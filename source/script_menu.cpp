@@ -631,6 +631,11 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMe
 			free(name_dynamic);
 		return FAIL;  // Caller should show error if desired.
 	}
+	if (mMenu)
+	{
+		InternalAppendMenu(menu_item);
+		UPDATE_GUI_MENU_BARS(mMenuType, mMenu)
+	}
 	if (!mFirstMenuItem)
 		mFirstMenuItem = mLastMenuItem = menu_item;
 	else
@@ -649,24 +654,34 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMe
 
 
 
-void UserMenu::InternalAppendMenu(UINT aFlags, UINT aMenuID, UserMenu *aSubmenu, LPTSTR aName)
+ResultType UserMenu::InternalAppendMenu(UserMenuItem *mi)
 // Appends an item to mMenu and and ensures the new item's ID is set.
 {
-	AppendMenu(mMenu, aFlags, aSubmenu ? (UINT_PTR)aSubmenu->mMenu : aMenuID, aName);
-	if (aFlags & (MF_SEPARATOR | MF_POPUP))
+	MENUITEMINFO mii;
+	mii.cbSize = sizeof(mii);
+	mii.fMask = MIIM_ID | MIIM_FTYPE | MIIM_STRING | MIIM_STATE;
+	mii.wID = mi->mMenuID;
+	mii.fType = mi->mMenuType;
+	mii.dwTypeData = mi->mName;
+	mii.fState = mi->mMenuState;
+	if (mi->mSubmenu)
 	{
-		// Although MF_SEPARATOR causes AppendMenu() to ignore the ID and MF_POPUP prevents
-		// us from passing the ID, it is apparently valid for those menu items to have an ID.
-		// Set the ID here to simplify identifying the menu item later.  In particular, this
-		// makes it possible to identify separator items for removal/renaming without having
-		// to calculate the position (allowing multiple separators and taking into account
-		// Menu::mIncludeStandardItems and whether those items are at the top or bottom).
-		MENUITEMINFO mii;
-		mii.cbSize = sizeof(mii);
-		mii.fMask = MIIM_ID;
-		mii.wID = aMenuID;
-		SetMenuItemInfo(mMenu, GetMenuItemCount(mMenu) - 1, TRUE, &mii);
+		// Ensure submenu is created so that its handle can be used below.
+		if (!mi->mSubmenu->Create())
+			return FAIL;
+		mii.fMask |= MIIM_SUBMENU;
+		mii.hSubMenu = mi->mSubmenu->mMenu;
 	}
+	if (mi->mIcon)
+	{
+		mii.fMask |= MIIM_BITMAP;
+		mii.hbmpItem = g_os.IsWinVistaOrLater() ? mi->mBitmap : HBMMENU_CALLBACK;
+	}
+	// Although AppendMenu() ignores the ID when adding a separator and provides no way to
+	// specify the ID when adding a submenu, that is purely a limitation of AppendMenu().
+	// Using InsertMenuItem() instead allows us to always set the ID, which simplifies
+	// identifying separator and submenu items later on.
+	return InsertMenuItem(mMenu, GetMenuItemCount(mMenu), TRUE, &mii) ? OK : FAIL;
 }
 
 
@@ -675,17 +690,10 @@ UserMenuItem::UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, IOb
 // UserMenuItem Constructor.
 	: mName(aName), mNameCapacity(aNameCapacity), mMenuID(aMenuID), mLabel(aLabel), mSubmenu(aSubmenu), mMenu(aMenu)
 	, mPriority(0) // default priority = 0
-	, mEnabled(true), mChecked(false), mNextMenuItem(NULL)
+	, mMenuState(MFS_ENABLED | MFS_UNCHECKED), mMenuType(*aName ? MFT_STRING : MFT_SEPARATOR)
+	, mNextMenuItem(NULL)
 	, mIcon(NULL) // L17: Initialize mIcon/mBitmap union.
 {
-	if (aMenu->mMenu)
-	{
-		if (aSubmenu) // Ensure the menu is created so that AppendMenu() will function properly.
-			aSubmenu->Create();
-		UINT flags = (*aName ? MF_STRING : MF_SEPARATOR) | (aSubmenu ? MF_POPUP : 0);
-		aMenu->InternalAppendMenu(flags, aMenuID, aSubmenu, aName);
-		UPDATE_GUI_MENU_BARS(aMenu->mMenuType, aMenu->mMenu)
-	}
 }
 
 
@@ -814,8 +822,61 @@ ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, IObject *aLabel, UserMe
 
 void UserMenu::UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions)
 {
-	if (ctoupper(*aOptions) == 'P')
-		aMenuItem->mPriority = _ttoi(aOptions + 1);
+	UINT new_type = aMenuItem->mMenuType; // Set default.
+
+	LPTSTR next_option, option_end;
+	bool adding;
+	TCHAR orig_char;
+
+	// See GuiType::ControlParseOptions() for comments about how the options are parsed.
+	for (next_option = aOptions; *next_option; next_option = option_end)
+	{
+		next_option = omit_leading_whitespace(next_option);
+		if (*next_option == '-')
+		{
+			adding = false;
+			++next_option;
+		}
+		else
+		{
+			adding = true;
+			if (*next_option == '+')
+				++next_option;
+		}
+
+		if (!*next_option)
+			break;
+		if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )
+			option_end = next_option + _tcslen(next_option);
+		if (option_end == next_option)
+			continue;
+
+		orig_char = *option_end;
+		*option_end = '\0';
+		// End generic option-parsing code; begin menu options.
+
+		     if (!_tcsicmp(next_option, _T("Radio"))) if (adding) new_type |= MFT_RADIOCHECK; else new_type &= ~MFT_RADIOCHECK;
+		else if (!_tcsicmp(next_option, _T("Right"))) if (adding) new_type |= MFT_RIGHTJUSTIFY; else new_type &= ~MFT_RIGHTJUSTIFY;
+		else if (!_tcsicmp(next_option, _T("Break"))) if (adding) new_type |= MFT_MENUBREAK; else new_type &= ~MFT_MENUBREAK;
+		else if (!_tcsicmp(next_option, _T("BarBreak"))) if (adding) new_type |= MFT_MENUBARBREAK; else new_type &= ~MFT_MENUBARBREAK;
+		else if (ctoupper(*next_option) == 'P')
+			aMenuItem->mPriority = ATOI(next_option + 1);
+
+		*option_end = orig_char;
+	}
+
+	if (new_type != aMenuItem->mMenuType)
+	{
+		if (mMenu)
+		{
+			MENUITEMINFO mii;
+			mii.cbSize = sizeof(mii);
+			mii.fMask = MIIM_FTYPE;
+			mii.fType = new_type;
+			SetMenuItemInfo(mMenu, aMenuItem->mMenuID, FALSE, &mii);
+		}
+		aMenuItem->mMenuType = (WORD)new_type;
+	}
 }
 
 
@@ -827,8 +888,17 @@ ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName)
 	if (_tcslen(aNewName) > MAX_MENU_NAME_LENGTH)
 		return FAIL; // Caller should display error if desired.
 
+	// Preserve any additional type flags set by options, but exclude the main type bits.
+	// Also clear MFT_OWNERDRAW (if set by the script), since it changes the meaning of dwTypeData.
+	// MSDN: "The MFT_BITMAP, MFT_SEPARATOR, and MFT_STRING values cannot be combined with one another."
+	UINT new_type = (aMenuItem->mMenuType & ~(MFT_BITMAP | MFT_SEPARATOR | MFT_STRING | MFT_OWNERDRAW))
+		| (*aNewName ? MFT_STRING : MFT_SEPARATOR);
+
 	if (!mMenu) // Just update the member variables for later use when the menu is created.
+	{
+		aMenuItem->mMenuType = (WORD)new_type;
 		return UpdateName(aMenuItem, aNewName);
+	}
 
 	MENUITEMINFO mii;
 	mii.cbSize = sizeof(mii);
@@ -840,24 +910,19 @@ ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName)
 		for (UserMenuItem *mi = mFirstMenuItem; mi; mi = mi->mNextMenuItem)
 			if (!lstrcmpi(mi->mName, aNewName)) // Match found (case insensitive).
 				return FAIL; // Caller should display an error message.
-		if (!*aMenuItem->mName && aMenuItem->mEnabled)
+		if (aMenuItem->mMenuType & MFT_SEPARATOR)
 		{
-			// This item is currently a separator and hasn't been specifically disabled by
-			// the script, but has been disabled by virtue of the fact that it's a separator.
-			// Retrieve the current (checked/unchecked/default) state and set things up so the
-			// item gets re-enabled below.
+			// Since this item is currently a separator, the system will have disabled it.
+			// Set the item's state to what it should be:
 			mii.fMask |= MIIM_STATE;
-			GetMenuItemInfo(mMenu, aMenuItem->mMenuID, FALSE, &mii);
-			mii.fState &= ~MFS_DISABLED;
+			mii.fState = aMenuItem->mMenuState;
 		}
-		mii.fType = MFT_STRING;
 	}
 	else // converting into a separator
 	{
 		// Notes about the below macro:
 		// ID_TRAY_OPEN is not set to be the default for the self-contained version, since it lacks that menu item.
 		CHANGE_DEFAULT_IF_NEEDED
-		mii.fType = MFT_SEPARATOR;
 		// Testing shows that if an item is converted into a separator and back into a
 		// normal item, it retains its submenu.  So don't set the submenu to NULL, since
 		// it's not necessary and would result in the OS destroying the submenu:
@@ -869,6 +934,7 @@ ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName)
 	}
 
 	mii.fMask |= MIIM_TYPE;
+	mii.fType = new_type;
 	mii.dwTypeData = aNewName;
 
 	// v1.1.04: If the new and old names both have accelerators, call UpdateAccelerators() if they
@@ -881,6 +947,7 @@ ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName)
 	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
 	if (  !(result && UpdateName(aMenuItem, aNewName))  )
 		return FAIL;
+	aMenuItem->mMenuType = (WORD)mii.fType; // Update this in case the menu is destroyed/recreated.
 	if (update_accel) // v1.1.04: Above determined this item's accelerator was changed.
 		UpdateAccelerators(); // Must not be done until after mName is updated.
 	if (*aNewName)
@@ -920,76 +987,59 @@ ResultType UserMenu::UpdateName(UserMenuItem *aMenuItem, LPTSTR aNewName)
 
 
 
-ResultType UserMenu::CheckItem(UserMenuItem *aMenuItem)
-// Note that items in a menu bar apparently cannot be checked, so it is not necessary to call
-// UPDATE_GUI_MENU_BARS here or in the next few functions below.
-
+ResultType UserMenu::SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aStateMask)
 {
-	aMenuItem->mChecked = true;
 	if (mMenu)
-		CheckMenuItem(mMenu, aMenuItem_ID, aMenuItem_MF_BY | MF_CHECKED);
+	{
+		MENUITEMINFO mii;
+		mii.cbSize = sizeof(mii);
+		mii.fMask = MIIM_STATE;
+		// Retrieve the current state from the menu rather than using mMenuState,
+		// in case the script has modified the state via DllCall.
+		if (GetMenuItemInfo(mMenu, aMenuItem->mMenuID, FALSE, &mii))
+		{
+			mii.fState = (mii.fState & ~aStateMask) | aState;
+			// Update our state in case the menu gets destroyed/recreated.
+			aMenuItem->mMenuState = (WORD)mii.fState;
+			// Set the new state.
+			SetMenuItemInfo(mMenu, aMenuItem->mMenuID, FALSE, &mii);
+			if (aStateMask & MFS_DISABLED) // i.e. enabling or disabling, which would affect a menu bar.
+				UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
+			return OK;
+		}
+	}
+	aMenuItem->mMenuState = (WORD)((aMenuItem->mMenuState & ~aStateMask) | aState);
 	return OK;
 }
 
-
+ResultType UserMenu::CheckItem(UserMenuItem *aMenuItem)
+{
+	return SetItemState(aMenuItem, MFS_CHECKED, MFS_CHECKED);
+}
 
 ResultType UserMenu::UncheckItem(UserMenuItem *aMenuItem)
 {
-	aMenuItem->mChecked = false;
-	if (mMenu)
-		CheckMenuItem(mMenu, aMenuItem_ID, aMenuItem_MF_BY | MF_UNCHECKED);
-	return OK;
+	return SetItemState(aMenuItem, MFS_UNCHECKED, MFS_CHECKED);
 }
-
-
 
 ResultType UserMenu::ToggleCheckItem(UserMenuItem *aMenuItem)
 {
-	aMenuItem->mChecked = !aMenuItem->mChecked;
-	if (mMenu)
-		CheckMenuItem(mMenu, aMenuItem_ID, aMenuItem_MF_BY | (aMenuItem->mChecked ? MF_CHECKED : MF_UNCHECKED));
-	return OK;
+	return SetItemState(aMenuItem, (aMenuItem->mMenuState & MFS_CHECKED) ^ MFS_CHECKED, MFS_CHECKED);
 }
-
-
 
 ResultType UserMenu::EnableItem(UserMenuItem *aMenuItem)
 {
-	aMenuItem->mEnabled = true;
-	if (mMenu)
-	{
-		EnableMenuItem(mMenu, aMenuItem_ID, aMenuItem_MF_BY | MF_ENABLED); // Automatically ungrays it too.
-		UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
-	}
-	return OK;
-
+	return SetItemState(aMenuItem, MFS_ENABLED, MFS_DISABLED);
 }
-
-
 
 ResultType UserMenu::DisableItem(UserMenuItem *aMenuItem)
 {
-	aMenuItem->mEnabled = false;
-	if (mMenu)
-	{
-		EnableMenuItem(mMenu,aMenuItem_ID, aMenuItem_MF_BY | MF_DISABLED | MF_GRAYED);
-		UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
-	}
-	return OK;
+	return SetItemState(aMenuItem, MFS_DISABLED, MFS_DISABLED);
 }
-
-
 
 ResultType UserMenu::ToggleEnableItem(UserMenuItem *aMenuItem)
 {
-	aMenuItem->mEnabled = !aMenuItem->mEnabled;
-	if (mMenu)
-	{
-		EnableMenuItem(mMenu, aMenuItem_ID, aMenuItem_MF_BY | (aMenuItem->mEnabled ? MF_ENABLED
-			: (MF_DISABLED | MF_GRAYED)));
-		UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
-	}
-	return OK;
+	return SetItemState(aMenuItem, (aMenuItem->mMenuState & MFS_DISABLED) ^ MFS_DISABLED, MFS_DISABLED);
 }
 
 
@@ -1092,29 +1142,10 @@ ResultType UserMenu::Create(MenuTypeType aMenuType)
 		AppendStandardItems();
 
 	// Now append all of the user defined items:
-	UINT flags;
 	UserMenuItem *mi;
 	for (mi = mFirstMenuItem; mi; mi = mi->mNextMenuItem)
-	{
-		flags = 0;
-		if (!*mi->mName)
-			flags |= MF_SEPARATOR;  // MF_STRING is the default.
-		if (!mi->mEnabled)
-			flags |= (MF_DISABLED | MF_GRAYED);  // MF_ENABLED is the default.
-		if (mi->mChecked)   // MF_UNCHECKED is the default.
-			flags |= MF_CHECKED;
-		if (mi->mSubmenu)
-		{
-			flags |= MF_POPUP;
-			// Ensure submenu is created so that handle can be used below.
-			if (!mi->mSubmenu->Create())
-				return FAIL;
-		}
-		InternalAppendMenu(flags, mi->mMenuID, mi->mSubmenu, mi->mName);
-		
-		if (mi->mIcon) // L17: Check mIcon/mBitmap union, apply icon if necessary.
-			ApplyItemIcon(mi);
-	}
+		InternalAppendMenu(mi);
+
 	if (mDefault)
 		// This also automatically ensures that only one is default at a time:
 		SetMenuDefaultItem(mMenu, mDefault->mMenuID, FALSE);

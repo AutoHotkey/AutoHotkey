@@ -2400,13 +2400,14 @@ public:
 	}
 
 	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions);
-	void InternalAppendMenu(UINT aFlags, UINT aMenuID, UserMenu *aSubmenu, LPTSTR aName);
+	ResultType InternalAppendMenu(UserMenuItem *aMenuItem);
 	ResultType DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev);
 	ResultType DeleteAllItems();
 	ResultType ModifyItem(UserMenuItem *aMenuItem, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions);
 	void UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions);
 	ResultType RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName);
 	ResultType UpdateName(UserMenuItem *aMenuItem, LPTSTR aNewName);
+	ResultType SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aStateMask);
 	ResultType CheckItem(UserMenuItem *aMenuItem);
 	ResultType UncheckItem(UserMenuItem *aMenuItem);
 	ResultType ToggleCheckItem(UserMenuItem *aMenuItem);
@@ -2441,14 +2442,15 @@ class UserMenuItem
 public:
 	LPTSTR mName;  // Dynamically allocated.
 	size_t mNameCapacity;
-	UINT mMenuID;
 	LabelRef mLabel;
 	UserMenu *mSubmenu;
 	UserMenu *mMenu;  // The menu to which this item belongs.  Needed to support script var A_ThisMenu.
+	UINT mMenuID;
 	int mPriority;
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
-	bool mEnabled, mChecked;
+	WORD mMenuState;
+	WORD mMenuType;
 	UserMenuItem *mNextMenuItem;  // Next item in linked list
 	
 	union
