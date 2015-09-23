@@ -142,6 +142,8 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 // 2) Testing shows that GetDlgCtrlID() is much faster than looping through a GUI window's control array to find
 //    a matching HWND.
 
+// Pixels to scroll when scroll bar button is pressed and WheelUp/Down
+#define SCROLL_STEP 10;
 
 #define ERR_ABORT_NO_SPACES _T("The current thread will exit.")
 #define ERR_ABORT _T("  ") ERR_ABORT_NO_SPACES
@@ -2547,6 +2549,8 @@ struct GuiControlType
 		// color if the picture's background is transparent (at least in the case of icons on XP).
 		lv_attrib_type *union_lv_attrib; // For ListView: Some attributes and an array of columns.
 	};
+	int mX, mY, mWidth, mHeight;
+	float mAX, mAY, mAWidth, mAHeight;
 	#define USES_FONT_AND_TEXT_COLOR(type) !(type == GUI_CONTROL_PIC || type == GUI_CONTROL_UPDOWN \
 		|| type == GUI_CONTROL_SLIDER || type == GUI_CONTROL_PROGRESS)
 };
@@ -2586,6 +2590,7 @@ struct GuiControlOptionsType
 	bool use_theme; // v1.0.32: Provides the means for the window's current setting of mUseTheme to be overridden.
 	bool listview_no_auto_sort; // v1.0.44: More maintainable and frees up GUI_CONTROL_ATTRIB_ALTBEHAVIOR for other uses.
 	ATOM customClassAtom;
+	float AX, AY, AWidth, AHeight;
 };
 
 LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam);
@@ -2631,7 +2636,7 @@ public:
 	HICON mIconEligibleForDestructionSmall; // L17: A window may have two icons: ICON_SMALL and ICON_BIG.
 	HACCEL mAccel; // Keyboard accelerator table.
 	int mMarginX, mMarginY, mPrevX, mPrevY, mPrevWidth, mPrevHeight, mMaxExtentRight, mMaxExtentDown
-		, mSectionX, mSectionY, mMaxExtentRightSection, mMaxExtentDownSection;
+		, mSectionX, mSectionY, mMaxExtentRightSection, mMaxExtentDownSection, mWidth, mHeight;
 	LONG mMinWidth, mMinHeight, mMaxWidth, mMaxHeight;
 	TabControlIndexType mTabControlCount;
 	TabControlIndexType mCurrentTabControlIndex; // Which tab control of the window.
@@ -2640,7 +2645,7 @@ public:
 	bool mControlWidthWasSetByContents; // Whether the most recently added control was auto-width'd to fit its contents.
 	bool mUsesDPIScaling; // Whether the GUI uses DPI scaling.
 
-	SCROLLINFO *mVScrollInfo, *mHScrollInfo;
+	SCROLLINFO *mVScroll, *mHScroll;
 	#define MAX_GUI_FONTS 200  // v1.0.44.14: Increased from 100 to 200 due to feedback that 100 wasn't enough.  But to alleviate memory usage, the array is now allocated upon first use.
 	static FontType *sFont; // An array of structs, allocated upon first use.
 	static int sFontCount;
@@ -2657,7 +2662,7 @@ public:
 		, mDefaultButtonIndex(-1), mLabelForClose(NULL), mLabelForEscape(NULL), mLabelForSize(NULL)
 		, mLabelForDropFiles(NULL), mLabelForContextMenu(NULL), mReferenceCount(1)
 		, mLabelForCloseIsRunning(false), mLabelForEscapeIsRunning(false), mLabelForSizeIsRunning(false)
-		, mLabelsHaveBeenSet(false), mUsesDPIScaling(true), mVScrollInfo(NULL), mHScrollInfo(NULL)
+		, mLabelsHaveBeenSet(false), mUsesDPIScaling(true), mVScroll(NULL), mHScroll(NULL)
 		// The styles DS_CENTER and DS_3DLOOK appear to be ineffectual in this case.
 		// Also note that WS_CLIPSIBLINGS winds up on the window even if unspecified, which is a strong hint
 		// that it should always be used for top level windows across all OSes.  Usenet posts confirm this.
@@ -2682,7 +2687,7 @@ public:
 		, mSectionX(COORD_UNSPECIFIED), mSectionY(COORD_UNSPECIFIED)
 		, mMaxExtentRightSection(COORD_UNSPECIFIED), mMaxExtentDownSection(COORD_UNSPECIFIED)
 		, mMinWidth(COORD_UNSPECIFIED), mMinHeight(COORD_UNSPECIFIED)
-		, mMaxWidth(COORD_UNSPECIFIED), mMaxHeight(COORD_UNSPECIFIED)
+		, mMaxWidth(COORD_UNSPECIFIED), mMaxHeight(COORD_UNSPECIFIED), mWidth(COORD_UNSPECIFIED), mHeight(COORD_UNSPECIFIED)
 		, mGuiShowHasNeverBeenDone(true), mFirstActivation(true), mShowIsInProgress(false)
 		, mDestroyWindowHasBeenCalled(false), mControlWidthWasSetByContents(false)
 	{
