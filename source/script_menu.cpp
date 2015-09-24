@@ -769,6 +769,8 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 	else // aMenuItem was the first one in the list.
 		mFirstMenuItem = aMenuItem->mNextMenuItem; // Can be NULL if the list will now be empty.
 	CHANGE_DEFAULT_IF_NEEDED  // Should do this before freeing aMenuItem's memory.
+	if (g_script.mThisMenuItem == aMenuItem)
+		g_script.mThisMenuItem = NULL;
 	if (mMenu) // Delete the item from the menu.
 		RemoveMenu(mMenu, aMenuItem_ID, aMenuItem_MF_BY); // v1.0.48: Lexikos: DeleteMenu() destroys any sub-menu handle associated with the item, so use RemoveMenu. Otherwise the submenu handle stored somewhere else in memory would suddenly become invalid.
 	RemoveItemIcon(aMenuItem); // L17: Free icon or bitmap.
@@ -806,6 +808,8 @@ ResultType UserMenu::DeleteAllItems()
 	{
 		menu_item_to_delete = mi;
 		mi = mi->mNextMenuItem;
+		if (g_script.mThisMenuItem == menu_item_to_delete)
+			g_script.mThisMenuItem = NULL;
 		RemoveItemIcon(menu_item_to_delete); // L26: Free icon or bitmap!
 		if (menu_item_to_delete->mName != Var::sEmptyString)
 			delete menu_item_to_delete->mName; // Since it was separately allocated.
