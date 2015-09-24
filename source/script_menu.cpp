@@ -244,6 +244,36 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 	// Now that most opportunities to return an error have passed, find or create the menu, since
 	// all the commands that haven't already been fully handled above will need it:
 	UserMenu *menu = FindMenu(aMenu);
+
+	// Handle the Insert command like a sub-mode of the Add command, for simplicity:
+	bool ignore_existing_items = false;
+	UserMenuItem **insert_at = NULL;
+	if (menu_command == MENU_CMD_INSERT && (menu || !*aParam3 || !_tcscmp(aParam3, _T("1&"))))
+	{
+		// If the menu doesn't exist yet, allow it to be created only if the item is being
+		// appended; i.e. aParam3 is either "" or "1&".
+		if (menu && *aParam3)
+		{
+			bool search_by_pos;
+			UserMenuItem *insert_before, *prev_item;
+			if (  !(insert_before = menu->FindItem(aParam3, prev_item, search_by_pos))  )
+			{
+				// The item wasn't found.  Treat it as an error unless it is the position
+				// immediately after the last item.
+				if (  !(search_by_pos && ATOI(aParam3) == (int)menu->mMenuItemCount + 1)  )
+					RETURN_MENU_ERROR(_T("Nonexistent menu item."), aParam3);
+			}
+			// To simplify insertion, give AddItem() a pointer to the variable within the
+			// linked-list which points to the item, rather than a pointer to the item itself:
+			insert_at = prev_item ? &prev_item->mNextMenuItem : &menu->mFirstMenuItem;
+		}
+		menu_command = MENU_CMD_ADD;
+		ignore_existing_items = true;
+		aParam3 = aParam4;
+		aParam4 = aOptions;
+		aOptions = aOptions2;
+	}
+	
 	if (!menu)
 	{
 		// Menus can be created only in conjunction with the ADD command. Update: As of v1.0.25.12, they can
@@ -263,7 +293,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 	case MENU_CMD_ADD:
 		if (*aParam3) // Since a menu item name was given, it's not a separator line.
 			break;    // Let a later switch() handle it.
-		if (!menu->AddItem(_T(""), GetFreeMenuItemID(), NULL, NULL, _T(""))) // Even separators get an ID, so that they can be modified later using the position& notation.
+		if (!menu->AddItem(_T(""), GetFreeMenuItemID(), NULL, NULL, _T(""), insert_at)) // Even separators get an ID, so that they can be modified later using the position& notation.
 			RETURN_MENU_ERROR(ERR_OUTOFMEM, _T(""));  // Out of mem should be the only possibility in this case.
 		return OK;
 	case MENU_CMD_DELETE:
@@ -312,22 +342,9 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 
 	// Find the menu item name AND its previous item (needed for the DELETE command) in the linked list:
 	UserMenuItem *menu_item = NULL, *menu_item_prev = NULL; // Set defaults.
-	size_t length_aParam3 = _tcslen(aParam3);
-	// Check if the caller identified the menu item by position/index rather than by name.
-	// This should be reasonably backwards-compatible, as any scripts that want literally
-	// "1&" as menu item text would have to actually write "1&&".
-	int index_to_find = -1;
-	if (length_aParam3 > 1
-		&& aParam3[length_aParam3 - 1] == '&' // Use the same convention as WinMenuSelectItem: 1&, 2&, 3&...
-		&& aParam3[length_aParam3 - 2] != '&') // Not &&, which means one literal &.
-		index_to_find = ATOI(aParam3) - 1; // Yields -1 if aParam3 doesn't start with a number.
-	int current_index = 0;
-	for (menu_item = menu->mFirstMenuItem
-		; menu_item
-		; menu_item_prev = menu_item, menu_item = menu_item->mNextMenuItem, ++current_index)
-		if (current_index == index_to_find // Found by index.
-			|| !lstrcmpi(menu_item->mName, aParam3)) // Found by case-insensitive text match.
-			break;
+	bool search_by_pos = false;
+	if (!ignore_existing_items) // i.e. Insert always inserts a new item.
+		menu_item = menu->FindItem(aParam3, menu_item_prev, search_by_pos);
 
 	// Whether an existing menu item's options should be updated without updating its submenu or label:
 	bool update_exiting_item_options = (menu_command == MENU_CMD_ADD && menu_item && !*aParam4 && *aOptions);
@@ -361,7 +378,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 
 	if (!menu_item)  // menu item doesn't exist, so create it (but only if the command is ADD).
 	{
-		if (menu_command != MENU_CMD_ADD || index_to_find != -1)
+		if (menu_command != MENU_CMD_ADD || search_by_pos)
 			// Seems best not to create menu items on-demand like this because they might get put into
 			// an incorrect position (i.e. it seems better than menu changes be kept separate from
 			// menu additions):
@@ -371,7 +388,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 		UINT item_id = GetFreeMenuItemID();
 		if (!item_id) // All ~64000 IDs are in use!
 			RETURN_MENU_ERROR(_T("Too many menu items."), aParam3); // Short msg since so rare.
-		if (!menu->AddItem(aParam3, item_id, target_label, submenu, aOptions))
+		if (!menu->AddItem(aParam3, item_id, target_label, submenu, aOptions, insert_at))
 			RETURN_MENU_ERROR(_T("Menu item name too long."), aParam3); // Can also happen due to out-of-mem, but that's too rare to display.
 		return OK;  // Item has been successfully added with the correct properties.
 	} // if (!menu_item)
@@ -569,6 +586,33 @@ UINT Script::GetFreeMenuItemID()
 
 
 
+UserMenuItem *UserMenu::FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bool &aByPos)
+{
+	int index_to_find = -1;
+	size_t length = _tcslen(aNameOrPos);
+	// Check if the caller identified the menu item by position/index rather than by name.
+	// This should be reasonably backwards-compatible, as any scripts that want literally
+	// "1&" as menu item text would have to actually write "1&&".
+	if (length > 1
+		&& aNameOrPos[length - 1] == '&' // Use the same convention as WinMenuSelectItem: 1&, 2&, 3&...
+		&& aNameOrPos[length - 2] != '&') // Not &&, which means one literal &.
+		index_to_find = ATOI(aNameOrPos) - 1; // Yields -1 if aParam3 doesn't start with a number.
+	aByPos = index_to_find > -1;
+	// Find the item.
+	int current_index = 0;
+	UserMenuItem *menu_item_prev = NULL, *menu_item;
+	for (menu_item = mFirstMenuItem
+		; menu_item
+		; menu_item_prev = menu_item, menu_item = menu_item->mNextMenuItem, ++current_index)
+		if (current_index == index_to_find // Found by index.
+			|| !lstrcmpi(menu_item->mName, aNameOrPos)) // Found by case-insensitive text match.
+			break;
+	aPrevItem = menu_item_prev;
+	return menu_item;
+}
+
+
+
 // Macros for use with the below methods:
 #define aMenuItem_ID		aMenuItem->mMenuID
 #define aMenuItem_MF_BY		MF_BYCOMMAND
@@ -607,7 +651,8 @@ UINT Script::GetFreeMenuItemID()
 
 
 
-ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions)
+ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions
+	, UserMenuItem **aInsertAt)
 // Caller must have already ensured that aName does not yet exist as a user-defined menu item
 // in this->mMenu.
 {
@@ -633,14 +678,24 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMe
 	}
 	if (mMenu)
 	{
-		InternalAppendMenu(menu_item);
+		InternalAppendMenu(menu_item, aInsertAt ? *aInsertAt : NULL);
 		UPDATE_GUI_MENU_BARS(mMenuType, mMenu)
 	}
-	if (!mFirstMenuItem)
-		mFirstMenuItem = mLastMenuItem = menu_item;
+	if (aInsertAt)
+	{
+		// Caller has passed a pointer to the variable in the linked list which should
+		// hold this new item; either &mFirstMenuItem or &previous_item->mNextMenuItem.
+		menu_item->mNextMenuItem = *aInsertAt;
+		// This must be done after the above:
+		*aInsertAt = menu_item;
+	}
 	else
 	{
-		mLastMenuItem->mNextMenuItem = menu_item;
+		// Append the item.
+		if (!mFirstMenuItem)
+			mFirstMenuItem = menu_item;
+		else
+			mLastMenuItem->mNextMenuItem = menu_item;
 		// This must be done after the above:
 		mLastMenuItem = menu_item;
 	}
@@ -654,7 +709,7 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMe
 
 
 
-ResultType UserMenu::InternalAppendMenu(UserMenuItem *mi)
+ResultType UserMenu::InternalAppendMenu(UserMenuItem *mi, UserMenuItem *aInsertBefore)
 // Appends an item to mMenu and and ensures the new item's ID is set.
 {
 	MENUITEMINFO mii;
@@ -677,11 +732,17 @@ ResultType UserMenu::InternalAppendMenu(UserMenuItem *mi)
 		mii.fMask |= MIIM_BITMAP;
 		mii.hbmpItem = g_os.IsWinVistaOrLater() ? mi->mBitmap : HBMMENU_CALLBACK;
 	}
+	UINT insert_at;
+	BOOL by_position;
+	if (aInsertBefore)
+		insert_at = aInsertBefore->mMenuID, by_position = FALSE;
+	else
+		insert_at = GetMenuItemCount(mMenu), by_position = TRUE;
 	// Although AppendMenu() ignores the ID when adding a separator and provides no way to
 	// specify the ID when adding a submenu, that is purely a limitation of AppendMenu().
 	// Using InsertMenuItem() instead allows us to always set the ID, which simplifies
 	// identifying separator and submenu items later on.
-	return InsertMenuItem(mMenu, GetMenuItemCount(mMenu), TRUE, &mii) ? OK : FAIL;
+	return InsertMenuItem(mMenu, insert_at, by_position, &mii) ? OK : FAIL;
 }
 
 
