@@ -21,13 +21,21 @@ GNU General Public License for more details.
 #include "window.h" // for SetForegroundWindowEx()
 
 
+ResultType Script::MenuError(LPTSTR aMessage, LPTSTR aInfo)
+// Displays an error or sets ErrorLevel as appropriate.  Defining this
+// as a function vs. a straight macro reduces code size considerably.
+{
+	return mMenuUseErrorLevel ? g_ErrorLevel->Assign(ERRORLEVEL_ERROR)
+		: ScriptError(aMessage, aInfo);
+}
+
+
 ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var)
 {
 	if (mMenuUseErrorLevel)
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Set default, which is "none" for the Menu command.
 
-	#define RETURN_MENU_ERROR(msg, info) return mMenuUseErrorLevel ? g_ErrorLevel->Assign(ERRORLEVEL_ERROR) \
-		: ScriptError(msg, info)
+	#define RETURN_MENU_ERROR(msg, info) return MenuError(msg, info)
 	#define RETURN_IF_NOT_TRAY if (!is_tray) RETURN_MENU_ERROR(ERR_MENUTRAY, aMenu)
 
 	MenuCommands menu_command = Line::ConvertMenuCommand(aCommand);
@@ -407,7 +415,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 		return menu->ModifyItem(menu_item, target_label, submenu, aOptions);
 	case MENU_CMD_RENAME:
 		if (!menu->RenameItem(menu_item, new_name))
-			RETURN_MENU_ERROR(_T("Menu item name already in use (or too long)."), new_name);
+			RETURN_MENU_ERROR(_T("Rename failed (name too long?)."), new_name);
 		return OK;
 	case MENU_CMD_CHECK:
 		return menu->CheckItem(menu_item);

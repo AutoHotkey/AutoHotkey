@@ -2971,6 +2971,7 @@ public:
 	LPTSTR ListKeyHistory(LPTSTR aBuf, int aBufSize);
 
 	ResultType PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var); // L17: Added aOptions2 for Icon sub-command (icon width). Arg was previously reserved/unused.
+	ResultType MenuError(LPTSTR aMessage, LPTSTR aInfo);
 	UINT GetFreeMenuItemID();
 	UserMenu *FindMenu(LPTSTR aMenuName);
 	UserMenu *AddMenu(LPTSTR aMenuName);
