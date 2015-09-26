@@ -9242,6 +9242,10 @@ void *Script::GetVarType(LPTSTR aVarName)
 		|| !_tcscmp(lower, _T("guix")) // Naming: Brevity seems more a benefit than would A_GuiEventX's improved clarity.
 		|| !_tcscmp(lower, _T("guiy"))) return BIV_Gui; // These can be overloaded if a GuiMove label or similar is ever needed.
 
+	if (   !_tcscmp(lower, _T("defaultgui"))
+		|| !_tcscmp(lower, _T("defaultlistview"))
+		|| !_tcscmp(lower, _T("defaulttreeview"))) return BIV_DefaultGui;
+
 	if (!_tcscmp(lower, _T("timeidle"))) return BIV_TimeIdle;
 	if (!_tcscmp(lower, _T("timeidlephysical"))) return BIV_TimeIdlePhysical;
 	if (   !_tcscmp(lower, _T("space"))

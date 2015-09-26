@@ -3110,6 +3110,7 @@ VarSizeType BIV_EndChar(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_GuiControl(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_GuiEvent(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_DefaultGui(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_EventInfo(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_TimeIdle(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_TimeIdlePhysical(LPTSTR aBuf, LPTSTR aVarName);

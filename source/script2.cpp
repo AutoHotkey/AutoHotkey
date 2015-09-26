@@ -12441,6 +12441,56 @@ VarSizeType BIV_GuiEvent(LPTSTR aBuf, LPTSTR aVarName)
 
 
 
+VarSizeType BIV_DefaultGui(LPTSTR aBuf, LPTSTR aVarName)
+// A_DefaultGui, A_DefaultListView, A_DefaultTreeView: Unlike BIV_Gui above, these
+// correspond to "Gui, x: Default", not necessarily the Gui which launched the thread.
+{
+	global_struct &g = *::g; // Reduces code size and may improve performance.
+	GuiType *gui = g.GuiDefaultWindowValid();
+	GuiControlType *control = NULL;
+	LPTSTR return_string = _T("");
+	HWND return_hwnd = NULL;
+	switch (ctoupper(aVarName[9]))
+	{
+	case 'G':
+		if (!gui)
+			gui = g.GuiDefaultWindow; // If non-NULL, it's a dummy struct containing just the Gui name.
+		if (!gui) // Either no default has been set, or the default was an anonymous Gui which has been destroyed.
+			return_string = _T("1");
+		else if (*gui->mName) // Not an anonymous GUI.
+			return_string = gui->mName;
+		else // implies gui->mHwnd != NULL
+			return_hwnd = gui->mHwnd;
+		break;
+	case 'L':
+		if (gui)
+			control = gui->mCurrentListView;
+		break;
+	case 'T':
+		if (gui)
+			control = gui->mCurrentTreeView;
+		break;
+	}
+	if (control)
+	{
+		if (control->output_var) // Return associated var name (more useful for debugging).
+			return_string = control->output_var->mName;
+		else // Return HWND.
+			return_hwnd = control->hwnd;
+	}
+	if (return_hwnd)
+	{
+		if (aBuf)
+			return (VarSizeType)_tcslen(HwndToString(return_hwnd, aBuf));
+		return MAX_INTEGER_LENGTH;
+	}
+	if (aBuf)
+		_tcscpy(aBuf, return_string);
+	return (VarSizeType)_tcslen(return_string);
+}
+
+
+
 VarSizeType BIV_EventInfo(LPTSTR aBuf, LPTSTR aVarName)
 // We're returning the length of the var's contents, not the size.
 {
