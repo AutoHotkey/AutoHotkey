@@ -11171,6 +11171,17 @@ VarSizeType BIV_DefaultMouseSpeed(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(target_buf);
 }
 
+VarSizeType BIV_CoordMode(LPTSTR aBuf, LPTSTR aVarName)
+{
+	static LPCTSTR sCoordModes[] = COORD_MODES;
+	LPCTSTR result = sCoordModes[(g->CoordMode >> Line::ConvertCoordModeCmd(aVarName + 11)) & COORD_MODE_MASK];
+	if (aBuf)
+		_tcscpy(aBuf, result);
+	return 6; // Currently all are 6 chars.
+}
+
+
+
 VarSizeType BIV_IsPaused(LPTSTR aBuf, LPTSTR aVarName) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
 {
 	// Although A_IsPaused could indicate how many threads are paused beneath the current thread,

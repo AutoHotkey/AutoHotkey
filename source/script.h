@@ -3041,6 +3041,7 @@ VarSizeType BIV_WinDelay(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_ControlDelay(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_MouseDelay(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_DefaultMouseSpeed(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_CoordMode(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IsPaused(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IsCritical(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IsSuspended(LPTSTR aBuf, LPTSTR aVarName);

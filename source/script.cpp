@@ -9130,6 +9130,18 @@ void *Script::GetVarType(LPTSTR aVarName)
 	if (!_tcscmp(lower, _T("fileencoding"))) return BIV_FileEncoding;
 	if (!_tcscmp(lower, _T("regview"))) return BIV_RegView;
 
+	if (!_tcsncmp(lower, _T("coordmode"), 9))
+	{
+		lower += 9;
+		if (   !_tcscmp(lower, _T("tooltip"))
+			|| !_tcscmp(lower, _T("mouse"))
+			|| !_tcscmp(lower, _T("pixel"))
+			|| !_tcscmp(lower, _T("caret"))
+			|| !_tcscmp(lower, _T("menu"))) return BIV_CoordMode;
+		// Otherwise, it can't be a match for any built-in variable:
+		return (void *)VAR_NORMAL;
+	}
+
 	if (!_tcscmp(lower, _T("iconhidden"))) return BIV_IconHidden;
 	if (!_tcscmp(lower, _T("icontip"))) return BIV_IconTip;
 	if (!_tcscmp(lower, _T("iconfile"))) return BIV_IconFile;

@@ -643,6 +643,7 @@ typedef USHORT CoordModeType;
 #define COORD_MODE_CLIENT  1
 #define COORD_MODE_SCREEN  2
 #define COORD_MODE_MASK    3
+#define COORD_MODES { _T("Window"), _T("Client"), _T("Screen") }
 
 #define COORD_CENTERED (INT_MIN + 1)
 #define COORD_UNSPECIFIED INT_MIN
