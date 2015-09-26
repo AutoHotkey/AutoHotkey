@@ -18479,6 +18479,47 @@ BIF_DECL(BIF_IL_Add)
 
 
 
+BIF_DECL(BIF_LoadPicture)
+{
+	// h := LoadPicture(filename [, options, ByRef image_type])
+	LPTSTR filename = ParamIndexToString(0, aResultToken.buf);
+	LPTSTR options = ParamIndexToOptionalString(1);
+	Var *image_type_var = ParamIndexToOptionalVar(2);
+
+	int width = -1;
+	int height = -1;
+	int icon_number = 0;
+	bool use_gdi_plus = false;
+
+	for (LPTSTR cp = options; cp; cp = StrChrAny(cp, _T(" \t")))
+	{
+		cp = omit_leading_whitespace(cp);
+		if (tolower(*cp) == 'w')
+			width = ATOI(cp + 1);
+		else if (tolower(*cp) == 'h')
+			height = ATOI(cp + 1);
+		else if (!_tcsnicmp(cp, _T("Icon"), 4))
+			icon_number = ATOI(cp + 4);
+		else if (!_tcsnicmp(cp, _T("GDI+"), 4))
+			// GDI+ or GDI+1 to enable, GDI+0 to disable.
+			use_gdi_plus = cp[4] != '0';
+	}
+
+	if (width == -1 && height == -1)
+		width = 0;
+
+	int image_type;
+	HBITMAP hbm = LoadPicture(filename, width, height, image_type, icon_number, use_gdi_plus);
+	if (image_type_var)
+		image_type_var->Assign(image_type);
+	else if (image_type != IMAGE_BITMAP && hbm)
+		// Always return a bitmap when the ImageType output var is omitted.
+		hbm = IconToBitmap32((HICON)hbm, true); // Also works for cursors.
+	aResultToken.value_int64 = (__int64)(UINT_PTR)hbm;
+}
+
+
+
 BIF_DECL(BIF_Trim) // L31
 {
 	TCHAR trim_type = ctoupper(*aResultToken.marker); // aResultToken.marker points to the name of the Func which was called.
