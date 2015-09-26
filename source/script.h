@@ -2551,6 +2551,7 @@ struct GuiControlType
 	};
 	int mX, mY, mWidth, mHeight;
 	float mAX, mAY, mAWidth, mAHeight;
+	bool mAXReset, mAYReset;
 	#define USES_FONT_AND_TEXT_COLOR(type) !(type == GUI_CONTROL_PIC || type == GUI_CONTROL_UPDOWN \
 		|| type == GUI_CONTROL_SLIDER || type == GUI_CONTROL_PROGRESS)
 };
@@ -2591,6 +2592,7 @@ struct GuiControlOptionsType
 	bool listview_no_auto_sort; // v1.0.44: More maintainable and frees up GUI_CONTROL_ATTRIB_ALTBEHAVIOR for other uses.
 	ATOM customClassAtom;
 	float AX, AY, AWidth, AHeight;
+	bool AXReset, AYReset;
 };
 
 LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam);
