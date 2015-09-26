@@ -4827,7 +4827,8 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 	// So currently, only BMP and GIF seem to work reliably, though some of the other GDIPlus-supported
 	// formats might work too.
 	int image_type;
-	HBITMAP hbitmap_image = LoadPicture(aImageFile, width, height, image_type, icon_number, false);
+	bool no_delete_bitmap;
+	HBITMAP hbitmap_image = LoadPicture(aImageFile, width, height, image_type, icon_number, false, &no_delete_bitmap);
 	// The comment marked OBSOLETE below is no longer true because the elimination of the high-byte via
 	// 0x00FFFFFF seems to have fixed it.  But "true" is still not passed because that should increase
 	// consistency when GIF/BMP/ICO files are used by a script on both Win9x and other OSs (since the
@@ -4841,7 +4842,13 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 	HDC hdc = GetDC(NULL);
 	if (!hdc)
 	{
-		DeleteObject(hbitmap_image);
+		if (!no_delete_bitmap)
+		{
+			if (image_type == IMAGE_ICON)
+				DestroyIcon((HICON)hbitmap_image);
+			else
+				DeleteObject(hbitmap_image);
+		}
 		goto error;
 	}
 
@@ -5068,7 +5075,8 @@ end:
 	// If found==false when execution reaches here, ErrorLevel is already set to the right value, so just
 	// clean up then return.
 	ReleaseDC(NULL, hdc);
-	DeleteObject(hbitmap_image);
+	if (!no_delete_bitmap)
+		DeleteObject(hbitmap_image);
 	if (sdc)
 	{
 		if (sdc_orig_select) // i.e. the original call to SelectObject() didn't fail.
