@@ -5713,14 +5713,14 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				if (ctoupper(*next_option) == 'P') // Use the previous control's value.
 					aOpt.width = mPrevWidth + Scale(ATOI(next_option + 1));
 				else
-					aOpt.width = Scale(ATOI(next_option));
+					aOpt.width = ScaleSize(ATOI(next_option));
 				break;
 
 			case 'H':
 				if (ctoupper(*next_option) == 'P') // Use the previous control's value.
 					aOpt.height = mPrevHeight + Scale(ATOI(next_option + 1));
 				else
-					aOpt.height = Scale(ATOI(next_option));
+					aOpt.height = ScaleSize(ATOI(next_option));
 				break;
 
 			case 'X':
