@@ -747,8 +747,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	if (!this_key.used_as_prefix && !this_key.used_as_suffix)
 		return AllowKeyToGoToSystem;
 
-	bool is_explicit_key_up_hotkey = false;                // Set default.
-	HotkeyIDType hotkey_id_with_flags = HOTKEY_ID_INVALID; //
+	HotkeyIDType hotkey_id_with_flags = HOTKEY_ID_INVALID; // Set default.
 	HotkeyVariant *firing_is_certain = NULL;               //
 	HotkeyIDType hotkey_id_temp; // For informal/temp storage of the ID-without-flags.
 
@@ -764,7 +763,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		if (this_key.hotkey_to_fire_upon_release != HOTKEY_ID_INVALID)
 		{
 			hotkey_id_with_flags = this_key.hotkey_to_fire_upon_release;
-			is_explicit_key_up_hotkey = true; // Can't rely on (hotkey_id_with_flags & HOTKEY_KEY_UP) because some key-up hotkeys (such as the hotkey_up array) might not be flagged that way.
 			// The line below is done even though the down-event also resets it in case it is ever
 			// possible for keys to generate multiple consecutive key-up events (faulty or unusual keyboards?)
 			this_key.hotkey_to_fire_upon_release = HOTKEY_ID_INVALID;
@@ -947,9 +945,19 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// If our caller is the mouse hook, both of the following will always be false:
 			// this_key.as_modifiersLR
 			// this_toggle_key_can_be_toggled
-			return (this_key.as_modifiersLR || (this_key.no_suppress & NO_SUPPRESS_PREFIX)
+			if (this_key.as_modifiersLR || (this_key.no_suppress & NO_SUPPRESS_PREFIX)
 				|| this_toggle_key_can_be_toggled || has_no_enabled_suffixes)
-				? AllowKeyToGoToSystem : SuppressThisKey;
+				return AllowKeyToGoToSystem;
+			// Mark this key as having been suppressed.  This currently doesn't have any known effect
+			// since the change to tilde (~) handling in v1.0.95 (commit 161162b8), but may in future.
+			// Search for "SEND_NOSUPPRESS_PREFIX_KEY_ON_RELEASE" for related comments.
+			//#define SEND_NOSUPPRESS_PREFIX_KEY_ON_RELEASE
+			// Without this next assignment, the following issues occur if the above line is uncommented:
+			//   1) ~prefixkey:: allows just a key-up to pass through, without first sending a key-down as
+			//      originally intended.
+			//   2) #if false .. ~prefixkey:: causes the key-up to pass through when it should be suppressed.
+			this_key.hotkey_down_was_suppressed = true;
+			return SuppressThisKey;
 		}
 		//else valid suffix hotkey has been found; this will now fall through to Case #4 by virtue of aKeyUp==false.
 	}
@@ -2077,6 +2085,17 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			if (aHook == g_MouseHook)
 				return AllowKeyToGoToSystem;
 			// Otherwise, our caller is the keyboard hook.
+			
+			// The following section is currently disabled because it hasn't been working as intended
+			// for quite some time, and doesn't seem to be what users expect.  It also contains some
+			// contradictions; for instance, explicit key-up hotkeys such as the one in the example
+			// were excluded, apparently by design (since v1.0.36.02).  Explicit key-up hotkeys which
+			// are turned on after the key is pressed were erroneously included, but this has been
+			// fixed in the code below.  Implicit key-up hotkeys (which act on key-up because the key
+			// is used as a prefix key) did not work because this_key.hotkey_down_was_suppressed was
+			// not set when the prefix key was suppressed -- and later because it was not suppressed
+			// at all due to a change in v1.0.95 (commit 161162b8).
+			#ifdef SEND_NOSUPPRESS_PREFIX_KEY_ON_RELEASE
 			// Since this hotkey is firing on key-up but the user specified not to suppress its native
 			// function, send a down event to make up for the fact that the original down event was
 			// suppressed (since key-up hotkeys' down events are always suppressed because they
@@ -2101,7 +2120,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// Used as either a prefix for a hotkey or just a plain modifier for another key.
 			// ... && (*this_key.pForceToggle != NEUTRAL || this_key.was_just_used);
 			if (this_key.hotkey_down_was_suppressed // Down was suppressed.
-				&& !is_explicit_key_up_hotkey // v1.0.36.02: Prevents a hotkey such as "~5 up::" from generating double characters, regardless of whether it's paired with a "~5::" hotkey.
+				&& !(hotkey_id_with_flags & HOTKEY_KEY_UP) // v1.0.36.02: Prevents a hotkey such as "~5 up::" from generating double characters, regardless of whether it's paired with a "~5::" hotkey.
 				&& !suppress_to_prevent_toggle) // Mouse vs. keybd hook was already checked higher above.
 				KeyEvent(KEYDOWN, aVK, aSC); // Substitute this to make up for the suppression (a check higher above has already determined that no_supress==true).
 				// Now allow the up-event to go through.  The DOWN should always wind up taking effect
@@ -2109,6 +2128,13 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				// it resulted in a recursive call to this function (using our hook-thread
 				// rather than our main thread or some other thread):
 			return suppress_to_prevent_toggle ? SuppressThisKey : AllowKeyToGoToSystem;
+			#else
+			// Although it seems more sensible to suppress the key-up if the key-down was suppressed,
+			// it probably does no harm to let the key-up pass through, and in this case, it's exactly
+			// what the script is asking to happen (by prefixing the key-up hotkey with '~').
+			// this_key.pForceToggle isn't checked because AllowIt() handles that.
+			return AllowKeyToGoToSystem;
+			#endif
 		} // No suppression.
 	}
 	else // Key Down
@@ -3911,6 +3937,7 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 					continue;
 				}
 			}
+			#ifndef SEND_NOSUPPRESS_PREFIX_KEY_ON_RELEASE // Search for this symbol for details.
 			else
 			{
 				// If this hotkey is a lone key with ~ prefix such as "~a::", the following ensures that
@@ -3919,6 +3946,7 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 				if (!hk.mModifiersConsolidatedLR && (hk.mNoSuppress & AT_LEAST_ONE_VARIANT_HAS_TILDE))
 					pThisKey->no_suppress |= NO_SUPPRESS_PREFIX;
 			}
+			#endif
 		}
 
 		// At this point, since the above didn't "continue", this hotkey is one without a ModifierVK/SC.
