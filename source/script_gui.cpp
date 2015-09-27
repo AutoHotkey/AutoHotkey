@@ -8042,7 +8042,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 					addedWidth = 0;
 				if (aControl.mAX)
 				{
-					x = aControl.mX + (int)(aControl.mAX * addWidth) - (pgui->mStyle & WS_HSCROLL ? pgui->mHScroll->nPos : 0);
+					x = aControl.mX + addedWidth + (int)(aControl.mAX * addWidth) - (pgui->mStyle & WS_HSCROLL ? pgui->mHScroll->nPos : 0);
 					addedWidth += (int)(aControl.mAX * addWidth) - (pgui->mStyle & WS_HSCROLL ? pgui->mHScroll->nPos : 0);
 				}
 				if (aControl.mAY) {
