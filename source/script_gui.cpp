@@ -8011,13 +8011,13 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			bool aVScrollVisible = pgui->mStyle & WS_VSCROLL && (int)pgui->mVScroll->nPage <= pgui->mVScroll->nMax;
 			bool aResizeWasDone = false;
 			int addedHeight = 0, addedWidth = 0;
-
+			/*
 			// ignore Scrollbars
 			if (aVScrollVisible)
-				addWidth += GetSystemMetrics(SM_CYVSCROLL);
+				addWidth -= GetSystemMetrics(SM_CYVSCROLL);
 			if (aHScrollVisible)
-				addHeight += GetSystemMetrics(SM_CYHSCROLL);
-
+				addHeight -= GetSystemMetrics(SM_CYHSCROLL);
+			*/
 			// use original size of window if new size is smaller.
 			if (addHeight < 0)
 				addHeight = 0;
@@ -8101,7 +8101,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			bool aVScrollVisible = pgui->mStyle & WS_VSCROLL && (int)aVScroll->nPage <= aVScroll->nMax;
 			bool aHScrollRequired = pgui->mStyle & WS_HSCROLL && client_right < pgui->mMaxExtentRight + pgui->mMarginX;
 			bool aVScrollRequired = pgui->mStyle & WS_VSCROLL && client_bottom < pgui->mMaxExtentDown + pgui->mMarginY;
-			if (client_right + 1 + (aVScrollVisible ? GetSystemMetrics(SM_CYVSCROLL) : 0) > pgui->mMaxExtentRight + pgui->mMarginX
+			if (aHScroll->nPage == 0 && aVScroll->nPage == 0
+				&& client_right + 1 + (aVScrollVisible ? GetSystemMetrics(SM_CYVSCROLL) : 0) > pgui->mMaxExtentRight + pgui->mMarginX
 				&& client_bottom + 1 + (aHScrollVisible ? GetSystemMetrics(SM_CYHSCROLL) : 0) > pgui->mMaxExtentDown + pgui->mMarginY)
 			{ // Scrollbars are shown but are not reqiured because without those client area is big enough
 				aHScrollRequired = aVScrollRequired = false;
