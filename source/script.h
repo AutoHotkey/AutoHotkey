@@ -2949,7 +2949,7 @@ public:
 		, int aScope = FINDVAR_DEFAULT
 		, bool *apIsLocal = NULL);
 	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope);
-	static void *GetVarType(LPTSTR aVarName);
+	static VarEntry *GetBuiltInVar(LPTSTR aVarName);
 
 	WinGroup *FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound = false);
 	ResultType AddGroup(LPTSTR aGroupName);
