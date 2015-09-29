@@ -11131,35 +11131,44 @@ VarSizeType BIV_FormatFloat(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(aBuf); // Must return exact length when aBuf isn't NULL.
 }
 
-VarSizeType BIV_KeyDelay(LPTSTR aBuf, LPTSTR aVarName)
+VarSizeType BIV_xDelay(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_INTEGER_SIZE];
 	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_itot(g->KeyDelay, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return (VarSizeType)_tcslen(target_buf);
-}
-
-VarSizeType BIV_WinDelay(LPTSTR aBuf, LPTSTR aVarName)
-{
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_itot(g->WinDelay, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return (VarSizeType)_tcslen(target_buf);
-}
-
-VarSizeType BIV_ControlDelay(LPTSTR aBuf, LPTSTR aVarName)
-{
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_itot(g->ControlDelay, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return (VarSizeType)_tcslen(target_buf);
-}
-
-VarSizeType BIV_MouseDelay(LPTSTR aBuf, LPTSTR aVarName)
-{
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_itot(g->MouseDelay, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
+	global_struct &g = *::g; // Reduces code size.
+	int result;
+	switch (ctoupper(aVarName[2])) // a_X...
+	{
+	case 'K':
+		if (ctolower(aVarName[6]) == 'e') // a_keydE...
+		{
+			if (aVarName[10]) // a_keydelayP...
+				result = g.KeyDelayPlay;
+			else
+				result = g.KeyDelay;
+		}
+		else // a_keydU...
+		{
+			if (aVarName[13]) // a_keydurationP...
+				result = g.PressDurationPlay;
+			else
+				result = g.PressDuration;
+		}
+		break;
+	case 'M':
+		if (aVarName[12]) // a_mousedelayP...
+			result = g.MouseDelayPlay;
+		else
+			result = g.MouseDelay;
+		break;
+	case 'W':
+		result = g.WinDelay;
+		break;
+	case 'C':
+		result = g.ControlDelay;
+		break;
+	}
+	_itot(result, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
 	return (VarSizeType)_tcslen(target_buf);
 }
 
