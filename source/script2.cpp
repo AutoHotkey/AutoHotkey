@@ -11189,6 +11189,29 @@ VarSizeType BIV_CoordMode(LPTSTR aBuf, LPTSTR aVarName)
 	return 6; // Currently all are 6 chars.
 }
 
+VarSizeType BIV_SendMode(LPTSTR aBuf, LPTSTR aVarName)
+{
+	static LPCTSTR sSendModes[] = SEND_MODES;
+	LPCTSTR result = sSendModes[g->SendMode];
+	if (aBuf)
+		_tcscpy(aBuf, result);
+	return (VarSizeType)_tcslen(result);
+}
+
+VarSizeType BIV_SendLevel(LPTSTR aBuf, LPTSTR aVarName)
+{
+	if (aBuf)
+		return (VarSizeType)_tcslen(_itot(g->SendLevel, aBuf, 10));  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
+	return 3; // Enough room for the maximum SendLevel (100).
+}
+
+VarSizeType BIV_StoreCapslockMode(LPTSTR aBuf, LPTSTR aVarName)
+{
+	return aBuf
+		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->StoreCapslockMode ? _T("On") : _T("Off"))) // For backward compatibility (due to StringCaseSense), never change the case used here.
+		: 3; // Room for either On or Off (in the estimation phase).
+}
+
 
 
 VarSizeType BIV_IsPaused(LPTSTR aBuf, LPTSTR aVarName) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
