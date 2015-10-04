@@ -8084,7 +8084,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				if (aMaxHeight != pgui->mMaxExtentDown)
 					pgui->mMaxExtentDown = aMaxHeight;
 			}
-			InvalidateRect(pgui->mHwnd, NULL, true);
+			RedrawWindow(pgui->mHwnd, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_VALIDATE | RDW_NOINTERNALPAINT);
 		}
 
 		// Update Scroll
