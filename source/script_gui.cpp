@@ -5885,6 +5885,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				{
 					if (ctoupper(*(next_option + 1)) == 'R')
 						aOpt.AXReset = true;
+					else if (ctoupper(*(next_option + 1)) == 'P')
+						aOpt.AX = (float)0.000000000000000000000000000000000000000000001;
 					else if (*(next_option + 1) == '\0')
 						aOpt.AX = 1;
 					else if (_tcschr(next_option + 1, '/') && *_tcschr(next_option + 1, '/') != '\0' && ATOI(_tcschr(next_option + 1, '/') + 1))
@@ -5901,6 +5903,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				{
 					if (ctoupper(*(next_option + 1)) == 'R')
 						aOpt.AYReset = true;
+					else if (ctoupper(*(next_option + 1)) == 'P')
+						aOpt.AY = (float)0.000000000000000000000000000000000000000000001;
 					else if (*(next_option + 1) == '\0')
 						aOpt.AY = 1;
 					else if (_tcschr(next_option + 1, '/') && *_tcschr(next_option + 1, '/') != '\0' && ATOI(_tcschr(next_option + 1, '/') + 1))
@@ -8040,20 +8044,23 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 					addedHeight = 0;
 				if (aControl.mAXReset)
 					addedWidth = 0;
+				
 				if (aControl.mAX)
 				{
 					x = aControl.mX + addedWidth + (int)(aControl.mAX * addWidth) - (pgui->mStyle & WS_HSCROLL ? pgui->mHScroll->nPos : 0);
+					// Backup previous added Width
 					addedWidth += (int)(aControl.mAX * addWidth);
 				}
 				if (aControl.mAY) {
 					y = aControl.mY + addedHeight + (int)(aControl.mAY * addHeight) - (pgui->mStyle & WS_VSCROLL ? pgui->mVScroll->nPos : 0);
+					// Backup previous added Height
 					addedHeight += (int)(aControl.mAY * addHeight);
 				}
 				if (aControl.mAWidth)
 					width = aControl.mWidth + (int)(aControl.mAWidth * addWidth);
 				if (aControl.mAHeight)
 					height = aControl.mHeight + (int)(aControl.mAHeight * addHeight);
-
+				
 				// Continue if size of control was not changed
 				if (x == pt.x && y == pt.y && width == rect.right - rect.left && height == rect.bottom - rect.top)
 					continue;

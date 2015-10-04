@@ -1,38 +1,23 @@
+
 #SingleInstance force
-;~ #include <Attach>
-;~ Gui, Margin, 0, 0
-try {
-	Gui,+Scroll +Resize ;0x300000
-	
-	;~ Gui,Add, Edit, ah1/3 w300 h20 hwndt1,Test1
-	;~ Gui,Add, Edit, ay1/3 ah1/3 w300 h20 hwndt2,Test2 ; y25 of 100 = 1/4
-	;~ Gui,Add, Edit, ay1/3 ah1/3 w300 h20 hwndt3,Test3
-	;Gui,Add, Edit, ay1/3 ah1/3 w300 h20 hwndt4,Test4
-	Gui,Add, Edit, ay1/3 ayr ah x+10 ym0 w300 h100,Test5
 
-	/*
-	Gui,Add, Edit, avg1 ah w300 h20 hwndt1,Test1 ; grew by 10px, moved down by 10px g1 = 0
-	Gui,Add, Edit, avg1 ah2  w300 h20 hwndt2,Test2 ; g1 = 20. grew by 10, moved down by 10
-	Gui,Add, Edit, avg1 w300 h20 hwndt3,Test3 ; g1 = 40
-	Gui,Add, Edit, am5 ag1 ah w300 h20 hwndt4,Test4
-	Gui,
-	*/
-} catch {
-	;Gui +0x300000 Resize
-	Gui +Resize
-	Gui,Add, Edit, w300 h20 hwndt1,Test1
-	Gui,Add, Edit, w300 h20 hwndt2,Test2 ; y25 of 100 = 1/4
-	Gui,Add, Edit, w300 h20 hwndt3,Test3
-	Gui,Add, Edit, w300 h20 hwndt4,Test4
-	;~ Attach(t1,"h")
-	;~ Attach(t2,"y h")
-	;~ Attach(t3,"y h")
-	;~ Attach(t4,"y h")
+Gui +Resize +Scroll
+Gui, Margin, 5, 5
+Gui, Add, Edit, xm w100 aw1/4 ym h40 ah1/4, Test1
+Gui, Add, Edit, xm w100 aw1/4 h40 ay1/4 ah1/4, Test2
+Gui, Add, Edit, xm w100 aw1/4 h40 ay1/4 ah1/4, Test3
+Gui, Add, Edit, xm w100 aw1/4 h40 ay1/4 ah1/4, Test4
 
-}
-;Gui,Show, x0 w320 h212
-Gui,Show, x0 ;w300 h100
-;~ Gui,Show, x0 w300 h300
+Gui, Add, Edit, xp+105 ax1/4 ayr w100 aw1/4 h55 ym ah1/3, Test5
+Gui, Add, Edit, xp axp w100 aw1/4 h55 yp+60 ah1/3 ay1/3, Test6
+Gui, Add, Edit, xp axp w100 aw1/4 h55 yp+60 ah1/3 ay1/3, Test7
+
+Gui, Add, Edit, xp+105 ax1/4 w100 aw1/4 h85 ym ayr ah1/2, Test8
+Gui, Add, Edit, xp axp w100 aw1/4 h85 yp+90 ah1/2 ay1/2, Test9
+
+Gui, Add, Edit, xp+105 ax1/4 w100 aw1/4 h175 ym ah, Test10
+Gui, Show, x0
+
 return
 GuiClose:
 ExitApp
