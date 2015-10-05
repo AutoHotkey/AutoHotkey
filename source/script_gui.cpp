@@ -8809,7 +8809,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			{
 			case SB_THUMBTRACK:
 			case SB_THUMBPOSITION:
-				new_pos = (int)wParam >> 16;
+				new_pos = HIWORD(wParam);
 				break;
 			case SB_LINEUP:
 				new_pos -= SCROLL_STEP;
