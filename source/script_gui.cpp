@@ -8796,7 +8796,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	case WM_HSCROLL:
 		if (   !(pgui = GuiType::FindGui(hWnd))   )
 			break; // Let default proc handle it.
-		if (GetDlgCtrlID(pgui->mHwnd))
+		if (GetDlgCtrlID((HWND)lParam))
 			pgui->Event(GUI_HWND_TO_INDEX((HWND)lParam), LOWORD(wParam));
 		else
 		{
