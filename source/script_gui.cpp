@@ -8015,13 +8015,13 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			bool aVScrollVisible = pgui->mStyle & WS_VSCROLL && (int)pgui->mVScroll->nPage <= pgui->mVScroll->nMax;
 			bool aResizeWasDone = false;
 			int addedHeight = 0, addedWidth = 0;
-			/*
+			
 			// ignore Scrollbars
-			if (aVScrollVisible)
-				addWidth -= GetSystemMetrics(SM_CYVSCROLL);
-			if (aHScrollVisible)
-				addHeight -= GetSystemMetrics(SM_CYHSCROLL);
-			*/
+			//if (aVScrollVisible)
+			//	addWidth -= GetSystemMetrics(SM_CYVSCROLL);
+			//if (aHScrollVisible)
+			//	addHeight -= GetSystemMetrics(SM_CYHSCROLL);
+			
 			// use original size of window if new size is smaller.
 			if (addHeight < 0)
 				addHeight = 0;
@@ -8030,40 +8030,40 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			// Update Controls position and size
 			for (GuiIndexType i = 0; i < pgui->mControlCount; i++)
 			{
-				GuiControlType aControl = pgui->mControl[i];
+				GuiControlType *aControl = &pgui->mControl[i];
 				// Check for autosize and autoposition options
-				if (!(aControl.mAX || aControl.mAY || aControl.mAWidth || aControl.mAHeight))
+				if (!(aControl->mAX || aControl->mAY || aControl->mAWidth || aControl->mAHeight))
 					continue;
 				// Calculate new size and position for controls
 				RECT rect;
-				GetWindowRect(aControl.hwnd, &rect);
+				GetWindowRect(aControl->hwnd, &rect);
 				POINT pt = { rect.left, rect.top };
 				ScreenToClient(pgui->mHwnd, &pt);
 				int x = pt.x, y = pt.y, width = rect.right - rect.left, height = rect.bottom - rect.top;
-				if (aControl.mAYReset)
+				if (aControl->mAYReset)
 					addedHeight = 0;
-				if (aControl.mAXReset)
+				if (aControl->mAXReset)
 					addedWidth = 0;
 				
-				if (aControl.mAX)
+				if (aControl->mAX)
 				{
-					x = aControl.mX + addedWidth + (int)(aControl.mAX * addWidth) - (pgui->mStyle & WS_HSCROLL ? pgui->mHScroll->nPos : 0);
-					addedWidth += (int)(aControl.mAX * addWidth);
+					x = aControl->mX + addedWidth + (int)(aControl->mAX * addWidth) - (pgui->mStyle & WS_HSCROLL ? pgui->mHScroll->nPos : 0);
+					addedWidth += (int)(aControl->mAX * addWidth);
 				}
-				if (aControl.mAY) {
-					y = aControl.mY + addedHeight + (int)(aControl.mAY * addHeight) - (pgui->mStyle & WS_VSCROLL ? pgui->mVScroll->nPos : 0);
-					addedHeight += (int)(aControl.mAY * addHeight);
+				if (aControl->mAY) {
+					y = aControl->mY + addedHeight + (int)(aControl->mAY * addHeight) - (pgui->mStyle & WS_VSCROLL ? pgui->mVScroll->nPos : 0);
+					addedHeight += (int)(aControl->mAY * addHeight);
 				}
-				if (aControl.mAWidth)
-					width = aControl.mWidth + (int)(aControl.mAWidth * addWidth);
-				if (aControl.mAHeight)
-					height = aControl.mHeight + (int)(aControl.mAHeight * addHeight);
+				if (aControl->mAWidth)
+					width = aControl->mWidth + (int)(aControl->mAWidth * addWidth);
+				if (aControl->mAHeight)
+					height = aControl->mHeight + (int)(aControl->mAHeight * addHeight);
 
 				// Continue if size of control was not changed
 				if (x == pt.x && y == pt.y && width == rect.right - rect.left && height == rect.bottom - rect.top)
 					continue;
 				// Resize and move control
-				MoveWindow(aControl.hwnd, x, y, width, height, false);
+				MoveWindow(aControl->hwnd, x, y, width, height, false);
 				aResizeWasDone = true;
 			}
 			
@@ -8074,8 +8074,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				for (GuiIndexType i = 0; i < pgui->mControlCount; i++)
 				{
 					RECT rect;
-					GuiControlType aControl = pgui->mControl[i];
-					GetWindowRect(aControl.hwnd, &rect);
+					GetWindowRect(pgui->mControl[i].hwnd, &rect);
 					POINT pt = { rect.left, rect.top };
 					ScreenToClient(pgui->mHwnd, &pt);
 					int aWidth = pt.x + pgui->mHScroll->nPos + (rect.right - rect.left), aHeight = pt.y + pgui->mVScroll->nPos + (rect.bottom - rect.top);
@@ -8088,10 +8087,9 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 					pgui->mMaxExtentRight = aMaxWidth;
 				if (aMaxHeight != pgui->mMaxExtentDown)
 					pgui->mMaxExtentDown = aMaxHeight;
+				RedrawWindow(pgui->mHwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_NOFRAME | RDW_ERASE | RDW_NOERASE | RDW_UPDATENOW | RDW_NOINTERNALPAINT);
 			}
-			RedrawWindow(pgui->mHwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ERASE | RDW_UPDATENOW | RDW_NOINTERNALPAINT);
 		}
-
 		// Update Scroll
 		if (pgui->mStyle & WS_HSCROLL || pgui->mStyle & WS_VSCROLL)
 		{
