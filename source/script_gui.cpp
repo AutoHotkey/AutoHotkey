@@ -4137,10 +4137,15 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			if (bottom > mMaxExtentDownSection)
 				mMaxExtentDownSection = bottom;
 		}
-		if (mHScroll) // Scroll has been already initialized and needs to be updated
+
+		// Scroll has been already initialized and needs to be updated
+		if (mStyle & WS_HSCROLL && mHScroll)
 		{
 			mHScroll->nMax = mMaxExtentRight;
 			SetScrollInfo(mHwnd, SB_HORZ, mHScroll, true);
+		}
+		if (mStyle & WS_VSCROLL && mVScroll)
+		{
 			mVScroll->nMax = mMaxExtentDown;
 			SetScrollInfo(mHwnd, SB_VERT, mVScroll, true);
 		}
