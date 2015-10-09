@@ -717,28 +717,8 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, 
 			int width = rect.right - rect.left;
 			int height = rect.bottom - rect.top;
 			int icon_number = 0; // Zero means "load icon or bitmap (doesn't matter)".
-
-			// The below must be done only after the above, because setting the control's picture handle
-			// to NULL sometimes or always shrinks the control down to zero dimensions:
-			// Although all HBITMAPs are freed upon program termination, if the program changes
-			// the picture frequently, memory/resources would continue to rise in the meantime
-			// unless this is done.
-			// 1.0.40.12: For maintainability, destroy the handle returned by STM_SETIMAGE, even though it
-			// should be identical to control.union_hbitmap (due to a call to STM_GETIMAGE in another section).
-			if (control.union_hbitmap)
-				if (control.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) // union_hbitmap is an icon or cursor.
-					// The control's image is set to NULL for the following reasons:
-					// 1) It turns off the control's animation timer in case the new image is not animated.
-					// 2) It feels a little bit safer to destroy the image only after it has been removed
-					//    from the control.
-					// NOTE: IMAGE_ICON or IMAGE_CURSOR must be passed, not IMAGE_BITMAP.  Otherwise the
-					// animated property of the control (via a timer that the control created) will remain
-					// in effect for the next image, even if it isn't animated, which results in a
-					// flashing/redrawing effect:
-					DestroyIcon((HICON)SendMessage(control.hwnd, STM_SETIMAGE, IMAGE_CURSOR, NULL));
-					// DestroyIcon() works on cursors too.  See notes in LoadPicture().
-				else // union_hbitmap is a bitmap
-					DeleteObject((HGDIOBJ)SendMessage(control.hwnd, STM_SETIMAGE, IMAGE_BITMAP, NULL));
+			// Note that setting the control's picture handle to NULL sometimes or always shrinks
+			// the control down to zero dimensions, so must be done only after the above.
 
 			// Parse any options that are present in front of the filename:
 			LPTSTR next_option = omit_leading_whitespace(aParam3);
@@ -6288,26 +6268,52 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 
 ResultType GuiType::ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilename, int aWidth, int aHeight, int aIconNumber)
 {
+	// LoadPicture() uses CopyImage() to scale the image, which seems to provide better scaling
+	// quality than using MoveWindow() (followed by redrawing the parent window) on the static
+	// control that contains the image.
+	int image_type;
+	HBITMAP new_image = LoadPicture(aFilename, aWidth, aHeight, image_type, aIconNumber
+		, aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT);
+
 	// In light of the below, it seems best to delete the bitmaps whenever the control changes
 	// to a new image or whenever the control is destroyed.  Otherwise, if a control or its
 	// parent window is destroyed and recreated many times, memory allocation would continue
-	// to grow from all the abandoned pointers.
+	// to grow from all of the abandoned bitmaps/icons.
 	// MSDN: "When you are finished using a bitmap...loaded without specifying the LR_SHARED flag,
 	// you can release its associated memory by calling...DeleteObject."
 	// MSDN: "The system automatically deletes these resources when the process that created them
 	// terminates, however, calling the appropriate function saves memory and decreases the size
 	// of the process's working set."
-	// LoadPicture() uses CopyImage() to scale the image, which seems to provide better scaling
-	// quality than using MoveWindow() (followed by redrawing the parent window) on the static
-	// control that contains the image.
-	int image_type;
-	if (!(aControl.union_hbitmap = LoadPicture(aFilename, aWidth, aHeight, image_type, aIconNumber
-		, aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT)))
+	// v1.0.40.12: For maintainability, destroy the handle returned by STM_SETIMAGE, even though it
+	// should be identical to control.union_hbitmap (due to a call to STM_GETIMAGE in another section).
+	// UPDATE: This is now done after LoadPicture() is called to reduce the length of time between
+	// the background being erased and the new picture being drawn, which might decrease flicker.
+	// It's still done as a separate step to setting the new bitmap due to uncertainty about how
+	// the control handles changing the image type, and the notes below about animation.
+	if (aControl.union_hbitmap)
+		if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) // union_hbitmap is an icon or cursor.
+			// The control's image is set to NULL for the following reasons:
+			// 1) It turns off the control's animation timer in case the new image is not animated.
+			// 2) It feels a little bit safer to destroy the image only after it has been removed
+			//    from the control.
+			// NOTE: IMAGE_ICON or IMAGE_CURSOR must be passed, not IMAGE_BITMAP.  Otherwise the
+			// animated property of the control (via a timer that the control created) will remain
+			// in effect for the next image, even if it isn't animated, which results in a
+			// flashing/redrawing effect:
+			DestroyIcon((HICON)SendMessage(aControl.hwnd, STM_SETIMAGE, IMAGE_CURSOR, NULL));
+			// DestroyIcon() works on cursors too.  See notes in LoadPicture().
+		else // union_hbitmap is a bitmap
+			DeleteObject((HGDIOBJ)SendMessage(aControl.hwnd, STM_SETIMAGE, IMAGE_BITMAP, NULL));
+	aControl.union_hbitmap = new_image;
+	// For backward-compatibility, the above is done even if the image failed to load.
+	if (!new_image)
 	{
 		// By design, no error is reported.  The picture is simply not displayed, nor is its
 		// style set to SS_BITMAP/SS_ICON, which allows the control to have the specified size
 		// yet lack an image (SS_BITMAP/SS_ICON tend to cause the control to auto-size to
 		// zero dimensions).
+		// UPDATE: For simplicity and backward-compatibility, any existing SS_BITMAP/SS_ICON
+		// style bit is not removed.
 		return FAIL;
 	}
 	if (image_type == IMAGE_ICON && (aControl.attrib & GUI_CONTROL_ATTRIB_BACKGROUND_TRANS))
