@@ -4159,8 +4159,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		control.mAYReset = opt.AYReset;
 		control.mAXAuto = opt.AXAuto;
 		control.mAYAuto = opt.AYAuto;
-		control.mAWAuto = opt.AWAuto;
-		control.mAHAuto = opt.AHAuto;
 
 		// Save default size of control
 		control.mX = opt.x;
@@ -5934,8 +5932,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				{
 					if (ctoupper(*(next_option + 1)) == 'R')
 						aOpt.AXReset = true;
-					else if (ctoupper(*(next_option + 1)) == 'A')
-						aOpt.AWAuto = true;
 					else if (*(next_option + 1) == '\0')
 						aOpt.AWidth = 1;
 					else if (_tcschr(next_option + 1, '/') && *_tcschr(next_option + 1, '/') != '\0' && ATOI(_tcschr(next_option + 1, '/') + 1))
@@ -5952,8 +5948,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				{
 					if (ctoupper(*(next_option + 1)) == 'R')
 						aOpt.AYReset = true;
-					else if (ctoupper(*(next_option + 1)) == 'A')
-						aOpt.AHAuto = true;
 					else if (*(next_option + 1) == '\0')
 						aOpt.AHeight = 1;
 					else if (_tcschr(next_option + 1, '/') && *_tcschr(next_option + 1, '/') != '\0' && ATOI(_tcschr(next_option + 1, '/') + 1))
@@ -8034,7 +8028,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 			// Calculate moved controls and add addWidth/Height to correctly position following controls
 			int addedHeight = 0, addedWidth = 0, autoX = 0, autoY = 0;
-			float autoW = 0, autoH = 0;
 			
 			// Add Scrollbars to client area if they exist because we keep client area behind scrollbars
 			if (pgui->mStyle & WS_VSCROLL && (int)pgui->mVScroll->nPage <= pgui->mVScroll->nMax)
@@ -8053,7 +8046,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				GuiControlType *aControl = &pgui->mControl[i];
 
 				// Check for autosize and autoposition options
-				if (!(aControl->mAX || aControl->mAY || aControl->mAWidth || aControl->mAHeight || aControl->mAXAuto || aControl->mAYAuto || aControl->mAWAuto || aControl->mAHAuto))
+				if (!(aControl->mAX || aControl->mAY || aControl->mAWidth || aControl->mAHeight || aControl->mAXAuto || aControl->mAYAuto))
 					continue;
 				
 				// Calculate new size and position for controls
@@ -8098,25 +8091,13 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				}
 				// calculate new width
 				if (aControl->mAWidth)
-				{
 					width = aControl->mWidth + (int)(aControl->mAWidth * addWidth);
-					autoW = aControl->mAWidth;
-				}
-				else if  (aControl->mAWAuto)
-					width = aControl->mWidth + (int)(autoW * addWidth);
 				// calculate new height
 				if (aControl->mAHeight)
-				{
 					height = aControl->mHeight + (int)(aControl->mAHeight * addHeight);
-					autoH = aControl->mAHeight;
-				}
-				else if (aControl->mAHAuto)
-					height = aControl->mHeight + (int)(autoH * addHeight);
-				if (autoX < (aControl->mAX ? (int)(aControl->mAX * addWidth) : 0) + (aControl->mAWidth ? (int)(aControl->mAWidth * addWidth) : 0))
-					autoX = (aControl->mAX ? (int)(aControl->mAX * addWidth) : 0) + (aControl->mAWidth ? (int)(aControl->mAWidth * addWidth) : 0);
-				if (autoY < (aControl->mAY ? (int)(aControl->mAY * addHeight) : 0) + (aControl->mAHeight ? (int)(aControl->mAHeight * addHeight) : 0))
-					autoY = (aControl->mAY ? (int)(aControl->mAY * addHeight) : 0) + (aControl->mAHeight ? (int)(aControl->mAHeight * addHeight) : 0);
 				
+				autoX = (aControl->mAX ? (int)(aControl->mAX * addWidth) : 0) + (aControl->mAWidth ? (int)(aControl->mAWidth * addWidth) : 0);
+				autoY = (aControl->mAY ? (int)(aControl->mAY * addHeight) : 0) + (aControl->mAHeight ? (int)(aControl->mAHeight * addHeight) : 0);
 				// Continue if size of control was not changed
 				if (x == pt.x && y == pt.y && width == rect.right - rect.left && height == rect.bottom - rect.top)
 					continue;
@@ -8145,7 +8126,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 					pgui->mMaxExtentRight = aMaxWidth;
 				if (aMaxHeight != pgui->mMaxExtentDown)
 					pgui->mMaxExtentDown = aMaxHeight;
-				RedrawWindow(pgui->mHwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_NOFRAME | RDW_ERASE | RDW_NOERASE | RDW_UPDATENOW | RDW_ERASENOW | RDW_NOINTERNALPAINT);
+				RedrawWindow(pgui->mHwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_NOFRAME | RDW_ERASE | RDW_NOERASE | RDW_UPDATENOW | RDW_NOINTERNALPAINT);
 			}
 		}
 
