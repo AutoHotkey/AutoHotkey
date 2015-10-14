@@ -606,7 +606,18 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					}
 				}
 			} // if (keyboard message sent to GUI)
-
+			else if (msg.message == WM_MOUSEWHEEL || msg.message == WM_MOUSEHWHEEL)
+			{ // Scroll message send to Gui when control under mouse is not focused control
+				HWND child_under_cursor = WindowFromPoint(msg.pt);
+				HWND parent_gui = GetParent(msg.hwnd);
+				if ( child_under_cursor != msg.hwnd && (pgui = GuiType::FindGui(parent_gui))
+					&& ((msg.message == WM_MOUSEWHEEL && pgui->mStyle & WS_VSCROLL && pgui->mVScroll->nPage <= pgui->mVScroll->nMax)
+					|| (msg.message == WM_MOUSEHWHEEL && pgui->mStyle & WS_HSCROLL && pgui->mHScroll->nPage <= pgui->mHScroll->nMax)))
+				{
+					SendMessage(parent_gui, msg.message, msg.wParam, msg.lParam);
+					continue;
+				}
+			}
 			for (i = 0, msg_was_handled = false; i < g_guiCount; ++i)
 			{
 				// Note: indications are that IsDialogMessage() should not be called with NULL as
