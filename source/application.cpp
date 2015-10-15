@@ -610,13 +610,15 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			{	// Scroll message send to Gui when control under mouse is not focused control
 				// If the window under the cursor is not the control that has focus...
 				HWND control_under_mouse = WindowFromPoint(msg.pt);
-				
-				if (control_under_mouse != msg.hwnd) {
+				DWORD style_under_mouse = GetWindowLong(control_under_mouse, GWL_STYLE);
+				int scroll_min, scroll_max;
+
+				if (control_under_mouse != msg.hwnd 
+					|| (GetScrollRange(control_under_mouse, msg.message == WM_MOUSEWHEEL ? SB_VERT : SB_HORZ, &scroll_min, &scroll_max)
+					&& scroll_max == 0)) {
 					// first check if control under mouse has a scrollbar and scroll it rather than main gui
 					if (GuiType::FindGui(GetParent(control_under_mouse)))
 					{	// Check if control belongs to one of our Guis
-						DWORD style_under_mouse = GetWindowLong(control_under_mouse, GWL_STYLE);
-						int scroll_min, scroll_max;
 						if ((msg.message == WM_MOUSEHWHEEL && style_under_mouse & WS_HSCROLL
 							|| msg.message == WM_MOUSEWHEEL && style_under_mouse & WS_VSCROLL)
 							&& GetScrollRange(control_under_mouse, msg.message == WM_MOUSEWHEEL ? SB_VERT : SB_HORZ, &scroll_min, &scroll_max)
