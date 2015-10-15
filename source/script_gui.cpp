@@ -8017,6 +8017,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 			aScrollInfo.nPos = new_pos;
 			SetScrollInfo(pgui->mHwnd, true, &aScrollInfo, true);
+			return 0;
 		}
 		break;
 	case WM_MOUSEHWHEEL:
@@ -8045,6 +8046,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 			aScrollInfo.nPos = new_pos;
 			SetScrollInfo(pgui->mHwnd, false, &aScrollInfo, true);
+			return 0;
 		}
 		break;
 
