@@ -609,7 +609,23 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			else if (msg.message == WM_MOUSEWHEEL || msg.message == WM_MOUSEHWHEEL)
 			{	// Scroll message send to Gui when control under mouse is not focused control
 				// If the window under the cursor is not the control that has focus...
-				if (WindowFromPoint(msg.pt) != msg.hwnd) {
+				HWND control_under_mouse = WindowFromPoint(msg.pt);
+				
+				if (control_under_mouse != msg.hwnd) {
+					// first check if control under mouse has a scrollbar and scroll it rather than main gui
+					if (GuiType::FindGui(GetParent(control_under_mouse)))
+					{	// Check if control belongs to one of our Guis
+						DWORD style_under_mouse = GetWindowLong(control_under_mouse, GWL_STYLE);
+						int scroll_min, scroll_max;
+						if ((msg.message == WM_MOUSEHWHEEL && style_under_mouse & WS_HSCROLL
+							|| msg.message == WM_MOUSEWHEEL && style_under_mouse & WS_VSCROLL)
+							&& GetScrollRange(control_under_mouse, msg.message == WM_MOUSEWHEEL ? SB_VERT : SB_HORZ, &scroll_min, &scroll_max)
+							&& scroll_max > 0)
+						{
+							SendMessage(control_under_mouse, msg.message, msg.wParam, msg.lParam);
+							continue;
+						}
+					}
 					// Keep getting the parent gui until we find one with scrollbars showing
 					pgui = GuiType::FindGui(GetParent(msg.hwnd));
 					while (pgui && !(pgui 
