@@ -2002,6 +2002,13 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	GuiControlType &control = mControl[mControlCount];
 	ZeroMemory(&control, sizeof(GuiControlType));
 
+	GuiType *aGui = NULL;
+	
+	if (aControlType == GUI_CONTROL_GUI)
+	{
+		if (!(aGui = GuiType::FindGui(aText)))
+			aGui = GuiType::FindGui((HWND)ATOI64(aText));
+	}
 	if (aControlType == GUI_CONTROL_TAB2) // v1.0.47.05: Replace TAB2 with TAB at an early stage to simplify the code.  The only purpose of TAB2 is to flag this as the new type of tab that avoids redrawing issues but has a new z-order that would break some existing scripts.
 	{
 		aControlType = GUI_CONTROL_TAB;
@@ -2207,6 +2214,17 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// the keyboard on Win2k/XP, standalone MonthCal controls don't support it, except on Vista and later.
 		if (g_os.IsWinVistaOrLater())
 			opt.style_add |= WS_TABSTOP;
+		break;
+	case GUI_CONTROL_GUI:
+		if (aGui)
+		{
+			SetParent(aGui->mHwnd, mHwnd);
+			if (aGui->mStyle & WS_POPUP)
+				aGui->mStyle = aGui->mStyle & ~WS_POPUP | WS_CHILD;
+			SetWindowLong(aGui->mHwnd, GWL_STYLE, aGui->mStyle);
+			if (!IsWindowVisible(aGui->mHwnd))
+				aGui->Show(_T(""),_T(""));
+		}
 		break;
 	// Nothing extra for these currently:
 	//case GUI_CONTROL_RADIO: This one is handled separately above the switch().
@@ -2536,6 +2554,14 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			break;
 		case GUI_CONTROL_TAB:
 			opt.row_count = 10;
+			break;
+		case GUI_CONTROL_GUI:
+			if (aGui)
+			{
+				RECT rc;
+				GetWindowRect(aGui->mHwnd, &rc);
+				opt.height = rc.bottom - rc.top;
+			}
 			break;
 		// Types not included
 		// ------------------
@@ -2963,6 +2989,14 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			// are usually used to fill up the entire window.  Therefore, default them to the ability
 			// to hold two columns of standard-width controls:
 			opt.width = (2 * gui_standard_width) + (3 * mMarginX);  // 3 vs. 2 to allow space in between columns.
+			break;
+		case GUI_CONTROL_GUI:
+			if (aGui)
+			{
+				RECT rc;
+				GetWindowRect(aGui->mHwnd, &rc);
+				opt.width = rc.right - rc.left;
+			}
 			break;
 		// Types not included
 		// ------------------
@@ -3951,6 +3985,13 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			mStatusBarHwnd = control.hwnd;
 			if (opt.color_bk != CLR_INVALID) // Explicit color change was requested.
 				SendMessage(mStatusBarHwnd, SB_SETBKCOLOR, 0, opt.color_bk);
+		}
+		break;
+	case GUI_CONTROL_GUI:
+		if (aGui)
+		{
+			control.hwnd = aGui->mHwnd;
+			MoveWindow(control.hwnd, opt.x, opt.y, opt.width, opt.height, true);
 		}
 		break;
 	} // switch() for control creation.
