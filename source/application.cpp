@@ -614,7 +614,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				int scroll_min, scroll_max;
 
 				if (control_under_mouse != msg.hwnd 
-					|| (GetScrollRange(control_under_mouse, msg.message == WM_MOUSEWHEEL ? SB_VERT : SB_HORZ, &scroll_min, &scroll_max)
+					|| ((msg.message == WM_MOUSEHWHEEL && style_under_mouse & WS_HSCROLL
+					|| msg.message == WM_MOUSEWHEEL && style_under_mouse & WS_VSCROLL)
+					&& GetScrollRange(control_under_mouse, msg.message == WM_MOUSEWHEEL ? SB_VERT : SB_HORZ, &scroll_min, &scroll_max)
 					&& scroll_max == 0)) {
 					// first check if control under mouse has a scrollbar and scroll it rather than main gui
 					if (GuiType::FindGui(GetParent(control_under_mouse)))
