@@ -4226,7 +4226,12 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 	{
 		// Since window already exists, its mStyle and mExStyle members might be out-of-date due to
 		// "WinSet Transparent", etc.  So update them:
+		bool aIsHScroll = mStyle & WS_HSCROLL, aIsVScroll = mStyle & WS_VSCROLL;
 		mStyle = GetWindowLong(mHwnd, GWL_STYLE);
+		if (aIsHScroll && !(mStyle & WS_HSCROLL))
+			mStyle |= WS_HSCROLL;
+		if (aIsVScroll && !(mStyle & WS_VSCROLL))
+			mStyle |= WS_VSCROLL;
 		mExStyle = GetWindowLong(mHwnd, GWL_EXSTYLE);
 	}
 	DWORD style_orig = mStyle;
@@ -8095,6 +8100,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			{
 				GuiControlType *aControl = &pgui->mControl[i];
 
+				if (aControl->type = GUI_CONTROL_STATUSBAR)
+					continue;
 				// Reset moved controls
 				if (aControl->mAYReset)
 				{
@@ -8185,7 +8192,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				for (GuiIndexType i = 0; i < pgui->mControlCount; i++)
 				{
 					RECT rect;
-					GetWindowRect(pgui->mControl[i].hwnd, &rect);
+					GuiControlType *aControl = &pgui->mControl[i];
+					if (aControl->type = GUI_CONTROL_STATUSBAR)
+						continue;
+					GetWindowRect(aControl->hwnd, &rect);
 					POINT pt = { rect.left, rect.top };
 					ScreenToClient(pgui->mHwnd, &pt);
 					int aWidth = pt.x + pgui->mHScroll->nPos + (rect.right - rect.left), aHeight = pt.y + pgui->mVScroll->nPos + (rect.bottom - rect.top);
