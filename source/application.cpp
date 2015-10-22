@@ -21,6 +21,33 @@ GNU General Public License for more details.
 #include "util.h" // for strlcpy()
 #include "resources/resource.h"  // For ID_TRAY_OPEN.
 
+int CanScrollInDirection(HWND aHwnd, DWORD aMessage, DWORD aStyle, WPARAM wParam)
+{
+	if ((aMessage == WM_MOUSEWHEEL && !(aStyle & WS_VSCROLL))
+		|| (aMessage == WM_MOUSEHWHEEL && !(aStyle & WS_HSCROLL)))
+		return 0;
+	SHORT direction = HIWORD(wParam);
+	SCROLLINFO si = { sizeof(SCROLLINFO) };
+	si.fMask = SIF_POS|SIF_RANGE|SIF_PAGE;
+	if (!GetScrollInfo(aHwnd, aMessage == WM_MOUSEWHEEL ? SB_VERT : SB_HORZ, &si))
+		return 0; // cannot retrive scrollinfo
+	// Scrolbar is disabled
+	if (si.nMax == si.nMin)
+		return 0;
+	else if (aMessage == WM_MOUSEWHEEL)
+	{ // check if VScroll is at limit and we can't scroll further
+		if (direction > 0 && si.nPos == si.nMin
+			|| direction < 0 && si.nPos + si.nPage - 1 == si.nMax)
+			return 0;
+	}
+	else
+	{	// check if HScroll is at limit and we can't scroll further
+		if (direction < 0 && si.nPos == si.nMin
+			|| direction > 0 && si.nPos + si.nPage - 1 == si.nMax)
+			return 0;
+	}
+	return 1;
+}
 
 bool MsgSleep(int aSleepDuration, MessageMode aMode)
 // Returns true if it launched at least one thread, and false otherwise.
@@ -606,6 +633,37 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					}
 				}
 			} // if (keyboard message sent to GUI)
+			else if (msg.message == WM_MOUSEWHEEL || msg.message == WM_MOUSEHWHEEL)
+			{	// Scroll message send to Gui when control under mouse is not focused control
+				// If the window under the cursor is not the control that has focus...
+				HWND control_under_mouse = WindowFromPoint(msg.pt);
+				DWORD style_under_mouse = GetWindowLong(control_under_mouse, GWL_STYLE);
+
+				// first check if control under mouse is not focused control
+				// or it is one of AutoHotkey Guis has a scrollbar but it is disabled or reached max or min
+				if (GuiType::FindGui(GetParent(control_under_mouse)) && (control_under_mouse != msg.hwnd
+					|| !CanScrollInDirection(control_under_mouse, msg.message, style_under_mouse, msg.wParam))) {
+					// Check if control belongs to one of our Guis
+					if (control_under_mouse != msg.hwnd
+						&& CanScrollInDirection(control_under_mouse, msg.message, style_under_mouse, msg.wParam))
+					{
+						SendMessage(control_under_mouse, msg.message, msg.wParam, msg.lParam);
+						continue;
+					}
+				}
+				if (!CanScrollInDirection(msg.hwnd, msg.message, GetWindowLong(msg.hwnd, GWL_STYLE), msg.wParam))
+				{
+					// Keep getting the parent gui until we find one with scrollbars showing
+					pgui = GuiType::FindGui(GetParent(msg.hwnd));
+					while (pgui && !(pgui && CanScrollInDirection(pgui->mHwnd, msg.message, pgui->mStyle, msg.wParam)))
+						pgui = GuiType::FindGui(GetParent(pgui->mHwnd));
+					if (pgui)
+					{
+						SendMessage(pgui->mHwnd, msg.message, msg.wParam, msg.lParam);
+						continue;
+					}
+				}
+			}
 
 			for (i = 0, msg_was_handled = false; i < g_guiCount; ++i)
 			{
