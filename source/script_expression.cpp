@@ -1561,7 +1561,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 	if (aIsVariadic) // i.e. this is a variadic function call.
 	{
 		ExprTokenType *rvalue = NULL;
-		if (mName == (LPTSTR)IT_SET && aParamCount > 1) // x[y*]:=z
+		if (mBIF == &Op_ObjInvoke && mID == IT_SET && aParamCount > 1) // x[y*]:=z
 			rvalue = aParam[--aParamCount];
 		
 		--aParamCount; // i.e. make aParamCount the count of normal params.
