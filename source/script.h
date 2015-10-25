@@ -2636,6 +2636,8 @@ public:
 	// See DPIScale() and DPIUnscale() for more details.
 	int Scale(int x) { return mUsesDPIScaling ? DPIScale(x) : x; }
 	int Unscale(int x) { return mUsesDPIScaling ? DPIUnscale(x) : x; }
+	// The following is a workaround for the "w-1" and "h-1" options:
+	int ScaleSize(int x) { return mUsesDPIScaling && x != -1 ? DPIScale(x) : x; }
 };
 
 
