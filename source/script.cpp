@@ -6518,7 +6518,8 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		orig_char = *item_end;
 		*item_end = '\0'; // Temporarily terminate.
 		bool item_exists = class_object->GetItem(temp_token, item);
-		if (orig_char == '.')
+		bool item_name_has_dot = (orig_char == '.');
+		if (item_name_has_dot)
 		{
 			*item_end = orig_char; // Undo termination.
 			// This is something like "object.key := 5", which is only valid if "object" was
@@ -6580,7 +6581,8 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		item_end += FindExprDelim(item_end); // Find the next comma which is not part of the initializer (or find end of string).
 
 		// Append "ClassNameOrThis.VarName := Initializer, " to the buffer.
-		int chars_written = _sntprintf(buf + buf_used, _countof(buf) - buf_used, _T("ObjRawSet(%s,\"%.*s\",(%.*s)), ")
+		LPCTSTR initializer = item_name_has_dot ? _T("%s.%.*s := %.*s, ") : _T("ObjRawSet(%s,\"%.*s\",(%.*s)), ");
+		int chars_written = _sntprintf(buf + buf_used, _countof(buf) - buf_used, initializer
 			, aStatic ? mClassName : _T("this"), (int)name_length, item, (int)(item_end - right_side_of_operator), right_side_of_operator);
 		if (chars_written < 0)
 			return ScriptError(_T("Declaration too long.")); // Short message since should be rare.
