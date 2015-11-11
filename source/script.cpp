@@ -9537,7 +9537,8 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 				//if (IS_BAD_ACTION_LINE(line_temp)) // See "#define IS_BAD_ACTION_LINE" for comments.
 				//	return line->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 				// Assign to line_temp rather than line:
-				line_temp = PreparseBlocks(line_temp, ONLY_ONE_LINE, line, aLoopType);
+				line_temp = PreparseBlocks(line_temp, ONLY_ONE_LINE, line
+					, line->mActionType == ACT_FINALLY ? ATTR_OBSCURE(aLoopType) : aLoopType);
 				if (line_temp == NULL)
 					return NULL; // Error.
 				// Set this ELSE/CATCH/FINALLY's jumppoint.  This is similar to the jumppoint
@@ -12205,7 +12206,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 						// two reasons: 1) if the script was non-#Persistent it would have already terminated
 						// anyway, and 2) it's only a question of whether to show a message before exiting.
 						return res;
-					// The remaining cases are all invalid jumps/control flow statements.
+					// The remaining cases are all invalid jumps/control flow statements.  All such cases
+					// should be detected at load time, but it seems best to keep this for maintainability:
 					return g_script.mCurrLine->LineError(ERR_BAD_JUMP_INSIDE_FINALLY);
 				}
 				g.ThrownToken = thrown_token; // If non-NULL, this was thrown within the try block.
