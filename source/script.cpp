@@ -13053,12 +13053,15 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 	param_tokens[0].symbol = SYM_STRING;
 	param_tokens[0].marker = _T("_NewEnum");
 
-	object_token.object->Invoke(enum_token, object_token, IT_CALL | IF_NEWENUM, params, 1);
+	result = object_token.object->Invoke(enum_token, object_token, IT_CALL | IF_NEWENUM, params, 1);
 	object_token.object->Release(); // This object reference is no longer needed.
 
 	if (enum_token.mem_to_free)
 		// Invoke returned memory for us to free.
 		free(enum_token.mem_to_free);
+	
+	if (result == FAIL || result == EARLY_EXIT)
+		return result;
 
 	if (enum_token.symbol != SYM_OBJECT)
 		// The object didn't return an enumerator, so nothing more we can do.
@@ -13095,7 +13098,9 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 		result_token.buf = buf;
 
 		// Call enumerator.Next(var1, var2)
-		enumerator.Invoke(result_token, enum_token, IT_CALL, params, param_count);
+		result = enumerator.Invoke(result_token, enum_token, IT_CALL, params, param_count);
+		if (result == FAIL || result == EARLY_EXIT)
+			break;
 
 		// Since any non-empty SYM_STRING is always considered "true", we need to change it to SYM_OPERAND
 		// before calling TokenToBOOL; otherwise "return false" and "return 0" will both evaluate to true
