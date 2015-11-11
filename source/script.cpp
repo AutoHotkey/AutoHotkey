@@ -12184,15 +12184,31 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			if (this_act == ACT_CATCH && line->mActionType == ACT_FINALLY)
 			{
 				if (result == OK && !jump_to_line)
-					// Let the next iteration handle the finally block.
+					// Execution is being allowed to flow normally into the finally block and
+					// then the line after.  Let the next iteration handle the finally block.
 					continue;
 
-				// An exception was thrown, and this try..(catch)..finally block didn't handle it.
-				// Therefore we must execute the finally block before returning.
+				// One of the following occurred:
+				//  - An exception was thrown, and this try..(catch)..finally block didn't handle it.
+				//  - A control flow statement such as break, continue or goto was used.
+				// Recursively execute the finally block before continuing.
+				ExprTokenType *thrown_token = g.ThrownToken;
+				g.ThrownToken = NULL; // Must clear this temporarily to avoid arbitrarily re-throwing it.
 				Line *invalid_jump; // Don't overwrite jump_to_line in case the try block used goto.
 				ResultType res = line->ExecUntil(ONLY_ONE_LINE, NULL, &invalid_jump);
-				if (invalid_jump || res == LOOP_BREAK || res == LOOP_CONTINUE || res == EARLY_RETURN)
+				if (res != OK || invalid_jump)
+				{
+					if (thrown_token) // The new error takes precedence over this one.
+						g_script.FreeExceptionToken(thrown_token);
+					if (res == FAIL || res == EARLY_EXIT)
+						// Above: It's borderline whether Exit should be valid here, but it's allowed for
+						// two reasons: 1) if the script was non-#Persistent it would have already terminated
+						// anyway, and 2) it's only a question of whether to show a message before exiting.
+						return res;
+					// The remaining cases are all invalid jumps/control flow statements.
 					return g_script.mCurrLine->LineError(ERR_BAD_JUMP_INSIDE_FINALLY);
+				}
+				g.ThrownToken = thrown_token; // If non-NULL, this was thrown within the try block.
 			}
 			
 			if (aMode == ONLY_ONE_LINE || result != OK)
