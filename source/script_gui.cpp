@@ -516,13 +516,10 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 
 	case GUI_CMD_TAB:
 	{
-		TabIndexType prev_tab_index = gui.mCurrentTabIndex;
-		TabControlIndexType prev_tab_control_index = gui.mCurrentTabControlIndex;
-		if (!*aParam2 && !*aParam3) // Both the tab control number and the tab number were omitted.
-			gui.mCurrentTabControlIndex = MAX_TAB_CONTROLS; // i.e. "no tab"
-		else
+		if (*aParam3 // Which tab control. Must be processed prior to Param2 since it might change mCurrentTabControlIndex.
+			|| !*aParam2) // Both the tab control number and the tab number were omitted.
 		{
-			if (*aParam3) // Which tab control. Must be processed prior to Param2 since it might change mCurrentTabControlIndex.
+			if (*aParam3)
 			{
 				index = ATOI(aParam3) - 1;
 				if (index < 0 || index > MAX_TAB_CONTROLS - 1)
@@ -530,52 +527,59 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 					result = ScriptError(ERR_PARAM3_INVALID, aParam3);
 					goto return_the_result;
 				}
-				if (index != gui.mCurrentTabControlIndex) // This is checked early in case of early return in the next section due to error.
-				{
-					gui.mCurrentTabControlIndex = index;
-					// Fix for v1.0.38.02: Changing to a different tab control (or none at all when there
-					// was one before, or vice versa) should start a new radio group:
-					gui.mInRadioGroup = false;
-				}
 			}
-			if (*aParam2) // Index or name of a particular tab inside a control.
+			else
+				index = MAX_TAB_CONTROLS; // i.e. "no tab"
+			
+			if (gui.mCurrentTabControlIndex != index) // This is checked early in case of early return in the next section due to error.
 			{
-				if (!*aParam3 && gui.mCurrentTabControlIndex == MAX_TAB_CONTROLS)
-					// Provide a default: the most recently added tab control.  If there are no
-					// tab controls, assume the index is the first tab control (i.e. a tab control
-					// to be created in the future).  Fix for v1.0.46.16: This section must be done
-					// prior to gui.FindTabControl() below because otherwise, a script that does
-					// "Gui Tab" will find that a later use of "Gui Tab, TabName" won't work unless
-					// the third parameter (which tab control) is explicitly specified.
-					gui.mCurrentTabControlIndex = gui.mTabControlCount ? gui.mTabControlCount - 1 : 0;
-				bool exact_match = !_tcsicmp(aParam4, _T("Exact")); // v1.0.37.03.
-				// Unlike "GuiControl, Choose", in this case, don't allow negatives since that would just
-				// generate an error msg further below:
-				if (!exact_match && IsPureNumeric(aParam2, false, false))
-				{
-					index = ATOI(aParam2) - 1;
-					if (index < 0 || index > MAX_TABS_PER_CONTROL - 1)
-					{
-						result = ScriptError(ERR_PARAM2_INVALID, aParam2);
-						goto return_the_result;
-					}
-				}
-				else
-				{
-					index = -1;  // Set default to be "failure".
-					GuiControlType *tab_control = gui.FindTabControl(gui.mCurrentTabControlIndex);
-					if (tab_control)
-						index = gui.FindTabIndexByName(*tab_control, aParam2, exact_match); // Returns -1 on failure.
-					if (index == -1)
-					{
-						result =ScriptError(_T("Tab name doesn't exist yet."), aParam2);
-						goto return_the_result;
-					}
-				}
-				gui.mCurrentTabIndex = index;
+				gui.mCurrentTabControlIndex = index;
+				// Fix for v1.1.23.00: This section was restructured so that the following is done even
+				// if both parameters are omitted (fixes the "none at all" condition mentioned below).
+				// Fix for v1.0.38.02: Changing to a different tab control (or none at all when there
+				// was one before, or vice versa) should start a new radio group:
+				gui.mInRadioGroup = false;
 			}
-			if (gui.mCurrentTabIndex != prev_tab_index || gui.mCurrentTabControlIndex != prev_tab_control_index)
+		}
+		if (*aParam2) // Index or name of a particular tab inside a control.
+		{
+			if (!*aParam3 && gui.mCurrentTabControlIndex == MAX_TAB_CONTROLS)
+				// Provide a default: the most recently added tab control.  If there are no
+				// tab controls, assume the index is the first tab control (i.e. a tab control
+				// to be created in the future).  Fix for v1.0.46.16: This section must be done
+				// prior to gui.FindTabControl() below because otherwise, a script that does
+				// "Gui Tab" will find that a later use of "Gui Tab, TabName" won't work unless
+				// the third parameter (which tab control) is explicitly specified.
+				gui.mCurrentTabControlIndex = gui.mTabControlCount ? gui.mTabControlCount - 1 : 0;
+			bool exact_match = !_tcsicmp(aParam4, _T("Exact")); // v1.0.37.03.
+			// Unlike "GuiControl, Choose", in this case, don't allow negatives since that would just
+			// generate an error msg further below:
+			if (!exact_match && IsPureNumeric(aParam2, false, false))
+			{
+				index = ATOI(aParam2) - 1;
+				if (index < 0 || index > MAX_TABS_PER_CONTROL - 1)
+				{
+					result = ScriptError(ERR_PARAM2_INVALID, aParam2);
+					goto return_the_result;
+				}
+			}
+			else
+			{
+				index = -1;  // Set default to be "failure".
+				GuiControlType *tab_control = gui.FindTabControl(gui.mCurrentTabControlIndex);
+				if (tab_control)
+					index = gui.FindTabIndexByName(*tab_control, aParam2, exact_match); // Returns -1 on failure.
+				if (index == -1)
+				{
+					result = ScriptError(_T("Tab name doesn't exist yet."), aParam2);
+					goto return_the_result;
+				}
+			}
+			if (gui.mCurrentTabIndex != index)
+			{
+				gui.mCurrentTabIndex = index;
 				gui.mInRadioGroup = false; // A fix for v1.0.38.02, see comments at similar line above.
+			}
 		}
 		goto return_the_result;
 	}
