@@ -413,7 +413,6 @@ struct ArgStruct
 #define _f_return_retval		return  // Return the value set by _f_set_retval().
 #define _f_return_empty			_f_return_p(_T(""), 0)
 #define _o_return_empty			return OK  // Default return value for Invoke is "".
-#define _o_return_or_throw(p)	if (p) _o_return(p); else _o_throw(ERR_OUTOFMEM);
 #define _f_retval_buf			(aResultToken.buf)
 #define _f_retval_buf_size		MAX_NUMBER_SIZE
 #define _f_number_buf			_f_retval_buf  // An alias to show intended usage, and in case the buffer size is changed.
