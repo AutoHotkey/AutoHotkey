@@ -491,8 +491,8 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 		return OK;
 	}
 
-	if (mAttrib & VAR_ATTRIB_IS_OBJECT) // This attrib will be removed below.
-		mObject->Release(); // But no need to set mObject = NULL.
+	if (mAttrib & VAR_ATTRIB_IS_OBJECT)
+		ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
 
 	// The below is done regardless of whether the section that follows it fails and returns early because
 	// it's the correct thing to do in all cases.
@@ -806,8 +806,8 @@ void Var::Free(int aWhenToFree, bool aExcludeAliasesAndRequireInit)
 	if (aWhenToFree == VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC && IsStatic())
 		return; // This is the only case in which the variable ISN'T made blank.
 
-	if (mAttrib & VAR_ATTRIB_IS_OBJECT) // This attrib will be removed below.
-		mObject->Release(); // But no need to set mObject = NULL.
+	if (mAttrib & VAR_ATTRIB_IS_OBJECT)
+		ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
 
 	mByteLength = 0; // Writing to union is safe because above already ensured that "this" isn't an alias.
 	// Even if it isn't free'd, variable will be made blank.  So it seems proper to always remove

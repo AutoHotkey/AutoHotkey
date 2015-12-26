@@ -194,7 +194,7 @@ private:
 		}
 
 		if (var.mAttrib & VAR_ATTRIB_IS_OBJECT) // mObject will be overwritten below via the union.
-			var.mObject->Release();
+			var.ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
 
 		var.mContentsInt64 = aNumberAsInt64;
 		var.mAttrib &= ~(VAR_ATTRIB_TYPES | VAR_ATTRIB_NOT_NUMERIC | VAR_ATTRIB_UNINITIALIZED);
@@ -353,7 +353,7 @@ public:
 		return NULL;
 	}
 
-	void ReleaseObject() // Not inline or __forceinline since our caller is not performance-critical.
+	void ReleaseObject()
 	// Caller has ensured that IsObject() == true, not just HasObject().
 	{
 		// Remove the attributes applied by AssignSkipAddRef().
