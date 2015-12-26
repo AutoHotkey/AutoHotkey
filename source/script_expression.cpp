@@ -1697,6 +1697,9 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		// instances of this function on the call-stack and yet SYM_VAR to be one of this function's own
 		// locals or formal params because it would have no legitimate origin.
 
+		// From this point on, mInstances must be decremented before returning, even on error:
+		++mInstances;
+
 		for (j = 0; j < mParamCount; ++j) // For each formal parameter.
 		{
 			FuncParam &this_formal_param = mParam[j]; // For performance and convenience.
@@ -1808,6 +1811,10 @@ free_and_return:
 		//       of itself exist on the call stack.  In other words, it would be inconsistent to make
 		//       all variables blank for case #1 above but not do it here in case #2.
 		Var::FreeAndRestoreFunctionVars(*this, backup, backup_count);
+
+		// mInstances must remain non-zero until this point to ensure that any recursive calls by an
+		// object's __Delete meta-function receive fresh variables, and none partially-destructed.
+		--mInstances;
 	}
 	return !aResultToken.Exited(); // i.e. aResultToken.SetExitResult() or aResultToken.Error() was not called.
 }
