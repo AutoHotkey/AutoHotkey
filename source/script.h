@@ -2974,6 +2974,7 @@ public:
 	ResultType MenuError(LPTSTR aMessage, LPTSTR aInfo);
 	UINT GetFreeMenuItemID();
 	UserMenu *FindMenu(LPTSTR aMenuName);
+	UserMenu *FindMenu(HMENU aMenuHandle);
 	UserMenu *AddMenu(LPTSTR aMenuName);
 	UINT ThisMenuItemPos();
 	ResultType ScriptDeleteMenu(UserMenu *aMenu);
@@ -3183,7 +3184,7 @@ BIF_DECL(BIF_OnExitOrClipboard);
 BIF_DECL(BIF_RegisterCallback);
 #endif
 
-BIF_DECL(BIF_MenuGetHandle);
+BIF_DECL(BIF_MenuGet);
 
 BIF_DECL(BIF_StatusBar);
 

@@ -16994,12 +16994,21 @@ BIF_DECL(BIF_RegisterCallback)
 
 
 
-BIF_DECL(BIF_MenuGetHandle)
+BIF_DECL(BIF_MenuGet)
 {
-	UserMenu *menu = g_script.FindMenu(ParamIndexToString(0, aResultToken.buf));
-	if (menu && !menu->mMenu)
-		menu->Create(); // On failure (rare), we just return 0.
-	aResultToken.value_int64 = menu ? (__int64)(UINT_PTR)menu->mMenu : 0;
+	if (ctoupper(aResultToken.marker[7]) == 'H') // MenuGetHandle
+	{
+		UserMenu *menu = g_script.FindMenu(ParamIndexToString(0, aResultToken.buf));
+		if (menu && !menu->mMenu)
+			menu->Create(); // On failure (rare), we just return 0.
+		aResultToken.value_int64 = menu ? (__int64)(UINT_PTR)menu->mMenu : 0;
+	}
+	else // MenuGetName
+	{
+		UserMenu *menu = g_script.FindMenu((HMENU)ParamIndexToInt64(0));
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = menu ? menu->mName : _T("");
+	}
 }
 
 

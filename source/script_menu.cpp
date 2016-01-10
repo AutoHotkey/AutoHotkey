@@ -459,6 +459,17 @@ UserMenu *Script::FindMenu(LPTSTR aMenuName)
 
 
 
+UserMenu *Script::FindMenu(HMENU aMenuHandle)
+{
+	if (!aMenuHandle) return NULL;
+	for (UserMenu *menu = mFirstMenu; menu != NULL; menu = menu->mNextMenu)
+		if (menu->mMenu == aMenuHandle)
+			return menu;
+	return NULL; // No match found.
+}
+
+
+
 UserMenu *Script::AddMenu(LPTSTR aMenuName)
 // Caller must have already ensured aMenuName doesn't exist yet in the list.
 // Returns the newly created UserMenu object.

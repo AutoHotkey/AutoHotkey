@@ -8317,8 +8317,8 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		bif = BIF_Exception;
 		max_params = 3;
 	}
-	else if (!_tcsicmp(func_name, _T("MenuGetHandle")))
-		bif = BIF_MenuGetHandle;
+	else if (!_tcsicmp(func_name, _T("MenuGetHandle")) || !_tcsicmp(func_name, _T("MenuGetName")))
+		bif = BIF_MenuGet;
 	else
 		return NULL; // Maint: There may be other lines above that also return NULL.
 
