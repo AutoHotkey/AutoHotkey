@@ -1818,7 +1818,7 @@ void FreeInterProcMem(HANDLE aHandle, LPVOID aMem)
 
 
 HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
-	, bool aUseGDIPlusIfAvailable)
+	, bool aUseGDIPlusIfAvailable, bool *apNoDelete)
 // Returns NULL on failure.
 // If aIconNumber > 0, an HICON or HCURSOR is returned (both should be interchangeable), never an HBITMAP.
 // However, aIconNumber==1 is treated as a special icon upon which LoadImage is given preference over ExtractIcon
@@ -1836,12 +1836,41 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 {
 	HBITMAP hbitmap = NULL;
 	aImageType = -1; // The type of image currently inside hbitmap.  Set default value for output parameter as "unknown".
+	if (apNoDelete)
+		*apNoDelete = false; // Set default.
 
 	if (!*aFilespec) // Allow blank filename to yield NULL bitmap (and currently, some callers do call it this way).
 		return NULL;
 	// Lexikos: Negative values now indicate an icon's integer resource ID.
 	//if (aIconNumber < 0) // Allowed to be called this way by GUI and others (to avoid need for validation of user input there).
 	//	aIconNumber = 0; // Use the default behavior, which is "load icon or bitmap, whichever is most appropriate".
+
+	bool script_passed_handle = false, script_owns_handle = false;
+	if (   !_tcsnicmp(aFilespec, _T("hicon:"), 6)
+		|| aIconNumber == 0 && !_tcsnicmp(aFilespec, _T("hbitmap:"), 8)   )
+	{
+		if (aFilespec[5] == ':') // hicon:
+		{
+			aImageType = IMAGE_ICON;
+			aFilespec += 6;
+		}
+		else
+		{
+			aImageType = IMAGE_BITMAP;
+			aFilespec += 8;
+		}
+		script_passed_handle = true;
+		script_owns_handle = (*aFilespec == '*'); // The "don't delete my icon/bitmap" flag.
+		if (script_owns_handle)
+		{
+			++aFilespec;
+			if (apNoDelete) // Caller supports conditional delete.
+				*apNoDelete = true; // May be overridden if a resized copy is created below.
+		}
+		hbitmap = (HBITMAP)(UINT_PTR)ATOI64(aFilespec);
+		if (!hbitmap)
+			return NULL;
+	}
 
 	LPTSTR file_ext = _tcsrchr(aFilespec, '.');
 	if (file_ext)
@@ -1863,7 +1892,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 	//    said that an ICL is an "ICon Library... a renamed 16-bit Windows .DLL (an NE format executable) which
 	//    typically contains nothing but a resource section. The ICL extension seems to be used by convention."
 	// L17: Support negative numbers to mean resource IDs. These are supported by the resource extraction method directly, and by ExtractIcon if aIconNumber < -1.
-	bool ExtractIcon_was_used = aIconNumber > 1 || aIconNumber < 0 || (file_ext && (
+	bool ExtractIcon_was_used = !hbitmap && (aIconNumber > 1 || aIconNumber < 0 || (file_ext && (
 		   !_tcsicmp(file_ext, _T("exe"))
 		|| !_tcsicmp(file_ext, _T("dll"))
 		|| !_tcsicmp(file_ext, _T("icl")) // Icon library: Unofficial dll container, see notes above.
@@ -1884,7 +1913,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		//|| !_tcsicmp(file_ext, _T("wfx")) // Total/Windows Commander File System Plug-in
 		//|| !_tcsicmp(file_ext, _T("wcx")) // Total/Windows Commander Plug-in
 		//|| !_tcsicmp(file_ext, _T("wdx")) // Total/Windows Commander Plug-in
-		));
+		)));
 
 	if (ExtractIcon_was_used)
 	{
@@ -2193,7 +2222,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 			// I haven't found any other way to retain an animated cursor's animation (and perhaps
 			// other icon/cursor attributes) when resizing the icon/cursor (CopyImage() doesn't
 			// retain animation):
-			if (!ExtractIcon_was_used)
+			if (!ExtractIcon_was_used && !script_passed_handle)
 			{
 				DestroyIcon((HICON)hbitmap); // Destroy the original HICON.
 				// Load a new one, but at the size newly calculated above.
@@ -2224,7 +2253,8 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 	}
 	else // GDIPlus or a simple method such as LoadImage or ExtractIcon was used.
 	{
-		if (!aWidth && !aHeight) // No resizing needed.
+		if (!aWidth && !aHeight // No resizing needed.
+			&& (!script_owns_handle || apNoDelete)) // No copying needed.
 			return hbitmap;
 		// The following will also handle HICON/HCURSOR correctly if aImageType == IMAGE_ICON/CURSOR.
 		// Also, LR_COPYRETURNORG|LR_COPYDELETEORG is used because it might allow the animation of
@@ -2239,7 +2269,9 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		//   Gui, Add, Pic, h1 w-1, bitmap 1x2.bmp  ; Crash (divide by zero)
 		//   Gui, Add, Pic, h1 w-1, bitmap 2x3.bmp  ; Crash (divide by zero)
 		// However, such sizes seem too rare to document or put in an exception handler for.
-		hbitmap_new = (HBITMAP)CopyImage(hbitmap, aImageType, aWidth, aHeight, LR_COPYRETURNORG | LR_COPYDELETEORG);
+		hbitmap_new = (HBITMAP)CopyImage(hbitmap, aImageType, aWidth, aHeight
+			, script_owns_handle ? (apNoDelete ? LR_COPYRETURNORG : 0) // If the script owns the original handle, never deleted it, and return it only if the caller can be told not to delete it.
+				: (LR_COPYRETURNORG | LR_COPYDELETEORG));
 		// Above's LR_COPYDELETEORG deletes the original to avoid cascading resource usage.  MSDN's
 		// LoadImage() docs say:
 		// "When you are finished using a bitmap, cursor, or icon you loaded without specifying the
@@ -2259,6 +2291,10 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		// Otherwise, resource usage would cascade upward until the script finally terminated, at
 		// which time all such handles are freed automatically.
 	}
+	if (hbitmap != hbitmap_new) // A new icon/bitmap was created above.
+		if (apNoDelete)
+			*apNoDelete = false; // Override any previously set value.
+		//else caller assumes it must take responsibility for the handle.
 	return hbitmap_new;
 }
 
