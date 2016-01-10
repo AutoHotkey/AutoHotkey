@@ -12235,14 +12235,21 @@ VarSizeType BIV_ThisMenuItem(LPTSTR aBuf, LPTSTR aVarName)
 
 UINT Script::ThisMenuItemPos()
 {
-	// The menu item's position is discovered through this process -- rather than doing
-	// something higher performance such as storing the menu handle or pointer to menu/item
-	// object in g_script -- because those things tend to be volatile.  For example, a menu
-	// or menu item object might be destroyed between the time the user selects it and the
-	// time this variable is referenced in the script.  Thus, by definition, this variable
-	// contains the CURRENT position of the most recently selected menu item within its
-	// CURRENT menu.
 	UserMenu *menu = FindMenu(mThisMenuName);
+	// The menu item's address was stored so we can distinguish between multiple items
+	// which have the same text.  The volatility of the address is handled by clearing
+	// it in UserMenu::DeleteItem and UserMenu::DeleteAllItems.  An ID would also be
+	// volatile, since IDs can be re-used if the item is deleted.
+	if (mThisMenuItem)
+	{
+		UINT pos = 0;
+		for (UserMenuItem *mi = menu->mFirstMenuItem; mi; mi = mi->mNextMenuItem, ++pos)
+			if (mi == mThisMenuItem)
+				return pos;
+	}
+	// For backward-compatibility, fall back to the old method if the item/menu has been
+	// deleted.  So by definition, this variable contains the CURRENT position of the most
+	// recently selected menu item within its CURRENT menu:
 	return menu ? menu->GetItemPos(mThisMenuItemName) : UINT_MAX;
 }
 
@@ -12257,7 +12264,6 @@ VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName)
 	*aBuf = '\0';
 	return 0;
 }
-
 
 VarSizeType BIV_ThisMenu(LPTSTR aBuf, LPTSTR aVarName)
 {
@@ -16985,6 +16991,27 @@ BIF_DECL(BIF_RegisterCallback)
 }
 
 #endif
+
+
+
+BIF_DECL(BIF_MenuGet)
+{
+	if (ctoupper(aResultToken.marker[7]) == 'H') // MenuGetHandle
+	{
+		UserMenu *menu = g_script.FindMenu(ParamIndexToString(0, aResultToken.buf));
+		if (menu && !menu->mMenu)
+			menu->Create(); // On failure (rare), we just return 0.
+		aResultToken.value_int64 = menu ? (__int64)(UINT_PTR)menu->mMenu : 0;
+	}
+	else // MenuGetName
+	{
+		UserMenu *menu = g_script.FindMenu((HMENU)ParamIndexToInt64(0));
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = menu ? menu->mName : _T("");
+	}
+}
+
+
 
 BIF_DECL(BIF_StatusBar)
 {

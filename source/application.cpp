@@ -1015,6 +1015,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// Safer to make a full copies than point to something potentially volatile.
 				tcslcpy(g_script.mThisMenuItemName, menu_item->mName, _countof(g_script.mThisMenuItemName));
 				tcslcpy(g_script.mThisMenuName, menu_item->mMenu->mName, _countof(g_script.mThisMenuName));
+				g_script.mThisMenuItem = menu_item;
 				break;
 			default: // hotkey or hotstring
 				// Just prior to launching the hotkey, update these values to support built-in

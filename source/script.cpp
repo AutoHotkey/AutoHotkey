@@ -59,7 +59,7 @@ Script::Script()
 	, mFirstLabel(NULL), mLastLabel(NULL)
 	, mFunc(NULL), mFuncCount(0), mFuncCountMax(0)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
-	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
+	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0), mThisMenuItem(NULL)
 	, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 	, mCurrentFuncOpenBlockCount(0), mNextLineIsFunctionBody(false), mNoUpdateLabels(false)
 	, mClassObjectCount(0), mUnresolvedClasses(NULL), mClassProperty(NULL), mClassPropertyDef(NULL)
@@ -8320,6 +8320,8 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		bif = BIF_Exception;
 		max_params = 3;
 	}
+	else if (!_tcsicmp(func_name, _T("MenuGetHandle")) || !_tcsicmp(func_name, _T("MenuGetName")))
+		bif = BIF_MenuGet;
 	else
 		return NULL; // Maint: There may be other lines above that also return NULL.
 
