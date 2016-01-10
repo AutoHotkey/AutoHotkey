@@ -1362,19 +1362,9 @@ ResultType UserMenu::Destroy()
 			return FAIL;
 	}
 	mMenu = NULL; // This must be done immediately after destroying the menu to prevent recursion problems below.
-
-	// Bug-fix for v1.0.19: The below is now done OUTSIDE the above block because the moment a
-	// parent menu is deleted all its submenus AND SUB-SUB-SUB...MENUS become invalid menu handles.
-	// But even though the OS has done this, Destroy() must still be called recursively from here
-	// so that the menu handles will be set to NULL.  This is because other functions -- such as
-	// Display() -- do not do the IsMenu() check, relying instead on whether the handle is NULL to
-	// determine whether the menu physically exists.
-	// The moment the above is done, any submenus that were attached to mMenu are also destroyed
-	// by the OS.  So mark them as destroyed in our bookkeeping also:
+	
+	ResultType result = OK;
 	UserMenuItem *mi;
-	for (mi = mFirstMenuItem; mi ; mi = mi->mNextMenuItem)
-		if (mi->mSubmenu && mi->mSubmenu->mMenu && !IsMenu(mi->mSubmenu->mMenu))
-			mi->mSubmenu->Destroy(); // Its return value isn't checked since there doesn't seem to be anything that can/should be done if it fails.
 
 	// Destroy any menu that contains this menu as a submenu.  This is done so that such
 	// menus will be automatically recreated the next time they are used, which is necessary
@@ -1387,13 +1377,28 @@ ResultType UserMenu::Destroy()
 	// time we display it.  Another drawback to DeleteMenu() is that it would change the
 	// order of the menu items to something other than what the user originally specified
 	// unless InsertMenu() was woven in during the update:
-	ResultType result = OK;
 	for (UserMenu *m = g_script.mFirstMenu; m; m = m->mNextMenu)
 		if (m->mMenu)
 			for (mi = m->mFirstMenuItem; mi; mi = mi->mNextMenuItem)
 				if (mi->mSubmenu == this)
 					if (!m->Destroy())  // Attempt to destroy any menu that contains this menu as a submenu (will fail if m is a menu bar).
 						result = FAIL; // Seems best to consider even one failure is considered a total failure.
+
+	// Bug-fix for v1.1.23: Destroying sub-menus after (rather than before) the parent menu appears
+	// to solve an issue where a sub-menu was not marked as destroyed because IsMenu() returned TRUE
+	// after its parent was destroyed but only until its grandparent was destroyed.
+	// Bug-fix for v1.0.19: The below is now done OUTSIDE the above block because the moment a
+	// parent menu is deleted all its submenus AND SUB-SUB-SUB...MENUS become invalid menu handles.
+	// But even though the OS has done this, Destroy() must still be called recursively from here
+	// so that the menu handles will be set to NULL.  This is because other functions -- such as
+	// Display() -- do not do the IsMenu() check, relying instead on whether the handle is NULL to
+	// determine whether the menu physically exists.
+	// The moment the above is done, any submenus that were attached to mMenu are also destroyed
+	// by the OS.  So mark them as destroyed in our bookkeeping also:
+	for (mi = mFirstMenuItem; mi ; mi = mi->mNextMenuItem)
+		if (mi->mSubmenu && mi->mSubmenu->mMenu && !IsMenu(mi->mSubmenu->mMenu))
+			mi->mSubmenu->Destroy(); // Its return value isn't checked since there doesn't seem to be anything that can/should be done if it fails.
+
 	return result;
 }
 
