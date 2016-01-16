@@ -11139,35 +11139,44 @@ VarSizeType BIV_FormatFloat(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(aBuf); // Must return exact length when aBuf isn't NULL.
 }
 
-VarSizeType BIV_KeyDelay(LPTSTR aBuf, LPTSTR aVarName)
+VarSizeType BIV_xDelay(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_INTEGER_SIZE];
 	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_itot(g->KeyDelay, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return (VarSizeType)_tcslen(target_buf);
-}
-
-VarSizeType BIV_WinDelay(LPTSTR aBuf, LPTSTR aVarName)
-{
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_itot(g->WinDelay, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return (VarSizeType)_tcslen(target_buf);
-}
-
-VarSizeType BIV_ControlDelay(LPTSTR aBuf, LPTSTR aVarName)
-{
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_itot(g->ControlDelay, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return (VarSizeType)_tcslen(target_buf);
-}
-
-VarSizeType BIV_MouseDelay(LPTSTR aBuf, LPTSTR aVarName)
-{
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_itot(g->MouseDelay, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
+	global_struct &g = *::g; // Reduces code size.
+	int result;
+	switch (ctoupper(aVarName[2])) // a_X...
+	{
+	case 'K':
+		if (ctolower(aVarName[6]) == 'e') // a_keydE...
+		{
+			if (aVarName[10]) // a_keydelayP...
+				result = g.KeyDelayPlay;
+			else
+				result = g.KeyDelay;
+		}
+		else // a_keydU...
+		{
+			if (aVarName[13]) // a_keydurationP...
+				result = g.PressDurationPlay;
+			else
+				result = g.PressDuration;
+		}
+		break;
+	case 'M':
+		if (aVarName[12]) // a_mousedelayP...
+			result = g.MouseDelayPlay;
+		else
+			result = g.MouseDelay;
+		break;
+	case 'W':
+		result = g.WinDelay;
+		break;
+	case 'C':
+		result = g.ControlDelay;
+		break;
+	}
+	_itot(result, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
 	return (VarSizeType)_tcslen(target_buf);
 }
 
@@ -11178,6 +11187,40 @@ VarSizeType BIV_DefaultMouseSpeed(LPTSTR aBuf, LPTSTR aVarName)
 	_itot(g->DefaultMouseSpeed, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
 	return (VarSizeType)_tcslen(target_buf);
 }
+
+VarSizeType BIV_CoordMode(LPTSTR aBuf, LPTSTR aVarName)
+{
+	static LPCTSTR sCoordModes[] = COORD_MODES;
+	LPCTSTR result = sCoordModes[(g->CoordMode >> Line::ConvertCoordModeCmd(aVarName + 11)) & COORD_MODE_MASK];
+	if (aBuf)
+		_tcscpy(aBuf, result);
+	return 6; // Currently all are 6 chars.
+}
+
+VarSizeType BIV_SendMode(LPTSTR aBuf, LPTSTR aVarName)
+{
+	static LPCTSTR sSendModes[] = SEND_MODES;
+	LPCTSTR result = sSendModes[g->SendMode];
+	if (aBuf)
+		_tcscpy(aBuf, result);
+	return (VarSizeType)_tcslen(result);
+}
+
+VarSizeType BIV_SendLevel(LPTSTR aBuf, LPTSTR aVarName)
+{
+	if (aBuf)
+		return (VarSizeType)_tcslen(_itot(g->SendLevel, aBuf, 10));  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
+	return 3; // Enough room for the maximum SendLevel (100).
+}
+
+VarSizeType BIV_StoreCapslockMode(LPTSTR aBuf, LPTSTR aVarName)
+{
+	return aBuf
+		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->StoreCapslockMode ? _T("On") : _T("Off"))) // For backward compatibility (due to StringCaseSense), never change the case used here.
+		: 3; // Room for either On or Off (in the estimation phase).
+}
+
+
 
 VarSizeType BIV_IsPaused(LPTSTR aBuf, LPTSTR aVarName) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
 {
@@ -12451,6 +12494,56 @@ VarSizeType BIV_GuiEvent(LPTSTR aBuf, LPTSTR aVarName)
 	// Otherwise, this event is not GUI_EVENT_DROPFILES, so use standard modes of operation.
 	LPTSTR event_string = GuiType::ConvertEvent(g.GuiEvent);
 	return (VarSizeType)_tcslen(aBuf ? _tcscpy(aBuf, event_string) : event_string);
+}
+
+
+
+VarSizeType BIV_DefaultGui(LPTSTR aBuf, LPTSTR aVarName)
+// A_DefaultGui, A_DefaultListView, A_DefaultTreeView: Unlike BIV_Gui above, these
+// correspond to "Gui, x: Default", not necessarily the Gui which launched the thread.
+{
+	global_struct &g = *::g; // Reduces code size and may improve performance.
+	GuiType *gui = g.GuiDefaultWindowValid();
+	GuiControlType *control = NULL;
+	LPTSTR return_string = _T("");
+	HWND return_hwnd = NULL;
+	switch (ctoupper(aVarName[9]))
+	{
+	case 'G':
+		if (!gui)
+			gui = g.GuiDefaultWindow; // If non-NULL, it's a dummy struct containing just the Gui name.
+		if (!gui) // Either no default has been set, or the default was an anonymous Gui which has been destroyed.
+			return_string = _T("1");
+		else if (*gui->mName) // Not an anonymous GUI.
+			return_string = gui->mName;
+		else // implies gui->mHwnd != NULL
+			return_hwnd = gui->mHwnd;
+		break;
+	case 'L':
+		if (gui)
+			control = gui->mCurrentListView;
+		break;
+	case 'T':
+		if (gui)
+			control = gui->mCurrentTreeView;
+		break;
+	}
+	if (control)
+	{
+		if (control->output_var) // Return associated var name (more useful for debugging).
+			return_string = control->output_var->mName;
+		else // Return HWND.
+			return_hwnd = control->hwnd;
+	}
+	if (return_hwnd)
+	{
+		if (aBuf)
+			return (VarSizeType)_tcslen(HwndToString(return_hwnd, aBuf));
+		return MAX_INTEGER_LENGTH;
+	}
+	if (aBuf)
+		_tcscpy(aBuf, return_string);
+	return (VarSizeType)_tcslen(return_string);
 }
 
 

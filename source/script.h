@@ -2957,7 +2957,7 @@ public:
 		, int aScope = FINDVAR_DEFAULT
 		, bool *apIsLocal = NULL);
 	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope);
-	static void *GetVarType(LPTSTR aVarName);
+	static VarEntry *GetBuiltInVar(LPTSTR aVarName);
 
 	WinGroup *FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound = false);
 	ResultType AddGroup(LPTSTR aGroupName);
@@ -3047,11 +3047,12 @@ VarSizeType BIV_AutoTrim(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_StringCaseSense(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_FormatInteger(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_FormatFloat(LPTSTR aBuf, LPTSTR aVarName);
-VarSizeType BIV_KeyDelay(LPTSTR aBuf, LPTSTR aVarName);
-VarSizeType BIV_WinDelay(LPTSTR aBuf, LPTSTR aVarName);
-VarSizeType BIV_ControlDelay(LPTSTR aBuf, LPTSTR aVarName);
-VarSizeType BIV_MouseDelay(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_xDelay(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_DefaultMouseSpeed(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_CoordMode(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_SendMode(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_SendLevel(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_StoreCapslockMode(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IsPaused(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IsCritical(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_IsSuspended(LPTSTR aBuf, LPTSTR aVarName);
@@ -3121,6 +3122,7 @@ VarSizeType BIV_EndChar(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_GuiControl(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_GuiEvent(LPTSTR aBuf, LPTSTR aVarName);
+VarSizeType BIV_DefaultGui(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_EventInfo(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_TimeIdle(LPTSTR aBuf, LPTSTR aVarName);
 VarSizeType BIV_TimeIdlePhysical(LPTSTR aBuf, LPTSTR aVarName);

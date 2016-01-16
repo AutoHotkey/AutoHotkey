@@ -102,6 +102,7 @@ enum ResultType {FAIL = 0, OK, WARN = OK, CRITICAL_ERROR  // Some things might r
 	, LOOP_BREAK, LOOP_CONTINUE
 	, EARLY_RETURN, EARLY_EXIT}; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
 
+#define SEND_MODES { _T("Event"), _T("Input"), _T("Play"), _T("InputThenPlay") } // Must match the enum below.
 enum SendModes {SM_EVENT, SM_INPUT, SM_PLAY, SM_INPUT_FALLBACK_TO_PLAY, SM_INVALID}; // SM_EVENT must be zero.
 // In above, SM_INPUT falls back to SM_EVENT when the SendInput mode would be defeated by the presence
 // of a keyboard/mouse hooks in another script (it does this because SendEvent is superior to a
@@ -643,6 +644,7 @@ typedef USHORT CoordModeType;
 #define COORD_MODE_CLIENT  1
 #define COORD_MODE_SCREEN  2
 #define COORD_MODE_MASK    3
+#define COORD_MODES { _T("Window"), _T("Client"), _T("Screen") }
 
 #define COORD_CENTERED (INT_MIN + 1)
 #define COORD_UNSPECIFIED INT_MIN

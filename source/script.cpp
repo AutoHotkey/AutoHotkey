@@ -34,6 +34,183 @@ static ExprOpFunc g_ObjPreInc(BIF_ObjIncDec, SYM_PRE_INCREMENT), g_ObjPreDec(BIF
 				, g_ObjPostInc(BIF_ObjIncDec, SYM_POST_INCREMENT), g_ObjPostDec(BIF_ObjIncDec, SYM_POST_DECREMENT);
 ExprOpFunc g_ObjCall(BIF_ObjInvoke, IT_CALL); // Also needed in script_expression.cpp.
 
+
+#define VF(name, fn) { _T(#name), fn }
+#define A_x(name, fn) { _T(#name), fn }
+#define A_(name) A_x(name, BIV_##name)
+// IMPORTANT: Both of the following arrays must be kept in alphabetical order
+// for binary search to work.  See Script::GetBuiltInVar for further comments.
+// g_BIV: All built-in vars not beginning with "A_".  Keeping these separate allows
+// the search to be limited to just these few whenever the var name does not begin
+// with "A_", as for most user-defined variables.  This helps average-case performance.
+VarEntry g_BIV[] =
+{
+	VF(Clipboard, (BuiltInVarType)VAR_CLIPBOARD),
+	VF(ClipboardAll, (BuiltInVarType)VAR_CLIPBOARDALL),
+	VF(ComSpec, BIV_ComSpec), // Lacks an "A_" prefix for backward compatibility with pre-NoEnv scripts and also it's easier to type & remember.,
+	VF(False, BIV_True_False),
+	VF(ProgramFiles, BIV_SpecialFolderPath), // v1.0.43.08: Added to ease the transition to #NoEnv.,
+	VF(True, BIV_True_False)
+};
+// g_BIV_A: All built-in vars beginning with "A_".  The prefix is omitted from each
+// name to reduce code size and speed up the comparisons.
+VarEntry g_BIV_A[] =
+{
+	A_(AhkPath),
+	A_(AhkVersion),
+	A_x(AppData, BIV_SpecialFolderPath),
+	A_x(AppDataCommon, BIV_SpecialFolderPath),
+	A_(AutoTrim),
+	A_x(BatchLines, BIV_BatchLines),
+	A_x(CaretX, BIV_Caret),
+	A_x(CaretY, BIV_Caret),
+	A_x(ComputerName, BIV_UserName_ComputerName),
+	A_x(ControlDelay, BIV_xDelay),
+	A_x(CoordModeCaret, BIV_CoordMode),
+	A_x(CoordModeMenu, BIV_CoordMode),
+	A_x(CoordModeMouse, BIV_CoordMode),
+	A_x(CoordModePixel, BIV_CoordMode),
+	A_x(CoordModeToolTip, BIV_CoordMode),
+	A_(Cursor),
+	A_x(DD, BIV_DateTime),
+	A_x(DDD, BIV_MMM_DDD),
+	A_x(DDDD, BIV_MMM_DDD),
+	A_x(DefaultGui, BIV_DefaultGui),
+	A_x(DefaultListView, BIV_DefaultGui),
+	A_(DefaultMouseSpeed),
+	A_x(DefaultTreeView, BIV_DefaultGui),
+	A_x(Desktop, BIV_SpecialFolderPath),
+	A_x(DesktopCommon, BIV_SpecialFolderPath),
+	A_(DetectHiddenText),
+	A_(DetectHiddenWindows),
+	A_(EndChar),
+	A_(EventInfo), // It's called "EventInfo" vs. "GuiEventInfo" because it applies to non-Gui events such as OnClipboardChange.,
+	A_(ExitReason),
+	A_(FileEncoding),
+	A_(FormatFloat),
+	A_(FormatInteger),
+	A_x(Gui, BIV_Gui),
+	A_(GuiControl),
+	A_x(GuiControlEvent, BIV_GuiEvent),
+	A_x(GuiEvent, BIV_GuiEvent), // v1.0.36: A_GuiEvent was added as a synonym for A_GuiControlEvent because it seems unlikely that A_GuiEvent will ever be needed for anything:,
+	A_x(GuiHeight, BIV_Gui),
+	A_x(GuiWidth, BIV_Gui),
+	A_x(GuiX, BIV_Gui), // Naming: Brevity seems more a benefit than would A_GuiEventX's improved clarity.,
+	A_x(GuiY, BIV_Gui), // These can be overloaded if a GuiMove label or similar is ever needed.,
+	A_x(Hour, BIV_DateTime),
+	A_(IconFile),
+	A_(IconHidden),
+	A_(IconNumber),
+	A_(IconTip),
+	A_x(Index, BIV_LoopIndex),
+	A_x(IPAddress1, BIV_IPAddress),
+	A_x(IPAddress2, BIV_IPAddress),
+	A_x(IPAddress3, BIV_IPAddress),
+	A_x(IPAddress4, BIV_IPAddress),
+	A_(Is64bitOS),
+	A_(IsAdmin),
+	A_(IsCompiled),
+	A_(IsCritical),
+	A_(IsPaused),
+	A_(IsSuspended),
+	A_(IsUnicode),
+	A_x(KeyDelay, BIV_xDelay),
+	A_x(KeyDelayPlay, BIV_xDelay),
+	A_x(KeyDuration, BIV_xDelay),
+	A_x(KeyDurationPlay, BIV_xDelay),
+	A_(Language),
+	A_(LastError),
+	A_(LineFile),
+	A_(LineNumber),
+	A_(LoopField),
+	A_(LoopFileAttrib),
+	A_(LoopFileDir),
+	A_(LoopFileExt),
+	A_(LoopFileFullPath),
+	A_(LoopFileLongPath),
+	A_(LoopFileName),
+	A_(LoopFileShortName),
+	A_(LoopFileShortPath),
+	A_x(LoopFileSize, BIV_LoopFileSize),
+	A_x(LoopFileSizeKB, BIV_LoopFileSize),
+	A_x(LoopFileSizeMB, BIV_LoopFileSize),
+	A_x(LoopFileTimeAccessed, BIV_LoopFileTime),
+	A_x(LoopFileTimeCreated, BIV_LoopFileTime),
+	A_x(LoopFileTimeModified, BIV_LoopFileTime),
+	A_(LoopReadLine),
+	A_(LoopRegKey),
+	A_(LoopRegName),
+	A_(LoopRegSubKey),
+	A_(LoopRegTimeModified),
+	A_(LoopRegType),
+	A_x(MDay, BIV_DateTime),
+	A_x(Min, BIV_DateTime),
+	A_x(MM, BIV_DateTime),
+	A_x(MMM, BIV_MMM_DDD),
+	A_x(MMMM, BIV_MMM_DDD),
+	A_x(Mon, BIV_DateTime),
+	A_x(MouseDelay, BIV_xDelay),
+	A_x(MouseDelayPlay, BIV_xDelay),
+	A_x(MSec, BIV_DateTime),
+	A_(MyDocuments),
+	A_x(Now, BIV_Now),
+	A_x(NowUTC, BIV_Now),
+	A_x(NumBatchLines, BIV_BatchLines),
+	A_(OSType),
+	A_(OSVersion),
+	A_(PriorHotkey),
+	A_(PriorKey),
+	A_x(ProgramFiles, BIV_SpecialFolderPath),
+	A_x(Programs, BIV_SpecialFolderPath),
+	A_x(ProgramsCommon, BIV_SpecialFolderPath),
+	A_(PtrSize),
+	A_(RegView),
+	A_(ScreenDPI),
+	A_x(ScreenHeight, BIV_ScreenWidth_Height),
+	A_x(ScreenWidth, BIV_ScreenWidth_Height),
+	A_(ScriptDir),
+	A_(ScriptFullPath),
+	A_(ScriptHwnd),
+	A_(ScriptName),
+	A_x(Sec, BIV_DateTime),
+	A_(SendLevel),
+	A_(SendMode),
+	A_x(Space, BIV_Space_Tab),
+	A_x(StartMenu, BIV_SpecialFolderPath),
+	A_x(StartMenuCommon, BIV_SpecialFolderPath),
+	A_x(Startup, BIV_SpecialFolderPath),
+	A_x(StartupCommon, BIV_SpecialFolderPath),
+	A_(StoreCapslockMode),
+	A_(StringCaseSense),
+	A_x(Tab, BIV_Space_Tab),
+	A_(Temp), // Debatably should be A_TempDir, but brevity seemed more popular with users, perhaps for heavy uses of the temp folder.,
+	A_(ThisFunc),
+	A_(ThisHotkey),
+	A_(ThisLabel),
+	A_(ThisMenu),
+	A_(ThisMenuItem),
+	A_(ThisMenuItemPos),
+	A_(TickCount),
+	A_(TimeIdle),
+	A_(TimeIdlePhysical),
+	A_(TimeSincePriorHotkey),
+	A_(TimeSinceThisHotkey),
+	A_(TitleMatchMode),
+	A_(TitleMatchModeSpeed),
+	A_x(UserName, BIV_UserName_ComputerName),
+	A_x(WDay, BIV_DateTime),
+	A_x(WinDelay, BIV_xDelay),
+	A_(WinDir),
+	A_(WorkingDir),
+	A_x(YDay, BIV_DateTime),
+	A_x(Year, BIV_DateTime),
+	A_x(YWeek, BIV_DateTime),
+	A_x(YYYY, BIV_DateTime)
+};
+#undef A_
+#undef VF
+
+
 // See Script::CreateWindows() for details about the following:
 typedef BOOL (WINAPI* AddRemoveClipboardListenerType)(HWND);
 static AddRemoveClipboardListenerType MyRemoveClipboardListener = (AddRemoveClipboardListenerType)
@@ -8659,7 +8836,7 @@ Var *Line::ResolveVarOfArg(int aArgIndex, bool aCreateIfNecessary)
 			return found_var;
 		// At this point, this is either a non-existent variable or a reserved/built-in variable
 		// that was never statically referenced in the script (only dynamically), e.g. A_IPAddress%A_Index%
-		if (Script::GetVarType(sVarName) == (void *)VAR_NORMAL)
+		if (!Script::GetBuiltInVar(sVarName))
 			// If not found: for performance reasons, don't create it because caller just wants an empty variable.
 			return &empty_var;
 		//else it's the clipboard or some other built-in variable, so continue onward so that the
@@ -8861,8 +9038,8 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	// built-in vars in the global list for efficiency and to keep them out of ListVars.  Note that another
 	// section at loadtime displays an error for any attempt to explicitly declare built-in variables as
 	// either global or local.
-	void *var_type = GetVarType(var_name);
-	if (aIsLocal && (var_type != (void *)VAR_NORMAL || !_tcsicmp(var_name, _T("ErrorLevel")))) // Attempt to create built-in variable as local.
+	VarEntry *builtin = GetBuiltInVar(var_name);
+	if (aIsLocal && (builtin || !_tcsicmp(var_name, _T("ErrorLevel")))) // Attempt to create built-in variable as local.
 	{
 		if (  !(aScope & VAR_LOCAL_FUNCPARAM)  ) // It's not a UDF's parameter, so fall back to the global built-in variable of this name rather than displaying an error.
 			return FindOrAddVar(var_name, aVarNameLength, FINDVAR_GLOBAL); // Force find-or-create of global.
@@ -8887,7 +9064,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 		// v1.0.48: Lexikos: Current function is assume-static, so set static attribute.
 		aScope |= VAR_LOCAL_STATIC;
 
-	Var *the_new_var = new Var(new_name, var_type, aScope);
+	Var *the_new_var = new Var(new_name, builtin ? builtin->type : (void *)VAR_NORMAL, aScope);
 	if (the_new_var == NULL)
 	{
 		ScriptError(ERR_OUTOFMEM);
@@ -9052,217 +9229,42 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 
 
 
-void *Script::GetVarType(LPTSTR aVarName)
+VarEntry *Script::GetBuiltInVar(LPTSTR aVarName)
 {
-	// Convert to lowercase to help performance a little (it typically only helps loadtime performance because
-	// this function is rarely called during script-runtime).
-	TCHAR lowercase[MAX_VAR_NAME_LENGTH + 1];
-	tcslcpy(lowercase, aVarName, _countof(lowercase)); // Caller should have ensured it fits, but call strlcpy() for maintainability.
-	CharLower(lowercase);
-	// Above: CharLower() is smaller in code size than strlwr(), but CharLower uses the OS locale and strlwr uses
-	// the setlocal() locale (which is always the same if setlocal() is never called).  However, locale
-	// differences shouldn't affect the cases checked below; some evidence of this is at MSDN:
-	// "CharLower always maps uppercase I to lowercase I, even when the current language is Turkish or Azeri."
-
-	if (lowercase[0] != 'a' || lowercase[1] != '_')  // This check helps average-case performance.
+	VarEntry *biv;
+	int count;
+	// This array approach saves about 9KB on code size over the old approach
+	// of a series of if's and _tcscmp calls, and performs about the same.
+	// Two arrays are used so that common dynamic vars (without "A_" prefix)
+	// don't require as long a search, and so that "A_" can be omitted from
+	// each var name in the array (to reduce code size).
+	if ((aVarName[0] == 'A' || aVarName[0] == 'a') && aVarName[1] == '_')
 	{
-		if (   !_tcscmp(lowercase, _T("true"))
-			|| !_tcscmp(lowercase, _T("false"))) return BIV_True_False;
-		if (!_tcscmp(lowercase, _T("clipboard"))) return (void *)VAR_CLIPBOARD;
-		if (!_tcscmp(lowercase, _T("clipboardall"))) return (void *)VAR_CLIPBOARDALL;
-		if (!_tcscmp(lowercase, _T("comspec"))) return BIV_ComSpec; // Lacks an "A_" prefix for backward compatibility with pre-NoEnv scripts and also it's easier to type & remember.
-		if (!_tcscmp(lowercase, _T("programfiles"))) return BIV_SpecialFolderPath; // v1.0.43.08: Added to ease the transition to #NoEnv.
-		// Otherwise:
-		return (void *)VAR_NORMAL;
+		aVarName += 2;
+		biv = g_BIV_A;
+		count = _countof(g_BIV_A);
 	}
-
-	// Otherwise, lowercase begins with "a_", so it's probably one of the built-in variables.
-	LPTSTR lower = lowercase + 2;
-
-	// Keeping the most common ones near the top helps performance a little.
-	if (!_tcscmp(lower, _T("index"))) return BIV_LoopIndex;  // A short name since it's typed so often.
-
-	if (   !_tcscmp(lower, _T("mmmm"))    // Long name of month.
-		|| !_tcscmp(lower, _T("mmm"))     // 3-char abbrev. month name.
-		|| !_tcscmp(lower, _T("dddd"))    // Name of weekday, e.g. Sunday
-		|| !_tcscmp(lower, _T("ddd"))   ) // Abbrev., e.g. Sun
-		return BIV_MMM_DDD;
-
-	if (   !_tcscmp(lower, _T("yyyy"))
-		|| !_tcscmp(lower, _T("year")) // Same as above.
-		|| !_tcscmp(lower, _T("mm"))   // 01 thru 12
-		|| !_tcscmp(lower, _T("mon"))  // Same
-		|| !_tcscmp(lower, _T("dd"))   // 01 thru 31
-		|| !_tcscmp(lower, _T("mday")) // Same
-		|| !_tcscmp(lower, _T("wday"))
-		|| !_tcscmp(lower, _T("yday"))
-		|| !_tcscmp(lower, _T("yweek"))
-		|| !_tcscmp(lower, _T("hour"))
-		|| !_tcscmp(lower, _T("min"))
-		|| !_tcscmp(lower, _T("sec"))
-		|| !_tcscmp(lower, _T("msec"))   )
-		return BIV_DateTime;
-
-	if (!_tcscmp(lower, _T("tickcount"))) return BIV_TickCount;
-	if (   !_tcscmp(lower, _T("now"))
-		|| !_tcscmp(lower, _T("nowutc"))) return BIV_Now;
-
-	if (!_tcscmp(lower, _T("workingdir"))) return BIV_WorkingDir;
-	if (!_tcscmp(lower, _T("scriptname"))) return BIV_ScriptName;
-	if (!_tcscmp(lower, _T("scriptdir"))) return BIV_ScriptDir;
-	if (!_tcscmp(lower, _T("scriptfullpath"))) return BIV_ScriptFullPath;
-	if (!_tcscmp(lower, _T("scripthwnd"))) return BIV_ScriptHwnd;
-	if (!_tcscmp(lower, _T("linenumber"))) return BIV_LineNumber;
-	if (!_tcscmp(lower, _T("linefile"))) return BIV_LineFile;
-
-	if (!_tcscmp(lower, _T("iscompiled"))) return BIV_IsCompiled;
-	if (!_tcscmp(lower, _T("isunicode"))) return BIV_IsUnicode;	
-	if (!_tcscmp(lower, _T("ptrsize"))) return BIV_PtrSize;
-
-	if (   !_tcscmp(lower, _T("batchlines"))
-		|| !_tcscmp(lower, _T("numbatchlines"))) return BIV_BatchLines;
-	if (!_tcscmp(lower, _T("titlematchmode"))) return BIV_TitleMatchMode;
-	if (!_tcscmp(lower, _T("titlematchmodespeed"))) return BIV_TitleMatchModeSpeed;
-	if (!_tcscmp(lower, _T("detecthiddenwindows"))) return BIV_DetectHiddenWindows;
-	if (!_tcscmp(lower, _T("detecthiddentext"))) return BIV_DetectHiddenText;
-	if (!_tcscmp(lower, _T("autotrim"))) return BIV_AutoTrim;
-	if (!_tcscmp(lower, _T("stringcasesense"))) return BIV_StringCaseSense;
-	if (!_tcscmp(lower, _T("formatinteger"))) return BIV_FormatInteger;
-	if (!_tcscmp(lower, _T("formatfloat"))) return BIV_FormatFloat;
-	if (!_tcscmp(lower, _T("keydelay"))) return BIV_KeyDelay;
-	if (!_tcscmp(lower, _T("windelay"))) return BIV_WinDelay;
-	if (!_tcscmp(lower, _T("controldelay"))) return BIV_ControlDelay;
-	if (!_tcscmp(lower, _T("mousedelay"))) return BIV_MouseDelay;
-	if (!_tcscmp(lower, _T("defaultmousespeed"))) return BIV_DefaultMouseSpeed;
-	if (!_tcscmp(lower, _T("ispaused"))) return BIV_IsPaused;
-	if (!_tcscmp(lower, _T("iscritical"))) return BIV_IsCritical;
-	if (!_tcscmp(lower, _T("issuspended"))) return BIV_IsSuspended;
-	if (!_tcscmp(lower, _T("fileencoding"))) return BIV_FileEncoding;
-	if (!_tcscmp(lower, _T("regview"))) return BIV_RegView;
-
-	if (!_tcscmp(lower, _T("iconhidden"))) return BIV_IconHidden;
-	if (!_tcscmp(lower, _T("icontip"))) return BIV_IconTip;
-	if (!_tcscmp(lower, _T("iconfile"))) return BIV_IconFile;
-	if (!_tcscmp(lower, _T("iconnumber"))) return BIV_IconNumber;
-
-	if (!_tcscmp(lower, _T("exitreason"))) return BIV_ExitReason;
-
-	if (!_tcscmp(lower, _T("ostype"))) return BIV_OSType;
-	if (!_tcscmp(lower, _T("osversion"))) return BIV_OSVersion;
-	if (!_tcscmp(lower, _T("is64bitos"))) return BIV_Is64bitOS;
-	if (!_tcscmp(lower, _T("language"))) return BIV_Language;
-	if (   !_tcscmp(lower, _T("computername"))
-		|| !_tcscmp(lower, _T("username"))) return BIV_UserName_ComputerName;
-
-	if (!_tcscmp(lower, _T("windir"))) return BIV_WinDir;
-	if (!_tcscmp(lower, _T("temp"))) return BIV_Temp; // Debatably should be A_TempDir, but brevity seemed more popular with users, perhaps for heavy uses of the temp folder.
-	if (!_tcscmp(lower, _T("mydocuments"))) return BIV_MyDocuments;
-
-	if (   !_tcscmp(lower, _T("programfiles"))
-		|| !_tcscmp(lower, _T("appdata"))
-		|| !_tcscmp(lower, _T("appdatacommon"))
-		|| !_tcscmp(lower, _T("desktop"))
-		|| !_tcscmp(lower, _T("desktopcommon"))
-		|| !_tcscmp(lower, _T("startmenu"))
-		|| !_tcscmp(lower, _T("startmenucommon"))
-		|| !_tcscmp(lower, _T("programs"))
-		|| !_tcscmp(lower, _T("programscommon"))
-		|| !_tcscmp(lower, _T("startup"))
-		|| !_tcscmp(lower, _T("startupcommon")))
-		return BIV_SpecialFolderPath;
-
-	if (!_tcscmp(lower, _T("isadmin"))) return BIV_IsAdmin;
-	if (!_tcscmp(lower, _T("cursor"))) return BIV_Cursor;
-	if (   !_tcscmp(lower, _T("caretx"))
-		|| !_tcscmp(lower, _T("carety"))) return BIV_Caret;
-	if (   !_tcscmp(lower, _T("screenwidth"))
-		|| !_tcscmp(lower, _T("screenheight"))) return BIV_ScreenWidth_Height;
-
-	if (!_tcsncmp(lower, _T("ipaddress"), 9))
+	else
 	{
-		lower += 9;
-		return (*lower >= '1' && *lower <= '4'
-			&& !lower[1]) // Make sure has only one more character rather than none or several (e.g. A_IPAddress1abc should not be match).
-			? BIV_IPAddress
-			: (void *)VAR_NORMAL; // Otherwise it can't be a match for any built-in variable.
+		biv = g_BIV;
+		count = _countof(g_BIV);
 	}
-
-	if (!_tcsncmp(lower, _T("loop"), 4))
+	// Using binary search vs. linear search performs a bit better (notably for
+	// rare/contrived cases like A_x%index%) and doesn't affect code size much.
+	int left, right, mid, result;
+	for (left = 0, right = count - 1; left <= right;)
 	{
-		lower += 4;
-		if (!_tcscmp(lower, _T("readline"))) return BIV_LoopReadLine;
-		if (!_tcscmp(lower, _T("field"))) return BIV_LoopField;
-
-		if (!_tcsncmp(lower, _T("file"), 4))
-		{
-			lower += 4;
-			if (!_tcscmp(lower, _T("name"))) return BIV_LoopFileName;
-			if (!_tcscmp(lower, _T("shortname"))) return BIV_LoopFileShortName;
-			if (!_tcscmp(lower, _T("ext"))) return BIV_LoopFileExt;
-			if (!_tcscmp(lower, _T("dir"))) return BIV_LoopFileDir;
-			if (!_tcscmp(lower, _T("fullpath"))) return BIV_LoopFileFullPath;
-			if (!_tcscmp(lower, _T("longpath"))) return BIV_LoopFileLongPath;
-			if (!_tcscmp(lower, _T("shortpath"))) return BIV_LoopFileShortPath;
-			if (!_tcscmp(lower, _T("attrib"))) return BIV_LoopFileAttrib;
-
-			if (   !_tcscmp(lower, _T("timemodified"))
-				|| !_tcscmp(lower, _T("timecreated"))
-				|| !_tcscmp(lower, _T("timeaccessed"))) return BIV_LoopFileTime;
-			if (   !_tcscmp(lower, _T("size"))
-				|| !_tcscmp(lower, _T("sizekb"))
-				|| !_tcscmp(lower, _T("sizemb"))) return BIV_LoopFileSize;
-			// Otherwise, it can't be a match for any built-in variable:
-			return (void *)VAR_NORMAL;
-		}
-
-		if (!_tcsncmp(lower, _T("reg"), 3))
-		{
-			lower += 3;
-			if (!_tcscmp(lower, _T("type"))) return BIV_LoopRegType;
-			if (!_tcscmp(lower, _T("key"))) return BIV_LoopRegKey;
-			if (!_tcscmp(lower, _T("subkey"))) return BIV_LoopRegSubKey;
-			if (!_tcscmp(lower, _T("name"))) return BIV_LoopRegName;
-			if (!_tcscmp(lower, _T("timemodified"))) return BIV_LoopRegTimeModified;
-			// Otherwise, it can't be a match for any built-in variable:
-			return (void *)VAR_NORMAL;
-		}
+		mid = (left + right) / 2;
+		result = _tcsicmp(aVarName, biv[mid].name);
+		if (result > 0)
+			left = mid + 1;
+		else if (result < 0)
+			right = mid - 1;
+		else // Match found.
+			return &biv[mid];
 	}
-
-	if (!_tcscmp(lower, _T("thisfunc"))) return BIV_ThisFunc;
-	if (!_tcscmp(lower, _T("thislabel"))) return BIV_ThisLabel;
-	if (!_tcscmp(lower, _T("thismenuitem"))) return BIV_ThisMenuItem;
-	if (!_tcscmp(lower, _T("thismenuitempos"))) return BIV_ThisMenuItemPos;
-	if (!_tcscmp(lower, _T("thismenu"))) return BIV_ThisMenu;
-	if (!_tcscmp(lower, _T("thishotkey"))) return BIV_ThisHotkey;
-	if (!_tcscmp(lower, _T("priorhotkey"))) return BIV_PriorHotkey;
-	if (!_tcscmp(lower, _T("timesincethishotkey"))) return BIV_TimeSinceThisHotkey;
-	if (!_tcscmp(lower, _T("timesincepriorhotkey"))) return BIV_TimeSincePriorHotkey;
-	if (!_tcscmp(lower, _T("endchar"))) return BIV_EndChar;
-	if (!_tcscmp(lower, _T("lasterror"))) return BIV_LastError;
-
-	if (!_tcscmp(lower, _T("eventinfo"))) return BIV_EventInfo; // It's called "EventInfo" vs. "GuiEventInfo" because it applies to non-Gui events such as OnClipboardChange.
-	if (!_tcscmp(lower, _T("guicontrol"))) return BIV_GuiControl;
-
-	if (   !_tcscmp(lower, _T("guicontrolevent")) // v1.0.36: A_GuiEvent was added as a synonym for A_GuiControlEvent because it seems unlikely that A_GuiEvent will ever be needed for anything:
-		|| !_tcscmp(lower, _T("guievent"))) return BIV_GuiEvent;
-
-	if (   !_tcscmp(lower, _T("gui"))
-		|| !_tcscmp(lower, _T("guiwidth"))
-		|| !_tcscmp(lower, _T("guiheight"))
-		|| !_tcscmp(lower, _T("guix")) // Naming: Brevity seems more a benefit than would A_GuiEventX's improved clarity.
-		|| !_tcscmp(lower, _T("guiy"))) return BIV_Gui; // These can be overloaded if a GuiMove label or similar is ever needed.
-
-	if (!_tcscmp(lower, _T("timeidle"))) return BIV_TimeIdle;
-	if (!_tcscmp(lower, _T("timeidlephysical"))) return BIV_TimeIdlePhysical;
-	if (   !_tcscmp(lower, _T("space"))
-		|| !_tcscmp(lower, _T("tab"))) return BIV_Space_Tab;
-	if (!_tcscmp(lower, _T("ahkversion"))) return BIV_AhkVersion;
-	if (!_tcscmp(lower, _T("ahkpath"))) return BIV_AhkPath;
-	if (!_tcscmp(lower, _T("priorkey"))) return BIV_PriorKey;
-	if (!_tcscmp(lower, _T("screendpi"))) return BIV_ScreenDPI;
-
 	// Since above didn't return:
-	return (void *)VAR_NORMAL;
+	return NULL;
 }
 
 
