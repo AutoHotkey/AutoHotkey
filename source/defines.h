@@ -52,6 +52,7 @@ GNU General Public License for more details.
 #define WINDOW_CLASS_GUI _T("AutoHotkeyGUI") // There's a section in Script::Edit() that relies on these all starting with "AutoHotkey".
 
 #define EXT_AUTOHOTKEY _T(".ahk")
+#define AHK_HELP_FILE _T("AutoHotkey.chm")
 
 // AutoIt2 supports lines up to 16384 characters long, and we want to be able to do so too
 // so that really long lines from aut2 scripts, such as a chain of IF commands, can be

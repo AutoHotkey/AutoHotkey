@@ -427,16 +427,22 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	// It also provides more consistency.
 	GetModuleFileName(NULL, buf, _countof(buf));
 #else
-	TCHAR def_buf[MAX_PATH + 1], exe_buf[MAX_PATH + 1];
+	TCHAR def_buf[MAX_PATH + 1], exe_buf[MAX_PATH + 20]; // For simplicity, allow at least space for +2 (see below) and "AutoHotkey.chm".
 	if (!aScriptFilename) // v1.0.46.08: Change in policy: store the default script in the My Documents directory rather than in Program Files.  It's more correct and solves issues that occur due to Vista's file-protection scheme.
 	{
 		// Since no script-file was specified on the command line, use the default name.
 		// For portability, first check if there's an <EXENAME>.ahk file in the current directory.
 		LPTSTR suffix, dot;
-		GetModuleFileName(NULL, exe_buf, _countof(exe_buf));
+		DWORD exe_len = GetModuleFileName(NULL, exe_buf, MAX_PATH + 2);
+		// exe_len can be MAX_PATH+2 on Windows XP, in which case it is not null-terminated.
+		// MAX_PATH+1 could mean it was truncated.  Any path longer than MAX_PATH would be rare.
+		if (exe_len > MAX_PATH)
+			return FAIL; // Seems the safest option for this unlikely case.
 		if (  (suffix = _tcsrchr(exe_buf, '\\')) // Find name part of path.
-			&& (dot = _tcsrchr(suffix, '.')) // Find extension part of name.
-			&& dot - exe_buf + 5 < _countof(exe_buf)  ) // Enough space in buffer?
+			&& (dot = _tcsrchr(suffix, '.'))  ) // Find extension part of name.
+			// Even if the extension is somehow zero characters, more than enough space was
+			// reserved in exe_buf to add "ahk":
+			//&& dot - exe_buf + 5 < _countof(exe_buf)  ) // Enough space in buffer?
 		{
 			_tcscpy(dot, EXT_AUTOHOTKEY);
 		}
@@ -453,7 +459,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 			_tcscpy(aScriptFilename + filespec_length, suffix); // Append the filename: .ahk vs. .ini seems slightly better in terms of clarity and usefulness (e.g. the ability to double click the default script to launch it).
 			if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF)
 			{
-				_tcscpy(dot, _T(".chm")); // Replace the ".ahk" which was inserted earlier.
+				_tcscpy(suffix, _T("\\") AHK_HELP_FILE); // Replace the executable name.
 				if (GetFileAttributes(exe_buf) != 0xFFFFFFFF) // Avoids hh.exe showing an error message if the file doesn't exist.
 				{
 					_sntprintf(buf, _countof(buf), _T("\"ms-its:%s::/docs/Welcome.htm\""), exe_buf);
@@ -462,8 +468,6 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 				}
 				// Since above didn't return, the help file is missing or failed to launch,
 				// so continue on and let the missing script file be reported as an error.
-				// This will happen for AutoHotkeyU32.exe because AutoHotkeyU32.chm doesn't
-				// exist (seems fine to just show an error message in such cases).
 			}
 		}
 		//else since the file exists, everything is now set up right. (The file might be a directory, but that isn't checked due to rarity.)

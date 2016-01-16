@@ -5686,7 +5686,7 @@ bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
 		return true;
 	case ID_TRAY_HELP:
 	case ID_HELP_USERMANUAL:
-		LaunchAutoHotkeyUtil(_T("AutoHotkey.chm"));
+		LaunchAutoHotkeyUtil(AHK_HELP_FILE);
 		return true;
 	case ID_TRAY_SUSPEND:
 	case ID_FILE_SUSPEND:
