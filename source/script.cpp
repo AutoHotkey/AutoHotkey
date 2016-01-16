@@ -3429,9 +3429,9 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	if (IS_DIRECTIVE_MATCH(_T("#InputLevel")))
 	{
 		// All hotkeys declared after this directive are assigned the specified InputLevel.
-		// Input generated at a given SendLevel can only trigger hotkeys that belong to the
-		// same or lower InputLevel. Hotkeys at the lowest level (0) cannot be triggered by
-		// any generated input (the same behavior as AHK versions before this feature).
+		// Input generated at a given SendLevel can only trigger hotkeys that belong to a
+		// lower InputLevel. Hotkeys at the lowest level (0) cannot be triggered by any
+		// generated input (the same behavior as AHK versions before this feature).
 		// The default level is 0.
 
 		int group = parameter ? ATOI(parameter) : 0;

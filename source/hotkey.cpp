@@ -1185,6 +1185,24 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				if (!_tcsicmp(cp, _T("UseErrorLevel")))
 					cp += 12; // Omit the rest of the letters in the string from further consideration.
 				break;
+			case 'I':
+				if (variant)
+				{
+					int new_input_level = _ttoi(cp + 1);
+					if (SendLevelIsValid(new_input_level))
+					{
+						if (new_input_level && !hk->mKeybdHookMandatory)
+						{
+							// For simplicity, a hotkey requires the hook if any of its variants have a non-zero
+							// input level, even if those variants are disabled.  The same is done for the tilde
+							// prefix above and in AddVariant(); see there for more comments.
+							hk->mKeybdHookMandatory = true;
+							update_all_hotkeys = true;
+						}
+						variant->mInputLevel = (SendLevelType)new_input_level;
+					}
+				}
+				break;
 			// Otherwise: Ignore other characters, such as the digits that comprise the number after the T option.
 			}
 		} // for()
