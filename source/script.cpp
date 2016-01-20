@@ -488,16 +488,24 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	// it might not find the dupe if the same script name is launched with different
 	// lowercase/uppercase letters:
 	ConvertFilespecToCorrectCase(buf); // This might change the length, e.g. due to expansion of 8.3 filename.
-	LPTSTR filename_marker;
-	if (   !(filename_marker = _tcsrchr(buf, '\\'))   )
-		filename_marker = buf;
-	else
-		++filename_marker;
 	if (   !(mFileSpec = SimpleHeap::Malloc(buf))   )  // The full spec is stored for convenience, and it's relied upon by mIncludeLibraryFunctionsThenExit.
 		return FAIL;  // It already displayed the error for us.
-	filename_marker[-1] = '\0'; // Terminate buf in this position to divide the string.
-	if (   !(mFileDir = SimpleHeap::Malloc(buf))   )
-		return FAIL;  // It already displayed the error for us.
+	LPTSTR filename_marker;
+	if (filename_marker = _tcsrchr(buf, '\\'))
+	{
+		*filename_marker = '\0'; // Terminate buf in this position to divide the string.
+		if (   !(mFileDir = SimpleHeap::Malloc(buf))   )
+			return FAIL;  // It already displayed the error for us.
+		++filename_marker;
+	}
+	else
+	{
+		// The only known cause of this condition is a path being too long for GetFullPathName
+		// to expand it into buf, in which case buf and mFileSpec are now empty, and this will
+		// cause LoadFromFile() to fail and the program to exit.
+		//mFileDir = _T(""); // Already done by the constructor.
+		filename_marker = buf;
+	}
 	if (   !(mFileName = SimpleHeap::Malloc(filename_marker))   )
 		return FAIL;  // It already displayed the error for us.
 #ifdef AUTOHOTKEYSC
