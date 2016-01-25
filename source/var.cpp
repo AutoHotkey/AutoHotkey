@@ -904,17 +904,19 @@ ResultType Var::AppendIfRoom(LPTSTR aStr, VarSizeType aLength)
 	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()):
 	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
 	if (var.mType != VAR_NORMAL // e.g. VAR_CLIPBOARD. Some callers do call it this way, but even if not it should be kept for maintainability.
-		|| (var.mAttrib & (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT))) // This check ensures n.="" correctly changes type(n) to String.
+		|| var.IsObject()) // Let caller free it; not worth handling here.
 		return FAIL; // CHECK THIS FIRST, BEFORE BELOW, BECAUSE CALLERS ALWAYS WANT IT TO BE A FAILURE.
-	if (!aLength) // Consider the appending of nothing to be a success.
-		return OK;
-	VarSizeType var_length = var.LengthIgnoreBinaryClip(); // Get the apparent length because one caller is a concat that wants consistent behavior of the .= operator regardless of whether this shortcut succeeds or not.
-	VarSizeType new_length = var_length + aLength;
-	if (new_length >= var._CharCapacity()) // Not enough room.
-		return FAIL;
-	tmemmove(var.mCharContents + var_length, aStr, aLength);  // mContents was updated via LengthIgnoreBinaryClip() above. Use memmove() vs. memcpy() in case there's any overlap between source and dest.
-	var.mCharContents[new_length] = '\0'; // Terminate it as a separate step in case caller passed a length shorter than the apparent length of aStr.
-	var.mByteLength = new_length * sizeof(TCHAR);
+	if (aLength)
+	{
+		VarSizeType var_length = var.LengthIgnoreBinaryClip(); // Get the apparent length because one caller is a concat that wants consistent behavior of the .= operator regardless of whether this shortcut succeeds or not.
+		VarSizeType new_length = var_length + aLength;
+		if (new_length >= var._CharCapacity()) // Not enough room.
+			return FAIL;
+		tmemmove(var.mCharContents + var_length, aStr, aLength);  // mContents was updated via LengthIgnoreBinaryClip() above. Use memmove() vs. memcpy() in case there's any overlap between source and dest.
+		var.mCharContents[new_length] = '\0'; // Terminate it as a separate step in case caller passed a length shorter than the apparent length of aStr.
+		var.mByteLength = new_length * sizeof(TCHAR);
+	}
+	// Even if nothing was appended above, set the attributes so n:=1,n.="" produces a String, not an Integer.
 	// If this is a binary-clip variable, appending has probably "corrupted" it; so don't allow it to ever be
 	// put back onto the clipboard as binary data (the routine that does that is designed to detect corruption,
 	// but it might not be perfect since corruption is so rare).  Also remove the other flags that are no longer
@@ -933,7 +935,9 @@ ResultType Var::Append(LPTSTR aStr, VarSizeType aLength)
 	if (AppendIfRoom(aStr, aLength))
 		return OK;
 	// Since above didn't return, we need to allocate space and postpone freeing our current value
-	// until after it is copied into the new buffer.
+	// until after it is copied into the new buffer.  The following relies on AppendIfRoom() always
+	// succeeding if there is room and the var has non-zero length; otherwise AssignString() would
+	// null-terminate the old contents at position 0 and the result would be incorrect.
 	LPTSTR old_contents = mCharContents; // Caller has ensured UpdateContents() was called if necessary.
 	VarSizeType old_length = _CharLength();
 	VarSizeType old_capacity = (mHowAllocated == ALLOC_MALLOC) ? mByteCapacity : 0;
