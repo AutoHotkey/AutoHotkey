@@ -533,7 +533,7 @@ ResultType Line::RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 	// or an empty string. aValueName is also checked to preserve the ability to delete a value
 	// that exists directly under a root key.
 	if (   !aRootKey
-		|| (!aRegSubkey || !*aRegSubkey) && (!aValueName || !*aValueName)   ) // See comment above.
+		|| (!aRegSubkey || !*aRegSubkey) && !aValueName   ) // See comment above.
 	{
 		result = ERROR_INVALID_PARAMETER;
 		goto finish;
@@ -545,7 +545,7 @@ ResultType Line::RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 	if (result != ERROR_SUCCESS)
 		goto finish;
 
-	if (!aValueName || !*aValueName)
+	if (!aValueName) // Caller's signal to delete the entire subkey.
 	{
 		// Remove the entire Key
 		result = RegRemoveSubkeys(hRegKey); // Delete any subitems within the key.
@@ -562,10 +562,8 @@ ResultType Line::RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 	}
 	else
 	{
-		// Remove Value.  The special phrase "ahk_default" indicates that the key's default
-		// value (displayed as "(Default)" by RegEdit) should be deleted.  This is done to
-		// distinguish a blank (which deletes the entire subkey) from the default item.
-		result = RegDeleteValue(hRegKey, _tcsicmp(aValueName, _T("ahk_default")) ? aValueName : _T(""));
+		// Remove the value.
+		result = RegDeleteValue(hRegKey, aValueName);
 		RegCloseKey(hRegKey);
 	}
 

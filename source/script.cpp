@@ -15232,7 +15232,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			if (g.mLoopRegItem->type == REG_SUBKEY)
 			{
 				sntprintf(buf_temp, _countof(buf_temp), _T("%s\\%s"), g.mLoopRegItem->subkey, g.mLoopRegItem->name);
-				return RegDelete(g.mLoopRegItem->root_key, buf_temp, _T(""));
+				return RegDelete(g.mLoopRegItem->root_key, buf_temp, NULL);
 			}
 			else
 				return RegDelete(g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name);
@@ -15243,6 +15243,15 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			subkey = ARG2, value_name = ARG3;
 		else // New syntax (root key combined with subkey).
 			value_name = ARG2;
+		// For backward-compatibility, the special phrase "ahk_default" indicates that the key's
+		// default value (displayed as "(Default)" by RegEdit) should be deleted, while a blank
+		// or omitted value deletes the entire subkey.  "RegDelete" without parameters needs to
+		// delete the current item even if that item is the default value (A_LoopRegName = "")
+		// or a value named "ahk_default", so the keyword is handled here, not in RegDelete():
+		if (!*value_name) // Blank or omitted: delete the entire subkey.
+			value_name = NULL;
+		else if (!_tcsicmp(value_name, _T("ahk_default"))) // Delete the key's default value.
+			value_name = _T("");
 		result = RegDelete(root_key, subkey, value_name);
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS always keeps open.
 			RegCloseKey(root_key);
