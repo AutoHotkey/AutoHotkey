@@ -2846,6 +2846,10 @@ public:
 	ResultType PerformGui(LPTSTR aBuf, LPTSTR aControlType, LPTSTR aOptions, LPTSTR aParam4);
 	static GuiType *ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName = NULL, size_t *aNameLength = NULL, LPTSTR aControlID = NULL);
 
+	static ResultType SetCoordMode(LPTSTR aCommand, LPTSTR aMode);
+	static ResultType SetSendMode(LPTSTR aValue);
+	static ResultType SetSendLevel(int aValue, LPTSTR aValueStr);
+
 	// Call this SciptError to avoid confusion with Line's error-displaying functions:
 	ResultType ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T("")); // , ResultType aErrorType = FAIL);
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
@@ -2894,15 +2898,11 @@ BIV_DECL_R (BIV_TitleMatchModeSpeed); // Write is handled by BIV_TitleMatchMode_
 BIV_DECL_RW(BIV_DetectHiddenWindows);
 BIV_DECL_RW(BIV_DetectHiddenText);
 BIV_DECL_RW(BIV_StringCaseSense);
-BIV_DECL_R (BIV_xDelay);
-BIV_DECL_W (BIV_KeyDelay_Set);
-BIV_DECL_W (BIV_WinDelay_Set);
-BIV_DECL_W (BIV_ControlDelay_Set);
-BIV_DECL_W (BIV_MouseDelay_Set);
+BIV_DECL_RW(BIV_xDelay);
 BIV_DECL_RW(BIV_DefaultMouseSpeed);
-BIV_DECL_R (BIV_CoordMode);
-BIV_DECL_R (BIV_SendMode);
-BIV_DECL_R (BIV_SendLevel);
+BIV_DECL_RW(BIV_CoordMode);
+BIV_DECL_RW(BIV_SendMode);
+BIV_DECL_RW(BIV_SendLevel);
 BIV_DECL_R (BIV_StoreCapslockMode);
 BIV_DECL_R (BIV_IsPaused);
 BIV_DECL_R (BIV_IsCritical);

@@ -251,12 +251,12 @@ VarEntry g_BIV_A[] =
 	A_x(CaretY, BIV_Caret),
 	A_x(ComputerName, BIV_UserName_ComputerName),
 	A_(ComSpec),
-	A_wx(ControlDelay, BIV_xDelay, BIV_ControlDelay_Set),
-	A_x(CoordModeCaret, BIV_CoordMode),
-	A_x(CoordModeMenu, BIV_CoordMode),
-	A_x(CoordModeMouse, BIV_CoordMode),
-	A_x(CoordModePixel, BIV_CoordMode),
-	A_x(CoordModeToolTip, BIV_CoordMode),
+	A_wx(ControlDelay, BIV_xDelay, BIV_xDelay_Set),
+	A_wx(CoordModeCaret, BIV_CoordMode, BIV_CoordMode_Set),
+	A_wx(CoordModeMenu, BIV_CoordMode, BIV_CoordMode_Set),
+	A_wx(CoordModeMouse, BIV_CoordMode, BIV_CoordMode_Set),
+	A_wx(CoordModePixel, BIV_CoordMode, BIV_CoordMode_Set),
+	A_wx(CoordModeToolTip, BIV_CoordMode, BIV_CoordMode_Set),
 	A_(Cursor),
 	A_x(DD, BIV_DateTime),
 	A_x(DDD, BIV_MMM_DDD),
@@ -298,10 +298,10 @@ VarEntry g_BIV_A[] =
 	A_(IsPaused),
 	A_(IsSuspended),
 	A_(IsUnicode),
-	A_wx(KeyDelay, BIV_xDelay, BIV_KeyDelay_Set),
-	A_x(KeyDelayPlay, BIV_xDelay),
-	A_x(KeyDuration, BIV_xDelay),
-	A_x(KeyDurationPlay, BIV_xDelay),
+	A_wx(KeyDelay, BIV_xDelay, BIV_xDelay_Set),
+	A_wx(KeyDelayPlay, BIV_xDelay, BIV_xDelay_Set),
+	A_wx(KeyDuration, BIV_xDelay, BIV_xDelay_Set),
+	A_wx(KeyDurationPlay, BIV_xDelay, BIV_xDelay_Set),
 	A_(Language),
 	A_w(LastError),
 	A_(LineFile),
@@ -333,8 +333,8 @@ VarEntry g_BIV_A[] =
 	A_x(MMM, BIV_MMM_DDD),
 	A_x(MMMM, BIV_MMM_DDD),
 	A_x(Mon, BIV_DateTime),
-	A_wx(MouseDelay, BIV_xDelay, BIV_MouseDelay_Set),
-	A_x(MouseDelayPlay, BIV_xDelay),
+	A_wx(MouseDelay, BIV_xDelay, BIV_xDelay_Set),
+	A_wx(MouseDelayPlay, BIV_xDelay, BIV_xDelay_Set),
 	A_x(MSec, BIV_DateTime),
 	A_(MsgBoxResult),
 	A_(MyDocuments),
@@ -359,8 +359,8 @@ VarEntry g_BIV_A[] =
 	A_(ScriptHwnd),
 	A_(ScriptName),
 	A_x(Sec, BIV_DateTime),
-	A_(SendLevel),
-	A_(SendMode),
+	A_w(SendLevel),
+	A_w(SendMode),
 	A_x(Space, BIV_Space_Tab),
 	A_x(StartMenu, BIV_SpecialFolderPath),
 	A_x(StartMenuCommon, BIV_SpecialFolderPath),
@@ -385,7 +385,7 @@ VarEntry g_BIV_A[] =
 	A_wx(TitleMatchModeSpeed, BIV_TitleMatchModeSpeed, BIV_TitleMatchMode_Set),
 	A_x(UserName, BIV_UserName_ComputerName),
 	A_x(WDay, BIV_DateTime),
-	A_wx(WinDelay, BIV_xDelay, BIV_WinDelay_Set),
+	A_wx(WinDelay, BIV_xDelay, BIV_xDelay_Set),
 	A_(WinDir),
 	A_w(WorkingDir),
 	A_x(YDay, BIV_DateTime),
@@ -12792,14 +12792,7 @@ ResultType Line::Perform()
 //////////////////////////////////////////////////////////////////////////
 
 	case ACT_COORDMODE:
-	{
-		CoordModeType mode = ConvertCoordMode(ARG2);
-		CoordModeType shift = ConvertCoordModeCmd(ARG1);
-		if (shift != -1 && mode != -1) // Compare directly to -1 because unsigned.
-			g.CoordMode = (g.CoordMode & ~(COORD_MODE_MASK << shift)) | (mode << shift);
-		//else too rare to report an error, since load-time validation normally catches it.
-		return OK;
-	}
+		return Script::SetCoordMode(ARG1, ARG2);
 
 	case ACT_SETDEFAULTMOUSESPEED:
 		g.DefaultMouseSpeed = (UCHAR)ArgToInt(1);
@@ -12809,17 +12802,10 @@ ResultType Line::Perform()
 		return OK;
 
 	case ACT_SENDMODE:
-		g.SendMode = ConvertSendMode(ARG1, g.SendMode); // Leave value unchanged if ARG1 is invalid.
-		return OK;
+		return Script::SetSendMode(ARG1);
 
 	case ACT_SENDLEVEL:
-	{
-		int sendLevel = ArgToInt(1);
-		if (SendLevelIsValid(sendLevel))
-			g.SendLevel = sendLevel;
-
-		return OK;
-	}
+		return Script::SetSendLevel(ArgToInt(1), ARG1);
 
 	case ACT_SETKEYDELAY:
 		if (!_tcsicmp(ARG3, _T("Play")))

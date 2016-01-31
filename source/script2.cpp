@@ -4923,6 +4923,33 @@ VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 
 
 
+ResultType Script::SetCoordMode(LPTSTR aCommand, LPTSTR aMode)
+{
+	CoordModeType mode = Line::ConvertCoordMode(aMode);
+	CoordModeType shift = Line::ConvertCoordModeCmd(aCommand);
+	if (shift == -1 || mode == -1) // Compare directly to -1 because unsigned.
+		return g_script.ScriptError(ERR_INVALID_VALUE, aMode);
+	g->CoordMode = (g->CoordMode & ~(COORD_MODE_MASK << shift)) | (mode << shift);
+	return OK;
+}
+
+ResultType Script::SetSendMode(LPTSTR aValue)
+{
+	g->SendMode = Line::ConvertSendMode(aValue, g->SendMode); // Leave value unchanged if ARG1 is invalid.
+	return OK;
+}
+
+ResultType Script::SetSendLevel(int aValue, LPTSTR aValueStr)
+{
+	int sendLevel = aValue;
+	if (!SendLevelIsValid(sendLevel))
+		return g_script.ScriptError(ERR_INVALID_VALUE, aValueStr);
+	g->SendLevel = sendLevel;
+	return OK;
+}
+
+
+
 ResultType Line::MouseGetPos(DWORD aOptions)
 // Returns OK or FAIL.
 {
@@ -9125,68 +9152,52 @@ BIV_DECL_W(BIV_StringCaseSense_Set)
 	return OK;
 }
 
-VarSizeType BIV_xDelay(LPTSTR aBuf, LPTSTR aVarName)
+int& BIV_xDelay(LPTSTR aVarName)
 {
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
 	global_struct &g = *::g; // Reduces code size.
-	int result;
 	switch (ctoupper(aVarName[2])) // a_X...
 	{
 	case 'K':
 		if (ctolower(aVarName[6]) == 'e') // a_keydE...
 		{
 			if (aVarName[10]) // a_keydelayP...
-				result = g.KeyDelayPlay;
+				return g.KeyDelayPlay;
 			else
-				result = g.KeyDelay;
+				return g.KeyDelay;
 		}
 		else // a_keydU...
 		{
 			if (aVarName[13]) // a_keydurationP...
-				result = g.PressDurationPlay;
+				return g.PressDurationPlay;
 			else
-				result = g.PressDuration;
+				return g.PressDuration;
 		}
-		break;
 	case 'M':
 		if (aVarName[12]) // a_mousedelayP...
-			result = g.MouseDelayPlay;
+			return g.MouseDelayPlay;
 		else
-			result = g.MouseDelay;
-		break;
+			return g.MouseDelay;
 	case 'W':
-		result = g.WinDelay;
-		break;
-	case 'C':
-		result = g.ControlDelay;
-		break;
+		return g.WinDelay;
+	//case 'C':
+	default:
+		return g.ControlDelay;
 	}
-	_itot(result, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
+}
+
+VarSizeType BIV_xDelay(LPTSTR aBuf, LPTSTR aVarName)
+{
+	TCHAR buf[MAX_INTEGER_SIZE];
+	LPTSTR target_buf = aBuf ? aBuf : buf;
+	int result = BIV_xDelay(aVarName);
+	_itot(result, target_buf, 10);
 	return (VarSizeType)_tcslen(target_buf);
 }
 
-BIV_DECL_W(BIV_KeyDelay_Set)
+BIV_DECL_W(BIV_xDelay_Set)
 {
-	g->KeyDelay = ATOI(aBuf);
-	return OK;
-}
-
-BIV_DECL_W(BIV_WinDelay_Set)
-{
-	g->WinDelay = ATOI(aBuf);
-	return OK;
-}
-
-BIV_DECL_W(BIV_ControlDelay_Set)
-{
-	g->ControlDelay = ATOI(aBuf);
-	return OK;
-}
-
-BIV_DECL_W(BIV_MouseDelay_Set)
-{
-	g->MouseDelay = ATOI(aBuf);
+	int &delay_var_ref = BIV_xDelay(aVarName);
+	delay_var_ref = ATOI(aBuf);
 	return OK;
 }
 
@@ -9213,6 +9224,11 @@ VarSizeType BIV_CoordMode(LPTSTR aBuf, LPTSTR aVarName)
 	return 6; // Currently all are 6 chars.
 }
 
+BIV_DECL_W(BIV_CoordMode_Set)
+{
+	return Script::SetCoordMode(aVarName + 11, aBuf); // A_CoordMode is 11 chars.
+}
+
 VarSizeType BIV_SendMode(LPTSTR aBuf, LPTSTR aVarName)
 {
 	static LPCTSTR sSendModes[] = SEND_MODES;
@@ -9222,11 +9238,21 @@ VarSizeType BIV_SendMode(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(result);
 }
 
+BIV_DECL_W(BIV_SendMode_Set)
+{
+	return Script::SetSendMode(aBuf);
+}
+
 VarSizeType BIV_SendLevel(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (aBuf)
 		return (VarSizeType)_tcslen(_itot(g->SendLevel, aBuf, 10));  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
 	return 3; // Enough room for the maximum SendLevel (100).
+}
+
+BIV_DECL_W(BIV_SendLevel_Set)
+{
+	return Script::SetSendLevel(ATOI(aBuf), aBuf);
 }
 
 VarSizeType BIV_StoreCapslockMode(LPTSTR aBuf, LPTSTR aVarName)
