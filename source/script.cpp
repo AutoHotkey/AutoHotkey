@@ -366,7 +366,7 @@ VarEntry g_BIV_A[] =
 	A_x(StartMenuCommon, BIV_SpecialFolderPath),
 	A_x(Startup, BIV_SpecialFolderPath),
 	A_x(StartupCommon, BIV_SpecialFolderPath),
-	A_(StoreCapslockMode),
+	A_w(StoreCapslockMode),
 	A_w(StringCaseSense),
 	A_x(Tab, BIV_Space_Tab),
 	A_(Temp), // Debatably should be A_TempDir, but brevity seemed more popular with users, perhaps for heavy uses of the temp folder.,
@@ -12837,9 +12837,7 @@ ResultType Line::Perform()
 		return OK;
 
 	case ACT_SETSTORECAPSLOCKMODE:
-		if (   (toggle = ConvertOnOff(ARG1, NEUTRAL)) != NEUTRAL   )
-			g.StoreCapslockMode = (toggle == TOGGLED_ON);
-		return OK;
+		return BIV_StoreCapslockMode_Set(ARG1, NULL);
 
 	case ACT_SETTITLEMATCHMODE:
 		return BIV_TitleMatchMode_Set(ARG1, NULL);

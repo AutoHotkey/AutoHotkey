@@ -2903,7 +2903,7 @@ BIV_DECL_RW(BIV_DefaultMouseSpeed);
 BIV_DECL_RW(BIV_CoordMode);
 BIV_DECL_RW(BIV_SendMode);
 BIV_DECL_RW(BIV_SendLevel);
-BIV_DECL_R (BIV_StoreCapslockMode);
+BIV_DECL_RW(BIV_StoreCapslockMode);
 BIV_DECL_R (BIV_IsPaused);
 BIV_DECL_R (BIV_IsCritical);
 BIV_DECL_R (BIV_IsSuspended);

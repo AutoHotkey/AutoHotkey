@@ -9262,6 +9262,15 @@ VarSizeType BIV_StoreCapslockMode(LPTSTR aBuf, LPTSTR aVarName)
 		: 3; // Room for either On or Off (in the estimation phase).
 }
 
+BIV_DECL_W(BIV_StoreCapslockMode_Set)
+{
+	ToggleValueType toggle = Line::ConvertOnOff(aBuf, NEUTRAL);
+	if (toggle == NEUTRAL)
+		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
+	g->StoreCapslockMode = (toggle == TOGGLED_ON);
+	return OK;
+}
+
 VarSizeType BIV_IsPaused(LPTSTR aBuf, LPTSTR aVarName) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
 {
 	// Although A_IsPaused could indicate how many threads are paused beneath the current thread,
