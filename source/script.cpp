@@ -5212,6 +5212,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		break;
 
 	case ACT_REGDELETE:
+	case ACT_REGDELETEKEY:
 		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertKey(new_raw_arg1))
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
@@ -12999,6 +13000,7 @@ ResultType Line::Perform()
 			RegCloseKey(root_key);
 		return result;
 	case ACT_REGDELETE:
+	case ACT_REGDELETEKEY:
 		if (mArgc < 1 && g.mLoopRegItem) // Uses the registry loop's current item.
 		{
 			// In this case, if the current reg item is a value, just delete it normally.
@@ -13014,17 +13016,10 @@ ResultType Line::Perform()
 		}
 		// Otherwise:
 		root_key = RegConvertKey(ARG1, &subkey, &is_remote_registry);
-		value_name = ARG2;
-		// The following should be changed for v2.0:
-		// For backward-compatibility, the special phrase "ahk_default" indicates that the key's
-		// default value (displayed as "(Default)" by RegEdit) should be deleted, while a blank
-		// or omitted value deletes the entire subkey.  "RegDelete" without parameters needs to
-		// delete the current item even if that item is the default value (A_LoopRegName = "")
-		// or a value named "ahk_default", so the keyword is handled here, not in RegDelete():
-		if (!*value_name) // Blank or omitted: delete the entire subkey.
+		if (mActionType == ACT_REGDELETEKEY)
 			value_name = NULL;
-		else if (!_tcsicmp(value_name, _T("ahk_default"))) // Delete the key's default value.
-			value_name = _T("");
+		else
+			value_name = ARG2; // If omitted, it will be blank (delete the default value).
 		result = RegDelete(root_key, subkey, value_name);
 		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS always keeps open.
 			RegCloseKey(root_key);
