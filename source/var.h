@@ -84,8 +84,14 @@ typedef ResultType (* BuiltInVarSetType)(LPTSTR aBuf, LPTSTR aVarName);
 
 struct VirtualVar
 {
-	BuiltInVarSetType Set;
 	BuiltInVarType Get; // Usage similar to Var::Get().
+	BuiltInVarSetType Set;
+};
+
+struct VarEntry
+{
+	LPTSTR name;
+	VirtualVar type; // Function pointer(s) or VarTypes constant.
 };
 
 #pragma warning(push)
@@ -904,7 +910,7 @@ public:
 	}
 
 	// Constructor:
-	Var(LPTSTR aVarName, VarTypes aType, VirtualVar *aBIV, UCHAR aScope)
+	Var(LPTSTR aVarName, VarEntry *aBuiltIn, UCHAR aScope)
 		// The caller must ensure that aVarName is non-null.
 		: mCharContents(sEmptyString) // Invariant: Anyone setting mCapacity to 0 must also set mContents to the empty string.
 		// Doesn't need initialization: , mContentsInt64(NULL)
@@ -913,22 +919,25 @@ public:
 		, mAttrib(VAR_ATTRIB_UNINITIALIZED) // Seems best not to init empty vars to VAR_ATTRIB_NOT_NUMERIC because it would reduce maintainability, plus finding out whether an empty var is numeric via IsNumeric() is a very fast operation.
 		, mScope(aScope)
 		, mName(aVarName) // Caller gave us a pointer to dynamic memory for this.
-		, mType((VarTypeType)aType)
 	{
-		if (aType == VAR_BUILTIN) // Relies on the fact that numbers less than VAR_LAST_TYPE can never realistically match the address of any function.
-		{
-			mBIV = aBIV->Get; // This also initializes mCapacity within the same union.
-		}
+		if (!aBuiltIn)
+			mType = VAR_NORMAL;
+		else if ((UINT_PTR)aBuiltIn->type.Get <= VAR_LAST_TYPE) // Relies on the fact that numbers less than VAR_LAST_TYPE can never realistically match the address of any function.
+			mType = (VarTypeType)(UINT_PTR)aBuiltIn->type.Get;
 		else
-		{
-			mByteCapacity = 0; // This also initializes mBIV within the same union.
-			if (aType == VAR_VIRTUAL)
+			if (aBuiltIn->type.Set)
 			{
-				mVV = (VirtualVar *)SimpleHeap::Malloc(sizeof(VirtualVar));
-				*mVV = *aBIV; // Struct copy.
+				mType = VAR_VIRTUAL;
+				mVV = &aBuiltIn->type;
 			}
-		}
-		if (aType != VAR_NORMAL)
+			else
+			{
+				mType = VAR_BUILTIN;
+				mBIV = aBuiltIn->type.Get; // This also initializes mCapacity within the same union.
+			}
+		if (mType != VAR_BUILTIN) 
+			mByteCapacity = 0; // This also initializes mBIV within the same union.
+		if (mType != VAR_NORMAL)
 			mAttrib = 0; // Any vars that aren't VAR_NORMAL are considered initialized, by definition.
 	}
 
@@ -956,7 +965,6 @@ public:
 
 }; // class Var
 #pragma pack(pop) // Calling pack with no arguments restores the default value (which is 8, but "the alignment of a member will be on a boundary that is either a multiple of n or a multiple of the size of the member, whichever is smaller.")
-
 #pragma warning(pop)
 
 inline void ResultToken::StealMem(Var *aVar)

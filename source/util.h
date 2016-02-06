@@ -686,7 +686,7 @@ DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf);
 DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, DWORD aBufSize, DWORD aFlag = 0);
 
 HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
-	, bool aUseGDIPlusIfAvailable);
+	, bool aUseGDIPlusIfAvailable, bool *apNoDelete = NULL);
 HBITMAP IconToBitmap(HICON ahIcon, bool aDestroyIcon);
 HBITMAP IconToBitmap32(HICON aIcon, bool aDestroyIcon); // Lexikos: Used for menu icons on Vista+. Creates a 32-bit (ARGB) device-independent bitmap from an icon.
 int CALLBACK FontEnumProc(ENUMLOGFONTEX *lpelfe, NEWTEXTMETRICEX *lpntme, DWORD FontType, LPARAM lParam);

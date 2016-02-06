@@ -516,7 +516,8 @@ enum JoyControls {JOYCTRL_INVALID, JOYCTRL_XPOS, JOYCTRL_YPOS, JOYCTRL_ZPOS
 #define IS_JOYSTICK_BUTTON(joy) (joy >= JOYCTRL_1 && joy <= JOYCTRL_BUTTON_MAX)
 
 enum MenuCommands {MENU_CMD_INVALID, MENU_CMD_SHOW, MENU_CMD_USEERRORLEVEL
-	, MENU_CMD_ADD, MENU_CMD_RENAME, MENU_CMD_CHECK, MENU_CMD_UNCHECK, MENU_CMD_TOGGLECHECK
+	, MENU_CMD_ADD, MENU_CMD_RENAME, MENU_CMD_INSERT
+	, MENU_CMD_CHECK, MENU_CMD_UNCHECK, MENU_CMD_TOGGLECHECK
 	, MENU_CMD_ENABLE, MENU_CMD_DISABLE, MENU_CMD_TOGGLEENABLE
 	, MENU_CMD_STANDARD, MENU_CMD_NOSTANDARD, MENU_CMD_COLOR, MENU_CMD_DEFAULT, MENU_CMD_NODEFAULT
 	, MENU_CMD_DELETE, MENU_CMD_DELETEALL, MENU_CMD_TIP, MENU_CMD_ICON, MENU_CMD_NOICON
@@ -552,7 +553,8 @@ enum BuiltInFunctionID {
 	FID_WinMoveBottom = 0, FID_WinMoveTop,
 	FID_ProcessExist = 0, FID_ProcessClose, FID_ProcessWait, FID_ProcessWaitClose, 
 	FID_MonitorGet = 0, FID_MonitorGetWorkArea, FID_MonitorGetCount, FID_MonitorGetPrimary, FID_MonitorGetName, 
-	FID_OnExit = 0, FID_OnClipboardChange
+	FID_OnExit = 0, FID_OnClipboardChange,
+	FID_MenuGetHandle = 0, FID_MenuGetName,
 };
 
 #define AHK_LV_SELECT       0x0100
@@ -1304,6 +1306,7 @@ public:
 		if (!_tcsicmp(aBuf, _T("UseErrorLevel"))) return MENU_CMD_USEERRORLEVEL;
 		if (!_tcsicmp(aBuf, _T("Add"))) return MENU_CMD_ADD;
 		if (!_tcsicmp(aBuf, _T("Rename"))) return MENU_CMD_RENAME;
+		if (!_tcsicmp(aBuf, _T("Insert"))) return MENU_CMD_INSERT;
 		if (!_tcsicmp(aBuf, _T("Check"))) return MENU_CMD_CHECK;
 		if (!_tcsicmp(aBuf, _T("Uncheck"))) return MENU_CMD_UNCHECK;
 		if (!_tcsicmp(aBuf, _T("ToggleCheck"))) return MENU_CMD_TOGGLECHECK;
@@ -2242,13 +2245,15 @@ public:
 	{
 	}
 
-	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions);
+	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions, UserMenuItem **aInsertAt);
+	ResultType InternalAppendMenu(UserMenuItem *aMenuItem, UserMenuItem *aInsertBefore = NULL);
 	ResultType DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev);
 	ResultType DeleteAllItems();
 	ResultType ModifyItem(UserMenuItem *aMenuItem, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions);
 	void UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions);
 	ResultType RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName);
 	ResultType UpdateName(UserMenuItem *aMenuItem, LPTSTR aNewName);
+	ResultType SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aStateMask);
 	ResultType CheckItem(UserMenuItem *aMenuItem);
 	ResultType UncheckItem(UserMenuItem *aMenuItem);
 	ResultType ToggleCheckItem(UserMenuItem *aMenuItem);
@@ -2264,6 +2269,7 @@ public:
 	ResultType AppendStandardItems();
 	ResultType Destroy();
 	ResultType Display(bool aForceToForeground = true, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED);
+	UserMenuItem *FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bool &aByPos);
 	UINT GetSubmenuPos(HMENU ahMenu);
 	UINT GetItemPos(LPTSTR aMenuItemName);
 	bool ContainsMenu(UserMenu *aMenu);
@@ -2283,14 +2289,15 @@ class UserMenuItem
 public:
 	LPTSTR mName;  // Dynamically allocated.
 	size_t mNameCapacity;
-	UINT mMenuID;
 	LabelRef mLabel;
 	UserMenu *mSubmenu;
 	UserMenu *mMenu;  // The menu to which this item belongs.  Needed to support script var A_ThisMenu.
+	UINT mMenuID;
 	int mPriority;
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
-	bool mEnabled, mChecked;
+	WORD mMenuState;
+	WORD mMenuType;
 	UserMenuItem *mNextMenuItem;  // Next item in linked list
 	
 	union
@@ -2552,6 +2559,7 @@ public:
 		, GuiIndexType aControlIndex = -1, Var *aParam3Var = NULL); // aControlIndex is not needed upon control creation.
 	void ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aControl);
 	void ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt = NULL);
+	ResultType ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilename, int aWidth, int aHeight, int aIconNumber);
 	ResultType Show(LPTSTR aOptions, LPTSTR aTitle);
 	ResultType Clear();
 	ResultType Cancel();
@@ -2706,6 +2714,7 @@ private:
 public:
 	Line *mCurrLine;     // Seems better to make this public than make Line our friend.
 	Label *mPlaceholderLabel; // Used in place of a NULL label to simplify code.
+	UserMenuItem *mThisMenuItem;
 	TCHAR mThisMenuItemName[MAX_MENU_NAME_LENGTH + 1];
 	TCHAR mThisMenuName[MAX_MENU_NAME_LENGTH + 1];
 	LPTSTR mThisHotkeyName, mPriorHotkeyName;
@@ -2791,8 +2800,7 @@ public:
 		, int aScope = FINDVAR_DEFAULT
 		, bool *apIsLocal = NULL);
 	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope);
-	static VarTypes GetVarType(LPTSTR aVarName, VirtualVar *aBIV = NULL);
-	static BuiltInVarType GetVarType_BIV(LPTSTR aVarName, BuiltInVarSetType &setter); // Helper function.
+	static VarEntry *GetBuiltInVar(LPTSTR aVarName);
 
 	WinGroup *FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound = false);
 	ResultType AddGroup(LPTSTR aGroupName);
@@ -2809,7 +2817,10 @@ public:
 	LPTSTR ListKeyHistory(LPTSTR aBuf, int aBufSize);
 
 	ResultType PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var); // L17: Added aOptions2 for Icon sub-command (icon width). Arg was previously reserved/unused.
+	ResultType MenuError(LPTSTR aMessage, LPTSTR aInfo);
+	UINT GetFreeMenuItemID();
 	UserMenu *FindMenu(LPTSTR aMenuName);
+	UserMenu *FindMenu(HMENU aMenuHandle);
 	UserMenu *AddMenu(LPTSTR aMenuName);
 	UINT ThisMenuItemPos();
 	ResultType ScriptDeleteMenu(UserMenu *aMenu);
@@ -2879,15 +2890,20 @@ BIV_DECL_R (BIV_True_False);
 BIV_DECL_R (BIV_MMM_DDD);
 BIV_DECL_R (BIV_DateTime);
 BIV_DECL_RW(BIV_TitleMatchMode);
-BIV_DECL_RW(BIV_TitleMatchModeSpeed);
+BIV_DECL_R (BIV_TitleMatchModeSpeed); // Write is handled by BIV_TitleMatchMode_Set.
 BIV_DECL_RW(BIV_DetectHiddenWindows);
 BIV_DECL_RW(BIV_DetectHiddenText);
 BIV_DECL_RW(BIV_StringCaseSense);
-BIV_DECL_RW(BIV_KeyDelay);
-BIV_DECL_RW(BIV_WinDelay);
-BIV_DECL_RW(BIV_ControlDelay);
-BIV_DECL_RW(BIV_MouseDelay);
+BIV_DECL_R (BIV_xDelay);
+BIV_DECL_W (BIV_KeyDelay_Set);
+BIV_DECL_W (BIV_WinDelay_Set);
+BIV_DECL_W (BIV_ControlDelay_Set);
+BIV_DECL_W (BIV_MouseDelay_Set);
 BIV_DECL_RW(BIV_DefaultMouseSpeed);
+BIV_DECL_R (BIV_CoordMode);
+BIV_DECL_R (BIV_SendMode);
+BIV_DECL_R (BIV_SendLevel);
+BIV_DECL_R (BIV_StoreCapslockMode);
 BIV_DECL_R (BIV_IsPaused);
 BIV_DECL_R (BIV_IsCritical);
 BIV_DECL_R (BIV_IsSuspended);
@@ -2960,6 +2976,7 @@ BIV_DECL_R (BIV_EndChar);
 BIV_DECL_R (BIV_Gui);
 BIV_DECL_R (BIV_GuiControl);
 BIV_DECL_R (BIV_GuiEvent);
+BIV_DECL_R (BIV_DefaultGui);
 BIV_DECL_RW(BIV_EventInfo);
 BIV_DECL_R (BIV_TimeIdle);
 BIV_DECL_R (BIV_TimeIdlePhysical);
@@ -3021,6 +3038,8 @@ BIF_DECL(BIF_OnExitOrClipboard);
 BIF_DECL(BIF_RegisterCallback);
 #endif
 
+BIF_DECL(BIF_MenuGet);
+
 BIF_DECL(BIF_StatusBar);
 
 BIF_DECL(BIF_LV_GetNextOrCount);
@@ -3038,6 +3057,8 @@ BIF_DECL(BIF_TV_SetImageList);
 BIF_DECL(BIF_IL_Create);
 BIF_DECL(BIF_IL_Destroy);
 BIF_DECL(BIF_IL_Add);
+
+BIF_DECL(BIF_LoadPicture);
 
 BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.
 
