@@ -64,6 +64,9 @@ FuncEntry g_BIF[] =
 	BIFn(RegExReplace, 2, 6, true, BIF_RegEx, {4}),
 	BIF1(Format, 1, NA, true),
 
+	BIFn(EnvGet, 1, 1, true, BIF_Env),
+	BIFn(EnvSet, 1, 2, false, BIF_Env),
+
 	BIF1(MsgBox, 0, 4, false, {4}),
 	BIF1(InputBox, 0, 4, true),
 
@@ -11910,23 +11913,6 @@ ResultType Line::Perform()
 		else
 			return PerformShowWindow(mActionType, FOUR_ARGS);
 	}
-
-	case ACT_ENVGET:
-		return EnvGet(ARG2);
-
-	case ACT_ENVSET:
-		// MSDN: "If [the 2nd] parameter is NULL, the variable is deleted from the current process’s environment."
-		// My: Though it seems okay, for now, just to set it to be blank if the user omitted the 2nd param or
-		// left it blank (AutoIt3 does this too).  Also, no checking is currently done to ensure that ARG2
-		// isn't longer than 32K, since future OSes may support longer env. vars.  SetEnvironmentVariable()
-		// might return 0(fail) in that case anyway.  Also, ARG1 may be a dereferenced variable that resolves
-		// to the name of an Env. Variable.  In any case, this name need not correspond to any existing
-		// variable name within the script (i.e. script variables and env. variables aren't tied to each other
-		// in any way).  This seems to be the most flexible approach, but are there any shortcomings?
-		// Note: It seems, at least under WinXP, that env variable names can contain spaces.  So it's best
-		// not to validate ARG1 the same way we validate script variables (i.e. just let\
-		// SetEnvironmentVariable()'s return value determine whether there's an error).
-		return SetErrorLevelOrThrowBool(!SetEnvironmentVariable(ARG1, ARG2));
 
 	case ACT_DOWNLOAD:
 		return Download(TWO_ARGS);

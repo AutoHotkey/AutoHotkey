@@ -298,9 +298,6 @@ Action g_act[] =
 	, {_T("SplitPath"), 1, 6, true, NULL} // InputFilespec, OutName, OutDir, OutExt, OutNameNoExt, OutDrive
 	, {_T("Sort"), 2, 3, false, NULL} // OutputVar, InputText, Options
 
-	, {_T("EnvGet"), 2, 2, true, NULL} // OutputVar, EnvVar
-	, {_T("EnvSet"), 1, 2, false, NULL} // EnvVar, Value
-
 	, {_T("RunAs"), 0, 3, false, NULL} // user, pass, domain (0 params can be passed to disable the feature)
 	, {_T("Run"), 1, 4, true, NULL}      // TargetFile, Working Dir, WinShow-Mode/UseErrorLevel, OutputVarPID
 	, {_T("RunWait"), 1, 4, true, NULL}  // TargetFile, Working Dir, WinShow-Mode/UseErrorLevel, OutputVarPID

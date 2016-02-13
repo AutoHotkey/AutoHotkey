@@ -2926,13 +2926,29 @@ ResultType Line::WinGetPos(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LP
 
 
 
-ResultType Line::EnvGet(LPTSTR aEnvVarName)
+BIF_DECL(BIF_Env)
+// Value := EnvGet(EnvVarName)
+// EnvSet(EnvVarName, Value)
 {
-	Var *output_var = OUTPUT_VAR;
+	LPTSTR aEnvVarName = ParamIndexToString(0, _f_number_buf);
 	// Don't use a size greater than 32767 because that will cause it to fail on Win95 (tested by Robert Yalkin).
 	// According to MSDN, 32767 is exactly large enough to handle the largest variable plus its zero terminator.
 	// Update: In practice, at least on Windows 7, the limit only applies to the ANSI functions.
 	TCHAR buf[32767];
+
+	if (_f_callee_id == FID_EnvSet)
+	{
+		// MSDN: "If [the 2nd] parameter is NULL, the variable is deleted from the current process's environment."
+		// No checking is currently done to ensure that aValue isn't longer than 32K, since testing shows that
+		// larger values are supported by the Unicode functions, at least in some OSes.  If not supported,
+		// SetEnvironmentVariable() should return 0 (fail) anyway.
+		// Note: It seems that env variable names can contain spaces and other symbols, so it's best not to
+		// validate aEnvVarName the same way we validate script variables (i.e. just let the return value
+		// determine whether there's an error).
+		LPTSTR aValue = ParamIndexIsOmitted(1) ? NULL : ParamIndexToString(1, buf);
+		_f_return_i(SetEnvironmentVariable(aEnvVarName, aValue) != FALSE);
+	}
+
 	// GetEnvironmentVariable() could be called twice, the first time to get the actual size.  But that would
 	// probably perform worse since GetEnvironmentVariable() is a very slow function, so it seems best to fetch
 	// it into a large buffer then just copy it to dest-var.
@@ -2942,14 +2958,16 @@ ResultType Line::EnvGet(LPTSTR aEnvVarName)
 		// In this case, length indicates the required buffer size, and the contents of the buffer are undefined.
 		// Since our buffer is 32767 characters, the var apparently exceeds the documented limit, as can happen
 		// if the var was set with the Unicode API.
-		if (!output_var->AssignString(NULL, length - 1, true))
-			return FAIL;
-		length = GetEnvironmentVariable(aEnvVarName, output_var->Contents(), length);
+		if (!TokenSetResult(aResultToken, NULL, length - 1))
+			return;
+		length = GetEnvironmentVariable(aEnvVarName, aResultToken.marker, length);
 		if (!length)
-			*output_var->Contents() = '\0'; // Ensure var is null-terminated.
-		return output_var->Close();
+			*aResultToken.marker = '\0'; // Ensure var is null-terminated.
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker_length = length; // Update length in case it changed.
+		return;
 	}
-	return output_var->Assign(length ? buf : _T(""), length);
+	_f_return(length ? buf : _T(""), length);
 }
 
 

@@ -575,6 +575,7 @@ enum BuiltInFunctionID {
 	FID_ControlSetChecked = 0, FID_ControlSetEnabled, FID_ControlShow, FID_ControlHide, FID_ControlSetStyle, FID_ControlSetExStyle, FID_ControlShowDropDown, FID_ControlHideDropDown, FID_ControlSetTab, FID_ControlAddItem, FID_ControlDeleteItem, FID_ControlChoose, FID_ControlChooseString, FID_ControlEditPaste,
 	FID_DriveEject = 0, FID_DriveLock, FID_DriveUnlock, FID_DriveSetLabel,
 	FID_DriveGetList = 0, FID_DriveGetFilesystem, FID_DriveGetLabel, FID_DriveGetSerial, FID_DriveGetType, FID_DriveGetStatus, FID_DriveGetStatusCD, FID_DriveGetCapacity, FID_DriveGetSpaceFree,
+	FID_EnvGet = 0, FID_EnvSet,
 };
 
 
@@ -708,7 +709,6 @@ private:
 	ResultType WinGetClass(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType WinGetText(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType WinGetPos(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType EnvGet(LPTSTR aEnvVarName);
 	ResultType PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB, int aVariation
 		, LPTSTR aOptions, bool aIsPixelGetColor);
 	ResultType ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTSTR aImageFile);
@@ -975,7 +975,6 @@ public:
 			case ACT_WINGETTEXT:
 			case ACT_WINGETPOS:
 			case ACT_SYSGET:
-			case ACT_ENVGET:
 			case ACT_CONTROLGETPOS:
 			case ACT_PIXELGETCOLOR:
 			case ACT_PIXELSEARCH:
@@ -3053,6 +3052,7 @@ BIF_DECL(BIF_Exp);
 BIF_DECL(BIF_SqrtLogLn);
 BIF_DECL(BIF_DateAdd);
 BIF_DECL(BIF_DateDiff);
+BIF_DECL(BIF_Env);
 
 BIF_DECL(BIF_OnMessage);
 BIF_DECL(BIF_OnExitOrClipboard);
