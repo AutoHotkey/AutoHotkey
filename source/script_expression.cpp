@@ -2237,8 +2237,6 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 // There are some other functions like ArgLength() that have procedures similar to this one, so
 // maintain them together.
 {
-	if (mActionType == ACT_SORT) // See PerformSort() for why it's always dereferenced.
-		return CONDITION_TRUE;
 	aVar = aVar->ResolveAlias(); // Helps performance, but also necessary to accurately detect a match further below.
 	VarTypeType aVar_type = aVar->Type();
 	if (aVar_type == VAR_CLIPBOARD)

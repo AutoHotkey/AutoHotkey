@@ -625,7 +625,6 @@ private:
 	ResultType MouseGetPos(DWORD aOptions);
 	ResultType FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat);
 	ResultType SplitPath(LPTSTR aFileSpec);
-	ResultType PerformSort(LPTSTR aContents, LPTSTR aOptions);
 	ResultType SoundSetGet(LPTSTR aSetting, LPTSTR aComponentType, LPTSTR aControlType, LPTSTR aDevice);
 	ResultType SoundSetGet2kXP(LPTSTR aSetting, DWORD aComponentType, int aComponentInstance
 		, DWORD aControlType, LPTSTR aDevice);
@@ -981,7 +980,6 @@ public:
 			case ACT_FORMATTIME:
 			case ACT_FOR:
 			case ACT_CATCH:
-			case ACT_SORT:
 				return ARG_TYPE_OUTPUT_VAR;
 			}
 			break;
@@ -3021,6 +3019,7 @@ BIF_DECL(BIF_InStr);
 BIF_DECL(BIF_StrCase);
 BIF_DECL(BIF_StrSplit);
 BIF_DECL(BIF_StrReplace);
+BIF_DECL(BIF_Sort);
 BIF_DECL(BIF_RegEx);
 BIF_DECL(BIF_Ord);
 BIF_DECL(BIF_Chr);

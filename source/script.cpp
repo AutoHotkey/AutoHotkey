@@ -60,6 +60,7 @@ FuncEntry g_BIF[] =
 	BIFn(StrLower, 1, 2, true, BIF_StrCase),
 	BIFn(StrUpper, 1, 2, true, BIF_StrCase),
 	BIF1(StrReplace, 2, 5, true, {4}),
+	BIF1(Sort, 1, 2, true),
 	BIFn(RegExMatch, 2, 4, true, BIF_RegEx, {3}),
 	BIFn(RegExReplace, 2, 6, true, BIF_RegEx, {4}),
 	BIF1(Format, 1, NA, true),
@@ -11812,9 +11813,6 @@ ResultType Line::Perform()
 
 	case ACT_SPLITPATH:
 		return SplitPath(ARG1);
-
-	case ACT_SORT:
-		return PerformSort(ARG2, ARG3);
 
 	case ACT_PIXELSEARCH:
 		// ArgToInt() works on ARG7 (the color) because any valid BGR or RGB color has 0x00 in the high order byte:

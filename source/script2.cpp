@@ -6101,7 +6101,7 @@ int SortUDF(const void *a1, const void *a2)
 
 
 
-ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
+BIF_DECL(BIF_Sort)
 // Caller must ensure that aContents is modifiable (ArgMustBeDereferenced() currently ensures this) because
 // not only does this function modify it, it also needs to store its result back into output_var in a way
 // that requires that output_var not be at the same address as the contents that were sorted.
@@ -6112,6 +6112,9 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 	g_SortFunc = NULL; // Now that original has been saved above, reset to detect whether THIS sort uses a UDF.
 	ResultType result_to_return = OK;
 	DWORD ErrorLevel = -1; // Use -1 to mean "don't change/set ErrorLevel".
+
+	_f_param_string(aContents, 0);
+	_f_param_string_opt(aOptions, 1);
 
 	// Resolve options.  First set defaults for options:
 	TCHAR delimiter = '\n';
@@ -6201,12 +6204,7 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 	}
 
 	// Check for early return only after parsing options in case an option that sets ErrorLevel is present:
-	if (!*aContents) // Variable is empty, nothing to sort.
-		goto end;
-	Var &output_var = *OUTPUT_VAR; // The input var (ARG1) is also the output var in this case.
-	// Do nothing for reserved variables, since most of them are read-only and besides, none
-	// of them (realistically) should ever need sorting:
-	if (VAR_IS_READONLY(output_var)) // output_var can be a reserved variable because it's not marked as an output-var by ArgIsVar() [since it has a dual purpose as an input-var].
+	if (!*aContents) // Input is empty, nothing to sort.
 		goto end;
 
 	// size_t helps performance and should be plenty of capacity for many years of advancement.
@@ -6214,9 +6212,7 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 	// so there's no point making this 64-bit until size_t itself becomes 64-bit (it already is on some compilers?).
 	size_t item_count;
 
-	// Explicitly calculate the length in case it's the clipboard or an environment var.
-	// (in which case Length() does not contain the current length).  While calculating
-	// the length, also check how many delimiters are present:
+	// Check how many delimiters are present:
 	for (item_count = 1, cp = aContents; *cp; ++cp)  // Start at 1 since item_count is delimiter_count+1
 		if (*cp == delimiter)
 			++item_count;
@@ -6261,15 +6257,7 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 
 	if (item_count == 1) // 1 item is already sorted, and no dupes are possible.
 	{
-		// Put the exact contents back into the output_var, which is necessary in case
-		// the variable was an environment variable or the clipboard-containing-files,
-		// since in those cases we want the behavior to be consistent regardless of
-		// whether there's only 1 item or more than one:
-		// Clipboard-contains-files: The single file should be translated into its
-		// text equivalent.  Var was an environment variable: the corresponding script
-		// variable should be assigned the contents, so it will basically "take over"
-		// for the environment variable.
-		result_to_return = output_var.Assign(aContents, (VarSizeType)aContents_length);
+		result_to_return = aResultToken.Return(aContents, aContents_length);
 		goto end;
 	}
 
@@ -6278,12 +6266,11 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 	// append the extra CRLF at the end.
 	if (g_SortFunc || trailing_crlf_added_temporarily) // Do this here rather than earlier with the options parsing in case the function-option is present twice (unlikely, but it would be a memory leak due to strdup below).  Doing it here also avoids allocating if it isn't necessary.
 	{
-		// When g_SortFunc!=NULL, the copy of the string is needed because an earlier stage has ensured that
-		// aContents is in the deref buffer, but that deref buffer is about to be overwritten by the
-		// execution of the script's UDF body.
+		// When g_SortFunc!=NULL, the copy of the string is needed because aContents may be in the deref buffer,
+		// and that deref buffer is about to be overwritten by the execution of the script's UDF body.
 		if (   !(mem_to_free = tmalloc(aContents_length + 3))   ) // +1 for terminator and +2 in case of trailing_crlf_added_temporarily.
 		{
-			result_to_return = LineError(ERR_OUTOFMEM);  // Short msg. since so rare.
+			result_to_return = aResultToken.Error(ERR_OUTOFMEM);
 			goto end;
 		}
 		tmemcpy(mem_to_free, aContents, aContents_length + 1); // memcpy() usually benches a little faster than _tcscpy().
@@ -6305,7 +6292,7 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 	LPTSTR *item = (LPTSTR *)malloc((item_count + 1) * item_size);
 	if (!item)
 	{
-		result_to_return = LineError(ERR_OUTOFMEM);  // Short msg. since so rare.
+		result_to_return = aResultToken.Error(ERR_OUTOFMEM);
 		goto end;
 	}
 
@@ -6374,14 +6361,13 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 	else
 		qsort((void *)item, item_count, item_size, sort_by_naked_filename ? SortByNakedFilename : SortWithOptions);
 
-	// Copy the sorted pointers back into output_var, which might not already be sized correctly
-	// if it's the clipboard or it was an environment variable when it came in as the input.
-	// If output_var is the clipboard, this call will set up the clipboard for writing:
-	if (output_var.AssignString(NULL, aContents_length) != OK) // Might fail due to clipboard problem.
+	// Allocate space to store the result.
+	if (!TokenSetResult(aResultToken, NULL, aContents_length))
 	{
 		result_to_return = FAIL;
 		goto end;
 	}
+	aResultToken.symbol = SYM_STRING;
 
 	// Set default in case original last item is still the last item, or if last item was omitted due to being a dupe:
 	size_t i, item_count_minus_1 = item_count - 1;
@@ -6394,7 +6380,7 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 	// item gets special treatment depending on the options that were specified.  The call to
 	// output_var->Contents() below should never fail due to the above having prepped it:
 	item_curr = item; // i.e. Don't use [] indexing for the reason described higher above (same applies to item += unit_size below).
-	for (dest = output_var.Contents(), i = 0; i < item_count; ++i, item_curr += unit_size)
+	for (dest = aResultToken.marker, i = 0; i < item_count; ++i, item_curr += unit_size)
 	{
 		keep_this_item = true;  // Set default.
 		if (omit_dupes && item_prev)
@@ -6458,7 +6444,7 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 	if (trailing_crlf_added_temporarily) // Remove the CRLF only after its presence was used above to simplify the code by reducing the number of types/cases.
 	{
 		dest[-2] = '\0';
-		output_var.ByteLength() -= 2 * sizeof(TCHAR);
+		aResultToken.marker_length -= 2;
 	}
 	else
 		*dest = '\0';
@@ -6467,14 +6453,12 @@ ResultType Line::PerformSort(LPTSTR aContents, LPTSTR aOptions)
 	{
 		if (omit_dupe_count) // Update the length to actual whenever at least one dupe was omitted.
 		{
-			output_var.SetCharLength((VarSizeType)_tcslen(output_var.Contents()));
+			aResultToken.marker_length = _tcslen(aResultToken.marker);
 			ErrorLevel = omit_dupe_count; // Override the 0 set earlier.
 		}
 	}
-	//else it is not necessary to set output_var.Length() here because its length hasn't changed
-	// since it was originally set by the above call "output_var.AssignString(NULL..."
-
-	result_to_return = output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
+	//else it is not necessary to set the length here because its length hasn't
+	// changed since it was originally set by the above call TokenSetResult.
 
 end:
 	if (ErrorLevel != -1) // A change to ErrorLevel is desired.  Compare directly to -1 due to unsigned.
@@ -6482,7 +6466,8 @@ end:
 	if (mem_to_free)
 		free(mem_to_free);
 	g_SortFunc = sort_func_orig;
-	return result_to_return;
+	if (!result_to_return)
+		_f_return_FAIL;
 }
 
 
