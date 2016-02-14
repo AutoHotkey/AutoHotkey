@@ -70,6 +70,9 @@ FuncEntry g_BIF[] =
 	BIF1(MsgBox, 0, 4, false, {4}),
 	BIF1(InputBox, 0, 4, true),
 
+	BIFn(Input, 0, 3, true, BIF_Input),
+	BIFn(InputEnd, 0, 0, false, BIF_Input),
+
 	BIF1(GetKeyState, 1, 2, true),
 	BIFn(GetKeyName, 1, 1, true, BIF_GetKeyName),
 	BIFn(GetKeyVK, 1, 1, true, BIF_GetKeyName),
@@ -12396,9 +12399,6 @@ ResultType Line::Perform()
 
 	case ACT_TRAYTIP:
 		return TrayTip(THREE_ARGS);
-
-	case ACT_INPUT:
-		return Input();
 
 
 //////////////////////////////////////////////////////////////////////////

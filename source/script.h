@@ -553,6 +553,7 @@ enum BuiltInFunctionID {
 	FID_SB_SetText = 0, FID_SB_SetParts, FID_SB_SetIcon,
 	FID_Trim = 0, FID_LTrim, FID_RTrim,
 	FID_RegExMatch = 0, FID_RegExReplace,
+	FID_Input = 0, FID_InputEnd,
 	FID_GetKeyName = 0, FID_GetKeyVK = 1, FID_GetKeySC,
 	FID_StrLower = 0, FID_StrUpper,
 	FID_StrGet = 0, FID_StrPut,
@@ -672,8 +673,6 @@ private:
 
 	ResultType ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID);
 	ResultType TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions);
-	ResultType Input(); // The Input command.
-
 	#define SW_NONE -1
 	ResultType PerformShowWindow(ActionTypeType aActionType, LPTSTR aTitle = _T(""), LPTSTR aText = _T("")
 		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
@@ -979,7 +978,6 @@ public:
 			case ACT_PIXELGETCOLOR:
 			case ACT_PIXELSEARCH:
 			case ACT_IMAGESEARCH:
-			case ACT_INPUT:
 			case ACT_FORMATTIME:
 			case ACT_FOR:
 			case ACT_CATCH:
@@ -3060,6 +3058,8 @@ BIF_DECL(BIF_OnExitOrClipboard);
 #ifdef ENABLE_REGISTERCALLBACK
 BIF_DECL(BIF_RegisterCallback);
 #endif
+
+BIF_DECL(BIF_Input);
 
 BIF_DECL(BIF_MenuGet);
 

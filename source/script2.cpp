@@ -280,7 +280,7 @@ ResultType Line::TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions)
 
 
 
-ResultType Line::Input()
+BIF_DECL(BIF_Input)
 // OVERVIEW:
 // Although a script can have many concurrent quasi-threads, there can only be one input
 // at a time.  Thus, if an input is ongoing and a new thread starts, and it begins its
@@ -291,32 +291,21 @@ ResultType Line::Input()
 // This signals the quasi-threads beneath, when they finally return, that their input
 // was terminated due to a new input that took precedence.
 {
-	if (g_os.IsWin9x()) // v1.0.44.14: For simplicity, do nothing on Win9x rather than try to see if it actually supports the hook (such as if its some kind of emulated/hybrid OS).
-		return OK; // Could also set ErrorLevel to "Timeout" and output_var to be blank, but the benefits to backward compatibility seemed too dubious.
-
-	// Since other script threads can interrupt this command while it's running, it's important that
-	// this command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
-	// This is because an interrupting thread usually changes the values to something inappropriate for this thread.
-	Var *output_var = OUTPUT_VAR; // See comment above.
-	if (!output_var)
+	if (_f_callee_id == FID_InputEnd)
 	{
-		// No output variable, which due to load-time validation means there are no other args either.
-		// This means that the user is specifically canceling the prior input (if any).  Thus, our
-		// ErrorLevel here is set to 1 or 0, but the prior input's ErrorLevel will be set to "NewInput"
-		// when its quasi-thread is resumed:
+		// This means that the user is specifically canceling the prior input (if any).
 		bool prior_input_is_being_terminated = (g_input.status == INPUT_IN_PROGRESS);
 		g_input.status = INPUT_OFF;
-		return SetErrorLevelOrThrowBool(!prior_input_is_being_terminated);
-		// Above: It's considered an "error" of sorts when there is no prior input to terminate.
+		_f_return_i(prior_input_is_being_terminated);
 	}
 
-	// Below are done directly this way rather than passed in as args mainly to emphasize that
-	// ArgLength() can safely be called in Line methods like this one (which is done further below).
-	// It also may also slightly improve performance and reduce code size.
-	LPTSTR aOptions = ARG2, aEndKeys = ARG3, aMatchList = ARG4;
+	size_t aMatchList_length;
+	_f_param_string_opt(aOptions, 0);
+	_f_param_string_opt(aEndKeys, 1);
+	_f_param_string_opt(aMatchList, 2, &aMatchList_length);
 	// The aEndKeys string must be modifiable (not constant), since for performance reasons,
 	// it's allowed to be temporarily altered by this function.
-
+	
 	// Set default in case of early return (we want these to be in effect even if
 	// FAIL is returned for our thread, since the underlying thread that had the
 	// active input prior to us didn't fail and it it needs to know how its input
@@ -511,11 +500,10 @@ ResultType Line::Input()
 		if (!g_input.match)
 		{
 			if (   !(g_input.match = (LPTSTR *)malloc(INPUT_ARRAY_BLOCK_SIZE * sizeof(LPTSTR)))   )
-				return LineError(ERR_OUTOFMEM);  // Short msg. since so rare.
+				_f_throw(ERR_OUTOFMEM);
 			g_input.MatchCountMax = INPUT_ARRAY_BLOCK_SIZE;
 		}
 		// If needed, create or enlarge the buffer that contains all the match phrases:
-		size_t aMatchList_length = ArgLength(4); // Performs better than _tcslen(aMatchList);
 		size_t space_needed = aMatchList_length + 1;  // +1 for the final zero terminator.
 		if (space_needed > g_input.MatchBufSize)
 		{
@@ -525,7 +513,7 @@ ResultType Line::Input()
 			if (   !(g_input.MatchBuf = tmalloc(g_input.MatchBufSize))   )
 			{
 				g_input.MatchBufSize = 0;
-				return LineError(ERR_OUTOFMEM);  // Short msg. since so rare.
+				_f_throw(ERR_OUTOFMEM);
 			}
 		}
 		// Copy aMatchList into the match buffer:
@@ -565,7 +553,7 @@ ResultType Line::Input()
 					// Expand the array by one block:
 					if (   !(realloc_temp = (LPTSTR *)realloc(g_input.match  // Must use a temp variable.
 						, (g_input.MatchCountMax + INPUT_ARRAY_BLOCK_SIZE) * sizeof(LPTSTR)))   )
-						return LineError(ERR_OUTOFMEM);  // Short msg. since so rare.
+						_f_throw(ERR_OUTOFMEM);
 					g_input.match = realloc_temp;
 					g_input.MatchCountMax += INPUT_ARRAY_BLOCK_SIZE;
 				}
@@ -702,7 +690,7 @@ ResultType Line::Input()
 	// Seems ok to assign after the kill/purge above since input_buf is our own stack variable
 	// and its contents shouldn't be affected even if KILL_AND_PURGE_INPUT_TIMER's MsgSleep()
 	// results in a new thread being created that starts a new Input:
-	return output_var->Assign(input_buf);
+	_f_return(input_buf);
 }
 
 
