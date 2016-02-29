@@ -2593,7 +2593,7 @@ BIF_DECL(BIF_WinGet)
 			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 		if (!target_window)
 			break;
-		_f_return(GetWindowLong(target_window, cmd == FID_WinGetStyle ? GWL_STYLE : GWL_EXSTYLE));
+		_f_return_i(GetWindowLong(target_window, cmd == FID_WinGetStyle ? GWL_STYLE : GWL_EXSTYLE));
 
 	case FID_WinGetTransparent:
 	case FID_WinGetTransColor:
@@ -11764,7 +11764,7 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 	if (extract_length == remaining_length_available) // All of haystack is desired (starting at starting_offset).
 	{
 		// No need for any copying or termination, just send back part of haystack.
-		// Caller and Var:Assign() know that overlap is possible, so this seems safe.
+		// Caller and Var::Assign() know that overlap is possible, so this seems safe.
 		_f_return_p(result, extract_length);
 	}
 	
@@ -14302,8 +14302,6 @@ BIF_DECL(BIF_ATan)
 
 
 BIF_DECL(BIF_Exp)
-// For simplicity and backward compatibility, a numeric result is always returned (even if the input
-// is non-numeric or an empty string).
 {
 	If_NaN_return_NaN(0);
 	_f_return(qmathExp(ParamIndexToDouble(0)));
@@ -14408,13 +14406,13 @@ BIF_DECL(BIF_DateDiff)
 
 
 BIF_DECL(BIF_OnMessage)
-// Returns: An empty string on failure or the name of a function (depends on mode) on success.
+// Returns: An empty string.
 // Parameters:
 // 1: Message number to monitor.
 // 2: Name of the function that will monitor the message.
 // 3: (FUTURE): A flex-list of space-delimited option words/letters.
 {
-	// Set default result in case of early return; a blank value:
+	// Currently OnMessage (in v2) has no return value.
 	_f_set_retval_p(_T(""), 0);
 
 	// Prior validation has ensured there's at least two parameters:
