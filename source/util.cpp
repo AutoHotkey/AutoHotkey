@@ -1440,7 +1440,7 @@ unsigned __int64 GetFileSize64(HANDLE aFileHandle)
 
 
 
-LPTSTR GetLastErrorText(LPTSTR aBuf, int aBufSize, bool aUpdateLastError)
+LPTSTR GetWin32ErrorText(LPTSTR aBuf, DWORD aBufSize, DWORD aError)
 // aBufSize is an int to preserve any negative values the caller might pass in.
 {
 	if (aBufSize < 1)
@@ -1450,10 +1450,8 @@ LPTSTR GetLastErrorText(LPTSTR aBuf, int aBufSize, bool aUpdateLastError)
 		*aBuf = '\0';
 		return aBuf;
 	}
-	DWORD last_error = GetLastError();
-	if (aUpdateLastError)
-		g->LastError = last_error;
-	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, last_error, 0, aBuf, (DWORD)aBufSize - 1, NULL);
+	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS // Ignore inserts: https://blogs.msdn.microsoft.com/oldnewthing/20071128-00/?p=24353
+		, NULL, aError, 0, aBuf, (DWORD)aBufSize - 1, NULL);
 	return aBuf;
 }
 
