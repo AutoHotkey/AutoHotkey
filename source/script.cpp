@@ -5983,7 +5983,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					if (   !(control_type = line.ConvertGuiControl(new_raw_arg2))   )
 						return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 					if (control_type == GUI_CONTROL_TREEVIEW && aArgc > 3) // Reserve it for future use such as a tab-indented continuation section that lists the tree hierarchy.
-						return ScriptError(ERR_PARAM4_OMIT, new_raw_arg4);
+						return ScriptError(ERR_PARAM4_MUST_BE_BLANK, new_raw_arg4);
 				}
 				break;
 			case GUI_CMD_CANCEL:
@@ -6532,7 +6532,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			case TRANS_CMD_ATAN:
 			case TRANS_CMD_BITNOT:
 				if (*new_raw_arg4)
-					return ScriptError(ERR_PARAM4_OMIT, new_raw_arg4);
+					return ScriptError(ERR_PARAM4_MUST_BE_BLANK, new_raw_arg4);
 				break;
 
 			case TRANS_CMD_BITAND:

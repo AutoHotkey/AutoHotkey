@@ -165,7 +165,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_PARAM1_REQUIRED _T("Parameter #1 required")
 #define ERR_PARAM2_REQUIRED _T("Parameter #2 required")
 #define ERR_PARAM3_REQUIRED _T("Parameter #3 required")
-#define ERR_PARAM4_OMIT _T("Parameter #4 should be omitted in this case.")
 #define ERR_PARAM2_MUST_BE_BLANK _T("Parameter #2 must be blank in this case.")
 #define ERR_PARAM3_MUST_BE_BLANK _T("Parameter #3 must be blank in this case.")
 #define ERR_PARAM4_MUST_BE_BLANK _T("Parameter #4 must be blank in this case.")
