@@ -282,6 +282,9 @@
     <ClCompile>
       <TreatWarningAsError Condition="!$(ConfigDebug)">true</TreatWarningAsError>
     </ClCompile>
+    <Link>
+      <ImageHasSafeExceptionHandlers Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ImageHasSafeExceptionHandlers>
+    </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <CustomBuild Include="source\lib\win2kcompat.asm">
