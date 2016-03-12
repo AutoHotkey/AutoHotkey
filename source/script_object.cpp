@@ -285,7 +285,20 @@ bool Object::Delete()
 		// less often in most cases.
 		PRIVATIZE_S_DEREF_BUF;
 
+		// If an exception has been thrown, temporarily clear it for execution of __Delete.
+		ResultToken *exc = g->ThrownToken;
+		g->ThrownToken = NULL;
+
 		CallMethod(mBase, this, _T("__Delete"), NULL, 0, NULL, IF_METAOBJ); // base.__Delete()
+
+		// Reset any exception cleared above.
+		if (exc)
+		{
+			if (g->ThrownToken)
+				// Let the original exception take precedence over this secondary exception.
+				g_script.FreeExceptionToken(g->ThrownToken);
+			g->ThrownToken = exc;
+		}
 
 		DEPRIVATIZE_S_DEREF_BUF; // L33: See above.
 

@@ -663,7 +663,7 @@ bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr = NULL);
 LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFullFileSpec);
 LPTSTR FileAttribToStr(LPTSTR aBuf, DWORD aAttr);
 unsigned __int64 GetFileSize64(HANDLE aFileHandle);
-LPTSTR GetLastErrorText(LPTSTR aBuf, int aBufSize, bool aUpdateLastError = false);
+LPTSTR GetWin32ErrorText(LPTSTR aBuf, DWORD aBufSize, DWORD aError);
 void AssignColor(LPTSTR aColorName, COLORREF &aColor, HBRUSH &aBrush);
 COLORREF ColorNameToBGR(LPTSTR aColorName);
 HRESULT MySetWindowTheme(HWND hwnd, LPCWSTR pszSubAppName, LPCWSTR pszSubIdList);

@@ -153,7 +153,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_PARAM1_REQUIRED _T("Parameter #1 required")
 #define ERR_PARAM2_REQUIRED _T("Parameter #2 required")
 #define ERR_PARAM3_REQUIRED _T("Parameter #3 required")
-#define ERR_PARAM4_OMIT _T("Parameter #4 should be omitted in this case.")
 #define ERR_PARAM2_MUST_BE_BLANK _T("Parameter #2 must be blank in this case.")
 #define ERR_PARAM3_MUST_BE_BLANK _T("Parameter #3 must be blank in this case.")
 #define ERR_PARAM4_MUST_BE_BLANK _T("Parameter #4 must be blank in this case.")
@@ -2807,8 +2806,8 @@ public:
 	Label *FindLabel(LPTSTR aLabelName);
 	IObject *FindCallable(LPTSTR aLabelName, Var *aVar = NULL, int aParamCount = 0);
 
-	ResultType DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, bool aUpdateLastError, WORD aShowWindow
-		, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, LPTSTR aSystemErrorText);
+	ResultType DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow
+		, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, DWORD &aLastError);
 	ResultType ActionExec(LPTSTR aAction, LPTSTR aParams = NULL, LPTSTR aWorkingDir = NULL
 		, bool aDisplayErrors = true, LPTSTR aRunShowMode = NULL, HANDLE *aProcess = NULL
 		, bool aUpdateLastError = false, bool aUseRunAs = false, Var *aOutputVar = NULL);
