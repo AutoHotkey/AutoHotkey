@@ -10858,6 +10858,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 					// non-NULL, and that can only be the result of a previous SYM_OPAREN/BRACKET.
 					if (this_infix[-1].symbol == SYM_COMMA || this_infix[-1].symbol == stack_symbol)
 					{
+						int num_blank_params = 0;
 						// Also handle any missing params following this one, otherwise the this_infix[-1].symbol
 						// check would fail next iteration because we've changed it from SYM_COMMA to SYM_MISSING.
 						while (this_infix->symbol == SYM_COMMA) // For each missing parameter: (, or ,,
@@ -10866,7 +10867,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 							postfix[postfix_count]->symbol = SYM_MISSING;
 							postfix[postfix_count]->marker = _T(""); // Simplify some cases by letting it be treated as SYM_STRING.
 							postfix[postfix_count]->circuit_token = NULL;
-							++in_param_list->param_count;
+							++num_blank_params;
 							++postfix_count;
 						}
 						// Below: Detects ,) and ,] as errors.  Since the loop above doesn't handle those cases,
@@ -10875,6 +10876,8 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 						if (IS_CPAREN_LIKE(this_infix->symbol) // End of the list.
 							|| func && in_param_list->param_count < func->mMinParams) // Omitted a required parameter.
 							return LineError(ERR_BLANK_PARAM, FAIL, in_param_list->marker);
+						// Now that we no longer need its old value, update param_count:
+						in_param_list->param_count += num_blank_params;
 						// Go back to the top to update the this_postfix ref.
 						continue;
 					}
