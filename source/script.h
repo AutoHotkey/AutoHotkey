@@ -2093,9 +2093,14 @@ public:
 	const LabelPtr* operator-> () { return this; } // Act like a pointer.
 	operator void *() const { return mObject; } // For comparisons and boolean eval.
 
+	// Caller beware: does not check for NULL.
 	Label *ToLabel() const { return getType(mObject) == Callable_Label ? (Label *)mObject : NULL; }
+	// Caller beware: does not check for NULL.
 	Func *ToFunc() const { return getType(mObject) == Callable_Func ? (Func *)mObject : NULL; }
 	IObject *ToObject() const { return mObject; }
+	
+	// True if it is a dynamically-allocated object, not a Label or Func.
+	bool IsLiveObject() const { return mObject && getType(mObject) == Callable_Object; }
 	
 	// Helper methods for legacy code which deals with Labels.
 	bool IsExemptFromSuspend() const;
