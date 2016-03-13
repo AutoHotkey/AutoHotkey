@@ -2094,6 +2094,8 @@ public:
 	operator void *() const { return mObject; } // For comparisons and boolean eval.
 
 	Label *ToLabel() const { return getType(mObject) == Callable_Label ? (Label *)mObject : NULL; }
+	Func *ToFunc() const { return getType(mObject) == Callable_Func ? (Func *)mObject : NULL; }
+	IObject *ToObject() const { return mObject; }
 	
 	// Helper methods for legacy code which deals with Labels.
 	bool IsExemptFromSuspend() const;

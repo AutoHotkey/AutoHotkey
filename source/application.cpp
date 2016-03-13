@@ -1743,6 +1743,9 @@ bool CheckScriptTimers()
 		// occurred, so it should be left as the responsibility of the section in MsgSleep that
 		// launches new threads.
 
+		// This is used to determine which timer SetTimer,,xxx acts on:
+		g->CurrentTimer = &timer;
+
 		++timer.mExistingThreads;
 		timer.mLabel->ExecuteInNewThread(_T("Timer"));
 		--timer.mExistingThreads;

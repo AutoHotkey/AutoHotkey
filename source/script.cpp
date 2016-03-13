@@ -3629,7 +3629,7 @@ void Script::DeleteTimer(IObject *aLabel)
 			// Disable it, even if it's not technically being deleted yet.
 			if (timer->mEnabled)
 				timer->Disable(); // Keeps track of mTimerEnabledCount and whether the main timer is needed.
-			if (timer->mExistingThreads)
+			if (timer->mExistingThreads) // This condition differs from g->CurrentTimer == timer, which only detects the "top-most" timer.
 			{
 				if (!aLabel) // Caller requested we delete a previously marked timer which
 					continue; // has now finished, but this one hasn't, so keep looking.
@@ -3677,13 +3677,26 @@ Label *Script::FindLabel(LPTSTR aLabelName)
 IObject *Script::FindCallable(LPTSTR aLabelName, Var *aVar, int aParamCount)
 {
 	if (aVar && aVar->HasObject())
-		return aVar->Object();
+	{
+		IObject *obj = aVar->Object();
+		if (Func *func = LabelPtr(obj).ToFunc())
+		{
+			// It seems worth performing this additional check; without it, registration
+			// of this function would appear to succeed but it would never be called.
+			// In particular, this will alert the user that a *method* is not a valid
+			// callable object (because it requires at least one parameter: "this").
+			// For simplicity, the error message will indicate that no label was found.
+			if (func->mMinParams > aParamCount)
+				return NULL;
+		}
+		return obj;
+	}
 	if (*aLabelName)
 	{
 		if (Label *label = FindLabel(aLabelName))
 			return label;
 		if (Func *func = FindFunc(aLabelName))
-			if (func->mMinParams <= aParamCount)
+			if (func->mMinParams <= aParamCount) // See comments above.
 				return func;
 	}
 	return NULL;
@@ -14478,16 +14491,49 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// Note that only one timer per label is allowed because the label is the unique identifier
 		// that allows us to figure out whether to "update or create" when searching the list of timers.
 		if (   !(target_label = (IObject *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
-			if (   !(target_label = g_script.FindCallable(ARG1, ARGVAR1))
-				&& !(!*ARG1 && (target_label = g.CurrentLabel))   )
-				return LineError(ERR_NO_LABEL, FAIL, ARG1);
+		{
+			if (   !(target_label = g_script.FindCallable(ARG1, ARGVAR1))   )
+			{
+				if (*ARG1)
+					// ARG1 is a non-empty string and not the name of an existing label or function.
+					return LineError(ERR_NO_LABEL, FAIL, ARG1);
+				// Possible cases not ruled out by the above check:
+				//   1) Label was omitted.
+				//   2) Label was a single variable or non-expression which produced an empty value.
+				//   3) Label was a single variable containing an incompatible function.
+				//   4) Label was an expression which produced an empty value.
+				//   5) Label was an expression which produced an object.
+				// Case 3 is always an error.
+				// Case 2 is arguably more likely to be an error (not intended to be empty) than meant as
+				// an indicator to use the current label, so it seems safest to treat it as an error (and
+				// also more consistent with Case 3).
+				// Case 5 is currently not supported; the object reference was converted to an empty string
+				// at an earlier stage, so it is indistinguishable from Case 4.  It seems rare that someone
+				// would have a legitimate need for Case 4, so both cases are treated as an error.  This
+				// covers cases like:
+				//   SetTimer, % Func(a).Bind(b), xxx  ; Unsupported.
+				//   SetTimer, % this.myTimerFunc, xxx  ; Unsupported (where myTimerFunc is an object).
+				//   SetTimer, % this.MyMethod, xxx  ; Additional error: failing to bind "this" to MyMethod.
+				// The following could be used to show "must not be blank" for Case 2, but it seems best
+				// to reserve that message for when the parameter is really blank, not an empty variable:
+				//if (mArgc > 0 && (mArg[0].is_expression /* Cases 4 & 5 */ || ARGVAR1 && ARGVAR1->HasObject() /* Case 3 */))
+				if (*RAW_ARG1)
+					return LineError(ERR_PARAM1_INVALID);
+				if (g.CurrentTimer)
+					// Default to the timer which launched the current thread.
+					target_label = g.CurrentTimer->mLabel.ToObject();
+				if (!target_label)
+					// Either the thread was not launched by a timer or the timer has been deleted.
+					return LineError(ERR_PARAM1_MUST_NOT_BE_BLANK);
+			}
+		}
 		// And don't update mAttribute (leave it NULL) because we want ARG1 to be dynamically resolved
 		// every time the command is executed (in case the contents of the referenced variable change).
 		// In the data structure that holds the timers, we store the target label rather than the target
-		// line so that a label can be registered independently as a timers even if there another label
+		// line so that a label can be registered independently as a timer even if there is another label
 		// that points to the same line such as in this example:
-		// Label1::
-		// Label2::
+		// Label1:
+		// Label2:
 		// ...
 		// return
 		if (*ARG2)
