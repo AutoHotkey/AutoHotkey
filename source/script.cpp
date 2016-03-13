@@ -7428,7 +7428,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 			return ScriptError(_T("A label must not point to a function."), mLastLabel->mName);
 		// Since above didn't return, the label or labels must have been hotkey labels.
 		if (func.mMinParams)
-			return ScriptError(_T("Parameters of hotkey functions must be optional."), aBuf);
+			return ScriptError(ERR_HOTKEY_FUNC_PARAMS, aBuf);
 	}
 
 	// Indicate success:
@@ -14476,14 +14476,8 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	}
 
 	case ACT_HOTKEY:
-	{
-		IObject *target_label;
 		// mAttribute is the label resolved at loadtime, if available (for performance).
-		if (   !(target_label = (IObject *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
-			if (ARGVAR2 && ARGVAR2->HasObject()) // Allow: Hotkey %KeyName%, %VarWithObject%
-				target_label = ARGVAR2->Object(); // AddRef() will be called later, when it is stored.
-		return Hotkey::Dynamic(THREE_ARGS, target_label);
-	}
+		return Hotkey::Dynamic(THREE_ARGS, (IObject *)mAttribute, ARGVAR2);
 
 	case ACT_SETTIMER: // A timer is being created, changed, or enabled/disabled.
 	{
