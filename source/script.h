@@ -2590,6 +2590,9 @@ struct GuiControlOptionsType
 	bool use_theme; // v1.0.32: Provides the means for the window's current setting of mUseTheme to be overridden.
 	bool listview_no_auto_sort; // v1.0.44: More maintainable and frees up GUI_CONTROL_ATTRIB_ALTBEHAVIOR for other uses.
 	bool tab_control_uses_dialog;
+	#define TAB3_AUTOWIDTH 1
+	#define TAB3_AUTOHEIGHT 2
+	CHAR tab_control_autosize;
 	ATOM customClassAtom;
 };
 
@@ -2783,6 +2786,7 @@ public:
 	POINT GetPositionOfTabDisplayArea(GuiControlType &aTabControl);
 	ResultType SelectAdjacentTab(GuiControlType &aTabControl, bool aMoveToRight, bool aFocusFirstControl
 		, bool aWrapAround);
+	void AutoSizeTabControl(GuiControlType &aTabControl);
 	ResultType CreateTabDialog(GuiControlType &aTabControl, GuiControlOptionsType &aOpt);
 	void UpdateTabDialog(HWND aTabControlHwnd);
 	void ControlGetPosOfFocusedItem(GuiControlType &aControl, POINT &aPoint);

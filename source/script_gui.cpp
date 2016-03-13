@@ -533,6 +533,17 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 			
 			if (gui.mCurrentTabControlIndex != index) // This is checked early in case of early return in the next section due to error.
 			{
+				if (GuiControlType *tab_control = gui.FindTabControl(gui.mCurrentTabControlIndex))
+				{
+					// Autosize the previous tab control.  Has no effect if it is not a Tab3 control or has
+					// already been autosized.  Doing it at this point allows the script to set different
+					// margins for inside and outside the tab control, and is simpler than the alternative:
+					// waiting until the next external control is added.  The main drawback is that the
+					// script is unable to alternate between tab controls and still utilize autosizing.
+					// On the flip side, scripts can use this to their advantage -- to add controls which
+					// should not affect the tab control's size.
+					gui.AutoSizeTabControl(*tab_control);
+				}
 				gui.mCurrentTabControlIndex = index;
 				// Fix for v1.1.23.00: This section was restructured so that the following is done even
 				// if both parameters are omitted (fixes the "none at all" condition mentioned below).
@@ -1167,6 +1178,21 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, 
 			{
 				SendMessage(control.hwnd, TBM_SETBUDDY, FALSE, (LPARAM)buddy2);
 				InvalidateRect(buddy2, NULL, TRUE);
+			}
+		}
+		else if (control.type == GUI_CONTROL_TAB)
+		{
+			// Check for autosizing flags on this Tab control.
+			int mask = (width == COORD_UNSPECIFIED ? 0 : TAB3_AUTOWIDTH)
+				| (height == COORD_UNSPECIFIED ? 0 : TAB3_AUTOHEIGHT);
+			int autosize = (int)(INT_PTR)GetProp(control.hwnd, _T("ahk_autosize"));
+			if (autosize & mask) // There are autosize flags to unset (implies this is a Tab3 control).
+			{
+				autosize &= ~mask; // Unset the flags corresponding to dimensions we've just set.
+				if (autosize)
+					SetProp(control.hwnd, _T("ahk_autosize"), (HANDLE)(INT_PTR)autosize);
+				else
+					RemoveProp(control.hwnd, _T("ahk_autosize"));
 			}
 		}
 
@@ -2018,6 +2044,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	{
 		aControlType = GUI_CONTROL_TAB;
 		opt.tab_control_uses_dialog = true;
+		opt.tab_control_autosize = TAB3_AUTOWIDTH | TAB3_AUTOHEIGHT;
 	}
 	if (aControlType == GUI_CONTROL_TAB)
 	{
@@ -2358,6 +2385,10 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		}
 		else
 			style &= ~TCS_OWNERDRAWFIXED;
+		if (opt.width != COORD_UNSPECIFIED) // If a width was specified, don't autosize horizontally.
+			opt.tab_control_autosize &= ~TAB3_AUTOWIDTH;
+		if (opt.height != COORD_UNSPECIFIED)
+			opt.tab_control_autosize &= ~TAB3_AUTOHEIGHT;
 		break;
 
 	// Nothing extra for these currently:
@@ -3900,6 +3931,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 					break;
 				}
 			}
+			if (opt.tab_control_autosize)
+				SetProp(control.hwnd, _T("ahk_autosize"), (HANDLE)opt.tab_control_autosize);
 			// After a new tab control is created, default all subsequently created controls to belonging
 			// to the first tab of this tab control: 
 			mCurrentTabControlIndex = mTabControlCount;
@@ -4143,10 +4176,14 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		mPrevHeight = opt.height;
 		int right = opt.x + opt.width;
 		int bottom = opt.y + opt.height;
-		if (right > mMaxExtentRight)
-			mMaxExtentRight = right;
-		if (bottom > mMaxExtentDown)
-			mMaxExtentDown = bottom;
+		if (parent_hwnd == mHwnd // Skip this for controls which are clipped by a parent control.
+			&& !opt.tab_control_autosize) // For auto-sizing Tab3, don't adjust mMaxExtent until later.
+		{
+			if (right > mMaxExtentRight)
+				mMaxExtentRight = right;
+			if (bottom > mMaxExtentDown)
+				mMaxExtentDown = bottom;
+		}
 
 		// As documented, always start new section for very first control, but never if this control is GUI_CONTROL_STATUSBAR.
 		if (opt.start_new_section || mControlCount == 1 // aControlType!=GUI_CONTROL_STATUSBAR due to check higher above.
@@ -6623,6 +6660,7 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 			{
 				GuiControlType &control = mControl[u];
 				if (control.type != GUI_CONTROL_STATUSBAR // Status bar is compensated for in a diff. way.
+					&& (control.tab_control_index == MAX_TAB_CONTROLS || GetParent(control.hwnd) == mHwnd) // Skip controls which are clipped by a parent control.
 					&& GetWindowLong(control.hwnd, GWL_STYLE) & WS_VISIBLE) // Don't use IsWindowVisible() in case parent window is hidden.
 				{
 					GetWindowRect(control.hwnd, &rect);
@@ -6649,6 +6687,11 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		{
 			if (mGuiShowHasNeverBeenDone) // By default, center the window if this is the first use of "Gui Show" (even "Gui Show, Hide").
 			{
+				for (GuiIndexType u = 0; u < mControlCount; ++u)
+				{
+					if (mControl[u].type == GUI_CONTROL_TAB)
+						AutoSizeTabControl(mControl[u]);
+				}
 				if (width == COORD_UNSPECIFIED)
 					width = mMaxExtentRight + mMarginX;
 				if (height == COORD_UNSPECIFIED)
@@ -8893,9 +8936,11 @@ LRESULT CALLBACK TabWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		case WM_WINDOWPOSCHANGED:
 			if ((LPWINDOWPOS(lParam)->flags & (SWP_NOMOVE | SWP_NOSIZE)) != (SWP_NOMOVE | SWP_NOSIZE)) // i.e. moved, resized or both.
 			{
+				// This appears to allow the tab control to update its row count:
+				LRESULT r = CallWindowProc(g_TabClassProc, hWnd, iMsg, wParam, lParam);
 				// Update this tab control's dialog, if it has one, to match the new size/position.
 				pgui->UpdateTabDialog(hWnd);
-				break;
+				return r;
 			}
 		}
 	}
@@ -9885,20 +9930,41 @@ void GuiType::GetTabDisplayAreaRect(HWND aTabControlHwnd, RECT &aRect)
 	RECT rect;
 	GetClientRect(aTabControlHwnd, &rect); // Used because the coordinates of its upper-left corner are (0,0).
 	DWORD style = GetWindowLong(aTabControlHwnd, GWL_STYLE);
-	// Tabs on left (TCS_BUTTONS only) require workaround, at least on XP.  Otherwise pt.x will be much too large.
-	// This has been confirmed to be true even when theme has been stripped off the tab control.
-	bool workaround = !(style & TCS_RIGHT) && (style & (TCS_VERTICAL | TCS_BUTTONS)) == (TCS_VERTICAL | TCS_BUTTONS);
-	if (workaround)
-		SetWindowLong(aTabControlHwnd, GWL_STYLE, style & ~TCS_BUTTONS);
-	TabCtrl_AdjustRect(aTabControlHwnd, FALSE, &rect); // Retrieve the area beneath the tabs.
-	int offset_x = -2;  // -2 because testing shows that X (but not Y) is off by exactly 2.
-	if (workaround)
+	if (style & TCS_BUTTONS) // Workarounds are needed for TCS_BUTTONS.
 	{
-		SetWindowLong(aTabControlHwnd, GWL_STYLE, style);
-		offset_x += 5 * TabCtrl_GetRowCount(aTabControlHwnd); // Adjust for the fact that buttons are wider than tabs.
+		RECT item_rect;
+		TabCtrl_GetItemRect(aTabControlHwnd, 0, &item_rect);
+		int row_count = TabCtrl_GetRowCount(aTabControlHwnd);
+		const int offset = 3; // The margin between buttons seems to be 3 pixels.
+		if (style & TCS_VERTICAL)
+		{
+			// TabCtrl_AdjustRect would not work for these cases.
+			int width = (item_rect.right - item_rect.left + offset) * row_count;
+			if (style & TCS_RIGHT)
+				rect.right -= width;
+			else
+				rect.left += width;
+		}
+		else
+		{
+			int height = (item_rect.bottom - item_rect.top + offset) * row_count;
+			if (style & TCS_BOTTOM)
+				// TabCtrl_AdjustRect would not work for this case.
+				rect.bottom -= height;
+			else
+				// TabCtrl_AdjustRect plus an adjustment of bottom += 3 would work,
+				// but it's easier to handle this case alongside TCS_BOTTOM (above).
+				rect.top += height;
+		}
+	}
+	else
+	{
+		TabCtrl_AdjustRect(aTabControlHwnd, FALSE, &rect); // Retrieve the area beneath the tabs.
+		rect.left -= 2;  // Testing shows that X (but not Y) is off by exactly 2.
+		rect.right += 2;
 	}
 	MapWindowPoints(aTabControlHwnd, mHwnd, (LPPOINT)&rect, 2); // Convert tab-control-relative coordinates to Gui-relative.
-	aRect.left = rect.left + offset_x;
+	aRect.left = rect.left;
 	aRect.right = rect.right;
 	aRect.top = rect.top;
 	aRect.bottom = rect.bottom;
@@ -9968,6 +10034,88 @@ ResultType GuiType::SelectAdjacentTab(GuiControlType &aTabControl, bool aMoveToR
 		Event(GUI_HWND_TO_INDEX(aTabControl.hwnd), TCN_SELCHANGE);
 
 	return OK;
+}
+
+
+
+void GuiType::AutoSizeTabControl(GuiControlType &aTabControl)
+{
+	int autosize = (int)(INT_PTR)GetProp(aTabControl.hwnd, _T("ahk_autosize"));
+	if (!autosize)
+		return;
+	RemoveProp(aTabControl.hwnd, _T("ahk_autosize"));
+
+	int tab_index = aTabControl.tab_index, right = 0, bottom = 0;
+	RECT rc;
+
+	for (GuiIndexType i = 0; i < mControlCount; ++i)
+	{
+		if (mControl[i].tab_control_index != tab_index)
+			continue;
+		GetWindowRect(mControl[i].hwnd, &rc);
+		if (right < rc.right)
+			right = rc.right;
+		if (bottom < rc.bottom)
+			bottom = rc.bottom;
+	}
+	
+	RECT tab_rect;
+	GetWindowRect(aTabControl.hwnd, &tab_rect);
+	if (autosize & TAB3_AUTOWIDTH)
+		tab_rect.right = right + mMarginX + 4;
+	if (autosize & TAB3_AUTOHEIGHT)
+		tab_rect.bottom = bottom + mMarginY + 4;
+	MapWindowPoints(NULL, mHwnd, (LPPOINT)&tab_rect, 2); // Screen to GUI client.
+	int width = tab_rect.right - tab_rect.left
+		, height = tab_rect.bottom - tab_rect.top;
+
+	DWORD style = GetWindowLong(aTabControl.hwnd, GWL_STYLE);
+	
+	// The number of "rows" of vertical buttons affect the tab control's width,
+	// while horizontal buttons affect its height; so check the appropriate flag:
+	bool adjust_for_rows = 0 != (autosize & ((style & TCS_VERTICAL) ? TAB3_AUTOWIDTH : TAB3_AUTOHEIGHT));
+	// For TCS_RIGHT, we need to adjust even when there's only one row before and after:
+	int rows_before = (!adjust_for_rows || (style & TCS_RIGHT)) ? 0 : TabCtrl_GetRowCount(aTabControl.hwnd);
+	
+	// Apply new size.
+	MoveWindow(aTabControl.hwnd, tab_rect.left, tab_rect.top, width, height, TRUE);
+
+	if (adjust_for_rows)
+	{
+		int rows_after = TabCtrl_GetRowCount(aTabControl.hwnd);
+		if (rows_before != rows_after)
+		{
+			// Adjust for the newly added tab rows/columns.
+			RECT item_rect;
+			TabCtrl_GetItemRect(aTabControl.hwnd, 0, &item_rect);
+			int offset = (style & TCS_BUTTONS) ? 3 : 0; // The margin between buttons seems to be 3 pixels.
+			if (style & TCS_VERTICAL) // Tabs on left/right.
+			{
+				width += (rows_after - rows_before) * (item_rect.right - item_rect.left + offset);
+				tab_rect.right = tab_rect.left + width;
+			}
+			else // Tabs on top/bottom.
+			{
+				height += (rows_after - rows_before) * (item_rect.bottom - item_rect.top + offset);
+				tab_rect.bottom = tab_rect.top + height;
+			}
+			// Apply size adjustment.
+			MoveWindow(aTabControl.hwnd, tab_rect.left, tab_rect.top, width, height, TRUE);
+		}
+	}
+	
+	if (mControl[mControlCount-1].tab_control_index == tab_index) // The previous control belongs to this tab control.
+	{
+		// Position next control relative to the tab control rather than its last child control.
+		mPrevX = tab_rect.left;
+		mPrevY = tab_rect.top;
+		mPrevWidth = width;
+		mPrevHeight = height;
+		if (mMaxExtentRight < tab_rect.right)
+			mMaxExtentRight = tab_rect.right;
+		if (mMaxExtentDown < tab_rect.bottom)
+			mMaxExtentDown = tab_rect.bottom;
+	}
 }
 
 
