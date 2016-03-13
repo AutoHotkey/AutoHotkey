@@ -6450,7 +6450,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				if (VAR(line.mArg[0])->Type() == VAR_CLIPBOARD)
 				{
 					if (aArgc < 3)
-						return ScriptError(_T("Parameter #3 must not be blank in this case."));
+						return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
 				}
 				else
 					if (aArgc > 2)
@@ -6651,7 +6651,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					break;  // i.e. for commands other than the above, do the default below.
 				default:
 					if (!*new_raw_arg3)
-						return ScriptError(_T("Parameter #3 must not be blank in this case."));
+						return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
 				}
 				break;
 
@@ -6688,7 +6688,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			case CONTROL_CMD_CHOOSESTRING:
 			case CONTROL_CMD_EDITPASTE:
 				if (control_cmd != CONTROL_CMD_TABLEFT && control_cmd != CONTROL_CMD_TABRIGHT && !*new_raw_arg2)
-					return ScriptError(_T("Parameter #2 must not be blank in this case."));
+					return ScriptError(ERR_PARAM2_MUST_NOT_BE_BLANK);
 				break;
 			default: // All commands except the above should have a blank Value parameter.
 				if (*new_raw_arg2)
@@ -6708,7 +6708,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			case CONTROLGET_CMD_FINDSTRING:
 			case CONTROLGET_CMD_LINE:
 				if (!*new_raw_arg3)
-					return ScriptError(_T("Parameter #3 must not be blank in this case."));
+					return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
 				break;
 			case CONTROLGET_CMD_LIST:
 				break; // Simply break for any sub-commands that have an optional parameter 3.
@@ -6743,7 +6743,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			case GUICONTROL_CMD_CHOOSE:
 			case GUICONTROL_CMD_CHOOSESTRING:
 				if (!*new_raw_arg3)
-					return ScriptError(_T("Parameter #3 must not be blank in this case."));
+					return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
 				break;
 			default: // All commands except the above should have a blank Text parameter.
 				if (*new_raw_arg3)
@@ -6789,7 +6789,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			if (!drive_cmd)
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 			if (drive_cmd != DRIVE_CMD_EJECT && !*new_raw_arg2)
-				return ScriptError(_T("Parameter #2 must not be blank in this case."));
+				return ScriptError(ERR_PARAM2_MUST_NOT_BE_BLANK);
 			// For DRIVE_CMD_LABEL: Note that it is possible and allowed for the new label to be blank.
 			// Not currently done since all sub-commands take a mandatory or optional ARG3:
 			//if (drive_cmd != ... && *new_raw_arg3)
@@ -6804,10 +6804,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			if (!drive_get_cmd)
 				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 			if (drive_get_cmd != DRIVEGET_CMD_LIST && drive_get_cmd != DRIVEGET_CMD_STATUSCD && !*new_raw_arg3)
-				return ScriptError(_T("Parameter #3 must not be blank in this case."));
+				return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
 			if (drive_get_cmd != DRIVEGET_CMD_SETLABEL && (aArgc < 1 || line.mArg[0].type == ARG_TYPE_NORMAL))
 				// The output variable has been omitted.
-				return ScriptError(_T("Parameter #1 must not be blank in this case."));
+				return ScriptError(ERR_PARAM1_MUST_NOT_BE_BLANK);
 		}
 		break;
 
@@ -6816,7 +6816,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		{
 			ProcessCmds process_cmd = line.ConvertProcessCmd(new_raw_arg1);
 			if (process_cmd != PROCESS_CMD_PRIORITY && process_cmd != PROCESS_CMD_EXIST && !*new_raw_arg2)
-				return ScriptError(_T("Parameter #2 must not be blank in this case."));
+				return ScriptError(ERR_PARAM2_MUST_NOT_BE_BLANK);
 			switch (process_cmd)
 			{
 			case PROCESS_CMD_INVALID:
@@ -6888,7 +6888,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				break;
 			case WINSET_TRANSCOLOR:
 				if (!*new_raw_arg2)
-					return ScriptError(_T("Parameter #2 must not be blank in this case."));
+					return ScriptError(ERR_PARAM2_MUST_NOT_BE_BLANK);
 				break;
 			case WINSET_ALWAYSONTOP:
 				if (aArgc > 1 && !line.ArgHasDeref(2) && !line.ConvertOnOffToggle(new_raw_arg2))
