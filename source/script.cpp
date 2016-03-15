@@ -14513,7 +14513,13 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 				//if (mArgc > 0 && (mArg[0].is_expression /* Cases 4 & 5 */ || ARGVAR1 && ARGVAR1->HasObject() /* Case 3 */))
 				if (*RAW_ARG1)
 					return LineError(ERR_PARAM1_INVALID);
-				if (g.CurrentTimer)
+				if (g.CurrentLabel)
+					// For backward-compatibility, use A_ThisLabel if set.  This can differ from CurrentTimer
+					// when goto/gosub is used.  Some scripts apparently use this with subroutines that are
+					// called both directly and by a timer.  The down side is that if a timer function uses
+					// goto/gosub, A_ThisLabel must take predence; that may or may not be the user's intention.
+					target_label = g.CurrentLabel;
+				else if (g.CurrentTimer)
 					// Default to the timer which launched the current thread.
 					target_label = g.CurrentTimer->mLabel.ToObject();
 				if (!target_label)
