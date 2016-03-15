@@ -9961,7 +9961,6 @@ void GuiType::GetTabDisplayAreaRect(HWND aTabControlHwnd, RECT &aRect)
 	{
 		TabCtrl_AdjustRect(aTabControlHwnd, FALSE, &rect); // Retrieve the area beneath the tabs.
 		rect.left -= 2;  // Testing shows that X (but not Y) is off by exactly 2.
-		rect.right += 2;
 	}
 	MapWindowPoints(aTabControlHwnd, mHwnd, (LPPOINT)&rect, 2); // Convert tab-control-relative coordinates to Gui-relative.
 	aRect.left = rect.left;
