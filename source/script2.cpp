@@ -2474,6 +2474,24 @@ void WinGetList(ResultToken &aResultToken, BuiltInFunctionID aCmd, LPTSTR aTitle
 	if (aCmd == FID_WinGetList)
 		if (  !(ws.mArray = Object::Create())  )
 			_f_throw(ERR_OUTOFMEM);
+	// Check if we were asked to "list" or count the active window:
+	if (USE_FOREGROUND_WINDOW(aTitle, aText, aExcludeTitle, aExcludeText))
+	{
+		HWND target_window; // Set by the macro below.
+		SET_TARGET_TO_ALLOWABLE_FOREGROUND(g->DetectHiddenWindows)
+		if (aCmd == FID_WinGetCount)
+		{
+			_f_return_i(target_window != NULL); // i.e. 1 if a window was found.
+		}
+		// Otherwise, it's FID_WinGetList:
+		if (target_window)
+			// Since the target window has been determined, we know that it is the only window
+			// to be put into the array:
+			ws.mArray->Append((__int64)(size_t)target_window);
+		// Otherwise, return an empty array.
+		_f_return(ws.mArray);
+	}
+	// Enumerate all windows which match the criteria:
 	// If aTitle is ahk_id nnnn, the Enum() below will be inefficient.  However, ahk_id is almost unheard of
 	// in this context because it makes little sense, so no extra code is added to make that case efficient.
 	if (ws.SetCriteria(*g, aTitle, aText, aExcludeTitle, aExcludeText)) // These criteria allow the possibility of a match.
@@ -2499,108 +2517,54 @@ BIF_DECL(BIF_WinGet)
 
 	BuiltInFunctionID cmd = _f_callee_id;
 
-	LPTSTR result = _f_retval_buf;
-	*result = '\0'; // Set default return value.
-
-	bool target_window_determined = true;  // Set default.
-	HWND target_window;
-	IF_USE_FOREGROUND_WINDOW(g->DetectHiddenWindows, aTitle, aText, aExcludeTitle, aExcludeText)
-	else if (!(*aTitle || *aText || *aExcludeTitle || *aExcludeText)
-		&& !(cmd == FID_WinGetList || cmd == FID_WinGetCount)) // v1.0.30.02/v1.0.30.03: Have "list"/"count" get all windows on the system when there are no parameters.
-		target_window = GetValidLastUsedWindow(*g);
-	else
-		target_window_determined = false;  // A different method is required.
+	if (cmd == FID_WinGetList || cmd == FID_WinGetCount)
+	{
+		WinGetList(aResultToken, cmd, aTitle, aText, aExcludeTitle, aExcludeText);
+		return;
+	}
+	// Not List or Count, so it's a function that operates on a single window.
+	HWND target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText, cmd == FID_WinGetIDLast);
+	if (!target_window)
+		_f_return_empty;
 
 	switch(cmd)
 	{
 	case FID_WinGetID:
 	case FID_WinGetIDLast:
-		if (!target_window_determined)
-			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText, cmd == FID_WinGetIDLast);
-		if (target_window)
-			_f_return((size_t)target_window);
-		// Otherwise, return the default value.
-		break;
+		_f_return((size_t)target_window);
 
 	case FID_WinGetPID:
 	case FID_WinGetProcessName:
 	case FID_WinGetProcessPath:
-		if (!target_window_determined)
-			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
-		if (target_window)
+		DWORD pid;
+		GetWindowThreadProcessId(target_window, &pid);
+		if (cmd == FID_WinGetPID)
 		{
-			DWORD pid;
-			GetWindowThreadProcessId(target_window, &pid);
-			if (cmd == FID_WinGetPID)
-			{
-				_f_return_i(pid);
-			}
-			// Otherwise, get the full path and name of the executable that owns this window.
-			TCHAR process_name[MAX_PATH];
-			GetProcessName(pid, process_name, _countof(process_name), cmd == FID_WinGetProcessName);
-			_f_return(process_name);
+			_f_return_i(pid);
 		}
-		break;
-
-	case FID_WinGetCount:
-	case FID_WinGetList:
-		// LIST returns an array of HWNDs for the windows that match the given criteria.
-		if (target_window_determined)
-		{
-			if (cmd == FID_WinGetCount)
-			{
-				_f_return_i(target_window != NULL); // i.e. 1 if a window was found.
-			}
-			// Otherwise, it's FID_WinGetList:
-			Object *arr = Object::Create();
-			if (!arr)
-				_f_throw(ERR_OUTOFMEM);
-			if (target_window)
-				// Since the target window has been determined, we know that it is the only window
-				// to be put into the array:
-				arr->Append((__int64)(size_t)target_window);
-			// Otherwise, return an empty array.
-			_f_return(arr);
-		}
-		// Otherwise, the target window(s) have not yet been determined and a special method
-		// is required to gather them.
-		WinGetList(aResultToken, cmd, aTitle, aText, aExcludeTitle, aExcludeText); // Outsourced to avoid having a WindowSearch object on this function's stack.
-		return;
+		// Otherwise, get the full path and name of the executable that owns this window.
+		TCHAR process_name[MAX_PATH];
+		GetProcessName(pid, process_name, _countof(process_name), cmd == FID_WinGetProcessName);
+		_f_return(process_name);
 
 	case FID_WinGetMinMax:
-		if (!target_window_determined)
-			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 		// Testing shows that it's not possible for a minimized window to also be maximized (under
 		// the theory that upon restoration, it *would* be maximized.  This is unfortunate if there
 		// is no other way to determine what the restoration size and maximized state will be for a
 		// minimized window.
-		if (!target_window)
-			break;
 		_f_return_i(IsZoomed(target_window) ? 1 : (IsIconic(target_window) ? -1 : 0));
 
 	case FID_WinGetControls:
 	case FID_WinGetControlsHwnd:
-		if (!target_window_determined)
-			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
-		if (!target_window)
-			break;
 		WinGetControlList(aResultToken, target_window, cmd == FID_WinGetControlsHwnd);
 		return;
 
 	case FID_WinGetStyle:
 	case FID_WinGetExStyle:
-		if (!target_window_determined)
-			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
-		if (!target_window)
-			break;
 		_f_return_i(GetWindowLong(target_window, cmd == FID_WinGetStyle ? GWL_STYLE : GWL_EXSTYLE));
 
 	case FID_WinGetTransparent:
 	case FID_WinGetTransColor:
-		if (!target_window_determined)
-			target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
-		if (!target_window)
-			break;
 		typedef BOOL (WINAPI *MyGetLayeredWindowAttributesType)(HWND, COLORREF*, BYTE*, DWORD*);
 		static MyGetLayeredWindowAttributesType MyGetLayeredWindowAttributes = (MyGetLayeredWindowAttributesType)
 			GetProcAddress(GetModuleHandle(_T("user32")), "GetLayeredWindowAttributes");
@@ -2625,13 +2589,15 @@ BIF_DECL(BIF_WinGet)
 			{
 				// Store in hex format to aid in debugging scripts.  Also, the color is always
 				// stored in RGB format, since that's what WinSet uses:
+				LPTSTR result = _f_retval_buf;
 				_stprintf(result, _T("0x%06X"), bgr_to_rgb(color));
+				_f_return_p(result);
 			}
 			// Otherwise, this window does not have a transparent color (or it's not accessible to us,
 			// perhaps for reasons described at MSDN GetLayeredWindowAttributes()).
 		}
 	}
-	_f_return_p(result);
+	_f_return_empty;
 }
 
 
@@ -8828,15 +8794,18 @@ ResultType Line::SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR 
 // Misc lower level functions //
 ////////////////////////////////
 
+DECLSPEC_NOINLINE // Lexikos: noinline saves ~300 bytes.  Originally the duplicated code prevented inlining.
 HWND Line::DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 {
-	HWND target_window; // A variable of this name is used by the macros below.
-	IF_USE_FOREGROUND_WINDOW(g->DetectHiddenWindows, aTitle, aText, aExcludeTitle, aExcludeText)
-	else if (*aTitle || *aText || *aExcludeTitle || *aExcludeText)
-		target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
-	else // Use the "last found" window.
-		target_window = GetValidLastUsedWindow(*g);
-	return target_window;
+	// Lexikos: Not sure why these checks were duplicated here and in WinExist(),
+	// so they're left here for reference:
+	//HWND target_window; // A variable of this name is used by the macros below.
+	//IF_USE_FOREGROUND_WINDOW(g->DetectHiddenWindows, aTitle, aText, aExcludeTitle, aExcludeText)
+	//else if (*aTitle || *aText || *aExcludeTitle || *aExcludeText)
+	//	target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
+	//else // Use the "last found" window.
+	//	target_window = GetValidLastUsedWindow(*g);
+	return WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 }
 
 HWND DetermineTargetWindow(ExprTokenType *aParam[], int aParamCount)
