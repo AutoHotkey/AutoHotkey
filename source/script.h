@@ -221,6 +221,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_ARG_TYPE _T("Invalid arg type.")
 #define ERR_INVALID_RETURN_TYPE _T("Invalid return type.")
 #define ERR_INVALID_LENGTH _T("Invalid Length.")
+#define ERR_INVALID_ENCODING _T("Invalid Encoding.")
 #define ERR_INVALID_USAGE _T("Invalid usage.")
 
 #define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")

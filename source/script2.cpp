@@ -13528,6 +13528,7 @@ BIF_DECL(BIF_StrGetPut)
 
 	LPVOID 	address;
 	int 	length = -1; // actual length
+	bool	length_is_max_size = false;
 	UINT 	encoding = UorA(CP_UTF16, CP_ACP); // native encoding
 
 	// Parameters are interpreted according to the following rules (highest to lowest precedence):
@@ -13567,9 +13568,16 @@ BIF_DECL(BIF_StrGetPut)
 			if (TokenIsNumeric(**aParam))
 			{
 				length = (int)TokenToInt64(**aParam);
-				if (length == 0 && !source_string)
-					return; // Get 0 chars.
-				if (length <= 0)
+				if (!source_string) // StrGet
+				{
+					if (length == 0)
+						return; // Get 0 chars.
+					if (length < 0)
+						length = -length; // Retrieve exactly this many chars, even if there are null chars.
+					else
+						length_is_max_size = true; // Limit to this, but stop at the first null char.
+				}
+				else if (length < 0)
 					_f_throw(ERR_INVALID_LENGTH);
 				++aParam; // Let encoding be the next param, if present.
 			}
@@ -13587,7 +13595,7 @@ BIF_DECL(BIF_StrGetPut)
 			{
 				encoding = Line::ConvertFileEncoding(TokenToString(**aParam));
 				if (encoding == -1)
-					return; // Invalid param.
+					_f_throw(ERR_INVALID_ENCODING);
 			}
 			else encoding = (UINT)TokenToInt64(**aParam);
 		}
@@ -13727,6 +13735,17 @@ BIF_DECL(BIF_StrGetPut)
 	}
 	else // StrGet
 	{
+		if (length_is_max_size) // Implies length != -1.
+		{
+			// Caller specified the maximum character count, not the exact length.
+			// If the length includes null characters, the conversion functions below
+			// would convert more than necessary and we'd still have to recalculate the
+			// length.  So find the exact length up front:
+			if (encoding == CP_UTF16)
+				length = (int)wcsnlen((LPWSTR)address, length);
+			else
+				length = (int)strnlen((LPSTR)address, length);
+		}
 		if (encoding != UorA(CP_UTF16, CP_ACP))
 		{
 			// Conversion is required.
@@ -13756,25 +13775,24 @@ BIF_DECL(BIF_StrGetPut)
 			}
 			conv_length = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (LPCWSTR)address, length, aResultToken.marker, conv_length, NULL, NULL);
 #endif
-			if (conv_length && !aResultToken.marker[conv_length - 1])
-				--conv_length; // Exclude null-terminator.
+			if (length == -1) // conv_length includes a null-terminator in this case.
+				--conv_length;
 			else
-				aResultToken.marker[conv_length] = '\0';
+				aResultToken.marker[conv_length] = '\0'; // It wasn't terminated above.
 			aResultToken.marker_length = conv_length; // Update it.
-			return;
 		}
-		else if (length > -1)
+		else if (length == -1)
+		{
+			// Return this null-terminated string, no conversion necessary.
+			aResultToken.marker = (LPTSTR) address;
+			aResultToken.marker_length = _tcslen(aResultToken.marker);
+		}
+		else
 		{
 			// No conversion necessary, but we might not want the whole string.
-			if (length == 0)
-				return;	// Already set marker = "" above.
-			// Copy and null-terminate at the specified length.
+			// Copy and null-terminate the string; some callers might require it.
 			TokenSetResult(aResultToken, (LPCTSTR)address, length);
-			return;
 		}
-
-		// Return this null-terminated string, no conversion necessary.
-		aResultToken.marker = (LPTSTR) address;
 	}
 }
 
