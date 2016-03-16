@@ -13237,8 +13237,8 @@ BIF_DECL(BIF_PerformAction)
 			continue;
 		}
 
-		// If this arg is optional and an empty string was passed, make it ARG_TYPE_NORMAL.
-		if (i >= min_params && aParam[i]->symbol == SYM_STRING && !*aParam[i]->marker)
+		// If this arg is optional and it was omitted, ensure it is ARG_TYPE_NORMAL.
+		if (i >= min_params && aParam[i]->symbol == SYM_MISSING)
 			arg[i].type = ARG_TYPE_NORMAL;
 		else
 			arg[i].type = (ArgTypeType)arg_type[i];
