@@ -13206,20 +13206,6 @@ BIF_DECL(BIF_PerformAction)
 		// Use ErrorLevel as the return value:
 		output_var = g_ErrorLevel;
 	}
-	if (i < aParamCount && arg_type[i] == ARG_TYPE_INPUT_VAR && aParam[i]->symbol != SYM_VAR)
-	{
-		// This command's first (e.g. SplitPath) or second (e.g. StrUpper) arg is an input var,
-		// but the caller didn't provide a variable.  Copy the value into our automatic variable
-		// and pass it to the command.  Note that stack_var might already be in use as an output
-		// var; the command should handle that case, and might even optimize for it.
-		stack_var.Assign(*aParam[i]);
-		arg[i].type = ARG_TYPE_INPUT_VAR;
-		arg[i].deref = (DerefType *)&stack_var;
-		arg[i].text = _T(""); // Mark it as a pre-resolved var.
-		//arg[i].length = 0;
-		arg[i].is_expression = false;
-		++i;
-	}
 
 	for ( ; i < aParamCount; ++i)
 	{
@@ -13245,10 +13231,10 @@ BIF_DECL(BIF_PerformAction)
 		
 		if (arg[i].type != ARG_TYPE_NORMAL) // It's an input or output var.
 		{
-			// This arg requires a var for input or output, but since it wasn't already handled
-			// above, the caller must have provided something other than a var.  Currently this
-			// can only happen for OUTPUT vars since the stack_var workaround above covers the
-			// INPUT var for all known commands.
+			// This arg requires a var for output, but no var was provided by the caller.
+			// There currently aren't any commands which require input vars, but if they
+			// are reintroduced, it's important that they are detected here in case there
+			// are commands which assume sArgVar[] is non-NULL.
 			sntprintf(aResultToken.buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
 				, i+1, aResultToken.func->mName);
 			stack_var.Free(VAR_ALWAYS_FREE); // It might've been used as an input var.
