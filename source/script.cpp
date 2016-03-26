@@ -8101,7 +8101,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		else if (!_tcsicmp(suffix, _T("Modify")))
 		{
 			bif = BIF_LV_AddInsertModify; // Although it shares the same function with "Insert", it can still have its own min/max params.
-			min_params = 2;
+			// Leave min_params at 1 so that it can be called like LV_Modify(row, , col1, col2).
 			max_params = 10000; // An arbitrarily high limit that will never realistically be reached.
 		}
 		else if (!_tcsicmp(suffix, _T("Delete")))
