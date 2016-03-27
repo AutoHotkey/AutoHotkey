@@ -10086,6 +10086,12 @@ end_of_infix_to_postfix:
 		}
 		else
 		{
+			if (aArg.type == ARG_TYPE_OUTPUT_VAR && only_symbol != SYM_VAR)
+				// If left as an expression, this arg would never resolve to a variable,
+				// so would always throw an exception.  It must not be converted to a
+				// non-expression as ExpandArgs() wouldn't handle it correctly.
+				return LineError(ERR_VAR_IS_READONLY, FAIL, aArg.text);
+
 			switch (only_symbol)
 			{
 			case SYM_INTEGER:
@@ -10097,7 +10103,8 @@ end_of_infix_to_postfix:
 				break;
 			case SYM_VAR: // SYM_VAR can only be VAR_NORMAL in this case.
 				// This isn't needed for ACT_ASSIGNEXPR, which does output_var->Assign(*postfix).
-				aArg.type = ARG_TYPE_INPUT_VAR;
+				if (aArg.type != ARG_TYPE_OUTPUT_VAR)
+					aArg.type = ARG_TYPE_INPUT_VAR;
 				aArg.deref = (DerefType *)only_token.var;
 				aArg.text = _T(""); // Mark it as a pre-resolved var.
 				aArg.length = 0;
