@@ -9743,10 +9743,13 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 						loop_line = NULL;
 					}
 				}
-				if (in_function_body && loop_line->IsOutsideAnyFunctionBody())
-					return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
-				if (!line->CheckValidFinallyJump(loop_line))
-					return NULL; // Error already shown.
+				if (loop_line) // i.e. it wasn't determined to be this line's direct parent, which is always valid.
+				{
+					if (in_function_body && loop_line->IsOutsideAnyFunctionBody())
+						return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
+					if (!line->CheckValidFinallyJump(loop_line))
+						return NULL; // Error already shown.
+				}
 				line->mRelatedLine = loop_line;
 			}
 			break;
