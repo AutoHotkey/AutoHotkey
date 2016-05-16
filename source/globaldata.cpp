@@ -726,6 +726,13 @@ modifier is specified along with it:
 , {_T("Launch_App1"), VK_LAUNCH_APP1}
 , {_T("Launch_App2"), VK_LAUNCH_APP2}
 
+// Special keys in Japanese keyboard
+, {_T("Muhenkan"), VK_NONCONVERT}
+, {_T("Henkan"), VK_CONVERT }
+, {_T("KanaHira"), VK_OEM_COPY }
+, {_T("HanZen1"), VK_OEM_AUTO } 
+, {_T("HanZen2"), VK_OEM_ENLW }
+
 // Probably safest to terminate it this way, with a flag value.  (plus this makes it a little easier
 // to code some loops, maybe).  Can also calculate how many elements are in the array using sizeof(array)
 // divided by sizeof(element).  UPDATE: Decided not to do this in case ever decide to sort this array; don't
