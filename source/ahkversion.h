@@ -1,2 +1,2 @@
-#define AHK_VERSION "1.1.23.06"
-#define AHK_VERSION_N 1,1,23,6
+#define AHK_VERSION "1.1.23.07"
+#define AHK_VERSION_N 1,1,23,7
