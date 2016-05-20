@@ -364,9 +364,11 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 	UserMenu *submenu = NULL;    // Set default.
 	if (menu_command == MENU_CMD_ADD && !update_exiting_item_options) // Labels and submenus are only used in conjunction with the ADD command.
 	{
-		if (!*aParam4) // Allow the label/submenu to default to the menu name.
+		if (aParam4Var && aParam4Var->HasObject()) // This must take precedence over the next check below.
+			target_label = aParam4Var->Object();
+		else if (!*aParam4) // Allow the label/submenu to default to the menu name.
 			aParam4 = aParam3; // Note that aParam3 will be blank in the case of a separator line.
-		if (*aParam4)
+		if (*aParam4) // It's not a separator line and no object was given.
 		{
 			if (*aParam4 == ':') // It's a submenu.
 			{
@@ -380,7 +382,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 					RETURN_MENU_ERROR(_T("Submenu must not contain its parent menu."), aParam4);
 			}
 			else // It's a label.
-				if (   !(target_label = FindCallable(aParam4, aParam4Var, 3))   )
+				if (   !(target_label = FindCallable(aParam4, NULL, 3))   )
 					RETURN_MENU_ERROR(ERR_NO_LABEL, aParam4);
 		}
 	}
