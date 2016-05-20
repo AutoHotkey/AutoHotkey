@@ -15058,7 +15058,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return FormatTime(ARG2, ARG3);
 
 	case ACT_MENU:
-		return g_script.PerformMenu(SIX_ARGS, ARGVAR4); // L17: Changed from FIVE_ARGS to access previously "reserved" arg (for use by Menu,,Icon).
+		return g_script.PerformMenu(SIX_ARGS, ARGVAR4, ARGVAR5);
 
 	case ACT_GUI:
 		return g_script.PerformGui(FOUR_ARGS);

@@ -30,7 +30,7 @@ ResultType Script::MenuError(LPTSTR aMessage, LPTSTR aInfo)
 }
 
 
-ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var)
+ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var, Var *aParam5Var)
 {
 	if (mMenuUseErrorLevel)
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Set default, which is "none" for the Menu command.
@@ -279,6 +279,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 		ignore_existing_items = true;
 		aParam3 = aParam4;
 		aParam4 = aOptions;
+		aParam4Var = aParam5Var;
 		aOptions = aOptions2;
 	}
 	
