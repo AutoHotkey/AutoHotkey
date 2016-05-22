@@ -533,7 +533,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 							// Fall back to the first tab control (for consistency & simplicity, seems best
 							// to always use the first rather than something fancier such as "nearest in z-order".
 							ptab_control = pgui->FindTabControl(0);
-						if (ptab_control)
+						if (ptab_control && IsWindowEnabled(ptab_control->hwnd))
 						{
 							pgui->SelectAdjacentTab(*ptab_control
 								, msg.wParam == VK_NEXT || (msg.wParam == VK_TAB && !(GetKeyState(VK_SHIFT) & 0x8000)) // Use GetKeyState() vs. GetAsyncKeyState() because the former's definition is more suitable.

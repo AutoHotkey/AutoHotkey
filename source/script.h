@@ -335,6 +335,9 @@ BOOL CALLBACK EnumMonitorProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMoni
 BOOL CALLBACK EnumChildGetText(HWND aWnd, LPARAM lParam);
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam);
 bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd);
+INT_PTR CALLBACK TabDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+#define TABDIALOG_ATTRIB_BACKGROUND_DEFAULT 1
+#define TABDIALOG_ATTRIB_THEMED 2
 
 
 typedef UINT LineNumberType;
@@ -553,7 +556,7 @@ enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero du
 	, GUI_CONTROL_DROPDOWNLIST, GUI_CONTROL_COMBOBOX
 	, GUI_CONTROL_LISTBOX, GUI_CONTROL_LISTVIEW, GUI_CONTROL_TREEVIEW
 	, GUI_CONTROL_EDIT, GUI_CONTROL_DATETIME, GUI_CONTROL_MONTHCAL, GUI_CONTROL_HOTKEY
-	, GUI_CONTROL_UPDOWN, GUI_CONTROL_SLIDER, GUI_CONTROL_PROGRESS, GUI_CONTROL_TAB, GUI_CONTROL_TAB2
+	, GUI_CONTROL_UPDOWN, GUI_CONTROL_SLIDER, GUI_CONTROL_PROGRESS, GUI_CONTROL_TAB, GUI_CONTROL_TAB2, GUI_CONTROL_TAB3
 	, GUI_CONTROL_ACTIVEX, GUI_CONTROL_LINK, GUI_CONTROL_CUSTOM, GUI_CONTROL_STATUSBAR}; // Kept last to reflect it being bottommost in switch()s (for perf), since not too often used.
 
 enum ThreadCommands {THREAD_CMD_INVALID, THREAD_CMD_PRIORITY, THREAD_CMD_INTERRUPT, THREAD_CMD_NOTIMERS};
@@ -1567,6 +1570,7 @@ public:
 		if (!_tcsicmp(aBuf, _T("Progress"))) return GUI_CONTROL_PROGRESS;
 		if (!_tcsicmp(aBuf, _T("Tab"))) return GUI_CONTROL_TAB;
 		if (!_tcsicmp(aBuf, _T("Tab2"))) return GUI_CONTROL_TAB2; // v1.0.47.05: Used only temporarily: becomes TAB vs. TAB2 upon creation.
+		if (!_tcsicmp(aBuf, _T("Tab3"))) return GUI_CONTROL_TAB3; // v1.1.23.00: As above.
 		if (!_tcsicmp(aBuf, _T("GroupBox"))) return GUI_CONTROL_GROUPBOX;
 		if (!_tcsicmp(aBuf, _T("Pic")) || !_tcsicmp(aBuf, _T("Picture"))) return GUI_CONTROL_PIC;
 		if (!_tcsicmp(aBuf, _T("DateTime"))) return GUI_CONTROL_DATETIME;
@@ -2590,6 +2594,10 @@ struct GuiControlOptionsType
 	bool start_new_section;
 	bool use_theme; // v1.0.32: Provides the means for the window's current setting of mUseTheme to be overridden.
 	bool listview_no_auto_sort; // v1.0.44: More maintainable and frees up GUI_CONTROL_ATTRIB_ALTBEHAVIOR for other uses.
+	bool tab_control_uses_dialog;
+	#define TAB3_AUTOWIDTH 1
+	#define TAB3_AUTOHEIGHT 2
+	CHAR tab_control_autosize;
 	ATOM customClassAtom;
 };
 
@@ -2780,9 +2788,13 @@ public:
 	GuiControlType *FindTabControl(TabControlIndexType aTabControlIndex);
 	int FindTabIndexByName(GuiControlType &aTabControl, LPTSTR aName, bool aExactMatch = false);
 	int GetControlCountOnTabPage(TabControlIndexType aTabControlIndex, TabIndexType aTabIndex);
-	POINT GetPositionOfTabClientArea(GuiControlType &aTabControl);
+	void GetTabDisplayAreaRect(HWND aTabControlHwnd, RECT &aRect);
+	POINT GetPositionOfTabDisplayArea(GuiControlType &aTabControl);
 	ResultType SelectAdjacentTab(GuiControlType &aTabControl, bool aMoveToRight, bool aFocusFirstControl
 		, bool aWrapAround);
+	void AutoSizeTabControl(GuiControlType &aTabControl);
+	ResultType CreateTabDialog(GuiControlType &aTabControl, GuiControlOptionsType &aOpt);
+	void UpdateTabDialog(HWND aTabControlHwnd);
 	void ControlGetPosOfFocusedItem(GuiControlType &aControl, POINT &aPoint);
 	static void LV_Sort(GuiControlType &aControl, int aColumnIndex, bool aSortOnlyIfEnabled, TCHAR aForceDirection = '\0');
 	static DWORD ControlGetListViewMode(HWND aWnd);
