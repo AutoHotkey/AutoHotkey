@@ -347,7 +347,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 	// including the adding separator lines.  So at the point, it is necessary to either find
 	// or create a menu item.  The latter only occurs for the ADD command.
 	if (!*aParam3)
-		RETURN_MENU_ERROR(_T("Parameter #3 must not be blank in this case."), _T(""));
+		RETURN_MENU_ERROR(ERR_PARAM3_MUST_NOT_BE_BLANK, _T(""));
 
 	// Find the menu item name AND its previous item (needed for the DELETE command) in the linked list:
 	UserMenuItem *menu_item = NULL, *menu_item_prev = NULL; // Set defaults.

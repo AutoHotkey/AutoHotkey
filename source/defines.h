@@ -674,6 +674,7 @@ class Line;                 //
 struct RegItemStruct;       //
 struct LoopReadFileStruct;  //
 class GuiType;				//
+class ScriptTimer;			//
 struct global_struct
 {
 	// 8-byte items are listed first, which might improve alignment for 64-bit processors (dubious).
@@ -712,6 +713,7 @@ struct global_struct
 	Func *CurrentFunc; // v1.0.46.16: The function whose body is currently being processed at load-time, or being run at runtime (if any).
 	Func *CurrentFuncGosub; // v1.0.48.02: Allows A_ThisFunc to work even when a function Gosubs an external subroutine.
 	Label *CurrentLabel; // The label that is currently awaiting its matching "return" (if any).
+	ScriptTimer *CurrentTimer; // The timer that launched this thread (if any).
 	HWND hWndLastUsed;  // In many cases, it's better to use GetValidLastUsedWindow() when referring to this.
 	//HWND hWndToRestore;
 	int MsgBoxResult;  // Which button was pressed in the most recent MsgBox.

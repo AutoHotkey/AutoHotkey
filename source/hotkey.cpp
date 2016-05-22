@@ -899,7 +899,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 
 
 
-ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions, IObject *aJumpToLabel)
+ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions, IObject *aJumpToLabel, Var *aJumpToLabelVar)
 // Creates, updates, enables, or disables a hotkey dynamically (while the script is running).
 // Returns OK or FAIL.
 {
@@ -962,8 +962,9 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	HookActionType hook_action = 0; // Set default.
 	if (!aJumpToLabel) // It wasn't provided by caller (resolved at load-time).
 		if (   !(hook_action = ConvertAltTab(aLabelName, true))   )
-			if (   *aLabelName && !(aJumpToLabel = g_script.FindCallable(aLabelName))   )
-				RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, ERR_NO_LABEL, aLabelName);
+			if (   !(aJumpToLabel = g_script.FindCallable(aLabelName, aJumpToLabelVar)) // Returns NULL if given a function which requires parameters.
+				&& (*aLabelName || aJumpToLabelVar && aJumpToLabelVar->HasObject())   ) // HasObject: if true, its a function we can't call (see above).
+				RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, *aLabelName ? ERR_NO_LABEL : ERR_HOTKEY_FUNC_PARAMS, aLabelName);
 	// Above has ensured that aJumpToLabel and hook_action can't both be non-zero.  Furthermore,
 	// both can be zero/NULL only when the caller is updating an existing hotkey to have new options
 	// (i.e. it's retaining its current label).

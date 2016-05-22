@@ -3629,7 +3629,7 @@ void Script::DeleteTimer(IObject *aLabel)
 			// Disable it, even if it's not technically being deleted yet.
 			if (timer->mEnabled)
 				timer->Disable(); // Keeps track of mTimerEnabledCount and whether the main timer is needed.
-			if (timer->mExistingThreads)
+			if (timer->mExistingThreads) // This condition differs from g->CurrentTimer == timer, which only detects the "top-most" timer.
 			{
 				if (!aLabel) // Caller requested we delete a previously marked timer which
 					continue; // has now finished, but this one hasn't, so keep looking.
@@ -3677,13 +3677,26 @@ Label *Script::FindLabel(LPTSTR aLabelName)
 IObject *Script::FindCallable(LPTSTR aLabelName, Var *aVar, int aParamCount)
 {
 	if (aVar && aVar->HasObject())
-		return aVar->Object();
+	{
+		IObject *obj = aVar->Object();
+		if (Func *func = LabelPtr(obj).ToFunc())
+		{
+			// It seems worth performing this additional check; without it, registration
+			// of this function would appear to succeed but it would never be called.
+			// In particular, this will alert the user that a *method* is not a valid
+			// callable object (because it requires at least one parameter: "this").
+			// For simplicity, the error message will indicate that no label was found.
+			if (func->mMinParams > aParamCount)
+				return NULL;
+		}
+		return obj;
+	}
 	if (*aLabelName)
 	{
 		if (Label *label = FindLabel(aLabelName))
 			return label;
 		if (Func *func = FindFunc(aLabelName))
-			if (func->mMinParams <= aParamCount)
+			if (func->mMinParams <= aParamCount) // See comments above.
 				return func;
 	}
 	return NULL;
@@ -6450,7 +6463,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				if (VAR(line.mArg[0])->Type() == VAR_CLIPBOARD)
 				{
 					if (aArgc < 3)
-						return ScriptError(_T("Parameter #3 must not be blank in this case."));
+						return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
 				}
 				else
 					if (aArgc > 2)
@@ -6651,7 +6664,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					break;  // i.e. for commands other than the above, do the default below.
 				default:
 					if (!*new_raw_arg3)
-						return ScriptError(_T("Parameter #3 must not be blank in this case."));
+						return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
 				}
 				break;
 
@@ -6688,7 +6701,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			case CONTROL_CMD_CHOOSESTRING:
 			case CONTROL_CMD_EDITPASTE:
 				if (control_cmd != CONTROL_CMD_TABLEFT && control_cmd != CONTROL_CMD_TABRIGHT && !*new_raw_arg2)
-					return ScriptError(_T("Parameter #2 must not be blank in this case."));
+					return ScriptError(ERR_PARAM2_MUST_NOT_BE_BLANK);
 				break;
 			default: // All commands except the above should have a blank Value parameter.
 				if (*new_raw_arg2)
@@ -6708,7 +6721,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			case CONTROLGET_CMD_FINDSTRING:
 			case CONTROLGET_CMD_LINE:
 				if (!*new_raw_arg3)
-					return ScriptError(_T("Parameter #3 must not be blank in this case."));
+					return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
 				break;
 			case CONTROLGET_CMD_LIST:
 				break; // Simply break for any sub-commands that have an optional parameter 3.
@@ -6743,7 +6756,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			case GUICONTROL_CMD_CHOOSE:
 			case GUICONTROL_CMD_CHOOSESTRING:
 				if (!*new_raw_arg3)
-					return ScriptError(_T("Parameter #3 must not be blank in this case."));
+					return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
 				break;
 			default: // All commands except the above should have a blank Text parameter.
 				if (*new_raw_arg3)
@@ -6789,7 +6802,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			if (!drive_cmd)
 				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 			if (drive_cmd != DRIVE_CMD_EJECT && !*new_raw_arg2)
-				return ScriptError(_T("Parameter #2 must not be blank in this case."));
+				return ScriptError(ERR_PARAM2_MUST_NOT_BE_BLANK);
 			// For DRIVE_CMD_LABEL: Note that it is possible and allowed for the new label to be blank.
 			// Not currently done since all sub-commands take a mandatory or optional ARG3:
 			//if (drive_cmd != ... && *new_raw_arg3)
@@ -6804,10 +6817,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			if (!drive_get_cmd)
 				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 			if (drive_get_cmd != DRIVEGET_CMD_LIST && drive_get_cmd != DRIVEGET_CMD_STATUSCD && !*new_raw_arg3)
-				return ScriptError(_T("Parameter #3 must not be blank in this case."));
+				return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
 			if (drive_get_cmd != DRIVEGET_CMD_SETLABEL && (aArgc < 1 || line.mArg[0].type == ARG_TYPE_NORMAL))
 				// The output variable has been omitted.
-				return ScriptError(_T("Parameter #1 must not be blank in this case."));
+				return ScriptError(ERR_PARAM1_MUST_NOT_BE_BLANK);
 		}
 		break;
 
@@ -6816,7 +6829,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		{
 			ProcessCmds process_cmd = line.ConvertProcessCmd(new_raw_arg1);
 			if (process_cmd != PROCESS_CMD_PRIORITY && process_cmd != PROCESS_CMD_EXIST && !*new_raw_arg2)
-				return ScriptError(_T("Parameter #2 must not be blank in this case."));
+				return ScriptError(ERR_PARAM2_MUST_NOT_BE_BLANK);
 			switch (process_cmd)
 			{
 			case PROCESS_CMD_INVALID:
@@ -6888,7 +6901,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				break;
 			case WINSET_TRANSCOLOR:
 				if (!*new_raw_arg2)
-					return ScriptError(_T("Parameter #2 must not be blank in this case."));
+					return ScriptError(ERR_PARAM2_MUST_NOT_BE_BLANK);
 				break;
 			case WINSET_ALWAYSONTOP:
 				if (aArgc > 1 && !line.ArgHasDeref(2) && !line.ConvertOnOffToggle(new_raw_arg2))
@@ -7415,7 +7428,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 			return ScriptError(_T("A label must not point to a function."), mLastLabel->mName);
 		// Since above didn't return, the label or labels must have been hotkey labels.
 		if (func.mMinParams)
-			return ScriptError(_T("Parameters of hotkey functions must be optional."), aBuf);
+			return ScriptError(ERR_HOTKEY_FUNC_PARAMS, aBuf);
 	}
 
 	// Indicate success:
@@ -14466,14 +14479,8 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	}
 
 	case ACT_HOTKEY:
-	{
-		IObject *target_label;
 		// mAttribute is the label resolved at loadtime, if available (for performance).
-		if (   !(target_label = (IObject *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
-			if (ARGVAR2 && ARGVAR2->HasObject()) // Allow: Hotkey %KeyName%, %VarWithObject%
-				target_label = ARGVAR2->Object(); // AddRef() will be called later, when it is stored.
-		return Hotkey::Dynamic(THREE_ARGS, target_label);
-	}
+		return Hotkey::Dynamic(THREE_ARGS, (IObject *)mAttribute, ARGVAR2);
 
 	case ACT_SETTIMER: // A timer is being created, changed, or enabled/disabled.
 	{
@@ -14481,16 +14488,55 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// Note that only one timer per label is allowed because the label is the unique identifier
 		// that allows us to figure out whether to "update or create" when searching the list of timers.
 		if (   !(target_label = (IObject *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
-			if (   !(target_label = g_script.FindCallable(ARG1, ARGVAR1))
-				&& !(!*ARG1 && (target_label = g.CurrentLabel))   )
-				return LineError(ERR_NO_LABEL, FAIL, ARG1);
+		{
+			if (   !(target_label = g_script.FindCallable(ARG1, ARGVAR1))   )
+			{
+				if (*ARG1)
+					// ARG1 is a non-empty string and not the name of an existing label or function.
+					return LineError(ERR_NO_LABEL, FAIL, ARG1);
+				// Possible cases not ruled out by the above check:
+				//   1) Label was omitted.
+				//   2) Label was a single variable or non-expression which produced an empty value.
+				//   3) Label was a single variable containing an incompatible function.
+				//   4) Label was an expression which produced an empty value.
+				//   5) Label was an expression which produced an object.
+				// Case 3 is always an error.
+				// Case 2 is arguably more likely to be an error (not intended to be empty) than meant as
+				// an indicator to use the current label, so it seems safest to treat it as an error (and
+				// also more consistent with Case 3).
+				// Case 5 is currently not supported; the object reference was converted to an empty string
+				// at an earlier stage, so it is indistinguishable from Case 4.  It seems rare that someone
+				// would have a legitimate need for Case 4, so both cases are treated as an error.  This
+				// covers cases like:
+				//   SetTimer, % Func(a).Bind(b), xxx  ; Unsupported.
+				//   SetTimer, % this.myTimerFunc, xxx  ; Unsupported (where myTimerFunc is an object).
+				//   SetTimer, % this.MyMethod, xxx  ; Additional error: failing to bind "this" to MyMethod.
+				// The following could be used to show "must not be blank" for Case 2, but it seems best
+				// to reserve that message for when the parameter is really blank, not an empty variable:
+				//if (mArgc > 0 && (mArg[0].is_expression /* Cases 4 & 5 */ || ARGVAR1 && ARGVAR1->HasObject() /* Case 3 */))
+				if (*RAW_ARG1)
+					return LineError(ERR_PARAM1_INVALID);
+				if (g.CurrentLabel)
+					// For backward-compatibility, use A_ThisLabel if set.  This can differ from CurrentTimer
+					// when goto/gosub is used.  Some scripts apparently use this with subroutines that are
+					// called both directly and by a timer.  The down side is that if a timer function uses
+					// goto/gosub, A_ThisLabel must take predence; that may or may not be the user's intention.
+					target_label = g.CurrentLabel;
+				else if (g.CurrentTimer)
+					// Default to the timer which launched the current thread.
+					target_label = g.CurrentTimer->mLabel.ToObject();
+				if (!target_label)
+					// Either the thread was not launched by a timer or the timer has been deleted.
+					return LineError(ERR_PARAM1_MUST_NOT_BE_BLANK);
+			}
+		}
 		// And don't update mAttribute (leave it NULL) because we want ARG1 to be dynamically resolved
 		// every time the command is executed (in case the contents of the referenced variable change).
 		// In the data structure that holds the timers, we store the target label rather than the target
-		// line so that a label can be registered independently as a timers even if there another label
+		// line so that a label can be registered independently as a timer even if there is another label
 		// that points to the same line such as in this example:
-		// Label1::
-		// Label2::
+		// Label1:
+		// Label2:
 		// ...
 		// return
 		if (*ARG2)
