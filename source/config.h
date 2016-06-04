@@ -38,6 +38,7 @@
 #define CONFIG_WINNT4
 #endif
 
-#ifndef _WIN64
-#define CONFIG_WIN2K
-#endif
+// This is now defined via Config.vcxproj if supported by the current platform toolset.
+//#ifndef _WIN64
+//#define CONFIG_WIN2K
+//#endif

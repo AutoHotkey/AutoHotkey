@@ -102,7 +102,7 @@
   <ItemDefinitionGroup Condition="'$(Platform)'=='Win32'">
     <Link>
       <TargetMachine>MachineX86</TargetMachine>
-      <MinimumRequiredVersion>5</MinimumRequiredVersion>
+      <MinimumRequiredVersion>5.01</MinimumRequiredVersion>
     </Link>
   </ItemDefinitionGroup>
   <!-- platform: x64 -->
@@ -166,6 +166,15 @@
       <Command>echo $(PackerName).exe disabled or not found, skipping compression</Command>
       <Command Condition="exists('$(PackerPath)')">$(PackerPath)$(PackerArgs) "$(TargetPath)" &amp; exit 0</Command>
     </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <!-- win2k support -->
+  <ItemDefinitionGroup Condition="$(SupportWin2k)">
+    <ClCompile>
+      <PreprocessorDefinitions>CONFIG_WIN2K;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <MinimumRequiredVersion>5</MinimumRequiredVersion>
+    </Link>
   </ItemDefinitionGroup>
   <!-- Visual C++ 2010 should place any newly created properties in these groups -->
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
@@ -285,7 +294,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <CustomBuild Include="source\lib\win2kcompat.asm">
-      <ExcludedFromBuild Condition="'$(Platform)'!='Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="!$(SupportWin2k)">true</ExcludedFromBuild>
     </CustomBuild>
     <CustomBuild Include="source\libx64call\x64call.asm">
       <ExcludedFromBuild Condition="'$(Platform)'!='x64'">true</ExcludedFromBuild>

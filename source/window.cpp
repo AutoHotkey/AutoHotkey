@@ -1887,11 +1887,15 @@ bool DialogPrep()
 		// issue.  If one L/R modifier is logically down and the opposite side is physically
 		// down, the workaround isn't wanted/needed, because the dialog *should* act like
 		// the key is down, and it does so until the key is released.
-		modLR_type mods_not_to_release = ConvertModifiers(ConvertModifiersLR(g_modifiersLR_logical) & (MOD_CONTROL | MOD_SHIFT));
+		// UPDATE: I'm not able to reproduce this problem on Windows 10, but it's done there
+		// too just in case.
+		mod_type mods_logical = ConvertModifiersLR(g_modifiersLR_logical);
+		modLR_type mods_not_to_release = ConvertModifiers(mods_logical & (MOD_CONTROL | MOD_SHIFT))
+			| MOD_LALT | MOD_RALT | MOD_LWIN | MOD_RWIN; // v1.1.23.05: No need to release these keys.
 		modLR_type mods_to_release = g_modifiersLR_physical & ~mods_not_to_release;
 		if (mods_to_release)
 		{
-			if (g_modifiersLR_logical & (MOD_LWIN | MOD_RWIN))
+			if (mods_logical == MOD_WIN) // Fixed in v1.1.23.05 to exclude combinations like MOD_WIN|MOD_CONTROL, which don't need this.
 			{
 				// Even though the Win key isn't being released, sending a Shift or Control key-up
 				// triggers the Start menu.  To prevent that, we send the mask key.  This has been

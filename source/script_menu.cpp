@@ -30,7 +30,7 @@ ResultType Script::MenuError(LPTSTR aMessage, LPTSTR aInfo)
 }
 
 
-ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var)
+ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var, Var *aParam5Var)
 {
 	if (mMenuUseErrorLevel)
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Set default, which is "none" for the Menu command.
@@ -279,6 +279,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 		ignore_existing_items = true;
 		aParam3 = aParam4;
 		aParam4 = aOptions;
+		aParam4Var = aParam5Var;
 		aOptions = aOptions2;
 	}
 	
@@ -346,7 +347,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 	// including the adding separator lines.  So at the point, it is necessary to either find
 	// or create a menu item.  The latter only occurs for the ADD command.
 	if (!*aParam3)
-		RETURN_MENU_ERROR(_T("Parameter #3 must not be blank in this case."), _T(""));
+		RETURN_MENU_ERROR(ERR_PARAM3_MUST_NOT_BE_BLANK, _T(""));
 
 	// Find the menu item name AND its previous item (needed for the DELETE command) in the linked list:
 	UserMenuItem *menu_item = NULL, *menu_item_prev = NULL; // Set defaults.
@@ -363,9 +364,11 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 	UserMenu *submenu = NULL;    // Set default.
 	if (menu_command == MENU_CMD_ADD && !update_exiting_item_options) // Labels and submenus are only used in conjunction with the ADD command.
 	{
-		if (!*aParam4) // Allow the label/submenu to default to the menu name.
+		if (aParam4Var && aParam4Var->HasObject()) // This must take precedence over the next check below.
+			target_label = aParam4Var->Object();
+		else if (!*aParam4) // Allow the label/submenu to default to the menu name.
 			aParam4 = aParam3; // Note that aParam3 will be blank in the case of a separator line.
-		if (*aParam4)
+		if (*aParam4) // It's not a separator line and no object was given.
 		{
 			if (*aParam4 == ':') // It's a submenu.
 			{
@@ -379,7 +382,7 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 					RETURN_MENU_ERROR(_T("Submenu must not contain its parent menu."), aParam4);
 			}
 			else // It's a label.
-				if (   !(target_label = FindCallable(aParam4, aParam4Var, 3))   )
+				if (   !(target_label = FindCallable(aParam4, NULL, 3))   )
 					RETURN_MENU_ERROR(ERR_NO_LABEL, aParam4);
 		}
 	}

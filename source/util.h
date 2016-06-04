@@ -667,7 +667,7 @@ LPTSTR GetWin32ErrorText(LPTSTR aBuf, DWORD aBufSize, DWORD aError);
 void AssignColor(LPTSTR aColorName, COLORREF &aColor, HBRUSH &aBrush);
 COLORREF ColorNameToBGR(LPTSTR aColorName);
 HRESULT MySetWindowTheme(HWND hwnd, LPCWSTR pszSubAppName, LPCWSTR pszSubIdList);
-//HRESULT MyEnableThemeDialogTexture(HWND hwnd, DWORD dwFlags);
+HRESULT MyEnableThemeDialogTexture(HWND hwnd, DWORD dwFlags);
 LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap, bool aAllowEscapedSpace = false);
 int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter = ',', int aStartIndex = 0, LPCTSTR aLiteralMap = NULL);
 int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter = ',', int aStartIndex = 0, LPCTSTR aLiteralMap = NULL);

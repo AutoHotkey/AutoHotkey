@@ -514,7 +514,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 							// Fall back to the first tab control (for consistency & simplicity, seems best
 							// to always use the first rather than something fancier such as "nearest in z-order".
 							ptab_control = pgui->FindTabControl(0);
-						if (ptab_control)
+						if (ptab_control && IsWindowEnabled(ptab_control->hwnd))
 						{
 							pgui->SelectAdjacentTab(*ptab_control
 								, msg.wParam == VK_NEXT || (msg.wParam == VK_TAB && !(GetKeyState(VK_SHIFT) & 0x8000)) // Use GetKeyState() vs. GetAsyncKeyState() because the former's definition is more suitable.
@@ -1669,6 +1669,9 @@ bool CheckScriptTimers()
 		// won't run if there is any paused thread, thus the icon can't currently be showing "paused".
 		InitNewThread(timer.mPriority, false, false, timer.mLabel->TypeOfFirstLine());
 
+		// This is used to determine which timer SetTimer,,xxx acts on:
+		g->CurrentTimer = &timer;
+
 		++timer.mExistingThreads;
 		timer.mLabel->ExecuteInNewThread(_T("Timer"));
 		--timer.mExistingThreads;
@@ -1676,6 +1679,17 @@ bool CheckScriptTimers()
 		// Resolve the next timer only now, in case other timers were created or deleted while
 		// this timer was executing.  Must be done before the timer is potentially deleted below.
 		next_timer = timer.mNextTimer;
+		// If this is a run-once timer for a live reference-counted object (i.e. not a Label or
+		// Func, which can never be deleted), delete the timer.  Otherwise, there's a high risk
+		// that the script will leak objects, because if the object is only referenced by the
+		// timer list, there's no way to re-enable it.  By contrast, a Label or Func can be
+		// referenced by name, and a repeating timer can self-reference during execution.
+		// It is tempting to do this only when mRefCount == 1 (for backward-compatibility),
+		// but that would only work if the script releases its last reference to the object
+		// *before* the timer expires.
+		// mEnabled is checked in case the timer re-enabled itself.
+		if (timer.mRunOnlyOnce && !timer.mEnabled && timer.mLabel.IsLiveObject())
+			timer.mLabel = NULL;
 		// If the script attempted to delete this timer while it was executing, mLabel was set
 		// to NULL and it is now time to delete the timer.  mExistingThreads == 0 is implied
 		// at this point since timers are only allowed one thread.
