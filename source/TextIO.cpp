@@ -1205,7 +1205,7 @@ BIF_DECL(BIF_FileOpen)
 
 invalid_param:
 	g->LastError = ERROR_INVALID_PARAMETER; // For consistency.
-	_f_throw(ERR_PARAM2_INVALID);
+	_f_throw(ERR_PARAM_INVALID);
 }
 
 
