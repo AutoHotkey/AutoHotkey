@@ -10065,20 +10065,17 @@ ResultType Line::WriteClipboardToFile(LPTSTR aFilespec, Var *aBinaryClipVar)
 
 
 
-ResultType Line::FileDelete()
+BOOL FileDeleteCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData)
 {
-	// Below is done directly this way rather than passed in as args mainly to emphasize that
-	// ArgLength() can safely be called in Line methods like this one (which is done further below).
-	// It also may also slightly improve performance and reduce code size.
-	LPTSTR aFilePattern = ARG1;
+	return DeleteFile(aFilename);
+}
 
-	if (!*aFilePattern)
-	{
-		// Let ErrorLevel indicate an error, since this is probably not what the user intended.
-		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
-	}
-
-	if (!StrChrAny(aFilePattern, _T("?*")))
+ResultType Line::FileDelete(LPTSTR aFilePattern)
+{
+	// The no-wildcard case could be handled via FilePatternApply(), but it is handled here
+	// for backward-compatibility (just in case the use of FindFirstFile() affects something):
+	if (!StrChrAny(aFilePattern, _T("?*")) // No wildcards; just a plain path/filename.
+		&& *aFilePattern) // i.e. if it's empty, let FilePatternApply() report the error.
 	{
 		SetLastError(0); // For sanity: DeleteFile appears to set it only on failure.
 		// ErrorLevel will indicate failure if DeleteFile fails.
@@ -10086,81 +10083,8 @@ ResultType Line::FileDelete()
 	}
 
 	// Otherwise aFilePattern contains wildcards, so we'll search for all matches and delete them.
-	// Testing shows that the ANSI version of FindFirstFile() will not accept a path+pattern longer
-	// than 256 or so, even if the pattern would match files whose names are short enough to be legal.
-	// Therefore, as of v1.0.25, there is also a hard limit of MAX_PATH on all these variables.
-	// MSDN confirms this in a vague way: "In the ANSI version of FindFirstFile(), [plpFileName] is
-	// limited to MAX_PATH characters."
-	if (ArgLength(1) >= MAX_PATH) // Checked early to simplify things later below.
-	{
-		// Let ErrorLevel indicate the error.
-		return SetErrorsOrThrow(true, ERROR_BUFFER_OVERFLOW);
-	}
-
-	LONG_OPERATION_INIT
-	int failure_count = 0; // Set default.
-
-	WIN32_FIND_DATA current_file;
-	HANDLE file_search = FindFirstFile(aFilePattern, &current_file);
-	if (file_search == INVALID_HANDLE_VALUE) // No matching files found.
-	{
-		g->LastError = GetLastError(); // Probably (but not necessarily) ERROR_FILE_NOT_FOUND.
-		return g_ErrorLevel->Assign(0); // Deleting a wildcard pattern that matches zero files is a success.
-	}
-
-	// Otherwise:
-	TCHAR file_path[MAX_PATH];
-	_tcscpy(file_path, aFilePattern); // Above has already confirmed this won't overflow.
-
-	// Remove the filename and/or wildcard part.   But leave the trailing backslash on it for
-	// consistency with below:
-	size_t file_path_length;
-	LPTSTR last_backslash = _tcsrchr(file_path, '\\');
-	if (last_backslash)
-	{
-		*(last_backslash + 1) = '\0'; // i.e. retain the trailing backslash.
-		file_path_length = _tcslen(file_path);
-	}
-	else // Use current working directory, e.g. if user specified only *.*
-	{
-		*file_path = '\0';
-		file_path_length = 0;
-	}
-
-	LPTSTR append_pos = file_path + file_path_length; // For performance, copy in the unchanging part only once.  This is where the changing part gets appended.
-	size_t space_remaining = _countof(file_path) - file_path_length - 1; // Space left in file_path for the changing part.
-
-	g->LastError = 0; // Set default. Overridden only when a failure occurs.
-
-	do
-	{
-		// Since other script threads can interrupt during LONG_OPERATION_UPDATE, it's important that
-		// this command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes
-		// possible. This is because an interrupting thread usually changes the values to something
-		// inappropriate for this thread.
-		LONG_OPERATION_UPDATE
-		if (current_file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) // skip any matching directories.
-			continue;
-		if (_tcslen(current_file.cFileName) > space_remaining)
-		{
-			// v1.0.45.03: Don't even try to operate upon truncated filenames in case they accidentally
-			// match the name of a real/existing file.
-			g->LastError = ERROR_BUFFER_OVERFLOW;
-			++failure_count;
-		}
-		else
-		{
-			_tcscpy(append_pos, current_file.cFileName); // Above has ensured this won't overflow.
-			if (!DeleteFile(file_path))
-			{
-				g->LastError = GetLastError();
-				++failure_count;
-			}
-		}
-	} while (FindNextFile(file_search, &current_file));
-	FindClose(file_search);
-
-	return SetErrorLevelOrThrowInt(failure_count); // i.e. indicate success if there were no failures.
+	FilePatternApply(aFilePattern, FILE_LOOP_FILES_ONLY, false, FileDeleteCallback, NULL);
+	return g->ThrownToken ? FAIL : OK;
 }
 
 

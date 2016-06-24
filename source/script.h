@@ -651,7 +651,7 @@ private:
 	ResultType FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber);
 	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *aCurrentReadFile);
 	ResultType WriteClipboardToFile(LPTSTR aFilespec, Var *aBinaryClipVar = NULL);
-	ResultType FileDelete();
+	ResultType FileDelete(LPTSTR aFilePattern);
 	ResultType FileRecycle(LPTSTR aFilePattern);
 	ResultType FileRecycleEmpty(LPTSTR aDriveLetter);
 	ResultType FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag);
