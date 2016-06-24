@@ -656,6 +656,11 @@ private:
 	ResultType FileRecycleEmpty(LPTSTR aDriveLetter);
 	ResultType FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag);
 
+	typedef BOOL (* FilePatternCallback)(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
+	int FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
+		, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData
+		, bool aCalledRecursively = false);
+
 	ResultType FileGetAttrib(LPTSTR aFilespec);
 	int FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
 		, bool aDoRecurse, bool aCalledRecursively = false);
