@@ -4,7 +4,7 @@ AutoHotkey is a free, open source macro-creation and automation software utility
 
 AutoHotkey_L started as a fork of AutoHotkey but has been the main branch for some time.
 
-http://ahkscript.org/
+https://autohotkey.com/
 
 
 ## How to Compile ##
