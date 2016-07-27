@@ -262,7 +262,13 @@ int Debugger::ProcessCommands()
 		// enter a break state.  In that case, we need to return after each
 		// command to avoid blocking in recv().
 		if (mInternalState != DIS_Break)
+		{
+			// As ExitBreakState() can cause re-entry into ReceiveCommand() via the message pump,
+			// it is safe to call only now that the command has been removed from the buffer.
+			if (mInternalState != DIS_Starting) // i.e. it hasn't already been called by Disconnect().
+				ExitBreakState();
 			break;
+		}
 	}
 	ASSERT(mInternalState != DIS_Break);
 	// Register for message-based notification of data arrival.  If a command
@@ -485,7 +491,6 @@ int Debugger::run_step(char **aArgV, int aArgCount, char *aTransactionId, char *
 	if (mInternalState != DIS_Break)
 		return DEBUGGER_E_COMMAND_UNAVAIL;
 
-	ExitBreakState();
 	mInternalState = aNewState;
 	mContinuationDepth = mStack.Depth();
 	mContinuationTransactionId = aTransactionId;
