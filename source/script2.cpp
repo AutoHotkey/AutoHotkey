@@ -5791,7 +5791,7 @@ int SortUDF(const void *a1, const void *a2)
 
 	LPTSTR aStr1 = *(LPTSTR *)a1;
 	LPTSTR aStr2 = *(LPTSTR *)a2;
-	bool returned = g_SortFunc->Call(result_token, 2, FUNC_ARG_STR(aStr1), FUNC_ARG_STR(aStr2), FUNC_ARG_INT(aStr2 - aStr1));
+	bool returned = g_SortFunc->Call(result_token, 3, FUNC_ARG_STR(aStr1), FUNC_ARG_STR(aStr2), FUNC_ARG_INT(aStr2 - aStr1));
 
 	// MUST handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value might be
 	// the contents of one of the function's local variables (which are about to be free'd).
