@@ -8324,7 +8324,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 				line->mRelatedLine = line_temp;
 			}
 			if (line_temp->mActionType == ACT_UNTIL
-				&& (line->mActionType == ACT_LOOP || line->mActionType == ACT_FOR)) // WHILE is excluded because PerformLoopWhile() doesn't handle UNTIL, due to rarity of need.
+				&& ACT_IS_LOOP_EXCLUDING_WHILE(line->mActionType)) // WHILE is excluded because PerformLoopWhile() doesn't handle UNTIL, due to rarity of need.
 			{
 				// For consistency/maintainability:
 				line_temp->mParentLine = line->mParentLine;

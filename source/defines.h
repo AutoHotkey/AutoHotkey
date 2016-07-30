@@ -561,6 +561,7 @@ enum enum_act {
 #define ACT_IS_CONTROL_FLOW(ActionType) (ActionType <= ACT_LAST_CONTROL_FLOW && ActionType >= ACT_FIRST_CONTROL_FLOW)
 #define ACT_IS_IF(ActionType) (ActionType == ACT_IF)
 #define ACT_IS_LOOP(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_WHILE)
+#define ACT_IS_LOOP_EXCLUDING_WHILE(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_FOR)
 #define ACT_IS_LINE_PARENT(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
 	|| ACT_IS_LOOP(ActionType) || (ActionType >= ACT_TRY && ActionType <= ACT_FINALLY))
 #define ACT_EXPANDS_ITS_OWN_ARGS(ActionType) (ActionType <= ACT_FUNC || ActionType == ACT_WHILE || ActionType == ACT_FOR || ActionType == ACT_THROW)
