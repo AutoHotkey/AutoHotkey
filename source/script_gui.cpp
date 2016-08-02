@@ -9413,12 +9413,19 @@ void GuiType::ControlCheckRadioButton(GuiControlType &aControl, GuiIndexType aCo
 	GuiIndexType radio_start, radio_end;
 	FindGroup(aControlIndex, radio_start, radio_end); // Even if the return value is 1, do the below because it ensures things like tabstop are in the right state.
 	if (aCheckType == BST_CHECKED)
+	{
+		// Testing shows that controls with different parent windows never behave as though they
+		// are part of the same radio group.  CheckRadioButton has been confirmed as working with
+		// both non-dialog windows (such as Static/Text) and Tab3's tab dialog.  This is required
+		// for this function to work on Radio buttons within a Tab3 control:
+		HWND hDlg = GetParent(aControl.hwnd);
 		// This will check the specified button and uncheck all the others in the group.
 		// There is at least one other reason to call CheckRadioButton() rather than doing something
 		// manually: It prevents an unwanted firing of the radio's g-label upon WM_ACTIVATE,
 		// at least when a radio group is first in the window's z-order and the radio group has
 		// an initially selected button:
-		CheckRadioButton(mHwnd, GUI_INDEX_TO_ID(radio_start), GUI_INDEX_TO_ID(radio_end - 1), GUI_INDEX_TO_ID(aControlIndex));
+		CheckRadioButton(hDlg, GUI_INDEX_TO_ID(radio_start), GUI_INDEX_TO_ID(radio_end - 1), GUI_INDEX_TO_ID(aControlIndex));
+	}
 	else // Uncheck it.
 	{
 		// If the group was originally created with the tabstop style, unchecking the button that currently
