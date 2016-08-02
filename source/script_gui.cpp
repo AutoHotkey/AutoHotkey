@@ -10271,6 +10271,11 @@ INT_PTR CALLBACK TabDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 				}
 				if (brush)
 				{
+					if (pcontrol->type != GUI_CONTROL_PIC && pcontrol->union_color != CLR_DEFAULT)
+						SetTextColor((HDC)wParam, pcontrol->union_color);
+					else
+						SetTextColor((HDC)wParam, GetSysColor(COLOR_WINDOWTEXT));
+
 					// Tell the control to draw its background using our pattern brush.
 					POINT pt = { 0,0 };
 					MapWindowPoints(hDlg, (HWND)lParam, &pt, 1);
