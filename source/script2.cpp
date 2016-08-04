@@ -1751,7 +1751,8 @@ ResultType Line::Input()
 	//////////////////////////////////////////////////////////////
 	// Initialize buffers and state variables for use by the hook:
 	//////////////////////////////////////////////////////////////
-	TCHAR input_buf[INPUT_BUFFER_SIZE] = _T(""); // Will contain the actual input from the user.
+	TCHAR input_buf[INPUT_BUFFER_SIZE]; // Will contain the actual input from the user.
+	*input_buf = '\0';
 	g_input.buffer = input_buf;
 	g_input.BufferLength = 0;
 	// g_input.BufferLengthMax was set in the option parsing section.
@@ -5779,7 +5780,8 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 {
 	// v1.0.30.05: Increased from 32 KB to 64 KB, which is the maximum size of an Edit
 	// in Win9x:
-	TCHAR buf_temp[65534] = _T("");  // Formerly 32767.
+	TCHAR buf_temp[65534];  // Formerly 32767.
+	*buf_temp = '\0';
 	bool jump_to_bottom = false;  // Set default behavior for edit control.
 	static MainWindowModes current_mode = MAIN_MODE_NO_CHANGE;
 
@@ -6514,7 +6516,8 @@ ResultType Line::FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat)
 	TCHAR format_buf[FT_MAX_OUTPUT_CHARS + 1];
 	TCHAR output_buf[FT_MAX_OUTPUT_CHARS + 1]; // The size of this is somewhat arbitrary, but buffer overflow is checked so it's safe.
 
-	TCHAR yyyymmdd[256] = _T(""); // Large enough to hold date/time and any options that follow it (note that D and T options can appear multiple times).
+	TCHAR yyyymmdd[256]; // Large enough to hold date/time and any options that follow it (note that D and T options can appear multiple times).
+	*yyyymmdd = '\0';
 
 	SYSTEMTIME st;
 	LPTSTR options = NULL;
@@ -9288,7 +9291,8 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 	// The call to GetOpenFileName() may fail if the first character of the buffer isn't NULL
 	// because it then thinks the buffer contains the default filename, which if it's uninitialized
 	// may be a string that's too long.
-	TCHAR file_buf[65535] = _T(""); // Set default.
+	TCHAR file_buf[65535];
+	*file_buf = '\0'; // Set default.
 
 	TCHAR working_dir[MAX_PATH];
 	if (!aWorkingDir || !*aWorkingDir)
@@ -9348,7 +9352,8 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 		sntprintf(greeting, _countof(greeting), _T("Select File - %s"), g_script.mFileName);
 
 	// The filter must be terminated by two NULL characters.  One is explicit, the other automatic:
-	TCHAR filter[1024] = _T(""), pattern[1024] = _T("");  // Set default.
+	TCHAR filter[1024], pattern[1024];
+	*filter = '\0'; *pattern = '\0'; // Set default.
 	if (*aFilter)
 	{
 		LPTSTR pattern_start = _tcschr(aFilter, '(');
@@ -12070,7 +12075,8 @@ VarSizeType BIV_LoopFileFullPath(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_LoopFileLongPath(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR *unused, buf[MAX_PATH] = _T(""); // Set default.
+	TCHAR *unused, buf[MAX_PATH];
+	*buf = '\0'; // Set default.
 	if (g->mLoopFile)
 	{
 		// GetFullPathName() is done in addition to ConvertFilespecToCorrectCase() for the following reasons:
@@ -12108,7 +12114,8 @@ VarSizeType BIV_LoopFileShortPath(LPTSTR aBuf, LPTSTR aVarName)
 // But to detect if that short name is really a long name, A_LoopFileShortPath could be checked
 // and if it's blank, there is no short name available.
 {
-	TCHAR buf[MAX_PATH] = _T(""); // Set default.
+	TCHAR buf[MAX_PATH];
+	*buf = '\0'; // Set default.
 	DWORD length = 0;        //
 	if (g->mLoopFile)
 		// The loop handler already prepended the script's directory in cFileName for us:
@@ -12182,7 +12189,8 @@ VarSizeType BIV_LoopFileSize(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_LoopRegType(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR buf[MAX_PATH] = _T(""); // Set default.
+	TCHAR buf[MAX_PATH];
+	*buf = '\0'; // Set default.
 	if (g->mLoopRegItem)
 		Line::RegConvertValueType(buf, MAX_PATH, g->mLoopRegItem->type);
 	if (aBuf)
@@ -12192,7 +12200,8 @@ VarSizeType BIV_LoopRegType(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_LoopRegKey(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR buf[MAX_PATH] = _T(""); // Set default.
+	TCHAR buf[MAX_PATH];
+	*buf = '\0'; // Set default.
 	if (g->mLoopRegItem)
 		// Use root_key_type, not root_key (which might be a remote vs. local HKEY):
 		Line::RegConvertRootKey(buf, MAX_PATH, g->mLoopRegItem->root_key_type);
