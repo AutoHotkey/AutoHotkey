@@ -1464,6 +1464,10 @@ public:
 		}
 
 		size_t name_length = colon_pos - aBuf;
+		
+		// Fix for v1.1.24.02: Support trailing spaces as in v1.1.02.03 and earlier:
+		while (name_length && IS_SPACE_OR_TAB(aBuf[name_length-1]))
+			--name_length;
 	
 		// For backward compatibility, "01" to "09" must be treated as "1" to "9".
 		if (name_length == 2 && *aBuf == '0' && aBuf[1] >= '1' && aBuf[1] <= '9')
