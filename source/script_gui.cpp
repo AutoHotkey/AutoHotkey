@@ -33,7 +33,7 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 		// v1.1.20: Support omitting the GUI name when specifying a control by HWND.
 		if (aControlID && IsPureNumeric(aControlID, TRUE, FALSE) == PURE_INTEGER)
 		{
-			HWND control_hwnd = (HWND)ATOI64(aControlID);
+			HWND control_hwnd = (HWND)ATOU64(aControlID);
 			if (GuiType *pgui = GuiType::FindGuiParent(control_hwnd))
 				return pgui;
 		}
@@ -69,7 +69,7 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 	
 	if (IsPureNumeric(name, TRUE, FALSE) == PURE_INTEGER) // Allow negatives, for flexibility.
 	{
-		__int64 gui_num = ATOI64(name);
+		unsigned __int64 gui_num = ATOU64(name); // Must use ATOU64 because ATOI64 can't handle values larger than _I64_MAX.
 		if (gui_num < 1 || gui_num > 99 // The range of valid Gui numbers prior to v1.1.03.
 			|| name_length > 2) // Length is also checked because that's how it used to be.
 		{
@@ -7518,7 +7518,7 @@ GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 	{
 		// v1.1.04: Allow Gui controls to be referenced by HWND.  There is some risk of breaking
 		// scripts, but only if the text of one control contains the HWND of another control.
-		u = FindControlIndex((HWND)ATOI64(aControlID));
+		u = FindControlIndex((HWND)ATOU64(aControlID));
 		if (u < mControlCount)
 			return u;
 		// Otherwise: no match was found, so fall back to considering it as text.
