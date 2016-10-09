@@ -6781,17 +6781,25 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		// If the window has a border or caption this also changes top & left *slightly* from zero.
 		RECT rect = {0, 0, width, height}; // left,top,right,bottom
 		LONG style = GetWindowLong(mHwnd, GWL_STYLE);
-		AdjustWindowRectEx(&rect, style, GetMenu(mHwnd) ? TRUE : FALSE
-			, GetWindowLong(mHwnd, GWL_EXSTYLE));
-		width = rect.right - rect.left;  // rect.left might be slightly less than zero.
-		height = rect.bottom - rect.top; // rect.top might be slightly less than zero. A status bar is properly handled since it's inside the window's client area.
+		BOOL has_menu = GetMenu(mHwnd) ? TRUE : FALSE;
+		AdjustWindowRectEx(&rect, style, has_menu, GetWindowLong(mHwnd, GWL_EXSTYLE));
 		// MSDN: "The AdjustWindowRectEx function does not take the WS_VSCROLL or WS_HSCROLL styles into
 		// account. To account for the scroll bars, call the GetSystemMetrics function with SM_CXVSCROLL
 		// or SM_CYHSCROLL."
 		if (style & WS_HSCROLL)
-			height += GetSystemMetrics(SM_CYHSCROLL);
+			rect.bottom += GetSystemMetrics(SM_CYHSCROLL);
 		if (style & WS_VSCROLL)
-			width += GetSystemMetrics(SM_CXVSCROLL);
+			rect.right += GetSystemMetrics(SM_CXVSCROLL);
+		// Compensate for menu wrapping: https://blogs.msdn.microsoft.com/oldnewthing/20030911-00/?p=42553/
+		if (has_menu)
+		{
+			RECT rcTemp = rect;
+			rcTemp.bottom = 0x7FFF;
+			SendMessage(mHwnd, WM_NCCALCSIZE, FALSE, (LPARAM)&rcTemp);
+			rect.bottom += rcTemp.top;
+		}
+		width = rect.right - rect.left;  // rect.left might be slightly less than zero.
+		height = rect.bottom - rect.top; // rect.top might be slightly less than zero. A status bar is properly handled since it's inside the window's client area.
 
 		RECT work_rect;
 		SystemParametersInfo(SPI_GETWORKAREA, 0, &work_rect, 0);  // Get desktop rect excluding task bar.
