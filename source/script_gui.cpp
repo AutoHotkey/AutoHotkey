@@ -6654,6 +6654,18 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 	// because the window is not in need of restoring doesn't mean the ShowWindow() call is skipped.
 	// That is why show_was_done is left false in such cases.
 
+	if (mGuiShowHasNeverBeenDone)
+	{
+		// Ensure all Tab3 controls have been sized prior to autosizing or showing the GUI.
+		// This has been confirmed to work even if IsIconic(), although that would require
+		// calling WinMinimize or option +0x20000000, since SW_MINIMIZE hasn't been applied.
+		for (GuiIndexType u = 0; u < mControlCount; ++u)
+		{
+			if (mControl[u].type == GUI_CONTROL_TAB)
+				AutoSizeTabControl(mControl[u]);
+		}
+	}
+
 	// Due to the checking above, if the window is minimized/maximized now, that means it will still be
 	// minimized/maximized when this function is done.  As a result, it's not really valid to call
 	// MoveWindow() for any purpose (auto-centering, auto-sizing, new position, new size, etc.).
@@ -6706,11 +6718,6 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		{
 			if (mGuiShowHasNeverBeenDone) // By default, center the window if this is the first use of "Gui Show" (even "Gui Show, Hide").
 			{
-				for (GuiIndexType u = 0; u < mControlCount; ++u)
-				{
-					if (mControl[u].type == GUI_CONTROL_TAB)
-						AutoSizeTabControl(mControl[u]);
-				}
 				if (width == COORD_UNSPECIFIED)
 					width = mMaxExtentRight + mMarginX;
 				if (height == COORD_UNSPECIFIED)
