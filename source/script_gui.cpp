@@ -1213,7 +1213,6 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, 
 			control.attrib |= GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN;
 		if (tab_control = gui.FindTabControl(control.tab_control_index)) // It belongs to a tab control that already exists.
 		{
-			
 			if (!(GetWindowLong(tab_control->hwnd, GWL_STYLE) & WS_VISIBLE)) // But its tab control is hidden...
 				goto return_the_result;
 			selection_index = TabCtrl_GetCurSel(tab_control->hwnd);
@@ -9855,7 +9854,7 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 	if (parent_is_visible_and_not_minimized) // Fix for v1.0.25.14.  See further above for details.
 		SendMessage(mHwnd, WM_SETREDRAW, TRUE, 0); // Re-enable drawing before below so that tab can be focused below.
 
-	if (tab_dialog)
+	if (tab_dialog && !hide_all)
 		ShowWindow(tab_dialog, SW_SHOW);
 
 	// In case tab is empty or there is no control capable of receiving focus, focus the tab itself
