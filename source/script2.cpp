@@ -17676,6 +17676,7 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 		return;
 	GuiControlType &control = *gui.mCurrentListView;
 	lv_attrib_type &lv_attrib = *control.union_lv_attrib;
+	DWORD view_mode = mode != 'D' ? GuiType::ControlGetListViewMode(control.hwnd) : 0;
 
 	int index;
 	if (!ParamIndexIsOmitted(0))
@@ -17684,7 +17685,7 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 	{
 		if (mode == 'M')
 		{
-			if (GuiType::ControlGetListViewMode(control.hwnd) != LVS_REPORT)
+			if (view_mode != LVS_REPORT)
 				return; // And leave aResultToken.value_int64 at 0 to indicate failure.
 			// Otherwise:
 			aResultToken.value_int64 = 1; // Always successful (for consistency), regardless of what happens below.
@@ -17722,7 +17723,7 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 	{
 		// v1.0.36.03: Don't attempt to auto-size the columns while the view is not report-view because
 		// that causes any subsequent switch to the "list" view to be corrupted (invisible icons and items):
-		if (GuiType::ControlGetListViewMode(control.hwnd) == LVS_REPORT)
+		if (view_mode == LVS_REPORT)
 			aResultToken.value_int64 = ListView_SetColumnWidth(control.hwnd, index, LVSCW_AUTOSIZE);
 		//else leave aResultToken.value_int64 set to 0.
 		return;
@@ -17890,9 +17891,22 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 			// v1.0.37: Fixed to allow floating point (although ATOI below will convert it to integer).
 			if (IsPureNumeric(next_option, true, false, true)) // Above has already verified that *next_option can't be whitespace.
 			{
-				do_auto_size = 0; // Turn off any auto-sizing that may have been put into effect by default (such as for insertion).
 				lvc.mask |= LVCF_WIDTH;
-				lvc.cx = gui.Scale(ATOI(next_option));
+				int width = gui.Scale(ATOI(next_option));
+				// Specifying a width when the column is initially added prevents the scrollbar from
+				// updating on Windows 7 and 10 (but not XP).  As a workaround, initialise the width
+				// to 0 and then resize it afterward.  do_auto_size is overloaded for this purpose
+				// since it's already passed to ListView_SetColumnWidth().
+				if (mode == 'I' && view_mode == LVS_REPORT)
+				{
+					lvc.cx = 0; // Must be zero; if width is zero, ListView_SetColumnWidth() won't be called.
+					do_auto_size = width; // If non-zero, this is passed to ListView_SetColumnWidth().
+				}
+				else
+				{
+					lvc.cx = width;
+					do_auto_size = 0; // Turn off any auto-sizing that may have been put into effect (explicitly or by default).
+				}
 			}
 		}
 
@@ -17951,7 +17965,8 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 
 	// Auto-size is done only at this late a stage, in case column was just created above.
 	// Note that ListView_SetColumn() apparently does not support LVSCW_AUTOSIZE_USEHEADER for it's "cx" member.
-	if (do_auto_size && GuiType::ControlGetListViewMode(control.hwnd) == LVS_REPORT)
+	// do_auto_size contains the actual column width if mode == 'I' and a width was passed by the caller.
+	if (do_auto_size && view_mode == LVS_REPORT)
 		ListView_SetColumnWidth(control.hwnd, index, do_auto_size); // aResultToken.value_int64 was previous set to the more important result above.
 	//else v1.0.36.03: Don't attempt to auto-size the columns while the view is not report-view because
 	// that causes any subsequent switch to the "list" view to be corrupted (invisible icons and items).
