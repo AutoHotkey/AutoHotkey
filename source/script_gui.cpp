@@ -10084,7 +10084,9 @@ void GuiType::AutoSizeTabControl(GuiControlType &aTabControl)
 		return;
 	RemoveProp(aTabControl.hwnd, _T("ahk_autosize"));
 
-	int tab_index = aTabControl.tab_index, right = 0, bottom = 0;
+	// Below: MUST NOT initialize to zero, since these are screen coordinates
+	// and it is possible to position the GUI prior to this function being called.
+	int tab_index = aTabControl.tab_index, right = INT_MIN, bottom = INT_MIN;
 	RECT rc;
 
 	for (GuiIndexType i = 0; i < mControlCount; ++i)
@@ -10097,12 +10099,17 @@ void GuiType::AutoSizeTabControl(GuiControlType &aTabControl)
 		if (bottom < rc.bottom)
 			bottom = rc.bottom;
 	}
-	
+
+	// Testing shows that -32768 is the minimum screen coordinate, but even if
+	// that's not always the case, a right edge of INT_MIN would mean that the
+	// controls have 0 width, since window positions are 32-bit at most.
+	BOOL at_least_one_control = right != INT_MIN;
+
 	RECT tab_rect;
 	GetWindowRect(aTabControl.hwnd, &tab_rect);
-	if (autosize & TAB3_AUTOWIDTH)
+	if ((autosize & TAB3_AUTOWIDTH) && at_least_one_control)
 		tab_rect.right = right + mMarginX + 4;
-	if (autosize & TAB3_AUTOHEIGHT)
+	if ((autosize & TAB3_AUTOHEIGHT) && at_least_one_control)
 		tab_rect.bottom = bottom + mMarginY + 4;
 	MapWindowPoints(NULL, mHwnd, (LPPOINT)&tab_rect, 2); // Screen to GUI client.
 	int width = tab_rect.right - tab_rect.left
@@ -10143,13 +10150,16 @@ void GuiType::AutoSizeTabControl(GuiControlType &aTabControl)
 		}
 	}
 	
-	if (mControl[mControlCount-1].tab_control_index == tab_index) // The previous control belongs to this tab control.
+	if (mControl[mControlCount-1].tab_control_index == tab_index // The previous control belongs to this tab control.
+		|| !at_least_one_control) // Empty Tab3. See below.
 	{
 		// Position next control relative to the tab control rather than its last child control.
 		mPrevX = tab_rect.left;
 		mPrevY = tab_rect.top;
 		mPrevWidth = width;
 		mPrevHeight = height;
+		// This is used by some positioning modes, but is also required for auto-sizing of the Gui
+		// to account for the auto-sized Tab3 control (even if it has retained its default size):
 		if (mMaxExtentRight < tab_rect.right)
 			mMaxExtentRight = tab_rect.right;
 		if (mMaxExtentDown < tab_rect.bottom)
