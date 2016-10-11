@@ -1987,6 +1987,14 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// second, etc.) -- this is done for performance reasons.
 		control.tab_control_index = MAX_TAB_CONTROLS;
 		control.tab_index = mTabControlCount; // Store its control-index to help look-up performance in other sections.
+		// Autosize any previous tab control, since this new one is going to become current.
+		// This is done here rather than when mCurrentTabControlIndex is actually changed later,
+		// because this new control's positioning might be dependent on the previous control's size.
+		if (GuiControlType *previous_tab_control = FindTabControl(mCurrentTabControlIndex))
+		{
+			// See "case GUI_CMD_TAB:" for more comments.
+			AutoSizeTabControl(*previous_tab_control);
+		}
 	}
 	else if (aControlType == GUI_CONTROL_STATUSBAR)
 	{
