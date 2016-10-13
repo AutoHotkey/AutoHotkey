@@ -33,7 +33,7 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 		// v1.1.20: Support omitting the GUI name when specifying a control by HWND.
 		if (aControlID && IsNumeric(aControlID, TRUE, FALSE) == PURE_INTEGER)
 		{
-			HWND control_hwnd = (HWND)ATOI64(aControlID);
+			HWND control_hwnd = (HWND)ATOU64(aControlID);
 			if (GuiType *pgui = GuiType::FindGuiParent(control_hwnd))
 				return pgui;
 		}
@@ -67,10 +67,10 @@ GuiType *Script::ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName, size_t
 	tmemcpy(name, name_marker, name_length);
 	name[name_length] = '\0';
 	
-	__int64 gui_num = 0;
+	unsigned __int64 gui_num = 0;
 	if (IsNumeric(name, TRUE, FALSE) == PURE_INTEGER) // Allow negatives, for flexibility.
 	{
-		gui_num = ATOI64(name);
+		gui_num = ATOU64(name); // Must use ATOU64 because ATOI64 can't handle values larger than _I64_MAX.
 		if (gui_num < 1 || gui_num > 99 // The range of valid Gui numbers prior to v1.1.03.
 			|| name_length > 2) // Length is also checked because that's how it used to be.
 		{
@@ -1214,7 +1214,6 @@ ResultType Line::GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, 
 			control.attrib |= GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN;
 		if (tab_control = gui.FindTabControl(control.tab_control_index)) // It belongs to a tab control that already exists.
 		{
-			
 			if (!(GetWindowLong(tab_control->hwnd, GWL_STYLE) & WS_VISIBLE)) // But its tab control is hidden...
 				goto return_the_result;
 			selection_index = TabCtrl_GetCurSel(tab_control->hwnd);
@@ -1986,6 +1985,14 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// second, etc.) -- this is done for performance reasons.
 		control.tab_control_index = MAX_TAB_CONTROLS;
 		control.tab_index = mTabControlCount; // Store its control-index to help look-up performance in other sections.
+		// Autosize any previous tab control, since this new one is going to become current.
+		// This is done here rather than when mCurrentTabControlIndex is actually changed later,
+		// because this new control's positioning might be dependent on the previous control's size.
+		if (GuiControlType *previous_tab_control = FindTabControl(mCurrentTabControlIndex))
+		{
+			// See "case GUI_CMD_TAB:" for more comments.
+			AutoSizeTabControl(*previous_tab_control);
+		}
 	}
 	else if (aControlType == GUI_CONTROL_STATUSBAR)
 	{
@@ -6650,6 +6657,18 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 	// because the window is not in need of restoring doesn't mean the ShowWindow() call is skipped.
 	// That is why show_was_done is left false in such cases.
 
+	if (mGuiShowHasNeverBeenDone)
+	{
+		// Ensure all Tab3 controls have been sized prior to autosizing or showing the GUI.
+		// This has been confirmed to work even if IsIconic(), although that would require
+		// calling WinMinimize or option +0x20000000, since SW_MINIMIZE hasn't been applied.
+		for (GuiIndexType u = 0; u < mControlCount; ++u)
+		{
+			if (mControl[u].type == GUI_CONTROL_TAB)
+				AutoSizeTabControl(mControl[u]);
+		}
+	}
+
 	// Due to the checking above, if the window is minimized/maximized now, that means it will still be
 	// minimized/maximized when this function is done.  As a result, it's not really valid to call
 	// MoveWindow() for any purpose (auto-centering, auto-sizing, new position, new size, etc.).
@@ -6702,11 +6721,6 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		{
 			if (mGuiShowHasNeverBeenDone) // By default, center the window if this is the first use of "Gui Show" (even "Gui Show, Hide").
 			{
-				for (GuiIndexType u = 0; u < mControlCount; ++u)
-				{
-					if (mControl[u].type == GUI_CONTROL_TAB)
-						AutoSizeTabControl(mControl[u]);
-				}
 				if (width == COORD_UNSPECIFIED)
 					width = mMaxExtentRight + mMarginX;
 				if (height == COORD_UNSPECIFIED)
@@ -6771,17 +6785,25 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		// If the window has a border or caption this also changes top & left *slightly* from zero.
 		RECT rect = {0, 0, width, height}; // left,top,right,bottom
 		LONG style = GetWindowLong(mHwnd, GWL_STYLE);
-		AdjustWindowRectEx(&rect, style, GetMenu(mHwnd) ? TRUE : FALSE
-			, GetWindowLong(mHwnd, GWL_EXSTYLE));
-		width = rect.right - rect.left;  // rect.left might be slightly less than zero.
-		height = rect.bottom - rect.top; // rect.top might be slightly less than zero. A status bar is properly handled since it's inside the window's client area.
+		BOOL has_menu = GetMenu(mHwnd) ? TRUE : FALSE;
+		AdjustWindowRectEx(&rect, style, has_menu, GetWindowLong(mHwnd, GWL_EXSTYLE));
 		// MSDN: "The AdjustWindowRectEx function does not take the WS_VSCROLL or WS_HSCROLL styles into
 		// account. To account for the scroll bars, call the GetSystemMetrics function with SM_CXVSCROLL
 		// or SM_CYHSCROLL."
 		if (style & WS_HSCROLL)
-			height += GetSystemMetrics(SM_CYHSCROLL);
+			rect.bottom += GetSystemMetrics(SM_CYHSCROLL);
 		if (style & WS_VSCROLL)
-			width += GetSystemMetrics(SM_CXVSCROLL);
+			rect.right += GetSystemMetrics(SM_CXVSCROLL);
+		// Compensate for menu wrapping: https://blogs.msdn.microsoft.com/oldnewthing/20030911-00/?p=42553/
+		if (has_menu)
+		{
+			RECT rcTemp = rect;
+			rcTemp.bottom = 0x7FFF;
+			SendMessage(mHwnd, WM_NCCALCSIZE, FALSE, (LPARAM)&rcTemp);
+			rect.bottom += rcTemp.top;
+		}
+		width = rect.right - rect.left;  // rect.left might be slightly less than zero.
+		height = rect.bottom - rect.top; // rect.top might be slightly less than zero. A status bar is properly handled since it's inside the window's client area.
 
 		RECT work_rect;
 		SystemParametersInfo(SPI_GETWORKAREA, 0, &work_rect, 0);  // Get desktop rect excluding task bar.
@@ -7512,7 +7534,7 @@ GuiIndexType GuiType::FindControl(LPTSTR aControlID)
 	{
 		// v1.1.04: Allow Gui controls to be referenced by HWND.  There is some risk of breaking
 		// scripts, but only if the text of one control contains the HWND of another control.
-		u = FindControlIndex((HWND)ATOI64(aControlID));
+		u = FindControlIndex((HWND)ATOU64(aControlID));
 		if (u < mControlCount)
 			return u;
 		// Otherwise: no match was found, so fall back to considering it as text.
@@ -9407,12 +9429,19 @@ void GuiType::ControlCheckRadioButton(GuiControlType &aControl, GuiIndexType aCo
 	GuiIndexType radio_start, radio_end;
 	FindGroup(aControlIndex, radio_start, radio_end); // Even if the return value is 1, do the below because it ensures things like tabstop are in the right state.
 	if (aCheckType == BST_CHECKED)
+	{
+		// Testing shows that controls with different parent windows never behave as though they
+		// are part of the same radio group.  CheckRadioButton has been confirmed as working with
+		// both non-dialog windows (such as Static/Text) and Tab3's tab dialog.  This is required
+		// for this function to work on Radio buttons within a Tab3 control:
+		HWND hDlg = GetParent(aControl.hwnd);
 		// This will check the specified button and uncheck all the others in the group.
 		// There is at least one other reason to call CheckRadioButton() rather than doing something
 		// manually: It prevents an unwanted firing of the radio's g-label upon WM_ACTIVATE,
 		// at least when a radio group is first in the window's z-order and the radio group has
 		// an initially selected button:
-		CheckRadioButton(mHwnd, GUI_INDEX_TO_ID(radio_start), GUI_INDEX_TO_ID(radio_end - 1), GUI_INDEX_TO_ID(aControlIndex));
+		CheckRadioButton(hDlg, GUI_INDEX_TO_ID(radio_start), GUI_INDEX_TO_ID(radio_end - 1), GUI_INDEX_TO_ID(aControlIndex));
+	}
 	else // Uncheck it.
 	{
 		// If the group was originally created with the tabstop style, unchecking the button that currently
@@ -9835,7 +9864,7 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 	if (parent_is_visible_and_not_minimized) // Fix for v1.0.25.14.  See further above for details.
 		SendMessage(mHwnd, WM_SETREDRAW, TRUE, 0); // Re-enable drawing before below so that tab can be focused below.
 
-	if (tab_dialog)
+	if (tab_dialog && !hide_all)
 		ShowWindow(tab_dialog, SW_SHOW);
 
 	// In case tab is empty or there is no control capable of receiving focus, focus the tab itself
@@ -10057,7 +10086,9 @@ void GuiType::AutoSizeTabControl(GuiControlType &aTabControl)
 		return;
 	RemoveProp(aTabControl.hwnd, _T("ahk_autosize"));
 
-	int tab_index = aTabControl.tab_index, right = 0, bottom = 0;
+	// Below: MUST NOT initialize to zero, since these are screen coordinates
+	// and it is possible to position the GUI prior to this function being called.
+	int tab_index = aTabControl.tab_index, right = INT_MIN, bottom = INT_MIN;
 	RECT rc;
 
 	for (GuiIndexType i = 0; i < mControlCount; ++i)
@@ -10070,12 +10101,17 @@ void GuiType::AutoSizeTabControl(GuiControlType &aTabControl)
 		if (bottom < rc.bottom)
 			bottom = rc.bottom;
 	}
-	
+
+	// Testing shows that -32768 is the minimum screen coordinate, but even if
+	// that's not always the case, a right edge of INT_MIN would mean that the
+	// controls have 0 width, since window positions are 32-bit at most.
+	BOOL at_least_one_control = right != INT_MIN;
+
 	RECT tab_rect;
 	GetWindowRect(aTabControl.hwnd, &tab_rect);
-	if (autosize & TAB3_AUTOWIDTH)
+	if ((autosize & TAB3_AUTOWIDTH) && at_least_one_control)
 		tab_rect.right = right + mMarginX + 4;
-	if (autosize & TAB3_AUTOHEIGHT)
+	if ((autosize & TAB3_AUTOHEIGHT) && at_least_one_control)
 		tab_rect.bottom = bottom + mMarginY + 4;
 	MapWindowPoints(NULL, mHwnd, (LPPOINT)&tab_rect, 2); // Screen to GUI client.
 	int width = tab_rect.right - tab_rect.left
@@ -10116,13 +10152,16 @@ void GuiType::AutoSizeTabControl(GuiControlType &aTabControl)
 		}
 	}
 	
-	if (mControl[mControlCount-1].tab_control_index == tab_index) // The previous control belongs to this tab control.
+	if (mControl[mControlCount-1].tab_control_index == tab_index // The previous control belongs to this tab control.
+		|| !at_least_one_control) // Empty Tab3. See below.
 	{
 		// Position next control relative to the tab control rather than its last child control.
 		mPrevX = tab_rect.left;
 		mPrevY = tab_rect.top;
 		mPrevWidth = width;
 		mPrevHeight = height;
+		// This is used by some positioning modes, but is also required for auto-sizing of the Gui
+		// to account for the auto-sized Tab3 control (even if it has retained its default size):
 		if (mMaxExtentRight < tab_rect.right)
 			mMaxExtentRight = tab_rect.right;
 		if (mMaxExtentDown < tab_rect.bottom)
@@ -10258,6 +10297,11 @@ INT_PTR CALLBACK TabDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 				}
 				if (brush)
 				{
+					if (pcontrol->type != GUI_CONTROL_PIC && pcontrol->union_color != CLR_DEFAULT)
+						SetTextColor((HDC)wParam, pcontrol->union_color);
+					else
+						SetTextColor((HDC)wParam, GetSysColor(COLOR_WINDOWTEXT));
+
 					// Tell the control to draw its background using our pattern brush.
 					POINT pt = { 0,0 };
 					MapWindowPoints(hDlg, (HWND)lParam, &pt, 1);

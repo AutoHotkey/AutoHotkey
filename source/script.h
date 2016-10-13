@@ -1341,7 +1341,7 @@ public:
 	{
 		LPTSTR colon_pos;
 		// Check for '+' and '-' to avoid ambiguity with something like "gui +Delimiter:".
-		if (*aBuf == '+' || *aBuf == '-' || !(colon_pos = _tcschr(aBuf, ':'))) // Assignment.
+		if (*aBuf == '+' || !(colon_pos = _tcschr(aBuf, ':'))) // Assignment.
 		{
 			aCommand = aBuf;
 			// Name not specified, so leave it at the default set by caller.
@@ -1349,6 +1349,25 @@ public:
 		}
 
 		size_t name_length = colon_pos - aBuf;
+		
+		// Fix for v1.1.24.02: Support trailing spaces as in v1.1.02.03 and earlier:
+		while (name_length && IS_SPACE_OR_TAB(aBuf[name_length-1]))
+			--name_length;
+
+		if (*aBuf == '-') // Fix for v1.1.24.02: Support negative integers for HWND.
+		{
+			TCHAR number_buf[MAX_INTEGER_SIZE + 1];
+			if (name_length >= _countof(number_buf))
+				*number_buf = '\0'; // A non-numeric value (with third parameter FALSE below).
+			else
+				tcslcpy(number_buf, aBuf, name_length + 1);
+			if (!IsNumeric(number_buf, TRUE, FALSE))
+			{
+				// This is an option rather than a HWND.
+				aCommand = aBuf;
+				return;
+			}
+		}
 	
 		// For backward compatibility, "01" to "09" must be treated as "1" to "9".
 		if (name_length == 2 && *aBuf == '0' && aBuf[1] >= '1' && aBuf[1] <= '9')

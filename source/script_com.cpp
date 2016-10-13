@@ -329,11 +329,13 @@ BIF_DECL(BIF_ComObjConnect)
 
 		if (obj->mEventSink)
 		{
+			HRESULT hr;
 			if (aParamCount < 2)
-				obj->mEventSink->Connect(); // Disconnect.
+				hr = obj->mEventSink->Connect(); // Disconnect.
 			else
-				if (!obj->mEventSink->Connect(TokenToString(*aParam[1]), TokenToObject(*aParam[1])))
-					aResultToken.SetExitResult(FAIL);
+				hr = obj->mEventSink->Connect(TokenToString(*aParam[1]), TokenToObject(*aParam[1]));
+			if (FAILED(hr))
+				ComError(hr, aResultToken);
 			return;
 		}
 
@@ -1001,7 +1003,7 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	return S_OK;
 }
 
-ResultType ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
+HRESULT ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
 {
 	HRESULT hr;
 
@@ -1052,8 +1054,7 @@ ResultType ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
 			*mPrefix = '\0'; // For maintainability.
 		return OK;
 	}
-	else
-		return ComError(hr);
+	return hr;
 }
 
 ResultType STDMETHODCALLTYPE ComObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)

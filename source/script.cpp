@@ -8547,6 +8547,8 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 					LPTSTR cp = line_raw_arg1 + 2;
 					if (!*cp) // Just "If"
 					{
+						if (line->mArgc > 2)
+							return line->PreparseError(ERR_PARAM3_MUST_BE_BLANK);
 						if (*line_raw_arg2 && !line->ArgHasDeref(2))
 						{
 							// Hotkey, If, Expression: Ensure the expression matches exactly an existing #If,

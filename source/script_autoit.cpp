@@ -1305,10 +1305,13 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 #ifndef UNICODE
 			WCHAR wsz[MAX_PATH];
 			ToWideChar(aShortcutFile, wsz, MAX_PATH); // Dest. size is in wchars, not bytes.
-			if (SUCCEEDED(ppf->Save((LPCWSTR)wsz, TRUE)))
 #else
-			if (SUCCEEDED(ppf->Save(aShortcutFile, TRUE)))
+			LPCWSTR wsz = aShortcutFile;
 #endif
+			// MSDN says to pass "The absolute path of the file".  Windows 10 requires it.
+			WCHAR full_path[MAX_PATH];
+			GetFullPathNameW(wsz, _countof(full_path), full_path, NULL);
+			if (SUCCEEDED(ppf->Save(full_path, TRUE)))
 			{
 				g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 				bSucceeded = true;
@@ -1360,30 +1363,9 @@ ResultType Line::FileRecycle(LPTSTR aFilePattern)
 
 ResultType Line::FileRecycleEmpty(LPTSTR aDriveLetter)
 {
-	// Not using GetModuleHandle() because there is doubt that SHELL32 (unlike USER32/KERNEL32), is
-	// always automatically present in every process (e.g. if shell is something other than Explorer):
-	HINSTANCE hinstLib = LoadLibrary(_T("shell32"));
-	if (!hinstLib)
-		goto error;
-	// au3: Get the address of all the functions we require
-	typedef HRESULT (WINAPI *MySHEmptyRecycleBin)(HWND, LPCTSTR, DWORD);
- 	MySHEmptyRecycleBin lpfnEmpty = (MySHEmptyRecycleBin)GetProcAddress(hinstLib, "SHEmptyRecycleBin" WINAPI_SUFFIX);
-	if (!lpfnEmpty)
-	{
-		FreeLibrary(hinstLib);
-		goto error;
-	}
 	LPCTSTR szPath = *aDriveLetter ? aDriveLetter : NULL;
-	if (lpfnEmpty(NULL, szPath, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND) != S_OK)
-	{
-		FreeLibrary(hinstLib);
-		goto error;
-	}
-	FreeLibrary(hinstLib);
-	return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-
-error:
-	return SetErrorLevelOrThrow();
+	HRESULT hr = SHEmptyRecycleBin(NULL, szPath, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
+	return SetErrorLevelOrThrowBool(hr != S_OK);
 }
 
 
