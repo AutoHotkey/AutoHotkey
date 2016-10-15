@@ -1139,7 +1139,10 @@ void Var::FreeAndRestoreFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVar
 ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError)
 // Returns OK or FAIL.
 {
-	if (!*aName) return FAIL;
+	if (!*aName) return FAIL; // Shouldn't be called this way.
+	
+	static LPCTSTR sErrorSubject[] = VALIDATENAME_SUBJECTS;
+
 	// Seems best to disallow variables that start with numbers for purity, to allow
 	// something like 1e3 to be scientific notation, and possibly other reasons.
 	if (*aName >= '0' && *aName <= '9')
@@ -1148,7 +1151,7 @@ ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError)
 		{
 			TCHAR msg[512];
 			sntprintf(msg, _countof(msg), _T("This %s name starts with a number, which is not allowed:\n\"%-1.300s\"")
-				, aDisplayError == DISPLAY_VAR_ERROR ? _T("variable") : _T("function")
+				, sErrorSubject[VALIDATENAME_SUBJECT_INDEX(aDisplayError)]
 				, aName);
 			return g_script.ScriptError(msg);
 		}
@@ -1161,7 +1164,7 @@ ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError)
 		{
 			TCHAR msg[512];
 			sntprintf(msg, _countof(msg), _T("The following %s name contains an illegal character:\n\"%-1.300s\"")
-				, aDisplayError == DISPLAY_VAR_ERROR ? _T("variable") : _T("function")
+				, sErrorSubject[VALIDATENAME_SUBJECT_INDEX(aDisplayError)]
 				, aName);
 			return g_script.ScriptError(msg);
 		}

@@ -584,9 +584,13 @@ public:
 	void Restore(VarBkp &aVarBkp);
 	static void FreeAndRestoreFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVarBackupCount);
 
-	#define DISPLAY_NO_ERROR   0  // Must be zero.
-	#define DISPLAY_VAR_ERROR  1
-	#define DISPLAY_FUNC_ERROR 2
+	#define DISPLAY_NO_ERROR    0  // Must be zero.
+	#define DISPLAY_VAR_ERROR   1
+	#define DISPLAY_FUNC_ERROR  2
+	#define DISPLAY_CLASS_ERROR 3
+	#define DISPLAY_GROUP_ERROR 4
+	#define VALIDATENAME_SUBJECT_INDEX(n) (n-1)
+	#define VALIDATENAME_SUBJECTS { _T("variable"), _T("function"), _T("class"), _T("group") }
 	static ResultType ValidateName(LPCTSTR aName, int aDisplayError = DISPLAY_VAR_ERROR);
 
 	LPTSTR ObjectToText(LPTSTR aBuf, int aBufSize);

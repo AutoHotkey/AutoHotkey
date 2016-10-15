@@ -6607,8 +6607,8 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	}
 
 	// Validate the name even if this is a nested definition, for consistency.
-	if (!Var::ValidateName(class_name, DISPLAY_NO_ERROR))
-		return ScriptError(_T("Invalid class name."), class_name);
+	if (!Var::ValidateName(class_name, DISPLAY_CLASS_ERROR))
+		return FAIL;
 
 	class_object = NULL; // This initializes the entry in the mClassObject array.
 	
@@ -7912,8 +7912,8 @@ ResultType Script::AddGroup(LPTSTR aGroupName)
 	size_t aGroupName_length = _tcslen(aGroupName);
 	if (aGroupName_length > MAX_VAR_NAME_LENGTH)
 		return ScriptError(_T("Group name too long."), aGroupName);
-	if (!Var::ValidateName(aGroupName, DISPLAY_NO_ERROR)) // Seems best to use same validation as var names.
-		return ScriptError(_T("Illegal group name."), aGroupName);
+	if (!Var::ValidateName(aGroupName, DISPLAY_GROUP_ERROR)) // Seems best to use same validation as var names.
+		return FAIL;
 
 	LPTSTR new_name = SimpleHeap::Malloc(aGroupName, aGroupName_length);
 	if (!new_name)
