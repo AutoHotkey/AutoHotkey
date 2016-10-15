@@ -357,7 +357,7 @@ VarEntry g_BIV_A[] =
 	A_(ScriptDir),
 	A_(ScriptFullPath),
 	A_(ScriptHwnd),
-	A_(ScriptName),
+	A_w(ScriptName),
 	A_x(Sec, BIV_DateTime),
 	A_w(SendLevel),
 	A_w(SendMode),
@@ -430,6 +430,7 @@ Script::Script()
 	, mClassObjectCount(0), mUnresolvedClasses(NULL), mClassProperty(NULL), mClassPropertyDef(NULL)
 	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true), mMenuUseErrorLevel(false)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
+	, mScriptName(NULL)
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
 	, mIsRestart(false), mErrorStdOut(false)
 #ifndef AUTOHOTKEYSC

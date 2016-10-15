@@ -2778,6 +2778,7 @@ public:
 	LPTSTR mFileSpec; // Will hold the full filespec, for convenience.
 	LPTSTR mFileDir;  // Will hold the directory containing the script file.
 	LPTSTR mFileName; // Will hold the script's naked file name.
+	LPTSTR mScriptName; // Value of A_ScriptName; defaults to mFileName if NULL. See also DefaultDialogTitle().
 	LPTSTR mOurEXE; // Will hold this app's module name (e.g. C:\Program Files\AutoHotkey\AutoHotkey.exe).
 	LPTSTR mOurEXEDir;  // Same as above but just the containing directory (for convenience).
 	LPTSTR mMainWindowTitle; // Will hold our main window's title, for consistency & convenience.
@@ -2821,6 +2822,7 @@ public:
 	ResultType UpdateOrCreateTimer(IObject *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
 		, bool aUpdatePriorityOnly);
 	void DeleteTimer(IObject *aLabel);
+	LPTSTR DefaultDialogTitle();
 
 	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[]);
 #ifndef AUTOHOTKEYSC
@@ -2982,7 +2984,7 @@ BIV_DECL_R (BIV_MyDocuments);
 BIV_DECL_R (BIV_Caret);
 BIV_DECL_R (BIV_Cursor);
 BIV_DECL_R (BIV_ScreenWidth_Height);
-BIV_DECL_R (BIV_ScriptName);
+BIV_DECL_RW(BIV_ScriptName);
 BIV_DECL_R (BIV_ScriptDir);
 BIV_DECL_R (BIV_ScriptFullPath);
 BIV_DECL_R (BIV_ScriptHwnd);

@@ -4407,6 +4407,18 @@ DWORD GetAHKInstallDir(LPTSTR aBuf)
 
 
 
+LPTSTR Script::DefaultDialogTitle()
+{
+	// If the script has set A_ScriptName, use that:
+	if (mScriptName)
+		return mScriptName;
+	// If available, the script's filename seems a much better title than the program name
+	// in case the user has more than one script running:
+	return (mFileName && *mFileName) ? mFileName : T_AHK_NAME_VERSION;
+}
+
+
+
 //////////////
 // InputBox //
 //////////////
@@ -4463,9 +4475,7 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, LPTSTR aOption
 	}
 	if (!aOutputVar) return FAIL;
 	if (!*aTitle)
-		// If available, the script's filename seems a much better title in case the user has
-		// more than one script running:
-		aTitle = (g_script.mFileName && *g_script.mFileName) ? g_script.mFileName : T_AHK_NAME_VERSION;
+		aTitle = g_script.DefaultDialogTitle();
 	// Limit the size of what we were given to prevent unreasonably huge strings from
 	// possibly causing a failure in CreateDialog().  This copying method is always done because:
 	// Make a copy of all string parameters, using the stack, because they may reside in the deref buffer
@@ -7379,7 +7389,7 @@ ResultType Line::FileSelect(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGreetin
 	else
 		// Use a more specific title so that the dialogs of different scripts can be distinguished
 		// from one another, which may help script automation in rare cases:
-		sntprintf(greeting, _countof(greeting), _T("Select File - %s"), g_script.mFileName);
+		sntprintf(greeting, _countof(greeting), _T("Select File - %s"), g_script.DefaultDialogTitle());
 
 	// The filter must be terminated by two NULL characters.  One is explicit, the other automatic:
 	TCHAR filter[1024] = _T(""), pattern[1024] = _T("");  // Set default.
@@ -9971,9 +9981,21 @@ VarSizeType BIV_ScreenWidth_Height(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_ScriptName(LPTSTR aBuf, LPTSTR aVarName)
 {
+	LPTSTR script_name = g_script.mScriptName ? g_script.mScriptName : g_script.mFileName;
 	if (aBuf)
-		_tcscpy(aBuf, g_script.mFileName);
-	return (VarSizeType)_tcslen(g_script.mFileName);
+		_tcscpy(aBuf, script_name);
+	return (VarSizeType)_tcslen(script_name);
+}
+
+BIV_DECL_W(BIV_ScriptName_Set)
+{
+	// For simplicity, a new buffer is allocated each time.  It is not expected to be set frequently.
+	LPTSTR script_name = _tcsdup(aBuf);
+	if (!script_name)
+		return g_script.ScriptError(ERR_OUTOFMEM);
+	free(g_script.mScriptName);
+	g_script.mScriptName = script_name;
+	return OK;
 }
 
 VarSizeType BIV_ScriptDir(LPTSTR aBuf, LPTSTR aVarName)

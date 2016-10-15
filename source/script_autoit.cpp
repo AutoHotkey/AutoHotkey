@@ -1124,7 +1124,7 @@ ResultType Line::DirSelect(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGreeting)
 	if (aGreeting && *aGreeting)
 		tcslcpy(greeting, aGreeting, _countof(greeting));
 	else
-		sntprintf(greeting, _countof(greeting), _T("Select Folder - %s"), g_script.mFileName);
+		sntprintf(greeting, _countof(greeting), _T("Select Folder - %s"), g_script.DefaultDialogTitle());
 	bi.lpszTitle = greeting;
 
 	DWORD options = *aOptions ? ATOI(aOptions) : FSF_ALLOW_CREATE;
