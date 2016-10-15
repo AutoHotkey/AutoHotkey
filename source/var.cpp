@@ -1170,6 +1170,19 @@ ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError)
 		}
 		return FAIL;
 	}
+	// Reserve names of control flow statements.  Aside from being more "pure" and allowing
+	// future improvements, it should also help catch syntax errors such as "if (foo) break".
+	for (int i = ACT_FIRST_NAMED_ACTION; i < ACT_FIRST_COMMAND; ++i)
+	{
+		if (!_tcsicmp(g_act[i].Name, aName))
+		{
+			TCHAR msg[512];
+			sntprintf(msg, _countof(msg), _T("The following reserved word must not be used as a %s name:\n\"%-1.300s\"")
+				, sErrorSubject[VALIDATENAME_SUBJECT_INDEX(aDisplayError)]
+				, aName);
+			return g_script.ScriptError(msg);
+		}
+	}
 	// Otherwise:
 	return OK;
 }
