@@ -933,7 +933,8 @@ void ComError(HRESULT hr, LPTSTR name, EXCEPINFO* pei)
 			size += FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, hr, 0, buf + size, _countof(buf) - size, NULL);
 			if (buf[size-1] == '\n')
 				buf[--size] = '\0';
-				// probably also has '\r', but doesn't seem necessary to remove it.
+			if (buf[size-1] == '\r')
+				buf[--size] = '\0';
 			if (pei)
 				_vsntprintf(buf + size, _countof(buf) - size, _T("\nSource:\t\t%ws\nDescription:\t%ws\nHelpFile:\t\t%ws\nHelpContext:\t%d"), (va_list) &pei->bstrSource);
 			error_text = buf;
