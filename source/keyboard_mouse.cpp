@@ -685,14 +685,28 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 				else if (key_text_length > 2 && !_tcsnicmp(aKeys, _T("U+"), 2))
 				{
 					// L24: Send a unicode value as shown by Character Map.
-					wchar_t u_code = (wchar_t) _tcstol(aKeys + 2, NULL, 16);
-
+					UINT u_code = (UINT) _tcstol(aKeys + 2, NULL, 16);
+					wchar_t wc1, wc2;
+					if (u_code >= 0x10000)
+					{
+						// Supplementary characters are encoded as UTF-16 and split into two messages.
+						u_code -= 0x10000;
+						wc1 = 0xd800 + ((u_code >> 10) & 0x3ff);
+						wc2 = 0xdc00 + (u_code & 0x3ff);
+					}
+					else
+					{
+						wc1 = (wchar_t) u_code;
+						wc2 = 0;
+					}
 					if (aTargetWindow)
 					{
 						// Although MSDN says WM_CHAR uses UTF-16, PostMessageA appears to truncate it to 8-bit.
 						// This probably means it does automatic translation between ANSI and UTF-16.  Since we
 						// specifically want to send a Unicode character value, use PostMessageW:
-						PostMessageW(aTargetWindow, WM_CHAR, u_code, 0);
+						PostMessageW(aTargetWindow, WM_CHAR, wc1, 0);
+						if (wc2)
+							PostMessageW(aTargetWindow, WM_CHAR, wc2, 0);
 					}
 					else
 					{
@@ -700,7 +714,9 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 						// To know why the following requires sSendMode != SM_PLAY, see SendUnicodeChar.
 						if (sSendMode != SM_PLAY && g_os.IsWin2000orLater())
 						{
-							SendUnicodeChar(u_code, mods_for_next_key | persistent_modifiers_for_this_SendKeys);
+							SendUnicodeChar(wc1, mods_for_next_key | persistent_modifiers_for_this_SendKeys);
+							if (wc2)
+								SendUnicodeChar(wc2, mods_for_next_key | persistent_modifiers_for_this_SendKeys);
 						}
 						else // Note that this method generally won't work with Unicode characters except
 						{	 // with specific controls which support it, such as RichEdit (tested on WordPad).
