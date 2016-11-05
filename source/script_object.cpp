@@ -517,10 +517,17 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// to initialize a field and allow processing to continue as if it already existed.
 			field = FindField(key_type, key, /*out*/ insert_pos);
 			if (prop)
+			{
+				// This field was a property.
 				if (field && field->symbol == SYM_OBJECT && field->object == prop)
-					prop_field = field; // Must update this pointer.
+				{
+					// This field is still a property (and the same one).
+					prop_field = field; // Must update this pointer in case the field is to be overwritten.
+					field = NULL; // Act like the field doesn't exist (until the time comes to insert a value).
+				}
 				else
 					prop = NULL; // field was reassigned or removed, so ignore the property.
+			}
 		}
 
 		// Since the base object didn't handle this op, check for built-in properties/methods.
