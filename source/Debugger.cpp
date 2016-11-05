@@ -276,7 +276,7 @@ int Debugger::ProcessCommands()
 	// to process it.  This allows the debugger engine to respond even if the
 	// script is sleeping or waiting for messages.
 	if (mSocket != INVALID_SOCKET)
-		WSAAsyncSelect(mSocket, g_hWnd, AHK_CHECK_DEBUGGER, FD_READ);
+		WSAAsyncSelect(mSocket, g_hWnd, AHK_CHECK_DEBUGGER, FD_READ | FD_CLOSE);
 	return err;
 }
 
