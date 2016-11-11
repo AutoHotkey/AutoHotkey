@@ -1202,6 +1202,10 @@ int Debugger::WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncoded
 	//     returned (when limited by aMaxEncodedSize).  This is more useful anyway.
 	//  2) Since the data is encoded as UTF-8, the size attribute must be a UTF-8 byte count
 	//     for any comparison by the IDE to give the correct result.
+
+	// According to the spec, -m 0 should mean "unlimited".
+	if (!aMaxEncodedSize)
+		aMaxEncodedSize = INT_MAX;
 	
 	// Calculate:
 	//  - the total size in terms of UTF-8 bytes (even if that exceeds INT_MAX).
