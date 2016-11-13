@@ -1655,6 +1655,10 @@ DEBUGGER_COMMAND(Debugger::property_set)
 	Object::FieldType *field;
 	if (err = ParsePropertyName(name, always_use, false, var, field))
 		return err;
+
+	// "Data must be encoded using base64." : https://xdebug.org/docs-dbgp.php
+	// Fixed in v1.1.24.03 to expect base64 even for integer/float:
+	int value_length = (int)Base64Decode(new_value, new_value);
 	
 	CString val_buf;
 	ExprTokenType val;
@@ -1670,7 +1674,7 @@ DEBUGGER_COMMAND(Debugger::property_set)
 	}
 	else // Assume type is "string", since that's the only other supported type.
 	{
-		StringUTF8ToTChar(new_value, val_buf, (int)Base64Decode(new_value, new_value));
+		StringUTF8ToTChar(new_value, val_buf, value_length);
 		val.symbol = SYM_STRING;
 		val.marker = (LPTSTR)val_buf.GetString();
 	}
