@@ -10291,7 +10291,8 @@ INT_PTR CALLBACK TabDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 			if (   uMsg == WM_CTLCOLORSTATIC
 				&& (TABDIALOG_ATTRIB_THEMED & GetWindowLongPtr(hDlg, GWLP_USERDATA))
 				&& (pcontrol = pgui->FindControl((HWND)lParam))
-				&& !(pcontrol->attrib & GUI_CONTROL_ATTRIB_BACKGROUND_TRANS)   )
+				&& !(pcontrol->attrib & GUI_CONTROL_ATTRIB_BACKGROUND_TRANS)
+				&& MyIsAppThemed()   )
 			{
 				HDC hdc = (HDC)wParam;
 				HBRUSH brush = (HBRUSH)GetProp(hDlg, _T("br"));
