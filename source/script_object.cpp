@@ -73,14 +73,14 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 
 	ResultType result = aInvokee->Invoke(result_token, this_token, IT_CALL | aExtraFlags, param, aParamCount);
 
-	if (aRetVal) // This is done regardless of result as some callers don't initialize it:
-		*aRetVal = (INT_PTR)TokenToInt64(result_token);
-
 	if (result != EARLY_EXIT && result != FAIL)
 	{
 		// Indicate to caller whether an integer value was returned (for MsgMonitor()).
 		result = TokenIsEmptyString(result_token) ? OK : EARLY_RETURN;
 	}
+	
+	if (aRetVal) // Always set this as some callers don't initialize it:
+		*aRetVal = result == EARLY_RETURN ? (INT_PTR)TokenToInt64(result_token) : 0;
 
 	if (result_token.mem_to_free)
 		free(result_token.mem_to_free);
