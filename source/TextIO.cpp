@@ -336,7 +336,14 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 				aBuf[target_used++] = INVALID_CHAR;
 			}
 		} // end for-loop which processes buffered data.
-		mPos = src;
+		if (src == src_end)
+		{
+			// Reset the buffer so that Read() can read a full block.
+			mLength = 0;
+			mPos = NULL;
+		}
+		else
+			mPos = src;
 	} // end for-loop which repopulates the buffer.
 	if (target_used < aBufLen)
 		aBuf[target_used] = '\0';
