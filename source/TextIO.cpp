@@ -352,10 +352,10 @@ DWORD TextStream::Read(LPVOID aBuf, DWORD aBufLen)
 		return 0;
 
 	DWORD target_used = 0;
-	DWORD data_in_buffer = mPos ? (DWORD)(mBuffer + mLength - mPos) : 0;
 	
-	if (data_in_buffer)
+	if (mPos)
 	{
+		DWORD data_in_buffer = (DWORD)(mBuffer + mLength - mPos);
 		if (data_in_buffer >= aBufLen)
 		{
 			// The requested amount of data already exists in our buffer, so copy it over.
@@ -370,7 +370,8 @@ DWORD TextStream::Read(LPVOID aBuf, DWORD aBufLen)
 			return aBufLen;
 		}
 		
-		// Consume all buffered data.
+		// Consume all buffered data.  If there is none (i.e. mPos was somehow pointing at the
+		// end of the buffer), it is crucial that we clear the buffer for the next section.
 		memcpy(aBuf, mPos, data_in_buffer);
 		target_used = data_in_buffer;
 		mLength = 0;
