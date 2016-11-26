@@ -32,14 +32,14 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 
 	ResultType result = aInvokee->Invoke(result_token, this_token, IT_CALL | aExtraFlags, param, aParamCount);
 
-	if (aRetVal) // This is done regardless of result as some callers don't initialize it:
-		*aRetVal = (INT_PTR)TokenToInt64(result_token);
-
 	if (result != EARLY_EXIT && result != FAIL)
 	{
 		// Indicate to caller whether an integer value was returned (for MsgMonitor()).
 		result = TokenIsEmptyString(result_token) ? OK : EARLY_RETURN;
 	}
+	
+	if (aRetVal) // Always set this as some callers don't initialize it:
+		*aRetVal = result == EARLY_RETURN ? (INT_PTR)TokenToInt64(result_token) : 0;
 
 	result_token.Free();
 	return result;
@@ -463,10 +463,17 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// to initialize a field and allow processing to continue as if it already existed.
 			field = FindField(key_type, key, /*out*/ insert_pos);
 			if (prop)
+			{
+				// This field was a property.
 				if (field && field->symbol == SYM_OBJECT && field->object == prop)
-					prop_field = field; // Must update this pointer.
+				{
+					// This field is still a property (and the same one).
+					prop_field = field; // Must update this pointer in case the field is to be overwritten.
+					field = NULL; // Act like the field doesn't exist (until the time comes to insert a value).
+				}
 				else
 					prop = NULL; // field was reassigned or removed, so ignore the property.
+			}
 		}
 
 		// Since the base object didn't handle this op, check for built-in properties/methods.

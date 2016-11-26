@@ -276,7 +276,7 @@ int Debugger::ProcessCommands()
 	// to process it.  This allows the debugger engine to respond even if the
 	// script is sleeping or waiting for messages.
 	if (mSocket != INVALID_SOCKET)
-		WSAAsyncSelect(mSocket, g_hWnd, AHK_CHECK_DEBUGGER, FD_READ);
+		WSAAsyncSelect(mSocket, g_hWnd, AHK_CHECK_DEBUGGER, FD_READ | FD_CLOSE);
 	return err;
 }
 
@@ -1203,6 +1203,10 @@ int Debugger::WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncoded
 	//     returned (when limited by aMaxEncodedSize).  This is more useful anyway.
 	//  2) Since the data is encoded as UTF-8, the size attribute must be a UTF-8 byte count
 	//     for any comparison by the IDE to give the correct result.
+
+	// According to the spec, -m 0 should mean "unlimited".
+	if (!aMaxEncodedSize)
+		aMaxEncodedSize = INT_MAX;
 	
 	// Calculate:
 	//  - the total size in terms of UTF-8 bytes (even if that exceeds INT_MAX).
@@ -1651,6 +1655,10 @@ DEBUGGER_COMMAND(Debugger::property_set)
 	Object::FieldType *field;
 	if (err = ParsePropertyName(name, always_use, false, var, field))
 		return err;
+
+	// "Data must be encoded using base64." : https://xdebug.org/docs-dbgp.php
+	// Fixed in v1.1.24.03 to expect base64 even for integer/float:
+	int value_length = (int)Base64Decode(new_value, new_value);
 	
 	CString val_buf;
 	ExprTokenType val;
@@ -1664,7 +1672,7 @@ DEBUGGER_COMMAND(Debugger::property_set)
 	}
 	else // Assume type is "string", since that's the only other supported type.
 	{
-		StringUTF8ToTChar(new_value, val_buf, (int)Base64Decode(new_value, new_value));
+		StringUTF8ToTChar(new_value, val_buf, value_length);
 		val.SetValue((LPTSTR)val_buf.GetString(), val_buf.GetLength());
 	}
 

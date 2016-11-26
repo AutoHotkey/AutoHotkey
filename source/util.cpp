@@ -2639,6 +2639,24 @@ HRESULT MyEnableThemeDialogTexture(HWND hwnd, DWORD dwFlags)
 
 
 
+BOOL MyIsAppThemed()
+{
+	BOOL result = FALSE;
+	HINSTANCE hinstTheme = GetModuleHandle(_T("uxtheme")); // Should always succeed if app is themed.
+	if (hinstTheme)
+	{
+		typedef BOOL (WINAPI *IsAppThemedType)();
+		// Unlike IsThemeActive, IsAppThemed will return false if the "Disable visual styles"
+		// compatibility setting is turned on for this script's EXE.
+  		IsAppThemedType DynIsAppThemed = (IsAppThemedType)GetProcAddress(hinstTheme, "IsAppThemed");
+		if (DynIsAppThemed)
+			result = DynIsAppThemed();
+	}
+	return result;
+}
+
+
+
 LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap, bool aAllowEscapedSpace)
 // Replaces any escape sequences in aBuf with their reduced equivalent.  For example, if aEscapeChar
 // is accent, Each `n would become a literal linefeed.  aBuf's length should always be the same or

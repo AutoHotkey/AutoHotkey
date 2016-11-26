@@ -4102,7 +4102,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		// This message is sent when data arrives on the debugger's socket.  It allows the
 		// debugger to respond to commands which are sent while the script is sleeping or
 		// waiting for messages.
-		if (g_Debugger.IsConnected() && g_Debugger.HasPendingCommand())
+		if (g_Debugger.IsConnected() && (g_Debugger.HasPendingCommand() || LOWORD(lParam) == FD_CLOSE))
 			g_Debugger.ProcessCommands();
 		break;
 #endif
