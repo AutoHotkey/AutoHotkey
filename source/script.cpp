@@ -13289,6 +13289,10 @@ BIF_DECL(BIF_PerformAction)
 	int min_params = aResultToken.func->mMinParams;
 	int max_params = aResultToken.func->mParamCount;
 	
+	// Truncate any extra parameters and prevent overflow of arg_type[] below.
+	if (aParamCount > max_params)
+		aParamCount = max_params;
+
 	// An array of args is constructed containing the var or text of each parameter,
 	// which is then used by ExpandArgs() to populate sArgDeref[] and sArgVar[].  This
 	// approach is used rather than directly assigning to those arrays because it avoids
