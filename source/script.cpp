@@ -4152,6 +4152,18 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		//    MsgBox :=  ; i.e. it is intended to be the first parameter, not an operator.
 		// In the above case, the user can provide the optional comma to avoid the ambiguity:
 		//    MsgBox, :=
+
+		if (*aLineText == '"' || *aLineText == '\'')
+		{
+			action_args = aLineText + FindTextDelim(aLineText, *aLineText, 1, aLiteralMap);
+			if (*action_args)
+			{
+				action_args = omit_leading_whitespace(action_args + 1);
+				if (*action_args != '.') // Don't treat "" := x as valid.
+					action_args = aLineText;
+			}
+		}
+
 		TCHAR action_args_2nd_char = action_args[1];
 
 		switch(*action_args)
