@@ -5000,12 +5000,13 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				aOpt.style_add |= ES_PASSWORD;
 				if (aControl.hwnd) // Update the existing edit.
 				{
-					// Don't know how to achieve the black circle on XP *after* the control has
-					// been created.  Maybe it's impossible.  Thus, provide default since otherwise
-					// pass-char will be removed vs. added:
+					// Provide default since otherwise pass-char will be removed vs. added.
+					// The encoding of the message's parameter depends on whether SendMessageW or SendMessageA is called.
+					// 9679 corresponds to the default bullet character on XP and later (verified with EM_GETPASSWORDCHAR).
 					if (!aOpt.password_char)
-						aOpt.password_char = '*';
-					SendMessage(aControl.hwnd, EM_SETPASSWORDCHAR, (WPARAM)aOpt.password_char, 0);
+						SendMessageW(aControl.hwnd, EM_SETPASSWORDCHAR, (g_os.IsWinXPorLater() ? 9679 : '*'), 0);
+					else
+						SendMessage(aControl.hwnd, EM_SETPASSWORDCHAR, (WPARAM)aOpt.password_char, 0);
 				}
 			}
 			else
