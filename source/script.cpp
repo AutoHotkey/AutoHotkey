@@ -3105,6 +3105,13 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			g_HotCriterion = NULL; // Indicate that no criteria are in effect for subsequent hotkeys.
 			return CONDITION_TRUE;
 		}
+
+		// Check for a duplicate #If expression;
+		//  - Prevents duplicate hotkeys under separate copies of the same expression.
+		//  - Hotkey,If would only be able to select the first expression with the given source code.
+		//  - Conserves memory.
+		if (g_HotCriterion = FindHotkeyIfExpr(parameter))
+			return CONDITION_TRUE;
 		
 		Func *current_func = g->CurrentFunc;
 		g->CurrentFunc = NULL; // Use global scope.
@@ -3119,18 +3126,12 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		Line *hot_expr_line = mLastLine;
 
 		// Set the new criterion.
-		if (  !(g_HotCriterion = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))  )
+		if (  !(g_HotCriterion = AddHotkeyIfExpr())  )
 			return FAIL;
 		g_HotCriterion->Type = HOT_IF_EXPR;
 		g_HotCriterion->ExprLine = hot_expr_line;
 		g_HotCriterion->WinTitle = hot_expr_line->mArg[0].text;
 		g_HotCriterion->WinText = _T("");
-		g_HotCriterion->NextCriterion = NULL;
-		if (g_LastHotExpr)
-			g_LastHotExpr->NextCriterion = g_HotCriterion;
-		else
-			g_FirstHotExpr = g_HotCriterion;
-		g_LastHotExpr = g_HotCriterion;
 		return CONDITION_TRUE;
 	}
 
@@ -9423,7 +9424,7 @@ ResultType Script::PreparseStaticLines(Line *aStartingLine)
 			mLastStaticLine = line;
 			break;
 		case ACT_HOTKEY_IF:
-			// It's already been added to g_HotExprLines[], so just remove it from the script (below).
+			// It's already been added to the hot-expr list, so just remove it from the script (below).
 			// Override mActionType so ACT_HOTKEY_IF doesn't have to be handled by EvaluateCondition():
 			line->mActionType = ACT_IFEXPR;
 			break;
@@ -12837,9 +12838,26 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 	return if_condition ? CONDITION_TRUE : CONDITION_FALSE;
 }
 
-// L4: Evaluate an expression used to define #if hotkey variant criterion.
-//	This is called by MainWindowProc when it receives an AHK_HOT_IF_EXPR message.
-ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
+
+// Evaluate an #If expression (in a thread created by the caller).
+ResultType Line::EvaluateHotCriterionExpression()
+{
+	g_script.mCurrLine = this; // Added in v1.1.16 to fix A_LineFile and A_LineNumber.
+
+	if (g->ListLinesIsEnabled)
+		LOG_LINE(this)
+
+	ResultType result = ExpandArgs();
+	if (result == OK)
+		result = EvaluateCondition();
+
+	return result;
+}
+
+
+// Evaluate an #If expression or callback function.
+// This is called by MainWindowProc when it receives an AHK_HOT_IF_EVAL message.
+ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 {
 	// Initialize a new quasi-thread to evaluate the expression. This may not be necessary for simple
 	// expressions, but expressions which call user-defined functions may otherwise interfere with
@@ -12856,7 +12874,6 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 	// Critical seems to improve reliability, either because the thread completes faster (i.e. before the timeout) or because we check for messages less often.
 	InitNewThread(0, false, true, ACT_CRITICAL);
 	ResultType result;
-	DEBUGGER_STACK_PUSH(_T("#If"))
 
 	// Update A_ThisHotkey, useful if #If calls a function to do its dirty work.
 	LPTSTR prior_hotkey_name[] = { g_script.mThisHotkeyName, g_script.mPriorHotkeyName };
@@ -12867,15 +12884,21 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 	g_script.mThisHotkeyStartTime = // Updated for consistency.
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount();
 
-	g_script.mCurrLine = this; // Added in v1.1.16 to fix A_LineFile and A_LineNumber.
-
-	if (g->ListLinesIsEnabled)
-		LOG_LINE(this)
-
-	// EVALUATE THE EXPRESSION
-	result = ExpandArgs();
-	if (result == OK)
-		result = EvaluateCondition();
+	// EVALUATE THE EXPRESSION OR CALL THE CALLBACK
+	if (Type == HOT_IF_EXPR)
+	{
+		DEBUGGER_STACK_PUSH(_T("#If"))
+		result = ExprLine->EvaluateHotCriterionExpression();
+		DEBUGGER_STACK_POP()
+	}
+	else
+	{
+		ExprTokenType param = aHotkeyName;
+		INT_PTR retval;
+		result = LabelPtr(Callback)->ExecuteInNewThread(_T("#If"), &param, 1, &retval);
+		if (result != FAIL)
+			result = retval ? CONDITION_TRUE : CONDITION_FALSE;
+	}
 
 	// The following allows the expression to set the Last Found Window for the
 	// hotkey subroutine, so that #if WinActive(T) and similar behave like #IfWin.
@@ -12890,7 +12913,6 @@ ResultType Line::EvaluateHotCriterionExpression(LPTSTR aHotkeyName)
 	g_script.mPriorHotkeyName = prior_hotkey_name[1];
 	g_script.mPriorHotkeyStartTime = prior_hotkey_time[1];
 
-	DEBUGGER_STACK_POP()
 	ResumeUnderlyingThread(ErrorLevel_saved);
 
 	return result;

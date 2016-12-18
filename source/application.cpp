@@ -931,7 +931,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				HotkeyCriterion *hc = variant->mHotCriterion;
 				if (!hc || hc->Type == HOT_IF_NOT_ACTIVE || hc->Type == HOT_IF_NOT_EXIST)
 					criterion_found_hwnd = NULL; // For "NONE" and "NOT", there is no last found window.
-				else if (hc->Type == HOT_IF_EXPR)
+				else if (HOT_IF_REQUIRES_EVAL(hc->Type))
 					criterion_found_hwnd = g_HotExprLFW; // For #if WinExist(WinTitle) and similar.
 
 				label_to_call = variant->mJumpToLabel;
