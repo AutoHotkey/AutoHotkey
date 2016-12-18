@@ -104,6 +104,7 @@ extern int g_MaxHotkeysPerInterval;
 extern int g_HotkeyThrottleInterval;
 extern bool g_MaxThreadsBuffer;
 extern SendLevelType g_InputLevel;
+extern HotkeyCriterion *g_HotCriterion;
 extern HotkeyCriterion *g_FirstHotCriterion, *g_LastHotCriterion;
 
 // Global variables for #if (expression). See globaldata.cpp for comments.

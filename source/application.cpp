@@ -1346,7 +1346,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			case AHK_HOTSTRING:
 				g.hWndLastUsed = criterion_found_hwnd; // v1.0.42. Even if the window is invalid for some reason, IsWindow() and such are called whenever the script accesses it (GetValidLastUsedWindow()).
 				g.SendLevel = hs->mInputLevel;
-				g.HotCriterion = hs->mHotCriterion; // v2: Let the Hotkey command use the criterion of this hotstring by default.
 				hs->PerformInNewThreadMadeByCaller();
 				break;
 
@@ -1373,7 +1372,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// Above also works for RunAgainAfterFinished since that feature reuses the same thread attributes set above.
 				g.hWndLastUsed = criterion_found_hwnd; // v1.0.42. Even if the window is invalid for some reason, IsWindow() and such are called whenever the script accesses it (GetValidLastUsedWindow()).
 				g.SendLevel = variant->mInputLevel;
-				g.HotCriterion = variant->mHotCriterion; // v2: Let the Hotkey command use the criterion of this hotkey variant by default.
 				hk->PerformInNewThreadMadeByCaller(*variant);
 			}
 

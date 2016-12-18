@@ -834,11 +834,6 @@ ResultType Script::AutoExecSection()
 	CopyMemory(g_array, g, sizeof(global_struct)); // Copy the temporary/startup "g" into array[0] to preserve historical behaviors that may rely on the idle thread starting with that "g".
 	g = g_array; // Must be done after above.
 
-	// v2: Ensure the Hotkey command defaults to no criterion rather than the last #IfWin.  Alternatively we
-	// could replace CopyMemory() above with global_init(), but it would need to be changed back if ever we
-	// want a directive to affect the default settings.
-	g->HotCriterion = NULL;
-
 	// v1.0.48: Due to switching from SET_UNINTERRUPTIBLE_TIMER to IsInterruptible():
 	// In spite of the comments in IsInterruptible(), periodically have a timer call IsInterruptible() due to
 	// the following scenario:
@@ -3107,7 +3102,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	{
 		if (!parameter) // The omission of the parameter indicates that any existing criteria should be turned off.
 		{
-			g->HotCriterion = NULL; // Indicate that no criteria are in effect for subsequent hotkeys.
+			g_HotCriterion = NULL; // Indicate that no criteria are in effect for subsequent hotkeys.
 			return CONDITION_TRUE;
 		}
 		
@@ -3124,18 +3119,18 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		Line *hot_expr_line = mLastLine;
 
 		// Set the new criterion.
-		if (  !(g->HotCriterion = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))  )
+		if (  !(g_HotCriterion = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))  )
 			return FAIL;
-		g->HotCriterion->Type = HOT_IF_EXPR;
-		g->HotCriterion->ExprLine = hot_expr_line;
-		g->HotCriterion->WinTitle = hot_expr_line->mArg[0].text;
-		g->HotCriterion->WinText = _T("");
-		g->HotCriterion->NextCriterion = NULL;
+		g_HotCriterion->Type = HOT_IF_EXPR;
+		g_HotCriterion->ExprLine = hot_expr_line;
+		g_HotCriterion->WinTitle = hot_expr_line->mArg[0].text;
+		g_HotCriterion->WinText = _T("");
+		g_HotCriterion->NextCriterion = NULL;
 		if (g_LastHotExpr)
-			g_LastHotExpr->NextCriterion = g->HotCriterion;
+			g_LastHotExpr->NextCriterion = g_HotCriterion;
 		else
-			g_FirstHotExpr = g->HotCriterion;
-		g_LastHotExpr = g->HotCriterion;
+			g_FirstHotExpr = g_HotCriterion;
+		g_LastHotExpr = g_HotCriterion;
 		return CONDITION_TRUE;
 	}
 
@@ -3155,11 +3150,11 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			hot_criterion = invert ? HOT_IF_NOT_ACTIVE : HOT_IF_ACTIVE;
 		else if (!_tcsnicmp(aBuf + (invert ? 9 : 6), _T("Exist"), 5))
 			hot_criterion = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
-		else // It starts with #IfWin but isn't Active or Exist: Don't alter g->HotCriterion.
+		else // It starts with #IfWin but isn't Active or Exist: Don't alter g_HotCriterion.
 			return CONDITION_FALSE; // Indicate unknown directive since there are currently no other possibilities.
 		if (!parameter) // The omission of the parameter indicates that any existing criteria should be turned off.
 		{
-			g->HotCriterion = NULL; // Indicate that no criteria are in effect for subsequent hotkeys.
+			g_HotCriterion = NULL; // Indicate that no criteria are in effect for subsequent hotkeys.
 			return CONDITION_TRUE;
 		}
 		LPTSTR hot_win_title = parameter, hot_win_text; // Set default for title; text is determined later.

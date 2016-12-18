@@ -116,6 +116,7 @@ int g_MaxHotkeysPerInterval = 70; // Increased to 70 because 60 was still causin
 int g_HotkeyThrottleInterval = 2000; // Milliseconds.
 bool g_MaxThreadsBuffer = false;  // This feature usually does more harm than good, so it defaults to OFF.
 SendLevelType g_InputLevel = 0;
+HotkeyCriterion *g_HotCriterion = NULL; // The current criterion for new hotkeys.
 HotkeyCriterion *g_FirstHotCriterion = NULL, *g_LastHotCriterion = NULL;
 
 // Global variables for #if (expression).
