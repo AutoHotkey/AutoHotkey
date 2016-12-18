@@ -663,14 +663,23 @@ const SendLevelType SendLevelMax = 100;
 inline bool SendLevelIsValid(int level) { return level >= 0 && level <= SendLevelMax; }
 
 
-// Same reason as above struct.  It's best to keep this struct as small as possible
-// because it's used as a local (stack) var by at least one recursive function:
+class Line; // Forward declaration.
+typedef UCHAR HotCriterionType;
+enum HotCriterionEnum {HOT_NO_CRITERION, HOT_IF_ACTIVE, HOT_IF_NOT_ACTIVE, HOT_IF_EXIST, HOT_IF_NOT_EXIST, HOT_IF_EXPR}; // HOT_NO_CRITERION must be zero.
+struct HotkeyCriterion
+{
+	HotCriterionType Type;
+	Line *ExprLine;
+	LPTSTR WinTitle, WinText;
+	HotkeyCriterion *NextCriterion;
+};
+
+
 // Each instance of this struct generally corresponds to a quasi-thread.  The function that creates
 // a new thread typically saves the old thread's struct values on its stack so that they can later
 // be copied back into the g struct when the thread is resumed:
 class Func;                 // Forward declarations
 class Label;                //
-class Line;                 //
 struct RegItemStruct;       //
 struct LoopReadFileStruct;  //
 class GuiType;				//
@@ -687,6 +696,7 @@ struct global_struct
 	// v1.0.44.14: The above mLoop attributes were moved into this structure from the script class
 	// because they're more appropriate as thread-attributes rather than being global to the entire script.
 
+	HotkeyCriterion *HotCriterion;
 	TitleMatchModes TitleMatchMode;
 	int IntervalBeforeRest;
 	int UninterruptedLineCount; // Stored as a g-struct attribute in case OnExit sub interrupts it while uninterruptible.
@@ -798,6 +808,7 @@ inline void global_init(global_struct &g)
 	// subroutine's values for these are restored prior to resuming execution:
 	global_clear_state(g);
 	g.SendMode = SM_EVENT;  // v1.0.43: Default to SM_EVENT for backward compatibility.
+	g.HotCriterion = NULL;
 	g.TitleMatchMode = FIND_IN_LEADING_PART; // Standard default for AutoIt2 and 3.
 	g.TitleFindFast = true; // Since it's so much faster in many cases.
 	g.DetectHiddenWindows = false;  // Same as AutoIt2 but unlike AutoIt3; seems like a more intuitive default.

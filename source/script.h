@@ -216,6 +216,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_LINE_IN_PROPERTY_DEF _T("Not a valid property getter/setter.")
 #define ERR_INVALID_GUI_NAME _T("Invalid Gui name.")
 #define ERR_INVALID_OPTION _T("Invalid option.") // Generic message used by Gui and GuiControl/Get.
+#define ERR_HOTKEY_IF_EXPR _T("Parameter #2 must match an existing #If expression.")
 #define ERR_EXCEPTION _T("An exception was thrown.")
 
 #define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")

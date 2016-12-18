@@ -104,18 +104,12 @@ extern int g_MaxHotkeysPerInterval;
 extern int g_HotkeyThrottleInterval;
 extern bool g_MaxThreadsBuffer;
 extern SendLevelType g_InputLevel;
-extern HotCriterionType g_HotCriterion;
-extern LPTSTR g_HotWinTitle;
-extern LPTSTR g_HotWinText;
 extern HotkeyCriterion *g_FirstHotCriterion, *g_LastHotCriterion;
 
 // Global variables for #if (expression). See globaldata.cpp for comments.
-extern int g_HotExprIndex;
-extern Line **g_HotExprLines;
-extern int g_HotExprLineCount;
-extern int g_HotExprLineCountMax;
 extern UINT g_HotExprTimeout;
 extern HWND g_HotExprLFW;
+extern HotkeyCriterion *g_FirstHotExpr, *g_LastHotExpr;
 
 extern int g_ScreenDPI;
 extern MenuTypeType g_MenuIsVisible;

@@ -5568,8 +5568,10 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		return GetCurrentProcessId(); // Don't use ReplyMessage because then our thread can't reply to itself with this answer.
 
 	case AHK_HOT_IF_EXPR: // L4: HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
-		if ((int)wParam > -1 && (int)wParam < g_HotExprLineCount)
-			return g_HotExprLines[(int)wParam]->EvaluateHotCriterionExpression((LPTSTR)lParam);
+		// Ensure wParam is a valid criterion (might prevent shatter attacks):
+		for (HotkeyCriterion *cp = g_FirstHotExpr; cp; cp = cp->NextCriterion)
+			if ((WPARAM)cp == wParam)
+				return cp->ExprLine->EvaluateHotCriterionExpression((LPTSTR)lParam);
 		return 0;
 
 	case WM_MEASUREITEM: // L17: Measure menu icon. Not used on Windows Vista or later.

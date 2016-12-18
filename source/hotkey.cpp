@@ -33,8 +33,7 @@ DWORD Hotkey::sJoyHotkeyCount = 0;
 
 
 
-// L4: Added aHotExprIndex for #if (expression).
-HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, LPTSTR aWinText, int aHotExprIndex, LPTSTR aHotkeyName)
+HWND HotCriterionAllowsFiring(HotkeyCriterion *aCriterion, LPTSTR aHotkeyName)
 // This is a global function because it's used by both hotkeys and hotstrings.
 // In addition to being called by the hook thread, this can now be called by the main thread.
 // That happens when a WM_HOTKEY message arrives that is non-hook (such as for Win9x).
@@ -42,40 +41,38 @@ HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, 
 // a "not-criterion" such as #IfWinNotActive, (HWND)1 is returned rather than a genuine HWND.
 {
 	HWND found_hwnd;
-	switch(aHotCriterion)
+	if (!aCriterion)
+		return (HWND)1; // Always allow hotkey to fire.
+	switch(aCriterion->Type)
 	{
 	case HOT_IF_ACTIVE:
 	case HOT_IF_NOT_ACTIVE:
-		found_hwnd = WinActive(g_default, aWinTitle, aWinText, _T(""), _T(""), false); // Thread-safe.
+		found_hwnd = WinActive(g_default, aCriterion->WinTitle, aCriterion->WinText, _T(""), _T(""), false); // Thread-safe.
 		break;
 	case HOT_IF_EXIST:
 	case HOT_IF_NOT_EXIST:
-		found_hwnd = WinExist(g_default, aWinTitle, aWinText, _T(""), _T(""), false, false); // Thread-safe.
+		found_hwnd = WinExist(g_default, aCriterion->WinTitle, aCriterion->WinText, _T(""), _T(""), false, false); // Thread-safe.
 		break;
 	// L4: Handling of #if (expression) hotkey variants.
 	case HOT_IF_EXPR:
 		// Expression evaluation must be done in the main thread. If the message times out, the hotkey/hotstring is not allowed to fire.
 		DWORD_PTR res;
-		return (SendMessageTimeout(g_hWnd, AHK_HOT_IF_EXPR, (WPARAM)aHotExprIndex, (LPARAM)aHotkeyName, SMTO_BLOCK | SMTO_ABORTIFHUNG, g_HotExprTimeout, &res) && res == CONDITION_TRUE) ? (HWND)1 : NULL;
-	default: // HOT_NO_CRITERION (listed last because most callers avoids calling here by checking this value first).
-		return (HWND)1; // Always allow hotkey to fire.
+		return (SendMessageTimeout(g_hWnd, AHK_HOT_IF_EXPR, (WPARAM)aCriterion, (LPARAM)aHotkeyName, SMTO_BLOCK | SMTO_ABORTIFHUNG, g_HotExprTimeout, &res) && res == CONDITION_TRUE) ? (HWND)1 : NULL;
 	}
-	return (aHotCriterion == HOT_IF_ACTIVE || aHotCriterion == HOT_IF_EXIST) ? found_hwnd : (HWND)!found_hwnd;
+	return (aCriterion->Type == HOT_IF_ACTIVE || aCriterion->Type == HOT_IF_EXIST) ? found_hwnd : (HWND)!found_hwnd;
 }
 
 
 
-ResultType SetGlobalHotTitleText(LPTSTR aWinTitle, LPTSTR aWinText)
-// Allocate memory for aWinTitle/Text (if necessary) and update g_HotWinTitle/Text to point to it.
+ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText)
+// Allocate memory for aWinTitle/Text (if necessary) and update g->HotWinTitle/Text to point to it.
 // Returns FAIL if memory couldn't be allocated, or OK otherwise.
 // This is a global function because it's used by both hotkeys and hotstrings.
 {
 	// Caller relies on this check:
 	if (!(*aWinTitle || *aWinText)) // In case of something weird but legit like: #IfWinActive, ,
 	{
-		g_HotCriterion = HOT_NO_CRITERION; // Don't allow blank title+text to avoid having it interpreted as the last-found-window.
-		g_HotWinTitle = _T(""); // Helps maintainability and some things might rely on it.
-		g_HotWinText = _T("");  //
+		g->HotCriterion = NULL;
 		return OK;
 	}
 
@@ -83,12 +80,11 @@ ResultType SetGlobalHotTitleText(LPTSTR aWinTitle, LPTSTR aWinText)
 	// have a separate linked list for Title vs. Text.  But it does save code size, and in the vast
 	// majority of scripts, the memory savings would be insignificant.
 	HotkeyCriterion *cp;
-	for (cp = g_FirstHotCriterion; cp; cp = cp->mNextCriterion)
-		if (!_tcscmp(cp->mHotWinTitle, aWinTitle) && !_tcscmp(cp->mHotWinText, aWinText)) // Case insensitive.
+	for (cp = g_FirstHotCriterion; cp; cp = cp->NextCriterion)
+		if (cp->Type == aType && !_tcscmp(cp->WinTitle, aWinTitle) && !_tcscmp(cp->WinText, aWinText)) // Case insensitive.
 		{
 			// Match found, so point to the existing memory.
-			g_HotWinTitle = cp->mHotWinTitle;
-			g_HotWinText = cp->mHotWinText;
+			g->HotCriterion = cp;
 			return OK;
 		}
 
@@ -96,31 +92,32 @@ ResultType SetGlobalHotTitleText(LPTSTR aWinTitle, LPTSTR aWinText)
 	// combination of Title and Text.  So create a new item and allocate memory for it.
 	if (   !(cp = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))   )
 		return FAIL;
-	cp->mNextCriterion = NULL;
+	cp->Type = aType;
+	cp->ExprLine = NULL;
+	cp->NextCriterion = NULL;
 	if (*aWinTitle)
 	{
-		if (   !(cp->mHotWinTitle = SimpleHeap::Malloc(aWinTitle))   )
+		if (   !(cp->WinTitle = SimpleHeap::Malloc(aWinTitle))   )
 			return FAIL;
 	}
 	else
-		cp->mHotWinTitle = _T("");
+		cp->WinTitle = _T("");
 	if (*aWinText)
 	{
-		if (   !(cp->mHotWinText = SimpleHeap::Malloc(aWinText))   )
+		if (   !(cp->WinText = SimpleHeap::Malloc(aWinText))   )
 			return FAIL;
 	}
 	else
-		cp->mHotWinText = _T("");
+		cp->WinText = _T("");
 
-	g_HotWinTitle = cp->mHotWinTitle;
-	g_HotWinText = cp->mHotWinText;
+	g->HotCriterion = cp;
 
 	// Update the linked list:
 	if (!g_FirstHotCriterion)
 		g_FirstHotCriterion = g_LastHotCriterion = cp;
 	else
 	{
-		g_LastHotCriterion->mNextCriterion = cp;
+		g_LastHotCriterion->NextCriterion = cp;
 		// This must be done after the above:
 		g_LastHotCriterion = cp;
 	}
@@ -530,9 +527,7 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC)
 			// whether the hotkey was enabled (above), which isn't enough):
 			if (   vp->mEnabled // This particular variant within its parent hotkey is enabled.
 				&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
-				&& (!vp->mHotCriterion || HotCriterionAllowsFiring(vp->mHotCriterion
-					// L4: Added vp->mHotExprIndex for #if (expression).
-					, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex, hk.mName))   ) // ... and its criteria allow it to fire.
+				&& (!vp->mHotCriterion || HotCriterionAllowsFiring(vp->mHotCriterion, hk.mName))   ) // ... and its criteria allow it to fire.
 				return false; // At least one of this prefix's suffixes is eligible for firing.
 	}
 	// Since above didn't return, no hotkeys were found for this prefix that are capable of firing.
@@ -574,9 +569,7 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
 		// impact performance since the vast majority of hotkeys have either one or just a few variants.
 		if (   vp->mEnabled // This particular variant within its parent hotkey is enabled.
 			&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
-			&& (!vp->mHotCriterion || (found_hwnd = HotCriterionAllowsFiring(vp->mHotCriterion
-				// L4: Added vp->mHotExprIndex for #if (expression).
-				, vp->mHotWinTitle, vp->mHotWinText, vp->mHotExprIndex, mName)))   ) // ... and its criteria allow it to fire.
+			&& (!vp->mHotCriterion || (found_hwnd = HotCriterionAllowsFiring(vp->mHotCriterion, mName)))   ) // ... and its criteria allow it to fire.
 		{
 			if (vp->mHotCriterion) // Since this is the first criteria hotkey, it takes precedence.
 				return vp;
@@ -913,11 +906,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 			hot_criterion = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
 		else // It starts with IfWin but isn't Active or Exist: Don't alter the current criterion.
 			return g_script.SetErrorLevelOrThrow();
-		if (!(*aLabelName || *aOptions)) // This check is done only after detecting bad spelling of IfWin above.
-			g_HotCriterion = HOT_NO_CRITERION;
-		else if (SetGlobalHotTitleText(aLabelName, aOptions)) // Currently, it only fails upon out-of-memory.
-			g_HotCriterion = hot_criterion; // Only set at the last minute so that previous criteria will stay in effect if it fails.
-		else
+		if (!SetHotkeyCriterion(hot_criterion, aLabelName, aOptions)) // Currently, it only fails upon out-of-memory.
 			return g_script.SetErrorLevelOrThrow();
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 	}
@@ -931,24 +920,23 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		}
 		if (!*aLabelName)
 		{
-			g_HotCriterion = HOT_NO_CRITERION;
+			g->HotCriterion = NULL;
 		}
 		else
 		{
-			int i;
-			for (i = 0; i < g_HotExprLineCount; ++i)
+			for (HotkeyCriterion *cp = g_FirstHotExpr; ; cp = cp->NextCriterion)
 			{
-				if (!_tcscmp(aLabelName, g_HotExprLines[i]->mArg[0].text))
+				if (!cp) // Expression not found.
+					// This should only occur if aLabelName contains a variable reference, since this parameter is
+					// validated at load time where possible.  Setting ErrorLevel might go unnoticed and would be
+					// inconsistent with other modes of this command (without UseErrorLevel), so throw an error.
+					return g_script.ScriptError(ERR_HOTKEY_IF_EXPR);
+				if (!_tcscmp(aLabelName, cp->WinTitle)) // Case-sensitive since the expression might be.
 				{
-					g_HotCriterion = HOT_IF_EXPR;
-					g_HotWinTitle = g_HotExprLines[i]->mArg[0].text;
-					g_HotWinText = _T("");
-					g_HotExprIndex = i;
+					g->HotCriterion = cp;
 					break;
 				}
 			}
-			if (i == g_HotExprLineCount)
-				return g_script.SetErrorLevelOrThrow();
 		}
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	}
@@ -1598,8 +1586,7 @@ HotkeyVariant *Hotkey::FindVariant()
 // If no match, it returns NULL.
 {
 	for (HotkeyVariant *vp = mFirstVariant; vp; vp = vp->mNextVariant)
-		if (vp->mHotCriterion == g_HotCriterion && (g_HotCriterion == HOT_NO_CRITERION
-			|| (!_tcscmp(vp->mHotWinTitle, g_HotWinTitle) && !_tcscmp(vp->mHotWinText, g_HotWinText)))) // Case insensitive.
+		if (vp->mHotCriterion == g->HotCriterion)
 			return vp;
 	return NULL;
 }
@@ -1629,10 +1616,7 @@ HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde)
 	v.mMaxThreads = g_MaxThreadsPerHotkey;    // The values of these can vary during load-time.
 	v.mMaxThreadsBuffer = g_MaxThreadsBuffer; //
 	v.mInputLevel = g_InputLevel;
-	v.mHotCriterion = g_HotCriterion; // If this hotkey is an alt-tab one (mHookAction), this is stored but ignored until/unless the Hotkey command converts it into a non-alt-tab hotkey.
-	v.mHotWinTitle = g_HotWinTitle;
-	v.mHotWinText = g_HotWinText;  // The value of this and other globals used above can vary during load-time.
-	v.mHotExprIndex = g_HotExprIndex;	// L4: Added mHotExprIndex for #if (expression).
+	v.mHotCriterion = g->HotCriterion; // If this hotkey is an alt-tab one (mHookAction), this is stored but ignored until/unless the Hotkey command converts it into a non-alt-tab hotkey.
 	v.mEnabled = true;
 	if (v.mInputLevel > 0)
 	{
@@ -2553,6 +2537,7 @@ ResultType Hotstring::AddHotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR 
 Hotstring::Hotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement, bool aHasContinuationSection)
 	: mJumpToLabel(aJumpToLabel)  // Any NULL value will cause failure further below.
 	, mString(NULL), mReplacement(_T("")), mStringLength(0)
+	, mHotCriterion(g->HotCriterion)
 	, mSuspended(false)
 	, mExistingThreads(0)
 	, mMaxThreads(g_MaxThreadsPerHotkey)  // The value of g_MaxThreadsPerHotkey can vary during load-time.
@@ -2560,11 +2545,8 @@ Hotstring::Hotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LP
 	, mCaseSensitive(g_HSCaseSensitive), mConformToCase(g_HSConformToCase), mDoBackspace(g_HSDoBackspace)
 	, mOmitEndChar(g_HSOmitEndChar), mSendRaw(aHasContinuationSection ? true : g_HSSendRaw)
 	, mEndCharRequired(g_HSEndCharRequired), mDetectWhenInsideWord(g_HSDetectWhenInsideWord), mDoReset(g_HSDoReset)
-	, mHotCriterion(g_HotCriterion)
 	, mInputLevel(g_InputLevel)
-	, mHotWinTitle(g_HotWinTitle), mHotWinText(g_HotWinText)
 	, mConstructedOK(false)
-	, mHotExprIndex(g_HotExprIndex)	// L4: Added mHotExprIndex for #if (expression).
 {
 	// Insist on certain qualities so that they never need to be checked other than here:
 	if (!mJumpToLabel) // Caller has already ensured that aHotstring is not blank.
