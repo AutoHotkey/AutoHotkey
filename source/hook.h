@@ -37,7 +37,7 @@ enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_
 	// start of a range used by other common controls too).  So trying a higher number that's (hopefully) very
 	// unlikely to be used by OS features.
 	, AHK_CLIPBOARD_CHANGE, AHK_HOOK_TEST_MSG, AHK_CHANGE_HOOK_STATE, AHK_GETWINDOWTEXT
-	, AHK_HOT_IF_EXPR	// L4: HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
+	, AHK_HOT_IF_EVAL	// HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
 };
 // NOTE: TRY NEVER TO CHANGE the specific numbers of the above messages, since some users might be
 // using the Post/SendMessage commands to automate AutoHotkey itself.  Here is the original order

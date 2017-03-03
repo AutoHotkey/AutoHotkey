@@ -805,8 +805,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				if (hs->mHotCriterion)
 				{
 					// For details, see comments in the hotkey section of this switch().
-					// L4: Added hs->mHotExprIndex for #if (expression).
-					if (   !(criterion_found_hwnd = HotCriterionAllowsFiring(hs->mHotCriterion, hs->mHotWinTitle, hs->mHotWinText, hs->mHotExprIndex, hs->mJumpToLabel ? hs->mJumpToLabel->mName : _T("")))   )
+					if (   !(criterion_found_hwnd = HotCriterionAllowsFiring(hs->mHotCriterion, hs->mJumpToLabel ? hs->mJumpToLabel->mName : _T("")))   )
 						// Hotstring is no longer eligible to fire even though it was when the hook sent us
 						// the message.  Abort the firing even though the hook may have already started
 						// executing the hotstring by suppressing the final end-character or other actions.
@@ -814,7 +813,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						// keystrokes to the wrong window, or when the hotstring has become suspended.
 						continue;
 					// For details, see comments in the hotkey section of this switch().
-					if (!(hs->mHotCriterion == HOT_IF_ACTIVE || hs->mHotCriterion == HOT_IF_EXIST))
+					if (!(hs->mHotCriterion->Type == HOT_IF_ACTIVE || hs->mHotCriterion->Type == HOT_IF_EXIST))
 						criterion_found_hwnd = NULL; // For "NONE" and "NOT", there is no last found window.
 				}
 				else // No criterion, so it's a global hotstring.  It can always fire, but it has no "last found window".
@@ -929,9 +928,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				}
 
 				// Now that above has ensured variant is non-NULL:
-				if (variant->mHotCriterion == HOT_IF_NOT_ACTIVE || variant->mHotCriterion == HOT_IF_NOT_EXIST)
+				HotkeyCriterion *hc = variant->mHotCriterion;
+				if (!hc || hc->Type == HOT_IF_NOT_ACTIVE || hc->Type == HOT_IF_NOT_EXIST)
 					criterion_found_hwnd = NULL; // For "NONE" and "NOT", there is no last found window.
-				else if (variant->mHotCriterion == HOT_IF_EXPR) // Variants of this type may 
+				else if (HOT_IF_REQUIRES_EVAL(hc->Type))
 					criterion_found_hwnd = g_HotExprLFW; // For #if WinExist(WinTitle) and similar.
 
 				label_to_call = variant->mJumpToLabel;

@@ -57,35 +57,24 @@ enum HotkeyTypeEnum {HK_NORMAL, HK_KEYBD_HOOK, HK_MOUSE_HOOK, HK_BOTH_HOOKS, HK_
 #define HK_TYPE_CAN_BECOME_KEYBD_HOOK(type) (type == HK_NORMAL)
 #define HK_TYPE_IS_HOOK(type) (type > HK_NORMAL && type < HK_JOYSTICK)
 
-typedef UCHAR HotCriterionType;
-// L4: Added HOT_IF_EXPR and aHotExprIndex for #if (expression).
-enum HotCriterionEnum {HOT_NO_CRITERION, HOT_IF_ACTIVE, HOT_IF_NOT_ACTIVE, HOT_IF_EXIST, HOT_IF_NOT_EXIST, HOT_IF_EXPR}; // HOT_NO_CRITERION must be zero.
-HWND HotCriterionAllowsFiring(HotCriterionType aHotCriterion, LPTSTR aWinTitle, LPTSTR aWinText, int aHotExprIndex, LPTSTR aHotkeyName); // Used by hotkeys and hotstrings.
+HWND HotCriterionAllowsFiring(HotkeyCriterion *aCriterion, LPTSTR aHotkeyName); // Used by hotkeys and hotstrings.
 bool HotInputLevelAllowsFiring(SendLevelType inputLevel, ULONG_PTR aEventExtraInfo, LPTSTR aKeyHistoryChar);
-ResultType SetGlobalHotTitleText(LPTSTR aWinTitle, LPTSTR aWinText);
-
-
-
-struct HotkeyCriterion
-{
-	LPTSTR mHotWinTitle, mHotWinText;
-	HotkeyCriterion *mNextCriterion;
-};
+ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText);
+HotkeyCriterion *AddHotkeyIfExpr();
+HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr);
 
 
 
 struct HotkeyVariant
 {
 	LabelRef mJumpToLabel;
-	DWORD mRunAgainTime;
-	LPTSTR mHotWinTitle, mHotWinText;
-	int mHotExprIndex; // L4: g_HotExprLines index of the expression which controls whether this variant may activate.
+	HotkeyCriterion *mHotCriterion;
 	HotkeyVariant *mNextVariant;
+	DWORD mRunAgainTime;
 	int mPriority;
-	USHORT mIndex;
 	// Keep members that are less than 32-bit adjacent to each other to conserve memory in with the default
 	// 4-byte alignment:
-	HotCriterionType mHotCriterion;
+	USHORT mIndex;
 	UCHAR mExistingThreads, mMaxThreads;
 	SendLevelType mInputLevel;
 	bool mNoSuppress; // v1.0.44: This became a per-variant attribute because it's more useful/flexible that way.
@@ -344,13 +333,12 @@ public:
 	static bool mAtLeastOneEnabled; // v1.0.44.08: For performance, such as avoiding calling ToAsciiEx() in the hook.
 
 	Label *mJumpToLabel;
-	LPTSTR mString, mReplacement, mHotWinTitle, mHotWinText;
+	LPTSTR mString, mReplacement;
+	HotkeyCriterion *mHotCriterion;
 	int mPriority, mKeyDelay;
-	int mHotExprIndex; // L4: g_HotExprLines index of the expression which controls whether this hotstring may activate.
 
 	// Keep members that are smaller than 32-bit adjacent with each other to conserve memory (due to 4-byte alignment).
 	SendModes mSendMode;
-	HotCriterionType mHotCriterion;
 	SendLevelType mInputLevel;
 	UCHAR mStringLength;
 	bool mSuspended;
