@@ -2191,15 +2191,16 @@ BIF_DECL(BIF_WinSet)
 	{
 	case FID_WinSetAlwaysOnTop:
 	{
-		if (   !(exstyle = GetWindowLong(target_window, GWL_EXSTYLE))   )
-			break;
 		HWND topmost_or_not;
 		switch(Line::ConvertOnOffToggle(aValue))
 		{
 		case TOGGLED_ON: topmost_or_not = HWND_TOPMOST; break;
 		case TOGGLED_OFF: topmost_or_not = HWND_NOTOPMOST; break;
 		case NEUTRAL: // parameter was blank, so it defaults to TOGGLE.
-		case TOGGLE: topmost_or_not = (exstyle & WS_EX_TOPMOST) ? HWND_NOTOPMOST : HWND_TOPMOST; break;
+		case TOGGLE:
+			exstyle = GetWindowLong(target_window, GWL_EXSTYLE);
+			topmost_or_not = (exstyle & WS_EX_TOPMOST) ? HWND_NOTOPMOST : HWND_TOPMOST;
+			break;
 		default:
 			_f_throw(ERR_PARAM1_INVALID);
 		}
@@ -2234,8 +2235,8 @@ BIF_DECL(BIF_WinSet)
 		// since there seem to be no easy API calls to discover the colors of pixels in an HBRUSH),
 		// the following is not yet implemented: Use window's own class background color (via
 		// GetClassLong) if aValue is entirely blank.
-		if (  !(exstyle = GetWindowLong(target_window, GWL_EXSTYLE))  )
-			break;  // Do nothing on OSes that don't support it.
+
+		exstyle = GetWindowLong(target_window, GWL_EXSTYLE);
 		if (!_tcsicmp(aValue, _T("Off")))
 			// One user reported that turning off the attribute helps window's scrolling performance.
 			success = SetWindowLong(target_window, GWL_EXSTYLE, exstyle & ~WS_EX_LAYERED);
@@ -4069,11 +4070,11 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		// it might do more harm than good).
 		return 0;
 
-	case AHK_HOT_IF_EXPR: // L4: HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
+	case AHK_HOT_IF_EVAL: // HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
 		// Ensure wParam is a valid criterion (might prevent shatter attacks):
 		for (HotkeyCriterion *cp = g_FirstHotExpr; cp; cp = cp->NextCriterion)
 			if ((WPARAM)cp == wParam)
-				return cp->ExprLine->EvaluateHotCriterionExpression((LPTSTR)lParam);
+				return cp->Eval((LPTSTR)lParam);
 		return 0;
 
 	case WM_MEASUREITEM: // L17: Measure menu icon. Not used on Windows Vista or later.

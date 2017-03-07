@@ -969,7 +969,7 @@ public:
 		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize
 		, Var **aArgVar = NULL);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
-	ResultType EvaluateHotCriterionExpression(LPTSTR aHotkeyName); // L4: Called by MainWindowProc to handle an AHK_HOT_IF_EXPR message.
+	ResultType EvaluateHotCriterionExpression(); // Called by HotkeyCriterion::Eval().
 
 	ResultType ValueIsType(ExprTokenType &aResultToken, ExprTokenType &aValue, LPTSTR aValueStr, ExprTokenType &aType, LPTSTR aTypeStr);
 

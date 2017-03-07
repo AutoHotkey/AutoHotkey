@@ -2021,7 +2021,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			//    ToolTip `nProblem 2`n
 			//return
 			hotkey_id_to_post = hotkey_id_to_fire; // Set this only when it is certain that this ID should be sent to the main thread via msg.
-			if (firing_is_certain->mHotCriterion && firing_is_certain->mHotCriterion->Type == HOT_IF_EXPR)
+			if (firing_is_certain->mHotCriterion && HOT_IF_REQUIRES_EVAL(firing_is_certain->mHotCriterion->Type))
 			{
 				// To avoid evaluating the expression twice, indicate to the main thread that the appropriate variant
 				// has already been determined, by packing the variant's index into the high word of the param:
@@ -2891,7 +2891,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 					// ... v1.0.41: Or it's a perfect match but the right window isn't active or doesn't exist.
 					// In that case, continue searching for other matches in case the script contains
 					// hotstrings that would trigger simultaneously were it not for the "only one" rule.
-					// L4: Added hs.mHotExprLine for #if (expression).
 					|| !HotCriterionAllowsFiring(hs.mHotCriterion, hs.mJumpToLabel ? hs.mJumpToLabel->mName : _T(""))   )
 					continue; // No match or not eligible to fire.
 					// v1.0.42: The following scenario defeats the ability to give criterion hotstrings

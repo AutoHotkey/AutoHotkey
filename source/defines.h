@@ -33,7 +33,7 @@ GNU General Public License for more details.
 
 #define AHK_NAME "AutoHotkey"
 #include "ahkversion.h"
-#define AHK_WEBSITE "http://ahkscript.org"
+#define AHK_WEBSITE "https://autohotkey.com"
 
 #define T_AHK_NAME			_T(AHK_NAME)
 #define T_AHK_VERSION		_T(AHK_VERSION)
@@ -755,13 +755,21 @@ inline bool SendLevelIsValid(int level) { return level >= 0 && level <= SendLeve
 
 class Line; // Forward declaration.
 typedef UCHAR HotCriterionType;
-enum HotCriterionEnum {HOT_NO_CRITERION, HOT_IF_ACTIVE, HOT_IF_NOT_ACTIVE, HOT_IF_EXIST, HOT_IF_NOT_EXIST, HOT_IF_EXPR}; // HOT_NO_CRITERION must be zero.
+enum HotCriterionEnum {HOT_NO_CRITERION, HOT_IF_ACTIVE, HOT_IF_NOT_ACTIVE, HOT_IF_EXIST, HOT_IF_NOT_EXIST // HOT_NO_CRITERION must be zero.
+	, HOT_IF_EXPR, HOT_IF_CALLBACK}; // Keep the last two in this order for the macro below.
+#define HOT_IF_REQUIRES_EVAL(type) ((type) >= HOT_IF_EXPR)
 struct HotkeyCriterion
 {
 	HotCriterionType Type;
-	Line *ExprLine;
 	LPTSTR WinTitle, WinText;
+	union
+	{
+		Line *ExprLine;
+		IObject *Callback;
+	};
 	HotkeyCriterion *NextCriterion;
+
+	ResultType Eval(LPTSTR aHotkeyName); // For HOT_IF_EXPR and HOT_IF_CALLBACK.
 };
 
 

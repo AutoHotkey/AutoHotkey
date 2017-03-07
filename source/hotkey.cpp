@@ -55,9 +55,10 @@ HWND HotCriterionAllowsFiring(HotkeyCriterion *aCriterion, LPTSTR aHotkeyName)
 		break;
 	// L4: Handling of #if (expression) hotkey variants.
 	case HOT_IF_EXPR:
+	case HOT_IF_CALLBACK:
 		// Expression evaluation must be done in the main thread. If the message times out, the hotkey/hotstring is not allowed to fire.
 		DWORD_PTR res;
-		return (SendMessageTimeout(g_hWnd, AHK_HOT_IF_EXPR, (WPARAM)aCriterion, (LPARAM)aHotkeyName, SMTO_BLOCK | SMTO_ABORTIFHUNG, g_HotExprTimeout, &res) && res == CONDITION_TRUE) ? (HWND)1 : NULL;
+		return (SendMessageTimeout(g_hWnd, AHK_HOT_IF_EVAL, (WPARAM)aCriterion, (LPARAM)aHotkeyName, SMTO_BLOCK | SMTO_ABORTIFHUNG, g_HotExprTimeout, &res) && res == CONDITION_TRUE) ? (HWND)1 : NULL;
 	}
 	return (aCriterion->Type == HOT_IF_ACTIVE || aCriterion->Type == HOT_IF_EXIST) ? found_hwnd : (HWND)!found_hwnd;
 }
@@ -123,6 +124,30 @@ ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR a
 	}
 
 	return OK;
+}
+
+
+HotkeyCriterion *AddHotkeyIfExpr()
+{
+	HotkeyCriterion *cp;
+	if (   !(cp = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))   )
+		return NULL;
+	cp->NextCriterion = NULL;
+	if (g_LastHotExpr)
+		g_LastHotExpr->NextCriterion = cp;
+	else
+		g_FirstHotExpr = cp;
+	g_LastHotExpr = cp;
+	return cp;
+}
+
+
+HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr)
+{
+	for (HotkeyCriterion *cp = g_FirstHotExpr; cp; cp = cp->NextCriterion)
+		if (!_tcscmp(aExpr, cp->WinTitle)) // Case-sensitive since the expression might be.
+			return cp;
+	return NULL;
 }
 
 
@@ -911,32 +936,50 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		return OK;
 	}
 
-	// L4: Allow "Hotkey, If, exact-expression-text" to reference existing #if expressions.
+	// Hotkey, If  ; Set null criterion.
+	// Hotkey, If, Exact-expression-text
+	// Hotkey, If, % FunctionObject
 	if (!_tcsicmp(aHotkeyName, _T("If")))
 	{
 		if (*aOptions)
 		{	// Let the script know of this error since it may indicate an unescaped comma in the expression text.
 			return g_script.ScriptError(ERR_PARAM3_MUST_BE_BLANK);
 		}
-		if (!*aLabelName)
+		if (aJumpToLabelVar && aJumpToLabelVar->HasObject())
+		{
+			IObject *callback = aJumpToLabelVar->Object();
+			HotkeyCriterion *cp;
+			for (cp = g_FirstHotExpr; ; cp = cp->NextCriterion)
+			{
+				if (!cp) // End of the list and it wasn't found.
+				{
+					if (  !(cp = AddHotkeyIfExpr())  )
+						return FAIL;
+					callback->AddRef();
+					cp->Type = HOT_IF_CALLBACK;
+					cp->Callback = callback;
+					cp->WinTitle = _T("");
+					cp->WinText = _T("");
+					break;
+				}
+				if (cp->Type == HOT_IF_CALLBACK && cp->Callback == callback)
+					break;
+			}
+			g->HotCriterion = cp;
+		}
+		else if (!*aLabelName)
 		{
 			g->HotCriterion = NULL;
 		}
 		else
 		{
-			for (HotkeyCriterion *cp = g_FirstHotExpr; ; cp = cp->NextCriterion)
-			{
-				if (!cp) // Expression not found.
-					// This should only occur if aLabelName contains a variable reference, since this parameter is
-					// validated at load time where possible.  Setting ErrorLevel might go unnoticed and would be
-					// inconsistent with other modes of this command (without UseErrorLevel), so throw an error.
-					return g_script.ScriptError(ERR_HOTKEY_IF_EXPR);
-				if (!_tcscmp(aLabelName, cp->WinTitle)) // Case-sensitive since the expression might be.
-				{
-					g->HotCriterion = cp;
-					break;
-				}
-			}
+			HotkeyCriterion *cp = FindHotkeyIfExpr(aLabelName);
+			if (!cp) // Expression not found.
+				// This should only occur if aLabelName contains a variable reference, since this parameter is
+				// validated at load time where possible.  Setting ErrorLevel might go unnoticed and would be
+				// inconsistent with other modes of this command (without UseErrorLevel), so throw an error.
+				return g_script.ScriptError(ERR_HOTKEY_IF_EXPR);
+			g->HotCriterion = cp;
 		}
 		return OK;
 	}

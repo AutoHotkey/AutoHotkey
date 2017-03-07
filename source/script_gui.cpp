@@ -4551,6 +4551,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 	GuiControlType *tab_control;
 	RECT rect;
 	POINT pt;
+	bool do_invalidate_rect = false; // Set default.
 
 	for (next_option = aOptions; *next_option; next_option = omit_leading_whitespace(option_end))
 	{
@@ -4996,12 +4997,13 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				aOpt.style_add |= ES_PASSWORD;
 				if (aControl.hwnd) // Update the existing edit.
 				{
-					// Don't know how to use the actual system password char *after* the control has
-					// been created.  Maybe it's impossible.  Thus, provide default since otherwise
-					// pass-char will be removed vs. added:
+					// Provide default since otherwise pass-char will be removed vs. added.
+					// The encoding of the message's parameter depends on whether SendMessageW or SendMessageA is called.
+					// 9679 corresponds to the default bullet character on XP and later (verified with EM_GETPASSWORDCHAR).
 					if (!aOpt.password_char)
-						aOpt.password_char = UorA(L'\x25CF', '*');
-					SendMessage(aControl.hwnd, EM_SETPASSWORDCHAR, (WPARAM)aOpt.password_char, 0);
+						SendMessageW(aControl.hwnd, EM_SETPASSWORDCHAR, (g_os.IsWinXPorLater() ? 9679 : '*'), 0);
+					else
+						SendMessage(aControl.hwnd, EM_SETPASSWORDCHAR, (WPARAM)aOpt.password_char, 0);
 				}
 			}
 			else
@@ -5010,6 +5012,9 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				if (aControl.hwnd) // Update the existing edit.
 					SendMessage(aControl.hwnd, EM_SETPASSWORDCHAR, 0, 0);
 			}
+			// Despite what MSDN seems to say, the control is not redrawn when the EM_SETPASSWORDCHAR
+			// message is received.  This is required for the control to visibly update immediately:
+			do_invalidate_rect = true;
 		}
 		else if (!_tcsnicmp(next_option, _T("Limit"), 5)) // This is used for Hotkey controls also.
 		{
@@ -6097,7 +6102,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
   		// Redrawing the controls is required in some cases, such as a checkbox losing its 3-state
 		// style while it has a gray checkmark in it (which incidentally in this case only changes
 		// the appearance of the control, not the internal stored value in this case).
-		bool do_invalidate_rect = style_needed_changing && style_change_ok; // Set default.
+		if (style_needed_changing && style_change_ok)
+			do_invalidate_rect = true;
 
 		// Do the below only after applying the styles above since part of it requires that the style be
 		// updated and applied above.
