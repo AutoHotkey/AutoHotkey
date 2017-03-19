@@ -338,7 +338,6 @@ VarEntry g_BIV_A[] =
 	A_wx(MouseDelay, BIV_xDelay, BIV_xDelay_Set),
 	A_wx(MouseDelayPlay, BIV_xDelay, BIV_xDelay_Set),
 	A_x(MSec, BIV_DateTime),
-	A_(MsgBoxResult),
 	A_(MyDocuments),
 	A_x(Now, BIV_Now),
 	A_x(NowUTC, BIV_Now),

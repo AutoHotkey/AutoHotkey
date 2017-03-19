@@ -1129,7 +1129,7 @@ int MsgBox(LPCTSTR aText, UINT uType, LPTSTR aTitle, double aTimeout, HWND aOwne
 	POST_AHK_DIALOG((DWORD)(aTimeout * 1000))
 
 	++g_nMessageBoxes;  // This value will also be used as the Timer ID if there's a timeout.
-	g->MsgBoxResult = MessageBox(aOwner, text, title, uType);
+	int result = MessageBox(aOwner, text, title, uType);
 	--g_nMessageBoxes;
 	// Above's use of aOwner: MsgBox, FileSelect, and other dialogs seem to consider aOwner to be NULL
 	// when aOwner is minimized or hidden.
@@ -1159,12 +1159,12 @@ int MsgBox(LPCTSTR aText, UINT uType, LPTSTR aTitle, double aTimeout, HWND aOwne
 	// and why the behavior varies:
 	// Unfortunately, it appears that MessageBox() will return zero rather
 	// than AHK_TIMEOUT that was specified in EndDialog() at least under WinXP.
-	if (g->MsgBoxTimedOut || (!g->MsgBoxResult && aTimeout > 0)) // v1.0.33: Added g->MsgBoxTimedOut, see comment higher above.
+	if (g->MsgBoxTimedOut || (!result && aTimeout > 0)) // v1.0.33: Added g->MsgBoxTimedOut, see comment higher above.
 		// Assume it timed out rather than failed, since failure should be VERY rare.
-		g->MsgBoxResult = AHK_TIMEOUT;
+		result = AHK_TIMEOUT;
 	// else let the caller handle the display of the error message because only it knows
 	// whether to also tell the user something like "the script will not continue".
-	return g->MsgBoxResult;
+	return result;
 }
 
 

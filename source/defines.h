@@ -820,7 +820,6 @@ struct global_struct
 	ScriptTimer *CurrentTimer; // The timer that launched this thread (if any).
 	HWND hWndLastUsed;  // In many cases, it's better to use GetValidLastUsedWindow() when referring to this.
 	//HWND hWndToRestore;
-	int MsgBoxResult;  // Which button was pressed in the most recent MsgBox.
 	HWND DialogHWND;
 	DWORD RegView;
 
@@ -871,7 +870,6 @@ inline void global_clear_state(global_struct &g)
 	g.CurrentLabel = NULL;
 	g.hWndLastUsed = NULL;
 	//g.hWndToRestore = NULL;
-	g.MsgBoxResult = 0;
 	g.IsPaused = false;
 	g.UninterruptedLineCount = 0;
 	g.DialogOwner = NULL;

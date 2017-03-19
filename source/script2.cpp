@@ -4467,7 +4467,7 @@ ResultType MsgBoxParseOptions(LPTSTR aOptions, int &aType, double &aTimeout, HWN
 				goto invalid_option;
 			aType = (aType & ~MB_DEFMASK) | ((default_button - 1) << 8); // 1=0, 2=0x100, 3=0x200, 4=0x300
 		}
-		else if (*option == 'T' && IsNumeric(option + 1, FALSE, FALSE, TRUE))
+		else if (toupper(*option) == 'T' && IsNumeric(option + 1, FALSE, FALSE, TRUE))
 		{
 			aTimeout = ATOF(option + 1);
 		}
@@ -9565,26 +9565,6 @@ BIV_DECL_W(BIV_FileEncoding_Set)
 		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
 	g->Encoding = new_encoding;
 	return OK;
-}
-
-
-
-VarSizeType BIV_MsgBoxResult(LPTSTR aBuf, LPTSTR aVarName)
-{
-	LPTSTR result = MsgBoxResultString(g->MsgBoxResult);
-	if (result)
-	{
-		if (aBuf)
-			_tcscpy(aBuf, result);
-		return _tcslen(result);
-	}
-	else
-	{
-		// In case other values are possible or are added by future OS updates, return the number:
-		if (aBuf)
-			return _tcslen(ITOA(g->MsgBoxResult, aBuf));
-		return MAX_INTEGER_LENGTH;
-	}
 }
 
 
