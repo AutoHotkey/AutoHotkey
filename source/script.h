@@ -3085,6 +3085,8 @@ BIF_DECL(BIF_RegisterCallback);
 
 BIF_DECL(BIF_MenuGet);
 
+BIF_DECL(BIF_MsgBox);
+
 BIF_DECL(BIF_StatusBar);
 
 BIF_DECL(BIF_LV_GetNextOrCount);

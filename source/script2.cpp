@@ -4420,6 +4420,182 @@ LPTSTR Script::DefaultDialogTitle()
 
 
 
+ResultType MsgBoxParseOptions(LPTSTR aOptions, int &aType, double &aTimeout, HWND &aOwner)
+{
+	aType = 0;
+	aTimeout = 0;
+
+	//int button_option = 0;
+	//int icon_option = 0;
+
+	LPTSTR next_option, option_end;
+	TCHAR option[1+MAX_NUMBER_SIZE];
+	for (next_option = omit_leading_whitespace(aOptions); ; next_option = omit_leading_whitespace(option_end))
+	{
+		if (!*next_option)
+			return OK;
+
+		// Find the end of this option item:
+		if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )  // Space or tab.
+			option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
+		size_t option_length = option_end - next_option;
+
+		// Make a terminated copy for simplicity and to reduce ambiguity:
+		if (option_length + 1 > _countof(option))
+			goto invalid_option;
+		tmemcpy(option, next_option, option_length);
+		option[option_length] = '\0';
+
+		if (option_length <= 5 && !_tcsnicmp(option, _T("Icon"), 4))
+		{
+			aType &= ~MB_ICONMASK;
+			switch (option[4])
+			{
+			case 'x': case 'X': aType |= MB_ICONERROR; break;
+			case '?': aType |= MB_ICONQUESTION; break;
+			case '!': aType |= MB_ICONEXCLAMATION; break;
+			case 'i': case 'I': aType |= MB_ICONINFORMATION; break;
+			case '\0': break;
+			default:
+				goto invalid_option;
+			}
+		}
+		else if (!_tcsnicmp(option, _T("Default"), 7) && IsNumeric(option + 7, FALSE, FALSE, FALSE))
+		{
+			int default_button = ATOI(option + 7);
+			if (default_button < 1 || default_button > 0xF) // Currently MsgBox can only have 4 buttons, but MB_DEFMASK may allow for up to this many in future.
+				goto invalid_option;
+			aType = (aType & ~MB_DEFMASK) | ((default_button - 1) << 8); // 1=0, 2=0x100, 3=0x200, 4=0x300
+		}
+		else if (*option == 'T' && IsNumeric(option + 1, FALSE, FALSE, TRUE))
+		{
+			aTimeout = ATOF(option + 1);
+		}
+		else if (!_tcsnicmp(option, _T("Owner"), 5) && IsNumeric(option + 5, TRUE, TRUE, FALSE))
+		{
+			aOwner = (HWND)ATOI64(option + 5); // This should be consistent with the Gui +Owner option.
+		}
+		else if (IsNumeric(option, FALSE, FALSE, FALSE))
+		{
+			int other_option = ATOI(option);
+			// Clear any conflicting options which were previously set.
+			if (other_option & MB_TYPEMASK) aType &= ~MB_TYPEMASK;
+			if (other_option & MB_ICONMASK) aType &= ~MB_ICONMASK;
+			if (other_option & MB_DEFMASK)  aType &= ~MB_DEFMASK;
+			if (other_option & MB_MODEMASK) aType &= ~MB_MODEMASK;
+			// All remaining options are bit flags (or not conflicting).
+			aType |= other_option;
+		}
+		else
+		{
+			static LPCTSTR sButtonString[] = {
+				_T("OK"), _T("OKCancel"), _T("AbortRetryIgnore"), _T("YesNoCancel"), _T("YesNo"), _T("RetryCancel"), _T("CancelTryAgainContinue"),
+				_T("O"), _T("O/C"), _T("A/R/I"), _T("Y/N/C"), _T("Y/N"), _T("R/C"), _T("C/T/C"),
+				_T("O"), _T("OC"), _T("ARI"), _T("YNC"), _T("YN"), _T("RC"), _T("CTC")
+			};
+
+			for (int i = 0; ; ++i)
+			{
+				if (i == _countof(sButtonString))
+					goto invalid_option;
+
+				if (!_tcsicmp(option, sButtonString[i]))
+				{
+					aType = (aType & ~MB_TYPEMASK) | (i % 7);
+					break;
+				}
+			}
+		}
+	}
+invalid_option:
+	return g_script.ScriptError(ERR_INVALID_OPTION, next_option);
+}
+
+
+LPTSTR MsgBoxResultString(int aResult)
+{
+	switch (aResult)
+	{
+	case IDYES:			return _T("Yes");
+	case IDNO:			return _T("No");
+	case IDOK:			return _T("OK");
+	case IDCANCEL:		return _T("Cancel");
+	case IDABORT:		return _T("Abort");
+	case IDIGNORE:		return _T("Ignore");
+	case IDRETRY:		return _T("Retry");
+	case IDCONTINUE:	return _T("Continue");
+	case IDTRYAGAIN:	return _T("TryAgain");
+	case AHK_TIMEOUT:	return _T("Timeout");
+	default:			return NULL;
+	}
+}
+
+
+BIF_DECL(BIF_MsgBox)
+{
+	int result;
+	HWND dialog_owner = THREAD_DIALOG_OWNER; // Resolve macro only once to reduce code size.
+	// dialog_owner is passed via parameter to avoid internally-displayed MsgBoxes from being
+	// affected by script-thread's owner setting.
+	if (!aParamCount) // When called explicitly with zero params, it displays this default msg.
+	{
+		result = MsgBox(_T("Press OK to continue."), MSGBOX_NORMAL, NULL, 0, dialog_owner);
+	}
+	else
+	{
+		TCHAR title_buf[MAX_NUMBER_SIZE], text_buf[MAX_NUMBER_SIZE], option_buf[MAX_NUMBER_SIZE];
+		int type;
+		double timeout;
+		if (!MsgBoxParseOptions(ParamIndexToOptionalString(2, option_buf), type, timeout, dialog_owner))
+		{
+			aResultToken.SetExitResult(FAIL);
+			return;
+		}
+		result = MsgBox(ParamIndexToString(0, text_buf), type, ParamIndexToOptionalString(1, title_buf), timeout, dialog_owner);
+	}
+	// If the MsgBox window can't be displayed for any reason, always return FAIL to
+	// the caller because it would be unsafe to proceed with the execution of the
+	// current script subroutine.  For example, if the script contains an IfMsgBox after,
+	// this line, it's result would be unpredictable and might cause the subroutine to perform
+	// the opposite action from what was intended (e.g. Delete vs. don't delete a file).
+	// v1.0.40.01: Rather than displaying another MsgBox in response to a failed attempt to display
+	// a MsgBox, it seems better (less likely to cause trouble) just to abort the thread.  This also
+	// solves a double-msgbox issue when the maximum number of MsgBoxes is reached.  In addition, the
+	// max-msgbox limit is the most common reason for failure, in which case a warning dialog has
+	// already been displayed, so there is no need to display another:
+	//if (!result)
+	//	// It will fail if the text is too large (say, over 150K or so on XP), but that
+	//	// has since been fixed by limiting how much it tries to display.
+	//	// If there were too many message boxes displayed, it will already have notified
+	//	// the user of this via a final MessageBox dialog, so our call here will
+	//	// not have any effect.  The below only takes effect if MsgBox()'s call to
+	//	// MessageBox() failed in some unexpected way:
+	//	LineError("The MsgBox could not be displayed.");
+	// v1.1.09.02: If the MsgBox failed due to invalid options, it seems better to display
+	// an error dialog than to silently exit the thread:
+	if (!result && GetLastError() == ERROR_INVALID_MSGBOX_STYLE)
+		_f_throw(ERR_PARAM3_INVALID, ParamIndexToString(2, _f_retval_buf));
+	// Return a string such as "OK", "Yes" or "No" if possible, or fall back to the integer value.
+	// Result is additionally provided to param #4 so that command syntax can get the result
+	// while keeping the parameters in priority order.
+	Var *result_var = ParamIndexToOptionalVar(3);
+	if (LPTSTR result_string = MsgBoxResultString(result))
+	{
+		if (result_var)
+			if (!result_var->Assign(result_string))
+				_f_throw(ERR_OUTOFMEM);
+		_f_return_p(result_string);
+	}
+	else
+	{
+		if (result_var)
+			result_var->Assign(result);
+		_f_return_i(result);
+	}
+}
+
+
+
 //////////////
 // InputBox //
 //////////////
@@ -9395,29 +9571,20 @@ BIV_DECL_W(BIV_FileEncoding_Set)
 
 VarSizeType BIV_MsgBoxResult(LPTSTR aBuf, LPTSTR aVarName)
 {
-	LPTSTR result;
-	switch (g->MsgBoxResult)
+	LPTSTR result = MsgBoxResultString(g->MsgBoxResult);
+	if (result)
 	{
-	case IDYES:			result = _T("Yes"); break;
-	case IDNO:			result = _T("No"); break;
-	case IDOK:			result = _T("OK"); break;
-	case IDCANCEL:		result = _T("Cancel"); break;
-	case IDABORT:		result = _T("Abort"); break;
-	case IDIGNORE:		result = _T("Ignore"); break;
-	case IDRETRY:		result = _T("Retry"); break;
-	case IDCONTINUE:	result = _T("Continue"); break;
-	case IDTRYAGAIN:	result = _T("TryAgain"); break;
-	case AHK_TIMEOUT:	result = _T("Timeout"); break;
-	case 0:				result = _T(""); break;
-	default:
+		if (aBuf)
+			_tcscpy(aBuf, result);
+		return _tcslen(result);
+	}
+	else
+	{
 		// In case other values are possible or are added by future OS updates, return the number:
 		if (aBuf)
 			return _tcslen(ITOA(g->MsgBoxResult, aBuf));
 		return MAX_INTEGER_LENGTH;
 	}
-	if (aBuf)
-		_tcscpy(aBuf, result);
-	return _tcslen(result);
 }
 
 
