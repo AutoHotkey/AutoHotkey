@@ -210,17 +210,68 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 
 
 
-ResultType Line::TrayTip(LPTSTR aTitle, LPTSTR aText, LPTSTR aTimeout, LPTSTR aOptions)
+ResultType TrayTipParseOptions(LPTSTR aOptions, NOTIFYICONDATA &nic)
 {
-	if (!g_os.IsWin2000orLater()) // Older OSes do not support it, so do nothing.
-		return OK;
+	LPTSTR next_option, option_end;
+	TCHAR option[1+MAX_NUMBER_SIZE];
+	for (next_option = omit_leading_whitespace(aOptions); ; next_option = omit_leading_whitespace(option_end))
+	{
+		if (!*next_option)
+			return OK;
+
+		// Find the end of this option item:
+		if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )  // Space or tab.
+			option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
+		size_t option_length = option_end - next_option;
+
+		// Make a terminated copy for simplicity and to reduce ambiguity:
+		if (option_length + 1 > _countof(option))
+			goto invalid_option;
+		tmemcpy(option, next_option, option_length);
+		option[option_length] = '\0';
+
+		if (option_length <= 5 && !_tcsnicmp(option, _T("Icon"), 4))
+		{
+			nic.dwInfoFlags &= ~NIIF_ICON_MASK;
+			switch (option[4])
+			{
+			case 'x': case 'X': nic.dwInfoFlags |= NIIF_ERROR; break;
+			case '!': nic.dwInfoFlags |= NIIF_WARNING; break;
+			case 'i': case 'I': nic.dwInfoFlags |= NIIF_INFO; break;
+			case '\0': break;
+			default:
+				goto invalid_option;
+			}
+		}
+		else if (!_tcsicmp(option, _T("Mute")))
+		{
+			nic.dwInfoFlags |= NIIF_NOSOUND;
+		}
+		else if (IsNumeric(option, FALSE, FALSE, FALSE))
+		{
+			nic.dwInfoFlags |= ATOI(option);
+		}
+	}
+invalid_option:
+	return g_script.ScriptError(ERR_INVALID_OPTION, next_option);
+}
+
+
+ResultType Line::TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions)
+{
 	NOTIFYICONDATA nic = {0};
 	nic.cbSize = sizeof(nic);
 	nic.uID = AHK_NOTIFYICON;  // This must match our tray icon's uID or Shell_NotifyIcon() will return failure.
 	nic.hWnd = g_hWnd;
 	nic.uFlags = NIF_INFO;
-	nic.uTimeout = ATOI(aTimeout) * 1000;
-	nic.dwInfoFlags = ATOI(aOptions);
+	// nic.uTimeout is no longer used because it is valid only on Windows 2000 and Windows XP.
+	if (!TrayTipParseOptions(aOptions, nic))
+		return FAIL;
+	if (*aTitle && !*aText)
+		// As passing an empty string hides the TrayTip (or does nothing on Windows 10),
+		// pass a space to ensure the TrayTip is shown.  Testing showed that Windows 10
+		// will size the notification to fit only the title, as if there was no text.
+		aText = _T(" ");
 	tcslcpy(nic.szInfoTitle, aTitle, _countof(nic.szInfoTitle)); // Empty title omits the title line entirely.
 	tcslcpy(nic.szInfo, aText, _countof(nic.szInfo));	// Empty text removes the balloon.
 	Shell_NotifyIcon(NIM_MODIFY, &nic);

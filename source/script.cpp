@@ -12814,7 +12814,7 @@ ResultType Line::Perform()
 		return ToolTip(FOUR_ARGS);
 
 	case ACT_TRAYTIP:
-		return TrayTip(FOUR_ARGS);
+		return TrayTip(THREE_ARGS);
 
 	case ACT_INPUT:
 		return Input();

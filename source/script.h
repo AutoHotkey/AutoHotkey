@@ -708,7 +708,7 @@ private:
 	ResultType SetRegView(LPTSTR aView);
 
 	ResultType ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID);
-	ResultType TrayTip(LPTSTR aTitle, LPTSTR aText, LPTSTR aTimeout, LPTSTR aOptions);
+	ResultType TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions);
 	ResultType Input(); // The Input command.
 
 	#define SW_NONE -1
