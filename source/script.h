@@ -306,7 +306,7 @@ static inline int DPIUnscale(int x)
 
 #define INPUTBOX_DEFAULT INT_MIN
 ResultType InputBoxParseOptions(LPTSTR aOptions, InputBoxType &aInputBox);
-ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, LPTSTR aOptions, LPTSTR aDefault);
+ResultType InputBox(Var *aOutputVar, LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions, LPTSTR aDefault);
 INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);

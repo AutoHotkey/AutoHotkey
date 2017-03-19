@@ -4693,7 +4693,7 @@ ResultType InputBoxParseOptions(LPTSTR aOptions, InputBoxType &aInputBox)
 	return OK;
 }
 
-ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, LPTSTR aOptions, LPTSTR aDefault)
+ResultType InputBox(Var *aOutputVar, LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions, LPTSTR aDefault)
 {
 	if (g_nInputBoxes >= MAX_INPUTBOXES)
 	{
