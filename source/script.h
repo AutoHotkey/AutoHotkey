@@ -206,7 +206,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_LINE_IN_CLASS_DEF _T("Not a valid method, class or property definition.")
 #define ERR_INVALID_LINE_IN_PROPERTY_DEF _T("Not a valid property getter/setter.")
 #define ERR_INVALID_GUI_NAME _T("Invalid Gui name.")
-#define ERR_INVALID_OPTION _T("Invalid option.") // Generic message used by Gui and GuiControl/Get.
+#define ERR_INVALID_OPTION _T("Invalid option.") // Generic message used by the Gui system.
 #define ERR_MUST_DECLARE _T("This variable must be declared.")
 #define ERR_REMOVE_THE_PERCENT _T("If this variable was not intended to be dynamic, remove the % symbols from it.")
 #define ERR_DYNAMIC_TOO_LONG _T("This dynamically built variable name is too long.  ") ERR_REMOVE_THE_PERCENT
@@ -394,6 +394,7 @@ struct ArgStruct
 
 // The following macro is used for definitions and declarations of built-in functions:
 #define BIF_DECL(name) void name(BIF_DECL_PARAMS)
+#define BIF_DECL_GUICTRL(name) void name(BIF_DECL_PARAMS, GuiControlType& control, BuiltInFunctionID aCallerID)
 
 #define _f__oneline(act)		do { act } while (0)		// Make the macro safe to use like a function, under if(), etc.
 #define _f__ret(act)			_f__oneline( act; return; )	// BIFs have no return value.
@@ -421,6 +422,7 @@ struct ArgStruct
 #define _f_return_retval		return  // Return the value set by _f_set_retval().
 #define _f_return_empty			_f_return_p(_T(""), 0)
 #define _o_return_empty			return OK  // Default return value for Invoke is "".
+#define _o_return_or_throw(p)	if (p) _o_return(p); else _o_throw(ERR_OUTOFMEM);
 #define _f_retval_buf			(aResultToken.buf)
 #define _f_retval_buf_size		MAX_NUMBER_SIZE
 #define _f_number_buf			_f_retval_buf  // An alias to show intended usage, and in case the buffer size is changed.
@@ -579,26 +581,9 @@ enum BuiltInFunctionID {
 // (since an item can't be both selected an deselected simultaneously), one value in each pair is available
 // for future use such as LVIS_CUT.
 
-enum GuiCommands {GUI_CMD_INVALID, GUI_CMD_OPTIONS, GUI_CMD_ADD, GUI_CMD_MARGIN, GUI_CMD_MENU
-	, GUI_CMD_SHOW, GUI_CMD_SUBMIT, GUI_CMD_CANCEL, GUI_CMD_MINIMIZE, GUI_CMD_MAXIMIZE, GUI_CMD_RESTORE
-	, GUI_CMD_DESTROY, GUI_CMD_FONT, GUI_CMD_TAB, GUI_CMD_LISTVIEW, GUI_CMD_TREEVIEW, GUI_CMD_DEFAULT
-	, GUI_CMD_COLOR, GUI_CMD_FLASH, GUI_CMD_NEW
-};
-
-enum GuiControlCmds {GUICONTROL_CMD_INVALID, GUICONTROL_CMD_OPTIONS, GUICONTROL_CMD_CONTENTS, GUICONTROL_CMD_TEXT
-	, GUICONTROL_CMD_MOVE, GUICONTROL_CMD_MOVEDRAW, GUICONTROL_CMD_FOCUS, GUICONTROL_CMD_ENABLE, GUICONTROL_CMD_DISABLE
-	, GUICONTROL_CMD_SHOW, GUICONTROL_CMD_HIDE, GUICONTROL_CMD_CHOOSE, GUICONTROL_CMD_CHOOSESTRING
-	, GUICONTROL_CMD_FONT
-};
-
-enum GuiControlGetCmds {GUICONTROLGET_CMD_INVALID, GUICONTROLGET_CMD_CONTENTS, GUICONTROLGET_CMD_POS
-	, GUICONTROLGET_CMD_FOCUS, GUICONTROLGET_CMD_FOCUSV, GUICONTROLGET_CMD_ENABLED, GUICONTROLGET_CMD_VISIBLE
-	, GUICONTROLGET_CMD_HWND, GUICONTROLGET_CMD_NAME
-};
-
 typedef UCHAR GuiControls;
 enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero due to things like ZeroMemory() on the struct.
-	, GUI_CONTROL_TEXT, GUI_CONTROL_PIC, GUI_CONTROL_GROUPBOX
+	, GUI_CONTROL_LABEL, GUI_CONTROL_PIC, GUI_CONTROL_GROUPBOX
 	, GUI_CONTROL_BUTTON, GUI_CONTROL_CHECKBOX, GUI_CONTROL_RADIO
 	, GUI_CONTROL_DROPDOWNLIST, GUI_CONTROL_COMBOBOX
 	, GUI_CONTROL_LISTBOX, GUI_CONTROL_LISTVIEW, GUI_CONTROL_TREEVIEW
@@ -740,8 +725,6 @@ private:
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlGet(LPTSTR aCommand, LPTSTR aValue, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, Var *aParam3Var);
-	ResultType GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3);
 	ResultType StatusBarGetText(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType StatusBarWait(LPTSTR aTextToWaitFor, LPTSTR aSeconds, LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
@@ -1006,7 +989,6 @@ public:
 			case ACT_CONTROLGETFOCUS:
 			case ACT_CONTROLGETTEXT:
 			case ACT_CONTROLGET:
-			case ACT_GUICONTROLGET:
 			case ACT_STATUSBARGETTEXT:
 			case ACT_INPUTBOX:
 			case ACT_RANDOM:
@@ -1337,6 +1319,7 @@ public:
 		return MENU_CMD_INVALID;
 	}
 	
+	// Will be removed.
 	static void ConvertGuiName(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName = NULL, size_t *aNameLength = NULL)
 	{
 		LPTSTR colon_pos;
@@ -1384,86 +1367,10 @@ public:
 		aCommand = omit_leading_whitespace(colon_pos + 1);
 	}
 
-	static GuiCommands ConvertGuiCommand(LPTSTR aBuf)
-	{
-		if (!*aBuf || *aBuf == '+' || *aBuf == '-') // Assume a var ref that resolves to blank is "options" (for runtime flexibility).
-			return GUI_CMD_OPTIONS;
-		if (!_tcsicmp(aBuf, _T("Add"))) return GUI_CMD_ADD;
-		if (!_tcsicmp(aBuf, _T("Show"))) return GUI_CMD_SHOW;
-		if (!_tcsicmp(aBuf, _T("Submit"))) return GUI_CMD_SUBMIT;
-		if (!_tcsicmp(aBuf, _T("Cancel")) || !_tcsicmp(aBuf, _T("Hide"))) return GUI_CMD_CANCEL;
-		if (!_tcsicmp(aBuf, _T("Minimize"))) return GUI_CMD_MINIMIZE;
-		if (!_tcsicmp(aBuf, _T("Maximize"))) return GUI_CMD_MAXIMIZE;
-		if (!_tcsicmp(aBuf, _T("Restore"))) return GUI_CMD_RESTORE;
-		if (!_tcsicmp(aBuf, _T("Destroy"))) return GUI_CMD_DESTROY;
-		if (!_tcsicmp(aBuf, _T("Margin"))) return GUI_CMD_MARGIN;
-		if (!_tcsicmp(aBuf, _T("Menu"))) return GUI_CMD_MENU;
-		if (!_tcsicmp(aBuf, _T("Font"))) return GUI_CMD_FONT;
-		if (!_tcsicmp(aBuf, _T("Tab"))) return GUI_CMD_TAB;
-		if (!_tcsicmp(aBuf, _T("ListView"))) return GUI_CMD_LISTVIEW;
-		if (!_tcsicmp(aBuf, _T("TreeView"))) return GUI_CMD_TREEVIEW;
-		if (!_tcsicmp(aBuf, _T("Default"))) return GUI_CMD_DEFAULT;
-		if (!_tcsicmp(aBuf, _T("Color"))) return GUI_CMD_COLOR;
-		if (!_tcsicmp(aBuf, _T("Flash"))) return GUI_CMD_FLASH;
-		if (!_tcsicmp(aBuf, _T("New"))) return GUI_CMD_NEW;
-		return GUI_CMD_INVALID;
-	}
-
-	static GuiControlCmds ConvertGuiControlCmd(LPTSTR aBuf)
-	{
-		// If it's blank without a deref, that's CONTENTS.  Otherwise, assume it's OPTIONS for better
-		// runtime flexibility (i.e. user can leave the variable blank to make the command do nothing).
-		// Fix for v1.0.40.11: Since the above is counterintuitive and undocumented, it has been fixed
-		// to behave the way most users would expect; that is, the contents of any deref in parameter 1
-		// will behave the same as when such contents is present literally as parameter 1.  Another
-		// reason for doing this is that otherwise, there is no way to specify the CONTENTS sub-command
-		// in a variable.  For example, the following wouldn't work:
-		// GuiControl, %WindowNumber%:, ...
-		// GuiControl, %WindowNumberWithColon%, ...
-		if (!*aBuf)
-			return GUICONTROL_CMD_CONTENTS;
-		if (*aBuf == '+' || *aBuf == '-') // Assume a var ref that resolves to blank is "options" (for runtime flexibility).
-			return GUICONTROL_CMD_OPTIONS;
-		if (!_tcsicmp(aBuf, _T("Text"))) return GUICONTROL_CMD_TEXT;
-		if (!_tcsicmp(aBuf, _T("Move"))) return GUICONTROL_CMD_MOVE;
-		if (!_tcsicmp(aBuf, _T("MoveDraw"))) return GUICONTROL_CMD_MOVEDRAW;
-		if (!_tcsicmp(aBuf, _T("Focus"))) return GUICONTROL_CMD_FOCUS;
-		if (!_tcsicmp(aBuf, _T("Choose"))) return GUICONTROL_CMD_CHOOSE;
-		if (!_tcsicmp(aBuf, _T("ChooseString"))) return GUICONTROL_CMD_CHOOSESTRING;
-		if (!_tcsicmp(aBuf, _T("Font"))) return GUICONTROL_CMD_FONT;
-
-		// v1.0.38.02: Anything not already returned from above supports an optional boolean suffix.
-		// The following example would hide the control: GuiControl, Show%VarContainingFalse%, MyControl
-		// To support hex (due to the 'x' in it), search from the left rather than the right for the
-		// first digit:
-		LPTSTR suffix;
-		for (suffix = aBuf; *suffix && !_istdigit(*suffix); ++suffix);
-		bool invert = (*suffix ? !ATOI(suffix) : false);
-		if (!_tcsnicmp(aBuf, _T("Enable"), 6)) return invert ? GUICONTROL_CMD_DISABLE : GUICONTROL_CMD_ENABLE;
-		if (!_tcsnicmp(aBuf, _T("Disable"), 7)) return invert ? GUICONTROL_CMD_ENABLE : GUICONTROL_CMD_DISABLE;
-		if (!_tcsnicmp(aBuf, _T("Show"), 4)) return invert ? GUICONTROL_CMD_HIDE : GUICONTROL_CMD_SHOW;
-		if (!_tcsnicmp(aBuf, _T("Hide"), 4)) return invert ? GUICONTROL_CMD_SHOW : GUICONTROL_CMD_HIDE;
-
-		return GUICONTROL_CMD_INVALID;
-	}
-
-	static GuiControlGetCmds ConvertGuiControlGetCmd(LPTSTR aBuf)
-	{
-		if (!*aBuf) return GUICONTROLGET_CMD_CONTENTS; // The implicit command when nothing was specified.
-		if (!_tcsicmp(aBuf, _T("Pos"))) return GUICONTROLGET_CMD_POS;
-		if (!_tcsicmp(aBuf, _T("Focus"))) return GUICONTROLGET_CMD_FOCUS;
-		if (!_tcsicmp(aBuf, _T("FocusV"))) return GUICONTROLGET_CMD_FOCUSV; // Returns variable vs. ClassNN.
-		if (!_tcsicmp(aBuf, _T("Enabled"))) return GUICONTROLGET_CMD_ENABLED;
-		if (!_tcsicmp(aBuf, _T("Visible"))) return GUICONTROLGET_CMD_VISIBLE;
-		if (!_tcsicmp(aBuf, _T("Hwnd"))) return GUICONTROLGET_CMD_HWND;
-		if (!_tcsicmp(aBuf, _T("Name"))) return GUICONTROLGET_CMD_NAME;
-		return GUICONTROLGET_CMD_INVALID;
-	}
-
 	static GuiControls ConvertGuiControl(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return GUI_CONTROL_INVALID;
-		if (!_tcsicmp(aBuf, _T("Text"))) return GUI_CONTROL_TEXT;
+		if (!_tcsicmp(aBuf, _T("Label"))) return GUI_CONTROL_LABEL;
 		if (!_tcsicmp(aBuf, _T("Edit"))) return GUI_CONTROL_EDIT;
 		if (!_tcsicmp(aBuf, _T("Button"))) return GUI_CONTROL_BUTTON;
 		if (!_tcsicmp(aBuf, _T("Checkbox"))) return GUI_CONTROL_CHECKBOX;
@@ -2400,20 +2307,36 @@ struct lv_attrib_type
 	int row_count_hint;
 };
 
+struct GuiEvent
+{
+	union
+	{
+		IObject* mObject;
+		LPTSTR mMethodName;
+	};
+
+	bool mIsMethod;
+
+	GuiEvent() : mObject(NULL), mIsMethod(false) { }
+	operator bool() { return mObject != NULL; } // Also valid for the other members.
+};
+
 typedef UCHAR TabControlIndexType;
 typedef UCHAR TabIndexType;
 // Keep the below in sync with the size of the types above:
 #define MAX_TAB_CONTROLS 255  // i.e. the value 255 itself is reserved to mean "doesn't belong to a tab".
 #define MAX_TABS_PER_CONTROL 256
-struct GuiControlType
+struct GuiControlType : public ObjectBase
 {
+	GuiType* gui; // Below code relies on this being the first field.
 	HWND hwnd;
+	LPTSTR name;
 	// Keep any fields that are smaller than 4 bytes adjacent to each other.  This conserves memory
 	// due to byte-alignment.  It has been verified to save 4 bytes per struct in this case:
 	GuiControls type;
 	#define GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL     0x01
 	#define GUI_CONTROL_ATTRIB_ALTSUBMIT           0x02
-	#define GUI_CONTROL_ATTRIB_LABEL_IS_RUNNING    0x04
+	#define GUI_CONTROL_ATTRIB_HANDLER_IS_RUNNING  0x04
 	#define GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN   0x08
 	#define GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED 0x10
 	#define GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT  0x20 // i.e. Don't conform to window/control background color; use default instead.
@@ -2422,8 +2345,7 @@ struct GuiControlType
 	UCHAR attrib; // A field of option flags/bits defined above.
 	TabControlIndexType tab_control_index; // Which tab control this control belongs to, if any.
 	TabIndexType tab_index; // For type==TAB, this stores the tab control's index.  For other types, it stores the page.
-	Var *output_var;
-	LabelRef jump_to_label;
+	GuiEvent event_handler;
 	union
 	{
 		COLORREF union_color;  // Color of the control's text.
@@ -2434,6 +2356,41 @@ struct GuiControlType
 	};
 	#define USES_FONT_AND_TEXT_COLOR(type) !(type == GUI_CONTROL_PIC || type == GUI_CONTROL_UPDOWN \
 		|| type == GUI_CONTROL_SLIDER || type == GUI_CONTROL_PROGRESS)
+
+	void Initialize(GuiType* owner)
+	{
+		// Zerofill all the members of this object (except for ObjectBase members)
+		ZeroMemory(&gui, (char*)(this+1) - (char*)&gui);
+		gui = owner;
+	}
+
+	enum MemberID
+	{
+		INVALID = 0,
+
+		// Methods
+		M_Options,
+		M_Focus,
+		M_Move,
+		M_Choose,
+		M_UpdateFont,
+		M_Tab_UseTab,
+		LastMethodPlusOne,
+
+		// Properties
+		P_Handle,
+		P_Gui,
+		P_Event,
+		P_ClassNN,
+		P_Text,
+		P_Value,
+		P_Pos,
+		P_Enabled,
+		P_Visible,
+	};
+
+	void Destroy(); // Called by GuiType::Destroy().
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
 struct GuiControlOptionsType
@@ -2441,7 +2398,6 @@ struct GuiControlOptionsType
 	DWORD style_add, style_remove, exstyle_add, exstyle_remove, listview_style;
 	int listview_view; // Viewing mode, such as LVS_ICON, LVS_REPORT.  Int vs. DWORD to more easily use any negative value as "invalid".
 	HIMAGELIST himagelist;
-	Var *hwnd_output_var; // v1.0.46.01: Allows a script to retrieve the control's HWND upon creation of control.
 	int x, y, width, height;  // Position info.
 	float row_count;
 	int choice;  // Which item of a DropDownList/ComboBox/ListBox to initially choose.
@@ -2480,9 +2436,11 @@ struct GuiControlOptionsType
 LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK TabWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam);
 
-class GuiType
+class GuiType : public ObjectBase
 {
 public:
+	GuiType *mNextGui, *mPrevGui; // For global Gui linked list.
+
 	#define GUI_STANDARD_WIDTH_MULTIPLIER 15 // This times font size = width, if all other means of determining it are exhausted.
 	#define GUI_STANDARD_WIDTH DPIScale(GUI_STANDARD_WIDTH_MULTIPLIER * sFont[mCurrentFontIndex].point_size)
 	// Update for v1.0.21: Reduced it to 8 vs. 9 because 8 causes the height each edit (with the
@@ -2490,7 +2448,6 @@ public:
 	// to be what other apps use too, and seems to make edits stand out a little nicer:
 	#define GUI_CTL_VERTICAL_DEADSPACE DPIScale(8)
 	#define PROGRESS_DEFAULT_THICKNESS DPIScale(2 * sFont[mCurrentFontIndex].point_size)
-	LPTSTR mName;
 	HWND mHwnd, mStatusBarHwnd;
 	HWND mOwner;  // The window that owns this one, if any.  Note that Windows provides no way to change owners after window creation.
 	// Control IDs are higher than their index in the array by the below amount.  This offset is
@@ -2498,17 +2455,20 @@ public:
 	// response to certain types of standard actions:
 	GuiIndexType mControlCount;
 	GuiIndexType mControlCapacity; // How many controls can fit into the current memory size of mControl.
-	GuiControlType *mControl; // Will become an array of controls when the window is first created.
+	GuiControlType **mControl; // Will become an array of controls when the window is first created.
 	GuiIndexType mDefaultButtonIndex; // Index vs. pointer is needed for some things.
-	ULONG mReferenceCount; // For keeping this structure in memory during execution of the Gui's labels.
-	LabelPtr mLabelForClose, mLabelForEscape, mLabelForSize, mLabelForDropFiles, mLabelForContextMenu; // These aren't reference counted, as they can only be a Func or Label, not a dynamic object.
-	bool mLabelForCloseIsRunning, mLabelForEscapeIsRunning, mLabelForSizeIsRunning; // DropFiles doesn't need one of these.
-	bool mLabelsHaveBeenSet;
+	union
+	{
+		IObject* mEventSink;
+		LPTSTR mEventFuncPrefix;
+	};
+	GuiEvent mOnClose, mOnEscape, mOnSize, mOnDropFiles, mOnContextMenu;
+	bool mOnCloseIsRunning, mOnEscapeIsRunning, mOnSizeIsRunning; // DropFiles doesn't need one of these.
+	bool mHasEventSink;
 	DWORD mStyle, mExStyle; // Style of window.
 	bool mInRadioGroup; // Whether the control currently being created is inside a prior radio-group.
 	bool mUseTheme;  // Whether XP theme and styles should be applied to the parent window and subsequently added controls.
 	TCHAR mDelimiter;  // The default field delimiter when adding items to ListBox, DropDownList, ListView, etc.
-	GuiControlType *mCurrentListView, *mCurrentTreeView; // The ListView and TreeView upon which the LV/TV functions operate.
 	int mCurrentFontIndex;
 	COLORREF mCurrentColor;       // The default color of text in controls.
 	COLORREF mBackgroundColorWin; // The window's background color itself.
@@ -2537,15 +2497,45 @@ public:
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since GUIs can be destroyed and recreated, over and over).
 
-	// Keep the default destructor to avoid entering the "Law of the Big Three": If your class requires a
-	// copy constructor, copy assignment operator, or a destructor, then it very likely will require all three.
+	enum MemberID
+	{
+		INVALID = 0,
+
+		// Methods
+		M_Destroy,
+		M_AddControl,
+		M_Show,
+		M_Hide,
+		M_SetFont,
+		M_Options,
+		M_Minimize,
+		M_Maximize,
+		M_Restore,
+		M_Flash,
+		M_Submit,
+		M_NewEnum,
+
+		LastMethodPlusOne,
+		
+		// Properties
+		P_Handle,
+		P_Title,
+		P_Control,
+		P_FocusedCtrl,
+		P_BgColor,
+		P_CtrlColor,
+		P_MarginX,
+		P_MarginY,
+		P_Menu,
+		P_OnEvent,
+	};
 
 	GuiType() // Constructor
-		: mName(NULL), mHwnd(NULL), mStatusBarHwnd(NULL), mControlCount(0), mControlCapacity(0)
-		, mDefaultButtonIndex(-1), mLabelForClose(NULL), mLabelForEscape(NULL), mLabelForSize(NULL)
-		, mLabelForDropFiles(NULL), mLabelForContextMenu(NULL), mReferenceCount(1)
-		, mLabelForCloseIsRunning(false), mLabelForEscapeIsRunning(false), mLabelForSizeIsRunning(false)
-		, mLabelsHaveBeenSet(false), mUsesDPIScaling(true)
+		: mHwnd(NULL), mStatusBarHwnd(NULL), mControlCount(0), mControlCapacity(0)
+		, mDefaultButtonIndex(-1), mEventFuncPrefix(Var::sEmptyString)
+		, mOnClose(), mOnEscape(), mOnSize(), mOnDropFiles(), mOnContextMenu()
+		, mOnCloseIsRunning(false), mOnEscapeIsRunning(false), mOnSizeIsRunning(false)
+		, mHasEventSink(false), mUsesDPIScaling(true)
 		// The styles DS_CENTER and DS_3DLOOK appear to be ineffectual in this case.
 		// Also note that WS_CLIPSIBLINGS winds up on the window even if unspecified, which is a strong hint
 		// that it should always be used for top level windows across all OSes.  Usenet posts confirm this.
@@ -2556,7 +2546,6 @@ public:
 		, mExStyle(0) // This and the above should not be used once the window has been created since they might get out of date.
 		, mInRadioGroup(false), mUseTheme(true), mOwner(NULL), mDelimiter('|')
 		, mCurrentFontIndex(FindOrCreateFont()) // Must call this in constructor to ensure sFont array is never NULL while a GUI object exists.  Omit params to tell it to find or create DEFAULT_GUI_FONT.
-		, mCurrentListView(NULL), mCurrentTreeView(NULL)
 		, mTabControlCount(0), mCurrentTabControlIndex(MAX_TAB_CONTROLS), mCurrentTabIndex(0)
 		, mCurrentColor(CLR_DEFAULT)
 		, mBackgroundColorWin(CLR_DEFAULT), mBackgroundBrushWin(NULL)
@@ -2579,41 +2568,60 @@ public:
 		//ZeroMemory(mControl, sizeof(mControl));
 	}
 
-	static ResultType Destroy(GuiType &gui);
-	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
-	ResultType Create();
-	void AddRef();
-	void Release();
-	void SetLabels(LPTSTR aLabelPrefix);
-	static LPTSTR ConvertEvent(GuiEventType evt);
-	static IObject* CreateDropArray(HDROP hDrop);
-	static void UpdateMenuBars(HMENU aMenu);
-	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText);
+	~GuiType()
+	{
+		Destroy();
+	}
 
-	ResultType ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs, Var *&aHwndVar);
+	ResultType Destroy();
+	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Create();
+	void ClearEventHandler(GuiEvent& aHandler);
+	void SetEventHandler(GuiEvent& aHandler, LPTSTR aName);
+	void SetEventHandler(GuiEvent& aHandler, IObject* aObject);
+	ResultType EventHandlerProp(ResultToken& aResultToken, GuiEvent& aHandler, ExprTokenType* aParam[], bool aIsSet);
+	int CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam[]);
+	static LPTSTR ConvertEvent(GuiEventType evt);
+	void SetEvents();
+	void ClearEvents();
+	static IObject* CreateDropArray(HDROP hDrop);
+	ResultType SetMenu(LPTSTR aMenuName);
+	static void UpdateMenuBars(HMENU aMenu);
+	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& pControl, Object *aObj = NULL);
+
+	ResultType ParseOptions(LPTSTR aOptions, ToggleValueType &aOwnDialogs);
+	void SetOwnDialogs(ToggleValueType state)
+	{
+		if (state == TOGGLE_INVALID)
+			return;
+		g->DialogOwner = state == TOGGLED_ON ? mHwnd : NULL;
+	}
 	void GetNonClientArea(LONG &aWidth, LONG &aHeight);
 	void GetTotalWidthAndHeight(LONG &aWidth, LONG &aHeight);
 
 	ResultType ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &aOpt, GuiControlType &aControl
-		, GuiIndexType aControlIndex = -1, Var *aParam3Var = NULL); // aControlIndex is not needed upon control creation.
+		, GuiIndexType aControlIndex = -1); // aControlIndex is not needed upon control creation.
 	void ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aControl);
-	void ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt = NULL);
+	void ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt = NULL, Object *aObj = NULL);
 	ResultType ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilename, int aWidth, int aHeight, int aIconNumber);
 	ResultType Show(LPTSTR aOptions, LPTSTR aTitle);
 	ResultType Clear();
 	ResultType Cancel();
+	ResultType CancelOrDestroy(ULONG minRefCount = 1)
+	{
+		// If there is only one reference left to the Gui (i.e. due to the global Gui list),
+		// destroy the Gui instead of hiding it. The extra minRefCount parameter is necessary
+		// because MsgSleep() increases the reference count of the Gui.
+		return mRefCount > minRefCount ? Cancel() : Destroy();
+	}
 	ResultType Close(); // Due to SC_CLOSE, etc.
 	ResultType Escape(); // Similar to close, except typically called when the user presses ESCAPE.
-	ResultType Submit(bool aHideIt);
-	ResultType ControlGetContents(Var &aOutputVar, GuiControlType &aControl, LPTSTR aMode = _T(""));
+	ResultType Submit(ResultToken &aResultToken, bool aHideIt);
+	ResultType ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, bool bText = false);
 
-	static VarSizeType ControlGetName(GuiType *aGuiWindow, GuiIndexType aControlIndex, LPTSTR aBuf);
-	
-	static GuiType *FindGui(LPTSTR aName);
 	static GuiType *FindGui(HWND aHwnd);
 	static GuiType *FindGuiParent(HWND aHwnd);
-
-	static GuiType *ValidGui(GuiType *&aGuiRef); // Updates aGuiRef if it points to a destroyed Gui.
 
 	GuiIndexType FindControl(LPTSTR aControlID);
 	GuiIndexType FindControlIndex(HWND aHwnd)
@@ -2627,7 +2635,7 @@ public:
 			if (aHwnd = GetParent(aHwnd)) // Note that a ComboBox's drop-list (class ComboLBox) is apparently a direct child of the desktop, so this won't help us in that case.
 				index = GUI_HWND_TO_INDEX(aHwnd); // Retrieves a small negative on failure, which will be out of bounds when converted to unsigned.
 		}
-		if (index < mControlCount && mControl[index].hwnd == aHwnd) // A match was found.  Fix for v1.1.09.03: Confirm it is actually one of our controls.
+		if (index < mControlCount && mControl[index]->hwnd == aHwnd) // A match was found.  Fix for v1.1.09.03: Confirm it is actually one of our controls.
 			return index;
 		else // No match, so indicate failure.
 			return NO_CONTROL_INDEX;
@@ -2635,7 +2643,7 @@ public:
 	GuiControlType *FindControl(HWND aHwnd)
 	{
 		GuiIndexType index = FindControlIndex(aHwnd);
-		return index == NO_CONTROL_INDEX ? NULL : mControl + index;
+		return index == NO_CONTROL_INDEX ? NULL : mControl[index];
 	}
 
 	int FindGroup(GuiIndexType aControlIndex, GuiIndexType &aGroupStart, GuiIndexType &aGroupEnd);
@@ -2650,6 +2658,12 @@ public:
 
 	static WORD TextToHotkey(LPTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
+	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, bool bText, Object *aObj = NULL);
+	void ControlSetEnabled(GuiControlType &aControl, bool bEnabled);
+	void ControlSetVisible(GuiControlType &aControl, bool bVisible);
+	ResultType ControlMove(GuiControlType &aControl, LPTSTR aPos, bool bDraw);
+	void ControlUpdateFont(GuiControlType &aControl);
+	ResultType ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, int aExtraActions = 0);
 	void ControlCheckRadioButton(GuiControlType &aControl, GuiIndexType aControlIndex, WPARAM aCheckType);
 	void ControlSetUpDownOptions(GuiControlType &aControl, GuiControlOptionsType &aOpt);
 	int ControlGetDefaultSliderThickness(DWORD aStyle, int aThumbThickness);
@@ -2888,9 +2902,6 @@ public:
 		return NULL;
 	}
 
-	ResultType PerformGui(LPTSTR aBuf, LPTSTR aControlType, LPTSTR aOptions, LPTSTR aParam4);
-	static GuiType *ResolveGui(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName = NULL, size_t *aNameLength = NULL, LPTSTR aControlID = NULL);
-
 	static ResultType SetCoordMode(LPTSTR aCommand, LPTSTR aMode);
 	static ResultType SetSendMode(LPTSTR aValue);
 	static ResultType SetSendLevel(int aValue, LPTSTR aValueStr);
@@ -3017,10 +3028,6 @@ BIV_DECL_R (BIV_PriorHotkey);
 BIV_DECL_R (BIV_TimeSinceThisHotkey);
 BIV_DECL_R (BIV_TimeSincePriorHotkey);
 BIV_DECL_R (BIV_EndChar);
-BIV_DECL_R (BIV_Gui);
-BIV_DECL_R (BIV_GuiControl);
-BIV_DECL_R (BIV_GuiEvent);
-BIV_DECL_R (BIV_DefaultGui);
 BIV_DECL_RW(BIV_EventInfo);
 BIV_DECL_R (BIV_TimeIdle);
 BIV_DECL_R (BIV_TimeIdlePhysical);
@@ -3086,19 +3093,24 @@ BIF_DECL(BIF_MenuGet);
 
 BIF_DECL(BIF_MsgBox);
 
-BIF_DECL(BIF_StatusBar);
+// Gui
+BIF_DECL(BIF_GuiCreate);
+BIF_DECL(BIF_GuiFromHwnd);
+BIF_DECL(BIF_GuiCtrlFromHwnd);
 
-BIF_DECL(BIF_LV_GetNextOrCount);
-BIF_DECL(BIF_LV_GetText);
-BIF_DECL(BIF_LV_AddInsertModify);
-BIF_DECL(BIF_LV_Delete);
-BIF_DECL(BIF_LV_InsertModifyDeleteCol);
-BIF_DECL(BIF_LV_SetImageList);
+BIF_DECL_GUICTRL(BIF_StatusBar);
 
-BIF_DECL(BIF_TV_AddModifyDelete);
-BIF_DECL(BIF_TV_GetRelatedItem);
-BIF_DECL(BIF_TV_Get);
-BIF_DECL(BIF_TV_SetImageList);
+BIF_DECL_GUICTRL(BIF_LV_GetNextOrCount);
+BIF_DECL_GUICTRL(BIF_LV_GetText);
+BIF_DECL_GUICTRL(BIF_LV_AddInsertModify);
+BIF_DECL_GUICTRL(BIF_LV_Delete);
+BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol);
+BIF_DECL_GUICTRL(BIF_LV_SetImageList);
+
+BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete);
+BIF_DECL_GUICTRL(BIF_TV_GetRelatedItem);
+BIF_DECL_GUICTRL(BIF_TV_Get);
+BIF_DECL_GUICTRL(BIF_TV_SetImageList);
 
 BIF_DECL(BIF_IL_Create);
 BIF_DECL(BIF_IL_Destroy);

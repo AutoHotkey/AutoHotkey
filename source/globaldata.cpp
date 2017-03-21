@@ -136,8 +136,7 @@ int g_nInputBoxes = 0;
 int g_nFileDialogs = 0;
 int g_nFolderDialogs = 0;
 InputBoxType g_InputBox[MAX_INPUTBOXES];
-GuiType **g_gui = NULL;
-int g_guiCount = 0, g_guiCountMax = 0;
+GuiType *g_firstGui = NULL, *g_lastGui = NULL;
 HWND g_hWndToolTip[MAX_TOOLTIPS] = {NULL};
 MsgMonitorList g_MsgMonitor;
 
@@ -474,9 +473,6 @@ Action g_act[] =
 	, {_T("Edit"), 0, 0, false, NULL}
 	, {_T("Reload"), 0, 0, false, NULL}
 	, {_T("Menu"), 2, 6, false, NULL}  // tray, add, name, label, options, future use
-	, {_T("Gui"), 1, 4, false, NULL}  // Cmd/Add, ControlType, Options, Text
-	, {_T("GuiControl"), 0, 3, true, NULL} // Sub-cmd (defaults to "contents"), ControlName/ID, Text
-	, {_T("GuiControlGet"), 1, 4, false, NULL} // OutputVar, Sub-cmd (defaults to "contents"), ControlName/ID (defaults to control assoc. with OutputVar), Text/FutureUse
 
 	, {_T("Shutdown"), 1, 1, false, {1, 0}} // Seems best to make the first param (the flag/code) mandatory.
 

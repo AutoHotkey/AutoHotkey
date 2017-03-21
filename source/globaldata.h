@@ -112,8 +112,7 @@ extern int g_nInputBoxes;
 extern int g_nFileDialogs;
 extern int g_nFolderDialogs;
 extern InputBoxType g_InputBox[MAX_INPUTBOXES];
-extern GuiType **g_gui;
-extern int g_guiCount, g_guiCountMax;
+extern GuiType *g_firstGui, *g_lastGui;
 extern HWND g_hWndToolTip[MAX_TOOLTIPS];
 extern MsgMonitorList g_MsgMonitor;
 
@@ -305,5 +304,26 @@ if (g_InputTimerExists && KillTimer(g_hWnd, TIMER_ID_INPUT))\
 #define KILL_DEREF_TIMER \
 if (g_DerefTimerExists && KillTimer(g_hWnd, TIMER_ID_DEREF))\
 	g_DerefTimerExists = false;
+
+static inline void AddGuiToList(GuiType* gui)
+{
+	gui->mNextGui = NULL;
+	gui->mPrevGui = g_lastGui;
+	if (g_lastGui)
+		g_lastGui->mNextGui = gui;
+	g_lastGui = gui;
+	if (!g_firstGui)
+		g_firstGui = gui;
+	gui->AddRef(); // Keep the Gui alive.
+}
+
+static inline void RemoveGuiFromList(GuiType* gui)
+{
+	GuiType *prev = gui->mPrevGui, *&prevNext = prev ? prev->mNextGui : g_firstGui;
+	GuiType *next = gui->mNextGui, *&nextPrev = next ? next->mPrevGui : g_lastGui;
+	prevNext = next;
+	nextPrev = prev;
+	gui->Release(); // Remove the reference.
+}
 
 #endif

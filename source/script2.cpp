@@ -10643,171 +10643,6 @@ VarSizeType BIV_EndChar(LPTSTR aBuf, LPTSTR aVarName)
 
 
 
-VarSizeType BIV_Gui(LPTSTR aBuf, LPTSTR aVarName)
-// We're returning the length of the var's contents, not the size.
-{
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	GuiType* gui = g->GuiWindow; // For performance.
-
-	if (!gui) // The current thread was not launched as a result of GUI action.
-	{
-		*target_buf = '\0';
-		return 0;
-	}
-
-	switch (ctoupper(aVarName[5]))
-	{
-	case 'W':
-		// g->GuiPoint.x was overloaded to contain the size, since there are currently never any cases when
-		// A_GuiX/Y and A_GuiWidth/Height are both valid simultaneously.  It is documented that each of these
-		// variables is defined only in proper types of subroutines.
-		_itot(gui->Unscale(LOWORD(g->GuiPoint.x)), target_buf, 10);
-		// Above is always stored as decimal vs. hex, regardless of script settings.
-		break;
-	case 'H':
-		_itot(gui->Unscale(HIWORD(g->GuiPoint.x)), target_buf, 10); // See comments above.
-		break;
-	case 'X':
-		_itot(gui->Unscale(g->GuiPoint.x), target_buf, 10);
-		break;
-	case 'Y':
-		_itot(gui->Unscale(g->GuiPoint.y), target_buf, 10);
-		break;
-	case '\0': // A_Gui
-		if (!*g->GuiWindow->mName) // v1.1.04: Anonymous GUI.
-			return _stprintf(target_buf, _T("0x%Ix"), (UINT_PTR)g->GuiWindow->mHwnd);
-		if (aBuf)
-			_tcscpy(aBuf, g->GuiWindow->mName);
-		return _tcslen(g->GuiWindow->mName);
-	}
-
-	return (VarSizeType)_tcslen(target_buf);
-}
-
-
-
-VarSizeType BIV_GuiControl(LPTSTR aBuf, LPTSTR aVarName)
-{
-	return GuiType::ControlGetName(g->GuiWindow, g->GuiControlIndex, aBuf);
-}
-
-
-
-VarSizeType BIV_GuiEvent(LPTSTR aBuf, LPTSTR aVarName)
-// We're returning the length of the var's contents, not the size.
-{
-	global_struct &g = *::g; // Reduces code size and may improve performance.
-	if (g.GuiEvent == GUI_EVENT_DROPFILES)
-	{
-		GuiType *pgui;
-		UINT u, file_count;
-		// GUI_EVENT_DROPFILES should mean that g.GuiWindow != NULL, but the below will double check that in
-		// case g.GuiEvent can ever be set to that value as a result of receiving a bogus message in the queue.
-		if (!(pgui = g.GuiWindow) // The current thread was not launched as a result of GUI action or this is a bogus msg.
-			|| !pgui->mHwnd // Gui window no longer exists.  Relies on short-circuit boolean.
-			|| !pgui->mHdrop // No HDROP (probably impossible unless g.GuiEvent was given a bogus value somehow).
-			|| !(file_count = DragQueryFile(pgui->mHdrop, 0xFFFFFFFF, NULL, 0))) // No files in the drop (not sure if this is possible).
-			// All of the above rely on short-circuit boolean order.
-		{
-			// Make the dropped-files list blank since there is no HDROP to query (or no files in it).
-			if (aBuf)
-				*aBuf = '\0';
-			return 0;
-		}
-		// Above has ensured that file_count > 0
-		if (aBuf)
-		{
-			TCHAR buf[MAX_PATH], *cp = aBuf;
-			UINT length;
-			for (u = 0; u < file_count; ++u)
-			{
-				length = DragQueryFile(pgui->mHdrop, u, buf, MAX_PATH); // MAX_PATH is arbitrary since aBuf is already known to be large enough.
-				_tcscpy(cp, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for something that isn't actually that large (though clearly large enough) due to previous size-estimation phase) can crash because the API may read/write data beyond what it actually needs.
-				cp += length;
-				if (u < file_count - 1) // i.e omit the LF after the last file to make parsing via "Loop, Parse" easier.
-					*cp++ = '\n';
-				// Although the transcription of files on the clipboard into their text filenames is done
-				// with \r\n (so that they're in the right format to be pasted to other apps as a plain text
-				// list), it seems best to use a plain linefeed for dropped files since they won't be going
-				// onto the clipboard nearly as often, and `n is easier to parse.  Also, a script array isn't
-				// used because large file lists would then consume a lot more of memory because arrays
-				// are permanent once created, and also there would be wasted space due to the part of each
-				// variable's capacity not used by the filename.
-			}
-			// No need for final termination of string because the last item lacks a newline.
-			return (VarSizeType)(cp - aBuf); // This is the length of what's in the buffer.
-		}
-		else
-		{
-			VarSizeType total_length = 0;
-			for (u = 0; u < file_count; ++u)
-				total_length += DragQueryFile(pgui->mHdrop, u, NULL, 0);
-				// Above: MSDN: "If the lpszFile buffer address is NULL, the return value is the required size,
-				// in characters, of the buffer, not including the terminating null character."
-			return total_length + file_count - 1; // Include space for a linefeed after each filename except the last.
-		}
-		// Don't call DragFinish() because this variable might be referred to again before this thread
-		// is done.  DragFinish() is called by MsgSleep() when the current thread finishes.
-	}
-
-	// Otherwise, this event is not GUI_EVENT_DROPFILES, so use standard modes of operation.
-	LPTSTR event_string = GuiType::ConvertEvent(g.GuiEvent);
-	return (VarSizeType)_tcslen(aBuf ? _tcscpy(aBuf, event_string) : event_string);
-}
-
-
-
-VarSizeType BIV_DefaultGui(LPTSTR aBuf, LPTSTR aVarName)
-// A_DefaultGui, A_DefaultListView, A_DefaultTreeView: Unlike BIV_Gui above, these
-// correspond to "Gui, x: Default", not necessarily the Gui which launched the thread.
-{
-	global_struct &g = *::g; // Reduces code size and may improve performance.
-	GuiType *gui = g.GuiDefaultWindowValid();
-	GuiControlType *control = NULL;
-	LPTSTR return_string = _T("");
-	HWND return_hwnd = NULL;
-	switch (ctoupper(aVarName[9]))
-	{
-	case 'G':
-		if (!gui)
-			gui = g.GuiDefaultWindow; // If non-NULL, it's a dummy struct containing just the Gui name.
-		if (!gui) // Either no default has been set, or the default was an anonymous Gui which has been destroyed.
-			return_string = _T("1");
-		else if (*gui->mName) // Not an anonymous GUI.
-			return_string = gui->mName;
-		else // implies gui->mHwnd != NULL
-			return_hwnd = gui->mHwnd;
-		break;
-	case 'L':
-		if (gui)
-			control = gui->mCurrentListView;
-		break;
-	case 'T':
-		if (gui)
-			control = gui->mCurrentTreeView;
-		break;
-	}
-	if (control)
-	{
-		if (control->output_var) // Return associated var name (more useful for debugging).
-			return_string = control->output_var->mName;
-		else // Return HWND.
-			return_hwnd = control->hwnd;
-	}
-	if (return_hwnd)
-	{
-		if (aBuf)
-			return (VarSizeType)_tcslen(ITOA64((size_t)return_hwnd, aBuf));
-		return MAX_INTEGER_LENGTH;
-	}
-	if (aBuf)
-		_tcscpy(aBuf, return_string);
-	return (VarSizeType)_tcslen(return_string);
-}
-
-
-
 VarSizeType BIV_EventInfo(LPTSTR aBuf, LPTSTR aVarName)
 // We're returning the length of the var's contents, not the size.
 {
@@ -15159,19 +14994,15 @@ BIF_DECL(BIF_MenuGet)
 
 
 
-BIF_DECL(BIF_StatusBar)
+BIF_DECL_GUICTRL(BIF_StatusBar)
 {
 	LPTSTR buf = _f_number_buf; // Must be saved early since below overwrites the union (better maintainability too).
 
-	if (!g->GuiDefaultWindowValid()) // Always operate on thread's default window to simplify the syntax.
-		_f_throw(ERR_NO_GUI);
-	GuiType& gui = *g->GuiDefaultWindow; // For performance.
-	HWND control_hwnd;
-	if (   !(control_hwnd = gui.mStatusBarHwnd)   )
-		_f_throw(ERR_NO_STATUSBAR);
+	GuiType& gui = *control.gui;
+	HWND control_hwnd = control.hwnd;
 
 	HICON hicon;
-	switch (_f_callee_id)
+	switch (aCallerID)
 	{
 	case FID_SB_SetText:
 		_f_return_b(SendMessage(control_hwnd, SB_SETTEXT
@@ -15239,44 +15070,26 @@ BIF_DECL(BIF_StatusBar)
 	// In spite of the above, SB_SETTIPTEXT doesn't actually seem to do anything, even when the text is too long
 	// to fit in a narrowed part, tooltip text has been set, and the user hovers the cursor over the bar.  Maybe
 	// I'm not doing it right or maybe this feature is somehow disabled under certain service packs or conditions.
-	//case 'T': // SB_SetTipText()
+	//case 'T': // SB.SetTipText()
 	//	break;
 	} // switch(mode)
 }
 
 
-
-bool ValidGuiAndListView(ResultToken &aResultToken)
-{
-	if (!g->GuiDefaultWindowValid())
-	{
-		aResultToken.Error(ERR_NO_GUI);
-		return false;
-	}
-	if (!g->GuiDefaultWindow->mCurrentListView)
-	{
-		aResultToken.Error(ERR_NO_LISTVIEW);
-		return false;
-	}
-	return true;
-}
-
-
-BIF_DECL(BIF_LV_GetNextOrCount)
-// LV_GetNext:
+BIF_DECL_GUICTRL(BIF_LV_GetNextOrCount)
+// LV.GetNext:
 // Returns: The index of the found item, or 0 on failure.
 // Parameters:
 // 1: Starting index (one-based when it comes in).  If absent, search starts at the top.
 // 2: Options string.
-// 3: (FUTURE): Possible for use with LV_FindItem (though I think it can only search item text, not subitem text).
+// 3: (FUTURE): Possible for use with LV.FindItem (though I think it can only search item text, not subitem text).
 {
-	if (!ValidGuiAndListView(aResultToken))
-		return; // Result was set by the above call.
-	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	HWND control_hwnd = gui.mCurrentListView->hwnd;
+	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
+
+	HWND control_hwnd = control.hwnd;
 
 	LPTSTR options;
-	if (_f_callee_id == FID_LV_GetCount)
+	if (aCallerID == FID_LV_GetCount)
 	{
 		options = (aParamCount > 0) ? omit_leading_whitespace(ParamIndexToString(0, _f_number_buf)) : _T("");
 		if (*options)
@@ -15284,7 +15097,7 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 			if (ctoupper(*options) == 'S')
 				_f_return_i(SendMessage(control_hwnd, LVM_GETSELECTEDCOUNT, 0, 0));
 			else if (!_tcsnicmp(options, _T("Col"), 3)) // "Col" or "Column". Don't allow "C" by itself, so that "Checked" can be added in the future.
-				_f_return_i(gui.mCurrentListView->union_lv_attrib->col_count);
+				_f_return_i(control.union_lv_attrib->col_count);
 			else
 				_f_throw(ERR_PARAM1_INVALID);
 		}
@@ -15331,31 +15144,26 @@ BIF_DECL(BIF_LV_GetNextOrCount)
 
 
 
-BIF_DECL(BIF_LV_GetText)
-// Returns: 1 on success and 0 on failure.
+BIF_DECL_GUICTRL(BIF_LV_GetText)
+// Returns: Text on success.
+// Throws on failure.
 // Parameters:
-// 1: Output variable (doing it this way allows success/fail return value to more closely mirror the API and
-//    simplifies the code since there is currently no easy means of passing back large strings to our caller).
 // 2: Row index (one-based when it comes in).
 // 3: Column index (one-based when it comes in).
 {
-	if (!ValidGuiAndListView(aResultToken))
-		return; // Result was set by the above call.
-	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	
-	// Caller has ensured there is at least two parameters:
-	if (aParam[0]->symbol != SYM_VAR) // No output variable.  Supporting a NULL for the purpose of checking for the existence of a cell seems too rarely needed.
-		_f_throw(ERR_PARAM1_INVALID);
+	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
+	// the following conditions:
+	// Item not found in ListView.
+	// And others.
 
-	int row_index = ParamIndexToInt(1) - 1; // -1 to convert to zero-based.
+	int row_index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 	if (row_index < -1) // row_index==-1 is reserved to mean "get column heading's text".
-		_f_throw(ERR_PARAM2_INVALID);
-	// If parameter 3 is omitted, default to the first column (index 0):
-	int col_index = ParamIndexIsOmitted(2) ? 0 : ParamIndexToInt(2) - 1; // -1 to convert to zero-based.
+		_f_throw(ERR_PARAM1_INVALID);
+	// If parameter 2 is omitted, default to the first column (index 0):
+	int col_index = ParamIndexIsOmitted(1) ? 0 : ParamIndexToInt(1) - 1; // -1 to convert to zero-based.
 	if (col_index < 0)
-		_f_throw(ERR_PARAM3_INVALID);
+		_f_throw(ERR_PARAM2_INVALID);
 
-	Var &output_var = *aParam[0]->var; // It was already ensured higher above that symbol==SYM_VAR.
 	TCHAR buf[LV_TEXT_BUF_SIZE];
 	bool result;
 
@@ -15365,10 +15173,10 @@ BIF_DECL(BIF_LV_GetText)
 		lvc.cchTextMax = LV_TEXT_BUF_SIZE - 1;  // See notes below about -1.
 		lvc.pszText = buf;
 		lvc.mask = LVCF_TEXT;
-		if (result = SendMessage(gui.mCurrentListView->hwnd, LVM_GETCOLUMN, col_index, (LPARAM)&lvc)) // Assign.
-			output_var.Assign(lvc.pszText); // See notes below about why pszText is used instead of buf (might apply to this too).
-		else // On failure, it seems best to also clear the output var for better consistency and in case the script doesn't check the return value.
-			output_var.Assign();
+		if (result = SendMessage(control.hwnd, LVM_GETCOLUMN, col_index, (LPARAM)&lvc)) // Assign.
+			_f_return(lvc.pszText); // See notes below about why pszText is used instead of buf (might apply to this too).
+		else // On failure, it seems best to throw.
+			_f_throw(_T("Error while retrieving text."));
 	}
 	else // Get row's indicated item or subitem text.
 	{
@@ -15382,20 +15190,19 @@ BIF_DECL(BIF_LV_GetText)
 		lvi.cchTextMax = LV_TEXT_BUF_SIZE - 1; // Note that LVM_GETITEM doesn't update this member to reflect the new length.
 		// Unlike LVM_GETITEMTEXT, LVM_GETITEM indicates success or failure, which seems more useful/preferable
 		// as a return value since a text length of zero would be ambiguous: could be an empty field or a failure.
-		if (result = SendMessage(gui.mCurrentListView->hwnd, LVM_GETITEM, 0, (LPARAM)&lvi)) // Assign
+		if (result = SendMessage(control.hwnd, LVM_GETITEM, 0, (LPARAM)&lvi)) // Assign
 			// Must use lvi.pszText vs. buf because MSDN says: "Applications should not assume that the text will
 			// necessarily be placed in the specified buffer. The control may instead change the pszText member
 			// of the structure to point to the new text rather than place it in the buffer."
-			output_var.Assign(lvi.pszText);
-		else // On failure, it seems best to also clear the output var for better consistency and in case the script doesn't check the return value.
-			output_var.Assign();
+			_f_return(lvi.pszText);
+		else // On failure, it seems best to throw.
+			_f_throw(_T("Error while retrieving text."));
 	}
-	_f_return_b(result);
 }
 
 
 
-BIF_DECL(BIF_LV_AddInsertModify)
+BIF_DECL_GUICTRL(BIF_LV_AddInsertModify)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: For Add(), this is the options.  For Insert/Modify, it's the row index (one-based when it comes in).
@@ -15403,7 +15210,7 @@ BIF_DECL(BIF_LV_AddInsertModify)
 // 3 and beyond: Additional field text.
 // In Add/Insert mode, if there are no text fields present, a blank for is appended/inserted.
 {
-	BuiltInFunctionID mode = _f_callee_id;
+	BuiltInFunctionID mode = aCallerID;
 	LPTSTR buf = _f_number_buf; // Resolve macro early for maintainability.
 
 	int index;
@@ -15420,11 +15227,6 @@ BIF_DECL(BIF_LV_AddInsertModify)
 		++aParam;  // Remove the first parameter from further consideration to make Insert/Modify symmetric with Add.
 		--aParamCount;
 	}
-
-	if (!ValidGuiAndListView(aResultToken))
-		return; // Result was set by the above call.
-	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	GuiControlType &control = *gui.mCurrentListView;
 
 	LPTSTR options = ParamIndexToOptionalString(0, buf);
 	bool ensure_visible = false, is_checked = false;  // Checkmark.
@@ -15543,9 +15345,9 @@ BIF_DECL(BIF_LV_AddInsertModify)
 		}
 		else if (!_tcsicmp(next_option, _T("Vis"))) // v1.0.44
 		{
-			// Since this option much more typically used with LV_Modify than LV_Add/Insert, the technique of
+			// Since this option much more typically used with LV.Modify than LV.Add/Insert, the technique of
 			// Vis%VarContainingOneOrZero% isn't supported, to reduce code size.
-			ensure_visible = adding; // Ignored by modes other than LV_Modify(), since it's not really appropriate when adding a row (plus would add code complexity).
+			ensure_visible = adding; // Ignored by modes other than LV.Modify(), since it's not really appropriate when adding a row (plus would add code complexity).
 		}
 		else
 		{
@@ -15633,7 +15435,7 @@ BIF_DECL(BIF_LV_AddInsertModify)
 			; i < aParamCount
 			; ++i, ++lvi_sub.iSubItem)
 		{
-			if (aParam[i]->symbol == SYM_MISSING) // Omitted, such as LV_Modify(1,Opt,"One",,"Three").
+			if (aParam[i]->symbol == SYM_MISSING) // Omitted, such as LV.Modify(1,Opt,"One",,"Three").
 				continue;
 			lvi_sub.pszText = ParamIndexToString(i, buf); // Done every time through the outer loop since it's not high-overhead, and for code simplicity.
 			if (!ListView_SetItem(control.hwnd, &lvi_sub) && mode != FID_LV_Insert) // Relies on short-circuit. Seems best to avoid loss of item's index in insert mode, since failure here should be rare.
@@ -15655,15 +15457,12 @@ BIF_DECL(BIF_LV_AddInsertModify)
 
 
 
-BIF_DECL(BIF_LV_Delete)
+BIF_DECL_GUICTRL(BIF_LV_Delete)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: Row index (one-based when it comes in).
 {
-	if (!ValidGuiAndListView(aResultToken))
-		return; // Result was set by the above call.
-	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	HWND control_hwnd = gui.mCurrentListView->hwnd;
+	HWND control_hwnd = control.hwnd;
 
 	if (ParamIndexIsOmitted(0))
 		_f_return_b(SendMessage(control_hwnd, LVM_DELETEALLITEMS, 0, 0)); // Returns TRUE/FALSE.
@@ -15679,7 +15478,7 @@ BIF_DECL(BIF_LV_Delete)
 
 
 
-BIF_DECL(BIF_LV_InsertModifyDeleteCol)
+BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: Column index (one-based when it comes in).
@@ -15687,14 +15486,11 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 // 3: New text of column
 // There are also some special modes when only zero or one parameter is present, see below.
 {
-	BuiltInFunctionID mode = _f_callee_id;
+	BuiltInFunctionID mode = aCallerID;
 	LPTSTR buf = _f_number_buf; // Resolve macro early for maintainability.
 	_f_set_retval_i(0); // Set default return value.
 
-	if (!ValidGuiAndListView(aResultToken))
-		return; // Result was set by the above call.
-	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	GuiControlType &control = *gui.mCurrentListView;
+	GuiType &gui = *control.gui;
 	lv_attrib_type &lv_attrib = *control.union_lv_attrib;
 	DWORD view_mode = mode != 'D' ? GuiType::ControlGetListViewMode(control.hwnd) : 0;
 
@@ -15763,7 +15559,7 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 		_f_return_retval; // Avoid array under/overflow below.
 
 	// In addition to other reasons, must convert any numeric value to a string so that an isolated width is
-	// recognized, e.g. LV_SetCol(1, old_width + 10):
+	// recognized, e.g. LV.SetCol(1, old_width + 10):
 	LPTSTR options = ParamIndexToOptionalString(1, buf);
 
 	// It's done the following way so that when in insert-mode, if the column fails to be inserted, don't
@@ -15867,7 +15663,7 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 		else if (!_tcsicmp(next_option, _T("Logical"))) // v1.0.44.12: Supports StrCmpLogicalW() method of sorting.
 			col.case_sensitive = SCS_INSENSITIVE_LOGICAL;
 
-		else if (!_tcsnicmp(next_option, _T("Sort"), 4)) // This is done as an option vs. LV_SortCol/LV_Sort so that the column's options can be changed simultaneously with a "sort now" to refresh.
+		else if (!_tcsnicmp(next_option, _T("Sort"), 4)) // This is done as an option vs. LV.SortCol/LV.Sort so that the column's options can be changed simultaneously with a "sort now" to refresh.
 		{
 			// Defer the sort until after all options have been parsed and applied.
 			sort_now = true;
@@ -15907,7 +15703,7 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 		else // Handle things that are more general than the above, such as single letter options and pure numbers.
 		{
 			// Width does not have a W prefix to permit a naked expression to be used as the entirely of
-			// options.  For example: LV_SetCol(1, old_width + 10)
+			// options.  For example: LV.SetCol(1, old_width + 10)
 			// v1.0.37: Fixed to allow floating point (although ATOI below will convert it to integer).
 			if (IsNumeric(next_option, true, false, true)) // Above has already verified that *next_option can't be whitespace.
 			{
@@ -16005,16 +15801,12 @@ BIF_DECL(BIF_LV_InsertModifyDeleteCol)
 
 
 
-BIF_DECL(BIF_LV_SetImageList)
+BIF_DECL_GUICTRL(BIF_LV_SetImageList)
 // Returns (MSDN): "handle to the image list previously associated with the control if successful; NULL otherwise."
 // Parameters:
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
 // 2: Optional: Type of list.
 {
-	if (!ValidGuiAndListView(aResultToken))
-		return; // Result was set by the above call.
-	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	
 	// Caller has ensured that there is at least one incoming parameter:
 	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0);
 	int list_type;
@@ -16026,79 +15818,58 @@ BIF_DECL(BIF_LV_SetImageList)
 		ImageList_GetIconSize(himl, &cx, &cy);
 		list_type = (cx > GetSystemMetrics(SM_CXSMICON)) ? LVSIL_NORMAL : LVSIL_SMALL;
 	}
-	_f_return_i((size_t)ListView_SetImageList(gui.mCurrentListView->hwnd, himl, list_type));
+	_f_return_i((size_t)ListView_SetImageList(control.hwnd, himl, list_type));
 }
 
 
 
-bool ValidGuiAndTreeView(ResultToken &aResultToken)
-{
-	if (!g->GuiDefaultWindowValid())
-	{
-		aResultToken.Error(ERR_NO_GUI);
-		return false;
-	}
-	if (!g->GuiDefaultWindow->mCurrentTreeView)
-	{
-		aResultToken.Error(ERR_NO_TREEVIEW);
-		return false;
-	}
-	return true;
-}
-
-
-BIF_DECL(BIF_TV_AddModifyDelete)
-// TV_Add():
+BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete)
+// TV.Add():
 // Returns the HTREEITEM of the item on success, zero on failure.
 // Parameters:
 //    1: Text/name of item.
 //    2: Parent of item.
 //    3: Options.
-// TV_Modify():
+// TV.Modify():
 // Returns the HTREEITEM of the item on success (to allow nested calls in script, zero on failure or partial failure.
 // Parameters:
 //    1: ID of item to modify.
 //    2: Options.
 //    3: New name.
-// Parameters for TV_Delete():
+// Parameters for TV.Delete():
 //    1: ID of item to delete (if omitted, all items are deleted).
 {
-	BuiltInFunctionID mode = _f_callee_id;
+	BuiltInFunctionID mode = aCallerID;
 	LPTSTR buf = _f_number_buf; // Resolve macro early for maintainability.
-
-	if (!ValidGuiAndTreeView(aResultToken))
-		return; // Result was set by the above call.
-	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	GuiControlType &control = *gui.mCurrentTreeView;
 
 	if (mode == FID_TV_Delete)
 	{
 		// If param #1 is present but is zero, for safety it seems best not to do a delete-all (in case a
 		// script bug is so rare that it is never caught until the script is distributed).  Another reason
-		// is that a script might do something like TV_Delete(TV_GetSelection()), which would be desired
+		// is that a script might do something like TV.Delete(TV.GetSelection()), which would be desired
 		// to fail not delete-all if there's ever any way for there to be no selection.
 		_f_return_i(SendMessage(control.hwnd, TVM_DELETEITEM, 0
 			, ParamIndexIsOmitted(0) ? NULL : (LPARAM)ParamIndexToInt64(0)));
 	}
 
-	// Since above didn't return, this is TV_Add() or TV_Modify().
+	// Since above didn't return, this is TV.Add() or TV.Modify().
 	TVINSERTSTRUCT tvi; // It contains a TVITEMEX, which is okay even if MSIE pre-4.0 on Win95/NT because those OSes will simply never access the new/bottommost item in the struct.
 	bool add_mode = (mode == FID_TV_Add); // For readability & maint.
 	HTREEITEM retval;
 
 	LPTSTR options;
-	if (add_mode) // TV_Add()
+	if (add_mode) // TV.Add()
 	{
 		tvi.hParent = ParamIndexIsOmitted(1) ? NULL : (HTREEITEM)ParamIndexToInt64(1);
 		tvi.hInsertAfter = TVI_LAST; // i.e. default is to insert the new item underneath the bottommost sibling.
 		options = ParamIndexToOptionalString(2, buf);
 		retval = 0; // Set default return value.
 	}
-	else // TV_Modify()
+	else // TV.Modify()
 	{
-		// NOTE: Must allow hitem==0 for TV_Modify, at least for the Sort option, because otherwise there would
+		// NOTE: Must allow hitem==0 for TV.Modify, at least for the Sort option, because otherwise there would
 		// be no way to sort the root-level items.
-		tvi.item.hItem = (HTREEITEM)ParamIndexToInt64(0); // Load-time validation has ensured there is a first parameter for TV_Modify().
+		tvi.item.hItem = (HTREEITEM)ParamIndexToInt64(0); // Load-time validation has ensured there is a first parameter for TV.Modify().
 		// For modify-mode, set default return value to be "success" from this point forward.  Note that
 		// in the case of sorting the root-level items, this will set it to zero, but since that almost
 		// always succeeds and the script rarely cares whether it succeeds or not, adding code size for that
@@ -16177,7 +15948,7 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 		}
 		else if (!_tcsnicmp(next_option, _T("Vis"), 3))
 		{
-			// Since this option much more typically used with TV_Modify than TV_Add, the technique of
+			// Since this option much more typically used with TV.Modify than TV.Add, the technique of
 			// Vis%VarContainingOneOrZero% isn't supported, to reduce code size.
 			next_option += 3;
 			if (!_tcsicmp(next_option, _T("First"))) // VisFirst
@@ -16218,7 +15989,7 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 				//else removing, so nothing needs to be done because "collapsed" is the default state
 				// of a TV item upon creation.
 			}
-			else // TV_Modify(): Expand and collapse both require a message to work properly on an existing item.
+			else // TV.Modify(): Expand and collapse both require a message to work properly on an existing item.
 				// Strangely, this generates a notification sometimes (such as the first time) but not for subsequent
 				// expands/collapses of that same item.  Also, TVE_TOGGLE is not currently supported because it seems
 				// like it would be too rarely used.
@@ -16267,7 +16038,7 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 				if (!TreeView_SortChildren(control.hwnd, tvi.item.hItem, FALSE)) // Best default seems no-recurse, since typically this is used after a user edits merely a single item.
 					retval = 0; // Indicate partial failure by overriding the HTREEITEM return value set earlier.
 		}
-		else if (add_mode) // MUST BE LISTED LAST DUE TO "ELSE IF": Options valid only for TV_Add().
+		else if (add_mode) // MUST BE LISTED LAST DUE TO "ELSE IF": Options valid only for TV.Add().
 		{
 			if (!_tcsicmp(next_option, _T("First")))
 				tvi.hInsertAfter = TVI_FIRST; // For simplicity, the value of "adding" is ignored.
@@ -16285,14 +16056,14 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 	}
 
-	if (add_mode) // TV_Add()
+	if (add_mode) // TV.Add()
 	{
 		tvi.item.pszText = ParamIndexToString(0, buf);
 		tvi.item.mask |= TVIF_TEXT;
 		tvi.item.hItem = TreeView_InsertItem(control.hwnd, &tvi); // Update tvi.item.hItem for convenience/maint. It's for use in later sections because retval is overridden to be zero for partial failure in modify-mode.
 		retval = tvi.item.hItem; // Set return value.
 	}
-	else // TV_Modify()
+	else // TV.Modify()
 	{
 		if (!ParamIndexIsOmitted(2)) // An explicit empty string is allowed, which sets it to a blank value.  By contrast, if the param is omitted, the name is left changed.
 		{
@@ -16350,24 +16121,21 @@ HTREEITEM GetNextTreeItem(HWND aTreeHwnd, HTREEITEM aItem)
 
 
 
-BIF_DECL(BIF_TV_GetRelatedItem)
-// TV_GetParent/Child/Selection/Next/Prev(hitem):
+BIF_DECL_GUICTRL(BIF_TV_GetRelatedItem)
+// TV.GetParent/Child/Selection/Next/Prev(hitem):
 // The above all return the HTREEITEM (or 0 on failure).
-// When TV_GetNext's second parameter is present, the search scope expands to include not just siblings,
+// When TV.GetNext's second parameter is present, the search scope expands to include not just siblings,
 // but also children and parents, which allows a tree to be traversed from top to bottom without the script
 // having to do something fancy.
 {
-	if (!ValidGuiAndTreeView(aResultToken))
-		return; // Result was set by the above call.
-	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	HWND control_hwnd = gui.mCurrentTreeView->hwnd;
+	HWND control_hwnd = control.hwnd;
 
 	HTREEITEM hitem = (HTREEITEM)ParamIndexToOptionalIntPtr(0, NULL);
 
 	if (ParamIndexIsOmitted(1))
 	{
 		WPARAM flag;
-		switch (_f_callee_id)
+		switch (aCallerID)
 		{
 		case FID_TV_GetSelection: flag = TVGN_CARET; break; // TVGN_CARET is the focused item.
 		case FID_TV_GetParent: flag = TVGN_PARENT; break;
@@ -16375,7 +16143,7 @@ BIF_DECL(BIF_TV_GetRelatedItem)
 		case FID_TV_GetPrev: flag = TVGN_PREVIOUS; break;
 		case FID_TV_GetNext: flag = !hitem ? TVGN_ROOT : TVGN_NEXT; break; // TV_GetNext(no-parameters) yields very first item in Tree (TVGN_ROOT).
 		// Above: It seems best to treat hitem==0 as "get root", even though it sacrifices some error detection,
-		// because not doing so would be inconsistent with the fact that TV_GetNext(0, "Full") does get the root
+		// because not doing so would be inconsistent with the fact that TV.GetNext(0, "Full") does get the root
 		// (which needs to be retained to make script loops to traverse entire tree easier).
 		//case FID_TV_GetCount:
 		default:
@@ -16390,12 +16158,12 @@ BIF_DECL(BIF_TV_GetRelatedItem)
 			_f_return_i((UINT)SendMessage(control_hwnd, TVM_GETCOUNT, 0, 0));
 		}
 		// Apparently there's no direct call to get the topmost ancestor of an item, presumably because it's rarely
-		// needed.  Therefore, no such mode is provide here yet (the syntax TV_GetParent(hitem, true) could be supported
+		// needed.  Therefore, no such mode is provide here yet (the syntax TV.GetParent(hitem, true) could be supported
 		// if it's ever needed).
 		_f_return_i(SendMessage(control_hwnd, TVM_GETNEXTITEM, flag, (LPARAM)hitem));
 	}
 
-	// Since above didn't return, this TV_GetNext's 2-parameter mode, which has an expanded scope that includes
+	// Since above didn't return, this TV.GetNext's 2-parameter mode, which has an expanded scope that includes
 	// not just siblings, but also children and parents.  This allows a tree to be traversed from top to bottom
 	// without the script having to do something fancy.
 	TCHAR first_char_upper = ctoupper(*omit_leading_whitespace(ParamIndexToString(1, _f_number_buf))); // Resolve parameter #2.
@@ -16427,25 +16195,21 @@ BIF_DECL(BIF_TV_GetRelatedItem)
 
 
 
-BIF_DECL(BIF_TV_Get)
-// LV_Get()
+BIF_DECL_GUICTRL(BIF_TV_Get)
+// TV.Get()
 // Returns: Varies depending on param #2.
 // Parameters:
 //    1: HTREEITEM.
 //    2: Name of attribute to get.
-// LV_GetText()
-// Returns: 1 on success and 0 on failure.
+// TV.GetText()
+// Returns: Text on success.
+// Throws on failure.
 // Parameters:
-//    1: Output variable (doing it this way allows success/fail return value to more closely mirror the API and
-//       simplifies the code since there is currently no easy means of passing back large strings to our caller).
-//    2: HTREEITEM.
+//    1: HTREEITEM.
 {
-	bool get_text = _f_callee_id == FID_TV_GetText;
+	bool get_text = aCallerID == FID_TV_GetText;
 
-	if (!ValidGuiAndTreeView(aResultToken))
-		return; // Result was set by the above call.
-	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	HWND control_hwnd = gui.mCurrentTreeView->hwnd;
+	HWND control_hwnd = control.hwnd;
 
 	if (!get_text)
 	{
@@ -16457,8 +16221,8 @@ BIF_DECL(BIF_TV_Get)
 		case 'E': state_mask = TVIS_EXPANDED; break; // Expanded
 		case 'C': state_mask = TVIS_STATEIMAGEMASK; break; // Checked
 		case 'B': state_mask = TVIS_BOLD; break; // Bold
-		//case 'S' for "Selected" is not provided because TV_GetSelection() seems to cover that well enough.
-		//case 'P' for "is item a parent?" is not provided because TV_GetChild() seems to cover that well enough.
+		//case 'S' for "Selected" is not provided because TV.GetSelection() seems to cover that well enough.
+		//case 'P' for "is item a parent?" is not provided because TV.GetChild() seems to cover that well enough.
 		// (though it's possible that retrieving TVITEM's cChildren would perform a little better).
 		}
 		// Below seems to be need a bit-AND with state_mask to work properly, at least on XP SP2.  Otherwise,
@@ -16475,15 +16239,9 @@ BIF_DECL(BIF_TV_Get)
 		_f_return_i((size_t)hitem);
 	}
 
-	// Since above didn't return, this is LV_GetText().
-	// Loadtime validation has ensured that param #1 and #2 are present.
-	if (aParam[0]->symbol != SYM_VAR) // No output variable. Supporting a NULL for the purpose of checking for the existence of an item seems too rarely needed.
-		_f_throw(ERR_PARAM1_INVALID);
-	Var &output_var = *aParam[0]->var;
-
 	TCHAR text_buf[LV_TEXT_BUF_SIZE]; // i.e. uses same size as ListView.
 	TVITEM tvi;
-	tvi.hItem = (HTREEITEM)ParamIndexToInt64(1);
+	tvi.hItem = (HTREEITEM)ParamIndexToInt64(0);
 	tvi.mask = TVIF_TEXT;
 	tvi.pszText = text_buf;
 	tvi.cchTextMax = LV_TEXT_BUF_SIZE - 1; // -1 because of nagging doubt about size vs. length. Some MSDN examples subtract one), such as TabCtrl_GetItem()'s cchTextMax.
@@ -16493,34 +16251,28 @@ BIF_DECL(BIF_TV_Get)
 		// Must use tvi.pszText vs. text_buf because MSDN says: "Applications should not assume that the text will
 		// necessarily be placed in the specified buffer. The control may instead change the pszText member
 		// of the structure to point to the new text rather than place it in the buffer."
-		output_var.Assign(tvi.pszText);
+		_f_return(tvi.pszText);
 	}
 	else
 	{
-		// On failure, it seems best to also clear the output var for better consistency and in case the script doesn't check the return value.
-		output_var.Assign();
-		tvi.hItem = 0; // Return 0.
+		// On failure, it seems best to throw an exception.
+		_f_throw(_T("Error while retrieving text."));
 	}
-	_f_return_i((size_t)tvi.hItem); // More useful than returning 1 since it allows function-call nesting.
 }
 
 
 
-BIF_DECL(BIF_TV_SetImageList)
+BIF_DECL_GUICTRL(BIF_TV_SetImageList)
 // Returns (MSDN): "handle to the image list previously associated with the control if successful; NULL otherwise."
 // Parameters:
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
 // 2: Optional: Type of list.
 {
-	if (!ValidGuiAndTreeView(aResultToken))
-		return; // Result was set by the above call.
-	GuiType &gui = *g->GuiDefaultWindow; // Always operate on thread's default window to simplify the syntax.
-	
 	// Caller has ensured that there is at least one incoming parameter:
 	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0);
 	int list_type;
 	list_type = ParamIndexToOptionalInt(1, TVSIL_NORMAL);
-	_f_return_i((size_t)TreeView_SetImageList(gui.mCurrentTreeView->hwnd, himl, list_type));
+	_f_return_i((size_t)TreeView_SetImageList(control.hwnd, himl, list_type));
 }
 
 
