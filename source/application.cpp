@@ -1056,7 +1056,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				case GUI_EVENT_CONTEXTMENU:
 					// Caller stored 1 in gui_event_info if this context-menu was generated via the keyboard
 					// (such as AppsKey or Shift-F10):
-					//EVT_ARG_ADD_STR(gui_event_info ? _T("Normal") : _T("RightClick"));
 					gui_action = gui_event_info ? GUI_EVENT_NORMAL : GUI_EVENT_RCLK; // Must be done prior to below.
 					gui_event_info = NO_EVENT_INFO; // Now that it has been used above, reset it to a default, to be conditionally overridden below.
 					gui_point = msg.pt; // Set default. v1.0.38: More accurate/customary to use msg.pt than GetCursorPos().
@@ -1201,8 +1200,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					LITEM item = {};
 					item.mask = LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
 					item.iLink = (int)gui_event_info - 1;
-					if(SendMessage(pcontrol->hwnd,LM_GETITEM,NULL,(LPARAM)&item))
-						EVT_ARG_ADD(*item.szUrl ? CStringTCharFromWCharIfNeeded(item.szUrl) : CStringTCharFromWCharIfNeeded(item.szID));
+					if (SendMessage(pcontrol->hwnd, LM_GETITEM, NULL, (LPARAM)&item))
+						EVT_ARG_ADD(CStringTCharFromWCharIfNeeded(*item.szUrl ? item.szUrl : item.szID));
 				}
 				else if (*gui_action_extra)
 					EVT_ARG_ADD(gui_action_extra);
@@ -1214,9 +1213,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// DetectHiddenWindows if the last-found window is one of the script's GUI windows [v1.0.25.13]:
 				g.hWndLastUsed = pgui->mHwnd;
 				pgui->AddRef(); // Keep the pointer valid at least until the thread finishes.
-				//pgui->AddRef(); //
-				//g.GuiWindow = g.GuiDefaultWindow = pgui; // GUI threads default to operating upon their own window.
-				//g.GuiControlIndex = gui_control_index; // Must be set only after the "g" struct has been initialized. This will be NO_CONTROL_INDEX if the sender of the message said to do that.
 				//g.EventInfo = gui_event_info; // Override the thread-default of NO_EVENT_INFO.
 				pgui->SetOwnDialogs(TOGGLED_ON); // Seems like a sensible default.
 

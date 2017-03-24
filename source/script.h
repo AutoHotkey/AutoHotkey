@@ -1318,54 +1318,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("NoMainWindow"))) return MENU_CMD_NOMAINWINDOW;
 		return MENU_CMD_INVALID;
 	}
-	
-	// Will be removed.
-	static void ConvertGuiName(LPTSTR aBuf, LPTSTR &aCommand, LPTSTR *aName = NULL, size_t *aNameLength = NULL)
-	{
-		LPTSTR colon_pos;
-		// Check for '+' and '-' to avoid ambiguity with something like "gui +Delimiter:".
-		if (*aBuf == '+' || !(colon_pos = _tcschr(aBuf, ':'))) // Assignment.
-		{
-			aCommand = aBuf;
-			// Name not specified, so leave it at the default set by caller.
-			return;
-		}
-
-		size_t name_length = colon_pos - aBuf;
-		
-		// Fix for v1.1.24.02: Support trailing spaces as in v1.1.02.03 and earlier:
-		while (name_length && IS_SPACE_OR_TAB(aBuf[name_length-1]))
-			--name_length;
-
-		if (*aBuf == '-') // Fix for v1.1.24.02: Support negative integers for HWND.
-		{
-			TCHAR number_buf[MAX_INTEGER_SIZE + 1];
-			if (name_length >= _countof(number_buf))
-				*number_buf = '\0'; // A non-numeric value (with third parameter FALSE below).
-			else
-				tcslcpy(number_buf, aBuf, name_length + 1);
-			if (!IsNumeric(number_buf, TRUE, FALSE))
-			{
-				// This is an option rather than a HWND.
-				aCommand = aBuf;
-				return;
-			}
-		}
-	
-		// For backward compatibility, "01" to "09" must be treated as "1" to "9".
-		if (name_length == 2 && *aBuf == '0' && aBuf[1] >= '1' && aBuf[1] <= '9')
-		{
-			// Normalize the number by excluding its leading "0".
-			++aBuf;
-			--name_length;
-		}
-	
-		if (aName)
-			*aName = aBuf;
-		if (aNameLength)
-			*aNameLength = name_length;
-		aCommand = omit_leading_whitespace(colon_pos + 1);
-	}
 
 	static GuiControls ConvertGuiControl(LPTSTR aBuf)
 	{
@@ -2588,7 +2540,7 @@ public:
 	static IObject* CreateDropArray(HDROP hDrop);
 	ResultType SetMenu(LPTSTR aMenuName);
 	static void UpdateMenuBars(HMENU aMenu);
-	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& pControl, Object *aObj = NULL);
+	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Object *aObj = NULL);
 
 	ResultType ParseOptions(LPTSTR aOptions, ToggleValueType &aOwnDialogs);
 	void SetOwnDialogs(ToggleValueType state)
@@ -2618,7 +2570,7 @@ public:
 	ResultType Close(); // Due to SC_CLOSE, etc.
 	ResultType Escape(); // Similar to close, except typically called when the user presses ESCAPE.
 	ResultType Submit(ResultToken &aResultToken, bool aHideIt);
-	ResultType ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, bool bText = false);
+	ResultType ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, bool aIsText = false);
 
 	static GuiType *FindGui(HWND aHwnd);
 	static GuiType *FindGuiParent(HWND aHwnd);
@@ -2658,10 +2610,10 @@ public:
 
 	static WORD TextToHotkey(LPTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
-	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, bool bText, Object *aObj = NULL);
-	void ControlSetEnabled(GuiControlType &aControl, bool bEnabled);
-	void ControlSetVisible(GuiControlType &aControl, bool bVisible);
-	ResultType ControlMove(GuiControlType &aControl, LPTSTR aPos, bool bDraw);
+	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, bool aText, Object *aObj = NULL);
+	void ControlSetEnabled(GuiControlType &aControl, bool aEnabled);
+	void ControlSetVisible(GuiControlType &aControl, bool aVisible);
+	ResultType ControlMove(GuiControlType &aControl, LPTSTR aPos, bool aDraw);
 	void ControlUpdateFont(GuiControlType &aControl);
 	ResultType ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, int aExtraActions = 0);
 	void ControlCheckRadioButton(GuiControlType &aControl, GuiIndexType aControlIndex, WPARAM aCheckType);

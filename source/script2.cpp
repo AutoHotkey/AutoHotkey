@@ -15148,8 +15148,8 @@ BIF_DECL_GUICTRL(BIF_LV_GetText)
 // Returns: Text on success.
 // Throws on failure.
 // Parameters:
-// 2: Row index (one-based when it comes in).
-// 3: Column index (one-based when it comes in).
+// 1: Row index (one-based when it comes in).
+// 2: Column index (one-based when it comes in).
 {
 	// Above sets default result in case of early return.  For code reduction, a zero is returned for all
 	// the following conditions:
