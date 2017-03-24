@@ -453,7 +453,7 @@ BIF_DECL(BIF_GuiCtrlFromHwnd)
 	_f_return_empty;
 }
 
-typedef void (*GuiCtrlFunc)(BIF_DECL_PARAMS, GuiControlType& aControl, BuiltInFunctionID aCallerID);
+typedef void (*GuiCtrlFunc)(BIF_DECL_PARAMS, GuiControlType& aControl, BuiltInFunctionID aCalleeID);
 struct GuiCtrlFuncInfo
 {
 	LPTSTR name;

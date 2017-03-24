@@ -15002,7 +15002,7 @@ BIF_DECL_GUICTRL(BIF_StatusBar)
 	HWND control_hwnd = control.hwnd;
 
 	HICON hicon;
-	switch (aCallerID)
+	switch (aCalleeID)
 	{
 	case FID_SB_SetText:
 		_f_return_b(SendMessage(control_hwnd, SB_SETTEXT
@@ -15089,7 +15089,7 @@ BIF_DECL_GUICTRL(BIF_LV_GetNextOrCount)
 	HWND control_hwnd = control.hwnd;
 
 	LPTSTR options;
-	if (aCallerID == FID_LV_GetCount)
+	if (aCalleeID == FID_LV_GetCount)
 	{
 		options = (aParamCount > 0) ? omit_leading_whitespace(ParamIndexToString(0, _f_number_buf)) : _T("");
 		if (*options)
@@ -15210,7 +15210,7 @@ BIF_DECL_GUICTRL(BIF_LV_AddInsertModify)
 // 3 and beyond: Additional field text.
 // In Add/Insert mode, if there are no text fields present, a blank for is appended/inserted.
 {
-	BuiltInFunctionID mode = aCallerID;
+	BuiltInFunctionID mode = aCalleeID;
 	LPTSTR buf = _f_number_buf; // Resolve macro early for maintainability.
 
 	int index;
@@ -15486,7 +15486,7 @@ BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol)
 // 3: New text of column
 // There are also some special modes when only zero or one parameter is present, see below.
 {
-	BuiltInFunctionID mode = aCallerID;
+	BuiltInFunctionID mode = aCalleeID;
 	LPTSTR buf = _f_number_buf; // Resolve macro early for maintainability.
 	_f_set_retval_i(0); // Set default return value.
 
@@ -15839,7 +15839,7 @@ BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete)
 // Parameters for TV.Delete():
 //    1: ID of item to delete (if omitted, all items are deleted).
 {
-	BuiltInFunctionID mode = aCallerID;
+	BuiltInFunctionID mode = aCalleeID;
 	LPTSTR buf = _f_number_buf; // Resolve macro early for maintainability.
 
 	if (mode == FID_TV_Delete)
@@ -16135,7 +16135,7 @@ BIF_DECL_GUICTRL(BIF_TV_GetRelatedItem)
 	if (ParamIndexIsOmitted(1))
 	{
 		WPARAM flag;
-		switch (aCallerID)
+		switch (aCalleeID)
 		{
 		case FID_TV_GetSelection: flag = TVGN_CARET; break; // TVGN_CARET is the focused item.
 		case FID_TV_GetParent: flag = TVGN_PARENT; break;
@@ -16207,7 +16207,7 @@ BIF_DECL_GUICTRL(BIF_TV_Get)
 // Parameters:
 //    1: HTREEITEM.
 {
-	bool get_text = aCallerID == FID_TV_GetText;
+	bool get_text = aCalleeID == FID_TV_GetText;
 
 	HWND control_hwnd = control.hwnd;
 
