@@ -86,14 +86,18 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		else
 		{
 			if (aParamCount < 1)
-				_o_throw(ERR_INVALID_USAGE);
+				_o_throw(ERR_TOO_FEW_PARAMS);
 			ctrl_type_name = ParamIndexToString(0);
 			--aParamCount; // Exclude control type from param count.
 			++aParam; // As above, but for the param array.
 		}
 		ctrl_type = Line::ConvertGuiControl(ctrl_type_name);
 		if (ctrl_type == GUI_CONTROL_INVALID)
-			_o_throw(_T("Invalid control type."), name+3);
+		{
+			if (name[3])
+				return INVOKE_NOT_HANDLED; // Seems more appropriate for Gui.AddSomething().
+			_o_throw(_T("Invalid control type."), ctrl_type_name);
+		}
 	}
 	else if (!_tcsnicmp(name, _T("On"), 2))
 	{
@@ -109,7 +113,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		else if (!_tcsicmp(name+2, _T("ContextMenu")))
 			pEvent = &mOnContextMenu;
 		else
-			_o_throw(_T("Invalid event name."), name);
+			return INVOKE_NOT_HANDLED;
 	}
 #define if_member(s,e)	else if (!_tcsicmp(name, _T(s))) member = e;
 	if_member("Destroy", M_Destroy)
@@ -221,7 +225,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		case P_Handle:
 		{
 			if (IS_INVOKE_SET)
-				return INVOKE_NOT_HANDLED;
+				_o_throw(ERR_INVALID_USAGE);
 			_o_return((__int64)(UINT_PTR)mHwnd);
 		}
 		case P_Title:
@@ -257,7 +261,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		case P_Control:
 		{
 			if (IS_INVOKE_SET)
-				return INVOKE_NOT_HANDLED;
+				_o_throw(ERR_INVALID_USAGE);
 
 			ExprTokenType& tok = *aParam[0];
 			GuiControlType* ctrl = NULL;
@@ -282,7 +286,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		case P_FocusedCtrl:
 		{
 			if (IS_INVOKE_SET)
-				return INVOKE_NOT_HANDLED;
+				_o_throw(ERR_INVALID_USAGE);
 
 			HWND hwnd = GetFocus();
 			GuiControlType* pcontrol = hwnd ? FindControl(hwnd) : NULL;
@@ -356,7 +360,7 @@ BIF_DECL(BIF_GuiCreate)
 	if (*options && !gui->ParseOptions(options, own_dialogs))
 	{
 		delete gui;
-		return; // ParseOptions() already displayed the error.
+		_f_return_FAIL; // ParseOptions() already displayed the error.
 	}
 
 	gui->mControl = (GuiControlType **)malloc(GUI_CONTROL_BLOCK_SIZE * sizeof(GuiControlType*));
@@ -397,7 +401,7 @@ BIF_DECL(BIF_GuiCreate)
 			if (!Var::ValidateName(prefix, DISPLAY_FUNC_ERROR))
 			{
 				delete gui;
-				return; // Error already shown by above.
+				_f_return_FAIL; // Error already shown by above.
 			}
 
 			// The caller specified a function prefix.
@@ -618,7 +622,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			
 		case M_Choose:
 			if (aParamCount == 0)
-				return INVOKE_NOT_HANDLED;
+				_o_throw(ERR_TOO_FEW_PARAMS);
 			return gui->ControlChoose(*this, *aParam[0], ParamIndexToOptionalInt(1, 0));
 
 		case P_Handle:
@@ -7225,7 +7229,7 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 				return FAIL; // It already displayed the error.
 			length = SendMessage(aControl.hwnd, CB_GETLBTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
 			if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-				_o_return_empty; // Return empty string (default).
+				_o_return_p(_T(""), 0); // Must use this vs _o_return_empty to override TokenSetResult.
 			return OK;
 
 		case GUI_CONTROL_LISTBOX:

@@ -407,6 +407,7 @@ struct ArgStruct
 #define _o_return(...)			_o__ret(aResultToken.Return(__VA_ARGS__))
 #define _f_throw(...)			_f__ret(aResultToken.Error(__VA_ARGS__))
 #define _o_throw(...)			_o__ret(aResultToken.Error(__VA_ARGS__))
+#define _f_return_FAIL			_f__ret(aResultToken.SetExitResult(FAIL))
 // The _f_set_retval macros should be used with care because the integer macros assume symbol
 // is set to its default value; i.e. don't set a string and then attempt to return an integer.
 // It is also best for maintainability to avoid setting mem_to_free or an object without
