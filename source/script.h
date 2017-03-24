@@ -2485,6 +2485,7 @@ public:
 
 	GuiType() // Constructor
 		: mHwnd(NULL), mStatusBarHwnd(NULL), mControlCount(0), mControlCapacity(0)
+		, mPrevGui(NULL), mNextGui(NULL)
 		, mDefaultButtonIndex(-1), mEventFuncPrefix(Var::sEmptyString)
 		, mOnClose(), mOnEscape(), mOnSize(), mOnDropFiles(), mOnContextMenu()
 		, mOnCloseIsRunning(false), mOnEscapeIsRunning(false), mOnSizeIsRunning(false)
