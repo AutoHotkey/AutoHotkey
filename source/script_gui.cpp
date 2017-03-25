@@ -7013,12 +7013,9 @@ ResultType GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 			ResultToken value;
 			value.InitResult(temp_buf);
 
-			ControlGetContents(value, control);
-			if (!ret->SetItem(control.name, value))
-			{
-				ret->Release();
-				_o_throw(ERR_OUTOFMEM);
-			}
+			if (  !ControlGetContents(value, control)
+				|| !ret->SetItem(control.name, value)  )
+				goto outofmem;
 		}
 	}
 
@@ -7058,7 +7055,8 @@ ResultType GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 				// for multiple selections is left intact.
 				if (selection_number == -1)
 					selection_number = 0;
-				ret->SetItem(group_name, selection_number); // group_var should not be NULL since group_radios_with_name == 1
+				if (!ret->SetItem(group_name, selection_number)) // group_var should not be NULL since group_radios_with_name == 1
+					goto outofmem;
 			}
 			if (u == mControlCount) // The last control in the window is a radio and its group was just processed.
 				break;
@@ -7072,27 +7070,27 @@ ResultType GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 				++group_radios_with_name;
 				group_name = output_name; // If this group winds up having only one name, this will be it.
 			}
-			// Assign default value for now.  It will be overridden if this turns out to be the
-			// only name in this group:
-			if (SendMessage(control.hwnd, BM_GETCHECK, 0, 0) == BST_CHECKED)
+			int control_is_checked = SendMessage(control.hwnd, BM_GETCHECK, 0, 0) == BST_CHECKED;
+			if (control_is_checked)
 			{
 				if (selection_number) // Multiple buttons selected, so flag this as an indeterminate state.
 					selection_number = -1;
 				else
 					selection_number = group_radios;
-				if (output_name)
-					ret->SetItem(output_name, 1);
 			}
-			else
-				if (output_name)
-					ret->SetItem(output_name, 0LL);
+			if (output_name)
+				if (!ret->SetItem(output_name, control_is_checked))
+					goto outofmem;
 		}
 	} // for()
 
 	if (aHideIt)
 		ShowWindow(mHwnd, SW_HIDE);
 	_o_return(ret);
-	return OK;
+
+outofmem:
+	ret->Release();
+	_o_throw(ERR_OUTOFMEM);
 }
 
 
