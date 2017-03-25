@@ -266,7 +266,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 
 			ExprTokenType& tok = *aParam[0];
 			GuiControlType* ctrl = NULL;
-			if (tok.symbol == SYM_INTEGER || tok.symbol == SYM_VAR && tok.var->IsPureNumeric() == SYM_INTEGER)
+			if (TokenIsPureNumeric(tok) == SYM_INTEGER)
 			{
 				HWND hWnd = (HWND)(UINT_PTR)TokenToInt64(tok);
 				ctrl = FindControl(hWnd);
@@ -726,7 +726,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 				BOOL exact_match = ParamIndexToOptionalBOOL(1, FALSE);
 				ExprTokenType& param = *aParam[0];
 				TabControlIndexType index = -1;
-				if (param.symbol == SYM_INTEGER || param.symbol == SYM_VAR && param.var->IsPureNumeric() == SYM_INTEGER)
+				if (TokenIsPureNumeric(param) == SYM_INTEGER)
 					index = (int)TokenToInt64(param)-1;
 				else
 					index = gui->FindTabIndexByName(*this, TokenToString(param, aResultToken.buf), exact_match);
@@ -1025,7 +1025,7 @@ void GuiType::ControlUpdateFont(GuiControlType &aControl)
 ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, int aExtraActions)
 {
 	int selection_index = -1;
-	bool is_choose_string = !(aParam.symbol == SYM_INTEGER || aParam.symbol == SYM_VAR && aParam.var->IsPureNumeric() == SYM_INTEGER);
+	bool is_choose_string = (TokenIsPureNumeric(aParam) != SYM_INTEGER);
 	TCHAR buf[MAX_NUMBER_SIZE];
 	
 	if (aExtraActions < 0 || aExtraActions > 2)

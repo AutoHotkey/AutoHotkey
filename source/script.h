@@ -3133,7 +3133,8 @@ BOOL ResultToBOOL(LPTSTR aResult);
 BOOL VarToBOOL(Var &aVar);
 BOOL TokenToBOOL(ExprTokenType &aToken);
 SymbolType TokenIsNumeric(ExprTokenType &aToken);
-SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aNumType);
+SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
+SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aIsImpureNumeric);
 BOOL TokenIsEmptyString(ExprTokenType &aToken);
 BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar); // Same as TokenIsEmptyString but optionally warns if the token is an uninitialized var.
 __int64 TokenToInt64(ExprTokenType &aToken);
