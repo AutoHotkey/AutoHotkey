@@ -196,7 +196,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			ShowWindow(mHwnd, SW_RESTORE);
 			_o_return_empty;
 		case M_Flash:
-			FlashWindow(mHwnd, ParamIndexToOptionalType(BOOL, 0, TRUE));
+			FlashWindow(mHwnd, ParamIndexToOptionalBOOL(0, TRUE));
 			_o_return_empty;
 		case M_SetFont:
 		{
@@ -215,8 +215,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		}
 		case M_Submit:
 		{
-			bool hide_it = (bool)ParamIndexToOptionalType(BOOL,0,TRUE);
-			return Submit(aResultToken, hide_it);
+			return Submit(aResultToken, ParamIndexToOptionalBOOL(0, TRUE));
 		}
 		case M_NewEnum:
 		{
@@ -431,7 +430,7 @@ BIF_DECL(BIF_GuiCreate)
 BIF_DECL(BIF_GuiFromHwnd)
 {
 	HWND hwnd = (HWND)ParamIndexToIntPtr(0);
-	BOOL recurse_parent = ParamIndexToOptionalType(BOOL, 1, FALSE);
+	BOOL recurse_parent = ParamIndexToOptionalBOOL(1, FALSE);
 	
 	GuiType* gui = recurse_parent ? GuiType::FindGuiParent(hwnd) : GuiType::FindGui(hwnd);
 	if (gui)
@@ -621,7 +620,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			_o_return_empty;
 
 		case M_Move:
-			return gui->ControlMove(*this, ParamIndexToOptionalString(0), (bool)ParamIndexToOptionalType(BOOL,1,FALSE));
+			return gui->ControlMove(*this, ParamIndexToOptionalString(0), ParamIndexToOptionalBOOL(1, FALSE));
 			
 		case M_Choose:
 			if (aParamCount == 0)
@@ -724,7 +723,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			else
 			{
 				gui->mCurrentTabControlIndex = tab_index;
-				BOOL exact_match = (BOOL)ParamIndexToOptionalType(BOOL, 1, FALSE);
+				BOOL exact_match = ParamIndexToOptionalBOOL(1, FALSE);
 				ExprTokenType& param = *aParam[0];
 				TabControlIndexType index = -1;
 				if (param.symbol == SYM_INTEGER || param.symbol == SYM_VAR && param.var->IsPureNumeric() == SYM_INTEGER)
