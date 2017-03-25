@@ -5554,10 +5554,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				// no support click-detection anyway, even if the BS_NOTIFY style is given to them
 				// (this has been verified twice):
 				if (aControl.type == GUI_CONTROL_GROUPBOX || aControl.type == GUI_CONTROL_PROGRESS)
-					// If control's hwnd exists, we were called from a caller who wants ErrorLevel set
-					// instead of a message displayed:
-					return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
-						: g_script.ScriptError(_T("This control type should not have an event handler.")
+					return g_script.ScriptError(_T("This control type should not have an event handler.")
 							, next_option - 1);
 
 				if (!_tcsicmp(next_option, _T("Cancel")))
@@ -6081,8 +6078,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		if (do_invalidate_rect)
 			InvalidateRect(aControl.hwnd, NULL, TRUE); // Assume there's text in the control.
 
-		if (style_needed_changing && !style_change_ok) // Override the default errorlevel set by our caller, GuiControl().
-			g_script.SetErrorLevelOrThrow();
+		g_ErrorLevel->Assign(style_needed_changing && !style_change_ok);
 	} // aControl.hwnd is not NULL
 
 	return OK;
