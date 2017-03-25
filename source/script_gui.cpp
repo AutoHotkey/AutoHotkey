@@ -312,34 +312,35 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			COLORREF &color = member == P_BgColor ? mBackgroundColorWin : mBackgroundColorCtl;
 			HBRUSH   &brush = member == P_BgColor ? mBackgroundBrushWin : mBackgroundBrushCtl;
 
-			if (!IS_INVOKE_SET)
+			if (IS_INVOKE_SET)
 			{
-				if (color == CLR_DEFAULT)
-					_o_return_empty;
-				_sntprintf(_f_retval_buf, _f_retval_buf_size, _T("%06X"), bgr_to_rgb(color));
-				_o_return_p(_f_retval_buf);
+				// AssignColor() takes care of deleting old brush, etc.
+				if (TokenIsPureNumeric(*aParam[0])) // Integer or float; float is invalid, so just truncate it to integer.
+					AssignColor(rgb_to_bgr((COLORREF)ParamIndexToInt64(0)), color, brush);
+				else
+					AssignColor(ParamIndexToString(0), color, brush);
+
+				// As documented, ListView_SetTextBkColor/ListView_SetBkColor are not called.  Primary reasons:
+				// 1) Allows any custom color that was explicitly specified via ListView control options
+				//    to stay in effect rather than being overridden by this change.  You could argue that this
+				//    could be detected by asking the control its background color and if it matches the previous
+				//    mBackgroundColorCtl (which might be CLR_DEFAULT?), it's 99% likely it was not an
+				//    individual/explicit custom color and thus should be changed here.  But that would be even
+				//    more complexity so it seems better to keep it simple.
+				// 2) Reduce code size.
+				// The same also probably applies to TreeView as well.
+
+				if (IsWindowVisible(mHwnd))
+					// Force the window to repaint so that colors take effect immediately.
+					// UpdateWindow() isn't enough sometimes/always, so do something more aggressive:
+					InvalidateRect(mHwnd, NULL, TRUE);
 			}
-
-			_f_set_retval_p(ParamIndexToString(0));
-
-			// AssignColor() takes care of deleting old brush, etc.
-			AssignColor(aResultToken.marker, color, brush);
-
-			// As documented, ListView_SetTextBkColor/ListView_SetBkColor are not called.  Primary reasons:
-			// 1) Allows any custom color that was explicitly specified via ListView control options
-			//    to stay in effect rather than being overridden by this change.  You could argue that this
-			//    could be detected by asking the control its background color and if it matches the previous
-			//    mBackgroundColorCtl (which might be CLR_DEFAULT?), it's 99% likely it was not an
-			//    individual/explicit custom color and thus should be changed here.  But that would be even
-			//    more complexity so it seems better to keep it simple.
-			// 2) Reduce code size.
-			// The same also probably applies to TreeView as well.
-
-			if (IsWindowVisible(mHwnd))
-				// Force the window to repaint so that colors take effect immediately.
-				// UpdateWindow() isn't enough sometimes/always, so do something more aggressive:
-				InvalidateRect(mHwnd, NULL, TRUE);
-			return OK;
+			
+			// Return the property's proper value, which may differ from the value assigned by the script.
+			if (color == CLR_DEFAULT)
+				_o_return_empty;
+			_sntprintf(_f_retval_buf, _f_retval_buf_size, _T("%06X"), bgr_to_rgb(color));
+			_o_return_p(_f_retval_buf);
 		}
 	}
 
