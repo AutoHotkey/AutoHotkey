@@ -818,8 +818,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			case AHK_CLIPBOARD_CHANGE: // Due to the registration of an OnClipboardChange function in the script.
 				if (g_script.mOnClipboardChangeIsRunning)
 					continue;
-				// Use the placeholder label to simplify the code.
-				label_to_call = g_script.mPlaceholderLabel;
 				priority = 0;  // Always use default for now.
 				break;
 
