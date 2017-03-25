@@ -87,7 +87,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		{
 			if (aParamCount < 1)
 				_o_throw(ERR_TOO_FEW_PARAMS);
-			ctrl_type_name = ParamIndexToString(0);
+			ctrl_type_name = ParamIndexToString(0, _f_number_buf); // Pass buf for error-reporting purposes.
 			--aParamCount; // Exclude control type from param count.
 			++aParam; // As above, but for the param array.
 		}
@@ -157,12 +157,14 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	if (!mHwnd)
 		_o_throw(_T("The Gui is destroyed."));
 
+	TCHAR nbuf1[MAX_NUMBER_SIZE], nbuf2[MAX_NUMBER_SIZE];
+
 	switch (member)
 	{
 		case M_AddControl: // Probably the most common method.
 		{
-			LPTSTR text = ParamIndexToOptionalString(0);
-			LPTSTR options = ParamIndexToOptionalString(1);
+			LPTSTR text = ParamIndexToOptionalString(0, nbuf1);
+			LPTSTR options = ParamIndexToOptionalString(1, nbuf2);
 			Object *text_obj = ParamIndexIsOmitted(0) ? NULL : TokenToScriptObject(*aParam[0]);
 			GuiControlType* pcontrol = NULL;
 			ResultType result = AddControl(ctrl_type, options, text, pcontrol, text_obj);
@@ -177,8 +179,8 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			return Destroy();
 		case M_Show:
 		{
-			LPTSTR options = ParamIndexToOptionalString(0);
-			LPTSTR title = ParamIndexToOptionalString(1);
+			LPTSTR options = ParamIndexToOptionalString(0, nbuf1);
+			LPTSTR title = ParamIndexToOptionalString(1, nbuf2);
 			return Show(options, title);
 		}
 		case M_Hide:
@@ -198,13 +200,13 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			_o_return_empty;
 		case M_SetFont:
 		{
-			LPTSTR options = ParamIndexToOptionalString(0);
-			LPTSTR font_name = ParamIndexToOptionalString(1);
+			LPTSTR options = ParamIndexToOptionalString(0, nbuf1);   // A number currently isn't valid here, so nbuf is passed just for maintainability.
+			LPTSTR font_name = ParamIndexToOptionalString(1, nbuf2); //
 			return SetCurrentFont(options, font_name);
 		}
 		case M_Options:
 		{
-			LPTSTR options = ParamIndexToOptionalString(0);
+			LPTSTR options = ParamIndexToOptionalString(0, nbuf1);
 			ToggleValueType own_dialogs = TOGGLE_INVALID;
 			if (!ParseOptions(options, own_dialogs))
 				break; // Above already displayed an error message.
@@ -232,7 +234,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		{
 			if (IS_INVOKE_SET)
 			{
-				_f_set_retval_p(ParamIndexToString(0));
+				_f_set_retval_p(ParamIndexToString(0, _f_retval_buf));
 				SetWindowText(mHwnd, aResultToken.marker);
 				return OK;
 			}
@@ -250,7 +252,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		{
 			if (IS_INVOKE_SET)
 			{
-				ResultType result = SetMenu(ParamIndexToString(0));
+				ResultType result = SetMenu(ParamIndexToString(0, nbuf1));
 				if (result != OK)
 					return result; // Already displayed error.
 			}
@@ -349,8 +351,9 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 
 BIF_DECL(BIF_GuiCreate)
 {
+	TCHAR nbuf2[MAX_NUMBER_SIZE];
 	LPTSTR title = ParamIndexToOptionalString(0, _f_number_buf);
-	LPTSTR options = ParamIndexToOptionalString(1);
+	LPTSTR options = ParamIndexToOptionalString(1, nbuf2);
 
 	GuiType* gui = new GuiType();
 	if (!gui)
@@ -397,7 +400,7 @@ BIF_DECL(BIF_GuiCreate)
 		}
 		else
 		{
-			LPTSTR prefix = ParamIndexToString(2);
+			LPTSTR prefix = ParamIndexToString(2, _f_number_buf); // Pass buf for error-reporting purposes.
 			if (!Var::ValidateName(prefix, DISPLAY_FUNC_ERROR))
 			{
 				delete gui;
@@ -606,7 +609,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 		{
 			GuiControlOptionsType go; // Its contents are not currently used here, but they might be in the future.
 			gui->ControlInitOptions(go, *this);
-			return gui->ControlParseOptions(ParamIndexToOptionalString(0), go, *this, GUI_HWND_TO_INDEX(hwnd));
+			return gui->ControlParseOptions(ParamIndexToOptionalString(0, _f_number_buf), go, *this, GUI_HWND_TO_INDEX(hwnd));
 		}
 
 		case M_Focus:
@@ -1024,7 +1027,7 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 {
 	int selection_index = -1;
 	bool is_choose_string = !(aParam.symbol == SYM_INTEGER || aParam.symbol == SYM_VAR && aParam.var->IsPureNumeric() == SYM_INTEGER);
-	TCHAR buf[_f_retval_buf_size];
+	TCHAR buf[MAX_NUMBER_SIZE];
 	
 	if (aExtraActions < 0 || aExtraActions > 2)
 		return g_script.ScriptError(ERR_PARAM2_INVALID);
@@ -1806,7 +1809,7 @@ ResultType GuiType::EventHandlerProp(ResultToken& aResultToken, GuiEvent& aHandl
 			SetEventHandler(aHandler, obj);
 		else
 		{
-			LPTSTR name = ParamIndexToString(0);
+			LPTSTR name = ParamIndexToString(0, _f_number_buf); // Pass buf because a number can be a valid suffix.
 			SetEventHandler(aHandler, name);
 			if (!aHandler)
 				_o_throw(_T("The specified event handler does not exist."), name);
