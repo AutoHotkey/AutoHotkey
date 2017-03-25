@@ -5210,7 +5210,10 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			// Retrieve the class atom (http://blogs.msdn.com/b/oldnewthing/archive/2004/10/11/240744.aspx)
 			aOpt.customClassAtom = (ATOM) GetClassInfoEx(g_hInstance, className, &wc);
 			if (aOpt.customClassAtom == 0)
-				return g_script.ScriptError(_T("Unregistered window class."), className);
+			{
+				g_script.ScriptError(_T("Unregistered window class."), className);
+				goto return_fail;
+			}
 		}
 
 		// Styles (alignment/justification):
@@ -5538,8 +5541,9 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					aControl.name = NULL;
 					break;
 				default:
-					// v1.1.04: Validate Gui options.
-					return g_script.ScriptError(ERR_INVALID_OPTION, next_option-1);
+					// Anything else is invalid.
+					g_script.ScriptError(ERR_INVALID_OPTION, next_option-1);
+					goto return_fail;
 				}
 				*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 				continue;
@@ -5550,12 +5554,14 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			{
 			case 'G': // Call a function or method when this control is clicked or changed.
 				// For reasons of potential future use and compatibility, don't allow handlers to be
-				// bouund to control types that have no present use for them.  Note: GroupBoxes do
+				// bound to control types that have no present use for them.  Note: GroupBoxes do
 				// no support click-detection anyway, even if the BS_NOTIFY style is given to them
 				// (this has been verified twice):
 				if (aControl.type == GUI_CONTROL_GROUPBOX || aControl.type == GUI_CONTROL_PROGRESS)
-					return g_script.ScriptError(_T("This control type should not have an event handler.")
-							, next_option - 1);
+				{
+					g_script.ScriptError(_T("This control type should not have an event handler."), next_option - 1);
+					goto return_fail;
+				}
 
 				if (!_tcsicmp(next_option, _T("Cancel")))
 					aControl.attrib |= GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL;
@@ -5563,7 +5569,10 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				{
 					SetEventHandler(aControl.event_handler, next_option);
 					if (!mHasEventSink && !aControl.event_handler)
-						return g_script.ScriptError(_T("The specified event handler does not exist."), next_option);
+					{
+						g_script.ScriptError(_T("The specified event handler does not exist."), next_option);
+						goto return_fail;
+					}
 				}
 				if (aControl.type == GUI_CONTROL_LABEL || aControl.type == GUI_CONTROL_PIC)
 					// Apply the SS_NOTIFY style *only* if the control actually has an associated action.
@@ -5583,7 +5592,10 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				// Make sure the name isn't already taken.
 				for (GuiIndexType u = 0; u < mControlCount; ++u)
 					if (mControl[u]->name && _tcsicmp(mControl[u]->name, next_option) == 0)
-						return g_script.ScriptError(_T("There already exists a control with the specified name."), next_option);
+					{
+						g_script.ScriptError(_T("There already exists a control with the specified name."), next_option);
+						goto return_fail;
+					}
 				aControl.name = _tcsdup(next_option);
 				break;
 
@@ -5743,13 +5755,17 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					if (adding) aOpt.exstyle_add |= given_exstyle; else aOpt.exstyle_remove |= given_exstyle;
 					break;
 				}
-				// v1.1.04: Validate Gui options.
-				return g_script.ScriptError(ERR_INVALID_OPTION, next_option-1);
+				// Anything not already handled above is invalid.
+				g_script.ScriptError(ERR_INVALID_OPTION, next_option-1);
+				goto return_fail;
 			} // switch()
 		} // Final "else" in the "else if" ladder.
 
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
-
+		continue;
+	return_fail:
+		*option_end = orig_char; // See above.
+		return FAIL;
 	} // for() each item in option list
 
 	// If the control has already been created, apply the new style and exstyle here, if any:
