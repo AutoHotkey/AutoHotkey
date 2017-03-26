@@ -1154,12 +1154,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				default: // Control-generated event (i.e. event_is_control_generated==true).
 					switch(pcontrol->type)
 					{
-					case GUI_CONTROL_STATUSBAR: // An earlier stage has ensured pcontrol isn't NULL in this case.
-						// For performance reasons, this isn't done for all GUI events, just ones that
-						// have a typical use for the coords.
-						gui_point = msg.pt;
-						ScreenToWindow(gui_point, pgui->mHwnd);
-						break;
 					case GUI_CONTROL_LISTVIEW: // v1.0.46.10: Added this section to support notifying the script of HOW the item changed.
 						if (LOBYTE(gui_action) == 'I')
 						{
