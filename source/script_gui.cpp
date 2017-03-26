@@ -518,7 +518,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 	if (!aParamCount) // ctrl[]
 		return INVOKE_NOT_HANDLED;
 		
-	LPTSTR name = ParamIndexToString(0); // Name of method or property.
+	LPTSTR member_name = ParamIndexToString(0); // Name of method or property.
 	MemberID member = INVALID;
 	GuiCtrlFunc func = NULL; // For ListView/TreeView/StatusBar-specific methods.
 	BuiltInFunctionID func_id; // As above.
@@ -529,7 +529,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 	if (!hwnd)
 		_o_throw(_T("The control is destroyed."));
 
-#define if_member(s,e) else if (!_tcsicmp(name, _T(s))) member = e;
+#define if_member(s,e) else if (!_tcsicmp(member_name, _T(s))) member = e;
 	if_member("Opt", M_Options)
 	if_member("Options", M_Options)
 	if_member("Move", M_Move)
@@ -539,6 +539,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 	if_member("Hwnd", P_Handle)
 	if_member("Gui", P_Gui)
 	if_member("Event", P_Event)
+	if_member("Name", P_Name)
 	if_member("ClassNN", P_ClassNN)
 	if_member("Text", P_Text)
 	if_member("Value", P_Value)
@@ -565,7 +566,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 		}
 		for (int i = 0; i < func_count; i ++)
 		{
-			if (!_tcsicmp(name, func_info[i].name))
+			if (!_tcsicmp(member_name, func_info[i].name))
 			{
 				func_info = func_info + i;
 				func = func_info->func;
@@ -628,15 +629,23 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 				_o_throw(ERR_TOO_FEW_PARAMS);
 			return gui->ControlChoose(*this, *aParam[0], ParamIndexToOptionalInt(1, 0));
 
+		case P_Name:
+			if (IS_INVOKE_SET)
+				if (!gui->ControlSetName(*this, ParamIndexToString(0, _f_number_buf)))
+					_o_return_FAIL;
+			_o_return(name ? name : _T(""));
+
 		case P_Handle:
 			if (IS_INVOKE_SET)
 				_o_throw(ERR_INVALID_USAGE);
 			_o_return((__int64)(UINT_PTR)hwnd);
+		
 		case P_Gui:
 			if (IS_INVOKE_SET)
 				_o_throw(ERR_INVALID_USAGE);
 			gui->AddRef();
 			_o_return(gui);
+		
 		case P_ClassNN:
 		{
 			if (IS_INVOKE_SET)
@@ -810,6 +819,34 @@ ResultType GuiType::SetMenu(LPTSTR aMenuName)
 		UpdateAccelerators(*menu);
 	else
 		RemoveAccelerators();
+	return OK;
+}
+
+
+ResultType GuiType::ControlSetName(GuiControlType &aControl, LPTSTR aName)
+{
+	if (aName && !*aName)
+	{
+		aName = NULL;
+	}
+	else if (aName)
+	{
+		// Make sure the name isn't already taken.
+		for (GuiIndexType u = 0; u < mControlCount; ++u)
+			if (mControl[u]->name && !_tcsicmp(mControl[u]->name, aName))
+			{
+				if (mControl[u] == &aControl) // aControl already has this name, but upper- vs lower-case may differ.
+					break;
+				return g_script.ScriptError(_T("A control with this name already exists."), aName);
+			}
+
+		aName = _tcsdup(aName);
+		if (!aName)
+			return g_script.ScriptError(ERR_OUTOFMEM);
+	}
+	if (aControl.name)
+		free(aControl.name);
+	aControl.name = aName;
 	return OK;
 }
 
@@ -1634,6 +1671,7 @@ void GuiControlType::Destroy()
 	gui->ClearEventHandler(event_handler);
 	if (name)
 		free(name);
+	name = NULL;
 	hwnd = NULL;
 	gui = NULL;
 }
@@ -5536,9 +5574,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					ClearEventHandler(aControl.event_handler);
 					break;
 				case 'V':
-					if (aControl.name)
-						free(aControl.name);
-					aControl.name = NULL;
+					ControlSetName(aControl, NULL);
 					break;
 				default:
 					// Anything else is invalid.
@@ -5589,14 +5625,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				break;
 
 			case 'V': // Name (originally: Variable)
-				// Make sure the name isn't already taken.
-				for (GuiIndexType u = 0; u < mControlCount; ++u)
-					if (mControl[u]->name && _tcsicmp(mControl[u]->name, next_option) == 0)
-					{
-						g_script.ScriptError(_T("There already exists a control with the specified name."), next_option);
-						goto return_fail;
-					}
-				aControl.name = _tcsdup(next_option);
+				ControlSetName(aControl, next_option);
 				break;
 
 			case 'C':  // Color

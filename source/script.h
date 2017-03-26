@@ -408,6 +408,7 @@ struct ArgStruct
 #define _f_throw(...)			_f__ret(aResultToken.Error(__VA_ARGS__))
 #define _o_throw(...)			_o__ret(aResultToken.Error(__VA_ARGS__))
 #define _f_return_FAIL			_f__ret(aResultToken.SetExitResult(FAIL))
+#define _o_return_FAIL			_o__ret(aResultToken.SetExitResult(FAIL))
 // The _f_set_retval macros should be used with care because the integer macros assume symbol
 // is set to its default value; i.e. don't set a string and then attempt to return an integer.
 // It is also best for maintainability to avoid setting mem_to_free or an object without
@@ -2334,6 +2335,7 @@ struct GuiControlType : public ObjectBase
 		P_Handle,
 		P_Gui,
 		P_Event,
+		P_Name,
 		P_ClassNN,
 		P_Text,
 		P_Value,
@@ -2613,6 +2615,7 @@ public:
 	static WORD TextToHotkey(LPTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
 	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, bool aText, Object *aObj = NULL);
+	ResultType ControlSetName(GuiControlType &aControl, LPTSTR aName);
 	void ControlSetEnabled(GuiControlType &aControl, bool aEnabled);
 	void ControlSetVisible(GuiControlType &aControl, bool aVisible);
 	ResultType ControlMove(GuiControlType &aControl, LPTSTR aPos, bool aDraw);
