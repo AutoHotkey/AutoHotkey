@@ -676,22 +676,22 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				switch(gui_action)
 				{
 				case GUI_EVENT_RESIZE: // This is the signal to run the window's OnEscape event handler. Listed first for performance.
-					if (   !(gui_event = &pgui->mOnSize)   ) // In case it became NULL since the msg was posted.
+					if (   !*(gui_event = &pgui->mOnSize)   ) // In case it became NULL since the msg was posted.
 						continue;
 					pgui_event_is_running = &pgui->mOnSizeIsRunning;
 					break;
 				case GUI_EVENT_CLOSE:  // This is the signal to run the window's OnClose event handler.
-					if (   !(gui_event = &pgui->mOnClose)   ) // In case it became NULL since the msg was posted.
+					if (   !*(gui_event = &pgui->mOnClose)   ) // In case it became NULL since the msg was posted.
 						continue;
 					pgui_event_is_running = &pgui->mOnCloseIsRunning;
 					break;
 				case GUI_EVENT_ESCAPE: // This is the signal to run the window's OnEscape event handler.
-					if (   !(gui_event = &pgui->mOnEscape)   ) // In case it became NULL since the msg was posted.
+					if (   !*(gui_event = &pgui->mOnEscape)   ) // In case it became NULL since the msg was posted.
 						continue;
 					pgui_event_is_running = &pgui->mOnEscapeIsRunning;
 					break;
 				case GUI_EVENT_CONTEXTMENU:
-					if (   !(gui_event = &pgui->mOnContextMenu)   ) // In case it became NULL since the msg was posted.
+					if (   !*(gui_event = &pgui->mOnContextMenu)   ) // In case it became NULL since the msg was posted.
 						continue;
 					// UPDATE: Must allow multiple threads because otherwise the user cannot right-click twice
 					// consecutively (the second click is blocked because the menu is still displayed at the
@@ -704,7 +704,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					break;
 				case GUI_EVENT_DROPFILES: // This is the signal to run the window's OnDropFiles event handler.
 					hdrop_to_free = pgui->mHdrop; // This variable simplifies the code further below.
-					if (   !(gui_event = &pgui->mOnDropFiles) // In case it became NULL since the msg was posted.
+					if (   !*(gui_event = &pgui->mOnDropFiles) // In case it became NULL since the msg was posted.
 						|| !hdrop_to_free // Checked just in case, so that the below can query it.
 						|| !(gui_event_info = DragQueryFile(hdrop_to_free, 0xFFFFFFFF, NULL, 0))   ) // Probably impossible, but if it ever can happen, seems best to ignore it.
 					{
@@ -723,9 +723,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				default: // This is an action from a particular control in the GUI window.
 					if (!pcontrol) // gui_control_index was beyond the quantity of controls, possibly due to parent window having been destroyed since the msg was sent (or bogus msg).
 						continue;  // Discarding an invalid message here is relied upon both other sections below.
-					if (   !(gui_event = &pcontrol->event_handler)   )
+					if (   !*(gui_event = &pcontrol->event_handler)   )
 					{
-						// On if there's no label is the implicit action considered.
+						// Only if there's no label is the implicit action considered.
 						if (pcontrol->attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)
 							pgui->CancelOrDestroy();
 						continue; // Fully handled by the above; or there was no label.
