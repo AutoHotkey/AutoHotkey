@@ -9129,14 +9129,10 @@ LRESULT GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	VarBkp ErrorLevel_saved;
 	ErrorLevel_Backup(ErrorLevel_saved);
 	InitNewThread(0, false, true, ACT_INVALID);
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-
-	AddRef();
-	ExprTokenType param[3];
-	param[0].SetValue(&aControl);
-	param[2].SetValue(_T("N"));
-	param[1].SetValue((__int64)(DWORD_PTR)aNmHdr);
 	g_script.mLastPeekTime = GetTickCount();
+	AddRef();
+	
+	ExprTokenType param[] = { &aControl, _T("N"), (__int64)(DWORD_PTR)aNmHdr };
 	int returnValue = CallEvent(evt, 3, param);
 
 	Release();
