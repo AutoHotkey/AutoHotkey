@@ -6976,7 +6976,7 @@ ResultType GuiType::Close()
 // If there is no handler, treat it the same as Destroy().
 {
 	if (!mOnClose)
-		return Destroy();
+		return CancelOrDestroy();
 	POST_AHK_GUI_ACTION(mHwnd, NO_CONTROL_INDEX, GUI_EVENT_CLOSE, NO_EVENT_INFO);
 	// MsgSleep() is not done because "case AHK_GUI_ACTION" in GuiWindowProc() takes care of it.
 	// See its comments for why.
