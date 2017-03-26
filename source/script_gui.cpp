@@ -667,7 +667,13 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 		}
 
 		case P_Event:
-			return gui->EventHandlerProp(aResultToken, event_handler, aParam, IS_INVOKE_SET);
+			if (!gui->EventHandlerProp(aResultToken, event_handler, aParam, IS_INVOKE_SET))
+				return FAIL; // aResultToken.result was already set.
+			if (event_handler && (type == GUI_CONTROL_LABEL || type == GUI_CONTROL_PIC))
+				// Apply SS_NOTIFY style so that the event handler will be called on click.
+				// Search for "SS_NOTIFY" for more comments regarding this.
+				SetWindowLong(hwnd, GWL_STYLE, GetWindowLong(hwnd, GWL_STYLE) | SS_NOTIFY);
+			return OK; // Return value was already set.
 
 		case P_Text:
 		case P_Value:
