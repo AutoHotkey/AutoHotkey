@@ -1849,7 +1849,7 @@ ResultType GuiType::EventHandlerProp(ResultToken& aResultToken, GuiEvent& aHandl
 		{
 			LPTSTR name = ParamIndexToString(0, _f_number_buf); // Pass buf because a number can be a valid suffix.
 			SetEventHandler(aHandler, name);
-			if (!aHandler)
+			if (!aHandler && *name)
 				_o_throw(_T("The specified event handler does not exist."), name);
 		}
 	}
