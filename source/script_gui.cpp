@@ -9085,7 +9085,7 @@ LRESULT GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	if (!evt)
 		return 0;
 
-	if (g_nThreads >= g_MaxThreadsTotal && g_nThreads >= MAX_THREADS_EMERGENCY)
+	if (g_nThreads >= g_MaxThreadsTotal)
 		return 0;
 
 	if (g->Priority > 0)
