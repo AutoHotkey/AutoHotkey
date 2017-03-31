@@ -178,11 +178,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		case M_Destroy:
 			return Destroy();
 		case M_Show:
-		{
-			LPTSTR options = ParamIndexToOptionalString(0, nbuf1);
-			LPTSTR title = ParamIndexToOptionalString(1, nbuf2);
-			return Show(options, title);
-		}
+			return Show(ParamIndexToOptionalString(0, nbuf1));
 		case M_Hide:
 			return Cancel();
 		case M_Minimize:
@@ -6461,7 +6457,7 @@ ResultType GuiType::ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilenam
 
 
 
-ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
+ResultType GuiType::Show(LPTSTR aOptions)
 {
 	if (!mHwnd)
 		return OK;  // Make this a harmless attempt.
@@ -6476,15 +6472,6 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 	// be set to false when that layer completes, leaving it false when it really should be true
 	// because our layer isn't done yet.
 	mShowIsInProgress = true; // Signal WM_SIZE to queue the GuiSize launch.  We'll unqueue via MsgSleep() when we're done.
-
-	// Change the title to get that out of the way.  But in any case, the title must be changed before the
-	// following:
-	// 1) Before the window is shown (to make transition a little nicer).
-	// 2) v1.0.25: Before MoveWindow(), because otherwise the GuiSize label (if any) will be launched
-	//    while the the window still has its old title (or no title, if this is the first showing), which
-	//    would not be desirable 99% of the time.
-	if (*aText)
-		SetWindowText(mHwnd, aText);
 
 	// Set defaults, to be overridden by the presence of zero or more options:
 	int x = COORD_UNSPECIFIED;

@@ -2646,7 +2646,7 @@ public:
 	void ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aControl);
 	void ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt = NULL, Object *aObj = NULL);
 	ResultType ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilename, int aWidth, int aHeight, int aIconNumber);
-	ResultType Show(LPTSTR aOptions, LPTSTR aTitle);
+	ResultType Show(LPTSTR aOptions);
 	ResultType Clear();
 	ResultType Cancel();
 	ResultType CancelOrDestroy(ULONG minRefCount = 1)
