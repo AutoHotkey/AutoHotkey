@@ -1195,7 +1195,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 		case GUI_CONTROL_LABEL:
 		case GUI_CONTROL_LINK:
 		case GUI_CONTROL_GROUPBOX:
-			do_redraw_unconditionally = (aControl.attrib & GUI_CONTROL_ATTRIB_BACKGROUND_TRANS); // v1.0.40.01.
+			do_redraw_unconditionally = (aControl.background_color == CLR_TRANSPARENT);
 			// Note that it isn't sufficient in this case to do InvalidateRect(control.hwnd, ...).
 			break;
 
@@ -1674,6 +1674,8 @@ void GuiControlType::Destroy()
 	}
 	else if (type == GUI_CONTROL_LISTVIEW) // It was ensured at an earlier stage that union_lv_attrib != NULL.
 		free(union_lv_attrib);
+	if (background_brush)
+		DeleteObject(background_brush);
 	gui->ClearEventHandler(event_handler);
 	if (name)
 		free(name);
@@ -2254,16 +2256,18 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	// else in the union_color's union) and other types that don't even use union_color for anything yet.  But
 	// that should be okay because those types should never consult opt.color_changed.
 	opt.color_changed = CLR_DEFAULT != (aControlType == GUI_CONTROL_LISTVIEW ? opt.color_listview : control.union_color);
-	if (opt.color_bk == CLR_DEFAULT) // i.e. the options list must have explicitly specified BackgroundDefault.
+	if (opt.color_bk == CLR_INVALID // No bk color was specified in options param.
+		&& aControlType != GUI_CONTROL_STATUSBAR) // And the control obeys the current Gui color.  Status bars don't obey it because it seems slightly less desirable for most people, and also because system default bar color might be diff. than system default win color on some themes.
+	{
+		// Since bkgnd color was not explicitly specified in options, use the current background color.
+		opt.color_bk = aControlType == GUI_CONTROL_PROGRESS ? mBackgroundColorWin : mBackgroundColorCtl;
+	}
+	//else leave it as invalid so that ControlSetListView/TreeView/ProgressOptions() etc. won't bother changing it.
+	if (opt.color_bk == CLR_DEFAULT) // i.e. the options list explicitly specified BackgroundDefault, or it was set above.
 	{
 		if (aControlType != GUI_CONTROL_TREEVIEW) // v1.1.08: Always set the back-color of a TreeView, otherwise it sends WM_CTLCOLOREDIT on Win2k/XP.
 			opt.color_bk = CLR_INVALID; // Tell things like ControlSetListViewOptions "no color change needed".
 	}
-	else if (opt.color_bk == CLR_INVALID && mBackgroundColorCtl != CLR_DEFAULT // No bk color was specified in options param.
-		&& aControlType != GUI_CONTROL_PROGRESS && aControlType != GUI_CONTROL_STATUSBAR) // And the control obeys the current "Gui, Color,, CtlBkColor".  Status bars don't obey it because it seems slightly less desirable for most people, and also because system default bar color might be diff. than system default win color on some themes.
-		// Since bkgnd color was not explicitly specified in options, use the current background color (except progress bars, which do their own thing).
-		opt.color_bk = mBackgroundColorCtl; // Use window's global custom, control background.
-	//else leave it as invalid so that ControlSetListView/TreeView/ProgressOptions() etc. won't bother changing it.
 
 	// Change for v1.0.45 (buttons) and v1.0.47.04 (checkboxes and radios): Under some desktop themes and
 	// unusual DPI settings, it has been reported that the last letter of the control's text gets truncated
@@ -2360,7 +2364,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// TCS_OWNERDRAWFIXED is required to implement custom Text color in the tabs.
 		// For some reason, it's also required for TabWindowProc's WM_ERASEBKGND to be able to
 		// override the background color of the control's interior, at least when an XP theme is in effect.
-		if (mBackgroundBrushWin && !(control.attrib & GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT)
+		if (control.background_brush
+			|| mBackgroundBrushWin && control.background_color != CLR_DEFAULT
 			|| control.union_color != CLR_DEFAULT)
 		{
 			style |= TCS_OWNERDRAWFIXED;
@@ -3986,7 +3991,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	// custom background color but not a custom text color.  The same is true for radios and checkboxes.
 	if (do_strip_theme || (control.union_color != CLR_DEFAULT && (control.type == GUI_CONTROL_CHECKBOX
 		|| control.type == GUI_CONTROL_RADIO || control.type == GUI_CONTROL_GROUPBOX)) // GroupBox needs it too.
-		|| (control.type == GUI_CONTROL_GROUPBOX && (control.attrib & GUI_CONTROL_ATTRIB_BACKGROUND_TRANS))   ) // Tested and found to be necessary.)
+		|| (control.type == GUI_CONTROL_GROUPBOX && control.background_color == CLR_TRANSPARENT) // Tested and found to be necessary.
+		|| (control.type == GUI_CONTROL_DROPDOWNLIST && control.background_color != CLR_INVALID))
 		MySetWindowTheme(control.hwnd, L"", L"");
 
 	// Must set the font even if mCurrentFontIndex > 0, otherwise the bold SYSTEM_FONT will be used.
@@ -4819,53 +4825,57 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		else if (!_tcsnicmp(next_option, _T("Background"), 10))
 		{
 			next_option += 10;  // To help maintainability, point it to the optional suffix here.
-			switch(aControl.type)
+
+			// Reset background properties to simplify the next section.
+			aControl.background_color = CLR_INVALID;
+			if (aControl.background_brush)
 			{
-			case GUI_CONTROL_PROGRESS:
-			case GUI_CONTROL_LISTVIEW:
-			case GUI_CONTROL_TREEVIEW:
-			case GUI_CONTROL_STATUSBAR:
-				// Note that GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT and GUI_CONTROL_ATTRIB_BACKGROUND_TRANS
-				// don't apply to Progress or ListView controls because the window proc never receives
-				// CTLCOLOR messages for them.
+				DeleteObject(aControl.background_brush);
+				aControl.background_brush = NULL;
+			}
+
+			if (!_tcsicmp(next_option, _T("Trans")))
+			{
 				if (adding)
 				{
+					if (!aControl.SupportsBackgroundTrans())
+					{
+						g_script.ScriptError(_T("Not supported for this control type."), next_option-10);
+						goto return_fail;
+					}
+					aControl.background_color = CLR_TRANSPARENT;
+				}
+				//else do nothing, because the attrib was already removed above.
+			}
+			else if (adding)
+			{
+				if (*next_option)
+				{
+					if (!aControl.SupportsBackgroundColor())
+					{
+						g_script.ScriptError(_T("Not supported for this control type."), next_option-10);
+						goto return_fail;
+					}
 					aOpt.color_bk = ColorNameToBGR(next_option);
 					if (aOpt.color_bk == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
 						// It seems _tcstol() automatically handles the optional leading "0x" if present:
 						aOpt.color_bk = rgb_to_bgr(_tcstol(next_option, NULL, 16));
 						// if next_option did not contain something hex-numeric, black (0x00) will be assumed,
 						// which seems okay given how rare such a problem would be.
+					if (aOpt.color_bk != CLR_DEFAULT && aControl.RequiresBackgroundBrush())
+					{
+						aControl.background_brush = CreateSolidBrush(aOpt.color_bk);
+						aControl.background_color = aOpt.color_bk;
+					}
 				}
-				else // Removing
-					aOpt.color_bk = CLR_DEFAULT;
-				break;
-			default: // Other control types don't yet support custom colors other than TRANS.
-				if (adding)
-				{
-					aControl.attrib &= ~GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT;
-					if (!_tcsicmp(next_option, _T("Trans")))
-						aControl.attrib |= GUI_CONTROL_ATTRIB_BACKGROUND_TRANS; // This is mutually exclusive of the above anyway.
-					else
-						aControl.attrib &= ~GUI_CONTROL_ATTRIB_BACKGROUND_TRANS;
-					// In the future, something like the below can help support background colors for individual controls.
-					//COLORREF background_color = ColorNameToBGR(next_option + 10);
-					//if (background_color == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
-					//	// It seems _tcstol() automatically handles the optional leading "0x" if present:
-					//	background_color = rgb_to_bgr(_tcstol(next_option, NULL, 16));
-					//	// if next_option did not contain something hex-numeric, black (0x00) will be assumed,
-					//	// which seems okay given how rare such a problem would be.
-				}
-				else
-				{
-					// Note that "-BackgroundTrans" is not supported, since Trans is considered to be
-					// a color value for the purpose of expanding this feature in the future to support
-					// custom background colors on a per-control basis.  In other words, the trans factor
-					// can be turned off by using "-Background" or "+BackgroundBlue", etc.
-					aControl.attrib &= ~GUI_CONTROL_ATTRIB_BACKGROUND_TRANS;
-					aControl.attrib |= GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT;
-				}
-			} // switch(aControl.type)
+				//else +Background (the traditional way to revert -Background).
+				// background_brush and background_color were already reset above.
+			}
+			else // -Background
+			{
+				aControl.background_color = CLR_DEFAULT;
+				aOpt.color_bk = CLR_DEFAULT;
+			}
 		} // Option "Background".
 		else if (!_tcsicmp(next_option, _T("Group"))) // This overlaps with g-label, but seems well worth it in this case.
 			if (adding) aOpt.style_add |= WS_GROUP; else aOpt.style_remove |= WS_GROUP;
@@ -5802,7 +5812,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		*option_end = orig_char; // See above.
 		return FAIL;
 	} // for() each item in option list
-
+	
 	// If the control has already been created, apply the new style and exstyle here, if any:
 	if (aControl.hwnd)
 	{
@@ -6374,7 +6384,7 @@ ResultType GuiType::ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilenam
 		// style bit is not removed.
 		return FAIL;
 	}
-	if (image_type == IMAGE_ICON && (aControl.attrib & GUI_CONTROL_ATTRIB_BACKGROUND_TRANS))
+	if (image_type == IMAGE_ICON && aControl.background_color == CLR_TRANSPARENT)
 	{
 		// Static controls don't appear to support background transparency with icons,
 		// so convert the icon to a bitmap.
@@ -7768,7 +7778,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	GuiType *pgui;
 	GuiControlType *pcontrol;
 	GuiIndexType control_index;
-	RECT rect;
 	bool text_color_was_changed;
 	TCHAR buf[1024];
 
@@ -8400,26 +8409,25 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		pgui->Event(GUI_HWND_TO_INDEX((HWND)lParam), LOWORD(wParam));
 		return 0; // "If an application processes this message, it should return zero."
 	
-	case WM_ERASEBKGND:
-		if (   !(pgui = GuiType::FindGui(hWnd))   )
-			break; // Let DefDlgProc() handle it.
-		if (!pgui->mBackgroundBrushWin) // Let default proc handle it.
-			break;
-		// Can't use SetBkColor(), need an real brush to fill it.
-		GetClipBox((HDC)wParam, &rect);
-		FillRect((HDC)wParam, &rect, pgui->mBackgroundBrushWin);
-		return 1; // "An application should return nonzero if it erases the background."
-
-	// The below seems to be the equivalent of the above (but MSDN indicates it will only work
-	// if there is no WM_ERASEBKGND handler).  Although it might perform a little better,
-	// the above is kept in effect to avoid introducing problems without a good reason:
-	//case WM_CTLCOLORDLG:
+	//case WM_ERASEBKGND:
 	//	if (   !(pgui = GuiType::FindGui(hWnd))   )
 	//		break; // Let DefDlgProc() handle it.
 	//	if (!pgui->mBackgroundBrushWin) // Let default proc handle it.
 	//		break;
-	//	SetBkColor((HDC)wParam, pgui->mBackgroundColorWin);
-	//	return (LRESULT)pgui->mBackgroundBrushWin;
+	//	// Can't use SetBkColor(), need an real brush to fill it.
+	//	GetClipBox((HDC)wParam, &rect);
+	//	FillRect((HDC)wParam, &rect, pgui->mBackgroundBrushWin);
+	//	return 1; // "An application should return nonzero if it erases the background."
+
+	// The below seems to be the equivalent of the above (but MSDN indicates it will only work
+	// if there is no WM_ERASEBKGND handler).  It might perform a little better.
+	case WM_CTLCOLORDLG:
+		if (   !(pgui = GuiType::FindGui(hWnd))   )
+			break; // Let DefDlgProc() handle it.
+		if (!pgui->mBackgroundBrushWin) // Let default proc handle it.
+			break;
+		SetBkColor((HDC)wParam, pgui->mBackgroundColorWin);
+		return (LRESULT)pgui->mBackgroundBrushWin;
 
 	// It seems that scrollbars belong to controls (such as Edit and ListBox) do not send us
 	// WM_CTLCOLORSCROLLBAR (unlike the static messages we receive for radio and checkbox).
@@ -8442,6 +8450,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	case WM_CTLCOLORSTATIC:
 	case WM_CTLCOLORLISTBOX:
 	case WM_CTLCOLOREDIT:
+	case WM_CTLCOLORBTN:
 		// MSDN: Buttons with the BS_PUSHBUTTON, BS_DEFPUSHBUTTON, or BS_PUSHLIKE styles do not use the
 		// returned brush. Buttons with these styles are always drawn with the default system colors.
 		// This is because "drawing push buttons requires several different brushes-face, highlight and
@@ -8454,13 +8463,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			break;
 		if (   !(pcontrol = pgui->FindControl((HWND)lParam))   )
 			break;
-		if (pcontrol->type == GUI_CONTROL_COMBOBOX) // But GUI_CONTROL_DROPDOWNLIST partially works.
-			// Setting the colors of combo boxes won't work without overriding the ComboBox window proc,
-			// which introduces complexities because there is no knowing exactly what the default
-			// window proc of a ComboBox really does in all OSes and under all visual themes.
-			// Overriding it is likely to cause problems, or at the very least require testing across
-			// various OSes and themes (XP vs. classic).
-			break;
 		if (text_color_was_changed = (pcontrol->type != GUI_CONTROL_PIC && pcontrol->union_color != CLR_DEFAULT))
 			SetTextColor((HDC)wParam, pcontrol->union_color);
 		else
@@ -8468,109 +8470,37 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			// a brush is returned, the system will use whatever color was set before; probably black.
 			SetTextColor((HDC)wParam, GetSysColor(COLOR_WINDOWTEXT));
 
-		if (pcontrol->attrib & GUI_CONTROL_ATTRIB_BACKGROUND_TRANS)
+		if (pcontrol->background_color == CLR_TRANSPARENT)
 		{
-			switch (pcontrol->type)
-			{
-			case GUI_CONTROL_CHECKBOX: // Checkbox and radios with trans background have problems with
-			case GUI_CONTROL_RADIO:    // their focus rects being drawn incorrectly.
-			case GUI_CONTROL_LISTBOX:  // ListBox and Edit are also a problem, at least under some theme settings.
-			case GUI_CONTROL_EDIT:
-			case GUI_CONTROL_SLIDER:   // Slider is a problem under both classic and XP themes.
-				break;  // Ignore the TRANS setting for the above control types.
-			// Types not included above because they support transparent background or because the attempt
-			// to make the background transparent has no effect:
-			//case GUI_CONTROL_LABEL:         Supported via WM_CTLCOLORSTATIC
-			//case GUI_CONTROL_LINK:         Supported via WM_CTLCOLORSTATIC
-			//case GUI_CONTROL_PIC:          Supported via WM_CTLCOLORSTATIC
-			//case GUI_CONTROL_GROUPBOX:     Supported via WM_CTLCOLORSTATIC
-			//case GUI_CONTROL_BUTTON:       Can't reach this point because WM_CTLCOLORBTN is not handled above.
-			//case GUI_CONTROL_DROPDOWNLIST: Can't reach this point because WM_CTLCOLORxxx is never received for it.
-			//case GUI_CONTROL_COMBOBOX:     I believe WM_CTLCOLOREDIT is not received for it.
-			//case GUI_CONTROL_LISTVIEW:     Can't reach this point because WM_CTLCOLORxxx is never received for it.
-			//case GUI_CONTROL_TREEVIEW:     Same (verified).
-			//case GUI_CONTROL_PROGRESS:     Same (verified).
-			//case GUI_CONTROL_UPDOWN:       Same (verified).
-			//case GUI_CONTROL_DATETIME:     Same (verified).
-			//case GUI_CONTROL_MONTHCAL:     Same (verified).
-			//case GUI_CONTROL_HOTKEY:       Same (verified).
-			//case GUI_CONTROL_TAB:          Same.
-			//case GUI_CONTROL_STATUSBAR:    Its text fields (parts) are its children, not ours, so its window proc probably receives WM_CTLCOLORSTATIC, not ours.
-			default:
-				SetBkMode((HDC)wParam, TRANSPARENT);
-				return (LRESULT)GetStockObject(NULL_BRUSH);
-			}
-			//else ignore the TRANS setting, since it causes the ListBox (at least in Classic theme)
-			// to appear to be multi-select even though it isn't.  And it causes Edit to have a
-			// black background.
-		}
-		if (pcontrol->attrib & GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT) // i.e. TRANS (above) takes precedence over this.
-		{
-			if (!text_color_was_changed) // No need to return a brush since no changes are needed.  Let def. proc. handle it.
-				break;
-			if (iMsg == WM_CTLCOLORSTATIC)
-			{
-				SetBkColor((HDC)wParam, GetSysColor(COLOR_BTNFACE)); // Use default window color for static controls.
-				return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
-			}
-			else
-			{
-				SetBkColor((HDC)wParam, GetSysColor(COLOR_WINDOW)); // Use default control-bkgnd color for others.
-				return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
-			}
+			SetBkMode((HDC)wParam, TRANSPARENT);
+			return (LRESULT)GetStockObject(NULL_BRUSH);
 		}
 
+		HBRUSH bk_brush;
+		COLORREF bk_color;
+		pgui->ControlGetBkColor(*pcontrol, iMsg == WM_CTLCOLORSTATIC, bk_brush, bk_color);
+		
+		if (bk_brush)
+		{
+			// Since we're processing this msg rather than passing it on to the default proc, must set
+			// background color unconditionally, otherwise plain white will likely be used:
+			SetBkColor((HDC)wParam, bk_color);
+			// Always return a real HBRUSH so that Windows knows we altered the HDC for it to use:
+			return (LRESULT)bk_brush;
+		}
+
+		if (!text_color_was_changed) // No need to return a brush since no changes are needed.  Let def. proc. handle it.
+			break;
 		if (iMsg == WM_CTLCOLORSTATIC)
 		{
-			// If this static control both belongs to a tab control and is within its physical boundaries,
-			// match its background to the tab control's.  This is only necessary if the tab control has
-			// the GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT property, since otherwise its background would
-			// be the same as the window's:
-			bool override_to_default_color = pgui->ControlOverrideBkColor(*pcontrol);
-			if (pgui->mBackgroundBrushWin && !override_to_default_color)
-			{
-				// Since we're processing this msg rather than passing it on to the default proc, must set
-				// background color unconditionally, otherwise plain white will likely be used:
-				SetBkColor((HDC)wParam, pgui->mBackgroundColorWin);
-				// Always return a real HBRUSH so that Windows knows we altered the HDC for it to use:
-				return (LRESULT)pgui->mBackgroundBrushWin;
-			}
-			// else continue on through so that brush can be returned if text_color_was_changed == true.
+			SetBkColor((HDC)wParam, GetSysColor(COLOR_BTNFACE)); // Use default window color for static controls.
+			return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
 		}
-		else // WM_CTLCOLORLISTBOX or WM_CTLCOLOREDIT: The interior of a non-static control.  Use the control background color (if there is one).
+		else
 		{
-			if (pgui->mBackgroundBrushCtl)
-			{
-				SetBkColor((HDC)wParam, pgui->mBackgroundColorCtl);
-				// Always return a real HBRUSH so that Windows knows we altered the HDC for it to use:
-				return (LRESULT)pgui->mBackgroundBrushCtl;
-			}
+			SetBkColor((HDC)wParam, GetSysColor(COLOR_WINDOW)); // Use default control-bkgnd color for others.
+			return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
 		}
-		// Since above didn't return a custom HBRUSH, we must return one here -- rather than letting the
-		// default proc handle this message -- if the color of the text itself was changed.  This is so
-		// that the OS will know that the DC has been altered:
-		if (text_color_was_changed)
-		{
-			// Whenever the default proc won't be handling this message, the background color must be set
-			// explicitly if something other than plain white is needed.  This must be done even for
-			// non-static controls because otherwise the area doesn't get filled correctly:
-			if (iMsg == WM_CTLCOLORSTATIC)
-			{
-				// COLOR_BTNFACE is hard-coded because here because it is also the hard-coded background
-				// color of the GUI window class:
-				SetBkColor((HDC)wParam, GetSysColor(COLOR_BTNFACE));
-				return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
-			}
-			else
-			{
-				// I'm pretty sure that COLOR_WINDOW is the color used by default for the background of
-				// all standard controls, such as ListBox, ComboBox, Edit, etc.  Although it's usually
-				// white, it can be different depending on theme/appearance settings:
-				SetBkColor((HDC)wParam, GetSysColor(COLOR_WINDOW));
-				return (LRESULT)GetSysColorBrush(COLOR_WINDOW);
-			}
-		}
-		//else since no colors were changed, let default proc handle it.
 		break;
 
 	case WM_MEASUREITEM:
@@ -8601,10 +8531,13 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			|| pgui->mControl[control_index]->type != GUI_CONTROL_TAB) // In case this msg can be received for other types.
 			break;
 		GuiControlType &control = *pgui->mControl[control_index]; // For performance & convenience.
-		if (pgui->mBackgroundBrushWin && !(control.attrib & GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT))
+		HBRUSH bk_brush;
+		COLORREF bk_color;
+		pgui->ControlGetBkColor(control, true, bk_brush, bk_color);
+		if (bk_brush)
 		{
-			FillRect(lpdis->hDC, &lpdis->rcItem, pgui->mBackgroundBrushWin); // Fill the tab itself.
-			SetBkColor(lpdis->hDC, pgui->mBackgroundColorWin); // Set the text's background color.
+			FillRect(lpdis->hDC, &lpdis->rcItem, bk_brush); // Fill the tab itself.
+			SetBkColor(lpdis->hDC, bk_color); // Set the text's background color.
 		}
 		else // Must do this anyway, otherwise there is an unwanted thin white line and possibly other problems.
 			FillRect(lpdis->hDC, &lpdis->rcItem, (HBRUSH)(size_t)GetClassLongPtr(control.hwnd, GCLP_HBRBACKGROUND));
@@ -8811,6 +8744,8 @@ LRESULT CALLBACK TabWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	GuiType *pgui;
 	GuiControlType *pcontrol;
 	HWND parent_window;
+	HBRUSH bk_brush;
+	COLORREF bk_color;
 
 	switch (iMsg)
 	{
@@ -8823,12 +8758,13 @@ LRESULT CALLBACK TabWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		switch (iMsg)
 		{
 		case WM_ERASEBKGND:
-			if (!pgui->mBackgroundBrushWin || (pcontrol->attrib & GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT))
+			pgui->ControlGetBkColor(*pcontrol, true, bk_brush, bk_color);
+			if (!bk_brush)
 				break; // Let default proc handle it.
 			// Can't use SetBkColor(), need a real brush to fill it.
 			RECT clipbox;
 			GetClipBox((HDC)wParam, &clipbox);
-			FillRect((HDC)wParam, &clipbox, pgui->mBackgroundBrushWin);
+			FillRect((HDC)wParam, &clipbox, bk_brush);
 			return 1; // "An application should return nonzero if it erases the background."
 		case WM_WINDOWPOSCHANGED:
 			if ((LPWINDOWPOS(lParam)->flags & (SWP_NOMOVE | SWP_NOSIZE)) != (SWP_NOMOVE | SWP_NOSIZE)) // i.e. moved, resized or both.
@@ -9494,38 +9430,24 @@ void GuiType::ControlSetProgressOptions(GuiControlType &aControl, GuiControlOpti
 	if (aOpt.color_changed)
 		SendMessage(aControl.hwnd, PBM_SETBARCOLOR, 0, aControl.union_color);
 
-	switch (aOpt.color_bk)
-	{
-	case CLR_DEFAULT:
-		// If background color is default, mBackgroundColorWin won't take effect if there is a visual theme
-		// in effect for this control.  But do the below anyway because we don't want to strip the theme off
-		// the control just to make the bar's background match the window or tab control.  But we do want
-		// it to match if the theme happens to be absent (due to OS not supporting it, classic theme being
-		// in effect, or -theme being in effect):
-		SendMessage(aControl.hwnd, PBM_SETBKCOLOR, 0, ControlOverrideBkColor(aControl) ? GetSysColor(COLOR_BTNFACE)
-			: mBackgroundColorWin);
-		break;
-	case CLR_INVALID: // Do nothing in this case because caller didn't want existing bkgnd color changed.
-		break;
-	default: // Custom background color.  In this case, theme would already have been stripped above.
+	if (aOpt.color_bk != CLR_INVALID) // Explicit color change was requested.
 		SendMessage(aControl.hwnd, PBM_SETBKCOLOR, 0, aOpt.color_bk);
-	}
 }
 
 
 
-bool GuiType::ControlOverrideBkColor(GuiControlType &aControl)
+GuiControlType *GuiType::ControlOverrideBkColor(GuiControlType &aControl)
 // Caller has ensured that aControl.type is something for which the window's or tab control's background
 // should apply (e.g. Progress or Text).
 {
 	GuiControlType *ptab_control;
 	if (!mTabControlCount || !(ptab_control = FindTabControl(aControl.tab_control_index))
-		|| !(ptab_control->attrib & GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT)) // Relies on short-circuit boolean order.
-		return false;  // Override not needed because control isn't on a tab, or it's tab has same color as window.
+		|| ptab_control->background_color == CLR_INVALID) // Relies on short-circuit boolean order.
+		return NULL;  // Override not needed because control isn't on a tab, or it's tab has same color as window.
 	if (GetParent(aControl.hwnd) != mHwnd)
 		// Even if the control doesn't lie entirely within the tab control's display area,
 		// it is only visible within that area due to the parent-child relationship.
-		return true;
+		return ptab_control;
 	// Does this control lie mostly inside the tab?  Note that controls can belong to a tab page even though
 	// they aren't physically located inside the page.
 	RECT overlap_rect, tab_rect, control_rect;
@@ -9534,7 +9456,40 @@ bool GuiType::ControlOverrideBkColor(GuiControlType &aControl)
 	IntersectRect(&overlap_rect, &tab_rect, &control_rect);
 	// Returns true if more than 50% of control's area is inside the tab:
 	return (overlap_rect.right - overlap_rect.left) * (overlap_rect.bottom - overlap_rect.top)
-		> 0.5 * (control_rect.right - control_rect.left) * (control_rect.bottom - control_rect.top);
+		> 0.5 * (control_rect.right - control_rect.left) * (control_rect.bottom - control_rect.top)
+		? ptab_control : NULL;
+}
+
+
+
+void GuiType::ControlGetBkColor(GuiControlType &aControl, bool aUseWindowColor, HBRUSH &aBrush, COLORREF &aColor)
+{
+	if (aControl.background_color != CLR_INVALID)
+	{
+		aBrush = aControl.background_brush;
+		aColor = aControl.background_color;
+	}
+	else if (aUseWindowColor)
+	{
+		// If this static control both belongs to a tab control and is within its physical boundaries,
+		// match its background to the tab control's.  This is only necessary if the tab control has
+		// the +/-Background option, since otherwise its background would be the same as the window's:
+		if (GuiControlType *tab_control = ControlOverrideBkColor(aControl))
+		{
+			aBrush = tab_control->background_brush;
+			aColor = tab_control->background_color;
+		}
+		else
+		{
+			aBrush = mBackgroundBrushWin;
+			aColor = mBackgroundColorWin;
+		}
+	}
+	else
+	{
+		aBrush = mBackgroundBrushCtl;
+		aColor = mBackgroundColorCtl;
+	}
 }
 
 
@@ -10017,13 +9972,12 @@ ResultType GuiType::CreateTabDialog(GuiControlType &aTabControl, GuiControlOptio
 	tab_dialog = CreateDialogIndirect(g_hInstance, &dlg, mHwnd, TabDialogProc);
 	if (!tab_dialog)
 		return FAIL;
-	// SetProp: Seems more maintainable than overloading control.union_color.
 	if (!SetProp(aTabControl.hwnd, _T("ahk_dlg"), tab_dialog))
 	{
 		DestroyWindow(tab_dialog);
 		return FAIL;
 	}
-	LONG attrib = 0;
+	LONG attrib = aTabControl.tab_index;
 	if (aOpt.use_theme)
 	{
 		// Apply a tab control background to the tab dialog.  This also affects
@@ -10031,8 +9985,6 @@ ResultType GuiType::CreateTabDialog(GuiControlType &aTabControl, GuiControlOptio
 		MyEnableThemeDialogTexture(tab_dialog, 6); // ETDT_ENABLETAB = 6
 		attrib |= TABDIALOG_ATTRIB_THEMED;
 	}
-	if (aTabControl.attrib & GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT)
-		attrib |= TABDIALOG_ATTRIB_BACKGROUND_DEFAULT;
 	SetWindowLongPtr(tab_dialog, GWLP_USERDATA, attrib);
 	if (!((mExStyle = GetWindowLong(mHwnd, GWL_EXSTYLE)) & WS_EX_CONTROLPARENT))
 		// WS_EX_CONTROLPARENT must be applied to the parent window as well as the
@@ -10113,7 +10065,7 @@ INT_PTR CALLBACK TabDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 			if (   uMsg == WM_CTLCOLORSTATIC
 				&& (TABDIALOG_ATTRIB_THEMED & GetWindowLongPtr(hDlg, GWLP_USERDATA))
 				&& (pcontrol = pgui->FindControl((HWND)lParam))
-				&& !(pcontrol->attrib & GUI_CONTROL_ATTRIB_BACKGROUND_TRANS)
+				&& (pcontrol->background_color != CLR_TRANSPARENT)
 				&& MyIsAppThemed()   )
 			{
 				HDC hdc = (HDC)wParam;
@@ -10153,13 +10105,17 @@ INT_PTR CALLBACK TabDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 	case WM_CTLCOLORDLG:
 		if (GuiType *pgui = GuiType::FindGui(GetParent(hDlg)))
 		{
-			// Apply the main GUI's background window color if any, unless the tab control
-			// was created with a theme or -Background.
-			if (  pgui->mBackgroundBrushWin
-				&& !((TABDIALOG_ATTRIB_BACKGROUND_DEFAULT | TABDIALOG_ATTRIB_THEMED) & GetWindowLongPtr(hDlg, GWLP_USERDATA))  )
+			// Apply the tab control's background color (which might be inherited from the Gui)
+			// if any.  A non-NULL brush implies -Theme, even if the background was inherited.
+			LONG attrib = (LONG)GetWindowLongPtr(hDlg, GWLP_USERDATA);
+			GuiControlType *ptab_control = pgui->FindTabControl(TABDIALOG_ATTRIB_INDEX(attrib));
+			HBRUSH bk_brush;
+			COLORREF bk_color;
+			pgui->ControlGetBkColor(*ptab_control, TRUE, bk_brush, bk_color);
+			if (bk_brush)
 			{
-				SetBkColor((HDC)wParam, pgui->mBackgroundColorWin);
-				return (INT_PTR)pgui->mBackgroundBrushWin;
+				SetBkColor((HDC)wParam, bk_color);
+				return (INT_PTR)bk_brush;
 			}
 		}
 		break;

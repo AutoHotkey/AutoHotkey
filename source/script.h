@@ -318,8 +318,8 @@ BOOL CALLBACK EnumChildGetText(HWND aWnd, LPARAM lParam);
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam);
 bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd);
 INT_PTR CALLBACK TabDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-#define TABDIALOG_ATTRIB_BACKGROUND_DEFAULT 1
-#define TABDIALOG_ATTRIB_THEMED 2
+#define TABDIALOG_ATTRIB_INDEX(a) (TabControlIndexType)(a & 0xFF)
+#define TABDIALOG_ATTRIB_THEMED 0x100
 
 
 typedef UINT LineNumberType;
@@ -2285,6 +2285,7 @@ struct GuiControlType : public ObjectBase
 	GuiType* gui; // Below code relies on this being the first field.
 	HWND hwnd;
 	LPTSTR name;
+	GuiEvent event_handler;
 	// Keep any fields that are smaller than 4 bytes adjacent to each other.  This conserves memory
 	// due to byte-alignment.  It has been verified to save 4 bytes per struct in this case:
 	GuiControls type;
@@ -2293,13 +2294,15 @@ struct GuiControlType : public ObjectBase
 	#define GUI_CONTROL_ATTRIB_HANDLER_IS_RUNNING  0x04
 	#define GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN   0x08
 	#define GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED 0x10
-	#define GUI_CONTROL_ATTRIB_BACKGROUND_DEFAULT  0x20 // i.e. Don't conform to window/control background color; use default instead.
-	#define GUI_CONTROL_ATTRIB_BACKGROUND_TRANS    0x40 // i.e. Leave this control's background transparent.
+	// Unused: 0x20
+	// Unused: 0x40
 	#define GUI_CONTROL_ATTRIB_ALTBEHAVIOR         0x80 // For sliders: Reverse/Invert the value. Also for up-down controls (ALT means 32-bit vs. 16-bit). Also for ListView and Tab, and for Edit.
 	UCHAR attrib; // A field of option flags/bits defined above.
 	TabControlIndexType tab_control_index; // Which tab control this control belongs to, if any.
 	TabIndexType tab_index; // For type==TAB, this stores the tab control's index.  For other types, it stores the page.
-	GuiEvent event_handler;
+	#define CLR_TRANSPARENT 0xFF000001L
+	COLORREF background_color;
+	HBRUSH background_brush;
 	union
 	{
 		COLORREF union_color;  // Color of the control's text.
@@ -2311,11 +2314,93 @@ struct GuiControlType : public ObjectBase
 	#define USES_FONT_AND_TEXT_COLOR(type) !(type == GUI_CONTROL_PIC || type == GUI_CONTROL_UPDOWN \
 		|| type == GUI_CONTROL_SLIDER || type == GUI_CONTROL_PROGRESS)
 
+	bool SupportsBackgroundTrans()
+	{
+		switch (type)
+		{
+		// Supported via WM_CTLCOLORSTATIC:
+		case GUI_CONTROL_LABEL:
+		case GUI_CONTROL_PIC:
+		case GUI_CONTROL_GROUPBOX:
+		case GUI_CONTROL_BUTTON:
+			return true;
+		//case GUI_CONTROL_CHECKBOX:     Checkbox and radios with trans background have problems with
+		//case GUI_CONTROL_RADIO:        their focus rects being drawn incorrectly.
+		//case GUI_CONTROL_LISTBOX:      These are also a problem, at least under some theme settings.
+		//case GUI_CONTROL_EDIT:
+		//case GUI_CONTROL_DROPDOWNLIST:
+		//case GUI_CONTROL_SLIDER:       These are a problem under both classic and non-classic themes.
+		//case GUI_CONTROL_COMBOBOX:
+		//case GUI_CONTROL_LINK:         BackgroundTrans would have no effect.
+		//case GUI_CONTROL_BUTTON:       Can't reach this point because WM_CTLCOLORBTN is not handled above.
+		//case GUI_CONTROL_LISTVIEW:     Can't reach this point because WM_CTLCOLORxxx is never received for it.
+		//case GUI_CONTROL_TREEVIEW:     Same (verified).
+		//case GUI_CONTROL_PROGRESS:     Same (verified).
+		//case GUI_CONTROL_UPDOWN:       Same (verified).
+		//case GUI_CONTROL_DATETIME:     Same (verified).
+		//case GUI_CONTROL_MONTHCAL:     Same (verified).
+		//case GUI_CONTROL_HOTKEY:       Same (verified).
+		//case GUI_CONTROL_TAB:          Same.
+		//case GUI_CONTROL_STATUSBAR:    Its text fields (parts) are its children, not ours, so its window proc probably receives WM_CTLCOLORSTATIC, not ours.
+		default:
+			return false; // Prohibit the TRANS setting for the above control types.
+		}
+	}
+
+	bool SupportsBackgroundColor()
+	{
+		switch (type)
+		{
+		case GUI_CONTROL_DATETIME:
+		case GUI_CONTROL_MONTHCAL:
+		case GUI_CONTROL_HOTKEY:
+		case GUI_CONTROL_UPDOWN:
+		case GUI_CONTROL_ACTIVEX:
+			return false;
+		//case GUI_CONTROL_LABEL:
+		//case GUI_CONTROL_PIC:
+		//case GUI_CONTROL_GROUPBOX: // Label only
+		//case GUI_CONTROL_BUTTON: // Border only (Win10 with theme)
+		//case GUI_CONTROL_CHECKBOX:
+		//case GUI_CONTROL_RADIO:
+		//case GUI_CONTROL_DROPDOWNLIST: // Main control only; requires -Theme
+		//case GUI_CONTROL_COMBOBOX: // Main control only
+		//case GUI_CONTROL_LISTBOX:
+		//case GUI_CONTROL_LISTVIEW:
+		//case GUI_CONTROL_TREEVIEW:
+		//case GUI_CONTROL_EDIT:
+		//case GUI_CONTROL_SLIDER:
+		//case GUI_CONTROL_PROGRESS:
+		//case GUI_CONTROL_TAB:
+		//case GUI_CONTROL_LINK:
+		//case GUI_CONTROL_CUSTOM: // Maybe
+		//case GUI_CONTROL_STATUSBAR:
+		default:
+			return true;
+		}
+	}
+
+	bool RequiresBackgroundBrush()
+	// Caller has verified this control supports custom background colors.
+	{
+		switch (type)
+		{
+		case GUI_CONTROL_LISTVIEW:
+		case GUI_CONTROL_TREEVIEW:
+		case GUI_CONTROL_PROGRESS:
+		case GUI_CONTROL_STATUSBAR:
+			return false;
+		default:
+			return true;
+		}
+	}
+
 	void Initialize(GuiType* owner)
 	{
 		// Zerofill all the members of this object (except for ObjectBase members)
 		ZeroMemory(&gui, (char*)(this+1) - (char*)&gui);
 		gui = owner;
+		background_color = CLR_INVALID;
 	}
 
 	enum MemberID
@@ -2629,7 +2714,8 @@ public:
 	void ControlSetListViewOptions(GuiControlType &aControl, GuiControlOptionsType &aOpt);
 	void ControlSetTreeViewOptions(GuiControlType &aControl, GuiControlOptionsType &aOpt);
 	void ControlSetProgressOptions(GuiControlType &aControl, GuiControlOptionsType &aOpt, DWORD aStyle);
-	bool ControlOverrideBkColor(GuiControlType &aControl);
+	GuiControlType *ControlOverrideBkColor(GuiControlType &aControl);
+	void ControlGetBkColor(GuiControlType &aControl, bool aUseWindowColor, HBRUSH &aBrush, COLORREF &aColor);
 
 	void ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFirstControl);
 	GuiControlType *FindTabControl(TabControlIndexType aTabControlIndex);
