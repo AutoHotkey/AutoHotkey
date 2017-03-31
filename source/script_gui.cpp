@@ -207,9 +207,12 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		case M_Options:
 		{
 			LPTSTR options = ParamIndexToOptionalString(0, nbuf1);
+			bool set_last_found_window = false;
 			ToggleValueType own_dialogs = TOGGLE_INVALID;
-			if (!ParseOptions(options, own_dialogs))
+			if (!ParseOptions(options, set_last_found_window, own_dialogs))
 				break; // Above already displayed an error message.
+			if (set_last_found_window)
+				g->hWndLastUsed = mHwnd;
 			SetOwnDialogs(own_dialogs);
 			return OK;
 		}
@@ -359,8 +362,9 @@ BIF_DECL(BIF_GuiCreate)
 	if (!gui)
 		_f_throw(ERR_OUTOFMEM); // Short msg since so rare.
 
+	bool set_last_found_window = false;
 	ToggleValueType own_dialogs = TOGGLE_INVALID;
-	if (*options && !gui->ParseOptions(options, own_dialogs))
+	if (*options && !gui->ParseOptions(options, set_last_found_window, own_dialogs))
 	{
 		delete gui;
 		_f_return_FAIL; // ParseOptions() already displayed the error.
@@ -420,6 +424,8 @@ BIF_DECL(BIF_GuiCreate)
 		gui->SetEvents();
 	}
 
+	if (set_last_found_window)
+		g->hWndLastUsed = gui->mHwnd;
 	gui->SetOwnDialogs(own_dialogs);
 
 	// Successful creation - add the Gui to the global list of Guis and return it
@@ -4153,7 +4159,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 
 
-ResultType GuiType::ParseOptions(LPTSTR aOptions, ToggleValueType &aOwnDialogs)
+ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs)
 // This function is similar to ControlParseOptions() further below, so should be maintained alongside it.
 // Caller must have already initialized aSetLastFoundWindow/, bool &aOwnDialogs with desired starting values.
 // Caller must ensure that aOptions is a modifiable string, since this method temporarily alters it.
@@ -4333,8 +4339,8 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, ToggleValueType &aOwnDialogs)
 			if (adding) mStyle |= WS_DISABLED; else mStyle &= ~WS_DISABLED;
 		}
 		
-		//else if (!_tcsicmp(next_option, _T("LastFound")))
-		//	aSetLastFoundWindow = true; // Regardless of whether "adding" is true or false.
+		else if (!_tcsicmp(next_option, _T("LastFound")))
+			aSetLastFoundWindow = true; // Regardless of whether "adding" is true or false.
 
 		else if (!_tcsicmp(next_option, _T("MaximizeBox"))) // See above comment.
 			if (adding) mStyle |= WS_MAXIMIZEBOX|WS_SYSMENU; else mStyle &= ~WS_MAXIMIZEBOX;

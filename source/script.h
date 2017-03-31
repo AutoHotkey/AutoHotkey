@@ -2631,7 +2631,7 @@ public:
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Object *aObj = NULL);
 
-	ResultType ParseOptions(LPTSTR aOptions, ToggleValueType &aOwnDialogs);
+	ResultType ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs);
 	void SetOwnDialogs(ToggleValueType state)
 	{
 		if (state == TOGGLE_INVALID)
