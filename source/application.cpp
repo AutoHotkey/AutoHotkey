@@ -1206,7 +1206,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				g.hWndLastUsed = pgui->mHwnd;
 				pgui->AddRef(); // Keep the pointer valid at least until the thread finishes.
 				//g.EventInfo = gui_event_info; // Override the thread-default of NO_EVENT_INFO.
-				pgui->SetOwnDialogs(TOGGLED_ON); // Seems like a sensible default.
 
 				if (pgui_event_is_running) // i.e. GuiClose, GuiEscape, and related window-level events.
 					*pgui_event_is_running = true;
