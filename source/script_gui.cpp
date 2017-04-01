@@ -257,7 +257,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			_o_return_empty; // TODO
 		}
 		case P_OnEvent:
-			return EventHandlerProp(aResultToken, *pEvent, aParam, IS_INVOKE_SET);
+			return EventHandlerProp(aResultToken, *pEvent, aParam, IS_INVOKE_SET, mEventPrefix);
 		case P_Control:
 		{
 			if (IS_INVOKE_SET)
@@ -387,38 +387,29 @@ BIF_DECL(BIF_GuiCreate)
 	if (*title)
 		SetWindowText(gui->mHwnd, title);
 
-	// Set the event handler if one has been specified.
+	// Set up event handlers.
+	LPTSTR prefix = _T("Gui");
 	if (!ParamIndexIsOmitted(2))
 	{
 		IObject* obj = TokenToObject(*aParam[2]);
 		if (obj)
 		{
 			// The caller specified an object to use as event sink.
-			gui->mHasEventSink = true;
 			gui->mEventSink = obj;
 			gui->mEventSink->AddRef();
 		}
 		else
 		{
-			LPTSTR prefix = ParamIndexToString(2, _f_number_buf); // Pass buf for error-reporting purposes.
-			if (!Var::ValidateName(prefix, DISPLAY_FUNC_ERROR))
-			{
-				delete gui;
-				_f_return_FAIL; // Error already shown by above.
-			}
-
 			// The caller specified a function prefix.
-			prefix = _tcsdup(prefix);
-			if (!prefix)
-			{
-				delete gui;
-				_f_throw(ERR_OUTOFMEM); // Short msg since so rare.
-			}
-
-			gui->mEventFuncPrefix = prefix;
+			prefix = ParamIndexToString(2, _f_number_buf);
 		}
-		gui->SetEvents();
 	}
+	if (!gui->SetEventPrefix(prefix))
+	{
+		delete gui;
+		_f_return_FAIL; // Error already shown by above.
+	}
+	gui->SetEvents();
 
 	if (set_last_found_window)
 		g->hWndLastUsed = gui->mHwnd;
@@ -1637,10 +1628,9 @@ ResultType GuiType::Destroy()
 
 	ClearEvents();
 
-	if (mHasEventSink)
+	if (mEventSink)
 		mEventSink->Release();
-	else if (mEventFuncPrefix != Var::sEmptyString)
-		free(mEventFuncPrefix);
+	free(mEventPrefix);
 
 	HICON icon_eligible_for_destruction = mIconEligibleForDestruction;
 	HICON icon_eligible_for_destruction_small = mIconEligibleForDestructionSmall;
@@ -1795,23 +1785,28 @@ void GuiType::ClearEventHandler(GuiEvent& aHandler)
 }
 
 
-void GuiType::SetEventHandler(GuiEvent& aHandler, LPTSTR aName)
+void GuiType::SetEventHandler(GuiEvent& aHandler, LPTSTR aName, LPTSTR aPrefix)
 {
 	ClearEventHandler(aHandler);
 
 	if (!aName || !*aName)
 		return;
 
-	if (mHasEventSink)
+	TCHAR buf[MAX_VAR_NAME_LENGTH+1];
+	if (aPrefix)
+	{
+		_sntprintf(buf, _countof(buf), _T("%s%s"), aPrefix, aName);
+		aName = buf;
+	}
+
+	if (mEventSink)
 	{
 		aHandler.mMethodName = _tcsdup(aName);
 		aHandler.mIsMethod = true;
 	}
 	else
 	{
-		TCHAR buf[MAX_VAR_NAME_LENGTH];
-		_sntprintf(buf, _countof(buf), _T("%s%s"), mEventFuncPrefix, aName);
-		aHandler.mObject = g_script.FindFunc(buf);
+		aHandler.mObject = g_script.FindFunc(aName);
 	}
 }
 
@@ -1849,7 +1844,7 @@ int GuiType::CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam
 
 
 
-ResultType GuiType::EventHandlerProp(ResultToken& aResultToken, GuiEvent& aHandler, ExprTokenType* aParam[], bool aIsSet)
+ResultType GuiType::EventHandlerProp(ResultToken& aResultToken, GuiEvent& aHandler, ExprTokenType* aParam[], bool aIsSet, LPTSTR aPrefix)
 {
 	if (aIsSet)
 	{
@@ -1858,7 +1853,7 @@ ResultType GuiType::EventHandlerProp(ResultToken& aResultToken, GuiEvent& aHandl
 		else
 		{
 			LPTSTR name = ParamIndexToString(0, _f_number_buf); // Pass buf because a number can be a valid suffix.
-			SetEventHandler(aHandler, name);
+			SetEventHandler(aHandler, name, aPrefix);
 			if (!aHandler && *name)
 				_o_throw(_T("The specified event handler does not exist."), name);
 		}
@@ -1912,16 +1907,36 @@ IObject* GuiType::CreateDropArray(HDROP hDrop)
 
 
 
+ResultType GuiType::SetEventPrefix(LPTSTR aPrefix)
+{
+	if (*aPrefix)
+	{
+		if (!Var::ValidateName(aPrefix, DISPLAY_FUNC_ERROR))
+			return FAIL; // Error already shown by above.
+
+		aPrefix = _tcsdup(aPrefix);
+		if (!aPrefix)
+			return g_script.ScriptError(ERR_OUTOFMEM);
+	}
+	else
+		aPrefix = NULL;
+	free(mEventPrefix);
+	mEventPrefix = aPrefix;
+	return OK;
+}
+
+
+
 void GuiType::SetEvents()
 {
-	if (!mHasEventSink && mEventFuncPrefix == Var::sEmptyString)
+	if (!mEventSink && !mEventPrefix)
 		return;
 
-	SetEventHandler(mOnClose, _T("OnClose"));
-	SetEventHandler(mOnEscape, _T("OnEscape"));
-	SetEventHandler(mOnSize, _T("OnSize"));
-	SetEventHandler(mOnContextMenu, _T("OnContextMenu"));
-	SetEventHandler(mOnDropFiles, _T("OnDropFiles"));
+	SetEventHandler(mOnClose, _T("Close"), mEventPrefix);
+	SetEventHandler(mOnEscape, _T("Escape"), mEventPrefix);
+	SetEventHandler(mOnSize, _T("Size"), mEventPrefix);
+	SetEventHandler(mOnContextMenu, _T("ContextMenu"), mEventPrefix);
+	SetEventHandler(mOnDropFiles, _T("DropFiles"), mEventPrefix);
 
 	if (mOnDropFiles && !mOnDropFiles.mIsMethod)
 	{
@@ -5622,7 +5637,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				else
 				{
 					SetEventHandler(aControl.event_handler, next_option);
-					if (!mHasEventSink && !aControl.event_handler)
+					if (!mEventSink && !aControl.event_handler)
 					{
 						g_script.ScriptError(_T("The specified event handler does not exist."), next_option);
 						goto return_fail;

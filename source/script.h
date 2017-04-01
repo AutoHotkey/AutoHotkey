@@ -2497,14 +2497,10 @@ public:
 	GuiIndexType mControlCapacity; // How many controls can fit into the current memory size of mControl.
 	GuiControlType **mControl; // Will become an array of controls when the window is first created.
 	GuiIndexType mDefaultButtonIndex; // Index vs. pointer is needed for some things.
-	union
-	{
-		IObject* mEventSink;
-		LPTSTR mEventFuncPrefix;
-	};
+	IObject* mEventSink;
+	LPTSTR mEventPrefix;
 	GuiEvent mOnClose, mOnEscape, mOnSize, mOnDropFiles, mOnContextMenu;
 	bool mOnCloseIsRunning, mOnEscapeIsRunning, mOnSizeIsRunning; // DropFiles doesn't need one of these.
-	bool mHasEventSink;
 	DWORD mStyle, mExStyle; // Style of window.
 	bool mInRadioGroup; // Whether the control currently being created is inside a prior radio-group.
 	bool mUseTheme;  // Whether XP theme and styles should be applied to the parent window and subsequently added controls.
@@ -2573,10 +2569,9 @@ public:
 	GuiType() // Constructor
 		: mHwnd(NULL), mStatusBarHwnd(NULL), mControlCount(0), mControlCapacity(0)
 		, mPrevGui(NULL), mNextGui(NULL)
-		, mDefaultButtonIndex(-1), mEventFuncPrefix(Var::sEmptyString)
+		, mDefaultButtonIndex(-1), mEventPrefix(NULL), mEventSink(NULL)
 		, mOnClose(), mOnEscape(), mOnSize(), mOnDropFiles(), mOnContextMenu()
 		, mOnCloseIsRunning(false), mOnEscapeIsRunning(false), mOnSizeIsRunning(false)
-		, mHasEventSink(false), mUsesDPIScaling(true)
 		// The styles DS_CENTER and DS_3DLOOK appear to be ineffectual in this case.
 		// Also note that WS_CLIPSIBLINGS winds up on the window even if unspecified, which is a strong hint
 		// that it should always be used for top level windows across all OSes.  Usenet posts confirm this.
@@ -2603,6 +2598,7 @@ public:
 		, mMaxWidth(COORD_UNSPECIFIED), mMaxHeight(COORD_UNSPECIFIED)
 		, mGuiShowHasNeverBeenDone(true), mFirstActivation(true), mShowIsInProgress(false)
 		, mDestroyWindowHasBeenCalled(false), mControlWidthWasSetByContents(false)
+		, mUsesDPIScaling(true)
 	{
 		// The array of controls is left uninitialized to catch bugs.  Each control's attributes should be
 		// fully populated when it is created.
@@ -2619,11 +2615,12 @@ public:
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Create();
 	void ClearEventHandler(GuiEvent& aHandler);
-	void SetEventHandler(GuiEvent& aHandler, LPTSTR aName);
+	void SetEventHandler(GuiEvent& aHandler, LPTSTR aName, LPTSTR aPrefix = NULL);
 	void SetEventHandler(GuiEvent& aHandler, IObject* aObject);
-	ResultType EventHandlerProp(ResultToken& aResultToken, GuiEvent& aHandler, ExprTokenType* aParam[], bool aIsSet);
+	ResultType EventHandlerProp(ResultToken& aResultToken, GuiEvent& aHandler, ExprTokenType* aParam[], bool aIsSet, LPTSTR aPrefix = NULL);
 	int CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam[]);
 	static LPTSTR ConvertEvent(GuiEventType evt);
+	ResultType SetEventPrefix(LPTSTR aPrefix);
 	void SetEvents();
 	void ClearEvents();
 	static IObject* CreateDropArray(HDROP hDrop);
