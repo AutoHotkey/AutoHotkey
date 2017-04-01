@@ -360,7 +360,8 @@ BIF_DECL(BIF_GuiCreate)
 
 	bool set_last_found_window = false;
 	ToggleValueType own_dialogs = TOGGLE_INVALID;
-	if (*options && !gui->ParseOptions(options, set_last_found_window, own_dialogs))
+	bool prefix_was_set = false;
+	if (*options && !gui->ParseOptions(options, set_last_found_window, own_dialogs, &prefix_was_set))
 	{
 		delete gui;
 		_f_return_FAIL; // ParseOptions() already displayed the error.
@@ -369,6 +370,7 @@ BIF_DECL(BIF_GuiCreate)
 	gui->mControl = (GuiControlType **)malloc(GUI_CONTROL_BLOCK_SIZE * sizeof(GuiControlType*));
 	if (!gui->mControl)
 	{
+		free(gui->mEventPrefix);
 		delete gui;
 		_f_throw(ERR_OUTOFMEM); // Short msg since so rare.
 	}
@@ -378,6 +380,7 @@ BIF_DECL(BIF_GuiCreate)
 	// Create the Gui now.
 	if (!gui->Create())
 	{
+		free(gui->mEventPrefix);
 		free(gui->mControl);
 		delete gui;
 		_f_throw(_T("Could not create Gui.")); // Short msg since so rare.
@@ -388,7 +391,7 @@ BIF_DECL(BIF_GuiCreate)
 		SetWindowText(gui->mHwnd, title);
 
 	// Set up event handlers.
-	LPTSTR prefix = _T("Gui");
+	LPTSTR prefix = prefix_was_set ? NULL : _T("Gui"); // Default to "Gui" if +PrefixXXX and -Prefix have not been used.
 	if (!ParamIndexIsOmitted(2))
 	{
 		IObject* obj = TokenToObject(*aParam[2]);
@@ -404,7 +407,7 @@ BIF_DECL(BIF_GuiCreate)
 			prefix = ParamIndexToString(2, _f_number_buf);
 		}
 	}
-	if (!gui->SetEventPrefix(prefix))
+	if (prefix && !gui->SetEventPrefix(prefix))
 	{
 		delete gui;
 		_f_return_FAIL; // Error already shown by above.
@@ -4170,7 +4173,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 
 
-ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs)
+ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs, bool *apPrefixWasSet)
 // This function is similar to ControlParseOptions() further below, so should be maintained alongside it.
 // Caller must have already initialized aSetLastFoundWindow/, bool &aOwnDialogs with desired starting values.
 // Caller must ensure that aOptions is a modifiable string, since this method temporarily alters it.
@@ -4419,6 +4422,20 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 				mMaxWidth = COORD_UNSPECIFIED;
 				mMaxHeight = COORD_UNSPECIFIED;
 			}
+		}
+
+		else if (!_tcsnicmp(next_option, _T("Prefix"), 6))
+		{
+			SetEventPrefix(next_option+6);
+			if (mHwnd)
+			{
+				if (mEventPrefix)
+					SetEvents();
+				else
+					ClearEvents();
+			}
+			if (apPrefixWasSet)
+				*apPrefixWasSet = true;
 		}
 
 		else if (!_tcsicmp(next_option, _T("OwnDialogs")))
