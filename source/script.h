@@ -2564,6 +2564,8 @@ public:
 		P_MarginY,
 		P_Menu,
 		P_OnEvent,
+		P_Pos,
+		P_ClientPos,
 	};
 
 	GuiType() // Constructor
@@ -2627,6 +2629,7 @@ public:
 	ResultType SetMenu(LPTSTR aMenuName);
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Object *aObj = NULL);
+	ResultType PropertyGetPos(ResultToken &aResultToken, RECT &aPos);
 
 	ResultType ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs, bool *apPrefixWasSet = NULL);
 	void SetOwnDialogs(ToggleValueType state)

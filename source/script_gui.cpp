@@ -138,6 +138,8 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	if_member("MarginY", P_MarginY)
 	if_member("BgColor", P_BgColor)
 	if_member("CtrlColor", P_CtrlColor)
+	if_member("Pos", P_Pos)
+	if_member("ClientPos", P_ClientPos)
 #undef if_member
 	if (member == INVALID)
 		return INVOKE_NOT_HANDLED;
@@ -341,6 +343,24 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			_sntprintf(_f_retval_buf, _f_retval_buf_size, _T("%06X"), bgr_to_rgb(color));
 			_o_return_p(_f_retval_buf);
 		}
+		case P_Pos:
+		case P_ClientPos:
+		{
+			if (IS_INVOKE_SET)
+				_o_throw(ERR_INVALID_USAGE);
+
+			RECT rect;
+			if (member == P_Pos)
+			{
+				GetWindowRect(mHwnd, &rect);
+			}
+			else
+			{
+				GetClientRect(mHwnd, &rect);
+				MapWindowPoints(mHwnd, NULL, (LPPOINT)&rect, 2);
+			}
+			return PropertyGetPos(aResultToken, rect);
+		}
 	}
 
 	// Since above did not return, we assume failure.
@@ -540,7 +560,6 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 	if_member("Text", P_Text)
 	if_member("Value", P_Value)
 	if_member("Pos", P_Pos)
-	if_member("Position", P_Pos)
 	if_member("Enabled", P_Enabled)
 	if_member("Visible", P_Visible)
 	else if (type == GUI_CONTROL_TAB)
@@ -694,21 +713,9 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 
 			RECT rect;
 			GetWindowRect(hwnd, &rect);
-			POINT pt = {rect.left, rect.top};
-			ScreenToClient(gui->mHwnd, &pt);  // Failure seems too rare to check for.
+			MapWindowPoints(NULL, gui->mHwnd, (LPPOINT)&rect, 2);
 
-			ExprTokenType tok[8];
-			ExprTokenType* param[8] = { tok+0, tok+1, tok+2, tok+3, tok+4, tok+5, tok+6, tok+7 };
-			tok[0].SetValue(_T("x"));
-			tok[1].SetValue(gui->Unscale(pt.x));
-			tok[2].SetValue(_T("y"));
-			tok[3].SetValue(gui->Unscale(pt.y));
-			tok[4].SetValue(_T("w"));
-			tok[5].SetValue(gui->Unscale(rect.right-rect.left));
-			tok[6].SetValue(_T("h"));
-			tok[7].SetValue(gui->Unscale(rect.bottom-rect.top));
-			IObject* obj = Object::Create(param, 8);
-			_o_return_or_throw(obj);
+			return gui->PropertyGetPos(aResultToken, rect);
 		}
 
 		case P_Enabled:
@@ -850,6 +857,23 @@ ResultType GuiType::ControlSetName(GuiControlType &aControl, LPTSTR aName)
 		free(aControl.name);
 	aControl.name = aName;
 	return OK;
+}
+
+
+ResultType GuiType::PropertyGetPos(ResultToken &aResultToken, RECT &aPos)
+{
+	ExprTokenType values[] =
+	{
+		_T("x"), Unscale(aPos.left),
+		_T("y"), Unscale(aPos.top),
+		_T("w"), Unscale(aPos.right-aPos.left),
+		_T("h"), Unscale(aPos.bottom-aPos.top)
+	};
+	ExprTokenType *param[_countof(values)];
+	for (int i = 0; i < _countof(values); ++i)
+		param[i] = &values[i];
+	IObject* obj = Object::Create(param, 8);
+	_o_return_or_throw(obj);
 }
 
 

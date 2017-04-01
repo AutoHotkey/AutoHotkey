@@ -299,6 +299,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 
 
 	ExprTokenType() {}
+	ExprTokenType(int aValue) { SetValue(aValue); }
 	ExprTokenType(__int64 aValue) { SetValue(aValue); }
 	ExprTokenType(double aValue) { SetValue(aValue); }
 	ExprTokenType(IObject *aValue) { SetValue(aValue); }
