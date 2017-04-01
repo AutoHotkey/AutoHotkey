@@ -7089,9 +7089,22 @@ ResultType GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 		GuiControlType& control = *mControl[u]; // For performance and readability.
 		if (control.name == NULL) // Skip the control if it does not have a name
 			continue;
-
-		if (control.type != GUI_CONTROL_RADIO)
+		
+		switch (control.type)
 		{
+		case GUI_CONTROL_TEXT:
+		case GUI_CONTROL_PIC:
+		case GUI_CONTROL_GROUPBOX:
+		case GUI_CONTROL_BUTTON:
+		case GUI_CONTROL_RADIO: // Radio controls are handled separately, by group.
+		case GUI_CONTROL_LISTVIEW: // LV and TV do not obey Submit. Instead, more flexible methods are available to the script.
+		case GUI_CONTROL_TREEVIEW: //
+		case GUI_CONTROL_PROGRESS:
+		case GUI_CONTROL_ACTIVEX:
+		case GUI_CONTROL_LINK:
+			// This control doesn't accept user input, or it must be retrieved a different way.
+			break;
+		default:
 			TCHAR temp_buf[MAX_NUMBER_SIZE];
 			ResultToken value;
 			value.InitResult(temp_buf);
