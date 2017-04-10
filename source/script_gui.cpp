@@ -4550,6 +4550,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 	COLORREF &color_main = (aControl.type == GUI_CONTROL_LISTVIEW || aControl.type == GUI_CONTROL_PIC)
 		? aOpt.color_listview : aControl.union_color;
 	LPTSTR next_option, option_end;
+	LPTSTR error_message; // Used by "return_error:" when aControl.hwnd == NULL.
 	TCHAR orig_char;
 	bool adding; // Whether this option is being added (+) or removed (-).
 	GuiControlType *tab_control;
@@ -5251,7 +5252,10 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			// Retrieve the class atom (http://blogs.msdn.com/b/oldnewthing/archive/2004/10/11/240744.aspx)
 			aOpt.customClassAtom = (ATOM) GetClassInfoEx(g_hInstance, className, &wc);
 			if (aOpt.customClassAtom == 0)
-				return g_script.ScriptError(_T("Unregistered window class."), className);
+			{
+				g_script.ScriptError(_T("Unregistered window class."), className);
+				goto return_fail;
+			}
 		}
 
 		// Styles (alignment/justification):
@@ -5578,7 +5582,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					break;
 				default:
 					// v1.1.04: Validate Gui options.
-					return g_script.ScriptError(ERR_INVALID_OPTION, next_option-1);
+					g_script.ScriptError(ERR_INVALID_OPTION, next_option-1);
+					goto return_fail;
 				}
 				*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 				continue;
@@ -5593,11 +5598,12 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				// no support click-detection anyway, even if the BS_NOTIFY style is given to them
 				// (this has been verified twice):
 				if (aControl.type == GUI_CONTROL_GROUPBOX || aControl.type == GUI_CONTROL_PROGRESS)
+				{
 					// If control's hwnd exists, we were called from a caller who wants ErrorLevel set
 					// instead of a message displayed:
-					return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
-						: g_script.ScriptError(_T("This control type should not have an associated subroutine.")
-							, next_option - 1);
+					error_message = _T("This control type should not have an associated subroutine.");
+					goto return_error;
+				}
 				IObject *candidate_label;
 				if (   !(candidate_label = g_script.FindCallable(next_option, aParam3Var, 4))   )
 				{
@@ -5611,8 +5617,10 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					//else if (!_tcsicmp(label_name, "Clear")) -->
 					//	control.options |= GUI_CONTROL_ATTRIB_IMPLICIT_CLEAR;
 					else // Since a non-special label was explicitly specified, it's an error that it can't be found.
-						return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
-							: g_script.ScriptError(ERR_NO_LABEL, next_option - 1);
+					{
+						error_message = ERR_NO_LABEL;
+						goto return_error;
+					}
 				}
 				if (aControl.type == GUI_CONTROL_TEXT || aControl.type == GUI_CONTROL_PIC)
 					// Apply the SS_NOTIFY style *only* if the control actually has an associated action.
@@ -5642,7 +5650,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					// all those functions to have a silent mode doesn't seem worth the trouble given how
 					// rarely 1) a control needs to get a new variable; 2) that variable name is too long
 					// or not valid.
-					return FAIL;  // It already displayed the error (e.g. name too long). Existing var (if any) is retained.
+					goto return_fail;  // It already displayed the error (e.g. name too long). Existing var (if any) is retained.
 				// Below: Must be a global variable since otherwise, "Gui Submit" would store its results
 				// in the local variables of some function that isn't even currently running.  Reporting
 				// a runtime error seems the best way to solve this overall issue since the other
@@ -5656,7 +5664,10 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				// that they point to the global instead.  But that is pretty ugly and doesn't seem worth it.
 				candidate_var = candidate_var->ResolveAlias(); // Update it to its target if it's an alias.  This might be relied upon by Gui::FindControl() and other things, and also the section below.
 				if (candidate_var->IsNonStaticLocal()) // Note that an alias can point to a local vs. global var.
-					return g_script.ScriptError(_T("A control's variable must be global or static."), next_option - 1);
+				{
+					g_script.ScriptError(_T("A control's variable must be global or static."), next_option - 1);
+					goto return_fail;
+				}
 				// Another reason that the above always resolves aliases is because it allows the next
 				// check below to find true duplicates, even if different aliases are used to create the
 				// controls (i.e. if two alias both point to the same global).
@@ -5670,9 +5681,10 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				GuiIndexType u;
 				for (u = 0; u < mControlCount; ++u)
 					if (mControl[u].output_var == candidate_var)
-						return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
-							: g_script.ScriptError(_T("The same variable cannot be used for more than one control.") // It used to say "one control per window" but that seems more confusing than it's worth.
-								, next_option - 1);
+					{
+						error_message = _T("The same variable cannot be used for more than one control."); // It used to say "one control per window" but that seems more confusing than it's worth.
+						goto return_error;
+					}
 				aControl.output_var = candidate_var;
 				break;
 
@@ -5833,12 +5845,24 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					break;
 				}
 				// v1.1.04: Validate Gui options.
-				return g_script.ScriptError(ERR_INVALID_OPTION, next_option-1);
+				g_script.ScriptError(ERR_INVALID_OPTION, next_option-1);
+				goto return_fail;
 			} // switch()
 		} // Final "else" in the "else if" ladder.
 
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
-
+		continue;
+	// These "subroutines" are used to reduce code size and ensure the temporary termination is undone even on failure:
+	return_fail:
+		*option_end = orig_char; // See above.
+		return FAIL;
+	return_error:
+		// Although it's tempting to undo the termination *after* showing the error (so that only the bad option
+		// is shown), that would cause the options parameter to appear truncated in the error line text, unless
+		// the parameter contains variables, since aOptions does not point to the arg text in that case.
+		*option_end = orig_char; // See above.
+		return aControl.hwnd ? g_script.SetErrorLevelOrThrow()
+						: g_script.ScriptError(error_message, next_option - 1);
 	} // for() each item in option list
 
 	// If the control has already been created, apply the new style and exstyle here, if any:
