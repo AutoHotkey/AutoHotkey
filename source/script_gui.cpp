@@ -552,6 +552,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 	if_member("Choose", M_Choose)
 	if_member("UpdateFont", M_UpdateFont)
 	if_member("Focus", M_Focus)
+	if_member("Focused", P_Focused)
 	if_member("Hwnd", P_Handle)
 	if_member("Gui", P_Gui)
 	if_member("Event", P_Event)
@@ -631,6 +632,13 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 		case M_Focus:
 			SetFocus(hwnd);
 			_o_return_empty;
+
+		case P_Focused:
+			if (IS_INVOKE_SET)
+				// Not allowed because it's unclear what should happen when Focused := false,
+				// and because the side effects of Focus() don't fit with property semantics.
+				_o_throw(ERR_INVALID_USAGE);
+			_o_return(GetFocus() == hwnd);
 
 		case M_UpdateFont:
 			gui->ControlUpdateFont(*this);

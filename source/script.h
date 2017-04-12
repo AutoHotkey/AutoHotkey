@@ -2427,6 +2427,7 @@ struct GuiControlType : public ObjectBase
 		P_Pos,
 		P_Enabled,
 		P_Visible,
+		P_Focused,
 	};
 
 	void Destroy(); // Called by GuiType::Destroy().
