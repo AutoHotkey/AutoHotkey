@@ -2448,29 +2448,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	//case GUI_CONTROL_STATUSBAR:
 	}
 
-	////////////////////////////////////////////////////////////////////////////////////////////
-	// If the above didn't already set an event handler for this control and this control type
-	// qualifies, check if an automatic/implicit event handler exists for it in the script.
-	////////////////////////////////////////////////////////////////////////////////////////////
-	if (aControlType == GUI_CONTROL_BUTTON
-		&& !control.event_handler && !(control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL))
-	{
-		// Generate automatic event handler name.
-		TCHAR handler_name[MAX_VAR_NAME_LENGTH] = _T("Button");
-		LPTSTR cur_char = aText;
-		while (*cur_char)
-		{
-			LPTSTR end = find_identifier_end(cur_char);
-			TCHAR temp = *end;
-			*end = 0;
-			_tcsncat(handler_name, cur_char, _countof(handler_name));
-			*end = temp;
-			for (; *end && !IS_IDENTIFIER_CHAR(*end); end++); // Skip over illegal part.
-			cur_char = end;
-		}
-		SetEventHandler(control.event_handler, handler_name);
-	}
-
 	// The below will yield NULL for GUI_CONTROL_STATUSBAR because control.tab_control_index==OutOfBounds for it.
 	GuiControlType *owning_tab_control = FindTabControl(control.tab_control_index); // For use in various places.
 	GuiControlType *prev_control = mControlCount ? mControl[mControlCount - 1] : NULL; // For code size reduction, performance, and maintainability.
