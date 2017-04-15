@@ -563,6 +563,7 @@ enum BuiltInFunctionID {
 	FID_MonitorGet = 0, FID_MonitorGetWorkArea, FID_MonitorGetCount, FID_MonitorGetPrimary, FID_MonitorGetName, 
 	FID_OnExit = 0, FID_OnClipboardChange,
 	FID_MenuGetHandle = 0, FID_MenuGetName,
+	FID_DriveGetList = 0, FID_DriveGetFilesystem, FID_DriveGetLabel, FID_DriveGetSerial, FID_DriveGetType, FID_DriveGetStatus, FID_DriveGetStatusCD, FID_DriveGetCapacity, FID_DriveGetSpaceFree,
 };
 
 #define AHK_LV_SELECT       0x0100
@@ -628,10 +629,6 @@ enum ControlGetCmds {CONTROLGET_CMD_INVALID, CONTROLGET_CMD_CHECKED, CONTROLGET_
 
 enum DriveCmds {DRIVE_CMD_INVALID, DRIVE_CMD_EJECT, DRIVE_CMD_LOCK, DRIVE_CMD_UNLOCK, DRIVE_CMD_LABEL};
 
-enum DriveGetCmds {DRIVEGET_CMD_INVALID, DRIVEGET_CMD_LIST, DRIVEGET_CMD_FILESYSTEM, DRIVEGET_CMD_LABEL
-	, DRIVEGET_CMD_SERIAL, DRIVEGET_CMD_TYPE, DRIVEGET_CMD_STATUS
-	, DRIVEGET_CMD_STATUSCD, DRIVEGET_CMD_CAPACITY, DRIVEGET_CMD_SPACEFREE};
-
 
 class Label; // Forward declaration so that each can use the other.
 class Line
@@ -658,10 +655,8 @@ private:
 	ResultType StringReplace();
 	ResultType SplitPath(LPTSTR aFileSpec);
 	ResultType PerformSort(LPTSTR aContents, LPTSTR aOptions);
-	ResultType DriveSpace(LPTSTR aPath, bool aGetFreeSpace);
 	ResultType Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2);
 	ResultType DriveLock(TCHAR aDriveLetter, bool aLockIt);
-	ResultType DriveGet(LPTSTR aCmd, LPTSTR aValue);
 	ResultType SoundSetGet(LPTSTR aSetting, LPTSTR aComponentType, LPTSTR aControlType, LPTSTR aDevice);
 	ResultType SoundSetGet2kXP(LPTSTR aSetting, DWORD aComponentType, int aComponentInstance
 		, DWORD aControlType, LPTSTR aDevice);
@@ -1012,7 +1007,6 @@ public:
 			case ACT_RANDOM:
 			case ACT_INIREAD:
 			case ACT_REGREAD:
-			case ACT_DRIVEGET:
 			case ACT_SOUNDGET:
 			case ACT_FILEREAD:
 			case ACT_FILEGETATTRIB:
@@ -1563,21 +1557,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("Unlock"))) return DRIVE_CMD_UNLOCK;
 		if (!_tcsicmp(aBuf, _T("Label"))) return DRIVE_CMD_LABEL;
 		return DRIVE_CMD_INVALID;
-	}
-
-	static DriveGetCmds ConvertDriveGetCmd(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf) return DRIVEGET_CMD_INVALID;
-		if (!_tcsicmp(aBuf, _T("List"))) return DRIVEGET_CMD_LIST;
-		if (!_tcsicmp(aBuf, _T("FileSystem")) || !_tcsicmp(aBuf, _T("FS"))) return DRIVEGET_CMD_FILESYSTEM;
-		if (!_tcsicmp(aBuf, _T("Label"))) return DRIVEGET_CMD_LABEL;
-		if (!_tcsicmp(aBuf, _T("Serial"))) return DRIVEGET_CMD_SERIAL;
-		if (!_tcsicmp(aBuf, _T("Type"))) return DRIVEGET_CMD_TYPE;
-		if (!_tcsicmp(aBuf, _T("Status"))) return DRIVEGET_CMD_STATUS;
-		if (!_tcsicmp(aBuf, _T("StatusCD"))) return DRIVEGET_CMD_STATUSCD;
-		if (!_tcsicmp(aBuf, _T("Capacity")) || !_tcsicmp(aBuf, _T("Cap"))) return DRIVEGET_CMD_CAPACITY;
-		if (!_tcsicmp(aBuf, _T("SpaceFree"))) return DRIVEGET_CMD_SPACEFREE;
-		return DRIVEGET_CMD_INVALID;
 	}
 
 	static ToggleValueType ConvertOnOff(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
@@ -3147,6 +3126,7 @@ BIF_DECL(BIF_ComObjQuery);
 BIF_DECL(BIF_Exception);
 
 
+BIF_DECL(BIF_DriveGet);
 BIF_DECL(BIF_WinGet);
 BIF_DECL(BIF_WinSet);
 BIF_DECL(BIF_WinRedraw);

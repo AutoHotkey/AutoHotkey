@@ -6439,13 +6439,11 @@ end:
 
 
 
-ResultType Line::DriveSpace(LPTSTR aPath, bool aGetFreeSpace)
+void DriveSpace(ResultToken &aResultToken, LPTSTR aPath, bool aGetFreeSpace)
 // Because of NTFS's ability to mount volumes into a directory, a path might not necessarily
 // have the same amount of free space as its root drive.  However, I'm not sure if this
 // method here actually takes that into account.
 {
-	OUTPUT_VAR->Assign(); // Init to empty string regardless of whether we succeed here.
-
 	if (!aPath || !*aPath) goto error;  // Below relies on this check.
 
 	TCHAR buf[MAX_PATH + 1];  // +1 to allow appending of backslash.
@@ -6470,10 +6468,11 @@ ResultType Line::DriveSpace(LPTSTR aPath, bool aGetFreeSpace)
 		/ (1024*1024));
 
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-	return OUTPUT_VAR->Assign(free_space);
+	_f_return(free_space);
 
 error:
-	return SetErrorLevelOrThrow();
+	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	_f_return_empty;
 }
 
 
@@ -6643,29 +6642,32 @@ ResultType Line::DriveLock(TCHAR aDriveLetter, bool aLockIt)
 
 
 
-ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
+BIF_DECL(BIF_DriveGet)
 {
-	DriveGetCmds drive_get_cmd = ConvertDriveGetCmd(aCmd);
-	if (drive_get_cmd == DRIVEGET_CMD_CAPACITY || drive_get_cmd == DRIVEGET_CMD_SPACEFREE)
-		return DriveSpace(aValue, drive_get_cmd == DRIVEGET_CMD_SPACEFREE);
+	BuiltInFunctionID drive_get_cmd = _f_callee_id;
+
+	// A parameter is mandatory for some, but optional for others:
+	LPTSTR aValue = ParamIndexToOptionalString(0, _f_number_buf);
+	if (!*aValue && drive_get_cmd != FID_DriveGetList && drive_get_cmd != FID_DriveGetStatusCD)
+		_f_throw(ERR_PARAM1_MUST_NOT_BE_BLANK);
+	
+	if (drive_get_cmd == FID_DriveGetCapacity || drive_get_cmd == FID_DriveGetSpaceFree)
+	{
+		if (!*aValue)
+			goto invalid_parameter;
+		DriveSpace(aResultToken, aValue, drive_get_cmd == FID_DriveGetSpaceFree);
+		return;
+	}
+	
+	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Set default: indicate success.
 
 	TCHAR path[MAX_PATH + 1];  // +1 to allow room for trailing backslash in case it needs to be added.
 	size_t path_length;
 
-	Var &output_var = *OUTPUT_VAR;
-
-	output_var.Assign(); // Init to empty string.
-
 	switch(drive_get_cmd)
 	{
 
-	case DRIVEGET_CMD_INVALID:
-		// Since command names are validated at load-time, this only happens if the command name
-		// was contained in a variable reference.  Since that is very rare, just set ErrorLevel
-		// and return:
-		goto error;
-
-	case DRIVEGET_CMD_LIST:
+	case FID_DriveGetList:
 	{
 		UINT drive_type;
 		#define ALL_DRIVE_TYPES 256
@@ -6696,15 +6698,14 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 				found_drives[found_drives_count++] = letter;  // Store just the drive letters.
 		}
 		found_drives[found_drives_count] = '\0';  // Terminate the string of found drive letters.
-		output_var.Assign(found_drives);
 		if (!*found_drives)
 			goto error;  // Seems best to flag zero drives in the system as ErrorLevel of "1".
-		break;
+		_f_return(found_drives);
 	}
 
-	case DRIVEGET_CMD_FILESYSTEM:
-	case DRIVEGET_CMD_LABEL:
-	case DRIVEGET_CMD_SERIAL:
+	case FID_DriveGetFilesystem:
+	case FID_DriveGetLabel:
+	case FID_DriveGetSerial:
 	{
 		TCHAR volume_name[256];
 		TCHAR file_system[256];
@@ -6715,47 +6716,47 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 			goto error;
 		switch(drive_get_cmd)
 		{
-		case DRIVEGET_CMD_FILESYSTEM: output_var.Assign(file_system); break;
-		case DRIVEGET_CMD_LABEL: output_var.Assign(volume_name); break;
-		case DRIVEGET_CMD_SERIAL: output_var.Assign(serial_number); break;
+		case FID_DriveGetFilesystem: _f_return(file_system);
+		case FID_DriveGetLabel:      _f_return(volume_name);
+		case FID_DriveGetSerial:     _f_return(serial_number);
 		}
 		break;
 	}
 
-	case DRIVEGET_CMD_TYPE:
+	case FID_DriveGetType:
 	{
 		DRIVE_SET_PATH
 		switch (GetDriveType(path))
 		{
-		case DRIVE_UNKNOWN:   output_var.Assign(_T("Unknown")); break;
-		case DRIVE_REMOVABLE: output_var.Assign(_T("Removable")); break;
-		case DRIVE_FIXED:     output_var.Assign(_T("Fixed")); break;
-		case DRIVE_REMOTE:    output_var.Assign(_T("Network")); break;
-		case DRIVE_CDROM:     output_var.Assign(_T("CDROM")); break;
-		case DRIVE_RAMDISK:   output_var.Assign(_T("RAMDisk")); break;
+		case DRIVE_UNKNOWN:   _f_return_p(_T("Unknown"));
+		case DRIVE_REMOVABLE: _f_return_p(_T("Removable"));
+		case DRIVE_FIXED:     _f_return_p(_T("Fixed"));
+		case DRIVE_REMOTE:    _f_return_p(_T("Network"));
+		case DRIVE_CDROM:     _f_return_p(_T("CDROM"));
+		case DRIVE_RAMDISK:   _f_return_p(_T("RAMDisk"));
 		default: // DRIVE_NO_ROOT_DIR
 			goto error;
 		}
 		break;
 	}
 
-	case DRIVEGET_CMD_STATUS:
+	case FID_DriveGetStatus:
 	{
 		DRIVE_SET_PATH
 		DWORD sectors_per_cluster, bytes_per_sector, free_clusters, total_clusters;
 		switch (GetDiskFreeSpace(path, &sectors_per_cluster, &bytes_per_sector, &free_clusters, &total_clusters)
 			? ERROR_SUCCESS : GetLastError())
 		{
-		case ERROR_SUCCESS:        output_var.Assign(_T("Ready")); break;
-		case ERROR_PATH_NOT_FOUND: output_var.Assign(_T("Invalid")); break;
-		case ERROR_NOT_READY:      output_var.Assign(_T("NotReady")); break;
-		case ERROR_WRITE_PROTECT:  output_var.Assign(_T("ReadOnly")); break;
-		default:                   output_var.Assign(_T("Unknown"));
+		case ERROR_SUCCESS:        _f_return_p(_T("Ready"));
+		case ERROR_PATH_NOT_FOUND: _f_return_p(_T("Invalid"));
+		case ERROR_NOT_READY:      _f_return_p(_T("NotReady"));
+		case ERROR_WRITE_PROTECT:  _f_return_p(_T("ReadOnly"));
+		default:                   _f_return_p(_T("Unknown"));
 		}
 		break;
 	}
 
-	case DRIVEGET_CMD_STATUSCD:
+	case FID_DriveGetStatusCD:
 		// Don't do DRIVE_SET_PATH in this case since trailing backslash might prevent it from
 		// working on some OSes.
 		// It seems best not to do the below check since:
@@ -6785,16 +6786,16 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 				goto error;
 		}
 		// Otherwise, success:
-		output_var.Assign(status);
-		break;
+		_f_return(status);
 
 	} // switch()
 
-	// Note that ControlDelay is not done for the Get type commands, because it seems unnecessary.
-	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-
 error:
-	return SetErrorLevelOrThrow();
+	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	_f_return_empty;
+
+invalid_parameter:
+	_f_throw(ERR_PARAM1_INVALID);
 }
 
 

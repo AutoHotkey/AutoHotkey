@@ -169,6 +169,16 @@ FuncEntry g_BIF[] =
 	
 	BIF1(Exception, 1, 3, true),
 
+	BIFn(DriveGetList, 0, 1, true, BIF_DriveGet),
+	BIFn(DriveGetFilesystem, 1, 1, true, BIF_DriveGet),
+	BIFn(DriveGetLabel, 1, 1, true, BIF_DriveGet),
+	BIFn(DriveGetSerial, 1, 1, true, BIF_DriveGet),
+	BIFn(DriveGetType, 1, 1, true, BIF_DriveGet),
+	BIFn(DriveGetStatus, 1, 1, true, BIF_DriveGet),
+	BIFn(DriveGetStatusCD, 0, 1, true, BIF_DriveGet),
+	BIFn(DriveGetCapacity, 1, 1, true, BIF_DriveGet),
+	BIFn(DriveGetSpaceFree, 1, 1, true, BIF_DriveGet),
+
 	BIFn(WinGetID, 0, 4, true, BIF_WinGet),
 	BIFn(WinGetIDLast, 0, 4, true, BIF_WinGet),
 	BIFn(WinGetPID, 0, 4, true, BIF_WinGet),
@@ -5655,17 +5665,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// Not currently done since all sub-commands take a mandatory or optional ARG3:
 			//if (drive_cmd != ... && *new_raw_arg3)
 			//	return ScriptError(ERR_PARAM3_MUST_BE_BLANK, new_raw_arg3);
-		}
-		break;
-
-	case ACT_DRIVEGET:
-		if (!line.ArgHasDeref(2))
-		{
-			DriveGetCmds drive_get_cmd = line.ConvertDriveGetCmd(new_raw_arg2);
-			if (!drive_get_cmd)
-				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-			if (drive_get_cmd != DRIVEGET_CMD_LIST && drive_get_cmd != DRIVEGET_CMD_STATUSCD && !*new_raw_arg3)
-				return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
 		}
 		break;
 
@@ -12647,9 +12646,6 @@ ResultType Line::Perform()
 
 	case ACT_DRIVE:
 		return Drive(THREE_ARGS);
-
-	case ACT_DRIVEGET:
-		return DriveGet(ARG2, ARG3);
 
 	case ACT_SOUNDGET:
 	case ACT_SOUNDSET:
