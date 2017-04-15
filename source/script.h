@@ -610,10 +610,6 @@ enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero du
 
 enum ThreadCommands {THREAD_CMD_INVALID, THREAD_CMD_PRIORITY, THREAD_CMD_INTERRUPT, THREAD_CMD_NOTIMERS};
 
-#define PROCESS_PRIORITY_LETTERS _T("LBNAHR")
-enum ProcessCmds {PROCESS_CMD_INVALID, PROCESS_CMD_EXIST, PROCESS_CMD_CLOSE
-	, PROCESS_CMD_WAIT, PROCESS_CMD_WAITCLOSE};
-
 enum ControlCmds {CONTROL_CMD_INVALID, CONTROL_CMD_CHECK, CONTROL_CMD_UNCHECK
 	, CONTROL_CMD_ENABLE, CONTROL_CMD_DISABLE, CONTROL_CMD_SHOW, CONTROL_CMD_HIDE
 	, CONTROL_CMD_STYLE, CONTROL_CMD_EXSTYLE
@@ -1490,16 +1486,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("Interrupt"))) return THREAD_CMD_INTERRUPT;
 		if (!_tcsicmp(aBuf, _T("NoTimers"))) return THREAD_CMD_NOTIMERS;
 		return THREAD_CMD_INVALID;
-	}
-	
-	static ProcessCmds ConvertProcessCmd(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf) return PROCESS_CMD_INVALID;
-		if (!_tcsicmp(aBuf, _T("Exist"))) return PROCESS_CMD_EXIST;
-		if (!_tcsicmp(aBuf, _T("Close"))) return PROCESS_CMD_CLOSE;
-		if (!_tcsicmp(aBuf, _T("Wait"))) return PROCESS_CMD_WAIT;
-		if (!_tcsicmp(aBuf, _T("WaitClose"))) return PROCESS_CMD_WAITCLOSE;
-		return PROCESS_CMD_INVALID;
 	}
 
 	static ControlCmds ConvertControlCmd(LPTSTR aBuf)
