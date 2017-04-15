@@ -331,7 +331,6 @@ Action g_act[] =
 	, {_T("ControlSetText"), 0, 6, false, NULL}   // Control, new text, std. 4 window params
 	, {_T("ControlGetText"), 1, 6, true, NULL}   // Output-var, Control, std. 4 window params
 	, {_T("Control"), 1, 7, false, NULL}   // Command, Value, Control, std. 4 window params
-	, {_T("ControlGet"), 2, 8, true, NULL}   // Output-var, Command, Value, Control, std. 4 window params
 
 	, {_T("SendMode"), 1, 1, false, NULL}
 	, {_T("SendLevel"), 1, 1, false, {1, 0}}

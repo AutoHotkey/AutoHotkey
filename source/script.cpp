@@ -169,6 +169,22 @@ FuncEntry g_BIF[] =
 	
 	BIF1(Exception, 1, 3, true),
 
+	BIFn(ControlFindString, 1, 6, true, BIF_ControlGet),
+	BIFn(ControlGetChecked, 0, 5, true, BIF_ControlGet),
+	BIFn(ControlGetEnabled, 0, 5, true, BIF_ControlGet),
+	BIFn(ControlGetVisible, 0, 5, true, BIF_ControlGet),
+	BIFn(ControlGetTab, 0, 5, true, BIF_ControlGet),
+	BIFn(ControlGetChoice, 0, 5, true, BIF_ControlGet),
+	BIFn(ControlGetList, 0, 6, true, BIF_ControlGet),
+	BIFn(ControlGetLineCount, 0, 5, true, BIF_ControlGet),
+	BIFn(ControlGetCurrentLine, 0, 5, true, BIF_ControlGet),
+	BIFn(ControlGetCurrentCol, 0, 5, true, BIF_ControlGet),
+	BIFn(ControlGetLine, 1, 6, true, BIF_ControlGet),
+	BIFn(ControlGetSelected, 0, 5, true, BIF_ControlGet),
+	BIFn(ControlGetStyle, 0, 5, true, BIF_ControlGet),
+	BIFn(ControlGetExStyle, 0, 5, true, BIF_ControlGet),
+	BIFn(ControlGetHwnd, 0, 5, true, BIF_ControlGet),
+
 	BIFn(DriveEject, 0, 2, false, BIF_Drive),
 	BIFn(DriveLock, 1, 1, false, BIF_Drive),
 	BIFn(DriveUnlock, 1, 1, false, BIF_Drive),
@@ -5569,28 +5585,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			default: // All commands except the above should have a blank Value parameter.
 				if (*new_raw_arg2)
 					return ScriptError(ERR_PARAM2_MUST_BE_BLANK, new_raw_arg2);
-			}
-		}
-		break;
-
-	case ACT_CONTROLGET:
-		if (aArgc > 1 && !line.ArgHasDeref(2))
-		{
-			ControlGetCmds control_get_cmd = line.ConvertControlGetCmd(new_raw_arg2);
-			switch (control_get_cmd)
-			{
-			case CONTROLGET_CMD_INVALID:
-				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-			case CONTROLGET_CMD_FINDSTRING:
-			case CONTROLGET_CMD_LINE:
-				if (!*new_raw_arg3)
-					return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
-				break;
-			case CONTROLGET_CMD_LIST:
-				break; // Simply break for any sub-commands that have an optional parameter 3.
-			default: // All commands except the above should have a blank Value parameter.
-				if (*new_raw_arg3)
-					return ScriptError(ERR_PARAM3_MUST_BE_BLANK, new_raw_arg3);
 			}
 		}
 		break;
@@ -12370,8 +12364,6 @@ ResultType Line::Perform()
 		return ControlGetText(ARG2, ARG3, ARG4, ARG5, ARG6);
 	case ACT_CONTROL:
 		return Control(SEVEN_ARGS);
-	case ACT_CONTROLGET:
-		return ControlGet(ARG2, ARG3, ARG4, ARG5, ARG6, ARG7, ARG8);
 	case ACT_STATUSBARGETTEXT:
 		return StatusBarGetText(ARG2, ARG3, ARG4, ARG5, ARG6);
 	case ACT_STATUSBARWAIT:

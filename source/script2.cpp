@@ -1557,15 +1557,13 @@ ResultType Line::ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 
 
 
-ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions)
+void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions)
 // Called by ControlGet() below.  It has ensured that aHwnd is a valid handle to a ListView.
 {
-	aOutputVar.Assign(); // Init to blank in case of early return.
-
 	// GET ROW COUNT
 	LRESULT row_count;
 	if (!SendMessageTimeout(aHwnd, LVM_GETITEMCOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&row_count)) // Timed out or failed.
-		return SetErrorLevelOrThrow();
+		goto error;
 
 	// GET COLUMN COUNT
 	// Through testing, could probably get to a level of 90% certainty that a ListView for which
@@ -1611,7 +1609,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 	int requested_col = col_option ? ATOI(col_option + 3) - 1 : -1;
 	// If the above yields a negative col number for any reason, it's ok because below will just ignore it.
 	if (col_count > -1 && requested_col > -1 && requested_col >= col_count) // Specified column does not exist.
-		return SetErrorLevelOrThrow();
+		goto error;
 
 	// IF THE "COUNT" OPTION IS PRESENT, FULLY HANDLE THAT AND RETURN
 	if (get_count)
@@ -1620,25 +1618,25 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 		if (include_focused_only) // Listed first so that it takes precedence over include_selected_only.
 		{
 			if (!SendMessageTimeout(aHwnd, LVM_GETNEXTITEM, -1, LVNI_FOCUSED, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&result)) // Timed out or failed.
-				return SetErrorLevelOrThrow();
+				goto error;
 			++result; // i.e. Set it to 0 if not found, or the 1-based row-number otherwise.
 		}
 		else if (include_selected_only)
 		{
 			if (!SendMessageTimeout(aHwnd, LVM_GETSELECTEDCOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&result)) // Timed out or failed.
-				return SetErrorLevelOrThrow();
+				goto error;
 		}
 		else if (col_option) // "Count Col" returns the number of columns.
 			result = (int)col_count;
 		else // Total row count.
 			result = (int)row_count;
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-		return aOutputVar.Assign(result);
+		//g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Already done by caller.
+		_f_return(result);
 	}
 
 	// FINAL CHECKS
 	if (row_count < 1 || !col_count) // But don't return when col_count == -1 (i.e. always make the attempt when col count is undetermined).
-		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // No text in the control, so indicate success.
+		_f_return_empty;  // No text in the control, so indicate success.
 	
 	// Notes about the following struct definitions:  The layout of LVITEM depends on
 	// which platform THIS executable was compiled for, but we need it to match what
@@ -1691,7 +1689,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 	HANDLE handle;
 	LPVOID p_remote_lvi; // Not of type LPLVITEM to help catch bugs where p_remote_lvi->member is wrongly accessed here in our process.
 	if (   !(p_remote_lvi = AllocInterProcMem(handle, sizeof(local_lvi) + _TSIZE(LV_REMOTE_BUF_SIZE), aHwnd, PROCESS_QUERY_INFORMATION))   ) // Allocate both the LVITEM struct and its internal string buffer in one go because VirtualAllocEx() is probably a high overhead call.
-		return SetErrorLevelOrThrow();
+		goto error;
 	LPVOID p_remote_text = (LPVOID)((UINT_PTR)p_remote_lvi + sizeof(local_lvi)); // The next buffer is the memory area adjacent to, but after the struct.
 	
 	// PREPARE LVI STRUCT MEMBERS FOR TEXT RETRIEVAL
@@ -1757,11 +1755,13 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 	// actual number of rows that will be transcribed, which might be less than row_count if is_selective==true.
 	total_length += i * (single_col_mode ? 1 : col_count);
 
-	// SET UP THE OUTPUT VARIABLE, ENLARGING IT IF NECESSARY
-	// If the aOutputVar is of type VAR_CLIPBOARD, this call will set up the clipboard for writing:
-	aOutputVar.AssignString(NULL, (VarSizeType)total_length, true); // Since failure is extremely rare, continue onward using the available capacity.
-	LPTSTR contents = aOutputVar.Contents();
-	LRESULT capacity = (int)aOutputVar.CharCapacity(); // LRESULT avoids signed vs. unsigned compiler warnings.
+	// SET UP THE OUTPUT BUFFER
+	if (!TokenSetResult(aResultToken, NULL, (size_t)total_length))
+		goto cleanup_and_return; // Error() was already called.
+	aResultToken.symbol = SYM_STRING;
+	
+	LPTSTR contents = aResultToken.marker;
+	LRESULT capacity = total_length; // LRESULT avoids signed vs. unsigned compiler warnings.
 	if (capacity > 0) // For maintainability, avoid going negative.
 		--capacity; // Adjust to exclude the zero terminator, which simplifies things below.
 
@@ -1830,14 +1830,18 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 	} // for() each row
 
 break_both:
-	if (contents) // Might be NULL if Assign() failed and thus var has zero capacity.
-		*contents = '\0'; // Final termination.  Above has reserved room for this one byte.
+	*contents = '\0'; // Final termination.  Above has reserved room for this one byte.
+	aResultToken.marker_length = (size_t)total_length; // Update to actual vs. estimated length.
+	//g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Already done by caller.
 
 	// CLEAN UP
+cleanup_and_return: // This is "called" if a memory allocation failed above
 	FreeInterProcMem(handle, p_remote_lvi);
-	aOutputVar.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-	aOutputVar.SetCharLength((VarSizeType)total_length); // Update to actual vs. estimated length.
-	return g_ErrorLevel->Assign(ERRORLEVEL_NONE);  // Indicate success.
+	return;
+
+error:
+	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	return;
 }
 
 

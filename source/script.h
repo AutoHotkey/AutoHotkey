@@ -563,6 +563,7 @@ enum BuiltInFunctionID {
 	FID_MonitorGet = 0, FID_MonitorGetWorkArea, FID_MonitorGetCount, FID_MonitorGetPrimary, FID_MonitorGetName, 
 	FID_OnExit = 0, FID_OnClipboardChange,
 	FID_MenuGetHandle = 0, FID_MenuGetName,
+	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlGetTab, FID_ControlFindString, FID_ControlGetChoice, FID_ControlGetList, FID_ControlGetLineCount, FID_ControlGetCurrentLine, FID_ControlGetCurrentCol, FID_ControlGetLine, FID_ControlGetSelected, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
 	FID_DriveEject = 0, FID_DriveLock, FID_DriveUnlock, FID_DriveSetLabel,
 	FID_DriveGetList = 0, FID_DriveGetFilesystem, FID_DriveGetLabel, FID_DriveGetSerial, FID_DriveGetType, FID_DriveGetStatus, FID_DriveGetStatusCD, FID_DriveGetCapacity, FID_DriveGetSpaceFree,
 };
@@ -617,12 +618,6 @@ enum ControlCmds {CONTROL_CMD_INVALID, CONTROL_CMD_CHECK, CONTROL_CMD_UNCHECK
 	, CONTROL_CMD_TABLEFT, CONTROL_CMD_TABRIGHT
 	, CONTROL_CMD_ADD, CONTROL_CMD_DELETE, CONTROL_CMD_CHOOSE
 	, CONTROL_CMD_CHOOSESTRING, CONTROL_CMD_EDITPASTE};
-
-enum ControlGetCmds {CONTROLGET_CMD_INVALID, CONTROLGET_CMD_CHECKED, CONTROLGET_CMD_ENABLED
-	, CONTROLGET_CMD_VISIBLE, CONTROLGET_CMD_TAB, CONTROLGET_CMD_FINDSTRING
-	, CONTROLGET_CMD_CHOICE, CONTROLGET_CMD_LIST, CONTROLGET_CMD_LINECOUNT, CONTROLGET_CMD_CURRENTLINE
-	, CONTROLGET_CMD_CURRENTCOL, CONTROLGET_CMD_LINE, CONTROLGET_CMD_SELECTED
-	, CONTROLGET_CMD_STYLE, CONTROLGET_CMD_EXSTYLE, CONTROLGET_CMD_HWND};
 
 
 class Label; // Forward declaration so that each can use the other.
@@ -723,10 +718,7 @@ private:
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions);
 	ResultType Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
-		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType ControlGet(LPTSTR aCommand, LPTSTR aValue, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, Var *aParam3Var);
 	ResultType GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3);
@@ -993,7 +985,6 @@ public:
 			case ACT_STRINGREPLACE:
 			case ACT_CONTROLGETFOCUS:
 			case ACT_CONTROLGETTEXT:
-			case ACT_CONTROLGET:
 			case ACT_GUICONTROLGET:
 			case ACT_STATUSBARGETTEXT:
 			case ACT_INPUTBOX:
@@ -1509,27 +1500,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("ChooseString"))) return CONTROL_CMD_CHOOSESTRING;
 		if (!_tcsicmp(aBuf, _T("EditPaste"))) return CONTROL_CMD_EDITPASTE;
 		return CONTROL_CMD_INVALID;
-	}
-
-	static ControlGetCmds ConvertControlGetCmd(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf) return CONTROLGET_CMD_INVALID;
-		if (!_tcsicmp(aBuf, _T("Checked"))) return CONTROLGET_CMD_CHECKED;
-		if (!_tcsicmp(aBuf, _T("Enabled"))) return CONTROLGET_CMD_ENABLED;
-		if (!_tcsicmp(aBuf, _T("Visible"))) return CONTROLGET_CMD_VISIBLE;
-		if (!_tcsicmp(aBuf, _T("Tab"))) return CONTROLGET_CMD_TAB;
-		if (!_tcsicmp(aBuf, _T("FindString"))) return CONTROLGET_CMD_FINDSTRING;
-		if (!_tcsicmp(aBuf, _T("Choice"))) return CONTROLGET_CMD_CHOICE;
-		if (!_tcsicmp(aBuf, _T("List"))) return CONTROLGET_CMD_LIST;
-		if (!_tcsicmp(aBuf, _T("LineCount"))) return CONTROLGET_CMD_LINECOUNT;
-		if (!_tcsicmp(aBuf, _T("CurrentLine"))) return CONTROLGET_CMD_CURRENTLINE;
-		if (!_tcsicmp(aBuf, _T("CurrentCol"))) return CONTROLGET_CMD_CURRENTCOL;
-		if (!_tcsicmp(aBuf, _T("Line"))) return CONTROLGET_CMD_LINE;
-		if (!_tcsicmp(aBuf, _T("Selected"))) return CONTROLGET_CMD_SELECTED;
-		if (!_tcsicmp(aBuf, _T("Style"))) return CONTROLGET_CMD_STYLE;
-		if (!_tcsicmp(aBuf, _T("ExStyle"))) return CONTROLGET_CMD_EXSTYLE;
-		if (!_tcsicmp(aBuf, _T("Hwnd"))) return CONTROLGET_CMD_HWND;
-		return CONTROLGET_CMD_INVALID;
 	}
 
 	static ToggleValueType ConvertOnOff(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
@@ -3099,6 +3069,7 @@ BIF_DECL(BIF_ComObjQuery);
 BIF_DECL(BIF_Exception);
 
 
+BIF_DECL(BIF_ControlGet);
 BIF_DECL(BIF_Drive);
 BIF_DECL(BIF_DriveGet);
 BIF_DECL(BIF_WinGet);
@@ -3141,6 +3112,8 @@ bool ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken,
 HWND DetermineTargetWindow(ExprTokenType *aParam[], int aParamCount);
 
 LPTSTR GetExitReasonString(ExitReasons aExitReason);
+
+void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions);
 
 #endif
 
