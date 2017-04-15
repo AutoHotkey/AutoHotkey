@@ -814,21 +814,14 @@ BIF_DECL(BIF_ControlGet)
 			|| !SendMessageTimeout(control_window, EM_LINEFROMCHAR, (WPARAM)start, 0, SMTO_ABORTIFHUNG, 2000, &line_number)   )
 			goto error;
 		if (!line_number) // Since we're on line zero, the column number is simply start+1.
-		{
 			_f_return(start + 1);  // +1 to convert from zero based.
-		}
-		// Au3: Decrement the character index until the row changes.  Difference between this
-		// char index and original is the column:
-		DWORD_PTR start_orig = start;  // Au3: the character index
-		for (;;)
-		{
-			if (!SendMessageTimeout(control_window, EM_LINEFROMCHAR, (WPARAM)start, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-				goto error;
-			if (dwResult != line_number)
-				break;
-			--start;
-		}
-		_f_return((int)(start_orig - start));
+		// The original Au3 function repeatedly decremented the character index and called EM_LINEFROMCHAR
+		// until the row changed. Don't know why; the EM_LINEINDEX method is MUCH faster for long lines and
+		// probably has been available since the dawn of time, though I've only tested it on Windows 10.
+		DWORD_PTR line_start;
+		if (!SendMessageTimeout(control_window, EM_LINEINDEX, (WPARAM)line_number, 0, SMTO_ABORTIFHUNG, 2000, &line_start))
+			goto error;
+		_f_return(start - line_start + 1);
 	}
 
 	case FID_ControlGetLine:
