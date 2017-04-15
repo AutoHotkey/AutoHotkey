@@ -6477,10 +6477,15 @@ error:
 
 
 
-ResultType Line::Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2) // aValue not aValue1, for use with a shared macro.
-{
-	DriveCmds drive_cmd = ConvertDriveCmd(aCmd);
+ResultType DriveLock(TCHAR aDriveLetter, bool aLockIt); // Forward declaration for BIF_Drive.
 
+BIF_DECL(BIF_Drive)
+{
+	BuiltInFunctionID drive_cmd = _f_callee_id;
+
+	LPTSTR aValue = ParamIndexToOptionalString(0, _f_number_buf);
+
+	bool successful = false;
 	TCHAR path[MAX_PATH + 1];  // +1 to allow room for trailing backslash in case it needs to be added.
 	size_t path_length;
 
@@ -6497,17 +6502,13 @@ ResultType Line::Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2) // aValue not
 
 	switch(drive_cmd)
 	{
-	case DRIVE_CMD_INVALID:
-		// Since command names are validated at load-time, this only happens if the command name
-		// was contained in a variable reference.  Since that is very rare, just set ErrorLevel
-		// and return:
-		return SetErrorLevelOrThrow();
+	case FID_DriveLock:
+	case FID_DriveUnlock:
+		successful = DriveLock(*aValue, drive_cmd == FID_DriveLock);
+		break;
 
-	case DRIVE_CMD_LOCK:
-	case DRIVE_CMD_UNLOCK:
-		return SetErrorLevelOrThrowBool(!DriveLock(*aValue, drive_cmd == DRIVE_CMD_LOCK));
-
-	case DRIVE_CMD_EJECT:
+	case FID_DriveEject:
+	{
 		// Don't do DRIVE_SET_PATH in this case since trailing backslash might prevent it from
 		// working on some OSes.
 		// It seems best not to do the below check since:
@@ -6528,32 +6529,38 @@ ResultType Line::Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2) // aValue not
 		// all OSes (on the off-chance that the absence of "wait" really avoids waiting on Win9x or future
 		// OSes, or perhaps under certain conditions or for certain types of drives).  See above comment
 		// for details.
+		BOOL retract = ParamIndexToOptionalBOOL(1, 0);
 		if (!*aValue) // When drive is omitted, operate upon default CD/DVD drive.
 		{
-			sntprintf(mci_string, _countof(mci_string), _T("set cdaudio door %s wait"), ATOI(aValue2) == 1 ? _T("closed") : _T("open"));
+			sntprintf(mci_string, _countof(mci_string), _T("set cdaudio door %s wait"), retract ? _T("closed") : _T("open"));
 			error = mciSendString(mci_string, NULL, 0, NULL); // Open or close the tray.
-			return SetErrorLevelOrThrowBool(error);
+			successful = !error;
+			break;
 		}
 		sntprintf(mci_string, _countof(mci_string), _T("open %s type cdaudio alias cd wait shareable"), aValue);
 		if (mciSendString(mci_string, NULL, 0, NULL)) // Error.
-			return SetErrorLevelOrThrow();
-		sntprintf(mci_string, _countof(mci_string), _T("set cd door %s wait"), ATOI(aValue2) == 1 ? _T("closed") : _T("open"));
+			break;
+		sntprintf(mci_string, _countof(mci_string), _T("set cd door %s wait"), retract ? _T("closed") : _T("open"));
 		error = mciSendString(mci_string, NULL, 0, NULL); // Open or close the tray.
 		mciSendString(_T("close cd wait"), NULL, 0, NULL);
-		return SetErrorLevelOrThrowBool(error);
+		successful = !error;
+		break;
+	}
 
-	case DRIVE_CMD_LABEL: // Note that it is possible and allowed for the new label to be blank.
+	case FID_DriveSetLabel: // Note that it is possible and allowed for the new label to be blank.
 		DRIVE_SET_PATH
-		return SetErrorLevelOrThrowBool(!SetVolumeLabel(path, aValue2));
+		successful = SetVolumeLabel(path, ParamIndexToOptionalString(1, _f_number_buf)); // _f_number_buf can potentially be used by both parameters, since aValue is copied into path above.
+		break;
 
 	} // switch()
 
-	return FAIL;  // Should never be executed.  Helps catch bugs.
+	g_ErrorLevel->Assign(!successful);
+	_f_return_b(successful);
 }
 
 
 
-ResultType Line::DriveLock(TCHAR aDriveLetter, bool aLockIt)
+ResultType DriveLock(TCHAR aDriveLetter, bool aLockIt)
 {
 	HANDLE hdevice;
 	DWORD unused;

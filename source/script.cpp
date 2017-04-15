@@ -169,6 +169,11 @@ FuncEntry g_BIF[] =
 	
 	BIF1(Exception, 1, 3, true),
 
+	BIFn(DriveEject, 0, 2, false, BIF_Drive),
+	BIFn(DriveLock, 1, 1, false, BIF_Drive),
+	BIFn(DriveUnlock, 1, 1, false, BIF_Drive),
+	BIFn(DriveSetLabel, 1, 2, false, BIF_Drive),
+
 	BIFn(DriveGetList, 0, 1, true, BIF_DriveGet),
 	BIFn(DriveGetFilesystem, 1, 1, true, BIF_DriveGet),
 	BIFn(DriveGetLabel, 1, 1, true, BIF_DriveGet),
@@ -5650,21 +5655,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			}
 			// else it can be optionally blank, in which case the output variable is used as the
 			// ControlID also.
-		}
-		break;
-
-	case ACT_DRIVE:
-		if (aArgc > 0 && !line.ArgHasDeref(1))
-		{
-			DriveCmds drive_cmd = line.ConvertDriveCmd(new_raw_arg1);
-			if (!drive_cmd)
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-			if (drive_cmd != DRIVE_CMD_EJECT && !*new_raw_arg2)
-				return ScriptError(ERR_PARAM2_MUST_NOT_BE_BLANK);
-			// For DRIVE_CMD_LABEL: Note that it is possible and allowed for the new label to be blank.
-			// Not currently done since all sub-commands take a mandatory or optional ARG3:
-			//if (drive_cmd != ... && *new_raw_arg3)
-			//	return ScriptError(ERR_PARAM3_MUST_BE_BLANK, new_raw_arg3);
 		}
 		break;
 
@@ -12643,9 +12633,6 @@ ResultType Line::Perform()
 				% ((__int64)rand_max - rand_min + 1)) + rand_min)   );
 		}
 	}
-
-	case ACT_DRIVE:
-		return Drive(THREE_ARGS);
 
 	case ACT_SOUNDGET:
 	case ACT_SOUNDSET:

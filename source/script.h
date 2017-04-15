@@ -563,6 +563,7 @@ enum BuiltInFunctionID {
 	FID_MonitorGet = 0, FID_MonitorGetWorkArea, FID_MonitorGetCount, FID_MonitorGetPrimary, FID_MonitorGetName, 
 	FID_OnExit = 0, FID_OnClipboardChange,
 	FID_MenuGetHandle = 0, FID_MenuGetName,
+	FID_DriveEject = 0, FID_DriveLock, FID_DriveUnlock, FID_DriveSetLabel,
 	FID_DriveGetList = 0, FID_DriveGetFilesystem, FID_DriveGetLabel, FID_DriveGetSerial, FID_DriveGetType, FID_DriveGetStatus, FID_DriveGetStatusCD, FID_DriveGetCapacity, FID_DriveGetSpaceFree,
 };
 
@@ -627,8 +628,6 @@ enum ControlGetCmds {CONTROLGET_CMD_INVALID, CONTROLGET_CMD_CHECKED, CONTROLGET_
 	, CONTROLGET_CMD_CURRENTCOL, CONTROLGET_CMD_LINE, CONTROLGET_CMD_SELECTED
 	, CONTROLGET_CMD_STYLE, CONTROLGET_CMD_EXSTYLE, CONTROLGET_CMD_HWND};
 
-enum DriveCmds {DRIVE_CMD_INVALID, DRIVE_CMD_EJECT, DRIVE_CMD_LOCK, DRIVE_CMD_UNLOCK, DRIVE_CMD_LABEL};
-
 
 class Label; // Forward declaration so that each can use the other.
 class Line
@@ -655,8 +654,6 @@ private:
 	ResultType StringReplace();
 	ResultType SplitPath(LPTSTR aFileSpec);
 	ResultType PerformSort(LPTSTR aContents, LPTSTR aOptions);
-	ResultType Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2);
-	ResultType DriveLock(TCHAR aDriveLetter, bool aLockIt);
 	ResultType SoundSetGet(LPTSTR aSetting, LPTSTR aComponentType, LPTSTR aControlType, LPTSTR aDevice);
 	ResultType SoundSetGet2kXP(LPTSTR aSetting, DWORD aComponentType, int aComponentInstance
 		, DWORD aControlType, LPTSTR aDevice);
@@ -1547,16 +1544,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("ExStyle"))) return CONTROLGET_CMD_EXSTYLE;
 		if (!_tcsicmp(aBuf, _T("Hwnd"))) return CONTROLGET_CMD_HWND;
 		return CONTROLGET_CMD_INVALID;
-	}
-
-	static DriveCmds ConvertDriveCmd(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf) return DRIVE_CMD_INVALID;
-		if (!_tcsicmp(aBuf, _T("Eject"))) return DRIVE_CMD_EJECT;
-		if (!_tcsicmp(aBuf, _T("Lock"))) return DRIVE_CMD_LOCK;
-		if (!_tcsicmp(aBuf, _T("Unlock"))) return DRIVE_CMD_UNLOCK;
-		if (!_tcsicmp(aBuf, _T("Label"))) return DRIVE_CMD_LABEL;
-		return DRIVE_CMD_INVALID;
 	}
 
 	static ToggleValueType ConvertOnOff(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
@@ -3126,6 +3113,7 @@ BIF_DECL(BIF_ComObjQuery);
 BIF_DECL(BIF_Exception);
 
 
+BIF_DECL(BIF_Drive);
 BIF_DECL(BIF_DriveGet);
 BIF_DECL(BIF_WinGet);
 BIF_DECL(BIF_WinSet);

@@ -20,6 +20,7 @@
 #define ParamIndexToOptionalIntPtr(index, def)		ParamIndexToOptionalType(IntPtr, index, def)
 #define ParamIndexToOptionalDouble(index, def)		ParamIndexToOptionalType(Double, index, def)
 #define ParamIndexToOptionalInt64(index, def)		ParamIndexToOptionalType(Int64, index, def)
+#define ParamIndexToOptionalBOOL(index, def)		ParamIndexToOptionalType(BOOL, index, def)
 #define ParamIndexToOptionalVar(index)				(((index) < aParamCount && aParam[index]->symbol == SYM_VAR) ? aParam[index]->var : NULL)
 
 // The macro below defaults to "", since that is by far the most common default.
