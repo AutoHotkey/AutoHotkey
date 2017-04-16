@@ -564,6 +564,7 @@ enum BuiltInFunctionID {
 	FID_OnExit = 0, FID_OnClipboardChange,
 	FID_MenuGetHandle = 0, FID_MenuGetName,
 	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlGetTab, FID_ControlFindItem, FID_ControlGetChoice, FID_ControlGetList, FID_ControlGetLineCount, FID_ControlGetCurrentLine, FID_ControlGetCurrentCol, FID_ControlGetLine, FID_ControlGetSelected, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
+	FID_ControlSetChecked = 0, FID_ControlSetEnabled, FID_ControlShow, FID_ControlHide, FID_ControlSetStyle, FID_ControlSetExStyle, FID_ControlShowDropDown, FID_ControlHideDropDown, FID_ControlTabLeft, FID_ControlTabRight, FID_ControlAddItem, FID_ControlDeleteItem, FID_ControlChoose, FID_ControlChooseString, FID_ControlEditPaste,
 	FID_DriveEject = 0, FID_DriveLock, FID_DriveUnlock, FID_DriveSetLabel,
 	FID_DriveGetList = 0, FID_DriveGetFilesystem, FID_DriveGetLabel, FID_DriveGetSerial, FID_DriveGetType, FID_DriveGetStatus, FID_DriveGetStatusCD, FID_DriveGetCapacity, FID_DriveGetSpaceFree,
 };
@@ -610,14 +611,6 @@ enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero du
 	, GUI_CONTROL_ACTIVEX, GUI_CONTROL_LINK, GUI_CONTROL_CUSTOM, GUI_CONTROL_STATUSBAR}; // Kept last to reflect it being bottommost in switch()s (for perf), since not too often used.
 
 enum ThreadCommands {THREAD_CMD_INVALID, THREAD_CMD_PRIORITY, THREAD_CMD_INTERRUPT, THREAD_CMD_NOTIMERS};
-
-enum ControlCmds {CONTROL_CMD_INVALID, CONTROL_CMD_CHECK, CONTROL_CMD_UNCHECK
-	, CONTROL_CMD_ENABLE, CONTROL_CMD_DISABLE, CONTROL_CMD_SHOW, CONTROL_CMD_HIDE
-	, CONTROL_CMD_STYLE, CONTROL_CMD_EXSTYLE
-	, CONTROL_CMD_SHOWDROPDOWN, CONTROL_CMD_HIDEDROPDOWN
-	, CONTROL_CMD_TABLEFT, CONTROL_CMD_TABRIGHT
-	, CONTROL_CMD_ADD, CONTROL_CMD_DELETE, CONTROL_CMD_CHOOSE
-	, CONTROL_CMD_CHOOSESTRING, CONTROL_CMD_EDITPASTE};
 
 
 class Label; // Forward declaration so that each can use the other.
@@ -717,8 +710,6 @@ private:
 	ResultType ControlSetText(LPTSTR aControl, LPTSTR aNewText, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
-		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType GuiControl(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3, Var *aParam3Var);
 	ResultType GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam3);
@@ -1477,29 +1468,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("Interrupt"))) return THREAD_CMD_INTERRUPT;
 		if (!_tcsicmp(aBuf, _T("NoTimers"))) return THREAD_CMD_NOTIMERS;
 		return THREAD_CMD_INVALID;
-	}
-
-	static ControlCmds ConvertControlCmd(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf) return CONTROL_CMD_INVALID;
-		if (!_tcsicmp(aBuf, _T("Check"))) return CONTROL_CMD_CHECK;
-		if (!_tcsicmp(aBuf, _T("Uncheck"))) return CONTROL_CMD_UNCHECK;
-		if (!_tcsicmp(aBuf, _T("Enable"))) return CONTROL_CMD_ENABLE;
-		if (!_tcsicmp(aBuf, _T("Disable"))) return CONTROL_CMD_DISABLE;
-		if (!_tcsicmp(aBuf, _T("Show"))) return CONTROL_CMD_SHOW;
-		if (!_tcsicmp(aBuf, _T("Hide"))) return CONTROL_CMD_HIDE;
-		if (!_tcsicmp(aBuf, _T("Style"))) return CONTROL_CMD_STYLE;
-		if (!_tcsicmp(aBuf, _T("ExStyle"))) return CONTROL_CMD_EXSTYLE;
-		if (!_tcsicmp(aBuf, _T("ShowDropDown"))) return CONTROL_CMD_SHOWDROPDOWN;
-		if (!_tcsicmp(aBuf, _T("HideDropDown"))) return CONTROL_CMD_HIDEDROPDOWN;
-		if (!_tcsicmp(aBuf, _T("TabLeft"))) return CONTROL_CMD_TABLEFT;
-		if (!_tcsicmp(aBuf, _T("TabRight"))) return CONTROL_CMD_TABRIGHT;
-		if (!_tcsicmp(aBuf, _T("Add"))) return CONTROL_CMD_ADD;
-		if (!_tcsicmp(aBuf, _T("Delete"))) return CONTROL_CMD_DELETE;
-		if (!_tcsicmp(aBuf, _T("Choose"))) return CONTROL_CMD_CHOOSE;
-		if (!_tcsicmp(aBuf, _T("ChooseString"))) return CONTROL_CMD_CHOOSESTRING;
-		if (!_tcsicmp(aBuf, _T("EditPaste"))) return CONTROL_CMD_EDITPASTE;
-		return CONTROL_CMD_INVALID;
 	}
 
 	static ToggleValueType ConvertOnOff(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
@@ -3069,6 +3037,7 @@ BIF_DECL(BIF_ComObjQuery);
 BIF_DECL(BIF_Exception);
 
 
+BIF_DECL(BIF_Control);
 BIF_DECL(BIF_ControlGet);
 BIF_DECL(BIF_Drive);
 BIF_DECL(BIF_DriveGet);

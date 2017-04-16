@@ -185,6 +185,23 @@ FuncEntry g_BIF[] =
 	BIFn(ControlGetExStyle, 0, 5, true, BIF_ControlGet),
 	BIFn(ControlGetHwnd, 0, 5, true, BIF_ControlGet),
 
+	BIFn(ControlSetChecked, 1, 6, false, BIF_Control),
+	BIFn(ControlSetEnabled, 1, 6, false, BIF_Control),
+	BIFn(ControlShow, 0, 5, false, BIF_Control),
+	BIFn(ControlHide, 0, 5, false, BIF_Control),
+	BIFn(ControlSetStyle, 1, 6, false, BIF_Control),
+	BIFn(ControlSetExStyle, 1, 6, false, BIF_Control),
+	BIFn(ControlShowDropDown, 0, 5, false, BIF_Control),
+	BIFn(ControlHideDropDown, 0, 5, false, BIF_Control),
+	BIFn(ControlTabLeft, 0, 6, false, BIF_Control),
+	BIFn(ControlTabRight, 0, 6, false, BIF_Control),
+	BIFn(ControlAddItem, 1, 6, false, BIF_Control),
+	BIFn(ControlDeleteItem, 1, 6, false, BIF_Control),
+	BIFn(ControlChoose, 1, 6, false, BIF_Control),
+	BIFn(ControlChooseString, 1, 6, false, BIF_Control),
+	BIFn(ControlEditPaste, 1, 6, false, BIF_Control),
+
+
 	BIFn(DriveEject, 0, 2, false, BIF_Drive),
 	BIFn(DriveLock, 1, 1, false, BIF_Drive),
 	BIFn(DriveUnlock, 1, 1, false, BIF_Drive),
@@ -5560,33 +5577,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_THREAD:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertThreadCommand(new_raw_arg1))
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_CONTROL:
-		if (aArgc > 0 && !line.ArgHasDeref(1))
-		{
-			ControlCmds control_cmd = line.ConvertControlCmd(new_raw_arg1);
-			switch (control_cmd)
-			{
-			case CONTROL_CMD_INVALID:
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-			case CONTROL_CMD_STYLE:
-			case CONTROL_CMD_EXSTYLE:
-			case CONTROL_CMD_TABLEFT:
-			case CONTROL_CMD_TABRIGHT:
-			case CONTROL_CMD_ADD:
-			case CONTROL_CMD_DELETE:
-			case CONTROL_CMD_CHOOSE:
-			case CONTROL_CMD_CHOOSESTRING:
-			case CONTROL_CMD_EDITPASTE:
-				if (control_cmd != CONTROL_CMD_TABLEFT && control_cmd != CONTROL_CMD_TABRIGHT && !*new_raw_arg2)
-					return ScriptError(ERR_PARAM2_MUST_NOT_BE_BLANK);
-				break;
-			default: // All commands except the above should have a blank Value parameter.
-				if (*new_raw_arg2)
-					return ScriptError(ERR_PARAM2_MUST_BE_BLANK, new_raw_arg2);
-			}
-		}
 		break;
 
 	case ACT_GUICONTROL:
@@ -12362,8 +12352,6 @@ ResultType Line::Perform()
 		return ControlSetText(SIX_ARGS);
 	case ACT_CONTROLGETTEXT:
 		return ControlGetText(ARG2, ARG3, ARG4, ARG5, ARG6);
-	case ACT_CONTROL:
-		return Control(SEVEN_ARGS);
 	case ACT_STATUSBARGETTEXT:
 		return StatusBarGetText(ARG2, ARG3, ARG4, ARG5, ARG6);
 	case ACT_STATUSBARWAIT:

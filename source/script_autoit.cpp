@@ -317,20 +317,56 @@ error:
 
 
 
-ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
-	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_Control)
 // ATTACH_THREAD_INPUT has been tested to see if they help any of these work with controls
 // in MSIE (whose Internet Explorer_TridentCmboBx2 does not respond to "Control Choose" but
 // does respond to "Control Focus").  But it didn't help.
 {
-	ControlCmds control_cmd = ConvertControlCmd(aCmd);
-	// Since command names are validated at load-time, this only happens if the command name
-	// was contained in a variable reference.  Since that is very rare, just set ErrorLevel
-	// and return:
-	if (control_cmd == CONTROL_CMD_INVALID)
-		goto error;
+	BuiltInFunctionID control_cmd = _f_callee_id;
 
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	// Retrieve and exclude the value parameter, if any.
+	ToggleValueType aToggle;
+	LPTSTR aValue;
+	int aNumber;
+	switch (control_cmd)
+	{
+	// Boolean parameter:
+	case FID_ControlSetChecked:
+	case FID_ControlSetEnabled:
+		aToggle = Line::ConvertOnOffToggle(ParamIndexToString(0, _f_number_buf));
+		++aParam;
+		--aParamCount;
+		break;
+	// String parameter:
+	case FID_ControlSetStyle: // String for +/-/^ prefix.
+	case FID_ControlSetExStyle: // As above.
+	case FID_ControlAddItem:
+	case FID_ControlChooseString:
+	case FID_ControlEditPaste:
+		aValue = ParamIndexToString(0, _f_number_buf);
+		++aParam;
+		--aParamCount;
+		break;
+	// Integer parameter:
+	case FID_ControlTabLeft:
+	case FID_ControlTabRight:
+	case FID_ControlDeleteItem:
+	case FID_ControlChoose:
+		aNumber = ParamIndexToOptionalInt(0, 1); // Default value is only for TabLeft/TabRight.
+		++aParam;
+		--aParamCount;
+		break;
+	// No parameter:
+	//case FID_ControlShow:
+	//case FID_ControlHide:
+	//case FID_ControlShowDropDown:
+	//case FID_ControlHideDropDown:
+	}
+
+	TCHAR control_buf[MAX_NUMBER_SIZE];
+	LPTSTR aControl = ParamIndexToString(0, control_buf);
+
+	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1);
 	if (!target_window)
 		goto error;
 	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
@@ -345,18 +381,19 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 	LPARAM lparam;
 	vk_type vk;
 	int key_count;
-	TCHAR temp_buf[32];
 
 	switch(control_cmd)
 	{
-	case CONTROL_CMD_CHECK: // au3: Must be a Button
-	case CONTROL_CMD_UNCHECK:
+	case FID_ControlSetChecked: // au3: Must be a Button
 	{ // Need braces for ATTACH_THREAD_INPUT macro.
-		new_button_state = (control_cmd == CONTROL_CMD_CHECK) ? BST_CHECKED : BST_UNCHECKED;
-		if (!SendMessageTimeout(control_window, BM_GETCHECK, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
-		if (dwResult == new_button_state) // It's already in the right state, so don't press it.
-			break;
+		if (aToggle != TOGGLE)
+		{
+			new_button_state = aToggle == TOGGLED_ON ? BST_CHECKED : BST_UNCHECKED;
+			if (!SendMessageTimeout(control_window, BM_GETCHECK, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
+				goto error;
+			if (dwResult == new_button_state) // It's already in the right state, so don't press it.
+				break;
+		}
 		// MSDN docs for BM_CLICK (and au3 author says it applies to this situation also):
 		// "If the button is in a dialog box and the dialog box is not active, the BM_CLICK message
 		// might fail. To ensure success in this situation, call the SetActiveWindow function to activate
@@ -372,28 +409,24 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 		break;
 	}
 
-	case CONTROL_CMD_ENABLE:
-		EnableWindow(control_window, TRUE);
+	case FID_ControlSetEnabled:
+		EnableWindow(control_window, aToggle == TOGGLE ? !IsWindowEnabled(control_window) : aToggle == TOGGLED_ON);
 		break;
 
-	case CONTROL_CMD_DISABLE:
-		EnableWindow(control_window, FALSE);
-		break;
-
-	case CONTROL_CMD_SHOW:
+	case FID_ControlShow:
 		ShowWindow(control_window, SW_SHOWNOACTIVATE); // SW_SHOWNOACTIVATE has been seen in some example code for this purpose.
 		break;
 
-	case CONTROL_CMD_HIDE:
+	case FID_ControlHide:
 		ShowWindow(control_window, SW_HIDE);
 		break;
 
-	case CONTROL_CMD_STYLE:
-	case CONTROL_CMD_EXSTYLE:
+	case FID_ControlSetStyle:
+	case FID_ControlSetExStyle:
 	{
 		if (!*aValue)
-			return OK; // Seems best not to treat an explicit blank as zero.  Let ErrorLevel tell the story. 
-		int style_index = (control_cmd == CONTROL_CMD_STYLE) ? GWL_STYLE : GWL_EXSTYLE;
+			_f_throw(ERR_PARAM1_MUST_NOT_BE_BLANK); // Seems best not to treat an explicit blank as zero.
+		int style_index = (control_cmd == FID_ControlSetStyle) ? GWL_STYLE : GWL_EXSTYLE;
 		DWORD new_style, orig_style = GetWindowLong(control_window, style_index);
 		// +/-/^ are used instead of |&^ because the latter is confusing, namely that & really means &=~style, etc.
 		if (!_tcschr(_T("+-^"), *aValue))  // | and & are used instead of +/- to allow +/- to have their native function.
@@ -410,7 +443,10 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 			}
 		}
 		if (new_style == orig_style) // v1.0.45.04: Ask for an unnecessary change (i.e. one that is already in effect) should not be considered an error.
-			return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+		{
+			g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+			return;
+		}
 		// Currently, BM_SETSTYLE is not done when GetClassName() says that the control is a button/checkbox/groupbox.
 		// This is because the docs for BM_SETSTYLE don't contain much, if anything, that anyone would ever
 		// want to change.
@@ -421,26 +457,29 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 			if (GetWindowLong(control_window, style_index) != orig_style) // Even a partial change counts as a success.
 			{
 				InvalidateRect(control_window, NULL, TRUE); // Quite a few styles require this to become visibly manifest.
-				return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+				g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+				return;
 			}
 		}
 		goto error; // As documented, DoControlDelay is not done for these.
 	}
 
-	case CONTROL_CMD_SHOWDROPDOWN:
-	case CONTROL_CMD_HIDEDROPDOWN:
+	case FID_ControlShowDropDown:
+	case FID_ControlHideDropDown:
 		// CB_SHOWDROPDOWN: Although the return value (dwResult) is always TRUE, SendMessageTimeout()
 		// will return failure if it times out:
 		if (!SendMessageTimeout(control_window, CB_SHOWDROPDOWN
-			, (WPARAM)(control_cmd == CONTROL_CMD_SHOWDROPDOWN)
+			, (WPARAM)(control_cmd == FID_ControlShowDropDown)
 			, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto error;
 		break;
 
-	case CONTROL_CMD_TABLEFT:
-	case CONTROL_CMD_TABRIGHT: // must be a Tab Control
-		key_count = *aValue ? ATOI(aValue) : 1;
-		vk = (control_cmd == CONTROL_CMD_TABLEFT) ? VK_LEFT : VK_RIGHT;
+	case FID_ControlTabLeft:
+	case FID_ControlTabRight: // must be a Tab Control
+		key_count = aNumber;
+		vk = ((control_cmd == FID_ControlTabLeft) == (key_count >= 0)) ? VK_LEFT : VK_RIGHT;
+		if (key_count < 0)
+			key_count = -key_count; // Seems more useful than throwing an error.
 		lparam = (LPARAM)(vk_to_sc(vk) << 16);
 		for (int i = 0; i < key_count; ++i)
 		{
@@ -452,11 +491,11 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 		}
 		break;
 
-	case CONTROL_CMD_ADD:
+	case FID_ControlAddItem:
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
-			GetClassName(control_window, temp_buf, _countof(temp_buf));
-			aControl = temp_buf;
+			GetClassName(control_window, control_buf, _countof(control_buf));
+			aControl = control_buf;
 		}
 		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. !strnicmp for TListBox/TComboBox.
 			msg = CB_ADDSTRING;
@@ -469,18 +508,17 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 		if (dwResult == CB_ERR || dwResult == CB_ERRSPACE) // General error or insufficient space to store it.
 			// CB_ERR == LB_ERR
 			goto error;
-		break;
+		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+		_f_return(dwResult + 1); // Return the one-based index of the new item.
 
-	case CONTROL_CMD_DELETE:
-		if (!*aValue)
-			goto error;
-		control_index = ATOI(aValue) - 1;
+	case FID_ControlDeleteItem:
+		control_index = aNumber - 1;
 		if (control_index < 0)
-			goto error;
+			_f_throw(ERR_PARAM1_INVALID);
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
-			GetClassName(control_window, temp_buf, _countof(temp_buf));
-			aControl = temp_buf;
+			GetClassName(control_window, control_buf, _countof(control_buf));
+			aControl = control_buf;
 		}
 		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 			msg = CB_DELETESTRING;
@@ -494,16 +532,14 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 			goto error;
 		break;
 
-	case CONTROL_CMD_CHOOSE:
-		if (!*aValue)
-			goto error;
-		control_index = ATOI(aValue) - 1;
+	case FID_ControlChoose:
+		control_index = aNumber - 1;
 		if (control_index < 0)
-			goto error;
+			_f_throw(ERR_PARAM1_INVALID);
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
-			GetClassName(control_window, temp_buf, _countof(temp_buf));
-			aControl = temp_buf;
+			GetClassName(control_window, control_buf, _countof(control_buf));
+			aControl = control_buf;
 		}
 		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 		{
@@ -545,11 +581,11 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 		// Otherwise break and do the end-function processing.
 		break;
 
-	case CONTROL_CMD_CHOOSESTRING:
+	case FID_ControlChooseString:
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
-			GetClassName(control_window, temp_buf, _countof(temp_buf));
-			aControl = temp_buf;
+			GetClassName(control_window, control_buf, _countof(control_buf));
+			aControl = control_buf;
 		}
 		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 		{
@@ -568,9 +604,9 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 		}
 		else
 			goto error;  // Must be ComboBox or ListBox.
+		DWORD_PTR item_index;
 		if (msg == LB_FINDSTRING) // Multi-select ListBox (LB_SELECTSTRING is not supported by these).
 		{
-			DWORD_PTR item_index;
 			if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &item_index)
 				|| item_index == LB_ERR
 				|| !SendMessageTimeout(control_window, LB_SETSEL, TRUE, item_index, SMTO_ABORTIFHUNG, 2000, &dwResult)
@@ -578,8 +614,8 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 				goto error;
 		}
 		else // ComboBox or single-select ListBox.
-			if (!SendMessageTimeout(control_window, msg, 1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult)
-				|| dwResult == CB_ERR) // CB_ERR == LB_ERR
+			if (!SendMessageTimeout(control_window, msg, 1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &item_index)
+				|| item_index == CB_ERR) // CB_ERR == LB_ERR
 				goto error;
 		if (   !(immediate_parent = GetParent(control_window))   )
 			goto error;
@@ -591,10 +627,10 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, y_msg)
 			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto error;
-		// Otherwise break and do the end-function processing.
-		break;
+		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+		_f_return(item_index + 1); // Return the index chosen.  Might have some use if the string was ambiguous.
 
-	case CONTROL_CMD_EDITPASTE:
+	case FID_ControlEditPaste:
 		if (!SendMessageTimeout(control_window, EM_REPLACESEL, TRUE, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto error;
 		// Note: dwResult is not used by EM_REPLACESEL since it doesn't return a value.
@@ -602,10 +638,12 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 	} // switch()
 
 	DoControlDelay;  // Seems safest to do this for all of these commands.
-	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	_f_return_empty;
 
 error:
-	return SetErrorLevelOrThrow();
+	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	_f_return_empty;
 }
 
 
