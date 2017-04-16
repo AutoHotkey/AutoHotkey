@@ -8453,7 +8453,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	case WM_HSCROLL:
 		if (   !(pgui = GuiType::FindGui(hWnd))   )
 			break; // Let default proc handle it.
-		pgui->Event(GUI_HWND_TO_INDEX((HWND)lParam), LOWORD(wParam));
+		pgui->Event(GUI_HWND_TO_INDEX((HWND)lParam), LOWORD(wParam), GUI_EVENT_NONE, HIWORD(wParam));
 		return 0; // "If an application processes this message, it should return zero."
 	
 	//case WM_ERASEBKGND:
@@ -8969,24 +8969,26 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 		case GUI_CONTROL_SLIDER:
 			switch (aNotifyCode)
 			{
-			case TB_ENDTRACK: // WM_KEYUP (the user released a key that sent a relevant virtual key code)
-				// Unfortunately, the control does not generate a TB_ENDTRACK notification when the slider
-				// was moved via the mouse wheel.  This is documented here as a known limitation.  The
-				// workaround is to use AltSubmit.
-				break;
+			case TB_THUMBTRACK:
+				// TB_THUMBTRACK is sent very frequently while the user is dragging the slider.
+				// It seems best to disable it by default, and only call the g-label once the user
+				// releases the mouse button (i.e. when TB_THUMBPOSITION is received).
+			case TB_ENDTRACK:
+				// TB_ENDTRACK always follows some other event. Since it isn't generated when the user
+				// uses the mouse wheel, filter it out by default so that the g-label is always called
+				// only once when the slider moves, by default.
+				if (!(control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT)) // Ignore this event.
+					return;
+				// Otherwise, continue:
 			default:
 				// Namely the following:
 				//case TB_THUMBPOSITION: // Mouse wheel or WM_LBUTTONUP following a TB_THUMBTRACK notification message
-				//case TB_THUMBTRACK:    // Slider movement (the user dragged the slider)
 				//case TB_LINEUP:        // VK_LEFT or VK_UP
 				//case TB_LINEDOWN:      // VK_RIGHT or VK_DOWN
 				//case TB_PAGEUP:        // VK_PRIOR (the user clicked the channel above or to the left of the slider)
 				//case TB_PAGEDOWN:      // VK_NEXT (the user clicked the channel below or to the right of the slider)
 				//case TB_TOP:           // VK_HOME
 				//case TB_BOTTOM:        // VK_END
-				if (!(control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT)) // Ignore this event.
-					return;
-				// Otherwise:
 				aGuiEvent = aNotifyCode + 48; // Signal it to store an ASCII character (digit) in A_GuiControlEvent.
 			}
 			break;
