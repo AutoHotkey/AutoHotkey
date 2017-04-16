@@ -8091,25 +8091,25 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				// v1.0.36.03: For NM_CLICK/NM_RCLICK, it's somewhat debatable to set event_info when the
 				// ListView isn't single-select, but the usefulness seems to outweigh any confusion it might cause.
 				gui_event = GUI_EVENT_NORMAL;
-				event_info = 1 + ListView_GetNextItem(control.hwnd, -1, LVNI_FOCUSED); // Fetch manually for compatibility with Win95/NT lacking MSIE 3.0+.
+				event_info = 1 + ((LPNMITEMACTIVATE)lParam)->iItem;
 				break;
 			case NM_RCLICK:
 				gui_event = GUI_EVENT_RCLK;
-				event_info = 1 + ListView_GetNextItem(control.hwnd, -1, LVNI_FOCUSED); // Fetch manually for compatibility with Win95/NT lacking MSIE 3.0+.
+				event_info = 1 + ((LPNMITEMACTIVATE)lParam)->iItem;
 				break;
 			case NM_DBLCLK:
 				gui_event = GUI_EVENT_DBLCLK;
-				event_info = 1 + ListView_GetNextItem(control.hwnd, -1, LVNI_FOCUSED); // Fetch manually for compatibility with Win95/NT lacking MSIE 3.0+.
+				event_info = 1 + ((LPNMITEMACTIVATE)lParam)->iItem;
 				ignore_unless_alt_submit = false;
 				break;
 			case NM_RDBLCLK:
 				gui_event = 'R'; // Rare, so just a simple mnemonic is stored (seems better than a digit).
-				event_info = 1 + ListView_GetNextItem(control.hwnd, -1, LVNI_FOCUSED); // Fetch manually for compatibility with Win95/NT lacking MSIE 3.0+.
+				event_info = 1 + ((LPNMITEMACTIVATE)lParam)->iItem;
 				ignore_unless_alt_submit = false;
 				break;
 			case LVN_ITEMACTIVATE: // By default, this notification arrives when an item is double-clicked (depends on style).
 				gui_event = 'A';
-				event_info = 1 + ListView_GetNextItem(control.hwnd, -1, LVNI_FOCUSED); // Fetch manually for compatibility with Win95/NT lacking MSIE 3.0+.
+				event_info = 1 + ((LPNMITEMACTIVATE)lParam)->iItem;
 				break;
 
 			case LVN_COLUMNCLICK:
