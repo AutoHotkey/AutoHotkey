@@ -619,7 +619,7 @@ BIF_DECL(BIF_ControlGet)
 	int aNumber;
 	switch (control_cmd)
 	{
-	case FID_ControlFindString: // String (required).
+	case FID_ControlFindItem: // String (required).
 	case FID_ControlGetList: // Options (optional).
 		if (aParamCount)
 		{
@@ -674,7 +674,7 @@ BIF_DECL(BIF_ControlGet)
 			goto error;
 		_f_return(index + 1);
 
-	case FID_ControlFindString:
+	case FID_ControlFindItem:
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
 			GetClassName(control_window, control_buf, _countof(control_buf));

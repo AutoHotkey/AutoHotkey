@@ -169,7 +169,7 @@ FuncEntry g_BIF[] =
 	
 	BIF1(Exception, 1, 3, true),
 
-	BIFn(ControlFindString, 1, 6, true, BIF_ControlGet),
+	BIFn(ControlFindItem, 1, 6, true, BIF_ControlGet),
 	BIFn(ControlGetChecked, 0, 5, true, BIF_ControlGet),
 	BIFn(ControlGetEnabled, 0, 5, true, BIF_ControlGet),
 	BIFn(ControlGetVisible, 0, 5, true, BIF_ControlGet),
