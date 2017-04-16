@@ -348,11 +348,10 @@ BIF_DECL(BIF_Control)
 		--aParamCount;
 		break;
 	// Integer parameter:
-	case FID_ControlTabLeft:
-	case FID_ControlTabRight:
+	case FID_ControlSetTab:
 	case FID_ControlDeleteItem:
 	case FID_ControlChoose:
-		aNumber = ParamIndexToOptionalInt(0, 1); // Default value is only for TabLeft/TabRight.
+		aNumber = ParamIndexToInt(0);
 		++aParam;
 		--aParamCount;
 		break;
@@ -379,8 +378,6 @@ BIF_DECL(BIF_Control)
 	UINT msg, x_msg, y_msg;
 	RECT rect;
 	LPARAM lparam;
-	vk_type vk;
-	int key_count;
 
 	switch(control_cmd)
 	{
@@ -474,21 +471,11 @@ BIF_DECL(BIF_Control)
 			goto error;
 		break;
 
-	case FID_ControlTabLeft:
-	case FID_ControlTabRight: // must be a Tab Control
-		key_count = aNumber;
-		vk = ((control_cmd == FID_ControlTabLeft) == (key_count >= 0)) ? VK_LEFT : VK_RIGHT;
-		if (key_count < 0)
-			key_count = -key_count; // Seems more useful than throwing an error.
-		lparam = (LPARAM)(vk_to_sc(vk) << 16);
-		for (int i = 0; i < key_count; ++i)
-		{
-			// DoControlDelay isn't done for every iteration because it seems likely that
-			// the Sleep(0) will take care of things.
-			PostMessage(control_window, WM_KEYDOWN, vk, lparam | 0x00000001);
-			SLEEP_WITHOUT_INTERRUPTION(0); // Au3 uses a Sleep(0).
-			PostMessage(control_window, WM_KEYUP, vk, lparam | 0xC0000001);
-		}
+	case FID_ControlSetTab: // Must be a Tab Control
+		if (aNumber < 1)
+			_f_throw(ERR_PARAM1_INVALID);
+		if (!ControlSetTab(aResultToken, control_window, (DWORD)aNumber - 1))
+			goto error;
 		break;
 
 	case FID_ControlAddItem:

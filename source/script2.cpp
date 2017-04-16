@@ -1846,6 +1846,54 @@ error:
 
 
 
+bool ControlSetTab(ResultToken &aResultToken, HWND aHwnd, DWORD aTabIndex)
+{
+	DWORD_PTR dwResult;
+	// MSDN: "If the tab control does not have the TCS_BUTTONS style, changing the focus also changes
+	// the selected tab. In this case, the tab control sends the TCN_SELCHANGING and TCN_SELCHANGE
+	// notification codes to its parent window."
+	if (!SendMessageTimeout(aHwnd, TCM_SETCURFOCUS, aTabIndex, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
+		return false;
+	// Tab controls with the TCS_BUTTONS style need additional work:
+	if (GetWindowLong(aHwnd, GWL_STYLE) & TCS_BUTTONS)
+	{
+		// Problem:
+		//  TCM_SETCURFOCUS does not change the selected tab if TCS_BUTTONS is set.
+		//
+		// False solution #1 (which used to be recommended in the docs):
+		//  Send a TCM_SETCURSEL method afterward.  TCM_SETCURSEL changes the selected tab,
+		//  but doesn't notify the control's parent, so it doesn't update the tab's contents.
+		//
+		// False solution #2:
+		//  Send a WM_NOTIFY message to the parent window to notify it.  Can't be done.
+		//  MSDN says: "For Windows 2000 and later systems, the WM_NOTIFY message cannot
+		//  be sent between processes."
+		//
+		// Solution #1:
+		//  Send VK_LEFT/VK_RIGHT as many times as needed.
+		//
+		// Solution #2:
+		//  Set the focus to an adjacent tab and then send VK_LEFT/VK_RIGHT.
+		//   - Must choose an appropriate tab index and vk depending on which tab is being
+		//     selected, since VK_LEFT/VK_RIGHT don't wrap around.
+		//   - Ends up tempting optimisations which increase code size, such as to avoid
+		//     TCM_SETCURFOCUS if an adjacent tab is already focused.
+		//   - Still needs VK_SPACE afterward to actually select the tab.
+		//
+		// Solution #3 (the one below):
+		//  Set the focus to the appropriate tab and then send VK_SPACE.
+		//   - Since we've already set the focus, all we need to do is send VK_SPACE.
+		//   - If the tab index is invalid and the user has focused but not selected
+		//     another tab, that tab will be selected.  This seems harmless enough.
+		//
+		PostMessage(aHwnd, WM_KEYDOWN, VK_SPACE, 0x00000001);
+		PostMessage(aHwnd, WM_KEYUP, VK_SPACE, 0xC0000001);
+	}
+	return true;
+}
+
+
+
 ResultType Line::StatusBarGetText(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 {
