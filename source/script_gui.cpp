@@ -1375,27 +1375,24 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 
 		case GUI_CONTROL_CHECKBOX:
 		case GUI_CONTROL_RADIO:
-			if (!aIsText && IsNumeric(aContents, true, false))
+			if (aIsText) // It's the text/caption for the item.
+				break; // The default SetWindowText() action will be taken below.
+			if (!IsNumeric(aContents, TRUE, FALSE))
+				return aResultToken.Error(ERR_INVALID_VALUE);
+			checked = ATOI(aContents);
+			if (  !(checked == 0 || checked == 1 || (aControl.type == GUI_CONTROL_CHECKBOX && checked == -1))  )
+				return aResultToken.Error(ERR_INVALID_VALUE);
+			if (checked == -1)
+				checked = BST_INDETERMINATE;
+			//else the "checked" var is already set correctly.
+			if (aControl.type == GUI_CONTROL_RADIO)
 			{
-				checked = ATOI(aContents);
-				if (!checked || checked == 1 || (aControl.type == GUI_CONTROL_CHECKBOX && checked == -1))
-				{
-					if (checked == -1)
-						checked = BST_INDETERMINATE;
-					//else the "checked" var is already set correctly.
-					if (aControl.type == GUI_CONTROL_RADIO)
-					{
-						ControlCheckRadioButton(aControl, control_index, checked);
-						return OK;
-					}
-					// Otherwise, we're operating upon a checkbox.
-					SendMessage(aControl.hwnd, BM_SETCHECK, checked, 0);
-					return OK;
-				}
-				//else the default SetWindowText() action will be taken below.
+				ControlCheckRadioButton(aControl, control_index, checked);
+				return OK;
 			}
-			// else assume it's the text/caption for the item, so the default SetWindowText() action will be taken below.
-			break; // Fix for v1.0.35.01: Don't return, continue onward.
+			// Otherwise, we're operating upon a checkbox.
+			SendMessage(aControl.hwnd, BM_SETCHECK, checked, 0);
+			return OK;
 
 		case GUI_CONTROL_LISTVIEW:
 		case GUI_CONTROL_TREEVIEW:
