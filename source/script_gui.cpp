@@ -6287,7 +6287,7 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 	if (!*aContent && !aObj)
 		return;
 
-	UINT msg_add, msg_select;
+	UINT msg_add;
 	int requested_index = 0;
 
 	switch (aControl.type)
@@ -6297,17 +6297,13 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 		// Fall through:
 	case GUI_CONTROL_LISTVIEW:
 		msg_add = 0;
-		msg_select = 0;
 		break;
 	case GUI_CONTROL_DROPDOWNLIST:
 	case GUI_CONTROL_COMBOBOX:
 		msg_add = CB_ADDSTRING;
-		msg_select = CB_SETCURSEL;
 		break;
 	case GUI_CONTROL_LISTBOX:
 		msg_add = LB_ADDSTRING;
-		msg_select = (GetWindowLong(aControl.hwnd, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
-			? LB_SETSEL : LB_SETCURSEL;
 		break;
 	default:    // Do nothing for any other control type that doesn't require content to be added this way.
 		return; // e.g. GUI_CONTROL_SLIDER, which the caller should handle.
@@ -6389,14 +6385,11 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 			{
 				if (item_index > -1) // The item was successfully added.
 				{
-					if (aControl.type == GUI_CONTROL_TAB)
-						// MSDN: "A tab control does not send a TCN_SELCHANGING or TCN_SELCHANGE notification message
-						// when a tab is selected using the TCM_SETCURSEL message."
-						TabCtrl_SetCurSel(aControl.hwnd, item_index);
-					else if (msg_select == LB_SETSEL) // Multi-select box requires diff msg to have a cumulative effect.
-						SendMessage(aControl.hwnd, msg_select, (WPARAM)TRUE, (LPARAM)item_index);
-					else if (msg_select) // Ensure 
-						SendMessage(aControl.hwnd, msg_select, (WPARAM)item_index, 0);  // Select this item.
+					ControlSetChoice(aControl, (int)item_index);
+					// It's not done this way because aChoice is expected to take precedence, and we can't just
+					// check aChoice != 0 because it might end up being out of bounds (in which case the choice
+					// set above will remain in effect):
+					//aChoice = item_index;
 				}
 				++next_field;  // Now this could be a third mDelimiter, which would in effect be an empty item.
 				// It can also be the zero terminator if the list ends in a delimiter, e.g. item1|item2||
@@ -6426,18 +6419,33 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 	}
 
 	// Have aChoice take precedence over any double-piped item(s) that appeared in the list:
-	if (aChoice < 1)
-		return;
-	--aChoice;
+	if (aChoice > 0)
+		ControlSetChoice(aControl, aChoice - 1);
+}
 
-	if (aControl.type == GUI_CONTROL_TAB)
+
+
+void GuiType::ControlSetChoice(GuiControlType &aControl, int aChoice)
+{
+	switch (aControl.type)
+	{
+	case GUI_CONTROL_TAB:
 		// MSDN: "A tab control does not send a TCN_SELCHANGING or TCN_SELCHANGE notification message
 		// when a tab is selected using the TCM_SETCURSEL message."
 		TabCtrl_SetCurSel(aControl.hwnd, aChoice);
-	else if (msg_select == LB_SETSEL) // Multi-select box requires diff msg to have a cumulative effect.
-		SendMessage(aControl.hwnd, msg_select, (WPARAM)TRUE, (LPARAM)aChoice);
-	else
-		SendMessage(aControl.hwnd, msg_select, (WPARAM)aChoice, 0);  // Select this item.
+		break;
+	case GUI_CONTROL_DROPDOWNLIST:
+	case GUI_CONTROL_COMBOBOX:
+		SendMessage(aControl.hwnd, CB_SETCURSEL, (WPARAM)aChoice, 0);
+		break;
+	case GUI_CONTROL_LISTBOX:
+		// Multi-select box requires a different message to have a cumulative effect:
+		if (GetWindowLong(aControl.hwnd, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
+			SendMessage(aControl.hwnd, LB_SETSEL, (WPARAM)TRUE, (LPARAM)aChoice);
+		else
+			SendMessage(aControl.hwnd, LB_SETCURSEL, (WPARAM)aChoice, 0);
+		break;
+	}
 }
 
 
