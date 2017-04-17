@@ -2703,13 +2703,13 @@ public:
 
 	static WORD TextToHotkey(LPTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
-	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, Object *aObj, bool aText, ResultToken &aResultToken);
+	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, bool aText, ResultToken &aResultToken);
 	ResultType ControlSetName(GuiControlType &aControl, LPTSTR aName);
 	void ControlSetEnabled(GuiControlType &aControl, bool aEnabled);
 	void ControlSetVisible(GuiControlType &aControl, bool aVisible);
 	ResultType ControlMove(GuiControlType &aControl, LPTSTR aPos, bool aDraw);
 	void ControlUpdateFont(GuiControlType &aControl);
-	ResultType ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, int aExtraActions = 0);
+	ResultType ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, int aExtraActions = 0, BOOL aOneExact = FALSE);
 	void ControlCheckRadioButton(GuiControlType &aControl, GuiIndexType aControlIndex, WPARAM aCheckType);
 	void ControlSetUpDownOptions(GuiControlType &aControl, GuiControlOptionsType &aOpt);
 	int ControlGetDefaultSliderThickness(DWORD aStyle, int aThumbThickness);

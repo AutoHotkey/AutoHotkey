@@ -712,17 +712,11 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			if (IS_INVOKE_SET)
 			{
 				LPTSTR value = ParamIndexToString(0, _f_retval_buf);
-				Object* obj = TokenToScriptObject(*aParam[0]);
-				if (!gui->ControlSetContents(*this, value, obj, member == P_Text, aResultToken))
+				if (!gui->ControlSetContents(*this, value, member == P_Text, aResultToken))
 					return FAIL;
 				// For simplicity and code size, just return the value passed by the script,
 				// even though it may differ from the type or value of the control's content.
 				// It seems best to return a pure number if one was given (e.g. for UpDown/Slider).
-				if (obj)
-				{
-					obj->AddRef();
-					_o_return(obj);
-				}
 				switch (TokenIsPureNumeric(*aParam[0]))
 				{
 				case PURE_INTEGER:
@@ -1156,7 +1150,7 @@ void GuiType::ControlUpdateFont(GuiControlType &aControl)
 }
 
 
-ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, int aExtraActions)
+ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, int aExtraActions, BOOL aOneExact)
 {
 	int selection_index = -1;
 	bool is_choose_string = (TokenIsPureNumeric(aParam) != SYM_INTEGER);
@@ -1165,22 +1159,22 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 	if (aExtraActions < 0 || aExtraActions > 2) // Below relies on this having been checked.
 		return g_script.ScriptError(ERR_PARAM2_INVALID);
 
-	UINT msg_set_index, msg_select_string, msg_find_string;
+	UINT msg_set_index = 0, msg_select_string = 0, msg_find_string = 0;
 	USHORT notify_code[2];
 	switch(aControl.type)
 	{
 	case GUI_CONTROL_TAB:
 		msg_set_index = TCM_SETCURSEL;
-		msg_find_string = 0;
-		msg_select_string = 0;
 		notify_code[0] = (USHORT)TCN_SELCHANGE; // Type-cast to suppress ridiculous truncation warning.
 		notify_code[1] = 0;
 		break;
 	case GUI_CONTROL_DROPDOWNLIST:
 	case GUI_CONTROL_COMBOBOX:
 		msg_set_index = CB_SETCURSEL;
-		msg_find_string = 0;
-		msg_select_string = CB_SELECTSTRING;
+		if (aOneExact)
+			msg_find_string = CB_FINDSTRINGEXACT;
+		else
+			msg_select_string = CB_SELECTSTRING;
 		notify_code[0] = CBN_SELCHANGE;
 		if ((GetWindowLong(aControl.hwnd, GWL_STYLE) & (CBS_SIMPLE|CBS_DROPDOWNLIST)) == CBS_SIMPLE) // DoubleClick events aren't normally possible without CBS_SIMPLE.
 			notify_code[1] = CBN_DBLCLK;
@@ -1193,14 +1187,15 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 			// MSDN: Do not use [LB_SELECTSTRING] with a list box that has the LBS_MULTIPLESEL or the
 			// LBS_EXTENDEDSEL styles:
 			msg_set_index = LB_SETSEL;
-			msg_find_string = LB_FINDSTRING;
-			msg_select_string = 0;
+			msg_find_string = aOneExact ? LB_FINDSTRINGEXACT : LB_FINDSTRING;
 		}
 		else // single-select listbox
 		{
 			msg_set_index = LB_SETCURSEL;
-			msg_find_string = 0;
-			msg_select_string = LB_SELECTSTRING;
+			if (aOneExact)
+				msg_find_string = LB_FINDSTRINGEXACT;
+			else
+				msg_select_string = LB_SELECTSTRING;
 		}
 		notify_code[0] = LBN_SELCHANGE;
 		notify_code[1] = LBN_DBLCLK;
@@ -1228,7 +1223,7 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 		else
 		{
 			ASSERT(aControl.type == GUI_CONTROL_TAB);
-			selection_index = FindTabIndexByName(aControl, item_string); // Returns -1 on failure.
+			selection_index = FindTabIndexByName(aControl, item_string, aOneExact); // Returns -1 on failure.
 			if (selection_index == -1)
 				goto error;
 		}
@@ -1241,6 +1236,8 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 	}
 	if (msg_set_index == LB_SETSEL) // Multi-select, so use the cumulative method.
 	{
+		if (aOneExact)
+			SendMessage(aControl.hwnd, msg_set_index, FALSE, -1); // Deselect all others.
 		SendMessage(aControl.hwnd, msg_set_index, selection_index >= 0, selection_index);
 		// The return value isn't checked since MSDN doesn't specify what it is in any
 		// case other than failure.
@@ -1265,14 +1262,13 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 	return OK;
 
 error:
-	return g_script.ScriptError(ERR_PARAM1_INVALID); // Invalid parameter #1 is almost definitely the cause.
+	return g_script.ScriptError(aOneExact ? ERR_INVALID_VALUE : ERR_PARAM1_INVALID); // Invalid parameter #1 is almost definitely the cause.
 }
 
 
-ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContents, Object *aObj
+ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContents
 	, bool aIsText, ResultToken &aResultToken)
 // aContents: The content as a string.
-// aObj: The content as an Object (should be an array).
 // aIsText: True for the Text property, false for the Value property.
 // aResultToken: Used only to set an exit result in the event of an error.
 {
@@ -1283,7 +1279,6 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 	GuiControlType *tab_control;
 	int new_pos;
 	SYSTEMTIME st[2];
-	bool do_redraw_if_in_tab = false;
 	bool do_redraw_unconditionally = false;
 
 	do // Code is simplified below by exiting early via break out of this block.
@@ -1371,9 +1366,8 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 			// in the tab control is the current page), must redraw the tab control to get the picture/icon
 			// to update correctly.  v1.0.40.01: Pictures such as .Gif sometimes disappear (even if they're
 			// not in a tab control):
-			//do_redraw_if_in_tab = true;
 			do_redraw_unconditionally = true;
-			break; // Rather than return, continue on to do the redraw.
+			goto break_and_maybe_redraw;
 		}
 
 		case GUI_CONTROL_BUTTON:
@@ -1488,9 +1482,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 				}
 				else
 					MonthCal_SetCurSel(aControl.hwnd, st);
-				//else invalid, so leave current sel. unchanged.
-				do_redraw_if_in_tab = true; // Confirmed necessary.
-				break;
+				goto break_and_maybe_redraw; // Confirmed necessary.
 			}
 			// The control does not support having "no selection".
 			return aResultToken.Error(ERR_INVALID_VALUE);
@@ -1561,60 +1553,32 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 		//case GUI_CONTROL_COMBOBOX:
 		//case GUI_CONTROL_LISTBOX:
 		//case GUI_CONTROL_TAB:
-			if (aControl.type == GUI_CONTROL_COMBOBOX && aIsText)
+			ExprTokenType choice;
+			if (aIsText)
 			{
-				// Fix for v1.0.40.08: Must clear the current selection to avoid Submit/GuiControlGet
-				// retrieving it instead of the text that's about to be put into the Edit field.  Note that
-				// whatever changes are done here should tested to work with ComboBox's AltSubmit option also.
-				// After the next text is added to the Edit field, upon GuiControlGet or "Gui Submit", that
-				// text will be checked against the drop-list to see if it matches any of the selections
-				// It's done at that stage rather than here because doing it there also solves the issue
-				// of the user manually entering a selection into the Edit field and then failing to get
-				// the position of the matching item when the ComboBox is set to AltSubmit mode.
-				SendMessage(aControl.hwnd, CB_SETCURSEL, -1, 0);
-				break; // v1.0.38: Fall through to the SetWindowText() method, which works to set combo's edit field.
-			}
-			// Seems best not to do the below due to the extreme rarity of anyone wanting to change a
-			// ListBox or ComboBox's hidden caption.  That can be done via ControlSetText if it is
-			// ever needed.  The advantage of not doing this is that the "TEXT" command can be used
-			// as a gentle, slight-variant of GUICONTROL_CMDCONTENTS, i.e. without needing to worry
-			// what the target control's type is:
-			//if (guicontrol_cmd == GUICONTROL_CMD_TEXT)
-			//	break;
-			if (aObj || *aContents == mDelimiter) // The signal to overwrite rather than append to the list.
-			{
-				if (*aContents)
-					++aContents;  // Exclude the initial pipe from further consideration.
-				int msg;
-				switch (aControl.type)
+				if (aControl.type == GUI_CONTROL_COMBOBOX)
 				{
-				case GUI_CONTROL_TAB: msg = TCM_DELETEALLITEMS; break; // Same as TabCtrl_DeleteAllItems().
-				case GUI_CONTROL_LISTBOX: msg = LB_RESETCONTENT; break;
-				default: // DropDownList or ComboBox
-					msg = CB_RESETCONTENT;
+					// Use the simple SetWindowText() method, which works on the ComboBox's Edit.
+					// Clearing the current selection isn't strictly necessary since ControlGetContents()
+					// compensates for the index being inaccurate (due to other possible causes), but it
+					// might help in some situations.  If it's not done, CB_GETCURSEL will return the
+					// previous selection.  By contrast, a user typing in the box always sets it to -1.
+					SendMessage(aControl.hwnd, CB_SETCURSEL, -1, 0);
+					goto break_and_SetWindowText;
 				}
-				SendMessage(aControl.hwnd, msg, 0, 0);  // Delete all items currently in the list.
+				choice.symbol = SYM_STRING;
+				choice.marker = aContents;
 			}
-			ControlAddContents(aControl, aContents, 0, NULL, aObj);
-			if (aControl.type == GUI_CONTROL_TAB)
+			else // (!aIsText)
 			{
-				// In case the active tab has changed or been deleted, update the tab.
-				// First, update the tab control's dialog (if any) to match its display area.
-				// The "false" param will cause focus to jump to first item in z-order if
-				// the control that previously had focus was inside a tab that was just
-				// deleted (seems okay since this kind of operation is fairly rare):
-				ControlUpdateCurrentTab(aControl, false);
-				// Must invalidate part of parent window to get controls to redraw correctly, at least
-				// in the following case: Tab that is currently active still exists and is still active
-				// after the tab-rebuild done above.  Currently ControlUpdateCurrentTab already does
-				// this, even if the selected tab has not changed or if there is now no tab selected.
-				//InvalidateRect(gui.mHwnd, NULL, TRUE); // TRUE = Seems safer to erase, not knowing all possible overlaps.
+				if (!IsNumeric(aContents, FALSE, FALSE))
+					return aResultToken.Error(ERR_INVALID_VALUE);
+				choice.symbol = SYM_INTEGER;
+				choice.value_int64 = ATOI(aContents);
 			}
-			return OK; // Don't break since don't want the other actions below to be taken.
-		} // inner switch() for control's type for contents/txt sub-commands.
-
-		if (do_redraw_if_in_tab) // Excludes the SetWindowText() below, but might need changing for future control types.
-			break;
+			return ControlChoose(aControl, choice, 0, TRUE); // Pass TRUE to find an exact (not partial) match.
+		} // switch() for control's type for contents/txt sub-commands.
+break_and_SetWindowText:
 		// Otherwise:
 		// The only other reason it wouldn't have already returned is to fall back to SetWindowText() here.
 		// Since above didn't return or break, it's either:
@@ -1627,6 +1591,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 		return OK;
 	} while(0);
 
+break_and_maybe_redraw:
 	// If the above didn't return, it wants this check:
 	if (   do_redraw_unconditionally
 		|| (tab_control = FindTabControl(aControl.tab_control_index)) && IsWindowVisible(aControl.hwnd)   )
