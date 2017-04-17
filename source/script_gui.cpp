@@ -1492,22 +1492,9 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 			return OK; // Don't break since don't want the other actions below to be taken.
 		
 		case GUI_CONTROL_UPDOWN:
-			if (*aContents == '+') // Apply as delta from its current position.
-			{
-				new_pos = ATOI(aContents + 1);
-				// Any out of range or non-numeric value in the buddy is ignored since error reporting is
-				// left up to the script, which can compare contents of buddy to those of UpDown to check
-				// validity if it wants.
-				if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) // It has a 32-bit vs. 16-bit range.
-					new_pos += (int)SendMessage(aControl.hwnd, UDM_GETPOS32, 0, 0);
-				else // 16-bit.  Must cast to short to omit the error portion (see comment above).
-					new_pos += (short)SendMessage(aControl.hwnd, UDM_GETPOS, 0, 0);
-				// Above uses +1 to omit the plus sign, which allows a negative delta via +-5.
-				// -5 is not treated as a delta because that would be ambiguous with an absolute position.
-				// In any case, it seems like too much code to be justified.
-			}
-			else
-				new_pos = ATOI(aContents);
+			if (!IsNumeric(aContents, TRUE, FALSE))
+				return aResultToken.Error(ERR_INVALID_VALUE);
+			new_pos = ATOI(aContents);
 			// MSDN: "If the parameter is outside the control's specified range, nPos will be set to the nearest
 			// valid value."
 			SendMessage(aControl.hwnd, (aControl.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) ? UDM_SETPOS32 : UDM_SETPOS
@@ -1515,33 +1502,20 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 			return OK; // Don't break since don't want the other actions below to be taken.
 
 		case GUI_CONTROL_SLIDER:
+			if (!IsNumeric(aContents, TRUE, FALSE))
+				return aResultToken.Error(ERR_INVALID_VALUE);
 			// Confirmed this fact from MSDN: That the control automatically deals with out-of-range values
 			// by setting slider to min or max:
-			if (*aContents == '+') // Apply as delta from its current position.
-			{
-				new_pos = ATOI(aContents + 1);
-				if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR)
-					new_pos = -new_pos;  // Delta moves to opposite direction if control is inverted.
-				SendMessage(aControl.hwnd, TBM_SETPOS, TRUE
-					, SendMessage(aControl.hwnd, TBM_GETPOS, 0, 0) + new_pos);
-				// Above uses +1 to omit the plus sign, which allows a negative delta via +-5.
-				// -5 is not treated as a delta because that would be ambiguous with an absolute position.
-				// In any case, it seems like too much code to be justified.
-			}
-			else
-				SendMessage(aControl.hwnd, TBM_SETPOS, TRUE, ControlInvertSliderIfNeeded(aControl, ATOI(aContents)));
-				// Above msg has no return value.
+			SendMessage(aControl.hwnd, TBM_SETPOS, TRUE, ControlInvertSliderIfNeeded(aControl, ATOI(aContents)));
+			// Above msg has no return value.
 			return OK; // Don't break since don't want the other actions below to be taken.
 
 		case GUI_CONTROL_PROGRESS:
+			if (!IsNumeric(aContents, TRUE, FALSE))
+				return aResultToken.Error(ERR_INVALID_VALUE);
 			// Confirmed through testing (PBM_DELTAPOS was also tested): The control automatically deals
 			// with out-of-range values by setting bar to min or max.  
-			if (*aContents == '+')
-				// This allows a negative delta, e.g. via +-5.  Nothing fancier is done since the need
-				// to go backwards in a progress bar is rare.
-				SendMessage(aControl.hwnd, PBM_DELTAPOS, ATOI(aContents + 1), 0);
-			else
-				SendMessage(aControl.hwnd, PBM_SETPOS, ATOI(aContents), 0);
+			SendMessage(aControl.hwnd, PBM_SETPOS, ATOI(aContents), 0);
 			return OK; // Don't break since don't want the other actions below to be taken.
 		
 		case GUI_CONTROL_STATUSBAR:
