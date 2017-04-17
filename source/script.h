@@ -2414,6 +2414,8 @@ struct GuiControlType : public ObjectBase
 		M_Choose,
 		M_UpdateFont,
 		M_Tab_UseTab,
+		M_List_Add,
+		M_List_Delete,
 		LastMethodPlusOne,
 
 		// Properties

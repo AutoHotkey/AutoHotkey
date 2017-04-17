@@ -536,7 +536,6 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 		
 	LPTSTR member_name = ParamIndexToString(0); // Name of method or property.
 	MemberID member = INVALID;
-	GuiCtrlFunc func = NULL; // For ListView/TreeView/StatusBar-specific methods.
 	BuiltInFunctionID func_id; // As above.
 	--aParamCount; // Exclude name from param count.
 	++aParam; // As above, but for the param array.
@@ -563,15 +562,29 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 	if_member("Pos", P_Pos)
 	if_member("Enabled", P_Enabled)
 	if_member("Visible", P_Visible)
-	else if (type == GUI_CONTROL_TAB)
-	{
-		// Tab methods/properties
-		if (0) ((void)0);
-		if_member("UseTab", M_Tab_UseTab)
-	}
 #undef if_member
-	else if (type == GUI_CONTROL_LISTVIEW || type == GUI_CONTROL_TREEVIEW || type == GUI_CONTROL_STATUSBAR)
+	// Check for control-type-specific members:
+	else switch (type)
 	{
+	case GUI_CONTROL_TAB:
+		if (!_tcsicmp(member_name, _T("UseTab")))
+		{
+			member = M_Tab_UseTab;
+			break;
+		}
+		// Also check the following:
+	case GUI_CONTROL_DROPDOWNLIST:
+	case GUI_CONTROL_COMBOBOX:
+	case GUI_CONTROL_LISTBOX:
+		if (!_tcsicmp(member_name, _T("Add")))
+			member = M_List_Add;
+		else if (!_tcsicmp(member_name, _T("Delete")))
+			member = M_List_Delete;
+		break;
+	case GUI_CONTROL_LISTVIEW:
+	case GUI_CONTROL_TREEVIEW:
+	case GUI_CONTROL_STATUSBAR:
+		GuiCtrlFunc func = NULL;
 		const GuiCtrlFuncInfo* func_info = NULL;
 		int func_count = 0;
 		switch (type)
@@ -580,8 +593,10 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			case GUI_CONTROL_TREEVIEW:  func_info = sTreeViewFuncs;  func_count = _countof(sTreeViewFuncs);  break;
 			case GUI_CONTROL_STATUSBAR: func_info = sStatusBarFuncs; func_count = _countof(sStatusBarFuncs); break;
 		}
-		for (int i = 0; i < func_count; i ++)
+		for (int i = 0; ; i++)
 		{
+			if (i == func_count)
+				return INVOKE_NOT_HANDLED;
 			if (!_tcsicmp(member_name, func_info[i].name))
 			{
 				func_info = func_info + i;
@@ -590,14 +605,8 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 				break;
 			}
 		}
-		if (!func)
-			return INVOKE_NOT_HANDLED;
 		if (aParamCount < func_info->min_params)
 			_o_throw(ERR_TOO_FEW_PARAMS);
-	}
-
-	if (func)
-	{
 		// Set up aResultToken to what the TV/LV/SB functions expect.
 		aResultToken.symbol = SYM_INTEGER;
 		// Call the function.
@@ -795,6 +804,46 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 				// Changing to a different tab control (or none at all when there
 				// was one before, or vice versa) should start a new radio group:
 				gui->mInRadioGroup = false;
+			}
+			_o_return_empty;
+		}
+
+		case M_List_Add:
+		{
+			if (aParamCount > 0)
+			{
+				Object* obj = TokenToScriptObject(*aParam[0]);
+				LPTSTR value = obj ? _T("") : ParamIndexToString(0, _f_number_buf);
+				gui->ControlAddContents(*this, value, 0, NULL, obj);
+				if (type == GUI_CONTROL_TAB)
+				{
+					// Appears to be necessary to resolve a redraw issue, at least for Tab3 on Windows 10.
+					InvalidateRect(gui->mHwnd, NULL, TRUE);
+				}
+			}
+			_o_return_empty;
+		}
+
+		case M_List_Delete:
+		{
+			UINT msg_one;
+			UINT msg_all;
+			switch (type)
+			{
+			case GUI_CONTROL_TAB:     msg_one = TCM_DELETEITEM; msg_all = TCM_DELETEALLITEMS; break;
+			case GUI_CONTROL_LISTBOX: msg_one = LB_DELETESTRING; msg_all = LB_RESETCONTENT; break;
+			default:                  msg_one = CB_DELETESTRING; msg_all = CB_RESETCONTENT; break; // ComboBox/DDL.
+			}
+			if (aParamCount > 0) // Delete item with given index.
+			{
+				int index = ParamIndexToInt(0) - 1;
+				if (index < 0) // Something always invalid (possibly non-numeric).
+					_o_throw(ERR_PARAM1_INVALID);
+				SendMessage(hwnd, msg_one, (WPARAM)index, 0);
+			}
+			else // Delete all items.
+			{
+				SendMessage(hwnd, msg_all, 0, 0);
 			}
 			_o_return_empty;
 		}
