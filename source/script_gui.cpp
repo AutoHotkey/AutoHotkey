@@ -7313,26 +7313,53 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 			break; // Fall through to the normal GetWindowText() method, which works for DDLs but not ComboBoxes.
 
 		case GUI_CONTROL_COMBOBOX:
+		{
 			index = SendMessage(aControl.hwnd, CB_GETCURSEL, 0, 0); // Get index of currently selected item.
-			if (index == CB_ERR) // There is no selection (or very rarely, some other type of problem).
+
+			//   Problem #1:
+			// It seems that any text put into a ComboBox's edit field by typing/pasting or via GuiControl
+			// always resets the current index to -1, even if that text exactly matches an existing item.
+
+			//   Problem #2:
+			// CB_GETCURSEL sometimes returns an index which doesn't match what's in the Edit control.
+			// This typically happens as a result of typing/pasting while the drop-down window is visible
+			// and then canceling the dropdown without making a selection.
+			// Note that when the CBN_SELENDCANCEL notification is received, CB_GETCURSEL correctly returns -1,
+			// but at some point after that the control restores the index to a possibly incorrect value.  This
+			// appears to happen in other programs as well, and has been confirmed on Windows 10 and earlier.
+
+			TCHAR edit_text[1024]; // Since long text is very unusual for a ComboBox item, use a fixed buffer size to minimise code size.
+			int edit_length = GetWindowText(aControl.hwnd, edit_text, _countof(edit_text)); // Zero is valid (the control may be empty).
+			if (edit_length + 1 < _countof(edit_text))
 			{
-				// Fix for v1.0.40.08: It seems that any text put into a ComboBox's edit field via GuiControl or
-				// even the user typing/pasting it does not cause the box to update its current selection/position.
-				// Since this can be the reason for the CB_ERR retrieved above, check if the Edit field
-				// contains text that exactly matches one of the items in the drop-list.  If it does, that
-				// item's position should be retrieved in AltSubmit mode (even for non-AltSubmit mode, this
-				// should be done because the case of the item in the drop-list is usually preferable to any
-				// varying case the user may have manually typed).
-				TCHAR tempBuf[1024];
-				if (GetWindowText(aControl.hwnd, tempBuf, _countof(tempBuf)))
+				if (index != CB_ERR)
 				{
-					index = SendMessage(aControl.hwnd, CB_FINDSTRINGEXACT, -1, (LPARAM)&buf); // It's not case sensitive.
-					if (index == CB_ERR)
-						break;  // Break out of the switch rather than returning so that the GetWindowText() method can be applied.
+					// The control returned a valid index, so verify that it matches the Edit control's contents.
+					TCHAR item_text[_countof(edit_text)];
+					int item_length = (int)SendMessage(aControl.hwnd, CB_GETLBTEXTLEN, index, 0);
+					if (item_length < _countof(item_text))
+					{
+						if (   item_length < edit_length // It's too short to match (but item_length > edit_length is okay since CB_GETLBTEXTLEN may not be exact).
+							|| SendMessage(aControl.hwnd, CB_GETLBTEXT, index, (LPARAM)item_text) != edit_length // CB_GETLBTEXT returned CB_ERR or the length doesn't match.
+							|| lstrcmpi(item_text, edit_text)  ) // g->StringCaseSense isn't checked because lstrcmpi seems to be consistent with the control's own behaviour (e.g. ä = Ä).
+						{
+							// The current item DOES NOT MATCH the Edit control's contents (see problem #2 above).
+							index = CB_ERR;
+						}
+					}
 				}
-				else // Failure of GetWindowText() in this case might be nearly impossible, so just fall through to default handling.
-					break; // Same comment as above.
+				if (index == CB_ERR)
+				{
+					// Check if the Edit field contains text that exactly matches one of the items in the drop-list.
+					// If it does, that item's position should be retrieved in AltSubmit mode (even for non-AltSubmit
+					// mode, this should be done because the case of the item in the drop-list is usually preferable
+					// to any varying case the user may have manually typed).
+					index = SendMessage(aControl.hwnd, CB_FINDSTRINGEXACT, -1, (LPARAM)edit_text); // It's not case sensitive.
+					index = index;
+				}
 			}
+			if (index == CB_ERR) // CB_FINDSTRINGEXACT either did not find a match or was not attempted because the text is too long.
+				break; // Break out of the switch rather than returning so that the GetWindowText() method can be applied.
 			if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
 				_o_return((int)index + 1);
 			length = SendMessage(aControl.hwnd, CB_GETLBTEXTLEN, (WPARAM)index, 0);
@@ -7349,6 +7376,7 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 			if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
 				_o_return_p(_T(""), 0); // Must use this vs _o_return_empty to override TokenSetResult.
 			return OK;
+		}
 
 		case GUI_CONTROL_LISTBOX:
 			if (GetWindowLong(aControl.hwnd, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
