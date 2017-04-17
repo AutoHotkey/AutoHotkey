@@ -2700,7 +2700,7 @@ public:
 
 	static WORD TextToHotkey(LPTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);
-	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, bool aText, Object *aObj = NULL);
+	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, Object *aObj, bool aText, ResultToken &aResultToken);
 	ResultType ControlSetName(GuiControlType &aControl, LPTSTR aName);
 	void ControlSetEnabled(GuiControlType &aControl, bool aEnabled);
 	void ControlSetVisible(GuiControlType &aControl, bool aVisible);

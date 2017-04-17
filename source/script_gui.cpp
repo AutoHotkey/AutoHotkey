@@ -702,14 +702,27 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 		case P_Value:
 			if (IS_INVOKE_SET)
 			{
-				_f_set_retval_p(ParamIndexToString(0, _f_retval_buf));
+				LPTSTR value = ParamIndexToString(0, _f_retval_buf);
 				Object* obj = TokenToScriptObject(*aParam[0]);
+				if (!gui->ControlSetContents(*this, value, obj, member == P_Text, aResultToken))
+					return FAIL;
+				// For simplicity and code size, just return the value passed by the script,
+				// even though it may differ from the type or value of the control's content.
+				// It seems best to return a pure number if one was given (e.g. for UpDown/Slider).
 				if (obj)
 				{
 					obj->AddRef();
-					aResultToken.SetValue(obj);
+					_o_return(obj);
 				}
-				return gui->ControlSetContents(*this, aResultToken.marker, member == P_Text, obj);
+				switch (TokenIsPureNumeric(*aParam[0]))
+				{
+				case PURE_INTEGER:
+					_o_return(ParamIndexToInt64(0));
+				case PURE_FLOAT:
+					_o_return(ParamIndexToDouble(0));
+				default:
+					_o_return_p(value);
+				}
 			}
 			else
 				return gui->ControlGetContents(aResultToken, *this, member == P_Text);
@@ -1204,7 +1217,12 @@ error:
 }
 
 
-ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContents, bool aIsText, Object *aObj)
+ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContents, Object *aObj
+	, bool aIsText, ResultToken &aResultToken)
+// aContents: The content as a string.
+// aObj: The content as an Object (should be an array).
+// aIsText: True for the Text property, false for the Value property.
+// aResultToken: Used only to set an exit result in the event of an error.
 {
 	GuiIndexType control_index = GUI_HWND_TO_INDEX(aControl.hwnd);
 	LPTSTR malloc_buf;
@@ -1296,7 +1314,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 
 			// See comments in ControlLoadPicture():
 			if (!ControlLoadPicture(aControl, aContents, width, height, icon_number))
-				goto error;
+				return aResultToken.Error(ERR_INVALID_VALUE, aContents); // A bit vague but probably correct.
 			// Fix for v1.0.33.02: If this control belongs to a tab control and is visible (i.e. its page
 			// in the tab control is the current page), must redraw the tab control to get the picture/icon
 			// to update correctly.  v1.0.40.01: Pictures such as .Gif sometimes disappear (even if they're
@@ -1335,10 +1353,12 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 
 		case GUI_CONTROL_LISTVIEW:
 		case GUI_CONTROL_TREEVIEW:
+		case GUI_CONTROL_ACTIVEX:
 			// Due to the fact that an LV's first col. can't be directly deleted and other complexities,
 			// this is not currently supported (also helps reduce code size).  The built-in function
 			// for modifying columns should be used instead.  Similar for TreeView.
-			return OK;
+			// For ActiveX it simply doesn't make sense to assign a value.
+			return aResultToken.Error(ERR_INVALID_USAGE);
 
 		case GUI_CONTROL_EDIT:
 		case GUI_CONTROL_CUSTOM: // Make it edit the default window text
@@ -1370,7 +1390,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 					DateTime_SetSystemtime(aControl.hwnd, GDT_NONE, st);  // Contents of st are ignored in this mode.
 				}
 			}
-			else // GUICONTROL_CMD_TEXT
+			else // GuiControl.Text
 			{
 				bool use_custom_format = false; // Set default.
 				// Reset style to "pure" so that new style (or custom format) can take effect.
@@ -1420,12 +1440,12 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 				do_redraw_if_in_tab = true; // Confirmed necessary.
 				break;
 			}
-			//else blank, so do nothing (control does not support having "no selection").
-			return OK; // Don't break since don't the other actions below to be taken.
+			// The control does not support having "no selection".
+			return aResultToken.Error(ERR_INVALID_VALUE);
 
 		case GUI_CONTROL_HOTKEY:
 			SendMessage(aControl.hwnd, HKM_SETHOTKEY, TextToHotkey(aContents), 0); // This will set it to "None" if aContents is blank.
-			return OK; // Don't break since don't the other actions below to be taken.
+			return OK; // Don't break since don't want the other actions below to be taken.
 		
 		case GUI_CONTROL_UPDOWN:
 			if (*aContents == '+') // Apply as delta from its current position.
@@ -1448,7 +1468,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 			// valid value."
 			SendMessage(aControl.hwnd, (aControl.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) ? UDM_SETPOS32 : UDM_SETPOS
 				, 0, new_pos); // Unnecessary to cast to short in the case of UDM_SETPOS, since it ignores the high-order word.
-			return OK; // Don't break since don't the other actions below to be taken.
+			return OK; // Don't break since don't want the other actions below to be taken.
 
 		case GUI_CONTROL_SLIDER:
 			// Confirmed this fact from MSDN: That the control automatically deals with out-of-range values
@@ -1467,7 +1487,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 			else
 				SendMessage(aControl.hwnd, TBM_SETPOS, TRUE, ControlInvertSliderIfNeeded(aControl, ATOI(aContents)));
 				// Above msg has no return value.
-			return OK; // Don't break since don't the other actions below to be taken.
+			return OK; // Don't break since don't want the other actions below to be taken.
 
 		case GUI_CONTROL_PROGRESS:
 			// Confirmed through testing (PBM_DELTAPOS was also tested): The control automatically deals
@@ -1478,12 +1498,8 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 				SendMessage(aControl.hwnd, PBM_DELTAPOS, ATOI(aContents + 1), 0);
 			else
 				SendMessage(aControl.hwnd, PBM_SETPOS, ATOI(aContents), 0);
-			return OK; // Don't break since don't the other actions below to be taken.
-			
-		case GUI_CONTROL_ACTIVEX:
-			// Don't do anything.
-			return OK;
-
+			return OK; // Don't break since don't want the other actions below to be taken.
+		
 		case GUI_CONTROL_STATUSBAR:
 			SetWindowText(aControl.hwnd, aContents);
 			return OK;
@@ -1542,7 +1558,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 				// this, even if the selected tab has not changed or if there is now no tab selected.
 				//InvalidateRect(gui.mHwnd, NULL, TRUE); // TRUE = Seems safer to erase, not knowing all possible overlaps.
 			}
-			return OK; // Don't break since don't the other actions below to be taken.
+			return OK; // Don't break since don't want the other actions below to be taken.
 		} // inner switch() for control's type for contents/txt sub-commands.
 
 		if (do_redraw_if_in_tab) // Excludes the SetWindowText() below, but might need changing for future control types.
@@ -1575,9 +1591,6 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 	}
 
 	return OK;
-
-error:
-	return g_script.ScriptError(_T("An error happened.")); // Incredibly descriptive error message.
 }
 
 
