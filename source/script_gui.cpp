@@ -1272,301 +1272,622 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 // aIsText: True for the Text property, false for the Value property.
 // aResultToken: Used only to set an exit result in the event of an error.
 {
-	GuiIndexType control_index = GUI_HWND_TO_INDEX(aControl.hwnd);
-	LPTSTR malloc_buf;
-	RECT rect;
-	WPARAM checked;
-	GuiControlType *tab_control;
-	int new_pos;
-	SYSTEMTIME st[2];
-	bool do_redraw_unconditionally = false;
-
-	do // Code is simplified below by exiting early via break out of this block.
+	switch (aControl.type)
 	{
-		switch (aControl.type)
-		{
-		case GUI_CONTROL_TEXT:
-		case GUI_CONTROL_LINK:
-		case GUI_CONTROL_GROUPBOX:
-			do_redraw_unconditionally = (aControl.background_color == CLR_TRANSPARENT);
-			// Note that it isn't sufficient in this case to do InvalidateRect(control.hwnd, ...).
-			break;
-
-		case GUI_CONTROL_PIC:
-		{
-			// Update: The below doesn't work, so it will be documented that a picture control
-			// should be always be referred to by its original filename even if the picture changes.
-			// Set the text unconditionally even if the picture can't be loaded.  This text must
-			// be set to allow GuiControl(Get) to be able to operate upon the picture without
-			// needing to identify it via something like "Static14".
-			//SetWindowText(control.hwnd, aContents);
-			//SendMessage(control.hwnd, WM_SETTEXT, 0, (LPARAM)aContents);
-
-			// Set default options, to be possibly overridden by any options actually present:
-			// Fixed for v1.0.23: Below should use GetClientRect() vs. GetWindowRect(), otherwise
-			// a size too large will be returned if the control has a border:
-			GetClientRect(aControl.hwnd, &rect);
-			int width = rect.right - rect.left;
-			int height = rect.bottom - rect.top;
-			int icon_number = 0; // Zero means "load icon or bitmap (doesn't matter)".
-			// Note that setting the control's picture handle to NULL sometimes or always shrinks
-			// the control down to zero dimensions, so must be done only after the above.
-
-			// Parse any options that are present in front of the filename:
-			LPTSTR next_option = omit_leading_whitespace(aContents);
-			if (*next_option == '*') // Options are present.  Must check this here and in the for-loop to avoid omitting legitimate whitespace in a filename that starts with spaces.
-			{
-				LPTSTR option_end;
-				TCHAR orig_char;
-				for (; *next_option == '*'; next_option = omit_leading_whitespace(option_end))
-				{
-					// Find the end of this option item:
-					if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )  // Space or tab.
-						option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
-					// Permanently terminate in between options to help eliminate ambiguity for words contained
-					// inside other words, and increase confidence in decimal and hexadecimal conversion.
-					orig_char = *option_end;
-					*option_end = '\0';
-					++next_option; // Skip over the asterisk.  It might point to a zero terminator now.
-					if (!_tcsnicmp(next_option, _T("Icon"), 4))
-						icon_number = ATOI(next_option + 4); // LoadPicture() correctly handles any negative value.
-					else
-					{
-						switch (ctoupper(*next_option))
-						{
-						case 'W':
-							width = ATOI(next_option + 1);
-							break;
-						case 'H':
-							height = ATOI(next_option + 1);
-							break;
-						// If not one of the above, such as zero terminator or a number, just ignore it.
-						}
-					}
-
-					*option_end = orig_char; // Undo the temporary termination so that loop's omit_leading() will work.
-				} // for() each item in option list
-
-				// The below assigns option_end + 1 vs. next_option in case the filename is contained in a
-				// variable ref and/ that filename contains leading spaces.  Example:
-				// GuiControl,, MyPic, *w100 *h-1 %FilenameWithLeadingSpaces%
-				// Update: Windows XP and perhaps other OSes will load filenames-containing-leading-spaces
-				// even if those spaces are omitted.  However, I'm not sure whether all API calls that
-				// use filenames do this, so it seems best to include those spaces whenever possible.
-				aContents = *option_end ? option_end + 1 : option_end; // Set aContents to the start of the image's filespec.
-			} 
-			//else options are not present, so do not set aContents to be next_option because that would
-			// omit legitimate spaces and tabs that might exist at the beginning of a real filename (file
-			// names can start with spaces).
-
-			// See comments in ControlLoadPicture():
-			if (!ControlLoadPicture(aControl, aContents, width, height, icon_number))
-				return aResultToken.Error(ERR_INVALID_VALUE, aContents); // A bit vague but probably correct.
-			// Fix for v1.0.33.02: If this control belongs to a tab control and is visible (i.e. its page
-			// in the tab control is the current page), must redraw the tab control to get the picture/icon
-			// to update correctly.  v1.0.40.01: Pictures such as .Gif sometimes disappear (even if they're
-			// not in a tab control):
-			do_redraw_unconditionally = true;
-			goto break_and_maybe_redraw;
-		}
-
-		case GUI_CONTROL_BUTTON:
-			break;
-
-		case GUI_CONTROL_CHECKBOX:
-		case GUI_CONTROL_RADIO:
-			if (aIsText) // It's the text/caption for the item.
-				break; // The default SetWindowText() action will be taken below.
-			if (!IsNumeric(aContents, TRUE, FALSE))
-				return aResultToken.Error(ERR_INVALID_VALUE);
-			checked = ATOI(aContents);
-			if (  !(checked == 0 || checked == 1 || (aControl.type == GUI_CONTROL_CHECKBOX && checked == -1))  )
-				return aResultToken.Error(ERR_INVALID_VALUE);
-			if (checked == -1)
-				checked = BST_INDETERMINATE;
-			//else the "checked" var is already set correctly.
-			if (aControl.type == GUI_CONTROL_RADIO)
-			{
-				ControlCheckRadioButton(aControl, control_index, checked);
-				return OK;
-			}
-			// Otherwise, we're operating upon a checkbox.
-			SendMessage(aControl.hwnd, BM_SETCHECK, checked, 0);
-			return OK;
-
-		case GUI_CONTROL_LISTVIEW:
-		case GUI_CONTROL_TREEVIEW:
-		case GUI_CONTROL_ACTIVEX:
-			// Due to the fact that an LV's first col. can't be directly deleted and other complexities,
-			// this is not currently supported (also helps reduce code size).  The built-in function
-			// for modifying columns should be used instead.  Similar for TreeView.
-			// For ActiveX it simply doesn't make sense to assign a value.
-			return aResultToken.Error(ERR_INVALID_USAGE);
-
-		case GUI_CONTROL_EDIT:
-		case GUI_CONTROL_CUSTOM: // Make it edit the default window text
-			// Note that TranslateLFtoCRLF() will return the original buffer we gave it if no translation
-			// is needed.  Otherwise, it will return a new buffer which we are responsible for freeing
-			// when done (or NULL if it failed to allocate the memory).
-			malloc_buf = (*aContents && (GetWindowLong(aControl.hwnd, GWL_STYLE) & ES_MULTILINE))
-				? TranslateLFtoCRLF(aContents) : aContents; // Automatic translation, as documented.
-			SetWindowText(aControl.hwnd,  malloc_buf ? malloc_buf : aContents); // malloc_buf is checked again in case the mem alloc failed.
-			if (malloc_buf && malloc_buf != aContents)
-				free(malloc_buf);
-			return OK;
-
-		case GUI_CONTROL_DATETIME:
-			if (!aIsText)
-			{
-				if (*aContents)
-				{
-					if (YYYYMMDDToSystemTime(aContents, st[0], true))
-						DateTime_SetSystemtime(aControl.hwnd, GDT_VALID, st);
-					//else invalid, so leave current sel. unchanged.
-				}
-				else // User wants there to be no date selection.
-				{
-					// Ensure the DTS_SHOWNONE style is present, otherwise it won't work.  However,
-					// it appears that this style cannot be applied after the control is created, so
-					// this line is commented out:
-					//SetWindowLong(aControl.hwnd, GWL_STYLE, GetWindowLong(aControl.hwnd, GWL_STYLE) | DTS_SHOWNONE);
-					DateTime_SetSystemtime(aControl.hwnd, GDT_NONE, st);  // Contents of st are ignored in this mode.
-				}
-			}
-			else // GuiControl.Text
-			{
-				bool use_custom_format = false; // Set default.
-				// Reset style to "pure" so that new style (or custom format) can take effect.
-				DWORD style = GetWindowLong(aControl.hwnd, GWL_STYLE) // DTS_SHORTDATEFORMAT==0 so can be omitted below.
-					& ~(DTS_LONGDATEFORMAT | DTS_SHORTDATECENTURYFORMAT | DTS_TIMEFORMAT);
-				if (*aContents)
-				{
-					// DTS_SHORTDATEFORMAT and DTS_SHORTDATECENTURYFORMAT
-					// seem to produce identical results (both display 4-digit year), at least on XP.  Perhaps
-					// DTS_SHORTDATECENTURYFORMAT is obsolete.  In any case, it's uncommon so for simplicity, is
-					// not a named style.  It can always be applied numerically if desired.  Update:
-					// DTS_SHORTDATECENTURYFORMAT is now applied by default upon creation, which can be overridden
-					// explicitly via -0x0C in the control's options.
-					if (!_tcsicmp(aContents, _T("LongDate"))) // LongDate seems more readable than "Long".  It also matches the keyword used by FormatTime.
-						style |= DTS_LONGDATEFORMAT; // Competing styles were already purged above.
-					else if (!_tcsicmp(aContents, _T("Time")))
-						style |= DTS_TIMEFORMAT; // Competing styles were already purged above.
-					else // Custom format.
-						use_custom_format = true;
-				}
-				//else aText is blank and use_custom_format==false, which will put DTS_SHORTDATEFORMAT into effect.
-				if (!use_custom_format)
-					SetWindowLong(aControl.hwnd, GWL_STYLE, style);
-				//else leave style unchanged so that if format is later removed, the underlying named style will
-				// not have been altered.
-				// This both adds and removes the custom format depending on aParma3:
-				DateTime_SetFormat(aControl.hwnd, use_custom_format ? aContents : NULL); // NULL removes any custom format so that the underlying style format is revealed.
-			}
-			return OK;
-
-		case GUI_CONTROL_MONTHCAL:
-			if (*aContents)
-			{
-				DWORD gdtr = YYYYMMDDToSystemTime2(aContents, st);
-				if (!gdtr) // Neither min nor max is present (or both are invalid).
-					break; // Leave current sel. unchanged.
-				if (GetWindowLong(aControl.hwnd, GWL_STYLE) & MCS_MULTISELECT) // Must use range-selection even if selection is only one date.
-				{
-					if (gdtr == GDTR_MIN) // No maximum is present, so set maximum to minimum.
-						st[1] = st[0];
-					//else just max, or both are present.  Assume both for code simplicity.
-					MonthCal_SetSelRange(aControl.hwnd, st);
-				}
-				else
-					MonthCal_SetCurSel(aControl.hwnd, st);
-				goto break_and_maybe_redraw; // Confirmed necessary.
-			}
-			// The control does not support having "no selection".
-			return aResultToken.Error(ERR_INVALID_VALUE);
-
-		case GUI_CONTROL_HOTKEY:
-			SendMessage(aControl.hwnd, HKM_SETHOTKEY, TextToHotkey(aContents), 0); // This will set it to "None" if aContents is blank.
-			return OK; // Don't break since don't want the other actions below to be taken.
+	case GUI_CONTROL_CHECKBOX:
+	case GUI_CONTROL_RADIO:
+		if (!aIsText) 
+			return ControlSetCheck(aControl, aContents, aResultToken);
+		//else it's the text/caption for the item.  Fall through:
+	case GUI_CONTROL_TEXT:
+	case GUI_CONTROL_LINK:
+	case GUI_CONTROL_GROUPBOX:
+	case GUI_CONTROL_BUTTON:
+	case GUI_CONTROL_STATUSBAR:
+		SetWindowText(aControl.hwnd, aContents);
+		if (aControl.background_color == CLR_TRANSPARENT) // +BackgroundTrans
+			ControlRedraw(aControl);
+		return OK;
 		
-		case GUI_CONTROL_UPDOWN:
-			if (!IsNumeric(aContents, TRUE, FALSE))
-				return aResultToken.Error(ERR_INVALID_VALUE);
-			new_pos = ATOI(aContents);
-			// MSDN: "If the parameter is outside the control's specified range, nPos will be set to the nearest
-			// valid value."
-			SendMessage(aControl.hwnd, (aControl.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) ? UDM_SETPOS32 : UDM_SETPOS
-				, 0, new_pos); // Unnecessary to cast to short in the case of UDM_SETPOS, since it ignores the high-order word.
-			return OK; // Don't break since don't want the other actions below to be taken.
+	case GUI_CONTROL_PIC:
+		return ControlSetPic(aControl, aContents, aResultToken);
 
-		case GUI_CONTROL_SLIDER:
-			if (!IsNumeric(aContents, TRUE, FALSE))
-				return aResultToken.Error(ERR_INVALID_VALUE);
-			// Confirmed this fact from MSDN: That the control automatically deals with out-of-range values
-			// by setting slider to min or max:
-			SendMessage(aControl.hwnd, TBM_SETPOS, TRUE, ControlInvertSliderIfNeeded(aControl, ATOI(aContents)));
-			// Above msg has no return value.
-			return OK; // Don't break since don't want the other actions below to be taken.
+	case GUI_CONTROL_EDIT:
+	case GUI_CONTROL_CUSTOM:
+		return ControlSetEdit(aControl, aContents, aResultToken);
 
-		case GUI_CONTROL_PROGRESS:
-			if (!IsNumeric(aContents, TRUE, FALSE))
-				return aResultToken.Error(ERR_INVALID_VALUE);
-			// Confirmed through testing (PBM_DELTAPOS was also tested): The control automatically deals
-			// with out-of-range values by setting bar to min or max.  
-			SendMessage(aControl.hwnd, PBM_SETPOS, ATOI(aContents), 0);
-			return OK; // Don't break since don't want the other actions below to be taken.
+	case GUI_CONTROL_DATETIME:
+		if (!aIsText)
+			return ControlSetDateTime(aControl, aContents, aResultToken);
+		else // GuiControl.Text
+			return ControlSetDateTimeFormat(aControl, aContents, aResultToken);
+
+	case GUI_CONTROL_MONTHCAL:
+		return ControlSetMonthCal(aControl, aContents, aResultToken);
+
+	case GUI_CONTROL_HOTKEY:
+		return ControlSetHotkey(aControl, aContents, aResultToken);
 		
-		case GUI_CONTROL_STATUSBAR:
+	case GUI_CONTROL_UPDOWN:
+		return ControlSetUpDown(aControl, aContents, aResultToken);
+
+	case GUI_CONTROL_SLIDER:
+		return ControlSetSlider(aControl, aContents, aResultToken);
+
+	case GUI_CONTROL_PROGRESS:
+		return ControlSetProgress(aControl, aContents, aResultToken);
+
+	case GUI_CONTROL_DROPDOWNLIST:
+	case GUI_CONTROL_COMBOBOX:
+	case GUI_CONTROL_LISTBOX:
+	case GUI_CONTROL_TAB:
+		return ControlSetChoice(aControl, aContents, aIsText, aResultToken);
+
+	case GUI_CONTROL_LISTVIEW: // More flexible methods are available.
+	case GUI_CONTROL_TREEVIEW: // More flexible methods are available.
+	case GUI_CONTROL_ACTIVEX: // Assigning a value doesn't make sense.  SetWindowText() does nothing.
+	default: // For maintainability (also helps code size, as the compiler omits checks for the previous three cases).
+		_o_throw(ERR_INVALID_USAGE);
+	}
+}
+
+
+ResultType GuiType::ControlSetPic(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+{
+	// Update: The below doesn't work, so it will be documented that a picture control
+	// should be always be referred to by its original filename even if the picture changes.
+	// Set the text unconditionally even if the picture can't be loaded.  This text must
+	// be set to allow GuiControl(Get) to be able to operate upon the picture without
+	// needing to identify it via something like "Static14".
+	//SetWindowText(control.hwnd, aContents);
+	//SendMessage(control.hwnd, WM_SETTEXT, 0, (LPARAM)aContents);
+
+	// Set default options, to be possibly overridden by any options actually present:
+	// Fixed for v1.0.23: Below should use GetClientRect() vs. GetWindowRect(), otherwise
+	// a size too large will be returned if the control has a border:
+	RECT rect;
+	GetClientRect(aControl.hwnd, &rect);
+	int width = rect.right - rect.left;
+	int height = rect.bottom - rect.top;
+	int icon_number = 0; // Zero means "load icon or bitmap (doesn't matter)".
+	// Note that setting the control's picture handle to NULL sometimes or always shrinks
+	// the control down to zero dimensions, so must be done only after the above.
+
+	// Parse any options that are present in front of the filename:
+	LPTSTR next_option = omit_leading_whitespace(aContents);
+	if (*next_option == '*') // Options are present.  Must check this here and in the for-loop to avoid omitting legitimate whitespace in a filename that starts with spaces.
+	{
+		LPTSTR option_end;
+		TCHAR orig_char;
+		for (; *next_option == '*'; next_option = omit_leading_whitespace(option_end))
+		{
+			// Find the end of this option item:
+			if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )  // Space or tab.
+				option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
+			// Permanently terminate in between options to help eliminate ambiguity for words contained
+			// inside other words, and increase confidence in decimal and hexadecimal conversion.
+			orig_char = *option_end;
+			*option_end = '\0';
+			++next_option; // Skip over the asterisk.  It might point to a zero terminator now.
+			if (!_tcsnicmp(next_option, _T("Icon"), 4))
+				icon_number = ATOI(next_option + 4); // LoadPicture() correctly handles any negative value.
+			else
+			{
+				switch (ctoupper(*next_option))
+				{
+				case 'W':
+					width = ATOI(next_option + 1);
+					break;
+				case 'H':
+					height = ATOI(next_option + 1);
+					break;
+				// If not one of the above, such as zero terminator or a number, just ignore it.
+				}
+			}
+
+			*option_end = orig_char; // Undo the temporary termination so that loop's omit_leading() will work.
+		} // for() each item in option list
+
+		// The below assigns option_end + 1 vs. next_option in case the filename is contained in a
+		// variable ref and/ that filename contains leading spaces.  Example:
+		// GuiControl,, MyPic, *w100 *h-1 %FilenameWithLeadingSpaces%
+		// Update: Windows XP and perhaps other OSes will load filenames-containing-leading-spaces
+		// even if those spaces are omitted.  However, I'm not sure whether all API calls that
+		// use filenames do this, so it seems best to include those spaces whenever possible.
+		aContents = *option_end ? option_end + 1 : option_end; // Set aContents to the start of the image's filespec.
+	} 
+	//else options are not present, so do not set aContents to be next_option because that would
+	// omit legitimate spaces and tabs that might exist at the beginning of a real filename (file
+	// names can start with spaces).
+
+	// See comments in ControlLoadPicture():
+	if (!ControlLoadPicture(aControl, aContents, width, height, icon_number))
+		_o_throw(ERR_INVALID_VALUE, aContents); // A bit vague but probably correct.
+
+	// Redraw is usually only needed for pictures in a tab control, but is sometimes
+	// needed outside of that, for .gif and perhaps others.  So redraw unconditionally:
+	ControlRedraw(aControl);
+	return OK;
+}
+
+
+ResultType GuiType::ControlSetCheck(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+{
+	if (!IsNumeric(aContents, TRUE, FALSE))
+		_o_throw(ERR_INVALID_VALUE);
+	WPARAM checked = ATOI(aContents);
+	if (  !(checked == 0 || checked == 1 || (aControl.type == GUI_CONTROL_CHECKBOX && checked == -1))  )
+		_o_throw(ERR_INVALID_VALUE);
+	if (checked == -1)
+		checked = BST_INDETERMINATE;
+	//else the "checked" var is already set correctly.
+	if (aControl.type == GUI_CONTROL_RADIO)
+	{
+		ControlCheckRadioButton(aControl, GUI_HWND_TO_INDEX(aControl.hwnd), checked);
+		return OK;
+	}
+	// Otherwise, we're operating upon a checkbox.
+	SendMessage(aControl.hwnd, BM_SETCHECK, checked, 0);
+	return OK;
+}
+
+
+ResultType GuiType::ControlGetCheck(ResultToken &aResultToken, GuiControlType &aControl)
+{
+	switch (SendMessage(aControl.hwnd, BM_GETCHECK, 0, 0))
+	{
+	case BST_CHECKED:
+		_o_return(1);
+	case BST_UNCHECKED:
+		_o_return(0);
+	case BST_INDETERMINATE:
+		// Seems better to use a value other than blank because blank might sometimes represent the
+		// state of an uninitialized or unfetched control.  In other words, a blank variable often
+		// has an external meaning that transcends the more specific meaning often desirable when
+		// retrieving the state of the control:
+		_o_return(-1);
+	}
+	return FAIL; // Shouldn't be reached since ZERO(BST_UNCHECKED) is returned on failure.
+}
+
+
+ResultType GuiType::ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, bool aIsText, ResultToken &aResultToken)
+{
+	ExprTokenType choice;
+	if (aIsText)
+	{
+		if (aControl.type == GUI_CONTROL_COMBOBOX)
+		{
+			// Use the simple SetWindowText() method, which works on the ComboBox's Edit.
+			// Clearing the current selection isn't strictly necessary since ControlGetContents()
+			// compensates for the index being inaccurate (due to other possible causes), but it
+			// might help in some situations.  If it's not done, CB_GETCURSEL will return the
+			// previous selection.  By contrast, a user typing in the box always sets it to -1.
+			SendMessage(aControl.hwnd, CB_SETCURSEL, -1, 0);
 			SetWindowText(aControl.hwnd, aContents);
 			return OK;
-
-		default: // Namely the following:
-		//case GUI_CONTROL_DROPDOWNLIST:
-		//case GUI_CONTROL_COMBOBOX:
-		//case GUI_CONTROL_LISTBOX:
-		//case GUI_CONTROL_TAB:
-			ExprTokenType choice;
-			if (aIsText)
-			{
-				if (aControl.type == GUI_CONTROL_COMBOBOX)
-				{
-					// Use the simple SetWindowText() method, which works on the ComboBox's Edit.
-					// Clearing the current selection isn't strictly necessary since ControlGetContents()
-					// compensates for the index being inaccurate (due to other possible causes), but it
-					// might help in some situations.  If it's not done, CB_GETCURSEL will return the
-					// previous selection.  By contrast, a user typing in the box always sets it to -1.
-					SendMessage(aControl.hwnd, CB_SETCURSEL, -1, 0);
-					goto break_and_SetWindowText;
-				}
-				choice.symbol = SYM_STRING;
-				choice.marker = aContents;
-			}
-			else // (!aIsText)
-			{
-				if (!IsNumeric(aContents, FALSE, FALSE))
-					return aResultToken.Error(ERR_INVALID_VALUE);
-				choice.symbol = SYM_INTEGER;
-				choice.value_int64 = ATOI(aContents);
-			}
-			return ControlChoose(aControl, choice, 0, TRUE); // Pass TRUE to find an exact (not partial) match.
-		} // switch() for control's type for contents/txt sub-commands.
-break_and_SetWindowText:
-		// Otherwise:
-		// The only other reason it wouldn't have already returned is to fall back to SetWindowText() here.
-		// Since above didn't return or break, it's either:
-		// 1) A control that uses the standard SetWindowText() method such as GUI_CONTROL_TEXT,
-		//    GUI_CONTROL_GROUPBOX, or GUI_CONTROL_BUTTON.
-		// 2) A radio or checkbox whose caption is being changed instead of its checked state.
-		SetWindowText(aControl.hwnd, aContents); // Seems more reliable to set text before doing the redraw, plus it saves code size.
-		if (do_redraw_unconditionally)
-			break;
-		return OK;
-	} while(0);
-
-break_and_maybe_redraw:
-	// If the above didn't return, it wants this check:
-	if (   do_redraw_unconditionally
-		|| (tab_control = FindTabControl(aControl.tab_control_index)) && IsWindowVisible(aControl.hwnd)   )
+		}
+		choice.symbol = SYM_STRING;
+		choice.marker = aContents;
+	}
+	else // (!aIsText)
 	{
+		if (!IsNumeric(aContents, FALSE, FALSE))
+			return aResultToken.Error(ERR_INVALID_VALUE);
+		choice.symbol = SYM_INTEGER;
+		choice.value_int64 = ATOI(aContents);
+	}
+	return ControlChoose(aControl, choice, 0, TRUE); // Pass TRUE to find an exact (not partial) match.
+}
+
+
+ResultType GuiType::ControlGetDDL(ResultToken &aResultToken, GuiControlType &aControl)
+{
+	LRESULT index;
+	if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
+	{
+		index = SendMessage(aControl.hwnd, CB_GETCURSEL, 0, 0); // Get index of currently selected item.
+		if (index != CB_ERR) // Maybe happens only if DROPDOWNLIST has no items at all, so ErrorLevel is not changed.
+			_o_return((int)index + 1);
+		_o_return_empty;
+	}
+	return ControlGetWindowText(aResultToken, aControl);
+}
+
+
+ResultType GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType &aControl)
+{
+	LRESULT index = SendMessage(aControl.hwnd, CB_GETCURSEL, 0, 0); // Get index of currently selected item.
+
+	//   Problem #1:
+	// It seems that any text put into a ComboBox's edit field by typing/pasting or via GuiControl
+	// always resets the current index to -1, even if that text exactly matches an existing item.
+
+	//   Problem #2:
+	// CB_GETCURSEL sometimes returns an index which doesn't match what's in the Edit control.
+	// This typically happens as a result of typing/pasting while the drop-down window is visible
+	// and then canceling the dropdown without making a selection.
+	// Note that when the CBN_SELENDCANCEL notification is received, CB_GETCURSEL correctly returns -1,
+	// but at some point after that the control restores the index to a possibly incorrect value.  This
+	// appears to happen in other programs as well, and has been confirmed on Windows 10 and earlier.
+
+	TCHAR edit_text[1024]; // Since long text is very unusual for a ComboBox item, use a fixed buffer size to minimise code size.
+	int edit_length = GetWindowText(aControl.hwnd, edit_text, _countof(edit_text)); // Zero is valid (the control may be empty).
+	if (edit_length + 1 < _countof(edit_text))
+	{
+		if (index != CB_ERR)
+		{
+			// The control returned a valid index, so verify that it matches the Edit control's contents.
+			TCHAR item_text[_countof(edit_text)];
+			int item_length = (int)SendMessage(aControl.hwnd, CB_GETLBTEXTLEN, index, 0);
+			if (item_length < _countof(item_text))
+			{
+				if (   item_length < edit_length // It's too short to match (but item_length > edit_length is okay since CB_GETLBTEXTLEN may not be exact).
+					|| SendMessage(aControl.hwnd, CB_GETLBTEXT, index, (LPARAM)item_text) != edit_length // CB_GETLBTEXT returned CB_ERR or the length doesn't match.
+					|| lstrcmpi(item_text, edit_text)  ) // g->StringCaseSense isn't checked because lstrcmpi seems to be consistent with the control's own behaviour (e.g. ä = Ä).
+				{
+					// The current item DOES NOT MATCH the Edit control's contents (see problem #2 above).
+					index = CB_ERR;
+				}
+			}
+		}
+		if (index == CB_ERR)
+		{
+			// Check if the Edit field contains text that exactly matches one of the items in the drop-list.
+			// If it does, that item's position should be retrieved in AltSubmit mode (even for non-AltSubmit
+			// mode, this should be done because the case of the item in the drop-list is usually preferable
+			// to any varying case the user may have manually typed).
+			index = SendMessage(aControl.hwnd, CB_FINDSTRINGEXACT, -1, (LPARAM)edit_text); // It's not case sensitive.
+			index = index;
+		}
+	}  // End section for correcting index.
+
+	if (index == CB_ERR) // CB_FINDSTRINGEXACT either did not find a match or was not attempted because the text is too long.
+		// Get the contents of this ComboBox's Edit.
+		return ControlGetWindowText(aResultToken, aControl);
+
+	if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
+		_o_return((int)index + 1);
+
+	LRESULT length = SendMessage(aControl.hwnd, CB_GETLBTEXTLEN, (WPARAM)index, 0);
+	if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
+		return OK; // Return empty string (default).
+	// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
+	// being when the item's text is retrieved.  This should be harmless, since there are many
+	// other precedents where a variable is sized to something larger than it winds up carrying.
+	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
+	// this call will set up the clipboard for writing:
+	if (TokenSetResult(aResultToken, NULL, length) != OK)
+		return FAIL; // It already displayed the error.
+	length = SendMessage(aControl.hwnd, CB_GETLBTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
+	if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
+		_o_return_p(_T(""), 0); // Must use this vs _o_return_empty to override TokenSetResult.
+	return OK;
+}
+
+
+ResultType GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType &aControl)
+{
+	if (GetWindowLong(aControl.hwnd, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
+	{
+		LRESULT sel_count = SendMessage(aControl.hwnd, LB_GETSELCOUNT, 0, 0);
+		if (sel_count < 1)  // <=0 to check for LB_ERR too (but it should be impossible in this case).
+			_o_return_empty;
+		int *item = (int *)malloc(sel_count * sizeof(int)); // dynamic since there can be a very large number of items.
+		if (!item)
+			_o_return_empty;
+		sel_count = SendMessage(aControl.hwnd, LB_GETSELITEMS, (WPARAM)sel_count, (LPARAM)item);
+		if (sel_count < 1)  // 0 or LB_ERR, but both these conditions should be impossible in this case.
+		{
+			free(item);
+			_o_return_empty;
+		}
+
+		// Create object for storing the selected items.
+		Object *ret = Object::Create();
+		if (!ret)
+		{
+			free(item);
+			_o_throw(ERR_OUTOFMEM); // Short msg since so rare.
+		}
+
+		for (LRESULT length = sel_count - 1, i = 0; i < sel_count; ++i)
+		{
+			if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the positions, not the text retrieved.
+				ret->Append(item[i] + 1); // +1 to convert from zero-based to 1-based.
+			else // Store item text vs. position.
+			{
+				LRESULT item_length = SendMessage(aControl.hwnd, LB_GETTEXTLEN, (WPARAM)item[i], 0);
+				if (item_length == LB_ERR) // Realistically impossible based on MSDN.
+				{
+					free(item);
+					ret->Release();
+					_o_throw(_T("LB_GETTEXTLEN")); // Short msg since so rare.
+				}
+				LPTSTR temp = tmalloc(item_length+1);
+				if (!temp)
+				{
+					free(item);
+					ret->Release();
+					_o_throw(ERR_OUTOFMEM); // Short msg since so rare.
+				}
+				LRESULT lr = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)item[i], (LPARAM)temp);
+				if (lr > 0) // Given the way it was called, LB_ERR (-1) should be impossible based on MSDN docs.
+					ret->Append(temp, item_length);
+				free(temp);
+			}
+		}
+
+		free(item);
+		_o_return(ret);
+	}
+	else // Single-select ListBox style.
+	{
+		LRESULT index = SendMessage(aControl.hwnd, LB_GETCURSEL, 0, 0); // Get index of currently selected item.
+		if (index == LB_ERR) // There is no selection (or very rarely, some other type of problem).
+			_o_return_empty;
+		if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
+			_o_return((int)index + 1);
+		LRESULT length = SendMessage(aControl.hwnd, LB_GETTEXTLEN, (WPARAM)index, 0);
+		if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
+			_o_return_empty;
+		if (TokenSetResult(aResultToken, NULL, length) != OK)
+			return FAIL;  // It already displayed the error.
+		length = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
+		if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
+			_o_return_empty;
+	}
+	return OK;
+}
+
+
+ResultType GuiType::ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+{
+	// Note that TranslateLFtoCRLF() will return the original buffer we gave it if no translation
+	// is needed.  Otherwise, it will return a new buffer which we are responsible for freeing
+	// when done (or NULL if it failed to allocate the memory).
+	LPTSTR malloc_buf = (*aContents && (GetWindowLong(aControl.hwnd, GWL_STYLE) & ES_MULTILINE))
+		? TranslateLFtoCRLF(aContents) : aContents; // Automatic translation, as documented.
+	SetWindowText(aControl.hwnd,  malloc_buf ? malloc_buf : aContents); // malloc_buf is checked again in case the mem alloc failed.
+	if (malloc_buf && malloc_buf != aContents)
+		free(malloc_buf);
+	return OK;
+}
+
+
+ResultType GuiType::ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+{
+	SYSTEMTIME st;
+	if (*aContents)
+	{
+		if (YYYYMMDDToSystemTime(aContents, st, true))
+			DateTime_SetSystemtime(aControl.hwnd, GDT_VALID, &st);
+		//else invalid, so leave current sel. unchanged.
+	}
+	else // User wants there to be no date selection.
+	{
+		// Ensure the DTS_SHOWNONE style is present, otherwise it won't work.  However,
+		// it appears that this style cannot be applied after the control is created, so
+		// this line is commented out:
+		//SetWindowLong(aControl.hwnd, GWL_STYLE, GetWindowLong(aControl.hwnd, GWL_STYLE) | DTS_SHOWNONE);
+		DateTime_SetSystemtime(aControl.hwnd, GDT_NONE, &st);  // Contents of st are ignored in this mode.
+	}
+	return OK;
+}
+
+
+ResultType GuiType::ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aFormat, ResultToken &aResultToken)
+{
+	bool use_custom_format = false; // Set default.
+	// Reset style to "pure" so that new style (or custom format) can take effect.
+	DWORD style = GetWindowLong(aControl.hwnd, GWL_STYLE) // DTS_SHORTDATEFORMAT==0 so can be omitted below.
+		& ~(DTS_LONGDATEFORMAT | DTS_SHORTDATECENTURYFORMAT | DTS_TIMEFORMAT);
+	if (*aFormat)
+	{
+		// DTS_SHORTDATEFORMAT and DTS_SHORTDATECENTURYFORMAT
+		// seem to produce identical results (both display 4-digit year), at least on XP.  Perhaps
+		// DTS_SHORTDATECENTURYFORMAT is obsolete.  In any case, it's uncommon so for simplicity, is
+		// not a named style.  It can always be applied numerically if desired.  Update:
+		// DTS_SHORTDATECENTURYFORMAT is now applied by default upon creation, which can be overridden
+		// explicitly via -0x0C in the control's options.
+		if (!_tcsicmp(aFormat, _T("LongDate"))) // LongDate seems more readable than "Long".  It also matches the keyword used by FormatTime.
+			style |= DTS_LONGDATEFORMAT; // Competing styles were already purged above.
+		else if (!_tcsicmp(aFormat, _T("Time")))
+			style |= DTS_TIMEFORMAT; // Competing styles were already purged above.
+		else // Custom format.
+			use_custom_format = true;
+	}
+	//else aText is blank and use_custom_format==false, which will put DTS_SHORTDATEFORMAT into effect.
+	if (!use_custom_format)
+		SetWindowLong(aControl.hwnd, GWL_STYLE, style);
+	//else leave style unchanged so that if format is later removed, the underlying named style will
+	// not have been altered.
+	DateTime_SetFormat(aControl.hwnd, use_custom_format ? aFormat : NULL); // NULL removes any custom format so that the underlying style format is revealed.
+	return OK;
+}
+
+
+ResultType GuiType::ControlGetDateTime(ResultToken &aResultToken, GuiControlType &aControl)
+{
+	LPTSTR buf = aResultToken.buf;
+	SYSTEMTIME st;
+	_o_return_p(DateTime_GetSystemtime(aControl.hwnd, &st) == GDT_VALID
+		? SystemTimeToYYYYMMDD(buf, st) : _T("")); // Blank string whenever GDT_NONE/GDT_ERROR.
+}
+
+
+ResultType GuiType::ControlSetMonthCal(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+{
+	SYSTEMTIME st[2];
+	DWORD gdtr = YYYYMMDDToSystemTime2(aContents, st);
+	if (!gdtr) // Neither min nor max is present (or both are invalid).
+		_o_throw(ERR_INVALID_VALUE);
+	if (GetWindowLong(aControl.hwnd, GWL_STYLE) & MCS_MULTISELECT) // Must use range-selection even if selection is only one date.
+	{
+		if (gdtr == GDTR_MIN) // No maximum is present, so set maximum to minimum.
+			st[1] = st[0];
+		//else just max, or both are present.  Assume both for code simplicity.
+		MonthCal_SetSelRange(aControl.hwnd, st);
+	}
+	else
+		MonthCal_SetCurSel(aControl.hwnd, st);
+	ControlRedraw(aControl, true); // Confirmed necessary.
+	return OK;
+}
+
+
+ResultType GuiType::ControlGetMonthCal(ResultToken &aResultToken, GuiControlType &aControl)
+{
+	LPTSTR buf = aResultToken.buf;
+	SYSTEMTIME st[2];
+	if (GetWindowLong(aControl.hwnd, GWL_STYLE) & MCS_MULTISELECT)
+	{
+		// For code simplicity and due to the expected rarity of using the MonthCal control, much less
+		// in its range-select mode, the range is returned with a dash between the min and max rather
+		// than as an array or anything fancier.
+		MonthCal_GetSelRange(aControl.hwnd, st);
+		// Seems easier for script (due to consistency) to always return it in range format, even if
+		// only one day is selected.
+		SystemTimeToYYYYMMDD(buf, st[0]);
+		buf[8] = '-'; // Retain only the first 8 chars to omit the time portion, which is unreliable (not relevant anyway).
+		SystemTimeToYYYYMMDD(buf + 9, st[1]);
+		buf[17] = 0; // Limit to 17 chars to omit the time portion of the second timestamp.
+	}
+	else
+	{
+		MonthCal_GetCurSel(aControl.hwnd, st);
+		SystemTimeToYYYYMMDD(buf, st[0]);
+		buf[8] = 0; // Limit to 8 chars to omit the time portion, which is unreliable (not relevant anyway).
+	}
+	_o_return_p(buf);
+}
+
+
+ResultType GuiType::ControlSetHotkey(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+{
+	SendMessage(aControl.hwnd, HKM_SETHOTKEY, TextToHotkey(aContents), 0); // This will set it to "None" if aContents is blank.
+	return OK;
+}
+
+
+ResultType GuiType::ControlGetHotkey(ResultToken &aResultToken, GuiControlType &aControl)
+{
+	LPTSTR buf = aResultToken.buf;
+	// Testing shows that neither GetWindowText() nor WM_GETTEXT can pull anything out of a hotkey
+	// control, so the only type of retrieval that can be offered is the HKM_GETHOTKEY method:
+	HotkeyToText((WORD)SendMessage(aControl.hwnd, HKM_GETHOTKEY, 0, 0), buf);
+	_o_return_p(buf);
+}
+
+
+ResultType GuiType::ControlSetUpDown(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+{
+	if (!IsNumeric(aContents, TRUE, FALSE))
+		_o_throw(ERR_INVALID_VALUE);
+	int new_pos = ATOI(aContents);
+	// MSDN: "If the parameter is outside the control's specified range, nPos will be set to the nearest
+	// valid value."
+	SendMessage(aControl.hwnd, (aControl.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) ? UDM_SETPOS32 : UDM_SETPOS
+		, 0, new_pos); // Unnecessary to cast to short in the case of UDM_SETPOS, since it ignores the high-order word.
+	return OK; // Don't break since don't want the other actions below to be taken.
+}
+
+
+ResultType GuiType::ControlGetUpDown(ResultToken &aResultToken, GuiControlType &aControl)
+{
+	// Any out of range or non-numeric value in the buddy is ignored since error reporting is
+	// left up to the script, which can compare contents of buddy to those of UpDown to check
+	// validity if it wants.
+	int pos;
+	if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) // It has a 32-bit vs. 16-bit range.
+		pos = (int)SendMessage(aControl.hwnd, UDM_GETPOS32, 0, 0);
+	else // 16-bit.  Must cast to short to omit the error portion (see comment above).
+		pos = (short)SendMessage(aControl.hwnd, UDM_GETPOS, 0, 0);
+	_o_return(pos);
+}
+
+
+ResultType GuiType::ControlSetSlider(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+{
+	if (!IsNumeric(aContents, TRUE, FALSE))
+		_o_throw(ERR_INVALID_VALUE);
+	// Confirmed this fact from MSDN: That the control automatically deals with out-of-range values
+	// by setting slider to min or max:
+	SendMessage(aControl.hwnd, TBM_SETPOS, TRUE, ControlInvertSliderIfNeeded(aControl, ATOI(aContents)));
+	// Above msg has no return value.
+	return OK; // Don't break since don't want the other actions below to be taken.
+}
+
+
+ResultType GuiType::ControlGetSlider(ResultToken &aResultToken, GuiControlType &aControl)
+{
+	_o_return(ControlInvertSliderIfNeeded(aControl, (int)SendMessage(aControl.hwnd, TBM_GETPOS, 0, 0)));
+	// Above assigns it as a signed value because testing shows a slider can have part or all of its
+	// available range consist of negative values.  32-bit values are supported if the range is set
+	// with the right messages.
+}
+
+
+ResultType GuiType::ControlSetProgress(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+{
+	if (!IsNumeric(aContents, TRUE, FALSE))
+		_o_throw(ERR_INVALID_VALUE);
+	// Confirmed through testing (PBM_DELTAPOS was also tested): The control automatically deals
+	// with out-of-range values by setting bar to min or max.  
+	SendMessage(aControl.hwnd, PBM_SETPOS, ATOI(aContents), 0);
+	return OK;
+}
+
+
+ResultType GuiType::ControlGetProgress(ResultToken &aResultToken, GuiControlType &aControl)
+{
+	_o_return((int)SendMessage(aControl.hwnd, PBM_GETPOS, 0, 0));
+}
+
+
+ResultType GuiType::ControlGetTab(ResultToken &aResultToken, GuiControlType &aControl)
+{
+	LPTSTR buf = aResultToken.buf;
+	LRESULT index = TabCtrl_GetCurSel(aControl.hwnd); // Get index of currently selected item.
+	if (index == -1) // There is no selection (maybe happens only if it has no tabs at all), so ErrorLevel is not changed.
+		_o_return_empty;
+	if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the index, not the text retrieved.
+		_o_return((int)index + 1);
+	// Otherwise: Get the stored name/caption of this tab:
+	TCITEM tci;
+	tci.mask = TCIF_TEXT;
+	tci.pszText = buf;
+	tci.cchTextMax = _f_retval_buf_size-1; // MSDN example uses -1.
+	if (TabCtrl_GetItem(aControl.hwnd, index, &tci))
+		_o_return_p(buf);
+	_o_return_empty;
+}
+
+
+ResultType GuiType::ControlGetWindowText(ResultToken &aResultToken, GuiControlType &aControl)
+{
+	// Set up the result token.
+	int length = GetWindowTextLength(aControl.hwnd); // Might be zero, which is properly handled below.
+	if (TokenSetResult(aResultToken, NULL, length) != OK)
+		return FAIL; // It already displayed the error.
+	GetWindowText(aControl.hwnd, aResultToken.marker, length+1);
+	if (aControl.type == GUI_CONTROL_EDIT) // Auto-translate CRLF to LF for better compatibility with other script commands.
+	{
+		// Since edit controls tend to have many hard returns in them, use "true" for the last param to
+		// enhance performance.  This performance gain is extreme when the control contains thousands
+		// of CRLFs:
+		StrReplace(aResultToken.marker, _T("\r\n"), _T("\n"), SCS_SENSITIVE);
+	}
+	return OK;
+}
+
+
+void GuiType::ControlRedraw(GuiControlType &aControl, bool aOnlyWithinTab)
+{
+	if (   !aOnlyWithinTab
+		|| FindTabControl(aControl.tab_control_index) && IsWindowVisible(aControl.hwnd)   )
+	{
+		RECT rect;
 		GetWindowRect(aControl.hwnd, &rect); // Limit it to only that part of the client area that is receiving the rect.
 		MapWindowPoints(NULL, mHwnd, (LPPOINT)&rect, 2); // Convert rect to client coordinates (not the same as GetClientRect()).
 		InvalidateRect(mHwnd, &rect, TRUE); // Seems safer to use TRUE, not knowing all possible overlaps, etc.
@@ -1577,8 +1898,6 @@ break_and_maybe_redraw:
 		//InvalidateRect(aControl.hwnd, NULL, TRUE);
 		//InvalidateRect(tab_control->hwnd, NULL, TRUE);
 	}
-
-	return OK;
 }
 
 
@@ -7211,64 +7530,26 @@ outofmem:
 
 ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, bool aIsText)
 {
-	LPTSTR buf = _f_retval_buf; // For various uses.
-	int pos;
-	LRESULT sel_count, i;  // LRESULT is a signed type (same as int/long).
-	SYSTEMTIME st[2];
-
 	// First handle any control types that behave the same regardless of aMode:
 	switch (aControl.type)
 	{
 	case GUI_CONTROL_UPDOWN: // Doesn't seem useful to ever retrieve the control's actual caption, which is invisible.
-		// Any out of range or non-numeric value in the buddy is ignored since error reporting is
-		// left up to the script, which can compare contents of buddy to those of UpDown to check
-		// validity if it wants.
-		if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) // It has a 32-bit vs. 16-bit range.
-			pos = (int)SendMessage(aControl.hwnd, UDM_GETPOS32, 0, 0);
-		else // 16-bit.  Must cast to short to omit the error portion (see comment above).
-			pos = (short)SendMessage(aControl.hwnd, UDM_GETPOS, 0, 0);
-		_o_return(pos);
+		return ControlGetUpDown(aResultToken, aControl);
 
 	case GUI_CONTROL_SLIDER: // Doesn't seem useful to ever retrieve the control's actual caption, which is invisible.
-		_o_return(ControlInvertSliderIfNeeded(aControl, (int)SendMessage(aControl.hwnd, TBM_GETPOS, 0, 0)));
-		// Above assigns it as a signed value because testing shows a slider can have part or all of its
-		// available range consist of negative values.  32-bit values are supported if the range is set
-		// with the right messages.
+		return ControlGetSlider(aResultToken, aControl);
 
 	case GUI_CONTROL_PROGRESS:
-		_o_return((int)SendMessage(aControl.hwnd, PBM_GETPOS, 0, 0));
+		return ControlGetProgress(aResultToken, aControl);
 
 	case GUI_CONTROL_DATETIME:
-		_o_return_p(DateTime_GetSystemtime(aControl.hwnd, st) == GDT_VALID
-			? SystemTimeToYYYYMMDD(buf, st[0]) : _T("")); // Blank string whenever GDT_NONE/GDT_ERROR.
+		return ControlGetDateTime(aResultToken, aControl);
 
 	case GUI_CONTROL_MONTHCAL:
-		if (GetWindowLong(aControl.hwnd, GWL_STYLE) & MCS_MULTISELECT)
-		{
-			// For code simplicity and due to the expected rarity of using the MonthCal control, much less
-			// in its range-select mode, the range is returned with a dash between the min and max rather
-			// than as an array or anything fancier.
-			MonthCal_GetSelRange(aControl.hwnd, st);
-			// Seems easier for script (due to consistency) to always return it in range format, even if
-			// only one day is selected.
-			SystemTimeToYYYYMMDD(buf, st[0]);
-			buf[8] = '-'; // Retain only the first 8 chars to omit the time portion, which is unreliable (not relevant anyway).
-			SystemTimeToYYYYMMDD(buf + 9, st[1]);
-			buf[17] = 0; // Limit to 17 chars to omit the time portion of the second timestamp.
-		}
-		else
-		{
-			MonthCal_GetCurSel(aControl.hwnd, st);
-			SystemTimeToYYYYMMDD(buf, st[0]);
-			buf[8] = 0; // Limit to 8 chars to omit the time portion, which is unreliable (not relevant anyway).
-		}
-		_o_return_p(buf);
+		return ControlGetMonthCal(aResultToken, aControl);
 
 	case GUI_CONTROL_HOTKEY:
-		// Testing shows that neither GetWindowText() nor WM_GETTEXT can pull anything out of a hotkey
-		// control, so the only type of retrieval that can be offered is the HKM_GETHOTKEY method:
-		HotkeyToText((WORD)SendMessage(aControl.hwnd, HKM_GETHOTKEY, 0, 0), buf);
-		_o_return_p(buf);
+		return ControlGetHotkey(aResultToken, aControl);
 	} // switch (aControl.type)
 
 	if (!aIsText) // Non-text, i.e. don't unconditionally use the simple GetWindowText() method.
@@ -7277,195 +7558,30 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 		// caption/text.  Any control types not mentioned in the switch() below will fall through
 		// into the section at the bottom that applies the standard GetWindowText() method.
 
-		LRESULT index, length, item_length;
-
 		switch (aControl.type)
 		{
 		case GUI_CONTROL_CHECKBOX:
 		case GUI_CONTROL_RADIO:
-			switch (SendMessage(aControl.hwnd, BM_GETCHECK, 0, 0))
-			{
-			case BST_CHECKED:
-				_o_return(1);
-			case BST_UNCHECKED:
-				_o_return(0);
-			case BST_INDETERMINATE:
-				// Seems better to use a value other than blank because blank might sometimes represent the
-				// state of an uninitialized or unfetched control.  In other words, a blank variable often
-				// has an external meaning that transcends the more specific meaning often desirable when
-				// retrieving the state of the control:
-				_o_return(-1);
-			}
-			return FAIL; // Shouldn't be reached since ZERO(BST_UNCHECKED) is returned on failure.
+			return ControlGetCheck(aResultToken, aControl);
 
 		case GUI_CONTROL_DROPDOWNLIST:
-			if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
-			{
-				index = SendMessage(aControl.hwnd, CB_GETCURSEL, 0, 0); // Get index of currently selected item.
-				if (index != CB_ERR) // Maybe happens only if DROPDOWNLIST has no items at all, so ErrorLevel is not changed.
-					_o_return((int)index + 1);
-				_o_return_empty;
-			}
-			break; // Fall through to the normal GetWindowText() method, which works for DDLs but not ComboBoxes.
+			return ControlGetDDL(aResultToken, aControl);
 
 		case GUI_CONTROL_COMBOBOX:
-		{
-			index = SendMessage(aControl.hwnd, CB_GETCURSEL, 0, 0); // Get index of currently selected item.
-
-			//   Problem #1:
-			// It seems that any text put into a ComboBox's edit field by typing/pasting or via GuiControl
-			// always resets the current index to -1, even if that text exactly matches an existing item.
-
-			//   Problem #2:
-			// CB_GETCURSEL sometimes returns an index which doesn't match what's in the Edit control.
-			// This typically happens as a result of typing/pasting while the drop-down window is visible
-			// and then canceling the dropdown without making a selection.
-			// Note that when the CBN_SELENDCANCEL notification is received, CB_GETCURSEL correctly returns -1,
-			// but at some point after that the control restores the index to a possibly incorrect value.  This
-			// appears to happen in other programs as well, and has been confirmed on Windows 10 and earlier.
-
-			TCHAR edit_text[1024]; // Since long text is very unusual for a ComboBox item, use a fixed buffer size to minimise code size.
-			int edit_length = GetWindowText(aControl.hwnd, edit_text, _countof(edit_text)); // Zero is valid (the control may be empty).
-			if (edit_length + 1 < _countof(edit_text))
-			{
-				if (index != CB_ERR)
-				{
-					// The control returned a valid index, so verify that it matches the Edit control's contents.
-					TCHAR item_text[_countof(edit_text)];
-					int item_length = (int)SendMessage(aControl.hwnd, CB_GETLBTEXTLEN, index, 0);
-					if (item_length < _countof(item_text))
-					{
-						if (   item_length < edit_length // It's too short to match (but item_length > edit_length is okay since CB_GETLBTEXTLEN may not be exact).
-							|| SendMessage(aControl.hwnd, CB_GETLBTEXT, index, (LPARAM)item_text) != edit_length // CB_GETLBTEXT returned CB_ERR or the length doesn't match.
-							|| lstrcmpi(item_text, edit_text)  ) // g->StringCaseSense isn't checked because lstrcmpi seems to be consistent with the control's own behaviour (e.g. ä = Ä).
-						{
-							// The current item DOES NOT MATCH the Edit control's contents (see problem #2 above).
-							index = CB_ERR;
-						}
-					}
-				}
-				if (index == CB_ERR)
-				{
-					// Check if the Edit field contains text that exactly matches one of the items in the drop-list.
-					// If it does, that item's position should be retrieved in AltSubmit mode (even for non-AltSubmit
-					// mode, this should be done because the case of the item in the drop-list is usually preferable
-					// to any varying case the user may have manually typed).
-					index = SendMessage(aControl.hwnd, CB_FINDSTRINGEXACT, -1, (LPARAM)edit_text); // It's not case sensitive.
-					index = index;
-				}
-			}
-			if (index == CB_ERR) // CB_FINDSTRINGEXACT either did not find a match or was not attempted because the text is too long.
-				break; // Break out of the switch rather than returning so that the GetWindowText() method can be applied.
-			if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
-				_o_return((int)index + 1);
-			length = SendMessage(aControl.hwnd, CB_GETLBTEXTLEN, (WPARAM)index, 0);
-			if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-				return OK; // Return empty string (default).
-			// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
-			// being when the item's text is retrieved.  This should be harmless, since there are many
-			// other precedents where a variable is sized to something larger than it winds up carrying.
-			// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-			// this call will set up the clipboard for writing:
-			if (TokenSetResult(aResultToken, NULL, length) != OK)
-				return FAIL; // It already displayed the error.
-			length = SendMessage(aControl.hwnd, CB_GETLBTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
-			if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-				_o_return_p(_T(""), 0); // Must use this vs _o_return_empty to override TokenSetResult.
-			return OK;
-		}
+			return ControlGetComboBox(aResultToken, aControl);
 
 		case GUI_CONTROL_LISTBOX:
-			if (GetWindowLong(aControl.hwnd, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
-			{
-				sel_count = SendMessage(aControl.hwnd, LB_GETSELCOUNT, 0, 0);
-				if (sel_count < 1)  // <=0 to check for LB_ERR too (but it should be impossible in this case).
-					_o_return_empty;
-				int *item = (int *)malloc(sel_count * sizeof(int)); // dynamic since there can be a very large number of items.
-				if (!item)
-					_o_return_empty;
-				sel_count = SendMessage(aControl.hwnd, LB_GETSELITEMS, (WPARAM)sel_count, (LPARAM)item);
-				if (sel_count < 1)  // 0 or LB_ERR, but both these conditions should be impossible in this case.
-				{
-					free(item);
-					_o_return_empty;
-				}
-
-				// Create object for storing the selected items.
-				Object *ret = Object::Create();
-				if (!ret)
-				{
-					free(item);
-					_o_throw(ERR_OUTOFMEM); // Short msg since so rare.
-				}
-
-				for (length = sel_count - 1, i = 0; i < sel_count; ++i)
-				{
-					if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the positions, not the text retrieved.
-						ret->Append(item[i] + 1); // +1 to convert from zero-based to 1-based.
-					else // Store item text vs. position.
-					{
-						item_length = SendMessage(aControl.hwnd, LB_GETTEXTLEN, (WPARAM)item[i], 0);
-						if (item_length == LB_ERR) // Realistically impossible based on MSDN.
-						{
-							free(item);
-							ret->Release();
-							_o_throw(_T("LB_GETTEXTLEN")); // Short msg since so rare.
-						}
-						LPTSTR temp = tmalloc(item_length+1);
-						if (!temp)
-						{
-							free(item);
-							ret->Release();
-							_o_throw(ERR_OUTOFMEM); // Short msg since so rare.
-						}
-						LRESULT lr = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)item[i], (LPARAM)temp);
-						if (lr > 0) // Given the way it was called, LB_ERR (-1) should be impossible based on MSDN docs.
-							ret->Append(temp, item_length);
-						free(temp);
-					}
-				}
-
-				free(item);
-				_o_return(ret);
-			}
-			else // Single-select ListBox style.
-			{
-				index = SendMessage(aControl.hwnd, LB_GETCURSEL, 0, 0); // Get index of currently selected item.
-				if (index == LB_ERR) // There is no selection (or very rarely, some other type of problem).
-					_o_return_empty;
-				if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
-					_o_return((int)index + 1);
-				length = SendMessage(aControl.hwnd, LB_GETTEXTLEN, (WPARAM)index, 0);
-				if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-					_o_return_empty;
-				if (TokenSetResult(aResultToken, NULL, length) != OK)
-					return FAIL;  // It already displayed the error.
-				length = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
-				if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-					_o_return_empty;
-			}
-			return OK;
+			return ControlGetListBox(aResultToken, aControl);
 
 		case GUI_CONTROL_TAB:
-			index = TabCtrl_GetCurSel(aControl.hwnd); // Get index of currently selected item.
-			if (index == -1) // There is no selection (maybe happens only if it has no tabs at all), so ErrorLevel is not changed.
-				_o_return_empty;
-			if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the index, not the text retrieved.
-				_o_return((int)index + 1);
-			// Otherwise: Get the stored name/caption of this tab:
-			TCITEM tci;
-			tci.mask = TCIF_TEXT;
-			tci.pszText = buf;
-			tci.cchTextMax = _f_retval_buf_size-1; // MSDN example uses -1.
-			if (TabCtrl_GetItem(aControl.hwnd, index, &tci))
-				_o_return_p(buf);
-			_o_return_empty;
+			return ControlGetTab(aResultToken, aControl);
 
 		case GUI_CONTROL_ACTIVEX:
 			// Below returns a new ComObject wrapper:
 			if (IObject *activex_obj = ControlGetActiveX(aControl.hwnd))
 				_o_return(activex_obj);
 			_o_return_empty;
+
 		case GUI_CONTROL_TEXT:
 		case GUI_CONTROL_LINK:
 		case GUI_CONTROL_PIC:
@@ -7474,8 +7590,7 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 		case GUI_CONTROL_PROGRESS:
 		case GUI_CONTROL_LISTVIEW: // LV and TV do not obey Submit. Instead, more flexible methods are available to the script.
 		case GUI_CONTROL_TREEVIEW: //
-		//GUI_CONTROL_ACTIVEX: // May have fallen through from above.
-			//else an explicit Get was called on the control, so it seems best to try to get it's text (if any).
+			// An explicit Get was called on the control, so it seems best to try to get it's text (if any).
 			break;
 		// Types specifically not handled here.  They will be handled by the section below this switch():
 		//case GUI_CONTROL_EDIT:
@@ -7489,19 +7604,7 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 	// 3) This control is a ComboBox, but it lacks a selected item, so any text entered by the user
 	//    into the control's edit field is fetched instead.
 
-	// Set up the result token.
-	int length = GetWindowTextLength(aControl.hwnd); // Might be zero, which is properly handled below.
-	if (TokenSetResult(aResultToken, NULL, length) != OK)
-		return FAIL; // It already displayed the error.
-	GetWindowText(aControl.hwnd, aResultToken.marker, length+1);
-	if (aControl.type == GUI_CONTROL_EDIT) // Auto-translate CRLF to LF for better compatibility with other script commands.
-	{
-		// Since edit controls tend to have many hard returns in them, use "true" for the last param to
-		// enhance performance.  This performance gain is extreme when the control contains thousands
-		// of CRLFs:
-		StrReplace(aResultToken.marker, _T("\r\n"), _T("\n"), SCS_SENSITIVE);
-	}
-	return OK;
+	return ControlGetWindowText(aResultToken, aControl);
 }
 
 
