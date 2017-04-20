@@ -712,7 +712,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			if (IS_INVOKE_SET)
 			{
 				LPTSTR value = ParamIndexToString(0, _f_retval_buf);
-				if (!gui->ControlSetContents(*this, value, member == P_Text, aResultToken))
+				if (!gui->ControlSetContents(*this, value, aResultToken, member == P_Text))
 					return FAIL;
 				// For simplicity and code size, just return the value passed by the script,
 				// even though it may differ from the type or value of the control's content.
@@ -728,7 +728,8 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 				}
 			}
 			else
-				return gui->ControlGetContents(aResultToken, *this, member == P_Text);
+				return gui->ControlGetContents(aResultToken, *this
+					, member == P_Text ? GuiType::Text_Mode : GuiType::Value_Mode);
 
 		case P_Pos:
 		{
@@ -1266,67 +1267,75 @@ error:
 }
 
 
-ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContents
-	, bool aIsText, ResultToken &aResultToken)
+ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText)
 // aContents: The content as a string.
-// aIsText: True for the Text property, false for the Value property.
 // aResultToken: Used only to set an exit result in the event of an error.
 {
+	// Control types for which Text and Value both have special handling:
 	switch (aControl.type)
 	{
-	case GUI_CONTROL_CHECKBOX:
-	case GUI_CONTROL_RADIO:
-		if (!aIsText) 
-			return ControlSetCheck(aControl, aContents, aResultToken);
-		//else it's the text/caption for the item.  Fall through:
-	case GUI_CONTROL_TEXT:
-	case GUI_CONTROL_LINK:
-	case GUI_CONTROL_GROUPBOX:
-	case GUI_CONTROL_BUTTON:
-	case GUI_CONTROL_STATUSBAR:
-		SetWindowText(aControl.hwnd, aContents);
-		if (aControl.background_color == CLR_TRANSPARENT) // +BackgroundTrans
-			ControlRedraw(aControl);
-		return OK;
-		
-	case GUI_CONTROL_PIC:
-		return ControlSetPic(aControl, aContents, aResultToken);
-
-	case GUI_CONTROL_EDIT:
-	case GUI_CONTROL_CUSTOM:
-		return ControlSetEdit(aControl, aContents, aResultToken);
-
-	case GUI_CONTROL_DATETIME:
-		if (!aIsText)
-			return ControlSetDateTime(aControl, aContents, aResultToken);
-		else // GuiControl.Text
-			return ControlSetDateTimeFormat(aControl, aContents, aResultToken);
-
-	case GUI_CONTROL_MONTHCAL:
-		return ControlSetMonthCal(aControl, aContents, aResultToken);
-
-	case GUI_CONTROL_HOTKEY:
-		return ControlSetHotkey(aControl, aContents, aResultToken);
-		
-	case GUI_CONTROL_UPDOWN:
-		return ControlSetUpDown(aControl, aContents, aResultToken);
-
-	case GUI_CONTROL_SLIDER:
-		return ControlSetSlider(aControl, aContents, aResultToken);
-
-	case GUI_CONTROL_PROGRESS:
-		return ControlSetProgress(aControl, aContents, aResultToken);
-
 	case GUI_CONTROL_DROPDOWNLIST:
 	case GUI_CONTROL_COMBOBOX:
 	case GUI_CONTROL_LISTBOX:
 	case GUI_CONTROL_TAB:
 		return ControlSetChoice(aControl, aContents, aIsText, aResultToken);
+	
+	case GUI_CONTROL_EDIT:
+		return ControlSetEdit(aControl, aContents, aResultToken);
 
+	case GUI_CONTROL_DATETIME:
+		if (aIsText)
+			return ControlSetDateTimeFormat(aControl, aContents, aResultToken);
+		else
+			return ControlSetDateTime(aControl, aContents, aResultToken);
+	
+	case GUI_CONTROL_TEXT:
+		// It seems sensible to treat the caption text of a Text control as its "value",
+		// since displaying text is its only purpose; it's just for output only, whereas
+		// an Edit control can be for input or output.
+		aIsText = true;
+		break;
+	}
+	// The remaining control types have no need for special handling of the Text property,
+	// either because they have normal caption text, or because they have no "text version"
+	// of the value, or no "value" at all.
+	if (aIsText)
+	{
+		SetWindowText(aControl.hwnd, aContents);
+		if (aControl.background_color == CLR_TRANSPARENT) // +BackgroundTrans
+			ControlRedraw(aControl);
+		return OK;
+	}
+	// Otherwise, this is the Value property.
+	switch (aControl.type)
+	{
+	case GUI_CONTROL_RADIO: // Same as below.
+	case GUI_CONTROL_CHECKBOX: return ControlSetCheck(aControl, aContents, aResultToken);
+	case GUI_CONTROL_PIC: return ControlSetPic(aControl, aContents, aResultToken);
+	case GUI_CONTROL_MONTHCAL: return ControlSetMonthCal(aControl, aContents, aResultToken);
+	case GUI_CONTROL_HOTKEY: return ControlSetHotkey(aControl, aContents, aResultToken);
+	case GUI_CONTROL_UPDOWN: return ControlSetUpDown(aControl, aContents, aResultToken);
+	case GUI_CONTROL_SLIDER: return ControlSetSlider(aControl, aContents, aResultToken);
+	case GUI_CONTROL_PROGRESS: return ControlSetProgress(aControl, aContents, aResultToken);
+
+	// Already handled in the switch() above:
+	//case GUI_CONTROL_DATETIME:
+	//case GUI_CONTROL_DROPDOWNLIST:
+	//case GUI_CONTROL_COMBOBOX:
+	//case GUI_CONTROL_LISTBOX:
+	//case GUI_CONTROL_TAB:
+	//case GUI_CONTROL_TEXT:
+
+	case GUI_CONTROL_LINK:
+	case GUI_CONTROL_GROUPBOX:
+	case GUI_CONTROL_BUTTON:
+	case GUI_CONTROL_STATUSBAR:
+		// Above: The control has no "value".  GuiControl.Text should be used to set its text.
 	case GUI_CONTROL_LISTVIEW: // More flexible methods are available.
 	case GUI_CONTROL_TREEVIEW: // More flexible methods are available.
+	case GUI_CONTROL_CUSTOM: // Don't know what this control's "value" is or how to set it.
 	case GUI_CONTROL_ACTIVEX: // Assigning a value doesn't make sense.  SetWindowText() does nothing.
-	default: // For maintainability (also helps code size, as the compiler omits checks for the previous three cases).
+	default: // Should help code size by allowing the compiler to omit checks for the above cases.
 		_o_throw(ERR_INVALID_USAGE);
 	}
 }
@@ -1481,10 +1490,10 @@ ResultType GuiType::ControlSetChoice(GuiControlType &aControl, LPTSTR aContents,
 }
 
 
-ResultType GuiType::ControlGetDDL(ResultToken &aResultToken, GuiControlType &aControl)
+ResultType GuiType::ControlGetDDL(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
 {
 	LRESULT index;
-	if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
+	if (aMode == Value_Mode || (aMode == Submit_Mode && (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))) // Caller wants the position, not the text.
 	{
 		index = SendMessage(aControl.hwnd, CB_GETCURSEL, 0, 0); // Get index of currently selected item.
 		if (index != CB_ERR) // Maybe happens only if DROPDOWNLIST has no items at all, so ErrorLevel is not changed.
@@ -1495,7 +1504,7 @@ ResultType GuiType::ControlGetDDL(ResultToken &aResultToken, GuiControlType &aCo
 }
 
 
-ResultType GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType &aControl)
+ResultType GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
 {
 	LRESULT index = SendMessage(aControl.hwnd, CB_GETCURSEL, 0, 0); // Get index of currently selected item.
 
@@ -1546,7 +1555,7 @@ ResultType GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType
 		// Get the contents of this ComboBox's Edit.
 		return ControlGetWindowText(aResultToken, aControl);
 
-	if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
+	if (aMode == Value_Mode || (aMode == Submit_Mode && (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))) // Caller wants the position, not the text.
 		_o_return((int)index + 1);
 
 	LRESULT length = SendMessage(aControl.hwnd, CB_GETLBTEXTLEN, (WPARAM)index, 0);
@@ -1566,8 +1575,9 @@ ResultType GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType
 }
 
 
-ResultType GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType &aControl)
+ResultType GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
 {
+	bool position_mode = (aMode == Value_Mode || (aMode == Submit_Mode && (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT)));
 	if (GetWindowLong(aControl.hwnd, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
 	{
 		LRESULT sel_count = SendMessage(aControl.hwnd, LB_GETSELCOUNT, 0, 0);
@@ -1593,7 +1603,7 @@ ResultType GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType 
 
 		for (LRESULT length = sel_count - 1, i = 0; i < sel_count; ++i)
 		{
-			if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the positions, not the text retrieved.
+			if (position_mode) // Caller wants the positions, not the text.
 				ret->Append(item[i] + 1); // +1 to convert from zero-based to 1-based.
 			else // Store item text vs. position.
 			{
@@ -1626,7 +1636,7 @@ ResultType GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType 
 		LRESULT index = SendMessage(aControl.hwnd, LB_GETCURSEL, 0, 0); // Get index of currently selected item.
 		if (index == LB_ERR) // There is no selection (or very rarely, some other type of problem).
 			_o_return_empty;
-		if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the position, not the text retrieved.
+		if (position_mode) // Caller wants the position, not the text.
 			_o_return((int)index + 1);
 		LRESULT length = SendMessage(aControl.hwnd, LB_GETTEXTLEN, (WPARAM)index, 0);
 		if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
@@ -1845,13 +1855,13 @@ ResultType GuiType::ControlGetProgress(ResultToken &aResultToken, GuiControlType
 }
 
 
-ResultType GuiType::ControlGetTab(ResultToken &aResultToken, GuiControlType &aControl)
+ResultType GuiType::ControlGetTab(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
 {
 	LPTSTR buf = aResultToken.buf;
 	LRESULT index = TabCtrl_GetCurSel(aControl.hwnd); // Get index of currently selected item.
 	if (index == -1) // There is no selection (maybe happens only if it has no tabs at all), so ErrorLevel is not changed.
 		_o_return_empty;
-	if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Caller wanted the index, not the text retrieved.
+	if (aMode == Value_Mode || (aMode == Submit_Mode && (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))) // Caller wants the index, not the text.
 		_o_return((int)index + 1);
 	// Otherwise: Get the stored name/caption of this tab:
 	TCITEM tci;
@@ -7446,7 +7456,7 @@ ResultType GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 			ResultToken value;
 			value.InitResult(temp_buf);
 
-			if (  !ControlGetContents(value, control)
+			if (  !ControlGetContents(value, control, Submit_Mode)
 				|| !ret->SetItem(control.name, value)  )
 				goto outofmem;
 		}
@@ -7528,83 +7538,79 @@ outofmem:
 
 
 
-ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, bool aIsText)
+ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
 {
-	// First handle any control types that behave the same regardless of aMode:
+	// Control types for which Text and Value both have special handling:
 	switch (aControl.type)
 	{
-	case GUI_CONTROL_UPDOWN: // Doesn't seem useful to ever retrieve the control's actual caption, which is invisible.
-		return ControlGetUpDown(aResultToken, aControl);
-
-	case GUI_CONTROL_SLIDER: // Doesn't seem useful to ever retrieve the control's actual caption, which is invisible.
-		return ControlGetSlider(aResultToken, aControl);
-
-	case GUI_CONTROL_PROGRESS:
-		return ControlGetProgress(aResultToken, aControl);
-
+	case GUI_CONTROL_DROPDOWNLIST: return ControlGetDDL(aResultToken, aControl, aMode);
+	case GUI_CONTROL_COMBOBOX: return ControlGetComboBox(aResultToken, aControl, aMode);
+	case GUI_CONTROL_LISTBOX: return ControlGetListBox(aResultToken, aControl, aMode);
+	case GUI_CONTROL_TAB: return ControlGetTab(aResultToken, aControl, aMode);
+	
 	case GUI_CONTROL_DATETIME:
-		return ControlGetDateTime(aResultToken, aControl);
-
-	case GUI_CONTROL_MONTHCAL:
-		return ControlGetMonthCal(aResultToken, aControl);
-
-	case GUI_CONTROL_HOTKEY:
-		return ControlGetHotkey(aResultToken, aControl);
-	} // switch (aControl.type)
-
-	if (!aIsText) // Non-text, i.e. don't unconditionally use the simple GetWindowText() method.
-	{
-		// The caller wants the contents of the control, which is often different from its
-		// caption/text.  Any control types not mentioned in the switch() below will fall through
-		// into the section at the bottom that applies the standard GetWindowText() method.
-
-		switch (aControl.type)
-		{
-		case GUI_CONTROL_CHECKBOX:
-		case GUI_CONTROL_RADIO:
-			return ControlGetCheck(aResultToken, aControl);
-
-		case GUI_CONTROL_DROPDOWNLIST:
-			return ControlGetDDL(aResultToken, aControl);
-
-		case GUI_CONTROL_COMBOBOX:
-			return ControlGetComboBox(aResultToken, aControl);
-
-		case GUI_CONTROL_LISTBOX:
-			return ControlGetListBox(aResultToken, aControl);
-
-		case GUI_CONTROL_TAB:
-			return ControlGetTab(aResultToken, aControl);
-
-		case GUI_CONTROL_ACTIVEX:
-			// Below returns a new ComObject wrapper:
-			if (IObject *activex_obj = ControlGetActiveX(aControl.hwnd))
-				_o_return(activex_obj);
+		if (aMode == Text_Mode)
+			// Text mode sets the format string, but there's no way to retrieve it.
+			// For consistency, this does not return the date value or formatted text.
 			_o_return_empty;
+		else
+			return ControlGetDateTime(aResultToken, aControl);
 
-		case GUI_CONTROL_TEXT:
-		case GUI_CONTROL_LINK:
-		case GUI_CONTROL_PIC:
-		case GUI_CONTROL_GROUPBOX:
-		case GUI_CONTROL_BUTTON:
-		case GUI_CONTROL_PROGRESS:
-		case GUI_CONTROL_LISTVIEW: // LV and TV do not obey Submit. Instead, more flexible methods are available to the script.
-		case GUI_CONTROL_TREEVIEW: //
-			// An explicit Get was called on the control, so it seems best to try to get it's text (if any).
-			break;
-		// Types specifically not handled here.  They will be handled by the section below this switch():
-		//case GUI_CONTROL_EDIT:
-		} // switch()
-	} // if (!aGetText)
+	case GUI_CONTROL_TEXT: // See case GUI_CONTROL_TEXT in ControlSetContents() for the reasoning behind this.
+	case GUI_CONTROL_PIC: // The control's window text is usually the original filename.
+	case GUI_CONTROL_EDIT: // An Edit control's Value is its window text.
+		aMode = Text_Mode; // Value and Text both return the window text.
+		break;
+	}
+	// The remaining control types have no need for special handling of the Text property,
+	// either because they have normal caption text, or because they have no "text version"
+	// of the value, or no "value" at all.
+	if (aMode == Text_Mode)
+	{
+		return ControlGetWindowText(aResultToken, aControl);
+	}
+	// Otherwise, it's the Value property or Submit method.
+	switch (aControl.type)
+	{
+	case GUI_CONTROL_RADIO: // Same as below.
+	case GUI_CONTROL_CHECKBOX: return ControlGetCheck(aResultToken, aControl);
+	case GUI_CONTROL_MONTHCAL: return ControlGetMonthCal(aResultToken, aControl);
+	case GUI_CONTROL_HOTKEY: return ControlGetHotkey(aResultToken, aControl);
+	case GUI_CONTROL_UPDOWN: return ControlGetUpDown(aResultToken, aControl);
+	case GUI_CONTROL_SLIDER: return ControlGetSlider(aResultToken, aControl);
+	case GUI_CONTROL_PROGRESS: return ControlGetProgress(aResultToken, aControl);
 
-	// Since the above didn't return, at least one of the following is true:
-	// 1) aGetText is true (the caller wanted the simple GetWindowText() method applied unconditionally).
-	// 2) This control's type is not mentioned in the switch because it does not require special handling.
-	//   e.g.  GUI_CONTROL_EDIT, GUI_CONTROL_DROPDOWNLIST, and others that use a simple GetWindowText().
-	// 3) This control is a ComboBox, but it lacks a selected item, so any text entered by the user
-	//    into the control's edit field is fetched instead.
+	case GUI_CONTROL_ACTIVEX:
+		// Below returns a new ComObject wrapper:
+		if (IObject *activex_obj = ControlGetActiveX(aControl.hwnd))
+			_o_return(activex_obj);
+		_o_return_empty;
+		
+	// Already handled in the switch() above:
+	//case GUI_CONTROL_DATETIME:
+	//case GUI_CONTROL_DROPDOWNLIST:
+	//case GUI_CONTROL_COMBOBOX:
+	//case GUI_CONTROL_LISTBOX:
+	//case GUI_CONTROL_TAB:
+	//case GUI_CONTROL_PIC:
+	//case GUI_CONTROL_TEXT:
+	//case GUI_CONTROL_EDIT:
 
-	return ControlGetWindowText(aResultToken, aControl);
+	case GUI_CONTROL_LINK:
+	case GUI_CONTROL_GROUPBOX:
+	case GUI_CONTROL_BUTTON:
+	case GUI_CONTROL_STATUSBAR:
+		// Above: The control has no "value".  GuiControl.Text should be used to get its text.
+	case GUI_CONTROL_LISTVIEW: // More flexible methods are available.
+	case GUI_CONTROL_TREEVIEW: // More flexible methods are available.
+	case GUI_CONTROL_CUSTOM: // Don't know what this control's "value" is or how to get it.
+	default: // Should help code size by allowing the compiler to omit checks for the above cases.
+		// The concept of a "value" does not apply to these controls.  Value could be
+		// an alias for Text in these cases, but that doesn't seem helpful/meaningful.
+		// This also "reserves" Value for other possible future uses, such as assigning
+		// an image to a Button control.
+		_o_return_empty;
+	}
 }
 
 

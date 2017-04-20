@@ -2719,7 +2719,7 @@ public:
 	GuiControlType *ControlOverrideBkColor(GuiControlType &aControl);
 	void ControlGetBkColor(GuiControlType &aControl, bool aUseWindowColor, HBRUSH &aBrush, COLORREF &aColor);
 	
-	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, bool aIsText, ResultToken &aResultToken);
+	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText);
 	ResultType ControlSetPic(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
 	ResultType ControlSetCheck(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken); // CheckBox, Radio
 	ResultType ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, bool aIsText, ResultToken &aResultToken); // DDL, ComboBox, ListBox, Tab
@@ -2732,18 +2732,20 @@ public:
 	ResultType ControlSetSlider(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
 	ResultType ControlSetProgress(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
 
-	ResultType ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, bool aIsText = false);
+	enum ValueModeType { Value_Mode, Text_Mode, Submit_Mode };
+
+	ResultType ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode = Value_Mode);
 	ResultType ControlGetCheck(ResultToken &aResultToken, GuiControlType &aControl); // CheckBox, Radio
-	ResultType ControlGetDDL(ResultToken &aResultToken, GuiControlType &aControl);
-	ResultType ControlGetComboBox(ResultToken &aResultToken, GuiControlType &aControl);
-	ResultType ControlGetListBox(ResultToken &aResultToken, GuiControlType &aControl);
+	ResultType ControlGetDDL(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
+	ResultType ControlGetComboBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
+	ResultType ControlGetListBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
 	ResultType ControlGetDateTime(ResultToken &aResultToken, GuiControlType &aControl);
 	ResultType ControlGetMonthCal(ResultToken &aResultToken, GuiControlType &aControl);
 	ResultType ControlGetHotkey(ResultToken &aResultToken, GuiControlType &aControl);
 	ResultType ControlGetUpDown(ResultToken &aResultToken, GuiControlType &aControl);
 	ResultType ControlGetSlider(ResultToken &aResultToken, GuiControlType &aControl);
 	ResultType ControlGetProgress(ResultToken &aResultToken, GuiControlType &aControl);
-	ResultType ControlGetTab(ResultToken &aResultToken, GuiControlType &aControl);
+	ResultType ControlGetTab(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
 	
 	ResultType ControlGetWindowText(ResultToken &aResultToken, GuiControlType &aControl);
 	void ControlRedraw(GuiControlType &aControl, bool aOnlyWithinTab = false);
