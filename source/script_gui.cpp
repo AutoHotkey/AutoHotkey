@@ -9922,7 +9922,7 @@ int GuiType::FindTabIndexByName(GuiControlType &aTabControl, LPTSTR aName, bool 
 		{
 			if (aExactMatch)
 			{
-				if (!_tcscmp(tci.pszText, aName))  // Match found.
+				if (!_tcsicmp(tci.pszText, aName))  // Match found.
 					return i;
 			}
 			else
