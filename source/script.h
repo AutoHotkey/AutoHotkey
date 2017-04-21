@@ -2294,7 +2294,7 @@ struct GuiControlType : public ObjectBase
 	#define GUI_CONTROL_ATTRIB_HANDLER_IS_RUNNING  0x04
 	#define GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN   0x08
 	#define GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED 0x10
-	// Unused: 0x20
+	#define GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS     0x20
 	// Unused: 0x40
 	#define GUI_CONTROL_ATTRIB_ALTBEHAVIOR         0x80 // For sliders: Reverse/Invert the value. Also for up-down controls (ALT means 32-bit vs. 16-bit). Also for ListView and Tab, and for Edit.
 	UCHAR attrib; // A field of option flags/bits defined above.

@@ -1660,7 +1660,14 @@ ResultType GuiType::ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, R
 		? TranslateLFtoCRLF(aContents) : aContents; // Automatic translation, as documented.
 	if (!malloc_buf)
 		_o_throw(ERR_OUTOFMEM); // Seems better than silently producing different results when memory is low.
+	// Users probably don't want or expect the control's event handler to be triggered by this
+	// action, so suppress it.  This makes single-line Edits consistent with all other controls.
+	aControl.attrib |= GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Disable events.
+	// Set the new content.
 	SetWindowText(aControl.hwnd,  malloc_buf);
+	// WM_SETTEXT and WM_COMMAND are sent, not posted, so it's certain that the EN_CHANGE
+	// notification (if any) has been received and discarded.  MsgSleep() is not needed.
+	aControl.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Enable events.
 	if (malloc_buf != aContents)
 		free(malloc_buf);
 	return OK;
@@ -8990,9 +8997,10 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 	GuiControlType &control = *mControl[aControlIndex];
 	if (!(control.event_handler || (control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)))
 		return; // No label or implicit-cancel associated with this control, so no action.
+	if (control.attrib & GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS)
+		return;
 	//else continue on even if it's just GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL so that the
-	// event will get posted.  The control's output_var might also get updated, but for
-	// simplicity that is done even when there is no jump_to_label.
+	// event will get posted.
 
 	// Update: The below is now checked by MsgSleep() at the time the launch actually would occur because
 	// g_nThreads will be more accurate/timely then:
