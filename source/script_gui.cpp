@@ -1278,10 +1278,10 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 	case GUI_CONTROL_COMBOBOX:
 	case GUI_CONTROL_LISTBOX:
 	case GUI_CONTROL_TAB:
-		return ControlSetChoice(aControl, aContents, aIsText, aResultToken);
+		return ControlSetChoice(aControl, aContents, aResultToken, aIsText);
 	
 	case GUI_CONTROL_EDIT:
-		return ControlSetEdit(aControl, aContents, aResultToken);
+		return ControlSetEdit(aControl, aContents, aResultToken, aIsText);
 
 	case GUI_CONTROL_DATETIME:
 		if (aIsText)
@@ -1460,7 +1460,7 @@ ResultType GuiType::ControlGetCheck(ResultToken &aResultToken, GuiControlType &a
 }
 
 
-ResultType GuiType::ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, bool aIsText, ResultToken &aResultToken)
+ResultType GuiType::ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText)
 {
 	ExprTokenType choice;
 	if (aIsText)
@@ -1651,12 +1651,13 @@ ResultType GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType 
 }
 
 
-ResultType GuiType::ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+ResultType GuiType::ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText)
 {
+	// Auto-translate LF to CRLF if this is the "Value" property of a multi-line Edit control.
 	// Note that TranslateLFtoCRLF() will return the original buffer we gave it if no translation
 	// is needed.  Otherwise, it will return a new buffer which we are responsible for freeing
 	// when done (or NULL if it failed to allocate the memory).
-	LPTSTR malloc_buf = (*aContents && (GetWindowLong(aControl.hwnd, GWL_STYLE) & ES_MULTILINE))
+	LPTSTR malloc_buf = (!aIsText && (GetWindowLong(aControl.hwnd, GWL_STYLE) & ES_MULTILINE))
 		? TranslateLFtoCRLF(aContents) : aContents; // Automatic translation, as documented.
 	if (!malloc_buf)
 		_o_throw(ERR_OUTOFMEM); // Seems better than silently producing different results when memory is low.
@@ -1670,6 +1671,24 @@ ResultType GuiType::ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, R
 	aControl.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Enable events.
 	if (malloc_buf != aContents)
 		free(malloc_buf);
+	return OK;
+}
+
+
+ResultType GuiType::ControlGetEdit(ResultToken &aResultToken, GuiControlType &aControl)
+// Only called by Edit.Value, so aTranslateEOL == true is implied.
+{
+	if (!ControlGetWindowText(aResultToken, aControl))
+		return FAIL;
+	if (GetWindowLong(aControl.hwnd, GWL_STYLE) & ES_MULTILINE) // For consistency with ControlSetEdit().
+	{
+		// Auto-translate CRLF to LF for better compatibility with other script commands.
+		// Since edit controls tend to have many hard returns in them, use SCS_SENSITIVE to
+		// enhance performance.  This performance gain is extreme when the control contains
+		// thousands of CRLFs:
+		StrReplace(aResultToken.marker, _T("\r\n"), _T("\n"), SCS_SENSITIVE
+			, -1, -1, NULL, &aResultToken.marker_length); // Pass &marker_length to improve performance and (more importantly) update it.
+	}
 	return OK;
 }
 
@@ -1884,14 +1903,7 @@ ResultType GuiType::ControlGetWindowText(ResultToken &aResultToken, GuiControlTy
 	int length = GetWindowTextLength(aControl.hwnd); // Might be zero, which is properly handled below.
 	if (TokenSetResult(aResultToken, NULL, length) != OK)
 		return FAIL; // It already displayed the error.
-	GetWindowText(aControl.hwnd, aResultToken.marker, length+1);
-	if (aControl.type == GUI_CONTROL_EDIT) // Auto-translate CRLF to LF for better compatibility with other script commands.
-	{
-		// Since edit controls tend to have many hard returns in them, use "true" for the last param to
-		// enhance performance.  This performance gain is extreme when the control contains thousands
-		// of CRLFs:
-		StrReplace(aResultToken.marker, _T("\r\n"), _T("\n"), SCS_SENSITIVE);
-	}
+	aResultToken.marker_length = GetWindowText(aControl.hwnd, aResultToken.marker, length+1);
 	return OK;
 }
 
@@ -7555,7 +7567,6 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 
 	case GUI_CONTROL_TEXT: // See case GUI_CONTROL_TEXT in ControlSetContents() for the reasoning behind this.
 	case GUI_CONTROL_PIC: // The control's window text is usually the original filename.
-	case GUI_CONTROL_EDIT: // An Edit control's Value is its window text.
 		aMode = Text_Mode; // Value and Text both return the window text.
 		break;
 	}
@@ -7571,6 +7582,7 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 	{
 	case GUI_CONTROL_RADIO: // Same as below.
 	case GUI_CONTROL_CHECKBOX: return ControlGetCheck(aResultToken, aControl);
+	case GUI_CONTROL_EDIT: return ControlGetEdit(aResultToken, aControl);
 	case GUI_CONTROL_MONTHCAL: return ControlGetMonthCal(aResultToken, aControl);
 	case GUI_CONTROL_HOTKEY: return ControlGetHotkey(aResultToken, aControl);
 	case GUI_CONTROL_UPDOWN: return ControlGetUpDown(aResultToken, aControl);
@@ -7591,7 +7603,6 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 	//case GUI_CONTROL_TAB:
 	//case GUI_CONTROL_PIC:
 	//case GUI_CONTROL_TEXT:
-	//case GUI_CONTROL_EDIT:
 
 	case GUI_CONTROL_LINK:
 	case GUI_CONTROL_GROUPBOX:

@@ -2722,8 +2722,8 @@ public:
 	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText);
 	ResultType ControlSetPic(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
 	ResultType ControlSetCheck(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken); // CheckBox, Radio
-	ResultType ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, bool aIsText, ResultToken &aResultToken); // DDL, ComboBox, ListBox, Tab
-	ResultType ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
+	ResultType ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText); // DDL, ComboBox, ListBox, Tab
+	ResultType ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText);
 	ResultType ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
 	ResultType ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aFormat, ResultToken &aResultToken);
 	ResultType ControlSetMonthCal(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
@@ -2739,6 +2739,7 @@ public:
 	ResultType ControlGetDDL(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
 	ResultType ControlGetComboBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
 	ResultType ControlGetListBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
+	ResultType ControlGetEdit(ResultToken &aResultToken, GuiControlType &aControl);
 	ResultType ControlGetDateTime(ResultToken &aResultToken, GuiControlType &aControl);
 	ResultType ControlGetMonthCal(ResultToken &aResultToken, GuiControlType &aControl);
 	ResultType ControlGetHotkey(ResultToken &aResultToken, GuiControlType &aControl);
