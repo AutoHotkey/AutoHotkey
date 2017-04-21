@@ -2270,8 +2270,9 @@ struct GuiEvent
 	};
 
 	bool mIsMethod;
+	bool mIsRunning; // Not always needed, but has no extra cost due to data alignment.
 
-	GuiEvent() : mObject(NULL), mIsMethod(false) { }
+	GuiEvent() : mObject(NULL), mIsMethod(false), mIsRunning(false) { }
 	operator bool() { return mObject != NULL; } // Also valid for the other members.
 };
 
@@ -2291,7 +2292,7 @@ struct GuiControlType : public ObjectBase
 	GuiControls type;
 	// Unused: 0x01
 	#define GUI_CONTROL_ATTRIB_ALTSUBMIT           0x02
-	#define GUI_CONTROL_ATTRIB_HANDLER_IS_RUNNING  0x04
+	// Unused: 0x04
 	#define GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN   0x08
 	#define GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED 0x10
 	#define GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS     0x20
@@ -2503,7 +2504,6 @@ public:
 	IObject* mEventSink;
 	LPTSTR mEventPrefix;
 	GuiEvent mOnClose, mOnEscape, mOnSize, mOnDropFiles, mOnContextMenu;
-	bool mOnCloseIsRunning, mOnEscapeIsRunning, mOnSizeIsRunning; // DropFiles doesn't need one of these.
 	DWORD mStyle, mExStyle; // Style of window.
 	bool mInRadioGroup; // Whether the control currently being created is inside a prior radio-group.
 	bool mUseTheme;  // Whether XP theme and styles should be applied to the parent window and subsequently added controls.
@@ -2576,7 +2576,6 @@ public:
 		, mPrevGui(NULL), mNextGui(NULL)
 		, mDefaultButtonIndex(-1), mEventPrefix(NULL), mEventSink(NULL)
 		, mOnClose(), mOnEscape(), mOnSize(), mOnDropFiles(), mOnContextMenu()
-		, mOnCloseIsRunning(false), mOnEscapeIsRunning(false), mOnSizeIsRunning(false)
 		// The styles DS_CENTER and DS_3DLOOK appear to be ineffectual in this case.
 		// Also note that WS_CLIPSIBLINGS winds up on the window even if unspecified, which is a strong hint
 		// that it should always be used for top level windows across all OSes.  Usenet posts confirm this.
