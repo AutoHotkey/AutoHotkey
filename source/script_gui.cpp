@@ -1658,8 +1658,10 @@ ResultType GuiType::ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, R
 	// when done (or NULL if it failed to allocate the memory).
 	LPTSTR malloc_buf = (*aContents && (GetWindowLong(aControl.hwnd, GWL_STYLE) & ES_MULTILINE))
 		? TranslateLFtoCRLF(aContents) : aContents; // Automatic translation, as documented.
-	SetWindowText(aControl.hwnd,  malloc_buf ? malloc_buf : aContents); // malloc_buf is checked again in case the mem alloc failed.
-	if (malloc_buf && malloc_buf != aContents)
+	if (!malloc_buf)
+		_o_throw(ERR_OUTOFMEM); // Seems better than silently producing different results when memory is low.
+	SetWindowText(aControl.hwnd,  malloc_buf);
+	if (malloc_buf != aContents)
 		free(malloc_buf);
 	return OK;
 }
