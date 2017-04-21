@@ -2296,7 +2296,7 @@ struct GuiControlType : public ObjectBase
 	#define GUI_CONTROL_ATTRIB_EXPLICITLY_DISABLED 0x10
 	#define GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS     0x20
 	// Unused: 0x40
-	#define GUI_CONTROL_ATTRIB_ALTBEHAVIOR         0x80 // For sliders: Reverse/Invert the value. Also for up-down controls (ALT means 32-bit vs. 16-bit). Also for ListView and Tab, and for Edit.
+	#define GUI_CONTROL_ATTRIB_ALTBEHAVIOR         0x80 // Slider +Invert, ListView/TreeView +WantF2, Edit +WantTab
 	UCHAR attrib; // A field of option flags/bits defined above.
 	TabControlIndexType tab_control_index; // Which tab control this control belongs to, if any.
 	TabIndexType tab_index; // For type==TAB, this stores the tab control's index.  For other types, it stores the page.

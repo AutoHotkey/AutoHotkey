@@ -1806,8 +1806,7 @@ ResultType GuiType::ControlSetUpDown(GuiControlType &aControl, LPTSTR aContents,
 	int new_pos = ATOI(aContents);
 	// MSDN: "If the parameter is outside the control's specified range, nPos will be set to the nearest
 	// valid value."
-	SendMessage(aControl.hwnd, (aControl.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) ? UDM_SETPOS32 : UDM_SETPOS
-		, 0, new_pos); // Unnecessary to cast to short in the case of UDM_SETPOS, since it ignores the high-order word.
+	SendMessage(aControl.hwnd, UDM_SETPOS32, 0, new_pos);
 	return OK; // Don't break since don't want the other actions below to be taken.
 }
 
@@ -1817,11 +1816,7 @@ ResultType GuiType::ControlGetUpDown(ResultToken &aResultToken, GuiControlType &
 	// Any out of range or non-numeric value in the buddy is ignored since error reporting is
 	// left up to the script, which can compare contents of buddy to those of UpDown to check
 	// validity if it wants.
-	int pos;
-	if (aControl.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) // It has a 32-bit vs. 16-bit range.
-		pos = (int)SendMessage(aControl.hwnd, UDM_GETPOS32, 0, 0);
-	else // 16-bit.  Must cast to short to omit the error portion (see comment above).
-		pos = (short)SendMessage(aControl.hwnd, UDM_GETPOS, 0, 0);
+	int pos = (int)SendMessage(aControl.hwnd, UDM_GETPOS32, 0, 0);
 	_o_return(pos);
 }
 
@@ -4188,8 +4183,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			// range does not include zero, since it would default to zero then).
 			// MSDN: "If the parameter is outside the control's specified range, nPos will be set to the nearest
 			// valid value."
-			SendMessage(control.hwnd, (control.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) ? UDM_SETPOS32 : UDM_SETPOS
-				, 0, ATOI(aText)); // Unnecessary to cast to short in the case of UDM_SETPOS, since it ignores the high-order word.
+			SendMessage(control.hwnd, UDM_SETPOS32, 0, ATOI(aText));
 		} // Control was successfully created.
 		break;
 
@@ -9443,28 +9437,7 @@ void GuiType::ControlSetUpDownOptions(GuiControlType &aControl, GuiControlOption
 // Caller has ensured that aControl.type is an UpDown.
 {
 	if (aOpt.range_changed)
-	{
-		// MSDN implies that UDM_SETPOS should not be used on a control with a 32-bit range.
-		// Although testing shows that it works okay, the 16-bit compatibility mode is used
-		// whenever possible by flagging here whether the control needs a 32-bit range.
-		// This flag is checked in several other places to determine whether to use the 16 or
-		// 32-bit method.  This way is easier than the alternative, which is to query the
-		// control's current range each time to find out whether compatibility mode
-		// should be used.  The other alternative is to use DllGetVersion() to see if this
-		// version of ComCtl32 supports 32-bit mode, but that would add complexities of its own.
-		if (aOpt.range_max > UD_MAXVAL || aOpt.range_min < UD_MINVAL)
-		{
-			aControl.attrib |= GUI_CONTROL_ATTRIB_ALTBEHAVIOR; // Flag it as 32-bit.
-			// When range exceeds 16-bit boundaries, use the 32-bit method even though it doesn't work
-			// on 95/NT if they lack MSIE 5.x.  This has been documented.
-			SendMessage(aControl.hwnd, UDM_SETRANGE32, aOpt.range_min, aOpt.range_max);
-		}
-		else // Use 16-bit mode whenever possible to maximize compatibility.
-		{
-			aControl.attrib &= ~GUI_CONTROL_ATTRIB_ALTBEHAVIOR; // Flag it as 16-bit.
-			SendMessage(aControl.hwnd, UDM_SETRANGE, 0, (LPARAM)MAKELONG((short)aOpt.range_max, (short)aOpt.range_min));
-		}
-	}
+		SendMessage(aControl.hwnd, UDM_SETRANGE32, aOpt.range_min, aOpt.range_max);
 }
 
 
