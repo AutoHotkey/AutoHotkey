@@ -5996,17 +5996,11 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					g_script.ScriptError(_T("This control type should not have an event handler."), next_option - 1);
 					goto return_fail;
 				}
-
-				if (!_tcsicmp(next_option, _T("Cancel")))
-					aControl.attrib |= GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL;
-				else
+				SetEventHandler(aControl.event_handler, next_option);
+				if (!mEventSink && !aControl.event_handler)
 				{
-					SetEventHandler(aControl.event_handler, next_option);
-					if (!mEventSink && !aControl.event_handler)
-					{
-						g_script.ScriptError(_T("The specified event handler does not exist."), next_option);
-						goto return_fail;
-					}
+					g_script.ScriptError(_T("The specified event handler does not exist."), next_option);
+					goto return_fail;
 				}
 				if (aControl.type == GUI_CONTROL_TEXT || aControl.type == GUI_CONTROL_PIC)
 					// Apply the SS_NOTIFY style *only* if the control actually has an associated action.
@@ -8571,7 +8565,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		case GUI_CONTROL_CUSTOM:
 			return pgui->CustomCtrlWmNotify(control_index, &nmhdr);
 		case GUI_CONTROL_STATUSBAR:
-			if (!(control.event_handler || (control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)))// These is checked to avoid returning TRUE below, and also for performance.
+			if (!control.event_handler) // This is checked to avoid returning TRUE below, and also for performance.
 				break; // Let default proc handle it.
 			switch(nmhdr.code)
 			{
@@ -8995,12 +8989,10 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 	if (aControlIndex >= mControlCount) // Caller probably already checked, but just to be safe.
 		return;
 	GuiControlType &control = *mControl[aControlIndex];
-	if (!(control.event_handler || (control.attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)))
-		return; // No label or implicit-cancel associated with this control, so no action.
+	if (!control.event_handler)
+		return; // No event handler associated with this control, so no action.
 	if (control.attrib & GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS)
 		return;
-	//else continue on even if it's just GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL so that the
-	// event will get posted.
 
 	// Update: The below is now checked by MsgSleep() at the time the launch actually would occur because
 	// g_nThreads will be more accurate/timely then:

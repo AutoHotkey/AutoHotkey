@@ -724,14 +724,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					if (!pcontrol) // gui_control_index was beyond the quantity of controls, possibly due to parent window having been destroyed since the msg was sent (or bogus msg).
 						continue;  // Discarding an invalid message here is relied upon both other sections below.
 					if (   !*(gui_event = &pcontrol->event_handler)   )
-					{
-						// Only if there's no label is the implicit action considered.
-						if (pcontrol->attrib & GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL)
-							pgui->CancelOrDestroy();
-						continue; // Fully handled by the above; or there was no label.
-						// This event might lack both a handler and an action if its control was changed to be
-						// non-actionable since the time the msg was posted.
-					}
+						// This control's event handler was likely removed after the msg was posted.
+						continue; 
 					// Above has confirmed it has a handler, so now it's valid to check if that handler is already running.
 					// It seems best by default not to allow multiple threads for the same control.
 					// Such events are discarded because it seems likely that most script designers

@@ -2289,7 +2289,7 @@ struct GuiControlType : public ObjectBase
 	// Keep any fields that are smaller than 4 bytes adjacent to each other.  This conserves memory
 	// due to byte-alignment.  It has been verified to save 4 bytes per struct in this case:
 	GuiControls type;
-	#define GUI_CONTROL_ATTRIB_IMPLICIT_CANCEL     0x01
+	// Unused: 0x01
 	#define GUI_CONTROL_ATTRIB_ALTSUBMIT           0x02
 	#define GUI_CONTROL_ATTRIB_HANDLER_IS_RUNNING  0x04
 	#define GUI_CONTROL_ATTRIB_EXPLICITLY_HIDDEN   0x08
