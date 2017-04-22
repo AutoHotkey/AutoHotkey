@@ -2496,7 +2496,9 @@ public:
 	// of course 64-bit, so a sequence like HBRUSH, COLORREF, HBRUSH would cause padding).
 	// POINTER-SIZED FIELDS:
 	GuiType *mNextGui, *mPrevGui; // For global Gui linked list.
-	HWND mHwnd, mStatusBarHwnd;
+	HWND mHwnd;
+	LPTSTR mName;
+	HWND mStatusBarHwnd;
 	HWND mOwner;  // The window that owns this one, if any.  Note that Windows provides no way to change owners after window creation.
 	// Control IDs are higher than their index in the array by +CONTROL_ID_FIRST.  This offset is
 	// necessary because windows that behave like dialogs automatically return IDOK and IDCANCEL in
@@ -2566,6 +2568,7 @@ public:
 		// Properties
 		P_Handle,
 		P_Title,
+		P_Name,
 		P_Control,
 		P_FocusedCtrl,
 		P_BgColor,
@@ -2579,7 +2582,7 @@ public:
 	};
 
 	GuiType() // Constructor
-		: mHwnd(NULL), mStatusBarHwnd(NULL), mControlCount(0), mControlCapacity(0)
+		: mHwnd(NULL), mName(NULL), mStatusBarHwnd(NULL), mControlCount(0), mControlCapacity(0)
 		, mPrevGui(NULL), mNextGui(NULL)
 		, mDefaultButtonIndex(-1), mEventPrefix(NULL), mEventSink(NULL)
 		, mOnClose(), mOnEscape(), mOnSize(), mOnDropFiles(), mOnContextMenu()
@@ -2625,6 +2628,7 @@ public:
 	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Create();
+	ResultType SetName(LPTSTR aName);
 	void ClearEventHandler(GuiEvent& aHandler);
 	void SetEventHandler(GuiEvent& aHandler, LPTSTR aName, LPTSTR aPrefix = NULL);
 	void SetEventHandler(GuiEvent& aHandler, IObject* aObject);

@@ -140,6 +140,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	if_member("CtrlColor", P_CtrlColor)
 	if_member("Pos", P_Pos)
 	if_member("ClientPos", P_ClientPos)
+	if_member("Name", P_Name)
 #undef if_member
 	if (member == INVALID)
 		return INVOKE_NOT_HANDLED;
@@ -360,6 +361,15 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 				MapWindowPoints(mHwnd, NULL, (LPPOINT)&rect, 2);
 			}
 			return PropertyGetPos(aResultToken, rect);
+		}
+		case P_Name:
+		{
+			// Name is used to help identify the Gui in event handlers, and has no use outside
+			// of the script being able to assign or retrieve it using this property.
+			if (IS_INVOKE_SET)
+				if (!SetName(ParamIndexToString(0, _f_number_buf)))
+					return FAIL;
+			_o_return_p(mName ? mName : _T(""));
 		}
 	}
 
@@ -665,7 +675,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			if (IS_INVOKE_SET)
 				if (!gui->ControlSetName(*this, ParamIndexToString(0, _f_number_buf)))
 					_o_return_FAIL;
-			_o_return(name ? name : _T(""));
+			_o_return_p(name ? name : _T(""));
 
 		case P_Handle:
 			if (IS_INVOKE_SET)
@@ -2024,6 +2034,8 @@ ResultType GuiType::Destroy()
 	mHwnd = NULL;
 	mControlCount = 0; // All child windows (controls) are automatically destroyed with parent.
 	free(mControl); // Free the control array, which was previously malloc'd.
+	free(mName);
+	mName = NULL;
 
 	// Remove the Gui from the global Gui list. Note that this also releases a reference
 	// to the object, possibly destroying it. From now on 'this' is considered to be invalid.
@@ -2284,6 +2296,21 @@ IObject* GuiType::CreateDropArray(HDROP hDrop)
 	}
 
 	return obj;
+}
+
+
+
+ResultType GuiType::SetName(LPTSTR aName)
+{
+	if (*aName)
+	{
+		aName = _tcsdup(aName);
+		if (!aName)
+			return g_script.ScriptError(ERR_OUTOFMEM);
+	}
+	free(mName);
+	mName = aName;
+	return OK;
 }
 
 
