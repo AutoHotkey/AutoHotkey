@@ -1218,7 +1218,13 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 	if (is_choose_string)
 	{
 		LPTSTR item_string = TokenToString(aParam, buf);
-		if (msg_select_string)
+		// Testing confirms that the CB and LB messages do not interpret an empty string
+		// as the first item.  It seems best for "" to deselect the current item/tab.
+		if (!*item_string)
+		{
+			selection_index = -1;
+		}
+		else if (msg_select_string)
 		{
 			if (SendMessage(aControl.hwnd, msg_select_string, -1, (LPARAM)item_string) == CB_ERR) // CB_ERR == LB_ERR
 				goto error;
@@ -1256,10 +1262,20 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 	else
 	{
 		int result = (int)SendMessage(aControl.hwnd, msg_set_index, selection_index, 0);
-		if (result == -1)
+		if (msg_set_index == TCM_SETCURSEL)
+		{
+			if (result == -1)
+			{
+				if (SendMessage(aControl.hwnd, TCM_GETCURSEL, 0, 0) != selection_index)
+					goto error;
+				// Otherwise, it's on the right tab, so maybe result == -1 because there
+				// was previously no tab selected.
+			}
+			if (result != selection_index)
+				ControlUpdateCurrentTab(aControl, aExtraActions > 0); // And set focus if the more forceful aExtraActions was done.
+		}
+		else if (result == -1 && selection_index != -1)
 			goto error;
-		if (msg_set_index == TCM_SETCURSEL && result != selection_index) // Successfully changed to a different tab.
-			ControlUpdateCurrentTab(aControl, aExtraActions > 0); // And set focus if the more forceful aExtraActions was done.
 	}
 	// Since these messages don't generate notifications, if requested by the caller
 	// we must manually raise the appropriate events as though WM_COMMAND/WM_NOTIFY
@@ -1506,9 +1522,10 @@ ResultType GuiType::ControlGetDDL(ResultToken &aResultToken, GuiControlType &aCo
 	if (aMode == Value_Mode || (aMode == Submit_Mode && (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))) // Caller wants the position, not the text.
 	{
 		index = SendMessage(aControl.hwnd, CB_GETCURSEL, 0, 0); // Get index of currently selected item.
-		if (index != CB_ERR) // Maybe happens only if DROPDOWNLIST has no items at all, so ErrorLevel is not changed.
-			_o_return((int)index + 1);
-		_o_return_empty;
+		// If there's no item selected (the default state, and also possible by Value:=0
+		// or Text:=""), index is -1 (CB_ERR).  Since Value:=0 is valid and Value:=""
+		// is not, return 0 in that case.  MSDN: "If no item is selected, it is CB_ERR."
+		_o_return((int)index + 1);
 	}
 	return ControlGetWindowText(aResultToken, aControl);
 }
@@ -1644,10 +1661,10 @@ ResultType GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType 
 	else // Single-select ListBox style.
 	{
 		LRESULT index = SendMessage(aControl.hwnd, LB_GETCURSEL, 0, 0); // Get index of currently selected item.
+		if (position_mode) // Caller wants the position, not the text.
+			_o_return((int)index + 1); // 0 if no selection.
 		if (index == LB_ERR) // There is no selection (or very rarely, some other type of problem).
 			_o_return_empty;
-		if (position_mode) // Caller wants the position, not the text.
-			_o_return((int)index + 1);
 		LRESULT length = SendMessage(aControl.hwnd, LB_GETTEXTLEN, (WPARAM)index, 0);
 		if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
 			_o_return_empty;
@@ -1892,10 +1909,10 @@ ResultType GuiType::ControlGetTab(ResultToken &aResultToken, GuiControlType &aCo
 {
 	LPTSTR buf = aResultToken.buf;
 	LRESULT index = TabCtrl_GetCurSel(aControl.hwnd); // Get index of currently selected item.
-	if (index == -1) // There is no selection (maybe happens only if it has no tabs at all), so ErrorLevel is not changed.
-		_o_return_empty;
 	if (aMode == Value_Mode || (aMode == Submit_Mode && (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))) // Caller wants the index, not the text.
-		_o_return((int)index + 1);
+		_o_return((int)index + 1); // 0 if no selection.
+	if (index == -1) // There is no selection.
+		_o_return_empty;
 	// Otherwise: Get the stored name/caption of this tab:
 	TCITEM tci;
 	tci.mask = TCIF_TEXT;
@@ -9929,10 +9946,11 @@ int GuiType::FindTabIndexByName(GuiControlType &aTabControl, LPTSTR aName, bool 
 // Return int vs. TabIndexType so that failure can be indicated.
 {
 	int tab_count = TabCtrl_GetItemCount(aTabControl.hwnd);
-	if (!tab_count)
+	// Although strictly performing a leading-part-of-name match should technically cause
+	// an empty string to result in the first item (index 0), it seems unlikely that a user
+	// would expect that.  The caller should verify *aName != 0.
+	if (!tab_count || !*aName)
 		return -1; // No match.
-	if (!*aName)
-		return 0;  // First item (index 0) matches the empty string.
 
 	TCITEM tci;
 	tci.mask = TCIF_TEXT;
