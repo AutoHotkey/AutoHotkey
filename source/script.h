@@ -2636,7 +2636,7 @@ public:
 	void Dispose();
 	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType Create();
+	ResultType Create(LPTSTR aTitle);
 	ResultType SetName(LPTSTR aName);
 	void ClearEventHandler(GuiEvent& aHandler);
 	void SetEventHandler(GuiEvent& aHandler, LPTSTR aName, LPTSTR aPrefix = NULL);

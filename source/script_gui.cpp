@@ -383,9 +383,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 
 BIF_DECL(BIF_GuiCreate)
 {
-	TCHAR nbuf2[MAX_NUMBER_SIZE];
 	LPTSTR options = ParamIndexToOptionalString(0, _f_number_buf);
-	LPTSTR title = ParamIndexToOptionalString(1, nbuf2);
 
 	GuiType* gui = new GuiType();
 	if (!gui)
@@ -433,16 +431,18 @@ BIF_DECL(BIF_GuiCreate)
 	}
 	gui->SetEvents();
 	
+	LPTSTR title;
+	if (ParamIndexIsOmitted(1)) // Completely omitted, not an empty string.
+		title = g_script.DefaultDialogTitle();
+	else
+		title = ParamIndexToString(1, _f_number_buf);
+
 	// Create the Gui, now that we're past all other failure points.
-	if (!gui->Create())
+	if (!gui->Create(title))
 	{
 		delete gui;
 		_f_throw(_T("Could not create Gui.")); // Short msg since so rare.
 	}
-
-	// Set the title if one has been specified.
-	if (*title)
-		SetWindowText(gui->mHwnd, title);
 
 	if (set_last_found_window)
 		g->hWndLastUsed = gui->mHwnd;
@@ -2121,7 +2121,7 @@ void GuiType::DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall)
 
 
 
-ResultType GuiType::Create()
+ResultType GuiType::Create(LPTSTR aTitle)
 {
 	if (mHwnd) // It already exists
 		return FAIL;  // Seems best for now, since it shouldn't really be called this way.
@@ -2147,7 +2147,7 @@ ResultType GuiType::Create()
 			return g_script.ScriptError(_T("RegClass")); // Short/generic msg since so rare.
 	}
 
-	if (   !(mHwnd = CreateWindowEx(mExStyle, WINDOW_CLASS_GUI, g_script.DefaultDialogTitle()
+	if (   !(mHwnd = CreateWindowEx(mExStyle, WINDOW_CLASS_GUI, aTitle
 		, mStyle, 0, 0, 0, 0, mOwner, NULL, g_hInstance, NULL))   )
 		return FAIL;
 
