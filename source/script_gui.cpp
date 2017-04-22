@@ -39,7 +39,8 @@ static Object* TokenToScriptObject(ExprTokenType &token)
 class GuiTypeEnum : public EnumBase
 {
 	GuiType& m_gui;
-	int m_pos;
+	GuiIndexType m_pos;
+
 public:
 	GuiTypeEnum(GuiType &gui) : m_gui(gui), m_pos(0)
 	{
@@ -53,7 +54,7 @@ public:
 
 	virtual int Next(Var *aOutputVar1, Var *aOutputVar2)
 	{
-		if (m_pos == m_gui.mControlCount)
+		if (m_pos >= m_gui.mControlCount) // Use >= vs. == in case the Gui was destroyed.
 			return 0;
 		GuiControlType* ctrl = m_gui.mControl[m_pos++];
 		aOutputVar1->AssignHWND(ctrl->hwnd);
@@ -179,11 +180,13 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			return result;
 		}
 		case M_Destroy:
-			return Destroy();
+			Destroy();
+			_o_return_empty;
 		case M_Show:
 			return Show(ParamIndexToOptionalString(0, nbuf1));
 		case M_Hide:
-			return Cancel();
+			Cancel();
+			_o_return_empty;
 		case M_Minimize:
 			// If the window is hidden, it is unhidden as a side-effect (this happens even for SW_SHOWMINNOACTIVE).
 			ShowWindow(mHwnd, SW_MINIMIZE);
@@ -400,25 +403,11 @@ BIF_DECL(BIF_GuiCreate)
 	gui->mControl = (GuiControlType **)malloc(GUI_CONTROL_BLOCK_SIZE * sizeof(GuiControlType*));
 	if (!gui->mControl)
 	{
-		free(gui->mEventPrefix);
 		delete gui;
 		_f_throw(ERR_OUTOFMEM); // Short msg since so rare.
 	}
 
 	gui->mControlCapacity = GUI_CONTROL_BLOCK_SIZE;
-
-	// Create the Gui now.
-	if (!gui->Create())
-	{
-		free(gui->mEventPrefix);
-		free(gui->mControl);
-		delete gui;
-		_f_throw(_T("Could not create Gui.")); // Short msg since so rare.
-	}
-
-	// Set the title if one has been specified.
-	if (*title)
-		SetWindowText(gui->mHwnd, title);
 
 	// Set up event handlers.
 	LPTSTR prefix = prefix_was_set ? NULL : _T("Gui"); // Default to "Gui" if +PrefixXXX and -Prefix have not been used.
@@ -443,6 +432,17 @@ BIF_DECL(BIF_GuiCreate)
 		_f_return_FAIL; // Error already shown by above.
 	}
 	gui->SetEvents();
+	
+	// Create the Gui, now that we're past all other failure points.
+	if (!gui->Create())
+	{
+		delete gui;
+		_f_throw(_T("Could not create Gui.")); // Short msg since so rare.
+	}
+
+	// Set the title if one has been specified.
+	if (*title)
+		SetWindowText(gui->mHwnd, title);
 
 	if (set_last_found_window)
 		g->hWndLastUsed = gui->mHwnd;
@@ -1947,13 +1947,12 @@ HWND GuiType::sTreeWithEditInProgress = NULL;
 
 
 
-ResultType GuiType::Destroy()
+void GuiType::Destroy()
+// Destroys the window and performs related cleanup which is only necessary for
+// a successfully constructed Gui, then calls Dispose() for the remaining cleanup.
 {
-	GuiIndexType u;
-	int i;
-
 	if (!mHwnd)
-		return OK; // We have already been destroyed.
+		return; // We have already been destroyed.
 
 	// First destroy any windows owned by this window, since they will be auto-destroyed
 	// anyway due to their being owned.  By destroying them explicitly, the Destroy()
@@ -1964,8 +1963,8 @@ ResultType GuiType::Destroy()
 
 	// Testing shows that this must be done prior to calling DestroyWindow() later below, presumably
 	// because the destruction immediately destroys the status bar, or prevents it from answering messages.
-	// This seems at odds with MSDN's comment: "During the processing of [WM_DESTROY], it can be assumed
-	// that all child windows still exist".
+	// MSDN says "During the processing of [WM_DESTROY], it can be assumed that all child windows still exist".
+	// However, for DestroyWindow() to have returned means that WM_DESTROY was already fully processed.
 	if (mStatusBarHwnd) // IsWindow(gui.mStatusBarHwnd) isn't called because even if possible for it to have been destroyed, SendMessage below should return 0.
 	{
 		// This is done because the vast majority of people wouldn't want to have to worry about it.
@@ -1973,10 +1972,11 @@ ResultType GuiType::Destroy()
 		// the same bar, or among different windows (fairly rare).
 		HICON hicon;
 		int part_count = (int)SendMessage(mStatusBarHwnd, SB_GETPARTS, 0, NULL); // MSDN: "This message always returns the number of parts in the status bar [regardless of how it is called]".
-		for (i = 0; i < part_count; ++i)
+		for (int i = 0; i < part_count; ++i)
 			if (hicon = (HICON)SendMessage(mStatusBarHwnd, SB_GETICON, i, 0))
 				DestroyIcon(hicon);
 	}
+
 	if (IsWindow(mHwnd)) // If WM_DESTROY called us, the window might already be partially destroyed.
 	{
 		// If this window is using a menu bar but that menu is also used by some other window, first
@@ -2000,22 +2000,57 @@ ResultType GuiType::Destroy()
 		// it's already in progress.
 	}
 
+	// This is done here rather than in Dispose() because a Gui is added to the list only
+	// after being successfully constructed, and should remain there only until the window
+	// is destroyed:
+	RemoveGuiFromList(this);
+
+	// It may be possible for an object released below to cause execution of script, and
+	// although the window has been destroyed (making it impossible for FindGui() to return
+	// this object) and the Gui has been removed from the list, the script might still have
+	// a reference to it.  It is therefore important that this is done to mark the Gui as
+	// invalid, so Invoke() raises an error:
+	mHwnd = NULL;
+
+	// Clean up final resources.
+	Dispose();
+
+	// This is done here on behalf of RemoveGuiFromList(), as the reference which was
+	// just removed from the list might be the last one, in which case releasing it
+	// will cause 'this' to be deleted.
+	Release();
+	// IT IS NOW UNSAFE TO REFER TO ANY NON-STATIC MEMBERS OF THIS OBJECT.
+
+	// If this Gui was the last thing keeping the script running, exit the script:
+	g_script.ExitIfNotPersistent(EXIT_DESTROY);
+}
+
+void GuiType::Dispose()
+// Cleans up resources managed separately to the window.  This is separate from Destroy()
+// for maintainability; i.e. to ensure resources are freed even if the window had not been
+// successfully created.
+{
+	if (mDisposed)
+		return;
+	mDisposed = true;
+
 	if (mBackgroundBrushWin)
 		DeleteObject(mBackgroundBrushWin);
 	if (mBackgroundBrushCtl)
 		DeleteObject(mBackgroundBrushCtl);
 	if (mHdrop)
 		DragFinish(mHdrop);
-
-	// It seems best to delete the bitmaps whenever the control changes to a new image or
-	// whenever the control is destroyed.  Otherwise, if a control or its parent window is
-	// destroyed and recreated many times, memory allocation would continue to grow from
-	// all the abandoned pointers:
-	for (u = 0; u < mControlCount; ++u)
+	
+	// A partially constructed Gui can't have a non-zero mControlCount, but it seems more
+	// appropriate to do this here than in Destroy():
+	for (GuiIndexType u = 0; u < mControlCount; ++u)
 	{
-		mControl[u]->Destroy();
+		mControl[u]->Dispose();
 		mControl[u]->Release(); // Release() vs delete because the script may still have references to it.
 	}
+	// The following has been confirmed necessary to prevent the script from crashing if
+	// the controls are being enumerated (e.g. by GuiTypeEnum) when the Gui is destroyed:
+	mControlCount = 0;
 
 	ClearEvents();
 
@@ -2023,31 +2058,23 @@ ResultType GuiType::Destroy()
 		mEventSink->Release();
 	free(mEventPrefix);
 
-	HICON icon_eligible_for_destruction = mIconEligibleForDestruction;
-	HICON icon_eligible_for_destruction_small = mIconEligibleForDestructionSmall;
-	if (icon_eligible_for_destruction && icon_eligible_for_destruction != g_script.mCustomIcon) // v1.0.37.07.
-		DestroyIconsIfUnused(icon_eligible_for_destruction, icon_eligible_for_destruction_small);
+	if (mIconEligibleForDestruction && mIconEligibleForDestruction != g_script.mCustomIcon) // v1.0.37.07.
+		DestroyIconsIfUnused(mIconEligibleForDestruction, mIconEligibleForDestructionSmall);
+
 	// For simplicity and performance, any fonts used *solely* by a destroyed window are destroyed
 	// only when the program terminates.  Another reason for this is that sometimes a destroyed window
 	// is soon recreated to use the same fonts it did before.
+
 	RemoveAccelerators();
-	mHwnd = NULL;
-	mControlCount = 0; // All child windows (controls) are automatically destroyed with parent.
 	free(mControl); // Free the control array, which was previously malloc'd.
 	free(mName);
-	mName = NULL;
-
-	// Remove the Gui from the global Gui list. Note that this also releases a reference
-	// to the object, possibly destroying it. From now on 'this' is considered to be invalid.
-	RemoveGuiFromList(this);
-
-	// If this Gui was the last thing keeping the script running, exit the script:
-	g_script.ExitIfNotPersistent(EXIT_DESTROY);
-	return OK;
 }
 
 
-void GuiControlType::Destroy()
+void GuiControlType::Dispose()
+// Clean up resources associated with this control.
+// It's called Dispose vs Destroy because at the time it is called, the control window
+// has already been destroyed as a side-effect of the parent window being destroyed.
 {
 	if (type == GUI_CONTROL_PIC && union_hbitmap)
 	{
@@ -2055,10 +2082,10 @@ void GuiControlType::Destroy()
 			DestroyIcon((HICON)union_hbitmap); // Works on cursors too.  See notes in LoadPicture().
 		else // union_hbitmap is a bitmap rather than an icon or cursor.
 			DeleteObject(union_hbitmap);
-		//else do nothing, since it isn't the right type to have a valid union_hbitmap member.
 	}
 	else if (type == GUI_CONTROL_LISTVIEW) // It was ensured at an earlier stage that union_lv_attrib != NULL.
 		free(union_lv_attrib);
+	//else do nothing, since it isn't the right type to have a valid union_hbitmap member.
 	if (background_brush)
 		DeleteObject(background_brush);
 	gui->ClearEventHandler(event_handler);
@@ -2075,7 +2102,7 @@ void GuiType::DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall)
 // Caller has ensured that the GUI window previously using ahIcon has been destroyed prior to calling
 // this function.
 {
-	if (!ahIcon) // Caller relies on this check.
+	if (!ahIcon) // At least one caller relies on this check.
 		return;
 	for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
 	{
@@ -6875,7 +6902,7 @@ ResultType GuiType::ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilenam
 ResultType GuiType::Show(LPTSTR aOptions)
 {
 	if (!mHwnd)
-		return OK;  // Make this a harmless attempt.
+		return FAIL; // Shouldn't be possible.
 
 	// In the future, it seems best to rely on mShowIsInProgress to prevent the Window Proc from ever
 	// doing a MsgSleep() to launch a script subroutine.  This is because if anything we do in this
@@ -7402,27 +7429,17 @@ ResultType GuiType::Show(LPTSTR aOptions)
 
 
 
-ResultType GuiType::Clear() // Not implemented yet.
-{
-	//if (!mHwnd) // Operating on a non-existent GUI has no effect.
-	//	return OK;
-	return OK;
-}
-
-
-
-ResultType GuiType::Cancel()
+void GuiType::Cancel()
 {
 	if (mHwnd)
 		ShowWindow(mHwnd, SW_HIDE);
 	// If this Gui was the last thing keeping the script running, exit the script:
 	g_script.ExitIfNotPersistent(EXIT_WM_CLOSE);
-	return OK;
 }
 
 
 
-ResultType GuiType::Close()
+void GuiType::Close()
 // If there is an OnClose event handler defined, launch it as a new thread.
 // In this case, don't close or hide the window.  It's up to the handler to do that
 // if it wants to.
@@ -7433,24 +7450,22 @@ ResultType GuiType::Close()
 	POST_AHK_GUI_ACTION(mHwnd, NO_CONTROL_INDEX, GUI_EVENT_CLOSE, NO_EVENT_INFO);
 	// MsgSleep() is not done because "case AHK_GUI_ACTION" in GuiWindowProc() takes care of it.
 	// See its comments for why.
-	return OK;
 }
 
 
 
-ResultType GuiType::Escape() // Similar to close, except typically called when the user presses ESCAPE.
+void GuiType::Escape() // Similar to close, except typically called when the user presses ESCAPE.
 // If there is an OnEscape event handler defined, launch it as a new thread.
 // In this case, don't close or hide the window.  It's up to the handler to do that
 // if it wants to.
 // If there is no label, treat it the same as Cancel().
 {
 	if (!mOnEscape) // The user preference (via votes on forum poll) is to do nothing by default.
-		return OK;
+		return;
 	// See lengthy comments in Event() about this section:
 	POST_AHK_GUI_ACTION(mHwnd, NO_CONTROL_INDEX, GUI_EVENT_ESCAPE, NO_EVENT_INFO);
 	// MsgSleep() is not done because "case AHK_GUI_ACTION" in GuiWindowProc() takes care of it.
 	// See its comments for why.
-	return OK;
 }
 
 
@@ -7458,8 +7473,8 @@ ResultType GuiType::Escape() // Similar to close, except typically called when t
 ResultType GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 // Caller has ensured that all controls have valid, non-NULL hwnds:
 {
-	if (!mHwnd) // Operating on a non-existent GUI has no effect.
-		_o_return_empty;
+	if (!mHwnd)
+		return FAIL; // Shouldn't be possible.
 
 	Object* ret = Object::Create();
 	if (!ret)

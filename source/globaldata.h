@@ -329,7 +329,7 @@ static inline void RemoveGuiFromList(GuiType* gui)
 	GuiType *next = gui->mNextGui, *&nextPrev = next ? next->mPrevGui : g_lastGui;
 	prevNext = next;
 	nextPrev = prev;
-	gui->Release(); // Remove the reference.
+	//gui->Release(); // This is done in GuiType::Destroy().  See there for comments.
 }
 
 #endif

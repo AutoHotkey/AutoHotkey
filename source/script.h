@@ -2433,7 +2433,8 @@ struct GuiControlType : public ObjectBase
 		P_Focused,
 	};
 
-	void Destroy(); // Called by GuiType::Destroy().
+	void Dispose(); // Called by GuiType::Dispose().
+
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
@@ -2536,6 +2537,7 @@ public:
 	bool mGuiShowHasNeverBeenDone, mFirstActivation, mShowIsInProgress, mDestroyWindowHasBeenCalled;
 	bool mControlWidthWasSetByContents; // Whether the most recently added control was auto-width'd to fit its contents.
 	bool mUsesDPIScaling; // Whether the GUI uses DPI scaling.
+	bool mDisposed; // Simplifies Dispose().
 
 	#define MAX_GUI_FONTS 200  // v1.0.44.14: Increased from 100 to 200 due to feedback that 100 wasn't enough.  But to alleviate memory usage, the array is now allocated upon first use.
 	static FontType *sFont; // An array of structs, allocated upon first use.
@@ -2582,8 +2584,10 @@ public:
 	};
 
 	GuiType() // Constructor
-		: mHwnd(NULL), mName(NULL), mStatusBarHwnd(NULL), mControlCount(0), mControlCapacity(0)
+		: mHwnd(NULL), mOwner(NULL), mName(NULL)
 		, mPrevGui(NULL), mNextGui(NULL)
+		, mControl(NULL), mControlCount(0), mControlCapacity(0)
+		, mStatusBarHwnd(NULL)
 		, mDefaultButtonIndex(-1), mEventPrefix(NULL), mEventSink(NULL)
 		, mOnClose(), mOnEscape(), mOnSize(), mOnDropFiles(), mOnContextMenu()
 		// The styles DS_CENTER and DS_3DLOOK appear to be ineffectual in this case.
@@ -2594,7 +2598,7 @@ public:
 		// removed, which implies that POPUP windows are more flexible than OVERLAPPED windows.
 		, mStyle(WS_POPUP|WS_CLIPSIBLINGS|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX) // WS_CLIPCHILDREN (doesn't seem helpful currently)
 		, mExStyle(0) // This and the above should not be used once the window has been created since they might get out of date.
-		, mInRadioGroup(false), mUseTheme(true), mOwner(NULL), mDelimiter('|')
+		, mInRadioGroup(false), mUseTheme(true), mDelimiter('|')
 		, mCurrentFontIndex(FindOrCreateFont()) // Must call this in constructor to ensure sFont array is never NULL while a GUI object exists.  Omit params to tell it to find or create DEFAULT_GUI_FONT.
 		, mTabControlCount(0), mCurrentTabControlIndex(MAX_TAB_CONTROLS), mCurrentTabIndex(0)
 		, mCurrentColor(CLR_DEFAULT)
@@ -2613,18 +2617,23 @@ public:
 		, mGuiShowHasNeverBeenDone(true), mFirstActivation(true), mShowIsInProgress(false)
 		, mDestroyWindowHasBeenCalled(false), mControlWidthWasSetByContents(false)
 		, mUsesDPIScaling(true)
+		, mDisposed(false)
 	{
-		// The array of controls is left uninitialized to catch bugs.  Each control's attributes should be
-		// fully populated when it is created.
-		//ZeroMemory(mControl, sizeof(mControl));
 	}
 
 	~GuiType()
 	{
-		Destroy();
+		// Since the program itself retains a reference to the Gui until the window is
+		// destroyed, the destructor should never be called without Destroy() having been
+		// called first, unless GuiCreate() aborted due to an error.  mHwnd != NULL would
+		// indicate a bug in the program or script (calling Release() too many times).
+		//Destroy();
+		ASSERT(!mHwnd);
+		Dispose();
 	}
 
-	ResultType Destroy();
+	void Destroy();
+	void Dispose();
 	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Create();
@@ -2661,17 +2670,16 @@ public:
 	void ControlSetChoice(GuiControlType &aControl, int aChoice);
 	ResultType ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilename, int aWidth, int aHeight, int aIconNumber);
 	ResultType Show(LPTSTR aOptions);
-	ResultType Clear();
-	ResultType Cancel();
-	ResultType CancelOrDestroy(ULONG minRefCount = 1)
+	void Cancel();
+	void CancelOrDestroy(ULONG minRefCount = 1)
 	{
 		// If there is only one reference left to the Gui (i.e. due to the global Gui list),
 		// destroy the Gui instead of hiding it. The extra minRefCount parameter is necessary
 		// because MsgSleep() increases the reference count of the Gui.
 		return mRefCount > minRefCount ? Cancel() : Destroy();
 	}
-	ResultType Close(); // Due to SC_CLOSE, etc.
-	ResultType Escape(); // Similar to close, except typically called when the user presses ESCAPE.
+	void Close(); // Due to SC_CLOSE, etc.
+	void Escape(); // Similar to close, except typically called when the user presses ESCAPE.
 	ResultType Submit(ResultToken &aResultToken, bool aHideIt);
 
 	static GuiType *FindGui(HWND aHwnd);
