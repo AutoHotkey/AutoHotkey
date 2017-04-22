@@ -2482,9 +2482,6 @@ LRESULT CALLBACK TabWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 class GuiType : public ObjectBase
 {
-public:
-	GuiType *mNextGui, *mPrevGui; // For global Gui linked list.
-
 	#define GUI_STANDARD_WIDTH_MULTIPLIER 15 // This times font size = width, if all other means of determining it are exhausted.
 	#define GUI_STANDARD_WIDTH DPIScale(GUI_STANDARD_WIDTH_MULTIPLIER * sFont[mCurrentFontIndex].point_size)
 	// Update for v1.0.21: Reduced it to 8 vs. 9 because 8 causes the height each edit (with the
@@ -2492,38 +2489,48 @@ public:
 	// to be what other apps use too, and seems to make edits stand out a little nicer:
 	#define GUI_CTL_VERTICAL_DEADSPACE DPIScale(8)
 	#define PROGRESS_DEFAULT_THICKNESS DPIScale(2 * sFont[mCurrentFontIndex].point_size)
+
+public:
+	// Ensure fields of the same size are grouped together to avoid padding between larger types
+	// and smaller types.  On last check, this saved 8 bytes per GUI on x64 (where pointers are
+	// of course 64-bit, so a sequence like HBRUSH, COLORREF, HBRUSH would cause padding).
+	// POINTER-SIZED FIELDS:
+	GuiType *mNextGui, *mPrevGui; // For global Gui linked list.
 	HWND mHwnd, mStatusBarHwnd;
 	HWND mOwner;  // The window that owns this one, if any.  Note that Windows provides no way to change owners after window creation.
-	// Control IDs are higher than their index in the array by the below amount.  This offset is
+	// Control IDs are higher than their index in the array by +CONTROL_ID_FIRST.  This offset is
 	// necessary because windows that behave like dialogs automatically return IDOK and IDCANCEL in
 	// response to certain types of standard actions:
-	GuiIndexType mControlCount;
-	GuiIndexType mControlCapacity; // How many controls can fit into the current memory size of mControl.
 	GuiControlType **mControl; // Will become an array of controls when the window is first created.
-	GuiIndexType mDefaultButtonIndex; // Index vs. pointer is needed for some things.
-	IObject* mEventSink;
-	LPTSTR mEventPrefix;
-	GuiEvent mOnClose, mOnEscape, mOnSize, mOnDropFiles, mOnContextMenu;
-	DWORD mStyle, mExStyle; // Style of window.
-	bool mInRadioGroup; // Whether the control currently being created is inside a prior radio-group.
-	bool mUseTheme;  // Whether XP theme and styles should be applied to the parent window and subsequently added controls.
-	TCHAR mDelimiter;  // The default field delimiter when adding items to ListBox, DropDownList, ListView, etc.
-	int mCurrentFontIndex;
-	COLORREF mCurrentColor;       // The default color of text in controls.
-	COLORREF mBackgroundColorWin; // The window's background color itself.
-	COLORREF mBackgroundColorCtl; // Background color for controls.
 	HBRUSH mBackgroundBrushWin;   // Brush corresponding to mBackgroundColorWin.
 	HBRUSH mBackgroundBrushCtl;   // Brush corresponding to mBackgroundColorCtl.
 	HDROP mHdrop;                 // Used for drag and drop operations.
 	HICON mIconEligibleForDestruction; // The window's icon, which can be destroyed when the window is destroyed if nothing else is using it.
 	HICON mIconEligibleForDestructionSmall; // L17: A window may have two icons: ICON_SMALL and ICON_BIG.
 	HACCEL mAccel; // Keyboard accelerator table.
+	IObject* mEventSink;
+	LPTSTR mEventPrefix;
+	GuiEvent mOnClose, mOnEscape, mOnSize, mOnDropFiles, mOnContextMenu;
+	// 32-BIT FIELDS:
+	GuiIndexType mControlCount;
+	GuiIndexType mControlCapacity; // How many controls can fit into the current memory size of mControl.
+	GuiIndexType mDefaultButtonIndex; // Index vs. pointer is needed for some things.
+	DWORD mStyle, mExStyle; // Style of window.
+	int mCurrentFontIndex;
+	COLORREF mCurrentColor;       // The default color of text in controls.
+	COLORREF mBackgroundColorWin; // The window's background color itself.
+	COLORREF mBackgroundColorCtl; // Background color for controls.
 	int mMarginX, mMarginY, mPrevX, mPrevY, mPrevWidth, mPrevHeight, mMaxExtentRight, mMaxExtentDown
 		, mSectionX, mSectionY, mMaxExtentRightSection, mMaxExtentDownSection;
 	LONG mMinWidth, mMinHeight, mMaxWidth, mMaxHeight;
+	// 16-BIT OR 8-BIT FIELDS:
+	TCHAR mDelimiter;  // The default field delimiter when adding items to ListBox, DropDownList, ListView, etc.
+	// 8-BIT FIELDS:
 	TabControlIndexType mTabControlCount;
 	TabControlIndexType mCurrentTabControlIndex; // Which tab control of the window.
 	TabIndexType mCurrentTabIndex;// Which tab of a tab control is currently the default for newly added controls.
+	bool mInRadioGroup; // Whether the control currently being created is inside a prior radio-group.
+	bool mUseTheme;  // Whether XP theme and styles should be applied to the parent window and subsequently added controls.
 	bool mGuiShowHasNeverBeenDone, mFirstActivation, mShowIsInProgress, mDestroyWindowHasBeenCalled;
 	bool mControlWidthWasSetByContents; // Whether the most recently added control was auto-width'd to fit its contents.
 	bool mUsesDPIScaling; // Whether the GUI uses DPI scaling.
