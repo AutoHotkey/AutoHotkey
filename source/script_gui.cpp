@@ -167,10 +167,10 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	{
 		case M_AddControl: // Probably the most common method.
 		{
-			LPTSTR text = ParamIndexToOptionalString(0, nbuf1);
-			LPTSTR options = ParamIndexToOptionalString(1, nbuf2);
-			Object *text_obj = ParamIndexIsOmitted(0) ? NULL : TokenToScriptObject(*aParam[0]);
-			GuiControlType* pcontrol = NULL;
+			LPTSTR options = ParamIndexToOptionalString(0, nbuf1);
+			LPTSTR text = ParamIndexToOptionalString(1, nbuf2);
+			Object *text_obj = aParamCount >= 2 ? TokenToScriptObject(*aParam[1]) : NULL;
+			GuiControlType* pcontrol;
 			ResultType result = AddControl(ctrl_type, options, text, pcontrol, text_obj);
 			if (result == OK)
 			{
@@ -384,8 +384,8 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 BIF_DECL(BIF_GuiCreate)
 {
 	TCHAR nbuf2[MAX_NUMBER_SIZE];
-	LPTSTR title = ParamIndexToOptionalString(0, _f_number_buf);
-	LPTSTR options = ParamIndexToOptionalString(1, nbuf2);
+	LPTSTR options = ParamIndexToOptionalString(0, _f_number_buf);
+	LPTSTR title = ParamIndexToOptionalString(1, nbuf2);
 
 	GuiType* gui = new GuiType();
 	if (!gui)
