@@ -2279,6 +2279,7 @@ struct GuiControlType : public ObjectBase
 	TabControlIndexType tab_control_index; // Which tab control this control belongs to, if any.
 	TabIndexType tab_index; // For type==TAB, this stores the tab control's index.  For other types, it stores the page.
 	#define CLR_TRANSPARENT 0xFF000001L
+	#define IS_AN_ACTUAL_COLOR(color) !((color) & ~0xffffff) // Produces smaller code than checking against CLR_DEFAULT || CLR_INVALID.
 	COLORREF background_color;
 	HBRUSH background_brush;
 	union
@@ -2289,8 +2290,6 @@ struct GuiControlType : public ObjectBase
 		// color if the picture's background is transparent (at least in the case of icons on XP).
 		lv_attrib_type *union_lv_attrib; // For ListView: Some attributes and an array of columns.
 	};
-	#define USES_FONT_AND_TEXT_COLOR(type) !(type == GUI_CONTROL_PIC || type == GUI_CONTROL_UPDOWN \
-		|| type == GUI_CONTROL_SLIDER || type == GUI_CONTROL_PROGRESS)
 
 	static LPTSTR sTypeNames[];
 	static GuiControls ConvertTypeName(LPTSTR aTypeName);
@@ -2306,6 +2305,8 @@ struct GuiControlType : public ObjectBase
 		TYPE_MSGBKCOLOR = TYPE_SUPPORTS_BGCOLOR | TYPE_REQUIRES_BGBRUSH, // Supports background color by responding to WM_CTLCOLOR, WM_ERASEBKGND or WM_DRAWITEM.
 		TYPE_SETBKCOLOR = TYPE_SUPPORTS_BGCOLOR, // Supports setting a background color by sending it a message.
 		TYPE_NO_SUBMIT = 0x08, // Doesn't accept user input, or is excluded from Submit() for some other reason.
+		TYPE_HAS_NO_TEXT = 0x10, // Has no text and therefore doesn't use the font or text color.
+		TYPE_RESERVE_UNION = 0x20, // Uses the union for some other purpose, so union_color must not be set.
 	};
 	typedef UCHAR TypeAttribs;
 	TypeAttribs TypeHasAttrib(TypeAttribs aAttrib);
@@ -2356,6 +2357,19 @@ struct GuiControlType : public ObjectBase
 	bool HasSubmittableValue()
 	{
 		return !TypeHasAttrib(TYPE_NO_SUBMIT);
+	}
+
+	bool UsesFontAndTextColor()
+	{
+		return !TypeHasAttrib(TYPE_HAS_NO_TEXT);
+	}
+
+	bool UsesUnionColor()
+	{
+		// It's easier to exclude those which require the union for some other purpose
+		// than to whitelist all controls which could potentially cause a WM_CTLCOLOR
+		// message (or WM_ERASEBKGND/WM_DRAWITEM in the case of Tab).
+		return !TypeHasAttrib(TYPE_RESERVE_UNION);
 	}
 
 	void Initialize(GuiType* owner)
@@ -2415,7 +2429,7 @@ struct GuiControlOptionsType
 	int thickness;  // Thickness of slider's thumb.
 	int tip_side; // Which side of the control to display the tip on (0 to use default side).
 	GuiControlType *buddy1, *buddy2;
-	COLORREF color_listview; // Used only for those controls that need control.union_color for something other than color.
+	COLORREF color; // Control's text color.
 	COLORREF color_bk; // Control's background color.
 	int limit;   // The max number of characters to permit in an edit or combobox's edit (also used by ListView).
 	int hscroll_pixels;  // The number of pixels for a listbox's horizontal scrollbar to be able to scroll.
@@ -2430,7 +2444,6 @@ struct GuiControlOptionsType
 	ResultType redraw;  // Whether the state of WM_REDRAW should be changed.
 	TCHAR password_char; // When zeroed, indicates "use default password" for an edit control with the password style.
 	bool range_changed;
-	bool color_changed; // To discern when a control has been put back to the default color. [v1.0.26]
 	bool start_new_section;
 	bool use_theme; // v1.0.32: Provides the means for the window's current setting of mUseTheme to be overridden.
 	bool listview_no_auto_sort; // v1.0.44: More maintainable and frees up GUI_CONTROL_ATTRIB_ALTBEHAVIOR for other uses.
@@ -2688,6 +2701,8 @@ public:
 	void ControlSetVisible(GuiControlType &aControl, bool aVisible);
 	ResultType ControlMove(GuiControlType &aControl, LPTSTR aPos, bool aDraw);
 	void ControlUpdateFont(GuiControlType &aControl);
+	void ControlSetTextColor(GuiControlType &aControl, COLORREF aColor);
+	void ControlSetMonthCalColor(GuiControlType &aControl, COLORREF aColor, UINT aMsg);
 	ResultType ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, int aExtraActions = 0, BOOL aOneExact = FALSE);
 	void ControlCheckRadioButton(GuiControlType &aControl, GuiIndexType aControlIndex, WPARAM aCheckType);
 	void ControlSetUpDownOptions(GuiControlType &aControl, GuiControlOptionsType &aOpt);

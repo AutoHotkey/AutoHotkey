@@ -56,7 +56,7 @@ GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
 {
 	static TypeAttribs sAttrib[] = { 0,
 		/*Text*/       TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT,
-		/*Pic*/        TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT,
+		/*Pic*/        TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT | TYPE_HAS_NO_TEXT | TYPE_RESERVE_UNION,
 		/*GroupBox*/   TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT, // Background affects only the label.
 		/*Button*/     TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT, // Background affects only the button's border, on Windows 10.
 		/*CheckBox*/   TYPE_MSGBKCOLOR,
@@ -64,19 +64,19 @@ GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
 		/*DDL*/        TYPE_MSGBKCOLOR, // Background affects only the main control, and requires -Theme.
 		/*ComboBox*/   TYPE_MSGBKCOLOR, // Background affects only the main control.
 		/*ListBox*/    TYPE_MSGBKCOLOR,
-		/*ListView*/   TYPE_SETBKCOLOR | TYPE_NO_SUBMIT,
+		/*ListView*/   TYPE_SETBKCOLOR | TYPE_NO_SUBMIT | TYPE_RESERVE_UNION,
 		/*TreeView*/   TYPE_SETBKCOLOR | TYPE_NO_SUBMIT,
 		/*Edit*/       TYPE_MSGBKCOLOR,
 		/*DateTime*/   0,
 		/*MonthCal*/   0,
 		/*Hotkey*/     0,
-		/*UpDown*/     0,
-		/*Slider*/     TYPE_MSGBKCOLOR,
-		/*Progress*/   TYPE_SETBKCOLOR | TYPE_NO_SUBMIT,
+		/*UpDown*/     TYPE_HAS_NO_TEXT,
+		/*Slider*/     TYPE_MSGBKCOLOR | TYPE_HAS_NO_TEXT,
+		/*Progress*/   TYPE_SETBKCOLOR | TYPE_HAS_NO_TEXT | TYPE_NO_SUBMIT,
 		/*Tab*/        TYPE_MSGBKCOLOR,
 		/*Tab2*/       0, // Never used since it is changed to TAB at an early stage.
 		/*Tab3*/       0, // As above.
-		/*ActiveX*/    TYPE_NO_SUBMIT,
+		/*ActiveX*/    TYPE_HAS_NO_TEXT | TYPE_NO_SUBMIT,
 		/*Link*/       TYPE_MSGBKCOLOR | TYPE_NO_SUBMIT,
 		/*Custom*/     TYPE_MSGBKCOLOR | TYPE_NO_SUBMIT, // Custom controls *may* use WM_CTLCOLOR.
 		/*StatusBar*/  TYPE_SETBKCOLOR | TYPE_NO_SUBMIT,
@@ -1197,31 +1197,48 @@ ResultType GuiType::ControlMove(GuiControlType &aControl, LPTSTR aPos, bool aDra
 
 void GuiType::ControlUpdateFont(GuiControlType &aControl)
 {
-	// Done regardless of USES_FONT_AND_TEXT_COLOR to allow future OSes or common control updates
-	// to be given an explicit font, even though it would have no effect currently:
+	if (!aControl.UsesFontAndTextColor()) // Control has no use for a font.
+		return;
 	SendMessage(aControl.hwnd, WM_SETFONT, (WPARAM)sFont[mCurrentFontIndex].hfont, 0);
-	if (USES_FONT_AND_TEXT_COLOR(aControl.type)) // Must check this to avoid corrupting union_hbitmap.
-	{
-		if (aControl.type != GUI_CONTROL_LISTVIEW) // Must check this to avoid corrupting union col attribs.
-			aControl.union_color = mCurrentColor; // Used by WM_CTLCOLORSTATIC et. al. for some types of controls.
-		switch (aControl.type)
-		{
-		case GUI_CONTROL_LISTVIEW:
-			ListView_SetTextColor(aControl.hwnd, mCurrentColor); // Must use mCurrentColor not aControl.union_color, see above.
-			break;
-		case GUI_CONTROL_TREEVIEW:
-			TreeView_SetTextColor(aControl.hwnd, mCurrentColor);
-			break;
-		case GUI_CONTROL_DATETIME:
-			// Since message MCM_SETCOLOR != DTM_SETMCCOLOR, can't combine the two types:
-			DateTime_SetMonthCalColor(aControl.hwnd, MCSC_TEXT, mCurrentColor); // Hopefully below will revert to default if color is CLR_DEFAULT.
-			break;
-		case GUI_CONTROL_MONTHCAL:
-			MonthCal_SetColor(aControl.hwnd, MCSC_TEXT, mCurrentColor); // Hopefully below will revert to default if color is CLR_DEFAULT.
-			break;
-		}
-	}
+	ControlSetTextColor(aControl, mCurrentColor);
 	InvalidateRect(aControl.hwnd, NULL, TRUE); // Required for refresh, at least for edit controls, probably some others.
+}
+
+
+void GuiType::ControlSetTextColor(GuiControlType &aControl, COLORREF aColor)
+{
+	switch (aControl.type)
+	{
+	case GUI_CONTROL_LISTVIEW:
+		// Although MSDN doesn't say, ListView_SetTextColor() appears to support CLR_DEFAULT.
+		ListView_SetTextColor(aControl.hwnd, aColor);
+		break;
+	case GUI_CONTROL_TREEVIEW:
+		// Must pass -1 rather than CLR_DEFAULT for TreeView controls.
+		TreeView_SetTextColor(aControl.hwnd, aColor == CLR_DEFAULT ? -1 : aColor);
+		break;
+	case GUI_CONTROL_DATETIME:
+		ControlSetMonthCalColor(aControl, aColor, DTM_SETMCCOLOR);
+		break;
+	case GUI_CONTROL_MONTHCAL:
+		ControlSetMonthCalColor(aControl, aColor, MCM_SETCOLOR);
+		break;
+	default:
+		if (aControl.UsesUnionColor()) // For maintainability.  Overlaps with previous checks.
+			aControl.union_color = aColor; // Used by WM_CTLCOLORSTATIC et. al. for some types of controls.
+		break;
+	}
+}
+
+
+void GuiType::ControlSetMonthCalColor(GuiControlType &aControl, COLORREF aColor, UINT aMsg)
+{
+	// Testing shows that changing the COLOR_WINDOWTEXT system color affects MonthCal
+	// controls, but passing CLR_DEFAULT always sets the color to black regardless.
+	// MSDN doesn't seem to specify any way to revert to defaults.
+	if (aColor == CLR_DEFAULT)
+		aColor = GetSysColor(COLOR_WINDOWTEXT);
+	SendMessage(aControl.hwnd, aMsg, MCSC_TEXT, aColor);
 }
 
 
@@ -2629,18 +2646,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		if (mInRadioGroup) // Close out the prior radio group by giving this control the WS_GROUP style.
 			opt.style_add |= WS_GROUP; // This might not be necessary on all OSes, but it seems traditional / best-practice.
 
-	// Set control's default text color:
-	bool uses_font_and_text_color = USES_FONT_AND_TEXT_COLOR(aControlType); // Resolve macro only once.
-	if (uses_font_and_text_color) // Must check this to avoid corrupting union_hbitmap for PIC controls.
-	{
-		if (control.type != GUI_CONTROL_LISTVIEW) // Must check this to avoid corrupting union_lv_attrib.
-			control.union_color = mCurrentColor; // Default to the most recently set color.
-		opt.color_listview = mCurrentColor;  // v1.0.44: Added so that ListViews start off with current font color unless overridden in their options.
-	}
-	else if (aControlType == GUI_CONTROL_PROGRESS) // This must be done to detect custom Progress color.
-		control.union_color = CLR_DEFAULT; // Set progress to default color avoids unnecessary stripping of theme.
-	//else don't change union_color since it shares the same address as union_hbitmap & union_col.
-
 	switch (aControlType) // Set starting defaults based on control type (the above also does some of that).
 	{
 	// Some controls also have the WS_EX_CLIENTEDGE exstyle by default because they look pretty strange
@@ -2783,23 +2788,30 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	}
 
 	// The following is needed by ControlSetListViewOptions/ControlSetTreeViewOptions, and possibly others
-	// in the future. It must be done only after ControlParseOptions() so that cases where mCurrentColor
-	// is not CLR_DEFAULT but the options contained cDefault are handled properly.
-	// The following will set opt.color_changed to an invalid value for GUI_CONTROL_PIC (which stores something
-	// else in the union_color's union) and other types that don't even use union_color for anything yet.  But
-	// that should be okay because those types should never consult opt.color_changed.
-	opt.color_changed = CLR_DEFAULT != (aControlType == GUI_CONTROL_LISTVIEW ? opt.color_listview : control.union_color);
+	// in the future.  It applies mCurrentColor as a default if no color was specified for the control.
+	bool uses_font_and_text_color = control.UsesFontAndTextColor();
+	if (uses_font_and_text_color) // Must check this to avoid corrupting union_hbitmap for PIC controls.
+	{
+		if (opt.color == CLR_INVALID) // No color was specified in options param.
+			opt.color = mCurrentColor;
+		if (control.UsesUnionColor()) // Must check this to avoid corrupting other union members.
+			control.union_color = opt.color;
+	}
 	if (opt.color_bk == CLR_INVALID // No bk color was specified in options param.
 		&& aControlType != GUI_CONTROL_STATUSBAR) // And the control obeys the current Gui color.  Status bars don't obey it because it seems slightly less desirable for most people, and also because system default bar color might be diff. than system default win color on some themes.
 	{
 		// Since bkgnd color was not explicitly specified in options, use the current background color.
 		opt.color_bk = aControlType == GUI_CONTROL_PROGRESS ? mBackgroundColorWin : mBackgroundColorCtl;
 	}
-	//else leave it as invalid so that ControlSetListView/TreeView/ProgressOptions() etc. won't bother changing it.
-	if (opt.color_bk == CLR_DEFAULT) // i.e. the options list explicitly specified BackgroundDefault, or it was set above.
+	// If either color is CLR_DEFAULT, that would be either because the options contained
+	// cDefault/BackgroundDefault, or because the Gui's current text/background color has
+	// not been set.  In either case, set it to CLR_INVALID to indicate "no change needed".
+	if (opt.color == CLR_DEFAULT)
+		opt.color = CLR_INVALID;
+	if (opt.color_bk == CLR_DEFAULT)
 	{
 		if (aControlType != GUI_CONTROL_TREEVIEW) // v1.1.08: Always set the back-color of a TreeView, otherwise it sends WM_CTLCOLOREDIT on Win2k/XP.
-			opt.color_bk = CLR_INVALID; // Tell things like ControlSetListViewOptions "no color change needed".
+			opt.color_bk = CLR_INVALID;
 	}
 
 	// Change for v1.0.45 (buttons) and v1.0.47.04 (checkboxes and radios): Under some desktop themes and
@@ -2899,7 +2911,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// override the background color of the control's interior, at least when an XP theme is in effect.
 		if (control.background_brush
 			|| mBackgroundBrushWin && control.background_color != CLR_DEFAULT
-			|| control.union_color != CLR_DEFAULT)
+			|| IS_AN_ACTUAL_COLOR(opt.color))
 		{
 			style |= TCS_OWNERDRAWFIXED;
 			// Even if use_theme is true, the theme won't be applied due to the above style.
@@ -3885,7 +3897,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				SendMessage(control.hwnd, LVM_SETVIEW, LV_VIEW_TILE, 0);
 			if (opt.listview_style) // This is a third set of styles that exist in addition to normal & extended.
 				ListView_SetExtendedListViewStyle(control.hwnd, opt.listview_style); // No return value. Will have no effect on Win95/NT that lack comctl32.dll 4.70+ distributed with MSIE 3.x.
-			ControlSetListViewOptions(control, opt); // Relies on adjustments to opt.color_changed and color_bk done higher above.
+			ControlSetListViewOptions(control, opt); // Relies on adjustments to opt.color and color_bk done higher above.
 
 			if (opt.height == COORD_UNSPECIFIED) // Adjust the control's size to fit opt.row_count rows.
 			{
@@ -3982,7 +3994,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				// SetWindowLong) after you create the tree-view control and before you populate the tree.
 				// Otherwise, the checkboxes might appear unchecked, depending on timing issues.
 				SetWindowLong(control.hwnd, GWL_STYLE, style | TVS_CHECKBOXES);
-			ControlSetTreeViewOptions(control, opt); // Relies on adjustments to opt.color_changed and color_bk done higher above.
+			ControlSetTreeViewOptions(control, opt); // Relies on adjustments to opt.color and color_bk done higher above.
 			if (opt.himagelist) // Currently only supported upon creation, not via GuiControl, since in that case the decision of whether to destroy the old imagelist would be uncertain.
 				TreeView_SetImageList(control.hwnd, opt.himagelist, TVSIL_NORMAL); // Currently no error reporting.
 
@@ -4090,8 +4102,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			if (opt.choice) // The option "ChooseYYYYMMDD" was present and valid (or ChooseNone was present, choice==2)
 				DateTime_SetSystemtime(control.hwnd, opt.choice == 1 ? GDT_VALID : GDT_NONE, opt.sys_time);
 			//else keep default, which is although undocumented appears to be today's date+time, which certainly is the expected default.
-			if (control.union_color != CLR_DEFAULT)
-				DateTime_SetMonthCalColor(control.hwnd, MCSC_TEXT, control.union_color);
+			if (IS_AN_ACTUAL_COLOR(opt.color))
+				DateTime_SetMonthCalColor(control.hwnd, MCSC_TEXT, opt.color);
 			// Note: The DateTime_SetMonthCalFont() macro is never used because apparently it's not required
 			// to set the font, or even to repaint.
 		}
@@ -4129,8 +4141,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 					MonthCal_SetCurSel(control.hwnd, opt.sys_time);
 			}
 			//else keep default, which is although undocumented appears to be today's date+time, which certainly is the expected default.
-			if (control.union_color != CLR_DEFAULT)
-				MonthCal_SetColor(control.hwnd, MCSC_TEXT, control.union_color);
+			if (IS_AN_ACTUAL_COLOR(opt.color))
+				MonthCal_SetColor(control.hwnd, MCSC_TEXT, opt.color);
 			GUI_SETFONT  // Required before asking it about its month size.
 			if ((opt.width == COORD_UNSPECIFIED || opt.height == COORD_UNSPECIFIED)
 				&& MonthCal_GetMinReqRect(control.hwnd, &rect))
@@ -5088,8 +5100,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 {
 	// If control type uses aControl's union for something other than color, communicate the chosen color
 	// back through a means that doesn't corrupt the union:
-	COLORREF &color_main = (aControl.type == GUI_CONTROL_LISTVIEW || aControl.type == GUI_CONTROL_PIC)
-		? aOpt.color_listview : aControl.union_color;
 	LPTSTR next_option, option_end;
 	TCHAR orig_char;
 	bool adding; // Whether this option is being added (+) or removed (-).
@@ -6103,11 +6113,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				switch (ctoupper(next_option[-1]))
 				{
 				case 'C':
-					if (!adding && aControl.type != GUI_CONTROL_PIC && color_main != CLR_DEFAULT)
-					{
-						color_main = CLR_DEFAULT; // i.e. treat "-C" as return to the default color. color_main is a reference to the right struct member.
-						aOpt.color_changed = true;
-					}
+					if (!adding)
+						aOpt.color = CLR_DEFAULT; // i.e. use system default even if mCurrentColor is non-default.
 					break;
 				case 'G':
 					ClearEventHandler(aControl.event_handler);
@@ -6162,20 +6169,12 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				break;
 
 			case 'C':  // Color
-				if (aControl.type == GUI_CONTROL_PIC) // Don't corrupt the union's hbitmap member.
-					break;
-				COLORREF new_color;
-				new_color = ColorNameToBGR(next_option);
-				if (new_color == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
+				aOpt.color = ColorNameToBGR(next_option);
+				if (aOpt.color == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
 					// It seems _tcstol() automatically handles the optional leading "0x" if present:
-					new_color = rgb_to_bgr(_tcstol(next_option, NULL, 16));
+					aOpt.color = rgb_to_bgr(_tcstol(next_option, NULL, 16));
 					// if next_option did not contain something hex-numeric, black (0x00) will be assumed,
 					// which seems okay given how rare such a problem would be.
-				if (color_main != new_color || &color_main == &aOpt.color_listview) // Always indicate that it changed if it's not a stored attribute of the control (so that cDefault can be detected).
-				{
-					color_main = new_color; // color_main is a reference to the right struct member.
-					aOpt.color_changed = true;
-				}
 				break;
 
 			case 'W':
@@ -6645,6 +6644,13 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			break;
 		}
 
+		if (aOpt.color != CLR_INVALID) // Explicit color change was requested.
+		{
+			// ListView and TreeView controls were already handled above, but are also supported here.
+			ControlSetTextColor(aControl, aOpt.color);
+			do_invalidate_rect = true;
+		}
+
 		if (aOpt.redraw)
 		{
 			SendMessage(aControl.hwnd, WM_SETREDRAW, aOpt.redraw == CONDITION_TRUE, 0);
@@ -6675,6 +6681,7 @@ void GuiType::ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aC
 		aOpt.listview_view = -1;  // Indicate "unspecified" so that changes can be detected.
 	}
 	aOpt.x = aOpt.y = aOpt.width = aOpt.height = COORD_UNSPECIFIED;
+	aOpt.color = CLR_INVALID;
 	aOpt.color_bk = CLR_INVALID;
 	// Above: If it stays unaltered, CLR_INVALID means "leave color as it is".  This is for
 	// use with "GuiControl, +option" so that ControlSetProgressOptions() and others know that
@@ -6682,7 +6689,6 @@ void GuiType::ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aC
 	// for background color but not bar color is that bar_color is stored as a control attribute,
 	// but to save memory, background color is not.  In addition, there is no good way to ask a
 	// progress control what its background color currently is.
-	aOpt.color_listview = CLR_DEFAULT; // But this one uses DEFAULT vs. INVALID because it has simpler logic.
 }
 
 
@@ -9647,10 +9653,14 @@ void GuiType::ControlSetListViewOptions(GuiControlType &aControl, GuiControlOpti
 			// is deferred until later by setting this flag:
 			aControl.union_lv_attrib->row_count_hint = aOpt.limit;
 	}
-	if (aOpt.color_changed || aOpt.color_bk != CLR_INVALID)
+	if (aOpt.color != CLR_INVALID || aOpt.color_bk != CLR_INVALID)
 	{
-		if (aOpt.color_changed)
-			ListView_SetTextColor(aControl.hwnd, aOpt.color_listview);
+		if (aOpt.color != CLR_INVALID) // Explicit color change was requested.
+		{
+			// Although MSDN doesn't say, ListView_SetTextColor() appears to support CLR_DEFAULT.
+			ListView_SetTextColor(aControl.hwnd, aOpt.color);
+			aOpt.color = CLR_INVALID; // Let ControlParseOptions() know we handled it.
+		}
 		if (aOpt.color_bk != CLR_INVALID) // Explicit color change was requested.
 		{
 			// Making both the same seems the best default because BkColor only applies to the portion
@@ -9676,12 +9686,13 @@ void GuiType::ControlSetTreeViewOptions(GuiControlType &aControl, GuiControlOpti
 // Caller has ensured that aOpt.color_bk is CLR_INVALID if no change should be made to the
 // current background color.
 {
-	if (aOpt.color_changed)
-		TreeView_SetTextColor(aControl.hwnd, aControl.union_color);
-	if (aOpt.color_bk != CLR_INVALID) // Explicit color change was requested.
-		// TreeView_SetBkColor() treats CLR_DEFAULT as black.  Therefore, use GetSysColor(COLOR_WINDOW),
-		// which is probably the system's default TreeView background.
-		TreeView_SetBkColor(aControl.hwnd, (aOpt.color_bk == CLR_DEFAULT) ? GetSysColor(COLOR_WINDOW) : aOpt.color_bk);
+	if (aOpt.color != CLR_INVALID) // Explicit color change was requested.
+	{
+		TreeView_SetTextColor(aControl.hwnd, aOpt.color == CLR_DEFAULT ? -1 : aOpt.color); // Must pass -1 rather than CLR_DEFAULT for TreeView controls.
+		aOpt.color = CLR_INVALID; // Let ControlParseOptions() know we handled it.
+	}
+	if (aOpt.color_bk != CLR_INVALID)
+		TreeView_SetBkColor(aControl.hwnd, aOpt.color_bk == CLR_DEFAULT ? -1 : aOpt.color_bk);
 	// Disabled because it apparently is not supported on XP:
 	//if (aOpt.tabstop_count)
 	//	// Although TreeView_GetIndent() confirms that the following takes effect, it doesn't seem to 
@@ -9703,8 +9714,8 @@ void GuiType::ControlSetProgressOptions(GuiControlType &aControl, GuiControlOpti
 	// If any options are present that cannot be manifest while a visual theme is in effect, ensure any
 	// such theme is removed from the control (currently, once removed it is never put back on):
 	// Override the default so that colors/smooth can be manifest even when non-classic theme is in effect.
-	if (aControl.union_color != CLR_DEFAULT
-		|| !(aOpt.color_bk == CLR_DEFAULT || aOpt.color_bk == CLR_INVALID)
+	if (   IS_AN_ACTUAL_COLOR(aOpt.color)
+		|| IS_AN_ACTUAL_COLOR(aOpt.color_bk)
 		|| (aStyle & PBS_SMOOTH))
 		MySetWindowTheme(aControl.hwnd, L"", L""); // Remove theme if options call for something theme can't show.
 
@@ -9718,8 +9729,8 @@ void GuiType::ControlSetProgressOptions(GuiControlType &aControl, GuiControlOpti
 			SendMessage(aControl.hwnd, PBM_SETRANGE32, aOpt.range_min, aOpt.range_max);
 	}
 
-	if (aOpt.color_changed)
-		SendMessage(aControl.hwnd, PBM_SETBARCOLOR, 0, aControl.union_color);
+	if (aOpt.color != CLR_INVALID) // Explicit color change was requested.
+		SendMessage(aControl.hwnd, PBM_SETBARCOLOR, 0, aOpt.color);
 
 	if (aOpt.color_bk != CLR_INVALID) // Explicit color change was requested.
 		SendMessage(aControl.hwnd, PBM_SETBKCOLOR, 0, aOpt.color_bk);
