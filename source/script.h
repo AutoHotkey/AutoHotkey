@@ -2289,6 +2289,7 @@ struct GuiControlType : public ObjectBase
 		// Note: Pic controls cannot obey the text color, but they can obey the window's background
 		// color if the picture's background is transparent (at least in the case of icons on XP).
 		lv_attrib_type *union_lv_attrib; // For ListView: Some attributes and an array of columns.
+		IObject *union_object; // For ActiveX.
 	};
 
 	static LPTSTR sTypeNames[];

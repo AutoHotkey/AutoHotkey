@@ -76,7 +76,7 @@ GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
 		/*Tab*/        TYPE_MSGBKCOLOR,
 		/*Tab2*/       0, // Never used since it is changed to TAB at an early stage.
 		/*Tab3*/       0, // As above.
-		/*ActiveX*/    TYPE_HAS_NO_TEXT | TYPE_NO_SUBMIT,
+		/*ActiveX*/    TYPE_HAS_NO_TEXT | TYPE_NO_SUBMIT | TYPE_RESERVE_UNION,
 		/*Link*/       TYPE_MSGBKCOLOR | TYPE_NO_SUBMIT,
 		/*Custom*/     TYPE_MSGBKCOLOR | TYPE_NO_SUBMIT, // Custom controls *may* use WM_CTLCOLOR.
 		/*StatusBar*/  TYPE_SETBKCOLOR | TYPE_NO_SUBMIT,
@@ -2183,7 +2183,9 @@ void GuiControlType::Dispose()
 	}
 	else if (type == GUI_CONTROL_LISTVIEW) // It was ensured at an earlier stage that union_lv_attrib != NULL.
 		free(union_lv_attrib);
-	//else do nothing, since it isn't the right type to have a valid union_hbitmap member.
+	else if (type == GUI_CONTROL_ACTIVEX)
+		union_object->Release();
+	//else do nothing, since this type has nothing more than a color stored in the union.
 	if (background_brush)
 		DeleteObject(background_brush);
 	gui->ClearEventHandler(event_handler);
@@ -4429,15 +4431,17 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		if (control.hwnd = CreateWindowEx(exstyle, _T("AtlAxWin"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
-			IObject *activex_obj;
-			// This is done even if no output_var, to ensure the control was successfully created:
-			if (  !(activex_obj = ControlGetActiveX(control.hwnd))  )
+			// A reference to the object is kept for two reasons:
+			//  1) So Ctrl.Value can return the same wrapper object each time.
+			//  2) To ensure that if the script subscribes to events with ComObjConnect(),
+			//     they will continue to work as long as the GUI exists, rather than being
+			//     disconnected the moment the script releases its reference.
+			if (  !(control.union_object = ControlGetActiveX(control.hwnd))  )
 			{
 				DestroyWindow(control.hwnd);
 				control.hwnd = NULL;
 				break;
 			}
-			activex_obj->Release(); // The script can retrieve it later via GuiControl.Value.
 		}
 		break;
 	}
@@ -7706,10 +7710,8 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 	case GUI_CONTROL_PROGRESS: return ControlGetProgress(aResultToken, aControl);
 
 	case GUI_CONTROL_ACTIVEX:
-		// Below returns a new ComObject wrapper:
-		if (IObject *activex_obj = ControlGetActiveX(aControl.hwnd))
-			_o_return(activex_obj);
-		_o_return_empty;
+		aControl.union_object->AddRef();
+		_o_return(aControl.union_object);
 		
 	// Already handled in the switch() above:
 	//case GUI_CONTROL_DATETIME:
