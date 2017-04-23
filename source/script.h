@@ -2296,16 +2296,31 @@ struct GuiControlType : public ObjectBase
 	static GuiControls ConvertTypeName(LPTSTR aTypeName);
 	LPTSTR GetTypeName();
 
+	// An array of these attributes is used in place of several long switch() statements,
+	// to reduce code size and possibly improve performance:
+	enum TypeAttribType
+	{
+		TYPE_SUPPORTS_BGTRANS = 0x01, // Supports +BackgroundTrans.
+		TYPE_SUPPORTS_BGCOLOR = 0x02, // Supports +Background followed by a color value.
+		TYPE_REQUIRES_BGBRUSH = 0x04, // Requires a brush to be created to implement background color.
+		TYPE_MSGBKCOLOR = TYPE_SUPPORTS_BGCOLOR | TYPE_REQUIRES_BGBRUSH, // Supports background color by responding to WM_CTLCOLOR, WM_ERASEBKGND or WM_DRAWITEM.
+		TYPE_SETBKCOLOR = TYPE_SUPPORTS_BGCOLOR, // Supports setting a background color by sending it a message.
+		TYPE_NO_SUBMIT = 0x08, // Doesn't accept user input, or is excluded from Submit() for some other reason.
+	};
+	typedef UCHAR TypeAttribs;
+	TypeAttribs TypeHasAttrib(TypeAttribs aAttrib);
+
 	bool SupportsBackgroundTrans()
 	{
-		switch (type)
-		{
+		return TypeHasAttrib(TYPE_SUPPORTS_BGTRANS);
+		//switch (type)
+		//{
 		// Supported via WM_CTLCOLORSTATIC:
-		case GUI_CONTROL_TEXT:
-		case GUI_CONTROL_PIC:
-		case GUI_CONTROL_GROUPBOX:
-		case GUI_CONTROL_BUTTON:
-			return true;
+		//case GUI_CONTROL_TEXT:
+		//case GUI_CONTROL_PIC:
+		//case GUI_CONTROL_GROUPBOX:
+		//case GUI_CONTROL_BUTTON:
+		//	return true;
 		//case GUI_CONTROL_CHECKBOX:     Checkbox and radios with trans background have problems with
 		//case GUI_CONTROL_RADIO:        their focus rects being drawn incorrectly.
 		//case GUI_CONTROL_LISTBOX:      These are also a problem, at least under some theme settings.
@@ -2314,7 +2329,6 @@ struct GuiControlType : public ObjectBase
 		//case GUI_CONTROL_SLIDER:       These are a problem under both classic and non-classic themes.
 		//case GUI_CONTROL_COMBOBOX:
 		//case GUI_CONTROL_LINK:         BackgroundTrans would have no effect.
-		//case GUI_CONTROL_BUTTON:       Can't reach this point because WM_CTLCOLORBTN is not handled above.
 		//case GUI_CONTROL_LISTVIEW:     Can't reach this point because WM_CTLCOLORxxx is never received for it.
 		//case GUI_CONTROL_TREEVIEW:     Same (verified).
 		//case GUI_CONTROL_PROGRESS:     Same (verified).
@@ -2324,57 +2338,24 @@ struct GuiControlType : public ObjectBase
 		//case GUI_CONTROL_HOTKEY:       Same (verified).
 		//case GUI_CONTROL_TAB:          Same.
 		//case GUI_CONTROL_STATUSBAR:    Its text fields (parts) are its children, not ours, so its window proc probably receives WM_CTLCOLORSTATIC, not ours.
-		default:
-			return false; // Prohibit the TRANS setting for the above control types.
-		}
+		//default:
+		//	return false; // Prohibit the TRANS setting for the above control types.
+		//}
 	}
 
 	bool SupportsBackgroundColor()
 	{
-		switch (type)
-		{
-		case GUI_CONTROL_DATETIME:
-		case GUI_CONTROL_MONTHCAL:
-		case GUI_CONTROL_HOTKEY:
-		case GUI_CONTROL_UPDOWN:
-		case GUI_CONTROL_ACTIVEX:
-			return false;
-		//case GUI_CONTROL_TEXT:
-		//case GUI_CONTROL_PIC:
-		//case GUI_CONTROL_GROUPBOX: // Label only
-		//case GUI_CONTROL_BUTTON: // Border only (Win10 with theme)
-		//case GUI_CONTROL_CHECKBOX:
-		//case GUI_CONTROL_RADIO:
-		//case GUI_CONTROL_DROPDOWNLIST: // Main control only; requires -Theme
-		//case GUI_CONTROL_COMBOBOX: // Main control only
-		//case GUI_CONTROL_LISTBOX:
-		//case GUI_CONTROL_LISTVIEW:
-		//case GUI_CONTROL_TREEVIEW:
-		//case GUI_CONTROL_EDIT:
-		//case GUI_CONTROL_SLIDER:
-		//case GUI_CONTROL_PROGRESS:
-		//case GUI_CONTROL_TAB:
-		//case GUI_CONTROL_LINK:
-		//case GUI_CONTROL_CUSTOM: // Maybe
-		//case GUI_CONTROL_STATUSBAR:
-		default:
-			return true;
-		}
+		return TypeHasAttrib(TYPE_SUPPORTS_BGCOLOR);
 	}
 
 	bool RequiresBackgroundBrush()
-	// Caller has verified this control supports custom background colors.
 	{
-		switch (type)
-		{
-		case GUI_CONTROL_LISTVIEW:
-		case GUI_CONTROL_TREEVIEW:
-		case GUI_CONTROL_PROGRESS:
-		case GUI_CONTROL_STATUSBAR:
-			return false;
-		default:
-			return true;
-		}
+		return TypeHasAttrib(TYPE_REQUIRES_BGBRUSH);
+	}
+
+	bool HasSubmittableValue()
+	{
+		return !TypeHasAttrib(TYPE_NO_SUBMIT);
 	}
 
 	void Initialize(GuiType* owner)

@@ -52,6 +52,38 @@ LPTSTR GuiControlType::GetTypeName()
 	return sTypeNames[type];
 }
 
+GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
+{
+	static TypeAttribs sAttrib[] = { 0,
+		/*Text*/       TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT,
+		/*Pic*/        TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT,
+		/*GroupBox*/   TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT, // Background affects only the label.
+		/*Button*/     TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT, // Background affects only the button's border, on Windows 10.
+		/*CheckBox*/   TYPE_MSGBKCOLOR,
+		/*Radio*/      TYPE_MSGBKCOLOR | TYPE_NO_SUBMIT, // No-submit: Radio controls are handled separately, by group.
+		/*DDL*/        TYPE_MSGBKCOLOR, // Background affects only the main control, and requires -Theme.
+		/*ComboBox*/   TYPE_MSGBKCOLOR, // Background affects only the main control.
+		/*ListBox*/    TYPE_MSGBKCOLOR,
+		/*ListView*/   TYPE_SETBKCOLOR | TYPE_NO_SUBMIT,
+		/*TreeView*/   TYPE_SETBKCOLOR | TYPE_NO_SUBMIT,
+		/*Edit*/       TYPE_MSGBKCOLOR,
+		/*DateTime*/   0,
+		/*MonthCal*/   0,
+		/*Hotkey*/     0,
+		/*UpDown*/     0,
+		/*Slider*/     TYPE_MSGBKCOLOR,
+		/*Progress*/   TYPE_SETBKCOLOR | TYPE_NO_SUBMIT,
+		/*Tab*/        TYPE_MSGBKCOLOR,
+		/*Tab2*/       0, // Never used since it is changed to TAB at an early stage.
+		/*Tab3*/       0, // As above.
+		/*ActiveX*/    TYPE_NO_SUBMIT,
+		/*Link*/       TYPE_MSGBKCOLOR | TYPE_NO_SUBMIT,
+		/*Custom*/     TYPE_MSGBKCOLOR | TYPE_NO_SUBMIT, // Custom controls *may* use WM_CTLCOLOR.
+		/*StatusBar*/  TYPE_SETBKCOLOR | TYPE_NO_SUBMIT,
+	};
+	return sAttrib[type] & aAttrib;
+}
+
 
 // Helper function used to convert a token to a script object.
 static Object* TokenToScriptObject(ExprTokenType &token)
@@ -7537,21 +7569,8 @@ ResultType GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 		if (control.name == NULL) // Skip the control if it does not have a name
 			continue;
 		
-		switch (control.type)
+		if (control.HasSubmittableValue())
 		{
-		case GUI_CONTROL_TEXT:
-		case GUI_CONTROL_PIC:
-		case GUI_CONTROL_GROUPBOX:
-		case GUI_CONTROL_BUTTON:
-		case GUI_CONTROL_RADIO: // Radio controls are handled separately, by group.
-		case GUI_CONTROL_LISTVIEW: // LV and TV do not obey Submit. Instead, more flexible methods are available to the script.
-		case GUI_CONTROL_TREEVIEW: //
-		case GUI_CONTROL_PROGRESS:
-		case GUI_CONTROL_ACTIVEX:
-		case GUI_CONTROL_LINK:
-			// This control doesn't accept user input, or it must be retrieved a different way.
-			break;
-		default:
 			TCHAR temp_buf[MAX_NUMBER_SIZE];
 			ResultToken value;
 			value.InitResult(temp_buf);
