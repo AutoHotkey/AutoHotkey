@@ -27,6 +27,32 @@ GNU General Public License for more details.
 static ATOM sGuiWinClass;
 
 
+LPTSTR GuiControlType::sTypeNames[] = { GUI_CONTROL_TYPE_NAMES };
+
+GuiControls GuiControlType::ConvertTypeName(LPTSTR aTypeName)
+{
+	for (int i = 1; i < _countof(sTypeNames); ++i) // Start at 1 because 0 is GUI_CONTROL_INVALID.
+		if (!_tcsicmp(aTypeName, sTypeNames[i]))
+			return (GuiControls)i;
+	if (!_tcsicmp(aTypeName, _T("DropDownList"))) return GUI_CONTROL_DROPDOWNLIST;
+	if (!_tcsicmp(aTypeName, _T("Picture"))) return GUI_CONTROL_PIC;
+	return GUI_CONTROL_INVALID;
+}
+
+LPTSTR GuiControlType::GetTypeName()
+{
+	if (type == GUI_CONTROL_TAB)
+	{
+		// Tab2 and Tab3 are changed into Tab at an early stage.
+		if (attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR)
+			return sTypeNames[GUI_CONTROL_TAB2];
+		if (GetProp(hwnd, _T("ahk_dlg")))
+			return sTypeNames[GUI_CONTROL_TAB3];
+	}
+	return sTypeNames[type];
+}
+
+
 // Helper function used to convert a token to a script object.
 static Object* TokenToScriptObject(ExprTokenType &token)
 {
@@ -92,7 +118,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			--aParamCount; // Exclude control type from param count.
 			++aParam; // As above, but for the param array.
 		}
-		ctrl_type = Line::ConvertGuiControl(ctrl_type_name);
+		ctrl_type = GuiControlType::ConvertTypeName(ctrl_type_name);
 		if (ctrl_type == GUI_CONTROL_INVALID)
 		{
 			if (name[3])
@@ -566,6 +592,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 	if_member("Gui", P_Gui)
 	if_member("Event", P_Event)
 	if_member("Name", P_Name)
+	if_member("Type", P_Type)
 	if_member("ClassNN", P_ClassNN)
 	if_member("Text", P_Text)
 	if_member("Value", P_Value)
@@ -676,6 +703,11 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 				if (!gui->ControlSetName(*this, ParamIndexToString(0, _f_number_buf)))
 					_o_return_FAIL;
 			_o_return_p(name ? name : _T(""));
+
+		case P_Type:
+			if (IS_INVOKE_SET)
+				_o_throw(ERR_INVALID_USAGE);
+			_o_return_p(GetTypeName());
 
 		case P_Handle:
 			if (IS_INVOKE_SET)

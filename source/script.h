@@ -593,6 +593,15 @@ enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero du
 	, GUI_CONTROL_UPDOWN, GUI_CONTROL_SLIDER, GUI_CONTROL_PROGRESS, GUI_CONTROL_TAB, GUI_CONTROL_TAB2, GUI_CONTROL_TAB3
 	, GUI_CONTROL_ACTIVEX, GUI_CONTROL_LINK, GUI_CONTROL_CUSTOM, GUI_CONTROL_STATUSBAR}; // Kept last to reflect it being bottommost in switch()s (for perf), since not too often used.
 
+#define GUI_CONTROL_TYPE_NAMES  _T(""), \
+	_T("Text"), _T("Pic"), _T("GroupBox"), \
+	_T("Button"), _T("CheckBox"), _T("Radio"), \
+	_T("DDL"), _T("ComboBox"), \
+	_T("ListBox"), _T("ListView"), _T("TreeView"), \
+	_T("Edit"), _T("DateTime"), _T("MonthCal"), _T("Hotkey"), \
+	_T("UpDown"), _T("Slider"), _T("Progress"), _T("Tab"), _T("Tab2"), _T("Tab3"), \
+	_T("ActiveX"), _T("Link"), _T("Custom"), _T("StatusBar")
+
 enum ThreadCommands {THREAD_CMD_INVALID, THREAD_CMD_PRIORITY, THREAD_CMD_INTERRUPT, THREAD_CMD_NOTIMERS};
 
 #define PROCESS_PRIORITY_LETTERS _T("LBNAHR")
@@ -1319,38 +1328,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("MainWindow"))) return MENU_CMD_MAINWINDOW;
 		if (!_tcsicmp(aBuf, _T("NoMainWindow"))) return MENU_CMD_NOMAINWINDOW;
 		return MENU_CMD_INVALID;
-	}
-
-	static GuiControls ConvertGuiControl(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf) return GUI_CONTROL_INVALID;
-		if (!_tcsicmp(aBuf, _T("Text"))) return GUI_CONTROL_TEXT;
-		if (!_tcsicmp(aBuf, _T("Edit"))) return GUI_CONTROL_EDIT;
-		if (!_tcsicmp(aBuf, _T("Button"))) return GUI_CONTROL_BUTTON;
-		if (!_tcsicmp(aBuf, _T("Checkbox"))) return GUI_CONTROL_CHECKBOX;
-		if (!_tcsicmp(aBuf, _T("Radio"))) return GUI_CONTROL_RADIO;
-		if (!_tcsicmp(aBuf, _T("DDL")) || !_tcsicmp(aBuf, _T("DropDownList"))) return GUI_CONTROL_DROPDOWNLIST;
-		if (!_tcsicmp(aBuf, _T("ComboBox"))) return GUI_CONTROL_COMBOBOX;
-		if (!_tcsicmp(aBuf, _T("ListBox"))) return GUI_CONTROL_LISTBOX;
-		if (!_tcsicmp(aBuf, _T("ListView"))) return GUI_CONTROL_LISTVIEW;
-		if (!_tcsicmp(aBuf, _T("TreeView"))) return GUI_CONTROL_TREEVIEW;
-		// Keep those seldom used at the bottom for performance:
-		if (!_tcsicmp(aBuf, _T("UpDown"))) return GUI_CONTROL_UPDOWN;
-		if (!_tcsicmp(aBuf, _T("Slider"))) return GUI_CONTROL_SLIDER;
-		if (!_tcsicmp(aBuf, _T("Progress"))) return GUI_CONTROL_PROGRESS;
-		if (!_tcsicmp(aBuf, _T("Tab"))) return GUI_CONTROL_TAB;
-		if (!_tcsicmp(aBuf, _T("Tab2"))) return GUI_CONTROL_TAB2; // v1.0.47.05: Used only temporarily: becomes TAB vs. TAB2 upon creation.
-		if (!_tcsicmp(aBuf, _T("Tab3"))) return GUI_CONTROL_TAB3; // v1.1.23.00: As above.
-		if (!_tcsicmp(aBuf, _T("GroupBox"))) return GUI_CONTROL_GROUPBOX;
-		if (!_tcsicmp(aBuf, _T("Pic")) || !_tcsicmp(aBuf, _T("Picture"))) return GUI_CONTROL_PIC;
-		if (!_tcsicmp(aBuf, _T("DateTime"))) return GUI_CONTROL_DATETIME;
-		if (!_tcsicmp(aBuf, _T("MonthCal"))) return GUI_CONTROL_MONTHCAL;
-		if (!_tcsicmp(aBuf, _T("Hotkey"))) return GUI_CONTROL_HOTKEY;
-		if (!_tcsicmp(aBuf, _T("StatusBar"))) return GUI_CONTROL_STATUSBAR;
-		if (!_tcsicmp(aBuf, _T("ActiveX"))) return GUI_CONTROL_ACTIVEX;
-		if (!_tcsicmp(aBuf, _T("Link"))) return GUI_CONTROL_LINK;
-		if (!_tcsicmp(aBuf, _T("Custom"))) return GUI_CONTROL_CUSTOM;
-		return GUI_CONTROL_INVALID;
 	}
 
 	static ThreadCommands ConvertThreadCommand(LPTSTR aBuf)
@@ -2315,6 +2292,10 @@ struct GuiControlType : public ObjectBase
 	#define USES_FONT_AND_TEXT_COLOR(type) !(type == GUI_CONTROL_PIC || type == GUI_CONTROL_UPDOWN \
 		|| type == GUI_CONTROL_SLIDER || type == GUI_CONTROL_PROGRESS)
 
+	static LPTSTR sTypeNames[];
+	static GuiControls ConvertTypeName(LPTSTR aTypeName);
+	LPTSTR GetTypeName();
+
 	bool SupportsBackgroundTrans()
 	{
 		switch (type)
@@ -2424,6 +2405,7 @@ struct GuiControlType : public ObjectBase
 		P_Gui,
 		P_Event,
 		P_Name,
+		P_Type,
 		P_ClassNN,
 		P_Text,
 		P_Value,
