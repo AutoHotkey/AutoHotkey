@@ -196,7 +196,6 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	if_member("MarginX", P_MarginX)
 	if_member("MarginY", P_MarginY)
 	if_member("BgColor", P_BgColor)
-	if_member("CtrlColor", P_CtrlColor)
 	if_member("Pos", P_Pos)
 	if_member("ClientPos", P_ClientPos)
 	if_member("Name", P_Name)
@@ -370,10 +369,9 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			_o_return(Unscale(margin));
 		}
 		case P_BgColor:
-		case P_CtrlColor:
 		{
-			COLORREF &color = member == P_BgColor ? mBackgroundColorWin : mBackgroundColorCtl;
-			HBRUSH   &brush = member == P_BgColor ? mBackgroundBrushWin : mBackgroundBrushCtl;
+			COLORREF &color = mBackgroundColorWin; // Future use: code reuse for TextColor property?
+			HBRUSH   &brush = mBackgroundBrushWin;
 
 			if (IS_INVOKE_SET)
 			{
@@ -382,16 +380,6 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 					AssignColor(rgb_to_bgr((COLORREF)ParamIndexToInt64(0)), color, brush);
 				else
 					AssignColor(ParamIndexToString(0), color, brush);
-
-				// As documented, ListView_SetTextBkColor/ListView_SetBkColor are not called.  Primary reasons:
-				// 1) Allows any custom color that was explicitly specified via ListView control options
-				//    to stay in effect rather than being overridden by this change.  You could argue that this
-				//    could be detected by asking the control its background color and if it matches the previous
-				//    mBackgroundColorCtl (which might be CLR_DEFAULT?), it's 99% likely it was not an
-				//    individual/explicit custom color and thus should be changed here.  But that would be even
-				//    more complexity so it seems better to keep it simple.
-				// 2) Reduce code size.
-				// The same also probably applies to TreeView as well.
 
 				if (IsWindowVisible(mHwnd))
 					// Force the window to repaint so that colors take effect immediately.
@@ -2134,8 +2122,6 @@ void GuiType::Dispose()
 
 	if (mBackgroundBrushWin)
 		DeleteObject(mBackgroundBrushWin);
-	if (mBackgroundBrushCtl)
-		DeleteObject(mBackgroundBrushCtl);
 	if (mHdrop)
 		DragFinish(mHdrop);
 	
@@ -2799,12 +2785,11 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		if (control.UsesUnionColor()) // Must check this to avoid corrupting other union members.
 			control.union_color = opt.color;
 	}
-	if (opt.color_bk == CLR_INVALID // No bk color was specified in options param.
-		&& aControlType != GUI_CONTROL_STATUSBAR) // And the control obeys the current Gui color.  Status bars don't obey it because it seems slightly less desirable for most people, and also because system default bar color might be diff. than system default win color on some themes.
-	{
-		// Since bkgnd color was not explicitly specified in options, use the current background color.
-		opt.color_bk = aControlType == GUI_CONTROL_PROGRESS ? mBackgroundColorWin : mBackgroundColorCtl;
-	}
+	// This is not done because it would be inconsistent with the other controls (Progress
+	// does not react to changes in the window color) and because applying a background
+	// color requires removing the control's theme:
+	//if (aControlType == GUI_CONTROL_PROGRESS && opt.color_bk == CLR_INVALID)
+	//	opt.color_bk = mBackgroundColorWin; // Use the current background color.
 	// If either color is CLR_DEFAULT, that would be either because the options contained
 	// cDefault/BackgroundDefault, or because the Gui's current text/background color has
 	// not been set.  In either case, set it to CLR_INVALID to indicate "no change needed".
@@ -2812,7 +2797,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		opt.color = CLR_INVALID;
 	if (opt.color_bk == CLR_DEFAULT)
 	{
-		if (aControlType != GUI_CONTROL_TREEVIEW) // v1.1.08: Always set the back-color of a TreeView, otherwise it sends WM_CTLCOLOREDIT on Win2k/XP.
+		if (aControlType != GUI_CONTROL_TREEVIEW) // v1.1.08: Always set the back-color of a TreeView, otherwise it sends WM_CTLCOLOREDIT on Win2k/XP (or if it is not themed).
 			opt.color_bk = CLR_INVALID;
 	}
 
@@ -4367,9 +4352,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		if (control.hwnd = CreateWindowEx(exstyle, PROGRESS_CLASS, _T(""), style
 			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
-			// Progress bars don't default to mBackgroundColorCtl for their background color because it
-			// would be undesired by the user 99% of the time (it usually would look bad since the bar's
-			// bk-color almost always matches that of its parent window).
 			ControlSetProgressOptions(control, opt, style); // Fix for v1.0.27.01: This must be done prior to the below.
 			// This has been confirmed though testing, even when the range is dynamically changed
 			// after the control is created to something that no longer includes the bar's current
@@ -9791,8 +9773,9 @@ void GuiType::ControlGetBkColor(GuiControlType &aControl, bool aUseWindowColor, 
 	}
 	else
 	{
-		aBrush = mBackgroundBrushCtl;
-		aColor = mBackgroundColorCtl;
+		// Caller requires these initialised.
+		aBrush = NULL;
+		aColor = CLR_DEFAULT;
 	}
 }
 

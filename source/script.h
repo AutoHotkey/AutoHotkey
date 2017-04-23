@@ -2483,7 +2483,6 @@ public:
 	// response to certain types of standard actions:
 	GuiControlType **mControl; // Will become an array of controls when the window is first created.
 	HBRUSH mBackgroundBrushWin;   // Brush corresponding to mBackgroundColorWin.
-	HBRUSH mBackgroundBrushCtl;   // Brush corresponding to mBackgroundColorCtl.
 	HDROP mHdrop;                 // Used for drag and drop operations.
 	HICON mIconEligibleForDestruction; // The window's icon, which can be destroyed when the window is destroyed if nothing else is using it.
 	HICON mIconEligibleForDestructionSmall; // L17: A window may have two icons: ICON_SMALL and ICON_BIG.
@@ -2499,7 +2498,6 @@ public:
 	int mCurrentFontIndex;
 	COLORREF mCurrentColor;       // The default color of text in controls.
 	COLORREF mBackgroundColorWin; // The window's background color itself.
-	COLORREF mBackgroundColorCtl; // Background color for controls.
 	int mMarginX, mMarginY, mPrevX, mPrevY, mPrevWidth, mPrevHeight, mMaxExtentRight, mMaxExtentDown
 		, mSectionX, mSectionY, mMaxExtentRightSection, mMaxExtentDownSection;
 	LONG mMinWidth, mMinHeight, mMaxWidth, mMaxHeight;
@@ -2551,7 +2549,6 @@ public:
 		P_Control,
 		P_FocusedCtrl,
 		P_BgColor,
-		P_CtrlColor,
 		P_MarginX,
 		P_MarginY,
 		P_Menu,
@@ -2580,7 +2577,6 @@ public:
 		, mTabControlCount(0), mCurrentTabControlIndex(MAX_TAB_CONTROLS), mCurrentTabIndex(0)
 		, mCurrentColor(CLR_DEFAULT)
 		, mBackgroundColorWin(CLR_DEFAULT), mBackgroundBrushWin(NULL)
-		, mBackgroundColorCtl(CLR_DEFAULT), mBackgroundBrushCtl(NULL)
 		, mHdrop(NULL), mIconEligibleForDestruction(NULL), mIconEligibleForDestructionSmall(NULL)
 		, mAccel(NULL)
 		, mMarginX(COORD_UNSPECIFIED), mMarginY(COORD_UNSPECIFIED) // These will be set when the first control is added.
