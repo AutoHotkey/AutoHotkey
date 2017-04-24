@@ -821,23 +821,31 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 
 		case M_Tab_UseTab:
 		{
+			BOOL whole_match = ParamIndexToOptionalBOOL(1, FALSE);
+			int index; // int vs TabControlIndexType for detection of negative/out-of-range values.
+			if (ParamIndexIsOmitted(0)) // Not necessary to use "OrEmpty" because that's handled below.
+				index = -1;
+			else if (TokenIsPureNumeric(*aParam[0]) == SYM_INTEGER)
+				index = ParamIndexToInt(0) - 1; // Convert to zero-based and let 0 indicate "no tab" (-1).
+			else
+			{
+				LPTSTR tab_name = ParamIndexToString(0, _f_number_buf);
+				index = gui->FindTabIndexByName(*this, tab_name, whole_match);
+				if (index == -1 && *tab_name) // Invalid tab name (but "" is a valid way to specify "no tab").
+					index = -2; // Flag it as invalid.
+			}
+			// Validate parameters before making any changes to the Gui's state:
+			if (index < -1 || index >= MAX_TABS_PER_CONTROL)
+				_o_throw(ERR_PARAM1_INVALID);
+
 			TabIndexType prev_tab_index = gui->mCurrentTabIndex;
 			TabControlIndexType prev_tab_control_index = gui->mCurrentTabControlIndex;
 
-			if (ParamIndexIsOmittedOrEmpty(0))
+			if (index == -1)
 				gui->mCurrentTabControlIndex = MAX_TAB_CONTROLS; // i.e. "no tab"
 			else
 			{
 				gui->mCurrentTabControlIndex = tab_index;
-				BOOL exact_match = ParamIndexToOptionalBOOL(1, FALSE);
-				ExprTokenType& param = *aParam[0];
-				TabControlIndexType index = -1;
-				if (TokenIsPureNumeric(param) == SYM_INTEGER)
-					index = (int)TokenToInt64(param)-1;
-				else
-					index = gui->FindTabIndexByName(*this, TokenToString(param, aResultToken.buf), exact_match);
-				if (index < 0 || index > (MAX_TABS_PER_CONTROL - 1))
-					_o_throw(_T("Invalid tab index or name."));
 				if (gui->mCurrentTabIndex != index)
 				{
 					gui->mCurrentTabIndex = index;
