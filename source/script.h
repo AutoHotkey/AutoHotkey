@@ -2308,7 +2308,7 @@ struct GuiControlType : public ObjectBase
 		TYPE_NO_SUBMIT = 0x08, // Doesn't accept user input, or is excluded from Submit() for some other reason.
 		TYPE_HAS_NO_TEXT = 0x10, // Has no text and therefore doesn't use the font or text color.
 		TYPE_RESERVE_UNION = 0x20, // Uses the union for some other purpose, so union_color must not be set.
-		TYPE_USES_BGCOLOR = 0x40, // Uses Gui.BgColor.
+		TYPE_USES_BGCOLOR = 0x40, // Uses Gui.BackColor.
 		TYPE_STATICBACK = TYPE_MSGBKCOLOR | TYPE_USES_BGCOLOR, // For brevity in the attrib array.
 	};
 	typedef UCHAR TypeAttribs;
@@ -2555,7 +2555,7 @@ public:
 		P_Name,
 		P_Control,
 		P_FocusedCtrl,
-		P_BgColor,
+		P_BackColor,
 		P_MarginX,
 		P_MarginY,
 		P_Menu,

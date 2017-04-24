@@ -195,7 +195,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	if_member("Menu", P_Menu)
 	if_member("MarginX", P_MarginX)
 	if_member("MarginY", P_MarginY)
-	if_member("BgColor", P_BgColor)
+	if_member("BackColor", P_BackColor)
 	if_member("Pos", P_Pos)
 	if_member("ClientPos", P_ClientPos)
 	if_member("Name", P_Name)
@@ -368,7 +368,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 				margin = Scale(ParamIndexToInt(0)); // Seems okay to allow negative margins.
 			_o_return(Unscale(margin));
 		}
-		case P_BgColor:
+		case P_BackColor:
 		{
 			COLORREF &color = mBackgroundColorWin; // Future use: code reuse for TextColor property?
 			HBRUSH   &brush = mBackgroundBrushWin;
