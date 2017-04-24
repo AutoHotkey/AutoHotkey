@@ -55,12 +55,12 @@ LPTSTR GuiControlType::GetTypeName()
 GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
 {
 	static TypeAttribs sAttrib[] = { 0,
-		/*Text*/       TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT,
-		/*Pic*/        TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT | TYPE_HAS_NO_TEXT | TYPE_RESERVE_UNION,
-		/*GroupBox*/   TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT, // Background affects only the label.
+		/*Text*/       TYPE_STATICBACK | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT,
+		/*Pic*/        TYPE_STATICBACK | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT | TYPE_HAS_NO_TEXT | TYPE_RESERVE_UNION,
+		/*GroupBox*/   TYPE_STATICBACK | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT, // Background affects only the label.
 		/*Button*/     TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT, // Background affects only the button's border, on Windows 10.
-		/*CheckBox*/   TYPE_MSGBKCOLOR,
-		/*Radio*/      TYPE_MSGBKCOLOR | TYPE_NO_SUBMIT, // No-submit: Radio controls are handled separately, by group.
+		/*CheckBox*/   TYPE_STATICBACK,
+		/*Radio*/      TYPE_STATICBACK | TYPE_NO_SUBMIT, // No-submit: Radio controls are handled separately, by group.
 		/*DDL*/        TYPE_MSGBKCOLOR, // Background affects only the main control, and requires -Theme.
 		/*ComboBox*/   TYPE_MSGBKCOLOR, // Background affects only the main control.
 		/*ListBox*/    TYPE_MSGBKCOLOR,
@@ -71,13 +71,13 @@ GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
 		/*MonthCal*/   0,
 		/*Hotkey*/     0,
 		/*UpDown*/     TYPE_HAS_NO_TEXT,
-		/*Slider*/     TYPE_MSGBKCOLOR | TYPE_HAS_NO_TEXT,
+		/*Slider*/     TYPE_STATICBACK | TYPE_HAS_NO_TEXT,
 		/*Progress*/   TYPE_SETBKCOLOR | TYPE_HAS_NO_TEXT | TYPE_NO_SUBMIT,
-		/*Tab*/        TYPE_MSGBKCOLOR,
+		/*Tab*/        TYPE_STATICBACK,
 		/*Tab2*/       0, // Never used since it is changed to TAB at an early stage.
 		/*Tab3*/       0, // As above.
 		/*ActiveX*/    TYPE_HAS_NO_TEXT | TYPE_NO_SUBMIT | TYPE_RESERVE_UNION,
-		/*Link*/       TYPE_MSGBKCOLOR | TYPE_NO_SUBMIT,
+		/*Link*/       TYPE_STATICBACK | TYPE_NO_SUBMIT,
 		/*Custom*/     TYPE_MSGBKCOLOR | TYPE_NO_SUBMIT, // Custom controls *may* use WM_CTLCOLOR.
 		/*StatusBar*/  TYPE_SETBKCOLOR | TYPE_NO_SUBMIT,
 	};
@@ -8779,7 +8779,16 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 		HBRUSH bk_brush;
 		COLORREF bk_color;
-		pgui->ControlGetBkColor(*pcontrol, iMsg == WM_CTLCOLORSTATIC, bk_brush, bk_color);
+		bool use_bg_color;
+		// Use mBackgroundColorWin only for specific controls that have no apparent frame.
+		// WM_CTLCOLORSTATIC can be received for Edit, DDL/ComboBox and TreeView (-Theme)
+		// controls when they are disabled, but we use system default colors (or the
+		// control's own background) in those cases for the following reasons:
+		//  - Consistency with ListBox, Hotkey, DateTime, MonthCal and ListView.
+		//  - TreeView looks bad (item backgrounds don't match the control).
+		//  - To match the control's text, which usually takes on the "disabled" color.
+		use_bg_color = iMsg == WM_CTLCOLORSTATIC && pcontrol->UsesGuiBgColor();
+		pgui->ControlGetBkColor(*pcontrol, use_bg_color, bk_brush, bk_color);
 		
 		if (bk_brush)
 		{

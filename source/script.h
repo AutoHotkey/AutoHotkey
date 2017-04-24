@@ -2308,6 +2308,8 @@ struct GuiControlType : public ObjectBase
 		TYPE_NO_SUBMIT = 0x08, // Doesn't accept user input, or is excluded from Submit() for some other reason.
 		TYPE_HAS_NO_TEXT = 0x10, // Has no text and therefore doesn't use the font or text color.
 		TYPE_RESERVE_UNION = 0x20, // Uses the union for some other purpose, so union_color must not be set.
+		TYPE_USES_BGCOLOR = 0x40, // Uses Gui.BgColor.
+		TYPE_STATICBACK = TYPE_MSGBKCOLOR | TYPE_USES_BGCOLOR, // For brevity in the attrib array.
 	};
 	typedef UCHAR TypeAttribs;
 	TypeAttribs TypeHasAttrib(TypeAttribs aAttrib);
@@ -2371,6 +2373,11 @@ struct GuiControlType : public ObjectBase
 		// than to whitelist all controls which could potentially cause a WM_CTLCOLOR
 		// message (or WM_ERASEBKGND/WM_DRAWITEM in the case of Tab).
 		return !TypeHasAttrib(TYPE_RESERVE_UNION);
+	}
+
+	bool UsesGuiBgColor()
+	{
+		return TypeHasAttrib(TYPE_USES_BGCOLOR);
 	}
 
 	void Initialize(GuiType* owner)
