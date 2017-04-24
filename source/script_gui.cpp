@@ -9713,14 +9713,7 @@ void GuiType::ControlSetProgressOptions(GuiControlType &aControl, GuiControlOpti
 		MySetWindowTheme(aControl.hwnd, L"", L""); // Remove theme if options call for something theme can't show.
 
 	if (aOpt.range_min || aOpt.range_max) // Must check like this because although it valid for one to be zero, both should not be.
-	{
-		if (aOpt.range_min > -1 && aOpt.range_min < 0x10000 && aOpt.range_max > -1 && aOpt.range_max < 0x10000)
-			// Since the values fall within the bounds for Win95/NT to support, use the old method
-			// in case Win95/NT lacks MSIE 3.0:
-			SendMessage(aControl.hwnd, PBM_SETRANGE, 0, MAKELPARAM(aOpt.range_min, aOpt.range_max));
-		else
-			SendMessage(aControl.hwnd, PBM_SETRANGE32, aOpt.range_min, aOpt.range_max);
-	}
+		SendMessage(aControl.hwnd, PBM_SETRANGE32, aOpt.range_min, aOpt.range_max);
 
 	if (aOpt.color != CLR_INVALID) // Explicit color change was requested.
 		SendMessage(aControl.hwnd, PBM_SETBARCOLOR, 0, aOpt.color);
