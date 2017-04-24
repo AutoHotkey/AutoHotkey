@@ -1689,7 +1689,7 @@ ResultType GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType 
 			_o_return_empty;
 		int *item = (int *)malloc(sel_count * sizeof(int)); // dynamic since there can be a very large number of items.
 		if (!item)
-			_o_return_empty;
+			_o_throw(ERR_OUTOFMEM);
 		sel_count = SendMessage(aControl.hwnd, LB_GETSELITEMS, (WPARAM)sel_count, (LPARAM)item);
 		if (sel_count < 1)  // 0 or LB_ERR, but both these conditions should be impossible in this case.
 		{
