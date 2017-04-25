@@ -1613,7 +1613,7 @@ ResultType GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType
 	LRESULT index = SendMessage(aControl.hwnd, CB_GETCURSEL, 0, 0); // Get index of currently selected item.
 
 	//   Problem #1:
-	// It seems that any text put into a ComboBox's edit field by typing/pasting or via GuiControl
+	// It seems that any text put into a ComboBox's edit field by typing/pasting or via Ctrl.Text
 	// always resets the current index to -1, even if that text exactly matches an existing item.
 
 	//   Problem #2:
@@ -1624,40 +1624,50 @@ ResultType GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType
 	// but at some point after that the control restores the index to a possibly incorrect value.  This
 	// appears to happen in other programs as well, and has been confirmed on Windows 10 and earlier.
 
-	TCHAR edit_text[1024]; // Since long text is very unusual for a ComboBox item, use a fixed buffer size to minimise code size.
-	int edit_length = GetWindowText(aControl.hwnd, edit_text, _countof(edit_text)); // Zero is valid (the control may be empty).
-	if (edit_length + 1 < _countof(edit_text))
+	int edit_length = GetWindowTextLength(aControl.hwnd); // Zero is valid (the control may be empty).
+	// For simplicity and in case the text is very large, use tmalloc() unconditionally
+	// even though the text is probably very small.  This allocation may be returned below.
+	LPTSTR edit_text = tmalloc(edit_length + 1);
+	if (!edit_text)
+		_o_throw(ERR_OUTOFMEM);
+	edit_length = GetWindowText(aControl.hwnd, edit_text, edit_length + 1);
+	if (index != CB_ERR)
 	{
-		if (index != CB_ERR)
+		// The control returned a valid index, so verify that it matches the edit text.
+		// If a search beginning at the indicated item does not return that item, it must
+		// not be a match.  This approach avoids retrieving the item's text, which reduces
+		// code size.  Performance hasn't been measured, but at a guess, is probably better
+		// when the item matches (as it would 99.9% of the time), and worse in other cases.
+		if (!edit_length)
 		{
-			// The control returned a valid index, so verify that it matches the Edit control's contents.
-			TCHAR item_text[_countof(edit_text)];
-			int item_length = (int)SendMessage(aControl.hwnd, CB_GETLBTEXTLEN, index, 0);
-			if (item_length < _countof(item_text))
-			{
-				if (   item_length < edit_length // It's too short to match (but item_length > edit_length is okay since CB_GETLBTEXTLEN may not be exact).
-					|| SendMessage(aControl.hwnd, CB_GETLBTEXT, index, (LPARAM)item_text) != edit_length // CB_GETLBTEXT returned CB_ERR or the length doesn't match.
-					|| lstrcmpi(item_text, edit_text)  ) // g->StringCaseSense isn't checked because lstrcmpi seems to be consistent with the control's own behaviour (e.g. ä = Ä).
-				{
-					// The current item DOES NOT MATCH the Edit control's contents (see problem #2 above).
-					index = CB_ERR;
-				}
-			}
+			// A different approach is needed in this case since CB_FINDSTRINGEXACT can't
+			// search for an empty string.  This preserves the ability to detect selection
+			// of a specific empty list item, though for simplicity, clearing the edit text
+			// will not match up to an empty list item.
+			if (0 != SendMessage(aControl.hwnd, CB_GETLBTEXTLEN, (WPARAM)index, 0))
+				index = CB_ERR;
 		}
+		else
+		{
+			if (index != SendMessage(aControl.hwnd, CB_FINDSTRINGEXACT, index - 1, (LPARAM)edit_text))
+				index = CB_ERR;
+		}
+	}
+	if (index == CB_ERR)
+	{
+		// Check if the Edit field contains text that exactly matches one of the items in the drop-list.
+		// If it does, that item's position should be retrieved in AltSubmit mode (even for non-AltSubmit
+		// mode, this should be done because the case of the item in the drop-list is usually preferable
+		// to any varying case the user may have manually typed).
+		index = SendMessage(aControl.hwnd, CB_FINDSTRINGEXACT, -1, (LPARAM)edit_text); // It's not case sensitive.
 		if (index == CB_ERR)
 		{
-			// Check if the Edit field contains text that exactly matches one of the items in the drop-list.
-			// If it does, that item's position should be retrieved in AltSubmit mode (even for non-AltSubmit
-			// mode, this should be done because the case of the item in the drop-list is usually preferable
-			// to any varying case the user may have manually typed).
-			index = SendMessage(aControl.hwnd, CB_FINDSTRINGEXACT, -1, (LPARAM)edit_text); // It's not case sensitive.
-			index = index;
+			// edit_text does not match any of the list items, so just return the text.
+			aResultToken.AcceptMem(edit_text, edit_length);
+			return OK;
 		}
-	}  // End section for correcting index.
-
-	if (index == CB_ERR) // CB_FINDSTRINGEXACT either did not find a match or was not attempted because the text is too long.
-		// Get the contents of this ComboBox's Edit.
-		return ControlGetWindowText(aResultToken, aControl);
+	}
+	free(edit_text);
 
 	if (aMode == Value_Mode || (aMode == Submit_Mode && (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))) // Caller wants the position, not the text.
 		_o_return((int)index + 1);
