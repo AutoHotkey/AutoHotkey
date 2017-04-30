@@ -84,6 +84,69 @@ GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
 	return sAttrib[type] & aAttrib;
 }
 
+UCHAR **ConstructEventSupportArray()
+{
+	// This is mostly static data, but I haven't figured out how to construct it with just
+	// an array initialiser (other than by using a fixed size for the sub-array, which
+	// wastes space due to ListView and TreeView having many more events than other types).
+	static UCHAR *raises[_countof(GuiControlType::sTypeNames)];
+	// Not necessary since the array is static and therefore initialised to 0 (NULL):
+	//#define RAISES_NONE(ctrl) \
+	//	raises[ctrl] = NULL;
+	#define RAISES(ctrl, ...) { \
+		static UCHAR events[] = { __VA_ARGS__, 0 }; \
+		raises[ctrl] = events; \
+	}
+
+	RAISES(GUI_CONTROL_TEXT,         GUI_EVENT_CLICK, GUI_EVENT_DBLCLK)
+	RAISES(GUI_CONTROL_PIC,          GUI_EVENT_CLICK, GUI_EVENT_DBLCLK)
+	//RAISES_NONE(GUI_CONTROL_GROUPBOX)
+	RAISES(GUI_CONTROL_BUTTON,       GUI_EVENT_CLICK, GUI_EVENT_DBLCLK)
+	RAISES(GUI_CONTROL_CHECKBOX,     GUI_EVENT_CLICK, GUI_EVENT_DBLCLK)
+	RAISES(GUI_CONTROL_RADIO,        GUI_EVENT_CLICK, GUI_EVENT_DBLCLK)
+	RAISES(GUI_CONTROL_DROPDOWNLIST, GUI_EVENT_CHANGE)
+	RAISES(GUI_CONTROL_COMBOBOX,     GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK)
+	RAISES(GUI_CONTROL_LISTBOX,      GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK)
+	RAISES(GUI_CONTROL_LISTVIEW,     GUI_EVENT_DBLCLK, GUI_EVENT_COLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, 'R', 'D', 'd', 'e', 'I', 'S', 's', 'M', 'C', 'F', 'f', 'K', 'A', 'E')
+	RAISES(GUI_CONTROL_TREEVIEW,     'S', GUI_EVENT_DBLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, 'e', 'D', 'd', 'R', 'F', 'f', 'K', '+', '-', 'E')
+	RAISES(GUI_CONTROL_EDIT,         GUI_EVENT_CHANGE)
+	RAISES(GUI_CONTROL_DATETIME,     GUI_EVENT_CHANGE)
+	RAISES(GUI_CONTROL_MONTHCAL,     GUI_EVENT_CHANGE, '1', '2')
+	RAISES(GUI_CONTROL_HOTKEY,       GUI_EVENT_CHANGE)
+	RAISES(GUI_CONTROL_UPDOWN,       GUI_EVENT_CHANGE)
+	RAISES(GUI_CONTROL_SLIDER,       GUI_EVENT_CHANGE)
+	//RAISES_NONE(GUI_CONTROL_PROGRESS)
+	RAISES(GUI_CONTROL_TAB,          GUI_EVENT_CHANGE)
+	//RAISES(GUI_CONTROL_TAB2,         ) // Not used since it is changed to TAB at an early stage.
+	//RAISES(GUI_CONTROL_TAB3,         )
+	//RAISES_NONE(GUI_CONTROL_ACTIVEX)
+	RAISES(GUI_CONTROL_LINK,         GUI_EVENT_CLICK)
+	RAISES(GUI_CONTROL_CUSTOM,       GUI_EVENT_NORMAL, 'N')
+	RAISES(GUI_CONTROL_STATUSBAR,    GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_DBLCLK, 'R')
+
+	//#undef RAISES_NONE
+	#undef RAISES
+
+	return raises;
+}
+
+UCHAR **GuiControlType::sRaisesEvents = ConstructEventSupportArray();
+
+bool GuiControlType::SupportsEvent(GuiEventType aEvent)
+{
+	if (UCHAR *this_raises = sRaisesEvents[type])
+	{
+		for (;; ++this_raises)
+		{
+			if (*this_raises == aEvent)
+				return true;
+			if (!*this_raises) // Checked after aEvent, as it will often be the first item in the array.
+				break;
+		}
+	}
+	return false;
+}
+
 
 // Helper function used to convert a token to a script object.
 static Object* TokenToScriptObject(ExprTokenType &token)
@@ -131,7 +194,6 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	LPTSTR name = ParamIndexToString(0); // Name of method or property.
 	MemberID member = INVALID;
 	GuiControls ctrl_type = GUI_CONTROL_INVALID; // For AddControl.
-	GuiEvent* pEvent = NULL; // For gui.OnEvent.
 	--aParamCount; // Exclude name from param count.
 	++aParam; // As above, but for the param array.
 
@@ -158,22 +220,6 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			_o_throw(_T("Invalid control type."), ctrl_type_name);
 		}
 	}
-	else if (!_tcsnicmp(name, _T("On"), 2))
-	{
-		member = P_OnEvent;
-		if (!_tcsicmp(name+2, _T("Close")))
-			pEvent = &mOnClose;
-		else if (!_tcsicmp(name+2, _T("Escape")))
-			pEvent = &mOnEscape;
-		else if (!_tcsicmp(name+2, _T("Size")))
-			pEvent = &mOnSize;
-		else if (!_tcsicmp(name+2, _T("DropFiles")))
-			pEvent = &mOnDropFiles;
-		else if (!_tcsicmp(name+2, _T("ContextMenu")))
-			pEvent = &mOnContextMenu;
-		else
-			return INVOKE_NOT_HANDLED;
-	}
 #define if_member(s,e)	else if (!_tcsicmp(name, _T(s))) member = e;
 	if_member("Destroy", M_Destroy)
 	if_member("Show", M_Show)
@@ -188,6 +234,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	if_member("Flash", M_Flash)
 	if_member("Submit", M_Submit)
 	if_member("_NewEnum", M_NewEnum)
+	if_member("OnEvent", M_OnEvent)
 	if_member("Hwnd", P_Handle)
 	if_member("Title", P_Title)
 	if_member("Control", P_Control)
@@ -285,6 +332,16 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 				_o_return(obj);
 			_o_throw(ERR_OUTOFMEM); // Short msg since so rare.
 		}
+		case M_OnEvent:
+		{
+			if (aParamCount < 2)
+				_o_throw(ERR_TOO_FEW_PARAMS);
+			LPTSTR event_name = ParamIndexToString(0, nbuf1);
+			GuiEventType evt = ConvertEvent(event_name);
+			if (evt < GUI_EVENT_WINDOW_FIRST || evt > GUI_EVENT_WINDOW_LAST)
+				_o_throw(ERR_PARAM1_INVALID);
+			return OnEvent(NULL, evt, aParam, aParamCount, aResultToken);
+		}
 		case P_Handle:
 		{
 			if (IS_INVOKE_SET)
@@ -319,8 +376,6 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			}
 			_o_return_empty; // TODO
 		}
-		case P_OnEvent:
-			return EventHandlerProp(aResultToken, *pEvent, aParam, IS_INVOKE_SET, mEventPrefix);
 		case P_Control:
 		{
 			if (IS_INVOKE_SET)
@@ -437,8 +492,7 @@ BIF_DECL(BIF_GuiCreate)
 
 	bool set_last_found_window = false;
 	ToggleValueType own_dialogs = TOGGLE_INVALID;
-	bool prefix_was_set = false;
-	if (*options && !gui->ParseOptions(options, set_last_found_window, own_dialogs, &prefix_was_set))
+	if (*options && !gui->ParseOptions(options, set_last_found_window, own_dialogs))
 	{
 		delete gui;
 		_f_return_FAIL; // ParseOptions() already displayed the error.
@@ -453,29 +507,17 @@ BIF_DECL(BIF_GuiCreate)
 
 	gui->mControlCapacity = GUI_CONTROL_BLOCK_SIZE;
 
-	// Set up event handlers.
-	LPTSTR prefix = prefix_was_set ? NULL : _T("Gui"); // Default to "Gui" if +PrefixXXX and -Prefix have not been used.
-	if (!ParamIndexIsOmitted(2))
+	if (!ParamIndexIsOmittedOrEmpty(2))
 	{
-		IObject* obj = TokenToObject(*aParam[2]);
-		if (obj)
+		if (IObject* obj = TokenToObject(*aParam[2]))
 		{
 			// The caller specified an object to use as event sink.
 			gui->mEventSink = obj;
 			gui->mEventSink->AddRef();
 		}
 		else
-		{
-			// The caller specified a function prefix.
-			prefix = ParamIndexToString(2, _f_number_buf);
-		}
+			_f_throw(ERR_PARAM3_INVALID);
 	}
-	if (prefix && !gui->SetEventPrefix(prefix))
-	{
-		delete gui;
-		_f_return_FAIL; // Error already shown by above.
-	}
-	gui->SetEvents();
 	
 	LPTSTR title;
 	if (ParamIndexIsOmitted(1)) // Completely omitted, not an empty string.
@@ -605,12 +647,12 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 	if_member("Options", M_Options)
 	if_member("Move", M_Move)
 	if_member("Choose", M_Choose)
+	if_member("OnEvent", M_OnEvent)
 	if_member("UpdateFont", M_UpdateFont)
 	if_member("Focus", M_Focus)
 	if_member("Focused", P_Focused)
 	if_member("Hwnd", P_Handle)
 	if_member("Gui", P_Gui)
-	if_member("Event", P_Event)
 	if_member("Name", P_Name)
 	if_member("Type", P_Type)
 	if_member("ClassNN", P_ClassNN)
@@ -718,6 +760,17 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 				_o_throw(ERR_TOO_FEW_PARAMS);
 			return gui->ControlChoose(*this, *aParam[0], ParamIndexToOptionalInt(1, 0));
 
+		case M_OnEvent:
+		{
+			if (aParamCount < 2)
+				_o_throw(ERR_TOO_FEW_PARAMS);
+			LPTSTR event_name = ParamIndexToString(0, _f_number_buf);
+			GuiEventType evt = GuiType::ConvertEvent(event_name);
+			if (!evt || !SupportsEvent(evt))
+				_o_throw(ERR_PARAM1_INVALID);
+			return gui->OnEvent(this, evt, aParam, aParamCount, aResultToken);
+		}
+
 		case P_Name:
 			if (IS_INVOKE_SET)
 				if (!gui->ControlSetName(*this, ParamIndexToString(0, _f_number_buf)))
@@ -759,15 +812,6 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 
 			_o_return_p(cah.class_name);
 		}
-
-		case P_Event:
-			if (!gui->EventHandlerProp(aResultToken, event_handler, aParam, IS_INVOKE_SET))
-				return FAIL; // aResultToken.result was already set.
-			if (event_handler && (type == GUI_CONTROL_TEXT || type == GUI_CONTROL_PIC))
-				// Apply SS_NOTIFY style so that the event handler will be called on click.
-				// Search for "SS_NOTIFY" for more comments regarding this.
-				SetWindowLong(hwnd, GWL_STYLE, GetWindowLong(hwnd, GWL_STYLE) | SS_NOTIFY);
-			return OK; // Return value was already set.
 
 		case P_Text:
 		case P_Value:
@@ -2154,11 +2198,9 @@ void GuiType::Dispose()
 	// the controls are being enumerated (e.g. by GuiTypeEnum) when the Gui is destroyed:
 	mControlCount = 0;
 
-	ClearEvents();
-
+	mEvents.Dispose();
 	if (mEventSink)
 		mEventSink->Release();
-	free(mEventPrefix);
 
 	if (mIconEligibleForDestruction && mIconEligibleForDestruction != g_script.mCustomIcon) // v1.0.37.07.
 		DestroyIconsIfUnused(mIconEligibleForDestruction, mIconEligibleForDestructionSmall);
@@ -2192,7 +2234,7 @@ void GuiControlType::Dispose()
 	//else do nothing, since this type has nothing more than a color stored in the union.
 	if (background_brush)
 		DeleteObject(background_brush);
-	gui->ClearEventHandler(event_handler);
+	events.Dispose();
 	if (name)
 		free(name);
 	name = NULL;
@@ -2293,121 +2335,150 @@ ResultType GuiType::Create(LPTSTR aTitle)
 
 
 
-void GuiType::ClearEventHandler(GuiEvent& aHandler)
+ResultType GuiType::NameToEventHandler(LPTSTR aName, IObject *&aObject)
 {
-	if (!aHandler.mObject) // Union get.
-		return;
-
-	if (aHandler.mIsMethod)
+	if (!*aName)
+		return FAIL;
+	if (!mEventSink)
 	{
-		free(aHandler.mMethodName);
-		aHandler.mIsMethod = false;
+		if (  !(aObject = g_script.FindFunc(aName))  )
+			return FAIL;
+		return OK;
 	}
+	aObject = NULL;
+	return OK;
+}
+
+
+ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent
+	, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken)
+{
+	// Caller has already converted aParam[0] to aEvent and validated it,
+	// as well as verifying aParamCount >= 2.
+	int max_threads = ParamIndexToOptionalInt(2, 1);
+	if (max_threads < -1 || max_threads > 1)
+		// An event can currently only run one thread at a time.  By contrast, OnMessage
+		// applies the thread limit per handler, not per message.  It's hard to say which
+		// approach is better.
+		_o_throw(ERR_PARAM3_INVALID);
+
+	TCHAR nbuf[MAX_NUMBER_SIZE];
+	IObject *func = TokenToObject(*aParam[1]);
+	LPTSTR name = func ? NULL : TokenToString(*aParam[1], nbuf);
+	if (!func)
+	{
+		if (!NameToEventHandler(name, func))
+			_o_throw(ERR_PARAM2_INVALID, name);
+	}
+	if (!OnEvent(aControl, aEvent, func, name, max_threads))
+		_o_throw(ERR_OUTOFMEM);
+	return OK;
+}
+
+
+ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent
+	, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads)
+{
+	MsgMonitorList &handlers = aControl ? aControl->events : mEvents;
+	MsgMonitorStruct *mon;
+	if (aFunc)
+		mon = handlers.Find(aEvent, aFunc);
 	else
-		aHandler.mObject->Release();
-	aHandler.mObject = NULL; // Union set.
-}
-
-
-void GuiType::SetEventHandler(GuiEvent& aHandler, LPTSTR aName, LPTSTR aPrefix)
-{
-	ClearEventHandler(aHandler);
-
-	if (!aName || !*aName)
-		return;
-
-	TCHAR buf[MAX_VAR_NAME_LENGTH+1];
-	if (aPrefix)
+		mon = handlers.Find(aEvent, aMethodName);
+	if (!aMaxThreads)
 	{
-		_sntprintf(buf, _countof(buf), _T("%s%s"), aPrefix, aName);
-		aName = buf;
+		if (mon)
+			handlers.Remove(mon);
+		ApplyEventStyles(aControl, aEvent, false);
+		return OK;
 	}
-
-	if (mEventSink)
+	bool append = aMaxThreads >= 0;
+	if (!append) // Negative values mean "call it last".
+		aMaxThreads = -aMaxThreads; // Make it positive.
+	if (aMaxThreads > MsgMonitorStruct::MAX_INSTANCES)
+		aMaxThreads = MsgMonitorStruct::MAX_INSTANCES;
+	if (!mon)
 	{
-		aHandler.mMethodName = _tcsdup(aName);
-		aHandler.mIsMethod = true;
-	}
-	else
-	{
-		aHandler.mObject = g_script.FindFunc(aName);
-	}
-}
-
-
-void GuiType::SetEventHandler(GuiEvent& aHandler, IObject* aObject)
-{
-	ClearEventHandler(aHandler);
-	aHandler.mObject = aObject;
-	aObject->AddRef();
-}
-
-
-
-int GuiType::CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam[])
-{
-	// Set up real argument array
-	ExprTokenType** params = (ExprTokenType**)_alloca((aParamCount+1)*sizeof(ExprTokenType*));
-	for (int i = 0; i < aParamCount; i ++)
-		params[i+1] = aParam+i;
-
-	ResultToken result_token;
-	TCHAR result_token_buf[_f_retval_buf_size];
-	result_token.InitResult(result_token_buf);
-
-	IObject* pThis = aHandler.mIsMethod ? mEventSink : aHandler.mObject;
-	ExprTokenType this_token(pThis);
-	ExprTokenType method_name(aHandler.mIsMethod ? aHandler.mMethodName : _T("Call"));
-	params[0] = &method_name;
-	pThis->Invoke(result_token, this_token, IT_CALL, params, aParamCount+1);
-
-	int ret = result_token.Exited() ? 0 : (int)TokenToInt64(result_token);
-	result_token.Free();
-	return ret;
-}
-
-
-
-ResultType GuiType::EventHandlerProp(ResultToken& aResultToken, GuiEvent& aHandler, ExprTokenType* aParam[], bool aIsSet, LPTSTR aPrefix)
-{
-	if (aIsSet)
-	{
-		if (IObject* obj = TokenToObject(*aParam[0]))
-			SetEventHandler(aHandler, obj);
+		if (aFunc)
+			mon = handlers.Add(aEvent, aFunc, append);
 		else
+			mon = handlers.Add(aEvent, aMethodName, append);
+		if (!mon)
+			return FAIL;
+	}
+	mon->instance_count = 0;
+	mon->max_instances = aMaxThreads;
+	ApplyEventStyles(aControl, aEvent, true);
+	return OK;
+}
+
+
+void GuiType::ApplyEventStyles(GuiControlType *aControl, UINT aEvent, bool aAdded)
+{
+	int style_type = 0;
+	DWORD style_bit;
+	HWND hwnd;
+	if (aEvent == GUI_EVENT_CLICK) // Implies aControl != NULL.
+	{
+		GuiControlType &control = *aControl;
+		if (control.type == GUI_CONTROL_TEXT || control.type == GUI_CONTROL_PIC)
 		{
-			LPTSTR name = ParamIndexToString(0, _f_number_buf); // Pass buf because a number can be a valid suffix.
-			SetEventHandler(aHandler, name, aPrefix);
-			if (!aHandler && *name)
-				_o_throw(_T("The specified event handler does not exist."), name);
+			// Apply the SS_NOTIFY style *only* if the control actually has an associated action.
+			// This is because otherwise the control would steal all clicks for any other controls
+			// drawn on top of it (e.g. a picture control with some edit fields drawn on top of it).
+			// See comments in the creation of GUI_CONTROL_PIC for more info:
+			style_type = GWL_STYLE;
+			style_bit = SS_NOTIFY;
+			hwnd = control.hwnd;
 		}
 	}
-
-	if (!aHandler)
-		_o_return_empty;
-	else if (aHandler.mIsMethod)
-		_o_return_p(aHandler.mMethodName);
-	else
+	else if (aEvent == GUI_EVENT_DROPFILES) // Implies aControl == NULL (see below).
 	{
-		IObject* ret = aHandler.mObject;
-		ret->AddRef();
-		_o_return(ret);
+		// Apply the WS_EX_ACCEPTFILES style to ensure the window can accept dropped files.
+		// Remove the style to ensure the mouse cursor correctly changes to show that the
+		// window no longer accepts dropped files.
+		style_type = GWL_EXSTYLE;
+		style_bit = WS_EX_ACCEPTFILES;
+		hwnd = mHwnd;
+	}
+	if (style_type)
+	{
+		MsgMonitorList &handlers = aControl ? aControl->events : mEvents;
+		if (aAdded || !handlers.IsMonitoring(aEvent)) // Added a handler or removed the last handler.
+		{
+			DWORD current_style = GetWindowLong(hwnd, style_type);
+			if (aAdded != ((current_style & style_bit) != 0)) // Needs toggling.
+			{
+				current_style ^= style_bit; // Toggle it.
+				SetWindowLong(hwnd, style_type, current_style);
+			}
+		}
 	}
 }
 
 
+
+LPTSTR GuiType::sEventNames[] = GUI_EVENT_NAMES;
 
 LPTSTR GuiType::ConvertEvent(GuiEventType evt)
 {
-	static LPTSTR sNames[] = GUI_EVENT_NAMES;
-	static TCHAR sBuf[2] = { 0, 0 };
-
-	if (evt < GUI_EVENT_FIRST_UNNAMED)
-		return sNames[evt];
+	if (evt < _countof(sEventNames))
+		return sEventNames[evt];
 
 	// Else it's a character code - convert it to a string
+	static TCHAR sBuf[2] = { 0, 0 };
 	sBuf[0] = (TCHAR)(UCHAR)evt;
 	return sBuf;
+}
+
+GuiEventType GuiType::ConvertEvent(LPTSTR evt)
+{
+	for (GuiEventType i = 0; i < _countof(sEventNames); ++i)
+		if (!_tcsicmp(sEventNames[i], evt))
+			return i;
+	if (*evt && !evt[1])
+		return *evt; // Single-letter event name.
+	return GUI_EVENT_NONE;
 }
 
 
@@ -2442,57 +2513,6 @@ ResultType GuiType::SetName(LPTSTR aName)
 	free(mName);
 	mName = aName;
 	return OK;
-}
-
-
-
-ResultType GuiType::SetEventPrefix(LPTSTR aPrefix)
-{
-	if (*aPrefix)
-	{
-		if (!Var::ValidateName(aPrefix, DISPLAY_FUNC_ERROR))
-			return FAIL; // Error already shown by above.
-
-		aPrefix = _tcsdup(aPrefix);
-		if (!aPrefix)
-			return g_script.ScriptError(ERR_OUTOFMEM);
-	}
-	else
-		aPrefix = NULL;
-	free(mEventPrefix);
-	mEventPrefix = aPrefix;
-	return OK;
-}
-
-
-
-void GuiType::SetEvents()
-{
-	if (!mEventSink && !mEventPrefix)
-		return;
-
-	SetEventHandler(mOnClose, _T("Close"), mEventPrefix);
-	SetEventHandler(mOnEscape, _T("Escape"), mEventPrefix);
-	SetEventHandler(mOnSize, _T("Size"), mEventPrefix);
-	SetEventHandler(mOnContextMenu, _T("ContextMenu"), mEventPrefix);
-	SetEventHandler(mOnDropFiles, _T("DropFiles"), mEventPrefix);
-
-	if (mOnDropFiles && !mOnDropFiles.mIsMethod)
-	{
-		mExStyle |= WS_EX_ACCEPTFILES; // Makes the window accept drops.
-		SetWindowLongPtr(mHwnd, GWL_EXSTYLE, mExStyle);
-	}
-}
-
-
-
-void GuiType::ClearEvents()
-{
-	ClearEventHandler(mOnClose);
-	ClearEventHandler(mOnEscape);
-	ClearEventHandler(mOnSize);
-	ClearEventHandler(mOnContextMenu);
-	ClearEventHandler(mOnDropFiles);
 }
 
 
@@ -4678,7 +4698,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 
 
-ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs, bool *apPrefixWasSet)
+ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs)
 // This function is similar to ControlParseOptions() further below, so should be maintained alongside it.
 // Caller must have already initialized aSetLastFoundWindow/, bool &aOwnDialogs with desired starting values.
 // Caller must ensure that aOptions is a modifiable string, since this method temporarily alters it.
@@ -4927,20 +4947,6 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 				mMaxWidth = COORD_UNSPECIFIED;
 				mMaxHeight = COORD_UNSPECIFIED;
 			}
-		}
-
-		else if (!_tcsnicmp(next_option, _T("Prefix"), 6))
-		{
-			SetEventPrefix(next_option+6);
-			if (mHwnd)
-			{
-				if (mEventPrefix)
-					SetEvents();
-				else
-					ClearEvents();
-			}
-			if (apPrefixWasSet)
-				*apPrefixWasSet = true;
 		}
 
 		else if (!_tcsicmp(next_option, _T("OwnDialogs")))
@@ -5270,7 +5276,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			if (adding) aOpt.style_add |= WS_TABSTOP; else aOpt.style_remove |= WS_TABSTOP;
 		else if (!_tcsicmp(next_option, _T("NoTab"))) // Supported for backward compatibility and it might be more ergonomic for "Gui Add".
 			if (adding) aOpt.style_remove |= WS_TABSTOP; else aOpt.style_add |= WS_TABSTOP;
-		else if (!_tcsicmp(next_option, _T("Group"))) // Because it starts with 'G', this overlaps with g-label, but seems well worth it in this case.
+		else if (!_tcsicmp(next_option, _T("Group")))
 			if (adding) aOpt.style_add |= WS_GROUP; else aOpt.style_remove |= WS_GROUP;
 		else if (!_tcsicmp(next_option, _T("Redraw")))  // Seems a little more intuitive/memorable than "Draw".
 			aOpt.redraw = adding ? CONDITION_TRUE : CONDITION_FALSE; // Otherwise leave it at its default of 0.
@@ -5377,7 +5383,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				{
 					if (!aControl.SupportsBackgroundTrans())
 					{
-						g_script.ScriptError(_T("Not supported for this control type."), next_option-10);
+						g_script.ScriptError(ERR_GUI_NOT_FOR_THIS_TYPE, next_option-10);
 						goto return_fail;
 					}
 					aControl.background_color = CLR_TRANSPARENT;
@@ -5390,7 +5396,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				{
 					if (!aControl.SupportsBackgroundColor())
 					{
-						g_script.ScriptError(_T("Not supported for this control type."), next_option-10);
+						g_script.ScriptError(ERR_GUI_NOT_FOR_THIS_TYPE, next_option-10);
 						goto return_fail;
 					}
 					aOpt.color_bk = ColorNameToBGR(next_option);
@@ -6120,9 +6126,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					if (!adding)
 						aOpt.color = CLR_DEFAULT; // i.e. use system default even if mCurrentColor is non-default.
 					break;
-				case 'G':
-					ClearEventHandler(aControl.event_handler);
-					break;
 				case 'V':
 					ControlSetName(aControl, NULL);
 					break;
@@ -6138,30 +6141,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			// Since above didn't "continue", there is text after the option letter, so take action accordingly.
 			switch (ctoupper(next_option[-1]))
 			{
-			case 'G': // Call a function or method when this control is clicked or changed.
-				// For reasons of potential future use and compatibility, don't allow handlers to be
-				// bound to control types that have no present use for them.  Note: GroupBoxes do
-				// no support click-detection anyway, even if the BS_NOTIFY style is given to them
-				// (this has been verified twice):
-				if (aControl.type == GUI_CONTROL_GROUPBOX || aControl.type == GUI_CONTROL_PROGRESS)
-				{
-					g_script.ScriptError(_T("This control type should not have an event handler."), next_option - 1);
-					goto return_fail;
-				}
-				SetEventHandler(aControl.event_handler, next_option);
-				if (!mEventSink && !aControl.event_handler)
-				{
-					g_script.ScriptError(_T("The specified event handler does not exist."), next_option);
-					goto return_fail;
-				}
-				if (aControl.type == GUI_CONTROL_TEXT || aControl.type == GUI_CONTROL_PIC)
-					// Apply the SS_NOTIFY style *only* if the control actually has an associated action.
-					// This is because otherwise the control would steal all clicks for any other controls
-					// drawn on top of it (e.g. a picture control with some edit fields drawn on top of it).
-					// See comments in the creation of GUI_CONTROL_PIC for more info:
-					aOpt.style_add |= SS_NOTIFY;
-				break;
-
 			case 'T': // Tabstop (the kind that exists inside a multi-line edit control or ListBox).
 				if (aOpt.tabstop_count < GUI_MAX_TABSTOPS)
 					aOpt.tabstop[aOpt.tabstop_count++] = ATOU(next_option);
@@ -7536,7 +7515,7 @@ void GuiType::Close()
 // if it wants to.
 // If there is no handler, treat it the same as Destroy().
 {
-	if (!mOnClose)
+	if (!IsMonitoring(GUI_EVENT_CLOSE))
 		return CancelOrDestroy();
 	POST_AHK_GUI_ACTION(mHwnd, NO_CONTROL_INDEX, GUI_EVENT_CLOSE, NO_EVENT_INFO);
 	// MsgSleep() is not done because "case AHK_GUI_ACTION" in GuiWindowProc() takes care of it.
@@ -7551,7 +7530,7 @@ void GuiType::Escape() // Similar to close, except typically called when the use
 // if it wants to.
 // If there is no label, treat it the same as Cancel().
 {
-	if (!mOnEscape) // The user preference (via votes on forum poll) is to do nothing by default.
+	if (!IsMonitoring(GUI_EVENT_ESCAPE)) // The user preference (via votes on forum poll) is to do nothing by default.
 		return;
 	// See lengthy comments in Event() about this section:
 	POST_AHK_GUI_ACTION(mHwnd, NO_CONTROL_INDEX, GUI_EVENT_ESCAPE, NO_EVENT_INFO);
@@ -8116,7 +8095,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// Note that SIZE_MAXSHOW/SIZE_MAXHIDE don't seem to ever be received under the conditions
 		// described at MSDN, even if the window has WS_POPUP style.  Therefore, A_EventInfo will
 		// probably never contain those values, and as a result they are not documented in the help file.
-		if (pgui->mOnSize) // There is an event handler in the script.
+		if (pgui->IsMonitoring(GUI_EVENT_RESIZE))
 			POST_AHK_GUI_ACTION(hWnd, LOWORD(wParam), GUI_EVENT_RESIZE, lParam); // LOWORD(wParam) just to be sure it fits in 16-bit, but SIZE_MAXIMIZED and the others all do.
 			// MsgSleep() is not done because "case AHK_GUI_ACTION" in GuiWindowProc() takes care of it.
 			// See its comments for why.
@@ -8362,7 +8341,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			case NM_CLICK:
 				// v1.0.36.03: For NM_CLICK/NM_RCLICK, it's somewhat debatable to set event_info when the
 				// ListView isn't single-select, but the usefulness seems to outweigh any confusion it might cause.
-				gui_event = GUI_EVENT_NORMAL;
+				gui_event = GUI_EVENT_CLICK;
 				event_info = 1 + ((LPNMITEMACTIVATE)lParam)->iItem;
 				break;
 			case NM_RCLICK:
@@ -8544,7 +8523,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			case NM_RDBLCLK:
 				switch(nmhdr.code)
 				{
-				case NM_CLICK: gui_event = GUI_EVENT_NORMAL; break;
+				case NM_CLICK: gui_event = GUI_EVENT_CLICK; break;
 				case NM_RCLICK: gui_event = GUI_EVENT_RCLK; break;
 				case NM_DBLCLK: gui_event = GUI_EVENT_DBLCLK; ignore_unless_alt_submit = false; break;
 				case NM_RDBLCLK: gui_event = 'R'; ignore_unless_alt_submit = false; break; // Rare, so just a simple mnemonic is stored (seems better than a digit).
@@ -8622,7 +8601,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				// seem to start a new message pump.  This is one of the reason things were redesigned to
 				// avoid doing a MsgSleep(-1) after posting AHK_GUI_ACTION at the bottom of Event().
 				// See its comments for details.
-				pgui->Event(control_index, nmhdr.code, GUI_EVENT_NORMAL);
+				pgui->Event(control_index, nmhdr.code, GUI_EVENT_CHANGE);
 			}
 			//else ignore all others here, for performance.
 			return 0; // 0 is appropriate for all DATETIME notifications.
@@ -8640,7 +8619,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			switch (nmhdr.code)
 			{
 			case MCN_SELCHANGE:
-				gui_event = GUI_EVENT_NORMAL;
+				gui_event = GUI_EVENT_CHANGE;
 				break;
 			case MCN_SELECT:
 			case NM_RELEASEDCAPTURE:
@@ -8672,7 +8651,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				// For code reduction and simplicity (and due to rarity of script needing it), A_EventInfo
 				// is not set to the newly selected tab name (or number in the case of AltSubmit).
 				pgui->ControlUpdateCurrentTab(control, true);
-				pgui->Event(control_index, nmhdr.code, GUI_EVENT_NORMAL);
+				pgui->Event(control_index, nmhdr.code, GUI_EVENT_CHANGE);
 			}
 			return 0; // 0 is appropriate for all TAB notifications.
 		case GUI_CONTROL_LINK:
@@ -8682,13 +8661,13 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				LITEM item = nmLink.item;
 				//Link control tries to execute the link URL if href property is set. Otherwise, it will execute a g-label if it exists.
 				if (!*item.szUrl || !g_script.ActionExec((LPTSTR)(LPCTSTR)CStringTCharFromWCharIfNeeded(item.szUrl), NULL, NULL, false))
-					pgui->Event(control_index, nmhdr.code, GUI_EVENT_NORMAL, item.iLink + 1); // Link control uses 1-based index for g-labels
+					pgui->Event(control_index, nmhdr.code, GUI_EVENT_CLICK, item.iLink + 1); // Link control uses 1-based index for g-labels
 			}
 			return 0;
 		case GUI_CONTROL_CUSTOM:
 			return pgui->CustomCtrlWmNotify(control_index, &nmhdr);
 		case GUI_CONTROL_STATUSBAR:
-			if (!control.event_handler) // This is checked to avoid returning TRUE below, and also for performance.
+			if (!control.events.Count()) // This is checked to avoid returning TRUE below, and also for performance.
 				break; // Let default proc handle it.
 			switch(nmhdr.code)
 			{
@@ -8698,7 +8677,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			case NM_RDBLCLK:
 				switch(nmhdr.code)
 				{
-				case NM_CLICK:  gui_event = GUI_EVENT_NORMAL; break;
+				case NM_CLICK:  gui_event = GUI_EVENT_CLICK; break;
 				case NM_RCLICK: gui_event = GUI_EVENT_RCLK;   break;
 				case NM_DBLCLK: gui_event = GUI_EVENT_DBLCLK; break;
 				case NM_RDBLCLK: gui_event = 'R';             break; // Rare, so just a simple mnemonic is stored (seems better than a digit).
@@ -8901,7 +8880,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	}
 
 	case WM_CONTEXTMENU:
-		if ((pgui = GuiType::FindGui(hWnd)) && pgui->mOnContextMenu)
+		if ((pgui = GuiType::FindGui(hWnd)) && pgui->IsMonitoring(GUI_EVENT_CONTEXTMENU))
 		{
 			HWND clicked_hwnd = (HWND)wParam;
 			bool from_keyboard; // Whether Context Menu was generated from keyboard (AppsKey or Shift-F10).
@@ -8944,7 +8923,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		if (   !(pgui = GuiType::FindGui(hWnd))   )
 			break; // Let DefDlgProc() handle it.
 		HDROP hdrop = (HDROP)wParam;
-		if (!pgui->mOnDropFiles || pgui->mHdrop)
+		if (pgui->mHdrop || !pgui->IsMonitoring(GUI_EVENT_DROPFILES))
 		{
 			// There is no event handler in the script, or this window is still processing a prior drop.
 			// Ignore this drop and free its memory.
@@ -9121,8 +9100,8 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 	if (aControlIndex >= mControlCount) // Caller probably already checked, but just to be safe.
 		return;
 	GuiControlType &control = *mControl[aControlIndex];
-	if (!control.event_handler)
-		return; // No event handler associated with this control, so no action.
+	if (!control.events.Count()) // But don't check IsMonitoring(aGuiEvent) yet, because aGuiEvent may be undetermined.
+		return; // No event handlers associated with this control, so no action.
 	if (control.attrib & GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS)
 		return;
 
@@ -9158,6 +9137,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 				// behavior seems like it would be desirable most of the time.
 				if (control.type == GUI_CONTROL_RADIO && SendMessage(control.hwnd, BM_GETCHECK, 0, 0) == BST_UNCHECKED)
 					return;
+				aGuiEvent = GUI_EVENT_CLICK;
 				break;
 			case BN_DBLCLK:
 				aGuiEvent = GUI_EVENT_DBLCLK;
@@ -9173,6 +9153,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 			{
 			case CBN_SELCHANGE:  // Must explicitly list this case since the default label does a return.
 			case CBN_EDITCHANGE: // Added for v1.0.24 to support detection of changes in a ComboBox's edit portion.
+				aGuiEvent = GUI_EVENT_CHANGE;
 				break;
 			case CBN_DBLCLK: // Used by CBS_SIMPLE (i.e. list always visible).
 				aGuiEvent = GUI_EVENT_DBLCLK; // But due to rarity of use, the focused row number is not stored in aEventInfo.
@@ -9186,6 +9167,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 			switch (aNotifyCode)
 			{
 			case LBN_SELCHANGE: // Must explicitly list this case since the default label does a return.
+				aGuiEvent = GUI_EVENT_CHANGE;
 				break;
 			case LBN_DBLCLK:
 				aGuiEvent = GUI_EVENT_DBLCLK;
@@ -9200,10 +9182,14 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 			// Seems more appropriate to check EN_CHANGE vs. EN_UPDATE since EN_CHANGE occurs only after
 			// any redrawing of the control.
 			if (aNotifyCode == EN_CHANGE)
+			{
+				aGuiEvent = GUI_EVENT_CHANGE;
 				break;
+			}
 			return; // No action for other notifications.
 
 		case GUI_CONTROL_HOTKEY: // The only notification sent by the hotkey control is EN_CHANGE.
+			aGuiEvent = GUI_EVENT_CHANGE;
 			break; // No action.
 
 		case GUI_CONTROL_TEXT:
@@ -9216,6 +9202,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 			switch (aNotifyCode)
 			{
 			case STN_CLICKED: // Must explicitly list this case since the default label does a return.
+				aGuiEvent = GUI_EVENT_CLICK;
 				break;
 			case STN_DBLCLK:
 				aGuiEvent = GUI_EVENT_DBLCLK;
@@ -9233,6 +9220,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 			if (aNotifyCode == SB_THUMBPOSITION)
 			{
 				// User has pressed arrow keys or clicked down on the mouse on one of the arrows.
+				aGuiEvent = GUI_EVENT_CHANGE;
 				break;
 			}
 			// Otherwise, ignore all others.  SB_ENDSCROLL is received when user has released mouse after
@@ -9269,7 +9257,10 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 				//case TB_PAGEDOWN:      // VK_NEXT (the user clicked the channel below or to the right of the slider)
 				//case TB_TOP:           // VK_HOME
 				//case TB_BOTTOM:        // VK_END
-				aGuiEvent = aNotifyCode + 48; // Signal it to store an ASCII character (digit) in A_GuiControlEvent.
+				// In most cases the script simply wants to know when the value changes,
+				// so this is one event with a parameter rather than multiple events:
+				aGuiEvent = GUI_EVENT_CHANGE;
+				aEventInfo = aNotifyCode;
 			}
 			break;
 
@@ -9282,12 +9273,15 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 		//case GUI_CONTROL_LINK:
 		//
 		// The following are not needed because execution never reaches this point.  This is because these types
-		// are forbidden from having a gLabel. Search on "case 'G'" for details.
+		// are forbidden from having event handlers, since they don't support raising any events.
 		//case GUI_CONTROL_GROUPBOX:
 		//case GUI_CONTROL_PROGRESS:
 
 		} // switch(control.type)
 	} // if (aGuiEvent == GUI_EVENT_NONE)
+
+	if (!control.IsMonitoring(LOBYTE(aGuiEvent))) // Checked after possibly determining aGuiEvent above.  LOBYTE() is needed for ListView 'I'.
+		return;
 
 	POST_AHK_GUI_ACTION(mHwnd, aControlIndex, aGuiEvent, (LPARAM)aEventInfo);
 	// MsgSleep(-1, RETURN_AFTER_MESSAGES_SPECIAL_FILTER) is not done because "case AHK_GUI_ACTION" in GuiWindowProc()
@@ -9344,26 +9338,6 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 	// shouldn't be an issue because the long-operation (clipboard/Send) does not return to that
 	// msg pump until the operation is complete; in other words, the message to stay queued rather than
 	// bouncing around.
-	//
-	// Concerning the practice of saving to a control's output variable prior to posting this message:
-	// It's true that this would cause any other queued/unprocessed messages of the same event/control
-	// to share the same value, which is undesirable but rare in practice (and usually inconsequential,
-	// since only the most recent value tends to matter, not those that happened very quickly in between).
-	// The code-simplicity of this approach seems worthwhile for now.
-	// More info: In many cases (e.g. Slider), the control's output var is set to the value before posting
-	// the message.  Therefore, if there are any of the same messages still in the queue when a new one
-	// is posted, they will all have the same output-var value.  If you consider that output-var update is
-	// just a convenience, this isn't much of an issue because if the script were to do GuiControlGet on it,
-	// the same effect would occur.  But still, it should be fixed for those situations where it's important
-	// (there don't appear to be any control types where this is important, but here's the list of those
-	// whose g-labels change the value of the output-var):
-	//GUI_CONTROL_LISTVIEW?
-	//GUI_CONTROL_HOTKEY
-	//GUI_CONTROL_DATETIME
-	//GUI_CONTROL_MONTHCAL
-	//GUI_CONTROL_UPDOWN
-	//GUI_CONTROL_SLIDER
-	//GUI_CONTROL_TAB (in GuiWindowProc)
 
 	// Although an additional WORD of info could be squeezed into the message by passing the control's HWND
 	// instead of the parent window's (and the msg pump could then look up the parent window via
@@ -9381,8 +9355,7 @@ LRESULT GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 		return 0;
 
 	GuiControlType& aControl = *mControl[aControlIndex];
-	GuiEvent& evt = aControl.event_handler;
-	if (!evt)
+	if (!aControl.IsMonitoring('N'))
 		return 0;
 
 	if (g_nThreads >= g_MaxThreadsTotal)
@@ -9397,13 +9370,14 @@ LRESULT GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	g_script.mLastPeekTime = GetTickCount();
 	AddRef();
 	
+	INT_PTR retval;
 	ExprTokenType param[] = { &aControl, _T("N"), (__int64)(DWORD_PTR)aNmHdr };
-	int returnValue = CallEvent(evt, 3, param);
+	aControl.events.Call(param, _countof(param), 'N', mEventSink, &retval);
 
 	Release();
 	ResumeUnderlyingThread(ErrorLevel_saved);
 
-	return returnValue;
+	return retval;
 }
 
 
@@ -10162,8 +10136,7 @@ ResultType GuiType::SelectAdjacentTab(GuiControlType &aTabControl, bool aMoveToR
 
 	// Fix for v1.0.35: Keyboard navigation of a tab control should still launch the tab's event handler
 	// if it has one:
-	if (aTabControl.event_handler)
-		Event(GUI_HWND_TO_INDEX(aTabControl.hwnd), TCN_SELCHANGE);
+	Event(GUI_HWND_TO_INDEX(aTabControl.hwnd), TCN_SELCHANGE);
 
 	return OK;
 }

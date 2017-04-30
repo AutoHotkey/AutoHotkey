@@ -221,11 +221,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	GuiEventType gui_action;
 	DWORD_PTR gui_event_info;
 	DWORD gui_size;
-	bool event_is_control_generated, check_if_running;
-	GuiEvent *gui_event;
+	bool event_is_control_generated;
+	MsgMonitorList *check_if_running;
 	ExprTokenType gui_event_args[6]; // Current maximum number of arguments for Gui event handlers.
 	int gui_event_arg_count;
-	int gui_event_ret;
 	POINT gui_point;
 	HDROP hdrop_to_free;
 	LRESULT msg_reply;
@@ -670,30 +669,23 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// Below relies on the GUI_EVENT_RESIZE section above having been done:
 				pcontrol = gui_control_index < pgui->mControlCount ? pgui->mControl[gui_control_index] : NULL; // Set for use in other places below.
 
-				check_if_running = true; // Set default.
+				check_if_running = &pgui->mEvents; // Set default.
 				event_is_control_generated = false; // Set default.
 
 				switch(gui_action)
 				{
-				case GUI_EVENT_RESIZE: // This is the signal to run the window's OnEscape event handler. Listed first for performance.
-					gui_event = &pgui->mOnSize;
-					break;
-				case GUI_EVENT_CLOSE:  // This is the signal to run the window's OnClose event handler.
-					gui_event = &pgui->mOnClose;
-					break;
-				case GUI_EVENT_ESCAPE: // This is the signal to run the window's OnEscape event handler.
-					gui_event = &pgui->mOnEscape;
+				case GUI_EVENT_CLOSE:
+				case GUI_EVENT_ESCAPE:
+				case GUI_EVENT_RESIZE:
 					break;
 				case GUI_EVENT_CONTEXTMENU:
-					gui_event = &pgui->mOnContextMenu;
 					// Must allow multiple threads because otherwise the user cannot right-click twice consecutively
 					// (the second click is blocked because the menu is still displayed at the instant of the click).
-					check_if_running = false;
+					check_if_running = NULL;
 					break;
-				case GUI_EVENT_DROPFILES: // This is the signal to run the window's OnDropFiles event handler.
+				case GUI_EVENT_DROPFILES:
 					hdrop_to_free = pgui->mHdrop; // This variable simplifies the code further below.
-					if (   !*(gui_event = &pgui->mOnDropFiles) // In case it became NULL since the msg was posted.
-						|| !hdrop_to_free // Checked just in case, so that the below can query it.
+					if (   !hdrop_to_free // Checked just in case, so that the below can query it.
 						|| !(gui_event_info = DragQueryFile(hdrop_to_free, 0xFFFFFFFF, NULL, 0))   ) // Probably impossible, but if it ever can happen, seems best to ignore it.
 					{
 						if (hdrop_to_free) // Checked again in case short-circuit boolean above never checked it.
@@ -703,29 +695,37 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						}
 						continue;
 					}
-					// It is not necessary to check if the event handler is running in this case because
-					// the caller who posted this message to us has ensured that it's the only message in the queue
-					// or in progress (by virtue of pgui->mHdrop being NULL at the time the message was posted).
-					check_if_running = false;
+					// mHdrop != NULL prevents another DROPFILES event from being queued, up until the
+					// message is received here and we remove WS_EX_ACCEPTFILES.  After that the user
+					// can no longer drop files onto the window, but it may still be necessary to check
+					// for running instances in case of:
+					//  1) Another WM_DROPFILES already in the queue, but not yet processed.
+					//  2) Someone posting WM_DROPFILES (i.e. fake drag and drop).
 					break;
 				default: // This is an action from a particular control in the GUI window.
 					if (!pcontrol) // gui_control_index was beyond the quantity of controls, possibly due to parent window having been destroyed since the msg was sent (or bogus msg).
 						continue;  // Discarding an invalid message here is relied upon both other sections below.
-					gui_event = &pcontrol->event_handler;
-					// It seems best by default not to allow multiple threads for the same control.
+					// It seems best by default not to allow multiple threads for the same event.
 					// Such events are discarded because it seems likely that most script designers
 					// would want to see the effects of faulty design (e.g. long running timers or
 					// hotkeys that interrupt gui threads) rather than having events for later,
 					// when they might suddenly take effect unexpectedly.
+					check_if_running = &pcontrol->events;
 					event_is_control_generated = true; // As opposed to a drag-and-drop or context-menu event that targets a specific control.
 				} // switch(gui_action)
 				
-				if (!*gui_event // In case the event handler was removed since the msg was posted.
-					|| check_if_running && gui_event->mIsRunning) // This handler is limited to one thread.
-					continue; // hdrop_to_free: Not necessary to check it because it's always NULL when check_if_running is true.
-				//else the check wasn't needed because it was done elsewhere (GUI_EVENT_DROPFILES) or the
-				// action is not thread-restricted (GUI_EVENT_CONTEXTMENU).  This event is now eligible
-				// to start a new thread.
+				// IsMonitoring() isn't checked at this stage for performance and code size, and because
+				// it was checked prior to posting AHK_GUI_ACTION.  If the handler was removed since then,
+				// the section below will do some unnecessary but harmless work.
+				if (check_if_running && check_if_running->IsRunning(gui_action))
+				{
+					if (hdrop_to_free) // Unlikely but possible, in theory.  Doesn't seem to affect code size.
+					{
+						DragFinish(hdrop_to_free); // Since the drop-thread will not be launched, free the memory.
+						pgui->mHdrop = NULL; // Indicate that this GUI window is ready for another drop.
+					}
+					continue;
+				}
 				priority = 0;  // Always use default for now.
 				break; // case AHK_GUI_ACTION
 
@@ -1018,6 +1018,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			switch (msg.message)
 			{
 			case AHK_GUI_ACTION: // Listed first for performance.
+			{
 				*gui_action_extra = '\0'; // Set default, which is possibly overridden below.
 
 #define EVT_ARG_ADD(_value) gui_event_args[gui_event_arg_count++].SetValue(_value)
@@ -1030,8 +1031,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				case GUI_EVENT_CONTEXTMENU:
 					// Caller stored 1 in gui_event_info if this context-menu was generated via the keyboard
 					// (such as AppsKey or Shift-F10):
-					gui_action = gui_event_info ? GUI_EVENT_NORMAL : GUI_EVENT_RCLK; // Must be done prior to below.
-					gui_event_info = NO_EVENT_INFO; // Now that it has been used above, reset it to a default, to be conditionally overridden below.
+					gui_event_info = NO_EVENT_INFO; // Reset it to a default, to be conditionally overridden below.
 					gui_point = msg.pt; // Set default. v1.0.38: More accurate/customary to use msg.pt than GetCursorPos().
 					if (pcontrol) // i.e. this context menu is for a control rather than a click somewhere in the parent window itself.
 					{
@@ -1039,7 +1039,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						// it can also be the only control in a window that lacks any focus-capable controls.
 						// If the window has no controls at all, testing shows that pcontrol will be NULL,
 						// in which case GuiPoint default set earlier is retained (for AppsKey too).
-						if (gui_action == GUI_EVENT_NORMAL) // Context menu was invoked via keyboard.
+						if (msg.lParam) // Context menu was invoked via keyboard.
 							pgui->ControlGetPosOfFocusedItem(*pcontrol, gui_point); // Since pcontrol!=NULL, find out which item is focused in this control.
 						//else this is a context-menu event that was invoked via normal mouse click.  Leave
 						// g.GuiPoint at its default set earlier.
@@ -1061,7 +1061,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 							break;
 						case GUI_CONTROL_TREEVIEW:
 							// Retrieves the HTREEITEM that is the true target of this event.
-							if (gui_action == GUI_EVENT_NORMAL) // AppsKey or Shift+F10.
+							if (msg.lParam) // AppsKey or Shift+F10.
 								gui_event_info = (DWORD)SendMessage(pcontrol->hwnd, TVM_GETNEXTITEM, TVGN_CARET, NULL); // Get focused item.
 							else // Context menu invoked via right-click.  Find out which item (if any) was clicked on.
 							{
@@ -1089,7 +1089,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					else
 						EVT_ARG_ADD(_T(""));
 					EVT_ARG_ADD((__int64)gui_event_info);
-					EVT_ARG_ADD(gui_action == GUI_EVENT_RCLK ? 1 : 0);
+					EVT_ARG_ADD(msg.lParam ? FALSE : TRUE); // True if mouse-activated.
 					EVT_ARG_ADD(gui_point.x);
 					EVT_ARG_ADD(gui_point.y);
 					break; // case GUI_CONTEXT_MENU.
@@ -1183,41 +1183,35 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				pgui->AddRef(); // Keep the pointer valid at least until the thread finishes.
 				//g.EventInfo = gui_event_info; // Override the thread-default of NO_EVENT_INFO.
 
-				gui_event->mIsRunning = true;
-
-				// LAUNCH GUI THREAD:
-				gui_event_ret = pgui->CallEvent(*gui_event, gui_event_arg_count, gui_event_args);
-
-				// Bug-fix for v1.0.22: If the above ExecUntil() performed a "Gui Destroy", the
-				// pointers below are now invalid so should not be dereferenced.  In such a case,
-				// hdrop_to_free will already have been freed as part of the window destruction
-				// process, so don't do it here.
-				if (pgui->mHwnd)
+				MsgMonitorList &events = event_is_control_generated ? pcontrol->events : pgui->mEvents;
+				ResultType gui_event_result = events.Call(gui_event_args, gui_event_arg_count, gui_action, pgui->mEventSink);
+				
+				if (pgui->mHwnd) // i.e. GUI was not destroyed.
 				{
-					// For events which are only allowed one thread, mark this event as not running.
-					// For other events, the value is ignored.
-					gui_event->mIsRunning = false;
-					
 					switch (gui_action)
 					{
 					case GUI_EVENT_CLOSE:
 						// If the return value is false/unspecified, hide/destroy the Gui.
-						if (!gui_event_ret)
+						if (gui_event_result != CONDITION_TRUE)
 							pgui->CancelOrDestroy(2); // The '2' is needed because we earlier used AddRef().
 						break;
 					case GUI_EVENT_DROPFILES:
-						// Free the drop array.
-						gui_event_args[1].object->Release();
-						// Fix for v1.0.31.02: The window's current ExStyle is fetched every time in case a non-GUI
-						// command altered it (such as making it transparent):
-						SetWindowLong(pgui->mHwnd, GWL_EXSTYLE, GetWindowLong(pgui->mHwnd, GWL_EXSTYLE) | WS_EX_ACCEPTFILES);
+						if (pgui->IsMonitoring(gui_action)) // Reapply the style only if we're still monitoring this event.
+						{
+							// The window's current ExStyle is fetched every time in case a non-GUI
+							// command altered it (such as making it transparent):
+							SetWindowLong(pgui->mHwnd, GWL_EXSTYLE, GetWindowLong(pgui->mHwnd, GWL_EXSTYLE) | WS_EX_ACCEPTFILES);
+						}
 						break;
 					}
 				}
+				if (gui_action == GUI_EVENT_DROPFILES) // Must be done regardless of pgui->mHwnd.
+					gui_event_args[1].object->Release(); // Free the drop array.
 				// Counteract the earlier AddRef(). If the Gui was destroyed (and none of this
 				// Gui's other labels are still running), this will free the Gui structure.
-				pgui->Release(); // g.GuiWindow
+				pgui->Release();
 				break;
+			} // case AHK_GUI_ACTION
 
 			case AHK_USER_MENU: // user-defined menu item
 			{
@@ -1833,18 +1827,23 @@ bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awPa
 	// 4) A newer msg monitor is deleted; nothing needs to be done since this item wasn't affected.
 	// 5) Some other msg monitor is created; nothing needs to be done since it's added at the end of the list.
 	//
+	// UPDATE: We now use a simpler method which flags this specific instance as having been deleted,
+	// so if the monitor is deleted and then recreated (with instance_count == 0), there's no chance
+	// it will be picked up as the same instance.
+	//
 	// If "monitor" is defunct due to deletion, decrementing its instance_count is harmless.  However,
 	// "monitor" might have been reused by BIF_OnMessage() to create a new msg monitor, so it must be
 	// checked to avoid wrongly decrementing some other msg monitor's instance_count.
-	if (aInstance.index >= 0)
+	if (!aInstance.deleted)
 	{
-		monitor = &g_MsgMonitor[aInstance.index];
-		if (monitor->msg == aMsg && monitor->func == func)
-		{
-			if (monitor->instance_count) // Avoid going negative, which might otherwise be possible in weird circumstances described in other comments.
-				--monitor->instance_count;
-		}
-		//else "monitor" is now some other msg-monitor, so do don't change it (see above comments).
+		monitor = &g_MsgMonitor[aInstance.index]; // Retrieve it again in case it was moved.
+		if (monitor->instance_count) // Checked for maintainability.  Zero should be impossible due to the "deleted" check.
+			--monitor->instance_count;
+	}
+	else
+	{
+		// "monitor" is now some other msg-monitor, so don't change it (see comments above).
+		aInstance.deleted = false; // Reset for subsequent iterations.
 	}
 	return block_further_processing; // If false, the caller will ignore aMsgReply and process this message normally. If true, aMsgReply contains the reply the caller should immediately send for this message.
 }

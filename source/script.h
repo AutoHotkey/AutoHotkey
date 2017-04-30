@@ -207,6 +207,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_LINE_IN_PROPERTY_DEF _T("Not a valid property getter/setter.")
 #define ERR_INVALID_GUI_NAME _T("Invalid Gui name.")
 #define ERR_INVALID_OPTION _T("Invalid option.") // Generic message used by the Gui system.
+#define ERR_GUI_NOT_FOR_THIS_TYPE _T("Not supported for this control type.")
 #define ERR_MUST_DECLARE _T("This variable must be declared.")
 #define ERR_REMOVE_THE_PERCENT _T("If this variable was not intended to be dynamic, remove the % symbols from it.")
 #define ERR_DYNAMIC_TOO_LONG _T("This dynamically built variable name is too long.  ") ERR_REMOVE_THE_PERCENT
@@ -2037,12 +2038,18 @@ public:
 
 struct MsgMonitorStruct
 {
-	IObject *func;
+	union
+	{
+		IObject *func;
+		LPTSTR method_name; // Used only by GUI.
+		LPVOID union_value; // Internal use.
+	};
 	UINT msg;
 	// Keep any members smaller than 4 bytes adjacent to save memory:
 	static const UCHAR MAX_INSTANCES = MAX_THREADS_LIMIT; // For maintainability.  Causes a compiler warning if MAX_THREADS_LIMIT > MAX_UCHAR.
 	UCHAR instance_count; // Distinct from func.mInstances because the script might have called the function explicitly.
 	UCHAR max_instances; // v1.0.47: Support more than one thread.
+	bool is_method; // Used only by GUI.
 };
 
 
@@ -2055,16 +2062,24 @@ class MsgMonitorList
 
 	friend struct MsgMonitorInstance;
 
+	MsgMonitorStruct *AddInternal(UINT aMsg, bool aAppend);
+
 public:
 	MsgMonitorStruct *Find(UINT aMsg, IObject *aCallback);
+	MsgMonitorStruct *Find(UINT aMsg, LPTSTR aMethodName);
 	MsgMonitorStruct *Add(UINT aMsg, IObject *aCallback, bool aAppend = TRUE);
+	MsgMonitorStruct *Add(UINT aMsg, LPTSTR aMethodName, bool aAppend = TRUE);
 	void Remove(MsgMonitorStruct *aMonitor);
 	ResultType Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex); // Used for OnExit and OnClipboardChange, but not OnMessage.
+	ResultType Call(ExprTokenType *aParamValue, int aParamCount, UINT aMsg, IObject *aEventSink, INT_PTR *aRetVal = NULL); // Used by GUI.
 
 	MsgMonitorStruct& operator[] (const int aIndex) { return mMonitor[aIndex]; }
 	int Count() { return mCount; }
+	BOOL IsMonitoring(UINT aMsg);
+	BOOL IsRunning(UINT aMsg);
 
-	MsgMonitorList() : mCount(0), mCountMax(0), mMonitor(NULL) {}
+	MsgMonitorList() : mCount(0), mCountMax(0), mMonitor(NULL), mTop(NULL) {}
+	void Dispose();
 };
 
 
@@ -2074,9 +2089,11 @@ struct MsgMonitorInstance
 	MsgMonitorInstance *previous;
 	int index;
 	int count;
+	bool deleted;
 
 	MsgMonitorInstance(MsgMonitorList &aList)
 		: list(aList), previous(aList.mTop), index(0), count(aList.mCount)
+		, deleted(false)
 	{
 		aList.mTop = this;
 	}
@@ -2084,6 +2101,17 @@ struct MsgMonitorInstance
 	~MsgMonitorInstance()
 	{
 		list.mTop = previous;
+	}
+
+	void Delete(int mon_index)
+	{
+		if (index >= mon_index && index >= 0)
+		{
+			if (index == mon_index)
+				deleted = true; // Callers who care about this will reset it after each iteration.
+			index--; // So index+1 is the next item.
+		}
+		count--;
 	}
 };
 
@@ -2238,21 +2266,6 @@ struct lv_attrib_type
 	int row_count_hint;
 };
 
-struct GuiEvent
-{
-	union
-	{
-		IObject* mObject;
-		LPTSTR mMethodName;
-	};
-
-	bool mIsMethod;
-	bool mIsRunning; // Not always needed, but has no extra cost due to data alignment.
-
-	GuiEvent() : mObject(NULL), mIsMethod(false), mIsRunning(false) { }
-	operator bool() { return mObject != NULL; } // Also valid for the other members.
-};
-
 typedef UCHAR TabControlIndexType;
 typedef UCHAR TabIndexType;
 // Keep the below in sync with the size of the types above:
@@ -2263,7 +2276,7 @@ struct GuiControlType : public ObjectBase
 	GuiType* gui; // Below code relies on this being the first field.
 	HWND hwnd;
 	LPTSTR name;
-	GuiEvent event_handler;
+	MsgMonitorList events;
 	// Keep any fields that are smaller than 4 bytes adjacent to each other.  This conserves memory
 	// due to byte-alignment.  It has been verified to save 4 bytes per struct in this case:
 	GuiControls type;
@@ -2313,6 +2326,9 @@ struct GuiControlType : public ObjectBase
 	};
 	typedef UCHAR TypeAttribs;
 	TypeAttribs TypeHasAttrib(TypeAttribs aAttrib);
+
+	static UCHAR **sRaisesEvents;
+	bool SupportsEvent(GuiEventType aEvent);
 
 	bool SupportsBackgroundTrans()
 	{
@@ -2387,6 +2403,8 @@ struct GuiControlType : public ObjectBase
 		gui = owner;
 		background_color = CLR_INVALID;
 	}
+	
+	BOOL IsMonitoring(GuiEventType aEvent) { return events.IsMonitoring(aEvent); }
 
 	enum MemberID
 	{
@@ -2397,6 +2415,7 @@ struct GuiControlType : public ObjectBase
 		M_Focus,
 		M_Move,
 		M_Choose,
+		M_OnEvent,
 		M_UpdateFont,
 		M_Tab_UseTab,
 		M_List_Add,
@@ -2406,7 +2425,6 @@ struct GuiControlType : public ObjectBase
 		// Properties
 		P_Handle,
 		P_Gui,
-		P_Event,
 		P_Name,
 		P_Type,
 		P_ClassNN,
@@ -2495,8 +2513,7 @@ public:
 	HICON mIconEligibleForDestructionSmall; // L17: A window may have two icons: ICON_SMALL and ICON_BIG.
 	HACCEL mAccel; // Keyboard accelerator table.
 	IObject* mEventSink;
-	LPTSTR mEventPrefix;
-	GuiEvent mOnClose, mOnEscape, mOnSize, mOnDropFiles, mOnContextMenu;
+	MsgMonitorList mEvents;
 	// 32-BIT FIELDS:
 	GuiIndexType mControlCount;
 	GuiIndexType mControlCapacity; // How many controls can fit into the current memory size of mControl.
@@ -2546,6 +2563,7 @@ public:
 		M_Flash,
 		M_Submit,
 		M_NewEnum,
+		M_OnEvent,
 
 		LastMethodPlusOne,
 		
@@ -2559,7 +2577,6 @@ public:
 		P_MarginX,
 		P_MarginY,
 		P_Menu,
-		P_OnEvent,
 		P_Pos,
 		P_ClientPos,
 	};
@@ -2569,8 +2586,7 @@ public:
 		, mPrevGui(NULL), mNextGui(NULL)
 		, mControl(NULL), mControlCount(0), mControlCapacity(0)
 		, mStatusBarHwnd(NULL)
-		, mDefaultButtonIndex(-1), mEventPrefix(NULL), mEventSink(NULL)
-		, mOnClose(), mOnEscape(), mOnSize(), mOnDropFiles(), mOnContextMenu()
+		, mDefaultButtonIndex(-1), mEventSink(NULL)
 		// The styles DS_CENTER and DS_3DLOOK appear to be ineffectual in this case.
 		// Also note that WS_CLIPSIBLINGS winds up on the window even if unspecified, which is a strong hint
 		// that it should always be used for top level windows across all OSes.  Usenet posts confirm this.
@@ -2618,22 +2634,25 @@ public:
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Create(LPTSTR aTitle);
 	ResultType SetName(LPTSTR aName);
-	void ClearEventHandler(GuiEvent& aHandler);
-	void SetEventHandler(GuiEvent& aHandler, LPTSTR aName, LPTSTR aPrefix = NULL);
-	void SetEventHandler(GuiEvent& aHandler, IObject* aObject);
-	ResultType EventHandlerProp(ResultToken& aResultToken, GuiEvent& aHandler, ExprTokenType* aParam[], bool aIsSet, LPTSTR aPrefix = NULL);
-	int CallEvent(GuiEvent& aHandler, int aParamCount, ExprTokenType aParam[]);
+	ResultType NameToEventHandler(LPTSTR aName, IObject *&aObject);
+	ResultType OnEvent(GuiControlType *aControl, UINT aEvent, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken);
+	ResultType OnEvent(GuiControlType *aControl, UINT aEvent, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads);
+	void ApplyEventStyles(GuiControlType *aControl, UINT aEvent, bool aAdded);
+	static LPTSTR sEventNames[];
 	static LPTSTR ConvertEvent(GuiEventType evt);
-	ResultType SetEventPrefix(LPTSTR aPrefix);
-	void SetEvents();
-	void ClearEvents();
+	static GuiEventType ConvertEvent(LPTSTR evt);
+	// Currently this returns true for all events if we're using an event sink,
+	// because checking for the presence of a method in the event sink could be
+	// unreliable (but maybe placing some limitations would solve that?).
+	BOOL IsMonitoring(GuiEventType aEvent) { return mEvents.IsMonitoring(aEvent); }
+
 	static IObject* CreateDropArray(HDROP hDrop);
 	ResultType SetMenu(LPTSTR aMenuName);
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Object *aObj = NULL);
 	ResultType PropertyGetPos(ResultToken &aResultToken, RECT &aPos);
 
-	ResultType ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs, bool *apPrefixWasSet = NULL);
+	ResultType ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs);
 	void SetOwnDialogs(ToggleValueType state)
 	{
 		if (state == TOGGLE_INVALID)

@@ -714,13 +714,18 @@ typedef UINT GuiIndexType; // Some things rely on it being unsigned to avoid the
 typedef UINT GuiEventType; // Made a UINT vs. enum so that illegal/underflow/overflow values are easier to detect.
 
 // The following array and enum must be kept in sync with each other:
-#define GUI_EVENT_NAMES {_T(""), _T("Normal"), _T("DoubleClick"), _T("RightClick"), _T("ColClick")}
+#define GUI_EVENT_NAMES { _T("") \
+	, _T("DropFiles"), _T("Close"), _T("Escape"), _T("Size"), _T("ContextMenu") \
+	, _T("Normal") \
+	, _T("Change") \
+	, _T("Click"), _T("DoubleClick"), _T("RightClick"), _T("ColClick") \
+}
 enum GuiEventTypes {GUI_EVENT_NONE  // NONE must be zero for any uses of ZeroMemory(), synonymous with false, etc.
-	, GUI_EVENT_NORMAL, GUI_EVENT_DBLCLK // Try to avoid changing this and the other common ones in case anyone automates a script via SendMessage (though that does seem very unlikely).
-	, GUI_EVENT_RCLK, GUI_EVENT_COLCLK
-	, GUI_EVENT_FIRST_UNNAMED  // This item must always be 1 greater than the last item that has a name in the GUI_EVENT_NAMES array below.
-	, GUI_EVENT_DROPFILES = GUI_EVENT_FIRST_UNNAMED
-	, GUI_EVENT_CLOSE, GUI_EVENT_ESCAPE, GUI_EVENT_RESIZE, GUI_EVENT_CONTEXTMENU
+	, GUI_EVENT_DROPFILES, GUI_EVENT_CLOSE, GUI_EVENT_ESCAPE, GUI_EVENT_RESIZE, GUI_EVENT_CONTEXTMENU
+	, GUI_EVENT_WINDOW_FIRST = GUI_EVENT_DROPFILES, GUI_EVENT_WINDOW_LAST = GUI_EVENT_CONTEXTMENU
+	, GUI_EVENT_NORMAL // This should be replaced with specific events.
+	, GUI_EVENT_CHANGE
+	, GUI_EVENT_CLICK, GUI_EVENT_DBLCLK, GUI_EVENT_RCLK, GUI_EVENT_COLCLK
 	, GUI_EVENT_DIGIT_0 = 48}; // Here just as a reminder that this value and higher are reserved so that a single printable character or digit (mnemonic) can be sent, and also so that ListView's "I" notification can add extra data into the high-byte (which lies just to the left of the "I" character in the bitfield).
 
 typedef USHORT CoordModeType;

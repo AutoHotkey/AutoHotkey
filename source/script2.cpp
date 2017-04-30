@@ -14555,13 +14555,22 @@ BIF_DECL(BIF_OnMessage)
 MsgMonitorStruct *MsgMonitorList::Find(UINT aMsg, IObject *aCallback)
 {
 	for (int i = 0; i < mCount; ++i)
-		if (mMonitor[i].msg == aMsg && mMonitor[i].func == aCallback)
+		if (mMonitor[i].msg == aMsg && mMonitor[i].func == aCallback) // No need to check is_method, since it's impossible for an object and string to exist at the same address.
 			return mMonitor + i;
 	return NULL;
 }
 
 
-MsgMonitorStruct *MsgMonitorList::Add(UINT aMsg, IObject *aCallback, bool aAppend)
+MsgMonitorStruct *MsgMonitorList::Find(UINT aMsg, LPTSTR aMethodName)
+{
+	for (int i = 0; i < mCount; ++i)
+		if (mMonitor[i].msg == aMsg && mMonitor[i].is_method && !_tcsicmp(aMethodName, mMonitor[i].method_name))
+			return mMonitor + i;
+	return NULL;
+}
+
+
+MsgMonitorStruct *MsgMonitorList::AddInternal(UINT aMsg, bool aAppend)
 {
 	if (mCount == mCountMax)
 	{
@@ -14590,11 +14599,39 @@ MsgMonitorStruct *MsgMonitorList::Add(UINT aMsg, IObject *aCallback, bool aAppen
 		new_mon = mMonitor + mCount;
 
 	++mCount;
-	aCallback->AddRef();
-	new_mon->func = aCallback;
 	new_mon->msg = aMsg;
+	// These are initialised by OnMessage, since OnExit and OnClipboardChange don't use them:
 	//new_mon->instance_count = 0;
 	//new_mon->max_instances = 1;
+	return new_mon;
+}
+
+
+MsgMonitorStruct *MsgMonitorList::Add(UINT aMsg, IObject *aCallback, bool aAppend)
+{
+	MsgMonitorStruct *new_mon = AddInternal(aMsg, aAppend);
+	if (new_mon)
+	{
+		aCallback->AddRef();
+		new_mon->func = aCallback;
+		new_mon->is_method = false;
+	}
+	return new_mon;
+}
+
+
+MsgMonitorStruct *MsgMonitorList::Add(UINT aMsg, LPTSTR aMethodName, bool aAppend)
+{
+	if (  !(aMethodName = _tcsdup(aMethodName))  )
+		return NULL;
+	MsgMonitorStruct *new_mon = AddInternal(aMsg, aAppend);
+	if (new_mon)
+	{
+		new_mon->method_name = aMethodName;
+		new_mon->is_method = true;
+	}
+	else
+		free(aMethodName);
 	return new_mon;
 }
 
@@ -14609,16 +14646,61 @@ void MsgMonitorList::Remove(MsgMonitorStruct *aMonitor)
 	// of that message to be called (when there are multiple).
 	for (MsgMonitorInstance *inst = mTop; inst; inst = inst->previous)
 	{
-		if (inst->index >= mon_index && inst->index >= 0)
-			inst->index--; // So index+1 is the next item.
-		inst->count--;
+		inst->Delete(mon_index);
 	}
 	// Remove the item from the array.
 	--mCount;  // Must be done prior to the below.
-	IObject *release_me = aMonitor->func;
+	LPVOID release_me = aMonitor->union_value;
+	bool is_method = aMonitor->is_method;
 	if (mon_index < mCount) // An element other than the last is being removed. Shift the array to cover/delete it.
 		memmove(aMonitor, aMonitor + 1, (mCount - mon_index) * sizeof(MsgMonitorStruct));
-	release_me->Release(); // Must be called after the above in case it calls a __delete() meta-function.
+	if (is_method)
+		free(release_me);
+	else
+		reinterpret_cast<IObject *>(release_me)->Release(); // Must be called last in case it calls a __delete() meta-function.
+}
+
+
+BOOL MsgMonitorList::IsMonitoring(UINT aMsg)
+{
+	for (int i = 0; i < mCount; ++i)
+		if (mMonitor[i].msg == aMsg)
+			return TRUE;
+	return FALSE;
+}
+
+
+BOOL MsgMonitorList::IsRunning(UINT aMsg)
+// Returns true if there are any monitors for a message currently executing.
+{
+	for (MsgMonitorInstance *inst = mTop; inst; inst = inst->previous)
+		if (!inst->deleted && mMonitor[inst->index].msg == aMsg)
+			return TRUE;
+	//if (!mTop)
+	//	return FALSE;
+	//for (int i = 0; i < mCount; ++i)
+	//	if (mMonitor[i].msg == aMsg && mMonitor[i].instance_count)
+	//		return TRUE;
+	return FALSE;
+}
+
+
+void MsgMonitorList::Dispose()
+{
+	// Although other action taken by GuiType::Destroy() ensures the event list isn't
+	// reachable from script once destruction begins, we take the careful approach and
+	// decrement mCount at each iteration to ensure that if Release() executes external
+	// code, this list is always in a valid state.
+	while (mCount)
+	{
+		--mCount;
+		if (mMonitor[mCount].is_method)
+			free(mMonitor[mCount].method_name);
+		else
+			mMonitor[mCount].func->Release();
+	}
+	free(mMonitor);
+	mCountMax = 0;
 }
 
 
