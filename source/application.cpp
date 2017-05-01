@@ -206,7 +206,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	int messages_received = 0; // This is used to ensure we Sleep() at least a minimal amount if no messages are received.
 
 	bool msg_was_handled;
-	HWND fore_window, focused_control, focused_parent, criterion_found_hwnd;
+	HWND fore_window, focused_control, criterion_found_hwnd;
 	TCHAR wnd_class_name[32], gui_action_extra[16], *walk;
 	UserMenuItem *menu_item;
 	HotkeyIDType hk_id;
@@ -467,14 +467,11 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		// performance, since all messages must come through this bottleneck.
 		if (g_firstGui && msg.hwnd && msg.hwnd != g_hWnd && !(msg.message == AHK_GUI_ACTION || msg.message == AHK_USER_MENU))
 		{
-			// Relies heavily on short-circuit boolean order:
 			if (  (msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST) // v1.1.09.04: Fixed to use && vs || and therefore actually exclude other messages.
-				&& (focused_control = GetFocus())
-				&& (focused_parent = GetNonChildParent(focused_control))
-				&& (pgui = GuiType::FindGuiParent(focused_control))  )  // v1.1.09.03: Fixed to support +Parent.  v1.1.09.04: Re-fixed to work when focused_control itself is a Gui.
+				&& (pgui = GuiType::FindGuiParent(focused_control = msg.hwnd))  )  // Seems more appropriate (and efficient) to use the hwnd this message was intended for rather than calling GetFocus().
 			{
 				if (pgui->mAccel) // v1.1.04: Keyboard accelerators.
-					if (TranslateAccelerator(focused_parent, pgui->mAccel, &msg))
+					if (TranslateAccelerator(pgui->mHwnd, pgui->mAccel, &msg))
 						continue; // Above call handled it.
 
 				// Relies heavily on short-circuit boolean order:
