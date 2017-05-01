@@ -463,152 +463,140 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		// else with the message.  This must be done first because some of the standard controls
 		// also use WM_USER messages, so we must not assume they're generic thread messages just
 		// because they're >= WM_USER.  The exception is AHK_GUI_ACTION should always be handled
-		// here rather than by IsDialogMessage().  Note: g_guiCount is checked first to help
-		// performance, since all messages must come through this bottleneck.
-		if (g_firstGui && msg.hwnd && msg.hwnd != g_hWnd && !(msg.message == AHK_GUI_ACTION || msg.message == AHK_USER_MENU))
+		// here rather than by IsDialogMessage().
+		// UPDATE: MSDN isn't clear about which messages IsDialogMessage() dispatches, so it's
+		// now only used for keyboard handling.  This reduces code complexity a little and
+		// eliminates some uncertainty about message routing.  All of the cases for WM_USER
+		// range messages below already checked msg.hwnd to ensure it is one of our messages.
+		if (g_firstGui // Checked first to help performance, since all messages must come through this bottleneck.
+			&& msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST
+			&& (pgui = GuiType::FindGuiParent(msg.hwnd))) // Ordered for short-circuit performance.
 		{
-			if (  (msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST) // v1.1.09.04: Fixed to use && vs || and therefore actually exclude other messages.
-				&& (pgui = GuiType::FindGuiParent(focused_control = msg.hwnd))  )  // Seems more appropriate (and efficient) to use the hwnd this message was intended for rather than calling GetFocus().
-			{
-				if (pgui->mAccel) // v1.1.04: Keyboard accelerators.
-					if (TranslateAccelerator(pgui->mHwnd, pgui->mAccel, &msg))
-						continue; // Above call handled it.
+			focused_control = msg.hwnd; // Alias for maintainability.  Seems more appropriate (and efficient) to use this vs. GetFocus().
 
-				// Relies heavily on short-circuit boolean order:
-				if (  msg.message == WM_KEYDOWN && pgui->mTabControlCount
-					&& (msg.wParam == VK_NEXT || msg.wParam == VK_PRIOR || msg.wParam == VK_TAB
-					 || msg.wParam == VK_LEFT || msg.wParam == VK_RIGHT)
-					&& (pcontrol = pgui->FindControl(focused_control)) && pcontrol->type != GUI_CONTROL_HOTKEY   )
+			if (pgui->mAccel) // v1.1.04: Keyboard accelerators.
+				if (TranslateAccelerator(pgui->mHwnd, pgui->mAccel, &msg))
+					continue; // Above call handled it.
+
+			// Relies heavily on short-circuit boolean order:
+			if (  msg.message == WM_KEYDOWN && pgui->mTabControlCount
+				&& (msg.wParam == VK_NEXT || msg.wParam == VK_PRIOR || msg.wParam == VK_TAB
+					|| msg.wParam == VK_LEFT || msg.wParam == VK_RIGHT)
+				&& (pcontrol = pgui->FindControl(focused_control)) && pcontrol->type != GUI_CONTROL_HOTKEY   )
+			{
+				ptab_control = NULL; // Set default.
+				if (pcontrol->type == GUI_CONTROL_TAB) // The focused control is a tab control itself.
 				{
-					ptab_control = NULL; // Set default.
-					if (pcontrol->type == GUI_CONTROL_TAB) // The focused control is a tab control itself.
+					ptab_control = pcontrol;
+					// For the below, note that Alt-left and Alt-right are automatically excluded,
+					// as desired, since any key modified only by alt would be WM_SYSKEYDOWN vs. WM_KEYDOWN.
+					if (msg.wParam == VK_LEFT || msg.wParam == VK_RIGHT)
 					{
-						ptab_control = pcontrol;
-						// For the below, note that Alt-left and Alt-right are automatically excluded,
-						// as desired, since any key modified only by alt would be WM_SYSKEYDOWN vs. WM_KEYDOWN.
-						if (msg.wParam == VK_LEFT || msg.wParam == VK_RIGHT)
-						{
-							pgui->SelectAdjacentTab(*ptab_control, msg.wParam == VK_RIGHT, false, false);
-							// Pass false for both the above since that's the whole point of having arrow
-							// keys handled separately from the below: Focus should stay on the tabs
-							// rather than jumping to the first control of the tab, it focus should not
-							// wrap around to the beginning or end (to conform to standard behavior for
-							// arrow keys).
-							continue; // Suppress this key even if the above failed (probably impossible in this case).
-						}
-						//else fall through to the next part.
+						pgui->SelectAdjacentTab(*ptab_control, msg.wParam == VK_RIGHT, false, false);
+						// Pass false for both the above since that's the whole point of having arrow
+						// keys handled separately from the below: Focus should stay on the tabs
+						// rather than jumping to the first control of the tab, it focus should not
+						// wrap around to the beginning or end (to conform to standard behavior for
+						// arrow keys).
+						continue; // Suppress this key even if the above failed (probably impossible in this case).
 					}
-					// If focus is in a multiline edit control, don't act upon Control-Tab (and
-					// shift-control-tab -> for simplicity & consistency) since Control-Tab is a special
-					// keystroke that inserts a literal tab in the edit control:
-					if (   msg.wParam != VK_LEFT && msg.wParam != VK_RIGHT
-						&& (GetKeyState(VK_CONTROL) & 0x8000) // Even if other modifiers are down, it still qualifies. Use GetKeyState() vs. GetAsyncKeyState() because the former's definition is more suitable.
-						&& (msg.wParam != VK_TAB || pcontrol->type != GUI_CONTROL_EDIT
-							|| !(GetWindowLong(pcontrol->hwnd, GWL_STYLE) & ES_MULTILINE))   )
+					//else fall through to the next part.
+				}
+				// If focus is in a multiline edit control, don't act upon Control-Tab (and
+				// shift-control-tab -> for simplicity & consistency) since Control-Tab is a special
+				// keystroke that inserts a literal tab in the edit control:
+				if (   msg.wParam != VK_LEFT && msg.wParam != VK_RIGHT
+					&& (GetKeyState(VK_CONTROL) & 0x8000) // Even if other modifiers are down, it still qualifies. Use GetKeyState() vs. GetAsyncKeyState() because the former's definition is more suitable.
+					&& (msg.wParam != VK_TAB || pcontrol->type != GUI_CONTROL_EDIT
+						|| !(GetWindowLong(pcontrol->hwnd, GWL_STYLE) & ES_MULTILINE))   )
+				{
+					// If ptab_control wasn't determined above, check if focused control is owned by a tab control:
+					if (!ptab_control && !(ptab_control = pgui->FindTabControl(pcontrol->tab_control_index))   )
+						// Fall back to the first tab control (for consistency & simplicity, seems best
+						// to always use the first rather than something fancier such as "nearest in z-order".
+						ptab_control = pgui->FindTabControl(0);
+					if (ptab_control && IsWindowEnabled(ptab_control->hwnd))
 					{
-						// If ptab_control wasn't determined above, check if focused control is owned by a tab control:
-						if (!ptab_control && !(ptab_control = pgui->FindTabControl(pcontrol->tab_control_index))   )
-							// Fall back to the first tab control (for consistency & simplicity, seems best
-							// to always use the first rather than something fancier such as "nearest in z-order".
-							ptab_control = pgui->FindTabControl(0);
-						if (ptab_control && IsWindowEnabled(ptab_control->hwnd))
-						{
-							pgui->SelectAdjacentTab(*ptab_control
-								, msg.wParam == VK_NEXT || (msg.wParam == VK_TAB && !(GetKeyState(VK_SHIFT) & 0x8000)) // Use GetKeyState() vs. GetAsyncKeyState() because the former's definition is more suitable.
-								, true, true);
-							// Update to the below: Must suppress the tab key at least, to prevent it
-							// from navigating *and* changing the tab.  And since this one is suppressed,
-							// might as well suppress the others for consistency.
-							// Older: Since WM_KEYUP is not handled/suppressed here, it seems best not to
-							// suppress this WM_KEYDOWN either (it should do nothing in this case
-							// anyway, but for balance this seems best): Fall through to the next section.
-							continue;
-						}
-						//else fall through to the below.
+						pgui->SelectAdjacentTab(*ptab_control
+							, msg.wParam == VK_NEXT || (msg.wParam == VK_TAB && !(GetKeyState(VK_SHIFT) & 0x8000)) // Use GetKeyState() vs. GetAsyncKeyState() because the former's definition is more suitable.
+							, true, true);
+						// Update to the below: Must suppress the tab key at least, to prevent it
+						// from navigating *and* changing the tab.  And since this one is suppressed,
+						// might as well suppress the others for consistency.
+						// Older: Since WM_KEYUP is not handled/suppressed here, it seems best not to
+						// suppress this WM_KEYDOWN either (it should do nothing in this case
+						// anyway, but for balance this seems best): Fall through to the next section.
+						continue;
 					}
 					//else fall through to the below.
-				} // Interception of keystrokes for navigation in tab control.
-
-				// v1.0.34: Fix for the fact that a multiline edit control will send WM_CLOSE to its parent
-				// when user presses ESC while it has focus.  The following check is similar to the block's above.
-				// The alternative to this approach would have been to override the edit control's WindowProc,
-				// but the following seemed to be less code. Although this fix is only necessary for multiline
-				// edits, its done for all edits since it doesn't do any harm.  In addition, there is no need to
-				// check what modifiers are down because we never receive the keystroke for Ctrl-Esc and Alt-Esc
-				// (the OS handles those beforehand) and both Win-Esc and Shift-Esc are identical to a naked Esc
-				// inside an edit.  The following check relies heavily on short-circuit eval. order.
-				if (   msg.message == WM_KEYDOWN
-					&& (msg.wParam == VK_ESCAPE || msg.wParam == VK_TAB // v1.0.38.03: Added VK_TAB handling for "WantTab".
-						|| (msg.wParam == 'A' && (GetKeyState(VK_CONTROL) & 0x8000) // v1.0.44: Added support for "WantCtrlA".
-							&& !(GetKeyState(VK_RMENU) & 0x8000))) // v1.1.17: Exclude AltGr+A (Ctrl+Alt+A).
-					&& (pcontrol = pgui->FindControl(focused_control))
-					&& pcontrol->type == GUI_CONTROL_EDIT)
-				{
-					switch(msg.wParam)
-					{
-					case 'A': // v1.0.44: Support for Ctrl-A to select all text.
-						if (!(pcontrol->attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT)) // i.e. presence of AltSubmit bit DISABLES Ctrl-A handling.
-						{
-							SendMessage(pcontrol->hwnd, EM_SETSEL, 0, -1); // Select all text.
-							continue; // Omit this keystroke from any further processing.
-						}
-						break;
-					case VK_ESCAPE:
-						pgui->Escape();
-						continue; // Omit this keystroke from any further processing.
-					default: // VK_TAB
-						if (pcontrol->attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) // It has the "WantTab" property.
-						{
-							// For flexibility, do this even for single-line edit controls, though in that
-							// case the tab keystroke will produce an "empty box" character.
-							// Strangely, if a message pump other than this one (MsgSleep) is running,
-							// such as that of a MsgBox, "WantTab" is already in effect unconditionally,
-							// perhaps because MsgBox and others respond to WM_GETDLGCODE with DLGC_WANTTAB.
-							SendMessage(pcontrol->hwnd, EM_REPLACESEL, TRUE, (LPARAM)"\t");
-							continue; // Omit this keystroke from any further processing.
-						}
-					} // switch()
 				}
+				//else fall through to the below.
+			} // Interception of keystrokes for navigation in tab control.
 
-				if (GuiType::sTreeWithEditInProgress && msg.message == WM_KEYDOWN)
-				{
-					if (msg.wParam == VK_RETURN)
-					{
-						TreeView_EndEditLabelNow(GuiType::sTreeWithEditInProgress, FALSE); // Save changes to label/text.
-						continue;
-					}
-					else if (msg.wParam == VK_ESCAPE)
-					{
-						TreeView_EndEditLabelNow(GuiType::sTreeWithEditInProgress, TRUE); // Cancel without saving.
-						continue;
-					}
-				}
-			} // if (keyboard message sent to GUI)
-
-			msg_was_handled = false;
-			for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
+			// v1.0.34: Fix for the fact that a multiline edit control will send WM_CLOSE to its parent
+			// when user presses ESC while it has focus.  The following check is similar to the block's above.
+			// The alternative to this approach would have been to override the edit control's WindowProc,
+			// but the following seemed to be less code. Although this fix is only necessary for multiline
+			// edits, its done for all edits since it doesn't do any harm.  In addition, there is no need to
+			// check what modifiers are down because we never receive the keystroke for Ctrl-Esc and Alt-Esc
+			// (the OS handles those beforehand) and both Win-Esc and Shift-Esc are identical to a naked Esc
+			// inside an edit.  The following check relies heavily on short-circuit eval. order.
+			if (   msg.message == WM_KEYDOWN
+				&& (msg.wParam == VK_ESCAPE || msg.wParam == VK_TAB // v1.0.38.03: Added VK_TAB handling for "WantTab".
+					|| (msg.wParam == 'A' && (GetKeyState(VK_CONTROL) & 0x8000) // v1.0.44: Added support for "WantCtrlA".
+						&& !(GetKeyState(VK_RMENU) & 0x8000))) // v1.1.17: Exclude AltGr+A (Ctrl+Alt+A).
+				&& (pcontrol = pgui->FindControl(focused_control))
+				&& pcontrol->type == GUI_CONTROL_EDIT)
 			{
-				// Note: indications are that IsDialogMessage() should not be called with NULL as
-				// its first parameter (perhaps as an attempt to get allow dialogs owned by our
-				// thread to be handled at once). Although it might work on some versions of Windows,
-				// it's undocumented and shouldn't be relied on.
-				// Also, can't call IsDialogMessage against msg.hwnd because that is not a complete
-				// solution: at the very least, tab key navigation will not work in GUI windows.
-				// There are probably other side-effects as well.
-				//if (g_gui[i]->mHwnd) // Always non-NULL for any item in g_gui.
-				g->CalledByIsDialogMessageOrDispatch = true;
-				g->CalledByIsDialogMessageOrDispatchMsg = msg.message; // Added in v1.0.44.11 because it's known that IsDialogMessage can change the message number (e.g. WM_KEYDOWN->WM_NOTIFY for UpDowns)
-				if (IsDialogMessage(gui->mHwnd, &msg))
+				switch(msg.wParam)
 				{
-					msg_was_handled = true;
-					g->CalledByIsDialogMessageOrDispatch = false;
+				case 'A': // v1.0.44: Support for Ctrl-A to select all text.
+					if (!(pcontrol->attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT)) // i.e. presence of AltSubmit bit DISABLES Ctrl-A handling.
+					{
+						SendMessage(pcontrol->hwnd, EM_SETSEL, 0, -1); // Select all text.
+						continue; // Omit this keystroke from any further processing.
+					}
 					break;
-				}
-				g->CalledByIsDialogMessageOrDispatch = false;
+				case VK_ESCAPE:
+					pgui->Escape();
+					continue; // Omit this keystroke from any further processing.
+				default: // VK_TAB
+					if (pcontrol->attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR) // It has the "WantTab" property.
+					{
+						// For flexibility, do this even for single-line edit controls, though in that
+						// case the tab keystroke will produce an "empty box" character.
+						// Strangely, if a message pump other than this one (MsgSleep) is running,
+						// such as that of a MsgBox, "WantTab" is already in effect unconditionally,
+						// perhaps because MsgBox and others respond to WM_GETDLGCODE with DLGC_WANTTAB.
+						SendMessage(pcontrol->hwnd, EM_REPLACESEL, TRUE, (LPARAM)"\t");
+						continue; // Omit this keystroke from any further processing.
+					}
+				} // switch()
 			}
+
+			if (GuiType::sTreeWithEditInProgress && msg.message == WM_KEYDOWN)
+			{
+				if (msg.wParam == VK_RETURN)
+				{
+					TreeView_EndEditLabelNow(GuiType::sTreeWithEditInProgress, FALSE); // Save changes to label/text.
+					continue;
+				}
+				else if (msg.wParam == VK_ESCAPE)
+				{
+					TreeView_EndEditLabelNow(GuiType::sTreeWithEditInProgress, TRUE); // Cancel without saving.
+					continue;
+				}
+			}
+
+			// IsDialogMessage() takes care of standard keyboard handling within the dialog,
+			// such as tab to change focus and Enter to activate the default button.
+			g->CalledByIsDialogMessageOrDispatch = true;
+			g->CalledByIsDialogMessageOrDispatchMsg = msg.message; // Added in v1.0.44.11 because it's known that IsDialogMessage can change the message number (e.g. WM_KEYDOWN->WM_NOTIFY for UpDowns)
+			msg_was_handled = IsDialogMessage(pgui->mHwnd, &msg); // Pass the dialog HWND, not msg.hwnd, which is often a control.
+			g->CalledByIsDialogMessageOrDispatch = false;
 			if (msg_was_handled) // This message was handled by IsDialogMessage() above.
 				continue; // Continue with the main message loop.
-		}
+		} // if (keyboard message posted to GUI)
 
 		// v1.0.44: There's no reason to call TRANSLATE_AHK_MSG here because all WM_COMMNOTIFY messages
 		// are sent to g_hWnd. Thus, our call to DispatchMessage() later below will route such messages to
