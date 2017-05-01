@@ -2105,9 +2105,17 @@ void GuiType::Destroy()
 	// First destroy any windows owned by this window, since they will be auto-destroyed
 	// anyway due to their being owned.  By destroying them explicitly, the Destroy()
 	// function is called recursively which keeps everything relatively neat.
-	for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
-		if (gui->mOwner == mHwnd)
-			gui->Destroy();
+	// Lexikos: I'm not really sure what Chris meant by "neat", since Destroy() is called
+	// recursively via WM_DESTROY anyway.  It's currently left to WM_DESTROY because the
+	// code below is actually broken in two ways (unique to the new object-oriented API):
+	//  1) If there are no external references to gui, it will be deleted and gui->mNextGui
+	//     will likely crash the program.
+	//  2) Destroy() removes the gui from the list, which causes the loop to break at the
+	//     first owned/child window.  Saving the next/previous link before-hand may not
+	//     solve the problem since Destroy() could recursively destroy other windows.
+	//for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
+	//	if (gui->mOwner == mHwnd)
+	//		gui->Destroy();
 
 	// Testing shows that this must be done prior to calling DestroyWindow() later below, presumably
 	// because the destruction immediately destroys the status bar, or prevents it from answering messages.
