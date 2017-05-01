@@ -2062,6 +2062,13 @@ ResultType GuiType::ControlGetWindowText(ResultToken &aResultToken, GuiControlTy
 	if (TokenSetResult(aResultToken, NULL, length) != OK)
 		return FAIL; // It already displayed the error.
 	aResultToken.marker_length = GetWindowText(aControl.hwnd, aResultToken.marker, length+1);
+	// MSDN: "If the function succeeds, the return value is the length, in characters,
+	// of the copied string, not including the terminating null character."
+	// However, GetWindowText() works by sending the control a WM_GETTEXT message, and some
+	// controls don't respond correctly.  Link controls have been caught including the null
+	// terminator in the count, so this works around it:
+	if (aResultToken.marker_length && !aResultToken.marker[aResultToken.marker_length-1])
+		--aResultToken.marker_length;
 	return OK;
 }
 
