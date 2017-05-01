@@ -1144,7 +1144,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					}
 
 					// Build event arguments.
-					EVT_ARG_ADD(GuiType::ConvertEvent(gui_action));
 					EVT_ARG_ADD((__int64)gui_event_info);
 				} // switch (msg.message)
 

@@ -9379,7 +9379,7 @@ LRESULT GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	AddRef();
 	
 	INT_PTR retval;
-	ExprTokenType param[] = { &aControl, _T("N"), (__int64)(DWORD_PTR)aNmHdr };
+	ExprTokenType param[] = { &aControl, (__int64)(DWORD_PTR)aNmHdr };
 	aControl.events.Call(param, _countof(param), 'N', mEventSink, &retval);
 
 	Release();
