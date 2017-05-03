@@ -207,7 +207,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 	bool msg_was_handled;
 	HWND fore_window, focused_control, criterion_found_hwnd;
-	TCHAR wnd_class_name[32], gui_action_extra[16], *walk;
+	TCHAR wnd_class_name[32];
 	UserMenuItem *menu_item;
 	HotkeyIDType hk_id;
 	Hotkey *hk;
@@ -1012,8 +1012,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			{
 			case AHK_GUI_ACTION: // Listed first for performance.
 			{
-				*gui_action_extra = '\0'; // Set default, which is possibly overridden below.
-
 #define EVT_ARG_ADD(_value) gui_event_args[gui_event_arg_count++].SetValue(_value)
 
 				// Set first argument
@@ -1120,41 +1118,19 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						EVT_ARG_ADD(pgui->Unscale(HIWORD(gui_size))); // Height
 					}
 					break;
+
 				case GUI_EVENT_WM_COMMAND: // Control-generated, but no additional parameters.
 					break;
-				default: // Control-generated event (i.e. event_is_control_generated==true).
-					switch(pcontrol->type)
-					{
-					case GUI_CONTROL_LISTVIEW: // v1.0.46.10: Added this section to support notifying the script of HOW the item changed.
-						if (gui_action == 'I')
-						{
-							UINT gui_action = (msg.wParam & 0xFF00);
-							walk = gui_action_extra;
-							if (gui_action & AHK_LV_SELECT) // Keep this one first, and the others below in the same order, in case any scripts come to rely on the ordering of the letters within the string.
-								*walk++ = 'S';
-							else if (gui_action & AHK_LV_DESELECT)
-								*walk++ = 's';
-							if (gui_action & AHK_LV_FOCUS)
-								*walk++ = 'F';
-							else if (gui_action & AHK_LV_DEFOCUS)
-								*walk++ = 'f';
-							if (gui_action & AHK_LV_CHECK)
-								*walk++ = 'C';
-							else if (gui_action & AHK_LV_UNCHECK)
-								*walk++ = 'c';
-							// Search on "AHK_LV_DROPHILITE" for comments about why the below is commented out:
-							//if (gui_action & AHK_LV_DROPHILITE)
-							//	*walk++ = 'D';
-							//else if (gui_action & AHK_LV_UNDROPHILITE)
-							//	*walk++ = 'd';
-							*walk = '\0'; // Provide terminator inside gui_action_extra.
-						}
-						break;
-					//default: No action for any other control-generated events since caller already set things up properly.
-					}
 
-					// Build event arguments.
+				default: // Other control-generated event (i.e. event_is_control_generated==true).
 					EVT_ARG_ADD((__int64)gui_event_info);
+					switch (gui_action)
+					{
+					case GUI_EVENT_ITEMSELECT:
+					case GUI_EVENT_ITEMCHECK:
+						EVT_ARG_ADD((int)HIBYTE(msg.wParam) - 1);
+						break;
+					}
 				} // switch (msg.message)
 
 				if (gui_action == GUI_EVENT_CLICK && pcontrol->type == GUI_CONTROL_LINK)
@@ -1165,8 +1141,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					if (SendMessage(pcontrol->hwnd, LM_GETITEM, NULL, (LPARAM)&item))
 						EVT_ARG_ADD(CStringTCharFromWCharIfNeeded(*item.szUrl ? item.szUrl : item.szID));
 				}
-				else if (*gui_action_extra)
-					EVT_ARG_ADD(gui_action_extra);
 
 				// Set last found window (as documented).  It's not necessary to check IsWindow/IsWindowVisible/
 				// DetectHiddenWindows since GetValidLastUsedWindow() takes care of that whenever the script

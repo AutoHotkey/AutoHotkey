@@ -107,7 +107,7 @@ UCHAR **ConstructEventSupportArray()
 	RAISES(GUI_CONTROL_DROPDOWNLIST, GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_COMBOBOX,     GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK)
 	RAISES(GUI_CONTROL_LISTBOX,      GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK)
-	RAISES(GUI_CONTROL_LISTVIEW,     GUI_EVENT_DBLCLK, GUI_EVENT_COLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, 'R', 'D', 'd', 'e', 'I', 'S', 's', 'M', 'C', 'F', 'f', 'K', 'A', 'E')
+	RAISES(GUI_CONTROL_LISTVIEW,     GUI_EVENT_DBLCLK, GUI_EVENT_COLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMFOCUS, GUI_EVENT_ITEMSELECT, GUI_EVENT_ITEMCHECK, 'R', 'D', 'd', 'e', 'S', 's', 'M', 'C', 'F', 'f', 'K', 'A', 'E')
 	RAISES(GUI_CONTROL_TREEVIEW,     'S', GUI_EVENT_DBLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, 'e', 'D', 'd', 'R', 'F', 'f', 'K', '+', '-', 'E')
 	RAISES(GUI_CONTROL_EDIT,         GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_DATETIME,     GUI_EVENT_CHANGE)
@@ -8300,57 +8300,45 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				break; // Let default proc handle them since they might mean something to it.
 
 			case LVN_ITEMCHANGED:
+			{
 				// This is received for selection/deselection, which means clicking a new item generates
 				// at least two of them (in practice, it generates between 1 and 3 but not sure why).
 				// It's also received for checking/unchecking an item.  Extending a selection via Shift-ArrowKey
 				// generates between 1 and 3 of them, perhaps at random?  Maybe all we can count on is that you
 				// get at least one when the selection has changed or a box is (un)checked.
-				if (control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT) // Script asked for item-change notifications.
+				NMLISTVIEW &lv = *(LPNMLISTVIEW)lParam;
+				event_info = 1 + lv.iItem; // MSDN: If iItem is -1, the change has been applied to all items in the list view.
+
+				// Although the OS sometimes generates focus+select together, that's only when the focus is
+				// moving and selecting a single item; i.e. not by Ctrl/Shift and the mouse or arrow keys.
+				// Also, de-focus and de-select seem to always be separate.
+				UINT newly_changed =  lv.uNewState ^ lv.uOldState; // uChanged doesn't seem accurate: it's always 8?  So derive the "correct" value of which flags have actually changed.
+				UINT newly_on = newly_changed & lv.uNewState;
+				UINT newly_off = newly_changed & lv.uOldState;
+				
+				// If the focus and selection is changed with Shift and the arrow keys, the control sends the
+				// selection change first, then focus change.  So for consistency, report the selection change
+				// first when the notification includes both.
+				if (newly_changed & LVIS_SELECTED)
+					// Pass the new selected state in the second byte of the event code.  Passing 1 or 2 vs. boolean allows shared handling for ITEMSELECT and ITEMCHECK.
+					pgui->Event(control_index, 0, GUI_EVENT_ITEMSELECT | ((newly_on & LVIS_SELECTED) ? 0x200 : 0x100), event_info);
+
+				if (newly_on & LVIS_FOCUSED)
+					pgui->Event(control_index, 0, GUI_EVENT_ITEMFOCUS, event_info);
+
+				if (newly_changed & LVIS_STATEIMAGEMASK) // State image changed.
 				{
-					gui_event = 'I'; // Set default to be a plain I.
-					NMLISTVIEW &lv = *(LPNMLISTVIEW)lParam;
-					event_info = 1 + lv.iItem; // MSDN: If iItem is -1, the change has been applied to all items in the list view.
-
-					// Although the OS currently generates focus+select together, it sends de-focus and de-select
-					// separately.  However, since this behavior might vary in past/future OSes, it seems best to
-					// use a method that will work regardless of what combinations are possible.
-					UINT newly_changed =  lv.uNewState ^ lv.uOldState; // uChanged doesn't seem accurate: it's always 8?  So derive the "correct" value of which flags have actually changed.
-					UINT newly_on = newly_changed & lv.uNewState;
-					UINT newly_off = newly_changed & lv.uOldState;
-					if (newly_on & LVIS_FOCUSED)
-						gui_event |= AHK_LV_FOCUS;
-					else if (newly_off & LVIS_FOCUSED)
-						gui_event |= AHK_LV_DEFOCUS;
-					if (newly_on & LVIS_SELECTED)
-						gui_event |= AHK_LV_SELECT;
-					else if (newly_off & LVIS_SELECTED)
-						gui_event |= AHK_LV_DESELECT;
-					// The following are commented out for possible future use because currently, I think they
-					// don't happen at all (not for dropping of files anyway).  If dragging & dropping within
-					// a ListView or between two different ListViews ever becomes a built-in feature, this
-					// section (and its counterpart in the main event loop) can be re-enabled.
-					// In those very rare cases when a script needs LVIS_DROPHILITED, it can use OnMessage().
-					//if (newly_on & LVIS_DROPHILITED) // MSDN: LVIS_DROPHILITED means "the item is highlighted as a drag-and-drop target."
-					//	gui_event |= AHK_LV_DROPHILITE;
-					//else if (newly_off & LVIS_DROPHILITED)
-					//	gui_event |= AHK_LV_UNDROPHILITE;
-
-					// Below must occur only after all of the checks above:
-					if (newly_changed & LVIS_STATEIMAGEMASK) // State image changed.
+					if (lv.uOldState & LVIS_STATEIMAGEMASK) // Image is changing from a non-blank image to a different non-blank image.
 					{
-						if (lv.uOldState & LVIS_STATEIMAGEMASK) // Image is changing from a non-blank image to a different non-blank image.
-							// For simplicity, assume checkboxes are present rather than custom images.
-							// User can use OnMessage() to do custom handling in the rare event of having
-							// images other than checkboxes.
-							gui_event |= ((lv.uNewState & LVIS_STATEIMAGEMASK) == 0x1000) ? AHK_LV_UNCHECK : AHK_LV_CHECK; // The #1 image is "unchecked" and the #2 (or anything higher) is considered "checked".
-						else // State image changed from blank/none to some new image.  v1.0.46.10: Omit this event because it seems to do more harm than good in 99% of cases (especially since it typically only occurs when the script calls LV_Add/Insert).
-							if (gui_event == 'I') // But only omit the even if there are no other changes/reasons for it.
-								is_actionable = false;
+						// Pass the new state image index in the second byte of the event code.
+						// If the control has checkboxes, these will be 1 (unchecked) or 2 (checked),
+						// but doing it this way provides extra utility in case of other state images.
+						pgui->Event(control_index, 0, GUI_EVENT_ITEMCHECK | ((lv.uNewState & LVIS_STATEIMAGEMASK) >> 4), event_info);
 					}
+					//else state image changed from blank/none to some new image.  Omit this event because it seems to do more harm than good in 99% of cases (especially since it typically only occurs when the script calls LV_Add/Insert).
 				}
-				//else script isn't being notified of item-changes, so leave everything uninitialized or at their
-				// defaults (it won't matter because further below, no event will be sent to the script).
-				break;
+				return 0; // All recognised events for this notification have been handled above.
+			}
 
 			case LVN_BEGINSCROLL: gui_event = 'S'; break;
 			case LVN_ENDSCROLL: gui_event = 's'; break; // Lowercase to distinguish it.

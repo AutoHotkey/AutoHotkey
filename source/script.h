@@ -570,19 +570,6 @@ enum BuiltInFunctionID {
 	FID_MenuGetHandle = 0, FID_MenuGetName,
 };
 
-#define AHK_LV_SELECT       0x0100
-#define AHK_LV_DESELECT     0x0200
-#define AHK_LV_FOCUS        0x0400
-#define AHK_LV_DEFOCUS      0x0800
-#define AHK_LV_CHECK        0x1000
-#define AHK_LV_UNCHECK      0x2000
-#define AHK_LV_DROPHILITE   0x4000
-#define AHK_LV_UNDROPHILITE 0x8000
-// Although there's no room remaining in the BYTE for LVIS_CUT (AHK_LV_CUT) [assuming it's ever needed],
-// it might be possible to squeeze more info into it as follows:
-// Each pair of bits can represent three values (other than zero).  But since only two values are needed
-// (since an item can't be both selected an deselected simultaneously), one value in each pair is available
-// for future use such as LVIS_CUT.
 
 typedef UCHAR GuiControls;
 enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero due to things like ZeroMemory() on the struct.
