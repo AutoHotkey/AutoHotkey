@@ -14552,19 +14552,23 @@ BIF_DECL(BIF_OnMessage)
 }
 
 
-MsgMonitorStruct *MsgMonitorList::Find(UINT aMsg, IObject *aCallback)
+MsgMonitorStruct *MsgMonitorList::Find(UINT aMsg, IObject *aCallback, UCHAR aMsgType)
 {
 	for (int i = 0; i < mCount; ++i)
-		if (mMonitor[i].msg == aMsg && mMonitor[i].func == aCallback) // No need to check is_method, since it's impossible for an object and string to exist at the same address.
+		if (mMonitor[i].msg == aMsg
+			&& mMonitor[i].func == aCallback // No need to check is_method, since it's impossible for an object and string to exist at the same address.
+			&& mMonitor[i].msg_type == aMsgType) // Checked last because it's nearly always true.
 			return mMonitor + i;
 	return NULL;
 }
 
 
-MsgMonitorStruct *MsgMonitorList::Find(UINT aMsg, LPTSTR aMethodName)
+MsgMonitorStruct *MsgMonitorList::Find(UINT aMsg, LPTSTR aMethodName, UCHAR aMsgType)
 {
 	for (int i = 0; i < mCount; ++i)
-		if (mMonitor[i].msg == aMsg && mMonitor[i].is_method && !_tcsicmp(aMethodName, mMonitor[i].method_name))
+		if (mMonitor[i].msg == aMsg
+			&& mMonitor[i].is_method && !_tcsicmp(aMethodName, mMonitor[i].method_name)
+			&& mMonitor[i].msg_type == aMsgType) // Checked last because it's nearly always true.
 			return mMonitor + i;
 	return NULL;
 }
@@ -14600,6 +14604,7 @@ MsgMonitorStruct *MsgMonitorList::AddInternal(UINT aMsg, bool aAppend)
 
 	++mCount;
 	new_mon->msg = aMsg;
+	new_mon->msg_type = 0; // Must be initialised to 0 for all callers except GUI.
 	// These are initialised by OnMessage, since OnExit and OnClipboardChange don't use them:
 	//new_mon->instance_count = 0;
 	//new_mon->max_instances = 1;
@@ -14661,20 +14666,20 @@ void MsgMonitorList::Remove(MsgMonitorStruct *aMonitor)
 }
 
 
-BOOL MsgMonitorList::IsMonitoring(UINT aMsg)
+BOOL MsgMonitorList::IsMonitoring(UINT aMsg, UCHAR aMsgType)
 {
 	for (int i = 0; i < mCount; ++i)
-		if (mMonitor[i].msg == aMsg)
+		if (mMonitor[i].msg == aMsg && mMonitor[i].msg_type == aMsgType)
 			return TRUE;
 	return FALSE;
 }
 
 
-BOOL MsgMonitorList::IsRunning(UINT aMsg)
+BOOL MsgMonitorList::IsRunning(UINT aMsg, UCHAR aMsgType)
 // Returns true if there are any monitors for a message currently executing.
 {
 	for (MsgMonitorInstance *inst = mTop; inst; inst = inst->previous)
-		if (!inst->deleted && mMonitor[inst->index].msg == aMsg)
+		if (!inst->deleted && mMonitor[inst->index].msg == aMsg && mMonitor[inst->index].msg_type == aMsgType)
 			return TRUE;
 	//if (!mTop)
 	//	return FALSE;

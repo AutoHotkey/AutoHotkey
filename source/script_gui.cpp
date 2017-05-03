@@ -121,7 +121,7 @@ UCHAR **ConstructEventSupportArray()
 	//RAISES(GUI_CONTROL_TAB3,         )
 	//RAISES_NONE(GUI_CONTROL_ACTIVEX)
 	RAISES(GUI_CONTROL_LINK,         GUI_EVENT_CLICK)
-	RAISES(GUI_CONTROL_CUSTOM,       GUI_EVENT_NORMAL, 'N')
+	//RAISES_NONE(GUI_CONTROL_CUSTOM)
 	RAISES(GUI_CONTROL_STATUSBAR,    GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_DBLCLK, 'R')
 
 	//#undef RAISES_NONE
@@ -340,7 +340,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			GuiEventType evt = ConvertEvent(event_name);
 			if (evt < GUI_EVENT_WINDOW_FIRST || evt > GUI_EVENT_WINDOW_LAST)
 				_o_throw(ERR_PARAM1_INVALID);
-			return OnEvent(NULL, evt, aParam, aParamCount, aResultToken);
+			return OnEvent(NULL, evt, GUI_EVENTKIND_EVENT, aParam, aParamCount, aResultToken);
 		}
 		case P_Handle:
 		{
@@ -648,6 +648,8 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 	if_member("Move", M_Move)
 	if_member("Choose", M_Choose)
 	if_member("OnEvent", M_OnEvent)
+	if_member("OnNotify", M_OnNotify)
+	if_member("OnCommand", M_OnCommand)
 	if_member("UpdateFont", M_UpdateFont)
 	if_member("Focus", M_Focus)
 	if_member("Focused", P_Focused)
@@ -761,14 +763,29 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			return gui->ControlChoose(*this, *aParam[0], ParamIndexToOptionalInt(1, 0));
 
 		case M_OnEvent:
+		case M_OnNotify:
+		case M_OnCommand:
 		{
 			if (aParamCount < 2)
 				_o_throw(ERR_TOO_FEW_PARAMS);
-			LPTSTR event_name = ParamIndexToString(0, _f_number_buf);
-			GuiEventType evt = GuiType::ConvertEvent(event_name);
-			if (!evt || !SupportsEvent(evt))
-				_o_throw(ERR_PARAM1_INVALID);
-			return gui->OnEvent(this, evt, aParam, aParamCount, aResultToken);
+			UINT event_code;
+			UCHAR event_kind;
+			if (member == M_OnEvent)
+			{
+				LPTSTR event_name = ParamIndexToString(0, _f_number_buf);
+				event_code = GuiType::ConvertEvent(event_name);
+				if (!event_code || !SupportsEvent(event_code))
+					_o_throw(ERR_PARAM1_INVALID);
+				event_kind = GUI_EVENTKIND_EVENT;
+			}
+			else
+			{
+				if (!TokenIsNumeric(*aParam[0]))
+					_o_throw(ERR_PARAM1_INVALID);
+				event_code = ParamIndexToInt(0);
+				event_kind = member == M_OnNotify ? GUI_EVENTKIND_NOTIFY : GUI_EVENTKIND_COMMAND;
+			}
+			return gui->OnEvent(this, event_code, event_kind, aParam, aParamCount, aResultToken);
 		}
 
 		case P_Name:
@@ -2365,7 +2382,7 @@ ResultType GuiType::NameToEventHandler(LPTSTR aName, IObject *&aObject)
 }
 
 
-ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent
+ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 	, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken)
 {
 	// Caller has already converted aParam[0] to aEvent and validated it,
@@ -2385,13 +2402,13 @@ ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent
 		if (!NameToEventHandler(name, func))
 			_o_throw(ERR_PARAM2_INVALID, name);
 	}
-	if (!OnEvent(aControl, aEvent, func, name, max_threads))
+	if (!OnEvent(aControl, aEvent, aEventKind, func, name, max_threads))
 		_o_throw(ERR_OUTOFMEM);
 	return OK;
 }
 
 
-ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent
+ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 	, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads)
 {
 	MsgMonitorList &handlers = aControl ? aControl->events : mEvents;
@@ -2423,6 +2440,7 @@ ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent
 	}
 	mon->instance_count = 0;
 	mon->max_instances = aMaxThreads;
+	mon->msg_type = aEventKind;
 	ApplyEventStyles(aControl, aEvent, true);
 	return OK;
 }
@@ -8203,7 +8221,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		GuiIndexType control_index = GUI_ID_TO_INDEX(id); // Convert from ID to array index. Relies on unsigned to flag as out-of-bounds.
 		if (control_index < pgui->mControlCount // Relies on short-circuit boolean order.
 			&& pgui->mControl[control_index]->hwnd == (HWND)lParam) // Handles match (this filters out bogus msgs).
-			pgui->Event(control_index, HIWORD(wParam));
+			pgui->Event(control_index, HIWORD(wParam), GUI_EVENT_WM_COMMAND);
 			// v1.0.35: And now pass it on to DefDlgProc() in case it needs to see certain types of messages.
 		break;
 	}
@@ -8224,12 +8242,28 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			break; // Let DefDlgProc() handle it.
 
 		NMHDR &nmhdr = *(LPNMHDR)lParam;
-		control_index = (GuiIndexType)GUI_ID_TO_INDEX(nmhdr.idFrom); // Convert from ID to array index.  Relies on unsigned to flag as out-of-bounds.
+		if (!nmhdr.idFrom)
+		{
+			// This might be the header of a ListView control.  Although there may be some
+			// risk of notification codes being ambiguous for custom controls (between the
+			// actual control and any child controls), the ability to monitor a ListView's
+			// header notifications seems useful enough to justify the risk.
+			control_index = pgui->FindControlIndex(nmhdr.hwndFrom);
+		}
+		else
+		{
+			control_index = (GuiIndexType)GUI_ID_TO_INDEX(nmhdr.idFrom); // Convert from ID to array index.  Relies on unsigned to flag as out-of-bounds.
+		}
 		if (control_index >= pgui->mControlCount)
 			break;  // Invalid to us, but perhaps meaningful DefDlgProc(), so let it handle it.
 		GuiControlType &control = *pgui->mControl[control_index]; // For performance and convenience.
-		if (control.hwnd != nmhdr.hwndFrom) // Handles match (this filters out bogus msgs).
+		if (control.hwnd != nmhdr.hwndFrom && nmhdr.idFrom) // Ensure handles match (this filters out bogus msgs).
 			break;
+
+		INT_PTR retval;
+		if (pgui->ControlWmNotify(control, &nmhdr, retval))
+			// A handler was found for this notification and it returned a value.
+			return retval;
 
 		UINT event_info = NO_EVENT_INFO; // Set default, to be possibly overridden below.
 		USHORT gui_event = '*'; // Something other than GUI_EVENT_NONE to flag events that don't get classified below. The special character helps debugging.
@@ -8669,6 +8703,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				pgui->Event(control_index, nmhdr.code, GUI_EVENT_CHANGE);
 			}
 			return 0; // 0 is appropriate for all TAB notifications.
+
 		case GUI_CONTROL_LINK:
 			if(nmhdr.code == NM_CLICK || nmhdr.code == NM_RETURN)
 			{
@@ -8679,8 +8714,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 					pgui->Event(control_index, nmhdr.code, GUI_EVENT_CLICK, item.iLink + 1); // Link control uses 1-based index for g-labels
 			}
 			return 0;
-		case GUI_CONTROL_CUSTOM:
-			return pgui->CustomCtrlWmNotify(control_index, &nmhdr);
+
 		case GUI_CONTROL_STATUSBAR:
 			if (!control.events.Count()) // This is checked to avoid returning TRUE below, and also for performance.
 				break; // Let default proc handle it.
@@ -9129,9 +9163,18 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 	//if (g_nThreads >= g_MaxThreadsTotal || (aControl->attrib & GUI_CONTROL_ATTRIB_HANDLER_IS_RUNNING))
 	//	continue
 
+	if (aGuiEvent == GUI_EVENT_WM_COMMAND) // Called by WM_COMMAND.
+	{
+		if (control.events.IsMonitoring(aNotifyCode, GUI_EVENTKIND_COMMAND))
+		{
+			POST_AHK_GUI_ACTION(mHwnd, aControlIndex, aGuiEvent, aNotifyCode);
+			// Do the rest as well, just in case this command corresponds to an event.
+		}
+		aGuiEvent = GUI_EVENT_NONE; // Determine the actual event below.
+	}
+
 	if (aGuiEvent == GUI_EVENT_NONE) // Caller wants us to determine aGuiEvent based on control type and aNotifyCode.
 	{
-		aGuiEvent = GUI_EVENT_NORMAL; // Set default, to be possibly overridden below.
 		switch(control.type)
 		{
 		case GUI_CONTROL_BUTTON:
@@ -9244,11 +9287,6 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 			// the g-label twice: once for lbutton-down and once for up.
 			return;
 
-		case GUI_CONTROL_CUSTOM:
-			// Copy the notification code to A_EventInfo.
-			aEventInfo = aNotifyCode;
-			break;
-
 		case GUI_CONTROL_SLIDER:
 			switch (aNotifyCode)
 			{
@@ -9279,7 +9317,8 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 			}
 			break;
 
-		// The following need no extra handling because their info is already ready to be posted as an event below:
+		// The following need no handling in this section because aGuiEvent and aEventInfo
+		// were given appropriate values by our caller (execution never reaches this point):
 		//case GUI_CONTROL_TREEVIEW:
 		//case GUI_CONTROL_LISTVIEW:
 		//case GUI_CONTROL_TAB: // aNotifyCode == TCN_SELCHANGE should be the only possibility.
@@ -9295,7 +9334,7 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 		} // switch(control.type)
 	} // if (aGuiEvent == GUI_EVENT_NONE)
 
-	if (!control.IsMonitoring(LOBYTE(aGuiEvent))) // Checked after possibly determining aGuiEvent above.  LOBYTE() is needed for ListView 'I'.
+	if (!control.events.IsMonitoring(LOBYTE(aGuiEvent))) // Checked after possibly determining aGuiEvent above.  LOBYTE() is needed for ListView 'I'.
 		return;
 
 	POST_AHK_GUI_ACTION(mHwnd, aControlIndex, aGuiEvent, (LPARAM)aEventInfo);
@@ -9362,22 +9401,21 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 }
 
 
-LRESULT GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
+bool GuiType::ControlWmNotify(GuiControlType &aControl, LPNMHDR aNmHdr, INT_PTR &aRetVal)
 {
 	// See MsgMonitor() in application.cpp for comments, as this method is based on the beforementioned function.
 
 	if (!INTERRUPTIBLE_IN_EMERGENCY)
-		return 0;
+		return false;
 
-	GuiControlType& aControl = *mControl[aControlIndex];
-	if (!aControl.IsMonitoring('N'))
-		return 0;
+	if (!aControl.events.IsMonitoring(aNmHdr->code, GUI_EVENTKIND_NOTIFY))
+		return false;
 
 	if (g_nThreads >= g_MaxThreadsTotal)
-		return 0;
+		return false;
 
 	if (g->Priority > 0)
-		return 0;
+		return false;
 
 	VarBkp ErrorLevel_saved;
 	ErrorLevel_Backup(ErrorLevel_saved);
@@ -9385,14 +9423,15 @@ LRESULT GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 	g_script.mLastPeekTime = GetTickCount();
 	AddRef();
 	
-	INT_PTR retval;
 	ExprTokenType param[] = { &aControl, (__int64)(DWORD_PTR)aNmHdr };
-	aControl.events.Call(param, _countof(param), 'N', mEventSink, &retval);
+	ResultType result = aControl.events.Call(param, _countof(param)
+		, aNmHdr->code, GUI_EVENTKIND_NOTIFY, mEventSink, &aRetVal);
 
 	Release();
 	ResumeUnderlyingThread(ErrorLevel_saved);
 
-	return retval;
+	// Consider this notification fully handled only if a non-empty value was returned.
+	return result == EARLY_RETURN;
 }
 
 

@@ -219,6 +219,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	GuiControlType *pcontrol, *ptab_control;
 	GuiIndexType gui_control_index;
 	GuiEventType gui_action;
+	UCHAR gui_event_kind;
+	UINT gui_event_code;
 	DWORD_PTR gui_event_info;
 	DWORD gui_size;
 	bool event_is_control_generated;
@@ -641,9 +643,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					goto break_out_of_main_switch; // Goto seems preferably in this case for code size & performance.
 				
 				gui_event_info =    (DWORD_PTR)msg.lParam;
-				gui_action =        LOWORD(msg.wParam);
+				gui_action =        LOBYTE(msg.wParam); // BYTE, not WORD, because the HIBYTE is sometimes used for additional info.
 				gui_control_index = HIWORD(msg.wParam); // Caller has set it to NO_CONTROL_INDEX if it isn't applicable.
 				gui_event_arg_count = 0;
+				gui_event_code = gui_action; // Set default.  Using both this and gui_action simplifies some things.
 
 				if (gui_action == GUI_EVENT_RESIZE) // This section be done after above but before pcontrol below.
 				{
@@ -656,6 +659,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 				check_if_running = &pgui->mEvents; // Set default.
 				event_is_control_generated = false; // Set default.
+				gui_event_kind = GUI_EVENTKIND_EVENT; // Set default.
 
 				switch(gui_action)
 				{
@@ -687,6 +691,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					//  1) Another WM_DROPFILES already in the queue, but not yet processed.
 					//  2) Someone posting WM_DROPFILES (i.e. fake drag and drop).
 					break;
+				case GUI_EVENT_WM_COMMAND:
+					gui_event_kind = GUI_EVENTKIND_COMMAND;
+					gui_event_code = (GuiEventType)gui_event_info;
+					// Fall through:
 				default: // This is an action from a particular control in the GUI window.
 					if (!pcontrol) // gui_control_index was beyond the quantity of controls, possibly due to parent window having been destroyed since the msg was sent (or bogus msg).
 						continue;  // Discarding an invalid message here is relied upon both other sections below.
@@ -702,7 +710,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// IsMonitoring() isn't checked at this stage for performance and code size, and because
 				// it was checked prior to posting AHK_GUI_ACTION.  If the handler was removed since then,
 				// the section below will do some unnecessary but harmless work.
-				if (check_if_running && check_if_running->IsRunning(gui_action))
+				if (check_if_running && check_if_running->IsRunning(gui_event_code, gui_event_kind))
 				{
 					if (hdrop_to_free) // Unlikely but possible, in theory.  Doesn't seem to affect code size.
 					{
@@ -1112,12 +1120,15 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						EVT_ARG_ADD(pgui->Unscale(HIWORD(gui_size))); // Height
 					}
 					break;
+				case GUI_EVENT_WM_COMMAND: // Control-generated, but no additional parameters.
+					break;
 				default: // Control-generated event (i.e. event_is_control_generated==true).
 					switch(pcontrol->type)
 					{
 					case GUI_CONTROL_LISTVIEW: // v1.0.46.10: Added this section to support notifying the script of HOW the item changed.
-						if (LOBYTE(gui_action) == 'I')
+						if (gui_action == 'I')
 						{
+							UINT gui_action = (msg.wParam & 0xFF00);
 							walk = gui_action_extra;
 							if (gui_action & AHK_LV_SELECT) // Keep this one first, and the others below in the same order, in case any scripts come to rely on the ordering of the letters within the string.
 								*walk++ = 'S';
@@ -1137,7 +1148,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 							//else if (gui_action & AHK_LV_UNDROPHILITE)
 							//	*walk++ = 'd';
 							*walk = '\0'; // Provide terminator inside gui_action_extra.
-							gui_action = 'I'; // Done only after we're done using it above. This clears out the flags above to leave only a naked 'I'.
 						}
 						break;
 					//default: No action for any other control-generated events since caller already set things up properly.
@@ -1147,7 +1157,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					EVT_ARG_ADD((__int64)gui_event_info);
 				} // switch (msg.message)
 
-				if (event_is_control_generated && pcontrol->type == GUI_CONTROL_LINK)
+				if (gui_action == GUI_EVENT_CLICK && pcontrol->type == GUI_CONTROL_LINK)
 				{
 					LITEM item = {};
 					item.mask = LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
@@ -1168,7 +1178,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				//g.EventInfo = gui_event_info; // Override the thread-default of NO_EVENT_INFO.
 
 				MsgMonitorList &events = event_is_control_generated ? pcontrol->events : pgui->mEvents;
-				ResultType gui_event_result = events.Call(gui_event_args, gui_event_arg_count, gui_action, pgui->mEventSink);
+				ResultType gui_event_result = events.Call(gui_event_args, gui_event_arg_count, gui_event_code, gui_event_kind, pgui->mEventSink);
 				
 				if (pgui->mHwnd) // i.e. GUI was not destroyed.
 				{

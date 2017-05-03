@@ -1966,7 +1966,7 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, int
 
 
 
-ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UINT aMsg, IObject *aEventSink, INT_PTR *aRetVal)
+ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UINT aMsg, UCHAR aMsgType, IObject *aEventSink, INT_PTR *aRetVal)
 {
 	ResultType result = OK;
 	INT_PTR retval = 0;
@@ -1975,7 +1975,7 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UIN
 	for (MsgMonitorInstance inst (*this); inst.index < inst.count; ++inst.index)
 	{
 		MsgMonitorStruct &mon = mMonitor[inst.index];
-		if (mon.msg != aMsg)
+		if (mon.msg != aMsg || mon.msg_type != aMsgType)
 			continue;
 
 		IObject *func = mon.is_method ? aEventSink : mon.func; // is_method == true implies the GUI has an event sink object.
@@ -1984,14 +1984,13 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UIN
 		if (thread_used) // Re-initialize the thread.
 			InitNewThread(0, true, false, ACT_INVALID);
 		
-		if (!CallMethod(func, func, method_name, aParamValue, aParamCount, &retval))
-		{
-			result = FAIL; // Callback encountered an error.
+		result = CallMethod(func, func, method_name, aParamValue, aParamCount, &retval);
+		if (result == FAIL) // Callback encountered an error.
 			break;
-		}
-		if (retval)
+		if (result == EARLY_RETURN) // Callback returned a non-empty value.
 		{
-			result = CONDITION_TRUE;
+			if (!aRetVal) // Caller wants a signal for true vs. false/not specified.
+				result = retval ? CONDITION_TRUE : OK;
 			break;
 		}
 		thread_used = TRUE;

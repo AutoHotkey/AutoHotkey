@@ -2049,6 +2049,7 @@ struct MsgMonitorStruct
 	static const UCHAR MAX_INSTANCES = MAX_THREADS_LIMIT; // For maintainability.  Causes a compiler warning if MAX_THREADS_LIMIT > MAX_UCHAR.
 	UCHAR instance_count; // Distinct from func.mInstances because the script might have called the function explicitly.
 	UCHAR max_instances; // v1.0.47: Support more than one thread.
+	UCHAR msg_type; // Used only by GUI, so may be ignored by some methods.
 	bool is_method; // Used only by GUI.
 };
 
@@ -2065,18 +2066,18 @@ class MsgMonitorList
 	MsgMonitorStruct *AddInternal(UINT aMsg, bool aAppend);
 
 public:
-	MsgMonitorStruct *Find(UINT aMsg, IObject *aCallback);
-	MsgMonitorStruct *Find(UINT aMsg, LPTSTR aMethodName);
+	MsgMonitorStruct *Find(UINT aMsg, IObject *aCallback, UCHAR aMsgType = 0);
+	MsgMonitorStruct *Find(UINT aMsg, LPTSTR aMethodName, UCHAR aMsgType = 0);
 	MsgMonitorStruct *Add(UINT aMsg, IObject *aCallback, bool aAppend = TRUE);
 	MsgMonitorStruct *Add(UINT aMsg, LPTSTR aMethodName, bool aAppend = TRUE);
 	void Remove(MsgMonitorStruct *aMonitor);
 	ResultType Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex); // Used for OnExit and OnClipboardChange, but not OnMessage.
-	ResultType Call(ExprTokenType *aParamValue, int aParamCount, UINT aMsg, IObject *aEventSink, INT_PTR *aRetVal = NULL); // Used by GUI.
+	ResultType Call(ExprTokenType *aParamValue, int aParamCount, UINT aMsg, UCHAR aMsgType, IObject *aEventSink, INT_PTR *aRetVal = NULL); // Used by GUI.
 
 	MsgMonitorStruct& operator[] (const int aIndex) { return mMonitor[aIndex]; }
 	int Count() { return mCount; }
-	BOOL IsMonitoring(UINT aMsg);
-	BOOL IsRunning(UINT aMsg);
+	BOOL IsMonitoring(UINT aMsg, UCHAR aMsgType = 0);
+	BOOL IsRunning(UINT aMsg, UCHAR aMsgType = 0);
 
 	MsgMonitorList() : mCount(0), mCountMax(0), mMonitor(NULL), mTop(NULL) {}
 	void Dispose();
@@ -2404,8 +2405,6 @@ struct GuiControlType : public ObjectBase
 		background_color = CLR_INVALID;
 	}
 	
-	BOOL IsMonitoring(GuiEventType aEvent) { return events.IsMonitoring(aEvent); }
-
 	enum MemberID
 	{
 		INVALID = 0,
@@ -2416,6 +2415,8 @@ struct GuiControlType : public ObjectBase
 		M_Move,
 		M_Choose,
 		M_OnEvent,
+		M_OnNotify,
+		M_OnCommand,
 		M_UpdateFont,
 		M_Tab_UseTab,
 		M_List_Add,
@@ -2635,8 +2636,8 @@ public:
 	ResultType Create(LPTSTR aTitle);
 	ResultType SetName(LPTSTR aName);
 	ResultType NameToEventHandler(LPTSTR aName, IObject *&aObject);
-	ResultType OnEvent(GuiControlType *aControl, UINT aEvent, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken);
-	ResultType OnEvent(GuiControlType *aControl, UINT aEvent, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads);
+	ResultType OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken);
+	ResultType OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads);
 	void ApplyEventStyles(GuiControlType *aControl, UINT aEvent, bool aAdded);
 	static LPTSTR sEventNames[];
 	static LPTSTR ConvertEvent(GuiEventType evt);
@@ -2715,7 +2716,7 @@ public:
 	static int FindFont(FontType &aFont);
 
 	void Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEvent = GUI_EVENT_NONE, UINT_PTR aEventInfo = 0);
-	LRESULT CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr);
+	bool ControlWmNotify(GuiControlType &aControl, LPNMHDR aNmHdr, INT_PTR &aRetVal);
 
 	static WORD TextToHotkey(LPTSTR aText);
 	static LPTSTR HotkeyToText(WORD aHotkey, LPTSTR aBuf);

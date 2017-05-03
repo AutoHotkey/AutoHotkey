@@ -716,17 +716,19 @@ typedef UINT GuiEventType; // Made a UINT vs. enum so that illegal/underflow/ove
 // The following array and enum must be kept in sync with each other:
 #define GUI_EVENT_NAMES { _T("") \
 	, _T("DropFiles"), _T("Close"), _T("Escape"), _T("Size"), _T("ContextMenu") \
-	, _T("Normal") \
 	, _T("Change") \
 	, _T("Click"), _T("DoubleClick"), _T("RightClick"), _T("ColClick") \
 }
 enum GuiEventTypes {GUI_EVENT_NONE  // NONE must be zero for any uses of ZeroMemory(), synonymous with false, etc.
 	, GUI_EVENT_DROPFILES, GUI_EVENT_CLOSE, GUI_EVENT_ESCAPE, GUI_EVENT_RESIZE, GUI_EVENT_CONTEXTMENU
 	, GUI_EVENT_WINDOW_FIRST = GUI_EVENT_DROPFILES, GUI_EVENT_WINDOW_LAST = GUI_EVENT_CONTEXTMENU
-	, GUI_EVENT_NORMAL // This should be replaced with specific events.
 	, GUI_EVENT_CHANGE
 	, GUI_EVENT_CLICK, GUI_EVENT_DBLCLK, GUI_EVENT_RCLK, GUI_EVENT_COLCLK
+	// The rest don't have explicit names in GUI_EVENT_NAMES:
+	, GUI_EVENT_WM_COMMAND
 	, GUI_EVENT_DIGIT_0 = 48}; // Here just as a reminder that this value and higher are reserved so that a single printable character or digit (mnemonic) can be sent, and also so that ListView's "I" notification can add extra data into the high-byte (which lies just to the left of the "I" character in the bitfield).
+
+enum GuiEventKinds {GUI_EVENTKIND_EVENT = 0, GUI_EVENTKIND_NOTIFY, GUI_EVENTKIND_COMMAND};
 
 typedef USHORT CoordModeType;
 
