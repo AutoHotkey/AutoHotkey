@@ -8265,7 +8265,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			// A handler was found for this notification and it returned a value.
 			return retval;
 
-		UINT event_info = NO_EVENT_INFO; // Set default, to be possibly overridden below.
+		UINT_PTR event_info = NO_EVENT_INFO; // Set default, to be possibly overridden below.
 		USHORT gui_event = '*'; // Something other than GUI_EVENT_NONE to flag events that don't get classified below. The special character helps debugging.
 		bool ignore_unless_alt_submit = true; // Set default, which is set to "false" only for the most important and/or rarely occurring notifications (for script performance).
 
@@ -8506,7 +8506,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				// On the other hand, if a script ever does some kind of automated traversal of the Tree, selecting
 				// each item one at a time (probably rare), this policy would reduce performance.
 				ignore_unless_alt_submit = false;
-				event_info = (UINT)(size_t)((LPNMTREEVIEW)lParam)->itemNew.hItem;
+				event_info = (UINT_PTR)((LPNMTREEVIEW)lParam)->itemNew.hItem;
 				break;
 
 			case TVN_ITEMEXPANDEDW: // Received even for non-Unicode apps, at least on XP.
@@ -8517,13 +8517,13 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				// It is especially important to store the HTREEITEM of this event for the TVS_SINGLEEXPAND style
 				// because an item that wasn't even clicked on is collapsed to allow the new one to expand.
 				// There might be no way to find out which item collapsed other than taking note of it here.
-				event_info = (UINT)(size_t)((LPNMTREEVIEW)lParam)->itemNew.hItem;
+				event_info = (UINT_PTR)((LPNMTREEVIEW)lParam)->itemNew.hItem;
 				break;
 
 			case TVN_BEGINLABELEDITW: // Received even for non-Unicode apps, at least on XP.  Even so, the text contained it the struct is apparently always ANSI vs. Unicode.
 			case TVN_BEGINLABELEDITA: // Never received, at least not on XP?
 				gui_event = 'E';
-				event_info = (UINT)(size_t)((LPNMTVDISPINFO)lParam)->item.hItem;
+				event_info = (UINT_PTR)((LPNMTVDISPINFO)lParam)->item.hItem;
 				GuiType::sTreeWithEditInProgress = control.hwnd;
 				// It seems best NOT to notify the script of this one except in AltSubmit mode because:
 				// 1) Script rarely cares about begin-edit, only end-edit.
@@ -8532,7 +8532,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			case TVN_ENDLABELEDITW: // See comment above.
 			case TVN_ENDLABELEDITA:
 				gui_event = 'e'; // Lowercase to distinguish it.
-				event_info = (UINT)(size_t)((LPNMTVDISPINFO)lParam)->item.hItem;
+				event_info = (UINT_PTR)((LPNMTVDISPINFO)lParam)->item.hItem;
 				ignore_unless_alt_submit = false; // Seems best to default to notifying only after data may have been changed; plus it avoids the need for script to distinguish case of 'e' vs. 'E'.
 				GuiType::sTreeWithEditInProgress = NULL;
 				break;
@@ -8540,13 +8540,13 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			case TVN_BEGINDRAGW: // Received even for non-Unicode apps, at least on XP.  Even so, the text contained it the struct is apparently always ANSI vs. Unicode.
 			case TVN_BEGINDRAGA: // Never received, at least not on XP?
 				gui_event = 'D';  // Left-drag.
-				event_info = (UINT)(size_t)((LPNMTREEVIEW)lParam)->itemNew.hItem;
+				event_info = (UINT_PTR)((LPNMTREEVIEW)lParam)->itemNew.hItem;
 				ignore_unless_alt_submit = false; // Due to how rare drags are, it seems best to report them so that AltSubmit mode doesn't have to be turned on just for them.
 				break;
 			case TVN_BEGINRDRAGW: // Same comments left-drag above.
 			case TVN_BEGINRDRAGA: //
 				gui_event = 'd';  // Right-drag. Lowercase to distinguish it.
-				event_info = (UINT)(size_t)((LPNMTREEVIEW)lParam)->itemNew.hItem;
+				event_info = (UINT_PTR)((LPNMTREEVIEW)lParam)->itemNew.hItem;
 				ignore_unless_alt_submit = false; // Same comment as left-drag above.
 				break;
 
@@ -8585,7 +8585,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				ht.pt.x = (short)LOWORD(pos);
 				ht.pt.y = (short)HIWORD(pos);
 				ScreenToClient(control.hwnd, &ht.pt);
-				event_info = (DWORD)(size_t)TreeView_HitTest(control.hwnd, &ht);
+				event_info = (UINT_PTR)TreeView_HitTest(control.hwnd, &ht);
 				break;
 
 			case NM_SETFOCUS: gui_event = 'F'; break;

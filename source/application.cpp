@@ -1053,7 +1053,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						case GUI_CONTROL_TREEVIEW:
 							// Retrieves the HTREEITEM that is the true target of this event.
 							if (msg.lParam) // AppsKey or Shift+F10.
-								gui_event_info = (DWORD)SendMessage(pcontrol->hwnd, TVM_GETNEXTITEM, TVGN_CARET, NULL); // Get focused item.
+								gui_event_info = (DWORD_PTR)SendMessage(pcontrol->hwnd, TVM_GETNEXTITEM, TVGN_CARET, NULL); // Get focused item.
 							else // Context menu invoked via right-click.  Find out which item (if any) was clicked on.
 							{
 								// Use HitTest because the focused item isn't necessarily the one that was
@@ -1063,7 +1063,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 								TVHITTESTINFO ht;
 								ht.pt = msg.pt;
 								ScreenToClient(pcontrol->hwnd, &ht.pt);
-								gui_event_info = (DWORD)(size_t)TreeView_HitTest(pcontrol->hwnd, &ht);
+								gui_event_info = (DWORD_PTR)TreeView_HitTest(pcontrol->hwnd, &ht);
 							}
 							break;
 						}
