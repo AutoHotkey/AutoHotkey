@@ -8267,7 +8267,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 		UINT_PTR event_info = NO_EVENT_INFO; // Set default, to be possibly overridden below.
 		USHORT gui_event = '*'; // Something other than GUI_EVENT_NONE to flag events that don't get classified below. The special character helps debugging.
-		bool ignore_unless_alt_submit = true; // Set default, which is set to "false" only for the most important and/or rarely occurring notifications (for script performance).
 
 		switch (control.type)
 		{
@@ -8388,12 +8387,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			case NM_DBLCLK:
 				gui_event = GUI_EVENT_DBLCLK;
 				event_info = 1 + ((LPNMITEMACTIVATE)lParam)->iItem;
-				ignore_unless_alt_submit = false;
 				break;
 			case NM_RDBLCLK:
 				gui_event = 'R'; // Rare, so just a simple mnemonic is stored (seems better than a digit).
 				event_info = 1 + ((LPNMITEMACTIVATE)lParam)->iItem;
-				ignore_unless_alt_submit = false;
 				break;
 			case LVN_ITEMACTIVATE: // By default, this notification arrives when an item is double-clicked (depends on style).
 				gui_event = 'A';
@@ -8408,7 +8405,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				// The following must be done here rather than in Event() in case the control has no g-label:
 				if (!(control.union_lv_attrib->no_auto_sort)) // Automatic sorting is in effect.
 					GuiType::LV_Sort(control, lv.iSubItem, true); // -1 to convert column index back to zero-based.
-				ignore_unless_alt_submit = false;
 				break;
 			}
 
@@ -8416,19 +8412,13 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			case LVN_BEGINLABELEDITA: // Never received, at least not on XP?
 				gui_event = 'E';
 				event_info = 1 + ((NMLVDISPINFO *)lParam)->item.iItem;
-				// It seems best NOT to notify the script of this one except in AltSubmit mode because:
-				// 1) Script rarely cares about begin-edit, only end-edit.
-				// 2) Script would have to do case-insensitive comparison to distinguish between 'E' and 'e'.
 				break;
 			case LVN_ENDLABELEDITW: // See comment above.
 			case LVN_ENDLABELEDITA:
 				gui_event = 'e'; // Lowercase to distinguish it.
 				event_info = 1 + ((NMLVDISPINFO *)lParam)->item.iItem;
-				ignore_unless_alt_submit = false; // Seems best to default to notifying only after data may have been changed; plus it avoids the need for script to distinguish case of 'e' vs. 'E'.
 				break;
 
-			// v1.0.44: Changed drag notifications to occur in non-AltSubmit mode due to how rare drags are.
-			// This avoids the need for the script to turn on AltSubmit just for them.
 			case LVN_BEGINDRAG: // Left-drag.
 				gui_event = 'D';
 				// v1.0.44: Testing shows that the following retrieves the row upon which the use clicked, which
@@ -8436,12 +8426,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				// previous versions).  However, due to obscurity and rarity, this is very unlikely to break any
 				// existing scripts and thus won't be documented as a change.
 				event_info = 1 + ((LPNMLISTVIEW)lParam)->iItem;
-				ignore_unless_alt_submit = false;
 				break;
 			case LVN_BEGINRDRAG: // Right-drag.
 				gui_event = 'd'; // Lowercase to distinguish it.
 				event_info = 1 + ((LPNMLISTVIEW)lParam)->iItem; // See comment in previous "case".
-				ignore_unless_alt_submit = false;
 				break;
 
 			case LVN_DELETEALLITEMS:
@@ -8449,8 +8437,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			} // switch(nmhdr.code).
 
 			// Since above didn't return, make it an event.
-			if (   is_actionable
-				&& (!ignore_unless_alt_submit || (control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))   )
+			if (is_actionable)
 				pgui->Event(control_index, nmhdr.code, gui_event, event_info);
 
 			// After the event, explicitly return a special value for any notifications that absolutely
@@ -8499,15 +8486,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				// within the context of TreeView controls, and also for consistency with notifications/msgs
 				// documented on MSDN (in case the user needs them).
 				gui_event = GUI_EVENT_ITEMSELECT;
-				// Having more than one item selected in a TreeView is fairly rare due to not being meaningful or
-				// supported by the control.  Therefore, performing a select-all on a TreeView by a script is
-				// likely to be uncommon, and thus the performance concern mentioned for expand-all above isn't
-				// as applicable.  For this reason and also because selecting an item TreeView is typically of
-				// high interest (since each item may often be a folder, in which case the script changes the
-				// contents in a corresponding ListView), it seems best to report these in non-alt-submit mode.
-				// On the other hand, if a script ever does some kind of automated traversal of the Tree, selecting
-				// each item one at a time (probably rare), this policy would reduce performance.
-				ignore_unless_alt_submit = false;
 				event_info = (UINT_PTR)((LPNMTREEVIEW)lParam)->itemNew.hItem;
 				break;
 
@@ -8542,15 +8520,11 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				gui_event = 'E';
 				event_info = (UINT_PTR)((LPNMTVDISPINFO)lParam)->item.hItem;
 				GuiType::sTreeWithEditInProgress = control.hwnd;
-				// It seems best NOT to notify the script of this one except in AltSubmit mode because:
-				// 1) Script rarely cares about begin-edit, only end-edit.
-				// 2) Script would have to do case-insensitive comparison to distinguish between 'E' and 'e'.
 				break;
 			case TVN_ENDLABELEDITW: // See comment above.
 			case TVN_ENDLABELEDITA:
 				gui_event = 'e'; // Lowercase to distinguish it.
 				event_info = (UINT_PTR)((LPNMTVDISPINFO)lParam)->item.hItem;
-				ignore_unless_alt_submit = false; // Seems best to default to notifying only after data may have been changed; plus it avoids the need for script to distinguish case of 'e' vs. 'E'.
 				GuiType::sTreeWithEditInProgress = NULL;
 				break;
 
@@ -8558,13 +8532,11 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			case TVN_BEGINDRAGA: // Never received, at least not on XP?
 				gui_event = 'D';  // Left-drag.
 				event_info = (UINT_PTR)((LPNMTREEVIEW)lParam)->itemNew.hItem;
-				ignore_unless_alt_submit = false; // Due to how rare drags are, it seems best to report them so that AltSubmit mode doesn't have to be turned on just for them.
 				break;
 			case TVN_BEGINRDRAGW: // Same comments left-drag above.
 			case TVN_BEGINRDRAGA: //
 				gui_event = 'd';  // Right-drag. Lowercase to distinguish it.
 				event_info = (UINT_PTR)((LPNMTREEVIEW)lParam)->itemNew.hItem;
-				ignore_unless_alt_submit = false; // Same comment as left-drag above.
 				break;
 
 			// Since a left-click is just one method of changing selection (keyboard navigation is another),
@@ -8579,8 +8551,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				{
 				case NM_CLICK: gui_event = GUI_EVENT_CLICK; break;
 				case NM_RCLICK: gui_event = GUI_EVENT_RCLK; break;
-				case NM_DBLCLK: gui_event = GUI_EVENT_DBLCLK; ignore_unless_alt_submit = false; break;
-				case NM_RDBLCLK: gui_event = 'R'; ignore_unless_alt_submit = false; break; // Rare, so just a simple mnemonic is stored (seems better than a digit).
+				case NM_DBLCLK: gui_event = GUI_EVENT_DBLCLK; break;
+				case NM_RDBLCLK: gui_event = 'R'; break; // Rare, so just a simple mnemonic is stored (seems better than a digit).
 				// Above: It's a known bug in Windows that NM_RDBLCLK is never actually generated by a TreeView
 				// (though it is for other controls such as ListView). But in case that bug is fixed in future
 				// patches or OSes, it seems best to handle the event (though it's currently undocumented for simplicity).
@@ -8628,8 +8600,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			} // switch(nmhdr.code).
 
 			// Since above didn't return, make it an event.
-			if (gui_event != '*' // An unknown notification; seems best to call DefDlgProc() but not the control's g-label in this case.
-				&& (!ignore_unless_alt_submit || (control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT)))
+			if (gui_event != '*') // An unknown notification; seems best to call DefDlgProc() but not the control's g-label in this case.
 				pgui->Event(control_index, nmhdr.code, gui_event, event_info);
 
 			// After the event, explicitly return a special value for any notifications that absolutely
