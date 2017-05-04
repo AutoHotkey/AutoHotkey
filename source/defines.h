@@ -719,6 +719,7 @@ typedef UINT GuiEventType; // Made a UINT vs. enum so that illegal/underflow/ove
 	, _T("Change") \
 	, _T("Click"), _T("DoubleClick"), _T("RightClick"), _T("ColClick") \
 	, _T("ItemCheck"), _T("ItemSelect"), _T("ItemFocus"), _T("ItemExpand") \
+	, _T("ItemEdit") \
 }
 enum GuiEventTypes {GUI_EVENT_NONE  // NONE must be zero for any uses of ZeroMemory(), synonymous with false, etc.
 	, GUI_EVENT_DROPFILES, GUI_EVENT_CLOSE, GUI_EVENT_ESCAPE, GUI_EVENT_RESIZE, GUI_EVENT_CONTEXTMENU
@@ -727,6 +728,7 @@ enum GuiEventTypes {GUI_EVENT_NONE  // NONE must be zero for any uses of ZeroMem
 	, GUI_EVENT_CHANGE = GUI_EVENT_CONTROL_FIRST
 	, GUI_EVENT_CLICK, GUI_EVENT_DBLCLK, GUI_EVENT_RCLK, GUI_EVENT_COLCLK
 	, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMSELECT, GUI_EVENT_ITEMFOCUS, GUI_EVENT_ITEMEXPAND
+	, GUI_EVENT_ITEMEDIT
 	// The rest don't have explicit names in GUI_EVENT_NAMES:
 	, GUI_EVENT_WM_COMMAND
 	, GUI_EVENT_DIGIT_0 = 48 // Here just as a reminder that from this value up to 0xFF are reserved so that a single printable character or digit (mnemonic) can be sent.

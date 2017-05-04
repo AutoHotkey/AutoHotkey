@@ -107,8 +107,8 @@ UCHAR **ConstructEventSupportArray()
 	RAISES(GUI_CONTROL_DROPDOWNLIST, GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_COMBOBOX,     GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK)
 	RAISES(GUI_CONTROL_LISTBOX,      GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK)
-	RAISES(GUI_CONTROL_LISTVIEW,     GUI_EVENT_DBLCLK, GUI_EVENT_COLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMFOCUS, GUI_EVENT_ITEMSELECT, GUI_EVENT_ITEMCHECK, 'R', 'D', 'd', 'e', 'S', 's', 'M', 'C', 'F', 'f', 'K', 'A', 'E')
-	RAISES(GUI_CONTROL_TREEVIEW,     GUI_EVENT_ITEMSELECT, GUI_EVENT_DBLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMEXPAND, GUI_EVENT_ITEMCHECK, 'e', 'D', 'd', 'R', 'F', 'f', 'K', 'E')
+	RAISES(GUI_CONTROL_LISTVIEW,     GUI_EVENT_DBLCLK, GUI_EVENT_COLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMFOCUS, GUI_EVENT_ITEMSELECT, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMEDIT, 'R', 'D', 'd', 'S', 's', 'M', 'C', 'F', 'f', 'K', 'A')
+	RAISES(GUI_CONTROL_TREEVIEW,     GUI_EVENT_ITEMSELECT, GUI_EVENT_DBLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMEXPAND, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMEDIT, 'D', 'd', 'R', 'F', 'f', 'K')
 	RAISES(GUI_CONTROL_EDIT,         GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_DATETIME,     GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_MONTHCAL,     GUI_EVENT_CHANGE)
@@ -8408,14 +8408,26 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				break;
 			}
 
-			case LVN_BEGINLABELEDITW: // Received even for non-Unicode apps, at least on XP.  Even so, the text contained it the struct is apparently always ANSI vs. Unicode.
-			case LVN_BEGINLABELEDITA: // Never received, at least not on XP?
-				gui_event = 'E';
-				event_info = 1 + ((NMLVDISPINFO *)lParam)->item.iItem;
-				break;
+			// ItemEdit: It's seems more useful to filter out canceled edits by default, since
+			// most scripts probably aren't interested in begin-edit and therefore would not be
+			// expecting an end-edit without actual change.  On top of begin-edit being rarely
+			// needed, it seems best to require the script to use OnNotify() for it because it
+			// might help avoid the case where script makes a change in response to begin-edit
+			// but then fails to revert it because the user canceled.  OnNotify() also allows
+			// the script to indicate which rows are editable or which edits to accept.
+			//case LVN_BEGINLABELEDITW: // Received even for non-Unicode apps, at least on XP.  Even so, the text contained it the struct is apparently always ANSI vs. Unicode.
+			//case LVN_BEGINLABELEDITA: // Never received, at least not on XP?
+			//	gui_event = 'E';
+			//	event_info = 1 + ((NMLVDISPINFO *)lParam)->item.iItem;
+			//	break;
 			case LVN_ENDLABELEDITW: // See comment above.
 			case LVN_ENDLABELEDITA:
-				gui_event = 'e'; // Lowercase to distinguish it.
+				if (!((NMLVDISPINFO *)lParam)->item.pszText) // Edit was cancelled (no change made).
+					// Unless the script also subscribes to LVN_BEGINLABELEDIT (unlikely), it's very
+					// unlikely that a script will want to know when a user has entered edit mode and
+					// then canceled without actually changing the item.
+					break;
+				gui_event = GUI_EVENT_ITEMEDIT;
 				event_info = 1 + ((NMLVDISPINFO *)lParam)->item.iItem;
 				break;
 
@@ -8515,15 +8527,21 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				break;
 			}
 
+			// ItemEdit: See comments in ListView section.
 			case TVN_BEGINLABELEDITW: // Received even for non-Unicode apps, at least on XP.  Even so, the text contained it the struct is apparently always ANSI vs. Unicode.
 			case TVN_BEGINLABELEDITA: // Never received, at least not on XP?
-				gui_event = 'E';
-				event_info = (UINT_PTR)((LPNMTVDISPINFO)lParam)->item.hItem;
+				//gui_event = 'E';
+				//event_info = (UINT_PTR)((LPNMTVDISPINFO)lParam)->item.hItem;
 				GuiType::sTreeWithEditInProgress = control.hwnd;
 				break;
 			case TVN_ENDLABELEDITW: // See comment above.
 			case TVN_ENDLABELEDITA:
-				gui_event = 'e'; // Lowercase to distinguish it.
+				if (!((LPNMTVDISPINFO)lParam)->item.pszText) // Edit was cancelled (no change made).
+					// Unless the script also subscribes to TVN_BEGINLABELEDIT (unlikely), it's very
+					// unlikely that a script will want to know when a user has entered edit mode and
+					// then canceled without actually changing the item.
+					break;
+				gui_event = GUI_EVENT_ITEMEDIT;
 				event_info = (UINT_PTR)((LPNMTVDISPINFO)lParam)->item.hItem;
 				GuiType::sTreeWithEditInProgress = NULL;
 				break;
