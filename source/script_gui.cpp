@@ -108,7 +108,7 @@ UCHAR **ConstructEventSupportArray()
 	RAISES(GUI_CONTROL_COMBOBOX,     GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK)
 	RAISES(GUI_CONTROL_LISTBOX,      GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK)
 	RAISES(GUI_CONTROL_LISTVIEW,     GUI_EVENT_DBLCLK, GUI_EVENT_COLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMFOCUS, GUI_EVENT_ITEMSELECT, GUI_EVENT_ITEMCHECK, 'R', 'D', 'd', 'e', 'S', 's', 'M', 'C', 'F', 'f', 'K', 'A', 'E')
-	RAISES(GUI_CONTROL_TREEVIEW,     'S', GUI_EVENT_DBLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, 'e', 'D', 'd', 'R', 'F', 'f', 'K', '+', '-', 'E')
+	RAISES(GUI_CONTROL_TREEVIEW,     GUI_EVENT_ITEMSELECT, GUI_EVENT_DBLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMEXPAND, GUI_EVENT_ITEMCHECK, 'e', 'D', 'd', 'R', 'F', 'f', 'K', 'E')
 	RAISES(GUI_CONTROL_EDIT,         GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_DATETIME,     GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_MONTHCAL,     GUI_EVENT_CHANGE, '1', '2')
@@ -8491,12 +8491,14 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 			case TVN_SELCHANGEDW:
 			case TVN_SELCHANGEDA:
-				// 'S' was chosen vs. 's' or 'C' because it seems easier to remember.  Known drawbacks:
-				// - Would have to use lowercase 's' for "TVN_SELCHANGING" in case it's ever wanted (though adding
-				// it directly would break existing scripts that rely on case insensitivity, so it would probably be
-				// better to choose an entirely different letter).
-				// - 'S' cannot be used for scrolling notifications in case TreeView ever adds them like ListViews.
-				gui_event = 'S';
+				// TreeViews are always single-select, so unlike ListView, each event always represents one
+				// selection and (if there was a selection before) one deselection.  It seems better to omit
+				// the "selected?" parameter altogether than to always pass 1, so TreeView's ItemSelect is
+				// like ListView's ItemFocus.  Although focus and selection are the same for a TreeView,
+				// it's probably best to stick with "select" because it's a more common term than "focus"
+				// within the context of TreeView controls, and also for consistency with notifications/msgs
+				// documented on MSDN (in case the user needs them).
+				gui_event = GUI_EVENT_ITEMSELECT;
 				// Having more than one item selected in a TreeView is fairly rare due to not being meaningful or
 				// supported by the control.  Therefore, performing a select-all on a TreeView by a script is
 				// likely to be uncommon, and thus the performance concern mentioned for expand-all above isn't
@@ -8513,12 +8515,27 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			case TVN_ITEMEXPANDEDA:
 				// The "action" flag is a bitwise value that should always contain either TVE_COLLAPSE or
 				// TVE_EXPAND (testing shows that TVE_TOGGLE never occurs, as expected).
-				gui_event = (((LPNMTREEVIEW)lParam)->action & TVE_COLLAPSE) ? '-' : '+';
+				gui_event = GUI_EVENT_ITEMEXPAND | ((((LPNMTREEVIEW)lParam)->action & TVE_EXPAND) ? 0x200 : 0x100);
 				// It is especially important to store the HTREEITEM of this event for the TVS_SINGLEEXPAND style
 				// because an item that wasn't even clicked on is collapsed to allow the new one to expand.
 				// There might be no way to find out which item collapsed other than taking note of it here.
 				event_info = (UINT_PTR)((LPNMTREEVIEW)lParam)->itemNew.hItem;
 				break;
+
+			case TVN_ITEMCHANGEDW:
+			case TVN_ITEMCHANGEDA:
+			{
+				NMTVITEMCHANGE &tv = *(NMTVITEMCHANGE*)lParam;
+				if (tv.uChanged == TVIF_STATE && ((tv.uStateOld ^ tv.uStateNew) & TVIS_STATEIMAGEMASK)) // State image changed.
+				{
+					// Pass the new state image index in the second byte of the event code.
+					// If the control has checkboxes, these will be 1 (unchecked) or 2 (checked),
+					// but doing it this way provides extra utility in case of other state images.
+					gui_event = GUI_EVENT_ITEMCHECK | ((tv.uStateNew & TVIS_STATEIMAGEMASK) >> 4);
+					event_info = (UINT)(size_t)tv.hItem;
+				}
+				break;
+			}
 
 			case TVN_BEGINLABELEDITW: // Received even for non-Unicode apps, at least on XP.  Even so, the text contained it the struct is apparently always ANSI vs. Unicode.
 			case TVN_BEGINLABELEDITA: // Never received, at least not on XP?

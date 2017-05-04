@@ -1127,7 +1127,12 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					switch (gui_action)
 					{
 					case GUI_EVENT_ITEMSELECT:
-					case GUI_EVENT_ITEMCHECK:
+						if (pcontrol->type != GUI_CONTROL_LISTVIEW)
+							break; // Should be a TreeView, which does not raise an event for de-selection.
+						// Otherwise, this is a ListView, so add the parameter indicating whether this
+						// is selection or de-selection:
+					case GUI_EVENT_ITEMCHECK: // Parameter indicates checked (1) vs unchecked (0).
+					case GUI_EVENT_ITEMEXPAND: // Parameter indicates expanded (1) vs collapsed (0).
 						EVT_ARG_ADD((int)HIBYTE(msg.wParam) - 1);
 						break;
 					}
