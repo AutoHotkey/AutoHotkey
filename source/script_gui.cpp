@@ -111,7 +111,7 @@ UCHAR **ConstructEventSupportArray()
 	RAISES(GUI_CONTROL_TREEVIEW,     GUI_EVENT_ITEMSELECT, GUI_EVENT_DBLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMEXPAND, GUI_EVENT_ITEMCHECK, 'e', 'D', 'd', 'R', 'F', 'f', 'K', 'E')
 	RAISES(GUI_CONTROL_EDIT,         GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_DATETIME,     GUI_EVENT_CHANGE)
-	RAISES(GUI_CONTROL_MONTHCAL,     GUI_EVENT_CHANGE, '1', '2')
+	RAISES(GUI_CONTROL_MONTHCAL,     GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_HOTKEY,       GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_UPDOWN,       GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_SLIDER,       GUI_EVENT_CHANGE)
@@ -8635,31 +8635,12 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			// Although the NMSELCHANGE notification struct contains the control's current date/time,
 			// it simplifies the code to fetch it again (performance is probably good since the control
 			// almost certainly just passes back a pointer to its self-maintained structs).
-			// v1.0.35.09 adds more useful g-label in AltSubmit mode by passing all events and indicating
-			// which ones they are.  This was done because the old way of launching the g-label only for
-			// MCN_SELECT wasn't very useful because the label was not launched when the user scrolled
-			// to a new month via the calendar's arrow buttons, even though doing so sets a new date inside
-			// the control.  The label was also not launched when a new year or month was chosen by clicking
-			// directly on the month or year.
-			switch (nmhdr.code)
-			{
-			case MCN_SELCHANGE:
-				gui_event = GUI_EVENT_CHANGE;
-				break;
-			case MCN_SELECT:
-			case NM_RELEASEDCAPTURE:
-				if (!(control.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))
-					return 0; // 0 is appropriate for all MONTHCAL notifications.
-				// Signal it to store the digit '1' or '2'.  Unlike slider -- which uses 0 so that the numbers
-				// match those defined in the API -- avoiding 0 seems best for this one since zero is equivalent
-				// and no conformance with API is desired.
-				gui_event = 49 + (nmhdr.code == NM_RELEASEDCAPTURE);
-				break;
-			default: // MCN_GETDAYSTATE or any others that are specifically undesired.
-				return 0; // 0 is appropriate for all MONTHCAL notifications.
-			}
-			// Since the above did a "break" vs. "return", the label will be launched.
-			pgui->Event(control_index, nmhdr.code, gui_event);
+			// MCN_SELECT isn't used because it isn't sent when the user scrolls to a new month via the
+			// calendar's arrow buttons, even though doing so sets a new date inside the control, or when
+			// a new year or month is chosen by clicking directly on the month or year.  MCN_SELCHANGE
+			// seems to be superior in every way.
+			if (nmhdr.code == MCN_SELCHANGE)
+				pgui->Event(control_index, nmhdr.code, GUI_EVENT_CHANGE);
 			return 0; // 0 is appropriate for all MONTHCAL notifications.
 
 		case GUI_CONTROL_UPDOWN:
