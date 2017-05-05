@@ -107,8 +107,8 @@ UCHAR **ConstructEventSupportArray()
 	RAISES(GUI_CONTROL_DROPDOWNLIST, GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_COMBOBOX,     GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK)
 	RAISES(GUI_CONTROL_LISTBOX,      GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK)
-	RAISES(GUI_CONTROL_LISTVIEW,     GUI_EVENT_DBLCLK, GUI_EVENT_COLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMFOCUS, GUI_EVENT_ITEMSELECT, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMEDIT, 'R', 'D', 'd', 'S', 's', 'M', 'C', 'F', 'f', 'K', 'A')
-	RAISES(GUI_CONTROL_TREEVIEW,     GUI_EVENT_ITEMSELECT, GUI_EVENT_DBLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMEXPAND, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMEDIT, 'D', 'd', 'R', 'F', 'f', 'K')
+	RAISES(GUI_CONTROL_LISTVIEW,     GUI_EVENT_DBLCLK, GUI_EVENT_COLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMFOCUS, GUI_EVENT_ITEMSELECT, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMEDIT, 'R', 'F', 'f')
+	RAISES(GUI_CONTROL_TREEVIEW,     GUI_EVENT_ITEMSELECT, GUI_EVENT_DBLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMEXPAND, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMEDIT, 'R', 'F', 'f')
 	RAISES(GUI_CONTROL_EDIT,         GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_DATETIME,     GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_MONTHCAL,     GUI_EVENT_CHANGE)
@@ -8266,7 +8266,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			return retval;
 
 		UINT_PTR event_info = NO_EVENT_INFO; // Set default, to be possibly overridden below.
-		USHORT gui_event = '*'; // Something other than GUI_EVENT_NONE to flag events that don't get classified below. The special character helps debugging.
+		USHORT gui_event = GUI_EVENT_NONE;
 
 		switch (control.type)
 		{
@@ -8274,9 +8274,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// LISTVIEW WM_NOTIFY
 		/////////////////////
 		case GUI_CONTROL_LISTVIEW:
-			bool is_actionable;
-			is_actionable = true; // Set default.
-
 			switch (nmhdr.code)
 			{
 			// MSDN: LVN_HOTTRACK: "Return zero to allow the list view to perform its normal track select processing."
@@ -8289,14 +8286,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			case LVN_GETINFOTIPW: // v1.0.44: Received even without LVS_EX_INFOTIP?. In any case, there's currently no point
 			case LVN_GETINFOTIPA: // in notifying the script because it would have no means of changing the tip (by altering the struct), except perhaps OnMessage.
 				return 0; // Return immediately to avoid calling Event() and DefDlgProc(). A return value of 0 is suitable for all of the above.
-
-			//case 0xFFFFFF4F: // Couldn't find these in commctrl.h anywhere. They seem to occur when control is first created and once for each row in the first set of added rows.
-			//case 0xFFFFFF5F:
-			//case 0xFFFFFF5D: // Probably something to do with incremental search since it seems to happen only when items are present and the user types a visible-character key.
-			default: // This covers the three above and any other events which aren't classified by this switch(),
-				// such as LVN_GETEMPTYMARKUP and any others invented after this switch() was first written.
-				is_actionable = false;
-				break; // Let default proc handle them since they might mean something to it.
 
 			case LVN_ITEMCHANGED:
 			{
@@ -8339,32 +8328,15 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				return 0; // All recognised events for this notification have been handled above.
 			}
 
-			case LVN_BEGINSCROLL: gui_event = 'S'; break;
-			case LVN_ENDSCROLL: gui_event = 's'; break; // Lowercase to distinguish it.
-			case LVN_MARQUEEBEGIN: gui_event = 'M'; break;
-			case NM_RELEASEDCAPTURE: gui_event = 'C'; break;
 			case NM_SETFOCUS: gui_event = 'F'; break;
 			case NM_KILLFOCUS: gui_event = 'f'; break;  // Lowercase to distinguish it.
-			//case NM_HOVER: gui_event = 'V'; break; // Spy++ indicates that NM_HOVER is never received.  Maybe a style has to be set to get it. Note: 'V' is used for Hover because 'H' is used for LVN_HOTTRACK.
-			//case NM_RETURN (user has pressed the ENTER key): Apparently never received, probably because the parent window uses DefDlgProc() vs. DefWindowProc().
 
 			case LVN_KEYDOWN:
-				// For simplicity and flexibility, it seems best to store the VK itself since it
-				// might not correspond to a visible character (such as a function key or modifier).
-				// This also helps to reduce code size since scripts will only rarely want to have
-				// key-down info.
-				gui_event = 'K';
-				event_info = ((LPNMLVKEYDOWN)lParam)->wVKey; // The one-based column number that was clicked.
-				if (event_info == VK_F2 && !(control.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR)) // WantF2 is in effect.
+				if (((LPNMLVKEYDOWN)lParam)->wVKey == VK_F2 && !(control.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR)) // WantF2 is in effect.
 				{
 					int focused_index = ListView_GetNextItem(control.hwnd, -1, LVNI_FOCUSED);
 					if (focused_index != -1)
 						SendMessage(control.hwnd, LVM_EDITLABEL, focused_index, 0);  // Has no effect if the control is read-only.
-					// For flexibility, it seems to still notify the script of the F2 keystroke in case
-					// it wants to do extra things.  Testing shows that even if the script sends its own
-					// TVM_EDITLABEL message (such as pre-1.0.44 scripts that weren't updated to take into
-					// account WantF2), the label still goes into edit mode properly (though it does go out
-					// of edit mode then back in quickly due to the duplicate message).
 				}
 				break;
 
@@ -8390,10 +8362,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				break;
 			case NM_RDBLCLK:
 				gui_event = 'R'; // Rare, so just a simple mnemonic is stored (seems better than a digit).
-				event_info = 1 + ((LPNMITEMACTIVATE)lParam)->iItem;
-				break;
-			case LVN_ITEMACTIVATE: // By default, this notification arrives when an item is double-clicked (depends on style).
-				gui_event = 'A';
 				event_info = 1 + ((LPNMITEMACTIVATE)lParam)->iItem;
 				break;
 
@@ -8431,25 +8399,12 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				event_info = 1 + ((NMLVDISPINFO *)lParam)->item.iItem;
 				break;
 
-			case LVN_BEGINDRAG: // Left-drag.
-				gui_event = 'D';
-				// v1.0.44: Testing shows that the following retrieves the row upon which the use clicked, which
-				// in a multi-select ListView isn't necessarily the same as the focused row (which was retrieved in
-				// previous versions).  However, due to obscurity and rarity, this is very unlikely to break any
-				// existing scripts and thus won't be documented as a change.
-				event_info = 1 + ((LPNMLISTVIEW)lParam)->iItem;
-				break;
-			case LVN_BEGINRDRAG: // Right-drag.
-				gui_event = 'd'; // Lowercase to distinguish it.
-				event_info = 1 + ((LPNMLISTVIEW)lParam)->iItem; // See comment in previous "case".
-				break;
-
 			case LVN_DELETEALLITEMS:
 				return TRUE; // For performance, tell it not to notify us as each individual item is deleted.
 			} // switch(nmhdr.code).
 
 			// Since above didn't return, make it an event.
-			if (is_actionable)
+			if (gui_event)
 				pgui->Event(control_index, nmhdr.code, gui_event, event_info);
 
 			// After the event, explicitly return a special value for any notifications that absolutely
@@ -8546,17 +8501,6 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				GuiType::sTreeWithEditInProgress = NULL;
 				break;
 
-			case TVN_BEGINDRAGW: // Received even for non-Unicode apps, at least on XP.  Even so, the text contained it the struct is apparently always ANSI vs. Unicode.
-			case TVN_BEGINDRAGA: // Never received, at least not on XP?
-				gui_event = 'D';  // Left-drag.
-				event_info = (UINT_PTR)((LPNMTREEVIEW)lParam)->itemNew.hItem;
-				break;
-			case TVN_BEGINRDRAGW: // Same comments left-drag above.
-			case TVN_BEGINRDRAGA: //
-				gui_event = 'd';  // Right-drag. Lowercase to distinguish it.
-				event_info = (UINT_PTR)((LPNMTREEVIEW)lParam)->itemNew.hItem;
-				break;
-
 			// Since a left-click is just one method of changing selection (keyboard navigation is another),
 			// it seems desirable for performance not to report such clicks except in alt-submit mode.
 			// Similarly, right-clicks are reported only in alt-submit mode because GuiContextMenu should be used
@@ -8597,16 +8541,9 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 			case NM_SETFOCUS: gui_event = 'F'; break;
 			case NM_KILLFOCUS: gui_event = 'f'; break; // Lowercase to distinguish it.
-			//case NM_RETURN (user has pressed the ENTER key): Apparently never received, probably because the parent window uses DefDlgProc() vs. DefWindowProc().
 
 			case TVN_KEYDOWN:
-				// For simplicity and flexibility, it seems best to store the VK itself since it
-				// might not correspond to a visible character (such as a function key or modifier).
-				// This also helps to reduce code size since scripts will only rarely want to have
-				// key-down info.
-				gui_event = 'K';
-				event_info = ((LPNMTVKEYDOWN)lParam)->wVKey; // The one-based column number that was clicked.
-				if (event_info == VK_F2 && !(control.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR)) // WantF2 is in effect.
+				if (((LPNMTVKEYDOWN)lParam)->wVKey == VK_F2 && !(control.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR)) // WantF2 is in effect.
 				{
 					HTREEITEM hitem;
 					if (hitem = TreeView_GetSelection(control.hwnd))
@@ -8617,8 +8554,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				break;
 			} // switch(nmhdr.code).
 
-			// Since above didn't return, make it an event.
-			if (gui_event != '*') // An unknown notification; seems best to call DefDlgProc() but not the control's g-label in this case.
+			if (gui_event)
 				pgui->Event(control_index, nmhdr.code, gui_event, event_info);
 
 			// After the event, explicitly return a special value for any notifications that absolutely
