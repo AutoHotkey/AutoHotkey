@@ -101,16 +101,16 @@ UCHAR **ConstructEventSupportArray()
 	RAISES(GUI_CONTROL_TEXT,         GUI_EVENT_CLICK, GUI_EVENT_DBLCLK)
 	RAISES(GUI_CONTROL_PIC,          GUI_EVENT_CLICK, GUI_EVENT_DBLCLK)
 	//RAISES_NONE(GUI_CONTROL_GROUPBOX)
-	RAISES(GUI_CONTROL_BUTTON,       GUI_EVENT_CLICK, GUI_EVENT_DBLCLK)
-	RAISES(GUI_CONTROL_CHECKBOX,     GUI_EVENT_CLICK, GUI_EVENT_DBLCLK)
-	RAISES(GUI_CONTROL_RADIO,        GUI_EVENT_CLICK, GUI_EVENT_DBLCLK)
-	RAISES(GUI_CONTROL_DROPDOWNLIST, GUI_EVENT_CHANGE)
-	RAISES(GUI_CONTROL_COMBOBOX,     GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK)
-	RAISES(GUI_CONTROL_LISTBOX,      GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK)
-	RAISES(GUI_CONTROL_LISTVIEW,     GUI_EVENT_DBLCLK, GUI_EVENT_COLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMFOCUS, GUI_EVENT_ITEMSELECT, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMEDIT, 'R', 'F', 'f')
-	RAISES(GUI_CONTROL_TREEVIEW,     GUI_EVENT_ITEMSELECT, GUI_EVENT_DBLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMEXPAND, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMEDIT, 'R', 'F', 'f')
-	RAISES(GUI_CONTROL_EDIT,         GUI_EVENT_CHANGE)
-	RAISES(GUI_CONTROL_DATETIME,     GUI_EVENT_CHANGE)
+	RAISES(GUI_CONTROL_BUTTON,       GUI_EVENT_CLICK, GUI_EVENT_DBLCLK, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS)
+	RAISES(GUI_CONTROL_CHECKBOX,     GUI_EVENT_CLICK, GUI_EVENT_DBLCLK, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS)
+	RAISES(GUI_CONTROL_RADIO,        GUI_EVENT_CLICK, GUI_EVENT_DBLCLK, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS)
+	RAISES(GUI_CONTROL_DROPDOWNLIST, GUI_EVENT_CHANGE, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS)
+	RAISES(GUI_CONTROL_COMBOBOX,     GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS)
+	RAISES(GUI_CONTROL_LISTBOX,      GUI_EVENT_CHANGE, GUI_EVENT_DBLCLK, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS)
+	RAISES(GUI_CONTROL_LISTVIEW,     GUI_EVENT_DBLCLK, GUI_EVENT_COLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMFOCUS, GUI_EVENT_ITEMSELECT, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMEDIT, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS, 'R')
+	RAISES(GUI_CONTROL_TREEVIEW,     GUI_EVENT_ITEMSELECT, GUI_EVENT_DBLCLK, GUI_EVENT_CLICK, GUI_EVENT_RCLK, GUI_EVENT_ITEMEXPAND, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMEDIT, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS, 'R')
+	RAISES(GUI_CONTROL_EDIT,         GUI_EVENT_CHANGE, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS)
+	RAISES(GUI_CONTROL_DATETIME,     GUI_EVENT_CHANGE, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS)
 	RAISES(GUI_CONTROL_MONTHCAL,     GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_HOTKEY,       GUI_EVENT_CHANGE)
 	RAISES(GUI_CONTROL_UPDOWN,       GUI_EVENT_CHANGE)
@@ -8328,8 +8328,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				return 0; // All recognised events for this notification have been handled above.
 			}
 
-			case NM_SETFOCUS: gui_event = 'F'; break;
-			case NM_KILLFOCUS: gui_event = 'f'; break;  // Lowercase to distinguish it.
+			case NM_SETFOCUS: gui_event = GUI_EVENT_FOCUS; break;
+			case NM_KILLFOCUS: gui_event = GUI_EVENT_LOSEFOCUS; break;
 
 			case LVN_KEYDOWN:
 				if (((LPNMLVKEYDOWN)lParam)->wVKey == VK_F2 && !(control.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR)) // WantF2 is in effect.
@@ -8539,8 +8539,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				event_info = (UINT_PTR)TreeView_HitTest(control.hwnd, &ht);
 				break;
 
-			case NM_SETFOCUS: gui_event = 'F'; break;
-			case NM_KILLFOCUS: gui_event = 'f'; break; // Lowercase to distinguish it.
+			case NM_SETFOCUS: gui_event = GUI_EVENT_FOCUS; break;
+			case NM_KILLFOCUS: gui_event = GUI_EVENT_LOSEFOCUS; break;
 
 			case TVN_KEYDOWN:
 				if (((LPNMTVKEYDOWN)lParam)->wVKey == VK_F2 && !(control.attrib & GUI_CONTROL_ATTRIB_ALTBEHAVIOR)) // WantF2 is in effect.
@@ -8574,15 +8574,18 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// OTHER CONTROL TYPES
 		//////////////////////
 		case GUI_CONTROL_DATETIME: // NMDATETIMECHANGE struct contains an NMHDR as it's first member.
-			if (nmhdr.code == DTN_DATETIMECHANGE)
+			// Both MonthCal's year spinner (when year is clicked on) and DateTime's drop-down calendar
+			// seem to start a new message pump.  This is one of the reason things were redesigned to
+			// avoid doing a MsgSleep(-1) after posting AHK_GUI_ACTION at the bottom of Event().
+			// See its comments for details.
+			switch (nmhdr.code)
 			{
-				// Both MonthCal's year spinner (when year is clicked on) and DateTime's drop-down calendar
-				// seem to start a new message pump.  This is one of the reason things were redesigned to
-				// avoid doing a MsgSleep(-1) after posting AHK_GUI_ACTION at the bottom of Event().
-				// See its comments for details.
-				pgui->Event(control_index, nmhdr.code, GUI_EVENT_CHANGE);
+			case DTN_DATETIMECHANGE: gui_event = GUI_EVENT_CHANGE; break;
+			case NM_SETFOCUS: gui_event = GUI_EVENT_FOCUS; break;
+			case NM_KILLFOCUS: gui_event = GUI_EVENT_LOSEFOCUS; break;
 			}
-			//else ignore all others here, for performance.
+			if (gui_event)
+				pgui->Event(control_index, nmhdr.code, gui_event);
 			return 0; // 0 is appropriate for all DATETIME notifications.
 
 		case GUI_CONTROL_MONTHCAL:
@@ -9108,9 +9111,10 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 					return;
 				aGuiEvent = GUI_EVENT_CLICK;
 				break;
-			case BN_DBLCLK:
-				aGuiEvent = GUI_EVENT_DBLCLK;
-				break;
+			// All three of these require BS_NOTIFY:
+			case BN_DBLCLK: aGuiEvent = GUI_EVENT_DBLCLK; break;
+			case BN_SETFOCUS: aGuiEvent = GUI_EVENT_FOCUS; break;
+			case BN_KILLFOCUS: aGuiEvent = GUI_EVENT_LOSEFOCUS; break;
 			default:
 				return;
 			}
@@ -9127,6 +9131,8 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 			case CBN_DBLCLK: // Used by CBS_SIMPLE (i.e. list always visible).
 				aGuiEvent = GUI_EVENT_DBLCLK; // But due to rarity of use, the focused row number is not stored in aEventInfo.
 				break;
+			case CBN_SETFOCUS: aGuiEvent = GUI_EVENT_FOCUS; break;
+			case CBN_KILLFOCUS: aGuiEvent = GUI_EVENT_LOSEFOCUS; break;
 			default:
 				return;
 			}
@@ -9142,6 +9148,8 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 				aGuiEvent = GUI_EVENT_DBLCLK;
 				aEventInfo = 1 + (UINT_PTR)SendMessage(control.hwnd, LB_GETCARETINDEX, 0, 0); // +1 to convert to one-based index.
 				break;
+			case LBN_SETFOCUS: aGuiEvent = GUI_EVENT_FOCUS; break;
+			case LBN_KILLFOCUS: aGuiEvent = GUI_EVENT_LOSEFOCUS; break;
 			default:
 				return;
 			}
@@ -9150,12 +9158,15 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 		case GUI_CONTROL_EDIT:
 			// Seems more appropriate to check EN_CHANGE vs. EN_UPDATE since EN_CHANGE occurs only after
 			// any redrawing of the control.
-			if (aNotifyCode == EN_CHANGE)
+			switch (aNotifyCode)
 			{
-				aGuiEvent = GUI_EVENT_CHANGE;
-				break;
+			case EN_CHANGE: aGuiEvent = GUI_EVENT_CHANGE; break;
+			case EN_SETFOCUS: aGuiEvent = GUI_EVENT_FOCUS; break;
+			case EN_KILLFOCUS: aGuiEvent = GUI_EVENT_LOSEFOCUS; break;
+			default:
+				return;
 			}
-			return; // No action for other notifications.
+			break;
 
 		case GUI_CONTROL_HOTKEY: // The only notification sent by the hotkey control is EN_CHANGE.
 			aGuiEvent = GUI_EVENT_CHANGE;
