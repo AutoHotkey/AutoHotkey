@@ -8267,6 +8267,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 		UINT_PTR event_info = NO_EVENT_INFO; // Set default, to be possibly overridden below.
 		USHORT gui_event = GUI_EVENT_NONE;
+		bool explicitly_return_true = false;
 
 		switch (control.type)
 		{
@@ -8397,28 +8398,15 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 					break;
 				gui_event = GUI_EVENT_ITEMEDIT;
 				event_info = 1 + ((NMLVDISPINFO *)lParam)->item.iItem;
+				// Must return TRUE explicitly because apparently DefDlgProc() would return FALSE,
+				// which would cause the change to be rejected:
+				explicitly_return_true = true;
 				break;
 
 			case LVN_DELETEALLITEMS:
 				return TRUE; // For performance, tell it not to notify us as each individual item is deleted.
 			} // switch(nmhdr.code).
-
-			// Since above didn't return, make it an event.
-			if (gui_event)
-				pgui->Event(control_index, nmhdr.code, gui_event, event_info);
-
-			// After the event, explicitly return a special value for any notifications that absolutely
-			// require it, and let default proc handle all the others.
-			switch (nmhdr.code)
-			{
-			case LVN_ENDLABELEDITW: // Received even for non-Unicode apps, at least on XP.  Even so, the text contained it the struct is apparently always ANSI vs. Unicode.
-			case LVN_ENDLABELEDITA: // Never received, at least not on XP?
-				// MSDN: "If the pszText member of the LVITEM structure is NULL, the return value is ignored."
-				// Therefore, returning TRUE to allow the edit should be the correct value in every case, at
-				// least until such time as the ability for a script to override individual edits is provided.
-				return TRUE; // Must return TRUE explicitly because apparently DefDlgProc() would return FALSE.
-			}
-			break; // Let default proc handle them all in case it does any extra processing.
+			break;
 
 		/////////////////////
 		// TREEVIEW WM_NOTIFY
@@ -8499,6 +8487,9 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				gui_event = GUI_EVENT_ITEMEDIT;
 				event_info = (UINT_PTR)((LPNMTVDISPINFO)lParam)->item.hItem;
 				GuiType::sTreeWithEditInProgress = NULL;
+				// Must return TRUE explicitly because apparently DefDlgProc() would return FALSE,
+				// which would cause the change to be rejected:
+				explicitly_return_true = true;
 				break;
 
 			// Since a left-click is just one method of changing selection (keyboard navigation is another),
@@ -8548,27 +8539,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 					HTREEITEM hitem;
 					if (hitem = TreeView_GetSelection(control.hwnd))
 						SendMessage(control.hwnd, TVM_EDITLABEL, 0, (LPARAM)hitem); // Has no effect if the control is read-only.
-					// For flexibility and consistency with ListView behavior, it seems to still notify the
-					// script of the F2 keystroke in case it wants to do extra things.
 				}
 				break;
 			} // switch(nmhdr.code).
-
-			if (gui_event)
-				pgui->Event(control_index, nmhdr.code, gui_event, event_info);
-
-			// After the event, explicitly return a special value for any notifications that absolutely
-			// require it, and let default proc handle all the others.
-			switch (nmhdr.code)
-			{
-			case TVN_ENDLABELEDITW: // Received even for non-Unicode apps, at least on XP.  Even so, the text contained it the struct is apparently always ANSI vs. Unicode.
-			case TVN_ENDLABELEDITA: // Never received, at least not on XP?
-				// MSDN: "If the pszText member is NULL, the return value is ignored."
-				// Therefore, returning TRUE to allow the edit should be the correct value in every case, at
-				// least until such time as the ability for a script to override individual edits is provided.
-				return TRUE; // Must return TRUE explicitly because apparently DefDlgProc() would return FALSE.
-			}
-			break; // Let default proc handle them all in case it does any extra processing.
+			break;
 
 		//////////////////////
 		// OTHER CONTROL TYPES
@@ -8584,9 +8558,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			case NM_SETFOCUS: gui_event = GUI_EVENT_FOCUS; break;
 			case NM_KILLFOCUS: gui_event = GUI_EVENT_LOSEFOCUS; break;
 			}
-			if (gui_event)
-				pgui->Event(control_index, nmhdr.code, gui_event);
-			return 0; // 0 is appropriate for all DATETIME notifications.
+			break;
 
 		case GUI_CONTROL_MONTHCAL:
 			// Although the NMSELCHANGE notification struct contains the control's current date/time,
@@ -8597,8 +8569,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			// a new year or month is chosen by clicking directly on the month or year.  MCN_SELCHANGE
 			// seems to be superior in every way.
 			if (nmhdr.code == MCN_SELCHANGE)
-				pgui->Event(control_index, nmhdr.code, GUI_EVENT_CHANGE);
-			return 0; // 0 is appropriate for all MONTHCAL notifications.
+				gui_event = GUI_EVENT_CHANGE;
+			break;
 
 		case GUI_CONTROL_UPDOWN:
 			// Now it just returns 0 for simplicity, but the following are kept for reference.
@@ -8614,20 +8586,23 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 				// For code reduction and simplicity (and due to rarity of script needing it), A_EventInfo
 				// is not set to the newly selected tab name (or number in the case of AltSubmit).
 				pgui->ControlUpdateCurrentTab(control, true);
-				pgui->Event(control_index, nmhdr.code, GUI_EVENT_CHANGE);
+				gui_event = GUI_EVENT_CHANGE;
 			}
-			return 0; // 0 is appropriate for all TAB notifications.
+			break;
 
 		case GUI_CONTROL_LINK:
-			if(nmhdr.code == NM_CLICK || nmhdr.code == NM_RETURN)
+			if (nmhdr.code == NM_CLICK || nmhdr.code == NM_RETURN)
 			{
 				NMLINK &nmLink = *(PNMLINK)lParam;
 				LITEM item = nmLink.item;
 				//Link control tries to execute the link URL if href property is set. Otherwise, it will execute a g-label if it exists.
 				if (!*item.szUrl || !g_script.ActionExec((LPTSTR)(LPCTSTR)CStringTCharFromWCharIfNeeded(item.szUrl), NULL, NULL, false))
-					pgui->Event(control_index, nmhdr.code, GUI_EVENT_CLICK, item.iLink + 1); // Link control uses 1-based index for g-labels
+				{
+					gui_event = GUI_EVENT_CLICK;
+					event_info = item.iLink + 1; // Convert to 1-based.
+				}
 			}
-			return 0;
+			break;
 
 		case GUI_CONTROL_STATUSBAR:
 			if (!control.events.Count()) // This is checked to avoid returning TRUE below, and also for performance.
@@ -8659,6 +8634,14 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			//default: Let default proc handle other notifications.
 			} // switch(nmhdr.code)
 		} // switch(control.type) within case WM_NOTIFY.
+
+		// Raise any event identified above.
+		if (gui_event)
+		{
+			pgui->Event(control_index, nmhdr.code, gui_event, event_info);
+			if (explicitly_return_true)
+				return TRUE;
+		}
 
 		break; // outermost switch()
 	}
