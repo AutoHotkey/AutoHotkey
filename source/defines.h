@@ -717,7 +717,7 @@ typedef UINT GuiEventType; // Made a UINT vs. enum so that illegal/underflow/ove
 #define GUI_EVENT_NAMES { _T("") \
 	, _T("DropFiles"), _T("Close"), _T("Escape"), _T("Size"), _T("ContextMenu") \
 	, _T("Change") \
-	, _T("Click"), _T("DoubleClick"), _T("RightClick"), _T("ColClick") \
+	, _T("Click"), _T("DoubleClick"), _T("ColClick") \
 	, _T("ItemCheck"), _T("ItemSelect"), _T("ItemFocus"), _T("ItemExpand") \
 	, _T("ItemEdit") \
 	, _T("Focus"), _T("LoseFocus") \
@@ -727,7 +727,7 @@ enum GuiEventTypes {GUI_EVENT_NONE  // NONE must be zero for any uses of ZeroMem
 	, GUI_EVENT_WINDOW_FIRST = GUI_EVENT_DROPFILES, GUI_EVENT_WINDOW_LAST = GUI_EVENT_CONTEXTMENU
 	, GUI_EVENT_CONTROL_FIRST
 	, GUI_EVENT_CHANGE = GUI_EVENT_CONTROL_FIRST
-	, GUI_EVENT_CLICK, GUI_EVENT_DBLCLK, GUI_EVENT_RCLK, GUI_EVENT_COLCLK
+	, GUI_EVENT_CLICK, GUI_EVENT_DBLCLK, GUI_EVENT_COLCLK
 	, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMSELECT, GUI_EVENT_ITEMFOCUS, GUI_EVENT_ITEMEXPAND
 	, GUI_EVENT_ITEMEDIT
 	, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS

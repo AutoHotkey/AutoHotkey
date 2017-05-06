@@ -1988,11 +1988,7 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UIN
 		if (result == FAIL) // Callback encountered an error.
 			break;
 		if (result == EARLY_RETURN) // Callback returned a non-empty value.
-		{
-			if (!aRetVal) // Caller wants a signal for true vs. false/not specified.
-				result = retval ? CONDITION_TRUE : OK;
 			break;
-		}
 		thread_used = TRUE;
 	}
 	if (aRetVal)
