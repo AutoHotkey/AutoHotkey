@@ -1362,9 +1362,10 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 		return g_script.ScriptError(ERR_GUI_NOT_FOR_THIS_TYPE);
 	} // switch(control.type)
 
+	LPTSTR item_string;
 	if (is_choose_string)
 	{
-		LPTSTR item_string = TokenToString(aParam, buf);
+		item_string = TokenToString(aParam, buf);
 		// Testing confirms that the CB and LB messages do not interpret an empty string
 		// as the first item.  It seems best for "" to deselect the current item/tab.
 		if (!*item_string)
@@ -1400,11 +1401,27 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 	}
 	if (msg_set_index == LB_SETSEL) // Multi-select, so use the cumulative method.
 	{
-		if (aOneExact)
+		if (aOneExact && selection_index >= 0) // But when selection_index == -1, it would be redundant.
 			SendMessage(aControl.hwnd, msg_set_index, FALSE, -1); // Deselect all others.
 		SendMessage(aControl.hwnd, msg_set_index, selection_index >= 0, selection_index);
 		// The return value isn't checked since MSDN doesn't specify what it is in any
 		// case other than failure.
+		if (is_choose_string)
+		{
+			// Since this ListBox is multi-select, select ALL matching items:
+			for (;;)
+			{
+				int found_item = (int)SendMessage(aControl.hwnd, msg_find_string, selection_index, (LPARAM)item_string);
+				// MSDN: "When the search reaches the bottom of the list box, it continues
+				// searching from the top of the list box back to the item specified by the
+				// wParam parameter."  So if there are no more results, it will return the
+				// original index found above, not -1.
+				if (found_item <= selection_index) // The search has looped.
+					break;
+				selection_index = found_item;
+				SendMessage(aControl.hwnd, LB_SETSEL, TRUE, selection_index);
+			}
+		}
 	}
 	else
 	{
