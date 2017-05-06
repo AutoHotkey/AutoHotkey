@@ -2189,7 +2189,7 @@ process_completed_line:
 			if (mClassObjectCount)
 			{
 				// Check for assignment first, in case of something like "Static := 123".
-				for (cp = buf; cisalnum(*cp) || *cp == '_' || *cp == '.'; ++cp);
+				for (cp = buf; IS_IDENTIFIER_CHAR(*cp) || *cp == '.'; ++cp);
 				if (cp > buf) // i.e. buf begins with an identifier.
 				{
 					cp = omit_leading_whitespace(cp);
@@ -7620,7 +7620,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 				return ScriptError(_T("Unknown class var."), item);
 			for (TCHAR *cp; *item_end == '.'; item_end = cp)
 			{
-				for (cp = item_end + 1; cisalnum(*cp) || *cp == '_'; ++cp);
+				for (cp = item_end + 1; IS_IDENTIFIER_CHAR(*cp); ++cp);
 				if (cp == item_end + 1)
 					// This '.' wasn't followed by a valid identifier.  Leave item_end
 					// pointing at '.' and allow the switch() below to report the error.
