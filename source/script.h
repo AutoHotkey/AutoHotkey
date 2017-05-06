@@ -2101,6 +2101,12 @@ struct MsgMonitorInstance
 		}
 		count--;
 	}
+	
+	void Dispose()
+	{
+		count = 0; // Prevent further iteration.
+		deleted = true; // Mark the current item as deleted, so it won't be accessed.
+	}
 };
 
 

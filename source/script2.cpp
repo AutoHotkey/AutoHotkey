@@ -14706,6 +14706,9 @@ void MsgMonitorList::Dispose()
 	}
 	free(mMonitor);
 	mCountMax = 0;
+	// Dispose all iterator instances to ensure Call() does not continue iterating:
+	for (MsgMonitorInstance *inst = mTop; inst; inst = inst->previous)
+		inst->Dispose();
 }
 
 
