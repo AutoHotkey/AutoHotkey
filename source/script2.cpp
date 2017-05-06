@@ -15449,6 +15449,9 @@ BIF_DECL_GUICTRL(BIF_LV_AddInsertModify)
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 	}
 
+	// Suppress any events raised by the changes made below:
+	control.attrib |= GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS;
+
 	// More maintainable and performs better to have a separate struct for subitems vs. items.
 	LVITEM lvi_sub;
 	// Ensure mask is pure to avoid giving it any excuse to fail due to the fact that
@@ -15483,7 +15486,10 @@ BIF_DECL_GUICTRL(BIF_LV_AddInsertModify)
 			// it returns the items new index (which will be the last item in the list unless the control has
 			// auto-sort style).
 			if (   -1 == (lvi_sub.iItem = ListView_InsertItem(control.hwnd, &lvi))   )
+			{
+				control.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Re-enable events.
 				_f_return_i(0); // Since item can't be inserted, no reason to try attaching any subitems to it.
+			}
 			// Update iItem with the actual index assigned to the item, which might be different than the
 			// specified index if the control has an auto-sort style in effect.  This new iItem value
 			// is used for ListView_SetCheckState() and for the attaching of any subitems to this item.
@@ -15542,6 +15548,7 @@ BIF_DECL_GUICTRL(BIF_LV_AddInsertModify)
 		control.union_lv_attrib->row_count_hint = 0; // Reset so that it only gets set once per request.
 	}
 
+	control.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Re-enable events.
 	_f_return_i(result);
 }
 
@@ -15946,6 +15953,9 @@ BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete)
 	TVINSERTSTRUCT tvi; // It contains a TVITEMEX, which is okay even if MSIE pre-4.0 on Win95/NT because those OSes will simply never access the new/bottommost item in the struct.
 	bool add_mode = (mode == FID_TV_Add); // For readability & maint.
 	HTREEITEM retval;
+	
+	// Suppress any events raised by the changes made below:
+	control.attrib |= GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS;
 
 	LPTSTR options;
 	if (add_mode) // TV.Add()
@@ -15969,6 +15979,7 @@ BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete)
 		{
 			if (!TreeView_SelectItem(control.hwnd, tvi.item.hItem))
 				retval = 0; // Override the HTREEITEM default value set above.
+			control.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Re-enable events.
 			_f_return_i((size_t)retval);
 		}
 		// Otherwise, there's a second parameter (even if it's 0 or "").
@@ -16137,6 +16148,7 @@ BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete)
 		}
 		else
 		{
+			control.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Re-enable events.
 			aResultToken.Error(ERR_INVALID_OPTION, next_option);
 			*option_end = orig_char; // See comment below.
 			return;
@@ -16174,6 +16186,7 @@ BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete)
 		if (!TreeView_Select(control.hwnd, tvi.item.hItem, select_flag) && !add_mode) // Relies on short-circuit boolean order.
 			retval = 0; // When not in add-mode, indicate partial failure by overriding the return value set earlier (add-mode should always return the new item's ID).
 
+	control.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Re-enable events.
 	_f_return_i((size_t)retval);
 }
 
