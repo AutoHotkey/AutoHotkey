@@ -1730,7 +1730,7 @@ ResultType GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType
 		// mode, this should be done because the case of the item in the drop-list is usually preferable
 		// to any varying case the user may have manually typed).
 		index = SendMessage(aControl.hwnd, CB_FINDSTRINGEXACT, -1, (LPARAM)edit_text); // It's not case sensitive.
-		if (index == CB_ERR)
+		if (index == CB_ERR && aMode != Value_Mode) // Text or Submit mode.
 		{
 			// edit_text does not match any of the list items, so just return the text.
 			aResultToken.AcceptMem(edit_text, edit_length);
