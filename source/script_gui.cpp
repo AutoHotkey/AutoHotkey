@@ -1359,7 +1359,7 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 		notify_code[1] = LBN_DBLCLK;
 		break;
 	default:  // Not a supported control type.
-		return g_script.ScriptError(_T("Choose() is only allowed on Tab, DDL, ComboBox and ListBox controls."));
+		return g_script.ScriptError(ERR_GUI_NOT_FOR_THIS_TYPE);
 	} // switch(control.type)
 
 	if (is_choose_string)
