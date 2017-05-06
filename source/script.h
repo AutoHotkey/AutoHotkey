@@ -2414,6 +2414,7 @@ struct GuiControlType : public ObjectBase
 		M_Tab_UseTab,
 		M_List_Add,
 		M_List_Delete,
+		M_DateTime_SetFormat,
 		LastMethodPlusOne,
 
 		// Properties

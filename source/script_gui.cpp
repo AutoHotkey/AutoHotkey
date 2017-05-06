@@ -684,6 +684,10 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 		else if (!_tcsicmp(member_name, _T("Delete")))
 			member = M_List_Delete;
 		break;
+	case GUI_CONTROL_DATETIME:
+		if (!_tcsicmp(member_name, _T("SetFormat")))
+			member = M_DateTime_SetFormat;
+		break;
 	case GUI_CONTROL_LISTVIEW:
 	case GUI_CONTROL_TREEVIEW:
 	case GUI_CONTROL_STATUSBAR:
@@ -975,6 +979,9 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			}
 			_o_return_empty;
 		}
+
+		case M_DateTime_SetFormat:
+			return gui->ControlSetDateTimeFormat(*this, ParamIndexToOptionalString(0, _f_number_buf), aResultToken);
 	}
 
 	// Since above did not return, we assume failure.
@@ -1451,7 +1458,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 
 	case GUI_CONTROL_DATETIME:
 		if (aIsText)
-			return ControlSetDateTimeFormat(aControl, aContents, aResultToken);
+			_o_throw(ERR_GUI_NOT_FOR_THIS_TYPE); // Let the user know the control doesn't support this.
 		else
 			return ControlSetDateTime(aControl, aContents, aResultToken);
 	
@@ -7691,14 +7698,6 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 	case GUI_CONTROL_LISTBOX: return ControlGetListBox(aResultToken, aControl, aMode);
 	case GUI_CONTROL_TAB: return ControlGetTab(aResultToken, aControl, aMode);
 	
-	case GUI_CONTROL_DATETIME:
-		if (aMode == Text_Mode)
-			// Text mode sets the format string, but there's no way to retrieve it.
-			// For consistency, this does not return the date value or formatted text.
-			_o_return_empty;
-		else
-			return ControlGetDateTime(aResultToken, aControl);
-
 	case GUI_CONTROL_TEXT: // See case GUI_CONTROL_TEXT in ControlSetContents() for the reasoning behind this.
 	case GUI_CONTROL_PIC: // The control's window text is usually the original filename.
 		aMode = Text_Mode; // Value and Text both return the window text.
@@ -7717,6 +7716,7 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 	case GUI_CONTROL_RADIO: // Same as below.
 	case GUI_CONTROL_CHECKBOX: return ControlGetCheck(aResultToken, aControl);
 	case GUI_CONTROL_EDIT: return ControlGetEdit(aResultToken, aControl);
+	case GUI_CONTROL_DATETIME: return ControlGetDateTime(aResultToken, aControl);
 	case GUI_CONTROL_MONTHCAL: return ControlGetMonthCal(aResultToken, aControl);
 	case GUI_CONTROL_HOTKEY: return ControlGetHotkey(aResultToken, aControl);
 	case GUI_CONTROL_UPDOWN: return ControlGetUpDown(aResultToken, aControl);
