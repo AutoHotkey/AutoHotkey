@@ -4933,9 +4933,6 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 		else if (!_tcsicmp(next_option, _T("Caption")))
 			if (adding) mStyle |= WS_CAPTION; else mStyle = mStyle & ~WS_CAPTION;
 
-		else if (!_tcsicmp(next_option, _T("DropFiles")))
-			if (adding) mExStyle |= WS_EX_ACCEPTFILES; else mExStyle &= ~WS_EX_ACCEPTFILES;
-
 		else if (!_tcsnicmp(next_option, _T("Delimiter"), 9))
 		{
 			next_option += 9;
