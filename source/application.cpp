@@ -1141,14 +1141,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						EVT_ARG_ADD(CStringTCharFromWCharIfNeeded(*item.szUrl ? item.szUrl : item.szID));
 				}
 
-				// Set last found window (as documented).  It's not necessary to check IsWindow/IsWindowVisible/
-				// DetectHiddenWindows since GetValidLastUsedWindow() takes care of that whenever the script
-				// actually tries to use the last found window.  UPDATE: Definitely don't want to check
-				// IsWindowVisible/DetectHiddenWindows now that the last-found window is exempt from
-				// DetectHiddenWindows if the last-found window is one of the script's GUI windows [v1.0.25.13]:
-				g.hWndLastUsed = pgui->mHwnd;
 				pgui->AddRef(); // Keep the pointer valid at least until the thread finishes.
-				//g.EventInfo = gui_event_info; // Override the thread-default of NO_EVENT_INFO.
 
 				ResultType result;
 				INT_PTR retval;
@@ -1157,7 +1150,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				{
 					// Call the control's context menu handler, if any, omitting the "Gui" parameter
 					// for consistency with other Ctrl events (and perhaps convenience).
-					result = pcontrol->events.Call(gui_event_args + 1, gui_event_arg_count - 1, gui_event_code, gui_event_kind, pgui->mEventSink);
+					result = pcontrol->events.Call(gui_event_args + 1, gui_event_arg_count - 1, gui_event_code, gui_event_kind, pgui);
 					if (result == EARLY_RETURN // Suppress the GUI's handler for this event, if any.
 						|| !pgui->mHwnd) // Gui was destroyed.
 					{
@@ -1167,7 +1160,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				}
 
 				MsgMonitorList &events = event_is_control_generated ? pcontrol->events : pgui->mEvents;
-				result = events.Call(gui_event_args, gui_event_arg_count, gui_event_code, gui_event_kind, pgui->mEventSink, &retval);
+				result = events.Call(gui_event_args, gui_event_arg_count, gui_event_code, gui_event_kind, pgui, &retval);
 				
 				if (pgui->mHwnd) // i.e. GUI was not destroyed.
 				{

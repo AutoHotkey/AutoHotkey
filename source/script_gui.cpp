@@ -9374,7 +9374,7 @@ bool GuiType::ControlWmNotify(GuiControlType &aControl, LPNMHDR aNmHdr, INT_PTR 
 	
 	ExprTokenType param[] = { &aControl, (__int64)(DWORD_PTR)aNmHdr };
 	ResultType result = aControl.events.Call(param, _countof(param)
-		, aNmHdr->code, GUI_EVENTKIND_NOTIFY, mEventSink, &aRetVal);
+		, aNmHdr->code, GUI_EVENTKIND_NOTIFY, this, &aRetVal);
 
 	Release();
 	ResumeUnderlyingThread(ErrorLevel_saved);

@@ -2059,7 +2059,7 @@ public:
 	MsgMonitorStruct *Add(UINT aMsg, LPTSTR aMethodName, bool aAppend = TRUE);
 	void Remove(MsgMonitorStruct *aMonitor);
 	ResultType Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex); // Used for OnExit and OnClipboardChange, but not OnMessage.
-	ResultType Call(ExprTokenType *aParamValue, int aParamCount, UINT aMsg, UCHAR aMsgType, IObject *aEventSink, INT_PTR *aRetVal = NULL); // Used by GUI.
+	ResultType Call(ExprTokenType *aParamValue, int aParamCount, UINT aMsg, UCHAR aMsgType, GuiType *aGui, INT_PTR *aRetVal = NULL); // Used by GUI.
 
 	MsgMonitorStruct& operator[] (const int aIndex) { return mMonitor[aIndex]; }
 	int Count() { return mCount; }

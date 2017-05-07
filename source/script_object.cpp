@@ -1966,7 +1966,7 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, int
 
 
 
-ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UINT aMsg, UCHAR aMsgType, IObject *aEventSink, INT_PTR *aRetVal)
+ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UINT aMsg, UCHAR aMsgType, GuiType *aGui, INT_PTR *aRetVal)
 {
 	ResultType result = OK;
 	INT_PTR retval = 0;
@@ -1978,11 +1978,14 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UIN
 		if (mon.msg != aMsg || mon.msg_type != aMsgType)
 			continue;
 
-		IObject *func = mon.is_method ? aEventSink : mon.func; // is_method == true implies the GUI has an event sink object.
+		IObject *func = mon.is_method ? aGui->mEventSink : mon.func; // is_method == true implies the GUI has an event sink object.
 		LPTSTR method_name = mon.is_method ? mon.method_name : _T("call");
 
 		if (thread_used) // Re-initialize the thread.
 			InitNewThread(0, true, false, ACT_INVALID);
+		
+		// Set last found window (as documented).
+		g->hWndLastUsed = aGui->mHwnd;
 		
 		result = CallMethod(func, func, method_name, aParamValue, aParamCount, &retval);
 		if (result == FAIL) // Callback encountered an error.
