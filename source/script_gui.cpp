@@ -652,7 +652,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 	if_member("OnEvent", M_OnEvent)
 	if_member("OnNotify", M_OnNotify)
 	if_member("OnCommand", M_OnCommand)
-	if_member("UpdateFont", M_UpdateFont)
+	if_member("SetFont", M_SetFont)
 	if_member("Focus", M_Focus)
 	if_member("Focused", P_Focused)
 	if_member("Hwnd", P_Handle)
@@ -756,9 +756,8 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 				_o_throw(ERR_INVALID_USAGE);
 			_o_return(GetFocus() == hwnd);
 
-		case M_UpdateFont:
-			gui->ControlUpdateFont(*this);
-			_o_return_empty;
+		case M_SetFont:
+			return gui->ControlSetFont(*this, ParamIndexToOptionalString(0), ParamIndexToOptionalString(1));
 
 		case M_Move:
 			return gui->ControlMove(*this, ParamIndexToOptionalString(0), ParamIndexToOptionalBOOL(1, FALSE));
@@ -1261,13 +1260,42 @@ ResultType GuiType::ControlMove(GuiControlType &aControl, LPTSTR aPos, bool aDra
 }
 
 
-void GuiType::ControlUpdateFont(GuiControlType &aControl)
+ResultType GuiType::ControlSetFont(GuiControlType &aControl, LPTSTR aOptions, LPTSTR aFontName)
 {
 	if (!aControl.UsesFontAndTextColor()) // Control has no use for a font.
-		return;
-	SendMessage(aControl.hwnd, WM_SETFONT, (WPARAM)sFont[mCurrentFontIndex].hfont, 0);
-	ControlSetTextColor(aControl, mCurrentColor);
-	InvalidateRect(aControl.hwnd, NULL, TRUE); // Required for refresh, at least for edit controls, probably some others.
+		return g_script.ScriptError(ERR_GUI_NOT_FOR_THIS_TYPE);
+	COLORREF color = CLR_INVALID;
+	int font_index;
+	if (*aOptions || *aFontName) // Use specified font.
+	{
+		// Find foundation font (control's current font, to inherit attributes).
+		HFONT hfont = (HFONT)SendMessage(aControl.hwnd, WM_GETFONT, 0, 0);
+		FontType *base_font = &sFont[mCurrentFontIndex]; // Set default.
+		for (int i = 0; i < sFontCount; ++i)
+			if (sFont[i].hfont == hfont)
+			{
+				base_font = &sFont[i];
+				break;
+			}
+
+		// Find or create font with the changed attributes.
+		font_index = FindOrCreateFont(aOptions, aFontName, base_font, &color);
+		if (font_index == -1)
+			return FAIL;
+	}
+	else // Use GUI's current font.
+	{
+		font_index = mCurrentFontIndex;
+		// It seems more correct to leave the control's current color, since there's
+		// no way to know whether it should take precedence over the GUI's text color.
+		// Require the caller to be explicit and specify the color if it should be changed.
+		//color = mCurrentColor;
+	}
+	SendMessage(aControl.hwnd, WM_SETFONT, (WPARAM)sFont[font_index].hfont, 0);
+	if (color != CLR_INVALID)
+		ControlSetTextColor(aControl, color);
+	ControlRedraw(aControl, false); // Required for refresh, at least for edit controls, probably some others.
+	return OK;
 }
 
 

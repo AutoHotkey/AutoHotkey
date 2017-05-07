@@ -2410,7 +2410,7 @@ struct GuiControlType : public ObjectBase
 		M_OnEvent,
 		M_OnNotify,
 		M_OnCommand,
-		M_UpdateFont,
+		M_SetFont,
 		M_Tab_UseTab,
 		M_List_Add,
 		M_List_Delete,
@@ -2718,7 +2718,7 @@ public:
 	void ControlSetEnabled(GuiControlType &aControl, bool aEnabled);
 	void ControlSetVisible(GuiControlType &aControl, bool aVisible);
 	ResultType ControlMove(GuiControlType &aControl, LPTSTR aPos, bool aDraw);
-	void ControlUpdateFont(GuiControlType &aControl);
+	ResultType ControlSetFont(GuiControlType &aControl, LPTSTR aOptions, LPTSTR aFontName);
 	void ControlSetTextColor(GuiControlType &aControl, COLORREF aColor);
 	void ControlSetMonthCalColor(GuiControlType &aControl, COLORREF aColor, UINT aMsg);
 	ResultType ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, int aExtraActions = 0, BOOL aOneExact = FALSE);
