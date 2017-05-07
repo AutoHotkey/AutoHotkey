@@ -2502,44 +2502,76 @@ ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventK
 
 void GuiType::ApplyEventStyles(GuiControlType *aControl, UINT aEvent, bool aAdded)
 {
-	int style_type = 0;
+	int style_type;
 	DWORD style_bit;
 	HWND hwnd;
-	if (aEvent == GUI_EVENT_CLICK) // Implies aControl != NULL.
+	if (aControl)
 	{
+		// These styles are only added automatically, not removed, for a few reasons:
+		//  1) Reduces code size (by 224 bytes on x86 vs. just 64 bytes for this section).
+		//     Note that it's necessary to check for handlers for every event in the group
+		//     before removing the style.
+		//  2) The script may have applied the style manually, in which case it should not
+		//     be removed automatically (but we have no way to know).
+		//  3) It's probably rare to remove a handler for one of these events.
+		if (!aAdded)
+			return;
 		GuiControlType &control = *aControl;
-		if (control.type == GUI_CONTROL_TEXT || control.type == GUI_CONTROL_PIC)
+		// This approach appears to produce the same code size as just checking for the
+		// events which don't need the style; i.e. GUI_EVENT_CONTEXTMENU and (for Buttons)
+		// GUI_EVENT_CLICK:
+		static char sStaticNotify[] = {GUI_EVENT_CLICK, GUI_EVENT_DBLCLK, NULL};
+		static char sButtonNotify[] = {GUI_EVENT_DBLCLK, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS, NULL};
+		char *event_group;
+		switch (control.type)
 		{
+		case GUI_CONTROL_TEXT:
+		case GUI_CONTROL_PIC:
 			// Apply the SS_NOTIFY style *only* if the control actually has an associated action.
 			// This is because otherwise the control would steal all clicks for any other controls
 			// drawn on top of it (e.g. a picture control with some edit fields drawn on top of it).
 			// See comments in the creation of GUI_CONTROL_PIC for more info:
-			style_type = GWL_STYLE;
 			style_bit = SS_NOTIFY;
-			hwnd = control.hwnd;
+			event_group = sStaticNotify;
+			break;
+		
+		case GUI_CONTROL_BUTTON:
+		case GUI_CONTROL_CHECKBOX:
+		case GUI_CONTROL_RADIO:
+			style_bit = BS_NOTIFY;
+			event_group = sButtonNotify;
+			break;
+		
+		default:
+			return;
 		}
+		if (!strchr(event_group, aEvent))
+			return;
+		style_type = GWL_STYLE;
+		hwnd = control.hwnd;
 	}
-	else if (aEvent == GUI_EVENT_DROPFILES) // Implies aControl == NULL (see below).
+	else // aControl == NULL
 	{
-		// Apply the WS_EX_ACCEPTFILES style to ensure the window can accept dropped files.
-		// Remove the style to ensure the mouse cursor correctly changes to show that the
-		// window no longer accepts dropped files.
-		style_type = GWL_EXSTYLE;
-		style_bit = WS_EX_ACCEPTFILES;
+		if (aEvent == GUI_EVENT_DROPFILES)
+		{
+			// Apply the WS_EX_ACCEPTFILES style to ensure the window can accept dropped files.
+			// Remove the style to ensure the mouse cursor correctly changes to show that the
+			// window no longer accepts dropped files.
+			style_type = GWL_EXSTYLE;
+			style_bit = WS_EX_ACCEPTFILES;
+		}
+		else
+			return;
+		if (!aAdded && IsMonitoring(aEvent)) // Removed a handler but not the last.
+			return;
 		hwnd = mHwnd;
 	}
-	if (style_type)
+	// Since above didn't return, there's a style to apply or remove.
+	DWORD current_style = GetWindowLong(hwnd, style_type);
+	if (aAdded != ((current_style & style_bit) != 0)) // Needs toggling.
 	{
-		MsgMonitorList &handlers = aControl ? aControl->events : mEvents;
-		if (aAdded || !handlers.IsMonitoring(aEvent)) // Added a handler or removed the last handler.
-		{
-			DWORD current_style = GetWindowLong(hwnd, style_type);
-			if (aAdded != ((current_style & style_bit) != 0)) // Needs toggling.
-			{
-				current_style ^= style_bit; // Toggle it.
-				SetWindowLong(hwnd, style_type, current_style);
-			}
-		}
+		current_style ^= style_bit; // Toggle it.
+		SetWindowLong(hwnd, style_type, current_style);
 	}
 }
 
@@ -2744,11 +2776,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// The BS_NOTIFY style is probably better not applied by default to radios because although it
 		// causes the control to send BN_DBLCLK messages, each double-click by the user is seen only
 		// as one click for the purpose of cosmetically making the button appear like it is being
-		// clicked rapidly.  Update: the usefulness of double-clicking a radio button seems to
-		// outweigh the rare cosmetic deficiency of rapidly clicking a radio button, so it seems
-		// better to provide it as a default that can be overridden via explicit option.
+		// clicked rapidly.  It is applied by ApplyEventStyles() instead.
 		// v1.0.47.04: Removed BS_MULTILINE from default because it is conditionally applied later below.
-		opt.style_add |= BS_NOTIFY;  // No WS_TABSTOP here since that is applied elsewhere depending on radio group nature.
+		// No WS_TABSTOP here since that is applied elsewhere depending on radio group nature.
 		if (!mInRadioGroup)
 			opt.style_add |= WS_GROUP; // Tabstop must be handled later below.
 			// The mInRadioGroup flag will be changed accordingly after the control is successfully created.
@@ -9124,11 +9154,6 @@ void GuiType::Event(GuiIndexType aControlIndex, UINT aNotifyCode, USHORT aGuiEve
 		case GUI_CONTROL_BUTTON:
 		case GUI_CONTROL_CHECKBOX:
 		case GUI_CONTROL_RADIO:
-			// Must include BN_DBLCLK or these control types won't be responsive to rapid consecutive clicks.
-			// Update: The above is true only if the button has the BS_NOTIFY option, and now it doesn't so
-			// checking for BN_DBLCLK is no longer necessary.  Update: Double-clicks are now detected in
-			// case that style every winds up on any of the above control types (currently it's the default
-			// on GUI_CONTROL_RADIO anyway):
 			switch (aNotifyCode)
 			{
 			case BN_CLICKED: // Must explicitly list this case since the default label below does a return.
