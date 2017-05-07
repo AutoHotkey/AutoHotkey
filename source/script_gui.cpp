@@ -8169,11 +8169,20 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			// Known/documented limitation: In spite of being in the right z-order position, any control that
 			// overlaps the status bar might sometimes get drawn on top of it.
 			SendMessage(pgui->mStatusBarHwnd, WM_SIZE, wParam, lParam); // It apparently ignores wParam and lParam, but just in case send it the actuals.
+		switch (wParam)
+		{
+		case SIZE_RESTORED: wParam = 0; break;
+		case SIZE_MAXIMIZED: wParam = 1; break;
+		case SIZE_MINIMIZED: wParam = -1; break;
+		//default:
 		// Note that SIZE_MAXSHOW/SIZE_MAXHIDE don't seem to ever be received under the conditions
-		// described at MSDN, even if the window has WS_POPUP style.  Therefore, A_EventInfo will
+		// described at MSDN, even if the window has WS_POPUP style.  They are probably relics from
+		// 16-bit Windows.  For simplicity (and because the window may have actually been resized)
+		// let wParam have its current (unexpected) value, if that's ever possible.
+		}
 		// probably never contain those values, and as a result they are not documented in the help file.
 		if (pgui->IsMonitoring(GUI_EVENT_RESIZE))
-			POST_AHK_GUI_ACTION(hWnd, LOWORD(wParam), GUI_EVENT_RESIZE, lParam); // LOWORD(wParam) just to be sure it fits in 16-bit, but SIZE_MAXIMIZED and the others all do.
+			POST_AHK_GUI_ACTION(hWnd, NO_CONTROL_INDEX, MAKEWORD(GUI_EVENT_RESIZE, wParam), lParam);
 			// MsgSleep() is not done because "case AHK_GUI_ACTION" in GuiWindowProc() takes care of it.
 			// See its comments for why.
 		return 0; // "If an application processes this message, it should return zero."

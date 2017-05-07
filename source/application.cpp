@@ -222,7 +222,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	UCHAR gui_event_kind;
 	UINT gui_event_code;
 	DWORD_PTR gui_event_info;
-	DWORD gui_size;
+	BYTE gui_event_byte;
 	bool event_is_control_generated;
 	MsgMonitorList *check_if_running;
 	ExprTokenType gui_event_args[6]; // Current maximum number of arguments for Gui event handlers.
@@ -643,18 +643,12 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					goto break_out_of_main_switch; // Goto seems preferably in this case for code size & performance.
 				
 				gui_event_info =    (DWORD_PTR)msg.lParam;
-				gui_action =        LOBYTE(msg.wParam); // BYTE, not WORD, because the HIBYTE is sometimes used for additional info.
-				gui_control_index = HIWORD(msg.wParam); // Caller has set it to NO_CONTROL_INDEX if it isn't applicable.
+				gui_action =        LOBYTE(msg.wParam); // Byte 0.
+				gui_event_byte =    HIBYTE(msg.wParam); // Byte 1.  Sometimes used as an additional parameter.
+				gui_control_index = HIWORD(msg.wParam); // Bytes 2-3.  Caller has set it to NO_CONTROL_INDEX if it isn't applicable.
 				gui_event_arg_count = 0;
 				gui_event_code = gui_action; // Set default.  Using both this and gui_action simplifies some things.
 
-				if (gui_action == GUI_EVENT_RESIZE) // This section be done after above but before pcontrol below.
-				{
-					gui_size = (DWORD)gui_event_info; // Temp storage until the "g" struct becomes available for the new thread.
-					gui_event_info = gui_control_index; // SizeType is stored in index in this case.
-					gui_control_index = NO_CONTROL_INDEX;
-				}
-				// Below relies on the GUI_EVENT_RESIZE section above having been done:
 				pcontrol = gui_control_index < pgui->mControlCount ? pgui->mControl[gui_control_index] : NULL; // Set for use in other places below.
 
 				check_if_running = &pgui->mEvents; // Set default.
@@ -1020,10 +1014,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				switch(gui_action)
 				{
 				case GUI_EVENT_CONTEXTMENU:
-					bool from_keyboard;
-					// Caller stored 1 in the second byte of wParam if this context-menu was generated
-					// via the keyboard (such as AppsKey or Shift-F10):
-					from_keyboard = HIBYTE(msg.wParam);
+					bool from_keyboard; // True if this context-menu was generated via the keyboard (such as AppsKey or Shift-F10):
+					from_keyboard = gui_event_byte;
 					gui_point = msg.pt; // Set default. v1.0.38: More accurate/customary to use msg.pt than GetCursorPos().
 					if (pcontrol) // i.e. this context menu is for a control rather than a click somewhere in the parent window itself.
 					{
@@ -1115,9 +1107,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					if (gui_action == GUI_EVENT_RESIZE)
 					{
 						// Build event arguments.
-						EVT_ARG_ADD((__int64)gui_event_info); // Event info
-						EVT_ARG_ADD(pgui->Unscale(LOWORD(gui_size))); // Width
-						EVT_ARG_ADD(pgui->Unscale(HIWORD(gui_size))); // Height
+						EVT_ARG_ADD((char)gui_event_byte); // MinMax state
+						EVT_ARG_ADD(pgui->Unscale(LOWORD(gui_event_info))); // Width
+						EVT_ARG_ADD(pgui->Unscale(HIWORD(gui_event_info))); // Height
 					}
 					break;
 
@@ -1135,7 +1127,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						// is selection or de-selection:
 					case GUI_EVENT_ITEMCHECK: // Parameter indicates checked (1) vs unchecked (0).
 					case GUI_EVENT_ITEMEXPAND: // Parameter indicates expanded (1) vs collapsed (0).
-						EVT_ARG_ADD((int)HIBYTE(msg.wParam) - 1);
+						EVT_ARG_ADD((int)gui_event_byte - 1);
 						break;
 					}
 				} // switch (msg.message)
