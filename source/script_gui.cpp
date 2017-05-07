@@ -8642,13 +8642,16 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			if (nmhdr.code == NM_CLICK || nmhdr.code == NM_RETURN)
 			{
 				NMLINK &nmLink = *(PNMLINK)lParam;
-				LITEM item = nmLink.item;
-				//Link control tries to execute the link URL if href property is set. Otherwise, it will execute a g-label if it exists.
-				if (!*item.szUrl || !g_script.ActionExec((LPTSTR)(LPCTSTR)CStringTCharFromWCharIfNeeded(item.szUrl), NULL, NULL, false))
+				LITEM &item = nmLink.item;
+				// If (and only if) the script is not monitoring the Click event,
+				// attempt to execute the link's HREF attribute:
+				if (*item.szUrl && !control.events.IsMonitoring(GUI_EVENT_CLICK))
 				{
-					gui_event = GUI_EVENT_CLICK;
-					event_info = item.iLink + 1; // Convert to 1-based.
+					g_script.ActionExec(item.szUrl, NULL, NULL, false);
+					return 0;
 				}
+				gui_event = GUI_EVENT_CLICK;
+				event_info = item.iLink + 1; // Convert to 1-based.
 			}
 			break;
 
