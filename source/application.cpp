@@ -1066,7 +1066,12 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					// cursor's position rather than some arbitrary center-point, or top-left point in the
 					// parent window.  This is because it might be more convenient for the user to move the
 					// mouse to select a menu item (since menu will be close to mouse cursor).
-					ScreenToWindow(gui_point, pgui->mHwnd); // For compatibility with "Menu Show", convert to window coordinates. A CoordMode option can be added to change this if desired.
+					
+					// Convert to client coordinates, since that's what we use for positioning controls,
+					// and it's usually the default Menu CoordMode.  Since the script might not use the
+					// coordinates to display a menu, it seems best to use this even if the script has
+					// changed the default CoordMode.
+					ScreenToClient(pgui->mHwnd, &gui_point);
 					
 					// Build event arguments.
 					if (pcontrol)
@@ -1081,7 +1086,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 				case GUI_EVENT_DROPFILES:
 					gui_point = msg.pt; // v1.0.38: More accurate/customary to use msg.pt than GetCursorPos().
-					ScreenToWindow(gui_point, pgui->mHwnd);
+					ScreenToClient(pgui->mHwnd, &gui_point); // Seems more useful/appropriate than window coordinates, especially now that Client CoordMode is the starting default.
 					// Visually indicate that drops aren't allowed while and existing drop is still being
 					// processed. Fix for v1.0.31.02: The window's current ExStyle is fetched every time
 					// in case a non-GUI command altered it (such as making it transparent):
