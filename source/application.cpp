@@ -1122,6 +1122,24 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					break;
 
 				default: // Other control-generated event (i.e. event_is_control_generated==true).
+					if (pcontrol->type == GUI_CONTROL_LINK && gui_action == GUI_EVENT_CLICK)
+					{
+						LITEM item;
+						item.mask = LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
+						item.iLink = (int)gui_event_info - 1;
+						if (!SendMessage(pcontrol->hwnd, LM_GETITEM, NULL, (LPARAM)&item))
+						{
+							// Make sure they are initialized to sensible values.
+							*item.szID = '\0';
+							*item.szUrl = '\0';
+						}
+						if (*item.szID)
+							EVT_ARG_ADD(item.szID); // ID attribute.
+						else
+							EVT_ARG_ADD((int)gui_event_info); // One-based index.
+						EVT_ARG_ADD(item.szUrl); // Empty unless it had a href which failed to execute.
+						break;
+					}
 					EVT_ARG_ADD((__int64)gui_event_info);
 					switch (gui_action)
 					{
@@ -1136,15 +1154,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						break;
 					}
 				} // switch (msg.message)
-
-				if (gui_action == GUI_EVENT_CLICK && pcontrol->type == GUI_CONTROL_LINK)
-				{
-					LITEM item = {};
-					item.mask = LIF_URL|LIF_ITEMID|LIF_ITEMINDEX;
-					item.iLink = (int)gui_event_info - 1;
-					if (SendMessage(pcontrol->hwnd, LM_GETITEM, NULL, (LPARAM)&item))
-						EVT_ARG_ADD(CStringTCharFromWCharIfNeeded(*item.szUrl ? item.szUrl : item.szID));
-				}
 
 				pgui->AddRef(); // Keep the pointer valid at least until the thread finishes.
 
