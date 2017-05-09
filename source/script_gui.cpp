@@ -765,7 +765,7 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 		case M_Choose:
 			if (aParamCount == 0)
 				_o_throw(ERR_TOO_FEW_PARAMS);
-			return gui->ControlChoose(*this, *aParam[0], ParamIndexToOptionalInt(1, 0));
+			return gui->ControlChoose(*this, *aParam[0]);
 
 		case M_OnEvent:
 		case M_OnNotify:
@@ -1336,23 +1336,17 @@ void GuiType::ControlSetMonthCalColor(GuiControlType &aControl, COLORREF aColor,
 }
 
 
-ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, int aExtraActions, BOOL aOneExact)
+ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, BOOL aOneExact)
 {
 	int selection_index = -1;
 	bool is_choose_string = (TokenIsPureNumeric(aParam) != SYM_INTEGER);
 	TCHAR buf[MAX_NUMBER_SIZE];
 	
-	if (aExtraActions < 0 || aExtraActions > 2) // Below relies on this having been checked.
-		return g_script.ScriptError(ERR_PARAM2_INVALID);
-
 	UINT msg_set_index = 0, msg_select_string = 0, msg_find_string = 0;
-	USHORT notify_code[2];
 	switch(aControl.type)
 	{
 	case GUI_CONTROL_TAB:
 		msg_set_index = TCM_SETCURSEL;
-		notify_code[0] = (USHORT)TCN_SELCHANGE; // Type-cast to suppress ridiculous truncation warning.
-		notify_code[1] = 0;
 		break;
 	case GUI_CONTROL_DROPDOWNLIST:
 	case GUI_CONTROL_COMBOBOX:
@@ -1361,11 +1355,6 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 			msg_find_string = CB_FINDSTRINGEXACT;
 		else
 			msg_select_string = CB_SELECTSTRING;
-		notify_code[0] = CBN_SELCHANGE;
-		if ((GetWindowLong(aControl.hwnd, GWL_STYLE) & (CBS_SIMPLE|CBS_DROPDOWNLIST)) == CBS_SIMPLE) // DoubleClick events aren't normally possible without CBS_SIMPLE.
-			notify_code[1] = CBN_DBLCLK;
-		else
-			notify_code[1] = 0;
 		break;
 	case GUI_CONTROL_LISTBOX:
 		if (GetWindowLong(aControl.hwnd, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
@@ -1383,8 +1372,6 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 			else
 				msg_select_string = LB_SELECTSTRING;
 		}
-		notify_code[0] = LBN_SELCHANGE;
-		notify_code[1] = LBN_DBLCLK;
 		break;
 	default:  // Not a supported control type.
 		return g_script.ScriptError(ERR_GUI_NOT_FOR_THIS_TYPE);
@@ -1464,20 +1451,11 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 				// was previously no tab selected.
 			}
 			if (result != selection_index)
-				ControlUpdateCurrentTab(aControl, aExtraActions > 0); // And set focus if the more forceful aExtraActions was done.
+				ControlUpdateCurrentTab(aControl, false);
 		}
 		else if (result == -1 && selection_index != -1)
 			goto error;
 	}
-	// Since these messages don't generate notifications, if requested by the caller
-	// we must manually raise the appropriate events as though WM_COMMAND/WM_NOTIFY
-	// was received (it's much simpler than generating the actual messages).
-	// An alternative approach using POST_AHK_GUI_ACTION() instead of Event()
-	// produced slightly larger code.
-	int control_index = GUI_HWND_TO_INDEX(aControl.hwnd);
-	for (int i = 0; i < aExtraActions; ++i) // aExtraActions is between 0 and 2.
-		if (notify_code[i])
-			Event(control_index, notify_code[i]);
 	return OK;
 
 error:
@@ -1704,7 +1682,7 @@ ResultType GuiType::ControlSetChoice(GuiControlType &aControl, LPTSTR aContents,
 		choice.symbol = SYM_INTEGER;
 		choice.value_int64 = ATOI(aContents);
 	}
-	return ControlChoose(aControl, choice, 0, TRUE); // Pass TRUE to find an exact (not partial) match.
+	return ControlChoose(aControl, choice, TRUE); // Pass TRUE to find an exact (not partial) match.
 }
 
 

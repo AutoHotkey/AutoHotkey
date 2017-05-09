@@ -2721,7 +2721,7 @@ public:
 	ResultType ControlSetFont(GuiControlType &aControl, LPTSTR aOptions, LPTSTR aFontName);
 	void ControlSetTextColor(GuiControlType &aControl, COLORREF aColor);
 	void ControlSetMonthCalColor(GuiControlType &aControl, COLORREF aColor, UINT aMsg);
-	ResultType ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, int aExtraActions = 0, BOOL aOneExact = FALSE);
+	ResultType ControlChoose(GuiControlType &aControl, ExprTokenType &aParam, BOOL aOneExact = FALSE);
 	void ControlCheckRadioButton(GuiControlType &aControl, GuiIndexType aControlIndex, WPARAM aCheckType);
 	void ControlSetUpDownOptions(GuiControlType &aControl, GuiControlOptionsType &aOpt);
 	int ControlGetDefaultSliderThickness(DWORD aStyle, int aThumbThickness);
