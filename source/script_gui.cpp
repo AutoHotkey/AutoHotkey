@@ -1939,6 +1939,8 @@ ResultType GuiType::ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aF
 			style |= DTS_LONGDATEFORMAT; // Competing styles were already purged above.
 		else if (!_tcsicmp(aFormat, _T("Time")))
 			style |= DTS_TIMEFORMAT; // Competing styles were already purged above.
+		else if (!_tcsicmp(aFormat, _T("ShortDate")))
+		{} // No change needed since DTS_SHORTDATEFORMAT is 0 and competing styles were already purged above.
 		else // Custom format.
 			use_custom_format = true;
 	}
