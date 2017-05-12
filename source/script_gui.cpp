@@ -1268,18 +1268,13 @@ ResultType GuiType::ControlSetFont(GuiControlType &aControl, LPTSTR aOptions, LP
 	int font_index;
 	if (*aOptions || *aFontName) // Use specified font.
 	{
-		// Find foundation font (control's current font, to inherit attributes).
-		HFONT hfont = (HFONT)SendMessage(aControl.hwnd, WM_GETFONT, 0, 0);
-		FontType *base_font = &sFont[mCurrentFontIndex]; // Set default.
-		for (int i = 0; i < sFontCount; ++i)
-			if (sFont[i].hfont == hfont)
-			{
-				base_font = &sFont[i];
-				break;
-			}
+		FontType font;
+		// Get control's current font, to inherit attributes.
+		font.hfont = (HFONT)SendMessage(aControl.hwnd, WM_GETFONT, 0, 0);
+		FontGetAttributes(font);
 
 		// Find or create font with the changed attributes.
-		font_index = FindOrCreateFont(aOptions, aFontName, base_font, &color);
+		font_index = FindOrCreateFont(aOptions, aFontName, &font, &color);
 		if (font_index == -1)
 			return FAIL;
 	}
@@ -7911,8 +7906,6 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 	if (aColor) // Caller wanted color returned in an output parameter.
 		*aColor = CLR_NONE; // Because we want CLR_DEFAULT to indicate a real color.
 
-	HDC hdc;
-
 	if (!*aOptions && !*aFontName)
 	{
 		// Relies on the fact that first item in the font array is always the default font.
@@ -7928,27 +7921,10 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 			// Doesn't seem likely that DEFAULT_GUI_FONT face/size will change while a script is running,
 			// or even while the system is running for that matter.  I think it's always an 8 or 9 point
 			// font regardless of desktop's appearance/theme settings.
-			ZeroMemory(&sFont[sFontCount], sizeof(FontType));
-			// SYSTEM_FONT seems to be the bold one that is used in a dialog window by default.
 			// MSDN: "It is not necessary (but it is not harmful) to delete stock objects by calling DeleteObject."
 			sFont[sFontCount].hfont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
 			// Get attributes of DEFAULT_GUI_FONT (name, size, etc.)
-			hdc = GetDC(HWND_DESKTOP);
-			HFONT hfont_old = (HFONT)SelectObject(hdc, sFont[sFontCount].hfont);
-			GetTextFace(hdc, MAX_FONT_NAME_LENGTH, sFont[sFontCount].name);
-			TEXTMETRIC tm;
-			GetTextMetrics(hdc, &tm);
-			// Convert height to points.  Use MulDiv's build-in rounding to get a more accurate result.
-			// This is confirmed to be the correct formula to convert tm's height to font point size,
-			// and it does yield 8 for DEFAULT_GUI_FONT as it should:
-			sFont[sFontCount].point_size = MulDiv(tm.tmHeight - tm.tmInternalLeading, 72, GetDeviceCaps(hdc, LOGPIXELSY));
-			sFont[sFontCount].weight = tm.tmWeight;
-			// Probably unnecessary for default font, but just to be consistent:
-			sFont[sFontCount].italic = (bool)tm.tmItalic;
-			sFont[sFontCount].underline = (bool)tm.tmUnderlined;
-			sFont[sFontCount].strikeout = (bool)tm.tmStruckOut;
-			SelectObject(hdc, hfont_old); // Necessary to avoid memory leak.
-			ReleaseDC(HWND_DESKTOP, hdc);
+			FontGetAttributes(sFont[sFontCount]);
 			++sFontCount;
 		}
 		// Tell caller to return to default color, since this is documented behavior when
@@ -7973,9 +7949,6 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 	if (*aFontName)
 		tcslcpy(font.name, aFontName, MAX_FONT_NAME_LENGTH+1);
 	COLORREF color = CLR_NONE; // Because we want to treat CLR_DEFAULT as a real color.
-
-	// L19: Set default quality to that of previous versions.
-	font.quality = PROOF_QUALITY;
 
 	// Temp vars:
 	TCHAR color_str[32], *space_pos;
@@ -8070,7 +8043,7 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 	if (aColor) // Caller wanted color returned in an output parameter.
 		*aColor = color;
 
-	hdc = GetDC(HWND_DESKTOP);
+	HDC hdc = GetDC(HWND_DESKTOP);
 	// Fetch the value every time in case it can change while the system is running (e.g. due to changing
 	// display to TV-Out, etc).  In addition, this HDC is needed by 
 	int pixels_per_point_y = GetDeviceCaps(hdc, LOGPIXELSY);
@@ -8081,7 +8054,6 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 		_tcscpy(font.name, aFoundationFont ? aFoundationFont->name : sFont[0].name);
 
 	ReleaseDC(HWND_DESKTOP, hdc);
-	hdc = NULL;
 
 	// Now that the attributes of the requested font are known, see if such a font already
 	// exists in the array:
@@ -8109,6 +8081,35 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 
 	sFont[sFontCount++] = font; // Copy the newly created font's attributes into the next array element.
 	return sFontCount - 1; // The index of the newly created font.
+}
+
+
+
+void GuiType::FontGetAttributes(FontType &aFont)
+{
+	// GetObject is used vs. GetTextMetrics because caller may need aFont.quality
+	// set to the current quality of the font (if it's one we previously created).
+	LOGFONT lf;
+	GetObject(aFont.hfont, sizeof(lf), &lf);
+	_tcscpy(aFont.name, lf.lfFaceName);
+	if (lf.lfHeight > 0) // Cell height (includes internal leading).
+	{
+		TEXTMETRIC tm;
+		HDC hdc = GetDC(HWND_DESKTOP);
+		HFONT hfont_old = (HFONT)SelectObject(hdc, aFont.hfont);
+		GetTextMetrics(hdc, &tm);
+		SelectObject(hdc, hfont_old); // Necessary to avoid memory leak.
+		ReleaseDC(HWND_DESKTOP, hdc);
+		lf.lfHeight -= tm.tmInternalLeading;
+	}
+	else // -Character height.
+		lf.lfHeight = -lf.lfHeight;
+	aFont.point_size = MulDiv(lf.lfHeight, 72, g_ScreenDPI);
+	aFont.weight = lf.lfWeight;
+	aFont.italic = lf.lfItalic;
+	aFont.underline = lf.lfUnderline;
+	aFont.strikeout = lf.lfStrikeOut;
+	aFont.quality = lf.lfQuality;
 }
 
 
