@@ -8420,10 +8420,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			case NM_RDBLCLK:
 				gui_event = GUI_EVENT_CONTEXTMENU;
 				event_info = 1 + ((LPNMITEMACTIVATE)lParam)->iItem;
-				// Suppress the default processing, which would generate a WM_CONTEXTMENU message
-				// and therefore a second ContextMenu event:
-				explicitly_return_true = true;
-				break;
+				// Post the event unconditionally rather than calling Event(), so that the Gui's
+				// ContextMenu handler can be called even if the control doesn't have one:
+				POST_AHK_GUI_ACTION(pgui->mHwnd, control_index, gui_event, event_info);
+				return TRUE; // To prevent a second ContextMenu event (which would lack the row number).
 			case NM_DBLCLK:
 				gui_event = GUI_EVENT_DBLCLK;
 				event_info = 1 + ((LPNMITEMACTIVATE)lParam)->iItem;
