@@ -2730,10 +2730,16 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	// of the current font, but only if the margins haven't already been set:
 	if (!mControlCount)
 	{
+		// The original default mMarginX was documented as "1.25 times font-height", which is
+		// confusing because font-height is in points while mMarginX is in pixels.  It's kept
+		// at this value anyway since it seems to work well.  The calculation below uses a
+		// factor relative to 72 vs. denominator of 96 to emulate pixel-to-point conversion.
+		// 96 is used even when DPI != 100% so that the scaling performed by point-to-pixel
+		// conversion is kept (lfHeight is already proportionate to screen DPI).
 		if (mMarginX == COORD_UNSPECIFIED)
-			mMarginX = DPIScale((int)(1.25 * sFont[mCurrentFontIndex].point_size));  // Seems to be a good rule of thumb.
+			mMarginX = MulDiv(sFont[mCurrentFontIndex].lfHeight, -90, 96); // Seems to be a good rule of thumb.  Originally 1.25 * point_size.
 		if (mMarginY == COORD_UNSPECIFIED)
-			mMarginY = DPIScale((int)(0.75 * sFont[mCurrentFontIndex].point_size));  // Also seems good.
+			mMarginY = MulDiv(sFont[mCurrentFontIndex].lfHeight, -54, 96); // Also seems good.  Originally 0.75 * point_size.
 		mPrevX = mMarginX;  // This makes first control be positioned correctly if it lacks both X & Y coords.
 	}
 
@@ -3275,10 +3281,10 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				break;
 			case GUI_CONTROL_BUTTON:
 				// Provide a extra space for top/bottom margin together, proportional to the current font
-				// size so that it looks better with very large or small fonts.  The +2 seems to make
-				// it look just right on all font sizes, especially the default GUI size of 8 where the
-				// height should be about 23 to be standard(?)
-				opt.height += DPIScale(sFont[mCurrentFontIndex].point_size + 2);
+				// size so that it looks better with very large or small fonts.  Logical font height - 1
+				// looks about right on all font sizes, and with default font size on 100% DPI it gives a
+				// height of 23, which is what Microsoft recommends: https://msdn.microsoft.com/library/dn742402.aspx#sizing
+				opt.height += -sFont[mCurrentFontIndex].lfHeight - 1;
 				break;
 			case GUI_CONTROL_GROUPBOX: // Since groups usually contain other controls, the below sizing seems best.
 				// Use row_count-2 because of the +1 added above for GUI_CONTROL_GROUPBOX.
@@ -3536,7 +3542,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 						opt.height += GetSystemMetrics(SM_CYHSCROLL);
 				}
 				else if (aControlType == GUI_CONTROL_BUTTON)
-					opt.height += sFont[mCurrentFontIndex].point_size + 2;  // +2 makes it standard height.
+					opt.height += -sFont[mCurrentFontIndex].lfHeight - 1; // See calc_control_height_from_row_count section for comments.
 			}
 			if (opt.width == COORD_UNSPECIFIED || draw_width > opt.width)
 			{
@@ -3547,7 +3553,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				if (aControlType == GUI_CONTROL_BUTTON)
 					// Allow room for border and an internal margin proportional to the font height.
 					// Button's border is 3D by default, so SM_CXEDGE vs. SM_CXBORDER is used?
-					opt.width += 2 * GetSystemMetrics(SM_CXEDGE) + sFont[mCurrentFontIndex].point_size;
+					opt.width += 2 * GetSystemMetrics(SM_CXEDGE) + -sFont[mCurrentFontIndex].lfHeight; // Compared to the old way of using point_size, this is slightly wider (which looks better) and automatically scales by DPI.
 			}
 			break;
 		} // case for text/button/checkbox/radio/link
@@ -4123,8 +4129,6 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				// compensate for this doesn't seem likely to be worth it.
 				GUI_SETFONT  // Required before asking it for a height estimate.
 				opt.height = TreeView_GetItemHeight(control.hwnd);
-				if (opt.height < 2) // Win95/NT without MSIE 4.0+ DLLs will probably yield 0 since this will send a message the control doesn't recognize.
-					opt.height = 2 * sFont[mCurrentFontIndex].point_size; // Crude estimate seems justified given rarity of lacking updated DLLs on 95/NT. Actuals for Verdana/DefaultGuiFont: 8 -> 16/16; 10 -> 18/18; 12 -> 20/22
 				// The following formula has been tested on XP fonts DefaultGUI, Verdana, Courier (for a few
 				// point sizes).
 				opt.height = 4 + (int)(opt.row_count * opt.height);
@@ -7947,11 +7951,12 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 	// The caller must ensure that mCurrentFontIndex array element exists:
 	FontType font = *aFoundationFont;
 	if (*aFontName)
-		tcslcpy(font.name, aFontName, MAX_FONT_NAME_LENGTH+1);
+		tcslcpy(font.lfFaceName, aFontName, _countof(font.lfFaceName));
 	COLORREF color = CLR_NONE; // Because we want to treat CLR_DEFAULT as a real color.
 
 	// Temp vars:
 	TCHAR color_str[32], *space_pos;
+	int point_size = 0;
 
 	for (LPTSTR cp = aOptions; *cp; ++cp)
 	{
@@ -7960,7 +7965,7 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 		case 'B':
 			if (!_tcsnicmp(cp, _T("bold"), 4))
 			{
-				font.weight = FW_BOLD;
+				font.lfWeight = FW_BOLD;
 				cp += 3;  // Skip over the word itself to prevent next iteration from seeing it as option letters.
 			}
 			break;
@@ -7968,7 +7973,7 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 		case 'I':
 			if (!_tcsnicmp(cp, _T("italic"), 6))
 			{
-				font.italic = true;
+				font.lfItalic = true;
 				cp += 5;  // Skip over the word itself to prevent next iteration from seeing it as option letters.
 			}
 			break;
@@ -7976,10 +7981,10 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 		case 'N':
 			if (!_tcsnicmp(cp, _T("norm"), 4))
 			{
-				font.italic = false;
-				font.underline = false;
-				font.strikeout = false;
-				font.weight = FW_NORMAL;
+				font.lfItalic = false;
+				font.lfUnderline = false;
+				font.lfStrikeOut = false;
+				font.lfWeight = FW_NORMAL;
 				cp += 3;  // Skip over the word itself to prevent next iteration from seeing it as option letters.
 			}
 			break;
@@ -7987,7 +7992,7 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 		case 'U':
 			if (!_tcsnicmp(cp, _T("underline"), 9))
 			{
-				font.underline = true;
+				font.lfUnderline = true;
 				cp += 8;  // Skip over the word itself to prevent next iteration from seeing it as option letters.
 			}
 			break;
@@ -8021,19 +8026,19 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 			// by the OS anyway (at the time font is created):
 			if (!_tcsnicmp(cp, _T("strike"), 6))
 			{
-				font.strikeout = true;
+				font.lfStrikeOut = true;
 				cp += 5;  // Skip over the word itself to prevent next iteration from seeing it as option letters.
 			}
 			else
-				font.point_size = (int)(_tstof(cp + 1) + 0.5);  // Round to nearest int.
+				point_size = (int)(_tstof(cp + 1) + 0.5);  // Round to nearest int.
 			break;
 
 		case 'W':
-			font.weight = _ttoi(cp + 1); // _ttoi() vs. ATOI() because some option letters (above) are also hex letters, and _ttoi() stops converting upon reaching the first non-digit character.
+			font.lfWeight = _ttoi(cp + 1); // _ttoi() vs. ATOI() because some option letters (above) are also hex letters, and _ttoi() stops converting upon reaching the first non-digit character.
 			break;
 
 		case 'Q': // L19: Allow control over font quality (anti-aliasing, etc.).
-			font.quality = _ttoi(cp + 1);
+			font.lfQuality = _ttoi(cp + 1);
 			break;
 
 		// Otherwise: Ignore other characters, such as the digits that occur after the P/X/Y option letters.
@@ -8045,13 +8050,18 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 
 	HDC hdc = GetDC(HWND_DESKTOP);
 	// Fetch the value every time in case it can change while the system is running (e.g. due to changing
-	// display to TV-Out, etc).  In addition, this HDC is needed by 
+	// display to TV-Out, etc).
 	int pixels_per_point_y = GetDeviceCaps(hdc, LOGPIXELSY);
+	
+	// MulDiv() is usually better because it has automatic rounding, getting the target font
+	// closer to the size specified.  This must be done prior to calling FindFont below:
+	if (point_size)
+		font.lfHeight = -MulDiv(point_size, pixels_per_point_y, 72);
 
 	// The reason it's done this way is that CreateFont() does not always (ever?) fail if given a
 	// non-existent typeface:
-	if (!FontExist(hdc, font.name)) // Fall back to foundation font's type face, as documented.
-		_tcscpy(font.name, aFoundationFont ? aFoundationFont->name : sFont[0].name);
+	if (!FontExist(hdc, font.lfFaceName)) // Fall back to foundation font's type face, as documented.
+		_tcscpy(font.lfFaceName, aFoundationFont ? aFoundationFont->lfFaceName : sFont[0].lfFaceName);
 
 	ReleaseDC(HWND_DESKTOP, hdc);
 
@@ -8067,13 +8077,17 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 		g_script.ScriptError(_T("Too many fonts."));  // Short msg since so rare.
 		return -1;
 	}
-
-	// MulDiv() is usually better because it has automatic rounding, getting the target font
-	// closer to the size specified:
-	if (   !(font.hfont = CreateFont(-MulDiv(font.point_size, pixels_per_point_y, 72), 0, 0, 0
-		, font.weight, font.italic, font.underline, font.strikeout
-		, DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, font.quality, FF_DONTCARE, font.name))   )
-		// OUT_DEFAULT_PRECIS/OUT_TT_PRECIS ... DEFAULT_QUALITY/PROOF_QUALITY
+	
+	// Set these parameters to defaults to ensure consistent results:
+	font.lfWidth = 0;
+	font.lfEscapement = 0;
+	font.lfOrientation = 0;
+	font.lfCharSet = DEFAULT_CHARSET;
+	font.lfOutPrecision = OUT_TT_PRECIS;
+	font.lfClipPrecision = CLIP_DEFAULT_PRECIS;
+	font.lfPitchAndFamily = FF_DONTCARE;
+	
+	if (  !(font.hfont = CreateFontIndirect(&font))  )
 	{
 		g_script.ScriptError(_T("Can't create font."));  // Short msg since so rare.
 		return -1;
@@ -8087,29 +8101,7 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 
 void GuiType::FontGetAttributes(FontType &aFont)
 {
-	// GetObject is used vs. GetTextMetrics because caller may need aFont.quality
-	// set to the current quality of the font (if it's one we previously created).
-	LOGFONT lf;
-	GetObject(aFont.hfont, sizeof(lf), &lf);
-	_tcscpy(aFont.name, lf.lfFaceName);
-	if (lf.lfHeight > 0) // Cell height (includes internal leading).
-	{
-		TEXTMETRIC tm;
-		HDC hdc = GetDC(HWND_DESKTOP);
-		HFONT hfont_old = (HFONT)SelectObject(hdc, aFont.hfont);
-		GetTextMetrics(hdc, &tm);
-		SelectObject(hdc, hfont_old); // Necessary to avoid memory leak.
-		ReleaseDC(HWND_DESKTOP, hdc);
-		lf.lfHeight -= tm.tmInternalLeading;
-	}
-	else // -Character height.
-		lf.lfHeight = -lf.lfHeight;
-	aFont.point_size = MulDiv(lf.lfHeight, 72, g_ScreenDPI);
-	aFont.weight = lf.lfWeight;
-	aFont.italic = lf.lfItalic;
-	aFont.underline = lf.lfUnderline;
-	aFont.strikeout = lf.lfStrikeOut;
-	aFont.quality = lf.lfQuality;
+	GetObject(aFont.hfont, sizeof(LOGFONT), &aFont);
 }
 
 
@@ -8117,13 +8109,13 @@ void GuiType::FontGetAttributes(FontType &aFont)
 int GuiType::FindFont(FontType &aFont)
 {
 	for (int i = 0; i < sFontCount; ++i)
-		if (!_tcsicmp(sFont[i].name, aFont.name) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales.
-			&& sFont[i].point_size == aFont.point_size
-			&& sFont[i].weight == aFont.weight
-			&& sFont[i].italic == aFont.italic
-			&& sFont[i].underline == aFont.underline
-			&& sFont[i].strikeout == aFont.strikeout
-			&& sFont[i].quality == aFont.quality) // Match found.
+		if (!_tcsicmp(sFont[i].lfFaceName, aFont.lfFaceName) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales.
+			&& sFont[i].lfHeight == aFont.lfHeight // There's no risk of mismatch between cell height (positive) and character height (negative), since we always set it to the latter.
+			&& sFont[i].lfWeight == aFont.lfWeight
+			&& sFont[i].lfItalic == aFont.lfItalic
+			&& sFont[i].lfUnderline == aFont.lfUnderline
+			&& sFont[i].lfStrikeOut == aFont.lfStrikeOut
+			&& sFont[i].lfQuality == aFont.lfQuality) // Match found.
 			return i;
 	return -1;  // Indicate failure.
 }

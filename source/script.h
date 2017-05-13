@@ -2222,18 +2222,8 @@ public:
 
 
 
-struct FontType
+struct FontType : public LOGFONT
 {
-	#define MAX_FONT_NAME_LENGTH 63  // Longest name I've seen is 29 chars, "Franklin Gothic Medium Italic". Anyway, there's protection against overflow.
-	TCHAR name[MAX_FONT_NAME_LENGTH + 1];
-	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
-	// due to byte-alignment:
-	bool italic;
-	bool underline;
-	bool strikeout;
-	int point_size; // Decided to use int vs. float to simplify the code in many places. Fractional sizes seem rarely needed.
-	int weight;
-	DWORD quality; // L19: Allow control over font quality (anti-aliasing, etc.).
 	HFONT hfont;
 };
 
@@ -2480,13 +2470,16 @@ LRESULT CALLBACK TabWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 
 class GuiType : public ObjectBase
 {
+	// The use of 72 and 96 below comes from v1, using the font's point size in the
+	// calculation.  It's really just 11.25 * font height in pixels.  Could use 12
+	// or 11 * font height, but keeping the same defaults as v1 seems worthwhile.
 	#define GUI_STANDARD_WIDTH_MULTIPLIER 15 // This times font size = width, if all other means of determining it are exhausted.
-	#define GUI_STANDARD_WIDTH DPIScale(GUI_STANDARD_WIDTH_MULTIPLIER * sFont[mCurrentFontIndex].point_size)
+	#define GUI_STANDARD_WIDTH GUI_STANDARD_WIDTH_MULTIPLIER * (MulDiv(sFont[mCurrentFontIndex].lfHeight, -72, 96)) // 96 vs. g_ScreenDPI since lfHeight already accounts for DPI.  Don't combine GUI_STANDARD_WIDTH_MULTIPLIER with -72 as it changes the result (due to rounding).
 	// Update for v1.0.21: Reduced it to 8 vs. 9 because 8 causes the height each edit (with the
 	// default style) to exactly match that of a Combo or DropDownList.  This type of spacing seems
 	// to be what other apps use too, and seems to make edits stand out a little nicer:
 	#define GUI_CTL_VERTICAL_DEADSPACE DPIScale(8)
-	#define PROGRESS_DEFAULT_THICKNESS DPIScale(2 * sFont[mCurrentFontIndex].point_size)
+	#define PROGRESS_DEFAULT_THICKNESS MulDiv(sFont[mCurrentFontIndex].lfHeight, -2 * 72, 96) // 96 vs. g_ScreenDPI to preserve DPI scale.
 
 public:
 	// Ensure fields of the same size are grouped together to avoid padding between larger types
