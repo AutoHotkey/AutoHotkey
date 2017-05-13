@@ -16112,7 +16112,9 @@ BIF_DECL(BIF_GetKeyName)
 	sc_type sc = TextToSC(key);
 	if (!sc)
 	{
-		if (LPTSTR cp = tcscasestr(key, _T("SC"))) // TextToSC() supports SCxxx but not VKxxSCyyy.
+		LPTSTR cp;
+		if (  (cp = tcscasestr(key, _T("SC"))) // TextToSC() supports SCxxx but not VKxxSCyyy.
+			&& isdigit(cp[2])  ) // Fixed in v1.1.25.03 to rule out key names containng "sc", like "Esc".
 			sc = (sc_type)_tcstoul(cp + 2, NULL, 16);
 		else
 			sc = vk_to_sc(vk);
