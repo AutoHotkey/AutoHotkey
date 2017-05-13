@@ -2007,7 +2007,7 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 
 BIF_DECL(BIF_Process)
 {
-	BIF_DECL_STRING_PARAM(1, aProcess);
+	_f_param_string_opt(aProcess, 0);
 
 	HANDLE hProcess;
 	DWORD pid;
@@ -2080,8 +2080,8 @@ BIF_DECL(BIF_Process)
 
 BIF_DECL(BIF_ProcessSetPriority)
 {
-	BIF_DECL_STRING_PARAM(1, aPriority);
-	BIF_DECL_STRING_PARAM(2, aProcess);
+	_f_param_string_opt(aPriority, 0);
+	_f_param_string_opt(aProcess, 1);
 
 	DWORD pid, priority;
 	HANDLE hProcess;
@@ -2276,7 +2276,7 @@ error:
 
 BIF_DECL(BIF_WinSet)
 {
-	BIF_DECL_STRING_PARAM(1, aValue);
+	_f_param_string_opt(aValue, 0);
 
 	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1);
 	if (!target_window)
@@ -2609,10 +2609,10 @@ void WinGetControlList(ResultToken &aResultToken, HWND aTargetWindow, bool aFetc
 
 BIF_DECL(BIF_WinGet)
 {
-	BIF_DECL_STRING_PARAM(1, aTitle);
-	BIF_DECL_STRING_PARAM(2, aText);
-	BIF_DECL_STRING_PARAM(3, aExcludeTitle);
-	BIF_DECL_STRING_PARAM(4, aExcludeText);
+	_f_param_string_opt(aTitle, 0);
+	_f_param_string_opt(aText, 1);
+	_f_param_string_opt(aExcludeTitle, 2);
+	_f_param_string_opt(aExcludeText, 3);
 
 	BuiltInFunctionID cmd = _f_callee_id;
 

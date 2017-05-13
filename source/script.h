@@ -3149,11 +3149,6 @@ BIF_DECL(BIF_MonitorGet);
 BIF_DECL(BIF_PerformAction);
 
 
-#define BIF_DECL_STRING_PARAM(n, name) \
-	TCHAR name##_buf[MAX_NUMBER_SIZE], \
-	*name = (aParamCount >= n ? TokenToString(*aParam[n-1], name##_buf) : _T(""))
-
-
 BOOL ResultToBOOL(LPTSTR aResult);
 BOOL VarToBOOL(Var &aVar);
 BOOL TokenToBOOL(ExprTokenType &aToken);
