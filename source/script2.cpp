@@ -4745,15 +4745,17 @@ ResultType InputBoxParseOptions(LPTSTR aOptions, InputBoxType &aInputBox)
 	return OK;
 }
 
-ResultType InputBox(Var *aOutputVar, LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions, LPTSTR aDefault)
+BIF_DECL(BIF_InputBox)
 {
 	if (g_nInputBoxes >= MAX_INPUTBOXES)
 	{
 		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
-		MsgBox(_T("The maximum number of InputBoxes has been reached."));
-		return FAIL;
+		_f_throw(_T("The maximum number of InputBoxes has been reached."));
 	}
-	if (!aOutputVar) return FAIL;
+	_f_param_string_opt(aText, 0);
+	_f_param_string_opt(aTitle, 1);
+	_f_param_string_opt(aOptions, 2);
+	_f_param_string_opt(aDefault, 3);
 	if (!*aTitle)
 		aTitle = g_script.DefaultDialogTitle();
 	// Limit the size of what we were given to prevent unreasonably huge strings from
@@ -4771,7 +4773,7 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aText, LPTSTR aTitle, LPTSTR aOption
 	g_InputBox[g_nInputBoxes].title = title;
 	g_InputBox[g_nInputBoxes].text = text;
 	g_InputBox[g_nInputBoxes].default_string = default_string;
-	g_InputBox[g_nInputBoxes].output_var = aOutputVar;
+	g_InputBox[g_nInputBoxes].result_token = &aResultToken;
 	// Set defaults:
 	g_InputBox[g_nInputBoxes].width = INPUTBOX_DEFAULT;
 	g_InputBox[g_nInputBoxes].height = INPUTBOX_DEFAULT;
@@ -4781,7 +4783,7 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aText, LPTSTR aTitle, LPTSTR aOption
 	g_InputBox[g_nInputBoxes].timeout = 0;
 	// Parse options and override defaults:
 	if (!InputBoxParseOptions(aOptions, g_InputBox[g_nInputBoxes]))
-		return FAIL; // It already displayed the error.
+		_f_return_FAIL; // It already displayed the error.
 
 	// At this point, we know a dialog will be displayed.  See macro's comments for details:
 	DIALOG_PREP
@@ -4799,22 +4801,21 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aText, LPTSTR aTitle, LPTSTR aOption
 	{
 	case AHK_TIMEOUT:
 		// In this case the TimerProc already set the output variable to be what the user entered.
-		return g_ErrorLevel->Assign(2);
+		g_ErrorLevel->Assign(2);
+		break;
 	case IDOK:
 	case IDCANCEL:
 		// The output variable is set to whatever the user entered, even if the user pressed
 		// the cancel button.  This allows the cancel button to specify that a different
 		// operation should be performed on the entered text:
-		return g_ErrorLevel->Assign(result == IDCANCEL ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
+		g_ErrorLevel->Assign(result == IDCANCEL ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
+		break;
 	case -1:
-		MsgBox(_T("The InputBox window could not be displayed."));
 		// No need to set ErrorLevel since this is a runtime error that will kill the current quasi-thread.
-		return FAIL;
+		_f_throw(_T("The InputBox window could not be displayed."));
 	case FAIL:
-		return FAIL;
+		_f_return_FAIL;
 	}
-
-	return OK;
 }
 
 
@@ -5071,33 +5072,7 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 				// dismissed a dialog that's underneath another, active dialog, or that's currently
 				// suspended due to a timed/hotkey subroutine running on top of it.  In other words,
 				// it's only safe to set ErrorLevel when the call to DialogProc() returns in InputBox().
-				#undef INPUTBOX_VAR
-				#define INPUTBOX_VAR (CURR_INPUTBOX.output_var)
-				int space_needed = GetWindowTextLength(hControl) + 1;
-				// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-				// this call will set up the clipboard for writing:
-				if (INPUTBOX_VAR->AssignString(NULL, space_needed - 1) != OK)
-					// It will have already displayed the error.  Displaying errors in a callback
-					// function like this one isn't that good, since the callback won't return
-					// to its caller in a timely fashion.  However, these type of errors are so
-					// rare it's not a priority to change all the called functions (and the functions
-					// they call) to skip the displaying of errors and just return FAIL instead.
-					// In addition, this callback function has been tested with a MsgBox() call
-					// inside and it doesn't seem to cause any crashes or undesirable behavior other
-					// than the fact that the InputBox window is not dismissed until the MsgBox
-					// window is dismissed:
-					return_value = (WORD)FAIL;
-				else
-				{
-					// Write to the variable:
-					INPUTBOX_VAR->SetCharLength((VarSizeType)GetWindowText(hControl
-						, INPUTBOX_VAR->Contents(), space_needed));
-					if (!INPUTBOX_VAR->Length())
-						// There was no text to get or GetWindowText() failed.
-						*INPUTBOX_VAR->Contents() = '\0';  // Safe because Assign() gave us a non-constant memory area.
-					if (INPUTBOX_VAR->Close() != OK) // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-						return_value = (WORD)FAIL;
-				}
+				CURR_INPUTBOX.UpdateResult(hControl);
 			}
 			// Since the user pressed a button to dismiss the dialog:
 			// Kill its timer for performance reasons (might degrade perf. a little since OS has
@@ -5143,26 +5118,37 @@ VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTi
 		// or a button:
 		HWND hControl = GetDlgItem(hWnd, IDC_INPUTEDIT);
 		if (hControl)
-		{
-			#undef INPUTBOX_VAR
-			#define INPUTBOX_VAR (g_InputBox[target_index].output_var)
-			int space_needed = GetWindowTextLength(hControl) + 1;
-			// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-			// this call will set up the clipboard for writing:
-			if (INPUTBOX_VAR->AssignString(NULL, space_needed - 1) == OK)
-			{
-				// Write to the variable:
-				INPUTBOX_VAR->SetCharLength((VarSizeType)GetWindowText(hControl
-					, INPUTBOX_VAR->Contents(), space_needed));
-				if (!INPUTBOX_VAR->Length())
-					// There was no text to get or GetWindowText() failed.
-					*INPUTBOX_VAR->Contents() = '\0';  // Safe because Assign() gave us a non-constant memory area.
-				INPUTBOX_VAR->Close();
-			}
-		}
+			CURR_INPUTBOX.UpdateResult(hControl);
 		EndDialog(hWnd, AHK_TIMEOUT);
 	}
 	KillTimer(hWnd, idEvent);
+}
+
+
+
+ResultType InputBoxType::UpdateResult(HWND hControl)
+{
+	int space_needed = GetWindowTextLength(hControl) + 1;
+	// Set up the result buffer.
+	if (!TokenSetResult(*result_token, NULL, space_needed - 1))
+		// It will have already displayed the error.  Displaying errors in a callback
+		// function like this one isn't that good, since the callback won't return
+		// to its caller in a timely fashion.  However, these type of errors are so
+		// rare it's not a priority to change all the called functions (and the functions
+		// they call) to skip the displaying of errors and just return FAIL instead.
+		// In addition, this callback function has been tested with a MsgBox() call
+		// inside and it doesn't seem to cause any crashes or undesirable behavior other
+		// than the fact that the InputBox window is not dismissed until the MsgBox
+		// window is dismissed:
+		return FAIL;
+	// Write to the variable:
+	size_t len = (size_t)GetWindowText(hControl, result_token->marker, space_needed);
+	if (!len)
+		// There was no text to get or GetWindowText() failed.
+		*result_token->marker = '\0';
+	result_token->marker_length = len;
+	result_token->symbol = SYM_STRING;
+	return OK;
 }
 
 

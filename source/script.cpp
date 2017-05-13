@@ -62,6 +62,7 @@ FuncEntry g_BIF[] =
 	BIF1(Format, 1, NA, true),
 
 	BIF1(MsgBox, 0, 4, false, {4}),
+	BIF1(InputBox, 0, 4, true),
 
 	BIF1(GetKeyState, 1, 2, true),
 	BIFn(GetKeyName, 1, 1, true, BIF_GetKeyName),
@@ -12617,9 +12618,6 @@ ResultType Line::Perform()
 		return ShowMainWindow(MAIN_MODE_VARS, false); // Pass "unrestricted" when the command is explicitly used in the script.
 	case ACT_LISTHOTKEYS:
 		return ShowMainWindow(MAIN_MODE_HOTKEYS, false); // Pass "unrestricted" when the command is explicitly used in the script.
-
-	case ACT_INPUTBOX:
-		return InputBox(output_var, ARG2, ARG3, ARG4, ARG5);
 
 	case ACT_TOOLTIP:
 		return ToolTip(FOUR_ARGS);

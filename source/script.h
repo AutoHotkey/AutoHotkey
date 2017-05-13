@@ -271,13 +271,15 @@ struct InputBoxType
 	int height;
 	int xpos;
 	int ypos;
-	Var *output_var;
 	TCHAR password_char;
 	bool set_password_char;
 	LPTSTR default_string;
 	DWORD timeout;
 	HWND hwnd;
 	HFONT font;
+	ResultToken *result_token;
+
+	ResultType UpdateResult(HWND hControl);
 };
 
 // From AutoIt3's InputBox.  This doesn't add a measurable amount of code size, so the compiler seems to implement
@@ -959,7 +961,6 @@ public:
 			case ACT_CONTROLGETFOCUS:
 			case ACT_CONTROLGETTEXT:
 			case ACT_STATUSBARGETTEXT:
-			case ACT_INPUTBOX:
 			case ACT_RANDOM:
 			case ACT_INIREAD:
 			case ACT_REGREAD:
@@ -3067,6 +3068,7 @@ BIF_DECL(BIF_RegisterCallback);
 BIF_DECL(BIF_MenuGet);
 
 BIF_DECL(BIF_MsgBox);
+BIF_DECL(BIF_InputBox);
 
 // Gui
 BIF_DECL(BIF_GuiCreate);
