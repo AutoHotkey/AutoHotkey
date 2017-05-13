@@ -201,7 +201,8 @@ BIF_DECL(BIF_ObjNew)
 	result = class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, 1);
 	if (result != INVOKE_NOT_HANDLED)
 	{
-		// See similar section below for comments.
+		// It's possible that __Init is user-defined (despite recommendations in the
+		// documentation) or built-in, so make sure the return value, if any, is freed:
 		if (aResultToken.symbol == SYM_OBJECT)
 			aResultToken.object->Release();
 		if (aResultToken.mem_to_free)
@@ -213,37 +214,39 @@ BIF_DECL(BIF_ObjNew)
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
 		aResultToken.buf = buf;
-		if (result == FAIL)
+		if (result == FAIL || result == EARLY_EXIT)
 		{
 			new_object->Release();
 			aParam[0] = class_token; // Restore it to original caller-supplied value.
+			aResult = result;
 			return;
 		}
 	}
 	
 	// __New may be defined by the script for custom initialization code.
 	name_token.marker = Object::sMetaFuncName[4]; // __New
-	if (class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, aParamCount) != EARLY_RETURN)
+	result = class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, aParamCount);
+	if (result == EARLY_RETURN || !TokenIsEmptyString(aResultToken))
 	{
-		// Although it isn't likely to happen, if __New points at a built-in function or if mBase
-		// (or an ancestor) is not an Object (i.e. it's a ComObject), aResultToken can be set even when
-		// the result is not EARLY_RETURN.  So make sure to clean up any result we're not going to use.
-		if (aResultToken.symbol == SYM_OBJECT)
-			aResultToken.object->Release();
-		if (aResultToken.mem_to_free)
-		{
-			// This can be done by our caller, but is done here for maintainability; i.e. because
-			// some callers might expect mem_to_free to be NULL when the result isn't a string.
-			free(aResultToken.mem_to_free);
-			aResultToken.mem_to_free = NULL;
-		}
+		// __New() returned a value in aResultToken, so use it as our result.  aResultToken is checked
+		// for the unlikely case that class_object is not an Object (perhaps it's a ComObject) or __New
+		// points to a built-in function.  The older behaviour for those cases was to free the unexpected
+		// return value, but this requires less code and might be useful somehow.
+		new_object->Release();
+	}
+	else if (result == FAIL || result == EARLY_EXIT)
+	{
+		// An error was raised within __New() or while trying to call it, or Exit was called.
+		new_object->Release();
+		aResult = result;
+	}
+	else
+	{
 		// Either it wasn't handled (i.e. neither this class nor any of its super-classes define __New()),
 		// or there was no explicit "return", so just return the new object.
 		aResultToken.symbol = SYM_OBJECT;
 		aResultToken.object = new_object;
 	}
-	else
-		new_object->Release();
 	aParam[0] = class_token;
 }
 
