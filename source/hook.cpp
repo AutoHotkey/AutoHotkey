@@ -2892,7 +2892,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				if (   cphs >= hs.mString // One of the loops above stopped early due discovering "no match"...
 					// ... or it did but the "?" option is not present to protect from the fact that
 					// what lies to the left of this hotstring abbreviation is an alphanumeric character:
-					|| !hs.mDetectWhenInsideWord && cpbuf >= g_HSBuf && IsCharAlphaNumeric(*cpbuf)
+					|| !hs.mDetectWhenInsideWord && cpbuf >= g_HSBuf && IsHotstringWordChar(*cpbuf)
 					// ... v1.0.41: Or it's a perfect match but the right window isn't active or doesn't exist.
 					// In that case, continue searching for other matches in case the script contains
 					// hotstrings that would trigger simultaneously were it not for the "only one" rule.
@@ -3201,6 +3201,32 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		g_input.status = INPUT_LIMIT_REACHED;
 	return treat_as_visible;
 #undef shs  // To avoid naming conflicts
+}
+
+
+
+bool IsHotstringWordChar(TCHAR aChar)
+// Returns true if aChar would be part of a word if followed by a word char.
+// aChar itself may be a word char or a nonspacing mark which combines with
+// the next character (the first character of a potential hotstring match).
+{
+	// IsCharAlphaNumeric is used for simplicity and to preserve old behaviour
+	// (with the only exception being the one added below), in case it's what
+	// users have come to expect.  Note that checking for C1_ALPHA or C3_ALPHA
+	// and C1_DIGIT is not equivalent: Michael S. Kaplan wrote that the real
+	// conditions are "(C1_ALPHA && ! (C3_HIRAGANA | C3_KATAKANA) || C1_DIGIT)" -- https://web.archive.org/web/20130627015450/http://blogs.msdn.com/b/michkap/archive/2007/06/19/3396819.aspx
+	if (IsCharAlphaNumeric(aChar))
+		return true;
+	WORD char_type;
+	if (GetStringTypeEx(LOCALE_USER_DEFAULT, CT_CTYPE3, &aChar, 1, &char_type))
+	{
+		// Nonspacing marks combine with the following character, so would visually
+		// appear to be part of the word.  This should fix detection of words beginning
+		// with or containing Arabic nonspacing diacritics, for example.
+		if (char_type & C3_NONSPACING)
+			return true;
+	}
+	return false;
 }
 
 
