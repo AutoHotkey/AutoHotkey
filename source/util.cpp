@@ -1281,7 +1281,7 @@ LPTSTR TranslateLFtoCRLF(LPTSTR aString)
 
 
 
-bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr)
+bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr, DWORD aRequiredAttr)
 // Returns true if the file/folder exists or false otherwise.
 // If non-NULL, aFileAttr's DWORD is set to the attributes of the file/folder if a match is found.
 // If there is no match, its contents are undefined.
@@ -1298,6 +1298,13 @@ bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr)
 		HANDLE hFile = FindFirstFile(aFilePattern, &wfd);
 		if (hFile == INVALID_HANDLE_VALUE)
 			return false;
+		if (aRequiredAttr) // Caller wants to check for a file/folder with specific attributes.
+		{
+			while ((wfd.dwFileAttributes & aRequiredAttr) != aRequiredAttr)
+				if (!FindNextFile(hFile, &wfd))
+					return false;
+			// Since above didn't return, a file/folder with the required attribute was found.
+		}
 		FindClose(hFile);
 		if (aFileAttr)
 			*aFileAttr = wfd.dwFileAttributes;

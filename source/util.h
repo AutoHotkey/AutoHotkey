@@ -656,7 +656,7 @@ UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType 
 size_t PredictReplacementSize(ptrdiff_t aLengthDelta, int aReplacementCount, int aLimit, size_t aHaystackLength
 	, size_t aCurrentLength, size_t aEndOffsetOfCurrMatch);
 LPTSTR TranslateLFtoCRLF(LPTSTR aString);
-bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr = NULL);
+bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr = NULL, DWORD aRequiredAttr = 0);
 #ifdef _DEBUG
 	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aLine, bool aAppendNewline = true);
 #endif

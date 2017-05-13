@@ -14137,8 +14137,7 @@ BIF_DECL(BIF_FileExist)
 	LPTSTR filename = ParamIndexToString(0, filename_buf);
 	LPTSTR buf = _f_retval_buf; // If necessary, it will be moved to a persistent memory location by our caller.
 	DWORD attr;
-	if (DoesFilePatternExist(filename, &attr)
-		&& (_f_callee_id != FID_DirExist || (attr & FILE_ATTRIBUTE_DIRECTORY)))
+	if (DoesFilePatternExist(filename, &attr, _f_callee_id == FID_DirExist ? FILE_ATTRIBUTE_DIRECTORY : 0))
 	{
 		// Yield the attributes of the first matching file.  If not match, yield an empty string.
 		// This relies upon the fact that a file's attributes are never legitimately zero, which
