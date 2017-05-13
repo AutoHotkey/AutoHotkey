@@ -42,38 +42,13 @@ ExprOpFunc g_ObjGet(Op_ObjInvoke, IT_GET), g_ObjSet(Op_ObjInvoke, IT_SET); // Al
 // (passing the function's name) in an attempt to reduce code size and improve readability.
 FuncEntry g_BIF[] =
 {
-	BIFn(LV_GetNext, 0, 2, true, BIF_LV_GetNextOrCount),
-	BIFn(LV_GetCount, 0, 1, true, BIF_LV_GetNextOrCount),
-	BIF1(LV_GetText, 2, 3, true, {1}),
-	BIFn(LV_Add, 0, NA, true, BIF_LV_AddInsertModify),
-	BIFn(LV_Insert, 1, NA, true, BIF_LV_AddInsertModify),
-	BIFn(LV_Modify, 1, NA, true, BIF_LV_AddInsertModify),
-	BIF1(LV_Delete,  0, 1, true),
-	BIFn(LV_InsertCol, 1, 3, true, BIF_LV_InsertModifyDeleteCol),
-	BIFn(LV_ModifyCol, 0, 3, true, BIF_LV_InsertModifyDeleteCol),
-	BIFn(LV_DeleteCol, 1, 1, true, BIF_LV_InsertModifyDeleteCol),
-	BIF1(LV_SetImageList, 1, 2, true),
-	
-	BIFn(TV_Add, 1, 3, true, BIF_TV_AddModifyDelete),
-	BIFn(TV_Modify, 1, 3, true, BIF_TV_AddModifyDelete),
-	BIFn(TV_Delete, 0, 1, true, BIF_TV_AddModifyDelete),
-	BIFn(TV_GetNext, 0, 2, true, BIF_TV_GetRelatedItem),
-	BIFn(TV_GetPrev, 1, 1, true, BIF_TV_GetRelatedItem),
-	BIFn(TV_GetParent, 1, 1, true, BIF_TV_GetRelatedItem),
-	BIFn(TV_GetChild, 1, 1, true, BIF_TV_GetRelatedItem),
-	BIFn(TV_GetSelection, 0, 0, true, BIF_TV_GetRelatedItem),
-	BIFn(TV_GetCount, 0, 0, true, BIF_TV_GetRelatedItem),
-	BIF1(TV_Get, 2, 2, true),
-	BIFn(TV_GetText, 2, 2, true, BIF_TV_Get, {1}),
-	BIF1(TV_SetImageList, 1, 2, true),
+	BIF1(GuiCreate, 0, 3, true),
+	BIF1(GuiFromHwnd, 1, 2, true),
+	BIF1(GuiCtrlFromHwnd, 1, 1, true),
 
 	BIF1(IL_Create, 0, 3, true),
 	BIF1(IL_Destroy, 1, 1, true),
 	BIF1(IL_Add, 2, 4, true),
-	
-	BIFn(SB_SetText, 1, 3, true, BIF_StatusBar),
-	BIFn(SB_SetParts, 0, 255, true, BIF_StatusBar),
-	BIFn(SB_SetIcon, 1, 3, true, BIF_StatusBar),
 
 	BIF1(StrLen, 1, 1, true),
 	BIF1(SubStr, 2, 3, true),
@@ -310,10 +285,7 @@ VarEntry g_BIV_A[] =
 	A_x(DD, BIV_DateTime),
 	A_x(DDD, BIV_MMM_DDD),
 	A_x(DDDD, BIV_MMM_DDD),
-	A_x(DefaultGui, BIV_DefaultGui),
-	A_x(DefaultListView, BIV_DefaultGui),
 	A_w(DefaultMouseSpeed),
-	A_x(DefaultTreeView, BIV_DefaultGui),
 	A_x(Desktop, BIV_SpecialFolderPath),
 	A_x(DesktopCommon, BIV_SpecialFolderPath),
 	A_w(DetectHiddenText),
@@ -321,14 +293,6 @@ VarEntry g_BIV_A[] =
 	A_(EndChar),
 	A_w(EventInfo), // It's called "EventInfo" vs. "GuiEventInfo" because it applies to non-Gui events such as OnClipboardChange.,
 	A_w(FileEncoding),
-	A_x(Gui, BIV_Gui),
-	A_(GuiControl),
-	A_x(GuiControlEvent, BIV_GuiEvent),
-	A_x(GuiEvent, BIV_GuiEvent), // v1.0.36: A_GuiEvent was added as a synonym for A_GuiControlEvent because it seems unlikely that A_GuiEvent will ever be needed for anything:,
-	A_x(GuiHeight, BIV_Gui),
-	A_x(GuiWidth, BIV_Gui),
-	A_x(GuiX, BIV_Gui), // Naming: Brevity seems more a benefit than would A_GuiEventX's improved clarity.,
-	A_x(GuiY, BIV_Gui), // These can be overloaded if a GuiMove label or similar is ever needed.,
 	A_x(Hour, BIV_DateTime),
 	A_(IconFile),
 	A_(IconHidden),
@@ -554,9 +518,10 @@ Script::~Script() // Destructor.
 	// It is safer/easier to destroy the GUI windows prior to the menus (especially the menu bars).
 	// This is because one GUI window might get destroyed and take with it a menu bar that is still
 	// in use by an existing GUI window.  GuiType::Destroy() adheres to this philosophy by detaching
-	// its menu bar prior to destroying its window:
-	while (g_guiCount)
-		GuiType::Destroy(*g_gui[g_guiCount-1]); // Static method to avoid problems with object destroying itself.
+	// its menu bar prior to destroying its window.
+	GuiType* gui;
+	while (gui = g_firstGui) // Destroy any remaining GUI windows (due to e.g. circular references). Also: assignment.
+		gui->Destroy();
 	for (i = 0; i < GuiType::sFontCount; ++i) // Now that GUI windows are gone, delete all GUI fonts.
 		if (GuiType::sFont[i].hfont)
 			DeleteObject(GuiType::sFont[i].hfont);
@@ -1142,8 +1107,8 @@ bool Script::IsPersistent()
 		//|| (g_input.status == INPUT_IN_PROGRESS) // The hook is actively collecting input for the Input command.
 		|| (mNIC.hWnd && mTrayMenu->mMenuItemCount)) // The tray icon is visible and its menu has custom items.
 		return true;
-	for (int i = 0; i < g_guiCount; ++i)
-		if (IsWindowVisible(g_gui[i]->mHwnd)) // A GUI is visible.
+	for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
+		if (IsWindowVisible(gui->mHwnd)) // A GUI is visible.
 			return true;
 	// Otherwise, none of the above conditions are true; but there might still be
 	// one or more script threads running.  Caller is responsible for checking that.
@@ -5143,59 +5108,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		break;
 
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
-		
-	case ACT_GUI:
-		if (aArgc > 0 && !line.ArgHasDeref(1))
-		{
-			LPTSTR command, name;
-			ResolveGui(new_raw_arg1, command, &name);
-			if (!name)
-				return ScriptError(ERR_INVALID_GUI_NAME, new_raw_arg1);
-
-			GuiCommands gui_cmd = line.ConvertGuiCommand(command);
-
-			switch (gui_cmd)
-			{
-			case GUI_CMD_INVALID:
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-			case GUI_CMD_ADD:
-				if (aArgc > 1 && !line.ArgHasDeref(2))
-				{
-					GuiControls control_type;
-					if (   !(control_type = line.ConvertGuiControl(new_raw_arg2))   )
-						return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-					if (control_type == GUI_CONTROL_TREEVIEW && aArgc > 3) // Reserve it for future use such as a tab-indented continuation section that lists the tree hierarchy.
-						return ScriptError(ERR_PARAM4_MUST_BE_BLANK, new_raw_arg4);
-				}
-				break;
-			case GUI_CMD_CANCEL:
-			case GUI_CMD_MINIMIZE:
-			case GUI_CMD_MAXIMIZE:
-			case GUI_CMD_RESTORE:
-			case GUI_CMD_DESTROY:
-			case GUI_CMD_DEFAULT:
-			case GUI_CMD_OPTIONS:
-				if (aArgc > 1)
-					return ScriptError(_T("Parameter #2 and beyond should be omitted in this case."), new_raw_arg2);
-				break;
-			case GUI_CMD_SUBMIT:
-			case GUI_CMD_MENU:
-			case GUI_CMD_LISTVIEW:
-			case GUI_CMD_TREEVIEW:
-			case GUI_CMD_FLASH:
-				if (aArgc > 2)
-					return ScriptError(_T("Parameter #3 and beyond should be omitted in this case."), new_raw_arg3);
-				break;
-			// No action for these since they have a varying number of optional params:
-			//case GUI_CMD_NEW:
-			//case GUI_CMD_SHOW:
-			//case GUI_CMD_FONT:
-			//case GUI_CMD_MARGIN:
-			//case GUI_CMD_TAB:
-			//case GUI_CMD_COLOR: No load-time param validation to avoid larger EXE size.
-			}
-		}
-		break;
 
 	case ACT_LOOP_FILE:
 	case ACT_LOOP_REG:
@@ -5576,69 +5488,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_THREAD:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertThreadCommand(new_raw_arg1))
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_GUICONTROL:
-		if (!*new_raw_arg2) // ControlID
-			return ScriptError(ERR_PARAM2_REQUIRED);
-		if (aArgc > 0 && !line.ArgHasDeref(1))
-		{
-			LPTSTR command, name;
-			ResolveGui(new_raw_arg1, command, &name);
-			if (!name)
-				return ScriptError(ERR_INVALID_GUI_NAME, new_raw_arg1);
-
-			GuiControlCmds guicontrol_cmd = line.ConvertGuiControlCmd(command);
-			switch (guicontrol_cmd)
-			{
-			case GUICONTROL_CMD_INVALID:
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-			case GUICONTROL_CMD_CONTENTS:
-			case GUICONTROL_CMD_TEXT:
-			case GUICONTROL_CMD_MOVEDRAW:
-			case GUICONTROL_CMD_OPTIONS:
-				break; // Do nothing for the above commands since Param3 is optional.
-			case GUICONTROL_CMD_MOVE:
-			case GUICONTROL_CMD_CHOOSE:
-			case GUICONTROL_CMD_CHOOSESTRING:
-				if (!*new_raw_arg3)
-					return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
-				break;
-			default: // All commands except the above should have a blank Text parameter.
-				if (*new_raw_arg3)
-					return ScriptError(ERR_PARAM3_MUST_BE_BLANK, new_raw_arg3);
-			}
-		}
-		break;
-
-	case ACT_GUICONTROLGET:
-		if (aArgc > 1 && !line.ArgHasDeref(2))
-		{
-			LPTSTR command, name;
-			ResolveGui(new_raw_arg2, command, &name);
-			if (!name)
-				return ScriptError(ERR_INVALID_GUI_NAME, new_raw_arg2);
-
-			GuiControlGetCmds guicontrolget_cmd = line.ConvertGuiControlGetCmd(command);
-			// This first check's error messages take precedence over the next check's:
-			switch (guicontrolget_cmd)
-			{
-			case GUICONTROLGET_CMD_INVALID:
-				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-			case GUICONTROLGET_CMD_CONTENTS:
-				break; // Do nothing, since Param4 is optional in this case.
-			default: // All commands except the above should have a blank parameter here.
-				if (*new_raw_arg4) // Currently true for all, since it's a FutureUse param.
-					return ScriptError(ERR_PARAM4_MUST_BE_BLANK, new_raw_arg4);
-			}
-			if (guicontrolget_cmd == GUICONTROLGET_CMD_FOCUS || guicontrolget_cmd == GUICONTROLGET_CMD_FOCUSV)
-			{
-				if (*new_raw_arg3)
-					return ScriptError(ERR_PARAM3_MUST_BE_BLANK, new_raw_arg3);
-			}
-			// else it can be optionally blank, in which case the output variable is used as the
-			// ControlID also.
-		}
 		break;
 
 	// For ACT_WINMOVE, don't validate anything for mandatory args so that its two modes of
@@ -12840,15 +12689,6 @@ ResultType Line::Perform()
 
 	case ACT_MENU:
 		return g_script.PerformMenu(SIX_ARGS, ARGVAR4, ARGVAR5);
-
-	case ACT_GUI:
-		return g_script.PerformGui(FOUR_ARGS);
-
-	case ACT_GUICONTROL:
-		return GuiControl(THREE_ARGS, ARGVAR3);
-
-	case ACT_GUICONTROLGET:
-		return GuiControlGet(ARG2, ARG3, ARG4);
 
 	////////////////////////////////////////////////////////////////////////////////////////
 	// For these, it seems best not to report an error during runtime if there's

@@ -1483,6 +1483,11 @@ void AssignColor(LPTSTR aColorName, COLORREF &aColor, HBRUSH &aBrush)
 			// if aColorName does not contain something hex-numeric, black (0x00) will be assumed,
 			// which seems okay given how rare such a problem would be.
 	}
+	AssignColor(color, aColor, aBrush);
+}
+
+void AssignColor(COLORREF color, COLORREF &aColor, HBRUSH &aBrush)
+{
 	if (color != aColor) // It's not already the right color.
 	{
 		aColor = color; // Set default.  v1.0.44.09: Added this line to fix the inability to change to a previously selected color after having changed to the default color.

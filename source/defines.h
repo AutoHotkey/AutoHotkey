@@ -299,6 +299,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 
 
 	ExprTokenType() {}
+	ExprTokenType(int aValue) { SetValue(aValue); }
 	ExprTokenType(__int64 aValue) { SetValue(aValue); }
 	ExprTokenType(double aValue) { SetValue(aValue); }
 	ExprTokenType(IObject *aValue) { SetValue(aValue); }
@@ -360,6 +361,7 @@ private: // Force code to use one of the CopyFrom() methods, for clarity.
 #define STACK_POP stack[--stack_count]  // To be used as the r-value for an assignment.
 
 class Func;
+enum BuiltInFunctionID;
 struct ResultToken : public ExprTokenType
 {
 	LPTSTR buf; // Points to a buffer of _f_retval_buf_size characters for returning short strings and misc purposes.
@@ -537,7 +539,7 @@ enum enum_act {
 , ACT_STRINGCASESENSE, ACT_DETECTHIDDENWINDOWS, ACT_DETECTHIDDENTEXT, ACT_BLOCKINPUT
 , ACT_SETNUMLOCKSTATE, ACT_SETSCROLLLOCKSTATE, ACT_SETCAPSLOCKSTATE, ACT_SETSTORECAPSLOCKMODE
 , ACT_KEYHISTORY, ACT_LISTLINES, ACT_LISTVARS, ACT_LISTHOTKEYS
-, ACT_EDIT, ACT_RELOAD, ACT_MENU, ACT_GUI, ACT_GUICONTROL, ACT_GUICONTROLGET
+, ACT_EDIT, ACT_RELOAD, ACT_MENU
 , ACT_SHUTDOWN
 , ACT_FILEENCODING
 // It's safer to use g_ActionCount, which is calculated immediately after the array is declared
@@ -711,14 +713,29 @@ typedef UINT GuiIndexType; // Some things rely on it being unsigned to avoid the
 typedef UINT GuiEventType; // Made a UINT vs. enum so that illegal/underflow/overflow values are easier to detect.
 
 // The following array and enum must be kept in sync with each other:
-#define GUI_EVENT_NAMES {_T(""), _T("Normal"), _T("DoubleClick"), _T("RightClick"), _T("ColClick")}
+#define GUI_EVENT_NAMES { _T("") \
+	, _T("DropFiles"), _T("Close"), _T("Escape"), _T("Size"), _T("ContextMenu") \
+	, _T("Change") \
+	, _T("Click"), _T("DoubleClick"), _T("ColClick") \
+	, _T("ItemCheck"), _T("ItemSelect"), _T("ItemFocus"), _T("ItemExpand") \
+	, _T("ItemEdit") \
+	, _T("Focus"), _T("LoseFocus") \
+}
 enum GuiEventTypes {GUI_EVENT_NONE  // NONE must be zero for any uses of ZeroMemory(), synonymous with false, etc.
-	, GUI_EVENT_NORMAL, GUI_EVENT_DBLCLK // Try to avoid changing this and the other common ones in case anyone automates a script via SendMessage (though that does seem very unlikely).
-	, GUI_EVENT_RCLK, GUI_EVENT_COLCLK
-	, GUI_EVENT_FIRST_UNNAMED  // This item must always be 1 greater than the last item that has a name in the GUI_EVENT_NAMES array below.
-	, GUI_EVENT_DROPFILES = GUI_EVENT_FIRST_UNNAMED
-	, GUI_EVENT_CLOSE, GUI_EVENT_ESCAPE, GUI_EVENT_RESIZE, GUI_EVENT_CONTEXTMENU
-	, GUI_EVENT_DIGIT_0 = 48}; // Here just as a reminder that this value and higher are reserved so that a single printable character or digit (mnemonic) can be sent, and also so that ListView's "I" notification can add extra data into the high-byte (which lies just to the left of the "I" character in the bitfield).
+	, GUI_EVENT_DROPFILES, GUI_EVENT_CLOSE, GUI_EVENT_ESCAPE, GUI_EVENT_RESIZE, GUI_EVENT_CONTEXTMENU
+	, GUI_EVENT_WINDOW_FIRST = GUI_EVENT_DROPFILES, GUI_EVENT_WINDOW_LAST = GUI_EVENT_CONTEXTMENU
+	, GUI_EVENT_CONTROL_FIRST
+	, GUI_EVENT_CHANGE = GUI_EVENT_CONTROL_FIRST
+	, GUI_EVENT_CLICK, GUI_EVENT_DBLCLK, GUI_EVENT_COLCLK
+	, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMSELECT, GUI_EVENT_ITEMFOCUS, GUI_EVENT_ITEMEXPAND
+	, GUI_EVENT_ITEMEDIT
+	, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS
+	// The rest don't have explicit names in GUI_EVENT_NAMES:
+	, GUI_EVENT_WM_COMMAND
+	, GUI_EVENT_DIGIT_0 = 48 // Here just as a reminder that from this value up to 0xFF are reserved so that a single printable character or digit (mnemonic) can be sent.
+};
+
+enum GuiEventKinds {GUI_EVENTKIND_EVENT = 0, GUI_EVENTKIND_NOTIFY, GUI_EVENTKIND_COMMAND};
 
 typedef USHORT CoordModeType;
 
@@ -796,15 +813,9 @@ struct global_struct
 	int UninterruptedLineCount; // Stored as a g-struct attribute in case OnExit func interrupts it while uninterruptible.
 	int Priority;  // This thread's priority relative to others.
 	DWORD LastError; // The result of GetLastError() after the most recent DllCall or Run.
-	GuiEventType GuiEvent; // This thread's triggering event, e.g. DblClk vs. normal click.
 	EventInfoType EventInfo; // Not named "GuiEventInfo" because it applies to non-GUI events such as clipboard.
-	POINT GuiPoint; // The position of GuiEvent. Stored as a thread vs. window attribute so that underlying threads see their original values when resumed.
-	GuiType *GuiWindow; // The GUI window that launched this thread.
-	GuiType *GuiDefaultWindow; // This thread's default GUI window, used except when specified "Gui, 2:Add, ..."
-	GuiType *GuiDefaultWindowValid(); // Updates and returns GuiDefaultWindow in case "Gui, Name: Default" wasn't used or the Gui has been destroyed; returns NULL if GuiDefaultWindow is invalid.
-	GuiType *DialogOwner; // This thread's GUI owner, if any.
-	GuiIndexType GuiControlIndex; // The GUI control index that launched this thread.
-	#define THREAD_DIALOG_OWNER (GuiType::ValidGui(::g->DialogOwner) ? ::g->DialogOwner->mHwnd : NULL)
+	HWND DialogOwner; // This thread's dialog owner, if any.
+	#define THREAD_DIALOG_OWNER (IsWindow(::g->DialogOwner) ? ::g->DialogOwner : NULL)
 	int WinDelay;  // negative values may be used as special flags.
 	int ControlDelay; // negative values may be used as special flags.
 	int KeyDelay;     //
@@ -873,7 +884,6 @@ inline void global_clear_state(global_struct &g)
 	g.UninterruptedLineCount = 0;
 	g.DialogOwner = NULL;
 	g.CalledByIsDialogMessageOrDispatch = false; // CalledByIsDialogMessageOrDispatchMsg doesn't need to be cleared because it's value is only considered relevant when CalledByIsDialogMessageOrDispatch==true.
-	g.GuiDefaultWindow = NULL;
 	// Above line is done because allowing it to be permanently changed by the auto-exec section
 	// seems like it would cause more confusion that it's worth.  A change to the global default
 	// or even an override/always-use-this-window-number mode can be added if there is ever a
@@ -910,15 +920,7 @@ inline void global_init(global_struct &g)
 	g.ThreadIsCritical = false;
 	g.Priority = 0;
 	g.LastError = 0;
-	g.GuiEvent = GUI_EVENT_NONE;
 	g.EventInfo = NO_EVENT_INFO;
-	g.GuiPoint.x = COORD_UNSPECIFIED;
-	g.GuiPoint.y = COORD_UNSPECIFIED;
-	// For these, indexes rather than pointers are stored because handles can become invalid during the
-	// lifetime of a thread (while it's suspended, or if it destroys the control or window that created itself):
-	g.GuiWindow = NULL;
-	g.GuiControlIndex = NO_CONTROL_INDEX; // Default to out-of-bounds.
-	g.GuiDefaultWindow = NULL;
 	g.WinDelay = 100;
 	g.ControlDelay = 20;
 	g.KeyDelay = 10;

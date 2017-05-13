@@ -39,7 +39,8 @@ GNU General Public License for more details.
 // UPDATE v1.1.10.01: Using 0x0600 broke Process Close and who knows what else on Win XP.
 // Instead, use 0x0501 and redefine it to 0x0600 only for the specific APIs which we need.
 #define _WIN32_WINNT 0x0501
-#define _WIN32_IE 0x0501  // Added for v1.0.35 to have MCS_NOTODAY resolve as expected, and possibly solve other problems on newer systems.
+//#define _WIN32_IE 0x0501  // Added for v1.0.35 to have MCS_NOTODAY resolve as expected, and possibly solve other problems on newer systems.
+#define _WIN32_IE _WIN32_IE_IE70  // Added for TVN_ITEMCHANGED, which most likely requires Vista.
 
 #ifdef _MSC_VER
 	#include "config.h" // compile-time configurations
