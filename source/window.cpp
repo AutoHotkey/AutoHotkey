@@ -1020,10 +1020,9 @@ int MsgBox(LPCTSTR aText, UINT uType, LPTSTR aTitle, double aTimeout, HWND aOwne
 		return 0;
 	}
 
-	// Set these in case the caller explicitly called it with a NULL, overriding the default:
-	if (!aText)
+	if (!aText) // In case the caller explicitly called it with a NULL, overriding the default.
 		aText = _T("");
-	if (!aTitle || !*aTitle)
+	if (!aTitle) // Caller omitted it or explicitly requested the default.
 		aTitle = g_script.DefaultDialogTitle();
 
 	// It doesn't feel safe to modify the contents of the caller's aText and aTitle,

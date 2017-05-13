@@ -4646,15 +4646,17 @@ BIF_DECL(BIF_MsgBox)
 	}
 	else
 	{
-		TCHAR title_buf[MAX_NUMBER_SIZE], text_buf[MAX_NUMBER_SIZE], option_buf[MAX_NUMBER_SIZE];
+		_f_param_string_opt(aText, 0);
+		_f_param_string_opt_def(aTitle, 1, NULL);
+		_f_param_string_opt(aOptions, 2);
 		int type;
 		double timeout;
-		if (!MsgBoxParseOptions(ParamIndexToOptionalString(2, option_buf), type, timeout, dialog_owner))
+		if (!MsgBoxParseOptions(aOptions, type, timeout, dialog_owner))
 		{
 			aResultToken.SetExitResult(FAIL);
 			return;
 		}
-		result = MsgBox(ParamIndexToString(0, text_buf), type, ParamIndexToOptionalString(1, title_buf), timeout, dialog_owner);
+		result = MsgBox(aText, type, aTitle, timeout, dialog_owner);
 	}
 	// If the MsgBox window can't be displayed for any reason, always return FAIL to
 	// the caller because it would be unsafe to proceed with the execution of the
@@ -4753,10 +4755,10 @@ BIF_DECL(BIF_InputBox)
 		_f_throw(_T("The maximum number of InputBoxes has been reached."));
 	}
 	_f_param_string_opt(aText, 0);
-	_f_param_string_opt(aTitle, 1);
+	_f_param_string_opt_def(aTitle, 1, NULL);
 	_f_param_string_opt(aOptions, 2);
 	_f_param_string_opt(aDefault, 3);
-	if (!*aTitle)
+	if (!aTitle) // Omitted, not just blank.
 		aTitle = g_script.DefaultDialogTitle();
 	// Limit the size of what we were given to prevent unreasonably huge strings from
 	// possibly causing a failure in CreateDialog().  This copying method is always done because:
