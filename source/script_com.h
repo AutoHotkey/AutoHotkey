@@ -64,7 +64,7 @@ public:
 
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	IObject_Type_Impl("ComObject")
+	LPTSTR Type();
 
 	void ToVariant(VARIANT &aVar)
 	{

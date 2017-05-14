@@ -1348,6 +1348,18 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 }
 
 
+LPTSTR ComObject::Type()
+{
+	if (mVarType & VT_ARRAY)
+		return _T("ComObjArray"); // Has SafeArray methods.
+	if (mVarType & VT_BYREF)
+		return _T("ComObjRef"); // Has this[].
+	if (mVarType == VT_DISPATCH && mDispatch)
+		return _T("ComObject"); // Can be invoked.
+	return _T("ComObjValue"); // Can't be invoked; just holds a value.
+}
+
+
 int ComEnum::Next(Var *aOutput, Var *aOutputType)
 {
 	VARIANT varResult = {0};
