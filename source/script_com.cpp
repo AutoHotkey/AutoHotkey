@@ -393,11 +393,33 @@ BIF_DECL(BIF_ComObjTypeOrValue)
 			aResultToken.symbol = SYM_STRING; // for all code paths below
 			aResultToken.marker = _T(""); // in case of error
 
-			ITypeInfo *ptinfo;
-			if (VT_DISPATCH == obj->mVarType && obj->mDispatch
-				&& SUCCEEDED(obj->mDispatch->GetTypeInfo(0, LOCALE_USER_DEFAULT, &ptinfo)))
+			LPTSTR requested_info = TokenToString(*aParam[1]);
+
+			ITypeInfo *ptinfo = NULL;
+			if (tolower(*requested_info) == 'c')
 			{
-				LPTSTR requested_info = TokenToString(*aParam[1]);
+				// Get class information.
+				if ((VT_DISPATCH == obj->mVarType || VT_UNKNOWN == obj->mVarType) && obj->mUnknown)
+				{
+					ptinfo = GetClassTypeInfo(obj->mUnknown);
+					if (ptinfo)
+					{
+						if (!_tcsicmp(requested_info, _T("class")))
+							requested_info = _T("name");
+						else if (!_tcsicmp(requested_info, _T("clsid")))
+							requested_info = _T("iid");
+					}
+				}
+			}
+			else
+			{
+				// Get IDispatch information.
+				if (VT_DISPATCH == obj->mVarType && obj->mDispatch)
+					if (FAILED(obj->mDispatch->GetTypeInfo(0, LOCALE_USER_DEFAULT, &ptinfo)))
+						ptinfo = NULL;
+			}
+			if (ptinfo)
+			{
 				if (!_tcsicmp(requested_info, _T("name")))
 				{
 					BSTR name;
