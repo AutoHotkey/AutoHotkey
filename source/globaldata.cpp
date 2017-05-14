@@ -319,14 +319,14 @@ Action g_act[] =
 	// be used.  For this first one, allow a minimum of zero, otherwise, the first param (control)
 	// would be considered mandatory-non-blank by default.  It's easier to make all the params
 	// optional and validate elsewhere that the 2nd one specifically isn't blank:
-	, {_T("ControlSend"), 0, 6, false, NULL} // Control, Chars-to-Send, std. 4 window params.
-	, {_T("ControlSendRaw"), 0, 6, false, NULL} // Control, Chars-to-Send, std. 4 window params.
+	, {_T("ControlSend"), 1, 6, false, NULL} // Chars-to-Send, Control, std. 4 window params.
+	, {_T("ControlSendRaw"), 1, 6, false, NULL} // Chars-to-Send, Control, std. 4 window params.
 	, {_T("ControlClick"), 0, 8, false, {5, 0}} // Control, WinTitle, WinText, WhichButton, ClickCount, Hold/Release, ExcludeTitle, ExcludeText
-	, {_T("ControlMove"), 0, 9, false, {2, 3, 4, 5, 0}} // Control, x, y, w, h, WinTitle, WinText, ExcludeTitle, ExcludeText
+	, {_T("ControlMove"), 0, 9, false, {1, 2, 3, 4, 0}} // x, y, w, h, Control, WinTitle, WinText, ExcludeTitle, ExcludeText
 	, {_T("ControlGetPos"), 0, 9, true, NULL} // Four optional output vars: xpos, ypos, width, height, control, std. 4 window params.
 	, {_T("ControlFocus"), 0, 5, false, NULL}     // Control, std. 4 window params
 	, {_T("ControlGetFocus"), 1, 5, true, NULL}  // OutputVar, std. 4 window params
-	, {_T("ControlSetText"), 0, 6, false, NULL}   // Control, new text, std. 4 window params
+	, {_T("ControlSetText"), 1, 6, false, NULL}   // new text, Control, std. 4 window params
 	, {_T("ControlGetText"), 1, 6, true, NULL}   // Output-var, Control, std. 4 window params
 	, {_T("Control"), 1, 7, false, NULL}   // Command, Value, Control, std. 4 window params
 
@@ -366,16 +366,10 @@ Action g_act[] =
 	, {_T("WinMinimizeAll"), 0, 0, false, NULL}, {_T("WinMinimizeAllUndo"), 0, 0, false, NULL}
 	, {_T("WinClose"), 0, 5, false, {3, 0}} // title, text, time-to-wait-for-close (0 = 500ms), exclude title/text
 	, {_T("WinKill"), 0, 5, false, {3, 0}} // same as WinClose.
-	, {_T("WinMove"), 0, 8, false, {1, 2, 3, 4, 5, 6, 0}} // title, text, xpos, ypos, width, height, exclude-title, exclude_text
-	// Note for WinMove: title/text are marked as numeric because in two-param mode, they are the X/Y params.
-	// This helps speed up loading expression-detection.  Also, xpos/ypos/width/height can be the string "default",
-	// but that is explicitly checked for, even though it is required it to be numeric in the definition here.
+	, {_T("WinMove"), 0, 8, false, {1, 2, 3, 4, 0}} // xpos, ypos, width, height, title, text, exclude-title, exclude_text
 	, {_T("MenuSelect"), 0, 11, false, NULL} // WinTitle, WinText, Menu name, 6 optional sub-menu names, ExcludeTitle/Text
 
-	// WinSetTitle: Allow a minimum of zero params so that title isn't forced to be non-blank.
-	// Also, if the user passes only one param, the title of the "last used" window will be
-	// set to the string in the first param:
-	, {_T("WinSetTitle"), 0, 5, false, NULL} // title, text, newtitle, exclude-title, exclude-text
+	, {_T("WinSetTitle"), 1, 5, false, NULL} // newtitle, title, text, exclude-title, exclude-text
 	, {_T("WinGetTitle"), 1, 5, true, NULL} // Output-var, std. 4 window params
 	, {_T("WinGetClass"), 1, 5, true, NULL} // Output-var, std. 4 window params
 	, {_T("WinGetPos"), 0, 8, true, NULL} // Four optional output vars: xpos, ypos, width, height.  Std. 4 window params.

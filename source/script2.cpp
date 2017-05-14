@@ -1013,8 +1013,8 @@ ResultType Line::PerformWait()
 
 
 
-ResultType Line::WinMove(LPTSTR aTitle, LPTSTR aText, LPTSTR aX, LPTSTR aY
-	, LPTSTR aWidth, LPTSTR aHeight, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+ResultType Line::WinMove(LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
+	, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 {
 	// So that compatibility is retained, don't set ErrorLevel for commands that are native to AutoIt2
 	// but that AutoIt2 doesn't use ErrorLevel with (such as this one).
@@ -1036,7 +1036,7 @@ ResultType Line::WinMove(LPTSTR aTitle, LPTSTR aText, LPTSTR aX, LPTSTR aY
 
 
 
-ResultType Line::ControlSend(LPTSTR aControl, LPTSTR aKeysToSend, LPTSTR aTitle, LPTSTR aText
+ResultType Line::ControlSend(LPTSTR aKeysToSend, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 	, LPTSTR aExcludeTitle, LPTSTR aExcludeText, bool aSendRaw)
 {
 	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
@@ -1300,8 +1300,8 @@ error:
 
 
 
-ResultType Line::ControlMove(LPTSTR aControl, LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
-	, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+ResultType Line::ControlMove(LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
+	, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 {
 	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
 	if (!target_window)
@@ -1488,7 +1488,7 @@ error:
 
 
 
-ResultType Line::ControlSetText(LPTSTR aControl, LPTSTR aNewText, LPTSTR aTitle, LPTSTR aText
+ResultType Line::ControlSetText(LPTSTR aNewText, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 {
 	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
@@ -2501,7 +2501,7 @@ BIF_DECL(BIF_WinMoveTopBottom)
 
 
 
-ResultType Line::WinSetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aNewTitle, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+ResultType Line::WinSetTitle(LPTSTR aNewTitle, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 // Like AutoIt2, this function and others like it always return OK, even if the target window doesn't
 // exist or there action doesn't actually succeed.
 {

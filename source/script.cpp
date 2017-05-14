@@ -4935,12 +4935,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				{
 					if (*np == i_plus_one) // This arg is enforced to be purely numeric.
 					{
-						if (aActionType == ACT_WINMOVE)
-						{
-							if (i < 2) // This is the first or second arg, which are title/text vs. X/Y when aArgc > 2.
-								if (aArgc > 2) // Title/text are not numeric.
-									break; // The loop is over because this arg was found in the list.
-						}
 						if (aActionType >= ACT_FIRST_COMMAND) // See above for comments.
 						{
 							if (!IsNumeric(this_aArg, true, true, true) && !_tcschr(this_aArg, g_DerefChar))
@@ -5491,8 +5485,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
-	// For ACT_WINMOVE, don't validate anything for mandatory args so that its two modes of
-	// operation can be supported: 2-param mode and normal-param mode.
 	// For these, although we validate that at least one is non-blank here, it's okay at
 	// runtime for them all to resolve to be blank, without an error being reported.
 	// It's probably more flexible that way since the commands are equipped to handle
@@ -12175,7 +12167,7 @@ ResultType Line::Perform()
 		return PerformWait();
 
 	case ACT_WINMOVE:
-		return mArgc > 2 ? WinMove(EIGHT_ARGS) : WinMove(_T(""), _T(""), ARG1, ARG2);
+		return WinMove(EIGHT_ARGS);
 
 	case ACT_MENUSELECT:
 		return MenuSelect(ELEVEN_ARGS);
@@ -12209,7 +12201,7 @@ ResultType Line::Perform()
 	case ACT_SENDMESSAGE:
 		return ScriptPostSendMessage(mActionType == ACT_SENDMESSAGE);
 	case ACT_WINSETTITLE:
-		return mArgc > 1 ? WinSetTitle(FIVE_ARGS) : WinSetTitle(_T(""), _T(""), ARG1);
+		return WinSetTitle(FIVE_ARGS);
 	case ACT_WINGETTITLE:
 		return WinGetTitle(ARG2, ARG3, ARG4, ARG5);
 	case ACT_WINGETCLASS:
