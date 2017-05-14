@@ -2597,12 +2597,9 @@ void Debugger::PropertyWriter::BeginProperty(LPCSTR aName, LPCSTR aType, int aNu
 
 	if (mDepth == 1) // Write <property> for the object itself.
 	{
-		LPCSTR classname = typeid(*mObject).name();
-		if (!strncmp(classname, "class ", 6))
-			classname += 6;
-
+		LPTSTR classname = mObject->Type();
 		mError = mDbg.mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" classname=\"%s\" address=\"%p\" size=\"0\" page=\"%i\" pagesize=\"%i\" children=\"%i\" numchildren=\"%i\">"
-					, mName, mNameBuf.GetString(), aType, classname, mObject, mPage, mPageSize, aNumChildren > 0, aNumChildren);
+					, mName, mNameBuf.GetString(), aType, U4T(classname), mObject, mPage, mPageSize, aNumChildren > 0, aNumChildren);
 		return;
 	}
 
