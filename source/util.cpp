@@ -1298,6 +1298,10 @@ bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr, DWORD aRequired
 		HANDLE hFile = FindFirstFile(aFilePattern, &wfd);
 		if (hFile == INVALID_HANDLE_VALUE)
 			return false;
+		// Skip . and .., which appear to always be listed first (for dir\* and dir\*.*).
+		while (wfd.cFileName[0] == '.' && (!wfd.cFileName[1] || wfd.cFileName[1] == '.' && !wfd.cFileName[2]))
+			if (!FindNextFile(hFile, &wfd))
+				return false;
 		if (aRequiredAttr) // Caller wants to check for a file/folder with specific attributes.
 		{
 			while ((wfd.dwFileAttributes & aRequiredAttr) != aRequiredAttr)
