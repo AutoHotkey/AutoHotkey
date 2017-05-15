@@ -521,7 +521,7 @@ BIF_DECL(BIF_Control)
 
 	case FID_ControlChoose:
 		control_index = aNumber - 1;
-		if (control_index < 0)
+		if (control_index < -1)
 			_f_throw(ERR_PARAM1_INVALID);
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
 		{
@@ -547,13 +547,13 @@ BIF_DECL(BIF_Control)
 			goto error;
 		if (msg == LB_SETSEL) // Multi-select, so use the cumulative method.
 		{
-			if (!SendMessageTimeout(control_window, msg, TRUE, control_index, SMTO_ABORTIFHUNG, 2000, &dwResult))
+			if (!SendMessageTimeout(control_window, msg, control_index != -1, control_index, SMTO_ABORTIFHUNG, 2000, &dwResult))
 				goto error;
 		}
 		else // ComboBox or single-select ListBox.
 			if (!SendMessageTimeout(control_window, msg, control_index, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
 				goto error;
-		if (dwResult == CB_ERR)  // CB_ERR == LB_ERR
+		if (dwResult == CB_ERR && control_index != -1)  // CB_ERR == LB_ERR
 			goto error;
 		if (   !(immediate_parent = GetParent(control_window))   )
 			goto error;
