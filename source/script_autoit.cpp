@@ -695,7 +695,7 @@ BIF_DECL(BIF_ControlGet)
 		_f_return(IsWindowVisible(control_window) ? 1 : 0); // Force pure boolean 0/1.
 
 	case FID_ControlGetTab: // must be a Tab Control
-		if (!SendMessageTimeout(control_window, TCM_GETCURSEL, 0, 0, SMTO_ABORTIFHUNG, 2000, &index) || index == -1) // Relies on short-circuit boolean order.
+		if (!SendMessageTimeout(control_window, TCM_GETCURSEL, 0, 0, SMTO_ABORTIFHUNG, 2000, &index))
 			goto error;
 		_f_return(index + 1);
 
