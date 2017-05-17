@@ -426,7 +426,7 @@ BIF_DECL(BIF_Control)
 		int style_index = (control_cmd == FID_ControlSetStyle) ? GWL_STYLE : GWL_EXSTYLE;
 		DWORD new_style, orig_style = GetWindowLong(control_window, style_index);
 		// +/-/^ are used instead of |&^ because the latter is confusing, namely that & really means &=~style, etc.
-		if (!_tcschr(_T("+-^"), *aValue))  // | and & are used instead of +/- to allow +/- to have their native function.
+		if (!_tcschr(_T("+-^"), *aValue))
 			new_style = ATOU(aValue); // No prefix, so this new style will entirely replace the current style.
 		else
 		{
@@ -440,10 +440,7 @@ BIF_DECL(BIF_Control)
 			}
 		}
 		if (new_style == orig_style) // v1.0.45.04: Ask for an unnecessary change (i.e. one that is already in effect) should not be considered an error.
-		{
-			g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-			return;
-		}
+			goto success; // As documented, DoControlDelay is not done for these.
 		// Currently, BM_SETSTYLE is not done when GetClassName() says that the control is a button/checkbox/groupbox.
 		// This is because the docs for BM_SETSTYLE don't contain much, if anything, that anyone would ever
 		// want to change.
@@ -454,8 +451,7 @@ BIF_DECL(BIF_Control)
 			if (GetWindowLong(control_window, style_index) != orig_style) // Even a partial change counts as a success.
 			{
 				InvalidateRect(control_window, NULL, TRUE); // Quite a few styles require this to become visibly manifest.
-				g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-				return;
+				goto success;
 			}
 		}
 		goto error; // As documented, DoControlDelay is not done for these.
@@ -625,12 +621,13 @@ BIF_DECL(BIF_Control)
 	} // switch()
 
 	DoControlDelay;  // Seems safest to do this for all of these commands.
+success:
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-	_f_return_empty;
+	_f_return_b(TRUE);
 
 error:
 	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-	_f_return_empty;
+	_f_return_b(FALSE);
 }
 
 
