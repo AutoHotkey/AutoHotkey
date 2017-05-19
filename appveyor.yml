@@ -1,0 +1,9 @@
+-
+    clone_depth: 15
+    branches:
+        only:
+            - master
+    configuration: Debug
+    build:
+        project: AutoHotkeyx.sln
+        verbosity: normal
