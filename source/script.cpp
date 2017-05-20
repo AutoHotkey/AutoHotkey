@@ -4442,13 +4442,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		if (end_marker && *end_marker == '(')
 		{
 			LPTSTR last_char = end_marker + _tcslen(end_marker) - 1;
-			if (*last_char == '{')
-			{
-				// Allow OTB if valid: Loop Parse(...) {
-				last_char = omit_trailing_whitespace(end_marker, last_char - 1);
-				if (*last_char == ')')
-					add_openbrace_afterward = true;
-			}
 			if (*last_char == ')')
 			{
 				// Remove the parentheses (and possible open brace) and trailing space.
@@ -4557,6 +4550,11 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		max_params_override = 2;
 	}
 
+	// v2: All statements accept expressions by default, except goto/gosub/break/continue.
+	// At this stage it isn't necessary to differentiate between variables and expressions.
+	if (aActionType > ACT_LAST_JUMP || aActionType < ACT_FIRST_JUMP)
+		all_args_are_expressions = true;
+
 	/////////////////////////////////////////////////////////////
 	// Parse the parameter string into a list of separate params.
 	/////////////////////////////////////////////////////////////
@@ -4581,51 +4579,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		}
 		arg[nArgs] = action_args + mark;
 		arg_map[nArgs] = literal_map + mark;
-		if (nArgs == max_params_minus_one)
-		{
-			// Don't terminate the last param, just put all the rest of the line
-			// into it.  This avoids the need for the user to escape any commas
-			// that may appear in the last param.  i.e. any commas beyond this
-			// point can't be delimiters because we've already reached MaxArgs
-			// for this command:
-			++nArgs;
-			break;
-		}
-		// The above does not need the in_quotes and in_parens checks because commas in the last arg
-		// are always literal, so there's no problem even in expressions.
 
-		if (all_args_are_expressions)
-		{
-			// This is a pseudo-function-call to a control flow statement, such as Loop Parse(string, delim) {}.
-			is_expression = true;
-		}
-		else
-		{
-			// The following implements the "% " prefix as a means of forcing an expression:
-			is_expression = *arg[nArgs] == g_DerefChar && !*arg_map[nArgs] // It's a non-literal deref character.
-				&& IS_SPACE_OR_TAB(arg[nArgs][1]); // Followed by a space or tab.
-
-			if (is_expression)
-			{
-				// Skip the "% " prefix.
-				mark += 2;
-			}
-		}
-		// Since this part of the loop never executes for the last arg of a command (due to the 
-		// nArgs == max_params_minus_one check above) and currently all control flow statements
-		// accept expressions only in their last or only arg, it's tempting to remove this block.
-		// However, it's actually needed for ACT_IF, where a second pseudo-arg is added for
-		// handling a same-line sub-action.  It might be needed for other commands in future.
-		if (!is_expression && aActionType < ACT_FIRST_COMMAND) // v2: Search for "NumericParams" for comments.
-		{
-			int nArgs_plus_one = nArgs + 1;
-			for (ActionTypeType *np = this_action.NumericParams; *np; ++np)
-				if (*np == nArgs_plus_one) // This arg is enforced to be purely numeric.
-				{
-					is_expression = true;
-					break;
-				}
-		}
+		is_expression = all_args_are_expressions; // This would be false for goto/gosub/break/continue.
 
 		// Find the end of the above arg:
 		if (is_expression)
@@ -4637,6 +4592,11 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 
 		if (action_args[mark])  // A non-literal delimiter was found.
 		{
+			if (nArgs == max_params_minus_one) // There should be no delimiter, since this is the last arg.
+			{
+				++nArgs;
+				break; // Let section below handle it as an error (if it's not ACT_EXPRESSION).
+			}
 			action_args[mark] = '\0';  // Terminate the previous arg.
 			// Trim any whitespace from the previous arg.  This operation will not alter the contents
 			// of anything beyond action_args[i], so it should be safe.  In addition, even though it
@@ -4665,6 +4625,13 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			, this_action.MinParams > 1 ? _T("s") : _T(""));
 		return ScriptError(error_msg, aLineText);
 	}
+	if (action_args[mark] && aActionType != ACT_EXPRESSION)
+	{
+		sntprintf(error_msg, _countof(error_msg), _T("\"%s\" accepts at most %d parameter%s.")
+			, this_action.Name, max_params
+			, max_params > 1 ? _T("s") : _T(""));
+		return ScriptError(error_msg, aLineText);
+	}
 	for (int i = 0; i < this_action.MinParams; ++i) // It's only safe to do this after the above.
 		if (!*arg[i])
 		{
@@ -4673,39 +4640,20 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			return ScriptError(error_msg, aLineText);
 		}
 
-	// In v1.0.41, the following one-true-brace styles are also supported:
-	// Loop {   ; Known limitation: Overlaps with file-pattern loop that retrieves single file of name "{".
-	// Loop 5 { ; Also overlaps, this time with file-pattern loop that retrieves numeric filename ending in '{'.
-	// Loop %Var% {  ; Similar, but like the above seems acceptable given extreme rarity of user intending a file pattern.
-	if (aActionType == ACT_IF || aActionType == ACT_WHILE || aActionType == ACT_FOR // Implies there is at least one non-blank arg.
-		|| ((aActionType == ACT_LOOP || aActionType == ACT_CATCH || aActionType == ACT_FINALLY) && nArgs == 1 && arg[0][0])) // A Loop or Catch with exactly one, non-blank arg.
+	// Handle one-true-brace (OTB).
+	// Else, Try and Finally were already handled, since they also accept a sub-action.
+	if (nArgs && (ACT_IS_LOOP(aActionType) || aActionType == ACT_IF || aActionType == ACT_CATCH))
 	{
 		LPTSTR arg1 = arg[nArgs - 1]; // For readability and possibly performance.
-		// A loop with the above criteria (exactly one arg) can only validly be a normal/counting loop or
-		// a file-pattern loop if its parameter's last character is '{'.  For the following reasons, any
-		// single-parameter loop that ends in '{' is considered to be one-true brace:
-		// 1) Extremely rare that a file-pattern loop such as "Loop filename {" would ever be used,
-		//    and even if it is, the syntax checker will report an unclosed block, making it apparent
-		//    to the user that a workaround is needed, such as putting the filename into a variable first.
-		// 2) Difficulty and code size of distinguishing all possible valid-one-true-braces from those
-		//    that aren't.  For example, the following are ambiguous, so it seems best for consistency
-		//    and code size reduction just to treat them as one-truce-brace, which will immediately alert
-		//    the user if the brace isn't closed:
-		//    a) Loop % (expression) {   ; Ambiguous because expression could resolve to a string, thus it would be seen as a file-pattern loop.
-		//    b) Loop %Var% {            ; Similar as above, which means all three of these unintentionally support
-		//    c) Loop filename{          ; OTB for some types of file loops because it's not worth the code size to "unsupport" them.
-		//    d) Loop *.txt {            ; Like the above: Unintentionally supported, but not documented.
-		//    e) (While-loops are also checked here now)
-		// Insist that no characters follow the '{' in case the user intended it to be a file-pattern loop
-		// such as "Loop {literal-filename".
 		LPTSTR arg1_last_char = arg1 + _tcslen(arg1) - 1;
-		if (*arg1_last_char == '{')
+		if (arg1_last_char >= arg1 // Checked for maintainability.  Probably unnecessary since if true, arg1_last_char would be the null-terminator of the previous arg (never '{').
+			&& *arg1_last_char == '{') // Relies on short-circuit boolean evaluation.
 		{
 			add_openbrace_afterward = true;
 			*arg1_last_char = '\0';  // Since it will be fully handled here, remove the brace from further consideration.
 			if (!rtrim(arg1)) // Trimmed down to nothing, so only a brace was present: remove the arg completely.
 				if (aActionType == ACT_LOOP || aActionType == ACT_CATCH)
-					nArgs = 0;    // This makes later stages recognize it as an infinite loop rather than a zero-iteration loop.
+					--nArgs;
 				else // ACT_WHILE or ACT_FOR
 					return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
 		}
@@ -4794,7 +4742,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	int deref_count;  // How many items are in deref array.
 	ArgStruct *new_arg;  // We will allocate some dynamic memory for this, then hang it onto the new line.
 	LPTSTR this_aArgMap, this_aArg;
-	ActionTypeType *np;
 
 	//////////////////////////////////////////////////////////
 	// Build the new arg list in dynamic memory.
@@ -4807,7 +4754,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		if (   !(new_arg = (ArgStruct *)SimpleHeap::Malloc(aArgc * sizeof(ArgStruct)))   )
 			return ScriptError(ERR_OUTOFMEM);
 
-		int i, j, i_plus_one;
+		int i, j;
 
 		for (i = 0; i < aArgc; ++i)
 		{
@@ -4870,83 +4817,14 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			}
 			else // this_new_arg.type == ARG_TYPE_NORMAL (excluding those input/output_vars that were converted to normal because they were blank, above).
 			{
-				if (aAllArgsAreExpressions)
+				if (  aAllArgsAreExpressions
+					&& !(aActionType == ACT_FUNC && i == 0) // !(function name).
+					&& !(aActionType == ACT_METHOD && i == 1 && !IsNumeric(this_aArg))  ) // !(non-integer method name).  Numeric names are processed as expressions for consistency with x.1() = x.0x1().
 				{
-					// For pseudo-function-calls to control flow statements, such as Loop Parse(string, delim) {}.
+					// Caller has determined all args should be expressions.
 					this_new_arg.is_expression = true;
-				}
-				// v1.0.29: Allow expressions in any parameter that starts with % followed by a space
-				// or tab. This should be unambiguous because spaces and tabs are illegal in variable names.
-				// Since there's little if any benefit to allowing input and output variables to be
-				// dynamically built via expression, for now it is disallowed.  If ever allow it,
-				// need to review other sections to ensure they will tolerate it.  Also, the following
-				// would probably need revision to get it to be detected as an output-variable:
-				// % Array%i% = value
-				else if (*this_aArg == g_DerefChar && !(this_aArgMap && *this_aArgMap) // It's a non-literal deref character.
-					&& IS_SPACE_OR_TAB(this_aArg[1])) // Followed by a space or tab.
-				{
-					this_new_arg.is_expression = true;
-					// Omit the percent sign and the space after it from further consideration.
-					this_aArg += 2;
-					if (this_aArgMap)
-						this_aArgMap += 2;
-				}
-				else if (aActionType == ACT_FUNC && i > 0)
-				{
-					// If this arg looks like a variable name, attempt to resolve it to an existing
-					// variable; but don't create any variables since we don't yet know whether the
-					// target parameter is ByRef.
-					if (Var::ValidateName(this_aArg, DISPLAY_NO_ERROR))
-					{
-						this_new_arg.deref = (DerefType *)FindVar(this_aArg);
-						// If a variable was found, indicate this by setting type.  If no variable was
-						// found and #MustDeclare is in effect at this point in the script, this might
-						// be an error.  But since we don't know if the target parameter is ByRef yet,
-						// just pass this information along by using a combination of NULL deref and
-						// ARG_TYPE_INPUT_VAR.  Otherwise (no variable was found and #MustDeclare is
-						// not in effect) let it be resolved later if appropriate.
-						if (this_new_arg.deref || (g_MustDeclare && !GetBuiltInVar(this_aArg))) // i.e. don't report a false #MustDeclare error if it's a built-in var.
-							this_new_arg.type = ARG_TYPE_INPUT_VAR;
-						// Store the text even if it was converted to an input var, since it might be
-						// converted back at a later stage.  Can't use Var::mName since it might have
-						// different case ("var" vs "Var").
-						if (   !(this_new_arg.text = SimpleHeap::Malloc(this_aArg))   )
-							return FAIL;
-						this_new_arg.length = (ArgLengthType)_tcslen(this_aArg);
-						continue;
-					}
-					// Otherwise, it may be text or a double-deref like Array%i%.  In either case
-					// the derefs will be preparsed correctly below, and a later stage will make
-					// this arg ARG_TYPE_INPUT_VAR if appropriate.
 				}
 			}
-			
-			// Experimental v2 behaviour: Where function syntax could've been used but isn't, require %
-			// for expressions.  This doesn't include control flow statements such as IF, WHILE, FOR, etc.
-			// since we want those to always be expressions (and function syntax can't be used for those).
-			if (!this_new_arg.is_expression) // It hasn't been explicitly % marked as an expression.
-			{
-				// Check for parameters of control flow statements which are marked as expressions,
-				// and parameters of commands which are marked as numeric.  Since numeric parameters aren't
-				// expressions by default anymore, non-numeric values like 'some_variable' are flagged as
-				// errors to ease the transition from v1.
-				i_plus_one = i + 1;
-				for (np = g_act[aActionType].NumericParams; *np; ++np)
-				{
-					if (*np == i_plus_one) // This arg is enforced to be purely numeric.
-					{
-						if (aActionType >= ACT_FIRST_COMMAND) // See above for comments.
-						{
-							if (!IsNumeric(this_aArg, true, true, true) && !_tcschr(this_aArg, g_DerefChar))
-								return ScriptError(_T("This parameter must be a number, %variable% or % expression."), this_aArg);
-							break;
-						}
-						// Otherwise, it is an expression.
-						this_new_arg.is_expression = true;
-						break; // The loop is over if this arg is found in the list of mandatory-numeric args.
-					} // i is a mandatory-numeric arg
-				} // for each mandatory-numeric arg of this command, see if this arg matches its number.
-			} // this command has a list of mandatory numeric-args.
 
 			if (!*this_aArg) // Some later optimizations rely on this check.
 				this_new_arg.is_expression = false; // Might already be false.
@@ -5012,11 +4890,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			//////////////////////////////////////////////////////////////
 			if (deref_count)
 			{
-				// +1 for the "NULL-item" terminator:
-				int extra = 1
-					// and +1 if this arg might need to be converted to a double-deref:
-					+ (aActionType == ACT_FUNC && !this_new_arg.is_expression);
-				if (   !(this_new_arg.deref = (DerefType *)SimpleHeap::Malloc((deref_count + extra) * sizeof(DerefType)))   )
+				if (   !(this_new_arg.deref = (DerefType *)SimpleHeap::Malloc((deref_count + 1) * sizeof(DerefType)))   ) // +1 for the "NULL-item" terminator.
 					return ScriptError(ERR_OUTOFMEM);
 				memcpy(this_new_arg.deref, deref, deref_count * sizeof(DerefType));
 				// Terminate the list of derefs with a deref that has a NULL marker:
@@ -7758,14 +7632,16 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 		// Preparse command-style function calls:
 		case ACT_FUNC:
 		{
-			ArgStruct &first_arg = line->mArg[0]; // Contains the function name.
-			int param_count = line->mArgc - 1; // This is not the final parameter count since it includes the output var (if present).
+			// Get the function name from the first arg and eliminate it from further consideration:
+			ArgStruct &first_arg = line->mArg[0];
+			--line->mArgc;
+			++line->mArg;
+			int param_count = line->mArgc; // This is not the final parameter count since it includes the output var (if present).
 			bool has_output_var = true; // Set default.
 			// Now that function declarations have been processed, resolve this line's function.
 			Func *func = NULL;
-			// Dynamic calling is currently disabled because it changes the way the parameters
-			// are interpreted, which seems tacky.  Expressions offer equivalent functionality
-			// without that problem.
+			// Dynamic calling wouldn't be this simple, since a line beginning with a double-deref
+			// would be ACT_EXPRESSION, never ACT_FUNC:
 			//if (!first_arg.deref)
 			{
 				func = FindFunc(first_arg.text);
@@ -7800,106 +7676,41 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 			}
 			for (i = 0; i < param_count; ++i)
 			{
-				ArgStruct &arg = line->mArg[i+1];
+				ArgStruct &arg = line->mArg[i];
 				int param_index = i - has_output_var; // For maintainability.
 				
 				// Determine what type of arg this should be.
-				int arg_type;
 				if (param_index < 0)
 				{
 					// Output var used for the return value, not one of the function's parameters.
 					// This arg is optional; if omitted, it must be ARG_TYPE_NORMAL since it won't
 					// resolve to a variable.
-					arg_type = *arg.text ? ARG_TYPE_OUTPUT_VAR : ARG_TYPE_NORMAL;
+					if (*arg.text)
+					{
+						// Convert to ARG_TYPE_OUTPUT_VAR:
+						//  1) So a load-time error is raised if the var is read-only.
+						//  2) So #Warn UseUnset isn't triggered by this parameter.
+						// Changing type is sufficient: since it was pre-processed as an expression,
+						// ExpressionToPostfix() will convert it to a normal output var if possible.
+						arg.type = ARG_TYPE_OUTPUT_VAR;
+					}
 				}
 				else
 				{
-					// For consistency with normal commands, mandatory parameters must not be blank.
+					// Mandatory parameters must not be blank.
 					if (!*arg.text && func && param_index < func->mMinParams)
 					{
 						TCHAR buf[50];
 						sntprintf(buf, _countof(buf), _T("Parameter #%i required"), i + 1);
 						return line->LineError(buf);
 					}
-					// Any non-empty ByRef parameter should be treated as an input var (unless it
-					// was explicitly flagged as an expression; that is handled later).
-					if (*arg.text && func && func->ArgIsOutputVar(param_index))
-						arg_type = func->mIsBuiltIn ? ARG_TYPE_OUTPUT_VAR : ARG_TYPE_INPUT_VAR; // For ByRef parameters, an input value is allowed.
-					else
-						arg_type = ARG_TYPE_NORMAL;
-				}
-
-				// Convert the arg to the appropriate type.
-				if (arg_type != ARG_TYPE_NORMAL)
-				{
-					// This arg needs to be an input or output var.
-					Var *lone_var = NULL;
-					if (arg.type == ARG_TYPE_INPUT_VAR)
-					{
-						// At this stage, this arg type is only possible if the arg was a plain
-						// variable name.  It was already resolved to a variable reference, unless
-						// #MustDeclare was in effect and the variable hadn't yet been declared.
-						if (  !(lone_var = (Var *)arg.deref)  )
-							return line->LineError(ERR_MUST_DECLARE, FAIL, arg.text);
-					}
-					else if (!arg.deref)
-					{
-						// This case happens if the var doesn't exist prior to the command being
-						// parsed (but only if #MustDeclare is off), or if the var name is invalid.
-						if (  !(lone_var = FindOrAddVar(arg.text))  )
-							return FAIL; // It already displayed the error.
-					}
-					else if (!arg.is_expression)
-					{
-						// This arg was parsed as text, but needs to be an expression/dynamic var.
-						// AddLine() saved some space for us to insert this double-deref marker:
-						DerefType *last_deref;
-						for (last_deref = arg.deref; last_deref->marker; ++last_deref);
-						last_deref->type = DT_DOUBLE;
-						last_deref->marker = arg.text + arg.length;
-						last_deref->length = 0;
-						last_deref[1].marker = NULL; // NULL-terminate.
-						// Although we're going to mark this as an expression, because ParseDerefs()
-						// has pre-processed the arg, something like `%v%+1` will correctly treat
-						// `+1` as text and display an error message.
-						arg.is_expression = true;
-					}
-					else
-					{
-						// This arg was explicitly marked as an expression and pre-processed as such.
-						// However, since it's possible that the expression won't produce a variable,
-						// change ARG_TYPE_INPUT_VAR to ARG_TYPE_NORMAL.
-						if (arg_type == ARG_TYPE_INPUT_VAR)
-							arg_type = ARG_TYPE_NORMAL;
-						//else ExpandArgs() will ensure it produces a writable variable.
-					}
-					if (lone_var)
-					{
-						if (arg_type == ARG_TYPE_OUTPUT_VAR && VAR_IS_READONLY(*lone_var))
-							return line->LineError(ERR_VAR_IS_READONLY, FAIL, arg.text);
-						// Convert this arg to a "pre-resolved" var:
-						arg.deref = (DerefType *)lone_var;
-						arg.text = _T("");
-						arg.length = 0;
-					}
-					arg.type = (ArgTypeType)arg_type;
-				}
-				else if (arg.type == ARG_TYPE_INPUT_VAR)
-				{
-					// Revert this arg to plain text.
-					arg.type = ARG_TYPE_NORMAL;
-					arg.deref = NULL;
+					if (func && func->mIsBuiltIn && *arg.text && func->ArgIsOutputVar(param_index))
+						arg.type = ARG_TYPE_OUTPUT_VAR; // See comments above.
 				}
 			}
 			line->mAttribute = func;
 			break;
 		}
-		case ACT_METHOD:
-			// For consistency with x.1(), treat literal integers as pure integers, although it
-			// might never be used in practice:
-			if (IsNumeric(line->mArg[1].text))
-				line->mArg[1].is_expression = true;
-			break;
 		} // switch (line->mActionType)
 
 		// Check if any of each arg's derefs are function calls.  If so, do some validation and
@@ -7907,15 +7718,14 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 		for (i = 0; i < line->mArgc; ++i) // For each arg.
 		{
 			ArgStruct &this_arg = line->mArg[i]; // For performance and convenience.
-			if (!*this_arg.text) // Blank, or a pre-resolved input/output var.
-				continue;
-			if (!this_arg.is_expression && !this_arg.deref) // Plain text.
+			if (!this_arg.is_expression) // Plain text or a pre-resolved output var.
 			{
-				if (ACT_USES_SIMPLE_POSTFIX(line->mActionType))
+				if (!this_arg.deref // Plain text.
+					&& ACT_USES_SIMPLE_POSTFIX(line->mActionType))
 				{
 					// This ensures ExpandArgs() always sets aResultTokens[i].marker.
 					this_arg.postfix = (ExprTokenType *)SimpleHeap::Malloc(sizeof(ExprTokenType));
-					this_arg.postfix->symbol = SYM_STRING;
+					this_arg.postfix->symbol = this_arg.length ? SYM_STRING : SYM_MISSING; // length == 0 indicates a completely omitted parameter, not "".
 					this_arg.postfix->marker = this_arg.text;
 					this_arg.postfix->marker_length = this_arg.length;
 				}
@@ -9885,10 +9695,19 @@ end_of_infix_to_postfix:
 		{
 			if (!SYM_DYNAMIC_IS_DOUBLE_DEREF(only_token)) // Checked for maintainability. Should always be the case since double-deref always has multiple tokens.
 			{
-				if ( !(only_token.var->mType == VAR_VIRTUAL
+				if (aArg.type == ARG_TYPE_OUTPUT_VAR)
+				{
+					// Var must be writable, but can be A_Index or A_EventInfo in this case.
+					if (VAR_IS_READONLY(*only_token.var))
+						return LineError(ERR_VAR_IS_READONLY, FAIL, aArg.text);
+				}
+				else if ( !(only_token.var->mType == VAR_VIRTUAL
 					&& (only_token.var->mVV->Get == BIV_LoopIndex || only_token.var->mVV->Get == BIV_EventInfo)) )
 				{
 					aArg.type = ARG_TYPE_INPUT_VAR;
+				}
+				if (aArg.type != ARG_TYPE_NORMAL)
+				{
 					aArg.deref = (DerefType *)only_token.var;
 					aArg.text = _T(""); // Mark it as a pre-resolved var.
 					aArg.length = 0;
@@ -12877,14 +12696,14 @@ ResultType Line::Perform()
 
 		Func *func = (Func *)mAttribute; // NULL for ACT_METHOD.
 		
-		int arg = (mActionType == ACT_FUNC); // i.e. include ACT_METHOD's target object but not ACT_FUNC's function name.
-		int param_count = mArgc - arg;
+		int arg = 0;
+		int param_count = mArgc;
 		if (param_count && func && func->mHasReturn)
 		{
-			// Above: mArg[1].type isn't checked because the output var is optional and
+			// Above: mArg[0].type isn't checked because the output var is optional and
 			// might have been omitted, in which case type would be ARG_TYPE_NORMAL.
-			// Below: sArgVar[1] contains the output variable, or NULL if it was omitted.
-			output_var = sArgVar[1];
+			// Below: sArgVar[0] contains the output variable, or NULL if it was omitted.
+			output_var = sArgVar[0];
 			// Exclude it from the list of parameters actually passed to the function:
 			--param_count;
 			++arg;
@@ -13459,7 +13278,9 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 	{
 		int i = 0;
 		if (mActionType == ACT_FUNC)
-			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), mArg[i++].text);
+			// Before PreparseExpressions(), mAttribute is NULL and mArg contains the function name.
+			// After PreparseExpressions(), mAttribute points to the Func and mArg excludes the function name.
+			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), mAttribute ? ((Func *)mAttribute)->mName : mArg[i++].text);
 		else if (mActionType == ACT_METHOD)
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s.%s"), *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName, mArg[1].text), i = 2;
 		else

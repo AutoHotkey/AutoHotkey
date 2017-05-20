@@ -270,10 +270,10 @@ Action g_act[] =
 	, {_T("If"), 1, 1, false, {1, 0}}
 	, {_T("Else"), 0, 0, false, NULL} // No args; it has special handling to support same-line ELSE-actions (e.g. "else if").
 	, {_T("Loop"), 0, 1, false, {1, 0}} // IterationCount
-	, {_T("LoopFiles"), 1, 2, false, NULL} // FilePattern [, Mode] -- LoopFiles vs LoopFile for clarity.
-	, {_T("LoopReg"), 1, 2, false, NULL} // Key [, Mode]
-	, {_T("LoopRead"), 1, 2, false, NULL} // InputFile [, OutputFile]
-	, {_T("LoopParse"), 1, 3, false, NULL} // InputVar [, Delimiters, OmitChars]
+	, {_T("LoopFiles"), 1, 2, false, {1, 2, 0}} // FilePattern [, Mode] -- LoopFiles vs LoopFile for clarity.
+	, {_T("LoopReg"), 1, 2, false, {1, 2, 0}} // Key [, Mode]
+	, {_T("LoopRead"), 1, 2, false, {1, 2, 0}} // InputFile [, OutputFile]
+	, {_T("LoopParse"), 1, 3, false, {1, 2, 3, 0}} // InputString [, Delimiters, OmitChars]
 	, {_T("For"), 1, 3, false, {3, 0}}  // For var [,var] in expression
 	, {_T("While"), 1, 1, false, {1, 0}} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
 	, {_T("Until"), 1, 1, false, {1, 0}} // Until expression (follows a Loop)
