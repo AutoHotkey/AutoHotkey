@@ -513,10 +513,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 					//else return empty string.
 					_o_return_empty;
 				}
-				else if (!_tcsicmp(key.s, _T("Length")) && IS_INVOKE_GET)
-				{
-					return _Length(aResultToken);
-				}
 			}
 		} // if (!IS_INVOKE_META && key_type == SYM_STRING)
 	} // if (!field)
