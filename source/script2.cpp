@@ -295,7 +295,7 @@ BIF_DECL(BIF_Input)
 	{
 		// This means that the user is specifically canceling the prior input (if any).
 		bool prior_input_is_being_terminated = (g_input.status == INPUT_IN_PROGRESS);
-		g_input.status = INPUT_OFF;
+		g_input.status = INPUT_TERMINATED_BY_INPUTEND;
 		_f_return_i(prior_input_is_being_terminated);
 	}
 
@@ -676,6 +676,9 @@ BIF_DECL(BIF_Input)
 	}
 	case INPUT_LIMIT_REACHED:
 		g_ErrorLevel->Assign(_T("Max"));
+		break;
+	case INPUT_TERMINATED_BY_INPUTEND:
+		g_ErrorLevel->Assign(_T("End"));
 		break;
 	default: // Our input was terminated due to a new input in a quasi-thread that interrupted ours.
 		g_ErrorLevel->Assign(_T("NewInput"));
