@@ -621,7 +621,6 @@ private:
 
 	ResultType MouseGetPos(DWORD aOptions);
 	ResultType FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat);
-	ResultType StringReplace();
 	ResultType SplitPath(LPTSTR aFileSpec);
 	ResultType PerformSort(LPTSTR aContents, LPTSTR aOptions);
 	ResultType SoundSetGet(LPTSTR aSetting, LPTSTR aComponentType, LPTSTR aControlType, LPTSTR aDevice);
@@ -957,7 +956,6 @@ public:
 			case ACT_DEREF:
 			case ACT_STRINGLOWER:
 			case ACT_STRINGUPPER:
-			case ACT_STRINGREPLACE:
 			case ACT_CONTROLGETFOCUS:
 			case ACT_CONTROLGETTEXT:
 			case ACT_STATUSBARGETTEXT:
@@ -1034,9 +1032,6 @@ public:
 			break;
 
 		case 4:  // Arg #5
-			if (aActionType == ACT_STRINGREPLACE)
-				return ARG_TYPE_OUTPUT_VAR;
-			// Otherwise, fall through to below:
 		case 5:  // Arg #6
 			if (aActionType == ACT_SPLITPATH || aActionType == ACT_FILEGETSHORTCUT)
 				return ARG_TYPE_OUTPUT_VAR;
@@ -3028,6 +3023,7 @@ BIF_DECL(BIF_StrLen);
 BIF_DECL(BIF_SubStr);
 BIF_DECL(BIF_InStr);
 BIF_DECL(BIF_StrSplit);
+BIF_DECL(BIF_StrReplace);
 BIF_DECL(BIF_RegEx);
 BIF_DECL(BIF_Ord);
 BIF_DECL(BIF_Chr);

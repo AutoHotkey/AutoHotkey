@@ -5648,62 +5648,39 @@ ResultType Line::FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat)
 
 
 
-ResultType Line::StringReplace()
-// v1.0.45: Revised to improve average-case performance and reduce memory utilization.
+BIF_DECL(BIF_StrReplace)
 {
-	Var &output_var = *OUTPUT_VAR;
-	Var *output_var_count = ARGVAR5; // Ok if NULL.
-	LPTSTR source = ARG2;
-	size_t length = ArgLength(2); // Going in, it's the haystack length. Later (coming out), it's the result length.
-
-	UINT replacement_limit = *ARG6 ? ArgToUInt(6) : UINT_MAX;
+	size_t length; // Going in to StrReplace(), it's the haystack length. Later (coming out), it's the result length. 
+	_f_param_string(source, 0, &length);
+	_f_param_string(oldstr, 1);
+	_f_param_string_opt(newstr, 2);
+	Var *output_var_count = ParamIndexToOptionalVar(3); 
+	UINT replacement_limit = (UINT)ParamIndexToOptionalInt64(4, UINT_MAX); 
 	
-	// In case the strings involved are massive, free the output_var in advance of the operation to
-	// reduce memory load and avoid swapping (but only if output_var isn't the same address as the input_var).
-	if (output_var.Type() == VAR_NORMAL && source != output_var.Contents(FALSE)) // It's compared this way in case ByRef/aliases are involved.  This will detect even them.
-		output_var.Free();
-	//else source and dest are the same, so can't free the dest until after the operation.
-
 	// Note: The current implementation of StrReplace() should be able to handle any conceivable inputs
 	// without an empty string causing an infinite loop and without going infinite due to finding the
 	// search string inside of newly-inserted replace strings (e.g. replacing all occurrences
-	// of b with bcb would not keep finding b in the newly inserted bcd, infinitely).
+	// of b with bcd would not keep finding b in the newly inserted bcd, infinitely).
 	LPTSTR dest;
-	UINT found_count = StrReplace(source, ARG3, ARG4, (StringCaseSenseType)g->StringCaseSense
-		, replacement_limit, -1, &dest, &length); // Length of haystack is passed to improve performance because ArgLength() can often discover it instantaneously.
+	UINT found_count = StrReplace(source, oldstr, newstr, (StringCaseSenseType)g->StringCaseSense
+		, replacement_limit, -1, &dest, &length); // Length of haystack is passed to improve performance because TokenToString() can often discover it instantaneously.
 
 	if (!dest) // Failure due to out of memory.
-		return LineError(ERR_OUTOFMEM);
+		_f_throw(ERR_OUTOFMEM); 
 
 	if (dest != source) // StrReplace() allocated new memory rather than returning "source" to us unaltered.
 	{
-		// v1.0.45: Take a shortcut for performance: Hang the newly allocated memory (populated by the callee)
-		// directly onto the variable, which saves a memcpy() over the old method (and possible other savings).
-		// AcceptNewMem() will shrink the memory for us, via _expand(), if there's a lot of extra/unused space in it.
-		output_var.AcceptNewMem(dest, (VarSizeType)length); // Tells the variable to adopt this memory as its new memory. Callee has set "length" for us.
-		// Above also handles the case where output_var is VAR_CLIPBOARD.
+		// Return the newly allocated memory directly to our caller. 
+		aResultToken.AcceptMem(dest, length);
 	}
 	else // StrReplace gave us back "source" unaltered because no replacements were needed.
 	{
-		if (output_var.Type() == VAR_NORMAL)
-		{
-			// Technically the following check isn't necessary because Assign() also checks for it.
-			// But since StringReplace is a frequently-used command, checking it here seems worthwhile
-			// to avoid calling Assign().
-			if (source != output_var.Contents(FALSE)) // It's compared this way in case ByRef/aliases are involved.  This will detect even them.
-				output_var.Assign(source, (VarSizeType)length); // Callee has set "length" for us.
-			//else the unaltered result and output_var same the same address.  Nothing needs to be done (for
-			// simplicity, not even the binary-clipboard attribute is removed if it happens to be present).
-		}
-		else // output_var is of type VAR_CLIPBOARD.
-			if (ARGVARRAW2->Type() != VAR_CLIPBOARD) // Arg index #1 (the second arg) is a normal var or some read-only var.
-				output_var.Assign(source, (VarSizeType)length); // Callee has set "length" for us.
-			//else the unaltered result and output_var are both the clipboard.  Nothing needs to be done.
+		_f_set_retval_p(dest, length); 
 	}
 
 	if (output_var_count)
 		output_var_count->Assign((DWORD)found_count);
-	return OK;
+	_f_return_retval;
 }
 
 

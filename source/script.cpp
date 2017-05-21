@@ -57,6 +57,7 @@ FuncEntry g_BIF[] =
 	BIFn(RTrim, 1, 2, true, BIF_Trim),
 	BIF1(InStr, 2, 5, true),
 	BIF1(StrSplit, 1, 3, true),
+	BIF1(StrReplace, 2, 5, true, {4}),
 	BIFn(RegExMatch, 2, 4, true, BIF_RegEx, {3}),
 	BIFn(RegExReplace, 2, 6, true, BIF_RegEx, {4}),
 	BIF1(Format, 1, NA, true),
@@ -11825,9 +11826,6 @@ ResultType Line::Perform()
 		else
 			CharUpper(contents);
 		return output_var->Close();  // In case it's the clipboard.
-
-	case ACT_STRINGREPLACE:
-		return StringReplace();
 
 	case ACT_DEREF:
 		return Deref(OUTPUT_VAR, ARG2);
