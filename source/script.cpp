@@ -1485,7 +1485,8 @@ bool IsFlowFunction(LPTSTR aBuf, size_t aBufLen = -1)
 		// Allowed because they accept an expression by default:
 		_T("If"), _T("While"), _T("Until"), _T("Return"),
 		// Allowed because () is supported to force all parameters to be expressions:
-		_T("Loop"), _T("LoopFiles"), _T("LoopReg"), _T("LoopRead"), _T("LoopParse")
+		_T("Loop"), _T("LoopFiles"), _T("LoopReg"), _T("LoopRead"), _T("LoopParse"),
+		_T("Gosub"), _T("Goto")
 	};
 	if (aBufLen == -1)
 		aBufLen = _tcslen(aBuf);
@@ -4439,6 +4440,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	case ACT_LOOP_REG:
 	case ACT_LOOP_READ:
 	case ACT_LOOP_PARSE:
+	case ACT_GOTO:
+	case ACT_GOSUB:
 		if (end_marker && *end_marker == '(')
 		{
 			LPTSTR last_char = end_marker + _tcslen(end_marker) - 1;
