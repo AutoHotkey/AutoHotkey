@@ -204,6 +204,9 @@ FuncEntry g_BIF[] =
 	BIFn(DriveGetCapacity, 1, 1, true, BIF_DriveGet),
 	BIFn(DriveGetSpaceFree, 1, 1, true, BIF_DriveGet),
 
+	BIF1(WinGetClass, 0, 4, true),
+	BIF1(WinGetText, 0, 4, true),
+	BIF1(WinGetTitle, 0, 4, true),
 	BIFn(WinGetID, 0, 4, true, BIF_WinGet),
 	BIFn(WinGetIDLast, 0, 4, true, BIF_WinGet),
 	BIFn(WinGetPID, 0, 4, true, BIF_WinGet),
@@ -11981,12 +11984,6 @@ ResultType Line::Perform()
 		return ScriptPostSendMessage(mActionType == ACT_SENDMESSAGE);
 	case ACT_WINSETTITLE:
 		return WinSetTitle(FIVE_ARGS);
-	case ACT_WINGETTITLE:
-		return WinGetTitle(ARG2, ARG3, ARG4, ARG5);
-	case ACT_WINGETCLASS:
-		return WinGetClass(ARG2, ARG3, ARG4, ARG5);
-	case ACT_WINGETTEXT:
-		return WinGetText(ARG2, ARG3, ARG4, ARG5);
 	case ACT_WINGETPOS:
 		return WinGetPos(ARG5, ARG6, ARG7, ARG8);
 

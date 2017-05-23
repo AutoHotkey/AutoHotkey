@@ -2507,52 +2507,40 @@ ResultType Line::WinSetTitle(LPTSTR aNewTitle, LPTSTR aTitle, LPTSTR aText, LPTS
 
 
 
-ResultType Line::WinGetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_WinGetTitle)
 {
-	Var &output_var = *OUTPUT_VAR; // Must be resolved only once and prior to DetermineTargetWindow().  See Line::WinGetClass() for explanation.
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
-	// Even if target_window is NULL, we want to continue on so that the output
-	// param is set to be the empty string, which is the proper thing to do
-	// rather than leaving whatever was in there before.
+	HWND target_window = DetermineTargetWindow(aParam, aParamCount);
 
-	// Handle the output parameter.  See the comments in ACT_CONTROLGETTEXT for details.
 	int space_needed = target_window ? GetWindowTextLength(target_window) + 1 : 1; // 1 for terminator.
-	if (output_var.AssignString(NULL, space_needed - 1) != OK)
-		return FAIL;  // It already displayed the error.
+	if (!TokenSetResult(aResultToken, NULL, space_needed - 1))
+		return;  // It already displayed the error.
+	aResultToken.symbol = SYM_STRING;
 	if (target_window)
 	{
 		// Update length using the actual length, rather than the estimate provided by GetWindowTextLength():
-		output_var.SetCharLength((VarSizeType)GetWindowText(target_window, output_var.Contents(), space_needed));
-		if (!output_var.Length())
+		aResultToken.marker_length = GetWindowText(target_window, aResultToken.marker, space_needed);
+		if (!aResultToken.marker_length)
 			// There was no text to get or GetWindowTextTimeout() failed.
-			*output_var.Contents() = '\0';  // Safe because Assign() gave us a non-constant memory area.
+			*aResultToken.marker = '\0';
 	}
 	else
 	{
-		*output_var.Contents() = '\0';
-		output_var.SetCharLength(0);
+		*aResultToken.marker = '\0';
+		aResultToken.marker_length = 0;
 	}
-	return output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 }
 
 
 
-ResultType Line::WinGetClass(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_WinGetClass)
 {
-	Var &output_var = *OUTPUT_VAR; // Fix for v1.0.48: Must be resolved only once and prior to DetermineTargetWindow() due to the following from Lexikos:
-	// WinGetClass causes an access violation if one of the script's windows is sub-classed by the script [unless the above is done].
-	// This occurs because WM_GETTEXT is sent to the GUI, triggering the window procedure. The script callback
-	// then executes and invalidates sArgVar[0], which WinGetClass attempts to dereference. 
-	// (Thanks to TodWulff for bringing this issue to my attention.) 
-	// Solution: WinGetTitle resolves the OUTPUT_VAR (*sArgVar) macro once, before searching for the window.
-	// I suggest the same be done for WinGetClass.
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	HWND target_window = DetermineTargetWindow(aParam, aParamCount);
 	if (!target_window)
-		return output_var.Assign();
+		_f_return_empty;
 	TCHAR class_name[WINDOW_CLASS_SIZE];
 	if (!GetClassName(target_window, class_name, _countof(class_name)))
-		return output_var.Assign();
-	return output_var.Assign(class_name);
+		_f_return_empty;
+	_f_return(class_name);
 }
 
 
@@ -2768,18 +2756,13 @@ BOOL CALLBACK EnumChildGetControlList(HWND aWnd, LPARAM lParam)
 
 
 
-ResultType Line::WinGetText(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_WinGetText)
 {
-	Var &output_var = *OUTPUT_VAR;
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
-	// Even if target_window is NULL, we want to continue on so that the output
-	// variables are set to be the empty string, which is the proper thing to do
-	// rather than leaving whatever was in there before:
+	HWND target_window = DetermineTargetWindow(aParam, aParamCount);
 	if (!target_window)
 	{
-		if (output_var.Assign() != OK) // Tell it not to free the memory by omitting all params.
-			return FAIL;
-		return SetErrorLevelOrThrow();
+		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		_f_return_empty;
 	}
 
 	length_and_buf_type sab;
@@ -2791,38 +2774,37 @@ ResultType Line::WinGetText(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, L
 	if (!sab.total_length) // No text in window.
 	{
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-		return output_var.Assign(); // Tell it not to free the memory by omitting all params.
+		_f_return_empty;
 	}
 
 	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
-	if (output_var.AssignString(NULL, (VarSizeType)sab.total_length) != OK)
-		return FAIL;  // It already displayed the error.
+	if (!TokenSetResult(aResultToken, NULL, sab.total_length))
+		return;  // It already displayed the error.
+	aResultToken.symbol = SYM_STRING;
 
 	// Fetch the text directly into the var.  Also set the length explicitly
 	// in case actual size written was different than the estimated size (since
 	// GetWindowTextLength() can return more space that will actually be required
 	// in certain circumstances, see MSDN):
-	sab.buf = output_var.Contents();
-	sab.total_length = 0; // Init
+	sab.buf = aResultToken.marker;
 	// Note: The capacity member below exists because granted capacity might be a little larger than we asked for,
 	// which allows the actual text fetched to be larger than the length estimate retrieved by the first pass
 	// (which generally shouldn't happen since MSDN docs say that the actual length can be less, but never greater,
 	// than the estimate length):
-	sab.capacity = output_var.Capacity(); // Capacity includes the zero terminator, i.e. it's the size of the memory area.
+	sab.capacity = sab.total_length + 1; // Capacity includes the zero terminator, i.e. it's the size of the memory area.
+	sab.total_length = 0; // Reinitialize.
 	EnumChildWindows(target_window, EnumChildGetText, (LPARAM)&sab); // Get the text.
 
 	// Length is set explicitly below in case it wound up being smaller than expected/estimated.
 	// MSDN says that can happen generally, and also specifically because: "ANSI applications may have
 	// the string in the buffer reduced in size (to a minimum of half that of the wParam value) due to
 	// conversion from ANSI to Unicode."
-	output_var.SetCharLength((VarSizeType)sab.total_length);
+	aResultToken.marker_length = sab.total_length;
 	if (!sab.total_length)
 		// Something went wrong, so make sure we set to empty string.
-		*sab.buf = '\0';  // Safe because Assign() gave us a non-constant memory area.
-	if (output_var.Close() != OK) // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-		return FAIL;
-	return SetErrorLevelOrThrowBool(!sab.total_length);
+		*sab.buf = '\0';
+	g_ErrorLevel->Assign(!sab.total_length);
 }
 
 

@@ -700,9 +700,6 @@ private:
 	ResultType ScriptPostSendMessage(bool aUseSend);
 	ResultType WinSetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aNewTitle
 		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
-	ResultType WinGetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType WinGetClass(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType WinGetText(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType WinGetPos(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB, int aVariation
 		, LPTSTR aOptions, bool aIsPixelGetColor);
@@ -963,9 +960,6 @@ public:
 			case ACT_FILESELECT:
 			case ACT_DIRSELECT:
 			case ACT_MOUSEGETPOS:
-			case ACT_WINGETTITLE:
-			case ACT_WINGETCLASS:
-			case ACT_WINGETTEXT:
 			case ACT_WINGETPOS:
 			case ACT_SYSGET:
 			case ACT_CONTROLGETPOS:
@@ -3132,6 +3126,9 @@ BIF_DECL(BIF_ControlGetFocus);
 BIF_DECL(BIF_ControlGetText);
 BIF_DECL(BIF_Drive);
 BIF_DECL(BIF_DriveGet);
+BIF_DECL(BIF_WinGetClass);
+BIF_DECL(BIF_WinGetText);
+BIF_DECL(BIF_WinGetTitle);
 BIF_DECL(BIF_WinGet);
 BIF_DECL(BIF_WinSet);
 BIF_DECL(BIF_WinRedraw);

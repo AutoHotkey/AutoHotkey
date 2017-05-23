@@ -358,10 +358,7 @@ Action g_act[] =
 	, {_T("MenuSelect"), 0, 11, false, NULL} // WinTitle, WinText, Menu name, 6 optional sub-menu names, ExcludeTitle/Text
 
 	, {_T("WinSetTitle"), 1, 5, false, NULL} // newtitle, title, text, exclude-title, exclude-text
-	, {_T("WinGetTitle"), 1, 5, true, NULL} // Output-var, std. 4 window params
-	, {_T("WinGetClass"), 1, 5, true, NULL} // Output-var, std. 4 window params
 	, {_T("WinGetPos"), 0, 8, true, NULL} // Four optional output vars: xpos, ypos, width, height.  Std. 4 window params.
-	, {_T("WinGetText"), 1, 5, true, NULL} // Output var, std 4 window params.
 
 	, {_T("SysGet"), 2, 2, true, NULL} // Output-var, sys-metrics-number
 
