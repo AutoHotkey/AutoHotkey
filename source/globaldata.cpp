@@ -315,9 +315,7 @@ Action g_act[] =
 	, {_T("ControlMove"), 0, 9, false, {1, 2, 3, 4, 0}} // x, y, w, h, Control, WinTitle, WinText, ExcludeTitle, ExcludeText
 	, {_T("ControlGetPos"), 0, 9, true, NULL} // Four optional output vars: xpos, ypos, width, height, control, std. 4 window params.
 	, {_T("ControlFocus"), 0, 5, false, NULL}     // Control, std. 4 window params
-	, {_T("ControlGetFocus"), 1, 5, true, NULL}  // OutputVar, std. 4 window params
 	, {_T("ControlSetText"), 1, 6, false, NULL}   // new text, Control, std. 4 window params
-	, {_T("ControlGetText"), 1, 6, true, NULL}   // Output-var, Control, std. 4 window params
 	, {_T("Control"), 1, 7, false, NULL}   // Command, Value, Control, std. 4 window params
 
 	, {_T("SendMode"), 1, 1, false, NULL}

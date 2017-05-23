@@ -1388,11 +1388,9 @@ ResultType Line::ControlGetPos(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText, LPT
 
 
 
-ResultType Line::ControlGetFocus(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_ControlGetFocus)
 {
-	Var &output_var = *OUTPUT_VAR; // Must be resolved only once and prior to DetermineTargetWindow().  See Line::WinGetClass() for explanation.
-	output_var.Assign();  // Set default: blank for the output variable.
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	HWND target_window = DetermineTargetWindow(aParam, aParamCount);
 	if (!target_window)
 		goto error;
 
@@ -1416,10 +1414,11 @@ ResultType Line::ControlGetFocus(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTit
 	// Append the class sequence number onto the class name set the output param to be that value:
 	sntprintfcat(class_name, _countof(class_name), _T("%d"), cah.class_count);
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-	return output_var.Assign(class_name);
+	_f_return(class_name);
 
 error:
-	return SetErrorLevelOrThrow();
+	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	_f_return_empty;
 }
 
 
@@ -1503,12 +1502,16 @@ error:
 
 
 
-ResultType Line::ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
-	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_ControlGetText)
 {
-	Var &output_var = *OUTPUT_VAR;
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
-	HWND control_window = target_window ? ControlExist(target_window, aControl) : NULL; // This can return target_window itself for cases such as ahk_id %ControlHWND%.
+	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1); // It can handle a negative param count.
+	if (!target_window)
+		goto error;
+	_f_param_string_opt(aControl, 0);
+	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
+	if (!control_window)
+		goto error;
+
 	// Even if control_window is NULL, we want to continue on so that the output
 	// param is set to be the empty string, which is the proper thing to do
 	// rather than leaving whatever was in there before.
@@ -1519,31 +1522,30 @@ ResultType Line::ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 
 	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
-	if (output_var.AssignString(NULL, space_needed - 1) != OK)
-		return FAIL;  // It already displayed the error.
-	// Fetch the text directly into the var.  Also set the length explicitly
+	if (!TokenSetResult(aResultToken, NULL, space_needed - 1))
+		_f_return_FAIL;  // It already displayed the error.
+	aResultToken.symbol = SYM_STRING;
+	// Fetch the text directly into the buffer.  Also set the length explicitly
 	// in case actual size written was off from the estimated size (since
 	// GetWindowTextLength() can return more space that will actually be required
 	// in certain circumstances, see MS docs):
 	if (control_window)
 	{
-		if (   !(output_var.SetCharLength((VarSizeType)GetWindowTextTimeout(control_window
-			, output_var.Contents(), space_needed)))   ) // There was no text to get or GetWindowTextTimeout() failed.
-			*output_var.Contents() = '\0';  // Safe because Assign() gave us a non-constant memory area.
+		aResultToken.marker_length = GetWindowTextTimeout(control_window, aResultToken.marker, space_needed);
+		if (!aResultToken.marker_length) // There was no text to get or GetWindowTextTimeout() failed.
+			*aResultToken.marker = '\0';
 	}
 	else
 	{
-		*output_var.Contents() = '\0';
-		output_var.SetCharLength(0);
-		// And leave bSucceeded set to false to distinguish a non-existent control
-		// from a one that does exist but returns no text.
+		*aResultToken.marker = '\0';
+		aResultToken.marker_length = 0;
 	}
-	// Consider the above to be always successful, even if the window wasn't found, except
-	// when below returns an error:
-	ResultType result = output_var.Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-	if (result != OK)
-		return result;
-	return SetErrorLevelOrThrowBool(!control_window);
+	g_ErrorLevel->Assign(!control_window);
+	return;
+
+error:
+	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	_f_return_empty;
 }
 
 

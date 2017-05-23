@@ -170,6 +170,8 @@ FuncEntry g_BIF[] =
 	BIFn(ControlGetStyle, 0, 5, true, BIF_ControlGet),
 	BIFn(ControlGetExStyle, 0, 5, true, BIF_ControlGet),
 	BIFn(ControlGetHwnd, 0, 5, true, BIF_ControlGet),
+	BIF1(ControlGetFocus, 0, 4, true),
+	BIF1(ControlGetText, 0, 5, true),
 
 	BIFn(ControlSetChecked, 1, 6, false, BIF_Control),
 	BIFn(ControlSetEnabled, 1, 6, false, BIF_Control),
@@ -11966,14 +11968,10 @@ ResultType Line::Perform()
 		return ControlMove(NINE_ARGS);
 	case ACT_CONTROLGETPOS:
 		return ControlGetPos(ARG5, ARG6, ARG7, ARG8, ARG9);
-	case ACT_CONTROLGETFOCUS:
-		return ControlGetFocus(ARG2, ARG3, ARG4, ARG5);
 	case ACT_CONTROLFOCUS:
 		return ControlFocus(FIVE_ARGS);
 	case ACT_CONTROLSETTEXT:
 		return ControlSetText(SIX_ARGS);
-	case ACT_CONTROLGETTEXT:
-		return ControlGetText(ARG2, ARG3, ARG4, ARG5, ARG6);
 	case ACT_STATUSBARGETTEXT:
 		return StatusBarGetText(ARG2, ARG3, ARG4, ARG5, ARG6);
 	case ACT_STATUSBARWAIT:

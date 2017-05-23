@@ -689,12 +689,9 @@ private:
 	ResultType ControlMove(LPTSTR aControl, LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
 		, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlGetPos(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType ControlGetFocus(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlFocus(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlSetText(LPTSTR aControl, LPTSTR aNewText, LPTSTR aTitle, LPTSTR aText
-		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType ControlGetText(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType StatusBarGetText(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
@@ -953,8 +950,6 @@ public:
 			{
 			case ACT_ASSIGNEXPR:
 			case ACT_DEREF:
-			case ACT_CONTROLGETFOCUS:
-			case ACT_CONTROLGETTEXT:
 			case ACT_STATUSBARGETTEXT:
 			case ACT_RANDOM:
 			case ACT_INIREAD:
@@ -3133,6 +3128,8 @@ BIF_DECL(BIF_Exception);
 
 BIF_DECL(BIF_Control);
 BIF_DECL(BIF_ControlGet);
+BIF_DECL(BIF_ControlGetFocus);
+BIF_DECL(BIF_ControlGetText);
 BIF_DECL(BIF_Drive);
 BIF_DECL(BIF_DriveGet);
 BIF_DECL(BIF_WinGet);
