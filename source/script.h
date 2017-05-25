@@ -562,6 +562,7 @@ enum BuiltInFunctionID {
 	FID_Floor = 0, FID_Ceil,
 	FID_ASin = 0, FID_ACos,
 	FID_Sqrt = 0, FID_Log, FID_Ln,
+	FID_Random = 0, FID_RandomSeed,
 	FID_ObjAddRef = 0, FID_ObjRelease,
 	FID_ObjInsertAt = 0, FID_ObjDelete, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength, FID_ObjMaxIndex, FID_ObjMinIndex, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjGetAddress, FID_ObjClone, FID_ObjNewEnum,
 	FID_ComObjType = 0, FID_ComObjValue,
@@ -931,7 +932,6 @@ public:
 			{
 			case ACT_ASSIGNEXPR:
 			case ACT_DEREF:
-			case ACT_RANDOM:
 			case ACT_SOUNDGET:
 			case ACT_FILEREAD:
 			case ACT_MOUSEGETPOS:
@@ -3111,6 +3111,7 @@ BIF_DECL(BIF_FileGetVersion);
 BIF_DECL(BIF_FileSelect);
 BIF_DECL(BIF_IniRead);
 BIF_DECL(BIF_RegRead);
+BIF_DECL(BIF_Random);
 BIF_DECL(BIF_StatusBarGetText);
 BIF_DECL(BIF_WinGetClass);
 BIF_DECL(BIF_WinGetText);

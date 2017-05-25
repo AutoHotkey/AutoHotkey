@@ -14410,6 +14410,53 @@ BIF_DECL(BIF_SqrtLogLn)
 
 
 
+BIF_DECL(BIF_Random)
+{
+	if (_f_callee_id == FID_RandomSeed) // Special mode to change the seed.
+	{
+		init_genrand((UINT)ParamIndexToInt64(0)); // It's documented that an unsigned 32-bit number is required.
+		_f_return_empty;
+	}
+	SymbolType arg1type = aParamCount > 0 ? TokenIsNumeric(*aParam[0]) : SYM_MISSING;
+	SymbolType arg2type = aParamCount > 1 ? TokenIsNumeric(*aParam[1]) : SYM_MISSING;
+	bool use_float = arg1type == PURE_FLOAT || arg2type == PURE_FLOAT;
+	if (use_float)
+	{
+		double rand_min = arg1type != SYM_MISSING ? ParamIndexToDouble(0) : 0;
+		double rand_max = arg2type != SYM_MISSING ? ParamIndexToDouble(1) : INT_MAX;
+		// Seems best not to use ErrorLevel for this command at all, since silly cases
+		// such as Max > Min are too rare.  Swap the two values instead.
+		if (rand_min > rand_max)
+		{
+			double rand_swap = rand_min;
+			rand_min = rand_max;
+			rand_max = rand_swap;
+		}
+		_f_return((genrand_real1() * (rand_max - rand_min)) + rand_min);
+	}
+	else // Avoid using floating point, where possible, which may improve speed a lot more than expected.
+	{
+		int rand_min = arg1type != SYM_MISSING ? ParamIndexToInt(0) : 0;
+		int rand_max = arg2type != SYM_MISSING ? ParamIndexToInt(1) : INT_MAX;
+		// Seems best not to use ErrorLevel for this command at all, since silly cases
+		// such as Max > Min are too rare.  Swap the two values instead.
+		if (rand_min > rand_max)
+		{
+			int rand_swap = rand_min;
+			rand_min = rand_max;
+			rand_max = rand_swap;
+		}
+		// Do NOT use genrand_real1() to generate random integers because of cases like
+		// min=0 and max=1: we want an even distribution of 1's and 0's in that case, not
+		// something skewed that might result due to rounding/truncation issues caused by
+		// the float method used above:
+		// AutoIt3: __int64 is needed here to do the proper conversion from unsigned long to signed long:
+		_f_return(__int64(genrand_int32() % ((__int64)rand_max - rand_min + 1)) + rand_min);
+	}
+}
+
+
+
 BIF_DECL(BIF_DateAdd)
 {
 	FILETIME ft;
