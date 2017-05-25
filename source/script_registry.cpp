@@ -27,12 +27,16 @@
 #include "script.h"
 #include "util.h" // for strlcpy()
 #include "globaldata.h"
+#include "script_func_impl.h"
 
 
-ResultType Line::IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR aDefault)
+BIF_DECL(BIF_IniRead)
 {
-	if (!aDefault || !*aDefault)
-		aDefault = _T("");
+	_f_param_string_opt(aFilespec, 0);
+	_f_param_string_opt(aSection, 1);
+	_f_param_string_opt(aKey, 2);
+	_f_param_string_opt(aDefault, 3);
+
 	TCHAR	szFileTemp[_MAX_PATH+1];
 	TCHAR	*szFilePart, *cp;
 	TCHAR	szBuffer[65535] = _T("");					// Max ini file size is 65535 under 95
@@ -76,9 +80,7 @@ ResultType Line::IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR 
 	g_ErrorLevel->Assign(GetLastError() ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
 	// The above function is supposed to set szBuffer to be aDefault if it can't find the
 	// file, section, or key.  In other words, it always changes the contents of szBuffer.
-	return OUTPUT_VAR->Assign(szBuffer); // Avoid using the length the API reported because it might be inaccurate if the data contains any binary zeroes, or if the data is double-terminated, etc.
-	// Note: ErrorLevel is not changed by this command since the aDefault value is returned
-	// whenever there's an error.
+	_f_return(szBuffer); // Avoid using the length the API reported because it might be inaccurate if the data contains any binary zeroes, or if the data is double-terminated, etc.
 }
 
 #ifdef UNICODE

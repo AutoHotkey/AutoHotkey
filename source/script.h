@@ -650,7 +650,6 @@ private:
 	int FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
 		, FileLoopModeType aOperateOnFolders, bool aDoRecurse, bool aCalledRecursively = false);
 
-	ResultType IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR aDefault);
 	ResultType IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
 	ResultType IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
 	ResultType RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName);
@@ -938,7 +937,6 @@ public:
 			case ACT_DEREF:
 			case ACT_STATUSBARGETTEXT:
 			case ACT_RANDOM:
-			case ACT_INIREAD:
 			case ACT_REGREAD:
 			case ACT_SOUNDGET:
 			case ACT_FILEREAD:
@@ -3117,6 +3115,7 @@ BIF_DECL(BIF_FileGetSize);
 BIF_DECL(BIF_FileGetTime);
 BIF_DECL(BIF_FileGetVersion);
 BIF_DECL(BIF_FileSelect);
+BIF_DECL(BIF_IniRead);
 BIF_DECL(BIF_WinGetClass);
 BIF_DECL(BIF_WinGetText);
 BIF_DECL(BIF_WinGetTitle);

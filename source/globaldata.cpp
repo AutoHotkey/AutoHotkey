@@ -402,7 +402,6 @@ Action g_act[] =
 	, {_T("FileGetShortcut"), 1, 8, true, NULL} // Filespec, OutTarget, OutDir, OutArg, OutDescrip, OutIcon, OutIconIndex, OutShowState.
 	, {_T("FileCreateShortcut"), 2, 9, false, {8, 9, 0}} // file, lnk [, workdir, args, desc, icon, hotkey, icon_number, run_state]
 
-	, {_T("IniRead"), 2, 5, true, NULL}   // OutputVar, Filespec, Section, Key, Default (value to return if key not found)
 	, {_T("IniWrite"), 3, 4, false, NULL}  // Value, Filespec, Section, Key
 	, {_T("IniDelete"), 2, 3, false, NULL} // Filespec, Section, Key
 

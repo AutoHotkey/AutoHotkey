@@ -211,6 +211,8 @@ FuncEntry g_BIF[] =
 	BIF1(FileGetVersion, 0, 1, true),
 	BIF1(FileSelect, 0, 4, true),
 
+	BIF1(IniRead, 1, 4, true),
+
 	BIF1(WinGetClass, 0, 4, true),
 	BIF1(WinGetText, 0, 4, true),
 	BIF1(WinGetTitle, 0, 4, true),
@@ -12154,8 +12156,6 @@ ResultType Line::Perform()
 		return OK;
 	}
 
-	case ACT_INIREAD:
-		return IniRead(ARG2, ARG3, ARG4, ARG5);
 	case ACT_INIWRITE:
 		return IniWrite(FOUR_ARGS);
 	case ACT_INIDELETE:
