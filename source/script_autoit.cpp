@@ -1062,24 +1062,24 @@ int CALLBACK FileSelectFolderCallback(HWND hwnd, UINT uMsg, LPARAM lParam, LPARA
 
 
 
-ResultType Line::DirSelect(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGreeting)
+BIF_DECL(BIF_DirSelect)
 // Since other script threads can interrupt this command while it's running, it's important that
 // the command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
 // This is because an interrupting thread usually changes the values to something inappropriate for this thread.
 {
-	Var &output_var = *OUTPUT_VAR; // Must be resolved early.  See comment above.
-	if (!output_var.Assign())  // Initialize the output variable.
-		return FAIL;
+	_f_param_string_opt(aRootDir, 0);
+	_f_param_string_opt(aOptions, 1);
+	_f_param_string_opt(aGreeting, 2);
 
 	if (g_nFolderDialogs >= MAX_FOLDERDIALOGS)
 	{
 		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
-		return LineError(_T("The maximum number of Folder Dialogs has been reached."));
+		_f_throw(_T("The maximum number of Folder Dialogs has been reached."));
 	}
 
 	LPMALLOC pMalloc;
     if (SHGetMalloc(&pMalloc) != NOERROR)	// Initialize
-		return SetErrorLevelOrThrow();
+		_f_throw(_T("SHGetMalloc")); // Short message since it probably never happens.
 
 	// v1.0.36.03: Support initial folder, which is different than the root folder because the root only
 	// controls the origin point (above which the control cannot navigate).
@@ -1143,6 +1143,10 @@ ResultType Line::DirSelect(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGreeting)
 		sntprintf(greeting, _countof(greeting), _T("Select Folder - %s"), g_script.DefaultDialogTitle());
 	bi.lpszTitle = greeting;
 
+	// Bitwise flags:
+	#define FSF_ALLOW_CREATE 0x01
+	#define FSF_EDITBOX      0x02
+	#define FSF_NONEWDIALOG  0x04
 	DWORD options = *aOptions ? ATOI(aOptions) : FSF_ALLOW_CREATE;
 	bi.ulFlags =
 		  ((options & FSF_NONEWDIALOG)    ? 0           : BIF_NEWDIALOGSTYLE) // v1.0.48: Added to support BartPE/WinPE.
@@ -1162,18 +1166,21 @@ ResultType Line::DirSelect(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGreeting)
 
 	DIALOG_END
 	if (!lpItemIDList)
+	{
 		// Due to rarity and because there doesn't seem to be any way to detect it,
 		// no exception is thrown when the function fails.  Instead, we just assume
 		// that the user pressed CANCEL (which should not be treated as an error):
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		_f_return_empty;
+	}
 
-	*Result = '\0';  // Reuse this var, this time to old the result of the below:
+	*Result = '\0';  // Reuse this var, this time to hold the result of the below:
 	SHGetPathFromIDList(lpItemIDList, Result);
 	pMalloc->Free(lpItemIDList);
 	pMalloc->Release();
 
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-	return output_var.Assign(Result);
+	_f_return(Result);
 }
 
 

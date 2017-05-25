@@ -7569,17 +7569,20 @@ void SetWorkingDir(LPTSTR aNewDir, bool aSetErrorLevel)
 
 
 
-ResultType Line::FileSelect(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGreeting, LPTSTR aFilter)
+BIF_DECL(BIF_FileSelect)
 // Since other script threads can interrupt this command while it's running, it's important that
 // this command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
 // This is because an interrupting thread usually changes the values to something inappropriate for this thread.
 {
-	Var &output_var = *OUTPUT_VAR; // Fix for v1.0.45.01: Must be resolved and saved early.  See comment above.
 	if (g_nFileDialogs >= MAX_FILEDIALOGS)
 	{
 		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
-		return LineError(_T("The maximum number of File Dialogs has been reached."));
+		_f_throw(_T("The maximum number of File Dialogs has been reached."));
 	}
+	_f_param_string_opt(aOptions, 0);
+	_f_param_string_opt(aWorkingDir, 1);
+	_f_param_string_opt(aGreeting, 2);
+	_f_param_string_opt(aFilter, 3);
 	
 	// Large in case more than one file is allowed to be selected.
 	// The call to GetOpenFileName() may fail if the first character of the buffer isn't NULL
@@ -7773,13 +7776,10 @@ ResultType Line::FileSelect(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGreetin
 
 	if (!result) // User pressed CANCEL vs. OK to dismiss the dialog or there was a problem displaying it.
 	{
-		// It seems best to clear the variable in these cases, since this is a scripting
-		// language where performance is not the primary goal.  So do that and return OK,
-		// but leave ErrorLevel set to ERRORLEVEL_ERROR.
-		if (output_var.Assign() != OK)
-			return FAIL;
-		return CommDlgExtendedError() ? SetErrorLevelOrThrow() // An error occurred.
-			: g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // User pressed CANCEL, so never throw an exception.
+		// Currently always returning ErrorLevel, otherwise this would tell us whether an error
+		// occurred vs. the user canceling: if (CommDlgExtendedError())
+		g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // User pressed CANCEL, so never throw an exception.
+		_f_return_empty;
 	}
 	else
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate that the user pressed OK vs. CANCEL.
@@ -7825,7 +7825,7 @@ ResultType Line::FileSelect(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGreetin
 			}
 		}
 	}
-	return output_var.Assign(file_buf);
+	_f_return(file_buf);
 }
 
 

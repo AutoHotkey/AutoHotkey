@@ -188,6 +188,7 @@ FuncEntry g_BIF[] =
 	BIFn(ControlChooseString, 1, 6, false, BIF_Control),
 	BIFn(ControlEditPaste, 1, 6, false, BIF_Control),
 
+	BIF1(DirSelect, 0, 3, true),
 
 	BIFn(DriveEject, 0, 2, false, BIF_Drive),
 	BIFn(DriveLock, 1, 1, false, BIF_Drive),
@@ -208,6 +209,7 @@ FuncEntry g_BIF[] =
 	BIF1(FileGetSize, 0, 2, true),
 	BIF1(FileGetTime, 0, 2, true),
 	BIF1(FileGetVersion, 0, 1, true),
+	BIF1(FileSelect, 0, 4, true),
 
 	BIF1(WinGetClass, 0, 4, true),
 	BIF1(WinGetText, 0, 4, true),
@@ -11920,12 +11922,6 @@ ResultType Line::Perform()
 	case ACT_SETWORKINGDIR:
 		SetWorkingDir(ARG1);
 		return !g.ThrownToken ? OK : FAIL;
-
-	case ACT_FILESELECT:
-		return FileSelect(ARG2, ARG3, ARG4, ARG5);
-
-	case ACT_DIRSELECT:
-		return DirSelect(ARG2, ARG3, ARG4);
 
 	case ACT_FILEGETSHORTCUT:
 		return FileGetShortcut(ARG1);

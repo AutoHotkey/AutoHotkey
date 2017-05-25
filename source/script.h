@@ -632,13 +632,6 @@ private:
 		, DWORD aControlType, LPTSTR aDevice);
 	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
 	ResultType Download(LPTSTR aURL, LPTSTR aFilespec);
-	ResultType FileSelect(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGreeting, LPTSTR aFilter);
-
-	// Bitwise flags:
-	#define FSF_ALLOW_CREATE 0x01
-	#define FSF_EDITBOX      0x02
-	#define FSF_NONEWDIALOG  0x04
-	ResultType DirSelect(LPTSTR aRootDir, LPTSTR aOptions, LPTSTR aGreeting);
 
 	ResultType FileGetShortcut(LPTSTR aShortcutFile);
 	ResultType FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
@@ -949,8 +942,6 @@ public:
 			case ACT_REGREAD:
 			case ACT_SOUNDGET:
 			case ACT_FILEREAD:
-			case ACT_FILESELECT:
-			case ACT_DIRSELECT:
 			case ACT_MOUSEGETPOS:
 			case ACT_WINGETPOS:
 			case ACT_SYSGET:
@@ -3118,12 +3109,14 @@ BIF_DECL(BIF_Control);
 BIF_DECL(BIF_ControlGet);
 BIF_DECL(BIF_ControlGetFocus);
 BIF_DECL(BIF_ControlGetText);
+BIF_DECL(BIF_DirSelect);
 BIF_DECL(BIF_Drive);
 BIF_DECL(BIF_DriveGet);
 BIF_DECL(BIF_FileGetAttrib);
 BIF_DECL(BIF_FileGetSize);
 BIF_DECL(BIF_FileGetTime);
 BIF_DECL(BIF_FileGetVersion);
+BIF_DECL(BIF_FileSelect);
 BIF_DECL(BIF_WinGetClass);
 BIF_DECL(BIF_WinGetText);
 BIF_DECL(BIF_WinGetTitle);
