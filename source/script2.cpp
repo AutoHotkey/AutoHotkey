@@ -1892,15 +1892,16 @@ bool ControlSetTab(ResultToken &aResultToken, HWND aHwnd, DWORD aTabIndex)
 
 
 
-ResultType Line::StatusBarGetText(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
-	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_StatusBarGetText)//(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
+	//, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 {
+	int part = ParamIndexToOptionalInt(0, 1);
 	// Note: ErrorLevel is handled by StatusBarUtil(), below.
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1);
 	HWND control_window = target_window ? ControlExist(target_window, _T("msctls_statusbar321")) : NULL;
 	// Call this even if control_window is NULL because in that case, it will set the output var to
 	// be blank for us:
-	return StatusBarUtil(OUTPUT_VAR, control_window, ATOI(aPart)); // It will handle any zero part# for us.
+	StatusBarUtil(&aResultToken, control_window, part); // It will handle any zero part# for us.
 }
 
 

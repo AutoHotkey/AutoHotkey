@@ -213,6 +213,7 @@ FuncEntry g_BIF[] =
 
 	BIF1(IniRead, 1, 4, true),
 	BIF1(RegRead, 0, 2, true),
+	BIF1(StatusBarGetText, 0, 5, true),
 
 	BIF1(WinGetClass, 0, 4, true),
 	BIF1(WinGetText, 0, 4, true),
@@ -11587,8 +11588,6 @@ ResultType Line::Perform()
 		return ControlFocus(FIVE_ARGS);
 	case ACT_CONTROLSETTEXT:
 		return ControlSetText(SIX_ARGS);
-	case ACT_STATUSBARGETTEXT:
-		return StatusBarGetText(ARG2, ARG3, ARG4, ARG5, ARG6);
 	case ACT_STATUSBARWAIT:
 		return StatusBarWait(EIGHT_ARGS);
 	case ACT_POSTMESSAGE:

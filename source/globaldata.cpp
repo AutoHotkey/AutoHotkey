@@ -328,7 +328,6 @@ Action g_act[] =
 	, {_T("MouseClickDrag"), 1, 7, false, {2, 3, 4, 5, 6, 0}} // which-button, x1, y1, x2, y2, speed, Relative
 	, {_T("MouseGetPos"), 0, 5, true, {5, 0}} // 4 optional output vars: xpos, ypos, WindowID, ControlName. Finally: Mode. MinParams must be 0.
 
-	, {_T("StatusBarGetText"), 1, 6, true, {2, 0}} // Output-var, part# (numeric), std. 4 window params
 	, {_T("StatusBarWait"), 0, 8, false, {2, 3, 6, 0}} // Wait-text(blank ok),seconds,part#,title,text,interval,exclude-title,exclude-text
 	, {_T("ClipWait"), 0, 2, false, {1, 2, 0}} // Seconds-to-wait (0 = 500ms), 1|0: Wait for any format, not just text/files
 	, {_T("KeyWait"), 1, 2, false, NULL} // KeyName, Options

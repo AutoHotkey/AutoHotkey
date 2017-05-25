@@ -679,8 +679,6 @@ private:
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlSetText(LPTSTR aControl, LPTSTR aNewText, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType StatusBarGetText(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
-		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType StatusBarWait(LPTSTR aTextToWaitFor, LPTSTR aSeconds, LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aInterval, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ScriptPostSendMessage(bool aUseSend);
@@ -933,7 +931,6 @@ public:
 			{
 			case ACT_ASSIGNEXPR:
 			case ACT_DEREF:
-			case ACT_STATUSBARGETTEXT:
 			case ACT_RANDOM:
 			case ACT_SOUNDGET:
 			case ACT_FILEREAD:
@@ -3114,6 +3111,7 @@ BIF_DECL(BIF_FileGetVersion);
 BIF_DECL(BIF_FileSelect);
 BIF_DECL(BIF_IniRead);
 BIF_DECL(BIF_RegRead);
+BIF_DECL(BIF_StatusBarGetText);
 BIF_DECL(BIF_WinGetClass);
 BIF_DECL(BIF_WinGetText);
 BIF_DECL(BIF_WinGetTitle);
