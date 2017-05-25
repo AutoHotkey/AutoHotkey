@@ -4941,47 +4941,24 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	///////////////////////////////////////////////////////////////////
 	// Do any post-add validation & handling for specific action types.
 	///////////////////////////////////////////////////////////////////
+	// v2.0: Currently only a very small subset of the v1 validation is used, since most of the
+	// old validation depended on parameters being plain literal text.  Although plain quoted
+	// strings are converted to non-expressions by a later stage and could be validated then,
+	// a lot more work is needed before validation can be done for function calls as well.
+	// This should be replaced with better tools (separate to the program), such as syntax
+	// checkers which can operate while the user is editing, before they try to run the script.
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
-	int value;    // For temp use during validation.
-	double value_float;
-	SYSTEMTIME st;  // same.
-#endif
 	// v1.0.38: The following should help reduce code size, and for some commands helps load-time
 	// performance by avoiding multiple resolutions of a given macro:
 	LPTSTR new_raw_arg1 = NEW_RAW_ARG1;
 	LPTSTR new_raw_arg2 = NEW_RAW_ARG2;
 	LPTSTR new_raw_arg3 = NEW_RAW_ARG3;
 	LPTSTR new_raw_arg4 = NEW_RAW_ARG4;
+#endif
 
 	switch(aActionType)
 	{
-	// THESE FIRST FEW CASES MUST EXIST IN BOTH SELF-CONTAINED AND NORMAL VERSION since they alter the
-	// attributes/members of some types of lines:
-	
-	case ACT_GROUPADD:
-	case ACT_GROUPACTIVATE:
-	case ACT_GROUPDEACTIVATE:
-	case ACT_GROUPCLOSE:
-		// For all these, store a pointer to the group to help performance.
-		// We create a non-existent group even for ACT_GROUPACTIVATE, ACT_GROUPDEACTIVATE
-		// and ACT_GROUPCLOSE because we can't rely on the ACT_GROUPADD commands having
-		// been parsed prior to them (e.g. something like "Gosub, DefineGroups" may appear
-		// in the auto-execute portion of the script).
-		if (!line.ArgHasDeref(1))
-			if (   !(line.mAttribute = FindGroup(new_raw_arg1, true))   ) // Create-if-not-found so that performance is enhanced at runtime.
-				return FAIL;  // The above already displayed the error.
-		if (aActionType == ACT_GROUPACTIVATE || aActionType == ACT_GROUPDEACTIVATE)
-		{
-			if (*new_raw_arg2 && !line.ArgHasDeref(2))
-				if (_tcslen(new_raw_arg2) > 1 || ctoupper(*new_raw_arg2) != 'R')
-					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		}
-		else if (aActionType == ACT_GROUPCLOSE)
-			if (*new_raw_arg2 && !line.ArgHasDeref(2))
-				if (_tcslen(new_raw_arg2) > 1 || !_tcschr(_T("RA"), ctoupper(*new_raw_arg2)))
-					return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		break;
-		
+	// MUST EXIST IN BOTH SELF-CONTAINED AND NORMAL VERSION:
 	case ACT_RETURN:
 		if (aArgc > 0)
 		{
@@ -4996,173 +4973,15 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 #ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
 
-	case ACT_LOOP_FILE:
-	case ACT_LOOP_REG:
-		if (!line.ArgHasDeref(2) && Line::ConvertLoopMode(new_raw_arg2) == FILE_LOOP_INVALID)
-			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		break;
-
-	case ACT_DETECTHIDDENWINDOWS:
-	case ACT_DETECTHIDDENTEXT:
-	case ACT_SETSTORECAPSLOCKMODE:
-		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertOnOff(new_raw_arg1))
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_STRINGCASESENSE:
-		if (aArgc > 0 && !line.ArgHasDeref(1) && line.ConvertStringCaseSense(new_raw_arg1) == SCS_INVALID)
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_SUSPEND:
-		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertOnOffTogglePermit(new_raw_arg1))
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_BLOCKINPUT:
-		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertBlockInput(new_raw_arg1))
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_SENDMODE:
-		if (aArgc > 0 && !line.ArgHasDeref(1) && line.ConvertSendMode(new_raw_arg1, SM_INVALID) == SM_INVALID)
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_SENDLEVEL:
-		if (aArgc > 0 && !line.ArgHasDeref(1) && !SendLevelIsValid(ATOI(new_raw_arg1)))
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_PAUSE:
-	case ACT_KEYHISTORY:
-		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertOnOffToggle(new_raw_arg1))
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_SETNUMLOCKSTATE:
-	case ACT_SETSCROLLLOCKSTATE:
-	case ACT_SETCAPSLOCKSTATE:
-		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertOnOffAlways(new_raw_arg1))
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_REGREAD:
-		if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertKey(new_raw_arg2))
-			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		break;
-
-	case ACT_SETREGVIEW:
-		if (!line.ArgHasDeref(1) && line.RegConvertView(new_raw_arg1) == -1)
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_REGWRITE:
-		// Both of these checks require that at least two parameters be present.  Otherwise, the command
-		// is being used in its registry-loop mode and is validated elsewhere:
-		if (aArgc > 1)
-		{
-			if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertValueType(new_raw_arg1))
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-			if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.RegConvertKey(new_raw_arg2))
-				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		}
-		break;
-
-	case ACT_REGDELETE:
-	case ACT_REGDELETEKEY:
-		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.RegConvertKey(new_raw_arg1))
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_SOUNDGET:
-	case ACT_SOUNDSET:
-		if (aActionType == ACT_SOUNDSET && aArgc > 0 && !line.ArgHasDeref(1))
-		{
-			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
-			// sees a valid no-deref expression such as 300-250 as invalid.
-			value_float = ATOF(new_raw_arg1);
-			if (value_float < -100 || value_float > 100)
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		}
-		if (*new_raw_arg2 && !line.ArgHasDeref(2) && !line.SoundConvertComponentType(new_raw_arg2))
-			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		if (*new_raw_arg3 && !line.ArgHasDeref(3) && line.SoundConvertControlType(new_raw_arg3) == MIXERCONTROL_CONTROLTYPE_INVALID)
-			return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-		break;
-
-	case ACT_SOUNDPLAY:
-		if (*new_raw_arg2 && !line.ArgHasDeref(2) && _tcsicmp(new_raw_arg2, _T("wait")) && _tcsicmp(new_raw_arg2, _T("1")))
-			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		break;
-
 	case ACT_PIXELSEARCH:
 	case ACT_IMAGESEARCH:
+		// These are required, but not treated as such by earlier stages because the first two
+		// parameters must be optional:
 		if (!*new_raw_arg3 || !*new_raw_arg4 || !*NEW_RAW_ARG5 || !*NEW_RAW_ARG6 || !*NEW_RAW_ARG7)
 			return ScriptError(_T("Parameters 3 through 7 must not be blank."));
-		if (aActionType != ACT_IMAGESEARCH)
-		{
-			if (*NEW_RAW_ARG8 && !line.ArgHasDeref(8))
-			{
-				// The value of catching syntax errors at load-time seems to outweigh the fact that this check
-				// sees a valid no-deref expression such as 300-200 as invalid.
-				value = ATOI(NEW_RAW_ARG8);
-				if (value < 0 || value > 255)
-					return ScriptError(ERR_PARAM8_INVALID, NEW_RAW_ARG8);
-			}
-		}
-		break;
-
-	case ACT_COORDMODE:
-		if (*new_raw_arg1 && !line.ArgHasDeref(1) && line.ConvertCoordModeCmd(new_raw_arg1) == -1)
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		if (*new_raw_arg2 && !line.ArgHasDeref(2) && line.ConvertCoordMode(new_raw_arg2) == -1)
-			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		break;
-
-	case ACT_SETDEFAULTMOUSESPEED:
-		if (*new_raw_arg1 && !line.ArgHasDeref(1))
-		{
-			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
-			// sees a valid no-deref expression such as 1+2 as invalid.
-			value = ATOI(new_raw_arg1);
-			if (value < 0 || value > MAX_MOUSE_SPEED)
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		}
-		break;
-
-	case ACT_MOUSEMOVE:
-		if (*new_raw_arg3 && !line.ArgHasDeref(3))
-		{
-			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
-			// sees a valid no-deref expression such as 200-150 as invalid.
-			value = ATOI(new_raw_arg3);
-			if (value < 0 || value > MAX_MOUSE_SPEED)
-				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-		}
-		if (*new_raw_arg4 && !line.ArgHasDeref(4) && ctoupper(*new_raw_arg4) != 'R')
-			return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
-		if (!line.ValidateMouseCoords(new_raw_arg1, new_raw_arg2))
-			return ScriptError(ERR_MOUSE_COORD, new_raw_arg1);
 		break;
 
 	case ACT_MOUSECLICK:
-		if (*NEW_RAW_ARG5 && !line.ArgHasDeref(5))
-		{
-			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
-			// sees a valid no-deref expression such as 200-150 as invalid.
-			value = ATOI(NEW_RAW_ARG5);
-			if (value < 0 || value > MAX_MOUSE_SPEED)
-				return ScriptError(ERR_PARAM5_INVALID, NEW_RAW_ARG5);
-		}
-		if (*NEW_RAW_ARG6 && !line.ArgHasDeref(6))
-			if (_tcslen(NEW_RAW_ARG6) > 1 || !_tcschr(_T("UD"), ctoupper(*NEW_RAW_ARG6)))  // Up / Down
-				return ScriptError(ERR_PARAM6_INVALID, NEW_RAW_ARG6);
-		if (*NEW_RAW_ARG7 && !line.ArgHasDeref(7) && ctoupper(*NEW_RAW_ARG7) != 'R')
-			return ScriptError(ERR_PARAM7_INVALID, NEW_RAW_ARG7);
-		// Check that the button is valid (e.g. left/right/middle):
-		if (*new_raw_arg1 && !line.ArgHasDeref(1) && !line.ConvertMouseButton(new_raw_arg1)) // Treats blank as "Left".
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		if (!line.ValidateMouseCoords(new_raw_arg2, new_raw_arg3))
 			return ScriptError(ERR_MOUSE_COORD, new_raw_arg2);
 		break;
@@ -5172,200 +4991,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		// (i.e. if a dereferenced var resolved to blank, it will be treated as a zero):
 		if (!*new_raw_arg4 || !*NEW_RAW_ARG5)
 			return ScriptError(_T("Parameter #4 and 5 required."));
-		if (*NEW_RAW_ARG6 && !line.ArgHasDeref(6))
-		{
-			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
-			// sees a valid no-deref expression such as 200-150 as invalid.
-			value = ATOI(NEW_RAW_ARG6);
-			if (value < 0 || value > MAX_MOUSE_SPEED)
-				return ScriptError(ERR_PARAM6_INVALID, NEW_RAW_ARG6);
-		}
-		if (*NEW_RAW_ARG7 && !line.ArgHasDeref(7) && ctoupper(*NEW_RAW_ARG7) != 'R')
-			return ScriptError(ERR_PARAM7_INVALID, NEW_RAW_ARG7);
-		if (!line.ArgHasDeref(1))
-			if (!line.ConvertMouseButton(new_raw_arg1, false))
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		if (!line.ValidateMouseCoords(new_raw_arg2, new_raw_arg3))
 			return ScriptError(ERR_MOUSE_COORD, new_raw_arg2);
 		if (!line.ValidateMouseCoords(new_raw_arg4, NEW_RAW_ARG5))
 			return ScriptError(ERR_MOUSE_COORD, new_raw_arg4);
-		break;
-
-	case ACT_CONTROLCLICK:
-		// Check that the button is valid (e.g. left/right/middle):
-		if (*new_raw_arg4 && !line.ArgHasDeref(4)) // i.e. it's allowed to be blank (defaults to left).
-			if (!line.ConvertMouseButton(new_raw_arg4)) // Treats blank as "Left".
-				return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
-		break;
-
-	case ACT_FILEINSTALL:
-	case ACT_FILECOPY:
-	case ACT_FILEMOVE:
-	case ACT_DIRCOPY:
-	case ACT_DIRMOVE:
-		if (*new_raw_arg3 && !line.ArgHasDeref(3))
-		{
-			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
-			// sees a valid no-deref expression such as 2-1 as invalid.
-			value = ATOI(new_raw_arg3);
-			bool is_pure_numeric = IsNumeric(new_raw_arg3, false, true); // Consider negatives to be non-numeric.
-			if (aActionType == ACT_DIRMOVE)
-			{
-				if (!is_pure_numeric && ctoupper(*new_raw_arg3) != 'R'
-					|| is_pure_numeric && value > 2) // IsNumeric() already checked if value < 0. 
-					return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-			}
-			else
-			{
-				if (!is_pure_numeric || value > 1) // IsNumeric() already checked if value < 0.
-					return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-			}
-		}
-		if (aActionType == ACT_FILEINSTALL)
-		{
-			if (aArgc > 0 && line.ArgHasDeref(1))
-				return ScriptError(_T("Must not contain variables."), new_raw_arg1);
-		}
-		break;
-
-	case ACT_DIRDELETE:
-		if (*new_raw_arg2 && !line.ArgHasDeref(2))
-		{
-			// The value of catching syntax errors at load-time seems to outweigh the fact that this check
-			// sees a valid no-deref expression such as 3-2 as invalid.
-			value = ATOI(new_raw_arg2);
-			if (!IsNumeric(new_raw_arg2, false, true) || value > 1) // IsNumeric() prevents negatives.
-				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		}
-		break;
-
-	case ACT_FILESETATTRIB:
-		if (*new_raw_arg1 && !line.ArgHasDeref(1))
-		{
-			for (LPTSTR cp = new_raw_arg1; *cp; ++cp)
-				if (!_tcschr(_T("+-^RASHNOT"), ctoupper(*cp)))
-					return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		}
-		// For the next two checks:
-		// The value of catching syntax errors at load-time seems to outweigh the fact that this check
-		// sees a valid no-deref expression such as 300-200 as invalid.
-		if (aArgc > 2 && !line.ArgHasDeref(3) && line.ConvertLoopMode(new_raw_arg3) == FILE_LOOP_INVALID)
-			return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-		break;
-
-	case ACT_FILEGETTIME:
-		if (*new_raw_arg3 && !line.ArgHasDeref(3))
-			if (_tcslen(new_raw_arg3) > 1 || !_tcschr(_T("MCA"), ctoupper(*new_raw_arg3)))
-				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-		break;
-
-	case ACT_FILESETTIME:
-		if (*new_raw_arg1 && !line.ArgHasDeref(1))
-			if (!YYYYMMDDToSystemTime(new_raw_arg1, st, true))
-				return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		if (*new_raw_arg3 && !line.ArgHasDeref(3))
-			if (_tcslen(new_raw_arg3) > 1 || !_tcschr(_T("MCA"), ctoupper(*new_raw_arg3)))
-				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-		// For the next two checks:
-		// The value of catching syntax errors at load-time seems to outweigh the fact that this check
-		// sees a valid no-deref expression such as 300-200 as invalid.
-		if (aArgc > 3 && !line.ArgHasDeref(4) && line.ConvertLoopMode(new_raw_arg4) == FILE_LOOP_INVALID)
-			return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
-		break;
-
-	case ACT_FILEGETSIZE:
-		if (*new_raw_arg3 && !line.ArgHasDeref(3))
-			if (_tcslen(new_raw_arg3) > 1 || !_tcschr(_T("BKM"), ctoupper(*new_raw_arg3))) // Allow B=Bytes as undocumented.
-				return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-		break;
-
-	case ACT_SETTITLEMATCHMODE:
-		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertTitleMatchMode(new_raw_arg1))
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_MENU:
-		if (aArgc > 1 && !line.ArgHasDeref(2))
-		{
-			MenuCommands menu_cmd = line.ConvertMenuCommand(new_raw_arg2);
-
-			switch(menu_cmd)
-			{
-			case MENU_CMD_TIP:
-			//case MENU_CMD_ICON: // L17: Now valid for other menus, used to set menu item icons.
-			//case MENU_CMD_NOICON:
-			case MENU_CMD_MAINWINDOW:
-			case MENU_CMD_NOMAINWINDOW:
-			case MENU_CMD_CLICK:
-			{
-				bool is_tray = true;  // Assume true if unknown.
-				if (aArgc > 0 && !line.ArgHasDeref(1))
-					if (_tcsicmp(new_raw_arg1, _T("tray")))
-						is_tray = false;
-				if (!is_tray)
-					return ScriptError(ERR_MENUTRAY, new_raw_arg1);
-				break;
-			}
-			}
-
-			switch (menu_cmd)
-			{
-			case MENU_CMD_INVALID:
-				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-
-			case MENU_CMD_NODEFAULT:
-			case MENU_CMD_STANDARD:
-			case MENU_CMD_NOSTANDARD:
-			case MENU_CMD_DELETEALL:
-			//case MENU_CMD_NOICON: // L17: Parameter #3 is now used to specify a menu item whose icon should be removed.
-			case MENU_CMD_MAINWINDOW:
-			case MENU_CMD_NOMAINWINDOW:
-				if (*new_raw_arg3 || *new_raw_arg4 || *NEW_RAW_ARG5 || *NEW_RAW_ARG6)
-					return ScriptError(_T("Parameter #3 and beyond should be omitted in this case."), new_raw_arg3);
-				break;
-
-			case MENU_CMD_RENAME:
-			case MENU_CMD_USEERRORLEVEL:
-			case MENU_CMD_CHECK:
-			case MENU_CMD_UNCHECK:
-			case MENU_CMD_TOGGLECHECK:
-			case MENU_CMD_ENABLE:
-			case MENU_CMD_DISABLE:
-			case MENU_CMD_TOGGLEENABLE:
-			case MENU_CMD_DEFAULT:
-			case MENU_CMD_DELETE:
-			case MENU_CMD_TIP:
-			case MENU_CMD_CLICK:
-			case MENU_CMD_NOICON: // L17: See comment in section above.
-				if (   menu_cmd != MENU_CMD_RENAME && (*new_raw_arg4 || *NEW_RAW_ARG5 || *NEW_RAW_ARG6)   )
-					return ScriptError(_T("Parameter #4 and beyond should be omitted in this case."), new_raw_arg4);
-				switch(menu_cmd)
-				{
-				case MENU_CMD_USEERRORLEVEL:
-				case MENU_CMD_TIP:
-				case MENU_CMD_DEFAULT:
-				case MENU_CMD_DELETE:
-				case MENU_CMD_NOICON:
-					break;  // i.e. for commands other than the above, do the default below.
-				default:
-					if (!*new_raw_arg3)
-						return ScriptError(ERR_PARAM3_MUST_NOT_BE_BLANK);
-				}
-				break;
-
-			// These have a highly variable number of parameters, or are too rarely used
-			// to warrant detailed load-time checking, so are not validated here:
-			//case MENU_CMD_SHOW:
-			//case MENU_CMD_ADD:
-			//case MENU_CMD_COLOR:
-			//case MENU_CMD_ICON:
-			}
-		}
-		break;
-
-	case ACT_THREAD:
-		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertThreadCommand(new_raw_arg1))
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
 		break;
 
 	// For these, although we validate that at least one is non-blank here, it's okay at
@@ -5395,24 +5024,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_PARAM3_REQUIRED);
 		break;
 
-	case ACT_SYSGET:
-		if (!line.ArgHasDeref(2) && !IsNumeric(new_raw_arg2, FALSE, FALSE, FALSE))
-			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
-		break;
-
-	case ACT_KEYWAIT: // v1.0.44.03: See comment above.
-		if (aArgc > 0 && !line.ArgHasDeref(1) && _tcslen(new_raw_arg1) > 1 && !TextToVK(new_raw_arg1) && !ConvertJoy(new_raw_arg1))
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
-
-	case ACT_FILEAPPEND:
-		if (aArgc > 2 && !line.ArgHasDeref(3) && line.ConvertFileEncoding(new_raw_arg3) == -1)
-			return ScriptError(ERR_PARAM3_INVALID, new_raw_arg3);
-		break;
-	case ACT_FILEENCODING:
-		if (aArgc > 0 && !line.ArgHasDeref(1) && line.ConvertFileEncoding(new_raw_arg1) == -1)
-			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		break;
 #endif  // The above section is in place only if when not AUTOHOTKEYSC.
 	}
 
