@@ -1402,6 +1402,11 @@ BIF_DECL(BIF_ControlGetFocus)
 	class_and_hwnd_type cah;
 	TCHAR class_name[WINDOW_CLASS_SIZE];
 	cah.hwnd = guithreadInfo.hwndFocus;
+	if (!cah.hwnd) // Not an error; it's valid (though rare) to have no focus.
+	{
+		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+		_f_return_empty;
+	}
 	cah.class_name = class_name;
 	if (!GetClassName(cah.hwnd, class_name, _countof(class_name) - 5)) // -5 to allow room for sequence number.
 		goto error;
