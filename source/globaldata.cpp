@@ -358,8 +358,6 @@ Action g_act[] =
 	, {_T("WinSetTitle"), 1, 5, false, NULL} // newtitle, title, text, exclude-title, exclude-text
 	, {_T("WinGetPos"), 0, 8, true, NULL} // Four optional output vars: xpos, ypos, width, height.  Std. 4 window params.
 
-	, {_T("SysGet"), 2, 2, true, NULL} // Output-var, sys-metrics-number
-
 	, {_T("PostMessage"), 1, 8, false, {1, 2, 3, 0}}  // msg, wParam, lParam, Control, WinTitle, WinText, ExcludeTitle, ExcludeText
 	, {_T("SendMessage"), 1, 9, false, {1, 2, 3, 9, 0}}  // msg, wParam, lParam, Control, WinTitle, WinText, ExcludeTitle, ExcludeText, Timeout
 

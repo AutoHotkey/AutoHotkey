@@ -936,7 +936,6 @@ public:
 			case ACT_FILEREAD:
 			case ACT_MOUSEGETPOS:
 			case ACT_WINGETPOS:
-			case ACT_SYSGET:
 			case ACT_CONTROLGETPOS:
 			case ACT_PIXELGETCOLOR:
 			case ACT_PIXELSEARCH:
@@ -3016,6 +3015,7 @@ BIF_DECL(BIF_SqrtLogLn);
 BIF_DECL(BIF_DateAdd);
 BIF_DECL(BIF_DateDiff);
 BIF_DECL(BIF_Env);
+BIF_DECL(BIF_SysGet);
 
 BIF_DECL(BIF_OnMessage);
 BIF_DECL(BIF_OnExitOrClipboard);

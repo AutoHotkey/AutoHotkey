@@ -2953,6 +2953,13 @@ BIF_DECL(BIF_Env)
 
 
 
+BIF_DECL(BIF_SysGet)
+{
+	_f_return(GetSystemMetrics(ParamIndexToInt(0)));
+}
+
+
+
 #if defined(CONFIG_WIN9X) || defined(CONFIG_WINNT4)
 #error MonitorGet: Win9x/NT4 support was removed; to restore it, load EnumDisplayMonitors dynamically.
 #endif

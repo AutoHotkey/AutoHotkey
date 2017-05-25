@@ -67,6 +67,7 @@ FuncEntry g_BIF[] =
 
 	BIFn(EnvGet, 1, 1, true, BIF_Env),
 	BIFn(EnvSet, 1, 2, false, BIF_Env),
+	BIF1(SysGet, 1, 1, true),
 
 	BIF1(MsgBox, 0, 4, false, {4}),
 	BIF1(InputBox, 0, 4, true),
@@ -11599,9 +11600,6 @@ ResultType Line::Perform()
 		return WinSetTitle(FIVE_ARGS);
 	case ACT_WINGETPOS:
 		return WinGetPos(ARG5, ARG6, ARG7, ARG8);
-
-	case ACT_SYSGET: // SysGet()
-		return output_var->Assign(GetSystemMetrics(ATOI(ARG2)));
 
 	case ACT_WINMINIMIZEALL:
 		PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 419, 0);
