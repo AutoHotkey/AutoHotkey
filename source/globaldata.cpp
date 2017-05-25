@@ -407,7 +407,6 @@ Action g_act[] =
 
 	// These require so few parameters due to registry loops, which provide the missing parameter values
 	// automatically:
-	, {_T("RegRead"), 1, 3, true, NULL} // output var, RegKey, ValueName
 	, {_T("RegWrite"), 0, 4, false, NULL} // ValueType, RegKey, ValueName, Value (set to blank if omitted?)
 	, {_T("RegDelete"), 0, 2, false, NULL} // RegKey, ValueName
 	, {_T("RegDeleteKey"), 1, 1, false, NULL} // RegKey

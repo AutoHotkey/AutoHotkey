@@ -171,30 +171,54 @@ ResultType Line::IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 
 
 
-ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
+ResultType RegConvertParams(ExprTokenType *aParam[], int aParamCount
+	, HKEY &aRootKey, LPTSTR &aSubKey, LPTSTR &aValueName, bool &aCloseRootKey
+	, ResultToken &aResultToken)
 {
-	Var &output_var = *OUTPUT_VAR;
-	output_var.Assign(); // Init.  Tell it not to free the memory by not calling without parameters.
+	if (!aParamCount && g->mLoopRegItem) // Default to the registry loop's current item.
+	{
+		// If g.mLoopRegItem->name specifies a subkey rather than a value name, do this anyway
+		// so that it will set ErrorLevel to ERROR and set the output variable to be blank.
+		RegItemStruct &reg_item = *g->mLoopRegItem;
+		aRootKey = reg_item.root_key;
+		aSubKey = reg_item.subkey;
+		aValueName = reg_item.name;
+		// Do not use RegCloseKey() on this, even if it's a remote key, since our caller handles that:
+		aCloseRootKey = false;
+	}
+	else
+	{
+		LPTSTR key_name = ParamIndexToOptionalString(0); // No buf needed since numbers aren't valid root keys.
+		aValueName = ParamIndexToOptionalString(1, aResultToken.buf); // Use caller's buf for this one.
+		aRootKey = Line::RegConvertKey(key_name, &aSubKey, &aCloseRootKey);
+		if (!aRootKey)
+			return aResultToken.Error(ERR_PARAM1_INVALID, key_name);
+	}
+	return OK;
+}
 
+
+
+void RegRead(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
+{
 	HKEY	hRegKey;
 	DWORD	dwRes, dwBuf, dwType;
 	LONG    result;
 
-	if (!aRootKey)
-		return LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
+	_f_set_retval_p(_T(""), 0); // Set default in case of early return.
 
 	// Open the registry key
 	result = RegOpenKeyEx(aRootKey, aRegSubkey, 0, KEY_READ | g->RegView, &hRegKey);
 	if (result != ERROR_SUCCESS)
-		goto finish;
+	{
+		Script::SetErrorLevels(true, result);
+		return;
+	}
 
 	// Read the value and determine the type.  If aValueName is the empty string, the key's default value is used.
 	result = RegQueryValueEx(hRegKey, aValueName, NULL, &dwType, NULL, NULL);
 	if (result != ERROR_SUCCESS)
-	{
-		RegCloseKey(hRegKey);
 		goto finish;
-	}
 
 	LPTSTR contents, cp;
 
@@ -205,8 +229,10 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 			dwRes = sizeof(dwBuf);
 			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, (LPBYTE)&dwBuf, &dwRes);
 			if (result == ERROR_SUCCESS)
-				output_var.Assign((DWORD)dwBuf);
-			RegCloseKey(hRegKey);
+			{
+				// Set the return value but don't return yet.
+				aResultToken.Return(dwBuf);
+			}
 			break;
 
 		// Note: The contents of any of these types can be >64K on NT/2k/XP+ (though that is probably rare):
@@ -219,30 +245,20 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 			// the size of the data, in bytes, in the variable pointed to by lpcbData.
 			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, NULL, &dwRes); // Find how large the value is.
 			if (result != ERROR_SUCCESS || !dwRes) // Can't find size (realistically might never happen), or size is zero.
-			{
-				RegCloseKey(hRegKey);
-				// Above realistically probably never happens; if it does and result != ERROR_SUCCESS,
-				// setting ErrorLevel to indicate the error seems more useful than maintaining backward-
-				// compatibility by faking success.
 				break;
-			}
 			DWORD dwCharLen = dwRes / sizeof(TCHAR);
-			// Set up the variable to receive the contents, enlarging it if necessary:
+			// Set up the result buffer to receive the contents.
 			// Since dwRes includes the space for the zero terminator (if the MSDN docs
-			// are accurate), this will enlarge it to be 1 byte larger than we need,
+			// are accurate), this will size it to be 1 byte larger than we need,
 			// which leaves room for the final newline character to be inserted after
 			// the last item.  But add 2 to the requested capacity in case the data isn't
 			// terminated in the registry, which allows double-NULL to be put in for REG_MULTI_SZ later.
-			if (output_var.AssignString(NULL, (VarSizeType)(dwCharLen + 2)) != OK)
-			{
-				RegCloseKey(hRegKey);
-				return FAIL; // FAIL is only returned when the error is a critical one such as this one.
-			}
-
-			contents = output_var.Contents(); // This target buf should now be large enough for the result.
+			if (!TokenSetResult(aResultToken, NULL, dwCharLen + 2))
+				break; // aResultToken.Error() was already called, but we still need to call RegCloseKey().
+			//aResultToken.symbol = SYM_STRING; // Already set by _f_set_reval_p().
+			contents = aResultToken.marker; // This target buf should now be large enough for the result.
 
 			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, (LPBYTE)contents, &dwRes);
-			RegCloseKey(hRegKey);
 
 			if (result != ERROR_SUCCESS || !dwRes) // Relies on short-circuit boolean order.
 			{
@@ -289,9 +305,7 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 					// into it at all, since each newline should correspond to an item in the buffer.
 				}
 			}
-			output_var.SetCharLength((VarSizeType)_tcslen(contents)); // Due to conservative buffer sizes above, length is probably too large by 3. So update to reflect the true length.
-			if (!output_var.Close()) // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-				return FAIL;
+			aResultToken.marker_length = _tcslen(contents); // Due to conservative buffer sizes above, length is probably too large by 3. So update to reflect the true length.
 			break;
 		}
 		case REG_BINARY:
@@ -300,29 +314,25 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 			dwRes = 0;
 			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, NULL, &dwRes); // Find how large the value is.
 			if (result != ERROR_SUCCESS || !dwRes) // Can't find size (realistically might never happen), or size is zero.
-			{
-				RegCloseKey(hRegKey);
 				break;
-			}
 
-			// Set up the variable to receive the contents, enlarging it if necessary.
+			// Set up the result buffer.
 			// AutoIt3: Each byte will turned into 2 digits, plus a final null:
-			if (output_var.AssignString(NULL, (VarSizeType)(dwRes * 2)) != OK)
-			{
-				RegCloseKey(hRegKey);
-				return FAIL;
-			}
-			contents = output_var.Contents();
+			if (!TokenSetResult(aResultToken, NULL, dwRes * 2))
+				break; // aResultToken.Error() was already called, but we still need to call RegCloseKey().
+			//aResultToken.symbol = SYM_STRING; // Already set by _f_set_reval_p().
+			contents = aResultToken.marker;
 			*contents = '\0';
 			
 			// Read the binary data into the variable, placed so that the last byte of
 			// binary data will be overwritten as the hexadecimal conversion completes.
 			LPBYTE pRegBuffer = (LPBYTE)(contents + dwRes * 2) - dwRes;
 			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, pRegBuffer, &dwRes);
-			RegCloseKey(hRegKey);
-
 			if (result != ERROR_SUCCESS)
+			{
+				aResultToken.marker_length = 0; // Override the length set by TokenSetResult().
 				break;
+			}
 
 			int j = 0;
 			DWORD i, n; // i and n must be unsigned to work
@@ -336,19 +346,36 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 				j += 2;
 			}
 			contents[j] = '\0'; // Terminate
-			if (!output_var.Close()) // Length() was already set by the earlier call to Assign().
-				return FAIL;
+			// aResultToken.marker_length was already set by TokenSetResult().
 			break;
 		}
 		default:
-			RegCloseKey(hRegKey);
 			result = ERROR_UNSUPPORTED_TYPE; // Indicate the error.
 			break;
 	}
 
 finish:
-	return SetErrorsOrThrow(result != ERROR_SUCCESS, result);
+	// The function is designed to reach this point only if the key was opened,
+	// rather than initializing hRegKey to NULL and checking here, since it's
+	// not clear whether NULL is actually an invalid registry handle value:
+	//if (hRegKey)
+	RegCloseKey(hRegKey);
+	Script::SetErrorLevels(result != ERROR_SUCCESS, result);
 } // RegRead()
+
+
+BIF_DECL(BIF_RegRead)
+{
+	HKEY root_key;
+	LPTSTR sub_key;
+	LPTSTR value_name;
+	bool close_root;
+	if (!RegConvertParams(aParam, aParamCount, root_key, sub_key, value_name, close_root, aResultToken))
+		return;
+	RegRead(aResultToken, root_key, sub_key, value_name);
+	if (close_root)
+		RegCloseKey(root_key);
+}
 
 
 

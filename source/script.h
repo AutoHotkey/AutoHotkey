@@ -652,11 +652,9 @@ private:
 
 	ResultType IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
 	ResultType IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
-	ResultType RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName);
 	ResultType RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName, LPTSTR aValue);
 	ResultType RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName);
 	static LONG RegRemoveSubkeys(HKEY hRegKey);
-	ResultType SetRegView(LPTSTR aView);
 
 	ResultType ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID);
 	ResultType TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions);
@@ -937,7 +935,6 @@ public:
 			case ACT_DEREF:
 			case ACT_STATUSBARGETTEXT:
 			case ACT_RANDOM:
-			case ACT_REGREAD:
 			case ACT_SOUNDGET:
 			case ACT_FILEREAD:
 			case ACT_MOUSEGETPOS:
@@ -3116,6 +3113,7 @@ BIF_DECL(BIF_FileGetTime);
 BIF_DECL(BIF_FileGetVersion);
 BIF_DECL(BIF_FileSelect);
 BIF_DECL(BIF_IniRead);
+BIF_DECL(BIF_RegRead);
 BIF_DECL(BIF_WinGetClass);
 BIF_DECL(BIF_WinGetText);
 BIF_DECL(BIF_WinGetTitle);

@@ -212,6 +212,7 @@ FuncEntry g_BIF[] =
 	BIF1(FileSelect, 0, 4, true),
 
 	BIF1(IniRead, 1, 4, true),
+	BIF1(RegRead, 0, 2, true),
 
 	BIF1(WinGetClass, 0, 4, true),
 	BIF1(WinGetText, 0, 4, true),
@@ -12165,18 +12166,6 @@ ResultType Line::Perform()
 		// nothing (that fact is untested):
 		return IniDelete(ARG1, ARG2, mArgc < 3 ? NULL : ARG3);
 
-	case ACT_REGREAD:
-		if (mArgc < 2 && g.mLoopRegItem) // Uses the registry loop's current item.
-			// If g.mLoopRegItem->name specifies a subkey rather than a value name, do this anyway
-			// so that it will set ErrorLevel to ERROR and set the output variable to be blank.
-			// Also, do not use RegCloseKey() on this, even if it's a remote key, since our caller handles that:
-			return RegRead(g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name);
-		// Otherwise:
-		root_key = RegConvertKey(ARG2, &subkey, &is_remote_registry);
-		result = RegRead(root_key, subkey, ARG3);
-		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS keeps always-open.
-			RegCloseKey(root_key);
-		return result;
 	case ACT_REGWRITE:
 		if (mArgc < 2 && g.mLoopRegItem) // Uses the registry loop's current item.
 			// If g.mLoopRegItem->name specifies a subkey rather than a value name, do this anyway
