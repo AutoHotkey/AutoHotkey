@@ -204,6 +204,11 @@ FuncEntry g_BIF[] =
 	BIFn(DriveGetCapacity, 1, 1, true, BIF_DriveGet),
 	BIFn(DriveGetSpaceFree, 1, 1, true, BIF_DriveGet),
 
+	BIF1(FileGetAttrib, 0, 1, true),
+	BIF1(FileGetSize, 0, 2, true),
+	BIF1(FileGetTime, 0, 2, true),
+	BIF1(FileGetVersion, 0, 1, true),
+
 	BIF1(WinGetClass, 0, 4, true),
 	BIF1(WinGetText, 0, 4, true),
 	BIF1(WinGetTitle, 0, 4, true),
@@ -11897,28 +11902,20 @@ ResultType Line::Perform()
 		return SetErrorLevelOrThrowBool(!*ARG1 // Consider an attempt to create or remove a blank dir to be an error.
 			|| !Util_RemoveDir(ARG1, ArgToInt(2) == 1)); // Relies on short-circuit evaluation.
 
-	case ACT_FILEGETATTRIB:
-		// The specified ARG, if non-blank, takes precedence over the file-loop's file (if any):
-		#define USE_FILE_LOOP_FILE_IF_ARG_BLANK(arg) (*arg ? arg : (g.mLoopFile ? g.mLoopFile->cFileName : _T("")))
-		return FileGetAttrib(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2));
 	case ACT_FILESETATTRIB:
 	{
 		FileLoopModeType mode = ConvertLoopMode(ARG3);
+		// The specified ARG, if non-blank, takes precedence over the file-loop's file (if any):
+		#define USE_FILE_LOOP_FILE_IF_ARG_BLANK(arg) (*arg ? arg : (g.mLoopFile ? g.mLoopFile->cFileName : _T("")))
 		FileSetAttrib(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), (mode & ~FILE_LOOP_RECURSE), (mode & FILE_LOOP_RECURSE));
 		return !g.ThrownToken ? OK : FAIL;
 	}
-	case ACT_FILEGETTIME:
-		return FileGetTime(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3);
 	case ACT_FILESETTIME:
 	{
 		FileLoopModeType mode = ConvertLoopMode(ARG4);
 		FileSetTime(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3, (mode & ~FILE_LOOP_RECURSE), (mode & FILE_LOOP_RECURSE));
 		return !g.ThrownToken ? OK : FAIL;
 	}
-	case ACT_FILEGETSIZE:
-		return FileGetSize(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), ARG3);
-	case ACT_FILEGETVERSION:
-		return FileGetVersion(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2));
 
 	case ACT_SETWORKINGDIR:
 		SetWorkingDir(ARG1);
@@ -13132,6 +13129,12 @@ ResultType Line::SetErrorsOrThrow(bool aError, DWORD aLastErrorOverride)
 	// LastError is set even if we're going to throw an exception, for simplicity:
 	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
 	return SetErrorLevelOrThrowBool(aError);
+}
+
+void Script::SetErrorLevels(bool aError, DWORD aLastErrorOverride)
+{
+	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
+	g_ErrorLevel->Assign(aError);
 }
 
 

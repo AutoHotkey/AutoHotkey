@@ -8445,20 +8445,22 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 
 
 
-ResultType Line::FileGetAttrib(LPTSTR aFilespec)
+BIF_DECL(BIF_FileGetAttrib)
 {
-	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.
+	_f_param_string_opt_def(aFilespec, 0, (g->mLoopFile ? g->mLoopFile->cFileName : _T("")));
 
-	if (!aFilespec || !*aFilespec)
-		return LineError(ERR_PARAM2_REQUIRED);
+	if (!*aFilespec)
+		_f_throw(ERR_PARAM2_MUST_NOT_BE_BLANK);
 
 	DWORD attr = GetFileAttributes(aFilespec);
 	if (attr == 0xFFFFFFFF)  // Failure, probably because file doesn't exist.
-		return SetErrorsOrThrow(true);
+	{
+		Script::SetErrorLevels(true);
+		_f_return_empty;
+	}
 
-	SetErrorsOrThrow(false, 0);
-	TCHAR attr_string[128];
-	return OUTPUT_VAR->Assign(FileAttribToStr(attr_string, attr));
+	Script::SetErrorLevels(false, 0);
+	_f_return_p(FileAttribToStr(_f_retval_buf, attr));
 }
 
 
@@ -8696,23 +8698,27 @@ int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeTyp
 
 
 
-ResultType Line::FileGetTime(LPTSTR aFilespec, TCHAR aWhichTime)
+BIF_DECL(BIF_FileGetTime)
 {
-	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.
+	_f_param_string_opt_def(aFilespec, 0, (g->mLoopFile ? g->mLoopFile->cFileName : _T("")));
+	_f_param_string_opt(aWhichTime, 1);
 
-	if (!aFilespec || !*aFilespec)
-		return LineError(ERR_PARAM2_REQUIRED);
+	if (!*aFilespec)
+		_f_throw(ERR_PARAM2_MUST_NOT_BE_BLANK);
 
 	// Don't use CreateFile() & FileGetSize() size they will fail to work on a file that's in use.
 	// Research indicates that this method has no disadvantages compared to the other method.
 	WIN32_FIND_DATA found_file;
 	HANDLE file_search = FindFirstFile(aFilespec, &found_file);
 	if (file_search == INVALID_HANDLE_VALUE)
-		return SetErrorsOrThrow(true);
+	{
+		Script::SetErrorLevels(true);
+		_f_return_empty;
+	}
 	FindClose(file_search);
 
 	FILETIME local_file_time;
-	switch (ctoupper(aWhichTime))
+	switch (ctoupper(*aWhichTime))
 	{
 	case 'C': // File's creation time.
 		FileTimeToLocalFileTime(&found_file.ftCreationTime, &local_file_time);
@@ -8724,9 +8730,8 @@ ResultType Line::FileGetTime(LPTSTR aFilespec, TCHAR aWhichTime)
 		FileTimeToLocalFileTime(&found_file.ftLastWriteTime, &local_file_time);
 	}
 
-	SetErrorsOrThrow(false, 0); // Indicate success.
-	TCHAR local_file_time_string[128];
-	return OUTPUT_VAR->Assign(FileTimeToYYYYMMDD(local_file_time_string, local_file_time));
+	Script::SetErrorLevels(false, 0); // Indicate success.
+	_f_return_p(FileTimeToYYYYMMDD(_f_retval_buf, local_file_time));
 }
 
 
@@ -8943,12 +8948,13 @@ int Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
 
 
 
-ResultType Line::FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity)
+BIF_DECL(BIF_FileGetSize)
 {
-	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.
+	_f_param_string_opt_def(aFilespec, 0, (g->mLoopFile ? g->mLoopFile->cFileName : _T("")));
+	_f_param_string_opt(aGranularity, 1);
 
-	if (!aFilespec || !*aFilespec)
-		return LineError(ERR_PARAM2_REQUIRED); // Throw an error, since this is probably not what the user intended.
+	if (!*aFilespec)
+		_f_throw(ERR_PARAM2_MUST_NOT_BE_BLANK); // Throw an error, since this is probably not what the user intended.
 	
 	BOOL got_file_size = false;
 	__int64 size;
@@ -8969,7 +8975,10 @@ ResultType Line::FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity)
 		WIN32_FIND_DATA found_file;
 		HANDLE file_search = FindFirstFile(aFilespec, &found_file);
 		if (file_search == INVALID_HANDLE_VALUE)
-			return SetErrorsOrThrow(true); // Let ErrorLevel tell the story.
+		{
+			Script::SetErrorLevels(true);
+			_f_return_empty;
+		}
 		FindClose(file_search);
 		size = ((__int64)found_file.nFileSizeHigh << 32) | found_file.nFileSizeLow;
 	}
@@ -8986,8 +8995,8 @@ ResultType Line::FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity)
 		// do nothing
 	}
 
-	SetErrorsOrThrow(false, 0); // Indicate success.
-	return OUTPUT_VAR->Assign(size);
+	Script::SetErrorLevels(false, 0); // Indicate success.
+	_f_return(size);
 	// The below comment is obsolete in light of the switch to 64-bit integers.  But it might
 	// be good to keep for background:
 	// Currently, the above is basically subject to a 2 gig limit, I believe, after which the

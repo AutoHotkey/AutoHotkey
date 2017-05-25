@@ -652,14 +652,10 @@ private:
 	ResultType FileRecycleEmpty(LPTSTR aDriveLetter);
 	ResultType FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag);
 
-	ResultType FileGetAttrib(LPTSTR aFilespec);
 	int FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
 		, bool aDoRecurse, bool aCalledRecursively = false);
-	ResultType FileGetTime(LPTSTR aFilespec, TCHAR aWhichTime);
 	int FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
 		, FileLoopModeType aOperateOnFolders, bool aDoRecurse, bool aCalledRecursively = false);
-	ResultType FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity);
-	ResultType FileGetVersion(LPTSTR aFilespec);
 
 	ResultType IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR aDefault);
 	ResultType IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
@@ -953,10 +949,6 @@ public:
 			case ACT_REGREAD:
 			case ACT_SOUNDGET:
 			case ACT_FILEREAD:
-			case ACT_FILEGETATTRIB:
-			case ACT_FILEGETTIME:
-			case ACT_FILEGETSIZE:
-			case ACT_FILEGETVERSION:
 			case ACT_FILESELECT:
 			case ACT_DIRSELECT:
 			case ACT_MOUSEGETPOS:
@@ -2875,6 +2867,8 @@ public:
 	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat = NULL);
 	static ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	static void FreeExceptionToken(ResultToken*& aToken);
+	static void SetErrorLevels(bool aError, DWORD aLastErrorOverride = -1);
+
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
 
@@ -3126,6 +3120,10 @@ BIF_DECL(BIF_ControlGetFocus);
 BIF_DECL(BIF_ControlGetText);
 BIF_DECL(BIF_Drive);
 BIF_DECL(BIF_DriveGet);
+BIF_DECL(BIF_FileGetAttrib);
+BIF_DECL(BIF_FileGetSize);
+BIF_DECL(BIF_FileGetTime);
+BIF_DECL(BIF_FileGetVersion);
 BIF_DECL(BIF_WinGetClass);
 BIF_DECL(BIF_WinGetText);
 BIF_DECL(BIF_WinGetTitle);

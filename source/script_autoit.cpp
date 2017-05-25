@@ -1386,16 +1386,19 @@ ResultType Line::FileRecycleEmpty(LPTSTR aDriveLetter)
 
 
 
-ResultType Line::FileGetVersion(LPTSTR aFilespec)
+BIF_DECL(BIF_FileGetVersion)
 {
-	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.
+	_f_param_string_opt_def(aFilespec, 0, (g->mLoopFile ? g->mLoopFile->cFileName : _T("")));
 
-	if (!aFilespec || !*aFilespec)
-		return LineError(ERR_PARAM1_REQUIRED);  // Since this is probably not what the user intended.
+	if (!*aFilespec)
+		_f_throw(ERR_PARAM1_MUST_NOT_BE_BLANK);  // Since this is probably not what the user intended.
 
 	DWORD dwUnused, dwSize;
 	if (   !(dwSize = GetFileVersionInfoSize(aFilespec, &dwUnused))   )  // No documented limit on how large it can be, so don't use _alloca().
-		return SetErrorsOrThrow(true);
+	{
+		Script::SetErrorLevels(true);
+		_f_return_empty;
+	}
 
 	BYTE *pInfo = (BYTE*)malloc(dwSize);  // Allocate the size retrieved by the above.
 	VS_FIXEDFILEINFO *pFFI;
@@ -1408,20 +1411,20 @@ ResultType Line::FileGetVersion(LPTSTR aFilespec)
 	{
 		g->LastError = GetLastError();
 		free(pInfo);
-		return SetErrorLevelOrThrow();
+		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		_f_return_empty;
 	}
 
 	// extract the fields you want from pFFI
 	UINT iFileMS = (UINT)pFFI->dwFileVersionMS;
 	UINT iFileLS = (UINT)pFFI->dwFileVersionLS;
-	TCHAR version_string[128];  // AutoIt3: 43+1 is the maximum size, but leave a little room to increase confidence.
-	sntprintf(version_string, _countof(version_string), _T("%u.%u.%u.%u")
+	sntprintf(_f_retval_buf, _f_retval_buf_size, _T("%u.%u.%u.%u")
 		, (iFileMS >> 16), (iFileMS & 0xFFFF), (iFileLS >> 16), (iFileLS & 0xFFFF));
 
 	free(pInfo);
 
-	SetErrorsOrThrow(false, 0); // Indicate success.
-	return OUTPUT_VAR->Assign(version_string);
+	Script::SetErrorLevels(false, 0); // Indicate success.
+	_f_return_p(_f_retval_buf);
 }
 
 

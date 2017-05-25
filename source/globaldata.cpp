@@ -394,12 +394,8 @@ Action g_act[] =
 	, {_T("DirCreate"), 1, 1, false, NULL} // dir name
 	, {_T("DirDelete"), 1, 2, false, {2, 0}} // dir name, flag
 
-	, {_T("FileGetAttrib"), 1, 2, true, NULL} // OutputVar, Filespec (if blank, uses loop's current file)
 	, {_T("FileSetAttrib"), 1, 3, false, NULL} // Attribute(s), FilePattern, Mode
-	, {_T("FileGetTime"), 1, 3, true, NULL} // OutputVar, Filespec, WhichTime (modified/created/accessed)
 	, {_T("FileSetTime"), 0, 4, false, {1, 0}} // datetime (YYYYMMDDHH24MISS), FilePattern, WhichTime, Mode
-	, {_T("FileGetSize"), 1, 3, true, NULL} // OutputVar, Filespec, B|K|M (bytes, kb, or mb)
-	, {_T("FileGetVersion"), 1, 2, true, NULL} // OutputVar, Filespec
 
 	, {_T("SetWorkingDir"), 1, 1, false, NULL} // New path
 	, {_T("FileSelect"), 1, 5, true, NULL} // output var, options, working dir, greeting, filter
