@@ -686,10 +686,7 @@ private:
 	ResultType WinSetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aNewTitle
 		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
 	ResultType WinGetPos(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB, int aVariation
-		, LPTSTR aOptions, bool aIsPixelGetColor);
 	ResultType ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTSTR aImageFile);
-	ResultType PixelGetColor(int aX, int aY, LPTSTR aOptions);
 
 	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
 
@@ -937,7 +934,6 @@ public:
 			case ACT_MOUSEGETPOS:
 			case ACT_WINGETPOS:
 			case ACT_CONTROLGETPOS:
-			case ACT_PIXELGETCOLOR:
 			case ACT_PIXELSEARCH:
 			case ACT_IMAGESEARCH:
 			case ACT_FORMATTIME:
@@ -3110,6 +3106,7 @@ BIF_DECL(BIF_FileGetTime);
 BIF_DECL(BIF_FileGetVersion);
 BIF_DECL(BIF_FileSelect);
 BIF_DECL(BIF_IniRead);
+BIF_DECL(BIF_PixelGetColor);
 BIF_DECL(BIF_RegRead);
 BIF_DECL(BIF_Random);
 BIF_DECL(BIF_StatusBarGetText);
@@ -3155,6 +3152,10 @@ LPTSTR GetExitReasonString(ExitReasons aExitReason);
 
 void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions);
 bool ControlSetTab(ResultToken &aResultToken, HWND aHwnd, DWORD aTabIndex);
+
+ResultType PixelSearch(Var *aOutputVarX, Var *aOutputVarY
+	, int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
+	, int aVariation, LPTSTR aOptions, ResultToken *aIsPixelGetColor);
 
 #endif
 

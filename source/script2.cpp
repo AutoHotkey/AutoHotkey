@@ -3185,8 +3185,9 @@ end:
 
 
 
-ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
-	, int aVariation, LPTSTR aOptions, bool aIsPixelGetColor)
+ResultType PixelSearch(Var *output_var_x, Var *output_var_y
+	, int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
+	, int aVariation, LPTSTR aOptions, ResultToken *aIsPixelGetColor)
 // Author: The fast-mode PixelSearch was created by Aurelian Maga.
 {
 	// For maintainability, get options and RGB/BGR conversion out of the way early.
@@ -3195,9 +3196,6 @@ ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLOR
 
 	// Many of the following sections are similar to those in ImageSearch(), so they should be
 	// maintained together.
-
-	Var *output_var_x = ARGVAR1;  // Ok if NULL. Load-time validation has ensured that these are valid output variables (e.g. not built-in vars).
-	Var *output_var_y = aIsPixelGetColor ? NULL : ARGVAR2;  // Ok if NULL. ARGVARRAW2 wouldn't be safe because load-time validation requires a min of only zero parameters to allow the output variables to be left blank.
 
 	if (output_var_x)
 		output_var_x->Assign();  // Init to empty string regardless of whether we succeed here.
@@ -3285,9 +3283,7 @@ ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLOR
 		if (aIsPixelGetColor)
 		{
 			COLORREF color = screen_pixel[0] & 0x00FFFFFF; // See other 0x00FFFFFF below for explanation.
-			TCHAR buf[32];
-			_stprintf(buf, _T("0x%06X"), color);
-			output_var_x->Assign(buf); // Caller has ensured that first output_var (x) won't be NULL in this mode.
+			aIsPixelGetColor->marker_length = _stprintf(aIsPixelGetColor->marker, _T("0x%06X"), color);
 			found = true; // ErrorLevel will be set to 0 further below.
 		}
 		else if (aVariation < 1) // Caller wants an exact match on one particular color.
@@ -3446,7 +3442,7 @@ fast_end:
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 error:
-	return SetErrorLevelOrThrowInt(aIsPixelGetColor ? ERRORLEVEL_ERROR : ERRORLEVEL_ERROR2); // 2 means error other than "color not found".
+	return Script::SetErrorLevelOrThrowInt(aIsPixelGetColor ? ERRORLEVEL_ERROR : ERRORLEVEL_ERROR2); // 2 means error other than "color not found".
 }
 
 

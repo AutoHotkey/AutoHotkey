@@ -213,6 +213,7 @@ FuncEntry g_BIF[] =
 	BIF1(FileSelect, 0, 4, true),
 
 	BIF1(IniRead, 1, 4, true),
+	BIF1(PixelGetColor, 2, 3, true),
 	BIF1(RegRead, 0, 2, true),
 	BIFn(Random, 0, 2, true, BIF_Random),
 	BIFn(RandomSeed, 1, 1, true, BIF_Random),
@@ -11437,11 +11438,9 @@ ResultType Line::Perform()
 
 	case ACT_PIXELSEARCH:
 		// ArgToInt() works on ARG7 (the color) because any valid BGR or RGB color has 0x00 in the high order byte:
-		return PixelSearch(ArgToInt(3), ArgToInt(4), ArgToInt(5), ArgToInt(6), ArgToInt(7), ArgToInt(8), ARG9, false);
+		return PixelSearch(ARGVAR1, ARGVAR2, ArgToInt(3), ArgToInt(4), ArgToInt(5), ArgToInt(6), ArgToInt(7), ArgToInt(8), ARG9, false);
 	case ACT_IMAGESEARCH:
 		return ImageSearch(ArgToInt(3), ArgToInt(4), ArgToInt(5), ArgToInt(6), ARG7);
-	case ACT_PIXELGETCOLOR:
-		return PixelGetColor(ArgToInt(2), ArgToInt(3), ARG4);
 
 	case ACT_SEND:
 	case ACT_SENDRAW:

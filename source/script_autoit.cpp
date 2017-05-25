@@ -177,20 +177,29 @@ VarSizeType BIV_IsAdmin(LPTSTR aBuf, LPTSTR aVarName)
 
 
 
-ResultType Line::PixelGetColor(int aX, int aY, LPTSTR aOptions)
+BIF_DECL(BIF_PixelGetColor)
 {
-	if (tcscasestr(aOptions, _T("Slow"))) // New mode for v1.0.43.10.  Takes precedence over Alt mode.
-		return PixelSearch(aX, aY, aX, aY, 0, 0, aOptions, true); // It takes care of setting ErrorLevel and the output-var.
+	_f_set_retval_p(_f_retval_buf, 0); // PixelSearch() below relies on this.
+	*aResultToken.marker = '\0'; // Set default.
+	int aX = ParamIndexToInt(0);
+	int aY = ParamIndexToInt(1);
+	_f_param_string_opt(aOptions, 2);
 
-	Var &output_var = *OUTPUT_VAR;
-	output_var.Assign(); // Init to empty string regardless of whether we succeed here.
+	if (tcscasestr(aOptions, _T("Slow"))) // New mode for v1.0.43.10.  Takes precedence over Alt mode.
+	{
+		PixelSearch(NULL, NULL, aX, aY, aX, aY, 0, 0, aOptions, &aResultToken); // It takes care of setting ErrorLevel and the return value.
+		_f_return_retval;
+	}
 
 	CoordToScreen(aX, aY, COORD_MODE_PIXEL);
 	
 	bool use_alt_mode = tcscasestr(aOptions, _T("Alt")) != NULL; // New mode for v1.0.43.10: Two users reported that CreateDC works better in certain windows such as SciTE, at least one some systems.
 	HDC hdc = use_alt_mode ? CreateDC(_T("DISPLAY"), NULL, NULL, NULL) : GetDC(NULL);
 	if (!hdc)
-		return SetErrorLevelOrThrow();
+	{
+		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		_f_return_retval;
+	}
 
 	// Assign the value as an 32-bit int to match Window Spy reports color values.
 	// Update for v1.0.21: Assigning in hex format seems much better, since it's easy to
@@ -203,10 +212,9 @@ ResultType Line::PixelGetColor(int aX, int aY, LPTSTR aOptions)
 	else
 		ReleaseDC(NULL, hdc);
 
-	TCHAR buf[32];
-	_stprintf(buf, _T("0x%06X"), bgr_to_rgb(color));
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-	return output_var.Assign(buf);
+	aResultToken.marker_length = _stprintf(aResultToken.marker, _T("0x%06X"), bgr_to_rgb(color));
+	_f_return_retval;
 }
 
 
