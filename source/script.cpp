@@ -5191,15 +5191,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_MOUSE_COORD, new_raw_arg4);
 		break;
 
-	case ACT_CONTROLSEND:
-	case ACT_CONTROLSENDRAW:
-		// Window params can all be blank in this case, but characters to send should
-		// be non-blank (but it's ok if its a dereferenced var that resolves to blank
-		// at runtime):
-		if (!*new_raw_arg2)
-			return ScriptError(ERR_PARAM2_REQUIRED);
-		break;
-
 	case ACT_CONTROLCLICK:
 		// Check that the button is valid (e.g. left/right/middle):
 		if (*new_raw_arg4 && !line.ArgHasDeref(4)) // i.e. it's allowed to be blank (defaults to left).
