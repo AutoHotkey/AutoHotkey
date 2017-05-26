@@ -217,6 +217,8 @@ FuncEntry g_BIF[] =
 	BIF1(RegRead, 0, 2, true),
 	BIFn(Random, 0, 2, true, BIF_Random),
 	BIFn(RandomSeed, 1, 1, true, BIF_Random),
+	BIFn(SoundGet, 0, 3, true, BIF_Sound),
+	BIFn(SoundSet, 1, 4, false, BIF_Sound),
 	BIF1(StatusBarGetText, 0, 5, true),
 
 	BIF1(WinGetClass, 0, 4, true),
@@ -11795,10 +11797,6 @@ ResultType Line::Perform()
 				group->CloseAndGoToNext(*ARG2 && !_tcsicmp(ARG2, _T("R")));  // Note: It will take care of DoWinDelay if needed.
 		//else nonexistent group: By design, do nothing.
 		return OK;
-
-	case ACT_SOUNDGET:
-	case ACT_SOUNDSET:
-		return SoundSetGet(mActionType == ACT_SOUNDGET ? NULL : ARG1, ARG2, ARG3, ARG4);
 
 	case ACT_SOUNDBEEP:
 		// For simplicity and support for future/greater capabilities, no range checking is done.

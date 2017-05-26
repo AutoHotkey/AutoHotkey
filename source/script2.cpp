@@ -6833,57 +6833,57 @@ invalid_parameter:
 
 
 
-ResultType Line::SoundSetGet(LPTSTR aSetting, LPTSTR aComponentType, LPTSTR aControlType, LPTSTR aDevice)
+BIF_DECL(BIF_Sound)
 // If the caller specifies NULL for aSetting, the mode will be "Get".  Otherwise, it will be "Set".
 {
+	LPTSTR aSetting = NULL;
+	if (_f_callee_id == FID_SoundSet)
+	{
+		aSetting = ParamIndexToString(0, _f_number_buf);
+		++aParam;
+		--aParamCount;
+	}
+	_f_param_string_opt(aComponentType, 0);
+	_f_param_string_opt(aControlType, 1);
+	_f_param_string_opt(aDevice, 2);
 	int instance_number = 1;  // Set default.
-	DWORD component_type = *ARG2 ? SoundConvertComponentType(ARG2, &instance_number) : MIXERLINE_COMPONENTTYPE_DST_SPEAKERS;
-	DWORD control_type = *ARG3 ? SoundConvertControlType(ARG3) : MIXERCONTROL_CONTROLTYPE_VOLUME;
+	DWORD component_type = *aComponentType ? Line::SoundConvertComponentType(aComponentType, &instance_number) : MIXERLINE_COMPONENTTYPE_DST_SPEAKERS;
+	DWORD control_type = *aControlType ? Line::SoundConvertControlType(aControlType) : MIXERCONTROL_CONTROLTYPE_VOLUME;
 
 	#define SOUND_MODE_IS_SET aSetting // Boolean: i.e. if it's not NULL, the mode is "SET".
-	if (!SOUND_MODE_IS_SET)
-		OUTPUT_VAR->Assign(); // Init to empty string regardless of whether we succeed here.
+	_f_set_retval_p(_T(""), 0); // Set default.
 
-	// Rare, since load-time validation would have caught problems unless the params were variable references.
-	// Text values for ErrorLevels should be kept below 64 characters in length so that the variable doesn't
-	// have to be expanded with a different memory allocation method:
 	if (control_type == MIXERCONTROL_CONTROLTYPE_INVALID || aComponentType == MIXERLINE_COMPONENTTYPE_DST_UNDEFINED)
-		return SetErrorLevelOrThrowStr(_T("Invalid Control Type or Component Type"));
+		_f_throw(_T("Invalid Control Type or Component Type"));
 
 	if (g_os.IsWinVistaOrLater())
-		return SoundSetGetVista(aSetting, component_type, instance_number, control_type, aDevice);
+		SoundSetGetVista(aResultToken, aSetting, component_type, instance_number, control_type, aDevice);
 	else
-		return SoundSetGet2kXP(aSetting, component_type, instance_number, control_type, aDevice);
+		SoundSetGet2kXP(aResultToken, aSetting, component_type, instance_number, control_type, aDevice);
 }
 
 
-ResultType Line::SoundSetGet2kXP(LPTSTR aSetting, DWORD aComponentType, int aComponentInstance
-	, DWORD aControlType, LPTSTR aDevice)
+ResultType SoundSetGet2kXP(ResultToken &aResultToken, LPTSTR aSetting
+	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDevice)
 {
 	int aMixerID = *aDevice ? ATOI(aDevice) - 1 : 0;
 	if (aMixerID < 0)
 		aMixerID = 0;
 
 	double setting_percent;
-	Var *output_var;
 	if (SOUND_MODE_IS_SET)
 	{
-		output_var = NULL; // To help catch bugs.
 		setting_percent = ATOF(aSetting);
 		if (setting_percent < -100)
 			setting_percent = -100;
 		else if (setting_percent > 100)
 			setting_percent = 100;
 	}
-	else // The mode is GET.
-	{
-		output_var = OUTPUT_VAR;
-	}
 
 	// Open the specified mixer ID:
 	HMIXER hMixer;
     if (mixerOpen(&hMixer, aMixerID, 0, 0, 0) != MMSYSERR_NOERROR)
-		return SetErrorLevelOrThrowStr(_T("Can't Open Specified Mixer"));
+		return g_ErrorLevel->Assign(_T("Can't Open Specified Mixer"));
 
 	// Find out how many destinations are available on this mixer (should always be at least one):
 	int dest_count;
@@ -6902,7 +6902,7 @@ ResultType Line::SoundSetGet2kXP(LPTSTR aSetting, DWORD aComponentType, int aCom
 		if (mixerGetLineInfo((HMIXEROBJ)hMixer, &ml, MIXER_GETLINEINFOF_COMPONENTTYPE) != MMSYSERR_NOERROR)
 		{
 			mixerClose(hMixer);
-			return SetErrorLevelOrThrowStr(_T("Mixer Doesn't Support This Component Type"));
+			return g_ErrorLevel->Assign(_T("Mixer Doesn't Support This Component Type"));
 		}
 	}
 	else
@@ -6938,7 +6938,7 @@ ResultType Line::SoundSetGet2kXP(LPTSTR aSetting, DWORD aComponentType, int aCom
 		if (!found)
 		{
 			mixerClose(hMixer);
-			return SetErrorLevelOrThrowStr(_T("Mixer Doesn't Have That Many of That Component Type"));
+			return g_ErrorLevel->Assign(_T("Mixer Doesn't Have That Many of That Component Type"));
 		}
 	}
 
@@ -6954,13 +6954,11 @@ ResultType Line::SoundSetGet2kXP(LPTSTR aSetting, DWORD aComponentType, int aCom
 	if (mixerGetLineControls((HMIXEROBJ)hMixer, &mlc, MIXER_GETLINECONTROLSF_ONEBYTYPE) != MMSYSERR_NOERROR)
 	{
 		mixerClose(hMixer);
-		return SetErrorLevelOrThrowStr(_T("Component Doesn't Support This Control Type"));
+		return g_ErrorLevel->Assign(_T("Component Doesn't Support This Control Type"));
 	}
 
 	// Does user want to adjust the current setting by a certain amount?
-	// For v1.0.25, the first char of RAW_ARG is also checked in case this is an expression intended
-	// to be a positive offset, such as +(var + 10)
-	bool adjust_current_setting = aSetting && (*aSetting == '-' || *aSetting == '+' || *RAW_ARG1 == '+');
+	bool adjust_current_setting = aSetting && (*aSetting == '-' || *aSetting == '+');
 
 	// These are used in more than once place, so always initialize them here:
 	MIXERCONTROLDETAILS mcd = {0};
@@ -6977,7 +6975,7 @@ ResultType Line::SoundSetGet2kXP(LPTSTR aSetting, DWORD aComponentType, int aCom
 		if (mixerGetControlDetails((HMIXEROBJ)hMixer, &mcd, MIXER_GETCONTROLDETAILSF_VALUE) != MMSYSERR_NOERROR)
 		{
 			mixerClose(hMixer);
-			return SetErrorLevelOrThrowStr(_T("Can't Get Current Setting"));
+			return g_ErrorLevel->Assign(_T("Can't Get Current Setting"));
 		}
 	}
 
@@ -7026,7 +7024,7 @@ ResultType Line::SoundSetGet2kXP(LPTSTR aSetting, DWORD aComponentType, int aCom
 
 		MMRESULT result = mixerSetControlDetails((HMIXEROBJ)hMixer, &mcd, MIXER_GETCONTROLDETAILSF_VALUE);
 		mixerClose(hMixer);
-		return result == MMSYSERR_NOERROR ? g_ErrorLevel->Assign(ERRORLEVEL_NONE) : SetErrorLevelOrThrowStr(_T("Can't Change Setting"));
+		return result == MMSYSERR_NOERROR ? g_ErrorLevel->Assign(ERRORLEVEL_NONE) : g_ErrorLevel->Assign(_T("Can't Change Setting"));
 	}
 
 	// Otherwise, the mode is "Get":
@@ -7034,14 +7032,16 @@ ResultType Line::SoundSetGet2kXP(LPTSTR aSetting, DWORD aComponentType, int aCom
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 	if (control_type_is_boolean)
-		return output_var->Assign(mcdMeter.dwValue ? _T("On") : _T("Off"));
+		return aResultToken.ReturnPtr(mcdMeter.dwValue ? _T("On") : _T("Off"), -1);
 	else // For all others, assume the control can have more than just ON/OFF as its allowed states.
 		// The MSDN docs imply that values fetched via the above method do not distinguish between
 		// left and right volume levels, unlike waveOutGetVolume():
-		return output_var->Assign(   ((double)100 * (mcdMeter.dwValue - (DWORD)mc.Bounds.dwMinimum))
+		return aResultToken.Return(   ((double)100 * (mcdMeter.dwValue - (DWORD)mc.Bounds.dwMinimum))
 			/ (mc.Bounds.dwMaximum - mc.Bounds.dwMinimum)   );
 }
 
+
+#pragma region Sound support functions - Vista and later
 
 HRESULT SoundSetGet_GetDevice(LPTSTR aDeviceString, IMMDevice *&aDevice)
 {
@@ -7237,35 +7237,31 @@ bool SoundSetGet_FindComponent(IMMDevice *aDevice, SoundComponentSearch &aSearch
 	return aSearch.count == aSearch.target_instance;
 }
 
+#pragma endregion
 
-ResultType Line::SoundSetGetVista(LPTSTR aSetting, DWORD aComponentType, int aComponentInstance
-		, DWORD aControlType, LPTSTR aDeviceString)
+
+ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
+	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDeviceString)
 {
 	float setting_scalar;
-	Var *output_var;
 	if (SOUND_MODE_IS_SET)
 	{
-		output_var = NULL; // To help catch bugs.
 		setting_scalar = (float)(ATOF(aSetting) / 100);
 		if (setting_scalar < -1)
 			setting_scalar = -1;
 		else if (setting_scalar > 1)
 			setting_scalar = 1;
 	}
-	else // The mode is GET.
-	{
-		output_var = OUTPUT_VAR;
-	}
 
 	// Does user want to adjust the current setting by a certain amount?
-	bool adjust_current_setting = aSetting && (*aSetting == '-' || *aSetting == '+' || *RAW_ARG1 == '+');
+	bool adjust_current_setting = aSetting && (*aSetting == '-' || *aSetting == '+');
 
 	IMMDevice *device;
 	HRESULT hr;
 
 	hr = SoundSetGet_GetDevice(aDeviceString, device);
 	if (FAILED(hr))
-		return SetErrorLevelOrThrowStr(_T("Can't Open Specified Mixer"));
+		return g_ErrorLevel->Assign(_T("Can't Open Specified Mixer"));
 
 	LPCTSTR errorlevel = NULL;
 	float result_float;
@@ -7456,7 +7452,7 @@ control_fail:
 			errorlevel = _T("Can't Get Current Setting");
 	}
 	if (errorlevel)
-		return SetErrorLevelOrThrowStr(errorlevel);
+		return g_ErrorLevel->Assign(errorlevel);
 	else
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 
@@ -7464,9 +7460,9 @@ control_fail:
 		return OK;
 
 	if (control_type_is_boolean)
-		return output_var->Assign(result_bool ? _T("On") : _T("Off"));
+		return aResultToken.ReturnPtr(result_bool ? _T("On") : _T("Off"), -1);
 	else
-		return output_var->Assign(result_float);
+		return aResultToken.Return(result_float);
 }
 
 

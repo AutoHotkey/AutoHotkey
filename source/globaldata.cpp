@@ -371,8 +371,6 @@ Action g_act[] =
 	, {_T("GroupDeactivate"), 1, 2, false, NULL}
 	, {_T("GroupClose"), 1, 2, false, NULL}
 
-	, {_T("SoundGet"), 1, 4, true, {4, 0}} // OutputVar, ComponentType (default=master), ControlType (default=vol), Mixer/Device Number
-	, {_T("SoundSet"), 1, 4, false, {1, 4, 0}} // Volume percent-level (0-100), ComponentType, ControlType (default=vol), Mixer/Device Number
 	, {_T("SoundBeep"), 0, 2, false, {1, 2, 0}} // Frequency, Duration.
 	, {_T("SoundPlay"), 1, 2, false, NULL} // Filename [, wait]
 

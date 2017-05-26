@@ -578,6 +578,7 @@ enum BuiltInFunctionID {
 	FID_DriveEject = 0, FID_DriveLock, FID_DriveUnlock, FID_DriveSetLabel,
 	FID_DriveGetList = 0, FID_DriveGetFilesystem, FID_DriveGetLabel, FID_DriveGetSerial, FID_DriveGetType, FID_DriveGetStatus, FID_DriveGetStatusCD, FID_DriveGetCapacity, FID_DriveGetSpaceFree,
 	FID_EnvGet = 0, FID_EnvSet,
+	FID_SoundGet = 0, FID_SoundSet
 };
 
 
@@ -626,11 +627,6 @@ private:
 	ResultType MouseGetPos(DWORD aOptions);
 	ResultType FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat);
 	ResultType SplitPath(LPTSTR aFileSpec);
-	ResultType SoundSetGet(LPTSTR aSetting, LPTSTR aComponentType, LPTSTR aControlType, LPTSTR aDevice);
-	ResultType SoundSetGet2kXP(LPTSTR aSetting, DWORD aComponentType, int aComponentInstance
-		, DWORD aControlType, LPTSTR aDevice);
-	ResultType SoundSetGetVista(LPTSTR aSetting, DWORD aComponentType, int aComponentInstance
-		, DWORD aControlType, LPTSTR aDevice);
 	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
 	ResultType Download(LPTSTR aURL, LPTSTR aFilespec);
 
@@ -929,7 +925,6 @@ public:
 			{
 			case ACT_ASSIGNEXPR:
 			case ACT_DEREF:
-			case ACT_SOUNDGET:
 			case ACT_FILEREAD:
 			case ACT_MOUSEGETPOS:
 			case ACT_WINGETPOS:
@@ -3109,6 +3104,7 @@ BIF_DECL(BIF_IniRead);
 BIF_DECL(BIF_PixelGetColor);
 BIF_DECL(BIF_RegRead);
 BIF_DECL(BIF_Random);
+BIF_DECL(BIF_Sound);
 BIF_DECL(BIF_StatusBarGetText);
 BIF_DECL(BIF_WinGetClass);
 BIF_DECL(BIF_WinGetText);
@@ -3156,6 +3152,11 @@ bool ControlSetTab(ResultToken &aResultToken, HWND aHwnd, DWORD aTabIndex);
 ResultType PixelSearch(Var *aOutputVarX, Var *aOutputVarY
 	, int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
 	, int aVariation, LPTSTR aOptions, ResultToken *aIsPixelGetColor);
+
+ResultType SoundSetGet2kXP(ResultToken &aResultToken, LPTSTR aSetting
+	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDevice);
+ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
+	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDevice);
 
 #endif
 
