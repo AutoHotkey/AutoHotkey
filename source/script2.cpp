@@ -5343,19 +5343,20 @@ BOOL CALLBACK EnumChildFindPoint(HWND aWnd, LPARAM lParam)
 // Related to other commands //
 ///////////////////////////////
 
-ResultType Line::FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat)
+BIF_DECL(BIF_FormatTime)
 // The compressed code size of this function is about 1 KB (2 KB uncompressed), which compares
 // favorably to using setlocale()+strftime(), which together are about 8 KB of compressed code
 // (setlocale() seems to be needed to put the user's or system's locale into effect for strftime()).
 // setlocale() weighs in at about 6.5 KB compressed (14 KB uncompressed).
 {
-	Var &output_var = *OUTPUT_VAR;
+	_f_param_string_opt(aYYYYMMDD, 0);
+	_f_param_string_opt(aFormat, 1);
 
-	#define FT_MAX_INPUT_CHARS 2000  // In preparation for future use of TCHARs, since GetDateFormat() uses char-count not size.
+	#define FT_MAX_INPUT_CHARS 2000
 	// Input/format length is restricted since it must be translated and expanded into a new format
 	// string that uses single quotes around non-alphanumeric characters such as punctuation:
 	if (_tcslen(aFormat) > FT_MAX_INPUT_CHARS)
-		return output_var.Assign();
+		_f_throw(ERR_PARAM2_INVALID);
 
 	// Worst case expansion: .d.d.d.d. (9 chars) --> '.'d'.'d'.'d'.'d'.' (19 chars)
 	// Buffer below is sized to a little more than twice as big as the largest allowed format,
@@ -5462,24 +5463,27 @@ ResultType Line::FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat)
 	else // aFormat is non-blank.
 	{
 		// Omit whitespace only for consideration of special keywords.  Whitespace is later kept for
-		// a normal format string such as %A_Space%MM/dd/yy:
+		// a normal format string such as " MM/dd/yy":
 		LPTSTR candidate = omit_leading_whitespace(aFormat);
 		if (!_tcsicmp(candidate, _T("YWeek")))
 		{
 			GetISOWeekNumber(output_buf, st.wYear, GetYDay(st.wMonth, st.wDay, IS_LEAP_YEAR(st.wYear)), st.wDayOfWeek);
-			return output_var.Assign(output_buf);
+			_f_return(output_buf);
 		}
 		if (!_tcsicmp(candidate, _T("YDay")) || !_tcsicmp(candidate, _T("YDay0")))
 		{
 			int yday = GetYDay(st.wMonth, st.wDay, IS_LEAP_YEAR(st.wYear));
-			if (!_tcsicmp(candidate, _T("YDay")))
-				return output_var.Assign(yday); // Assign with no leading zeroes, also will be in hex format if that format is in effect.
-			// Otherwise:
-			_stprintf(output_buf, _T("%03d"), yday);
-			return output_var.Assign(output_buf);
+			// Format with leading zeroes if YDay0 was used.
+			_stprintf(output_buf, candidate[4] == '0' ? _T("%03d") : _T("%d"), yday);
+			_f_return(output_buf);
 		}
 		if (!_tcsicmp(candidate, _T("WDay")))
-			return output_var.Assign(st.wDayOfWeek + 1);  // Convert to 1-based for compatibility with A_WDay.
+		{
+			LPTSTR buf = _f_retval_buf;
+			*buf = '1' + st.wDayOfWeek; // '1' vs '0' to convert to 1-based for compatibility with A_WDay.
+			buf[1] = '\0';
+			_f_return_p(buf, 1);
+		}
 
 		// Since above didn't return, check for those that require a call to GetTimeFormat/GetDateFormat
 		// further below:
@@ -5645,7 +5649,7 @@ ResultType Line::FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat)
 			output_buf[output_buf_length] = '\0'; // Ensure the first part is still terminated and just return that rather than nothing.
 	}
 
-	return output_var.Assign(output_buf);
+	_f_return(output_buf);
 }
 
 

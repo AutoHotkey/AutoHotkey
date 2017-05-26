@@ -64,6 +64,7 @@ FuncEntry g_BIF[] =
 	BIFn(RegExMatch, 2, 4, true, BIF_RegEx, {3}),
 	BIFn(RegExReplace, 2, 6, true, BIF_RegEx, {4}),
 	BIF1(Format, 1, NA, true),
+	BIF1(FormatTime, 0, 2, true),
 
 	BIFn(EnvGet, 1, 1, true, BIF_Env),
 	BIFn(EnvSet, 1, 2, false, BIF_Env),
@@ -11995,9 +11996,6 @@ ResultType Line::Perform()
 
 	case ACT_SETTITLEMATCHMODE:
 		return BIV_TitleMatchMode_Set(ARG1, NULL);
-
-	case ACT_FORMATTIME:
-		return FormatTime(ARG2, ARG3);
 
 	case ACT_MENU:
 		return g_script.PerformMenu(SIX_ARGS, ARGVAR4, ARGVAR5);

@@ -625,7 +625,6 @@ private:
 	friend BIF_DECL(BIF_PerformAction);
 
 	ResultType MouseGetPos(DWORD aOptions);
-	ResultType FormatTime(LPTSTR aYYYYMMDD, LPTSTR aFormat);
 	ResultType SplitPath(LPTSTR aFileSpec);
 	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
 	ResultType Download(LPTSTR aURL, LPTSTR aFilespec);
@@ -931,7 +930,6 @@ public:
 			case ACT_CONTROLGETPOS:
 			case ACT_PIXELSEARCH:
 			case ACT_IMAGESEARCH:
-			case ACT_FORMATTIME:
 			case ACT_FOR:
 			case ACT_CATCH:
 				return ARG_TYPE_OUTPUT_VAR;
@@ -2980,6 +2978,7 @@ BIF_DECL(BIF_RegEx);
 BIF_DECL(BIF_Ord);
 BIF_DECL(BIF_Chr);
 BIF_DECL(BIF_Format);
+BIF_DECL(BIF_FormatTime);
 BIF_DECL(BIF_NumGet);
 BIF_DECL(BIF_NumPut);
 BIF_DECL(BIF_StrGetPut);

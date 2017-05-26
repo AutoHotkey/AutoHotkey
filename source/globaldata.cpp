@@ -412,7 +412,6 @@ Action g_act[] =
 	, {_T("SetWinDelay"), 1, 1, false, {1, 0}} // Delay in ms (numeric, negative allowed)
 	, {_T("SetControlDelay"), 1, 1, false, {1, 0}} // Delay in ms (numeric, negative allowed)
 	, {_T("SetTitleMatchMode"), 1, 1, false, NULL} // Allowed values: 1, 2, slow, fast
-	, {_T("FormatTime"), 1, 3, true, NULL} // OutputVar, YYYYMMDDHH24MISS, Format (format is last to avoid having to escape commas in it).
 
 	, {_T("Suspend"), 0, 1, false, NULL} // On/Off/Toggle/Permit/Blank (blank is the same as toggle)
 	, {_T("Pause"), 0, 2, false, NULL} // On/Off/Toggle/Blank (blank is the same as toggle), AlwaysAffectUnderlying
