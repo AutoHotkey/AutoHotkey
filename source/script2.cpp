@@ -8127,7 +8127,7 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			free(output_buf);
 	}
 
-	if (!output_var.Close(is_binary_clipboard)) // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
+	if (!output_var.Close()) // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
 		return FAIL;
 
 	return SetErrorLevelOrThrowBool(!result);
@@ -8172,27 +8172,6 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	}
 	else if (!file_was_already_open) // As of 1.0.25, auto-detect binary if that mode wasn't explicitly specified.
 	{
-		// sArgVar is used for two reasons:
-		// 1) It properly resolves dynamic variables, such as "FileAppend, % %VarContainingTheStringClipboardAll%, File".
-		// 2) It resolves them only once at a prior stage, rather than having to do them again here
-		//    (which helps performance).
-		if (ARGVAR1)
-		{
-			if (ARGVAR1->Type() == VAR_CLIPBOARDALL)
-				return WriteClipboardToFile(aFilespec);
-			else if (ARGVAR1->IsBinaryClip())
-			{
-				// Since there is at least one deref in Arg #1 and the first deref is binary clipboard,
-				// assume this operation's only purpose is to write binary data from that deref to a file.
-				// This is because that's the only purpose that seems useful and that's currently supported.
-				// In addition, the file is always overwritten in this mode, since appending clipboard data
-				// to an existing clipboard file would not work due to:
-				// 1) Duplicate clipboard formats not making sense (i.e. two CF_TEXT formats would cause the
-				//    first to be overwritten by the second when restoring to clipboard).
-				// 2) There is a 4-byte zero terminator at the end of the file.
-				return WriteClipboardToFile(aFilespec, ARGVAR1);
-			}
-		}
 		// Auto-detection avoids the need to have to translate \r\n to \n when reading
 		// a file via the FileRead command.  This seems extremely unlikely to break any
 		// existing scripts because the intentional use of \r\r\n in a text file (two
@@ -8250,50 +8229,6 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	// else it's the caller's responsibility, or it's caller's, to close it.
 
 	return SetErrorsOrThrow(result);
-}
-
-
-
-ResultType Line::WriteClipboardToFile(LPTSTR aFilespec, Var *aBinaryClipVar)
-// Returns OK or FAIL.  If OK, it sets ErrorLevel to the appropriate result.
-// If the clipboard is empty, a zero length file will be written, which seems best for its consistency.
-{
-	LPVOID data;
-	size_t data_size;
-	if (aBinaryClipVar)
-	{
-		// Get clipboard data from a variable.
-		data = aBinaryClipVar->Contents();
-		data_size = aBinaryClipVar->ByteLength();
-	}
-	else
-	{
-		// Get the clipboard's current contents.
-		if (!Var::GetClipboardAll(NULL, &data, &data_size))
-		{
-			g->LastError = 0; // To avoid possible confusion, don't leave it at its previous value.
-			return FAIL;
-		}
-	}
-
-	BOOL success = FALSE; // Set default.
-	DWORD bytes_to_write = (DWORD)data_size;
-
-	HANDLE hfile = CreateFile(aFilespec, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL); // Overwrite. Unsharable (since reading the file while it is being written would probably produce bad data in this case).
-	if (hfile != INVALID_HANDLE_VALUE)
-	{
-		DWORD bytes_written = 0;
-		if (data) // Can be NULL if data_size == 0.
-			WriteFile(hfile, data, bytes_to_write, &bytes_written, NULL);
-		success = (bytes_written == bytes_to_write); // Even if both are zero.
-	}
-	g->LastError = GetLastError(); // Always done, for simplicity.  Must be called before CloseHandle().
-	if (hfile != INVALID_HANDLE_VALUE)
-		CloseHandle(hfile); // Close file.
-	if (!aBinaryClipVar)
-		free(data); // Free ClipboardAll data.  Can be NULL.
-
-	return SetErrorLevelOrThrowBool(!success); // Set ErrorLevel based on result.
 }
 
 
@@ -14045,7 +13980,7 @@ BIF_DECL(BIF_VarSetCapacity)
 					// Seems more useful to report length vs. capacity in this special case. Scripts might be able
 					// to use this to boost performance.
 					aResultToken.value_int64 = var.ByteLength() = ((VarSizeType)_tcslen(var.Contents()) * sizeof(TCHAR)); // Performance: Length() and Contents() will update mContents if necessary, it's unlikely to be necessary under the circumstances of this call.  In any case, it seems appropriate to do it this way.
-					var.Close(); // v1.0.44.14: Removes attributes like VAR_ATTRIB_BINARY_CLIP (if present) because it seems more flexible to convert binary-to-normal rather than checking IsBinaryClip() then doing nothing if it binary.
+					var.Close();
 					return;
 				}
 				// x64: it's negative but not -1.

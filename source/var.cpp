@@ -47,8 +47,6 @@ ResultType Var::Assign(Var &aVar)
 		return target_var.Assign(source_var.mContentsDouble);
 	case VAR_ATTRIB_IS_OBJECT:
 		return target_var.Assign(source_var.mObject);
-	case VAR_ATTRIB_BINARY_CLIP:
-		return target_var.AssignBinaryClip(source_var); // Caller wants a variable with binary contents assigned (copied) to another variable (usually VAR_CLIPBOARD).
 	}
 	// Otherwise:
 	source_var.MaybeWarnUninitialized();
@@ -77,19 +75,7 @@ ResultType Var::Assign(ExprTokenType &aToken)
 
 
 
-ResultType Var::AssignClipboardAll()
-// Caller must ensure that "this" is a normal variable or the clipboard (though if it's the clipboard, this
-// function does nothing).
-{
-	if (mType == VAR_CLIPBOARD) // Seems pointless to do Clipboard:=ClipboardAll, and the below isn't equipped
-		return OK;              // to handle it, so make this have no effect.
-	if (mType == VAR_VIRTUAL)
-		return g_script.ScriptError(_T("Bad assignment.")); // Short message since rare.
-
-	return GetClipboardAll(mType == VAR_ALIAS ? mAliasFor : this, NULL, NULL);
-}
-
-ResultType Var::GetClipboardAll(Var *aOutputVar, void **aData, size_t *aDataSize)
+ResultType Var::GetClipboardAll(void **aData, size_t *aDataSize)
 {
 	if (!g_clip.Open())
 		return g_script.ScriptError(CANT_OPEN_CLIPBOARD_READ);
@@ -203,32 +189,22 @@ ResultType Var::GetClipboardAll(Var *aOutputVar, void **aData, size_t *aDataSize
 	if (space_needed == sizeof(format)) // This works because even a single empty format requires space beyond sizeof(format) for storing its format+size.
 	{
 		g_clip.Close();
-		if (aOutputVar)
-			return aOutputVar->Assign(); // Nothing on the clipboard, so just make the variable blank.
 		*aData = NULL;
 		*aDataSize = 0;
 		return OK;
 	}
 
-	LPVOID binary_contents; 
+	if (space_needed & 1)
+		++space_needed; // Ensure it's a multiple of WCHAR.
+
+	LPVOID binary_contents;
 	
-	// Resize the output variable, if needed:
-	if (aOutputVar)
-		if (aOutputVar->SetCapacity(space_needed, true))
-		{
-			binary_contents = aOutputVar->mCharContents; // mCharContents vs. Contents() is okay since aOutputVar type is never VAR_ALIAS.
-			space_needed = aOutputVar->mByteCapacity; // Update to actual granted capacity, which might be a little larger than requested.
-		}
-		else
-			binary_contents = NULL; // For detection below.
-	else
-		*aData = binary_contents = malloc(space_needed);
+	// Allocate buffer.
+	*aData = binary_contents = malloc(space_needed);
 	
 	if (!binary_contents)
 	{
 		g_clip.Close();
-		if (aOutputVar)
-			return FAIL; // Above should have already reported the error.
 		return g_script.ScriptError(ERR_OUTOFMEM);
 	}
 
@@ -294,68 +270,11 @@ ResultType Var::GetClipboardAll(Var *aOutputVar, void **aData, size_t *aDataSize
 	g_clip.Close();
 	*(UINT *)binary_contents = 0; // Final termination (must be UINT, see above).
 
-	if (aOutputVar)
-	{
-#ifdef UNICODE
-		// v1.1.16: Although it might change the behaviour of some scripts, it seems safer
-		// to use the "rounded up" size than an odd byte count, which would cause the last
-		// byte to be truncated due to integer division in Var::CharLength().
-		if (actual_space_used & 1) // Odd number of bytes.
-		{
-			// Add one byte to form a complete WCHAR.  This should always be safe because
-			// aOutputVar->SetCapacity() always allocates an even number of bytes.
-			((LPBYTE)binary_contents)[sizeof(UINT)] = 0; // binary_contents points at the "final termination" UINT.
-			++actual_space_used;
-		}
-#endif
-		aOutputVar->mByteLength = actual_space_used;
-		aOutputVar->mAttrib |= VAR_ATTRIB_BINARY_CLIP; // VAR_ATTRIB_CONTENTS_OUT_OF_DATE and VAR_ATTRIB_CACHE were already removed by earlier call to SetCapacity().
-	}
-	else
-		*aDataSize = (DWORD)actual_space_used;
+	*aDataSize = (DWORD)actual_space_used;
 	return OK;
 }
 
 
-
-ResultType Var::AssignBinaryClip(Var &aSourceVar)
-// Caller must ensure that this->Type() is VAR_NORMAL or VAR_CLIPBOARD (usually via load-time validation).
-// Caller must ensure that aSourceVar->Type()==VAR_NORMAL and aSourceVar->IsBinaryClip()==true.
-{
-	if (mType == VAR_ALIAS)
-		// For maintainability, it seems best not to use the following method:
-		//    Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		// If that were done, bugs would be easy to introduce in a long function like this one
-		// if your forget at use the implicit "this" by accident.  So instead, just call self.
-		return mAliasFor->AssignBinaryClip(aSourceVar);
-
-	// Resolve early for maintainability.
-	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-	Var &source_var = (aSourceVar.mType == VAR_ALIAS) ? *aSourceVar.mAliasFor : aSourceVar;
-	source_var.UpdateContents(); // Update mContents/mLength (probably not necessary because caller is supposed to ensure that aSourceVar->IsBinaryClip()==true).
-
-	if (mType == VAR_NORMAL) // Copy a binary variable to another variable that isn't the clipboard.
-	{
-		if (this == &source_var) // i.e. source == destination.  Aliases were already resolved.
-			return OK;
-		if (!SetCapacity(source_var.mByteLength, true)) // Also sets length.  source_var.mByteLength vs. Length() is okay (see above).
-			return FAIL; // Above should have already reported the error.
-		memcpy(mByteContents, source_var.mByteContents, source_var.mByteLength + sizeof(TCHAR)); // Add sizeof(TCHAR) not sizeof(format). Contents() vs. a variable for the same because mContents might have just changed due Assign() above.
-		mAttrib |= VAR_ATTRIB_BINARY_CLIP; // VAR_ATTRIB_CACHE and VAR_ATTRIB_CONTENTS_OUT_OF_DATE were already removed by earlier call to Assign().
-		return OK; // No need to call Close() in this case.
-	}
-
-	if (mType == VAR_VIRTUAL)
-	{
-		// Rather than throwing an error, treat this as a string assignment in case the
-		// data came from FileRead with the *c option and isn't actually clipboard data.
-		//return g_script.ScriptError(_T("Bad assignment.")); // Short message since rare.
-		return AssignString(source_var.mCharContents);
-	}
-
-	// SINCE ABOVE DIDN'T RETURN, A VARIABLE CONTAINING BINARY CLIPBOARD DATA IS BEING COPIED BACK ONTO THE CLIPBOARD.
-	return SetClipboardAll(source_var.mByteContents, source_var.mByteLength);
-}
 
 ResultType Var::SetClipboardAll(void *aData, size_t aDataSize)
 {
@@ -664,6 +583,15 @@ ResultType Var::AssignSkipAddRef(IObject *aValueToAssign)
 
 	if (var.mType != VAR_NORMAL)
 	{
+		if (var.mType == VAR_CLIPBOARD)
+		{
+			if (ClipboardAll *cba = dynamic_cast<ClipboardAll *>(aValueToAssign))
+			{
+				ResultType result = SetClipboardAll(cba->Data(), cba->Size());
+				aValueToAssign->Release();
+				return result;
+			}
+		}
 		aValueToAssign->Release();
 		return g_script.ScriptError(ERR_INVALID_VALUE, _T("An object."));
 	}
@@ -766,9 +694,7 @@ VarSizeType Var::Get(LPTSTR aBuf)
 		return mVV->Get(aBuf, mName);
 
 	default:
-	//case VAR_CLIPBOARDALL: // There's a slight chance this case is never executed; but even if true, it should be kept for maintainability.
-		// This variable is directly handled at a higher level.  As documented, any use of ClipboardAll outside of
-		// the supported modes yields an empty string.
+		ASSERT(FALSE && "Invalid var type");
 		if (aBuf)
 			*aBuf = '\0';
 		return 0;
@@ -908,11 +834,11 @@ ResultType Var::AppendIfRoom(LPTSTR aStr, VarSizeType aLength)
 		return FAIL; // CHECK THIS FIRST, BEFORE BELOW, BECAUSE CALLERS ALWAYS WANT IT TO BE A FAILURE.
 	if (aLength)
 	{
-		VarSizeType var_length = var.LengthIgnoreBinaryClip(); // Get the apparent length because one caller is a concat that wants consistent behavior of the .= operator regardless of whether this shortcut succeeds or not.
+		VarSizeType var_length = var.Length(); // Get the apparent length because one caller is a concat that wants consistent behavior of the .= operator regardless of whether this shortcut succeeds or not.
 		VarSizeType new_length = var_length + aLength;
 		if (new_length >= var._CharCapacity()) // Not enough room.
 			return FAIL;
-		tmemmove(var.mCharContents + var_length, aStr, aLength);  // mContents was updated via LengthIgnoreBinaryClip() above. Use memmove() vs. memcpy() in case there's any overlap between source and dest.
+		tmemmove(var.mCharContents + var_length, aStr, aLength);  // mContents was updated via Length() above. Use memmove() vs. memcpy() in case there's any overlap between source and dest.
 		var.mCharContents[new_length] = '\0'; // Terminate it as a separate step in case caller passed a length shorter than the apparent length of aStr.
 		var.mByteLength = new_length * sizeof(TCHAR);
 	}

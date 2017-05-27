@@ -635,7 +635,6 @@ private:
 	ResultType FileCreateDir(LPTSTR aDirSpec);
 	ResultType FileRead(LPTSTR aFilespec);
 	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *aCurrentReadFile);
-	ResultType WriteClipboardToFile(LPTSTR aFilespec, Var *aBinaryClipVar = NULL);
 	ResultType FileDelete();
 	ResultType FileRecycle(LPTSTR aFilePattern);
 	ResultType FileRecycleEmpty(LPTSTR aDriveLetter);
@@ -3009,6 +3008,7 @@ BIF_DECL(BIF_SysGet);
 
 BIF_DECL(BIF_OnMessage);
 BIF_DECL(BIF_OnExitOrClipboard);
+BIF_DECL(BIF_ClipboardAll);
 
 #ifdef ENABLE_REGISTERCALLBACK
 BIF_DECL(BIF_RegisterCallback);

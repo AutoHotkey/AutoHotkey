@@ -2033,6 +2033,62 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ResultToken &aResultToken, ExprT
 }
 
 
+
+ResultType ClipboardAll::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (IS_INVOKE_GET && aParamCount)
+	{
+		LPTSTR name = ParamIndexToString(0);
+		if (!_tcsicmp(name, _T("Ptr")))
+			_o_return((size_t)mData);
+		if (!_tcsicmp(name, _T("Size")))
+			_o_return(mSize);
+	}
+	return INVOKE_NOT_HANDLED;
+}
+
+
+BIF_DECL(BIF_ClipboardAll)
+{
+	void *data;
+	size_t size;
+	if (!aParamCount)
+	{
+		// Retrieve clipboard contents.
+		if (!Var::GetClipboardAll(&data, &size))
+			_f_return_FAIL;
+	}
+	else
+	{
+		// Use caller-supplied data.
+		void *caller_data;
+		if (TokenIsPureNumeric(*aParam[0]))
+		{
+			// Caller supplied an address.
+			caller_data = (void *)ParamIndexToIntPtr(0);
+			if ((size_t)caller_data < 65536) // Basic check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
+				_f_throw(ERR_PARAM1_INVALID);
+			size = -1;
+		}
+		else
+		{
+			// Caller supplied a binary string or variable, such as from File.RawRead(var, n).
+			caller_data = ParamIndexToString(0, NULL, &size);
+			size *= sizeof(TCHAR);
+		}
+		if (!ParamIndexIsOmitted(1))
+			size = (size_t)ParamIndexToIntPtr(1);
+		else if (size == -1) // i.e. it can be omitted when size != -1 (a string was passed).
+			_f_throw(ERR_PARAM2_MUST_NOT_BE_BLANK);
+		if (  !(data = malloc(size))  ) // More likely to be due to invalid parameter than out of memory.
+			_f_throw(ERR_OUTOFMEM);
+		memcpy(data, caller_data, size);
+	}
+	_f_return(new ClipboardAll(data, size));
+}
+
+
+
 #ifdef CONFIG_DEBUGGER
 
 void ObjectBase::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)

@@ -1422,7 +1422,7 @@ push_this_token:
 		if (result_token.symbol == SYM_VAR)
 		{
 			result = result_token.var->Contents();
-			result_size = result_token.var->LengthIgnoreBinaryClip() + 1; // Ignore binary clipboard for anything other than ACT_ASSIGNEXPR (i.e. output_var!=NULL) because it's documented that except for certain features, binary clipboard variables are seen only up to the first binary zero (mostly to simplify the code).
+			result_size = result_token.var->Length() + 1;
 		}
 		else
 		{

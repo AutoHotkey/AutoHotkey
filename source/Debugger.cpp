@@ -982,7 +982,7 @@ DEBUGGER_COMMAND(Debugger::property_value)
 
 int Debugger::WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage)
 {
-	char facet[35]; // Alias Builtin Static ClipboardAll
+	char facet[35]; // Alias Builtin Static
 	facet[0] = '\0';
 	VarAttribType attrib;
 	if (aVar.mType == VAR_ALIAS)
@@ -996,8 +996,6 @@ int Debugger::WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage)
 		strcat(facet, "Builtin ");
 	if (aVar.IsStatic())
 		strcat(facet, "Static ");
-	if (aVar.IsBinaryClip())
-		strcat(facet, "ClipboardAll ");
 	if (facet[0] != '\0') // Remove the final space.
 		facet[strlen(facet)-1] = '\0';
 

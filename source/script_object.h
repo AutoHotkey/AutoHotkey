@@ -464,3 +464,21 @@ public:
 	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
 #endif
 };
+
+
+//
+// ClipboardAll: Represents a blob of clipboard data (all formats retrieved from clipboard).
+//
+
+class ClipboardAll : public ObjectBase
+{
+	void *mData;
+	size_t mSize;
+
+public:
+	void *Data() { return mData; }
+	size_t Size() { return mSize; }
+	ClipboardAll(void *aData, size_t aSize) : mData(aData), mSize(aSize) {}
+	~ClipboardAll() { free(mData); }
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+};

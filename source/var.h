@@ -43,7 +43,6 @@ enum VarTypes
 , VAR_CLIPBOARD
 , VAR_LAST_WRITABLE = VAR_CLIPBOARD  // Keep this in sync with any changes to the set of writable variables.
 #define VAR_IS_READONLY(var) ((var).Type() > VAR_LAST_WRITABLE)
-, VAR_CLIPBOARDALL // Must be read-only because it's not designed to be writable.
 , VAR_BUILTIN
 , VAR_LAST_TYPE = VAR_BUILTIN
 };
@@ -153,15 +152,15 @@ private:
 	AllocMethodType mHowAllocated; // Keep adjacent/contiguous with the below to save memory.
 	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE 0x01 // Combined with VAR_ATTRIB_IS_INT64/DOUBLE/OBJECT to indicate mContents is not current.
 	#define VAR_ATTRIB_UNINITIALIZED        0x02 // Var requires initialization before use.
-	#define VAR_ATTRIB_BINARY_CLIP          0x04 // mContents contains binary data from ClipboardAll.
+	// Unused: 0x04
 	#define VAR_ATTRIB_NOT_NUMERIC			0x08 // A prior call to IsNumeric() determined the var's value is PURE_NOT_NUMERIC.
 	#define VAR_ATTRIB_IS_INT64				0x10 // Var's proper value is in mContentsInt64.
 	#define VAR_ATTRIB_IS_DOUBLE			0x20 // Var's proper value is in mContentsDouble.
 	#define VAR_ATTRIB_IS_OBJECT		    0x40 // Var's proper value is in mObject.
 	#define VAR_ATTRIB_VIRTUAL_OPEN			0x80 // Virtual var is open for writing.
 	#define VAR_ATTRIB_CACHE (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_NOT_NUMERIC) // These three are mutually exclusive.
-	#define VAR_ATTRIB_TYPES (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_BINARY_CLIP) // These four are mutually exclusive (but NOT_NUMERIC may be combined with OBJECT or BINARY_CLIP).
-	#define VAR_ATTRIB_OFTEN_REMOVED (VAR_ATTRIB_CACHE | VAR_ATTRIB_BINARY_CLIP | VAR_ATTRIB_CONTENTS_OUT_OF_DATE | VAR_ATTRIB_UNINITIALIZED)
+	#define VAR_ATTRIB_TYPES (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT) // These are mutually exclusive (but NOT_NUMERIC may be combined with OBJECT or BINARY_CLIP).
+	#define VAR_ATTRIB_OFTEN_REMOVED (VAR_ATTRIB_CACHE | VAR_ATTRIB_CONTENTS_OUT_OF_DATE | VAR_ATTRIB_UNINITIALIZED)
 	VarAttribType mAttrib;  // Bitwise combination of the above flags (but many of them may be mutually exclusive).
 	#define VAR_GLOBAL			0x01
 	#define VAR_LOCAL			0x02
@@ -259,10 +258,8 @@ public:
 	ResultType AssignHWND(HWND aWnd);
 	ResultType Assign(Var &aVar);
 	ResultType Assign(ExprTokenType &aToken);
-	static ResultType GetClipboardAll(Var *aOutputVar, void **aData, size_t *aDataSize);
+	static ResultType GetClipboardAll(void **aData, size_t *aDataSize);
 	static ResultType SetClipboardAll(void *aData, size_t aDataSize);
-	ResultType AssignClipboardAll();
-	ResultType AssignBinaryClip(Var &aSourceVar);
 	// Assign(char *, ...) has been break into four methods below.
 	// This should prevent some mistakes, as characters and bytes are not interchangeable in the Unicode build.
 	// Callers must make sure which one is the right method to call.
@@ -682,12 +679,6 @@ public:
 		return mScope;
 	}
 
-	__forceinline bool IsBinaryClip()
-	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		return (mType == VAR_ALIAS ? mAliasFor->mAttrib : mAttrib) & VAR_ATTRIB_BINARY_CLIP;
-	}
-
 	__forceinline bool IsObject() // L31: Indicates this var contains an object reference which must be released if the var is emptied.
 	{
 		return (mAttrib & VAR_ATTRIB_IS_OBJECT);
@@ -772,19 +763,6 @@ public:
 	UNICODE_CHECK VarSizeType Length()
 	{
 		return CharLength();
-	}
-
-	VarSizeType LengthIgnoreBinaryClip()
-	// Returns 0 for types other than VAR_NORMAL and VAR_CLIPBOARD.
-	// IMPORTANT: Environment variables aren't supported here, so caller must either want such
-	// variables treated as blank, or have already checked that they're not environment variables.
-	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		// Return the apparent length of the string (i.e. the position of its first binary zero).
-		return (var.mType == VAR_NORMAL && !(var.mAttrib & VAR_ATTRIB_BINARY_CLIP))
-			? var.Length() // Use Length() vs. mLength so that the length is updated if necessary.
-			: _tcslen(var.Contents()); // Use Contents() vs. mContents to support VAR_CLIPBOARD.
 	}
 
 	//BYTE *ByteContents(BOOL aAllowUpdate = TRUE)
@@ -886,7 +864,7 @@ public:
 		mType = VAR_ALIAS; // It might already be this type, so this is just in case it's VAR_NORMAL.
 	}
 
-	ResultType Close(bool aIsBinaryClip = false)
+	ResultType Close()
 	{
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
@@ -906,8 +884,6 @@ public:
 		// for maintainability; it shouldn't be necessary because any caller of Close() should have previously
 		// called something that updates the flags, such as Contents().
 		var.mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
-		if (aIsBinaryClip) // If true, caller should ensure that var.mType isn't VAR_CLIPBOARD because it doesn't seem possible/valid for the clipboard to contain a binary image of the clipboard.
-			var.mAttrib |= VAR_ATTRIB_BINARY_CLIP;
 		//else (already done above)
 		//	var.mAttrib &= ~VAR_ATTRIB_BINARY_CLIP;
 		return OK; // In all other cases.

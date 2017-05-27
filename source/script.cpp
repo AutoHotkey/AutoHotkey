@@ -65,6 +65,7 @@ FuncEntry g_BIF[] =
 	BIFn(RegExReplace, 2, 6, true, BIF_RegEx, {4}),
 	BIF1(Format, 1, NA, true),
 	BIF1(FormatTime, 0, 2, true),
+	BIF1(ClipboardAll, 0, 2, true),
 
 	BIFn(EnvGet, 1, 1, true, BIF_Env),
 	BIFn(EnvSet, 1, 2, false, BIF_Env),
@@ -292,7 +293,6 @@ FuncEntry g_BIF[] =
 VarEntry g_BIV[] =
 {
 	VF(Clipboard, (BuiltInVarType)VAR_CLIPBOARD),
-	VF(ClipboardAll, (BuiltInVarType)VAR_CLIPBOARDALL),
 	VF(False, BIV_True_False),
 	VF(ProgramFiles, BIV_SpecialFolderPath), // v1.0.43.08: Added to ease the transition to #NoEnv.,
 	VF(True, BIV_True_False)
@@ -6703,8 +6703,7 @@ size_t Line::ArgIndexLength(int aArgIndex)
 		if (   var.Type() == VAR_NORMAL  // This and below ordered for short-circuit performance based on types of input expected from caller.
 			&& !g_act[mActionType].CheckOverlap // Although the ones that have CheckOverlap == true are hereby omitted from the fast method, the nature of almost all of the highbit commands is such that their performance won't be measurably affected. See ArgMustBeDereferenced() for more info.
 			&& &var != g_ErrorLevel   ) // Mostly for maintainability because the following situation is very rare: If it's g_ErrorLevel, use the deref version instead because if g_ErrorLevel is an input variable in the caller's command, and the caller changes ErrorLevel (such as to set a default) prior to calling this function, the changed/new ErrorLevel will be used rather than its original value (which is usually undesirable).
-			//&& !var.IsBinaryClip())  // This check isn't necessary because the line below handles it.
-			return var.LengthIgnoreBinaryClip(); // Do it the fast way (unless it's binary clipboard, in which case this call will internally call _tcslen()).
+			return var.Length(); // Do it the fast way.
 	}
 	// Otherwise, length isn't known due to no variable, a built-in variable, or an environment variable.
 	// So do it the slow way.
@@ -6733,8 +6732,7 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 		Var &var = *sArgVar[aArgIndex];
 		if (   var.Type() == VAR_NORMAL  // See ArgIndexLength() for comments about this line and below.
 			&& !g_act[mActionType].CheckOverlap
-			&& &var != g_ErrorLevel
-			&& !var.IsBinaryClip()   )
+			&& &var != g_ErrorLevel   )
 			return var.ToInt64();
 	}
 	// Otherwise:
@@ -6763,8 +6761,7 @@ double Line::ArgIndexToDouble(int aArgIndex)
 		Var &var = *sArgVar[aArgIndex];
 		if (   var.Type() == VAR_NORMAL  // See ArgIndexLength() for comments about this line and below.
 			&& !g_act[mActionType].CheckOverlap
-			&& &var != g_ErrorLevel
-			&& !var.IsBinaryClip()   )
+			&& &var != g_ErrorLevel   )
 			return var.ToDouble();
 	}
 	// Otherwise:
@@ -11403,21 +11400,15 @@ ResultType Line::Perform()
 
 			// sArgVar is used to enhance performance, which would otherwise be poor for dynamic variables
 			// such as Var:=Array%i% because it would have to be resolved twice (once here and once previously
-			// by ExpandArgs()) just to find out if it's IsBinaryClip().
+			// by ExpandArgs()) just to retain data type.
 			// ARG2 is non-blank for built-in vars, which this optimization can't be applied to.
 			if (ARGVARRAW2 && !*ARG2) // See above.  Also, RAW is safe due to the above check of mArgc > 1.
 			{
 				switch(ARGVARRAW2->Type())
 				{
-				case VAR_NORMAL: // This can be reached via things like: x:=single_naked_var_including_binary_clip
-					// Assign var to var in case ARGVARRAW2->IsBinaryClip(), and for others because
-					// var-to-var has optimizations like retaining the copying over the cached binary number.
-					// In the case of ARGVARRAW2->IsBinaryClip(), performance should be good since
-					// IsBinaryClip() implies a single isolated deref, which would never have been copied
-					// into the deref buffer.
-					return output_var->Assign(*ARGVARRAW2); // Var-to-var copy supports ARGVARRAW2 being binary clipboard, and also exploits caching of binary numbers, for performance.
-				case VAR_CLIPBOARDALL:
-					return output_var->AssignClipboardAll();
+				case VAR_NORMAL: // This can be reached via things like: x:=single_naked_var
+					// Assign var to var so data type is retained.
+					return output_var->Assign(*ARGVARRAW2);
 				// Otherwise it's VAR_CLIPBOARD or a read-only variable; continue on to do assign the normal way.
 				}
 			}
