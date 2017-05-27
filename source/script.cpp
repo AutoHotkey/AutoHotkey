@@ -208,6 +208,7 @@ FuncEntry g_BIF[] =
 	BIFn(DriveGetCapacity, 1, 1, true, BIF_DriveGet),
 	BIFn(DriveGetSpaceFree, 1, 1, true, BIF_DriveGet),
 
+	BIF1(FileAppend, 1, 3, false),
 	BIF1(FileGetAttrib, 0, 1, true),
 	BIF1(FileGetSize, 0, 2, true),
 	BIF1(FileGetTime, 0, 2, true),
@@ -11801,11 +11802,6 @@ ResultType Line::Perform()
 
 	case ACT_SOUNDPLAY:
 		return SoundPlay(ARG1, *ARG2 && !_tcsicmp(ARG2, _T("wait")) || !_tcsicmp(ARG2, _T("1")));
-
-	case ACT_FILEAPPEND:
-		// Uses the read-file loop's current item filename was explicitly leave blank (i.e. not just
-		// a reference to a variable that's blank):
-		return FileAppend(ARG2, ARG1, (mArgc < 2) ? g.mLoopReadFile : NULL);
 
 	case ACT_FILEDELETE:
 		return FileDelete();

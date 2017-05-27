@@ -633,7 +633,6 @@ private:
 	ResultType FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
 		, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState);
 	ResultType FileCreateDir(LPTSTR aDirSpec);
-	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *aCurrentReadFile);
 	ResultType FileDelete();
 	ResultType FileRecycle(LPTSTR aFilePattern);
 	ResultType FileRecycleEmpty(LPTSTR aDriveLetter);
@@ -3093,6 +3092,7 @@ BIF_DECL(BIF_ControlGetText);
 BIF_DECL(BIF_DirSelect);
 BIF_DECL(BIF_Drive);
 BIF_DECL(BIF_DriveGet);
+BIF_DECL(BIF_FileAppend);
 BIF_DECL(BIF_FileGetAttrib);
 BIF_DECL(BIF_FileGetSize);
 BIF_DECL(BIF_FileGetTime);

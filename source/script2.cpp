@@ -8119,17 +8119,26 @@ BIF_DECL(BIF_FileRead)
 
 
 
-ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *aCurrentReadFile)
+BIF_DECL(BIF_FileAppend)
 {
+	_f_param_string(aBuf, 0);
+	_f_param_string_opt(aFilespec, 1);
+	_f_param_string_opt_def(aEncoding, 2, NULL);
+
+	_f_set_retval_p(_T(""), 0); // For all non-throw cases.
+
 	// The below is avoided because want to allow "nothing" to be written to a file in case the
 	// user is doing this to reset it's timestamp (or create an empty file).
 	//if (!aBuf || !*aBuf)
 	//	return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 
-	if (aCurrentReadFile) // It always takes precedence over aFilespec.
+	// Use the read-file loop's current item if filename was explicitly left blank (i.e. not just
+	// a reference to a variable that's blank):
+	LoopReadFileStruct *aCurrentReadFile = (aParamCount < 2) ? g->mLoopReadFile : NULL;
+	if (aCurrentReadFile)
 		aFilespec = aCurrentReadFile->mWriteFileName;
-	if (!*aFilespec) // Nothing to write to (caller relies on this check).
-		return LineError(ERR_PARAM2_REQUIRED);
+	if (!*aFilespec) // Nothing to write to.
+		_f_throw(ERR_PARAM2_REQUIRED);
 
 	TextStream *ts = aCurrentReadFile ? aCurrentReadFile->mWriteFile : NULL;
 	bool file_was_already_open = ts;
@@ -8149,29 +8158,19 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 #ifdef CONFIG_DEBUGGER
 		else if (!aFilespec[1] && g_Debugger.FileAppendStdOut(aBuf))
 		{
-			// StdOut has been redirected to the debugger, so return.
-			return SetErrorsOrThrow(false, 0);
+			// StdOut has been redirected to the debugger, and this "FileAppend" call has been
+			// fully handled by the call above, so just return.
+			Script::SetErrorLevels(false, 0);
+			_f_return_retval;
 		}
 #endif
-	}
-	else if (!file_was_already_open) // As of 1.0.25, auto-detect binary if that mode wasn't explicitly specified.
-	{
-		// Auto-detection avoids the need to have to translate \r\n to \n when reading
-		// a file via the FileRead command.  This seems extremely unlikely to break any
-		// existing scripts because the intentional use of \r\r\n in a text file (two
-		// consecutive carriage returns) -- which would happen if \r\n were written in
-		// text mode -- is so rare as to be close to non-existent.  If this behavior
-		// is ever specifically needed, the script can explicitly places some \r\r\n's
-		// in the file and then write it as binary mode.
-		open_as_binary = _tcsstr(aBuf, _T("\r\n")); // Performance: The following could be done instead, but seems likely to cause some scripts to write \r\r\n and even \r\r\r\n due to the text having both \n and \r\n in it: char *first_newline = _tcschr(aBuf, '\n')... open_as_binary = first_newline > aBuf && aBuf[-1] == '\r'
-		// Due to "else if", the above will not turn off binary mode if binary was explicitly specified.
-		// That is useful to write Unix style text files whose lines end in solitary linefeeds.
 	}
 
 	// Check if the file needs to be opened.  As of 1.0.25, this is done here rather than
 	// at the time the loop first begins so that:
 	// 1) Binary mode can be auto-detected if the first block of text appended to the file
-	//    contains any \r\n's.
+	//    contains any \r\n's.  UPDATE: Auto-detect is no longer needed due to optimizations
+	//    in v1.0.95 which eliminate the cost of EOL translation.
 	// 2) To avoid opening the file if the file-reading loop has zero iterations (i.e. it's
 	//    opened only upon first actual use to help performance and avoid changing the
 	//    file-modification time when no actual text will be appended).
@@ -8179,9 +8178,9 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	{
 		DWORD flags = TextStream::APPEND | (open_as_binary ? 0 : TextStream::EOL_CRLF);
 		
-		UINT codepage = mArgc > 2 ? ConvertFileEncoding(ARG3) : g->Encoding;
+		UINT codepage = aEncoding ? Line::ConvertFileEncoding(aEncoding) : g->Encoding;
 		if (codepage == -1) // ARG3 was invalid.
-			return LineError(ERR_PARAM3_INVALID, FAIL, ARG3);
+			_f_throw(ERR_PARAM3_INVALID, aEncoding);
 		
 		ASSERT( (~CP_AHKNOBOM) == CP_AHKCP );
 		// codepage may include CP_AHKNOBOM, in which case below will not add BOM_UTFxx flag.
@@ -8193,12 +8192,12 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 		// Open the output file (if one was specified).  Unlike the input file, this is not
 		// a critical error if it fails.  We want it to be non-critical so that FileAppend
 		// commands in the body of the loop will set ErrorLevel to indicate the problem:
-		if (  !(ts = new TextFile)  ) // ts was alredy verified NULL via !file_was_already_open.
-			return LineError(ERR_OUTOFMEM);
+		ts = new TextFile; // ts was already verified NULL via !file_was_already_open.
 		if ( !ts->Open(aFilespec, flags, codepage & CP_AHKCP) )
 		{
 			delete ts; // Must be deleted explicitly!
-			return SetErrorsOrThrow(true);
+			Script::SetErrorLevels(true);
+			_f_return_retval;
 		}
 		if (aCurrentReadFile)
 			aCurrentReadFile->mWriteFile = ts;
@@ -8212,7 +8211,8 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 		delete ts;
 	// else it's the caller's responsibility, or it's caller's, to close it.
 
-	return SetErrorsOrThrow(result);
+	Script::SetErrorLevels(result);
+	_f_return_retval;
 }
 
 
