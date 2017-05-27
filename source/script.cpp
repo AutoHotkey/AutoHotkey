@@ -212,6 +212,7 @@ FuncEntry g_BIF[] =
 	BIF1(FileGetSize, 0, 2, true),
 	BIF1(FileGetTime, 0, 2, true),
 	BIF1(FileGetVersion, 0, 1, true),
+	BIF1(FileRead, 1, 1, true),
 	BIF1(FileSelect, 0, 4, true),
 
 	BIF1(IniRead, 1, 4, true),
@@ -11806,9 +11807,6 @@ ResultType Line::Perform()
 		// a reference to a variable that's blank):
 		return FileAppend(ARG2, ARG1, (mArgc < 2) ? g.mLoopReadFile : NULL);
 
-	case ACT_FILEREAD:
-		return FileRead(ARG2);
-
 	case ACT_FILEDELETE:
 		return FileDelete();
 
@@ -13059,6 +13057,13 @@ ResultType Line::SetErrorsOrThrow(bool aError, DWORD aLastErrorOverride)
 void Script::SetErrorLevels(bool aError, DWORD aLastErrorOverride)
 {
 	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
+	g_ErrorLevel->Assign(aError);
+}
+
+void Script::SetErrorLevelsAndClose(HANDLE aHandle, bool aError, DWORD aLastErrorOverride)
+{
+	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
+	CloseHandle(aHandle);
 	g_ErrorLevel->Assign(aError);
 }
 

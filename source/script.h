@@ -633,7 +633,6 @@ private:
 	ResultType FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
 		, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState);
 	ResultType FileCreateDir(LPTSTR aDirSpec);
-	ResultType FileRead(LPTSTR aFilespec);
 	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *aCurrentReadFile);
 	ResultType FileDelete();
 	ResultType FileRecycle(LPTSTR aFilePattern);
@@ -923,7 +922,6 @@ public:
 			{
 			case ACT_ASSIGNEXPR:
 			case ACT_DEREF:
-			case ACT_FILEREAD:
 			case ACT_MOUSEGETPOS:
 			case ACT_WINGETPOS:
 			case ACT_CONTROLGETPOS:
@@ -2838,6 +2836,7 @@ public:
 	static ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	static void FreeExceptionToken(ResultToken*& aToken);
 	static void SetErrorLevels(bool aError, DWORD aLastErrorOverride = -1);
+	static void SetErrorLevelsAndClose(HANDLE aHandle, bool aError, DWORD aLastErrorOverride = -1);
 
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
@@ -3098,6 +3097,7 @@ BIF_DECL(BIF_FileGetAttrib);
 BIF_DECL(BIF_FileGetSize);
 BIF_DECL(BIF_FileGetTime);
 BIF_DECL(BIF_FileGetVersion);
+BIF_DECL(BIF_FileRead);
 BIF_DECL(BIF_FileSelect);
 BIF_DECL(BIF_IniRead);
 BIF_DECL(BIF_PixelGetColor);

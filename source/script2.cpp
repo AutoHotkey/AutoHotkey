@@ -7877,16 +7877,9 @@ ResultType Line::FileCreateDir(LPTSTR aDirSpec)
 
 
 
-ResultType Line::FileRead(LPTSTR aFilespec)
-// Returns OK or FAIL.  Will almost always return OK because if an error occurs,
-// the script's ErrorLevel variable will be set accordingly.  However, if some
-// kind of unexpected and more serious error occurs, such as variable-out-of-memory,
-// that will cause FAIL to be returned.
+BIF_DECL(BIF_FileRead)
 {
-	Var &output_var = *OUTPUT_VAR;
-	// Init output var to be blank as an additional indicator of failure (or empty file).
-	// Caller must check ErrorLevel to distinguish between an empty file and an error.
-	output_var.Assign();
+	_f_param_string(aFilespec, 0);
 
 	const DWORD DWORD_MAX = ~0;
 
@@ -7914,14 +7907,14 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			max_bytes_to_load = ATOU64(cp + 1); // Relies upon the fact that it ceases conversion upon reaching a space or tab.
 			// Skip over the digits of this option in case it's the last option.
 			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
-				return LineError(ERR_PARAM1_INVALID);
+				_f_throw(ERR_PARAM1_INVALID);
 			--cp; // Standardize it to make it conform to the other options, for use below.
 			break;
 		case 'P':
 			codepage = _ttoi(cp + 1);
 			// Skip over the digits of this option in case it's the last option.
 			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
-				return LineError(ERR_PARAM1_INVALID);
+				_f_throw(ERR_PARAM1_INVALID);
 			--cp; // Standardize it to make it conform to the other options, for use below.
 			break;
 		case 'T': // Text mode.
@@ -7951,6 +7944,8 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 		}
 	} // for()
 
+	_f_set_retval_p(_T(""), 0); // Set default.
+
 	// It seems more flexible to allow other processes to read and write the file while we're reading it.
 	// For example, this allows the file to be appended to during the read operation, which could be
 	// desirable, especially it's a very large log file that would take a long time to read.
@@ -7959,14 +7954,16 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	HANDLE hfile = CreateFile(aFilespec, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING
 		, FILE_FLAG_SEQUENTIAL_SCAN, NULL); // MSDN says that FILE_FLAG_SEQUENTIAL_SCAN will often improve performance
 	if (hfile == INVALID_HANDLE_VALUE)      // in cases like these (and it seems best even if max_bytes_to_load was specified).
-		return SetErrorsOrThrow(true);
+	{
+		Script::SetErrorLevels(true);
+		return;
+	}
 
 	unsigned __int64 bytes_to_read = GetFileSize64(hfile);
 	if (bytes_to_read == ULLONG_MAX) // GetFileSize64() failed.
 	{
-		g->LastError = GetLastError();
-		CloseHandle(hfile);
-		return SetErrorLevelOrThrow();
+		Script::SetErrorLevelsAndClose(hfile, true);
+		return;
 	}
 	// In addition to imposing the limit set by the *M option, the following check prevents an error
 	// caused by 64 to 32-bit truncation -- that is, a file size of 0x100000001 would be truncated to
@@ -7988,39 +7985,22 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 	// guaranteed to fail at the malloc stage, that might change if we ever become large address aware.
 	if (bytes_to_read > DWORD_MAX - sizeof(wchar_t))
 #endif
-		return LineError(ERR_OUTOFMEM); // Using this instead of "File too large." to reduce code size, since this condition is very rare (and malloc succeeding would be even rarer).
+	{
+		CloseHandle(hfile);
+		_f_throw(ERR_OUTOFMEM); // Using this instead of "File too large." to reduce code size, since this condition is very rare (and malloc succeeding would be even rarer).
+	}
 
 	if (!bytes_to_read)
 	{
-		CloseHandle(hfile);
-		return SetErrorsOrThrow(false, 0); // Indicate success (a zero-length file results in empty output_var).
+		Script::SetErrorLevelsAndClose(hfile, false, 0); // Indicate success (a zero-length file results in an empty string).
+		return;
 	}
 
-	LPBYTE output_buf;
-	bool output_buf_is_var = is_binary_clipboard && output_var.Type() != VAR_CLIPBOARD;
-	if (output_buf_is_var) 
-	{
-		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-		// this call will set up the clipboard for writing:
-		if (output_var.SetCapacity(VarSizeType(bytes_to_read) + (sizeof(wchar_t) - sizeof(TCHAR)), true) == OK) // SetCapacity() reserves 1 TCHAR for null-terminator.  Allow an extra byte on ANSI builds for wchar_t.
-			output_buf = (LPBYTE) output_var.Contents();
-		else
-			output_buf = NULL; // Above already displayed the error message.
-	}
-	else
-	{
-		// Either we're reading text and need an intermediate buffer to allow text conversion,
-		// or we're reading binary clipboard data into the Clipboard and need a temporary buffer
-		// to read into before calling SetClipboardData().
-		output_buf = (LPBYTE) malloc(size_t(bytes_to_read + sizeof(wchar_t)));
-		if (!output_buf)
-			LineError(ERR_OUTOFMEM);
-	}
+	LPBYTE output_buf = (LPBYTE)malloc(size_t(bytes_to_read + sizeof(wchar_t)));
 	if (!output_buf)
 	{
 		CloseHandle(hfile);
-		// ErrorLevel doesn't matter now because the current quasi-thread will be aborted.
-		return FAIL;
+		_f_throw(ERR_OUTOFMEM);
 	}
 
 	DWORD bytes_actually_read;
@@ -8038,62 +8018,77 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 		if (!is_binary_clipboard) // text mode, do UTF-8 and UTF-16LE BOM checking
 		{
 			bool has_bom;
-			if (bytes_actually_read >= 3 && output_buf[0] == 0xEF && output_buf[1] == 0xBB && output_buf[2] == 0xBF) // UTF-8 BOM
-			{
-				if (!output_var.AssignStringFromUTF8((LPCSTR)output_buf + 3, bytes_actually_read - 3))
-					result = FALSE;
-			}
-			else if ( (has_bom = (bytes_actually_read >= 2 && output_buf[0] == 0xFF && output_buf[1] == 0xFE)) // UTF-16LE BOM
+			if ( (has_bom = (bytes_actually_read >= 2 && output_buf[0] == 0xFF && output_buf[1] == 0xFE)) // UTF-16LE BOM
 					|| codepage == CP_UTF16 ) // Covers FileEncoding UTF-16 and FileEncoding UTF-16-RAW.
 			{
-				LPCWSTR text_start = (LPCWSTR)output_buf;
-				DWORD text_size = bytes_actually_read;
-				if (has_bom) {
-					text_start ++; // Skip BOM.
-					text_size -= 2; // Exclude BOM from calculations below for consistency; include only the actual data.
+				#ifndef UNICODE
+				#error FileRead UTF-16 to ANSI string not implemented.
+				#endif
+				LPWSTR text = (LPWSTR)output_buf;
+				DWORD length = bytes_actually_read / sizeof(WCHAR);
+				if (has_bom)
+				{
+					// Move the data to eliminate the byte order mark.
+					// Seems likely to perform better than allocating new memory and copying to it.
+					--length;
+					wmemmove(text, text + 1, length);
 				}
-				if (!output_var.AssignStringW(text_start, text_size / sizeof(wchar_t)))
-					result = FALSE;
+				text[length] = '\0'; // Ensure text is terminated where indicated.  Two bytes were reserved for this purpose.
+				aResultToken.AcceptMem(text, length);
+				output_buf = NULL; // Don't free it; caller will take over.
 			}
 			else
 			{
+				LPCSTR text = (LPCSTR)output_buf;
+				DWORD length = bytes_actually_read;
+				if (length >= 3 && output_buf[0] == 0xEF && output_buf[1] == 0xBB && output_buf[2] == 0xBF) // UTF-8 BOM
+				{
+					codepage = CP_UTF8;
+					length -= 3;
+					text += 3;
+				}
 #ifndef UNICODE
 				if (codepage == CP_ACP || codepage == GetACP())
 				{
 					// Avoid any unnecessary conversion or copying by using our malloc'd buffer directly.
 					// This should be worth doing since the string must otherwise be converted to UTF-16 and back.
 					output_buf[bytes_actually_read] = 0; // Ensure text is terminated where indicated.
-					output_var.AcceptNewMem((LPTSTR)output_buf, bytes_actually_read);
-					output_buf = NULL; // AcceptNewMem took charge of it.
+					aResultToken.AcceptMem((LPSTR)output_buf, bytes_actually_read);
+					output_buf = NULL; // Don't free it; caller will take over.
 				}
 				else
+				#error FileRead non-ACP-ANSI to ANSI string not fully implemented.
 #endif
-				if (!output_var.AssignStringFromCodePage((LPCSTR)output_buf, bytes_actually_read, codepage))
-					result = FALSE;
+				{
+					int wlen = MultiByteToWideChar(codepage, 0, text, length, NULL, 0);
+					if (wlen > 0)
+					{
+						if (!TokenSetResult(aResultToken, NULL, wlen))
+						{
+							free(output_buf);
+							_f_return_FAIL;
+						}
+						wlen = MultiByteToWideChar(codepage, 0, text, length, aResultToken.marker, wlen);
+						aResultToken.symbol = SYM_STRING;
+						aResultToken.marker[wlen] = 0;
+						aResultToken.marker_length = wlen;
+						if (!wlen)
+							result = FALSE;
+					}
+				}
 			}
 			if (output_buf) // i.e. it wasn't "claimed" above.
 				free(output_buf);
-			output_buf = (LPBYTE) output_var.Contents();
-			if (translate_crlf_to_lf)
+			if (translate_crlf_to_lf && aResultToken.marker_length)
 			{
 				// Since a larger string is being replaced with a smaller, there's a good chance the 2 GB
 				// address limit will not be exceeded by StrReplace even if the file is close to the
 				// 1 GB limit as described above:
-				VarSizeType var_length = output_var.CharLength();
-				StrReplace((LPTSTR)output_buf, _T("\r\n"), _T("\n"), SCS_SENSITIVE, UINT_MAX, -1, NULL, &var_length);
-				output_var.SetCharLength(var_length);
+				StrReplace(aResultToken.marker, _T("\r\n"), _T("\n"), SCS_SENSITIVE, UINT_MAX, -1, NULL, &aResultToken.marker_length);
 			}
 		}
 		else // is_binary_clipboard == true
 		{
-			if (output_var.Type() == VAR_CLIPBOARD) // Reading binary clipboard data directly back onto the clipboard.
-			{
-				result = Var::SetClipboardAll(output_buf, bytes_actually_read) == OK;
-				free(output_buf);
-				if (!result)
-					return FAIL;
-				return SetErrorLevelOrThrowBool(false);
-			}
 			// Although binary clipboard data is always null-terminated, this might be some other kind
 			// of binary data or actually text (but the caller passed *c to skip codepage conversion),
 			// so might not be terminated.  Ensure the data is null-terminated:
@@ -8105,32 +8100,21 @@ ResultType Line::FileRead(LPTSTR aFilespec)
 			if (terminate_at & 1) // Odd number of bytes.
 				output_buf[terminate_at++] = 0; // Put an extra zero byte in and move the actual terminator right one byte.
 #endif
+			// Write final TCHAR terminator.
 			*LPTSTR(output_buf + terminate_at) = 0;
-			// Update the output var's length.  In this case the script wants the actual data size rather
-			// than the "usable" length.  v1.1.16: Although it might change the behaviour of some scripts,
-			// it seems safer to use the "rounded up" size than an odd byte count, which would cause the
-			// last byte to be truncated due to integer division in Var::CharLength().
-			output_var.ByteLength() = terminate_at;
+			// Return the buffer to our caller.
+			aResultToken.AcceptMem((LPTSTR)output_buf, terminate_at / sizeof(TCHAR));
 		}
 	}
 	else
 	{
-		// ReadFile() failed.  Since MSDN does not document what is in the buffer at this stage,
-		// or whether what's in it is even null-terminated, or even whether bytes_to_read contains
-		// a valid value, it seems best to abort the entire operation rather than try to put partial
-		// file contents into output_var.  ErrorLevel will indicate the failure.
-		// Since ReadFile() failed, to avoid complications or side-effects in functions such as Var::Close(),
-		// avoid storing a potentially non-terminated string in the variable.
-		*((LPTSTR)output_buf) = '\0'; // Assign() at this point would fail for the clipboard since it's already open for writing.
-		output_var.ByteLength() = 0;
-		if (!output_buf_is_var)
-			free(output_buf);
+		// ReadFile() failed.  Since MSDN does not document what is in the buffer at this stage, or
+		// whether bytes_to_read contains a valid value, it seems best to abort the entire operation
+		// rather than try to return partial file contents.  ErrorLevel will indicate the failure.
+		free(output_buf);
 	}
 
-	if (!output_var.Close()) // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-		return FAIL;
-
-	return SetErrorLevelOrThrowBool(!result);
+	Script::SetErrorLevels(!result);
 }
 
 

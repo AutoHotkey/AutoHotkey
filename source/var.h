@@ -282,11 +282,6 @@ public:
 #endif
 	}
 
-	ResultType AssignStringFromCodePage(LPCSTR aBuf, int aLength = -1, UINT aCodePage = CP_ACP);
-	ResultType AssignStringFromUTF8(LPCSTR aBuf, int aLength = -1)
-	{
-		return AssignStringFromCodePage(aBuf, aLength, CP_UTF8);
-	}
 	ResultType AssignStringToCodePage(LPCWSTR aBuf, int aLength = -1, UINT aCodePage = CP_ACP, DWORD aFlags = WC_NO_BEST_FIT_CHARS, char aDefChar = '?');
 	inline ResultType AssignStringW(LPCWSTR aBuf, int aLength = -1)
 	{
