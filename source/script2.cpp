@@ -7877,72 +7877,71 @@ ResultType Line::FileCreateDir(LPTSTR aDirSpec)
 
 
 
+ResultType ConvertFileOptions(LPTSTR aOptions, UINT &codepage, bool &translate_crlf_to_lf, unsigned __int64 *pmax_bytes_to_load)
+{
+	for (LPTSTR next, cp = aOptions; cp && *(cp = omit_leading_whitespace(cp)); cp = next)
+	{
+		if (*cp == '\n')
+		{
+			translate_crlf_to_lf = true;
+			// Rather than treating "`nxxx" as invalid or ignoring "xxx", let the delimiter be
+			// optional for `n.  Treating "`nxxx" and "m1024`n" and "utf-8`n" as invalid would
+			// require larger code, and would produce confusing error messages because the `n
+			// isn't visible; e.g. "Invalid option. Specifically: utf-8"
+			next = cp + 1; 
+			continue;
+		}
+		// \n is included below to allow "m1024`n" and "utf-8`n" (see above).
+		next = StrChrAny(cp, _T(" \t\n"));
+
+		switch (ctoupper(*cp))
+		{
+		case 'M':
+			if (pmax_bytes_to_load) // i.e. caller is FileRead.
+			{
+				*pmax_bytes_to_load = ATOU64(cp + 1); // Relies upon the fact that it ceases conversion upon reaching a space or tab.
+				break;
+			}
+			// Otherwise, fall through to treat it as invalid:
+		default:
+			TCHAR name[12]; // Large enough for any valid encoding.
+			if (next && (next - cp) < _countof(name))
+			{
+				// Create a temporary null-terminated copy.
+				wmemcpy(name, cp, next - cp);
+				name[next - cp] = '\0';
+				cp = name;
+			}
+			if (!_tcsicmp(cp, _T("RAW")))
+			{
+				codepage = -1;
+			}
+			else
+			{
+				codepage = Line::ConvertFileEncoding(cp);
+				if (codepage == -1)
+					return g_script.ScriptError(ERR_INVALID_OPTION, cp);
+			}
+			break;
+		} // switch()
+	} // for()
+	return OK;
+}
+
 BIF_DECL(BIF_FileRead)
 {
 	_f_param_string(aFilespec, 0);
+	_f_param_string_opt(aOptions, 1);
 
 	const DWORD DWORD_MAX = ~0;
 
 	// Set default options:
 	bool translate_crlf_to_lf = false;
-	bool is_binary_clipboard = false;
 	unsigned __int64 max_bytes_to_load = ULLONG_MAX; // By default, fail if the file is too large.  See comments near bytes_to_read below.
-	UINT codepage = g->Encoding & CP_AHKCP;
+	UINT codepage = g->Encoding;
 
-	// It's done as asterisk+option letter to permit future expansion.  A plain asterisk such as used
-	// by the FileAppend command would create ambiguity if there was ever an effort to add other asterisk-
-	// prefixed options later.
-	LPTSTR cp;
-	for (;;)
-	{
-		cp = omit_leading_whitespace(aFilespec); // omit leading whitespace only temporarily in case aFilespec contains literal whitespace we want to retain.
-		if (*cp != '*') // No more options.
-			break; // Make no further changes to aFilespec.
-		switch (ctoupper(*++cp)) // This could move cp to the terminator if string ends in an asterisk.
-		{
-		case 'C': // Clipboard (binary).
-			is_binary_clipboard = true; // When this option is present, any others are parsed (to skip over them) but ignored as documented.
-			break;
-		case 'M': // Maximum number of bytes to load.
-			max_bytes_to_load = ATOU64(cp + 1); // Relies upon the fact that it ceases conversion upon reaching a space or tab.
-			// Skip over the digits of this option in case it's the last option.
-			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
-				_f_throw(ERR_PARAM1_INVALID);
-			--cp; // Standardize it to make it conform to the other options, for use below.
-			break;
-		case 'P':
-			codepage = _ttoi(cp + 1);
-			// Skip over the digits of this option in case it's the last option.
-			if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there should be one if options are properly formatted).
-				_f_throw(ERR_PARAM1_INVALID);
-			--cp; // Standardize it to make it conform to the other options, for use below.
-			break;
-		case 'T': // Text mode.
-			translate_crlf_to_lf = true;
-			break;
-		}
-		// Note: because it's possible for filenames to start with a space (even though Explorer itself
-		// won't let you create them that way), allow exactly one space between end of option and the
-		// filename itself:
-		aFilespec = cp;  // aFilespec is now the option letter after the asterisk *or* empty string if there was none.
-		if (*aFilespec)
-		{
-			++aFilespec;
-			// Now it's the space or tab (if there is one) after the option letter.  It seems best for
-			// future expansion to assume that this is a space or tab even if it's really the start of
-			// the filename.  For example, in the future, multiletter options might be wanted, in which
-			// case allowing the omission of the space or tab between *t and the start of the filename
-			// would cause the following to be ambiguous:
-			// FileRead, OutputVar, *delimC:\File.txt
-			// (assuming *delim would accept an optional arg immediately following it).
-			// Enforcing this format also simplifies parsing in the future, if there are ever multiple options.
-			// It also conforms to the precedent/behavior of GuiControl when it accepts picture sizing options
-			// such as *w/h and *x/y
-			if (*aFilespec)
-				++aFilespec; // And now it's the start of the filename or the asterisk of the next option.
-							// This behavior is as documented in the help file.
-		}
-	} // for()
+	if (!ConvertFileOptions(aOptions, codepage, translate_crlf_to_lf, &max_bytes_to_load))
+		_f_return_FAIL; // It already displayed the error.
 
 	_f_set_retval_p(_T(""), 0); // Set default.
 
@@ -8015,8 +8014,9 @@ BIF_DECL(BIF_FileRead)
 
 	if (result)
 	{
-		if (!is_binary_clipboard) // text mode, do UTF-8 and UTF-16LE BOM checking
+		if (codepage != -1) // Text mode, not "RAW" mode.
 		{
+			codepage &= CP_AHKCP; // Convert to plain Win32 codepage (remove CP_AHKNOBOM, which has no meaning here).
 			bool has_bom;
 			if ( (has_bom = (bytes_actually_read >= 2 && output_buf[0] == 0xFF && output_buf[1] == 0xFE)) // UTF-16LE BOM
 					|| codepage == CP_UTF16 ) // Covers FileEncoding UTF-16 and FileEncoding UTF-16-RAW.
@@ -8087,11 +8087,10 @@ BIF_DECL(BIF_FileRead)
 				StrReplace(aResultToken.marker, _T("\r\n"), _T("\n"), SCS_SENSITIVE, UINT_MAX, -1, NULL, &aResultToken.marker_length);
 			}
 		}
-		else // is_binary_clipboard == true
+		else // codepage == -1 ("RAW" mode)
 		{
-			// Although binary clipboard data is always null-terminated, this might be some other kind
-			// of binary data or actually text (but the caller passed *c to skip codepage conversion),
-			// so might not be terminated.  Ensure the data is null-terminated:
+			// This could be text or any kind of binary data, so may not be null-terminated.
+			// Since we're returning a string, ensure it is terminated with a complete \0 TCHAR:
 			DWORD terminate_at = bytes_actually_read;
 #ifdef UNICODE
 			// Since the data might be interpreted as UTF-16, we need to ensure the null-terminator is
@@ -8121,9 +8120,10 @@ BIF_DECL(BIF_FileRead)
 
 BIF_DECL(BIF_FileAppend)
 {
-	_f_param_string(aBuf, 0);
+	size_t aBuf_length;
+	_f_param_string(aBuf, 0, &aBuf_length);
 	_f_param_string_opt(aFilespec, 1);
-	_f_param_string_opt_def(aEncoding, 2, NULL);
+	_f_param_string_opt(aOptions, 2);
 
 	_f_set_retval_p(_T(""), 0); // For all non-throw cases.
 
@@ -8142,45 +8142,33 @@ BIF_DECL(BIF_FileAppend)
 
 	TextStream *ts = aCurrentReadFile ? aCurrentReadFile->mWriteFile : NULL;
 	bool file_was_already_open = ts;
-	BOOL result;
 
-	bool open_as_binary = (*aFilespec == '*');
-	if (open_as_binary)
-	{
-		if (aFilespec[1] && (aFilespec[1] != '*' || !aFilespec[2])) // i.e. it's not just * (stdout) or ** (stderr).
-		{
-			// Do not do this because it's possible for filenames to start with a space
-			// (even though Explorer itself won't let you create them that way):
-			//write_filespec = omit_leading_whitespace(write_filespec + 1);
-			// Instead just do this:
-			++aFilespec;
-		}
 #ifdef CONFIG_DEBUGGER
-		else if (!aFilespec[1] && g_Debugger.FileAppendStdOut(aBuf))
-		{
-			// StdOut has been redirected to the debugger, and this "FileAppend" call has been
-			// fully handled by the call above, so just return.
-			Script::SetErrorLevels(false, 0);
-			_f_return_retval;
-		}
-#endif
+	if (*aFilespec == '*' && !aFilespec[1] && g_Debugger.FileAppendStdOut(aBuf))
+	{
+		// StdOut has been redirected to the debugger, and this "FileAppend" call has been
+		// fully handled by the call above, so just return.
+		Script::SetErrorLevels(false, 0);
+		_f_return_retval;
 	}
+#endif
 
-	// Check if the file needs to be opened.  As of 1.0.25, this is done here rather than
-	// at the time the loop first begins so that:
-	// 1) Binary mode can be auto-detected if the first block of text appended to the file
-	//    contains any \r\n's.  UPDATE: Auto-detect is no longer needed due to optimizations
-	//    in v1.0.95 which eliminate the cost of EOL translation.
+	UINT codepage;
+
+	// Check if the file needs to be opened.  This is done here rather than at the time the
+	// loop first begins so that:
+	// 1) Any options/encoding specified in the first FileAppend call can take effect.
 	// 2) To avoid opening the file if the file-reading loop has zero iterations (i.e. it's
 	//    opened only upon first actual use to help performance and avoid changing the
 	//    file-modification time when no actual text will be appended).
 	if (!file_was_already_open)
 	{
-		DWORD flags = TextStream::APPEND | (open_as_binary ? 0 : TextStream::EOL_CRLF);
-		
-		UINT codepage = aEncoding ? Line::ConvertFileEncoding(aEncoding) : g->Encoding;
-		if (codepage == -1) // ARG3 was invalid.
-			_f_throw(ERR_PARAM3_INVALID, aEncoding);
+		codepage = g->Encoding;
+		bool translate_crlf_to_lf = false;
+		if (!ConvertFileOptions(aOptions, codepage, translate_crlf_to_lf, NULL))
+			_f_return_FAIL;
+
+		DWORD flags = TextStream::APPEND | (translate_crlf_to_lf ? TextStream::EOL_CRLF : 0);
 		
 		ASSERT( (~CP_AHKNOBOM) == CP_AHKCP );
 		// codepage may include CP_AHKNOBOM, in which case below will not add BOM_UTFxx flag.
@@ -8188,12 +8176,14 @@ BIF_DECL(BIF_FileAppend)
 			flags |= TextStream::BOM_UTF8;
 		else if (codepage == CP_UTF16)
 			flags |= TextStream::BOM_UTF16;
+		else if (codepage != -1)
+			codepage &= CP_AHKCP;
 
 		// Open the output file (if one was specified).  Unlike the input file, this is not
 		// a critical error if it fails.  We want it to be non-critical so that FileAppend
 		// commands in the body of the loop will set ErrorLevel to indicate the problem:
 		ts = new TextFile; // ts was already verified NULL via !file_was_already_open.
-		if ( !ts->Open(aFilespec, flags, codepage & CP_AHKCP) )
+		if ( !ts->Open(aFilespec, flags, codepage) )
 		{
 			delete ts; // Must be deleted explicitly!
 			Script::SetErrorLevels(true);
@@ -8202,16 +8192,25 @@ BIF_DECL(BIF_FileAppend)
 		if (aCurrentReadFile)
 			aCurrentReadFile->mWriteFile = ts;
 	}
+	else
+		codepage = ts->GetCodePage();
 
 	// Write to the file:
-	DWORD length = (DWORD)_tcslen(aBuf);
-	result = length && ts->Write(aBuf, length) == 0; // Relies on short-circuit boolean evaluation.  If buf is empty, we've already succeeded in creating the file and have nothing further to do.
+	DWORD result = 1;
+	if (aBuf_length)
+	{
+		if (codepage == -1) // "RAW" mode.
+			result = ts->Write((LPCVOID)aBuf, DWORD(aBuf_length * sizeof(TCHAR)));
+		else
+			result = ts->Write(aBuf, DWORD(aBuf_length));
+	}
+	//else: aBuf is empty; we've already succeeded in creating the file and have nothing further to do.
+	Script::SetErrorLevels(result == 0);
 
 	if (!aCurrentReadFile)
 		delete ts;
 	// else it's the caller's responsibility, or it's caller's, to close it.
 
-	Script::SetErrorLevels(result);
 	_f_return_retval;
 }
 

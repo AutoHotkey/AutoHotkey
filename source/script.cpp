@@ -213,7 +213,7 @@ FuncEntry g_BIF[] =
 	BIF1(FileGetSize, 0, 2, true),
 	BIF1(FileGetTime, 0, 2, true),
 	BIF1(FileGetVersion, 0, 1, true),
-	BIF1(FileRead, 1, 1, true),
+	BIF1(FileRead, 1, 2, true),
 	BIF1(FileSelect, 0, 4, true),
 
 	BIF1(IniRead, 1, 4, true),
