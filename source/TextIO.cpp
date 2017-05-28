@@ -1125,16 +1125,13 @@ BIF_DECL(BIF_FileOpen)
 		
 		// Default to not locking file, for consistency with fopen/standard AutoHotkey and because it seems best for flexibility.
 		aFlags |= TextStream::SHARE_ALL;
-		// Default to translating `r`n and `r, for convenience and consistency with the other file I/O commands.
-		aFlags |= TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR;
 
 		for (++sflag; *sflag; ++sflag)
 		{
 			switch (ctolower(*sflag))
 			{
-			case '*':
-				aFlags &= ~(TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR);
-				break;
+			case '\n': aFlags |= TextStream::EOL_CRLF; break;
+			case '\r': aFlags |= TextStream::EOL_ORPHAN_CR; break;
 			case ' ':
 			case '\t':
 				// Allow spaces and tabs for readability.
