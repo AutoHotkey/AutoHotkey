@@ -129,7 +129,7 @@ ResultType Var::GetClipboardAll(void **aData, size_t *aDataSize)
 	// says: "If the system provides an automatic type conversion for a particular clipboard format,
 	// there is no advantage to placing the conversion format(s) on the clipboard."
 	HGLOBAL hglobal;
-	SIZE_T size;
+	UINT size; // Make it 32-bit even on x64 to allow clipboard data to be used between x86 and x64.
 	UINT format;
 	VarSizeType space_needed;
 	UINT dib_format_to_omit = 0;
@@ -237,7 +237,7 @@ ResultType Var::GetClipboardAll(void **aData, size_t *aDataSize)
 		// GlobalLock() fails to work on hglobals of size zero, so don't do it for them.
 		hglobal = g_clip.GetClipboardDataTimeout(format, &save_null_data);
 		if (hglobal)
-			size = GlobalSize(hglobal);
+			size = (UINT)GlobalSize(hglobal); // Data >= 4GB seems extremely unlikely, and couldn't be detected by 32-bit processes anyway, so there's no checking for overflow on x64.
 		else if (save_null_data)
 			size = 0; // This format usually has NULL data.
 		else
@@ -289,7 +289,7 @@ ResultType Var::SetClipboardAll(void *aData, size_t aDataSize)
 	HGLOBAL hglobal;
 	LPVOID hglobal_locked;
 	UINT format;
-	SIZE_T size;
+	UINT size;
 
 	while ((next = (char *)binary_contents + sizeof(format)) <= binary_contents_max
 		&& (format = *(UINT *)binary_contents)) // Get the format.  Relies on short-circuit boolean order.
