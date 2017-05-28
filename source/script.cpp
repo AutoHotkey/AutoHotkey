@@ -373,7 +373,6 @@ VarEntry g_BIV_A[] =
 	A_(LoopReadLine),
 	A_(LoopRegKey),
 	A_(LoopRegName),
-	A_(LoopRegSubKey),
 	A_(LoopRegTimeModified),
 	A_(LoopRegType),
 	A_x(MDay, BIV_DateTime),

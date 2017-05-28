@@ -1070,18 +1070,17 @@ public:
 		return (RegConnectRegistry(computer_name, root_key, &remote_key) == ERROR_SUCCESS) ? remote_key : NULL;
 	}
 
-	static LPTSTR RegConvertRootKey(LPTSTR aBuf, size_t aBufSize, HKEY aRootKey)
+	static LPTSTR RegConvertRootKey(HKEY aRootKey)
 	{
 		// switch() doesn't directly support expression of type HKEY:
-		if (aRootKey == HKEY_LOCAL_MACHINE)       tcslcpy(aBuf, _T("HKEY_LOCAL_MACHINE"), aBufSize);
-		else if (aRootKey == HKEY_CLASSES_ROOT)   tcslcpy(aBuf, _T("HKEY_CLASSES_ROOT"), aBufSize);
-		else if (aRootKey == HKEY_CURRENT_CONFIG) tcslcpy(aBuf, _T("HKEY_CURRENT_CONFIG"), aBufSize);
-		else if (aRootKey == HKEY_CURRENT_USER)   tcslcpy(aBuf, _T("HKEY_CURRENT_USER"), aBufSize);
-		else if (aRootKey == HKEY_USERS)          tcslcpy(aBuf, _T("HKEY_USERS"), aBufSize);
-		else if (aBufSize)                        *aBuf = '\0'; // Make it be the empty string for anything else.
+		if (aRootKey == HKEY_LOCAL_MACHINE)       return _T("HKEY_LOCAL_MACHINE");
+		else if (aRootKey == HKEY_CLASSES_ROOT)   return _T("HKEY_CLASSES_ROOT");
+		else if (aRootKey == HKEY_CURRENT_CONFIG) return _T("HKEY_CURRENT_CONFIG");
+		else if (aRootKey == HKEY_CURRENT_USER)   return _T("HKEY_CURRENT_USER");
+		else if (aRootKey == HKEY_USERS)          return _T("HKEY_USERS");
 		// These are either unused or so rarely used (DYN_DATA on Win9x) that they aren't supported:
 		// HKEY_PERFORMANCE_DATA, HKEY_PERFORMANCE_TEXT, HKEY_PERFORMANCE_NLSTEXT, HKEY_DYN_DATA
-		return aBuf;
+		return _T(""); // Make it be the empty string for anything else.
 	}
 	static int RegConvertValueType(LPTSTR aValueType)
 	{
@@ -2928,7 +2927,6 @@ BIV_DECL_R (BIV_LoopFileAttrib);
 BIV_DECL_R (BIV_LoopFileSize);
 BIV_DECL_R (BIV_LoopRegType);
 BIV_DECL_R (BIV_LoopRegKey);
-BIV_DECL_R (BIV_LoopRegSubKey);
 BIV_DECL_R (BIV_LoopRegName);
 BIV_DECL_R (BIV_LoopRegTimeModified);
 BIV_DECL_R (BIV_LoopReadLine);
