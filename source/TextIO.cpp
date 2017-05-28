@@ -942,36 +942,87 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 
 		case RawReadWrite:
 			{
-				if (aParamCount < 2)
+				if (aParamCount < 1)
 					_o_throw(ERR_TOO_FEW_PARAMS);
 
 				bool reading = (name[3] == 'R' || name[3] == 'r');
 
 				LPVOID target;
+				DWORD max_size;
 				ExprTokenType &target_token = *aParam[1];
-				DWORD size = (DWORD)TokenToInt64(*aParam[2]);
-
-				if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+				Var *target_var = NULL; // For maintainability (since target_token.symbol == SYM_VAR isn't a reliable indicator).
+				switch (target_token.symbol)
 				{
-					// Check if the user requested a size larger than the variable.
-					if ( size > target_token.var->ByteCapacity()
-						// Too small: expand the target variable if reading; abort otherwise.
-						&& (!reading || !target_token.var->SetCapacity(size, false)) ) // Relies on short-circuit order.
+				case SYM_STRING:
+					if (reading)
+						_o_throw(ERR_PARAM1_INVALID); // Can't read into a read-only string.
+					target = target_token.marker;
+					max_size = (DWORD)(target_token.marker_length + 1) * sizeof(TCHAR); // Allow +1 to write the null-terminator (but it won't be written by default if size is omitted).
+					break;
+				case SYM_VAR:
+					if (!target_token.var->IsPureNumericOrObject())
 					{
-						if (reading)
-							return FAIL; // SetCapacity() already showed the error message.
-						_o_throw(ERR_PARAM2_INVALID); // Invalid size (param #2).
+						target_var = target_token.var;
+						target = target_var->Contents(TRUE, reading); // Pass TRUE for aAllowUpdate just to enable uninit' warning when !reading.
+						max_size = (DWORD)target_var->ByteCapacity();
+						if (reading && max_size) // But when writing, allow the null-terminator to be included.
+							max_size -= sizeof(TCHAR); // Always reserve space for the null-terminator.
+						break;
 					}
-					target = target_token.var->Contents();
+				default:
+					if (TokenIsPureNumeric(target_token) == PURE_INTEGER)
+					{
+						target = (LPVOID)TokenToInt64(target_token);
+						max_size = ~0; // Unknown; perform no validation.
+						if ((size_t)target >= 65536) // Basic sanity check relying on the fact that Win32 platforms reserve the first 64KB of address space.
+							break;
+						// Otherwise, it's invalid:
+					}
+					// Otherwise, it's invalid (float or object):
+					_o_throw(ERR_PARAM1_INVALID);
+				}
+
+				DWORD size;
+				if (aParamCount < 2 || aParam[2]->symbol == SYM_MISSING)
+				{
+					if (max_size == ~0) // Param #1 was an address.
+						_o_throw(ERR_PARAM2_REQUIRED); // (in this case).
+					if (reading)
+						// Fill the variable (space was already reserved for the null-terminator).
+						size = max_size; // max_size != SIZE_MAX implies target_var != NULL, so this is its capacity.
+					else
+						// Default to the byte count of the binary string, excluding the null-terminator.
+						size = target_var ? (DWORD)target_var->ByteLength() : (max_size - sizeof(TCHAR));
 				}
 				else
-					target = (LPVOID)TokenToInt64(target_token);
+				{
+					size = (DWORD)TokenToInt64(*aParam[2]);
+					if (size > max_size) // Implies max_size != ~0.
+					{
+						if (!reading || !target_var)
+							_o_throw(ERR_PARAM2_INVALID); // Invalid size (param #2).
+						if (!target_var->SetCapacity(size, false))
+							return FAIL; // SetCapacity() already showed the error message.
+						target = target_var->Contents(FALSE, TRUE); // Update to the new address.
+					}
+				}
 
 				DWORD result;
-				if (target < (LPVOID)65536) // Basic sanity check to catch incoming raw addresses that are zero or blank.
-					_o_throw(ERR_PARAM1_INVALID);
-				else if (reading)
+				if (reading)
+				{
 					result = mFile.Read(target, size);
+					if (target_var)
+					{
+						DWORD byte_length = result;
+						#ifdef UNICODE
+						// Var capacity is always a multiple of sizeof(TCHAR), so there's always room for this:
+						if (byte_length & 1)
+							((LPBYTE)target)[byte_length++] = 0; // Round up to multiple of sizeof(TCHAR) and init to zero for predictability.
+						#endif
+						target_var->ByteLength() = byte_length; // Update variable's length.
+						*(LPTSTR)((LPBYTE)target + byte_length) = '\0'; // Ensure it is null-terminated.
+					}
+				}
 				else
 					result = mFile.Write(target, size);
 				aResultToken.value_int64 = result;
