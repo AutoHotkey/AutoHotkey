@@ -578,6 +578,7 @@ enum BuiltInFunctionID {
 	FID_DriveEject = 0, FID_DriveLock, FID_DriveUnlock, FID_DriveSetLabel,
 	FID_DriveGetList = 0, FID_DriveGetFilesystem, FID_DriveGetLabel, FID_DriveGetSerial, FID_DriveGetType, FID_DriveGetStatus, FID_DriveGetStatusCD, FID_DriveGetCapacity, FID_DriveGetSpaceFree,
 	FID_EnvGet = 0, FID_EnvSet,
+	FID_RegRead = 0, FID_RegWrite, FID_RegDelete, FID_RegDeleteKey,
 	FID_SoundGet = 0, FID_SoundSet
 };
 
@@ -645,9 +646,6 @@ private:
 
 	ResultType IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
 	ResultType IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
-	ResultType RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName, LPTSTR aValue);
-	ResultType RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName);
-	static LONG RegRemoveSubkeys(HKEY hRegKey);
 
 	ResultType ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID);
 	ResultType TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions);
@@ -3099,7 +3097,7 @@ BIF_DECL(BIF_FileRead);
 BIF_DECL(BIF_FileSelect);
 BIF_DECL(BIF_IniRead);
 BIF_DECL(BIF_PixelGetColor);
-BIF_DECL(BIF_RegRead);
+BIF_DECL(BIF_Reg);
 BIF_DECL(BIF_Random);
 BIF_DECL(BIF_Sound);
 BIF_DECL(BIF_StatusBarGetText);

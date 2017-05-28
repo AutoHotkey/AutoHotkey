@@ -218,7 +218,11 @@ FuncEntry g_BIF[] =
 
 	BIF1(IniRead, 1, 4, true),
 	BIF1(PixelGetColor, 2, 3, true),
-	BIF1(RegRead, 0, 2, true),
+	BIFn(RegDelete, 0, 2, false, BIF_Reg),
+	#undef RegDeleteKey // Don't make it "RegDeleteKeyW".
+	BIFn(RegDeleteKey, 0, 1, false, BIF_Reg),
+	BIFn(RegRead, 0, 2, true, BIF_Reg),
+	BIFn(RegWrite, 0, 4, false, BIF_Reg),
 	BIFn(Random, 0, 2, true, BIF_Random),
 	BIFn(RandomSeed, 1, 1, true, BIF_Random),
 	BIFn(SoundGet, 0, 3, true, BIF_Sound),
@@ -11355,9 +11359,6 @@ ResultType Line::Perform()
 	ToggleValueType toggle;  // For commands that use on/off/neutral.
 	// Use signed values for these in case they're really given an explicit negative value:
 	vk_type vk; // For GetKeyState.
-	bool is_remote_registry; // For Registry commands.
-	HKEY root_key; // For Registry commands.
-	LPTSTR subkey, value_name; // For Registry commands.
 	ResultType result;  // General purpose.
 
 	// Even though the loading-parser already checked, check again, for now,
@@ -12099,43 +12100,6 @@ ResultType Line::Perform()
 		// nothing (that fact is untested):
 		return IniDelete(ARG1, ARG2, mArgc < 3 ? NULL : ARG3);
 
-	case ACT_REGWRITE:
-		if (mArgc < 2 && g.mLoopRegItem) // Uses the registry loop's current item.
-			// If g.mLoopRegItem->name specifies a subkey rather than a value name, do this anyway
-			// so that it will set ErrorLevel to ERROR.  An error will also be indicated if
-			// g.mLoopRegItem->type is an unsupported type:
-			return RegWrite(g.mLoopRegItem->type, g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name, ARG1);
-		// Otherwise:
-		root_key = RegConvertKey(ARG2, &subkey, &is_remote_registry);
-		result = RegWrite(RegConvertValueType(ARG1), root_key, subkey, ARG3, ARG4); // If RegConvertValueType(ARG1) yields REG_NONE, RegWrite() will set ErrorLevel rather than displaying a runtime error.
-		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS keeps always-open.
-			RegCloseKey(root_key);
-		return result;
-	case ACT_REGDELETE:
-	case ACT_REGDELETEKEY:
-		if (mArgc < 1 && g.mLoopRegItem) // Uses the registry loop's current item.
-		{
-			// In this case, if the current reg item is a value, just delete it normally.
-			// But if it's a subkey, append it to the dir name so that the proper subkey
-			// will be deleted as the user intended:
-			if (g.mLoopRegItem->type == REG_SUBKEY)
-			{
-				sntprintf(buf_temp, _countof(buf_temp), _T("%s\\%s"), g.mLoopRegItem->subkey, g.mLoopRegItem->name);
-				return RegDelete(g.mLoopRegItem->root_key, buf_temp, NULL);
-			}
-			else
-				return RegDelete(g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name);
-		}
-		// Otherwise:
-		root_key = RegConvertKey(ARG1, &subkey, &is_remote_registry);
-		if (mActionType == ACT_REGDELETEKEY)
-			value_name = NULL;
-		else
-			value_name = ARG2; // If omitted, it will be blank (delete the default value).
-		result = RegDelete(root_key, subkey, value_name);
-		if (is_remote_registry && root_key) // Never try to close local root keys, which the OS always keeps open.
-			RegCloseKey(root_key);
-		return result;
 	case ACT_SETREGVIEW:
 		return BIV_RegView_Set(ARG1, NULL);
 

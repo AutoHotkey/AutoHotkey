@@ -171,34 +171,6 @@ ResultType Line::IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 
 
 
-ResultType RegConvertParams(ExprTokenType *aParam[], int aParamCount
-	, HKEY &aRootKey, LPTSTR &aSubKey, LPTSTR &aValueName, bool &aCloseRootKey
-	, ResultToken &aResultToken)
-{
-	if (!aParamCount && g->mLoopRegItem) // Default to the registry loop's current item.
-	{
-		// If g.mLoopRegItem->name specifies a subkey rather than a value name, do this anyway
-		// so that it will set ErrorLevel to ERROR and set the output variable to be blank.
-		RegItemStruct &reg_item = *g->mLoopRegItem;
-		aRootKey = reg_item.root_key;
-		aSubKey = reg_item.subkey;
-		aValueName = reg_item.name;
-		// Do not use RegCloseKey() on this, even if it's a remote key, since our caller handles that:
-		aCloseRootKey = false;
-	}
-	else
-	{
-		LPTSTR key_name = ParamIndexToOptionalString(0); // No buf needed since numbers aren't valid root keys.
-		aValueName = ParamIndexToOptionalString(1, aResultToken.buf); // Use caller's buf for this one.
-		aRootKey = Line::RegConvertKey(key_name, &aSubKey, &aCloseRootKey);
-		if (!aRootKey)
-			return aResultToken.Error(ERR_PARAM1_INVALID, key_name);
-	}
-	return OK;
-}
-
-
-
 void RegRead(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 {
 	HKEY	hRegKey;
@@ -364,36 +336,24 @@ finish:
 } // RegRead()
 
 
-BIF_DECL(BIF_RegRead)
-{
-	HKEY root_key;
-	LPTSTR sub_key;
-	LPTSTR value_name;
-	bool close_root;
-	if (!RegConvertParams(aParam, aParamCount, root_key, sub_key, value_name, close_root, aResultToken))
-		return;
-	RegRead(aResultToken, root_key, sub_key, value_name);
-	if (close_root)
-		RegCloseKey(root_key);
-}
 
-
-
-ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName, LPTSTR aValue)
+void RegWrite(ResultToken &aResultToken, ExprTokenType &aValue, DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 // If aValueName is the empty string, the key's default value is used.
 {
 	HKEY	hRegKey;
 	DWORD	dwRes, dwBuf;
 
-	TCHAR *buf;
-	#define SET_REG_BUF buf = aValue;
+	TCHAR nbuf[MAX_NUMBER_SIZE];
+	LPTSTR value;
+	size_t length;
 	
 	LONG result;
 
-	if (aValueType == REG_NONE || aValueType == REG_SUBKEY) // Can't write to these.
-		return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
-	if (!aRootKey)
-		return LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
+	if (aValueType == REG_NONE)
+		_f_throw(ERR_PARAM2_REQUIRED);
+
+	if (aValueType != REG_DWORD)
+		value = TokenToString(aValue, nbuf, &length);
 
 	// Open/Create the registry key
 	// The following works even on root keys (i.e. blank subkey), although values can't be created/written to
@@ -408,30 +368,27 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	switch (aValueType)
 	{
 	case REG_SZ:
-		SET_REG_BUF
-		result = RegSetValueEx(hRegKey, aValueName, 0, REG_SZ, (CONST BYTE *)buf, (DWORD)(_tcslen(buf)+1) * sizeof(TCHAR));
+		result = RegSetValueEx(hRegKey, aValueName, 0, REG_SZ, (CONST BYTE *)value, (DWORD)(length+1) * sizeof(TCHAR));
 		break;
 
 	case REG_EXPAND_SZ:
-		SET_REG_BUF
-		result = RegSetValueEx(hRegKey, aValueName, 0, REG_EXPAND_SZ, (CONST BYTE *)buf, (DWORD)(_tcslen(buf)+1) * sizeof(TCHAR));
+		result = RegSetValueEx(hRegKey, aValueName, 0, REG_EXPAND_SZ, (CONST BYTE *)value, (DWORD)(length+1) * sizeof(TCHAR));
 		break;
 	
 	case REG_MULTI_SZ:
 	{
-		size_t length = _tcslen(aValue);
 		// Allocate some temporary memory because aValue might not be a writable string,
 		// and we would need to write to it to temporarily change the newline delimiters into
 		// zero-delimiters.  Even if we were to require callers to give us a modifiable string,
 		// its capacity may be 1 byte too small to handle the double termination that's needed
 		// (i.e. if the last item in the list happens to not end in a newline):
-		buf = tmalloc(length + 2);
+		LPTSTR buf = tmalloc(length + 2);
 		if (!buf)
 		{
 			result = ERROR_OUTOFMEMORY;
 			break;
 		}
-		tcslcpy(buf, aValue, length + 1);
+		tcslcpy(buf, value, length + 1);
 		// Double-terminate:
 		buf[length + 1] = '\0';
 
@@ -452,16 +409,13 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	}
 
 	case REG_DWORD:
-		if (*aValue)
-			dwBuf = ATOU(aValue);  // Changed to ATOU() for v1.0.24 so that hex values are supported.
-		else // Default to 0 when blank.
-			dwBuf = 0;
+		dwBuf = (DWORD)TokenToInt64(aValue);
 		result = RegSetValueEx(hRegKey, aValueName, 0, REG_DWORD, (CONST BYTE *)&dwBuf, sizeof(dwBuf));
 		break;
 
 	case REG_BINARY:
 	{
-		int nLen = (int)_tcslen(aValue);
+		int nLen = (int)length;
 
 		// String length must be a multiple of 2 
 		if (nLen % 2)
@@ -485,12 +439,12 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 			nVal = 0;
 			for (nMult = 16; nMult >= 0; nMult = nMult - 15)
 			{
-				if (aValue[i] >= '0' && aValue[i] <= '9')
-					nVal += (aValue[i] - '0') * nMult;
-				else if (aValue[i] >= 'A' && aValue[i] <= 'F')
-					nVal += (((aValue[i] - 'A'))+10) * nMult;
-				else if (aValue[i] >= 'a' && aValue[i] <= 'f')
-					nVal += (((aValue[i] - 'a'))+10) * nMult;
+				if (value[i] >= '0' && value[i] <= '9')
+					nVal += (value[i] - '0') * nMult;
+				else if (value[i] >= 'A' && value[i] <= 'F')
+					nVal += (((value[i] - 'A'))+10) * nMult;
+				else if (value[i] >= 'a' && value[i] <= 'f')
+					nVal += (((value[i] - 'a'))+10) * nMult;
 				else
 				{
 					free(pRegBuffer);
@@ -517,12 +471,13 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	// Additionally, fall through to below:
 
 finish:
-	return SetErrorsOrThrow(result != ERROR_SUCCESS, result);
+	Script::SetErrorLevels(result != ERROR_SUCCESS, result);
+	_f_return_empty;
 } // RegWrite()
 
 
 
-LONG Line::RegRemoveSubkeys(HKEY hRegKey)
+LONG RegRemoveSubkeys(HKEY hRegKey)
 {
 	// Removes all subkeys to the given key.  Will not touch the given key.
 	TCHAR Name[256];
@@ -552,18 +507,18 @@ LONG Line::RegRemoveSubkeys(HKEY hRegKey)
 
 
 
-ResultType Line::RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
+void RegDelete(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 {
 	LONG result;
 
 	if (!aRootKey)
-		return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
+		_f_throw(ERR_PARAM1_INVALID);
 	// Fix for v1.0.48: Don't remove the entire key if it's a root key!  According to MSDN,
 	// the root key would be opened by RegOpenKeyEx() further below whenever aRegSubkey is NULL
 	// or an empty string. aValueName is also checked to preserve the ability to delete a value
 	// that exists directly under a root key.
 	if (  (!aRegSubkey || !*aRegSubkey) && !aValueName  )
-		return LineError(_T("Cannot delete root key"));
+		_f_throw(_T("Cannot delete root key"));
 
 	// Open the key we want
 	HKEY hRegKey;
@@ -594,5 +549,83 @@ ResultType Line::RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 	}
 
 finish:
-	return SetErrorsOrThrow(result != ERROR_SUCCESS, result);
+	Script::SetErrorLevels(result != ERROR_SUCCESS, result);
+	_f_return_empty;
 } // RegDelete()
+
+
+
+BIF_DECL(BIF_Reg)
+{
+	TCHAR key_buf[MAX_REG_ITEM_SIZE];
+	BuiltInFunctionID action = _f_callee_id;
+	HKEY root_key;
+	LPTSTR sub_key;
+	LPTSTR value_name = action == FID_RegDeleteKey ? NULL : _T(""); // Set default.
+	DWORD value_type = REG_NONE; // RegWrite
+	ExprTokenType *value; // RegWrite
+	bool close_root;
+	if (action == FID_RegWrite)
+	{
+		value = aParam[0];
+		if (aParamCount > 1)
+		{
+			if (aParam[1]->symbol != SYM_MISSING)
+			{
+				value_type = Line::RegConvertValueType(ParamIndexToString(1));
+				if (value_type == REG_NONE) // In this case REG_NONE means unknown/invalid vs. omitted.
+					_f_throw(ERR_PARAM2_INVALID);
+			}
+			aParamCount -= 2;
+		}
+		else
+			aParamCount = 0; // It was 1.
+		aParam += 2; // There might not have been 2, but it won't be dereferenced in that case anyway.
+	}
+	if (ParamIndexIsOmitted(0) && g->mLoopRegItem) // Default to the registry loop's current item.
+	{
+		RegItemStruct &reg_item = *g->mLoopRegItem;
+		root_key = reg_item.root_key;
+		if (reg_item.type == REG_SUBKEY)
+		{
+			if (*reg_item.subkey)
+			{
+				sntprintf(key_buf, _countof(key_buf), _T("%s\\%s"), reg_item.subkey, reg_item.name);
+				sub_key = key_buf;
+			}
+			else
+				sub_key = reg_item.name;
+		}
+		else
+		{
+			sub_key = reg_item.subkey;
+			if (action != FID_RegDeleteKey)
+			{
+				value_name = reg_item.name; // Set default.
+				if (value_type == REG_NONE)
+					value_type = reg_item.type;
+			}
+		}
+		// Do not use RegCloseKey() on this, even if it's a remote key, since our caller handles that:
+		close_root = false;
+	}
+	else
+	{
+		LPTSTR key_name = ParamIndexToOptionalString(0); // No buf needed since numbers aren't valid root keys.
+		root_key = Line::RegConvertKey(key_name, &sub_key, &close_root);
+		if (!root_key)
+			_f_throw(action == FID_RegWrite ? ERR_PARAM3_INVALID : ERR_PARAM1_INVALID, key_name);
+	}
+	if (!ParamIndexIsOmitted(1)) // Implies this isn't RegDeleteKey.
+		value_name = ParamIndexToString(1, _f_number_buf);
+
+	switch (action)
+	{
+	case FID_RegRead:  RegRead(aResultToken, root_key, sub_key, value_name); break;
+	case FID_RegWrite: RegWrite(aResultToken, *value, value_type, root_key, sub_key, value_name); break;
+	default:           RegDelete(aResultToken, root_key, sub_key, value_name); break;
+	}
+
+	if (close_root)
+		RegCloseKey(root_key);
+}

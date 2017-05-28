@@ -396,11 +396,6 @@ Action g_act[] =
 	, {_T("IniWrite"), 3, 4, false, NULL}  // Value, Filespec, Section, Key
 	, {_T("IniDelete"), 2, 3, false, NULL} // Filespec, Section, Key
 
-	// These require so few parameters due to registry loops, which provide the missing parameter values
-	// automatically:
-	, {_T("RegWrite"), 0, 4, false, NULL} // ValueType, RegKey, ValueName, Value (set to blank if omitted?)
-	, {_T("RegDelete"), 0, 2, false, NULL} // RegKey, ValueName
-	, {_T("RegDeleteKey"), 1, 1, false, NULL} // RegKey
 	, {_T("SetRegView"), 1, 1, false, NULL}
 
 	, {_T("OutputDebug"), 1, 1, false, NULL}
