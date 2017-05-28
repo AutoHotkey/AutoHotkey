@@ -73,12 +73,12 @@ public:
 
 	DWORD Write(LPCTSTR aBuf, DWORD aBufLen = 0);
 	DWORD Write(LPCVOID aBuf, DWORD aBufLen);
-	DWORD Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines = 0);
+	DWORD Read(LPTSTR aBuf, DWORD aBufLen, BOOL aReadLine = FALSE);
 	DWORD Read(LPVOID aBuf, DWORD aBufLen);
 
 	DWORD ReadLine(LPTSTR aBuf, DWORD aBufLen)
 	{
-		return Read(aBuf, aBufLen, 1);
+		return Read(aBuf, aBufLen, TRUE);
 	}
 
 	INT_PTR FormatV(LPCTSTR fmt, va_list ap)

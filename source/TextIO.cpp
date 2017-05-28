@@ -84,7 +84,7 @@ bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 
 
 
-DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
+DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, BOOL aReadLine)
 {
 	if (!PrepareToRead())
 		return 0;
@@ -151,28 +151,6 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 			{
 				src_size = sizeof(WCHAR); // Set default (currently never overridden).
 				LPWSTR cp = (LPWSTR)src;
-				if (*cp == '\r')
-				{
-					if (cp + 2 <= (LPWSTR)src_end)
-					{
-						if (cp[1] == '\n')
-						{
-							// There's an \n following this \r, but is \r\n considered EOL?
-							if ( !(mFlags & EOL_CRLF) )
-								// This \r isn't being translated, so just write it out.
-								aBuf[target_used++] = '\r';
-							continue;
-						}
-					}
-					else if (!LAST_READ_HIT_EOF)
-					{
-						// There's not enough data in the buffer to determine if this is \r\n.
-						// Let the next iteration handle this char after reading more data.
-						next_size = 2 * sizeof(WCHAR);
-						break;
-					}
-					// Since above didn't break or continue, this is an orphan \r.
-				}
 				// There doesn't seem to be much need to give surrogate pairs special handling,
 				// so the following is disabled for now.  Some "brute force" tests on Windows 7
 				// showed that none of the ANSI code pages are capable of representing any of
@@ -203,29 +181,7 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 				src_size = 1; // Set default.
 				if (*src < 0x80)
 				{
-					if (*src == '\r')
-					{
-						if (src + 1 < src_end)
-						{
-							if (src[1] == '\n')
-							{
-								// There's an \n following this \r, but is \r\n considered EOL?
-								if ( !(mFlags & EOL_CRLF) )
-									// This \r isn't being translated, so just write it out.
-									aBuf[target_used++] = '\r';
-								continue;
-							}
-						}
-						else if (!LAST_READ_HIT_EOF)
-						{
-							// There's not enough data in the buffer to determine if this is \r\n.
-							// Let the next iteration handle this char after reading more data.
-							next_size = 2;
-							break;
-						}
-						// Since above didn't break or continue, this is an orphan \r.
-					}
-					// No conversion needed for ASCII chars.
+					// No codepage conversion needed for ASCII chars.
 					*dst = *(LPSTR)src;
 					dst_size = 1;
 				}
@@ -300,17 +256,53 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 
 			if (dst_size == 1)
 			{
-				// \r\n has already been handled above, even if !(mFlags & EOL_CRLF), so \r at
-				// this point can only be \r on its own:
-				if (*dst == '\r' && (mFlags & EOL_ORPHAN_CR))
-					*dst = '\n';
-				if (*dst == '\n')
+				if (*dst == '\n' || *dst == '\r')
 				{
-					if (--aNumLines == 0)
+					if (*dst == '\r')
 					{
-						// Our caller asked for a specific number of lines, which we now have.
-						aBuf[target_used++] = '\n';
+						if (src + 2 * chr_size <= src_end)
+						{
+							int nextch = (codepage == CP_UTF16) ? LPWSTR(src)[1] : LPSTR(src)[1];
+							if (nextch == '\n') // \r\n
+							{
+								src_size *= 2; // Increase it to two characters (\r and \n).
+								if (!aReadLine)
+								{
+									if (  !(mFlags & EOL_CRLF)  )
+									{
+										// \r\n translation is disabled, so this \r\n should be written out as is.
+										if (target_used + 2 > aBufLen)
+										{
+											// This \r\n wouldn't fit.  Seems best to leave the \r in the buffer for next
+											// time rather than returning just the \r (even though \r\n translation isn't
+											// enabled, it seems best to treat this \r\n as a single unit).
+											mPos = src;
+											aBuf[target_used] = '\0';
+											return target_used;
+										}
+										aBuf[target_used++] = '\r';
+									}
+									aBuf[target_used++] = '\n';
+									continue;
+								}
+							}
+						}
+						else if (!LAST_READ_HIT_EOF)
+						{
+							// There's not enough data in the buffer to determine if this is \r\n.
+							// Let the next iteration handle this char after reading more data.
+							next_size = 2 * chr_size;
+							break;
+						}
+						// Since above didn't break or continue, this is an orphan \r.
+						if (mFlags & EOL_ORPHAN_CR)
+							*dst = '\n';
+					}
+					if (aReadLine)
+					{
+						// Our caller asked for one line, which we now have.
 						mPos = src + src_size;
+						aBuf[target_used++] = '\n'; // Caller expects a newline-terminated line, to distinguish empty lines from end of file.
 						if (target_used < aBufLen)
 							aBuf[target_used] = '\0';
 						return target_used;
