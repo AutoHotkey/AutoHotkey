@@ -2043,6 +2043,9 @@ ResultType ClipboardAll::Invoke(ResultToken &aResultToken, ExprTokenType &aThisT
 			_o_return((size_t)mData);
 		if (!_tcsicmp(name, _T("Size")))
 			_o_return(mSize);
+		if (!_tcsicmp(name, _T("Data")))
+			// Return the data as a binary string, which can be passed to FileAppend().
+			_o_return_p((LPTSTR)mData, mSize / sizeof(TCHAR));
 	}
 	return INVOKE_NOT_HANDLED;
 }
@@ -2080,9 +2083,23 @@ BIF_DECL(BIF_ClipboardAll)
 			size = (size_t)ParamIndexToIntPtr(1);
 		else if (size == -1) // i.e. it can be omitted when size != -1 (a string was passed).
 			_f_throw(ERR_PARAM2_MUST_NOT_BE_BLANK);
-		if (  !(data = malloc(size))  ) // More likely to be due to invalid parameter than out of memory.
+		size_t extra = sizeof(TCHAR); // For an additional null-terminator in case the caller passed invalid data.
+		#ifdef UNICODE
+		if (size & 1) // Odd; not a multiple of sizeof(WCHAR).
+			++extra; // Align the null-terminator.
+		#endif
+		if (  !(data = malloc(size + extra))  ) // More likely to be due to invalid parameter than out of memory.
 			_f_throw(ERR_OUTOFMEM);
 		memcpy(data, caller_data, size);
+		// Although data returned by GetClipboardAll() should already be terminated with
+		// a null UINT, the caller may have passed invalid data.  So align the data to a
+		// multiple of sizeof(TCHAR) and terminate with a proper null character in case
+		// `this.Data` is used with something expecting a null-terminated string.
+		#ifdef UNICODE
+		if (size & 1)
+			((LPBYTE)data)[size++] = 0; // Size is rounded up so that `this.Data` will not truncate the last byte.
+		#endif
+		((LPTSTR)data)[size] = '\0';
 	}
 	_f_return(new ClipboardAll(data, size));
 }
