@@ -2443,9 +2443,9 @@ ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventK
 	MsgMonitorList &handlers = aControl ? aControl->events : mEvents;
 	MsgMonitorStruct *mon;
 	if (aFunc)
-		mon = handlers.Find(aEvent, aFunc);
+		mon = handlers.Find(aEvent, aFunc, aEventKind);
 	else
-		mon = handlers.Find(aEvent, aMethodName);
+		mon = handlers.Find(aEvent, aMethodName, aEventKind);
 	if (!aMaxThreads)
 	{
 		if (mon)
