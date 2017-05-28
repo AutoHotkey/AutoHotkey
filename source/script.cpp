@@ -15303,11 +15303,21 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			// will be deleted as the user intended:
 			if (g.mLoopRegItem->type == REG_SUBKEY)
 			{
-				sntprintf(buf_temp, _countof(buf_temp), _T("%s\\%s"), g.mLoopRegItem->subkey, g.mLoopRegItem->name);
-				return RegDelete(g.mLoopRegItem->root_key, buf_temp, NULL);
+				if (*g.mLoopRegItem->subkey)
+				{
+					sntprintf(buf_temp, _countof(buf_temp), _T("%s\\%s"), g.mLoopRegItem->subkey, g.mLoopRegItem->name);
+					subkey = buf_temp;
+				}
+				else // It's a direct subkey of root_key.
+					subkey = g.mLoopRegItem->name;
+				value_name = NULL;
 			}
 			else
-				return RegDelete(g.mLoopRegItem->root_key, g.mLoopRegItem->subkey, g.mLoopRegItem->name);
+			{
+				subkey = g.mLoopRegItem->subkey;
+				value_name = g.mLoopRegItem->name;
+			}
+			return RegDelete(g.mLoopRegItem->root_key, subkey, value_name);
 		}
 		// Otherwise:
 		root_key = RegConvertKey(ARG1, REG_EITHER_SYNTAX, &subkey, &is_remote_registry);
