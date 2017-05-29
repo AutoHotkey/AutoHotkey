@@ -4981,20 +4981,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 	switch(aActionType)
 	{
-	// MUST EXIST IN BOTH SELF-CONTAINED AND NORMAL VERSION:
+#ifndef AUTOHOTKEYSC // Some syntax checking is removed in compiled scripts to reduce their size.
 	case ACT_RETURN:
-		if (aArgc > 0)
-		{
-			if (g->CurrentFunc)
-				g->CurrentFunc->mHasReturn = true;
-#ifndef AUTOHOTKEYSC
-			else
-				return ScriptError(_T("Return's parameter should be blank except inside a function."));
-#endif
-		}
+		if (aArgc > 0 && !g->CurrentFunc)
+			return ScriptError(_T("Return's parameter should be blank except inside a function."));
 		break;
-
-#ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
 
 	case ACT_PIXELSEARCH:
 	case ACT_IMAGESEARCH:
@@ -5620,7 +5611,6 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 				found_func->mParamCount = 0; // Revert to the default appropriate for non-built-in functions.
 				found_func->mMinParams = 0;  //
 				found_func->mJumpToLine = NULL; // Fixed for v1.0.35.12: Must reset for detection elsewhere.
-				found_func->mHasReturn = false; // For consistency.
 				found_func->mParam = NULL;
 				g->CurrentFunc = found_func;
 			}
@@ -6573,7 +6563,6 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	pfunc->mBIF = bif.mBIF;
 	pfunc->mMinParams = bif.mMinParams;
 	pfunc->mParamCount = bif.mMaxParams;
-	pfunc->mHasReturn = bif.mHasReturn;
 	pfunc->mID = (BuiltInFunctionID)bif.mID;
 	pfunc->mOutputVars = bif_output_vars; // Not bif.mOutputVars, which is on the stack (and bif_output_vars may have been overridden above).
 
@@ -7277,7 +7266,6 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 			--line->mArgc;
 			++line->mArg;
 			int param_count = line->mArgc; // This is not the final parameter count since it includes the output var (if present).
-			bool has_output_var = true; // Set default.
 			// Now that function declarations have been processed, resolve this line's function.
 			Func *func = NULL;
 			// Dynamic calling wouldn't be this simple, since a line beginning with a double-deref
@@ -7303,50 +7291,27 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 						: ERR_NONEXISTENT_FUNCTION, FAIL, first_arg.text);
 #endif
 				}
-				has_output_var = func->mHasReturn; // Does it need an output var?
-				if (param_count // There are parameters; i.e. the next line won't produce a negative count if the output var is omitted.
-					&& (param_count - has_output_var < func->mMinParams))
+				if (param_count < func->mMinParams)
 				{
 					return line->LineError(ERR_TOO_FEW_PARAMS);
 				}
-				if (!func->mIsVariadic && param_count - has_output_var > func->mParamCount)
+				if (!func->mIsVariadic && param_count > func->mParamCount)
 				{
 					return line->LineError(ERR_TOO_MANY_PARAMS);
 				}
 			}
-			for (i = 0; i < param_count; ++i)
+			for (int param_index = 0; param_index < param_count; ++param_index)
 			{
-				ArgStruct &arg = line->mArg[i];
-				int param_index = i - has_output_var; // For maintainability.
-				
-				// Determine what type of arg this should be.
-				if (param_index < 0)
+				ArgStruct &arg = line->mArg[param_index];
+				// Mandatory parameters must not be blank.
+				if (!*arg.text && func && param_index < func->mMinParams)
 				{
-					// Output var used for the return value, not one of the function's parameters.
-					// This arg is optional; if omitted, it must be ARG_TYPE_NORMAL since it won't
-					// resolve to a variable.
-					if (*arg.text)
-					{
-						// Convert to ARG_TYPE_OUTPUT_VAR:
-						//  1) So a load-time error is raised if the var is read-only.
-						//  2) So #Warn UseUnset isn't triggered by this parameter.
-						// Changing type is sufficient: since it was pre-processed as an expression,
-						// ExpressionToPostfix() will convert it to a normal output var if possible.
-						arg.type = ARG_TYPE_OUTPUT_VAR;
-					}
+					TCHAR buf[50];
+					sntprintf(buf, _countof(buf), _T("Parameter #%i required"), i + 1);
+					return line->LineError(buf);
 				}
-				else
-				{
-					// Mandatory parameters must not be blank.
-					if (!*arg.text && func && param_index < func->mMinParams)
-					{
-						TCHAR buf[50];
-						sntprintf(buf, _countof(buf), _T("Parameter #%i required"), i + 1);
-						return line->LineError(buf);
-					}
-					if (func && func->mIsBuiltIn && *arg.text && func->ArgIsOutputVar(param_index))
-						arg.type = ARG_TYPE_OUTPUT_VAR; // See comments above.
-				}
+				if (func && func->mIsBuiltIn && *arg.text && func->ArgIsOutputVar(param_index))
+					arg.type = ARG_TYPE_OUTPUT_VAR; // See comments above.
 			}
 			line->mAttribute = func;
 			break;
@@ -12133,18 +12098,6 @@ ResultType Line::Perform()
 		
 		int arg = 0;
 		int param_count = mArgc;
-		if (param_count && func && func->mHasReturn)
-		{
-			// Above: mArg[0].type isn't checked because the output var is optional and
-			// might have been omitted, in which case type would be ARG_TYPE_NORMAL.
-			// Below: sArgVar[0] contains the output variable, or NULL if it was omitted.
-			output_var = sArgVar[0];
-			// Exclude it from the list of parameters actually passed to the function:
-			--param_count;
-			++arg;
-		}
-		else
-			output_var = NULL;
 		
 		for (int i = 0; i < param_count; ++i, ++arg)
 		{
@@ -12183,22 +12136,6 @@ ResultType Line::Perform()
 			Op_ObjInvoke(result_token, param_ptr, param_count);
 		}
 		result = result_token.Result();
-
-		if (output_var)
-		{
-			if (result_token.symbol == SYM_STRING && result_token.marker == result_token.mem_to_free)
-			{
-				// Rather than copying the result, take ownership of the block of memory
-				// returned by the function:
-				output_var->AcceptNewMem(result_token.marker, result_token.marker_length);
-				result_token.mem_to_free = NULL;
-			}
-			else if (result == FAIL || result == EARLY_EXIT)
-				output_var->Assign();
-			else
-				if (!output_var->Assign(result_token))
-					result = FAIL;
-		}
 
 		// Clean up:
 		result_token.Free();
