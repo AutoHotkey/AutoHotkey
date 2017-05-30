@@ -9543,10 +9543,6 @@ VarSizeType BIV_FileEncoding(LPTSTR aBuf, LPTSTR aVarName)
 	// A similar section may be found under "case Encoding:" in FileObject::Invoke.  Maintain that with this:
 	switch (g->Encoding)
 	{
-	case CP_ACP:
-		if (aBuf)
-			*aBuf = '\0';
-		return 0;
 #define FILEENCODING_CASE(n, s) \
 	case n: \
 		if (aBuf) \
