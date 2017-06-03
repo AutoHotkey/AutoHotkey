@@ -3158,28 +3158,15 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 // #y::run, notepad
 {
 	TCHAR end_flags[] = {' ', '\t', g_delimiter, '\0'}; // '\0' must be last.
-	LPTSTR directive_end, parameter_raw;
+	LPTSTR directive_end, parameter;
 	if (   !(directive_end = StrChrAny(aBuf, end_flags))   )
 	{
 		directive_end = aBuf + _tcslen(aBuf); // Point it to the zero terminator.
-		parameter_raw = NULL;
+		parameter = NULL;
 	}
 	else
-		if (!*(parameter_raw = omit_leading_whitespace(directive_end)))
-			parameter_raw = NULL;
-
-	// The raw parameter retains any leading comma for those directives that need that (none currently).
-	// But the following omits that comma:
-	LPTSTR parameter;
-	if (!parameter_raw)
-		parameter = NULL;
-	else // Since parameter_raw is non-NULL, it's also non-blank and non-whitespace due to the above checking.
-		if (*parameter_raw != g_delimiter)
-			parameter = parameter_raw;
-		else // It's a delimiter, so "parameter" will be whatever non-whitespace character follows it, if any.
-			if (!*(parameter = omit_leading_whitespace(parameter_raw + 1)))
-				parameter = NULL;
-			//else leave it set to the value returned by omit_leading_whitespace().
+		if (!*(parameter = omit_leading_whitespace(directive_end)))
+			parameter = NULL;
 
 	int value; // Helps detect values that are too large, since some of the target globals are UCHAR.
 
@@ -3201,12 +3188,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 #ifdef AUTOHOTKEYSC
 		return CONDITION_TRUE;
 #else
-		// If the below decision is ever changed, be sure to update ahk2exe with the same change:
-		// "parameter" is checked rather than parameter_raw for backward compatibility with earlier versions,
-		// in which a leading comma is not considered part of the filename.  Although this behavior is incorrect
-		// because it prevents files whose names start with a comma from being included without the first
-		// delim-comma being there too, it is kept because filenames that start with a comma seem
-		// exceedingly rare.  As a workaround, the script can do #Include ,,FilenameWithLeadingComma.ahk
 		if (!parameter)
 			return ScriptError(ERR_PARAM1_REQUIRED, aBuf);
 		// v1.0.32:
@@ -4179,7 +4160,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		// L34: Require that named commands and their args are delimited with a space, tab or comma.
 		// Detects errors such as "MsgBox< foo" or "If!foo" and allows things like "control[x]:=y".
 		TCHAR end_char = *end_marker;
-		could_be_named_action = (end_char == g_delimiter || !end_char || IS_SPACE_OR_TAB(end_char)
+		could_be_named_action = (!end_char || IS_SPACE_OR_TAB(end_char)
 			// Allow If() and While() but something like MsgBox() should always be a function-call:
 			|| (end_char == '(' && IsFlowFunction(action_name)));
 	}
@@ -4202,10 +4183,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		// This section is done before the section that checks whether action_name is a valid command
 		// because it avoids ambiguity in a line such as the following:
 		//    Input := test  ; Would otherwise be confused with the Input command.
-		// But there may be times when a line like this is used:
-		//    MsgBox :=  ; i.e. it is intended to be the first parameter, not an operator.
-		// In the above case, the user can provide the optional comma to avoid the ambiguity:
-		//    MsgBox, :=
 
 		if (*aLineText == '"' || *aLineText == '\'')
 		{
@@ -4291,10 +4268,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					}
 					if (*cp != '.')
 					{
-						if (!*cp || has_space_or_tab || *cp == g_delimiter)
+						if (!*cp || has_space_or_tab)
 						{
 							id_begin[-1] = g_delimiter; // Separate target object from method name.
-							if (has_space_or_tab && *cp != g_delimiter)
+							if (has_space_or_tab)
 								cp[-1] = g_delimiter; // Separate method name from parameters.
 							action_args = aLineText;
 							aActionType = ACT_METHOD;
@@ -4358,16 +4335,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			{
 				aActionType = ACT_FUNC;
 				// Include the function name as an arg:
-				if (*end_marker && *action_args != g_delimiter) // Replace space or tab with comma.
+				if (*end_marker) // Replace space or tab with comma.
 					*end_marker = g_delimiter;
 				action_args = aLineText;
 			}
-		}
-
-		if (*action_args == g_delimiter)
-		{
-			// Find the start of the next token (or its ending delimiter if the token is blank such as ", ,"):
-			for (++action_args; IS_SPACE_OR_TAB(*action_args); ++action_args);
 		}
 	}
 
@@ -4436,6 +4407,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			else if (*action_args == '=')
 				// v2: Give a more specific error message since the user probably meant to do an old-style assignment.
 				return ScriptError(_T("Syntax error. Did you mean to use \":=\"?"), aLineText);
+			else if (*action_args == g_delimiter)
+				return ScriptError(_T("Function calls require a space or \"(\".  Use comma only between parameters."), aLineText);
 			else
 				// v1.0.40: Give a more specific error message now that hotkeys can make it here due to
 				// the change that avoids the need to escape double-colons:
@@ -4600,7 +4573,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	// Parse the parameter string into a list of separate params.
 	/////////////////////////////////////////////////////////////
 	// MaxParams has already been verified as being <= MAX_ARGS.
-	// Any g_delimiter-delimited items beyond MaxParams will be included in a lump inside the last param:
 	int nArgs;
 	LPTSTR arg[MAX_ARGS], arg_map[MAX_ARGS];
 	TCHAR *subaction_start = NULL;
