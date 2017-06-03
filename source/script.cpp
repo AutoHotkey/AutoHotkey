@@ -1787,7 +1787,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 #else
 	LineNumberType phys_line_number = 0;
 #endif
-	buf_length = GetLine(buf, LINE_SIZE - 1, 0, fp);
+	buf_length = GetLine(buf, LINE_SIZE - 1, 0, false, fp);
 
 	if (in_comment_section = !_tcsncmp(buf, _T("/*"), 2))
 	{
@@ -1816,41 +1816,46 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		{
 			// This increment relies on the fact that this loop always has at least one iteration:
 			++phys_line_number; // Tracks phys. line number in *this* file (independent of any recursion caused by #Include).
-			next_buf_length = GetLine(next_buf, LINE_SIZE - 1, in_continuation_section, fp);
-			if (next_buf_length && next_buf_length != -1 // Prevents infinite loop when file ends with an unclosed "/*" section.  Compare directly to -1 since length is unsigned.
-				&& !in_continuation_section) // Multi-line comments can't be used in continuation sections. This line fixes '*/' being discarded in continuation sections (broken by L54).
+			next_buf_length = GetLine(next_buf, LINE_SIZE - 1, in_continuation_section, in_comment_section, fp);
+			if (!in_continuation_section)
 			{
-				if (!_tcsncmp(next_buf, _T("*/"), 2) // Check this even if !in_comment_section so it can be ignored (for convenience) and not treated as a line-continuation operator.
-					&& (in_comment_section || next_buf[2] != ':' || next_buf[3] != ':')) // ...but support */:: as a hotkey.
-				{
-					in_comment_section = false;
-					next_buf_length -= 2; // Adjust for removal of /* from the beginning of the string.
-					tmemmove(next_buf, next_buf + 2, next_buf_length + 1);  // +1 to include the string terminator.
-					next_buf_length = ltrim(next_buf, next_buf_length); // Get rid of any whitespace that was between the comment-end and remaining text.
-					if (!*next_buf) // The rest of the line is empty, so it was just a naked comment-end.
-						continue;
-				}
-				else if (in_comment_section)
-					continue;
+				// v2: The comment-end is allowed at the end of the line (vs. just the start) to reduce
+				// confusion for users expecting C-like behaviour, but unlike v1.1, the end flag is not
+				// allowed outside of comments, since allowing and ignoring */ at the end of any line
+				// seems to have risk of ambiguity.
+				// If this policy is changed to ignore an orphan */, remember to allow */:: as a hotkey.
 
+				// Check for /* first in case */ appears on the same line.  There's no need to check
+				// in_comment_section since this has the same effect either way (and it's usually false).
 				if (!_tcsncmp(next_buf, _T("/*"), 2))
 				{
 					in_comment_section = true;
-					continue; // It's now commented out, so the rest of this line is ignored.
+					// But don't "continue;" since there might be a */ on this same line.
 				}
-			}
 
-			if (in_comment_section) // Above has incremented and read the next line, which is everything needed while inside /* .. */
-			{
-				if (next_buf_length == -1) // Compare directly to -1 since length is unsigned.
-					break; // By design, it's not an error.  This allows "/*" to be used to comment out the bottommost portion of the script without needing a matching "*/".
-				// Otherwise, continue reading lines so that they can be merged with the line above them
-				// if they qualify as continuation lines.
-				continue;
-			}
+				if (in_comment_section)
+				{
+					if (next_buf_length == -1) // Compare directly to -1 since length is unsigned.
+						break; // By design, it's not an error.  This allows "/*" to be used to comment out the bottommost portion of the script without needing a matching "*/".
 
-			if (!in_continuation_section) // This is either the first iteration or the line after the end of a previous continuation section.
-			{
+					if (!_tcsncmp(next_buf, _T("*/"), 2))
+					{
+						in_comment_section = false;
+						next_buf_length -= 2; // Adjust for removal of */ from the beginning of the string.
+						tmemmove(next_buf, next_buf + 2, next_buf_length + 1);  // +1 to include the string terminator.
+						next_buf_length = ltrim(next_buf, next_buf_length); // Get rid of any whitespace that was between the comment-end and remaining text.
+						if (!*next_buf) // The rest of the line is empty, so it was just a naked comment-end.
+							continue;
+					}
+					else
+					{
+						// This entire line is part of the comment, but there might be */ at the end of the line.
+						if (next_buf_length >= 2 && !_tcscmp(next_buf + (next_buf_length - 2), _T("*/")))
+							in_comment_section = false;
+						continue;
+					}
+				}
+
 				// v1.0.38.06: The following has been fixed to exclude "(:" and "(::".  These should be
 				// labels/hotkeys, not the start of a continuation section.  In addition, a line that starts
 				// with '(' but that ends with ':' should be treated as a label because labels such as
@@ -3039,7 +3044,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 
 
 
-size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, TextStream *ts)
+size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, bool aInBlockComment, TextStream *ts)
 {
 	size_t aBuf_length = 0;
 
@@ -3077,7 +3082,7 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 				*aBuf = '\0'; // Since this line is a comment, have the caller ignore it.
 				return -2; // Callers tolerate -2 only when in a continuation section.  -2 indicates, "don't include this line at all, not even as a blank line to which the JOIN string (default "\n") will apply.
 			}
-			if (*cp == ')') // This isn't the last line of the continuation section, so leave the line untrimmed (caller will apply the ltrim setting on its own).
+			if (*cp == ')') // This is the last line of the continuation section.
 			{
 				ltrim(aBuf); // Ltrim this line unconditionally so that caller will see that it starts with ')' without having to do extra steps.
 				aBuf_length = _tcslen(aBuf); // ltrim() doesn't always return an accurate length, so do it this way.
@@ -3095,7 +3100,15 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 	if (aInContinuationSection != CONTINUATION_SECTION_WITH_COMMENTS) // Case #1 & #2 above.
 	{
 		aBuf_length = trim(aBuf);
-		if (*aBuf == g_CommentChar)
+		if (aInBlockComment)
+		{
+			if (  !(*aBuf == '*' && aBuf[1] == '/')  )
+				// Avoid stripping ;comments since that would prevent detection of the comment-end
+				// in cases like "; xxx */".
+				return aBuf_length;
+			//else the block comment ends at */ and there may be a ;line comment following it.
+		}
+		else if (*aBuf == g_CommentChar)
 		{
 			// Due to other checks, aInContinuationSection==false whenever the above condition is true.
 			*aBuf = '\0';

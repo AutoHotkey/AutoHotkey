@@ -2655,7 +2655,7 @@ private:
 		: (mFileName ? mFileName : T_AHK_NAME), _countof(mNIC.szTip));
 	NOTIFYICONDATA mNIC; // For ease of adding and deleting our tray icon.
 
-	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, TextStream *ts);
+	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, bool aInBlockComment, TextStream *ts);
 	ResultType IsDirective(LPTSTR aBuf);
 	ResultType ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType = ACT_INVALID
 		, LPTSTR aLiteralMap = NULL, size_t aLiteralMapLength = 0);
