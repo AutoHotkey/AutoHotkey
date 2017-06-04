@@ -4683,22 +4683,10 @@ BIF_DECL(BIF_MsgBox)
 	if (!result && GetLastError() == ERROR_INVALID_MSGBOX_STYLE)
 		_f_throw(ERR_PARAM3_INVALID, ParamIndexToString(2, _f_retval_buf));
 	// Return a string such as "OK", "Yes" or "No" if possible, or fall back to the integer value.
-	// Result is additionally provided to param #4 so that command syntax can get the result
-	// while keeping the parameters in priority order.
-	Var *result_var = ParamIndexToOptionalVar(3);
 	if (LPTSTR result_string = MsgBoxResultString(result))
-	{
-		if (result_var)
-			if (!result_var->Assign(result_string))
-				_f_throw(ERR_OUTOFMEM);
 		_f_return_p(result_string);
-	}
 	else
-	{
-		if (result_var)
-			result_var->Assign(result);
 		_f_return_i(result);
-	}
 }
 
 

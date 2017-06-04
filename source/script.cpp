@@ -71,7 +71,7 @@ FuncEntry g_BIF[] =
 	BIFn(EnvSet, 1, 2, false, BIF_Env),
 	BIF1(SysGet, 1, 1, true),
 
-	BIF1(MsgBox, 0, 4, false, {4}),
+	BIF1(MsgBox, 0, 3, false),
 	BIF1(InputBox, 0, 4, true),
 
 	BIFn(Input, 0, 3, true, BIF_Input),
