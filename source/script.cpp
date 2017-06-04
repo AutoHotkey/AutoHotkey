@@ -4460,10 +4460,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	switch (aActionType)
 	{
 	case ACT_LOOP:
-	case ACT_LOOP_FILE:
-	case ACT_LOOP_REG:
-	case ACT_LOOP_READ:
-	case ACT_LOOP_PARSE:
 	case ACT_GOTO:
 	case ACT_GOSUB:
 		if (end_marker && *end_marker == '(')
