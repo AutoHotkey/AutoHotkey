@@ -184,8 +184,8 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_ADD, SYM_SUBTRACT
 	, SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
 	, SYM_POWER
-	, SYM_NEGATIVE, SYM_POSITIVE, SYM_HIGHNOT, SYM_BITNOT, SYM_ADDRESS, SYM_DEREF  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
-#define SYM_OVERRIDES_POWER_ON_STACK(symbol) (((symbol) >= SYM_NEGATIVE && (symbol) <= SYM_DEREF) || (symbol) == SYM_LOWNOT) // Check lower bound first for short-circuit performance.
+	, SYM_NEGATIVE, SYM_POSITIVE, SYM_HIGHNOT, SYM_BITNOT, SYM_ADDRESS  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
+#define SYM_OVERRIDES_POWER_ON_STACK(symbol) (((symbol) >= SYM_NEGATIVE && (symbol) <= SYM_ADDRESS) || (symbol) == SYM_LOWNOT) // Check lower bound first for short-circuit performance.
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
 #define SYM_INCREMENT_OR_DECREMENT_IS_PRE(symbol) ((symbol) >= SYM_PRE_INCREMENT) // Caller has verified symbol is an INCREMENT or DECREMENT operator.
 	, SYM_NEW      // new Class()

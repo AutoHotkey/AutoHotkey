@@ -834,7 +834,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				goto abort_with_exception;
 			break;
 
-		case SYM_DEREF:   // Dereference an address to retrieve a single byte.
 		case SYM_BITNOT:  // The tilde (~) operator.
 			if (right_is_number == PURE_NOT_NUMERIC) // String.  Seems best to consider the application of '*' or '~' to a non-numeric string to be a failure.
 			{
@@ -843,44 +842,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			}
 			// Since above didn't "break": right_is_number is PURE_INTEGER or PURE_FLOAT.
 			right_int64 = TokenToInt64(right); // Although PURE_FLOAT can't be hex, for simplicity and due to the rarity of encountering a PURE_FLOAT in this case, the slight performance reduction of calling TokenToInt64() is done for both PURE_FLOAT and PURE_INTEGER.
-			if (this_token.symbol == SYM_BITNOT)
-			{
-				// Note that it is not legal to perform ~, &, |, or ^ on doubles.  Because of this,
-				// any floating point operand is truncated to an integer above.
-				if (right_int64 < 0 || right_int64 > UINT_MAX)
-					// Treat it as a 64-bit signed value, since no other aspects of the program
-					// (e.g. IfEqual) will recognize an unsigned 64 bit number.
-					this_token.value_int64 = ~right_int64;
-				else
-					// Treat it as a 32-bit unsigned value when inverting and assigning.  This is
-					// because assigning it as a signed value would "convert" it into a 64-bit
-					// value, which in turn is caused by the fact that the script sees all negative
-					// numbers as 64-bit values (e.g. -1 is 0xFFFFFFFFFFFFFFFF).
-					this_token.value_int64 = (size_t)(DWORD)~(DWORD)right_int64; // Casting this way avoids compiler warning.
-			}
-			else // SYM_DEREF
-			{
-				// Reasons for resolving *Var to a number rather than a single-char string:
-				// 1) More consistent with future uses of * that might operate on the address of 2-byte,
-				//    4-byte, and 8-byte targets.
-				// 2) Performs better in things like ExtractInteger() that would otherwise have to call Asc().
-				// 3) Converting it to a one-char string would add no value beyond convenience because script
-				//    could do "if (*var = 65)" if it's concerned with avoiding a Chr() call for performance
-				//    reasons.  Also, it seems somewhat rare that a script will access a string's characters
-				//    one-by-one via the * method because that a parsing loop can already do that more easily.
-				// 4) Reduces code size and improves performance (however, the single-char string method would
-				//    use _alloca(2) to get some temporary memory, so it wouldn't be too bad in performance).
-				//
-				// The following does a basic bounds check to prevent crashes due to dereferencing addresses
-				// that are obviously bad.  In terms of percentage impact on performance, this seems quite
-				// justified.  In the future, could also put a __try/__except block around this (like DllCall
-				// uses) to prevent buggy scripts from crashing.  In addition to ruling out the dereferencing of
-				// a NULL address, the >255 check also rules out common-bug addresses (I don't think addresses
-				// this low can realistically ever be legitimate, but it would be nice to get confirmation).
-				// For simplicity and due to rarity, a zero is yielded in such cases rather than an empty string.
-				this_token.value_int64 = ((size_t)right_int64 < 4096)
-					? 0 : *(UCHAR *)right_int64; // Dereference to extract one unsigned character, just like Asc().
-			}
+			// Note that it is not legal to perform ~, &, |, or ^ on doubles.  Because of this,
+			// any floating point operand is truncated to an integer above.
+			if (right_int64 < 0 || right_int64 > UINT_MAX)
+				// Treat it as a 64-bit signed value, since no other aspects of the program
+				// (e.g. IfEqual) will recognize an unsigned 64 bit number.
+				this_token.value_int64 = ~right_int64;
+			else
+				// Treat it as a 32-bit unsigned value when inverting and assigning.  This is
+				// because assigning it as a signed value would "convert" it into a 64-bit
+				// value, which in turn is caused by the fact that the script sees all negative
+				// numbers as 64-bit values (e.g. -1 is 0xFFFFFFFFFFFFFFFF).
+				this_token.value_int64 = (size_t)(DWORD)~(DWORD)right_int64; // Casting this way avoids compiler warning.
 			this_token.symbol = SYM_INTEGER; // Must be done only after its old value was used above. v1.0.36.07: Fixed to be SYM_INTEGER vs. right_is_number for SYM_BITNOT.
 			break;
 

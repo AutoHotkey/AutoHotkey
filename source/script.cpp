@@ -7835,7 +7835,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 58, 58         // SYM_ADD, SYM_SUBTRACT
 		, 62, 62, 62     // SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
 		, 72             // SYM_POWER (see note below).  Associativity kept as left-to-right for backward compatibility (e.g. 2**2**3 is 4**3=64 not 2**8=256).
-		, 67,67,67,67,67,67 // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT, SYM_ADDRESS, SYM_DEREF
+		, 67,67,67,67,67 // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT, SYM_ADDRESS
 		// NOTE: THE ABOVE MUST BE AN ODD NUMBER to indicate right-to-left evaluation order, which was added in v1.0.46 to support consecutive unary operators such as !*var !!var (!!var can be used to convert a value into a pure 1/0 boolean).
 //		, 68             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 77, 77         // SYM_PRE_INCREMENT, SYM_PRE_DECREMENT (higher precedence than SYM_POWER because it doesn't make sense to evaluate power first because that would cause ++/-- to fail due to operating on a non-lvalue.
@@ -8069,12 +8069,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							this_infix_item.symbol = SYM_POWER;
 						}
 						else
-						{
-							// Differentiate between unary dereference (*) and the "multiply" operator:
-							// See '-' above for more details:
-							this_infix_item.symbol = (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
-								? SYM_MULTIPLY : SYM_DEREF;
-						}
+							this_infix_item.symbol = SYM_MULTIPLY;
 					}
 					break;
 				case '!':
@@ -9054,7 +9049,7 @@ unquoted_literal:
 			// Note: BEGIN and OPAREN are the lowest precedence items ever to appear on the stack (CPAREN
 			// never goes on the stack, so can't be encountered there).
 			if (   sPrecedence[stack_symbol] < sPrecedence[infix_symbol] + (sPrecedence[infix_symbol] % 2) // Performance: An sPrecedence2[] array could be made in lieu of the extra add+indexing+modulo, but it benched only 0.3% faster, so the extra code size it caused didn't seem worth it.
-				|| IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(infix_symbol) && stack_symbol != SYM_DEREF // See note 1 below. Ordered for short-circuit performance.
+				|| IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(infix_symbol) // See note 1 below. Ordered for short-circuit performance.
 				|| stack_symbol == SYM_POWER && SYM_OVERRIDES_POWER_ON_STACK(infix_symbol)   ) // See note 2 below.
 			{
 				// NOTE 1: v1.0.46: The IS_ASSIGNMENT_EXCEPT_POST_AND_PRE line above was added in conjunction with
@@ -9081,8 +9076,6 @@ unquoted_literal:
 				//    an lvalue); so divide by 5 then do the increment.
 				// -> i++ := 5 (and i++ /= 5) ; Postfix operator can't produce an lvalue, so do the assignment
 				//    first and then the postfix op.
-				// SYM_DEREF is the only exception to the above because there's a slight chance that
-				// *Var:=X (evaluated strictly according to precedence as (*Var):=X) will be used for someday.
 				// Also, SYM_FUNC seems unaffected by any of this due to its enclosing parentheses (i.e. even
 				// if a function-call can someday generate an lvalue [SYM_VAR], the current rules probably
 				// already support it.
