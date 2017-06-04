@@ -2673,7 +2673,7 @@ BOOL MyIsAppThemed()
 
 
 
-LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap, bool aAllowEscapedSpace)
+LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap)
 // Replaces any escape sequences in aBuf with their reduced equivalent.  For example, if aEscapeChar
 // is accent, Each `n would become a literal linefeed.  aBuf's length should always be the same or
 // lower than when the process started, so there is no chance of overflow.
@@ -2695,11 +2695,7 @@ LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap, bool aAllowEscape
 			case 'r': *cp1 = '\r'; break;  // carriage return
 			case 't': *cp1 = '\t'; break;  // horizontal tab
 			case 'v': *cp1 = '\v'; break;  // vertical tab
-			case 's': // space (not always allowed for backward compatibility reasons).
-				if (aAllowEscapedSpace)
-					*cp1 = ' ';
-				//else do nothing extra, just let the standard action for unrecognized escape sequences.
-				break;
+			case 's': *cp1 = ' '; break;   // space
 		}
 		// Replace escape-sequence with its single-char value.  This is done even if the pair isn't
 		// a recognizable escape sequence (e.g. `? becomes ?), which is the Microsoft approach and

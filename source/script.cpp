@@ -2074,7 +2074,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 						// Passing true for the last parameter supports `s as the special escape character,
 						// which allows space to be used by itself and also at the beginning or end of a string
 						// containing other chars.
-						ConvertEscapeSequences(suffix, NULL, true);
+						ConvertEscapeSequences(suffix, NULL);
 						suffix_length = _tcslen(suffix);
 					}
 					else if (!_tcsnicmp(next_option, _T("LTrim"), 5))
@@ -3428,12 +3428,12 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			// The following must be done only after trimming and omitting whitespace above, so that
 			// `s and `t can be used to insert leading/trailing spaces/tabs.  ConvertEscapeSequences()
 			// also supports insertion of literal commas via escaped sequences.
-			ConvertEscapeSequences(hot_win_text, NULL, true);
+			ConvertEscapeSequences(hot_win_text, NULL);
 		}
 		else
 			hot_win_text = _T(""); // And leave hot_win_title set to the entire string because there's only one parameter.
 		// The following must be done only after trimming and omitting whitespace above (see similar comment above).
-		ConvertEscapeSequences(hot_win_title, NULL, true);
+		ConvertEscapeSequences(hot_win_title, NULL);
 		// The following also handles the case where both title and text are blank, which could happen
 		// due to something weird but legit like: #IfWinActive, ,
 		if (!SetHotkeyCriterion(hot_criterion, hot_win_title, hot_win_text))

@@ -670,7 +670,7 @@ COLORREF ColorNameToBGR(LPTSTR aColorName);
 HRESULT MySetWindowTheme(HWND hwnd, LPCWSTR pszSubAppName, LPCWSTR pszSubIdList);
 HRESULT MyEnableThemeDialogTexture(HWND hwnd, DWORD dwFlags);
 BOOL MyIsAppThemed();
-LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap, bool aAllowEscapedSpace = false);
+LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap);
 int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter = ',', int aStartIndex = 0, LPCTSTR aLiteralMap = NULL);
 int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter = ',', int aStartIndex = 0, LPCTSTR aLiteralMap = NULL);
 POINT CenterWindow(int aWidth, int aHeight);
