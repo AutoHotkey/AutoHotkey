@@ -136,8 +136,8 @@ enum StringCaseSenseType {SCS_INSENSITIVE, SCS_SENSITIVE, SCS_INSENSITIVE_LOCALE
 enum SymbolType // For use with ExpandExpression() and IsNumeric().
 {
 	// The sPrecedence array in ExpandExpression() must be kept in sync with any additions, removals,
-	// or re-ordering of the below.  Also, IS_OPERAND() relies on all operand types being at the
-	// beginning of the list:
+	// or re-ordering of the below.  When reordering or adding new symbols, take care not to break
+	// the range checks in the various macros defined below.
 	 PURE_NOT_NUMERIC // Must be zero/false because callers rely on that.
 	, PURE_INTEGER, PURE_FLOAT
 	, SYM_STRING = PURE_NOT_NUMERIC, SYM_INTEGER = PURE_INTEGER, SYM_FLOAT = PURE_FLOAT // Specific operand types.
@@ -150,6 +150,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_BEGIN = SYM_OPERAND_END  // SYM_BEGIN is a special marker to simplify the code.
 #define IS_OPERAND(symbol) ((symbol) < SYM_OPERAND_END)
 	, SYM_POST_INCREMENT, SYM_POST_DECREMENT // Kept in this position for use by YIELDS_AN_OPERAND() [helps performance].
+#define IS_POSTFIX_OPERATOR(symbol) ((symbol) == SYM_POST_INCREMENT || (symbol) == SYM_POST_DECREMENT)
 	, SYM_DOT // DOT must precede SYM_OPAREN so YIELDS_AN_OPERAND(SYM_GET) == TRUE, allowing auto-concat to work for it even though it is positioned after its second operand.
 	, SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE, SYM_COMMA  // CPAREN (close-paren)/CBRACKET/CBRACE must come right before OPAREN for YIELDS_AN_OPERAND.
 #define IS_OPAREN_LIKE(symbol) ((symbol) <= SYM_OBRACE && (symbol) >= SYM_OPAREN)
@@ -164,26 +165,32 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 #define IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(symbol) (symbol <= SYM_ASSIGN_CONCAT && symbol >= SYM_ASSIGN) // Check upper bound first for short-circuit performance.
 #define IS_ASSIGNMENT_OR_POST_OP(symbol) (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(symbol) || symbol == SYM_POST_INCREMENT || symbol == SYM_POST_DECREMENT)
 	, SYM_IFF_ELSE, SYM_IFF_THEN // THESE TERNARY OPERATORS MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE BELOW.
-	, SYM_OR, SYM_AND // MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE ABOVE because infix-to-postfix is optimized to check a range rather than a series of equalities.
+	, SYM_OR, SYM_AND // MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE ABOVE for the range checks below.
+#define IS_SHORT_CIRCUIT_OPERATOR(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_THEN) // Excludes SYM_IFF_ELSE, which acts as a simple jump after the THEN branch is evaluated.
+#define SYM_USES_CIRCUIT_TOKEN(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_ELSE)
 	, SYM_LOWNOT  // LOWNOT is the word "not", the low precedence counterpart of !
+	, SYM_IS, SYM_IN, SYM_CONTAINS
 	, SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL // =, ==, <> ... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
 	, SYM_GT, SYM_LT, SYM_GTOE, SYM_LTOE  // >, <, >=, <= ... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
 #define IS_RELATIONAL_OPERATOR(symbol) (symbol >= SYM_EQUAL && symbol <= SYM_LTOE)
+	, SYM_REGEXMATCH // ~=, equivalent to a RegExMatch call in two-parameter mode.
 	, SYM_CONCAT
 	, SYM_LOW_CONCAT // Zero-precedence concat, used so that "x%y=z%" is equivalent to "x%(y=z)%".
 	, SYM_BITOR // Seems more intuitive to have these higher in prec. than the above, unlike C and Perl, but like Python.
 	, SYM_BITXOR // SYM_BITOR (ABOVE) MUST BE KEPT FIRST AMONG THE BIT OPERATORS BECAUSE IT'S USED IN A RANGE-CHECK.
 	, SYM_BITAND
 	, SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT // << >>  ALSO: SYM_BITSHIFTRIGHT MUST BE KEPT LAST AMONG THE BIT OPERATORS BECAUSE IT'S USED IN A RANGE-CHECK.
+#define IS_BIT_OPERATOR(symbol) ((symbol) <= SYM_BITSHIFTRIGHT && (symbol) >= SYM_BITOR) // Check upper bound first for short-circuit performance (because operators like +-*/ are much more frequently used).
 	, SYM_ADD, SYM_SUBTRACT
 	, SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
+	, SYM_POWER
 	, SYM_NEGATIVE, SYM_POSITIVE, SYM_HIGHNOT, SYM_BITNOT, SYM_ADDRESS, SYM_DEREF  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
-	, SYM_POWER    // See comments near precedence array for why this takes precedence over SYM_NEGATIVE.
+#define SYM_OVERRIDES_POWER_ON_STACK(symbol) (((symbol) >= SYM_NEGATIVE && (symbol) <= SYM_DEREF) || (symbol) == SYM_LOWNOT) // Check lower bound first for short-circuit performance.
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
-	, SYM_FUNC     // A call to a function.
+#define SYM_INCREMENT_OR_DECREMENT_IS_PRE(symbol) ((symbol) >= SYM_PRE_INCREMENT) // Caller has verified symbol is an INCREMENT or DECREMENT operator.
 	, SYM_NEW      // new Class()
-	, SYM_REGEXMATCH // L31: Experimental ~= RegExMatch operator, equivalent to a RegExMatch call in two-parameter mode.
-	, SYM_IS, SYM_IN, SYM_CONTAINS
+#define IS_PREFIX_OPERATOR(symbol) ((symbol) >= SYM_NEGATIVE && (symbol) <= SYM_NEW)
+	, SYM_FUNC     // A call to a function.
 	, SYM_COUNT    // Must be last because it's the total symbol count for everything above.
 	, SYM_INVALID = SYM_COUNT // Some callers may rely on YIELDS_AN_OPERAND(SYM_INVALID)==false.
 };
@@ -290,6 +297,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).
 			{
 				DerefType *outer_deref; // Used by ExpressionToPostfix().
+				LPTSTR error_reporting_marker; // Used by ExpressionToPostfix() for binary and unary operators.
 				size_t marker_length;
 				BOOL is_lvalue;		// for SYM_DYNAMIC
 			};

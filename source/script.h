@@ -214,7 +214,10 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_DYNAMIC_BLANK _T("This dynamic variable is blank.  ") ERR_REMOVE_THE_PERCENT
 #define ERR_HOTKEY_IF_EXPR _T("Parameter #2 must match an existing #If expression.")
 #define ERR_EXCEPTION _T("An exception was thrown.")
-#define ERR_EXPR_EVAL _T("Error evaluating expression.  There may be a syntax error.")
+#define ERR_INVALID_ASSIGNMENT _T("Invalid assignment.")
+#define ERR_EXPR_EVAL _T("Error evaluating expression.")
+#define ERR_EXPR_SYNTAX _T("Syntax error.")
+#define ERR_EXPR_MISSING_OPERAND _T("Missing operand.")
 #define ERR_NO_OBJECT _T("No object to invoke.")
 #define ERR_NO_MEMBER _T("Unknown property or method.")
 #define ERR_NO_GUI _T("No default GUI.")

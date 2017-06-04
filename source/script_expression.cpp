@@ -726,7 +726,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		case SYM_PRE_DECREMENT:  // unique among all the operators in that it pushes an operand before the evaluation.
 			if (right.symbol != SYM_VAR) // Syntax error.
 				goto abort_with_exception;
-			is_pre_op = (this_token.symbol >= SYM_PRE_INCREMENT); // Store this early because its symbol will soon be overwritten.
+			is_pre_op = SYM_INCREMENT_OR_DECREMENT_IS_PRE(this_token.symbol); // Store this early because its symbol will soon be overwritten.
 			if (!*right.var->Contents()) // It's empty (this also serves to display a warning if applicable).
 			{
 				// For convenience, treat an empty variable as zero for ++ and --.
@@ -1158,7 +1158,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			}
 
 			else if (right_is_number == PURE_INTEGER && left_is_number == PURE_INTEGER && this_token.symbol != SYM_DIVIDE
-				|| this_token.symbol <= SYM_BITSHIFTRIGHT && this_token.symbol >= SYM_BITOR) // Check upper bound first for short-circuit performance (because operators like +-*/ are much more frequently used).
+				|| IS_BIT_OPERATOR(this_token.symbol))
 			{
 				// Because both are integers and the operation isn't division, the result is integer.
 				// The result is also an integer for the bitwise operations listed in the if-statement

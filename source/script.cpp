@@ -7822,8 +7822,10 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 20             // SYM_AND
 		, 25             // SYM_LOWNOT (the word "NOT": the low precedence version of logical-not).  HAS AN ODD NUMBER to indicate right-to-left evaluation order so that things like "not not var" are supports (which can be used to convert a variable into a pure 1/0 boolean value).
 //		, 26             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
+		, 28, 28, 28	 // SYM_IS, SYM_IN, SYM_CONTAINS
 		, 30, 30, 30     // SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL (lower prec. than the below so that "x < 5 = var" means "result of comparison is the boolean value in var".
 		, 34, 34, 34, 34 // SYM_GT, SYM_LT, SYM_GTOE, SYM_LTOE
+		, 36             // SYM_REGEXMATCH
 		, 38             // SYM_CONCAT
 		, 4				 // SYM_LOW_CONCAT
 		, 42             // SYM_BITOR -- Seems more intuitive to have these three higher in prec. than the above, unlike C and Perl, but like Python.
@@ -7832,17 +7834,15 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 54, 54         // SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT
 		, 58, 58         // SYM_ADD, SYM_SUBTRACT
 		, 62, 62, 62     // SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
+		, 72             // SYM_POWER (see note below).  Associativity kept as left-to-right for backward compatibility (e.g. 2**2**3 is 4**3=64 not 2**8=256).
 		, 67,67,67,67,67,67 // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT, SYM_ADDRESS, SYM_DEREF
 		// NOTE: THE ABOVE MUST BE AN ODD NUMBER to indicate right-to-left evaluation order, which was added in v1.0.46 to support consecutive unary operators such as !*var !!var (!!var can be used to convert a value into a pure 1/0 boolean).
 //		, 68             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
-		, 72             // SYM_POWER (see note below).  Associativity kept as left-to-right for backward compatibility (e.g. 2**2**3 is 4**3=64 not 2**8=256).
 		, 77, 77         // SYM_PRE_INCREMENT, SYM_PRE_DECREMENT (higher precedence than SYM_POWER because it doesn't make sense to evaluate power first because that would cause ++/-- to fail due to operating on a non-lvalue.
 //		, 78             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 //		, 82, 82         // RESERVED FOR SYM_POST_INCREMENT, SYM_POST_DECREMENT (which are listed higher above for the performance of YIELDS_AN_OPERAND().
-		, 86             // SYM_FUNC -- Has special handling which ensures it stays tightly bound with its parameters as though it's a single operand for use by other operators; the actual value here is irrelevant.
 		, 87             // SYM_NEW.  Unlike SYM_FUNC, SYM_DOT, etc., precedence actually matters for this one.
-		, 36             // SYM_REGEXMATCH
-		, 28, 28, 28	 // SYM_IS, SYM_IN, SYM_CONTAINS
+		, 86             // SYM_FUNC -- Has special handling which ensures it stays tightly bound with its parameters as though it's a single operand for use by other operators; the actual value here is irrelevant.
 	};
 	// Most programming languages give exponentiation a higher precedence than unary minus and logical-not.
 	// For example, -2**2 is evaluated as -(2**2), not (-2)**2 (the latter is unsupported by qmathPow anyway).
@@ -7895,6 +7895,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 
 				ExprTokenType &this_infix_item = infix[infix_count]; // Might help reduce code size since it's referenced many places below.
 				this_infix_item.deref = NULL; // Init needed for SYM_ASSIGN and related; a non-NULL deref means it should be converted to an object-assignment.
+				this_infix_item.error_reporting_marker = cp; // Used for reporting syntax errors with unary and binary operators, and may be overwritten via union for other symbols.
 
 				// Auto-concat requires a space or tab for the following reasons:
 				//  - Readability.
@@ -8684,8 +8685,12 @@ unquoted_literal:
 				if (IS_ASSIGNMENT_OR_POST_OP(sym_prev) // Post-op must be checked for VAR_CLIPBOARD (by contrast, it seems unnecessary to check it for others; see comments below).
 					|| stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT) // Stack *not* infix.
 				{
-					if (SYM_DYNAMIC_IS_WRITABLE(this_infix))
+					if (this_infix->var) // Not a double-deref.
+					{
+						if (VAR_IS_READONLY(*this_infix->var))
+							return LineError(ERR_VAR_IS_READONLY, FAIL, this_infix->var->mName);
 						this_infix->symbol = SYM_VAR; // Convert to SYM_VAR.
+					}
 					else
 						this_infix->is_lvalue = TRUE; // Mark this as the target of an assignment.
 				}
@@ -8728,9 +8733,15 @@ unquoted_literal:
 			// open-paren/bracket/brace is now at the top of the stack.  If a function parameter has just
 			// been completed in postfix, we have extra work to do:
 			//  a) Maintain and validate the parameter count.
-			//  b) Where possible, allow empty parameters by inserting the parameter's default value.
+			//  b) Allow empty parameters by inserting the SYM_MISSING marker.
 			//  c) Optimize DllCalls by pre-resolving common function names.
-			if (in_param_list && IS_OPAREN_LIKE(stack_symbol))
+			if (!in_param_list)
+			{
+				sym_prev = this_infix[-1].symbol; // There's always at least one token preceding this one.
+				if (sym_prev == SYM_OPAREN || sym_prev == SYM_COMMA) // () or ,)
+					return LineError(ERR_EXPR_SYNTAX, FAIL, this_infix->error_reporting_marker);
+			}
+			else if (IS_OPAREN_LIKE(stack_symbol))
 			{
 				Func *func = in_param_list->func; // Can be NULL, e.g. for dynamic function calls.
 				if (infix_symbol == SYM_COMMA || this_infix[-1].symbol != stack_symbol) // i.e. not an empty parameter list.
@@ -9004,6 +9015,38 @@ unquoted_literal:
 			// DO NOT BREAK: FALL THROUGH TO BELOW
 
 		default: // This infix symbol is an operator, so act according to its precedence.
+			// Perform some rough checks to detect most syntax errors:
+			sym_prev = this_infix > infix ? this_infix[-1].symbol : SYM_INVALID;
+			if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))
+			{
+				// Assignment and postfix operators must be preceded by a variable, except for
+				// assignment operators which have been marked with a non-NULL deref, indicating
+				// that the target is an object's property.  Postfix operators which apply to an
+				// object's property are fully handled in the standard_pop_into_postfix section.
+				if (  !(sym_prev == SYM_VAR       // VAR_NORMAL variable.
+					|| sym_prev == SYM_DYNAMIC    // Built-in var (previously verified as read-write) or double-deref.
+					|| this_infix->deref          // Object property.
+					|| sym_prev == SYM_CPAREN)  ) // (x ? y : z) := v is valid.
+					return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_infix->error_reporting_marker);
+			}
+			else
+			{
+				// Prefix operators must not be preceded by an operand.
+				// Binary operators must be preceded by an operand.
+				// If sym_prev == SYM_FUNC, that can only be the result of SYM_DOT (x.y).
+				if ((YIELDS_AN_OPERAND(sym_prev) || sym_prev == SYM_FUNC) == IS_PREFIX_OPERATOR(infix_symbol))
+					return LineError(ERR_EXPR_SYNTAX, FAIL, this_infix->error_reporting_marker);
+			}
+			if (!IS_POSTFIX_OPERATOR(infix_symbol))
+			{
+				// Prefix and binary operators must be followed by an operand.
+				SymbolType sym_next = this_infix[1].symbol; // It will be SYM_INVALID if there are no more.
+				if (  !(IS_OPERAND(sym_next)
+					 || sym_next == SYM_FUNC
+					 || IS_OPAREN_LIKE(sym_next)
+					 || IS_PREFIX_OPERATOR(sym_next))  )
+					return LineError(ERR_EXPR_MISSING_OPERAND, FAIL, this_infix->error_reporting_marker);
+			}
 			// If the symbol waiting on the stack has a lower precedence than the current symbol, push the
 			// current symbol onto the stack so that it will be processed sooner than the waiting one.
 			// Otherwise, pop waiting items off the stack (by means of i not being incremented) until their
@@ -9012,8 +9055,7 @@ unquoted_literal:
 			// never goes on the stack, so can't be encountered there).
 			if (   sPrecedence[stack_symbol] < sPrecedence[infix_symbol] + (sPrecedence[infix_symbol] % 2) // Performance: An sPrecedence2[] array could be made in lieu of the extra add+indexing+modulo, but it benched only 0.3% faster, so the extra code size it caused didn't seem worth it.
 				|| IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(infix_symbol) && stack_symbol != SYM_DEREF // See note 1 below. Ordered for short-circuit performance.
-				|| stack_symbol == SYM_POWER && (infix_symbol >= SYM_NEGATIVE && infix_symbol <= SYM_DEREF // See note 2 below. Check lower bound first for short-circuit performance.
-					|| infix_symbol == SYM_LOWNOT)   )
+				|| stack_symbol == SYM_POWER && SYM_OVERRIDES_POWER_ON_STACK(infix_symbol)   ) // See note 2 below.
 			{
 				// NOTE 1: v1.0.46: The IS_ASSIGNMENT_EXCEPT_POST_AND_PRE line above was added in conjunction with
 				// the new assignment operators (e.g. := and +=). Here's what it does: Normally, the assignment
@@ -9058,7 +9100,7 @@ unquoted_literal:
 				// '*' a higher precedence than the other unaries): !*Var, -*Var and ~*Var
 				// !x  ; Supported even if X contains a negative number, since x is recognized as an isolated operand and not something containing unary minus.
 				//
-				if (infix_symbol <= SYM_AND && infix_symbol >= SYM_IFF_THEN) // Check upper bound first for short-circuit performance.
+				if (IS_SHORT_CIRCUIT_OPERATOR(infix_symbol))
 				{
 					// Short-circuit boolean evaluation works as follows:
 					//
@@ -9211,7 +9253,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			// Point this short-circuit operator to the end of its right operand.
 			ExprTokenType *iff_end = postfix[postfix_count - 1];
 			if (this_postfix == iff_end) // i.e. the last token is the operator itself.
-				return LineError(_T("Missing operand"), FAIL, this_postfix->marker);
+				return LineError(ERR_EXPR_MISSING_OPERAND, FAIL, this_postfix->marker);
 			// Point the original token already in postfix to the end of its right branch:
 			this_postfix->circuit_token = iff_end;
 			continue; // This token was already put into postfix by an earlier stage, so skip it this time.
@@ -9256,7 +9298,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 end_of_infix_to_postfix:
 
 	if (!postfix_count) // The code below relies on this check.  This can't be an empty (omitted) expression because an earlier check would've turned it into a non-expression.
-		return LineError(_T("Invalid expression."), FAIL, aArg.text);
+		return LineError(ERR_EXPR_SYNTAX, FAIL, aArg.text);
 
 	// ExpressionToPostfix() also handles unquoted string args (i.e. to support expressions
 	// between percent signs).  Now that the postfix array is constructed, is_expression
@@ -9361,7 +9403,7 @@ end_of_infix_to_postfix:
 	{
 		ExprTokenType &new_token = aArg.postfix[i];
 		new_token.CopyExprFrom(*postfix[i]);
-		if (new_token.symbol <= SYM_AND && new_token.symbol >= SYM_IFF_ELSE) // Adjust each circuit_token address to be relative to the new array rather than the temp/infix array.
+		if (SYM_USES_CIRCUIT_TOKEN(new_token.symbol)) // Adjust each circuit_token address to be relative to the new array rather than the temp/infix array.
 		{
 			// circuit_token should always be non-NULL at this point.
 			for (j = i + 1; postfix[j] != new_token.circuit_token; ++j); // Should always be found, and always to the right in the postfix array, so no need to check postfix_count.
