@@ -895,8 +895,6 @@ public:
 
 	ResultType ValueIsType(ExprTokenType &aResultToken, ExprTokenType &aValue, LPTSTR aValueStr, ExprTokenType &aType, LPTSTR aTypeStr);
 
-	ResultType Deref(Var *aOutputVar, LPTSTR aBuf);
-
 	static bool FileIsFilteredOut(WIN32_FIND_DATA &aCurrentFile, FileLoopModeType aFileLoopMode
 		, LPTSTR aFilePath, size_t aFilePathLength);
 
@@ -921,7 +919,6 @@ public:
 			switch(aActionType)
 			{
 			case ACT_ASSIGNEXPR:
-			case ACT_DEREF:
 			case ACT_MOUSEGETPOS:
 			case ACT_WINGETPOS:
 			case ACT_CONTROLGETPOS:

@@ -11408,9 +11408,6 @@ ResultType Line::Perform()
 		//    var ? func() : x:=y
 		return OK;
 
-	case ACT_DEREF:
-		return Deref(OUTPUT_VAR, ARG2);
-
 	case ACT_SPLITPATH:
 		return SplitPath(ARG1);
 
@@ -12365,114 +12362,6 @@ BIF_DECL(BIF_PerformAction)
 	}
 	// Free the stack variable (which may have been used as an output and/or input variable).
 	stack_var.Free(VAR_ALWAYS_FREE);
-}
-
-
-
-ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
-// Parses and expands all variable references and escape sequences contained in aBuf.
-{
-	aOutputVar = aOutputVar->ResolveAlias(); // Necessary for proper detection below of whether it's invalidly used as a source for itself.
-
-	// This transient variable is used resolving environment variables that don't already exist
-	// in the script's variable list (due to the fact that they aren't directly referenced elsewhere
-	// in the script):
-	TCHAR var_name[MAX_VAR_NAME_LENGTH + 1] = _T("");
-
-	Var *var;
-	VarSizeType expanded_length;
-	size_t var_name_length;
-	LPTSTR cp, cp1, dest;
-
-	// Do two passes:
-	// #1: Calculate the space needed so that aOutputVar can be given more capacity if necessary.
-	// #2: Expand the contents of aBuf into aOutputVar.
-
-	for (int which_pass = 0; which_pass < 2; ++which_pass)
-	{
-		if (which_pass) // Starting second pass.
-		{
-			// Set up aOutputVar, enlarging it if necessary.  If it is of type VAR_CLIPBOARD,
-			// this call will set up the clipboard for writing:
-			if (aOutputVar->AssignString(NULL, expanded_length) != OK)
-				return FAIL;
-			dest = aOutputVar->Contents();  // Init, and for performance.
-		}
-		else // First pass.
-			expanded_length = 0; // Init prior to accumulation.
-
-		for (cp = aBuf; ; )
-		{
-			// Find the next escape char or deref symbol:
-			for (; *cp && *cp != g_EscapeChar && *cp != g_DerefChar; ++cp)
-			{
-				if (which_pass) // 2nd pass
-					*dest++ = *cp;  // Copy all non-variable-ref characters literally.
-				else // just accumulate the length
-					++expanded_length;
-			}
-			if (!*cp) // End of string while scanning/copying.  The current pass is now complete.
-				break;
-			if (*cp == g_EscapeChar)
-			{
-				if (which_pass) // 2nd pass
-				{
-					cp1 = cp + 1;
-					switch (*cp1) // See ConvertEscapeSequences() for more details.
-					{
-						// Only lowercase is recognized for these:
-						case 'a': *dest = '\a'; break;  // alert (bell) character
-						case 'b': *dest = '\b'; break;  // backspace
-						case 'f': *dest = '\f'; break;  // formfeed
-						case 'n': *dest = '\n'; break;  // newline
-						case 'r': *dest = '\r'; break;  // carriage return
-						case 't': *dest = '\t'; break;  // horizontal tab
-						case 'v': *dest = '\v'; break;  // vertical tab
-						default:  *dest = *cp1; // These other characters are resolved just as they are, including '\0'.
-					}
-					++dest;
-				}
-				else
-					++expanded_length;
-				// Skip over the escape character, treating it and its target character
-				// as a single character.
-				cp += 2;
-				continue;
-			}
-			// Otherwise, it's a dereference symbol, so calculate the size of that variable's contents
-			// and add that to expanded_length (or copy the contents into aOutputVar if this is the
-			// second pass).
-			++cp; // Omit the deref char.
-			cp1 = find_identifier_end(cp);
-			var_name_length = cp1 - cp;
-			if (var_name_length && var_name_length <= MAX_VAR_NAME_LENGTH)
-			{
-				tcslcpy(var_name, cp, var_name_length + 1);  // +1 to convert var_name_length to size.
-				// Fixed for v1.0.34: Use FindOrAddVar() vs. FindVar() so that environment or built-in
-				// variables that aren't directly referenced elsewhere in the script will still work:
-				if (   !(var = g_script.FindOrAddVar(var_name, var_name_length))   )
-					return FAIL; // Above already displayed the error.
-				var = var->ResolveAlias();
-				// Don't allow the output variable to be read into itself this way because its contents
-				if (var != aOutputVar) // Both of these have had ResolveAlias() called, if required, to make the comparison accurate.
-				{
-					if (which_pass) // 2nd pass
-						dest += var->Get(dest);
-					else // just accumulate the length
-						expanded_length += var->Get(); // Add in the length of the variable's contents.
-				}
-			}
-			// else since the variable name between the deref symbols is blank or too long: for consistency in behavior,
-			// it seems best to omit the dereference entirely (don't put it into aOutputVar).
-			cp = cp1; // For the next loop iteration, continue at the char after this reference's final deref symbol.
-			if (*cp == g_DerefChar)
-				++cp; // Skip this deref's explicit end char.
-		} // for()
-	} // for() (first and second passes)
-
-	*dest = '\0';  // Terminate the output variable.
-	aOutputVar->SetCharLength((VarSizeType)_tcslen(aOutputVar->Contents())); // Update to actual in case estimate was too large.
-	return aOutputVar->Close();  // In case it's the clipboard.
 }
 
 
