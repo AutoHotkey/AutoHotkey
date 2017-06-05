@@ -1760,7 +1760,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	bool remap_source_is_mouse, remap_dest_is_mouse, remap_keybd_to_mouse;
 
 	// For the line continuation mechanism:
-	bool do_rtrim, literal_escapes, literal_derefs, literal_delimiters, literal_quotes
+	bool do_rtrim, literal_escapes, literal_quotes
 		, has_continuation_section, is_continuation_line;
 	#define CONTINUATION_SECTION_WITHOUT_COMMENTS 1 // MUST BE 1 because it's the default set by anything that's boolean-true.
 	#define CONTINUATION_SECTION_WITH_COMMENTS    2 // Zero means "not in a continuation section".
@@ -2046,8 +2046,6 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 				// hotstring continuation section seems more useful/common than the ability to use the
 				// accent character by itself literally (which seems quite rare in most languages).
 				literal_escapes = false;
-				literal_derefs = false;
-				literal_delimiters = true; // This is the default even for hotstrings because although using (*buf != ':') would improve loading performance, it's not a 100% reliable way to detect hotstrings.
 				literal_quotes = true; // This is the default even for non-expressions for simplicity (it should ultimately have no effect except inside an expression anyway).
 				// The default is linefeed because:
 				// 1) It's the best choice for hotstrings, for which the line continuation mechanism is well suited.
@@ -2095,12 +2093,6 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 							{
 							case '`': // OBSOLETE because g_EscapeChar is now constant: Although not using g_EscapeChar (reduces code size/complexity), #EscapeChar is still supported by continuation sections; it's just that enabling the option uses '`' rather than the custom escape-char (one reason is that that custom escape-char might be ambiguous with future/past options if it's something weird like an alphabetic character).
 								literal_escapes = true;
-								break;
-							case '%': // Same comment as above.
-								literal_derefs = true;
-								break;
-							case ',': // Same comment as above.
-								literal_delimiters = false;
 								break;
 							case 'C': // v1.0.45.03: For simplicity, anything that begins with "C" is enough to
 							case 'c': // identify it as the option to allow comments in the section.
@@ -2205,12 +2197,8 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 				//    are always de-escaped at a later stage, at least for everything that's likely to matter
 				//    or that's reasonable to put into a continuation section (e.g. a hotstring's replacement text).
 				int replacement_count = 0;
-				if (literal_escapes) // literal_escapes must be done FIRST because otherwise it would also replace any accents added for literal_delimiters or literal_derefs.
+				if (literal_escapes) // literal_escapes must be done FIRST because otherwise it would also replace any accents added by other options.
 					replacement_count += StrReplace(next_buf, _T("`"), _T("``"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
-				if (literal_derefs)
-					replacement_count += StrReplace(next_buf, _T("%"), _T("`%"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
-				if (literal_delimiters)
-					replacement_count += StrReplace(next_buf, _T(","), _T("`,"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
 				if (literal_quotes)
 				{
 					replacement_count += StrReplace(next_buf, _T("'"), _T("`'"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
