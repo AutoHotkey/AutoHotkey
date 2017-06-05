@@ -5276,15 +5276,28 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 
 		if (*op_begin == '"' || *op_begin == '\'')
 		{
+#ifdef ENABLE_TEXT_DEREFS
 			j = (int)(op_begin - aArgText + 1);
 			if (!ParseDerefs(aArgText, aArgMap, aDeref, aDerefCount, &j, *op_begin))
 				return FAIL;
 			op_end = aArgText + j;
+#else
+			if (aDerefCount >= MAX_DEREFS_PER_ARG)
+				return ScriptError(ERR_TOO_MANY_REFS, aArgText); // Short msg since so rare.
+			op_end = aArgText + FindTextDelim(aArgText, *op_begin, int(op_begin - aArgText + 1), aArgMap);
+			DerefType &this_deref = aDeref[aDerefCount];  // For performance.
+			this_deref.type = DT_QSTRING;
+			this_deref.next = NULL;
+			this_deref.marker = op_begin + 1;
+			this_deref.length = DerefLengthType(op_end - (op_begin + 1));
+			this_deref.param_count = 1;
+			aDerefCount++;
+#endif
 			if (!*op_end)
 				return ScriptError(ERR_MISSING_CLOSE_QUOTE, op_begin);
 			++op_end;
 			// op_end is now set correctly to allow the outer loop to continue.
-			continue; // Ignore this literal string, letting the runtime expression parser recognize it.
+			continue;
 		}
 					
 		// Find the end of this operand (if *op_end is '\0', strchr() will find that too):
