@@ -2717,16 +2717,7 @@ int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 	for (int mark = aStartIndex; ; ++mark)
 	{
 		if (aBuf[mark] == aDelimiter)
-		{
-			// Escaping a comma is allowed in case it has some utility.  An escaped comma
-			// acts as the multi-statement operator instead of as a delimiter, which also
-			// means that commas in continuation sections act as multi-statement by default.
-			// aDelimiter is checked in case this is a recursive call -- escaping ')', ']'
-			// or '}' should have no effect.
-			if (aDelimiter == g_delimiter && aLiteralMap && aLiteralMap[mark])
-				continue;
 			return mark;
-		}
 		switch (aBuf[mark])
 		{
 		case '\0':
@@ -2734,6 +2725,7 @@ int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 			// index of the null-terminator since that's typically what the caller wants.
 			return mark;
 		default:
+		//case '`': // May indicate an attempt to escape something when aLiteralMap==NULL, but has escape has no meaning here.
 			// Not a meaningful character; just have the loop skip over it.
 			continue;
 		case '"': 
@@ -2741,11 +2733,6 @@ int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 			mark = FindTextDelim(aBuf, aBuf[mark], mark + 1, aLiteralMap);
 			if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
 				return mark; // See case '\0' for comments.
-			continue;
-		case '`':
-			// See comments at the top of the loop.
-			if (!aLiteralMap && aBuf[mark+1] == g_delimiter)
-				mark++;
 			continue;
 		//case ')':
 		//case ']':
