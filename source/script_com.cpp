@@ -1392,7 +1392,7 @@ LPTSTR ComObject::Type()
 		if (mVarType == VT_DISPATCH)
 			return _T("ComObject"); // Can be invoked.
 	}
-	return _T("ComObjValue"); // Can't be invoked; just holds a value.
+	return _T("ComObj"); // Can't be invoked; may represent a value or a non-dispatch object.
 }
 
 
