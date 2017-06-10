@@ -35,7 +35,8 @@ ResultType Line::IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR 
 		aDefault = _T("ERROR");  // This mirrors what AutoIt2 does for its default value.
 	TCHAR	szFileTemp[_MAX_PATH+1];
 	TCHAR	*szFilePart, *cp;
-	TCHAR	szBuffer[65535] = _T("");					// Max ini file size is 65535 under 95
+	TCHAR	szBuffer[65535];					// Max ini file size is 65535 under 95
+	*szBuffer = '\0';
 	TCHAR	szEmpty[] = _T("");
 	// Get the fullpathname (ini functions need a full path):
 	GetFullPathName(aFilespec, _MAX_PATH, szFileTemp, &szFilePart);
