@@ -652,10 +652,15 @@ private:
 	ResultType FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber);
 	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *aCurrentReadFile);
 	ResultType WriteClipboardToFile(LPTSTR aFilespec, Var *aBinaryClipVar = NULL);
-	ResultType FileDelete();
+	ResultType FileDelete(LPTSTR aFilePattern);
 	ResultType FileRecycle(LPTSTR aFilePattern);
 	ResultType FileRecycleEmpty(LPTSTR aDriveLetter);
 	ResultType FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag);
+
+	typedef BOOL (* FilePatternCallback)(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
+	int FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
+		, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData
+		, bool aCalledRecursively = false);
 
 	ResultType FileGetAttrib(LPTSTR aFilespec);
 	int FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders

@@ -14786,7 +14786,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return FileReadLine(ARG2, ARG3);
 
 	case ACT_FILEDELETE:
-		return FileDelete();
+		return FileDelete(ARG1);
 
 	case ACT_FILERECYCLE:
 		return FileRecycle(ARG1);
