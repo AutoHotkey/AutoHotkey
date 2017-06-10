@@ -4946,11 +4946,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	LPTSTR new_raw_arg2 = NEW_RAW_ARG2;
 	LPTSTR new_raw_arg3 = NEW_RAW_ARG3;
 	LPTSTR new_raw_arg4 = NEW_RAW_ARG4;
-#endif
 
 	switch(aActionType)
 	{
-#ifndef AUTOHOTKEYSC // Some syntax checking is removed in compiled scripts to reduce their size.
 	case ACT_RETURN:
 		if (aArgc > 0 && !g->CurrentFunc)
 			return ScriptError(_T("Return's parameter should be blank except inside a function."));
@@ -5006,9 +5004,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		if (!*new_raw_arg3)
 			return ScriptError(ERR_PARAM3_REQUIRED);
 		break;
-
-#endif  // The above section is in place only if when not AUTOHOTKEYSC.
 	}
+#endif  // The above section is in place only if when not AUTOHOTKEYSC.
 
 	if (mNextLineIsFunctionBody && do_update_labels) // do_update_labels: false for '#if expr' and 'static var:=expr', neither of which should be treated as part of the function's body.
 	{
