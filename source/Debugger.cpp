@@ -2647,9 +2647,10 @@ void Debugger::PropertyWriter::EndProperty(DebugCookie aCookie)
 LPTSTR Var::ObjectToText(LPTSTR aBuf, int aBufSize)
 {
 	LPTSTR aBuf_orig = aBuf;
+	aBuf += sntprintf(aBuf, aBufSize, _T("%s: %s object"), mName, mObject->Type());
 	if (ComObject *cobj = dynamic_cast<ComObject *>(mObject))
-		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s: ComObject(0x%04hX, 0x%I64X)"), mName, cobj->mVarType, cobj->mVal64);
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T(" {wrapper: 0x%IX, vt: 0x%04hX, value: 0x%I64X}"), cobj, cobj->mVarType, cobj->mVal64);
 	else
-		aBuf += sntprintf(aBuf, aBufSize, _T("%s: Object(0x%p), of type %s"), mName, mObject, mObject->Type());
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T(" {address: 0x%IX}"), mObject);
 	return aBuf;
 }
