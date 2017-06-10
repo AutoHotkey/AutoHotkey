@@ -95,6 +95,7 @@ public:
 	Property() : mGet(NULL), mSet(NULL) { }
 	
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	IObject_Type_Impl("Property")
 };
 
 
@@ -152,6 +153,7 @@ protected:
 		Enumerator(Object *aObject) : mObject(aObject), mOffset(-1) { mObject->AddRef(); }
 		~Enumerator() { mObject->Release(); }
 		int Next(Var *aKey, Var *aVal);
+		IObject_Type_Impl("Object.Enumerator")
 	};
 	
 	IObject *mBase;
@@ -308,6 +310,7 @@ public:
 		return mBase; // Callers only want to call Invoke(), so no AddRef is done.
 	}
 	
+	LPTSTR Type();
 	// Used by Object::_Insert() and Func::Call():
 	bool InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], int aValueCount);
 
@@ -385,6 +388,7 @@ public:
 	~BoundFunc();
 
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	IObject_Type_Impl("BoundFunc")
 };
 
 
@@ -426,6 +430,7 @@ public:
 		, int aPatternCount, int aCapturedPatternCount, LPCTSTR aMark);
 	
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	IObject_Type_Impl("RegExMatch")
 
 #ifdef CONFIG_DEBUGGER
 	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);

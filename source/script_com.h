@@ -19,11 +19,15 @@ public:
 	STDMETHODIMP GetIDsOfNames(REFIID riid, LPOLESTR *rgszNames, UINT cNames, LCID lcid, DISPID *rgDispId);
 	STDMETHODIMP Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr);
 	
+	// IObject::Invoke() and Type() are unlikely to be called, since that would mean
+	// the script has a reference to the object, which means either that the script
+	// itself has implemented IConnectionPoint (and why would it?), or has used the
+	// IEnumConnections interface to retrieve its own object (unlikely).
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 	{
-		// Currently ComEvent objects are never exposed to the AutoHotkey side.
 		return INVOKE_NOT_HANDLED;
 	}
+	IObject_Type_Impl("ComEvent") // Unlikely to be called; see above.
 
 	HRESULT Connect(LPTSTR pfx = NULL, IObject *ahkObject = NULL);
 
@@ -60,6 +64,7 @@ public:
 
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	LPTSTR Type();
 
 	void ToVariant(VARIANT &aVar)
 	{
@@ -113,6 +118,7 @@ public:
 	{
 		penum->Release();
 	}
+	IObject_Type_Impl("ComObject.Enumerator")
 };
 
 
@@ -132,6 +138,7 @@ public:
 	static HRESULT Begin(ComObject *aArrayObject, ComArrayEnum *&aOutput);
 	int Next(Var *aOutput, Var *aOutputType);
 	~ComArrayEnum();
+	IObject_Type_Impl("ComObjArray.Enumerator")
 };
 
 

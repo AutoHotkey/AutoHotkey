@@ -393,11 +393,33 @@ BIF_DECL(BIF_ComObjTypeOrValue)
 			aResultToken.symbol = SYM_STRING; // for all code paths below
 			aResultToken.marker = _T(""); // in case of error
 
-			ITypeInfo *ptinfo;
-			if (VT_DISPATCH == obj->mVarType && obj->mDispatch
-				&& SUCCEEDED(obj->mDispatch->GetTypeInfo(0, LOCALE_USER_DEFAULT, &ptinfo)))
+			LPTSTR requested_info = TokenToString(*aParam[1]);
+
+			ITypeInfo *ptinfo = NULL;
+			if (tolower(*requested_info) == 'c')
 			{
-				LPTSTR requested_info = TokenToString(*aParam[1]);
+				// Get class information.
+				if ((VT_DISPATCH == obj->mVarType || VT_UNKNOWN == obj->mVarType) && obj->mUnknown)
+				{
+					ptinfo = GetClassTypeInfo(obj->mUnknown);
+					if (ptinfo)
+					{
+						if (!_tcsicmp(requested_info, _T("class")))
+							requested_info = _T("name");
+						else if (!_tcsicmp(requested_info, _T("clsid")))
+							requested_info = _T("iid");
+					}
+				}
+			}
+			else
+			{
+				// Get IDispatch information.
+				if (VT_DISPATCH == obj->mVarType && obj->mDispatch)
+					if (FAILED(obj->mDispatch->GetTypeInfo(0, LOCALE_USER_DEFAULT, &ptinfo)))
+						ptinfo = NULL;
+			}
+			if (ptinfo)
+			{
 				if (!_tcsicmp(requested_info, _T("name")))
 				{
 					BSTR name;
@@ -1345,6 +1367,32 @@ ResultType ComObject::SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, E
 	if (FAILED(hr))
 		ComError(hr);
 	return OK;
+}
+
+
+LPTSTR ComObject::Type()
+{
+	if (mVarType & VT_ARRAY)
+		return _T("ComObjArray"); // Has SafeArray methods.
+	if (mVarType & VT_BYREF)
+		return _T("ComObjRef"); // Has this[].
+	if ((mVarType == VT_DISPATCH || mVarType == VT_UNKNOWN) && mUnknown)
+	{
+		BSTR name;
+		ITypeInfo *ptinfo;
+		// Use COM class name if available.
+		if (  (ptinfo = GetClassTypeInfo(mUnknown))
+			&& SUCCEEDED(ptinfo->GetDocumentation(MEMBERID_NIL, &name, NULL, NULL, NULL))  )
+		{
+			static TCHAR sBuf[64]; // Seems generous enough.
+			tcslcpy(sBuf, CStringTCharFromWCharIfNeeded(name), _countof(sBuf));
+			SysFreeString(name);
+			return sBuf;
+		}
+		if (mVarType == VT_DISPATCH)
+			return _T("ComObject"); // Can be invoked.
+	}
+	return _T("ComObj"); // Can't be invoked; may represent a value or a non-dispatch object.
 }
 
 

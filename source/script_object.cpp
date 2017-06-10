@@ -940,6 +940,25 @@ void Object::EndClassDefinition()
 	
 
 //
+// Object::Type() - Returns the object's type/class name.
+//
+
+LPTSTR Object::Type()
+{
+	IObject *ibase;
+	Object *base;
+	ExprTokenType value;
+	if (GetItem(value, _T("__Class")))
+		return _T("Class"); // This object is a class.
+	for (ibase = mBase; base = dynamic_cast<Object *>(ibase); ibase = base->mBase)
+		if (base->GetItem(value, _T("__Class")))
+			return TokenToString(value); // This object is an instance of base.
+	return _T("Object"); // This is an Object of undetermined type, like Object(), {} or [].
+}
+
+	
+
+//
 // Object:: Built-in Methods
 //
 
