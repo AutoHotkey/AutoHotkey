@@ -8370,6 +8370,10 @@ ResultType Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoop
 			attrib.xor_mask ^= mask; // Toggle bit.  ^= vs |= to invert any prior + or ^.
 			// Leave and_mask as is, so any prior + or - will be inverted.
 			break;
+		default: // No +/-/^ specified, so overwrite attributes (equal and opposite to FileGetAttrib).
+			attrib.and_mask = 0; // Reset all bits to 0.
+			attrib.xor_mask |= mask; // Set bit to 1.  |= to accumulate if multiple attributes are present.
+			break;
 		}
 	}
 	FilePatternApply(aFilePattern, aOperateOnFolders, aDoRecurse, FileSetAttribCallback, &attrib);
