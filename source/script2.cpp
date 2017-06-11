@@ -16365,21 +16365,10 @@ BIF_DECL(BIF_Type)
 		type = _T("Float");
 		break;
 	case SYM_OBJECT:
-	{
-		// This seems like the most future-proof and probably fastest method.
-		// Although the string returned by name() is implementation defined,
-		// for Microsoft Visual C++ it is the "human-readable name of the type".
-		LPCSTR name = typeid(*aParam[0]->object).name();
-		if (!strncmp(name, "class ", 6))
-			name += 6;
-		type = _f_retval_buf;
-		if (MultiByteToWideChar(CP_ACP, 0, name, -1, type, _f_retval_buf_size))
-			break;
-		// Otherwise, the call above failed, so fall through (should never happen):
-	}
+		type = aParam[0]->object->Type();
+		break;
 	default:
 		// Default for maintainability.  Could be SYM_MISSING, but it would have to be intentional: %'type'%(,).
-		// Also may have fallen through from above.
 		type = _T("");
 	}
 	_f_return(type);
