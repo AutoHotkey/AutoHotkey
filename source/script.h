@@ -647,9 +647,9 @@ private:
 		, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData
 		, bool aCalledRecursively = false);
 
-	int FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
+	ResultType FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
 		, bool aDoRecurse, bool aCalledRecursively = false);
-	int FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
+	ResultType FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
 		, FileLoopModeType aOperateOnFolders, bool aDoRecurse, bool aCalledRecursively = false);
 
 	ResultType IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);

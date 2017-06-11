@@ -8216,10 +8216,12 @@ BOOL FileDeleteCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbac
 
 ResultType Line::FileDelete(LPTSTR aFilePattern)
 {
+	if (!*aFilePattern)
+		return LineError(ERR_PARAM1_INVALID);
+
 	// The no-wildcard case could be handled via FilePatternApply(), but it is handled here
 	// for backward-compatibility (just in case the use of FindFirstFile() affects something):
-	if (!StrChrAny(aFilePattern, _T("?*")) // No wildcards; just a plain path/filename.
-		&& *aFilePattern) // i.e. if it's empty, let FilePatternApply() report the error.
+	if (!StrChrAny(aFilePattern, _T("?*"))) // No wildcards; just a plain path/filename.
 	{
 		SetLastError(0); // For sanity: DeleteFile appears to set it only on failure.
 		// ErrorLevel will indicate failure if DeleteFile fails.
@@ -8228,7 +8230,7 @@ ResultType Line::FileDelete(LPTSTR aFilePattern)
 
 	// Otherwise aFilePattern contains wildcards, so we'll search for all matches and delete them.
 	FilePatternApply(aFilePattern, FILE_LOOP_FILES_ONLY, false, FileDeleteCallback, NULL);
-	return g->ThrownToken ? FAIL : OK;
+	return OK;
 }
 
 
@@ -8318,10 +8320,13 @@ struct FileSetAttribData
 	DWORD and_mask, xor_mask;
 };
 
-int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
+ResultType Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
 	, bool aDoRecurse, bool aCalledRecursively)
 // Returns the number of files and folders that could not be changed due to an error.
 {
+	if (!*aFilePattern)
+		return LineError(ERR_PARAM2_INVALID);
+
 	// Convert the attribute string to three bit-masks: add, remove and toggle.
 	FileSetAttribData attrib;
 	DWORD mask;
@@ -8336,8 +8341,11 @@ int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeTyp
 		case '-':
 		case '^':
 			op = *cp;
-		default:
+		case ' ':
+		case '\t':
 			continue;
+		default:
+			return LineError(ERR_PARAM1_INVALID, FAIL, cp);
 		// Note that D (directory) and C (compressed) are currently not supported:
 		case 'R': mask = FILE_ATTRIBUTE_READONLY; break;
 		case 'A': mask = FILE_ATTRIBUTE_ARCHIVE; break;
@@ -8364,7 +8372,8 @@ int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeTyp
 			break;
 		}
 	}
-	return FilePatternApply(aFilePattern, aOperateOnFolders, aDoRecurse, FileSetAttribCallback, &attrib);
+	FilePatternApply(aFilePattern, aOperateOnFolders, aDoRecurse, FileSetAttribCallback, &attrib);
+	return OK;
 }
 
 BOOL FileSetAttribCallback(LPTSTR file_path, WIN32_FIND_DATA &current_file, void *aCallbackData)
@@ -8389,6 +8398,7 @@ int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolde
 	{
 		if (!*aFilePattern)
 		{
+			// Caller should handle this case before calling us if an exception is to be thrown.
 			SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
 			return 0;
 		}
@@ -8581,7 +8591,7 @@ struct FileSetTimeData
 	TCHAR WhichTime;
 };
 
-int Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
+ResultType Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
 	, FileLoopModeType aOperateOnFolders, bool aDoRecurse, bool aCalledRecursively)
 // Returns the number of files and folders that could not be changed due to an error.
 {
@@ -8597,23 +8607,21 @@ int Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
 	FILETIME ft;
 	if (*yyyymmdd)
 	{
-		// Convert the arg into the time struct as local (non-UTC) time:
-		if (!YYYYMMDDToFileTime(yyyymmdd, ft))
+		if (   !YYYYMMDDToFileTime(yyyymmdd, ft)  // Convert the arg into the time struct as local (non-UTC) time.
+			|| !LocalFileTimeToFileTime(&ft, &callbackData.Time)   )  // Convert from local to UTC.
 		{
-			SetErrorsOrThrow(true);
-			return 0;
-		}
-		// Convert from local to UTC:
-		if (!LocalFileTimeToFileTime(&ft, &callbackData.Time))
-		{
-			SetErrorsOrThrow(true);
-			return 0;
+			// Invalid parameters are the only likely cause of this condition.
+			return LineError(ERR_PARAM1_INVALID, FAIL, aYYYYMMDD);
 		}
 	}
 	else // User wants to use the current time (i.e. now) as the new timestamp.
 		GetSystemTimeAsFileTime(&callbackData.Time);
 
-	return FilePatternApply(aFilePattern, aOperateOnFolders, aDoRecurse, FileSetTimeCallback, &callbackData);
+	if (!*aFilePattern)
+		return LineError(ERR_PARAM2_INVALID);
+
+	FilePatternApply(aFilePattern, aOperateOnFolders, aDoRecurse, FileSetTimeCallback, &callbackData);
+	return OK;
 }
 
 BOOL FileSetTimeCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData)

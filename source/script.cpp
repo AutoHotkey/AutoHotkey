@@ -11826,14 +11826,12 @@ ResultType Line::Perform()
 		FileLoopModeType mode = ConvertLoopMode(ARG3);
 		// The specified ARG, if non-blank, takes precedence over the file-loop's file (if any):
 		#define USE_FILE_LOOP_FILE_IF_ARG_BLANK(arg) (*arg ? arg : (g.mLoopFile ? g.mLoopFile->cFileName : _T("")))
-		FileSetAttrib(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), (mode & ~FILE_LOOP_RECURSE), (mode & FILE_LOOP_RECURSE));
-		return !g.ThrownToken ? OK : FAIL;
+		return FileSetAttrib(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), (mode & ~FILE_LOOP_RECURSE), (mode & FILE_LOOP_RECURSE));
 	}
 	case ACT_FILESETTIME:
 	{
 		FileLoopModeType mode = ConvertLoopMode(ARG4);
-		FileSetTime(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3, (mode & ~FILE_LOOP_RECURSE), (mode & FILE_LOOP_RECURSE));
-		return !g.ThrownToken ? OK : FAIL;
+		return FileSetTime(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3, (mode & ~FILE_LOOP_RECURSE), (mode & FILE_LOOP_RECURSE));
 	}
 
 	case ACT_SETWORKINGDIR:
