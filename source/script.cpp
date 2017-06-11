@@ -70,6 +70,8 @@ FuncEntry g_BIF[] =
 	BIFn(EnvGet, 1, 1, true, BIF_Env),
 	BIFn(EnvSet, 1, 2, false, BIF_Env),
 	BIF1(SysGet, 1, 1, true),
+	BIFn(PostMessage, 1, 8, false, BIF_PostSendMessage),
+	BIFn(SendMessage, 1, 9, true, BIF_PostSendMessage),
 
 	BIF1(MsgBox, 0, 3, false),
 	BIF1(InputBox, 0, 4, true),
@@ -219,7 +221,6 @@ FuncEntry g_BIF[] =
 	BIF1(IniRead, 1, 4, true),
 	BIF1(PixelGetColor, 2, 3, true),
 	BIFn(RegDelete, 0, 2, false, BIF_Reg),
-	#undef RegDeleteKey // Don't make it "RegDeleteKeyW".
 	BIFn(RegDeleteKey, 0, 1, false, BIF_Reg),
 	BIFn(RegRead, 0, 2, true, BIF_Reg),
 	BIFn(RegWrite, 0, 4, false, BIF_Reg),
@@ -9309,7 +9310,7 @@ end_of_infix_to_postfix:
 		&& (mActionType < ACT_FOR || mActionType > ACT_UNTIL) // It's not WHILE or UNTIL, which currently perform better as expressions, or FOR, which performs the same but currently expects aResultToken to always be set.
 		&& (mActionType != ACT_THROW) // Exclude THROW to simplify variable handling (ensures vars are always dereferenced).
 		&& ((only_symbol != SYM_VAR && only_symbol != SYM_DYNAMIC) || mActionType != ACT_RETURN) // "return var" is kept as an expression for correct handling of built-ins, locals (see "ToReturnValue") and ByRef.
-		&& (only_symbol != SYM_STRING || mActionType != ACT_SENDMESSAGE && mActionType != ACT_POSTMESSAGE)   ) // It's not something like SendMessage WM_SETTEXT,,"New text" (which requires the leading quote mark to be present).
+		)
 	{
 		if (only_symbol == SYM_DYNAMIC) // This needs some extra checks to ensure correct behaviour.
 		{
@@ -11565,9 +11566,6 @@ ResultType Line::Perform()
 		return ControlSetText(SIX_ARGS);
 	case ACT_STATUSBARWAIT:
 		return StatusBarWait(EIGHT_ARGS);
-	case ACT_POSTMESSAGE:
-	case ACT_SENDMESSAGE:
-		return ScriptPostSendMessage(mActionType == ACT_SENDMESSAGE);
 	case ACT_WINSETTITLE:
 		return WinSetTitle(FIVE_ARGS);
 	case ACT_WINGETPOS:
@@ -12321,7 +12319,7 @@ BIF_DECL(BIF_PerformAction)
 	if (result == OK) // Can be OK, FAIL or EARLY_EXIT.
 	{
 		if (output_var == g_ErrorLevel 
-			&& !(act == ACT_RUNWAIT || act == ACT_SENDMESSAGE) // These two have a more useful return value.
+			&& act != ACT_RUNWAIT // ErrorLevel is an exit code (not boolean error indicator) in this case.
 			&& output_var->HasContents()) // Commands which don't set ErrorLevel at all shouldn't return 1.
 		{
 			aResultToken.Return(!VarToBOOL(*output_var)); // Return TRUE for success, otherwise FALSE.

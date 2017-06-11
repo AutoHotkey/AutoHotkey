@@ -1928,7 +1928,7 @@ ResultType Line::StatusBarWait(LPTSTR aTextToWaitFor, LPTSTR aSeconds, LPTSTR aP
 
 
 
-ResultType Line::ScriptPostSendMessage(bool aUseSend)
+BIF_DECL(BIF_PostSendMessage)
 // Arg list:
 // sArgDeref[0]: Msg number
 // sArgDeref[1]: wParam
@@ -1940,21 +1940,20 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 // sArgDeref[7]: ExcludeText
 // sArgDeref[8]: Timeout
 {
+	bool aUseSend = _f_callee_id == FID_SendMessage;
+	_f_param_string_opt(aControl, 3);
 	HWND target_window, control_window;
-	if (   !(target_window = DetermineTargetWindow(sArgDeref[4], sArgDeref[5], sArgDeref[6], sArgDeref[7]))
-		|| !(control_window = *sArgDeref[3] ? ControlExist(target_window, sArgDeref[3]) : target_window)   ) // Relies on short-circuit boolean order.
-		 // aUseSend: Need a special value to distinguish this from numeric reply-values.
-		return aUseSend ? SetErrorLevelOrThrowStr(_T("ERROR")) : SetErrorLevelOrThrow();
+	if (   !(target_window = DetermineTargetWindow(aParam + 4, aParamCount - 4)) // It can handle a negative param count.
+		|| !(control_window = *aControl ? ControlExist(target_window, aControl) : target_window)   ) // Relies on short-circuit boolean order.
+	{
+		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		_f_return_empty;
+	}
 
-	// v1.0.40.05: Support the passing of a literal (quoted) string by checking whether the
-	// original/raw arg's first character is '"'.  The avoids the need to put the string into a
-	// variable and then pass something like &MyVar.
-	UINT msg = ArgToUInt(1);
-	WPARAM wparam = (mArgc > 1 && (mArg[1].text[0] == '"' || mArg[1].text[0] == '\'')) ? (WPARAM)sArgDeref[1] : (WPARAM)ArgToInt64(2);
-	LPARAM lparam = (mArgc > 2 && (mArg[2].text[0] == '"' || mArg[2].text[0] == '\'')) ? (LPARAM)sArgDeref[2] : (LPARAM)ArgToInt64(3);
+	UINT msg = ParamIndexToInt(0);
 	// Timeout increased from 2000 to 5000 in v1.0.27:
 	// jackieku: specify timeout by the parameter.
-	UINT timeout = mArgc > 8 ? ArgToUInt(9) : 5000;
+	UINT timeout = ParamIndexToOptionalInt(8, 5000);
 
 	// Fixed for v1.0.48.04: Make copies of the wParam and lParam variables (if eligible for updating) prior
 	// to sending the message in case the message triggers a callback or OnMessage function, which would be
@@ -1965,42 +1964,53 @@ ResultType Line::ScriptPostSendMessage(bool aUseSend)
 	// v1.0.43.06: If either wParam or lParam contained the address of a variable, update the mLength
 	// member after sending the message in case the receiver of the message wrote something to the buffer.
 	// This is similar to the way "Str" parameters work in DllCall.
-	Var *var_to_update[2];
+	INT_PTR param[2] = { 0, 0 };
+	Var *var_to_update[2] = { 0, 0 };
 	int i;
 	for (i = 1; i < 3; ++i) // Two iterations: wParam and lParam.
 	{
-		if (mArgc > i) // The arg exists.
+		if (ParamIndexIsOmitted(i))
+			continue;
+		ExprTokenType &this_param = *aParam[i];
+		if (this_param.symbol == SYM_VAR)
 		{
-			ArgStruct &this_arg = mArg[i];
-			var_to_update[i-1] = this_arg.text[0] == '&'  // Must start with '&', so things like 5+&MyVar aren't supported.
-				&& this_arg.deref && !this_arg.deref->is_function()
-				&& this_arg.deref->var->Type() == VAR_NORMAL // Check VAR_NORMAL to be extra-certain it can't be the clipboard or a built-in variable (ExpandExpression() probably prevents taking the address of such a variable, but might not stop it from being in the deref array that way).
-				? this_arg.deref->var
-				: NULL;
+			Var *var = this_param.var;
+			var->ToTokenSkipAddRef(this_param);
+			if (this_param.symbol == SYM_STRING)
+				var_to_update[i-1] = var; // Not this_param.var, which was overwritten.
 		}
-		else // L32: Bugfix - var_to_update must be initialised.
+		switch (this_param.symbol)
+		{
+		case SYM_INTEGER:
+			param[i-1] = (INT_PTR)this_param.value_int64;
 			var_to_update[i-1] = NULL;
+			break;
+		case SYM_STRING:
+			param[i-1] = (INT_PTR)this_param.marker;
+			break;
+		default:
+			// SYM_FLOAT: Seems best to treat it as an error rather than truncating the value.
+			// SYM_OBJECT: Reserve for future use (user-defined conversion meta-functions?).
+			_f_throw(i == 1 ? ERR_PARAM2_INVALID : ERR_PARAM3_INVALID);
+		}
 	}
 
+	bool successful;
+	DWORD_PTR dwResult;
 	if (aUseSend)
-	{
-		DWORD_PTR dwResult;
-		if (!SendMessageTimeout(control_window, msg, wparam, lparam, SMTO_ABORTIFHUNG, timeout, &dwResult))
-			return SetErrorLevelOrThrowStr(_T("ERROR")); // Need a special value to distinguish this from numeric reply-values.
-		g_ErrorLevel->Assign(dwResult); // UINT seems best most of the time?
-	}
-	else // Post vs. Send
-	{
-		if (!PostMessage(control_window, msg, wparam, lparam))
-			return SetErrorLevelOrThrow();
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-	}
+		successful = SendMessageTimeout(control_window, msg, (WPARAM)param[0], (LPARAM)param[1], SMTO_ABORTIFHUNG, timeout, &dwResult);
+	else
+		successful = PostMessage(control_window, msg, (WPARAM)param[0], (LPARAM)param[1]);
 
 	for (i = 0; i < 2; ++i) // Two iterations: wParam and lParam.
 		if (var_to_update[i])
 			var_to_update[i]->SetLengthFromContents();
 
-	return OK;
+	g_ErrorLevel->Assign(successful ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
+	if (aUseSend && successful)
+		_f_return_i((__int64)dwResult);
+	else
+		_f_return_empty;
 }
 
 
