@@ -213,6 +213,9 @@ struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 {
 	// See script_object.cpp for comments.
 	virtual ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount) = 0;
+	virtual LPTSTR Type() = 0;
+	#define IObject_Type_Impl(name) \
+		LPTSTR Type() { return _T(name); }
 	
 #ifdef CONFIG_DEBUGGER
 	virtual void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aMaxDepth) = 0;

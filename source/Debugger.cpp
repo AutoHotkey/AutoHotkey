@@ -2606,12 +2606,9 @@ void Debugger::PropertyWriter::BeginProperty(LPCSTR aName, LPCSTR aType, int aNu
 
 	if (mDepth == 1) // Write <property> for the object itself.
 	{
-		LPCSTR classname = typeid(*mObject).name();
-		if (!strncmp(classname, "class ", 6))
-			classname += 6;
-
+		LPTSTR classname = mObject->Type();
 		mError = mDbg.mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" classname=\"%s\" address=\"%p\" size=\"0\" page=\"%i\" pagesize=\"%i\" children=\"%i\" numchildren=\"%i\">"
-					, mName, mNameBuf.GetString(), aType, classname, mObject, mPage, mPageSize, aNumChildren > 0, aNumChildren);
+					, mName, mNameBuf.GetString(), aType, U4T(classname), mObject, mPage, mPageSize, aNumChildren > 0, aNumChildren);
 		return;
 	}
 
@@ -2659,8 +2656,10 @@ void Debugger::PropertyWriter::EndProperty(DebugCookie aCookie)
 LPTSTR Var::ObjectToText(LPTSTR aBuf, int aBufSize)
 {
 	LPTSTR aBuf_orig = aBuf;
-	aBuf += sntprintf(aBuf, aBufSize, _T("%s: Object(0x%p)"), mName, mObject);
+	aBuf += sntprintf(aBuf, aBufSize, _T("%s: %s object"), mName, mObject->Type());
 	if (ComObject *cobj = dynamic_cast<ComObject *>(mObject))
-		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T(" <= ComObject(0x%04hX, 0x%I64X)"), cobj->mVarType, cobj->mVal64);
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T(" {wrapper: 0x%IX, vt: 0x%04hX, value: 0x%I64X}"), cobj, cobj->mVarType, cobj->mVal64);
+	else
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T(" {address: 0x%IX}"), mObject);
 	return aBuf;
 }

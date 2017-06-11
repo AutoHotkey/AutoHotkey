@@ -185,6 +185,8 @@ public:
 			aOutputVar2->Assign(ctrl);
 		return 1;
 	}
+
+	IObject_Type_Impl("Gui.Enumerator")
 };
 
 
@@ -5204,6 +5206,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 	// If control type uses aControl's union for something other than color, communicate the chosen color
 	// back through a means that doesn't corrupt the union:
 	LPTSTR next_option, option_end;
+	LPTSTR error_message; // Used by "return_error:" when aControl.hwnd == NULL.
 	TCHAR orig_char;
 	bool adding; // Whether this option is being added (+) or removed (-).
 	GuiControlType *tab_control;
@@ -5476,8 +5479,9 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				{
 					if (!aControl.SupportsBackgroundTrans())
 					{
-						g_script.ScriptError(ERR_GUI_NOT_FOR_THIS_TYPE, next_option-10);
-						goto return_fail;
+						next_option -= 10;
+						error_message = ERR_GUI_NOT_FOR_THIS_TYPE;
+						goto return_error;
 					}
 					aControl.background_color = CLR_TRANSPARENT;
 				}
@@ -5489,8 +5493,9 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				{
 					if (!aControl.SupportsBackgroundColor())
 					{
-						g_script.ScriptError(ERR_GUI_NOT_FOR_THIS_TYPE, next_option-10);
-						goto return_fail;
+						next_option -= 10;
+						error_message = ERR_GUI_NOT_FOR_THIS_TYPE;
+						goto return_error;
 					}
 					aOpt.color_bk = ColorNameToBGR(next_option);
 					if (aOpt.color_bk == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
@@ -5895,14 +5900,14 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 
 		else if (aControl.type == GUI_CONTROL_CUSTOM && !_tcsnicmp(next_option, _T("Class"), 5))
 		{
-			LPTSTR className = next_option + 5;
+			next_option += 5;
 			WNDCLASSEX wc;
 			// Retrieve the class atom (http://blogs.msdn.com/b/oldnewthing/archive/2004/10/11/240744.aspx)
-			aOpt.customClassAtom = (ATOM) GetClassInfoEx(g_hInstance, className, &wc);
+			aOpt.customClassAtom = (ATOM) GetClassInfoEx(g_hInstance, next_option, &wc);
 			if (aOpt.customClassAtom == 0)
 			{
-				g_script.ScriptError(_T("Unregistered window class."), className);
-				goto return_fail;
+				error_message = _T("Unrecognized window class.");
+				goto return_error;
 			}
 		}
 
@@ -6224,8 +6229,9 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					break;
 				default:
 					// Anything else is invalid.
-					g_script.ScriptError(ERR_INVALID_OPTION, next_option-1);
-					goto return_fail;
+					--next_option;
+					error_message = ERR_INVALID_OPTION;
+					goto return_error;
 				}
 				*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 				continue;
@@ -6393,16 +6399,21 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					break;
 				}
 				// Anything not already handled above is invalid.
-				g_script.ScriptError(ERR_INVALID_OPTION, next_option-1);
-				goto return_fail;
+				--next_option;
+				error_message = ERR_INVALID_OPTION;
+				goto return_error;
 			} // switch()
 		} // Final "else" in the "else if" ladder.
 
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 		continue;
-	return_fail:
+	// This "subroutine" is used to reduce code size and ensure the temporary termination is undone even on failure:
+	return_error:
+		// Although it's tempting to undo the termination *after* showing the error (so that only the bad option
+		// is shown), that would cause the options parameter to appear truncated in the error line text, unless
+		// the parameter contains variables, since aOptions does not point to the arg text in that case.
 		*option_end = orig_char; // See above.
-		return FAIL;
+		return g_script.ScriptError(error_message, next_option);
 	} // for() each item in option list
 	
 	// If the control has already been created, apply the new style and exstyle here, if any:

@@ -203,14 +203,8 @@ BIF_DECL(Op_ObjNew)
 	result = class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, 1);
 	if (result != INVOKE_NOT_HANDLED)
 	{
-		if (result != OK)
-		{
-			new_object->Release();
-			aParam[0] = class_token; // Restore it to original caller-supplied value.
-			aResultToken.SetExitResult(result);
-			return;
-		}
-		// See similar section below for comments.
+		// It's possible that __Init is user-defined (despite recommendations in the
+		// documentation) or built-in, so make sure the return value, if any, is freed:
 		aResultToken.Free();
 		// Reset to defaults for __New, invoked below.
 		aResultToken.mem_to_free = NULL;
@@ -218,6 +212,13 @@ BIF_DECL(Op_ObjNew)
 		aResultToken.marker = _T("");
 		aResultToken.marker_length = -1;
 		aResultToken.buf = buf;
+		if (result == FAIL || result == EARLY_EXIT)
+		{
+			new_object->Release();
+			aParam[0] = class_token; // Restore it to original caller-supplied value.
+			aResultToken.SetExitResult(result);
+			return;
+		}
 	}
 	
 	// __New may be defined by the script for custom initialization code.
@@ -234,7 +235,7 @@ BIF_DECL(Op_ObjNew)
 	}
 	else if (result == FAIL || result == EARLY_EXIT)
 	{
-		// An error was raised within __New() or while trying to call it.
+		// An error was raised within __New() or while trying to call it, or Exit was called.
 		new_object->Release();
 		aResultToken.SetExitResult(result);
 	}

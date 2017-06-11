@@ -597,7 +597,8 @@ BIF_DECL(BIF_Input)
 	//////////////////////////////////////////////////////////////
 	// Initialize buffers and state variables for use by the hook:
 	//////////////////////////////////////////////////////////////
-	TCHAR input_buf[INPUT_BUFFER_SIZE] = _T(""); // Will contain the actual input from the user.
+	TCHAR input_buf[INPUT_BUFFER_SIZE]; // Will contain the actual input from the user.
+	*input_buf = '\0';
 	g_input.buffer = input_buf;
 	g_input.BufferLength = 0;
 	// g_input.BufferLengthMax was set in the option parsing section.
@@ -4389,7 +4390,8 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 {
 	// v1.0.30.05: Increased from 32 KB to 64 KB, which is the maximum size of an Edit
 	// in Win9x:
-	TCHAR buf_temp[65534] = _T("");  // Formerly 32767.
+	TCHAR buf_temp[65534];  // Formerly 32767.
+	*buf_temp = '\0';
 	bool jump_to_bottom = false;  // Set default behavior for edit control.
 	static MainWindowModes current_mode = MAIN_MODE_NO_CHANGE;
 
@@ -5354,7 +5356,8 @@ BIF_DECL(BIF_FormatTime)
 	TCHAR format_buf[FT_MAX_OUTPUT_CHARS + 1];
 	TCHAR output_buf[FT_MAX_OUTPUT_CHARS + 1]; // The size of this is somewhat arbitrary, but buffer overflow is checked so it's safe.
 
-	TCHAR yyyymmdd[256] = _T(""); // Large enough to hold date/time and any options that follow it (note that D and T options can appear multiple times).
+	TCHAR yyyymmdd[256]; // Large enough to hold date/time and any options that follow it (note that D and T options can appear multiple times).
+	*yyyymmdd = '\0';
 
 	SYSTEMTIME st;
 	LPTSTR options = NULL;
@@ -7585,7 +7588,8 @@ BIF_DECL(BIF_FileSelect)
 	// The call to GetOpenFileName() may fail if the first character of the buffer isn't NULL
 	// because it then thinks the buffer contains the default filename, which if it's uninitialized
 	// may be a string that's too long.
-	TCHAR file_buf[65535] = _T(""); // Set default.
+	TCHAR file_buf[65535];
+	*file_buf = '\0'; // Set default.
 
 	TCHAR working_dir[MAX_PATH];
 	if (!aWorkingDir || !*aWorkingDir)
@@ -7645,7 +7649,8 @@ BIF_DECL(BIF_FileSelect)
 		sntprintf(greeting, _countof(greeting), _T("Select File - %s"), g_script.DefaultDialogTitle());
 
 	// The filter must be terminated by two NULL characters.  One is explicit, the other automatic:
-	TCHAR filter[1024] = _T(""), pattern[1024] = _T("");  // Set default.
+	TCHAR filter[1024], pattern[1024];
+	*filter = '\0'; *pattern = '\0'; // Set default.
 	if (*aFilter)
 	{
 		LPTSTR pattern_start = _tcschr(aFilter, '(');
@@ -8204,17 +8209,17 @@ BIF_DECL(BIF_FileAppend)
 
 
 
-ResultType Line::FileDelete()
+BOOL FileDeleteCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData)
 {
-	// Below is done directly this way rather than passed in as args mainly to emphasize that
-	// ArgLength() can safely be called in Line methods like this one (which is done further below).
-	// It also may also slightly improve performance and reduce code size.
-	LPTSTR aFilePattern = ARG1;
+	return DeleteFile(aFilename);
+}
 
-	if (!*aFilePattern)
-		return LineError(ERR_PARAM1_REQUIRED); // Throw an error, since this is probably not what the user intended.
-
-	if (!StrChrAny(aFilePattern, _T("?*")))
+ResultType Line::FileDelete(LPTSTR aFilePattern)
+{
+	// The no-wildcard case could be handled via FilePatternApply(), but it is handled here
+	// for backward-compatibility (just in case the use of FindFirstFile() affects something):
+	if (!StrChrAny(aFilePattern, _T("?*")) // No wildcards; just a plain path/filename.
+		&& *aFilePattern) // i.e. if it's empty, let FilePatternApply() report the error.
 	{
 		SetLastError(0); // For sanity: DeleteFile appears to set it only on failure.
 		// ErrorLevel will indicate failure if DeleteFile fails.
@@ -8222,81 +8227,8 @@ ResultType Line::FileDelete()
 	}
 
 	// Otherwise aFilePattern contains wildcards, so we'll search for all matches and delete them.
-	// Testing shows that the ANSI version of FindFirstFile() will not accept a path+pattern longer
-	// than 256 or so, even if the pattern would match files whose names are short enough to be legal.
-	// Therefore, as of v1.0.25, there is also a hard limit of MAX_PATH on all these variables.
-	// MSDN confirms this in a vague way: "In the ANSI version of FindFirstFile(), [plpFileName] is
-	// limited to MAX_PATH characters."
-	if (ArgLength(1) >= MAX_PATH) // Checked early to simplify things later below.
-	{
-		// Let ErrorLevel indicate the error.
-		return SetErrorsOrThrow(true, ERROR_BUFFER_OVERFLOW);
-	}
-
-	LONG_OPERATION_INIT
-	int failure_count = 0; // Set default.
-
-	WIN32_FIND_DATA current_file;
-	HANDLE file_search = FindFirstFile(aFilePattern, &current_file);
-	if (file_search == INVALID_HANDLE_VALUE) // No matching files found.
-	{
-		g->LastError = GetLastError(); // Probably (but not necessarily) ERROR_FILE_NOT_FOUND.
-		return g_ErrorLevel->Assign(0); // Deleting a wildcard pattern that matches zero files is a success.
-	}
-
-	// Otherwise:
-	TCHAR file_path[MAX_PATH];
-	_tcscpy(file_path, aFilePattern); // Above has already confirmed this won't overflow.
-
-	// Remove the filename and/or wildcard part.   But leave the trailing backslash on it for
-	// consistency with below:
-	size_t file_path_length;
-	LPTSTR last_backslash = _tcsrchr(file_path, '\\');
-	if (last_backslash)
-	{
-		*(last_backslash + 1) = '\0'; // i.e. retain the trailing backslash.
-		file_path_length = _tcslen(file_path);
-	}
-	else // Use current working directory, e.g. if user specified only *.*
-	{
-		*file_path = '\0';
-		file_path_length = 0;
-	}
-
-	LPTSTR append_pos = file_path + file_path_length; // For performance, copy in the unchanging part only once.  This is where the changing part gets appended.
-	size_t space_remaining = _countof(file_path) - file_path_length - 1; // Space left in file_path for the changing part.
-
-	g->LastError = 0; // Set default. Overridden only when a failure occurs.
-
-	do
-	{
-		// Since other script threads can interrupt during LONG_OPERATION_UPDATE, it's important that
-		// this command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes
-		// possible. This is because an interrupting thread usually changes the values to something
-		// inappropriate for this thread.
-		LONG_OPERATION_UPDATE
-		if (current_file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) // skip any matching directories.
-			continue;
-		if (_tcslen(current_file.cFileName) > space_remaining)
-		{
-			// v1.0.45.03: Don't even try to operate upon truncated filenames in case they accidentally
-			// match the name of a real/existing file.
-			g->LastError = ERROR_BUFFER_OVERFLOW;
-			++failure_count;
-		}
-		else
-		{
-			_tcscpy(append_pos, current_file.cFileName); // Above has ensured this won't overflow.
-			if (!DeleteFile(file_path))
-			{
-				g->LastError = GetLastError();
-				++failure_count;
-			}
-		}
-	} while (FindNextFile(file_search, &current_file));
-	FindClose(file_search);
-
-	return SetErrorLevelOrThrowInt(failure_count); // i.e. indicate success if there were no failures.
+	FilePatternApply(aFilePattern, FILE_LOOP_FILES_ONLY, false, FileDeleteCallback, NULL);
+	return g->ThrownToken ? FAIL : OK;
 }
 
 
@@ -8380,16 +8312,84 @@ BIF_DECL(BIF_FileGetAttrib)
 
 
 
+BOOL FileSetAttribCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
+struct FileSetAttribData
+{
+	DWORD and_mask, xor_mask;
+};
+
 int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
 	, bool aDoRecurse, bool aCalledRecursively)
 // Returns the number of files and folders that could not be changed due to an error.
+{
+	// Convert the attribute string to three bit-masks: add, remove and toggle.
+	FileSetAttribData attrib;
+	DWORD mask;
+	int op = 0;
+	attrib.and_mask = 0xFFFFFFFF; // Set default: keep all bits.
+	attrib.xor_mask = 0; // Set default: affect none.
+	for (LPTSTR cp = aAttributes; *cp; ++cp)
+	{
+		switch (ctoupper(*cp))
+		{
+		case '+':
+		case '-':
+		case '^':
+			op = *cp;
+		default:
+			continue;
+		// Note that D (directory) and C (compressed) are currently not supported:
+		case 'R': mask = FILE_ATTRIBUTE_READONLY; break;
+		case 'A': mask = FILE_ATTRIBUTE_ARCHIVE; break;
+		case 'S': mask = FILE_ATTRIBUTE_SYSTEM; break;
+		case 'H': mask = FILE_ATTRIBUTE_HIDDEN; break;
+		// N: Docs say it's valid only when used alone.  But let the API handle it if this is not so.
+		case 'N': mask = FILE_ATTRIBUTE_NORMAL; break;
+		case 'O': mask = FILE_ATTRIBUTE_OFFLINE; break;
+		case 'T': mask = FILE_ATTRIBUTE_TEMPORARY; break;
+		}
+		switch (op)
+		{
+		case '+':
+			attrib.and_mask &= ~mask; // Reset bit to 0.
+			attrib.xor_mask |= mask; // Set bit to 1.
+			break;
+		case '-':
+			attrib.and_mask &= ~mask; // Reset bit to 0.
+			attrib.xor_mask &= ~mask; // Override any prior + or ^.
+			break;
+		case '^':
+			attrib.xor_mask ^= mask; // Toggle bit.  ^= vs |= to invert any prior + or ^.
+			// Leave and_mask as is, so any prior + or - will be inverted.
+			break;
+		}
+	}
+	return FilePatternApply(aFilePattern, aOperateOnFolders, aDoRecurse, FileSetAttribCallback, &attrib);
+}
+
+BOOL FileSetAttribCallback(LPTSTR file_path, WIN32_FIND_DATA &current_file, void *aCallbackData)
+{
+	FileSetAttribData &attrib = *(FileSetAttribData *)aCallbackData;
+	DWORD file_attrib = ((current_file.dwFileAttributes & attrib.and_mask) ^ attrib.xor_mask);
+	if (!SetFileAttributes(file_path, file_attrib))
+	{
+		g->LastError = GetLastError();
+		return FALSE;
+	}
+	return TRUE;
+}
+
+
+
+int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
+	, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData
+	, bool aCalledRecursively)
 {
 	if (!aCalledRecursively)  // i.e. Only need to do this if we're not called by ourself:
 	{
 		if (!*aFilePattern)
 		{
-			g->LastError = ERROR_INVALID_PARAMETER;
-			SetErrorLevelOrThrow();
+			SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
 			return 0;
 		}
 		if (aOperateOnFolders == FILE_LOOP_INVALID) // In case runtime dereference of a var was an invalid value.
@@ -8399,17 +8399,9 @@ int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeTyp
 
 	if (_tcslen(aFilePattern) >= MAX_PATH) // Checked early to simplify other things below.
 	{
-		g->LastError = ERROR_BUFFER_OVERFLOW;
-		SetErrorLevelOrThrow();
+		SetErrorsOrThrow(true, ERROR_BUFFER_OVERFLOW);
 		return 0;
 	}
-
-	// Related to the comment at the top: Since the script subroutine that resulted in the call to
-	// this function can be interrupted during our MsgSleep(), make a copy of any params that might
-	// currently point directly to the deref buffer.  This is done because their contents might
-	// be overwritten by the interrupting subroutine:
-	TCHAR attributes[64];
-	tcslcpy(attributes, aAttributes, _countof(attributes));
 
 	// Testing shows that the ANSI version of FindFirstFile() will not accept a path+pattern longer
 	// than 256 or so, even if the pattern would match files whose names are short enough to be legal.
@@ -8448,10 +8440,6 @@ int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeTyp
 		// Since no wildcards, always operate on this single item even if it's a folder.
 		aOperateOnFolders = FILE_LOOP_FILES_AND_FOLDERS;
 
-	LPTSTR cp;
-	enum attrib_modes {ATTRIB_MODE_NONE, ATTRIB_MODE_ADD, ATTRIB_MODE_REMOVE, ATTRIB_MODE_TOGGLE};
-	attrib_modes mode = ATTRIB_MODE_NONE;
-
 	LONG_OPERATION_INIT
 	int failure_count = 0;
 	WIN32_FIND_DATA current_file;
@@ -8471,7 +8459,7 @@ int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeTyp
 			{
 				if (current_file.cFileName[0] == '.' && (!current_file.cFileName[1]    // Relies on short-circuit boolean order.
 					|| current_file.cFileName[1] == '.' && !current_file.cFileName[2]) //
-					// Regardless of whether this folder will be recursed into, this folder's own attributes
+					// Regardless of whether this folder will be recursed into, this folder
 					// will not be affected when the mode is files-only:
 					|| aOperateOnFolders == FILE_LOOP_FILES_ONLY)
 					continue; // Never operate upon or recurse into these.
@@ -8490,79 +8478,11 @@ int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeTyp
 			}
 			// Otherwise, make file_path be the filespec of the file to operate upon:
 			_tcscpy(append_pos, current_file.cFileName); // Above has ensured this won't overflow.
-
-			for (cp = attributes; *cp; ++cp)
-			{
-				switch (ctoupper(*cp))
-				{
-				case '+': mode = ATTRIB_MODE_ADD; break;
-				case '-': mode = ATTRIB_MODE_REMOVE; break;
-				case '^': mode = ATTRIB_MODE_TOGGLE; break;
-				// Note that D (directory) and C (compressed) are currently not supported:
-				case 'R':
-					if (mode == ATTRIB_MODE_ADD)
-						current_file.dwFileAttributes |= FILE_ATTRIBUTE_READONLY;
-					else if (mode == ATTRIB_MODE_REMOVE)
-						current_file.dwFileAttributes &= ~FILE_ATTRIBUTE_READONLY;
-					else if (mode == ATTRIB_MODE_TOGGLE)
-						current_file.dwFileAttributes ^= FILE_ATTRIBUTE_READONLY;
-					break;
-				case 'A':
-					if (mode == ATTRIB_MODE_ADD)
-						current_file.dwFileAttributes |= FILE_ATTRIBUTE_ARCHIVE;
-					else if (mode == ATTRIB_MODE_REMOVE)
-						current_file.dwFileAttributes &= ~FILE_ATTRIBUTE_ARCHIVE;
-					else if (mode == ATTRIB_MODE_TOGGLE)
-						current_file.dwFileAttributes ^= FILE_ATTRIBUTE_ARCHIVE;
-					break;
-				case 'S':
-					if (mode == ATTRIB_MODE_ADD)
-						current_file.dwFileAttributes |= FILE_ATTRIBUTE_SYSTEM;
-					else if (mode == ATTRIB_MODE_REMOVE)
-						current_file.dwFileAttributes &= ~FILE_ATTRIBUTE_SYSTEM;
-					else if (mode == ATTRIB_MODE_TOGGLE)
-						current_file.dwFileAttributes ^= FILE_ATTRIBUTE_SYSTEM;
-					break;
-				case 'H':
-					if (mode == ATTRIB_MODE_ADD)
-						current_file.dwFileAttributes |= FILE_ATTRIBUTE_HIDDEN;
-					else if (mode == ATTRIB_MODE_REMOVE)
-						current_file.dwFileAttributes &= ~FILE_ATTRIBUTE_HIDDEN;
-					else if (mode == ATTRIB_MODE_TOGGLE)
-						current_file.dwFileAttributes ^= FILE_ATTRIBUTE_HIDDEN;
-					break;
-				case 'N':  // Docs say it's valid only when used alone.  But let the API handle it if this is not so.
-					if (mode == ATTRIB_MODE_ADD)
-						current_file.dwFileAttributes |= FILE_ATTRIBUTE_NORMAL;
-					else if (mode == ATTRIB_MODE_REMOVE)
-						current_file.dwFileAttributes &= ~FILE_ATTRIBUTE_NORMAL;
-					else if (mode == ATTRIB_MODE_TOGGLE)
-						current_file.dwFileAttributes ^= FILE_ATTRIBUTE_NORMAL;
-					break;
-				case 'O':
-					if (mode == ATTRIB_MODE_ADD)
-						current_file.dwFileAttributes |= FILE_ATTRIBUTE_OFFLINE;
-					else if (mode == ATTRIB_MODE_REMOVE)
-						current_file.dwFileAttributes &= ~FILE_ATTRIBUTE_OFFLINE;
-					else if (mode == ATTRIB_MODE_TOGGLE)
-						current_file.dwFileAttributes ^= FILE_ATTRIBUTE_OFFLINE;
-					break;
-				case 'T':
-					if (mode == ATTRIB_MODE_ADD)
-						current_file.dwFileAttributes |= FILE_ATTRIBUTE_TEMPORARY;
-					else if (mode == ATTRIB_MODE_REMOVE)
-						current_file.dwFileAttributes &= ~FILE_ATTRIBUTE_TEMPORARY;
-					else if (mode == ATTRIB_MODE_TOGGLE)
-						current_file.dwFileAttributes ^= FILE_ATTRIBUTE_TEMPORARY;
-					break;
-				}
-			}
-
-			if (!SetFileAttributes(file_path, current_file.dwFileAttributes))
-			{
-				g->LastError = GetLastError();
+			//
+			// This is the part that actually does something to the file:
+			if (!aCallback(file_path, current_file, aCallbackData))
 				++failure_count;
-			}
+			//
 		} while (FindNextFile(file_search, &current_file));
 
 		FindClose(file_search);
@@ -8600,7 +8520,10 @@ int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeTyp
 				// of temp.txt both in C:\Temp and any subdirectories it might contain:
 				_stprintf(append_pos, _T("%s\\%s") // Above has ensured this won't overflow.
 					, current_file.cFileName, naked_filename_or_pattern);
-				failure_count += FileSetAttrib(attributes, file_path, aOperateOnFolders, aDoRecurse, true);
+				//
+				// Apply the callback to files in this subdirectory:
+				failure_count += FilePatternApply(file_path, aOperateOnFolders, aDoRecurse, aCallback, aCallbackData, true);
+				//
 			} while (FindNextFile(file_search, &current_file));
 			FindClose(file_search);
 		} // if (file_search != INVALID_HANDLE_VALUE)
@@ -8651,40 +8574,27 @@ BIF_DECL(BIF_FileGetTime)
 
 
 
+BOOL FileSetTimeCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
+struct FileSetTimeData
+{
+	FILETIME Time;
+	TCHAR WhichTime;
+};
+
 int Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
 	, FileLoopModeType aOperateOnFolders, bool aDoRecurse, bool aCalledRecursively)
 // Returns the number of files and folders that could not be changed due to an error.
-// Current limitation: It will not recurse into subfolders unless their names also match
-// aFilePattern.
 {
-	if (!aCalledRecursively)  // i.e. Only need to do this if we're not called by ourself:
-	{
-		if (!*aFilePattern)
-		{
-			LineError(ERR_PARAM2_REQUIRED);
-			return 0;
-		}
-		if (aOperateOnFolders == FILE_LOOP_INVALID) // In case runtime dereference of a var was an invalid value.
-			aOperateOnFolders = FILE_LOOP_FILES_ONLY;  // Set default.
-		g->LastError = 0; // Set default. Overridden only when a failure occurs.
-	}
-
-	if (_tcslen(aFilePattern) >= MAX_PATH) // Checked early to simplify other things below.
-	{
-		SetErrorsOrThrow(true, ERROR_BUFFER_OVERFLOW);
-		return 0;
-	}
-
 	// Related to the comment at the top: Since the script subroutine that resulted in the call to
 	// this function can be interrupted during our MsgSleep(), make a copy of any params that might
 	// currently point directly to the deref buffer.  This is done because their contents might
 	// be overwritten by the interrupting subroutine:
 	TCHAR yyyymmdd[64]; // Even do this one since its value is passed recursively in calls to self.
 	tcslcpy(yyyymmdd, aYYYYMMDD, _countof(yyyymmdd));
-	TCHAR file_pattern[MAX_PATH];
-	_tcscpy(file_pattern, aFilePattern); // An earlier check has ensured this won't overflow.
 
-	FILETIME ft, ftUTC;
+	FileSetTimeData callbackData;
+	callbackData.WhichTime = aWhichTime;
+	FILETIME ft;
 	if (*yyyymmdd)
 	{
 		// Convert the arg into the time struct as local (non-UTC) time:
@@ -8694,171 +8604,53 @@ int Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
 			return 0;
 		}
 		// Convert from local to UTC:
-		if (!LocalFileTimeToFileTime(&ft, &ftUTC))
+		if (!LocalFileTimeToFileTime(&ft, &callbackData.Time))
 		{
 			SetErrorsOrThrow(true);
 			return 0;
 		}
 	}
 	else // User wants to use the current time (i.e. now) as the new timestamp.
-		GetSystemTimeAsFileTime(&ftUTC);
+		GetSystemTimeAsFileTime(&callbackData.Time);
 
-	// This following section is very similar to that in FileSetAttrib and FileDelete:
-	TCHAR file_path[MAX_PATH]; // Giving +3 extra for "*.*" seems fairly pointless because any files that actually need that extra room would fail to be retrieved by FindFirst/Next due to their inability to support paths much over 256.
-	_tcscpy(file_path, aFilePattern); // An earlier check has ensured this won't overflow.
+	return FilePatternApply(aFilePattern, aOperateOnFolders, aDoRecurse, FileSetTimeCallback, &callbackData);
+}
 
-	size_t file_path_length; // The length of just the path portion of the filespec.
-	LPTSTR last_backslash = _tcsrchr(file_path, '\\');
-	if (last_backslash)
-	{
-		// Remove the filename and/or wildcard part.   But leave the trailing backslash on it for
-		// consistency with below:
-		*(last_backslash + 1) = '\0';
-		file_path_length = _tcslen(file_path);
-	}
-	else // Use current working directory, e.g. if user specified only *.*
-	{
-		*file_path = '\0';
-		file_path_length = 0;
-	}
-	LPTSTR append_pos = file_path + file_path_length; // For performance, copy in the unchanging part only once.  This is where the changing part gets appended.
-	size_t space_remaining = _countof(file_path) - file_path_length - 1; // Space left in file_path for the changing part.
-
-	// For use with aDoRecurse, get just the naked file name/pattern:
-	LPTSTR naked_filename_or_pattern = _tcsrchr(file_pattern, '\\');
-	if (naked_filename_or_pattern)
-		++naked_filename_or_pattern;
-	else
-		naked_filename_or_pattern = file_pattern;
-
-	if (!StrChrAny(naked_filename_or_pattern, _T("?*")))
-		// Since no wildcards, always operate on this single item even if it's a folder.
-		aOperateOnFolders = FILE_LOOP_FILES_AND_FOLDERS;
-
+BOOL FileSetTimeCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData)
+{
 	HANDLE hFile;
-	LONG_OPERATION_INIT
-	int failure_count = 0;
-	WIN32_FIND_DATA current_file;
-	HANDLE file_search = FindFirstFile(file_pattern, &current_file);
-
-	if (file_search != INVALID_HANDLE_VALUE)
+	// Open existing file.
+	// FILE_FLAG_NO_BUFFERING might improve performance because all we're doing is
+	// changing one of the file's attributes.  FILE_FLAG_BACKUP_SEMANTICS must be
+	// used, otherwise changing the time of a directory under NT and beyond will
+	// not succeed.  Win95 (not sure about Win98/Me) does not support this, but it
+	// should be harmless to specify it even if the OS is Win95:
+	hFile = CreateFile(aFilename, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE
+		, (LPSECURITY_ATTRIBUTES)NULL, OPEN_EXISTING
+		, FILE_FLAG_NO_BUFFERING | FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	if (hFile == INVALID_HANDLE_VALUE)
 	{
-		do
-		{
-			// Since other script threads can interrupt during LONG_OPERATION_UPDATE, it's important that
-			// this command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes
-			// possible. This is because an interrupting thread usually changes the values to something
-			// inappropriate for this thread.
-			LONG_OPERATION_UPDATE
+		g->LastError = GetLastError();
+		return FALSE;
+	}
 
-			if (current_file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-			{
-				if (current_file.cFileName[0] == '.' && (!current_file.cFileName[1]    // Relies on short-circuit boolean order.
-					|| current_file.cFileName[1] == '.' && !current_file.cFileName[2]) //
-					// Regardless of whether this folder will be recursed into, this folder's own timestamp
-					// will not be affected when the mode is files-only:
-					|| aOperateOnFolders == FILE_LOOP_FILES_ONLY)
-					continue; // Never operate upon or recurse into these.
-			}
-			else // It's a file, not a folder.
-				if (aOperateOnFolders == FILE_LOOP_FOLDERS_ONLY)
-					continue;
-
-			if (_tcslen(current_file.cFileName) > space_remaining)
-			{
-				// v1.0.45.03: Don't even try to operate upon truncated filenames in case they accidentally
-				// match the name of a real/existing file.
-				g->LastError = ERROR_BUFFER_OVERFLOW;
-				++failure_count;
-				continue;
-			}
-			// Otherwise, make file_path be the filespec of the file to operate upon:
-			_tcscpy(append_pos, current_file.cFileName); // Above has ensured this won't overflow.
-
-			// Open existing file.  Uses CreateFile() rather than OpenFile for an expectation
-			// of greater compatibility for all files, and folder support too.
-			// FILE_FLAG_NO_BUFFERING might improve performance because all we're doing is
-			// changing one of the file's attributes.  FILE_FLAG_BACKUP_SEMANTICS must be
-			// used, otherwise changing the time of a directory under NT and beyond will
-			// not succeed.  Win95 (not sure about Win98/Me) does not support this, but it
-			// should be harmless to specify it even if the OS is Win95:
-			hFile = CreateFile(file_path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE
-				, (LPSECURITY_ATTRIBUTES)NULL, OPEN_EXISTING
-				, FILE_FLAG_NO_BUFFERING | FILE_FLAG_BACKUP_SEMANTICS, NULL);
-			if (hFile == INVALID_HANDLE_VALUE)
-			{
-				g->LastError = GetLastError();
-				++failure_count;
-				continue;
-			}
-
-			switch (ctoupper(aWhichTime))
-			{
-			case 'C': // File's creation time.
-				if (!SetFileTime(hFile, &ftUTC, NULL, NULL))
-				{
-					g->LastError = GetLastError();
-					++failure_count;
-				}
-				break;
-			case 'A': // File's last access time.
-				if (!SetFileTime(hFile, NULL, &ftUTC, NULL))
-				{
-					g->LastError = GetLastError();
-					++failure_count;
-				}
-				break;
-			default:  // 'M', unspecified, or some other value.  Use the file's modification time.
-				if (!SetFileTime(hFile, NULL, NULL, &ftUTC))
-				{
-					g->LastError = GetLastError();
-					++failure_count;
-				}
-			}
-
-			CloseHandle(hFile);
-		} while (FindNextFile(file_search, &current_file));
-
-		FindClose(file_search);
-	} // if (file_search != INVALID_HANDLE_VALUE)
-
-	// This section is identical to that in FileSetAttrib() except for the recursive function
-	// call itself, so see comments there for details:
-	if (aDoRecurse && space_remaining > 2) // The space_remaining check ensures there's enough room to append "*.*" (if not, just avoid recursing into it due to rarity).
+	BOOL success;
+	FileSetTimeData &a = *(FileSetTimeData *)aCallbackData;
+	switch (ctoupper(a.WhichTime))
 	{
-		// Testing shows that the ANSI version of FindFirstFile() will not accept a path+pattern longer
-		// than 256 or so, even if the pattern would match files whose names are short enough to be legal.
-		// Therefore, as of v1.0.25, there is also a hard limit of MAX_PATH on all these variables.
-		// MSDN confirms this in a vague way: "In the ANSI version of FindFirstFile(), [plpFileName] is
-		// limited to MAX_PATH characters."
-		_tcscpy(append_pos, _T("*.*")); // Above has ensured this won't overflow.
-		file_search = FindFirstFile(file_path, &current_file);
-
-		if (file_search != INVALID_HANDLE_VALUE)
-		{
-			size_t pattern_length = _tcslen(naked_filename_or_pattern);
-			do
-			{
-				LONG_OPERATION_UPDATE
-				if (!(current_file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-					|| current_file.cFileName[0] == '.' && (!current_file.cFileName[1]     // Relies on short-circuit boolean order.
-						|| current_file.cFileName[1] == '.' && !current_file.cFileName[2]) //
-					// v1.0.45.03: Skip over folders whose full-path-names are too long to be supported by the ANSI
-					// versions of FindFirst/FindNext.  Without this fix, it might be possible for infinite recursion
-					// to occur (see PerformLoop() for more comments).
-					|| pattern_length + _tcslen(current_file.cFileName) >= space_remaining) // >= vs. > to reserve 1 for the backslash to be added between cFileName and naked_filename_or_pattern.
-					continue;
-				_stprintf(append_pos, _T("%s\\%s") // Above has ensured this won't overflow.
-					, current_file.cFileName, naked_filename_or_pattern);
-				failure_count += FileSetTime(yyyymmdd, file_path, aWhichTime, aOperateOnFolders, aDoRecurse, true);
-			} while (FindNextFile(file_search, &current_file));
-			FindClose(file_search);
-		} // if (file_search != INVALID_HANDLE_VALUE)
-	} // if (aDoRecurse)
-
-	if (!aCalledRecursively) // i.e. Only need to do this if we're returning to top-level caller:
-		SetErrorLevelOrThrowInt(failure_count); // i.e. indicate success if there were no failures.
-	return failure_count;
+	case 'C': // File's creation time.
+		success = SetFileTime(hFile, &a.Time, NULL, NULL);
+		break;
+	case 'A': // File's last access time.
+		success = SetFileTime(hFile, NULL, &a.Time, NULL);
+		break;
+	default:  // 'M', unspecified, or some other value.  Use the file's modification time.
+		success = SetFileTime(hFile, NULL, NULL, &a.Time);
+	}
+	if (!success)
+		g->LastError = GetLastError();
+	CloseHandle(hFile);
+	return success;
 }
 
 
@@ -10279,7 +10071,8 @@ VarSizeType BIV_LoopFilePath(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_LoopFileFullPath(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR *unused, buf[MAX_PATH] = _T(""); // Set default.
+	TCHAR *unused, buf[MAX_PATH];
+	*buf = '\0'; // Set default.
 	if (g->mLoopFile)
 	{
 		// GetFullPathName() is done in addition to ConvertFilespecToCorrectCase() for the following reasons:
@@ -10317,7 +10110,8 @@ VarSizeType BIV_LoopFileShortPath(LPTSTR aBuf, LPTSTR aVarName)
 // But to detect if that short name is really a long name, A_LoopFileShortPath could be checked
 // and if it's blank, there is no short name available.
 {
-	TCHAR buf[MAX_PATH] = _T(""); // Set default.
+	TCHAR buf[MAX_PATH];
+	*buf = '\0'; // Set default.
 	DWORD length = 0;        //
 	if (g->mLoopFile)
 		// The loop handler already prepended the script's directory in cFileName for us:
@@ -10381,7 +10175,8 @@ VarSizeType BIV_LoopFileSize(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_LoopRegType(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR buf[MAX_PATH] = _T(""); // Set default.
+	TCHAR buf[MAX_PATH];
+	*buf = '\0'; // Set default.
 	if (g->mLoopRegItem)
 		Line::RegConvertValueType(buf, MAX_PATH, g->mLoopRegItem->type);
 	if (aBuf)
@@ -13895,7 +13690,9 @@ BIF_DECL(BIF_GetKeyName)
 	sc_type sc = TextToSC(key);
 	if (!sc)
 	{
-		if (LPTSTR cp = tcscasestr(key, _T("SC"))) // TextToSC() supports SCxxx but not VKxxSCyyy.
+		LPTSTR cp;
+		if (  (cp = tcscasestr(key, _T("SC"))) // TextToSC() supports SCxxx but not VKxxSCyyy.
+			&& isdigit(cp[2])  ) // Fixed in v1.1.25.03 to rule out key names containng "sc", like "Esc".
 			sc = (sc_type)_tcstoul(cp + 2, NULL, 16);
 		else
 			sc = vk_to_sc(vk);

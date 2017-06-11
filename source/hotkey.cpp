@@ -2445,7 +2445,8 @@ void Hotstring::DoReplace(LPARAM alParam)
 	global_struct &g = *::g; // Reduces code size and may improve performance.
 	// The below buffer allows room for the longest replacement text plus MAX_HOTSTRING_LENGTH for the
 	// optional backspaces, +10 for the possible presence of {Raw} and a safety margin.
-	TCHAR SendBuf[LINE_SIZE + MAX_HOTSTRING_LENGTH + 10] = _T("");
+	TCHAR SendBuf[LINE_SIZE + MAX_HOTSTRING_LENGTH + 10];
+	*SendBuf = '\0';
 	LPTSTR start_of_replacement = SendBuf;  // Set default.
 
 	if (mDoBackspace)
