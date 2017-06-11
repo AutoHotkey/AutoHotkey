@@ -52,6 +52,22 @@ LPTSTR GuiControlType::GetTypeName()
 	return sTypeNames[type];
 }
 
+LPTSTR GuiControlType::Type()
+// Called by the Type() built-in function.
+// This is the class name, not the Type string passed to Gui.Add().
+{
+	// A static buf is used vs. having caller pass buf because most classes can just
+	// return a static string (doing it this way reduces code size significantly).
+	// The string is copied into another buffer by our caller's caller (usually
+	// ExpandExpression) before doing anything else.
+	static TCHAR sBuf[16] // Enough for "GuiDropDownList", although it's currently "GuiDDL" ("GuiStatusBar" is the next longest).
+		= _T("Gui"); // Initialized once for all.
+	// It seems more correct to include the control type in the class/type name,
+	// since the available methods differ by control type (Add/SetParts/etc.).
+	_tcscpy(sBuf + 3, GetTypeName());
+	return sBuf;
+}
+
 GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
 {
 	static TypeAttribs sAttrib[] = { 0,

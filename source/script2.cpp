@@ -16371,7 +16371,7 @@ BIF_DECL(BIF_Type)
 		// Default for maintainability.  Could be SYM_MISSING, but it would have to be intentional: %'type'%(,).
 		type = _T("");
 	}
-	_f_return(type);
+	_f_return_p(type);
 }
 
 

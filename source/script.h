@@ -2254,7 +2254,7 @@ struct GuiControlType : public ObjectBase
 	void Dispose(); // Called by GuiType::Dispose().
 
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	IObject_Type_Impl("GuiControl")
+	LPTSTR Type();
 };
 
 struct GuiControlOptionsType
