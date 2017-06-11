@@ -945,7 +945,7 @@ inline void global_init(global_struct &g)
 	g.StringCaseSense = SCS_INSENSITIVE;  // AutoIt2 default, and it does seem best.
 	g.StoreCapslockMode = true;  // AutoIt2 (and probably 3's) default, and it makes a lot of sense.
 	g.SendLevel = 0;
-	g.ListLinesIsEnabled = false;
+	g.ListLinesIsEnabled = true;
 	g.Encoding = CP_ACP;
 }
 
