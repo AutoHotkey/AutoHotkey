@@ -207,12 +207,8 @@ BIF_DECL(Op_ObjNew)
 		// documentation) or built-in, so make sure the return value, if any, is freed:
 		aResultToken.Free();
 		// Reset to defaults for __New, invoked below.
-		aResultToken.mem_to_free = NULL;
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
-		aResultToken.marker_length = -1;
-		aResultToken.buf = buf;
-		if (result == FAIL || result == EARLY_EXIT)
+		aResultToken.InitResult(buf);
+		if (result == FAIL || result == EARLY_EXIT) // Checked only after Free() and InitResult() as caller might expect mem_to_free == NULL.
 		{
 			new_object->Release();
 			aParam[0] = class_token; // Restore it to original caller-supplied value.
