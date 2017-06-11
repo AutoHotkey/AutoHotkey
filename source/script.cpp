@@ -12550,22 +12550,26 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 			, mArg[2].text);
 	else
 	{
-		int i = 0;
+		int first = 0;
 		if (mActionType == ACT_FUNC)
 			// Before PreparseExpressions(), mAttribute is NULL and mArg contains the function name.
 			// After PreparseExpressions(), mAttribute points to the Func and mArg excludes the function name.
-			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), mAttribute ? ((Func *)mAttribute)->mName : mArg[i++].text);
+			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), mAttribute ? ((Func *)mAttribute)->mName : mArg[first++].text);
 		else if (mActionType == ACT_METHOD)
-			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s.%s"), *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName, mArg[1].text), i = 2;
+			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s.%s"), *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName, mArg[1].text), first = 2;
 		else
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), g_act[mActionType].Name);
-		for ( ; i < mArgc; ++i)
+		for (int i = first; i < mArgc; ++i)
+		{
+			bool quote = !mArg[i].is_expression && !(mArg[i].postfix && mArg[i].postfix->symbol != SYM_STRING);
 			// This method a little more efficient than using snprintfcat().
 			// Also, always use the arg's text for input and output args whose variables haven't
 			// been resolved at load-time, since the text has everything in it we want to display
 			// and thus there's no need to "resolve" dynamic variables here (e.g. array%i%).
-			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T(",%s"), (mArg[i].type != ARG_TYPE_NORMAL && !*mArg[i].text)
-				? VAR(mArg[i])->mName : mArg[i].text);
+			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, quote ? _T("%s \"%s\"") : _T("%s %s")
+				, i == first ? _T("") : _T(",")
+				, (mArg[i].type != ARG_TYPE_NORMAL && !*mArg[i].text) ? VAR(mArg[i])->mName : mArg[i].text);
+		}
 	}
 	if (aElapsed && !aLineWasResumed)
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T(" (%0.2f)"), (float)aElapsed / 1000.0);
