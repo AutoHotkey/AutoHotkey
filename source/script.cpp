@@ -7820,7 +7820,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 //		, 12             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 16             // SYM_OR
 		, 20             // SYM_AND
-		, 25             // SYM_LOWNOT (the word "NOT": the low precedence version of logical-not).  HAS AN ODD NUMBER to indicate right-to-left evaluation order so that things like "not not var" are supports (which can be used to convert a variable into a pure 1/0 boolean value).
+//		, 25             // Reserved for SYM_LOWNOT.
 //		, 26             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 28, 28, 28	 // SYM_IS, SYM_IN, SYM_CONTAINS
 		, 30, 30, 30     // SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL (lower prec. than the below so that "x < 5 = var" means "result of comparison is the boolean value in var".
@@ -7835,6 +7835,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 58, 58         // SYM_ADD, SYM_SUBTRACT
 		, 62, 62, 62     // SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
 		, 72             // SYM_POWER (see note below).  Associativity kept as left-to-right for backward compatibility (e.g. 2**2**3 is 4**3=64 not 2**8=256).
+		, 25             // SYM_LOWNOT (the word "NOT": the low precedence version of logical-not).  HAS AN ODD NUMBER to indicate right-to-left evaluation order so that things like "not not var" are supports (which can be used to convert a variable into a pure 1/0 boolean value).
 		, 67,67,67,67,67 // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT, SYM_ADDRESS
 		// NOTE: THE ABOVE MUST BE AN ODD NUMBER to indicate right-to-left evaluation order, which was added in v1.0.46 to support consecutive unary operators such as !*var !!var (!!var can be used to convert a value into a pure 1/0 boolean).
 //		, 68             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.

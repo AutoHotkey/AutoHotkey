@@ -168,7 +168,6 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_OR, SYM_AND // MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE ABOVE for the range checks below.
 #define IS_SHORT_CIRCUIT_OPERATOR(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_THEN) // Excludes SYM_IFF_ELSE, which acts as a simple jump after the THEN branch is evaluated.
 #define SYM_USES_CIRCUIT_TOKEN(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_ELSE)
-	, SYM_LOWNOT  // LOWNOT is the word "not", the low precedence counterpart of !
 	, SYM_IS, SYM_IN, SYM_CONTAINS
 	, SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL // =, ==, <> ... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
 	, SYM_GT, SYM_LT, SYM_GTOE, SYM_LTOE  // >, <, >=, <= ... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
@@ -184,12 +183,13 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_ADD, SYM_SUBTRACT
 	, SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
 	, SYM_POWER
+	, SYM_LOWNOT  // LOWNOT is the word "not", the low precedence counterpart of !
 	, SYM_NEGATIVE, SYM_POSITIVE, SYM_HIGHNOT, SYM_BITNOT, SYM_ADDRESS  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
-#define SYM_OVERRIDES_POWER_ON_STACK(symbol) (((symbol) >= SYM_NEGATIVE && (symbol) <= SYM_ADDRESS) || (symbol) == SYM_LOWNOT) // Check lower bound first for short-circuit performance.
+#define SYM_OVERRIDES_POWER_ON_STACK(symbol) ((symbol) >= SYM_LOWNOT && (symbol) <= SYM_ADDRESS) // Check lower bound first for short-circuit performance.
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
 #define SYM_INCREMENT_OR_DECREMENT_IS_PRE(symbol) ((symbol) >= SYM_PRE_INCREMENT) // Caller has verified symbol is an INCREMENT or DECREMENT operator.
 	, SYM_NEW      // new Class()
-#define IS_PREFIX_OPERATOR(symbol) ((symbol) >= SYM_NEGATIVE && (symbol) <= SYM_NEW)
+#define IS_PREFIX_OPERATOR(symbol) ((symbol) >= SYM_LOWNOT && (symbol) <= SYM_NEW)
 	, SYM_FUNC     // A call to a function.
 	, SYM_COUNT    // Must be last because it's the total symbol count for everything above.
 	, SYM_INVALID = SYM_COUNT // Some callers may rely on YIELDS_AN_OPERAND(SYM_INVALID)==false.
