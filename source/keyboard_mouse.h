@@ -256,6 +256,9 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam);
 #define KEY_IGNORE_LEVEL(LEVEL) (KEY_IGNORE_ALL_EXCEPT_MODIFIER - LEVEL)
 #define KEY_IGNORE_MIN KEY_IGNORE_LEVEL(SendLevelMax)
 #define KEY_IGNORE_MAX KEY_IGNORE // There are two extra values above KEY_IGNORE_LEVEL(0)
+// This is used to generate an Alt key-up event for the purpose of changing system state, but having the hook
+// block it from the active window to avoid unwanted side-effects:
+#define KEY_BLOCK_THIS (KEY_IGNORE + 1)
 
 
 // The default in the below is KEY_IGNORE_ALL_EXCEPT_MODIFIER, which causes standard calls to

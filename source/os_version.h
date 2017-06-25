@@ -64,6 +64,7 @@ public:
 #endif
 	bool	IsWinVistaOrLater(void) {return m_bWinVistaOrLater;}// Returns true if WinVista or later (v1.0.48.01)
 	bool	IsWin7OrLater(void) {return m_bWin7OrLater; }		// Returns true if Win7+
+	bool	IsWin10OrLater(void) {return m_dwMajorVersion >= 10;} // Excludes early pre-release builds.
 
 #ifdef CONFIG_WIN9X
 	bool	IsWin95(void) {return m_bWin95;}					// Returns true if 95

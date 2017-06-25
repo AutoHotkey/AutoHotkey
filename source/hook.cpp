@@ -167,6 +167,8 @@ LRESULT CALLBACK LowLevelKeybdProc(int aCode, WPARAM wParam, LPARAM lParam)
 	// purpose of updating modifier and key states:
 	if (event.dwExtraInfo == KEY_PHYS_IGNORE)
 		event.flags &= ~LLKHF_INJECTED;
+	else if (event.dwExtraInfo == KEY_BLOCK_THIS)
+		return TRUE;
 
 	// Make all keybd events physical to try to fool the system into accepting CTRL-ALT-DELETE.
 	// This didn't work, which implies that Ctrl-Alt-Delete is trapped at a lower level than
@@ -2185,8 +2187,20 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			this_key.no_suppress |= NO_SUPPRESS_NEXT_UP_EVENT;
 			return AllowKeyToGoToSystem;
 		}
-		else if (aVK == VK_LMENU || aVK == VK_RMENU)
+		else if ((aVK == VK_LMENU || aVK == VK_RMENU) && !g_os.IsWin10OrLater())
 		{
+			// Fix for v1.1.26.01: Added KEY_BLOCK_THIS to suppress the Alt key-up, which fixes an issue
+			// which could be reproduced as follows:
+			//  - Test with an Alt-blocking hotkey such as LAlt::return or LAlt::LCtrl.
+			//  - Open Notepad and alt-tab away using the other Alt key or a remapping such as LCtrl::LAlt.
+			//  - Reactivate Notepad and note that the keyboard accelerators (underlined letters) are still
+			//    visible in the menus (usually).
+			//  - Press LAlt and the menus are activated once, even though LAlt is supposed to be blocked.
+			// Additionally, a Windows 10 check was added because the original issue this workaround was
+			// intended for doesn't appear to occur on Windows 10 (tested on 10.0.15063).
+			// Testing on XP, Vista and 8.1 showed that the #LAlt issue below only occurred if the key-up
+			// was allowed to pass through to the active window.  It appeared to be a non-issue on Win 10
+			// even when the Alt key-up was passed through.
 			// Fix for v1.0.34: For some reason, the release of the ALT key here causes the Start Menu
 			// to appear instantly for the hotkey #LAlt (and probably #RAlt), even when the hotkey does
 			// nothing other than return.  This seems like an OS quirk since it doesn't conform to any
@@ -2194,9 +2208,9 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// down.  To work around it, send the menu-suppressing Control keystroke here.  Another one
 			// will probably be sent later when the WIN key is physically released, but it seems best
 			// for simplicity and avoidance of side-effects not to make this one prevent that one.
-			if (   (g_modifiersLR_logical & (MOD_LWIN | MOD_RWIN))   // At least one WIN key is down.
-				&& !(g_modifiersLR_logical & (MOD_LSHIFT | MOD_RSHIFT | MOD_LCONTROL | MOD_RCONTROL))   ) // But no SHIFT or CONTROL key is down to help us.
-				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey);
+			//if (   (g_modifiersLR_logical & (MOD_LWIN | MOD_RWIN))   // At least one WIN key is down.
+			//	&& !(g_modifiersLR_logical & (MOD_LSHIFT | MOD_RSHIFT | MOD_LCONTROL | MOD_RCONTROL))   ) // But no SHIFT or CONTROL key is down to help us.
+			//	KeyEvent(KEYDOWNANDUP, g_MenuMaskKey);
 			// Since this is a hotkey that fires on ALT-DOWN and it's a normal (suppressed) hotkey,
 			// send an up-event to "turn off" the OS's low-level handling for the alt key with
 			// respect to having it modify keypresses.  For example, the following hotkeys would
@@ -2204,7 +2218,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// the ALT key is physically down even though it is not logically down:
 			// RAlt::Send f  ; Actually triggers !f, which activates the FILE menu if the active window has one.
 			// RAlt::Send {PgDn}  ; Fails to work because ALT-PgDn usually does nothing.
-			KeyEvent(KEYUP, aVK, aSC);
+			KeyEvent(KEYUP, aVK, aSC, NULL, false, KEY_BLOCK_THIS);
 		}
 	}
 	
