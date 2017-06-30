@@ -5382,21 +5382,22 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 			{
 				// v1.0.46.11: This item appears to be a scientific-notation literal with the OPTIONAL +/- sign PRESENT on the exponent (e.g. 1.0e+001), so check that before checking if it's a variable name.
 				*op_end = orig_char; // Undo the temporary termination.
+				TCHAR *n_end = op_end; // Don't change op_end yet because it might be something like "e+f" rather than a number.
 				do // Skip over the sign and its exponent; e.g. the "+1" in "1.0e+1".  There must be a sign in this particular sci-notation number or we would never have arrived here.
-					++op_end;
-				while (*op_end >= '0' && *op_end <= '9'); // Avoid isdigit() because it sometimes causes a debug assertion failure at: (unsigned)(c + 1) <= 256 (probably only in debug mode), and maybe only when bad data got in it due to some other bug.
-				// No need to do the following because a number can't validly be followed by the ".=" operator:
-				//if (*op_end == '=' && op_end[-1] == '.') // v1.0.46.01: Support .=, but not any use of '.' because that is reserved as a struct/member operator.
-				//	--op_end;
+					++n_end;
+				while (*n_end >= '0' && *n_end <= '9'); // Avoid isdigit() because it sometimes causes a debug assertion failure at: (unsigned)(c + 1) <= 256 (probably only in debug mode), and maybe only when bad data got in it due to some other bug.
 
 				// Double-check it really is a floating-point literal with signed exponent.
-				orig_char = *op_end;
-				*op_end = '\0';
+				TCHAR n_orig_char = *n_end; // Don't change orig_char because it might be needed below if !IsNumeric().
+				*n_end = '\0';
 				if (IsNumeric(op_begin, true, false, true))
 				{
-					*op_end = orig_char;
+					*n_end = n_orig_char;
+					op_end = n_end;
 					continue; // Pure number, which doesn't need any processing at this stage.
 				}
+				*n_end = n_orig_char;
+				*op_end = '\0'; // Temporarily terminate again.
 			}
 			// Since above did not "continue", this is NOT a scientific-notation literal
 			// with +/- sign present, but maybe it's an object access operation such as "x.y".
