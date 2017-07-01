@@ -1546,9 +1546,9 @@ bool IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace = NULL)
 // *aPendingFunctionHasBrace is set to true if a brace is present at the end, or false otherwise.
 // In addition, any open-brace is removed from aBuf in this mode.
 {
-	if (!_tcsnicmp(aBuf, _T("inline "), 7))
+	if (!_tcsnicmp(aBuf, _T("dynamic "), 8))
 	{
-		aBuf += 7;
+		aBuf += 8;
 	}
 
 	LPTSTR action_end = StrChrAny(aBuf, EXPR_ALL_SYMBOLS EXPR_ILLEGAL_CHARS);
@@ -6452,10 +6452,10 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = _tcslen(aFuncName);
 
-	if (!_tcsnicmp(aFuncName, _T("inline "), 7))
+	if (!_tcsnicmp(aFuncName, _T("dynamic "), 8))
 	{
-		aFuncName += 7;
-		aFuncNameLength -= 7;
+		aFuncName += 8;
+		aFuncNameLength -= 8;
 	}
 
 	if (apInsertPos) // L27: Set default for maintainability.
@@ -6567,20 +6567,20 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 // Returns the address of the new function or NULL on failure.
 // The caller must already have verified that this isn't a duplicate function.
 {
-	bool aIsInline = false;
+	bool aIsDynamic = false;
 	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = _tcslen(aFuncName);
 
-	if (!_tcsnicmp(aFuncName, _T("inline "), 7))
+	if (!_tcsnicmp(aFuncName, _T("dynamic "), 7))
 	{
 		if (aClassObject)
 		{
-			ScriptError(_T("Inline is not supported for Methods."), aFuncName);
+			ScriptError(_T("Dynamic function is not supported for Methods."), aFuncName);
 			return NULL;
 		}
-		aIsInline = true;
-		aFuncName += 7;
-		aFuncNameLength -= 7;
+		aIsDynamic = true;
+		aFuncName += 8;
+		aFuncNameLength -= 8;
 	}
 
 	if (aFuncNameLength > MAX_VAR_NAME_LENGTH) // FindFunc(), BIF_OnMessage() and perhaps others rely on this limit being enforced.
@@ -6645,8 +6645,8 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 		// and automatic cleanup of objects in static vars on program exit.
 	}
 	
-	if (aIsInline)
-		the_new_func->mIsInline = true;
+	if (aIsDynamic)
+		the_new_func->mIsDynamic = true;
 	
 	if (mFuncCount == mFuncCountMax)
 	{
