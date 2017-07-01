@@ -1687,6 +1687,7 @@ public:
 	// override in the script.  So mIsBuiltIn should always be used to determine whether the function
 	// is truly built-in, not its name.
 	bool mIsVariadic;
+	bool mIsDynamic;
 
 #define MAX_FUNC_OUTPUT_VAR 7
 	bool ArgIsOutputVar(int aIndex)
@@ -1720,7 +1721,8 @@ public:
 		// would not be significant because the Return command's expression (arg1) must still be evaluated
 		// in case it calls any functions that have side-effects, e.g. "return LogThisError()".
 		Func *prev_func = g->CurrentFunc; // This will be non-NULL when a function is called from inside another function.
-		g->CurrentFunc = this;
+		if (!mIsDynamic)
+			g->CurrentFunc = this;
 		// Although a GOTO that jumps to a position outside of the function's body could be supported,
 		// it seems best not to for these reasons:
 		// 1) The extreme rarity of a legitimate desire to intentionally do so.
@@ -1794,6 +1796,7 @@ public:
 		, mDefaultVarType(VAR_DECLARE_NONE)
 		, mIsBuiltIn(aIsBuiltIn)
 		, mIsVariadic(false)
+		, mIsDynamic(false)
 	{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
