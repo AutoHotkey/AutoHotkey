@@ -124,6 +124,7 @@ EXTERN_G;
 #define SC_NUMPADMULT 0x037
 #define SC_NUMPADSUB 0x04A
 #define SC_NUMPADADD 0x04E
+#define SC_PAUSE 0x045
 
 // Note: A KeyboardProc() (hook) actually receives 0x36 for RSHIFT under both WinXP and Win98se, not 0x136.
 // All the below have been verified to be accurate under Win98se and XP (except rctrl and ralt in XP).

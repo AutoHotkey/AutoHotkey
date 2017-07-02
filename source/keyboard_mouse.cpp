@@ -4261,6 +4261,7 @@ sc_type vk_to_sc(vk_type aVK, bool aReturnSecondary)
 	case VK_RMENU:    sc = SC_RALT; break;
 	case VK_LWIN:     sc = SC_LWIN; break; // Earliest versions of Win95/NT might not support these, so map them manually.
 	case VK_RWIN:     sc = SC_RWIN; break; //
+	case VK_PAUSE:    sc = SC_PAUSE; break; // Added in v1.1.26.01.
 
 	// According to http://support.microsoft.com/default.aspx?scid=kb;en-us;72583
 	// most or all numeric keypad keys cannot be mapped reliably under any OS. The article is
@@ -4314,6 +4315,25 @@ sc_type vk_to_sc(vk_type aVK, bool aReturnSecondary)
 	//case VK_RMENU:
 	//case VK_RCONTROL:
 	//case VK_RSHIFT: // WinXP needs this to be extended for keybd_event() to work properly.
+	// The rest are multimedia keys:
+	case VK_BROWSER_BACK:
+	case VK_BROWSER_FORWARD:
+	case VK_BROWSER_REFRESH:
+	case VK_BROWSER_STOP:
+	case VK_BROWSER_SEARCH:
+	case VK_BROWSER_FAVORITES:
+	case VK_BROWSER_HOME:
+	case VK_VOLUME_MUTE:
+	case VK_VOLUME_DOWN:
+	case VK_VOLUME_UP:
+	case VK_MEDIA_NEXT_TRACK:
+	case VK_MEDIA_PREV_TRACK:
+	case VK_MEDIA_STOP:
+	case VK_MEDIA_PLAY_PAUSE:
+	case VK_LAUNCH_MAIL:
+	case VK_LAUNCH_MEDIA_SELECT:
+	case VK_LAUNCH_APP1:
+	case VK_LAUNCH_APP2:
 		sc |= 0x0100;
 		break;
 
@@ -4357,6 +4377,12 @@ vk_type sc_to_vk(sc_type aSC)
 	case SC_LALT:        return VK_LMENU;
 	case SC_RALT:        return VK_RMENU;
 
+	// It seems worthwhile including these even though the extended-key check below will
+	// handle them if the OS is Vista or later.  Truncating aSC (as would be done below
+	// on Win2k/XP) would give the wrong results.
+	case SC_LWIN:        return VK_LWIN;
+	case SC_RWIN:        return VK_RWIN;
+
 	// Numpad keys require explicit mapping because MapVirtualKey() doesn't support them on all OSes.
 	// See comments in vk_to_sc() for details.
 	case SC_NUMLOCK:     return VK_NUMLOCK;
@@ -4397,18 +4423,32 @@ vk_type sc_to_vk(sc_type aSC)
 	//case SC_NUMPADPGDN:  return VK_NUMPAD3;	
 
 	case SC_APPSKEY:	return VK_APPS; // Added in v1.1.17.00.
+	case SC_PAUSE:      return VK_PAUSE; // Added in v1.1.26.01.
 	}
 
+	if (aSC & 0x100) // Our extended-key flag.
+	{
+		// This section was added in v1.1.26.01 to fix multimedia keys such as Volume_Up.
+		// Passing the 0xE000 extended scan code prefix should work on Vista and up, though
+		// this appears to have not made it into the documentation at MSDN.  Details can be
+		// found in archives of Michael Kaplan's blog (the original blog has been taken down):
+		// https://web.archive.org/web/20070219075710/http://blogs.msdn.com/michkap/archive/2006/08/29/729476.aspx
+		if (UINT vk = MapVirtualKey(0xE000 | (aSC & 0xFF), MAPVK_VSC_TO_VK))
+			return vk;
+		// Since MapVirtualKey's support for 0xE000 isn't properly documented, assume that
+		// it might fail even on Vista or later.  Fall back to the old method in that case.
+		// Testing shows that it always returns 0 on XP.
+	}
 	// Use the OS API call to resolve any not manually set above.  This should correctly
 	// resolve even elements such as SC_INSERT, which is an extended scan code, because
 	// it passes in only the low-order byte which is SC_NUMPADINS.  In the case of SC_INSERT
 	// and similar ones, MapVirtualKey() will return the same vk for both, which is correct.
-	// Only pass the LOBYTE because I think it fails to work properly otherwise.
+	// Only pass the LOBYTE because it fails to work properly otherwise.
 	// Also, DO NOT pass 3 for the 2nd param of MapVirtualKey() because apparently
 	// that is not compatible with Win9x so it winds up returning zero for keys
 	// such as UP, LEFT, HOME, and PGUP (maybe other sorts of keys too).  This
 	// should be okay even on XP because the left/right specific keys have already
 	// been resolved above so don't need to be looked up here (LWIN and RWIN
 	// each have their own VK's so shouldn't be problem for the below call to resolve):
-	return MapVirtualKey((BYTE)aSC, 1);
+	return MapVirtualKey((BYTE)aSC, MAPVK_VSC_TO_VK);
 }
