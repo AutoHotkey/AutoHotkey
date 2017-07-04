@@ -8452,6 +8452,8 @@ unquoted_literal:
 						infix[infix_count].value_double = ATOF(number_buf);
 						break;
 					default:
+						if (*cp == '.')
+							return LineError(ERR_INVALID_DOT, FAIL, cp);
 						// SYM_STRING: either the "key" in "{key: value}" or a syntax error (might be impossible).
 						LPTSTR str = SimpleHeap::Malloc(cp, op_end - cp);
 						if (!str)
