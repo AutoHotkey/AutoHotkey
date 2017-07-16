@@ -2153,12 +2153,18 @@ ResultType Line::PerformWait()
 				// currently active thread is the one that's still waiting for the window).
 				if (g->ListLinesIsEnabled)
 				{
-					sLog[sLogNext] = this;
-					sLogTick[sLogNext++] = start_time; // Store a special value so that Line::LogToText() can report that its "still waiting" from earlier.
-					if (sLogNext >= LINE_LOG_SIZE)
-						sLogNext = 0;
-					// The lines above are the similar to those used in ExecUntil(), so the two should be
-					// maintained together.
+					// ListLines is enabled in this thread, but if it was disabled in the interrupting thread,
+					// the very last log entry will be ours.  In that case, we don't want to duplicate it.
+					int previous_log_index = (sLogNext ? sLogNext : LINE_LOG_SIZE) - 1; // Wrap around if needed (the entry can be NULL in that case).
+					if (sLog[previous_log_index] != this || sLogTick[previous_log_index] != start_time) // The previously logged line was not this one, or it was added by the interrupting thread (different start_time).
+					{
+						sLog[sLogNext] = this;
+						sLogTick[sLogNext++] = start_time; // Store a special value so that Line::LogToText() can report that its "still waiting" from earlier.
+						if (sLogNext >= LINE_LOG_SIZE)
+							sLogNext = 0;
+						// The lines above are the similar to those used in ExecUntil(), so the two should be
+						// maintained together.
+					}
 				}
 			}
 		}
