@@ -2316,6 +2316,8 @@ BOOL CALLBACK ResourceIndexToIdEnumProc(HMODULE hModule, LPCTSTR lpszType, LPTST
 	return TRUE; // Continue
 }
 
+static TCHAR RESOURCE_ID_NOT_FOUND[] = {0};
+
 // L17: Find ID of resource from one-based index. i.e. IconNumber -> resource ID.
 // v1.1.22.05: Return LPTSTR since some (very few) icons have a string ID.
 LPTSTR ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex)
@@ -2323,7 +2325,11 @@ LPTSTR ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex)
 	ResourceIndexToIdEnumData enum_data;
 	enum_data.find_index = aIndex;
 	enum_data.index = 0;
-	enum_data.result = NULL; // Zero is probably not a valid integer ID; I think it would be compiled as "0" (string).
+	// NULL can't be used to indicate "not found", as any value between 0 and 0xFFFF is an
+	// integer ID, including zero, even though some compilers replace it with "0" (string).
+	// (LPTSTR)-1 or "" could be used instead, but this method should be safest, since we
+	// know the API cannot ever return a string at this address:
+	enum_data.result = RESOURCE_ID_NOT_FOUND;
 
 	EnumResourceNames(aModule, aType, &ResourceIndexToIdEnumProc, (LONG_PTR)&enum_data);
 
@@ -2352,7 +2358,8 @@ HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, i
 		// that the pointer returned by LockResource is valid until the *module* containing
 		// the resource is unloaded. Testing seems to indicate that unloading a module indeed
 		// unloads or invalidates any resources it contains.
-		if ((hres = FindResource(hdatafile, group_icon_id, RT_GROUP_ICON))
+		if (group_icon_id != RESOURCE_ID_NOT_FOUND
+			&& (hres = FindResource(hdatafile, group_icon_id, RT_GROUP_ICON))
 			&& (hresdata = LoadResource(hdatafile, hres))
 			&& (presdata = LockResource(hresdata)))
 		{
