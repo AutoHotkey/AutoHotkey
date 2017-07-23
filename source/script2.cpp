@@ -6268,8 +6268,10 @@ BIF_DECL(BIF_Sort)
 	// v1.0.47.05: It simplifies the code a lot to allocate and/or improves understandability to allocate
 	// memory for trailing_crlf_added_temporarily even though technically it's done only to make room to
 	// append the extra CRLF at the end.
-	if (g_SortFunc || trailing_crlf_added_temporarily) // Do this here rather than earlier with the options parsing in case the function-option is present twice (unlikely, but it would be a memory leak due to strdup below).  Doing it here also avoids allocating if it isn't necessary.
+	// v2.0: Never modify the caller's aContents, since it may be a quoted literal string or variable.
+	//if (g_SortFunc || trailing_crlf_added_temporarily) // Do this here rather than earlier with the options parsing in case the function-option is present twice (unlikely, but it would be a memory leak due to strdup below).  Doing it here also avoids allocating if it isn't necessary.
 	{
+		// Comment is obsolete because if aContents is in a deref buffer, it has been privatized by ExpandArgs():
 		// When g_SortFunc!=NULL, the copy of the string is needed because aContents may be in the deref buffer,
 		// and that deref buffer is about to be overwritten by the execution of the script's UDF body.
 		if (   !(mem_to_free = tmalloc(aContents_length + 3))   ) // +1 for terminator and +2 in case of trailing_crlf_added_temporarily.
