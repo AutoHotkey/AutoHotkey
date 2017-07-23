@@ -4283,6 +4283,10 @@ sc_type vk_to_sc(vk_type aVK, bool aReturnSecondary)
 	case VK_MULTIPLY: sc = SC_NUMPADMULT; break;
 	case VK_SUBTRACT: sc = SC_NUMPADSUB; break;
 	case VK_ADD:      sc = SC_NUMPADADD; break;
+	
+	// Added in v1.1.26.02 because MapVirtualKey returns the scan code for SysReq
+	// (which is what the key produces while Alt is held down):
+	case VK_SNAPSHOT: sc = SC_PRINTSCREEN; break;
 	}
 
 	if (sc) // Above found a match.
@@ -4306,7 +4310,6 @@ sc_type vk_to_sc(vk_type aVK, bool aReturnSecondary)
 	{
 	case VK_APPS:     // Application key on keyboards with LWIN/RWIN/Apps.  Not listed in MSDN as "extended"?
 	case VK_CANCEL:   // Ctrl-break
-	case VK_SNAPSHOT: // PrintScreen
 	case VK_DIVIDE:   // NumpadDivide (slash)
 	case VK_NUMLOCK:
 	// Below are extended but were already handled and returned from higher above:
@@ -4424,6 +4427,7 @@ vk_type sc_to_vk(sc_type aSC)
 
 	case SC_APPSKEY:	return VK_APPS; // Added in v1.1.17.00.
 	case SC_PAUSE:      return VK_PAUSE; // Added in v1.1.26.01.
+	case SC_PRINTSCREEN: return VK_SNAPSHOT; // Added in v1.1.26.02 to ensure consistency with vk_to_sc() and fix Win2k/XP.
 	}
 
 	if (aSC & 0x100) // Our extended-key flag.
