@@ -7245,9 +7245,7 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 		{
 			// Get the function name from the first arg and eliminate it from further consideration:
 			ArgStruct &first_arg = line->mArg[0];
-			--line->mArgc;
-			++line->mArg;
-			int param_count = line->mArgc; // This is not the final parameter count since it includes the output var (if present).
+			int param_count = line->mArgc - 1; // This is not the final parameter count since it includes the output var (if present).
 			// Now that function declarations have been processed, resolve this line's function.
 			Func *func = NULL;
 			// Dynamic calling wouldn't be this simple, since a line beginning with a double-deref
@@ -7295,7 +7293,11 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 				if (func && func->mIsBuiltIn && *arg.text && func->ArgIsOutputVar(param_index))
 					arg.type = ARG_TYPE_OUTPUT_VAR; // See comments above.
 			}
+			// Convert the function reference to an attribute and exclude from the parameter list.
+			// Line::ToText() requires that the arg be excluded only when mAttribute is non-NULL.
 			line->mAttribute = func;
+			--line->mArgc;
+			++line->mArg;
 			break;
 		}
 		} // switch (line->mActionType)
