@@ -3818,6 +3818,8 @@ Label *Script::FindLabel(LPTSTR aLabelName)
 	for (label = mFirstLabel; label != NULL; label = label->mNextLabel)
 		if (!_tcsicmp(label->mName, aLabelName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			return label; // Match found.
+	if (g->CurrentLabel && !_tcsicmp(g->CurrentLabel->mName, aLabelName))
+		return g->CurrentLabel;
 	return NULL; // No match found.
 }
 
