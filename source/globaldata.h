@@ -34,9 +34,7 @@ extern UINT g_DefaultScriptCodepage;
 extern bool g_DestroyWindowCalled;
 extern HWND g_hWnd;  // The main window
 extern HWND g_hWndEdit;  // The edit window, child of main.
-extern HWND g_hWndSplash;  // The SplashText window.
 extern HFONT g_hFontEdit;
-extern HFONT g_hFontSplash;
 extern HACCEL g_hAccelTable; // Accelerator table for main menu shortcut keys.
 
 typedef int (WINAPI *StrCmpLogicalW_type)(LPCWSTR, LPCWSTR);
@@ -70,10 +68,10 @@ extern HHOOK g_MouseHook;
 extern HHOOK g_PlaybackHook;
 extern bool g_ForceLaunch;
 extern bool g_WinActivateForce;
+extern bool g_MustDeclare;
 extern bool g_RunStdIn;
 extern WarnMode g_Warn_UseUnsetLocal;
 extern WarnMode g_Warn_UseUnsetGlobal;
-extern WarnMode g_Warn_UseEnv;
 extern WarnMode g_Warn_LocalSameAsGlobal;
 extern SingleInstanceType g_AllowOnlyOneInstance;
 extern bool g_persistent;
@@ -88,23 +86,18 @@ extern bool g_InputTimerExists;
 extern bool g_DerefTimerExists;
 extern bool g_SoundWasPlayed;
 extern bool g_IsSuspended;
-extern BOOL g_WriteCacheDisabledInt64;
-extern BOOL g_WriteCacheDisabledDouble;
-extern BOOL g_NoEnv;
 extern BOOL g_AllowInterruption;
 extern int g_nLayersNeedingTimer;
 extern int g_nThreads;
 extern int g_nPausedThreads;
 extern int g_MaxHistoryKeys;
 
-extern VarSizeType g_MaxVarCapacity;
 extern UCHAR g_MaxThreadsPerHotkey;
 extern int g_MaxThreadsTotal;
 extern int g_MaxHotkeysPerInterval;
 extern int g_HotkeyThrottleInterval;
 extern bool g_MaxThreadsBuffer;
 extern SendLevelType g_InputLevel;
-extern HotkeyCriterion *g_HotCriterion;
 extern HotkeyCriterion *g_FirstHotCriterion, *g_LastHotCriterion;
 
 // Global variables for #if (expression). See globaldata.cpp for comments.
@@ -119,10 +112,7 @@ extern int g_nInputBoxes;
 extern int g_nFileDialogs;
 extern int g_nFolderDialogs;
 extern InputBoxType g_InputBox[MAX_INPUTBOXES];
-extern SplashType g_Progress[MAX_PROGRESS_WINDOWS];
-extern SplashType g_SplashImage[MAX_SPLASHIMAGE_WINDOWS];
-extern GuiType **g_gui;
-extern int g_guiCount, g_guiCountMax;
+extern GuiType *g_firstGui, *g_lastGui;
 extern HWND g_hWndToolTip[MAX_TOOLTIPS];
 extern MsgMonitorList g_MsgMonitor;
 
@@ -132,9 +122,10 @@ extern bool g_SortReverse;
 extern int g_SortColumnOffset;
 extern Func *g_SortFunc;
 
-extern TCHAR g_delimiter;
-extern TCHAR g_DerefChar;
-extern TCHAR g_EscapeChar;
+#define g_DerefChar   '%' // As of v2 these are constant, so even more parts of the code assume they
+#define g_EscapeChar  '`' // are at their usual default values to reduce code size/complexity.
+#define g_delimiter   ',' // Also, g_delimiter was never used in expressions (i.e. for SYM_COMMA).
+#define g_CommentChar ';'
 
 // Hot-string vars:
 extern TCHAR g_HSBuf[HS_BUF_SIZE];
@@ -174,7 +165,6 @@ extern global_struct g_default, *g_array;
 extern TCHAR g_WorkingDir[MAX_PATH];  // Explicit size needed here in .h file for use with sizeof().
 extern LPTSTR g_WorkingDirOrig;
 
-extern bool g_ContinuationLTrim;
 extern bool g_ForceKeybdHook;
 extern ToggleValueType g_ForceNumLock;
 extern ToggleValueType g_ForceCapsLock;
@@ -314,5 +304,32 @@ if (g_InputTimerExists && KillTimer(g_hWnd, TIMER_ID_INPUT))\
 #define KILL_DEREF_TIMER \
 if (g_DerefTimerExists && KillTimer(g_hWnd, TIMER_ID_DEREF))\
 	g_DerefTimerExists = false;
+
+static inline void AddGuiToList(GuiType* gui)
+{
+	gui->mNextGui = NULL;
+	gui->mPrevGui = g_lastGui;
+	if (g_lastGui)
+		g_lastGui->mNextGui = gui;
+	g_lastGui = gui;
+	if (!g_firstGui)
+		g_firstGui = gui;
+	gui->AddRef(); // Keep the Gui alive.
+}
+
+static inline void RemoveGuiFromList(GuiType* gui)
+{
+	if (!gui->mPrevGui && gui != g_firstGui)
+		// !mPrevGui indicates this is either the first Gui or not in the list.
+		// Since both conditions were met, this Gui must have been partially constructed
+		// but not added to the list, and is being destroyed due to an error in GuiCreate.
+		// AddRef() wasn't called, so Release() MUST NOT be called.
+		return;
+	GuiType *prev = gui->mPrevGui, *&prevNext = prev ? prev->mNextGui : g_firstGui;
+	GuiType *next = gui->mNextGui, *&nextPrev = next ? next->mPrevGui : g_lastGui;
+	prevNext = next;
+	nextPrev = prev;
+	//gui->Release(); // This is done in GuiType::Destroy().  See there for comments.
+}
 
 #endif

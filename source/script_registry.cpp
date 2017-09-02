@@ -27,12 +27,16 @@
 #include "script.h"
 #include "util.h" // for strlcpy()
 #include "globaldata.h"
+#include "script_func_impl.h"
 
 
-ResultType Line::IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR aDefault)
+BIF_DECL(BIF_IniRead)
 {
-	if (!aDefault || !*aDefault)
-		aDefault = _T("ERROR");  // This mirrors what AutoIt2 does for its default value.
+	_f_param_string_opt(aFilespec, 0);
+	_f_param_string_opt(aSection, 1);
+	_f_param_string_opt(aKey, 2);
+	_f_param_string_opt(aDefault, 3);
+
 	TCHAR	szFileTemp[_MAX_PATH+1];
 	TCHAR	*szFilePart, *cp;
 	TCHAR	szBuffer[65535];					// Max ini file size is 65535 under 95
@@ -72,11 +76,12 @@ ResultType Line::IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR 
 				*cp = '\n';
 			}
 	}
+	// If the value exists but is empty, the return value and GetLastError() will both be 0,
+	// so assign ErrorLevel solely based on GetLastError():
+	g_ErrorLevel->Assign(GetLastError() ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
 	// The above function is supposed to set szBuffer to be aDefault if it can't find the
 	// file, section, or key.  In other words, it always changes the contents of szBuffer.
-	return OUTPUT_VAR->Assign(szBuffer); // Avoid using the length the API reported because it might be inaccurate if the data contains any binary zeroes, or if the data is double-terminated, etc.
-	// Note: ErrorLevel is not changed by this command since the aDefault value is returned
-	// whenever there's an error.
+	_f_return(szBuffer); // Avoid using the length the API reported because it might be inaccurate if the data contains any binary zeroes, or if the data is double-terminated, etc.
 }
 
 #ifdef UNICODE
@@ -167,33 +172,26 @@ ResultType Line::IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 
 
 
-ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
+void RegRead(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 {
-	Var &output_var = *OUTPUT_VAR;
-	output_var.Assign(); // Init.  Tell it not to free the memory by not calling without parameters.
-
 	HKEY	hRegKey;
 	DWORD	dwRes, dwBuf, dwType;
 	LONG    result;
 
-	if (!aRootKey)
-	{
-		result = ERROR_INVALID_PARAMETER; // Indicate the error.
-		goto finish;
-	}
+	_f_set_retval_p(_T(""), 0); // Set default in case of early return.
 
 	// Open the registry key
 	result = RegOpenKeyEx(aRootKey, aRegSubkey, 0, KEY_READ | g->RegView, &hRegKey);
 	if (result != ERROR_SUCCESS)
-		goto finish;
+	{
+		Script::SetErrorLevels(true, result);
+		return;
+	}
 
 	// Read the value and determine the type.  If aValueName is the empty string, the key's default value is used.
 	result = RegQueryValueEx(hRegKey, aValueName, NULL, &dwType, NULL, NULL);
 	if (result != ERROR_SUCCESS)
-	{
-		RegCloseKey(hRegKey);
 		goto finish;
-	}
 
 	LPTSTR contents, cp;
 
@@ -204,8 +202,10 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 			dwRes = sizeof(dwBuf);
 			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, (LPBYTE)&dwBuf, &dwRes);
 			if (result == ERROR_SUCCESS)
-				output_var.Assign((DWORD)dwBuf);
-			RegCloseKey(hRegKey);
+			{
+				// Set the return value but don't return yet.
+				aResultToken.Return(dwBuf);
+			}
 			break;
 
 		// Note: The contents of any of these types can be >64K on NT/2k/XP+ (though that is probably rare):
@@ -218,30 +218,20 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 			// the size of the data, in bytes, in the variable pointed to by lpcbData.
 			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, NULL, &dwRes); // Find how large the value is.
 			if (result != ERROR_SUCCESS || !dwRes) // Can't find size (realistically might never happen), or size is zero.
-			{
-				RegCloseKey(hRegKey);
-				// Above realistically probably never happens; if it does and result != ERROR_SUCCESS,
-				// setting ErrorLevel to indicate the error seems more useful than maintaining backward-
-				// compatibility by faking success.
 				break;
-			}
 			DWORD dwCharLen = dwRes / sizeof(TCHAR);
-			// Set up the variable to receive the contents, enlarging it if necessary:
+			// Set up the result buffer to receive the contents.
 			// Since dwRes includes the space for the zero terminator (if the MSDN docs
-			// are accurate), this will enlarge it to be 1 byte larger than we need,
+			// are accurate), this will size it to be 1 byte larger than we need,
 			// which leaves room for the final newline character to be inserted after
 			// the last item.  But add 2 to the requested capacity in case the data isn't
 			// terminated in the registry, which allows double-NULL to be put in for REG_MULTI_SZ later.
-			if (output_var.AssignString(NULL, (VarSizeType)(dwCharLen + 2)) != OK)
-			{
-				RegCloseKey(hRegKey);
-				return FAIL; // FAIL is only returned when the error is a critical one such as this one.
-			}
-
-			contents = output_var.Contents(); // This target buf should now be large enough for the result.
+			if (!TokenSetResult(aResultToken, NULL, dwCharLen + 2))
+				break; // aResultToken.Error() was already called, but we still need to call RegCloseKey().
+			//aResultToken.symbol = SYM_STRING; // Already set by _f_set_reval_p().
+			contents = aResultToken.marker; // This target buf should now be large enough for the result.
 
 			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, (LPBYTE)contents, &dwRes);
-			RegCloseKey(hRegKey);
 
 			if (result != ERROR_SUCCESS || !dwRes) // Relies on short-circuit boolean order.
 			{
@@ -288,9 +278,7 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 					// into it at all, since each newline should correspond to an item in the buffer.
 				}
 			}
-			output_var.SetCharLength((VarSizeType)_tcslen(contents)); // Due to conservative buffer sizes above, length is probably too large by 3. So update to reflect the true length.
-			if (!output_var.Close()) // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
-				return FAIL;
+			aResultToken.marker_length = _tcslen(contents); // Due to conservative buffer sizes above, length is probably too large by 3. So update to reflect the true length.
 			break;
 		}
 		case REG_BINARY:
@@ -299,29 +287,25 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 			dwRes = 0;
 			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, NULL, &dwRes); // Find how large the value is.
 			if (result != ERROR_SUCCESS || !dwRes) // Can't find size (realistically might never happen), or size is zero.
-			{
-				RegCloseKey(hRegKey);
 				break;
-			}
 
-			// Set up the variable to receive the contents, enlarging it if necessary.
+			// Set up the result buffer.
 			// AutoIt3: Each byte will turned into 2 digits, plus a final null:
-			if (output_var.AssignString(NULL, (VarSizeType)(dwRes * 2)) != OK)
-			{
-				RegCloseKey(hRegKey);
-				return FAIL;
-			}
-			contents = output_var.Contents();
+			if (!TokenSetResult(aResultToken, NULL, dwRes * 2))
+				break; // aResultToken.Error() was already called, but we still need to call RegCloseKey().
+			//aResultToken.symbol = SYM_STRING; // Already set by _f_set_reval_p().
+			contents = aResultToken.marker;
 			*contents = '\0';
 			
 			// Read the binary data into the variable, placed so that the last byte of
 			// binary data will be overwritten as the hexadecimal conversion completes.
 			LPBYTE pRegBuffer = (LPBYTE)(contents + dwRes * 2) - dwRes;
 			result = RegQueryValueEx(hRegKey, aValueName, NULL, NULL, pRegBuffer, &dwRes);
-			RegCloseKey(hRegKey);
-
 			if (result != ERROR_SUCCESS)
+			{
+				aResultToken.marker_length = 0; // Override the length set by TokenSetResult().
 				break;
+			}
 
 			int j = 0;
 			DWORD i, n; // i and n must be unsigned to work
@@ -335,38 +319,42 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 				j += 2;
 			}
 			contents[j] = '\0'; // Terminate
-			if (!output_var.Close()) // Length() was already set by the earlier call to Assign().
-				return FAIL;
+			// aResultToken.marker_length was already set by TokenSetResult().
 			break;
 		}
 		default:
-			RegCloseKey(hRegKey);
 			result = ERROR_UNSUPPORTED_TYPE; // Indicate the error.
 			break;
 	}
 
 finish:
-	return SetErrorsOrThrow(result != ERROR_SUCCESS, result);
+	// The function is designed to reach this point only if the key was opened,
+	// rather than initializing hRegKey to NULL and checking here, since it's
+	// not clear whether NULL is actually an invalid registry handle value:
+	//if (hRegKey)
+	RegCloseKey(hRegKey);
+	Script::SetErrorLevels(result != ERROR_SUCCESS, result);
 } // RegRead()
 
 
 
-ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName, LPTSTR aValue)
+void RegWrite(ResultToken &aResultToken, ExprTokenType &aValue, DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 // If aValueName is the empty string, the key's default value is used.
 {
 	HKEY	hRegKey;
 	DWORD	dwRes, dwBuf;
 
-	TCHAR *buf;
-	#define SET_REG_BUF buf = aValue;
+	TCHAR nbuf[MAX_NUMBER_SIZE];
+	LPTSTR value;
+	size_t length;
 	
 	LONG result;
 
-	if (!aRootKey || aValueType == REG_NONE || aValueType == REG_SUBKEY) // Can't write to these.
-	{
-		result = ERROR_INVALID_PARAMETER; // Indicate the error.
-		goto finish;
-	}
+	if (aValueType == REG_NONE)
+		_f_throw(ERR_PARAM2_REQUIRED);
+
+	if (aValueType != REG_DWORD)
+		value = TokenToString(aValue, nbuf, &length);
 
 	// Open/Create the registry key
 	// The following works even on root keys (i.e. blank subkey), although values can't be created/written to
@@ -381,30 +369,27 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	switch (aValueType)
 	{
 	case REG_SZ:
-		SET_REG_BUF
-		result = RegSetValueEx(hRegKey, aValueName, 0, REG_SZ, (CONST BYTE *)buf, (DWORD)(_tcslen(buf)+1) * sizeof(TCHAR));
+		result = RegSetValueEx(hRegKey, aValueName, 0, REG_SZ, (CONST BYTE *)value, (DWORD)(length+1) * sizeof(TCHAR));
 		break;
 
 	case REG_EXPAND_SZ:
-		SET_REG_BUF
-		result = RegSetValueEx(hRegKey, aValueName, 0, REG_EXPAND_SZ, (CONST BYTE *)buf, (DWORD)(_tcslen(buf)+1) * sizeof(TCHAR));
+		result = RegSetValueEx(hRegKey, aValueName, 0, REG_EXPAND_SZ, (CONST BYTE *)value, (DWORD)(length+1) * sizeof(TCHAR));
 		break;
 	
 	case REG_MULTI_SZ:
 	{
-		size_t length = _tcslen(aValue);
 		// Allocate some temporary memory because aValue might not be a writable string,
 		// and we would need to write to it to temporarily change the newline delimiters into
 		// zero-delimiters.  Even if we were to require callers to give us a modifiable string,
 		// its capacity may be 1 byte too small to handle the double termination that's needed
 		// (i.e. if the last item in the list happens to not end in a newline):
-		buf = tmalloc(length + 2);
+		LPTSTR buf = tmalloc(length + 2);
 		if (!buf)
 		{
 			result = ERROR_OUTOFMEMORY;
 			break;
 		}
-		tcslcpy(buf, aValue, length + 1);
+		tcslcpy(buf, value, length + 1);
 		// Double-terminate:
 		buf[length + 1] = '\0';
 
@@ -425,16 +410,13 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	}
 
 	case REG_DWORD:
-		if (*aValue)
-			dwBuf = ATOU(aValue);  // Changed to ATOU() for v1.0.24 so that hex values are supported.
-		else // Default to 0 when blank.
-			dwBuf = 0;
+		dwBuf = (DWORD)TokenToInt64(aValue);
 		result = RegSetValueEx(hRegKey, aValueName, 0, REG_DWORD, (CONST BYTE *)&dwBuf, sizeof(dwBuf));
 		break;
 
 	case REG_BINARY:
 	{
-		int nLen = (int)_tcslen(aValue);
+		int nLen = (int)length;
 
 		// String length must be a multiple of 2 
 		if (nLen % 2)
@@ -458,12 +440,12 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 			nVal = 0;
 			for (nMult = 16; nMult >= 0; nMult = nMult - 15)
 			{
-				if (aValue[i] >= '0' && aValue[i] <= '9')
-					nVal += (aValue[i] - '0') * nMult;
-				else if (aValue[i] >= 'A' && aValue[i] <= 'F')
-					nVal += (((aValue[i] - 'A'))+10) * nMult;
-				else if (aValue[i] >= 'a' && aValue[i] <= 'f')
-					nVal += (((aValue[i] - 'a'))+10) * nMult;
+				if (value[i] >= '0' && value[i] <= '9')
+					nVal += (value[i] - '0') * nMult;
+				else if (value[i] >= 'A' && value[i] <= 'F')
+					nVal += (((value[i] - 'A'))+10) * nMult;
+				else if (value[i] >= 'a' && value[i] <= 'f')
+					nVal += (((value[i] - 'a'))+10) * nMult;
 				else
 				{
 					free(pRegBuffer);
@@ -490,12 +472,13 @@ ResultType Line::RegWrite(DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LP
 	// Additionally, fall through to below:
 
 finish:
-	return SetErrorsOrThrow(result != ERROR_SUCCESS, result);
+	Script::SetErrorLevels(result != ERROR_SUCCESS, result);
+	_f_return_empty;
 } // RegWrite()
 
 
 
-LONG Line::RegRemoveSubkeys(HKEY hRegKey)
+LONG RegRemoveSubkeys(HKEY hRegKey)
 {
 	// Removes all subkeys to the given key.  Will not touch the given key.
 	TCHAR Name[256];
@@ -525,20 +508,18 @@ LONG Line::RegRemoveSubkeys(HKEY hRegKey)
 
 
 
-ResultType Line::RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
+void RegDelete(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 {
 	LONG result;
 
+	if (!aRootKey)
+		_f_throw(ERR_PARAM1_INVALID);
 	// Fix for v1.0.48: Don't remove the entire key if it's a root key!  According to MSDN,
 	// the root key would be opened by RegOpenKeyEx() further below whenever aRegSubkey is NULL
 	// or an empty string. aValueName is also checked to preserve the ability to delete a value
 	// that exists directly under a root key.
-	if (   !aRootKey
-		|| (!aRegSubkey || !*aRegSubkey) && !aValueName   ) // See comment above.
-	{
-		result = ERROR_INVALID_PARAMETER;
-		goto finish;
-	}
+	if (  (!aRegSubkey || !*aRegSubkey) && !aValueName  )
+		_f_throw(_T("Cannot delete root key"));
 
 	// Open the key we want
 	HKEY hRegKey;
@@ -569,5 +550,83 @@ ResultType Line::RegDelete(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 	}
 
 finish:
-	return SetErrorsOrThrow(result != ERROR_SUCCESS, result);
+	Script::SetErrorLevels(result != ERROR_SUCCESS, result);
+	_f_return_empty;
 } // RegDelete()
+
+
+
+BIF_DECL(BIF_Reg)
+{
+	TCHAR key_buf[MAX_REG_ITEM_SIZE];
+	BuiltInFunctionID action = _f_callee_id;
+	HKEY root_key;
+	LPTSTR sub_key;
+	LPTSTR value_name = action == FID_RegDeleteKey ? NULL : _T(""); // Set default.
+	DWORD value_type = REG_NONE; // RegWrite
+	ExprTokenType *value; // RegWrite
+	bool close_root;
+	if (action == FID_RegWrite)
+	{
+		value = aParam[0];
+		if (aParamCount > 1)
+		{
+			if (aParam[1]->symbol != SYM_MISSING)
+			{
+				value_type = Line::RegConvertValueType(ParamIndexToString(1));
+				if (value_type == REG_NONE) // In this case REG_NONE means unknown/invalid vs. omitted.
+					_f_throw(ERR_PARAM2_INVALID);
+			}
+			aParamCount -= 2;
+		}
+		else
+			aParamCount = 0; // It was 1.
+		aParam += 2; // There might not have been 2, but it won't be dereferenced in that case anyway.
+	}
+	if (ParamIndexIsOmitted(0) && g->mLoopRegItem) // Default to the registry loop's current item.
+	{
+		RegItemStruct &reg_item = *g->mLoopRegItem;
+		root_key = reg_item.root_key;
+		if (reg_item.type == REG_SUBKEY)
+		{
+			if (*reg_item.subkey)
+			{
+				sntprintf(key_buf, _countof(key_buf), _T("%s\\%s"), reg_item.subkey, reg_item.name);
+				sub_key = key_buf;
+			}
+			else
+				sub_key = reg_item.name;
+		}
+		else
+		{
+			sub_key = reg_item.subkey;
+			if (action != FID_RegDeleteKey)
+			{
+				value_name = reg_item.name; // Set default.
+				if (value_type == REG_NONE)
+					value_type = reg_item.type;
+			}
+		}
+		// Do not use RegCloseKey() on this, even if it's a remote key, since our caller handles that:
+		close_root = false;
+	}
+	else
+	{
+		LPTSTR key_name = ParamIndexToOptionalString(0); // No buf needed since numbers aren't valid root keys.
+		root_key = Line::RegConvertKey(key_name, &sub_key, &close_root);
+		if (!root_key)
+			_f_throw(action == FID_RegWrite ? ERR_PARAM3_INVALID : ERR_PARAM1_INVALID, key_name);
+	}
+	if (!ParamIndexIsOmitted(1)) // Implies this isn't RegDeleteKey.
+		value_name = ParamIndexToString(1, _f_number_buf);
+
+	switch (action)
+	{
+	case FID_RegRead:  RegRead(aResultToken, root_key, sub_key, value_name); break;
+	case FID_RegWrite: RegWrite(aResultToken, *value, value_type, root_key, sub_key, value_name); break;
+	default:           RegDelete(aResultToken, root_key, sub_key, value_name); break;
+	}
+
+	if (close_root)
+		RegCloseKey(root_key);
+}

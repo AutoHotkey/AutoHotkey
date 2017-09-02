@@ -143,10 +143,8 @@ ResultType WinGroup::CloseAndGoToNext(bool aStartWithMostRecent)
 
 
 
-ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec, Label **aJumpToLabel)
+ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec)
 {
-	if (aJumpToLabel) // Initialize early in case of early return.
-		*aJumpToLabel = NULL;
 	if (IsEmpty())
 		return OK;  // OK since this is the expected behavior in this case.
 	// Otherwise:
@@ -271,15 +269,7 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec, L
 				// than getting stuck on this one.
 			}
 			else 
-			{
-				if (aJumpToLabel && mJumpToLabel)
-				{
-					// Caller asked us to return in this case, so that it can
-					// use this value to execute a user-specified Gosub:
-					*aJumpToLabel = mJumpToLabel;  // Set output param for the caller.
-				}
 				return FAIL; // Let GroupActivate set ErrorLevel to indicate what happened.
-			}
 		}
 	}
 	return OK;

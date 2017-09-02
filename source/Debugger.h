@@ -117,6 +117,7 @@ struct DbgStack
 			Func *func; // SE_Func
 		};
 		StackEntryType type;
+		TCHAR *Name();
 	};
 
 	Entry *mBottom, *mTop, *mTopBound;
@@ -187,7 +188,13 @@ public:
 	inline bool HasStdErrHook() { return mStdErrMode != SR_Disabled; }
 	inline bool HasStdOutHook() { return mStdOutMode != SR_Disabled; }
 
-	inline void PostExecFunctionCall(Line *aExpressionLine)
+	TCHAR *WhatThrew()
+	{
+		return mStack.mTop >= mStack.mBottom ? mStack.mTop->Name() : _T("");
+	}
+
+	__declspec(noinline) // Avoiding inlining should reduce the code size of ExpandExpression(), which might help performance since this is only called when the debugger is connected.
+	void PostExecFunctionCall(Line *aExpressionLine)
 	{
 		// If the debugger is stepping into/over/out from a function call, we want to
 		// break at the line which called that function, since the next line to execute
@@ -353,29 +360,9 @@ private:
 		{
 		}
 
-		void WriteProperty(LPCSTR aName, LPTSTR aValue)
-		{
-			ExprTokenType value;
-			value.symbol = SYM_STRING;
-			value.marker = aValue;
-			WriteProperty(aName, value);
-		}
-
-		void WriteProperty(LPCSTR aName, __int64 aValue)
-		{
-			ExprTokenType value;
-			value.symbol = SYM_INTEGER;
-			value.value_int64 = aValue;
-			WriteProperty(aName, value);
-		}
-		
-		void WriteProperty(LPCSTR aName, IObject *aValue)
-		{
-			ExprTokenType value;
-			value.symbol = SYM_OBJECT;
-			value.object = aValue;
-			WriteProperty(aName, value);
-		}
+		void WriteProperty(LPCSTR aName, LPTSTR aValue)    { WriteProperty(aName, ExprTokenType(aValue)); }
+		void WriteProperty(LPCSTR aName, __int64 aValue)   { WriteProperty(aName, ExprTokenType(aValue)); }
+		void WriteProperty(LPCSTR aName, IObject *aValue)  { WriteProperty(aName, ExprTokenType(aValue)); }
 
 		void WriteProperty(LPCSTR aName, ExprTokenType &aValue);
 		void WriteProperty(INT_PTR aKey, ExprTokenType &aValue);

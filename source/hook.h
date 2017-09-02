@@ -26,7 +26,7 @@ GNU General Public License for more details.
 // Also, it has been announced in OnMessage() that message numbers between WM_USER and 0x1000 are earmarked
 // for possible future use by the program, so don't use a message above 0x1000 without good reason.
 enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_DIALOG, AHK_NOTIFYICON
-	, AHK_RETURN_PID, AHK_EXIT_BY_RELOAD, AHK_EXIT_BY_SINGLEINSTANCE, AHK_CHECK_DEBUGGER
+	, AHK_UNUSED_MSG, AHK_EXIT_BY_RELOAD, AHK_EXIT_BY_SINGLEINSTANCE, AHK_CHECK_DEBUGGER
 	// Allow some room here in between for more "exit" type msgs to be added in the future (see below comment).
 	, AHK_GUI_ACTION = WM_USER+20 // Avoid WM_USER+100/101 and vicinity.  See below comment.
 	// v1.0.43.05: On second thought, it seems better to stay close to WM_USER because the OnMessage page
@@ -48,7 +48,7 @@ enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_
 // a custom menu item if the current quasi-thread is uninterruptible.  This is exactly the same way
 // hotkeys are buffered.  By making a thread truly uninterruptible, behavior is more consistent with
 // what most users would want, though it should be noted that this also makes it impossible for the
-// OnExit subroutine to be interrupted by a custom menu item, even one that is designed to simply
+// OnExit function to be interrupted by a custom menu item, even one that is designed to simply
 // exit the script (by means of aborting the on-exit subroutine).  Another reason to buffer the
 // selection of a custom menu item is that we don't want to interrupt the current thread if is
 // right in the middle of executing a single line, e.g. doing something with the deref buffer
@@ -87,7 +87,7 @@ enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_
 // enabled).  My only concern about this is that on some OS's, or on slower CPUs, the message may be
 // received too soon (before the dialog window actually exists) resulting in our window proc not
 // being able to ensure that it's the foreground window.  That seems unlikely, however, since
-// MessageBox() and the other dialog invocating API calls (for FileSelectFile/Folder) likely
+// MessageBox() and the other dialog invocating API calls (for FileSelect/DirSelect) likely
 // ensures its window really exists before dispatching messages.
 #define POST_AHK_DIALOG(timeout) PostMessage(g_hWnd, WM_COMMNOTIFY, AHK_DIALOG, (LPARAM)timeout);
 
@@ -172,7 +172,7 @@ struct key_type
 #define INPUT_BUFFER_SIZE 16384
 
 enum InputStatusType {INPUT_OFF, INPUT_IN_PROGRESS, INPUT_TIMED_OUT, INPUT_TERMINATED_BY_MATCH
-	, INPUT_TERMINATED_BY_ENDKEY, INPUT_LIMIT_REACHED};
+	, INPUT_TERMINATED_BY_ENDKEY, INPUT_LIMIT_REACHED, INPUT_TERMINATED_BY_INPUTEND};
 
 // Bitwise flags for the end-key arrays:
 #define END_KEY_ENABLED 0x01

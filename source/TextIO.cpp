@@ -2,6 +2,7 @@
 #include "TextIO.h"
 #include "script.h"
 #include "script_object.h"
+EXTERN_SCRIPT;
 
 UINT g_ACP = GetACP(); // Requires a reboot to change.
 #define INVALID_CHAR UorA(0xFFFD, '?')
@@ -83,7 +84,7 @@ bool TextStream::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 
 
 
-DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
+DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, BOOL aReadLine)
 {
 	if (!PrepareToRead())
 		return 0;
@@ -150,28 +151,6 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 			{
 				src_size = sizeof(WCHAR); // Set default (currently never overridden).
 				LPWSTR cp = (LPWSTR)src;
-				if (*cp == '\r')
-				{
-					if (cp + 2 <= (LPWSTR)src_end)
-					{
-						if (cp[1] == '\n')
-						{
-							// There's an \n following this \r, but is \r\n considered EOL?
-							if ( !(mFlags & EOL_CRLF) )
-								// This \r isn't being translated, so just write it out.
-								aBuf[target_used++] = '\r';
-							continue;
-						}
-					}
-					else if (!LAST_READ_HIT_EOF)
-					{
-						// There's not enough data in the buffer to determine if this is \r\n.
-						// Let the next iteration handle this char after reading more data.
-						next_size = 2 * sizeof(WCHAR);
-						break;
-					}
-					// Since above didn't break or continue, this is an orphan \r.
-				}
 				// There doesn't seem to be much need to give surrogate pairs special handling,
 				// so the following is disabled for now.  Some "brute force" tests on Windows 7
 				// showed that none of the ANSI code pages are capable of representing any of
@@ -202,29 +181,7 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 				src_size = 1; // Set default.
 				if (*src < 0x80)
 				{
-					if (*src == '\r')
-					{
-						if (src + 1 < src_end)
-						{
-							if (src[1] == '\n')
-							{
-								// There's an \n following this \r, but is \r\n considered EOL?
-								if ( !(mFlags & EOL_CRLF) )
-									// This \r isn't being translated, so just write it out.
-									aBuf[target_used++] = '\r';
-								continue;
-							}
-						}
-						else if (!LAST_READ_HIT_EOF)
-						{
-							// There's not enough data in the buffer to determine if this is \r\n.
-							// Let the next iteration handle this char after reading more data.
-							next_size = 2;
-							break;
-						}
-						// Since above didn't break or continue, this is an orphan \r.
-					}
-					// No conversion needed for ASCII chars.
+					// No codepage conversion needed for ASCII chars.
 					*dst = *(LPSTR)src;
 					dst_size = 1;
 				}
@@ -299,17 +256,53 @@ DWORD TextStream::Read(LPTSTR aBuf, DWORD aBufLen, int aNumLines)
 
 			if (dst_size == 1)
 			{
-				// \r\n has already been handled above, even if !(mFlags & EOL_CRLF), so \r at
-				// this point can only be \r on its own:
-				if (*dst == '\r' && (mFlags & EOL_ORPHAN_CR))
-					*dst = '\n';
-				if (*dst == '\n')
+				if (*dst == '\n' || *dst == '\r')
 				{
-					if (--aNumLines == 0)
+					if (*dst == '\r')
 					{
-						// Our caller asked for a specific number of lines, which we now have.
-						aBuf[target_used++] = '\n';
+						if (src + 2 * chr_size <= src_end)
+						{
+							int nextch = (codepage == CP_UTF16) ? LPWSTR(src)[1] : LPSTR(src)[1];
+							if (nextch == '\n') // \r\n
+							{
+								src_size *= 2; // Increase it to two characters (\r and \n).
+								if (!aReadLine)
+								{
+									if (  !(mFlags & EOL_CRLF)  )
+									{
+										// \r\n translation is disabled, so this \r\n should be written out as is.
+										if (target_used + 2 > aBufLen)
+										{
+											// This \r\n wouldn't fit.  Seems best to leave the \r in the buffer for next
+											// time rather than returning just the \r (even though \r\n translation isn't
+											// enabled, it seems best to treat this \r\n as a single unit).
+											mPos = src;
+											aBuf[target_used] = '\0';
+											return target_used;
+										}
+										aBuf[target_used++] = '\r';
+									}
+									aBuf[target_used++] = '\n';
+									continue;
+								}
+							}
+						}
+						else if (!LAST_READ_HIT_EOF)
+						{
+							// There's not enough data in the buffer to determine if this is \r\n.
+							// Let the next iteration handle this char after reading more data.
+							next_size = 2 * chr_size;
+							break;
+						}
+						// Since above didn't break or continue, this is an orphan \r.
+						if (mFlags & EOL_ORPHAN_CR)
+							*dst = '\n';
+					}
+					if (aReadLine)
+					{
+						// Our caller asked for one line, which we now have.
 						mPos = src + src_size;
+						aBuf[target_used++] = '\n'; // Caller expects a newline-terminated line, to distinguish empty lines from end of file.
 						if (target_used < aBufLen)
 							aBuf[target_used] = '\0';
 						return target_used;
@@ -730,8 +723,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		Close
 	};
 
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
-	// Reference: MetaObject::Invoke
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 	{
 		if (!aParamCount) // file[]
 			return INVOKE_NOT_HANDLED;
@@ -782,11 +774,11 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		{
 			if (member < LastMethodPlusOne)
 				// Member requires parentheses().
-				return OK;
+				return INVOKE_NOT_HANDLED;
 			if (aParamCount != (IS_INVOKE_SET ? 1 : 0))
 				// Get: disallow File.Length[newLength] and File.Seek[dist,origin].
 				// Set: disallow File[]:=PropertyName and File["Pos",dist]:=origin.
-				return OK;
+				_o_throw(ERR_INVALID_USAGE);
 		}
 
 		aResultToken.symbol = SYM_INTEGER; // Set default return type -- the most common cases return integer.
@@ -827,7 +819,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				case 'F': size = 4; is_float = true; break; // Float.
 				}
 				if (!size)
-					break; // Return "" or throw.
+					return INVOKE_NOT_HANDLED; // Treat as unknown method, since 'type' is part of the method name.
 
 				union {
 						__int64 i8;
@@ -842,7 +834,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				{
 					buf.i8 = 0;
 					if ( !mFile.Read(&buf, size) )
-						break; // Return "" or throw.
+						break; // Fail.
 
 					if (is_float)
 					{
@@ -869,8 +861,8 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				}
 				else
 				{
-					if (aParamCount != 1)
-						break; // Return "" or throw.
+					if (aParamCount < 1)
+						_o_throw(ERR_PARAM1_REQUIRED);
 
 					ExprTokenType &token_to_write = *aParam[1];
 					
@@ -889,9 +881,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 					}
 					
 					DWORD bytes_written = mFile.Write(&buf, size);
-					if (!bytes_written && g->InTryBlock)
-						break; // Throw an exception.
-					// Otherwise, we should return bytes_written even if it is 0:
+					// Return bytes_written even if it is 0:
 					aResultToken.value_int64 = bytes_written;
 				}
 				return OK;
@@ -899,99 +889,142 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			break;
 
 		case Read:
-			if (aParamCount <= 1)
 			{
 				DWORD length;
 				if (aParamCount)
 					length = (DWORD)TokenToInt64(*aParam[1]);
 				else
 					length = (DWORD)(mFile.Length() - mFile.Tell()); // We don't know the actual number of characters these bytes will translate to, but this should be sufficient.
-				if (length == -1 || !TokenSetResult(aResultToken, NULL, length)) // Relies on short-circuit order. TokenSetResult requires non-NULL aResult if aResultLength == -1.
-					break; // Return "" or throw.
+				if (length == -1)
+					break; // Fail.
+				if (!TokenSetResult(aResultToken, NULL, length)) // Only after checking length above: TokenSetResult requires non-NULL aResult if aResultLength == -1.
+					return FAIL;
 				length = mFile.Read(aResultToken.marker, length);
 				aResultToken.symbol = SYM_STRING;
 				aResultToken.marker[length] = '\0';
-				aResultToken.marker_length = length; // Update marker_length to the actual number of characters read. Only strictly necessary in some cases; see TokenSetResult.
+				aResultToken.marker_length = length; // Update marker_length to the actual number of characters read.
 				return OK;
 			}
 			break;
 		
 		case ReadLine:
-			if (aParamCount == 0)
 			{	// See above for comments.
 				if (!TokenSetResult(aResultToken, NULL, READ_FILE_LINE_SIZE))
-					break; // Return "" or throw.
+					return FAIL;
 				DWORD length = mFile.ReadLine(aResultToken.marker, READ_FILE_LINE_SIZE - 1);
 				aResultToken.symbol = SYM_STRING;
+				if (length && aResultToken.marker[length - 1] == '\n')
+					--length;
 				aResultToken.marker[length] = '\0';
-				aResultToken.buf = (LPTSTR)(size_t) length;
+				aResultToken.marker_length = length;
 				return OK;
 			}
 			break;
 
 		case Write:
 		case WriteLine:
-			if (aParamCount <= 1)
 			{
-				DWORD bytes_written = 0, chars_to_write = 0;
+				DWORD bytes_written = 0;
+				size_t chars_to_write = 0;
 				if (aParamCount)
 				{
-					LPTSTR param1 = TokenToString(*aParam[1], aResultToken.buf);
-					chars_to_write = (DWORD)EXPR_TOKEN_LENGTH(aParam[1], param1);
-					bytes_written = mFile.Write(param1, chars_to_write);
+					LPTSTR param1 = TokenToString(*aParam[1], aResultToken.buf, &chars_to_write);
+					bytes_written = mFile.Write(param1, (DWORD)chars_to_write);
 				}
 				if (member == WriteLine && (bytes_written || !chars_to_write)) // i.e. don't attempt it if above failed.
 				{
-					chars_to_write += 1;
 					bytes_written += mFile.Write(_T("\n"), 1);
 				}
-				// If no data was written and some should have been, consider it a failure:
-				if (!bytes_written && chars_to_write && g->InTryBlock)
-					break; // Throw an exception.
-				// Otherwise, some data was written (partial writes are considered successful),
-				// no data was requested to be written, or no TRY block is active, so we need to
-				// return the value of bytes_written even if it is 0:
 				aResultToken.value_int64 = bytes_written;
 				return OK;
 			}
 			break;
 
 		case RawReadWrite:
-			if (aParamCount == 2)
 			{
+				if (aParamCount < 1)
+					_o_throw(ERR_TOO_FEW_PARAMS);
+
 				bool reading = (name[3] == 'R' || name[3] == 'r');
 
 				LPVOID target;
+				DWORD max_size;
 				ExprTokenType &target_token = *aParam[1];
-				DWORD size = (DWORD)TokenToInt64(*aParam[2]);
-
-				if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+				Var *target_var = NULL; // For maintainability (since target_token.symbol == SYM_VAR isn't a reliable indicator).
+				switch (target_token.symbol)
 				{
-					// Check if the user requested a size larger than the variable.
-					if ( size > target_token.var->ByteCapacity()
-						// Too small: expand the target variable if reading; abort otherwise.
-						&& (!reading || !target_token.var->SetCapacity(size, false, false)) ) // Relies on short-circuit order.
+				case SYM_STRING:
+					if (reading)
+						_o_throw(ERR_PARAM1_INVALID); // Can't read into a read-only string.
+					target = target_token.marker;
+					max_size = (DWORD)(target_token.marker_length + 1) * sizeof(TCHAR); // Allow +1 to write the null-terminator (but it won't be written by default if size is omitted).
+					break;
+				case SYM_VAR:
+					if (!target_token.var->IsPureNumericOrObject())
 					{
-						if (g->InTryBlock)
-							break; // Throw an exception.
-						aResultToken.value_int64 = 0;
-						return OK;
+						target_var = target_token.var;
+						target = target_var->Contents(TRUE, reading); // Pass TRUE for aAllowUpdate just to enable uninit' warning when !reading.
+						max_size = (DWORD)target_var->ByteCapacity();
+						if (reading && max_size) // But when writing, allow the null-terminator to be included.
+							max_size -= sizeof(TCHAR); // Always reserve space for the null-terminator.
+						break;
 					}
-					target = target_token.var->Contents();
+				default:
+					if (TokenIsPureNumeric(target_token) == PURE_INTEGER)
+					{
+						target = (LPVOID)TokenToInt64(target_token);
+						max_size = ~0; // Unknown; perform no validation.
+						if ((size_t)target >= 65536) // Basic sanity check relying on the fact that Win32 platforms reserve the first 64KB of address space.
+							break;
+						// Otherwise, it's invalid:
+					}
+					// Otherwise, it's invalid (float or object):
+					_o_throw(ERR_PARAM1_INVALID);
+				}
+
+				DWORD size;
+				if (aParamCount < 2 || aParam[2]->symbol == SYM_MISSING)
+				{
+					if (max_size == ~0) // Param #1 was an address.
+						_o_throw(ERR_PARAM2_REQUIRED); // (in this case).
+					if (reading)
+						// Fill the variable (space was already reserved for the null-terminator).
+						size = max_size; // max_size != SIZE_MAX implies target_var != NULL, so this is its capacity.
+					else
+						// Default to the byte count of the binary string, excluding the null-terminator.
+						size = target_var ? (DWORD)target_var->ByteLength() : (max_size - sizeof(TCHAR));
 				}
 				else
-					target = (LPVOID)TokenToInt64(target_token);
+				{
+					size = (DWORD)TokenToInt64(*aParam[2]);
+					if (size > max_size) // Implies max_size != ~0.
+					{
+						if (!reading || !target_var)
+							_o_throw(ERR_PARAM2_INVALID); // Invalid size (param #2).
+						if (!target_var->SetCapacity(size, false))
+							return FAIL; // SetCapacity() already showed the error message.
+						target = target_var->Contents(FALSE, TRUE); // Update to the new address.
+					}
+				}
 
 				DWORD result;
-				if (target < (LPVOID)65536) // Basic sanity check to catch incoming raw addresses that are zero or blank.
-					result = 0;
-				else if (reading)
+				if (reading)
+				{
 					result = mFile.Read(target, size);
+					if (target_var)
+					{
+						DWORD byte_length = result;
+						#ifdef UNICODE
+						// Var capacity is always a multiple of sizeof(TCHAR), so there's always room for this:
+						if (byte_length & 1)
+							((LPBYTE)target)[byte_length++] = 0; // Round up to multiple of sizeof(TCHAR) and init to zero for predictability.
+						#endif
+						target_var->ByteLength() = byte_length; // Update variable's length.
+						*(LPTSTR)((LPBYTE)target + byte_length) = '\0'; // Ensure it is null-terminated.
+					}
+				}
 				else
 					result = mFile.Write(target, size);
-				if (!result && size && g->InTryBlock)
-					break; // Throw an exception.
-				// Otherwise, it was a complete or partial success, or no TRY block is active.
 				aResultToken.value_int64 = result;
 				return OK;
 			}
@@ -1003,23 +1036,16 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				aResultToken.value_int64 = mFile.Tell();
 				return OK;
 			}
-			else if (aParamCount <= 2)
+			else
 			{
 				__int64 distance = TokenToInt64(*aParam[1]);
 				int origin;
-				if (aParamCount == 2)
+				if (aParamCount >= 2)
 					origin = (int)TokenToInt64(*aParam[2]);
 				else // Defaulting to SEEK_END when distance is negative seems more useful than allowing it to be interpreted as an unsigned value (> 9.e18 bytes).
 					origin = (distance < 0) ? SEEK_END : SEEK_SET;
 
-				if (!mFile.Seek(distance, origin))
-				{
-					if (g->InTryBlock)
-						break; // Throw an exception.
-					aResultToken.value_int64 = 0;
-				}
-				else
-					aResultToken.value_int64 = 1;
+				aResultToken.value_int64 = mFile.Seek(distance, origin);
 				return OK;
 			}
 			break;
@@ -1030,24 +1056,20 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				aResultToken.value_int64 = mFile.Length();
 				return OK;
 			}
-			else if (aParamCount == 1)
+			else
 			{
 				if (-1 != (aResultToken.value_int64 = mFile.Length(TokenToInt64(*aParam[1]))))
 					return OK;
-				else // Empty string seems like a more suitable failure indicator than -1.
-					aResultToken.marker = _T("");
-					// Let below set symbol back to SYM_STRING and throw an exception if appropriate.
+				// Otherwise, fall through:
 			}
 			break;
 
 		case AtEOF:
-			if (aParamCount == 0)
-				aResultToken.value_int64 = mFile.AtEOF();
+			aResultToken.value_int64 = mFile.AtEOF();
 			return OK;
 		
 		case Handle:
-			if (aParamCount == 0)
-				aResultToken.value_int64 = (UINT_PTR) mFile.Handle();
+			aResultToken.value_int64 = (UINT_PTR) mFile.Handle();
 			return OK;
 
 		case Encoding:
@@ -1062,7 +1084,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			UINT codepage;
 			if (aParamCount > 0)
 			{
-				if (TokenIsPureNumeric(*aParam[1]))
+				if (TokenIsNumeric(*aParam[1]))
 					codepage = (UINT)TokenToInt64(*aParam[1]);
 				else
 					codepage = Line::ConvertFileEncoding(TokenToString(*aParam[1]));
@@ -1094,17 +1116,13 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		}
 
 		case Close:
-			if (aParamCount == 0)
-				mFile.Close();
+			mFile.Close();
 			return OK;
 		}
 		
 		// Since above didn't return, an error must've occurred.
 		aResultToken.symbol = SYM_STRING;
-		// marker should already be set to "".
-		if (g->InTryBlock)
-			// For simplicity, don't attempt to identify what kind of error occurred:
-			Script::ThrowRuntimeException(ERRORLEVEL_ERROR, _T("FileObject"));
+		aResultToken.marker = _T(""); // Already set in most cases, but done here for maintainability.
 		return OK;
 	}
 
@@ -1128,7 +1146,7 @@ BIF_DECL(BIF_FileOpen)
 	DWORD aFlags;
 	UINT aEncoding;
 
-	if (TokenIsPureNumeric(*aParam[1]))
+	if (TokenIsNumeric(*aParam[1]))
 	{
 		aFlags = (DWORD) TokenToInt64(*aParam[1]);
 	}
@@ -1197,7 +1215,7 @@ BIF_DECL(BIF_FileOpen)
 
 	if (aParamCount > 2)
 	{
-		if (!TokenIsPureNumeric(*aParam[2]))
+		if (!TokenIsNumeric(*aParam[2]))
 		{
 			aEncoding = Line::ConvertFileEncoding(TokenToString(*aParam[2]));
 			if (aEncoding == -1)
@@ -1223,24 +1241,21 @@ BIF_DECL(BIF_FileOpen)
 		aFileName = TokenToString(*aParam[0], aResultToken.buf);
 
 	if (aResultToken.object = FileObject::Open(aFileName, aFlags, aEncoding & CP_AHKCP))
-		aResultToken.symbol = SYM_OBJECT;
-
-	g->LastError = GetLastError(); // Even on success, since it might provide something useful.
-	
-	if (!aResultToken.object)
 	{
-		aResultToken.value_int64 = 0; // and symbol is already SYM_INTEGER.
-		if (g->InTryBlock)
-			Script::ThrowRuntimeException(_T("Failed to open file."), _T("FileOpen"));
+		aResultToken.symbol = SYM_OBJECT;
+	}
+	else
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
 	}
 
+	g->LastError = GetLastError(); // Even on success, since it might provide something useful.
 	return;
 
 invalid_param:
-	aResultToken.value_int64 = 0;
 	g->LastError = ERROR_INVALID_PARAMETER; // For consistency.
-	if (g->InTryBlock)
-		Script::ThrowRuntimeException(ERR_PARAM2_INVALID, _T("FileOpen"));
+	_f_throw(ERR_PARAM_INVALID);
 }
 
 

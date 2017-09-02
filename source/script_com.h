@@ -23,7 +23,7 @@ public:
 	// the script has a reference to the object, which means either that the script
 	// itself has implemented IConnectionPoint (and why would it?), or has used the
 	// IEnumConnections interface to retrieve its own object (unlikely).
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 	{
 		return INVOKE_NOT_HANDLED;
 	}
@@ -62,8 +62,8 @@ public:
 	enum { F_OWNVALUE = 1 };
 	USHORT mFlags;
 
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType SafeArrayInvoke(ExprTokenType &aResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType SafeArrayInvoke(ResultToken &aResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	LPTSTR Type();
 
 	void ToVariant(VARIANT &aVar)
@@ -142,7 +142,7 @@ public:
 };
 
 
-void ComError(HRESULT, LPTSTR = _T(""), EXCEPINFO* = NULL);
+void ComError(HRESULT, ResultToken &, LPTSTR = _T(""), EXCEPINFO* = NULL);
 
 bool SafeSetTokenObject(ExprTokenType &aToken, IObject *aObject);
 

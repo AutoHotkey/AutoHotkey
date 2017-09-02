@@ -77,14 +77,13 @@ private:
 public:
 	LPTSTR mName;    // The name of the group.
 	WindowSpec *mFirstWindow, *mLastWindow;
-	Label *mJumpToLabel;
 	WinGroup *mNextGroup;  // Next item in linked list.
 	UINT mWindowCount;
 
 	ResultType AddWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ActUponAll(ActionTypeType aActionType, int aTimeToWaitForClose);
 	ResultType CloseAndGoToNext(bool aStartWithMostRecent);
-	ResultType Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec = NULL, Label **aJumpToLabel = NULL);
+	ResultType Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec = NULL);
 	ResultType Deactivate(bool aStartWithMostRecent);
 	bool IsEmpty() {return mFirstWindow == NULL;}
 	WindowSpec *IsMember(HWND aWnd, global_struct &aSettings);
@@ -95,7 +94,6 @@ public:
 		, mWindowCount(0)
 		, mNextGroup(NULL) // v1.0.41: Required for thread-safety, but also for maintainability.
 		, mIsModeActivate(true) // arbitrary default.
-		, mJumpToLabel(NULL)
 	{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}

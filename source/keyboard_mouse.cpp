@@ -1894,14 +1894,14 @@ void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEvent
 		if (   !(option_end = StrChrAny(next_option, _T(" \t,")))   )  // Space, tab, comma.
 			option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
 
-		// Temp termination for IsPureNumeric(), ConvertMouseButton(), and peace-of-mind.
+		// Temp termination for IsNumeric(), ConvertMouseButton(), and peace-of-mind.
 		orig_char = *option_end;
 		*option_end = '\0';
 
 		// Parameters can occur in almost any order to enhance usability (at the cost of
 		// slightly diminishing the ability unambiguously add more parameters in the future).
 		// Seems okay to support floats because ATOI() will just omit the decimal portion.
-		if (IsPureNumeric(next_option, true, false, true))
+		if (IsNumeric(next_option, true, false, true))
 		{
 			// Any numbers present must appear in the order: X, Y, RepeatCount
 			// (optionally with other options between them).

@@ -43,7 +43,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// reverted afterward, so it affected all subsequent commands.
 	SetErrorMode(SEM_FAILCRITICALERRORS);
 
-	if (!GetCurrentDirectory(_countof(g_WorkingDir), g_WorkingDir)) // Needed for the FileSelectFile() workaround.
+	if (!GetCurrentDirectory(_countof(g_WorkingDir), g_WorkingDir)) // Needed for the FileSelect() workaround.
 		*g_WorkingDir = '\0';
 	// Unlike the below, the above must not be Malloc'd because the contents can later change to something
 	// as large as MAX_PATH by means of the SetWorkingDir command.
@@ -73,25 +73,14 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// and will be added as variables %1% %2% etc.
 	// The above rules effectively make it impossible to autostart AutoHotkey.ini with parameters
 	// unless the filename is explicitly given (shouldn't be an issue for 99.9% of people).
-	TCHAR var_name[32], *param; // Small size since only numbers will be used (e.g. %1%, %2%).
-	Var *var;
-	bool switch_processing_is_complete = false;
-	int script_param_num = 1;
-
-	for (int i = 1; i < __argc; ++i) // Start at 1 because 0 contains the program name.
+	int i;
+	for (i = 1; i < __argc; ++i) // Start at 1 because 0 contains the program name.
 	{
-		param = __targv[i]; // For performance and convenience.
-		if (switch_processing_is_complete) // All args are now considered to be input parameters for the script.
-		{
-			if (   !(var = g_script.FindOrAddVar(var_name, _stprintf(var_name, _T("%d"), script_param_num)))   )
-				return CRITICAL_ERROR;  // Realistically should never happen.
-			var->Assign(param);
-			++script_param_num;
-		}
+		LPTSTR param = __targv[i]; // For performance and convenience.
 		// Insist that switches be an exact match for the allowed values to cut down on ambiguity.
 		// For example, if the user runs "CompiledScript.exe /find", we want /find to be considered
 		// an input parameter for the script rather than a switch:
-		else if (!_tcsicmp(param, _T("/R")) || !_tcsicmp(param, _T("/restart")))
+		if (!_tcsicmp(param, _T("/R")) || !_tcsicmp(param, _T("/restart")))
 			restart_mode = true;
 		else if (!_tcsicmp(param, _T("/F")) || !_tcsicmp(param, _T("/force")))
 			g_ForceLaunch = true;
@@ -145,19 +134,26 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 #endif
 		else // since this is not a recognized switch, the end of the [Switches] section has been reached (by design).
 		{
-			switch_processing_is_complete = true;  // No more switches allowed after this point.
-#ifdef AUTOHOTKEYSC
-			--i; // Make the loop process this item again so that it will be treated as a script param.
-#else
+#ifndef AUTOHOTKEYSC
 			script_filespec = param;  // The first unrecognized switch must be the script filespec, by design.
+			++i; // Omit this from the "args" array.
 #endif
+			break; // No more switches allowed after this point.
 		}
 	}
 
-	// Like AutoIt2, store the number of script parameters in the script variable %0%, even if it's zero:
-	if (   !(var = g_script.FindOrAddVar(_T("0")))   )
-		return CRITICAL_ERROR;  // Realistically should never happen.
-	var->Assign(script_param_num - 1);
+	if (Var *var = g_script.FindOrAddVar(_T("A_Args"), 6, VAR_DECLARE_SUPER_GLOBAL))
+	{
+		// Store the remaining args in an array and assign it to "Args".
+		// If there are no args, assign an empty array so that A_Args[1]
+		// and A_Args.MaxIndex() don't cause an error.
+		Object *args = Object::CreateFromArgV(__targv + i, __argc - i);
+		if (!args)
+			return CRITICAL_ERROR;  // Realistically should never happen.
+		var->AssignSkipAddRef(args);
+	}
+	else
+		return CRITICAL_ERROR;
 
 	global_init(*g);  // Set defaults.
 
@@ -172,6 +168,12 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// Set g_default now, reflecting any changes made to "g" above, in case AutoExecSection(), below,
 	// never returns, perhaps because it contains an infinite loop (intentional or not):
 	CopyMemory(&g_default, g, sizeof(global_struct));
+
+	// Use FindOrAdd vs Add for maintainability, although it shouldn't already exist:
+	if (   !(g_ErrorLevel = g_script.FindOrAddVar(_T("ErrorLevel")))   )
+		return CRITICAL_ERROR; // Error.  Above already displayed it for us.
+	// Initialize the var state to zero:
+	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 
 	// Could use CreateMutex() but that seems pointless because we have to discover the
 	// hWnd of the existing process so that we can close or restart it, so we would have
@@ -195,15 +197,9 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	if (!load_result) // LoadFromFile() relies upon us to do this check.  No script was loaded or we're in /iLib mode, so nothing more to do.
 		return 0;
 
-	// Unless explicitly set to be non-SingleInstance via SINGLE_INSTANCE_OFF or a special kind of
-	// SingleInstance such as SINGLE_INSTANCE_REPLACE and SINGLE_INSTANCE_IGNORE, persistent scripts
-	// and those that contain hotkeys/hotstrings are automatically SINGLE_INSTANCE_PROMPT as of v1.0.16:
-	if (g_AllowOnlyOneInstance == ALLOW_MULTI_INSTANCE && IS_PERSISTENT)
-		g_AllowOnlyOneInstance = SINGLE_INSTANCE_PROMPT;
-
 	HWND w_existing = NULL;
 	UserMessages reason_to_close_prior = (UserMessages)0;
-	if (g_AllowOnlyOneInstance && g_AllowOnlyOneInstance != SINGLE_INSTANCE_OFF && !restart_mode && !g_ForceLaunch)
+	if (g_AllowOnlyOneInstance && !restart_mode && !g_ForceLaunch)
 	{
 		// Note: the title below must be constructed the same was as is done by our
 		// CreateWindows(), which is why it's standardized in g_script.mMainWindowTitle:
@@ -229,7 +225,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		// We wait until now to do this so that the prior instance's "restart" hotkey will still
 		// be available to use again after the user has fixed the script.  UPDATE: We now inform
 		// the prior instance of why it is being asked to close so that it can make that reason
-		// available to the OnExit subroutine via a built-in variable:
+		// available to the OnExit function via a built-in variable:
 		ASK_INSTANCE_TO_CLOSE(w_existing, reason_to_close_prior);
 		//PostMessage(w_existing, WM_CLOSE, 0, 0);
 
@@ -243,7 +239,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 				break;  // done waiting.
 			if (interval_count == 100)
 			{
-				// This can happen if the previous instance has an OnExit subroutine that takes a long
+				// This can happen if the previous instance has an OnExit function that takes a long
 				// time to finish, or if it's waiting for a network drive to timeout or some other
 				// operation in which it's thread is occupied.
 				if (MsgBox(_T("Could not close the previous instance of this script.  Keep waiting?"), 4) == IDNO)
@@ -323,12 +319,6 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	g_script.mIsReadyToExecute = true; // This is done only after the above to support error reporting in Hotkey.cpp.
 
 	Var *clipboard_var = g_script.FindOrAddVar(_T("Clipboard")); // Add it if it doesn't exist, in case the script accesses "Clipboard" via a dynamic variable.
-	if (clipboard_var)
-		// This is done here rather than upon variable creation speed up runtime/dynamic variable creation.
-		// Since the clipboard can be changed by activity outside the program, don't read-cache its contents.
-		// Since other applications and the user should see any changes the program makes to the clipboard,
-		// don't write-cache it either.
-		clipboard_var->DisableCache();
 
 	// Run the auto-execute part at the top of the script (this call might never return):
 	if (!g_script.AutoExecSection()) // Can't run script at all. Due to rarity, just abort.

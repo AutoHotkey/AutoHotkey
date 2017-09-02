@@ -9,13 +9,6 @@
 
 #define INVOKE_NOT_HANDLED	CONDITION_FALSE
 
-enum ObjectMethodID { // Partially ported from v2 BuiltInFunctionID.  Used for code sharing.
-	FID_ObjInsertAt, FID_ObjDelete, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength
-	, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjGetAddress, FID_ObjClone
-	, FID_ObjNewEnum, FID_ObjMaxIndex, FID_ObjMinIndex, FID_ObjRemove, FID_ObjInsert
-};
-
-
 //
 // ObjectBase - Common base class, implements reference counting.
 //
@@ -75,10 +68,60 @@ public:
 class DECLSPEC_NOVTABLE EnumBase : public ObjectBase
 {
 public:
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	virtual int Next(Var *aOutputVar1, Var *aOutputVar2) = 0;
 };
-	
+
+
+//
+// FlatVector - utility class.
+//
+
+template <typename T>
+class FlatVector
+{
+	struct Data
+	{
+		size_t size;
+		size_t length;
+		T value[1];
+	};
+	Data *data;
+	static Data Empty;
+public:
+	void Init() // Not a constructor because this class is used in a union.
+	{
+		data = &Empty;
+	}
+	void Free()
+	{
+		if (data != &Empty)
+		{
+			free(data);
+			data = &Empty;
+		}
+	}
+	bool SetCapacity(size_t new_size)
+	{
+		Data *d = (data == &Empty) ? NULL : data;
+		size_t length = data->length;
+		const size_t header_size = sizeof(Data) - sizeof(T);
+		if (  !(d = (Data *)realloc(d, new_size * sizeof(T) + header_size))  )
+			return false;
+		data = d;
+		data->size = new_size;
+		data->length = length; // Only strictly necessary if NULL was passed to realloc.
+		return true;
+	}
+	size_t &Length() { return data->length; }
+	size_t Capacity() { return data->size; }
+	T *Value() { return data->value; }
+	operator T *() { return Value(); }
+};
+
+template <typename T>
+typename FlatVector<T>::Data FlatVector<T>::Empty;
+
 
 //
 // Property: Invoked when a derived object gets/sets the corresponding key.
@@ -94,7 +137,7 @@ public:
 
 	Property() : mGet(NULL), mSet(NULL) { }
 	
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	IObject_Type_Impl("Property")
 };
 
@@ -102,6 +145,8 @@ public:
 //
 // Object - Scriptable associative array.
 //
+
+#define ObjParseIntKey(s, endptr) Exp32or64(UorA(wcstol,strtol),UorA(_wcstoi64,_strtoi64))(s, endptr, 10) // Convert string to IntKeyType, setting errno = ERANGE if overflow occurs.
 
 class Object : public ObjectBase
 {
@@ -114,35 +159,29 @@ protected:
 		IntKeyType i;
 		IObject *p;
 	};
+	typedef FlatVector<TCHAR> String;
 	struct FieldType
 	{
 		union { // Which of its members is used depends on the value of symbol, below.
 			__int64 n_int64;	// for SYM_INTEGER
 			double n_double;	// for SYM_FLOAT
 			IObject *object;	// for SYM_OBJECT
-			struct {
-				LPTSTR marker;		// for SYM_OPERAND
-				size_t size;		// for SYM_OPERAND; allows reuse of allocated memory. For UNICODE: count in characters
-			};
+			String string;		// for SYM_STRING
 		};
 		// key and symbol probably need to be adjacent to each other to conserve memory due to 8-byte alignment.
 		KeyType key;
 		SymbolType symbol;
-		
+
 		inline IntKeyType CompareKey(IntKeyType val) { return val - key.i; }  // Used by both int and object since they are stored separately.
 		inline int CompareKey(LPTSTR val) { return _tcsicmp(val, key.s); }
 
+		void Clear();
 		bool Assign(LPTSTR str, size_t len = -1, bool exact_size = false);
 		bool Assign(ExprTokenType &val);
 		void Get(ExprTokenType &result);
 		void Free();
 	
-		inline void ToToken(ExprTokenType &aToken) // Used when we want the value as is, in a token.  Does not AddRef() or copy strings.
-		{
-			aToken.value_int64 = n_int64; // Union copy. Overlaps with buf on x86 builds, so do it first.
-			if ((aToken.symbol = symbol) == SYM_OPERAND)
-				aToken.buf = NULL; // Indicate that this SYM_OPERAND token LACKS a pre-converted binary integer.
-		}
+		inline void ToToken(ExprTokenType &aToken); // Used when we want the value as is, in a token.  Does not AddRef() or copy strings.
 	};
 
 	class Enumerator : public EnumBase
@@ -187,6 +226,8 @@ protected:
 	FieldType *FindField(T val, IndexType left, IndexType right, IndexType &insert_pos);
 	FieldType *FindField(SymbolType key_type, KeyType key, IndexType &insert_pos);	
 	FieldType *FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos);
+
+	void ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type, KeyType &key);
 	
 	FieldType *Insert(SymbolType key_type, KeyType key, IndexType at);
 
@@ -197,15 +238,17 @@ protected:
 		return SetInternalCapacity(mFieldCountMax ? mFieldCountMax * 2 : 4);
 	}
 	
-	ResultType CallField(FieldType *aField, ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallField(FieldType *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	
 public:
 	static Object *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
 	static Object *CreateArray(ExprTokenType *aValue[] = NULL, int aValueCount = 0);
+	static Object *CreateFromArgV(LPTSTR *aArgV, int aArgC);
+	
+	bool Append(ExprTokenType &aValue);
+	bool Append(LPTSTR aValue, size_t aValueLength = -1) { return Append(ExprTokenType(aValue, aValueLength)); }
+	bool Append(__int64 aValue) { return Append(ExprTokenType(aValue)); }
 
-	bool Append(LPTSTR aValue, size_t aValueLength = -1);
-
-	// Used by Func::Call() for variadic functions/function-calls:
 	Object *Clone(BOOL aExcludeIntegerKeys = false);
 	void ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params, ExprTokenType **aParam, int aParamCount);
 	ResultType ArrayToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax);
@@ -232,11 +275,11 @@ public:
 	{
 		return (int)mKeyOffsetObject;
 	}
-	
+
 	bool GetItem(ExprTokenType &aToken, LPTSTR aKey)
 	{
 		KeyType key;
-		SymbolType key_type = IsPureNumeric(aKey, FALSE, FALSE, FALSE); // SYM_STRING or SYM_INTEGER.
+		SymbolType key_type = IsNumeric(aKey, FALSE, FALSE, FALSE); // SYM_STRING or SYM_INTEGER.
 		if (key_type == SYM_INTEGER)
 			key.i = ATOI(aKey);
 		else
@@ -263,29 +306,19 @@ public:
 
 	bool SetItem(LPTSTR aKey, ExprTokenType &aValue)
 	{
-		ExprTokenType key;
-		key.symbol = SYM_OPERAND;
-		key.marker = aKey;
-		key.buf = NULL;
-		return SetItem(key, aValue);
+		return SetItem(ExprTokenType(aKey), aValue);
 	}
 
 	bool SetItem(LPTSTR aKey, __int64 aValue)
 	{
-		ExprTokenType token;
-		token.symbol = SYM_INTEGER;
-		token.value_int64 = aValue;
-		return SetItem(aKey, token);
+		return SetItem(aKey, ExprTokenType(aValue));
 	}
 
 	bool SetItem(LPTSTR aKey, IObject *aValue)
 	{
-		ExprTokenType token;
-		token.symbol = SYM_OBJECT;
-		token.object = aValue;
-		return SetItem(aKey, token);
+		return SetItem(aKey, ExprTokenType(aValue));
 	}
-	
+
 	void ReduceKeys(INT_PTR aAmount)
 	{
 		for (IndexType i = 0; i < mKeyOffsetObject; ++i)
@@ -309,39 +342,39 @@ public:
 	{
 		return mBase; // Callers only want to call Invoke(), so no AddRef is done.
 	}
-	
+
 	LPTSTR Type();
+	bool IsDerivedFrom(IObject *aBase);
+	
 	// Used by Object::_Insert() and Func::Call():
 	bool InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], int aValueCount);
 
 	void EndClassDefinition();
 	Object *GetUnresolvedClass(LPTSTR &aName);
 	
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	int GetBuiltinID(LPCTSTR aName);
-	ResultType CallBuiltin(int aID, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
-	ResultType _Insert(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _InsertAt(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _Push(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _InsertAt(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Push(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	
-	enum RemoveMode { RM_RemoveKeyOrIndex, RM_RemoveKey, RM_RemoveAt, RM_Pop };
-	ResultType _Remove_impl(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, RemoveMode aMode);
-	ResultType _Remove(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _Delete(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _RemoveAt(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _Pop(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	enum RemoveMode { RM_RemoveKey = 0, RM_RemoveAt, RM_Pop };
+	ResultType _Remove_impl(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, RemoveMode aMode);
+	ResultType _Delete(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _RemoveAt(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Pop(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	
-	ResultType _GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _GetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _Length(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _MaxIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _MinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _NewEnum(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _HasKey(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType _Clone(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _GetCapacity(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _SetCapacity(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _GetAddress(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Length(ResultToken &aResultToken);
+	ResultType _MaxIndex(ResultToken &aResultToken);
+	ResultType _MinIndex(ResultToken &aResultToken);
+	ResultType _NewEnum(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _HasKey(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Clone(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	static LPTSTR sMetaFuncName[];
 
@@ -364,7 +397,7 @@ public:
 	ULONG STDMETHODCALLTYPE Release() { return 1; }
 	bool Delete() { return false; }
 
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
 extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object values.
@@ -387,7 +420,7 @@ public:
 	static BoundFunc *Bind(IObject *aFunc, ExprTokenType **aParam, int aParamCount, int aFlags);
 	~BoundFunc();
 
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	IObject_Type_Impl("BoundFunc")
 };
 
@@ -426,13 +459,32 @@ class RegExMatchObject : public ObjectBase
 	}
 
 public:
-	static RegExMatchObject *Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName
-		, int aPatternCount, int aCapturedPatternCount, LPCTSTR aMark);
+	static ResultType Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName
+		, int aPatternCount, int aCapturedPatternCount, LPCTSTR aMark, IObject *&aNewObject);
 	
-	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	IObject_Type_Impl("RegExMatch")
 
 #ifdef CONFIG_DEBUGGER
 	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
 #endif
+};
+
+
+//
+// ClipboardAll: Represents a blob of clipboard data (all formats retrieved from clipboard).
+//
+
+class ClipboardAll : public ObjectBase
+{
+	void *mData;
+	size_t mSize;
+
+public:
+	void *Data() { return mData; }
+	size_t Size() { return mSize; }
+	ClipboardAll(void *aData, size_t aSize) : mData(aData), mSize(aSize) {}
+	~ClipboardAll() { free(mData); }
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	IObject_Type_Impl("ClipboardAll")
 };

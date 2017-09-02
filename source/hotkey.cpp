@@ -73,7 +73,7 @@ ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR a
 	// Caller relies on this check:
 	if (!(*aWinTitle || *aWinText)) // In case of something weird but legit like: #IfWinActive, ,
 	{
-		g_HotCriterion = NULL;
+		g->HotCriterion = NULL;
 		return OK;
 	}
 
@@ -85,7 +85,7 @@ ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR a
 		if (cp->Type == aType && !_tcscmp(cp->WinTitle, aWinTitle) && !_tcscmp(cp->WinText, aWinText)) // Case insensitive.
 		{
 			// Match found, so point to the existing memory.
-			g_HotCriterion = cp;
+			g->HotCriterion = cp;
 			return OK;
 		}
 
@@ -111,7 +111,7 @@ ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR a
 	else
 		cp->WinText = _T("");
 
-	g_HotCriterion = cp;
+	g->HotCriterion = cp;
 
 	// Update the linked list:
 	if (!g_FirstHotCriterion)
@@ -839,7 +839,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 		sDialogIsDisplayed = true;
 		g_AllowInterruption = FALSE;
 		if (MsgBox(error_text, MB_YESNO) == IDNO)
-			g_script.ExitApp(EXIT_CRITICAL); // Might not actually Exit if there's an OnExit subroutine.
+			g_script.ExitApp(EXIT_CRITICAL); // Might not actually Exit if there's an OnExit function.
 		g_AllowInterruption = TRUE;
 		sDialogIsDisplayed = false;
 	}
@@ -930,10 +930,10 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		else if (!_tcsicmp(aHotkeyName + (invert ? 8 : 5), _T("Exist")))
 			hot_criterion = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
 		else // It starts with IfWin but isn't Active or Exist: Don't alter the current criterion.
-			return g_script.SetErrorLevelOrThrow();
+			return g_script.ScriptError(ERR_PARAM1_INVALID);
 		if (!SetHotkeyCriterion(hot_criterion, aLabelName, aOptions)) // Currently, it only fails upon out-of-memory.
-			return g_script.SetErrorLevelOrThrow();
-		return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+			return FAIL;
+		return OK;
 	}
 
 	// Hotkey, If  ; Set null criterion.
@@ -965,11 +965,11 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				if (cp->Type == HOT_IF_CALLBACK && cp->Callback == callback)
 					break;
 			}
-			g_HotCriterion = cp;
+			g->HotCriterion = cp;
 		}
 		else if (!*aLabelName)
 		{
-			g_HotCriterion = NULL;
+			g->HotCriterion = NULL;
 		}
 		else
 		{
@@ -979,9 +979,9 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				// validated at load time where possible.  Setting ErrorLevel might go unnoticed and would be
 				// inconsistent with other modes of this command (without UseErrorLevel), so throw an error.
 				return g_script.ScriptError(ERR_HOTKEY_IF_EXPR);
-			g_HotCriterion = cp;
+			g->HotCriterion = cp;
 		}
-		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+		return OK;
 	}
 
 	// For maintainability (and script readability), don't support "U" as a substitute for "UseErrorLevel",
@@ -1629,7 +1629,7 @@ HotkeyVariant *Hotkey::FindVariant()
 // If no match, it returns NULL.
 {
 	for (HotkeyVariant *vp = mFirstVariant; vp; vp = vp->mNextVariant)
-		if (vp->mHotCriterion == g_HotCriterion)
+		if (vp->mHotCriterion == g->HotCriterion)
 			return vp;
 	return NULL;
 }
@@ -1659,7 +1659,7 @@ HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde)
 	v.mMaxThreads = g_MaxThreadsPerHotkey;    // The values of these can vary during load-time.
 	v.mMaxThreadsBuffer = g_MaxThreadsBuffer; //
 	v.mInputLevel = g_InputLevel;
-	v.mHotCriterion = g_HotCriterion; // If this hotkey is an alt-tab one (mHookAction), this is stored but ignored until/unless the Hotkey command converts it into a non-alt-tab hotkey.
+	v.mHotCriterion = g->HotCriterion; // If this hotkey is an alt-tab one (mHookAction), this is stored but ignored until/unless the Hotkey command converts it into a non-alt-tab hotkey.
 	v.mEnabled = true;
 	if (v.mInputLevel > 0)
 	{
@@ -2581,6 +2581,7 @@ ResultType Hotstring::AddHotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR 
 Hotstring::Hotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement, bool aHasContinuationSection)
 	: mJumpToLabel(aJumpToLabel)  // Any NULL value will cause failure further below.
 	, mString(NULL), mReplacement(_T("")), mStringLength(0)
+	, mHotCriterion(g->HotCriterion)
 	, mSuspended(false)
 	, mExistingThreads(0)
 	, mMaxThreads(g_MaxThreadsPerHotkey)  // The value of g_MaxThreadsPerHotkey can vary during load-time.
@@ -2588,7 +2589,6 @@ Hotstring::Hotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LP
 	, mCaseSensitive(g_HSCaseSensitive), mConformToCase(g_HSConformToCase), mDoBackspace(g_HSDoBackspace)
 	, mOmitEndChar(g_HSOmitEndChar), mSendRaw(aHasContinuationSection ? true : g_HSSendRaw)
 	, mEndCharRequired(g_HSEndCharRequired), mDetectWhenInsideWord(g_HSDetectWhenInsideWord), mDoReset(g_HSDoReset)
-	, mHotCriterion(g_HotCriterion)
 	, mInputLevel(g_InputLevel)
 	, mConstructedOK(false)
 {

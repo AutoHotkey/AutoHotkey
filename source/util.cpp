@@ -263,7 +263,10 @@ __int64 YYYYMMDDSecondsUntil(LPTSTR aYYYYMMDDStart, LPTSTR aYYYYMMDDEnd, bool &a
 	if (*aYYYYMMDDStart)
 	{
 		if (!YYYYMMDDToFileTime(aYYYYMMDDStart, ftStart))
+		{
+			g_script.ScriptError(ERR_PARAM2_INVALID);
 			return 0;
+		}
 	}
 	else // Use the current time in its place.
 	{
@@ -273,7 +276,10 @@ __int64 YYYYMMDDSecondsUntil(LPTSTR aYYYYMMDDStart, LPTSTR aYYYYMMDDEnd, bool &a
 	if (*aYYYYMMDDEnd)
 	{
 		if (!YYYYMMDDToFileTime(aYYYYMMDDEnd, ftEnd))
+		{
+			g_script.ScriptError(ERR_PARAM1_INVALID);
 			return 0;
+		}
 	}
 	else // Use the current time in its place.
 	{
@@ -305,7 +311,7 @@ __int64 FileTimeSecondsUntil(FILETIME *pftStart, FILETIME *pftEnd)
 
 
 
-SymbolType IsPureNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
+SymbolType IsNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
 	, BOOL aAllowFloat, BOOL aAllowImpure)  // BOOL vs. bool might squeeze a little more performance out of this frequently-called function.
 // String can contain whitespace.
 // If aBuf doesn't contain something purely numeric, PURE_NOT_NUMERIC is returned.  The same happens if
@@ -340,6 +346,7 @@ SymbolType IsPureNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhites
 
 	// Set defaults:
 	BOOL has_decimal_point = false;
+	BOOL has_exponent = false;
 	BOOL has_at_least_one_digit = false; // i.e. a string consisting of only "+", "-" or "." is not considered numeric.
 	int c; // int vs. char might squeeze a little more performance out of it (it does reduce code size by 5 bytes). Probably must stay signed vs. unsigned for some of the uses below.
 
@@ -360,7 +367,7 @@ SymbolType IsPureNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhites
 			break; // The number qualifies as pure, so fall through to the logic at the bottom. (It would already have returned elsewhere in the loop if the number is impure).
 		if (c == '.')
 		{
-			if (!aAllowFloat || has_decimal_point || is_hex) // If aAllowFloat==false, a decimal point at the very end of the number is considered non-numeric even if aAllowImpure==true.  Some callers like "case ACT_ADD" might rely on this.
+			if (!aAllowFloat || has_decimal_point || is_hex) // If aAllowFloat==false, a decimal point at the very end of the number is considered non-numeric even if aAllowImpure==true.  Some callers might rely on this.
 				// i.e. if aBuf contains 2 decimal points, it can't be a valid number.
 				// Note that decimal points are allowed in hexadecimal strings, e.g. 0xFF.EE.
 				// But since that format doesn't seem to be supported by VC++'s atof() and probably
@@ -382,18 +389,19 @@ SymbolType IsPureNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhites
 				}
 				else
 				{
-					// As written below, this actually tolerates malformed scientific notation such as numbers
-					// containing two or more E's (e.g. 1.0e4e+5e-6,).  But for performance and due to rarity,
-					// it seems best not to check for them.
 					if (ctoupper(c) != 'E' // v1.0.46.11: Support scientific notation in floating point numbers.
-						|| !(has_decimal_point && has_at_least_one_digit)) // But it must have a decimal point and at least one digit to the left of the 'E'. This avoids variable names like "1e4" from being seen as sci-notation literals (for backward compatibility). Some callers rely on this check.
+						|| !has_at_least_one_digit // But it must have at least one digit to the left of the 'E'. Some callers rely on this check.
+						|| has_exponent
+						|| !aAllowFloat)
 						return PURE_NOT_NUMERIC;
 					if (aBuf[1] == '-' || aBuf[1] == '+') // The optional sign is present on the exponent.
 						++aBuf; // Omit it from further consideration so that the outer loop doesn't see it as an extra/illegal sign.
 					if (aBuf[1] < '0' || aBuf[1] > '9')
 						// Even if it is an 'e', ensure what follows it is a valid exponent.  Some callers rely
-						// on this check, such as ones that expect "0.6e" to be non-numeric (for "SetFormat Float") 
+						// on this check, such as ones that expect "0.6e" to be non-numeric.
 						return PURE_NOT_NUMERIC;
+					has_exponent = true;
+					has_decimal_point = true; // For simplicity, since a decimal point after the exponent isn't valid.
 				}
 			}
 			else // This character is a valid digit or hex-digit.
@@ -1273,7 +1281,7 @@ LPTSTR TranslateLFtoCRLF(LPTSTR aString)
 
 
 
-bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr)
+bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr, DWORD aRequiredAttr)
 // Returns true if the file/folder exists or false otherwise.
 // If non-NULL, aFileAttr's DWORD is set to the attributes of the file/folder if a match is found.
 // If there is no match, its contents are undefined.
@@ -1290,6 +1298,17 @@ bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr)
 		HANDLE hFile = FindFirstFile(aFilePattern, &wfd);
 		if (hFile == INVALID_HANDLE_VALUE)
 			return false;
+		// Skip . and .., which appear to always be listed first (for dir\* and dir\*.*).
+		while (wfd.cFileName[0] == '.' && (!wfd.cFileName[1] || wfd.cFileName[1] == '.' && !wfd.cFileName[2]))
+			if (!FindNextFile(hFile, &wfd))
+				return false;
+		if (aRequiredAttr) // Caller wants to check for a file/folder with specific attributes.
+		{
+			while ((wfd.dwFileAttributes & aRequiredAttr) != aRequiredAttr)
+				if (!FindNextFile(hFile, &wfd))
+					return false;
+			// Since above didn't return, a file/folder with the required attribute was found.
+		}
 		FindClose(hFile);
 		if (aFileAttr)
 			*aFileAttr = wfd.dwFileAttributes;
@@ -1298,6 +1317,8 @@ bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr)
     else
 	{
 		DWORD attr = GetFileAttributes(aFilePattern);
+		if (aRequiredAttr && (attr & aRequiredAttr) != aRequiredAttr)
+			return false;
 		if (aFileAttr)
 			*aFileAttr = attr;
 		return attr != 0xFFFFFFFF;
@@ -1475,6 +1496,11 @@ void AssignColor(LPTSTR aColorName, COLORREF &aColor, HBRUSH &aBrush)
 			// if aColorName does not contain something hex-numeric, black (0x00) will be assumed,
 			// which seems okay given how rare such a problem would be.
 	}
+	AssignColor(color, aColor, aBrush);
+}
+
+void AssignColor(COLORREF color, COLORREF &aColor, HBRUSH &aBrush)
+{
 	if (color != aColor) // It's not already the right color.
 	{
 		aColor = color; // Set default.  v1.0.44.09: Added this line to fix the inability to change to a previously selected color after having changed to the default color.
@@ -2026,13 +2052,13 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		//   Gui, Add, Pic, h1, bitmap 1x2.bmp
 		// And then it falls back to GDIplus, which in the particular case above appears to traumatize the
 		// parent window (or its picture control), because the GUI window hangs (but not the script) after
-		// doing a FileSelectFolder.  For example:
-		//   Gui, Add, Button,, FileSelectFile
-		//   Gui, Add, Pic, h1, bitmap 1x2.bmp  ; Causes GUI window to hang after FileSelectFolder (due to LoadImage failing then falling back to GDIplus; i.e. GDIplus is somehow triggering the problem).
+		// doing a FileSelect.  For example:
+		//   Gui, Add, Button,, FileSelect
+		//   Gui, Add, Pic, h1, bitmap 1x2.bmp  ; Causes GUI window to hang after FileSelect (due to LoadImage failing then falling back to GDIplus; i.e. GDIplus is somehow triggering the problem).
 		//   Gui, Show
 		//   return
-		//   ButtonFileSelectFile:
-		//   FileSelectFile, outputvar
+		//   ButtonFileSelect:
+		//   FileSelect, outputvar
 		//   return
 		if (hbitmap = (HBITMAP)LoadImage(NULL, aFilespec, aImageType, desired_width, desired_height
 			, LR_LOADFROMFILE | LR_CREATEDIBSECTION))
@@ -2649,18 +2675,18 @@ BOOL MyIsAppThemed()
 
 
 
-LPTSTR ConvertEscapeSequences(LPTSTR aBuf, TCHAR aEscapeChar, bool aAllowEscapedSpace)
+LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap)
 // Replaces any escape sequences in aBuf with their reduced equivalent.  For example, if aEscapeChar
 // is accent, Each `n would become a literal linefeed.  aBuf's length should always be the same or
 // lower than when the process started, so there is no chance of overflow.
 {
-	LPTSTR cp, cp1;
-	for (cp = aBuf; ; ++cp)  // Increment to skip over the symbol just found by the inner for().
+	int i;
+	for (i = 0; ; ++i)  // Increment to skip over the symbol just found by the inner for().
 	{
-		for (; *cp && *cp != aEscapeChar; ++cp);  // Find the next escape char.
-		if (!*cp) // end of string.
+		for (; aBuf[i] && aBuf[i] != g_EscapeChar; ++i);  // Find the next escape char.
+		if (!aBuf[i]) // end of string.
 			break;
-		cp1 = cp + 1;
+		LPTSTR cp1 = aBuf + i + 1;
 		switch (*cp1)
 		{
 			// Only lowercase is recognized for these:
@@ -2671,64 +2697,102 @@ LPTSTR ConvertEscapeSequences(LPTSTR aBuf, TCHAR aEscapeChar, bool aAllowEscaped
 			case 'r': *cp1 = '\r'; break;  // carriage return
 			case 't': *cp1 = '\t'; break;  // horizontal tab
 			case 'v': *cp1 = '\v'; break;  // vertical tab
-			case 's': // space (not always allowed for backward compatibility reasons).
-				if (aAllowEscapedSpace)
-					*cp1 = ' ';
-				//else do nothing extra, just let the standard action for unrecognized escape sequences.
-				break;
-			// Otherwise, if it's not one of the above, the escape-char is considered to
-			// mark the next character as literal, regardless of what it is. Examples:
-			// `` -> `
-			// `:: -> :: (effectively)
-			// `; -> ;
-			// `c -> c (i.e. unknown escape sequences resolve to the char after the `)
+			case 's': *cp1 = ' '; break;   // space
 		}
-		// Below has a final +1 to include the terminator:
-		tmemmove(cp, cp1, _tcslen(cp1) + 1);
+		// Replace escape-sequence with its single-char value.  This is done even if the pair isn't
+		// a recognizable escape sequence (e.g. `? becomes ?), which is the Microsoft approach and
+		// might not be a bad way of handling things. Below has a final +1 to include the terminator:
+		tmemmove(aBuf + i, cp1, _tcslen(cp1) + 1);
+		if (aLiteralMap)
+			aLiteralMap[i] = 1;  // In the map, mark this char as literal.
 	}
 	return aBuf;
 }
 
 
 
-int FindNextDelimiter(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLiteralMap)
+int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLiteralMap)
 // Returns the index of the next delimiter, taking into account quotes, parentheses, etc.
 // If the delimiter is not found, returns the length of aBuf.
 {
-	bool in_quotes = false;
-	int open_parens = 0;
+	TCHAR close_char;
 	for (int mark = aStartIndex; ; ++mark)
 	{
 		if (aBuf[mark] == aDelimiter)
-		{
-			if (!in_quotes && open_parens <= 0 && !(aLiteralMap && aLiteralMap[mark]))
-				// A delimiting comma other than one in a sub-statement or function.
-				return mark;
-			// Otherwise, its a quoted/literal comma or one in parentheses (such as function-call).
-			continue;
-		}
+			return mark;
 		switch (aBuf[mark])
 		{
-		case '"': // There are sections similar this one later below; so see them for comments.
-			in_quotes = !in_quotes;
-			break;
-		case '(': // For our purpose, "(", "[" and "{" can be treated the same.
-		case '[': // If they aren't balanced properly, a later stage will detect it.
-		case '{': //
-			if (!in_quotes) // Literal parentheses inside a quoted string should not be counted for this purpose.
-				++open_parens;
-			break;
-		case ')':
-		case ']':
-		case '}':
-			if (!in_quotes)
-				--open_parens; // If this makes it negative, validation later on will catch the syntax error.
-			break;
 		case '\0':
 			// Reached the end of the string without finding a delimiter.  Return the
 			// index of the null-terminator since that's typically what the caller wants.
 			return mark;
-		//default: some other character; just have the loop skip over it.
+		default:
+		//case '`': // May indicate an attempt to escape something when aLiteralMap==NULL, but has escape has no meaning here.
+			// Not a meaningful character; just have the loop skip over it.
+			continue;
+		case '"': 
+		case '\'':
+			mark = FindTextDelim(aBuf, aBuf[mark], mark + 1, aLiteralMap);
+			if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
+				return mark; // See case '\0' for comments.
+			continue;
+		//case ')':
+		//case ']':
+		//case '}':
+			// Unbalanced parentheses etc are caught at a later stage.
+			//continue;
+		case g_DerefChar:
+			// Since the check at the top of the loop didn't "return", this is the beginning
+			// of a double-deref, not the end.
+			close_char = g_DerefChar;
+			break;
+		case '(': close_char = ')'; break;
+		case '[': close_char = ']'; break;
+		case '{': close_char = '}'; break;
+		}
+		// Since above didn't "return" or "continue":
+		mark = FindExprDelim(aBuf, close_char, mark + 1, aLiteralMap);
+		if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
+			return mark; // See case '\0' for comments.
+		// Otherwise, continue the loop.
+	} // for each character.
+}
+
+
+
+int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLiteralMap)
+{
+	for (int mark = aStartIndex; ; ++mark)
+	{
+		if (aBuf[mark] == aDelimiter)
+		{
+			if (aLiteralMap && aLiteralMap[mark])
+				continue;
+			return mark;
+		}
+		switch (aBuf[mark])
+		{
+		case '\0':
+			// Reached the end of the string without finding a delimiter.  Return the
+			// index of the null-terminator since that's typically what the caller wants.
+			return mark;
+#ifdef ENABLE_TEXT_DEREFS
+		case g_DerefChar:
+			if (!aLiteralMap || !aLiteralMap[mark])
+			{
+				// Find the corresponding end char for this deref.
+				mark = FindExprDelim(aBuf, g_DerefChar, mark + 1, aLiteralMap);
+				if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
+					return mark; // See case '\0' for comments.
+			}
+			continue;
+#endif
+		case '`':
+			// This allows g_DerefChar or aDelimiter to be escaped, but since every other non-null
+			// character has no meaning here, it doesn't need to check which character it is skipping.
+			if (!aLiteralMap && aBuf[mark+1])
+				++mark;
+ 			continue;
 		}
 	}
 }
@@ -2818,6 +2882,30 @@ LPTSTR InStrAny(LPTSTR aStr, LPTSTR aNeedle[], int aNeedleCount, size_t &aFoundL
 			}
 	// If the above loops completed without returning, no matches were found.
 	return NULL;
+}
+
+
+
+int FTOA(double aValue, LPTSTR aBuf, int aBufSize)
+// Converts aValue to a string while trying to ensure that conversion back to double will
+// produce the same value.  Trailing 0s after the decimal point are stripped for brevity.
+// Caller must ensure there is sufficient buffer size to avoid truncating the decimal point.
+{
+	int result = sntprintf(aBuf, aBufSize, _T("%0.17f"), aValue);
+	for (int i = result; i > 0; --i)
+	{
+		if (aBuf[i - 1] != '0')
+		{
+			if (i < result)
+			{
+				if (aBuf[i - 1] == '.')
+					++i;
+				aBuf[i] = '\0';
+			}
+			return i;
+		}
+	}
+	return result;
 }
 
 

@@ -48,7 +48,6 @@ GNU General Public License for more details.
 // the same process. Also, because class names occupy space in the system's private atom table, you
 // should keep class name strings as short a possible:
 #define WINDOW_CLASS_MAIN _T("AutoHotkey")
-#define WINDOW_CLASS_SPLASH _T("AutoHotkey2")
 #define WINDOW_CLASS_GUI _T("AutoHotkeyGUI") // There's a section in Script::Edit() that relies on these all starting with "AutoHotkey".
 
 #define EXT_AUTOHOTKEY _T(".ahk")
@@ -90,7 +89,6 @@ GNU General Public License for more details.
 	#define HIMETRIC_INCH 2540
 #endif
 
-
 #define IS_32BIT(signed_value_64) (signed_value_64 >= INT_MIN && signed_value_64 <= INT_MAX)
 #define GET_BIT(buf,n) (((buf) & (1 << (n))) >> (n))
 #define SET_BIT(buf,n,val) ((val) ? ((buf) |= (1<<(n))) : (buf &= ~(1<<(n))))
@@ -115,12 +113,12 @@ enum SendModes {SM_EVENT, SM_INPUT, SM_PLAY, SM_INPUT_FALLBACK_TO_PLAY, SM_INVAL
 enum ExitReasons {EXIT_NONE, EXIT_CRITICAL, EXIT_ERROR, EXIT_DESTROY, EXIT_LOGOFF, EXIT_SHUTDOWN
 	, EXIT_WM_QUIT, EXIT_WM_CLOSE, EXIT_MENU, EXIT_EXIT, EXIT_RELOAD, EXIT_SINGLEINSTANCE};
 
-enum WarnType {WARN_USE_UNSET_LOCAL, WARN_USE_UNSET_GLOBAL, WARN_LOCAL_SAME_AS_GLOBAL, WARN_USE_ENV, WARN_ALL};
+enum WarnType {WARN_USE_UNSET_LOCAL, WARN_USE_UNSET_GLOBAL, WARN_LOCAL_SAME_AS_GLOBAL, WARN_ALL};
 
 enum WarnMode {WARNMODE_OFF, WARNMODE_OUTPUTDEBUG, WARNMODE_MSGBOX, WARNMODE_STDOUT};	// WARNMODE_OFF must be zero.
 
-enum SingleInstanceType {ALLOW_MULTI_INSTANCE, SINGLE_INSTANCE_PROMPT, SINGLE_INSTANCE_REPLACE
-	, SINGLE_INSTANCE_IGNORE, SINGLE_INSTANCE_OFF}; // ALLOW_MULTI_INSTANCE must be zero.
+enum SingleInstanceType {SINGLE_INSTANCE_OFF, SINGLE_INSTANCE_PROMPT, SINGLE_INSTANCE_REPLACE
+	, SINGLE_INSTANCE_IGNORE }; // SINGLE_INSTANCE_OFF must be zero.
 
 enum MenuTypeType {MENU_TYPE_NONE, MENU_TYPE_POPUP, MENU_TYPE_BAR}; // NONE must be zero.
 
@@ -135,26 +133,24 @@ enum ToggleValueType {TOGGLE_INVALID = 0, TOGGLED_ON, TOGGLED_OFF, ALWAYS_ON, AL
 // In addition, BIF_InStr relies on SCS_SENSITIVE being 1:
 enum StringCaseSenseType {SCS_INSENSITIVE, SCS_SENSITIVE, SCS_INSENSITIVE_LOCALE, SCS_INSENSITIVE_LOGICAL, SCS_INVALID};
 
-enum RegSyntax {REG_OLD_SYNTAX, REG_NEW_SYNTAX, REG_EITHER_SYNTAX};
-
-enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
+enum SymbolType // For use with ExpandExpression() and IsNumeric().
 {
 	// The sPrecedence array in ExpandExpression() must be kept in sync with any additions, removals,
-	// or re-ordering of the below.  Also, IS_OPERAND() relies on all operand types being at the
-	// beginning of the list:
+	// or re-ordering of the below.  When reordering or adding new symbols, take care not to break
+	// the range checks in the various macros defined below.
 	 PURE_NOT_NUMERIC // Must be zero/false because callers rely on that.
 	, PURE_INTEGER, PURE_FLOAT
 	, SYM_STRING = PURE_NOT_NUMERIC, SYM_INTEGER = PURE_INTEGER, SYM_FLOAT = PURE_FLOAT // Specific operand types.
 #define IS_NUMERIC(symbol) ((symbol) == SYM_INTEGER || (symbol) == SYM_FLOAT) // Ordered for short-circuit performance.
 	, SYM_MISSING // Only used in parameter lists.
 	, SYM_VAR // An operand that is a variable's contents.
-	, SYM_OPERAND // Generic/undetermined type of operand.
 	, SYM_OBJECT // L31: Represents an IObject interface pointer.
 	, SYM_DYNAMIC // An operand that needs further processing during the evaluation phase.
 	, SYM_OPERAND_END // Marks the symbol after the last operand.  This value is used below.
 	, SYM_BEGIN = SYM_OPERAND_END  // SYM_BEGIN is a special marker to simplify the code.
 #define IS_OPERAND(symbol) ((symbol) < SYM_OPERAND_END)
 	, SYM_POST_INCREMENT, SYM_POST_DECREMENT // Kept in this position for use by YIELDS_AN_OPERAND() [helps performance].
+#define IS_POSTFIX_OPERATOR(symbol) ((symbol) == SYM_POST_INCREMENT || (symbol) == SYM_POST_DECREMENT)
 	, SYM_DOT // DOT must precede SYM_OPAREN so YIELDS_AN_OPERAND(SYM_GET) == TRUE, allowing auto-concat to work for it even though it is positioned after its second operand.
 	, SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE, SYM_COMMA  // CPAREN (close-paren)/CBRACKET/CBRACE must come right before OPAREN for YIELDS_AN_OPERAND.
 #define IS_OPAREN_LIKE(symbol) ((symbol) <= SYM_OBRACE && (symbol) >= SYM_OPAREN)
@@ -169,33 +165,46 @@ enum SymbolType // For use with ExpandExpression() and IsPureNumeric().
 #define IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(symbol) (symbol <= SYM_ASSIGN_CONCAT && symbol >= SYM_ASSIGN) // Check upper bound first for short-circuit performance.
 #define IS_ASSIGNMENT_OR_POST_OP(symbol) (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(symbol) || symbol == SYM_POST_INCREMENT || symbol == SYM_POST_DECREMENT)
 	, SYM_IFF_ELSE, SYM_IFF_THEN // THESE TERNARY OPERATORS MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE BELOW.
-	, SYM_OR, SYM_AND // MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE ABOVE because infix-to-postfix is optimized to check a range rather than a series of equalities.
-	, SYM_LOWNOT  // LOWNOT is the word "not", the low precedence counterpart of !
+	, SYM_OR, SYM_AND // MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE ABOVE for the range checks below.
+#define IS_SHORT_CIRCUIT_OPERATOR(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_THEN) // Excludes SYM_IFF_ELSE, which acts as a simple jump after the THEN branch is evaluated.
+#define SYM_USES_CIRCUIT_TOKEN(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_ELSE)
+	, SYM_IS, SYM_IN, SYM_CONTAINS
 	, SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL // =, ==, <> ... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
 	, SYM_GT, SYM_LT, SYM_GTOE, SYM_LTOE  // >, <, >=, <= ... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
 #define IS_RELATIONAL_OPERATOR(symbol) (symbol >= SYM_EQUAL && symbol <= SYM_LTOE)
+	, SYM_REGEXMATCH // ~=, equivalent to a RegExMatch call in two-parameter mode.
 	, SYM_CONCAT
+	, SYM_LOW_CONCAT // Zero-precedence concat, used so that "x%y=z%" is equivalent to "x%(y=z)%".
 	, SYM_BITOR // Seems more intuitive to have these higher in prec. than the above, unlike C and Perl, but like Python.
 	, SYM_BITXOR // SYM_BITOR (ABOVE) MUST BE KEPT FIRST AMONG THE BIT OPERATORS BECAUSE IT'S USED IN A RANGE-CHECK.
 	, SYM_BITAND
 	, SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT // << >>  ALSO: SYM_BITSHIFTRIGHT MUST BE KEPT LAST AMONG THE BIT OPERATORS BECAUSE IT'S USED IN A RANGE-CHECK.
+#define IS_BIT_OPERATOR(symbol) ((symbol) <= SYM_BITSHIFTRIGHT && (symbol) >= SYM_BITOR) // Check upper bound first for short-circuit performance (because operators like +-*/ are much more frequently used).
 	, SYM_ADD, SYM_SUBTRACT
 	, SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
-	, SYM_NEGATIVE, SYM_HIGHNOT, SYM_BITNOT, SYM_ADDRESS, SYM_DEREF  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
-	, SYM_POWER    // See comments near precedence array for why this takes precedence over SYM_NEGATIVE.
+	, SYM_POWER
+	, SYM_LOWNOT  // LOWNOT is the word "not", the low precedence counterpart of !
+	, SYM_NEGATIVE, SYM_POSITIVE, SYM_HIGHNOT, SYM_BITNOT, SYM_ADDRESS  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
+#define SYM_OVERRIDES_POWER_ON_STACK(symbol) ((symbol) >= SYM_LOWNOT && (symbol) <= SYM_ADDRESS) // Check lower bound first for short-circuit performance.
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
-	, SYM_FUNC     // A call to a function.
+#define SYM_INCREMENT_OR_DECREMENT_IS_PRE(symbol) ((symbol) >= SYM_PRE_INCREMENT) // Caller has verified symbol is an INCREMENT or DECREMENT operator.
 	, SYM_NEW      // new Class()
-	, SYM_REGEXMATCH // L31: Experimental ~= RegExMatch operator, equivalent to a RegExMatch call in two-parameter mode.
+#define IS_PREFIX_OPERATOR(symbol) ((symbol) >= SYM_LOWNOT && (symbol) <= SYM_NEW)
+	, SYM_FUNC     // A call to a function.
 	, SYM_COUNT    // Must be last because it's the total symbol count for everything above.
 	, SYM_INVALID = SYM_COUNT // Some callers may rely on YIELDS_AN_OPERAND(SYM_INVALID)==false.
 };
 // These two are macros for maintainability (i.e. seeing them together here helps maintain them together).
-#define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) (token.buf) // SYM_DYNAMICs other than doubles have NULL buf, at least at the stage this macro is called.
-#define SYM_DYNAMIC_IS_VAR_NORMAL_OR_CLIP(token) (!(token)->buf && ((token)->var->Type() == VAR_NORMAL || (token)->var->Type() == VAR_CLIPBOARD)) // i.e. it's an environment variable or the clipboard, not a built-in variable or double-deref.
+#define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) (!(token).var) // SYM_DYNAMICs are either double-derefs or built-in vars.
+#define SYM_DYNAMIC_IS_WRITABLE(token) ((token)->var && (token)->var->Type() <= VAR_LAST_WRITABLE) // i.e. it's the clipboard, not a built-in variable or double-deref.
+
+#define EXPR_NAN_STR	_T("")
+#define EXPR_NAN_LEN	0
+#define EXPR_NAN		EXPR_NAN_STR, EXPR_NAN_LEN
 
 
 struct ExprTokenType; // Forward declarations for use below.
+struct ResultToken;
 struct IDebugProperties;
 
 
@@ -203,7 +212,7 @@ struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 	: public IDispatch
 {
 	// See script_object.cpp for comments.
-	virtual ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount) = 0;
+	virtual ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount) = 0;
 	virtual LPTSTR Type() = 0;
 	#define IObject_Type_Impl(name) \
 		LPTSTR Type() { return _T(name); }
@@ -283,36 +292,29 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 			union // These nested structs and unions minimize the token size by overlapping data.
 			{
 				IObject *object;
-				DerefType *deref; // for SYM_FUNC
-				Var *var;         // for SYM_VAR
-				LPTSTR marker;     // for SYM_STRING and SYM_OPERAND.
+				DerefType *deref;  // for SYM_FUNC
+				Var *var;          // for SYM_VAR and SYM_DYNAMIC
+				LPTSTR marker;     // for SYM_STRING
+				ExprTokenType *circuit_token; // for short-circuit operators
 			};
-			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64). It's used by SYM_FUNC (helps built-in functions), SYM_DYNAMIC, SYM_OPERAND, and perhaps other misc. purposes.
+			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).
 			{
-				LPTSTR buf;
-				size_t marker_length; // Used only with aResultToken. TODO: Move into separate ResultTokenType struct.
+				DerefType *outer_deref; // Used by ExpressionToPostfix().
+				LPTSTR error_reporting_marker; // Used by ExpressionToPostfix() for binary and unary operators.
+				size_t marker_length;
+				BOOL is_lvalue;		// for SYM_DYNAMIC
 			};
 		};  
 	};
-	// Note that marker's str-length should not be stored in this struct, even though it might be readily
-	// available in places and thus help performance.  This is because if it were stored and the marker
-	// or SYM_VAR's var pointed to a location that was changed as a side effect of an expression's
-	// call to a script function, the length would then be invalid.
-	SymbolType symbol; // Short-circuit benchmark is currently much faster with this and the next beneath the union, perhaps due to CPU optimizations for 8-byte alignment.
-	union
-	{
-		ExprTokenType *circuit_token; // Facilitates short-circuit boolean evaluation.
-		LPTSTR mem_to_free; // Used only with aResultToken. TODO: Move into separate ResultTokenType struct.
-	};
-	// The above two probably need to be adjacent to each other to conserve memory due to 8-byte alignment,
-	// which is the default alignment (for performance reasons) in any struct that contains 8-byte members
-	// such as double and __int64.
+	SymbolType symbol;
+
 
 	ExprTokenType() {}
+	ExprTokenType(int aValue) { SetValue(aValue); }
 	ExprTokenType(__int64 aValue) { SetValue(aValue); }
 	ExprTokenType(double aValue) { SetValue(aValue); }
 	ExprTokenType(IObject *aValue) { SetValue(aValue); }
-	ExprTokenType(LPTSTR aValue) { SetValue(aValue); }
+	ExprTokenType(LPTSTR aValue, size_t aLength = -1) { SetValue(aValue, aLength); }
 	
 	void SetValue(__int64 aValue)
 	{
@@ -327,11 +329,12 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 		symbol = SYM_FLOAT;
 		value_double = aValue;
 	}
-	void SetValue(LPTSTR aValue)
+	void SetValue(LPTSTR aValue, size_t aLength = -1)
 	{
 		ASSERT(aValue);
 		symbol = SYM_STRING;
 		marker = aValue;
+		marker_length = aLength;
 	}
 	void SetValue(IObject *aValue)
 	// Caller must AddRef() if appropriate.
@@ -340,10 +343,146 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 		symbol = SYM_OBJECT;
 		object = aValue;
 	}
+
+	inline void CopyValueFrom(ExprTokenType &other)
+	// Copies the value of a token (by reference where applicable).  Does not object->AddRef().
+	{
+		value_int64 = other.value_int64; // Union copy.
+#ifdef _WIN64
+		// For simplicity/smaller code size, don't bother checking symbol == SYM_STRING.
+		marker_length = other.marker_length; // Already covered by the above on x86.
+#endif
+		symbol = other.symbol;
+	}
+
+	inline void CopyExprFrom(ExprTokenType &other)
+	// Copies all fields typically needed in a postfix expression.
+	{
+		return CopyValueFrom(other); // Currently nothing needs to be done differently.
+	}
+
+private: // Force code to use one of the CopyFrom() methods, for clarity.
+	ExprTokenType & operator = (ExprTokenType &other)
+	{
+		return *this;
+	}
 };
 #define MAX_TOKENS 512 // Max number of operators/operands.  Seems enough to handle anything realistic, while conserving call-stack space.
 #define STACK_PUSH(token_ptr) stack[stack_count++] = token_ptr
 #define STACK_POP stack[--stack_count]  // To be used as the r-value for an assignment.
+
+class Func;
+enum BuiltInFunctionID;
+struct ResultToken : public ExprTokenType
+{
+	LPTSTR buf; // Points to a buffer of _f_retval_buf_size characters for returning short strings and misc purposes.
+	LPTSTR mem_to_free; // Callee stores memory allocated for the result here.  Must be NULL or equal to marker.
+
+	// Utility function for initializing result tokens.
+	void InitResult(LPTSTR aResultBuf)
+	{
+		symbol = SYM_STRING;
+		marker = _T("");
+		marker_length = -1; // Helps code size to do this here instead of in ReturnPtr(), which should be inlined.
+		buf = aResultBuf;
+		mem_to_free = NULL;
+		result = OK;
+	}
+
+	// Utility function for properly freeing a token's contents.
+	void Free()
+	{
+		// If the token contains an object, release it.
+		if (symbol == SYM_OBJECT)
+			object->Release();
+		// If the token has memory allocated for it, free it.
+		if (mem_to_free)
+			free(mem_to_free);
+	}
+
+	void StealMem(Var *aVar);
+	
+	void AcceptMem(LPTSTR aNewMem, size_t aLength)
+	{
+		symbol = SYM_STRING;
+		marker = mem_to_free = aNewMem;
+		marker_length = aLength;
+	}
+	
+	LPTSTR Malloc(LPTSTR aValue, size_t aLength);
+
+	ResultType Return(LPTSTR aValue, size_t aLength = -1);
+	ResultType ReturnPtr(LPTSTR aValue)
+	// Return a null-terminated string which is already in persistent memory.
+	{
+		ASSERT(aValue);
+		symbol = SYM_STRING;
+		marker = aValue;
+		//marker_length is left at its default value, -1.  Caller will call _tcslen().
+		return OK;
+	}
+	ResultType ReturnPtr(LPTSTR aValue, size_t aLength)
+	// Return a string which is already in persistent memory.
+	{
+		SetValue(aValue, aLength);
+		return OK;
+	}
+	ResultType Return(__int64 aValue)
+	{
+		SetValue(aValue);
+		return OK;
+	}
+	ResultType Return(int aValue) { return Return((__int64)aValue); }
+	ResultType Return(UINT aValue) { return Return((__int64)aValue); }
+	ResultType Return(DWORD aValue) { return Return((__int64)aValue); }
+	ResultType Return(UINT64 aValue) { return Return((__int64)aValue); }
+	ResultType Return(double aValue)
+	{
+		SetValue(aValue);
+		return OK;
+	}
+	ResultType Return(IObject *aValue)
+	// Caller must AddRef() if appropriate and must not pass NULL.
+	{
+		symbol = SYM_OBJECT;
+		object = aValue;
+		return OK;
+	}
+	
+	ResultType SetExitResult(ResultType aResult)
+	{
+		ASSERT(aResult == FAIL || aResult == EARLY_EXIT);
+		return result = aResult;
+	}
+
+	ResultType SetResult(ResultType aResult) // See comments for 'result' below.
+	{
+		return result = aResult;
+	}
+
+	bool Exited()
+	{
+		return result == FAIL || result == EARLY_EXIT;
+	}
+
+	ResultType Result()
+	{
+		return result;
+	}
+
+	ResultType Error(LPCTSTR aErrorText);
+	ResultType Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo);
+
+	Func *func; // For maintainability, this is separate from the ExprTokenType union.  Its main uses are func->mID and func->mOutputVars.
+
+private:
+	// Currently can't be included in the value union because meta-functions
+	// need the EARLY_RETURN result *and* return value passed back.  However,
+	// probably best to keep it separate for code size and maintainability.
+	// Struct size is a non-issue since there is only one ResultToken per
+	// function call on the stack (or MAX_ARGS for ACT_FUNC/ACT_METHOD).
+	ResultType result;
+};
 
 // But the array that goes with these actions is in globaldata.cpp because
 // otherwise it would be a little cumbersome to declare the extern version
@@ -353,100 +492,70 @@ enum enum_act {
 // Seems best to make ACT_INVALID zero so that it will be the ZeroMemory() default within
 // any POD structures that contain an action_type field:
   ACT_INVALID = FAIL  // These should both be zero for initialization and function-return-value purposes.
-, ACT_ASSIGN, ACT_ASSIGNEXPR, ACT_EXPRESSION, ACT_ADD, ACT_SUB, ACT_MULT, ACT_DIV
-, ACT_ASSIGN_FIRST = ACT_ASSIGN, ACT_ASSIGN_LAST = ACT_DIV
+, ACT_ASSIGNEXPR, ACT_METHOD, ACT_FUNC
+// Actions above this line take care of calling ExpandArgs() for themselves (ACT_EXPANDS_ITS_OWN_ARGS).
+, ACT_EXPRESSION
+// Keep ACT_BLOCK_BEGIN as the first "control flow" action, for range checks with ACT_FIRST_CONTROL_FLOW:
+, ACT_BLOCK_BEGIN, ACT_BLOCK_END
 , ACT_STATIC
-, ACT_IFIN, ACT_IFNOTIN, ACT_IFCONTAINS, ACT_IFNOTCONTAINS, ACT_IFIS, ACT_IFISNOT
-, ACT_IFBETWEEN, ACT_IFNOTBETWEEN
-, ACT_IFEXPR  // i.e. if (expr)
- // *** *** *** KEEP ALL OLD-STYLE/AUTOIT V2 IFs AFTER THIS (v1.0.20 bug fix). *** *** ***
- , ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION
- // *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
- // ACT_IS_IF_OLD() relies upon ACT_IFEQUAL through ACT_IFLESSOREQUAL being adjacent to one another
- // and it relies upon the fact that ACT_IFEQUAL is first in the series and ACT_IFLESSOREQUAL last.
-, ACT_IFEQUAL = ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION, ACT_IFNOTEQUAL, ACT_IFGREATER, ACT_IFGREATEROREQUAL
-, ACT_IFLESS, ACT_IFLESSOREQUAL
-, ACT_FIRST_OPTIMIZED_IF = ACT_IFBETWEEN, ACT_LAST_OPTIMIZED_IF = ACT_IFLESSOREQUAL
-, ACT_FIRST_COMMAND // i.e the above aren't considered commands for parsing/searching purposes.
-, ACT_IFWINEXIST = ACT_FIRST_COMMAND
-, ACT_IFWINNOTEXIST, ACT_IFWINACTIVE, ACT_IFWINNOTACTIVE
-, ACT_IFINSTRING, ACT_IFNOTINSTRING
-, ACT_IFEXIST, ACT_IFNOTEXIST, ACT_IFMSGBOX
-, ACT_FIRST_IF = ACT_IFIN, ACT_LAST_IF = ACT_IFMSGBOX  // Keep this range updated with any new IFs that are added.
+, ACT_HOTKEY_IF // Must be before ACT_FIRST_COMMAND.
+, ACT_FIRST_NAMED_ACTION, ACT_IF = ACT_FIRST_NAMED_ACTION
 , ACT_ELSE
-, ACT_MSGBOX, ACT_INPUTBOX, ACT_SPLASHTEXTON, ACT_SPLASHTEXTOFF, ACT_PROGRESS, ACT_SPLASHIMAGE
-, ACT_TOOLTIP, ACT_TRAYTIP, ACT_INPUT
-, ACT_TRANSFORM, ACT_STRINGLEFT, ACT_STRINGRIGHT, ACT_STRINGMID
-, ACT_STRINGTRIMLEFT, ACT_STRINGTRIMRIGHT, ACT_STRINGLOWER, ACT_STRINGUPPER
-, ACT_STRINGLEN, ACT_STRINGGETPOS, ACT_STRINGREPLACE, ACT_STRINGSPLIT, ACT_SPLITPATH, ACT_SORT
-, ACT_ENVGET, ACT_ENVSET, ACT_ENVUPDATE
-, ACT_RUNAS, ACT_RUN, ACT_RUNWAIT, ACT_URLDOWNLOADTOFILE
-, ACT_GETKEYSTATE
+, ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE
+, ACT_FOR, ACT_WHILE, ACT_UNTIL // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
+, ACT_BREAK, ACT_CONTINUE
+, ACT_GOTO, ACT_GOSUB
+, ACT_FIRST_JUMP = ACT_BREAK, ACT_LAST_JUMP = ACT_GOSUB // Actions which accept a label name.
+, ACT_RETURN
+, ACT_TRY, ACT_CATCH, ACT_FINALLY, ACT_THROW // Keep TRY, CATCH and FINALLY together and in this order for range checks.
+, ACT_FIRST_CONTROL_FLOW = ACT_BLOCK_BEGIN, ACT_LAST_CONTROL_FLOW = ACT_THROW
+, ACT_FIRST_COMMAND, ACT_EXIT = ACT_FIRST_COMMAND, ACT_EXITAPP // Excluded from the "CONTROL_FLOW" range above because they can be safely wrapped into a Func.
+, ACT_TOOLTIP, ACT_TRAYTIP
+, ACT_SPLITPATH
+, ACT_RUNAS, ACT_RUN, ACT_RUNWAIT, ACT_DOWNLOAD
 , ACT_SEND, ACT_SENDRAW, ACT_SENDINPUT, ACT_SENDPLAY, ACT_SENDEVENT
 , ACT_CONTROLSEND, ACT_CONTROLSENDRAW, ACT_CONTROLCLICK, ACT_CONTROLMOVE, ACT_CONTROLGETPOS, ACT_CONTROLFOCUS
-, ACT_CONTROLGETFOCUS, ACT_CONTROLSETTEXT, ACT_CONTROLGETTEXT, ACT_CONTROL, ACT_CONTROLGET
+, ACT_CONTROLSETTEXT, ACT_CONTROL
 , ACT_SENDMODE, ACT_SENDLEVEL, ACT_COORDMODE, ACT_SETDEFAULTMOUSESPEED
 , ACT_CLICK, ACT_MOUSEMOVE, ACT_MOUSECLICK, ACT_MOUSECLICKDRAG, ACT_MOUSEGETPOS
-, ACT_STATUSBARGETTEXT
 , ACT_STATUSBARWAIT
 , ACT_CLIPWAIT, ACT_KEYWAIT
-, ACT_SLEEP, ACT_RANDOM
-, ACT_GOTO, ACT_GOSUB, ACT_ONEXIT, ACT_HOTKEY, ACT_SETTIMER, ACT_CRITICAL, ACT_THREAD, ACT_RETURN, ACT_EXIT
-, ACT_LOOP, ACT_FOR, ACT_WHILE, ACT_UNTIL, ACT_BREAK, ACT_CONTINUE // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
-, ACT_TRY, ACT_CATCH, ACT_FINALLY, ACT_THROW // Keep TRY, CATCH and FINALLY together and in this order for range checks.
-, ACT_BLOCK_BEGIN, ACT_BLOCK_END
+, ACT_SLEEP
+, ACT_HOTKEY, ACT_SETTIMER, ACT_CRITICAL, ACT_THREAD
 , ACT_WINACTIVATE, ACT_WINACTIVATEBOTTOM
 , ACT_WINWAIT, ACT_WINWAITCLOSE, ACT_WINWAITACTIVE, ACT_WINWAITNOTACTIVE
 , ACT_WINMINIMIZE, ACT_WINMAXIMIZE, ACT_WINRESTORE
 , ACT_WINHIDE, ACT_WINSHOW
 , ACT_WINMINIMIZEALL, ACT_WINMINIMIZEALLUNDO
-, ACT_WINCLOSE, ACT_WINKILL, ACT_WINMOVE, ACT_WINMENUSELECTITEM, ACT_PROCESS
-, ACT_WINSET, ACT_WINSETTITLE, ACT_WINGETTITLE, ACT_WINGETCLASS, ACT_WINGET, ACT_WINGETPOS, ACT_WINGETTEXT
-, ACT_SYSGET, ACT_POSTMESSAGE, ACT_SENDMESSAGE
+, ACT_WINCLOSE, ACT_WINKILL, ACT_WINMOVE, ACT_MENUSELECT
+, ACT_WINSETTITLE, ACT_WINGETPOS
 // Keep rarely used actions near the bottom for parsing/performance reasons:
-, ACT_PIXELGETCOLOR, ACT_PIXELSEARCH, ACT_IMAGESEARCH
+, ACT_PIXELSEARCH, ACT_IMAGESEARCH
 , ACT_GROUPADD, ACT_GROUPACTIVATE, ACT_GROUPDEACTIVATE, ACT_GROUPCLOSE
-, ACT_DRIVESPACEFREE, ACT_DRIVE, ACT_DRIVEGET
-, ACT_SOUNDGET, ACT_SOUNDSET, ACT_SOUNDGETWAVEVOLUME, ACT_SOUNDSETWAVEVOLUME, ACT_SOUNDBEEP, ACT_SOUNDPLAY
-, ACT_FILEAPPEND, ACT_FILEREAD, ACT_FILEREADLINE, ACT_FILEDELETE, ACT_FILERECYCLE, ACT_FILERECYCLEEMPTY
-, ACT_FILEINSTALL, ACT_FILECOPY, ACT_FILEMOVE, ACT_FILECOPYDIR, ACT_FILEMOVEDIR
-, ACT_FILECREATEDIR, ACT_FILEREMOVEDIR
-, ACT_FILEGETATTRIB, ACT_FILESETATTRIB, ACT_FILEGETTIME, ACT_FILESETTIME
-, ACT_FILEGETSIZE, ACT_FILEGETVERSION
-, ACT_SETWORKINGDIR, ACT_FILESELECTFILE, ACT_FILESELECTFOLDER, ACT_FILEGETSHORTCUT, ACT_FILECREATESHORTCUT
-, ACT_INIREAD, ACT_INIWRITE, ACT_INIDELETE
-, ACT_REGREAD, ACT_REGWRITE, ACT_REGDELETE, ACT_SETREGVIEW
+, ACT_SOUNDBEEP, ACT_SOUNDPLAY
+, ACT_FILEDELETE, ACT_FILERECYCLE, ACT_FILERECYCLEEMPTY
+, ACT_FILEINSTALL, ACT_FILECOPY, ACT_FILEMOVE, ACT_DIRCOPY, ACT_DIRMOVE
+, ACT_DIRCREATE, ACT_DIRDELETE
+, ACT_FILESETATTRIB, ACT_FILESETTIME
+, ACT_SETWORKINGDIR, ACT_FILEGETSHORTCUT, ACT_FILECREATESHORTCUT
+, ACT_INIWRITE, ACT_INIDELETE
+, ACT_SETREGVIEW
 , ACT_OUTPUTDEBUG
-, ACT_SETKEYDELAY, ACT_SETMOUSEDELAY, ACT_SETWINDELAY, ACT_SETCONTROLDELAY, ACT_SETBATCHLINES
-, ACT_SETTITLEMATCHMODE, ACT_SETFORMAT, ACT_FORMATTIME
+, ACT_SETKEYDELAY, ACT_SETMOUSEDELAY, ACT_SETWINDELAY, ACT_SETCONTROLDELAY
+, ACT_SETTITLEMATCHMODE
 , ACT_SUSPEND, ACT_PAUSE
-, ACT_AUTOTRIM, ACT_STRINGCASESENSE, ACT_DETECTHIDDENWINDOWS, ACT_DETECTHIDDENTEXT, ACT_BLOCKINPUT
+, ACT_STRINGCASESENSE, ACT_DETECTHIDDENWINDOWS, ACT_DETECTHIDDENTEXT, ACT_BLOCKINPUT
 , ACT_SETNUMLOCKSTATE, ACT_SETSCROLLLOCKSTATE, ACT_SETCAPSLOCKSTATE, ACT_SETSTORECAPSLOCKMODE
 , ACT_KEYHISTORY, ACT_LISTLINES, ACT_LISTVARS, ACT_LISTHOTKEYS
-, ACT_EDIT, ACT_RELOAD, ACT_MENU, ACT_GUI, ACT_GUICONTROL, ACT_GUICONTROLGET
-, ACT_EXITAPP
+, ACT_EDIT, ACT_RELOAD, ACT_MENU
 , ACT_SHUTDOWN
 , ACT_FILEENCODING
-, ACT_HOTKEY_IF
-// Make these the last ones before the count so they will be less often processed.  This helps
-// performance because this one doesn't actually have a keyword so will never result
-// in a match anyway.  UPDATE: No longer used because Run/RunWait is now required, which greatly
-// improves syntax checking during load:
-//, ACT_EXEC
 // It's safer to use g_ActionCount, which is calculated immediately after the array is declared
 // and initialized, at which time we know its true size.  However, the following lets us detect
 // when the size of the array doesn't match the enum (in debug mode):
 #ifdef _DEBUG
 , ACT_COUNT
 #endif
-};
-
-enum enum_act_old {
-  OLD_INVALID = FAIL  // These should both be zero for initialization and function-return-value purposes.
-  , OLD_SETENV, OLD_ENVADD, OLD_ENVSUB, OLD_ENVMULT, OLD_ENVDIV
-  // ACT_IS_IF_OLD() relies on the items in this next line being adjacent to one another and in this order:
-  , OLD_IFEQUAL, OLD_IFNOTEQUAL, OLD_IFGREATER, OLD_IFGREATEROREQUAL, OLD_IFLESS, OLD_IFLESSOREQUAL
-  , OLD_WINGETACTIVETITLE, OLD_WINGETACTIVESTATS
 };
 
 // It seems best not to include ACT_SUSPEND in the below, since the user may have marked
@@ -457,18 +566,14 @@ enum enum_act_old {
 #define ACT_IS_ALWAYS_ALLOWED(ActionType) (ActionType == ACT_EXITAPP || ActionType == ACT_PAUSE \
 	|| ActionType == ACT_EDIT || ActionType == ACT_RELOAD || ActionType == ACT_KEYHISTORY \
 	|| ActionType == ACT_LISTLINES || ActionType == ACT_LISTVARS || ActionType == ACT_LISTHOTKEYS)
-#define ACT_IS_ASSIGN(ActionType) (ActionType <= ACT_ASSIGN_LAST && ActionType >= ACT_ASSIGN_FIRST) // Ordered for short-circuit performance.
-#define ACT_IS_IF(ActionType) (ActionType >= ACT_FIRST_IF && ActionType <= ACT_LAST_IF)
+#define ACT_IS_CONTROL_FLOW(ActionType) (ActionType <= ACT_LAST_CONTROL_FLOW && ActionType >= ACT_FIRST_CONTROL_FLOW)
+#define ACT_IS_IF(ActionType) (ActionType == ACT_IF)
 #define ACT_IS_LOOP(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_WHILE)
+#define ACT_IS_LOOP_EXCLUDING_WHILE(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_FOR)
 #define ACT_IS_LINE_PARENT(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
 	|| ACT_IS_LOOP(ActionType) || (ActionType >= ACT_TRY && ActionType <= ACT_FINALLY))
-#define ACT_IS_IF_OLD(ActionType, OldActionType) (ActionType >= ACT_FIRST_IF_ALLOWING_SAME_LINE_ACTION && ActionType <= ACT_LAST_IF) \
-	&& (ActionType < ACT_IFEQUAL || ActionType > ACT_IFLESSOREQUAL || (OldActionType >= OLD_IFEQUAL && OldActionType <= OLD_IFLESSOREQUAL))
-	// All the checks above must be done so that cmds such as IfMsgBox (which are both "old" and "new")
-	// can support parameters on the same line or on the next line.  For example, both of the above are allowed:
-	// IfMsgBox, No, Gosub, XXX
-	// IfMsgBox, No
-	//     Gosub, XXX
+#define ACT_EXPANDS_ITS_OWN_ARGS(ActionType) (ActionType <= ACT_FUNC || ActionType == ACT_WHILE || ActionType == ACT_FOR || ActionType == ACT_THROW)
+#define ACT_USES_SIMPLE_POSTFIX(ActionType) (ActionType <= ACT_FUNC || ActionType == ACT_RETURN) // Actions which are optimized to use arg.postfix when is_expression == false, via the "only_token" optimization.
 
 // For convenience in many places.  Must cast to int to avoid loss of negative values.
 #define BUF_SPACE_REMAINING ((int)(aBufSize - (aBuf - aBuf_orig)))
@@ -481,10 +586,6 @@ enum enum_act_old {
 // And these to prevent mutual dependency problem between window.h and globaldata.h:
 #define MAX_MSGBOXES 7 // Probably best not to change this because it's used by OurTimers to set the timer IDs, which should probably be kept the same for backward compatibility.
 #define MAX_INPUTBOXES 4
-#define MAX_PROGRESS_WINDOWS 10  // Allow a lot for downloads and such.
-#define MAX_PROGRESS_WINDOWS_STR _T("10") // Keep this in sync with above.
-#define MAX_SPLASHIMAGE_WINDOWS 10
-#define MAX_SPLASHIMAGE_WINDOWS_STR _T("10") // Keep this in sync with above.
 #define MAX_MSG_MONITORS 500
 
 // IMPORTANT: Before ever changing the below, note that it will impact the IDs of menu items created
@@ -597,18 +698,12 @@ typedef UCHAR ActionTypeType; // If ever have more than 256 actions, will have t
 struct Action
 {
 	LPTSTR Name;
-	// Just make them int's, rather than something smaller, because the collection
-	// of actions will take up very little memory.  Int's are probably faster
-	// for the processor to access since they are the native word size, or something:
-	// Update for v1.0.40.02: Now that the ARGn macros don't check mArgc, MaxParamsAu2WithHighBit
-	// is needed to allow MaxParams to stay pure, which in turn prevents Line::Perform()
-	// from accessing a NULL arg in the sArgDeref array (i.e. an arg that exists only for
-	// non-AutoIt2 scripts, such as the extra ones in StringGetPos).
-	// Also, changing these from ints to chars greatly reduces code size since this struct
-	// is used by g_act to build static data into the code.  Testing shows that the compiler
-	// will generate a warning even when not in debug mode in the unlikely event that a constant
+	// Changing these from ints to chars greatly reduced code size since this struct is used
+	// by g_act to build static data into the code.  Testing shows that the compiler will
+	// generate a warning even when not in debug mode in the unlikely event that a constant
 	// larger than 127 is ever stored in one of these:
-	char MinParams, MaxParams, MaxParamsAu2WithHighBit;
+	char MinParams, MaxParams;
+	bool CheckOverlap;
 	// Array indicating which args must be purely numeric.  The first arg is
 	// number 1, the second 2, etc (i.e. it doesn't start at zero).  The list
 	// is ended with a zero, much like a string.  The compiler will notify us
@@ -626,14 +721,29 @@ typedef UINT GuiIndexType; // Some things rely on it being unsigned to avoid the
 typedef UINT GuiEventType; // Made a UINT vs. enum so that illegal/underflow/overflow values are easier to detect.
 
 // The following array and enum must be kept in sync with each other:
-#define GUI_EVENT_NAMES {_T(""), _T("Normal"), _T("DoubleClick"), _T("RightClick"), _T("ColClick")}
+#define GUI_EVENT_NAMES { _T("") \
+	, _T("DropFiles"), _T("Close"), _T("Escape"), _T("Size"), _T("ContextMenu") \
+	, _T("Change") \
+	, _T("Click"), _T("DoubleClick"), _T("ColClick") \
+	, _T("ItemCheck"), _T("ItemSelect"), _T("ItemFocus"), _T("ItemExpand") \
+	, _T("ItemEdit") \
+	, _T("Focus"), _T("LoseFocus") \
+}
 enum GuiEventTypes {GUI_EVENT_NONE  // NONE must be zero for any uses of ZeroMemory(), synonymous with false, etc.
-	, GUI_EVENT_NORMAL, GUI_EVENT_DBLCLK // Try to avoid changing this and the other common ones in case anyone automates a script via SendMessage (though that does seem very unlikely).
-	, GUI_EVENT_RCLK, GUI_EVENT_COLCLK
-	, GUI_EVENT_FIRST_UNNAMED  // This item must always be 1 greater than the last item that has a name in the GUI_EVENT_NAMES array below.
-	, GUI_EVENT_DROPFILES = GUI_EVENT_FIRST_UNNAMED
-	, GUI_EVENT_CLOSE, GUI_EVENT_ESCAPE, GUI_EVENT_RESIZE, GUI_EVENT_CONTEXTMENU
-	, GUI_EVENT_DIGIT_0 = 48}; // Here just as a reminder that this value and higher are reserved so that a single printable character or digit (mnemonic) can be sent, and also so that ListView's "I" notification can add extra data into the high-byte (which lies just to the left of the "I" character in the bitfield).
+	, GUI_EVENT_DROPFILES, GUI_EVENT_CLOSE, GUI_EVENT_ESCAPE, GUI_EVENT_RESIZE, GUI_EVENT_CONTEXTMENU
+	, GUI_EVENT_WINDOW_FIRST = GUI_EVENT_DROPFILES, GUI_EVENT_WINDOW_LAST = GUI_EVENT_CONTEXTMENU
+	, GUI_EVENT_CONTROL_FIRST
+	, GUI_EVENT_CHANGE = GUI_EVENT_CONTROL_FIRST
+	, GUI_EVENT_CLICK, GUI_EVENT_DBLCLK, GUI_EVENT_COLCLK
+	, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMSELECT, GUI_EVENT_ITEMFOCUS, GUI_EVENT_ITEMEXPAND
+	, GUI_EVENT_ITEMEDIT
+	, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS
+	// The rest don't have explicit names in GUI_EVENT_NAMES:
+	, GUI_EVENT_WM_COMMAND
+	, GUI_EVENT_DIGIT_0 = 48 // Here just as a reminder that from this value up to 0xFF are reserved so that a single printable character or digit (mnemonic) can be sent.
+};
+
+enum GuiEventKinds {GUI_EVENTKIND_EVENT = 0, GUI_EVENTKIND_NOTIFY, GUI_EVENTKIND_COMMAND};
 
 typedef USHORT CoordModeType;
 
@@ -644,11 +754,11 @@ typedef USHORT CoordModeType;
 #define COORD_MODE_CARET   6
 #define COORD_MODE_MENU    8
 
-#define COORD_MODE_WINDOW  0
-#define COORD_MODE_CLIENT  1
+#define COORD_MODE_CLIENT  0
+#define COORD_MODE_WINDOW  1
 #define COORD_MODE_SCREEN  2
 #define COORD_MODE_MASK    3
-#define COORD_MODES { _T("Window"), _T("Client"), _T("Screen") }
+#define COORD_MODES { _T("Client"), _T("Window"), _T("Screen") }
 
 #define COORD_CENTERED (INT_MIN + 1)
 #define COORD_UNSPECIFIED INT_MIN
@@ -698,7 +808,6 @@ class ScriptTimer;			//
 struct global_struct
 {
 	// 8-byte items are listed first, which might improve alignment for 64-bit processors (dubious).
-	__int64 LinesPerCycle; // Use 64-bits for this so that user can specify really large values.
 	__int64 mLoopIteration; // Signed, since script/ITOA64 aren't designed to handle unsigned.
 	WIN32_FIND_DATA *mLoopFile;  // The file of the current file-loop, if applicable.
 	RegItemStruct *mLoopRegItem; // The registry subkey or value of the current registry enumeration loop.
@@ -707,20 +816,14 @@ struct global_struct
 	// v1.0.44.14: The above mLoop attributes were moved into this structure from the script class
 	// because they're more appropriate as thread-attributes rather than being global to the entire script.
 
+	HotkeyCriterion *HotCriterion;
 	TitleMatchModes TitleMatchMode;
-	int IntervalBeforeRest;
-	int UninterruptedLineCount; // Stored as a g-struct attribute in case OnExit sub interrupts it while uninterruptible.
+	int UninterruptedLineCount; // Stored as a g-struct attribute in case OnExit func interrupts it while uninterruptible.
 	int Priority;  // This thread's priority relative to others.
 	DWORD LastError; // The result of GetLastError() after the most recent DllCall or Run.
-	GuiEventType GuiEvent; // This thread's triggering event, e.g. DblClk vs. normal click.
 	EventInfoType EventInfo; // Not named "GuiEventInfo" because it applies to non-GUI events such as clipboard.
-	POINT GuiPoint; // The position of GuiEvent. Stored as a thread vs. window attribute so that underlying threads see their original values when resumed.
-	GuiType *GuiWindow; // The GUI window that launched this thread.
-	GuiType *GuiDefaultWindow; // This thread's default GUI window, used except when specified "Gui, 2:Add, ..."
-	GuiType *GuiDefaultWindowValid(); // Updates and returns GuiDefaultWindow in case "Gui, Name: Default" wasn't used or the Gui has been destroyed; returns NULL if GuiDefaultWindow is invalid.
-	GuiType *DialogOwner; // This thread's GUI owner, if any.
-	GuiIndexType GuiControlIndex; // The GUI control index that launched this thread.
-	#define THREAD_DIALOG_OWNER (GuiType::ValidGui(::g->DialogOwner) ? ::g->DialogOwner->mHwnd : NULL)
+	HWND DialogOwner; // This thread's dialog owner, if any.
+	#define THREAD_DIALOG_OWNER (IsWindow(::g->DialogOwner) ? ::g->DialogOwner : NULL)
 	int WinDelay;  // negative values may be used as special flags.
 	int ControlDelay; // negative values may be used as special flags.
 	int KeyDelay;     //
@@ -729,14 +832,12 @@ struct global_struct
 	int PressDurationPlay; // 
 	int MouseDelay;     // negative values may be used as special flags.
 	int MouseDelayPlay; //
-	TCHAR FormatFloat[32];
 	Func *CurrentFunc; // v1.0.46.16: The function whose body is currently being processed at load-time, or being run at runtime (if any).
 	Func *CurrentFuncGosub; // v1.0.48.02: Allows A_ThisFunc to work even when a function Gosubs an external subroutine.
 	Label *CurrentLabel; // The label that is currently awaiting its matching "return" (if any).
 	ScriptTimer *CurrentTimer; // The timer that launched this thread (if any).
 	HWND hWndLastUsed;  // In many cases, it's better to use GetValidLastUsedWindow() when referring to this.
 	//HWND hWndToRestore;
-	int MsgBoxResult;  // Which button was pressed in the most recent MsgBox.
 	HWND DialogHWND;
 	DWORD RegView;
 
@@ -757,14 +858,12 @@ struct global_struct
 	CoordModeType CoordMode; // Bitwise collection of flags.
 	UCHAR StringCaseSense; // On/Off/Locale
 	bool StoreCapslockMode;
-	bool AutoTrim;
-	char FormatInt;
 	SendLevelType SendLevel;
 	bool MsgBoxTimedOut; // Doesn't require initialization.
 	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
 	bool ListLinesIsEnabled;
 	UINT Encoding;
-	ExprTokenType* ThrownToken;
+	ResultToken* ThrownToken;
 	Line* ExcptLine;
 	bool InTryBlock;
 };
@@ -789,12 +888,10 @@ inline void global_clear_state(global_struct &g)
 	g.CurrentLabel = NULL;
 	g.hWndLastUsed = NULL;
 	//g.hWndToRestore = NULL;
-	g.MsgBoxResult = 0;
 	g.IsPaused = false;
 	g.UninterruptedLineCount = 0;
 	g.DialogOwner = NULL;
 	g.CalledByIsDialogMessageOrDispatch = false; // CalledByIsDialogMessageOrDispatchMsg doesn't need to be cleared because it's value is only considered relevant when CalledByIsDialogMessageOrDispatch==true.
-	g.GuiDefaultWindow = NULL;
 	// Above line is done because allowing it to be permanently changed by the auto-exec section
 	// seems like it would cause more confusion that it's worth.  A change to the global default
 	// or even an override/always-use-this-window-number mode can be added if there is ever a
@@ -817,14 +914,12 @@ inline void global_init(global_struct &g)
 	// deeper recursion.  When the interrupting subroutine returns, the former
 	// subroutine's values for these are restored prior to resuming execution:
 	global_clear_state(g);
-	g.SendMode = SM_EVENT;  // v1.0.43: Default to SM_EVENT for backward compatibility.
-	g.TitleMatchMode = FIND_IN_LEADING_PART; // Standard default for AutoIt2 and 3.
+	g.HotCriterion = NULL;
+	g.SendMode = SM_INPUT;
+	g.TitleMatchMode = FIND_ANYWHERE;
 	g.TitleFindFast = true; // Since it's so much faster in many cases.
 	g.DetectHiddenWindows = false;  // Same as AutoIt2 but unlike AutoIt3; seems like a more intuitive default.
 	g.DetectHiddenText = true;  // Unlike AutoIt, which defaults to false.  This setting performs better.
-	// Not sure what the optimal default is.  1 seems too low (scripts would be very slow by default):
-	g.LinesPerCycle = -1;
-	g.IntervalBeforeRest = 10;  // sleep for 10ms every 10ms
 	#define DEFAULT_PEEK_FREQUENCY 5
 	g.PeekFrequency = DEFAULT_PEEK_FREQUENCY; // v1.0.46. See comments in ACT_CRITICAL.
 	g.AllowThreadToBeInterrupted = true; // Separate from g_AllowInterruption so that they can have independent values.
@@ -833,15 +928,7 @@ inline void global_init(global_struct &g)
 	g.ThreadIsCritical = false;
 	g.Priority = 0;
 	g.LastError = 0;
-	g.GuiEvent = GUI_EVENT_NONE;
 	g.EventInfo = NO_EVENT_INFO;
-	g.GuiPoint.x = COORD_UNSPECIFIED;
-	g.GuiPoint.y = COORD_UNSPECIFIED;
-	// For these, indexes rather than pointers are stored because handles can become invalid during the
-	// lifetime of a thread (while it's suspended, or if it destroys the control or window that created itself):
-	g.GuiWindow = NULL;
-	g.GuiControlIndex = NO_CONTROL_INDEX; // Default to out-of-bounds.
-	g.GuiDefaultWindow = NULL;
 	g.WinDelay = 100;
 	g.ControlDelay = 20;
 	g.KeyDelay = 10;
@@ -856,24 +943,10 @@ inline void global_init(global_struct &g)
 	g.CoordMode = 0;  // All the flags it contains are off by default.
 	g.StringCaseSense = SCS_INSENSITIVE;  // AutoIt2 default, and it does seem best.
 	g.StoreCapslockMode = true;  // AutoIt2 (and probably 3's) default, and it makes a lot of sense.
-	g.AutoTrim = true;  // AutoIt2's default, and overall the best default in most cases.
-	_tcscpy(g.FormatFloat, _T("%0.6f"));
-	g.FormatInt = 'D';
 	g.SendLevel = 0;
 	g.ListLinesIsEnabled = true;
 	g.Encoding = CP_ACP;
-	// For FormatFloat:
-	// I considered storing more than 6 digits to the right of the decimal point (which is the default
-	// for most Unices and MSVC++ it seems).  But going beyond that makes things a little weird for many
-	// numbers, due to the inherent imprecision of floating point storage.  For example, 83648.4 divided
-	// by 2 shows up as 41824.200000 with 6 digits, but might show up 41824.19999999999700000000 with
-	// 20 digits.  The extra zeros could be chopped off the end easily enough, but even so, going beyond
-	// 6 digits seems to do more harm than good for the avg. user, overall.  A default of 6 is used here
-	// in case other/future compilers have a different default (for backward compatibility, we want
-	// 6 to always be in effect as the default for future releases).
 }
-
-#define ERRORLEVEL_SAVED_SIZE 128 // The size that can be remembered (saved & restored) if a thread is interrupted. Big in case user put something bigger than a number in g_ErrorLevel.
 
 #ifdef UNICODE
 #define WINAPI_SUFFIX "W"

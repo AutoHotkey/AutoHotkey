@@ -512,7 +512,7 @@ DEBUGGER_COMMAND(Debugger::stop)
 {
 	mContinuationTransactionId = aTransactionId;
 
-	// Call g_script.TerminateApp instead of g_script.ExitApp to bypass OnExit subroutine.
+	// Call g_script.TerminateApp instead of g_script.ExitApp to bypass OnExit function.
 	g_script.TerminateApp(EXIT_EXIT, 0); // This also causes this->Exit() to be called.
 	
 	// Should never be reached, but must be here to avoid a compile error:
@@ -851,7 +851,7 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 			else if (se->type == DbgStack::SE_Thread)
 			{
 				// !se->line implies se->type == SE_Thread.
-				if (se[1].type == DbgStack::SE_Func)
+				if (se[1].type == DbgStack::SE_Func && !se[1].func->mIsBuiltIn)
 					line = se[1].func->mJumpToLine;
 				else if (se[1].type == DbgStack::SE_Sub)
 					line = se[1].sub->mJumpToLine;
@@ -874,7 +874,7 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 				mResponseBuf.WriteF("%e thread", U4T(se->desc)); // %e to escape characters which desc may contain (e.g. "a & b" in hotkey name).
 				break;
 			case DbgStack::SE_Func:
-				mResponseBuf.WriteF("%s()", U4T(se->func->mName)); // %s because function names should never contain characters which need escaping.
+				mResponseBuf.WriteF("%e()", U4T(se->Name()));
 				break;
 			case DbgStack::SE_Sub:
 				mResponseBuf.WriteF("%e sub", U4T(se->sub->mName)); // %e because label/hotkey names may contain almost anything.
@@ -982,7 +982,7 @@ DEBUGGER_COMMAND(Debugger::property_value)
 
 int Debugger::WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage)
 {
-	char facet[35]; // Alias Builtin Static ClipboardAll
+	char facet[35]; // Alias Builtin Static
 	facet[0] = '\0';
 	VarAttribType attrib;
 	if (aVar.mType == VAR_ALIAS)
@@ -996,21 +996,19 @@ int Debugger::WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage)
 		strcat(facet, "Builtin ");
 	if (aVar.IsStatic())
 		strcat(facet, "Static ");
-	if (aVar.IsBinaryClip())
-		strcat(facet, "ClipboardAll ");
 	if (facet[0] != '\0') // Remove the final space.
 		facet[strlen(facet)-1] = '\0';
 
-	if (attrib & VAR_ATTRIB_OBJECT)
+	if (attrib & VAR_ATTRIB_IS_OBJECT)
 	{
 		CStringUTF8FromTChar name_buf(aVar.mName);
 		return WritePropertyXml(aVar.Object(), name_buf.GetString(), name_buf, aPage, mMaxChildren, mMaxDepth, aMaxEncodedSize, facet);
 	}
 
 	char *type;
-	if (attrib & VAR_ATTRIB_HAS_VALID_INT64)
+	if (attrib & VAR_ATTRIB_IS_INT64)
 		type = "integer";
-	else if (attrib & VAR_ATTRIB_HAS_VALID_DOUBLE)
+	else if (attrib & VAR_ATTRIB_IS_DOUBLE)
 		type = "float";
 	else if (attrib & VAR_ATTRIB_UNINITIALIZED)
 		type = "undefined";
@@ -1095,6 +1093,7 @@ int Debugger::WritePropertyXml(ExprTokenType &aValue, const char *aName, CString
 // This function has an equivalent WritePropertyData() for property_value, so maintain the two together.
 {
 	LPTSTR value;
+	size_t value_length = -1;
 	char *type;
 	TCHAR number_buf[MAX_NUMBER_SIZE];
 
@@ -1104,8 +1103,8 @@ int Debugger::WritePropertyXml(ExprTokenType &aValue, const char *aName, CString
 		return WritePropertyXml(*aValue.var, aMaxEncodedSize);
 
 	case SYM_STRING:
-	case SYM_OPERAND:
 		value = aValue.marker;
+		value_length = aValue.marker_length;
 		type = "string";
 		break;
 
@@ -1120,7 +1119,7 @@ int Debugger::WritePropertyXml(ExprTokenType &aValue, const char *aName, CString
 		}
 		else
 		{
-			sntprintf(number_buf, _countof(number_buf), g->FormatFloat, aValue.value_double);
+			FTOA(aValue.value_double, number_buf, _countof(number_buf));
 			type = "float";
 		}
 		value = number_buf;
@@ -1138,7 +1137,7 @@ int Debugger::WritePropertyXml(ExprTokenType &aValue, const char *aName, CString
 	// If we fell through, value and type have been set appropriately above.
 	mResponseBuf.WriteF("<property name=\"%e\" fullname=\"%e\" type=\"%s\" facet=\"\" children=\"0\" encoding=\"base64\" size=\"", aName, aNameBuf.GetString(), type);
 	int err;
-	if (err = WritePropertyData(value, _tcslen(value), aMaxEncodedSize))
+	if (err = WritePropertyData(value, value_length == -1 ? _tcslen(value) : value_length, aMaxEncodedSize))
 		return err;
 	return mResponseBuf.Write("</property>");
 }
@@ -1300,8 +1299,8 @@ int Debugger::WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize)
 
 	switch (aField.symbol)
 	{
-	case SYM_OPERAND:
-		value = aField.marker;
+	case SYM_STRING:
+		value = aField.string;
 		type = "string";
 		break;
 
@@ -1316,7 +1315,7 @@ int Debugger::WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize)
 		}
 		else
 		{
-			sntprintf(number_buf, _countof(number_buf), g->FormatFloat, aField.n_double);
+			FTOA(aField.n_double, number_buf, _countof(number_buf));
 			type = "float";
 		}
 		value = number_buf;
@@ -1393,13 +1392,13 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 			if (*name == '"')
 			{
 				// Quoted string which may contain any character.
-				// Replace "" with " in-place and find and of string:
+				// Replace "" with " in-place and find end of string:
 				for (dst = src = ++name; c = *src; ++src)
 				{
 					if (c == '"')
 					{
 						// Quote mark; but is it a literal quote mark?
-						if (*++src != '"')
+						if (*++src != '"') // This currently doesn't match up with expression syntax, but is left this way for simplicity.
 							// Nope.
 							break;
 						//else above skipped the second quote mark, so fall through:
@@ -1443,7 +1442,7 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 				*name_end = '\0';
 			}
 			//else there won't be a next iteration.
-			key_type = IsPureNumeric(name); // SYM_INTEGER or SYM_STRING.
+			key_type = IsNumeric(name); // SYM_INTEGER or SYM_STRING.
 		}
 		else
 			return DEBUGGER_E_INVALID_OPTIONS;
@@ -1468,9 +1467,8 @@ int Debugger::ParsePropertyName(const char *aFullName, int aVarScope, bool aVarM
 				}
 				else
 				{
-					sBaseField->symbol = SYM_OPERAND;
-					sBaseField->marker = _T("");
-					sBaseField->size = 0;
+					sBaseField->symbol = SYM_STRING;
+					sBaseField->string.Init();
 				}
 				field = sBaseField;
 				// If this is the end of 'name', sBaseField will be returned to our caller.
@@ -1664,19 +1662,16 @@ DEBUGGER_COMMAND(Debugger::property_set)
 	ExprTokenType val;
 	if (!strcmp(type, "integer"))
 	{
-		val.symbol = SYM_INTEGER;
-		val.value_int64 = _atoi64(new_value);
+		val.SetValue(_atoi64(new_value));
 	}
 	else if (!strcmp(type, "float"))
 	{
-		val.symbol = SYM_FLOAT;
-		val.value_double = atof(new_value);
+		val.SetValue(atof(new_value));
 	}
 	else // Assume type is "string", since that's the only other supported type.
 	{
 		StringUTF8ToTChar(new_value, val_buf, value_length);
-		val.symbol = SYM_STRING;
-		val.marker = (LPTSTR)val_buf.GetString();
+		val.SetValue((LPTSTR)val_buf.GetString(), val_buf.GetLength());
 	}
 
 	bool success;
@@ -2130,7 +2125,7 @@ int Debugger::FatalError(LPCTSTR aMessage)
 
 	if (IDNO == MessageBox(g_hWnd, aMessage, g_script.mFileSpec, MB_YESNO | MB_ICONSTOP | MB_SETFOREGROUND | MB_APPLMODAL))
 	{
-		// The following will exit even if the OnExit subroutine does not use ExitApp:
+		// The following will exit even if the OnExit function does not use ExitApp:
 		g_script.ExitApp(EXIT_ERROR, _T(""));
 	}
 	return DEBUGGER_E_INTERNAL_ERROR;
@@ -2549,6 +2544,20 @@ void DbgStack::Push(Func *aFunc)
 	s.line = aFunc->mJumpToLine;
 	s.func = aFunc;
 	s.type = SE_Func;
+}
+
+
+TCHAR *DbgStack::Entry::Name()
+{
+	switch (type)
+	{
+	case SE_Sub:
+		return sub->mName;
+	case SE_Func:
+		return func->mName;
+	default: // SE_Thread
+		return desc;
+	}
 }
 
 
