@@ -11566,7 +11566,8 @@ BIF_DECL(BIF_InStr)
 	LPTSTR haystack = ParamIndexToString(0, _f_number_buf, (size_t *)&haystack_length);
 	size_t needle_length;
 	LPTSTR needle = ParamIndexToString(1, needle_buf, &needle_length);
-	
+	if (*needle == NULL)  // avoid instr(str, "") and (eg) instr(str, []) returning 1.
+		_f_return_i(0);
 	// v1.0.43.03: Rather than adding a third value to the CaseSensitive parameter, it seems better to
 	// obey StringCaseSense because:
 	// 1) It matches the behavior of the equal operator (=) in expressions.
