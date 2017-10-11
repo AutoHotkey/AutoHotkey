@@ -3235,6 +3235,7 @@ BIF_DECL(BIF_ASinACos);
 BIF_DECL(BIF_ATan);
 BIF_DECL(BIF_Exp);
 BIF_DECL(BIF_SqrtLogLn);
+BIF_DECL(BIF_MinMax);
 
 BIF_DECL(BIF_OnMessage);
 BIF_DECL(BIF_OnExitOrClipboard);

@@ -8354,6 +8354,11 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		min_params = 2;
 		max_params = 2;
 	}
+	else if (!_tcsicmp(func_name, _T("Min")) || !_tcsicmp(func_name, _T("Max")))
+	{
+		bif = BIF_MinMax;
+		max_params = 10000; // An arbitrarily high limit that will never realistically be reached.
+	}
 	else if (!_tcsicmp(func_name, _T("Abs")))
 		bif = BIF_Abs;
 	else if (!_tcsicmp(func_name, _T("Sin")))
