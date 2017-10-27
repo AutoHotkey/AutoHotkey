@@ -8006,7 +8006,7 @@ BIF_DECL(BIF_FileRead)
 		return;
 	}
 
-	LPBYTE output_buf = (LPBYTE)malloc(size_t(bytes_to_read + sizeof(wchar_t)));
+	LPBYTE output_buf = (LPBYTE)malloc(size_t(bytes_to_read + (bytes_to_read & 1) + sizeof(wchar_t)));
 	if (!output_buf)
 	{
 		CloseHandle(hfile);
