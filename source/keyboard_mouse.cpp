@@ -2708,8 +2708,10 @@ ResultType ExpandEventArray()
 		memcpy(new_mem, sEventSI, sEventCount * event_size);
 	if (sMaxEvents > (sSendMode == SM_INPUT ? MAX_INITIAL_EVENTS_SI : MAX_INITIAL_EVENTS_PB))
 		free(sEventSI); // Previous block was malloc'd vs. _alloc'd, so free it.
-	if (sAbortArraySend)
+	if (sAbortArraySend) {
+		free(new_mem);
 		return FAIL;
+	}
 	sEventSI = (LPINPUT)new_mem; // Note that sEventSI and sEventPB are different views of the same variable.
 	sMaxEvents *= EVENT_EXPANSION_MULTIPLIER;
 	return OK;
