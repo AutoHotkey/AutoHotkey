@@ -111,7 +111,7 @@ ResultType WinGroup::CloseAndGoToNext(bool aStartWithMostRecent)
 	// Even if it's NULL, don't return since the legacy behavior is to continue on to the final part below.
 
 	WindowSpec *win_spec = IsMember(fore_win, *g);
-	if (   (mIsModeActivate && win_spec) || (!mIsModeActivate && !win_spec)   )
+	if (   mIsModeActivate && win_spec!=nullptr)
 	{
 		// If the user is using a GroupActivate hotkey, we don't want to close
 		// the foreground window if it's not a member of the group.  Conversely,

@@ -1984,7 +1984,7 @@ public:
 		// OK: Both are absent, which is the signal to use the current position.
 		// OK: Both are present (that they are numeric is validated elsewhere).
 		// FAIL: One is absent but the other is present.
-		return (!*aX && !*aY) || (*aX && *aY) ? OK : FAIL;
+		return (*aX == *aY) ? OK : FAIL;
 	}
 
 	bool IsExemptFromSuspend()

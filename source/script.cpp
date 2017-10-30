@@ -12297,6 +12297,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
 				{
 					sDerefBufSize = 0;
+					delete token;
 					return line->LineError(ERR_OUTOFMEM);
 				}
 			}
