@@ -2644,10 +2644,10 @@ void Debugger::PropertyWriter::EndProperty(DebugCookie aCookie)
 
 // Helper for Var::ToText().
 
-LPTSTR Var::ObjectToText(LPTSTR aBuf, int aBufSize)
+LPTSTR Var::ObjectToText(LPTSTR aName, LPTSTR aBuf, int aBufSize)
 {
 	LPTSTR aBuf_orig = aBuf;
-	aBuf += sntprintf(aBuf, aBufSize, _T("%s: %s object"), mName, mObject->Type());
+	aBuf += sntprintf(aBuf, aBufSize, _T("%s: %s object"), aName, mObject->Type());
 	if (ComObject *cobj = dynamic_cast<ComObject *>(mObject))
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T(" {wrapper: 0x%IX, vt: 0x%04hX, value: 0x%I64X}"), cobj, cobj->mVarType, cobj->mVal64);
 	else
