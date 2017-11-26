@@ -2691,6 +2691,8 @@ void PutMouseEventIntoArray(DWORD aEventFlags, DWORD aData, DWORD aX, DWORD aY)
 ResultType ExpandEventArray()
 // Returns OK or FAIL.
 {
+	if (sAbortArraySend) // A prior call failed (might be impossible).  Avoid malloc() in this case.
+		return FAIL;
 	#define EVENT_EXPANSION_MULTIPLIER 2  // Should be very rare for array to need to expand more than a few times.
 	size_t event_size = (sSendMode == SM_INPUT) ? sizeof(INPUT) : sizeof(PlaybackEvent);
 	void *new_mem;
@@ -2702,14 +2704,15 @@ ResultType ExpandEventArray()
 	// In any case, it seems best not to restrict to 5000 here in case the limit can vary for any reason.
 	// The 5000 limit is documented in the help file.
 	if (   !(new_mem = malloc(EVENT_EXPANSION_MULTIPLIER * sMaxEvents * event_size))   )
+	{
 		sAbortArraySend = true; // Usually better to send nothing rather than partial.
-		// And continue on below to free the old block, if appropriate.
+		// Leave sEventSI and sMaxEvents in their current valid state, to be freed by CleanupEventArray().
+		return FAIL;
+	}
 	else // Copy old array into new memory area (note that sEventSI and sEventPB are different views of the same variable).
 		memcpy(new_mem, sEventSI, sEventCount * event_size);
 	if (sMaxEvents > (sSendMode == SM_INPUT ? MAX_INITIAL_EVENTS_SI : MAX_INITIAL_EVENTS_PB))
 		free(sEventSI); // Previous block was malloc'd vs. _alloc'd, so free it.
-	if (sAbortArraySend)
-		return FAIL;
 	sEventSI = (LPINPUT)new_mem; // Note that sEventSI and sEventPB are different views of the same variable.
 	sMaxEvents *= EVENT_EXPANSION_MULTIPLIER;
 	return OK;
