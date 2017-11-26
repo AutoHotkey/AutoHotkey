@@ -764,7 +764,10 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 		}
 
 		case M_Focus:
-			SetFocus(hwnd);
+			// MSDN: "WM_NEXTDLGCTL updates the default pushbutton border, sets the default control identifier,
+			// and automatically selects the text of an edit control (if the target window is an edit control)."
+			// (It also sets the focus.)
+			SendMessage(gui->mHwnd, WM_NEXTDLGCTL, (WPARAM)hwnd, TRUE);
 			_o_return_empty;
 
 		case P_Focused:
