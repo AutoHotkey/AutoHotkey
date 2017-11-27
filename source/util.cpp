@@ -566,12 +566,10 @@ LPTSTR tcsrstr(LPTSTR aStr, size_t aStr_length, LPCTSTR aPattern, StringCaseSens
 {
 	if (aOccurrence < 1)
 		return NULL;
-	// Currently the only calling function is already doing the below check, hence it is redundant.
-	// Future callers should consider how to handle the case where (!*aPattern) == true.
-	//if (!*aPattern)
-	//	// The empty string is found in every string, and since we're searching from the right, return
-	//	// the position of the zero terminator to indicate the situation:
-	//	return aStr + aStr_length;
+	if (!*aPattern)
+		// The empty string is found in every string, and since we're searching from the right, return
+		// the position of the zero terminator to indicate the situation:
+		return aStr + aStr_length;
 
 	size_t aPattern_length = _tcslen(aPattern);
 	TCHAR aPattern_last_char = aPattern[aPattern_length - 1];
