@@ -841,13 +841,17 @@ void Object::EndClassDefinition()
 	for (IndexType i = mFieldCount - 1; i >= 0; --i)
 		if (mFields[i].symbol == SYM_INTEGER)
 		{
-			if (i >= mKeyOffsetString) // Must be checked since key can be an integer, such as for "0 := (expr)".
+			if (i >= mKeyOffsetString)		// Must be checked since key can be an integer, such as for "0 := (expr)".
 				free(mFields[i].key.s);
+			else							// Removing an integer key, decrement mKeyOffsetObject and mKeyOffsetString.
+			{								// script_object.h, Class Object, comment on mKeyOffsetX wrote:
+				--mKeyOffsetObject;			// mKeyOffsetObject should be set to mKeyOffsetInt + the number of int keys.
+				--mKeyOffsetString;			// mKeyOffsetString should be set to mKeyOffsetObject + the number of object keys.
+			}
 			if (i < --mFieldCount)
 				memmove(mFields + i, mFields + i + 1, (mFieldCount - i) * sizeof(FieldType));
 		}
 }
-
 
 //
 // Helper function for 'is' operator: is aBase a direct or indirect base object of this?
