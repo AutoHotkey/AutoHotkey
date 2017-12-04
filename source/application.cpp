@@ -953,7 +953,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			case AHK_USER_MENU: // user-defined menu item
 				// Safer to make a full copies than point to something potentially volatile.
 				tcslcpy(g_script.mThisMenuItemName, menu_item->mName, _countof(g_script.mThisMenuItemName));
-				tcslcpy(g_script.mThisMenuName, menu_item->mMenu->mName, _countof(g_script.mThisMenuName));
 				g_script.mThisMenuItem = menu_item;
 				break;
 			default: // hotkey or hotstring
@@ -1219,13 +1218,16 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					g.EventInfo = (EventInfoType)pgui->mHwnd;
 					pgui->AddRef();
 				}
+				UserMenu *menu = menu_item->mMenu; // In case the item is deleted.
+				menu->AddRef();
 				ExprTokenType param[] =
 				{
 					g_script.mThisMenuItemName,
 					(__int64)(g_script.ThisMenuItemPos() + 1), // +1 to convert zero-based to one-based.
-					g_script.mThisMenuName
+					menu
 				};
 				label_to_call->ExecuteInNewThread(_T("Menu"), param, _countof(param));
+				menu->Release();
 				if (pgui)
 					pgui->Release();
 				break;

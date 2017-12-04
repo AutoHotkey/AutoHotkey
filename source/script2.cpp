@@ -10312,7 +10312,6 @@ VarSizeType BIV_ThisMenuItem(LPTSTR aBuf, LPTSTR aVarName)
 
 UINT Script::ThisMenuItemPos()
 {
-	UserMenu *menu = FindMenu(mThisMenuName);
 	// The menu item's address was stored so we can distinguish between multiple items
 	// which have the same text.  The volatility of the address is handled by clearing
 	// it in UserMenu::DeleteItem and UserMenu::DeleteAllItems.  An ID would also be
@@ -10320,14 +10319,11 @@ UINT Script::ThisMenuItemPos()
 	if (mThisMenuItem)
 	{
 		UINT pos = 0;
-		for (UserMenuItem *mi = menu->mFirstMenuItem; mi; mi = mi->mNextMenuItem, ++pos)
+		for (UserMenuItem *mi = mThisMenuItem->mMenu->mFirstMenuItem; mi; mi = mi->mNextMenuItem, ++pos)
 			if (mi == mThisMenuItem)
 				return pos;
 	}
-	// For backward-compatibility, fall back to the old method if the item/menu has been
-	// deleted.  So by definition, this variable contains the CURRENT position of the most
-	// recently selected menu item within its CURRENT menu:
-	return menu ? menu->GetItemPos(mThisMenuItemName) : UINT_MAX;
+	return UINT_MAX;
 }
 
 VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName)
@@ -10340,13 +10336,6 @@ VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName)
 	// Otherwise:
 	*aBuf = '\0';
 	return 0;
-}
-
-VarSizeType BIV_ThisMenu(LPTSTR aBuf, LPTSTR aVarName)
-{
-	if (aBuf)
-		_tcscpy(aBuf, g_script.mThisMenuName);
-	return (VarSizeType)_tcslen(g_script.mThisMenuName);
 }
 
 VarSizeType BIV_ThisHotkey(LPTSTR aBuf, LPTSTR aVarName)
@@ -14880,20 +14869,29 @@ BIF_DECL(BIF_RegisterCallback)
 
 
 
-BIF_DECL(BIF_MenuGet)
+BIF_DECL(BIF_Menu)
 {
-	if (_f_callee_id == FID_MenuGetHandle)
+	UserMenu *menu;
+	switch (_f_callee_id)
 	{
-		UserMenu *menu = g_script.FindMenu(ParamIndexToString(0, aResultToken.buf));
-		if (menu && !menu->mMenu)
-			menu->Create(); // On failure (rare), we just return 0.
-		_f_return_i(menu ? (__int64)(UINT_PTR)menu->mMenu : 0);
+	case FID_MenuCreate:
+		if (  !(menu = g_script.AddMenu())  )
+			_f_throw(ERR_OUTOFMEM);
+		break;
+	case FID_MenuFromHandle:
+		menu = g_script.FindMenu((HMENU)ParamIndexToInt64(0));
+		break;
+	case FID_TrayMenu:
+		menu = g_script.mTrayMenu;
+		menu->AddRef();
+		break;
 	}
-	else // MenuGetName
+	if (menu)
 	{
-		UserMenu *menu = g_script.FindMenu((HMENU)ParamIndexToInt64(0));
-		_f_return(menu ? menu->mName : _T(""));
+		menu->AddRef();
+		_f_return(menu);
 	}
+	_f_return_empty;
 }
 
 

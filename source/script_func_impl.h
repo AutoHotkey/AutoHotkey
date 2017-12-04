@@ -28,6 +28,8 @@
 // This allows it to skip the check for SYM_MISSING, which always has marker == _T("").
 #define ParamIndexToOptionalString(index, ...)		(((index) < aParamCount) ? ParamIndexToString(index, __VA_ARGS__) : _T(""))
 
+#define ParamIndexToOptionalObject(index)			((index) < aParamCount ? TokenToObject(*aParam[index]) : NULL)
+
 #define _f_param_string(name, index, ...) \
 	TCHAR name##_buf[MAX_NUMBER_SIZE], *name = ParamIndexToString(index, name##_buf, __VA_ARGS__)
 #define _f_param_string_opt(name, index, ...) \

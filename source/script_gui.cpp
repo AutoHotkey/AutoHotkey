@@ -390,7 +390,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		{
 			if (IS_INVOKE_SET)
 			{
-				ResultType result = SetMenu(ParamIndexToString(0, nbuf1));
+				ResultType result = SetMenu(*aParam[0]);
 				if (result != OK)
 					return result; // Already displayed error.
 			}
@@ -1034,20 +1034,20 @@ GuiType *GuiType::FindGuiParent(HWND aHwnd)
 	return NULL;
 }
 
-ResultType GuiType::SetMenu(LPTSTR aMenuName)
+ResultType GuiType::SetMenu(ExprTokenType &aParam)
 {
-	UserMenu *menu;
-	if (*aMenuName)
+	UserMenu *menu = NULL;
+	if (!TokenIsEmptyString(aParam))
 	{
-		// By design, the below will give a slightly misleading error if the specified menu is the
-		// TRAY menu, since it should be obvious that it cannot be used as a menu bar (since it
-		// must always be of the popup type):
-		if (   !(menu = g_script.FindMenu(aMenuName)) || menu == g_script.mTrayMenu   ) // Relies on short-circuit boolean.
-			return g_script.ScriptError(ERR_MENU, aMenuName);
+		menu = dynamic_cast<UserMenu *>(TokenToObject(aParam));
+		if (!menu || menu == g_script.mTrayMenu)
+			return g_script.ScriptError(ERR_INVALID_VALUE);
 		menu->Create(MENU_TYPE_BAR);  // Ensure the menu physically exists and is the "non-popup" type (for a menu bar).
+		menu->AddRef();
 	}
-	else
-		menu = NULL;
+	if (mMenu)
+		mMenu->Release();
+	mMenu = menu;
 	::SetMenu(mHwnd, menu ? menu->mMenu : NULL);  // Add or remove the menu.
 	if (menu) // v1.1.04: Keyboard accelerators.
 		UpdateAccelerators(*menu);
@@ -2279,6 +2279,9 @@ void GuiType::Dispose()
 	// The following has been confirmed necessary to prevent the script from crashing if
 	// the controls are being enumerated (e.g. by GuiTypeEnum) when the Gui is destroyed:
 	mControlCount = 0;
+
+	if (mMenu)
+		mMenu->Release();
 
 	mEvents.Dispose();
 	if (mEventSink)

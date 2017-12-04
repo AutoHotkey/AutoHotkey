@@ -277,8 +277,9 @@ FuncEntry g_BIF[] =
 	BIFn(OnExit, 1, 2, false, BIF_OnExitOrClipboard),
 	BIFn(OnClipboardChange, 1, 2, false, BIF_OnExitOrClipboard),
 
-	BIFn(MenuGetHandle, 1, 1, true, BIF_MenuGet),
-	BIFn(MenuGetName, 1, 1, true, BIF_MenuGet),
+	BIFn(MenuCreate, 0, 0, true, BIF_Menu),
+	BIFn(MenuFromHandle, 1, 1, true, BIF_Menu),
+	BIFn(TrayMenu, 0, 0, true, BIF_Menu),
 
 	BIF1(LoadPicture, 1, 3, true),
 };
@@ -425,7 +426,6 @@ VarEntry g_BIV_A[] =
 	A_(ThisFunc),
 	A_(ThisHotkey),
 	A_(ThisLabel),
-	A_(ThisMenu),
 	A_(ThisMenuItem),
 	A_(ThisMenuItemPos),
 	A_(TickCount),
@@ -480,7 +480,7 @@ Script::Script()
 	, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 	, mCurrentFuncOpenBlockCount(0), mNextLineIsFunctionBody(false), mNoUpdateLabels(false)
 	, mClassObjectCount(0), mUnresolvedClasses(NULL), mClassProperty(NULL), mClassPropertyDef(NULL)
-	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true), mMenuUseErrorLevel(false)
+	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
 	, mScriptName(NULL)
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
@@ -496,12 +496,12 @@ Script::Script()
 	// v1.0.25: mLastScriptRest (removed in v2) and mLastPeekTime are now initialized
 	// right before the auto-exec section of the script is launched, which avoids an
 	// initial Sleep(10) in ExecUntil that would otherwise occur.
-	*mThisMenuItemName = *mThisMenuName = '\0';
+	*mThisMenuItemName = '\0';
 	ZeroMemory(&mNIC, sizeof(mNIC));  // Constructor initializes this, to be safe.
 	mNIC.hWnd = NULL;  // Set this as an indicator that it tray icon is not installed.
 
 	// Lastly (after the above have been initialized), anything that can fail:
-	if (   !(mTrayMenu = AddMenu(_T("Tray")))   ) // realistically never happens
+	if (   !(mTrayMenu = AddMenu())   ) // realistically never happens
 	{
 		ScriptError(_T("No tray mem"));
 		ExitApp(EXIT_CRITICAL);
@@ -580,15 +580,8 @@ Script::~Script() // Destructor.
 	// Since they're not associated with a window, we must free the resources for all popup menus.
 	// Update: Even if a menu is being used as a GUI window's menu bar, see note above for why menu
 	// destruction is done AFTER the GUI windows are destroyed:
-	UserMenu *menu_to_delete;
-	for (UserMenu *m = mFirstMenu; m;)
-	{
-		menu_to_delete = m;
-		m = m->mNextMenu;
-		ScriptDeleteMenu(menu_to_delete);
-		// Above call should not return FAIL, since the only way FAIL can realistically happen is
-		// when a GUI window is still using the menu as its menu bar.  But all GUI windows are gone now.
-	}
+	for (UserMenu *m = mFirstMenu; m; m = m->mNextMenu)
+		m->Dispose();
 
 	// Since tooltip windows are unowned, they should be destroyed to avoid resource leak:
 	for (i = 0; i < MAX_TOOLTIPS; ++i)

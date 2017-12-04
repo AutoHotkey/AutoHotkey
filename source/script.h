@@ -533,12 +533,8 @@ enum JoyControls {JOYCTRL_INVALID, JOYCTRL_XPOS, JOYCTRL_YPOS, JOYCTRL_ZPOS
 };
 #define IS_JOYSTICK_BUTTON(joy) (joy >= JOYCTRL_1 && joy <= JOYCTRL_BUTTON_MAX)
 
-enum MenuCommands {MENU_CMD_INVALID, MENU_CMD_SHOW, MENU_CMD_USEERRORLEVEL
-	, MENU_CMD_ADD, MENU_CMD_RENAME, MENU_CMD_INSERT
-	, MENU_CMD_CHECK, MENU_CMD_UNCHECK, MENU_CMD_TOGGLECHECK
-	, MENU_CMD_ENABLE, MENU_CMD_DISABLE, MENU_CMD_TOGGLEENABLE
-	, MENU_CMD_STANDARD, MENU_CMD_NOSTANDARD, MENU_CMD_COLOR, MENU_CMD_DEFAULT, MENU_CMD_NODEFAULT
-	, MENU_CMD_DELETE, MENU_CMD_DELETEALL, MENU_CMD_TIP, MENU_CMD_ICON, MENU_CMD_NOICON
+enum MenuCommands {MENU_CMD_INVALID, MENU_CMD_USEERRORLEVEL
+	, MENU_CMD_TIP, MENU_CMD_ICON, MENU_CMD_NOICON
 	, MENU_CMD_CLICK, MENU_CMD_MAINWINDOW, MENU_CMD_NOMAINWINDOW
 };
 
@@ -575,7 +571,7 @@ enum BuiltInFunctionID {
 	FID_ProcessExist = 0, FID_ProcessClose, FID_ProcessWait, FID_ProcessWaitClose, 
 	FID_MonitorGet = 0, FID_MonitorGetWorkArea, FID_MonitorGetCount, FID_MonitorGetPrimary, FID_MonitorGetName, 
 	FID_OnExit = 0, FID_OnClipboardChange,
-	FID_MenuGetHandle = 0, FID_MenuGetName,
+	FID_MenuCreate = 0, FID_MenuFromHandle, FID_TrayMenu,
 	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlGetTab, FID_ControlFindItem, FID_ControlGetChoice, FID_ControlGetList, FID_ControlGetLineCount, FID_ControlGetCurrentLine, FID_ControlGetCurrentCol, FID_ControlGetLine, FID_ControlGetSelected, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
 	FID_ControlSetChecked = 0, FID_ControlSetEnabled, FID_ControlShow, FID_ControlHide, FID_ControlSetStyle, FID_ControlSetExStyle, FID_ControlShowDropDown, FID_ControlHideDropDown, FID_ControlSetTab, FID_ControlAddItem, FID_ControlDeleteItem, FID_ControlChoose, FID_ControlChooseString, FID_ControlEditPaste,
 	FID_DriveEject = 0, FID_DriveLock, FID_DriveUnlock, FID_DriveSetLabel,
@@ -1200,24 +1196,7 @@ public:
 	static MenuCommands ConvertMenuCommand(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return MENU_CMD_INVALID;
-		if (!_tcsicmp(aBuf, _T("Show"))) return MENU_CMD_SHOW;
 		if (!_tcsicmp(aBuf, _T("UseErrorLevel"))) return MENU_CMD_USEERRORLEVEL;
-		if (!_tcsicmp(aBuf, _T("Add"))) return MENU_CMD_ADD;
-		if (!_tcsicmp(aBuf, _T("Rename"))) return MENU_CMD_RENAME;
-		if (!_tcsicmp(aBuf, _T("Insert"))) return MENU_CMD_INSERT;
-		if (!_tcsicmp(aBuf, _T("Check"))) return MENU_CMD_CHECK;
-		if (!_tcsicmp(aBuf, _T("Uncheck"))) return MENU_CMD_UNCHECK;
-		if (!_tcsicmp(aBuf, _T("ToggleCheck"))) return MENU_CMD_TOGGLECHECK;
-		if (!_tcsicmp(aBuf, _T("Enable"))) return MENU_CMD_ENABLE;
-		if (!_tcsicmp(aBuf, _T("Disable"))) return MENU_CMD_DISABLE;
-		if (!_tcsicmp(aBuf, _T("ToggleEnable"))) return MENU_CMD_TOGGLEENABLE;
-		if (!_tcsicmp(aBuf, _T("Standard"))) return MENU_CMD_STANDARD;
-		if (!_tcsicmp(aBuf, _T("NoStandard"))) return MENU_CMD_NOSTANDARD;
-		if (!_tcsicmp(aBuf, _T("Color"))) return MENU_CMD_COLOR;
-		if (!_tcsicmp(aBuf, _T("Default"))) return MENU_CMD_DEFAULT;
-		if (!_tcsicmp(aBuf, _T("NoDefault"))) return MENU_CMD_NODEFAULT;
-		if (!_tcsicmp(aBuf, _T("Delete"))) return MENU_CMD_DELETE;
-		if (!_tcsicmp(aBuf, _T("DeleteAll"))) return MENU_CMD_DELETEALL;
 		if (!_tcsicmp(aBuf, _T("Tip"))) return MENU_CMD_TIP;
 		if (!_tcsicmp(aBuf, _T("Icon"))) return MENU_CMD_ICON;
 		if (!_tcsicmp(aBuf, _T("NoIcon"))) return MENU_CMD_NOICON;
@@ -1943,10 +1922,9 @@ struct MsgMonitorInstance
 
 #define MAX_MENU_NAME_LENGTH MAX_PATH // For both menu and menu item names.
 class UserMenuItem;  // Forward declaration since classes use each other (i.e. a menu *item* can have a submenu).
-class UserMenu
+class UserMenu : public ObjectBase
 {
 public:
-	LPTSTR mName;  // Dynamically allocated.
 	UserMenuItem *mFirstMenuItem, *mLastMenuItem, *mDefault;
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
@@ -1962,13 +1940,45 @@ public:
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
 
-	UserMenu(LPTSTR aName) // Constructor
-		: mName(aName), mFirstMenuItem(NULL), mLastMenuItem(NULL), mDefault(NULL)
+	UserMenu() // Constructor
+		: mFirstMenuItem(NULL), mLastMenuItem(NULL), mDefault(NULL)
 		, mIncludeStandardItems(false), mClickCount(2), mMenuItemCount(0), mNextMenu(NULL), mMenu(NULL)
 		, mMenuType(MENU_TYPE_POPUP) // The MENU_TYPE_NONE flag is not used in this context.  Default = POPUP.
 		, mBrush(NULL), mColor(CLR_DEFAULT)
 	{
 	}
+
+	void Dispose();
+	~UserMenu();
+
+	enum MemberID
+	{
+		INVALID = 0,
+
+		// Methods
+		M_Add,
+		M_Insert,
+		M_Delete,
+		M_Rename,
+		M_Check,
+		M_Uncheck,
+		M_ToggleCheck,
+		M_Enable,
+		M_Disable,
+		M_ToggleEnable,
+		M_SetIcon,
+		M_Show,
+		M_SetColor,
+		LastMethodPlusOne,
+
+		// Properties
+		P_Default,
+		P_Standard,
+		P_Handle,
+	};
+	
+	IObject_Type_Impl("Menu")
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions, UserMenuItem **aInsertAt);
 	ResultType InternalAppendMenu(UserMenuItem *aMenuItem, UserMenuItem *aInsertBefore = NULL);
@@ -1989,13 +1999,12 @@ public:
 	ResultType IncludeStandardItems();
 	ResultType ExcludeStandardItems();
 	ResultType Create(MenuTypeType aMenuType = MENU_TYPE_NONE); // NONE means UNSPECIFIED in this context.
-	void SetColor(LPTSTR aColorName, bool aApplyToSubmenus);
+	void SetColor(ExprTokenType &aColor, bool aApplyToSubmenus);
 	void ApplyColor(bool aApplyToSubmenus);
 	ResultType AppendStandardItems();
 	ResultType Destroy();
 	ResultType Display(bool aForceToForeground = true, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED);
 	UserMenuItem *FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bool &aByPos);
-	UINT GetSubmenuPos(HMENU ahMenu);
 	UINT GetItemPos(LPTSTR aMenuItemName);
 	bool ContainsMenu(UserMenu *aMenu);
 	void UpdateAccelerators();
@@ -2331,6 +2340,7 @@ public:
 	HICON mIconEligibleForDestruction; // The window's icon, which can be destroyed when the window is destroyed if nothing else is using it.
 	HICON mIconEligibleForDestructionSmall; // L17: A window may have two icons: ICON_SMALL and ICON_BIG.
 	HACCEL mAccel; // Keyboard accelerator table.
+	UserMenu *mMenu;
 	IObject* mEventSink;
 	MsgMonitorList mEvents;
 	// 32-BIT FIELDS:
@@ -2406,6 +2416,7 @@ public:
 		, mControl(NULL), mControlCount(0), mControlCapacity(0)
 		, mStatusBarHwnd(NULL)
 		, mDefaultButtonIndex(-1), mEventSink(NULL)
+		, mMenu(NULL)
 		// The styles DS_CENTER and DS_3DLOOK appear to be ineffectual in this case.
 		// Also note that WS_CLIPSIBLINGS winds up on the window even if unspecified, which is a strong hint
 		// that it should always be used for top level windows across all OSes.  Usenet posts confirm this.
@@ -2467,7 +2478,7 @@ public:
 	BOOL IsMonitoring(GuiEventType aEvent) { return mEvents.IsMonitoring(aEvent); }
 
 	static IObject* CreateDropArray(HDROP hDrop);
-	ResultType SetMenu(LPTSTR aMenuName);
+	ResultType SetMenu(ExprTokenType &aParam);
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Object *aObj = NULL);
 	ResultType PropertyGetPos(ResultToken &aResultToken, RECT &aPos);
@@ -2658,7 +2669,6 @@ private:
 	LineNumberType mCombinedLineNumber; // In the case of a continuation section/line(s), this is always the top line.
 
 	bool mNoHotkeyLabels;
-	bool mMenuUseErrorLevel;  // Whether runtime errors should be displayed by the Menu command, vs. ErrorLevel.
 
 	#define UPDATE_TIP_FIELD tcslcpy(mNIC.szTip, (mTrayIconTip && *mTrayIconTip) ? mTrayIconTip \
 		: (mFileName ? mFileName : T_AHK_NAME), _countof(mNIC.szTip));
@@ -2690,7 +2700,6 @@ public:
 	Label *mPlaceholderLabel; // Used in place of a NULL label to simplify code.
 	UserMenuItem *mThisMenuItem;
 	TCHAR mThisMenuItemName[MAX_MENU_NAME_LENGTH + 1];
-	TCHAR mThisMenuName[MAX_MENU_NAME_LENGTH + 1];
 	LPTSTR mThisHotkeyName, mPriorHotkeyName;
 	MsgMonitorList mOnExit, mOnClipboardChange; // Lists of event handlers for OnExit() and OnClipboardChange().
 	HWND mNextClipboardViewer;
@@ -2795,9 +2804,8 @@ public:
 	ResultType PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var, Var *aParam5Var);
 	ResultType MenuError(LPTSTR aMessage, LPTSTR aInfo);
 	UINT GetFreeMenuItemID();
-	UserMenu *FindMenu(LPTSTR aMenuName);
 	UserMenu *FindMenu(HMENU aMenuHandle);
-	UserMenu *AddMenu(LPTSTR aMenuName);
+	UserMenu *AddMenu();
 	UINT ThisMenuItemPos();
 	ResultType ScriptDeleteMenu(UserMenu *aMenu);
 	UserMenuItem *FindMenuItemByID(UINT aID)
@@ -2941,7 +2949,6 @@ BIV_DECL_R (BIV_ThisFunc);
 BIV_DECL_R (BIV_ThisLabel);
 BIV_DECL_R (BIV_ThisMenuItem);
 BIV_DECL_R (BIV_ThisMenuItemPos);
-BIV_DECL_R (BIV_ThisMenu);
 BIV_DECL_R (BIV_ThisHotkey);
 BIV_DECL_R (BIV_PriorHotkey);
 BIV_DECL_R (BIV_TimeSinceThisHotkey);
@@ -3017,7 +3024,7 @@ BIF_DECL(BIF_RegisterCallback);
 
 BIF_DECL(BIF_Input);
 
-BIF_DECL(BIF_MenuGet);
+BIF_DECL(BIF_Menu);
 
 BIF_DECL(BIF_MsgBox);
 BIF_DECL(BIF_InputBox);
