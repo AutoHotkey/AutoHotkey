@@ -949,12 +949,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			{
 			case AHK_GUI_ACTION: // Listed first for performance.
 			case AHK_CLIPBOARD_CHANGE:
-				break; // Do nothing at this stage.
 			case AHK_USER_MENU: // user-defined menu item
-				// Safer to make a full copies than point to something potentially volatile.
-				tcslcpy(g_script.mThisMenuItemName, menu_item->mName, _countof(g_script.mThisMenuItemName));
-				g_script.mThisMenuItem = menu_item;
-				break;
+				break; // Do nothing at this stage.
 			default: // hotkey or hotstring
 				// Just prior to launching the hotkey, update these values to support built-in
 				// variables such as A_TimeSincePriorHotkey:
@@ -1222,8 +1218,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				menu->AddRef();
 				ExprTokenType param[] =
 				{
-					g_script.mThisMenuItemName,
-					(__int64)(g_script.ThisMenuItemPos() + 1), // +1 to convert zero-based to one-based.
+					menu_item->mName, // This should be immediately copied into a script variable, so it's okay if menu_item is deleted.
+					(__int64)(menu_item->Pos() + 1), // +1 to convert zero-based to one-based.
 					menu
 				};
 				label_to_call->ExecuteInNewThread(_T("Menu"), param, _countof(param));

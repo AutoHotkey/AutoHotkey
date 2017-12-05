@@ -10405,41 +10405,6 @@ VarSizeType BIV_ThisLabel(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(name);
 }
 
-VarSizeType BIV_ThisMenuItem(LPTSTR aBuf, LPTSTR aVarName)
-{
-	if (aBuf)
-		_tcscpy(aBuf, g_script.mThisMenuItemName);
-	return (VarSizeType)_tcslen(g_script.mThisMenuItemName);
-}
-
-UINT Script::ThisMenuItemPos()
-{
-	// The menu item's address was stored so we can distinguish between multiple items
-	// which have the same text.  The volatility of the address is handled by clearing
-	// it in UserMenu::DeleteItem and UserMenu::DeleteAllItems.  An ID would also be
-	// volatile, since IDs can be re-used if the item is deleted.
-	if (mThisMenuItem)
-	{
-		UINT pos = 0;
-		for (UserMenuItem *mi = mThisMenuItem->mMenu->mFirstMenuItem; mi; mi = mi->mNextMenuItem, ++pos)
-			if (mi == mThisMenuItem)
-				return pos;
-	}
-	return UINT_MAX;
-}
-
-VarSizeType BIV_ThisMenuItemPos(LPTSTR aBuf, LPTSTR aVarName)
-{
-	if (!aBuf) // To avoid doing possibly high-overhead calls twice, merely return a conservative estimate for the first pass.
-		return MAX_INTEGER_LENGTH;
-	UINT menu_item_pos = g_script.ThisMenuItemPos();
-	if (menu_item_pos < UINT_MAX) // Success
-		return (VarSizeType)_tcslen(UTOA(menu_item_pos + 1, aBuf)); // +1 to convert from zero-based to 1-based.
-	// Otherwise:
-	*aBuf = '\0';
-	return 0;
-}
-
 VarSizeType BIV_ThisHotkey(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (aBuf)

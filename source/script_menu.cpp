@@ -603,8 +603,6 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 	else // aMenuItem was the first one in the list.
 		mFirstMenuItem = aMenuItem->mNextMenuItem; // Can be NULL if the list will now be empty.
 	CHANGE_DEFAULT_IF_NEEDED  // Should do this before freeing aMenuItem's memory.
-	if (g_script.mThisMenuItem == aMenuItem)
-		g_script.mThisMenuItem = NULL;
 	if (mMenu) // Delete the item from the menu.
 		RemoveMenu(mMenu, aMenuItem_ID, aMenuItem_MF_BY); // v1.0.48: Lexikos: DeleteMenu() destroys any sub-menu handle associated with the item, so use RemoveMenu. Otherwise the submenu handle stored somewhere else in memory would suddenly become invalid.
 	RemoveItemIcon(aMenuItem); // L17: Free icon or bitmap.
@@ -644,8 +642,6 @@ ResultType UserMenu::DeleteAllItems()
 	{
 		menu_item_to_delete = mi;
 		mi = mi->mNextMenuItem;
-		if (g_script.mThisMenuItem == menu_item_to_delete)
-			g_script.mThisMenuItem = NULL;
 		RemoveItemIcon(menu_item_to_delete); // L26: Free icon or bitmap!
 		if (menu_item_to_delete->mName != Var::sEmptyString)
 			delete menu_item_to_delete->mName; // Since it was separately allocated.
@@ -1376,20 +1372,13 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 
 
 
-UINT UserMenu::GetItemPos(LPTSTR aMenuItemName)
-// aMenuItemName will be searched for in this menu.
-// Returns UINT_MAX if aMenuItemName can't be found.
+UINT UserMenuItem::Pos()
 {
-	int i = 0;
-	// It seems more proper to use the original menu item name as set by the Menu command
-	// rather than GetMenuString() as in v1.1.19 and earlier since our only caller always
-	// passes an item name which originally came from item->mName.  If the item names are
-	// out of sync (i.e. the user modified the item via the Win32 API), this method may
-	// be more reliable.  It should also be faster and smaller.
-	for (UserMenuItem *item = mFirstMenuItem; item; item = item->mNextMenuItem, ++i)
-		if (!lstrcmpi(item->mName, aMenuItemName))
-			return i;
-	return UINT_MAX;  // No match found.
+	UINT pos = 0;
+	for (UserMenuItem *mi = mMenu->mFirstMenuItem; mi; mi = mi->mNextMenuItem, ++pos)
+		if (mi == this)
+			return pos;
+	return UINT_MAX;
 }
 
 

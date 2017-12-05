@@ -427,8 +427,6 @@ VarEntry g_BIV_A[] =
 	A_(ThisFunc),
 	A_(ThisHotkey),
 	A_(ThisLabel),
-	A_(ThisMenuItem),
-	A_(ThisMenuItemPos),
 	A_(TickCount),
 	A_(TimeIdle),
 	A_(TimeIdlePhysical),
@@ -478,7 +476,7 @@ Script::Script()
 	, mFirstLabel(NULL), mLastLabel(NULL)
 	, mFunc(NULL), mFuncCount(0), mFuncCountMax(0)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
-	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0), mThisMenuItem(NULL)
+	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 	, mCurrentFuncOpenBlockCount(0), mNextLineIsFunctionBody(false), mNoUpdateLabels(false)
 	, mClassObjectCount(0), mUnresolvedClasses(NULL), mClassProperty(NULL), mClassPropertyDef(NULL)
@@ -498,7 +496,6 @@ Script::Script()
 	// v1.0.25: mLastScriptRest (removed in v2) and mLastPeekTime are now initialized
 	// right before the auto-exec section of the script is launched, which avoids an
 	// initial Sleep(10) in ExecUntil that would otherwise occur.
-	*mThisMenuItemName = '\0';
 	ZeroMemory(&mNIC, sizeof(mNIC));  // Constructor initializes this, to be safe.
 	mNIC.hWnd = NULL;  // Set this as an indicator that it tray icon is not installed.
 

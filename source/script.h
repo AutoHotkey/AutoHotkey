@@ -1989,7 +1989,6 @@ public:
 	ResultType Destroy();
 	ResultType Display(bool aForceToForeground = true, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED);
 	UserMenuItem *FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bool &aByPos);
-	UINT GetItemPos(LPTSTR aMenuItemName);
 	bool ContainsMenu(UserMenu *aMenu);
 	void UpdateAccelerators();
 	// L17: Functions for menu icons.
@@ -2041,6 +2040,8 @@ public:
 
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
+
+	UINT Pos();
 };
 
 
@@ -2682,8 +2683,6 @@ private:
 public:
 	Line *mCurrLine;     // Seems better to make this public than make Line our friend.
 	Label *mPlaceholderLabel; // Used in place of a NULL label to simplify code.
-	UserMenuItem *mThisMenuItem;
-	TCHAR mThisMenuItemName[MAX_MENU_NAME_LENGTH + 1];
 	LPTSTR mThisHotkeyName, mPriorHotkeyName;
 	MsgMonitorList mOnExit, mOnClipboardChange; // Lists of event handlers for OnExit() and OnClipboardChange().
 	HWND mNextClipboardViewer;
@@ -2794,7 +2793,6 @@ public:
 	UINT GetFreeMenuItemID();
 	UserMenu *FindMenu(HMENU aMenuHandle);
 	UserMenu *AddMenu();
-	UINT ThisMenuItemPos();
 	ResultType ScriptDeleteMenu(UserMenu *aMenu);
 	UserMenuItem *FindMenuItemByID(UINT aID)
 	{
@@ -2937,8 +2935,6 @@ BIV_DECL_R (BIV_LoopField);
 BIV_DECL_RW(BIV_LoopIndex);
 BIV_DECL_R (BIV_ThisFunc);
 BIV_DECL_R (BIV_ThisLabel);
-BIV_DECL_R (BIV_ThisMenuItem);
-BIV_DECL_R (BIV_ThisMenuItemPos);
 BIV_DECL_R (BIV_ThisHotkey);
 BIV_DECL_R (BIV_PriorHotkey);
 BIV_DECL_R (BIV_TimeSinceThisHotkey);
