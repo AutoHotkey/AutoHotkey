@@ -843,6 +843,8 @@ void Object::EndClassDefinition()
 		{
 			if (i >= mKeyOffsetString) // Must be checked since key can be an integer, such as for "0 := (expr)".
 				free(mFields[i].key.s);
+			else // At this stage it can only be an integer key.
+				--mKeyOffsetObject, --mKeyOffsetString; // Number of int/obj keys is implied by these, so they must be adjusted.
 			if (i < --mFieldCount)
 				memmove(mFields + i, mFields + i + 1, (mFieldCount - i) * sizeof(FieldType));
 		}
