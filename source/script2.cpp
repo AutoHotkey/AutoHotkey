@@ -6218,11 +6218,14 @@ BIF_DECL(BIF_Sort)
 			sort_by_naked_filename = true;
 		}
 	}
-
+	
 	// Check for early return only after parsing options in case an option that sets ErrorLevel is present:
-	if (!*aContents) // Input is empty, nothing to sort.
+	if (!*aContents) // Input is empty, nothing to sort, return empty string.
+	{
+		result_to_return = aResultToken.Return(_T(""), 0);
 		goto end;
-
+	}
+	
 	// size_t helps performance and should be plenty of capacity for many years of advancement.
 	// In addition, things like realloc() can't accept anything larger than size_t anyway,
 	// so there's no point making this 64-bit until size_t itself becomes 64-bit (it already is on some compilers?).
