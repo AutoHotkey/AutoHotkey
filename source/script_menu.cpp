@@ -22,224 +22,6 @@ GNU General Public License for more details.
 #include "script_func_impl.h"
 
 
-ResultType Script::MenuError(LPTSTR aMessage, LPTSTR aInfo)
-{
-	return ScriptError(aMessage, aInfo);
-}
-
-
-ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var, Var *aParam5Var)
-{
-	#define RETURN_MENU_ERROR(msg, info) return MenuError(msg, info)
-	#define RETURN_IF_NOT_TRAY if (!is_tray) RETURN_MENU_ERROR(ERR_MENUTRAY, aMenu)
-
-	MenuCommands menu_command = Line::ConvertMenuCommand(aCommand);
-	if (menu_command == MENU_CMD_INVALID)
-		RETURN_MENU_ERROR(ERR_PARAM2_INVALID, aCommand);
-
-	bool is_tray = !_tcsicmp(aMenu, _T("tray"));
-
-	// Handle early on anything that doesn't require the menu to be found or created:
-	switch(menu_command)
-	{
-	case MENU_CMD_TIP:
-		RETURN_IF_NOT_TRAY;
-		if (*aParam3)
-		{
-			if (!mTrayIconTip)
-				mTrayIconTip = (LPTSTR) SimpleHeap::Malloc(sizeof(mNIC.szTip)); // SimpleHeap improves avg. case mem load.
-			if (mTrayIconTip)
-				tcslcpy(mTrayIconTip, aParam3, _countof(mNIC.szTip));
-		}
-		else // Restore tip to default.
-			if (mTrayIconTip)
-				*mTrayIconTip = '\0';
-		if (mNIC.hWnd) // i.e. only update the tip if the tray icon exists (can't work otherwise).
-		{
-			UPDATE_TIP_FIELD
-			Shell_NotifyIcon(NIM_MODIFY, &mNIC);  // Currently not checking its result (e.g. in case a shell other than Explorer is running).
-		}
-		return OK;
-
-	case MENU_CMD_ICON:
-		// L17: If is_tray and aParam3 is omitted or aParam4 is an integer, set the tray icon. Otherwise set a menu item icon.
-		if (is_tray)
-		{
-			bool mIconFrozen_prev = mIconFrozen;
-			// Lexikos: aOptions still ambiguous with menu item icon number at this point.
-			//if (*aOptions) // i.e. if it's blank, don't change the current setting of mIconFrozen.
-			//	mIconFrozen = (ATOI(aOptions) == 1);
-
-			if (!*aParam3)
-			{
-				// Lexikos: MenuItemName omitted, therefore no conflict. mIconFrozen may now be set.
-				if (*aOptions) // i.e. if it's blank, don't change the current setting of mIconFrozen.
-					mIconFrozen = (ATOI(aOptions) == 1);
-
-				g_NoTrayIcon = false;
-				if (!mNIC.hWnd) // The icon doesn't exist, so create it.
-				{
-					CreateTrayIcon();
-					UpdateTrayIcon(true);  // Force the icon into the correct pause/suspend state.
-				}
-				else if (!mIconFrozen && mIconFrozen_prev) // To cause "Menu Tray, Icon,,, 0" to update the icon while the script is suspended.
-					UpdateTrayIcon(true);
-				return OK;
-			}
-
-			// Otherwise, user has specified a custom icon:
-			if (*aParam3 == '*' && !*(aParam3 + 1)) // Restore the standard icon.
-			{
-				// Lexikos: For compatibility with older scripts, "Menu, Tray, Icon, *" must reset tray to default icon, even if an item "*" exists. mIconFrozen may now be set.
-				if (*aOptions) // i.e. if it's blank, don't change the current setting of mIconFrozen.
-					mIconFrozen = (ATOI(aOptions) == 1);
-
-				if (mCustomIcon)
-				{
-					GuiType::DestroyIconsIfUnused(mCustomIcon, mCustomIconSmall); // v1.0.37.07: Solves reports of Gui windows losing their icons.
-					// If the above doesn't destroy the icon, the GUI window(s) still using it are responsible for
-					// destroying it later.
-					mCustomIcon = NULL;  // To indicate that there is no custom icon.
-					mCustomIconSmall = NULL;
-					if (mCustomIconFile)
-						*mCustomIconFile = '\0';
-					mCustomIconNumber = 0;
-					UpdateTrayIcon(true);  // Need to use true in this case too.
-				}
-				return OK;
-			}
-
-			if (IsNumeric(aParam4, true)) // pure integer or empty/whitespace
-			{
-				// Lexikos: We are unconditionally treating this as a request to set the tray icon, so mIconFrozen may now be set.
-				if (*aOptions) // i.e. if it's blank, don't change the current setting of mIconFrozen.
-					mIconFrozen = (ATOI(aOptions) == 1);
-
-				// v1.0.43.03: Load via LoadPicture() vs. ExtractIcon() because ExtractIcon harms the quality
-				// of 16x16 icons inside .ico files by first scaling them to 32x32 (which then has to be scaled
-				// back to 16x16 for the tray and for the SysMenu icon). I've visually confirmed that the
-				// distortion occurs at least when a 16x16 icon is loaded by ExtractIcon() then put into the
-				// tray.  It might not be the scaling itself that distorts the icon: the pixels are all in the
-				// right places, it's just that some are the wrong color/shade. This implies that some kind of
-				// unwanted interpolation or color tweaking is being done by ExtractIcon (and probably LoadIcon),
-				// but not by LoadImage.
-				// Also, load the icon at actual size so that when/if this icon is used for a GUI window, its
-				// appearance in the alt-tab menu won't be unexpectedly poor due to having been scaled from its
-				// native size down to 16x16.
-				int icon_number;
-				if (*aParam4)
-				{
-					icon_number = ATOI(aParam4);
-					if (icon_number == 0) // Must validate for use in two places below.
-						icon_number = 1; // Must be != 0 to tell LoadPicture that "icon must be loaded, never a bitmap".
-				}
-				else
-					icon_number = 1; // One vs. Zero tells LoadIcon: "must load icon, never a bitmap (e.g. no gif/jpg/png)".
-
-				int image_type;
-				// L17: For best results, load separate small and large icons.
-				HICON new_icon_small;
-				HICON new_icon = NULL; // Initialize to detect failure to load either icon.
-				if ( new_icon_small = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), image_type, icon_number, false) ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
-					if ( !(new_icon = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, icon_number, false)) )
-						DestroyIcon(new_icon_small);
-				if ( !new_icon )
-					RETURN_MENU_ERROR(_T("Can't load icon."), aParam3);
-
-				GuiType::DestroyIconsIfUnused(mCustomIcon, mCustomIconSmall); // This destroys it if non-NULL and it's not used by an GUI windows.
-
-				mCustomIcon = new_icon;
-				mCustomIconSmall = new_icon_small;
-				mCustomIconNumber = icon_number;
-				// Allocate the full MAX_PATH in case the contents grow longer later.
-				// SimpleHeap improves avg. case mem load:
-				if (!mCustomIconFile)
-					mCustomIconFile = (LPTSTR) SimpleHeap::Malloc(MAX_PATH * sizeof(TCHAR));
-				if (mCustomIconFile)
-				{
-					// Get the full path in case it's a relative path.  This is documented and it's done in case
-					// the script ever changes its working directory:
-					TCHAR full_path[MAX_PATH], *filename_marker;
-					if (GetFullPathName(aParam3, _countof(full_path) - 1, full_path, &filename_marker))
-						tcslcpy(mCustomIconFile, full_path, MAX_PATH);
-					else
-						tcslcpy(mCustomIconFile, aParam3, MAX_PATH);
-				}
-
-				if (!g_NoTrayIcon)
-					UpdateTrayIcon(true);  // Need to use true in this case too.
-				return OK;
-			}
-		}
-		break;
-
-	case MENU_CMD_NOICON:
-		if (is_tray && !*aParam3) // L17: "Menu, Tray, NoIcon, xxx" removes icon from tray menu item xxx.
-		{
-			g_NoTrayIcon = true;
-			if (mNIC.hWnd) // Since it exists, destroy it.
-			{
-				Shell_NotifyIcon(NIM_DELETE, &mNIC); // Remove it.
-				mNIC.hWnd = NULL;  // Set this as an indicator that tray icon is not installed.
-				// but don't do DestroyMenu() on mTrayMenu->mMenu (if non-NULL) since it may have been
-				// changed by the user to have the custom items on top of the standard items,
-				// for example, and we don't want to lose that ordering in case the script turns
-				// the icon back on at some future time during this session.
-			}
-			return OK;
-		}
-		// else: this request to remove a menu item's icon will be processed below.
-		break;
-
-	case MENU_CMD_CLICK:
-		RETURN_IF_NOT_TRAY;
-		mTrayMenu->mClickCount = ATOI(aParam3);
-		if (mTrayMenu->mClickCount < 1)
-			mTrayMenu->mClickCount = 1;  // Single-click to activate menu's default item.
-		else if (mTrayMenu->mClickCount > 2)
-			mTrayMenu->mClickCount = 2;  // Double-click.
-		return OK;
-
-	case MENU_CMD_MAINWINDOW:
-		RETURN_IF_NOT_TRAY;
-#ifdef AUTOHOTKEYSC
-		if (!g_AllowMainWindow)
-		{
-			g_AllowMainWindow = true;
-			EnableOrDisableViewMenuItems(GetMenu(g_hWnd), MF_ENABLED); // Added as a fix in v1.0.47.06.
-			// Rather than using InsertMenu() to insert the item in the right position,
-			// which makes the code rather unmaintainable, it seems best just to recreate
-			// the entire menu.  This will result in the standard menu items going back
-			// up to the top of the menu if the user previously had them at the bottom,
-			// but it seems too rare to worry about, especially since it's easy to
-			// work around that:
-			if (mTrayMenu->mIncludeStandardItems)
-				mTrayMenu->Destroy(); // It will be recreated automatically the next time the user displays it.
-			// else there's no need.
-		}
-#endif
-        return OK;
-
-	case MENU_CMD_NOMAINWINDOW:
-		RETURN_IF_NOT_TRAY;
-#ifdef AUTOHOTKEYSC
-		if (g_AllowMainWindow)
-		{
-			g_AllowMainWindow = false;
-			EnableOrDisableViewMenuItems(GetMenu(g_hWnd), MF_DISABLED | MF_GRAYED); // Added as a fix in v1.0.47.06.
-			// See comments in the prior case above for why it's done this way vs. using DeleteMenu():
-			if (mTrayMenu->mIncludeStandardItems)
-				mTrayMenu->Destroy(); // It will be recreated automatically the next time the user displays it.
-			// else there's no need.
-		}
-#endif
-		return OK;
-	} // switch()
-
-	RETURN_MENU_ERROR(_T("Invalid parameter(s)"), _T(""));
-}
-
-
 
 ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
@@ -269,6 +51,7 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 	if_member("Default", P_Default)
 	if_member("Standard", P_Standard)
 	if_member("Handle", P_Handle)
+	if_member("ClickCount", P_ClickCount)
 #undef if_member
 	if (member == INVALID)
 		return INVOKE_NOT_HANDLED;
@@ -368,6 +151,17 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 		if (!mMenu)
 			Create(); // On failure (rare), we just return 0.
 		_o_return((__int64)(UINT_PTR)mMenu);
+
+	case P_ClickCount:
+		if (IS_INVOKE_SET)
+		{
+			mClickCount = ParamIndexToInt(0);
+			if (mClickCount < 1)
+				mClickCount = 1;  // Single-click to activate menu's default item.
+			else if (mClickCount > 2)
+				mClickCount = 2;  // Double-click.
+		}
+		_o_return(mClickCount);
 	}
 	
 	// All the remaining methods need a menu item to operate upon, or some other requirement met below.

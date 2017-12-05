@@ -280,6 +280,18 @@ ResultType Line::TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions)
 
 
 
+BIF_DECL(BIF_TraySetIcon)
+{
+	if (!g_script.SetTrayIcon(
+		ParamIndexToOptionalString(0, _f_number_buf) // buf is provided for error-reporting purposes.
+		, ParamIndexToOptionalInt(1, 1)
+		, ParamIndexIsOmitted(2) ? NEUTRAL : ParamIndexToBOOL(2) ? TOGGLED_ON : TOGGLED_OFF))
+		_f_return_FAIL;
+	_f_return_empty;
+}
+
+
+
 BIF_DECL(BIF_Input)
 // OVERVIEW:
 // Although a script can have many concurrent quasi-threads, there can only be one input
@@ -9454,6 +9466,36 @@ VarSizeType BIV_ScreenDPI(LPTSTR aBuf, LPTSTR aVarName)
 
 
 
+BIV_DECL_R(BIV_AllowMainWindow)
+{
+	if (aBuf)
+	{
+#ifdef AUTOHOTKEYSC
+		*aBuf++ = g_AllowMainWindow ? '1' : '0';
+#else
+		*aBuf++ = '1';
+#endif
+		*aBuf = '\0';
+	}
+	return 1;  // Length is always 1.
+}
+
+BIV_DECL_W(BIV_AllowMainWindow_Set)
+{
+#ifdef AUTOHOTKEYSC
+	g_script.AllowMainWindow(ResultToBOOL(aBuf));
+#else
+	// It seems best to allow `A_AllowMainWindow := true`, since a script
+	// which is only sometimes compiled may execute it unconditionally.
+	// For code size, false values are ignored instead of throwing an exception.
+	//if (!ResultToBOOL(aBuf))
+	//	return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
+#endif
+	return OK;
+}
+
+
+
 VarSizeType BIV_IconHidden(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (aBuf)
@@ -9462,6 +9504,37 @@ VarSizeType BIV_IconHidden(LPTSTR aBuf, LPTSTR aVarName)
 		*aBuf = '\0';
 	}
 	return 1;  // Length is always 1.
+}
+
+BIV_DECL_W(BIV_IconHidden_Set)
+{
+	g_script.ShowTrayIcon(!ResultToBOOL(aBuf));
+	return OK;
+}
+
+void Script::ShowTrayIcon(bool aShow)
+{
+	if (g_NoTrayIcon = !aShow) // Assign.
+	{
+		if (mNIC.hWnd) // Since it exists, destroy it.
+		{
+			Shell_NotifyIcon(NIM_DELETE, &mNIC); // Remove it.
+			mNIC.hWnd = NULL;  // Set this as an indicator that tray icon is not installed.
+			// but don't do DestroyMenu() on mTrayMenu->mMenu (if non-NULL) since it may have been
+			// changed by the user to have the custom items on top of the standard items,
+			// for example, and we don't want to lose that ordering in case the script turns
+			// the icon back on at some future time during this session.  Also, the script
+			// may provide some other means of displaying the tray menu.
+		}
+	}
+	else
+	{
+		if (!mNIC.hWnd) // The icon doesn't exist, so create it.
+		{
+			CreateTrayIcon();
+			UpdateTrayIcon(true);  // Force the icon into the correct pause/suspend state.
+		}
+	}
 }
 
 VarSizeType BIV_IconTip(LPTSTR aBuf, LPTSTR aVarName)
@@ -9474,6 +9547,31 @@ VarSizeType BIV_IconTip(LPTSTR aBuf, LPTSTR aVarName)
 	{
 		*aBuf = '\0';
 		return 0;
+	}
+}
+
+BIV_DECL_W(BIV_IconTip_Set)
+{
+	g_script.SetTrayTip(aBuf);
+	return OK;
+}
+
+void Script::SetTrayTip(LPTSTR aText)
+{
+	if (*aText)
+	{
+		if (!mTrayIconTip)
+			mTrayIconTip = (LPTSTR) SimpleHeap::Malloc(sizeof(mNIC.szTip)); // SimpleHeap improves avg. case mem load.
+		if (mTrayIconTip)
+			tcslcpy(mTrayIconTip, aText, _countof(mNIC.szTip));
+	}
+	else // Restore tip to default.
+		if (mTrayIconTip)
+			*mTrayIconTip = '\0';
+	if (mNIC.hWnd) // i.e. only update the tip if the tray icon exists (can't work otherwise).
+	{
+		UPDATE_TIP_FIELD
+		Shell_NotifyIcon(NIM_MODIFY, &mNIC);  // Currently not checking its result (e.g. in case a shell other than Explorer is running).
 	}
 }
 

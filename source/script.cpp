@@ -280,6 +280,7 @@ FuncEntry g_BIF[] =
 	BIFn(MenuCreate, 0, 0, true, BIF_Menu),
 	BIFn(MenuFromHandle, 1, 1, true, BIF_Menu),
 	BIFn(TrayMenu, 0, 0, true, BIF_Menu),
+	BIF1(TraySetIcon, 0, 3, false),
 
 	BIF1(LoadPicture, 1, 3, true),
 };
@@ -311,6 +312,7 @@ VarEntry g_BIV_A[] =
 {
 	A_(AhkPath),
 	A_(AhkVersion),
+	A_w(AllowMainWindow),
 	A_x(AppData, BIV_SpecialFolderPath),
 	A_x(AppDataCommon, BIV_SpecialFolderPath),
 	A_x(CaretX, BIV_Caret),
@@ -337,9 +339,9 @@ VarEntry g_BIV_A[] =
 	A_w(FileEncoding),
 	A_x(Hour, BIV_DateTime),
 	A_(IconFile),
-	A_(IconHidden),
+	A_w(IconHidden),
 	A_(IconNumber),
-	A_(IconTip),
+	A_w(IconTip),
 	A_wx(Index, BIV_LoopIndex, BIV_LoopIndex_Set),
 	A_(InitialWorkingDir),
 	A_x(IPAddress1, BIV_IPAddress),
@@ -926,6 +928,36 @@ void Script::EnableClipboardListener(bool aEnable)
 
 
 
+#ifdef AUTOHOTKEYSC
+
+void Script::AllowMainWindow(bool aAllow)
+{
+	if (g_AllowMainWindow == aAllow)
+		return;
+	g_AllowMainWindow = aAllow;
+	if (aAllow)
+	{
+		EnableOrDisableViewMenuItems(GetMenu(g_hWnd), MF_ENABLED); // Added as a fix in v1.0.47.06.
+		// Rather than using InsertMenu() to insert the item in the right position,
+		// which makes the code rather unmaintainable, it seems best just to recreate
+		// the entire menu.  This will result in the standard menu items going back
+		// up to the top of the menu if the user previously had them at the bottom,
+		// but it seems too rare to worry about, especially since it's easy to
+		// work around that:
+		if (mTrayMenu->mIncludeStandardItems)
+			mTrayMenu->Destroy(); // It will be recreated automatically the next time the user displays it.
+		// else there's no need.
+	}
+	else
+	{
+		EnableOrDisableViewMenuItems(GetMenu(g_hWnd), MF_DISABLED | MF_GRAYED); // Added as a fix in v1.0.47.06.
+		// See comments above for why it's done this way vs. using DeleteMenu():
+		if (mTrayMenu->mIncludeStandardItems)
+			mTrayMenu->Destroy(); // It will be recreated automatically the next time the user displays it.
+		// else there's no need.
+	}
+}
+
 void Script::EnableOrDisableViewMenuItems(HMENU aMenu, UINT aFlags)
 {
 	EnableMenuItem(aMenu, ID_VIEW_KEYHISTORY, aFlags);
@@ -933,6 +965,8 @@ void Script::EnableOrDisableViewMenuItems(HMENU aMenu, UINT aFlags)
 	EnableMenuItem(aMenu, ID_VIEW_VARIABLES, aFlags);
 	EnableMenuItem(aMenu, ID_VIEW_HOTKEYS, aFlags);
 }
+
+#endif
 
 
 
@@ -990,6 +1024,95 @@ void Script::UpdateTrayIcon(bool aForceUpdate)
 		icon_shows_suspended = g_IsSuspended;
 	}
 	// else do nothing, just leave it in the same state.
+}
+
+
+
+ResultType Script::SetTrayIcon(LPTSTR aIconFile, int aIconNumber, ToggleValueType aFreezeIcon)
+{
+	bool force_update = false;
+
+	if (aFreezeIcon != NEUTRAL) // i.e. if it's blank, don't change the current setting of mIconFrozen.
+	{
+		if (mIconFrozen != (aFreezeIcon == TOGGLED_ON)) // It needs to be toggled.
+		{
+			mIconFrozen = !mIconFrozen;
+			force_update = true; // Ensure the icon correctly reflects the current setting and suspend/pause status.
+		}
+	}
+	
+	if (*aIconFile == '*' && !aIconFile[1]) // Restore the standard icon.
+	{
+		if (mCustomIcon)
+		{
+			GuiType::DestroyIconsIfUnused(mCustomIcon, mCustomIconSmall); // v1.0.37.07: Solves reports of Gui windows losing their icons.
+			// If the above doesn't destroy the icon, the GUI window(s) still using it are responsible for
+			// destroying it later.
+			mCustomIcon = NULL;  // To indicate that there is no custom icon.
+			mCustomIconSmall = NULL;
+			if (mCustomIconFile)
+				*mCustomIconFile = '\0';
+			mCustomIconNumber = 0;
+			force_update = true;
+		}
+		aIconFile = _T(""); // Handle this like TraySetIcon(,,n) in case n was specified.
+	}
+	
+	if (!*aIconFile) // No icon specified, or it was already reset to default above.
+	{
+		if (force_update)
+			UpdateTrayIcon(true);
+		return OK; // We were called just to freeze/unfreeze the icon.
+	}
+
+	// v1.0.43.03: Load via LoadPicture() vs. ExtractIcon() because ExtractIcon harms the quality
+	// of 16x16 icons inside .ico files by first scaling them to 32x32 (which then has to be scaled
+	// back to 16x16 for the tray and for the SysMenu icon). I've visually confirmed that the
+	// distortion occurs at least when a 16x16 icon is loaded by ExtractIcon() then put into the
+	// tray.  It might not be the scaling itself that distorts the icon: the pixels are all in the
+	// right places, it's just that some are the wrong color/shade. This implies that some kind of
+	// unwanted interpolation or color tweaking is being done by ExtractIcon (and probably LoadIcon),
+	// but not by LoadImage.
+	// Also, load the icon at actual size so that when/if this icon is used for a GUI window, its
+	// appearance in the alt-tab menu won't be unexpectedly poor due to having been scaled from its
+	// native size down to 16x16.
+	
+	if (aIconNumber == 0) // Must validate for use in two places below.
+		aIconNumber = 1; // Must be != 0 to tell LoadPicture that "icon must be loaded, never a bitmap".
+
+	int image_type;
+	// L17: For best results, load separate small and large icons.
+	HICON new_icon_small;
+	HICON new_icon = NULL; // Initialize to detect failure to load either icon.
+	if ( new_icon_small = (HICON)LoadPicture(aIconFile, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), image_type, aIconNumber, false) ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
+		if ( !(new_icon = (HICON)LoadPicture(aIconFile, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, aIconNumber, false)) )
+			DestroyIcon(new_icon_small);
+	if ( !new_icon )
+		return g_script.ScriptError(_T("Can't load icon."), aIconFile);
+
+	GuiType::DestroyIconsIfUnused(mCustomIcon, mCustomIconSmall); // This destroys it if non-NULL and it's not used by an GUI windows.
+
+	mCustomIcon = new_icon;
+	mCustomIconSmall = new_icon_small;
+	mCustomIconNumber = aIconNumber;
+	// Allocate the full MAX_PATH in case the contents grow longer later.
+	// SimpleHeap improves avg. case mem load:
+	if (!mCustomIconFile)
+		mCustomIconFile = (LPTSTR) SimpleHeap::Malloc(MAX_PATH * sizeof(TCHAR));
+	if (mCustomIconFile)
+	{
+		// Get the full path in case it's a relative path.  This is documented and it's done in case
+		// the script ever changes its working directory:
+		TCHAR full_path[MAX_PATH], *filename_marker;
+		if (GetFullPathName(aIconFile, _countof(full_path) - 1, full_path, &filename_marker))
+			tcslcpy(mCustomIconFile, full_path, MAX_PATH);
+		else
+			tcslcpy(mCustomIconFile, aIconFile, MAX_PATH);
+	}
+
+	if (!g_NoTrayIcon)
+		UpdateTrayIcon(true);  // Need to use true in this case too.
+	return OK;
 }
 
 
@@ -11953,9 +12076,6 @@ ResultType Line::Perform()
 
 	case ACT_SETTITLEMATCHMODE:
 		return BIV_TitleMatchMode_Set(ARG1, NULL);
-
-	case ACT_MENU:
-		return g_script.PerformMenu(SIX_ARGS, ARGVAR4, ARGVAR5);
 
 	////////////////////////////////////////////////////////////////////////////////////////
 	// For these, it seems best not to report an error during runtime if there's

@@ -418,7 +418,6 @@ Action g_act[] =
 
 	, {_T("Edit"), 0, 0, false, NULL}
 	, {_T("Reload"), 0, 0, false, NULL}
-	, {_T("Menu"), 2, 6, false, NULL}  // tray, add, name, label, options, future use
 
 	, {_T("Shutdown"), 1, 1, false, {1, 0}} // Seems best to make the first param (the flag/code) mandatory.
 

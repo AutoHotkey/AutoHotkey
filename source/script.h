@@ -533,10 +533,6 @@ enum JoyControls {JOYCTRL_INVALID, JOYCTRL_XPOS, JOYCTRL_YPOS, JOYCTRL_ZPOS
 };
 #define IS_JOYSTICK_BUTTON(joy) (joy >= JOYCTRL_1 && joy <= JOYCTRL_BUTTON_MAX)
 
-enum MenuCommands {MENU_CMD_INVALID, MENU_CMD_USEERRORLEVEL
-	, MENU_CMD_TIP, MENU_CMD_ICON, MENU_CMD_NOICON
-	, MENU_CMD_CLICK, MENU_CMD_MAINWINDOW, MENU_CMD_NOMAINWINDOW
-};
 
 // Each line in the enumeration below corresponds to a group of built-in functions (defined
 // in g_BIF) which are implemented using a single C++ function.  These IDs are passed to the
@@ -1191,19 +1187,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("FAST"))) return FIND_FAST;
 		if (!_tcsicmp(aBuf, _T("SLOW"))) return FIND_SLOW;
 		return MATCHMODE_INVALID;
-	}
-
-	static MenuCommands ConvertMenuCommand(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf) return MENU_CMD_INVALID;
-		if (!_tcsicmp(aBuf, _T("UseErrorLevel"))) return MENU_CMD_USEERRORLEVEL;
-		if (!_tcsicmp(aBuf, _T("Tip"))) return MENU_CMD_TIP;
-		if (!_tcsicmp(aBuf, _T("Icon"))) return MENU_CMD_ICON;
-		if (!_tcsicmp(aBuf, _T("NoIcon"))) return MENU_CMD_NOICON;
-		if (!_tcsicmp(aBuf, _T("Click"))) return MENU_CMD_CLICK;
-		if (!_tcsicmp(aBuf, _T("MainWindow"))) return MENU_CMD_MAINWINDOW;
-		if (!_tcsicmp(aBuf, _T("NoMainWindow"))) return MENU_CMD_NOMAINWINDOW;
-		return MENU_CMD_INVALID;
 	}
 
 	static ThreadCommands ConvertThreadCommand(LPTSTR aBuf)
@@ -1975,6 +1958,7 @@ public:
 		P_Default,
 		P_Standard,
 		P_Handle,
+		P_ClickCount,
 	};
 	
 	IObject_Type_Impl("Menu")
@@ -2747,9 +2731,15 @@ public:
 	ResultType Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestart);
 	ResultType CreateWindows();
 	void EnableClipboardListener(bool aEnable);
+#ifdef AUTOHOTKEYSC
+	void AllowMainWindow(bool aAllow);
 	void EnableOrDisableViewMenuItems(HMENU aMenu, UINT aFlags);
+#endif
 	void CreateTrayIcon();
 	void UpdateTrayIcon(bool aForceUpdate = false);
+	void ShowTrayIcon(bool aShow);
+	ResultType SetTrayIcon(LPTSTR aIconFile, int aIconNumber, ToggleValueType aFreezeIcon);
+	void SetTrayTip(LPTSTR aText);
 	ResultType AutoExecSection();
 	bool IsPersistent();
 	void ExitIfNotPersistent(ExitReasons aExitReason);
@@ -2801,8 +2791,6 @@ public:
 	LPTSTR ListVars(LPTSTR aBuf, int aBufSize);
 	LPTSTR ListKeyHistory(LPTSTR aBuf, int aBufSize);
 
-	ResultType PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LPTSTR aParam4, LPTSTR aOptions, LPTSTR aOptions2, Var *aParam4Var, Var *aParam5Var);
-	ResultType MenuError(LPTSTR aMessage, LPTSTR aInfo);
 	UINT GetFreeMenuItemID();
 	UserMenu *FindMenu(HMENU aMenuHandle);
 	UserMenu *AddMenu();
@@ -2896,8 +2884,9 @@ BIV_DECL_R (BIV_IsUnicode);
 BIV_DECL_RW(BIV_FileEncoding);
 BIV_DECL_RW(BIV_RegView);
 BIV_DECL_RW(BIV_LastError);
-BIV_DECL_R (BIV_IconHidden);
-BIV_DECL_R (BIV_IconTip);
+BIV_DECL_RW(BIV_AllowMainWindow);
+BIV_DECL_RW(BIV_IconHidden);
+BIV_DECL_RW(BIV_IconTip);
 BIV_DECL_R (BIV_IconFile);
 BIV_DECL_R (BIV_IconNumber);
 BIV_DECL_R (BIV_Space_Tab);
@@ -3025,6 +3014,7 @@ BIF_DECL(BIF_RegisterCallback);
 BIF_DECL(BIF_Input);
 
 BIF_DECL(BIF_Menu);
+BIF_DECL(BIF_TraySetIcon);
 
 BIF_DECL(BIF_MsgBox);
 BIF_DECL(BIF_InputBox);
