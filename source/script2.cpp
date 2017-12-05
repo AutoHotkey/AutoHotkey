@@ -9466,6 +9466,17 @@ VarSizeType BIV_ScreenDPI(LPTSTR aBuf, LPTSTR aVarName)
 
 
 
+BIV_DECL_R(BIV_TrayMenu)
+{
+	// The actual value (an object) is resolved in ExpandExpression,
+	// to work around the limitations of the current BIV interface.
+	if (aBuf)
+		*aBuf = '\0';
+	return 0;
+}
+
+
+
 BIV_DECL_R(BIV_AllowMainWindow)
 {
 	if (aBuf)
@@ -14971,10 +14982,6 @@ BIF_DECL(BIF_Menu)
 		break;
 	case FID_MenuFromHandle:
 		menu = g_script.FindMenu((HMENU)ParamIndexToInt64(0));
-		break;
-	case FID_TrayMenu:
-		menu = g_script.mTrayMenu;
-		menu->AddRef();
 		break;
 	}
 	if (menu)

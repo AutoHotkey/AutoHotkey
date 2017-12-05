@@ -241,6 +241,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						LineError(ERR_VAR_IS_READONLY, FAIL, this_token.var->mName);
 						goto abort;
 					}
+					if (this_token.var->mBIV == BIV_TrayMenu) // Handled here to work around limitations of the BIV interface.
+					{
+						this_token.SetValue(g_script.mTrayMenu);
+						goto push_this_token;
+					}
   				}
 				// Otherwise, it's a built-in variable.
 				result_size = this_token.var->Get() + 1;

@@ -279,7 +279,6 @@ FuncEntry g_BIF[] =
 
 	BIFn(MenuCreate, 0, 0, true, BIF_Menu),
 	BIFn(MenuFromHandle, 1, 1, true, BIF_Menu),
-	BIFn(TrayMenu, 0, 0, true, BIF_Menu),
 	BIF1(TraySetIcon, 0, 3, false),
 
 	BIF1(LoadPicture, 1, 3, true),
@@ -437,6 +436,7 @@ VarEntry g_BIV_A[] =
 	A_(TimeSinceThisHotkey),
 	A_w(TitleMatchMode),
 	A_wx(TitleMatchModeSpeed, BIV_TitleMatchModeSpeed, BIV_TitleMatchMode_Set),
+	A_(TrayMenu),
 	A_x(UserName, BIV_UserName_ComputerName),
 	A_x(WDay, BIV_DateTime),
 	A_wx(WinDelay, BIV_xDelay, BIV_xDelay_Set),
@@ -9445,7 +9445,8 @@ end_of_infix_to_postfix:
 						return LineError(ERR_VAR_IS_READONLY, FAIL, aArg.text);
 				}
 				else if ( !(only_token.var->mType == VAR_VIRTUAL
-					&& (only_token.var->mVV->Get == BIV_LoopIndex || only_token.var->mVV->Get == BIV_EventInfo)) )
+					&& (only_token.var->mVV->Get == BIV_LoopIndex || only_token.var->mVV->Get == BIV_EventInfo))
+					&& !(only_token.var->mType == VAR_BUILTIN && only_token.var->mBIV == BIV_TrayMenu) ) // This exception is required for A_TrayMenu to return an object.
 				{
 					aArg.type = ARG_TYPE_INPUT_VAR;
 				}
