@@ -2654,8 +2654,8 @@ private:
 
 	bool mNoHotkeyLabels;
 
-	#define UPDATE_TIP_FIELD tcslcpy(mNIC.szTip, (mTrayIconTip && *mTrayIconTip) ? mTrayIconTip \
-		: (mFileName ? mFileName : T_AHK_NAME), _countof(mNIC.szTip));
+	#define UPDATE_TIP_FIELD tcslcpy(mNIC.szTip, mTrayIconTip ? mTrayIconTip \
+		: mFileName, _countof(mNIC.szTip));
 	NOTIFYICONDATA mNIC; // For ease of adding and deleting our tray icon.
 
 	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, bool aInBlockComment, TextStream *ts);

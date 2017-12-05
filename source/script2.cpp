@@ -9539,15 +9539,11 @@ void Script::ShowTrayIcon(bool aShow)
 
 VarSizeType BIV_IconTip(LPTSTR aBuf, LPTSTR aVarName)
 {
+	// Return the custom tip if any, otherwise the default tip.
+	LPTSTR icontip = g_script.mTrayIconTip ? g_script.mTrayIconTip : g_script.mFileName;
 	if (!aBuf)
-		return g_script.mTrayIconTip ? (VarSizeType)_tcslen(g_script.mTrayIconTip) : 0;
-	if (g_script.mTrayIconTip)
-		return (VarSizeType)_tcslen(_tcscpy(aBuf, g_script.mTrayIconTip));
-	else
-	{
-		*aBuf = '\0';
-		return 0;
-	}
+		return (VarSizeType)_tcslen(icontip);
+	return (VarSizeType)_tcslen(_tcscpy(aBuf, icontip));
 }
 
 BIV_DECL_W(BIV_IconTip_Set)
@@ -9558,16 +9554,13 @@ BIV_DECL_W(BIV_IconTip_Set)
 
 void Script::SetTrayTip(LPTSTR aText)
 {
-	if (*aText)
-	{
-		if (!mTrayIconTip)
-			mTrayIconTip = (LPTSTR) SimpleHeap::Malloc(sizeof(mNIC.szTip)); // SimpleHeap improves avg. case mem load.
-		if (mTrayIconTip)
-			tcslcpy(mTrayIconTip, aText, _countof(mNIC.szTip));
-	}
-	else // Restore tip to default.
-		if (mTrayIconTip)
-			*mTrayIconTip = '\0';
+	// Allocate mTrayIconTip on first use even if aText is empty, so that
+	// it will override the use of mFileName as the tray tip text.
+	// This allows the script to completely disable the tray tooltip.
+	if (!mTrayIconTip)
+		mTrayIconTip = (LPTSTR) SimpleHeap::Malloc(sizeof(mNIC.szTip)); // SimpleHeap improves avg. case mem load.
+	if (mTrayIconTip)
+		tcslcpy(mTrayIconTip, aText, _countof(mNIC.szTip));
 	if (mNIC.hWnd) // i.e. only update the tip if the tray icon exists (can't work otherwise).
 	{
 		UPDATE_TIP_FIELD
