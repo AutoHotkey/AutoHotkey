@@ -9497,7 +9497,10 @@ end_of_infix_to_postfix:
 				// commands which ordinarily expect expressions might still look wrong in ListLines,
 				// but that seems too rare and inconsequential to worry about.
 				if (  !(mActionType == ACT_ASSIGNEXPR || mActionType == ACT_RETURN)  )
+				{
 					aArg.text = only_token.marker;
+					aArg.deref = NULL; // Discard deref array (let ArgIndexHasDeref() know there are none).
+				}
 				break;
 			}
 			aArg.is_expression = false;
