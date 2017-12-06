@@ -917,7 +917,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 
 
 
-ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions, IObject *aJumpToLabel, Var *aJumpToLabelVar)
+ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions, IObject *aJumpToLabel)
 // Creates, updates, enables, or disables a hotkey dynamically (while the script is running).
 // Returns OK or FAIL.
 {
@@ -936,18 +936,17 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		return OK;
 	}
 
-	// Hotkey, If  ; Set null criterion.
-	// Hotkey, If, Exact-expression-text
-	// Hotkey, If, % FunctionObject
+	// Hotkey "If"  ; Set null criterion.
+	// Hotkey "If", "Exact-expression-text"
+	// Hotkey "If", FunctionObject
 	if (!_tcsicmp(aHotkeyName, _T("If")))
 	{
 		if (*aOptions)
 		{	// Let the script know of this error since it may indicate an unescaped comma in the expression text.
 			return g_script.ScriptError(ERR_PARAM3_MUST_BE_BLANK);
 		}
-		if (aJumpToLabelVar && aJumpToLabelVar->HasObject())
+		if (aJumpToLabel)
 		{
-			IObject *callback = aJumpToLabelVar->Object();
 			HotkeyCriterion *cp;
 			for (cp = g_FirstHotExpr; ; cp = cp->NextCriterion)
 			{
@@ -955,14 +954,14 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				{
 					if (  !(cp = AddHotkeyIfExpr())  )
 						return FAIL;
-					callback->AddRef();
+					aJumpToLabel->AddRef();
 					cp->Type = HOT_IF_CALLBACK;
-					cp->Callback = callback;
+					cp->Callback = aJumpToLabel;
 					cp->WinTitle = _T("");
 					cp->WinText = _T("");
 					break;
 				}
-				if (cp->Type == HOT_IF_CALLBACK && cp->Callback == callback)
+				if (cp->Type == HOT_IF_CALLBACK && cp->Callback == aJumpToLabel)
 					break;
 			}
 			g->HotCriterion = cp;
@@ -991,14 +990,21 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		: g_script.ScriptError(msg, info)
 
 	HookActionType hook_action = 0; // Set default.
-	if (!aJumpToLabel) // It wasn't provided by caller (resolved at load-time).
-		if (   !(hook_action = ConvertAltTab(aLabelName, true))   )
-			if (   !(aJumpToLabel = g_script.FindCallable(aLabelName, aJumpToLabelVar)) // Returns NULL if given a function which requires parameters.
-				&& (*aLabelName || aJumpToLabelVar && aJumpToLabelVar->HasObject())   ) // HasObject: if true, its a function we can't call (see above).
-				RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, *aLabelName ? ERR_NO_LABEL : ERR_HOTKEY_FUNC_PARAMS, aLabelName);
+	if (!aJumpToLabel) // An object wasn't provided by caller.
+		if (  !(hook_action = ConvertAltTab(aLabelName, true))  )
+			if (  !(aJumpToLabel = g_script.FindCallable(aLabelName, NULL, INT_MAX))  ) // Pass INT_MAX to disable function validation (do it below).
+				RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, ERR_NO_LABEL, aLabelName);
 	// Above has ensured that aJumpToLabel and hook_action can't both be non-zero.  Furthermore,
 	// both can be zero/NULL only when the caller is updating an existing hotkey to have new options
 	// (i.e. it's retaining its current label).
+	if (aJumpToLabel) // Provided by caller or by name lookup above.
+	{
+		// Validate after possibly resolving aJumpToLabel above so that the error message
+		// is correct (i.e. no "label not found" when a function was found but rejected).
+		Func *func = LabelPtr(aJumpToLabel).ToFunc();
+		if (func && func->mMinParams > 0)
+			RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, ERR_HOTKEY_FUNC_PARAMS, func->mName);
+	}
 
 	bool suffix_has_tilde, hook_is_mandatory;
 	Hotkey *hk = FindHotkeyByTrueNature(aHotkeyName, suffix_has_tilde, hook_is_mandatory); // NULL if not found.

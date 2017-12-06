@@ -117,6 +117,7 @@ FuncEntry g_BIF[] =
 	BIFn(Ln, 1, 1, true, BIF_SqrtLogLn),
 	BIF1(DateAdd, 3, 3, true),
 	BIF1(DateDiff, 3, 3, true),
+	BIF1(Hotkey, 1, 3, false),
 	BIF1(SetTimer, 0, 3, false),
 	BIF1(OnMessage, 2, 3, false),
 	BIF1(RegisterCallback, 1, 4, true),
@@ -7853,50 +7854,6 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 				if (parent->mActionType == ACT_FINALLY)
 					return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			break;
-			
-		case ACT_HOTKEY:
-			if (!line->ArgHasDeref(1))
-			{
-				if (!_tcsnicmp(line_raw_arg1, _T("If"), 2))
-				{
-					LPTSTR cp = line_raw_arg1 + 2;
-					if (!*cp) // Just "If"
-					{
-						if (line->mArgc > 2)
-							return line->PreparseError(ERR_PARAM3_MUST_BE_BLANK);
-						if (*line_raw_arg2 && !line->ArgHasDeref(2))
-						{
-							// Hotkey, If, Expression: Ensure the expression matches exactly an existing #If,
-							// as required by the Hotkey command.  This seems worth doing since the current
-							// behaviour might be unexpected (despite being documented), and because typos
-							// are likely due to the fact that case and whitespace matter.
-							for (HotkeyCriterion *cp = g_FirstHotExpr; ; cp = cp->NextCriterion)
-							{
-								if (!cp)
-									return line->PreparseError(ERR_HOTKEY_IF_EXPR);
-								if (!_tcscmp(line_raw_arg2, cp->WinTitle))
-									break;
-							}
-						}
-						break;
-					}
-					if (!_tcsnicmp(cp, _T("Win"), 3))
-					{
-						cp += 3;
-						if (!_tcsnicmp(cp, _T("Not"), 3))
-							cp += 3;
-						if (!_tcsicmp(cp, _T("Active")) || !_tcsicmp(cp, _T("Exist")))
-							break;
-					}
-					// Since above didn't break, it's something invalid starting with "If".
-					return line->PreparseError(ERR_PARAM1_INVALID);
-				}
-				if (*line_raw_arg2 && !line->ArgHasDeref(2))
-					if (!Hotkey::ConvertAltTab(line_raw_arg2, true))
-						if (   !(line->mAttribute = FindCallable(line_raw_arg2))   )
-							return line->PreparseError(ERR_NO_LABEL);
-			}
-			break;
 		}
 	} // for()
 	// Return something non-NULL to indicate success:
@@ -11691,10 +11648,6 @@ ResultType Line::Perform()
 		PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 416, 0);
 		DoWinDelay;
 		return OK;
-
-	case ACT_HOTKEY:
-		// mAttribute is the label resolved at loadtime, if available (for performance).
-		return Hotkey::Dynamic(THREE_ARGS, (IObject *)mAttribute, ARGVAR2);
 
 	case ACT_CRITICAL:
 	{

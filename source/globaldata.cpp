@@ -332,7 +332,6 @@ Action g_act[] =
 
 	, {_T("Sleep"), 1, 1, false, {1, 0}} // Sleep time in ms (numeric)
 
-	, {_T("Hotkey"), 1, 3, false, NULL}  // Mod+Keys, Label/Action (blank to avoid changing curr. label), Options
 	, {_T("Critical"), 0, 1, false, NULL}  // On|Off
 	, {_T("Thread"), 1, 3, false, {2, 3, 0}}  // Command, value1 (can be blank for interrupt), value2
 

@@ -14316,6 +14316,18 @@ BIF_DECL(BIF_DateDiff)
 
 
 
+BIF_DECL(BIF_Hotkey)
+{
+	_f_param_string(aHotkeyName, 0);
+	_f_param_string_opt(aLabelName, 1);
+	_f_param_string_opt(aOptions, 2);
+	IObject *aLabelObject = ParamIndexToOptionalObject(1);
+	Hotkey::Dynamic(aHotkeyName, aLabelName, aOptions, aLabelObject);
+	_f_return_empty;
+}
+
+
+
 BIF_DECL(BIF_SetTimer)
 {
 	IObject *target_label;
