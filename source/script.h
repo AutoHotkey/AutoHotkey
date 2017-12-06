@@ -3000,6 +3000,7 @@ BIF_DECL(BIF_DateDiff);
 BIF_DECL(BIF_Env);
 BIF_DECL(BIF_SysGet);
 BIF_DECL(BIF_PostSendMessage);
+BIF_DECL(BIF_SetTimer);
 BIF_DECL(BIF_OnMessage);
 BIF_DECL(BIF_OnExitOrClipboard);
 BIF_DECL(BIF_ClipboardAll);

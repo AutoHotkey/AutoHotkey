@@ -6,6 +6,7 @@
 #define ParamIndexToDouble(index)					TokenToDouble(*aParam[(index)])
 #define ParamIndexToNumber(index, output)			TokenToDoubleOrInt64(*aParam[(index)], output)
 #define ParamIndexToBOOL(index)						TokenToBOOL(*aParam[(index)])
+#define ParamIndexToObject(index)					TokenToObject(*aParam[(index)])
 
 // For functions that allow "" to mean parameter is omitted.
 #define ParamIndexIsOmittedOrEmpty(index)  (ParamIndexIsOmitted(index) || TokenIsEmptyString(*aParam[(index)], TRUE))
@@ -28,7 +29,7 @@
 // This allows it to skip the check for SYM_MISSING, which always has marker == _T("").
 #define ParamIndexToOptionalString(index, ...)		(((index) < aParamCount) ? ParamIndexToString(index, __VA_ARGS__) : _T(""))
 
-#define ParamIndexToOptionalObject(index)			((index) < aParamCount ? TokenToObject(*aParam[index]) : NULL)
+#define ParamIndexToOptionalObject(index)			((index) < aParamCount ? ParamIndexToObject(index) : NULL)
 
 #define _f_param_string(name, index, ...) \
 	TCHAR name##_buf[MAX_NUMBER_SIZE], *name = ParamIndexToString(index, name##_buf, __VA_ARGS__)

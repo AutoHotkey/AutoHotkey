@@ -117,6 +117,7 @@ FuncEntry g_BIF[] =
 	BIFn(Ln, 1, 1, true, BIF_SqrtLogLn),
 	BIF1(DateAdd, 3, 3, true),
 	BIF1(DateDiff, 3, 3, true),
+	BIF1(SetTimer, 0, 3, false),
 	BIF1(OnMessage, 2, 3, false),
 	BIF1(RegisterCallback, 1, 4, true),
 	BIF1(Type, 1, 1, true),
@@ -7896,18 +7897,6 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 							return line->PreparseError(ERR_NO_LABEL);
 			}
 			break;
-
-		case ACT_SETTIMER:
-			if (*line_raw_arg1 && !line->ArgHasDeref(1))
-				if (   !(line->mAttribute = FindCallable(line_raw_arg1))   )
-					return line->PreparseError(ERR_NO_LABEL);
-			if (*line_raw_arg2 && !line->ArgHasDeref(2))
-				if (!Line::ConvertOnOff(line_raw_arg2) && !IsNumeric(line_raw_arg2, true) // v1.0.46.16: Allow negatives to support the new run-only-once mode.
-					&& _tcsicmp(line_raw_arg2, _T("Delete"))
-					&& !line->mArg[1].is_expression) // v1.0.46.10: Don't consider expressions THAT CONTAIN NO VARIABLES OR FUNCTION-CALLS like "% 2*500" to be a syntax error.
-					return line->PreparseError(ERR_PARAM2_INVALID);
-			break;
-
 		}
 	} // for()
 	// Return something non-NULL to indicate success:
@@ -11706,92 +11695,6 @@ ResultType Line::Perform()
 	case ACT_HOTKEY:
 		// mAttribute is the label resolved at loadtime, if available (for performance).
 		return Hotkey::Dynamic(THREE_ARGS, (IObject *)mAttribute, ARGVAR2);
-
-	case ACT_SETTIMER: // A timer is being created, changed, or enabled/disabled.
-	{
-		IObject *target_label;
-		// Note that only one timer per label is allowed because the label is the unique identifier
-		// that allows us to figure out whether to "update or create" when searching the list of timers.
-		if (   !(target_label = (IObject *)mAttribute)   ) // Since it wasn't resolved at load-time, it must be a variable reference.
-		{
-			if (   !(target_label = g_script.FindCallable(ARG1, ARGVAR1))   )
-			{
-				if (*ARG1)
-					// ARG1 is a non-empty string and not the name of an existing label or function.
-					return LineError(ERR_NO_LABEL, FAIL, ARG1);
-				// Possible cases not ruled out by the above check:
-				//   1) Label was omitted.
-				//   2) Label was a single variable or non-expression which produced an empty value.
-				//   3) Label was a single variable containing an incompatible function.
-				//   4) Label was an expression which produced an empty value.
-				//   5) Label was an expression which produced an object.
-				// Case 3 is always an error.
-				// Case 2 is arguably more likely to be an error (not intended to be empty) than meant as
-				// an indicator to use the current label, so it seems safest to treat it as an error (and
-				// also more consistent with Case 3).
-				// Case 5 is currently not supported; the object reference was converted to an empty string
-				// at an earlier stage, so it is indistinguishable from Case 4.  It seems rare that someone
-				// would have a legitimate need for Case 4, so both cases are treated as an error.  This
-				// covers cases like:
-				//   SetTimer, % Func(a).Bind(b), xxx  ; Unsupported.
-				//   SetTimer, % this.myTimerFunc, xxx  ; Unsupported (where myTimerFunc is an object).
-				//   SetTimer, % this.MyMethod, xxx  ; Additional error: failing to bind "this" to MyMethod.
-				// The following could be used to show "must not be blank" for Case 2, but it seems best
-				// to reserve that message for when the parameter is really blank, not an empty variable:
-				//if (mArgc > 0 && (mArg[0].is_expression /* Cases 4 & 5 */ || ARGVAR1 && ARGVAR1->HasObject() /* Case 3 */))
-				if (*RAW_ARG1)
-					return LineError(ERR_PARAM1_INVALID);
-				if (g.CurrentLabel)
-					// For backward-compatibility, use A_ThisLabel if set.  This can differ from CurrentTimer
-					// when goto/gosub is used.  Some scripts apparently use this with subroutines that are
-					// called both directly and by a timer.  The down side is that if a timer function uses
-					// goto/gosub, A_ThisLabel must take predence; that may or may not be the user's intention.
-					target_label = g.CurrentLabel;
-				else if (g.CurrentTimer)
-					// Default to the timer which launched the current thread.
-					target_label = g.CurrentTimer->mLabel.ToObject();
-				if (!target_label)
-					// Either the thread was not launched by a timer or the timer has been deleted.
-					return LineError(ERR_PARAM1_MUST_NOT_BE_BLANK);
-			}
-		}
-		// And don't update mAttribute (leave it NULL) because we want ARG1 to be dynamically resolved
-		// every time the command is executed (in case the contents of the referenced variable change).
-		// In the data structure that holds the timers, we store the target label rather than the target
-		// line so that a label can be registered independently as a timer even if there is another label
-		// that points to the same line such as in this example:
-		// Label1:
-		// Label2:
-		// ...
-		// return
-		if (!IsNumeric(ARG2, true, true, true)) // Allow it to be neg. or floating point at runtime.
-		{
-			toggle = Line::ConvertOnOff(ARG2);
-			if (!toggle)
-			{
-				if (!_tcsicmp(ARG2, _T("Delete")))
-				{
-					g_script.DeleteTimer(target_label);
-					return OK;
-				}
-				return LineError(ERR_PARAM2_INVALID, FAIL, ARG2);
-			}
-		}
-		else
-			toggle = TOGGLE_INVALID;
-		// Below relies on distinguishing a true empty string from one that is sent to the function
-		// as empty as a signal.  Don't change it without a full understanding because it's likely
-		// to break compatibility or something else:
-		switch(toggle)
-		{
-		case TOGGLED_ON:  
-		case TOGGLED_OFF: g_script.UpdateOrCreateTimer(target_label, _T(""), ARG3, toggle == TOGGLED_ON, false); break;
-		// Timer is always (re)enabled when ARG2 specifies a numeric period or is blank + there's no ARG3.
-		// If ARG2 is blank but ARG3 (priority) isn't, tell it to update only the priority and nothing else:
-		default: g_script.UpdateOrCreateTimer(target_label, ARG2, ARG3, true, !*ARG2 && *ARG3);
-		}
-		return OK;
-	}
 
 	case ACT_CRITICAL:
 	{

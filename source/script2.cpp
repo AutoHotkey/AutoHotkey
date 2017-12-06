@@ -14316,6 +14316,59 @@ BIF_DECL(BIF_DateDiff)
 
 
 
+BIF_DECL(BIF_SetTimer)
+{
+	IObject *target_label;
+	// Note that only one timer per label/function is allowed because the label is the unique identifier
+	// that allows us to figure out whether to "update or create" when searching the list of timers.
+	if (ParamIndexIsOmitted(0)) // Fully omitted, not an empty string.
+	{
+		if (g->CurrentTimer)
+			// Default to the timer which launched the current thread.
+			target_label = g->CurrentTimer->mLabel.ToObject();
+		else
+			target_label = NULL;
+		if (!target_label)
+			// Either the thread was not launched by a timer or the timer has been deleted.
+			_f_throw(ERR_PARAM1_MUST_NOT_BE_BLANK);
+	}
+	else if (  !(target_label = ParamIndexToObject(0))  )
+	{
+		LPTSTR arg1 = ParamIndexToString(0, _f_number_buf);
+		if (  !(target_label = g_script.FindCallable(arg1))  )
+			_f_throw(ERR_NO_LABEL, arg1);
+	}
+	ToggleValueType toggle;
+	_f_param_string_opt(arg2, 1);
+	_f_param_string_opt(arg3, 2);
+	if (!IsNumeric(arg2, true, true, true)) // Allow it to be neg. or floating point at runtime.
+	{
+		toggle = Line::ConvertOnOff(arg2);
+		if (!toggle)
+		{
+			if (!_tcsicmp(arg2, _T("Delete")))
+			{
+				g_script.DeleteTimer(target_label);
+				_f_return_empty;
+			}
+			_f_throw(ERR_PARAM2_INVALID, arg2);
+		}
+	}
+	else
+		toggle = TOGGLE_INVALID;
+	switch(toggle)
+	{
+	case TOGGLED_ON:
+	case TOGGLED_OFF: g_script.UpdateOrCreateTimer(target_label, _T(""), arg3, toggle == TOGGLED_ON, false); break;
+	// Timer is always (re)enabled when ARG2 specifies a numeric period or is blank + there's no ARG3.
+	// If ARG2 is blank but ARG3 (priority) isn't, tell it to update only the priority and nothing else:
+	default: g_script.UpdateOrCreateTimer(target_label, arg2, arg3, true, !*arg2 && *arg3);
+	}
+	_f_return_empty;
+}
+
+
+
 BIF_DECL(BIF_OnMessage)
 // Returns: An empty string.
 // Parameters:
