@@ -231,6 +231,7 @@ FuncEntry g_BIF[] =
 	BIFn(SoundGet, 0, 3, true, BIF_Sound),
 	BIFn(SoundSet, 1, 4, false, BIF_Sound),
 	BIF1(StatusBarGetText, 0, 5, true),
+	BIF1(CaretGetPos, 0, 2, false, {1, 2}),
 
 	BIF1(WinGetClass, 0, 4, true),
 	BIF1(WinGetText, 0, 4, true),
@@ -316,8 +317,6 @@ VarEntry g_BIV_A[] =
 	A_w(AllowMainWindow),
 	A_x(AppData, BIV_SpecialFolderPath),
 	A_x(AppDataCommon, BIV_SpecialFolderPath),
-	A_x(CaretX, BIV_Caret),
-	A_x(CaretY, BIV_Caret),
 	A_x(ComputerName, BIV_UserName_ComputerName),
 	A_(ComSpec),
 	A_wx(ControlDelay, BIV_xDelay, BIV_xDelay_Set),

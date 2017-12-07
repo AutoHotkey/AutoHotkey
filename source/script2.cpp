@@ -9916,67 +9916,52 @@ VarSizeType BIV_MyDocuments(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple 
 
 
 
-VarSizeType BIV_Caret(LPTSTR aBuf, LPTSTR aVarName)
+BIF_DECL(BIF_CaretGetPos)
 {
-	if (!aBuf)
-		return MAX_INTEGER_LENGTH; // Conservative, both for performance and in case the value changes between first and second call.
-
-	// These static variables are used to keep the X and Y coordinates in sync with each other, as a snapshot
-	// of where the caret was at one precise instant in time.  This is because the X and Y vars are resolved
-	// separately by the script, and due to split second timing, they might otherwise not be accurate with
-	// respect to each other.  This method also helps performance since it avoids unnecessary calls to
-	// GetGUIThreadInfo().
-	static HWND sForeWinPrev = NULL;
-	static DWORD sTimestamp = GetTickCount();
-	static POINT sPoint;
-	static BOOL sResult;
-
+	Var *varX = ParamIndexToOptionalVar(0);
+	Var *varY = ParamIndexToOptionalVar(1);
+	
 	// I believe only the foreground window can have a caret position due to relationship with focused control.
 	HWND target_window = GetForegroundWindow(); // Variable must be named target_window for ATTACH_THREAD_INPUT.
 	if (!target_window) // No window is in the foreground, report blank coordinate.
 	{
-		*aBuf = '\0';
-		return 0;
+		if (varX)
+			varX->Assign();
+		if (varY)
+			varY->Assign();
+		_f_return_i(FALSE);
 	}
 
 	DWORD now_tick = GetTickCount();
 
-	if (target_window != sForeWinPrev || now_tick - sTimestamp > 5) // Different window or too much time has passed.
+	GUITHREADINFO info;
+	info.cbSize = sizeof(GUITHREADINFO);
+	BOOL result = GetGUIThreadInfo(GetWindowThreadProcessId(target_window, NULL), &info) // Got info okay...
+		&& info.hwndCaret; // ...and there is a caret.
+	if (!result)
 	{
-		// Otherwise:
-		GUITHREADINFO info;
-		info.cbSize = sizeof(GUITHREADINFO);
-		sResult = GetGUIThreadInfo(GetWindowThreadProcessId(target_window, NULL), &info) // Got info okay...
-			&& info.hwndCaret; // ...and there is a caret.
-		if (!sResult)
-		{
-			*aBuf = '\0';
-			return 0;
-		}
-		sPoint.x = info.rcCaret.left;
-		sPoint.y = info.rcCaret.top;
-		// Unconditionally convert to screen coordinates, for simplicity.
-		ClientToScreen(info.hwndCaret, &sPoint);
-		// Now convert back to whatever is expected for the current mode.
-		POINT origin = {0};
-		CoordToScreen(origin, COORD_MODE_CARET);
-		sPoint.x -= origin.x;
-		sPoint.y -= origin.y;
-		// Now that all failure conditions have been checked, update static variables for the next caller:
-		sForeWinPrev = target_window;
-		sTimestamp = now_tick;
+		if (varX)
+			varX->Assign();
+		if (varY)
+			varY->Assign();
+		_f_return_i(FALSE);
 	}
-	else // Same window and recent enough, but did prior call fail?  If so, provide a blank result like the prior.
-	{
-		if (!sResult)
-		{
-			*aBuf = '\0';
-			return 0;
-		}
-	}
-	// Now the above has ensured that sPoint contains valid coordinates that are up-to-date enough to be used.
-	_itot(ctoupper(aVarName[7]) == 'X' ? sPoint.x : sPoint.y, aBuf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return (VarSizeType)_tcslen(aBuf);
+	POINT pt;
+	pt.x = info.rcCaret.left;
+	pt.y = info.rcCaret.top;
+	// Unconditionally convert to screen coordinates, for simplicity.
+	ClientToScreen(info.hwndCaret, &pt);
+	// Now convert back to whatever is expected for the current mode.
+	POINT origin = {0};
+	CoordToScreen(origin, COORD_MODE_CARET);
+	pt.x -= origin.x;
+	pt.y -= origin.y;
+	
+	if (varX)
+		varX->Assign(pt.x);
+	if (varY)
+		varY->Assign(pt.y);
+	_f_return_i(TRUE);
 }
 
 
