@@ -16206,6 +16206,53 @@ BIF_DECL(BIF_Mod)
 
 
 
+BIF_DECL(BIF_MinMax)
+{
+	// Supports one or more parameters.
+	// Load-time validation has already ensured there is at least one parameter.
+	ExprTokenType param;
+	int index, ib_index = 0, db_index = 0;
+	bool isMin = (ctoupper(aResultToken.marker[1]) == 'I') ? TRUE : FALSE; // To save code size.
+	__int64 ia, ib = 0; double da, db = 0;
+	bool ib_empty = TRUE, db_empty = TRUE;
+	for (int i = 0; i < aParamCount; ++i)
+	{
+		ParamIndexToNumber(i, param);
+		switch (param.symbol)
+		{
+			case SYM_INTEGER: // Compare only integers.
+				ia = param.value_int64;
+				if ((ib_empty) || (isMin ? ia < ib : ia > ib))
+				{
+					ib_empty = FALSE;
+					ib = ia;
+					ib_index = i;
+				}
+				break;
+			case SYM_FLOAT: // Compare only floats.
+				da = param.value_double;
+				if ((db_empty) || (isMin ? da < db : da > db))
+				{
+					db_empty = FALSE;
+					db = da;
+					db_index = i;
+				}
+				break;
+			default: // Non-operand or non-numeric string.
+				aResultToken.symbol = SYM_STRING;
+				aResultToken.marker = _T("");
+				return; // Return a blank value to indicate the problem.
+		}
+	}
+	// Compare found integer with found float:
+	index = (isMin) ? (ib < db) ? ib_index : db_index : (ib < db) ? db_index : ib_index;
+	ParamIndexToNumber(index, param);
+	aResultToken.symbol = param.symbol;
+	aResultToken.value_int64 = param.value_int64;
+}
+
+
+
 BIF_DECL(BIF_Abs)
 {
 	// Unlike TRANS_CMD_ABS, which removes the minus sign from the string if it has one,
