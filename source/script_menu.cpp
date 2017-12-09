@@ -635,7 +635,7 @@ UserMenuItem *UserMenu::FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bo
 
 
 
-// Macros for use with the below methods:
+// Macros for use with the below methods (in previous versions, submenus were identified by position):
 #define aMenuItem_ID		aMenuItem->mMenuID
 #define aMenuItem_MF_BY		MF_BYCOMMAND
 #define UPDATE_GUI_MENU_BARS(menu_type, hmenu) \
@@ -1140,7 +1140,7 @@ ResultType UserMenu::SetDefault(UserMenuItem *aMenuItem)
 	if (!mMenu) // No further action required: the new setting will be in effect when the menu is created.
 		return OK;
 	if (aMenuItem) // A user-defined menu item is being made the default.
-		SetMenuDefaultItem(mMenu, aMenuItem_ID, aMenuItem->mSubmenu != NULL); // This also ensures that only one is default at a time.
+		SetMenuDefaultItem(mMenu, aMenuItem->mMenuID, FALSE); // This also ensures that only one is default at a time.
 	else
 	{
 		// Otherwise, a user-defined item that was previously the default is no longer the default.
