@@ -822,6 +822,23 @@ ResultType Object::CallBuiltin(int aID, ExprTokenType &aResultToken, ExprTokenTy
 
 
 //
+// Helper function for WinMain()
+//
+
+Object *Object::CreateFromArgV(LPTSTR *aArgV, int aArgC)
+{
+	ExprTokenType *token = (ExprTokenType *)_alloca(aArgC * sizeof(ExprTokenType));
+	ExprTokenType **param = (ExprTokenType **)_alloca(aArgC * sizeof(ExprTokenType*));
+	for (int j = 0; j < aArgC; ++j)
+	{
+		token[j].SetValue(aArgV[j]);
+		param[j] = &token[j];
+	}
+	return CreateArray(param, aArgC);
+}
+
+
+//
 // Internal: Object::CallField - Used by Object::Invoke to call a function/method stored in this object.
 //
 

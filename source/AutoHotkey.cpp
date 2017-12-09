@@ -77,6 +77,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	Var *var;
 	bool switch_processing_is_complete = false;
 	int script_param_num = 1;
+	int first_script_param = __argc;
 
 	for (int i = 1; i < __argc; ++i) // Start at 1 because 0 contains the program name.
 	{
@@ -151,6 +152,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 #else
 			script_filespec = param;  // The first unrecognized switch must be the script filespec, by design.
 #endif
+			first_script_param = i + 1;
 		}
 	}
 
@@ -158,6 +160,18 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	if (   !(var = g_script.FindOrAddVar(_T("0")))   )
 		return CRITICAL_ERROR;  // Realistically should never happen.
 	var->Assign(script_param_num - 1);
+
+	if (Var *var = g_script.FindOrAddVar(_T("A_Args"), 6, VAR_DECLARE_SUPER_GLOBAL))
+	{
+		// Store the remaining args in an array and assign it to "Args".
+		// If there are no args, assign an empty array.
+		Object *args = Object::CreateFromArgV(__targv + first_script_param, __argc - first_script_param);
+		if (!args)
+			return CRITICAL_ERROR;  // Realistically should never happen.
+		var->AssignSkipAddRef(args);
+	}
+	else
+		return CRITICAL_ERROR;
 
 	global_init(*g);  // Set defaults.
 

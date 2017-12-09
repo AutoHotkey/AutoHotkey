@@ -202,6 +202,7 @@ protected:
 public:
 	static Object *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
 	static Object *CreateArray(ExprTokenType *aValue[] = NULL, int aValueCount = 0);
+	static Object *CreateFromArgV(LPTSTR *aArgV, int aArgC);
 
 	bool Append(LPTSTR aValue, size_t aValueLength = -1);
 
