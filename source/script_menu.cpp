@@ -808,11 +808,10 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 
 ResultType UserMenu::DeleteAllItems()
 {
-	if (!mFirstMenuItem)
-		return OK;  // If there are no user-defined menu items, it's already in the correct state.
 	// Remove all menu items from the linked list and from the menu.  First destroy the menu since
 	// it's probably better to start off fresh than have the destructor individually remove each
-	// menu item as the items in the linked list are deleted.  In addition, this avoids the need
+	// menu item as the items in the linked list are deleted.  Some callers rely on this being done
+	// unconditionally (i.e. regardless of !mFirstMenuItem).  In addition, this avoids the need
 	// to find any submenus by position:
 	if (!Destroy())  // if mStandardMenuItems is true, the menu will be recreated later when needed.
 		// If menu can't be destroyed, it's probably due to it being attached as a menu bar to an existing
@@ -825,6 +824,8 @@ ResultType UserMenu::DeleteAllItems()
 	// a menu bar, but that isn't the case with our GUI windows, which detach such menus prior to
 	// when the GUI window is destroyed in case the menu is in use by another window), must be
 	// destroyed with DestroyMenu() to ensure a clean exit (resources freed).
+	if (!mFirstMenuItem)
+		return OK;  // If there are no user-defined menu items, it's already in the correct state.
 	UserMenuItem *menu_item_to_delete;
 	for (UserMenuItem *mi = mFirstMenuItem; mi;)
 	{
