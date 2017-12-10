@@ -92,17 +92,12 @@ void DisguiseWinAltIfNeeded(vk_type aVK)
 
 
 // moved from SendKeys
-void SendUnicodeChar(wchar_t aChar, int aModifiers = -1)
+void SendUnicodeChar(wchar_t aChar, modLR_type aModifiers)
 {
-	// Set modifier keystate for consistent results. If not specified by caller, default to releasing
-	// Alt/Ctrl/Shift since these are known to interfere in some cases, and because SendAsc() does it
-	// (except for LAlt). Leave LWin/RWin as they are, for consistency with SendAsc().
-	if (aModifiers == -1)
-	{
-		aModifiers = sSendMode ? sEventModifiersLR : GetModifierLRState();
-		aModifiers &= ~(MOD_LALT | MOD_RALT | MOD_LCONTROL | MOD_RCONTROL | MOD_LSHIFT | MOD_RSHIFT);
-	}
-	SetModifierLRState((modLR_type)aModifiers, sSendMode ? sEventModifiersLR : GetModifierLRState(), NULL, false, true);
+	// Set modifier keystate as specified by caller.  Generally this will be 0, since
+	// key combinations with Unicode packets either do nothing at all or do the same as
+	// without the modifiers.  All modifiers are known to interfere in some applications.
+	SetModifierLRState(aModifiers, sSendMode ? sEventModifiersLR : GetModifierLRState(), NULL, false, true);
 
 	if (sSendMode == SM_INPUT)
 	{
@@ -639,7 +634,7 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 							// translation between ANSI and UTF-16; we rely on this for correct results:
 							PostMessage(aTargetWindow, WM_CHAR, aKeys[0], 0);
 						else
-							SendKeySpecial(aKeys[0], repeat_count);
+							SendKeySpecial(aKeys[0], repeat_count, mods_for_next_key | persistent_modifiers_for_this_SendKeys);
 					}
 				}
 
@@ -763,7 +758,7 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 					// translation between ANSI and UTF-16; we rely on this for correct results:
 					PostMessage(aTargetWindow, WM_CHAR, *aKeys, 0);
 				else
-					SendKeySpecial(*aKeys, 1);
+					SendKeySpecial(*aKeys, 1, mods_for_next_key | persistent_modifiers_for_this_SendKeys);
 			}
 			mods_for_next_key = 0;  // Safest to reset this regardless of whether a key was sent.
 		}
@@ -1096,11 +1091,11 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 
 
 
-void SendKeySpecial(TCHAR aChar, int aRepeatCount)
+void SendKeySpecial(TCHAR aChar, int aRepeatCount, modLR_type aModifiersLR)
 // Caller must be aware that keystrokes are sent directly (i.e. never to a target window via ControlSend mode).
 // It must also be aware that the event type KEYDOWNANDUP is always what's used since there's no way
 // to support anything else.  Furthermore, there's no way to support "modifiersLR_for_next_key" such as ^€
-// (assuming € is a character for which SendKeySpecial() is required in the current layout).
+// (assuming € is a character for which SendKeySpecial() is required in the current layout) with ASC mode.
 // This function uses some of the same code as SendKey() above, so maintain them together.
 {
 	// Caller must verify that aRepeatCount > 1.
@@ -1156,7 +1151,7 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount)
 			LONG_OPERATION_UPDATE_FOR_SENDKEYS
 #ifdef UNICODE
 		if (sSendMode != SM_PLAY) // See SendUnicodeChar for comments.
-			SendUnicodeChar(aChar);
+			SendUnicodeChar(aChar, aModifiersLR);
 		else
 #endif
 		SendASC(asc_string);

@@ -201,7 +201,7 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModifiersLRPersistent
 	, int aRepeatCount, KeyEventTypes aEventType, modLR_type aKeyAsModifiersLR, HWND aTargetWindow
 	, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED, bool aMoveOffset = false);
-void SendKeySpecial(TCHAR aChar, int aRepeatCount);
+void SendKeySpecial(TCHAR aChar, int aRepeatCount, modLR_type aModifiersLR);
 void SendASC(LPCTSTR aAscii);
 
 struct PlaybackEvent
