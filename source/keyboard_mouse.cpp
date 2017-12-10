@@ -630,9 +630,12 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 					if (event_type != KEYUP) // In this mode, mods_for_next_key and event_type are ignored due to being unsupported.
 					{
 						if (aTargetWindow)
+						{
 							// Although MSDN says WM_CHAR uses UTF-16, it seems to really do automatic
 							// translation between ANSI and UTF-16; we rely on this for correct results:
-							PostMessage(aTargetWindow, WM_CHAR, aKeys[0], 0);
+							for (int i = 0; i < repeat_count; ++i)
+								PostMessage(aTargetWindow, WM_CHAR, aKeys[0], 0);
+						}
 						else
 							SendKeySpecial(aKeys[0], repeat_count, mods_for_next_key | persistent_modifiers_for_this_SendKeys);
 					}
