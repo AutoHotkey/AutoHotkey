@@ -2187,7 +2187,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			this_key.no_suppress |= NO_SUPPRESS_NEXT_UP_EVENT;
 			return AllowKeyToGoToSystem;
 		}
-		else if ((aVK == VK_LMENU || aVK == VK_RMENU) && !g_os.IsWin10OrLater())
+		else if (aVK == VK_LMENU || aVK == VK_RMENU)
 		{
 			// Fix for v1.1.26.01: Added KEY_BLOCK_THIS to suppress the Alt key-up, which fixes an issue
 			// which could be reproduced as follows:
@@ -2197,7 +2197,9 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			//    visible in the menus (usually).
 			//  - Press LAlt and the menus are activated once, even though LAlt is supposed to be blocked.
 			// Additionally, a Windows 10 check was added because the original issue this workaround was
-			// intended for doesn't appear to occur on Windows 10 (tested on 10.0.15063).
+			// intended for doesn't appear to occur on Windows 10 (tested on 10.0.15063).  This check was
+			// removed for v1.1.27.00 to ensure consistent behaviour of AltGr hotkeys across OS versions.
+			// (Sending RAlt up on a layout with AltGr causes the system to send LCtrl up.)
 			// Testing on XP, Vista and 8.1 showed that the #LAlt issue below only occurred if the key-up
 			// was allowed to pass through to the active window.  It appeared to be a non-issue on Win 10
 			// even when the Alt key-up was passed through.
