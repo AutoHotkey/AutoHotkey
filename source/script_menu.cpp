@@ -1632,10 +1632,8 @@ ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int 
 	if (!*aFilename || (*aFilename == '*' && !aFilename[1]))
 		return RemoveItemIcon(aMenuItem);
 
-	// L29: The bitmap/icon returned by LoadPicture is converted to the appropriate format automatically,
-	// so the following is no longer necessary:
-	//if (aIconNumber == 0)
-	//	aIconNumber = 1; // Must be != 0 to tell LoadPicture that "icon must be loaded, never a bitmap".
+	if (aIconNumber == 0 && !g_os.IsWinVistaOrLater()) // The owner-draw method used on XP and older expects an icon.
+		aIconNumber = 1; // Must be != 0 to tell LoadPicture to return an icon, converting from bitmap if necessary.
 
 	int image_type;
 	HICON new_icon;
@@ -1662,20 +1660,7 @@ ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int 
 	}
 	else
 	{
-		if (image_type == IMAGE_BITMAP) // Convert to icon:
-		{
-			ICONINFO iconinfo;
-			iconinfo.fIcon = TRUE;
-			iconinfo.hbmMask = (HBITMAP)new_icon;
-			iconinfo.hbmColor = (HBITMAP)new_icon;
-			new_copy = (HBITMAP)CreateIconIndirect(&iconinfo);
-			// Even if conversion failed, we have no further use for the bitmap:
-			DeleteObject((HBITMAP)new_icon);
-			if (!new_copy)
-				return FAIL;
-			new_icon = (HICON)new_copy;
-		}
-
+		// LoadPicture already converted to icon if needed, due to aIconNumber > 0.
 		if (aMenuItem->mIcon) // Delete previous icon.
 			DestroyIcon(aMenuItem->mIcon);
 	}
