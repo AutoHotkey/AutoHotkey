@@ -1645,7 +1645,7 @@ ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int 
 
 	if (g_os.IsWinVistaOrLater())
 	{
-		if (image_type == IMAGE_ICON) // Convert to 32-bit bitmap:
+		if (image_type != IMAGE_BITMAP) // Convert to 32-bit bitmap:
 		{
 			new_copy = IconToBitmap32(new_icon, true);
 			// Even if conversion failed, we have no further use for the icon:
