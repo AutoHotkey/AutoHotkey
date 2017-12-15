@@ -1252,7 +1252,7 @@ UINT Script::LoadFromFile()
 	for (int i = 0; i < mFuncCount; ++i)
 	{
 		Func &func = *mFunc[i];
-		if (!func.mIsBuiltIn)
+		if (!func.mIsBuiltIn && func.mDefaultVarType != VAR_FORCE_LOCAL)
 		{
 			PreprocessLocalVars(func, func.mVar, func.mVarCount);
 			PreprocessLocalVars(func, func.mLazyVar, func.mLazyVarCount);
@@ -3801,7 +3801,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				if (!result) // It's probably operator, e.g. local = %var%
 					break;
 			}
-			else // It's the word "global", "local", "static" by itself.  But only global or static is valid that way (when it's the first line in the function body).
+			else // It's the word "global", "local", "static" by itself.
 			{
 				// All of the following must be checked to catch back-to-back conflicting declarations such
 				// as these:
@@ -3809,9 +3809,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				//    global  ; Should be an error because global vars are implied/automatic.
 				// v1.0.48: Lexikos: Added assume-static mode. For now, this requires "static" to be
 				// placed above local or global variable declarations.
-				if (declare_type != VAR_DECLARE_LOCAL  // i.e. VAR_DECLARE_GLOBAL or VAR_DECLARE_STATIC (can't due be VAR_DECLARE_NONE due to checks higher above).
-					&& mNextLineIsFunctionBody && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE)
+				if (mNextLineIsFunctionBody && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE)
 				{
+					if (declare_type == VAR_DECLARE_LOCAL)
+						declare_type = VAR_FORCE_LOCAL; // v1.1.27: "local" by itself restricts globals to only those declared inside the function.
 					g->CurrentFunc->mDefaultVarType = declare_type;
 					// No further action is required for the word "global" or "static" by itself.
 					return OK;
@@ -7018,13 +7019,23 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		if (g->CurrentFunc && !mCurrentFuncOpenBlockCount) // Any negative mCurrentFuncOpenBlockCount is caught by a different stage.
 		{
 			Func &func = *g->CurrentFunc;
-			// v1: mGlobalVar isn't used after this point. In v2 it is used to prevent dynamic
-			// variable references from resolving to globals which aren't declared in this
-			// function, but doing that in v1 would break numerous scripts. It could be moved
-			// from Func to Script to reduce memory usage, but v2 needs it in Func, so it's
-			// left there for maintainability.
-			func.mGlobalVarCount = 0; // For maintainability; shouldn't be used at run-time.
-			func.mGlobalVar = NULL;   // For maintainability; shouldn't be used when count is 0.
+			// After this point, mGlobalVar is used to prevent dynamic variable references from
+			// resolving to globals which aren't declared in this function (though in v1, this is
+			// only done in functions with a lone "local", added in v1.1.27).
+			if (func.mGlobalVarCount && func.mDefaultVarType == VAR_FORCE_LOCAL)
+			{
+				// Now that there can be no more "global" declarations, copy the list into persistent memory.
+				Var **global_vars;
+				if (  !(global_vars = (Var **)SimpleHeap::Malloc(func.mGlobalVarCount * sizeof(Var *)))  )
+					return ScriptError(ERR_OUTOFMEM);
+				memcpy(global_vars, func.mGlobalVar, func.mGlobalVarCount * sizeof(Var *));
+				func.mGlobalVar = global_vars;
+			}
+			else
+			{
+				func.mGlobalVarCount = 0;
+				func.mGlobalVar = NULL;
+			}
 			line.mAttribute = ATTR_TRUE;  // Flag this ACT_BLOCK_END as the ending brace of a function's body.
 			g->CurrentFunc = NULL;
 		}
@@ -9014,12 +9025,14 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 		if (g.CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL)
 			return FindVar(aVarName, aVarNameLength, apInsertPos, FINDVAR_GLOBAL, apIsLocal);
 		// v1: Each *dynamic* variable reference may resolve to a global if one exists.
-		if (mIsReadyToExecute)
+		if (mIsReadyToExecute && g.CurrentFunc->mDefaultVarType != VAR_FORCE_LOCAL)
 			return FindVar(aVarName, aVarNameLength, NULL, FINDVAR_GLOBAL);
 		// Otherwise, caller only wants globals which are declared in *this* function:
 		for (int i = 0; i < g.CurrentFunc->mGlobalVarCount; ++i)
 			if (!_tcsicmp(var_name, g.CurrentFunc->mGlobalVar[i]->mName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 				return g.CurrentFunc->mGlobalVar[i];
+		if (g.CurrentFunc->mDefaultVarType == VAR_FORCE_LOCAL)
+			return NULL;
 		// As a last resort, check for a super-global:
 		Var *gvar = FindVar(aVarName, aVarNameLength, NULL, FINDVAR_GLOBAL, NULL);
 		if (gvar && gvar->IsSuperGlobal())

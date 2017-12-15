@@ -2214,6 +2214,7 @@ public:
 	#define VAR_DECLARE_GLOBAL (VAR_DECLARED | VAR_GLOBAL)
 	#define VAR_DECLARE_SUPER_GLOBAL (VAR_DECLARE_GLOBAL | VAR_SUPER_GLOBAL)
 	#define VAR_DECLARE_LOCAL  (VAR_DECLARED | VAR_LOCAL)
+	#define VAR_FORCE_LOCAL (VAR_DECLARE_LOCAL | VAR_NO_SUPER)
 	#define VAR_DECLARE_STATIC (VAR_DECLARED | VAR_LOCAL | VAR_LOCAL_STATIC)
 
 	bool mIsBuiltIn; // Determines contents of union. Keep this member adjacent/contiguous with the above.
