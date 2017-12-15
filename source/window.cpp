@@ -1836,7 +1836,7 @@ HWND WindowSearch::IsMatch(bool aInvert)
 		TCHAR var_name[MAX_VAR_NAME_LENGTH + 20];
 		Var *array_item = g_script.FindOrAddVar(var_name
 			, sntprintf(var_name, _countof(var_name), _T("%s%u"), mArrayStart->mName, mFoundCount)
-			, mArrayStart->IsLocal() ? FINDVAR_LOCAL : FINDVAR_GLOBAL);
+			, FINDVAR_FOR_PSEUDO_ARRAY(*mArrayStart));
 		if (array_item)
 			array_item->AssignHWND(mFoundParent);
 		//else no error reporting currently, since should be very rare.

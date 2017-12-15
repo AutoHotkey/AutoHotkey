@@ -3772,7 +3772,7 @@ ResultType Line::WinGet(LPTSTR aCmd, LPTSTR aTitle, LPTSTR aText, LPTSTR aExclud
 				// the only window to be put into the array:
 				if (   !(array_item = g_script.FindOrAddVar(var_name
 					, sntprintf(var_name, _countof(var_name), _T("%s1"), output_var.mName)
-					, output_var.IsLocal() ? FINDVAR_LOCAL : FINDVAR_GLOBAL))   )  // Find or create element #1.
+					, FINDVAR_FOR_PSEUDO_ARRAY(output_var)))   )  // Find or create element #1.
 
 					return FAIL;  // It will have already displayed the error.
 				if (!array_item->AssignHWND(target_window))
@@ -4222,7 +4222,7 @@ ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
 		// for example, Array19 is alphabetically less than Array2, so we can't rely on the
 		// numerical ordering:
 		int always_use;
-		always_use = output_var.IsLocal() ? FINDVAR_LOCAL : FINDVAR_GLOBAL;
+		always_use = FINDVAR_FOR_PSEUDO_ARRAY(output_var);
 		if (   !(output_var_left = g_script.FindOrAddVar(var_name
 			, sntprintf(var_name, _countof(var_name), _T("%sLeft"), output_var.mName)
 			, always_use))   )
@@ -7117,7 +7117,7 @@ ResultType Line::StringSplit(LPTSTR aArrayName, LPTSTR aInputString, LPTSTR aDel
 		if (   !(array0 = g_script.FindOrAddVar(var_name))   )
 			return FAIL;  // It will have already displayed the error.
 	}
-	int always_use = array0->IsLocal() ? FINDVAR_LOCAL : FINDVAR_GLOBAL;
+	int always_use = FINDVAR_FOR_PSEUDO_ARRAY(*array0);
 
 	if (!*aInputString) // The input variable is blank, thus there will be zero elements.
 		return array0->Assign(_T("0"));  // Store the count in the 0th element.
@@ -13634,7 +13634,7 @@ void RegExSetSubpatternVars(LPCTSTR haystack, pcret *re, pcret_extra *extra, TCH
 	_tcscpy(var_name, output_var.mName); // This prefix is copied in only once, for performance.
 	size_t suffix_length, prefix_length = _tcslen(var_name);
 	LPTSTR var_name_suffix = var_name + prefix_length; // The position at which to copy the sequence number (index).
-	int always_use = output_var.IsLocal() ? FINDVAR_LOCAL : FINDVAR_GLOBAL;
+	int always_use = FINDVAR_FOR_PSEUDO_ARRAY(output_var);
 	int n, p = 1, *this_offset = offset + 2; // Init for both loops below.
 	Var *array_item;
 	bool subpat_not_matched;

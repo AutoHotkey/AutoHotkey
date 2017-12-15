@@ -3003,6 +3003,11 @@ public:
 	#define FINDVAR_DEFAULT  (VAR_LOCAL | VAR_GLOBAL)
 	#define FINDVAR_GLOBAL   VAR_GLOBAL
 	#define FINDVAR_LOCAL    VAR_LOCAL
+	// For pseudo-arrays, force-local mode overrides the legacy behaviour (a common source of
+	// confusion) and resolves the array elements individually, consistent with double-derefs:
+	#define FINDVAR_FOR_PSEUDO_ARRAY(array_start_var) \
+		((g->CurrentFunc && g->CurrentFunc->mDefaultVarType == VAR_FORCE_LOCAL) ? FINDVAR_DEFAULT \
+		: (array_start_var).IsLocal() ? FINDVAR_LOCAL : FINDVAR_GLOBAL)
 	Var *FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT);
 	Var *FindVar(LPTSTR aVarName, size_t aVarNameLength = 0, int *apInsertPos = NULL
 		, int aScope = FINDVAR_DEFAULT

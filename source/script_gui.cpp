@@ -1498,7 +1498,7 @@ ResultType Line::GuiControlGet(LPTSTR aCommand, LPTSTR aControlID, LPTSTR aParam
 		// var names that are too long:
 		TCHAR var_name[MAX_VAR_NAME_LENGTH + 20];
 		Var *var;
-		int always_use = output_var.IsLocal() ? FINDVAR_LOCAL : FINDVAR_GLOBAL;
+		int always_use = FINDVAR_FOR_PSEUDO_ARRAY(output_var);
 		if (   !(var = g_script.FindOrAddVar(var_name
 			, sntprintf(var_name, _countof(var_name), _T("%sX"), output_var.mName)
 			, always_use))   )
