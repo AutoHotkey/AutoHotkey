@@ -2214,8 +2214,8 @@ public:
 	#define VAR_DECLARE_GLOBAL (VAR_DECLARED | VAR_GLOBAL)
 	#define VAR_DECLARE_SUPER_GLOBAL (VAR_DECLARE_GLOBAL | VAR_SUPER_GLOBAL)
 	#define VAR_DECLARE_LOCAL  (VAR_DECLARED | VAR_LOCAL)
-	#define VAR_FORCE_LOCAL (VAR_DECLARE_LOCAL | VAR_NO_SUPER)
 	#define VAR_DECLARE_STATIC (VAR_DECLARED | VAR_LOCAL | VAR_LOCAL_STATIC)
+	// The last two may be combined (bitwise-OR) with VAR_FORCE_LOCAL.
 
 	bool mIsBuiltIn; // Determines contents of union. Keep this member adjacent/contiguous with the above.
 	// Note that it's possible for a built-in function such as WinExist() to become a normal/UDF via
@@ -3006,7 +3006,7 @@ public:
 	// For pseudo-arrays, force-local mode overrides the legacy behaviour (a common source of
 	// confusion) and resolves the array elements individually, consistent with double-derefs:
 	#define FINDVAR_FOR_PSEUDO_ARRAY(array_start_var) \
-		((g->CurrentFunc && g->CurrentFunc->mDefaultVarType == VAR_FORCE_LOCAL) ? FINDVAR_DEFAULT \
+		((g->CurrentFunc && (g->CurrentFunc->mDefaultVarType & VAR_FORCE_LOCAL)) ? FINDVAR_DEFAULT \
 		: (array_start_var).IsLocal() ? FINDVAR_LOCAL : FINDVAR_GLOBAL)
 	Var *FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT);
 	Var *FindVar(LPTSTR aVarName, size_t aVarNameLength = 0, int *apInsertPos = NULL

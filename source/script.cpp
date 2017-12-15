@@ -1252,7 +1252,7 @@ UINT Script::LoadFromFile()
 	for (int i = 0; i < mFuncCount; ++i)
 	{
 		Func &func = *mFunc[i];
-		if (!func.mIsBuiltIn && func.mDefaultVarType != VAR_FORCE_LOCAL)
+		if (!func.mIsBuiltIn && !(func.mDefaultVarType & VAR_FORCE_LOCAL))
 		{
 			PreprocessLocalVars(func, func.mVar, func.mVarCount);
 			PreprocessLocalVars(func, func.mLazyVar, func.mLazyVarCount);
@@ -3809,16 +3809,24 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				//    global  ; Should be an error because global vars are implied/automatic.
 				// v1.0.48: Lexikos: Added assume-static mode. For now, this requires "static" to be
 				// placed above local or global variable declarations.
-				if (mNextLineIsFunctionBody && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE)
+				if (mNextLineIsFunctionBody)
 				{
-					if (declare_type == VAR_DECLARE_LOCAL)
-						declare_type = VAR_FORCE_LOCAL; // v1.1.27: "local" by itself restricts globals to only those declared inside the function.
-					g->CurrentFunc->mDefaultVarType = declare_type;
-					// No further action is required for the word "global" or "static" by itself.
-					return OK;
+					if (g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE)
+					{
+						if (declare_type == VAR_DECLARE_LOCAL)
+							declare_type |= VAR_FORCE_LOCAL; // v1.1.27: "local" by itself restricts globals to only those declared inside the function.
+						g->CurrentFunc->mDefaultVarType = declare_type;
+						// No further action is required.
+						return OK;
+					}
+					// v1.1.27: Allow "local" and "static" to be combined, leaving the restrictions on globals in place.
+					else if (g->CurrentFunc->mDefaultVarType == (VAR_DECLARE_LOCAL | VAR_FORCE_LOCAL) && declare_type == VAR_DECLARE_STATIC)
+					{
+						g->CurrentFunc->mDefaultVarType = (VAR_DECLARE_STATIC | VAR_FORCE_LOCAL);
+						return OK;
+					}
 				}
-				// Otherwise, it's the word "local" by itself (which isn't allowed since it's the default),
-				// or it's the word global or static by itself, but it occurs too far down in the body.
+				// Otherwise, it occurs too far down in the body.
 				return ScriptError(ERR_UNRECOGNIZED_ACTION, aLineText); // Vague error since so rare.
 			}
 			if (mNextLineIsFunctionBody && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE)
@@ -7021,8 +7029,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			Func &func = *g->CurrentFunc;
 			// After this point, mGlobalVar is used to prevent dynamic variable references from
 			// resolving to globals which aren't declared in this function (though in v1, this is
-			// only done in functions with a lone "local", added in v1.1.27).
-			if (func.mGlobalVarCount && func.mDefaultVarType == VAR_FORCE_LOCAL)
+			// only done in force-local functions, added in v1.1.27).
+			if (func.mGlobalVarCount && (func.mDefaultVarType & VAR_FORCE_LOCAL))
 			{
 				// Now that there can be no more "global" declarations, copy the list into persistent memory.
 				Var **global_vars;
@@ -9025,13 +9033,14 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 		if (g.CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL)
 			return FindVar(aVarName, aVarNameLength, apInsertPos, FINDVAR_GLOBAL, apIsLocal);
 		// v1: Each *dynamic* variable reference may resolve to a global if one exists.
-		if (mIsReadyToExecute && g.CurrentFunc->mDefaultVarType != VAR_FORCE_LOCAL)
+		bool force_local = g.CurrentFunc->mDefaultVarType & VAR_FORCE_LOCAL;
+		if (mIsReadyToExecute && !force_local)
 			return FindVar(aVarName, aVarNameLength, NULL, FINDVAR_GLOBAL);
 		// Otherwise, caller only wants globals which are declared in *this* function:
 		for (int i = 0; i < g.CurrentFunc->mGlobalVarCount; ++i)
 			if (!_tcsicmp(var_name, g.CurrentFunc->mGlobalVar[i]->mName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 				return g.CurrentFunc->mGlobalVar[i];
-		if (g.CurrentFunc->mDefaultVarType == VAR_FORCE_LOCAL)
+		if (force_local)
 			return NULL;
 		// As a last resort, check for a super-global:
 		Var *gvar = FindVar(aVarName, aVarNameLength, NULL, FINDVAR_GLOBAL, NULL);
@@ -9099,7 +9108,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	//   VAR_LOCAL_FUNCPARAM should not be made static.
 	//   VAR_LOCAL_STATIC is already static.
 	//   VAR_DECLARED indicates mDefaultVarType is irrelevant.
-	if (aScope == VAR_LOCAL && g->CurrentFunc->mDefaultVarType == VAR_DECLARE_STATIC)
+	if (aScope == VAR_LOCAL && (g->CurrentFunc->mDefaultVarType & VAR_LOCAL_STATIC))
 		// v1.0.48: Lexikos: Current function is assume-static, so set static attribute.
 		aScope |= VAR_LOCAL_STATIC;
 

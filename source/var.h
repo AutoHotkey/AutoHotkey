@@ -148,7 +148,7 @@ private:
 	VarAttribType mAttrib;  // Bitwise combination of the above flags.
 	#define VAR_GLOBAL			0x01
 	#define VAR_LOCAL			0x02
-	#define VAR_NO_SUPER		0x04
+	#define VAR_FORCE_LOCAL		0x04 // Flag reserved for force-local mode in functions (not used in Var::mScope).
 	#define VAR_LOCAL_FUNCPARAM	0x10 // Indicates this local var is a function's parameter.  VAR_LOCAL_DECLARED should also be set.
 	#define VAR_LOCAL_STATIC	0x20 // Indicates this local var retains its value between function calls.
 	#define VAR_DECLARED		0x40 // Indicates this var was declared somehow, not automatic.
