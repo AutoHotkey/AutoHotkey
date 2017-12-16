@@ -1268,6 +1268,10 @@ UINT Script::LoadFromFile()
 		mUnresolvedClasses = NULL;
 	}
 
+	// Check for classes potentially being overwritten.
+	if (g_Warn_ClassOverwrite)
+		CheckForClassOverwrite();
+
 #ifndef AUTOHOTKEYSC
 	if (mIncludeLibraryFunctionsThenExit)
 	{
@@ -3477,6 +3481,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			warnType = WARN_USE_ENV;
 		else if (IS_PARAM1_MATCH(_T("LocalSameAsGlobal")))
 			warnType = WARN_LOCAL_SAME_AS_GLOBAL;
+		else if (IS_PARAM1_MATCH(_T("ClassOverwrite")))
+			warnType = WARN_CLASS_OVERWRITE;
 		else
 			return ScriptError(ERR_PARAM1_INVALID, aBuf);
 
@@ -3505,6 +3511,9 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		if (warnType == WARN_LOCAL_SAME_AS_GLOBAL || warnType == WARN_ALL)
 			g_Warn_LocalSameAsGlobal = warnMode;
+
+		if (warnType == WARN_CLASS_OVERWRITE || warnType == WARN_ALL)
+			g_Warn_ClassOverwrite = warnMode;
 
 		return CONDITION_TRUE;
 	}
@@ -10013,6 +10022,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 
 				ExprTokenType &this_infix_item = infix[infix_count]; // Might help reduce code size since it's referenced many places below.
 				this_infix_item.deref = NULL; // Init needed for SYM_ASSIGN and related; a non-NULL deref means it should be converted to an object-assignment.
+				this_infix_item.is_lvalue = FALSE; // Init needed for SYM_VAR; simplifies #Warn ClassOverwrite (vs. storing it in the assignment token).
 
 				// CHECK IF THIS CHARACTER IS AN OPERATOR.
 				cp1 = cp[1]; // Improves performance by nearly 5% and appreciably reduces code size (at the expense of being less maintainable).
@@ -11159,6 +11169,25 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 			// DO NOT BREAK: FALL THROUGH TO BELOW
 
 		default: // This infix symbol is an operator, so act according to its precedence.
+			if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))
+			{
+				// Resolve the variable now, for validation after all files have been loaded.
+				// Without this, the valdiation code would need to determine which postfix token
+				// corresponds to an assignment's l-value, which would require larger code.
+				if (this_infix > infix) // Must be checked, although always true in valid expressions.
+				{
+					if (this_infix[-1].symbol == SYM_VAR)
+						this_infix[-1].is_lvalue = TRUE;
+				}
+			}
+			else if (infix_symbol == SYM_PRE_INCREMENT || infix_symbol == SYM_PRE_DECREMENT)
+			{
+				// Same as other assignments (above), but need to check SYM_DYNAMIC as well since
+				// the target won't have been converted to SYM_VAR yet (not applicable with #NoEnv).
+				if (this_infix[1].symbol == SYM_VAR
+					|| this_infix[1].symbol == SYM_DYNAMIC && !SYM_DYNAMIC_IS_DOUBLE_DEREF(this_infix[1]))
+					this_infix[1].is_lvalue = TRUE;
+			}
 			// If the symbol waiting on the stack has a lower precedence than the current symbol, push the
 			// current symbol onto the stack so that it will be processed sooner than the waiting one.
 			// Otherwise, pop waiting items off the stack (by means of i not being incremented) until their
@@ -16368,6 +16397,36 @@ void Script::PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount)
 		// Since this undeclared local variable has the same name as a global, there's
 		// a chance the user intended it to be global. So consider warning the user:
 		MaybeWarnLocalSameAsGlobal(aFunc, var);
+	}
+}
+
+
+
+void Script::CheckForClassOverwrite()
+{
+	for (Line *line = mFirstLine; line; line = line->mNextLine)
+	{
+		for (int a = 0; a < line->mArgc; ++a)
+		{
+			ArgStruct &arg = line->mArg[a];
+			if (arg.type == ARG_TYPE_OUTPUT_VAR)
+			{
+				if (!*arg.text) // The arg's variable is not one that needs to be dynamically resolved.
+				{
+					Var *target_var = VAR(arg);
+					if (target_var->HasObject()) // At this stage, all variables are empty except class variables.
+						ScriptWarning(g_Warn_ClassOverwrite, WARNING_CLASS_OVERWRITE, target_var->mName, line);
+				}
+			}
+			else if (arg.is_expression)
+			{
+				for (ExprTokenType *token = arg.postfix; token->symbol != SYM_INVALID; ++token)
+				{
+					if (token->symbol == SYM_VAR && token->is_lvalue && token->var->HasObject())
+						ScriptWarning(g_Warn_ClassOverwrite, WARNING_CLASS_OVERWRITE, token->var->mName, line);
+				}
+			}
+		}
 	}
 }
 

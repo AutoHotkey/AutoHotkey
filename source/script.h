@@ -222,6 +222,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
 #define WARNING_USE_ENV_VARIABLE _T("An environment variable is being accessed; see #NoEnv.")
+#define WARNING_CLASS_OVERWRITE _T("Class may be overwritten.")
 
 //----------------------------------------------------------------------------------
 
@@ -3066,6 +3067,7 @@ public:
 	void MaybeWarnLocalSameAsGlobal(Func &func, Var &var);
 
 	void PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount);
+	void CheckForClassOverwrite();
 
 	static ResultType UnhandledException(ExprTokenType*& aToken, Line* aLine);
 	static ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
