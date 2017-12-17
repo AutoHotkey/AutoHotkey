@@ -5653,21 +5653,71 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 
 
-void LaunchAutoHotkeyUtil(LPTSTR aFile)
+bool FindAutoHotkeyUtilSub(LPTSTR aBuf, int aBufSize, LPTSTR aFile, LPTSTR aDir)
 {
-    TCHAR buf_temp[2048];
+	int len = sntprintf(aBuf, aBufSize, _T("\"%s\\%s"), aDir, aFile);
+	if (len + 1 > aBufSize // Too long. Should realistically never happen.
+		|| GetFileAttributes(aBuf + 1) == INVALID_FILE_ATTRIBUTES) // File not found.
+		return false;
+	aBuf[len++] = '"';
+	aBuf[len] = '\0';
+	return true;
+}
+
+bool FindAutoHotkeyUtil(LPTSTR aBuf, int aBufSize, LPTSTR aFile, LPTSTR aInstallDirBuf, LPTSTR &aUtilDir)
+{
+	// Always try our directory first, in case it has different utils to the installed version.
 	// ActionExec()'s CreateProcess() is currently done in a way that prefers enclosing double quotes:
-	*buf_temp = '"';
-	// Try GetAHKInstallDir() first so that compiled scripts running on machines that happen
-	// to have AHK installed will still be able to fetch the help file and Window Spy:
-	if (!GetAHKInstallDir(buf_temp + 1))
-		// Even if this is the self-contained version (AUTOHOTKEYSC), attempt to launch anyway in
-		// case the user has put a copy of the file in the same dir with the compiled script:
-		_tcscpy(buf_temp + 1, g_script.mOurEXEDir);
-	sntprintfcat(buf_temp, _countof(buf_temp), _T("\\%s\""), aFile);
+	if (!FindAutoHotkeyUtilSub(aBuf, aBufSize, aFile, g_script.mOurEXEDir))
+	{
+		// Try GetAHKInstallDir() so that compiled scripts running on machines that happen
+		// to have AHK installed will still be able to fetch the help file and Window Spy:
+		if (   !GetAHKInstallDir(aInstallDirBuf)
+			|| !FindAutoHotkeyUtilSub(aBuf, aBufSize, aFile, aInstallDirBuf)   )
+			return false;
+		aUtilDir = aInstallDirBuf;
+	}
+	else
+		aUtilDir = g_script.mOurEXEDir;
+	return true;
+}
+
+bool LaunchAutoHotkeyUtil(LPTSTR aFile, bool aIsScript)
+{
+	TCHAR buf_file[2048], buf_exe[2048], installdir[MAX_PATH];
+	LPTSTR utildir, file = buf_file, args = _T(""); // Use "" vs. NULL to specify that there are no params at all.
+	if (!FindAutoHotkeyUtil(buf_file, _countof(buf_file), aFile, installdir, utildir))
+		return false;
+	if (aIsScript)
+	{
+		// Always try AutoHotkey.exe in the same directory as the util first, if present,
+		// since mOurEXE could be a different version of AutoHotkey (or a compiled script).
+		if (FindAutoHotkeyUtilSub(buf_exe, _countof(buf_exe), _T("AutoHotkey.exe"), utildir))
+			file = buf_exe, args = buf_file;
+#ifndef AUTOHOTKEYSC
+		else if (utildir == g_script.mOurEXEDir)
+			// Use our EXE only if the util was found in our directory.
+			file = g_script.mOurEXE, args = buf_file;
+#endif
+		//else: AutoHotkey appears to be installed but missing AutoHotkey.exe.
+		// Try running the .ahk file directly in the off chance that it is registered
+		// with some other EXE name.
+	}
 	// Attempt to run the file:
-	if (!g_script.ActionExec(buf_temp, _T(""), NULL, false)) // Use "" vs. NULL to specify that there are no params at all.
-		MsgBox(buf_temp, 0, _T("Could not launch file:"));
+	return g_script.ActionExec(file, args, NULL, false) != FAIL;
+}
+
+void LaunchWindowSpy()
+{
+	if (   !LaunchAutoHotkeyUtil(_T("WindowSpy.ahk"), true)
+		&& !LaunchAutoHotkeyUtil(_T("AU3_Spy.exe"), false)   )
+		MsgBox(_T("Could not launch WindowSpy.ahk or AU3_Spy.exe"), MB_ICONERROR);
+}
+
+void LaunchAutoHotkeyHelp()
+{
+	if (   !LaunchAutoHotkeyUtil(AHK_HELP_FILE, false)   )
+		MsgBox(_T("Could not launch ") AHK_HELP_FILE, MB_ICONERROR);
 }
 
 bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
@@ -5692,11 +5742,11 @@ bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
 		return true;
 	case ID_TRAY_WINDOWSPY:
 	case ID_FILE_WINDOWSPY:
-		LaunchAutoHotkeyUtil(_T("AU3_Spy.exe"));
+		LaunchWindowSpy();
 		return true;
 	case ID_TRAY_HELP:
 	case ID_HELP_USERMANUAL:
-		LaunchAutoHotkeyUtil(AHK_HELP_FILE);
+		LaunchAutoHotkeyHelp();
 		return true;
 	case ID_TRAY_SUSPEND:
 	case ID_FILE_SUSPEND:
