@@ -3933,7 +3933,11 @@ sc_type TextToSC(LPTSTR aText)
 			return g_key_to_sc[i].sc;
 	// Do this only after the above, in case any valid key names ever start with SC:
 	if (ctoupper(*aText) == 'S' && ctoupper(*(aText + 1)) == 'C')
-		return (sc_type)_tcstol(aText + 2, NULL, 16);  // Convert from hex.
+	{
+		LPTSTR endptr;
+		sc_type sc = (sc_type)_tcstol(aText + 2, &endptr, 16);  // Convert from hex.
+		return *endptr ? 0 : sc; // Fixed for v1.1.27: Disallow any invalid suffix so that hotkeys like a::scb() are not misinterpreted as remappings.
+	}
 	return 0; // Indicate "not found".
 }
 
@@ -3956,7 +3960,11 @@ vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandl
 		return CharToVKAndModifiers(*aText, pModifiersLR, aKeybdLayout, aEnableAZFallback); // Making this a function simplifies things because it can do early return, etc.
 
 	if (aAllowExplicitVK && ctoupper(aText[0]) == 'V' && ctoupper(aText[1]) == 'K')
-		return (vk_type)_tcstol(aText + 2, NULL, 16);  // Convert from hex.
+	{
+		LPTSTR endptr;
+		vk_type vk = (vk_type)_tcstol(aText + 2, &endptr, 16);  // Convert from hex.
+		return *endptr ? 0 : vk; // Fixed for v1.1.27: Disallow any invalid suffix so that hotkeys like a::vkb() are not misinterpreted as remappings.
+	}
 
 	for (int i = 0; i < g_key_to_vk_count; ++i)
 		if (!_tcsicmp(g_key_to_vk[i].key_name, aText))
