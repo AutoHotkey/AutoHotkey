@@ -749,7 +749,8 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 			// In other words, SendKey(TextToVK(...), modifiers, ...) would often send the old
 			// value for modifiers.
 			single_char_string[0] = *aKeys; // String was pre-terminated earlier.
-			if (vk = TextToVK(single_char_string, &mods_for_next_key, true, true, sTargetKeybdLayout))
+			if (vk = TextToVK(single_char_string, &mods_for_next_key, true, true, sTargetKeybdLayout
+				, (mods_for_next_key | persistent_modifiers_for_this_SendKeys) != 0 && !aSendRaw)) // v1.1.27.00: Disable the a-z to vk41-vk5A fallback translation when modifiers are present since it would produce the wrong printable characters.
 				// TextToVK() takes no measurable time compared to the amount of time SendKey takes.
 				SendKey(vk, 0, mods_for_next_key, persistent_modifiers_for_this_SendKeys, 1, KEYDOWNANDUP
 					, 0, aTargetWindow);
@@ -3939,7 +3940,7 @@ sc_type TextToSC(LPTSTR aText)
 
 
 vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandledByScanCode, bool aAllowExplicitVK
-	, HKL aKeybdLayout)
+	, HKL aKeybdLayout, bool aEnableAZFallback)
 // If modifiers_p is non-NULL, place the modifiers that are needed to realize the key in there.
 // e.g. M is really +m (shift-m), # is really shift-3.
 // HOWEVER, this function does not completely overwrite the contents of pModifiersLR; instead, it just
@@ -3952,7 +3953,7 @@ vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandl
 	// of text during load, is that on either side of the COMPOSITE_DELIMITER (e.g. " then ").
 
 	if (!aText[1]) // _tcslen(aText) == 1
-		return CharToVKAndModifiers(*aText, pModifiersLR, aKeybdLayout); // Making this a function simplifies things because it can do early return, etc.
+		return CharToVKAndModifiers(*aText, pModifiersLR, aKeybdLayout, aEnableAZFallback); // Making this a function simplifies things because it can do early return, etc.
 
 	if (aAllowExplicitVK && ctoupper(aText[0]) == 'V' && ctoupper(aText[1]) == 'K')
 		return (vk_type)_tcstol(aText + 2, NULL, 16);  // Convert from hex.
@@ -3972,7 +3973,7 @@ vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandl
 
 
 
-vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLayout)
+vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLayout, bool aEnableAZFallback)
 // If non-NULL, pModifiersLR contains the initial set of modifiers provided by the caller, to which
 // we add any extra modifiers required to realize aChar.
 {
@@ -3986,7 +3987,16 @@ vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLa
 	vk_type vk = LOBYTE(mod_plus_vk);
 	char keyscan_modifiers = HIBYTE(mod_plus_vk);
 	if (keyscan_modifiers == -1 && vk == (UCHAR)-1) // No translation could be made.
-		return 0;
+	{
+		if (  !(aEnableAZFallback && cisalpha(aChar))  )
+			return 0;
+		// v1.1.27.00: Use the A-Z fallback; assume the user means vk41-vk5A, since these letters
+		// are commonly used to describe keyboard shortcuts even when these vk codes are actually
+		// mapped to other characters.  Our callers should pass false for aEnableAZFallback if
+		// they require a strict printable character->keycode mapping, such as for sending text.
+		vk = (vk_type)ctoupper(aChar);
+		keyscan_modifiers = cisupper(aChar) ? 0x01 : 0; // It's debatable whether the user intends this to be Shift+letter; this at least makes `Send ^A` consistent across (most?) layouts.
+	}
 	if (keyscan_modifiers & 0x38) // "The Hankaku key is pressed" or either of the "Reserved" state bits (for instance, used by Neo2 keyboard layout).
 		// Callers expect failure in this case so that a fallback method can be used.
 		return 0;
