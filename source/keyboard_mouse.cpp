@@ -1134,31 +1134,45 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount, modLR_type aModifiersLR)
 	// Production of ANSI characters above 127 has been tested on both Windows XP and 98se (but not the
 	// Win98 command prompt).
 
-	TCHAR asc_string[16], *cp = asc_string;
+	bool use_sendasc = sSendMode == SM_PLAY; // See SendUnicodeChar for why it isn't called for SM_PLAY.
+	TCHAR asc_string[16];
+	WCHAR wc;
 
-	// The following range isn't checked because this function appears never to be called for such
-	// characters (tested in English and Russian so far), probably because VkKeyScan() finds a way to
-	// manifest them via Control+VK combinations:
-	//if (aChar > -1 && aChar < 32)
-	//	return;
-	if (aChar & ~127)    // Try using ANSI.
-		*cp++ = '0';  // ANSI mode is achieved via leading zero in the Alt+Numpad keystrokes.
-	//else use Alt+Numpad without the leading zero, which allows the characters a-z, A-Z, and quite
-	// a few others to be produced in Russian and perhaps other layouts, which was impossible in versions
-	// prior to 1.0.40.
-	_itot((TBYTE)aChar, cp, 10); // Convert to UCHAR in case aChar < 0.
+	if (use_sendasc)
+	{
+		// The following range isn't checked because this function appears never to be called for such
+		// characters (tested in English and Russian so far), probably because VkKeyScan() finds a way to
+		// manifest them via Control+VK combinations:
+		//if (aChar > -1 && aChar < 32)
+		//	return;
+		TCHAR *cp = asc_string;
+		if (aChar & ~127)    // Try using ANSI.
+			*cp++ = '0';  // ANSI mode is achieved via leading zero in the Alt+Numpad keystrokes.
+		//else use Alt+Numpad without the leading zero, which allows the characters a-z, A-Z, and quite
+		// a few others to be produced in Russian and perhaps other layouts, which was impossible in versions
+		// prior to 1.0.40.
+		_itot((TBYTE)aChar, cp, 10); // Convert to UCHAR in case aChar < 0.
+	}
+	else
+	{
+#ifdef UNICODE
+		wc = aChar;
+#else
+		// Convert our ANSI character to Unicode for sending.
+		if (!MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, &aChar, 1, &wc, 1))
+			return;
+#endif
+	}
 
 	LONG_OPERATION_INIT
 	for (int i = 0; i < aRepeatCount; ++i)
 	{
 		if (!sSendMode)
 			LONG_OPERATION_UPDATE_FOR_SENDKEYS
-#ifdef UNICODE
-		if (sSendMode != SM_PLAY) // See SendUnicodeChar for comments.
-			SendUnicodeChar(aChar, aModifiersLR);
+		if (use_sendasc)
+			SendASC(asc_string);
 		else
-#endif
-		SendASC(asc_string);
+			SendUnicodeChar(wc, aModifiersLR);
 		DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
 	}
 
