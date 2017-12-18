@@ -4011,6 +4011,7 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 		// modifiersLR into its column in the kvkm or kscm arrays.
 
 		mod_type modifiers, i_modifiers_merged;
+		modLR_type i_modifiersLR_excluded;
 		int modifiersLR;  // Don't make this modLR_type to avoid integer overflow, since it's a loop-counter.
 		bool prev_hk_is_key_up, this_hk_is_key_up;
 		HotkeyIDType this_hk_id;
@@ -4024,21 +4025,23 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 			i_modifiers_merged = this_hk.modifiers;
 			if (this_hk.modifiersLR)
 				i_modifiers_merged |= ConvertModifiersLR(this_hk.modifiersLR);
+			
+			// Fixed for v1.1.27.00: Calculate the modifiersLR bits which are NOT allowed to be set.
+			// This fixes <^A erroneously taking over <>^A, and reduces the work that must be done
+			// on each iteration of the loop below.
+			i_modifiersLR_excluded = this_hk.AllowExtraModifiers ? 0
+				: ~(this_hk.modifiersLR | ConvertModifiers(this_hk.modifiers));
 
 			for (modifiersLR = 0; modifiersLR <= MODLR_MAX; ++modifiersLR)  // For each possible LR value.
 			{
+				if (modifiersLR & i_modifiersLR_excluded) // Checked first to avoid the ConvertModifiersLR call in many cases.
+					continue;
 				modifiers = ConvertModifiersLR(modifiersLR);
-				if (this_hk.AllowExtraModifiers)
-				{
-					// True if modifiersLR is a superset of i's modifier value.  In other words,
-					// modifiersLR has the minimum required keys but also has some
-					// extraneous keys, which are allowed in this case:
-					if (i_modifiers_merged != (modifiers & i_modifiers_merged))
-						continue;
-				}
-				else
-					if (i_modifiers_merged != modifiers)
-						continue;
+				// Below is true if modifiersLR is a superset of i's modifier value.  In other words,
+				// modifiersLR has the minimum required keys.  It may also have some extraneous keys,
+				// but only if they were not excluded by the check above, in which case they are allowed.
+				if (i_modifiers_merged != (modifiers & i_modifiers_merged))
+					continue;
 
 				// In addition to the above, modifiersLR must also have the *specific* left or right keys
 				// found in i's modifiersLR.  In other words, i's modifiersLR must be a perfect subset
