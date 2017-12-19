@@ -16295,7 +16295,7 @@ BIF_DECL(BIF_MinMax)
 		}
 	}
 	// Compare found integer with found float:
-	index = (isMin) ? (ib < db) ? ib_index : db_index : (ib < db) ? db_index : ib_index;
+	index = (db_empty || !ib_empty && (isMin ? ib < db : ib > db)) ? ib_index : db_index;
 	ParamIndexToNumber(index, param);
 	aResultToken.symbol = param.symbol;
 	aResultToken.value_int64 = param.value_int64;
