@@ -2482,8 +2482,13 @@ void Hotstring::DoReplace(LPARAM alParam)
 			TCHAR end_char;
 			if (mEndCharRequired && (end_char = (TCHAR)LOWORD(alParam))) // Must now check mEndCharRequired because LOWORD has been overloaded with context-sensitive meanings.
 			{
-				start_of_replacement += _tcslen(start_of_replacement);
-				_stprintf(start_of_replacement, _T("%s%c"), mSendRaw ? _T("") : _T("{Raw}"), end_char); // v1.0.43.02: Don't send "{Raw}" if already in raw mode!
+				LPTSTR end = start_of_replacement + _tcslen(start_of_replacement);
+				// v1.0.43.02: Don't send "{Raw}" if already in raw mode!
+				// v1.1.27: Avoid adding {Raw} if it gets switched on within the replacement text.
+				if (mSendRaw || tcscasestr(start_of_replacement, _T("{Raw}")) || tcscasestr(start_of_replacement, _T("{Text}")))
+					*end++ = end_char, *end = '\0';
+				else
+					_stprintf(end, _T("%s%c"), _T("{Raw}"), end_char);
 			}
 		}
 	}
