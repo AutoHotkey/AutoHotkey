@@ -136,7 +136,7 @@ void SendUnicodeChar(wchar_t aChar, modLR_type aModifiers)
 
 
 
-void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow)
+void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow)
 // The aKeys string must be modifiable (not constant), since for performance reasons,
 // it's allowed to be temporarily altered by this function.  mThisHotkeyModifiersLR, if non-zero,
 // should be the set of modifiers used to trigger the hotkey that called the subroutine
@@ -512,7 +512,14 @@ void SendKeys(LPTSTR aKeys, bool aSendRaw, SendModes aSendModeOrig, HWND aTarget
 				{
 					// As documented, there's no way to switch back to non-raw mode afterward since there's no
 					// correct way to support special (non-literal) strings such as {Raw Off} while in raw mode.
-					aSendRaw = true;
+					aSendRaw = SCM_RAW;
+					goto brace_case_end; // This {} item completely handled, so move on to next.
+				}
+				else if (!_tcsnicmp(aKeys, _T("Text"), 4)) // Added in v1.1.27
+				{
+					if (omit_leading_whitespace(aKeys + 4) == end_pos)
+						aSendRaw = SCM_RAW_TEXT;
+					//else: ignore this {Text something} to reserve for future use.
 					goto brace_case_end; // This {} item completely handled, so move on to next.
 				}
 
@@ -744,14 +751,37 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 
 		else // Encountered a character other than ^+!#{} ... or we're in raw mode.
 		{
-			// Best to call this separately, rather than as first arg in SendKey, since it changes the
-			// value of modifiers and the updated value is *not* guaranteed to be passed.
-			// In other words, SendKey(TextToVK(...), modifiers, ...) would often send the old
-			// value for modifiers.
-			single_char_string[0] = *aKeys; // String was pre-terminated earlier.
-			if (vk = TextToVK(single_char_string, &mods_for_next_key, true, true, sTargetKeybdLayout
-				, (mods_for_next_key | persistent_modifiers_for_this_SendKeys) != 0 && !aSendRaw)) // v1.1.27.00: Disable the a-z to vk41-vk5A fallback translation when modifiers are present since it would produce the wrong printable characters.
+			if (aSendRaw == SCM_RAW_TEXT)
+			{
+				// \b needs to produce VK_BACK for auto-replace hotstrings to work (this is more useful anyway).
+				// \r and \n need to produce VK_RETURN for decent compatibility.  SendKeySpecial('\n') works for
+				// some controls (such as Scintilla) but has no effect in other common applications.
+				// \t has more utility if translated to VK_TAB.  SendKeySpecial('\t') has no effect in many
+				// common cases, and seems to only work in cases where {tab} would work just as well.
+				switch (*aKeys)
+				{
+				case '\r': // Translate \r but ignore any trailing \n, since \r\n -> {Enter 2} is counter-intuitive.
+					if (aKeys[1] == '\n')
+						++aKeys;
+					// Fall through:
+				case '\n': vk = VK_RETURN; break;
+				case '\b': vk = VK_BACK; break;
+				case '\t': vk = VK_TAB; break;
+				default: vk = 0; break; // Send all other characters via SendKeySpecial()/WM_CHAR.
+				}
+			}
+			else
+			{
+				*single_char_string = *aKeys; // String was pre-terminated earlier.
+				// Best to call this separately, rather than as first arg in SendKey, since it changes the
+				// value of modifiers and the updated value is *not* guaranteed to be passed.
+				// In other words, SendKey(TextToVK(...), modifiers, ...) would often send the old
+				// value for modifiers.
+				vk = TextToVK(single_char_string, &mods_for_next_key, true, false, sTargetKeybdLayout
+					, (mods_for_next_key | persistent_modifiers_for_this_SendKeys) != 0 && !aSendRaw); // v1.1.27.00: Disable the a-z to vk41-vk5A fallback translation when modifiers are present since it would produce the wrong printable characters.
 				// TextToVK() takes no measurable time compared to the amount of time SendKey takes.
+			}
+			if (vk)
 				SendKey(vk, 0, mods_for_next_key, persistent_modifiers_for_this_SendKeys, 1, KEYDOWNANDUP
 					, 0, aTargetWindow);
 			else // Try to send it by alternate means.
@@ -1102,7 +1132,7 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount, modLR_type aModifiersLR)
 // (assuming € is a character for which SendKeySpecial() is required in the current layout) with ASC mode.
 // This function uses some of the same code as SendKey() above, so maintain them together.
 {
-	// Caller must verify that aRepeatCount > 1.
+	// Caller must verify that aRepeatCount >= 1.
 	// Avoid changing modifier states and other things if there is nothing to be sent.
 	// Otherwise, menu bar might activated due to ALT keystrokes that don't modify any key,
 	// the Start Menu might appear due to WIN keystrokes that don't modify anything, etc:

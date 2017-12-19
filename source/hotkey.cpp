@@ -2518,7 +2518,7 @@ void Hotstring::DoReplace(LPARAM alParam)
 	if (!(mDoBackspace || mOmitEndChar) && mSendMode != SM_EVENT) // The final character of the abbreviation (or its EndChar) was not suppressed by the hook.
 		Sleep(0);
 
-	SendKeys(SendBuf, mSendRaw, mSendMode); // Send the backspaces and/or replacement.
+	SendKeys(SendBuf, (SendRawModes)mSendRaw, mSendMode); // Send the backspaces and/or replacement.
 
 	// Restore original values.
 	g.KeyDelay = old_delay;
@@ -2629,7 +2629,7 @@ Hotstring::Hotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LP
 
 
 void Hotstring::ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
-	, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, bool &aSendRaw
+	, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, SendRawType &aSendRaw
 	, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset)
 {
 	// In this case, colon rather than zero marks the end of the string.  However, the string
@@ -2679,7 +2679,10 @@ void Hotstring::ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, Se
 			aPriority = _ttoi(cp1);
 			break;
 		case 'R':
-			aSendRaw = (*cp1 != '0');
+			aSendRaw = (*cp1 != '0') ? SCM_RAW : SCM_NOT_RAW;
+			break;
+		case 'T':
+			aSendRaw = (*cp1 != '0') ? SCM_RAW_TEXT : SCM_NOT_RAW;
 			break;
 		case 'S':
 			if (*cp1)

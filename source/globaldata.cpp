@@ -171,11 +171,11 @@ HWND g_HShwnd;
 int g_HSPriority = 0;  // default priority is always 0
 int g_HSKeyDelay = 0;  // Fast sends are much nicer for auto-replace and auto-backspace.
 SendModes g_HSSendMode = SM_INPUT; // v1.0.43: New default for more reliable hotstrings.
+SendRawType g_HSSendRaw = SCM_NOT_RAW;
 bool g_HSCaseSensitive = false;
 bool g_HSConformToCase = true;
 bool g_HSDoBackspace = true;
 bool g_HSOmitEndChar = false;
-bool g_HSSendRaw = false;
 bool g_HSEndCharRequired = true;
 bool g_HSDetectWhenInsideWord = false;
 bool g_HSDoReset = false;

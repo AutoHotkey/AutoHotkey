@@ -706,7 +706,7 @@ private:
 		, LPTSTR aMenu3, LPTSTR aMenu4, LPTSTR aMenu5, LPTSTR aMenu6, LPTSTR aMenu7
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlSend(LPTSTR aControl, LPTSTR aKeysToSend, LPTSTR aTitle, LPTSTR aText
-		, LPTSTR aExcludeTitle, LPTSTR aExcludeText, bool aSendRaw);
+		, LPTSTR aExcludeTitle, LPTSTR aExcludeText, SendRawModes aSendRaw);
 	ResultType ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPTSTR aControl
 		, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlMove(LPTSTR aControl, LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight

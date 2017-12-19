@@ -14331,16 +14331,16 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_SEND:
 	case ACT_SENDRAW:
-		SendKeys(ARG1, mActionType == ACT_SENDRAW, g.SendMode);
+		SendKeys(ARG1, mActionType == ACT_SENDRAW ? SCM_RAW : SCM_NOT_RAW, g.SendMode);
 		return OK;
 	case ACT_SENDINPUT: // Raw mode is supported via {Raw} in ARG1.
-		SendKeys(ARG1, false, g.SendMode == SM_INPUT_FALLBACK_TO_PLAY ? SM_INPUT_FALLBACK_TO_PLAY : SM_INPUT);
+		SendKeys(ARG1, SCM_NOT_RAW, g.SendMode == SM_INPUT_FALLBACK_TO_PLAY ? SM_INPUT_FALLBACK_TO_PLAY : SM_INPUT);
 		return OK;
 	case ACT_SENDPLAY: // Raw mode is supported via {Raw} in ARG1.
-		SendKeys(ARG1, false, SM_PLAY);
+		SendKeys(ARG1, SCM_NOT_RAW, SM_PLAY);
 		return OK;
 	case ACT_SENDEVENT:
-		SendKeys(ARG1, false, SM_EVENT);
+		SendKeys(ARG1, SCM_NOT_RAW, SM_EVENT);
 		return OK;
 
 	case ACT_CLICK:
@@ -14485,7 +14485,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_CONTROLSEND:
 	case ACT_CONTROLSENDRAW:
-		return ControlSend(SIX_ARGS, mActionType == ACT_CONTROLSENDRAW);
+		return ControlSend(SIX_ARGS, mActionType == ACT_CONTROLSENDRAW ? SCM_RAW : SCM_NOT_RAW);
 
 	case ACT_CONTROLCLICK:
 		if (   !(vk = ConvertMouseButton(ARG4))   ) // Treats blank as "Left".

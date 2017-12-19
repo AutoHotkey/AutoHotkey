@@ -2199,7 +2199,7 @@ ResultType Line::WinMove(LPTSTR aTitle, LPTSTR aText, LPTSTR aX, LPTSTR aY
 
 
 ResultType Line::ControlSend(LPTSTR aControl, LPTSTR aKeysToSend, LPTSTR aTitle, LPTSTR aText
-	, LPTSTR aExcludeTitle, LPTSTR aExcludeText, bool aSendRaw)
+	, LPTSTR aExcludeTitle, LPTSTR aExcludeText, SendRawModes aSendRaw)
 {
 	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
 	if (!target_window)
