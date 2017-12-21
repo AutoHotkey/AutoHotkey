@@ -98,7 +98,7 @@ void SendUnicodeChar(wchar_t aChar, modLR_type aModifiers)
 	// Set modifier keystate as specified by caller.  Generally this will be 0, since
 	// key combinations with Unicode packets either do nothing at all or do the same as
 	// without the modifiers.  All modifiers are known to interfere in some applications.
-	SetModifierLRState(aModifiers, sSendMode ? sEventModifiersLR : GetModifierLRState(), NULL, false, true);
+	SetModifierLRState(aModifiers, sSendMode ? sEventModifiersLR : GetModifierLRState(), NULL, false, true, KEY_IGNORE);
 
 	if (sSendMode == SM_INPUT)
 	{
@@ -1270,7 +1270,7 @@ void SendASC(LPCTSTR aAscii)
 	modLR_type modifiersLR_now = sSendMode ? sEventModifiersLR : GetModifierLRState();
 	SetModifierLRState((modifiersLR_now | MOD_LALT) & ~(MOD_RALT | MOD_LCONTROL | MOD_RCONTROL | MOD_LSHIFT | MOD_RSHIFT)
 		, modifiersLR_now, NULL, false // Pass false because there's no need to disguise the down-event of LALT.
-		, true); // Pass true so that any release of RALT is disguised (Win is never released here).
+		, true, KEY_IGNORE); // Pass true so that any release of RALT is disguised (Win is never released here).
 	// Note: It seems best never to press back down any key released above because the
 	// act of doing so may do more harm than good (i.e. the keystrokes may caused
 	// unexpected side-effects.
