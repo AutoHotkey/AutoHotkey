@@ -773,6 +773,15 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 
 
 
+modLR_type Hotkey::HotkeyRequiresModLR(HotkeyIDType aHotkeyID, modLR_type aModLR)
+{
+	if (aHotkeyID >= sHotkeyCount)
+		return 0;
+	return shk[aHotkeyID]->mModifiersConsolidatedLR & aModLR;
+}
+
+
+
 void Hotkey::TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown)
 {
 	for (int i = 0; i < sHotkeyCount; ++i)
