@@ -339,6 +339,7 @@ LPTSTR ModifiersLRToText(modLR_type aModifiersLR, LPTSTR aBuf);
 #define LAYOUT_UNDETERMINED FAIL
 bool ActiveWindowLayoutHasAltGr();
 ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr = LAYOUT_UNDETERMINED);
+void FillLayoutHasAltGrCache();
 
 //---------------------------------------------------------------------
 

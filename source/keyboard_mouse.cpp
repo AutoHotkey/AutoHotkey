@@ -3889,6 +3889,20 @@ ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr)
 
 
 
+void FillLayoutHasAltGrCache()
+// This is called on startup to improve the odds that LayoutHasAltGr() will return
+// a cached value the first time Send is called.  This fixes an oddity with "reg"
+// hotkeys which Send, such as ^m::Send x, where the very first Send does not put
+// Ctrl back into effect because LayoutHasAltGr() exceeds g_HotkeyModifierTimeout.
+{
+	HKL active_layouts[MAX_CACHED_LAYOUTS];
+	int n = GetKeyboardLayoutList(MAX_CACHED_LAYOUTS, active_layouts);
+	for (int i = 0; i < n; ++i)
+		LayoutHasAltGr(active_layouts[i]);
+}
+
+
+
 LPTSTR SCtoKeyName(sc_type aSC, LPTSTR aBuf, int aBufSize, bool aUseFallback)
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // Always produces a non-empty string.
