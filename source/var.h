@@ -164,6 +164,7 @@ private:
 	VarAttribType mAttrib;  // Bitwise combination of the above flags (but many of them may be mutually exclusive).
 	#define VAR_GLOBAL			0x01
 	#define VAR_LOCAL			0x02
+	#define VAR_FORCE_LOCAL		0x04 // Flag reserved for force-local mode in functions (not used in Var::mScope).
 	#define VAR_LOCAL_FUNCPARAM	0x10 // Indicates this local var is a function's parameter.  VAR_LOCAL_DECLARED should also be set.
 	#define VAR_LOCAL_STATIC	0x20 // Indicates this local var retains its value between function calls.
 	#define VAR_DECLARED		0x40 // Indicates this var was declared somehow, not automatic.
@@ -585,7 +586,7 @@ public:
 	#define VALIDATENAME_SUBJECTS { _T("variable"), _T("function"), _T("class"), _T("group") }
 	static ResultType ValidateName(LPCTSTR aName, int aDisplayError = DISPLAY_VAR_ERROR);
 
-	LPTSTR ObjectToText(LPTSTR aBuf, int aBufSize);
+	LPTSTR ObjectToText(LPTSTR aName, LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline)
 	// Caller must ensure that Type() == VAR_NORMAL.
 	// aBufSize is an int so that any negative values passed in from caller are not lost.
@@ -608,7 +609,7 @@ public:
 			aBuf += sntprintf(aBuf, aBufSize, _T("%s: %s"), mName, var.mCharContents);
 			break;
 		case VAR_ATTRIB_IS_OBJECT:
-			aBuf = ObjectToText(aBuf, aBufSize);
+			aBuf = var.ObjectToText(this->mName, aBuf, aBufSize);
 			break;
 		default:
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s[%Iu of %Iu]: %-1.60s%s"), mName // mName not var.mName (see comment above).

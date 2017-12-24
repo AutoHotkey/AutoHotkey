@@ -236,6 +236,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
 #define WARNING_USE_ENV_VARIABLE _T("An environment variable is being accessed; see #NoEnv.")
+#define WARNING_CLASS_OVERWRITE _T("Class may be overwritten.")
 
 //----------------------------------------------------------------------------------
 
@@ -557,6 +558,7 @@ enum BuiltInFunctionID {
 	FID_Floor = 0, FID_Ceil,
 	FID_ASin = 0, FID_ACos,
 	FID_Sqrt = 0, FID_Log, FID_Ln,
+	FID_Min = 0, FID_Max,
 	FID_Random = 0, FID_RandomSeed,
 	FID_ObjAddRef = 0, FID_ObjRelease,
 	FID_ObjInsertAt = 0, FID_ObjDelete, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength, FID_ObjMaxIndex, FID_ObjMinIndex, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjGetAddress, FID_ObjClone, FID_ObjNewEnum,
@@ -661,7 +663,7 @@ private:
 		, LPTSTR aMenu3, LPTSTR aMenu4, LPTSTR aMenu5, LPTSTR aMenu6, LPTSTR aMenu7
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlSend(LPTSTR aControl, LPTSTR aKeysToSend, LPTSTR aTitle, LPTSTR aText
-		, LPTSTR aExcludeTitle, LPTSTR aExcludeText, bool aSendRaw);
+		, LPTSTR aExcludeTitle, LPTSTR aExcludeText, SendRawModes aSendRaw);
 	ResultType ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPTSTR aControl
 		, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ControlMove(LPTSTR aControl, LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
@@ -1643,6 +1645,7 @@ public:
 	#define VAR_DECLARE_SUPER_GLOBAL (VAR_DECLARE_GLOBAL | VAR_SUPER_GLOBAL)
 	#define VAR_DECLARE_LOCAL  (VAR_DECLARED | VAR_LOCAL)
 	#define VAR_DECLARE_STATIC (VAR_DECLARED | VAR_LOCAL | VAR_LOCAL_STATIC)
+	// The last two may be combined (bitwise-OR) with VAR_FORCE_LOCAL.
 
 	bool mIsBuiltIn; // Determines contents of union. Keep this member adjacent/contiguous with the above.
 	// Note that it's possible for a built-in function such as WinExist() to become a normal/UDF via
@@ -2824,6 +2827,7 @@ public:
 	void MaybeWarnLocalSameAsGlobal(Func &func, Var &var);
 
 	void PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount);
+	void CheckForClassOverwrite();
 
 	static ResultType UnhandledException(ResultToken*& aToken, Line* aLine);
 	static ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
@@ -2995,6 +2999,7 @@ BIF_DECL(BIF_ASinACos);
 BIF_DECL(BIF_ATan);
 BIF_DECL(BIF_Exp);
 BIF_DECL(BIF_SqrtLogLn);
+BIF_DECL(BIF_MinMax);
 BIF_DECL(BIF_DateAdd);
 BIF_DECL(BIF_DateDiff);
 BIF_DECL(BIF_Env);

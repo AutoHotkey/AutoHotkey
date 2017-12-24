@@ -1871,7 +1871,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 
 	bool script_passed_handle = false, script_owns_handle = false;
 	if (   !_tcsnicmp(aFilespec, _T("hicon:"), 6)
-		|| aIconNumber == 0 && !_tcsnicmp(aFilespec, _T("hbitmap:"), 8)   )
+		|| !_tcsnicmp(aFilespec, _T("hbitmap:"), 8)   )
 	{
 		if (aFilespec[5] == ':') // hicon:
 		{
@@ -1995,8 +1995,6 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 			return NULL; // v1.0.44: Fixed to return NULL vs. hbitmap, since 1 is an invalid handle (perhaps rare since no known bugs caused by it).
 		//else continue on below so that the icon can be resized to the caller's specified dimensions.
 	}
-	else if (aIconNumber > 0) // Caller wanted HICON, never HBITMAP, so set type now to enforce that.
-		aImageType = IMAGE_ICON; // Should be suitable for cursors too, since they're interchangeable for the most part.
 	else if (file_ext) // Make an initial guess of the type of image if the above didn't already determine the type.
 	{
 		if (!_tcsicmp(file_ext, _T("ico")))
@@ -2077,8 +2075,6 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		// DirectDraw in 256-color depth.
 		else if (GetFileAttributes(aFilespec) == 0xFFFFFFFF) // For simplicity, we don't check if it's a directory vs. file, since that should be too rare.
 			return NULL;
-		// v1.0.43.07: Also abort if caller wanted an HICON (not an HBITMAP), since the other methods below
-		// can't yield an HICON.
 		else if (aIconNumber > 0)
 		{
 			// UPDATE for v1.0.44: Attempt ExtractIcon in case its some extension that's
@@ -2091,6 +2087,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 			if (hbitmap < (HBITMAP)2) // i.e. it's NULL or 1. Return value of 1 means "incorrect file type".
 				return NULL;
 			ExtractIcon_was_used = true;
+			aImageType = IMAGE_ICON;
 		}
 		//else file exists, so continue on so that the other methods are attempted in case file's contents
 		// differ from what the file extension indicates, or in case the other methods can be successful
@@ -2278,7 +2275,8 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 	else // GDIPlus or a simple method such as LoadImage or ExtractIcon was used.
 	{
 		if (!aWidth && !aHeight // No resizing needed.
-			&& (!script_owns_handle || apNoDelete)) // No copying needed.
+			&& (!script_owns_handle || apNoDelete) // No copying needed.
+			&& (aIconNumber < 1 || aImageType == IMAGE_ICON)) // No conversion to icon needed.
 			return hbitmap;
 		// The following will also handle HICON/HCURSOR correctly if aImageType == IMAGE_ICON/CURSOR.
 		// Also, LR_COPYRETURNORG|LR_COPYDELETEORG is used because it might allow the animation of
@@ -2315,6 +2313,19 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		// Otherwise, resource usage would cascade upward until the script finally terminated, at
 		// which time all such handles are freed automatically.
 	}
+	if (aIconNumber > 0 && aImageType == IMAGE_BITMAP)
+	{
+		// aIconNumber > 0 means the caller requires an icon.
+		ICONINFO iconinfo;
+		iconinfo.fIcon = TRUE;
+		iconinfo.hbmMask = hbitmap_new;
+		iconinfo.hbmColor = hbitmap_new;
+		HICON new_icon = CreateIconIndirect(&iconinfo);
+		if (!script_owns_handle)
+			DeleteObject(hbitmap_new);
+		hbitmap_new = (HBITMAP)new_icon;
+		aImageType = IMAGE_ICON;
+	}
 	if (hbitmap != hbitmap_new) // A new icon/bitmap was created above.
 		if (apNoDelete)
 			*apNoDelete = false; // Override any previously set value.
@@ -2342,6 +2353,8 @@ BOOL CALLBACK ResourceIndexToIdEnumProc(HMODULE hModule, LPCTSTR lpszType, LPTST
 	return TRUE; // Continue
 }
 
+static TCHAR RESOURCE_ID_NOT_FOUND[] = {0};
+
 // L17: Find ID of resource from one-based index. i.e. IconNumber -> resource ID.
 // v1.1.22.05: Return LPTSTR since some (very few) icons have a string ID.
 LPTSTR ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex)
@@ -2349,7 +2362,11 @@ LPTSTR ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex)
 	ResourceIndexToIdEnumData enum_data;
 	enum_data.find_index = aIndex;
 	enum_data.index = 0;
-	enum_data.result = NULL; // Zero is probably not a valid integer ID; I think it would be compiled as "0" (string).
+	// NULL can't be used to indicate "not found", as any value between 0 and 0xFFFF is an
+	// integer ID, including zero, even though some compilers replace it with "0" (string).
+	// (LPTSTR)-1 or "" could be used instead, but this method should be safest, since we
+	// know the API cannot ever return a string at this address:
+	enum_data.result = RESOURCE_ID_NOT_FOUND;
 
 	EnumResourceNames(aModule, aType, &ResourceIndexToIdEnumProc, (LONG_PTR)&enum_data);
 
@@ -2378,7 +2395,8 @@ HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, i
 		// that the pointer returned by LockResource is valid until the *module* containing
 		// the resource is unloaded. Testing seems to indicate that unloading a module indeed
 		// unloads or invalidates any resources it contains.
-		if ((hres = FindResource(hdatafile, group_icon_id, RT_GROUP_ICON))
+		if (group_icon_id != RESOURCE_ID_NOT_FOUND
+			&& (hres = FindResource(hdatafile, group_icon_id, RT_GROUP_ICON))
 			&& (hresdata = LoadResource(hdatafile, hres))
 			&& (presdata = LockResource(hresdata)))
 		{

@@ -447,7 +447,7 @@ UserMenuItem *UserMenu::FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bo
 
 
 
-// Macros for use with the below methods:
+// Macros for use with the below methods (in previous versions, submenus were identified by position):
 #define aMenuItem_ID		aMenuItem->mMenuID
 #define aMenuItem_MF_BY		MF_BYCOMMAND
 #define UPDATE_GUI_MENU_BARS(menu_type, hmenu) \
@@ -620,11 +620,10 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 
 ResultType UserMenu::DeleteAllItems()
 {
-	if (!mFirstMenuItem)
-		return OK;  // If there are no user-defined menu items, it's already in the correct state.
 	// Remove all menu items from the linked list and from the menu.  First destroy the menu since
 	// it's probably better to start off fresh than have the destructor individually remove each
-	// menu item as the items in the linked list are deleted.  In addition, this avoids the need
+	// menu item as the items in the linked list are deleted.  Some callers rely on this being done
+	// unconditionally (i.e. regardless of !mFirstMenuItem).  In addition, this avoids the need
 	// to find any submenus by position:
 	if (!Destroy())  // if mStandardMenuItems is true, the menu will be recreated later when needed.
 		// If menu can't be destroyed, it's probably due to it being attached as a menu bar to an existing
@@ -637,6 +636,8 @@ ResultType UserMenu::DeleteAllItems()
 	// a menu bar, but that isn't the case with our GUI windows, which detach such menus prior to
 	// when the GUI window is destroyed in case the menu is in use by another window), must be
 	// destroyed with DestroyMenu() to ensure a clean exit (resources freed).
+	if (!mFirstMenuItem)
+		return OK;  // If there are no user-defined menu items, it's already in the correct state.
 	UserMenuItem *menu_item_to_delete;
 	for (UserMenuItem *mi = mFirstMenuItem; mi;)
 	{
@@ -955,7 +956,7 @@ ResultType UserMenu::SetDefault(UserMenuItem *aMenuItem)
 	if (!mMenu) // No further action required: the new setting will be in effect when the menu is created.
 		return OK;
 	if (aMenuItem) // A user-defined menu item is being made the default.
-		SetMenuDefaultItem(mMenu, aMenuItem_ID, aMenuItem->mSubmenu != NULL); // This also ensures that only one is default at a time.
+		SetMenuDefaultItem(mMenu, aMenuItem->mMenuID, FALSE); // This also ensures that only one is default at a time.
 	else
 	{
 		// Otherwise, a user-defined item that was previously the default is no longer the default.
@@ -1440,10 +1441,8 @@ ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int 
 	if (!*aFilename || (*aFilename == '*' && !aFilename[1]))
 		return RemoveItemIcon(aMenuItem);
 
-	// L29: The bitmap/icon returned by LoadPicture is converted to the appropriate format automatically,
-	// so the following is no longer necessary:
-	//if (aIconNumber == 0)
-	//	aIconNumber = 1; // Must be != 0 to tell LoadPicture that "icon must be loaded, never a bitmap".
+	if (aIconNumber == 0 && !g_os.IsWinVistaOrLater()) // The owner-draw method used on XP and older expects an icon.
+		aIconNumber = 1; // Must be != 0 to tell LoadPicture to return an icon, converting from bitmap if necessary.
 
 	int image_type;
 	HICON new_icon;
@@ -1455,7 +1454,7 @@ ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int 
 
 	if (g_os.IsWinVistaOrLater())
 	{
-		if (image_type == IMAGE_ICON) // Convert to 32-bit bitmap:
+		if (image_type != IMAGE_BITMAP) // Convert to 32-bit bitmap:
 		{
 			new_copy = IconToBitmap32(new_icon, true);
 			// Even if conversion failed, we have no further use for the icon:
@@ -1470,20 +1469,7 @@ ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int 
 	}
 	else
 	{
-		if (image_type == IMAGE_BITMAP) // Convert to icon:
-		{
-			ICONINFO iconinfo;
-			iconinfo.fIcon = TRUE;
-			iconinfo.hbmMask = (HBITMAP)new_icon;
-			iconinfo.hbmColor = (HBITMAP)new_icon;
-			new_copy = (HBITMAP)CreateIconIndirect(&iconinfo);
-			// Even if conversion failed, we have no further use for the bitmap:
-			DeleteObject((HBITMAP)new_icon);
-			if (!new_copy)
-				return FAIL;
-			new_icon = (HICON)new_copy;
-		}
-
+		// LoadPicture already converted to icon if needed, due to aIconNumber > 0.
 		if (aMenuItem->mIcon) // Delete previous icon.
 			DestroyIcon(aMenuItem->mIcon);
 	}

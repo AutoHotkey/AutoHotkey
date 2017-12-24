@@ -28,13 +28,16 @@ static HANDLE sMouseMutex = NULL;
 #define MOUSE_MUTEX_NAME _T("AHK Mouse")
 
 // Whether to disguise the next up-event for lwin/rwin to suppress Start Menu.
+// There is only one variable because even if multiple modifiers are pressed
+// simultaneously and they do not cancel each other out, disguising one will
+// have the effect of disguising all (with the exception that key-repeat can
+// reset LWin/RWin after the other modifier is released, so this variable
+// should not be reset until all Win keys are released).
 // These are made global, rather than static inside the hook function, so that
 // we can ensure they are initialized by the keyboard init function every
 // time it's called (currently it can be only called once):
-static bool sDisguiseNextLWinUp;        // Initialized by ResetHook().
-static bool sDisguiseNextRWinUp;        //
-static bool sDisguiseNextLAltUp;        //
-static bool sDisguiseNextRAltUp;        //
+static bool sDisguiseNextMenu;          // Initialized by ResetHook().
+static bool sUndisguisedMenuInEffect;	//
 static bool sAltTabMenuIsVisible;       //
 
 // The prefix key that's currently down (i.e. in effect).
@@ -625,54 +628,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// this_key.no_suppress &= ~NO_SUPPRESS_NEXT_UP_EVENT;
 	}
 
-	if (aHook == g_KeybdHook)
-	{
-		// The below DISGUISE events are done only after ignored events are returned from, above.
-		// In other words, only non-ignored events (usually physical) are disguised.  The Send {Blind}
-		// method is designed with this in mind, since it's more concerned that simulated keystrokes
-		// don't get disguised (i.e. it seems best to disguise physical keystrokes even during {Blind} mode).
-		// Do this only after the above because the SuppressThisKey macro relies
-		// on the vk variable being available.  It also relies upon the fact that sc has
-		// already been properly determined. Also, in rare cases it may be necessary to disguise
-		// both left and right, which is why it's not done as a generic windows key:
-		if (   aKeyUp && ((sDisguiseNextLWinUp && aVK == VK_LWIN) || (sDisguiseNextRWinUp && aVK == VK_RWIN)
-			|| (sDisguiseNextLAltUp && aVK == VK_LMENU) || (sDisguiseNextRAltUp && aVK == VK_RMENU))   )
-		{
-			// Do this first to avoid problems with reentrancy triggered by the KeyEvent() calls further below.
-			switch (aVK)
-			{
-			case VK_LWIN: sDisguiseNextLWinUp = false; break;
-			case VK_RWIN: sDisguiseNextRWinUp = false; break;
-			// UPDATE: The comment below is no longer a concern since neutral keys are translated higher above
-			// into their left/right-specific counterpart:
-			// For now, assume VK_MENU the left alt key.  This neutral key is probably never received anyway
-			// due to the nature of this type of hook on NT/2k/XP and beyond.  Later, this can be further
-			// optimized to check the scan code and such (what's being done here isn't that essential to
-			// start with, so it's not a high priority -- but when it is done, be sure to review the
-			// above IF statement also).
-			case VK_LMENU: sDisguiseNextLAltUp = false; break;
-			case VK_RMENU: sDisguiseNextRAltUp = false; break;
-			}
-			// Send our own up-event to replace this one.  But since ours has the Shift key
-			// held down for it, the Start Menu or foreground window's menu bar won't be invoked.
-			// It's necessary to send an up-event so that it's state, as seen by the system,
-			// is put back into the up position, which would be needed if its previous
-			// down-event wasn't suppressed (probably due to the fact that this win or alt
-			// key is a prefix but not a suffix).
-			// Fix for v1.0.25: Use CTRL vs. Shift to avoid triggering the LAlt+Shift language-change hotkey.
-			// This is definitely needed for ALT, but is done here for WIN also in case ALT is down,
-			// which might cause the use of SHIFT as the disguise key to trigger the language switch.
-			if (!(g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL))) // Neither CTRL key is down.
-				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey);
-			// Since the above call to KeyEvent() calls the keybd hook recursively, a quick down-and-up
-			// on Control is all that is necessary to disguise the key.  This is because the OS will see
-			// that the Control keystroke occurred while ALT or WIN is still down because we haven't
-			// done CallNextHookEx() yet.
-			// Fix for v1.0.36.07: Don't return here because this release might also be a hotkey such as
-			// "~LWin Up::".
-		}
-	}
-	else // Mouse hook
+	if (aHook == g_MouseHook)
 	{
 		// If no vk, there's no mapping for this key, so currently there's no way to process it.
 		if (!aVK)
@@ -1115,8 +1071,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				&& hotkey_id_with_flags == HOTKEY_ID_INVALID) // v1.0.44.04: Must check this because this prefix might be being used in its role as a suffix instead.
 			{
 				if (this_key.as_modifiersLR) // Always false if our caller is the mouse hook.
-					return (this_key.was_just_used == AS_PREFIX_FOR_HOTKEY) ? AllowKeyToGoToSystemButDisguiseWinAlt
-						: AllowKeyToGoToSystem;  // i.e. don't disguise Win or Alt key if it didn't fire a hotkey.
+					return AllowKeyToGoToSystem; // Win/Alt will be disguised if needed.
 				// Otherwise:
 				return (this_key.no_suppress & NO_SUPPRESS_PREFIX) ? AllowKeyToGoToSystem : SuppressThisKey;
 			}
@@ -1693,7 +1648,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		this_key.no_suppress &= ~NO_SUPPRESS_NEXT_UP_EVENT; // This ticket has been used up, so remove it.
 	}
 
-	// v1.0.41: This must be done prior to the setting of sDisguiseNextLWinUp and similar items below.
+	// v1.0.41: This must be done prior to the setting of sDisguiseNextMenu below.
 	hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK;
 	if (hotkey_id_temp < Hotkey::sHotkeyCount // i.e. don't call the below for Alt-tab hotkeys and similar.
 		&& !firing_is_certain  // i.e. CriterionFiringIsCertain() wasn't already called earlier.
@@ -1734,84 +1689,60 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	// Determine the final ID at this late stage to improve maintainability:
 	HotkeyIDType hotkey_id_to_fire = hotkey_id_temp;
 
-	// If only a windows key was held down (and no other modifiers) to activate this hotkey,
-	// suppress the next win-up event so that the Start Menu won't appear (if other modifiers are
-	// present, there's no need to do this because the Start Menu doesn't appear, at least on WinXP).
-	// The appearance of the Start Menu would be caused by the fact that the hotkey's suffix key
-	// was suppressed, therefore the OS doesn't see that the WIN key "modified" anything while
-	// it was held down.  Note that if the WIN key is auto-repeating due to the user having held
-	// it down long enough, when the user presses the hotkey's suffix key, the auto-repeating
-	// stops, probably because auto-repeat is a very low-level feature.  It's also interesting
-	// that unlike non-modifier keys such as letters, the auto-repeat does not resume after
-	// the user releases the suffix, even if the WIN key is kept held down for a long time.
-	// When the user finally releases the WIN key, that release will be disguised if called
-	// for by the logic below.
-	if (aHook == g_KeybdHook)
+	// Check if the WIN or ALT key needs to be masked:
+	if (   (g_modifiersLR_logical & (MOD_LALT|MOD_RALT|MOD_LWIN|MOD_RWIN)) // ALT and/or WIN is down.
+		&& !fire_with_no_suppress // This hotkey will be suppressed (hotkeys with ~no-suppress should not require masking).
+		&& (sUndisguisedMenuInEffect || aHook == g_MouseHook)   ) // Menu has not already been disguised (as tracked by the keyboard hook), or this is the mouse hook, which may require masking anyway.
 	{
-		if (!(g_modifiersLR_logical & ~(MOD_LWIN | MOD_RWIN))) // Only lwin, rwin, both, or neither are currently down.
+		// If only a windows key was held down to activate this hotkey, suppress the next win-up
+		// event so that the Start Menu won't appear.  The appearance of the Start Menu would be
+		// caused by the fact that the hotkey's suffix key was suppressed, therefore the OS doesn't
+		// see that the WIN key "modified" anything while it was held down.
+		// Although having other modifiers present prevents the Start Menu from appearing, that's
+		// handled by later checks since the WIN key can auto-repeat, putting an unmodified WIN
+		// back into effect after the other mods are released.  This only happens if the WIN key
+		// is the most recently pressed physical key, such as if this hotkey is a mouse button.
+		// When the user finally releases the WIN key, that release will be disguised if called
+		// for by the logic below and in AllowIt().
+		if (   (g_modifiersLR_logical & (MOD_LWIN|MOD_RWIN)) // One or both are down and may require disguising.
+			&& ((g_modifiersLR_physical & (MOD_LWIN|MOD_RWIN)) // Always disguise if physically down, for backward compatibility.
+				|| Hotkey::HotkeyRequiresModLR(hotkey_id_to_fire, MOD_LWIN|MOD_RWIN))   ) // If not physically down, avoid masking hotkeys which could be intended to send {LWin up}, such as for AppsKey::RWin.
 		{
-			// If it's used as a prefix, there's no need (and it would probably break something)
-			// to disguise the key this way since the prefix-handling logic already does that
-			// whenever necessary:
-			if ((g_modifiersLR_logical & MOD_LWIN) && !kvk[VK_LWIN].used_as_prefix)
-				sDisguiseNextLWinUp = true;
-			if ((g_modifiersLR_logical & MOD_RWIN) && !kvk[VK_RWIN].used_as_prefix)
-				sDisguiseNextRWinUp = true;
+			sDisguiseNextMenu = true;
+			// An earlier stage has ensured that the keyboard hook is installed for suppression of LWin/RWin if
+			// this is a mouse hotkey, because the sending of CTRL directly (here) would otherwise not suppress
+			// the Start Menu (though it does supress menu bar activation for ALT hotkeys, as described below).
 		}
-	}
-	else // Mouse hook
-	{
-		// The mouse hook requires suppression in more situations than the keyboard because the
-		// OS does not consider LWin/RWin to have modified a mouse button, only a keyboard key.
-		// Thus, the Start Menu appears in the following cases if the user releases LWin/RWin
-		// *after* the other modifier:
-		// #+MButton::return
-		// #^MButton::return
-		if (!(g_modifiersLR_logical & (MOD_LALT|MOD_RALT)))
-		{
-			if ((g_modifiersLR_logical & MOD_LWIN) && !kvk[VK_LWIN].used_as_prefix)
-				sDisguiseNextLWinUp = true;
-			else if ((g_modifiersLR_logical & MOD_RWIN) && !kvk[VK_RWIN].used_as_prefix)
-				sDisguiseNextRWinUp = true;
-		}
-		// An earlier stage has ensured that the keyboard hook is installed for the above, because the sending
-		// of CTRL directly (here) would otherwise not suppress the Start Menu for LWin/RWin (though it does
-		// supress menu bar activation for ALT hotkeys, as described below).
-	}
 
-	// For maximum reliability on the maximum range of systems, it seems best to do the above
-	// for ALT keys also, to prevent them from invoking the icon menu or menu bar of the
-	// foreground window (rarer than the Start Menu problem, above, I think).
-	// Update for v1.0.25: This is usually only necessary for hotkeys whose only modifier is ALT.
-	// For example, Shift-Alt hotkeys do not need it if Shift is pressed after Alt because Alt
-	// "modified" the shift so the OS knows it's not a naked ALT press to activate the menu bar.
-	// Conversely, if Shift is pressed prior to Alt, but released before Alt, I think the shift-up
-	// counts as a "modification" and the same rule applies.  However, if shift is released after Alt,
-	// that would activate the menu bar unless the ALT key is disguised below.  This issue does
-	// not apply to the WIN key above because apparently it is disguised automatically
-	// whenever some other modifier was involved with it in any way and at any time during the
-	// keystrokes that comprise the hotkey.
-	if ((g_modifiersLR_logical & MOD_LALT) && !kvk[VK_LMENU].used_as_prefix)
-	{
-		if (g_KeybdHook)
-			sDisguiseNextLAltUp = true;
-		else
-			// Since no keyboard hook, no point in setting the variable because it would never be acted up.
-			// Instead, disguise the key now with a CTRL keystroke. Note that this is not done for
-			// mouse buttons that use the WIN key as a prefix because it does not work reliably for them
-			// (i.e. sometimes the Start Menu appears, even if two CTRL keystrokes are sent rather than one).
-			// Therefore, as of v1.0.25.05, mouse button hotkeys that use only the WIN key as a modifier cause
-			// the keyboard hook to be installed.  This determination is made during the hotkey loading stage.
-			KeyEvent(KEYDOWNANDUP, g_MenuMaskKey);
-	}
-	else if ((g_modifiersLR_logical & MOD_RALT) && !kvk[VK_RMENU].used_as_prefix && !ActiveWindowLayoutHasAltGr()) // If RAlt==AltGr, it should never need disguising.
-	{
-		// The two else if's above: If it's used as a prefix, there's no need (and it would probably break something)
-		// to disguise the key this way since the prefix-handling logic already does that whenever necessary.
-		if (g_KeybdHook)
-			sDisguiseNextRAltUp = true;
-		else
-			KeyEvent(KEYDOWNANDUP, g_MenuMaskKey);
+		// For maximum reliability on the maximum range of systems, it seems best to do the above
+		// for ALT keys also, to prevent them from invoking the icon menu or menu bar of the
+		// foreground window (rarer than the Start Menu problem, above, I think).
+		// Update for v1.0.25: This is usually only necessary for hotkeys whose only modifier is ALT.
+		// For example, Shift-Alt hotkeys do not need it if Shift is pressed after Alt because Alt
+		// "modified" the shift so the OS knows it's not a naked ALT press to activate the menu bar.
+		// Conversely, if Shift is pressed prior to Alt, but released before Alt, I think the shift-up
+		// counts as a "modification" and the same rule applies.  However, if shift is released after Alt,
+		// that would activate the menu bar unless the ALT key is disguised below.  This issue does
+		// not apply to the WIN key above because apparently it is disguised automatically
+		// whenever some other modifier was involved with it in any way and at any time during the
+		// keystrokes that comprise the hotkey.
+		if (   !sDisguiseNextMenu // It's not already going to be disguised due to the section above or a previous hotkey.
+			&& (g_modifiersLR_logical & (MOD_LALT|MOD_RALT)) // If RAlt==AltGr, it should never need disguising, but in that case LCtrl is also down, so ActiveWindowLayoutHasAltGr() isn't checked.
+			&& !(g_modifiersLR_logical & (MOD_LCONTROL|MOD_RCONTROL)) // No need to mask if Ctrl is down (the key-repeat issue that affects the WIN key does not affect ALT).
+			&& ((g_modifiersLR_physical & (MOD_LALT|MOD_RALT)) // Always disguise if physically down, for backward compatibility.
+				|| Hotkey::HotkeyRequiresModLR(hotkey_id_to_fire, MOD_LALT|MOD_RALT))   ) // If not physically down, avoid masking hotkeys which could be intended to send {Alt up}, such as for AppsKey::Alt.
+		{
+			if (g_KeybdHook)
+				sDisguiseNextMenu = true;
+			else
+				// Since no keyboard hook, no point in setting the variable because it would never be acted upon.
+				// Instead, disguise the key now with a CTRL keystroke. Note that this is not done for
+				// mouse buttons that use the WIN key as a prefix because it does not work reliably for them
+				// (i.e. sometimes the Start Menu appears, even if two CTRL keystrokes are sent rather than one).
+				// Therefore, as of v1.0.25.05, mouse button hotkeys that use only the WIN key as a modifier cause
+				// the keyboard hook to be installed.  This determination is made during the hotkey loading stage.
+				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey);
+		}
 	}
 
 	switch (hotkey_id_to_fire)
@@ -2069,7 +2000,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// Alt key events would prevent it):
 			// *LAlt up::Send {LWin up}
 			// *LAlt::Send {LWin down}
-			return this_key.hotkey_down_was_suppressed ? SuppressThisKey : AllowKeyToGoToSystemButDisguiseWinAlt;
+			return this_key.hotkey_down_was_suppressed ? SuppressThisKey : AllowKeyToGoToSystem;
 
 		if (fire_with_no_suppress) // Plus we know it's not a modifier since otherwise it would've returned above.
 		{
@@ -2182,7 +2113,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			this_key.no_suppress |= NO_SUPPRESS_NEXT_UP_EVENT;
 			return AllowKeyToGoToSystem;
 		}
-		else if ((aVK == VK_LMENU || aVK == VK_RMENU) && !g_os.IsWin10OrLater())
+		else if (aVK == VK_LMENU || aVK == VK_RMENU)
 		{
 			// Fix for v1.1.26.01: Added KEY_BLOCK_THIS to suppress the Alt key-up, which fixes an issue
 			// which could be reproduced as follows:
@@ -2192,7 +2123,9 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			//    visible in the menus (usually).
 			//  - Press LAlt and the menus are activated once, even though LAlt is supposed to be blocked.
 			// Additionally, a Windows 10 check was added because the original issue this workaround was
-			// intended for doesn't appear to occur on Windows 10 (tested on 10.0.15063).
+			// intended for doesn't appear to occur on Windows 10 (tested on 10.0.15063).  This check was
+			// removed for v1.1.27.00 to ensure consistent behaviour of AltGr hotkeys across OS versions.
+			// (Sending RAlt up on a layout with AltGr causes the system to send LCtrl up.)
 			// Testing on XP, Vista and 8.1 showed that the #LAlt issue below only occurred if the key-up
 			// was allowed to pass through to the active window.  It appeared to be a non-issue on Win 10
 			// even when the Alt key-up was passed through.
@@ -2304,7 +2237,7 @@ LRESULT SuppressThisKeyFunc(const HHOOK aHook, LPARAM lParam, const vk_type aVK,
 
 
 LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, const vk_type aVK, const sc_type aSC
-	, bool aKeyUp, KeyHistoryItem *pKeyHistoryCurr, WPARAM aHotkeyIDToPost, bool aDisguiseWinAlt)
+	, bool aKeyUp, KeyHistoryItem *pKeyHistoryCurr, WPARAM aHotkeyIDToPost)
 // Always use the parameter vk rather than event.vkCode because the caller or caller's caller
 // might have adjusted vk, namely to make it a left/right specific modifier key rather than a
 // neutral one.
@@ -2465,7 +2398,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 			&& !(g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL))) // Neither CTRL key is down.
 			sAltTabMenuIsVisible = true;
 
-		if (kvk[aVK].as_modifiersLR) // It's a modifier key.
+		if (modLR_type modLR = kvk[aVK].as_modifiersLR) // It's a modifier key.
 		{
 			// Don't do it this way because then the alt key itself can't be reliable used as "AltTabMenu"
 			// (due to ShiftAltTab causing sAltTabMenuIsVisible to become false):
@@ -2481,38 +2414,51 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 				// display the Alt-tab menu, we would incorrectly believe the menu to be displayed:
 				sAltTabMenuIsVisible = false;
 
-			bool vk_is_win = aVK == VK_LWIN || aVK == VK_RWIN;
-			if (aDisguiseWinAlt && aKeyUp && (vk_is_win || aVK == VK_MENU || aVK == VK_LMENU
-				|| aVK == VK_RMENU && !ActiveWindowLayoutHasAltGr())) // AltGr should never need disguising, and avoiding it may help avoid unwanted side-effects.
+			if (  !(modLR & (MOD_LALT | MOD_RALT | MOD_LWIN | MOD_RWIN))  ) // It's not Win, Alt or AltGr (but AltGr is excluded below by virtue of the fact that it puts LCtrl into effect).
 			{
-				// I think the best way to do this is to suppress the given key-event and substitute
-				// some new events to replace it.  This is because otherwise we would probably have to
-				// Sleep() or wait for the shift key-down event to take effect before calling
-				// CallNextHookEx(), so that the shift key will be in effect in time for the win
-				// key-up event to be disguised properly.  UPDATE: Currently, this doesn't check
-				// to see if a shift key is already down for some other reason; that would be
-				// pretty rare anyway, and I have more confidence in the reliability of putting
-				// the shift key down every time.  UPDATE #2: Ctrl vs. Shift is now used to avoid
-				// issues with the system's language-switch hotkey.  See detailed comments in
-				// SetModifierLRState() about this.
-				// Also, check the current logical state of CTRL to see if it's already down, for these reasons:
-				// 1) There is no need to push it down again, since the release of ALT or WIN will be
-				//    successfully disguised as long as it's down currently.
-				// 2) If it's already down, the up-event part of the disguise keystroke would put it back
-				//    up, which might mess up other things that rely upon it being down.
-				bool disguise_it = true;  // Starting default.
-				if (g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL))
-					disguise_it = false; // LCTRL or RCTRL is already down, so disguise is already in effect.
-				else if (   vk_is_win && (g_modifiersLR_logical & (MOD_LSHIFT | MOD_RSHIFT | MOD_LALT | MOD_RALT))   )
-					disguise_it = false; // WIN key disguise is easier to satisfy, so don't need it in these cases either.
+				// Pressing or releasing Ctrl or Shift serves to disguise Alt or Win.
+				sUndisguisedMenuInEffect = false;
+			}
+			else if (!aKeyUp) // Key-down.
+			{
+				// sUndisguisedMenuInEffect can be true or false prior to this.
+				//  LAlt (true) + LWin = both disguised (false).
+				//  LWin (true) + LAlt = both disguised (false).
+				if (modLR & (MOD_LWIN | MOD_RWIN))
+					sUndisguisedMenuInEffect = !(g_modifiersLR_logical & ~(MOD_LWIN | MOD_RWIN)); // If any other modifier is down, disguise is already in effect.
+				else // ALT
+					sUndisguisedMenuInEffect = !(g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL)); // If CTRL is down, disguise is already in effect.
+			}
+			else if (sDisguiseNextMenu)
+			{
 				// Since the below call to KeyEvent() calls the keybd hook recursively, a quick down-and-up
-				// on Control is all that is necessary to disguise the key.  This is because the OS will see
-				// that the Control keystroke occurred while ALT or WIN is still down because we haven't
-				// done CallNextHookEx() yet.
-				if (disguise_it)
-					KeyEvent(KEYDOWNANDUP, g_MenuMaskKey); // Fix for v1.0.25: Use Ctrl vs. Shift to avoid triggering the LAlt+Shift language-change hotkey.
+				// is all that is necessary to disguise the key.  This is because the OS will see that the
+				// keystroke occurred while ALT or WIN is still down because we haven't done CallNextHookEx() yet.
+				if (sUndisguisedMenuInEffect)
+					KeyEvent(KEYDOWNANDUP, g_MenuMaskKey);
+				// If LWin/RWin is still physically down (or down due to an explicit Send, such as a remapping),
+				// keep watching until it is released so that if key-repeat puts it back into effect, it will be
+				// disguised again.  _non_ignored is used to ignore temporary modifier changes made during a
+				// Send which aren't explicit, such as `Send x` temporarily releasing LWin/RWin.  Without this,
+				// something like AppsKey::RWin would not work well with other hotkeys which Send.
+				if (  !(g_modifiersLR_logical_non_ignored & (MOD_LWIN | MOD_RWIN))  )
+				{
+					sDisguiseNextMenu = false;
+					sUndisguisedMenuInEffect = false;
+				}
+			}
+			else // Win, Alt or AltGr was released and not disguised.
+			{
+				// Now either no menu keys are down or they have been disguised by this keyup event.
+				// Key-repeat may put the menu key back into effect, but that will be detected above.
+				sUndisguisedMenuInEffect = false;
 			}
 		} // It's a modifier key.
+		else // It's not a modifier key.
+		{
+			// Any key press or release serves to disguise the menu key.
+			sUndisguisedMenuInEffect = false;
+		}
 	} // Keyboard vs. mouse hook.
 
 	// Since above didn't return, this keystroke is being passed through rather than suppressed.
@@ -4004,6 +3950,7 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 		// modifiersLR into its column in the kvkm or kscm arrays.
 
 		mod_type modifiers, i_modifiers_merged;
+		modLR_type i_modifiersLR_excluded;
 		int modifiersLR;  // Don't make this modLR_type to avoid integer overflow, since it's a loop-counter.
 		bool prev_hk_is_key_up, this_hk_is_key_up;
 		HotkeyIDType this_hk_id;
@@ -4017,21 +3964,23 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 			i_modifiers_merged = this_hk.modifiers;
 			if (this_hk.modifiersLR)
 				i_modifiers_merged |= ConvertModifiersLR(this_hk.modifiersLR);
+			
+			// Fixed for v1.1.27.00: Calculate the modifiersLR bits which are NOT allowed to be set.
+			// This fixes <^A erroneously taking over <>^A, and reduces the work that must be done
+			// on each iteration of the loop below.
+			i_modifiersLR_excluded = this_hk.AllowExtraModifiers ? 0
+				: ~(this_hk.modifiersLR | ConvertModifiers(this_hk.modifiers));
 
 			for (modifiersLR = 0; modifiersLR <= MODLR_MAX; ++modifiersLR)  // For each possible LR value.
 			{
+				if (modifiersLR & i_modifiersLR_excluded) // Checked first to avoid the ConvertModifiersLR call in many cases.
+					continue;
 				modifiers = ConvertModifiersLR(modifiersLR);
-				if (this_hk.AllowExtraModifiers)
-				{
-					// True if modifiersLR is a superset of i's modifier value.  In other words,
-					// modifiersLR has the minimum required keys but also has some
-					// extraneous keys, which are allowed in this case:
-					if (i_modifiers_merged != (modifiers & i_modifiers_merged))
-						continue;
-				}
-				else
-					if (i_modifiers_merged != modifiers)
-						continue;
+				// Below is true if modifiersLR is a superset of i's modifier value.  In other words,
+				// modifiersLR has the minimum required keys.  It may also have some extraneous keys,
+				// but only if they were not excluded by the check above, in which case they are allowed.
+				if (i_modifiers_merged != (modifiers & i_modifiers_merged))
+					continue;
 
 				// In addition to the above, modifiersLR must also have the *specific* left or right keys
 				// found in i's modifiersLR.  In other words, i's modifiersLR must be a perfect subset
@@ -4564,10 +4513,8 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 
 		ZeroMemory(g_PhysicalKeyState, sizeof(g_PhysicalKeyState));
 
-		sDisguiseNextLWinUp = false;
-		sDisguiseNextRWinUp = false;
-		sDisguiseNextLAltUp = false;
-		sDisguiseNextRAltUp = false;
+		sDisguiseNextMenu = false;
+		sUndisguisedMenuInEffect = false;
 		sAltTabMenuIsVisible = (FindWindow(_T("#32771"), NULL) != NULL); // I've seen indications that MS wants this to work on all operating systems.
 
 		ZeroMemory(sPadState, sizeof(sPadState));
