@@ -4095,13 +4095,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				// appear above this line:
 				if (mNextLineIsFunctionBody)
 				{
-					if (g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE)
+					if (declare_type == VAR_DECLARE_LOCAL)
 					{
-						if (declare_type == VAR_DECLARE_LOCAL)
-							declare_type |= VAR_FORCE_LOCAL; // v1.1.27: "local" by itself restricts globals to only those declared inside the function.
-						g->CurrentFunc->mDefaultVarType = declare_type;
-						// No further action is required.
-						return OK;
+						// v1.1.27: "local" by itself restricts globals to only those declared inside the function.
+						declare_type |= VAR_FORCE_LOCAL;
 					}
 					// v1.1.27: Allow "local" and "static" to be combined, leaving the restrictions on globals in place.
 					else if (g->CurrentFunc->mDefaultVarType == (VAR_DECLARE_LOCAL | VAR_FORCE_LOCAL) && declare_type == VAR_DECLARE_STATIC)
@@ -4109,6 +4106,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 						g->CurrentFunc->mDefaultVarType = (VAR_DECLARE_STATIC | VAR_FORCE_LOCAL);
 						return OK;
 					}
+					g->CurrentFunc->mDefaultVarType = declare_type;
+					// No further action is required.
+					return OK;
 				}
 				// Otherwise, it occurs too far down in the body.
 				return ScriptError(ERR_UNRECOGNIZED_ACTION, aLineText); // Vague error since so rare.
