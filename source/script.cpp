@@ -11180,14 +11180,9 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 						this_infix[-1].is_lvalue = TRUE;
 				}
 			}
-			else if (infix_symbol == SYM_PRE_INCREMENT || infix_symbol == SYM_PRE_DECREMENT)
-			{
-				// Same as other assignments (above), but need to check SYM_DYNAMIC as well since
-				// the target won't have been converted to SYM_VAR yet (not applicable with #NoEnv).
-				if (this_infix[1].symbol == SYM_VAR
-					|| this_infix[1].symbol == SYM_DYNAMIC && !SYM_DYNAMIC_IS_DOUBLE_DEREF(this_infix[1]))
-					this_infix[1].is_lvalue = TRUE;
-			}
+			//else: if it's pre-increment/decrement, looking to the right in infix is insufficient.
+			// For cases like ++this.x, we must wait until the operator is popped from the stack.
+
 			// If the symbol waiting on the stack has a lower precedence than the current symbol, push the
 			// current symbol onto the stack so that it will be processed sooner than the waiting one.
 			// Otherwise, pop waiting items off the stack (by means of i not being incremented) until their
@@ -11271,8 +11266,9 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 		this_postfix->circuit_token = NULL; // Set default. It's only ever overridden after it's in the postfix array.
 		// Additional processing for syntax sugar:
 		SymbolType postfix_symbol = this_postfix->symbol;
-		if (postfix_symbol == SYM_FUNC)
+		switch (postfix_symbol)
 		{
+		case SYM_FUNC:
 			infix_symbol = this_infix->symbol;
 			// The sections below pre-process assignments to work with objects:
 			//	x.y := z	->	x "y" z (set)
@@ -11345,9 +11341,23 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				// if this_infix[1] is SYM_DOT.  In that case, a later iteration should apply
 				// the transformations above to that operator.
 			}
-		}
-		else if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(postfix_symbol))
-		{
+
+		case SYM_NEW: // This is probably something like "new Class", without "()", otherwise an earlier stage would've handled it.
+		case SYM_REGEXMATCH: // a ~= b  ->  RegExMatch(a, b)
+			this_postfix->symbol = SYM_FUNC;
+			break;
+
+		case SYM_PRE_INCREMENT:
+		case SYM_PRE_DECREMENT:
+			// Mark the target variable as an l-value for #Warn ClassOverwrite.
+			if (postfix_count && postfix[postfix_count-1]->symbol == SYM_VAR)
+				postfix[postfix_count-1]->is_lvalue = TRUE;
+			//else: It's invalid, but for backward-compatibility it is ignored at this stage.
+			break;
+
+		default:
+			if (!IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(postfix_symbol))
+				break;
 			if (this_postfix->deref) // The section above marked this as an object assignment in an earlier iteration.
 			{
 				ExprTokenType *assign_op = this_postfix;
@@ -11375,11 +11385,6 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				}
 				assign_op->symbol = SYM_FUNC; // An earlier stage already set up the func and param_count.
 			}
-		}
-		else if (postfix_symbol == SYM_NEW // This is probably something like "new Class", without "()", otherwise an earlier stage would've handled it.
-			|| postfix_symbol == SYM_REGEXMATCH) // a ~= b  ->  RegExMatch(a, b)
-		{
-			this_postfix->symbol = SYM_FUNC;
 		}
 		++postfix_count;
 	} // End of loop that builds postfix array from the infix array.
