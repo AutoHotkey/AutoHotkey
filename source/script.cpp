@@ -10273,7 +10273,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				return line->LineError(ERR_OUTOFMEM);
 
 			token->symbol = SYM_STRING; // Set default. ExpandArgs() mightn't set it.
-					delete token;
 			token->mem_to_free = NULL;
 			token->marker_length = -1;
 
