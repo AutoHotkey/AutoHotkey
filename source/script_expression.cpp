@@ -849,16 +849,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			right_int64 = TokenToInt64(right); // Although PURE_FLOAT can't be hex, for simplicity and due to the rarity of encountering a PURE_FLOAT in this case, the slight performance reduction of calling TokenToInt64() is done for both PURE_FLOAT and PURE_INTEGER.
 			// Note that it is not legal to perform ~, &, |, or ^ on doubles.  Because of this,
 			// any floating point operand is truncated to an integer above.
-			if (right_int64 < 0 || right_int64 > UINT_MAX)
-				// Treat it as a 64-bit signed value, since no other aspects of the program
-				// (e.g. IfEqual) will recognize an unsigned 64 bit number.
-				this_token.value_int64 = ~right_int64;
-			else
-				// Treat it as a 32-bit unsigned value when inverting and assigning.  This is
-				// because assigning it as a signed value would "convert" it into a 64-bit
-				// value, which in turn is caused by the fact that the script sees all negative
-				// numbers as 64-bit values (e.g. -1 is 0xFFFFFFFFFFFFFFFF).
-				this_token.value_int64 = (size_t)(DWORD)~(DWORD)right_int64; // Casting this way avoids compiler warning.
+			// Treat it as a 64-bit signed value, since no other aspects of the program
+			// (e.g. IfEqual) will recognize an unsigned 64 bit number.
+			this_token.value_int64 = ~right_int64;
 			this_token.symbol = SYM_INTEGER; // Must be done only after its old value was used above. v1.0.36.07: Fixed to be SYM_INTEGER vs. right_is_number for SYM_BITNOT.
 			break;
 
