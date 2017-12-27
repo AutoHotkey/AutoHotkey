@@ -4556,11 +4556,14 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 	else if (aActionType == ACT_LOOP)
 	{
 		LPTSTR cp = StrChrAny(action_args, EXPR_OPERAND_TERMINATORS);
-		LPTSTR delim = cp ? omit_leading_whitespace(cp) : NULL;
-		if (delim && *delim == g_delimiter && delim > action_args)
+		if (cp && cp > action_args && (IS_SPACE_OR_TAB(*cp) || *cp == g_delimiter))
 		{
-			// Now delim points at the comma and term points at the comma or the first whitespace
-			// character following the arg.
+			LPTSTR next_nonspace = omit_leading_whitespace(cp);
+			bool comma_was_used = *next_nonspace == g_delimiter;
+			// Now cp points at the next character after the first word, while next_nonspace points
+			// at the next non-whitespace character after that.  If comma_was_used, there is also
+			// a comma and potentially more whitespace to skip if a valid loop keyword is used.
+			TCHAR orig_char = *cp;
 			*cp = '\0'; // Terminate the sub-command name.
 			if (!_tcsicmp(_T("Files"), action_args))
 				aActionType = ACT_LOOP_FILE;
@@ -4570,16 +4573,15 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				aActionType = ACT_LOOP_READ;
 			else if (!_tcsicmp(_T("Parse"), action_args))
 				aActionType = ACT_LOOP_PARSE;
-			else
-			{
+			*cp = orig_char; // Undo the temporary termination.
+			if (aActionType != ACT_LOOP) // Loop sub-type discovered above.
+				// Set action_args to the start of the actual args, skipping the optional delimiter.
+				action_args = comma_was_used ? omit_leading_whitespace(next_nonspace + 1) : next_nonspace;
+			else if (comma_was_used)
 				// This is a plain word or variable reference followed by a comma.  It could be a
 				// multi-statement expression, but in this case the first sub-statement would have
 				// no effect, so it's probably an error.
-				return ScriptError(_tcschr(action_args, g_DerefChar)
-					? _T("Dynamic loop sub-commands are not supported.") : _T("Unknown loop sub-command.")
-					, action_args);
-			}
-			action_args = omit_leading_whitespace(delim + 1);
+				return ScriptError(_T("Invalid loop type."), aLineText);
 		}
 	}
 	switch (aActionType)
