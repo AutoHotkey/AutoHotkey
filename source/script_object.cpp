@@ -2120,7 +2120,7 @@ BIF_DECL(BIF_ClipboardAll)
 		if (size & 1)
 			((LPBYTE)data)[size++] = 0; // Size is rounded up so that `this.Data` will not truncate the last byte.
 		#endif
-		((LPTSTR)data)[size] = '\0';
+		*LPTSTR(LPBYTE(data)+size) = '\0'; // Cast to LPBYTE first because size is in bytes, not TCHARs.
 	}
 	_f_return(new ClipboardAll(data, size));
 }
