@@ -6950,17 +6950,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(_T("Parameter #9 must be blank."), NEW_RAW_ARG9);
 		break;
 
-	case ACT_MSGBOX:
-		if (aArgc > 1) // i.e. this MsgBox is using the 3-param or 4-param style.
-			if (!line.mArg[0].is_expression && !line.ArgHasDeref(1)) // i.e. if it's an expression (or an expression which was converted into a simple deref), we won't try to validate it now.
-				if (!IsPureNumeric(new_raw_arg1)) // Allow it to be entirely whitespace to indicate 0, like Aut2.
-					return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
-		if (aArgc > 3)
-			if (!line.mArg[3].is_expression && !line.ArgHasDeref(4)) // i.e. if it's an expression or deref, we won't try to validate it now.
-				if (!IsPureNumeric(new_raw_arg4, false, true, true))
-					return ScriptError(ERR_PARAM4_INVALID, new_raw_arg4);
-		break;
-
 	case ACT_IFMSGBOX:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertMsgBoxResult(new_raw_arg1))
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
