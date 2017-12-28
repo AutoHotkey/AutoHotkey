@@ -278,10 +278,8 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 		// testing shows that this adapt-to-layout method costs almost nothing in performance, especially since
 		// the active window, its thread, and its layout are retrieved only once for each Send rather than once
 		// for each keystroke.
-		HWND active_window;
-		if (active_window = GetForegroundWindow())
-			keybd_layout_thread = GetWindowThreadProcessId(active_window, NULL);
-		//else no foreground window, so keep keybd_layout_thread at default.
+		// v1.1.27.01: Use the thread of the focused control, which may differ from the active window.
+		keybd_layout_thread = GetFocusedThread();
 	}
 	sTargetKeybdLayout = GetKeyboardLayout(keybd_layout_thread); // If keybd_layout_thread==0, this will get our thread's own layout, which seems like the best/safest default.
 	sTargetLayoutHasAltGr = LayoutHasAltGr(sTargetKeybdLayout);  // Note that WM_INPUTLANGCHANGEREQUEST is not monitored by MsgSleep for the purpose of caching our thread's keyboard layout.  This is because it would be unreliable if another msg pump such as MsgBox is running.  Plus it hardly helps perf. at all, and hurts maintainability.
@@ -1772,10 +1770,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 				target_keybd_layout = sTargetKeybdLayout;
 			else
 			{
-				// Below is similar to the macro "Get_active_window_keybd_layout":
-				HWND active_window;
-				target_keybd_layout = GetKeyboardLayout((active_window = GetForegroundWindow())\
-					? GetWindowThreadProcessId(active_window, NULL) : 0); // When no foreground window, the script's own layout seems like the safest default.
+				target_keybd_layout = GetFocusedKeybdLayout();
 				target_layout_has_altgr = LayoutHasAltGr(target_keybd_layout); // In the case of this else's "if", target_layout_has_altgr was already set properly higher above.
 			}
 			if (target_layout_has_altgr != LAYOUT_UNDETERMINED) // This layout's AltGr status is already known with certainty.
@@ -3818,6 +3813,42 @@ LPTSTR ModifiersLRToText(modLR_type aModifiersLR, LPTSTR aBuf)
 	if (aModifiersLR & MOD_LALT) _tcscat(aBuf, _T("LAlt "));
 	if (aModifiersLR & MOD_RALT) _tcscat(aBuf, _T("RAlt "));
 	return aBuf;
+}
+
+
+
+DWORD GetFocusedThread(HWND aWindow)
+{
+	// Determine the thread for which we want the keyboard layout.
+	// When no foreground window, the script's own layout seems like the safest default.
+	DWORD thread_id = 0;
+	if (aWindow)
+	{
+		// Get thread of aWindow (which should be the foreground window).
+		thread_id = GetWindowThreadProcessId(aWindow, NULL);
+		// Get focus.  Benchmarks showed this additional step added only 6% to the time,
+		// and the total was only around 4µs per iteration anyway (on a Core i5-4460).
+		// It is necessary for UWP apps such as Microsoft Edge, and any others where
+		// the top-level window belongs to a different thread than the focused control.
+		GUITHREADINFO thread_info;
+		thread_info.cbSize = sizeof(thread_info);
+		if (GetGUIThreadInfo(thread_id, &thread_info))
+		{
+			if (thread_info.hwndFocus)
+			{
+				// Use the focused control's thread.
+				thread_id = GetWindowThreadProcessId(thread_info.hwndFocus, NULL);
+			}
+		}
+	}
+	return thread_id;
+}
+
+
+
+HKL GetFocusedKeybdLayout(HWND aWindow)
+{
+	return GetKeyboardLayout(GetFocusedThread(aWindow));
 }
 
 

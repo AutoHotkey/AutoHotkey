@@ -701,10 +701,11 @@ inline LPTSTR UTF8ToWide(LPCSTR str){
 // seems best to use the same approach to avoid calling ToAsciiEx() more than once in cases where a
 // script has hotstrings and also uses the Input command. Calling ToAsciiEx() twice in such a case would
 // be likely to aggravate its side effects with dead keys as described at length in the hook/Input code).
+// v1.1.27.01: Retrieve the layout of the thread which owns the focused control, not the active window.
+// This fixes UWP apps such as Microsoft Edge, where the top-level window is owned by a different process.
 #define Get_active_window_keybd_layout \
-	HWND active_window;\
-	HKL active_window_keybd_layout = GetKeyboardLayout((active_window = GetForegroundWindow())\
-		? GetWindowThreadProcessId(active_window, NULL) : 0); // When no foreground window, the script's own layout seems like the safest default.
+	HWND active_window = GetForegroundWindow();\
+	HKL active_window_keybd_layout = GetFocusedKeybdLayout(active_window);
 
 #define FONT_POINT(hdc, p) (-MulDiv(p, GetDeviceCaps(hdc, LOGPIXELSY), 72))
 #define DATE_FORMAT_LENGTH 14 // "YYYYMMDDHHMISS"
