@@ -2419,40 +2419,51 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 				// display the Alt-tab menu, we would incorrectly believe the menu to be displayed:
 				sAltTabMenuIsVisible = false;
 
-			if (  !(modLR & (MOD_LALT | MOD_RALT | MOD_LWIN | MOD_RWIN))  ) // It's not Win, Alt or AltGr (but AltGr is excluded below by virtue of the fact that it puts LCtrl into effect).
-			{
-				// Pressing or releasing Ctrl or Shift serves to disguise Alt or Win.
-				sUndisguisedMenuInEffect = false;
-			}
-			else if (!aKeyUp) // Key-down.
+			if (!aKeyUp) // Key-down.
 			{
 				// sUndisguisedMenuInEffect can be true or false prior to this.
 				//  LAlt (true) + LWin = both disguised (false).
 				//  LWin (true) + LAlt = both disguised (false).
 				if (modLR & (MOD_LWIN | MOD_RWIN))
 					sUndisguisedMenuInEffect = !(g_modifiersLR_logical & ~(MOD_LWIN | MOD_RWIN)); // If any other modifier is down, disguise is already in effect.
-				else // ALT
-					sUndisguisedMenuInEffect = !(g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL)); // If CTRL is down, disguise is already in effect.
+				else if (modLR & (MOD_LALT | MOD_RALT))
+					sUndisguisedMenuInEffect = !(g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL)); // If Ctrl is down (including if this Alt is AltGr), disguise is already in effect.
+				else // Shift or Ctrl: pressing either serves to disguise any previous Alt or Win.
+					sUndisguisedMenuInEffect = false;
 			}
 			else if (sDisguiseNextMenu)
 			{
-				// Since the below call to KeyEvent() calls the keybd hook recursively, a quick down-and-up
-				// is all that is necessary to disguise the key.  This is because the OS will see that the
-				// keystroke occurred while ALT or WIN is still down because we haven't done CallNextHookEx() yet.
-				if (sUndisguisedMenuInEffect)
-					KeyEvent(KEYDOWNANDUP, g_MenuMaskKey);
 				// If LWin/RWin is still physically down (or down due to an explicit Send, such as a remapping),
 				// keep watching until it is released so that if key-repeat puts it back into effect, it will be
 				// disguised again.  _non_ignored is used to ignore temporary modifier changes made during a
 				// Send which aren't explicit, such as `Send x` temporarily releasing LWin/RWin.  Without this,
 				// something like AppsKey::RWin would not work well with other hotkeys which Send.
+				// v1.1.27.01: This section now also handles Ctrl-up and Shift-up events, which not only fail to
+				// disguise Win but actually cause the Start menu to immediately appear even though the Win key
+				// has not been released.  This only occurs if it was not already disguised by the Ctrl/Shift down
+				// event; i.e. when an isolated Ctrl/Shift up event is received without a corresponding down event.
+				// "Physical" events of this kind can be sent by the system when switching from a window with UK
+				// layout to a window with US layout.  This is likely related to the UK layout having AltGr.
 				if (  !(g_modifiersLR_logical_non_ignored & (MOD_LWIN | MOD_RWIN))  )
 				{
+					if (modLR & (MOD_LCONTROL | MOD_RCONTROL | MOD_LSHIFT | MOD_RSHIFT))
+					{
+						// v1.1.27.01: Since this key being released is Ctrl/Shift and Win is not down, this must
+						// be in combination with Alt, which can be disguised by this event.  By contrast, if the
+						// Win key was down and sUndisguisedMenuInEffect == true (meaning there was no Ctrl/Shift
+						// down event prior to this up event), this event needs to be disguised for the reason
+						// described above.
+						sUndisguisedMenuInEffect = false;
+					}
 					sDisguiseNextMenu = false;
-					sUndisguisedMenuInEffect = false;
 				}
+				// Since the below call to KeyEvent() calls the keybd hook recursively, a quick down-and-up
+				// is all that is necessary to disguise the key.  This is because the OS will see that the
+				// keystroke occurred while ALT or WIN is still down because we haven't done CallNextHookEx() yet.
+				if (sUndisguisedMenuInEffect)
+					KeyEvent(KEYDOWNANDUP, g_MenuMaskKey); // This should also cause sUndisguisedMenuInEffect to be reset.
 			}
-			else // Win, Alt or AltGr was released and not disguised.
+			else // A modifier key was released and sDisguiseNextMenu was false.
 			{
 				// Now either no menu keys are down or they have been disguised by this keyup event.
 				// Key-repeat may put the menu key back into effect, but that will be detected above.
