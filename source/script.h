@@ -2984,6 +2984,9 @@ public:
 	void TerminateApp(ExitReasons aExitReason, int aExitCode); // L31: Added aExitReason. See script.cpp.
 	LineNumberType LoadFromFile();
 	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
+	LineNumberType CurrentLine();
+	LPTSTR CurrentFile();
+
 	ResultType UpdateOrCreateTimer(IObject *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
 		, bool aUpdatePriorityOnly);
 	void DeleteTimer(IObject *aLabel);
@@ -3015,6 +3018,8 @@ public:
 		, bool *apIsLocal = NULL);
 	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope);
 	static VarEntry *GetBuiltInVar(LPTSTR aVarName);
+
+	ResultType DerefInclude(LPTSTR &aOutput, LPTSTR aBuf);
 
 	WinGroup *FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound = false);
 	ResultType AddGroup(LPTSTR aGroupName);

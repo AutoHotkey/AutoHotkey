@@ -11804,20 +11804,32 @@ VarSizeType BIV_ScriptHwnd(LPTSTR aBuf, LPTSTR aVarName)
 	return MAX_INTEGER_LENGTH;
 }
 
+
+LineNumberType Script::CurrentLine()
+{
+	return mCurrLine ? mCurrLine->mLineNumber : mCombinedLineNumber;
+}
+
 VarSizeType BIV_LineNumber(LPTSTR aBuf, LPTSTR aVarName)
 // Caller has ensured that g_script.mCurrLine is not NULL.
 {
 	return aBuf
-		? (VarSizeType)_tcslen(ITOA(g_script.mCurrLine->mLineNumber, aBuf))
+		? (VarSizeType)_tcslen(ITOA(g_script.CurrentLine(), aBuf))
 		: MAX_INTEGER_LENGTH;
+}
+
+
+LPTSTR Script::CurrentFile()
+{
+	return Line::sSourceFile[mCurrLine ? mCurrLine->mFileIndex : mCurrFileIndex];
 }
 
 VarSizeType BIV_LineFile(LPTSTR aBuf, LPTSTR aVarName)
 // Caller has ensured that g_script.mCurrLine is not NULL.
 {
 	if (aBuf)
-		_tcscpy(aBuf, Line::sSourceFile[g_script.mCurrLine->mFileIndex]);
-	return (VarSizeType)_tcslen(Line::sSourceFile[g_script.mCurrLine->mFileIndex]);
+		_tcscpy(aBuf, g_script.CurrentFile());
+	return (VarSizeType)_tcslen(g_script.CurrentFile());
 }
 
 
