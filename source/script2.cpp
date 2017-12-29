@@ -1832,7 +1832,7 @@ ResultType Line::Input()
 			// For partial backward-compatibility, keys A-Z are upper-cased when handled by VK,
 			// but only if they actually correspond to those characters.  If this wasn't done,
 			// the character would always be lowercase since the shift state is not considered.
-			if (key_name[7] >= 'a' && key_name[7] <= 'z')
+			if (key_name[7] >= 'a' && key_name[7] <= 'z' && !key_name[8])
 				key_name[7] -= 32;
 		}
 		g_ErrorLevel->Assign(key_name);
