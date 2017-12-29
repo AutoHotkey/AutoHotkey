@@ -16434,7 +16434,7 @@ BIF_DECL(BIF_OnMessage)
 // Parameters:
 // 1: Message number to monitor.
 // 2: Name of the function that will monitor the message.
-// 3: (FUTURE): A flex-list of space-delimited option words/letters.
+// 3: Maximum threads and "register first" flag.
 {
 	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
 	// Set default result in case of early return; a blank value:
