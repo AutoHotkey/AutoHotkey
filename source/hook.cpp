@@ -2611,7 +2611,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	if (g_modifiersLR_logical
 		&& !(g_input.status == INPUT_IN_PROGRESS && g_input.TranscribeModifiedKeys)
 		&& g_modifiersLR_logical != MOD_LSHIFT && g_modifiersLR_logical != MOD_RSHIFT
-		&& g_modifiersLR_logical != (MOD_LSHIFT & MOD_RSHIFT)
+		&& g_modifiersLR_logical != (MOD_LSHIFT | MOD_RSHIFT)
 		&& !((g_modifiersLR_logical & (MOD_LALT | MOD_RALT)) && (g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL))))
 		// Since in some keybd layouts, AltGr (Ctrl+Alt) will produce valid characters (such as the @ symbol,
 		// which is Ctrl+Alt+Q in the German/IBM layout and Ctrl+Alt+2 in the Spanish layout), an attempt
