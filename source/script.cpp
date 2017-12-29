@@ -16193,7 +16193,7 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 
 
 
-ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine)
+ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine, LPTSTR aFooter)
 {
 	LPCTSTR message = _T(""), extra = _T("");
 	TCHAR extra_buf[MAX_NUMBER_SIZE], message_buf[MAX_NUMBER_SIZE];
@@ -16241,7 +16241,7 @@ ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine)
 	}	
 
 	TCHAR buf[MSGBOX_TEXT_SIZE];
-	Line::FormatError(buf, _countof(buf), FAIL, message, extra, aLine, _T("The thread has exited."));
+	Line::FormatError(buf, _countof(buf), FAIL, message, extra, aLine, aFooter);
 	MsgBox(buf);
 	
 	FreeExceptionToken(aToken);

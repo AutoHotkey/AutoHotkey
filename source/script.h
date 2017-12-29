@@ -3069,7 +3069,7 @@ public:
 	void PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount);
 	void CheckForClassOverwrite();
 
-	static ResultType UnhandledException(ExprTokenType*& aToken, Line* aLine);
+	static ResultType UnhandledException(ExprTokenType*& aToken, Line* aLine, LPTSTR aFooter = _T("The thread has exited."));
 	static ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
 	static ResultType SetErrorLevelOrThrowBool(bool aError);
 	static ResultType SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat);
