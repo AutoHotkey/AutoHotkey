@@ -790,3 +790,5 @@ HWND g_HistoryHwndPrev = NULL;
 
 // Also hook related:
 DWORD g_TimeLastInputPhysical = GetTickCount();
+DWORD g_TimeLastInputKeyboard = g_TimeLastInputPhysical;
+DWORD g_TimeLastInputMouse = g_TimeLastInputPhysical;

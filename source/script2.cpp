@@ -12461,12 +12461,19 @@ VarSizeType BIV_TimeIdlePhysical(LPTSTR aBuf, LPTSTR aVarName)
 // hotkey.h and globaldata.h, which can't be easily included in script.h due to
 // mutual dependency issues.
 {
-	// If neither hook is active, default this to the same as the regular idle time:
-	if (!(g_KeybdHook || g_MouseHook))
+	DWORD time_last_input;
+	switch (toupper(aVarName[10]))
+	{
+	case 'M': time_last_input = g_MouseHook ? g_TimeLastInputMouse : 0; break;
+	case 'K': time_last_input = g_KeybdHook ? g_TimeLastInputKeyboard : 0; break;
+	default: time_last_input = (g_KeybdHook || g_MouseHook) ? g_TimeLastInputPhysical : 0; break;
+	}
+	// If the relevant hook is not active, default this to the same as the regular idle time:
+	if (!time_last_input)
 		return BIV_TimeIdle(aBuf, _T(""));
 	if (!aBuf)
 		return MAX_INTEGER_LENGTH; // IMPORTANT: Conservative estimate because tick might change between 1st & 2nd calls.
-	return (VarSizeType)_tcslen(ITOA64(GetTickCount() - g_TimeLastInputPhysical, aBuf)); // Switching keyboard layouts/languages sometimes sees to throw off the timestamps of the incoming events in the hook.
+	return (VarSizeType)_tcslen(ITOA64(GetTickCount() - time_last_input, aBuf)); // Switching keyboard layouts/languages sometimes sees to throw off the timestamps of the incoming events in the hook.
 }
 
 

@@ -192,6 +192,8 @@ VarEntry g_BIV_A[] =
 	A_(ThisMenuItemPos),
 	A_(TickCount),
 	A_(TimeIdle),
+	A_x(TimeIdleKeyboard, BIV_TimeIdlePhysical),
+	A_x(TimeIdleMouse, BIV_TimeIdlePhysical),
 	A_(TimeIdlePhysical),
 	A_(TimeSincePriorHotkey),
 	A_(TimeSinceThisHotkey),

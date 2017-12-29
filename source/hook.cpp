@@ -305,7 +305,7 @@ LRESULT CALLBACK LowLevelMouseProc(int aCode, WPARAM wParam, LPARAM lParam)
 	//event.flags &= ~LLMHF_INJECTED;
 
 	if (!(event.flags & LLMHF_INJECTED)) // Physical mouse movement or button action (uses LLMHF vs. LLKHF).
-		g_TimeLastInputPhysical = GetTickCount();
+		g_TimeLastInputPhysical = g_TimeLastInputMouse = GetTickCount();
 		// Above: Don't use event.time, mostly because SendInput can produce invalid timestamps on such events
 		// (though in truth, that concern isn't valid because SendInput's input isn't marked as physical).
 		// Another concern is the comments at the other update of "g_TimeLastInputPhysical" elsewhere in this file.
@@ -3375,7 +3375,7 @@ bool KeybdEventIsPhysical(DWORD aEventFlags, const vk_type aVK, bool aKeyUp)
 	// the LControl event received here is marked as physical by the OS or keyboard driver.  This is undesirable
 	// primarily because it makes g_TimeLastInputPhysical inaccurate, but also because falsely marked physical
 	// events can impact the script's calls to GetKeyState("LControl", "P"), etc.
-	g_TimeLastInputPhysical = GetTickCount();
+	g_TimeLastInputPhysical = g_TimeLastInputKeyboard = GetTickCount();
 	return true;
 }
 
