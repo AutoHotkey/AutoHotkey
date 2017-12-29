@@ -3106,6 +3106,7 @@ BIV_DECL_R (BIV_True_False);
 BIV_DECL_R (BIV_MMM_DDD);
 BIV_DECL_R (BIV_DateTime);
 BIV_DECL_R (BIV_BatchLines);
+BIV_DECL_R (BIV_ListLines);
 BIV_DECL_R (BIV_TitleMatchMode);
 BIV_DECL_R (BIV_TitleMatchModeSpeed);
 BIV_DECL_R (BIV_DetectHiddenWindows);

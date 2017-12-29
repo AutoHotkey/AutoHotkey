@@ -122,6 +122,7 @@ VarEntry g_BIV_A[] =
 	A_(LastError),
 	A_(LineFile),
 	A_(LineNumber),
+	A_(ListLines),
 	A_(LoopField),
 	A_(LoopFileAttrib),
 	A_(LoopFileDir),

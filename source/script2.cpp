@@ -10914,6 +10914,16 @@ VarSizeType BIV_BatchLines(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(target_buf);
 }
 
+BIV_DECL_R(BIV_ListLines)
+{
+	if (aBuf)
+	{
+		*aBuf++ = g->ListLinesIsEnabled ? '1' : '0';
+		*aBuf = '\0';
+	}
+	return 1;
+}
+
 VarSizeType BIV_TitleMatchMode(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (g->TitleMatchMode == FIND_REGEX) // v1.0.45.
