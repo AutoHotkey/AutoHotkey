@@ -65,6 +65,7 @@ VarEntry g_BIV_A[] =
 	A_x(CaretX, BIV_Caret),
 	A_x(CaretY, BIV_Caret),
 	A_x(ComputerName, BIV_UserName_ComputerName),
+	A_(ComSpec),
 	A_x(ControlDelay, BIV_xDelay),
 	A_x(CoordModeCaret, BIV_CoordMode),
 	A_x(CoordModeMenu, BIV_CoordMode),
