@@ -131,6 +131,7 @@ VarEntry g_BIV_A[] =
 	A_(LoopFileFullPath),
 	A_(LoopFileLongPath),
 	A_(LoopFileName),
+	A_x(LoopFilePath, BIV_LoopFileFullPath),
 	A_(LoopFileShortName),
 	A_(LoopFileShortPath),
 	A_x(LoopFileSize, BIV_LoopFileSize),
