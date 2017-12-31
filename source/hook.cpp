@@ -2313,7 +2313,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 
 		// This is done unconditionally so that even if a qualified Input is not in progress, the
 		// variable will be correctly reset anyway:
-		if ((Hotstring::mAtLeastOneEnabled && !is_ignored) || (g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && is_ignored)))
+		if ((Hotstring::sAtLeastOneEnabled && !is_ignored) || (g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && is_ignored)))
 			if (!CollectInput(event, aVK, aSC, aKeyUp, is_ignored, pKeyHistoryCurr, hs_wparam_to_post, hs_lparam_to_post)) // Key should be invisible (suppressed).
 				return SuppressThisKeyFunc(aHook, lParam, aVK, aSC, aKeyUp, pKeyHistoryCurr, aHotkeyIDToPost, hs_wparam_to_post, hs_lparam_to_post);
 

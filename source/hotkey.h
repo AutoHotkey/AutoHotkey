@@ -331,7 +331,7 @@ public:
 	static Hotstring **shs;  // An array to be allocated on first use (performs better than linked list).
 	static HotstringIDType sHotstringCount;
 	static HotstringIDType sHotstringCountMax;
-	static bool mAtLeastOneEnabled; // v1.0.44.08: For performance, such as avoiding calling ToAsciiEx() in the hook.
+	static bool sAtLeastOneEnabled; // v1.0.44.08: For performance, such as avoiding calling ToAsciiEx() in the hook.
 
 	Label *mJumpToLabel;
 	LPTSTR mString, mReplacement;

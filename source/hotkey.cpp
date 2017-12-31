@@ -440,10 +440,10 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// run on multiple OSes without a continual warning message just because it happens to be running
 	// on Win9x.  By design, the Num/Scroll/CapsLock AlwaysOn/Off setting stays in effect even when
 	// Suspend in ON.
-	if (   Hotstring::mAtLeastOneEnabled
+	if (   Hotstring::sAtLeastOneEnabled
 		|| !(g_ForceNumLock == NEUTRAL && g_ForceCapsLock == NEUTRAL && g_ForceScrollLock == NEUTRAL)   )
 		sWhichHookNeeded |= HOOK_KEYBD;
-	if (g_BlockMouseMove || (g_HSResetUponMouseClick && Hotstring::mAtLeastOneEnabled))
+	if (g_BlockMouseMove || (g_HSResetUponMouseClick && Hotstring::sAtLeastOneEnabled))
 		sWhichHookNeeded |= HOOK_MOUSE;
 
 	// Install or deinstall either or both hooks, if necessary, based on these param values.
@@ -2407,7 +2407,7 @@ LPTSTR Hotkey::ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline)
 Hotstring **Hotstring::shs = NULL;
 HotstringIDType Hotstring::sHotstringCount = 0;
 HotstringIDType Hotstring::sHotstringCountMax = 0;
-bool Hotstring::mAtLeastOneEnabled = false;
+bool Hotstring::sAtLeastOneEnabled = false;
 
 
 void Hotstring::SuspendAll(bool aSuspend)
@@ -2418,9 +2418,9 @@ void Hotstring::SuspendAll(bool aSuspend)
 	UINT u;
 	if (aSuspend) // Suspend all those that aren't exempt.
 	{
-		for (mAtLeastOneEnabled = false, u = 0; u < sHotstringCount; ++u)
+		for (sAtLeastOneEnabled = false, u = 0; u < sHotstringCount; ++u)
 			if (shs[u]->mJumpToLabel->IsExemptFromSuspend())
-				mAtLeastOneEnabled = true;
+				sAtLeastOneEnabled = true;
 			else
 				shs[u]->mSuspended = true;
 	}
@@ -2432,9 +2432,9 @@ void Hotstring::SuspendAll(bool aSuspend)
 		// are newly enabled after having been entirely disabled.  This is because CollectInput() would not
 		// have been called in a long time, making the contents of g_HSBuf obsolete, which in turn might
 		// otherwise cause accidental firings based on old keystrokes coupled with new ones.
-		if (!mAtLeastOneEnabled)
+		if (!sAtLeastOneEnabled)
 		{
-			mAtLeastOneEnabled = true; // sHotstringCount was already checked higher above.
+			sAtLeastOneEnabled = true; // sHotstringCount was already checked higher above.
 			*g_HSBuf = '\0';
 			g_HSBufLength = 0;
 		}
@@ -2602,7 +2602,7 @@ ResultType Hotstring::AddHotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR 
 	}
 
 	++sHotstringCount;
-	mAtLeastOneEnabled = true; // Added in v1.0.44.  This method works because the script can't be suspended while hotstrings are being created (upon startup).
+	sAtLeastOneEnabled = true; // Added in v1.0.44.  This method works because the script can't be suspended while hotstrings are being created (upon startup).
 	return OK;
 }
 
