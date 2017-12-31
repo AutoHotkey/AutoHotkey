@@ -2040,7 +2040,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 			// HCURSOR are identical for most/all Windows API uses.  Also note that LoadImage() will load
 			// an icon as a bitmap if the file contains an icon but IMAGE_BITMAP was passed in (at least
 			// on Windows XP).
-			if (!keep_aspect_ratio) // No further resizing is needed.
+			if (!keep_aspect_ratio && !aIconNumber) // No further resizing or conversion is needed.
 				return hbitmap;
 			// Otherwise, continue on so that the image can be resized via a second call to LoadImage().
 		}
