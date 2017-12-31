@@ -11163,7 +11163,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 			if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))
 			{
 				// Resolve the variable now, for validation after all files have been loaded.
-				// Without this, the valdiation code would need to determine which postfix token
+				// Without this, the validation code would need to determine which postfix token
 				// corresponds to an assignment's l-value, which would require larger code.
 				if (this_infix > infix) // Must be checked, although always true in valid expressions.
 				{
@@ -11332,6 +11332,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				// if this_infix[1] is SYM_DOT.  In that case, a later iteration should apply
 				// the transformations above to that operator.
 			}
+			break;
 
 		case SYM_NEW: // This is probably something like "new Class", without "()", otherwise an earlier stage would've handled it.
 		case SYM_REGEXMATCH: // a ~= b  ->  RegExMatch(a, b)
