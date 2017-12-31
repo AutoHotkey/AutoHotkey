@@ -2508,23 +2508,7 @@ examine_line:
 			// :c:abc::
 			if (!AddLabel(buf, true)) // Always add a label before adding the first line of its section.
 				return FAIL;
-			hook_action = 0; // Set default.
-			if (*hotkey_flag) // This hotkey's action is on the same line as its label.
-			{
-				if (!hotstring_start)
-					// Don't add the alt-tabs as a line, since it has no meaning as a script command.
-					// But do put in the Return regardless, in case this label is ever jumped to
-					// via Goto/Gosub:
-					if (   !(hook_action = Hotkey::ConvertAltTab(hotkey_flag, false))   )
-						if (!ParseAndAddLine(hotkey_flag))
-							return FAIL;
-				// Also add a Return that's implicit for a single-line hotkey.  This is also
-				// done for auto-replace hotstrings in case gosub/goto is ever used to jump
-				// to their labels:
-				if (!AddLine(ACT_RETURN))
-					return FAIL;
-			}
-
+			
 			if (hotstring_start)
 			{
 				if (!*hotstring_start)
@@ -2547,9 +2531,35 @@ examine_line:
 				if (!Hotstring::AddHotstring(mLastLabel->mName, mLastLabel, hotstring_options ? hotstring_options : _T("")
 					, hotstring_start, hotkey_flag, has_continuation_section))
 					return FAIL;
+				// The following section is similar to the one for hotkeys below, but is done after
+				// parsing the hotstring's options. An attempt at combining the two sections actually
+				// increased the final code size, so they're left separate.
+				if (*hotkey_flag)
+				{
+					if (Hotstring::shs[Hotstring::sHotstringCount - 1]->mExecuteAction)
+						if (!ParseAndAddLine(hotkey_flag))
+							return FAIL;
+					// This is done for hotstrings with same-line action via 'E' and also auto-replace
+					// hotstrings in case gosub/goto is ever used to jump to their labels:
+					if (!AddLine(ACT_RETURN))
+						return FAIL;
+				}
 			}
 			else // It's a hotkey vs. hotstring.
 			{
+				hook_action = 0; // Set default.
+				if (*hotkey_flag) // This hotkey's action is on the same line as its label.
+				{
+					// Don't add the alt-tabs as a line, since it has no meaning as a script command.
+					// But do put in the Return regardless, in case this label is ever jumped to
+					// via Goto/Gosub:
+					if (   !(hook_action = Hotkey::ConvertAltTab(hotkey_flag, false))   )
+						if (!ParseAndAddLine(hotkey_flag))
+							return FAIL;
+					// Also add a Return that's implicit for a single-line hotkey.
+					if (!AddLine(ACT_RETURN))
+						return FAIL;
+				}
 				if (hk = Hotkey::FindHotkeyByTrueNature(buf, suffix_has_tilde, hook_is_mandatory)) // Parent hotkey found.  Add a child/variant hotkey for it.
 				{
 					if (hook_action) // suffix_has_tilde has always been ignored for these types (alt-tab hotkeys).
@@ -3240,7 +3250,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			// other caller, it will stop at end-of-string or ':', whichever comes first.
 			Hotstring::ParseOptions(parameter, g_HSPriority, g_HSKeyDelay, g_HSSendMode, g_HSCaseSensitive
 				, g_HSConformToCase, g_HSDoBackspace, g_HSOmitEndChar, g_HSSendRaw, g_HSEndCharRequired
-				, g_HSDetectWhenInsideWord, g_HSDoReset);
+				, g_HSDetectWhenInsideWord, g_HSDoReset, g_HSSameLineAction);
 		}
 		return CONDITION_TRUE;
 	}

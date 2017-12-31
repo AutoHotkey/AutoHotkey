@@ -2622,6 +2622,7 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 	, mEndCharRequired(g_HSEndCharRequired), mDetectWhenInsideWord(g_HSDetectWhenInsideWord), mDoReset(g_HSDoReset)
 	, mHotCriterion(g_HotCriterion)
 	, mInputLevel(g_InputLevel)
+	, mExecuteAction(g_HSSameLineAction)
 	, mConstructedOK(false)
 {
 	// Insist on certain qualities so that they never need to be checked other than here:
@@ -2629,7 +2630,10 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 		return;
 
 	ParseOptions(aOptions, mPriority, mKeyDelay, mSendMode, mCaseSensitive, mConformToCase, mDoBackspace
-		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset);
+		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, mExecuteAction);
+
+	if (mExecuteAction)
+		aReplacement = _T(""); // Our caller will handle the rest.
 
 	// To avoid memory leak, this is done only when it is certain the hotkey will be created:
 	if (   !(mString = SimpleHeap::Malloc(aHotstring))   )
@@ -2662,7 +2666,7 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 
 void Hotstring::ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
 	, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, SendRawType &aSendRaw
-	, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset)
+	, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset, bool &aExecuteAction)
 {
 	// In this case, colon rather than zero marks the end of the string.  However, the string
 	// might be empty so check for that too.  In addition, this is now called from
@@ -2732,6 +2736,9 @@ void Hotstring::ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, Se
 			break;
 		case 'Z':
 			aDoReset = (*cp1 != '0');
+			break;
+		case 'E':
+			aExecuteAction = (*cp1 != '0');
 			break;
 		// Otherwise: Ignore other characters, such as the digits that comprise the number after the P option.
 		}

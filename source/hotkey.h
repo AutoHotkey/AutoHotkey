@@ -347,7 +347,7 @@ public:
 	bool mSuspended;
 	UCHAR mExistingThreads, mMaxThreads;
 	bool mCaseSensitive, mConformToCase, mDoBackspace, mOmitEndChar, mEndCharRequired
-		, mDetectWhenInsideWord, mDoReset, mConstructedOK;
+		, mDetectWhenInsideWord, mDoReset, mExecuteAction, mConstructedOK;
 
 	static void SuspendAll(bool aSuspend);
 	ResultType PerformInNewThreadMadeByCaller();
@@ -356,7 +356,7 @@ public:
 		, LPTSTR aReplacement, bool aHasContinuationSection);
 	static void ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
 		, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, SendRawType &aSendRaw
-		, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset);
+		, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset, bool &aExecuteAction);
 
 	// Constructor & destructor:
 	Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement, bool aHasContinuationSection);
