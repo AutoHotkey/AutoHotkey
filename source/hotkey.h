@@ -333,7 +333,8 @@ public:
 	static HotstringIDType sHotstringCountMax;
 	static bool sAtLeastOneEnabled; // v1.0.44.08: For performance, such as avoiding calling ToAsciiEx() in the hook.
 
-	Label *mJumpToLabel;
+	LabelRef mJumpToLabel;
+	LPTSTR mName;
 	LPTSTR mString, mReplacement;
 	HotkeyCriterion *mHotCriterion;
 	int mPriority, mKeyDelay;
@@ -351,14 +352,14 @@ public:
 	static void SuspendAll(bool aSuspend);
 	ResultType PerformInNewThreadMadeByCaller();
 	void DoReplace(LPARAM alParam);
-	static ResultType AddHotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
-		, bool aHasContinuationSection);
+	static ResultType AddHotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring
+		, LPTSTR aReplacement, bool aHasContinuationSection);
 	static void ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
 		, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, SendRawType &aSendRaw
 		, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset);
 
 	// Constructor & destructor:
-	Hotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement, bool aHasContinuationSection);
+	Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement, bool aHasContinuationSection);
 	~Hotstring() {}  // Note that mReplacement is sometimes malloc'd, sometimes from SimpleHeap, and sometimes the empty string.
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}

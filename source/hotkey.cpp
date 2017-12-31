@@ -2449,7 +2449,8 @@ ResultType Hotstring::PerformInNewThreadMadeByCaller()
 // we return.
 {
 	// Although our caller may have already called ACT_IS_ALWAYS_ALLOWED(), it was for a different reason:
-	if (mExistingThreads >= mMaxThreads && !ACT_IS_ALWAYS_ALLOWED(mJumpToLabel->mJumpToLine->mActionType)) // See above.
+	ActionTypeType act = mJumpToLabel->TypeOfFirstLine();
+	if (mExistingThreads >= mMaxThreads && !ACT_IS_ALWAYS_ALLOWED(act)) // See above.
 		return FAIL;
 	// See Hotkey::Perform() for details about this.  For hot strings -- which also use the
 	// g_script.mThisHotkeyStartTime value to determine whether g_script.mThisHotkeyModifiersLR
@@ -2457,7 +2458,7 @@ ResultType Hotstring::PerformInNewThreadMadeByCaller()
 	g_script.mThisHotkeyModifiersLR = 0;
 	++mExistingThreads;  // This is the thread count for this particular hotstring only.
 	ResultType result;
-	result = LabelPtr(mJumpToLabel)->ExecuteInNewThread(g_script.mThisHotkeyName);
+	result = mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName);
 	--mExistingThreads;
 	return result ? OK : FAIL;	// Return OK on all non-failure results.
 }
@@ -2560,8 +2561,8 @@ void Hotstring::DoReplace(LPARAM alParam)
 
 
 
-ResultType Hotstring::AddHotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
-	, bool aHasContinuationSection)
+ResultType Hotstring::AddHotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring
+		, LPTSTR aReplacement, bool aHasContinuationSection)
 // Caller provides aJumpToLabel rather than a Line* because at the time a hotkey or hotstring
 // is created, the label's destination line is not yet known.  So the label is used a placeholder.
 // Returns OK or FAIL.
@@ -2593,7 +2594,7 @@ ResultType Hotstring::AddHotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR 
 		sHotstringCountMax += HOTSTRING_BLOCK_SIZE;
 	}
 
-	if (   !(shs[sHotstringCount] = new Hotstring(aJumpToLabel, aOptions, aHotstring, aReplacement, aHasContinuationSection))   )
+	if (   !(shs[sHotstringCount] = new Hotstring(aName, aJumpToLabel, aOptions, aHotstring, aReplacement, aHasContinuationSection))   )
 		return g_script.ScriptError(ERR_OUTOFMEM); // Short msg. since so rare.
 	if (!shs[sHotstringCount]->mConstructedOK)
 	{
@@ -2608,8 +2609,9 @@ ResultType Hotstring::AddHotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR 
 
 
 
-Hotstring::Hotstring(Label *aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement, bool aHasContinuationSection)
+Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement, bool aHasContinuationSection)
 	: mJumpToLabel(aJumpToLabel)  // Any NULL value will cause failure further below.
+	, mName(aName)
 	, mString(NULL), mReplacement(_T("")), mStringLength(0)
 	, mSuspended(false)
 	, mExistingThreads(0)

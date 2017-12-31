@@ -805,7 +805,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				if (hs->mHotCriterion)
 				{
 					// For details, see comments in the hotkey section of this switch().
-					if (   !(criterion_found_hwnd = HotCriterionAllowsFiring(hs->mHotCriterion, hs->mJumpToLabel ? hs->mJumpToLabel->mName : _T("")))   )
+					if (   !(criterion_found_hwnd = HotCriterionAllowsFiring(hs->mHotCriterion, hs->mName))   )
 						// Hotstring is no longer eligible to fire even though it was when the hook sent us
 						// the message.  Abort the firing even though the hook may have already started
 						// executing the hotstring by suppressing the final end-character or other actions.
@@ -1025,7 +1025,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// Unlike hotkeys -- which can have a name independent of their label by being created or updated
 				// with the HOTKEY command -- a hot string's unique name is always its label since that includes
 				// the options that distinguish between (for example) :c:ahk:: and ::ahk::
-				g_script.mThisHotkeyName = (msg.message == AHK_HOTSTRING) ? hs->mJumpToLabel->mName : hk->mName;
+				g_script.mThisHotkeyName = (msg.message == AHK_HOTSTRING) ? hs->mName : hk->mName;
 				g_script.mThisHotkeyStartTime = GetTickCount(); // Fixed for v1.0.35.10 to not happen for GUI threads.
 			}
 
