@@ -1181,7 +1181,15 @@ ResultType UserMenu::ExcludeStandardItems()
 	if (!mIncludeStandardItems)
 		return OK;
 	mIncludeStandardItems = false;
-	return Destroy(); // It will be recreated automatically the next time the user displays it.
+	// This method isn't used because it fails on sub-menus of a menu bar:
+	//return Destroy(); // It will be recreated automatically the next time the user displays it.
+	if (mMenu)
+	{
+		for (UINT i = ID_TRAY_FIRST; i <= ID_TRAY_LAST; ++i)
+			RemoveMenu(mMenu, i, MF_BYCOMMAND);
+		UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary (though it's unusual to put the standard items on a menu bar).
+	}
+	return OK;
 }
 
 
@@ -1314,11 +1322,11 @@ ResultType UserMenu::AppendStandardItems()
 #else
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_OPEN, _T("&Open"));
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_HELP, _T("&Help"));
-	AppendMenu(mMenu, MF_SEPARATOR, 0, NULL);
+	AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP1, NULL); // The separators are given IDs to simplify removal.
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_WINDOWSPY, _T("&Window Spy"));
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_RELOADSCRIPT, _T("&Reload This Script"));
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_EDITSCRIPT, _T("&Edit This Script"));
-	AppendMenu(mMenu, MF_SEPARATOR, 0, NULL);
+	AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP2, NULL);
 	if (this == g_script.mTrayMenu && !mDefault) // No user-defined default menu item, so use the standard one.
 		SetMenuDefaultItem(mMenu, ID_TRAY_OPEN, FALSE); // Seems to have no function other than appearance.
 #endif
