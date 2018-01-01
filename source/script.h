@@ -401,6 +401,20 @@ struct ArgStruct
 // The following macro is used for definitions and declarations of built-in functions:
 #define BIF_DECL(name) void name(BIF_DECL_PARAMS)
 
+// NOTE FOR v1: The following macros currently aren't used much; they're for use in new code
+// to facilitate merging into the v2 branch, which uses its own versions of these macros heavily.
+// This is just the subset of the macros that don't rely on other changes.
+#define _f__oneline(act)		do { act } while (0)		// Make the macro safe to use like a function, under if(), etc.
+#define _f__ret(act)			_f__oneline( aResult = (act); return; )	// BIFs have no return value.
+#define _o__ret(act)			return (act)				// IObject::Invoke() returns ResultType.
+#define _f_throw(...)			_f__ret(g_script.ScriptError(__VA_ARGS__))
+#define _o_throw(...)			_o__ret(g_script.ScriptError(__VA_ARGS__))
+#define _f_return_FAIL			_f__ret(FAIL)
+#define _o_return_FAIL			_o__ret(FAIL)
+#define _f_retval_buf			(aResultToken.buf)
+#define _f_retval_buf_size		MAX_NUMBER_SIZE
+#define _f_number_buf			_f_retval_buf  // An alias to show intended usage, and in case the buffer size is changed.
+
 
 // Some of these lengths and such are based on the MSDN example at
 // http://msdn.microsoft.com/library/default.asp?url=/library/en-us/sysinfo/base/enumerating_registry_subkeys.asp:
