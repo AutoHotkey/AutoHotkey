@@ -3296,6 +3296,8 @@ BIF_DECL(BIF_LoadPicture);
 
 BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.
 
+BIF_DECL(BIF_Hotstring);
+
 
 BIF_DECL(BIF_IsObject);
 BIF_DECL(BIF_ObjCreate);

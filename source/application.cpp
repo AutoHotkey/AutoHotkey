@@ -823,7 +823,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// below.  But also do the backspacing (if specified) for a non-autoreplace hotstring,
 				// even if it can't launch due to MaxThreads, MaxThreadsPerHotkey, or some other reason:
 				hs->DoReplace(msg.lParam);  // Does only the backspacing if it's not an auto-replace hotstring.
-				if (*hs->mReplacement) // Fully handled by the above; i.e. it's an auto-replace hotstring.
+				if (hs->mReplacement) // Fully handled by the above; i.e. it's an auto-replace hotstring.
 					continue;
 				// Otherwise, continue on and let a new thread be created to handle this hotstring.
 				// Since this isn't an auto-replace hotstring, set this value to support

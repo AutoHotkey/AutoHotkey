@@ -331,7 +331,7 @@ public:
 	static Hotstring **shs;  // An array to be allocated on first use (performs better than linked list).
 	static HotstringIDType sHotstringCount;
 	static HotstringIDType sHotstringCountMax;
-	static bool sAtLeastOneEnabled; // v1.0.44.08: For performance, such as avoiding calling ToAsciiEx() in the hook.
+	static UINT sEnabledCount; // v1.1.28.00: For performance, such as avoiding calling ToAsciiEx() in the hook.
 
 	LabelRef mJumpToLabel;
 	LPTSTR mName;
@@ -344,7 +344,10 @@ public:
 	SendRawType mSendRaw;
 	SendLevelType mInputLevel;
 	UCHAR mStringLength;
-	bool mSuspended;
+	UCHAR mSuspended; // FALSE or a combination of one of the following:
+	#define HS_SUSPENDED 0x01
+	#define HS_TURNED_OFF 0x02
+	#define HS_TEMPORARILY_DISABLED 0x04
 	UCHAR mExistingThreads, mMaxThreads;
 	bool mCaseSensitive, mConformToCase, mDoBackspace, mOmitEndChar, mEndCharRequired
 		, mDetectWhenInsideWord, mDoReset, mExecuteAction, mConstructedOK;
@@ -352,14 +355,17 @@ public:
 	static void SuspendAll(bool aSuspend);
 	ResultType PerformInNewThreadMadeByCaller();
 	void DoReplace(LPARAM alParam);
+	static Hotstring *FindHotstring(LPTSTR aHotstring, bool aCaseSensitive, bool aDetectWhenInsideWord, HotkeyCriterion *aHotCriterion);
 	static ResultType AddHotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring
-		, LPTSTR aReplacement, bool aHasContinuationSection);
+		, LPTSTR aReplacement, bool aHasContinuationSection, UCHAR aSuspend = FALSE);
 	static void ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
 		, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, SendRawType &aSendRaw
 		, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset, bool &aExecuteAction);
+	void ParseOptions(LPTSTR aOptions);
 
 	// Constructor & destructor:
-	Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement, bool aHasContinuationSection);
+	Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
+		, bool aHasContinuationSection, UCHAR aSuspend);
 	~Hotstring() {}  // Note that mReplacement is sometimes malloc'd, sometimes from SimpleHeap, and sometimes the empty string.
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
