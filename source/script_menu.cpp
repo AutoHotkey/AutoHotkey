@@ -538,9 +538,8 @@ ResultType Script::ScriptDeleteMenu(UserMenu *aMenu)
 		aMenu_prev->mNextMenu = aMenu->mNextMenu; // Can be NULL if aMenu was the last one.
 	else // aMenu was the first one in the list.
 		mFirstMenu = aMenu->mNextMenu; // Can be NULL if the list will now be empty.
-	// Do this last when its contents are no longer needed.  Its destructor will delete all
-	// the items in the menu and destroy the OS menu itself:
-	aMenu->DeleteAllItems(); // This also calls Destroy() to free the menu's resources.
+	aMenu->Destroy(); // Destroy the OS menu.
+	aMenu->DeleteAllItems();
 	if (aMenu->mBrush) // Free the brush used for the menu's background color.
 		DeleteObject(aMenu->mBrush);
 	free(aMenu->mName); // Since it was separately allocated.
@@ -807,28 +806,20 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 
 
 ResultType UserMenu::DeleteAllItems()
+// Remove all menu items from the linked list and from the menu.
 {
-	// Remove all menu items from the linked list and from the menu.  First destroy the menu since
-	// it's probably better to start off fresh than have the destructor individually remove each
-	// menu item as the items in the linked list are deleted.  Some callers rely on this being done
-	// unconditionally (i.e. regardless of !mFirstMenuItem).  In addition, this avoids the need
-	// to find any submenus by position:
-	if (!Destroy())  // if mStandardMenuItems is true, the menu will be recreated later when needed.
-		// If menu can't be destroyed, it's probably due to it being attached as a menu bar to an existing
-		// GUI window.  In this case, when the window is destroyed, the menu bar will be too, so it's
-		// probably best to do nothing.  If we were called as a result of "menu, MenuName, Delete", it
-		// is documented that this will fail in this case.
-		return FAIL;
-	// The destructor relies on the fact that the above destroys the menu but does not recreate it.
-	// This is because popup menus, not being affiliated with a window (unless they're attached to
-	// a menu bar, but that isn't the case with our GUI windows, which detach such menus prior to
-	// when the GUI window is destroyed in case the menu is in use by another window), must be
-	// destroyed with DestroyMenu() to ensure a clean exit (resources freed).
+	// Fixed for v1.1.27.03: Don't attempt to take a shortcut by calling Destroy(), as it
+	// will fail if this is a sub-menu of a menu bar.  Removing the items individually will
+	// do exactly what the user expects.  The following old comment indicates one reason
+	// Destroy() was used; that reason is now obsolete since submenus are given IDs:
+	// "In addition, this avoids the need to find any submenus by position:"
 	if (!mFirstMenuItem)
 		return OK;  // If there are no user-defined menu items, it's already in the correct state.
 	UserMenuItem *menu_item_to_delete;
 	for (UserMenuItem *mi = mFirstMenuItem; mi;)
 	{
+		if (mMenu)
+			RemoveMenu(mMenu, mi->mMenuID, MF_BYCOMMAND);
 		menu_item_to_delete = mi;
 		mi = mi->mNextMenuItem;
 		if (g_script.mThisMenuItem == menu_item_to_delete)
@@ -841,6 +832,7 @@ ResultType UserMenu::DeleteAllItems()
 	mFirstMenuItem = mLastMenuItem = NULL;
 	mMenuItemCount = 0;
 	mDefault = NULL;  // i.e. there can't be a *user-defined* default item anymore, even if this is the tray.
+	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
 	return OK;
 }
 
