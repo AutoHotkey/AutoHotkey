@@ -2155,10 +2155,14 @@ public:
 };
 
 // LabelPtr with automatic reference-counting, for storing an object safely,
-// such as in a HotkeyVariant, UserMenuItem, etc.  In future, this could be
-// replaced with a more general smart pointer class.
+// such as in a HotkeyVariant, UserMenuItem, etc.  Its specific purpose is to
+// work with old code that wasn't concerned with reference counting.
 class LabelRef : public LabelPtr
 {
+private:
+	LabelRef(const LabelRef &); // Disable default copy constructor.
+	LabelRef & operator = (const LabelRef &); // ...and copy assignment.
+
 public:
 	LabelRef() : LabelPtr() {}
 	LabelRef(IObject *object) : LabelPtr(object)
@@ -2179,6 +2183,10 @@ public:
 			mObject->Release();
 		mObject = object;
 		return *this;
+	}
+	LabelRef & operator = (const LabelPtr &other)
+	{
+		return *this = other.ToObject();
 	}
 	~LabelRef()
 	{
