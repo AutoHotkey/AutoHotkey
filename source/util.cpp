@@ -892,6 +892,71 @@ ret0:
 
 
 
+__int64 tcstoi64_o(LPCTSTR buf, LPCTSTR *endptr, int base)
+// A version of _tcstoi64 which does no range checks, but instead has overflow behaviour
+// consistent with arithmetic operations.  Some behaviour may be unlike _tcstoi64/strtoll:
+//  - base must be 0 (undetermined), 10 or 16.
+//  - A leading '0' does not activate base 8, since we specifically don't want that.
+//  - Only space and tab are considered whitespace, consistent with IsNumeric().
+//  - errno is never set.
+{
+	// Skip spaces and tabs.
+	LPCTSTR p = omit_leading_whitespace(buf);
+	
+	// Determine/skip sign.
+	TCHAR sign = (*p != '+' && *p != '-') ? '+' : *p++;
+	
+	// Handle hex prefix if allowed.
+	if (*p == '0' && (p[1] == 'x' || p[1] == 'X') && (base == 0 || base == 16) && isxdigit(p[2]))
+	{
+		p += 2;
+		base = 16;
+	}
+	else if (base != 16)
+	{
+		base = 10; // Ignore any other base value since we'll only test what we need, 10 and 16.
+	}
+
+	__int64 i = 0;
+	LPCTSTR first = p;
+	// Having two separate loops keeps each one simpler, so benchmarks faster.
+	// This approach has similar code size and performance to using a pre-filled
+	// array to map '0'..'f' to their numeric values.
+	if (base == 16)
+	{
+		for (;; ++p)
+		{
+			int c = *p;
+			if (c <= '9' && c >= '0')
+				c -= '0';
+			else if (c <= 'F' && c >= 'A')
+				c -= 'A' - 10;
+			else if (c <= 'f' && c >= 'a')
+				c -= 'a' - 10;
+			else
+				break;
+			i = i * base + c;
+		}
+	}
+	else // base == 10
+	{
+		for (;; ++p)
+		{
+			int c = *p;
+			if (c <= '9' && c >= '0')
+				c -= '0';
+			else
+				break;
+			i = i * base + c;
+		}
+	}
+	if (endptr)
+		*endptr = p == first ? buf : p; // Don't consider " -" numeric on its own.
+	return sign == '+' ? i : -i;
+}
+
+
+
 UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType aStringCaseSense
 	, UINT aLimit, size_t aSizeLimit, LPTSTR *aDest, size_t *aHaystackLength)
 // Replaces all (or aLimit) occurrences of aOld with aNew in aHaystack.

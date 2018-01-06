@@ -424,6 +424,8 @@ inline bool IsHex(LPCTSTR aBuf) // 10/17/2006: __forceinline worsens performance
 
 
 
+__int64 tcstoi64_o(LPCTSTR buf, LPCTSTR *endptr, int base);
+
 // As of v1.0.30, ATOI(), ITOA() and the other related functions below are no longer macros
 // because there are too many places where something like ATOI(++cp) is done, which would be a
 // bug if not caught since cp would be incremented more than once if the macro referred to that
@@ -439,12 +441,26 @@ inline bool IsHex(LPCTSTR aBuf) // 10/17/2006: __forceinline worsens performance
 inline __int64 ATOI64(LPCTSTR buf)
 {
 	// See ATOI() for the reason IsHex() is used.
-	return IsHex(buf) ? _tcstoi64(buf, NULL, 16) : _ttoi64(buf);  // _atoi64() has superior performance, so use it when possible.
+	// Old comment: _atoi64() has superior performance, so use it when possible.
+	// Update: Benchmarks in 2018 showed there to be only marginal difference between _ttoi64
+	// and _tcstoull, with the latter getting slightly better results.  Initially _tcstoull
+	// was used to allow values in the range LLONG_MAX+1..ULLONG_MAX to overflow, but it also
+	// made the behaviour of larger values even less consistent (producing -1 vs. LLONG_MAX).
+	// Instead, a custom version of _tcstoi64 is used, allowing all overflow and disallowing
+	// octal (avoiding the need for IsHex()).  This benchmarked considerably faster.
+	// For example, these expressions are now true:
+	//  9223372036854775807+1 == 9223372036854775808
+	//   0xFFFFFFFFFFFFFFFF == -1
+	//  0x10000000000000001 ==  1
+	//return IsHex(buf) ? _tcstoi64(buf, NULL, 16) : _ttoi64(buf);  
+	return tcstoi64_o(buf, NULL, 0);
 }
 
 inline unsigned __int64 ATOU64(LPCTSTR buf)
 {
-	return _tcstoui64(buf, NULL, IsHex(buf) ? 16 : 10);
+	// Simple type-cast is sufficient since tcstoi64_o doesn't do range checks.
+	return (unsigned __int64)tcstoi64_o(buf, NULL, 0);
+	//return _tcstoui64(buf, NULL, IsHex(buf) ? 16 : 10);
 }
 
 inline int ATOI(LPCTSTR buf)
