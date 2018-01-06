@@ -429,13 +429,12 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 	// which ALT key is held down to produce the character.
 	vk_type this_event_modifier_down;
 	size_t key_text_length, key_name_length;
-	TCHAR *end_pos, *space_pos, *next_word, old_char, single_char_string[2];
+	TCHAR *end_pos, *space_pos, *next_word, old_char;
 	KeyEventTypes event_type;
 	int repeat_count, click_x, click_y;
 	bool move_offset;
 	enum { KEYDOWN_TEMP = 0, KEYDOWN_PERSISTENT, KEYDOWN_REMAP } key_down_type;
 	DWORD placeholder;
-	single_char_string[1] = '\0'; // Terminate in advance.
 
 	LONG_OPERATION_INIT  // Needed even for SendInput/Play.
 
@@ -571,16 +570,7 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 					}
 				}
 
-				vk = TextToVK(aKeys, &mods_for_next_key, true, false, sTargetKeybdLayout); // false must be passed due to below.
-				sc = vk ? 0 : TextToSC(aKeys);  // If sc is 0, it will be resolved by KeyEvent() later.
-				if (!vk && !sc && ctoupper(aKeys[0]) == 'V' && ctoupper(aKeys[1]) == 'K')
-				{
-					LPTSTR sc_string = StrChrAny(aKeys + 2, _T("Ss")); // Look for the "SC" that demarks the scan code.
-					if (sc_string && ctoupper(sc_string[1]) == 'C')
-						sc = (sc_type)_tcstol(sc_string + 2, NULL, 16);  // Convert from hex.
-					// else leave sc set to zero and just get the specified VK.  This supports Send {VKnn}.
-					vk = (vk_type)_tcstol(aKeys + 2, NULL, 16);  // Convert from hex.
-				}
+				TextToVKandSC(aKeys, vk, sc, &mods_for_next_key, sTargetKeybdLayout);
 
 				if (space_pos)  // undo the temporary termination
 					*space_pos = old_char;
@@ -785,14 +775,13 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 			}
 			else
 			{
-				*single_char_string = *aKeys; // String was pre-terminated earlier.
 				// Best to call this separately, rather than as first arg in SendKey, since it changes the
 				// value of modifiers and the updated value is *not* guaranteed to be passed.
 				// In other words, SendKey(TextToVK(...), modifiers, ...) would often send the old
 				// value for modifiers.
-				vk = TextToVK(single_char_string, &mods_for_next_key, true, false, sTargetKeybdLayout
+				vk = CharToVKAndModifiers(*aKeys, &mods_for_next_key, sTargetKeybdLayout
 					, (mods_for_next_key | persistent_modifiers_for_this_SendKeys) != 0 && !aSendRaw); // v1.1.27.00: Disable the a-z to vk41-vk5A fallback translation when modifiers are present since it would produce the wrong printable characters.
-				// TextToVK() takes no measurable time compared to the amount of time SendKey takes.
+				// CharToVKAndModifiers() takes no measurable time compared to the amount of time SendKey takes.
 			}
 			if (vk)
 				SendKey(vk, 0, mods_for_next_key, persistent_modifiers_for_this_SendKeys, 1, KEYDOWNANDUP
@@ -4055,7 +4044,7 @@ sc_type TextToSC(LPTSTR aText)
 
 
 vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandledByScanCode, bool aAllowExplicitVK
-	, HKL aKeybdLayout, bool aEnableAZFallback)
+	, HKL aKeybdLayout)
 // If modifiers_p is non-NULL, place the modifiers that are needed to realize the key in there.
 // e.g. M is really +m (shift-m), # is really shift-3.
 // HOWEVER, this function does not completely overwrite the contents of pModifiersLR; instead, it just
@@ -4068,7 +4057,7 @@ vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandl
 	// of text during load, is that on either side of the COMPOSITE_DELIMITER (e.g. " then ").
 
 	if (!aText[1]) // _tcslen(aText) == 1
-		return CharToVKAndModifiers(*aText, pModifiersLR, aKeybdLayout, aEnableAZFallback); // Making this a function simplifies things because it can do early return, etc.
+		return CharToVKAndModifiers(*aText, pModifiersLR, aKeybdLayout); // Making this a function simplifies things because it can do early return, etc.
 
 	if (aAllowExplicitVK && ctoupper(aText[0]) == 'V' && ctoupper(aText[1]) == 'K')
 	{
@@ -4166,6 +4155,40 @@ vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLa
 			*pModifiersLR |= MOD_LSHIFT;
 	}
 	return vk;
+}
+
+
+
+bool TextToVKandSC(LPTSTR aText, vk_type &aVK, sc_type &aSC, modLR_type *pModifiersLR, HKL aKeybdLayout)
+{
+	if (aVK = TextToVK(aText, pModifiersLR, true, true, aKeybdLayout))
+	{
+		aSC = 0; // Caller should call vk_to_sc(aVK) if needed.
+		return true;
+	}
+	if (aSC = TextToSC(aText))
+	{
+		// Leave aVK set to 0.  Caller should call sc_to_vk(aSC) if needed.
+		return true;
+	}
+	if (!_tcsnicmp(aText, _T("VK"), 2)) // Could be vkXXscXXX, which TextToVK() does not permit in v1.1.27+.
+	{
+		LPTSTR cp;
+		vk_type vk = (vk_type)_tcstoul(aText + 2, &cp, 16);
+		if (!_tcsnicmp(cp, _T("SC"), 2))
+		{
+			sc_type sc = (sc_type)_tcstoul(cp + 2, &cp, 16);
+			if (!*cp) // No invalid suffix.
+			{
+				aVK = vk;
+				aSC = sc;
+				return true;
+			}
+		}
+		else // Invalid suffix.  *cp!=0 is implied as vkXX would be handled by TextToVK().
+			return false;
+	}
+	return false;
 }
 
 

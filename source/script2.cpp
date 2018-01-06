@@ -15957,29 +15957,19 @@ BIF_DECL(BIF_GetKeyName)
 	// Key names are allowed even for GetKeyName() for simplicity and so that it can be
 	// used to normalise a key name; e.g. GetKeyName("Esc") returns "Escape".
 	LPTSTR key = ParamIndexToString(0, aResultToken.buf);
-	vk_type vk = TextToVK(key, NULL, true); // Pass true for the third parameter to avoid it calling TextToSC(), in case this is something like vk23sc14F.
-	sc_type sc = TextToSC(key);
-	if (!sc)
-	{
-		LPTSTR cp;
-		if (  (cp = tcscasestr(key, _T("SC"))) // TextToSC() supports SCxxx but not VKxxSCyyy.
-			&& isxdigit(cp[2])  ) // v1.1.26.00: Rule out key names containing "sc", like "Esc".  v1.1.27.01: Use isxdigit() vs isdigit() for "scF" and similar.
-			sc = (sc_type)_tcstoul(cp + 2, NULL, 16);
-		else
-			sc = vk_to_sc(vk);
-	}
-	else if (!vk)
-		vk = sc_to_vk(sc);
+	vk_type vk;
+	sc_type sc;
+	TextToVKandSC(key, vk, sc);
 
 	switch (ctoupper(aResultToken.marker[6]))
 	{
 	case 'V': // GetKey[V]K
 		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = vk;
+		aResultToken.value_int64 = vk ? vk : sc_to_vk(sc);
 		break;
 	case 'S': // GetKey[S]C
 		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = sc;
+		aResultToken.value_int64 = sc ? sc : vk_to_sc(vk);
 		break;
 	default: // GetKey[N]ame
 		aResultToken.symbol = SYM_STRING;
