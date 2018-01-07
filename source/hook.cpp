@@ -2678,7 +2678,11 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// Use ToAsciiEx() vs. ToAscii() because there is evidence from Putty author that ToAsciiEx() works better
 	// with more keyboard layouts under 2k/XP than ToAscii() does (though if true, there is no MSDN explanation). 
 	// UPDATE: In v1.0.44.03, need to use ToAsciiEx() anyway because of the adapt-to-active-window-layout feature.
-	Get_active_window_keybd_layout // Defines the variables active_window and active_window_keybd_layout for use below.
+	// v1.1.28.00: active_window is set to the focused control, if any, so that the hotstring buffer is reset
+	// when the focus changes between controls, not just between windows.
+	// See Get_active_window_keybd_layout macro definition for related comments.
+	HWND active_window = GetForegroundWindow(); // Set default in case there's no focused control.
+	HKL active_window_keybd_layout = GetKeyboardLayout(GetFocusedCtrlThread(&active_window, active_window));
 
 	if (aVK == VK_PACKET)
 	{
@@ -4543,7 +4547,7 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 
 		*g_HSBuf = '\0';
 		g_HSBufLength = 0;
-		g_HShwnd = GetForegroundWindow(); // Not needed by some callers, but shouldn't hurt even then.
+		g_HShwnd = 0; // It isn't necessary to determine the actual window/control at this point since the buffer is already empty.
 
 		// Variables for the Shift+Numpad workaround:
 		sNextPhysShiftDownIsNotPhys = false;

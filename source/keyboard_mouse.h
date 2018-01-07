@@ -336,7 +336,7 @@ modLR_type ConvertModifiers(mod_type aModifiers);
 mod_type ConvertModifiersLR(modLR_type aModifiersLR);
 LPTSTR ModifiersLRToText(modLR_type aModifiersLR, LPTSTR aBuf);
 
-DWORD GetFocusedThread(HWND aWindow = GetForegroundWindow());
+DWORD GetFocusedCtrlThread(HWND *apControl = NULL, HWND aWindow = GetForegroundWindow());
 HKL GetFocusedKeybdLayout(HWND aWindow = GetForegroundWindow());
 
 #define LAYOUT_UNDETERMINED FAIL
