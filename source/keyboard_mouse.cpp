@@ -87,7 +87,7 @@ void DisguiseWinAltIfNeeded(vk_type aVK)
 		// unwanted effects in certain games):
 		&& ((aVK == VK_LWIN || aVK == VK_RWIN) && (sPrevVK == VK_LWIN || sPrevVK == VK_RWIN) && sSendMode != SM_PLAY
 			|| (aVK == VK_LMENU || (aVK == VK_RMENU && sTargetLayoutHasAltGr != CONDITION_TRUE)) && (sPrevVK == VK_LMENU || sPrevVK == VK_RMENU)))
-		KeyEvent(KEYDOWNANDUP, g_MenuMaskKey); // Disguise it to suppress Start Menu or prevent activation of active window's menu bar.
+		KeyEventMenuMask(KEYDOWNANDUP); // Disguise it to suppress Start Menu or prevent activation of active window's menu bar.
 }
 
 
@@ -1895,6 +1895,15 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 }
 
 
+
+void KeyEventMenuMask(KeyEventTypes aEventType, DWORD aExtraInfo)
+// Send a menu masking key event (use of this function reduces code size).
+{
+	KeyEvent(aEventType, g_MenuMaskKey, 0, NULL, false, aExtraInfo);
+}
+
+
+
 ///////////////////
 // Mouse related //
 ///////////////////
@@ -3273,7 +3282,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 			// to trigger the language switch.
 			if (ctrl_nor_shift_nor_alt_down && aDisguiseUpWinAlt // Nor will they be pushed down later below, otherwise defer_win_release would have been true and we couldn't get to this point.
 				&& sSendMode != SM_PLAY) // SendPlay can't display Start Menu, so disguise not needed (also, disguise might mess up some games).
-				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Disguise key release to suppress Start Menu.
+				KeyEventMenuMask(KEYDOWNANDUP, aExtraInfo); // Disguise key release to suppress Start Menu.
 				// The above event is safe because if we're here, it means VK_CONTROL will not be
 				// pressed down further below.  In other words, we're not defeating the job
 				// of this function by sending these disguise keystrokes.
@@ -3284,10 +3293,10 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 	else if (!(aModifiersLRnow & MOD_LWIN) && (aModifiersLRnew & MOD_LWIN)) // Press down LWin.
 	{
 		if (disguise_win_down)
-			KeyEvent(KEYDOWN, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
+			KeyEventMenuMask(KEYDOWN, aExtraInfo); // Ensures that the Start Menu does not appear.
 		KeyEvent(KEYDOWN, VK_LWIN, 0, NULL, false, aExtraInfo);
 		if (disguise_win_down)
-			KeyEvent(KEYUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
+			KeyEventMenuMask(KEYUP, aExtraInfo); // Ensures that the Start Menu does not appear.
 	}
 
 	if (release_rwin)
@@ -3295,7 +3304,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 		if (!defer_win_release)
 		{
 			if (ctrl_nor_shift_nor_alt_down && aDisguiseUpWinAlt && sSendMode != SM_PLAY)
-				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Disguise key release to suppress Start Menu.
+				KeyEventMenuMask(KEYDOWNANDUP, aExtraInfo); // Disguise key release to suppress Start Menu.
 			KeyEvent(KEYUP, VK_RWIN, 0, NULL, false, aExtraInfo);
 		}
 		// else release it only after the normal operation of the function pushes down the disguise keys.
@@ -3303,10 +3312,10 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 	else if (!(aModifiersLRnow & MOD_RWIN) && (aModifiersLRnew & MOD_RWIN)) // Press down RWin.
 	{
 		if (disguise_win_down)
-			KeyEvent(KEYDOWN, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
+			KeyEventMenuMask(KEYDOWN, aExtraInfo); // Ensures that the Start Menu does not appear.
 		KeyEvent(KEYDOWN, VK_RWIN, 0, NULL, false, aExtraInfo);
 		if (disguise_win_down)
-			KeyEvent(KEYUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
+			KeyEventMenuMask(KEYUP, aExtraInfo); // Ensures that the Start Menu does not appear.
 	}
 
 	// ** SHIFT (PART 1 OF 2)
@@ -3324,17 +3333,17 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 		if (!defer_alt_release)
 		{
 			if (ctrl_not_down && aDisguiseUpWinAlt)
-				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Disguise key release to suppress menu activation.
+				KeyEventMenuMask(KEYDOWNANDUP, aExtraInfo); // Disguise key release to suppress menu activation.
 			KeyEvent(KEYUP, VK_LMENU, 0, NULL, false, aExtraInfo);
 		}
 	}
 	else if (!(aModifiersLRnow & MOD_LALT) && (aModifiersLRnew & MOD_LALT))
 	{
 		if (disguise_alt_down)
-			KeyEvent(KEYDOWN, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that menu bar is not activated.
+			KeyEventMenuMask(KEYDOWN, aExtraInfo); // Ensures that menu bar is not activated.
 		KeyEvent(KEYDOWN, VK_LMENU, 0, NULL, false, aExtraInfo);
 		if (disguise_alt_down)
-			KeyEvent(KEYUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo);
+			KeyEventMenuMask(KEYUP, aExtraInfo);
 	}
 
 	if (release_ralt)
@@ -3355,7 +3364,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 			}
 			else // No AltGr, so check if disguise is necessary (AltGr itself never needs disguise).
 				if (ctrl_not_down && aDisguiseUpWinAlt)
-					KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Disguise key release to suppress menu activation.
+					KeyEventMenuMask(KEYDOWNANDUP, aExtraInfo); // Disguise key release to suppress menu activation.
 			KeyEvent(KEYUP, VK_RMENU, 0, NULL, false, aExtraInfo);
 		}
 	}
@@ -3366,9 +3375,9 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 		// disguise_alt_key also applies to the left alt key.
 		if (disguise_alt_down && sTargetLayoutHasAltGr != CONDITION_TRUE)
 		{
-			KeyEvent(KEYDOWN, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that menu bar is not activated.
+			KeyEventMenuMask(KEYDOWN, aExtraInfo); // Ensures that menu bar is not activated.
 			KeyEvent(KEYDOWN, VK_RMENU, 0, NULL, false, aExtraInfo);
-			KeyEvent(KEYUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo);
+			KeyEventMenuMask(KEYUP, aExtraInfo);
 		}
 		else // No disguise needed.
 		{
