@@ -2930,6 +2930,7 @@ private:
 	static ActionTypeType ConvertActionType(LPTSTR aActionTypeString);
 	static ActionTypeType ConvertOldActionType(LPTSTR aActionTypeString);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
+	void RemoveLabel(Label *aLabel);
 	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, int aArgc = 0, LPTSTR aArgMap[] = NULL);
 
 	// These aren't in the Line class because I think they're easier to implement

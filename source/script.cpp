@@ -3750,6 +3750,22 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 
 
 
+void Script::RemoveLabel(Label *aLabel)
+// Remove a label from the linked list.
+// Used by DefineFunc to implement hotkey/hotstring functions.
+{
+	if (aLabel->mPrevLabel)
+		aLabel->mPrevLabel->mNextLabel = aLabel->mNextLabel;
+	else
+		mFirstLabel = aLabel->mNextLabel;
+	if (aLabel->mNextLabel)
+		aLabel->mNextLabel->mPrevLabel = aLabel->mPrevLabel;
+	else
+		mLastLabel = aLabel->mPrevLabel;
+}
+
+
+
 ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType, ActionTypeType aOldActionType
 	, LPTSTR aActionName, LPTSTR aEndMarker, LPTSTR aLiteralMap, size_t aLiteralMapLength)
 // Returns OK or FAIL.
@@ -7434,16 +7450,22 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 					// Remove this hotkey label from the list.  Each label is removed as the corresponding
 					// hotkey variant is found so that any generic labels that might be mixed in are left
 					// in the list and detected as errors later.
-					if (label->mPrevLabel)
-						label->mPrevLabel->mNextLabel = label->mNextLabel;
-					else
-						mFirstLabel = label->mNextLabel;
-					if (label->mNextLabel)
-						label->mNextLabel->mPrevLabel = label->mPrevLabel;
-					else
-						mLastLabel = label->mPrevLabel;
+					RemoveLabel(label);
 				}
 			}
+		}
+		// Check hotstrings as well (even if a hotkey was found):
+		for (int i = Hotstring::sHotstringCount - 1; i >= 0; --i) // Start with the last one defined, for performance.
+		{
+			Label *label = Hotstring::shs[i]->mJumpToLabel->ToLabel(); // Might be a function.
+			if (!label || label->mJumpToLine)
+				// This hotstring has a function or a label which has already been resolved.
+				// Since hotstrings are listed in order of definition and we're iterating in
+				// the reverse order, there's no need to continue.
+				break;
+			// See hotkey section above for comments.
+			Hotstring::shs[i]->mJumpToLabel = &func;
+			RemoveLabel(label);
 		}
 		if (mLastLabel && !mLastLabel->mJumpToLine)
 			// There are one or more non-hotkey labels pointing at this function.
