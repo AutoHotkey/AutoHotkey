@@ -1899,7 +1899,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 void KeyEventMenuMask(KeyEventTypes aEventType, DWORD aExtraInfo)
 // Send a menu masking key event (use of this function reduces code size).
 {
-	KeyEvent(aEventType, g_MenuMaskKey, 0, NULL, false, aExtraInfo);
+	KeyEvent(aEventType, g_MenuMaskKeyVK, g_MenuMaskKeySC, NULL, false, aExtraInfo);
 }
 
 
