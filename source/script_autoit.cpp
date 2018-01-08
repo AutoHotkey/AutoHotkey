@@ -297,7 +297,17 @@ ResultType Line::WinMenuSelectItem(LPTSTR aTitle, LPTSTR aText, LPTSTR aMenu1, L
 	if (!target_window)
 		goto error;
 
-	HMENU hMenu = GetMenu(target_window);
+	int first_menu_param = 0;
+	UINT message = WM_COMMAND;
+	HMENU hMenu;
+	if (!_tcsicmp(aMenu1, _T("0&")))
+	{
+		hMenu = GetSystemMenu(target_window, FALSE);
+		first_menu_param = 1;
+		message = WM_SYSCOMMAND;
+	}
+	else
+		hMenu = GetMenu(target_window);
 	if (!hMenu) // Window has no menu bar.
 		goto error;
 
@@ -323,7 +333,7 @@ else\
 	int pos, target_menu_pos;
 	LPTSTR this_menu_param;
 
-	for (int i = 0; ; ++i)
+	for (int i = first_menu_param; ; ++i)
 	{
 		this_menu_param = menu_param[i]; // For performance and convenience.
 		if (!(this_menu_param && *this_menu_param))
@@ -382,7 +392,7 @@ else\
 		goto error;
 
 	// Since the above didn't return, the specified search hierarchy was completely found.
-	PostMessage(target_window, WM_COMMAND, (WPARAM)menu_id, 0);
+	PostMessage(target_window, message, (WPARAM)menu_id, 0);
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 error:
