@@ -8284,7 +8284,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	{
 		bif = BIF_StrSplit;
 		min_params = 1;
-		max_params = 3;
+		max_params = 4;
 	}
 	else if (!_tcsnicmp(func_name, _T("GetKey"), 6))
 	{
