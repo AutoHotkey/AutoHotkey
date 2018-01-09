@@ -4339,6 +4339,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 		{
 		case ':':
 			// v1.0.40: Allow things like "MsgBox :: test" to be valid by insisting that '=' follows ':'.
+			// v2.0: The example above is invalid, but it's still best to verify this is really ':='.
 			if (action_args_2nd_char == '=') // i.e. :=
 				aActionType = ACT_ASSIGNEXPR;
 			break;
@@ -4348,6 +4349,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			// a line such as the following, which omits the first optional comma, to still be recognized
 			// as a command rather than a variable-with-operator:
 			// SetWinDelay -1
+			// v2.0: Cases like `x ++` aren't currently supported due to the risk of misinterpreting
+			// something like `myfn ++x` or other contrived-but-valid calls like `myfn ++(b ? x : y)`
+			// or `myfn ++++x`.  Unlike ternary, it's probably more common to write ++ without the space.
 			if (!end_marker && action_args_2nd_char == *action_args // i.e. the pre-increment/decrement operator; e.g. ++index or --index.
 				|| action_args_2nd_char == '=') // i.e. x+=y or x-=y (by contrast, post-increment/decrement is recognized only after we check for a command name to cut down on ambiguity).
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
@@ -4364,8 +4368,12 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				|| action_args_2nd_char == '/' && action_args[2] == '=') // i.e. //=
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 			break;
-		//case '?': Stand-alone ternary such as true ? fn1() : fn2().  These are rare so are
-		// checked later, only after action_name has been checked to see if it's a valid command.
+		case '?': // Stand-alone ternary beginning with a variable, such as true ? fn1() : fn2().
+			// v2.0: Even if this is a valid function name (which is impossible to determine for
+			// user-defined functions at this stage due), this can't be a valid function call stmt
+			// since its first parameter would begin with the '?' operator.
+			aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
+			break;
 		case '>':
 		case '<':
 			if (action_args_2nd_char == *action_args && action_args[2] == '=') // i.e. >>= and <<=
@@ -4464,7 +4472,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 
 		if (!aActionType)
 		{
-			if (!_tcsicmp(action_name, _T("new")) && IS_SPACE_OR_TAB(*end_marker))
+			if (!_tcsicmp(action_name, _T("new")) && IS_SPACE_OR_TAB(*end_marker)) // Note that new(MyClass) doesn't need to be checked here because our caller pre-determines ACT_EXPRESSION based on IsFunction().
 			{
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				action_args = aLineText; // Use the line's full text for later parsing.
