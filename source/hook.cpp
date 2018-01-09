@@ -2623,7 +2623,9 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// that determines whether the backspace behaves like an unmodified backspace.  This solves the issue
 	// of the Input command collecting simulated backspaces as real characters rather than recognizing
 	// them as a means to erase the previous character in the buffer.
-	if (aVK == VK_BACK && !g_modifiersLR_logical) // Backspace
+	// Fix for v2.0: Shift is allowed as it generally has no effect on the native function of Backspace.
+	// This is probably connected with the fact that Shift+BS is also transcribed to `b, which we don't want.
+	if (aVK == VK_BACK && !(g_modifiersLR_logical & ~(MOD_LSHIFT | MOD_RSHIFT))) // Backspace
 	{
 		// Note that it might have been in progress upon entry to this function but now isn't due to
 		// INPUT_TERMINATED_BY_ENDKEY above:
@@ -2636,7 +2638,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 			sPendingDeadKeyVK = 0;
 		return treat_as_visible;
 	}
-
 
 	int char_count;
 	TBYTE ch[3];
