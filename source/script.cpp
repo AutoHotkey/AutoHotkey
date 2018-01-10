@@ -10013,7 +10013,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 
 				ExprTokenType &this_infix_item = infix[infix_count]; // Might help reduce code size since it's referenced many places below.
 				this_infix_item.deref = NULL; // Init needed for SYM_ASSIGN and related; a non-NULL deref means it should be converted to an object-assignment.
-				this_infix_item.is_lvalue = FALSE; // Init needed for SYM_VAR; simplifies #Warn ClassOverwrite (vs. storing it in the assignment token).
 
 				// CHECK IF THIS CHARACTER IS AN OPERATOR.
 				cp1 = cp[1]; // Improves performance by nearly 5% and appreciably reduces code size (at the expense of being less maintainable).
@@ -10689,6 +10688,7 @@ numeric_literal:
 					// DllCall() and possibly others rely on this having been done to support changing the
 					// value of a parameter (similar to by-ref).
 					infix[infix_count].symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the clipboard in the case of expression lvalues.  Search for VAR_CLIPBOARD further below for details.
+					infix[infix_count].is_lvalue = FALSE; // Set default.  This simplifies #Warn ClassOverwrite (vs. storing it in the assignment token).
 				}
 				else // It's either a built-in variable (including clipboard) OR a possible environment variable.
 				{
@@ -10828,7 +10828,10 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				sym_prev = this_infix[1].symbol; // Resolve to help macro's code size and performance.
 				if (IS_ASSIGNMENT_OR_POST_OP(sym_prev) // Post-op must be checked for VAR_CLIPBOARD (by contrast, it seems unnecessary to check it for others; see comments below).
 					|| stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT) // Stack *not* infix.
+				{
 					this_infix->symbol = SYM_VAR; // Convert clipboard or environment variable into SYM_VAR.
+					//this_infix->is_lvalue = TRUE; // No need to set this; it will be set when the assignment is detected.
+				}
 				// POST-INC/DEC: It seems unnecessary to check for these except for VAR_CLIPBOARD because
 				// those assignments (and indeed any assignment other than .= and :=) will have no effect
 				// on a ON A SYM_DYNAMIC environment variable.  This is because by definition, such
@@ -11050,6 +11053,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 							// direct assignment to environment variables isn't supported by anything other
 							// than EnvSet.
 							fwd_infix->symbol = SYM_VAR; // Convert dynamic to a normal variable, see above.
+							//fwd_infix->is_lvalue = TRUE; // No need to set this; it will be set when the assignment is detected.
 							fwd_infix[1].symbol = SYM_ASSIGN;
 							// And now cascade to the right until the last qualified '=' operator is found.
 						}
@@ -11344,7 +11348,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			// Mark the target variable as an l-value for #Warn ClassOverwrite.
 			if (postfix_count && postfix[postfix_count-1]->symbol == SYM_VAR)
 				postfix[postfix_count-1]->is_lvalue = TRUE;
-			//else: It's invalid, but for backward-compatibility it is ignored at this stage.
+			//else: It could still be something valid, like SYM_IFF_ELSE in ++(whichvar ? x : y).
 			break;
 
 		default:
