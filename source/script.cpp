@@ -8694,6 +8694,7 @@ unquoted_literal:
 			}
 			else
 				infix[infix_count].symbol = this_deref_ref.symbol;
+			infix[infix_count].error_reporting_marker = this_deref_ref.marker;
 		}
 		else // this_deref is a variable.
 		{
