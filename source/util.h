@@ -426,6 +426,11 @@ inline bool IsHex(LPCTSTR aBuf) // 10/17/2006: __forceinline worsens performance
 
 __int64 tcstoi64_o(LPCTSTR buf, LPCTSTR *endptr, int base);
 
+inline __int64 tcstoi64_o(LPTSTR buf, LPTSTR *endptr, int base)
+{
+	return tcstoi64_o(buf, const_cast<LPCTSTR *>(endptr), base);
+}
+
 // As of v1.0.30, ATOI(), ITOA() and the other related functions below are no longer macros
 // because there are too many places where something like ATOI(++cp) is done, which would be a
 // bug if not caught since cp would be incremented more than once if the macro referred to that

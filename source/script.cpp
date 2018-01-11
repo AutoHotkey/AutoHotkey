@@ -5313,11 +5313,12 @@ ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDere
 	return OK;
 }
 
+
 ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos, TCHAR aEndChar)
 {
 	LPTSTR op_begin, op_end;
 	size_t operand_length;
-	TCHAR orig_char, close_char, *cp;
+	TCHAR close_char, *cp;
 	int j;
 	bool is_function, pending_op_is_class = false;
 	bool is_double_deref;
@@ -5431,219 +5432,139 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 			// op_end is now set correctly to allow the outer loop to continue.
 			continue;
 		}
-					
-		// Find the end of this operand (if *op_end is '\0', strchr() will find that too):
-		for (op_end = op_begin; !_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT, *op_end); ++op_end); // Find first whitespace, operator, or paren.
-		if (*op_end == '=' && op_end[-1] == '.') // .=
-			--op_end;
-		// Now op_end marks the end of this operand.  The end might be the zero terminator, an operator, etc.
 
-		// Before checking for word operators, check if this is the "key" in {key: value}.
-		// Things like {new: true} and obj.new are allowed because there is no ambiguity.
-		cp = omit_leading_whitespace(op_end);
-		if (*cp == ':' && cp[1] != '=') // Not :=
+		if (*op_begin <= '9' && *op_begin >= '0') // Numeric literal.  Numbers starting with a decimal point are handled under "case '.'".
 		{
-			cp = omit_trailing_whitespace(aArgText, op_begin - 1);
-			if (*cp == ',' || *cp == '{')
+			if (IsHex(op_begin))
+				tcstoi64_o(op_begin, &op_end, 16);
+			else
+				_tcstod(op_begin, &op_end); // Handles both decimal integers and floating-point numbers.
+			if (_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT, *op_end)) // '\0' is included in the search.
 			{
-				// This is either the key in a key-value pair in an object literal, or a syntax
-				// error which will be caught at a later stage (since the ':' is missing its '?').
-				cp = find_identifier_end(op_begin);
-				if (*cp != '.') // i.e. exclude x.y as that should be parsed as normal for an expression.
-				{
-					if (cp != op_end) // op contains reserved characters.
-						return ScriptError(_T("Quote marks are required around this key."), op_begin);
-					continue;
-				}
+				pending_op_is_class = false; // Must be cleared for `new 123` to be interpreted correctly.
+				continue; // Do nothing further since pure numbers don't need any processing at this stage.
 			}
+			//else: It's not valid, but let it pass through to Var::ValidateName() to generate an error message.
 		}
 
+		// Find the end of this operand (if *op_end is '\0', _tcschr() will find that too):
+		op_end = find_identifier_end(op_begin);
+		// Now op_end marks the end of this operand.  The end might be the zero terminator, an operator, etc.
 		operand_length = op_end - op_begin;
 
-		// Check if it's a word operator like AND/OR/NOT:
-		if (operand_length < 9 && operand_length > 1)
-		{
-			struct WordOp
-			{
-				LPCTSTR word;
-				SymbolType op;
-			};
-			static WordOp sWordOp[] =
-			{
-				{ _T("or"), SYM_OR },
-				{ _T("and"), SYM_AND },
-				{ _T("not"), SYM_LOWNOT },
-				{ _T("new"), SYM_NEW },
-				{ _T("is"), SYM_IS },
-				{ _T("in"), SYM_IN },
-				{ _T("contains"), SYM_CONTAINS }
-			};
-			for (int i = 0; i < _countof(sWordOp); ++i)
-			{
-				if (!_tcsnicmp(sWordOp[i].word, op_begin, operand_length) && !sWordOp[i].word[operand_length])
-				{
-					wordop = sWordOp[i].op;
-					if (wordop == SYM_NEW)
-					{
-						cp = omit_leading_whitespace(op_begin + 3);
-						if (IS_IDENTIFIER_CHAR(*cp) || *cp == g_DerefChar)
-						{
-							// This "new" is followed by something that could be a class name or double-deref
-							// (but might be some other var, as in `new x.y()`).  In any case, we need to avoid
-							// parsing it as a function call.
-							pending_op_is_class = true;
-						}
-					}
-					else if (wordop == SYM_IN || wordop == SYM_CONTAINS)
-					{
-						return ScriptError(_T("Word reserved for future use."), sWordOp[i].word);
-					}
-					// Mark this word as an operator.  Unlike the old method of replacing "OR" with "||",
-					// this leaves ListLines more accurate.  More importantly, it allows "Hotkey, If" to
-					// recognize an expression which uses AND/OR.  Additionally, the "NEW" operator will
-					// require a DerefType struct in the postfix expression phase anyway.
-					goto word_operator;
-				}
-			}
-		} // End of word operator check.
-
-		// Temporarily terminate, for IsNumeric() and to simplify some other checks.
-		orig_char = *op_end;
-		*op_end = '\0';
-
+		// Check for characters which are either illegal in expressions or reserved for future use.
 		// Illegal characters are legal when enclosed in double quotes.  So the following is
 		// done only after the above has ensured this operand is not one enclosed entirely in
-		// double quotes.
-		// The following characters are either illegal in expressions or reserved for future use.
-		for (cp = op_begin; !_tcschr(EXPR_ILLEGAL_CHARS, *cp); ++cp); // _tcschr includes the null terminator in the search.
-		if (*cp)
-			return ScriptError(ERR_EXP_ILLEGAL_CHAR, cp);
+		// double quotes.  Only *op_end needs to be checked since find_identifier_end() ends at
+		// the first non-identifier character, which may be op_begin itself.
+		if (*op_end && _tcschr(EXPR_ILLEGAL_CHARS, *op_end))
+			return ScriptError(ERR_EXP_ILLEGAL_CHAR, op_end);
 
-		// Below takes care of recognizing hexadecimal integers, which avoids the 'x' character
-		// inside of something like 0xFF from being detected as the name of a variable:
-		if (!IsNumeric(op_begin, true, false, true)) // Not a numeric literal.
+		if (is_double_deref = (*op_end == g_DerefChar && aEndChar != g_DerefChar))
 		{
-			if (ctoupper(op_end[-1]) == 'E' && (orig_char == '+' || orig_char == '-')) // Listed first for short-circuit performance with the below.
-			{
-				// v1.0.46.11: This item appears to be a scientific-notation literal with the OPTIONAL +/- sign PRESENT on the exponent (e.g. 1.0e+001), so check that before checking if it's a variable name.
-				*op_end = orig_char; // Undo the temporary termination.
-				TCHAR *n_end = op_end; // Don't change op_end yet because it might be something like "e+f" rather than a number.
-				do // Skip over the sign and its exponent; e.g. the "+1" in "1.0e+1".  There must be a sign in this particular sci-notation number or we would never have arrived here.
-					++n_end;
-				while (*n_end >= '0' && *n_end <= '9'); // Avoid isdigit() because it sometimes causes a debug assertion failure at: (unsigned)(c + 1) <= 256 (probably only in debug mode), and maybe only when bad data got in it due to some other bug.
-
-				// Double-check it really is a floating-point literal with signed exponent.
-				TCHAR n_orig_char = *n_end; // Don't change orig_char because it might be needed below if !IsNumeric().
-				*n_end = '\0';
-				if (IsNumeric(op_begin, true, false, true))
-				{
-					*n_end = n_orig_char;
-					op_end = n_end;
-					continue; // Pure number, which doesn't need any processing at this stage.
-				}
-				*n_end = n_orig_char;
-				*op_end = '\0'; // Temporarily terminate again.
-			}
-			// Since above did not "continue", this is NOT a scientific-notation literal
-			// with +/- sign present, but maybe it's an object access operation such as "x.y".
-			// Note that although an operand can contain a dot, it cannot begin with one.
-			if (cp = _tcschr(op_begin, '.'))
-			{
-				// Resolve the part preceding the dot as a variable reference,
-				// and allow the next iteration to handle the dot.
-				operand_length = cp - op_begin;
-				*op_end = orig_char; // Unterminate at the old end position.
-				op_end = cp; // End at the dot.
-				*op_end = '\0'; // Temporarily terminate.
-				orig_char = '.';
-				// Since this operand ends with a dot, it can't be either of the following:
-				is_double_deref = false;
-				is_function = false;
-			}
-			else if (is_double_deref = (orig_char == g_DerefChar && aEndChar != g_DerefChar))
-			{
-				// This operand is the leading literal part of a double dereference.
-				*op_end = orig_char; // Undo termination.
-				j = (int)(op_begin - aArgText);
-				if (!ParseDoubleDeref(aArgText, aArgMap, aDeref, aDerefCount, &j))
-					return FAIL;
-				op_end = aArgText + j;
-				is_function = *op_end == '('; // Dynamic function call.
-			}
-			else
-			{
-				is_function	= orig_char == '(';
-			}			
-
-			// If the "new" operator directly precedes this operand, it can't be a function name.
-			// This only applies to operands at the same recursion/nesting level as the operator.
-			if (pending_op_is_class)
-				pending_op_is_class = is_function = false;
-
-			if (aDerefCount >= MAX_DEREFS_PER_ARG)
-				return ScriptError(ERR_TOO_MANY_REFS, op_begin); // Indicate which operand it ran out of space at.
-
-			if (is_double_deref)
-			{
-				// Mark the end of the sub-expression which computes the variable name or function
-				// in this double-deref or dynamic function call:
-				aDeref[aDerefCount].marker = op_end;
-				aDeref[aDerefCount].length = 0;
-				if (is_function)
-				{
-					// func is initialized to NULL and left that way to indicate the call is dynamic.
-					// PreparseBlocks() relies on length == 0 meaning a dynamic function reference.
-					aDeref[aDerefCount].func = NULL;
-					aDeref[aDerefCount].type = DT_FUNC;
-				}
-				else
-					aDeref[aDerefCount].type = DT_DOUBLE;
-				++aDerefCount;
-				continue;
-			}
-			else // This operand is a variable name or function name (single deref).
-			{
-				// Store the deref's starting location, even for functions (leave it set to the start
-				// of the function's name for use when doing error reporting at other stages -- i.e.
-				// don't set it to the address of the first param or closing-paren-if-no-params):
-				aDeref[aDerefCount].marker = op_begin;
-				aDeref[aDerefCount].length = (DerefLengthType)operand_length;
-				aDeref[aDerefCount].type = is_function ? DT_FUNC : DT_VAR;
-				if (is_function)
-					// Set to NULL to catch bugs.  It must and will be filled in at a later stage
-					// because the setting of each function's mJumpToLine relies upon the fact that
-					// functions are added to the linked list only upon being formally defined
-					// so that the most recently defined function is always last in the linked
-					// list, awaiting its mJumpToLine that will appear beneath it.
-					aDeref[aDerefCount].func = NULL;
-				else // It's a variable rather than a function.
-					if (   !(aDeref[aDerefCount].var = FindOrAddVar(op_begin, operand_length))   )
-						return FAIL; // The called function already displayed the error.
-				++aDerefCount; // Since above didn't "continue" or "return".
-			}
+			// This operand is the leading literal part of a double dereference.
+			j = (int)(op_begin - aArgText);
+			if (!ParseDoubleDeref(aArgText, aArgMap, aDeref, aDerefCount, &j))
+				return FAIL;
+			op_end = aArgText + j;
+			is_function = *op_end == '('; // Dynamic function call.
 		}
 		else
 		{
-			// Purely numeric.  Do nothing since pure numbers don't need any processing at this stage.
-			// Clear this flag, which may have been set for something like `new 123`:
-			pending_op_is_class = false;
-		}
-		*op_end = orig_char; // Undo the temporary termination.
-		continue;
+			// Before checking for word operators, check if this is the "key" in {key: value}.
+			// Things like {new: true} and obj.new are allowed because there is no ambiguity.
+			// This is done after the check for '.' above so that {x.y:z} is parsed as {(x.y):z}.
+			cp = omit_leading_whitespace(op_end);
+			if (*cp == ':' && cp[1] != '=') // Not :=
+			{
+				cp = omit_trailing_whitespace(aArgText, op_begin - 1);
+				if (*cp == ',' || *cp == '{')
+				{
+					// This is either the key in a key-value pair in an object literal, or a syntax
+					// error which will be caught at a later stage (since the ':' is missing its '?').
+					continue; // Leave it unmarked so ExpressionToPostfix() handles it as a literal.
+				}
+			}
+			is_function	= *op_end == '(';
+		}			
 
-word_operator:
+		// If the "new" operator directly precedes this operand, it can't be a function name.
+		// This only applies to operands at the same recursion/nesting level as the operator.
+		if (pending_op_is_class)
+			pending_op_is_class = is_function = false;
+
 		if (aDerefCount >= MAX_DEREFS_PER_ARG)
-			return ScriptError(ERR_TOO_MANY_REFS, op_begin);
-		aDeref[aDerefCount].marker = op_begin;
-		aDeref[aDerefCount].length = (DerefLengthType)operand_length;
-		aDeref[aDerefCount].type = DT_WORDOP;
-		aDeref[aDerefCount].symbol = wordop;
-		aDerefCount++;
+			return ScriptError(ERR_TOO_MANY_REFS, op_begin); // Indicate which operand it ran out of space at.
+
+		if (is_double_deref)
+		{
+			// Mark the end of the sub-expression which computes the variable name or function
+			// in this double-deref or dynamic function call:
+			aDeref[aDerefCount].marker = op_end;
+			aDeref[aDerefCount].length = 0;
+			if (is_function)
+			{
+				// func is initialized to NULL and left that way to indicate the call is dynamic.
+				// PreparseBlocks() relies on length == 0 meaning a dynamic function reference.
+				aDeref[aDerefCount].func = NULL;
+				aDeref[aDerefCount].type = DT_FUNC;
+			}
+			else
+				aDeref[aDerefCount].type = DT_DOUBLE;
+		}
+		else if (  operand_length < 9 && (wordop = ConvertWordOperator(op_begin, operand_length))  )
+		{
+			// It's a word operator like AND/OR/NOT.
+			if (wordop == SYM_NEW)
+			{
+				cp = omit_leading_whitespace(op_begin + 3);
+				if (IS_IDENTIFIER_CHAR(*cp) || *cp == g_DerefChar)
+				{
+					// This "new" is followed by something that could be a class name or double-deref
+					// (but might be some other var, as in `new x.y()`).  In any case, we need to avoid
+					// parsing it as a function call.
+					pending_op_is_class = true;
+				}
+			}
+			else if (wordop == SYM_IN || wordop == SYM_CONTAINS)
+			{
+				return ScriptError(_T("Word reserved for future use."), op_begin);
+			}
+			// Mark this word as an operator.  Unlike the old method of replacing "OR" with "||",
+			// this leaves ListLines more accurate.  More importantly, it allows "Hotkey, If" to
+			// recognize an expression which uses AND/OR.  Additionally, the "NEW" operator will
+			// require a DerefType struct in the postfix expression phase anyway.
+			aDeref[aDerefCount].marker = op_begin;
+			aDeref[aDerefCount].length = (DerefLengthType)operand_length;
+			aDeref[aDerefCount].type = DT_WORDOP;
+			aDeref[aDerefCount].symbol = wordop;
+		}
+		else // This operand is a variable name or function name (single deref).
+		{
+			// Store the deref's starting location, even for functions (leave it set to the start
+			// of the function's name for use when doing error reporting at other stages -- i.e.
+			// don't set it to the address of the first param or closing-paren-if-no-params):
+			aDeref[aDerefCount].marker = op_begin;
+			aDeref[aDerefCount].length = (DerefLengthType)operand_length;
+			aDeref[aDerefCount].type = is_function ? DT_FUNC : DT_VAR;
+			if (is_function)
+				// Set to NULL to catch bugs.  It must and will be filled in at a later stage
+				// because the setting of each function's mJumpToLine relies upon the fact that
+				// functions are added to the linked list only upon being formally defined
+				// so that the most recently defined function is always last in the linked
+				// list, awaiting its mJumpToLine that will appear beneath it.
+				aDeref[aDerefCount].func = NULL;
+			else // It's a variable rather than a function.
+				if (   !(aDeref[aDerefCount].var = FindOrAddVar(op_begin, operand_length))   )
+					return FAIL; // The called function already displayed the error.
+		}
+		++aDerefCount; // Since above didn't "continue" or "return".
 	}
 	if (aPos)
     	*aPos = int(op_begin - aArgText);
 	return OK;
 }
+
 
 ResultType Script::ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos)
 {
@@ -5682,6 +5603,34 @@ ResultType Script::ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefType *
 			return ScriptError(_T("Missing ending \"%\""), op_begin);
 	}
 	return OK;
+}
+
+
+SymbolType Script::ConvertWordOperator(LPCTSTR aWord, size_t aLength)
+{
+	struct WordOp
+	{
+		LPCTSTR word;
+		SymbolType op;
+	};
+	static WordOp sWordOp[] =
+	{
+		{ _T("or"), SYM_OR },
+		{ _T("and"), SYM_AND },
+		{ _T("not"), SYM_LOWNOT },
+		{ _T("new"), SYM_NEW },
+		{ _T("is"), SYM_IS },
+		{ _T("in"), SYM_IN },
+		{ _T("contains"), SYM_CONTAINS }
+	};
+	for (int i = 0; i < _countof(sWordOp); ++i)
+	{
+		if (!_tcsnicmp(sWordOp[i].word, aWord, aLength) && !sWordOp[i].word[aLength])
+		{
+			return sWordOp[i].op;
+		}
+	}
+	return (SymbolType)FALSE;
 }
 
 

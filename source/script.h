@@ -852,18 +852,14 @@ public:
 
 	ResultType ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken = NULL, Line **apJumpToLine = NULL);
 
-	// The following are characters that can't legally occur after an AND or OR.  It excludes all unary operators
+	// The following are characters that can't legally occur after a binary operator.  It excludes all unary operators
 	// "!~*&-+" as well as the parentheses chars "()":
-	#define EXPR_CORE _T("<>=/|^,:")
-	// The characters common to both EXPR_TELLTALES and EXPR_OPERAND_TERMINATORS:
+	#define EXPR_CORE _T("<>=/|^,?:")
+	// The characters common to both EXPR_TELLTALES (obsolete) and EXPR_OPERAND_TERMINATORS:
 	#define EXPR_COMMON _T(" \t") EXPR_CORE _T("*&~!()[]{}")  // Space and Tab are included at the beginning for performance.  L31: Added [] for array-like syntax.
-	#define CONTINUATION_LINE_SYMBOLS EXPR_CORE _T(".+-*&!?~") // v1.0.46.
-	// Characters whose presence in a mandatory-numeric param make it an expression for certain.
-	// + and - are not included here because legacy numeric parameters can contain unary plus or minus,
-	// e.g. WinMove, -%x%, -%y%:
-	#define EXPR_TELLTALES EXPR_COMMON _T("\"")
+	#define CONTINUATION_LINE_SYMBOLS EXPR_CORE _T(".+-*&!~") // v1.0.46.
 	// Characters that mark the end of an operand inside an expression.  Double-quote must not be included:
-	#define EXPR_OPERAND_TERMINATORS_EX_DOT EXPR_COMMON _T("%+-?\n") // L31: Used in a few places where '.' needs special treatment.
+	#define EXPR_OPERAND_TERMINATORS_EX_DOT EXPR_COMMON _T("%+-\n") // L31: Used in a few places where '.' needs special treatment.
 	#define EXPR_OPERAND_TERMINATORS EXPR_OPERAND_TERMINATORS_EX_DOT _T(".") // L31: Used in expressions where '.' is always an operator.
 	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS _T("\"'")
 	#define EXPR_ILLEGAL_CHARS _T("\\;`@#$") // Characters illegal in an expression.
@@ -2768,6 +2764,8 @@ public:
 	ResultType DefineClassProperty(LPTSTR aBuf);
 	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
 	ResultType ResolveClasses();
+
+	static SymbolType ConvertWordOperator(LPCTSTR aWord, size_t aLength);
 
 	#define FINDVAR_DEFAULT  (VAR_LOCAL | VAR_GLOBAL)
 	#define FINDVAR_GLOBAL   VAR_GLOBAL
