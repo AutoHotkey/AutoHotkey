@@ -4477,7 +4477,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				action_args = aLineText; // Use the line's full text for later parsing.
 			}
-			else
+			else if (*action_name < '0' || *action_name > '9') // Exclude numbers, since no function name can start with a number.
 			{
 				aActionType = ACT_FUNC;
 				// Include the function name as an arg:
