@@ -7301,52 +7301,31 @@ BIF_DECL(BIF_StrSplit)
 		|| splits_left == -1) // The caller specified 0 parts.
 		return;
 	
+	LPTSTR contents_of_next_element, delimiter, new_starting_pos;
+	size_t element_length, delimiter_length;
+
 	if (aDelimiterCount) // The user provided a list of delimiters, so process the input variable normally.
 	{
-		LPTSTR contents_of_next_element, delimiter, new_starting_pos;
-		size_t element_length, delimiter_length;
 		for (contents_of_next_element = aInputString; ; )
 		{
-			if (   splits_left // No limit, or limit not reached yet.
-				&& (delimiter = InStrAny(contents_of_next_element, aDelimiterList, aDelimiterCount, delimiter_length))   ) // A delimiter was found.
+			if (   !splits_left // Limit reached.
+				|| !(delimiter = InStrAny(contents_of_next_element, aDelimiterList, aDelimiterCount, delimiter_length))   ) // No delimiter found.
+				break; // This is the only way out of the loop other than critical errors.
+			element_length = delimiter - contents_of_next_element;
+			if (*aOmitList && element_length > 0)
 			{
-				element_length = delimiter - contents_of_next_element;
-				if (*aOmitList && element_length > 0)
-				{
-					contents_of_next_element = omit_leading_any(contents_of_next_element, aOmitList, element_length);
-					element_length = delimiter - contents_of_next_element; // Update in case above changed it.
-					if (element_length)
-						element_length = omit_trailing_any(contents_of_next_element, aOmitList, delimiter - 1);
-				}
-				// If there are no chars to the left of the delim, or if they were all in the list of omitted
-				// chars, the variable will be assigned the empty string:
-				if (!output_array->Append(contents_of_next_element, element_length))
-					break;
-				contents_of_next_element = delimiter + delimiter_length;  // Omit the delimiter since it's never included in contents.
-				if (splits_left > 0)
-					--splits_left;
+				contents_of_next_element = omit_leading_any(contents_of_next_element, aOmitList, element_length);
+				element_length = delimiter - contents_of_next_element; // Update in case above changed it.
+				if (element_length)
+					element_length = omit_trailing_any(contents_of_next_element, aOmitList, delimiter - 1);
 			}
-			else // the entire length of contents_of_next_element is what will be stored
-			{
-				element_length = _tcslen(contents_of_next_element);
-				if (*aOmitList && element_length > 0)
-				{
-					new_starting_pos = omit_leading_any(contents_of_next_element, aOmitList, element_length);
-					element_length -= (new_starting_pos - contents_of_next_element); // Update in case above changed it.
-					contents_of_next_element = new_starting_pos;
-					if (element_length)
-						// If this is true, the string must contain at least one char that isn't in the list
-						// of omitted chars, otherwise omit_leading_any() would have already omitted them:
-						element_length = omit_trailing_any(contents_of_next_element, aOmitList
-							, contents_of_next_element + element_length - 1);
-				}
-				// If there are no chars to the left of the delim, or if they were all in the list of omitted
-				// chars, the variable will be assigned the empty string:
-				if (!output_array->Append(contents_of_next_element, element_length))
-					break;
-				// This is the only way out of the loop other than critical errors:
-				return;
-			}
+			// If there are no chars to the left of the delim, or if they were all in the list of omitted
+			// chars, the variable will be assigned the empty string:
+			if (!output_array->Append(contents_of_next_element, element_length))
+				goto outofmem;
+			contents_of_next_element = delimiter + delimiter_length;  // Omit the delimiter since it's never included in contents.
+			if (splits_left > 0)
+				--splits_left;
 		}
 	}
 	else
@@ -7359,13 +7338,38 @@ BIF_DECL(BIF_StrSplit)
 				return; // All done; result already set.
 			for (dp = aOmitList; *dp; ++dp)
 				if (*cp == *dp) // This char is a member of the omitted list, thus it is not included in the output array.
-					break;
+					break; // (inner loop)
 			if (*dp) // Omitted.
 				continue;
+			if (!splits_left) // Limit reached (checked only after excluding omitted chars).
+				break; // This is the only way out of the loop other than critical errors.
+			if (splits_left > 0)
+				--splits_left;
 			if (!output_array->Append(cp, 1))
-				break;
+				goto outofmem;
 		}
+		contents_of_next_element = cp;
 	}
+	// Since above used break rather than goto or return, either the limit was reached or there are
+	// no more delimiters, so store the remainder of the string minus any characters to be omitted.
+	element_length = _tcslen(contents_of_next_element);
+	if (*aOmitList && element_length > 0)
+	{
+		new_starting_pos = omit_leading_any(contents_of_next_element, aOmitList, element_length);
+		element_length -= (new_starting_pos - contents_of_next_element); // Update in case above changed it.
+		contents_of_next_element = new_starting_pos;
+		if (element_length)
+			// If this is true, the string must contain at least one char that isn't in the list
+			// of omitted chars, otherwise omit_leading_any() would have already omitted them:
+			element_length = omit_trailing_any(contents_of_next_element, aOmitList
+				, contents_of_next_element + element_length - 1);
+	}
+	// If there are no chars to the left of the delim, or if they were all in the list of omitted
+	// chars, the variable will be assigned the empty string:
+	if (output_array->Append(contents_of_next_element, element_length))
+		return; // All done; result already set.
+	//else memory allocation failed, so fall through:
+outofmem:
 	// The fact that this section is executing means that a memory allocation failed and caused the
 	// loop to break, so return a false value to let the caller detect the failure.  Empty string
 	// is used vs 0 for consistency with Object() and Array().
