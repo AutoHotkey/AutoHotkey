@@ -6286,7 +6286,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					break;
 				case 'X':
 				case 'Y':
-					if (use_margin_offset = !_tcsicmp(option_value, _T("+M"))) // x+m or y+m without any suffix.
+					if (use_margin_offset = (*option_value == '+' && 'M' == ctoupper(option_value[1]))) // x+m or y+m.
 						option_value += 2;
 					else if (_tcschr(_T("MPS"), option_char2)) // Any other non-digit char should be picked up as an error via *endptr.
 						++option_value;
@@ -6356,7 +6356,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			case 'X':
 				if (option_char2 == '+')
 				{
-					int offset = use_margin_offset ? mMarginX : option_int;
+					int offset = (use_margin_offset ? mMarginX : 0) + option_int;
 					if (tab_control = FindTabControl(aControl.tab_control_index)) // Assign.
 					{
 						// Since this control belongs to a tab control and that tab control already exists,
@@ -6410,7 +6410,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			case 'Y':
 				if (option_char2 == '+')
 				{
-					int offset = use_margin_offset ? mMarginY : option_int;
+					int offset = (use_margin_offset ? mMarginY : 0) + option_int;
 					if (tab_control = FindTabControl(aControl.tab_control_index)) // Assign.
 					{
 						// Since this control belongs to a tab control and that tab control already exists,
