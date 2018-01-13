@@ -6326,7 +6326,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = mPrevY;  // Since moving in the X direction, retain the same Y as previous control.
 				}
-				// For the M and P sub-options, not that the +/- prefix is optional.  The number is simply
+				// For the M and P sub-options, note that the +/- prefix is optional.  The number is simply
 				// read in as-is (though the use of + is more self-documenting in this case than omitting
 				// the sign entirely).
 				else if (ctoupper(*next_option) == 'M') // Use the X margin
@@ -6339,7 +6339,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				{
 					aOpt.x = mPrevX + Scale(ATOI(next_option + 1));
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
-						aOpt.y = mPrevY;  // Since moving in the X direction, retain the same Y as previous control.
+						aOpt.y = aOpt.x != mPrevX ? mPrevY  // Since moving in the X direction, retain the same Y as previous control.
+							: mPrevY + mPrevHeight + mMarginY; // Same X, so default to below the previous control.
 				}
 				else if (ctoupper(*next_option) == 'S') // Use the saved X position
 				{
@@ -6392,7 +6393,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				{
 					aOpt.y = mPrevY + Scale(ATOI(next_option + 1));
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
-						aOpt.x = mPrevX;  // Since moving in the Y direction, retain the same X as previous control.
+						aOpt.x = aOpt.y != mPrevY ? mPrevX  // Since moving in the Y direction, retain the same X as previous control.
+							: mPrevX + mPrevWidth + mMarginY; // Same Y, so default to below the previous control.
 				}
 				else if (ctoupper(*next_option) == 'S') // Use the saved Y position
 				{
