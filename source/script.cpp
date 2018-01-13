@@ -2008,31 +2008,22 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 					is_continuation_line = false; // Set default.
 					switch(ctoupper(*next_buf)) // Above has ensured *next_buf != '\0' (toupper might have problems with '\0').
 					{
-					case 'A': // "AND".
+					case 'A': // AND
+					case 'O': // OR
+					case 'I': // IS, IN
+					case 'C': // CONTAINS (future use)
 						// See comments in the default section further below.
-						if (!_tcsnicmp(next_buf, _T("and"), 3) && IS_SPACE_OR_TAB_OR_NBSP(next_buf[3])) // Relies on short-circuit boolean order.
+						cp = find_identifier_end(next_buf);
+						// Although (x)and(y) is technically valid, it's quite unusual.  The space or tab requirement is kept
+						// as the simplest way to allow method definitions to use these as names (when called, the leading dot
+						// ensures there is no ambiguity).  Note that checking if we're inside a class definition is not
+						// sufficient because multi-line expressions are valid there too (i.e. for var initializers).
+						// This also rules out valid double-derefs such as and%suffix% := 1.
+						if (IS_SPACE_OR_TAB(*cp) && ConvertWordOperator(next_buf, cp - next_buf))
 						{
-							cp = omit_leading_whitespace(next_buf + 3);
-							// v1.0.38.06: The following was fixed to use EXPR_CORE vs. EXPR_OPERAND_TERMINATORS
-							// to properly detect a continuation line whose first char after AND/OR is "!~*&-+()":
-							if (!_tcschr(EXPR_CORE, *cp))
-								// This check recognizes the following examples as NON-continuation lines by checking
-								// that AND/OR aren't followed immediately by something that's obviously an operator:
-								//    and := x, and = 2 (but not and += 2 since the an operand can have a unary plus/minus).
-								// This is done for backward compatibility.  Also, it's documented that
-								// AND/OR/NOT aren't supported as variable names inside expressions.
-								is_continuation_line = true; // Override the default set earlier.
-						}
-						break;
-					case 'O': // "OR".
-						// See comments in the default section further below.
-						if (ctoupper(next_buf[1]) == 'R' && IS_SPACE_OR_TAB_OR_NBSP(next_buf[2])) // Relies on short-circuit boolean order.
-						{
-							cp = omit_leading_whitespace(next_buf + 2);
-							// v1.0.38.06: The following was fixed to use EXPR_CORE vs. EXPR_OPERAND_TERMINATORS
-							// to properly detect a continuation line whose first char after AND/OR is "!~*&-+()":
-							if (!_tcschr(EXPR_CORE, *cp)) // See comment in the "AND" case above.
-								is_continuation_line = true; // Override the default set earlier.
+							// Unlike in v1, there's no check for an operator after AND/OR (such as AND := 1) because they
+							// should never be used as variable names.
+							is_continuation_line = true; // Override the default set earlier.
 						}
 						break;
 					default:
