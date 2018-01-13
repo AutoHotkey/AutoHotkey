@@ -6242,12 +6242,14 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				continue;
 			}
 
-			++next_option;  // Above has already verified that next_option isn't the empty string.
-			if (!*next_option)
+			TCHAR option_char = ctoupper(*next_option);
+			LPTSTR option_value = next_option + 1; // Above has already verified that next_option isn't the empty string.
+
+			if (!*option_value)
 			{
 				// The option word consists of only one character, so consider it valid only if it doesn't
 				// require an arg.  Example: An isolated "H" should not cause the height to be set to zero.
-				switch (ctoupper(next_option[-1]))
+				switch (option_char)
 				{
 				case 'C':
 					if (!adding)
@@ -6258,54 +6260,103 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					break;
 				default:
 					// Anything else is invalid.
-					--next_option;
 					error_message = ERR_INVALID_OPTION;
 					goto return_error;
 				}
 				*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
 				continue;
 			}
-
 			// Since above didn't "continue", there is text after the option letter, so take action accordingly.
-			switch (ctoupper(next_option[-1]))
+
+			LPTSTR endptr;
+			int option_int; // Only valid for [XYWHTER].
+			float option_float; // Only valid for R.
+			TCHAR option_char2; // Only valid for [XYWH].
+			bool use_margin_offset; // Only valid for [XY].
+
+			if (_tcschr(_T("XYWHTER"), option_char))
+			{
+				option_char2 = ctoupper(*option_value);
+				switch (option_char)
+				{
+				case 'W':
+				case 'H':
+					if (option_char2 == 'P')
+						++option_value;
+					break;
+				case 'X':
+				case 'Y':
+					if (use_margin_offset = !_tcsicmp(option_value, _T("+M"))) // x+m or y+m without any suffix.
+						option_value += 2;
+					else if (_tcschr(_T("MPS"), option_char2)) // Any other non-digit char should be picked up as an error via *endptr.
+						++option_value;
+					break;
+				}
+				// Parse the option's number as integer first, since that's most common.  If that fails,
+				// parse as floating-point (e.g. "w" A_ScreenWidth/4 or "R1.5").
+				option_int = (int)tcstoi64_o(option_value, &endptr, 0); // 'E' depends on this supporting the full range of DWORD.
+				if (*endptr) // It wasn't blank or a valid integer.
+				{
+					// It's done this way rather than checking for and discarding any fractional part
+					// in case it's something unusual like "w1.0e3" or "w1e3", and to update endptr
+					// and support "R1.5".
+					option_int = (int)(option_float = (float)_tcstod(option_value, &endptr));
+					if (*endptr) // Still invalid.
+						option_char = 0; // Mark it as invalid for switch() below.
+				}
+				else
+					option_float = (float)option_int;
+				if ((option_char == 'X' || option_char == 'Y')
+					|| (option_char == 'W' || option_char == 'H') && (option_int != -1 || option_char2 == 'P')) // Scale W/H unless it's W-1 or H-1.
+					option_int = Scale(option_int);
+			}
+
+			switch (option_char)
 			{
 			case 'T': // Tabstop (the kind that exists inside a multi-line edit control or ListBox).
 				if (aOpt.tabstop_count < GUI_MAX_TABSTOPS)
-					aOpt.tabstop[aOpt.tabstop_count++] = ATOU(next_option);
+					aOpt.tabstop[aOpt.tabstop_count++] = (UINT)option_int;
 				//else ignore ones beyond the maximum.
 				break;
 
 			case 'V': // Name (originally: Variable)
-				ControlSetName(aControl, next_option);
+				ControlSetName(aControl, option_value);
 				break;
 
 			case 'C':  // Color
-				aOpt.color = ColorNameToBGR(next_option);
+				aOpt.color = ColorNameToBGR(option_value);
 				if (aOpt.color == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
-					// It seems _tcstol() automatically handles the optional leading "0x" if present:
-					aOpt.color = rgb_to_bgr(_tcstol(next_option, NULL, 16));
-					// if next_option did not contain something hex-numeric, black (0x00) will be assumed,
+				{
+					// _tcstol() automatically handles the optional leading "0x" if present:
+					aOpt.color = rgb_to_bgr(_tcstol(option_value, &endptr, 16));
+					if (*endptr)
+					{
+						error_message = ERR_INVALID_OPTION;
+						goto return_error;
+					}
+					// if option_value did not contain something hex-numeric, black (0x00) will be assumed,
 					// which seems okay given how rare such a problem would be.
+				}
 				break;
 
 			case 'W':
-				if (ctoupper(*next_option) == 'P') // Use the previous control's value.
-					aOpt.width = mPrevWidth + Scale(ATOI(next_option + 1));
+				if (option_char2 == 'P') // Use the previous control's value.
+					aOpt.width = mPrevWidth + option_int;
 				else
-					aOpt.width = ScaleSize(ATOI(next_option));
+					aOpt.width = option_int;
 				break;
 
 			case 'H':
-				if (ctoupper(*next_option) == 'P') // Use the previous control's value.
-					aOpt.height = mPrevHeight + Scale(ATOI(next_option + 1));
+				if (option_char2 == 'P') // Use the previous control's value.
+					aOpt.height = mPrevHeight + option_int;
 				else
-					aOpt.height = ScaleSize(ATOI(next_option));
+					aOpt.height = option_int;
 				break;
 
 			case 'X':
-				if (*next_option == '+')
+				if (option_char2 == '+')
 				{
-					int offset = (ctoupper(next_option[1]) == 'M') ? mMarginX : Scale(ATOI(next_option + 1));
+					int offset = use_margin_offset ? mMarginX : option_int;
 					if (tab_control = FindTabControl(aControl.tab_control_index)) // Assign.
 					{
 						// Since this control belongs to a tab control and that tab control already exists,
@@ -6329,37 +6380,37 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				// For the M and P sub-options, note that the +/- prefix is optional.  The number is simply
 				// read in as-is (though the use of + is more self-documenting in this case than omitting
 				// the sign entirely).
-				else if (ctoupper(*next_option) == 'M') // Use the X margin
+				else if (option_char2 == 'M') // Use the X margin
 				{
-					aOpt.x = mMarginX + Scale(ATOI(next_option + 1));
+					aOpt.x = mMarginX + option_int;
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = mMaxExtentDown + mMarginY;
 				}
-				else if (ctoupper(*next_option) == 'P') // Use the previous control's X position.
+				else if (option_char2 == 'P') // Use the previous control's X position.
 				{
-					aOpt.x = mPrevX + Scale(ATOI(next_option + 1));
+					aOpt.x = mPrevX + option_int;
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = aOpt.x != mPrevX ? mPrevY  // Since moving in the X direction, retain the same Y as previous control.
 							: mPrevY + mPrevHeight + mMarginY; // Same X, so default to below the previous control.
 				}
-				else if (ctoupper(*next_option) == 'S') // Use the saved X position
+				else if (option_char2 == 'S') // Use the saved X position
 				{
-					aOpt.x = mSectionX + Scale(ATOI(next_option + 1));
+					aOpt.x = mSectionX + option_int;
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = mMaxExtentDownSection + mMarginY;  // In this case, mMarginY is the padding between controls.
 				}
 				else
 				{
-					aOpt.x = Scale(ATOI(next_option));
+					aOpt.x = option_int;
 					if (aOpt.y == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.y = mMaxExtentDown + mMarginY;
 				}
 				break;
 
 			case 'Y':
-				if (*next_option == '+')
+				if (option_char2 == '+')
 				{
-					int offset = (ctoupper(next_option[1]) == 'M') ? mMarginY : Scale(ATOI(next_option + 1));
+					int offset = use_margin_offset ? mMarginY : option_int;
 					if (tab_control = FindTabControl(aControl.tab_control_index)) // Assign.
 					{
 						// Since this control belongs to a tab control and that tab control already exists,
@@ -6383,54 +6434,46 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				// For the M and P sub-options, not that the +/- prefix is optional.  The number is simply
 				// read in as-is (though the use of + is more self-documenting in this case than omitting
 				// the sign entirely).
-				else if (ctoupper(*next_option) == 'M') // Use the Y margin
+				else if (option_char2 == 'M') // Use the Y margin
 				{
-					aOpt.y = mMarginY + Scale(ATOI(next_option + 1));
+					aOpt.y = mMarginY + option_int;
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.x = mMaxExtentRight + mMarginX;
 				}
-				else if (ctoupper(*next_option) == 'P') // Use the previous control's Y position.
+				else if (option_char2 == 'P') // Use the previous control's Y position.
 				{
-					aOpt.y = mPrevY + Scale(ATOI(next_option + 1));
+					aOpt.y = mPrevY + option_int;
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.x = aOpt.y != mPrevY ? mPrevX  // Since moving in the Y direction, retain the same X as previous control.
 							: mPrevX + mPrevWidth + mMarginY; // Same Y, so default to below the previous control.
 				}
-				else if (ctoupper(*next_option) == 'S') // Use the saved Y position
+				else if (option_char2 == 'S') // Use the saved Y position
 				{
-					aOpt.y = mSectionY + Scale(ATOI(next_option + 1));
+					aOpt.y = mSectionY + option_int;
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.x = mMaxExtentRightSection + mMarginX; // In this case, mMarginX is the padding between controls.
 				}
 				else
 				{
-					aOpt.y = Scale(ATOI(next_option));
+					aOpt.y = option_int;
 					if (aOpt.x == COORD_UNSPECIFIED) // Not yet explicitly set, so use default.
 						aOpt.x = mMaxExtentRight + mMarginX;
 				}
 				break;
 
-			case 'R': // The number of rows desired in the control.  Use ATOF() so that fractional rows are allowed.
-				aOpt.row_count = (float)ATOF(next_option); // Don't need double precision.
+			case 'R': // The number of rows desired in the control (can be fractional).
+				aOpt.row_count = option_float;
+				break;
+
+			case 'E': // Extended style additions or removals.
+				if (adding)
+					aOpt.exstyle_add |= (DWORD)option_int;
+				else
+					aOpt.exstyle_remove |= (DWORD)option_int;
 				break;
 
 			default:
-				// Extended style is handled here so that something like +ection is detected as an error.
-				// However, the options above don't get the same treatment:
-				//  G/V: Already validated -- must be followed by a a valid label/variable name.
-				//  T/C/W/H/X/Y/R: If not followed by a valid letter (e.g. "XP"), it's assumed to be
-				//  a number; if it isn't numeric, it will be treated as 0, which will probably be
-				//  easy to detect. Cases like the following are ignored for simplicity and due to
-				//  rarity: xpp (trailing p is ignored) y100abc (abc is ignored).
-				if (ctoupper(next_option[-1]) == 'E' && IsNumeric(next_option, false, false)) // Disallow whitespace in case option string ends in naked "E".
-				{
-					// Pure numbers are assumed to be style additions or removals:
-					DWORD given_exstyle = ATOU(next_option); // ATOU() for unsigned.
-					if (adding) aOpt.exstyle_add |= given_exstyle; else aOpt.exstyle_remove |= given_exstyle;
-					break;
-				}
 				// Anything not already handled above is invalid.
-				--next_option;
 				error_message = ERR_INVALID_OPTION;
 				goto return_error;
 			} // switch()
