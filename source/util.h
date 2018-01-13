@@ -473,7 +473,12 @@ inline int ATOI(LPCTSTR buf)
 	// Below has been updated because values with leading zeros were being interpreted as
 	// octal, which is undesirable.
 	// Formerly: #define ATOI(buf) strtol(buf, NULL, 0) // Use zero as last param to support both hex & dec.
-	return IsHex(buf) ? _tcstol(buf, NULL, 16) : _ttoi(buf); // atoi() has superior performance, so use it when possible.
+	//return IsHex(buf) ? _tcstol(buf, NULL, 16) : _ttoi(buf); // atoi() has superior performance, so use it when possible.
+	// Update: ATOI() is mostly used in places where other factors have a much bigger impact
+	// on performance; still, this method benchmarks slightly faster and produces smaller code
+	// than the older version above.  It is also behaves more consistently with ATOI64() for
+	// very large out of range values.
+	return (int)tcstoi64_o(buf, NULL, 0);
 }
 
 // v1.0.38.01: Make ATOU a macro that refers to ATOI64() to improve performance (takes advantage of _atoi64()
