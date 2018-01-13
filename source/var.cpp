@@ -1062,56 +1062,60 @@ void Var::FreeAndRestoreFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVar
 
 
 
+// Without __declspec(noinline), this produced larger code than the original, which had
+// the code essentially repeated in ValidateName().  There's no good reason to inline
+// this function (or other functions which are only called to display an error dialog).
+__declspec(noinline)
+ResultType DisplayNameError(LPCTSTR aErrorFormat, int aDisplayError, LPCTSTR aName)
+{
+	if (!aDisplayError)
+		return FAIL;
+	static LPCTSTR sErrorSubject[] = VALIDATENAME_SUBJECTS;
+	TCHAR msg[512];
+	sntprintf(msg, _countof(msg), aErrorFormat
+		, sErrorSubject[VALIDATENAME_SUBJECT_INDEX(aDisplayError)]
+		, aName);
+	return g_script.ScriptError(msg);
+}
+
+
+
 ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError)
 // Returns OK or FAIL.
 {
 	if (!*aName) return FAIL; // Shouldn't be called this way.
 	
-	static LPCTSTR sErrorSubject[] = VALIDATENAME_SUBJECTS;
-
 	// Seems best to disallow variables that start with numbers for purity, to allow
 	// something like 1e3 to be scientific notation, and possibly other reasons.
 	if (*aName >= '0' && *aName <= '9')
 	{
-		if (aDisplayError)
-		{
-			TCHAR msg[512];
-			sntprintf(msg, _countof(msg), _T("This %s name starts with a number, which is not allowed:\n\"%-1.300s\"")
-				, sErrorSubject[VALIDATENAME_SUBJECT_INDEX(aDisplayError)]
-				, aName);
-			return g_script.ScriptError(msg);
-		}
-		else
-			return FAIL;
+		return DisplayNameError(_T("This %s name starts with a number, which is not allowed:\n\"%-1.300s\""), aDisplayError, aName);
 	}
 	if (*find_identifier_end(aName) != '\0')
 	{
-		if (aDisplayError)
-		{
-			TCHAR msg[512];
-			sntprintf(msg, _countof(msg), _T("The following %s name contains an illegal character:\n\"%-1.300s\"")
-				, sErrorSubject[VALIDATENAME_SUBJECT_INDEX(aDisplayError)]
-				, aName);
-			return g_script.ScriptError(msg);
-		}
-		return FAIL;
+		return DisplayNameError(_T("The following %s name contains an illegal character:\n\"%-1.300s\""), aDisplayError, aName);
 	}
+	if (aDisplayError == DISPLAY_METHOD_ERROR || aDisplayError == DISPLAY_GROUP_ERROR)
+		return OK;
 	// Reserve names of control flow statements.  Aside from being more "pure" and allowing
 	// future improvements, it should also help catch syntax errors such as "if (foo) break".
-	for (int i = ACT_FIRST_NAMED_ACTION; i < ACT_FIRST_COMMAND; ++i)
-	{
+	// Note that some names don't get this far as they aren't interpreted as functions.
+	// For example, if(), while() and a few others.
+	int i;
+	for (i = ACT_FIRST_NAMED_ACTION; i < ACT_FIRST_COMMAND; ++i)
 		if (!_tcsicmp(g_act[i].Name, aName))
-		{
-			TCHAR msg[512];
-			sntprintf(msg, _countof(msg), _T("The following reserved word must not be used as a %s name:\n\"%-1.300s\"")
-				, sErrorSubject[VALIDATENAME_SUBJECT_INDEX(aDisplayError)]
-				, aName);
-			return g_script.ScriptError(msg);
-		}
+			break;
+	// Reserve operator keywords.  This makes ACT_ASSIGNEXPR more consistent with ACT_EXPRESSION,
+	// such as for "and := 1" vs. "(and := 1)", though a different error message is given.
+	if (i < ACT_FIRST_COMMAND || Script::ConvertWordOperator(aName, _tcslen(aName)))
+	{
+		return DisplayNameError(_T("The following reserved word must not be used as a %s name:\n\"%-1.300s\""), aDisplayError, aName);
 	}
 	// Otherwise:
 	return OK;
 }
+
+
 
 ResultType Var::AssignStringToCodePage(LPCWSTR aBuf, int aLength, UINT aCodePage, DWORD aFlags, char aDefChar)
 {
@@ -1139,6 +1143,8 @@ ResultType Var::AssignStringToCodePage(LPCWSTR aBuf, int aLength, UINT aCodePage
 		Assign();
 	return OK;
 }
+
+
 
 __forceinline void Var::MaybeWarnUninitialized()
 {

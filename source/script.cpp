@@ -6679,14 +6679,9 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 
 	if (aClassObject)
 	{
-		LPTSTR key = _tcsrchr(new_name, '.');
-		if (!key)
-		{
-			ScriptError(_T("Invalid method name."), new_name); // Shouldn't ever happen.
-			return NULL;
-		}
+		LPTSTR key = _tcsrchr(new_name, '.'); // DefineFunc() always passes "ClassName.MethodName".
 		++key;
-		if (!Var::ValidateName(key, DISPLAY_FUNC_ERROR))
+		if (!Var::ValidateName(key, DISPLAY_METHOD_ERROR))
 			return NULL;
 		if (mClassProperty)
 		{
