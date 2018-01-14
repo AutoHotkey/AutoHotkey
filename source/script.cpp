@@ -7345,6 +7345,12 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 					return line->LineError(ERR_TOO_MANY_PARAMS);
 				}
 			}
+			// Convert the function reference to an attribute and exclude from the parameter list.
+			// Line::ToText() requires that the arg be excluded only when mAttribute is non-NULL.
+			line->mAttribute = func;
+			--line->mArgc;
+			++line->mArg;
+			// Check for omitted parameters and output vars.
 			for (int param_index = 0; param_index < param_count; ++param_index)
 			{
 				ArgStruct &arg = line->mArg[param_index];
@@ -7358,11 +7364,6 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 				if (func && func->mIsBuiltIn && *arg.text && func->ArgIsOutputVar(param_index))
 					arg.type = ARG_TYPE_OUTPUT_VAR; // See comments above.
 			}
-			// Convert the function reference to an attribute and exclude from the parameter list.
-			// Line::ToText() requires that the arg be excluded only when mAttribute is non-NULL.
-			line->mAttribute = func;
-			--line->mArgc;
-			++line->mArg;
 			break;
 		}
 		} // switch (line->mActionType)
