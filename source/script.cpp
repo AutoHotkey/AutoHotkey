@@ -10637,14 +10637,15 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 			free(param_tokens[2].mem_to_free);
 		// The following would need to be checked if the "non-expression" optimization
 		// was enabled for ACT_FOR (currently it does not improve performance):
-		//if (  !(ARGVARRAW3 && (param_tokens[2].object = ARGVARRAW3->ToObject()))  )
-		
-		// The expression didn't resolve to an object, so no enumerator is available, throw to indicate the problem..
-		LineError(ERR_NO_OBJECT);
-		return FAIL;
-		// Arg was a simple var ref, so not evaluated as an expression, but it contained an object.
-		//param_tokens[2].symbol = SYM_OBJECT;
-		//param_tokens[2].object->AddRef();
+		//if (  (ARGVARRAW3 && (param_tokens[2].object = ARGVARRAW3->ToObject()))  )
+		//{
+		//	// Arg was a simple var ref, so not evaluated as an expression, but it contained an object.
+		//	param_tokens[2].symbol = SYM_OBJECT;
+		//	param_tokens[2].object->AddRef();
+		//}
+		//else:
+		// The expression didn't resolve to an object, so no enumerator is available.
+		return LineError(ERR_NO_OBJECT);
 	}
 	
 	// Save these pointers since they will be overwritten during the loop:
@@ -10673,11 +10674,11 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 	if (result == FAIL || result == EARLY_EXIT)
 		return result;
 
-	if (enum_token.symbol != SYM_OBJECT) {
-		// The object didn't return an enumerator, throw to indicate the problem.
-		LineError(ERR_NO_MEMBER, FAIL, _T("Object has no enumerator.")); // Extra info added for clarity.
-		return FAIL;
-	}
+	if (enum_token.symbol != SYM_OBJECT)
+		if (result == INVOKE_NOT_HANDLED)
+			return LineError(ERR_NO_MEMBER, FAIL, _T("_NewEnum"));
+		else
+			return LineError(ERR_NO_OBJECT, FAIL, _T("Enumerator")); // Since it's probably rare, keep the unique part of the message short.
 
 	// "Localize" the loop variables.
 	VarBkp var_bkp[2];
@@ -10716,6 +10717,12 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 		result = enumerator.Invoke(result_token, enum_token, IT_CALL, params, param_count);
 		if (result == FAIL || result == EARLY_EXIT)
 			break;
+
+		if (result == INVOKE_NOT_HANDLED)
+		{
+			result = LineError(ERR_NO_MEMBER, FAIL, _T("Next"));
+			break;
+		}
 
 		bool next_returned_true = TokenToBOOL(result_token);
 
