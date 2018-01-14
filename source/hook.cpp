@@ -2533,11 +2533,15 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// indirectly via a different hotstring:
 	bool do_monitor_hotstring = shs && !aIsIgnored && treat_as_visible;
 	bool do_input = g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && aIsIgnored);
+	
+	static vk_type sPendingDeadKeyVK = 0;
+	static sc_type sPendingDeadKeySC = 0; // Need to track this separately because sometimes default VK-to-SC mapping isn't correct.
+	static bool sPendingDeadKeyUsedShift = false;
+	static bool sPendingDeadKeyUsedAltGr = false;
 
-	UCHAR end_key_attributes;
 	if (do_input && aVK != VK_PACKET)
 	{
-		end_key_attributes = g_input.EndVK[aVK];
+		UCHAR end_key_attributes = g_input.EndVK[aVK];
 		if (!end_key_attributes)
 			end_key_attributes = g_input.EndSC[aSC];
 		if (end_key_attributes) // A terminating keystroke has now occurred unless the shift state isn't right.
@@ -2559,9 +2563,10 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				g_input.EndingChar = 0;
 				// Don't change this line:
 				g_input.EndingRequiredShift = shift_must_be_down && (g_modifiersLR_logical & (MOD_LSHIFT | MOD_RSHIFT));
-				if (!do_monitor_hotstring)
+				if (!do_monitor_hotstring && !sPendingDeadKeyVK)
 					return treat_as_visible;
-				// else need to return only after the input is collected for the hotstring.
+				// else need to return only after the input is collected for the hotstring,
+				// or after determining whether this key completes the pending dead key sequence.
 			}
 		}
 	}
@@ -2627,11 +2632,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		// Note that ToAsciiEx() will translate ^i to a tab character, !i to plain i, and many other modified
 		// letters as just the plain letter key, which we don't want.
 		return treat_as_visible;
-
-	static vk_type sPendingDeadKeyVK = 0;
-	static sc_type sPendingDeadKeySC = 0; // Need to track this separately because sometimes default VK-to-SC mapping isn't correct.
-	static bool sPendingDeadKeyUsedShift = false;
-	static bool sPendingDeadKeyUsedAltGr = false;
 
 	// v1.0.21: Only true (unmodified) backspaces are recognized by the below.  Another reason to do
 	// this is that ^backspace has a native function (delete word) different than backspace in many editors.
