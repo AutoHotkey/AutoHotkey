@@ -2705,6 +2705,9 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// VK_TAB & VK_ESCAPE
 	// These keys have an ascii translation but should not trigger/complete a pending dead key,
 	// at least not on the Spanish and Danish layouts, which are the two I've tested so far.
+	// UPDATE: Above appears to be untrue (tested on Windows 10 and XP).  Both Tab and Esc complete
+	// the dead key sequence (by inserting the dead char and tab/nothing), so excluding these keys
+	// actually causes unwanted side-effects.
 
 	// Dead keys in Danish layout as they appear on a US English keyboard: Equals and Plus /
 	// Right bracket & Brace / probably others.
@@ -2733,7 +2736,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// allows dead keys to continue to operate properly in the user's foreground window, while still
 	// being capturable by the Input command and recognizable by any defined hotstrings whose
 	// abbreviations use diacritical letters:
-	bool dead_key_sequence_complete = sPendingDeadKeyVK && aVK != VK_TAB && aVK != VK_ESCAPE;
+	bool dead_key_sequence_complete = sPendingDeadKeyVK;
 	if (char_count < 0) // It's a dead key, and it doesn't complete a sequence since in that case char_count would be >= 1.
 	{
 		if (treat_as_visible)
