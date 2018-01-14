@@ -6840,7 +6840,10 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		height = rect.bottom - rect.top; // rect.top might be slightly less than zero. A status bar is properly handled since it's inside the window's client area.
 
 		RECT work_rect;
-		SystemParametersInfo(SPI_GETWORKAREA, 0, &work_rect, 0);  // Get desktop rect excluding task bar.
+		if (mOwner && (mStyle & WS_CHILD))
+			GetClientRect(mOwner, &work_rect); // Center within parent window (our position is set relative to mOwner's client area, not in screen coordinates).
+		else
+			SystemParametersInfo(SPI_GETWORKAREA, 0, &work_rect, 0);  // Get desktop rect excluding task bar.
 		int work_width = work_rect.right - work_rect.left;  // Note that "left" won't be zero if task bar is on left!
 		int work_height = work_rect.bottom - work_rect.top; // Note that "top" won't be zero if task bar is on top!
 
@@ -6857,12 +6860,8 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 
 		if (x == COORD_CENTERED || y == COORD_CENTERED) // Center it, based on its dimensions determined above.
 		{
-			// This does not currently handle multi-monitor systems explicitly, since those calculations
-			// require API functions that don't exist in Win95/NT (and thus would have to be loaded
-			// dynamically to allow the program to launch).  Therefore, windows will likely wind up
-			// being centered across the total dimensions of all monitors, which usually results in
-			// half being on one monitor and half in the other.  This doesn't seem too terrible and
-			// might even be what the user wants in some cases (i.e. for really big windows).
+			// This does not handle multi-monitor systems explicitly, and has no need to do so since
+			// SPI_GETWORKAREA "Retrieves the size of the work area on the primary display monitor".
 			if (x == COORD_CENTERED)
 				x = work_rect.left + ((work_width - width) / 2);
 			if (y == COORD_CENTERED)
