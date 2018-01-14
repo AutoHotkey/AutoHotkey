@@ -152,8 +152,9 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 				// L17: For best results, load separate small and large icons.
 				HICON new_icon_small;
 				HICON new_icon = NULL; // Initialize to detect failure to load either icon.
+				HMODULE icon_module = NULL; // Must initialize because it's not always set by LoadPicture().
 				if ( new_icon_small = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), image_type, icon_number, false) ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
-					if ( !(new_icon = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, icon_number, false)) )
+					if ( !(new_icon = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, icon_number, false, NULL, &icon_module)) )
 						DestroyIcon(new_icon_small);
 				if ( !new_icon )
 					RETURN_MENU_ERROR(_T("Can't load icon."), aParam3);
@@ -169,14 +170,21 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 					mCustomIconFile = (LPTSTR) SimpleHeap::Malloc(MAX_PATH * sizeof(TCHAR));
 				if (mCustomIconFile)
 				{
+					TCHAR full_path[MAX_PATH], *filename_marker;
+					// If the icon was loaded from a DLL, relative->absolute conversion below may produce the
+					// wrong result (i.e. in the typical case where the DLL is not in the working directory).
+					// So in that case, get the path of the module which contained the icon (if available).
 					// Get the full path in case it's a relative path.  This is documented and it's done in case
 					// the script ever changes its working directory:
-					TCHAR full_path[MAX_PATH], *filename_marker;
-					if (GetFullPathName(aParam3, _countof(full_path) - 1, full_path, &filename_marker))
+					if (   icon_module && GetModuleFileName(icon_module, full_path, _countof(full_path))
+						|| GetFullPathName(aParam3, _countof(full_path) - 1, full_path, &filename_marker)   )
 						tcslcpy(mCustomIconFile, full_path, MAX_PATH);
 					else
 						tcslcpy(mCustomIconFile, aParam3, MAX_PATH);
 				}
+
+				if (icon_module)
+					FreeLibrary(icon_module);
 
 				if (!g_NoTrayIcon)
 					UpdateTrayIcon(true);  // Need to use true in this case too.

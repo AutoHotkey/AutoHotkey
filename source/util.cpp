@@ -1816,7 +1816,7 @@ void FreeInterProcMem(HANDLE aHandle, LPVOID aMem)
 
 
 HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
-	, bool aUseGDIPlusIfAvailable, bool *apNoDelete)
+	, bool aUseGDIPlusIfAvailable, bool *apNoDelete, HMODULE *apModule)
 // Returns NULL on failure.
 // If aIconNumber > 0, an HICON or HCURSOR is returned (both should be interchangeable), never an HBITMAP.
 // However, aIconNumber==1 is treated as a special icon upon which LoadImage is given preference over ExtractIcon
@@ -1918,7 +1918,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		aImageType = IMAGE_ICON;
 
 		// L17: Manually extract the most appropriately sized icon resource for the best results.
-		hbitmap = (HBITMAP)ExtractIconFromExecutable(aFilespec, aIconNumber, aWidth, aHeight);
+		hbitmap = (HBITMAP)ExtractIconFromExecutable(aFilespec, aIconNumber, aWidth, aHeight, apModule);
 
 		// At this time it seems unnecessary to fall back to any of the following methods:
 		/*
@@ -2056,7 +2056,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 			//hbitmap = (HBITMAP)ExtractIcon(g_hInstance, aFilespec, aIconNumber - 1);
 
 			// L17: Manually extract the most appropriately sized icon resource for the best results.
-			hbitmap = (HBITMAP)ExtractIconFromExecutable(aFilespec, aIconNumber, aWidth, aHeight);
+			hbitmap = (HBITMAP)ExtractIconFromExecutable(aFilespec, aIconNumber, aWidth, aHeight, apModule);
 
 			if (hbitmap < (HBITMAP)2) // i.e. it's NULL or 1. Return value of 1 means "incorrect file type".
 				return NULL;
@@ -2348,7 +2348,7 @@ LPTSTR ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex)
 }
 
 // L17: Extract icon of the appropriate size from an executable (or compatible) file.
-HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, int aHeight)
+HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, int aHeight, HMODULE *apModule)
 {
 	HICON hicon = NULL;
 
@@ -2424,9 +2424,10 @@ HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, i
 			}
 		}
 
-		// Decrements the executable module's reference count or frees the data file mapping.
-		if (aFilespec)
-			FreeLibrary(hdatafile);
+		if (apModule && hicon) // Only return the module if an icon was loaded; otherwise free it.
+			*apModule = hdatafile;
+		else if (aFilespec)
+			FreeLibrary(hdatafile); // Decrements the executable module's reference count or frees the data file mapping.
 	}
 
 	// L20: Fall back to ExtractIcon if the above method failed. This may work on some versions of Windows where
