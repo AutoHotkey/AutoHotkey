@@ -2884,9 +2884,17 @@ BIF_DECL(BIF_WinGetPos)
 	RECT rect;
 	if (target_window)
 	{
-		GetWindowRect(target_window, &rect);
-		rect.right -= rect.left; // Convert right to width.
-		rect.bottom -= rect.top; // Convert bottom to height.
+		if (_f_callee_id == FID_WinGetPos)
+		{
+			GetWindowRect(target_window, &rect);
+			rect.right -= rect.left; // Convert right to width.
+			rect.bottom -= rect.top; // Convert bottom to height.
+		}
+		else // FID_WinGetClientPos
+		{
+			GetClientRect(target_window, &rect); // Get client pos relative to client (position is always 0,0).
+			MapWindowPoints(target_window, NULL, (LPPOINT)&rect, 2); // Convert to screen coordinates.
+		}
 	}
 
 	for (int i = 0; i < 4; ++i)
