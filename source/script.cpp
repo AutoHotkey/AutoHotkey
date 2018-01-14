@@ -238,6 +238,7 @@ FuncEntry g_BIF[] =
 	BIF1(WinGetClass, 0, 4, true),
 	BIF1(WinGetText, 0, 4, true),
 	BIF1(WinGetTitle, 0, 4, true),
+	BIF1(WinGetPos, 0, 8, false, {1, 2, 3, 4}),
 	BIFn(WinGetID, 0, 4, true, BIF_WinGet),
 	BIFn(WinGetIDLast, 0, 4, true, BIF_WinGet),
 	BIFn(WinGetPID, 0, 4, true, BIF_WinGet),
@@ -11597,8 +11598,6 @@ ResultType Line::Perform()
 		return StatusBarWait(EIGHT_ARGS);
 	case ACT_WINSETTITLE:
 		return WinSetTitle(FIVE_ARGS);
-	case ACT_WINGETPOS:
-		return WinGetPos(ARG5, ARG6, ARG7, ARG8);
 
 	case ACT_WINMINIMIZEALL:
 		PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 419, 0);

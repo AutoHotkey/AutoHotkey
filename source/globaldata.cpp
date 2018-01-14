@@ -353,7 +353,6 @@ Action g_act[] =
 	, {_T("MenuSelect"), 0, 11, false, NULL} // WinTitle, WinText, Menu name, 6 optional sub-menu names, ExcludeTitle/Text
 
 	, {_T("WinSetTitle"), 1, 5, false, NULL} // newtitle, title, text, exclude-title, exclude-text
-	, {_T("WinGetPos"), 0, 8, true, NULL} // Four optional output vars: xpos, ypos, width, height.  Std. 4 window params.
 
 	, {_T("PixelSearch"), 0, 9, true, {3, 4, 5, 6, 7, 8, 0}} // OutputX, OutputY, left, top, right, bottom, Color, Variation [, RGB]
 	, {_T("ImageSearch"), 0, 7, true, {3, 4, 5, 6, 0}} // OutputX, OutputY, left, top, right, bottom, ImageFile

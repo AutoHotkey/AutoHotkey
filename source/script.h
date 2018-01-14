@@ -677,7 +677,6 @@ private:
 		, LPTSTR aInterval, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType WinSetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aNewTitle
 		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
-	ResultType WinGetPos(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTSTR aImageFile);
 
 	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
@@ -915,7 +914,6 @@ public:
 			{
 			case ACT_ASSIGNEXPR:
 			case ACT_MOUSEGETPOS:
-			case ACT_WINGETPOS:
 			case ACT_CONTROLGETPOS:
 			case ACT_PIXELSEARCH:
 			case ACT_IMAGESEARCH:
@@ -929,7 +927,6 @@ public:
 			switch(aActionType)
 			{
 			case ACT_MOUSEGETPOS:
-			case ACT_WINGETPOS:
 			case ACT_CONTROLGETPOS:
 			case ACT_PIXELSEARCH:
 			case ACT_IMAGESEARCH:
@@ -943,7 +940,6 @@ public:
 		case 2:  // Arg #3
 			switch(aActionType)
 			{
-			case ACT_WINGETPOS:
 			case ACT_CONTROLGETPOS:
 			case ACT_MOUSEGETPOS:
 			case ACT_SPLITPATH:
@@ -955,7 +951,6 @@ public:
 		case 3:  // Arg #4
 			switch(aActionType)
 			{
-			case ACT_WINGETPOS:
 			case ACT_CONTROLGETPOS:
 			case ACT_MOUSEGETPOS:
 			case ACT_SPLITPATH:
@@ -3111,6 +3106,7 @@ BIF_DECL(BIF_CaretGetPos);
 BIF_DECL(BIF_WinGetClass);
 BIF_DECL(BIF_WinGetText);
 BIF_DECL(BIF_WinGetTitle);
+BIF_DECL(BIF_WinGetPos);
 BIF_DECL(BIF_WinGet);
 BIF_DECL(BIF_WinSet);
 BIF_DECL(BIF_WinRedraw);

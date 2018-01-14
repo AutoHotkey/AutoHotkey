@@ -2875,63 +2875,32 @@ BOOL CALLBACK EnumChildGetText(HWND aWnd, LPARAM lParam)
 
 
 
-ResultType Line::WinGetPos(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_WinGetPos)
 {
-	Var *output_var_x = ARGVAR1;  // Ok if NULL. Load-time validation has ensured that these are valid output variables (e.g. not built-in vars).
-	Var *output_var_y = ARGVAR2;  // Ok if NULL.
-	Var *output_var_width = ARGVAR3;  // Ok if NULL.
-	Var *output_var_height = ARGVAR4;  // Ok if NULL.
-
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	HWND target_window = DetermineTargetWindow(aParam + 4, aParamCount - 4);
 	// Even if target_window is NULL, we want to continue on so that the output
 	// variables are set to be the empty string, which is the proper thing to do
 	// rather than leaving whatever was in there before.
 	RECT rect;
 	if (target_window)
+	{
 		GetWindowRect(target_window, &rect);
-	else // ensure it's initialized for possible later use:
-		rect.bottom = rect.left = rect.right = rect.top = 0;
+		rect.right -= rect.left; // Convert right to width.
+		rect.bottom -= rect.top; // Convert bottom to height.
+	}
 
-	ResultType result = OK; // Set default;
-
-	if (output_var_x)
+	for (int i = 0; i < 4; ++i)
+	{
+		Var *var = ParamIndexToOptionalVar(i);
+		if (!var)
+			continue;
 		if (target_window)
-		{
-			if (!output_var_x->Assign(rect.left))  // X position
-				result = FAIL;
-		}
+			var->Assign(((int *)(&rect))[i]); // Always succeeds.
 		else
-			if (!output_var_x->Assign(_T("")))
-				result = FAIL;
-	if (output_var_y)
-		if (target_window)
-		{
-			if (!output_var_y->Assign(rect.top))  // Y position
-				result = FAIL;
-		}
-		else
-			if (!output_var_y->Assign(_T("")))
-				result = FAIL;
-	if (output_var_width) // else user didn't want this value saved to an output param
-		if (target_window)
-		{
-			if (!output_var_width->Assign(rect.right - rect.left))  // Width
-				result = FAIL;
-		}
-		else
-			if (!output_var_width->Assign(_T(""))) // Set it to be empty to signal the user that the window wasn't found.
-				result = FAIL;
-	if (output_var_height)
-		if (target_window)
-		{
-			if (!output_var_height->Assign(rect.bottom - rect.top))  // Height
-				result = FAIL;
-		}
-		else
-			if (!output_var_height->Assign(_T("")))
-				result = FAIL;
-
-	return result;
+			if (!var->Assign(_T(""))) // Failure would be very unusual, but can occur for Clipboard and other built-in variables.
+				aResultToken.SetExitResult(FAIL);
+	}
+	_f_return((__int64)(size_t)target_window); // Return the HWND to indicate success/failure.
 }
 
 
