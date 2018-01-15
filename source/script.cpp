@@ -2393,7 +2393,8 @@ examine_line:
 			if (!hotstring_start)
 			{
 				ltrim(hotkey_flag); // Has already been rtrimmed by GetLine().
-				rtrim(buf); // Trim the new substring inside of buf (due to temp termination). It has already been ltrimmed.
+				// Not done because Hotkey::TextInterpret() does not allow trailing whitespace: 
+				//rtrim(buf); // Trim the new substring inside of buf (due to temp termination). It has already been ltrimmed.
 				cp = hotkey_flag; // Set default, conditionally overridden below (v1.0.44.07).
 				// v1.0.40: Check if this is a remap rather than hotkey:
 				if (   *hotkey_flag // This hotkey's action is on the same line as its label.
