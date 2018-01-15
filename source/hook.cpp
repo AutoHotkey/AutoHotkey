@@ -2653,11 +2653,41 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		return treat_as_visible;
 	}
 
+	Get_active_window_keybd_layout // Defines the variables active_window and active_window_keybd_layout for use below.
+
+	// Univeral Windows Platform apps apparently have their own handling for dead keys:
+	//  - Dead key followed by Esc produces Chr(27), unlike non-UWP apps.
+	//  - Pressing a dead key in a UWP app does not leave it in the keyboard layout's buffer,
+	//    so to get the correct result here we must translate the dead key again, first.
+	//  - Pressing a non-dead key disregards any dead key which was placed into the buffer by
+	//    calling ToUnicodeEx, and it is left in the buffer.  To get the correct result for the
+	//    next call, we must NOT reinsert it into the buffer (see dead_key_sequence_complete).
+	static bool sUwpAppFocused = false;
+	static HWND sUwpHwndChecked = 0;
+	if (sUwpHwndChecked != active_window)
+	{
+		sUwpHwndChecked = active_window;
+		TCHAR class_name[28];
+		GetClassName(active_window, class_name, _countof(class_name));
+		sUwpAppFocused = !_tcsicmp(class_name, _T("ApplicationFrameWindow"));
+	}
 
 	int char_count;
 	TBYTE ch[3];
 	BYTE key_state[256];
 	memcpy(key_state, g_PhysicalKeyState, 256);
+
+	if (sPendingDeadKeyVK && sUwpAppFocused && aVK != VK_PACKET)
+	{
+		AdjustKeyState(key_state
+			, (sPendingDeadKeyUsedAltGr ? MOD_LCONTROL|MOD_RALT : 0)
+			| (sPendingDeadKeyUsedShift ? MOD_RSHIFT : 0)); // Left vs Right Shift probably doesn't matter in this context.
+		// If it turns out there was already a dead key in the buffer, the second call puts it back.
+		if (ToUnicodeOrAsciiEx(sPendingDeadKeyVK, sPendingDeadKeySC, key_state, ch, 0, active_window_keybd_layout) > 0)
+			ToUnicodeOrAsciiEx(sPendingDeadKeyVK, sPendingDeadKeySC, key_state, ch, 0, active_window_keybd_layout);
+		sPendingDeadKeyVK = 0; // Don't reinsert it afterward (see above).
+	}
+
 	// As of v1.0.25.10, the below fixes the Input command so that when it is capturing artificial input,
 	// such as from the Send command or a hotstring's replacement text, the captured input will reflect
 	// any modifiers that are logically but not physically down (or vice versa):
@@ -2667,11 +2697,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		key_state[VK_CAPITAL] |= STATE_ON;
 	else
 		key_state[VK_CAPITAL] &= ~STATE_ON;
-
-	// Use ToAsciiEx() vs. ToAscii() because there is evidence from Putty author that ToAsciiEx() works better
-	// with more keyboard layouts under 2k/XP than ToAscii() does (though if true, there is no MSDN explanation). 
-	// UPDATE: In v1.0.44.03, need to use ToAsciiEx() anyway because of the adapt-to-active-window-layout feature.
-	Get_active_window_keybd_layout // Defines the variables active_window and active_window_keybd_layout for use below.
 
 	if (aVK == VK_PACKET)
 	{
@@ -3072,8 +3097,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// the letter "a" to produce á.
 	if (dead_key_sequence_complete)
 	{
-		vk_type vk_to_send = sPendingDeadKeyVK; // To facilitate early reset below.
-		sPendingDeadKeyVK = 0; // First reset this because below results in a recursive call to keyboard hook.
 		// If there's an Input in progress and it's invisible, the foreground app won't see the keystrokes,
 		// thus no need to re-insert the dead key into the keyboard buffer.  Note that the Input might have
 		// been in progress upon entry to this function but now isn't due to INPUT_TERMINATED_BY_ENDKEY above.
@@ -3086,7 +3109,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				, (sPendingDeadKeyUsedAltGr ? MOD_LCONTROL|MOD_RALT : 0)
 				| (sPendingDeadKeyUsedShift ? MOD_RSHIFT : 0)); // Left vs Right Shift probably doesn't matter in this context.
 			TCHAR temp_ch[2];
-			ToUnicodeOrAsciiEx(vk_to_send, sPendingDeadKeySC, key_state, temp_ch, 0, active_window_keybd_layout);
+			ToUnicodeOrAsciiEx(sPendingDeadKeyVK, sPendingDeadKeySC, key_state, temp_ch, 0, active_window_keybd_layout);
 		}
 	}
 
