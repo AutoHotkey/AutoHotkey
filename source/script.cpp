@@ -2424,7 +2424,7 @@ process_completed_line:
 					return ScriptError(ERR_MISSING_OPEN_BRACE, pending_buf);
 				if (mClassObjectCount && !g->CurrentFunc) // Unexpected function call in class definition.
 					return ScriptError(mClassProperty ? ERR_MISSING_OPEN_BRACE : ERR_INVALID_LINE_IN_CLASS_DEF, pending_buf);
-				if (!ParseAndAddLine(pending_buf, ACT_EXPRESSION))
+				if (!ParseAndAddLine(pending_buf, LINE_SIZE, ACT_EXPRESSION))
 					return FAIL;
 				mCurrLine = NULL; // Prevents showing misleading vicinity lines if the line after a function call is a syntax error.
 			}
@@ -2844,7 +2844,7 @@ examine_line:
 					// But do put in the Return regardless, in case this label is ever jumped to
 					// via Goto/Gosub:
 					if (   !(hook_action = Hotkey::ConvertAltTab(hotkey_flag, false))   )
-						if (!ParseAndAddLine(hotkey_flag))
+						if (!ParseAndAddLine(hotkey_flag, LINE_SIZE - int(hotkey_flag - buf)))
 							return FAIL;
 				// Also add a Return that's implicit for a single-line hotkey.  This is also
 				// done for auto-replace hotstrings in case gosub/goto is ever used to jump
@@ -3010,7 +3010,7 @@ examine_line:
 		// Parse the command, assignment or expression, including any same-line open brace or sub-action
 		// for ELSE, TRY, CATCH or FINALLY.  Unlike braces at the start of a line (processed above), this
 		// does not allow directives or labels to the right of the command.
-		if (!ParseAndAddLine(buf))
+		if (!ParseAndAddLine(buf, LINE_SIZE))
 			return FAIL;
 
 continue_main_loop: // This method is used in lieu of "continue" for performance and code size reduction.
@@ -3124,7 +3124,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		mCombinedLineNumber = pending_buf_line_number; // Done so that any syntax errors that occur during the calls below will report the correct line number.
 		if (pending_buf_type != Pending_Func)
 			return ScriptError(pending_buf_has_brace ? ERR_MISSING_CLOSE_BRACE : ERR_MISSING_OPEN_BRACE, pending_buf);
-		if (!ParseAndAddLine(pending_buf, ACT_EXPRESSION)) // Must be function call vs. definition since otherwise the above would have detected the opening brace beneath it and already cleared pending_function.
+		if (!ParseAndAddLine(pending_buf, LINE_SIZE, ACT_EXPRESSION)) // Must be function call vs. definition since otherwise the above would have detected the opening brace beneath it and already cleared pending_function.
 			return FAIL;
 		mCombinedLineNumber = saved_line_number;
 	}
@@ -3451,7 +3451,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		g->CurrentFunc = NULL; // Use global scope.
 		mNoUpdateLabels = true; // Avoid pointing any pending labels at this line.
 		
-		if (!ParseAndAddLine(parameter, ACT_HOTKEY_IF))
+		if (!ParseAndAddLine(parameter, LINE_SIZE - int(parameter-aBuf), ACT_HOTKEY_IF))
 			return FAIL;
 		
 		mNoUpdateLabels = false;
@@ -4008,7 +4008,7 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 
 
 
-ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
+ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeType aActionType
 	, LPTSTR aLiteralMap, size_t aLiteralMapLength)
 // Returns OK or FAIL.
 // aLineText needs to be a string whose contents are modifiable (though the string won't be made any
@@ -4254,7 +4254,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 				}
 				// Call Parse() vs. AddLine() because it detects and optimizes simple assignments into
 				// non-expressions for faster runtime execution.
-				if (!ParseAndAddLine(item)) // For simplicity and maintainability, call self rather than trying to set things up properly to stay in self.
+				if (!ParseAndAddLine(item, aBufSize - int(item - aLineText))) // For simplicity and maintainability, call self rather than trying to set things up properly to stay in self.
 					return FAIL; // Above already displayed the error.
 				if (declare_type == VAR_DECLARE_STATIC)
 				{
@@ -4380,21 +4380,21 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			else
 			{
 				LPTSTR id_begin = action_args + 1;
-				LPTSTR cp;
+				LPTSTR cp, id_end;
 				bool has_space_or_tab;
 				for (;;) // L35: Loop to fix x.y.z() and similar.
 				{
-					cp = find_identifier_end(id_begin);
-					if (*cp == '(')
+					id_end = find_identifier_end(id_begin);
+					if (*id_end == '(')
 					{	// Allow function/method Call as standalone expression.
 						aActionType = ACT_EXPRESSION;
 						break;
 					}
-					if (cp == id_begin)
+					if (id_end == id_begin)
 						// No valid identifier, doesn't look like a valid expression.
 						break;
-					has_space_or_tab = IS_SPACE_OR_TAB(*cp);
-					cp = omit_leading_whitespace(cp);
+					has_space_or_tab = IS_SPACE_OR_TAB(*id_end);
+					cp = omit_leading_whitespace(id_end);
 					if (*cp) // Avoid checking cp[1] and cp[2] when !*cp.
 					if (*cp == '[' // x.y[z]
 						|| cp[1] == '=' && _tcschr(_T(":+-*/|&^."), cp[0]) // Two-char assignment operator.
@@ -4409,11 +4409,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 					{
 						if (!*cp || has_space_or_tab)
 						{
-							id_begin[-1] = g_delimiter; // Separate target object from method name.
-							if (has_space_or_tab)
-								cp[-1] = g_delimiter; // Separate method name from parameters.
-							action_args = aLineText;
-							aActionType = ACT_METHOD;
+							end_marker = id_end;
+							could_be_named_action = true;
+							// Let the parentheses be added in the section below.
 						}
 						//else: Neither a command nor a legal standalone expression.
 						break;
@@ -4472,11 +4470,18 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			}
 			else if (*action_name < '0' || *action_name > '9') // Exclude numbers, since no function name can start with a number.
 			{
-				aActionType = ACT_FUNC;
-				// Include the function name as an arg:
-				if (*end_marker) // Replace space or tab with comma.
-					*end_marker = g_delimiter;
+				// Convert function/method call statements to function/method calls.
+				int line_length = (int)_tcslen(aLineText);
+				if (line_length + bool(*end_marker) >= aBufSize)
+					return ScriptError(ERR_LINE_TOO_LONG);
+				if (*end_marker) // Replace space or tab with parenthesis.
+					*end_marker = '(';
+				else
+					aLineText[line_length++] = '(';
+				aLineText[line_length++] = ')';
+				aLineText[line_length] = '\0';
 				action_args = aLineText;
+				aActionType = ACT_EXPRESSION;
 			}
 		}
 	}
@@ -4623,7 +4628,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType
 			return OK;
 		// Call self recursively to parse the sub-action.
 		//mCurrLine = NULL; // Seems more useful to leave this set to the line added above.
-		return ParseAndAddLine(action_args);
+		return ParseAndAddLine(action_args, aBufSize - int(action_args - aLineText));
 	}
 
 	Action &this_action = g_act[aActionType];
@@ -4948,9 +4953,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			}
 			else // this_new_arg.type == ARG_TYPE_NORMAL (excluding those input/output_vars that were converted to normal because they were blank, above).
 			{
-				if (  aAllArgsAreExpressions
-					&& !(aActionType == ACT_FUNC && i == 0) // !(function name).
-					&& !(aActionType == ACT_METHOD && i == 1 && !IsNumeric(this_aArg))  ) // !(non-integer method name).  Numeric names are processed as expressions for consistency with x.1() = x.0x1().
+				if (aAllArgsAreExpressions)
 				{
 					// Caller has determined all args should be expressions.
 					this_new_arg.is_expression = true;
@@ -6194,7 +6197,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 				// Create an __Init method for this class.
 				TCHAR def[] = _T("__Init()");
 				if (!DefineFunc(def, NULL) || !AddLine(ACT_BLOCK_BEGIN)
-					|| (class_object->Base() && !ParseAndAddLine(_T("base.__Init()"), ACT_EXPRESSION))) // Initialize base-class variables first. Relies on short-circuit evaluation.
+					|| (class_object->Base() && !ParseAndAddLine(_T("base.__Init()"), 0, ACT_EXPRESSION))) // Initialize base-class variables first. Relies on short-circuit evaluation.
 					return FAIL;
 				
 				mLastLine->mLineNumber = 0; // Signal the debugger to skip this line while stepping in/over/out.
@@ -6217,7 +6220,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		}
 
 		mNoUpdateLabels = true;
-		if (!ParseAndAddLine(buf))
+		if (!ParseAndAddLine(buf, LINE_SIZE))
 			return FAIL; // Above already displayed the error.
 		mNoUpdateLabels = false;
 		
@@ -6586,7 +6589,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		
 		// For performance, the action and arg types are "precalculated" and stored in Func::mOutputVars,
 		// which should never be used for its other purpose because the ActionType appropriate for this
-		// command should be used instead of ACT_FUNC -> BIF_PerformAction -> ActionType.
+		// command should be used instead of func-stmt -> BIF_PerformAction -> ActionType.
 		bif_output_vars = (UCHAR *)SimpleHeap::Malloc(bif.mMaxParams + 1);
 		if (!bif_output_vars)
 			return NULL;
@@ -7293,81 +7296,6 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 	DerefType *deref;
 	for (Line *line = aStartingLine; line; line = line->mNextLine)
 	{
-		switch (line->mActionType)
-		{
-		// These first two are needed to support local variables with ACT_FUNC/ACT_METHOD below:
-		case ACT_BLOCK_BEGIN:
-			if (line->mAttribute)
-				g->CurrentFunc = (Func *)line->mAttribute;
-			break;
-		case ACT_BLOCK_END:
-			if (line->mAttribute)
-				g->CurrentFunc = NULL;
-			break;
-
-		// Preparse command-style function calls:
-		case ACT_FUNC:
-		{
-			// Get the function name from the first arg and eliminate it from further consideration:
-			ArgStruct &first_arg = line->mArg[0];
-			int param_count = line->mArgc - 1; // This is not the final parameter count since it includes the output var (if present).
-			// Now that function declarations have been processed, resolve this line's function.
-			Func *func = NULL;
-			// Dynamic calling wouldn't be this simple, since a line beginning with a double-deref
-			// would be ACT_EXPRESSION, never ACT_FUNC:
-			//if (!first_arg.deref)
-			{
-				func = FindFunc(first_arg.text);
-				if (!func)
-				{
-#ifndef AUTOHOTKEYSC
-					bool error_was_shown, file_was_found;
-					if (   !(func = FindFuncInLibrary(first_arg.text, first_arg.length, error_was_shown, file_was_found, true))   )
-					{
-						// When above already displayed the proximate cause of the error, it's usually
-						// undesirable to show the cascade effects of that error in a second dialog:
-						if (error_was_shown)
-							return FAIL;
-						return line->LineError(*first_arg.text == '#' ? ERR_UNRECOGNIZED_DIRECTIVE // Give a more sensible error message for something like "#NoEnv".
-							: ERR_NONEXISTENT_FUNCTION, FAIL, first_arg.text);
-					}
-#else
-					return line->LineError(*first_arg.text == '#' ? ERR_UNRECOGNIZED_DIRECTIVE // Give a more sensible error message for something like "#NoEnv".
-						: ERR_NONEXISTENT_FUNCTION, FAIL, first_arg.text);
-#endif
-				}
-				if (param_count < func->mMinParams)
-				{
-					return line->LineError(ERR_TOO_FEW_PARAMS);
-				}
-				if (!func->mIsVariadic && param_count > func->mParamCount)
-				{
-					return line->LineError(ERR_TOO_MANY_PARAMS);
-				}
-			}
-			// Convert the function reference to an attribute and exclude from the parameter list.
-			// Line::ToText() requires that the arg be excluded only when mAttribute is non-NULL.
-			line->mAttribute = func;
-			--line->mArgc;
-			++line->mArg;
-			// Check for omitted parameters and output vars.
-			for (int param_index = 0; param_index < param_count; ++param_index)
-			{
-				ArgStruct &arg = line->mArg[param_index];
-				// Mandatory parameters must not be blank.
-				if (!*arg.text && func && param_index < func->mMinParams)
-				{
-					TCHAR buf[50];
-					sntprintf(buf, _countof(buf), _T("Parameter #%i required"), i + 1);
-					return line->LineError(buf);
-				}
-				if (func && func->mIsBuiltIn && *arg.text && func->ArgIsOutputVar(param_index))
-					arg.type = ARG_TYPE_OUTPUT_VAR; // See comments above.
-			}
-			break;
-		}
-		} // switch (line->mActionType)
-
 		// Check if any of each arg's derefs are function calls.  If so, do some validation and
 		// preprocessing to set things up for better runtime performance:
 		for (i = 0; i < line->mArgc; ++i) // For each arg.
@@ -9604,7 +9532,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 		// Note: Only one line at a time be expanded via the above function.  So be sure
 		// to store any parts of a line that are needed prior to moving on to the next
 		// line (e.g. control stmts such as IF and LOOP).
-		if (!ACT_EXPANDS_ITS_OWN_ARGS(line->mActionType)) // Not ACT_ASSIGNEXPR, ACT_FUNC, ACT_WHILE or ACT_THROW.
+		if (!ACT_EXPANDS_ITS_OWN_ARGS(line->mActionType)) // Not ACT_ASSIGNEXPR, ACT_WHILE or ACT_THROW.
 		{
 			result = line->ExpandArgs(line->mActionType == ACT_RETURN ? aResultToken : NULL);
 			// As of v1.0.31, ExpandArgs() will also return EARLY_EXIT if a function call inside one of this
@@ -12038,71 +11966,6 @@ ResultType Line::Perform()
 	case ACT_FILEENCODING:
 		return BIV_FileEncoding_Set(ARG1, NULL);
 
-	case ACT_FUNC:
-	case ACT_METHOD:
-	{
-		ResultToken param_tok[MAX_ARGS];
-		ExprTokenType *param_ptr[MAX_ARGS];
-		for (int i = 0; i < mArgc; ++i)
-			param_tok[i].InitResult(NULL); // Passing NULL is okay in this case since buf is only used for ACT_RETURN.
-
-		result = ExpandArgs(param_tok);
-		if (result != OK) // Probably FAIL or EARLY_EXIT.
-			return result;
-
-		Func *func = (Func *)mAttribute; // NULL for ACT_METHOD.
-		
-		int arg = 0;
-		int param_count = mArgc;
-		
-		for (int i = 0; i < param_count; ++i, ++arg)
-		{
-			if (sArgVar[arg])
-			{
-				if (sArgVar[arg]->Type() == VAR_NORMAL) // Only normal variables can be SYM_VAR.
-				{
-					param_tok[arg].symbol = SYM_VAR;
-					param_tok[arg].var = sArgVar[arg];
-				}
-				else
-				{
-					// This arg must be a simple built-in var reference, not an expression (since that would only
-					// set sArgVar[] for VAR_NORMAL).  ExpandArgs() didn't set marker in this case, so set it now:
-					param_tok[arg].marker = sArgDeref[arg];
-					param_tok[arg].marker_length = -1;
-				}
-			}
-			param_ptr[i] = &param_tok[arg];
-		}
-		
-		FuncResult result_token;
-		
-		if (func) // ACT_FUNC
-		{
-			func->Call(result_token, param_ptr, param_count);
-		}
-		else // ACT_METHOD
-		{
-			// Call Op_ObjInvoke() instead of invoking the object to ensure all of the normal behaviour
-			// of method calls is in effect, including g_MetaObject and base.Method calling a base-class.
-			// param_tok[0] is always either SYM_VAR set by ExpandArgs() or the result of an expression
-			// such as the "var.id" in "var.id.method".
-			result_token.symbol = SYM_INTEGER;
-			result_token.func = &g_ObjCall;
-			Op_ObjInvoke(result_token, param_ptr, param_count);
-		}
-		result = result_token.Result();
-
-		// Clean up:
-		result_token.Free();
-		for (int i = 0; i < mArgc; ++i)
-			param_tok[i].Free();
-
-		if (result == EARLY_RETURN) // This would cause our caller to "return".
-			result = OK;
-		return result;
-	}
-	
 	case ACT_EXIT:
 		// Even if the script isn't persistent, this thread might've interrupted another which should
 		// be allowed to complete normally.  This is especially important in v2 because a persistent
@@ -12496,16 +12359,8 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 			, mArg[2].text);
 	else
 	{
-		int first = 0;
-		if (mActionType == ACT_FUNC)
-			// Before PreparseExpressions(), mAttribute is NULL and mArg contains the function name.
-			// After PreparseExpressions(), mAttribute points to the Func and mArg excludes the function name.
-			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), mAttribute ? ((Func *)mAttribute)->mName : mArg[first++].text);
-		else if (mActionType == ACT_METHOD)
-			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s.%s"), *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName, mArg[1].text), first = 2;
-		else
-			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), g_act[mActionType].Name);
-		for (int i = first; i < mArgc; ++i)
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), g_act[mActionType].Name);
+		for (int i = 0; i < mArgc; ++i)
 		{
 			bool quote = !mArg[i].is_expression && !(mArg[i].postfix && mArg[i].postfix->symbol != SYM_STRING);
 			// This method a little more efficient than using snprintfcat().
@@ -12513,7 +12368,7 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 			// been resolved at load-time, since the text has everything in it we want to display
 			// and thus there's no need to "resolve" dynamic variables here (e.g. array%i%).
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, quote ? _T("%s \"%s\"") : _T("%s %s")
-				, i == first ? _T("") : _T(",")
+				, i == 0 ? _T("") : _T(",")
 				, (mArg[i].type != ARG_TYPE_NORMAL && !*mArg[i].text) ? VAR(mArg[i])->mName : mArg[i].text);
 		}
 	}

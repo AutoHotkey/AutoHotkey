@@ -133,6 +133,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_ABORT _T("  ") ERR_ABORT_NO_SPACES
 #define WILL_EXIT _T("The program will exit.")
 #define OLD_STILL_IN_EFFECT _T("The script was not reloaded; the old version will remain in effect.")
+#define ERR_LINE_TOO_LONG _T("Line too long.")
 #define ERR_CONTINUATION_SECTION_TOO_LONG _T("Continuation section too long.")
 #define ERR_UNRECOGNIZED_ACTION _T("This line does not contain a recognized action.")
 #define ERR_NONEXISTENT_HOTKEY _T("Nonexistent hotkey.")
@@ -1618,7 +1619,7 @@ public:
 		};
 		struct { // Built-in functions.
 			BuiltInFunctionType mBIF;
-			UCHAR *mOutputVars; // String of indices indicating which params are output vars (for ACT_FUNC and BIF_PerformAction).
+			UCHAR *mOutputVars; // String of indices indicating which params are output vars (for BIF_PerformAction).
 			BuiltInFunctionID mID; // For code sharing: this function's ID in the group of functions which share the same C++ function.
 		};
 	};
@@ -2656,7 +2657,7 @@ private:
 
 	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, bool aInBlockComment, TextStream *ts);
 	ResultType IsDirective(LPTSTR aBuf);
-	ResultType ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType = ACT_INVALID
+	ResultType ParseAndAddLine(LPTSTR aLineText, int aBufSize = 0, ActionTypeType aActionType = ACT_INVALID
 		, LPTSTR aLiteralMap = NULL, size_t aLiteralMapLength = 0);
 	ResultType ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos = NULL, TCHAR aEndChar = 0);
 	ResultType ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos = NULL, TCHAR aEndChar = 0);
