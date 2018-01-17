@@ -1649,11 +1649,15 @@ public:
 #define MAX_FUNC_OUTPUT_VAR 7
 	bool ArgIsOutputVar(int aIndex)
 	{
+		// Since this function is used only to determine whether a parameter requires a writable var,
+		// ByRef parameters are not considered to be OutputVars:
 		if (!mIsBuiltIn)
-			return aIndex <= mParamCount && mParam[aIndex].is_byref;
+			return false;
 		if (!mOutputVars)
 			return false;
 		++aIndex; // Convert to one-based.
+		if (mBIF == &BIF_PerformAction)
+			return mOutputVars[aIndex] == ARG_TYPE_OUTPUT_VAR;
 		for (int i = 0; i < MAX_FUNC_OUTPUT_VAR && mOutputVars[i]; ++i)
 			if (mOutputVars[i] == aIndex)
 				return true;

@@ -6587,9 +6587,9 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		bif.mMaxParams = g_act[action_type].MaxParams;
 		bif.mName = g_act[action_type].Name;
 		
-		// For performance, the action and arg types are "precalculated" and stored in Func::mOutputVars,
-		// which should never be used for its other purpose because the ActionType appropriate for this
-		// command should be used instead of func-stmt -> BIF_PerformAction -> ActionType.
+		// For performance, the action and arg types are "precalculated" and stored in Func::mOutputVars.
+		// This is currently only used for BIF_PerformAction and for ArgIsOutputVar(), which knows to
+		// interpret mOutputVars differently depending on whether mBIF == &BIF_PerformAction.
 		bif_output_vars = (UCHAR *)SimpleHeap::Malloc(bif.mMaxParams + 1);
 		if (!bif_output_vars)
 			return NULL;
@@ -8717,13 +8717,30 @@ unquoted_literal:
 					}
 					else
 					{
+						if (func && func->ArgIsOutputVar(in_param_list->param_count))
+						{
+							ExprTokenType &param1 = *postfix[postfix_count-1];
+							if (param1.symbol == SYM_VAR || param1.symbol == SYM_DYNAMIC)
+							{
+								if (param1.var && VAR_IS_READONLY(*param1.var))
+									return LineError(ERR_VAR_IS_READONLY, FAIL, param1.var->mName);
+							}
+							else if (  !(IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(param1.symbol) // Technically valid, although the assignment will be superseded by the function call.
+								|| param1.symbol == SYM_PRE_INCREMENT || param1.symbol == SYM_PRE_DECREMENT // As above.
+								|| param1.symbol == SYM_IFF_ELSE)  ) // Could be something like fn(whichvar ? x : y).
+							{
+								sntprintf(number_buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
+									, in_param_list->param_count + 1, func->mName);
+								return LineError(number_buf);
+							}
+						}
 						#ifdef ENABLE_DLLCALL
 						if (func && func->mBIF == &BIF_DllCall // Implies mIsBuiltIn == true.
 							&& in_param_list->param_count == 0) // i.e. this is the end of the first param.
 						{
 							// Optimise DllCall by resolving function addresses at load-time where possible.
-							ExprTokenType &param1 = this_infix[-1]; // Safety note: this_infix is necessarily preceded by at least two tokens at this stage.
-							if (param1.symbol == SYM_STRING && this_infix[-2].symbol == SYM_OPAREN) // i.e. the first param is a single literal string and nothing else.
+							ExprTokenType &param1 = *postfix[postfix_count-1]; // Due to the nature of postfix, an operand can only be the last token if it is the only token in this parameter.
+							if (param1.symbol == SYM_STRING)
 							{
 								void *function = GetDllProcAddress(param1.marker);
 								if (function)
