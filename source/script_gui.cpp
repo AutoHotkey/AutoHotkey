@@ -6840,7 +6840,8 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		height = rect.bottom - rect.top; // rect.top might be slightly less than zero. A status bar is properly handled since it's inside the window's client area.
 
 		RECT work_rect;
-		if (mOwner && (mStyle & WS_CHILD))
+		bool is_child_window = mOwner && (style & WS_CHILD);
+		if (is_child_window)
 			GetClientRect(mOwner, &work_rect); // Center within parent window (our position is set relative to mOwner's client area, not in screen coordinates).
 		else
 			SystemParametersInfo(SPI_GETWORKAREA, 0, &work_rect, 0);  // Get desktop rect excluding task bar.
@@ -6850,7 +6851,7 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		// Seems best to restrict window size to the size of the desktop whenever explicit sizes
 		// weren't given, since most users would probably want that.  But only on first use of
 		// "Gui Show" (even "Gui, Show, Hide"):
-		if (mGuiShowHasNeverBeenDone)
+		if (mGuiShowHasNeverBeenDone && !is_child_window)
 		{
 			if (width_orig == COORD_UNSPECIFIED && width > work_width)
 				width = work_width;
