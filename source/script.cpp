@@ -4927,8 +4927,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// that this arg is not a variable, just a normal empty arg.  Functions
 					// such as ListLines() rely on this having been done because they assume,
 					// for performance reasons, that args marked as variables really are
-					// variables.  In addition, ExpandArgs() relies on this having been done
-					// as does the load-time validation for ACT_DRIVEGET:
+					// variables.  In addition, ExpandArgs() relies on this having been done.
 					this_new_arg.type = ARG_TYPE_NORMAL;
 				else
 				{
@@ -5067,79 +5066,16 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	///////////////////////////////////////////////////////////////////
 	// Do any post-add validation & handling for specific action types.
 	///////////////////////////////////////////////////////////////////
-	// v2.0: Currently only a very small subset of the v1 validation is used, since most of the
-	// old validation depended on parameters being plain literal text.  Although plain quoted
-	// strings are converted to non-expressions by a later stage and could be validated then,
-	// a lot more work is needed before validation can be done for function calls as well.
+	// v2.0: Currently almost none of the v1 validation is done here, since built-in functions
+	// are now fully parsed as expressions and not as unique action types.  This old method
+	// was never applicable to expressions/functions, which are more complicated to validate.
 	// This should be replaced with better tools (separate to the program), such as syntax
 	// checkers which can operate while the user is editing, before they try to run the script.
-#ifndef AUTOHOTKEYSC // For v1.0.35.01, some syntax checking is removed in compiled scripts to reduce their size.
-	// v1.0.38: The following should help reduce code size, and for some commands helps load-time
-	// performance by avoiding multiple resolutions of a given macro:
-	LPTSTR new_raw_arg1 = NEW_RAW_ARG1;
-	LPTSTR new_raw_arg2 = NEW_RAW_ARG2;
-	LPTSTR new_raw_arg3 = NEW_RAW_ARG3;
-	LPTSTR new_raw_arg4 = NEW_RAW_ARG4;
-
-	switch(aActionType)
+	if (aActionType == ACT_RETURN)
 	{
-	case ACT_RETURN:
 		if (aArgc > 0 && !g->CurrentFunc)
 			return ScriptError(_T("Return's parameter should be blank except inside a function."));
-		break;
-
-	case ACT_PIXELSEARCH:
-	case ACT_IMAGESEARCH:
-		// These are required, but not treated as such by earlier stages because the first two
-		// parameters must be optional:
-		if (!*new_raw_arg3 || !*new_raw_arg4 || !*NEW_RAW_ARG5 || !*NEW_RAW_ARG6 || !*NEW_RAW_ARG7)
-			return ScriptError(_T("Parameters 3 through 7 must not be blank."));
-		break;
-
-	case ACT_MOUSECLICK:
-		if (!line.ValidateMouseCoords(new_raw_arg2, new_raw_arg3))
-			return ScriptError(ERR_MOUSE_COORD, new_raw_arg2);
-		break;
-
-	case ACT_MOUSECLICKDRAG:
-		// Even though we check for blanks here at load-time, we don't bother to do so at runtime
-		// (i.e. if a dereferenced var resolved to blank, it will be treated as a zero):
-		if (!*new_raw_arg4 || !*NEW_RAW_ARG5)
-			return ScriptError(_T("Parameter #4 and 5 required."));
-		if (!line.ValidateMouseCoords(new_raw_arg2, new_raw_arg3))
-			return ScriptError(ERR_MOUSE_COORD, new_raw_arg2);
-		if (!line.ValidateMouseCoords(new_raw_arg4, NEW_RAW_ARG5))
-			return ScriptError(ERR_MOUSE_COORD, new_raw_arg4);
-		break;
-
-	// For these, although we validate that at least one is non-blank here, it's okay at
-	// runtime for them all to resolve to be blank, without an error being reported.
-	// It's probably more flexible that way since the commands are equipped to handle
-	// all-blank params.
-	// Not these because they can have their window params all-blank to work in "last-used window" mode:
-	//case ACT_WINACTIVATE:
-	//case ACT_WINWAITCLOSE:
-	//case ACT_WINWAITACTIVE:
-	//case ACT_WINWAITNOTACTIVE:
-	case ACT_WINACTIVATEBOTTOM:
-		if (!*new_raw_arg1 && !*new_raw_arg2 && !*new_raw_arg3 && !*new_raw_arg4)
-			return ScriptError(ERR_WINDOW_PARAM);
-		break;
-
-	case ACT_WINWAIT:
-		if (!*new_raw_arg1 && !*new_raw_arg2 && !*new_raw_arg4 && !*NEW_RAW_ARG5) // ARG3 is omitted because it's the timeout.
-			return ScriptError(ERR_WINDOW_PARAM);
-		break;
-
-	case ACT_MENUSELECT:
-		// Window params can all be blank in this case, but the first menu param should
-		// be non-blank (but it's ok if its a dereferenced var that resolves to blank
-		// at runtime):
-		if (!*new_raw_arg3)
-			return ScriptError(ERR_PARAM3_REQUIRED);
-		break;
 	}
-#endif  // The above section is in place only if when not AUTOHOTKEYSC.
 
 	if (mNextLineIsFunctionBody && do_update_labels) // do_update_labels: false for '#if expr' and 'static var:=expr', neither of which should be treated as part of the function's body.
 	{
