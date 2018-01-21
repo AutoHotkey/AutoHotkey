@@ -8146,7 +8146,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					break;
 
 				case g_DerefChar:
-					// Deref char within a string, acts as concat.
+					// Deref char within a string or double-deref; acts as concat.
 					this_infix_item.symbol = SYM_LOW_CONCAT;
 					break;
 
