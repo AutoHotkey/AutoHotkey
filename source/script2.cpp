@@ -9498,11 +9498,15 @@ VarSizeType BIV_ScreenDPI(LPTSTR aBuf, LPTSTR aVarName)
 
 BIV_DECL_R(BIV_TrayMenu)
 {
-	// The actual value (an object) is resolved in ExpandExpression,
-	// to work around the limitations of the current BIV interface.
+	// The actual value (an object) is resolved in ExpandExpression, to work around the
+	// limitations of the current BIV interface.  The current implementation requires that
+	// this function has a unique address, which would not be the case if COMDAT folding
+	// caused it to be "folded" with an identical function (such as A_IsCompiled, which
+	// also just returns an empty string ifndef AUTOHOTKEYSC).  So to ensure it gets a
+	// unique address, we check aVarName.
 	if (aBuf)
 		*aBuf = '\0';
-	return 0;
+	return !_tcsicmp(aVarName, _T("A_TrayMenu")) ? 0 : 1;
 }
 
 
