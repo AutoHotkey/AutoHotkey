@@ -4668,7 +4668,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 		ConvertEscapeSequences(action_args, literal_map);
 	}
 
-	int mark, max_params_override = 0; // Set default.
+	int mark;
 	if (aActionType == ACT_FOR)
 	{
 		// Validate "For" syntax and translate to conventional command syntax.
@@ -4698,14 +4698,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 			in[2] = g_delimiter; // Insert another delimiter so the expression is always arg 3.
 	}
 
-	else if (aActionType == ACT_IF)
-	{
-		// To support a same-line action, we tell the loop below to make one extra iteration.
-		// If a second "arg" exists, make it into a subaction.  This approach simplifies
-		// handling of commas in the expression, such as "if Func(a,b)".
-		max_params_override = 2;
-	}
-
 	// v2: All statements accept expressions by default, except goto/gosub/break/continue.
 	// At this stage it isn't necessary to differentiate between variables and expressions.
 	if (aActionType > ACT_LAST_JUMP || aActionType < ACT_FIRST_JUMP)
@@ -4717,7 +4709,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 	// MaxParams has already been verified as being <= MAX_ARGS.
 	int nArgs;
 	LPTSTR arg[MAX_ARGS], arg_map[MAX_ARGS];
-	int max_params = max_params_override ? max_params_override : this_action.MaxParams;
+	int max_params = this_action.MaxParams;
 	int max_params_minus_one = max_params - 1;
 	bool is_expression;
 
