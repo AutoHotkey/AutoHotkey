@@ -9812,8 +9812,15 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 	// ShowWindow(), EnableWindow() apparently does not cause a repaint to occur.
 	// Fix for v1.0.25.14: Don't send the message below (and its counterpart later on) because that
 	// sometimes or always, as a side-effect, shows the window if it's hidden:
+	// Fix for v1.1.27.07: WM_SETREDRAW appears to have the effect of clearing the update region
+	// (causing any pending redraw, such as by a previous call to this function for a different tab
+	// control, to be discarded).  To work around this, save the current update region.
+	RECT update_rect = {0}; // For simplicity, use GetUpdateRect() vs GetUpdateRgn().
 	if (parent_is_visible_and_not_minimized)
+	{
+		GetUpdateRect(mHwnd, &update_rect, FALSE);
 		SendMessage(mHwnd, WM_SETREDRAW, FALSE, 0);
+	}
 	bool invalidate_entire_parent = false; // Set default.
 
 	// Even if mHwnd is hidden, set styles to Show/Hide and Enable/Disable any controls that need it.
@@ -9926,6 +9933,12 @@ void GuiType::ControlUpdateCurrentTab(GuiControlType &aTabControl, bool aFocusFi
 			InvalidateRect(mHwnd, NULL, TRUE); // TRUE seems safer.
 		else
 		{
+			if (update_rect.left != update_rect.right)
+				// Reset the window's update region, which was likely cleared by WM_SETREDRAW.
+				// Doing this separately to tab_rect might perform better than using UnionRect(),
+				// which could cover a much larger area than necessary.  The system should handle
+				// the case where the two rects overlap (i.e. there won't be redundant repainting).
+				InvalidateRect(mHwnd, &update_rect, TRUE);
 			MapWindowPoints(NULL, mHwnd, (LPPOINT)&tab_rect, 2); // Convert rect to client coordinates (not the same as GetClientRect()).
 			InvalidateRect(mHwnd, &tab_rect, TRUE); // Seems safer to use TRUE, not knowing all possible overlaps, etc.
 		}
