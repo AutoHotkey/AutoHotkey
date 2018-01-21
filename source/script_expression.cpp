@@ -194,7 +194,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						break;
 					// Otherwise, this is the target of an assignment, so must be SYM_VAR:
 				case VAR_NORMAL:
-					this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with one limited exception) is relied upon in several places such as built-in functions.
+					this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with limited exceptions) is relied upon in several places such as built-in functions.
 					goto push_this_token;
 				case VAR_VIRTUAL:
 					if (this_token.is_lvalue)

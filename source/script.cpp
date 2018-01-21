@@ -8521,9 +8521,10 @@ unquoted_literal:
 		{
 			if (infix_symbol == SYM_DYNAMIC)
 			{
-				// IMPORTANT: VAR_CLIPBOARD is made into SYM_VAR, but only for assignments.
-				// This allows built-in functions and other places in the code to treat SYM_VAR
-				// as though it's always VAR_NORMAL, which reduces code size and improves maintainability.
+				// IMPORTANT: VAR_CLIPBOARD is made into SYM_VAR, but only for assignments and output var
+				// parameters which are explicitly listed in g_BIF.  This allows built-in functions and
+				// other places in the code to treat SYM_VAR as though it's always VAR_NORMAL, which reduces
+				// code size and improves maintainability.
 				// Similarly, is_lvalue is set so that a dynamically resolved VAR_VIRTUAL or VAR_CLIPBOARD
 				// will yield SYM_VAR if it's the target of an assignment.  This detection is done just
 				// prior to pushing the assignment operator onto the stack (or popping pre-inc/dec) since
@@ -8611,10 +8612,25 @@ unquoted_literal:
 						if (func && func->ArgIsOutputVar(in_param_list->param_count))
 						{
 							ExprTokenType &param1 = *postfix[postfix_count-1];
-							if (param1.symbol == SYM_VAR || param1.symbol == SYM_DYNAMIC)
+							if (param1.symbol == SYM_VAR)
 							{
-								if (param1.var && VAR_IS_READONLY(*param1.var))
-									return LineError(ERR_VAR_IS_READONLY, FAIL, param1.var->mName);
+								param1.is_lvalue = TRUE; // For #Warn ClassOverwrite.
+							}
+							else if (param1.symbol == SYM_DYNAMIC)
+							{
+								if (param1.var) // Built-in var.
+								{
+									if (VAR_IS_READONLY(*param1.var))
+										return LineError(ERR_VAR_IS_READONLY, FAIL, param1.var->mName);
+									// Convert this SYM_DYNAMIC to SYM_VAR to allow it to be passed to the function.
+									// Some functions rely on this being done only for those parameters which are listed
+									// as output vars in g_BIF or Line::ArgIsVar (since legacy commands are designed to
+									// allow Clipboard etc. as output vars).  This must not be done for ByRef parameters.
+									param1.symbol = SYM_VAR;
+								}
+								// Mark this as an l-value.  If it is a double-deref, it will either produce a writable
+								// var as SYM_VAR or will throw an error.
+								param1.is_lvalue = TRUE;
 							}
 							else if (!IS_OPERATOR_VALID_LVALUE(param1.symbol))
 							{

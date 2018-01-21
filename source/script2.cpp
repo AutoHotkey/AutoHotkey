@@ -12457,7 +12457,7 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	// as the haystack, needle, or replacement (i.e. the same memory), don't set output_var_count until
 	// immediately prior to returning.  Otherwise, haystack, needle, or replacement would corrupted while
 	// it's still being used here.
-	Var *output_var_count = ParamIndexToOptionalVar(3); // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+	Var *output_var_count = ParamIndexToOptionalVar(3);
 	int replacement_count = 0; // This value will be stored in output_var_count, but only at the very end due to the reason above.
 
 	// Get the replacement text (if any) from the incoming parameters.  If it was omitted, treat it as "".
@@ -12952,7 +12952,7 @@ BIF_DECL(BIF_RegEx)
 	if (aParamCount < 3 || aParam[2]->symbol != SYM_VAR) // No output var, so nothing more to do.
 		return;
 
-	Var &output_var = *aParam[2]->var; // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+	Var &output_var = *aParam[2]->var;
 	
 	IObject *match_object;
 	if (!RegExCreateMatchArray(haystack, re, extra, offset, pattern_count, captured_pattern_count, match_object))
@@ -13818,9 +13818,9 @@ BIF_DECL(BIF_VarSetCapacity)
 {
 	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
 	aResultToken.value_int64 = 0; // Set default. In spite of being ambiguous with the result of Free(), 0 seems a little better than -1 since it indicates "no capacity" and is also equal to "false" for easy use in expressions.
-	if (aParam[0]->symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+	if (aParam[0]->symbol == SYM_VAR && aParam[0]->var->Type() == VAR_NORMAL)
 	{
-		Var &var = *aParam[0]->var; // For performance and convenience. SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+		Var &var = *aParam[0]->var; // For performance and convenience.
 		if (aParamCount > 1) // Second parameter is present.
 		{
 			__int64 param1 = TokenToInt64(*aParam[1]);
@@ -13909,7 +13909,7 @@ BIF_DECL(BIF_VarSetCapacity)
 
 		if (aResultToken.value_int64 = var.ByteCapacity()) // Don't subtract 1 here in lieu doing it below (avoids underflow).
 			aResultToken.value_int64 -= sizeof(TCHAR); // Omit the room for the zero terminator since script capacity is defined as length vs. size.
-	} // (aParam[0]->symbol == SYM_VAR)
+	} // (aParam[0]->symbol == SYM_VAR && aParam[0]->var->Type() == VAR_NORMAL)
 	else
 		_f_throw(ERR_PARAM1_INVALID);
 }
