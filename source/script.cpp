@@ -10213,13 +10213,27 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 		//	// Shouldn't happen if the pre-parser and this function are designed properly?
 		//	return line->LineError("Unexpected ELSE.");
 
-		default:
-			result = line->Perform();
+		case ACT_ASSIGNEXPR:
+			result = line->PerformAssign();
+			// Fall through:
+		case ACT_EXPRESSION:
+			// Nothing else needs to be done because the expression in ARG1 (which is the only arg)
+			// has already been evaluated and its functions and subfunctions called.  Examples:
+			//    fn(123, "string", var, fn2(y))
+			//    x&=3
+			//    var ? func() : x:=y
 			if (result != OK || aMode == ONLY_ONE_LINE)
-				// Thus, Perform() should be designed to only return FAIL if it's an error that would make
-				// it unsafe to proceed in the subroutine we're executing now:
 				return result; // Usually OK or FAIL; can also be EARLY_EXIT.
 			line = line->mNextLine;
+			continue;
+
+		case ACT_EXIT: // In this context it's the ACT_EXIT added automatically by LoadFromFile().
+			return EARLY_EXIT;
+
+#ifdef _DEBUG
+		default:
+			return LineError(_T("DEBUG: ExecUntil(): Unhandled action type."));
+#endif
 		} // switch()
 	} // for each line
 
@@ -11258,6 +11272,60 @@ ResultType Line::PerformLoopReadFile(ResultToken *aResultToken, bool &aContinueM
 
 
 
+ResultType Line::PerformAssign()
+{
+	// Note: This line's args have not yet been dereferenced in this case (i.e. ExpandArgs() hasn't been called).
+	// Currently, ACT_ASSIGNEXPR can occur even when mArg[1].is_expression==false, such as things like var:=5
+	// and var:=Array%i%.  Search on "is_expression = " to find such cases in the script-loading/parsing
+	// routines.
+	// This isn't checked because load-time validation now ensures that there is at least one arg:
+	//if (mArgc > 1)
+
+	Var *output_var;
+
+	if (mArg[1].is_expression)
+		return ExpandArgs(); // This will also take care of the assignment (for performance).
+
+	if (mArg[1].postfix)
+	{
+		// This is a single-operand expression which was turned into a non-expression.  Bypassing
+		// ExpandArgs() gives a slight performance boost in this case since the second arg never
+		// needs to be copied into the deref buffer.  For more details about this optimization,
+		// search this file for "only_token".  Examples of assignments this covers:
+		//		x := 123
+		//		x := 1.0
+		//		x := "quoted literal string"
+		//		x := normal_var
+		ASSERT(!*mArg[0].text); // Pre-resolved.  Dynamic assignments are handled as ACT_EXPRESSION.
+		output_var = VAR(mArg[0]);
+		return output_var->Assign(*mArg[1].postfix);
+	}
+
+	if (!ExpandArgs()) // This also resolves OUTPUT_VAR.
+		return FAIL;
+
+	output_var = OUTPUT_VAR;
+
+	// sArgVar is used to enhance performance, which would otherwise be poor for dynamic variables
+	// such as Var:=Array%i% because it would have to be resolved twice (once here and once previously
+	// by ExpandArgs()) just to retain data type.
+	// ARG2 is non-blank for built-in vars, which this optimization can't be applied to.
+	if (ARGVARRAW2 && !*ARG2) // See above.  Also, RAW is safe due to the above check of mArgc > 1.
+	{
+		switch(ARGVARRAW2->Type())
+		{
+		case VAR_NORMAL: // This can be reached via things like: x:=single_naked_var
+			// Assign var to var so data type is retained.
+			return output_var->Assign(*ARGVARRAW2);
+		// Otherwise it's VAR_CLIPBOARD or a read-only variable; continue on to do assign the normal way.
+		}
+	}
+	// Since above didn't return, it's probably x:=BUILT_IN_VAR.
+	return output_var->Assign(ARG2);
+}
+
+
+
 ResultType Line::Perform()
 // Performs only this line's action.
 // Returns OK or FAIL.
@@ -11281,63 +11349,6 @@ ResultType Line::Perform()
 
 	switch (mActionType)
 	{
-	case ACT_ASSIGNEXPR:
-		// Note: This line's args have not yet been dereferenced in this case (i.e. ExpandArgs() hasn't been called).
-		// Currently, ACT_ASSIGNEXPR can occur even when mArg[1].is_expression==false, such as things like var:=5
-		// and var:=Array%i%.  Search on "is_expression = " to find such cases in the script-loading/parsing
-		// routines.
-		// This isn't checked because load-time validation now ensures that there is at least one arg:
-		//if (mArgc > 1)
-		{
-			if (mArg[1].is_expression)
-				return ExpandArgs(); // This will also take care of the assignment (for performance).
-
-			if (mArg[1].postfix)
-			{
-				// This is a single-operand expression which was turned into a non-expression.  Bypassing
-				// ExpandArgs() gives a slight performance boost in this case since the second arg never
-				// needs to be copied into the deref buffer.  For more details about this optimization,
-				// search this file for "only_token".  Examples of assignments this covers:
-				//		x := 123
-				//		x := 1.0
-				//		x := "quoted literal string"
-				//		x := normal_var
-				ASSERT(!*mArg[0].text); // Pre-resolved.  Dynamic assignments are handled as ACT_EXPRESSION.
-				output_var = VAR(mArg[0]);
-				return output_var->Assign(*mArg[1].postfix);
-			}
-
-			if (!ExpandArgs()) // This also resolves OUTPUT_VAR.
-				return FAIL;
-			
-			output_var = OUTPUT_VAR;
-
-			// sArgVar is used to enhance performance, which would otherwise be poor for dynamic variables
-			// such as Var:=Array%i% because it would have to be resolved twice (once here and once previously
-			// by ExpandArgs()) just to retain data type.
-			// ARG2 is non-blank for built-in vars, which this optimization can't be applied to.
-			if (ARGVARRAW2 && !*ARG2) // See above.  Also, RAW is safe due to the above check of mArgc > 1.
-			{
-				switch(ARGVARRAW2->Type())
-				{
-				case VAR_NORMAL: // This can be reached via things like: x:=single_naked_var
-					// Assign var to var so data type is retained.
-					return output_var->Assign(*ARGVARRAW2);
-				// Otherwise it's VAR_CLIPBOARD or a read-only variable; continue on to do assign the normal way.
-				}
-			}
-			// Since above didn't return, it's probably x:=BUILT_IN_VAR.
-			return output_var->Assign(ARG2);
-		}
-
-	case ACT_EXPRESSION:
-		// Nothing needs to be done because the expression in ARG1 (which is the only arg) has already
-		// been evaluated and its functions and subfunctions called.  Examples:
-		//    fn(123, "string", var, fn2(y))
-		//    x&=3
-		//    var ? func() : x:=y
-		return OK;
-
 	case ACT_SPLITPATH:
 		return SplitPath(ARG1);
 
