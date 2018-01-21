@@ -1877,10 +1877,9 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	ResultType hotkey_validity;
 
 	// For the remap mechanism, e.g. a::b
-	int remap_stage;
 	vk_type remap_source_vk, remap_dest_vk = 0; // Only dest is initialized to enforce the fact that it is the flag/signal to indicate whether remapping is in progress.
 	TCHAR remap_source[32], remap_dest[32], remap_dest_modifiers[8]; // Must fit the longest key name (currently Browser_Favorites [17]), but buffer overflow is checked just in case.
-	LPTSTR extra_event;
+	LPTSTR remap_ptr, extra_event;
 	bool remap_source_is_mouse, remap_dest_is_mouse, remap_keybd_to_mouse;
 
 	// For the line continuation mechanism:
@@ -2757,11 +2756,18 @@ examine_line:
 					sntprintf(remap_source, _countof(remap_source), _T("%s%s")
 						, _tcslen(cp1) == 1 && IsCharUpper(*cp1) ? _T("+") : _T("")  // Allow A::b to be different than a::b.
 						, buf); // Include any modifiers too, e.g. ^b::c.
-					tcslcpy(remap_dest, cp, _countof(remap_dest));      // But exclude modifiers here; they're wanted separately.
+					if (*cp == '"' || *cp == g_EscapeChar) // Need to escape these.
+					{
+						*remap_dest = g_EscapeChar;
+						remap_dest[1] = *cp;
+						remap_dest[2] = '\0';
+					}
+					else
+						tcslcpy(remap_dest, cp, _countof(remap_dest));  // But exclude modifiers here; they're wanted separately.
 					tcslcpy(remap_dest_modifiers, hotkey_flag, _countof(remap_dest_modifiers));
 					if (cp - hotkey_flag < _countof(remap_dest_modifiers)) // Avoid reading beyond the end.
 						remap_dest_modifiers[cp - hotkey_flag] = '\0';   // Terminate at the proper end of the modifier string.
-					remap_stage = 0; // Init for use in the next stage.
+					remap_ptr = NULL; // Init for use in the next stage.
 					// In the unlikely event that the dest key has the same name as a command, disqualify it
 					// from being a remap (as documented).  v1.0.40.05: If the destination key has any modifiers,
 					// it is unambiguously a key name rather than a command, so the switch() isn't necessary.
@@ -3031,14 +3037,19 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 			//	event.scanCode = 0x30; // Or use vk_to_sc(event.vkCode).
 			//	return CallNextHookEx(g_KeybdHook, aCode, wParam, lParam);
 			// }
-			switch (++remap_stage)
+
+			LPTSTR remap_buf = pending_buf; // Reusing this buffer since it's only used for its other purpose in the process_completed_line stage.
+			if (!remap_ptr)
 			{
-			case 1: // Stage 1: Add key-down hotkey label, e.g. *LButton::
-				buf_length = _stprintf(buf, _T("*%s::"), remap_source); // Should be no risk of buffer overflow due to prior validation.
-				goto examine_line; // Have the main loop process the contents of "buf" as though it came in from the script.
-			case 2: // Stage 2.
-				// Copied into a writable buffer for maintainability: AddLine() might rely on this.
-				// Also, it seems unnecessary to set press-duration to -1 even though the auto-exec section might
+				cp = remap_buf;
+				cp += _stprintf(cp
+					, _T("*%s::\n") // Key-down hotkey label, e.g. *LButton::
+					  _T("Set%sDelay(-1)\n") // Does NOT need to be "-1, -1" for SetKeyDelay (see below).
+					, remap_source
+					, remap_dest_is_mouse ? _T("Mouse") : _T("Key")
+				);
+			
+				// It seems unnecessary to set press-duration to -1 even though the auto-exec section might
 				// have set it to something higher than -1 because:
 				// 1) Press-duration doesn't apply to normal remappings since they use down-only and up-only events.
 				// 2) Although it does apply to remappings such as a::B and a::^b (due to press-duration being
@@ -3047,22 +3058,18 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 				//    that may be desirable to keep.
 				// 3) SendInput may become the predominant SendMode, so press-duration won't often be in effect anyway.
 				// 4) It has been documented that remappings use the auto-execute section's press-duration.
-				_tcscpy(buf, _T("-1")); // Does NOT need to be "-1, -1" for SetKeyDelay (see above).
 				// The primary reason for adding Key/MouseDelay -1 is to minimize the chance that a one of
 				// these hotkey threads will get buried under some other thread such as a timer, which
 				// would disrupt the remapping if #MaxThreadsPerHotkey is at its default of 1.
-				AddLine(remap_dest_is_mouse ? ACT_SETMOUSEDELAY : ACT_SETKEYDELAY, &buf, 1, NULL); // PressDuration doesn't need to be specified because it doesn't affect down-only and up-only events.
 				if (remap_keybd_to_mouse)
 				{
 					// Since source is keybd and dest is mouse, prevent keyboard auto-repeat from auto-repeating
 					// the mouse button (since that would be undesirable 90% of the time).  This is done
 					// by inserting a single extra IF-statement above the Send that produces the down-event:
-					buf_length = _stprintf(buf, _T("if not GetKeyState(\"%s\")"), remap_dest); // Should be no risk of buffer overflow due to prior validation.
-					remap_stage = 9; // Have it hit special stage 9+1 next time for code reduction purposes.
-					goto examine_line; // Have the main loop process the contents of "buf" as though it came in from the script.
+					cp += _stprintf(cp, _T("if not GetKeyState(\"%s\")\n"), remap_dest); // Should be no risk of buffer overflow due to prior validation.
 				}
-				// Otherwise, remap_keybd_to_mouse==false, so fall through to next case.
-			case 10:
+				// Otherwise, remap_keybd_to_mouse==false.
+
 				extra_event = _T(""); // Set default.
 				switch (remap_dest_vk)
 				{
@@ -3092,24 +3099,32 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 					}
 					break;
 				}
-				mCurrLine = NULL; // v1.0.40.04: Prevents showing misleading vicinity lines for a syntax-error such as %::%
-				_stprintf(buf, _T("{Blind}%s%s{%s DownR}"), extra_event, remap_dest_modifiers, remap_dest); // v1.0.44.05: DownTemp vs. Down. See Send's DownTemp handler for details.
-				if (!AddLine(ACT_SEND, &buf, 1, NULL)) // v1.0.40.04: Check for failure due to bad remaps such as %::%.
-					return FAIL;
-				AddLine(ACT_RETURN);
-				// Add key-up hotkey label, e.g. *LButton up::
-				buf_length = _stprintf(buf, _T("*%s up::"), remap_source); // Should be no risk of buffer overflow due to prior validation.
-				remap_stage = 2; // Adjust to hit stage 3 next time (in case this is stage 10).
-				goto examine_line; // Have the main loop process the contents of "buf" as though it came in from the script.
-			case 3: // Stage 3.
-				_tcscpy(buf, _T("-1"));
-				AddLine(remap_dest_is_mouse ? ACT_SETMOUSEDELAY : ACT_SETKEYDELAY, &buf, 1, NULL);
-				_stprintf(buf, _T("{Blind}{%s Up}"), remap_dest); // Unlike the down-event above, remap_dest_modifiers is not included for the up-event; e.g. ^{b up} is inappropriate.
-				AddLine(ACT_SEND, &buf, 1, NULL);
-				AddLine(ACT_RETURN);
-				remap_dest_vk = 0; // Reset to signal that the remapping expansion is now complete.
-				break; // Fall through to the next section so that script loading can resume at the next line.
+				_stprintf(cp
+					, _T("Send(\"{Blind}%s%s{%s DownR}\")\n") // DownR vs. Down. See Send's DownR handler for details.
+					  _T("Return\n")
+					  _T("*%s up::\n") // Key-up hotkey label, e.g. *LButton up::
+					  _T("Set%sDelay(-1)\n")
+					  _T("Send(\"{Blind}{%s Up}\")\n") // Unlike the down-event above, remap_dest_modifiers is not included for the up-event; e.g. ^{b up} is inappropriate.
+					  _T("Return\n") // Last line must end with \n to simplify the code.
+					, extra_event, remap_dest_modifiers, remap_dest
+					, remap_source
+					, remap_dest_is_mouse ? _T("Mouse") : _T("Key")
+					, remap_dest
+				);
+
+				// Begin parsing remap_buf on the next iteration.
+				remap_ptr = remap_buf;
 			}
+			cp = _tcschr(remap_ptr, '\n'); // Always succeeds unless there's a bug.
+			tcslcpy(buf, remap_ptr, cp - remap_ptr + 1); // Copy this line into buf.
+			remap_ptr = cp + 1; // Set up remap_ptr for next iteration.
+			if (!*remap_ptr)
+			{
+				remap_dest_vk = 0; // Reset to signal that the remapping expansion will be complete after the next iteration.
+				*remap_buf = '\0'; // Necessary because it is an alias for pending_buf.
+			}
+			mCurrLine = NULL; // Prevent misleading vicinity lines if an error is somehow possible.
+			goto examine_line;
 		} // if (remap_dest_vk)
 		// Since above didn't "continue", resume loading script line by line:
 		buf = next_buf;
