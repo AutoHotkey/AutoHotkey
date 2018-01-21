@@ -72,7 +72,6 @@ HHOOK g_MouseHook = NULL;
 HHOOK g_PlaybackHook = NULL;
 bool g_ForceLaunch = false;
 bool g_WinActivateForce = false;
-bool g_MustDeclare = false; // Used by #MustDeclare.
 bool g_RunStdIn = false;
 WarnMode g_Warn_UseUnsetLocal = WARNMODE_OFF;		// Used by #Warn directive.
 WarnMode g_Warn_UseUnsetGlobal = WARNMODE_OFF;		//

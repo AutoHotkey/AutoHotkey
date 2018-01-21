@@ -1634,7 +1634,6 @@ public:
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
 	UCHAR mDefaultVarType;
-	#define VAR_DECLARE_NONE   0
 	#define VAR_DECLARE_GLOBAL (VAR_DECLARED | VAR_GLOBAL)
 	#define VAR_DECLARE_SUPER_GLOBAL (VAR_DECLARE_GLOBAL | VAR_SUPER_GLOBAL)
 	#define VAR_DECLARE_LOCAL  (VAR_DECLARED | VAR_LOCAL)
@@ -1754,7 +1753,7 @@ public:
 		, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 		, mGlobalVar(NULL), mGlobalVarCount(0)
 		, mInstances(0)
-		, mDefaultVarType(VAR_DECLARE_NONE)
+		, mDefaultVarType(VAR_DECLARE_LOCAL)
 		, mIsBuiltIn(aIsBuiltIn)
 		, mIsVariadic(false)
 	{}

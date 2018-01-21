@@ -3714,25 +3714,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		return CONDITION_TRUE;
 	}
 
-	if (IS_DIRECTIVE_MATCH(_T("#MustDeclare")))
-	{
-		if (g->CurrentFunc) // Behavior wouldn't be intuitive, so disallow it.
-			return ScriptError(_T("#MustDeclare cannot be used inside a function."));
-		switch (Line::ConvertOnOff(parameter))
-		{
-		case NEUTRAL:		// #MustDeclare
-		case TOGGLED_ON:	// #MustDeclare On
-			g_MustDeclare = true;
-			break;
-		case TOGGLED_OFF:	// #MustDeclare Off
-			g_MustDeclare = false;
-			break;
-		default:			// #MustDeclare <invalid parameter>
-			return ScriptError(ERR_PARAM1_INVALID, aBuf);
-		}
-		return CONDITION_TRUE;
-	}
-
 	if (IS_DIRECTIVE_MATCH(_T("#Warn")))
 	{
 		if (!parameter)
@@ -4050,20 +4031,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 		{
 			int declare_type;
 			LPTSTR cp;
-			if (!_tcsnicmp(aLineText, _T("Var"), 3))
-			{
-				cp = aLineText + 3; // The character after the declaration word.
-				if (!g->CurrentFunc)
-					declare_type = VAR_DECLARE_GLOBAL; // Ordinary global, not super-global.
-				else
-					// Seems best to require the more specific forms of "Local"/"Global"/"Static",
-					// for clarity in scripts, to simplify the documentation and so we don't need
-					// to test as many different combinations of declarations.
-					//if (  !(declare_type = g->CurrentFunc->mDefaultVarType)  )
-					//	declare_type = VAR_DECLARE_LOCAL;
-					break;
-			}
-			else if (!_tcsnicmp(aLineText, _T("Global"), 6))
+			if (!_tcsnicmp(aLineText, _T("Global"), 6))
 			{
 				cp = aLineText + 6; // The character after the declaration word.
 				declare_type = g->CurrentFunc ? VAR_DECLARE_GLOBAL : VAR_DECLARE_SUPER_GLOBAL;
@@ -4999,11 +4967,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			///////////////////////////////////////////
 			// Build the list of operands for this arg.
 			///////////////////////////////////////////
-			// Now that any escaped g_DerefChars and quote marks have been marked, pre-parse all
-			// operands in this_new_arg.text.  Resolving var derefs at this early stage allows
-			// #MustDeclare to be positional.  Other operands are marked at this stage to avoid
-			// some redundant processing later, and so that we don't need to make this_aArgMap
-			// persistent (i.e. all deref chars and quote marks are handled here).
+			// Now that any escaped quote marks etc. have been marked, pre-parse all operands
+			// in this_new_arg.text.  Review is needed to determine whether var derefs still
+			// need to be resolved at this stage (and whether this is optimal).  Other operands
+			// are marked at this stage to avoid some redundant processing later, and so that we
+			// don't need to make this_aArgMap persistent.
 			// Note: this_new_arg.text is scanned rather than this_aArg because we want to
 			// establish pointers to the correct area of memory:
 			deref_count = 0;  // Init for each arg.
@@ -5816,9 +5784,6 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 	}
 	//else leave func.mParam/mParamCount set to their NULL/0 defaults.
 
-	if (!g_MustDeclare)
-		func.mDefaultVarType = VAR_DECLARE_LOCAL; // Set default.
-
 	if (mLastLabel && !mLastLabel->mJumpToLine)
 	{
 		// Check all variants of all hotkeys, since there might be multiple variants
@@ -6407,10 +6372,6 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 				// Now continue on normally so that our caller can continue looking for syntax errors.
 			}
 			
-			// Save the current #MustDeclare setting to allow func lib authors a choice about
-			// whether they use it, without imposing their choice on users of their libs.
-			bool must_declare = g_MustDeclare;
-
 			// g->CurrentFunc is non-NULL when the function-call being resolved is inside
 			// a function.  Save and reset it for correct behaviour in the include file:
 			Func *current_func = g->CurrentFunc;
@@ -6425,9 +6386,6 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			}
 			
 			g->CurrentFunc = current_func; // Restore.
-
-			// Restore setting as per the comment above.
-			g_MustDeclare = must_declare;
 
 			// Now that a matching filename has been found, it seems best to stop searching here even if that
 			// file doesn't actually contain the requested function.  This helps library authors catch bugs/typos.
@@ -6943,14 +6901,6 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 				ScriptError(_T("Illegal parameter name."), aVarName); // Short message since so rare.
 				return NULL;
 			}
-		}
-	}
-	else if (!mIsReadyToExecute && !(aScope & VAR_DECLARED) && (g->CurrentFunc ? g->CurrentFunc->mDefaultVarType == VAR_DECLARE_NONE : g_MustDeclare))
-	{
-		if (  !(g->CurrentFunc && _tcschr(g->CurrentFunc->mName, '.') && !_tcsnicmp(aVarName, _T("base"), 4) && aVarNameLength == 4)  ) // i.e. not "base" in a class method.
-		{
-			ScriptError(ERR_MUST_DECLARE, aVarName);
-			return NULL;
 		}
 	}
 
