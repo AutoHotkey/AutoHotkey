@@ -4462,7 +4462,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 
 	if (!aActionType && could_be_named_action) // Caller nor logic above has yet determined the action.
 	{
-		aActionType = ConvertActionType(action_name); // Is this line a command?
+		aActionType = ConvertActionType(action_name, ACT_FIRST_NAMED_ACTION, ACT_FIRST_COMMAND); // Is this line a control flow statement?
 
 		if (!aActionType)
 		{
@@ -4495,7 +4495,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 		// things like "Loop{ string" are reported as errors (in case user intended an object literal).
 		if (*action_args == '{')
 		{
-			switch (ActionTypeType otb_act = ConvertActionType(action_name))
+			switch (ActionTypeType otb_act = ConvertActionType(action_name, ACT_FIRST_NAMED_ACTION, ACT_FIRST_COMMAND))
 			{
 			case ACT_LOOP:
 				add_openbrace_afterward = true;
@@ -4833,13 +4833,13 @@ inline LPTSTR Script::ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool
 
 
 
-inline ActionTypeType Script::ConvertActionType(LPTSTR aActionTypeString)
+inline ActionTypeType Script::ConvertActionType(LPTSTR aActionTypeString, int aFirstAction, int aLastActionPlus1)
 // inline since it's called so often, but don't keep it in the .h due to #include issues.
 {
 	// For the loop's index:
 	// Use an int rather than ActionTypeType since it's sure to be large enough to go beyond
 	// 256 if there happen to be exactly 256 actions in the array:
- 	for (int action_type = ACT_FIRST_NAMED_ACTION; action_type < g_ActionCount; ++action_type)
+ 	for (int action_type = aFirstAction; action_type < aLastActionPlus1; ++action_type)
 		if (!_tcsicmp(aActionTypeString, g_act[action_type].Name)) // Match found.
 			return action_type;
 	return ACT_INVALID;  // On failure to find a match.
@@ -6567,14 +6567,11 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 
 	if (!bif.mBIF)
 	{
-		// The following handles calling of commands using function syntax:
-		action_type = ConvertActionType(func_name);
-		if (action_type == ACT_INVALID
-			// The following are not implemented in Line::Perform, so are not supported.
-			// Most are control flow statements which can only be handled correctly in
-			// Line::ExecUntil and therefore can't be implemented as functions.
-			|| ACT_IS_CONTROL_FLOW(action_type))
-			return NULL; // Maint: There may be other lines above that also return NULL.
+		// The following handles those commands which have not yet been converted to BIFs,
+		// excluding control flow statements (which are not "functions" and can't work this way):
+		action_type = ConvertActionType(func_name, ACT_FIRST_COMMAND, g_ActionCount);
+		if (action_type == ACT_INVALID)
+			return NULL;
 		// Otherwise, there is a command with this name which can be converted to a function.
 
 		bif.mBIF = BIF_PerformAction;

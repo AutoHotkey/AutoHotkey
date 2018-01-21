@@ -2667,7 +2667,7 @@ private:
 	ResultType ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos = NULL, TCHAR aEndChar = 0);
 	ResultType ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos);
 	LPTSTR ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool aDisplayErrors);
-	static ActionTypeType ConvertActionType(LPTSTR aActionTypeString);
+	static ActionTypeType ConvertActionType(LPTSTR aActionTypeString, int aFirstAction, int aLastActionPlus1);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
 	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, int aArgc = 0, LPTSTR aArgMap[] = NULL, bool aAllArgsAreExpressions = false);
 
