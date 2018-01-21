@@ -7586,7 +7586,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 		{
 		case ACT_BLOCK_BEGIN:
 			if (line->mAttribute) // This is the opening brace of a function definition.
-				g->CurrentFunc = (Func *)line->mAttribute; // Must be set only for mAttribute == ATTR_TRUE because functions can of course contain types of blocks other than the function's own block.
+				g->CurrentFunc = (Func *)line->mAttribute; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
 			break;
 		case ACT_BLOCK_END:
 			if (line->mAttribute) // This is the closing brace of a function definition.
@@ -12171,7 +12171,7 @@ LPTSTR Line::LogToText(LPTSTR aBuf, int aBufSize) // aBufSize should be an int t
 			if (line_index >= LINE_LOG_SIZE) // wrap around, because sLog is a circular queue
 				line_index -= LINE_LOG_SIZE; // Don't just reset it to zero because an offset larger than one may have been added to it.
 			if (!sLog[line_index]) // No line has yet been logged in this slot.
-				continue; // ACT_LISTLINES and other things might rely on "continue" isntead of halting the loop here.
+				continue; // ACT_LISTLINES and other things might rely on "continue" instead of halting the loop here.
 			this_item_is_special = next_item_is_special;
 			next_item_is_special = false;  // Set default.
 			if (i + 1 < lines_to_show)  // There are still more lines to be processed
