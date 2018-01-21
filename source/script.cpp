@@ -1934,6 +1934,9 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		// indirectly by calling something that changed it:
 		mCurrLine = NULL;  // To signify that we're in transition, trying to load a new one.
 
+		if (buf_length == LINE_SIZE - 1) // The documented limit is 16383 (LINE_SIZE - 2).
+			return ScriptError(ERR_LINE_TOO_LONG);
+
 		// Read in the next line (if that next line is the start of a continuation section, append
 		// it to the line currently being processed:
 		for (has_continuation_section = false, in_continuation_section = 0;;)
@@ -4472,7 +4475,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 			{
 				// Convert function/method call statements to function/method calls.
 				int line_length = (int)_tcslen(aLineText);
-				if (line_length + bool(*end_marker) >= aBufSize)
+				if (line_length + bool(*end_marker) >= aBufSize) // This should never be true since LoadIncludedFile() enforces a max length of LINE_SIZE - 2.
 					return ScriptError(ERR_LINE_TOO_LONG);
 				if (*end_marker) // Replace space or tab with parenthesis.
 					*end_marker = '(';
