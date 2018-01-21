@@ -281,7 +281,7 @@ public:
 		KeyType key;
 		SymbolType key_type = IsNumeric(aKey, FALSE, FALSE, FALSE); // SYM_STRING or SYM_INTEGER.
 		if (key_type == SYM_INTEGER)
-			key.i = ATOI(aKey);
+			key.i = Exp32or64(ATOI,ATOI64)(aKey);
 		else
 			key.s = aKey;
 		IndexType insert_pos;

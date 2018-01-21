@@ -2414,40 +2414,51 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 				// display the Alt-tab menu, we would incorrectly believe the menu to be displayed:
 				sAltTabMenuIsVisible = false;
 
-			if (  !(modLR & (MOD_LALT | MOD_RALT | MOD_LWIN | MOD_RWIN))  ) // It's not Win, Alt or AltGr (but AltGr is excluded below by virtue of the fact that it puts LCtrl into effect).
-			{
-				// Pressing or releasing Ctrl or Shift serves to disguise Alt or Win.
-				sUndisguisedMenuInEffect = false;
-			}
-			else if (!aKeyUp) // Key-down.
+			if (!aKeyUp) // Key-down.
 			{
 				// sUndisguisedMenuInEffect can be true or false prior to this.
 				//  LAlt (true) + LWin = both disguised (false).
 				//  LWin (true) + LAlt = both disguised (false).
 				if (modLR & (MOD_LWIN | MOD_RWIN))
 					sUndisguisedMenuInEffect = !(g_modifiersLR_logical & ~(MOD_LWIN | MOD_RWIN)); // If any other modifier is down, disguise is already in effect.
-				else // ALT
-					sUndisguisedMenuInEffect = !(g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL)); // If CTRL is down, disguise is already in effect.
+				else if (modLR & (MOD_LALT | MOD_RALT))
+					sUndisguisedMenuInEffect = !(g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL)); // If Ctrl is down (including if this Alt is AltGr), disguise is already in effect.
+				else // Shift or Ctrl: pressing either serves to disguise any previous Alt or Win.
+					sUndisguisedMenuInEffect = false;
 			}
 			else if (sDisguiseNextMenu)
 			{
-				// Since the below call to KeyEvent() calls the keybd hook recursively, a quick down-and-up
-				// is all that is necessary to disguise the key.  This is because the OS will see that the
-				// keystroke occurred while ALT or WIN is still down because we haven't done CallNextHookEx() yet.
-				if (sUndisguisedMenuInEffect)
-					KeyEvent(KEYDOWNANDUP, g_MenuMaskKey);
 				// If LWin/RWin is still physically down (or down due to an explicit Send, such as a remapping),
 				// keep watching until it is released so that if key-repeat puts it back into effect, it will be
 				// disguised again.  _non_ignored is used to ignore temporary modifier changes made during a
 				// Send which aren't explicit, such as `Send x` temporarily releasing LWin/RWin.  Without this,
 				// something like AppsKey::RWin would not work well with other hotkeys which Send.
+				// v1.1.27.01: This section now also handles Ctrl-up and Shift-up events, which not only fail to
+				// disguise Win but actually cause the Start menu to immediately appear even though the Win key
+				// has not been released.  This only occurs if it was not already disguised by the Ctrl/Shift down
+				// event; i.e. when an isolated Ctrl/Shift up event is received without a corresponding down event.
+				// "Physical" events of this kind can be sent by the system when switching from a window with UK
+				// layout to a window with US layout.  This is likely related to the UK layout having AltGr.
 				if (  !(g_modifiersLR_logical_non_ignored & (MOD_LWIN | MOD_RWIN))  )
 				{
+					if (modLR & (MOD_LCONTROL | MOD_RCONTROL | MOD_LSHIFT | MOD_RSHIFT))
+					{
+						// v1.1.27.01: Since this key being released is Ctrl/Shift and Win is not down, this must
+						// be in combination with Alt, which can be disguised by this event.  By contrast, if the
+						// Win key was down and sUndisguisedMenuInEffect == true (meaning there was no Ctrl/Shift
+						// down event prior to this up event), this event needs to be disguised for the reason
+						// described above.
+						sUndisguisedMenuInEffect = false;
+					}
 					sDisguiseNextMenu = false;
-					sUndisguisedMenuInEffect = false;
 				}
+				// Since the below call to KeyEvent() calls the keybd hook recursively, a quick down-and-up
+				// is all that is necessary to disguise the key.  This is because the OS will see that the
+				// keystroke occurred while ALT or WIN is still down because we haven't done CallNextHookEx() yet.
+				if (sUndisguisedMenuInEffect)
+					KeyEvent(KEYDOWNANDUP, g_MenuMaskKey); // This should also cause sUndisguisedMenuInEffect to be reset.
 			}
-			else // Win, Alt or AltGr was released and not disguised.
+			else // A modifier key was released and sDisguiseNextMenu was false.
 			{
 				// Now either no menu keys are down or they have been disguised by this keyup event.
 				// Key-repeat may put the menu key back into effect, but that will be detected above.
@@ -2517,11 +2528,15 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// indirectly via a different hotstring:
 	bool do_monitor_hotstring = shs && !aIsIgnored && treat_as_visible;
 	bool do_input = g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && aIsIgnored);
+	
+	static vk_type sPendingDeadKeyVK = 0;
+	static sc_type sPendingDeadKeySC = 0; // Need to track this separately because sometimes default VK-to-SC mapping isn't correct.
+	static bool sPendingDeadKeyUsedShift = false;
+	static bool sPendingDeadKeyUsedAltGr = false;
 
-	UCHAR end_key_attributes;
 	if (do_input && aVK != VK_PACKET)
 	{
-		end_key_attributes = g_input.EndVK[aVK];
+		UCHAR end_key_attributes = g_input.EndVK[aVK];
 		if (!end_key_attributes)
 			end_key_attributes = g_input.EndSC[aSC];
 		if (end_key_attributes) // A terminating keystroke has now occurred unless the shift state isn't right.
@@ -2543,9 +2558,10 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				g_input.EndingChar = 0;
 				// Don't change this line:
 				g_input.EndingRequiredShift = shift_must_be_down && (g_modifiersLR_logical & (MOD_LSHIFT | MOD_RSHIFT));
-				if (!do_monitor_hotstring)
+				if (!do_monitor_hotstring && !sPendingDeadKeyVK)
 					return treat_as_visible;
-				// else need to return only after the input is collected for the hotstring.
+				// else need to return only after the input is collected for the hotstring,
+				// or after determining whether this key completes the pending dead key sequence.
 			}
 		}
 	}
@@ -2595,7 +2611,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	if (g_modifiersLR_logical
 		&& !(g_input.status == INPUT_IN_PROGRESS && g_input.TranscribeModifiedKeys)
 		&& g_modifiersLR_logical != MOD_LSHIFT && g_modifiersLR_logical != MOD_RSHIFT
-		&& g_modifiersLR_logical != (MOD_LSHIFT & MOD_RSHIFT)
+		&& g_modifiersLR_logical != (MOD_LSHIFT | MOD_RSHIFT)
 		&& !((g_modifiersLR_logical & (MOD_LALT | MOD_RALT)) && (g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL))))
 		// Since in some keybd layouts, AltGr (Ctrl+Alt) will produce valid characters (such as the @ symbol,
 		// which is Ctrl+Alt+Q in the German/IBM layout and Ctrl+Alt+2 in the Spanish layout), an attempt
@@ -2611,11 +2627,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		// Note that ToAsciiEx() will translate ^i to a tab character, !i to plain i, and many other modified
 		// letters as just the plain letter key, which we don't want.
 		return treat_as_visible;
-
-	static vk_type sPendingDeadKeyVK = 0;
-	static sc_type sPendingDeadKeySC = 0; // Need to track this separately because sometimes default VK-to-SC mapping isn't correct.
-	static bool sPendingDeadKeyUsedShift = false;
-	static bool sPendingDeadKeyUsedAltGr = false;
 
 	// v1.0.21: Only true (unmodified) backspaces are recognized by the below.  Another reason to do
 	// this is that ^backspace has a native function (delete word) different than backspace in many editors.
@@ -2639,10 +2650,40 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		return treat_as_visible;
 	}
 
+	Get_active_window_keybd_layout // Defines the variables active_window and active_window_keybd_layout for use below.
+
+	// Univeral Windows Platform apps apparently have their own handling for dead keys:
+	//  - Dead key followed by Esc produces Chr(27), unlike non-UWP apps.
+	//  - Pressing a dead key in a UWP app does not leave it in the keyboard layout's buffer,
+	//    so to get the correct result here we must translate the dead key again, first.
+	//  - Pressing a non-dead key disregards any dead key which was placed into the buffer by
+	//    calling ToUnicodeEx, and it is left in the buffer.  To get the correct result for the
+	//    next call, we must NOT reinsert it into the buffer (see dead_key_sequence_complete).
+	static bool sUwpAppFocused = false;
+	static HWND sUwpHwndChecked = 0;
+	if (sUwpHwndChecked != active_window)
+	{
+		sUwpHwndChecked = active_window;
+		TCHAR class_name[28];
+		GetClassName(active_window, class_name, _countof(class_name));
+		sUwpAppFocused = !_tcsicmp(class_name, _T("ApplicationFrameWindow"));
+	}
 	int char_count;
 	TBYTE ch[3];
 	BYTE key_state[256];
 	memcpy(key_state, g_PhysicalKeyState, 256);
+
+	if (sPendingDeadKeyVK && sUwpAppFocused && aVK != VK_PACKET)
+	{
+		AdjustKeyState(key_state
+			, (sPendingDeadKeyUsedAltGr ? MOD_LCONTROL|MOD_RALT : 0)
+			| (sPendingDeadKeyUsedShift ? MOD_RSHIFT : 0)); // Left vs Right Shift probably doesn't matter in this context.
+		// If it turns out there was already a dead key in the buffer, the second call puts it back.
+		if (ToUnicodeOrAsciiEx(sPendingDeadKeyVK, sPendingDeadKeySC, key_state, ch, 0, active_window_keybd_layout) > 0)
+			ToUnicodeOrAsciiEx(sPendingDeadKeyVK, sPendingDeadKeySC, key_state, ch, 0, active_window_keybd_layout);
+		sPendingDeadKeyVK = 0; // Don't reinsert it afterward (see above).
+	}
+
 	// As of v1.0.25.10, the below fixes the Input command so that when it is capturing artificial input,
 	// such as from the Send command or a hotstring's replacement text, the captured input will reflect
 	// any modifiers that are logically but not physically down (or vice versa):
@@ -2652,11 +2693,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		key_state[VK_CAPITAL] |= STATE_ON;
 	else
 		key_state[VK_CAPITAL] &= ~STATE_ON;
-
-	// Use ToAsciiEx() vs. ToAscii() because there is evidence from Putty author that ToAsciiEx() works better
-	// with more keyboard layouts under 2k/XP than ToAscii() does (though if true, there is no MSDN explanation). 
-	// UPDATE: In v1.0.44.03, need to use ToAsciiEx() anyway because of the adapt-to-active-window-layout feature.
-	Get_active_window_keybd_layout // Defines the variables active_window and active_window_keybd_layout for use below.
 
 	if (aVK == VK_PACKET)
 	{
@@ -2690,6 +2726,9 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// VK_TAB & VK_ESCAPE
 	// These keys have an ascii translation but should not trigger/complete a pending dead key,
 	// at least not on the Spanish and Danish layouts, which are the two I've tested so far.
+	// UPDATE: Above appears to be untrue (tested on Windows 10 and XP).  Both Tab and Esc complete
+	// the dead key sequence (by inserting the dead char and tab/nothing), so excluding these keys
+	// actually causes unwanted side-effects.
 
 	// Dead keys in Danish layout as they appear on a US English keyboard: Equals and Plus /
 	// Right bracket & Brace / probably others.
@@ -2718,7 +2757,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// allows dead keys to continue to operate properly in the user's foreground window, while still
 	// being capturable by the Input command and recognizable by any defined hotstrings whose
 	// abbreviations use diacritical letters:
-	bool dead_key_sequence_complete = sPendingDeadKeyVK && aVK != VK_TAB && aVK != VK_ESCAPE;
+	bool dead_key_sequence_complete = sPendingDeadKeyVK;
 	if (char_count < 0) // It's a dead key, and it doesn't complete a sequence since in that case char_count would be >= 1.
 	{
 		if (treat_as_visible)
@@ -3054,8 +3093,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// the letter "a" to produce á.
 	if (dead_key_sequence_complete)
 	{
-		vk_type vk_to_send = sPendingDeadKeyVK; // To facilitate early reset below.
-		sPendingDeadKeyVK = 0; // First reset this because below results in a recursive call to keyboard hook.
 		// If there's an Input in progress and it's invisible, the foreground app won't see the keystrokes,
 		// thus no need to re-insert the dead key into the keyboard buffer.  Note that the Input might have
 		// been in progress upon entry to this function but now isn't due to INPUT_TERMINATED_BY_ENDKEY above.
@@ -3068,7 +3105,8 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				, (sPendingDeadKeyUsedAltGr ? MOD_LCONTROL|MOD_RALT : 0)
 				| (sPendingDeadKeyUsedShift ? MOD_RSHIFT : 0)); // Left vs Right Shift probably doesn't matter in this context.
 			TCHAR temp_ch[2];
-			ToUnicodeOrAsciiEx(vk_to_send, sPendingDeadKeySC, key_state, temp_ch, 0, active_window_keybd_layout);
+			ToUnicodeOrAsciiEx(sPendingDeadKeyVK, sPendingDeadKeySC, key_state, temp_ch, 0, active_window_keybd_layout);
+			sPendingDeadKeyVK = 0;
 		}
 	}
 

@@ -1086,8 +1086,9 @@ ResultType Script::SetTrayIcon(LPTSTR aIconFile, int aIconNumber, ToggleValueTyp
 	// L17: For best results, load separate small and large icons.
 	HICON new_icon_small;
 	HICON new_icon = NULL; // Initialize to detect failure to load either icon.
+	HMODULE icon_module = NULL; // Must initialize because it's not always set by LoadPicture().
 	if ( new_icon_small = (HICON)LoadPicture(aIconFile, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), image_type, aIconNumber, false) ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
-		if ( !(new_icon = (HICON)LoadPicture(aIconFile, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, aIconNumber, false)) )
+		if ( !(new_icon = (HICON)LoadPicture(aIconFile, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, aIconNumber, false, NULL, &icon_module)) )
 			DestroyIcon(new_icon_small);
 	if ( !new_icon )
 		return g_script.ScriptError(_T("Can't load icon."), aIconFile);
@@ -1103,14 +1104,21 @@ ResultType Script::SetTrayIcon(LPTSTR aIconFile, int aIconNumber, ToggleValueTyp
 		mCustomIconFile = (LPTSTR) SimpleHeap::Malloc(MAX_PATH * sizeof(TCHAR));
 	if (mCustomIconFile)
 	{
+		TCHAR full_path[MAX_PATH], *filename_marker;
+		// If the icon was loaded from a DLL, relative->absolute conversion below may produce the
+		// wrong result (i.e. in the typical case where the DLL is not in the working directory).
+		// So in that case, get the path of the module which contained the icon (if available).
 		// Get the full path in case it's a relative path.  This is documented and it's done in case
 		// the script ever changes its working directory:
-		TCHAR full_path[MAX_PATH], *filename_marker;
-		if (GetFullPathName(aIconFile, _countof(full_path) - 1, full_path, &filename_marker))
+		if (   icon_module && GetModuleFileName(icon_module, full_path, _countof(full_path))
+			|| GetFullPathName(aIconFile, _countof(full_path) - 1, full_path, &filename_marker)   )
 			tcslcpy(mCustomIconFile, full_path, MAX_PATH);
 		else
 			tcslcpy(mCustomIconFile, aIconFile, MAX_PATH);
 	}
+
+	if (icon_module)
+		FreeLibrary(icon_module);
 
 	if (!g_NoTrayIcon)
 		UpdateTrayIcon(true);  // Need to use true in this case too.
@@ -1880,7 +1888,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	vk_type remap_source_vk, remap_dest_vk = 0; // Only dest is initialized to enforce the fact that it is the flag/signal to indicate whether remapping is in progress.
 	TCHAR remap_source[32], remap_dest[32], remap_dest_modifiers[8]; // Must fit the longest key name (currently Browser_Favorites [17]), but buffer overflow is checked just in case.
 	LPTSTR remap_ptr, extra_event;
-	bool remap_source_is_mouse, remap_dest_is_mouse, remap_keybd_to_mouse;
+	bool remap_source_is_combo, remap_source_is_mouse, remap_dest_is_mouse, remap_keybd_to_mouse;
 
 	// For the line continuation mechanism:
 	bool do_rtrim, literal_escapes, literal_quotes
@@ -2730,7 +2738,8 @@ examine_line:
 			if (!hotstring_start)
 			{
 				ltrim(hotkey_flag); // Has already been rtrimmed by GetLine().
-				rtrim(buf); // Trim the new substring inside of buf (due to temp termination). It has already been ltrimmed.
+				// Not done because Hotkey::TextInterpret() does not allow trailing whitespace: 
+				//rtrim(buf); // Trim the new substring inside of buf (due to temp termination). It has already been ltrimmed.
 				cp = hotkey_flag; // Set default, conditionally overridden below (v1.0.44.07).
 				// v1.0.40: Check if this is a remap rather than hotkey:
 				if (   *hotkey_flag // This hotkey's action is on the same line as its label.
@@ -2750,10 +2759,12 @@ examine_line:
 				{
 					// These will be ignored in other stages if it turns out not to be a remap later below:
 					remap_source_vk = TextToVK(cp1 = Hotkey::TextToModifiers(buf, NULL)); // An earlier stage verified that it's a valid hotkey, though VK could be zero.
+					remap_source_is_combo = _tcsstr(cp1, COMPOSITE_DELIMITER);
 					remap_source_is_mouse = IsMouseVK(remap_source_vk);
 					remap_dest_is_mouse = IsMouseVK(remap_dest_vk);
 					remap_keybd_to_mouse = !remap_source_is_mouse && remap_dest_is_mouse;
-					sntprintf(remap_source, _countof(remap_source), _T("%s%s")
+					sntprintf(remap_source, _countof(remap_source), _T("%s%s%s")
+						, remap_source_is_combo ? _T("") : _T("*") // v1.1.27.01: Omit * when the remap source is a custom combo.
 						, _tcslen(cp1) == 1 && IsCharUpper(*cp1) ? _T("+") : _T("")  // Allow A::b to be different than a::b.
 						, buf); // Include any modifiers too, e.g. ^b::c.
 					if (*cp == '"' || *cp == g_EscapeChar) // Need to escape these.
@@ -3043,7 +3054,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 			{
 				cp = remap_buf;
 				cp += _stprintf(cp
-					, _T("*%s::\n") // Key-down hotkey label, e.g. *LButton::
+					, _T("%s::\n") // Key-down hotkey label, e.g. *LButton::
 					  _T("Set%sDelay(-1)\n") // Does NOT need to be "-1, -1" for SetKeyDelay (see below).
 					, remap_source
 					, remap_dest_is_mouse ? _T("Mouse") : _T("Key")
@@ -3102,7 +3113,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 				_stprintf(cp
 					, _T("Send(\"{Blind}%s%s{%s DownR}\")\n") // DownR vs. Down. See Send's DownR handler for details.
 					  _T("Return\n")
-					  _T("*%s up::\n") // Key-up hotkey label, e.g. *LButton up::
+					  _T("%s up::\n") // Key-up hotkey label, e.g. *LButton up::
 					  _T("Set%sDelay(-1)\n")
 					  _T("Send(\"{Blind}{%s Up}\")\n") // Unlike the down-event above, remap_dest_modifiers is not included for the up-event; e.g. ^{b up} is inappropriate.
 					  _T("Return\n") // Last line must end with \n to simplify the code.
@@ -8445,7 +8456,7 @@ unquoted_literal:
 				// DllCall() and possibly others rely on this having been done to support changing the
 				// value of a parameter (similar to by-ref).
 				infix[infix_count].symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the clipboard in the case of expression lvalues.  Search for VAR_CLIPBOARD further below for details.
-				infix[infix_count].is_lvalue = FALSE;
+				infix[infix_count].is_lvalue = FALSE; // Set default.  This simplifies #Warn ClassOverwrite (vs. storing it in the assignment token).
 			}
 			else // It's a built-in variable (including clipboard).
 			{
@@ -8892,12 +8903,8 @@ unquoted_literal:
 				// If sym_prev == SYM_FUNC, that can only be the result of SYM_DOT (x.y).
 				if ((YIELDS_AN_OPERAND(sym_prev) || sym_prev == SYM_FUNC) == IS_PREFIX_OPERATOR(infix_symbol))
 					return LineError(ERR_EXPR_SYNTAX, FAIL, this_infix->error_reporting_marker);
-				if (infix_symbol == SYM_PRE_INCREMENT || infix_symbol == SYM_PRE_DECREMENT)
-				{
-					// Same as other assignments (above), but in the other direction.
-					if (sym_next == SYM_VAR)
-						this_infix[1].is_lvalue = TRUE;
-				}
+				// If it's pre-increment/decrement, looking to the right in infix is insufficient.
+				// For cases like ++this.x, we must wait until the operator is popped from the stack.
 			}
 			if (!IS_POSTFIX_OPERATOR(infix_symbol))
 			{
@@ -9099,7 +9106,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				// the transformations above to that operator.
 			}
 			break;
-		
+
 		case SYM_NEW: // This is probably something like "new Class", without "()", otherwise an earlier stage would've handled it.
 		case SYM_REGEXMATCH: // a ~= b  ->  RegExMatch(a, b)
 			this_postfix->symbol = SYM_FUNC;
@@ -9119,7 +9126,15 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 		}
 		case SYM_IFF_THEN:
 			return LineError(_T("A \"?\" is missing its \":\""), FAIL, this_postfix->marker);
-		
+
+		case SYM_PRE_INCREMENT:
+		case SYM_PRE_DECREMENT:
+			// Mark the target variable as an l-value for #Warn ClassOverwrite.
+			if (postfix_count && postfix[postfix_count-1]->symbol == SYM_VAR)
+				postfix[postfix_count-1]->is_lvalue = TRUE;
+			//else: It could still be something valid, like SYM_IFF_ELSE in ++(whichvar ? x : y).
+			break;
+
 		default:
 			if (!IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(postfix_symbol))
 				break;

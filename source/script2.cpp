@@ -13791,26 +13791,16 @@ BIF_DECL(BIF_GetKeyName)
 	// Key names are allowed even for GetKeyName() for simplicity and so that it can be
 	// used to normalise a key name; e.g. GetKeyName("Esc") returns "Escape".
 	LPTSTR key = ParamIndexToString(0, _f_number_buf);
-	vk_type vk = TextToVK(key, NULL, true); // Pass true for the third parameter to avoid it calling TextToSC(), in case this is something like vk23sc14F.
-	sc_type sc = TextToSC(key);
-	if (!sc)
-	{
-		LPTSTR cp;
-		if (  (cp = tcscasestr(key, _T("SC"))) // TextToSC() supports SCxxx but not VKxxSCyyy.
-			&& isdigit(cp[2])  ) // Fixed in v1.1.25.03 to rule out key names containng "sc", like "Esc".
-			sc = (sc_type)_tcstoul(cp + 2, NULL, 16);
-		else
-			sc = vk_to_sc(vk);
-	}
-	else if (!vk)
-		vk = sc_to_vk(sc);
+	vk_type vk;
+	sc_type sc;
+	TextToVKandSC(key, vk, sc);
 
 	switch (_f_callee_id)
 	{
 	case FID_GetKeyVK:
-		_f_return_i(vk);
+		_f_return_i(vk ? vk : sc_to_vk(sc));
 	case FID_GetKeySC:
-		_f_return_i(sc);
+		_f_return_i(sc ? sc : vk_to_sc(vk));
 	//case FID_GetKeyName:
 	default:
 		_f_return_p(GetKeyName(vk, sc, _f_retval_buf, _f_retval_buf_size, _T("")));
@@ -14447,7 +14437,7 @@ BIF_DECL(BIF_OnMessage)
 // Parameters:
 // 1: Message number to monitor.
 // 2: Name of the function that will monitor the message.
-// 3: (FUTURE): A flex-list of space-delimited option words/letters.
+// 3: Maximum threads and "register first" flag.
 {
 	// Currently OnMessage (in v2) has no return value.
 	_f_set_retval_p(_T(""), 0);

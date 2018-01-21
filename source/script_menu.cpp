@@ -349,7 +349,8 @@ ResultType Script::ScriptDeleteMenu(UserMenu *aMenu)
 
 void UserMenu::Dispose()
 {
-	DeleteAllItems(); // This also calls Destroy() to free the menu's resources.
+	Destroy();
+	DeleteAllItems();
 	if (mBrush) // Free the brush used for the menu's background color.
 		DeleteObject(mBrush);
 }
@@ -619,28 +620,20 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 
 
 ResultType UserMenu::DeleteAllItems()
+// Remove all menu items from the linked list and from the menu.
 {
-	// Remove all menu items from the linked list and from the menu.  First destroy the menu since
-	// it's probably better to start off fresh than have the destructor individually remove each
-	// menu item as the items in the linked list are deleted.  Some callers rely on this being done
-	// unconditionally (i.e. regardless of !mFirstMenuItem).  In addition, this avoids the need
-	// to find any submenus by position:
-	if (!Destroy())  // if mStandardMenuItems is true, the menu will be recreated later when needed.
-		// If menu can't be destroyed, it's probably due to it being attached as a menu bar to an existing
-		// GUI window.  In this case, when the window is destroyed, the menu bar will be too, so it's
-		// probably best to do nothing.  If we were called as a result of "menu, MenuName, Delete", it
-		// is documented that this will fail in this case.
-		return FAIL;
-	// The destructor relies on the fact that the above destroys the menu but does not recreate it.
-	// This is because popup menus, not being affiliated with a window (unless they're attached to
-	// a menu bar, but that isn't the case with our GUI windows, which detach such menus prior to
-	// when the GUI window is destroyed in case the menu is in use by another window), must be
-	// destroyed with DestroyMenu() to ensure a clean exit (resources freed).
+	// Fixed for v1.1.27.03: Don't attempt to take a shortcut by calling Destroy(), as it
+	// will fail if this is a sub-menu of a menu bar.  Removing the items individually will
+	// do exactly what the user expects.  The following old comment indicates one reason
+	// Destroy() was used; that reason is now obsolete since submenus are given IDs:
+	// "In addition, this avoids the need to find any submenus by position:"
 	if (!mFirstMenuItem)
 		return OK;  // If there are no user-defined menu items, it's already in the correct state.
 	UserMenuItem *menu_item_to_delete;
 	for (UserMenuItem *mi = mFirstMenuItem; mi;)
 	{
+		if (mMenu)
+			RemoveMenu(mMenu, mi->mMenuID, MF_BYCOMMAND);
 		menu_item_to_delete = mi;
 		mi = mi->mNextMenuItem;
 		RemoveItemIcon(menu_item_to_delete); // L26: Free icon or bitmap!
@@ -651,6 +644,7 @@ ResultType UserMenu::DeleteAllItems()
 	mFirstMenuItem = mLastMenuItem = NULL;
 	mMenuItemCount = 0;
 	mDefault = NULL;  // i.e. there can't be a *user-defined* default item anymore, even if this is the tray.
+	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
 	return OK;
 }
 
@@ -997,7 +991,15 @@ ResultType UserMenu::ExcludeStandardItems()
 	if (!mIncludeStandardItems)
 		return OK;
 	mIncludeStandardItems = false;
-	return Destroy(); // It will be recreated automatically the next time the user displays it.
+	// This method isn't used because it fails on sub-menus of a menu bar:
+	//return Destroy(); // It will be recreated automatically the next time the user displays it.
+	if (mMenu)
+	{
+		for (UINT i = ID_TRAY_FIRST; i <= ID_TRAY_LAST; ++i)
+			RemoveMenu(mMenu, i, MF_BYCOMMAND);
+		UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary (though it's unusual to put the standard items on a menu bar).
+	}
+	return OK;
 }
 
 
@@ -1130,11 +1132,11 @@ ResultType UserMenu::AppendStandardItems()
 #else
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_OPEN, _T("&Open"));
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_HELP, _T("&Help"));
-	AppendMenu(mMenu, MF_SEPARATOR, 0, NULL);
+	AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP1, NULL); // The separators are given IDs to simplify removal.
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_WINDOWSPY, _T("&Window Spy"));
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_RELOADSCRIPT, _T("&Reload This Script"));
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_EDITSCRIPT, _T("&Edit This Script"));
-	AppendMenu(mMenu, MF_SEPARATOR, 0, NULL);
+	AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP2, NULL);
 	if (this == g_script.mTrayMenu && !mDefault) // No user-defined default menu item, so use the standard one.
 		SetMenuDefaultItem(mMenu, ID_TRAY_OPEN, FALSE); // Seems to have no function other than appearance.
 #endif

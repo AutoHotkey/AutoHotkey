@@ -1811,7 +1811,12 @@ LPTSTR Hotkey::TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperti
 	// Improved for v1.0.40.01: The loop's condition now stops when it reaches a single space followed
 	// by the word "Up" so that hotkeys like "< up" and "+ up" are supported by seeing their '<' or '+' as
 	// a key name rather than a modifier symbol.
-	for (marker = aText, key_left = false, key_right = false; marker[1] && _tcsicmp(marker + 1, _T(" Up")); ++marker)
+	// Fix for v1.1.27.05: Stop at any space, not just " up", so that " & " is also covered.
+	// This fixes "> & v" to not interpret ">" as a modifier.  This also causes "+ ::" to be
+	// seen as invalid, where previously TextToModifiers() saw it as Shift+Space but a later
+	// stage trimmed the space and registered "+::".  This is best since trailing spaces are
+	// not allowed in any other hotkeys, and even "+  ::" (two spaces) was not allowed.
+	for (marker = aText, key_left = false, key_right = false; marker[1] && marker[1] != ' '; ++marker)
 	{
 		switch (*marker)
 		{
