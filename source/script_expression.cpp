@@ -732,15 +732,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			if (right.symbol != SYM_VAR) // Syntax error.
 				goto abort_with_exception;
 			is_pre_op = SYM_INCREMENT_OR_DECREMENT_IS_PRE(this_token.symbol); // Store this early because its symbol will soon be overwritten.
-			if (!*right.var->Contents()) // It's empty (this also serves to display a warning if applicable).
+			if (right_is_number == PURE_NOT_NUMERIC) // Not empty and not numeric: invalid operation.
 			{
-				// For convenience, treat an empty variable as zero for ++ and --.
-				// Consistent with v1 ++/-- when not combined with another expression.
-				right.var->Assign(0);
-				right_is_number = PURE_INTEGER;
-			}
-			else if (right_is_number == PURE_NOT_NUMERIC) // Not empty and not numeric: invalid operation.
-			{
+				right.var->MaybeWarnUninitialized();
 				right.var->Assign(EXPR_NAN); // Clipboard is also supported here.
 				if (is_pre_op)
 				{
@@ -898,14 +892,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				// Since above didn't goto or break out of the outer loop, this is an assignment other than
 				// SYM_ASSIGN, so it needs further evaluation later below before the assignment will actually be made.
 				sym_assign_var = left.var; // This tells the bottom of this switch() to do extra steps for this assignment.
-				if ((this_token.symbol == SYM_ADD || this_token.symbol == SYM_SUBTRACT)
-					&& !*sym_assign_var->Contents()) // It's empty (this also serves to display a warning if applicable).
-				{
-					// For convenience, treat an empty variable as zero for += and -=.
-					// Consistent with v1 EnvAdd/EnvSub or +=/-= when not combined with another expression.
-					left.symbol = SYM_INTEGER;
-					left.value_int64 = 0;
-				}
 			}
 
 			// The following section needs done even for assignments such as += because the type of value
