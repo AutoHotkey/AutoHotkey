@@ -201,6 +201,12 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 #define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) (!(token).var) // SYM_DYNAMICs are either double-derefs or built-in vars.
 #define SYM_DYNAMIC_IS_WRITABLE(token) ((token)->var && (token)->var->Type() <= VAR_LAST_WRITABLE) // i.e. it's the clipboard, not a built-in variable or double-deref.
 
+// This should include all operators which can produce SYM_VAR for a subsequent assignment:
+#define IS_OPERATOR_VALID_LVALUE(sym) \
+	(IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(sym) \
+		|| sym == SYM_PRE_INCREMENT || sym == SYM_PRE_DECREMENT \
+		|| sym == SYM_IFF_ELSE)
+
 #define EXPR_NAN_STR	_T("")
 #define EXPR_NAN_LEN	0
 #define EXPR_NAN		EXPR_NAN_STR, EXPR_NAN_LEN

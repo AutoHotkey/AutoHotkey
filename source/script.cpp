@@ -8521,27 +8521,14 @@ unquoted_literal:
 		{
 			if (infix_symbol == SYM_DYNAMIC)
 			{
-				// IMPORTANT: VAR_CLIPBOARD is made into SYM_VAR here, but only for assignments.
+				// IMPORTANT: VAR_CLIPBOARD is made into SYM_VAR, but only for assignments.
 				// This allows built-in functions and other places in the code to treat SYM_VAR
 				// as though it's always VAR_NORMAL, which reduces code size and improves maintainability.
 				// Similarly, is_lvalue is set so that a dynamically resolved VAR_VIRTUAL or VAR_CLIPBOARD
-				// will yield SYM_VAR if it's the target of an assignment.
-				sym_prev = this_infix[1].symbol; // Resolve to help macro's code size and performance.
-				if (IS_ASSIGNMENT_OR_POST_OP(sym_prev) // Post-op must be checked for VAR_CLIPBOARD (by contrast, it seems unnecessary to check it for others; see comments below).
-					|| stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT) // Stack *not* infix.
-				{
-					if (this_infix->var) // Not a double-deref.
-					{
-						if (VAR_IS_READONLY(*this_infix->var))
-							return LineError(ERR_VAR_IS_READONLY, FAIL, this_infix->var->mName);
-						this_infix->symbol = SYM_VAR; // Convert to SYM_VAR.
-					}
-					this_infix->is_lvalue = TRUE; // Mark this as the target of an assignment.
-				}
-				else
-					this_infix->is_lvalue = FALSE;
-				// Above logic might not be perfect because it doesn't check for parens such as (var):=x,
-				// and possibly other obscure types of assignments.
+				// will yield SYM_VAR if it's the target of an assignment.  This detection is done just
+				// prior to pushing the assignment operator onto the stack (or popping pre-inc/dec) since
+				// that's the only time the l-value's postfix token can be detected reliably.
+				this_infix->is_lvalue = FALSE; // Set default.
 			}
 			this_postfix = this_infix++;
 			++postfix_count;
@@ -8629,9 +8616,7 @@ unquoted_literal:
 								if (param1.var && VAR_IS_READONLY(*param1.var))
 									return LineError(ERR_VAR_IS_READONLY, FAIL, param1.var->mName);
 							}
-							else if (  !(IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(param1.symbol) // Technically valid, although the assignment will be superseded by the function call.
-								|| param1.symbol == SYM_PRE_INCREMENT || param1.symbol == SYM_PRE_DECREMENT // As above.
-								|| param1.symbol == SYM_IFF_ELSE)  ) // Could be something like fn(whichvar ? x : y).
+							else if (!IS_OPERATOR_VALID_LVALUE(param1.symbol))
 							{
 								sntprintf(number_buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
 									, in_param_list->param_count + 1, func->mName);
@@ -8876,45 +8861,6 @@ unquoted_literal:
 			// DO NOT BREAK: FALL THROUGH TO BELOW
 
 		default: // This infix symbol is an operator, so act according to its precedence.
-			// Perform some rough checks to detect most syntax errors:
-			sym_prev = this_infix > infix ? this_infix[-1].symbol : SYM_INVALID;
-			sym_next = this_infix[1].symbol; // It will be SYM_INVALID if there are no more.
-			if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))
-			{
-				// Assignment and postfix operators must be preceded by a variable, except for
-				// assignment operators which have been marked with a non-NULL deref, indicating
-				// that the target is an object's property.  Postfix operators which apply to an
-				// object's property are fully handled in the standard_pop_into_postfix section.
-				if (  !(sym_prev == SYM_VAR       // VAR_NORMAL variable.
-					|| sym_prev == SYM_DYNAMIC    // Built-in var (previously verified as read-write) or double-deref.
-					|| this_infix->deref          // Object property.
-					|| sym_prev == SYM_CPAREN)  ) // (x ? y : z) := v is valid.
-					return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_infix->error_reporting_marker);
-				// Mark SYM_VAR as an l-value, for validation after all files have loaded.
-				// Without this, the validation code would need to determine which postfix token
-				// corresponds to an assignment's l-value, which would require larger code.
-				if (sym_prev == SYM_VAR)
-					this_infix[-1].is_lvalue = TRUE;
-			}
-			else
-			{
-				// Prefix operators must not be preceded by an operand.
-				// Binary operators must be preceded by an operand.
-				// If sym_prev == SYM_FUNC, that can only be the result of SYM_DOT (x.y).
-				if ((YIELDS_AN_OPERAND(sym_prev) || sym_prev == SYM_FUNC) == IS_PREFIX_OPERATOR(infix_symbol))
-					return LineError(ERR_EXPR_SYNTAX, FAIL, this_infix->error_reporting_marker);
-				// If it's pre-increment/decrement, looking to the right in infix is insufficient.
-				// For cases like ++this.x, we must wait until the operator is popped from the stack.
-			}
-			if (!IS_POSTFIX_OPERATOR(infix_symbol))
-			{
-				// Prefix and binary operators must be followed by an operand.
-				if (  !(IS_OPERAND(sym_next)
-					 || sym_next == SYM_FUNC
-					 || IS_OPAREN_LIKE(sym_next)
-					 || IS_PREFIX_OPERATOR(sym_next))  )
-					return LineError(ERR_EXPR_MISSING_OPERAND, FAIL, this_infix->error_reporting_marker);
-			}
 			// If the symbol waiting on the stack has a lower precedence than the current symbol, push the
 			// current symbol onto the stack so that it will be processed sooner than the waiting one.
 			// Otherwise, pop waiting items off the stack (by means of i not being incremented) until their
@@ -8966,6 +8912,56 @@ unquoted_literal:
 				// '*' a higher precedence than the other unaries): !*Var, -*Var and ~*Var
 				// !x  ; Supported even if X contains a negative number, since x is recognized as an isolated operand and not something containing unary minus.
 				//
+
+				// Perform some rough checks to detect most syntax errors.  This is done after the
+				// precedence check so that it isn't done multiple times for a single token when
+				// the stack contains one or more higher-precedence operators, and also so that
+				// the left operand (if this is a binary operator) has been popped into postfix.
+				sym_prev = this_infix > infix ? this_infix[-1].symbol : SYM_INVALID;
+				sym_next = this_infix[1].symbol; // It will be SYM_INVALID if there are no more.
+				SymbolType sym_postfix = postfix_count ? postfix[postfix_count-1]->symbol : SYM_INVALID;
+				if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))
+				{
+					// Assignment and postfix operators must be preceded by a variable, except for
+					// assignment operators which have been marked with a non-NULL deref, indicating
+					// that the target is an object's property.  Postfix operators which apply to an
+					// object's property are fully handled in the standard_pop_into_postfix section.
+					if (this_infix->deref) // Object property.  Takes precedence over the next checks.
+					{}  // Nothing needed here.
+					else if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
+					{
+						ExprTokenType &target = *postfix[postfix_count - 1];
+						if (sym_postfix == SYM_DYNAMIC && target.var) // Built-in var.
+						{
+							if (VAR_IS_READONLY(*target.var))
+								return LineError(ERR_VAR_IS_READONLY, FAIL, target.var->mName);
+							target.symbol = SYM_VAR; // Convert to SYM_VAR.
+						}
+						target.is_lvalue = TRUE; // Mark this as the target of an assignment.
+					}
+					else if (!IS_OPERATOR_VALID_LVALUE(sym_postfix))
+						return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_infix->error_reporting_marker);
+				}
+				else
+				{
+					// Prefix operators must not be preceded by an operand.
+					// Binary operators must be preceded by an operand.
+					// If sym_prev == SYM_FUNC, that can only be the result of SYM_DOT (x.y).
+					if ((YIELDS_AN_OPERAND(sym_prev) || sym_prev == SYM_FUNC) == IS_PREFIX_OPERATOR(infix_symbol))
+						return LineError(ERR_EXPR_SYNTAX, FAIL, this_infix->error_reporting_marker);
+					// If it's pre-increment/decrement, looking to the right in infix is insufficient.
+					// For cases like ++this.x, we must wait until the operator is popped from the stack.
+				}
+				if (!IS_POSTFIX_OPERATOR(infix_symbol))
+				{
+					// Prefix and binary operators must be followed by an operand.
+					if (  !(IS_OPERAND(sym_next)
+						 || sym_next == SYM_FUNC
+						 || IS_OPAREN_LIKE(sym_next)
+						 || IS_PREFIX_OPERATOR(sym_next))  )
+						return LineError(ERR_EXPR_MISSING_OPERAND, FAIL, this_infix->error_reporting_marker);
+				}
+
 				if (IS_SHORT_CIRCUIT_OPERATOR(infix_symbol))
 				{
 					// Short-circuit boolean evaluation works as follows:
@@ -9129,10 +9125,24 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 
 		case SYM_PRE_INCREMENT:
 		case SYM_PRE_DECREMENT:
-			// Mark the target variable as an l-value for #Warn ClassOverwrite.
-			if (postfix_count && postfix[postfix_count-1]->symbol == SYM_VAR)
-				postfix[postfix_count-1]->is_lvalue = TRUE;
-			//else: It could still be something valid, like SYM_IFF_ELSE in ++(whichvar ? x : y).
+			if (postfix_count)
+			{
+				SymbolType sym_postfix = postfix[postfix_count-1]->symbol;
+				// This is nearly identical to the section for assignments under "if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))":
+				if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
+				{
+					ExprTokenType &target = *postfix[postfix_count - 1];
+					if (sym_postfix == SYM_DYNAMIC && target.var) // Built-in var.
+					{
+						if (VAR_IS_READONLY(*target.var))
+							return LineError(ERR_VAR_IS_READONLY, FAIL, target.var->mName);
+						target.symbol = SYM_VAR; // Convert to SYM_VAR.
+					}
+					target.is_lvalue = TRUE; // Mark this as the target of an assignment.
+				}
+				else if (!IS_OPERATOR_VALID_LVALUE(sym_postfix))
+					return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_postfix->error_reporting_marker);
+			}
 			break;
 
 		default:
