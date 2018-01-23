@@ -2500,9 +2500,8 @@ process_completed_line:
 		//    that could happen is that syntax errors would be thrown off, which testing shows isn't the case.
 examine_line:
 		// "::" alone isn't a hotstring, it's a label whose name is colon.
-		// Below relies on the fact that no valid hotkey can start with a colon, since
-		// ": & somekey" is not valid (since colon is a shifted key) and colon itself
-		// should instead be defined as "+;::".  It also relies on short-circuit boolean:
+		// ": & somekey::" is a valid hotkey on some non-US layouts (and works even on US layouts but is
+		// equivalent to "`; & somekey::").  Hotstring detection below is thorough enough to exclude this.
 		hotstring_start = NULL;
 		hotstring_options = NULL; // Set default as "no options were specified for this hotstring".
 		hotkey_flag = NULL;
