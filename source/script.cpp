@@ -3027,6 +3027,64 @@ examine_line:
 			goto continue_main_loop; // It's just a naked "{" or "}", so no more processing needed for this line.
 		}
 
+		// Aside from goto/gosub/break/continue, anything not already handled above must accept an expression.
+		// This section allows expressions to span multiple lines without an explicit continuation section
+		// by simply putting (/[/{ on one line and )/]/} on another.
+		int balance = BalanceExpr(buf, 0);
+		if (balance > 0 && next_buf_length != -1)
+		{
+			// Rule out something like "Gosub (" which is intended to execute "(::".
+			// Checking this only when balance > 0 should be better for average-case performance.
+			cp = find_identifier_end(buf);
+			orig_char = *cp;
+			if (IS_SPACE_OR_TAB(orig_char)) // By contrast, "Gosub(x)" takes an expression.
+			{
+				*cp = '\0';
+				if (ConvertActionType(buf, ACT_FIRST_JUMP, ACT_LAST_JUMP)) // Gosub, goto, break or continue (though only the first two are likely to be needed).
+					balance = 0;
+				*cp = orig_char;
+			}
+
+			while (balance > 0 && next_buf_length != -1)
+			{
+				// Before appending each line, check whether the last line ended with OTB '{'.
+				// It can't be OTB if balance > 1 since that would mean another unclosed (/[/{.
+				if (balance == 1 && buf[buf_length - 1] == '{' && buf_length > 3)
+				{
+					bool otb = true;
+					cp = omit_trailing_whitespace(buf, buf + buf_length - 2);
+					if (_tcschr(EXPR_NOT_OTB, *cp) // Can't be OTB if it's preceded by an operator, such as ":= {".
+						&& (!(*cp == '+' || *cp == '-') || cp[-1] != *cp)) // Not ++ or --.  Relies on buf_length check above.
+						otb = false;
+					else
+					{
+						LPTSTR word;
+						for (word = cp; word > buf && IS_IDENTIFIER_CHAR(word[-1]); --word);
+						if (ConvertWordOperator(word, cp - word + 1))
+							otb = false;
+					}
+					// ACT_IS_LINE_PARENT(action_type) could be used to restrict this to action types where
+					// OTB is allowed, but the detection of action_type based solely on the first word is
+					// not 100% accurate, and even if it is correct for the start of the line, it would not
+					// be reliable for our purpose if this is else/try/finally with a same-line action.
+					// Omitting the action_type check also keeps the syntax more consistent.
+					if (otb)
+						break;
+				}
+				if (next_buf_length) // Skip empty/comment lines.
+				{
+					if (next_buf_length + buf_length + 1 >= LINE_SIZE)
+						return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG);
+					balance = BalanceExpr(next_buf, balance); // Adjust balance based on what we're about to append.
+					buf[buf_length++] = '\n'; // To ensure two distinct tokens aren't joined together.
+					tmemcpy(buf + buf_length, next_buf, next_buf_length); // Append next_buf to this line.
+					buf_length += next_buf_length;
+					buf[buf_length] = '\0';
+				}
+				next_buf_length = GetLine(next_buf, LINE_SIZE - 1, 0, false, fp);
+			}
+		}
+
 		// Parse the command, assignment or expression, including any same-line open brace or sub-action
 		// for ELSE, TRY, CATCH or FINALLY.  Unlike braces at the start of a line (processed above), this
 		// does not allow directives or labels to the right of the command.

@@ -2883,6 +2883,41 @@ int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 
 
 
+int BalanceExpr(LPCTSTR aBuf, int aStartBalance)
+{
+	for (int balance = aStartBalance, mark = 0; ; ++mark)
+	{
+		switch (aBuf[mark])
+		{
+		case '\0':
+			return balance;
+		default:
+		//case '`': // May indicate an attempt to escape something, but has escape has no meaning here.
+		//case g_DerefChar: // Caller does not want these balanced.
+			// Not a meaningful character; just have the loop skip over it.
+			break;
+		case '"': 
+		case '\'':
+			mark = FindTextDelim(aBuf, aBuf[mark], mark + 1);
+			if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
+				return balance;
+			break;
+		case ')':
+		case ']':
+		case '}':
+			--balance;
+			break;
+		case '(':
+		case '[':
+		case '{':
+			++balance;
+			break;
+		}
+	} // for each character.
+}
+
+
+
 bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch)
 // Checks if aStr exists in aList (which is a comma-separated list).
 // If aStr is blank, aList must start with a delimiting comma for there to be a match.

@@ -860,6 +860,7 @@ public:
 	// The characters common to both EXPR_TELLTALES (obsolete) and EXPR_OPERAND_TERMINATORS:
 	#define EXPR_COMMON _T(" \t") EXPR_CORE _T("*&~!()[]{}")  // Space and Tab are included at the beginning for performance.  L31: Added [] for array-like syntax.
 	#define CONTINUATION_LINE_SYMBOLS EXPR_CORE _T(".+-*&!~") // v1.0.46.
+	#define EXPR_NOT_OTB EXPR_CORE CONTINUATION_LINE_SYMBOLS  // The set of characters which would indicate the following '{' is not OTB, since that would make the expression invalid.
 	// Characters that mark the end of an operand inside an expression.  Double-quote must not be included:
 	#define EXPR_OPERAND_TERMINATORS_EX_DOT EXPR_COMMON _T("%+-\n") // L31: Used in a few places where '.' needs special treatment.
 	#define EXPR_OPERAND_TERMINATORS EXPR_OPERAND_TERMINATORS_EX_DOT _T(".") // L31: Used in expressions where '.' is always an operator.

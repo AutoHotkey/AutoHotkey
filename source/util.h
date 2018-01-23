@@ -700,6 +700,7 @@ BOOL MyIsAppThemed();
 LPTSTR ConvertEscapeSequences(LPTSTR aBuf, LPTSTR aLiteralMap);
 int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter = ',', int aStartIndex = 0, LPCTSTR aLiteralMap = NULL);
 int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter = ',', int aStartIndex = 0, LPCTSTR aLiteralMap = NULL);
+int BalanceExpr(LPCTSTR aBuf, int aStartBalance);
 POINT CenterWindow(int aWidth, int aHeight);
 bool FontExist(HDC aHdc, LPCTSTR aTypeface);
 void ScreenToWindow(POINT &aPoint, HWND aHwnd);
