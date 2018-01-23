@@ -1714,7 +1714,7 @@ bool IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace = NULL)
 
 
 
-inline LPTSTR IsClassDefinition(LPTSTR aBuf, bool &aHasOTB)
+inline LPTSTR IsClassDefinition(LPTSTR aBuf)
 {
 	if (_tcsnicmp(aBuf, _T("Class"), 5) || !IS_SPACE_OR_TAB(aBuf[5])) // i.e. it's not "Class" followed by a space or tab.
 		return NULL;
@@ -1722,15 +1722,31 @@ inline LPTSTR IsClassDefinition(LPTSTR aBuf, bool &aHasOTB)
 	if (_tcschr(EXPR_ALL_SYMBOLS EXPR_ILLEGAL_CHARS, *class_name))
 		// It's probably something like "Class := GetClass()".
 		return NULL;
-	// Check for opening brace on same line:
-	LPTSTR aBuf_last_char = class_name + _tcslen(class_name) - 1;
-	if (aHasOTB = (*aBuf_last_char == '{')) // Caller has ensured that aBuf is rtrim'd.
-	{
-		*aBuf_last_char = '\0'; // For the caller, remove it from further consideration.
-		rtrim(aBuf, aBuf_last_char - aBuf); // Omit trailing whitespace too.
-	}
 	// Validation of the name is left up to the caller, for simplicity.
 	return class_name;
+}
+
+
+
+bool ClassHasOpenBrace(LPTSTR aBuf, size_t aBufLength, LPTSTR aNextBuf, size_t &aNextBufLength)
+{
+	if (aBuf[aBufLength - 1] == '{') // Brace on same line (OTB).
+	{
+		rtrim(aBuf, aBufLength - 1);
+		return true;
+	}
+	if (*aNextBuf == '{') // Brace on next line.
+	{
+		// Remove '{' from aNextBuf since ACT_BLOCK_END is unwanted in this context.
+		LPTSTR cp = omit_leading_whitespace(aNextBuf + 1);
+		aNextBufLength -= (cp - aNextBuf);
+		if (aNextBufLength) // There's something following the '{'.
+			tmemmove(aNextBuf, aNextBuf + 1, aNextBufLength);
+		else
+			*aNextBuf = '\0';
+		return true;
+	}
+	return false;
 }
 
 
@@ -1800,16 +1816,10 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 #endif
 
 	// <buf> should be no larger than LINE_SIZE because some later functions rely upon that:
-	TCHAR msg_text[MAX_PATH + 256], buf1[LINE_SIZE], buf2[LINE_SIZE], suffix[16], pending_buf[LINE_SIZE];
-	*pending_buf = '\0';
+	TCHAR msg_text[MAX_PATH + 256], buf1[LINE_SIZE], buf2[LINE_SIZE], suffix[16], remap_buf[LINE_SIZE];
 	LPTSTR buf = buf1, next_buf = buf2; // Oscillate between bufs to improve performance (avoids memcpy from buf2 to buf1).
 	size_t buf_length, next_buf_length, suffix_length;
-	bool pending_buf_has_brace;
-	enum {
-		Pending_Func,
-		Pending_Class,
-		Pending_Property
-	} pending_buf_type;
+	bool buf_has_brace;
 
 #ifndef AUTOHOTKEYSC
 	TextFile tfile, *fp = &tfile;
@@ -1879,7 +1889,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 	LPTSTR hotkey_flag, cp, cp1, hotstring_start, hotstring_options;
 	Hotkey *hk;
-	LineNumberType pending_buf_line_number, saved_line_number;
+	LineNumberType saved_line_number;
 	HookActionType hook_action;
 	bool is_label, suffix_has_tilde, hook_is_mandatory, in_comment_section, hotstring_options_all_valid;
 	ResultType hotkey_validity;
@@ -2368,97 +2378,6 @@ process_completed_line:
 		// by design, phys_line_number will be greater than mCombinedLineNumber whenever
 		// a continuation section/lines were used to build this combined line.
 
-		// If there's a previous line waiting to be processed, its fate can now be determined based on the
-		// nature of *this* line:
-		if (*pending_buf)
-		{
-			// Somewhat messy to decrement then increment later, but it's probably easier than the
-			// alternatives due to the use of "continue" in some places above.  NOTE: phys_line_number
-			// would not need to be decremented+incremented even if the below resulted in a recursive
-			// call to us (though it doesn't currently) because line_number's only purpose is to
-			// remember where this layer left off when the recursion collapses back to us.
-			// Fix for v1.0.31.05: It's not enough just to decrement mCombinedLineNumber because there
-			// might be some blank lines or commented-out lines between this function call/definition
-			// and the line that follows it, each of which will have previously incremented mCombinedLineNumber.
-			saved_line_number = mCombinedLineNumber;
-			mCombinedLineNumber = pending_buf_line_number;  // Done so that any syntax errors that occur during the calls below will report the correct line number.
-			// Open brace means this is a function definition. NOTE: buf was already ltrimmed by GetLine().
-			// Could use *g_act[ACT_BLOCK_BEGIN].Name instead of '{', but it seems too elaborate to be worth it.
-			if (*buf == '{' || pending_buf_has_brace) // v1.0.41: Support one-true-brace, e.g. fn(...) {
-			{
-				switch (pending_buf_type)
-				{
-				case Pending_Class:
-					if (!DefineClass(pending_buf))
-						return FAIL;
-					break;
-				case Pending_Property:
-					if (!DefineClassProperty(pending_buf))
-						return FAIL;
-					break;
-				case Pending_Func:
-					// Note that two consecutive function definitions aren't possible:
-					// fn1()
-					// fn2()
-					// {
-					//  ...
-					// }
-					// In the above, the first would automatically be deemed a function call by means of
-					// the check higher above (by virtue of the fact that the line after it isn't an open-brace).
-					if (g->CurrentFunc)
-					{
-						// Though it might be allowed in the future -- perhaps to have nested functions have
-						// access to their parent functions' local variables, or perhaps just to improve
-						// script readability and maintainability -- it's currently not allowed because of
-						// the practice of maintaining the func_exception_var list on our stack:
-						return ScriptError(_T("Functions cannot contain functions."), pending_buf);
-					}
-					if (!DefineFunc(pending_buf, func_global_var))
-						return FAIL;
-					if (pending_buf_has_brace) // v1.0.41: Support one-true-brace for function def, e.g. fn() {
-					{
-						if (!AddLine(ACT_BLOCK_BEGIN))
-							return FAIL;
-						mCurrLine = NULL; // L30: Prevents showing misleading vicinity lines if the line after a OTB function def is a syntax error.
-					}
-					break;
-#ifdef _DEBUG
-				default:
-					return ScriptError(_T("DEBUG: pending_buf_type has an unexpected value."));
-#endif
-				}
-			}
-			else // It's a function call on a line by itself, such as fn(x). It can't be if(..) because another section checked that.
-			{
-				if (pending_buf_type != Pending_Func) // Missing open-brace for class definition.
-					return ScriptError(ERR_MISSING_OPEN_BRACE, pending_buf);
-				if (mClassObjectCount && !g->CurrentFunc) // Unexpected function call in class definition.
-					return ScriptError(mClassProperty ? ERR_MISSING_OPEN_BRACE : ERR_INVALID_LINE_IN_CLASS_DEF, pending_buf);
-				if (!ParseAndAddLine(pending_buf, LINE_SIZE, ACT_EXPRESSION))
-					return FAIL;
-				mCurrLine = NULL; // Prevents showing misleading vicinity lines if the line after a function call is a syntax error.
-			}
-			*pending_buf = '\0'; // Reset now that it's been fully handled, as an indicator for subsequent iterations.
-			if (pending_buf_type != Pending_Func) // Class or property.
-			{
-				if (!pending_buf_has_brace)
-				{
-					// This is the open-brace of a class definition, so requires no further processing.
-					if (  !*(cp = omit_leading_whitespace(buf + 1))  )
-					{
-						mCombinedLineNumber = saved_line_number;
-						goto continue_main_loop;
-					}
-					// Otherwise, there's something following the "{", possibly "}" or a function definition.
-					tmemmove(buf, cp, (buf_length = _tcslen(cp)) + 1);
-				}
-			}
-			mCombinedLineNumber = saved_line_number;
-			// Now fall through to the below so that *this* line (the one after it) will be processed.
-			// Note that this line might be a pre-processor directive, label, etc. that won't actually
-			// become a runtime line per se.
-		} // if (*pending_function)
-
 		if (*buf == '}' && mClassObjectCount && !g->CurrentFunc)
 		{
 			if (mClassProperty)
@@ -2498,47 +2417,32 @@ process_completed_line:
 			if (!_tcsnicmp(buf, _T("Get"), 3) || !_tcsnicmp(buf, _T("Set"), 3))
 			{
 				LPTSTR cp = omit_leading_whitespace(buf + 3);
-				if ( !*cp || (*cp == '{' && !cp[1]) )
+				if (!*cp && *next_buf == '{' || *cp == '{' && !cp[1])
 				{
-					// Defer this line until the next line comes in to simplify handling of '{' and OTB.
 					// For simplicity, pass the property definition to DefineFunc instead of the actual
 					// line text, even though it makes some error messages a bit inaccurate. (That would
 					// happen anyway when DefineFunc() finds a syntax error in the parameter list.)
-					_tcscpy(pending_buf, mClassPropertyDef);
-					LPTSTR dot = _tcschr(pending_buf, '.');
+					LPTSTR dot = _tcschr(mClassPropertyDef, '.');
 					dot[1] = *buf; // Replace the x in property.xet(params).
-					pending_buf_line_number = mCombinedLineNumber;
-					pending_buf_has_brace = *cp == '{';
-					pending_buf_type = Pending_Func;
+					if (!DefineFunc(mClassPropertyDef, func_global_var))
+						return FAIL;
+					if (*cp == '{' && !AddLine(ACT_BLOCK_BEGIN))
+						return FAIL;
 					goto continue_main_loop;
 				}
 			}
 			return ScriptError(ERR_INVALID_LINE_IN_PROPERTY_DEF, buf);
 		}
 
-		// By doing the following section prior to checking for hotkey and hotstring labels, double colons do
-		// not need to be escaped inside naked function calls and function definitions such as the following:
-		// fn("::")      ; Function call.
-		// fn(Str="::")  ; Function definition with default value for its parameter.
-		if (IsFunction(buf, &pending_buf_has_brace)) // If true, it's either a function definition or a function call (to be distinguished later).
-		{
-			// Defer this line until the next line comes in, which helps determine whether this line is
-			// a function call vs. definition:
-			_tcscpy(pending_buf, buf);
-			pending_buf_line_number = mCombinedLineNumber;
-			pending_buf_type = Pending_Func;
-			goto continue_main_loop; // In lieu of "continue", for performance.
-		}
-		
 		if (!g->CurrentFunc)
 		{
-			if (LPTSTR class_name = IsClassDefinition(buf, pending_buf_has_brace))
+			if (LPTSTR class_name = IsClassDefinition(buf))
 			{
-				// Defer this line until the next line comes in to simplify handling of '{' and OTB:
-				_tcscpy(pending_buf, class_name);
-				pending_buf_line_number = mCombinedLineNumber;
-				pending_buf_type = Pending_Class;
-				goto continue_main_loop; // In lieu of "continue", for performance.
+				if (!ClassHasOpenBrace(buf, buf_length, next_buf, next_buf_length))
+					return ScriptError(ERR_MISSING_OPEN_BRACE, buf);
+				if (!DefineClass(class_name))
+					return FAIL;
+				goto continue_main_loop;
 			}
 
 			if (mClassObjectCount)
@@ -2554,20 +2458,12 @@ process_completed_line:
 							return FAIL;
 						goto continue_main_loop;
 					}
-					if ( !*cp || *cp == '[' || (*cp == '{' && !cp[1]) ) // Property
+					if (   (!*cp || *cp == '[' || (*cp == '{' && !cp[1])) // Property
+						&& ClassHasOpenBrace(buf, buf_length, next_buf, next_buf_length)   )
 					{
-						size_t length = _tcslen(buf);
-						if (pending_buf_has_brace = (buf[length - 1] == '{'))
-						{
-							// Omit '{' and trailing whitespace from further consideration.
-							rtrim(buf, length - 1);
-						}
-						
-						// Defer this line until the next line comes in to simplify handling of '{' and OTB:
-						_tcscpy(pending_buf, buf);
-						pending_buf_line_number = mCombinedLineNumber;
-						pending_buf_type = Pending_Property;
-						goto continue_main_loop; // In lieu of "continue", for performance.
+						if (!DefineClassProperty(buf))
+							return FAIL;
+						goto continue_main_loop;
 					}
 				}
 				if (!_tcsnicmp(buf, _T("Static"), 6) && IS_SPACE_OR_TAB(buf[6]))
@@ -2595,15 +2491,12 @@ process_completed_line:
 		}
 
 		// The following "examine_line" label skips the following parts above:
-		// 1) IsFunction() because that's only for a function call or definition alone on a line
-		//    e.g. not "if fn()" or x := fn().  Those who goto this label don't need that processing.
-		// 2) The "if (*pending_function)" block: Doesn't seem applicable for the callers of this label.
-		// 3) The inner loop that handles continuation sections: Not needed by the callers of this label.
-		// 4) Things like the following should be skipped because callers of this label don't want the
+		// 1) The inner loop that handles continuation sections: Not needed by the callers of this label.
+		// 2) Things like the following should be skipped because callers of this label don't want the
 		//    physical line number changed (which would throw off the count of lines that lie beneath a remap):
 		//    mCombinedLineNumber = phys_line_number + 1;
 		//    ++phys_line_number;
-		// 5) "mCurrLine = NULL": Probably not necessary since it's only for error reporting.  Worst thing
+		// 3) "mCurrLine = NULL": Probably not necessary since it's only for error reporting.  Worst thing
 		//    that could happen is that syntax errors would be thrown off, which testing shows isn't the case.
 examine_line:
 		// "::" alone isn't a hotstring, it's a label whose name is colon.
@@ -3076,12 +2969,28 @@ examine_line:
 					if (next_buf_length + buf_length + 1 >= LINE_SIZE)
 						return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG);
 					balance = BalanceExpr(next_buf, balance); // Adjust balance based on what we're about to append.
-					buf[buf_length++] = '\n'; // To ensure two distinct tokens aren't joined together.
+					buf[buf_length++] = ' '; // To ensure two distinct tokens aren't joined together.  ' ' vs. '\n' because DefineFunc() currently doesn't permit '\n'.
 					tmemcpy(buf + buf_length, next_buf, next_buf_length); // Append next_buf to this line.
 					buf_length += next_buf_length;
 					buf[buf_length] = '\0';
 				}
 				next_buf_length = GetLine(next_buf, LINE_SIZE - 1, 0, false, fp);
+			}
+		}
+
+		if (IsFunction(buf, &buf_has_brace)) // If true, it's either a function definition or a function call.
+		{
+			// Open brace means this is a function definition. NOTE: Both bufs were already ltrimmed by GetLine().
+			if (buf_has_brace || *next_buf == '{')
+			{
+				if (g->CurrentFunc)
+					// This is prohibited until it becomes feasible to implement closures.
+					return ScriptError(_T("Functions cannot contain functions."), buf);
+				if (!DefineFunc(buf, func_global_var))
+					return FAIL;
+				if (buf_has_brace && !AddLine(ACT_BLOCK_BEGIN))
+					return FAIL;
+				goto continue_main_loop;
 			}
 		}
 
@@ -3107,7 +3016,6 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 			//	return CallNextHookEx(g_KeybdHook, aCode, wParam, lParam);
 			// }
 
-			LPTSTR remap_buf = pending_buf; // Reusing this buffer since it's only used for its other purpose in the process_completed_line stage.
 			if (!remap_ptr)
 			{
 				cp = remap_buf;
@@ -3188,10 +3096,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 			tcslcpy(buf, remap_ptr, cp - remap_ptr + 1); // Copy this line into buf.
 			remap_ptr = cp + 1; // Set up remap_ptr for next iteration.
 			if (!*remap_ptr)
-			{
 				remap_dest_vk = 0; // Reset to signal that the remapping expansion will be complete after the next iteration.
-				*remap_buf = '\0'; // Necessary because it is an alias for pending_buf.
-			}
 			mCurrLine = NULL; // Prevent misleading vicinity lines if an error is somehow possible.
 			goto examine_line;
 		} // if (remap_dest_vk)
@@ -3202,19 +3107,6 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		// The line above alternates buffers (toggles next_buf to be the unused buffer), which helps
 		// performance because it avoids memcpy from buf2 to buf1.
 	} // for each whole/constructed line.
-
-	if (*pending_buf) // Since this is the last non-comment line, the pending function must be a function call, not a function definition.
-	{
-		// Somewhat messy to decrement then increment later, but it's probably easier than the
-		// alternatives due to the use of "continue" in some places above.
-		saved_line_number = mCombinedLineNumber;
-		mCombinedLineNumber = pending_buf_line_number; // Done so that any syntax errors that occur during the calls below will report the correct line number.
-		if (pending_buf_type != Pending_Func)
-			return ScriptError(pending_buf_has_brace ? ERR_MISSING_CLOSE_BRACE : ERR_MISSING_OPEN_BRACE, pending_buf);
-		if (!ParseAndAddLine(pending_buf, LINE_SIZE, ACT_EXPRESSION)) // Must be function call vs. definition since otherwise the above would have detected the opening brace beneath it and already cleared pending_function.
-			return FAIL;
-		mCombinedLineNumber = saved_line_number;
-	}
 
 	if (mClassObjectCount && !source_file_index) // or mClassProperty, which implies mClassObjectCount != 0.
 	{
@@ -6129,8 +6021,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		}
 						
 		// Since above didn't "continue", this declared variable also has an initializer.
-		// Append the class name, ":=" and initializer to pending_buf, to be turned into
-		// an expression below, and executed at script start-up.
+		// Build an expression which can be executed to initialize this class variable.
 		item_end = omit_leading_whitespace(item_end);
 		LPTSTR right_side_of_operator = item_end; // Save for use below.
 
