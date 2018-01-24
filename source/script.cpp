@@ -2426,7 +2426,13 @@ examine_line:
 				cp1 = cp + 1;
 				if (*cp == ':')
 				{
-					if (*cp1 == ':') // Found a non-escaped double-colon, so this is the right one.
+					// v2: Use the first non-escaped double-colon, not the last, since it seems more likely
+					// that the user intends to produce text with "::" in it rather than typing "::" to trigger
+					// the hotstring, and generally the trigger should be short.  By contrast, the v1 policy
+					// behaved inconsistently with an odd number of colons, such as:
+					//   ::foo::::bar  ; foo:: -> bar
+					//   ::foo:::bar   ; foo -> :bar
+					if (!hotkey_flag && *cp1 == ':') // Found a non-escaped double-colon, so this is the right one.
 					{
 						hotkey_flag = cp++;  // Increment to have loop skip over both colons.
 						// and the continue with the loop so that escape sequences in the replacement
