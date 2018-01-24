@@ -2885,7 +2885,7 @@ int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 
 int BalanceExpr(LPCTSTR aBuf, int aStartBalance)
 {
-	for (int balance = aStartBalance, mark = 0; ; ++mark)
+	for (int balance = aStartBalance, mark = 0;; ++mark)
 	{
 		switch (aBuf[mark])
 		{
@@ -2900,7 +2900,7 @@ int BalanceExpr(LPCTSTR aBuf, int aStartBalance)
 		case '\'':
 			mark = FindTextDelim(aBuf, aBuf[mark], mark + 1);
 			if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
-				return balance;
+				return -1; // Since this quote is missing its close-quote, abort the continuation loop.
 			break;
 		case ')':
 		case ']':
