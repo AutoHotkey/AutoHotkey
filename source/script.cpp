@@ -2448,18 +2448,21 @@ examine_line:
 					// Otherwise, if it's not one of the above, the escape-char is considered to
 					// mark the next character as literal, regardless of what it is. Examples:
 					// `` -> `
-					// `:: -> :: (effectively)
+					// `: -> : (so `::: means a literal : followed by hotkey_flag)
 					// `; -> ;
 					// `c -> c (i.e. unknown escape sequences resolve to the char after the `)
 				}
 				// Below has a final +1 to include the terminator:
 				tmemmove(cp, cp1, _tcslen(cp1) + 1);
+				// v2: The following is not done because 1) it is counter-intuitive for ` to affect two
+				// characters and 2) it hurts flexibility by preventing the escaping of a single colon
+				// immediately prior to the double-colon, such as ::lbl`:::.  Older comment:
 				// Since single colons normally do not need to be escaped, this increments one extra
 				// for double-colons to skip over the entire pair so that its second colon
 				// is not seen as part of the hotstring's final double-colon.  Example:
 				// ::ahc```::::Replacement String
-				if (*cp == ':' && *cp1 == ':')
-					++cp;
+				//if (*cp == ':' && *cp1 == ':')
+				//	++cp;
 			} // for()
 			if (!hotkey_flag)
 				hotstring_start = NULL;  // Indicate that this isn't a hotstring after all.
