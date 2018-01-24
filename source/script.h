@@ -167,6 +167,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_MISSING_CLOSE_PAREN _T("Missing \")\"")
 #define ERR_MISSING_CLOSE_BRACE _T("Missing \"}\"")
 #define ERR_MISSING_CLOSE_BRACKET _T("Missing \"]\"") // L31
+#define ERR_UNEXPECTED_OPEN_BRACE _T("Unexpected \"{\"")
 #define ERR_UNEXPECTED_CLOSE_PAREN _T("Unexpected \")\"")
 #define ERR_UNEXPECTED_CLOSE_BRACKET _T("Unexpected \"]\"")
 #define ERR_UNEXPECTED_CLOSE_BRACE _T("Unexpected \"}\"")

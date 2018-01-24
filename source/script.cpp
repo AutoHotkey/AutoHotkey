@@ -2378,118 +2378,6 @@ process_completed_line:
 		// by design, phys_line_number will be greater than mCombinedLineNumber whenever
 		// a continuation section/lines were used to build this combined line.
 
-		if (*buf == '}' && mClassObjectCount && !g->CurrentFunc)
-		{
-			if (mClassProperty)
-			{
-				// Close this property definition.
-				mClassProperty = NULL;
-				if (mClassPropertyDef)
-				{
-					free(mClassPropertyDef);
-					mClassPropertyDef = NULL;
-				}
-			}
-			else
-			{
-				// End of class definition.
-				--mClassObjectCount;
-				mClassObject[mClassObjectCount]->EndClassDefinition(); // Remove instance variables from the class object.
-				mClassObject[mClassObjectCount]->Release();
-				// Revert to the name of the class this class is nested inside, or "" if none.
-				if (cp1 = _tcsrchr(mClassName, '.'))
-					*cp1 = '\0';
-				else
-					*mClassName = '\0';
-			}
-			// Allow multiple end-braces or other declarations to the right of "}":
-			if (   *(buf = omit_leading_whitespace(buf + 1))   )
-			{
-				buf_length = _tcslen(buf); // Update.
-				mCurrLine = NULL;  // To signify that we're in transition, trying to load a new line.
-				goto process_completed_line; // Have the main loop process the contents of "buf" as though it came in from the script.
-			}
-			goto continue_main_loop; // It's just a naked "{" or "}", so no more processing needed for this line.
-		}
-
-		if (mClassProperty && !g->CurrentFunc) // This is checked before IsFunction() to prevent method definitions inside a property.
-		{
-			if (!_tcsnicmp(buf, _T("Get"), 3) || !_tcsnicmp(buf, _T("Set"), 3))
-			{
-				LPTSTR cp = omit_leading_whitespace(buf + 3);
-				if (!*cp && *next_buf == '{' || *cp == '{' && !cp[1])
-				{
-					// For simplicity, pass the property definition to DefineFunc instead of the actual
-					// line text, even though it makes some error messages a bit inaccurate. (That would
-					// happen anyway when DefineFunc() finds a syntax error in the parameter list.)
-					LPTSTR dot = _tcschr(mClassPropertyDef, '.');
-					dot[1] = *buf; // Replace the x in property.xet(params).
-					if (!DefineFunc(mClassPropertyDef, func_global_var))
-						return FAIL;
-					if (*cp == '{' && !AddLine(ACT_BLOCK_BEGIN))
-						return FAIL;
-					goto continue_main_loop;
-				}
-			}
-			return ScriptError(ERR_INVALID_LINE_IN_PROPERTY_DEF, buf);
-		}
-
-		if (!g->CurrentFunc)
-		{
-			if (LPTSTR class_name = IsClassDefinition(buf))
-			{
-				if (!ClassHasOpenBrace(buf, buf_length, next_buf, next_buf_length))
-					return ScriptError(ERR_MISSING_OPEN_BRACE, buf);
-				if (!DefineClass(class_name))
-					return FAIL;
-				goto continue_main_loop;
-			}
-
-			if (mClassObjectCount)
-			{
-				// Check for assignment first, in case of something like "Static := 123".
-				for (cp = buf; IS_IDENTIFIER_CHAR(*cp) || *cp == '.'; ++cp);
-				if (cp > buf) // i.e. buf begins with an identifier.
-				{
-					cp = omit_leading_whitespace(cp);
-					if (*cp == ':' && cp[1] == '=') // This is an assignment.
-					{
-						if (!DefineClassVars(buf, false)) // See above for comments.
-							return FAIL;
-						goto continue_main_loop;
-					}
-					if (   (!*cp || *cp == '[' || (*cp == '{' && !cp[1])) // Property
-						&& ClassHasOpenBrace(buf, buf_length, next_buf, next_buf_length)   )
-					{
-						if (!DefineClassProperty(buf))
-							return FAIL;
-						goto continue_main_loop;
-					}
-				}
-				if (!_tcsnicmp(buf, _T("Static"), 6) && IS_SPACE_OR_TAB(buf[6]))
-				{
-					if (!DefineClassVars(buf + 7, true))
-						return FAIL; // Above already displayed the error.
-					goto continue_main_loop; // In lieu of "continue", for performance.
-				}
-				if (*buf == '#') // See the identical section further below for comments.
-				{
-					saved_line_number = mCombinedLineNumber;
-					switch(IsDirective(buf))
-					{
-					case CONDITION_TRUE:
-						mCurrFileIndex = source_file_index;
-						mCombinedLineNumber = saved_line_number;
-						goto continue_main_loop;
-					case FAIL:
-						return FAIL;
-					}
-				}
-				// Anything not already handled above is not valid directly inside a class definition.
-				return ScriptError(ERR_INVALID_LINE_IN_CLASS_DEF, buf);
-			}
-		}
-
 		// The following "examine_line" label skips the following parts above:
 		// 1) The inner loop that handles continuation sections: Not needed by the callers of this label.
 		// 2) Things like the following should be skipped because callers of this label don't want the
@@ -2611,7 +2499,7 @@ examine_line:
 		// Treat a naked "::" as a normal label whose label name is colon:
 		if (is_label = (hotkey_flag && hotkey_flag > buf)) // It's a hotkey/hotstring label.
 		{
-			if (g->CurrentFunc)
+			if (g->CurrentFunc || mClassObjectCount)
 			{
 				// Even if it weren't for the reasons below, the first hotkey/hotstring label in a script
 				// will end the auto-execute section with a "return".  Therefore, if this restriction here
@@ -2623,7 +2511,7 @@ examine_line:
 				// if it were.  It doesn't seem useful in any case.  By contrast, normal labels can
 				// safely exist inside a function body and since the body is a block, other validation
 				// ensures that a Gosub or Goto can't jump to it from outside the function.
-				return ScriptError(_T("Hotkeys/hotstrings are not allowed inside functions."), buf);
+				return ScriptError(_T("Hotkeys/hotstrings are not allowed inside functions or classes."), buf);
 			}
 			*hotkey_flag = '\0'; // Terminate so that buf is now the label itself.
 			hotkey_flag += HOTKEY_FLAG_LENGTH;  // Now hotkey_flag is the hotkey's action, if any.
@@ -2846,7 +2734,8 @@ examine_line:
 		} // if (is_label = ...)
 
 		// Otherwise, not a hotkey or hotstring.  Check if it's a generic, non-hotkey label:
-		if (buf[buf_length - 1] == ':') // Labels must end in a colon (buf was previously rtrimmed).
+		if (buf[buf_length - 1] == ':' // Labels must end in a colon (buf was previously rtrimmed).
+			&& (!mClassObjectCount || g->CurrentFunc)) // Not directly inside a class body or property definition (but inside a method is okay).
 		{
 			if (buf_length == 1) // v1.0.41.01: Properly handle the fact that this line consists of only a colon.
 				return ScriptError(ERR_UNRECOGNIZED_ACTION, buf);
@@ -2907,9 +2796,40 @@ examine_line:
 
 		if (*buf == '{' || *buf == '}')
 		{
-			if (!AddLine(*buf == '{' ? ACT_BLOCK_BEGIN : ACT_BLOCK_END))
-				return FAIL;
-			// Allow any command/action, directive or label to the right of "{" or "}":
+			if (mClassObjectCount && !g->CurrentFunc)
+			{
+				if (*buf == '{')
+					return ScriptError(ERR_UNEXPECTED_OPEN_BRACE, buf);
+
+				if (mClassProperty)
+				{
+					// Close this property definition.
+					mClassProperty = NULL;
+					if (mClassPropertyDef)
+					{
+						free(mClassPropertyDef);
+						mClassPropertyDef = NULL;
+					}
+				}
+				else
+				{
+					// End of class definition.
+					--mClassObjectCount;
+					mClassObject[mClassObjectCount]->EndClassDefinition(); // Remove instance variables from the class object.
+					mClassObject[mClassObjectCount]->Release();
+					// Revert to the name of the class this class is nested inside, or "" if none.
+					if (cp1 = _tcsrchr(mClassName, '.'))
+						*cp1 = '\0';
+					else
+						*mClassName = '\0';
+				}
+			}
+			else // Normal block begin/end.
+			{
+				if (!AddLine(*buf == '{' ? ACT_BLOCK_BEGIN : ACT_BLOCK_END))
+					return FAIL;
+			}
+			// Allow the remainder of the line to be treated as a separate line:
 			if (   *(buf = omit_leading_whitespace(buf + 1))   )
 			{
 				buf_length = _tcslen(buf); // Update.
@@ -2919,7 +2839,30 @@ examine_line:
 			goto continue_main_loop; // It's just a naked "{" or "}", so no more processing needed for this line.
 		}
 
-		// Aside from goto/gosub/break/continue, anything not already handled above must accept an expression.
+		if (mClassProperty && !g->CurrentFunc) // This is checked before IsFunction() to prevent method definitions inside a property.
+		{
+			if (!_tcsnicmp(buf, _T("Get"), 3) || !_tcsnicmp(buf, _T("Set"), 3))
+			{
+				LPTSTR cp = omit_leading_whitespace(buf + 3);
+				if (!*cp && *next_buf == '{' || *cp == '{' && !cp[1])
+				{
+					// For simplicity, pass the property definition to DefineFunc instead of the actual
+					// line text, even though it makes some error messages a bit inaccurate. (That would
+					// happen anyway when DefineFunc() finds a syntax error in the parameter list.)
+					LPTSTR dot = _tcschr(mClassPropertyDef, '.');
+					dot[1] = *buf; // Replace the x in property.xet(params).
+					if (!DefineFunc(mClassPropertyDef, func_global_var))
+						return FAIL;
+					if (*cp == '{' && !AddLine(ACT_BLOCK_BEGIN))
+						return FAIL;
+					goto continue_main_loop;
+				}
+			}
+			return ScriptError(ERR_INVALID_LINE_IN_PROPERTY_DEF, buf);
+		}
+
+		// Aside from goto/gosub/break/continue, anything not already handled above is either an expression
+		// or something with similar lexical requirements (i.e. balanced parentheses/brackets/braces).
 		// This section allows expressions to span multiple lines without an explicit continuation section
 		// by simply putting (/[/{ on one line and )/]/} on another.
 		int balance = BalanceExpr(buf, 0);
@@ -2991,6 +2934,48 @@ examine_line:
 					return FAIL;
 				goto continue_main_loop;
 			}
+		}
+		else if (g->CurrentFunc)
+		{
+			// Skip the next two sections.
+		}
+		else if (LPTSTR class_name = IsClassDefinition(buf))
+		{
+			if (!ClassHasOpenBrace(buf, buf_length, next_buf, next_buf_length))
+				return ScriptError(ERR_MISSING_OPEN_BRACE, buf);
+			if (!DefineClass(class_name))
+				return FAIL;
+			goto continue_main_loop;
+		}
+		else if (mClassObjectCount) // Inside a class definition (and not inside a method, checked above).
+		{
+			// Check for assignment first, in case of something like "Static := 123".
+			for (cp = buf; IS_IDENTIFIER_CHAR(*cp) || *cp == '.'; ++cp);
+			if (cp > buf) // i.e. buf begins with an identifier.
+			{
+				cp = omit_leading_whitespace(cp);
+				if (*cp == ':' && cp[1] == '=') // This is an assignment.
+				{
+					if (!DefineClassVars(buf, false)) // See above for comments.
+						return FAIL;
+					goto continue_main_loop;
+				}
+				if (   (!*cp || *cp == '[' || (*cp == '{' && !cp[1])) // Property
+					&& ClassHasOpenBrace(buf, buf_length, next_buf, next_buf_length)   )
+				{
+					if (!DefineClassProperty(buf))
+						return FAIL;
+					goto continue_main_loop;
+				}
+			}
+			if (!_tcsnicmp(buf, _T("Static"), 6) && IS_SPACE_OR_TAB(buf[6]))
+			{
+				if (!DefineClassVars(buf + 7, true))
+					return FAIL; // Above already displayed the error.
+				goto continue_main_loop; // In lieu of "continue", for performance.
+			}
+			// Anything not already handled above is not valid directly inside a class definition.
+			return ScriptError(ERR_INVALID_LINE_IN_CLASS_DEF, buf);
 		}
 
 		// Parse the command, assignment or expression, including any same-line open brace or sub-action
