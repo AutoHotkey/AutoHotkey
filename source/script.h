@@ -2662,6 +2662,8 @@ private:
 	NOTIFYICONDATA mNIC; // For ease of adding and deleting our tray icon.
 
 	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, bool aInBlockComment, TextStream *ts);
+	ResultType GetLineContinuation(TextStream *ts, LPTSTR aBuf, size_t &aBufLength, LPTSTR aNextBuf, size_t &aNextBufLength
+		, LineNumberType &aPhysLineNumber, bool &aHasContinuationSection, int aExprBalance = 0);
 	ResultType IsDirective(LPTSTR aBuf);
 	ResultType ParseAndAddLine(LPTSTR aLineText, int aBufSize = 0, ActionTypeType aActionType = ACT_INVALID
 		, LPTSTR aLiteralMap = NULL, size_t aLiteralMapLength = 0);

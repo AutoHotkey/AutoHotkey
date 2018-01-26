@@ -1816,9 +1816,9 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 #endif
 
 	// <buf> should be no larger than LINE_SIZE because some later functions rely upon that:
-	TCHAR msg_text[MAX_PATH + 256], buf1[LINE_SIZE], buf2[LINE_SIZE], suffix[16], remap_buf[LINE_SIZE];
+	TCHAR msg_text[MAX_PATH + 256], buf1[LINE_SIZE], buf2[LINE_SIZE], remap_buf[LINE_SIZE];
 	LPTSTR buf = buf1, next_buf = buf2; // Oscillate between bufs to improve performance (avoids memcpy from buf2 to buf1).
-	size_t buf_length, next_buf_length, suffix_length;
+	size_t buf_length, next_buf_length;
 	bool buf_has_brace;
 
 #ifndef AUTOHOTKEYSC
@@ -1887,11 +1887,14 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 	// File is now open, read lines from it.
 
+	bool has_continuation_section;
+	TCHAR orig_char;
+
 	LPTSTR hotkey_flag, cp, cp1, hotstring_start, hotstring_options;
 	Hotkey *hk;
 	LineNumberType saved_line_number;
 	HookActionType hook_action;
-	bool is_label, suffix_has_tilde, hook_is_mandatory, in_comment_section, hotstring_options_all_valid;
+	bool is_label, suffix_has_tilde, hook_is_mandatory;
 	ResultType hotkey_validity;
 
 	// For the remap mechanism, e.g. a::b
@@ -1899,21 +1902,6 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	TCHAR remap_source[32], remap_dest[32], remap_dest_modifiers[8]; // Must fit the longest key name (currently Browser_Favorites [17]), but buffer overflow is checked just in case.
 	LPTSTR remap_ptr, extra_event;
 	bool remap_source_is_combo, remap_source_is_mouse, remap_dest_is_mouse, remap_keybd_to_mouse;
-
-	// For the line continuation mechanism:
-	bool do_rtrim, literal_escapes, literal_quotes
-		, has_continuation_section, is_continuation_line;
-	#define CONTINUATION_SECTION_WITHOUT_COMMENTS 1 // MUST BE 1 because it's the default set by anything that's boolean-true.
-	#define CONTINUATION_SECTION_WITH_COMMENTS    2 // Zero means "not in a continuation section".
-	int in_continuation_section, indent_level;
-	TCHAR indent_char;
-	ToggleValueType do_ltrim;
-
-	LPTSTR next_option, option_end;
-	TCHAR orig_char, one_char_string[2], two_char_string[3]; // Line continuation mechanism's option parsing.
-	one_char_string[1] = '\0';  // Pre-terminate these to simplify code later below.
-	two_char_string[2] = '\0';  //
-	int continuation_line_count;
 
 	#define MAX_FUNC_VAR_GLOBALS 2000
 	Var *func_global_var[MAX_FUNC_VAR_GLOBALS];
@@ -1928,14 +1916,12 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 #else
 	LineNumberType phys_line_number = 0;
 #endif
-	buf_length = GetLine(buf, LINE_SIZE - 1, 0, false, fp);
-
-	if (in_comment_section = !_tcsncmp(buf, _T("/*"), 2))
-	{
-		// Fixed for v1.0.35.08. Must reset buffer to allow a script's first line to be "/*".
-		*buf = '\0';
-		buf_length = 0;
-	}
+	
+	// buf is initialized this way rather than calling GetLine() to simplify handling of comment
+	// sections beginning at the first line, and to reduce code size by having GetLine() only
+	// called from one place:
+	*buf = '\0';
+	buf_length = 0;
 
 	while (buf_length != -1)  // Compare directly to -1 since length is unsigned.
 	{
@@ -1945,7 +1931,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		// Keep track of this line's *physical* line number within its file for A_LineNumber and
 		// error reporting purposes.  This must be done only in the outer loop so that it tracks
 		// the topmost line of any set of lines merged due to continuation section/line(s)..
-		mCombinedLineNumber = phys_line_number + 1;
+		mCombinedLineNumber = phys_line_number;
 
 		// This must be reset for each iteration because a prior iteration may have changed it, even
 		// indirectly by calling something that changed it:
@@ -1954,418 +1940,9 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		if (buf_length == LINE_SIZE - 1) // The documented limit is 16383 (LINE_SIZE - 2).
 			return ScriptError(ERR_LINE_TOO_LONG);
 
-		// Read in the next line (if that next line is the start of a continuation section, append
-		// it to the line currently being processed:
-		for (has_continuation_section = false, in_continuation_section = 0;;)
-		{
-			// This increment relies on the fact that this loop always has at least one iteration:
-			++phys_line_number; // Tracks phys. line number in *this* file (independent of any recursion caused by #Include).
-			next_buf_length = GetLine(next_buf, LINE_SIZE - 1, in_continuation_section, in_comment_section, fp);
-			if (!in_continuation_section)
-			{
-				// v2: The comment-end is allowed at the end of the line (vs. just the start) to reduce
-				// confusion for users expecting C-like behaviour, but unlike v1.1, the end flag is not
-				// allowed outside of comments, since allowing and ignoring */ at the end of any line
-				// seems to have risk of ambiguity.
-				// If this policy is changed to ignore an orphan */, remember to allow */:: as a hotkey.
-
-				// Check for /* first in case */ appears on the same line.  There's no need to check
-				// in_comment_section since this has the same effect either way (and it's usually false).
-				if (!_tcsncmp(next_buf, _T("/*"), 2))
-				{
-					in_comment_section = true;
-					// But don't "continue;" since there might be a */ on this same line.
-				}
-
-				if (in_comment_section)
-				{
-					if (next_buf_length == -1) // Compare directly to -1 since length is unsigned.
-						break; // By design, it's not an error.  This allows "/*" to be used to comment out the bottommost portion of the script without needing a matching "*/".
-
-					if (!_tcsncmp(next_buf, _T("*/"), 2))
-					{
-						in_comment_section = false;
-						next_buf_length -= 2; // Adjust for removal of */ from the beginning of the string.
-						tmemmove(next_buf, next_buf + 2, next_buf_length + 1);  // +1 to include the string terminator.
-						next_buf_length = ltrim(next_buf, next_buf_length); // Get rid of any whitespace that was between the comment-end and remaining text.
-						if (!*next_buf) // The rest of the line is empty, so it was just a naked comment-end.
-							continue;
-					}
-					else
-					{
-						// This entire line is part of the comment, but there might be */ at the end of the line.
-						if (next_buf_length >= 2 && !_tcscmp(next_buf + (next_buf_length - 2), _T("*/")))
-							in_comment_section = false;
-						continue;
-					}
-				}
-
-				// v1.0.38.06: The following has been fixed to exclude "(:" and "(::".  These should be
-				// labels/hotkeys, not the start of a continuation section.  In addition, a line that starts
-				// with '(' but that ends with ':' should be treated as a label because labels such as
-				// "(label):" are far more common than something obscure like a continuation section whose
-				// join character is colon, namely "(Join:".
-				if (   !(in_continuation_section = (next_buf_length != -1 && *next_buf == '(' // Compare directly to -1 since length is unsigned.
-					&& next_buf[1] != ':' && next_buf[next_buf_length - 1] != ':'))   ) // Relies on short-circuit boolean order.
-				{
-					if (next_buf_length == -1)  // Compare directly to -1 since length is unsigned.
-						break;
-					if (!next_buf_length)
-						// It is permitted to have blank lines and comment lines in between the line above
-						// and any continuation section/line that might come after the end of the
-						// comment/blank lines:
-						continue;
-					// SINCE ABOVE DIDN'T BREAK/CONTINUE, NEXT_BUF IS NON-BLANK.
-					if (next_buf[next_buf_length - 1] == ':' && *next_buf != ',')
-						// With the exception of lines starting with a comma, the last character of any
-						// legitimate continuation line can't be a colon because expressions can't end
-						// in a colon. The only exception is the ternary operator's colon, but that is
-						// very rare because it requires the line after it also be a continuation line
-						// or section, which is unusual to say the least -- so much so that it might be
-						// too obscure to even document as a known limitation.  Anyway, by excluding lines
-						// that end with a colon from consideration ambiguity with normal labels
-						// and non-single-line hotkeys and hotstrings is eliminated.
-						break;
-
-					is_continuation_line = false; // Set default.
-					switch(ctoupper(*next_buf)) // Above has ensured *next_buf != '\0' (toupper might have problems with '\0').
-					{
-					case 'A': // AND
-					case 'O': // OR
-					case 'I': // IS, IN
-					case 'C': // CONTAINS (future use)
-						// See comments in the default section further below.
-						cp = find_identifier_end(next_buf);
-						// Although (x)and(y) is technically valid, it's quite unusual.  The space or tab requirement is kept
-						// as the simplest way to allow method definitions to use these as names (when called, the leading dot
-						// ensures there is no ambiguity).  Note that checking if we're inside a class definition is not
-						// sufficient because multi-line expressions are valid there too (i.e. for var initializers).
-						// This also rules out valid double-derefs such as and%suffix% := 1.
-						if (IS_SPACE_OR_TAB(*cp) && ConvertWordOperator(next_buf, cp - next_buf))
-						{
-							// Unlike in v1, there's no check for an operator after AND/OR (such as AND := 1) because they
-							// should never be used as variable names.
-							is_continuation_line = true; // Override the default set earlier.
-						}
-						break;
-					default:
-						// Desired line continuation operators:
-						// Pretty much everything, namely:
-						// +, -, *, /, //, **, <<, >>, &, |, ^, <, >, <=, >=, =, ==, <>, !=, :=, +=, -=, /=, *=, ?, :
-						// And also the following remaining unaries (i.e. those that aren't also binaries): !, ~
-						// The first line below checks for ::, ++, and --.  Those can't be continuation lines because:
-						// "::" isn't a valid operator (this also helps performance if there are many hotstrings).
-						// ++ and -- are ambiguous with an isolated line containing ++Var or --Var (and besides,
-						// wanting to use ++ to continue an expression seems extremely rare, though if there's ever
-						// demand for it, might be able to look at what lies to the right of the operator's operand
-						// -- though that would produce inconsistent continuation behavior since ++Var itself still
-						// could never be a continuation line due to ambiguity).
-						//
-						// The logic here isn't smart enough to differentiate between a leading ! or - that's
-						// meant as a continuation character and one that isn't. Even if it were, it would
-						// still be ambiguous in some cases because the author's intent isn't known; for example,
-						// the leading minus sign on the second line below is ambiguous, so will probably remain
-						// a continuation character in both v1 and v2:
-						//    x := y 
-						//    -z ? a:=1 : func() 
-						if ((*next_buf == ':' || *next_buf == '+' || *next_buf == '-') && next_buf[1] == *next_buf // See above.
-							// L31: '.' and '?' no longer require spaces; '.' without space is member-access (object) operator.
-							//|| (*next_buf == '.' || *next_buf == '?') && !IS_SPACE_OR_TAB_OR_NBSP(next_buf[1]) // The "." and "?" operators require a space or tab after them to be legitimate.  For ".", this is done in case period is ever a legal character in var names, such as struct support.  For "?", it's done for backward compatibility since variable names can contain question marks (though "?" by itself is not considered a variable in v1.0.46).
-								//&& next_buf[1] != '=' // But allow ".=" (and "?=" too for code simplicity), since ".=" is the concat-assign operator.
-							|| !_tcschr(CONTINUATION_LINE_SYMBOLS, *next_buf)) // Line doesn't start with a continuation char.
-							break; // Leave is_continuation_line set to its default of false.
-						// Some of the above checks must be done before the next ones.
-						if (   !(hotkey_flag = _tcsstr(next_buf, HOTKEY_FLAG))   ) // Without any "::", it can't be a hotkey or hotstring.
-						{
-							is_continuation_line = true; // Override the default set earlier.
-							break;
-						}
-						if (*next_buf == ':') // First char is ':', so it's more likely a hotstring than a hotkey.
-						{
-							// Remember that hotstrings can contain what *appear* to be quoted literal strings,
-							// so detecting whether a "::" is in a quoted/literal string in this case would
-							// be more complicated.  That's one reason this other method is used.
-							for (hotstring_options_all_valid = true, cp = next_buf + 1; *cp && *cp != ':'; ++cp)
-								if (!IS_HOTSTRING_OPTION(*cp)) // Not a perfect test, but eliminates most of what little remaining ambiguity exists between ':' as a continuation character vs. ':' as the start of a hotstring.  It especially eliminates the ":=" operator.
-								{
-									hotstring_options_all_valid = false;
-									break;
-								}
-							if (hotstring_options_all_valid && *cp == ':') // It's almost certainly a hotstring.
-								break; // So don't treat it as a continuation line.
-							//else it's not a hotstring but it might still be a hotkey such as ": & x::".
-							// So continue checking below.
-						}
-						// Since above didn't "break", this line isn't a hotstring but it is probably a hotkey
-						// because above already discovered that it contains "::" somewhere. So try to find out
-						// if there's anything that disqualifies this from being a hotkey, such as some
-						// expression line that contains a quoted/literal "::" (or a line starting with
-						// a comma that contains an unquoted-but-literal "::" such as for FileAppend).
-						if (*next_buf == ',')
-						{
-							cp = omit_leading_whitespace(next_buf + 1);
-							// The above has set cp to the position of the non-whitespace item to the right of
-							// this comma.  Normal (single-colon) labels can't contain commas, so only hotkey
-							// labels are sources of ambiguity.  In addition, normal labels and hotstrings have
-							// already been checked for, higher above.
-							if (   _tcsncmp(cp, HOTKEY_FLAG, HOTKEY_FLAG_LENGTH) // It's not a hotkey such as ",::action".
-								&& _tcsncmp(cp - 1, COMPOSITE_DELIMITER, COMPOSITE_DELIMITER_LENGTH)   ) // ...and it's not a hotkey such as ", & y::action".
-								is_continuation_line = true; // Override the default set earlier.
-						}
-						else // First symbol in line isn't a comma but some other operator symbol.
-						{
-							// Check if the "::" found earlier appears to be inside a quoted/literal string.
-							// This check is NOT done for a line beginning with a comma since such lines
-							// can contain an unquoted-but-literal "::".  In addition, this check is done this
-							// way to detect hotkeys such as the following:
-							//   +keyname:: (and other hotkey modifier symbols such as ! and ^)
-							//   +keyname1 & keyname2::
-							//   +^:: (i.e. a modifier symbol followed by something that is a hotkey modifier and/or a hotkey suffix and/or an expression operator).
-							//   <:: and &:: (i.e. hotkeys that are also expression-continuation symbols)
-							// By contrast, expressions that qualify as continuation lines can look like:
-							//   . "xxx::yyy"
-							//   + x . "xxx::yyy"
-							// In addition, hotkeys like the following should continue to be supported regardless
-							// of how things are done here:
-							//   ^"::
-							//   . & "::
-							// Finally, keep in mind that an expression-continuation line can start with two
-							// consecutive unary operators like !! or !*. It can also start with a double-symbol
-							// operator such as <=, <>, !=, &&, ||, //, **.
-							for (cp = next_buf; cp < hotkey_flag && *cp != '"' && *cp != '\''; ++cp);
-							if (cp == hotkey_flag) // No '"' found to left of "::", so this "::" appears to be a real hotkey flag rather than part of a literal string.
-								break; // Treat this line as a normal line vs. continuation line.
-							TCHAR in_quote = *cp;
-							for (cp = hotkey_flag + HOTKEY_FLAG_LENGTH; *cp && *cp != in_quote; ++cp);
-							if (*cp)
-							{
-								// Closing quote was found so "::" is probably inside a literal string of an
-								// expression (further checking seems unnecessary given the fairly extreme
-								// rarity of using '"' as a key in a hotkey definition).
-								is_continuation_line = true; // Override the default set earlier.
-							}
-							//else no closing '"' found, so this "::" probably belongs to something like +":: or
-							// . & "::.  Treat this line as a normal line vs. continuation line.
-						}
-					} // switch(toupper(*next_buf))
-
-					if (is_continuation_line)
-					{
-						if (buf_length + next_buf_length >= LINE_SIZE - 1) // -1 to account for the extra space added below.
-							return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, next_buf);
-						if (*next_buf != ',') // Insert space before expression operators so that built/combined expression works correctly (some operators like 'and', 'or' and concat currently require spaces on either side) and also for readability of ListLines.
-							buf[buf_length++] = ' ';
-						tmemcpy(buf + buf_length, next_buf, next_buf_length + 1); // Append this line to prev. and include the zero terminator.
-						buf_length += next_buf_length;
-						continue; // Check for yet more continuation lines after this one.
-					}
-					// Since above didn't continue, there is no continuation line or section.  In addition,
-					// since this line isn't blank, no further searching is needed.
-					break;
-				} // if (!in_continuation_section)
-
-				// OTHERWISE in_continuation_section != 0, so the above has found the first line of a new
-				// continuation section.
-				continuation_line_count = 0; // Reset for this new section.
-				// Otherwise, parse options.  First set the defaults, which can be individually overridden
-				// by any options actually present.  RTrim defaults to ON for two reasons:
-				// 1) Whitespace often winds up at the end of a lines in a text editor by accident.  In addition,
-				//    whitespace at the end of any consolidated/merged line will be rtrim'd anyway, since that's
-				//    how command parsing works.
-				// 2) Copy & paste from the forum and perhaps other web sites leaves a space at the end of each
-				//    line.  Although this behavior is probably site/browser-specific, it's a consideration.
-				do_ltrim = NEUTRAL; // Start off at neutral/smart-trim.
-				do_rtrim = true; // Seems best to rtrim even if this line is a hotstring, since it is very rare that trailing spaces and tabs would ever be desirable.
-				// For hotstrings (which could be detected via *buf==':'), it seems best not to default the
-				// escape character (`) to be literal because the ability to have `t `r and `n inside the
-				// hotstring continuation section seems more useful/common than the ability to use the
-				// accent character by itself literally (which seems quite rare in most languages).
-				literal_escapes = false;
-				literal_quotes = true; // This is the default even for non-expressions for simplicity (it should ultimately have no effect except inside an expression anyway).
-				// The default is linefeed because:
-				// 1) It's the best choice for hotstrings, for which the line continuation mechanism is well suited.
-				// 2) It's good for FileAppend.
-				// 3) Minor: Saves memory in large sections by being only one character instead of two.
-				suffix[0] = '\n';
-				suffix[1] = '\0';
-				suffix_length = 1;
-				for (next_option = omit_leading_whitespace(next_buf + 1); *next_option; next_option = omit_leading_whitespace(option_end))
-				{
-					// Find the end of this option item:
-					if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )  // Space or tab.
-						option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
-
-					// Temporarily terminate to help eliminate ambiguity for words contained inside other words,
-					// such as hypothetical "Checked" inside of "CheckedGray":
-					orig_char = *option_end;
-					*option_end = '\0';
-
-					if (!_tcsnicmp(next_option, _T("Join"), 4))
-					{
-						next_option += 4;
-						tcslcpy(suffix, next_option, _countof(suffix)); // The word "Join" by itself will product an empty string, as documented.
-						// Passing true for the last parameter supports `s as the special escape character,
-						// which allows space to be used by itself and also at the beginning or end of a string
-						// containing other chars.
-						ConvertEscapeSequences(suffix, NULL);
-						suffix_length = _tcslen(suffix);
-					}
-					else if (!_tcsnicmp(next_option, _T("LTrim"), 5))
-						do_ltrim = (next_option[5] == '0') ? TOGGLED_OFF : TOGGLED_ON;  // i.e. Only an explicit zero will turn it off.
-					else if (!_tcsnicmp(next_option, _T("RTrim"), 5))
-						do_rtrim = (next_option[5] != '0');
-					else
-					{
-						// Fix for v1.0.36.01: Missing "else" above, because otherwise, the option Join`r`n
-						// would be processed above but also be processed again below, this time seeing the
-						// accent and thinking it's the signal to treat accents literally for the entire
-						// continuation section rather than as escape characters.
-						// Within this terminated option substring, allow the characters to be adjacent to
-						// improve usability:
-						for (; *next_option; ++next_option)
-						{
-							switch (*next_option)
-							{
-							case '`': // OBSOLETE because g_EscapeChar is now constant: Although not using g_EscapeChar (reduces code size/complexity), #EscapeChar is still supported by continuation sections; it's just that enabling the option uses '`' rather than the custom escape-char (one reason is that that custom escape-char might be ambiguous with future/past options if it's something weird like an alphabetic character).
-								literal_escapes = true;
-								break;
-							case 'C': // v1.0.45.03: For simplicity, anything that begins with "C" is enough to
-							case 'c': // identify it as the option to allow comments in the section.
-								in_continuation_section = CONTINUATION_SECTION_WITH_COMMENTS; // Override the default, which is boolean true (i.e. 1).
-								break;
-							case 'Q':
-							case 'q':
-								literal_quotes = false;
-								break;
-							case ')':
-								// Probably something like (x.y)[z](), which is not intended as the beginning of
-								// a continuation section.  Doing this only when ")" is found should remove the
-								// need to escape "(" in most real-world expressions while still allowing new
-								// options to be added later with minimal risk of breaking scripts.
-								in_continuation_section = 0;
-								*option_end = orig_char; // Undo the temporary termination.
-								goto process_completed_line;
-							}
-						}
-					}
-
-					// If the item was not handled by the above, ignore it because it is unknown.
-					*option_end = orig_char; // Undo the temporary termination.
-				} // for() each item in option list
-
-				// "has_continuation_section" indicates whether the line we're about to construct is partially
-				// composed of continuation lines beneath it.  It's separate from continuation_line_count
-				// in case there is another continuation section immediately after/adjacent to the first one,
-				// but the second one doesn't have any lines in it:
-				has_continuation_section = true;
-
-				continue; // Now that the open-parenthesis of this continuation section has been processed, proceed to the next line.
-			} // if (!in_continuation_section)
-
-			// Since above didn't "continue", we're in the continuation section and thus next_buf contains
-			// either a line to be appended onto buf or the closing parenthesis of this continuation section.
-			if (next_buf_length == -1) // Compare directly to -1 since length is unsigned.
-				return ScriptError(ERR_MISSING_CLOSE_PAREN, buf);
-			if (next_buf_length == -2) // v1.0.45.03: Special flag that means "this is a commented-out line to be
-				continue;              // entirely omitted from the continuation section." Compare directly to -2 since length is unsigned.
-
-			if (*next_buf == ')')
-			{
-				in_continuation_section = 0; // Facilitates back-to-back continuation sections and proper incrementing of phys_line_number.
-				next_buf_length = rtrim(next_buf); // Done because GetLine() wouldn't have done it due to have told it we're in a continuation section.
-				// Anything that lies to the right of the close-parenthesis gets appended verbatim, with
-				// no trimming (for flexibility) and no options-driven translation:
-				cp = next_buf + 1;  // Use temp var cp to avoid altering next_buf (for maintainability).
-				--next_buf_length;  // This is now the length of cp, not next_buf.
-			}
-			else
-			{
-				cp = next_buf;
-				// The following are done in this block only because anything that comes after the closing
-				// parenthesis (i.e. the block above) is exempt from translations and custom trimming.
-				// This means that commas are always delimiters and percent signs are always deref symbols
-				// in the previous block.
-				if (do_rtrim)
-					next_buf_length = rtrim(next_buf, next_buf_length);
-				if (do_ltrim == NEUTRAL)
-				{
-					// Neither "LTrim" nor "LTrim0" was present in this section's options, so
-					// trim the continuation section based on the indentation of the first line.
-					if (!continuation_line_count)
-					{
-						// This is the first line.
-						indent_char = *next_buf;
-						if (IS_SPACE_OR_TAB(indent_char))
-						{
-							// For simplicity, require that only one type of indent char is used. Otherwise
-							// we'd have to provide some way to set the width (in spaces) of a tab char.
-							for (indent_level = 1; next_buf[indent_level] == indent_char; ++indent_level);
-							// Let the section below actually remove the indentation on this and subsequent lines.
-						}
-						else
-							indent_level = 0; // No trimming is to be done.
-					}
-					if (indent_level)
-					{
-						int i;
-						for (i = 0; i < indent_level && next_buf[i] == indent_char; ++i);
-						if (i == indent_level)
-						{
-							// LTrim exactly (indent_level) occurrences of (indent_char).
-							tmemmove(next_buf, next_buf + i, next_buf_length - i + 1); // +1 for null terminator.
-							next_buf_length -= i;
-						}
-						// Otherwise, the indentation on this line is inconsistent with the first line,
-						// so just leave it as is.
-					}
-				}
-				else if (do_ltrim == TOGGLED_ON)
-					// Trim all leading whitespace.
-					next_buf_length = ltrim(next_buf, next_buf_length);
-				// Escape each comma and percent sign in the body of the continuation section so that
-				// the later parsing stages will see them as literals.  Although, it's not always
-				// necessary to do this (e.g. commas in the last parameter of a command don't need to
-				// be escaped, nor do percent signs in hotstrings' auto-replace text), the settings
-				// are applied unconditionally because:
-				// 1) Determining when its safe to omit the translation would add a lot of code size and complexity.
-				// 2) The translation doesn't affect the functionality of the script since escaped literals
-				//    are always de-escaped at a later stage, at least for everything that's likely to matter
-				//    or that's reasonable to put into a continuation section (e.g. a hotstring's replacement text).
-				int replacement_count = 0;
-				if (literal_escapes) // literal_escapes must be done FIRST because otherwise it would also replace any accents added by other options.
-					replacement_count += StrReplace(next_buf, _T("`"), _T("``"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
-				if (literal_quotes)
-				{
-					replacement_count += StrReplace(next_buf, _T("'"), _T("`'"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
-					replacement_count += StrReplace(next_buf, _T("\""), _T("`\""), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
-				}
-				if (replacement_count) // Update the length if any actual replacements were done.
-					next_buf_length = _tcslen(next_buf);
-			} // Handling of a normal line within a continuation section.
-
-			// Must check the combined length only after anything that might have expanded the string above.
-			if (buf_length + next_buf_length + suffix_length >= LINE_SIZE)
-				return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, cp);
-
-			++continuation_line_count;
-			// Append this continuation line onto the primary line.
-			// The suffix for the previous line gets written immediately prior writing this next line,
-			// which allows the suffix to be omitted for the final line.  But if this is the first line,
-			// No suffix is written because there is no previous line in the continuation section.
-			// In addition, cp!=next_buf, this is the special line whose text occurs to the right of the
-			// continuation section's closing parenthesis. In this case too, the previous line doesn't
-			// get a suffix.
-			if (continuation_line_count > 1 && suffix_length && cp == next_buf)
-			{
-				tmemcpy(buf + buf_length, suffix, suffix_length + 1); // Append and include the zero terminator.
-				buf_length += suffix_length; // Must be done only after the old value of buf_length was used above.
-			}
-			if (next_buf_length)
-			{
-				tmemcpy(buf + buf_length, cp, next_buf_length + 1); // Append this line to prev. and include the zero terminator.
-				buf_length += next_buf_length; // Must be done only after the old value of buf_length was used above.
-			}
-		} // for() each sub-line (continued line) that composes this line.
+		if (!GetLineContinuation(fp, buf, buf_length, next_buf, next_buf_length
+			, phys_line_number, has_continuation_section))
+			return FAIL;
 
 process_completed_line:
 		// buf_length can't be -1 (though next_buf_length can) because outer loop's condition prevents it:
@@ -2925,7 +2502,14 @@ examine_line:
 					buf_length += next_buf_length;
 					buf[buf_length] = '\0';
 				}
-				next_buf_length = GetLine(next_buf, LINE_SIZE - 1, 0, false, fp);
+				LPTSTR addition_to_balance = buf + buf_length;
+				// This serves to get the next line into next_buf but also handle any comment sections
+				// or (when balance <= 0) continuation lines which follow the line just appended:
+				if (!GetLineContinuation(fp, buf, buf_length, next_buf, next_buf_length
+					, phys_line_number, has_continuation_section, balance))
+					return FAIL;
+				if (*addition_to_balance) // buf was extended via line continuation (only possible when balance <= 0).
+					balance = BalanceExpr(addition_to_balance, balance); // Adjust balance based on what was appended.
 			}
 		}
 
@@ -3114,6 +2698,444 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 
 	// This is not required, it is called by the destructor.
 	// fp->Close();
+	return OK;
+}
+
+
+
+ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_length, LPTSTR next_buf, size_t &next_buf_length
+	, LineNumberType &phys_line_number, bool &has_continuation_section, int expr_balance)
+{
+	bool do_rtrim, literal_escapes, literal_quotes;
+	#define CONTINUATION_SECTION_WITHOUT_COMMENTS 1 // MUST BE 1 because it's the default set by anything that's boolean-true.
+	#define CONTINUATION_SECTION_WITH_COMMENTS    2 // Zero means "not in a continuation section".
+	int in_continuation_section, indent_level;
+	ToggleValueType do_ltrim;
+	TCHAR indent_char, suffix[16];
+	size_t suffix_length;
+
+	LPTSTR next_option, option_end, cp, hotkey_flag;
+	TCHAR orig_char;
+	bool in_comment_section, is_continuation_line, hotstring_options_all_valid;
+	int continuation_line_count;
+
+	// Read in the next line (if that next line is the start of a continuation section, append
+	// it to the line currently being processed:
+	for (has_continuation_section = in_comment_section = false, in_continuation_section = 0;;)
+	{
+		// This increment relies on the fact that this loop always has at least one iteration:
+		++phys_line_number; // Tracks phys. line number in *this* file (independent of any recursion caused by #Include).
+		next_buf_length = GetLine(next_buf, LINE_SIZE - 1, in_continuation_section, in_comment_section, fp);
+		if (!in_continuation_section)
+		{
+			// v2: The comment-end is allowed at the end of the line (vs. just the start) to reduce
+			// confusion for users expecting C-like behaviour, but unlike v1.1, the end flag is not
+			// allowed outside of comments, since allowing and ignoring */ at the end of any line
+			// seems to have risk of ambiguity.
+			// If this policy is changed to ignore an orphan */, remember to allow */:: as a hotkey.
+
+			// Check for /* first in case */ appears on the same line.  There's no need to check
+			// in_comment_section since this has the same effect either way (and it's usually false).
+			if (!_tcsncmp(next_buf, _T("/*"), 2))
+			{
+				in_comment_section = true;
+				// But don't "continue;" since there might be a */ on this same line.
+			}
+
+			if (in_comment_section)
+			{
+				if (next_buf_length == -1) // Compare directly to -1 since length is unsigned.
+					break; // By design, it's not an error.  This allows "/*" to be used to comment out the bottommost portion of the script without needing a matching "*/".
+
+				if (!_tcsncmp(next_buf, _T("*/"), 2))
+				{
+					in_comment_section = false;
+					next_buf_length -= 2; // Adjust for removal of */ from the beginning of the string.
+					tmemmove(next_buf, next_buf + 2, next_buf_length + 1);  // +1 to include the string terminator.
+					next_buf_length = ltrim(next_buf, next_buf_length); // Get rid of any whitespace that was between the comment-end and remaining text.
+					if (!*next_buf) // The rest of the line is empty, so it was just a naked comment-end.
+						continue;
+				}
+				else
+				{
+					// This entire line is part of the comment, but there might be */ at the end of the line.
+					if (next_buf_length >= 2 && !_tcscmp(next_buf + (next_buf_length - 2), _T("*/")))
+						in_comment_section = false;
+					continue;
+				}
+			}
+
+			if (expr_balance > 0) // Inside a continuation expression.
+				// Caller will combine lines, so no need to check for continuation operators.
+				// By design, '(' is a normal expression symbol here, not a continuation section.
+				break;
+
+			// v1.0.38.06: The following has been fixed to exclude "(:" and "(::".  These should be
+			// labels/hotkeys, not the start of a continuation section.  In addition, a line that starts
+			// with '(' but that ends with ':' should be treated as a label because labels such as
+			// "(label):" are far more common than something obscure like a continuation section whose
+			// join character is colon, namely "(Join:".
+			if (   !(in_continuation_section = (next_buf_length != -1 && *next_buf == '(' // Compare directly to -1 since length is unsigned.
+				&& next_buf[1] != ':' && next_buf[next_buf_length - 1] != ':'))   ) // Relies on short-circuit boolean order.
+			{
+				if (next_buf_length == -1)  // Compare directly to -1 since length is unsigned.
+					break;
+				if (!next_buf_length)
+					// It is permitted to have blank lines and comment lines in between the line above
+					// and any continuation section/line that might come after the end of the
+					// comment/blank lines:
+					continue;
+				// SINCE ABOVE DIDN'T BREAK/CONTINUE, NEXT_BUF IS NON-BLANK.
+				if (next_buf[next_buf_length - 1] == ':' && *next_buf != ',')
+					// With the exception of lines starting with a comma, the last character of any
+					// legitimate continuation line can't be a colon because expressions can't end
+					// in a colon. The only exception is the ternary operator's colon, but that is
+					// very rare because it requires the line after it also be a continuation line
+					// or section, which is unusual to say the least -- so much so that it might be
+					// too obscure to even document as a known limitation.  Anyway, by excluding lines
+					// that end with a colon from consideration ambiguity with normal labels
+					// and non-single-line hotkeys and hotstrings is eliminated.
+					break;
+
+				is_continuation_line = false; // Set default.
+				switch(ctoupper(*next_buf)) // Above has ensured *next_buf != '\0' (toupper might have problems with '\0').
+				{
+				case 'A': // AND
+				case 'O': // OR
+				case 'I': // IS, IN
+				case 'C': // CONTAINS (future use)
+					// See comments in the default section further below.
+					cp = find_identifier_end(next_buf);
+					// Although (x)and(y) is technically valid, it's quite unusual.  The space or tab requirement is kept
+					// as the simplest way to allow method definitions to use these as names (when called, the leading dot
+					// ensures there is no ambiguity).  Note that checking if we're inside a class definition is not
+					// sufficient because multi-line expressions are valid there too (i.e. for var initializers).
+					// This also rules out valid double-derefs such as and%suffix% := 1.
+					if (IS_SPACE_OR_TAB(*cp) && ConvertWordOperator(next_buf, cp - next_buf))
+					{
+						// Unlike in v1, there's no check for an operator after AND/OR (such as AND := 1) because they
+						// should never be used as variable names.
+						is_continuation_line = true; // Override the default set earlier.
+					}
+					break;
+				default:
+					// Desired line continuation operators:
+					// Pretty much everything, namely:
+					// +, -, *, /, //, **, <<, >>, &, |, ^, <, >, <=, >=, =, ==, <>, !=, :=, +=, -=, /=, *=, ?, :
+					// And also the following remaining unaries (i.e. those that aren't also binaries): !, ~
+					// The first line below checks for ::, ++, and --.  Those can't be continuation lines because:
+					// "::" isn't a valid operator (this also helps performance if there are many hotstrings).
+					// ++ and -- are ambiguous with an isolated line containing ++Var or --Var (and besides,
+					// wanting to use ++ to continue an expression seems extremely rare, though if there's ever
+					// demand for it, might be able to look at what lies to the right of the operator's operand
+					// -- though that would produce inconsistent continuation behavior since ++Var itself still
+					// could never be a continuation line due to ambiguity).
+					//
+					// The logic here isn't smart enough to differentiate between a leading ! or - that's
+					// meant as a continuation character and one that isn't. Even if it were, it would
+					// still be ambiguous in some cases because the author's intent isn't known; for example,
+					// the leading minus sign on the second line below is ambiguous, so will probably remain
+					// a continuation character in both v1 and v2:
+					//    x := y 
+					//    -z ? a:=1 : func() 
+					if ((*next_buf == ':' || *next_buf == '+' || *next_buf == '-') && next_buf[1] == *next_buf // See above.
+						// L31: '.' and '?' no longer require spaces; '.' without space is member-access (object) operator.
+						//|| (*next_buf == '.' || *next_buf == '?') && !IS_SPACE_OR_TAB_OR_NBSP(next_buf[1]) // The "." and "?" operators require a space or tab after them to be legitimate.  For ".", this is done in case period is ever a legal character in var names, such as struct support.  For "?", it's done for backward compatibility since variable names can contain question marks (though "?" by itself is not considered a variable in v1.0.46).
+							//&& next_buf[1] != '=' // But allow ".=" (and "?=" too for code simplicity), since ".=" is the concat-assign operator.
+						|| !_tcschr(CONTINUATION_LINE_SYMBOLS, *next_buf)) // Line doesn't start with a continuation char.
+						break; // Leave is_continuation_line set to its default of false.
+					// Some of the above checks must be done before the next ones.
+					if (   !(hotkey_flag = _tcsstr(next_buf, HOTKEY_FLAG))   ) // Without any "::", it can't be a hotkey or hotstring.
+					{
+						is_continuation_line = true; // Override the default set earlier.
+						break;
+					}
+					if (*next_buf == ':') // First char is ':', so it's more likely a hotstring than a hotkey.
+					{
+						// Remember that hotstrings can contain what *appear* to be quoted literal strings,
+						// so detecting whether a "::" is in a quoted/literal string in this case would
+						// be more complicated.  That's one reason this other method is used.
+						for (hotstring_options_all_valid = true, cp = next_buf + 1; *cp && *cp != ':'; ++cp)
+							if (!IS_HOTSTRING_OPTION(*cp)) // Not a perfect test, but eliminates most of what little remaining ambiguity exists between ':' as a continuation character vs. ':' as the start of a hotstring.  It especially eliminates the ":=" operator.
+							{
+								hotstring_options_all_valid = false;
+								break;
+							}
+						if (hotstring_options_all_valid && *cp == ':') // It's almost certainly a hotstring.
+							break; // So don't treat it as a continuation line.
+						//else it's not a hotstring but it might still be a hotkey such as ": & x::".
+						// So continue checking below.
+					}
+					// Since above didn't "break", this line isn't a hotstring but it is probably a hotkey
+					// because above already discovered that it contains "::" somewhere. So try to find out
+					// if there's anything that disqualifies this from being a hotkey, such as some
+					// expression line that contains a quoted/literal "::" (or a line starting with
+					// a comma that contains an unquoted-but-literal "::" such as for FileAppend).
+					if (*next_buf == ',')
+					{
+						cp = omit_leading_whitespace(next_buf + 1);
+						// The above has set cp to the position of the non-whitespace item to the right of
+						// this comma.  Normal (single-colon) labels can't contain commas, so only hotkey
+						// labels are sources of ambiguity.  In addition, normal labels and hotstrings have
+						// already been checked for, higher above.
+						if (   _tcsncmp(cp, HOTKEY_FLAG, HOTKEY_FLAG_LENGTH) // It's not a hotkey such as ",::action".
+							&& _tcsncmp(cp - 1, COMPOSITE_DELIMITER, COMPOSITE_DELIMITER_LENGTH)   ) // ...and it's not a hotkey such as ", & y::action".
+							is_continuation_line = true; // Override the default set earlier.
+					}
+					else // First symbol in line isn't a comma but some other operator symbol.
+					{
+						// Check if the "::" found earlier appears to be inside a quoted/literal string.
+						// This check is NOT done for a line beginning with a comma since such lines
+						// can contain an unquoted-but-literal "::".  In addition, this check is done this
+						// way to detect hotkeys such as the following:
+						//   +keyname:: (and other hotkey modifier symbols such as ! and ^)
+						//   +keyname1 & keyname2::
+						//   +^:: (i.e. a modifier symbol followed by something that is a hotkey modifier and/or a hotkey suffix and/or an expression operator).
+						//   <:: and &:: (i.e. hotkeys that are also expression-continuation symbols)
+						// By contrast, expressions that qualify as continuation lines can look like:
+						//   . "xxx::yyy"
+						//   + x . "xxx::yyy"
+						// In addition, hotkeys like the following should continue to be supported regardless
+						// of how things are done here:
+						//   ^"::
+						//   . & "::
+						// Finally, keep in mind that an expression-continuation line can start with two
+						// consecutive unary operators like !! or !*. It can also start with a double-symbol
+						// operator such as <=, <>, !=, &&, ||, //, **.
+						for (cp = next_buf; cp < hotkey_flag && *cp != '"' && *cp != '\''; ++cp);
+						if (cp == hotkey_flag) // No '"' found to left of "::", so this "::" appears to be a real hotkey flag rather than part of a literal string.
+							break; // Treat this line as a normal line vs. continuation line.
+						TCHAR in_quote = *cp;
+						for (cp = hotkey_flag + HOTKEY_FLAG_LENGTH; *cp && *cp != in_quote; ++cp);
+						if (*cp)
+						{
+							// Closing quote was found so "::" is probably inside a literal string of an
+							// expression (further checking seems unnecessary given the fairly extreme
+							// rarity of using '"' as a key in a hotkey definition).
+							is_continuation_line = true; // Override the default set earlier.
+						}
+						//else no closing '"' found, so this "::" probably belongs to something like +":: or
+						// . & "::.  Treat this line as a normal line vs. continuation line.
+					}
+				} // switch(toupper(*next_buf))
+
+				if (is_continuation_line)
+				{
+					if (buf_length + next_buf_length >= LINE_SIZE - 1) // -1 to account for the extra space added below.
+						return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, next_buf);
+					if (*next_buf != ',') // Insert space before expression operators so that built/combined expression works correctly (some operators like 'and', 'or' and concat currently require spaces on either side) and also for readability of ListLines.
+						buf[buf_length++] = ' ';
+					tmemcpy(buf + buf_length, next_buf, next_buf_length + 1); // Append this line to prev. and include the zero terminator.
+					buf_length += next_buf_length;
+					continue; // Check for yet more continuation lines after this one.
+				}
+				// Since above didn't continue, there is no continuation line or section.  In addition,
+				// since this line isn't blank, no further searching is needed.
+				break;
+			} // if (!in_continuation_section)
+
+			// OTHERWISE in_continuation_section != 0, so the above has found the first line of a new
+			// continuation section.
+			continuation_line_count = 0; // Reset for this new section.
+			// Otherwise, parse options.  First set the defaults, which can be individually overridden
+			// by any options actually present.  RTrim defaults to ON for two reasons:
+			// 1) Whitespace often winds up at the end of a lines in a text editor by accident.  In addition,
+			//    whitespace at the end of any consolidated/merged line will be rtrim'd anyway, since that's
+			//    how command parsing works.
+			// 2) Copy & paste from the forum and perhaps other web sites leaves a space at the end of each
+			//    line.  Although this behavior is probably site/browser-specific, it's a consideration.
+			do_ltrim = NEUTRAL; // Start off at neutral/smart-trim.
+			do_rtrim = true; // Seems best to rtrim even if this line is a hotstring, since it is very rare that trailing spaces and tabs would ever be desirable.
+			// For hotstrings (which could be detected via *buf==':'), it seems best not to default the
+			// escape character (`) to be literal because the ability to have `t `r and `n inside the
+			// hotstring continuation section seems more useful/common than the ability to use the
+			// accent character by itself literally (which seems quite rare in most languages).
+			literal_escapes = false;
+			literal_quotes = true; // This is the default even for non-expressions for simplicity (it should ultimately have no effect except inside an expression anyway).
+			// The default is linefeed because:
+			// 1) It's the best choice for hotstrings, for which the line continuation mechanism is well suited.
+			// 2) It's good for FileAppend.
+			// 3) Minor: Saves memory in large sections by being only one character instead of two.
+			suffix[0] = '\n';
+			suffix[1] = '\0';
+			suffix_length = 1;
+			for (next_option = omit_leading_whitespace(next_buf + 1); *next_option; next_option = omit_leading_whitespace(option_end))
+			{
+				// Find the end of this option item:
+				if (   !(option_end = StrChrAny(next_option, _T(" \t")))   )  // Space or tab.
+					option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
+
+				// Temporarily terminate to help eliminate ambiguity for words contained inside other words,
+				// such as hypothetical "Checked" inside of "CheckedGray":
+				orig_char = *option_end;
+				*option_end = '\0';
+
+				if (!_tcsnicmp(next_option, _T("Join"), 4))
+				{
+					next_option += 4;
+					tcslcpy(suffix, next_option, _countof(suffix)); // The word "Join" by itself will product an empty string, as documented.
+					// Passing true for the last parameter supports `s as the special escape character,
+					// which allows space to be used by itself and also at the beginning or end of a string
+					// containing other chars.
+					ConvertEscapeSequences(suffix, NULL);
+					suffix_length = _tcslen(suffix);
+				}
+				else if (!_tcsnicmp(next_option, _T("LTrim"), 5))
+					do_ltrim = (next_option[5] == '0') ? TOGGLED_OFF : TOGGLED_ON;  // i.e. Only an explicit zero will turn it off.
+				else if (!_tcsnicmp(next_option, _T("RTrim"), 5))
+					do_rtrim = (next_option[5] != '0');
+				else
+				{
+					// Fix for v1.0.36.01: Missing "else" above, because otherwise, the option Join`r`n
+					// would be processed above but also be processed again below, this time seeing the
+					// accent and thinking it's the signal to treat accents literally for the entire
+					// continuation section rather than as escape characters.
+					// Within this terminated option substring, allow the characters to be adjacent to
+					// improve usability:
+					for (; *next_option; ++next_option)
+					{
+						switch (*next_option)
+						{
+						case '`': // OBSOLETE because g_EscapeChar is now constant: Although not using g_EscapeChar (reduces code size/complexity), #EscapeChar is still supported by continuation sections; it's just that enabling the option uses '`' rather than the custom escape-char (one reason is that that custom escape-char might be ambiguous with future/past options if it's something weird like an alphabetic character).
+							literal_escapes = true;
+							break;
+						case 'C': // v1.0.45.03: For simplicity, anything that begins with "C" is enough to
+						case 'c': // identify it as the option to allow comments in the section.
+							in_continuation_section = CONTINUATION_SECTION_WITH_COMMENTS; // Override the default, which is boolean true (i.e. 1).
+							break;
+						case 'Q':
+						case 'q':
+							literal_quotes = false;
+							break;
+						case ')':
+							// Probably something like (x.y)[z](), which is not intended as the beginning of
+							// a continuation section.  Doing this only when ")" is found should remove the
+							// need to escape "(" in most real-world expressions while still allowing new
+							// options to be added later with minimal risk of breaking scripts.
+							in_continuation_section = 0;
+							*option_end = orig_char; // Undo the temporary termination.
+							return OK;
+						}
+					}
+				}
+
+				// If the item was not handled by the above, ignore it because it is unknown.
+				*option_end = orig_char; // Undo the temporary termination.
+			} // for() each item in option list
+
+			// "has_continuation_section" indicates whether the line we're about to construct is partially
+			// composed of continuation lines beneath it.  It's separate from continuation_line_count
+			// in case there is another continuation section immediately after/adjacent to the first one,
+			// but the second one doesn't have any lines in it:
+			has_continuation_section = true;
+
+			continue; // Now that the open-parenthesis of this continuation section has been processed, proceed to the next line.
+		} // if (!in_continuation_section)
+
+		// Since above didn't "continue", we're in the continuation section and thus next_buf contains
+		// either a line to be appended onto buf or the closing parenthesis of this continuation section.
+		if (next_buf_length == -1) // Compare directly to -1 since length is unsigned.
+			return ScriptError(ERR_MISSING_CLOSE_PAREN, buf);
+		if (next_buf_length == -2) // v1.0.45.03: Special flag that means "this is a commented-out line to be
+			continue;              // entirely omitted from the continuation section." Compare directly to -2 since length is unsigned.
+
+		if (*next_buf == ')')
+		{
+			in_continuation_section = 0; // Facilitates back-to-back continuation sections and proper incrementing of phys_line_number.
+			next_buf_length = rtrim(next_buf); // Done because GetLine() wouldn't have done it due to have told it we're in a continuation section.
+			// Anything that lies to the right of the close-parenthesis gets appended verbatim, with
+			// no trimming (for flexibility) and no options-driven translation:
+			cp = next_buf + 1;  // Use temp var cp to avoid altering next_buf (for maintainability).
+			--next_buf_length;  // This is now the length of cp, not next_buf.
+		}
+		else
+		{
+			cp = next_buf;
+			// The following are done in this block only because anything that comes after the closing
+			// parenthesis (i.e. the block above) is exempt from translations and custom trimming.
+			// This means that commas are always delimiters and percent signs are always deref symbols
+			// in the previous block.
+			if (do_rtrim)
+				next_buf_length = rtrim(next_buf, next_buf_length);
+			if (do_ltrim == NEUTRAL)
+			{
+				// Neither "LTrim" nor "LTrim0" was present in this section's options, so
+				// trim the continuation section based on the indentation of the first line.
+				if (!continuation_line_count)
+				{
+					// This is the first line.
+					indent_char = *next_buf;
+					if (IS_SPACE_OR_TAB(indent_char))
+					{
+						// For simplicity, require that only one type of indent char is used. Otherwise
+						// we'd have to provide some way to set the width (in spaces) of a tab char.
+						for (indent_level = 1; next_buf[indent_level] == indent_char; ++indent_level);
+						// Let the section below actually remove the indentation on this and subsequent lines.
+					}
+					else
+						indent_level = 0; // No trimming is to be done.
+				}
+				if (indent_level)
+				{
+					int i;
+					for (i = 0; i < indent_level && next_buf[i] == indent_char; ++i);
+					if (i == indent_level)
+					{
+						// LTrim exactly (indent_level) occurrences of (indent_char).
+						tmemmove(next_buf, next_buf + i, next_buf_length - i + 1); // +1 for null terminator.
+						next_buf_length -= i;
+					}
+					// Otherwise, the indentation on this line is inconsistent with the first line,
+					// so just leave it as is.
+				}
+			}
+			else if (do_ltrim == TOGGLED_ON)
+				// Trim all leading whitespace.
+				next_buf_length = ltrim(next_buf, next_buf_length);
+			// Escape each comma and percent sign in the body of the continuation section so that
+			// the later parsing stages will see them as literals.  Although, it's not always
+			// necessary to do this (e.g. commas in the last parameter of a command don't need to
+			// be escaped, nor do percent signs in hotstrings' auto-replace text), the settings
+			// are applied unconditionally because:
+			// 1) Determining when its safe to omit the translation would add a lot of code size and complexity.
+			// 2) The translation doesn't affect the functionality of the script since escaped literals
+			//    are always de-escaped at a later stage, at least for everything that's likely to matter
+			//    or that's reasonable to put into a continuation section (e.g. a hotstring's replacement text).
+			int replacement_count = 0;
+			if (literal_escapes) // literal_escapes must be done FIRST because otherwise it would also replace any accents added by other options.
+				replacement_count += StrReplace(next_buf, _T("`"), _T("``"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
+			if (literal_quotes)
+			{
+				replacement_count += StrReplace(next_buf, _T("'"), _T("`'"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
+				replacement_count += StrReplace(next_buf, _T("\""), _T("`\""), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
+			}
+			if (replacement_count) // Update the length if any actual replacements were done.
+				next_buf_length = _tcslen(next_buf);
+		} // Handling of a normal line within a continuation section.
+
+		// Must check the combined length only after anything that might have expanded the string above.
+		if (buf_length + next_buf_length + suffix_length >= LINE_SIZE)
+			return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, cp);
+
+		++continuation_line_count;
+		// Append this continuation line onto the primary line.
+		// The suffix for the previous line gets written immediately prior to writing this next line,
+		// which allows the suffix to be omitted for the final line.  But if this is the first line,
+		// No suffix is written because there is no previous line in the continuation section.
+		// In addition, if cp!=next_buf, this is the special line whose text occurs to the right of the
+		// continuation section's closing parenthesis. In this case too, the previous line doesn't
+		// get a suffix.
+		if (continuation_line_count > 1 && suffix_length && cp == next_buf)
+		{
+			tmemcpy(buf + buf_length, suffix, suffix_length + 1); // Append and include the zero terminator.
+			buf_length += suffix_length; // Must be done only after the old value of buf_length was used above.
+		}
+		if (next_buf_length)
+		{
+			tmemcpy(buf + buf_length, cp, next_buf_length + 1); // Append this line to prev. and include the zero terminator.
+			buf_length += next_buf_length; // Must be done only after the old value of buf_length was used above.
+		}
+	} // for() each sub-line (continued line) that composes this line.
 	return OK;
 }
 
