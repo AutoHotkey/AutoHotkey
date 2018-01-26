@@ -2368,6 +2368,12 @@ examine_line:
 		// Since above didn't "goto", it's not a label.
 		if (*buf == '#')
 		{
+			if (!_tcsnicmp(buf, _T("#If"), 2) && IS_SPACE_OR_TAB(buf[3]))
+			{
+				// Allow an expression enclosed in ()/[]/{} to span multiple lines:
+				if (!GetLineContExpr(fp, buf, buf_length, next_buf, next_buf_length, phys_line_number, has_continuation_section))
+					return FAIL;
+			}
 			saved_line_number = mCombinedLineNumber; // Backup in case IsDirective() processes an include file, which would change mCombinedLineNumber's value.
 			switch(IsDirective(buf)) // Note that it may alter the contents of buf, at least in the case of #IfWin.
 			{
