@@ -2794,11 +2794,6 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 				}
 			}
 
-			if (expr_balance > 0) // Inside a continuation expression.
-				// Caller will combine lines, so no need to check for continuation operators.
-				// By design, '(' is a normal expression symbol here, not a continuation section.
-				break;
-
 			// v1.0.38.06: The following has been fixed to exclude "(:" and "(::".  These should be
 			// labels/hotkeys, not the start of a continuation section.  In addition, a line that starts
 			// with '(' but that ends with ':' should be treated as a label because labels such as
@@ -2814,6 +2809,9 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 					// and any continuation section/line that might come after the end of the
 					// comment/blank lines:
 					continue;
+				if (expr_balance > 0) // Inside a continuation expression.
+					// Caller will combine lines, so no need to check for continuation operators.
+					break;
 				// SINCE ABOVE DIDN'T BREAK/CONTINUE, NEXT_BUF IS NON-BLANK.
 				if (next_buf[next_buf_length - 1] == ':' && *next_buf != ',')
 					// With the exception of lines starting with a comma, the last character of any
