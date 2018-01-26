@@ -2222,22 +2222,6 @@ examine_line:
 			// :c:abc::
 			if (!AddLabel(buf, true)) // Always add a label before adding the first line of its section.
 				return FAIL;
-			hook_action = 0; // Set default.
-			if (*hotkey_flag) // This hotkey's action is on the same line as its label.
-			{
-				if (!hotstring_start)
-					// Don't add the alt-tabs as a line, since it has no meaning as a script command.
-					// But do put in the Return regardless, in case this label is ever jumped to
-					// via Goto/Gosub:
-					if (   !(hook_action = Hotkey::ConvertAltTab(hotkey_flag, false))   )
-						if (!ParseAndAddLine(hotkey_flag, LINE_SIZE - int(hotkey_flag - buf)))
-							return FAIL;
-				// Also add a Return that's implicit for a single-line hotkey.  This is also
-				// done for auto-replace hotstrings in case gosub/goto is ever used to jump
-				// to their labels:
-				if (!AddLine(ACT_RETURN))
-					return FAIL;
-			}
 
 			if (hotstring_start)
 			{
@@ -2264,6 +2248,7 @@ examine_line:
 			}
 			else // It's a hotkey vs. hotstring.
 			{
+				hook_action = Hotkey::ConvertAltTab(hotkey_flag, false);
 				if (hk = Hotkey::FindHotkeyByTrueNature(buf, suffix_has_tilde, hook_is_mandatory)) // Parent hotkey found.  Add a child/variant hotkey for it.
 				{
 					if (hook_action) // suffix_has_tilde has always been ignored for these types (alt-tab hotkeys).
@@ -2315,6 +2300,27 @@ examine_line:
 							MsgBox(msg_text);
 						}
 					}
+			}
+			if (*hotkey_flag) // This hotkey's/hotstring's action is on the same line as its label.
+			{
+				// Don't add AltTab or similar as a line, since it has no meaning as a script command.
+				// But do put in the Return regardless, in case this label is ever jumped to via Goto/Gosub:
+				if (!hotstring_start && !hook_action)
+				{
+					// Remove the hotkey from buf.
+					buf_length -= hotkey_flag - buf;
+					tmemmove(buf, hotkey_flag, buf_length);
+					buf[buf_length] = '\0';
+					// Before adding the line, apply expression line-continuation logic, which hasn't
+					// been applied yet because hotkey labels can contain unbalanced ()[]{}:
+					if (   !GetLineContExpr(fp, buf, buf_length, next_buf, next_buf_length, phys_line_number, has_continuation_section)
+						|| !ParseAndAddLine(buf, LINE_SIZE)   )
+						return FAIL;
+				}
+				// Also add the Return that's implicit for a single-line hotkey.  This is also done for
+				// auto-replace hotstrings in case gosub/goto is ever used to jump to their labels:
+				if (!AddLine(ACT_RETURN))
+					return FAIL;
 			}
 			goto continue_main_loop; // In lieu of "continue", for performance.
 		} // if (is_label = ...)
