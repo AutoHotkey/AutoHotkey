@@ -861,7 +861,7 @@ public:
 	// The characters common to both EXPR_TELLTALES (obsolete) and EXPR_OPERAND_TERMINATORS:
 	#define EXPR_COMMON _T(" \t") EXPR_CORE _T("*&~!()[]{}")  // Space and Tab are included at the beginning for performance.  L31: Added [] for array-like syntax.
 	#define CONTINUATION_LINE_SYMBOLS EXPR_CORE _T(".+-*&!~") // v1.0.46.
-	#define EXPR_NOT_OTB EXPR_CORE CONTINUATION_LINE_SYMBOLS  // The set of characters which would indicate the following '{' is not OTB, since that would make the expression invalid.
+	#define EXPR_OPERATOR_SYMBOLS CONTINUATION_LINE_SYMBOLS  // The set of operator symbols which can't appear at the end of a valid expression, plus '+' and '-' (which are valid for ++/--).
 	// Characters that mark the end of an operand inside an expression.  Double-quote must not be included:
 	#define EXPR_OPERAND_TERMINATORS_EX_DOT EXPR_COMMON _T("%+-\n") // L31: Used in a few places where '.' needs special treatment.
 	#define EXPR_OPERAND_TERMINATORS EXPR_OPERAND_TERMINATORS_EX_DOT _T(".") // L31: Used in expressions where '.' is always an operator.
@@ -2664,6 +2664,8 @@ private:
 	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, bool aInBlockComment, TextStream *ts);
 	ResultType GetLineContinuation(TextStream *ts, LPTSTR aBuf, size_t &aBufLength, LPTSTR aNextBuf, size_t &aNextBufLength
 		, LineNumberType &aPhysLineNumber, bool &aHasContinuationSection, int aExprBalance = 0);
+	ResultType GetLineContExpr(TextStream *ts, LPTSTR aBuf, size_t &aBufLength, LPTSTR aNextBuf, size_t &aNextBufLength
+		, LineNumberType &aPhysLineNumber, bool &aHasContinuationSection);
 	ResultType IsDirective(LPTSTR aBuf);
 	ResultType ParseAndAddLine(LPTSTR aLineText, int aBufSize = 0, ActionTypeType aActionType = ACT_INVALID
 		, LPTSTR aLiteralMap = NULL, size_t aLiteralMapLength = 0);
@@ -2771,6 +2773,7 @@ public:
 	ResultType ResolveClasses();
 
 	static SymbolType ConvertWordOperator(LPCTSTR aWord, size_t aLength);
+	static bool EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker);
 
 	#define FINDVAR_DEFAULT  (VAR_LOCAL | VAR_GLOBAL)
 	#define FINDVAR_GLOBAL   VAR_GLOBAL

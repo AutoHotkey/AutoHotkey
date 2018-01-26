@@ -2449,69 +2449,10 @@ examine_line:
 
 		// Aside from goto/gosub/break/continue, anything not already handled above is either an expression
 		// or something with similar lexical requirements (i.e. balanced parentheses/brackets/braces).
-		// This section allows expressions to span multiple lines without an explicit continuation section
-		// by simply putting (/[/{ on one line and )/]/} on another.
-		int balance = BalanceExpr(buf, 0);
-		if (balance > 0 && next_buf_length != -1)
-		{
-			// Rule out something like "Gosub (" which is intended to execute "(::".
-			// Checking this only when balance > 0 should be better for average-case performance.
-			cp = find_identifier_end(buf);
-			orig_char = *cp;
-			if (IS_SPACE_OR_TAB(orig_char)) // By contrast, "Gosub(x)" takes an expression.
-			{
-				*cp = '\0';
-				if (ConvertActionType(buf, ACT_FIRST_JUMP, ACT_LAST_JUMP)) // Gosub, goto, break or continue (though only the first two are likely to be needed).
-					balance = 0;
-				*cp = orig_char;
-			}
-
-			while (balance > 0 && next_buf_length != -1)
-			{
-				// Before appending each line, check whether the last line ended with OTB '{'.
-				// It can't be OTB if balance > 1 since that would mean another unclosed (/[/{.
-				if (balance == 1 && buf[buf_length - 1] == '{' && buf_length > 3)
-				{
-					bool otb = true;
-					cp = omit_trailing_whitespace(buf, buf + buf_length - 2);
-					if (_tcschr(EXPR_NOT_OTB, *cp) // Can't be OTB if it's preceded by an operator, such as ":= {".
-						&& (!(*cp == '+' || *cp == '-') || cp[-1] != *cp)) // Not ++ or --.  Relies on buf_length check above.
-						otb = false;
-					else
-					{
-						LPTSTR word;
-						for (word = cp; word > buf && IS_IDENTIFIER_CHAR(word[-1]); --word);
-						if (ConvertWordOperator(word, cp - word + 1))
-							otb = false;
-					}
-					// ACT_IS_LINE_PARENT(action_type) could be used to restrict this to action types where
-					// OTB is allowed, but the detection of action_type based solely on the first word is
-					// not 100% accurate, and even if it is correct for the start of the line, it would not
-					// be reliable for our purpose if this is else/try/finally with a same-line action.
-					// Omitting the action_type check also keeps the syntax more consistent.
-					if (otb)
-						break;
-				}
-				if (next_buf_length) // Skip empty/comment lines.
-				{
-					if (next_buf_length + buf_length + 1 >= LINE_SIZE)
-						return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG);
-					balance = BalanceExpr(next_buf, balance); // Adjust balance based on what we're about to append.
-					buf[buf_length++] = ' '; // To ensure two distinct tokens aren't joined together.  ' ' vs. '\n' because DefineFunc() currently doesn't permit '\n'.
-					tmemcpy(buf + buf_length, next_buf, next_buf_length); // Append next_buf to this line.
-					buf_length += next_buf_length;
-					buf[buf_length] = '\0';
-				}
-				LPTSTR addition_to_balance = buf + buf_length;
-				// This serves to get the next line into next_buf but also handle any comment sections
-				// or (when balance <= 0) continuation lines which follow the line just appended:
-				if (!GetLineContinuation(fp, buf, buf_length, next_buf, next_buf_length
-					, phys_line_number, has_continuation_section, balance))
-					return FAIL;
-				if (*addition_to_balance) // buf was extended via line continuation (only possible when balance <= 0).
-					balance = BalanceExpr(addition_to_balance, balance); // Adjust balance based on what was appended.
-			}
-		}
+		// The following call allows any expression enclosed in ()/[]/{} to span multiple lines:
+		if (!GetLineContExpr(fp, buf, buf_length, next_buf, next_buf_length
+			, phys_line_number, has_continuation_section))
+			return FAIL;
 
 		if (IsFunction(buf, &buf_has_brace)) // If true, it's either a function definition or a function call.
 		{
@@ -2698,6 +2639,88 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 
 	// This is not required, it is called by the destructor.
 	// fp->Close();
+	return OK;
+}
+
+
+
+bool Script::EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker)
+// Returns true if aBuf_marker is the end of an operator (or whitespace following it), excluding ++ and --.
+{
+	LPTSTR cp = omit_trailing_whitespace(aBuf, aBuf_marker);
+	if (_tcschr(EXPR_OPERATOR_SYMBOLS, *cp) // It's a binary operator or ++ or --.
+		&& !((*cp == '+' || *cp == '-') && cp > aBuf && cp[-1] == *cp)) // Not ++ or --.
+		return true;
+	LPTSTR word;
+	for (word = cp; word > aBuf && IS_IDENTIFIER_CHAR(word[-1]); --word);
+	return ConvertWordOperator(word, cp - word + 1);
+}
+
+
+
+ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_length, LPTSTR next_buf, size_t &next_buf_length
+	, LineNumberType &phys_line_number, bool &has_continuation_section)
+// Determine whether buf has an unclosed (/[/{, and if so, complete the expression by
+// appending subsequent lines until the number of opening and closing symbols balances out.
+// Continuation lines and sections are assumed to have already been handled (and appended to
+// buf) by a previous call to GetLineContinuation(), but **only up to the unbalanced line**;
+// any subsequent contination is handled by this function.
+{
+	TCHAR orig_char, *cp;
+
+	if (next_buf_length == -1) // End of file.
+		return OK;
+
+	int balance = BalanceExpr(buf, 0);
+	if (balance <= 0) // Balanced or invalid.
+		return OK;
+
+	// Rule out something like "Gosub (" which is intended to execute "(::".
+	// Checking this only when balance > 0 should be better for average-case performance.
+	cp = find_identifier_end(buf);
+	orig_char = *cp;
+	if (IS_SPACE_OR_TAB(orig_char)) // By contrast, "Gosub(x)" takes an expression.
+	{
+		*cp = '\0';
+		if (ConvertActionType(buf, ACT_FIRST_JUMP, ACT_LAST_JUMP)) // Gosub, goto, break or continue (though only the first two are likely to be needed).
+			balance = 0;
+		*cp = orig_char;
+	}
+
+	do
+	{
+		// Before appending each line, check whether the last line ended with OTB '{'.
+		// It can't be OTB if balance > 1 since that would mean another unclosed (/[/{.
+		if (balance == 1 && buf[buf_length - 1] == '{' && buf_length > 3)
+		{
+			// ACT_IS_LINE_PARENT(action_type) could be used to restrict this to action types where
+			// OTB is allowed, but the detection of action_type based solely on the first word is
+			// not 100% accurate, and even if it is correct for the start of the line, it would not
+			// be reliable for our purpose if this is else/try/finally with a same-line action.
+			// Omitting the action_type check also keeps the syntax more consistent.
+			if (!EndsWithOperator(buf, buf + (buf_length - 2))) // Can't be OTB if it's preceded by an operator, such as ":= {".
+				break;
+		}
+		if (next_buf_length) // Skip empty/comment lines.
+		{
+			if (next_buf_length + buf_length + 1 >= LINE_SIZE)
+				return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG);
+			balance = BalanceExpr(next_buf, balance); // Adjust balance based on what we're about to append.
+			buf[buf_length++] = ' '; // To ensure two distinct tokens aren't joined together.  ' ' vs. '\n' because DefineFunc() currently doesn't permit '\n'.
+			tmemcpy(buf + buf_length, next_buf, next_buf_length); // Append next_buf to this line.
+			buf_length += next_buf_length;
+			buf[buf_length] = '\0';
+		}
+		LPTSTR addition_to_balance = buf + buf_length;
+		// This serves to get the next line into next_buf but also handle any comment sections
+		// or (when balance <= 0) continuation lines/sections which follow the line just appended:
+		if (!GetLineContinuation(fp, buf, buf_length, next_buf, next_buf_length
+			, phys_line_number, has_continuation_section, balance))
+			return FAIL;
+		if (*addition_to_balance) // buf was extended via line continuation (only possible when balance <= 0).
+			balance = BalanceExpr(addition_to_balance, balance); // Adjust balance based on what was appended.
+	} // do
+	while (balance > 0 && next_buf_length != -1);
 	return OK;
 }
 
