@@ -2743,8 +2743,8 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 	TCHAR indent_char, suffix[16];
 	size_t suffix_length;
 
-	LPTSTR next_option, option_end, cp, hotkey_flag;
-	TCHAR orig_char;
+	LPTSTR next_option, option_end, cp, hotkey_flag, quote_marker;
+	TCHAR orig_char, quote_char;
 	bool in_comment_section, is_continuation_line, hotstring_options_all_valid;
 	int continuation_line_count;
 
@@ -2978,7 +2978,7 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 			// hotstring continuation section seems more useful/common than the ability to use the
 			// accent character by itself literally (which seems quite rare in most languages).
 			literal_escapes = false;
-			literal_quotes = true; // This is the default even for non-expressions for simplicity (it should ultimately have no effect except inside an expression anyway).
+			//literal_quotes is set below based on the contents of buf.
 			// The default is linefeed because:
 			// 1) It's the best choice for hotstrings, for which the line continuation mechanism is well suited.
 			// 2) It's good for FileAppend.
@@ -3030,10 +3030,6 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 						case 'c': // identify it as the option to allow comments in the section.
 							in_continuation_section = CONTINUATION_SECTION_WITH_COMMENTS; // Override the default, which is boolean true (i.e. 1).
 							break;
-						case 'Q':
-						case 'q':
-							literal_quotes = false;
-							break;
 						case ')':
 							// Probably something like (x.y)[z](), which is not intended as the beginning of
 							// a continuation section.  Doing this only when ")" is found should remove the
@@ -3049,6 +3045,36 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 				// If the item was not handled by the above, ignore it because it is unknown.
 				*option_end = orig_char; // Undo the temporary termination.
 			} // for() each item in option list
+
+			// This section determines the default value for literal_quotes based on whether this
+			// continuation section appears to start inside a quoted string.  This is done because
+			// unconditionally defaulting to true would make it possible to start a quoted string
+			// but impossible to end it within the same section, which seems counter-intuitive.
+			// It's okay if buf contains something other than an expression, because in that case
+			// it won't matter whether the quote marks are escaped or not.
+			if (!has_continuation_section)
+			{
+				quote_marker = buf; // Init.
+				quote_char = 0;
+			}
+			for (;;)
+			{
+				if (quote_char) // quote_marker is within a string.
+				{
+					quote_marker += FindTextDelim(quote_marker, quote_char);
+					if (!*quote_marker) // No end quote yet.
+						break;
+					++quote_marker; // Skip the end quote.
+				}
+				for ( ; *quote_marker && *quote_marker != '"' && *quote_marker != '\''; ++quote_marker);
+				if (  !(quote_char = *quote_marker)  )
+					break;
+				++quote_marker; // Continue scanning after the start quote.
+			}
+			literal_quotes = quote_char != 0; // true if this section starts inside a quoted string.
+			// quote_marker and quote_char are retained between iterations of the outer loop to ensure
+			// correct detection when there are multiple continuation sections, and to avoid re-scanning
+			// the entire buf for each new section.
 
 			// "has_continuation_section" indicates whether the line we're about to construct is partially
 			// composed of continuation lines beneath it.  It's separate from continuation_line_count
