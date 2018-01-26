@@ -3110,6 +3110,23 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 		else
 		{
 			cp = next_buf;
+			// To support continuation sections following a naked action name such as "return", add a space.
+			// Checking for an action name at the start of buf would be insufficient due to try/else/finally,
+			// hotkeys with same-line action, etc. so perform only very basic checking.  This probably also
+			// benefits other expressions, such as if buf ends with a variable name.  The quote_char check
+			// prevents unwanted spaces in quoted strings at the expense of possible inconsistency in some
+			// vanishingly rare cases, such as:
+			//  - Auto-replace hotstring with an odd number of quote marks on the first line, a word char
+			//    at the end of the first line *and* a continuation section following it.
+			//  - Other very unconventional cases, such as labels or directives which also meet the above
+			//    criteria (it's very unlikely for continuation sections to be used with these at all).
+			if (!continuation_line_count && !quote_char // First content line and we're not in a quoted string.
+				&& buf_length && IS_IDENTIFIER_CHAR(buf[buf_length - 1]) // buf ends with a possible var/action name.
+				&& buf_length + 1 < LINE_SIZE)
+			{
+				buf[buf_length++] = ' ';
+				buf[buf_length] = '\0';
+			}
 			// The following are done in this block only because anything that comes after the closing
 			// parenthesis (i.e. the block above) is exempt from translations and custom trimming.
 			// This means that commas are always delimiters and percent signs are always deref symbols
