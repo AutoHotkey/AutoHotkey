@@ -3326,7 +3326,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 // not be unconditionally ignored, just because it starts with '#', since it is a valid hotkey:
 // #y::run, notepad
 {
-	TCHAR end_flags[] = {' ', '\t', g_delimiter, '\0'}; // '\0' must be last.
+	TCHAR end_flags[] = {' ', '\t', '\0'}; // '\0' must be last.
 	LPTSTR directive_end, parameter;
 	if (   !(directive_end = StrChrAny(aBuf, end_flags))   )
 	{
