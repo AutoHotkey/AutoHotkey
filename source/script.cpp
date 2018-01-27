@@ -2459,6 +2459,18 @@ examine_line:
 			return ScriptError(ERR_INVALID_LINE_IN_PROPERTY_DEF, buf);
 		}
 
+		// Handle this first so that GetLineContExpr() doesn't need to detect it for OTB exclusion:
+		if (LPTSTR class_name = IsClassDefinition(buf))
+		{
+			if (g->CurrentFunc)
+				return ScriptError(_T("Functions cannot contain classes."), buf);
+			if (!ClassHasOpenBrace(buf, buf_length, next_buf, next_buf_length))
+				return ScriptError(ERR_MISSING_OPEN_BRACE, buf);
+			if (!DefineClass(class_name))
+				return FAIL;
+			goto continue_main_loop;
+		}
+
 		// Aside from goto/gosub/break/continue, anything not already handled above is either an expression
 		// or something with similar lexical requirements (i.e. balanced parentheses/brackets/braces).
 		// The following call allows any expression enclosed in ()/[]/{} to span multiple lines:
@@ -2481,19 +2493,7 @@ examine_line:
 				goto continue_main_loop;
 			}
 		}
-		else if (g->CurrentFunc)
-		{
-			// Skip the next two sections.
-		}
-		else if (LPTSTR class_name = IsClassDefinition(buf))
-		{
-			if (!ClassHasOpenBrace(buf, buf_length, next_buf, next_buf_length))
-				return ScriptError(ERR_MISSING_OPEN_BRACE, buf);
-			if (!DefineClass(class_name))
-				return FAIL;
-			goto continue_main_loop;
-		}
-		else if (mClassObjectCount) // Inside a class definition (and not inside a method, checked above).
+		else if (mClassObjectCount && !g->CurrentFunc) // Inside a class definition (and not inside a method).
 		{
 			// Check for assignment first, in case of something like "Static := 123".
 			for (cp = buf; IS_IDENTIFIER_CHAR(*cp) || *cp == '.'; ++cp);
@@ -2657,9 +2657,9 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 
 
 bool Script::EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker)
-// Returns true if aBuf_marker is the end of an operator (or whitespace following it), excluding ++ and --.
+// Returns true if aBuf_marker is the end of an operator, excluding ++ and --.
 {
-	LPTSTR cp = omit_trailing_whitespace(aBuf, aBuf_marker);
+	LPTSTR cp = aBuf_marker; // Caller has omitted trailing whitespace.
 	if (_tcschr(EXPR_OPERATOR_SYMBOLS, *cp) // It's a binary operator or ++ or --.
 		&& !((*cp == '+' || *cp == '-') && cp > aBuf && cp[-1] == *cp)) // Not ++ or --.
 		return true;
@@ -2678,7 +2678,8 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 // buf) by a previous call to GetLineContinuation(), but **only up to the unbalanced line**;
 // any subsequent contination is handled by this function.
 {
-	TCHAR orig_char, *cp;
+	TCHAR orig_char, *action_start, *action_end;
+	ActionTypeType action_type;
 
 	if (next_buf_length == -1) // End of file.
 		return OK;
@@ -2687,16 +2688,35 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 	if (balance <= 0) // Balanced or invalid.
 		return OK;
 
-	// Rule out something like "Gosub (" which is intended to execute "(::".
-	// Checking this only when balance > 0 should be better for average-case performance.
-	cp = find_identifier_end(buf);
-	orig_char = *cp;
-	if (IS_SPACE_OR_TAB(orig_char)) // By contrast, "Gosub(x)" takes an expression.
+	// Perform rough checking for this line's action type.
+	for (action_start = buf; ; )
 	{
-		*cp = '\0';
-		if (ConvertActionType(buf, ACT_FIRST_JUMP, ACT_LAST_JUMP)) // Gosub, goto, break or continue (though only the first two are likely to be needed).
-			balance = 0;
-		*cp = orig_char;
+		action_end = find_identifier_end(action_start);
+		if (action_end > action_start)
+		{
+			orig_char = *action_end;
+			// This relies on names of control flow statements being invalid for use as var/func names:
+			if (IS_SPACE_OR_TAB(orig_char) || orig_char == '(')
+			{
+				*action_end = '\0';
+				action_type = ConvertActionType(action_start, ACT_FIRST_NAMED_ACTION, ACT_FIRST_COMMAND);
+				*action_end = orig_char;
+
+				if (action_type == ACT_ELSE || action_type == ACT_TRY || action_type == ACT_FINALLY)
+				{
+					action_start = omit_leading_whitespace(action_end);
+					if (*action_start == '{')
+						return OK; // This is unconditionally a block-begin, not an expression.
+					continue; // Parse any same-line action instead.
+				}
+
+				// Rule out something like "Gosub (" which is intended to execute "(::".
+				if (action_type >= ACT_FIRST_JUMP && action_type <= ACT_LAST_JUMP // Gosub, goto, break or continue (though only the first two are likely to be needed).
+					&& orig_char != '(') // Not "Gosub(x)", which takes an expression.
+					return OK;
+			}
+		}
+		break;
 	}
 
 	do
@@ -2705,12 +2725,24 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 		// It can't be OTB if balance > 1 since that would mean another unclosed (/[/{.
 		if (balance == 1 && buf[buf_length - 1] == '{' && buf_length > 3)
 		{
-			// ACT_IS_LINE_PARENT(action_type) could be used to restrict this to action types where
-			// OTB is allowed, but the detection of action_type based solely on the first word is
-			// not 100% accurate, and even if it is correct for the start of the line, it would not
-			// be reliable for our purpose if this is else/try/finally with a same-line action.
-			// Omitting the action_type check also keeps the syntax more consistent.
-			if (!EndsWithOperator(buf, buf + (buf_length - 2))) // Can't be OTB if it's preceded by an operator, such as ":= {".
+			// Some common OTB constructs:
+			//   myfn() {
+			//   if (cond) {
+			//   while (cond) {
+			//   loop {
+			//   if cond {
+			// For the first few cases, *cp == ')' is sufficient.  There is no need to verify
+			// that this is a function definition because ") {" is not valid in an expression
+			// (it is reserved for future use with anonymous functions).  Similarly, "] {" is
+			// either a property definition or invalid.
+			// For other cases, checking the action_type is the only way to resolve the ambiguity
+			// between "loop {" and "return {".  Since valid OTB can't be preceded by an operator
+			// such as ":= {", also check that case to improve flexibility.
+			LPTSTR cp = omit_trailing_whitespace(buf, buf + (buf_length - 2));
+			if (   *cp == ')' // Function/method definition or reserved.
+				|| *cp == ']' // Property definition or reserved.
+				|| ACT_IS_LINE_PARENT(action_type) && !EndsWithOperator(buf, cp)
+				|| mClassObjectCount && !g->CurrentFunc && cp < action_end   ) // "Property {" (get/set was already handled by caller).
 				break;
 		}
 		if (next_buf_length) // Skip empty/comment lines.
