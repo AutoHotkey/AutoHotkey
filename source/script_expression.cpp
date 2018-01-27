@@ -2150,14 +2150,12 @@ VarSizeType Line::GetExpandedArgSize(Var *aArgVar[])
 		{
 			// Pre-resolved output vars should never be included in the space calculation,
 			// but we do need to store the var reference in aArgVar for our caller.
-			ASSERT(!*this_arg.text);
 			aArgVar[i] = VAR(this_arg);
 			continue;
 		}
 
 		if (this_arg.type == ARG_TYPE_INPUT_VAR)
 		{
-			ASSERT(!*this_arg.text);
 			the_only_var_of_this_arg = VAR(this_arg);
 			aArgVar[i] = the_only_var_of_this_arg; // For now, this is done regardless of whether it must be dereferenced.
 			if (   !(result = ArgMustBeDereferenced(the_only_var_of_this_arg, i, aArgVar))   )

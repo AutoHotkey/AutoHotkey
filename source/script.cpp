@@ -5002,11 +5002,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 							return ScriptError(ERR_VAR_IS_READONLY, this_aArg);
 						// Rather than removing this arg from the list altogether -- which would disturb
 						// the ordering and hurt the maintainability of the code -- the next best thing
-						// in terms of saving memory is to store an empty string in place of the arg's
-						// text if that arg is a pure variable (i.e. since the name of the variable is already
-						// stored in the Var object, we don't need to store it twice):
-						this_new_arg.text = _T("");
-						this_new_arg.length = 0;
+						// in terms of saving memory is to store Var::mName in place of the arg's text
+						// if that arg is a pure variable (i.e. since the name of the variable is already
+						// stored in persistent memory, we don't need to allocate more memory):
+						this_new_arg.text = target_var->mName;
+						this_new_arg.length = (ArgLengthType)_tcslen(target_var->mName);
 						this_new_arg.deref = (DerefType *)target_var;
 						continue;
 					}
@@ -9313,9 +9313,7 @@ end_of_infix_to_postfix:
 				if (aArg.type != ARG_TYPE_NORMAL)
 				{
 					aArg.deref = (DerefType *)only_token.var;
-					aArg.text = _T(""); // Mark it as a pre-resolved var.
-					aArg.length = 0;
-					aArg.is_expression = false;
+					aArg.is_expression = false; // Mark it as a pre-resolved var.
 					aArg.postfix = NULL;
 					return OK;
 				}
@@ -9349,8 +9347,6 @@ end_of_infix_to_postfix:
 				if (aArg.type != ARG_TYPE_OUTPUT_VAR)
 					aArg.type = ARG_TYPE_INPUT_VAR;
 				aArg.deref = (DerefType *)only_token.var;
-				aArg.text = _T(""); // Mark it as a pre-resolved var.
-				aArg.length = 0;
 				break;
 			case SYM_STRING:
 				// If this arg will be expanded normally, it needs a pointer to the final string,
@@ -11362,7 +11358,7 @@ ResultType Line::PerformAssign()
 		//		x := 1.0
 		//		x := "quoted literal string"
 		//		x := normal_var
-		ASSERT(!*mArg[0].text); // Pre-resolved.  Dynamic assignments are handled as ACT_EXPRESSION.
+		ASSERT(!mArg[0].is_expression); // Pre-resolved.  Dynamic assignments are handled as ACT_EXPRESSION.
 		output_var = VAR(mArg[0]);
 		return output_var->Assign(*mArg[1].postfix);
 	}
@@ -12067,7 +12063,7 @@ BIF_DECL(BIF_PerformAction)
 		// Insert an implicit output variable to receive the return value:
 		arg[0].type = ARG_TYPE_OUTPUT_VAR;
 		arg[0].deref = (DerefType *)(output_var = &stack_var);
-		arg[0].text = _T(""); // Mark it as a pre-resolved var.
+		arg[0].text = _T(""); // text not needed.
 		//arg[0].length = 0;
 		arg[0].is_expression = false;
 		--aParam; // i.e. make aParam[1] the first parameter.
@@ -12091,7 +12087,7 @@ BIF_DECL(BIF_PerformAction)
 			else
 				arg[i].type = ARG_TYPE_INPUT_VAR;
 			arg[i].deref = (DerefType *)aParam[i]->var;
-			arg[i].text = _T(""); // Mark it as a pre-resolved var.
+			arg[i].text = _T(""); // text not needed.
 			//arg[i].length = 0;
 			continue;
 		}
@@ -12387,13 +12383,11 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 	if (mActionType == ACT_ASSIGNEXPR || mActionType == ACT_EXPRESSION || mActionType == ACT_IF)
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s%s%s%s")
 			, mActionType == ACT_IF ? _T("if ") : _T("")
-			, *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName  // i.e. don't resolve dynamic variable names.
+			, mArg[0].text
 			, mActionType == ACT_ASSIGNEXPR ? _T(" := ") : _T(""), RAW_ARG2);
 	else if (mActionType == ACT_FOR)
-		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("For %s,%s in %s")
-			, *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName	  // i.e. don't resolve dynamic variable names.
-			, *mArg[1].text || !VAR(mArg[1]) ? mArg[1].text : VAR(mArg[1])->mName  // can be omitted.
-			, mArg[2].text);
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("For %s%s%s in %s")
+			, mArg[0].text, *mArg[1].text ? _T(",") : _T(""), mArg[1].text, mArg[2].text);
 	else
 	{
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), g_act[mActionType].Name);
@@ -12407,7 +12401,7 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 			// and thus there's no need to "resolve" dynamic variables here (e.g. array%i%).
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, quote ? _T("%s \"%s\"") : _T("%s %s")
 				, i == 0 ? _T("") : _T(",")
-				, (mArg[i].type != ARG_TYPE_NORMAL && !*mArg[i].text) ? VAR(mArg[i])->mName : mArg[i].text);
+				, mArg[i].text);
 		}
 	}
 	if (aElapsed && !aLineWasResumed)
@@ -13109,7 +13103,7 @@ void Script::CheckForClassOverwrite()
 			ArgStruct &arg = line->mArg[a];
 			if (arg.type == ARG_TYPE_OUTPUT_VAR)
 			{
-				if (!*arg.text) // The arg's variable is not one that needs to be dynamically resolved.
+				if (!arg.is_expression) // The arg's variable is not one that needs to be dynamically resolved.
 				{
 					Var *target_var = VAR(arg);
 					if (target_var->HasObject()) // At this stage, all variables are empty except class variables.
