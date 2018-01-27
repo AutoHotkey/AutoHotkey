@@ -799,7 +799,7 @@ struct HotkeyCriterion
 		Line *ExprLine;
 		IObject *Callback;
 	};
-	HotkeyCriterion *NextCriterion;
+	HotkeyCriterion *NextCriterion, *NextExpr;
 
 	ResultType Eval(LPTSTR aHotkeyName); // For HOT_IF_EXPR and HOT_IF_CALLBACK.
 };

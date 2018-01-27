@@ -66,16 +66,23 @@ HWND HotCriterionAllowsFiring(HotkeyCriterion *aCriterion, LPTSTR aHotkeyName)
 
 
 ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText)
-// Allocate memory for aWinTitle/Text (if necessary) and update g->HotWinTitle/Text to point to it.
 // Returns FAIL if memory couldn't be allocated, or OK otherwise.
 // This is a global function because it's used by both hotkeys and hotstrings.
 {
-	// Caller relies on this check:
-	if (!(*aWinTitle || *aWinText)) // In case of something weird but legit like: #IfWinActive, ,
-	{
-		g->HotCriterion = NULL;
-		return OK;
-	}
+	HotkeyCriterion *cp;
+	if (  !(cp = FindHotkeyCriterion(aType, aWinTitle, aWinText))
+		&& !(cp = AddHotkeyCriterion(aType, aWinTitle, aWinText))  )
+		return FAIL;
+	g->HotCriterion = cp;
+	return OK;
+}
+
+
+HotkeyCriterion *FindHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText)
+{
+	// Caller may rely on this check:
+	if (!(*aWinTitle || *aWinText))
+		return NULL;
 
 	// Storing combinations of WinTitle+WinText doesn't have as good a best-case memory savings as
 	// have a separate linked list for Title vs. Text.  But it does save code size, and in the vast
@@ -83,37 +90,40 @@ ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR a
 	HotkeyCriterion *cp;
 	for (cp = g_FirstHotCriterion; cp; cp = cp->NextCriterion)
 		if (cp->Type == aType && !_tcscmp(cp->WinTitle, aWinTitle) && !_tcscmp(cp->WinText, aWinText)) // Case insensitive.
-		{
-			// Match found, so point to the existing memory.
-			g->HotCriterion = cp;
-			return OK;
-		}
+			return cp;
 
-	// Since above didn't return, there is no existing entry in the linked list that matches this exact
-	// combination of Title and Text.  So create a new item and allocate memory for it.
+	return NULL;
+}
+
+
+HotkeyCriterion *AddHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText)
+{
+	HotkeyCriterion *cp;
 	if (   !(cp = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))   )
-		return FAIL;
+		return NULL;
 	cp->Type = aType;
 	cp->ExprLine = NULL;
-	cp->NextCriterion = NULL;
 	if (*aWinTitle)
 	{
 		if (   !(cp->WinTitle = SimpleHeap::Malloc(aWinTitle))   )
-			return FAIL;
+			return NULL;
 	}
 	else
 		cp->WinTitle = _T("");
 	if (*aWinText)
 	{
 		if (   !(cp->WinText = SimpleHeap::Malloc(aWinText))   )
-			return FAIL;
+			return NULL;
 	}
 	else
 		cp->WinText = _T("");
+	return AddHotkeyCriterion(cp);
+}
 
-	g->HotCriterion = cp;
 
-	// Update the linked list:
+HotkeyCriterion *AddHotkeyCriterion(HotkeyCriterion *cp)
+{
+	cp->NextCriterion = NULL;
 	if (!g_FirstHotCriterion)
 		g_FirstHotCriterion = g_LastHotCriterion = cp;
 	else
@@ -122,8 +132,7 @@ ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR a
 		// This must be done after the above:
 		g_LastHotCriterion = cp;
 	}
-
-	return OK;
+	return cp;
 }
 
 
@@ -132,9 +141,9 @@ HotkeyCriterion *AddHotkeyIfExpr()
 	HotkeyCriterion *cp;
 	if (   !(cp = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))   )
 		return NULL;
-	cp->NextCriterion = NULL;
+	cp->NextExpr = NULL;
 	if (g_LastHotExpr)
-		g_LastHotExpr->NextCriterion = cp;
+		g_LastHotExpr->NextExpr = cp;
 	else
 		g_FirstHotExpr = cp;
 	g_LastHotExpr = cp;
@@ -144,10 +153,50 @@ HotkeyCriterion *AddHotkeyIfExpr()
 
 HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr)
 {
-	for (HotkeyCriterion *cp = g_FirstHotExpr; cp; cp = cp->NextCriterion)
-		if (!_tcscmp(aExpr, cp->WinTitle)) // Case-sensitive since the expression might be.
+	for (HotkeyCriterion *cp = g_FirstHotExpr; cp; cp = cp->NextExpr)
+		if (!_tcscmp(aExpr, cp->ExprLine->mArg[0].text)) // Case-sensitive since the expression might be.
 			return cp;
 	return NULL;
+}
+
+
+void Script::PreparseHotkeyIfExpr(Line *aLine)
+// Optimize simple #If expressions into the more specific HOT_IF_ types so that they can be
+// evaluated by the hook directly, without synchronizing with the main thread.
+{
+	ExprTokenType *postfix = aLine->mArg[0].postfix;
+	int param_count = 0;
+	while (postfix[param_count].symbol == SYM_STRING)
+		++param_count;
+	if (postfix[param_count].symbol != SYM_FUNC)
+		return; // Not a function call, or it doesn't only accept strings.
+	if (param_count > 2)
+		return; // Too many parameters.
+	Func &fn = *postfix[param_count].deref->func;
+	if (!fn.mIsBuiltIn || fn.mBIF != &BIF_WinExistActive)
+		return; // Not WinExist() or WinActive().
+	bool invert = postfix[param_count+1].symbol == SYM_LOWNOT || postfix[param_count+1].symbol == SYM_HIGHNOT;
+	if (postfix[param_count+1+invert].symbol != SYM_INVALID)
+		return; // There's more to the expression.
+	// Otherwise, it was a single call to WinExist() or WinActive() where each parameter
+	// was exactly one literal string and the result was optionally inverted with "not" or "!".
+	HotkeyCriterion *hc = (HotkeyCriterion *)aLine->mAttribute;
+	// Change the parameters of this criterion.  FindHotkeyIfExpr() will still be able to
+	// find it based on the expression text since it only relies on ExprLine.
+	if (ctoupper(fn.mName[3]) == 'A')
+		hc->Type = invert ? HOT_IF_NOT_ACTIVE : HOT_IF_ACTIVE;
+	else
+		hc->Type = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
+	hc->WinTitle = param_count > 0 ? postfix[0].marker : _T("");
+	hc->WinText = param_count > 1 ? postfix[1].marker : _T("");
+	// The following adds a duplicate in the event that there are two different expressions
+	// which resolve to the same criterion, such as WinExist("x","") and WinExist("x", "").
+	// In that case, only the first criterion can be referenced by its WinTitle & WinText
+	// (but each can be referenced by its unique expression text).  This seems unavoidable
+	// since variants are only unique to a given expression, and trying to work around that
+	// here would cause inconsistency since this only applies to very specific expressions.
+	// At this stage, the only criterion in the list are those added by the following line:
+	AddHotkeyCriterion(hc);
 }
 
 

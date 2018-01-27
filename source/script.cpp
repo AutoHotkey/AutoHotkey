@@ -3552,6 +3552,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		g->HotCriterion->ExprLine = hot_expr_line;
 		g->HotCriterion->WinTitle = hot_expr_line->mArg[0].text;
 		g->HotCriterion->WinText = _T("");
+		hot_expr_line->mAttribute = g->HotCriterion;
 		return CONDITION_TRUE;
 	}
 
@@ -3562,73 +3563,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			g_HotExprTimeout = ATOU(parameter);
 		return CONDITION_TRUE;
 	}
-
-	if (!_tcsnicmp(aBuf, _T("#IfWin"), 6))
-	{
-		HotCriterionType hot_criterion;
-		bool invert = !_tcsnicmp(aBuf + 6, _T("Not"), 3);
-		if (!_tcsnicmp(aBuf + (invert ? 9 : 6), _T("Active"), 6)) // It matches #IfWin[Not]Active.
-			hot_criterion = invert ? HOT_IF_NOT_ACTIVE : HOT_IF_ACTIVE;
-		else if (!_tcsnicmp(aBuf + (invert ? 9 : 6), _T("Exist"), 5))
-			hot_criterion = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
-		else // It starts with #IfWin but isn't Active or Exist: Don't alter g->HotCriterion.
-			return CONDITION_FALSE; // Indicate unknown directive since there are currently no other possibilities.
-		if (!parameter) // The omission of the parameter indicates that any existing criteria should be turned off.
-		{
-			g->HotCriterion = NULL; // Indicate that no criteria are in effect for subsequent hotkeys.
-			return CONDITION_TRUE;
-		}
-		LPTSTR hot_win_title = parameter, hot_win_text; // Set default for title; text is determined later.
-		// Scan for the first non-escaped comma.  If there is one, it marks the second parameter: WinText.
-		LPTSTR cp, first_non_escaped_comma;
-		for (first_non_escaped_comma = NULL, cp = hot_win_title; ; ++cp)  // Increment to skip over the symbol just found by the inner for().
-		{
-			for (; *cp && !(*cp == g_EscapeChar || *cp == g_delimiter || *cp == g_DerefChar); ++cp);  // Find the next escape char, comma, or %.
-			if (!*cp) // End of string was found.
-				break;
-#define ERR_ESCAPED_COMMA_PERCENT _T("Literal commas and percent signs must be escaped (e.g. `%)")
-			if (*cp == g_DerefChar)
-				return ScriptError(ERR_ESCAPED_COMMA_PERCENT, aBuf);
-			if (*cp == g_delimiter) // non-escaped delimiter was found.
-			{
-				// Preserve the ability to add future-use parameters such as section of window
-				// over which the mouse is hovering, e.g. #IfWinActive, Untitled - Notepad,, TitleBar
-				if (first_non_escaped_comma) // A second non-escaped comma was found.
-					return ScriptError(ERR_ESCAPED_COMMA_PERCENT, aBuf);
-				// Otherwise:
-				first_non_escaped_comma = cp;
-				continue; // Check if there are any more non-escaped commas.
-			}
-			// Otherwise, an escape character was found, so skip over the next character (if any).
-			if (!*(++cp)) // The string unexpectedly ends in an escape character, so avoid out-of-bounds.
-				break;
-			// Otherwise, the ++cp above has skipped over the escape-char itself, and the loop's ++cp will now
-			// skip over the char-to-be-escaped, which is not the one we want (even if it is a comma).
-		}
-		if (first_non_escaped_comma) // Above found a non-escaped comma, so there is a second parameter (WinText).
-		{
-			// Omit whitespace to (seems best to conform to convention/expectations rather than give
-			// strange whitespace flexibility that would likely cause unwanted bugs due to inadvertently
-			// have two spaces instead of one).  The user may use `s and `t to put literal leading/trailing
-			// spaces/tabs into these parameters.
-			hot_win_text = omit_leading_whitespace(first_non_escaped_comma + 1);
-			*first_non_escaped_comma = '\0'; // Terminate at the comma to split off hot_win_title on its own.
-			rtrim(hot_win_title, first_non_escaped_comma - hot_win_title);  // Omit whitespace (see similar comment above).
-			// The following must be done only after trimming and omitting whitespace above, so that
-			// `s and `t can be used to insert leading/trailing spaces/tabs.  ConvertEscapeSequences()
-			// also supports insertion of literal commas via escaped sequences.
-			ConvertEscapeSequences(hot_win_text, NULL);
-		}
-		else
-			hot_win_text = _T(""); // And leave hot_win_title set to the entire string because there's only one parameter.
-		// The following must be done only after trimming and omitting whitespace above (see similar comment above).
-		ConvertEscapeSequences(hot_win_title, NULL);
-		// The following also handles the case where both title and text are blank, which could happen
-		// due to something weird but legit like: #IfWinActive, ,
-		if (!SetHotkeyCriterion(hot_criterion, hot_win_title, hot_win_text))
-			return ScriptError(ERR_OUTOFMEM); // So rare that no second param is provided (since its contents may have been temp-terminated or altered above).
-		return CONDITION_TRUE;
-	} // Above completely handles all directives and non-directives that start with "#IfWin".
 
 	if (IS_DIRECTIVE_MATCH(_T("#Hotstring")))
 	{
@@ -7353,9 +7287,9 @@ ResultType Script::PreparseStaticLines(Line *aStartingLine)
 			mLastStaticLine = line;
 			break;
 		case ACT_HOTKEY_IF:
+			if (line->mArg[0].is_expression) // May be false for optimized cases like "#If somevar".
+				PreparseHotkeyIfExpr(line);
 			// It's already been added to the hot-expr list, so just remove it from the script (below).
-			// Override mActionType so ACT_HOTKEY_IF doesn't have to be handled by EvaluateCondition():
-			line->mActionType = ACT_IF;
 			break;
 		default:
 			continue;
@@ -9291,6 +9225,7 @@ end_of_infix_to_postfix:
 	if (   postfix_count == 1 && IS_OPERAND(only_symbol) // This expression is a lone operand, like (1) or "string".
 		&& (mActionType < ACT_FOR || mActionType > ACT_UNTIL) // It's not WHILE or UNTIL, which currently perform better as expressions, or FOR, which performs the same but currently expects aResultToken to always be set.
 		&& (mActionType != ACT_THROW) // Exclude THROW to simplify variable handling (ensures vars are always dereferenced).
+		&& (mActionType != ACT_HOTKEY_IF) // #If requires the expression text not be modified.
 		&& ((only_symbol != SYM_VAR && only_symbol != SYM_DYNAMIC) || mActionType != ACT_RETURN) // "return var" is kept as an expression for correct handling of built-ins, locals (see "ToReturnValue") and ByRef.
 		)
 	{
@@ -10326,7 +10261,7 @@ ResultType Line::EvaluateCondition()
 // Returns CONDITION_TRUE or CONDITION_FALSE (FAIL is returned only in DEBUG mode).
 {
 #ifdef _DEBUG
-	if (mActionType != ACT_IF)
+	if (mActionType != ACT_IF && mActionType != ACT_HOTKEY_IF)
 		return LineError(_T("DEBUG: EvaluateCondition() was called with a line that isn't a condition."));
 #endif
 

@@ -2684,6 +2684,7 @@ private:
 	// be done before dereferencing any line's mNextLine, for example:
 	ResultType PreparseExpressions(Line *aStartingLine);
 	ResultType PreparseStaticLines(Line *aStartingLine);
+	void PreparseHotkeyIfExpr(Line *aLine);
 	Line *PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode = NORMAL_MODE, Line *aParentLine = NULL, const ActionTypeType aLoopType = ACT_INVALID);
 	Line *PreparseCommands(Line *aStartingLine);
 
