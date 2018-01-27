@@ -1017,7 +1017,8 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	HookActionType hook_action = 0; // Set default.
 	if (!aJumpToLabel) // An object wasn't provided by caller.
 		if (  !(hook_action = ConvertAltTab(aLabelName, true))  )
-			if (  !(aJumpToLabel = g_script.FindCallable(aLabelName, NULL, INT_MAX))  ) // Pass INT_MAX to disable function validation (do it below).
+			if (  !(aJumpToLabel = g_script.FindCallable(aLabelName, NULL, INT_MAX)) // Pass INT_MAX to disable function validation (do it below).
+				&& *aLabelName  ) // Don't thrown an error yet if Label was omitted.
 				RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, ERR_NO_LABEL, aLabelName);
 	// Above has ensured that aJumpToLabel and hook_action can't both be non-zero.  Furthermore,
 	// both can be zero/NULL only when the caller is updating an existing hotkey to have new options
