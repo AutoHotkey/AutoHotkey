@@ -2666,6 +2666,7 @@ private:
 		, LineNumberType &aPhysLineNumber, bool &aHasContinuationSection, int aExprBalance = 0);
 	ResultType GetLineContExpr(TextStream *ts, LPTSTR aBuf, size_t &aBufLength, LPTSTR aNextBuf, size_t &aNextBufLength
 		, LineNumberType &aPhysLineNumber, bool &aHasContinuationSection);
+	static bool IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace = NULL);
 	ResultType IsDirective(LPTSTR aBuf);
 	ResultType ParseAndAddLine(LPTSTR aLineText, int aBufSize = 0, ActionTypeType aActionType = ACT_INVALID
 		, LPTSTR aLiteralMap = NULL, size_t aLiteralMapLength = 0);

@@ -1648,26 +1648,7 @@ UINT Script::LoadFromFile()
 
 
 
-bool IsFlowFunction(LPTSTR aBuf, size_t aBufLen = -1)
-{
-	static LPTSTR sControlFlow[] = {
-		// Allowed because they accept an expression by default:
-		_T("If"), _T("While"), _T("Until"), _T("Return"),
-		// Allowed because () is supported to force all parameters to be expressions:
-		_T("Loop"), _T("LoopFiles"), _T("LoopReg"), _T("LoopRead"), _T("LoopParse"),
-		_T("Gosub"), _T("Goto")
-	};
-	if (aBufLen == -1)
-		aBufLen = _tcslen(aBuf);
-	for (int i = 0; i < _countof(sControlFlow); ++i)
-		if (!tcslicmp(aBuf, sControlFlow[i], aBufLen))
-			return true;
-	return false;
-}
-
-
-
-bool IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace = NULL)
+bool Script::IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace)
 // Helper function for LoadIncludedFile().
 // Caller passes in an aBuf containing a candidate line such as "function(x, y)"
 // Caller has ensured that aBuf is rtrim'd.
@@ -1676,7 +1657,7 @@ bool IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace = NULL)
 // *aPendingFunctionHasBrace is set to true if a brace is present at the end, or false otherwise.
 // In addition, any open-brace is removed from aBuf in this mode.
 {
-	LPTSTR action_end = StrChrAny(aBuf, EXPR_ALL_SYMBOLS EXPR_ILLEGAL_CHARS);
+	LPTSTR action_end = find_identifier_end(aBuf);
 	// Can't be a function definition or call without an open-parenthesis as first char found by the above.
 	// In addition, if action_end isn't NULL, that confirms that the string in aBuf prior to action_end contains
 	// no spaces, tabs, colons, or equal-signs.  As a result, it can't be:
@@ -1693,10 +1674,16 @@ bool IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace = NULL)
 	// opening parenthesis to occur after a legitimate/quoted colon or double-colon in its parameters.
 	// v1.0.40.04: Added condition "action_end != aBuf" to allow a hotkey or remap or hotkey such as
 	// such as "(::" to work even if it ends in a close-parenthesis such as "(::)" or "(::MsgBox )"
-	if (   !(action_end && *action_end == '(' && action_end != aBuf)
-		|| IsFlowFunction(aBuf, action_end - aBuf) // Control flow statement such as if(expression).
-		|| action_end[1] == ':'   ) // v1.0.44.07: This prevents "$(::fn_call()" from being seen as a function-call vs. hotkey-with-call.  For simplicity and due to rarity, omit_leading_whitespace() isn't called; i.e. assumes that the colon immediate follows the '('.
+	if (*action_end != '(' || action_end == aBuf)
 		return false;
+	// Is it a control flow statement, such as "if(condition)"?
+	TCHAR orig_char = *action_end;
+	*action_end = '\0';
+	bool is_control_flow = ConvertActionType(aBuf, ACT_FIRST_NAMED_ACTION, ACT_FIRST_COMMAND);
+	*action_end = orig_char;
+	if (is_control_flow)
+		return false;
+	// It's not control flow.
 	LPTSTR aBuf_last_char = action_end + _tcslen(action_end) - 1; // Above has already ensured that action_end is "(...".
 	if (aPendingFunctionHasBrace) // Caller specified that an optional open-brace may be present at the end of aBuf.
 	{
@@ -1707,9 +1694,6 @@ bool IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace = NULL)
 		}
 	}
 	return *aBuf_last_char == ')'; // This last check avoids detecting a label such as "Label(x):" as a function.
-	// Also, it seems best never to allow if(...) to be a function call, even if it's blank inside such as if().
-	// In addition, it seems best not to allow if(...) to ever be a function definition since such a function
-	// could never be called as ACT_EXPRESSION since it would be seen as an IF-stmt instead.
 }
 
 
@@ -4358,12 +4342,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 	if (end_marker)
 	{
 		action_args = omit_leading_whitespace(end_marker);
-		// L34: Require that named commands and their args are delimited with a space, tab or comma.
-		// Detects errors such as "MsgBox< foo" or "If!foo" and allows things like "control[x]:=y".
 		TCHAR end_char = *end_marker;
-		could_be_named_action = (!end_char || IS_SPACE_OR_TAB(end_char)
-			// Allow If() and While() but something like MsgBox() should always be a function-call:
-			|| (end_char == '(' && IsFlowFunction(action_name)));
+		could_be_named_action = !end_char || IS_SPACE_OR_TAB(end_char) || end_char == '(';
 	}
 	else
 	{
@@ -4531,9 +4511,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 	{
 		aActionType = ConvertActionType(action_name, ACT_FIRST_NAMED_ACTION, ACT_FIRST_COMMAND); // Is this line a control flow statement?
 
-		if (!aActionType)
+		if (!aActionType && *end_marker != '(')
 		{
-			if (!_tcsicmp(action_name, _T("new")) && IS_SPACE_OR_TAB(*end_marker)) // Note that new(MyClass) doesn't need to be checked here because our caller pre-determines ACT_EXPRESSION based on IsFunction().
+			if (!_tcsicmp(action_name, _T("new")) && *end_marker) // Note that new(MyClass) doesn't need to be checked here because our caller pre-determines ACT_EXPRESSION based on IsFunction().
 			{
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				action_args = aLineText; // Use the line's full text for later parsing.
@@ -4660,14 +4640,35 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 				return ScriptError(_T("Invalid loop type."), aLineText);
 		}
 	}
+	// Perform some pre-processing to allow the parameter list of a control flow statement
+	// to be enclosed in parentheses.  For goto/gosub/break/continue, this changes the param
+	// from a literal label to an expression.  For others it is just a matter of coding style.
+	// No pre-processing is needed for statements with exactly one parameter, since they will
+	// be interpreted correctly with or without parentheses.
 	switch (aActionType)
 	{
-	case ACT_LOOP:
+	// Cases not handled here because they do not require pre-processing:
+	//case ACT_IF:
+	//case ACT_WHILE:
+	//case ACT_UNTIL:
+	// Cases omitted to prevent empty "()" from being allowed:
+	//case ACT_LOOP:
+	//case ACT_RETURN:
+	case ACT_FOR:
+	case ACT_CATCH:
+		end_marker = action_args; // Handle both "for(...)" and "for (...)" below.
 	case ACT_GOTO:
 	case ACT_GOSUB:
+	case ACT_BREAK:    // These only support constant expressions (checked later).
+	case ACT_CONTINUE: //
 		if (end_marker && *end_marker == '(')
 		{
 			LPTSTR last_char = end_marker + _tcslen(end_marker) - 1;
+			if (*last_char == '{' && aActionType == ACT_FOR)
+			{
+				add_openbrace_afterward = true;
+				last_char = omit_trailing_whitespace(end_marker, last_char - 1);
+			}
 			if (*last_char == ')')
 			{
 				// Remove the parentheses (and possible open brace) and trailing space.
@@ -4679,13 +4680,14 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 				all_args_are_expressions = true;
 			}
 		}
-		break;
-	case ACT_CATCH:
-		if (*action_args != '{') // i.e. "Catch varname" must be handled a different way.
+		if (aActionType != ACT_CATCH || *action_args != '{') // i.e. "Catch varname" must be handled a different way.
 			break;
+		// Otherwise, fall through to handle "Catch {":
 	case ACT_ELSE:
 	case ACT_TRY:
 	case ACT_FINALLY:
+		if (end_marker && *end_marker == '(') // Seems best to treat this as an error, perhaps reserve for future use.
+			return ScriptError(ERR_EXPR_SYNTAX, aLineText);
 		if (!AddLine(aActionType))
 			return FAIL;
 		if (*action_args == '{')
@@ -4850,7 +4852,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 
 	// Handle one-true-brace (OTB).
 	// Else, Try and Finally were already handled, since they also accept a sub-action.
-	if (nArgs && (ACT_IS_LOOP(aActionType) || aActionType == ACT_IF || aActionType == ACT_CATCH))
+	if (nArgs && (ACT_IS_LOOP(aActionType) || aActionType == ACT_IF || aActionType == ACT_CATCH)
+		&& !add_openbrace_afterward) // It wasn't already handled.
 	{
 		LPTSTR arg1 = arg[nArgs - 1]; // For readability and possibly performance.
 		LPTSTR arg1_last_char = arg1 + _tcslen(arg1) - 1;

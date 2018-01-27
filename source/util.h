@@ -384,6 +384,8 @@ inline size_t strip_trailing_backslash(LPTSTR aPath)
 
 
 
+// If this is ever changed to allow symbols which are also valid hotkey modifiers,
+// be sure to update IsFunction() to allow for cases like "$(::fn_call()":
 #define IS_IDENTIFIER_CHAR(c) (cisalnum(c) || (c) == '_' || ((UINT)(c) > 0x7F))
 template<typename T> inline T find_identifier_end(T aBuf)
 // Locates the next character which is not valid in an identifier (var, func, or obj.key name).
