@@ -2663,7 +2663,7 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 // any subsequent contination is handled by this function.
 {
 	TCHAR orig_char, *action_start, *action_end;
-	ActionTypeType action_type;
+	ActionTypeType action_type = ACT_INVALID; // Set default.
 
 	if (next_buf_length == -1) // End of file.
 		return OK;
@@ -2680,7 +2680,7 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 		{
 			orig_char = *action_end;
 			// This relies on names of control flow statements being invalid for use as var/func names:
-			if (IS_SPACE_OR_TAB(orig_char) || orig_char == '(')
+			if (IS_SPACE_OR_TAB(orig_char) || orig_char == '(' || orig_char == '{') // '{' supports "else{".
 			{
 				*action_end = '\0';
 				action_type = ConvertActionType(action_start, ACT_FIRST_NAMED_ACTION, ACT_FIRST_COMMAND);
