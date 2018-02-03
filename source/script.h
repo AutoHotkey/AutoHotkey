@@ -402,6 +402,45 @@ struct ArgStruct
 #define BIF_DECL(name) void name(BIF_DECL_PARAMS)
 
 
+struct LoopFilesStruct : WIN32_FIND_DATA
+{
+	// Note that using fixed buffer sizes significantly reduces code size vs. using CString
+	// or probably any other method of dynamically allocating/expanding the buffers.  It also
+	// performs marginally better, but file system performance has a much bigger impact.
+	// Unicode builds allow for the maximum path size supported by Win32 as of 2018, although
+	// in some cases the script might need to use the \\?\ prefix to go beyond MAX_PATH.
+	// On Windows 10 v1607+, MAX_PATH limits can be lifted by opting-in to long path support
+	// via the application's manifest and LongPathsEnabled registry setting.  In any case,
+	// ANSI APIs are still limited to MAX_PATH, but MAX_PATH*2 allows for the longest path
+	// supported by FindFirstFile() concatenated with the longest filename it can return.
+	// This preserves backward-compatibility under the following set of conditions:
+	//  1) the absolute path and pattern fits within MAX_PATH;
+	//  2) the relative path and filename fits within MAX_PATH; and
+	//  3) the absolute path and filename exceeds MAX_PATH.
+	static const size_t BUF_SIZE = UorA(MAX_WIDE_PATH, MAX_PATH*2);
+	// file_path contains the full path of the directory being looped, with trailing slash.
+	// Temporarily also contains the pattern for FindFirstFile(), which is either a copy of
+	// 'pattern' or "*" for scanning sub-directories.
+	// During execution of the loop body, it contains the full path of the file.
+	TCHAR file_path[BUF_SIZE];
+	TCHAR pattern[MAX_PATH]; // Naked filename or pattern.  Allows max NTFS filename length plus a few chars.
+	TCHAR short_path[BUF_SIZE]; // Short name version of orig_dir.
+	TCHAR *file_path_suffix; // The dynamic part of file_path (used by A_LoopFilePath).
+	TCHAR *orig_dir; // Initial directory as specified by caller (used by A_LoopFilePath).
+	TCHAR *long_dir; // Full/long path of initial directory (used by A_LoopFileLongPath).
+	size_t file_path_length, pattern_length, short_path_length, orig_dir_length, long_dir_length
+		, dir_length; // Portion of file_path which is the directory, used by BIVs.
+
+	LoopFilesStruct() : orig_dir_length(0), long_dir(NULL) {}
+	~LoopFilesStruct()
+	{
+		if (orig_dir_length)
+			free(orig_dir);
+		//else: orig_dir is the constant _T("").
+		free(long_dir);
+	}
+};
+
 // Some of these lengths and such are based on the MSDN example at
 // http://msdn.microsoft.com/library/default.asp?url=/library/en-us/sysinfo/base/enumerating_registry_subkeys.asp:
 // FIX FOR v1.0.48: 
@@ -605,8 +644,11 @@ private:
 	bool EvaluateLoopUntil(ResultType &aResult);
 	ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 		, __int64 aIterationLimit, bool aIsInfinite);
-	ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+	ResultType PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LPTSTR aFilePattern);
+	bool ParseLoopFilePattern(LPTSTR aFilePattern, LoopFilesStruct &lfs, ResultType &aResult);
+	ResultType PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LoopFilesStruct &lfs);
 	ResultType PerformLoopReg(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, HKEY aRootKeyType, HKEY aRootKey, LPTSTR aRegSubkey);
 	ResultType PerformLoopParse(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil);
@@ -971,8 +1013,7 @@ public:
 
 	ResultType Deref(Var *aOutputVar, LPTSTR aBuf);
 
-	static bool FileIsFilteredOut(WIN32_FIND_DATA &aCurrentFile, FileLoopModeType aFileLoopMode
-		, LPTSTR aFilePath, size_t aFilePathLength);
+	static bool FileIsFilteredOut(LoopFilesStruct &aCurrentFile, FileLoopModeType aFileLoopMode);
 
 	Label *GetJumpTarget(bool aIsDereferenced);
 	Label *IsJumpValid(Label &aTargetLabel, bool aSilent = false);
@@ -3160,10 +3201,9 @@ BIV_DECL_R (BIV_ScriptHwnd);
 BIV_DECL_R (BIV_LineNumber);
 BIV_DECL_R (BIV_LineFile);
 BIV_DECL_R (BIV_LoopFileName);
-BIV_DECL_R (BIV_LoopFileShortName);
 BIV_DECL_R (BIV_LoopFileExt);
 BIV_DECL_R (BIV_LoopFileDir);
-BIV_DECL_R (BIV_LoopFileFullPath);
+BIV_DECL_R (BIV_LoopFilePath);
 BIV_DECL_R (BIV_LoopFileLongPath);
 BIV_DECL_R (BIV_LoopFileShortPath);
 BIV_DECL_R (BIV_LoopFileTime);

@@ -749,7 +749,8 @@ bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr = NULL);
 #ifdef _DEBUG
 	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aLine, bool aAppendNewline = true);
 #endif
-LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFullFileSpec);
+LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFilespec, LPTSTR aBuf, size_t aBufSize, size_t &aBufLength);
+void ConvertFilespecToCorrectCase(LPTSTR aBuf, size_t aBufSize, size_t &aBufLength);
 LPTSTR FileAttribToStr(LPTSTR aBuf, DWORD aAttr);
 unsigned __int64 GetFileSize64(HANDLE aFileHandle);
 LPTSTR GetWin32ErrorText(LPTSTR aBuf, DWORD aBufSize, DWORD aError);

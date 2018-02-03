@@ -128,11 +128,11 @@ VarEntry g_BIV_A[] =
 	A_(LoopFileAttrib),
 	A_(LoopFileDir),
 	A_(LoopFileExt),
-	A_(LoopFileFullPath),
+	A_x(LoopFileFullPath, BIV_LoopFilePath), // Misnomer for backward-compatibility.
 	A_(LoopFileLongPath),
-	A_(LoopFileName),
-	A_x(LoopFilePath, BIV_LoopFileFullPath),
-	A_(LoopFileShortName),
+	A_x(LoopFileName, BIV_LoopFileName),
+	A_x(LoopFilePath, BIV_LoopFilePath),
+	A_x(LoopFileShortName, BIV_LoopFileName),
 	A_(LoopFileShortPath),
 	A_x(LoopFileSize, BIV_LoopFileSize),
 	A_x(LoopFileSizeKB, BIV_LoopFileSize),
@@ -424,13 +424,14 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 {
 	mIsRestart = aIsRestart;
 	TCHAR buf[2048]; // Just to make sure we have plenty of room to do things with.
+	size_t buf_length;
 #ifdef AUTOHOTKEYSC
 	// Fix for v1.0.29: Override the caller's use of __argv[0] by using GetModuleFileName(),
 	// so that when the script is started from the command line but the user didn't type the
 	// extension, the extension will be included.  This necessary because otherwise
 	// #SingleInstance wouldn't be able to detect duplicate versions in every case.
 	// It also provides more consistency.
-	GetModuleFileName(NULL, buf, _countof(buf));
+	buf_length = GetModuleFileName(NULL, buf, _countof(buf));
 #else
 	TCHAR def_buf[MAX_PATH + 1], exe_buf[MAX_PATH + 20]; // For simplicity, allow at least space for +2 (see below) and "AutoHotkey.chm".
 	if (!aScriptFilename) // v1.0.46.08: Change in policy: store the default script in the My Documents directory rather than in Program Files.  It's more correct and solves issues that occur due to Vista's file-protection scheme.
@@ -478,7 +479,8 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		//else since the file exists, everything is now set up right. (The file might be a directory, but that isn't checked due to rarity.)
 	}
 	// In case the script is a relative filespec (relative to current working dir):
-	if (!GetFullPathName(aScriptFilename, _countof(buf), buf, NULL)) // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
+	buf_length = GetFullPathName(aScriptFilename, _countof(buf), buf, NULL); // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
+	if (!buf_length)
 		return FAIL; // Due to rarity, no error msg, just abort.
 #endif
 	if (g_RunStdIn = (*aScriptFilename == '*' && !aScriptFilename[1])) // v1.1.17: Read script from stdin.
@@ -488,11 +490,13 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		g_NoEnv = true;
 	}
 	else // i.e. don't call the following function for stdin.
-	// Using the correct case not only makes it look better in title bar & tray tool tip,
-	// it also helps with the detection of "this script already running" since otherwise
-	// it might not find the dupe if the same script name is launched with different
-	// lowercase/uppercase letters:
-	ConvertFilespecToCorrectCase(buf); // This might change the length, e.g. due to expansion of 8.3 filename.
+	{
+		// Using the correct case not only makes it look better in title bar & tray tool tip,
+		// it also helps with the detection of "this script already running" since otherwise
+		// it might not find the dupe if the same script name is launched with different
+		// lowercase/uppercase letters:
+		ConvertFilespecToCorrectCase(buf, _countof(buf), buf_length); // This might change the length, e.g. due to expansion of 8.3 filename.
+	}
 	if (   !(mFileSpec = SimpleHeap::Malloc(buf))   )  // The full spec is stored for convenience, and it's relied upon by mIncludeLibraryFunctionsThenExit.
 		return FAIL;  // It already displayed the error for us.
 	LPTSTR filename_marker;
@@ -11489,7 +11493,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 	// is about 0.25%.  Since that is probably not even statistically significant, the only reason for declaring
 	// them here is in case compilers other than MSVC++ 7.1 benefit more -- and because it's an old silly habit.
 	__int64 loop_iteration;
-	WIN32_FIND_DATA *loop_file;
+	LoopFilesStruct *loop_file;
 	RegItemStruct *loop_reg_item;
 	LoopReadFileStruct *loop_read_file;
 	LPTSTR loop_field;
@@ -13285,55 +13289,186 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 
 ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 	, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LPTSTR aFilePattern)
-// Note: Even if aFilePattern is just a directory (i.e. with not wildcard pattern), it seems best
-// not to append "\\*.*" to it because the pattern might be a script variable that the user wants
-// to conditionally resolve to various things at runtime.  In other words, it's valid to have
-// only a single directory be the target of the loop.
 {
-	// Make a local copy of the path given in aFilePattern because as the lines of
-	// the loop are executed, the deref buffer (which is what aFilePattern might
-	// point to if we were called from ExecUntil()) may be overwritten --
-	// and we will need the path string for every loop iteration.  We also need
-	// to determine naked_filename_or_pattern:
-	TCHAR file_path[MAX_PATH], naked_filename_or_pattern[MAX_PATH]; // Giving +3 extra for "*.*" seems fairly pointless because any files that actually need that extra room would fail to be retrieved by FindFirst/Next due to their inability to support paths much over 256.
-	size_t file_path_length;
-	tcslcpy(file_path, aFilePattern, _countof(file_path));
-	LPTSTR last_backslash = _tcsrchr(file_path, '\\');
-	if (last_backslash)
+	ResultType result = OK; // Set default.
+	// LoopFilesStruct is currently about 128KB, so it's probably best not to put it on the stack.
+	// 128KB temporary usage per Loop (for all iterations) seems a reasonable trade-off for supporting
+	// long paths while keeping code size minimal.
+	LoopFilesStruct *plfs = new LoopFilesStruct;
+	if (!plfs)
+		return LineError(ERR_OUTOFMEM);
+	// Parse aFilePattern into its components and copy into *plfs.  Copies are taken because:
+	//  - As the lines of the loop are executed, the deref buffer (which is what aFilePattern might
+	//    point to if we were called from ExecUntil()) may be overwritten -- and we will need the path
+	//    string for every loop iteration.
+	//  - We relative paths resolved to full paths in case the working directory is changed after the
+	//    loop begins but before FindFirstFile() is called for a sub-directory.
+	//  - Several built-in variables rely on the paths stored in *plfs and updated on each iteration.
+	//    This approach means a little up-front work that mightn't be needed, but greatly improves
+	//    performance in some common cases, such as if A_LoopFileLongPath is used on each iteration.
+	if (ParseLoopFilePattern(aFilePattern, *plfs, result))
+		result = PerformLoopFilePattern(aResultToken, aContinueMainLoop, aJumpToLine, aUntil, aFileLoopMode, aRecurseSubfolders, *plfs);
+	//else: leave result == OK, since in effect, no files were found.
+	delete plfs;
+	return result;
+}
+
+
+
+bool Line::ParseLoopFilePattern(LPTSTR aFilePattern, LoopFilesStruct &lfs, ResultType &aResult)
+// Parse aFilePattern and initialize lfs.
+{
+	if (!*aFilePattern) // Some checks below may rely on empty aFilePattern having been excluded.
+		// FindFirstFile() would find nothing in this case, but continuing may cause unnecessary
+		// rescursion through all subdirectories of the working directory.
+		return false;
+	// Note: Even if aFilePattern is just a directory (i.e. with no wildcard pattern), it seems best
+	// not to append "\\*.*" to it because the pattern might be a script variable that the user wants
+	// to conditionally resolve to various things at runtime.  In other words, it's valid to have
+	// only a single directory be the target of the loop.
+	
+	// v1.1.28.00: This function was revised.
+	//  - Resolve aFilePattern to a full path immediately so that changing the working directory
+	//    does not disrupt recursion or A_LoopFileLongPath/ShortPath.
+	//  - Take care that path lengths are not limited to below what the system allows.
+	//    That is, directory+pattern can be up to MAX_PATH on ANSI and 32767 on Unicode,
+	//    although the latter requires the \\?\ prefix or Windows 10 long path awareness.
+	//  - Optimize A_LoopFileLongPath and A_LoopFileShortPath by resolving the path prefix
+	//    up-front and utilizing the names returned by FindFirstFile() during the loop.
+	//    This can be much faster because file system access is minimized.  Benchmarks
+	//    showed improvement even for single-iteration loops which use A_LoopFileLongPath.
+	
+	// Prior to v1.1.28, A_LoopFileLongPath worked as follows:
+	//  - Each reference to A_LoopFileLongPath results in two BIV_LoopFileLongPath calls.
+	//  - BIV_LoopFileLongPath calls GetFullPathName() and ConvertFilespecToCorrectCase().
+	//  - CFTCC() calls FindFirstFile() once for each slash-delimited name.
+	//  - For example, with "c:\foo\bar\baz.txt", A_LoopFileLongPath results in SIX calls to
+	//    FindFirstFile().
+
+	// Find the final name or pattern component of aFilePattern.
+	LPTSTR name_part, cp;
+	for (name_part = cp = aFilePattern; *cp; cp++)
+		if (*cp == '\\' || *cp == '/')
+			name_part = cp + 1;
+	
+	size_t pattern_length = cp - name_part;
+	if (!pattern_length // Empty pattern (aFilePattern ends with a slash).  FindFirstFile() would fail.
+		|| pattern_length > _countof(lfs.pattern)) // Most likely too long to match a real path/filename.
+		return false; 
+	tmemcpy(lfs.pattern, name_part, pattern_length + 1);
+	lfs.pattern_length = pattern_length;
+
+	size_t orig_dir_length = name_part - aFilePattern;
+	if (orig_dir_length)
 	{
-		_tcscpy(naked_filename_or_pattern, last_backslash + 1); // Naked filename.  No danger of overflow due size of src vs. dest.
-		*(last_backslash + 1) = '\0';  // Convert file_path to be the file's path, but use +1 to retain the final backslash on the string.
-		file_path_length = _tcslen(file_path);
+		if (  !(lfs.orig_dir = tmalloc(orig_dir_length + 1))  )
+		{
+			aResult = LineError(ERR_OUTOFMEM);
+			return false;
+		}
+		tmemcpy(lfs.orig_dir, aFilePattern, orig_dir_length);
+		lfs.orig_dir[orig_dir_length] = '\0';
+		lfs.orig_dir_length = orig_dir_length;
 	}
 	else
 	{
-		_tcscpy(naked_filename_or_pattern, file_path); // No danger of overflow due size of src vs. dest.
-		*file_path = '\0'; // There is no path, so make it empty to use current working directory.
-		file_path_length = 0;
+		lfs.orig_dir = _T("");
+		lfs.orig_dir_length = 0;
 	}
 
-	// g->mLoopFile is the current file of the file-loop that encloses this file-loop, if any.
-	// The below is our own current_file, which will take precedence over g->mLoopFile if this
-	// loop is a file-loop:
+	// The following aren't checked because A_LoopFileLongPath requires that GetFullPathName()
+	// be called unconditionally so that relative references such as "x\..\y" are resolved:
+	//if (   !(aFilePattern[1] == ':' && aFilePattern[2] == '\\') // Not an absolute path with drive letter (must have slash, as "C:xxx" is not fully qualified).
+	//	&& !(*aFilePattern == '\\' && aFilePattern[1] == '\\')   ) // Not a UNC path.
+
+	// Testing shows that GetFullPathNameW() supports longer than MAX_PATH even on Windows XP.
+	// MSDN: "In the ANSI version of this function, the name is limited to MAX_PATH characters.
+	//  To extend this limit to 32,767 wide characters, call the Unicode version of the function
+	//  (GetFullPathNameW), and prepend "\\?\" to the path. "
+	// But that's obviously incorrect, since prepending "\\?\" would make it an absolute path.
+	// Instead, we just call it without the prefix, and this works (on Unicode builds).
+	LPCTSTR dir_to_resolve = *lfs.orig_dir ? lfs.orig_dir : _T(".\\"); // Include a trailing slash so there will be one in the result.
+	lfs.file_path_length = GetFullPathName(dir_to_resolve, _countof(lfs.file_path), lfs.file_path, NULL);
+	if (!lfs.file_path_length)
+		// It's unclear under what conditions GetFullPathName() can fail, but the most likely
+		// cause is that the buffer is too small (and even this is unlikely on Unicode builds).
+		// With current buffer sizes, that implies the path is too long for FindFirstFile().
+		return false;
+	
+	// Mark the part of file_path which will contain discovered sub-directories/files.
+	// This will be appended to orig_dir to get the value of A_LoopFilePath.
+	lfs.file_path_suffix = lfs.file_path + lfs.file_path_length;
+	
+	// Correct case and convert any short names to long names for A_LoopFileLongPath.
+	LPTSTR long_dir;
+	TCHAR long_dir_buf[MAX_WIDE_PATH]; // Max expanded length is probably about 8k on ANSI, but this covers all builds.
+	if (  !(long_dir = ConvertFilespecToCorrectCase(lfs.file_path, long_dir_buf, _countof(long_dir_buf), lfs.long_dir_length))  )
+	{
+		// Conversion failed.  In theory, FindFirstFile() can fail for a parent directory
+		// but succeed for the full path, so use file_path as-is and attempt to continue.
+		// Since this is rare, _tcsdup() is still used below rather than aliasing file_path
+		// (which would require avoiding free() in that case).
+		long_dir = lfs.file_path;
+		lfs.long_dir_length = lfs.file_path_length;
+	}
+	if (  !(lfs.long_dir = _tcsdup(long_dir))  ) // Conserve memory during loop execution by not using the full MAX_WIDE_PATH.
+	{
+		aResult = LineError(ERR_OUTOFMEM);
+		return false;
+	}
+
+	// For simplicity/code size, get the short path unconditionally, even though it's more
+	// rarely used than the long path (and not required for the loop to function).  Having the
+	// short path built in advance helps performance for loops which use it.
+	// Testing and research shows that GetShortPathName() uses the long name for a directory
+	// or file if no short name exists, so it can be as long as orig_dir (also, see below).
+	lfs.short_path_length = GetShortPathName(lfs.orig_dir, lfs.short_path, _countof(lfs.short_path));
+	if (lfs.short_path_length > _countof(lfs.short_path)) // Buffer was too small.
+		// This can only occur if the short path is longer than the long path (file_path),
+		// which is possible for names which are short but don't comply with 8.3 rules,
+		// such as ".vs", which might have the 8.3 name "VS4DA5~1".  Even so, file_path
+		// must be near the limit for short_path to exceed it.
+		return false; // short_path and short_path_length aren't valid, so just abort.
+
+	return true; // aFilePattern parsed and all members initialized okay.
+}
+
+
+
+ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+	, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LoopFilesStruct &lfs)
+// This is the recursive part, called for each sub-directory when aRecurseSubfolders is true.
+// Caller has allocated buffers (lfs) and filled in the initial paths and filename/pattern.
+{
+	// Save current lengths before modification.
+	size_t file_path_length = lfs.file_path_length;
+	size_t short_path_length = lfs.short_path_length;
+	lfs.dir_length = file_path_length; // During the loop, lfs.file_path_length will include the filename.
+
+	LPTSTR file_path_end = lfs.file_path + file_path_length;
+	size_t file_space_remaining = _countof(lfs.file_path) - file_path_length;
+	if (lfs.pattern_length >= file_space_remaining)
+		return OK;
+	tmemcpy(file_path_end, lfs.pattern, lfs.pattern_length + 1); // file_path already includes the slash.
+
 	BOOL file_found;
-	WIN32_FIND_DATA new_current_file;
-	HANDLE file_search = FindFirstFile(aFilePattern, &new_current_file);
+	HANDLE file_search = FindFirstFile(lfs.file_path, &lfs);
 	for ( file_found = (file_search != INVALID_HANDLE_VALUE) // Convert FindFirst's return value into a boolean so that it's compatible with FindNext's.
-		; file_found && FileIsFilteredOut(new_current_file, aFileLoopMode, file_path, file_path_length)
-		; file_found = FindNextFile(file_search, &new_current_file));
-	// file_found and new_current_file have now been set for use below.
+		; file_found && FileIsFilteredOut(lfs, aFileLoopMode)
+		; file_found = FindNextFile(file_search, &lfs));
+	// file_found and lfs have now been set for use below.
 	// Above is responsible for having properly set file_found and file_search.
 
 	ResultType result;
 	Line *jump_to_line;
 	global_struct &g = *::g; // Primarily for performance in this case.
 
+	g.mLoopFile = &lfs; // inner file-loop's file takes precedence over any outer file-loop's.
+	// Other types of loops leave g.mLoopFile unchanged so that a file-loop can enclose some other type of
+	// inner loop, and that inner loop will still have access to the outer loop's current file.
+
 	for (; file_found; ++g.mLoopIteration)
 	{
-		g.mLoopFile = &new_current_file; // inner file-loop's file takes precedence over any outer file-loop's.
-		// Other types of loops leave g.mLoopFile unchanged so that a file-loop can enclose some other type of
-		// inner loop, and that inner loop will still have access to the outer loop's current file.
-
 		// Execute once the body of the loop (either just one statement or a block of statements).
 		// Preparser has ensured that every LOOP has a non-NULL next line.
 		if (mNextLine->mActionType == ACT_BLOCK_BEGIN) // See PerformLoop() for comments about this section.
@@ -13342,6 +13477,7 @@ ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aCont
 			while (jump_to_line == mNextLine);
 		else
 			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
+
 		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // See comments in PerformLoop() about this section.
 		{
 			if (jump_to_line == this)
@@ -13364,11 +13500,10 @@ ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aCont
 		// (the current iteration completed normally) or LOOP_CONTINUE (the current loop
 		// iteration was cut short).  In both cases, just continue on through the loop.
 		// But first do end-of-iteration steps:
-		while ((file_found = FindNextFile(file_search, &new_current_file))
-			&& FileIsFilteredOut(new_current_file, aFileLoopMode, file_path, file_path_length)); // Relies on short-circuit boolean order.
+		while ((file_found = FindNextFile(file_search, &lfs))
+			&& FileIsFilteredOut(lfs, aFileLoopMode)); // Relies on short-circuit boolean order.
 			// Above is a self-contained loop that keeps fetching files until there's no more files, or a file
-			// is found that isn't filtered out.  It also sets file_found and new_current_file for use by the
-			// outer loop.
+			// is found that isn't filtered out.  It also sets file_found and lfs for use by the outer loop.
 	} // for()
 
 	// The script's loop is now over.
@@ -13383,40 +13518,55 @@ ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aCont
 		return OK;
 
 	// Since above didn't return, this is a file-loop and recursion into sub-folders has been requested.
-	// Append *.* to file_path so that we can retrieve all files and folders in the aFilePattern
-	// main folder.  We're only interested in the folders, but we have to use *.* to ensure
-	// that the search will find all folder names:
-	if (file_path_length > _countof(file_path) - 4) // v1.0.45.03: No room to append "*.*", so for simplicity, skip this folder (don't recurse into it).
-		return OK; // This situation might be impossible except for 32000-capable paths because the OS seems to reserve room inside every directory for at least the maximum length of a short filename.
-	LPTSTR append_pos = file_path + file_path_length;
-	_tcscpy(append_pos, _T("*.*")); // Above has already verified that no overflow is possible.
-
-	file_search = FindFirstFile(file_path, &new_current_file);
+	// Append * to file_path so that we can retrieve all files and folders in the aFilePattern main dir.
+	// We're only interested in the folders, but there's no special pattern that would filter out files.
+	file_path_end[0] = '*'; // There's always room for this since it's shorter than lfs.pattern.
+	file_path_end[1] = '\0';
+	file_search = FindFirstFile(lfs.file_path, &lfs);
 	if (file_search == INVALID_HANDLE_VALUE)
 		return OK; // Nothing more to do.
 	// Otherwise, recurse into any subdirectories found inside this parent directory.
 
-	size_t path_and_pattern_length = file_path_length + _tcslen(naked_filename_or_pattern); // Calculated only once for performance.
+	LPTSTR short_path_end = lfs.short_path + short_path_length;
+	size_t short_space_remaining = _countof(lfs.short_path) - short_path_length;
+
 	do
 	{
-		if (!(new_current_file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) // We only want directories (except "." and "..").
-			|| new_current_file.cFileName[0] == '.' && (!new_current_file.cFileName[1]      // Relies on short-circuit boolean order.
-				|| new_current_file.cFileName[1] == '.' && !new_current_file.cFileName[2])  //
-			// v1.0.45.03: Skip over folders whose full-path-names are too long to be supported by the ANSI
-			// versions of FindFirst/FindNext.  Without this fix, the section below formerly called PerformLoop()
-			// with a truncated full-path-name, which caused the last_backslash-finding logic to find the wrong
-			// backslash, which in turn caused infinite recursion and a stack overflow (i.e. caused by the
-			// full-path-name getting truncated in the same spot every time, endlessly).
-			|| path_and_pattern_length + _tcslen(new_current_file.cFileName) > _countof(file_path) - 2) // -2 to reflect: 1) the backslash to be added between cFileName and naked_filename_or_pattern; 2) the zero terminator.
+		if (!(lfs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) // We only want directories (except "." and "..").
+			|| lfs.cFileName[0] == '.' && (!lfs.cFileName[1]      // Relies on short-circuit boolean order.
+				|| lfs.cFileName[1] == '.' && !lfs.cFileName[2])) //
 			continue;
-		// Build the new search pattern, which consists of the original file_path + the subfolder name
-		// we just discovered + the original pattern:
-		_stprintf(append_pos, _T("%s\\%s"), new_current_file.cFileName, naked_filename_or_pattern); // Indirectly set file_path to the new search pattern.  This won't overflow due to the check above.
-		// Pass NULL for the 2nd param because it will determine its own current-file when it does
-		// its first loop iteration.  This is because this directory is being recursed into, not
-		// processed itself as a file-loop item (since this was already done in the first loop,
-		// above, if its name matches the original search pattern):
-		result = PerformLoopFilePattern(aResultToken, aContinueMainLoop, aJumpToLine, aUntil, aFileLoopMode, aRecurseSubfolders, file_path);
+
+		size_t this_dir_length = _tcslen(lfs.cFileName);
+		if (this_dir_length + 1 >= file_space_remaining)
+			// This should be virtually impossible because:
+			//  - Unicode builds allow 32767 chars, which is also the limit for most APIs.
+			//  - ANSI builds allow MAX_PATH*2 (520), but FindFirstFileA() would fail for any
+			//    file pattern longer than MAX_PATH, and cFileName itself is MAX_PATH chars max.
+			continue;
+
+		// Append the directory name\ to file_path.
+		tmemcpy(file_path_end, lfs.cFileName, this_dir_length);
+		file_path_end[this_dir_length] = '\\';
+		file_path_end[this_dir_length + 1] = '\0';
+		lfs.file_path_length = file_path_length + this_dir_length + 1;
+
+		// Append the directory's short (8.3) name to short_path.
+		LPTSTR short_name = lfs.cAlternateFileName;
+		size_t short_name_length = _tcslen(short_name);
+		if (!short_name_length)
+		{
+			short_name = lfs.cFileName; // See BIV_LoopFileName for comments about why cFileName is used.
+			short_name_length = this_dir_length;
+		}
+		if (short_name_length + 1 >= short_space_remaining) // Should realistically never happen, but it's possible for an 8.3 name to be longer than the non-8.3 name.
+			continue;
+		tmemcpy(short_path_end, short_name, short_name_length);
+		short_path_end[short_name_length] = '\\';
+		short_path_end[short_name_length + 1] = '\0';
+		lfs.short_path_length = short_path_length + short_name_length + 1;
+
+		result = PerformLoopFilePattern(aResultToken, aContinueMainLoop, aJumpToLine, aUntil, aFileLoopMode, aRecurseSubfolders, lfs);
 		// Above returns LOOP_CONTINUE for cases like "continue 2" or "continue outer_loop", where the
 		// target is not this Loop but a Loop which encloses it. In those cases we want below to return:
 		if (result != OK) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
@@ -13430,7 +13580,7 @@ ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aCont
 			// handled it.  But if it set aJumpToLine to be non-NULL, it means we have to return and let our caller
 			// handle the jump.
 			break;
-	} while (FindNextFile(file_search, &new_current_file));
+	} while (FindNextFile(file_search, &lfs));
 	FindClose(file_search);
 
 	return OK;
@@ -14879,7 +15029,8 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 
 	case ACT_FILEGETATTRIB:
 		// The specified ARG, if non-blank, takes precedence over the file-loop's file (if any):
-		#define USE_FILE_LOOP_FILE_IF_ARG_BLANK(arg) (*arg ? arg : (g.mLoopFile ? g.mLoopFile->cFileName : _T("")))
+		#define USE_FILE_LOOP_FILE_IF_ARG_BLANK(arg) \
+			(*arg ? arg : (g.mLoopFile ? g.mLoopFile->file_path : _T("")))
 		return FileGetAttrib(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2));
 	case ACT_FILESETATTRIB:
 		FileSetAttrib(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), ConvertLoopMode(ARG3), ArgToInt(4) == 1);

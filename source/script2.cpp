@@ -10705,9 +10705,7 @@ HWND Line::DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTit
 
 
 
-bool Line::FileIsFilteredOut(WIN32_FIND_DATA &aCurrentFile, FileLoopModeType aFileLoopMode
-	, LPTSTR aFilePath, size_t aFilePathLength)
-// Caller has ensured that aFilePath (if non-blank) has a trailing backslash.
+bool Line::FileIsFilteredOut(LoopFilesStruct &aCurrentFile, FileLoopModeType aFileLoopMode)
 {
 	if (aCurrentFile.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) // It's a folder.
 	{
@@ -10720,23 +10718,14 @@ bool Line::FileIsFilteredOut(WIN32_FIND_DATA &aCurrentFile, FileLoopModeType aFi
 		if (aFileLoopMode == FILE_LOOP_FOLDERS_ONLY)
 			return true; // Exclude this file by returning true.
 
-	// Since file was found, also prepend the file's path to its name for the caller:
-	if (*aFilePath)
-	{
-		// Seems best to check length in advance because it allows a faster move/copy method further below
-		// (in lieu of sntprintf(), which is probably quite a bit slower than the method here).
-		size_t name_length = _tcslen(aCurrentFile.cFileName);
-		if (aFilePathLength + name_length >= MAX_PATH)
-			// v1.0.45.03: Filter out filenames that would be truncated because it seems undesirable in 99% of
-			// cases to include such "faulty" data in the loop.  Most scripts would want to skip them rather than
-			// seeing the truncated names.  Furthermore, a truncated name might accidentally match the name
-			// of a legitimate non-truncated filename, which could cause such a name to get retrieved twice by
-			// the loop (or other undesirable side-effects).
-			return true;
-		//else no overflow is possible, so below can move things around inside the buffer without concern.
-		tmemmove(aCurrentFile.cFileName + aFilePathLength, aCurrentFile.cFileName, name_length + 1); // memmove() because source & dest might overlap.  +1 to include the terminator.
-		tmemcpy(aCurrentFile.cFileName, aFilePath, aFilePathLength); // Prepend in the area liberated by the above. Don't include the terminator since this is a concat operation.
-	}
+	// Since file was found, also append the file's name to its directory for the caller:
+	// Seems best to check length in advance because it allows a faster move/copy method further below
+	// (in lieu of sntprintf(), which is probably quite a bit slower than the method here).
+	size_t name_length = _tcslen(aCurrentFile.cFileName);
+	if (aCurrentFile.dir_length + name_length >= _countof(aCurrentFile.file_path)) // Should be impossible with current buffer sizes.
+		return true; // Exclude this file/folder.
+	tmemcpy(aCurrentFile.file_path + aCurrentFile.dir_length, aCurrentFile.cFileName, name_length + 1); // +1 to include the terminator.
+	aCurrentFile.file_path_length = aCurrentFile.dir_length + name_length;
 	return false; // Indicate that this file is not to be filtered out.
 }
 
@@ -11856,53 +11845,30 @@ VarSizeType BIV_LineFile(LPTSTR aBuf, LPTSTR aVarName)
 }
 
 
-
 VarSizeType BIV_LoopFileName(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple callers.
 {
-	LPTSTR naked_filename;
+	LPCTSTR filename = _T("");  // Set default.
 	if (g->mLoopFile)
 	{
-		// The loop handler already prepended the script's directory in here for us:
-		if (naked_filename = _tcsrchr(g->mLoopFile->cFileName, '\\'))
-			++naked_filename;
-		else // No backslash, so just make it the entire file name.
-			naked_filename = g->mLoopFile->cFileName;
-	}
-	else
-		naked_filename = _T("");
-	if (aBuf)
-		_tcscpy(aBuf, naked_filename);
-	return (VarSizeType)_tcslen(naked_filename);
-}
-
-VarSizeType BIV_LoopFileShortName(LPTSTR aBuf, LPTSTR aVarName)
-{
-	LPTSTR short_filename = _T("");  // Set default.
-	if (g->mLoopFile)
-	{
-		if (   !*(short_filename = g->mLoopFile->cAlternateFileName)   )
-			// Files whose long name is shorter than the 8.3 usually don't have value stored here,
-			// so use the long name whenever a short name is unavailable for any reason (could
-			// also happen if NTFS has short-name generation disabled?)
-			return BIV_LoopFileName(aBuf, _T(""));
+		// cAlternateFileName can be blank if the file lacks a short name, but it can also be blank
+		// if the file's proper name complies with all 8.3 requirements (not just length), so use
+		// cFileName whenever cAlternateFileName is empty.  GetShortPathName() also behaves this way.
+		if (   ctoupper(aVarName[10]) != 'S' // It's not A_LoopFileShortName or ...
+			|| !*(filename = g->mLoopFile->cAlternateFileName)   ) // ... there's no alternate name (see above).
+			filename = g->mLoopFile->cFileName;
 	}
 	if (aBuf)
-		_tcscpy(aBuf, short_filename);
-	return (VarSizeType)_tcslen(short_filename);
+		_tcscpy(aBuf, filename);
+	return (VarSizeType)_tcslen(filename);
 }
 
 VarSizeType BIV_LoopFileExt(LPTSTR aBuf, LPTSTR aVarName)
 {
-	LPTSTR file_ext = _T("");  // Set default.
+	LPCTSTR file_ext = _T("");  // Set default.
 	if (g->mLoopFile)
 	{
-		// The loop handler already prepended the script's directory in here for us:
 		if (file_ext = _tcsrchr(g->mLoopFile->cFileName, '.'))
-		{
 			++file_ext;
-			if (_tcschr(file_ext, '\\')) // v1.0.48.01: Disqualify periods found in the path instead of the filename; e.g. path.name\FileWithNoExtension.
-				file_ext = _T("");
-		}
 		else // Reset to empty string vs. NULL.
 			file_ext = _T("");
 	}
@@ -11913,74 +11879,76 @@ VarSizeType BIV_LoopFileExt(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_LoopFileDir(LPTSTR aBuf, LPTSTR aVarName)
 {
-	LPTSTR file_dir = _T("");  // Set default.
-	LPTSTR last_backslash = NULL;
-	if (g->mLoopFile)
+	if (!g->mLoopFile)
 	{
-		// The loop handler already prepended the script's directory in here for us.
-		// But if the loop had a relative path in its FilePattern, there might be
-		// only a relative directory here, or no directory at all if the current
-		// file is in the origin/root dir of the search:
-		if (last_backslash = _tcsrchr(g->mLoopFile->cFileName, '\\'))
-		{
-			*last_backslash = '\0'; // Temporarily terminate.
-			file_dir = g->mLoopFile->cFileName;
-		}
-		else // No backslash, so there is no directory in this case.
-			file_dir = _T("");
+		if (aBuf)
+			*aBuf = '\0';
+		return 0;
 	}
-	VarSizeType length = (VarSizeType)_tcslen(file_dir);
-	if (!aBuf)
+	LoopFilesStruct &lfs = *g->mLoopFile;
+	LPTSTR dir_end = lfs.file_path + lfs.dir_length; // Start of the filename.
+	size_t suffix_length = dir_end - lfs.file_path_suffix; // Directory names\ added since the loop started.
+	size_t total_length = lfs.orig_dir_length + suffix_length;
+	if (total_length)
+		--total_length; // Omit the trailing slash.
+	if (aBuf)
 	{
-		if (last_backslash)
-			*last_backslash = '\\';  // Restore the original value.
-		return length;
+		tmemcpy(aBuf, lfs.orig_dir, lfs.orig_dir_length);
+		tmemcpy(aBuf + lfs.orig_dir_length, lfs.file_path_suffix, suffix_length);
+		aBuf[total_length] = '\0'; // This replaces the final character copied above, if any.
 	}
-	_tcscpy(aBuf, file_dir);
-	if (last_backslash)
-		*last_backslash = '\\';  // Restore the original value.
-	return length;
+	return total_length;
 }
 
-VarSizeType BIV_LoopFileFullPath(LPTSTR aBuf, LPTSTR aVarName)
+VarSizeType BIV_LoopFilePath(LPTSTR aBuf, LPTSTR aVarName)
 {
-	// The loop handler already prepended the script's directory in cFileName for us:
-	LPTSTR full_path = g->mLoopFile ? g->mLoopFile->cFileName : _T("");
+	if (!g->mLoopFile)
+	{
+		if (aBuf)
+			*aBuf = '\0';
+		return 0;
+	}
+	LoopFilesStruct &lfs = *g->mLoopFile;
+	// Combine the original directory specified by the script with the dynamic part of file_path
+	// (i.e. the sub-directory and file names appended to it since the loop started):
+	size_t suffix_length = lfs.file_path_length - (lfs.file_path_suffix - lfs.file_path);
 	if (aBuf)
-		_tcscpy(aBuf, full_path);
-	return (VarSizeType)_tcslen(full_path);
+	{
+		tmemcpy(aBuf, lfs.orig_dir, lfs.orig_dir_length);
+		tmemcpy(aBuf + lfs.orig_dir_length, lfs.file_path_suffix, suffix_length + 1); // +1 for \0.
+	}
+	return lfs.orig_dir_length + suffix_length;
 }
 
 VarSizeType BIV_LoopFileLongPath(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR *unused, buf[MAX_PATH];
-	*buf = '\0'; // Set default.
-	if (g->mLoopFile)
+	if (!g->mLoopFile)
 	{
-		// GetFullPathName() is done in addition to ConvertFilespecToCorrectCase() for the following reasons:
-		// 1) It's currently the only easy way to get the full path of the directory in which a file resides.
-		//    For example, if a script is passed a filename via command line parameter, that file could be
-		//    either an absolute path or a relative path.  If relative, of course it's relative to A_WorkingDir.
-		//    The problem is, the script would have to manually detect this, which would probably take several
-		//    extra steps.
-		// 2) A_LoopFileLongPath is mostly intended for the following cases, and in all of them it seems
-		//    preferable to have the full/absolute path rather than the relative path:
-		//    a) Files dragged onto a .ahk script when the drag-and-drop option has been enabled via the Installer.
-		//    b) Files passed into the script via command line.
-		// The below also serves to make a copy because changing the original would yield
-		// unexpected/inconsistent results in a script that retrieves the A_LoopFileFullPath
-		// but only conditionally retrieves A_LoopFileLongPath.
-		if (!GetFullPathName(g->mLoopFile->cFileName, MAX_PATH, buf, &unused))
-			*buf = '\0'; // It might fail if NtfsDisable8dot3NameCreation is turned on in the registry, and possibly for other reasons.
-		else
-			// The below is called in case the loop is being used to convert filename specs that were passed
-			// in from the command line, which thus might not be the proper case (at least in the path
-			// portion of the filespec), as shown in the file system:
-			ConvertFilespecToCorrectCase(buf);
+		if (aBuf)
+			*aBuf = '\0';
+		return 0;
 	}
+	// GetFullPathName() is done in addition to ConvertFilespecToCorrectCase() for the following reasons:
+	// 1) It's currently the only easy way to get the full path of the directory in which a file resides.
+	//    For example, if a script is passed a filename via command line parameter, that file could be
+	//    either an absolute path or a relative path.  If relative, of course it's relative to A_WorkingDir.
+	//    The problem is, the script would have to manually detect this, which would probably take several
+	//    extra steps.
+	// 2) A_LoopFileLongPath is mostly intended for the following cases, and in all of them it seems
+	//    preferable to have the full/absolute path rather than the relative path:
+	//    a) Files dragged onto a .ahk script when the drag-and-drop option has been enabled via the Installer.
+	//    b) Files passed into the script via command line.
+	// Currently both are done by PerformLoopFilePattern(), for performance and in case the working
+	// directory changes after the Loop begins.
+	LoopFilesStruct &lfs = *g->mLoopFile;
+	// Combine long_dir with the dynamic part of file_path:
+	size_t suffix_length = lfs.file_path_length - (lfs.file_path_suffix - lfs.file_path);
 	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
-	return (VarSizeType)_tcslen(buf); // Must explicitly calculate the length rather than using the return value from GetFullPathName(), because ConvertFilespecToCorrectCase() expands 8.3 path components.
+	{
+		tmemcpy(aBuf, lfs.long_dir, lfs.long_dir_length);
+		tmemcpy(aBuf + lfs.long_dir_length, lfs.file_path_suffix, suffix_length + 1); // +1 for \0.
+	}
+	return lfs.long_dir_length + suffix_length;
 }
 
 VarSizeType BIV_LoopFileShortPath(LPTSTR aBuf, LPTSTR aVarName)
@@ -11992,16 +11960,24 @@ VarSizeType BIV_LoopFileShortPath(LPTSTR aBuf, LPTSTR aVarName)
 // But to detect if that short name is really a long name, A_LoopFileShortPath could be checked
 // and if it's blank, there is no short name available.
 {
-	TCHAR buf[MAX_PATH];
-	*buf = '\0'; // Set default.
-	DWORD length = 0;        //
-	if (g->mLoopFile)
-		// The loop handler already prepended the script's directory in cFileName for us:
-		if (   !(length = GetShortPathName(g->mLoopFile->cFileName, buf, MAX_PATH))   )
-			*buf = '\0'; // It might fail if NtfsDisable8dot3NameCreation is turned on in the registry, and possibly for other reasons.
+	if (!g->mLoopFile)
+	{
+		if (aBuf)
+			*aBuf = '\0';
+		return 0;
+	}
+	LoopFilesStruct &lfs = *g->mLoopFile;
+	// MSDN says cAlternateFileName is empty if the file does not have a long name.
+	// Testing and research shows that GetShortPathName() uses the long name for a directory
+	// or file if no short name exists, so there's no check for the filename's length here.
+	LPTSTR name = *lfs.cAlternateFileName ? lfs.cAlternateFileName : lfs.cFileName;
+	size_t name_length = _tcslen(name);
 	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
-	return (VarSizeType)length;
+	{
+		tmemcpy(aBuf, lfs.short_path, lfs.short_path_length);
+		tmemcpy(aBuf + lfs.short_path_length, name, name_length + 1); // +1 for \0.
+	}
+	return lfs.short_path_length + name_length;
 }
 
 VarSizeType BIV_LoopFileTime(LPTSTR aBuf, LPTSTR aVarName)
