@@ -693,7 +693,7 @@ private:
 	ResultType FileGetShortcut(LPTSTR aShortcutFile);
 	ResultType FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
 		, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState);
-	ResultType FileCreateDir(LPTSTR aDirSpec);
+	ResultType FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec = NULL);
 	ResultType FileRead(LPTSTR aFilespec);
 	ResultType FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber);
 	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *aCurrentReadFile);

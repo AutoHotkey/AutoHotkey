@@ -9640,7 +9640,7 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 
 
 
-ResultType Line::FileCreateDir(LPTSTR aDirSpec)
+ResultType Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 {
 	if (!aDirSpec || !*aDirSpec)
 		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
@@ -9652,13 +9652,24 @@ ResultType Line::FileCreateDir(LPTSTR aDirSpec)
 	// If it has a backslash, make sure all its parent directories exist before we attempt
 	// to create this directory:
 	LPTSTR last_backslash = _tcsrchr(aDirSpec, '\\');
-	if (last_backslash > aDirSpec) // v1.0.48.04: Changed "last_backslash" to "last_backslash > aDirSpec" so that an aDirSpec with a leading \ (but no other backslashes), such as \dir, is supported.
+	if (last_backslash > aDirSpec // v1.0.48.04: Changed "last_backslash" to "last_backslash > aDirSpec" so that an aDirSpec with a leading \ (but no other backslashes), such as \dir, is supported.
+		&& last_backslash[-1] != ':') // v1.1.28.00: Don't attempt FileCreateDir("C:") since that's equivalent to either "C:\" or the working directory (which already exists), or FileCreateDir("\\?\C:") since it always fails.
 	{
-		TCHAR parent_dir[MAX_PATH];
-		if (_tcslen(aDirSpec) >= _countof(parent_dir)) // avoid overflow
-			return SetErrorsOrThrow(true, ERROR_BUFFER_OVERFLOW);
-		tcslcpy(parent_dir, aDirSpec, last_backslash - aDirSpec + 1); // Omits the last backslash.
-		FileCreateDir(parent_dir); // Recursively create all needed ancestor directories.
+		LPTSTR parent_dir;
+		if (aCanModifyDirSpec)
+		{
+			parent_dir = aDirSpec; // Caller provided a modifiable aDirSpec.
+			*last_backslash = '\0'; // Temporarily terminate for parent directory.
+		}
+		else
+		{
+			// v1.1.28.00: Allocate a modifiable buffer to be used by all calls (supports long paths).
+			parent_dir = (LPTSTR)_alloca((last_backslash - aDirSpec + 1) * sizeof(TCHAR));
+			tcslcpy(parent_dir, aDirSpec, last_backslash - aDirSpec + 1); // Omits the last backslash.
+		}
+		FileCreateDir(parent_dir, parent_dir); // Recursively create all needed ancestor directories.
+		if (aCanModifyDirSpec)
+			*last_backslash = '\\'; // Undo temporary termination.
 
 		// v1.0.44: Fixed ErrorLevel being set to 1 when the specified directory ends in a backslash.  In such cases,
 		// two calls were made to CreateDirectory for the same folder: the first without the backslash and then with
