@@ -401,7 +401,7 @@ Script::~Script() // Destructor.
 	// especially if the sound subsystem part of the OS is currently swapped out or something:
 	if (g_SoundWasPlayed)
 	{
-		TCHAR buf[MAX_PATH * 2];
+		TCHAR buf[MAX_PATH * 2]; // See "MAX_PATH note" in Line::SoundPlay for comments.
 		mciSendString(_T("status ") SOUNDPLAY_ALIAS _T(" mode"), buf, _countof(buf), NULL);
 		if (*buf) // "playing" or "stopped"
 			mciSendString(_T("close ") SOUNDPLAY_ALIAS, NULL, 0, NULL);
@@ -423,7 +423,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 // Otherwise, aScriptFilename can be NULL if caller hasn't determined the filename of the script yet.
 {
 	mIsRestart = aIsRestart;
-	TCHAR buf[2048]; // Just to make sure we have plenty of room to do things with.
+	TCHAR buf[UorA(T_MAX_PATH, 2048)]; // Just to make sure we have plenty of room to do things with.
 	size_t buf_length;
 #ifdef AUTOHOTKEYSC
 	// Fix for v1.0.29: Override the caller's use of __argv[0] by using GetModuleFileName(),
@@ -440,8 +440,11 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		// For portability, first check if there's an <EXENAME>.ahk file in the current directory.
 		LPTSTR suffix, dot;
 		DWORD exe_len = GetModuleFileName(NULL, exe_buf, MAX_PATH + 2);
-		// exe_len can be MAX_PATH+2 on Windows XP, in which case it is not null-terminated.
-		// MAX_PATH+1 could mean it was truncated.  Any path longer than MAX_PATH would be rare.
+		// MAX_PATH+1 could mean it was truncated.  Any path longer than MAX_PATH is probably
+		// impossible as of 2018 since testing indicates the program can't start if its path
+		// is longer than MAX_PATH-1 even with Windows 10 long path awareness enabled.
+		// On Windows XP, exe_len of exactly the buffer size specified would indicate the path
+		// was truncated and not null-terminated, but is probably impossible in this case.
 		if (exe_len > MAX_PATH)
 			return FAIL; // Seems the safest option for this unlikely case.
 		if (  (suffix = _tcsrchr(exe_buf, '\\')) // Find name part of path.
@@ -983,7 +986,7 @@ ResultType Script::Edit()
 		SetForegroundWindowEx(hwnd);
 	else
 	{
-		TCHAR buf[MAX_PATH * 2];
+		TCHAR buf[T_MAX_PATH + 2]; // +2 for the two quote marks.
 		// Enclose in double quotes anything that might contain spaces since the CreateProcess()
 		// method, which is attempted first, is more likely to succeed.  This is because it uses
 		// the command line method of creating the process, with everything all lumped together:
@@ -1019,7 +1022,7 @@ ResultType Script::Reload(bool aDisplayErrors)
 	// Script" menu item is not available for compiled scripts, it can't be called from there.
 	return g_script.ActionExec(mOurEXE, _T("/restart"), g_WorkingDirOrig, aDisplayErrors);
 #else
-	TCHAR arg_string[MAX_PATH + 512];
+	TCHAR arg_string[T_MAX_PATH + 16];
 	sntprintf(arg_string, _countof(arg_string), _T("/restart \"%s\""), mFileSpec);
 	return g_script.ActionExec(mOurEXE, arg_string, g_WorkingDirOrig, aDisplayErrors);
 #endif
@@ -1211,7 +1214,7 @@ UINT Script::LoadFromFile()
 	DWORD attr = g_RunStdIn ? 0 : GetFileAttributes(mFileSpec); // v1.1.17: Don't check if reading script from stdin.
 	if (attr == MAXDWORD) // File does not exist or lacking the authorization to get its attributes.
 	{
-		TCHAR buf[MAX_PATH + 256];
+		TCHAR buf[T_MAX_PATH + 24];
 		sntprintf(buf, _countof(buf), _T("Script file not found:\n%s"), mFileSpec);
 		MsgBox(buf, MB_ICONHAND);
 		return 0;
@@ -1451,7 +1454,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		Line::sMaxSourceFiles = new_max;
 	}
 
-	TCHAR full_path[MAX_PATH];
+	TCHAR full_path[T_MAX_PATH];
 #endif
 
 	// Keep this var on the stack due to recursion, which allows newly created lines to be given the
@@ -1481,7 +1484,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 #endif
 
 	// <buf> should be no larger than LINE_SIZE because some later functions rely upon that:
-	TCHAR msg_text[MAX_PATH + 256], buf1[LINE_SIZE], buf2[LINE_SIZE], suffix[16], pending_buf[LINE_SIZE];
+	TCHAR buf1[LINE_SIZE], buf2[LINE_SIZE], suffix[16], pending_buf[LINE_SIZE];
 	*pending_buf = '\0';
 	LPTSTR buf = buf1, next_buf = buf2; // Oscillate between bufs to improve performance (avoids memcpy from buf2 to buf1).
 	size_t buf_length, next_buf_length, suffix_length;
@@ -1498,6 +1501,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	{
 		if (aIgnoreLoadFailure)
 			return OK;
+		TCHAR msg_text[T_MAX_PATH + 64]; // T_MAX_PATH vs. MAX_PATH because the full length could be utilized with ErrorStdOut.
 		sntprintf(msg_text, _countof(msg_text), _T("%s file \"%s\" cannot be opened.")
 			, Line::sSourceFileCount > 0 ? _T("#Include") : _T("Script"), aFileSpec);
 		return ScriptError(msg_text);
@@ -2601,6 +2605,7 @@ examine_line:
 						if (!mIncludeLibraryFunctionsThenExit) // Current keyboard layout is not relevant in /iLib mode.
 #endif
 						{
+							TCHAR msg_text[128];
 							sntprintf(msg_text, _countof(msg_text), _T("Note: The hotkey %s will not be active because it does not exist in the current keyboard layout."), buf);
 							MsgBox(msg_text);
 						}
@@ -13985,6 +13990,10 @@ ResultType Line::PerformLoopParseCSV(ExprTokenType *aResultToken, bool &aContinu
 ResultType Line::PerformLoopReadFile(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 	, TextStream *aReadFile, LPTSTR aWriteFileName)
 {
+	// Make a persistent copy in case aWriteFileName's contents are in the deref buffer:
+	if (  !(aWriteFileName = _tcsdup(aWriteFileName))  )
+		return LineError(ERR_OUTOFMEM);
+
 	LoopReadFileStruct loop_info(aReadFile, aWriteFileName);
 	size_t line_length;
 	ResultType result;

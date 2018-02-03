@@ -1834,7 +1834,7 @@ LPTSTR GuiType::ConvertEvent(GuiEventType evt)
 
 IObject* GuiType::CreateDropArray(HDROP hDrop)
 {
-	TCHAR buf[MAX_PATH];
+	TCHAR buf[T_MAX_PATH]; // T_MAX_PATH vs. MAX_PATH is unlikely to matter if the source of hDrop is the shell as of 2018, but may allow long paths in future OS versions.
 	UINT file_count = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
 	Object* obj = Object::Create();
 	ExprTokenType tok(buf);
@@ -1842,7 +1842,7 @@ IObject* GuiType::CreateDropArray(HDROP hDrop)
 
 	for (UINT u = 0; u < file_count; u++)
 	{
-		DragQueryFile(hDrop, u, buf, MAX_PATH);
+		DragQueryFile(hDrop, u, buf, _countof(buf));
 		obj->InsertAt(u, u+1, &pTok, 1);
 	}
 

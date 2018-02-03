@@ -33,13 +33,13 @@ ResultType Line::IniRead(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey, LPTSTR 
 {
 	if (!aDefault || !*aDefault)
 		aDefault = _T("ERROR");  // This mirrors what AutoIt2 does for its default value.
-	TCHAR	szFileTemp[_MAX_PATH+1];
+	TCHAR	szFileTemp[T_MAX_PATH];
 	TCHAR	*szFilePart, *cp;
 	TCHAR	szBuffer[65535];					// Max ini file size is 65535 under 95
 	*szBuffer = '\0';
 	TCHAR	szEmpty[] = _T("");
 	// Get the fullpathname (ini functions need a full path):
-	GetFullPathName(aFilespec, _MAX_PATH, szFileTemp, &szFilePart);
+	GetFullPathName(aFilespec, _countof(szFileTemp), szFileTemp, &szFilePart);
 	if (*aKey)
 	{
 		// An access violation can occur if the following conditions are met:
@@ -115,11 +115,11 @@ static BOOL IniEncodingFix(LPWSTR aFilespec, LPWSTR aSection)
 
 ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 {
-	TCHAR	szFileTemp[_MAX_PATH+1];
+	TCHAR	szFileTemp[T_MAX_PATH];
 	TCHAR	*szFilePart;
 	BOOL	result;
 	// Get the fullpathname (INI functions need a full path) 
-	GetFullPathName(aFilespec, _MAX_PATH, szFileTemp, &szFilePart);
+	GetFullPathName(aFilespec, _countof(szFileTemp), szFileTemp, &szFilePart);
 #ifdef UNICODE
 	// WritePrivateProfileStringW() always creates INIs using the system codepage.
 	// IniEncodingFix() checks if the file exists and if it doesn't then it creates
@@ -156,10 +156,10 @@ ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTS
 ResultType Line::IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 // Note that aKey can be NULL, in which case the entire section will be deleted.
 {
-	TCHAR	szFileTemp[_MAX_PATH+1];
+	TCHAR	szFileTemp[T_MAX_PATH];
 	TCHAR	*szFilePart;
 	// Get the fullpathname (ini functions need a full path) 
-	GetFullPathName(aFilespec, _MAX_PATH, szFileTemp, &szFilePart);
+	GetFullPathName(aFilespec, _countof(szFileTemp), szFileTemp, &szFilePart);
 	BOOL result = WritePrivateProfileString(aSection, aKey, NULL, szFileTemp);  // Returns zero on failure.
 	WritePrivateProfileString(NULL, NULL, NULL, szFileTemp);	// Flush
 	return SetErrorLevelOrThrowBool(!result);

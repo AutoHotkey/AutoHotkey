@@ -1416,7 +1416,7 @@ LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFilespec, LPTSTR aBuf, size_t aBufSi
 
 void ConvertFilespecToCorrectCase(LPTSTR aBuf, size_t aBufSize, size_t &aBufLength)
 {
-	TCHAR built_filespec[UorA(MAX_WIDE_PATH, MAX_PATH)];
+	TCHAR built_filespec[T_MAX_PATH];
 	if (aBufSize > _countof(built_filespec))
 		aBufSize = _countof(built_filespec);
 	if (ConvertFilespecToCorrectCase(aBuf, built_filespec, aBufSize, aBufLength))
@@ -2134,8 +2134,8 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 			if (DynGdiplusStartup && DynGdiplusStartup(&token, &gdi_input, NULL) == Gdiplus::Ok)
 			{
 #ifndef UNICODE
-				WCHAR filespec_wide[MAX_PATH];
-				ToWideChar(aFilespec, filespec_wide, MAX_PATH); // Dest. size is in wchars, not bytes.
+				WCHAR filespec_wide[MAX_WIDE_PATH]; // MAX_WIDE_PATH vs. MAX_PATH allows this to work with long paths (\\?\ prefix may be required).
+				ToWideChar(aFilespec, filespec_wide, _countof(filespec_wide)); // Dest. size is in wchars, not bytes.
 				if (DynGdipCreateBitmapFromFile(filespec_wide, &pgdi_bitmap) == Gdiplus::Ok)
 #else
 				if (DynGdipCreateBitmapFromFile(aFilespec, &pgdi_bitmap) == Gdiplus::Ok)

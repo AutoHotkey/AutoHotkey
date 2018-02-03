@@ -485,15 +485,18 @@ class TextStream; // TextIO
 struct LoopReadFileStruct
 {
 	TextStream *mReadFile, *mWriteFile;
-	TCHAR mWriteFileName[MAX_PATH];
+	LPTSTR mWriteFileName;
 	#define READ_FILE_LINE_SIZE (64 * 1024)  // This is also used by FileReadLine().
 	TCHAR mCurrentLine[READ_FILE_LINE_SIZE];
 	LoopReadFileStruct(TextStream *aReadFile, LPTSTR aWriteFileName)
 		: mReadFile(aReadFile), mWriteFile(NULL) // mWriteFile is opened by FileAppend() only upon first use.
+		, mWriteFileName(aWriteFileName) // Caller has passed the result of _tcsdup() for us to take over.
 	{
-		// Use our own buffer because caller's is volatile due to possibly being in the deref buffer:
-		tcslcpy(mWriteFileName, aWriteFileName, _countof(mWriteFileName));
 		*mCurrentLine = '\0';
+	}
+	~LoopReadFileStruct()
+	{
+		free(mWriteFileName);
 	}
 };
 

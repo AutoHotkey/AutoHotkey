@@ -61,6 +61,11 @@ GNU General Public License for more details.
 
 // Maximum length of a Unicode file path, plus null-terminator.
 #define MAX_WIDE_PATH 32768
+#ifdef UNICODE
+#define T_MAX_PATH MAX_WIDE_PATH
+#else
+#define T_MAX_PATH MAX_PATH
+#endif
 
 // The following avoid having to link to OLDNAMES.lib, but they probably don't
 // reduce code size at all.

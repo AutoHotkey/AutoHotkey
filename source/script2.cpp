@@ -8144,7 +8144,7 @@ ResultType Line::DriveSpace(LPTSTR aPath, bool aGetFreeSpace)
 
 	if (!aPath || !*aPath) goto error;  // Below relies on this check.
 
-	TCHAR buf[MAX_PATH + 1];  // +1 to allow appending of backslash.
+	TCHAR buf[MAX_PATH]; // MAX_PATH vs T_MAX_PATH because testing shows it doesn't support long paths even with \\?\.
 	tcslcpy(buf, aPath, _countof(buf));
 	size_t length = _tcslen(buf);
 	if (buf[length - 1] != '\\') // Trailing backslash is present, which some of the API calls below don't like.
@@ -8195,7 +8195,7 @@ ResultType Line::Drive(LPTSTR aCmd, LPTSTR aValue, LPTSTR aValue2) // aValue not
 {
 	DriveCmds drive_cmd = ConvertDriveCmd(aCmd);
 
-	TCHAR path[MAX_PATH + 1];  // +1 to allow room for trailing backslash in case it needs to be added.
+	TCHAR path[MAX_PATH]; // MAX_PATH vs. T_MAX_PATH because SetVolumeLabel() can't seem to make use of long paths.
 	size_t path_length;
 
 	// Notes about the below macro:
@@ -8362,7 +8362,7 @@ ResultType Line::DriveGet(LPTSTR aCmd, LPTSTR aValue)
 	if (drive_get_cmd == DRIVEGET_CMD_CAPACITY)
 		return DriveSpace(aValue, false);
 
-	TCHAR path[MAX_PATH + 1];  // +1 to allow room for trailing backslash in case it needs to be added.
+	TCHAR path[T_MAX_PATH]; // T_MAX_PATH vs. MAX_PATH, though testing indicates only GetDriveType() supports long paths.
 	size_t path_length;
 
 	if (drive_get_cmd == DRIVEGET_CMD_SETLABEL) // The is retained for backward compatibility even though the Drive cmd is normally used.
@@ -9248,6 +9248,10 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 		// ATOU() returns 0xFFFFFFFF for -1, which is relied upon to support the -1 sound.
 	// See http://msdn.microsoft.com/library/default.asp?url=/library/en-us/multimed/htm/_win32_play.asp
 	// for some documentation mciSendString() and related.
+	// MAX_PATH note: There's no chance this API supports long paths even on Windows 10.
+	// Research indicates it limits paths to 127 chars (not even MAX_PATH), but since there's
+	// no apparent benefit to reducing it, we'll keep this size to ensure backward-compatibility.
+	// Note that using a relative path does not help, but using short (8.3) names does.
 	TCHAR buf[MAX_PATH * 2]; // Allow room for filename and commands.
 	mciSendString(_T("status ") SOUNDPLAY_ALIAS _T(" mode"), buf, _countof(buf), NULL);
 	if (*buf) // "playing" or "stopped" (so close it before trying to re-open with a new aFilespec).
@@ -9366,12 +9370,20 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 	TCHAR file_buf[65535];
 	*file_buf = '\0'; // Set default.
 
-	TCHAR working_dir[MAX_PATH];
+	TCHAR working_dir[MAX_PATH]; // Using T_MAX_PATH vs. MAX_PATH did not help on Windows 10.0.16299 (see below).
 	if (!aWorkingDir || !*aWorkingDir)
 		*working_dir = '\0';
 	else
 	{
-		tcslcpy(working_dir, aWorkingDir, _countof(working_dir));
+		// Compress the path if possible to support longer paths.  Without this, any path longer
+		// than MAX_PATH would be ignored, presumably because the dialog, as part of the shell,
+		// does not support long paths.  Surprisingly, although Windows 10 long path awareness
+		// does not allow us to pass a long path for working_dir, it does affect whether the long
+		// path is used in the address bar and returned filenames.
+		if (_tcslen(aWorkingDir) >= MAX_PATH)
+			GetShortPathName(aWorkingDir, working_dir, _countof(working_dir));
+		else
+			tcslcpy(working_dir, aWorkingDir, _countof(working_dir));
 		// v1.0.43.10: Support CLSIDs such as:
 		//   My Computer  ::{20d04fe0-3aea-1069-a2d8-08002b30309d}
 		//   My Documents ::{450d8fba-ad25-11d0-98a8-0800361b1103}
@@ -10183,7 +10195,7 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	// Ahk2Exe converts it to upper-case before adding the resource. My testing showed that
 	// using lower or mixed case in some instances prevented the resource from being found.
 	// Since file paths are case-insensitive, it certainly doesn't seem harmful to do this:
-	TCHAR source[MAX_PATH];
+	TCHAR source[T_MAX_PATH];
 	size_t source_length = _tcslen(aSource);
 	if (source_length >= _countof(source))
 		// Probably can't happen; for simplicity, truncate it.
@@ -10212,8 +10224,8 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	// v1.0.35.11: Must search in A_ScriptDir by default because that's where ahk2exe will search by default.
 	// The old behavior was to search in A_WorkingDir, which seems pointless because ahk2exe would never
 	// be able to use that value if the script changes it while running.
-	TCHAR aDestPath[MAX_PATH];
-	GetFullPathName(aDest, MAX_PATH, aDestPath, NULL);
+	TCHAR aDestPath[T_MAX_PATH];
+	GetFullPathName(aDest, _countof(aDestPath), aDestPath, NULL);
 	SetCurrentDirectory(g_script.mFileDir);
 	success = CopyFile(aSource, aDestPath, !allow_overwrite);
 	SetCurrentDirectory(g_WorkingDir); // Restore to proper value.
@@ -11538,15 +11550,10 @@ VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName)
 	// dialog can thus change the current directory as seen by the active quasi-thread even
 	// though g_WorkingDir hasn't been updated.  It might also be possible for the working
 	// directory to change in unusual circumstances such as a network drive being lost).
-	//
-	// Fix for v1.0.43.11: Changed size below from 9999 to MAX_PATH, otherwise it fails sometimes on Win9x.
-	// Testing shows that the failure is not caused by GetCurrentDirectory() writing to the unused part of the
-	// buffer, such as zeroing it (which is good because that would require this part to be redesigned to pass
-	// the actual buffer size or use a temp buffer).  So there's something else going on to explain why the
-	// problem only occurs in longer scripts on Win98se, not in trivial ones such as Var=%A_WorkingDir%.
-	// Nor did the problem affect expression assignments such as Var:=A_WorkingDir.
-	TCHAR buf[MAX_PATH];
-	VarSizeType length = GetCurrentDirectory(MAX_PATH, buf);
+	// Update: FileSelectFile changing the current directory might be OS-specific;
+	// I could not reproduce it on Windows 10.
+	TCHAR buf[T_MAX_PATH]; // T_MAX_PATH vs. MAX_PATH only has an effect with Windows 10 long path awareness.
+	DWORD length = GetCurrentDirectory(_countof(buf), buf);
 	if (aBuf)
 		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
 	return length;
@@ -11559,8 +11566,8 @@ VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_WinDir(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR buf[MAX_PATH];
-	VarSizeType length = GetWindowsDirectory(buf, MAX_PATH);
+	TCHAR buf[MAX_PATH]; // MSDN (2018): The uSize parameter "should be set to MAX_PATH."
+	VarSizeType length = GetWindowsDirectory(buf, _countof(buf));
 	if (aBuf)
 		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
 	return length;
@@ -11575,17 +11582,17 @@ VarSizeType BIV_WinDir(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_Temp(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR buf[MAX_PATH];
-	VarSizeType length = GetTempPath(MAX_PATH, buf);
+	TCHAR buf[MAX_PATH+1]; // MSDN (2018): "The maximum possible return value is MAX_PATH+1 (261)."
+	VarSizeType length = GetTempPath(_countof(buf), buf);
 	if (aBuf)
 	{
 		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
 		if (length)
 		{
 			aBuf += length - 1;
-			if (*aBuf == '\\') // For some reason, it typically yields a trailing backslash, so omit it to improve friendliness/consistency.
+			if (*aBuf == '\\') // Should always be true. MSDN: "The returned string ends with a backslash"
 			{
-				*aBuf = '\0';
+				*aBuf = '\0'; // Omit the trailing backslash to improve friendliness/consistency.
 				--length;
 			}
 		}
@@ -11604,6 +11611,10 @@ VarSizeType BIV_ComSpec(LPTSTR aBuf, LPTSTR aVarName)
 VarSizeType BIV_SpecialFolderPath(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_PATH]; // One caller relies on this being explicitly limited to MAX_PATH.
+	// SHGetFolderPath requires a buffer size of MAX_PATH, but the function was superseded
+	// by SHGetKnownFolderPath in Windows Vista, and that function returns COM-allocated
+	// memory of unknown length.  However, it seems the shell still does not support long
+	// paths as of 2018.
 	int aFolder;
 	switch (ctoupper(aVarName[2]))
 	{
@@ -11640,7 +11651,7 @@ VarSizeType BIV_SpecialFolderPath(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_MyDocuments(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple callers.
 {
-	TCHAR buf[MAX_PATH];
+	TCHAR buf[MAX_PATH]; // SHGetFolderPath requires a buffer size of MAX_PATH.
 	if (SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, buf) != S_OK)
 		*buf = '\0';
 	// Since it is common (such as in networked environments) to have My Documents on the root of a drive
@@ -12321,11 +12332,11 @@ VarSizeType BIV_GuiEvent(LPTSTR aBuf, LPTSTR aVarName)
 		// Above has ensured that file_count > 0
 		if (aBuf)
 		{
-			TCHAR buf[MAX_PATH], *cp = aBuf;
+			TCHAR buf[T_MAX_PATH], *cp = aBuf; // T_MAX_PATH is arbitrary since aBuf is already known to be large enough.
 			UINT length;
 			for (u = 0; u < file_count; ++u)
 			{
-				length = DragQueryFile(pgui->mHdrop, u, buf, MAX_PATH); // MAX_PATH is arbitrary since aBuf is already known to be large enough.
+				length = DragQueryFile(pgui->mHdrop, u, buf, _countof(buf));
 				_tcscpy(cp, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for something that isn't actually that large (though clearly large enough) due to previous size-estimation phase) can crash because the API may read/write data beyond what it actually needs.
 				cp += length;
 				if (u < file_count - 1) // i.e omit the LF after the last file to make parsing via "Loop, Parse" easier.
