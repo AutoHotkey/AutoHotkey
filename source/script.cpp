@@ -3016,13 +3016,15 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				*parameter_end = '\0'; // Remove '>'.
 				bool error_was_shown, file_was_found;
 				// Save the working directory.
-				TCHAR buf[MAX_PATH];
-				if (!GetCurrentDirectory(_countof(buf) - 1, buf))
-					*buf = '\0';
+				LPTSTR prev_dir = GetWorkingDir();
 				// Attempt to include a script file based on the same rules as func() auto-include:
 				FindFuncInLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found, false);
 				// Restore the working directory so that any ordinary #includes will work correctly.
-				SetCurrentDirectory(buf);
+				if (prev_dir)
+				{
+					SetCurrentDirectory(prev_dir);
+					free(prev_dir);
+				}
 				// If any file was included, consider it a success; i.e. allow #include <lib> and #include <lib_func>.
 				if (!error_was_shown && (file_was_found || ignore_load_failure))
 					return CONDITION_TRUE;

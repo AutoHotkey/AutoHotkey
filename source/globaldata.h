@@ -172,7 +172,7 @@ extern DWORD g_OriginalTimeout;
 EXTERN_G;
 extern global_struct g_default, *g_array;
 
-extern TCHAR g_WorkingDir[MAX_PATH];  // Explicit size needed here in .h file for use with sizeof().
+extern CString g_WorkingDir;
 extern LPTSTR g_WorkingDirOrig;
 
 extern bool g_ContinuationLTrim;

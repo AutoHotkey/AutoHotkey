@@ -209,8 +209,8 @@ global_struct *g = &g_startup; // g_startup provides a non-NULL placeholder duri
 // when the script has many high-frequency timers), and possibly changing the working directory
 // whenever a new thread is launched, doesn't seem worth it.  This is because the need to change
 // the working directory is comparatively rare:
-TCHAR g_WorkingDir[MAX_PATH] = _T("");
-TCHAR *g_WorkingDirOrig = NULL;  // Assigned a value in WinMain().
+CString g_WorkingDir;
+LPTSTR g_WorkingDirOrig = NULL;  // Assigned a value in WinMain().
 
 bool g_ContinuationLTrim = false;
 bool g_ForceKeybdHook = false;

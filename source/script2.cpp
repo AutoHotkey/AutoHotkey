@@ -9291,62 +9291,76 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 void SetWorkingDir(LPTSTR aNewDir)
 // Sets ErrorLevel to indicate success/failure, but only if the script has begun runtime execution (callers
 // want that).
-// This function was added in v1.0.45.01 for the reasons commented further below.
-// It's similar to the one in the ahk2exe source, so maintain them together.
+// This function was added in v1.0.45.01 for the reason described below.
 {
+	// v1.0.45.01: Since A_ScriptDir omits the trailing backslash for roots of drives (such as C:),
+	// and since that variable probably shouldn't be changed for backward compatibility, provide
+	// the missing backslash to allow SetWorkingDir %A_ScriptDir% (and others) to work as expected
+	// in the root of a drive.
+	// Update in 2018: The reason it wouldn't by default is that "C:" is actually a reference to the
+	// the current directory if it's on C: drive, otherwise a reference to the path contained by the
+	// env var "=C:".  Similarly, "C:x" is a reference to "x" inside that directory.
+	// For details, see https://blogs.msdn.microsoft.com/oldnewthing/20100506-00/?p=14133
+	// Although the override here creates inconsistency between SetWorkingDir and everything else
+	// that can accept "C:", it is most likely what the user wants, and now there's also backward-
+	// compatibility to consider since this workaround has been in place since 2006.
+	// v1.1.28.00: Add the slash up-front instead of attempting SetCurrentDirectory(_T("C:"))
+	// and comparing the result, since the comparison would always yield "not equal" due to either
+	// a trailing slash or the directory being incorrect.
+	TCHAR drive_buf[4];
+	if (aNewDir[0] && aNewDir[1] == ':' && !aNewDir[2])
+	{
+		drive_buf[0] = aNewDir[0];
+		drive_buf[1] = aNewDir[1];
+		drive_buf[2] = '\\';
+		drive_buf[3] = '\0';
+		aNewDir = drive_buf;
+	}
+
 	if (!SetCurrentDirectory(aNewDir)) // Caused by nonexistent directory, permission denied, etc.
 	{
 		if (g_script.mIsReadyToExecute)
 			g_script.SetErrorLevelOrThrow();
 		return;
 	}
+	// Otherwise, the change to the working directory succeeded.
 
-	// Otherwise, the change to the working directory *apparently* succeeded (but is confirmed below for root drives
-	// and also because we want the absolute path in cases where aNewDir is relative).
-	TCHAR buf[_countof(g_WorkingDir)];
-	LPTSTR actual_working_dir = g_script.mIsReadyToExecute ? g_WorkingDir : buf; // i.e. don't update g_WorkingDir when our caller is the #include directive.
 	// Other than during program startup, this should be the only place where the official
 	// working dir can change.  The exception is FileSelectFile(), which changes the working
 	// dir as the user navigates from folder to folder.  However, the whole purpose of
 	// maintaining g_WorkingDir is to workaround that very issue.
-
-	// GetCurrentDirectory() is called explicitly, to confirm the change, in case aNewDir is a relative path.
-	// We want to store the absolute path:
-	if (!GetCurrentDirectory(_countof(buf), actual_working_dir)) // Might never fail in this case, but kept for backward compatibility.
+	if (g_script.mIsReadyToExecute) // Callers want this done only during script runtime.
 	{
-		tcslcpy(actual_working_dir, aNewDir, _countof(buf)); // Update the global to the best info available.
-		// But ErrorLevel is set to "none" further below because the actual "set" did succeed; it's also for
-		// backward compatibility.
-	}
-	else // GetCurrentDirectory() succeeded, so it's appropriate to compare what we asked for to what was received.
-	{
-		if (aNewDir[0] && aNewDir[1] == ':' && !aNewDir[2] // Root with missing backslash. Relies on short-circuit boolean order.
-			&& _tcsicmp(aNewDir, actual_working_dir)) // The root directory we requested didn't actually get set. See below.
-		{
-			// There is some strange OS behavior here: If the current working directory is C:\anything\...
-			// and SetCurrentDirectory() is called to switch to "C:", the function reports success but doesn't
-			// actually change the directory.  However, if you first change to D: then back to C:, the change
-			// works as expected.  Presumably this is for backward compatibility with DOS days; but it's 
-			// inconvenient and seems desirable to override it in this case, especially because:
-			// v1.0.45.01: Since A_ScriptDir omits the trailing backslash for roots of drives (such as C:),
-			// and since that variable probably shouldn't be changed for backward compatibility, provide
-			// the missing backslash to allow SetWorkingDir %A_ScriptDir% (and others) to work in the root
-			// of a drive.
-			TCHAR buf_temp[8];
-			_stprintf(buf_temp, _T("%s\\"), aNewDir); // No danger of buffer overflow in this case.
-			if (SetCurrentDirectory(buf_temp))
-			{
-				if (!GetCurrentDirectory(_countof(buf), actual_working_dir)) // Might never fail in this case, but kept for backward compatibility.
-					tcslcpy(actual_working_dir, aNewDir, _countof(buf)); // But still report "no error" (below) because the Set() actually did succeed.
-					// But treat this as a success like the similar one higher above.
-			}
-			//else Set() failed; but since the original Set() succeeded (and for simplicity) report ErrorLevel "none".
-		}
-	}
-
-	// Since the above didn't return, it wants us to indicate success.
-	if (g_script.mIsReadyToExecute) // Callers want ErrorLevel changed only during script runtime.
+		UpdateWorkingDir(aNewDir);
+		// Since the above didn't return, it wants us to indicate success.
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+	}
+}
+
+
+
+void UpdateWorkingDir(LPTSTR aNewDir)
+// aNewDir is NULL or a path which was just passed to SetCurrentDirectory().
+{
+	TCHAR buf[T_MAX_PATH]; // Windows 10 long path awareness enables working dir to exceed MAX_PATH.
+	// GetCurrentDirectory() is called explicitly, in case aNewDir is a relative path.
+	// We want to store the absolute path:
+	if (GetCurrentDirectory(_countof(buf), buf)) // Might never fail in this case, but kept for backward compatibility.
+		aNewDir = buf;
+	if (aNewDir)
+		g_WorkingDir.SetString(aNewDir);
+}
+
+
+
+LPTSTR GetWorkingDir()
+// Allocate a copy of the working directory from the heap.  This is used to support long
+// paths without adding 64KB of stack usage per recursive #include <> on Unicode builds.
+{
+	TCHAR buf[T_MAX_PATH];
+	if (GetCurrentDirectory(_countof(buf), buf))
+		return _tcsdup(buf);
+	return NULL;
 }
 
 
