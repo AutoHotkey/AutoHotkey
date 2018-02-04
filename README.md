@@ -14,7 +14,7 @@ AutoHotkey is developed with [Microsoft Visual Studio Community 2015 Express](ht
   - Get the source code.
   - Open AutoHotkeyx.sln in Visual Studio.
   - Select the appropriate Build and Platform.
-  - Build.
+  - Build. (seems like some steps may be missing around here)
 
 The project is configured to build with the Visual C++ 2010 toolset if available, primarily to facilitate Windows 2000 support but also because it appears to produce smaller 32-bit binaries than later versions. If the 2010 toolset is not available for a given platform, the project should automatically fall back to v140 (2015), v120 (2013) or v110 (2012).
 
