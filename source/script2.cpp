@@ -10183,8 +10183,7 @@ ResultType Line::FileDelete(LPTSTR aFilePattern)
 	}
 
 	// Otherwise aFilePattern contains wildcards, so we'll search for all matches and delete them.
-	FilePatternApply(aFilePattern, FILE_LOOP_FILES_ONLY, false, FileDeleteCallback, NULL);
-	return g->ThrownToken ? FAIL : OK;
+	return FilePatternApply(aFilePattern, FILE_LOOP_FILES_ONLY, false, FileDeleteCallback, NULL);
 }
 
 
@@ -10272,8 +10271,8 @@ struct FileSetAttribData
 	DWORD and_mask, xor_mask;
 };
 
-int Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
-	, bool aDoRecurse, bool aCalledRecursively)
+ResultType Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern
+	, FileLoopModeType aOperateOnFolders, bool aDoRecurse)
 // Returns the number of files and folders that could not be changed due to an error.
 {
 	// Convert the attribute string to three bit-masks: add, remove and toggle.
@@ -10335,69 +10334,64 @@ BOOL FileSetAttribCallback(LPTSTR file_path, WIN32_FIND_DATA &current_file, void
 
 
 
-int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
-	, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData
-	, bool aCalledRecursively)
+ResultType Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
+	, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData)
 {
-	if (!aCalledRecursively)  // i.e. Only need to do this if we're not called by ourself:
-	{
-		if (!*aFilePattern)
-		{
-			SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
-			return 0;
-		}
-		if (aOperateOnFolders == FILE_LOOP_INVALID) // In case runtime dereference of a var was an invalid value.
-			aOperateOnFolders = FILE_LOOP_FILES_ONLY;  // Set default.
-		g->LastError = 0; // Set default. Overridden only when a failure occurs.
-	}
+	if (!*aFilePattern)
+		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
 
-	if (_tcslen(aFilePattern) >= MAX_PATH) // Checked early to simplify other things below.
-	{
-		SetErrorsOrThrow(true, ERROR_BUFFER_OVERFLOW);
-		return 0;
-	}
-
-	// Testing shows that the ANSI version of FindFirstFile() will not accept a path+pattern longer
-	// than 256 or so, even if the pattern would match files whose names are short enough to be legal.
-	// Therefore, as of v1.0.25, there is also a hard limit of MAX_PATH on all these variables.
-	// MSDN confirms this in a vague way: "In the ANSI version of FindFirstFile(), [plpFileName] is
-	// limited to MAX_PATH characters."
-	TCHAR file_pattern[MAX_PATH], file_path[MAX_PATH]; // Giving +3 extra for "*.*" seems fairly pointless because any files that actually need that extra room would fail to be retrieved by FindFirst/Next due to their inability to support paths much over 256.
-	_tcscpy(file_pattern, aFilePattern); // Make a copy in case of overwrite of deref buf during LONG_OPERATION/MsgSleep.
-	_tcscpy(file_path, aFilePattern);    // An earlier check has ensured these won't overflow.
-
-	size_t file_path_length; // The length of just the path portion of the filespec.
-	LPTSTR last_backslash = _tcsrchr(file_path, '\\');
+	if (aOperateOnFolders == FILE_LOOP_INVALID) // In case runtime dereference of a var was an invalid value.
+		aOperateOnFolders = FILE_LOOP_FILES_ONLY;  // Set default.
+	g->LastError = 0; // Set default. Overridden only when a failure occurs.
+	
+	FilePatternStruct fps;
+	
+	LPTSTR last_backslash = _tcsrchr(aFilePattern, '\\');
 	if (last_backslash)
-	{
-		// Remove the filename and/or wildcard part.   But leave the trailing backslash on it for
-		// consistency with below:
-		*(last_backslash + 1) = '\0';
-		file_path_length = _tcslen(file_path);
-	}
+		fps.dir_length = last_backslash - aFilePattern + 1; // Include the slash.
 	else // Use current working directory, e.g. if user specified only *.*
-	{
-		*file_path = '\0';
-		file_path_length = 0;
-	}
-	LPTSTR append_pos = file_path + file_path_length; // For performance, copy in the unchanging part only once.  This is where the changing part gets appended.
-	size_t space_remaining = _countof(file_path) - file_path_length - 1; // Space left in file_path for the changing part.
+		fps.dir_length = 0;
+	fps.pattern_length = _tcslen(aFilePattern + fps.dir_length);
+	
+	// Testing shows that the ANSI version of FindFirstFile() will not accept a path+pattern longer
+	// than 259, even if the pattern would match files whose names are short enough to be legal.
+	if (fps.dir_length + fps.pattern_length >= _countof(fps.path)
+		|| fps.pattern_length >= _countof(fps.pattern))
+		return SetErrorsOrThrow(true, ERROR_BUFFER_OVERFLOW);
 
-	// For use with aDoRecurse, get just the naked file name/pattern:
-	LPTSTR naked_filename_or_pattern = _tcsrchr(file_pattern, '\\');
-	if (naked_filename_or_pattern)
-		++naked_filename_or_pattern;
-	else
-		naked_filename_or_pattern = file_pattern;
+	// Make copies in case of overwrite of deref buf during LONG_OPERATION/MsgSleep,
+	// and to allow modification:
+	_tcscpy(fps.path, aFilePattern); // Include the pattern initially.
+	_tcscpy(fps.pattern, aFilePattern + fps.dir_length); // Just the naked filename or pattern, for use with aDoRecurse.
 
-	if (!StrChrAny(naked_filename_or_pattern, _T("?*")))
+	if (!StrChrAny(fps.pattern, _T("?*")))
 		// Since no wildcards, always operate on this single item even if it's a folder.
 		aOperateOnFolders = FILE_LOOP_FILES_AND_FOLDERS;
+
+	// Passing the parameters this way reduces code size:
+	fps.aCallback = aCallback;
+	fps.aCallbackData = aCallbackData;
+	fps.aDoRecurse = aDoRecurse;
+	fps.aOperateOnFolders = aOperateOnFolders;
+
+	fps.failure_count = 0;
+
+	FilePatternApply(fps);
+	return SetErrorLevelOrThrowInt(fps.failure_count); // i.e. indicate success if there were no failures.
+}
+
+
+
+void Line::FilePatternApply(FilePatternStruct &fps)
+{
+	size_t dir_length = fps.dir_length; // Length of this directory (saved before recursion).
+	LPTSTR append_pos = fps.path + dir_length; // This is where the changing part gets appended.
+	size_t space_remaining = _countof(fps.path) - dir_length - 1; // Space left in file_path for the changing part.
 
 	LONG_OPERATION_INIT
 	int failure_count = 0;
 	WIN32_FIND_DATA current_file;
-	HANDLE file_search = FindFirstFile(file_pattern, &current_file);
+	HANDLE file_search = FindFirstFile(fps.path, &current_file);
 
 	if (file_search != INVALID_HANDLE_VALUE)
 	{
@@ -10415,11 +10409,11 @@ int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolde
 					|| current_file.cFileName[1] == '.' && !current_file.cFileName[2]) //
 					// Regardless of whether this folder will be recursed into, this folder
 					// will not be affected when the mode is files-only:
-					|| aOperateOnFolders == FILE_LOOP_FILES_ONLY)
+					|| fps.aOperateOnFolders == FILE_LOOP_FILES_ONLY)
 					continue; // Never operate upon or recurse into these.
 			}
 			else // It's a file, not a folder.
-				if (aOperateOnFolders == FILE_LOOP_FOLDERS_ONLY)
+				if (fps.aOperateOnFolders == FILE_LOOP_FOLDERS_ONLY)
 					continue;
 
 			if (_tcslen(current_file.cFileName) > space_remaining)
@@ -10434,7 +10428,7 @@ int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolde
 			_tcscpy(append_pos, current_file.cFileName); // Above has ensured this won't overflow.
 			//
 			// This is the part that actually does something to the file:
-			if (!aCallback(file_path, current_file, aCallbackData))
+			if (!fps.aCallback(fps.path, current_file, fps.aCallbackData))
 				++failure_count;
 			//
 		} while (FindNextFile(file_search, &current_file));
@@ -10442,29 +10436,23 @@ int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolde
 		FindClose(file_search);
 	} // if (file_search != INVALID_HANDLE_VALUE)
 
-	if (aDoRecurse && space_remaining > 2) // The space_remaining check ensures there's enough room to append "*.*" (if not, just avoid recursing into it due to rarity).
+	if (fps.aDoRecurse && space_remaining > 1) // The space_remaining check ensures there's enough room to append "*", though if false, that would imply lfs.pattern is empty.
 	{
-		// Testing shows that the ANSI version of FindFirstFile() will not accept a path+pattern longer
-		// than 256 or so, even if the pattern would match files whose names are short enough to be legal.
-		// Therefore, as of v1.0.25, there is also a hard limit of MAX_PATH on all these variables.
-		// MSDN confirms this in a vague way: "In the ANSI version of FindFirstFile(), [plpFileName] is
-		// limited to MAX_PATH characters."
-		_tcscpy(append_pos, _T("*.*")); // Above has ensured this won't overflow.
-		file_search = FindFirstFile(file_path, &current_file);
+		_tcscpy(append_pos, _T("*")); // Above has ensured this won't overflow.
+		file_search = FindFirstFile(fps.path, &current_file);
 
 		if (file_search != INVALID_HANDLE_VALUE)
 		{
-			size_t pattern_length = _tcslen(naked_filename_or_pattern);
 			do
 			{
 				LONG_OPERATION_UPDATE
 				if (!(current_file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-					|| current_file.cFileName[0] == '.' && (!current_file.cFileName[1]     // Relies on short-circuit boolean order.
-						|| current_file.cFileName[1] == '.' && !current_file.cFileName[2]) //
-					// v1.0.45.03: Skip over folders whose full-path-names are too long to be supported by the ANSI
-					// versions of FindFirst/FindNext.  Without this fix, it might be possible for infinite recursion
-					// to occur (see PerformLoop() for more comments).
-					|| pattern_length + _tcslen(current_file.cFileName) >= space_remaining) // >= vs. > to reserve 1 for the backslash to be added between cFileName and naked_filename_or_pattern.
+					|| current_file.cFileName[0] == '.' && (!current_file.cFileName[1]      // Relies on short-circuit boolean order.
+						|| current_file.cFileName[1] == '.' && !current_file.cFileName[2])) //
+					continue;
+				size_t filename_length = _tcslen(current_file.cFileName);
+				// v1.0.45.03: Skip over folders whose paths are too long to be supported by FindFirst.
+				if (fps.pattern_length + filename_length >= space_remaining) // >= vs. > to reserve 1 for the backslash to be added between cFileName and naked_filename_or_pattern.
 					continue; // Never recurse into these.
 				// This will build the string CurrentDir+SubDir+FilePatternOrName.
 				// If FilePatternOrName doesn't contain a wildcard, the recursion
@@ -10473,19 +10461,18 @@ int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolde
 				// tree, e.g. recursing C:\Temp\temp.txt would affect all occurrences
 				// of temp.txt both in C:\Temp and any subdirectories it might contain:
 				_stprintf(append_pos, _T("%s\\%s") // Above has ensured this won't overflow.
-					, current_file.cFileName, naked_filename_or_pattern);
+					, current_file.cFileName, fps.pattern);
+				fps.dir_length = dir_length + filename_length + 1; // Include the slash.
 				//
 				// Apply the callback to files in this subdirectory:
-				failure_count += FilePatternApply(file_path, aOperateOnFolders, aDoRecurse, aCallback, aCallbackData, true);
+				FilePatternApply(fps);
 				//
 			} while (FindNextFile(file_search, &current_file));
 			FindClose(file_search);
 		} // if (file_search != INVALID_HANDLE_VALUE)
 	} // if (aDoRecurse)
 
-	if (!aCalledRecursively) // i.e. Only need to do this if we're returning to top-level caller:
-		SetErrorLevelOrThrowInt(failure_count); // i.e. indicate success if there were no failures.
-	return failure_count;
+	fps.failure_count += failure_count; // Update failure count (produces smaller code than doing ++fps.failure_count directly).
 }
 
 
@@ -10532,8 +10519,8 @@ struct FileSetTimeData
 	TCHAR WhichTime;
 };
 
-int Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
-	, FileLoopModeType aOperateOnFolders, bool aDoRecurse, bool aCalledRecursively)
+ResultType Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
+	, FileLoopModeType aOperateOnFolders, bool aDoRecurse)
 // Returns the number of files and folders that could not be changed due to an error.
 {
 	// Related to the comment at the top: Since the script subroutine that resulted in the call to
@@ -10550,16 +10537,10 @@ int Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
 	{
 		// Convert the arg into the time struct as local (non-UTC) time:
 		if (!YYYYMMDDToFileTime(yyyymmdd, ft))
-		{
-			SetErrorsOrThrow(true);
-			return 0;
-		}
+			return SetErrorsOrThrow(true);
 		// Convert from local to UTC:
 		if (!LocalFileTimeToFileTime(&ft, &callbackData.Time))
-		{
-			SetErrorsOrThrow(true);
-			return 0;
-		}
+			return SetErrorsOrThrow(true);
 	}
 	else // User wants to use the current time (i.e. now) as the new timestamp.
 		GetSystemTimeAsFileTime(&callbackData.Time);

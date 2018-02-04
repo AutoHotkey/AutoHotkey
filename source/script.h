@@ -704,16 +704,27 @@ private:
 	ResultType FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag);
 
 	typedef BOOL (* FilePatternCallback)(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
-	int FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
-		, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData
-		, bool aCalledRecursively = false);
+	struct FilePatternStruct
+	{
+		TCHAR path[T_MAX_PATH]; // Directory and naked filename or pattern.
+		TCHAR pattern[MAX_PATH]; // Naked filename or pattern.
+		size_t dir_length, pattern_length;
+		FilePatternCallback aCallback;
+		void *aCallbackData;
+		FileLoopModeType aOperateOnFolders;
+		bool aDoRecurse;
+		int failure_count;
+	};
+	ResultType FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
+		, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData);
+	void FilePatternApply(FilePatternStruct &);
 
 	ResultType FileGetAttrib(LPTSTR aFilespec);
-	int FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
-		, bool aDoRecurse, bool aCalledRecursively = false);
+	ResultType FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern
+		, FileLoopModeType aOperateOnFolders, bool aDoRecurse);
 	ResultType FileGetTime(LPTSTR aFilespec, TCHAR aWhichTime);
-	int FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
-		, FileLoopModeType aOperateOnFolders, bool aDoRecurse, bool aCalledRecursively = false);
+	ResultType FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
+		, FileLoopModeType aOperateOnFolders, bool aDoRecurse);
 	ResultType FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity);
 	ResultType FileGetVersion(LPTSTR aFilespec);
 

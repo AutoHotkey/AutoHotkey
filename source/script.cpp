@@ -15042,13 +15042,11 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			(*arg ? arg : (g.mLoopFile ? g.mLoopFile->file_path : _T("")))
 		return FileGetAttrib(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2));
 	case ACT_FILESETATTRIB:
-		FileSetAttrib(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), ConvertLoopMode(ARG3), ArgToInt(4) == 1);
-		return !g.ThrownToken ? OK : FAIL;
+		return FileSetAttrib(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), ConvertLoopMode(ARG3), ArgToInt(4) == 1);
 	case ACT_FILEGETTIME:
 		return FileGetTime(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3);
 	case ACT_FILESETTIME:
-		FileSetTime(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3, ConvertLoopMode(ARG4), ArgToInt(5) == 1);
-		return !g.ThrownToken ? OK : FAIL;
+		return FileSetTime(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3, ConvertLoopMode(ARG4), ArgToInt(5) == 1);
 	case ACT_FILEGETSIZE:
 		return FileGetSize(USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), ARG3);
 	case ACT_FILEGETVERSION:
