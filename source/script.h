@@ -3048,6 +3048,13 @@ public:
 
 	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[]);
 #ifndef AUTOHOTKEYSC
+	struct FuncLibrary
+	{
+		LPTSTR path;
+		size_t length;
+	};
+	void InitFuncLibraries(FuncLibrary aLibs[]);
+	void InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix);
 	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
 #endif
 	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0, int *apInsertPos = NULL);

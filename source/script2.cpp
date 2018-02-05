@@ -11657,7 +11657,7 @@ VarSizeType BIV_SpecialFolderPath(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_MyDocuments(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple callers.
 {
-	TCHAR buf[MAX_PATH]; // SHGetFolderPath requires a buffer size of MAX_PATH.
+	TCHAR buf[MAX_PATH]; // SHGetFolderPath requires a buffer size of MAX_PATH.  At least one caller relies on this.
 	if (SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, buf) != S_OK)
 		*buf = '\0';
 	// Since it is common (such as in networked environments) to have My Documents on the root of a drive

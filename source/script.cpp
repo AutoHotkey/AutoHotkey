@@ -7865,11 +7865,54 @@ ResultType Script::ResolveClasses()
 
 
 #ifndef AUTOHOTKEYSC
-struct FuncLibrary
+
+#define FUNC_LIB_EXT EXT_AUTOHOTKEY
+#define FUNC_LIB_EXT_LENGTH (_countof(FUNC_LIB_EXT) - 1)
+#define FUNC_LOCAL_LIB _T("\\Lib\\") // Needs leading and trailing backslash.
+#define FUNC_LOCAL_LIB_LENGTH (_countof(FUNC_LOCAL_LIB) - 1)
+#define FUNC_USER_LIB _T("\\AutoHotkey\\Lib\\") // Needs leading and trailing backslash.
+#define FUNC_USER_LIB_LENGTH (_countof(FUNC_USER_LIB) - 1)
+#define FUNC_STD_LIB _T("\\Lib\\") // Needs leading and trailing backslash.
+#define FUNC_STD_LIB_LENGTH (_countof(FUNC_STD_LIB) - 1)
+
+#define FUNC_LIB_COUNT 3
+
+void Script::InitFuncLibraries(FuncLibrary aLib[])
 {
-	LPTSTR path;
-	DWORD_PTR length;
-};
+	// Local lib in script's directory.
+	InitFuncLibrary(aLib[0], mFileDir, FUNC_LOCAL_LIB);
+
+	// User lib in Documents folder.
+	TCHAR buf[MAX_PATH];
+	BIV_MyDocuments(buf, NULL);
+	InitFuncLibrary(aLib[1], buf, FUNC_USER_LIB);
+
+	// Std lib in AutoHotkey directory.
+	InitFuncLibrary(aLib[2], mOurEXEDir, FUNC_STD_LIB);
+}
+
+void Script::InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix)
+{
+	TCHAR buf[T_MAX_PATH + 1]; // +1 to ensure truncated paths are filtered out due to being too long for GetFileAttributes().  It would probably have to be intentional due to MAX_PATH limits elsewhere, but this +1 costs nothing.
+	int length = sntprintf(buf, _countof(buf), _T("%s%s"), aPathBase, aPathSuffix);
+	DWORD attr = GetFileAttributes(buf); // Seems to accept directories that have a trailing backslash, which is good because it simplifies the code.
+	if (attr == 0xFFFFFFFF || !(attr & FILE_ATTRIBUTE_DIRECTORY)) // Directory doesn't exist or it's a file vs. directory. Relies on short-circuit boolean order.
+	{
+		aLib.path = _T("");
+		return;
+	}
+	// Allow room for appending each candidate file/function name.  This could be exactly
+	// MAX_PATH on ANSI builds since no path longer than that would work, but doing it this
+	// way simplifies length checks later (and Unicode builds support much longer paths).
+	size_t buf_size = length + MAX_VAR_NAME_LENGTH + FUNC_LIB_EXT_LENGTH + 1;
+	if (  !(aLib.path = (LPTSTR)SimpleHeap::Malloc(buf_size * sizeof(TCHAR)))  )
+	{
+		aLib.path = _T("");
+		return;
+	}
+	tmemcpy(aLib.path, buf, length + 1);
+	aLib.length = length;
+}
 
 Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude)
 // Caller must ensure that aFuncName doesn't already exist as a defined function.
@@ -7879,88 +7922,19 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 	aFileWasFound = false;
 
 	int i;
-	LPTSTR char_after_last_backslash, terminate_here;
+	LPTSTR terminate_here;
 	DWORD attr;
 
-	#define FUNC_LIB_EXT EXT_AUTOHOTKEY
-	#define FUNC_LIB_EXT_LENGTH (_countof(FUNC_LIB_EXT) - 1)
-	#define FUNC_LOCAL_LIB _T("\\Lib\\") // Needs leading and trailing backslash.
-	#define FUNC_LOCAL_LIB_LENGTH (_countof(FUNC_LOCAL_LIB) - 1)
-	#define FUNC_USER_LIB _T("\\AutoHotkey\\Lib\\") // Needs leading and trailing backslash.
-	#define FUNC_USER_LIB_LENGTH (_countof(FUNC_USER_LIB) - 1)
-	#define FUNC_STD_LIB _T("Lib\\") // Needs trailing but not leading backslash.
-	#define FUNC_STD_LIB_LENGTH (_countof(FUNC_STD_LIB) - 1)
-
-	#define FUNC_LIB_COUNT 3
 	static FuncLibrary sLib[FUNC_LIB_COUNT] = {0};
 
 	if (!sLib[0].path) // Allocate & discover paths only upon first use because many scripts won't use anything from the library. This saves a bit of memory and performance.
-	{
-		for (i = 0; i < FUNC_LIB_COUNT; ++i)
-			if (   !(sLib[i].path = (LPTSTR) SimpleHeap::Malloc(MAX_PATH * sizeof(TCHAR)))   ) // Need MAX_PATH for to allow room for appending each candidate file/function name.
-				return NULL; // Due to rarity, simply pass the failure back to caller.
-
-		FuncLibrary *this_lib;
-
-		// DETERMINE PATH TO "LOCAL" LIBRARY:
-		this_lib = sLib; // For convenience and maintainability.
-		this_lib->length = BIV_ScriptDir(NULL, _T(""));
-		if (this_lib->length < MAX_PATH-FUNC_LOCAL_LIB_LENGTH)
-		{
-			this_lib->length = BIV_ScriptDir(this_lib->path, _T(""));
-			_tcscpy(this_lib->path + this_lib->length, FUNC_LOCAL_LIB);
-			this_lib->length += FUNC_LOCAL_LIB_LENGTH;
-		}
-		else // Insufficient room to build the path name.
-		{
-			*this_lib->path = '\0'; // Mark this library as disabled.
-			this_lib->length = 0;   //
-		}
-
-		// DETERMINE PATH TO "USER" LIBRARY:
-		this_lib++; // For convenience and maintainability.
-		this_lib->length = BIV_MyDocuments(this_lib->path, _T(""));
-		if (this_lib->length < MAX_PATH-FUNC_USER_LIB_LENGTH)
-		{
-			_tcscpy(this_lib->path + this_lib->length, FUNC_USER_LIB);
-			this_lib->length += FUNC_USER_LIB_LENGTH;
-		}
-		else // Insufficient room to build the path name.
-		{
-			*this_lib->path = '\0'; // Mark this library as disabled.
-			this_lib->length = 0;   //
-		}
-
-		// DETERMINE PATH TO "STANDARD" LIBRARY:
-		this_lib++; // For convenience and maintainability.
-		GetModuleFileName(NULL, this_lib->path, MAX_PATH); // The full path to the currently-running AutoHotkey.exe.
-		char_after_last_backslash = 1 + _tcsrchr(this_lib->path, '\\'); // Should always be found, so failure isn't checked.
-		this_lib->length = (DWORD)(char_after_last_backslash - this_lib->path); // The length up to and including the last backslash.
-		if (this_lib->length < MAX_PATH-FUNC_STD_LIB_LENGTH)
-		{
-			_tcscpy(this_lib->path + this_lib->length, FUNC_STD_LIB);
-			this_lib->length += FUNC_STD_LIB_LENGTH;
-		}
-		else // Insufficient room to build the path name.
-		{
-			*this_lib->path = '\0'; // Mark this library as disabled.
-			this_lib->length = 0;   //
-		}
-
-		for (i = 0; i < FUNC_LIB_COUNT; ++i)
-		{
-			attr = GetFileAttributes(sLib[i].path); // Seems to accept directories that have a trailing backslash, which is good because it simplifies the code.
-			if (attr == 0xFFFFFFFF || !(attr & FILE_ATTRIBUTE_DIRECTORY)) // Directory doesn't exist or it's a file vs. directory. Relies on short-circuit boolean order.
-			{
-				*sLib[i].path = '\0'; // Mark this library as disabled.
-				sLib[i].length = 0;   //
-			}
-		}
-	}
+		InitFuncLibraries(sLib);
 	// Above must ensure that all sLib[].path elements are non-NULL (but they can be "" to indicate "no library").
 
 	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = _tcslen(aFuncName);
+	if (aFuncNameLength > MAX_VAR_NAME_LENGTH) // Too long to fit in the allowed space, and also too long to be a valid function name.
+		return NULL;
 
 	TCHAR *dest, *first_underscore, class_name_buf[MAX_VAR_NAME_LENGTH + 1];
 	LPTSTR naked_filename = aFuncName;               // Set up for the first iteration.
@@ -7973,13 +7947,11 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			if (!*sLib[i].path) // Library is marked disabled, so skip it.
 				continue;
 
-			if (sLib[i].length + naked_filename_length >= MAX_PATH-FUNC_LIB_EXT_LENGTH)
-				continue; // Path too long to match in this library, but try others.
 			dest = (LPTSTR) tmemcpy(sLib[i].path + sLib[i].length, naked_filename, naked_filename_length); // Append the filename to the library path.
 			_tcscpy(dest + naked_filename_length, FUNC_LIB_EXT); // Append the file extension.
 
 			attr = GetFileAttributes(sLib[i].path); // Testing confirms that GetFileAttributes() doesn't support wildcards; which is good because we want filenames containing question marks to be "not found" rather than being treated as a match-pattern.
-			if (attr == 0xFFFFFFFF || (attr & FILE_ATTRIBUTE_DIRECTORY)) // File doesn't exist or it's a directory. Relies on short-circuit boolean order.
+			if (attr == 0xFFFFFFFF || (attr & FILE_ATTRIBUTE_DIRECTORY)) // File doesn't exist or it's a directory.
 				continue;
 
 			aFileWasFound = true; // Indicate success for #include <lib>, which doesn't necessarily expect a function to be found.
@@ -8049,6 +8021,7 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 	// Since above didn't return, no match found in any library.
 	return NULL;
 }
+
 #endif
 
 
