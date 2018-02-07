@@ -1419,19 +1419,14 @@ inline LPTSTR IsClassDefinition(LPTSTR aBuf, bool &aHasOTB)
 
 
 
-ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure)
-// Returns OK or FAIL.
-// Below: Use double-colon as delimiter to set these apart from normal labels.
-// The main reason for this is that otherwise the user would have to worry
-// about a normal label being unintentionally valid as a hotkey, e.g.
-// "Shift:" might be a legitimate label that the user forgot is also
-// a valid hotkey:
-#define HOTKEY_FLAG _T("::")
-#define HOTKEY_FLAG_LENGTH 2
+ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure)
+// Open the included file.  Returns CONDITION_TRUE if the file is to
+// be loaded, otherwise OK (duplicate/already loaded) or FAIL (error).
+// See "full_path" below for why this is separate to LoadIncludedFile().  
 {
+#ifndef AUTOHOTKEYSC
 	if (!aFileSpec || !*aFileSpec) return FAIL;
 
-#ifndef AUTOHOTKEYSC
 	if (Line::sSourceFileCount >= Line::sMaxSourceFiles)
 	{
 		if (Line::sSourceFileCount >= ABSOLUTE_MAX_SOURCE_FILES)
@@ -1454,18 +1449,20 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		Line::sMaxSourceFiles = new_max;
 	}
 
+	// Use of stack memory here to build the full path is the most efficient method,
+	// but utilizes 64KB per buffer on Unicode builds.  There is virtually no cost
+	// when used here, but if used directly in LoadIncludedFile(), this would mean
+	// 64KB used *for each instance on the stack*, which significantly reduces the
+	// recursion limit for #include inside #include.  Note that enclosing the buf
+	// within a limited scope is insufficient, as the compiler will (or may) still
+	// allocate the required stack space on entry to the function.
 	TCHAR full_path[T_MAX_PATH];
-#endif
 
-	// Keep this var on the stack due to recursion, which allows newly created lines to be given the
-	// correct file number even when some #include's have been encountered in the middle of the script:
 	int source_file_index = Line::sSourceFileCount;
-
 	if (!source_file_index)
 		// Since this is the first source file, it must be the main script file.  Just point it to the
 		// location of the filespec already dynamically allocated:
 		Line::sSourceFile[source_file_index] = mFileSpec;
-#ifndef AUTOHOTKEYSC  // The "else" part below should never execute for compiled scripts since they never include anything (other than the main/combined script).
 	else
 	{
 		// Get the full path in case aFileSpec has a relative path.  This is done so that duplicates
@@ -1481,23 +1478,8 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		// The file is added to the list further below, after the file has been opened, in case the
 		// opening fails and aIgnoreLoadFailure==true.
 	}
-#endif
 
-	// <buf> should be no larger than LINE_SIZE because some later functions rely upon that:
-	TCHAR buf1[LINE_SIZE], buf2[LINE_SIZE], suffix[16], pending_buf[LINE_SIZE];
-	*pending_buf = '\0';
-	LPTSTR buf = buf1, next_buf = buf2; // Oscillate between bufs to improve performance (avoids memcpy from buf2 to buf1).
-	size_t buf_length, next_buf_length, suffix_length;
-	bool pending_buf_has_brace;
-	enum {
-		Pending_Func,
-		Pending_Class,
-		Pending_Property
-	} pending_buf_type;
-
-#ifndef AUTOHOTKEYSC
-	TextFile tfile, *fp = &tfile;
-	if (!tfile.Open(aFileSpec, DEFAULT_READ_FLAGS, g_DefaultScriptCodepage))
+	if (!ts.Open(aFileSpec, DEFAULT_READ_FLAGS, g_DefaultScriptCodepage))
 	{
 		if (aIgnoreLoadFailure)
 			return OK;
@@ -1509,10 +1491,12 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 	// This is done only after the file has been successfully opened in case aIgnoreLoadFailure==true:
 	if (source_file_index > 0)
-		Line::sSourceFile[source_file_index] = SimpleHeap::Malloc(full_path);
+		if (  !(Line::sSourceFile[source_file_index] = SimpleHeap::Malloc(full_path))  )
+			return ScriptError(ERR_OUTOFMEM);
 	//else the first file was already taken care of by another means.
 
 #else // Stand-alone mode (there are no include files in this mode since all of them were merged into the main script at the time of compiling).
+
 	TextMem::Buffer textbuf(NULL, 0, false);
 
 	HRSRC hRes;
@@ -1536,12 +1520,60 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 		return FAIL;
 	}
 
-	TextMem tmem, *fp = &tmem;
 	// NOTE: Ahk2Exe strips off the UTF-8 BOM.
-	tmem.Open(textbuf, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR, CP_UTF8);
+	ts.Open(textbuf, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR, CP_UTF8);
+
+	// Since this is a compiled script, there is only one script file.
+	// Just point it to the location of the filespec already dynamically allocated:
+	Line::sSourceFile[0] = mFileSpec;
+
+#endif
+	
+	// Since above did not continue, proceed with loading the file.
+	++Line::sSourceFileCount;
+	return CONDITION_TRUE;
+}
+
+
+
+ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure)
+// Returns OK or FAIL.
+{
+#ifndef AUTOHOTKEYSC
+	TextFile ts;
+#else
+	TextMem ts;
 #endif
 
-	++Line::sSourceFileCount;
+	ResultType result = OpenIncludedFile(ts, aFileSpec, aAllowDuplicateInclude, aIgnoreLoadFailure);
+	if (result != CONDITION_TRUE)
+		return result; // OK or FAIL.
+
+	// Off-loading to another function significantly reduces code size, perhaps because
+	// the TextFile/TextMem destructor is called from fewer places (each "return"):
+	return LoadIncludedFile(&ts);
+}
+
+
+
+ResultType Script::LoadIncludedFile(TextStream *fp)
+// Returns OK or FAIL.
+{
+	// Keep this var on the stack due to recursion, which allows newly created lines to be given the
+	// correct file number even when some #include's have been encountered in the middle of the script:
+	int source_file_index = Line::sSourceFileCount - 1;
+
+	// <buf> should be no larger than LINE_SIZE because some later functions rely upon that:
+	TCHAR buf1[LINE_SIZE], buf2[LINE_SIZE], suffix[16], pending_buf[LINE_SIZE];
+	*pending_buf = '\0';
+	LPTSTR buf = buf1, next_buf = buf2; // Oscillate between bufs to improve performance (avoids memcpy from buf2 to buf1).
+	size_t buf_length, next_buf_length, suffix_length;
+	bool pending_buf_has_brace;
+	enum {
+		Pending_Func,
+		Pending_Class,
+		Pending_Property
+	} pending_buf_type;
 
 	// File is now open, read lines from it.
 

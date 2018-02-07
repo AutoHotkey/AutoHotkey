@@ -3039,6 +3039,8 @@ public:
 	void TerminateApp(ExitReasons aExitReason, int aExitCode); // L31: Added aExitReason. See script.cpp.
 	LineNumberType LoadFromFile();
 	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
+	ResultType LoadIncludedFile(TextStream *fp);
+	ResultType OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
 	LineNumberType CurrentLine();
 	LPTSTR CurrentFile();
 
