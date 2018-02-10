@@ -2755,7 +2755,7 @@ void Hotstring::ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, Se
 		case 'Z':
 			aDoReset = (*cp1 != '0');
 			break;
-		case 'E':
+		case 'X':
 			aExecuteAction = (*cp1 != '0');
 			break;
 		// Otherwise: Ignore other characters, such as the digits that comprise the number after the P option.
