@@ -331,17 +331,26 @@ bool Object::Delete()
 		// If an exception has been thrown, temporarily clear it for execution of __Delete.
 		ExprTokenType *exc = g->ThrownToken;
 		g->ThrownToken = NULL;
+		
+		// This prevents an erroneous "The current thread will exit" message when an error occurs,
+		// by causing LineError() to throw an exception:
+		bool in_try = g->InTryBlock;
+		g->InTryBlock = true;
 
 		CallMethod(mBase, this, sMetaFuncName[3], NULL, 0, NULL, IF_METAOBJ); // base.__Delete()
 
-		// Reset any exception cleared above.
+		g->InTryBlock = in_try;
+
+		// Exceptions thrown by __Delete are reported immediately because they would not be handled
+		// consistently by the caller (they would typically be "thrown" by the next function call),
+		// and because the caller must be allowed to make additional __Delete calls.
+		if (g->ThrownToken)
+			g_script.UnhandledException(g->ThrownToken, NULL, _T("__Delete will now return."));
+
+		// If an exception has been thrown by our caller, it's likely that it can and should be handled
+		// reliably by our caller, so restore it.
 		if (exc)
-		{
-			if (g->ThrownToken)
-				// Let the original exception take precedence over this secondary exception.
-				g_script.FreeExceptionToken(g->ThrownToken);
 			g->ThrownToken = exc;
-		}
 
 		DEPRIVATIZE_S_DEREF_BUF; // L33: See above.
 

@@ -3851,6 +3851,79 @@ bool ActiveWindowLayoutHasAltGr()
 
 
 
+HMODULE LoadKeyboardLayoutModule(HKL aLayout)
+// Loads a keyboard layout DLL and returns its handle.
+// Activates the layout as a side-effect, but reverts it if !aSideEffectsOK.
+{
+	HMODULE hmod = NULL;
+	// Unfortunately activating the layout seems to be the only way to retrieve it's name.
+	// This may have side-effects in general (such as the language selector flickering),
+	// but shouldn't have any in our case since we're only changing layouts for our thread,
+	// and only if some other window is active (because if our window was active, aLayout
+	// is already the current layout).
+	if (HKL old_layout = ActivateKeyboardLayout(aLayout, 0))
+	{
+		#define KEYBOARD_LAYOUTS_REG_KEY _T("SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts\\")
+		const size_t prefix_length = _countof(KEYBOARD_LAYOUTS_REG_KEY) - 1;
+		TCHAR keyname[prefix_length + KL_NAMELENGTH];
+		_tcscpy(keyname, KEYBOARD_LAYOUTS_REG_KEY);
+		if (GetKeyboardLayoutName(keyname + prefix_length))
+		{
+			TCHAR layout_file[MAX_PATH]; // It's probably much smaller (like "KBDUSX.dll"), but who knows what whacky custom layouts exist?
+			if (ReadRegString(HKEY_LOCAL_MACHINE, keyname, _T("Layout File"), layout_file, _countof(layout_file)))
+			{
+				hmod = LoadLibrary(layout_file);
+			}
+		}
+		if (aLayout != old_layout)
+			ActivateKeyboardLayout(old_layout, 0); // Nothing we can do if it fails.
+	}
+	return hmod;
+}
+
+
+
+ResultType LayoutHasAltGrDirect(HKL aLayout)
+// Loads and reads the keyboard layout DLL to determine if it has AltGr.
+// Activates the layout as a side-effect, but reverts it if !aSideEffectsOK.
+// This is fast enough that there's no need to cache these values on startup.
+{
+	// This abbreviated definition is based on the actual definition in kbd.h (Windows DDK):
+	typedef struct tagKbdLayer {
+		PVOID pCharModifiers;
+		PVOID pVkToWcharTable;
+		PVOID pDeadKey;
+		PVOID pKeyNames;
+		PVOID pKeyNamesExt;
+		WCHAR **pKeyNamesDead;
+		USHORT  *pusVSCtoVK;
+		BYTE    bMaxVSCtoVK;
+		PVOID   pVSCtoVK_E0;
+		PVOID   pVSCtoVK_E1;
+		// This is the one we want:
+		DWORD fLocaleFlags;
+		// Struct definition truncated.
+	} KBDTABLES, *PKBDTABLES;
+	#define KLLF_ALTGR 0x0001 // Also defined in kbd.h.
+	typedef PKBDTABLES (* KbdLayerDescriptorType)();
+
+	ResultType result = LAYOUT_UNDETERMINED;
+
+	if (HMODULE hmod = LoadKeyboardLayoutModule(aLayout))
+	{
+		KbdLayerDescriptorType kbdLayerDescriptor = (KbdLayerDescriptorType)GetProcAddress(hmod, "KbdLayerDescriptor");
+		if (kbdLayerDescriptor)
+		{
+			PKBDTABLES kl = kbdLayerDescriptor();
+			result = (kl->fLocaleFlags & KLLF_ALTGR) ? CONDITION_TRUE : CONDITION_FALSE;
+		}
+		FreeLibrary(hmod);
+	}
+	return result;
+}
+
+
+
 ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr)
 // Thread-safety: While not thoroughly thread-safe, due to the extreme simplicity of the cache array, even if
 // a collision occurs it should be inconsequential.
@@ -3887,7 +3960,19 @@ ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr)
 	// a keyboard hook catch and block it.  If the layout has altgr, the hook would see a driver-generated LCtrl
 	// keystroke immediately prior to RAlt.
 	// Performance: This loop is quite fast. Doing this section 1000 times only takes about 160ms
-	// on a 2gHz system (0.16ms per call).
+	// on a 2gHz system (0.16ms per call).  UPDATE: In theory, it can be 256 (that is, around WCHAR_MAX/UCHAR_MAX)
+	// times slower on Unicode builds, so an alternative method is used there.
+#ifdef _UNICODE
+	// Read the AltGr value directly from the keyboard layout DLL.
+	// This method has been compared to the VkKeyScanEx method and another one using Send and hotkeys,
+	// and was found to have 100% accuracy for the 203 standard layouts on Windows 10, whereas the
+	// VkKeyScanEx method failed for two layouts:
+	//   - N'Ko has AltGr but does not appear to use it for anything.
+	//   - Ukrainian has AltGr but only uses it for one character, which is also assigned to a naked
+	//     VK (so VkKeyScanEx returns that one).  Likely the key in question is absent from some keyboards.
+	cl.has_altgr = LayoutHasAltGrDirect(aLayout);
+#else
+	// Use the old VkKeyScanEx method on ANSI builds since it is faster and has smaller code size.
 	SHORT s;
 	for (cl.has_altgr = LAYOUT_UNDETERMINED, i = 32; i <= UorA(WCHAR_MAX,UCHAR_MAX); ++i) // Include Spacebar up through final ANSI character (i.e. include 255 but not 256).
 	{
@@ -3900,25 +3985,11 @@ ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr)
 			break;
 		}
 	}
-
+#endif
 	// If loop didn't break, leave cl.has_altgr as LAYOUT_UNDETERMINED because we can't be sure whether AltGr is
 	// present (see other comments for details).
 	cl.hkl = aLayout; // This is done here (immediately after has_altgr was set in the loop above) rather than earlier to minimize the consequences of not being fully thread-safe.
 	return cl.has_altgr;
-}
-
-
-
-void FillLayoutHasAltGrCache()
-// This is called on startup to improve the odds that LayoutHasAltGr() will return
-// a cached value the first time Send is called.  This fixes an oddity with "reg"
-// hotkeys which Send, such as ^m::Send x, where the very first Send does not put
-// Ctrl back into effect because LayoutHasAltGr() exceeds g_HotkeyModifierTimeout.
-{
-	HKL active_layouts[MAX_CACHED_LAYOUTS];
-	int n = GetKeyboardLayoutList(MAX_CACHED_LAYOUTS, active_layouts);
-	for (int i = 0; i < n; ++i)
-		LayoutHasAltGr(active_layouts[i]);
 }
 
 

@@ -201,6 +201,8 @@ extern DWORD g_HistoryTickNow;
 extern DWORD g_HistoryTickPrev;
 extern HWND g_HistoryHwndPrev;
 extern DWORD g_TimeLastInputPhysical;
+extern DWORD g_TimeLastInputKeyboard;
+extern DWORD g_TimeLastInputMouse;
 
 #ifdef ENABLE_KEY_HISTORY_FILE
 extern bool g_KeyHistoryToFile;

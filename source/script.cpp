@@ -65,6 +65,7 @@ VarEntry g_BIV_A[] =
 	A_x(CaretX, BIV_Caret),
 	A_x(CaretY, BIV_Caret),
 	A_x(ComputerName, BIV_UserName_ComputerName),
+	A_(ComSpec),
 	A_x(ControlDelay, BIV_xDelay),
 	A_x(CoordModeCaret, BIV_CoordMode),
 	A_x(CoordModeMenu, BIV_CoordMode),
@@ -122,6 +123,7 @@ VarEntry g_BIV_A[] =
 	A_(LastError),
 	A_(LineFile),
 	A_(LineNumber),
+	A_(ListLines),
 	A_(LoopField),
 	A_(LoopFileAttrib),
 	A_(LoopFileDir),
@@ -129,6 +131,7 @@ VarEntry g_BIV_A[] =
 	A_(LoopFileFullPath),
 	A_(LoopFileLongPath),
 	A_(LoopFileName),
+	A_x(LoopFilePath, BIV_LoopFileFullPath),
 	A_(LoopFileShortName),
 	A_(LoopFileShortPath),
 	A_x(LoopFileSize, BIV_LoopFileSize),
@@ -192,6 +195,8 @@ VarEntry g_BIV_A[] =
 	A_(ThisMenuItemPos),
 	A_(TickCount),
 	A_(TimeIdle),
+	A_x(TimeIdleKeyboard, BIV_TimeIdlePhysical),
+	A_x(TimeIdleMouse, BIV_TimeIdlePhysical),
 	A_(TimeIdlePhysical),
 	A_(TimeSincePriorHotkey),
 	A_(TimeSinceThisHotkey),
@@ -3019,22 +3024,11 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			//else invalid syntax; treat it as a regular #include which will almost certainly fail.
 		}
 
-		size_t space_remaining = LINE_SIZE - (parameter-aBuf);
-		TCHAR buf[MAX_PATH];
-		StrReplace(parameter, _T("%A_ScriptDir%"), mFileDir, SCS_INSENSITIVE, 1, space_remaining); // v1.0.35.11.  Caller has ensured string is writable.
-		StrReplace(parameter, _T("%A_LineFile%"), Line::sSourceFile[mCurrFileIndex], SCS_INSENSITIVE, 1, space_remaining); // v1.1.11: Support A_LineFile to allow paths relative to current file regardless of working dir; e.g. %A_LineFile%\..\fileinsamedir.ahk.
-		if (tcscasestr(parameter, _T("%A_AppData%"))) // v1.0.45.04: This and the next were requested by Tekl to make it easier to customize scripts on a per-user basis.
-		{
-			BIV_SpecialFolderPath(buf, _T("A_AppData"));
-			StrReplace(parameter, _T("%A_AppData%"), buf, SCS_INSENSITIVE, 1, space_remaining);
-		}
-		if (tcscasestr(parameter, _T("%A_AppDataCommon%"))) // v1.0.45.04.
-		{
-			BIV_SpecialFolderPath(buf, _T("A_AppDataCommon"));
-			StrReplace(parameter, _T("%A_AppDataCommon%"), buf, SCS_INSENSITIVE, 1, space_remaining);
-		}
+		LPTSTR include_path;
+		if (!DerefInclude(include_path, parameter))
+			return FAIL;
 
-		DWORD attr = GetFileAttributes(parameter);
+		DWORD attr = GetFileAttributes(include_path);
 		if (attr != 0xFFFFFFFF && (attr & FILE_ATTRIBUTE_DIRECTORY)) // File exists and its a directory (possibly A_ScriptDir or A_AppData set above).
 		{
 			// v1.0.35.11 allow changing of load-time directory to increase flexibility.  This feature has
@@ -3043,12 +3037,15 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			// that would not work.  But that seems too rare to worry about.
 			// v1.0.45.01: Call SetWorkingDir() vs. SetCurrentDirectory() so that it succeeds even for a root
 			// drive like C: that lacks a backslash (see SetWorkingDir() for details).
-			SetWorkingDir(parameter);
+			SetWorkingDir(include_path);
+			free(include_path);
 			return CONDITION_TRUE;
 		}
 		// Since above didn't return, it's a file (or non-existent file, in which case the below will display
 		// the error).  This will also display any other errors that occur:
-		return LoadIncludedFile(parameter, is_include_again, ignore_load_failure) ? CONDITION_TRUE : FAIL;
+		ResultType result = LoadIncludedFile(include_path, is_include_again, ignore_load_failure) ? CONDITION_TRUE : FAIL;
+		free(include_path);
+		return result;
 #endif
 	}
 
@@ -8288,7 +8285,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	{
 		bif = BIF_StrSplit;
 		min_params = 1;
-		max_params = 3;
+		max_params = 4;
 	}
 	else if (!_tcsnicmp(func_name, _T("GetKey"), 6))
 	{
@@ -15447,11 +15444,7 @@ ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
 {
 	aOutputVar = aOutputVar->ResolveAlias(); // Necessary for proper detection below of whether it's invalidly used as a source for itself.
 
-	// This transient variable is used resolving environment variables that don't already exist
-	// in the script's variable list (due to the fact that they aren't directly referenced elsewhere
-	// in the script):
-	TCHAR var_name[MAX_VAR_NAME_LENGTH + 1] = _T("");
-
+	TCHAR var_name[MAX_VAR_NAME_LENGTH + 1];
 	Var *var;
 	VarSizeType expanded_length;
 	size_t var_name_length;
@@ -15549,6 +15542,74 @@ ResultType Line::Deref(Var *aOutputVar, LPTSTR aBuf)
 	*dest = '\0';  // Terminate the output variable.
 	aOutputVar->SetCharLength((VarSizeType)_tcslen(aOutputVar->Contents())); // Update to actual in case estimate was too large.
 	return aOutputVar->Close();  // In case it's the clipboard.
+}
+
+
+
+ResultType Script::DerefInclude(LPTSTR &aOutput, LPTSTR aBuf)
+// For #Include and #IncludeAgain.
+// Based on Line::Deref above, but with a few differences for backward-compatibility:
+//  1) Percent signs that aren't part of a valid deref are not omitted.
+//  2) Escape sequences aren't recognized (`; is handled elsewhere).
+//  3) It is restricted to built-in vars to reduce the risk of breaking any scripts
+//     that use percent sign literally in a filename.  Most other vars are empty anyway.
+{
+	aOutput = NULL; // Set default.
+
+	TCHAR var_name[MAX_VAR_NAME_LENGTH + 1];
+	VarSizeType expanded_length;
+	size_t var_name_length;
+	LPTSTR cp, cp1, dest;
+
+	// Do two passes:
+	// #1: Calculate the space needed.
+	// #2: Expand the contents of aBuf into aOutput.
+
+	for (int which_pass = 0; which_pass < 2; ++which_pass)
+	{
+		if (which_pass) // Starting second pass.
+		{
+			// Allocate a buffer to contain the result:
+			if (  !(aOutput = tmalloc(expanded_length+1))  )
+				return FAIL;
+			dest = aOutput;
+		}
+		else // First pass.
+			expanded_length = 0; // Init prior to accumulation.
+
+		for (cp = aBuf; *cp; ++cp)  // Increment to skip over the deref/escape just found by the inner for().
+		{
+			if (*cp == g_DerefChar)
+			{
+				// It's a dereference symbol, so calculate the size of that variable's contents and add
+				// that to expanded_length (or copy the contents into aOutputVar if this is the second pass).
+				for (cp1 = cp + 1; *cp1 && *cp1 != g_DerefChar; ++cp1); // Find the reference's ending symbol.
+				var_name_length = cp1 - cp - 1;
+				if (*cp1 && var_name_length && var_name_length <= MAX_VAR_NAME_LENGTH)
+				{
+					tcslcpy(var_name, cp + 1, var_name_length + 1);  // +1 to convert var_name_length to size.
+					VarEntry *biv = GetBuiltInVar(var_name);  // Only get built-in vars.
+					if (biv)
+					{
+						if (which_pass) // 2nd pass
+							dest += biv->type(dest, var_name);
+						else
+							expanded_length += biv->type(NULL, var_name);
+						cp = cp1; // For the next loop iteration, continue at the char after this reference's final deref symbol.
+						continue;
+					}
+				}
+				// Since it wasn't a supported deref, copy the deref char into the output:
+			}
+			if (which_pass) // 2nd pass
+				*dest++ = *cp;  // Copy all non-variable-ref characters literally.
+			else // just accumulate the length
+				++expanded_length;
+		} // for()
+	} // for() (first and second passes)
+
+	*dest = '\0';  // Terminate the output variable.
+	return OK;
 }
 
 
@@ -16199,7 +16260,7 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 
 
 
-ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine)
+ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine, LPTSTR aFooter)
 {
 	LPCTSTR message = _T(""), extra = _T("");
 	TCHAR extra_buf[MAX_NUMBER_SIZE], message_buf[MAX_NUMBER_SIZE];
@@ -16247,7 +16308,7 @@ ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine)
 	}	
 
 	TCHAR buf[MSGBOX_TEXT_SIZE];
-	Line::FormatError(buf, _countof(buf), FAIL, message, extra, aLine, _T("The thread has exited."));
+	Line::FormatError(buf, _countof(buf), FAIL, message, extra, aLine, aFooter);
 	MsgBox(buf);
 	
 	FreeExceptionToken(aToken);
