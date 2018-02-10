@@ -1617,6 +1617,19 @@ bool Line::Util_RemoveDir(LPCTSTR szInputSource, bool bRecurse)
 {
 	SHFILEOPSTRUCT	FileOp;
 	TCHAR			szSource[_MAX_PATH+2];
+	
+	// If recursion not on just try a standard delete on the directory (the SHFile function WILL
+	// delete a directory even if not empty no matter what flags you give it...)
+	if (bRecurse == false)
+	{
+		// v1.1.28.00: Use the original source path in case its length exceeds _MAX_PATH.
+		// Relative paths and trailing slashes are okay in this case, and Util_IsDir() is
+		// not needed since the function only removes empty directories, not files.
+		if (!RemoveDirectory(szInputSource))
+			return false;
+		else
+			return true;
+	}
 
 	// Get the fullpathnames and strip trailing \s
 	Util_GetFullPathName(szInputSource, szSource);
@@ -1624,16 +1637,6 @@ bool Line::Util_RemoveDir(LPCTSTR szInputSource, bool bRecurse)
 	// Ensure source is a directory
 	if (Util_IsDir(szSource) == false)
 		return false;							// Nope
-
-	// If recursion not on just try a standard delete on the directory (the SHFile function WILL
-	// delete a directory even if not empty no matter what flags you give it...)
-	if (bRecurse == false)
-	{
-		if (!RemoveDirectory(szSource))
-			return false;
-		else
-			return true;
-	}
 
 	// We must also make double nulled strings for the SHFileOp API
 	szSource[_tcslen(szSource)+1] = '\0';
