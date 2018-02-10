@@ -2777,6 +2777,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 				if (!AddLine(ACT_SEND, &buf, 1, NULL)) // v1.0.40.04: Check for failure due to bad remaps such as %::%.
 					return FAIL;
 				AddLine(ACT_RETURN);
+				mCurrLine = NULL; // Prevents showing misleading vicinity lines for something like "RAlt up::AppsKey" -> "*RAlt up up::".
 				// Add key-up hotkey label, e.g. *LButton up::
 				buf_length = _stprintf(buf, _T("%s up::"), remap_source); // Should be no risk of buffer overflow due to prior validation.
 				remap_stage = 2; // Adjust to hit stage 3 next time (in case this is stage 10).
