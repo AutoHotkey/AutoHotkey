@@ -279,7 +279,7 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 		// the active window, its thread, and its layout are retrieved only once for each Send rather than once
 		// for each keystroke.
 		// v1.1.27.01: Use the thread of the focused control, which may differ from the active window.
-		keybd_layout_thread = GetFocusedThread();
+		keybd_layout_thread = GetFocusedCtrlThread();
 	}
 	sTargetKeybdLayout = GetKeyboardLayout(keybd_layout_thread); // If keybd_layout_thread==0, this will get our thread's own layout, which seems like the best/safest default.
 	sTargetLayoutHasAltGr = LayoutHasAltGr(sTargetKeybdLayout);  // Note that WM_INPUTLANGCHANGEREQUEST is not monitored by MsgSleep for the purpose of caching our thread's keyboard layout.  This is because it would be unreliable if another msg pump such as MsgBox is running.  Plus it hardly helps perf. at all, and hurts maintainability.
@@ -3815,7 +3815,7 @@ LPTSTR ModifiersLRToText(modLR_type aModifiersLR, LPTSTR aBuf)
 
 
 
-DWORD GetFocusedThread(HWND aWindow)
+DWORD GetFocusedCtrlThread(HWND *apControl, HWND aWindow)
 {
 	// Determine the thread for which we want the keyboard layout.
 	// When no foreground window, the script's own layout seems like the safest default.
@@ -3836,6 +3836,8 @@ DWORD GetFocusedThread(HWND aWindow)
 			{
 				// Use the focused control's thread.
 				thread_id = GetWindowThreadProcessId(thread_info.hwndFocus, NULL);
+				if (apControl)
+					*apControl = thread_info.hwndFocus;
 			}
 		}
 	}
@@ -3846,7 +3848,7 @@ DWORD GetFocusedThread(HWND aWindow)
 
 HKL GetFocusedKeybdLayout(HWND aWindow)
 {
-	return GetKeyboardLayout(GetFocusedThread(aWindow));
+	return GetKeyboardLayout(GetFocusedCtrlThread(NULL, aWindow));
 }
 
 

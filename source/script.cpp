@@ -2509,23 +2509,7 @@ examine_line:
 			// :c:abc::
 			if (!AddLabel(buf, true)) // Always add a label before adding the first line of its section.
 				return FAIL;
-			hook_action = 0; // Set default.
-			if (*hotkey_flag) // This hotkey's action is on the same line as its label.
-			{
-				if (!hotstring_start)
-					// Don't add the alt-tabs as a line, since it has no meaning as a script command.
-					// But do put in the Return regardless, in case this label is ever jumped to
-					// via Goto/Gosub:
-					if (   !(hook_action = Hotkey::ConvertAltTab(hotkey_flag, false))   )
-						if (!ParseAndAddLine(hotkey_flag))
-							return FAIL;
-				// Also add a Return that's implicit for a single-line hotkey.  This is also
-				// done for auto-replace hotstrings in case gosub/goto is ever used to jump
-				// to their labels:
-				if (!AddLine(ACT_RETURN))
-					return FAIL;
-			}
-
+			
 			if (hotstring_start)
 			{
 				if (!*hotstring_start)
@@ -2545,12 +2529,38 @@ examine_line:
 				// hotstrings are less commonly used and also because it requires more code to find
 				// hotstring duplicates (and performs a lot worse if a script has thousands of
 				// hotstrings) because of all the hotstring options.
-				if (!Hotstring::AddHotstring(mLastLabel, hotstring_options ? hotstring_options : _T("")
+				if (!Hotstring::AddHotstring(mLastLabel->mName, mLastLabel, hotstring_options ? hotstring_options : _T("")
 					, hotstring_start, hotkey_flag, has_continuation_section))
 					return FAIL;
+				// The following section is similar to the one for hotkeys below, but is done after
+				// parsing the hotstring's options. An attempt at combining the two sections actually
+				// increased the final code size, so they're left separate.
+				if (*hotkey_flag)
+				{
+					if (Hotstring::shs[Hotstring::sHotstringCount - 1]->mExecuteAction)
+						if (!ParseAndAddLine(hotkey_flag))
+							return FAIL;
+					// This is done for hotstrings with same-line action via 'E' and also auto-replace
+					// hotstrings in case gosub/goto is ever used to jump to their labels:
+					if (!AddLine(ACT_RETURN))
+						return FAIL;
+				}
 			}
 			else // It's a hotkey vs. hotstring.
 			{
+				hook_action = 0; // Set default.
+				if (*hotkey_flag) // This hotkey's action is on the same line as its label.
+				{
+					// Don't add the alt-tabs as a line, since it has no meaning as a script command.
+					// But do put in the Return regardless, in case this label is ever jumped to
+					// via Goto/Gosub:
+					if (   !(hook_action = Hotkey::ConvertAltTab(hotkey_flag, false))   )
+						if (!ParseAndAddLine(hotkey_flag))
+							return FAIL;
+					// Also add a Return that's implicit for a single-line hotkey.
+					if (!AddLine(ACT_RETURN))
+						return FAIL;
+				}
 				if (hk = Hotkey::FindHotkeyByTrueNature(buf, suffix_has_tilde, hook_is_mandatory)) // Parent hotkey found.  Add a child/variant hotkey for it.
 				{
 					if (hook_action) // suffix_has_tilde has always been ignored for these types (alt-tab hotkeys).
@@ -3241,7 +3251,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			// other caller, it will stop at end-of-string or ':', whichever comes first.
 			Hotstring::ParseOptions(parameter, g_HSPriority, g_HSKeyDelay, g_HSSendMode, g_HSCaseSensitive
 				, g_HSConformToCase, g_HSDoBackspace, g_HSOmitEndChar, g_HSSendRaw, g_HSEndCharRequired
-				, g_HSDetectWhenInsideWord, g_HSDoReset);
+				, g_HSDetectWhenInsideWord, g_HSDoReset, g_HSSameLineAction);
 		}
 		return CONDITION_TRUE;
 	}
@@ -3745,6 +3755,22 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 	if (!_tcsicmp(new_name, _T("OnClipboardChange")))
 		mOnClipboardChangeLabel = the_new_label;
 	return OK;
+}
+
+
+
+void Script::RemoveLabel(Label *aLabel)
+// Remove a label from the linked list.
+// Used by DefineFunc to implement hotkey/hotstring functions.
+{
+	if (aLabel->mPrevLabel)
+		aLabel->mPrevLabel->mNextLabel = aLabel->mNextLabel;
+	else
+		mFirstLabel = aLabel->mNextLabel;
+	if (aLabel->mNextLabel)
+		aLabel->mNextLabel->mPrevLabel = aLabel->mPrevLabel;
+	else
+		mLastLabel = aLabel->mPrevLabel;
 }
 
 
@@ -7433,16 +7459,22 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 					// Remove this hotkey label from the list.  Each label is removed as the corresponding
 					// hotkey variant is found so that any generic labels that might be mixed in are left
 					// in the list and detected as errors later.
-					if (label->mPrevLabel)
-						label->mPrevLabel->mNextLabel = label->mNextLabel;
-					else
-						mFirstLabel = label->mNextLabel;
-					if (label->mNextLabel)
-						label->mNextLabel->mPrevLabel = label->mPrevLabel;
-					else
-						mLastLabel = label->mPrevLabel;
+					RemoveLabel(label);
 				}
 			}
+		}
+		// Check hotstrings as well (even if a hotkey was found):
+		for (int i = Hotstring::sHotstringCount - 1; i >= 0; --i) // Start with the last one defined, for performance.
+		{
+			Label *label = Hotstring::shs[i]->mJumpToLabel->ToLabel(); // Might be a function.
+			if (!label || label->mJumpToLine)
+				// This hotstring has a function or a label which has already been resolved.
+				// Since hotstrings are listed in order of definition and we're iterating in
+				// the reverse order, there's no need to continue.
+				break;
+			// See hotkey section above for comments.
+			Hotstring::shs[i]->mJumpToLabel = &func;
+			RemoveLabel(label);
 		}
 		if (mLastLabel && !mLastLabel->mJumpToLine)
 			// There are one or more non-hotkey labels pointing at this function.
@@ -8553,6 +8585,11 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	else if (!_tcsicmp(func_name, _T("LoadPicture")))
 	{
 		bif = BIF_LoadPicture;
+		max_params = 3;
+	}
+	else if (!_tcsicmp(func_name, _T("Hotstring")))
+	{
+		bif = BIF_Hotstring;
 		max_params = 3;
 	}
 	else

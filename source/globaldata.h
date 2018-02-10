@@ -156,6 +156,7 @@ extern bool g_HSEndCharRequired;
 extern bool g_HSDetectWhenInsideWord;
 extern bool g_HSDoReset;
 extern bool g_HSResetUponMouseClick;
+extern bool g_HSSameLineAction;
 extern TCHAR g_EndChars[HS_MAX_END_CHARS + 1];
 
 // Global objects:

@@ -27,6 +27,11 @@ static HANDLE sMouseMutex = NULL;
 #define KEYBD_MUTEX_NAME _T("AHK Keybd")
 #define MOUSE_MUTEX_NAME _T("AHK Mouse")
 
+// It's done the following way because:
+// It's unclear that zero is always an invalid thread ID (not even GetWindowThreadProcessId's
+// documentation gives any hint), so its safer to assume that a thread ID can be zero and yet still valid.
+static HANDLE sThreadHandle = NULL;
+
 // Whether to disguise the next up-event for lwin/rwin to suppress Start Menu.
 // There is only one variable because even if multiple modifiers are pressed
 // simultaneously and they do not cancel each other out, disguising one will
@@ -130,6 +135,8 @@ enum DualNumpadKeys	{PAD_DECIMAL, PAD_NUMPAD0, PAD_NUMPAD1, PAD_NUMPAD2, PAD_NUM
 , PAD_DELETE, PAD_INSERT, PAD_END, PAD_DOWN, PAD_NEXT, PAD_LEFT, PAD_CLEAR
 , PAD_RIGHT, PAD_HOME, PAD_UP, PAD_PRIOR, PAD_TOTAL_COUNT};
 static bool sPadState[PAD_TOTAL_COUNT];  // Initialized by ChangeHookState()
+
+static bool sHookSyncd; // Only valid while in WaitHookIdle().
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2313,7 +2320,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 
 		// This is done unconditionally so that even if a qualified Input is not in progress, the
 		// variable will be correctly reset anyway:
-		if ((Hotstring::mAtLeastOneEnabled && !is_ignored) || (g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && is_ignored)))
+		if ((Hotstring::sEnabledCount && !is_ignored) || (g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && is_ignored)))
 			if (!CollectInput(event, aVK, aSC, aKeyUp, is_ignored, pKeyHistoryCurr, hs_wparam_to_post, hs_lparam_to_post)) // Key should be invisible (suppressed).
 				return SuppressThisKeyFunc(aHook, lParam, aVK, aSC, aKeyUp, pKeyHistoryCurr, aHotkeyIDToPost, hs_wparam_to_post, hs_lparam_to_post);
 
@@ -2653,7 +2660,11 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		return treat_as_visible;
 	}
 
-	Get_active_window_keybd_layout // Defines the variables active_window and active_window_keybd_layout for use below.
+	// v1.1.28.00: active_window is set to the focused control, if any, so that the hotstring buffer is reset
+	// when the focus changes between controls, not just between windows.
+	// See Get_active_window_keybd_layout macro definition for related comments.
+	HWND active_window = GetForegroundWindow(); // Set default in case there's no focused control.
+	HKL active_window_keybd_layout = GetKeyboardLayout(GetFocusedCtrlThread(&active_window, active_window));
 
 	// Univeral Windows Platform apps apparently have their own handling for dead keys:
 	//  - Dead key followed by Esc produces Chr(27), unlike non-UWP apps.
@@ -2895,7 +2906,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 					// ... v1.0.41: Or it's a perfect match but the right window isn't active or doesn't exist.
 					// In that case, continue searching for other matches in case the script contains
 					// hotstrings that would trigger simultaneously were it not for the "only one" rule.
-					|| !HotCriterionAllowsFiring(hs.mHotCriterion, hs.mJumpToLabel ? hs.mJumpToLabel->mName : _T(""))   )
+					|| !HotCriterionAllowsFiring(hs.mHotCriterion, hs.mName)   )
 					continue; // No match or not eligible to fire.
 					// v1.0.42: The following scenario defeats the ability to give criterion hotstrings
 					// precedence over non-criterion:
@@ -3037,7 +3048,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				// Consequently, the buffer should be adjusted below to ensure it's in the right state to work
 				// in situations such as the user typing two hotstrings consecutively where the ending
 				// character of the first is used as a valid starting character (non-alphanumeric) for the next.
-				if (*hs.mReplacement)
+				if (hs.mReplacement)
 				{
 					// Since the buffer no longer reflects what is actually on screen to the left
 					// of the caret position (since a replacement is about to be done), reset the
@@ -4167,11 +4178,6 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 	if (aHooksToBeActive == hooks_active_orig) // It's already in the right state.
 		return;
 
-	// It's done the following way because:
-	// It's unclear that zero is always an invalid thread ID (not even GetWindowThreadProcessId's
-	// documentation gives any hint), so its safer to assume that a thread ID can be zero and yet still valid.
-	static HANDLE sThreadHandle = NULL;
-
 	if (!hooks_active_orig) // Neither hook is active now but at least one will be or the above would have returned.
 	{
 		// Assert: sThreadHandle should be NULL at this point.  The only way this isn't true is if
@@ -4496,6 +4502,10 @@ DWORD WINAPI HookThreadProc(LPVOID aUnused)
 				// full responsibility for freeing the hook's memory.
 			break;
 
+		case AHK_HOOK_SYNC:
+			sHookSyncd = true;
+			break;
+
 		} // switch (msg.message)
 	} // for(;;)
 }
@@ -4564,7 +4574,7 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 
 		*g_HSBuf = '\0';
 		g_HSBufLength = 0;
-		g_HShwnd = GetForegroundWindow(); // Not needed by some callers, but shouldn't hurt even then.
+		g_HShwnd = 0; // It isn't necessary to determine the actual window/control at this point since the buffer is already empty.
 
 		// Variables for the Shift+Numpad workaround:
 		sNextPhysShiftDownIsNotPhys = false;
@@ -4722,4 +4732,18 @@ void GetHookStatus(LPTSTR aBuf, int aBufSize)
 					);
 		}
 	}
+}
+
+
+
+void WaitHookIdle()
+// Wait until the hook has reached a known idle state (i.e. finished any processing
+// that it was in the middle of, though it could start something new immediately after).
+{
+	if (!sThreadHandle)
+		return;
+	sHookSyncd = false;
+	PostThreadMessage(g_HookThreadID, AHK_HOOK_SYNC, 0, 0);
+	while (!sHookSyncd)
+		SLEEP_WITHOUT_INTERRUPTION(0);
 }
