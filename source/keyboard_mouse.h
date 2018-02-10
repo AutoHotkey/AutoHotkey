@@ -277,6 +277,7 @@ LRESULT CALLBACK PlaybackProc(int aCode, WPARAM wParam, LPARAM lParam);
 //    to make the hotkey suffix match a different set of modifiers, the wrong hotkey would fire.
 void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC = 0, HWND aTargetWindow = NULL
 	, bool aDoKeyDelay = false, DWORD aExtraInfo = KEY_IGNORE_ALL_EXCEPT_MODIFIER);
+void KeyEventMenuMask(KeyEventTypes aEventType, DWORD aExtraInfo = KEY_IGNORE_ALL_EXCEPT_MODIFIER);
 
 ResultType PerformClick(LPTSTR aOptions);
 void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEventTypes &aEventType

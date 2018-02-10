@@ -1908,7 +1908,7 @@ bool DialogPrep()
 				// Even though the Win key isn't being released, sending a Shift or Control key-up
 				// triggers the Start menu.  To prevent that, we send the mask key.  This has been
 				// confirmed to apply to #Control, #Shift and the left/right variants.
-				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, KEY_IGNORE_ALL_EXCEPT_MODIFIER);
+				KeyEventMenuMask(KEYDOWNANDUP, KEY_IGNORE_ALL_EXCEPT_MODIFIER);
 				// Releasing the Win key now does not prevent it from being "masked" again later:
 				//mods_to_release |= (g_modifiersLR_logical & (MOD_LWIN | MOD_RWIN));
 			}

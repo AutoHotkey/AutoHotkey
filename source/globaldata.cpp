@@ -64,7 +64,8 @@ DWORD g_HookReceiptOfLControlMeansAltGr = 0; // In these cases, zero is used as 
 DWORD g_IgnoreNextLControlDown = 0;          //
 DWORD g_IgnoreNextLControlUp = 0;            //
 
-BYTE g_MenuMaskKey = VK_CONTROL; // L38: See #MenuMaskKey.
+BYTE g_MenuMaskKeyVK = VK_CONTROL; // For #MenuMaskKey.
+USHORT g_MenuMaskKeySC = SC_LCONTROL;
 
 int g_HotkeyModifierTimeout = 50;  // Reduced from 100, which was a little too large for fast typists.
 int g_ClipboardTimeout = 1000; // v1.0.31

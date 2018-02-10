@@ -1746,7 +1746,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				// (i.e. sometimes the Start Menu appears, even if two CTRL keystrokes are sent rather than one).
 				// Therefore, as of v1.0.25.05, mouse button hotkeys that use only the WIN key as a modifier cause
 				// the keyboard hook to be installed.  This determination is made during the hotkey loading stage.
-				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey);
+				KeyEventMenuMask(KEYDOWNANDUP);
 		}
 	}
 
@@ -2143,7 +2143,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// for simplicity and avoidance of side-effects not to make this one prevent that one.
 			//if (   (g_modifiersLR_logical & (MOD_LWIN | MOD_RWIN))   // At least one WIN key is down.
 			//	&& !(g_modifiersLR_logical & (MOD_LSHIFT | MOD_RSHIFT | MOD_LCONTROL | MOD_RCONTROL))   ) // But no SHIFT or CONTROL key is down to help us.
-			//	KeyEvent(KEYDOWNANDUP, g_MenuMaskKey);
+			//	KeyEventMenuMask(KEYDOWNANDUP);
 			// Since this is a hotkey that fires on ALT-DOWN and it's a normal (suppressed) hotkey,
 			// send an up-event to "turn off" the OS's low-level handling for the alt key with
 			// respect to having it modify keypresses.  For example, the following hotkeys would
@@ -2461,7 +2461,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 				// is all that is necessary to disguise the key.  This is because the OS will see that the
 				// keystroke occurred while ALT or WIN is still down because we haven't done CallNextHookEx() yet.
 				if (sUndisguisedMenuInEffect)
-					KeyEvent(KEYDOWNANDUP, g_MenuMaskKey); // This should also cause sUndisguisedMenuInEffect to be reset.
+					KeyEventMenuMask(KEYDOWNANDUP); // This should also cause sUndisguisedMenuInEffect to be reset.
 			}
 			else // A modifier key was released and sDisguiseNextMenu was false.
 			{

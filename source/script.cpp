@@ -3433,10 +3433,18 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	if (IS_DIRECTIVE_MATCH(_T("#MenuMaskKey")))
 	{
 		// L38: Allow scripts to specify an alternate "masking" key in place of VK_CONTROL.
-		if (parameter && (g_MenuMaskKey = (BYTE)TextToVK(parameter, NULL, true, true)))
-			return CONDITION_TRUE;
-		else
-			return ScriptError(parameter ? ERR_PARAM1_INVALID : ERR_PARAM1_REQUIRED, aBuf);
+		if (parameter)
+		{
+			// Testing shows that sending an event with zero VK but non-zero SC fails to suppress
+			// the Start menu (although it does suppress the window menu).  However, checking the
+			// validity of the key seems more correct than requiring g_MenuMaskKeyVK != 0, and
+			// adds flexibility at very little cost.  Note that this use of TextToVKandSC()'s
+			// return value (vs. checking VK|SC) allows vk00sc000 to turn off masking altogether.
+			if (TextToVKandSC(parameter, g_MenuMaskKeyVK, g_MenuMaskKeySC))
+				return CONDITION_TRUE;
+			//else: It's okay that above modified our variables since we're about to exit.
+		}
+		return ScriptError(parameter ? ERR_PARAM1_INVALID : ERR_PARAM1_REQUIRED, aBuf);
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#InputLevel")))
 	{
