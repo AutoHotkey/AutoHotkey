@@ -3475,49 +3475,49 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	if (IS_DIRECTIVE_MATCH(_T("#Warn")))
 	{
 		if (!parameter)
-			parameter = _T("All");
+			parameter = _T("");
 
 		LPTSTR param1_end = _tcschr(parameter, g_delimiter);
-		size_t param1_length = -1;
 		LPTSTR param2 = _T("");
 		if (param1_end)
 		{
 			param2 = omit_leading_whitespace(param1_end + 1);
 			param1_end = omit_trailing_whitespace(parameter, param1_end - 1);
-			param1_length = param1_end - parameter + 1;
+			param1_end[1] = '\0';
 		}
 
-		#define IS_PARAM1_MATCH(value) (!tcslicmp(parameter, value, param1_length))
+		int i;
 
-		WarnType warnType;
-		if (IS_PARAM1_MATCH(_T("All")) || !param1_length)
-			warnType = WARN_ALL;
-		else if (IS_PARAM1_MATCH(_T("UseUnsetLocal")))
-			warnType = WARN_USE_UNSET_LOCAL;
-		else if (IS_PARAM1_MATCH(_T("UseUnsetGlobal")))
-			warnType = WARN_USE_UNSET_GLOBAL;
-		else if (IS_PARAM1_MATCH(_T("UseEnv")))
-			warnType = WARN_USE_ENV;
-		else if (IS_PARAM1_MATCH(_T("LocalSameAsGlobal")))
-			warnType = WARN_LOCAL_SAME_AS_GLOBAL;
-		else if (IS_PARAM1_MATCH(_T("ClassOverwrite")))
-			warnType = WARN_CLASS_OVERWRITE;
-		else
-			return ScriptError(ERR_PARAM1_INVALID, aBuf);
+		static LPTSTR sWarnTypes[] = { WARN_TYPE_STRINGS };
+		WarnType warnType = WARN_ALL; // Set default.
+		if (*parameter)
+		{
+			for (i = 0; ; ++i)
+			{
+				if (i == _countof(sWarnTypes))
+					return ScriptError(ERR_PARAM1_INVALID, aBuf);
+				if (!_tcsicmp(parameter, sWarnTypes[i]))
+					break;
+			}
+			warnType = (WarnType)i;
+		}
 
-		WarnMode warnMode;
-		if (!*param2)
-			warnMode = WARNMODE_MSGBOX;	// omitted mode parameter implies "MsgBox" mode
-		else if (!_tcsicmp(param2, _T("MsgBox")))
-			warnMode = WARNMODE_MSGBOX;
-		else if (!_tcsicmp(param2, _T("OutputDebug")))
-			warnMode = WARNMODE_OUTPUTDEBUG;
-		else if (!_tcsicmp(param2, _T("StdOut")))
-			warnMode = WARNMODE_STDOUT;
-		else if (!_tcsicmp(param2, _T("Off")))
-			warnMode = WARNMODE_OFF;
-		else
-			return ScriptError(ERR_PARAM2_INVALID, aBuf);
+		static LPTSTR sWarnModes[] = { WARN_MODE_STRINGS };
+		WarnMode warnMode = WARNMODE_MSGBOX; // Set default.
+		if (*param2)
+		{
+			for (i = 0; ; ++i)
+			{
+				if (i == _countof(sWarnModes))
+					return ScriptError(ERR_PARAM2_INVALID, param2);
+				if (!_tcsicmp(param2, sWarnModes[i]))
+					break;
+			}
+			warnMode = (WarnMode)i;
+		}
+
+		// The following series of "if" statements was confirmed to produce smaller code
+		// than a switch() with a final case WARN_ALL that duplicates all of the assignments:
 
 		if (warnType == WARN_USE_UNSET_LOCAL || warnType == WARN_ALL)
 			g_Warn_UseUnsetLocal = warnMode;
