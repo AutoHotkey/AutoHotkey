@@ -2889,7 +2889,7 @@ public:
 BIV_DECL_R (BIV_True_False);
 BIV_DECL_R (BIV_MMM_DDD);
 BIV_DECL_R (BIV_DateTime);
-BIV_DECL_R (BIV_ListLines);
+BIV_DECL_RW(BIV_ListLines);
 BIV_DECL_RW(BIV_TitleMatchMode);
 BIV_DECL_R (BIV_TitleMatchModeSpeed); // Write is handled by BIV_TitleMatchMode_Set.
 BIV_DECL_RW(BIV_DetectHiddenWindows);

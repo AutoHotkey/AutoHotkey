@@ -9100,6 +9100,12 @@ BIV_DECL_R(BIV_ListLines)
 	return 1;
 }
 
+BIV_DECL_W(BIV_ListLines_Set)
+{
+	g->ListLinesIsEnabled = ResultToBOOL(aBuf);
+	return OK;
+}
+
 VarSizeType BIV_TitleMatchMode(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (g->TitleMatchMode == FIND_REGEX) // v1.0.45.
