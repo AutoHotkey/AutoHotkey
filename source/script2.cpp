@@ -2893,7 +2893,8 @@ BIF_DECL(BIF_WinGetPos)
 		else // FID_WinGetClientPos
 		{
 			GetClientRect(target_window, &rect); // Get client pos relative to client (position is always 0,0).
-			MapWindowPoints(target_window, NULL, (LPPOINT)&rect, 2); // Convert to screen coordinates.
+			// Since the position is always 0,0, right,bottom are already equivalent to width,height.
+			MapWindowPoints(target_window, NULL, (LPPOINT)&rect, 1); // Convert position to screen coordinates.
 		}
 	}
 
