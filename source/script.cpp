@@ -8598,18 +8598,20 @@ unquoted_literal:
 					// Accessing this_infix[-1] here is necessarily safe since in_param_list is
 					// non-NULL, and that can only be the result of a previous SYM_OPAREN/BRACKET.
 					SymbolType prev_sym = this_infix[-1].symbol;
-					if (prev_sym == SYM_COMMA || prev_sym == stack_symbol || prev_sym == SYM_MISSING) // Empty parameter.
+					if (prev_sym == SYM_COMMA || prev_sym == stack_symbol) // Empty parameter.
 					{
 						if (func && in_param_list->param_count < func->mMinParams) // Is this parameter mandatory?
 							return LineError(ERR_PARAM_REQUIRED);
 						if (infix_symbol == SYM_COMMA)
 						{
-							this_postfix = this_infix++;
+							// Using _alloca() vs. this_infix simplifies checks in other places
+							// which rely on this_infix being identified as SYM_COMMA:
+							this_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
 							this_postfix->symbol = SYM_MISSING;
 							this_postfix->marker = _T(""); // Simplify some cases by letting it be treated as SYM_STRING.
-							this_postfix->circuit_token = NULL;
 							++in_param_list->param_count;
 							++postfix_count;
+							++this_infix;
 							continue; // Must do this to update this_postfix ref.
 						}
 						// Otherwise: it's something like ,) or ,] -- just do nothing at this point, so that the end
@@ -8720,7 +8722,6 @@ unquoted_literal:
 						postfix[postfix_count] = this_infix;
 						postfix[postfix_count]->symbol = SYM_MISSING;
 						postfix[postfix_count]->marker = _T(""); // Simplify some cases by letting it be treated as SYM_STRING.
-						postfix[postfix_count]->circuit_token = NULL;
 						++postfix_count;
 					}
 					stack_top.deref->func = &g_ObjCall; // Override the default now that we know this is a method-call.
@@ -8802,8 +8803,7 @@ unquoted_literal:
 			}
 			else if (infix_symbol == SYM_FUNC)
 				in_param_list = this_infix[-1].deref; // Store this SYM_FUNC's deref.
-			else if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol)
-				&& this_infix[-1].symbol != SYM_MISSING) // Workaround for X(,(something)), where SYM_COMMA has been replaced with SYM_MISSING.
+			else if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol))
 				return LineError(_T("Missing operator or space before \"(\"."));
 			else
 				in_param_list = NULL; // Allow multi-statement commas, even in cases like Func((x,y)).
