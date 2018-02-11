@@ -644,8 +644,8 @@ inline LPTSTR UTF8ToWide(LPCSTR str){
 // v1.1.27.01: Retrieve the layout of the thread which owns the focused control, not the active window.
 // This fixes UWP apps such as Microsoft Edge, where the top-level window is owned by a different process.
 #define Get_active_window_keybd_layout \
-	HWND active_window = GetForegroundWindow();\
-	HKL active_window_keybd_layout = GetFocusedKeybdLayout(active_window);
+	HKL active_window_keybd_layout = GetFocusedKeybdLayout();
+
 
 #define FONT_POINT(hdc, p) (-MulDiv(p, GetDeviceCaps(hdc, LOGPIXELSY), 72))
 #define DATE_FORMAT_LENGTH 14 // "YYYYMMDDHHMISS"

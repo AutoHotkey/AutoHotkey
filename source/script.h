@@ -1555,10 +1555,14 @@ public:
 };
 
 // LabelPtr with automatic reference-counting, for storing an object safely,
-// such as in a HotkeyVariant, UserMenuItem, etc.  In future, this could be
-// replaced with a more general smart pointer class.
+// such as in a HotkeyVariant, UserMenuItem, etc.  Its specific purpose is to
+// work with old code that wasn't concerned with reference counting.
 class LabelRef : public LabelPtr
 {
+private:
+	LabelRef(const LabelRef &); // Disable default copy constructor.
+	LabelRef & operator = (const LabelRef &); // ...and copy assignment.
+
 public:
 	LabelRef() : LabelPtr() {}
 	LabelRef(IObject *object) : LabelPtr(object)
@@ -1579,6 +1583,10 @@ public:
 			mObject->Release();
 		mObject = object;
 		return *this;
+	}
+	LabelRef & operator = (const LabelPtr &other)
+	{
+		return *this = other.ToObject();
 	}
 	~LabelRef()
 	{
@@ -2676,6 +2684,7 @@ private:
 	LPTSTR ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool aDisplayErrors);
 	static ActionTypeType ConvertActionType(LPTSTR aActionTypeString, int aFirstAction, int aLastActionPlus1);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
+	void RemoveLabel(Label *aLabel);
 	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, int aArgc = 0, LPTSTR aArgMap[] = NULL, bool aAllArgsAreExpressions = false);
 
 	// These aren't in the Line class because I think they're easier to implement
@@ -2756,6 +2765,9 @@ public:
 	void TerminateApp(ExitReasons aExitReason, int aExitCode); // L31: Added aExitReason. See script.cpp.
 	LineNumberType LoadFromFile();
 	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
+	LineNumberType CurrentLine();
+	LPTSTR CurrentFile();
+
 	ResultType UpdateOrCreateTimer(IObject *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
 		, bool aUpdatePriorityOnly);
 	void DeleteTimer(IObject *aLabel);
@@ -2786,6 +2798,8 @@ public:
 		, bool *apIsLocal = NULL);
 	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope);
 	static VarEntry *GetBuiltInVar(LPTSTR aVarName);
+
+	ResultType DerefInclude(LPTSTR &aOutput, LPTSTR aBuf);
 
 	WinGroup *FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound = false);
 	ResultType AddGroup(LPTSTR aGroupName);
@@ -2837,7 +2851,7 @@ public:
 	void PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount);
 	void CheckForClassOverwrite();
 
-	static ResultType UnhandledException(ResultToken*& aToken, Line* aLine);
+	static ResultType UnhandledException(ResultToken*& aToken, Line* aLine, LPTSTR aFooter = _T("The thread has exited."));
 	static ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
 	static ResultType SetErrorLevelOrThrowBool(bool aError);
 	static ResultType SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat = NULL);
@@ -2875,6 +2889,7 @@ public:
 BIV_DECL_R (BIV_True_False);
 BIV_DECL_R (BIV_MMM_DDD);
 BIV_DECL_R (BIV_DateTime);
+BIV_DECL_R (BIV_ListLines);
 BIV_DECL_RW(BIV_TitleMatchMode);
 BIV_DECL_R (BIV_TitleMatchModeSpeed); // Write is handled by BIV_TitleMatchMode_Set.
 BIV_DECL_RW(BIV_DetectHiddenWindows);
@@ -3057,6 +3072,8 @@ BIF_DECL(BIF_IL_Add);
 BIF_DECL(BIF_LoadPicture);
 
 BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.
+
+BIF_DECL(BIF_Hotstring);
 
 BIF_DECL(BIF_Type);
 
