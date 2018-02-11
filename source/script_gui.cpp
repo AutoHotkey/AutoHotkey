@@ -1738,7 +1738,8 @@ void GuiType::DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall)
 	// authorized us to destroy it.
 	DestroyIcon(ahIcon);
 	// L17: Small icon should always also be unused at this point.
-	DestroyIcon(ahIconSmall);
+	if (ahIconSmall != ahIcon)
+		DestroyIcon(ahIconSmall);
 }
 
 

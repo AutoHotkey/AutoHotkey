@@ -153,7 +153,16 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 				HICON new_icon_small;
 				HICON new_icon = NULL; // Initialize to detect failure to load either icon.
 				HMODULE icon_module = NULL; // Must initialize because it's not always set by LoadPicture().
-				if ( new_icon_small = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), image_type, icon_number, false) ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
+				if (!_tcsnicmp(aParam3, _T("HICON:"), 6) && aParam3[6] != '*')
+				{
+					// Handle this here rather than in LoadPicture() because the first call would destroy the
+					// original icon (due to specifying the width and height), causing the second call to fail.
+					// Keep the original size for both icons since that sometimes produces better results than
+					// CopyImage(), and it keeps the code smaller.
+					new_icon_small = (HICON)(UINT_PTR)ATOI64(aParam3 + 6);
+					new_icon = new_icon_small; // DestroyIconsIfUnused() handles this case by calling DestroyIcon() only once.
+				}
+				else if ( new_icon_small = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), image_type, icon_number, false) ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
 					if ( !(new_icon = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, icon_number, false, NULL, &icon_module)) )
 						DestroyIcon(new_icon_small);
 				if ( !new_icon )
