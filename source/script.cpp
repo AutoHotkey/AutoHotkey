@@ -680,36 +680,44 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		}
 		//else since the file exists, everything is now set up right. (The file might be a directory, but that isn't checked due to rarity.)
 	}
-	// In case the script is a relative filespec (relative to current working dir):
-	if (!GetFullPathName(aScriptFilename, _countof(buf), buf, NULL)) // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
-		return FAIL; // Due to rarity, no error msg, just abort.
-#endif
-	if (g_RunStdIn = (*aScriptFilename == '*' && !aScriptFilename[1])) // v1.1.17: Read script from stdin.
+	if (*aScriptFilename == '*' && !aScriptFilename[1]) // Read script from stdin.
 	{
+		g_RunStdIn = true;
+		buf[0] = '*';
+		buf[1] = '\0';
 		// Seems best to disable #SingleInstance for stdin scripts.
 		g_AllowOnlyOneInstance = SINGLE_INSTANCE_OFF;
 	}
-	else // i.e. don't call the following function for stdin.
-	// Using the correct case not only makes it look better in title bar & tray tool tip,
-	// it also helps with the detection of "this script already running" since otherwise
-	// it might not find the dupe if the same script name is launched with different
-	// lowercase/uppercase letters:
-	ConvertFilespecToCorrectCase(buf); // This might change the length, e.g. due to expansion of 8.3 filename.
+	else
+	{
+		// In case the script is a relative filespec (relative to current working dir):
+		if (!GetFullPathName(aScriptFilename, _countof(buf), buf, NULL)) // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
+			return FAIL; // Due to rarity, no error msg, just abort.
+	}
+#endif
+	if (!g_RunStdIn)
+	{
+		// Using the correct case not only makes it look better in title bar & tray tool tip,
+		// it also helps with the detection of "this script already running" since otherwise
+		// it might not find the dupe if the same script name is launched with different
+		// lowercase/uppercase letters:
+		ConvertFilespecToCorrectCase(buf); // This might change the length, e.g. due to expansion of 8.3 filename.
+	}
 	if (   !(mFileSpec = SimpleHeap::Malloc(buf))   )  // The full spec is stored for convenience, and it's relied upon by mIncludeLibraryFunctionsThenExit.
 		return FAIL;  // It already displayed the error for us.
 	LPTSTR filename_marker;
 	if (filename_marker = _tcsrchr(buf, '\\'))
 	{
-		*filename_marker = '\0'; // Terminate buf in this position to divide the string.
-		if (   !(mFileDir = SimpleHeap::Malloc(buf))   )
+		if (   !(mFileDir = SimpleHeap::Malloc(buf, filename_marker - buf))   )
 			return FAIL;  // It already displayed the error for us.
 		++filename_marker;
 	}
 	else
 	{
-		// The only known cause of this condition is a path being too long for GetFullPathName
-		// to expand it into buf, in which case buf and mFileSpec are now empty, and this will
-		// cause LoadFromFile() to fail and the program to exit.
+		// There is no slash in "*" (i.e. g_RunStdIn).  The only other known cause of this
+		// condition is a path being too long for GetFullPathName to expand it into buf,
+		// in which case buf and mFileSpec are now empty, and this will cause LoadFromFile()
+		// to fail and the program to exit.
 		//mFileDir = _T(""); // Already done by the constructor.
 		filename_marker = buf;
 	}
@@ -718,10 +726,9 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 #ifdef AUTOHOTKEYSC
 	// Omit AutoHotkey from the window title, like AutoIt3 does for its compiled scripts.
 	// One reason for this is to reduce backlash if evil-doers create viruses and such
-	// with the program:
-	sntprintf(buf, _countof(buf), _T("%s\\%s"), mFileDir, mFileName);
+	// with the program.  buf already contains the full path, so no change is needed.
 #else
-	sntprintf(buf, _countof(buf), _T("%s\\%s - %s"), mFileDir, mFileName, T_AHK_NAME_VERSION);
+	sntprintfcat(buf, _countof(buf), _T(" - %s"), T_AHK_NAME_VERSION);
 #endif
 	if (   !(mMainWindowTitle = SimpleHeap::Malloc(buf))   )
 		return FAIL;  // It already displayed the error for us.
