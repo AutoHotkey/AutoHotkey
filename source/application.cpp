@@ -2012,10 +2012,15 @@ BOOL IsInterruptible()
 	// in percentage terms compared to the alternative, which could cause a timeout of 15 milliseconds to
 	// increase to 24 days.  Windows Vista and beyond have a 64-bit tickcount available, so that may be of
 	// use in future versions (hopefully it performs nearly as well as GetTickCount()).
+	// v2.0: g->UninterruptedLineCount is checked to ensure that each thread is allowed to execute at least
+	// one line before being interrupted.  This was proven necessary for g->UninterruptibleDuration <= 16
+	// because GetTickCount() updates in increments of 15 or 16 and therefore 16 can be virtually no time
+	// at all.  It might also be needed for larger values if the system is busy.
 	if (   !g->AllowThreadToBeInterrupted // Those who check whether g->AllowThreadToBeInterrupted==false should then check whether it should be made true.
 		&& !g->ThreadIsCritical // Must take precedence over the checks below.
 		&& g->UninterruptibleDuration > -1 // Must take precedence over the below. For backward compatibility, g_script.mUninterruptibleTime is not checked because it's supposed to go into effect during thread creation, not after the thread is running and has possibly changed the timeout via "Thread Interrupt".
 		&& (DWORD)(GetTickCount()- g->ThreadStartTime) >= (DWORD)g->UninterruptibleDuration // See big comment section above.
+		&& g->UninterruptedLineCount // In case of "Critical" on the first line.  See v2.0 comment above.
 		)
 		// Once the thread becomes interruptible by any means, g->ThreadStartTime/UninterruptibleDuration
 		// can never matter anymore because only Critical (never "Thread Interrupt") can turn off the

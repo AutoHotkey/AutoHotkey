@@ -9490,12 +9490,15 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 
 		// If interruptions are currently forbidden, it's our responsibility to check if the number
 		// of lines that have been run since this quasi-thread started now indicate that
-		// interruptibility should be reenabled.  But if UninterruptedLineCountMax is negative, don't
-		// bother checking because this quasi-thread will stay non-interruptible until it finishes.
+		// interruptibility should be reenabled.  g.UninterruptedLineCount must also be tracked
+		// for IsInterruptible() to detect execution of the thread's first line.
 		// v1.0.38.04: If g.ThreadIsCritical==true, no need to check or accumulate g.UninterruptedLineCount
 		// because the script is now in charge of this thread's interruptibility.
-		if (!g.AllowThreadToBeInterrupted && !g.ThreadIsCritical && g_script.mUninterruptedLineCountMax > -1) // Ordered for short-circuit performance.
+		if (!g.AllowThreadToBeInterrupted && !g.ThreadIsCritical) // Ordered for short-circuit performance.
 		{
+			// Incrementing this unconditionally makes it a relatively crude measure,
+			// but it seems okay to be less accurate for this purpose:
+			++g.UninterruptedLineCount;
 			// To preserve backward compatibility, ExecUntil() must be the one to check
 			// g.UninterruptedLineCount and update g.AllowThreadToBeInterrupted, rather than doing
 			// those things on-demand in IsInterruptible().  If those checks were moved to
@@ -9503,12 +9506,9 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			// g_script.mUninterruptedLineCountMax because IsInterruptible() is called only upon demand.
 			// THIS SECTION DOES NOT CHECK g.ThreadStartTime because that only needs to be
 			// checked on demand by callers of IsInterruptible().
-			if (g.UninterruptedLineCount > g_script.mUninterruptedLineCountMax) // See above.
+			if (g.UninterruptedLineCount > g_script.mUninterruptedLineCountMax // See above.
+				&& g_script.mUninterruptedLineCountMax > -1)
 				g.AllowThreadToBeInterrupted = true;
-			else
-				// Incrementing this unconditionally makes it a relatively crude measure,
-				// but it seems okay to be less accurate for this purpose:
-				++g.UninterruptedLineCount;
 		}
 
 		// At this point, a pause may have been triggered either by the above MsgSleep()
