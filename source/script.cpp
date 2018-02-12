@@ -2719,7 +2719,11 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 	{
 		// Before appending each line, check whether the last line ended with OTB '{'.
 		// It can't be OTB if balance > 1 since that would mean another unclosed (/[/{.
-		if (balance == 1 && buf[buf_length - 1] == '{' && buf_length > 3)
+		// balance == 1 implies buf_length >= 1, but below requires buf_length >= 2.
+		// The shortest valid OTB is for the property "p{".  Finding '{' usually implies
+		// buf_length >= 2 because '{' at the start of buf is usually handled by the
+		// caller, but that isn't always the case (e.g. for one-line hotkeys).
+		if (balance == 1 && buf[buf_length - 1] == '{' && buf_length >= 2)
 		{
 			// Some common OTB constructs:
 			//   myfn() {
