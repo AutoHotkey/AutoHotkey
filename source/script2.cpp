@@ -2655,6 +2655,11 @@ ResultType Line::ControlFocus(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 
 	if (SetFocus(control_window))
 	{
+		// Reset hotstring buffer, so that a hotkey bound to ControlFocus
+		// works the same as pressing TAB or Shift-TAB
+		*g_HSBuf = '\0';
+		g_HSBufLength = 0;
+		
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 		DoControlDelay;
 	}
