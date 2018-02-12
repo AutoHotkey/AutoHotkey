@@ -14743,9 +14743,9 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			break;
 		case THREAD_CMD_INTERRUPT:
 			// If either one is blank, leave that setting as it was before.
-			if (*ARG1)
-				g_script.mUninterruptibleTime = ArgToInt(2);  // 32-bit (for compatibility with DWORDs returned by GetTickCount).
 			if (*ARG2)
+				g_script.mUninterruptibleTime = ArgToInt(2);  // 32-bit (for compatibility with DWORDs returned by GetTickCount).
+			if (*ARG3)
 				g_script.mUninterruptedLineCountMax = ArgToInt(3);  // 32-bit also, to help performance (since huge values seem unnecessary).
 			break;
 		case THREAD_CMD_NOTIMERS:
