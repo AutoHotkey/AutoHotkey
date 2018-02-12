@@ -496,7 +496,7 @@ Script::Script()
 #ifndef AUTOHOTKEYSC
 	, mIncludeLibraryFunctionsThenExit(NULL)
 #endif
-	, mUninterruptedLineCountMax(1000), mUninterruptibleTime(15)
+	, mUninterruptedLineCountMax(1000), mUninterruptibleTime(17)
 	, mCustomIcon(NULL), mCustomIconSmall(NULL) // Normally NULL unless there's a custom tray icon loaded dynamically.
 	, mCustomIconFile(NULL), mIconFrozen(false), mTrayIconTip(NULL) // Allocated on first use.
 	, mCustomIconNumber(0)

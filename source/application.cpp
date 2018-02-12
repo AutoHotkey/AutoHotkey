@@ -2006,7 +2006,7 @@ BOOL IsInterruptible()
 	//     (currently unlikely since MSG_FILTER_MAX calls it).  This could cause a TickCount to get too
 	//     stale and have the same consequences as described in #2 above.
 	// OVERALL: Although the method used here can wrongly extend the uninterruptibility of a thread by as
-	// much as 100%, since g_script.mUninterruptible time defaults to 15 milliseconds (and in practice is
+	// much as 100%, since g_script.mUninterruptible time defaults to 17 milliseconds (and in practice is
 	// rarely raised beyond 1000) it doesn't matter much in those cases. Even when g_script.mUninterruptible
 	// is large such as 20 days, this method can be off by no more than 20 days, which isn't too bad
 	// in percentage terms compared to the alternative, which could cause a timeout of 15 milliseconds to
