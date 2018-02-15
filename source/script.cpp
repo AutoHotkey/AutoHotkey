@@ -289,6 +289,37 @@ FuncEntry g_BIF[] =
 	BIF1(TraySetIcon, 0, 3, false),
 
 	BIF1(LoadPicture, 1, 3, true),
+
+	// Thread settings
+	BIFn(DetectHiddenText, 0, 1, true, ThreadSettings),
+	BIFn(DetectHiddenWindows, 0, 1, true, ThreadSettings),
+	BIFn(StoreCapslock, 0, 1, true, ThreadSettings),
+	BIFn(MouseSpeed, 0, 1, true, ThreadSettings),
+	BIFn(ControlDelay, 0, 1, true, ThreadSettings),
+	BIFn(MouseDelay, 0, 1, true, ThreadSettings),
+	BIFn(MouseDelayPlay, 0, 1, true, ThreadSettings),
+	BIFn(WinDelay, 0, 1, true, ThreadSettings),
+	BIFn(SendMode, 0, 1, true, ThreadSettings),
+	BIFn(SendLevel, 0, 1, true, ThreadSettings),
+	BIFn(StringCaseSense, 0, 1, true, ThreadSettings),
+	BIFn(TitleMatchMode, 0, 1, true, ThreadSettings),
+	BIFn(TitleMatchFast, 0, 1, true, ThreadSettings),
+
+	BIFn(KeyDelay, 0, 2, true, KeyDelay),
+	BIFn(KeyDelayPlay, 0, 2, true, KeyDelay),
+
+	BIFn(CoordModeToolTip, 0, 1, true, CoordMode),
+	BIFn(CoordModePixel, 0, 1, true, CoordMode),
+	BIFn(CoordModeMouse, 0, 1, true, CoordMode),
+	BIFn(CoordModeCaret, 0, 1, true, CoordMode),
+	BIFn(CoordModeMenu, 0, 1, true, CoordMode),
+
+	BIF1(RegView, 0, 1, true),
+	
+	//BIF1(Critical, 0, 1, true),
+
+	BIF1(FileEncoding, 0, 1, true),
+
 };
 #undef NA
 #undef BIFn
@@ -323,24 +354,14 @@ VarEntry g_BIV_A[] =
 	A_x(AppDataCommon, BIV_SpecialFolderPath),
 	A_x(ComputerName, BIV_UserName_ComputerName),
 	A_(ComSpec),
-	A_wx(ControlDelay, BIV_xDelay, BIV_xDelay_Set),
-	A_wx(CoordModeCaret, BIV_CoordMode, BIV_CoordMode_Set),
-	A_wx(CoordModeMenu, BIV_CoordMode, BIV_CoordMode_Set),
-	A_wx(CoordModeMouse, BIV_CoordMode, BIV_CoordMode_Set),
-	A_wx(CoordModePixel, BIV_CoordMode, BIV_CoordMode_Set),
-	A_wx(CoordModeToolTip, BIV_CoordMode, BIV_CoordMode_Set),
 	A_(Cursor),
 	A_x(DD, BIV_DateTime),
 	A_x(DDD, BIV_MMM_DDD),
 	A_x(DDDD, BIV_MMM_DDD),
-	A_w(DefaultMouseSpeed),
 	A_x(Desktop, BIV_SpecialFolderPath),
 	A_x(DesktopCommon, BIV_SpecialFolderPath),
-	A_w(DetectHiddenText),
-	A_w(DetectHiddenWindows),
 	A_(EndChar),
 	A_w(EventInfo), // It's called "EventInfo" vs. "GuiEventInfo" because it applies to non-Gui events such as OnClipboardChange.,
-	A_w(FileEncoding),
 	A_x(Hour, BIV_DateTime),
 	A_(IconFile),
 	A_w(IconHidden),
@@ -359,10 +380,6 @@ VarEntry g_BIV_A[] =
 	A_(IsPaused),
 	A_(IsSuspended),
 	A_(IsUnicode),
-	A_wx(KeyDelay, BIV_xDelay, BIV_xDelay_Set),
-	A_wx(KeyDelayPlay, BIV_xDelay, BIV_xDelay_Set),
-	A_wx(KeyDuration, BIV_xDelay, BIV_xDelay_Set),
-	A_wx(KeyDurationPlay, BIV_xDelay, BIV_xDelay_Set),
 	A_(Language),
 	A_w(LastError),
 	A_(LineFile),
@@ -393,8 +410,6 @@ VarEntry g_BIV_A[] =
 	A_x(MMM, BIV_MMM_DDD),
 	A_x(MMMM, BIV_MMM_DDD),
 	A_x(Mon, BIV_DateTime),
-	A_wx(MouseDelay, BIV_xDelay, BIV_xDelay_Set),
-	A_wx(MouseDelayPlay, BIV_xDelay, BIV_xDelay_Set),
 	A_x(MSec, BIV_DateTime),
 	A_(MyDocuments),
 	A_x(Now, BIV_Now),
@@ -409,7 +424,6 @@ VarEntry g_BIV_A[] =
 	A_x(Programs, BIV_SpecialFolderPath),
 	A_x(ProgramsCommon, BIV_SpecialFolderPath),
 	A_(PtrSize),
-	A_w(RegView),
 	A_(ScreenDPI),
 	A_x(ScreenHeight, BIV_ScreenWidth_Height),
 	A_x(ScreenWidth, BIV_ScreenWidth_Height),
@@ -418,15 +432,11 @@ VarEntry g_BIV_A[] =
 	A_(ScriptHwnd),
 	A_w(ScriptName),
 	A_x(Sec, BIV_DateTime),
-	A_w(SendLevel),
-	A_w(SendMode),
 	A_x(Space, BIV_Space_Tab),
 	A_x(StartMenu, BIV_SpecialFolderPath),
 	A_x(StartMenuCommon, BIV_SpecialFolderPath),
 	A_x(Startup, BIV_SpecialFolderPath),
 	A_x(StartupCommon, BIV_SpecialFolderPath),
-	A_w(StoreCapslockMode),
-	A_w(StringCaseSense),
 	A_x(Tab, BIV_Space_Tab),
 	A_(Temp), // Debatably should be A_TempDir, but brevity seemed more popular with users, perhaps for heavy uses of the temp folder.,
 	A_(ThisFunc),
@@ -437,12 +447,9 @@ VarEntry g_BIV_A[] =
 	A_(TimeIdlePhysical),
 	A_(TimeSincePriorHotkey),
 	A_(TimeSinceThisHotkey),
-	A_w(TitleMatchMode),
-	A_wx(TitleMatchModeSpeed, BIV_TitleMatchModeSpeed, BIV_TitleMatchMode_Set),
 	A_(TrayMenu),
 	A_x(UserName, BIV_UserName_ComputerName),
 	A_x(WDay, BIV_DateTime),
-	A_wx(WinDelay, BIV_xDelay, BIV_xDelay_Set),
 	A_(WinDir),
 	A_w(WorkingDir),
 	A_x(YDay, BIV_DateTime),
@@ -2535,7 +2542,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 				cp = remap_buf;
 				cp += _stprintf(cp
 					, _T("%s::\n") // Key-down hotkey label, e.g. *LButton::
-					  _T("Set%sDelay(-1)\n") // Does NOT need to be "-1, -1" for SetKeyDelay (see below).
+					  _T("%sDelay(-1)\n") // Does NOT need to be "-1, -1" for KeyDelay() (see below).
 					, remap_source
 					, remap_dest_is_mouse ? _T("Mouse") : _T("Key")
 				);
@@ -2594,7 +2601,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 					, _T("Send(\"{Blind}%s%s{%s DownR}\")\n") // DownR vs. Down. See Send's DownR handler for details.
 					  _T("Return\n")
 					  _T("%s up::\n") // Key-up hotkey label, e.g. *LButton up::
-					  _T("Set%sDelay(-1)\n")
+					  _T("%sDelay(-1)\n")
 					  _T("Send(\"{Blind}{%s Up}\")\n") // Unlike the down-event above, remap_dest_modifiers is not included for the up-event; e.g. ^{b up} is inappropriate.
 					  _T("Return\n") // Last line must end with \n to simplify the code.
 					, extra_event, remap_dest_modifiers, remap_dest
@@ -11516,7 +11523,6 @@ ResultType Line::Perform()
 		PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 416, 0);
 		DoWinDelay;
 		return OK;
-
 	case ACT_CRITICAL:
 	{
 		// v1.0.46: When the current thread is critical, have the script check messages less often to
@@ -11749,58 +11755,6 @@ ResultType Line::Perform()
 		return TrayTip(THREE_ARGS);
 
 
-//////////////////////////////////////////////////////////////////////////
-
-	case ACT_COORDMODE:
-		return Script::SetCoordMode(ARG1, ARG2);
-
-	case ACT_SETDEFAULTMOUSESPEED:
-		g.DefaultMouseSpeed = (UCHAR)ArgToInt(1);
-		// In case it was a deref, force it to be some default value if it's out of range:
-		if (g.DefaultMouseSpeed < 0 || g.DefaultMouseSpeed > MAX_MOUSE_SPEED)
-			g.DefaultMouseSpeed = DEFAULT_MOUSE_SPEED;
-		return OK;
-
-	case ACT_SENDMODE:
-		return Script::SetSendMode(ARG1);
-
-	case ACT_SENDLEVEL:
-		return Script::SetSendLevel(ArgToInt(1), ARG1);
-
-	case ACT_SETKEYDELAY:
-		if (!_tcsicmp(ARG3, _T("Play")))
-		{
-			if (*ARG1)
-				g.KeyDelayPlay = ArgToInt(1);
-			if (*ARG2)
-				g.PressDurationPlay = ArgToInt(2);
-		}
-		else
-		{
-			if (*ARG1)
-				g.KeyDelay = ArgToInt(1);
-			if (*ARG2)
-				g.PressDuration = ArgToInt(2);
-		}
-		return OK;
-	case ACT_SETMOUSEDELAY:
-		if (!_tcsicmp(ARG2, _T("Play")))
-			g.MouseDelayPlay = ArgToInt(1);
-		else
-			g.MouseDelay = ArgToInt(1);
-		return OK;
-	case ACT_SETWINDELAY:
-		g.WinDelay = ArgToInt(1);
-		return OK;
-	case ACT_SETCONTROLDELAY:
-		g.ControlDelay = ArgToInt(1);
-		return OK;
-
-	case ACT_SETSTORECAPSLOCKMODE:
-		return BIV_StoreCapslockMode_Set(ARG1, NULL);
-
-	case ACT_SETTITLEMATCHMODE:
-		return BIV_TitleMatchMode_Set(ARG1, NULL);
 
 	////////////////////////////////////////////////////////////////////////////////////////
 	// For these, it seems best not to report an error during runtime if there's
@@ -11833,12 +11787,6 @@ ResultType Line::Perform()
 		return OK;
 	case ACT_PAUSE:
 		return ChangePauseState(ConvertOnOffToggle(ARG1), (bool)ArgToInt(2));
-	case ACT_STRINGCASESENSE:
-		return BIV_StringCaseSense_Set(ARG1, NULL);
-	case ACT_DETECTHIDDENWINDOWS:
-		return BIV_DetectHiddenWindows_Set(ARG1, NULL);
-	case ACT_DETECTHIDDENTEXT:
-		return BIV_DetectHiddenText_Set(ARG1, NULL);
 	case ACT_BLOCKINPUT:
 		switch (toggle = ConvertBlockInput(ARG1))
 		{
@@ -11916,10 +11864,7 @@ ResultType Line::Perform()
 		// fact that a blank ARG3 does not delete the entire section, but rather does
 		// nothing (that fact is untested):
 		return IniDelete(ARG1, ARG2, mArgc < 3 ? NULL : ARG3);
-
-	case ACT_SETREGVIEW:
-		return BIV_RegView_Set(ARG1, NULL);
-
+		
 	case ACT_OUTPUTDEBUG:
 #ifndef CONFIG_DEBUGGER
 		OutputDebugString(ARG1); // It does not return a value for the purpose of setting ErrorLevel.
@@ -11930,10 +11875,7 @@ ResultType Line::Perform()
 
 	case ACT_SHUTDOWN:
 		return Util_Shutdown(ArgToInt(1)) ? OK : FAIL; // Range of ARG1 is not validated in case other values are supported in the future.
-
-	case ACT_FILEENCODING:
-		return BIV_FileEncoding_Set(ARG1, NULL);
-
+		
 	case ACT_EXIT:
 		// Even if the script isn't persistent, this thread might've interrupted another which should
 		// be allowed to complete normally.  This is especially important in v2 because a persistent

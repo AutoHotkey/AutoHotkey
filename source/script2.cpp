@@ -5209,32 +5209,6 @@ VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 
 
 
-ResultType Script::SetCoordMode(LPTSTR aCommand, LPTSTR aMode)
-{
-	CoordModeType mode = Line::ConvertCoordMode(aMode);
-	CoordModeType shift = Line::ConvertCoordModeCmd(aCommand);
-	if (shift == -1 || mode == -1) // Compare directly to -1 because unsigned.
-		return g_script.ScriptError(ERR_INVALID_VALUE, aMode);
-	g->CoordMode = (g->CoordMode & ~(COORD_MODE_MASK << shift)) | (mode << shift);
-	return OK;
-}
-
-ResultType Script::SetSendMode(LPTSTR aValue)
-{
-	g->SendMode = Line::ConvertSendMode(aValue, g->SendMode); // Leave value unchanged if ARG1 is invalid.
-	return OK;
-}
-
-ResultType Script::SetSendLevel(int aValue, LPTSTR aValueStr)
-{
-	int sendLevel = aValue;
-	if (!SendLevelIsValid(sendLevel))
-		return g_script.ScriptError(ERR_INVALID_VALUE, aValueStr);
-	g->SendLevel = sendLevel;
-	return OK;
-}
-
-
 
 ResultType Line::MouseGetPos(DWORD aOptions)
 // Returns OK or FAIL.
@@ -9075,217 +9049,6 @@ VarSizeType BIV_DateTime(LPTSTR aBuf, LPTSTR aVarName)
 	return 0; // Never reached, but avoids compiler warning.
 }
 
-VarSizeType BIV_TitleMatchMode(LPTSTR aBuf, LPTSTR aVarName)
-{
-	if (g->TitleMatchMode == FIND_REGEX) // v1.0.45.
-	{
-		if (aBuf)  // For backward compatibility (due to StringCaseSense), never change the case used here:
-			_tcscpy(aBuf, _T("RegEx"));
-		return 5; // The length.
-	}
-	// Otherwise, it's a numerical mode:
-	// It's done this way in case it's ever allowed to go beyond a single-digit number.
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_itot(g->TitleMatchMode, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return (VarSizeType)_tcslen(target_buf);
-}
-
-BIV_DECL_W(BIV_TitleMatchMode_Set)
-{
-	switch (Line::ConvertTitleMatchMode((LPTSTR)aBuf))
-	{
-	case FIND_IN_LEADING_PART: g->TitleMatchMode = FIND_IN_LEADING_PART; break;
-	case FIND_ANYWHERE: g->TitleMatchMode = FIND_ANYWHERE; break;
-	case FIND_REGEX: g->TitleMatchMode = FIND_REGEX; break;
-	case FIND_EXACT: g->TitleMatchMode = FIND_EXACT; break;
-	// For simplicity, this function handles both variables.
-	case FIND_FAST: g->TitleFindFast = true; break;
-	case FIND_SLOW: g->TitleFindFast = false; break;
-	default:
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
-	}
-	return OK;
-}
-
-VarSizeType BIV_TitleMatchModeSpeed(LPTSTR aBuf, LPTSTR aVarName)
-{
-	if (aBuf)  // For backward compatibility (due to StringCaseSense), never change the case used here:
-		_tcscpy(aBuf, g->TitleFindFast ? _T("Fast") : _T("Slow"));
-	return 4;  // Always length 4
-}
-
-VarSizeType BIV_DetectHiddenWindows(LPTSTR aBuf, LPTSTR aVarName)
-{
-	return aBuf
-		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->DetectHiddenWindows ? _T("On") : _T("Off"))) // For backward compatibility (due to StringCaseSense), never change the case used here.  Fixed in v1.0.42.01 to return exact length (required).
-		: 3; // Room for either On or Off (in the estimation phase).
-}
-
-BIV_DECL_W(BIV_DetectHiddenWindows_Set)
-{
-	ToggleValueType toggle;
-	if ( (toggle = Line::ConvertOnOff(aBuf, NEUTRAL)) != NEUTRAL )
-		g->DetectHiddenWindows = (toggle == TOGGLED_ON);
-	else
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
-	return OK;
-}
-
-VarSizeType BIV_DetectHiddenText(LPTSTR aBuf, LPTSTR aVarName)
-{
-	return aBuf
-		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->DetectHiddenText ? _T("On") : _T("Off"))) // For backward compatibility (due to StringCaseSense), never change the case used here. Fixed in v1.0.42.01 to return exact length (required).
-		: 3; // Room for either On or Off (in the estimation phase).
-}
-
-BIV_DECL_W(BIV_DetectHiddenText_Set)
-{
-	ToggleValueType toggle;
-	if ( (toggle = Line::ConvertOnOff(aBuf, NEUTRAL)) != NEUTRAL )
-		g->DetectHiddenText = (toggle == TOGGLED_ON);
-	else
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
-	return OK;
-}
-
-VarSizeType BIV_StringCaseSense(LPTSTR aBuf, LPTSTR aVarName)
-{
-	return aBuf
-		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->StringCaseSense == SCS_INSENSITIVE ? _T("Off") // For backward compatibility (due to StringCaseSense), never change the case used here.  Fixed in v1.0.42.01 to return exact length (required).
-			: (g->StringCaseSense == SCS_SENSITIVE ? _T("On") : _T("Locale"))))
-		: 6; // Room for On, Off, or Locale (in the estimation phase).
-}
-
-BIV_DECL_W(BIV_StringCaseSense_Set)
-{
-	StringCaseSenseType sense;
-	if ( (sense = Line::ConvertStringCaseSense(aBuf)) != SCS_INVALID )
-		g->StringCaseSense = sense;
-	else
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
-	return OK;
-}
-
-int& BIV_xDelay(LPTSTR aVarName)
-{
-	global_struct &g = *::g; // Reduces code size.
-	switch (ctoupper(aVarName[2])) // a_X...
-	{
-	case 'K':
-		if (ctolower(aVarName[6]) == 'e') // a_keydE...
-		{
-			if (aVarName[10]) // a_keydelayP...
-				return g.KeyDelayPlay;
-			else
-				return g.KeyDelay;
-		}
-		else // a_keydU...
-		{
-			if (aVarName[13]) // a_keydurationP...
-				return g.PressDurationPlay;
-			else
-				return g.PressDuration;
-		}
-	case 'M':
-		if (aVarName[12]) // a_mousedelayP...
-			return g.MouseDelayPlay;
-		else
-			return g.MouseDelay;
-	case 'W':
-		return g.WinDelay;
-	//case 'C':
-	default:
-		return g.ControlDelay;
-	}
-}
-
-VarSizeType BIV_xDelay(LPTSTR aBuf, LPTSTR aVarName)
-{
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	int result = BIV_xDelay(aVarName);
-	_itot(result, target_buf, 10);
-	return (VarSizeType)_tcslen(target_buf);
-}
-
-BIV_DECL_W(BIV_xDelay_Set)
-{
-	int &delay_var_ref = BIV_xDelay(aVarName);
-	delay_var_ref = ATOI(aBuf);
-	return OK;
-}
-
-VarSizeType BIV_DefaultMouseSpeed(LPTSTR aBuf, LPTSTR aVarName)
-{
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_itot(g->DefaultMouseSpeed, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return (VarSizeType)_tcslen(target_buf);
-}
-
-BIV_DECL_W(BIV_DefaultMouseSpeed_Set)
-{
-	g->DefaultMouseSpeed = ATOI(aBuf);
-	return OK;
-}
-
-VarSizeType BIV_CoordMode(LPTSTR aBuf, LPTSTR aVarName)
-{
-	static LPCTSTR sCoordModes[] = COORD_MODES;
-	LPCTSTR result = sCoordModes[(g->CoordMode >> Line::ConvertCoordModeCmd(aVarName + 11)) & COORD_MODE_MASK];
-	if (aBuf)
-		_tcscpy(aBuf, result);
-	return 6; // Currently all are 6 chars.
-}
-
-BIV_DECL_W(BIV_CoordMode_Set)
-{
-	return Script::SetCoordMode(aVarName + 11, aBuf); // A_CoordMode is 11 chars.
-}
-
-VarSizeType BIV_SendMode(LPTSTR aBuf, LPTSTR aVarName)
-{
-	static LPCTSTR sSendModes[] = SEND_MODES;
-	LPCTSTR result = sSendModes[g->SendMode];
-	if (aBuf)
-		_tcscpy(aBuf, result);
-	return (VarSizeType)_tcslen(result);
-}
-
-BIV_DECL_W(BIV_SendMode_Set)
-{
-	return Script::SetSendMode(aBuf);
-}
-
-VarSizeType BIV_SendLevel(LPTSTR aBuf, LPTSTR aVarName)
-{
-	if (aBuf)
-		return (VarSizeType)_tcslen(_itot(g->SendLevel, aBuf, 10));  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return 3; // Enough room for the maximum SendLevel (100).
-}
-
-BIV_DECL_W(BIV_SendLevel_Set)
-{
-	return Script::SetSendLevel(ATOI(aBuf), aBuf);
-}
-
-VarSizeType BIV_StoreCapslockMode(LPTSTR aBuf, LPTSTR aVarName)
-{
-	return aBuf
-		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->StoreCapslockMode ? _T("On") : _T("Off"))) // For backward compatibility (due to StringCaseSense), never change the case used here.
-		: 3; // Room for either On or Off (in the estimation phase).
-}
-
-BIV_DECL_W(BIV_StoreCapslockMode_Set)
-{
-	ToggleValueType toggle = Line::ConvertOnOff(aBuf, NEUTRAL);
-	if (toggle == NEUTRAL)
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
-	g->StoreCapslockMode = (toggle == TOGGLED_ON);
-	return OK;
-}
-
 VarSizeType BIV_IsPaused(LPTSTR aBuf, LPTSTR aVarName) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
 {
 	// Although A_IsPaused could indicate how many threads are paused beneath the current thread,
@@ -9387,75 +9150,6 @@ VarSizeType BIV_IsUnicode(LPTSTR aBuf, LPTSTR aVarName)
 	return 0;
 #endif
 }
-
-
-
-VarSizeType BIV_FileEncoding(LPTSTR aBuf, LPTSTR aVarName)
-{
-	// A similar section may be found under "case Encoding:" in FileObject::Invoke.  Maintain that with this:
-	switch (g->Encoding)
-	{
-#define FILEENCODING_CASE(n, s) \
-	case n: \
-		if (aBuf) \
-			_tcscpy(aBuf, _T(s)); \
-		return _countof(_T(s)) - 1;
-	// Returning readable strings for these seems more useful than returning their numeric values, especially with CP_AHKNOBOM:
-	FILEENCODING_CASE(CP_UTF8, "UTF-8")
-	FILEENCODING_CASE(CP_UTF8 | CP_AHKNOBOM, "UTF-8-RAW")
-	FILEENCODING_CASE(CP_UTF16, "UTF-16")
-	FILEENCODING_CASE(CP_UTF16 | CP_AHKNOBOM, "UTF-16-RAW")
-#undef FILEENCODING_CASE
-	default:
-	  {
-		TCHAR buf[MAX_INTEGER_SIZE + 2]; // + 2 for "CP"
-		LPTSTR target_buf = aBuf ? aBuf : buf;
-		target_buf[0] = _T('C');
-		target_buf[1] = _T('P');
-		_itot(g->Encoding, target_buf + 2, 10);  // Always output as decimal since we aren't exactly returning a number.
-		return (VarSizeType)_tcslen(target_buf);
-	  }
-	}
-}
-
-BIV_DECL_W(BIV_FileEncoding_Set)
-{
-	UINT new_encoding = Line::ConvertFileEncoding(aBuf);
-	if (new_encoding == -1)
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
-	g->Encoding = new_encoding;
-	return OK;
-}
-
-
-
-VarSizeType BIV_RegView(LPTSTR aBuf, LPTSTR aVarName)
-{
-	LPCTSTR value;
-	switch (g->RegView)
-	{
-	case KEY_WOW64_32KEY: value = _T("32"); break;
-	case KEY_WOW64_64KEY: value = _T("64"); break;
-	default: value = _T("Default"); break;
-	}
-	if (aBuf)
-		_tcscpy(aBuf, value);
-	return (VarSizeType)_tcslen(value);
-}
-
-BIV_DECL_W(BIV_RegView_Set)
-{
-	DWORD reg_view = Line::RegConvertView(aBuf);
-	// Validate the parameter even if it's not going to be used.
-	if (reg_view == -1)
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
-	// Since these flags cause the registry functions to fail on Win2k and have no effect on
-	// any later 32-bit OS, ignore this command when the OS is 32-bit.  Leave A_RegView blank.
-	if (IsOS64Bit())
-		g->RegView = reg_view;
-	return OK;
-}
-
 
 
 VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName)
@@ -16639,6 +16333,179 @@ BIF_DECL(BIF_Exception)
 	}
 }
 
+BIF_DECL(ThreadSettings)
+{
+	void* setting_ptr;		// Pointer to the setting being changed and / or retrieved. Assigned in the switch below.
+	size_t size;			// Number of bytes to copy to / from setting_ptr.
+	int b[3];				// Bounds for input validation. Set b[0] = 1 to verify that input is between (inclusive) b[1] and b[2]. (Use TS_BOUNDS macro)
+	b[0] = 0;				// Default: no boundaries.
+	int dv = 0;				// Adjust input / output. Eg, set to -1 if user (script) input is in range 1 to x, but the implementation is in range 0 to (x-1).
+	int prev_setting = 0;	// Return value placeholder.
+	bool is_bool = false;	// Indicates that the input should be interpreted as true / false. Otherwise it is an integer.
+	
+	switch (_f_callee_id)	// Determine which setting to handle
+	{
+#define TS_CASE(fid, set) case fid: size = sizeof(set), setting_ptr = &(set)
+#define TS_BOUNDS(lb, ub) b[0] = 1, b[1] = lb, b[2] = ub
+	
+		TS_CASE(FID_DetectHiddenText, g->DetectHiddenText),			is_bool = true;	break;
+		TS_CASE(FID_DetectHiddenWindows, g->DetectHiddenWindows),	is_bool = true;	break;
+		TS_CASE(FID_StoreCapslock, g->StoreCapslockMode),			is_bool = true;	break;
+		TS_CASE(FID_TitleMatchFast, g->TitleFindFast),				is_bool = true;	break;
+
+		TS_CASE(FID_ControlDelay, g->ControlDelay);					break;
+		TS_CASE(FID_MouseDelay, g->MouseDelay);						break;
+		TS_CASE(FID_MouseDelayPlay, g->MouseDelayPlay);				break;
+		TS_CASE(FID_WinDelay, g->WinDelay);							break;
+				
+		TS_CASE(FID_MouseSpeed, g->DefaultMouseSpeed),				TS_BOUNDS(0, MAX_MOUSE_SPEED); break;
+		TS_CASE(FID_TitleMatchMode, g->TitleMatchMode),				TS_BOUNDS(FIND_IN_LEADING_PART, FIND_REGEX); break;
+		TS_CASE(FID_SendMode, g->SendMode), dv = -1,				TS_BOUNDS(SM_EVENT, SM_INPUT_FALLBACK_TO_PLAY); break;
+		TS_CASE(FID_SendLevel, g->SendLevel),						TS_BOUNDS(0, SendLevelMax); break;
+		TS_CASE(FID_StringCaseSense, g->StringCaseSense),			TS_BOUNDS(SCS_INSENSITIVE, SCS_INSENSITIVE_LOCALE); break;
+
+#undef TS_CASE
+#undef TS_BOUNDS
+	}
+
+	memcpy(&prev_setting, setting_ptr, size);		// Copy the current setting to the return value placeholder.
+	if (!ParamIndexIsOmitted(0))					// New setting specified.
+	{
+		int new_setting = is_bool == false ? (ParamIndexToInt(0) + dv) : ParamIndexToBOOL(0);
+		if (b[0] == 1 && !(new_setting >= b[1] && new_setting <= b[2]))		// Input validation if boundaries specified.
+			_f_throw(ERR_PARAM1_INVALID);
+		memcpy(setting_ptr, &new_setting, size);							// Copy the new setting.
+	}
+	if (is_bool == false) 
+		_f_return_i(prev_setting - dv);
+	_f_return_b((bool) prev_setting); // For maintainability, use _f_return_b, even though it currently means _f_return_i.
+}
+
+BIF_DECL(KeyDelay)
+{
+	Object* prev_setting = Object::Create();	// Return array: [current_delay, current_press].
+	if (prev_setting == NULL)
+		_f_throw(ERR_OUTOFMEM);
+	int* current_delay;
+	int* current_press;
+
+	switch (_f_callee_id)
+	{
+	case FID_KeyDelay:		current_delay = &(g->KeyDelay),		current_press = &(g->PressDuration);		break;
+	case FID_KeyDelayPlay:	current_delay = &(g->KeyDelayPlay), current_press = &(g->PressDurationPlay);	break;
+	}
+
+	prev_setting->Append(*current_delay);		// Save current settings.
+	prev_setting->Append(*current_press);
+	if (!ParamIndexIsOmitted(0))				// Set delay.
+		*current_delay = ParamIndexToInt(0);
+	if (!ParamIndexIsOmitted(1))				// Set press duration.
+		*current_press = ParamIndexToInt(1);
+	_f_return(prev_setting);
+}
+
+BIF_DECL(CoordMode)
+{
+	// Script function input range is 1-3 instead of 0-2.
+	// Script input:
+	// 1 for client
+	// 2 for window
+	// 3 for screen
+	CoordModeType shift; // Indicates which setting is being changed and / or retrieved.
+	
+	switch (_f_callee_id)
+	{
+	case FID_CoordModePixel:	shift = 0;	break;
+	case FID_CoordModeMouse:	shift = 2;	break;
+	case FID_CoordModeToolTip:	shift = 4;	break;
+	case FID_CoordModeCaret:	shift = 6;	break;
+	case FID_CoordModeMenu:		shift = 8;	break;
+	}
+
+	CoordModeType prev_setting = 1 + (g->CoordMode >> shift & COORD_MODE_MASK); // Note, add 1 for correct range.
+	if (!ParamIndexIsOmitted(0))
+	{
+		CoordModeType mode = ParamIndexToInt(0) - 1;							// Note, subtract 1 for correct range.
+		if (mode < COORD_MODE_CLIENT || mode > COORD_MODE_SCREEN)
+			_f_throw(ERR_PARAM1_INVALID);
+		g->CoordMode = (g->CoordMode & ~(COORD_MODE_MASK << shift)) | (mode << shift);
+	}
+	_f_return_i(prev_setting);
+}
+
+BIF_DECL(BIF_RegView)
+{
+	DWORD prev_setting = g->RegView;
+	if (!ParamIndexIsOmitted(0))
+	{
+		DWORD new_setting = ParamIndexToInt(0);
+		if (new_setting != 32 && new_setting != 64 && new_setting != 0)
+			_f_throw(ERR_PARAM1_INVALID);
+		// Since these flags cause the registry functions to fail on Win2k and have no effect on
+		// any later 32-bit OS, ignore this command when the OS is 32-bit.
+		if (IsOS64Bit())
+			g->RegView = new_setting;
+	}
+	_f_return_i(prev_setting);
+}
+/*
+BIF_DECL(BIF_Critical)
+{
+	// Note, both critical(0) and critical(DEFAULT_PEEK_FREQUENCY)  sets g.ThreadCritical = false;
+	// Returns the previous / current g.PeekFrequency or false (0) if (prev/cur) g.ThreadCritical == false.
+	DWORD prev_peek = g->PeekFrequency;
+	bool prev_critical = g->ThreadIsCritical;
+	if (!ParamIndexIsOmitted(0))
+	{
+		DWORD new_setting = ParamIndexToInt(0);
+		// Critical is turned off either by specifying DEFAULT_PEEK_FREQUENCY or 0
+		g->ThreadIsCritical = new_setting == DEFAULT_PEEK_FREQUENCY || new_setting == 0 ? false : true;
+		if (g->ThreadIsCritical) // Critical has been turned on. (For simplicity even if it was already on, the following is done.)
+		{
+			g->PeekFrequency = new_setting == 1 ? 16 : new_setting; // If critical(true) is called, use 16.
+			g->AllowThreadToBeInterrupted = false;
+		}
+		else // Critical has been turned off.
+		{
+			// Since Critical is being turned off, allow thread to be immediately interrupted regardless of
+			// any "Thread Interrupt" settings.
+			g->PeekFrequency = DEFAULT_PEEK_FREQUENCY;
+			g->AllowThreadToBeInterrupted = true;
+		}
+	}
+	_f_return_i(prev_critical ? prev_peek : 0);
+}
+*/
+BIF_DECL(BIF_FileEncoding)
+{
+	TCHAR prev_setting[12]; // Enough for "UTF-16-RAW" + '\0'. _tcscpy and _itot ensures null termination.
+	
+	switch (g->Encoding)	// Handle return string
+	{
+#define FILEENCODING_CASE(n, s) case n: _tcscpy(prev_setting, _T(s)); break;
+
+		// Returning readable strings for these seems more useful than returning their numeric values, especially with CP_AHKNOBOM:
+		FILEENCODING_CASE(CP_UTF8, "UTF-8")
+		FILEENCODING_CASE(CP_UTF8 | CP_AHKNOBOM, "UTF-8-RAW")
+		FILEENCODING_CASE(CP_UTF16, "UTF-16")
+		FILEENCODING_CASE(CP_UTF16 | CP_AHKNOBOM, "UTF-16-RAW")
+
+#undef FILEENCODING_CASE
+	default:
+		prev_setting[0] = _T('C');
+		prev_setting[1] = _T('P');
+		_itot(g->Encoding, prev_setting + 2, 10);  // Always output as decimal since we aren't exactly returning a number. 
+	}
+
+	if (!ParamIndexIsOmitted(0))	// Handle new setting.
+	{
+		UINT new_setting = Line::ConvertFileEncoding(ParamIndexToString(0));
+		if (new_setting == -1)
+			_f_throw(ERR_INVALID_VALUE, ParamIndexToString(0));
+		g->Encoding = new_setting;
+	}
+	_f_return(prev_setting);
+}
 
 
 ////////////////////////////////////////////////////////

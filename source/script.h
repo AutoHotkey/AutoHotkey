@@ -580,7 +580,15 @@ enum BuiltInFunctionID {
 	FID_EnvGet = 0, FID_EnvSet,
 	FID_PostMessage = 0, FID_SendMessage,
 	FID_RegRead = 0, FID_RegWrite, FID_RegDelete, FID_RegDeleteKey,
-	FID_SoundGet = 0, FID_SoundSet
+	FID_SoundGet = 0, FID_SoundSet,
+
+	// Thread Settings
+	FID_DetectHiddenText=0, FID_DetectHiddenWindows, FID_StoreCapslock, FID_TitleMatchFast,
+	FID_ControlDelay, FID_MouseDelay, FID_MouseDelayPlay, FID_WinDelay,
+	FID_MouseSpeed, FID_TitleMatchMode, FID_SendMode, FID_SendLevel, FID_StringCaseSense,
+	
+	FID_KeyDelay = 0, FID_KeyDelayPlay,
+	FID_CoordModePixel = 0, FID_CoordModeMouse, FID_CoordModeToolTip, FID_CoordModeCaret, FID_CoordModeMenu,
 };
 
 
@@ -1103,17 +1111,6 @@ public:
 		default: if (aBufSize) *aBuf = '\0'; return aBuf;  // Make it be the empty string for REG_NONE and anything else.
 		}
 	}
-	static DWORD RegConvertView(LPTSTR aBuf)
-	{
-		if (!_tcsicmp(aBuf, _T("Default")))
-			return 0;
-		else if (!_tcscmp(aBuf, _T("32")))
-			return KEY_WOW64_32KEY;
-		else if (!_tcscmp(aBuf, _T("64")))
-			return KEY_WOW64_64KEY;
-		else
-			return -1;
-	}
 
 	static DWORD SoundConvertComponentType(LPTSTR aBuf, int *aInstanceNumber = NULL)
 	{
@@ -1174,19 +1171,6 @@ public:
 		return MIXERCONTROL_CONTROLTYPE_INVALID;
 	}
 
-	static TitleMatchModes ConvertTitleMatchMode(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf) return MATCHMODE_INVALID;
-		if (*aBuf == '1' && !*(aBuf + 1)) return FIND_IN_LEADING_PART;
-		if (*aBuf == '2' && !*(aBuf + 1)) return FIND_ANYWHERE;
-		if (*aBuf == '3' && !*(aBuf + 1)) return FIND_EXACT;
-		if (!_tcsicmp(aBuf, _T("RegEx"))) return FIND_REGEX; // Goes with the above, not fast/slow below.
-
-		if (!_tcsicmp(aBuf, _T("FAST"))) return FIND_FAST;
-		if (!_tcsicmp(aBuf, _T("SLOW"))) return FIND_SLOW;
-		return MATCHMODE_INVALID;
-	}
-
 	static ThreadCommands ConvertThreadCommand(LPTSTR aBuf)
 	{
 		if (!aBuf || !*aBuf) return THREAD_CMD_INVALID;
@@ -1224,14 +1208,6 @@ public:
 		return aDefault;
 	}
 
-	static StringCaseSenseType ConvertStringCaseSense(LPTSTR aBuf)
-	{
-		if (!_tcsicmp(aBuf, _T("On"))) return SCS_SENSITIVE;
-		if (!_tcsicmp(aBuf, _T("Off"))) return SCS_INSENSITIVE;
-		if (!_tcsicmp(aBuf, _T("Locale"))) return SCS_INSENSITIVE_LOCALE;
-		return SCS_INVALID;
-	}
-
 	static ToggleValueType ConvertOnOffTogglePermit(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, TOGGLE, PERMIT, or blank.
 	{
@@ -1252,22 +1228,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("MouseMove"))) return TOGGLE_MOUSEMOVE;
 		if (!_tcsicmp(aBuf, _T("MouseMoveOff"))) return TOGGLE_MOUSEMOVEOFF;
 		return TOGGLE_INVALID;
-	}
-
-	static SendModes ConvertSendMode(LPTSTR aBuf, SendModes aValueToReturnIfInvalid)
-	{
-		if (!_tcsicmp(aBuf, _T("Play"))) return SM_PLAY;
-		if (!_tcsicmp(aBuf, _T("Event"))) return SM_EVENT;
-		if (!_tcsnicmp(aBuf, _T("Input"), 5)) // This IF must be listed last so that it can fall through to bottom line.
-		{
-			aBuf += 5;
-			if (!*aBuf || !_tcsicmp(aBuf, _T("ThenEvent"))) // "ThenEvent" is supported for backward compatibility with 1.0.43.00.
-				return SM_INPUT;
-			if (!_tcsicmp(aBuf, _T("ThenPlay")))
-				return SM_INPUT_FALLBACK_TO_PLAY;
-			//else fall through and return the indication of invalidity.
-		}
-		return aValueToReturnIfInvalid;
 	}
 
 	static FileLoopModeType ConvertLoopMode(LPTSTR aBuf)
@@ -1333,28 +1293,6 @@ public:
 			if (!_tcsicmp(aBuf, _T("WheelRight")) || !_tcsicmp(aBuf, _T("WR"))) return VK_WHEEL_RIGHT;
 		}
 		return 0;
-	}
-
-	static CoordModeType ConvertCoordMode(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf || !_tcsicmp(aBuf, _T("Screen")))
-			return COORD_MODE_SCREEN;
-		else if (!_tcsicmp(aBuf, _T("Relative")) || !_tcsicmp(aBuf, _T("Window")))
-			return COORD_MODE_WINDOW;
-		else if (!_tcsicmp(aBuf, _T("Client")))
-			return COORD_MODE_CLIENT;
-		return -1;
-	}
-
-	static CoordModeType ConvertCoordModeCmd(LPTSTR aBuf)
-	{
-		if (!aBuf || !*aBuf) return -1;
-		if (!_tcsicmp(aBuf, _T("Pixel"))) return COORD_MODE_PIXEL;
-		if (!_tcsicmp(aBuf, _T("Mouse"))) return COORD_MODE_MOUSE;
-		if (!_tcsicmp(aBuf, _T("ToolTip"))) return COORD_MODE_TOOLTIP;
-		if (!_tcsicmp(aBuf, _T("Caret"))) return COORD_MODE_CARET;
-		if (!_tcsicmp(aBuf, _T("Menu"))) return COORD_MODE_MENU;
-		return -1;
 	}
 
 	static VariableTypeType ConvertVariableTypeName(LPTSTR aBuf)
@@ -2824,10 +2762,7 @@ public:
 		return NULL;
 	}
 
-	static ResultType SetCoordMode(LPTSTR aCommand, LPTSTR aMode);
-	static ResultType SetSendMode(LPTSTR aValue);
-	static ResultType SetSendLevel(int aValue, LPTSTR aValueStr);
-
+		
 	// Call this SciptError to avoid confusion with Line's error-displaying functions:
 	ResultType ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T("")); // , ResultType aErrorType = FAIL);
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
@@ -2875,24 +2810,11 @@ public:
 BIV_DECL_R (BIV_True_False);
 BIV_DECL_R (BIV_MMM_DDD);
 BIV_DECL_R (BIV_DateTime);
-BIV_DECL_RW(BIV_TitleMatchMode);
-BIV_DECL_R (BIV_TitleMatchModeSpeed); // Write is handled by BIV_TitleMatchMode_Set.
-BIV_DECL_RW(BIV_DetectHiddenWindows);
-BIV_DECL_RW(BIV_DetectHiddenText);
-BIV_DECL_RW(BIV_StringCaseSense);
-BIV_DECL_RW(BIV_xDelay);
-BIV_DECL_RW(BIV_DefaultMouseSpeed);
-BIV_DECL_RW(BIV_CoordMode);
-BIV_DECL_RW(BIV_SendMode);
-BIV_DECL_RW(BIV_SendLevel);
-BIV_DECL_RW(BIV_StoreCapslockMode);
 BIV_DECL_R (BIV_IsPaused);
 BIV_DECL_R (BIV_IsCritical);
 BIV_DECL_R (BIV_IsSuspended);
 BIV_DECL_R (BIV_IsCompiled);
 BIV_DECL_R (BIV_IsUnicode);
-BIV_DECL_RW(BIV_FileEncoding);
-BIV_DECL_RW(BIV_RegView);
 BIV_DECL_RW(BIV_LastError);
 BIV_DECL_RW(BIV_AllowMainWindow);
 BIV_DECL_R (BIV_TrayMenu);
@@ -3131,6 +3053,13 @@ BIF_DECL(BIF_ProcessSetPriority);
 BIF_DECL(BIF_MonitorGet);
 
 BIF_DECL(BIF_PerformAction);
+
+BIF_DECL(ThreadSettings);			// "General" thread settings, eg, WinDelay
+BIF_DECL(KeyDelay);					// KeyDelay(delay,duration), KeyDelayPlay(delay,duration)
+BIF_DECL(CoordMode);				// CoordModeToolTip,...
+BIF_DECL(BIF_RegView);
+// BIF_DECL(BIF_Critical);
+BIF_DECL(BIF_FileEncoding);
 
 
 BOOL ResultToBOOL(LPTSTR aResult);
