@@ -14874,11 +14874,11 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 	// However, in those cases it's hard to imagine that INTERRUPTIBLE_IN_EMERGENCY wouldn't be true anyway.
 	if (cb.create_new_thread)
 	{
-		if (g_nThreads >= g_MaxThreadsTotal) // Since this is a callback, it seems too rare to make an exemption for functions whose first line is ExitApp. In any case, to avoid array overflow, g_MaxThreadsTotal must not be exceeded except where otherwise documented.
+		if (g_nThreads >= g_MaxThreadsTotal) // To avoid array overflow, g_MaxThreadsTotal must not be exceeded except where otherwise documented.
 			return DEFAULT_CB_RETURN_VALUE;
 		// See MsgSleep() for comments about the following section.
 		ErrorLevel_Backup(ErrorLevel_saved);
-		InitNewThread(0, false, true, func.mJumpToLine->mActionType);
+		InitNewThread(0, false, true);
 		DEBUGGER_STACK_PUSH(_T("Callback"))
 	}
 	else // Backup/restore only A_EventInfo. This avoids callbacks changing A_EventInfo for the current thread/context (that would be counterintuitive and a source of script bugs).

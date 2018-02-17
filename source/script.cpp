@@ -1421,7 +1421,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	// to returning to our caller:
 	VarBkp ErrorLevel_saved;
 	ErrorLevel_Backup(ErrorLevel_saved); // Save caller's errorlevel.
-	InitNewThread(0, true, true, ACT_INVALID); // Uninterruptibility is handled below. Since this special thread should always run, no checking of g_MaxThreadsTotal is done before calling this.
+	InitNewThread(0, true, true); // Uninterruptibility is handled below. Since this special thread should always run, no checking of g_MaxThreadsTotal is done before calling this.
 
 	// Turn on uninterruptibility to forbid any hotkeys, timers, or user defined menu items
 	// to interrupt.  This is mainly done for peace-of-mind (since possible interactions due to
@@ -10380,7 +10380,7 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	VarBkp ErrorLevel_saved;
 	ErrorLevel_Backup(ErrorLevel_saved);
 	// Critical seems to improve reliability, either because the thread completes faster (i.e. before the timeout) or because we check for messages less often.
-	InitNewThread(0, false, true, ACT_CRITICAL);
+	InitNewThread(0, false, true, true);
 	ResultType result;
 
 	// Update A_ThisHotkey, useful if #If calls a function to do its dirty work.

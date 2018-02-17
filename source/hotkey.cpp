@@ -2515,9 +2515,7 @@ ResultType Hotstring::PerformInNewThreadMadeByCaller()
 // has been done.  Caller must have already created a new thread for us, and must close the thread when
 // we return.
 {
-	// Although our caller may have already called ACT_IS_ALWAYS_ALLOWED(), it was for a different reason:
-	ActionTypeType act = mJumpToLabel->TypeOfFirstLine();
-	if (mExistingThreads >= mMaxThreads && !ACT_IS_ALWAYS_ALLOWED(act)) // See above.
+	if (mExistingThreads >= mMaxThreads)
 		return FAIL;
 	// See Hotkey::Perform() for details about this.  For hot strings -- which also use the
 	// g_script.mThisHotkeyStartTime value to determine whether g_script.mThisHotkeyModifiersLR

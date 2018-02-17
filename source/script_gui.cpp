@@ -9455,7 +9455,7 @@ bool GuiType::ControlWmNotify(GuiControlType &aControl, LPNMHDR aNmHdr, INT_PTR 
 
 	VarBkp ErrorLevel_saved;
 	ErrorLevel_Backup(ErrorLevel_saved);
-	InitNewThread(0, false, true, ACT_INVALID);
+	InitNewThread(0, false, true);
 	g_script.mLastPeekTime = GetTickCount();
 	AddRef();
 	

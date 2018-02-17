@@ -34,11 +34,9 @@ EXTERN_G;
 
 #define MAX_THREADS_LIMIT UCHAR_MAX // Uses UCHAR_MAX (255) because some variables that store a thread count are UCHARs.
 #define MAX_THREADS_DEFAULT 10 // Must not be higher than above.
-#define EMERGENCY_THREADS 2 // This is the number of extra threads available after g_MaxThreadsTotal has been reached for the following to launch: hotkeys/etc. whose first line is something important like ExitApp or Pause. (see #MaxThreads documentation).
-#define MAX_THREADS_EMERGENCY (g_MaxThreadsTotal + EMERGENCY_THREADS)
-#define TOTAL_ADDITIONAL_THREADS (EMERGENCY_THREADS + 2) // See below.
-// Must allow two beyond EMERGENCY_THREADS: One for the AutoExec/idle thread and one so that ExitApp()
-// can run even when MAX_THREADS_EMERGENCY has been reached.
+#define TOTAL_ADDITIONAL_THREADS 2 // See below.
+// Must allow two additional threads: One for the AutoExec/idle thread and one so that ExitApp()
+// can run even when #MaxThreads has been reached.
 // Explanation: If/when AutoExec() finishes, although it no longer needs g_array[0] (not even
 // AutoExecSectionTimeout() needs it because it either won't be called or it will return early),
 // at least the following might still use g_array[0]:
@@ -1526,7 +1524,6 @@ public:
 	bool IsLiveObject() const { return mObject && getType(mObject) == Callable_Object; }
 	
 	// Helper methods for legacy code which deals with Labels.
-	ActionTypeType TypeOfFirstLine() const;
 	LPTSTR Name() const;
 };
 

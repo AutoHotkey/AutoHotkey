@@ -569,14 +569,6 @@ enum enum_act {
 #endif
 };
 
-// It seems best not to include ACT_SUSPEND in the below, since the user may have marked
-// a large number of subroutines as "Suspend, Permit".  Even PAUSE is iffy, since the user
-// may be using it as "Pause, off/toggle", but it seems best to support PAUSE because otherwise
-// hotkey such as "#z::pause" would not be able to unpause the script if its MaxThreadsPerHotkey
-// was 1 (the default).
-#define ACT_IS_ALWAYS_ALLOWED(ActionType) (ActionType == ACT_EXITAPP || ActionType == ACT_PAUSE \
-	|| ActionType == ACT_EDIT || ActionType == ACT_RELOAD || ActionType == ACT_KEYHISTORY \
-	|| ActionType == ACT_LISTLINES || ActionType == ACT_LISTVARS || ActionType == ACT_LISTHOTKEYS)
 #define ACT_IS_CONTROL_FLOW(ActionType) (ActionType <= ACT_LAST_CONTROL_FLOW && ActionType >= ACT_FIRST_CONTROL_FLOW)
 #define ACT_IS_IF(ActionType) (ActionType == ACT_IF)
 #define ACT_IS_LOOP(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_WHILE)

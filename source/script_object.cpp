@@ -1938,13 +1938,6 @@ Line *LabelPtr::getJumpToLine(IObject *aObject)
 	}
 }
 
-ActionTypeType LabelPtr::TypeOfFirstLine() const
-{
-	if (Line *line = getJumpToLine(mObject))
-		return line->mActionType;
-	return ACT_INVALID;
-}
-
 LPTSTR LabelPtr::Name() const
 {
 	switch (getType(mObject))
@@ -1965,7 +1958,7 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, int
 	for (MsgMonitorInstance inst (*this); inst.index < inst.count; ++inst.index)
 	{
 		if (inst.index >= aInitNewThreadIndex) // Re-initialize the thread.
-			InitNewThread(0, true, false, ACT_INVALID);
+			InitNewThread(0, true, false);
 		
 		IObject *func = mMonitor[inst.index].func;
 
@@ -2001,7 +1994,7 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UIN
 		LPTSTR method_name = mon.is_method ? mon.method_name : _T("call");
 
 		if (thread_used) // Re-initialize the thread.
-			InitNewThread(0, true, false, ACT_INVALID);
+			InitNewThread(0, true, false);
 		
 		// Set last found window (as documented).
 		g->hWndLastUsed = aGui->mHwnd;

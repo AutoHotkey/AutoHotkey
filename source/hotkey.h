@@ -245,9 +245,7 @@ public:
 		// the number of currently active threads drops below the max.  But doing such
 		// might make "infinite key loops" harder to catch because the rate of incoming hotkeys
 		// would be slowed down to prevent the subroutines from running concurrently:
-		ActionTypeType act = aVariant.mJumpToLabel->TypeOfFirstLine();
-		return aVariant.mExistingThreads < aVariant.mMaxThreads || (ACT_IS_ALWAYS_ALLOWED(act)); // See below.
-		// Although our caller may have already called ACT_IS_ALWAYS_ALLOWED(), it was for a different reason.
+		return aVariant.mExistingThreads < aVariant.mMaxThreads;
 	}
 
 	bool IsExemptFromSuspend() // A hotkey is considered exempt if even one of its variants is exempt.
