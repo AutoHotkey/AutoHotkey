@@ -155,7 +155,7 @@ HotkeyCriterion *AddHotkeyIfExpr()
 HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr)
 {
 	for (HotkeyCriterion *cp = g_FirstHotExpr; cp; cp = cp->NextExpr)
-		if (!_tcscmp(aExpr, cp->ExprLine->mArg[0].text)) // Case-sensitive since the expression might be.
+		if (cp->Type == HOT_IF_EXPR && !_tcscmp(aExpr, cp->ExprLine->mArg[0].text)) // Case-sensitive since the expression might be.
 			return cp;
 	return NULL;
 }
@@ -1023,7 +1023,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		if (aJumpToLabel)
 		{
 			HotkeyCriterion *cp;
-			for (cp = g_FirstHotExpr; ; cp = cp->NextCriterion)
+			for (cp = g_FirstHotExpr; ; cp = cp->NextExpr)
 			{
 				if (!cp) // End of the list and it wasn't found.
 				{

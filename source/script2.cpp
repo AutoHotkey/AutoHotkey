@@ -4184,7 +4184,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	case AHK_HOT_IF_EVAL: // HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
 		// Ensure wParam is a valid criterion (might prevent shatter attacks):
-		for (HotkeyCriterion *cp = g_FirstHotExpr; cp; cp = cp->NextCriterion)
+		for (HotkeyCriterion *cp = g_FirstHotExpr; cp; cp = cp->NextExpr)
 			if ((WPARAM)cp == wParam)
 				return cp->Eval((LPTSTR)lParam);
 		return 0;
