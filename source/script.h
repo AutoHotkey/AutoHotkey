@@ -1232,15 +1232,6 @@ public:
 		return SCS_INVALID;
 	}
 
-	static ToggleValueType ConvertOnOffTogglePermit(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
-	// Returns aDefault if aBuf isn't either ON, OFF, TOGGLE, PERMIT, or blank.
-	{
-		if (ToggleValueType toggle = ConvertOnOffToggle(aBuf))
-			return toggle;
-		if (!_tcsicmp(aBuf, _T("Permit"))) return TOGGLE_PERMIT;
-		return aDefault;
-	}
-
 	static ToggleValueType ConvertBlockInput(LPTSTR aBuf)
 	{
 		if (ToggleValueType toggle = ConvertOnOff(aBuf))
@@ -1402,14 +1393,6 @@ public:
 		return (!*aX && !*aY) || (*aX && *aY) ? OK : FAIL;
 	}
 
-	bool IsExemptFromSuspend()
-	{
-		// Hotkey and Hotstring subroutines whose first line is the Suspend command are exempt from
-		// being suspended themselves except when their first parameter is the literal
-		// word "on":
-		return mActionType == ACT_SUSPEND && (!mArgc || ArgHasDeref(1) || _tcsicmp(mArg[0].text, _T("On")));
-	}
-
 	static LPTSTR LogToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR VicinityToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false);
@@ -1468,12 +1451,6 @@ public:
 	LPTSTR mName;
 	Line *mJumpToLine;
 	Label *mPrevLabel, *mNextLabel;  // Prev & Next items in linked list.
-
-	bool IsExemptFromSuspend()
-	{
-		// See Line::IsExemptFromSuspend() for comments.
-		return mJumpToLine->IsExemptFromSuspend();
-	}
 
 	ResultType Execute()
 	// This function was added in v1.0.46.16 to support A_ThisLabel.
@@ -1549,7 +1526,6 @@ public:
 	bool IsLiveObject() const { return mObject && getType(mObject) == Callable_Object; }
 	
 	// Helper methods for legacy code which deals with Labels.
-	bool IsExemptFromSuspend() const;
 	ActionTypeType TypeOfFirstLine() const;
 	LPTSTR Name() const;
 };
@@ -2676,6 +2652,7 @@ private:
 		, LineNumberType &aPhysLineNumber, bool &aHasContinuationSection);
 	static bool IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace = NULL);
 	ResultType IsDirective(LPTSTR aBuf);
+	ResultType ConvertDirectiveBool(LPTSTR aBuf, bool &aResult, bool aDefault);
 	ResultType ParseAndAddLine(LPTSTR aLineText, int aBufSize = 0, ActionTypeType aActionType = ACT_INVALID
 		, LPTSTR aLiteralMap = NULL, size_t aLiteralMapLength = 0);
 	ResultType ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos = NULL, TCHAR aEndChar = 0);

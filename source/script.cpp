@@ -3669,6 +3669,13 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		return CONDITION_TRUE;
 	}
 
+	if (IS_DIRECTIVE_MATCH(_T("#SuspendExempt")))
+	{
+		if (!ConvertDirectiveBool(parameter, g_SuspendExempt, true))
+			return ScriptError(ERR_PARAM1_INVALID, aBuf);
+		return CONDITION_TRUE;
+	}
+
 	if (IS_DIRECTIVE_MATCH(_T("#ClipboardTimeout")))
 	{
 		if (parameter)
@@ -3803,6 +3810,21 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 	// Otherwise, report that this line isn't a directive:
 	return CONDITION_FALSE;
+}
+
+
+
+ResultType Script::ConvertDirectiveBool(LPTSTR aBuf, bool &aResult, bool aDefault)
+{
+	if (!aBuf || !*aBuf)
+		aResult = aDefault;
+	else if (!_tcsicmp(aBuf, _T("true")) || *aBuf == '1' && !aBuf[1])
+		aResult = true;
+	else if (!_tcsicmp(aBuf, _T("false")) || *aBuf == '0' && !aBuf[1])
+		aResult = false;
+	else
+		return FAIL;
+	return OK;
 }
 
 
@@ -11849,13 +11871,8 @@ ResultType Line::Perform()
 	case ACT_SETTITLEMATCHMODE:
 		return BIV_TitleMatchMode_Set(ARG1, NULL);
 
-	////////////////////////////////////////////////////////////////////////////////////////
-	// For these, it seems best not to report an error during runtime if there's
-	// an invalid value (e.g. something other than On/Off/Blank) in a param containing
-	// a dereferenced variable, since settings are global and affect all subroutines,
-	// not just the one that we would otherwise report failure for:
 	case ACT_SUSPEND:
-		switch (ConvertOnOffTogglePermit(ARG1))
+		switch (ConvertOnOffToggle(ARG1))
 		{
 		case NEUTRAL:
 		case TOGGLE:
@@ -11869,11 +11886,6 @@ ResultType Line::Perform()
 			if (g_IsSuspended)
 				ToggleSuspendState();
 			break;
-		case TOGGLE_PERMIT:
-			// In this case do nothing.  The user is just using this command as a flag to indicate that
-			// this subroutine should not be suspended.
-			break;
-		// We know it's a variable because otherwise the loading validation would have caught it earlier:
 		case TOGGLE_INVALID:
 			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
 		}

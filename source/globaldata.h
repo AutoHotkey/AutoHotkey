@@ -98,6 +98,7 @@ extern int g_MaxThreadsTotal;
 extern int g_MaxHotkeysPerInterval;
 extern int g_HotkeyThrottleInterval;
 extern bool g_MaxThreadsBuffer;
+extern bool g_SuspendExempt;
 extern SendLevelType g_InputLevel;
 extern HotkeyCriterion *g_FirstHotCriterion, *g_LastHotCriterion;
 

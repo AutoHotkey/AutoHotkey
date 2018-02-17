@@ -1938,13 +1938,6 @@ Line *LabelPtr::getJumpToLine(IObject *aObject)
 	}
 }
 
-bool LabelPtr::IsExemptFromSuspend() const
-{
-	if (Line *line = getJumpToLine(mObject))
-		return line->IsExemptFromSuspend();
-	return false;
-}
-
 ActionTypeType LabelPtr::TypeOfFirstLine() const
 {
 	if (Line *line = getJumpToLine(mObject))

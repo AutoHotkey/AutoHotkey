@@ -84,6 +84,7 @@ struct HotkeyVariant
 	bool mMaxThreadsBuffer;
 	bool mRunAgainAfterFinished;
 	bool mEnabled; // Whether this variant has been disabled via the Hotkey command.
+	bool mSuspendExempt;
 };
 
 
@@ -255,7 +256,7 @@ public:
 		if (mHookAction) // An alt-tab hotkey (which overrides all its variants) is never exempt.
 			return false;
 		for (HotkeyVariant *vp = mFirstVariant; vp; vp = vp->mNextVariant)
-			if (vp->mJumpToLabel->IsExemptFromSuspend()) // If it has no label, it's never exempt.
+			if (vp->mSuspendExempt)
 				return true; // Even a single exempt variant makes the entire hotkey exempt.
 		// Otherwise, since the above didn't find any exempt variants, the entire hotkey is non-exempt:
 		return false;
@@ -353,7 +354,7 @@ public:
 	#define HS_TEMPORARILY_DISABLED 0x04
 	UCHAR mExistingThreads, mMaxThreads;
 	bool mCaseSensitive, mConformToCase, mDoBackspace, mOmitEndChar, mEndCharRequired
-		, mDetectWhenInsideWord, mDoReset, mExecuteAction, mConstructedOK;
+		, mDetectWhenInsideWord, mDoReset, mExecuteAction, mSuspendExempt, mConstructedOK;
 
 	static void SuspendAll(bool aSuspend);
 	ResultType PerformInNewThreadMadeByCaller();

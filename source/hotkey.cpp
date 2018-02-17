@@ -413,7 +413,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 				for (hot.mType = HK_KEYBD_HOOK, vp = hot.mFirstVariant; vp; vp = vp->mNextVariant)
 				{
 					if (   !vp->mHotCriterion && vp->mEnabled // It's a global variant (no criteria) and it's enabled...
-						&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend())   )
+						&& (!g_IsSuspended || vp->mSuspendExempt)   )
 						// ... and this variant isn't suspended (we already know IsCompletelyDisabled()==false from an earlier check).
 					{
 						hot.mType = HK_NORMAL; // Reset back to how it was before this loop started.  Hook not needed.
@@ -617,7 +617,7 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC)
 			// v1.0.42: Fixed to take into account whether the hotkey is suspended (previously it only checked
 			// whether the hotkey was enabled (above), which isn't enough):
 			if (   vp->mEnabled // This particular variant within its parent hotkey is enabled.
-				&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
+				&& (!g_IsSuspended || vp->mSuspendExempt) // This variant isn't suspended...
 				&& (!vp->mHotCriterion || HotCriterionAllowsFiring(vp->mHotCriterion, hk.mName))   ) // ... and its criteria allow it to fire.
 				return false; // At least one of this prefix's suffixes is eligible for firing.
 	}
@@ -659,7 +659,7 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
 		// is for maintainability and code size reduction.  Finally, it's unlikely to significantly
 		// impact performance since the vast majority of hotkeys have either one or just a few variants.
 		if (   vp->mEnabled // This particular variant within its parent hotkey is enabled.
-			&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
+			&& (!g_IsSuspended || vp->mSuspendExempt) // This variant isn't suspended...
 			&& (!vp->mHotCriterion || (found_hwnd = HotCriterionAllowsFiring(vp->mHotCriterion, mName)))   ) // ... and its criteria allow it to fire.
 		{
 			if (vp->mHotCriterion) // Since this is the first criteria hotkey, it takes precedence.
@@ -730,7 +730,7 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 		// (once in the hook to determine whether the hotkey keystroke should be passed through to the active window,
 		// and again upon receipt of the message for reasons explained there).
 		for (HotkeyVariant *vp = hk.mFirstVariant; vp; vp = vp->mNextVariant)
-			if (!vp->mHotCriterion && vp->mEnabled && (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()))
+			if (!vp->mHotCriterion && vp->mEnabled && (!g_IsSuspended || vp->mSuspendExempt))
 			{
 				// Fix for v1.0.47.02: The following section (above "return") was moved into this block
 				// from above the for() because only when this for() returns is it certain that this
@@ -1173,14 +1173,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				{
 					if (aJumpToLabel != variant->mJumpToLabel) // ...and it's label is being changed.
 					{
-						// If the new label's exempt status is different than the old's, re-manifest all hotkeys
-						// in case the new presence/absence of this variant impacts other hotkeys.
-						// v1.0.42: However, this only needs to be done if Suspend is currently turned on,
-						// since otherwise the change in exempt status can't change whether this variant is
-						// currently in effect.
-						if (variant->mEnabled && g_IsSuspended && LabelPtr(aJumpToLabel)->IsExemptFromSuspend() != variant->mJumpToLabel->IsExemptFromSuspend())
-							update_all_hotkeys = true;
-						variant->mJumpToLabel = aJumpToLabel; // Must be done only after the above has finished using the old mJumpToLabel.
+						variant->mJumpToLabel = aJumpToLabel;
 						// Older comment:
 						// If this hotkey is currently a static hotkey (one not created by the Hotkey command):
 						// Even though it's about to be transformed into a dynamic hotkey via the Hotkey command,
@@ -1743,6 +1736,7 @@ HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde)
 	v.mInputLevel = g_InputLevel;
 	v.mHotCriterion = g->HotCriterion; // If this hotkey is an alt-tab one (mHookAction), this is stored but ignored until/unless the Hotkey command converts it into a non-alt-tab hotkey.
 	v.mEnabled = true;
+	v.mSuspendExempt = g_SuspendExempt;
 	if (v.mInputLevel > 0)
 	{
 		// A non-zero InputLevel only works when using the hook
@@ -2482,7 +2476,7 @@ void Hotstring::SuspendAll(bool aSuspend)
 	{
 		// Recalculating sEnabledCount might perform better in the average case since most aren't exempt.
 		for (sEnabledCount = 0, u = 0; u < sHotstringCount; ++u)
-			if (shs[u]->mJumpToLabel->IsExemptFromSuspend())
+			if (shs[u]->mSuspendExempt)
 			{
 				shs[u]->mSuspended &= ~HS_SUSPENDED;
 				if (!shs[u]->mSuspended) // Not turned off.
@@ -2698,6 +2692,7 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 	, mEndCharRequired(g_HSEndCharRequired), mDetectWhenInsideWord(g_HSDetectWhenInsideWord), mDoReset(g_HSDoReset)
 	, mInputLevel(g_InputLevel)
 	, mExecuteAction(g_HSSameLineAction)
+	, mSuspendExempt(g_SuspendExempt)
 	, mConstructedOK(false)
 {
 	// Insist on certain qualities so that they never need to be checked other than here:
@@ -2965,11 +2960,6 @@ BIF_DECL(BIF_Hotstring)
 			if (new_label != existing->mJumpToLabel)
 			{
 				existing->mJumpToLabel = new_label;
-				// Update suspension status in case new or old label was exempt:
-				if (g_IsSuspended && !new_label->IsExemptFromSuspend())
-					existing->mSuspended |= HS_SUSPENDED;
-				else
-					existing->mSuspended &= ~HS_SUSPENDED;
 			}
 		}
 		// Update the hotstring's options.  Note that mCaseSensitive and mDetectWhenInsideWord
@@ -2990,7 +2980,7 @@ BIF_DECL(BIF_Hotstring)
 			_f_throw(aParamCount > 1 ? ERR_PARAM2_MUST_NOT_BE_BLANK : _T("Hotstring not found."));
 
 		UCHAR initial_suspend_state = (toggle == TOGGLED_OFF) ? HS_TURNED_OFF : FALSE;
-		if (g_IsSuspended && !(action_obj && LabelPtr(action_obj)->IsExemptFromSuspend()))
+		if (g_IsSuspended)
 			initial_suspend_state |= HS_SUSPENDED;
 
 		if (!Hotstring::AddHotstring(name, action_obj, hotstring_options, hotstring_start, action, false, initial_suspend_state))
@@ -3002,7 +2992,7 @@ BIF_DECL(BIF_Hotstring)
 
 	// Note that mSuspended must be 0 to count as enabled, meaning the hotstring was neither
 	// turned off by us nor suspended by SuspendAll().  If it was suspended, there's no change
-	// in status unless the label was changed to/from one which is exempt from suspension.
+	// in status.
 	bool is_enabled = !existing->mSuspended; // Important to avoid direct comparison with mSuspended becauses it isn't pure bool.
 	if (is_enabled != was_already_enabled)
 	{
