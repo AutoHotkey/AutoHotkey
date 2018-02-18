@@ -151,14 +151,27 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 
 	// For performance and also to reserve future flexibility, recognize {Blind} only when it's the first item
 	// in the string.
-	if (sInBlindMode = !aSendRaw && !_tcsnicmp(aKeys, _T("{Blind}"), 7)) // Don't allow {Blind} while in raw mode due to slight chance {Blind} is intended to be sent as a literal string.
+	modLR_type mods_excluded_from_blind = 0;
+	if (sInBlindMode = !aSendRaw && !_tcsnicmp(aKeys, _T("{Blind"), 6)) // Don't allow {Blind} while in raw mode due to slight chance {Blind} is intended to be sent as a literal string.
+	{
 		// Blind Mode (since this seems too obscure to document, it's mentioned here):  Blind Mode relies
 		// on modifiers already down for something like ^c because ^c is saying "manifest a ^c", which will
 		// happen if ctrl is already down.  By contrast, Blind does not release shift to produce lowercase
 		// letters because avoiding that adds flexibility that couldn't be achieved otherwise.
 		// Thus, ^c::Send {Blind}c produces the same result when ^c is substituted for the final c.
 		// But Send {Blind}{LControl down} will generate the extra events even if ctrl already down.
-		aKeys += 7; // Remove "{Blind}" from further consideration.
+		for (aKeys += 6; *aKeys != '}'; ++aKeys)
+		{
+			switch (*aKeys)
+			{
+			case '^': mods_excluded_from_blind |= MOD_LCONTROL|MOD_RCONTROL; break;
+			case '+': mods_excluded_from_blind |= MOD_LSHIFT|MOD_RSHIFT; break;
+			case '!': mods_excluded_from_blind |= MOD_LALT|MOD_RALT; break;
+			case '#': mods_excluded_from_blind |= MOD_LWIN|MOD_RWIN; break;
+			case '\0': return; // Just ignore the error.
+			}
+		}
+	}
 
 	int orig_key_delay = g.KeyDelay;
 	int orig_press_duration = g.PressDuration;
@@ -341,7 +354,8 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 	// to enforce it as "always-down" during the send operation.  Thus, the key would
 	// basically get stuck down even after the send was over:
 	sModifiersLR_persistent &= mods_current & ~mods_down_physically_and_logically;
-	modLR_type persistent_modifiers_for_this_SendKeys, extra_persistent_modifiers_for_blind_mode;
+	modLR_type persistent_modifiers_for_this_SendKeys;
+	modLR_type mods_released_for_selective_blind = 0;
 	if (sInBlindMode)
 	{
 		// The following value is usually zero unless the user is currently holding down
@@ -349,12 +363,15 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 		// this send operation (along with all its calls to SendKey and similar) should
 		// consider to be down for the duration of the Send (unless they go up via an
 		// explicit {LWin up}, etc.)
-		extra_persistent_modifiers_for_blind_mode = mods_current & ~sModifiersLR_persistent;
 		persistent_modifiers_for_this_SendKeys = mods_current;
+		if (mods_excluded_from_blind) // Caller specified modifiers to exclude from Blind treatment.
+		{
+			persistent_modifiers_for_this_SendKeys &= ~mods_excluded_from_blind;
+			mods_released_for_selective_blind = mods_current ^ persistent_modifiers_for_this_SendKeys;
+		}
 	}
 	else
 	{
-		extra_persistent_modifiers_for_blind_mode = 0;
 		persistent_modifiers_for_this_SendKeys = sModifiersLR_persistent;
 	}
 	// Above:
@@ -598,16 +615,10 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 								DisguiseWinAltIfNeeded(vk);
 								sModifiersLR_persistent &= ~key_as_modifiersLR;
 								sModifiersLR_remapped &= ~key_as_modifiersLR;
-								// By contrast with KEYDOWN, KEYUP should also remove this modifier
-								// from extra_persistent_modifiers_for_blind_mode if it happens to be
-								// in there.  For example, if "#i::Send {LWin Up}" is a hotkey,
-								// LWin should become persistently up in every respect.
-								extra_persistent_modifiers_for_blind_mode &= ~key_as_modifiersLR;
+								persistent_modifiers_for_this_SendKeys &= ~key_as_modifiersLR;
 								// Fix for v1.0.43: Also remove LControl if this key happens to be AltGr.
 								if (vk == VK_RMENU && sTargetLayoutHasAltGr == CONDITION_TRUE) // It is AltGr.
-									extra_persistent_modifiers_for_blind_mode &= ~MOD_LCONTROL;
-								// Since key_as_modifiersLR isn't 0, update to reflect any changes made above:
-								persistent_modifiers_for_this_SendKeys = sModifiersLR_persistent | extra_persistent_modifiers_for_blind_mode;
+									persistent_modifiers_for_this_SendKeys &= ~MOD_LCONTROL;
 							}
 							// else must never change sModifiersLR_persistent in response to KEYDOWNANDUP
 							// because that would break existing scripts.  This is because that same
@@ -833,7 +844,8 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 			//    they know there are other LL hooks in the system.  In any case, there's no known solution
 			//    for it, so nothing can be done.
 			mods_to_set = persistent_modifiers_for_this_SendKeys
-				| (sInBlindMode ? 0 : (mods_down_physically_orig & ~mods_down_physically_but_not_logically_orig)); // The last item is usually 0.
+				| (sInBlindMode ? mods_released_for_selective_blind
+					: (mods_down_physically_orig & ~mods_down_physically_but_not_logically_orig)); // The last item is usually 0.
 			// Above: When in blind mode, don't restore physical modifiers.  This is done to allow a hotkey
 			// such as the following to release Shift:
 			//    +space::SendInput/Play {Blind}{Shift up}
@@ -880,6 +892,11 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 		mods_to_set = persistent_modifiers_for_this_SendKeys; // Set default.
 		if (sInBlindMode) // This section is not needed for the array-sending modes because they exploit uninterruptibility to perform a more reliable restoration.
 		{
+			// For selective {Blind!#^+}, restore any modifiers that were automatically released at the
+			// start, such as for *^1::Send "{Blind^}2" when Ctrl+Alt+1 is pressed (Ctrl is released).
+			// But do this before the below so that if the key was physically down at the start and has
+			// since been released, it won't be pushed back down.
+			mods_to_set |= mods_released_for_selective_blind;
 			// At the end of a blind-mode send, modifiers are restored differently than normal. One
 			// reason for this is to support the explicit ability for a Send to turn off a hotkey's
 			// modifiers even if the user is still physically holding them down.  For example:

@@ -2580,6 +2580,15 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 				}
 				// Otherwise, remap_keybd_to_mouse==false.
 
+				TCHAR blind_mods[5], *next_blind_mod = blind_mods, *this_mod, *found_mod;
+				for (this_mod = _T("!#^+"); *this_mod; ++this_mod)
+				{
+					found_mod = _tcschr(remap_source, *this_mod);
+					if (found_mod && found_mod[1]) // Exclude the last char for !:: and similar.
+						*next_blind_mod++ = *this_mod;
+				}
+				*next_blind_mod = '\0';
+
 				extra_event = _T(""); // Set default.
 				switch (remap_dest_vk)
 				{
@@ -2610,13 +2619,13 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 					break;
 				}
 				_stprintf(cp
-					, _T("Send(\"{Blind}%s%s{%s DownR}\")\n") // DownR vs. Down. See Send's DownR handler for details.
+					, _T("Send(\"{Blind%s}%s%s{%s DownR}\")\n") // DownR vs. Down. See Send's DownR handler for details.
 					  _T("Return\n")
 					  _T("%s up::\n") // Key-up hotkey label, e.g. *LButton up::
 					  _T("Set%sDelay(-1)\n")
 					  _T("Send(\"{Blind}{%s Up}\")\n") // Unlike the down-event above, remap_dest_modifiers is not included for the up-event; e.g. ^{b up} is inappropriate.
 					  _T("Return\n") // Last line must end with \n to simplify the code.
-					, extra_event, remap_dest_modifiers, remap_dest
+					, blind_mods, extra_event, remap_dest_modifiers, remap_dest
 					, remap_source
 					, remap_dest_is_mouse ? _T("Mouse") : _T("Key")
 					, remap_dest
