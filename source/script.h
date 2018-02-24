@@ -1589,7 +1589,23 @@ struct FuncResult : public ResultToken
 	}
 };
 
+
+class Func;
+struct FuncList
+{
+	Func **mItem;
+	int mCount, mCountMax;
+
+	Func *Find(LPCTSTR aName, int *apInsertPos);
+	ResultType Insert(Func *aFunc, int aInsertPos);
+	ResultType Alloc(int aAllocCount);
+
+	FuncList() : mItem(NULL), mCount(0), mCountMax(0) {}
+};
+
+
 typedef BIF_DECL((* BuiltInFunctionType));
+
 
 class Func : public IObjectComCompatible
 {
@@ -1610,6 +1626,8 @@ public:
 	int mParamCount; // The function's maximum number of parameters.  For UDFs, also the number of items in the mParam array.
 	int mMinParams;  // The number of mandatory parameters (populated for both UDFs and built-in's).
 	Label *mFirstLabel, *mLastLabel; // Linked list of private labels.
+	Func *mOuterFunc; // Func which contains this Func (usually NULL).
+	FuncList mFuncs; // List of nested functions (usually empty).
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	Var **mGlobalVar; // Array of global declarations.
 	int mVarCount, mVarCountMax, mLazyVarCount, mGlobalVarCount; // Count of items in the above array as well as the maximum capacity.
@@ -1731,6 +1749,7 @@ public:
 		: mName(aFuncName) // Caller gave us a pointer to dynamic memory for this.
 		, mBIF(NULL) // Also initializes mJumpToLine via union.
 		, mParam(NULL), mParamCount(0), mMinParams(0) // Also initializes mOutputVar via union (mParam).
+		, mOuterFunc(NULL)
 		, mFirstLabel(NULL), mLastLabel(NULL)
 		, mClass(NULL) // Also initializes mID via union.
 		, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
@@ -2611,12 +2630,11 @@ private:
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
 	Line *mFirstStaticLine, *mLastStaticLine; // The first and last static var initializer.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
-	Func **mFunc;  // Binary-searchable array of functions.
-	int mFuncCount, mFuncCountMax;
+	FuncList mFuncs;
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
-	int mCurrentFuncOpenBlockCount; // While loading the script, this is how many blocks are currently open in the current function's body.
+	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	bool mNoUpdateLabels;
 
@@ -2822,6 +2840,7 @@ public:
 	void WarnUninitializedVar(Var *var);
 	void MaybeWarnLocalSameAsGlobal(Func &func, Var &var);
 
+	void PreprocessLocalVars(FuncList &aFuncs);
 	void PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount);
 	void CheckForClassOverwrite();
 

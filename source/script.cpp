@@ -482,11 +482,10 @@ Script::Script()
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
 	, mNextClipboardViewer(NULL), mOnClipboardChangeIsRunning(false), mExitReason(EXIT_NONE)
 	, mFirstLabel(NULL), mLastLabel(NULL)
-	, mFunc(NULL), mFuncCount(0), mFuncCountMax(0)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
-	, mCurrentFuncOpenBlockCount(0), mNextLineIsFunctionBody(false), mNoUpdateLabels(false)
+	, mOpenBlock(NULL), mNextLineIsFunctionBody(false), mNoUpdateLabels(false)
 	, mClassObjectCount(0), mUnresolvedClasses(NULL), mClassProperty(NULL), mClassPropertyDef(NULL)
 	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
@@ -756,6 +755,9 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 				return FAIL;  // It already displayed the error for us.
 		}
 	}
+
+	mFuncs.Alloc(100); // For performance.  Failure is non-critical and unlikely, so ignored for code size.
+
 	return OK;
 }
 
@@ -1472,6 +1474,41 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 
 
 
+void ReleaseVarObjects(Var **aVar, int aVarCount)
+{
+	for (int v = 0; v < aVarCount; ++v)
+		if (aVar[v]->IsObject())
+			aVar[v]->ReleaseObject(); // ReleaseObject() vs Free() for performance (though probably not important at this point).
+		// Otherwise, maybe best not to free it in case an object's __Delete meta-function uses it?
+}
+
+void ReleaseStaticVarObjects(Var **aVar, int aVarCount)
+{
+	for (int v = 0; v < aVarCount; ++v)
+		if (aVar[v]->IsStatic() && aVar[v]->IsObject()) // For consistency, only free static vars (see below).
+			aVar[v]->ReleaseObject();
+}
+
+void ReleaseStaticVarObjects(FuncList &aFuncs)
+{
+	for (int i = 0; i < aFuncs.mCount; ++i)
+	{
+		Func &f = *aFuncs.mItem[i];
+		if (f.mIsBuiltIn)
+			continue;
+		// Since it doesn't seem feasible to release all var backups created by recursive function
+		// calls and all tokens in the 'stack' of each currently executing expression, currently
+		// only static and global variables are released.  It seems best for consistency to also
+		// avoid releasing top-level non-static local variables (i.e. which aren't in var backups).
+		ReleaseStaticVarObjects(f.mVar, f.mVarCount);
+		ReleaseStaticVarObjects(f.mLazyVar, f.mLazyVarCount);
+		if (f.mFuncs.mCount)
+			ReleaseStaticVarObjects(f.mFuncs);
+	}
+}
+
+
+
 void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 // Note that g_script's destructor takes care of most other cleanup work, such as destroying
 // tray icons, menus, and unowned windows such as ToolTip.
@@ -1484,30 +1521,9 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 		g_AllowInterruption = FALSE;
 		g->IsPaused = false;
 
-		int v, i;
-		for (v = 0; v < mVarCount; ++v)
-			if (mVar[v]->IsObject())
-				mVar[v]->ReleaseObject(); // ReleaseObject() vs Free() for performance (though probably not important at this point).
-			// Otherwise, maybe best not to free it in case an object's __Delete meta-function uses it?
-		for (v = 0; v < mLazyVarCount; ++v)
-			if (mLazyVar[v]->IsObject())
-				mLazyVar[v]->ReleaseObject();
-		for (i = 0; i < mFuncCount; ++i)
-		{
-			Func &f = *mFunc[i];
-			if (f.mIsBuiltIn)
-				continue;
-			// Since it doesn't seem feasible to release all var backups created by recursive function
-			// calls and all tokens in the 'stack' of each currently executing expression, currently
-			// only static and global variables are released.  It seems best for consistency to also
-			// avoid releasing top-level non-static local variables (i.e. which aren't in var backups).
-			for (v = 0; v < f.mVarCount; ++v)
-				if (f.mVar[v]->IsStatic() && f.mVar[v]->IsObject()) // For consistency, only free static vars (see above).
-					f.mVar[v]->ReleaseObject();
-			for (v = 0; v < f.mLazyVarCount; ++v)
-				if (f.mLazyVar[v]->IsStatic() && f.mLazyVar[v]->IsObject())
-					f.mLazyVar[v]->ReleaseObject();
-		}
+		ReleaseVarObjects(mVar, mVarCount);
+		ReleaseVarObjects(mLazyVar, mLazyVarCount);
+		ReleaseStaticVarObjects(mFuncs);
 	}
 #ifdef CONFIG_DEBUGGER // L34: Exit debugger *after* the above to allow debugging of any invoked __Delete handlers.
 	g_Debugger.Exit(aExitReason);
@@ -1585,15 +1601,7 @@ UINT Script::LoadFromFile()
 	//
 	//  2) Warn the user (if appropriate) since they probably meant it to be global.
 	//
-	for (int i = 0; i < mFuncCount; ++i)
-	{
-		Func &func = *mFunc[i];
-		if (!func.mIsBuiltIn && !(func.mDefaultVarType & VAR_FORCE_LOCAL))
-		{
-			PreprocessLocalVars(func, func.mVar, func.mVarCount);
-			PreprocessLocalVars(func, func.mLazyVar, func.mLazyVarCount);
-		}
-	}
+	PreprocessLocalVars(mFuncs);
 
 	// Resolve any unresolved base classes.
 	if (mUnresolvedClasses)
@@ -2486,9 +2494,6 @@ examine_line:
 			// Open brace means this is a function definition. NOTE: Both bufs were already ltrimmed by GetLine().
 			if (buf_has_brace || *next_buf == '{')
 			{
-				if (g->CurrentFunc)
-					// This is prohibited until it becomes feasible to implement closures.
-					return ScriptError(_T("Functions cannot contain functions."), buf);
 				if (!DefineFunc(buf, func_global_var))
 					return FAIL;
 				if (buf_has_brace && !AddLine(ACT_BLOCK_BEGIN))
@@ -5148,15 +5153,15 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// it displays more informative error messages:
 	if (aActionType == ACT_BLOCK_BEGIN)
 	{
-		++mCurrentFuncOpenBlockCount; // It's okay to increment unconditionally because it is reset to zero every time a new function definition is entered.
+		// While loading the script, use mParentLine to form a linked list of blocks for the purpose of
+		// identifying the end of each function.  mParentLine will be set more accurately (taking into
+		// account control flow statements) by PreparseBlocks().
+		the_new_line->mParentLine = mOpenBlock;
+		mOpenBlock = the_new_line;
 		// It's only necessary to check the last func, not the one(s) that come before it, to see if its
 		// mJumpToLine is NULL.  This is because our caller has made it impossible for a function
 		// to ever have been defined in the first place if it lacked its opening brace.  Search on
-		// "consecutive function" for more comments.  In addition, the following does not check
-		// that mCurrentFuncOpenBlockCount is exactly 1, because: 1) Want to be able to support function
-		// definitions inside of other function definitions (to help script maintainability); 2) If
-		// mCurrentFuncOpenBlockCount is 0 or negative, that will be caught as a syntax error by PreparseBlocks(),
-		// which yields a more informative error message that we could here.
+		// "consecutive function" for more comments.
 		if (g->CurrentFunc && !g->CurrentFunc->mJumpToLine)
 		{
 			// The above check relies upon the fact that g->CurrentFunc->mIsBuiltIn must be false at this stage,
@@ -5225,10 +5230,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	//    local_label:
 	// }
 
-	if (aActionType == ACT_BLOCK_END)
+	if (aActionType == ACT_BLOCK_END && mOpenBlock) // !mOpenBlock would indicate a syntax error, reported at a later stage.
 	{
-		--mCurrentFuncOpenBlockCount; // It's okay to increment unconditionally because it is reset to zero every time a new function definition is entered.
-		if (g->CurrentFunc && !mCurrentFuncOpenBlockCount) // Any negative mCurrentFuncOpenBlockCount is caught by a different stage.
+		if (g->CurrentFunc && g->CurrentFunc == mOpenBlock->mAttribute)
 		{
 			Func &func = *g->CurrentFunc;
 			if (func.mGlobalVarCount)
@@ -5243,8 +5247,12 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			else
 				func.mGlobalVar = NULL; // For maintainability.
 			line.mAttribute = ATTR_TRUE;  // Flag this ACT_BLOCK_END as the ending brace of a function's body.
-			g->CurrentFunc = NULL;
+			g->CurrentFunc = func.mOuterFunc;
+			if (g->CurrentFunc && !g->CurrentFunc->mJumpToLine)
+				// The outer function has no body yet, so it probably began with one or more nested functions.
+				mNextLineIsFunctionBody = true;
 		}
+		mOpenBlock = mOpenBlock->mParentLine;
 	}
 
 	return OK;
@@ -5629,7 +5637,8 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 	LPTSTR param_end, param_start = _tcschr(aBuf, '('); // Caller has ensured that this will return non-NULL.
 	int insert_pos;
 	
-	if (mClassObjectCount) // Class method or property getter/setter.
+	bool is_method = mClassObjectCount && !g->CurrentFunc;
+	if (is_method) // Class method or property getter/setter.
 	{
 		Object *class_object = mClassObject[mClassObjectCount - 1];
 
@@ -5682,7 +5691,6 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 				return FAIL; // It already displayed the error.
 	}
 
-	mCurrentFuncOpenBlockCount = 0; // v1.0.48.01: Initializing this here makes function definitions work properly when they're inside a block.
 	Func &func = *g->CurrentFunc; // For performance and convenience.
 	size_t param_length, value_length;
 	FuncParam param[MAX_FUNCTION_PARAMS];
@@ -5690,7 +5698,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 	TCHAR buf[LINE_SIZE], *target;
 	bool param_must_have_default = false;
 
-	if (mClassObjectCount)
+	if (is_method)
 	{
 		// Add the automatic/hidden "this" parameter.
 		if (  !(param[0].var = FindOrAddVar(_T("this"), 4, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM))  )
@@ -5924,8 +5932,16 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 			return ScriptError(ERR_HOTKEY_FUNC_PARAMS, aBuf);
 	}
 
+	if (func.mOuterFunc)
+	{
+		// Inherit the global declarations of the outer function.
+		func.mGlobalVar = func.mOuterFunc->mGlobalVar; // Usually the same as aFuncGlobalVar, but maybe not if #include was used.
+		func.mGlobalVarCount = func.mOuterFunc->mGlobalVarCount;
+	}
+	else
+		func.mGlobalVar = aFuncGlobalVar; // Use the stack-allocated space provided by our caller.
+	mNextLineIsFunctionBody = false; // This is part of a workaround for functions which start with a nested function.
 	// Indicate success:
-	func.mGlobalVar = aFuncGlobalVar; // Give func.mGlobalVar its address, to be used for any var declarations inside this function's body.
 	return OK;
 }
 
@@ -6514,9 +6530,34 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 
 
 
+Func *FuncList::Find(LPCTSTR aName, int *apInsertPos)
+{
+	// Using a binary searchable array vs a linked list speeds up dynamic function calls, on average.
+	int left, right, mid, result;
+	for (left = 0, right = mCount - 1; left <= right;)
+	{
+		mid = (left + right) / 2;
+		result = _tcsicmp(aName, mItem[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+		if (result > 0)
+			left = mid + 1;
+		else if (result < 0)
+			right = mid - 1;
+		else // Match found.
+			return mItem[mid];
+	}
+	if (apInsertPos)
+		*apInsertPos = left;
+	return NULL;
+}
+
+
+
 Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertPos) // L27: Added apInsertPos for binary-search.
 // Returns the Function whose name matches aFuncName (which caller has ensured isn't NULL).
 // If it doesn't exist, NULL is returned.
+// If apInsertPos is non-NULL (i.e. caller is DefineFunc), only the current scope is searched
+// and built-in functions are returned only if g->CurrentFunc == NULL (so that nested functions
+// "shadow" built-in functions but do not actually replace them globally).
 {
 	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = _tcslen(aFuncName);
@@ -6537,22 +6578,22 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	tcslcpy(func_name, aFuncName, aFuncNameLength + 1);  // +1 to convert length to size.
 
 	Func *pfunc;
-	
-	// Using a binary searchable array vs a linked list speeds up dynamic function calls, on average.
-	int left, right, mid, result;
-	for (left = 0, right = mFuncCount - 1; left <= right;)
+	int left;
+	for (Func *outer = g->CurrentFunc; ; outer = outer->mOuterFunc)
 	{
-		mid = (left + right) / 2;
-		result = _tcsicmp(func_name, mFunc[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
-		if (result > 0)
-			left = mid + 1;
-		else if (result < 0)
-			right = mid - 1;
-		else // Match found.
-			return mFunc[mid];
+		FuncList &funcs = outer ? outer->mFuncs : mFuncs;
+		if (pfunc = funcs.Find(func_name, &left))
+			return pfunc;
+		if (apInsertPos) // Caller is DefineFunc.
+		{
+			*apInsertPos = left;
+			if (outer) // Nested functions may "shadow" built-in functions without replacing them globally.
+				return NULL;
+		}
+		if (!outer)
+			break;
 	}
-	if (apInsertPos)
-		*apInsertPos = left;
+	// left now contains a position in the outer-most FuncList, as needed for built-in functions below.
 
 	// Since above didn't return, there is no match.  See if it's a built-in function that hasn't yet
 	// been added to the function list.
@@ -6609,7 +6650,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 
 	// Since above didn't return, this is a built-in function that hasn't yet been added to the list.
 	// Add it now:
-	if (   !(pfunc = AddFunc(bif.mName, aFuncNameLength, true, left))   ) // L27: left contains the position within mFunc to insert the function.  Cannot use *apInsertPos as caller may have omitted it or passed NULL.
+	if (   !(pfunc = AddFunc(bif.mName, aFuncNameLength, true, left))   ) // left contains the position within mFuncs to insert the function.  Cannot use *apInsertPos as caller may have omitted it or passed NULL.
 		return NULL;
 
 	pfunc->mBIF = bif.mBIF;
@@ -6686,29 +6727,48 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 		// Also add it to the script's list of functions, to support #Warn LocalSameAsGlobal
 		// and automatic cleanup of objects in static vars on program exit.
 	}
-	
-	if (mFuncCount == mFuncCountMax)
-	{
-		// Allocate or expand function list.
-		int alloc_count = mFuncCountMax ? mFuncCountMax * 2 : 100;
 
-		Func **temp = (Func **)realloc(mFunc, alloc_count * sizeof(Func *)); // If passed NULL, realloc() will do a malloc().
-		if (!temp)
-		{
-			ScriptError(ERR_OUTOFMEM);
-			return NULL;
-		}
-		mFunc = temp;
-		mFuncCountMax = alloc_count;
+	the_new_func->mOuterFunc = aIsBuiltIn ? NULL : g->CurrentFunc;
+	FuncList &funcs = the_new_func->mOuterFunc ? the_new_func->mOuterFunc->mFuncs : mFuncs;
+	
+	if (!funcs.Insert(the_new_func, aInsertPos))
+	{
+		ScriptError(ERR_OUTOFMEM);
+		return NULL;
 	}
 
-	if (aInsertPos != mFuncCount) // Need to make room at the indicated position for this variable.
-		memmove(mFunc + aInsertPos + 1, mFunc + aInsertPos, (mFuncCount - aInsertPos) * sizeof(Func *));
-	//else both are zero or the item is being inserted at the end of the list, so it's easy.
-	mFunc[aInsertPos] = the_new_func;
-	++mFuncCount;
-
 	return the_new_func;
+}
+
+
+
+ResultType FuncList::Insert(Func *aFunc, int aInsertPos)
+{
+	if (mCount == mCountMax)
+	{
+		// Allocate or expand function list.
+		if (!Alloc(mCountMax ? mCountMax * 2 : 4)) // Initial count is small since functions aren't expected to contain many nested functions.
+			return FAIL;
+	}
+
+	if (aInsertPos != mCount) // Need to make room at the indicated position for this variable.
+		memmove(mItem + aInsertPos + 1, mItem + aInsertPos, (mCount - aInsertPos) * sizeof(Func *));
+	//else both are zero or the item is being inserted at the end of the list, so it's easy.
+	mItem[aInsertPos] = aFunc;
+	++mCount;
+	return OK;
+}
+
+
+
+ResultType FuncList::Alloc(int aAllocCount)
+{
+	Func **temp = (Func **)realloc(mItem, aAllocCount * sizeof(Func *)); // If passed NULL, realloc() will do a malloc().
+	if (!temp)
+		return FAIL;
+	mItem = temp;
+	mCountMax = aAllocCount;
+	return OK;
 }
 
 
@@ -7287,6 +7347,18 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 	DerefType *deref;
 	for (Line *line = aStartingLine; line; line = line->mNextLine)
 	{
+		switch (line->mActionType)
+		{
+		// Set g->CurrentFunc for use resolving names of nested functions.
+		case ACT_BLOCK_BEGIN:
+			if (line->mAttribute)
+				g->CurrentFunc = (Func *)line->mAttribute;
+			break;
+		case ACT_BLOCK_END:
+			if (line->mAttribute)
+				g->CurrentFunc = g->CurrentFunc->mOuterFunc;
+			break;
+		}
 		// Check if any of each arg's derefs are function calls.  If so, do some validation and
 		// preprocessing to set things up for better runtime performance:
 		for (i = 0; i < line->mArgc; ++i) // For each arg.
@@ -13135,6 +13207,24 @@ void Script::MaybeWarnLocalSameAsGlobal(Func &func, Var &var)
 }
 
 
+
+void Script::PreprocessLocalVars(FuncList &aFuncs)
+// Caller has verified aFunc.mIsBuiltIn == false.
+{
+	for (int i = 0; i < aFuncs.mCount; ++i)
+	{
+		Func &func = *aFuncs.mItem[i];
+		if (func.mIsBuiltIn)
+			continue;
+		if (  !(func.mDefaultVarType & VAR_FORCE_LOCAL)  )
+		{
+			PreprocessLocalVars(func, func.mVar, func.mVarCount);
+			PreprocessLocalVars(func, func.mLazyVar, func.mLazyVarCount);
+		}
+		if (func.mFuncs.mCount)
+			PreprocessLocalVars(func.mFuncs);
+	}
+}
 
 void Script::PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount)
 {
