@@ -1851,7 +1851,7 @@ ResultType STDMETHODCALLTYPE BoundFunc::Invoke(ResultToken &aResultToken, ExprTo
 	if (  !(aFlags & IF_FUNCOBJ) && aParamCount  )
 	{
 		// No methods/properties implemented yet, except Call().
-		if (!TokenIsEmptyString(*aParam[0]) && _tcsicmp(TokenToString(*aParam[0]), _T("Call")))
+		if (_tcsicmp(TokenToString(*aParam[0]), _T("Call")))
 			return INVOKE_NOT_HANDLED; // Reserved.
 		++aParam;
 		--aParamCount;
