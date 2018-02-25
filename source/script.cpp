@@ -7001,7 +7001,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 		for (int i = 0; i < g.CurrentFunc->mGlobalVarCount; ++i)
 			if (!_tcsicmp(var_name, g.CurrentFunc->mGlobalVar[i]->mName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 				return g.CurrentFunc->mGlobalVar[i];
-		if (g.CurrentFunc->mDefaultVarType & VAR_FORCE_LOCAL)
+		if (!g.CurrentFunc->AllowSuperGlobals())
 			return NULL;
 		// As a last resort, check for a super-global:
 		Var *gvar = FindVar(aVarName, aVarNameLength, NULL, FINDVAR_GLOBAL, NULL);
@@ -12125,10 +12125,7 @@ BIF_DECL(BIF_PerformAction)
 	
 	TCHAR number_buf[MAX_ARGS * MAX_NUMBER_SIZE]; // Enough for worst case.
 	Var *output_var;
-	Var stack_var(_T(""), NULL, 0);
-	// Prevent the use of SimpleHeap::Malloc().  Otherwise, each call could allocate
-	// some memory which cannot be freed until the program exits.
-	stack_var.DisableSimpleMalloc();
+	Var stack_var;
 
 	int i = 0;
 
@@ -13208,31 +13205,101 @@ void Script::MaybeWarnLocalSameAsGlobal(Func &func, Var &var)
 
 
 
-void Script::PreprocessLocalVars(FuncList &aFuncs)
+ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
 // Caller has verified aFunc.mIsBuiltIn == false.
 {
+	Var *upvar[MAX_FUNC_UP_VARS], *downvar[MAX_FUNC_UP_VARS];
+	int upvarindex[MAX_FUNC_UP_VARS];
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
 		Func &func = *aFuncs.mItem[i];
 		if (func.mIsBuiltIn)
 			continue;
+		// Set temporary buffers for use processing this func and nested functions:
+		func.mUpVar = upvar;
+		func.mUpVarIndex = upvarindex;
+		// No pre-processing is needed for this func if it is force-local.  However, if only
+		// the outer func is force-local, we still need to process upvars (but super-globals
+		// and warnings are skipped in that case).
 		if (  !(func.mDefaultVarType & VAR_FORCE_LOCAL)  )
 		{
-			PreprocessLocalVars(func, func.mVar, func.mVarCount);
-			PreprocessLocalVars(func, func.mLazyVar, func.mLazyVarCount);
+			// Preprocess this function's local variables.
+			if (   !PreprocessLocalVars(func, func.mVar, func.mVarCount)
+				|| !PreprocessLocalVars(func, func.mLazyVar, func.mLazyVarCount)   )
+				return FAIL; // Script will exit, so OK to leave mUpVar in an invalid state.
 		}
 		if (func.mFuncs.mCount)
-			PreprocessLocalVars(func.mFuncs);
+		{
+			func.mDownVar = downvar;
+
+			// Preprocess this function's nested functions.
+			if (!PreprocessLocalVars(func.mFuncs))
+				return FAIL; // Script will exit, so OK to leave mDownVar in an invalid state.
+
+			if (func.mDownVarCount)
+			{
+				func.mDownVar = (Var **)SimpleHeap::Malloc(func.mDownVarCount * sizeof(Var *));
+				if (!func.mDownVar)
+					return ScriptError(ERR_OUTOFMEM);
+				memcpy(func.mDownVar, downvar, func.mDownVarCount * sizeof(Var *));
+			}
+			else
+				func.mDownVar = NULL;
+		}
+		if (func.mUpVarCount)
+		{
+			func.mUpVar = (Var **)SimpleHeap::Malloc(func.mUpVarCount * sizeof(Var *));
+			func.mUpVarIndex = (int *)SimpleHeap::Malloc(func.mUpVarCount * sizeof(int));
+			if (!func.mUpVar || !func.mUpVarIndex)
+				return ScriptError(ERR_OUTOFMEM);
+			memcpy(func.mUpVar, upvar, func.mUpVarCount * sizeof(Var *));
+			memcpy(func.mUpVarIndex, upvarindex, func.mUpVarCount * sizeof(int));
+		}
+		else
+			func.mUpVar = NULL;
 	}
+	return OK;
 }
 
-void Script::PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount)
+
+
+ResultType Script::PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount)
 {
+	bool check_globals = aFunc.AllowSuperGlobals();
+
 	for (int v = 0; v < aVarCount; ++v)
 	{
 		Var &var = *aVarList[v];
-		if (var.IsDeclared()) // Not a canditate for a super-global or warning.
+		if (var.IsDeclared()) // Not a candidate for an upvar, super-global or warning.
 			continue;
+
+		if (aFunc.mOuterFunc)
+		{
+			Var *ovar;
+			if (!PreprocessFindUpVar(var.mName, *aFunc.mOuterFunc, aFunc, ovar, &var))
+				return FAIL;
+
+			if (ovar)
+			{
+				switch (ovar->Scope() & (VAR_GLOBAL | VAR_LOCAL_STATIC))
+				{
+				case VAR_LOCAL_STATIC:
+					// There's only one "instance" of this variable, so alias it directly.
+					// Leave it in aVarList so that it appears in ListVars.
+					var.UpdateAlias(ovar);
+					continue;
+				case VAR_GLOBAL:
+					// There's only one "instance" of this variable, so alias it directly.
+					ConvertLocalToAlias(var, ovar, v, aVarList, aVarCount);
+					--v; // Counter the loop's increment since var has been removed.
+					continue;
+				}
+			}
+		}
+
+		if (!check_globals)
+			continue;
+
 		Var *global_var = FindVar(var.mName, 0, NULL, FINDVAR_GLOBAL);
 		if (!global_var) // No global variable with that name.
 			continue;
@@ -13240,17 +13307,72 @@ void Script::PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount)
 		{
 			// Make this local variable an alias for the super-global. Above has already
 			// verified this var was not declared and therefore isn't a function parameter.
-			var.UpdateAlias(global_var);
-			// Remove the variable from the local list to prevent it from being shown in
-			// ListVars or being reset when the function returns.
-			memmove(aVarList + v, aVarList + v + 1, (--aVarCount - v) * sizeof(Var *));
-			--v; // Counter the loop's increment.
+			ConvertLocalToAlias(var, global_var, v, aVarList, aVarCount);
+			--v; // Counter the loop's increment since var has been removed.
 		}
 		else
 		// Since this undeclared local variable has the same name as a global, there's
 		// a chance the user intended it to be global. So consider warning the user:
 		MaybeWarnLocalSameAsGlobal(aFunc, var);
 	}
+	return OK;
+}
+
+
+
+ResultType Script::PreprocessFindUpVar(LPTSTR aName, Func &aOuter, Func &aInner, Var *&aFound, Var *aLocal)
+{
+	g->CurrentFunc = &aOuter;
+	aFound = FindVar(aName);
+	if (!aFound)
+	{
+		if (aOuter.mOuterFunc && !(aOuter.mDefaultVarType & VAR_FORCE_LOCAL))
+		{
+			if (!PreprocessFindUpVar(aName, *aOuter.mOuterFunc, aOuter, aFound, NULL))
+				return FAIL;
+		}
+		if (!aFound)
+			return OK;
+	}
+	if (!aFound->IsNonStaticLocal())
+	{
+		// There's only one "instance" of this variable, so alias it directly.
+		return OK;
+	}
+	int d;
+	for (d = 0; d < aOuter.mDownVarCount; ++d)
+		if (aOuter.mDownVar[d] == aFound)
+			break;
+	if (d == aOuter.mDownVarCount)
+	{
+		if (d >= MAX_FUNC_UP_VARS)
+			return ScriptError(_T("Too many upvalues."), aOuter.mName);
+		aOuter.mDownVar[aOuter.mDownVarCount++] = aFound;
+	}
+	if (!aLocal)
+	{
+		// aInner hasn't yet referenced this var, so create a local alias to allow it
+		// to "bubble up" to the inner function (our caller).
+		g->CurrentFunc = &aInner;
+		if (  !(aLocal = FindOrAddVar(aName, 0, FINDVAR_LOCAL))  )
+			return FAIL;
+	}
+	// Because all upvars are also downvars of the outer function, the MAX_FUNC_UP_VARS
+	// check above is sufficient to prevent overflow for mUpVar as well.
+	aInner.mUpVar[aInner.mUpVarCount] = aLocal;
+	aInner.mUpVarIndex[aInner.mUpVarCount] = d;
+	++aInner.mUpVarCount;
+	return OK;
+}
+
+
+
+void Script::ConvertLocalToAlias(Var &aLocal, Var *aAliasFor, int aPos, Var **aVarList, int &aVarCount)
+{
+	aLocal.UpdateAlias(aAliasFor);
+	// Remove the variable from the local list to prevent it from being shown in
+	// ListVars or being reset when the function returns.
+	memmove(aVarList + aPos, aVarList + aPos + 1, (--aVarCount - aPos) * sizeof(Var *));
 }
 
 

@@ -1901,6 +1901,25 @@ BoundFunc::~BoundFunc()
 }
 
 
+ResultType STDMETHODCALLTYPE Closure::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (  !(aFlags & IF_FUNCOBJ) && aParamCount  )
+	{
+		if (_tcsicmp(TokenToString(*aParam[0]), _T("Call"))) // i.e. not Call.
+			return mFunc->Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
+		++aParam;
+		--aParamCount;
+	}
+	mFunc->Call(aResultToken, aParam, aParamCount, false, mVars);
+	return aResultToken.Result();
+}
+
+Closure::~Closure()
+{
+	mVars->Release();
+}
+
+
 ResultType STDMETHODCALLTYPE Label::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	// Labels are never returned to script, so no need to check flags or parameters.

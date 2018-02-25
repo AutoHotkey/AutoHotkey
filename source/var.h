@@ -544,12 +544,6 @@ public:
 		return true;
 	}
 
-	void DisableSimpleMalloc()
-	// Caller must ensure that mType == VAR_NORMAL and mByteCapacity == 0.
-	{
-		mHowAllocated = ALLOC_MALLOC;
-	}
-
 	LPTSTR StealMem()
 	// Caller must ensure that mType == VAR_NORMAL and mHowAllocated == ALLOC_MALLOC.
 	{
@@ -916,6 +910,25 @@ public:
 			mByteCapacity = 0; // This also initializes mBIV within the same union.
 		if (mType != VAR_NORMAL)
 			mAttrib = 0; // Any vars that aren't VAR_NORMAL are considered initialized, by definition.
+	}
+
+	Var()
+		//: Var(_T(""), NULL, 0) // Not supported by Visual C++ 2010.
+		// Initialized as above:
+		: mCharContents(sEmptyString)
+		, mByteLength(0)
+		, mAttrib(VAR_ATTRIB_UNINITIALIZED)
+		// For anonymous/temporary variables:
+		, mScope(0)
+		, mName(_T(""))
+		// Normally set as a result of !aBuiltIn:
+		, mType(VAR_NORMAL)
+		, mByteCapacity(0)
+		// Vars constructed this way are for temporary use, and therefore must have mHowAllocated set
+		// as below to prevent the use of SimpleHeap::Malloc().  Otherwise, each Var could allocate
+		// some memory which cannot be freed until the program exits.
+		, mHowAllocated(ALLOC_MALLOC)
+	{
 	}
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}

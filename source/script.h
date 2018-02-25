@@ -1604,6 +1604,42 @@ struct FuncList
 };
 
 
+struct FreeVars
+{
+	int mRefCount, mVarCount;
+	Var *mVar;
+
+	void AddRef()
+	{
+		++mRefCount;
+	}
+
+	void Release()
+	{
+		if (mRefCount == 1)
+			delete this;
+		else
+			--mRefCount;
+	}
+
+	static FreeVars *Alloc(int aCount)
+	{
+		return new FreeVars(::new Var[aCount], aCount); // Must use :: to avoid SimpleHeap.
+	}
+
+private:
+	FreeVars(Var *aVars, int aCount)
+		: mVar(aVars), mVarCount(aCount), mRefCount(1) {}
+
+	~FreeVars()
+	{
+		for (int i = 0; i < mVarCount; ++i)
+			mVar[i].Free(VAR_ALWAYS_FREE);
+		::delete[] mVar; // Must use :: to avoid SimpleHeap.
+	}
+};
+
+
 typedef BIF_DECL((* BuiltInFunctionType));
 
 
@@ -1630,7 +1666,12 @@ public:
 	FuncList mFuncs; // List of nested functions (usually empty).
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	Var **mGlobalVar; // Array of global declarations.
+	Var **mDownVar, **mUpVar;
+	int *mUpVarIndex;
+	FreeVars *mFreeVars;
+	#define MAX_FUNC_UP_VARS 1000
 	int mVarCount, mVarCountMax, mLazyVarCount, mGlobalVarCount; // Count of items in the above array as well as the maximum capacity.
+	int mDownVarCount, mUpVarCount;
 	int mInstances; // How many instances currently exist on the call stack (due to recursion or thread interruption).  Future use: Might be used to limit how deep recursion can go to help prevent stack overflow.
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
@@ -1640,6 +1681,16 @@ public:
 	#define VAR_DECLARE_LOCAL  (VAR_DECLARED | VAR_LOCAL)
 	#define VAR_DECLARE_STATIC (VAR_DECLARED | VAR_LOCAL | VAR_LOCAL_STATIC)
 	// The last two may be combined (bitwise-OR) with VAR_FORCE_LOCAL.
+
+	bool AllowSuperGlobals()
+	{
+		// A function allows super-globals unless it is force-local or contained by another
+		// function which is force-local (i.e. a nested function should inherit the rules and
+		// declarations of the scope which encloses it).
+		if (mDefaultVarType & VAR_FORCE_LOCAL)
+			return false;
+		return mOuterFunc ? mOuterFunc->AllowSuperGlobals() : true;
+	}
 
 	bool mIsBuiltIn; // Determines contents of union. Keep this member adjacent/contiguous with the above.
 	// Note that it's possible for a built-in function such as WinExist() to become a normal/UDF via
@@ -1666,7 +1717,7 @@ public:
 	}
 
 	// bool result indicates whether aResultToken contains a value (i.e. false for FAIL/EARLY_EXIT).
-	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false);
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false, FreeVars *aUpVars = NULL);
 	bool Call(ResultToken &aResultToken, int aParamCount, ...);
 
 // Macros for specifying arguments in Func::Call(aResultToken, aParamCount, ...)
@@ -1736,6 +1787,8 @@ public:
 		return result;
 	}
 
+	IObject *CloseIfNeeded(); // Returns this Func or (if mUpVarCount != 0) a Closure.
+
 	// IObject.
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
@@ -1754,6 +1807,7 @@ public:
 		, mClass(NULL) // Also initializes mID via union.
 		, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 		, mGlobalVar(NULL), mGlobalVarCount(0)
+		, mDownVar(NULL), mDownVarCount(0), mUpVar(NULL), mUpVarCount(0), mUpVarIndex(NULL), mFreeVars(NULL)
 		, mInstances(0)
 		, mDefaultVarType(VAR_DECLARE_LOCAL)
 		, mIsBuiltIn(aIsBuiltIn)
@@ -2840,8 +2894,10 @@ public:
 	void WarnUninitializedVar(Var *var);
 	void MaybeWarnLocalSameAsGlobal(Func &func, Var &var);
 
-	void PreprocessLocalVars(FuncList &aFuncs);
-	void PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount);
+	ResultType PreprocessLocalVars(FuncList &aFuncs);
+	ResultType PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount);
+	ResultType PreprocessFindUpVar(LPTSTR aName, Func &aOuter, Func &aInner, Var *&aFound, Var *aLocal);
+	void ConvertLocalToAlias(Var &aLocal, Var *aAliasFor, int aPos, Var **aVarList, int &aVarCount);
 	void CheckForClassOverwrite();
 
 	static ResultType UnhandledException(ResultToken*& aToken, Line* aLine, LPTSTR aFooter = _T("The thread has exited."));
@@ -3157,6 +3213,7 @@ LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL, size_t *aLength 
 ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOutput);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
 Func *TokenToFunc(ExprTokenType &aToken);
+IObject *TokenToFunctor(ExprTokenType &aToken);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);

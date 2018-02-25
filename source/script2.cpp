@@ -13778,9 +13778,27 @@ BIF_DECL(BIF_Func)
 {
 	Func *func = TokenToFunc(*aParam[0]);
 	if (func)
-		_f_return(func);
+		_f_return(func->CloseIfNeeded());
 	else
 		_f_return_empty;
+}
+
+
+IObject *Func::CloseIfNeeded()
+{
+	if (!mUpVarCount)
+		// Standard practice would require AddRef() here, but we have the inside
+		// knowledge that Func ignores it (since it's allocated with SimpleHeap).
+		return this;
+	// The following should always be true because:
+	//  1) mUpVarCount != 0 implies mOuterFunc && mOuterFunc->mDownVarCount != 0.
+	//  2) A nested function can only be "found" while the outer function is executing.
+	//  3) CloseIfNeeded() is called immediately after finding the function.
+	//  4) If mDownVarCount is non-zero, Func::Call has set mFreeVars.
+	ASSERT(mOuterFunc && mOuterFunc->mFreeVars);
+	Closure *cl = new Closure(this, mOuterFunc->mFreeVars);
+	mOuterFunc->mFreeVars->AddRef();
+	return cl;
 }
 
 
@@ -14759,14 +14777,16 @@ BIF_DECL(BIF_OnExitOrClipboard)
 	MsgMonitorList &handlers = is_onexit ? g_script.mOnExit : g_script.mOnClipboardChange;
 
 	IObject *callback;
-	if (callback = TokenToFunc(*aParam[0]))
+	if (callback = TokenToFunctor(*aParam[0]))
 	{
-		// Ensure this function is a valid one.
-		if (((Func *)callback)->mMinParams > 2)
-			callback = NULL;
+		// Ensure this function is a valid one (if possible).
+		if (Func *func = dynamic_cast<Func *>(callback))
+			if (func->mMinParams > 2)
+			{
+				callback->Release();
+				callback = NULL;
+			}
 	}
-	else
-		callback = TokenToObject(*aParam[0]);
 	if (!callback)
 		_f_throw(ERR_PARAM1_INVALID);
 	
@@ -14781,7 +14801,10 @@ BIF_DECL(BIF_OnExitOrClipboard)
 	case  1:
 	case -1:
 		if (existing)
+		{
+			callback->Release();
 			return;
+		}
 		if (!is_onexit)
 		{
 			// Do this before adding the handler so that it won't be called as a result of the
@@ -14790,19 +14813,24 @@ BIF_DECL(BIF_OnExitOrClipboard)
 			g_script.EnableClipboardListener(true);
 		}
 		if (!handlers.Add(0, callback, mode == 1))
+		{
+			callback->Release();
 			_f_throw(ERR_OUTOFMEM);
+		}
 		break;
 	case  0:
 		if (existing)
 			handlers.Remove(existing);
 		break;
 	default:
+		callback->Release();
 		_f_throw(ERR_PARAM2_INVALID);
 	}
 	// In case the above enabled the clipboard listener but failed to add the handler,
 	// do this even if mode != 0:
 	if (!is_onexit && !handlers.Count())
 		g_script.EnableClipboardListener(false);
+	callback->Release();
 }
 
 
@@ -17000,6 +17028,26 @@ Func *TokenToFunc(ExprTokenType &aToken)
 			func = g_script.FindFunc(func_name);
 	}
 	return func;
+}
+
+
+
+IObject *TokenToFunctor(ExprTokenType &aToken)
+// Returns an object if aToken contains an object or function name.
+// Reference is counted so CALLER MUST Release() WHEN APPROPRIATE.
+// For nested functions with upvalues, this returns a Closure, whereas TokenToFunc
+// returns the base Func (which can't be called after the outer function returns).
+{
+	if (IObject *obj = TokenToObject(aToken))
+	{
+		obj->AddRef();
+		return obj;
+	}
+	LPTSTR func_name = TokenToString(aToken); // No need for buf (see TokenToFunc).
+	if (!*func_name)
+		return NULL; // For performance (see TokenToFunc).
+	Func *func = g_script.FindFunc(func_name);
+	return func->CloseIfNeeded();
 }
 
 

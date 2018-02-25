@@ -374,12 +374,13 @@ BIF_DECL(BIF_ObjAddRefRelease)
 BIF_DECL(BIF_ObjBindMethod)
 {
 	IObject *func, *bound_func;
-	if (  !(func = TokenToObject(*aParam[0]))
-		&& !(func = TokenToFunc(*aParam[0]))  )
+	if (  !(func = TokenToFunctor(*aParam[0]))  )
 	{
 		_f_throw(ERR_PARAM1_INVALID);
 	}
-	if (  !(bound_func = BoundFunc::Bind(func, aParam + 1, aParamCount - 1, IT_CALL))  )
+	bound_func = BoundFunc::Bind(func, aParam + 1, aParamCount - 1, IT_CALL);
+	func->Release();
+	if (!bound_func)
 		_f_throw(ERR_OUTOFMEM);
 	_f_return(bound_func);
 }

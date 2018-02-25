@@ -426,6 +426,26 @@ public:
 
 
 //
+// Closure
+//
+
+struct FreeVars;
+class Closure : public ObjectBase
+{
+	Func *mFunc;
+	FreeVars *mVars;
+
+public:
+	Closure(Func *aFunc, FreeVars *aVars)
+		: mFunc(aFunc), mVars(aVars) { }
+	~Closure();
+
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	IObject_Type_Impl("Closure")
+};
+
+
+//
 // RegExMatchObject:  Returned by RegExMatch via UnquotedOutputVar.
 //
 class RegExMatchObject : public ObjectBase

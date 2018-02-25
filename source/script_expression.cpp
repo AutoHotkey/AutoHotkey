@@ -310,7 +310,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// This isn't a function name or reference, but it could be an object emulating
 					// a function reference.  Additionally, we want something like %emptyvar%() to
 					// invoke g_MetaObject, so this part is done even if stack[stack_count] is not
-					// an object.  To "call" the object/value, we need to insert an empty method
+					// an object.  To "call" the object/value, we need to insert the "call" method
 					// name between the object/value and the parameter list.  There should always
 					// be room for this since the maximum number of operands at any one time <=
 					// postfix token count < infix token count < MAX_TOKENS == _countof(stack).
@@ -1505,7 +1505,7 @@ normal_end_skip_output_var:
 
 
 
-bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic)
+bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic, FreeVars *aUpVars)
 {
 	Object *param_obj = NULL;
 	if (aIsVariadic) // i.e. this is a variadic function call.
@@ -1581,6 +1581,30 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		VarBkp *backup = NULL;
 		int backup_count;
 
+		FreeVars *outer_free_vars;
+		if (mDownVarCount)
+		{
+			outer_free_vars = mFreeVars; // NULL unless mInstances > 0.
+			// These local vars need to persist after the function returns (and be independent of
+			// any other instances of this function).  Since we really only have one set of local
+			// vars for the lifetime of the script, make them aliases for newly allocated vars:
+			mFreeVars = FreeVars::Alloc(mDownVarCount);
+			for (int i = 0; i < mDownVarCount; ++i)
+				mDownVar[i]->UpdateAlias(mFreeVars->mVar + i);
+		}
+		
+		if (mUpVarCount)
+		{
+			if (  !aUpVars // No closure, so it must be a direct call.
+				&& !(aUpVars = mOuterFunc->mFreeVars)  )
+			{
+				aResultToken.Error(_T("Func out of scope."), mName); // Keep it short since this shouldn't be possible if things are designed correctly.
+				goto early_abort;
+			}
+			for (int i = 0; i < mUpVarCount; ++i)
+				mUpVar[i]->UpdateAlias(aUpVars->mVar + mUpVarIndex[i]);
+		}
+
 		int j, count_of_actuals_that_have_formals;
 		count_of_actuals_that_have_formals = (aParamCount > mParamCount)
 			? mParamCount  // Omit any actuals that lack formals (this can happen when a dynamic call passes too many parameters).
@@ -1637,7 +1661,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			if (!Var::BackupFunctionVars(*this, backup, backup_count)) // Out of memory.
 			{
 				aResultToken.Error(ERR_OUTOFMEM, mName);
-				return false;
+				goto early_abort;
 			}
 		} // if (func.mInstances > 0)
 		//else backup is not needed because there are no other instances of this function on the call-stack.
@@ -1765,6 +1789,13 @@ free_and_return:
 		// mInstances must remain non-zero until this point to ensure that any recursive calls by an
 		// object's __Delete meta-function receive fresh variables, and none partially-destructed.
 		--mInstances;
+
+early_abort:
+		if (mDownVarCount)
+		{
+			mFreeVars->Release();
+			mFreeVars = outer_free_vars;
+		}
 	}
 	return !aResultToken.Exited(); // i.e. aResultToken.SetExitResult() or aResultToken.Error() was not called.
 }
