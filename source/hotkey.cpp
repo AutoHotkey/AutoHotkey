@@ -2910,15 +2910,21 @@ BIF_DECL(BIF_Hotstring)
 	IObject *action_obj = NULL;
 	if (!ParamIndexIsOmitted(1))
 	{
-		action_obj = ParamIndexToObject(1);
-		if (   execute_action // Caller specified 'E' option (which is ignored when passing an object).
-			&& !action_obj // Caller did not specify an object, so must specify a function or label name.
-			&& !(action_obj = g_script.FindCallable(action))   ) // No valid label or function found.
-			_f_throw(ERR_PARAM2_INVALID, action);
+		if (action_obj = ParamIndexToObject(1))
+			action_obj->AddRef();
+		else // Caller did not specify an object, so must specify a function or label name.
+			if (   execute_action // Caller specified 'E' option (which is ignored when passing an object).
+				&& !(action_obj = StringToLabelOrFunctor(action))   ) // No valid label or function found.
+				_f_throw(ERR_PARAM2_INVALID, action);
 	}
+
 	ToggleValueType toggle = NEUTRAL;
 	if (  *onoff && !(toggle = Line::ConvertOnOffToggle(onoff))   )
+	{
+		if (action_obj)
+			action_obj->Release();
 		_f_throw(ERR_PARAM3_INVALID, onoff);
+	}
 
 	bool was_already_enabled;
 	Hotstring *existing = Hotstring::FindHotstring(hotstring_start, case_sensitive, detect_inside_word, g->HotCriterion);
@@ -2979,11 +2985,18 @@ BIF_DECL(BIF_Hotstring)
 			initial_suspend_state |= HS_SUSPENDED;
 
 		if (!Hotstring::AddHotstring(name, action_obj, hotstring_options, hotstring_start, action, false, initial_suspend_state))
+		{
+			if (action_obj)
+				action_obj->Release();
 			_f_return_FAIL;
+		}
 
 		existing = Hotstring::shs[Hotstring::sHotstringCount-1];
 		was_already_enabled = false; // Because it didn't exist.
 	}
+
+	if (action_obj)
+		action_obj->Release();
 
 	// Note that mSuspended must be 0 to count as enabled, meaning the hotstring was neither
 	// turned off by us nor suspended by SuspendAll().  If it was suspended, there's no change
