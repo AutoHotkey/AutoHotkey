@@ -3214,6 +3214,8 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 IObject *TokenToObject(ExprTokenType &aToken); // L31
 Func *TokenToFunc(ExprTokenType &aToken);
 IObject *TokenToFunctor(ExprTokenType &aToken);
+IObject *TokenToLabelOrFunctor(ExprTokenType &aToken);
+IObject *StringToLabelOrFunctor(LPTSTR aStr);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);

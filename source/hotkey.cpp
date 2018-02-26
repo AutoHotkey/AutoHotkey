@@ -992,85 +992,82 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 
 
 
-ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions, IObject *aJumpToLabel)
+ResultType Hotkey::IfWin(LPTSTR aIfWin, LPTSTR aWinTitle, LPTSTR aWinText)
+{
+	HotCriterionType hot_criterion;
+	bool invert = !_tcsnicmp(aIfWin + 5, _T("Not"), 3);
+	if (!_tcsicmp(aIfWin + (invert ? 8 : 5), _T("Active"))) // It matches #IfWin[Not]Active.
+		hot_criterion = invert ? HOT_IF_NOT_ACTIVE : HOT_IF_ACTIVE;
+	else if (!_tcsicmp(aIfWin + (invert ? 8 : 5), _T("Exist")))
+		hot_criterion = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
+	else // It starts with IfWin but isn't Active or Exist: Don't alter the current criterion.
+		return g_script.ScriptError(ERR_PARAM1_INVALID);
+	if (!SetHotkeyCriterion(hot_criterion, aWinTitle, aWinText)) // Currently, it only fails upon out-of-memory.
+		return FAIL;
+	return OK;
+}
+
+
+
+ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj)
+// Hotkey "If"  ; Set null criterion.
+// Hotkey "If", "Exact-expression-text"
+// Hotkey "If", FunctionObject
+{
+	if (aExprObj)
+	{
+		HotkeyCriterion *cp;
+		for (cp = g_FirstHotExpr; ; cp = cp->NextExpr)
+		{
+			if (!cp) // End of the list and it wasn't found.
+			{
+				if (  !(cp = AddHotkeyIfExpr())  )
+					return FAIL;
+				aExprObj->AddRef();
+				cp->Type = HOT_IF_CALLBACK;
+				cp->Callback = aExprObj;
+				cp->WinTitle = _T("");
+				cp->WinText = _T("");
+				break;
+			}
+			if (cp->Type == HOT_IF_CALLBACK && cp->Callback == aExprObj)
+				break;
+		}
+		g->HotCriterion = cp;
+	}
+	else if (!*aExpr)
+	{
+		g->HotCriterion = NULL;
+	}
+	else
+	{
+		HotkeyCriterion *cp = FindHotkeyIfExpr(aExpr);
+		if (!cp) // Expression not found.
+			// This should only occur if aLabelName contains a variable reference, since this parameter is
+			// validated at load time where possible.  Setting ErrorLevel might go unnoticed and would be
+			// inconsistent with other modes of this command (without UseErrorLevel), so throw an error.
+			return g_script.ScriptError(ERR_HOTKEY_IF_EXPR);
+		g->HotCriterion = cp;
+	}
+	return OK;
+}
+
+
+
+ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions
+	, IObject *aJumpToLabel, HookActionType aHookAction)
 // Creates, updates, enables, or disables a hotkey dynamically (while the script is running).
 // Returns OK or FAIL.
 {
-	if (!_tcsnicmp(aHotkeyName, _T("IfWin"), 5)) // Seems reasonable to assume that anything starting with "IfWin" can't be the name of a hotkey.
-	{
-		HotCriterionType hot_criterion;
-		bool invert = !_tcsnicmp(aHotkeyName + 5, _T("Not"), 3);
-		if (!_tcsicmp(aHotkeyName + (invert ? 8 : 5), _T("Active"))) // It matches #IfWin[Not]Active.
-			hot_criterion = invert ? HOT_IF_NOT_ACTIVE : HOT_IF_ACTIVE;
-		else if (!_tcsicmp(aHotkeyName + (invert ? 8 : 5), _T("Exist")))
-			hot_criterion = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
-		else // It starts with IfWin but isn't Active or Exist: Don't alter the current criterion.
-			return g_script.ScriptError(ERR_PARAM1_INVALID);
-		if (!SetHotkeyCriterion(hot_criterion, aLabelName, aOptions)) // Currently, it only fails upon out-of-memory.
-			return FAIL;
-		return OK;
-	}
-
-	// Hotkey "If"  ; Set null criterion.
-	// Hotkey "If", "Exact-expression-text"
-	// Hotkey "If", FunctionObject
-	if (!_tcsicmp(aHotkeyName, _T("If")))
-	{
-		if (*aOptions)
-		{	// Let the script know of this error since it may indicate an unescaped comma in the expression text.
-			return g_script.ScriptError(ERR_PARAM3_MUST_BE_BLANK);
-		}
-		if (aJumpToLabel)
-		{
-			HotkeyCriterion *cp;
-			for (cp = g_FirstHotExpr; ; cp = cp->NextExpr)
-			{
-				if (!cp) // End of the list and it wasn't found.
-				{
-					if (  !(cp = AddHotkeyIfExpr())  )
-						return FAIL;
-					aJumpToLabel->AddRef();
-					cp->Type = HOT_IF_CALLBACK;
-					cp->Callback = aJumpToLabel;
-					cp->WinTitle = _T("");
-					cp->WinText = _T("");
-					break;
-				}
-				if (cp->Type == HOT_IF_CALLBACK && cp->Callback == aJumpToLabel)
-					break;
-			}
-			g->HotCriterion = cp;
-		}
-		else if (!*aLabelName)
-		{
-			g->HotCriterion = NULL;
-		}
-		else
-		{
-			HotkeyCriterion *cp = FindHotkeyIfExpr(aLabelName);
-			if (!cp) // Expression not found.
-				// This should only occur if aLabelName contains a variable reference, since this parameter is
-				// validated at load time where possible.  Setting ErrorLevel might go unnoticed and would be
-				// inconsistent with other modes of this command (without UseErrorLevel), so throw an error.
-				return g_script.ScriptError(ERR_HOTKEY_IF_EXPR);
-			g->HotCriterion = cp;
-		}
-		return OK;
-	}
-
 	// For maintainability (and script readability), don't support "U" as a substitute for "UseErrorLevel",
 	// since future options might contain the letter U as a "parameter" that immediately follows an option-letter.
 	bool use_errorlevel = tcscasestr(aOptions, _T("UseErrorLevel"));
 	#define RETURN_HOTKEY_ERROR(level, msg, info) return use_errorlevel ? g_ErrorLevel->Assign(level) \
 		: g_script.ScriptError(msg, info)
 
-	HookActionType hook_action = 0; // Set default.
-	if (!aJumpToLabel) // An object wasn't provided by caller.
-		if (  !(hook_action = ConvertAltTab(aLabelName, true))  )
-			if (  !(aJumpToLabel = g_script.FindCallable(aLabelName, NULL, INT_MAX)) // Pass INT_MAX to disable function validation (do it below).
-				&& *aLabelName  ) // Don't thrown an error yet if Label was omitted.
-				RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, ERR_NO_LABEL, aLabelName);
-	// Above has ensured that aJumpToLabel and hook_action can't both be non-zero.  Furthermore,
+	if (!aJumpToLabel && !aHookAction && *aLabelName)
+		RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, ERR_NO_LABEL, aLabelName);
+	// Caller has ensured that aJumpToLabel and aHookAction can't both be non-zero.  Furthermore,
 	// both can be zero/NULL only when the caller is updating an existing hotkey to have new options
 	// (i.e. it's retaining its current label).
 	if (aJumpToLabel) // Provided by caller or by name lookup above.
@@ -1088,7 +1085,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	bool update_all_hotkeys = false;  // This method avoids multiple calls to ManifestAllHotkeysHotstringsHooks() (which is high-overhead).
 	bool variant_was_just_created = false;
 
-	switch (hook_action)
+	switch (aHookAction)
 	{
 	case HOTKEY_ID_ON:
 	case HOTKEY_ID_OFF:
@@ -1100,11 +1097,11 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 			// already exists, it seems best to strictly require a matching variant rather than falling back
 			// onto some "default variant" such as the global variant (if any).
 			RETURN_HOTKEY_ERROR(HOTKEY_EL_NOTEXISTVARIANT, ERR_NONEXISTENT_VARIANT, aHotkeyName);
-		if (hook_action == HOTKEY_ID_TOGGLE)
-			hook_action = hk->mHookAction
+		if (aHookAction == HOTKEY_ID_TOGGLE)
+			aHookAction = hk->mHookAction
 				? (hk->mParentEnabled ? HOTKEY_ID_OFF : HOTKEY_ID_ON) // Enable/disable parent hotkey (due to alt-tab being a global hotkey).
 				: (variant->mEnabled ? HOTKEY_ID_OFF : HOTKEY_ID_ON); // Enable/disable individual variant.
-		if (hook_action == HOTKEY_ID_ON)
+		if (aHookAction == HOTKEY_ID_ON)
 		{
 			if (hk->mHookAction ? hk->EnableParent() : hk->Enable(*variant))
 				update_all_hotkeys = true; // Do it this way so that any previous "true" value isn't lost.
@@ -1114,11 +1111,11 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				update_all_hotkeys = true; // Do it this way so that any previous "true" value isn't lost.
 		break;
 
-	default: // hook_action is 0 or an AltTab action.  COMMAND: Hotkey, Name, Label|AltTabAction
+	default: // aHookAction is 0 or an AltTab action.  COMMAND: Hotkey, Name, Label|AltTabAction
 		if (!hk) // No existing hotkey of this name, so create a new hotkey.
 		{
-			if (hook_action) // COMMAND (create hotkey): Hotkey, Name, AltTabAction
-				hk = AddHotkey(NULL, hook_action, aHotkeyName, suffix_has_tilde, use_errorlevel);
+			if (aHookAction) // COMMAND (create hotkey): Hotkey, Name, AltTabAction
+				hk = AddHotkey(NULL, aHookAction, aHotkeyName, suffix_has_tilde, use_errorlevel);
 			else // COMMAND (create hotkey): Hotkey, Name, LabelName [, Options]
 			{
 				if (!aJumpToLabel) // Caller is trying to set new aOptions for a nonexistent hotkey.
@@ -1133,16 +1130,16 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		}
 		else // Hotkey already exists (though possibly not the required variant).  Update the hotkey if appropriate.
 		{
-			if (hk->mHookAction != hook_action) // COMMAND: Change to/from alt-tab hotkey.
+			if (hk->mHookAction != aHookAction) // COMMAND: Change to/from alt-tab hotkey.
 			{
 				// LoadIncludedFile() contains logic and comments similar to this, so maintain them together.
-				// If hook_action isn't zero, the caller is converting this hotkey into a global alt-tab
+				// If aHookAction isn't zero, the caller is converting this hotkey into a global alt-tab
 				// hotkey (alt-tab hotkeys are never subject to #IfWin, as documented).  Thus, variant can
 				// be NULL because making a hotkey become alt-tab doesn't require the creation or existence
 				// of a variant matching the current #IfWin criteria.  However, continue on to process the
 				// Options parameter in case it contains "On" or some other keyword applicable to alt-tab.
-				hk->mHookAction = hook_action;
-				if (!hook_action)
+				hk->mHookAction = aHookAction;
+				if (!aHookAction)
 					// Since this hotkey is going from alt-tab to non-alt-tab, make sure it's not disabled
 					// because currently, mParentEnabled is only actually used by alt-tab hotkeys (though it
 					// may have other uses in the future, which is why it's implemented and named the way it is).
@@ -1227,7 +1224,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 			}
 		} // Hotkey already existed.
 		break;
-	} // switch(hook_action)
+	} // switch(aHookAction)
 
 	// Above has ensured that hk is not NULL.
 

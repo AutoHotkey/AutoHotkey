@@ -14437,11 +14437,40 @@ BIF_DECL(BIF_DateDiff)
 
 BIF_DECL(BIF_Hotkey)
 {
-	_f_param_string(aHotkeyName, 0);
-	_f_param_string_opt(aLabelName, 1);
-	_f_param_string_opt(aOptions, 2);
-	IObject *aLabelObject = ParamIndexToOptionalObject(1);
-	if (!Hotkey::Dynamic(aHotkeyName, aLabelName, aOptions, aLabelObject))
+	_f_param_string(aParam0, 0);
+	_f_param_string_opt(aParam1, 1);
+	_f_param_string_opt(aParam2, 2);
+	
+	ResultType result;
+	IObject *functor = NULL;
+	
+	if (!_tcsnicmp(aParam0, _T("IfWin"), 5)) // Seems reasonable to assume that anything starting with "IfWin" can't be the name of a hotkey.
+	{
+		result = Hotkey::IfWin(aParam0, aParam1, aParam2);
+	}
+	else if (!_tcsicmp(aParam0, _T("If")))
+	{
+		if (!ParamIndexIsOmitted(1))
+			functor = TokenToFunctor(*aParam[1]);
+		result = Hotkey::IfExpr(aParam0, functor);
+	}
+	else
+	{
+		HookActionType hook_action = 0;
+		if (!ParamIndexIsOmitted(1))
+		{
+			if (functor = TokenToObject(*aParam[1]))
+				functor->AddRef();
+			else if (  !(hook_action = Hotkey::ConvertAltTab(aParam1, true))  )
+				functor = StringToLabelOrFunctor(aParam1);
+		}
+		result = Hotkey::Dynamic(aParam0, aParam1, aParam2, functor, hook_action);
+	}
+	
+	if (functor)
+		functor->Release();
+
+	if (!result)
 		_f_return_FAIL;
 	_f_return_empty;
 }
@@ -17047,7 +17076,32 @@ IObject *TokenToFunctor(ExprTokenType &aToken)
 	if (!*func_name)
 		return NULL; // For performance (see TokenToFunc).
 	Func *func = g_script.FindFunc(func_name);
-	return func->CloseIfNeeded();
+	return func ? func->CloseIfNeeded() : NULL;
+}
+
+
+IObject *TokenToLabelOrFunctor(ExprTokenType &aToken)
+// Returns an object if aToken contains an object or label/function name.
+// Reference is counted so CALLER MUST Release() WHEN APPROPRIATE.
+{
+	if (IObject *obj = TokenToObject(aToken))
+	{
+		obj->AddRef();
+		return obj;
+	}
+	return StringToLabelOrFunctor(TokenToString(aToken)); // No need for buf (see TokenToFunc).
+}
+
+
+
+IObject *StringToLabelOrFunctor(LPTSTR aStr)
+{
+	if (!*aStr)
+		return NULL; // For performance (see TokenToFunc).
+	if (Label *lbl = g_script.FindLabel(aStr))
+		return lbl;
+	Func *func = g_script.FindFunc(aStr);
+	return func ? func->CloseIfNeeded() : NULL;
 }
 
 
