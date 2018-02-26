@@ -2427,8 +2427,10 @@ ResultType GuiType::NameToEventHandler(LPTSTR aName, IObject *&aObject)
 		return FAIL;
 	if (!mEventSink)
 	{
-		if (  !(aObject = g_script.FindFunc(aName))  )
+		Func *func = g_script.FindFunc(aName);
+		if (!func)
 			return FAIL;
+		aObject = func->CloseIfNeeded();
 		return OK;
 	}
 	aObject = NULL;
@@ -2451,12 +2453,15 @@ ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventK
 	TCHAR nbuf[MAX_NUMBER_SIZE];
 	IObject *func = TokenToObject(*aParam[1]);
 	LPTSTR name = func ? NULL : TokenToString(*aParam[1], nbuf);
-	if (!func)
-	{
+	if (func)
+		func->AddRef();
+	else
 		if (!NameToEventHandler(name, func))
 			_o_throw(ERR_PARAM2_INVALID, name);
-	}
-	if (!OnEvent(aControl, aEvent, aEventKind, func, name, max_threads))
+	ResultType result = OnEvent(aControl, aEvent, aEventKind, func, name, max_threads);
+	if (func)
+		func->Release();
+	if (!result)
 		_o_throw(ERR_OUTOFMEM);
 	return OK;
 }
