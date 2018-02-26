@@ -2850,7 +2850,6 @@ public:
 	WinGroup *FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound = false);
 	ResultType AddGroup(LPTSTR aGroupName);
 	Label *FindLabel(LPTSTR aLabelName);
-	IObject *FindCallable(LPTSTR aLabelName, Var *aVar = NULL, int aParamCount = 0);
 
 	ResultType DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow
 		, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, DWORD &aLastError);

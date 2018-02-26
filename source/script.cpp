@@ -4004,36 +4004,6 @@ Label *Script::FindLabel(LPTSTR aLabelName)
 
 
 
-IObject *Script::FindCallable(LPTSTR aLabelName, Var *aVar, int aParamCount)
-{
-	if (aVar && aVar->HasObject())
-	{
-		IObject *obj = aVar->Object();
-		if (Func *func = LabelPtr(obj).ToFunc())
-		{
-			// It seems worth performing this additional check; without it, registration
-			// of this function would appear to succeed but it would never be called.
-			// In particular, this will alert the user that a *method* is not a valid
-			// callable object (because it requires at least one parameter: "this").
-			// For simplicity, the error message will indicate that no label was found.
-			if (func->mMinParams > aParamCount)
-				return NULL;
-		}
-		return obj;
-	}
-	if (*aLabelName)
-	{
-		if (Label *label = FindLabel(aLabelName))
-			return label;
-		if (Func *func = FindFunc(aLabelName))
-			if (func->mMinParams <= aParamCount) // See comments above.
-				return func;
-	}
-	return NULL;
-}
-
-
-
 ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 // Returns OK or FAIL.
 {
