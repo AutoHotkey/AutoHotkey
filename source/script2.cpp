@@ -14493,10 +14493,14 @@ BIF_DECL(BIF_SetTimer)
 			// Either the thread was not launched by a timer or the timer has been deleted.
 			_f_throw(ERR_PARAM1_MUST_NOT_BE_BLANK);
 	}
-	else if (  !(target_label = ParamIndexToObject(0))  )
+	else
+		target_label = ParamIndexToObject(0);
+	if (target_label)
+		target_label->AddRef();
+	else
 	{
 		LPTSTR arg1 = ParamIndexToString(0, _f_number_buf);
-		if (  !(target_label = g_script.FindCallable(arg1))  )
+		if (  !(target_label = StringToLabelOrFunctor(arg1))  )
 			_f_throw(ERR_NO_LABEL, arg1);
 	}
 	ToggleValueType toggle;
@@ -14510,8 +14514,10 @@ BIF_DECL(BIF_SetTimer)
 			if (!_tcsicmp(arg2, _T("Delete")))
 			{
 				g_script.DeleteTimer(target_label);
+				target_label->Release();
 				_f_return_empty;
 			}
+			target_label->Release();
 			_f_throw(ERR_PARAM2_INVALID, arg2);
 		}
 	}
@@ -14525,6 +14531,7 @@ BIF_DECL(BIF_SetTimer)
 	// If ARG2 is blank but ARG3 (priority) isn't, tell it to update only the priority and nothing else:
 	default: g_script.UpdateOrCreateTimer(target_label, arg2, arg3, true, !*arg2 && *arg3);
 	}
+	target_label->Release();
 	_f_return_empty;
 }
 
