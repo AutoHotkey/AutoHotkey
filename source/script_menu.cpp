@@ -185,6 +185,7 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 	// Whether an existing menu item's options should be updated without updating its submenu or label:
 	bool update_exiting_item_options = (member == M_Add && menu_item && !*param2 && *aOptions);
 
+	ResultType result;
 	IObject *target_label = NULL;  // Set default.
 	UserMenu *submenu = NULL;    // Set default.
 	if (member == M_Add && !update_exiting_item_options) // Labels and submenus are only used in conjunction with the ADD command.
@@ -198,12 +199,15 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 			// The OS doesn't seem to like that, creating empty or strange menus if it's attempted:
 			if (submenu == this || submenu->ContainsMenu(this))
 				_o_throw(_T("Submenu must not contain its parent menu."));
+			target_label = NULL;
 		}
-		else if (!target_label) // Param #2 is not an object of any kind; must be a label/function name.
+		else if (target_label) 
+			target_label->AddRef();
+		else // Param #2 is not an object of any kind; must be a label/function name.
 		{
 			if (!*param2) // Allow the label to default to the menu item name.
 				param2 = param1;
-			if (   !(target_label = g_script.FindCallable(param2, NULL, 3))   )
+			if (   !(target_label = StringToLabelOrFunctor(param2))   )
 				_o_throw(ERR_NO_LABEL, param2);
 		}
 	}
@@ -211,16 +215,27 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 	if (!menu_item)  // menu item doesn't exist, so create it (but only if the command is ADD).
 	{
 		if (member != M_Add || search_by_pos)
+		{
+			if (target_label)
+				target_label->Release();
 			// Seems best not to create menu items on-demand like this because they might get put into
-			// an incorrect position (i.e. it seems better than menu changes be kept separate from
+			// an incorrect position (i.e. it seems better that menu changes be kept separate from
 			// menu additions):
 			_o_throw(_T("Nonexistent menu item."), param1);
+		}
 
 		// Otherwise: Adding a new item that doesn't yet exist.
 		UINT item_id = g_script.GetFreeMenuItemID();
 		if (!item_id) // All ~64000 IDs are in use!
+		{
+			if (target_label)
+				target_label->Release();
 			_o_throw(_T("Too many menu items."), param1); // Short msg since so rare.
-		if (!AddItem(param1, item_id, target_label, submenu, aOptions, insert_at))
+		}
+		result = AddItem(param1, item_id, target_label, submenu, aOptions, insert_at);
+		if (target_label)
+			target_label->Release();
+		if (!result)
 			_o_throw(_T("Menu item name too long."), param1); // Can also happen due to out-of-mem, but that's too rare to display.
 		return OK;  // Item has been successfully added with the correct properties.
 	} // if (!menu_item)
@@ -236,7 +251,10 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 		// This is only reached if the ADD command is being used to update the label, submenu, or
 		// options of an existing menu item (since it would have returned above if the item was
 		// just newly created).
-		return ModifyItem(menu_item, target_label, submenu, aOptions);
+		result = ModifyItem(menu_item, target_label, submenu, aOptions);
+		if (target_label)
+			target_label->Release();
+		return result;
 	case M_Rename:
 		if (!RenameItem(menu_item, param2))
 			_o_throw(_T("Rename failed (name too long?)."), param2);
