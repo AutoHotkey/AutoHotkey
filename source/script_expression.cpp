@@ -1602,7 +1602,18 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 				goto early_abort;
 			}
 			for (int i = 0; i < mUpVarCount; ++i)
-				mUpVar[i]->UpdateAlias(aUpVars->mVar + mUpVarIndex[i]);
+			{
+				Var *outer_free_var = aUpVars->mVar + mUpVarIndex[i];
+				if (mUpVar[i]->Scope() & VAR_DOWNVAR) // This is both an upvar and a downvar.
+				{
+					Var *inner_free_var = mUpVar[i]->ResolveAlias(); // Retrieve the alias which was just set above.
+					inner_free_var->UpdateAlias(outer_free_var); // Point the free var of our layer to the outer one for use by closures within this function.
+					// mUpVar[i] is now a two-level alias (mUpVar[i] -> inner_free_var -> outer_free_var),
+					// but that will be corrected below.  Technically outer_free_var might also be an alias,
+					// in which case inner_free_var is now an alias for outer_free_var->mAliasFor.
+				}
+				mUpVar[i]->UpdateAlias(outer_free_var);
+			}
 		}
 
 		int j, count_of_actuals_that_have_formals;

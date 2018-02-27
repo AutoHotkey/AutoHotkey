@@ -13319,6 +13319,7 @@ ResultType Script::PreprocessFindUpVar(LPTSTR aName, Func &aOuter, Func &aInner,
 		if (d >= MAX_FUNC_UP_VARS)
 			return ScriptError(_T("Too many upvalues."), aOuter.mName);
 		aOuter.mDownVar[aOuter.mDownVarCount++] = aFound;
+		aFound->Scope() |= VAR_DOWNVAR;
 	}
 	if (!aLocal)
 	{
