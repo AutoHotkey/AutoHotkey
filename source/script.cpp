@@ -4204,10 +4204,11 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 						return ScriptError(_T("Too many declarations."), item); // Short message since it's so unlikely.
 					g->CurrentFunc->mGlobalVar[g->CurrentFunc->mGlobalVarCount++] = var;
 				}
-				else if (declare_type == VAR_DECLARE_SUPER_GLOBAL)
+				else
 				{
-					// Ensure the "declared" and "super-global" flags are set, in case this
-					// var was added to the list via a reference prior to the declaration.
+					// Ensure the VAR_DECLARED and (if appropriate) VAR_SUPER_GLOBAL flags are set,
+					// in case this var was added to the list via a reference prior to the declaration.
+					// Checks above have already ruled out conflicting declarations.
 					var->Scope() = declare_type;
 				}
 
