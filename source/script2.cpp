@@ -13786,18 +13786,13 @@ BIF_DECL(BIF_Func)
 
 IObject *Func::CloseIfNeeded()
 {
-	if (!mUpVarCount)
+	FreeVars *fv = (mOuterFunc && sFreeVars) ? sFreeVars->ForFunc(mOuterFunc) : NULL;
+	if (!fv)
 		// Standard practice would require AddRef() here, but we have the inside
 		// knowledge that Func ignores it (since it's allocated with SimpleHeap).
 		return this;
-	// The following should always be true because:
-	//  1) mUpVarCount != 0 implies mOuterFunc && mOuterFunc->mDownVarCount != 0.
-	//  2) A nested function can only be "found" while the outer function is executing.
-	//  3) CloseIfNeeded() is called immediately after finding the function.
-	//  4) If mDownVarCount is non-zero, Func::Call has set mFreeVars.
-	ASSERT(mOuterFunc && mOuterFunc->mFreeVars);
-	Closure *cl = new Closure(this, mOuterFunc->mFreeVars);
-	mOuterFunc->mFreeVars->AddRef();
+	Closure *cl = new Closure(this, fv);
+	fv->AddRef();
 	return cl;
 }
 

@@ -1608,6 +1608,8 @@ struct FreeVars
 {
 	int mRefCount, mVarCount;
 	Var *mVar;
+	Func *mFunc;
+	FreeVars *mOuterVars;
 
 	void AddRef()
 	{
@@ -1622,17 +1624,37 @@ struct FreeVars
 			--mRefCount;
 	}
 
-	static FreeVars *Alloc(int aCount)
+	FreeVars *ForFunc(Func *aFunc)
 	{
-		return new FreeVars(::new Var[aCount], aCount); // Must use :: to avoid SimpleHeap.
+		FreeVars *fv = this;
+		do
+		{
+			if (fv->mFunc == aFunc)
+				return fv;
+		}
+		while (fv = fv->mOuterVars);
+		return NULL;
+	}
+
+	static FreeVars *Alloc(Func &aFunc, int aVarCount, FreeVars *aOuterVars)
+	{
+		Var *v = aVarCount ? ::new Var[aVarCount] : NULL;
+		return new FreeVars(v, aFunc, aVarCount, aOuterVars); // Must use :: to avoid SimpleHeap.
 	}
 
 private:
-	FreeVars(Var *aVars, int aCount)
-		: mVar(aVars), mVarCount(aCount), mRefCount(1) {}
+	FreeVars(Var *aVars, Func &aFunc, int aVarCount, FreeVars *aOuterVars)
+		: mVar(aVars), mVarCount(aVarCount), mRefCount(1)
+		, mFunc(&aFunc), mOuterVars(aOuterVars)
+	{
+		if (aOuterVars)
+			aOuterVars->AddRef();
+	}
 
 	~FreeVars()
 	{
+		if (mOuterVars)
+			mOuterVars->Release();
 		for (int i = 0; i < mVarCount; ++i)
 			mVar[i].Free(VAR_ALWAYS_FREE);
 		::delete[] mVar; // Must use :: to avoid SimpleHeap.
@@ -1668,7 +1690,7 @@ public:
 	Var **mGlobalVar; // Array of global declarations.
 	Var **mDownVar, **mUpVar;
 	int *mUpVarIndex;
-	FreeVars *mFreeVars;
+	static FreeVars *sFreeVars;
 	#define MAX_FUNC_UP_VARS 1000
 	int mVarCount, mVarCountMax, mLazyVarCount, mGlobalVarCount; // Count of items in the above array as well as the maximum capacity.
 	int mDownVarCount, mUpVarCount;
@@ -1807,7 +1829,7 @@ public:
 		, mClass(NULL) // Also initializes mID via union.
 		, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 		, mGlobalVar(NULL), mGlobalVarCount(0)
-		, mDownVar(NULL), mDownVarCount(0), mUpVar(NULL), mUpVarCount(0), mUpVarIndex(NULL), mFreeVars(NULL)
+		, mDownVar(NULL), mDownVarCount(0), mUpVar(NULL), mUpVarCount(0), mUpVarIndex(NULL)
 		, mInstances(0)
 		, mDefaultVarType(VAR_DECLARE_LOCAL)
 		, mIsBuiltIn(aIsBuiltIn)

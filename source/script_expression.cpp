@@ -1581,24 +1581,28 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		VarBkp *backup = NULL;
 		int backup_count;
 
-		FreeVars *outer_free_vars;
-		if (mDownVarCount)
+		FreeVars *caller_free_vars = sFreeVars;
+		if (sFreeVars && mOuterFunc && !aUpVars)
+			aUpVars = sFreeVars->ForFunc(mOuterFunc);
+
+		if (mDownVarCount || aUpVars)
 		{
-			outer_free_vars = mFreeVars; // NULL unless mInstances > 0.
 			// These local vars need to persist after the function returns (and be independent of
 			// any other instances of this function).  Since we really only have one set of local
 			// vars for the lifetime of the script, make them aliases for newly allocated vars:
-			mFreeVars = FreeVars::Alloc(mDownVarCount);
+			sFreeVars = FreeVars::Alloc(*this, mDownVarCount, aUpVars);
 			for (int i = 0; i < mDownVarCount; ++i)
-				mDownVar[i]->UpdateAlias(mFreeVars->mVar + i);
+				mDownVar[i]->UpdateAlias(sFreeVars->mVar + i);
 		}
 		
 		if (mUpVarCount)
 		{
-			if (  !aUpVars // No closure, so it must be a direct call.
-				&& !(aUpVars = mOuterFunc->mFreeVars)  )
+			if (!aUpVars)
 			{
-				aResultToken.Error(_T("Func out of scope."), mName); // Keep it short since this shouldn't be possible if things are designed correctly.
+				// No aUpVars, so it must be a direct call, and mOuterFunc wasn't found in the sFreeVars
+				// linked list, so it's probably a direct call from something which doesn't support closures,
+				// occurring after mOuterFunc returned.
+				aResultToken.Error(_T("Func out of scope."), mName); // Keep it short since this shouldn't be possible once the implementation is complete.
 				goto early_abort;
 			}
 			for (int i = 0; i < mUpVarCount; ++i)
@@ -1802,14 +1806,16 @@ free_and_return:
 		--mInstances;
 
 early_abort:
-		if (mDownVarCount)
+		if (sFreeVars != caller_free_vars)
 		{
-			mFreeVars->Release();
-			mFreeVars = outer_free_vars;
+			sFreeVars->Release();
+			sFreeVars = caller_free_vars;
 		}
 	}
 	return !aResultToken.Exited(); // i.e. aResultToken.SetExitResult() or aResultToken.Error() was not called.
 }
+
+FreeVars *Func::sFreeVars = NULL;
 
 
 bool Func::Call(ResultToken &aResultToken, int aParamCount, ...)
