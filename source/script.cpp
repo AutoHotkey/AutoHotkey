@@ -1602,7 +1602,8 @@ UINT Script::LoadFromFile()
 	//
 	//  2) Warn the user (if appropriate) since they probably meant it to be global.
 	//
-	PreprocessLocalVars(mFuncs);
+	if (!PreprocessLocalVars(mFuncs))
+		return LOADING_FAILED;
 
 	// Resolve any unresolved base classes.
 	if (mUnresolvedClasses)
@@ -13194,6 +13195,9 @@ ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
 		// and warnings are skipped in that case).
 		if (  !(func.mDefaultVarType & VAR_FORCE_LOCAL)  )
 		{
+			// For error-reporting, using the open brace vs. mJumpToLine itself seems less 
+			// misleading (and both cases seem better than using the script's very last line).
+			mCurrLine = func.mJumpToLine->mPrevLine;
 			// Preprocess this function's local variables.
 			if (   !PreprocessLocalVars(func, func.mVar, func.mVarCount)
 				|| !PreprocessLocalVars(func, func.mLazyVar, func.mLazyVarCount)   )
