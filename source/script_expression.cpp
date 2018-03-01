@@ -1581,45 +1581,6 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		VarBkp *backup = NULL;
 		int backup_count;
 
-		FreeVars *caller_free_vars = sFreeVars;
-		if (sFreeVars && mOuterFunc && !aUpVars)
-			aUpVars = sFreeVars->ForFunc(mOuterFunc);
-
-		if (mDownVarCount || aUpVars)
-		{
-			// These local vars need to persist after the function returns (and be independent of
-			// any other instances of this function).  Since we really only have one set of local
-			// vars for the lifetime of the script, make them aliases for newly allocated vars:
-			sFreeVars = FreeVars::Alloc(*this, mDownVarCount, aUpVars);
-			for (int i = 0; i < mDownVarCount; ++i)
-				mDownVar[i]->UpdateAlias(sFreeVars->mVar + i);
-		}
-		
-		if (mUpVarCount)
-		{
-			if (!aUpVars)
-			{
-				// No aUpVars, so it must be a direct call, and mOuterFunc wasn't found in the sFreeVars
-				// linked list, so it's probably a direct call from something which doesn't support closures,
-				// occurring after mOuterFunc returned.
-				aResultToken.Error(_T("Func out of scope."), mName); // Keep it short since this shouldn't be possible once the implementation is complete.
-				goto early_abort;
-			}
-			for (int i = 0; i < mUpVarCount; ++i)
-			{
-				Var *outer_free_var = aUpVars->mVar + mUpVarIndex[i];
-				if (mUpVar[i]->Scope() & VAR_DOWNVAR) // This is both an upvar and a downvar.
-				{
-					Var *inner_free_var = mUpVar[i]->ResolveAlias(); // Retrieve the alias which was just set above.
-					inner_free_var->UpdateAlias(outer_free_var); // Point the free var of our layer to the outer one for use by closures within this function.
-					// mUpVar[i] is now a two-level alias (mUpVar[i] -> inner_free_var -> outer_free_var),
-					// but that will be corrected below.  Technically outer_free_var might also be an alias,
-					// in which case inner_free_var is now an alias for outer_free_var->mAliasFor.
-				}
-				mUpVar[i]->UpdateAlias(outer_free_var);
-			}
-		}
-
 		int j, count_of_actuals_that_have_formals;
 		count_of_actuals_that_have_formals = (aParamCount > mParamCount)
 			? mParamCount  // Omit any actuals that lack formals (this can happen when a dynamic call passes too many parameters).
@@ -1676,7 +1637,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			if (!Var::BackupFunctionVars(*this, backup, backup_count)) // Out of memory.
 			{
 				aResultToken.Error(ERR_OUTOFMEM, mName);
-				goto early_abort;
+				return false;
 			}
 		} // if (func.mInstances > 0)
 		//else backup is not needed because there are no other instances of this function on the call-stack.
@@ -1688,6 +1649,47 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 		// From this point on, mInstances must be decremented before returning, even on error:
 		++mInstances;
+		
+		FreeVars *caller_free_vars = sFreeVars;
+		if (sFreeVars && mOuterFunc && !aUpVars)
+			aUpVars = sFreeVars->ForFunc(mOuterFunc);
+
+		if (mDownVarCount || aUpVars)
+		{
+			// These local vars need to persist after the function returns (and be independent of
+			// any other instances of this function).  Since we really only have one set of local
+			// vars for the lifetime of the script, make them aliases for newly allocated vars:
+			sFreeVars = FreeVars::Alloc(*this, mDownVarCount, aUpVars);
+			for (int i = 0; i < mDownVarCount; ++i)
+				mDownVar[i]->UpdateAlias(sFreeVars->mVar + i);
+		}
+		else
+			sFreeVars = NULL;
+		
+		if (mUpVarCount)
+		{
+			if (!aUpVars)
+			{
+				// No aUpVars, so it must be a direct call, and mOuterFunc wasn't found in the sFreeVars
+				// linked list, so it's probably a direct call from something which doesn't support closures,
+				// occurring after mOuterFunc returned.
+				aResultToken.Error(_T("Func out of scope."), mName); // Keep it short since this shouldn't be possible once the implementation is complete.
+				goto free_and_return;
+			}
+			for (int i = 0; i < mUpVarCount; ++i)
+			{
+				Var *outer_free_var = aUpVars->mVar + mUpVarIndex[i];
+				if (mUpVar[i]->Scope() & VAR_DOWNVAR) // This is both an upvar and a downvar.
+				{
+					Var *inner_free_var = mUpVar[i]->ResolveAlias(); // Retrieve the alias which was just set above.
+					inner_free_var->UpdateAlias(outer_free_var); // Point the free var of our layer to the outer one for use by closures within this function.
+					// mUpVar[i] is now a two-level alias (mUpVar[i] -> inner_free_var -> outer_free_var),
+					// but that will be corrected below.  Technically outer_free_var might also be an alias,
+					// in which case inner_free_var is now an alias for outer_free_var->mAliasFor.
+				}
+				mUpVar[i]->UpdateAlias(outer_free_var);
+			}
+		}
 
 		for (j = 0; j < mParamCount; ++j) // For each formal parameter.
 		{
@@ -1805,12 +1807,9 @@ free_and_return:
 		// object's __Delete meta-function receive fresh variables, and none partially-destructed.
 		--mInstances;
 
-early_abort:
-		if (sFreeVars != caller_free_vars)
-		{
+		if (sFreeVars)
 			sFreeVars->Release();
-			sFreeVars = caller_free_vars;
-		}
+		sFreeVars = caller_free_vars;
 	}
 	return !aResultToken.Exited(); // i.e. aResultToken.SetExitResult() or aResultToken.Error() was not called.
 }
