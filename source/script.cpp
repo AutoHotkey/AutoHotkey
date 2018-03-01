@@ -4129,6 +4129,15 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 					{
 						// v1.1.27: "local" by itself restricts globals to only those declared inside the function.
 						declare_type |= VAR_FORCE_LOCAL;
+						if (Func *outer = g->CurrentFunc->mOuterFunc)
+						{
+							// Exclude all global declarations of the outer function.  This relies on the lack of
+							// duplicate checking below (so that a re-declaration above this line will take effect
+							// even if it was already declared in the outer function).
+							g->CurrentFunc->mGlobalVar += outer->mGlobalVarCount;
+							g->CurrentFunc->mGlobalVarCount -= outer->mGlobalVarCount;
+							mGlobalVarCountMax -= outer->mGlobalVarCount;
+						}
 					}
 					// v1.1.27: Allow "local" and "static" to be combined, leaving the restrictions on globals in place.
 					else if (g->CurrentFunc->mDefaultVarType == (VAR_DECLARE_LOCAL | VAR_FORCE_LOCAL) && declare_type == VAR_DECLARE_STATIC)
@@ -4200,7 +4209,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 					return ScriptError(_T("Built-in variables must not be declared."), item);
 				if (declare_type == VAR_DECLARE_GLOBAL && g->CurrentFunc) // i.e. "global x" in a function, not "var x" (which is also VAR_DECLARE_GLOBAL).
 				{
-					if (g->CurrentFunc->mGlobalVarCount >= MAX_FUNC_VAR_GLOBALS)
+					if (g->CurrentFunc->mGlobalVarCount >= mGlobalVarCountMax)
 						return ScriptError(_T("Too many declarations."), item); // Short message since it's so unlikely.
 					g->CurrentFunc->mGlobalVar[g->CurrentFunc->mGlobalVarCount++] = var;
 				}
@@ -5208,6 +5217,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		if (g->CurrentFunc && g->CurrentFunc == mOpenBlock->mAttribute)
 		{
 			Func &func = *g->CurrentFunc;
+			if (func.mOuterFunc)
+				// At this point both functions point to the same buffer, but maybe different portions.
+				// Reverse any adjustment that may have been made by a force-local declaration.
+				mGlobalVarCountMax += int(func.mGlobalVar - func.mOuterFunc->mGlobalVar);
 			if (func.mGlobalVarCount)
 			{
 				// Now that there can be no more "global" declarations, copy the list into persistent memory.
@@ -5912,7 +5925,10 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		func.mGlobalVarCount = func.mOuterFunc->mGlobalVarCount;
 	}
 	else
+	{
 		func.mGlobalVar = aFuncGlobalVar; // Use the stack-allocated space provided by our caller.
+		mGlobalVarCountMax = MAX_FUNC_VAR_GLOBALS;
+	}
 	mNextLineIsFunctionBody = false; // This is part of a workaround for functions which start with a nested function.
 	// Indicate success:
 	return OK;

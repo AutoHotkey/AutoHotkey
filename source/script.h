@@ -2709,6 +2709,7 @@ private:
 	FuncList mFuncs;
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
+	int mGlobalVarCountMax; // While loading the script, the maximum number of global declarations allowed for the current function.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
