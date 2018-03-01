@@ -650,10 +650,10 @@ public:
 		return (mScope & (VAR_LOCAL|VAR_LOCAL_STATIC)) == VAR_LOCAL;
 	}
 
-	//__forceinline bool IsFuncParam()
-	//{
-	//	return (mScope & VAR_LOCAL_FUNCPARAM);
-	//}
+	__forceinline bool IsFuncParam()
+	{
+		return (mScope & VAR_LOCAL_FUNCPARAM);
+	}
 
 	__forceinline bool IsDeclared()
 	// Returns true if this is a declared var, such as "local var", "static var" or a func param.

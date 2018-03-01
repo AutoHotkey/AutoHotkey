@@ -13314,6 +13314,21 @@ ResultType Script::PreprocessFindUpVar(LPTSTR aName, Func &aOuter, Func &aInner,
 		// There's only one "instance" of this variable, so alias it directly.
 		return OK;
 	}
+	if (aFound->IsFuncParam())
+	{
+		// ByRef parameters cannot be upvalues with the current implementation since it is
+		// impossible to predict (for dynamic function or method calls) which variables will
+		// be passed ByRef.  In other words, the caller's Var would have a fixed, unknown
+		// duration and therefore could not be safely captured by a closure.
+		// If this restriction is removed, make sure to update BIF_IsByRef.
+		for (int p = 0; p < aOuter.mParamCount; ++p)
+			if (aOuter.mParam[p].var == aFound)
+			{
+				if (aOuter.mParam[p].is_byref)
+					return ScriptError(_T("ByRef parameters cannot be upvalues."), aFound->mName);
+				break;
+			}
+	}
 	int d;
 	for (d = 0; d < aOuter.mDownVarCount; ++d)
 		if (aOuter.mDownVar[d] == aFound)

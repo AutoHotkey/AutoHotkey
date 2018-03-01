@@ -13806,8 +13806,15 @@ BIF_DECL(BIF_IsByRef)
 	}
 	else
 	{
-		// Return true if the var is an alias for another var.
-		_f_return_b(aParam[0]->var->ResolveAlias() != aParam[0]->var);
+		// Return true if the var is a function parameter which currently holds an alias for
+		// another var, unless it is a downvar (an alias for a free variable, rather than one
+		// passed by the caller).  The current implementation does not allow ByRef parameters
+		// to be downvars; if that is changed, this will need to differentiate between an alias
+		// to one of this function's own free variables and an alias to any other variable
+		// (including free variables from another function, or another instance of this function).
+		Var &var = *aParam[0]->var;
+		_f_return_b(var.ResolveAlias() != &var
+			&& (var.Scope() & (VAR_LOCAL_FUNCPARAM | VAR_DOWNVAR)) == VAR_LOCAL_FUNCPARAM);
 	}
 }
 
