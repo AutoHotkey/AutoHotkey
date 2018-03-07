@@ -172,29 +172,49 @@ BIF_DECL(BIF_ComObjActive)
 	{
 		HRESULT hr;
 		CLSID clsid;
-		IUnknown *punk;
+		IUnknown *punk = NULL;
 		hr = CLSIDFromString(CStringWCharFromTCharIfNeeded(TokenToString(*aParam[0])), &clsid);
 		if (SUCCEEDED(hr))
 		{
+			// valid clsid
 			hr = GetActiveObject(clsid, NULL, &punk);
-			if (SUCCEEDED(hr))
+		}
+		else
+		{
+			// not a valid CLSID or name not present in the registry
+			// try getting the object from the ROT by name
+			LPRUNNINGOBJECTTABLE pRot;
+			LPMONIKER pMon;
+
+			if (SUCCEEDED(GetRunningObjectTable(0, &pRot)))
 			{
-				IDispatch *pdisp;
-				hr = punk->QueryInterface(IID_IDispatch, (void **)&pdisp);
-				punk->Release();
-				if (SUCCEEDED(hr))
+				if (SUCCEEDED(CreateFileMoniker(CStringWCharFromTCharIfNeeded(TokenToString(*aParam[0])), &pMon)))
 				{
-					if (obj = new ComObject(pdisp))
-					{
-						aResultToken.symbol = SYM_OBJECT;
-						aResultToken.object = obj;
-						return;
-					}
-					hr = E_OUTOFMEMORY;
-					pdisp->Release();
+					pRot->GetObjectW(pMon, &punk);
+
+					pMon->Release();
 				}
+				pRot->Release();
 			}
 		}
+
+		if (punk != NULL) {
+			IDispatch *pdisp;
+			hr = punk->QueryInterface(IID_IDispatch, (void **)&pdisp);
+			punk->Release();
+			if (SUCCEEDED(hr))
+			{
+				if (obj = new ComObject(pdisp))
+				{
+					aResultToken.symbol = SYM_OBJECT;
+					aResultToken.object = obj;
+					return;
+				}
+				hr = E_OUTOFMEMORY;
+				pdisp->Release();
+			}
+		}
+
 		ComError(hr);
 	}
 }
