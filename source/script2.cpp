@@ -14596,7 +14596,12 @@ BIF_DECL(BIF_OnMessage)
 		if (mode_is_delete) // Delete a non-existent item.
 			_f_return_retval; // Yield the default return value set earlier (an empty string).
 		// From this point on, it is certain that an item will be added to the array.
-		if (  !(pmonitor = g_MsgMonitor.Add(specified_msg, callback, call_it_last))  )
+		if (func)
+			callback = func->CloseIfNeeded();
+		pmonitor = g_MsgMonitor.Add(specified_msg, callback, call_it_last);
+		if (func && func != callback)
+			callback->Release();
+		if (!pmonitor)
 			_f_throw(ERR_OUTOFMEM);
 	}
 
@@ -14631,16 +14636,7 @@ BIF_DECL(BIF_OnMessage)
 		// Continue on to the update-or-create logic below.
 	}
 
-	// Since above didn't return, above has ensured that msg_index is the index of the existing or new
-	// MsgMonitorStruct in the array.  In addition, it has set the proper return value for us.
 	// Update those struct attributes that get the same treatment regardless of whether this is an update or creation.
-	if (callback && callback != monitor.func) // Callback is being registered or changed.
-	{
-		callback->AddRef(); // Keep the object alive while it's in g_MsgMonitor.
-		if (monitor.func)
-			monitor.func->Release();
-		monitor.func = callback;
-	}
 	if (!item_already_exists || !ParamIndexIsOmitted(2))
 		monitor.max_instances = max_instances;
 	// Otherwise, the parameter was omitted so leave max_instances at its current value.
