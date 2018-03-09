@@ -13126,8 +13126,6 @@ BIF_DECL(BIF_NumGet)
 	}
 }
 
-
-
 BIF_DECL(BIF_Format)
 {
 	LPCTSTR fmt = ParamIndexToString(0), lit, cp, cp_end, cp_spec;
@@ -13135,16 +13133,23 @@ BIF_DECL(BIF_Format)
 	int size = 0, spec_len;
 	int param, last_param;
 	TCHAR number_buf[MAX_NUMBER_SIZE];
-	TCHAR spec[12+MAX_INTEGER_LENGTH*2];
+	TCHAR spec[12 + MAX_INTEGER_LENGTH * 2];
 	TCHAR custom_format;
 	ExprTokenType value;
 	*spec = '%';
-
+	
+	// Variables for handling "recursive" placeholders, eg, {+y}, {x+y}, {x+y:fmt}.
+	int recurse;					// Non-zero value indicates the presence of "recursive" placeholders. Incremented on "suspected", and decremented on false-postive "recursive" placeholders.
+	int sign;						// Indicates if "x+y" or "x-y"
+	int recursive_iteration;		// Zero-based iteration counter, ensures parameter x+y*recursive_iteration*sign is used. If x is not specified, last_param + 1 is used as x. 
+	int step_size;					// Temporarily hold the value of "y"
+	bool placeholder_is_recursive;	// Temporarily indicates if considering a recursive placeholder.
+	bool param_out_of_bounds;		// Indicates x+y*recursive_iteration*sign > aParamCount or less than 1, also catches {0:fmt}.
+	
 	for (;;)
 	{
-		last_param = 0;
-
-		for (lit = cp = fmt;; )
+		recurse = recursive_iteration = last_param = 0;
+		for (lit = cp = fmt;;)
 		{
 			// Find next placeholder.
 			for (cp_end = cp; *cp_end && *cp_end != '{'; ++cp_end);
@@ -13159,7 +13164,17 @@ BIF_DECL(BIF_Format)
 			}
 			cp = cp_end;
 			if (!*cp)
+			{
+				if (recurse) // fmt has placeholders on the form: {+y},{x+y},{x+y:...}
+				{
+					if (param_out_of_bounds) // breaks on the first valid recursive placeholder which causes a param value outside of 1...aParamCount.
+						break;
+					recursive_iteration++;
+					lit = cp = fmt;	// repeat the parsing of the format string, fmt.
+					continue;
+				}
 				break;
+			}
 			// else: Implies *cp == '{'.
 			++cp;
 			if ((*cp == '{' || *cp == '}') && cp[1] == '}') // {{} or {}}
@@ -13172,15 +13187,44 @@ BIF_DECL(BIF_Format)
 				lit = cp; // Mark this as the next literal character.
 				continue;
 			}
-			
+
 			// Index.
 			for (cp_end = cp; *cp_end >= '0' && *cp_end <= '9'; ++cp_end);
+			
 			if (cp_end > cp)
 				param = ATOI(cp), cp = cp_end;
 			else
 				param = last_param + 1;
-			if (param >= aParamCount) // Invalid parameter index.
-				continue;
+			
+			// Identify recursive placeholders, eg, {x+y...
+			sign = 1;
+			switch (*cp)
+			{
+			default:
+				placeholder_is_recursive = false;
+				break;
+			case '-':
+				sign = -1;
+			case '+':
+				++cp;
+				for (cp_end = cp; *cp_end >= '0' && *cp_end <= '9'; ++cp_end); // find y in {x+y...
+
+				if (cp_end > cp && (step_size = ATOI(cp))) // ensures step_size (y) is not zero, aviods inf. loop.
+					param += sign * step_size * recursive_iteration, cp = cp_end; // add y to param
+				else
+					continue;  // y not a number or 0, "placeholder" is literal.
+				placeholder_is_recursive = true; // Does not need to be set to false below if placeholder is found to be literal. Setting it to false as above is sufficient.
+				++recurse; // this is decremented below if placeholder is found to not be valid.
+			}
+			
+			param_out_of_bounds = false;
+			if (param >= aParamCount || param < 1) // Invalid parameter index.
+			{
+				if (placeholder_is_recursive)
+					param_out_of_bounds = true; // need to continue parsing to ensure the placeholder is not a literal, eg, {x+y:john}
+				else
+					continue;
+			}
 
 			custom_format = 0; // Set default.
 
@@ -13190,13 +13234,29 @@ BIF_DECL(BIF_Format)
 				cp_spec = ++cp;
 				// Skip valid format specifier options.
 				for (cp = cp_spec; *cp && _tcschr(_T("-+0 #"), *cp); ++cp); // flags
-				for ( ; *cp >= '0' && *cp <= '9'; ++cp); // width
+				for (; *cp >= '0' && *cp <= '9'; ++cp); // width
 				if (*cp == '.') do ++cp; while (*cp >= '0' && *cp <= '9'); // .precision
 				spec_len = int(cp - cp_spec);
 				// For now, size specifiers (h | l | ll | w | I | I32 | I64) are not supported.
-				
-				if (spec_len + 4 >= _countof(spec)) // Format specifier too long (probably invalid).
+
+				if (param_out_of_bounds) 
+				{	// Here, placeholder can only be recursive, verify out of bounds for a valid placeholder.
+					if (*cp == '}' ||	// {x+y:} 
+						(_tcschr(_T("diouxXeEfgGaAcCpsULlTt"), *cp) && *(cp + 1) == '}') ||	// eg, {x+y:d}
+						(_tcschr(_T("ULlTt"), *cp) && *(cp + 1) == 's' && *(cp + 2) == '}'))	// eg, {x+y:Us}
+						break; // valid placeholder. Break since out of bounds.
+					// not valid placeholder, must be literal
+					--recurse;
 					continue;
+				}
+
+				if (spec_len + 4 >= _countof(spec)) // Format specifier too long (probably invalid).
+				{
+					if (placeholder_is_recursive)
+						--recurse;	// Not valid recursive placeholder, decrement recurse count
+					continue;
+				}
+				
 				// Copy options, if any (+1 to leave the leading %).
 				tmemcpy(spec + 1, cp_spec, spec_len);
 				++spec_len; // Include the leading %.
@@ -13236,20 +13296,30 @@ BIF_DECL(BIF_Format)
 				spec[1] = 's';
 				spec_len = 2;
 			}
-			if (spec[spec_len - 1] == 's')
-			{
-				value.marker = ParamIndexToString(param, number_buf);
+
+			if (param_out_of_bounds)
+			{	// if here, no ':' was in the "recursive" placeholder. 
+				if (*cp == '}') // {x+y}
+					break; // valid placeholder, break since out of bounds.
+				--recurse;
+				continue; // not valid placeholder, must be literal. Eg, "{x+y..."
 			}
-			spec[spec_len] = '\0';
+			if (spec[spec_len - 1] == 's')
+				value.marker = ParamIndexToString(param, number_buf);
 			
+			spec[spec_len] = '\0';
+
 			if (*cp != '}') // Syntax error.
+			{
+				if (placeholder_is_recursive) // If true, the case is a valid recursive placeholder not ending with '}', eg, "{x+y|..." where x+y*recursive_iteration*sign is not out of bounds.
+					--recurse;	// Not valid recursive placeholder, decrement recurse count
 				continue;
+			}
 			++cp;
 			lit = cp; // Mark this as the next literal character.
 
-			// Now that validation is complete, set last_param for use by the next {} or {:fmt}.
+			// Now that validation is complete, set last_param for use by the next {} or {:fmt} or {+y} or {+y:fmt} (or -y).
 			last_param = param;
-			
 			if (target)
 			{
 				int len = _stprintf(target, spec, value.value_int64);
@@ -13278,8 +13348,6 @@ BIF_DECL(BIF_Format)
 		target = aResultToken.marker;
 	}
 }
-
-
 
 BIF_DECL(BIF_NumPut)
 {
