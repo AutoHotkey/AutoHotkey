@@ -16370,9 +16370,18 @@ BIF_DECL(ThreadSettings)
 
 	memcpy(&prev_setting, setting_ptr, size);		// Copy the current setting to the return value placeholder.
 	if (!ParamIndexIsOmitted(0))					// New setting specified.
-	{
-		int new_setting = is_bool == false ? (ParamIndexToInt(0) + dv) : ParamIndexToBOOL(0);
-		if (b[0] == 1 && !(new_setting >= b[1] && new_setting <= b[2]))		// Input validation if boundaries specified.
+	{	
+		int new_setting;
+		bool error = false;
+		if (is_bool)
+			new_setting = ParamIndexToBOOL(0);
+		else
+		{
+			ExprTokenType token;
+			error = !ParamIndexToNumber(0, token) || token.symbol == SYM_FLOAT; // Not number or float
+			new_setting = (int)token.value_int64 + dv;
+		}
+		if (error || b[0] == 1 && !(new_setting >= b[1] && new_setting <= b[2]))		// Input validation if boundaries specified.
 			_f_throw(ERR_PARAM1_INVALID);
 		memcpy(setting_ptr, &new_setting, size);							// Copy the new setting.
 	}
@@ -16397,10 +16406,19 @@ BIF_DECL(KeyDelay)
 
 	prev_setting->Append(*current_delay);		// Save current settings.
 	prev_setting->Append(*current_press);
+	ExprTokenType token;
 	if (!ParamIndexIsOmitted(0))				// Set delay.
-		*current_delay = ParamIndexToInt(0);
+	{ 
+		if (!ParamIndexToNumber(0, token) || token.symbol == SYM_FLOAT)
+			_f_throw(ERR_PARAM1_INVALID); // Not number or float
+		*current_delay = (int)token.value_int64;
+	}
 	if (!ParamIndexIsOmitted(1))				// Set press duration.
-		*current_press = ParamIndexToInt(1);
+	{
+		if (!ParamIndexToNumber(1, token) || token.symbol == SYM_FLOAT)
+			_f_throw(ERR_PARAM2_INVALID); // Not number or float
+		*current_press = (int)token.value_int64;
+	}
 	_f_return(prev_setting);
 }
 
@@ -16425,8 +16443,10 @@ BIF_DECL(CoordMode)
 	CoordModeType prev_setting = 1 + (g->CoordMode >> shift & COORD_MODE_MASK); // Note, add 1 for correct range.
 	if (!ParamIndexIsOmitted(0))
 	{
-		CoordModeType mode = ParamIndexToInt(0) - 1;							// Note, subtract 1 for correct range.
-		if (mode < COORD_MODE_CLIENT || mode > COORD_MODE_SCREEN)
+		ExprTokenType token;
+		bool error = !ParamIndexToNumber(0, token) || token.symbol == SYM_FLOAT;	// Not number or float
+		CoordModeType mode = (CoordModeType) (token.value_int64 - 1);				// Note, subtract 1 for correct range.
+		if (error || mode < COORD_MODE_CLIENT || mode > COORD_MODE_SCREEN)
 			_f_throw(ERR_PARAM1_INVALID);
 		g->CoordMode = (g->CoordMode & ~(COORD_MODE_MASK << shift)) | (mode << shift);
 	}
@@ -16438,8 +16458,10 @@ BIF_DECL(BIF_RegView)
 	DWORD prev_setting = g->RegView;
 	if (!ParamIndexIsOmitted(0))
 	{
-		DWORD new_setting = ParamIndexToInt(0);
-		if (new_setting != 32 && new_setting != 64 && new_setting != 0)
+		ExprTokenType token;
+		bool error = !ParamIndexToNumber(0, token) || token.symbol == SYM_FLOAT; // Not number or float
+		DWORD new_setting = (DWORD) token.value_int64;
+		if (error || new_setting != 32 && new_setting != 64 && new_setting != 0)
 			_f_throw(ERR_PARAM1_INVALID);
 		// Since these flags cause the registry functions to fail on Win2k and have no effect on
 		// any later 32-bit OS, ignore this command when the OS is 32-bit.
@@ -16457,7 +16479,10 @@ BIF_DECL(BIF_Critical)
 	bool prev_critical = g->ThreadIsCritical;
 	if (!ParamIndexIsOmitted(0))
 	{
-		DWORD new_setting = ParamIndexToInt(0);
+		ExprTokenType token;
+		if (!ParamIndexToNumber(0, token) || token.symbol == SYM_FLOAT)
+			_f_throw(ERR_PARAM1_INVALID); // Not number or float
+		DWORD new_setting = (DWORD)token.value_int64;
 		// Critical is turned off either by specifying DEFAULT_PEEK_FREQUENCY or 0
 		g->ThreadIsCritical = new_setting == DEFAULT_PEEK_FREQUENCY || new_setting == 0 ? false : true;
 		if (g->ThreadIsCritical) // Critical has been turned on. (For simplicity even if it was already on, the following is done.)
