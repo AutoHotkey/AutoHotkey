@@ -14869,7 +14869,7 @@ BIF_DECL(BIF_OnExitOrClipboard)
 
 
 #ifdef ENABLE_REGISTERCALLBACK
-struct RCCallbackFunc // Used by BIF_RegisterCallback() and related.
+struct RCCallbackFunc // Used by BIF_CallbackCreate() and related.
 {
 #ifdef WIN32_PLATFORM
 	ULONG data1;	//E8 00 00 00
@@ -14887,9 +14887,10 @@ struct RCCallbackFunc // Used by BIF_RegisterCallback() and related.
 #endif
 	//code ends
 	UCHAR actual_param_count; // This is the actual (not formal) number of parameters passed from the caller to the callback. Kept adjacent to the USHORT above to conserve memory due to 4-byte struct alignment.
-	bool create_new_thread; // Kept adjacent to above to conserve memory due to 4-byte struct alignment.
-	EventInfoType event_info; // A_EventInfo
-	Func *func; // The UDF to be called whenever the callback's caller calls callfuncptr.
+#define CBF_CREATE_NEW_THREAD	1
+#define CBF_PASS_PARAMS_POINTER	2
+	UCHAR flags; // Kept adjacent to above to conserve memory due to 4-byte struct alignment in 32-bit builds.
+	IObject *func; // The function object to be called whenever the callback's caller calls callfuncptr.
 };
 
 #ifdef _WIN64
@@ -14904,17 +14905,13 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 // convention assumes that the parameter size equals the pointer size. 64 integers on Win32 are passed on
 // pointers, or as two 32 bit halves for some functions...
 {
-	#define DEFAULT_CB_RETURN_VALUE 0  // The value returned to the callback's caller if script doesn't provide one.
-
 #ifdef WIN32_PLATFORM
 	RCCallbackFunc &cb = *((RCCallbackFunc*)(address-5)); //second instruction is 5 bytes after start (return address pushed by call)
 #else
 	RCCallbackFunc &cb = *((RCCallbackFunc*) address);
 #endif
-	Func &func = *cb.func; // For performance and convenience.
 
 	VarBkp ErrorLevel_saved;
-	EventInfoType EventInfo_saved;
 	BOOL pause_after_execute;
 
 	// NOTES ABOUT INTERRUPTIONS / CRITICAL:
@@ -14934,18 +14931,17 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 	// Of course, a callback can also be triggered through explicit script action such as a DllCall of
 	// EnumWindows, in which case the script would want to be interrupted unconditionally to make the call.
 	// However, in those cases it's hard to imagine that INTERRUPTIBLE_IN_EMERGENCY wouldn't be true anyway.
-	if (cb.create_new_thread)
+	if (cb.flags & CBF_CREATE_NEW_THREAD)
 	{
 		if (g_nThreads >= g_MaxThreadsTotal) // To avoid array overflow, g_MaxThreadsTotal must not be exceeded except where otherwise documented.
-			return DEFAULT_CB_RETURN_VALUE;
+			return 0;
 		// See MsgSleep() for comments about the following section.
 		ErrorLevel_Backup(ErrorLevel_saved);
 		InitNewThread(0, false, true);
 		DEBUGGER_STACK_PUSH(_T("Callback"))
 	}
-	else // Backup/restore only A_EventInfo. This avoids callbacks changing A_EventInfo for the current thread/context (that would be counterintuitive and a source of script bugs).
+	else
 	{
-		EventInfo_saved = g->EventInfo;
 		if (pause_after_execute = g->IsPaused) // Assign.
 		{
 			// v1.0.48: If the current thread is paused, this threadless callback would get stuck in
@@ -14968,69 +14964,37 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 		// because it's likely to hurt any callback that's performance-sensitive.
 	}
 
-	g->EventInfo = cb.event_info; // This is the means to identify which caller called the callback (if the script assigned more than one caller to this callback).
-
-	// For performance and to preserve stack space, the indirect method of calling a function via the new
-	// Func::Call overload is not used here.  Using it would only be necessary to support variadic functions,
-	// which have very limited use as callbacks; instead, we pass such functions a pointer to surplus params.
-
-	// Need to check if backup of function's variables is needed in case:
-	// 1) The UDF is assigned to more than one callback, in which case the UDF could be running more than once
-	//    simultaneously.
-	// 2) The callback is intended to be reentrant (e.g. a subclass/WindowProc that doesn't use Critical).
-	// 3) Script explicitly calls the UDF in addition to using it as a callback.
-	//
-	// See ExpandExpression() for detailed comments about the following section.
-	VarBkp *var_backup = NULL;  // If needed, it will hold an array of VarBkp objects.
-	int var_backup_count; // The number of items in the above array.
-	if (func.mInstances > 0) // Backup is needed (see above for explanation).
-		if (!Var::BackupFunctionVars(func, var_backup, var_backup_count)) // Out of memory.
-			return DEFAULT_CB_RETURN_VALUE; // Since out-of-memory is so rare, it seems justifiable not to have any error reporting and instead just avoid calling the function.
-
-	// The following section is similar to the one in ExpandExpression().  See it for detailed comments.
-	int i, j = cb.actual_param_count < func.mParamCount ? cb.actual_param_count : func.mParamCount;
-	for (i = 0; i < j; ++i)  // For each formal parameter that has a matching actual.
-		func.mParam[i].var->Assign((UINT_PTR)params[i]); // All parameters are passed "by value" because an earlier stage ensured there are no ByRef parameters.
-	if (func.mIsVariadic)
-		// See the performance note further above.  Rather than having the "variadic" param remain empty,
-		// pass it a pointer to the first actual parameter which wasn't assigned to a formal parameter:
-		func.mParam[func.mParamCount].var->Assign((UINT_PTR)(params + i));
-	for (; i < func.mParamCount; ++i) // For each remaining formal (i.e. those that lack actuals), apply a default value (an earlier stage verified that all such parameters have a default-value available).
-	{
-		FuncParam &this_formal_param = func.mParam[i]; // For performance and convenience.
-		// The following isn't necessary because an earlier stage has already ensured that there
-		// are no ByRef parameters in a callback:
-		//if (this_formal_param.is_byref)
-		//	this_formal_param.var->ConvertToNonAliasIfNecessary();
-		switch(this_formal_param.default_type)
-		{
-		case PARAM_DEFAULT_STR:   this_formal_param.var->Assign(this_formal_param.default_str);    break;
-		case PARAM_DEFAULT_INT:   this_formal_param.var->Assign(this_formal_param.default_int64);  break;
-		case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
-		//case PARAM_DEFAULT_NONE: Not possible due to validation at an earlier stage.
-		}
-	}
-
 	g_script.mLastPeekTime = GetTickCount(); // Somewhat debatable, but might help minimize interruptions when the callback is called via message (e.g. subclassing a control; overriding a WindowProc).
 
+	INT_PTR number_to_return;
 	FuncResult result_token;
-	++func.mInstances;
-	func.Call(&result_token); // Call the UDF.  Call()'s own return value (e.g. EARLY_EXIT or FAIL) is ignored because it wouldn't affect the handling below.
+	ExprTokenType *param, one_param;
+	int param_count;
 
-	UINT_PTR number_to_return = (UINT_PTR)TokenToInt64(result_token); // L31: For simplicity, DEFAULT_CB_RETURN_VALUE is not used - DEFAULT_CB_RETURN_VALUE is 0, which TokenToInt64 will return if the token is empty.
+	if (cb.flags & CBF_PASS_PARAMS_POINTER)
+	{
+		param_count = 1;
+		param = &one_param;
+		one_param.SetValue((UINT_PTR)params);
+	}
+	else
+	{
+		param_count = cb.actual_param_count;
+		param = (ExprTokenType *)_alloca(param_count * sizeof(ExprTokenType));
+		for (int i = 0; i < param_count; ++i)
+			param[i].SetValue((UINT_PTR)params[i]);
+	}
 	
-	result_token.Free();
-	Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count); // ABOVE must be done BEFORE this because return_value might be the contents of one of the function's local variables (which are about to be free'd).
-	--func.mInstances; // See comments in Func::Call.
-
-	if (cb.create_new_thread)
+	CallMethod(cb.func, cb.func, _T("call"), param, param_count, &number_to_return);
+	// CallMethod()'s own return value is ignored because it wouldn't affect the handling below.
+	
+	if (cb.flags & CBF_CREATE_NEW_THREAD)
 	{
 		DEBUGGER_STACK_POP()
 		ResumeUnderlyingThread(ErrorLevel_saved);
 	}
 	else
 	{
-		g->EventInfo = EventInfo_saved;
 		if (g == g_array && !g_script.mAutoExecSectionIsRunning)
 			// If the function just called used thread #0 and the AutoExec section isn't running, that means
 			// the AutoExec section definitely didn't launch or control the callback (even if it is running,
@@ -15051,50 +15015,70 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 
 
 
-BIF_DECL(BIF_RegisterCallback)
+BIF_DECL(BIF_CallbackCreate)
 // Returns: Address of callback procedure, or empty string on failure.
 // Parameters:
 // 1: Name of the function to be called when the callback routine is executed.
 // 2: Options.
 // 3: Number of parameters of callback.
-// 4: EventInfo: a DWORD set for use by UDF to identify the caller (in case more than one caller).
 //
-// Author: RegisterCallback() was created by Jonathan Rennison (JGR).
+// Author: Original x86 RegisterCallback() was created by Jonathan Rennison (JGR).
+//   x64 support by fincs.  Various changes by Lexikos.
 {
-	// Loadtime validation has ensured that at least 1 parameter is present.
-	Func *func;
-	if (  !(func = TokenToFunc(*aParam[0])) || func->mIsBuiltIn  )  // Not a valid user-defined function.
+	IObject *func = TokenToFunctor(*aParam[0]);
+	if (!func)
 		_f_throw(ERR_PARAM1_INVALID);
 
+	// Get func.MinParams (if present) for validation and default parameter count.
+	ResultToken rt;
+	rt.InitResult(_f_retval_buf);
+	ExprTokenType pt(_T("MinParams"), 9);
+	ExprTokenType *pp = &pt;
+	ResultType result = func->Invoke(rt, ExprTokenType(func), IT_GET, &pp, 1);
+	rt.Free();
+	if (!result)
+	{
+		func->Release();
+		_f_return_FAIL;
+	}
+	bool has_minparams = TokenIsPureNumeric(rt);
+	int minparams = has_minparams ? (int)TokenToInt64(rt) : 0;
+
 	LPTSTR options = ParamIndexToOptionalString(1);
+	bool pass_params_pointer = _tcschr(options, '&'); // Callback wants the address of the parameter list instead of their values.
+#ifdef WIN32_PLATFORM
+	bool use_cdecl = StrChrAny(options, _T("Cc")); // Recognize "C" as the "CDecl" option.
+	bool require_param_count = !use_cdecl; // Param count must be specified for x86 stdcall.
+#else
+	bool require_param_count = false;
+#endif
+
 	int actual_param_count;
 	if (!ParamIndexIsOmittedOrEmpty(2)) // A parameter count was specified.
 	{
 		actual_param_count = ParamIndexToInt(2);
-		if (   actual_param_count > func->mParamCount    // The function doesn't have enough formals to cover the specified number of actuals.
-				&& !func->mIsVariadic					 // ...and the function isn't designed to accept parameters via an array (or in this case, a pointer).
-			|| actual_param_count < func->mMinParams   ) // ...or the function has too many mandatory formals (caller specified insufficient actuals to cover them all).
+		if (  actual_param_count < 0 // Invalid.
+			|| has_minparams && (pass_params_pointer ? 1 : actual_param_count) < minparams  ) // Too many mandatory parameters.
 		{
+			func->Release();
 			_f_throw(ERR_PARAM3_INVALID);
 		}
 	}
+	else if (!has_minparams || pass_params_pointer && require_param_count)
+	{
+		func->Release();
+		_f_throw(ERR_PARAM3_MUST_NOT_BE_BLANK);
+	}
 	else // Default to the number of mandatory formal parameters in the function's definition.
-		actual_param_count = func->mMinParams;
+		actual_param_count = minparams;
 
 #ifdef WIN32_PLATFORM
-	bool use_cdecl = StrChrAny(options, _T("Cc")); // Recognize "C" as the "CDecl" option.
 	if (!use_cdecl && actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).
 	{
+		func->Release();
 		_f_throw(ERR_PARAM3_INVALID);
 	}
 #endif
-
-	// To improve callback performance, ensure there are no ByRef parameters (for simplicity: not even ones that
-	// have default values).  This avoids the need to ensure formal parameters are non-aliases each time the
-	// callback is called.
-	for (int i = 0; i < func->mParamCount; ++i)
-		if (func->mParam[i].is_byref)
-			_f_throw(ERR_PARAM1_INVALID); // Incompatible function (param #1).
 
 	// GlobalAlloc() and dynamically-built code is the means by which a script can have an unlimited number of
 	// distinct callbacks. On Win32, GlobalAlloc is the same function as LocalAlloc: they both point to
@@ -15109,7 +15093,10 @@ BIF_DECL(BIF_RegisterCallback)
 	//						memory and the VirtualProtect function to grant PAGE_EXECUTE access."
 	RCCallbackFunc *callbackfunc=(RCCallbackFunc*) GlobalAlloc(GMEM_FIXED,sizeof(RCCallbackFunc));	//allocate structure off process heap, automatically RWE and fixed.
 	if (!callbackfunc)
+	{
+		func->Release();
 		_f_throw(ERR_OUTOFMEM);
+	}
 	RCCallbackFunc &cb = *callbackfunc; // For convenience and possible code-size reduction.
 
 #ifdef WIN32_PLATFORM
@@ -15151,10 +15138,13 @@ BIF_DECL(BIF_RegisterCallback)
 	cb.callfuncptr = RegisterCallbackCStub;
 #endif
 
-	cb.event_info = (EventInfoType)ParamIndexToOptionalInt64(3, (size_t)callbackfunc);
 	cb.func = func;
 	cb.actual_param_count = actual_param_count;
-	cb.create_new_thread = !StrChrAny(options, _T("Ff")); // Recognize "F" as the "fast" mode that avoids creating a new thread.
+	cb.flags = 0;
+	if (!StrChrAny(options, _T("Ff"))) // Recognize "F" as the "fast" mode that avoids creating a new thread.
+		cb.flags |= CBF_CREATE_NEW_THREAD;
+	if (pass_params_pointer)
+		cb.flags |= CBF_PASS_PARAMS_POINTER;
 
 	// If DEP is enabled (and sometimes when DEP is apparently "disabled"), we must change the
 	// protection of the page of memory in which the callback resides to allow it to execute:
@@ -15162,6 +15152,15 @@ BIF_DECL(BIF_RegisterCallback)
 	VirtualProtect(callbackfunc, sizeof(RCCallbackFunc), PAGE_EXECUTE_READWRITE, &dwOldProtect);
 
 	_f_return_i((__int64)callbackfunc); // Yield the callable address as the result.
+}
+
+BIF_DECL(BIF_CallbackFree)
+{
+	RCCallbackFunc *callbackfunc = (RCCallbackFunc *)ParamIndexToIntPtr(0);
+	callbackfunc->func->Release();
+	callbackfunc->func = NULL; // To help detect bugs.
+	GlobalFree(callbackfunc);
+	_f_return_empty;
 }
 
 #endif

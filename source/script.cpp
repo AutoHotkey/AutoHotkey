@@ -123,7 +123,8 @@ FuncEntry g_BIF[] =
 	BIF1(Hotstring, 1, 3, false),
 	BIF1(SetTimer, 0, 3, false),
 	BIF1(OnMessage, 2, 3, false),
-	BIF1(RegisterCallback, 1, 4, true),
+	BIF1(CallbackCreate, 1, 3, true),
+	BIF1(CallbackFree, 1, 1, false),
 	BIF1(Type, 1, 1, true),
 	BIF1(IsObject, 1, NA, true),
 	

@@ -3106,7 +3106,8 @@ BIF_DECL(BIF_OnExitOrClipboard);
 BIF_DECL(BIF_ClipboardAll);
 
 #ifdef ENABLE_REGISTERCALLBACK
-BIF_DECL(BIF_RegisterCallback);
+BIF_DECL(BIF_CallbackCreate);
+BIF_DECL(BIF_CallbackFree);
 #endif
 
 BIF_DECL(BIF_Input);

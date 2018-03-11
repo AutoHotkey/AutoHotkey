@@ -1937,7 +1937,7 @@ void ResumeUnderlyingThread(VarBkp &aSavedErrorLevel)
 	// such an emergency interruption, a critical thread should be uninterruptible again.
 	//g->AllowThreadToBeInterrupted = !g->ThreadIsCritical;
 	// ABOVE: if g==g_array now, g->ThreadIsCritical==true should be possible only when the AutoExec
-	// section is still running (and it has turned on Critical), or if a threadless RegisterCallback()
+	// section is still running (and it has turned on Critical), or if a threadless CallbackCreate()
 	// function is running in the idle thread (the docs discourage that).
 
 	// If this was the last running thread and the script has nothing keeping it open (hotkeys, Gui,

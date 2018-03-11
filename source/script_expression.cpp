@@ -207,7 +207,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						this_token.SetValue(g->mLoopIteration);
 						goto push_this_token;
 					}
-					if (this_token.var->mVV->Get == BIV_EventInfo) // v1.0.48.02: A_EventInfo is used often enough in performance-sensitive numeric contexts to seem worth special treatment like A_Index; e.g. LV_GetText(RowText, A_EventInfo) or RegisterCallback()'s A_EventInfo.
+					if (this_token.var->mVV->Get == BIV_EventInfo) // Not really useful for performance anymore, but allows it to have the correct "Integer" type.
 					{
 						this_token.SetValue(g->EventInfo);
 						goto push_this_token;
