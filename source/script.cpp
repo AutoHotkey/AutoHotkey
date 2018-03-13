@@ -5638,12 +5638,12 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		TCHAR full_name[MAX_VAR_NAME_LENGTH + 1 + 1]; // Extra +1 for null terminator.
 		_sntprintf(full_name, MAX_VAR_NAME_LENGTH + 1, _T("%s.%s"), mClassName, aBuf);
 		full_name[MAX_VAR_NAME_LENGTH + 1] = '\0'; // Must terminate at this exact point if _sntprintf hit the limit.
-
+		
 		// Check for duplicates and determine insert_pos:
 		Func *found_func;
 		ExprTokenType found_item;
 		if (!mClassProperty && class_object->GetItem(found_item, aBuf) // Must be done in addition to the below to detect conflicting var/method declarations.
-			|| (found_func = FindFunc(full_name, 0, &insert_pos))) // Must be done to determine insert_pos.
+			|| (found_func = FindFunc(full_name, -1, &insert_pos))) // Must be done to determine insert_pos.
 		{
 			return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf); // The parameters are omitted due to temporary termination above.  This might make it more obvious why "X[]" and "X()" are considered duplicates.
 		}
@@ -5651,7 +5651,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 		*param_start = '('; // Undo temporary termination.
 
 		// Below passes class_object for AddFunc() to store the func "by reference" in it:
-		if (  !(g->CurrentFunc = AddFunc(full_name, 0, false, insert_pos, class_object))  )
+		if (  !(g->CurrentFunc = AddFunc(full_name, -1, false, insert_pos, class_object))  )
 			return FAIL;
 	}
 	else
@@ -6549,16 +6549,16 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 // and built-in functions are returned only if g->CurrentFunc == NULL (so that nested functions
 // "shadow" built-in functions but do not actually replace them globally).
 {
-	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
+	if (aFuncNameLength == -1) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = _tcslen(aFuncName);
 
 	if (apInsertPos) // L27: Set default for maintainability.
 		*apInsertPos = -1;
-
+	
 	// For the below, no error is reported because callers don't want that.  Instead, simply return
 	// NULL to indicate that names that are illegal or too long are not found.  If the caller later
 	// tries to add the function, it will get an error then:
-	if (aFuncNameLength > MAX_VAR_NAME_LENGTH)
+	if (aFuncNameLength > MAX_VAR_NAME_LENGTH || !aFuncNameLength)
 		return NULL;
 
 	// The following copy is made because it allows the name searching to use _tcsicmp() instead of
@@ -6658,7 +6658,7 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 // Returns the address of the new function or NULL on failure.
 // The caller must already have verified that this isn't a duplicate function.
 {
-	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
+	if (aFuncNameLength == -1) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = _tcslen(aFuncName);
 
 	if (aFuncNameLength > MAX_VAR_NAME_LENGTH) // FindFunc(), BIF_OnMessage() and perhaps others rely on this limit being enforced.

@@ -13754,20 +13754,15 @@ BIF_DECL(BIF_IsLabel)
 
 
 BIF_DECL(BIF_IsFunc) // Lexikos: Added for use with dynamic function calls.
-// Although it's tempting to return an integer like 0x8000000_min_max, where min/max are the function's
-// minimum and maximum number of parameters stored in the low-order DWORD, it would be more friendly and
-// readable to implement those outputs as optional ByRef parameters;
-//     e.g. IsFunc(FunctionName, ByRef Minparameters, ByRef Maxparameters)
-// It's also tempting to return something like 1+func.mInstances; but mInstances is tracked only due to
-// the nature of the current implementation of function-recursion; it might not be something that would
-// be tracked in future versions, and its value to the script is questionable.  Finally, a pointer to
-// the Func struct itself could be returns so that the script could use NumGet() to retrieve function
-// attributes.  However, that would expose implementation details that might be likely to change in the
-// future, plus it would be cumbersome to use.  Therefore, something simple seems best; and since a
-// dynamic function-call fails when too few parameters are passed (but not too many), it seems best to
-// indicate to the caller not only that the function exists, but also how many parameters are required.
+// Returns a non-zero value if the function exists in the current scope.  Since a dynamic function-call
+// fails when too few parameters are passed (but not too many), the return value indicates to the caller
+// not only that the function exists, but also how many parameters are required.  Although this may seem
+// redundant due to Func().MinParams, it has the benefit of not creating a new closure if the function
+// is a nested one with upvalues.
 {
-	Func *func = TokenToFunc(*aParam[0]);
+	if (ParamIndexToObject(0))
+		_f_throw(ERR_PARAM1_INVALID); // Seems worthwhile to avoid confusion.
+	Func *func = g_script.FindFunc(ParamIndexToString(0));
 	_f_return_i(func ? (__int64)func->mMinParams+1 : 0);
 }
 
@@ -13775,9 +13770,11 @@ BIF_DECL(BIF_IsFunc) // Lexikos: Added for use with dynamic function calls.
 
 BIF_DECL(BIF_Func)
 // Returns a reference to an existing user-defined or built-in function, as an object.
+// Returns a new closure if the function has upvalues.
 {
-	Func *func = TokenToFunc(*aParam[0]);
-	if (func)
+	if (ParamIndexToObject(0))
+		_f_throw(ERR_PARAM1_INVALID); // For consistency with IsFunc().
+	if (Func *func = g_script.FindFunc(ParamIndexToString(0)))
 		_f_return(func->CloseIfNeeded());
 	else
 		_f_return_empty;
