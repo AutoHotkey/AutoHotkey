@@ -2042,7 +2042,7 @@ public:
 	IObject_Type_Impl("Menu")
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
-	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions, UserMenuItem **aInsertAt);
+	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions, UserMenuItem **aInsertAt, ResultToken &aResultToken);
 	ResultType InternalAppendMenu(UserMenuItem *aMenuItem, UserMenuItem *aInsertBefore = NULL);
 	ResultType DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev);
 	ResultType DeleteAllItems();

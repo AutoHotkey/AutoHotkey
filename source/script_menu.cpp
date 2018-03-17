@@ -103,8 +103,8 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 	case M_Add:
 		if (*param1) // Since a menu item name was given, it's not a separator line.
 			break; // Let a later switch() handle it.
-		if (!AddItem(_T(""), g_script.GetFreeMenuItemID(), NULL, NULL, _T(""), insert_at)) // Even separators get an ID, so that they can be modified later using the position& notation.
-			_o_throw(ERR_OUTOFMEM);  // Out of mem should be the only possibility in this case.
+		if (!AddItem(_T(""), g_script.GetFreeMenuItemID(), NULL, NULL, _T(""), insert_at, aResultToken)) // Even separators get an ID, so that they can be modified later using the position& notation.
+			return FAIL;
 		return OK;
 
 	case M_Delete:
@@ -232,12 +232,10 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 				callback->Release();
 			_o_throw(_T("Too many menu items."), param1); // Short msg since so rare.
 		}
-		result = AddItem(param1, item_id, callback, submenu, aOptions, insert_at);
+		result = AddItem(param1, item_id, callback, submenu, aOptions, insert_at, aResultToken);
 		if (callback)
 			callback->Release();
-		if (!result)
-			_o_throw(_T("Menu item name too long."), param1); // Can also happen due to out-of-mem, but that's too rare to display.
-		return OK;  // Item has been successfully added with the correct properties.
+		return result;
 	} // if (!menu_item)
 
 	// Above has found the correct menu_item to operate upon (it already returned if
@@ -505,19 +503,19 @@ UserMenuItem *UserMenu::FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bo
 
 
 ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions
-	, UserMenuItem **aInsertAt)
+	, UserMenuItem **aInsertAt, ResultToken &aResultToken)
 // Caller must have already ensured that aName does not yet exist as a user-defined menu item
 // in this->mMenu.
 {
 	size_t length = _tcslen(aName);
 	if (length > MAX_MENU_NAME_LENGTH)
-		return FAIL;  // Caller should show error if desired.
+		return aResultToken.Error(_T("Menu item name too long."), aName);
 	// After mem is allocated, the object takes charge of its later deletion:
 	LPTSTR name_dynamic;
 	if (length)
 	{
 		if (   !(name_dynamic = tmalloc(length + 1))   )  // +1 for terminator.
-			return FAIL;  // Caller should show error if desired.
+			return aResultToken.Error(ERR_OUTOFMEM);
 		_tcscpy(name_dynamic, aName);
 	}
 	else
@@ -527,7 +525,7 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, Use
 	{
 		if (name_dynamic != Var::sEmptyString)
 			free(name_dynamic);
-		return FAIL;  // Caller should show error if desired.
+		return aResultToken.Error(ERR_OUTOFMEM);
 	}
 	if (mMenu)
 	{
