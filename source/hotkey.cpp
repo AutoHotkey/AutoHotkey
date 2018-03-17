@@ -1066,7 +1066,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		: g_script.ScriptError(msg, info)
 
 	if (!aJumpToLabel && !aHookAction && *aLabelName)
-		RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, ERR_NO_LABEL, aLabelName);
+		RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, ERR_PARAM2_INVALID, aLabelName);
 	// Caller has ensured that aJumpToLabel and aHookAction can't both be non-zero.  Furthermore,
 	// both can be zero/NULL only when the caller is updating an existing hotkey to have new options
 	// (i.e. it's retaining its current label).

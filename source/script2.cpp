@@ -17073,31 +17073,14 @@ IObject *TokenToFunctor(ExprTokenType &aToken)
 		obj->AddRef();
 		return obj;
 	}
-	LPTSTR func_name = TokenToString(aToken); // No need for buf (see TokenToFunc).
-	if (!*func_name)
-		return NULL; // For performance (see TokenToFunc).
-	Func *func = g_script.FindFunc(func_name);
-	return func ? func->CloseIfNeeded() : NULL;
+	return StringToFunctor(TokenToString(aToken)); // No need for buf (see TokenToFunc).
 }
-
-
-IObject *TokenToLabelOrFunctor(ExprTokenType &aToken)
-// Returns an object if aToken contains an object or label/function name.
-// Reference is counted so CALLER MUST Release() WHEN APPROPRIATE.
-{
-	if (IObject *obj = TokenToObject(aToken))
-	{
-		obj->AddRef();
-		return obj;
-	}
-	return StringToLabelOrFunctor(TokenToString(aToken)); // No need for buf (see TokenToFunc).
-}
-
 
 
 IObject *StringToLabelOrFunctor(LPTSTR aStr)
+// Reference is counted so CALLER MUST Release() WHEN APPROPRIATE.
 {
-	if (Label *lbl = g_script.FindLabel(aStr))
+	if (Label *lbl = g_script.FindLabel(aStr, false))
 		return lbl;
 	return StringToFunctor(aStr);
 }
@@ -17105,6 +17088,7 @@ IObject *StringToLabelOrFunctor(LPTSTR aStr)
 
 
 IObject *StringToFunctor(LPTSTR aStr)
+// Reference is counted so CALLER MUST Release() WHEN APPROPRIATE.
 {
 	Func *func = g_script.FindFunc(aStr);
 	return func ? func->CloseIfNeeded() : NULL;

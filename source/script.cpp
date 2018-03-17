@@ -3985,7 +3985,7 @@ void Script::DeleteTimer(IObject *aLabel)
 
 
 
-Label *Script::FindLabel(LPTSTR aLabelName)
+Label *Script::FindLabel(LPTSTR aLabelName, bool aSearchLocal)
 // Returns the first label whose name matches aLabelName, or NULL if not found.
 // v1.0.42: Since duplicates labels are now possible (to support #IfWin variants of a particular
 // hotkey or hotstring), callers must be aware that only the first match is returned.
@@ -3994,7 +3994,7 @@ Label *Script::FindLabel(LPTSTR aLabelName)
 {
 	if (!aLabelName || !*aLabelName) return NULL;
 	Label *label;
-	if (g->CurrentFunc)
+	if (g->CurrentFunc && aSearchLocal)
 		for (label = g->CurrentFunc->mFirstLabel; label != NULL; label = label->mNextLabel)
 			if (!_tcsicmp(label->mName, aLabelName))
 				return label;
