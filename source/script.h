@@ -1987,14 +1987,14 @@ class UserMenu : public ObjectBase
 {
 public:
 	UserMenuItem *mFirstMenuItem, *mLastMenuItem, *mDefault;
+	UserMenu *mNextMenu;  // Next item in linked list
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
 	bool mIncludeStandardItems;
 	int mClickCount; // How many clicks it takes to trigger the default menu item.  2 = double-click
 	UINT mMenuItemCount;  // The count of user-defined menu items (doesn't include the standard items, if present).
-	UserMenu *mNextMenu;  // Next item in linked list
-	HMENU mMenu;
 	MenuTypeType mMenuType; // MENU_TYPE_POPUP (via CreatePopupMenu) vs. MENU_TYPE_BAR (via CreateMenu).
+	HMENU mMenu;
 	HBRUSH mBrush;   // Background color to apply to menu.
 	COLORREF mColor; // The color that corresponds to the above.
 
