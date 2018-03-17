@@ -13144,7 +13144,7 @@ BIF_DECL(BIF_Format)
 	int recursive_iteration;		// Zero-based iteration counter, ensures parameter x+y*recursive_iteration*sign is used. If x is not specified, last_param + 1 is used as x. 
 	int step_size;					// Temporarily hold the value of "y"
 	bool placeholder_is_recursive;	// Temporarily indicates if considering a recursive placeholder.
-	bool param_out_of_bounds;		// Indicates x+y*recursive_iteration*sign > aParamCount or less than 1, also catches {0:fmt}.
+	bool param_out_of_bounds;		// Indicates x+y*recursive_iteration*sign > aParamCount or less than 1.
 	
 	for (;;)
 	{
@@ -13167,8 +13167,6 @@ BIF_DECL(BIF_Format)
 			{
 				if (recurse) // fmt has placeholders on the form: {+y},{x+y},{x+y:...}
 				{
-					if (param_out_of_bounds) // breaks on the first valid recursive placeholder which causes a param value outside of 1...aParamCount.
-						break;
 					recursive_iteration++;
 					lit = cp = fmt;	// repeat the parsing of the format string, fmt.
 					continue;
@@ -13216,9 +13214,9 @@ BIF_DECL(BIF_Format)
 				placeholder_is_recursive = true; // Does not need to be set to false below if placeholder is found to be literal. Setting it to false as above is sufficient.
 				++recurse; // this is decremented below if placeholder is found to not be valid.
 			}
-			
+
 			param_out_of_bounds = false;
-			if (param >= aParamCount || param < 1) // Invalid parameter index.
+			if (param >= aParamCount || param < 1) // Invalid parameter index. I.e, "{0}" or something like "{" 0x80000000+0 "}" or "{x-y}"
 			{
 				if (placeholder_is_recursive)
 					param_out_of_bounds = true; // need to continue parsing to ensure the placeholder is not a literal, eg, {x+y:john}
