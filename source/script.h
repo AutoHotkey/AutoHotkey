@@ -1874,7 +1874,7 @@ struct FuncEntry
 class ScriptTimer
 {
 public:
-	LabelRef mLabel;
+	LabelRef mCallback;
 	DWORD mPeriod; // v1.0.36.33: Changed from int to DWORD to double its capacity.
 	DWORD mTimeLastRun;  // TickCount
 	int mPriority;  // Thread priority relative to other threads, default 0.
@@ -1885,7 +1885,7 @@ public:
 	void ScriptTimer::Disable();
 	ScriptTimer(IObject *aLabel)
 		#define DEFAULT_TIMER_PERIOD 250
-		: mLabel(aLabel), mPeriod(DEFAULT_TIMER_PERIOD), mPriority(0) // Default is always 0.
+		: mCallback(aLabel), mPeriod(DEFAULT_TIMER_PERIOD), mPriority(0) // Default is always 0.
 		, mExistingThreads(0), mTimeLastRun(0)
 		, mEnabled(false), mRunOnlyOnce(false), mNextTimer(NULL)  // Note that mEnabled must default to false for the counts to be right.
 	{}
@@ -2042,11 +2042,11 @@ public:
 	IObject_Type_Impl("Menu")
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
-	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions, UserMenuItem **aInsertAt);
+	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions, UserMenuItem **aInsertAt);
 	ResultType InternalAppendMenu(UserMenuItem *aMenuItem, UserMenuItem *aInsertBefore = NULL);
 	ResultType DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev);
 	ResultType DeleteAllItems();
-	ResultType ModifyItem(UserMenuItem *aMenuItem, IObject *aLabel, UserMenu *aSubmenu, LPTSTR aOptions);
+	ResultType ModifyItem(UserMenuItem *aMenuItem, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions);
 	void UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions);
 	ResultType RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName);
 	ResultType UpdateName(UserMenuItem *aMenuItem, LPTSTR aNewName);
@@ -2084,7 +2084,7 @@ class UserMenuItem
 public:
 	LPTSTR mName;  // Dynamically allocated.
 	size_t mNameCapacity;
-	LabelRef mLabel;
+	LabelRef mCallback;
 	UserMenu *mSubmenu;
 	UserMenu *mMenu;  // The menu to which this item belongs.  Needed to support script var A_ThisMenu.
 	UINT mMenuID;
@@ -2114,7 +2114,7 @@ public:
 	};
 
 	// Constructor:
-	UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, IObject *aLabel, UserMenu *aSubmenu, UserMenu *aMenu);
+	UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, UserMenu *aMenu);
 
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
@@ -3239,6 +3239,7 @@ Func *TokenToFunc(ExprTokenType &aToken);
 IObject *TokenToFunctor(ExprTokenType &aToken);
 IObject *TokenToLabelOrFunctor(ExprTokenType &aToken);
 IObject *StringToLabelOrFunctor(LPTSTR aStr);
+IObject *StringToFunctor(LPTSTR aStr);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);

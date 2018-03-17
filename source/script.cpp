@@ -3869,7 +3869,7 @@ void ScriptTimer::Disable()
 
 
 
-ResultType Script::UpdateOrCreateTimer(IObject *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
+ResultType Script::UpdateOrCreateTimer(IObject *aCallback, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
 	, bool aUpdatePriorityOnly)
 // Caller should specific a blank aPeriod to prevent the timer's period from being changed
 // (i.e. if caller just wants to turn on or off an existing timer).  But if it does this
@@ -3878,12 +3878,12 @@ ResultType Script::UpdateOrCreateTimer(IObject *aLabel, LPTSTR aPeriod, LPTSTR a
 {
 	ScriptTimer *timer;
 	for (timer = mFirstTimer; timer != NULL; timer = timer->mNextTimer)
-		if (timer->mLabel == aLabel) // Match found.
+		if (timer->mCallback == aCallback) // Match found.
 			break;
 	bool timer_existed = (timer != NULL);
 	if (!timer_existed)  // Create it.
 	{
-		if (   !(timer = new ScriptTimer(aLabel))   )
+		if (   !(timer = new ScriptTimer(aCallback))   )
 			return ScriptError(ERR_OUTOFMEM);
 		if (!mFirstTimer)
 			mFirstTimer = mLastTimer = timer;
@@ -3951,7 +3951,7 @@ void Script::DeleteTimer(IObject *aLabel)
 {
 	ScriptTimer *timer, *previous = NULL;
 	for (timer = mFirstTimer; timer != NULL; previous = timer, timer = timer->mNextTimer)
-		if (timer->mLabel == aLabel) // Match found.
+		if (timer->mCallback == aLabel) // Match found.
 		{
 			// Disable it, even if it's not technically being deleted yet.
 			if (timer->mEnabled)
@@ -3961,8 +3961,8 @@ void Script::DeleteTimer(IObject *aLabel)
 				if (!aLabel) // Caller requested we delete a previously marked timer which
 					continue; // has now finished, but this one hasn't, so keep looking.
 				// In this case we can't delete the timer yet, so mark it for later deletion.
-				timer->mLabel = NULL;
-				// Clearing mLabel:
+				timer->mCallback = NULL;
+				// Clearing mCallback:
 				//  1) Marks the timer to be deleted after its last thread finishes.
 				//  2) Ensures any subsequently created timer will get default settings.
 				//  3) Allows the object to be freed before the timer subroutine returns
@@ -13473,7 +13473,7 @@ LPTSTR Script::ListKeyHistory(LPTSTR aBuf, int aBufSize) // aBufSize should be a
 	*timer_list = '\0';
 	for (ScriptTimer *timer = mFirstTimer; timer != NULL; timer = timer->mNextTimer)
 		if (timer->mEnabled)
-			sntprintfcat(timer_list, _countof(timer_list) - 3, _T("%s "), timer->mLabel->Name()); // Allow room for "..."
+			sntprintfcat(timer_list, _countof(timer_list) - 3, _T("%s "), timer->mCallback->Name()); // Allow room for "..."
 	if (*timer_list)
 	{
 		size_t length = _tcslen(timer_list);

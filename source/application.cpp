@@ -733,7 +733,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// And just in case a menu item that lacks a label (such as a separator) is ever
 				// somehow selected (perhaps via someone sending direct messages to us, bypassing
 				// the menu):
-				if (!menu_item->mLabel)
+				if (!menu_item->mCallback)
 					continue;
 				// Ignore/discard a hotkey or custom menu item event if the current thread's priority
 				// is higher than it's:
@@ -1205,7 +1205,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					(__int64)(menu_item->Pos() + 1), // +1 to convert zero-based to one-based.
 					menu
 				};
-				menu_item->mLabel->ExecuteInNewThread(_T("Menu"), param, _countof(param));
+				menu_item->mCallback->ExecuteInNewThread(_T("Menu"), param, _countof(param));
 				menu->Release();
 				if (pgui)
 					pgui->Release();
@@ -1585,7 +1585,7 @@ bool CheckScriptTimers()
 		g->CurrentTimer = &timer;
 
 		++timer.mExistingThreads;
-		timer.mLabel->ExecuteInNewThread(_T("Timer"));
+		timer.mCallback->ExecuteInNewThread(_T("Timer"));
 		--timer.mExistingThreads;
 
 		// Resolve the next timer only now, in case other timers were created or deleted while
@@ -1600,12 +1600,12 @@ bool CheckScriptTimers()
 		// but that would only work if the script releases its last reference to the object
 		// *before* the timer expires.
 		// mEnabled is checked in case the timer re-enabled itself.
-		if (timer.mRunOnlyOnce && !timer.mEnabled && timer.mLabel.IsLiveObject())
-			timer.mLabel = NULL;
-		// If the script attempted to delete this timer while it was executing, mLabel was set
+		if (timer.mRunOnlyOnce && !timer.mEnabled && timer.mCallback.IsLiveObject())
+			timer.mCallback = NULL;
+		// If the script attempted to delete this timer while it was executing, mCallback was set
 		// to NULL and it is now time to delete the timer.  mExistingThreads == 0 is implied
 		// at this point since timers are only allowed one thread.
-		if (timer.mLabel == NULL)
+		if (timer.mCallback == NULL)
 			g_script.DeleteTimer(NULL);
 	} // for() each timer.
 
