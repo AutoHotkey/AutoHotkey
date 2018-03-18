@@ -13317,7 +13317,10 @@ ResultType Script::PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCou
 ResultType Script::PreprocessFindUpVar(LPTSTR aName, Func &aOuter, Func &aInner, Var *&aFound, Var *aLocal)
 {
 	g->CurrentFunc = &aOuter;
-	aFound = FindVar(aName);
+	// If aOuter is assume-global, add the variable as global if no variable is found.
+	// Otherwise, the presence of a global variable reference *anywhere in the script*
+	// would affect whether the one in aInner is global, which is counter-intuitive.
+	aFound = (aOuter.mDefaultVarType == VAR_DECLARE_GLOBAL) ? FindOrAddVar(aName) : FindVar(aName);
 	if (!aFound)
 	{
 		if (aOuter.mOuterFunc && !(aOuter.mDefaultVarType & VAR_FORCE_LOCAL))
