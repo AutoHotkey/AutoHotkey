@@ -13280,6 +13280,7 @@ ResultType Script::PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCou
 					// There's only one "instance" of this variable, so alias it directly.
 					// Leave it in aVarList so that it appears in ListVars.
 					var.UpdateAlias(ovar);
+					var.Scope() |= VAR_LOCAL_STATIC; // Disable backup/restore of this var when aFunc.mInstances > 0, for performance.
 					continue;
 				case VAR_GLOBAL:
 					// There's only one "instance" of this variable, so alias it directly.
