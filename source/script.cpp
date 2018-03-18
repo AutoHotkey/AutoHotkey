@@ -13366,6 +13366,10 @@ ResultType Script::PreprocessFindUpVar(LPTSTR aName, Func &aOuter, Func &aInner,
 		if (  !(aLocal = FindOrAddVar(aName, 0, FINDVAR_LOCAL))  )
 			return FAIL;
 	}
+	// If aInner is assume-static, aLocal should be static at this point (but not VAR_DECLARED).
+	// Ensure aLocal is non-static so that if aInner is interrupted by a different closure of the
+	// same function, aLocal's mAliasFor will be restored correctly when the interrupter returns.
+	aLocal->Scope() &= ~VAR_LOCAL_STATIC;
 	// Because all upvars are also downvars of the outer function, the MAX_FUNC_UP_VARS
 	// check above is sufficient to prevent overflow for mUpVar as well.
 	aInner.mUpVar[aInner.mUpVarCount] = aLocal;
