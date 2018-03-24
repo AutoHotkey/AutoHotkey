@@ -9998,7 +9998,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	bool open_as_binary = (*aFilespec == '*');
 	if (open_as_binary)
 	{
-		if (aFilespec[1] && (aFilespec[1] != '*' || !aFilespec[2])) // i.e. it's not just * (stdout) or ** (stderr).
+		if (aFilespec[1] && (aFilespec[1] != '*' || aFilespec[2])) // i.e. it's not just * (stdout) or ** (stderr).
 		{
 			// Do not do this because it's possible for filenames to start with a space
 			// (even though Explorer itself won't let you create them that way):
