@@ -13772,9 +13772,16 @@ BIF_DECL(BIF_Func)
 // Returns a reference to an existing user-defined or built-in function, as an object.
 // Returns a new closure if the function has upvalues.
 {
-	if (ParamIndexToObject(0))
-		_f_throw(ERR_PARAM1_INVALID); // For consistency with IsFunc().
-	if (Func *func = g_script.FindFunc(ParamIndexToString(0)))
+	Func *func;
+	if (_f_callee_id == FID_Func)
+	{
+		if (ParamIndexToObject(0))
+			_f_throw(ERR_PARAM1_INVALID); // For consistency with IsFunc().
+		func = g_script.FindFunc(ParamIndexToString(0));
+	}
+	else // FID_FuncClose (internal).
+		func = (Func *)aParam[0]->object; // No type-checking needed because this is a private/internal function.
+	if (func)
 		_f_return(func->CloseIfNeeded());
 	else
 		_f_return_empty;

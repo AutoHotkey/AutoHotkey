@@ -30,6 +30,7 @@ static ExprOpFunc g_ObjPreInc(Op_ObjIncDec, SYM_PRE_INCREMENT), g_ObjPreDec(Op_O
 				, g_ObjPostInc(Op_ObjIncDec, SYM_POST_INCREMENT), g_ObjPostDec(Op_ObjIncDec, SYM_POST_DECREMENT);
 ExprOpFunc g_ObjCall(Op_ObjInvoke, IT_CALL); // Also needed in script_expression.cpp.
 ExprOpFunc g_ObjGet(Op_ObjInvoke, IT_GET), g_ObjSet(Op_ObjInvoke, IT_SET); // Also needed in script_object_bif.cpp.
+ExprOpFunc g_FuncClose(BIF_Func, FID_FuncClose);
 
 #define NA MAX_FUNCTION_PARAMS
 #define BIFn(name, minp, maxp, hasret, bif, ...) {_T(#name), bif, minp, maxp, hasret, FID_##name, __VA_ARGS__}
@@ -5373,6 +5374,21 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 			}
 			// Since above didn't "continue", recurse to handle nesting:
 			j = (int)(op_begin - aArgText + 1);
+			if (close_char == ')')
+			{
+				// Before pasing derefs, check if this is the parameter list of an inline function.
+				LPTSTR close_paren = aArgText + FindExprDelim(aArgText, close_char, j, aArgMap);
+				if (*close_paren)
+				{
+					cp = omit_leading_whitespace(close_paren + 1);
+					if (*cp == '=' && cp[1] == '>') // () => Fat arrow function.
+					{
+						if (!ParseFatArrow(aArgText, aArgMap, aDeref, aDerefCount, op_begin, close_paren, cp + 2, op_begin))
+							return FAIL;
+						continue;
+					}
+				}
+			}
 			if (!ParseOperands(aArgText, aArgMap, aDeref, aDerefCount, &j, close_char))
 				return FAIL;
 			op_begin = aArgText + j;
@@ -5426,7 +5442,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 			//else: It's not valid, but let it pass through to Var::ValidateName() to generate an error message.
 		}
 
-		// Find the end of this operand (if *op_end is '\0', _tcschr() will find that too):
+		// Find the end of this operand (the position immediately after the operand):
 		op_end = find_identifier_end(op_begin);
 		// Now op_end marks the end of this operand.  The end might be the zero terminator, an operator, etc.
 		operand_length = op_end - op_begin;
@@ -5463,6 +5479,12 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 					// error which will be caught at a later stage (since the ':' is missing its '?').
 					continue; // Leave it unmarked so ExpressionToPostfix() handles it as a literal.
 				}
+			}
+			else if (*cp == '=' && cp[1] == '>') // () => Fat arrow function.
+			{
+				if (!ParseFatArrow(aArgText, aArgMap, aDeref, aDerefCount, op_begin, op_end, cp + 2, op_end))
+					return FAIL;
+				continue;
 			}
 			is_function	= *op_end == '(';
 		}			
@@ -5613,6 +5635,64 @@ SymbolType Script::ConvertWordOperator(LPCTSTR aWord, size_t aLength)
 }
 
 
+ResultType Script::ParseFatArrow(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount
+	, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR &aExprEnd)
+{
+	if (aDerefCount >= MAX_DEREFS_PER_ARG)
+		return ScriptError(ERR_TOO_MANY_REFS, aArgText); // Short msg since so rare.
+	int j = FindExprDelim(aArgText, 0, int(aExpr - aArgText), aArgMap);
+	if (!ParseFatArrow(aDeref[aDerefCount], aPrmStart, aPrmEnd, aExpr, aArgText + j, aArgMap + j))
+		return FAIL;
+	aDerefCount++;
+	aExprEnd = aArgText + j;
+	return OK;
+}
+
+
+ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd, LPTSTR aExprMap)
+{
+	TCHAR orig_end;
+
+	if (*aPrmStart == '(') // Implies aPrmEnd[0] == ')'.
+	{
+		orig_end = aPrmEnd[1];
+		aPrmEnd[1] = '\0';
+		if (!DefineFunc(aPrmStart, NULL))
+			return FAIL;
+		aPrmEnd[1] = orig_end;
+	}
+	else // aPrmStart is a variable name and aPrmEnd is the next character after it.
+	{
+		// Format the parameter list as needed for DefineFunc().
+		TCHAR prm[MAX_VAR_NAME_LENGTH + 4];
+		sntprintf(prm, _countof(prm), _T("(%.*s)"), aPrmEnd - aPrmStart, aPrmStart);
+		if (!DefineFunc(prm, NULL))
+			return FAIL;
+	}
+
+	if (!AddLine(ACT_BLOCK_BEGIN))
+		return FAIL;
+
+	orig_end = *aExprEnd;
+	*aExprEnd = '\0';
+	bool nolabels = mNoUpdateLabels;
+	mNoUpdateLabels = false; // Must be overridden in case this is in a static initializer.
+	if (!ParseAndAddLine(aExpr, 0, ACT_RETURN, aExprMap, aExprEnd - aExpr))
+		return FAIL;
+	mNoUpdateLabels = nolabels;
+	*aExprEnd = orig_end;
+
+	aDeref.type = DT_FUNCREF;
+	aDeref.marker = aPrmStart; // Mark the entire fat arrow expression as a function deref.
+	aDeref.length = DerefLengthType(aExprEnd - aPrmStart); // Relies on the fact that an arg can't be longer than the max deref length (because ArgLengthType == DerefLengthType).
+	aDeref.func = g->CurrentFunc;
+
+	if (!AddLine(ACT_BLOCK_END))
+		return FAIL;
+	return OK;
+}
+
+
 
 ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 // Returns OK or FAIL.
@@ -5624,7 +5704,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 	LPTSTR param_end, param_start = _tcschr(aBuf, '('); // Caller has ensured that this will return non-NULL.
 	int insert_pos;
 	
-	bool is_method = mClassObjectCount && !g->CurrentFunc;
+	bool is_method = mClassObjectCount && !g->CurrentFunc && param_start != aBuf;
 	if (is_method) // Class method or property getter/setter.
 	{
 		Object *class_object = mClassObject[mClassObjectCount - 1];
@@ -5928,7 +6008,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 	else
 	{
 		func.mGlobalVar = aFuncGlobalVar; // Use the stack-allocated space provided by our caller.
-		mGlobalVarCountMax = MAX_FUNC_VAR_GLOBALS;
+		mGlobalVarCountMax = aFuncGlobalVar ? MAX_FUNC_VAR_GLOBALS : 0;
 	}
 	mNextLineIsFunctionBody = false; // This is part of a workaround for functions which start with a nested function.
 	// Indicate success:
@@ -6552,14 +6632,15 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	if (aFuncNameLength == -1) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = _tcslen(aFuncName);
 
-	if (apInsertPos) // L27: Set default for maintainability.
-		*apInsertPos = -1;
-	
 	// For the below, no error is reported because callers don't want that.  Instead, simply return
 	// NULL to indicate that names that are illegal or too long are not found.  If the caller later
 	// tries to add the function, it will get an error then:
 	if (aFuncNameLength > MAX_VAR_NAME_LENGTH || !aFuncNameLength)
+	{
+		if (apInsertPos)
+			*apInsertPos = 0; // Unnamed (fat arrow) functions rely on this.
 		return NULL;
+	}
 
 	// The following copy is made because it allows the name searching to use _tcsicmp() instead of
 	// strlicmp(), which close to doubles the performance.  The copy includes only the first aVarNameLength
@@ -6677,7 +6758,7 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 		if (!new_name)
 			return NULL; // Above already displayed the error for us.
 
-		if (!aClassObject && !Var::ValidateName(new_name, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
+		if (!aClassObject && *new_name && !Var::ValidateName(new_name, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
 			return NULL; // Above already displayed the error for us.
 	}
 	else // aIsBuiltIn == true
@@ -7373,7 +7454,7 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 			{
 			for (deref = this_arg.deref; deref->marker; ++deref) // For each deref.
 			{
-				if (!deref->is_function() || !deref->length) // Zero length means a dynamic function call.
+				if (!deref->is_function() || !deref->length || deref->func) // Zero length means a dynamic function call.
 					continue;
 				if (   !(deref->func = FindFunc(deref->marker, deref->length))   )
 				{
@@ -8595,6 +8676,24 @@ unquoted_literal:
 			else
 				infix[infix_count].symbol = this_deref_ref.symbol;
 			infix[infix_count].error_reporting_marker = this_deref_ref.marker;
+		}
+		else if (this_deref_ref.type == DT_FUNCREF)
+		{
+			// Make a function call to an internal version of Func() which accepts the function
+			// reference and returns the function itself or a closure.  Which that will be depends
+			// on processing which hasn't been done yet (PreprocessLocalVars), except for global
+			// functions, which are never closures.
+			if (infix_count > MAX_TOKENS - 4)
+				return LineError(ERR_EXPR_TOO_LONG);
+			infix[infix_count].symbol = SYM_FUNC;
+			infix[infix_count].deref = this_deref;
+			infix[infix_count+1].symbol = SYM_OPAREN;
+			infix[infix_count+2].symbol = SYM_OBJECT;
+			infix[infix_count+2].object = this_deref_ref.func;
+			infix[infix_count+3].symbol = SYM_CPAREN;
+			infix_count += 3; // Loop will increment once more.
+			this_deref_ref.func = &g_FuncClose;
+			this_deref_ref.param_count = 0; // Init.
 		}
 		else // this_deref is a variable.
 		{

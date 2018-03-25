@@ -353,6 +353,7 @@ enum DerefTypeType : BYTE
 	DT_STRING,		// Segment of text in a text arg (delimited by '%').
 	DT_QSTRING,		// Segment of text in a quoted string (delimited by '%').
 	DT_WORDOP,		// Word operator: and, or, not, new.
+	DT_FUNCREF,		// Reference to function (for fat arrow functions).
 	// DerefType::is_function() requires that these are last:
 	DT_FUNC,		// Function call.
 	DT_VARIADIC		// Variadic function call.
@@ -540,6 +541,7 @@ enum JoyControls {JOYCTRL_INVALID, JOYCTRL_XPOS, JOYCTRL_YPOS, JOYCTRL_ZPOS
 // C++ function to tell it which function is being called.  Each group starts at ID 0 in case
 // it helps the compiler to reduce code size.
 enum BuiltInFunctionID {
+	FID_Func = 0, FID_FuncClose,
 	FID_LV_GetNext = 0, FID_LV_GetCount,
 	FID_LV_Add = 0, FID_LV_Insert, FID_LV_Modify,
 	FID_LV_InsertCol = 0, FID_LV_ModifyCol, FID_LV_DeleteCol,
@@ -2750,6 +2752,9 @@ private:
 	ResultType ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos = NULL, TCHAR aEndChar = 0);
 	ResultType ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos = NULL, TCHAR aEndChar = 0);
 	ResultType ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos);
+	ResultType ParseFatArrow(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount
+		, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR &aExprEnd);
+	ResultType ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd, LPTSTR aExprMap);
 	LPTSTR ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool aDisplayErrors);
 	static ActionTypeType ConvertActionType(LPTSTR aActionTypeString, int aFirstAction, int aLastActionPlus1);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);

@@ -2820,11 +2820,29 @@ int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 			if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
 				return mark; // See case '\0' for comments.
 			continue;
-		//case ')':
-		//case ']':
-		//case '}':
-			// Unbalanced parentheses etc are caught at a later stage.
-			//continue;
+		case ')':
+		case ']':
+		case '}':
+		case g_delimiter:
+			if (aDelimiter && aDelimiter != ':') // Caller wants to find a specific symbol and it's not this one.
+				continue; // Unbalanced parentheses etc are caught at a later stage.
+			return mark;
+		case ':':
+			if (aDelimiter) // See above.
+				continue;
+			// Since aDelimiter is zero, this colon doesn't belong to a ternary expression
+			// or object literal which is part of this sub-expression, so should effectively
+			// terminate the sub-expression (likely a fat arrow function).
+			return mark;
+		case '?':
+			if (aDelimiter && aDelimiter != ':')
+				continue; // The following isn't needed in this case.
+			// Scan for the corresponding ':' (or some other closing symbol if that's missing)
+			// so that it won't terminate the sub-expression.
+			mark = FindExprDelim(aBuf, ':', mark + 1, aLiteralMap);
+			if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
+				return mark; // See case '\0' for comments.
+			continue; // The colon is also skipped via the loop's increment.
 		case g_DerefChar:
 			// Since the check at the top of the loop didn't "return", this is the beginning
 			// of a double-deref, not the end.
