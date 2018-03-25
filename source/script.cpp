@@ -8826,14 +8826,6 @@ unquoted_literal:
 				Func *func = in_param_list->func; // Can be NULL, e.g. for dynamic function calls.
 				if (infix_symbol == SYM_COMMA || this_infix[-1].symbol != stack_symbol) // i.e. not an empty parameter list.
 				{
-					// Ensure the function can accept this many parameters.
-					if (func && in_param_list->param_count >= func->mParamCount)
-					{
-						if (!func->mIsVariadic)
-							return LineError(ERR_TOO_MANY_PARAMS, FAIL, in_param_list->marker);
-						func = NULL; // Indicate that no validation can be done for this parameter.
-					}
-
 					// Accessing this_infix[-1] here is necessarily safe since in_param_list is
 					// non-NULL, and that can only be the result of a previous SYM_OPAREN/BRACKET.
 					SymbolType prev_sym = this_infix[-1].symbol;
@@ -8841,25 +8833,44 @@ unquoted_literal:
 					{
 						if (func && in_param_list->param_count < func->mMinParams) // Is this parameter mandatory?
 							return LineError(ERR_PARAM_REQUIRED);
-						if (infix_symbol == SYM_COMMA)
+
+						int num_blank_params = 0;
+						while (this_infix->symbol == SYM_COMMA)
 						{
-							// Using _alloca() vs. this_infix simplifies checks in other places
-							// which rely on this_infix being identified as SYM_COMMA:
-							this_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
-							this_postfix->symbol = SYM_MISSING;
-							this_postfix->marker = _T(""); // Simplify some cases by letting it be treated as SYM_STRING.
-							++in_param_list->param_count;
-							++postfix_count;
 							++this_infix;
-							continue; // Must do this to update this_postfix ref.
+							++num_blank_params;
 						}
-						// Otherwise: it's something like ,) or ,] -- just do nothing at this point, so that the end
-						// result is the same as without the comma.  SYM_MISSING isn't necessary here since param_count
-						// indicates the parameter is omitted.
+						infix_symbol = this_infix->symbol; // In case this_infix changed above.
+						if (!IS_OPAREN_MATCHING_CPAREN(stack_symbol, infix_symbol))
+						{
+							for (int i = 0; i < num_blank_params; ++i)
+							{
+								// Do not reuse the infix token, since checks in other places depend on it being
+								// identified as SYM_COMMA.  Using _alloca() inexplicably produces somewhat smaller
+								// code than setting it up like token_begin, at least at the time of this comment.
+								ExprTokenType *missing = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+								missing->symbol = SYM_MISSING;
+								missing->marker = _T(""); // Simplify some cases by letting it be treated as SYM_STRING.
+								postfix[postfix_count++] = missing;
+							}
+							in_param_list->param_count += num_blank_params;
+							// Go back to the top to update the this_postfix ref.
+							continue;
+						}
+						// Since above didn't "continue", the last blank parameter is at the end of the list (and that's
+						// terminated with the correct symbol), so there's no need to put anything in postfix or adjust
+						// param_count.  this_infix has already been adjusted to discard the blank parameters.
 					}
 					else
 					{
-						if (func && func->ArgIsOutputVar(in_param_list->param_count))
+						// This is SYM_COMMA or SYM_CPAREN/BRACKET/BRACE at the end of a parameter.
+						++in_param_list->param_count;
+
+						// Ensure the function can accept this many parameters.
+						if (func && in_param_list->param_count > func->mParamCount && !func->mIsVariadic)
+							return LineError(ERR_TOO_MANY_PARAMS, FAIL, in_param_list->marker);
+
+						if (func && func->ArgIsOutputVar(in_param_list->param_count - 1))
 						{
 							ExprTokenType &param1 = *postfix[postfix_count-1];
 							if (param1.symbol == SYM_VAR)
@@ -8885,13 +8896,13 @@ unquoted_literal:
 							else if (!IS_OPERATOR_VALID_LVALUE(param1.symbol))
 							{
 								sntprintf(number_buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
-									, in_param_list->param_count + 1, func->mName);
+									, in_param_list->param_count, func->mName);
 								return LineError(number_buf);
 							}
 						}
 						#ifdef ENABLE_DLLCALL
 						if (func && func->mBIF == &BIF_DllCall // Implies mIsBuiltIn == true.
-							&& in_param_list->param_count == 0) // i.e. this is the end of the first param.
+							&& in_param_list->param_count == 1) // i.e. this is the end of the first param.
 						{
 							// Optimise DllCall by resolving function addresses at load-time where possible.
 							ExprTokenType &param1 = *postfix[postfix_count-1]; // Due to the nature of postfix, an operand can only be the last token if it is the only token in this parameter.
@@ -8910,9 +8921,6 @@ unquoted_literal:
 							}
 						}
 						#endif
-
-						// This is SYM_COMMA or SYM_CPAREN/BRACKET/BRACE at the end of a parameter.
-						++in_param_list->param_count;
 
 						if (stack_symbol == SYM_OBRACE && (in_param_list->param_count & 1)) // i.e. an odd number of parameters, which means no "key:" was specified.
 							return LineError(_T("Missing \"key:\" in object literal."));
