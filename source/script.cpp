@@ -5383,6 +5383,13 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 					cp = omit_leading_whitespace(close_paren + 1);
 					if (*cp == '=' && cp[1] == '>') // () => Fat arrow function.
 					{
+						if (aDerefCount)
+						{
+							DerefType &d = aDeref[aDerefCount - 1];
+							if (d.type == DT_FUNC && d.marker + d.length == op_begin)
+								op_begin = d.marker;
+							--aDerefCount;
+						}
 						if (!ParseFatArrow(aArgText, aArgMap, aDeref, aDerefCount, op_begin, close_paren, cp + 2, op_begin))
 							return FAIL;
 						continue;
@@ -5653,7 +5660,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 {
 	TCHAR orig_end;
 
-	if (*aPrmStart == '(') // Implies aPrmEnd[0] == ')'.
+	if (*aPrmEnd == ')') // `() => e` or `fn() => e`, not `v => e`.
 	{
 		orig_end = aPrmEnd[1];
 		aPrmEnd[1] = '\0';
