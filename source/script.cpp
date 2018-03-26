@@ -8866,11 +8866,15 @@ unquoted_literal:
 						// This is SYM_COMMA or SYM_CPAREN/BRACKET/BRACE at the end of a parameter.
 						++in_param_list->param_count;
 
-						// Ensure the function can accept this many parameters.
-						if (func && in_param_list->param_count > func->mParamCount && !func->mIsVariadic)
+						if (!func)
+						{
+							// Skip the checks below.
+						}
+						else if (in_param_list->param_count > func->mParamCount && !func->mIsVariadic)
+						{
 							return LineError(ERR_TOO_MANY_PARAMS, FAIL, in_param_list->marker);
-
-						if (func && func->ArgIsOutputVar(in_param_list->param_count - 1))
+						}
+						else if (func->ArgIsOutputVar(in_param_list->param_count - 1))
 						{
 							ExprTokenType &param1 = *postfix[postfix_count-1];
 							if (param1.symbol == SYM_VAR)
@@ -8901,7 +8905,7 @@ unquoted_literal:
 							}
 						}
 						#ifdef ENABLE_DLLCALL
-						if (func && func->mBIF == &BIF_DllCall // Implies mIsBuiltIn == true.
+						else if (func->mBIF == &BIF_DllCall // Implies mIsBuiltIn == true.
 							&& in_param_list->param_count == 1) // i.e. this is the end of the first param.
 						{
 							// Optimise DllCall by resolving function addresses at load-time where possible.
@@ -8921,6 +8925,37 @@ unquoted_literal:
 							}
 						}
 						#endif
+						else if (func->mBIF == &BIF_Func) // Implies mIsBuiltIn == true.
+						{
+							ExprTokenType &param1 = *postfix[postfix_count-1];
+							if (param1.symbol == SYM_STRING && infix_symbol == SYM_CPAREN) // Checking infix_symbol ensures errors such as Func(a,b) are handled correctly.
+							{
+								// Reduce the cost of repeated calls to Func() by resolving the function name now. 
+								Func *param_func = g_script.FindFunc(param1.marker, param1.marker_length);
+								if (param_func)
+								{
+									// Pass the Func to an internal version of Func() which will call CloseIfNeeded().
+									param1.SetValue(param_func);
+									in_param_list->func = &g_FuncClose;
+								}
+								else
+								{
+									param1.SetValue(_T(""), 0);
+								}
+								if (!param_func || !param_func->mOuterFunc)
+								{
+									// The function either doesn't exist or is not nested.  In both cases, the value
+									// in param1 would always be the result of Func(), so skip the function call.
+									ASSERT(stack_symbol == SYM_OPAREN && stack[stack_count - 2]->symbol == SYM_FUNC);
+									in_param_list = stack[stack_count - 1]->outer_deref;
+									stack_count -= 2;
+									++this_infix;
+									continue;
+								}
+								// There's not enough information at this stage to determine whether this nested
+								// function needs CloseIfNeeded() to be called, so we must assume that it does.
+							}
+						}
 
 						if (stack_symbol == SYM_OBRACE && (in_param_list->param_count & 1)) // i.e. an odd number of parameters, which means no "key:" was specified.
 							return LineError(_T("Missing \"key:\" in object literal."));
