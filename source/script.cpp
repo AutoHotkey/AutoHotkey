@@ -5659,6 +5659,11 @@ ResultType Script::ParseFatArrow(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd, LPTSTR aExprMap)
 {
 	TCHAR orig_end;
+	
+	// Avoid pointing any pending labels at the fat arrow function's body (let the caller
+	// finish adding the line which contains this expression and make it the label's target).
+	bool nolabels = mNoUpdateLabels; // Could be true if this line is a static declaration.
+	mNoUpdateLabels = true;
 
 	if (*aPrmEnd == ')') // `() => e` or `fn() => e`, not `v => e`.
 	{
@@ -5682,12 +5687,13 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 
 	orig_end = *aExprEnd;
 	*aExprEnd = '\0';
-	bool nolabels = mNoUpdateLabels;
-	mNoUpdateLabels = false; // Must be overridden in case this is in a static initializer.
 	if (!ParseAndAddLine(aExpr, 0, ACT_RETURN, aExprMap, aExprEnd - aExpr))
 		return FAIL;
-	mNoUpdateLabels = nolabels;
 	*aExprEnd = orig_end;
+
+	// mNoUpdateLabels prevents this from being done in AddLine():
+	g->CurrentFunc->mJumpToLine = mLastLine;
+	mNextLineIsFunctionBody = false;
 
 	aDeref.type = DT_FUNCREF;
 	aDeref.marker = aPrmStart; // Mark the entire fat arrow expression as a function deref.
@@ -5696,6 +5702,9 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 
 	if (!AddLine(ACT_BLOCK_END))
 		return FAIL;
+
+	mNoUpdateLabels = nolabels;
+
 	return OK;
 }
 
@@ -5959,7 +5968,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 	}
 	//else leave func.mParam/mParamCount set to their NULL/0 defaults.
 
-	if (mLastLabel && !mLastLabel->mJumpToLine)
+	if (mLastLabel && !mLastLabel->mJumpToLine && !mNoUpdateLabels)
 	{
 		// Check all variants of all hotkeys, since there might be multiple variants
 		// of various hotkeys defined in a row, such as:
