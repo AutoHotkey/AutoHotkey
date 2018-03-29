@@ -13527,6 +13527,7 @@ ResultType Script::PreprocessFindUpVar(LPTSTR aName, Func &aOuter, Func &aInner,
 		g->CurrentFunc = &aInner;
 		if (  !(aLocal = FindOrAddVar(aName, 0, FINDVAR_LOCAL))  )
 			return FAIL;
+		aFound = aLocal;
 	}
 	// If aInner is assume-static, aLocal should be static at this point (but not VAR_DECLARED).
 	// Ensure aLocal is non-static so that if aInner is interrupted by a different closure of the

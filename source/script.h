@@ -1658,7 +1658,7 @@ private:
 		if (mOuterVars)
 			mOuterVars->Release();
 		for (int i = 0; i < mVarCount; ++i)
-			mVar[i].Free(VAR_ALWAYS_FREE);
+			mVar[i].Free(VAR_ALWAYS_FREE, true); // Pass "true" to exclude aliases, since their targets should not be freed (they don't belong to this function).
 		::delete[] mVar; // Must use :: to avoid SimpleHeap.
 	}
 };
