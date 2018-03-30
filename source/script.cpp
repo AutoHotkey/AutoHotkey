@@ -5669,7 +5669,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	{
 		orig_end = aPrmEnd[1];
 		aPrmEnd[1] = '\0';
-		if (!DefineFunc(aPrmStart, NULL))
+		if (!DefineFunc(aPrmStart, NULL, true))
 			return FAIL;
 		aPrmEnd[1] = orig_end;
 	}
@@ -5678,7 +5678,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 		// Format the parameter list as needed for DefineFunc().
 		TCHAR prm[MAX_VAR_NAME_LENGTH + 4];
 		sntprintf(prm, _countof(prm), _T("(%.*s)"), aPrmEnd - aPrmStart, aPrmStart);
-		if (!DefineFunc(prm, NULL))
+		if (!DefineFunc(prm, NULL, true))
 			return FAIL;
 	}
 
@@ -5710,7 +5710,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 
 
 
-ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
+ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsFatArrow)
 // Returns OK or FAIL.
 // Caller has already called ValidateName() on the function, and it is known that this valid name
 // is followed immediately by an open-paren.  aFuncExceptionVar is the address of an array on
@@ -5720,7 +5720,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 	LPTSTR param_end, param_start = _tcschr(aBuf, '('); // Caller has ensured that this will return non-NULL.
 	int insert_pos;
 	
-	bool is_method = mClassObjectCount && !g->CurrentFunc && param_start != aBuf;
+	bool is_method = mClassObjectCount && !g->CurrentFunc && !aIsFatArrow;
 	if (is_method) // Class method or property getter/setter.
 	{
 		Object *class_object = mClassObject[mClassObjectCount - 1];

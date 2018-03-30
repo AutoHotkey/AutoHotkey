@@ -2847,7 +2847,7 @@ public:
 	void DeleteTimer(IObject *aLabel);
 	LPTSTR DefaultDialogTitle();
 
-	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[]);
+	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsFatArrow = false);
 #ifndef AUTOHOTKEYSC
 	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
 #endif
