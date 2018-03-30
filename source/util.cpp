@@ -2828,7 +2828,8 @@ int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 				continue; // Unbalanced parentheses etc are caught at a later stage.
 			return mark;
 		case ':':
-			if (aDelimiter) // See above.
+			if (aDelimiter // See above.
+				|| aBuf[mark + 1] == '=')
 				continue;
 			// Since aDelimiter is zero, this colon doesn't belong to a ternary expression
 			// or object literal which is part of this sub-expression, so should effectively
