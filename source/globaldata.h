@@ -122,7 +122,8 @@ extern UCHAR g_SortCaseSensitive;
 extern bool g_SortNumeric;
 extern bool g_SortReverse;
 extern int g_SortColumnOffset;
-extern Func *g_SortFunc;
+extern IObject *g_SortFunc;
+extern ResultType g_SortFuncResult;
 
 #define g_DerefChar   '%' // As of v2 these are constant, so even more parts of the code assume they
 #define g_EscapeChar  '`' // are at their usual default values to reduce code size/complexity.

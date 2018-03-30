@@ -61,7 +61,7 @@ FuncEntry g_BIF[] =
 	BIFn(StrLower, 1, 2, true, BIF_StrCase),
 	BIFn(StrUpper, 1, 2, true, BIF_StrCase),
 	BIF1(StrReplace, 2, 5, true, {4}),
-	BIF1(Sort, 1, 2, true),
+	BIF1(Sort, 1, 3, true),
 	BIFn(RegExMatch, 2, 4, true, BIF_RegEx, {3}),
 	BIFn(RegExReplace, 2, 6, true, BIF_RegEx, {4}),
 	BIF1(Format, 1, NA, true),

@@ -15,7 +15,7 @@
 //
 
 ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
-	, ExprTokenType *aParamValue, int aParamCount, INT_PTR *aRetVal // For event handlers.
+	, ExprTokenType *aParamValue, int aParamCount, __int64 *aRetVal // For event handlers.
 	, int aExtraFlags) // For Object.__Delete().
 {
 	ResultToken result_token;
@@ -1926,7 +1926,7 @@ ResultType STDMETHODCALLTYPE Label::Invoke(ResultToken &aResultToken, ExprTokenT
 	return Execute();
 }
 
-ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aParamValue, int aParamCount, INT_PTR *aRetVal) const
+ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aParamValue, int aParamCount, __int64 *aRetVal) const
 {
 	DEBUGGER_STACK_PUSH(aNewThreadDesc)
 	ResultType result = CallMethod(mObject, mObject, _T("call"), aParamValue, aParamCount, aRetVal); // Lower-case "call" for compatibility with JScript.
@@ -1972,7 +1972,7 @@ LPTSTR LabelPtr::Name() const
 ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex)
 {
 	ResultType result = OK;
-	INT_PTR retval = 0;
+	__int64 retval = 0;
 	
 	for (MsgMonitorInstance inst (*this); inst.index < inst.count; ++inst.index)
 	{
@@ -2000,7 +2000,7 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, int
 ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UINT aMsg, UCHAR aMsgType, GuiType *aGui, INT_PTR *aRetVal)
 {
 	ResultType result = OK;
-	INT_PTR retval = 0;
+	__int64 retval = 0;
 	BOOL thread_used = FALSE;
 	
 	for (MsgMonitorInstance inst (*this); inst.index < inst.count; ++inst.index)
@@ -2026,7 +2026,7 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UIN
 		thread_used = TRUE;
 	}
 	if (aRetVal)
-		*aRetVal = retval;
+		*aRetVal = (INT_PTR)retval;
 	return result;
 }
 
