@@ -14458,7 +14458,7 @@ BIF_DECL(BIF_Hotkey)
 	{
 		if (!ParamIndexIsOmitted(1))
 			functor = TokenToFunctor(*aParam[1]);
-		result = Hotkey::IfExpr(aParam0, functor);
+		result = Hotkey::IfExpr(aParam1, functor);
 	}
 	else
 	{

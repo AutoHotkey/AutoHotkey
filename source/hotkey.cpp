@@ -155,7 +155,8 @@ HotkeyCriterion *AddHotkeyIfExpr()
 HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr)
 {
 	for (HotkeyCriterion *cp = g_FirstHotExpr; cp; cp = cp->NextExpr)
-		if (cp->Type == HOT_IF_EXPR && !_tcscmp(aExpr, cp->ExprLine->mArg[0].text)) // Case-sensitive since the expression might be.
+		if (cp->Type != HOT_IF_CALLBACK // i.e. HOT_IF_EXPR or an expression optimised to be any other type.
+			&& !_tcscmp(aExpr, cp->ExprLine->mArg[0].text)) // Case-sensitive since the expression might be.
 			return cp;
 	return NULL;
 }
