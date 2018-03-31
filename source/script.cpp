@@ -9790,41 +9790,41 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 				LPTSTR loop_name = line->mArg[0].text;
 				Label *loop_label;
 				Line *loop_line;
-				if (IsPureNumeric(loop_name))
-				{
-					int n = _ttoi(loop_name);
-					// Find the nth innermost loop which encloses this line:
-					for (loop_line = line->mParentLine; loop_line; loop_line = loop_line->mParentLine)
-						if (ACT_IS_LOOP(loop_line->mActionType)) // i.e. LOOP, FOR or WHILE.
-							if (--n < 1)
-								break;
-					if (!loop_line || n != 0)
-						return line->PreparseError(ERR_PARAM1_INVALID);
-				}
-				else
+				bool is_numeric = IsPureNumeric(loop_name);
+				// If loop_name is a label, find the innermost loop (#1) for validation purposes:
+				int n = is_numeric ? _ttoi(loop_name) : 1;
+				// Find the nth innermost loop which encloses this line:
+				for (loop_line = line->mParentLine; loop_line; loop_line = loop_line->mParentLine)
+					if (ACT_IS_LOOP(loop_line->mActionType)) // i.e. LOOP, FOR or WHILE.
+						if (--n < 1)
+							break;
+				if (!loop_line || n != 0)
+					return line->PreparseError(ERR_PARAM1_INVALID);
+				if (!is_numeric)
 				{
 					// Target is a named loop.
 					if ( !(loop_label = FindLabel(loop_name)) )
 						return line->PreparseError(ERR_NO_LABEL, loop_name);
+					Line *innermost_loop = loop_line;
 					loop_line = loop_label->mJumpToLine;
-					// Ensure the label points to a Loop, For-loop or While-loop ...
+					// Ensure the label points to a LOOP, FOR or WHILE which encloses this line.
+					// Use innermost_loop as the starting-point of the "jump" to ensure the target
+					// isn't a loop *inside* the current loop:
 					if (   !ACT_IS_LOOP(loop_line->mActionType)
-						// ... which encloses this line.  Use line->mParentLine as the starting-point of
-						// the "jump" to ensure the target isn't at the same nesting level as this line:
-						|| !line->mParentLine->IsJumpValid(*loop_label, true)   )
+						|| !innermost_loop->IsJumpValid(*loop_label, true)   )
 						return line->PreparseError(ERR_PARAM1_INVALID); //_T("Target label does not point to an appropriate Loop."));
-					// Although we've validated that it points to a loop, we can't resolve the line
-					// after the loop's body as that (mRelatedLine) hasn't been determined yet.
-					if (loop_line == line->mParentLine
-						// line->mParentLine must be non-NULL because above verified this line is enclosed by a Loop:
-						|| line->mParentLine->mActionType == ACT_BLOCK_BEGIN && loop_line == line->mParentLine->mParentLine)
-					{
-						// Set mRelatedLine to NULL since the target loop directly encloses this line.
-						loop_line = NULL;
-					}
+					if (loop_line == innermost_loop)
+						loop_line = NULL; // Since a normal break/continue will work in this case.
 				}
 				if (loop_line) // i.e. it wasn't determined to be this line's direct parent, which is always valid.
 				{
+					if (line->mActionType == ACT_BREAK)
+					{
+						// Find the line to which we'll actually jump when the loop breaks.
+						loop_line = loop_line->mRelatedLine; // From LOOP itself to the line after the LOOP's body.
+						if (loop_line->mActionType == ACT_UNTIL)
+							loop_line = loop_line->mNextLine;
+					}
 					if (in_function_body && loop_line->IsOutsideAnyFunctionBody())
 						return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
 					if (!line->CheckValidFinallyJump(loop_line))
@@ -11957,9 +11957,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			{
 				// Rather than having PerformLoop() handle LOOP_BREAK specifically, tell our caller to jump to
 				// the line *after* the loop's body. This is always a jump our caller must handle, unlike GOTO:
-				caller_jump_to_line = line->mRelatedLine->mRelatedLine;
-				if (caller_jump_to_line->mActionType == ACT_UNTIL)
-					caller_jump_to_line = caller_jump_to_line->mNextLine;
+				caller_jump_to_line = line->mRelatedLine;
 				// Return OK instead of LOOP_BREAK to handle it like GOTO.  Returning LOOP_BREAK would
 				// cause the following to behave incorrectly (as described in the comments):
 				// If (True)  ; LOOP_BREAK takes precedence, causing this ExecUntil() layer to return.
