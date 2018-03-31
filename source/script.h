@@ -1721,6 +1721,7 @@ public:
 	// override in the script.  So mIsBuiltIn should always be used to determine whether the function
 	// is truly built-in, not its name.
 	bool mIsVariadic;
+	bool mIsFatArrow;
 
 #define MAX_FUNC_OUTPUT_VAR 7
 	bool ArgIsOutputVar(int aIndex)
@@ -1836,6 +1837,7 @@ public:
 		, mDefaultVarType(VAR_DECLARE_LOCAL)
 		, mIsBuiltIn(aIsBuiltIn)
 		, mIsVariadic(false)
+		, mIsFatArrow(false)
 	{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
@@ -2769,6 +2771,7 @@ private:
 	ResultType PreparseStaticLines(Line *aStartingLine);
 	void PreparseHotkeyIfExpr(Line *aLine);
 	Line *PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode = NORMAL_MODE, Line *aParentLine = NULL, const ActionTypeType aLoopType = ACT_INVALID);
+	Line *PreparseBlocksStmtBody(Line *aStartingLine, Line *aParentLine = NULL, const ActionTypeType aLoopType = ACT_INVALID);
 	Line *PreparseCommands(Line *aStartingLine);
 
 public:

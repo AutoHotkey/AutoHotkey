@@ -5781,6 +5781,8 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsFatArr
 	TCHAR buf[LINE_SIZE], *target;
 	bool param_must_have_default = false;
 
+	func.mIsFatArrow = aIsFatArrow;
+
 	if (is_method)
 	{
 		// Add the automatic/hidden "this" parameter.
@@ -7594,7 +7596,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			// single entity and find the line below it.  This must be done even if line_temp
 			// isn't an IF/ELSE/LOOP/BLOCK_BEGIN because all lines need mParentLine set by this
 			// function, and some other types such as BREAK/CONTINUE also need special handling.
-			line_temp = PreparseBlocks(line_temp, ONLY_ONE_LINE, line, ACT_IS_LOOP(line->mActionType) ? line->mActionType : aLoopType);
+			line_temp = PreparseBlocksStmtBody(line_temp, line, ACT_IS_LOOP(line->mActionType) ? line->mActionType : aLoopType);
 			// If not an error, line_temp is now either:
 			// 1) If this if's/loop's action was a BEGIN_BLOCK: The line after the end of the block.
 			// 2) If this if's/loop's action was another IF or LOOP:
@@ -7660,7 +7662,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 				//if (IS_BAD_ACTION_LINE(line_temp)) // See "#define IS_BAD_ACTION_LINE" for comments.
 				//	return line->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
 				// Assign to line_temp rather than line:
-				line_temp = PreparseBlocks(line_temp, ONLY_ONE_LINE, line
+				line_temp = PreparseBlocksStmtBody(line_temp, line
 					, line->mActionType == ACT_FINALLY ? ACT_FINALLY : aLoopType);
 				if (line_temp == NULL)
 					return NULL; // Error.
@@ -7692,15 +7694,8 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 		switch (line->mActionType)
 		{
 		case ACT_BLOCK_BEGIN:
-			if (line->mAttribute) // This is the opening brace of a function definition.
-			{
-				g->CurrentFunc = (Func *)line->mAttribute; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
-				if (aParentLine && aParentLine->mActionType != ACT_BLOCK_BEGIN) // Implies ACT_IS_LINE_PARENT(aParentLine->mActionType).  Functions are allowed inside blocks.
-					// A function must not be defined directly below an IF/ELSE/LOOP because runtime evaluation won't handle it properly.
-					return line->PreparseError(_T("Unexpected function"));
-			}
 			line_temp = PreparseBlocks(line->mNextLine, UNTIL_BLOCK_END, line, line->mAttribute ? 0 : aLoopType); // mAttribute usage: don't consider a function's body to be inside the loop, since it can be called from outside.
-			// "line" is now either NULL due to an error, or the location of the END_BLOCK itself.
+			// "line_temp" is now either NULL due to an error, or the location of the END_BLOCK itself.
 			if (line_temp == NULL)
 				return NULL; // Error.
 			// The BLOCK_BEGIN's mRelatedLine should point to the line *after* the BLOCK_END:
@@ -7710,8 +7705,6 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			line = line_temp;
 			break;
 		case ACT_BLOCK_END:
-			if (line->mAttribute) // This is the closing brace of a function definition.
-				g->CurrentFunc = NULL; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
 			if (aMode == UNTIL_BLOCK_END)
 				// Return line rather than line->mNextLine because, if we're at the end of
 				// the script, it's up to the caller to differentiate between that condition
@@ -7776,6 +7769,50 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 
 	// Otherwise, return something non-NULL to indicate success to the top-level caller:
 	return mLastLine;
+}
+
+
+
+Line *Script::PreparseBlocksStmtBody(Line *aStartingLine, Line *aParentLine, const ActionTypeType aLoopType)
+{
+	Line *body, *line_after;
+	for (body = aStartingLine;; body = line_after)
+	{
+		// Preparse the function body and find the line after it.
+		line_after = PreparseBlocks(body, ONLY_ONE_LINE, aParentLine, aLoopType);
+		if (line_after == NULL)
+			return NULL; // Error.
+		
+		if (body->mActionType == ACT_BLOCK_BEGIN && body->mAttribute) // Function body.
+		{
+			if (!((Func *)body->mAttribute)->mIsFatArrow)
+			{
+				// Normal function definitions aren't allowed here because it simply wouldn't make sense.
+				return body->PreparseError(_T("Unexpected function"));
+			}
+			// This fat arrow function was defined inside an expression, but due to the nature of the parser,
+			// its lines have been added before that expression.  line_after is either the line containing the
+			// expression or another fat arrow function from the same expression.  Continue the loop until the
+			// whole lot has been processed as one group.
+		}
+		else
+			break;
+	}
+	if (body != aStartingLine)
+	{
+		// One or more fat arrow functions were processed by the loop above.
+		// body is the line which contains the `=>` operator(s).
+		// line_after is the line after body, or after body's own body if it has one.
+		Line *block_end = body->mPrevLine;
+		// Move the blocks below the expression to ensure proper evaluation of aParentLine's body.
+		aParentLine->mNextLine = body; // parent -> expression
+		body->mPrevLine = aParentLine; // parent <- expression
+		body->mNextLine = aStartingLine; // expression -> block-begin
+		aStartingLine->mPrevLine = body; // expression <- block-begin
+		block_end->mNextLine = line_after; // block-end -> the line after expression
+		line_after->mPrevLine = block_end; // block-end <- the line after expression
+	}
+	return line_after;
 }
 
 
