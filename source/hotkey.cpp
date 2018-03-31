@@ -2821,6 +2821,12 @@ BIF_DECL(BIF_Hotstring)
 		aResultToken.value_int64 = previous_value;
 		return;
 	}
+	else if (!_tcsicmp(name, _T("Reset")))
+	{
+		*g_HSBuf = '\0';
+		g_HSBufLength = 0;
+		return;
+	}
 	else if (aParamCount == 1 && *name != ':') // Equivalent to #Hotstring <name>
 	{
 		// TODO: Build string of current options and return it?
