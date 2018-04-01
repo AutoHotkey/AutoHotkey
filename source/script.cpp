@@ -5387,8 +5387,10 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 						{
 							DerefType &d = aDeref[aDerefCount - 1];
 							if (d.type == DT_FUNC && d.marker + d.length == op_begin)
+							{
 								op_begin = d.marker;
-							--aDerefCount;
+								--aDerefCount;
+							}
 						}
 						if (!ParseFatArrow(aArgText, aArgMap, aDeref, aDerefCount, op_begin, close_paren, cp + 2, op_begin))
 							return FAIL;
