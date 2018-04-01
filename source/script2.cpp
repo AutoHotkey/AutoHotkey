@@ -15182,13 +15182,12 @@ BIF_DECL(BIF_Menu)
 		break;
 	case FID_MenuFromHandle:
 		menu = g_script.FindMenu((HMENU)ParamIndexToInt64(0));
+		if (menu)
+			menu->AddRef();
 		break;
 	}
 	if (menu)
-	{
-		menu->AddRef();
 		_f_return(menu);
-	}
 	_f_return_empty;
 }
 
