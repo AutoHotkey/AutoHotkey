@@ -2117,8 +2117,8 @@ public:
 		HBITMAP mBitmap;
 	};
 
-	// Constructor:
 	UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, UserMenu *aMenu);
+	~UserMenuItem();
 
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).

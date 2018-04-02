@@ -606,6 +606,8 @@ UserMenuItem::UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, IOb
 	, mNextMenuItem(NULL)
 	, mIcon(NULL) // L17: Initialize mIcon/mBitmap union.
 {
+	if (aSubmenu)
+		aSubmenu->AddRef();
 }
 
 
@@ -623,10 +625,6 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 	if (mMenu) // Delete the item from the menu.
 		RemoveMenu(mMenu, aMenuItem_ID, aMenuItem_MF_BY); // v1.0.48: Lexikos: DeleteMenu() destroys any sub-menu handle associated with the item, so use RemoveMenu. Otherwise the submenu handle stored somewhere else in memory would suddenly become invalid.
 	RemoveItemIcon(aMenuItem); // L17: Free icon or bitmap.
-	if (aMenuItem->mName != Var::sEmptyString)
-		free(aMenuItem->mName); // Since it was separately allocated.
-	if (aMenuItem->mSubmenu)
-		aMenuItem->mSubmenu->Release();
 	delete aMenuItem; // Do this last when its contents are no longer needed.
 	--mMenuItemCount;
 	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
@@ -653,8 +651,6 @@ ResultType UserMenu::DeleteAllItems()
 		menu_item_to_delete = mi;
 		mi = mi->mNextMenuItem;
 		RemoveItemIcon(menu_item_to_delete); // L26: Free icon or bitmap!
-		if (menu_item_to_delete->mName != Var::sEmptyString)
-			delete menu_item_to_delete->mName; // Since it was separately allocated.
 		delete menu_item_to_delete;
 	}
 	mFirstMenuItem = mLastMenuItem = NULL;
@@ -662,6 +658,17 @@ ResultType UserMenu::DeleteAllItems()
 	mDefault = NULL;  // i.e. there can't be a *user-defined* default item anymore, even if this is the tray.
 	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
 	return OK;
+}
+
+
+
+UserMenuItem::~UserMenuItem()
+{
+	if (mName != Var::sEmptyString)
+		free(mName);
+	// mCallback is handled by ~LabelRef().
+	if (mSubmenu)
+		mSubmenu->Release();
 }
 
 
