@@ -1994,7 +1994,6 @@ public:
 	UserMenu *mNextMenu;  // Next item in linked list
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
-	bool mIncludeStandardItems;
 	int mClickCount; // How many clicks it takes to trigger the default menu item.  2 = double-click
 	UINT mMenuItemCount;  // The count of user-defined menu items (doesn't include the standard items, if present).
 	MenuTypeType mMenuType; // MENU_TYPE_POPUP (via CreatePopupMenu) vs. MENU_TYPE_BAR (via CreateMenu).
@@ -2007,7 +2006,7 @@ public:
 
 	UserMenu() // Constructor
 		: mFirstMenuItem(NULL), mLastMenuItem(NULL), mDefault(NULL)
-		, mIncludeStandardItems(false), mClickCount(2), mMenuItemCount(0), mNextMenu(NULL), mMenu(NULL)
+		, mClickCount(2), mMenuItemCount(0), mNextMenu(NULL), mMenu(NULL)
 		, mMenuType(MENU_TYPE_POPUP) // The MENU_TYPE_NONE flag is not used in this context.  Default = POPUP.
 		, mBrush(NULL), mColor(CLR_DEFAULT)
 	{
@@ -2022,6 +2021,7 @@ public:
 
 		// Methods
 		M_Add,
+		M_AddStandard,
 		M_Insert,
 		M_Delete,
 		M_Rename,
@@ -2038,7 +2038,6 @@ public:
 
 		// Properties
 		P_Default,
-		P_Standard,
 		P_Handle,
 		P_ClickCount,
 	};
@@ -2046,9 +2045,9 @@ public:
 	IObject_Type_Impl("Menu")
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
-	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions, UserMenuItem **aInsertAt, ResultToken &aResultToken);
+	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions, UserMenuItem **aInsertAt);
 	ResultType InternalAppendMenu(UserMenuItem *aMenuItem, UserMenuItem *aInsertBefore = NULL);
-	ResultType DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev);
+	ResultType DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev, bool aUpdateGuiMenuBars = true);
 	ResultType DeleteAllItems();
 	ResultType ModifyItem(UserMenuItem *aMenuItem, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions);
 	void UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions);
@@ -2061,17 +2060,18 @@ public:
 	ResultType EnableItem(UserMenuItem *aMenuItem);
 	ResultType DisableItem(UserMenuItem *aMenuItem);
 	ResultType ToggleEnableItem(UserMenuItem *aMenuItem);
-	ResultType SetDefault(UserMenuItem *aMenuItem = NULL);
-	ResultType IncludeStandardItems();
-	ResultType ExcludeStandardItems();
+	ResultType SetDefault(UserMenuItem *aMenuItem = NULL, bool aUpdateGuiMenuBars = true);
 	ResultType Create(MenuTypeType aMenuType = MENU_TYPE_NONE); // NONE means UNSPECIFIED in this context.
 	void SetColor(ExprTokenType &aColor, bool aApplyToSubmenus);
 	void ApplyColor(bool aApplyToSubmenus);
 	ResultType AppendStandardItems();
+	ResultType EnableStandardOpenItem(bool aEnable);
 	ResultType Destroy();
 	ResultType Display(bool aForceToForeground = true, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED);
 	UserMenuItem *FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bool &aByPos);
+	UserMenuItem *FindItemByID(UINT aID);
 	bool ContainsMenu(UserMenu *aMenu);
+	bool ContainsCustomItems();
 	void UpdateAccelerators();
 	// L17: Functions for menu icons.
 	ResultType SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int aIconNumber, int aWidth);
@@ -2897,11 +2897,9 @@ public:
 	ResultType ScriptDeleteMenu(UserMenu *aMenu);
 	UserMenuItem *FindMenuItemByID(UINT aID)
 	{
-		UserMenuItem *mi;
 		for (UserMenu *m = mFirstMenu; m; m = m->mNextMenu)
-			for (mi = m->mFirstMenuItem; mi; mi = mi->mNextMenuItem)
-				if (mi->mMenuID == aID)
-					return mi;
+			if (UserMenuItem *mi = m->FindItemByID(aID))
+				return mi;
 		return NULL;
 	}
 	UserMenuItem *FindMenuItemBySubmenu(HMENU aSubmenu) // L26: Used by WM_MEASUREITEM/WM_DRAWITEM to find the menu item with an associated submenu. Fixes icons on such items when owner-drawn menus are in use.

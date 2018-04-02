@@ -79,6 +79,8 @@ extern bool g_persistent;
 extern bool g_NoTrayIcon;
 #ifdef AUTOHOTKEYSC
 	extern bool g_AllowMainWindow;
+#else
+	const bool g_AllowMainWindow = true;
 #endif
 extern bool g_DeferMessagesForUnderlyingPump;
 extern bool g_MainTimerExists;

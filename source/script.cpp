@@ -516,7 +516,7 @@ Script::Script()
 		ExitApp(EXIT_CRITICAL);
 	}
 	else
-		mTrayMenu->mIncludeStandardItems = true;
+		mTrayMenu->AppendStandardItems();
 
 #ifdef _DEBUG
 	if (ID_FILE_EXIT < ID_MAIN_FIRST) // Not a very thorough check.
@@ -952,27 +952,9 @@ void Script::AllowMainWindow(bool aAllow)
 	if (g_AllowMainWindow == aAllow)
 		return;
 	g_AllowMainWindow = aAllow;
-	if (aAllow)
-	{
-		EnableOrDisableViewMenuItems(GetMenu(g_hWnd), MF_ENABLED); // Added as a fix in v1.0.47.06.
-		// Rather than using InsertMenu() to insert the item in the right position,
-		// which makes the code rather unmaintainable, it seems best just to recreate
-		// the entire menu.  This will result in the standard menu items going back
-		// up to the top of the menu if the user previously had them at the bottom,
-		// but it seems too rare to worry about, especially since it's easy to
-		// work around that:
-		if (mTrayMenu->mIncludeStandardItems)
-			mTrayMenu->Destroy(); // It will be recreated automatically the next time the user displays it.
-		// else there's no need.
-	}
-	else
-	{
-		EnableOrDisableViewMenuItems(GetMenu(g_hWnd), MF_DISABLED | MF_GRAYED); // Added as a fix in v1.0.47.06.
-		// See comments above for why it's done this way vs. using DeleteMenu():
-		if (mTrayMenu->mIncludeStandardItems)
-			mTrayMenu->Destroy(); // It will be recreated automatically the next time the user displays it.
-		// else there's no need.
-	}
+	EnableOrDisableViewMenuItems(GetMenu(g_hWnd)
+		, aAllow ? MF_ENABLED : MF_DISABLED | MF_GRAYED);
+	mTrayMenu->EnableStandardOpenItem(aAllow);
 }
 
 void Script::EnableOrDisableViewMenuItems(HMENU aMenu, UINT aFlags)
@@ -1295,7 +1277,7 @@ bool Script::IsPersistent()
 		// The following isn't checked because there has to be at least one script thread
 		// running for it to be true, in which case we shouldn't have been called:
 		//|| (g_input.status == INPUT_IN_PROGRESS) // The hook is actively collecting input for the Input command.
-		|| (mNIC.hWnd && mTrayMenu->mMenuItemCount)) // The tray icon is visible and its menu has custom items.
+		|| (mNIC.hWnd && mTrayMenu->ContainsCustomItems())) // The tray icon is visible and its menu has custom items.
 		return true;
 	for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
 		if (IsWindowVisible(gui->mHwnd)) // A GUI is visible.

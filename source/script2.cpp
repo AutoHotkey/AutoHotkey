@@ -3890,16 +3890,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			//else fall through to the next case.
 		case WM_LBUTTONDBLCLK:
 			if (g_script.mTrayMenu->mDefault)
-				POST_AHK_USER_MENU(hWnd, g_script.mTrayMenu->mDefault->mMenuID, NULL) // NULL flags it as a non-GUI menu item.
-#ifdef AUTOHOTKEYSC
-			else if (g_script.mTrayMenu->mIncludeStandardItems && g_AllowMainWindow)
-				ShowMainWindow();
-			// else do nothing.
-#else
-			else if (g_script.mTrayMenu->mIncludeStandardItems)
-				ShowMainWindow();
-			// else do nothing.
-#endif
+				PostMessage(hWnd, WM_COMMAND, g_script.mTrayMenu->mDefault->mMenuID, 0); // WM_COMMAND vs POST_AHK_USER_MENU to support the Standard menu items.
 			return 0;
 		case WM_RBUTTONUP:
 			// v1.0.30.03:
@@ -9546,11 +9537,7 @@ BIV_DECL_R(BIV_AllowMainWindow)
 {
 	if (aBuf)
 	{
-#ifdef AUTOHOTKEYSC
 		*aBuf++ = g_AllowMainWindow ? '1' : '0';
-#else
-		*aBuf++ = '1';
-#endif
 		*aBuf = '\0';
 	}
 	return 1;  // Length is always 1.

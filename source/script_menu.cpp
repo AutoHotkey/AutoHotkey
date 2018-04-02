@@ -36,6 +36,7 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 	if (0) {}
 #define if_member(s,e)	else if (!_tcsicmp(name, _T(s))) member = e;
 	if_member("Add", M_Add)
+	if_member("AddStandard", M_AddStandard)
 	if_member("Insert", M_Insert)
 	if_member("Delete", M_Delete)
 	if_member("Rename", M_Rename)
@@ -49,7 +50,6 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 	if_member("Show", M_Show)
 	if_member("SetColor", M_SetColor)
 	if_member("Default", P_Default)
-	if_member("Standard", P_Standard)
 	if_member("Handle", P_Handle)
 	if_member("ClickCount", P_ClickCount)
 #undef if_member
@@ -103,9 +103,7 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 	case M_Add:
 		if (*param1) // Since a menu item name was given, it's not a separator line.
 			break; // Let a later switch() handle it.
-		if (!AddItem(_T(""), g_script.GetFreeMenuItemID(), NULL, NULL, _T(""), insert_at, aResultToken)) // Even separators get an ID, so that they can be modified later using the position& notation.
-			return FAIL;
-		return OK;
+		return AddItem(_T(""), g_script.GetFreeMenuItemID(), NULL, NULL, _T(""), insert_at); // Even separators get an ID, so that they can be modified later using the position& notation.
 
 	case M_Delete:
 		if (aParamCount) // Since a menu item name was given, an item is being deleted, not the whole menu.
@@ -125,15 +123,8 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 		}
 		_o_return(mDefault ? mDefault->mName : _T(""));
 
-	case P_Standard:
-		if (IS_INVOKE_SET)
-		{
-			if (ParamIndexToBOOL(0))
-				IncludeStandardItems();
-			else
-				ExcludeStandardItems();
-		}
-		_o_return(mIncludeStandardItems);
+	case M_AddStandard:
+		return AppendStandardItems();
 
 	case M_SetColor:
 	{
@@ -232,7 +223,7 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 				callback->Release();
 			_o_throw(_T("Too many menu items."), param1); // Short msg since so rare.
 		}
-		result = AddItem(param1, item_id, callback, submenu, aOptions, insert_at, aResultToken);
+		result = AddItem(param1, item_id, callback, submenu, aOptions, insert_at);
 		if (callback)
 			callback->Release();
 		return result;
@@ -464,6 +455,16 @@ UserMenuItem *UserMenu::FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bo
 
 
 
+UserMenuItem *UserMenu::FindItemByID(UINT aID)
+{
+	for (UserMenuItem *mi = mFirstMenuItem; mi; mi = mi->mNextMenuItem)
+		if (mi->mMenuID == aID)
+			return mi;
+	return NULL;
+}
+
+
+
 // Macros for use with the below methods (in previous versions, submenus were identified by position):
 #define aMenuItem_ID		aMenuItem->mMenuID
 #define aMenuItem_MF_BY		MF_BYCOMMAND
@@ -472,50 +473,21 @@ UserMenuItem *UserMenu::FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bo
 		GuiType::UpdateMenuBars(hmenu); // Above: If it's not a popup, it's probably a menu bar.
 
 
-#ifdef AUTOHOTKEYSC
-#define CHANGE_DEFAULT_IF_NEEDED \
-	if (mDefault == aMenuItem)\
-	{\
-		if (mMenu)\
-		{\
-			if (this == g_script.mTrayMenu)\
-				SetMenuDefaultItem(mMenu, mIncludeStandardItems && g_AllowMainWindow ? ID_TRAY_OPEN : -1, FALSE);\
-			else\
-				SetMenuDefaultItem(mMenu, -1, FALSE);\
-		}\
-		mDefault = NULL;\
-	}
-#else
-#define CHANGE_DEFAULT_IF_NEEDED \
-	if (mDefault == aMenuItem)\
-	{\
-		if (mMenu)\
-		{\
-			if (this == g_script.mTrayMenu)\
-				SetMenuDefaultItem(mMenu, mIncludeStandardItems ? ID_TRAY_OPEN : -1, FALSE);\
-			else\
-				SetMenuDefaultItem(mMenu, -1, FALSE);\
-		}\
-		mDefault = NULL;\
-	}
-#endif
-
-
 
 ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions
-	, UserMenuItem **aInsertAt, ResultToken &aResultToken)
+	, UserMenuItem **aInsertAt)
 // Caller must have already ensured that aName does not yet exist as a user-defined menu item
 // in this->mMenu.
 {
 	size_t length = _tcslen(aName);
 	if (length > MAX_MENU_NAME_LENGTH)
-		return aResultToken.Error(_T("Menu item name too long."), aName);
+		return g_script.ScriptError(_T("Menu item name too long."), aName);
 	// After mem is allocated, the object takes charge of its later deletion:
 	LPTSTR name_dynamic;
 	if (length)
 	{
 		if (   !(name_dynamic = tmalloc(length + 1))   )  // +1 for terminator.
-			return aResultToken.Error(ERR_OUTOFMEM);
+			return g_script.ScriptError(ERR_OUTOFMEM);
 		_tcscpy(name_dynamic, aName);
 	}
 	else
@@ -525,7 +497,7 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, Use
 	{
 		if (name_dynamic != Var::sEmptyString)
 			free(name_dynamic);
-		return aResultToken.Error(ERR_OUTOFMEM);
+		return g_script.ScriptError(ERR_OUTOFMEM);
 	}
 	if (mMenu)
 	{
@@ -612,7 +584,7 @@ UserMenuItem::UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, IOb
 
 
 
-ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev)
+ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev, bool aUpdateGuiMenuBars)
 {
 	// Remove this menu item from the linked list:
 	if (aMenuItem == mLastMenuItem)
@@ -621,13 +593,13 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 		aMenuItemPrev->mNextMenuItem = aMenuItem->mNextMenuItem; // Can be NULL if aMenuItem was the last one.
 	else // aMenuItem was the first one in the list.
 		mFirstMenuItem = aMenuItem->mNextMenuItem; // Can be NULL if the list will now be empty.
-	CHANGE_DEFAULT_IF_NEEDED  // Should do this before freeing aMenuItem's memory.
 	if (mMenu) // Delete the item from the menu.
 		RemoveMenu(mMenu, aMenuItem_ID, aMenuItem_MF_BY); // v1.0.48: Lexikos: DeleteMenu() destroys any sub-menu handle associated with the item, so use RemoveMenu. Otherwise the submenu handle stored somewhere else in memory would suddenly become invalid.
 	RemoveItemIcon(aMenuItem); // L17: Free icon or bitmap.
 	delete aMenuItem; // Do this last when its contents are no longer needed.
 	--mMenuItemCount;
-	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
+	if (aUpdateGuiMenuBars)
+		UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
 	return OK;
 }
 
@@ -683,6 +655,18 @@ ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, IObject *aCallback, Use
 		UpdateOptions(aMenuItem, aOptions);
 	if (!aCallback && !aSubmenu) // We were called only to update this item's options.
 		return OK;
+
+	if (aMenuItem->mMenuID >= ID_TRAY_FIRST && aCallback)
+	{
+		// For a custom label to work for this item, it must have a different ID.
+		MENUITEMINFO mii;
+		mii.cbSize = sizeof(mii);
+		mii.fMask = MIIM_ID;
+		mii.wID = g_script.GetFreeMenuItemID();
+		if (mMenu)
+			SetMenuItemInfo(mMenu, aMenuItem->mMenuID, FALSE, &mii);
+		aMenuItem->mMenuID = mii.wID;
+	}
 
 	aMenuItem->mCallback = aCallback;  // This will be NULL if this menu item is a separator or submenu.
 	if (aMenuItem->mSubmenu == aSubmenu) // Below relies on this check.
@@ -841,9 +825,6 @@ ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName)
 	}
 	else // converting into a separator
 	{
-		// Notes about the below macro:
-		// ID_TRAY_OPEN is not set to be the default for the self-contained version, since it lacks that menu item.
-		CHANGE_DEFAULT_IF_NEEDED
 		// Testing shows that if an item is converted into a separator and back into a
 		// normal item, it retains its submenu.  So don't set the submenu to NULL, since
 		// it's not necessary and would result in the OS destroying the submenu:
@@ -965,7 +946,7 @@ ResultType UserMenu::ToggleEnableItem(UserMenuItem *aMenuItem)
 
 
 
-ResultType UserMenu::SetDefault(UserMenuItem *aMenuItem)
+ResultType UserMenu::SetDefault(UserMenuItem *aMenuItem, bool aUpdateGuiMenuBars)
 {
 	if (mDefault == aMenuItem)
 		return OK;
@@ -975,53 +956,9 @@ ResultType UserMenu::SetDefault(UserMenuItem *aMenuItem)
 	if (aMenuItem) // A user-defined menu item is being made the default.
 		SetMenuDefaultItem(mMenu, aMenuItem->mMenuID, FALSE); // This also ensures that only one is default at a time.
 	else
-	{
-		// Otherwise, a user-defined item that was previously the default is no longer the default.
-		// Provide a new default if this is the tray menu, the standard items are present, and a default
-		// action is called for:
-		if (this == g_script.mTrayMenu) // Necessary for proper operation of the self-contained version:
-#ifdef AUTOHOTKEYSC
-			SetMenuDefaultItem(mMenu, g_AllowMainWindow && mIncludeStandardItems ? ID_TRAY_OPEN : -1, FALSE);
-#else
-			SetMenuDefaultItem(mMenu, mIncludeStandardItems ? ID_TRAY_OPEN : -1, FALSE);
-#endif
-		else
-			SetMenuDefaultItem(mMenu, -1, FALSE);
-	}
-	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Testing shows that menu bars themselves can have default items, and that this is necessary.
-	return OK;
-}
-
-
-
-ResultType UserMenu::IncludeStandardItems()
-{
-	if (mIncludeStandardItems)
-		return OK;
-	// In this case, immediately create the menu to support having the standard menu items on the
-	// bottom or middle rather than at the top (which is the default). Older comment: Only do
-	// this if it was false beforehand so that the standard menu items will be appended to whatever
-	// the user has already added to the tray menu (increases flexibility).
-	if (!Create()) // It may already exist, in which case this returns OK.
-		return FAIL; // No error msg since so rare.
-	return AppendStandardItems();
-}
-
-
-
-ResultType UserMenu::ExcludeStandardItems()
-{
-	if (!mIncludeStandardItems)
-		return OK;
-	mIncludeStandardItems = false;
-	// This method isn't used because it fails on sub-menus of a menu bar:
-	//return Destroy(); // It will be recreated automatically the next time the user displays it.
-	if (mMenu)
-	{
-		for (UINT i = ID_TRAY_FIRST; i <= ID_TRAY_LAST; ++i)
-			RemoveMenu(mMenu, i, MF_BYCOMMAND);
-		UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary (though it's unusual to put the standard items on a menu bar).
-	}
+		SetMenuDefaultItem(mMenu, -1, FALSE);
+	if (aUpdateGuiMenuBars)
+		UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Testing shows that menu bars themselves can have default items, and that this is necessary.
 	return OK;
 }
 
@@ -1054,21 +991,15 @@ ResultType UserMenu::Create(MenuTypeType aMenuType)
 	mMenuType = aMenuType;  // We have to track its type since I don't think there's any way to find out via API.
 
 	// It seems best not to have a mandatory EXIT item added to the bottom of the tray menu
-	// for these reasons:
-	// 1) Allows the tray icon to be shown even at time when the user wants it to have no menu at all
-	//    (i.e. avoids the need for #NoTrayIcon just to disable the showing of the menu).
-	// 2) Avoids complexity because there would be a 3rd state: Standard, NoStandard, and
-	//    NoStandardWithExit.  This might be inconsequential, but would require testing.
-	//if (!mIncludeStandardItems && !mMenuItemCount)
+	// because omitting it allows the tray icon to be shown even when the user wants it to
+	// have no menu at all (i.e. avoids the need for #NoTrayIcon just to disable the showing
+	// of the menu).  If it was done, it should not be done here because calling Menu.Handle
+	// prior to adding items would have the effect of inserting EXIT at the top.
+	//if (!mMenuItemCount)
 	//{
 	//	AppendMenu(mTrayMenu->mMenu, MF_STRING, ID_TRAY_EXIT, "E&xit");
 	//	return OK;
 	//}
-
-	// By default, the standard menu items are added first, since the users would probably want
-	// their own user defined menus at the bottom where they're easier to reach:
-	if (mIncludeStandardItems)
-		AppendStandardItems();
 
 	// Now append all of the user defined items:
 	UserMenuItem *mi;
@@ -1142,33 +1073,75 @@ void UserMenu::ApplyColor(bool aApplyToSubmenus)
 ResultType UserMenu::AppendStandardItems()
 // Caller must ensure that this->mMenu exists if it wants the items to be added immediately.
 {
-	mIncludeStandardItems = true; // even if the menu doesn't exist.
-	if (!mMenu)
-		return OK;
-#ifdef AUTOHOTKEYSC
-	if (g_AllowMainWindow)
+	struct StandardItem
 	{
-		AppendMenu(mMenu, MF_STRING, ID_TRAY_OPEN, _T("&Open"));
-		if (this == g_script.mTrayMenu && !mDefault) // No user-defined default menu item, so use the standard one.
-			SetMenuDefaultItem(mMenu, ID_TRAY_OPEN, FALSE); // Seems to have no function other than appearance.
-	}
-#else
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_OPEN, _T("&Open"));
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_HELP, _T("&Help"));
-	AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP1, NULL); // The separators are given IDs to simplify removal.
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_WINDOWSPY, _T("&Window Spy"));
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_RELOADSCRIPT, _T("&Reload This Script"));
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_EDITSCRIPT, _T("&Edit This Script"));
-	AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP2, NULL);
-	if (this == g_script.mTrayMenu && !mDefault) // No user-defined default menu item, so use the standard one.
-		SetMenuDefaultItem(mMenu, ID_TRAY_OPEN, FALSE); // Seems to have no function other than appearance.
+		LPTSTR name;
+		UINT id;
+	};
+	static StandardItem sItems[] =
+	{
+		_T("&Open"), ID_TRAY_OPEN,
+#ifndef AUTOHOTKEYSC
+		_T("&Help"), ID_TRAY_HELP,
+		_T(""), ID_TRAY_SEP1,
+		_T("&Window Spy"), ID_TRAY_WINDOWSPY,
+		_T("&Reload This Script"), ID_TRAY_RELOADSCRIPT,
+		_T("&Edit This Script"), ID_TRAY_EDITSCRIPT,
+		_T(""), ID_TRAY_SEP2,
 #endif
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_SUSPEND, _T("&Suspend Hotkeys"));
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_PAUSE, _T("&Pause Script"));
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_EXIT, _T("E&xit"));
-	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary (though it would be rare anyone would want the menu bar containing the std items).
+		_T("&Suspend Hotkeys"), ID_TRAY_SUSPEND,
+		_T("&Pause Script"), ID_TRAY_PAUSE,
+		_T("E&xit"), ID_TRAY_EXIT
+	};
+	UserMenuItem *&first_new_item = mLastMenuItem ? mLastMenuItem->mNextMenuItem : mFirstMenuItem;
+	int i = g_AllowMainWindow ? 0 : 1;
+	for (; i < _countof(sItems); ++i)
+	{
+		if (!FindItemByID(sItems[i].id)) // Avoid duplicating items, but add any missing ones.
+			if (!AddItem(sItems[i].name, sItems[i].id, NULL, NULL, _T(""), NULL))
+				return FAIL;
+	}
+	if (this == g_script.mTrayMenu && !mDefault && first_new_item
+		&& first_new_item->mMenuID == ID_TRAY_OPEN)
+	{
+		// No user-defined default menu item, so use the standard one.
+		SetDefault(first_new_item, false);
+	}
+	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary (though it would be rare anyone would want a menu bar to contain the std items).
 	return OK;  // For caller convenience.
 }
+
+
+
+#ifdef AUTOHOTKEYSC
+
+ResultType UserMenu::EnableStandardOpenItem(bool aEnable)
+{
+	for (UserMenuItem *mi_prev = NULL, *mi = mFirstMenuItem; mi; mi_prev = mi, mi = mi->mNextMenuItem)
+	{
+		if (mi->mMenuID >= ID_TRAY_FIRST)
+		{
+			bool is_enabled = mi->mMenuID == ID_TRAY_OPEN;
+			if (is_enabled != aEnable)
+			{
+				if (aEnable)
+				{
+					UserMenuItem **p = mi_prev ? &mi_prev->mNextMenuItem : &mFirstMenuItem;
+					if (!AddItem(_T("&Open"), ID_TRAY_OPEN, NULL, NULL, _T(""), p))
+						return FAIL;
+					if (this == g_script.mTrayMenu && !mDefault)
+						SetDefault(*p);
+					return OK;
+				}
+				return DeleteItem(mi, mi_prev);
+			}
+			break;
+		}
+	}
+	return OK;
+}
+
+#endif
 
 
 
@@ -1258,7 +1231,7 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 // resistance.  This is done because if the main window is *not* successfully activated prior to
 // displaying the menu, it might be impossible to dismiss the menu by clicking outside of it.
 {
-	if (!mMenuItemCount && !mIncludeStandardItems)
+	if (!mMenuItemCount)
 		return OK;  // Consider the display of an empty menu to be a success.
 	//if (!IsMenu(mMenu))
 	//	mMenu = NULL;
@@ -1419,6 +1392,17 @@ bool UserMenu::ContainsMenu(UserMenu *aMenu)
 			if (mi->mSubmenu == aMenu || mi->mSubmenu->ContainsMenu(aMenu)) // recursive
 				return true;
 			//else keep searching
+	return false;
+}
+
+
+
+bool UserMenu::ContainsCustomItems()
+// Returns true if the menu contains items other than the standard items.
+{
+	for (UserMenuItem *mi = mFirstMenuItem; mi; mi = mi->mNextMenuItem)
+		if (mi->mMenuID <= ID_USER_LAST)
+			return true;
 	return false;
 }
 
