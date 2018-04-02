@@ -187,9 +187,12 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 		{
 			// Before going further: since a submenu has been specified, make sure that the parent
 			// menu is not included anywhere in the nested hierarchy of that submenu's submenus.
-			// The OS doesn't seem to like that, creating empty or strange menus if it's attempted:
-			if (submenu == this || submenu->ContainsMenu(this))
-				_o_throw(_T("Submenu must not contain its parent menu."));
+			// The OS doesn't seem to like that, creating empty or strange menus if it's attempted.
+			// Although adding a menu bar as a submenu appears to work, displaying it does strange
+			// things to the actual menu bar on any GUI it is assigned to.
+			if (submenu == this || submenu->ContainsMenu(this)
+				|| submenu->mMenuType != MENU_TYPE_POPUP)
+				_o_throw(ERR_PARAM2_INVALID);
 			callback = NULL;
 		}
 		else if (callback) 
@@ -286,10 +289,10 @@ UserMenu *Script::FindMenu(HMENU aMenuHandle)
 
 
 
-UserMenu *Script::AddMenu()
+UserMenu *Script::AddMenu(MenuTypeType aMenuType)
 // Returns the newly created UserMenu object.
 {
-	UserMenu *menu = new UserMenu();
+	UserMenu *menu = new UserMenu(aMenuType);
 	if (!menu)
 		return NULL;  // Caller should show error if desired.
 	if (!mFirstMenu)
@@ -671,55 +674,24 @@ ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, IObject *aCallback, Use
 	aMenuItem->mCallback = aCallback;  // This will be NULL if this menu item is a separator or submenu.
 	if (aMenuItem->mSubmenu == aSubmenu) // Below relies on this check.
 		return OK;
-	if (!mMenu)
-	{
-		if (aSubmenu)
-			aSubmenu->AddRef();
-		if (aMenuItem->mSubmenu)
-			aMenuItem->mSubmenu->Release();
-		aMenuItem->mSubmenu = aSubmenu;  // Just set the indicator for when the menu is later created.
-		return OK;
-	}
 
+	if (aSubmenu)
+		aSubmenu->AddRef();
+	if (aMenuItem->mSubmenu)
+		aMenuItem->mSubmenu->Release();
+	aMenuItem->mSubmenu = aSubmenu;
+
+	if (!mMenu)
+		return OK;
 	// Otherwise, since the OS menu exists, one of these is to be done to aMenuItem in it:
 	// 1) Change a submenu to point to a different menu.
 	// 2) Change a submenu so that it becomes a normal menu item.
 	// 3) Change a normal menu item into a submenu.
-
-	if (aSubmenu)
-		if (!aSubmenu->Create()) // Create if needed.  No error msg since so rare.
-			return FAIL;
-
-	MENUITEMINFO mii;
-	mii.cbSize = sizeof(mii);
-	mii.fMask = MIIM_SUBMENU;
-	mii.hSubMenu = aSubmenu ? aSubmenu->mMenu : NULL;
-	if (SetMenuItemInfo(mMenu, aMenuItem->mMenuID, FALSE, &mii))
-	{
-		if (aSubmenu)
-			aSubmenu->AddRef();
-		UserMenu *old_submenu = aMenuItem->mSubmenu;
-		aMenuItem->mSubmenu = aSubmenu; // Should be done before the below so that Destroy() sees the change.
-		if (old_submenu)
-		{
-			// Submenu was just made into a different submenu or converted into a normal menu item.
-			// Since the OS (as an undocumented side effect) sometimes destroys the menu itself when
-			// a submenu is changed in this way, update our state to indicate that the menu handle
-			// is no longer valid:
-			if (old_submenu->mMenu && !IsMenu(old_submenu->mMenu))
-			{
-				// The following shouldn't fail because submenus are popup menus, and popup menus can't be
-				// menu bars. Update: Even if it does fail due to causing a cascade-destroy upward toward any
-				// menu bar that happens to own it, it seems okay because the real purpose here is simply to
-				// update that fact that "temp" was already destroyed indirectly by the OS, as evidenced by
-				// the fact that IsMenu() returned FALSE above.
-				old_submenu->Destroy();
-			}
-			old_submenu->Release();
-		}
-	}
-	// else no error msg and return OK so that the thread will continue.  This may help catch
-	// bugs in the course of normal use of this feature.
+	// Replacing or removing a submenu is known to destroy the old submenu as a side-effect,
+	// so instead of changing the submenu directly, remove the item and add it back with the
+	// correct properties.
+	RemoveMenu(mMenu, aMenuItem->mMenuID, MF_BYCOMMAND);
+	InternalAppendMenu(aMenuItem, aMenuItem->mNextMenuItem);
 	return OK;
 }
 
@@ -964,31 +936,18 @@ ResultType UserMenu::SetDefault(UserMenuItem *aMenuItem, bool aUpdateGuiMenuBars
 
 
 
-ResultType UserMenu::Create(MenuTypeType aMenuType)
+ResultType UserMenu::Create()
 // Menu bars require non-popup menus (CreateMenu vs. CreatePopupMenu).  Rather than maintain two
 // different types of HMENUs on the rare chance that a script might try to use a menu both as
 // a popup and a menu bar, it seems best to have only one type to keep the code simple and reduce
-// resources used for the menu.  This has been documented in the help file.
-// Note that a menu bar's submenus can be (perhaps must be) of the popup type, so we only need
-// to worry about the distinction for the menu bar itself.  The caller tells us which is which.
+// resources used for the menu.  This is reflected in MenuCreate() and MenuBarCreate(), which
+// create the UserMenu with the appropriate value for mMenuType.
 {
 	if (mMenu)
-	{
-		// Since menu already exists, check if it's the right type.  If caller left the type unspecified,
-		// assume it is the right type:
-		if (aMenuType == MENU_TYPE_NONE || aMenuType == mMenuType)
-			return OK;
-		else // It exists but it's the wrong type.  Destroy and recreate it (but keep TRAY always as popup type).
-			if (!Destroy()) // Could not be destroyed, perhaps because it is attached to a window as a menu bar.
-				return FAIL;
-	}
-	if (aMenuType == MENU_TYPE_NONE) // Since caller didn't specify and it's about to be (re)created, assume popup.
-		aMenuType = MENU_TYPE_POPUP;
-	if (   !(mMenu = (aMenuType == MENU_TYPE_BAR) ? CreateMenu() : CreatePopupMenu())   )
+		return OK;
+	if (   !(mMenu = (mMenuType == MENU_TYPE_BAR) ? CreateMenu() : CreatePopupMenu())   )
 		// Failure is rare, so no error msg here (caller can, if it wants).
 		return FAIL;
-
-	mMenuType = aMenuType;  // We have to track its type since I don't think there's any way to find out via API.
 
 	// It seems best not to have a mandatory EXIT item added to the bottom of the tray menu
 	// because omitting it allows the tray icon to be shown even when the user wants it to
@@ -1145,79 +1104,33 @@ ResultType UserMenu::EnableStandardOpenItem(bool aEnable)
 
 
 
-ResultType UserMenu::Destroy()
-// Returns OK upon complete success or FAIL otherwise.  For example, even if this's menu
-// is successfully destroyed, if the indirect destructions resulting from it don't succeed, this
-// method returns FAIL.
+void UserMenu::Destroy()
+// Destroys the Win32 menu or marks it NULL if it has already been destroyed externally.
+// This should be called only when the UserMenu is being deleted (or the script is exiting),
+// otherwise any parent menus would still refer to the old Win32 menu.  If the UserMenu is
+// being deleted, that implies that its reference count is zero, meaning it isn't in use as
+// a submenu or menu bar.
 {
 	if (!mMenu)  // For performance.
-		return OK;
-	// I think DestroyMenu() can fail if an attempt is made to destroy the menu while it is being
-	// displayed (but even if it doesn't fail, it seems very bad to try to destroy it then, which
-	// is why g_MenuIsVisible is checked just to be sure).
-	// But this all should be impossible in our case because the script is in an uninterruptible state
-	// while the menu is displayed, which in addition to pausing the current thread (which happens
-	// anyway), no new timed or hotkey subroutines can be launched.  Thus, this should rarely if
-	// ever happen, which is why no error message is given here:
+		return;
+	// Testing on Windows 10 shows that DestroyMenu() is able to destroy a menu even while it is
+	// being displayed, causing only temporary cosmetic issues.  Previous testing with menu bars
+	// showed similar results.  There wouldn't be much point in checking the following because the
+	// script is in an uninterruptible state while the menu is displayed, which in addition to
+	// pausing the current thread (which happens anyway), no new threads can be launched:
 	//if (g_MenuIsVisible)
 	//	return FAIL;
 
-	// DestroyMenu fails (GetLastError() == ERROR_INVALID_MENU_HANDLE) if a parent menu that contained
-	// mMenu as one of its submenus was destroyed above.  This seems to indicate that submenus are
-	// destroyed whenever a parent menu is destroyed.  Therefore, don't check failure on the below,
-	// just assume that afterward, the menu is gone.  IsMenu() is checked because the handle can be
-	// invalid if the OS already destroyed it behind-the-scenes (this happens to a submenu whenever
-	// its parent menu is destroyed, or whenever a submenu is converted back into a normal menu item):
-	if (IsMenu(mMenu))
-	{
-		// As a precaution, don't allow a menu to be destroyed if a window is using it as its
-		// menu bar. That might have bad side-effects on some OSes, especially older ones:
-		if (mMenuType == MENU_TYPE_BAR)
-			for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
-				if (GetMenu(gui->mHwnd) == mMenu) // mHwnd is always non-NULL for any item in g_gui.
-					return FAIL; // A GUI window is using this menu, so don't destroy the menu.
-		if (!DestroyMenu(mMenu)) // v1.0.30.01: Doesn't seem to be a reason *not* to check the return value and return FAIL if it failed.
-			return FAIL;
-	}
-	mMenu = NULL; // This must be done immediately after destroying the menu to prevent recursion problems below.
-	
-	ResultType result = OK;
-	UserMenuItem *mi;
+	// MSDN: "DestroyMenu is recursive, that is, it will destroy the menu and all its submenus."
+	// Therefore remove all submenus before destroying the menu, in case the script is using them.
+	// If the script is not using them, they will be destroyed automatically as they are released
+	// by ~UserMenuItem().
+	for (UserMenuItem *mi = mFirstMenuItem; mi ; mi = mi->mNextMenuItem)
+		if (mi->mSubmenu)
+			RemoveMenu(mMenu, mi->mMenuID, MF_BYCOMMAND);
 
-	// Destroy any menu that contains this menu as a submenu.  This is done so that such
-	// menus will be automatically recreated the next time they are used, which is necessary
-	// because otherwise when such a menu is displayed the next time, the OS will show its
-	// old contents even though the menu is gone.  Thus, those old menu items will be
-	// selectable but will have no effect.  In addition, sometimes our caller plans to
-	// recreate this->mMenu (or have it recreated automatically upon first use) and thus
-	// we don't want to use DeleteMenu() because that would require having to detect whether
-	// the menu needs updating (to reflect whether the submenu has been recreated) every
-	// time we display it.  Another drawback to DeleteMenu() is that it would change the
-	// order of the menu items to something other than what the user originally specified
-	// unless InsertMenu() was woven in during the update:
-	for (UserMenu *m = g_script.mFirstMenu; m; m = m->mNextMenu)
-		if (m->mMenu)
-			for (mi = m->mFirstMenuItem; mi; mi = mi->mNextMenuItem)
-				if (mi->mSubmenu == this)
-					if (!m->Destroy())  // Attempt to destroy any menu that contains this menu as a submenu (will fail if m is a menu bar).
-						result = FAIL; // Seems best to consider even one failure is considered a total failure.
-
-	// Bug-fix for v1.1.23: Destroying sub-menus after (rather than before) the parent menu appears
-	// to solve an issue where a sub-menu was not marked as destroyed because IsMenu() returned TRUE
-	// after its parent was destroyed but only until its grandparent was destroyed.
-	// Bug-fix for v1.0.19: The below is now done OUTSIDE the above block because the moment a
-	// parent menu is deleted all its submenus AND SUB-SUB-SUB...MENUS become invalid menu handles.
-	// But even though the OS has done this, Destroy() must still be called recursively from here
-	// so that the menu handles will be set to NULL.  This is because other functions -- such as
-	// Display() -- do not do the IsMenu() check, relying instead on whether the handle is NULL to
-	// determine whether the menu physically exists.
-	// The moment the above is done, any submenus that were attached to mMenu are also destroyed
-	// by the OS.  So mark them as destroyed in our bookkeeping also:
-	for (mi = mFirstMenuItem; mi ; mi = mi->mNextMenuItem)
-		if (mi->mSubmenu && mi->mSubmenu->mMenu && !IsMenu(mi->mSubmenu->mMenu))
-			mi->mSubmenu->Destroy(); // Its return value isn't checked since there doesn't seem to be anything that can/should be done if it fails.
-
-	return result;
+	DestroyMenu(mMenu);
+	mMenu = NULL;
 }
 
 
@@ -1231,13 +1144,14 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 // resistance.  This is done because if the main window is *not* successfully activated prior to
 // displaying the menu, it might be impossible to dismiss the menu by clicking outside of it.
 {
+	if (mMenuType != MENU_TYPE_POPUP)
+		return g_script.ScriptError(ERR_INVALID_MENU_TYPE);
 	if (!mMenuItemCount)
 		return OK;  // Consider the display of an empty menu to be a success.
+	if (!Create()) // Create if needed.  No error msg since so rare.
+		return FAIL;
 	//if (!IsMenu(mMenu))
 	//	mMenu = NULL;
-	if (!mMenu) // i.e. because this is the first time the user has opened the menu.
-		if (!Create()) // no error msg since so rare
-			return FAIL;
 	if (this == g_script.mTrayMenu)
 	{
 		// These are okay even if the menu items don't exist (perhaps because the user customized the menu):

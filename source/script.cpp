@@ -288,6 +288,7 @@ FuncEntry g_BIF[] =
 	BIFn(OnClipboardChange, 1, 2, false, BIF_OnExitOrClipboard),
 
 	BIFn(MenuCreate, 0, 0, true, BIF_Menu),
+	BIFn(MenuBarCreate, 0, 0, true, BIF_Menu),
 	BIFn(MenuFromHandle, 1, 1, true, BIF_Menu),
 	BIF1(TraySetIcon, 0, 3, false),
 
@@ -510,7 +511,7 @@ Script::Script()
 	mNIC.hWnd = NULL;  // Set this as an indicator that it tray icon is not installed.
 
 	// Lastly (after the above have been initialized), anything that can fail:
-	if (   !(mTrayMenu = AddMenu())   ) // realistically never happens
+	if (   !(mTrayMenu = AddMenu(MENU_TYPE_POPUP))   ) // realistically never happens
 	{
 		ScriptError(_T("No tray mem"));
 		ExitApp(EXIT_CRITICAL);

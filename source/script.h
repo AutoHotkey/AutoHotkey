@@ -190,10 +190,9 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_EXPR_TOO_LONG _T("Expression too complex")
 #define ERR_TOO_MANY_REFS ERR_EXPR_TOO_LONG // No longer applies to just var/func refs. Old message: "Too many var/func refs."
 #define ERR_NO_LABEL _T("Target label does not exist.")
-#define ERR_MENU _T("Menu does not exist.")
-#define ERR_SUBMENU _T("Submenu does not exist.")
+#define ERR_INVALID_MENU_TYPE _T("Invalid menu type.")
+#define ERR_INVALID_SUBMENU _T("Invalid submenu.")
 #define ERR_WINDOW_PARAM _T("Requires at least one of its window parameters.")
-#define ERR_MENUTRAY _T("Supported only for the tray menu")
 #define ERR_MOUSE_COORD _T("X & Y must be either both absent or both present.")
 #define ERR_DIVIDEBYZERO _T("Divide by zero")
 #define ERR_VAR_IS_READONLY _T("Not allowed as an output variable.")
@@ -572,7 +571,7 @@ enum BuiltInFunctionID {
 	FID_ProcessExist = 0, FID_ProcessClose, FID_ProcessWait, FID_ProcessWaitClose, 
 	FID_MonitorGet = 0, FID_MonitorGetWorkArea, FID_MonitorGetCount, FID_MonitorGetPrimary, FID_MonitorGetName, 
 	FID_OnExit = 0, FID_OnClipboardChange,
-	FID_MenuCreate = 0, FID_MenuFromHandle,
+	FID_MenuCreate = 0, FID_MenuBarCreate, FID_MenuFromHandle,
 	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlGetTab, FID_ControlFindItem, FID_ControlGetChoice, FID_ControlGetList, FID_ControlGetLineCount, FID_ControlGetCurrentLine, FID_ControlGetCurrentCol, FID_ControlGetLine, FID_ControlGetSelected, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
 	FID_ControlSetChecked = 0, FID_ControlSetEnabled, FID_ControlShow, FID_ControlHide, FID_ControlSetStyle, FID_ControlSetExStyle, FID_ControlShowDropDown, FID_ControlHideDropDown, FID_ControlSetTab, FID_ControlAddItem, FID_ControlDeleteItem, FID_ControlChoose, FID_ControlChooseString, FID_ControlEditPaste,
 	FID_DriveEject = 0, FID_DriveLock, FID_DriveUnlock, FID_DriveSetLabel,
@@ -2004,10 +2003,10 @@ public:
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
 
-	UserMenu() // Constructor
+	UserMenu(MenuTypeType aMenuType) // Constructor
 		: mFirstMenuItem(NULL), mLastMenuItem(NULL), mDefault(NULL)
 		, mClickCount(2), mMenuItemCount(0), mNextMenu(NULL), mMenu(NULL)
-		, mMenuType(MENU_TYPE_POPUP) // The MENU_TYPE_NONE flag is not used in this context.  Default = POPUP.
+		, mMenuType(aMenuType)
 		, mBrush(NULL), mColor(CLR_DEFAULT)
 	{
 	}
@@ -2042,7 +2041,8 @@ public:
 		P_ClickCount,
 	};
 	
-	IObject_Type_Impl("Menu")
+	//IObject_Type_Impl("Menu")
+	LPTSTR Type() { return mMenuType == MENU_TYPE_BAR ? _T("MenuBar") : _T("Menu"); }
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions, UserMenuItem **aInsertAt);
@@ -2061,12 +2061,12 @@ public:
 	ResultType DisableItem(UserMenuItem *aMenuItem);
 	ResultType ToggleEnableItem(UserMenuItem *aMenuItem);
 	ResultType SetDefault(UserMenuItem *aMenuItem = NULL, bool aUpdateGuiMenuBars = true);
-	ResultType Create(MenuTypeType aMenuType = MENU_TYPE_NONE); // NONE means UNSPECIFIED in this context.
+	ResultType Create();
 	void SetColor(ExprTokenType &aColor, bool aApplyToSubmenus);
 	void ApplyColor(bool aApplyToSubmenus);
 	ResultType AppendStandardItems();
 	ResultType EnableStandardOpenItem(bool aEnable);
-	ResultType Destroy();
+	void Destroy();
 	ResultType Display(bool aForceToForeground = true, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED);
 	UserMenuItem *FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bool &aByPos);
 	UserMenuItem *FindItemByID(UINT aID);
@@ -2893,7 +2893,7 @@ public:
 
 	UINT GetFreeMenuItemID();
 	UserMenu *FindMenu(HMENU aMenuHandle);
-	UserMenu *AddMenu();
+	UserMenu *AddMenu(MenuTypeType aMenuType);
 	ResultType ScriptDeleteMenu(UserMenu *aMenu);
 	UserMenuItem *FindMenuItemByID(UINT aID)
 	{

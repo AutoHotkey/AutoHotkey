@@ -1040,9 +1040,9 @@ ResultType GuiType::SetMenu(ExprTokenType &aParam)
 	if (!TokenIsEmptyString(aParam))
 	{
 		menu = dynamic_cast<UserMenu *>(TokenToObject(aParam));
-		if (!menu || menu == g_script.mTrayMenu)
+		if (!menu || menu->mMenuType != MENU_TYPE_BAR)
 			return g_script.ScriptError(ERR_INVALID_VALUE);
-		menu->Create(MENU_TYPE_BAR);  // Ensure the menu physically exists and is the "non-popup" type (for a menu bar).
+		menu->Create(); // Ensure the menu bar physically exists.
 		menu->AddRef();
 	}
 	if (mMenu)

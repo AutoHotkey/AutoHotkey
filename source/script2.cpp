@@ -15163,8 +15163,10 @@ BIF_DECL(BIF_Menu)
 	UserMenu *menu;
 	switch (_f_callee_id)
 	{
-	case FID_MenuCreate:
-		if (  !(menu = g_script.AddMenu())  )
+	default:
+	//case FID_MenuCreate:
+	//case FID_MenuBarCreate:
+		if (  !(menu = g_script.AddMenu(_f_callee_id == FID_MenuCreate ? MENU_TYPE_POPUP : MENU_TYPE_BAR))  )
 			_f_throw(ERR_OUTOFMEM);
 		break;
 	case FID_MenuFromHandle:
