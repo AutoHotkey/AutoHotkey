@@ -259,7 +259,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	if_member("Title", P_Title)
 	if_member("Control", P_Control)
 	if_member("FocusedCtrl", P_FocusedCtrl)
-	if_member("Menu", P_Menu)
+	if_member("MenuBar", P_MenuBar)
 	if_member("MarginX", P_MarginX)
 	if_member("MarginY", P_MarginY)
 	if_member("BackColor", P_BackColor)
@@ -386,7 +386,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 				return OK;
 			}
 		}
-		case P_Menu:
+		case P_MenuBar:
 		{
 			if (IS_INVOKE_SET)
 			{

@@ -2472,7 +2472,7 @@ public:
 		P_BackColor,
 		P_MarginX,
 		P_MarginY,
-		P_Menu,
+		P_MenuBar,
 		P_Pos,
 		P_ClientPos,
 	};
