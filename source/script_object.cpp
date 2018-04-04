@@ -1279,7 +1279,7 @@ ResultType Object::_GetAddress(ResultToken &aResultToken, ExprTokenType *aParam[
 	FieldType *field;
 
 	if ( (field = FindField(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
-		&& field->symbol == SYM_STRING && field->string.Capacity() != 0 )
+		&& field->symbol == SYM_STRING )
 	{
 		_o_return((__int64)field->string.Value());
 	}
