@@ -829,6 +829,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					this_token.value_int64 = (__int64)right_var->Contents(); // Contents() vs. mContents to support VAR_CLIPBOARD, and in case mContents needs to be updated by Contents().
 				this_token.symbol = SYM_INTEGER;
 			}
+			else if (right.symbol == SYM_STRING)
+			{
+				this_token.SetValue((__int64)right.marker);
+			}
 			else // Syntax error: operand is not an object or a variable reference.
 				goto abort_with_exception;
 			break;
