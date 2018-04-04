@@ -1283,8 +1283,8 @@ ResultType Object::_GetAddress(ResultToken &aResultToken, ExprTokenType *aParam[
 	{
 		_o_return((__int64)field->string.Value());
 	}
-	//else: field has no memory allocated, so return an empty string.
-	_o_return_empty;
+	//else: nonexistent field or wrong type.
+	_o_throw(field ? ERR_INVALID_VALUE : ERR_PARAM1_INVALID);
 }
 
 ResultType Object::_NewEnum(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
