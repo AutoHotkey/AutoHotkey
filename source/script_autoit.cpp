@@ -662,7 +662,7 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 				goto error;
 		}
 		else // ComboBox or single-select ListBox.
-			if (!SendMessageTimeout(control_window, msg, 1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult)
+			if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult)
 				|| dwResult == CB_ERR) // CB_ERR == LB_ERR
 				goto error;
 		if (   !(immediate_parent = GetParent(control_window))   )
@@ -752,7 +752,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 			msg = LB_FINDSTRINGEXACT;
 		else // Must be ComboBox or ListBox
 			goto error;
-		if (!SendMessageTimeout(control_window, msg, 1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &index)
+		if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &index)
 			|| index == CB_ERR) // CB_ERR == LB_ERR
 			goto error;
 		output_var.Assign(index + 1);
