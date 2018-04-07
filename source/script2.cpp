@@ -1983,7 +1983,6 @@ BIF_DECL(BIF_PostSendMessage)
 	// member after sending the message in case the receiver of the message wrote something to the buffer.
 	// This is similar to the way "Str" parameters work in DllCall.
 	INT_PTR param[2] = { 0, 0 };
-	Var *var_to_update[2] = { 0, 0 };
 	int i;
 	for (i = 1; i < 3; ++i) // Two iterations: wParam and lParam.
 	{
@@ -1991,21 +1990,19 @@ BIF_DECL(BIF_PostSendMessage)
 			continue;
 		ExprTokenType &this_param = *aParam[i];
 		if (this_param.symbol == SYM_VAR)
-		{
-			Var *var = this_param.var;
-			var->ToTokenSkipAddRef(this_param);
-			if (this_param.symbol == SYM_STRING)
-				var_to_update[i-1] = var; // Not this_param.var, which was overwritten.
-		}
+			this_param.var->ToTokenSkipAddRef(this_param);
 		switch (this_param.symbol)
 		{
 		case SYM_INTEGER:
 			param[i-1] = (INT_PTR)this_param.value_int64;
-			var_to_update[i-1] = NULL;
 			break;
 		case SYM_STRING:
-			param[i-1] = (INT_PTR)this_param.marker;
-			break;
+			LPTSTR error_marker;
+			param[i-1] = (INT_PTR)tcstoi64_o(this_param.marker, &error_marker, 0);
+			if (!*error_marker) // Valid number or empty string.
+				break;
+			//else: It's a non-numeric string; maybe the caller forgot the &address-of operator.
+			// Note that an empty string would satisfy the check above.
 		default:
 			// SYM_FLOAT: Seems best to treat it as an error rather than truncating the value.
 			// SYM_OBJECT: Reserve for future use (user-defined conversion meta-functions?).
@@ -2019,10 +2016,6 @@ BIF_DECL(BIF_PostSendMessage)
 		successful = SendMessageTimeout(control_window, msg, (WPARAM)param[0], (LPARAM)param[1], SMTO_ABORTIFHUNG, timeout, &dwResult);
 	else
 		successful = PostMessage(control_window, msg, (WPARAM)param[0], (LPARAM)param[1]);
-
-	for (i = 0; i < 2; ++i) // Two iterations: wParam and lParam.
-		if (var_to_update[i])
-			var_to_update[i]->SetLengthFromContents();
 
 	g_ErrorLevel->Assign(successful ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
 	if (aUseSend && successful)
