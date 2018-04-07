@@ -1161,7 +1161,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					case GUI_EVENT_CLOSE:
 						// If the return value is false/unspecified, hide/destroy the Gui.
 						if (!retval)
-							pgui->CancelOrDestroy(2); // The '2' is needed because we earlier used AddRef().
+							pgui->Cancel();
 						break;
 					case GUI_EVENT_DROPFILES:
 						if (pgui->IsMonitoring(gui_action)) // Reapply the style only if we're still monitoring this event.

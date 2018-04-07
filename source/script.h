@@ -2433,6 +2433,7 @@ public:
 	bool mControlWidthWasSetByContents; // Whether the most recently added control was auto-width'd to fit its contents.
 	bool mUsesDPIScaling; // Whether the GUI uses DPI scaling.
 	bool mDisposed; // Simplifies Dispose().
+	bool mVisibleRefCounted; // Whether AddRef() has been done as a result of the window being shown.
 
 	#define MAX_GUI_FONTS 200  // v1.0.44.14: Increased from 100 to 200 due to feedback that 100 wasn't enough.  But to alleviate memory usage, the array is now allocated upon first use.
 	static FontType *sFont; // An array of structs, allocated upon first use.
@@ -2511,18 +2512,8 @@ public:
 		, mDestroyWindowHasBeenCalled(false), mControlWidthWasSetByContents(false)
 		, mUsesDPIScaling(true)
 		, mDisposed(false)
+		, mVisibleRefCounted(false)
 	{
-	}
-
-	~GuiType()
-	{
-		// Since the program itself retains a reference to the Gui until the window is
-		// destroyed, the destructor should never be called without Destroy() having been
-		// called first, unless GuiCreate() aborted due to an error.  mHwnd != NULL would
-		// indicate a bug in the program or script (calling Release() too many times).
-		//Destroy();
-		ASSERT(!mHwnd);
-		Dispose();
 	}
 
 	void Destroy();
@@ -2568,15 +2559,9 @@ public:
 	ResultType ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilename, int aWidth, int aHeight, int aIconNumber);
 	ResultType Show(LPTSTR aOptions);
 	void Cancel();
-	void CancelOrDestroy(ULONG minRefCount = 1)
-	{
-		// If there is only one reference left to the Gui (i.e. due to the global Gui list),
-		// destroy the Gui instead of hiding it. The extra minRefCount parameter is necessary
-		// because MsgSleep() increases the reference count of the Gui.
-		return mRefCount > minRefCount ? Cancel() : Destroy();
-	}
 	void Close(); // Due to SC_CLOSE, etc.
 	void Escape(); // Similar to close, except typically called when the user presses ESCAPE.
+	void VisibilityChanged();
 	ResultType Submit(ResultToken &aResultToken, bool aHideIt);
 
 	static GuiType *FindGui(HWND aHwnd);
@@ -2695,6 +2680,9 @@ public:
 	int Unscale(int x) { return mUsesDPIScaling ? DPIUnscale(x) : x; }
 	// The following is a workaround for the "w-1" and "h-1" options:
 	int ScaleSize(int x) { return mUsesDPIScaling && x != -1 ? DPIScale(x) : x; }
+
+protected:
+	bool Delete();
 };
 
 
