@@ -2659,9 +2659,11 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 
 	// v1.1.28.00: active_window is set to the focused control, if any, so that the hotstring buffer is reset
 	// when the focus changes between controls, not just between windows.
+	// v1.1.28.01: active_window is left as the active window; the above is not done because it disrupts
+	// hotstrings when the first keypress causes a change in focus, such as to enter editing mode in Excel.
 	// See Get_active_window_keybd_layout macro definition for related comments.
 	HWND active_window = GetForegroundWindow(); // Set default in case there's no focused control.
-	HKL active_window_keybd_layout = GetKeyboardLayout(GetFocusedCtrlThread(&active_window, active_window));
+	HKL active_window_keybd_layout = GetKeyboardLayout(GetFocusedCtrlThread(NULL, active_window));
 
 	// Univeral Windows Platform apps apparently have their own handling for dead keys:
 	//  - Dead key followed by Esc produces Chr(27), unlike non-UWP apps.
