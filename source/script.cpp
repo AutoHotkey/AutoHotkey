@@ -5670,6 +5670,9 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	if (!AddLine(ACT_BLOCK_BEGIN))
 		return FAIL;
 
+	if (!g->CurrentFunc->mOuterFunc)
+		g->CurrentFunc->mDefaultVarType = VAR_DECLARE_GLOBAL;
+
 	orig_end = *aExprEnd;
 	*aExprEnd = '\0';
 	if (!ParseAndAddLine(aExpr, 0, ACT_RETURN, aExprMap, aExprEnd - aExpr))
