@@ -7735,9 +7735,6 @@ void GuiType::Close()
 
 void GuiType::Escape() // Similar to close, except typically called when the user presses ESCAPE.
 // If there is an OnEscape event handler defined, launch it as a new thread.
-// In this case, don't close or hide the window.  It's up to the handler to do that
-// if it wants to.
-// If there is no label, treat it the same as Cancel().
 {
 	if (!IsMonitoring(GUI_EVENT_ESCAPE)) // The user preference (via votes on forum poll) is to do nothing by default.
 		return;
