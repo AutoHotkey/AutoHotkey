@@ -1250,13 +1250,8 @@ public:
 		if (aIsRemoteRegistry)
 			*aIsRemoteRegistry = (computer_name_end != NULL);
 
-		HKEY root_key;
-		if (!_tcsicmp(key_name, _T("HKLM")) || !_tcsicmp(key_name, _T("HKEY_LOCAL_MACHINE")))       root_key = HKEY_LOCAL_MACHINE;
-		else if (!_tcsicmp(key_name, _T("HKCR")) || !_tcsicmp(key_name, _T("HKEY_CLASSES_ROOT")))   root_key = HKEY_CLASSES_ROOT;
-		else if (!_tcsicmp(key_name, _T("HKCC")) || !_tcsicmp(key_name, _T("HKEY_CURRENT_CONFIG"))) root_key = HKEY_CURRENT_CONFIG;
-		else if (!_tcsicmp(key_name, _T("HKCU")) || !_tcsicmp(key_name, _T("HKEY_CURRENT_USER")))   root_key = HKEY_CURRENT_USER;
-		else if (!_tcsicmp(key_name, _T("HKU")) || !_tcsicmp(key_name, _T("HKEY_USERS")))           root_key = HKEY_USERS;
-		else // Invalid or unsupported root key name.
+		HKEY root_key = RegConvertRootKeyType(key_name);
+		if (!root_key) // Invalid or unsupported root key name.
 			return NULL;
 
 		if (!aIsRemoteRegistry || !computer_name_end) // Either caller didn't want it opened, or it doesn't need to be.
@@ -1271,19 +1266,10 @@ public:
 		HKEY remote_key;
 		return (RegConnectRegistry(computer_name, root_key, &remote_key) == ERROR_SUCCESS) ? remote_key : NULL;
 	}
-	static LPTSTR RegConvertRootKey(LPTSTR aBuf, size_t aBufSize, HKEY aRootKey)
-	{
-		// switch() doesn't directly support expression of type HKEY:
-		if (aRootKey == HKEY_LOCAL_MACHINE)       tcslcpy(aBuf, _T("HKEY_LOCAL_MACHINE"), aBufSize);
-		else if (aRootKey == HKEY_CLASSES_ROOT)   tcslcpy(aBuf, _T("HKEY_CLASSES_ROOT"), aBufSize);
-		else if (aRootKey == HKEY_CURRENT_CONFIG) tcslcpy(aBuf, _T("HKEY_CURRENT_CONFIG"), aBufSize);
-		else if (aRootKey == HKEY_CURRENT_USER)   tcslcpy(aBuf, _T("HKEY_CURRENT_USER"), aBufSize);
-		else if (aRootKey == HKEY_USERS)          tcslcpy(aBuf, _T("HKEY_USERS"), aBufSize);
-		else if (aBufSize)                        *aBuf = '\0'; // Make it be the empty string for anything else.
-		// These are either unused or so rarely used (DYN_DATA on Win9x) that they aren't supported:
-		// HKEY_PERFORMANCE_DATA, HKEY_PERFORMANCE_TEXT, HKEY_PERFORMANCE_NLSTEXT, HKEY_DYN_DATA
-		return aBuf;
-	}
+
+	static HKEY RegConvertRootKeyType(LPTSTR aName);
+	static LPTSTR RegConvertRootKeyType(HKEY aKey);
+
 	static int RegConvertValueType(LPTSTR aValueType)
 	{
 		if (!_tcsicmp(aValueType, _T("REG_SZ"))) return REG_SZ;
@@ -1293,23 +1279,23 @@ public:
 		if (!_tcsicmp(aValueType, _T("REG_BINARY"))) return REG_BINARY;
 		return REG_NONE; // Unknown or unsupported type.
 	}
-	static LPTSTR RegConvertValueType(LPTSTR aBuf, size_t aBufSize, DWORD aValueType)
+	static LPTSTR RegConvertValueType(DWORD aValueType)
 	{
 		switch(aValueType)
 		{
-		case REG_SZ: tcslcpy(aBuf, _T("REG_SZ"), aBufSize); return aBuf;
-		case REG_EXPAND_SZ: tcslcpy(aBuf, _T("REG_EXPAND_SZ"), aBufSize); return aBuf;
-		case REG_BINARY: tcslcpy(aBuf, _T("REG_BINARY"), aBufSize); return aBuf;
-		case REG_DWORD: tcslcpy(aBuf, _T("REG_DWORD"), aBufSize); return aBuf;
-		case REG_DWORD_BIG_ENDIAN: tcslcpy(aBuf, _T("REG_DWORD_BIG_ENDIAN"), aBufSize); return aBuf;
-		case REG_LINK: tcslcpy(aBuf, _T("REG_LINK"), aBufSize); return aBuf;
-		case REG_MULTI_SZ: tcslcpy(aBuf, _T("REG_MULTI_SZ"), aBufSize); return aBuf;
-		case REG_RESOURCE_LIST: tcslcpy(aBuf, _T("REG_RESOURCE_LIST"), aBufSize); return aBuf;
-		case REG_FULL_RESOURCE_DESCRIPTOR: tcslcpy(aBuf, _T("REG_FULL_RESOURCE_DESCRIPTOR"), aBufSize); return aBuf;
-		case REG_RESOURCE_REQUIREMENTS_LIST: tcslcpy(aBuf, _T("REG_RESOURCE_REQUIREMENTS_LIST"), aBufSize); return aBuf;
-		case REG_QWORD: tcslcpy(aBuf, _T("REG_QWORD"), aBufSize); return aBuf;
-		case REG_SUBKEY: tcslcpy(aBuf, _T("KEY"), aBufSize); return aBuf;  // Custom (non-standard) type.
-		default: if (aBufSize) *aBuf = '\0'; return aBuf;  // Make it be the empty string for REG_NONE and anything else.
+		case REG_SZ: return _T("REG_SZ");
+		case REG_EXPAND_SZ: return _T("REG_EXPAND_SZ");
+		case REG_BINARY: return _T("REG_BINARY");
+		case REG_DWORD: return _T("REG_DWORD");
+		case REG_DWORD_BIG_ENDIAN: return _T("REG_DWORD_BIG_ENDIAN");
+		case REG_LINK: return _T("REG_LINK");
+		case REG_MULTI_SZ: return _T("REG_MULTI_SZ");
+		case REG_RESOURCE_LIST: return _T("REG_RESOURCE_LIST");
+		case REG_FULL_RESOURCE_DESCRIPTOR: return _T("REG_FULL_RESOURCE_DESCRIPTOR");
+		case REG_RESOURCE_REQUIREMENTS_LIST: return _T("REG_RESOURCE_REQUIREMENTS_LIST");
+		case REG_QWORD: return _T("REG_QWORD");
+		case REG_SUBKEY: return _T("KEY");  // Custom (non-standard) type.
+		default: return _T("");  // Make it be the empty string for REG_NONE and anything else.
 		}
 	}
 	static DWORD RegConvertView(LPTSTR aBuf)
