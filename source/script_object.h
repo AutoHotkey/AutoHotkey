@@ -234,21 +234,27 @@ public:
 	{
 		return (int)mKeyOffsetObject;
 	}
-	
-	bool GetItem(ExprTokenType &aToken, LPTSTR aKey)
+
+	bool GetItem(ExprTokenType &aToken, ExprTokenType &aKey)
 	{
-		KeyType key;
-		SymbolType key_type = IsPureNumeric(aKey, FALSE, FALSE, FALSE); // SYM_STRING or SYM_INTEGER.
-		if (key_type == SYM_INTEGER)
-			key.i = Exp32or64(ATOI,ATOI64)(aKey);
-		else
-			key.s = aKey;
 		IndexType insert_pos;
-		FieldType *field = FindField(key_type, key, insert_pos);
+		TCHAR buf[MAX_NUMBER_SIZE];
+		SymbolType key_type;
+		KeyType key;
+		FieldType *field = FindField(aKey, buf, key_type, key, insert_pos);
 		if (!field)
 			return false;
 		field->ToToken(aToken);
 		return true;
+	}
+	
+	bool GetItem(ExprTokenType &aToken, LPTSTR aKey)
+	{
+		ExprTokenType key;
+		key.symbol = SYM_OPERAND;
+		key.marker = aKey;
+		key.buf = NULL;
+		return GetItem(aToken, key);
 	}
 	
 	bool SetItem(ExprTokenType &aKey, ExprTokenType &aValue)

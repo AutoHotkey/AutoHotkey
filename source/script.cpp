@@ -8503,9 +8503,15 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 			bif = BIF_ObjAddRefRelease;
 		else if (!_tcsicmp(suffix, _T("RawSet")))
 		{
-			bif = BIF_ObjRawSet;
+			bif = BIF_ObjRaw;
 			min_params = 3;
 			max_params = 3;
+		}
+		else if (!_tcsicmp(suffix, _T("RawGet")))
+		{
+			bif = BIF_ObjRaw;
+			min_params = 2;
+			max_params = 2;
 		}
 		else if (!_tcsicmp(suffix, _T("GetBase")))
 			bif = BIF_ObjBase;

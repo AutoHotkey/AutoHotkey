@@ -3303,7 +3303,7 @@ BIF_DECL(BIF_ObjNew); // Pseudo-operator.
 BIF_DECL(BIF_ObjIncDec); // Pseudo-operator.
 BIF_DECL(BIF_ObjAddRefRelease);
 BIF_DECL(BIF_ObjBindMethod);
-BIF_DECL(BIF_ObjRawSet);
+BIF_DECL(BIF_ObjRaw);
 BIF_DECL(BIF_ObjBase);
 // Built-ins also available as methods -- these are available as functions for use primarily by overridden methods (i.e. where using the built-in methods isn't possible as they're no longer accessible).
 BIF_DECL(BIF_ObjInsert);

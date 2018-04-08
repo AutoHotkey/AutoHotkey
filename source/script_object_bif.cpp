@@ -435,7 +435,7 @@ BIF_DECL(BIF_ObjBindMethod)
 // ObjRawSet - set a value without invoking any meta-functions.
 //
 
-BIF_DECL(BIF_ObjRawSet)
+BIF_DECL(BIF_ObjRaw)
 {
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
 	if (!obj)
@@ -443,9 +443,38 @@ BIF_DECL(BIF_ObjRawSet)
 		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
 		return;
 	}
-	if (!obj->SetItem(*aParam[1], *aParam[2]))
-		aResult = g_script.ScriptError(ERR_OUTOFMEM);
-	
+	if (ctoupper(aResultToken.marker[6]) == 'S')
+	{
+		if (!obj->SetItem(*aParam[1], *aParam[2]))
+		{
+			aResult = g_script.ScriptError(ERR_OUTOFMEM);
+			return;
+		}
+	}
+	else
+	{
+		ExprTokenType value;
+		if (obj->GetItem(value, *aParam[1]))
+		{
+			switch (value.symbol)
+			{
+			case SYM_OPERAND:
+				aResultToken.symbol = SYM_STRING;
+				aResult = TokenSetResult(aResultToken, value.marker);
+				break;
+			case SYM_OBJECT:
+				aResultToken.symbol = SYM_OBJECT;
+				aResultToken.object = value.object;
+				aResultToken.object->AddRef();
+				break;
+			default:
+				aResultToken.symbol = value.symbol;
+				aResultToken.value_int64 = value.value_int64;
+				break;
+			}
+			return;
+		}
+	}
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
 }
