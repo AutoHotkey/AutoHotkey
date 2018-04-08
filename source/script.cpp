@@ -8949,6 +8949,12 @@ unquoted_literal:
 						{
 							return LineError(ERR_TOO_MANY_PARAMS, FAIL, in_param_list->marker);
 						}
+						else if (postfix_count > 1 && postfix[postfix_count-2] > stack[stack_count-1])
+						{
+							// Second-last postfix token is also within the function's parameter list,
+							// so the parameter isn't a simple value.  The checks and optimizations below
+							// aren't capable of handling this.  For example: Func(true ? "abs" : "").
+						}
 						else if (func->ArgIsOutputVar(in_param_list->param_count - 1))
 						{
 							ExprTokenType &param1 = *postfix[postfix_count-1];
@@ -8984,7 +8990,7 @@ unquoted_literal:
 							&& in_param_list->param_count == 1) // i.e. this is the end of the first param.
 						{
 							// Optimise DllCall by resolving function addresses at load-time where possible.
-							ExprTokenType &param1 = *postfix[postfix_count-1]; // Due to the nature of postfix, an operand can only be the last token if it is the only token in this parameter.
+							ExprTokenType &param1 = *postfix[postfix_count-1];
 							if (param1.symbol == SYM_STRING)
 							{
 								void *function = GetDllProcAddress(param1.marker);
