@@ -10934,7 +10934,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 
 	if (enum_token.symbol != SYM_OBJECT)
 		if (result == INVOKE_NOT_HANDLED)
-			return LineError(ERR_NO_MEMBER, FAIL, _T("_NewEnum"));
+			return LineError(ERR_UNKNOWN_METHOD, FAIL, _T("_NewEnum"));
 		else
 			return LineError(ERR_NO_OBJECT, FAIL, _T("Enumerator")); // Since it's probably rare, keep the unique part of the message short.
 
@@ -10978,7 +10978,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 
 		if (result == INVOKE_NOT_HANDLED)
 		{
-			result = LineError(ERR_NO_MEMBER, FAIL, _T("Next"));
+			result = LineError(ERR_UNKNOWN_METHOD, FAIL, _T("Next"));
 			break;
 		}
 

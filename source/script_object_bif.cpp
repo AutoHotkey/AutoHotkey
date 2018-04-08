@@ -141,7 +141,8 @@ BIF_DECL(Op_ObjInvoke)
 		if (!obj)
 			_f_throw(ERR_NO_OBJECT);
 		else
-			_f_throw(ERR_NO_MEMBER, aParamCount ? TokenToString(*aParam[0]) : _T(""));
+			_f_throw(invoke_type == IT_CALL ? ERR_UNKNOWN_METHOD : ERR_UNKNOWN_PROPERTY
+				, aParamCount ? TokenToString(*aParam[0]) : _T(""));
 	}
 	else if (result == FAIL || result == EARLY_EXIT) // For maintainability: SetExitResult() might not have been called.
 	{
