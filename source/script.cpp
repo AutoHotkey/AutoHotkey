@@ -8487,6 +8487,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		BIF_OBJ_CASE(Remove, 		0, 2) // [min_key, max_key]
 		BIF_OBJ_CASE(RemoveAt,      1, 2) // position [, count]
 		BIF_OBJ_CASE(Pop,			0, 0)
+		BIF_OBJ_CASE(Count, 		0, 0)
 		BIF_OBJ_CASE(Length, 		0, 0)
 		BIF_OBJ_CASE(MinIndex, 		0, 0)
 		BIF_OBJ_CASE(MaxIndex, 		0, 0)

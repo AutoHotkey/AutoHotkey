@@ -3315,6 +3315,7 @@ BIF_DECL(BIF_ObjRemoveAt);
 BIF_DECL(BIF_ObjGetCapacity);
 BIF_DECL(BIF_ObjSetCapacity);
 BIF_DECL(BIF_ObjGetAddress);
+BIF_DECL(BIF_ObjCount);
 BIF_DECL(BIF_ObjLength);
 BIF_DECL(BIF_ObjMaxIndex);
 BIF_DECL(BIF_ObjMinIndex);

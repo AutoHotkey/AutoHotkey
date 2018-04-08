@@ -750,6 +750,9 @@ int Object::GetBuiltinID(LPCTSTR aName)
 	case 'D':
 		if (!_tcsicmp(aName, _T("Delete")))
 			return FID_ObjDelete;
+	case 'C':
+		if (!_tcsicmp(aName, _T("Count")))
+			return FID_ObjCount;
 		break;
 	}
 	// Older methods which support the _ prefix:
@@ -816,6 +819,7 @@ ResultType Object::CallBuiltin(int aID, ExprTokenType &aResultToken, ExprTokenTy
 	case_method(InsertAt);
 	case_method(RemoveAt);
 	case_method(Delete);
+	case_method(Count);
 	case_method(MinIndex);
 	case_method(GetAddress);
 	case_method(SetCapacity);
@@ -1288,6 +1292,12 @@ ResultType Object::_MinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[
 		aResultToken.value_int64 = (__int64)mFields[0].key.i;
 	}
 	// else no integer keys; leave aResultToken at default, empty string.
+	return OK;
+}
+
+ResultType Object::_Count(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	aResultToken.SetValue((__int64)mFieldCount);
 	return OK;
 }
 

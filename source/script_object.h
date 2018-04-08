@@ -13,6 +13,7 @@ enum ObjectMethodID { // Partially ported from v2 BuiltInFunctionID.  Used for c
 	FID_ObjInsertAt, FID_ObjDelete, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength
 	, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjGetAddress, FID_ObjClone
 	, FID_ObjNewEnum, FID_ObjMaxIndex, FID_ObjMinIndex, FID_ObjRemove, FID_ObjInsert
+	, FID_ObjCount
 };
 
 
@@ -337,6 +338,7 @@ public:
 	ResultType _GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _GetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Count(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _Length(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _MaxIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _MinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
