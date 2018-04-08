@@ -8507,6 +8507,14 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 			min_params = 3;
 			max_params = 3;
 		}
+		else if (!_tcsicmp(suffix, _T("GetBase")))
+			bif = BIF_ObjBase;
+		else if (!_tcsicmp(suffix, _T("SetBase")))
+		{
+			bif = BIF_ObjBase;
+			min_params = 2;
+			max_params = 2;
+		}
 		else return NULL;
 	}
 	else if (!_tcsicmp(func_name, _T("Array")))

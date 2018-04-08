@@ -449,3 +449,38 @@ BIF_DECL(BIF_ObjRawSet)
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
 }
+
+
+//
+// ObjSetBase/ObjGetBase - Change or return Object's base without invoking any meta-functions.
+//
+
+BIF_DECL(BIF_ObjBase)
+{
+	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
+	if (!obj)
+	{
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		return;
+	}
+	if (ctoupper(aResultToken.marker[3]) == 'S') // ObjSetBase
+	{
+		IObject *new_base = TokenToObject(*aParam[1]);
+		if (!new_base && !TokenIsEmptyString(*aParam[1]))
+		{
+			aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
+			return;
+		}
+		obj->SetBase(new_base);
+	}
+	else // ObjGetBase
+	{
+		if (IObject *obj_base = obj->Base())
+		{
+			obj_base->AddRef();
+			aResultToken.SetValue(obj_base);
+			return;
+		}
+	}
+	aResultToken.SetValue(_T(""));
+}
