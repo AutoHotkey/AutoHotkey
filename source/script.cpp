@@ -2685,13 +2685,12 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 	TCHAR orig_char, *action_start, *action_end;
 	ActionTypeType action_type = ACT_INVALID; // Set default.
 
-	if (next_buf_length == -1) // End of file.
-		return OK;
-
-	int balance = BalanceExpr(buf, 0);
-	if (balance <= 0) // Balanced or invalid.
-		return OK;
-
+	TCHAR expect[MAX_BALANCEEXPR_DEPTH];
+	int balance = BalanceExpr(buf, 0, expect);
+	if (balance <= 0 // Balanced or invalid.
+		|| next_buf_length == -1) // End of file.
+		return balance == 0 ? OK : BalanceExprError(balance, expect, buf);
+	
 	// Perform rough checking for this line's action type.
 	for (action_start = buf; ; )
 	{
@@ -2757,7 +2756,7 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 		{
 			if (next_buf_length + buf_length + 1 >= LINE_SIZE)
 				return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG);
-			balance = BalanceExpr(next_buf, balance); // Adjust balance based on what we're about to append.
+			balance = BalanceExpr(next_buf, balance, expect); // Adjust balance based on what we're about to append.
 			buf[buf_length++] = ' '; // To ensure two distinct tokens aren't joined together.  ' ' vs. '\n' because DefineFunc() currently doesn't permit '\n'.
 			tmemcpy(buf + buf_length, next_buf, next_buf_length); // Append next_buf to this line.
 			buf_length += next_buf_length;
@@ -2769,11 +2768,48 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 		if (!GetLineContinuation(fp, buf, buf_length, next_buf, next_buf_length
 			, phys_line_number, has_continuation_section, balance))
 			return FAIL;
-		if (*addition_to_balance) // buf was extended via line continuation (only possible when balance <= 0).
-			balance = BalanceExpr(addition_to_balance, balance); // Adjust balance based on what was appended.
+		if (*addition_to_balance // buf was extended via line continuation (only possible when balance <= 0).
+			 && balance >= 0)
+			balance = BalanceExpr(addition_to_balance, balance, expect); // Adjust balance based on what was appended.
 	} // do
 	while (balance > 0 && next_buf_length != -1);
+	if (balance != 0)
+	{
+		// buf might include some lines that the author did not intend to be merged, so report
+		// the error immediately.  Leaving it to later might obscure it with some other problem,
+		// such as control flow statements being interpreted as invalid variable references.
+		return BalanceExprError(balance, expect, buf);
+	}
 	return OK;
+}
+
+
+
+ResultType Script::BalanceExprError(int aBalance, TCHAR aExpect[], LPTSTR aLineText)
+{
+	TCHAR expected, found;
+	if (aBalance < 0)
+	{
+		expected = aExpect[0];
+		found = aExpect[1];
+	}
+	else
+	{
+		expected = aBalance < MAX_BALANCEEXPR_DEPTH ? aExpect[aBalance - 1] : 0;
+		found = 0;
+	}
+	TCHAR msgbuf[40];
+	LPTSTR msgfmt;
+	if (expected && found)
+		msgfmt = _T("Missing \"%c\" before \"%c\"");
+	else if (found)
+		msgfmt = _T("Unexpected \"%c\""), expected = found;
+	else if (expected)
+		msgfmt = _T("Missing \"%c\"");
+	else
+		msgfmt = _T("Missing symbol"); // Rare case (expression too deep to keep track of what's missing).
+	sntprintf(msgbuf, _countof(msgbuf), msgfmt, expected, found);
+	return ScriptError(msgbuf, aLineText);
 }
 
 
@@ -5344,13 +5380,11 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 				*op_begin++ = ' ';
 				continue;
 
-			// Let ExpressionToPostfix() handle mismatched parentheses etc.
+			// These errors are detected by GetLineContExpr()/BalanceExpr() or later by ExpressionToPostfix:
 			//case ')':
-			//	return ScriptError(ERR_UNEXPECTED_CLOSE_PAREN, op_begin);
 			//case ']':
-			//	return ScriptError(ERR_UNEXPECTED_CLOSE_BRACKET, op_begin);
 			//case '}':
-			//	return ScriptError(ERR_UNEXPECTED_CLOSE_BRACE, op_begin);
+			//	return ScriptError(ERR_EXPR_SYNTAX, op_begin);
 			case '(': close_char = ')'; break;
 			case '[': close_char = ']'; break;
 			case '{': close_char = '}'; break;
@@ -8836,12 +8870,11 @@ unquoted_literal:
 			if (infix_symbol != SYM_COMMA && !IS_OPAREN_MATCHING_CPAREN(stack_symbol, infix_symbol))
 			{
 				// This stack item is not the OPAREN/BRACKET/BRACE corresponding to this CPAREN/BRACKET/BRACE.
-				if (stack_symbol == SYM_BEGIN // This can happen with bad expressions like "Var := 1 ? (:) :" even though theoretically it should mean that paren is closed without having been opened (currently impossible due to load-time balancing).
+				if (stack_symbol == SYM_BEGIN // Not sure if this is possible.
 					|| IS_OPAREN_LIKE(stack_symbol)) // Mismatched parens/brackets/braces.
 				{
-					return LineError( (infix_symbol == SYM_CPAREN) ? ERR_UNEXPECTED_CLOSE_PAREN
-									: (infix_symbol == SYM_CBRACKET) ? ERR_UNEXPECTED_CLOSE_BRACKET
-									: ERR_UNEXPECTED_CLOSE_BRACE );
+					// This should never happen due to balancing done by GetLineContExpr()/BalanceExpr().
+					return LineError(ERR_EXPR_SYNTAX);
 				}
 				else // This stack item is an operator.
 				{
@@ -9189,12 +9222,10 @@ unquoted_literal:
 				--stack_count; // Remove SYM_BEGIN from the stack, leaving the stack empty for use in postfix eval.
 				goto end_of_infix_to_postfix; // Both infix and stack have been fully processed, so the postfix expression is now completely built.
 			}
-			else if (stack_symbol == SYM_OPAREN) // Open paren is never closed (currently impossible due to load-time balancing, but kept for completeness).
-				return LineError(ERR_MISSING_CLOSE_PAREN); // Since this error string is used in other places, compiler string pooling should result in little extra memory needed for this line.
-			else if (stack_symbol == SYM_OBRACKET) // L31
-				return LineError(ERR_MISSING_CLOSE_BRACKET);
-			else if (stack_symbol == SYM_OBRACE)
-				return LineError(ERR_MISSING_CLOSE_BRACE);
+			else if (  stack_symbol == SYM_OPAREN // Open paren is never closed (currently impossible due to load-time balancing, but kept for completeness).
+					|| stack_symbol == SYM_OBRACKET
+					|| stack_symbol == SYM_OBRACE  )
+				return LineError(ERR_EXPR_SYNTAX);
 			else // Pop item off the stack, AND CONTINUE ITERATING, which will hit this line until stack is empty.
 				goto standard_pop_into_postfix;
 			// ALL PATHS ABOVE must continue or goto.

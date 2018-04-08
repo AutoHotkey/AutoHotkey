@@ -2902,8 +2902,9 @@ int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 
 
 
-int BalanceExpr(LPCTSTR aBuf, int aStartBalance)
+int BalanceExpr(LPCTSTR aBuf, int aStartBalance, TCHAR aExpect[])
 {
+	TCHAR quote;
 	for (int balance = aStartBalance, mark = 0;; ++mark)
 	{
 		switch (aBuf[mark])
@@ -2917,18 +2918,32 @@ int BalanceExpr(LPCTSTR aBuf, int aStartBalance)
 			break;
 		case '"': 
 		case '\'':
-			mark = FindTextDelim(aBuf, aBuf[mark], mark + 1);
+			quote = aBuf[mark];
+			mark = FindTextDelim(aBuf, quote, mark + 1);
 			if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
+			{
+				aExpect[0] = quote; // Expected
+				aExpect[1] = 0; // Found
 				return -1; // Since this quote is missing its close-quote, abort the continuation loop.
+			}
 			break;
 		case ')':
 		case ']':
 		case '}':
 			--balance;
+			if (balance < 0
+				|| balance < MAX_BALANCEEXPR_DEPTH && aBuf[mark] != aExpect[balance])
+			{
+				aExpect[0] = balance < 0 ? 0 : aExpect[balance]; // Expected
+				aExpect[1] = aBuf[mark]; // Found
+				return -1;
+			}
 			break;
 		case '(':
 		case '[':
 		case '{':
+			if (balance < MAX_BALANCEEXPR_DEPTH)
+				aExpect[balance] = (aBuf[mark] == '(' ? ')' : aBuf[mark] + 2);
 			++balance;
 			break;
 		}
