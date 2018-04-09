@@ -2935,7 +2935,7 @@ public:
 	TCHAR mThisMenuItemName[MAX_MENU_NAME_LENGTH + 1];
 	TCHAR mThisMenuName[MAX_MENU_NAME_LENGTH + 1];
 	LPTSTR mThisHotkeyName, mPriorHotkeyName;
-	MsgMonitorList mOnExit, mOnClipboardChange; // Lists of event handlers for OnExit() and OnClipboardChange().
+	MsgMonitorList mOnExit, mOnClipboardChange, mOnError; // Event handlers for OnExit(), OnClipboardChange() and OnError().
 	Label *mOnClipboardChangeLabel; // Separate from mOnClipboardChange for backward-compatibility reasons.
 	Label *mOnExitLabel;  // The label to run when the script terminates (NULL if none).
 	HWND mNextClipboardViewer;
@@ -3076,6 +3076,7 @@ public:
 
 	// Call this SciptError to avoid confusion with Line's error-displaying functions:
 	ResultType ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T("")); // , ResultType aErrorType = FAIL);
+
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
 	void WarnUninitializedVar(Var *var);
 	void MaybeWarnLocalSameAsGlobal(Func &func, Var &var);
@@ -3261,7 +3262,7 @@ BIF_DECL(BIF_SqrtLogLn);
 BIF_DECL(BIF_MinMax);
 
 BIF_DECL(BIF_OnMessage);
-BIF_DECL(BIF_OnExitOrClipboard);
+BIF_DECL(BIF_On);
 
 #ifdef ENABLE_REGISTERCALLBACK
 BIF_DECL(BIF_RegisterCallback);

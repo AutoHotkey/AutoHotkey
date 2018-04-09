@@ -16665,17 +16665,38 @@ void MsgMonitorList::Remove(MsgMonitorStruct *aMonitor)
 }
 
 
-BIF_DECL(BIF_OnExitOrClipboard)
+BIF_DECL(BIF_On)
 {
-	bool is_onexit = toupper(aResultToken.marker[2]) == 'E';
+	enum OnEventType {
+		OnExit,
+		OnError,
+		OnClipboardChange
+	} event_type;
+	MsgMonitorList *phandlers;
+	switch (tolower(aResultToken.marker[3]))
+	{
+	case 'r':
+		event_type = OnError;
+		phandlers = &g_script.mOnError;
+		break;
+	case 'l':
+		event_type = OnClipboardChange;
+		phandlers = &g_script.mOnClipboardChange;
+		break;
+	default:
+		event_type = OnExit;
+		phandlers = &g_script.mOnExit;
+		break;
+	}
+	MsgMonitorList &handlers = *phandlers;
+
 	aResultToken.SetValue(_T("")); // In all cases there is no return value.
-	MsgMonitorList &handlers = is_onexit ? g_script.mOnExit : g_script.mOnClipboardChange;
 
 	IObject *callback;
 	if (callback = TokenToFunc(*aParam[0]))
 	{
 		// Ensure this function is a valid one.
-		if (((Func *)callback)->mMinParams > 2)
+		if (((Func *)callback)->mMinParams > (event_type == OnExit ? 2 : 1))
 			callback = NULL;
 	}
 	else
@@ -16698,7 +16719,7 @@ BIF_DECL(BIF_OnExitOrClipboard)
 	case -1:
 		if (existing)
 			return;
-		if (!is_onexit)
+		if (event_type == OnClipboardChange)
 		{
 			// Do this before adding the handler so that it won't be called as a result of the
 			// SetClipboardViewer() call on Windows XP.  This won't cause existing handlers to
@@ -16718,7 +16739,7 @@ BIF_DECL(BIF_OnExitOrClipboard)
 	}
 	// In case the above enabled the clipboard listener but failed to add the handler,
 	// do this even if mode != 0:
-	if (!is_onexit && !g_script.mOnClipboardChangeLabel && !handlers.Count())
+	if (event_type == OnClipboardChange && !g_script.mOnClipboardChangeLabel && !handlers.Count())
 		g_script.EnableClipboardListener(false);
 }
 

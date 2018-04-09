@@ -721,7 +721,7 @@ ResultType Script::CreateWindows()
 void Script::EnableClipboardListener(bool aEnable)
 {
 	static bool sEnabled = false;
-	if (aEnable == sEnabled) // Simplifies BIF_OnExitOrClipboard.
+	if (aEnable == sEnabled) // Simplifies BIF_On.
 		return;
 	if (aEnable)
 	{
@@ -8444,9 +8444,11 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		// override the default set here.
 		g_persistent = true;
 	}
-	else if (!_tcsicmp(func_name, _T("OnExit")) || !_tcsicmp(func_name, _T("OnClipboardChange")))
+	else if (!_tcsicmp(func_name, _T("OnExit"))
+		|| !_tcsicmp(func_name, _T("OnClipboardChange"))
+		|| !_tcsicmp(func_name, _T("OnError")))
 	{
-		bif = BIF_OnExitOrClipboard;
+		bif = BIF_On;
 		max_params = 2;
 	}
 #ifdef ENABLE_REGISTERCALLBACK
@@ -16144,7 +16146,8 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
 
-	if (g->InTryBlock && (aErrorType == FAIL || aErrorType == EARLY_EXIT)) // FAIL is most common, but EARLY_EXIT is used by ComError(). WARN and CRITICAL_ERROR are excluded.
+	if ((g->InTryBlock || g_script.mOnError.Count()) // OnError also needs an exception object.
+		&& (aErrorType == FAIL || aErrorType == EARLY_EXIT)) // FAIL is most common, but EARLY_EXIT is used by ComError(). WARN and CRITICAL_ERROR are excluded.
 		return ThrowRuntimeException(aErrorText, NULL, aExtraInfo);
 
 	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute && aErrorType != WARN) // i.e. runtime errors are always displayed via dialog.
@@ -16309,6 +16312,21 @@ ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine, LPTST
 	LPCTSTR message = _T(""), extra = _T("");
 	TCHAR extra_buf[MAX_NUMBER_SIZE], message_buf[MAX_NUMBER_SIZE];
 
+	if (g_script.mOnError.Count())
+	{
+		ExprTokenType *token = aToken;
+		aToken = NULL; // Clear ThrownToken for the callback.
+		if (g_script.mOnError.Call(token, 1, 0) == CONDITION_TRUE)
+		{
+			FreeExceptionToken(token);
+			return FAIL;
+		}
+		if (aToken) // An exception was thrown by the callback.
+			FreeExceptionToken(token);
+		else
+			aToken = token;
+	}
+
 	if (Object *ex = dynamic_cast<Object *>(TokenToObject(*aToken)))
 	{
 		// For simplicity and safety, we call into the Object directly rather than via Invoke().
@@ -16353,9 +16371,10 @@ ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine, LPTST
 
 	TCHAR buf[MSGBOX_TEXT_SIZE];
 	Line::FormatError(buf, _countof(buf), FAIL, message, extra, aLine, aFooter);
-	MsgBox(buf);
-	
+
 	FreeExceptionToken(aToken);
+
+	MsgBox(buf);
 
 	return FAIL;
 }

@@ -9338,6 +9338,7 @@ LRESULT GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 		returnValue = (INT_PTR)g_ErrorLevel->ToInt64(FALSE);
 
 	Release();
+	g->GuiWindow = NULL;
 	ResumeUnderlyingThread(ErrorLevel_saved);
 
 	return returnValue;
