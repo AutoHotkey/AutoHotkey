@@ -5354,7 +5354,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			// DestroyWindow() upon termination so that the WM_DESTROY message winds up being
 			// received and process in this function (which is probably necessary for a clean
 			// termination of the app and all its windows):
-			g_script.ExitApp(EXIT_WM_CLOSE);
+			g_script.ExitApp(EXIT_CLOSE);
 			return 0;  // Verified correct.
 		}
 		// Otherwise, some window of ours other than our main window was destroyed
@@ -5384,9 +5384,9 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 				// and acting upon a WM_CLOSE or us calling DestroyWindow() directly) -- perhaps the window
 				// is being forcibly closed or something else abnormal happened.  Make a best effort to run
 				// the OnExit subroutine, if present, even without a main window (testing on an earlier
-				// versions shows that most commands work fine without the window). Pass the empty string
-				// to tell it to terminate after running the OnExit subroutine:
-				g_script.ExitApp(EXIT_DESTROY, _T(""));
+				// versions shows that most commands work fine without the window). For EXIT_DESTROY,
+				// it always terminates after running the OnExit subroutine:
+				g_script.ExitApp(EXIT_DESTROY);
 			// Do not do PostQuitMessage() here because we don't know the proper exit code.
 			// MSDN: "The exit value returned to the system must be the wParam parameter of
 			// the WM_QUIT message."
@@ -11372,7 +11372,7 @@ LPTSTR GetExitReasonString(ExitReasons aExitReason)
 	case EXIT_WM_QUIT:
 	case EXIT_CRITICAL:
 	case EXIT_DESTROY:
-	case EXIT_WM_CLOSE: str = _T("Close"); break;
+	case EXIT_CLOSE: str = _T("Close"); break;
 	case EXIT_ERROR: str = _T("Error"); break;
 	case EXIT_MENU: str = _T("Menu"); break;  // Standard menu, not a user-defined menu.
 	case EXIT_EXIT: str = _T("Exit"); break;  // ExitApp or Exit command.

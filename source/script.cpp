@@ -1022,23 +1022,12 @@ ResultType Script::Reload(bool aDisplayErrors)
 
 
 
-ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
+ResultType Script::ExitApp(ExitReasons aExitReason, int aExitCode)
 // Normal exit (if aBuf is NULL), or a way to exit immediately on error (which is mostly
 // for times when it would be unsafe to call MsgBox() due to the possibility that it would
 // make the situation even worse).
 {
 	mExitReason = aExitReason;
-	bool caller_requested_termination = aBuf && !*aBuf;
-	if (aBuf && *aBuf)
-	{
-		TCHAR buf[1024];
-		// No more than size-1 chars will be written and string will be terminated:
-		sntprintf(buf, _countof(buf), _T("Critical Error: %s\n\n") WILL_EXIT, aBuf);
-		// To avoid chance of more errors, don't use MsgBox():
-		MessageBox(g_hWnd, buf, g_script.mFileSpec, MB_OK | MB_SETFOREGROUND | MB_APPLMODAL);
-		TerminateApp(aExitReason, CRITICAL_ERROR); // Only after the above.
-	}
-	// Otherwise, it's not a critical error.
 	static bool sOnExitIsRunning = false, sExitAppShouldTerminate = true;
 	static int sExitCode;
 	if (sOnExitIsRunning || !mIsReadyToExecute)
@@ -1129,7 +1118,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, LPTSTR aBuf, int aExitCode)
 	DEBUGGER_STACK_POP()
 	sOnExitIsRunning = false;  // In case the user wanted the thread to end normally (see above).
 
-	if (terminate_afterward || caller_requested_termination)
+	if (terminate_afterward || aExitReason == EXIT_DESTROY)
 		TerminateApp(aExitReason, aExitCode);
 
 	// Otherwise:
@@ -12451,7 +12440,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		case ACT_EXITAPP: // Unconditional exit.
 			// This has been tested and it does yield to the OS the error code indicated in ARG1,
 			// if present (otherwise it returns 0, naturally) as expected:
-			return g_script.ExitApp(EXIT_EXIT, NULL, (int)line->ArgIndexToInt64(0));
+			return g_script.ExitApp(EXIT_EXIT, (int)line->ArgIndexToInt64(0));
 
 		case ACT_BLOCK_BEGIN:
 			if (line->mAttribute == ATTR_TRUE) // This is the ACT_BLOCK_BEGIN that starts a function's body.

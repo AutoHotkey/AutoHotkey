@@ -2990,7 +2990,7 @@ public:
 	ResultType AutoExecSection();
 	ResultType Edit();
 	ResultType Reload(bool aDisplayErrors);
-	ResultType ExitApp(ExitReasons aExitReason, LPTSTR aBuf = NULL, int ExitCode = 0);
+	ResultType ExitApp(ExitReasons aExitReason, int aExitCode = 0);
 	void TerminateApp(ExitReasons aExitReason, int aExitCode); // L31: Added aExitReason. See script.cpp.
 	LineNumberType LoadFromFile();
 	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
