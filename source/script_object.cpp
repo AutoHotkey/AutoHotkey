@@ -334,18 +334,18 @@ bool Object::Delete()
 		
 		// This prevents an erroneous "The current thread will exit" message when an error occurs,
 		// by causing LineError() to throw an exception:
-		bool in_try = g->InTryBlock;
-		g->InTryBlock = true;
+		int outer_excptmode = g->ExcptMode;
+		g->ExcptMode |= EXCPTMODE_DELETE;
 
 		CallMethod(mBase, this, sMetaFuncName[3], NULL, 0, NULL, IF_METAOBJ); // base.__Delete()
 
-		g->InTryBlock = in_try;
+		g->ExcptMode = outer_excptmode;
 
 		// Exceptions thrown by __Delete are reported immediately because they would not be handled
 		// consistently by the caller (they would typically be "thrown" by the next function call),
 		// and because the caller must be allowed to make additional __Delete calls.
 		if (g->ThrownToken)
-			g_script.UnhandledException(g->ThrownToken, NULL, _T("__Delete will now return."));
+			g_script.FreeExceptionToken(g->ThrownToken);
 
 		// If an exception has been thrown by our caller, it's likely that it can and should be handled
 		// reliably by our caller, so restore it.

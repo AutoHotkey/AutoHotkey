@@ -2099,10 +2099,8 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 
 void ResumeUnderlyingThread(LPTSTR aSavedErrorLevel)
 {
-	// Check if somebody has thrown an exception and it's not been caught yet
 	if (g->ThrownToken)
-		// Display an error message
-		g_script.UnhandledException(g->ThrownToken, g->ExcptLine);
+		g_script.FreeExceptionToken(g->ThrownToken);
 
 	// These two may be set by any thread, so must be released here:
 	if (g->GuiDefaultWindow)

@@ -907,8 +907,7 @@ ResultType Script::AutoExecSection()
 
 	// Check if an exception has been thrown
 	if (g->ThrownToken)
-		// Display an error message
-		ExecUntil_result = g_script.UnhandledException(g->ThrownToken, g->ExcptLine);
+		g_script.FreeExceptionToken(g->ThrownToken);
 
 	// The below is done even if AutoExecSectionTimeout() already set the values once.
 	// This is because when the AutoExecute section finally does finish, by definition it's
@@ -12251,7 +12250,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 		case ACT_CATCH:
 		{
 			ActionTypeType this_act = line->mActionType;
-			bool bSavedInTryBlock = g.InTryBlock;
+			int outer_excptmode = g.ExcptMode;
 
 			if (this_act == ACT_CATCH)
 			{
@@ -12260,24 +12259,21 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				//	return line->LineError(_T("Attempt to catch nothing!"), CRITICAL_ERROR);
 
 				Var* catch_var = ARGVARRAW1;
+				ExprTokenType *our_token = g.ThrownToken;
+				g.ThrownToken = NULL; // Assign() may cause script to execute via __Delete, so this must be cleared first.
 
 				// Assign the thrown token to the variable if provided.
-				if (catch_var && !catch_var->Assign(*g.ThrownToken))
-				{
-					// If this TRY/CATCH is inside some other TRY, Assign() has indirectly freed
-					// our token and possibly created a new one. So in that case, let someone else
-					// handle the token. Otherwise, free our token to avoid an "Unhandled" error
-					// message (since an error message has already been shown, and it probably
-					// indicated the thread will exit).
-					if (!g.InTryBlock)
-						g_script.FreeExceptionToken(g.ThrownToken);
+				result = catch_var ? catch_var->Assign(*our_token) : OK;
+				g_script.FreeExceptionToken(our_token);
+				if (!result)
 					return FAIL;
-				}
-
-				g_script.FreeExceptionToken(g.ThrownToken);
 			}
 			else // (this_act == ACT_TRY)
-				g.InTryBlock = true;
+			{
+				g.ExcptMode |= EXCPTMODE_TRY; // Must use |= rather than = to avoid removing EXCPTMODE_CATCH, if present.
+				if (line->mRelatedLine->mActionType != ACT_FINALLY) // Try without Catch/Finally acts like it has an empty Catch.
+					g.ExcptMode |= EXCPTMODE_CATCH;
+			}
 
 			// The following section is similar to ACT_IF.
 			jump_to_line = NULL;
@@ -12295,8 +12291,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 
 			if (this_act == ACT_TRY)
 			{
-				// Restore the previous InTryBlock value.
-				g.InTryBlock = bSavedInTryBlock;
+				g.ExcptMode = outer_excptmode;
 				bool bHasCatch = false;
 
 				if (line->mActionType == ACT_CATCH)
@@ -12380,11 +12375,9 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			if (!line->mArgc)
 				return line->ThrowRuntimeException(ERR_EXCEPTION);
 
-			if (g.ThrownToken)
-			{
-				// This may happen if the catch is executed inside a finally block.
-				g_script.FreeExceptionToken(g.ThrownToken);
-			}
+			// ThrownToken should only be non-NULL while control is being passed up the
+			// stack, which implies no script code can be executing.
+			ASSERT(!g.ThrownToken);
 
 			ExprTokenType* token = new ExprTokenType;
 			if (!token) // Unlikely.
@@ -12433,8 +12426,9 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			}
 
 			// Throw the newly-created token
-			g.ExcptLine = line;
 			g.ThrownToken = token;
+			if (!(g.ExcptMode & EXCPTMODE_CATCH))
+				g_script.UnhandledException(line);
 			return FAIL;
 		}
 
@@ -16031,11 +16025,9 @@ IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR
 
 ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
 {
-	// ThrownToken may already exist if Assign() fails in ACT_CATCH, or possibly
-	// in other extreme cases. In such a case, just free the old token. If this
-	// line is CATCH, it won't handle the new exception; an outer TRY/CATCH will.
-	if (g->ThrownToken)
-		g_script.FreeExceptionToken(g->ThrownToken);
+	// ThrownToken should only be non-NULL while control is being passed up the
+	// stack, which implies no script code can be executing.
+	ASSERT(!g->ThrownToken);
 
 	ExprTokenType *token;
 	if (   !(token = new ExprTokenType)
@@ -16055,7 +16047,8 @@ ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTST
 	token->mem_to_free = NULL;
 
 	g->ThrownToken = token;
-	g->ExcptLine = this;
+	if (!(g->ExcptMode & EXCPTMODE_CATCH))
+		g_script.UnhandledException(this);
 
 	// Returning FAIL causes each caller to also return FAIL, until either the
 	// thread has fully exited or the recursion layer handling ACT_TRY is reached:
@@ -16072,7 +16065,7 @@ ResultType Line::SetErrorLevelOrThrowBool(bool aError)
 {
 	if (!aError)
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-	if (!g->InTryBlock)
+	if (!g->InTryBlock())
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
 	return ThrowRuntimeException(ERRORLEVEL_ERROR);
@@ -16080,7 +16073,7 @@ ResultType Line::SetErrorLevelOrThrowBool(bool aError)
 
 ResultType Line::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
 {
-	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
+	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock())
 		return g_ErrorLevel->Assign(aErrorValue);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
 	return ThrowRuntimeException(aErrorValue);
@@ -16088,7 +16081,7 @@ ResultType Line::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
 
 ResultType Line::SetErrorLevelOrThrowInt(int aErrorValue)
 {
-	if (!aErrorValue || !g->InTryBlock)
+	if (!aErrorValue || !g->InTryBlock())
 		return g_ErrorLevel->Assign(aErrorValue);
 	TCHAR buf[12];
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
@@ -16105,7 +16098,7 @@ ResultType Script::SetErrorLevelOrThrowBool(bool aError)
 {
 	if (!aError)
 		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-	if (!g->InTryBlock)
+	if (!g->InTryBlock())
 		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
 	return ThrowRuntimeException(ERRORLEVEL_ERROR);
@@ -16113,7 +16106,7 @@ ResultType Script::SetErrorLevelOrThrowBool(bool aError)
 
 ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat)
 {
-	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock)
+	if ((*aErrorValue == '0' && !aErrorValue[1]) || !g->InTryBlock())
 		return g_ErrorLevel->Assign(aErrorValue);
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
 	return ThrowRuntimeException(aErrorValue, aWhat);
@@ -16121,7 +16114,7 @@ ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat)
 
 ResultType Script::SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat)
 {
-	if (!aErrorValue || !g->InTryBlock)
+	if (!aErrorValue || !g->InTryBlock())
 		return g_ErrorLevel->Assign(aErrorValue);
 	TCHAR buf[12];
 	// Otherwise, an error occurred and there is a try block, so throw an exception:
@@ -16146,7 +16139,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 	if (!aExtraInfo)
 		aExtraInfo = _T("");
 
-	if ((g->InTryBlock || g_script.mOnError.Count()) // OnError also needs an exception object.
+	if ((g->ExcptMode || g_script.mOnError.Count()) // OnError also needs an exception object.
 		&& (aErrorType == FAIL || aErrorType == EARLY_EXIT)) // FAIL is most common, but EARLY_EXIT is used by ComError(). WARN and CRITICAL_ERROR are excluded.
 		return ThrowRuntimeException(aErrorText, NULL, aExtraInfo);
 
@@ -16307,27 +16300,39 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 
 
 
-ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine, LPTSTR aFooter)
+ResultType Script::UnhandledException(Line* aLine)
 {
 	LPCTSTR message = _T(""), extra = _T("");
 	TCHAR extra_buf[MAX_NUMBER_SIZE], message_buf[MAX_NUMBER_SIZE];
 
-	if (g_script.mOnError.Count())
+	global_struct &g = *::g;
+
+	// OnError: Allow the script to handle it via a global callback.
+	static bool sOnErrorRunning = false;
+	if (g_script.mOnError.Count() && !sOnErrorRunning)
 	{
-		ExprTokenType *token = aToken;
-		aToken = NULL; // Clear ThrownToken for the callback.
-		if (g_script.mOnError.Call(token, 1, 0) == CONDITION_TRUE)
+		ExprTokenType *token = g.ThrownToken;
+		g.ThrownToken = NULL; // Allow the callback to execute correctly.
+		sOnErrorRunning = true;
+		bool returned_true = g_script.mOnError.Call(token, 1, INT_MAX) == CONDITION_TRUE;
+		sOnErrorRunning = false;
+		if (g.ThrownToken) // An exception was thrown by the callback.
 		{
+			// UnhandledException() has already been called recursively for g.ThrownToken,
+			// so don't show a second error message.  This allows `throw param1` to mean
+			// "abort all OnError callbacks and show default message now".
 			FreeExceptionToken(token);
 			return FAIL;
 		}
-		if (aToken) // An exception was thrown by the callback.
-			FreeExceptionToken(token);
-		else
-			aToken = token;
+		// Some callers rely on g.ThrownToken!=NULL to unwind the stack, so it is restored
+		// rather than freeing it immediately.  If the exception object has __Delete, it
+		// will be called after the stack unwinds.
+		g.ThrownToken = token;
+		if (returned_true)
+			return FAIL;
 	}
 
-	if (Object *ex = dynamic_cast<Object *>(TokenToObject(*aToken)))
+	if (Object *ex = dynamic_cast<Object *>(TokenToObject(*g.ThrownToken)))
 	{
 		// For simplicity and safety, we call into the Object directly rather than via Invoke().
 		ExprTokenType t;
@@ -16359,7 +16364,7 @@ ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine, LPTST
 	else
 	{
 		// Assume it's a string or number.
-		message = TokenToString(*aToken, message_buf);
+		message = TokenToString(*g.ThrownToken, message_buf);
 	}
 
 	// If message is empty or numeric, display a default message for clarity.
@@ -16370,10 +16375,8 @@ ResultType Script::UnhandledException(ExprTokenType*& aToken, Line* aLine, LPTST
 	}	
 
 	TCHAR buf[MSGBOX_TEXT_SIZE];
-	Line::FormatError(buf, _countof(buf), FAIL, message, extra, aLine, aFooter);
-
-	FreeExceptionToken(aToken);
-
+	Line::FormatError(buf, _countof(buf), FAIL, message, extra, aLine
+		, (g.ExcptMode & EXCPTMODE_DELETE) ? ERR_ABORT_DELETE : ERR_ABORT_NO_SPACES);
 	MsgBox(buf);
 
 	return FAIL;

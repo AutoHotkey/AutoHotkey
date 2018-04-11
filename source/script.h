@@ -147,6 +147,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_ABORT _T("  ") ERR_ABORT_NO_SPACES
 #define WILL_EXIT _T("The program will exit.")
 #define OLD_STILL_IN_EFFECT _T("The script was not reloaded; the old version will remain in effect.")
+#define ERR_ABORT_DELETE _T("__Delete will now return.")
 #define ERR_CONTINUATION_SECTION_TOO_LONG _T("Continuation section too long.")
 #define ERR_UNRECOGNIZED_ACTION _T("This line does not contain a recognized action.")
 #define ERR_NONEXISTENT_HOTKEY _T("Nonexistent hotkey.")
@@ -3084,7 +3085,7 @@ public:
 	void PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount);
 	void CheckForClassOverwrite();
 
-	static ResultType UnhandledException(ExprTokenType*& aToken, Line* aLine, LPTSTR aFooter = _T("The thread has exited."));
+	static ResultType UnhandledException(Line* aLine);
 	static ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
 	static ResultType SetErrorLevelOrThrowBool(bool aError);
 	static ResultType SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat);

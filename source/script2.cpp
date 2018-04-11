@@ -3612,7 +3612,7 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 error:
 	// Only STYLE, EXSTYLE and REDRAW affect ErrorLevel for compatibility reasons,
 	// but seems best to allow the other sub-commands to throw exceptions:
-	return (use_errorlevel || g->InTryBlock) ? SetErrorLevelOrThrow() : OK;
+	return (use_errorlevel || g->InTryBlock()) ? SetErrorLevelOrThrow() : OK;
 }
 
 
@@ -13304,7 +13304,7 @@ has_valid_return_type:
 		// Don't bother with freeing hmodule_to_free since a critical error like this calls for minimal cleanup.
 		// The OS almost certainly frees it upon termination anyway.
 		// Call ScriptErrror() so that the user knows *which* DllCall is at fault:
-		g->InTryBlock = false; // do not throw an exception
+		g->ExcptMode = EXCPTMODE_NONE; // Do not throw an exception.
 		g_script.ScriptError(_T("This DllCall requires a prior VarSetCapacity. The program is now unstable and will exit."));
 		g_script.ExitApp(EXIT_CRITICAL); // Called this way, it will run the OnExit routine, which is debatable because it could cause more good than harm, but might avoid loss of data if the OnExit routine does something important.
 	}
