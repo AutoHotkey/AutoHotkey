@@ -8286,6 +8286,15 @@ bool Script::IsLabelTarget(Line *aLine)
 
 
 ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
+{
+	ExprTokenType *infix = NULL;
+	ResultType result = ExpressionToPostfix(aArg, infix);
+	// This approach produces smaller code than using RAII in the function below:
+	free(infix);
+	return result;
+}
+
+ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 // Returns OK or FAIL.
 {
 	// Having a precedence array is required at least for SYM_POWER (since the order of evaluation
@@ -8335,14 +8344,10 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 	// evaluated as 2**(-2) rather than being seen as an error.  v1.0.45: A similar thing is required
 	// to allow the following to work: 2**!1, 2**not 0, 2**~0xFFFFFFFE, 2**&x.
 
-	ExprTokenType infix[MAX_TOKENS], *postfix[MAX_TOKENS], *stack[MAX_TOKENS + 1];  // +1 for SYM_BEGIN on the stack.
-	int infix_count = 0, postfix_count = 0, stack_count = 0;
-	// Above dimensions the stack to be as large as the infix/postfix arrays to cover worst-case
-	// scenarios and avoid having to check for overflow.  For the infix-to-postfix conversion, the
-	// stack must be large enough to hold a malformed expression consisting entirely of operators
-	// (though other checks might prevent this).  It must also be large enough for use by the final
-	// expression evaluation phase, the worst case of which is unknown but certainly not larger
-	// than MAX_TOKENS.
+	ExprTokenType *infix = NULL;
+	int infix_size = 0, infix_count = 0;
+	const int INFIX_GROWTH = 128; // Amount to grow by each time expansion is needed.  Rarely needed more than once (from zero).
+	const int INFIX_MIN_SPACE = 5; // Minimum space to allow prior to each iteration or deref-processing.  Room for auto-concat, two tokens for `.id`, `. ("s")` for DT_STRING, and `f(fn)` for DT_FUNCREF; plus the final SYM_INVALID.
 
 	///////////////////////////////////////////////////////////////////////////////////////////////
 	// TOKENIZE THE INFIX EXPRESSION INTO AN INFIX ARRAY: Avoids the performance overhead of having
@@ -8366,11 +8371,15 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 			{
 				// Because neither the postfix array nor the stack can ever wind up with more tokens than were
 				// contained in the original infix array, only the infix array need be checked for overflow:
-				if (infix_count > MAX_TOKENS - 1) // No room for this operator or operand to be added.
-					return LineError(ERR_EXPR_TOO_LONG);
+				if (infix_count + INFIX_MIN_SPACE > infix_size)
+				{
+					infix_size += INFIX_GROWTH;
+					if (void *p = realloc(infix, infix_size * sizeof(ExprTokenType)))
+						aInfix = infix = (ExprTokenType *)p;
+					else
+						return LineError(ERR_OUTOFMEM);
+				}
 
-				// Only spaces and tabs are considered whitespace, leaving newlines and other whitespace characters
-				// for possible future use:
 				cp = omit_leading_whitespace(cp);
 				if (!*cp // Very end of expression...
 					|| this_deref && cp >= this_deref->marker) // ...or no more literal/raw text left to process at the left side of this_deref.
@@ -8390,8 +8399,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 				{ \
 					if (!IS_SPACE_OR_TAB(cp[-1])) \
 						return LineError(ERR_BAD_AUTO_CONCAT, FAIL, cp); \
-					if (infix_count > MAX_TOKENS - 2) \
-						return LineError(ERR_EXPR_TOO_LONG); \
 					infix[infix_count++].symbol = SYM_CONCAT; \
 				}
 
@@ -8577,8 +8584,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol)
 						&& IS_SPACE_OR_TAB(cp[-1])) // If there's no space, assume it's something valid like "new Class()" until it can be proven otherwise.
 					{
-						if (infix_count > MAX_TOKENS - 2)
-							return LineError(ERR_EXPR_TOO_LONG);
 						infix[infix_count++].symbol = SYM_CONCAT;
 					}
 					infix[infix_count].symbol = SYM_OPAREN; // MUST NOT REFER TO this_infix_item IN CASE ABOVE DID ++infix_count.
@@ -8816,10 +8821,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								break;
 							}
 
-							// Ensure at least enough room for this operand and the operator further below.
-							if (infix_count > MAX_TOKENS - 2)
-								return LineError(ERR_EXPR_TOO_LONG);
-							
 							// Skip this '.'
 							++cp;
 
@@ -8926,10 +8927,17 @@ unquoted_literal:
 		if (!this_deref) // All done because the above just processed all the raw/literal text (if any) that
 			break;       // lay to the right of the last deref.
 
+		if (infix_count + INFIX_MIN_SPACE > infix_size)
+		{
+			infix_size += INFIX_GROWTH;
+			if (void *p = realloc(infix, infix_size * sizeof(ExprTokenType)))
+				aInfix = infix = (ExprTokenType *)p;
+			else
+				return LineError(ERR_OUTOFMEM);
+		}
+
 		// THE ABOVE HAS NOW PROCESSED ANY/ALL RAW/LITERAL TEXT THAT LIES TO THE LEFT OF this_deref.
 		// SO NOW PROCESS THIS_DEREF ITSELF.
-		if (infix_count > MAX_TOKENS - 1) // No room for the deref item below to be added.
-			return LineError(ERR_EXPR_TOO_LONG);
 		DerefType &this_deref_ref = *this_deref; // Boosts performance slightly.
 		if (this_deref_ref.is_function()) // Above has ensured that at this stage, this_deref!=NULL.
 		{
@@ -8956,8 +8964,6 @@ unquoted_literal:
 				{
 					if (!IS_SPACE_OR_TAB(c))
 						return LineError(ERR_BAD_AUTO_CONCAT, FAIL, cp);
-					if (infix_count > MAX_TOKENS - 2)
-						return LineError(ERR_EXPR_TOO_LONG);
 					infix[infix_count++].symbol = SYM_CONCAT;
 				}
 			}
@@ -8990,8 +8996,6 @@ unquoted_literal:
 
 			if (require_paren && is_start_of_string)
 			{
-				if (infix_count > MAX_TOKENS - 2)
-					return LineError(ERR_EXPR_TOO_LONG);
 				infix[infix_count].symbol = SYM_OPAREN;
 				infix[infix_count].marker = cp;
 				infix_count++;
@@ -9025,8 +9029,6 @@ unquoted_literal:
 				}
 				if (require_paren)
 				{
-					if (infix_count > MAX_TOKENS - 1)
-    					return LineError(ERR_EXPR_TOO_LONG);
     				infix[infix_count].symbol = SYM_CPAREN;
 					infix_count++;
 				}
@@ -9087,8 +9089,6 @@ unquoted_literal:
 			// reference and returns the function itself or a closure.  Which that will be depends
 			// on processing which hasn't been done yet (PreprocessLocalVars), except for global
 			// functions, which are never closures.
-			if (infix_count > MAX_TOKENS - 4)
-				return LineError(ERR_EXPR_TOO_LONG);
 			infix[infix_count].symbol = SYM_FUNC;
 			infix[infix_count].deref = this_deref;
 			infix[infix_count+1].symbol = SYM_OPAREN;
@@ -9140,13 +9140,26 @@ unquoted_literal:
 
 	// Terminate the array with a special item.  This allows infix-to-postfix conversion to do a faster
 	// traversal of the infix array.
-	if (infix_count > MAX_TOKENS - 1) // No room for the following symbol to be added.
-		return LineError(ERR_EXPR_TOO_LONG);
+	ASSERT(infix_count < infix_size);
 	infix[infix_count].symbol = SYM_INVALID;
 
 	////////////////////////////
 	// CONVERT INFIX TO POSTFIX.
 	////////////////////////////
+
+	ExprTokenType **postfix = (ExprTokenType **)_alloca(infix_count * sizeof(ExprTokenType *));
+	ExprTokenType **stack = (ExprTokenType **)_alloca((infix_count + 1) * sizeof(ExprTokenType *));  // +1 for SYM_BEGIN on the stack.
+	int postfix_count = 0, stack_count = 0;
+	// Above dimensions the stack to be as large as the infix/postfix arrays to cover worst-case
+	// scenarios and avoid having to check for overflow.  For the infix-to-postfix conversion, the
+	// stack must be large enough to hold a malformed expression consisting entirely of operators
+	// (though other checks might prevent this).
+
+#ifdef _DEBUG
+#undef STACK_PUSH
+#define STACK_PUSH(token_ptr) (ASSERT(stack_count < infix_count), stack[stack_count++] = (token_ptr))
+#endif
+
 	// SYM_BEGIN is the first item to go on the stack.  It's a flag to indicate that conversion to postfix has begun:
 	ExprTokenType token_begin;
 	token_begin.symbol = SYM_BEGIN;
@@ -9870,6 +9883,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				assign_op->symbol = SYM_FUNC; // An earlier stage already set up the func and param_count.
 			}
 		}
+		ASSERT(postfix_count < infix_count);
 		++postfix_count;
 	} // End of loop that builds postfix array from the infix array.
 end_of_infix_to_postfix:
@@ -9936,7 +9950,7 @@ end_of_infix_to_postfix:
 	if (   !(aArg.postfix = (ExprTokenType *)SimpleHeap::Malloc((postfix_count+1)*sizeof(ExprTokenType)))   ) // +1 for the terminator item added below.
 		return LineError(ERR_OUTOFMEM);
 
-	int i, j;
+	int i, j, max_stack = 0, max_alloc = 0;
 	for (i = 0; i < postfix_count; ++i) // Copy the postfix array in physically sorted order into the new postfix array.
 	{
 		ExprTokenType &new_token = aArg.postfix[i];
@@ -9947,8 +9961,19 @@ end_of_infix_to_postfix:
 			for (j = i + 1; postfix[j] != new_token.circuit_token; ++j); // Should always be found, and always to the right in the postfix array, so no need to check postfix_count.
 			new_token.circuit_token = aArg.postfix + j;
 		}
+		// Simple calculation: only operands and SYM_FUNC can increase the stack count,
+		// so this finds the worst-case stack requirement (or slightly higher).
+		if (IS_OPERAND(new_token.symbol))
+			++max_stack;
+		else if (new_token.symbol == SYM_FUNC)
+			max_stack += new_token.deref->func ? 1 : 2; // Reserve 1 extra for dynamic calls.
+		// Count the tokens which potentially use to_free[].
+		if (new_token.symbol == SYM_DYNAMIC || new_token.symbol == SYM_FUNC || new_token.symbol == SYM_CONCAT)
+			++max_alloc;
 	}
 	aArg.postfix[postfix_count].symbol = SYM_INVALID;  // Special item to mark the end of the array.
+	aArg.max_stack = max_stack;
+	aArg.max_alloc = max_alloc;
 
 	return OK;
 }

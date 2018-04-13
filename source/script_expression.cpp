@@ -70,14 +70,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 	// The following must be defined early so that to_free_count is initialized and the array is guaranteed to be
 	// "in scope" in case of early "goto" (goto substantially boosts performance and reduces code size here).
-	#define MAX_EXPR_MEM_ITEMS 200 // v1.0.47.01: Raised from 100 because a line consisting entirely of concat operators can exceed it.  However, there's probably not much point to going much above MAX_TOKENS/2 because then it would reach the MAX_TOKENS limit first.
-	ExprTokenType *to_free[MAX_EXPR_MEM_ITEMS]; // No init necessary.  In many cases, it will never be used.
+	ExprTokenType **to_free = (ExprTokenType **)_alloca(mArg[aArgIndex].max_alloc * sizeof(ExprTokenType *));
 	int to_free_count = 0; // The actual number of items in use in the above array.
 	LPTSTR result_to_return = _T(""); // By contrast, NULL is used to tell the caller to abort the current thread.
 	LPCTSTR error_msg = ERR_EXPR_EVAL, error_info = _T("");
 	Var *output_var = (mActionType == ACT_ASSIGNEXPR) ? VAR(mArg[0]) : NULL; // Resolve early because it's similar in usage/scope to the above.
 
-	ExprTokenType *stack[MAX_TOKENS];
+	ExprTokenType **stack = (ExprTokenType **)_alloca(mArg[aArgIndex].max_stack * sizeof(ExprTokenType *));
 	int stack_count = 0;
 	ExprTokenType *&postfix = mArg[aArgIndex].postfix;
 
@@ -102,11 +101,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 	// v1.0.44.06: EXPR_SMALL_MEM_LIMIT is the means by which _alloca() is used to boost performance a
 	// little by avoiding the overhead of malloc+free for small strings.  The limit should be something
-	// small enough that the chance that even 10 of them would cause stack overflow is vanishingly small
-	// (the program is currently compiled to allow stack to expand anyway).  Even in a worst-case
-	// scenario where an expression is composed entirely of functions and they all need to use this
-	// limit of stack space, there's a practical limit on how many functions you can call in an
-	// expression due to MAX_TOKENS (probably around MAX_TOKENS / 3).
+	// small enough that the chance that even 10 of them would cause stack overflow is vanishingly small.
 	#define EXPR_SMALL_MEM_LIMIT 4097 // The maximum size allowed for an item to qualify for alloca.
 	#define EXPR_ALLOCA_LIMIT 40000  // The maximum amount of alloca memory for all items.  v1.0.45: An extra precaution against stack stress in extreme/theoretical cases.
 	#define EXPR_IS_DONE (!stack_count && this_postfix[1].symbol == SYM_INVALID) // True if we've used up the last of the operators & operands.  Non-zero stack_count combined with SYM_INVALID would indicate an error (an exception will be thrown later, so don't take any shortcuts).
@@ -125,7 +120,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		//    this_postfix.
 		// 2) Using a particular variable very frequently might help compiler to optimize that variable to
 		//    generate faster code.
-		ExprTokenType &this_token = *(ExprTokenType *)_alloca(sizeof(ExprTokenType)); // Saves a lot of stack space, and seems to perform just as well as something like the following (at the cost of ~82 byte increase in OBJ code size): ExprTokenType &this_token = new_token[new_token_count++]  // array size MAX_TOKENS
+		ExprTokenType &this_token = *(ExprTokenType *)_alloca(sizeof(ExprTokenType)); // Saves a lot of stack space, and seems to perform just as well as something like the following (at the cost of ~82 byte increase in OBJ code size): ExprTokenType &this_token = new_token[new_token_count++]
 		this_token.CopyExprFrom(*this_postfix); // See comment section above.
 
 		// At this stage, operands in the postfix array should be SYM_STRING, SYM_INTEGER, SYM_FLOAT or SYM_DYNAMIC.
@@ -224,15 +219,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				if (result_token.marker != left_buf)
 				{
 					if (result_token.mem_to_free) // Persistent memory was already allocated for the result.
-					{
-						if (to_free_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
-						{
-							result_token.Free();
-							goto outofmem;
-						}
-						to_free[to_free_count++] = &this_token;
+						to_free[to_free_count++] = &this_token; // A slot was reserved for this SYM_DYNAMIC.
 						// Also push the value, below.
-					}
 					//else: Currently marker is assumed to point to persistent memory, such as a literal
 					// string, which should be safe to use at least until expression evaluation completes.
 					this_token.SetValue(result_token.marker, result_length);
@@ -282,10 +270,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// invoke ValueBase(), so this part is done even if stack[stack_count] is not
 					// an object.  To "call" the object/value, we need to insert the "call" method
 					// name between the object/value and the parameter list.  There should always
-					// be room for this since the maximum number of operands at any one time <=
-					// postfix token count < infix token count < MAX_TOKENS == _countof(stack).
-					// That is, each extra (SYM_OPAREN, SYM_COMMA or SYM_CPAREN) token in infix
-					// effectively reserves one stack slot.
+					// be room for this since 1 stack slot was reserved for each dynamic call.
 					if (actual_param_count)
 						memmove(params + 1, params, actual_param_count * sizeof(ExprTokenType *));
 					// Insert the "use default method name" marker:
@@ -351,15 +336,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				this_token.value_int64 = result_token.value_int64;
 				this_token.symbol = result_token.symbol;
 				if (this_token.symbol == SYM_OBJECT)
-				{
-					if (to_free_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
-					{
-						this_token.object->Release();
-						error_info = ERR_OUTOFMEM;
-						goto abort_with_exception;
-					}
-					to_free[to_free_count++] = &this_token;
-				}
+					to_free[to_free_count++] = &this_token; // A slot was reserved for this SYM_FUNC.
 				goto push_this_token;
 			}
 			
@@ -461,10 +438,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					aResultToken->AcceptMem(result_to_return = result, result_length);
 					goto normal_end_skip_output_var;
 				}
-				if (to_free_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
-					goto outofmem;
 				// Mark it to be freed at the time we return.
-				to_free[to_free_count++] = &this_token;
+				to_free[to_free_count++] = &this_token; // A slot was reserved for this SYM_FUNC.
 				// Invariant: any string token put in to_free must have marker set to the memory block
 				// to be freed.  marker = result is set further below, but only when result_length != 0.
 				this_token.marker = result;
@@ -567,11 +542,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// - There's insufficient room at the end of the deref buf to store the return value
 					//   (unusual because the deref buf expands in block-increments, and also because
 					//   return values are usually small, such as numbers).
-					if (to_free_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
-						|| !(this_token.marker = tmalloc(result_size)))
+					if (  !(this_token.marker = tmalloc(result_size))  )
 						goto outofmem;
 					tmemcpy(this_token.marker, result, result_size); // Benches slightly faster than strcpy().
-					to_free[to_free_count++] = &this_token;
+					to_free[to_free_count++] = &this_token; // A slot was reserved for this SYM_FUNC.
 				}
 			}
 			else // make_result_persistent==false
@@ -1014,10 +988,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					else // Need to create some new persistent memory for our temporary use.
 					{
 						// See the nearly identical section higher above for comments:
-						if (to_free_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
-							|| !(this_token.marker = tmalloc(result_size)))
+						if (  !(this_token.marker = tmalloc(result_size))  )
 							goto outofmem;
-						to_free[to_free_count++] = &this_token;
+						to_free[to_free_count++] = &this_token; // A slot was reserved for this SYM_CONCAT.
 					}
 					if (left_length)
 						tmemcpy(this_token.marker, left_string, left_length);  // Not +1 because don't need the zero terminator.
@@ -1194,6 +1167,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		}
 
 push_this_token:
+		ASSERT(stack_count < mArg[aArgIndex].max_stack);
 		STACK_PUSH(&this_token);   // Push the result onto the stack for use as an operand by a future operator.
 	} // For each item in the postfix array.
 

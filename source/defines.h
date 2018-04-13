@@ -395,7 +395,6 @@ private: // Force code to use one of the CopyFrom() methods, for clarity.
 		return *this;
 	}
 };
-#define MAX_TOKENS 512 // Max number of operators/operands.  Seems enough to handle anything realistic, while conserving call-stack space.
 #define STACK_PUSH(token_ptr) stack[stack_count++] = token_ptr
 #define STACK_POP stack[--stack_count]  // To be used as the r-value for an assignment.
 

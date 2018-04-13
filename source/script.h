@@ -413,6 +413,7 @@ struct ArgStruct
 	LPTSTR text;
 	DerefType *deref;  // Will hold a NULL-terminated array of operands/word-operators pre-parsed by ParseDerefs()/ParseOperands().
 	ExprTokenType *postfix;  // An array of tokens in postfix order.
+	int max_stack, max_alloc;
 };
 
 __int64 pow_ll(__int64 base, __int64 exp); // integer power function
@@ -928,6 +929,7 @@ public:
 		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize);
 	ResultType ExpandSingleArg(int aArgIndex, ResultToken &aResultToken, LPTSTR &aDerefBuf, size_t &aDerefBufSize);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
+	ResultType ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix);
 
 	static bool FileIsFilteredOut(LoopFilesStruct &aCurrentFile, FileLoopModeType aFileLoopMode);
 
