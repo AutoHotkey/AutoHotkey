@@ -5193,8 +5193,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		do_update_labels = !mNoUpdateLabels;
 
 	Var *target_var;
-	DerefType deref[MAX_DEREFS_PER_ARG];  // Will be used to temporarily store the var-deref locations in each arg.
-	int deref_count;  // How many items are in deref array.
+	DerefList deref;  // Will be used to temporarily store the var-deref locations in each arg.
 	ArgStruct *new_arg;  // We will allocate some dynamic memory for this, then hang it onto the new line.
 	LPTSTR this_aArgMap, this_aArg;
 
@@ -5296,38 +5295,27 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// don't need to make this_aArgMap persistent.
 			// Note: this_new_arg.text is scanned rather than this_aArg because we want to
 			// establish pointers to the correct area of memory:
-			deref_count = 0;  // Init for each arg.
+			deref.count = 0;  // Init for each arg.
 
 			if (this_new_arg.is_expression)
 			{
-				if (!ParseOperands(this_new_arg.text, this_aArgMap, deref, deref_count))
+				if (!ParseOperands(this_new_arg.text, this_aArgMap, deref))
 					return FAIL;
 			}
-			else // this arg does not contain an expression.
-			{
-				if (!ParseDerefs(this_new_arg.text, this_aArgMap, deref, deref_count))
-					return FAIL; // It already displayed the error.
-
-				if (deref_count == 1)
-				{
-					// The following are implied due to the way ParseDerefs() works:
-					ASSERT(deref->type   == DT_STRING);
-					ASSERT(deref->length == this_new_arg.length);
-					// Don't bother putting it into persistent memory:
-					deref_count = 0;
-				}
-			}
+			// Otherwise, this arg does not contain an expression and therefore cannot contain
+			// any derefs.  This is currently limited to ACT_GOTO/ACT_GOSUB/ACT_BREAK/ACT_CONTINUE,
+			// which require either a literal label name or () to force an expression.
 
 			//////////////////////////////////////////////////////////////
 			// Allocate mem for this arg's list of dereferenced variables.
 			//////////////////////////////////////////////////////////////
-			if (deref_count)
+			if (deref.count)
 			{
-				if (   !(this_new_arg.deref = (DerefType *)SimpleHeap::Malloc((deref_count + 1) * sizeof(DerefType)))   ) // +1 for the "NULL-item" terminator.
+				if (   !(this_new_arg.deref = (DerefType *)SimpleHeap::Malloc((deref.count + 1) * sizeof(DerefType)))   ) // +1 for the "NULL-item" terminator.
 					return ScriptError(ERR_OUTOFMEM);
-				memcpy(this_new_arg.deref, deref, deref_count * sizeof(DerefType));
+				memcpy(this_new_arg.deref, deref.items, deref.count * sizeof(DerefType));
 				// Terminate the list of derefs with a deref that has a NULL marker:
-				this_new_arg.deref[deref_count].marker = NULL;
+				this_new_arg.deref[deref.count].marker = NULL;
 			}
 			else
 				this_new_arg.deref = NULL;
@@ -5485,53 +5473,24 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 
 
-ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos, TCHAR aEndChar)
-// Caller provides modifiable aDerefCount, which might be non-zero to indicate that there are already
-// some items in the aDeref array.
-// Returns FAIL or OK.
+ResultType DerefList::Push()
 {
-	DerefType *last = NULL;
-	int i, j = aPos ? *aPos : 0, count = 0;
-	// For each sub-expression found in aArgText:
-	for (;;)
+	if (count == size)
 	{
-		i = j;
-		// Find next non-literal g_DerefChar or aEndChar, or end of string:
-		for (; aArgText[j] && (aArgText[j] != g_DerefChar && aArgText[j] != aEndChar || (aArgMap && aArgMap[j])); ++j);
-
-		// String "derefs" are needed to pair up to the '%' markers, allowing both
-		// to be optimized out if the string is empty (as on either side of %a%).
-		if (aDerefCount >= MAX_DEREFS_PER_ARG)
-			return ScriptError(ERR_TOO_MANY_REFS, aArgText); // Short msg since so rare.
-		DerefType &this_deref = aDeref[aDerefCount];  // For performance.
-		this_deref.type = aEndChar ? DT_QSTRING : DT_STRING;
-		this_deref.next = NULL;
-		this_deref.marker = aArgText + i;
-		this_deref.length = DerefLengthType(j - i);
-		this_deref.param_count = ++count;
-		aDerefCount++;
-		
-		if (last)
-			last->next = &this_deref;
-		last = &this_deref;
-		
-		if (aArgText[j] != g_DerefChar)
-			break;
-		// Recursively parse derefs within the expression.
-		j++; // Opening %
-		if (!ParseOperands(aArgText, aArgMap, aDeref, aDerefCount, &j, g_DerefChar))
-			return FAIL;
-		if (aArgText[j] != g_DerefChar) // Implies !aArgText[j].
-			return ScriptError(_T("Missing ending \"%\""), aArgText);
-		j++; // Closing %
+		const int block_size = 128; // In most cases one allocation will be enough.
+		DerefType *p = (DerefType *)realloc(items, (size + block_size) * sizeof(DerefType));
+		if (!p)
+			return g_script.ScriptError(ERR_OUTOFMEM);
+		items = p;
+		size += block_size;
 	}
-	if (aPos)
-		*aPos = j;
+	++count;
 	return OK;
 }
 
 
-ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos, TCHAR aEndChar)
+
+ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDeref, int *aPos, TCHAR aEndChar)
 {
 	LPTSTR op_begin, op_end;
 	size_t operand_length;
@@ -5541,19 +5500,12 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 	bool is_double_deref;
 	SymbolType wordop;
 
-	// ParseDerefs() won't consider escaped percent signs to be illegal, but in this case
-	// they should be since they have no meaning in expressions.  UPDATE for v1.0.44.11: The following
-	// is now commented out because it causes false positives (and fixing that probably isn't worth the
-	// performance & code size).  Specifically, the section below reports an error for escaped delimiters
-	// inside quotes such as x := "`%".  More importantly, it defeats the continuation section's %
-	// option; for example:
-	//   MsgBox %
-	//   (%  ; <<< This option here is defeated because it causes % to be replaced with `% at an early stage.
-	//   "%"
-	//   )
+	// Escape sequences outside of literal strings have no meaning, so could be considered illegal
+	// to improve error detection and reserve ` for future use.  However, in that case ` must still
+	// be allowed inside quoted strings and for `) in continuation sections, so this is inadequate:
 	//if (this_aArgMap) // This arg has an arg map indicating which chars are escaped/literal vs. normal.
 	//	for (j = 0; this_new_arg.text[j]; ++j)
-	//		if (this_aArgMap[j] && this_new_arg.text[j] == g_DerefChar)
+	//		if (this_aArgMap[j])
 	//			return ScriptError(ERR_EXP_ILLEGAL_CHAR, this_new_arg.text + j);
 
 	op_begin = aArgText;
@@ -5623,22 +5575,22 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 					cp = omit_leading_whitespace(close_paren + 1);
 					if (*cp == '=' && cp[1] == '>') // () => Fat arrow function.
 					{
-						if (aDerefCount)
+						if (aDeref.count)
 						{
-							DerefType &d = aDeref[aDerefCount - 1];
+							DerefType &d = *aDeref.Last();
 							if (d.type == DT_FUNC && d.marker + d.length == op_begin)
 							{
 								op_begin = d.marker;
-								--aDerefCount;
+								--aDeref.count;
 							}
 						}
-						if (!ParseFatArrow(aArgText, aArgMap, aDeref, aDerefCount, op_begin, close_paren, cp + 2, op_begin))
+						if (!ParseFatArrow(aArgText, aArgMap, aDeref, op_begin, close_paren, cp + 2, op_begin))
 							return FAIL;
 						continue;
 					}
 				}
 			}
-			if (!ParseOperands(aArgText, aArgMap, aDeref, aDerefCount, &j, close_char))
+			if (!ParseOperands(aArgText, aArgMap, aDeref, &j, close_char))
 				return FAIL;
 			op_begin = aArgText + j;
 			if (*op_begin)
@@ -5653,25 +5605,17 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 
 		if (*op_begin == '"' || *op_begin == '\'')
 		{
-#ifdef ENABLE_TEXT_DEREFS
-			j = (int)(op_begin - aArgText + 1);
-			if (!ParseDerefs(aArgText, aArgMap, aDeref, aDerefCount, &j, *op_begin))
-				return FAIL;
-			op_end = aArgText + j;
-#else
-			if (aDerefCount >= MAX_DEREFS_PER_ARG)
-				return ScriptError(ERR_TOO_MANY_REFS, aArgText); // Short msg since so rare.
 			op_end = aArgText + FindTextDelim(aArgText, *op_begin, int(op_begin - aArgText + 1), aArgMap);
-			DerefType &this_deref = aDeref[aDerefCount];  // For performance.
+			if (!*op_end)
+				return ScriptError(ERR_MISSING_CLOSE_QUOTE, op_begin);
+			if (!aDeref.Push())
+				return ScriptError(ERR_OUTOFMEM);
+			DerefType &this_deref = *aDeref.Last();
 			this_deref.type = DT_QSTRING;
 			this_deref.next = NULL;
 			this_deref.marker = op_begin + 1;
 			this_deref.length = DerefLengthType(op_end - (op_begin + 1));
 			this_deref.param_count = 1;
-			aDerefCount++;
-#endif
-			if (!*op_end)
-				return ScriptError(ERR_MISSING_CLOSE_QUOTE, op_begin);
 			++op_end;
 			// op_end is now set correctly to allow the outer loop to continue.
 			continue;
@@ -5711,7 +5655,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 		{
 			// This operand is the leading literal part of a double dereference.
 			j = (int)(op_begin - aArgText);
-			if (!ParseDoubleDeref(aArgText, aArgMap, aDeref, aDerefCount, &j))
+			if (!ParseDoubleDeref(aArgText, aArgMap, aDeref, &j))
 				return FAIL;
 			op_end = aArgText + j;
 			is_function = *op_end == '('; // Dynamic function call.
@@ -5743,7 +5687,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 			}
 			else if (*cp == '=' && cp[1] == '>') // () => Fat arrow function.
 			{
-				if (!ParseFatArrow(aArgText, aArgMap, aDeref, aDerefCount, op_begin, op_end, cp + 2, op_end))
+				if (!ParseFatArrow(aArgText, aArgMap, aDeref, op_begin, op_end, cp + 2, op_end))
 					return FAIL;
 				continue;
 			}
@@ -5755,28 +5699,29 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 		if (pending_op_is_class)
 			pending_op_is_class = is_function = false;
 
-		if (aDerefCount >= MAX_DEREFS_PER_ARG)
-			return ScriptError(ERR_TOO_MANY_REFS, op_begin); // Indicate which operand it ran out of space at.
+		if (!aDeref.Push())
+			return ScriptError(ERR_OUTOFMEM);
+		auto &this_deref = *aDeref.Last();
 
 		if (is_double_deref)
 		{
 			// Mark the end of the sub-expression which computes the variable name or function
 			// in this double-deref or dynamic function call:
-			aDeref[aDerefCount].marker = op_end;
-			aDeref[aDerefCount].length = 0;
+			this_deref.marker = op_end;
+			this_deref.length = 0;
 			if (op_begin > aArgText && op_begin[-1] == '.')
 			{
-				aDeref[aDerefCount].type = DT_DOTPERCENT;
+				this_deref.type = DT_DOTPERCENT;
 			}
 			else if (is_function)
 			{
 				// func is initialized to NULL and left that way to indicate the call is dynamic.
 				// PreparseBlocks() relies on length == 0 meaning a dynamic function reference.
-				aDeref[aDerefCount].func = NULL;
-				aDeref[aDerefCount].type = DT_FUNC;
+				this_deref.func = NULL;
+				this_deref.type = DT_FUNC;
 			}
 			else
-				aDeref[aDerefCount].type = DT_DOUBLE;
+				this_deref.type = DT_DOUBLE;
 		}
 		else if (  operand_length < 9 && (wordop = ConvertWordOperator(op_begin, operand_length))  )
 		{
@@ -5789,39 +5734,37 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 			// this leaves ListLines more accurate.  More importantly, it allows "Hotkey, If" to
 			// recognize an expression which uses AND/OR.  Additionally, the "NEW" operator will
 			// require a DerefType struct in the postfix expression phase anyway.
-			aDeref[aDerefCount].marker = op_begin;
-			aDeref[aDerefCount].length = (DerefLengthType)operand_length;
-			aDeref[aDerefCount].type = DT_WORDOP;
-			aDeref[aDerefCount].symbol = wordop;
+			this_deref.marker = op_begin;
+			this_deref.length = (DerefLengthType)operand_length;
+			this_deref.type = DT_WORDOP;
+			this_deref.symbol = wordop;
 		}
 		else if (!_tcsnicmp(op_begin, _T("true"), 4) || !_tcsnicmp(op_begin, _T("false"), 5))
 		{
-			aDeref[aDerefCount].marker = op_begin;
-			aDeref[aDerefCount].length = (DerefLengthType)operand_length;
-			aDeref[aDerefCount].type = DT_CONST_INT;
-			aDeref[aDerefCount].int_value = toupper(*op_begin) == 'T';
-
+			this_deref.marker = op_begin;
+			this_deref.length = (DerefLengthType)operand_length;
+			this_deref.type = DT_CONST_INT;
+			this_deref.int_value = toupper(*op_begin) == 'T';
 		}
 		else // This operand is a variable name or function name (single deref).
 		{
 			// Store the deref's starting location, even for functions (leave it set to the start
 			// of the function's name for use when doing error reporting at other stages -- i.e.
 			// don't set it to the address of the first param or closing-paren-if-no-params):
-			aDeref[aDerefCount].marker = op_begin;
-			aDeref[aDerefCount].length = (DerefLengthType)operand_length;
-			aDeref[aDerefCount].type = is_function ? DT_FUNC : DT_VAR;
+			this_deref.marker = op_begin;
+			this_deref.length = (DerefLengthType)operand_length;
+			this_deref.type = is_function ? DT_FUNC : DT_VAR;
 			if (is_function)
 				// Set to NULL to catch bugs.  It must and will be filled in at a later stage
 				// because the setting of each function's mJumpToLine relies upon the fact that
 				// functions are added to the linked list only upon being formally defined
 				// so that the most recently defined function is always last in the linked
 				// list, awaiting its mJumpToLine that will appear beneath it.
-				aDeref[aDerefCount].func = NULL;
+				this_deref.func = NULL;
 			else // It's a variable rather than a function.
-				if (   !(aDeref[aDerefCount].var = FindOrAddVar(op_begin, operand_length))   )
+				if (   !(this_deref.var = FindOrAddVar(op_begin, operand_length))   )
 					return FAIL; // The called function already displayed the error.
 		}
-		++aDerefCount; // Since above didn't "continue" or "return".
 	}
 	if (aPos)
     	*aPos = int(op_begin - aArgText);
@@ -5829,7 +5772,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 }
 
 
-ResultType Script::ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos)
+ResultType Script::ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDeref, int *aPos)
 {
 	LPTSTR op_begin, dd_begin;
 	LPTSTR op_end;
@@ -5841,15 +5784,14 @@ ResultType Script::ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefType *
 		
 		// String "derefs" are needed to pair up to the '%' markers, allowing both
 		// to be optimized out if the string is empty (as on either side of %a%).
-		if (aDerefCount >= MAX_DEREFS_PER_ARG)
-			return ScriptError(ERR_TOO_MANY_REFS, op_begin);
-		DerefType &this_deref = aDeref[aDerefCount];  // For performance.
+		if (!aDeref.Push())
+			return ScriptError(ERR_OUTOFMEM);
+		DerefType &this_deref = *aDeref.Last();
 		this_deref.type = DT_STRING;
 		this_deref.next = NULL;
 		this_deref.marker = op_begin;
 		this_deref.length = DerefLengthType(op_end - op_begin);
 		this_deref.param_count = ++count;
-		aDerefCount++;
 
 		if (last)
 			last->next = &this_deref;
@@ -5859,7 +5801,7 @@ ResultType Script::ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefType *
 		if (*op_end != g_DerefChar)
 			break;
 		(*aPos)++;
-		if (!ParseOperands(aArgText, aArgMap, aDeref, aDerefCount, aPos, g_DerefChar))
+		if (!ParseOperands(aArgText, aArgMap, aDeref, aPos, g_DerefChar))
 			return FAIL;
 		op_end = aArgText + *aPos;
 		if (*op_end != g_DerefChar)
@@ -5897,15 +5839,14 @@ SymbolType Script::ConvertWordOperator(LPCTSTR aWord, size_t aLength)
 }
 
 
-ResultType Script::ParseFatArrow(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount
+ResultType Script::ParseFatArrow(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDeref
 	, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR &aExprEnd)
 {
-	if (aDerefCount >= MAX_DEREFS_PER_ARG)
-		return ScriptError(ERR_TOO_MANY_REFS, aArgText); // Short msg since so rare.
+	if (!aDeref.Push())
+		return ScriptError(ERR_OUTOFMEM);
 	int j = FindExprDelim(aArgText, 0, int(aExpr - aArgText), aArgMap);
-	if (!ParseFatArrow(aDeref[aDerefCount], aPrmStart, aPrmEnd, aExpr, aArgText + j, aArgMap + j))
+	if (!ParseFatArrow(*aDeref.Last(), aPrmStart, aPrmEnd, aExpr, aArgText + j, aArgMap + j))
 		return FAIL;
-	aDerefCount++;
 	aExprEnd = aArgText + j;
 	return OK;
 }

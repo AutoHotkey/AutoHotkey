@@ -2939,17 +2939,6 @@ int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 			// Reached the end of the string without finding a delimiter.  Return the
 			// index of the null-terminator since that's typically what the caller wants.
 			return mark;
-#ifdef ENABLE_TEXT_DEREFS
-		case g_DerefChar:
-			if (!aLiteralMap || !aLiteralMap[mark])
-			{
-				// Find the corresponding end char for this deref.
-				mark = FindExprDelim(aBuf, g_DerefChar, mark + 1, aLiteralMap);
-				if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
-					return mark; // See case '\0' for comments.
-			}
-			continue;
-#endif
 		case '`':
 			// This allows g_DerefChar or aDelimiter to be escaped, but since every other non-null
 			// character has no meaning here, it doesn't need to check which character it is skipping.
