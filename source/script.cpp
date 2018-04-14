@@ -5078,7 +5078,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	// Loop 5 { ; Also overlaps, this time with file-pattern loop that retrieves numeric filename ending in '{'.
 	// Loop %Var% {  ; Similar, but like the above seems acceptable given extreme rarity of user intending a file pattern.
 	if ((aActionType == ACT_LOOP || aActionType == ACT_WHILE) && nArgs == 1 && arg[0][0] // A loop with exactly one, non-blank arg.
-		|| ((aActionType == ACT_FOR || aActionType == ACT_CATCH) && nArgs))
+		|| ((aActionType == ACT_FOR || aActionType == ACT_CATCH || aActionType == ACT_GIVEN) && nArgs))
 	{
 		LPTSTR arg1 = arg[nArgs - 1]; // For readability and possibly performance.
 		// A loop with the above criteria (exactly one arg) can only validly be a normal/counting loop or
@@ -5106,7 +5106,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			if (!rtrim(arg1)) // Trimmed down to nothing, so only a brace was present: remove the arg completely.
 				if (aActionType == ACT_LOOP || aActionType == ACT_CATCH)
 					nArgs = 0;    // This makes later stages recognize it as an infinite loop rather than a zero-iteration loop.
-				else // ACT_WHILE or ACT_FOR
+				else // ACT_WHILE, ACT_FOR or ACT_GIVEN
 					return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
 		}
 	}
@@ -5448,7 +5448,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 						// expression because this is an arg that's marked as a number-or-expression.
 						// So telltales avoid the need for the complex check further below.
 						if (aActionType == ACT_ASSIGNEXPR || aActionType >= ACT_FOR && aActionType <= ACT_UNTIL // i.e. FOR, WHILE or UNTIL
-							|| aActionType == ACT_THROW
+							|| aActionType >= ACT_THROW && aActionType <= ACT_WHEN // THROW, GIVEN or WHEN
 							|| StrChrAny(this_new_arg.text, EXPR_TELLTALES)) // See above.
 							this_new_arg.is_expression = true;
 						else
@@ -5473,7 +5473,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			//		a type mismatch error.
 			//
 			if (this_new_arg.is_expression && IsPureNumeric(this_new_arg.text, true, true, true)
-				&& aActionType != ACT_ASSIGNEXPR && aActionType != ACT_FOR && aActionType != ACT_THROW)
+				&& aActionType != ACT_ASSIGNEXPR && aActionType != ACT_FOR
+				&& (aActionType < ACT_THROW || aActionType > ACT_WHEN)) // Not THROW, GIVEN or WHEN.
 				this_new_arg.is_expression = false;
 
 			if (this_new_arg.is_expression)
@@ -5775,8 +5776,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				{
 					// ACT_WHILE performs less than 4% faster as a non-expression in these cases, and keeping
 					// it as an expression avoids an extra check in a performance-sensitive spot of ExpandArgs
-					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).
-					if (aActionType < ACT_FOR || aActionType > ACT_UNTIL && aActionType != ACT_THROW) // If it is FOR, WHILE, UNTIL or THROW, it would be something like "while x" in this case. Keep those as expressions for the reason above. PerformLoopFor() requires FOR's expression arg to remain an expression.
+					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).  ACT_UNTIL is treated the same way.
+					// Additionally, FOR, THROW, GIVEN and WHEN are kept as expressions in all cases to
+					// simplify the code (which works around ExpandArgs() lack of support for objects).
+					if (aActionType < ACT_FOR || aActionType > ACT_UNTIL // Not FOR, WHILE or UNTIL.
+						&& (aActionType < ACT_THROW || aActionType > ACT_WHEN)) // Not THROW, GIVEN or WHEN.
 						this_new_arg.is_expression = false; // In addition to being an optimization, doing this might also be necessary for things like "Var := ClipboardAll" to work properly.
 					// But if aActionType is ACT_ASSIGNEXPR, it's left as ACT_ASSIGNEXPR vs. ACT_ASSIGN
 					// because it might be necessary to avoid having AutoTrim take effect for := (which
@@ -9668,6 +9672,43 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			// Otherwise, continue processing at line's new location:
 			continue;
 		} // ActionType is IF/LOOP/TRY.
+		else if (line->mActionType == ACT_GIVEN)
+		{
+			// "Hide" the arg so that ExpandArgs() doesn't evaluate it.  This is necessary because
+			// ACT_GIVEN has special handling to support objects.
+			line->mArgc = 0;
+			Line *given_line = line;
+
+			line = line->mNextLine;
+			if (line->mActionType != ACT_BLOCK_BEGIN)
+				return given_line->PreparseError(ERR_MISSING_OPEN_BRACE);
+			Line *block_begin = line;
+			block_begin->mParentLine = given_line;
+			
+			Line *end_line;
+			for (line = line->mNextLine; line->mActionType == ACT_WHEN; line = end_line)
+			{
+				// Hide the arg so that ExpandArgs() won't evaluate it.
+				line->mArgc = 0;
+				// Find the next ACT_WHEN or ACT_BLOCK_END:
+				end_line = PreparseBlocks(line->mNextLine, UNTIL_BLOCK_END, block_begin, aLoopType);
+				if (!end_line)
+					return NULL; // Error.
+				// Form a linked list of WHEN lines within this block:
+				line->mRelatedLine = end_line;
+			}
+
+			if (line->mActionType != ACT_BLOCK_END)
+				return line->PreparseError(_T("Expected WHEN or \"}\"")); // Is this even possible?
+
+			// After evaluating ACT_GIVEN, execution resumes after ACT_BLOCK_END:
+			given_line->mRelatedLine = line = end_line->mNextLine;
+
+			if (aMode == ONLY_ONE_LINE) // Return the next unprocessed line to the caller.
+				return line;
+			// Otherwise, continue processing at line's new location:
+			continue;
+		}
 
 		// Since above didn't continue, do the switch:
 		switch (line->mActionType)
@@ -9704,6 +9745,12 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			if (aLoopType == ATTR_LOOP_OBSCURED)
 				return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			break;
+
+		case ACT_WHEN:
+			if (!aParentLine || !aParentLine->mParentLine
+				|| aParentLine->mParentLine->mActionType != ACT_GIVEN)
+				return line->PreparseError(ERR_WHEN_WITH_NO_GIVEN);
+			return line;
 
 		case ACT_ELSE:
 			// This happens if there's an extra ELSE in this scope level that has no IF:
@@ -12388,46 +12435,26 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			if (!token) // Unlikely.
 				return line->LineError(ERR_OUTOFMEM);
 
-			// The following is based on code from PerformLoopFor()
-
-			if (!sDerefBuf)
-			{
-				sDerefBufSize = (line->mArg[0].length < MAX_NUMBER_LENGTH ? MAX_NUMBER_LENGTH : line->mArg[0].length) + 1;
-				if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
-				{
-					sDerefBufSize = 0;
-					delete token;
-					return line->LineError(ERR_OUTOFMEM);
-				}
-			}
-
 			PRIVATIZE_S_DEREF_BUF;
-			LPTSTR our_buf_marker = our_deref_buf;
-			LPTSTR arg_deref[] = {0, 0};
-			LPTSTR strVal;
-			token->symbol = SYM_INVALID;
-			strVal = line->ExpandExpression(0, result, token, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, 0);
-			if (strVal == our_deref_buf)
-				token->mem_to_free = strVal;
+
+			result = line->ExpandSingleArg(0, *token, our_deref_buf, our_deref_buf_size);
+			
+			if (result == OK && token->symbol == SYM_STRING && token->marker == our_deref_buf)
+			{
+				// Assign ownership of our_deref_buf to token.
+				token->mem_to_free = our_deref_buf;
+				if (our_deref_buf_size > LARGE_DEREF_BUF_SIZE)
+					--sLargeDerefBufs;
+			}
 			else
 			{
-				token->mem_to_free = NULL;
 				DEPRIVATIZE_S_DEREF_BUF;
-			}
-
-			if (!strVal)
-			{
-				// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
-				delete token;
-				return result;
-			}
-
-			// Check if ExpandExpression has not returned a token at all
-			if (token->symbol == SYM_INVALID)
-			{
-				// Store the returned string in the token
-				token->symbol = SYM_STRING;
-				token->marker = strVal;
+				if (result != OK)
+				{
+					delete token;
+					return result; // Typically EARLY_EXIT or FAIL.
+				}
+				token->mem_to_free = NULL;
 			}
 
 			// Throw the newly-created token
@@ -12442,6 +12469,77 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			line = line->mNextLine;
 			continue;
 		}
+
+		case ACT_GIVEN:
+		{
+			Line *line_to_execute = NULL;
+
+			// Privatize our deref buf so that any function calls within any of the GIVEN/WHEN
+			// expressions can allocate and use their own separate deref buf.  Our deref buf
+			// will be reused for each expression evaluation.
+			PRIVATIZE_S_DEREF_BUF;
+
+			ExprTokenType given_value;
+			result = line->ExpandSingleArg(0, given_value, our_deref_buf, our_deref_buf_size);
+			if (result == OK)
+			{
+				// Privatize the deref buf again to avoid overwriting given_value.  Note
+				// that this introduces a new "our_deref_buf" distinct from the outer one.
+				PRIVATIZE_S_DEREF_BUF;
+				// For each WHEN:
+				for (Line *when = line->mNextLine->mNextLine; when->mActionType == ACT_WHEN; when = when->mRelatedLine)
+				{
+					ExprTokenType when_value;
+					result = when->ExpandSingleArg(0, when_value, our_deref_buf, our_deref_buf_size);
+					if (result != OK)
+						break;
+					if (TokensAreEqual(given_value, when_value))
+						line_to_execute = when->mNextLine;
+					if (when_value.symbol == SYM_OBJECT)
+						when_value.object->Release();
+					if (line_to_execute)
+						break;
+				}
+				DEPRIVATIZE_S_DEREF_BUF;
+				if (given_value.symbol == SYM_OBJECT)
+					given_value.object->Release();
+			}
+
+			DEPRIVATIZE_S_DEREF_BUF;
+
+			if (line_to_execute)
+			{
+				// Above found a matching WHEN.  Execute the lines between it and the next WHEN or block-end.
+				result = line_to_execute->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
+			}
+			else
+				jump_to_line = NULL;
+
+			if (result != OK || aMode == ONLY_ONE_LINE)
+			{
+				caller_jump_to_line = jump_to_line;
+				return result;
+			}
+			
+			if (jump_to_line != NULL)
+			{
+				if (jump_to_line->mParentLine != line->mParentLine)
+				{
+					caller_jump_to_line = jump_to_line;
+					return OK;
+				}
+				line = jump_to_line;
+				continue;
+			}
+			
+			// Continue execution at the line following the block-end.
+			line = line->mRelatedLine;
+			continue;
+		}
+
+		case ACT_WHEN:
+			// This is the next WHEN after one that matched, so we're done.
+			return OK;
 
 		case ACT_EXIT:
 			// If this script has no hotkeys and hasn't activated one of the hooks, EXIT will cause the
@@ -13182,40 +13280,22 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 
 	// Save these pointers since they will be overwritten during the loop:
 	Var *var[] = { ARGVARRAW1, ARGVARRAW2 };
-	
-	if (!sDerefBuf)
-	{
-		// This must be done in case ExpandExpression() needs the deref buf for temporary storage.
-		sDerefBufSize = (mArg[2].length < MAX_NUMBER_LENGTH ? MAX_NUMBER_LENGTH : mArg[2].length) + 1; // See EXPR_BUF_SIZE macro in script_expression.cpp.
-		if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
-		{
-			sDerefBufSize = 0;
-			return LineError(ERR_OUTOFMEM);
-		}
-	}
 
+	// Although we won't need sDerefBuf since string results aren't meaningful, the deref buf
+	// must be privatized so that any function calls within the expression don't conflict with
+	// the expression's own use of the deref buf:
 	PRIVATIZE_S_DEREF_BUF;
-	LPTSTR our_buf_marker = our_deref_buf;
-	LPTSTR arg_deref[] = {0, 0}; // ExpandExpression checks these if it needs to expand the deref buffer.
-	ExprTokenType object_token;
-	object_token.symbol = SYM_INVALID; // Init in case ExpandExpression() resolves to a string, in which case it won't use enum_token.
-
-	// Since expressions aren't normally capable of resolving to an object (except for RETURN), we need to
-	// call ExpandExpression() directly and pass in a "result token" which will be used if the result is an
-	// object or number. Load-time pre-parsing has ensured there are really three args, but mArgc == 2 so
-	// this one hasn't been evaluated yet:
-	if (ExpandExpression(2, result, &object_token, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, 0))
-		result = OK;
 	
-	DEPRIVATIZE_S_DEREF_BUF
+	ExprTokenType object_token;
+	// Load-time pre-parsing has ensured there are really three args, but mArgc == 2 so this
+	// one hasn't been evaluated yet (since ExpandArgs() doesn't support objects):
+	result = ExpandSingleArg(2, object_token, our_deref_buf, our_deref_buf_size);
+	
+	DEPRIVATIZE_S_DEREF_BUF;
 
-	if (result == FAIL || result == EARLY_EXIT)
-		// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
-		return result;
-
-	if (object_token.symbol != SYM_OBJECT)
+	if (result != OK || object_token.symbol != SYM_OBJECT)
 		// The expression didn't resolve to an object, so no enumerator is available.
-		return OK;
+		return result;
 	
 	TCHAR buf[MAX_NUMBER_SIZE]; // Small buffer which may be used by object->Invoke().
 	
