@@ -9721,6 +9721,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 		{
 			// "Hide" the arg so that ExpandArgs() doesn't evaluate it.  This is necessary because
 			// ACT_SWITCH has special handling to support objects.
+			line->mAttribute = (AttributeType)line->mArgc;
 			line->mArgc = 0;
 			Line *switch_line = line;
 
@@ -12530,7 +12531,13 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			PRIVATIZE_S_DEREF_BUF;
 
 			ExprTokenType switch_value;
-			result = line->ExpandSingleArg(0, switch_value, our_deref_buf, our_deref_buf_size);
+			if (!line->mAttribute) // Switch with no value: find the first 'true' case.
+			{
+				switch_value.symbol = SYM_INVALID;
+				result = OK;
+			}
+			else
+				result = line->ExpandSingleArg(0, switch_value, our_deref_buf, our_deref_buf_size);
 			if (result == OK)
 			{
 				// Privatize the deref buf again to avoid overwriting given_value.  Note
@@ -12548,7 +12555,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					result = case_line->ExpandSingleArg(0, case_value, our_deref_buf, our_deref_buf_size);
 					if (result != OK)
 						break;
-					bool found = TokensAreEqual(switch_value, case_value);
+					bool found = switch_value.symbol == SYM_INVALID ? TokenToBOOL(case_value)
+						: TokensAreEqual(switch_value, case_value);
 					if (case_value.symbol == SYM_OBJECT)
 						case_value.object->Release();
 					if (found)

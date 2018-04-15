@@ -411,7 +411,7 @@ Action g_act[] =
 	, {_T("Catch"), 0, 1, 0, NULL} // fincs: seems best to allow catch without a parameter
 	, {_T("Finally"), 0, 0, 0, NULL}
 	, {_T("Throw"), 0, 1, 1, {1, 0}}
-	, {_T("Switch"), 1, 1, 1, {1, 0}}
+	, {_T("Switch"), 0, 1, 1, {1, 0}}
 	, {_T("Case"), 1, 1, 1, {1, 0}}
 	, {_T("{"), 0, 0, 0, NULL}, {_T("}"), 0, 0, 0, NULL}
 
