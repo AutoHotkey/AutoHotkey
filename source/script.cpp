@@ -4813,7 +4813,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	/////////////////////////////////////////////////////////////
 	// MaxParams has already been verified as being <= MAX_ARGS.
 	// Any g_delimiter-delimited items beyond MaxParams will be included in a lump inside the last param:
-	int nArgs, nArgs_plus_one;
+	int nArgs;
 	LPTSTR arg[MAX_ARGS], arg_map[MAX_ARGS];
 	ActionTypeType subaction_type = ACT_INVALID; // Must init these.
 	ActionTypeType suboldaction_type = OLD_INVALID;
@@ -4821,7 +4821,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	int max_params = max_params_override ? max_params_override : this_action.MaxParams;
 	int max_params_minus_one = max_params - 1;
 	bool is_expression;
-	ActionTypeType *np;
 
 	for (nArgs = mark = 0; action_args[mark] && nArgs < max_params; ++nArgs)
 	{
@@ -4865,59 +4864,12 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 
 		if (!is_expression)
 		{
-			if (aActionType == ACT_TRANSFORM && (nArgs == 2 || nArgs == 3)) // i.e. the 3rd or 4th arg is about to be added.
-			{
-				// Somewhat inefficient since it has to be called for both Arg#2 and Arg#3, but seems
-				// worth the benefit in terms of code simplification.  Note that the following might
-				// return TRANS_CMD_INVALID just because the sub-command is contained in a variable
-				// reference.  That is why TRANS_CMD_INVALID does not produce an error at this stage,
-				// but only later when the line has been constructed far enough to call ArgHasDeref():
-				// i.e. Not the first param, only the third and fourth, which currently are either both numeric or both non-numeric for all cases.
-				switch(Line::ConvertTransformCmd(arg[1])) // arg[1] is the second arg.
-				{
-				// See comment above for why TRANS_CMD_INVALID isn't yet reported as an error:
-#ifdef UNICODE
-				#define TRANS_CMD_UNICODE_CASES
-#else
-				#define TRANS_CMD_UNICODE_CASES \
-				case TRANS_CMD_UNICODE:
-#endif
-				#define TRANSFORM_NON_EXPRESSION_CASES \
-				case TRANS_CMD_INVALID:\
-				case TRANS_CMD_ASC:\
-				TRANS_CMD_UNICODE_CASES\
-				case TRANS_CMD_DEREF:\
-				case TRANS_CMD_HTML:\
-					break; // Do nothing.  Leave is_expression set to its default of false.
-
-				TRANSFORM_NON_EXPRESSION_CASES
-				default:
-					// For all other sub-commands, Arg #3 and #4 are expression-capable.  It doesn't
-					// seem necessary to call LegacyArgIsExpression() because is_expression is only
-					// used below to avoid misinterpreting commas in quoted strings and parentheses;
-					// i.e. detecting those legacy cases wouldn't affect the outcome.
-					is_expression = true;
-					break;
-				}
-			}
-			else
-			{
-				// v1.0.43.07: Fixed below to use this_action instead of g_act[aActionType] so that the
-				// numeric params of legacy commands like EnvAdd/Sub/LeftClick can be detected.  Without
-				// this fix, the last comma in a line like "EnvSub, var, Add(2, 3)" is seen as a parameter
-				// delimiter, which causes a loadtime syntax error.
-				if (np = this_action.NumericParams) // This command has at least one numeric parameter.
-				{
-					// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
-					nArgs_plus_one = nArgs + 1;
-					for (; *np; ++np)
-						if (*np == nArgs_plus_one) // This arg is enforced to be purely numeric.
-							break;
-					if (*np) // Match found, so this is a purely numeric arg.
-						is_expression = true;
-				}
-			}
-		} // if (!is_expression)
+			// v1.0.43.07: Fixed below to use this_action instead of g_act[aActionType] so that the
+			// numeric params of legacy commands like EnvAdd/Sub/LeftClick can be detected.  Without
+			// this fix, the last comma in a line like "EnvSub, var, Add(2, 3)" is seen as a parameter
+			// delimiter, which causes a loadtime syntax error.
+			is_expression = ArgIsNumeric(aActionType, this_action.NumericParams, arg, nArgs);
+		}
 
 		// Find the end of the above arg:
 		if (is_expression)
@@ -5199,6 +5151,45 @@ inline ActionTypeType Script::ConvertOldActionType(LPTSTR aActionTypeString)
 
 
 
+bool Script::ArgIsNumeric(ActionTypeType aActionType, ActionTypeType *np, LPTSTR arg[], int nArgs)
+{
+	// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
+	int nArgs_plus_one = nArgs + 1;
+	for (; *np; ++np)
+		if (*np == nArgs_plus_one) // This arg is enforced to be purely numeric.
+			break;
+	if (*np) // Match found, so this is a purely numeric arg.
+		return true;
+	if (aActionType == ACT_TRANSFORM && (nArgs == 2 || nArgs == 3)) // i.e. the 3rd or 4th arg is about to be added.
+	{
+		// Somewhat inefficient since it has to be called for both Arg#2 and Arg#3, but seems
+		// worth the benefit in terms of code simplification.  Note that the following might
+		// return TRANS_CMD_INVALID just because the sub-command is contained in a variable
+		// reference.  That is why TRANS_CMD_INVALID does not produce an error at this stage,
+		// but only later when the line has been constructed far enough to call ArgHasDeref():
+		// i.e. Not the first param, only the third and fourth, which currently are either both numeric or both non-numeric for all cases.
+		switch (Line::ConvertTransformCmd(arg[1])) // arg[1] is the second arg.
+		{
+		// See comment above for why TRANS_CMD_INVALID isn't yet reported as an error:
+		case TRANS_CMD_INVALID:
+		case TRANS_CMD_ASC:
+#ifndef UNICODE
+		case TRANS_CMD_UNICODE:
+#endif
+		case TRANS_CMD_DEREF:
+		case TRANS_CMD_HTML:
+			break; // Do nothing.  Return default of false.
+
+		default:
+			// For all other sub-commands, Arg #3 and #4 are expression-capable.
+			return true;
+		}
+	}
+	return false;
+}
+
+
+
 bool LegacyArgIsExpression(LPTSTR aArgText, LPTSTR aArgMap)
 // Helper function for AddLine
 {
@@ -5255,8 +5246,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	TCHAR orig_char;
 	LPTSTR op_begin, op_end;
 	LPTSTR this_aArgMap, this_aArg, cp;
-	ActionTypeType *np;
-	TransformCmds trans_cmd;
 	bool is_function, pending_function_is_new_op = false;
 
 	//////////////////////////////////////////////////////////
@@ -5270,7 +5259,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		if (   !(new_arg = (ArgStruct *)SimpleHeap::Malloc(aArgc * sizeof(ArgStruct)))   )
 			return ScriptError(ERR_OUTOFMEM);
 
-		int i, j, i_plus_one;
+		int i, j;
 
 		for (i = 0; i < aArgc; ++i)
 		{
@@ -5281,28 +5270,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			this_aArgMap = aArgMap ? aArgMap[i] : NULL; // Same.
 			ArgStruct &this_new_arg = new_arg[i];       // Same.
 			this_new_arg.is_expression = false;         // Set default early, for maintainability.
-
-			if (aActionType == ACT_TRANSFORM)
-			{
-				if (i == 1) // The second parameter (since the first is the OutputVar).
-					// Note that the following might return TRANS_CMD_INVALID just because the sub-command
-					// is contained in a variable reference.  That is why TRANS_CMD_INVALID does not
-					// produce an error at this stage, but only later when the line has been constructed
-					// far enough to call ArgHasDeref():
-					trans_cmd = Line::ConvertTransformCmd(this_aArg);
-					// The value of trans_cmd is also used by the syntax checker further below.
-				else if (i > 1) // i.e. Not the first param, only the third and fourth, which currently are either both numeric or both non-numeric for all cases.
-				{
-					switch(trans_cmd)
-					{
-					TRANSFORM_NON_EXPRESSION_CASES
-					default:
-						// For all other sub-commands, Arg #3 and #4 are expression-capable and will be made so
-						// if they pass the following check:
-						this_new_arg.is_expression = LegacyArgIsExpression(this_aArg, this_aArgMap);
-					}
-				}
-			}
 
 			// Before allocating memory for this Arg's text, first check if it's a pure
 			// variable.  If it is, we store it differently (and there's no need to resolve
@@ -5415,48 +5382,41 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// memory:
 			deref_count = 0;  // Init for each arg.
 
-			if (np = g_act[aActionType].NumericParams) // This command has at least one numeric parameter.
+			// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
+			if (ArgIsNumeric(aActionType, g_act[aActionType].NumericParams, aArg, i))
 			{
-				// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
-				i_plus_one = i + 1;
-				for (; *np; ++np)
+				if (aActionType == ACT_WINMOVE)
 				{
-					if (*np == i_plus_one) // This arg is enforced to be purely numeric.
+					if (i > 1)
 					{
-						if (aActionType == ACT_WINMOVE)
-						{
-							if (i > 1)
-							{
-								// i indicates this is Arg #3 or beyond, which is one of the args that is
-								// either the word "default" or a number/expression.
-								if (!_tcsicmp(this_new_arg.text, _T("default"))) // It's not an expression.
-									break; // The loop is over because this arg was found in the list.
-							}
-							else // This is the first or second arg, which are title/text vs. X/Y when aArgc > 2.
-								if (aArgc > 2) // Title/text are not numeric/expressions.
-									break; // The loop is over because this arg was found in the list.
-						}
-						// Otherwise, it might be an expression so do the final checks.
-						// Override the original false default of is_expression unless an exception applies.
-						// Since ACT_ASSIGNEXPR, WHILE, FOR and UNTIL aren't legacy commands, don't call
-						// LegacyArgIsExpression() for them because that would cause things like x:=%y% and
-						// "while %x%" to behave the same as x:=y and "while x:, which would be inconsistent
-						// with how expressions are supposed to work. ACT_RETURN should have been excluded
-						// too; but it was left out for so long that it was thought best to document and keep
-						// the unexpected behavior of "return %x%".
-						// For other commands, if any telltale character is present it's definitely an
-						// expression because this is an arg that's marked as a number-or-expression.
-						// So telltales avoid the need for the complex check further below.
-						if (aActionType == ACT_ASSIGNEXPR || aActionType >= ACT_FOR && aActionType <= ACT_UNTIL // i.e. FOR, WHILE or UNTIL
-							|| aActionType == ACT_THROW
-							|| StrChrAny(this_new_arg.text, EXPR_TELLTALES)) // See above.
-							this_new_arg.is_expression = true;
-						else
-							this_new_arg.is_expression = LegacyArgIsExpression(this_new_arg.text, this_aArgMap);
-						break; // The loop is over if this arg is found in the list of mandatory-numeric args.
-					} // i is a mandatory-numeric arg
-				} // for each mandatory-numeric arg of this command, see if this arg matches its number.
-			} // this command has a list of mandatory numeric-args.
+						// i indicates this is Arg #3 or beyond, which is one of the args that is
+						// either the word "default" or a number/expression.
+						if (!_tcsicmp(this_new_arg.text, _T("default"))) // It's not an expression.
+							break; // The loop is over because this arg was found in the list.
+					}
+					else // This is the first or second arg, which are title/text vs. X/Y when aArgc > 2.
+						if (aArgc > 2) // Title/text are not numeric/expressions.
+							break; // The loop is over because this arg was found in the list.
+				}
+				// Otherwise, it might be an expression so do the final checks.
+				// Override the original false default of is_expression unless an exception applies.
+				// Since ACT_ASSIGNEXPR, WHILE, FOR and UNTIL aren't legacy commands, don't call
+				// LegacyArgIsExpression() for them because that would cause things like x:=%y% and
+				// "while %x%" to behave the same as x:=y and "while x:, which would be inconsistent
+				// with how expressions are supposed to work. ACT_RETURN should have been excluded
+				// too; but it was left out for so long that it was thought best to document and keep
+				// the unexpected behavior of "return %x%".
+				// For other commands, if any telltale character is present it's definitely an
+				// expression because this is an arg that's marked as a number-or-expression.
+				// So telltales avoid the need for the complex check further below.
+				if (aActionType == ACT_ASSIGNEXPR || aActionType >= ACT_FOR && aActionType <= ACT_UNTIL // i.e. FOR, WHILE or UNTIL
+					|| aActionType == ACT_THROW
+					|| StrChrAny(this_new_arg.text, EXPR_TELLTALES)) // See above.
+					this_new_arg.is_expression = true;
+				// For backward-compatibility, ignore the previous value if this isn't Transform:
+				else if (  !(aActionType == ACT_TRANSFORM && this_new_arg.is_expression)  )
+					this_new_arg.is_expression = LegacyArgIsExpression(this_new_arg.text, this_aArgMap);
+			} // i is a mandatory-numeric arg
 
 			// To help runtime performance, the below changes args to non-expressions if they contain
 			// only a single numeric literal (or are entirely blank). At runtime, such args are expanded
@@ -6496,9 +6456,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_TRANSFORM:
 		if (aArgc > 1 && !line.ArgHasDeref(2))
 		{
-			// The value of trans_cmd was already set at an earlier stage, but only here can the error
-			// for new_raw_arg3 be displayed because only here was it finally possible to call
-			// ArgHasDeref() [above].
+			TransformCmds trans_cmd = Line::ConvertTransformCmd(new_raw_arg2);
 			if (trans_cmd == TRANS_CMD_INVALID)
 				return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 #ifndef UNICODE
