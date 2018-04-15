@@ -2649,9 +2649,17 @@ examine_line:
 				// something like foo:: from being interpreted as a generic label, so when the line fails
 				// to resolve to a command or expression, an error message will be shown.
 				buf[--buf_length] = '\0';  // Remove the trailing colon.
-				rtrim(buf, buf_length); // Has already been ltrimmed.
-				if (!AddLabel(buf, false))
-					return FAIL;
+				if (!_tcsicmp(buf, _T("Default")) && mOpenBlock && mOpenBlock->mPrevLine // "Default:" case.
+					&& mOpenBlock->mPrevLine->mActionType == ACT_GIVEN) // For backward-compatibility, it's a normal label in any other case.
+				{
+					if (!AddLine(ACT_WHEN))
+						return FAIL;
+				}
+				else
+				{
+					if (!AddLabel(buf, false))
+						return FAIL;
+				}
 				goto continue_main_loop; // In lieu of "continue", for performance.
 			}
 		}
@@ -4536,6 +4544,21 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			case ACT_FINALLY:
 				aActionType = otb_act;
 				break;
+			}
+		}
+		else if (*action_args == ':')
+		{
+			// Default isn't handled as its own action type because that would only cover the cases
+			// where there is a space after the name.  This covers "Default: subaction", "Default :"
+			// and "Default : subaction".  "Default:" on its own is handled by label-parsing.
+			if (!_tcsicmp(action_name, _T("Default")))
+			{
+				if (!AddLine(ACT_WHEN))
+					return FAIL;
+				action_args = omit_leading_whitespace(action_args + 1);
+				if (!*action_args)
+					return OK;
+				return ParseAndAddLine(action_args);
 			}
 		}
 		if (!aActionType && _tcschr(EXPR_ALL_SYMBOLS, *action_args))
@@ -7054,6 +7077,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	if (aActionType == ACT_BLOCK_BEGIN)
 	{
 		++mCurrentFuncOpenBlockCount; // It's okay to increment unconditionally because it is reset to zero every time a new function definition is entered.
+		// While loading the script, use mParentLine to form a linked list of blocks.  mParentLine will
+		// be set more accurately (taking into account control flow statements) by PreparseBlocks().
+		the_new_line->mParentLine = mOpenBlock;
+		mOpenBlock = the_new_line;
 		// It's only necessary to check the last func, not the one(s) that come before it, to see if its
 		// mJumpToLine is NULL.  This is because our caller has made it impossible for a function
 		// to ever have been defined in the first place if it lacked its opening brace.  Search on
@@ -7100,6 +7127,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			line.mAttribute = ATTR_TRUE;  // Flag this ACT_BLOCK_END as the ending brace of a function's body.
 			g->CurrentFunc = NULL;
 		}
+		if (mOpenBlock) // !mOpenBlock would indicate a syntax error, reported at a later stage.
+			mOpenBlock = mOpenBlock->mParentLine;
 	}
 
 	// Above must be done prior to the below, since it sometimes sets mAttribute for use below.
@@ -9705,6 +9734,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			for (line = line->mNextLine; line->mActionType == ACT_WHEN; line = end_line)
 			{
 				// Hide the arg so that ExpandArgs() won't evaluate it.
+				line->mAttribute = (AttributeType)line->mArgc;
 				line->mArgc = 0;
 				// Find the next ACT_WHEN or ACT_BLOCK_END:
 				end_line = PreparseBlocks(line->mNextLine, UNTIL_BLOCK_END, block_begin, aLoopType);
@@ -12505,16 +12535,23 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				// For each WHEN:
 				for (Line *when = line->mNextLine->mNextLine; when->mActionType == ACT_WHEN; when = when->mRelatedLine)
 				{
+					if (!when->mAttribute) // The default case.
+					{
+						line_to_execute = when->mNextLine;
+						continue;
+					}
 					ExprTokenType when_value;
 					result = when->ExpandSingleArg(0, when_value, our_deref_buf, our_deref_buf_size);
 					if (result != OK)
 						break;
-					if (TokensAreEqual(given_value, when_value))
-						line_to_execute = when->mNextLine;
+					bool found = TokensAreEqual(given_value, when_value);
 					if (when_value.symbol == SYM_OBJECT)
 						when_value.object->Release();
-					if (line_to_execute)
+					if (found)
+					{
+						line_to_execute = when->mNextLine;
 						break;
+					}
 				}
 				DEPRIVATIZE_S_DEREF_BUF;
 				if (given_value.symbol == SYM_OBJECT)
