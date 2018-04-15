@@ -4612,21 +4612,17 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	case ACT_ELSE:
 	case ACT_TRY:
 	case ACT_FINALLY:
-		if (!AddLine(aActionType))
-			return FAIL;
 		if (*action_args == '{')
 		{
-			if (!AddLine(ACT_BLOCK_BEGIN))
-				return FAIL;
+			add_openbrace_afterward = true;
 			action_args = omit_leading_whitespace(action_args + 1);
 		}
-		if (!*action_args)
-			return OK;
-		// Call self recursively to parse the sub-action.  Doing this before the args are
-		// processed any further avoids some complexity, since literal_map would otherwise
-		// have to be passed recursively, in which case the action name is also expected.
-		//mCurrLine = NULL; // Seems more useful to leave this set to the line added above.
-		return ParseAndAddLine(action_args);
+		if (*action_args)
+		{
+			subaction_start = action_args;
+			*--action_args = '\0'; // Relies on there being a space, tab or brace at this position.
+		}
+		break;
 	case ACT_WHEN:
 		mark = FindExprDelim(action_args, ':');
 		if (!action_args[mark])
@@ -5136,7 +5132,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			return FAIL;
 	if (!subaction_start) // There is no subaction in this case.
 		return OK;
-	if (aActionType == ACT_WHEN)
+	if (!subaction_end_marker)
 		return ParseAndAddLine(subaction_start); // Escape sequences in the subaction haven't been translated yet, in this case.
 	// Otherwise, recursively add the subaction, and any subactions it might have, beneath
 	// the line just added.  The following example:
