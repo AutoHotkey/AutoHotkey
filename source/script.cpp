@@ -2650,9 +2650,9 @@ examine_line:
 				// to resolve to a command or expression, an error message will be shown.
 				buf[--buf_length] = '\0';  // Remove the trailing colon.
 				if (!_tcsicmp(buf, _T("Default")) && mOpenBlock && mOpenBlock->mPrevLine // "Default:" case.
-					&& mOpenBlock->mPrevLine->mActionType == ACT_GIVEN) // For backward-compatibility, it's a normal label in any other case.
+					&& mOpenBlock->mPrevLine->mActionType == ACT_SWITCH) // For backward-compatibility, it's a normal label in any other case.
 				{
-					if (!AddLine(ACT_WHEN))
+					if (!AddLine(ACT_CASE))
 						return FAIL;
 				}
 				else
@@ -4553,7 +4553,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			// and "Default : subaction".  "Default:" on its own is handled by label-parsing.
 			if (!_tcsicmp(action_name, _T("Default")))
 			{
-				if (!AddLine(ACT_WHEN))
+				if (!AddLine(ACT_CASE))
 					return FAIL;
 				action_args = omit_leading_whitespace(action_args + 1);
 				if (!*action_args)
@@ -4646,7 +4646,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			*--action_args = '\0'; // Relies on there being a space, tab or brace at this position.
 		}
 		break;
-	case ACT_WHEN:
+	case ACT_CASE:
 		mark = FindExprDelim(action_args, ':');
 		if (!action_args[mark])
 			return ScriptError(ERR_MISSING_COLON, aLineText);
@@ -5115,7 +5115,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	// Loop 5 { ; Also overlaps, this time with file-pattern loop that retrieves numeric filename ending in '{'.
 	// Loop %Var% {  ; Similar, but like the above seems acceptable given extreme rarity of user intending a file pattern.
 	if ((aActionType == ACT_LOOP || aActionType == ACT_WHILE) && nArgs == 1 && arg[0][0] // A loop with exactly one, non-blank arg.
-		|| ((aActionType == ACT_FOR || aActionType == ACT_CATCH || aActionType == ACT_GIVEN) && nArgs))
+		|| ((aActionType == ACT_FOR || aActionType == ACT_CATCH || aActionType == ACT_SWITCH) && nArgs))
 	{
 		LPTSTR arg1 = arg[nArgs - 1]; // For readability and possibly performance.
 		// A loop with the above criteria (exactly one arg) can only validly be a normal/counting loop or
@@ -5143,7 +5143,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			if (!rtrim(arg1)) // Trimmed down to nothing, so only a brace was present: remove the arg completely.
 				if (aActionType == ACT_LOOP || aActionType == ACT_CATCH)
 					nArgs = 0;    // This makes later stages recognize it as an infinite loop rather than a zero-iteration loop.
-				else // ACT_WHILE, ACT_FOR or ACT_GIVEN
+				else // ACT_WHILE, ACT_FOR or ACT_SWITCH
 					return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
 		}
 	}
@@ -5487,7 +5487,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 						// expression because this is an arg that's marked as a number-or-expression.
 						// So telltales avoid the need for the complex check further below.
 						if (aActionType == ACT_ASSIGNEXPR || aActionType >= ACT_FOR && aActionType <= ACT_UNTIL // i.e. FOR, WHILE or UNTIL
-							|| aActionType >= ACT_THROW && aActionType <= ACT_WHEN // THROW, GIVEN or WHEN
+							|| aActionType >= ACT_THROW && aActionType <= ACT_CASE // THROW, SWITCH or CASE
 							|| StrChrAny(this_new_arg.text, EXPR_TELLTALES)) // See above.
 							this_new_arg.is_expression = true;
 						else
@@ -5513,7 +5513,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			//
 			if (this_new_arg.is_expression && IsPureNumeric(this_new_arg.text, true, true, true)
 				&& aActionType != ACT_ASSIGNEXPR && aActionType != ACT_FOR
-				&& (aActionType < ACT_THROW || aActionType > ACT_WHEN)) // Not THROW, GIVEN or WHEN.
+				&& (aActionType < ACT_THROW || aActionType > ACT_CASE)) // Not THROW, SWITCH or CASE.
 				this_new_arg.is_expression = false;
 
 			if (this_new_arg.is_expression)
@@ -5816,10 +5816,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// ACT_WHILE performs less than 4% faster as a non-expression in these cases, and keeping
 					// it as an expression avoids an extra check in a performance-sensitive spot of ExpandArgs
 					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).  ACT_UNTIL is treated the same way.
-					// Additionally, FOR, THROW, GIVEN and WHEN are kept as expressions in all cases to
+					// Additionally, FOR, THROW, SWITCH and CASE are kept as expressions in all cases to
 					// simplify the code (which works around ExpandArgs() lack of support for objects).
 					if (aActionType < ACT_FOR || aActionType > ACT_UNTIL // Not FOR, WHILE or UNTIL.
-						&& (aActionType < ACT_THROW || aActionType > ACT_WHEN)) // Not THROW, GIVEN or WHEN.
+						&& (aActionType < ACT_THROW || aActionType > ACT_CASE)) // Not THROW, SWITCH or CASE.
 						this_new_arg.is_expression = false; // In addition to being an optimization, doing this might also be necessary for things like "Var := ClipboardAll" to work properly.
 					// But if aActionType is ACT_ASSIGNEXPR, it's left as ACT_ASSIGNEXPR vs. ACT_ASSIGN
 					// because it might be necessary to avoid having AutoTrim take effect for := (which
@@ -9717,38 +9717,35 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			// Otherwise, continue processing at line's new location:
 			continue;
 		} // ActionType is IF/LOOP/TRY.
-		else if (line->mActionType == ACT_GIVEN)
+		else if (line->mActionType == ACT_SWITCH)
 		{
 			// "Hide" the arg so that ExpandArgs() doesn't evaluate it.  This is necessary because
-			// ACT_GIVEN has special handling to support objects.
+			// ACT_SWITCH has special handling to support objects.
 			line->mArgc = 0;
-			Line *given_line = line;
+			Line *switch_line = line;
 
 			line = line->mNextLine;
 			if (line->mActionType != ACT_BLOCK_BEGIN)
-				return given_line->PreparseError(ERR_MISSING_OPEN_BRACE);
+				return switch_line->PreparseError(ERR_MISSING_OPEN_BRACE);
 			Line *block_begin = line;
-			block_begin->mParentLine = given_line;
+			block_begin->mParentLine = switch_line;
 			
 			Line *end_line;
-			for (line = line->mNextLine; line->mActionType == ACT_WHEN; line = end_line)
+			for (line = line->mNextLine; line->mActionType == ACT_CASE; line = end_line)
 			{
 				// Hide the arg so that ExpandArgs() won't evaluate it.
 				line->mAttribute = (AttributeType)line->mArgc;
 				line->mArgc = 0;
-				// Find the next ACT_WHEN or ACT_BLOCK_END:
+				// Find the next ACT_CASE or ACT_BLOCK_END:
 				end_line = PreparseBlocks(line->mNextLine, UNTIL_BLOCK_END, block_begin, aLoopType);
 				if (!end_line)
 					return NULL; // Error.
-				// Form a linked list of WHEN lines within this block:
+				// Form a linked list of CASE lines within this block:
 				line->mRelatedLine = end_line;
 			}
 
-			if (line->mActionType != ACT_BLOCK_END)
-				return line->PreparseError(_T("Expected WHEN or \"}\"")); // Is this even possible?
-
-			// After evaluating ACT_GIVEN, execution resumes after ACT_BLOCK_END:
-			given_line->mRelatedLine = line = end_line->mNextLine;
+			// After evaluating ACT_SWITCH, execution resumes after ACT_BLOCK_END:
+			switch_line->mRelatedLine = line = end_line->mNextLine;
 
 			if (aMode == ONLY_ONE_LINE) // Return the next unprocessed line to the caller.
 				return line;
@@ -9792,10 +9789,10 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 				return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			break;
 
-		case ACT_WHEN:
+		case ACT_CASE:
 			if (!aParentLine || !aParentLine->mParentLine
-				|| aParentLine->mParentLine->mActionType != ACT_GIVEN)
-				return line->PreparseError(ERR_WHEN_WITH_NO_GIVEN);
+				|| aParentLine->mParentLine->mActionType != ACT_SWITCH)
+				return line->PreparseError(ERR_UNEXPECTED_CASE);
 			return line;
 
 		case ACT_ELSE:
@@ -12516,53 +12513,53 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			continue;
 		}
 
-		case ACT_GIVEN:
+		case ACT_SWITCH:
 		{
 			Line *line_to_execute = NULL;
 
-			// Privatize our deref buf so that any function calls within any of the GIVEN/WHEN
+			// Privatize our deref buf so that any function calls within any of the SWITCH/CASE
 			// expressions can allocate and use their own separate deref buf.  Our deref buf
 			// will be reused for each expression evaluation.
 			PRIVATIZE_S_DEREF_BUF;
 
-			ExprTokenType given_value;
-			result = line->ExpandSingleArg(0, given_value, our_deref_buf, our_deref_buf_size);
+			ExprTokenType switch_value;
+			result = line->ExpandSingleArg(0, switch_value, our_deref_buf, our_deref_buf_size);
 			if (result == OK)
 			{
 				// Privatize the deref buf again to avoid overwriting given_value.  Note
 				// that this introduces a new "our_deref_buf" distinct from the outer one.
 				PRIVATIZE_S_DEREF_BUF;
-				// For each WHEN:
-				for (Line *when = line->mNextLine->mNextLine; when->mActionType == ACT_WHEN; when = when->mRelatedLine)
+				// For each CASE:
+				for (Line *case_line = line->mNextLine->mNextLine; case_line->mActionType == ACT_CASE; case_line = case_line->mRelatedLine)
 				{
-					if (!when->mAttribute) // The default case.
+					if (!case_line->mAttribute) // The default case.
 					{
-						line_to_execute = when->mNextLine;
+						line_to_execute = case_line->mNextLine;
 						continue;
 					}
-					ExprTokenType when_value;
-					result = when->ExpandSingleArg(0, when_value, our_deref_buf, our_deref_buf_size);
+					ExprTokenType case_value;
+					result = case_line->ExpandSingleArg(0, case_value, our_deref_buf, our_deref_buf_size);
 					if (result != OK)
 						break;
-					bool found = TokensAreEqual(given_value, when_value);
-					if (when_value.symbol == SYM_OBJECT)
-						when_value.object->Release();
+					bool found = TokensAreEqual(switch_value, case_value);
+					if (case_value.symbol == SYM_OBJECT)
+						case_value.object->Release();
 					if (found)
 					{
-						line_to_execute = when->mNextLine;
+						line_to_execute = case_line->mNextLine;
 						break;
 					}
 				}
 				DEPRIVATIZE_S_DEREF_BUF;
-				if (given_value.symbol == SYM_OBJECT)
-					given_value.object->Release();
+				if (switch_value.symbol == SYM_OBJECT)
+					switch_value.object->Release();
 			}
 
 			DEPRIVATIZE_S_DEREF_BUF;
 
 			if (line_to_execute)
 			{
-				// Above found a matching WHEN.  Execute the lines between it and the next WHEN or block-end.
+				// Above found a matching CASE.  Execute the lines between it and the next CASE or block-end.
 				result = line_to_execute->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
 			}
 			else
@@ -12590,8 +12587,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			continue;
 		}
 
-		case ACT_WHEN:
-			// This is the next WHEN after one that matched, so we're done.
+		case ACT_CASE:
+			// This is the next CASE after one that matched, so we're done.
 			return OK;
 
 		case ACT_EXIT:
