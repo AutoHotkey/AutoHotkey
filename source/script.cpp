@@ -4900,7 +4900,23 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 
 		if (!is_expression)
 		{
-			if (aActionType == ACT_TRANSFORM && (nArgs == 2 || nArgs == 3)) // i.e. the 3rd or 4th arg is about to be added.
+			// v1.0.43.07: Fixed below to use this_action instead of g_act[aActionType] so that the
+			// numeric params of legacy commands like EnvAdd/Sub/LeftClick can be detected.  Without
+			// this fix, the last comma in a line like "EnvSub, var, Add(2, 3)" is seen as a parameter
+			// delimiter, which causes a loadtime syntax error.
+			if (  *(np = this_action.NumericParams)  ) // This command has at least one numeric parameter.
+			{
+				// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
+				nArgs_plus_one = nArgs + 1;
+				for (; *np; ++np)
+					if (*np == nArgs_plus_one) // This arg is enforced to be purely numeric.
+						break;
+				if (*np) // Match found, so this is a purely numeric arg.
+					is_expression = true;
+			}
+			else if (aActionType == ACT_CASE) // Needed because MAX_ARGS > MAX_NUMERIC_PARAMS.
+				is_expression = true;
+			else if (aActionType == ACT_TRANSFORM && (nArgs == 2 || nArgs == 3)) // i.e. the 3rd or 4th arg is about to be added.
 			{
 				// Somewhat inefficient since it has to be called for both Arg#2 and Arg#3, but seems
 				// worth the benefit in terms of code simplification.  Note that the following might
@@ -4933,23 +4949,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					// i.e. detecting those legacy cases wouldn't affect the outcome.
 					is_expression = true;
 					break;
-				}
-			}
-			else
-			{
-				// v1.0.43.07: Fixed below to use this_action instead of g_act[aActionType] so that the
-				// numeric params of legacy commands like EnvAdd/Sub/LeftClick can be detected.  Without
-				// this fix, the last comma in a line like "EnvSub, var, Add(2, 3)" is seen as a parameter
-				// delimiter, which causes a loadtime syntax error.
-				if (np = this_action.NumericParams) // This command has at least one numeric parameter.
-				{
-					// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
-					nArgs_plus_one = nArgs + 1;
-					for (; *np; ++np)
-						if (*np == nArgs_plus_one) // This arg is enforced to be purely numeric.
-							break;
-					if (*np) // Match found, so this is a purely numeric arg.
-						is_expression = true;
 				}
 			}
 		} // if (!is_expression)
@@ -5342,6 +5341,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					}
 				}
 			}
+			else if (aActionType == ACT_CASE)
+				this_new_arg.is_expression = true;
 
 			// Before allocating memory for this Arg's text, first check if it's a pure
 			// variable.  If it is, we store it differently (and there's no need to resolve
@@ -12546,24 +12547,30 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				// For each CASE:
 				for (Line *case_line = line->mNextLine->mNextLine; case_line->mActionType == ACT_CASE; case_line = case_line->mRelatedLine)
 				{
-					if (!case_line->mAttribute) // The default case.
+					int arg, arg_count = (int)(INT_PTR)case_line->mAttribute;
+					if (!arg_count) // The default case.
 					{
 						line_to_execute = case_line->mNextLine;
 						continue;
 					}
-					ExprTokenType case_value;
-					result = case_line->ExpandSingleArg(0, case_value, our_deref_buf, our_deref_buf_size);
-					if (result != OK)
-						break;
-					bool found = switch_value.symbol == SYM_INVALID ? TokenToBOOL(case_value)
-						: TokensAreEqual(switch_value, case_value);
-					if (case_value.symbol == SYM_OBJECT)
-						case_value.object->Release();
-					if (found)
+					for (arg = 0; arg < arg_count; ++arg)
 					{
-						line_to_execute = case_line->mNextLine;
-						break;
+						ExprTokenType case_value;
+						result = case_line->ExpandSingleArg(arg, case_value, our_deref_buf, our_deref_buf_size);
+						if (result != OK)
+							break;
+						bool found = switch_value.symbol == SYM_INVALID ? TokenToBOOL(case_value)
+							: TokensAreEqual(switch_value, case_value);
+						if (case_value.symbol == SYM_OBJECT)
+							case_value.object->Release();
+						if (found)
+						{
+							line_to_execute = case_line->mNextLine;
+							break;
+						}
 					}
+					if (arg < arg_count)
+						break;
 				}
 				DEPRIVATIZE_S_DEREF_BUF;
 				if (switch_value.symbol == SYM_OBJECT)
