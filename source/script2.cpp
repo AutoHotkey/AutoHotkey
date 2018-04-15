@@ -10349,13 +10349,10 @@ VarSizeType BIV_LoopFileSize(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_LoopRegType(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR buf[MAX_PATH];
-	*buf = '\0'; // Set default.
-	if (g->mLoopRegItem)
-		Line::RegConvertValueType(buf, MAX_PATH, g->mLoopRegItem->type);
+	LPTSTR value = g->mLoopRegItem ? Line::RegConvertValueType(g->mLoopRegItem->type) : _T("");
 	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that due to the zero-the-unused-part behavior of strlcpy/strncpy.
-	return (VarSizeType)_tcslen(buf);
+		_tcscpy(aBuf, value);
+	return (VarSizeType)_tcslen(value);
 }
 
 VarSizeType BIV_LoopRegKey(LPTSTR aBuf, LPTSTR aVarName)
@@ -10365,7 +10362,7 @@ VarSizeType BIV_LoopRegKey(LPTSTR aBuf, LPTSTR aVarName)
 	if (g->mLoopRegItem)
 	{
 		// Use root_key_type, not root_key (which might be a remote vs. local HKEY):
-		rootkey = Line::RegConvertRootKey(g->mLoopRegItem->root_key_type);
+		rootkey = Line::RegConvertRootKeyType(g->mLoopRegItem->root_key_type);
 		subkey = g->mLoopRegItem->subkey;
 	}
 	if (aBuf)

@@ -238,4 +238,7 @@
       <Filter>Resource Files</Filter>
     </CustomBuild>
   </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="debug.natvis" />
+  </ItemGroup>
 </Project>
