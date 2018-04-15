@@ -4600,11 +4600,15 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				return ScriptError(_tcsstr(aLineText, HOTKEY_FLAG) ? _T("Invalid hotkey.") : ERR_UNRECOGNIZED_ACTION, aLineText);
 		}
 	}
+
+	int mark;
+	LPTSTR subaction_start = NULL;
 	switch (aActionType)
 	{
 	case ACT_CATCH:
 		if (*action_args != '{') // i.e. "Catch varname" must be handled a different way.
 			break;
+		// Fall through:
 	case ACT_ELSE:
 	case ACT_TRY:
 	case ACT_FINALLY:
@@ -4623,6 +4627,16 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		// have to be passed recursively, in which case the action name is also expected.
 		//mCurrLine = NULL; // Seems more useful to leave this set to the line added above.
 		return ParseAndAddLine(action_args);
+	case ACT_WHEN:
+		mark = FindExprDelim(action_args, ':');
+		if (!action_args[mark])
+			return ScriptError(ERR_MISSING_COLON, aLineText);
+		action_args[mark] = '\0';
+		rtrim(action_args);
+		subaction_start = omit_leading_whitespace(action_args + mark + 1);
+		if (!*subaction_start) // Nothing to the right of ':'.
+			subaction_start = NULL;
+		break;
 	}
 
 	Action &this_action = aActionType ? g_act[aActionType] : g_old_act[aOldActionType];
@@ -4710,7 +4724,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	// new numeric parameter at the end.  Whenever possible, we want to avoid the need for
 	// the user to have to escape commas that are intended to be literal.
 	///////////////////////////////////////////////////////////////////////////////////////
-	int mark, max_params_override = 0; // Set default.
+	int max_params_override = 0; // Set default.
 	if (aActionType == ACT_MSGBOX)
 	{
 		for (int next, mark = 0, arg = 1; action_args[mark]; mark = next, ++arg)
@@ -4817,7 +4831,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	LPTSTR arg[MAX_ARGS], arg_map[MAX_ARGS];
 	ActionTypeType subaction_type = ACT_INVALID; // Must init these.
 	ActionTypeType suboldaction_type = OLD_INVALID;
-	TCHAR subaction_name[MAX_VAR_NAME_LENGTH + 1], *subaction_end_marker = NULL, *subaction_start = NULL;
+	TCHAR subaction_name[MAX_VAR_NAME_LENGTH + 1], *subaction_end_marker = NULL;
 	int max_params = max_params_override ? max_params_override : this_action.MaxParams;
 	int max_params_minus_one = max_params - 1;
 	bool is_expression;
@@ -4833,16 +4847,18 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			case ACT_IFWINNOTEXIST:
 			case ACT_IFWINACTIVE:
 			case ACT_IFWINNOTACTIVE:
-				subaction_start = action_args + mark;
-				if (subaction_end_marker = ParseActionType(subaction_name, subaction_start, false))
+				if (subaction_end_marker = ParseActionType(subaction_name, action_args + mark, false))
 					if (   !(subaction_type = ConvertActionType(subaction_name))   )
 						suboldaction_type = ConvertOldActionType(subaction_name);
 				break;
 			}
 			if (subaction_type || suboldaction_type)
+			{
 				// A valid command was found (i.e. AutoIt2-style) in place of this commands Exclude Title
 				// parameter, so don't add this item as a param to the command.
+				subaction_start = action_args + mark;
 				break;
+			}
 		}
 		arg[nArgs] = action_args + mark;
 		arg_map[nArgs] = literal_map + mark;
@@ -5062,12 +5078,14 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						// Remove this subaction from its parent line; we want it separate:
 						*delimiter = '\0';
 						rtrim(last_arg);
+						break;
 					}
 					// else leave it as-is, i.e. as part of the last param, because the delimiter
 					// found above is probably being used as a literal char even though it isn't
 					// escaped, e.g. "ifequal, var1, string with embedded, but non-escaped, commas"
 				}
-				// else, do nothing; reasoning perhaps similar to above comment.
+				// else leave it as-is; reasoning perhaps similar to above comment.
+				subaction_start = NULL; // Indicate no subaction after all.
 				break;
 			}
 		}
@@ -5116,8 +5134,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	if (add_openbrace_afterward)
 		if (!AddLine(ACT_BLOCK_BEGIN))
 			return FAIL;
-	if (!subaction_type && !suboldaction_type) // There is no subaction in this case.
+	if (!subaction_start) // There is no subaction in this case.
 		return OK;
+	if (aActionType == ACT_WHEN)
+		return ParseAndAddLine(subaction_start); // Escape sequences in the subaction haven't been translated yet, in this case.
 	// Otherwise, recursively add the subaction, and any subactions it might have, beneath
 	// the line just added.  The following example:
 	// IfWinExist, x, y, IfWinNotExist, a, b, Gosub, Sub1
