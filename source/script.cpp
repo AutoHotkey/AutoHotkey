@@ -9730,7 +9730,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			Line *block_begin = line;
 			block_begin->mParentLine = switch_line;
 			
-			Line *end_line;
+			Line *end_line = NULL;
 			for (line = line->mNextLine; line->mActionType == ACT_CASE; line = end_line)
 			{
 				// Hide the arg so that ExpandArgs() won't evaluate it.
@@ -9742,6 +9742,13 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 					return NULL; // Error.
 				// Form a linked list of CASE lines within this block:
 				line->mRelatedLine = end_line;
+			}
+
+			if (!end_line) // First line is not ACT_CASE.
+			{
+				if (line->mActionType != ACT_BLOCK_END)
+					return line->PreparseError(_T("Expected Case/Default"));
+				end_line = line;
 			}
 
 			// After evaluating ACT_SWITCH, execution resumes after ACT_BLOCK_END:
