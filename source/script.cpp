@@ -9697,6 +9697,7 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 				// Hide the arg so that ExpandArgs() won't evaluate it.
 				line->mAttribute = (AttributeType)line->mArgc;
 				line->mArgc = 0;
+				line->mParentLine = block_begin; // Required for GOTO to work correctly.
 				// Find the next ACT_CASE or ACT_BLOCK_END:
 				end_line = PreparseBlocks(line->mNextLine, UNTIL_BLOCK_END, block_begin, aLoopType);
 				if (!end_line)
