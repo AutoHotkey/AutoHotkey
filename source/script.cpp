@@ -12518,7 +12518,10 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 						ExprTokenType case_value;
 						result = case_line->ExpandSingleArg(arg, case_value, our_deref_buf, our_deref_buf_size);
 						if (result != OK)
+						{
+							line_to_execute = NULL; // Do not execute default case.
 							break;
+						}
 						bool found = switch_value.symbol == SYM_INVALID ? TokenToBOOL(case_value)
 							: TokensAreEqual(switch_value, case_value);
 						if (case_value.symbol == SYM_OBJECT)
