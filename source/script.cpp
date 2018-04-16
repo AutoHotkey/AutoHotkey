@@ -12491,6 +12491,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			// will be reused for each expression evaluation.
 			PRIVATIZE_S_DEREF_BUF;
 
+			size_t switch_value_mem_size;
 			ExprTokenType switch_value;
 			if (!line->mAttribute) // Switch with no value: find the first 'true' case.
 			{
@@ -12501,9 +12502,16 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				result = line->ExpandSingleArg(0, switch_value, our_deref_buf, our_deref_buf_size);
 			if (result == OK)
 			{
-				// Privatize the deref buf again to avoid overwriting given_value.  Note
-				// that this introduces a new "our_deref_buf" distinct from the outer one.
-				PRIVATIZE_S_DEREF_BUF;
+				if (switch_value.symbol == SYM_STRING && switch_value.marker == our_deref_buf)
+				{
+					// Prevent the case expressions from reusing our_deref_buf, since we'll need it.
+					// A new buf will be allocated by ExpandSingleArg() if required, which would only
+					// be if at least one case expression is not a literal number/quoted string.
+					switch_value.mem_to_free = our_deref_buf;
+					switch_value_mem_size = our_deref_buf_size;
+					our_deref_buf = NULL;
+					our_deref_buf_size = 0;
+				}
 				// For each CASE:
 				for (Line *case_line = line->mNextLine->mNextLine; case_line->mActionType == ACT_CASE; case_line = case_line->mRelatedLine)
 				{
@@ -12535,9 +12543,21 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 					if (arg < arg_count)
 						break;
 				}
-				DEPRIVATIZE_S_DEREF_BUF;
 				if (switch_value.symbol == SYM_OBJECT)
 					switch_value.object->Release();
+				if (switch_value.mem_to_free)
+				{
+					if (our_deref_buf)
+					{
+						// Free the newly allocated deref buf.
+						free(our_deref_buf);
+						if (our_deref_buf_size > LARGE_DEREF_BUF_SIZE)
+							--sLargeDerefBufs;
+					}
+					// Restore original deref buf.
+					our_deref_buf = switch_value.mem_to_free;
+					our_deref_buf_size = switch_value_mem_size;
+				}
 			}
 
 			DEPRIVATIZE_S_DEREF_BUF;
