@@ -2438,7 +2438,8 @@ examine_line:
 			if (!hotstring_start)
 			{
 				ltrim(hotkey_flag); // Has already been rtrimmed by GetLine().
-				rtrim(buf); // Trim the new substring inside of buf (due to temp termination). It has already been ltrimmed.
+				// Not done because Hotkey::TextInterpret() does not allow trailing whitespace: 
+				//rtrim(buf); // Trim the new substring inside of buf (due to temp termination). It has already been ltrimmed.
 				cp = hotkey_flag; // Set default, conditionally overridden below (v1.0.44.07).
 				// v1.0.40: Check if this is a remap rather than hotkey:
 				if (   *hotkey_flag // This hotkey's action is on the same line as its label.
@@ -2548,23 +2549,7 @@ examine_line:
 			// :c:abc::
 			if (!AddLabel(buf, true)) // Always add a label before adding the first line of its section.
 				return FAIL;
-			hook_action = 0; // Set default.
-			if (*hotkey_flag) // This hotkey's action is on the same line as its label.
-			{
-				if (!hotstring_start)
-					// Don't add the alt-tabs as a line, since it has no meaning as a script command.
-					// But do put in the Return regardless, in case this label is ever jumped to
-					// via Goto/Gosub:
-					if (   !(hook_action = Hotkey::ConvertAltTab(hotkey_flag, false))   )
-						if (!ParseAndAddLine(hotkey_flag))
-							return FAIL;
-				// Also add a Return that's implicit for a single-line hotkey.  This is also
-				// done for auto-replace hotstrings in case gosub/goto is ever used to jump
-				// to their labels:
-				if (!AddLine(ACT_RETURN))
-					return FAIL;
-			}
-
+			
 			if (hotstring_start)
 			{
 				if (!*hotstring_start)
@@ -2584,12 +2569,38 @@ examine_line:
 				// hotstrings are less commonly used and also because it requires more code to find
 				// hotstring duplicates (and performs a lot worse if a script has thousands of
 				// hotstrings) because of all the hotstring options.
-				if (!Hotstring::AddHotstring(mLastLabel, hotstring_options ? hotstring_options : _T("")
+				if (!Hotstring::AddHotstring(mLastLabel->mName, mLastLabel, hotstring_options ? hotstring_options : _T("")
 					, hotstring_start, hotkey_flag, has_continuation_section))
 					return FAIL;
+				// The following section is similar to the one for hotkeys below, but is done after
+				// parsing the hotstring's options. An attempt at combining the two sections actually
+				// increased the final code size, so they're left separate.
+				if (*hotkey_flag)
+				{
+					if (Hotstring::shs[Hotstring::sHotstringCount - 1]->mExecuteAction)
+						if (!ParseAndAddLine(hotkey_flag))
+							return FAIL;
+					// This is done for hotstrings with same-line action via 'E' and also auto-replace
+					// hotstrings in case gosub/goto is ever used to jump to their labels:
+					if (!AddLine(ACT_RETURN))
+						return FAIL;
+				}
 			}
 			else // It's a hotkey vs. hotstring.
 			{
+				hook_action = 0; // Set default.
+				if (*hotkey_flag) // This hotkey's action is on the same line as its label.
+				{
+					// Don't add the alt-tabs as a line, since it has no meaning as a script command.
+					// But do put in the Return regardless, in case this label is ever jumped to
+					// via Goto/Gosub:
+					if (   !(hook_action = Hotkey::ConvertAltTab(hotkey_flag, false))   )
+						if (!ParseAndAddLine(hotkey_flag))
+							return FAIL;
+					// Also add a Return that's implicit for a single-line hotkey.
+					if (!AddLine(ACT_RETURN))
+						return FAIL;
+				}
 				if (hk = Hotkey::FindHotkeyByTrueNature(buf, suffix_has_tilde, hook_is_mandatory)) // Parent hotkey found.  Add a child/variant hotkey for it.
 				{
 					if (hook_action) // suffix_has_tilde has always been ignored for these types (alt-tab hotkeys).
@@ -2807,6 +2818,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 				if (!AddLine(ACT_SEND, &buf, 1, NULL)) // v1.0.40.04: Check for failure due to bad remaps such as %::%.
 					return FAIL;
 				AddLine(ACT_RETURN);
+				mCurrLine = NULL; // Prevents showing misleading vicinity lines for something like "RAlt up::AppsKey" -> "*RAlt up up::".
 				// Add key-up hotkey label, e.g. *LButton up::
 				buf_length = _stprintf(buf, _T("%s up::"), remap_source); // Should be no risk of buffer overflow due to prior validation.
 				remap_stage = 2; // Adjust to hit stage 3 next time (in case this is stage 10).
@@ -3283,7 +3295,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			// other caller, it will stop at end-of-string or ':', whichever comes first.
 			Hotstring::ParseOptions(parameter, g_HSPriority, g_HSKeyDelay, g_HSSendMode, g_HSCaseSensitive
 				, g_HSConformToCase, g_HSDoBackspace, g_HSOmitEndChar, g_HSSendRaw, g_HSEndCharRequired
-				, g_HSDetectWhenInsideWord, g_HSDoReset);
+				, g_HSDetectWhenInsideWord, g_HSDoReset, g_HSSameLineAction);
 		}
 		return CONDITION_TRUE;
 	}
@@ -3475,10 +3487,18 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	if (IS_DIRECTIVE_MATCH(_T("#MenuMaskKey")))
 	{
 		// L38: Allow scripts to specify an alternate "masking" key in place of VK_CONTROL.
-		if (parameter && (g_MenuMaskKey = (BYTE)TextToVK(parameter, NULL, true, true)))
-			return CONDITION_TRUE;
-		else
-			return ScriptError(parameter ? ERR_PARAM1_INVALID : ERR_PARAM1_REQUIRED, aBuf);
+		if (parameter)
+		{
+			// Testing shows that sending an event with zero VK but non-zero SC fails to suppress
+			// the Start menu (although it does suppress the window menu).  However, checking the
+			// validity of the key seems more correct than requiring g_MenuMaskKeyVK != 0, and
+			// adds flexibility at very little cost.  Note that this use of TextToVKandSC()'s
+			// return value (vs. checking VK|SC) allows vk00sc000 to turn off masking altogether.
+			if (TextToVKandSC(parameter, g_MenuMaskKeyVK, g_MenuMaskKeySC))
+				return CONDITION_TRUE;
+			//else: It's okay that above modified our variables since we're about to exit.
+		}
+		return ScriptError(parameter ? ERR_PARAM1_INVALID : ERR_PARAM1_REQUIRED, aBuf);
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#InputLevel")))
 	{
@@ -3498,49 +3518,49 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	if (IS_DIRECTIVE_MATCH(_T("#Warn")))
 	{
 		if (!parameter)
-			parameter = _T("All");
+			parameter = _T("");
 
 		LPTSTR param1_end = _tcschr(parameter, g_delimiter);
-		size_t param1_length = -1;
 		LPTSTR param2 = _T("");
 		if (param1_end)
 		{
 			param2 = omit_leading_whitespace(param1_end + 1);
 			param1_end = omit_trailing_whitespace(parameter, param1_end - 1);
-			param1_length = param1_end - parameter + 1;
+			param1_end[1] = '\0';
 		}
 
-		#define IS_PARAM1_MATCH(value) (!tcslicmp(parameter, value, param1_length))
+		int i;
 
-		WarnType warnType;
-		if (IS_PARAM1_MATCH(_T("All")) || !param1_length)
-			warnType = WARN_ALL;
-		else if (IS_PARAM1_MATCH(_T("UseUnsetLocal")))
-			warnType = WARN_USE_UNSET_LOCAL;
-		else if (IS_PARAM1_MATCH(_T("UseUnsetGlobal")))
-			warnType = WARN_USE_UNSET_GLOBAL;
-		else if (IS_PARAM1_MATCH(_T("UseEnv")))
-			warnType = WARN_USE_ENV;
-		else if (IS_PARAM1_MATCH(_T("LocalSameAsGlobal")))
-			warnType = WARN_LOCAL_SAME_AS_GLOBAL;
-		else if (IS_PARAM1_MATCH(_T("ClassOverwrite")))
-			warnType = WARN_CLASS_OVERWRITE;
-		else
-			return ScriptError(ERR_PARAM1_INVALID, aBuf);
+		static LPTSTR sWarnTypes[] = { WARN_TYPE_STRINGS };
+		WarnType warnType = WARN_ALL; // Set default.
+		if (*parameter)
+		{
+			for (i = 0; ; ++i)
+			{
+				if (i == _countof(sWarnTypes))
+					return ScriptError(ERR_PARAM1_INVALID, aBuf);
+				if (!_tcsicmp(parameter, sWarnTypes[i]))
+					break;
+			}
+			warnType = (WarnType)i;
+		}
 
-		WarnMode warnMode;
-		if (!*param2)
-			warnMode = WARNMODE_MSGBOX;	// omitted mode parameter implies "MsgBox" mode
-		else if (!_tcsicmp(param2, _T("MsgBox")))
-			warnMode = WARNMODE_MSGBOX;
-		else if (!_tcsicmp(param2, _T("OutputDebug")))
-			warnMode = WARNMODE_OUTPUTDEBUG;
-		else if (!_tcsicmp(param2, _T("StdOut")))
-			warnMode = WARNMODE_STDOUT;
-		else if (!_tcsicmp(param2, _T("Off")))
-			warnMode = WARNMODE_OFF;
-		else
-			return ScriptError(ERR_PARAM2_INVALID, aBuf);
+		static LPTSTR sWarnModes[] = { WARN_MODE_STRINGS };
+		WarnMode warnMode = WARNMODE_MSGBOX; // Set default.
+		if (*param2)
+		{
+			for (i = 0; ; ++i)
+			{
+				if (i == _countof(sWarnModes))
+					return ScriptError(ERR_PARAM2_INVALID, param2);
+				if (!_tcsicmp(param2, sWarnModes[i]))
+					break;
+			}
+			warnMode = (WarnMode)i;
+		}
+
+		// The following series of "if" statements was confirmed to produce smaller code
+		// than a switch() with a final case WARN_ALL that duplicates all of the assignments:
 
 		if (warnType == WARN_USE_UNSET_LOCAL || warnType == WARN_ALL)
 			g_Warn_UseUnsetLocal = warnMode;
@@ -3779,6 +3799,22 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 	if (!_tcsicmp(new_name, _T("OnClipboardChange")))
 		mOnClipboardChangeLabel = the_new_label;
 	return OK;
+}
+
+
+
+void Script::RemoveLabel(Label *aLabel)
+// Remove a label from the linked list.
+// Used by DefineFunc to implement hotkey/hotstring functions.
+{
+	if (aLabel->mPrevLabel)
+		aLabel->mPrevLabel->mNextLabel = aLabel->mNextLabel;
+	else
+		mFirstLabel = aLabel->mNextLabel;
+	if (aLabel->mNextLabel)
+		aLabel->mNextLabel->mPrevLabel = aLabel->mPrevLabel;
+	else
+		mLastLabel = aLabel->mPrevLabel;
 }
 
 
@@ -7467,16 +7503,22 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[])
 					// Remove this hotkey label from the list.  Each label is removed as the corresponding
 					// hotkey variant is found so that any generic labels that might be mixed in are left
 					// in the list and detected as errors later.
-					if (label->mPrevLabel)
-						label->mPrevLabel->mNextLabel = label->mNextLabel;
-					else
-						mFirstLabel = label->mNextLabel;
-					if (label->mNextLabel)
-						label->mNextLabel->mPrevLabel = label->mPrevLabel;
-					else
-						mLastLabel = label->mPrevLabel;
+					RemoveLabel(label);
 				}
 			}
+		}
+		// Check hotstrings as well (even if a hotkey was found):
+		for (int i = Hotstring::sHotstringCount - 1; i >= 0; --i) // Start with the last one defined, for performance.
+		{
+			Label *label = Hotstring::shs[i]->mJumpToLabel->ToLabel(); // Might be a function.
+			if (!label || label->mJumpToLine)
+				// This hotstring has a function or a label which has already been resolved.
+				// Since hotstrings are listed in order of definition and we're iterating in
+				// the reverse order, there's no need to continue.
+				break;
+			// See hotkey section above for comments.
+			Hotstring::shs[i]->mJumpToLabel = &func;
+			RemoveLabel(label);
 		}
 		if (mLastLabel && !mLastLabel->mJumpToLine)
 			// There are one or more non-hotkey labels pointing at this function.
@@ -8560,6 +8602,11 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	else if (!_tcsicmp(func_name, _T("LoadPicture")))
 	{
 		bif = BIF_LoadPicture;
+		max_params = 3;
+	}
+	else if (!_tcsicmp(func_name, _T("Hotstring")))
+	{
+		bif = BIF_Hotstring;
 		max_params = 3;
 	}
 	else
@@ -9759,41 +9806,41 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 				LPTSTR loop_name = line->mArg[0].text;
 				Label *loop_label;
 				Line *loop_line;
-				if (IsPureNumeric(loop_name))
-				{
-					int n = _ttoi(loop_name);
-					// Find the nth innermost loop which encloses this line:
-					for (loop_line = line->mParentLine; loop_line; loop_line = loop_line->mParentLine)
-						if (ACT_IS_LOOP(loop_line->mActionType)) // i.e. LOOP, FOR or WHILE.
-							if (--n < 1)
-								break;
-					if (!loop_line || n != 0)
-						return line->PreparseError(ERR_PARAM1_INVALID);
-				}
-				else
+				bool is_numeric = IsPureNumeric(loop_name);
+				// If loop_name is a label, find the innermost loop (#1) for validation purposes:
+				int n = is_numeric ? _ttoi(loop_name) : 1;
+				// Find the nth innermost loop which encloses this line:
+				for (loop_line = line->mParentLine; loop_line; loop_line = loop_line->mParentLine)
+					if (ACT_IS_LOOP(loop_line->mActionType)) // i.e. LOOP, FOR or WHILE.
+						if (--n < 1)
+							break;
+				if (!loop_line || n != 0)
+					return line->PreparseError(ERR_PARAM1_INVALID);
+				if (!is_numeric)
 				{
 					// Target is a named loop.
 					if ( !(loop_label = FindLabel(loop_name)) )
 						return line->PreparseError(ERR_NO_LABEL, loop_name);
+					Line *innermost_loop = loop_line;
 					loop_line = loop_label->mJumpToLine;
-					// Ensure the label points to a Loop, For-loop or While-loop ...
+					// Ensure the label points to a LOOP, FOR or WHILE which encloses this line.
+					// Use innermost_loop as the starting-point of the "jump" to ensure the target
+					// isn't a loop *inside* the current loop:
 					if (   !ACT_IS_LOOP(loop_line->mActionType)
-						// ... which encloses this line.  Use line->mParentLine as the starting-point of
-						// the "jump" to ensure the target isn't at the same nesting level as this line:
-						|| !line->mParentLine->IsJumpValid(*loop_label, true)   )
+						|| !innermost_loop->IsJumpValid(*loop_label, true)   )
 						return line->PreparseError(ERR_PARAM1_INVALID); //_T("Target label does not point to an appropriate Loop."));
-					// Although we've validated that it points to a loop, we can't resolve the line
-					// after the loop's body as that (mRelatedLine) hasn't been determined yet.
-					if (loop_line == line->mParentLine
-						// line->mParentLine must be non-NULL because above verified this line is enclosed by a Loop:
-						|| line->mParentLine->mActionType == ACT_BLOCK_BEGIN && loop_line == line->mParentLine->mParentLine)
-					{
-						// Set mRelatedLine to NULL since the target loop directly encloses this line.
-						loop_line = NULL;
-					}
+					if (loop_line == innermost_loop)
+						loop_line = NULL; // Since a normal break/continue will work in this case.
 				}
 				if (loop_line) // i.e. it wasn't determined to be this line's direct parent, which is always valid.
 				{
+					if (line->mActionType == ACT_BREAK)
+					{
+						// Find the line to which we'll actually jump when the loop breaks.
+						loop_line = loop_line->mRelatedLine; // From LOOP itself to the line after the LOOP's body.
+						if (loop_line->mActionType == ACT_UNTIL)
+							loop_line = loop_line->mNextLine;
+					}
 					if (in_function_body && loop_line->IsOutsideAnyFunctionBody())
 						return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
 					if (!line->CheckValidFinallyJump(loop_line))
@@ -10026,7 +10073,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 
 				ExprTokenType &this_infix_item = infix[infix_count]; // Might help reduce code size since it's referenced many places below.
 				this_infix_item.deref = NULL; // Init needed for SYM_ASSIGN and related; a non-NULL deref means it should be converted to an object-assignment.
-				this_infix_item.is_lvalue = FALSE; // Init needed for SYM_VAR; simplifies #Warn ClassOverwrite (vs. storing it in the assignment token).
 
 				// CHECK IF THIS CHARACTER IS AN OPERATOR.
 				cp1 = cp[1]; // Improves performance by nearly 5% and appreciably reduces code size (at the expense of being less maintainable).
@@ -10702,6 +10748,7 @@ numeric_literal:
 					// DllCall() and possibly others rely on this having been done to support changing the
 					// value of a parameter (similar to by-ref).
 					infix[infix_count].symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the clipboard in the case of expression lvalues.  Search for VAR_CLIPBOARD further below for details.
+					infix[infix_count].is_lvalue = FALSE; // Set default.  This simplifies #Warn ClassOverwrite (vs. storing it in the assignment token).
 				}
 				else // It's either a built-in variable (including clipboard) OR a possible environment variable.
 				{
@@ -10841,7 +10888,10 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 				sym_prev = this_infix[1].symbol; // Resolve to help macro's code size and performance.
 				if (IS_ASSIGNMENT_OR_POST_OP(sym_prev) // Post-op must be checked for VAR_CLIPBOARD (by contrast, it seems unnecessary to check it for others; see comments below).
 					|| stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT) // Stack *not* infix.
+				{
 					this_infix->symbol = SYM_VAR; // Convert clipboard or environment variable into SYM_VAR.
+					//this_infix->is_lvalue = TRUE; // No need to set this; it will be set when the assignment is detected.
+				}
 				// POST-INC/DEC: It seems unnecessary to check for these except for VAR_CLIPBOARD because
 				// those assignments (and indeed any assignment other than .= and :=) will have no effect
 				// on a ON A SYM_DYNAMIC environment variable.  This is because by definition, such
@@ -11063,6 +11113,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 							// direct assignment to environment variables isn't supported by anything other
 							// than EnvSet.
 							fwd_infix->symbol = SYM_VAR; // Convert dynamic to a normal variable, see above.
+							//fwd_infix->is_lvalue = TRUE; // No need to set this; it will be set when the assignment is detected.
 							fwd_infix[1].symbol = SYM_ASSIGN;
 							// And now cascade to the right until the last qualified '=' operator is found.
 						}
@@ -11176,7 +11227,7 @@ double_deref: // Caller has set cp to be start and op_end to be the character af
 			if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))
 			{
 				// Resolve the variable now, for validation after all files have been loaded.
-				// Without this, the valdiation code would need to determine which postfix token
+				// Without this, the validation code would need to determine which postfix token
 				// corresponds to an assignment's l-value, which would require larger code.
 				if (this_infix > infix) // Must be checked, although always true in valid expressions.
 				{
@@ -11345,6 +11396,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				// if this_infix[1] is SYM_DOT.  In that case, a later iteration should apply
 				// the transformations above to that operator.
 			}
+			break;
 
 		case SYM_NEW: // This is probably something like "new Class", without "()", otherwise an earlier stage would've handled it.
 		case SYM_REGEXMATCH: // a ~= b  ->  RegExMatch(a, b)
@@ -11356,7 +11408,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			// Mark the target variable as an l-value for #Warn ClassOverwrite.
 			if (postfix_count && postfix[postfix_count-1]->symbol == SYM_VAR)
 				postfix[postfix_count-1]->is_lvalue = TRUE;
-			//else: It's invalid, but for backward-compatibility it is ignored at this stage.
+			//else: It could still be something valid, like SYM_IFF_ELSE in ++(whichvar ? x : y).
 			break;
 
 		default:
@@ -11921,9 +11973,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			{
 				// Rather than having PerformLoop() handle LOOP_BREAK specifically, tell our caller to jump to
 				// the line *after* the loop's body. This is always a jump our caller must handle, unlike GOTO:
-				caller_jump_to_line = line->mRelatedLine->mRelatedLine;
-				if (caller_jump_to_line->mActionType == ACT_UNTIL)
-					caller_jump_to_line = caller_jump_to_line->mNextLine;
+				caller_jump_to_line = line->mRelatedLine;
 				// Return OK instead of LOOP_BREAK to handle it like GOTO.  Returning LOOP_BREAK would
 				// cause the following to behave incorrectly (as described in the comments):
 				// If (True)  ; LOOP_BREAK takes precedence, causing this ExecUntil() layer to return.
@@ -14857,9 +14907,9 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			break;
 		case THREAD_CMD_INTERRUPT:
 			// If either one is blank, leave that setting as it was before.
-			if (*ARG1)
-				g_script.mUninterruptibleTime = ArgToInt(2);  // 32-bit (for compatibility with DWORDs returned by GetTickCount).
 			if (*ARG2)
+				g_script.mUninterruptibleTime = ArgToInt(2);  // 32-bit (for compatibility with DWORDs returned by GetTickCount).
+			if (*ARG3)
 				g_script.mUninterruptedLineCountMax = ArgToInt(3);  // 32-bit also, to help performance (since huge values seem unnecessary).
 			break;
 		case THREAD_CMD_NOTIMERS:

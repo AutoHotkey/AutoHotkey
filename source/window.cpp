@@ -169,9 +169,9 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 	if (!orig_foreground_wnd)
 		orig_foreground_wnd = FindWindow(_T("Shell_TrayWnd"), NULL);
 
-	if (aTargetWindow == orig_foreground_wnd) // It's already the active window.
-		return aTargetWindow;
-
+	// Fix for v1.1.28.02: Restore the window *before* checking if it is already active.
+	// This was supposed to be done in v1.1.20, but was only done for WinTitle = "A".
+	// See "IsIconic" in WinActivate() for comments.
 	if (IsIconic(aTargetWindow))
 		// This might never return if aTargetWindow is a hung window.  But it seems better
 		// to do it this way than to use the PostMessage() method, which might not work
@@ -182,6 +182,9 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 		// has been acted on prior to trying to activate the window (and all Async()
 		// does is post a message to its queue):
 		ShowWindow(aTargetWindow, SW_RESTORE);
+
+	if (aTargetWindow == orig_foreground_wnd) // It's already the active window.
+		return aTargetWindow;
 
 	// This causes more trouble than it's worth.  In fact, the AutoIt author said that
 	// he didn't think it even helped with the IE 5.5 related issue it was originally
@@ -1908,7 +1911,7 @@ bool DialogPrep()
 				// Even though the Win key isn't being released, sending a Shift or Control key-up
 				// triggers the Start menu.  To prevent that, we send the mask key.  This has been
 				// confirmed to apply to #Control, #Shift and the left/right variants.
-				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, KEY_IGNORE_ALL_EXCEPT_MODIFIER);
+				KeyEventMenuMask(KEYDOWNANDUP, KEY_IGNORE_ALL_EXCEPT_MODIFIER);
 				// Releasing the Win key now does not prevent it from being "masked" again later:
 				//mods_to_release |= (g_modifiersLR_logical & (MOD_LWIN | MOD_RWIN));
 			}

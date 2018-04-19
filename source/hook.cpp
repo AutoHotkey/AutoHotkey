@@ -27,6 +27,11 @@ static HANDLE sMouseMutex = NULL;
 #define KEYBD_MUTEX_NAME _T("AHK Keybd")
 #define MOUSE_MUTEX_NAME _T("AHK Mouse")
 
+// It's done the following way because:
+// It's unclear that zero is always an invalid thread ID (not even GetWindowThreadProcessId's
+// documentation gives any hint), so its safer to assume that a thread ID can be zero and yet still valid.
+static HANDLE sThreadHandle = NULL;
+
 // Whether to disguise the next up-event for lwin/rwin to suppress Start Menu.
 // There is only one variable because even if multiple modifiers are pressed
 // simultaneously and they do not cancel each other out, disguising one will
@@ -130,6 +135,8 @@ enum DualNumpadKeys	{PAD_DECIMAL, PAD_NUMPAD0, PAD_NUMPAD1, PAD_NUMPAD2, PAD_NUM
 , PAD_DELETE, PAD_INSERT, PAD_END, PAD_DOWN, PAD_NEXT, PAD_LEFT, PAD_CLEAR
 , PAD_RIGHT, PAD_HOME, PAD_UP, PAD_PRIOR, PAD_TOTAL_COUNT};
 static bool sPadState[PAD_TOTAL_COUNT];  // Initialized by ChangeHookState()
+
+static bool sHookSyncd; // Only valid while in WaitHookIdle().
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1746,7 +1753,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				// (i.e. sometimes the Start Menu appears, even if two CTRL keystrokes are sent rather than one).
 				// Therefore, as of v1.0.25.05, mouse button hotkeys that use only the WIN key as a modifier cause
 				// the keyboard hook to be installed.  This determination is made during the hotkey loading stage.
-				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey);
+				KeyEventMenuMask(KEYDOWNANDUP);
 		}
 	}
 
@@ -2143,7 +2150,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// for simplicity and avoidance of side-effects not to make this one prevent that one.
 			//if (   (g_modifiersLR_logical & (MOD_LWIN | MOD_RWIN))   // At least one WIN key is down.
 			//	&& !(g_modifiersLR_logical & (MOD_LSHIFT | MOD_RSHIFT | MOD_LCONTROL | MOD_RCONTROL))   ) // But no SHIFT or CONTROL key is down to help us.
-			//	KeyEvent(KEYDOWNANDUP, g_MenuMaskKey);
+			//	KeyEventMenuMask(KEYDOWNANDUP);
 			// Since this is a hotkey that fires on ALT-DOWN and it's a normal (suppressed) hotkey,
 			// send an up-event to "turn off" the OS's low-level handling for the alt key with
 			// respect to having it modify keypresses.  For example, the following hotkeys would
@@ -2313,7 +2320,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 
 		// This is done unconditionally so that even if a qualified Input is not in progress, the
 		// variable will be correctly reset anyway:
-		if ((Hotstring::mAtLeastOneEnabled && !is_ignored) || (g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && is_ignored)))
+		if ((Hotstring::sEnabledCount && !is_ignored) || (g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && is_ignored)))
 			if (!CollectInput(event, aVK, aSC, aKeyUp, is_ignored, pKeyHistoryCurr, hs_wparam_to_post, hs_lparam_to_post)) // Key should be invisible (suppressed).
 				return SuppressThisKeyFunc(aHook, lParam, aVK, aSC, aKeyUp, pKeyHistoryCurr, aHotkeyIDToPost, hs_wparam_to_post, hs_lparam_to_post);
 
@@ -2461,7 +2468,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 				// is all that is necessary to disguise the key.  This is because the OS will see that the
 				// keystroke occurred while ALT or WIN is still down because we haven't done CallNextHookEx() yet.
 				if (sUndisguisedMenuInEffect)
-					KeyEvent(KEYDOWNANDUP, g_MenuMaskKey); // This should also cause sUndisguisedMenuInEffect to be reset.
+					KeyEventMenuMask(KEYDOWNANDUP); // This should also cause sUndisguisedMenuInEffect to be reset.
 			}
 			else // A modifier key was released and sDisguiseNextMenu was false.
 			{
@@ -2533,11 +2540,15 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// indirectly via a different hotstring:
 	bool do_monitor_hotstring = shs && !aIsIgnored && treat_as_visible;
 	bool do_input = g_input.status == INPUT_IN_PROGRESS && !(g_input.IgnoreAHKInput && aIsIgnored);
+	
+	static vk_type sPendingDeadKeyVK = 0;
+	static sc_type sPendingDeadKeySC = 0; // Need to track this separately because sometimes default VK-to-SC mapping isn't correct.
+	static bool sPendingDeadKeyUsedShift = false;
+	static bool sPendingDeadKeyUsedAltGr = false;
 
-	UCHAR end_key_attributes;
 	if (do_input && aVK != VK_PACKET)
 	{
-		end_key_attributes = g_input.EndVK[aVK];
+		UCHAR end_key_attributes = g_input.EndVK[aVK];
 		if (!end_key_attributes)
 			end_key_attributes = g_input.EndSC[aSC];
 		if (end_key_attributes) // A terminating keystroke has now occurred unless the shift state isn't right.
@@ -2559,9 +2570,10 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				g_input.EndingChar = 0;
 				// Don't change this line:
 				g_input.EndingRequiredShift = shift_must_be_down && (g_modifiersLR_logical & (MOD_LSHIFT | MOD_RSHIFT));
-				if (!do_monitor_hotstring)
+				if (!do_monitor_hotstring && !sPendingDeadKeyVK)
 					return treat_as_visible;
-				// else need to return only after the input is collected for the hotstring.
+				// else need to return only after the input is collected for the hotstring,
+				// or after determining whether this key completes the pending dead key sequence.
 			}
 		}
 	}
@@ -2611,7 +2623,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	if (g_modifiersLR_logical
 		&& !(g_input.status == INPUT_IN_PROGRESS && g_input.TranscribeModifiedKeys)
 		&& g_modifiersLR_logical != MOD_LSHIFT && g_modifiersLR_logical != MOD_RSHIFT
-		&& g_modifiersLR_logical != (MOD_LSHIFT & MOD_RSHIFT)
+		&& g_modifiersLR_logical != (MOD_LSHIFT | MOD_RSHIFT)
 		&& !((g_modifiersLR_logical & (MOD_LALT | MOD_RALT)) && (g_modifiersLR_logical & (MOD_LCONTROL | MOD_RCONTROL))))
 		// Since in some keybd layouts, AltGr (Ctrl+Alt) will produce valid characters (such as the @ symbol,
 		// which is Ctrl+Alt+Q in the German/IBM layout and Ctrl+Alt+2 in the Spanish layout), an attempt
@@ -2627,11 +2639,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		// Note that ToAsciiEx() will translate ^i to a tab character, !i to plain i, and many other modified
 		// letters as just the plain letter key, which we don't want.
 		return treat_as_visible;
-
-	static vk_type sPendingDeadKeyVK = 0;
-	static sc_type sPendingDeadKeySC = 0; // Need to track this separately because sometimes default VK-to-SC mapping isn't correct.
-	static bool sPendingDeadKeyUsedShift = false;
-	static bool sPendingDeadKeyUsedAltGr = false;
 
 	// v1.0.21: Only true (unmodified) backspaces are recognized by the below.  Another reason to do
 	// this is that ^backspace has a native function (delete word) different than backspace in many editors.
@@ -2653,11 +2660,47 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		return treat_as_visible;
 	}
 
+	// v1.1.28.00: active_window is set to the focused control, if any, so that the hotstring buffer is reset
+	// when the focus changes between controls, not just between windows.
+	// v1.1.28.01: active_window is left as the active window; the above is not done because it disrupts
+	// hotstrings when the first keypress causes a change in focus, such as to enter editing mode in Excel.
+	// See Get_active_window_keybd_layout macro definition for related comments.
+	HWND active_window = GetForegroundWindow(); // Set default in case there's no focused control.
+	HKL active_window_keybd_layout = GetKeyboardLayout(GetFocusedCtrlThread(NULL, active_window));
+
+	// Univeral Windows Platform apps apparently have their own handling for dead keys:
+	//  - Dead key followed by Esc produces Chr(27), unlike non-UWP apps.
+	//  - Pressing a dead key in a UWP app does not leave it in the keyboard layout's buffer,
+	//    so to get the correct result here we must translate the dead key again, first.
+	//  - Pressing a non-dead key disregards any dead key which was placed into the buffer by
+	//    calling ToUnicodeEx, and it is left in the buffer.  To get the correct result for the
+	//    next call, we must NOT reinsert it into the buffer (see dead_key_sequence_complete).
+	static bool sUwpAppFocused = false;
+	static HWND sUwpHwndChecked = 0;
+	if (sUwpHwndChecked != active_window)
+	{
+		sUwpHwndChecked = active_window;
+		TCHAR class_name[28];
+		GetClassName(active_window, class_name, _countof(class_name));
+		sUwpAppFocused = !_tcsicmp(class_name, _T("ApplicationFrameWindow"));
+	}
 
 	int char_count;
 	TBYTE ch[3];
 	BYTE key_state[256];
 	memcpy(key_state, g_PhysicalKeyState, 256);
+
+	if (sPendingDeadKeyVK && sUwpAppFocused && aVK != VK_PACKET)
+	{
+		AdjustKeyState(key_state
+			, (sPendingDeadKeyUsedAltGr ? MOD_LCONTROL|MOD_RALT : 0)
+			| (sPendingDeadKeyUsedShift ? MOD_RSHIFT : 0)); // Left vs Right Shift probably doesn't matter in this context.
+		// If it turns out there was already a dead key in the buffer, the second call puts it back.
+		if (ToUnicodeOrAsciiEx(sPendingDeadKeyVK, sPendingDeadKeySC, key_state, ch, 0, active_window_keybd_layout) > 0)
+			ToUnicodeOrAsciiEx(sPendingDeadKeyVK, sPendingDeadKeySC, key_state, ch, 0, active_window_keybd_layout);
+		sPendingDeadKeyVK = 0; // Don't reinsert it afterward (see above).
+	}
+
 	// As of v1.0.25.10, the below fixes the Input command so that when it is capturing artificial input,
 	// such as from the Send command or a hotstring's replacement text, the captured input will reflect
 	// any modifiers that are logically but not physically down (or vice versa):
@@ -2667,11 +2710,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		key_state[VK_CAPITAL] |= STATE_ON;
 	else
 		key_state[VK_CAPITAL] &= ~STATE_ON;
-
-	// Use ToAsciiEx() vs. ToAscii() because there is evidence from Putty author that ToAsciiEx() works better
-	// with more keyboard layouts under 2k/XP than ToAscii() does (though if true, there is no MSDN explanation). 
-	// UPDATE: In v1.0.44.03, need to use ToAsciiEx() anyway because of the adapt-to-active-window-layout feature.
-	Get_active_window_keybd_layout // Defines the variables active_window and active_window_keybd_layout for use below.
 
 	if (aVK == VK_PACKET)
 	{
@@ -2705,6 +2743,9 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// VK_TAB & VK_ESCAPE
 	// These keys have an ascii translation but should not trigger/complete a pending dead key,
 	// at least not on the Spanish and Danish layouts, which are the two I've tested so far.
+	// UPDATE: Above appears to be untrue (tested on Windows 10 and XP).  Both Tab and Esc complete
+	// the dead key sequence (by inserting the dead char and tab/nothing), so excluding these keys
+	// actually causes unwanted side-effects.
 
 	// Dead keys in Danish layout as they appear on a US English keyboard: Equals and Plus /
 	// Right bracket & Brace / probably others.
@@ -2733,7 +2774,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// allows dead keys to continue to operate properly in the user's foreground window, while still
 	// being capturable by the Input command and recognizable by any defined hotstrings whose
 	// abbreviations use diacritical letters:
-	bool dead_key_sequence_complete = sPendingDeadKeyVK && aVK != VK_TAB && aVK != VK_ESCAPE;
+	bool dead_key_sequence_complete = sPendingDeadKeyVK;
 	if (char_count < 0) // It's a dead key, and it doesn't complete a sequence since in that case char_count would be >= 1.
 	{
 		if (treat_as_visible)
@@ -2867,7 +2908,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 					// ... v1.0.41: Or it's a perfect match but the right window isn't active or doesn't exist.
 					// In that case, continue searching for other matches in case the script contains
 					// hotstrings that would trigger simultaneously were it not for the "only one" rule.
-					|| !HotCriterionAllowsFiring(hs.mHotCriterion, hs.mJumpToLabel ? hs.mJumpToLabel->mName : _T(""))   )
+					|| !HotCriterionAllowsFiring(hs.mHotCriterion, hs.mName)   )
 					continue; // No match or not eligible to fire.
 					// v1.0.42: The following scenario defeats the ability to give criterion hotstrings
 					// precedence over non-criterion:
@@ -3009,7 +3050,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				// Consequently, the buffer should be adjusted below to ensure it's in the right state to work
 				// in situations such as the user typing two hotstrings consecutively where the ending
 				// character of the first is used as a valid starting character (non-alphanumeric) for the next.
-				if (*hs.mReplacement)
+				if (hs.mReplacement)
 				{
 					// Since the buffer no longer reflects what is actually on screen to the left
 					// of the caret position (since a replacement is about to be done), reset the
@@ -3069,8 +3110,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// the letter "a" to produce á.
 	if (dead_key_sequence_complete)
 	{
-		vk_type vk_to_send = sPendingDeadKeyVK; // To facilitate early reset below.
-		sPendingDeadKeyVK = 0; // First reset this because below results in a recursive call to keyboard hook.
 		// If there's an Input in progress and it's invisible, the foreground app won't see the keystrokes,
 		// thus no need to re-insert the dead key into the keyboard buffer.  Note that the Input might have
 		// been in progress upon entry to this function but now isn't due to INPUT_TERMINATED_BY_ENDKEY above.
@@ -3083,7 +3122,8 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 				, (sPendingDeadKeyUsedAltGr ? MOD_LCONTROL|MOD_RALT : 0)
 				| (sPendingDeadKeyUsedShift ? MOD_RSHIFT : 0)); // Left vs Right Shift probably doesn't matter in this context.
 			TCHAR temp_ch[2];
-			ToUnicodeOrAsciiEx(vk_to_send, sPendingDeadKeySC, key_state, temp_ch, 0, active_window_keybd_layout);
+			ToUnicodeOrAsciiEx(sPendingDeadKeyVK, sPendingDeadKeySC, key_state, temp_ch, 0, active_window_keybd_layout);
+			sPendingDeadKeyVK = 0;
 		}
 	}
 
@@ -4140,11 +4180,6 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 	if (aHooksToBeActive == hooks_active_orig) // It's already in the right state.
 		return;
 
-	// It's done the following way because:
-	// It's unclear that zero is always an invalid thread ID (not even GetWindowThreadProcessId's
-	// documentation gives any hint), so its safer to assume that a thread ID can be zero and yet still valid.
-	static HANDLE sThreadHandle = NULL;
-
 	if (!hooks_active_orig) // Neither hook is active now but at least one will be or the above would have returned.
 	{
 		// Assert: sThreadHandle should be NULL at this point.  The only way this isn't true is if
@@ -4469,6 +4504,10 @@ DWORD WINAPI HookThreadProc(LPVOID aUnused)
 				// full responsibility for freeing the hook's memory.
 			break;
 
+		case AHK_HOOK_SYNC:
+			sHookSyncd = true;
+			break;
+
 		} // switch (msg.message)
 	} // for(;;)
 }
@@ -4537,7 +4576,7 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 
 		*g_HSBuf = '\0';
 		g_HSBufLength = 0;
-		g_HShwnd = GetForegroundWindow(); // Not needed by some callers, but shouldn't hurt even then.
+		g_HShwnd = 0; // It isn't necessary to determine the actual window/control at this point since the buffer is already empty.
 
 		// Variables for the Shift+Numpad workaround:
 		sNextPhysShiftDownIsNotPhys = false;
@@ -4695,4 +4734,18 @@ void GetHookStatus(LPTSTR aBuf, int aBufSize)
 					);
 		}
 	}
+}
+
+
+
+void WaitHookIdle()
+// Wait until the hook has reached a known idle state (i.e. finished any processing
+// that it was in the middle of, though it could start something new immediately after).
+{
+	if (!sThreadHandle)
+		return;
+	sHookSyncd = false;
+	PostThreadMessage(g_HookThreadID, AHK_HOOK_SYNC, 0, 0);
+	while (!sHookSyncd)
+		SLEEP_WITHOUT_INTERRUPTION(0);
 }

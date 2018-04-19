@@ -87,7 +87,7 @@ void DisguiseWinAltIfNeeded(vk_type aVK)
 		// unwanted effects in certain games):
 		&& ((aVK == VK_LWIN || aVK == VK_RWIN) && (sPrevVK == VK_LWIN || sPrevVK == VK_RWIN) && sSendMode != SM_PLAY
 			|| (aVK == VK_LMENU || (aVK == VK_RMENU && sTargetLayoutHasAltGr != CONDITION_TRUE)) && (sPrevVK == VK_LMENU || sPrevVK == VK_RMENU)))
-		KeyEvent(KEYDOWNANDUP, g_MenuMaskKey); // Disguise it to suppress Start Menu or prevent activation of active window's menu bar.
+		KeyEventMenuMask(KEYDOWNANDUP); // Disguise it to suppress Start Menu or prevent activation of active window's menu bar.
 }
 
 
@@ -279,7 +279,7 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 		// the active window, its thread, and its layout are retrieved only once for each Send rather than once
 		// for each keystroke.
 		// v1.1.27.01: Use the thread of the focused control, which may differ from the active window.
-		keybd_layout_thread = GetFocusedThread();
+		keybd_layout_thread = GetFocusedCtrlThread();
 	}
 	sTargetKeybdLayout = GetKeyboardLayout(keybd_layout_thread); // If keybd_layout_thread==0, this will get our thread's own layout, which seems like the best/safest default.
 	sTargetLayoutHasAltGr = LayoutHasAltGr(sTargetKeybdLayout);  // Note that WM_INPUTLANGCHANGEREQUEST is not monitored by MsgSleep for the purpose of caching our thread's keyboard layout.  This is because it would be unreliable if another msg pump such as MsgBox is running.  Plus it hardly helps perf. at all, and hurts maintainability.
@@ -429,13 +429,12 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 	// which ALT key is held down to produce the character.
 	vk_type this_event_modifier_down;
 	size_t key_text_length, key_name_length;
-	TCHAR *end_pos, *space_pos, *next_word, old_char, single_char_string[2];
+	TCHAR *end_pos, *space_pos, *next_word, old_char;
 	KeyEventTypes event_type;
 	int repeat_count, click_x, click_y;
 	bool move_offset;
 	enum { KEYDOWN_TEMP = 0, KEYDOWN_PERSISTENT, KEYDOWN_REMAP } key_down_type;
 	DWORD placeholder;
-	single_char_string[1] = '\0'; // Terminate in advance.
 
 	LONG_OPERATION_INIT  // Needed even for SendInput/Play.
 
@@ -571,16 +570,7 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 					}
 				}
 
-				vk = TextToVK(aKeys, &mods_for_next_key, true, false, sTargetKeybdLayout); // false must be passed due to below.
-				sc = vk ? 0 : TextToSC(aKeys);  // If sc is 0, it will be resolved by KeyEvent() later.
-				if (!vk && !sc && ctoupper(aKeys[0]) == 'V' && ctoupper(aKeys[1]) == 'K')
-				{
-					LPTSTR sc_string = StrChrAny(aKeys + 2, _T("Ss")); // Look for the "SC" that demarks the scan code.
-					if (sc_string && ctoupper(sc_string[1]) == 'C')
-						sc = (sc_type)_tcstol(sc_string + 2, NULL, 16);  // Convert from hex.
-					// else leave sc set to zero and just get the specified VK.  This supports Send {VKnn}.
-					vk = (vk_type)_tcstol(aKeys + 2, NULL, 16);  // Convert from hex.
-				}
+				TextToVKandSC(aKeys, vk, sc, &mods_for_next_key, sTargetKeybdLayout);
 
 				if (space_pos)  // undo the temporary termination
 					*space_pos = old_char;
@@ -785,14 +775,13 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 			}
 			else
 			{
-				*single_char_string = *aKeys; // String was pre-terminated earlier.
 				// Best to call this separately, rather than as first arg in SendKey, since it changes the
 				// value of modifiers and the updated value is *not* guaranteed to be passed.
 				// In other words, SendKey(TextToVK(...), modifiers, ...) would often send the old
 				// value for modifiers.
-				vk = TextToVK(single_char_string, &mods_for_next_key, true, false, sTargetKeybdLayout
+				vk = CharToVKAndModifiers(*aKeys, &mods_for_next_key, sTargetKeybdLayout
 					, (mods_for_next_key | persistent_modifiers_for_this_SendKeys) != 0 && !aSendRaw); // v1.1.27.00: Disable the a-z to vk41-vk5A fallback translation when modifiers are present since it would produce the wrong printable characters.
-				// TextToVK() takes no measurable time compared to the amount of time SendKey takes.
+				// CharToVKAndModifiers() takes no measurable time compared to the amount of time SendKey takes.
 			}
 			if (vk)
 				SendKey(vk, 0, mods_for_next_key, persistent_modifiers_for_this_SendKeys, 1, KEYDOWNANDUP
@@ -1904,6 +1893,15 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 	if (aDoKeyDelay) // SM_PLAY also uses DoKeyDelay(): it stores the delay item in the event array.
 		DoKeyDelay(); // Thread-safe because only called by main thread in this mode.  See notes above.
 }
+
+
+
+void KeyEventMenuMask(KeyEventTypes aEventType, DWORD aExtraInfo)
+// Send a menu masking key event (use of this function reduces code size).
+{
+	KeyEvent(aEventType, g_MenuMaskKeyVK, g_MenuMaskKeySC, NULL, false, aExtraInfo);
+}
+
 
 
 ///////////////////
@@ -3284,7 +3282,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 			// to trigger the language switch.
 			if (ctrl_nor_shift_nor_alt_down && aDisguiseUpWinAlt // Nor will they be pushed down later below, otherwise defer_win_release would have been true and we couldn't get to this point.
 				&& sSendMode != SM_PLAY) // SendPlay can't display Start Menu, so disguise not needed (also, disguise might mess up some games).
-				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Disguise key release to suppress Start Menu.
+				KeyEventMenuMask(KEYDOWNANDUP, aExtraInfo); // Disguise key release to suppress Start Menu.
 				// The above event is safe because if we're here, it means VK_CONTROL will not be
 				// pressed down further below.  In other words, we're not defeating the job
 				// of this function by sending these disguise keystrokes.
@@ -3295,10 +3293,10 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 	else if (!(aModifiersLRnow & MOD_LWIN) && (aModifiersLRnew & MOD_LWIN)) // Press down LWin.
 	{
 		if (disguise_win_down)
-			KeyEvent(KEYDOWN, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
+			KeyEventMenuMask(KEYDOWN, aExtraInfo); // Ensures that the Start Menu does not appear.
 		KeyEvent(KEYDOWN, VK_LWIN, 0, NULL, false, aExtraInfo);
 		if (disguise_win_down)
-			KeyEvent(KEYUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
+			KeyEventMenuMask(KEYUP, aExtraInfo); // Ensures that the Start Menu does not appear.
 	}
 
 	if (release_rwin)
@@ -3306,7 +3304,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 		if (!defer_win_release)
 		{
 			if (ctrl_nor_shift_nor_alt_down && aDisguiseUpWinAlt && sSendMode != SM_PLAY)
-				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Disguise key release to suppress Start Menu.
+				KeyEventMenuMask(KEYDOWNANDUP, aExtraInfo); // Disguise key release to suppress Start Menu.
 			KeyEvent(KEYUP, VK_RWIN, 0, NULL, false, aExtraInfo);
 		}
 		// else release it only after the normal operation of the function pushes down the disguise keys.
@@ -3314,10 +3312,10 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 	else if (!(aModifiersLRnow & MOD_RWIN) && (aModifiersLRnew & MOD_RWIN)) // Press down RWin.
 	{
 		if (disguise_win_down)
-			KeyEvent(KEYDOWN, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
+			KeyEventMenuMask(KEYDOWN, aExtraInfo); // Ensures that the Start Menu does not appear.
 		KeyEvent(KEYDOWN, VK_RWIN, 0, NULL, false, aExtraInfo);
 		if (disguise_win_down)
-			KeyEvent(KEYUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that the Start Menu does not appear.
+			KeyEventMenuMask(KEYUP, aExtraInfo); // Ensures that the Start Menu does not appear.
 	}
 
 	// ** SHIFT (PART 1 OF 2)
@@ -3335,17 +3333,17 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 		if (!defer_alt_release)
 		{
 			if (ctrl_not_down && aDisguiseUpWinAlt)
-				KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Disguise key release to suppress menu activation.
+				KeyEventMenuMask(KEYDOWNANDUP, aExtraInfo); // Disguise key release to suppress menu activation.
 			KeyEvent(KEYUP, VK_LMENU, 0, NULL, false, aExtraInfo);
 		}
 	}
 	else if (!(aModifiersLRnow & MOD_LALT) && (aModifiersLRnew & MOD_LALT))
 	{
 		if (disguise_alt_down)
-			KeyEvent(KEYDOWN, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that menu bar is not activated.
+			KeyEventMenuMask(KEYDOWN, aExtraInfo); // Ensures that menu bar is not activated.
 		KeyEvent(KEYDOWN, VK_LMENU, 0, NULL, false, aExtraInfo);
 		if (disguise_alt_down)
-			KeyEvent(KEYUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo);
+			KeyEventMenuMask(KEYUP, aExtraInfo);
 	}
 
 	if (release_ralt)
@@ -3366,7 +3364,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 			}
 			else // No AltGr, so check if disguise is necessary (AltGr itself never needs disguise).
 				if (ctrl_not_down && aDisguiseUpWinAlt)
-					KeyEvent(KEYDOWNANDUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Disguise key release to suppress menu activation.
+					KeyEventMenuMask(KEYDOWNANDUP, aExtraInfo); // Disguise key release to suppress menu activation.
 			KeyEvent(KEYUP, VK_RMENU, 0, NULL, false, aExtraInfo);
 		}
 	}
@@ -3377,9 +3375,9 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 		// disguise_alt_key also applies to the left alt key.
 		if (disguise_alt_down && sTargetLayoutHasAltGr != CONDITION_TRUE)
 		{
-			KeyEvent(KEYDOWN, g_MenuMaskKey, 0, NULL, false, aExtraInfo); // Ensures that menu bar is not activated.
+			KeyEventMenuMask(KEYDOWN, aExtraInfo); // Ensures that menu bar is not activated.
 			KeyEvent(KEYDOWN, VK_RMENU, 0, NULL, false, aExtraInfo);
-			KeyEvent(KEYUP, g_MenuMaskKey, 0, NULL, false, aExtraInfo);
+			KeyEventMenuMask(KEYUP, aExtraInfo);
 		}
 		else // No disguise needed.
 		{
@@ -3817,7 +3815,7 @@ LPTSTR ModifiersLRToText(modLR_type aModifiersLR, LPTSTR aBuf)
 
 
 
-DWORD GetFocusedThread(HWND aWindow)
+DWORD GetFocusedCtrlThread(HWND *apControl, HWND aWindow)
 {
 	// Determine the thread for which we want the keyboard layout.
 	// When no foreground window, the script's own layout seems like the safest default.
@@ -3838,6 +3836,8 @@ DWORD GetFocusedThread(HWND aWindow)
 			{
 				// Use the focused control's thread.
 				thread_id = GetWindowThreadProcessId(thread_info.hwndFocus, NULL);
+				if (apControl)
+					*apControl = thread_info.hwndFocus;
 			}
 		}
 	}
@@ -3848,7 +3848,7 @@ DWORD GetFocusedThread(HWND aWindow)
 
 HKL GetFocusedKeybdLayout(HWND aWindow)
 {
-	return GetKeyboardLayout(GetFocusedThread(aWindow));
+	return GetKeyboardLayout(GetFocusedCtrlThread(NULL, aWindow));
 }
 
 
@@ -4126,7 +4126,7 @@ sc_type TextToSC(LPTSTR aText)
 
 
 vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandledByScanCode, bool aAllowExplicitVK
-	, HKL aKeybdLayout, bool aEnableAZFallback)
+	, HKL aKeybdLayout)
 // If modifiers_p is non-NULL, place the modifiers that are needed to realize the key in there.
 // e.g. M is really +m (shift-m), # is really shift-3.
 // HOWEVER, this function does not completely overwrite the contents of pModifiersLR; instead, it just
@@ -4139,7 +4139,7 @@ vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandl
 	// of text during load, is that on either side of the COMPOSITE_DELIMITER (e.g. " then ").
 
 	if (!aText[1]) // _tcslen(aText) == 1
-		return CharToVKAndModifiers(*aText, pModifiersLR, aKeybdLayout, aEnableAZFallback); // Making this a function simplifies things because it can do early return, etc.
+		return CharToVKAndModifiers(*aText, pModifiersLR, aKeybdLayout); // Making this a function simplifies things because it can do early return, etc.
 
 	if (aAllowExplicitVK && ctoupper(aText[0]) == 'V' && ctoupper(aText[1]) == 'K')
 	{
@@ -4237,6 +4237,40 @@ vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLa
 			*pModifiersLR |= MOD_LSHIFT;
 	}
 	return vk;
+}
+
+
+
+bool TextToVKandSC(LPTSTR aText, vk_type &aVK, sc_type &aSC, modLR_type *pModifiersLR, HKL aKeybdLayout)
+{
+	if (aVK = TextToVK(aText, pModifiersLR, true, true, aKeybdLayout))
+	{
+		aSC = 0; // Caller should call vk_to_sc(aVK) if needed.
+		return true;
+	}
+	if (aSC = TextToSC(aText))
+	{
+		// Leave aVK set to 0.  Caller should call sc_to_vk(aSC) if needed.
+		return true;
+	}
+	if (!_tcsnicmp(aText, _T("VK"), 2)) // Could be vkXXscXXX, which TextToVK() does not permit in v1.1.27+.
+	{
+		LPTSTR cp;
+		vk_type vk = (vk_type)_tcstoul(aText + 2, &cp, 16);
+		if (!_tcsnicmp(cp, _T("SC"), 2))
+		{
+			sc_type sc = (sc_type)_tcstoul(cp + 2, &cp, 16);
+			if (!*cp) // No invalid suffix.
+			{
+				aVK = vk;
+				aSC = sc;
+				return true;
+			}
+		}
+		else // Invalid suffix.  *cp!=0 is implied as vkXX would be handled by TextToVK().
+			return false;
+	}
+	return false;
 }
 
 

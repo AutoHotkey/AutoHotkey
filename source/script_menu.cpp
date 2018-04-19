@@ -152,8 +152,18 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 				// L17: For best results, load separate small and large icons.
 				HICON new_icon_small;
 				HICON new_icon = NULL; // Initialize to detect failure to load either icon.
-				if ( new_icon_small = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), image_type, icon_number, false) ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
-					if ( !(new_icon = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, icon_number, false)) )
+				HMODULE icon_module = NULL; // Must initialize because it's not always set by LoadPicture().
+				if (!_tcsnicmp(aParam3, _T("HICON:"), 6) && aParam3[6] != '*')
+				{
+					// Handle this here rather than in LoadPicture() because the first call would destroy the
+					// original icon (due to specifying the width and height), causing the second call to fail.
+					// Keep the original size for both icons since that sometimes produces better results than
+					// CopyImage(), and it keeps the code smaller.
+					new_icon_small = (HICON)(UINT_PTR)ATOI64(aParam3 + 6);
+					new_icon = new_icon_small; // DestroyIconsIfUnused() handles this case by calling DestroyIcon() only once.
+				}
+				else if ( new_icon_small = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), image_type, icon_number, false) ) // Called with icon_number > 0, it guarantees return of an HICON/HCURSOR, never an HBITMAP.
+					if ( !(new_icon = (HICON)LoadPicture(aParam3, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), image_type, icon_number, false, NULL, &icon_module)) )
 						DestroyIcon(new_icon_small);
 				if ( !new_icon )
 					RETURN_MENU_ERROR(_T("Can't load icon."), aParam3);
@@ -164,13 +174,20 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 				mCustomIconSmall = new_icon_small;
 				mCustomIconNumber = icon_number;
 
+				TCHAR full_path[T_MAX_PATH], *filename_marker;
+				// If the icon was loaded from a DLL, relative->absolute conversion below may produce the
+				// wrong result (i.e. in the typical case where the DLL is not in the working directory).
+				// So in that case, get the path of the module which contained the icon (if available).
 				// Get the full path in case it's a relative path.  This is documented and it's done in case
 				// the script ever changes its working directory:
-				TCHAR full_path[T_MAX_PATH];
-				if (GetFullPathName(aParam3, _countof(full_path), full_path, NULL))
+				if (   icon_module && GetModuleFileName(icon_module, full_path, _countof(full_path))
+					|| GetFullPathName(aParam3, _countof(full_path) - 1, full_path, &filename_marker)   )
 					aParam3 = full_path;
 				free(mCustomIconFile);
 				mCustomIconFile = _tcsdup(aParam3); // Failure isn't checked due to rarity and for simplicity; it'll be reported as empty in that case.
+
+				if (icon_module)
+					FreeLibrary(icon_module);
 
 				if (!g_NoTrayIcon)
 					UpdateTrayIcon(true);  // Need to use true in this case too.
@@ -532,9 +549,8 @@ ResultType Script::ScriptDeleteMenu(UserMenu *aMenu)
 		aMenu_prev->mNextMenu = aMenu->mNextMenu; // Can be NULL if aMenu was the last one.
 	else // aMenu was the first one in the list.
 		mFirstMenu = aMenu->mNextMenu; // Can be NULL if the list will now be empty.
-	// Do this last when its contents are no longer needed.  Its destructor will delete all
-	// the items in the menu and destroy the OS menu itself:
-	aMenu->DeleteAllItems(); // This also calls Destroy() to free the menu's resources.
+	aMenu->Destroy(); // Destroy the OS menu.
+	aMenu->DeleteAllItems();
 	if (aMenu->mBrush) // Free the brush used for the menu's background color.
 		DeleteObject(aMenu->mBrush);
 	free(aMenu->mName); // Since it was separately allocated.
@@ -801,28 +817,20 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 
 
 ResultType UserMenu::DeleteAllItems()
+// Remove all menu items from the linked list and from the menu.
 {
-	// Remove all menu items from the linked list and from the menu.  First destroy the menu since
-	// it's probably better to start off fresh than have the destructor individually remove each
-	// menu item as the items in the linked list are deleted.  Some callers rely on this being done
-	// unconditionally (i.e. regardless of !mFirstMenuItem).  In addition, this avoids the need
-	// to find any submenus by position:
-	if (!Destroy())  // if mStandardMenuItems is true, the menu will be recreated later when needed.
-		// If menu can't be destroyed, it's probably due to it being attached as a menu bar to an existing
-		// GUI window.  In this case, when the window is destroyed, the menu bar will be too, so it's
-		// probably best to do nothing.  If we were called as a result of "menu, MenuName, Delete", it
-		// is documented that this will fail in this case.
-		return FAIL;
-	// The destructor relies on the fact that the above destroys the menu but does not recreate it.
-	// This is because popup menus, not being affiliated with a window (unless they're attached to
-	// a menu bar, but that isn't the case with our GUI windows, which detach such menus prior to
-	// when the GUI window is destroyed in case the menu is in use by another window), must be
-	// destroyed with DestroyMenu() to ensure a clean exit (resources freed).
+	// Fixed for v1.1.27.03: Don't attempt to take a shortcut by calling Destroy(), as it
+	// will fail if this is a sub-menu of a menu bar.  Removing the items individually will
+	// do exactly what the user expects.  The following old comment indicates one reason
+	// Destroy() was used; that reason is now obsolete since submenus are given IDs:
+	// "In addition, this avoids the need to find any submenus by position:"
 	if (!mFirstMenuItem)
 		return OK;  // If there are no user-defined menu items, it's already in the correct state.
 	UserMenuItem *menu_item_to_delete;
 	for (UserMenuItem *mi = mFirstMenuItem; mi;)
 	{
+		if (mMenu)
+			RemoveMenu(mMenu, mi->mMenuID, MF_BYCOMMAND);
 		menu_item_to_delete = mi;
 		mi = mi->mNextMenuItem;
 		if (g_script.mThisMenuItem == menu_item_to_delete)
@@ -835,6 +843,7 @@ ResultType UserMenu::DeleteAllItems()
 	mFirstMenuItem = mLastMenuItem = NULL;
 	mMenuItemCount = 0;
 	mDefault = NULL;  // i.e. there can't be a *user-defined* default item anymore, even if this is the tray.
+	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
 	return OK;
 }
 
@@ -1175,7 +1184,15 @@ ResultType UserMenu::ExcludeStandardItems()
 	if (!mIncludeStandardItems)
 		return OK;
 	mIncludeStandardItems = false;
-	return Destroy(); // It will be recreated automatically the next time the user displays it.
+	// This method isn't used because it fails on sub-menus of a menu bar:
+	//return Destroy(); // It will be recreated automatically the next time the user displays it.
+	if (mMenu)
+	{
+		for (UINT i = ID_TRAY_FIRST; i <= ID_TRAY_LAST; ++i)
+			RemoveMenu(mMenu, i, MF_BYCOMMAND);
+		UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary (though it's unusual to put the standard items on a menu bar).
+	}
+	return OK;
 }
 
 
@@ -1308,11 +1325,11 @@ ResultType UserMenu::AppendStandardItems()
 #else
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_OPEN, _T("&Open"));
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_HELP, _T("&Help"));
-	AppendMenu(mMenu, MF_SEPARATOR, 0, NULL);
+	AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP1, NULL); // The separators are given IDs to simplify removal.
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_WINDOWSPY, _T("&Window Spy"));
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_RELOADSCRIPT, _T("&Reload This Script"));
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_EDITSCRIPT, _T("&Edit This Script"));
-	AppendMenu(mMenu, MF_SEPARATOR, 0, NULL);
+	AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP2, NULL);
 	if (this == g_script.mTrayMenu && !mDefault) // No user-defined default menu item, so use the standard one.
 		SetMenuDefaultItem(mMenu, ID_TRAY_OPEN, FALSE); // Seems to have no function other than appearance.
 #endif

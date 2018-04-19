@@ -662,13 +662,17 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 				goto error;
 		}
 		else // ComboBox or single-select ListBox.
-			if (!SendMessageTimeout(control_window, msg, 1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult)
+			if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult)
 				|| dwResult == CB_ERR) // CB_ERR == LB_ERR
 				goto error;
 		if (   !(immediate_parent = GetParent(control_window))   )
 			goto error;
-		if (   !(control_id = GetDlgCtrlID(control_window))   )
-			goto error;
+		SetLastError(0); // Must be done to differentiate between success and failure when control has ID 0.
+		control_id = GetDlgCtrlID(control_window);
+		if (!control_id && GetLastError()) // Both conditions must be checked (see above).
+			goto error; // Avoid sending the notification in case some other control has ID 0.
+		// Proceed even if control_id == 0, since some applications are known to
+		// utilize the notification in that case (e.g. Notepad's Save As dialog).
 		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, x_msg)
 			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto error;
@@ -752,7 +756,7 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 			msg = LB_FINDSTRINGEXACT;
 		else // Must be ComboBox or ListBox
 			goto error;
-		if (!SendMessageTimeout(control_window, msg, 1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &index)
+		if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &index)
 			|| index == CB_ERR) // CB_ERR == LB_ERR
 			goto error;
 		output_var.Assign(index + 1);

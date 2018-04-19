@@ -1832,7 +1832,7 @@ ResultType Line::Input()
 			// For partial backward-compatibility, keys A-Z are upper-cased when handled by VK,
 			// but only if they actually correspond to those characters.  If this wasn't done,
 			// the character would always be lowercase since the shift state is not considered.
-			if (key_name[7] >= 'a' && key_name[7] <= 'z')
+			if (key_name[7] >= 'a' && key_name[7] <= 'z' && !key_name[8])
 				key_name[7] -= 32;
 		}
 		g_ErrorLevel->Assign(key_name);
@@ -10035,7 +10035,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 	bool open_as_binary = (*aFilespec == '*');
 	if (open_as_binary)
 	{
-		if (aFilespec[1] && (aFilespec[1] != '*' || !aFilespec[2])) // i.e. it's not just * (stdout) or ** (stderr).
+		if (aFilespec[1] && (aFilespec[1] != '*' || aFilespec[2])) // i.e. it's not just * (stdout) or ** (stderr).
 		{
 			// Do not do this because it's possible for filenames to start with a space
 			// (even though Explorer itself won't let you create them that way):
@@ -12060,25 +12060,19 @@ VarSizeType BIV_LoopFileSize(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_LoopRegType(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR buf[MAX_PATH];
-	*buf = '\0'; // Set default.
-	if (g->mLoopRegItem)
-		Line::RegConvertValueType(buf, MAX_PATH, g->mLoopRegItem->type);
+	LPTSTR value = g->mLoopRegItem ? Line::RegConvertValueType(g->mLoopRegItem->type) : _T("");
 	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that due to the zero-the-unused-part behavior of strlcpy/strncpy.
-	return (VarSizeType)_tcslen(buf);
+		_tcscpy(aBuf, value);
+	return (VarSizeType)_tcslen(value);
 }
 
 VarSizeType BIV_LoopRegKey(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR buf[MAX_PATH];
-	*buf = '\0'; // Set default.
-	if (g->mLoopRegItem)
-		// Use root_key_type, not root_key (which might be a remote vs. local HKEY):
-		Line::RegConvertRootKey(buf, MAX_PATH, g->mLoopRegItem->root_key_type);
+	// Use root_key_type, not root_key (which might be a remote vs. local HKEY):
+	LPTSTR value = g->mLoopRegItem ? Line::RegConvertRootKeyType(g->mLoopRegItem->root_key_type) : _T("");
 	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that due to the zero-the-unused-part behavior of strlcpy/strncpy.
-	return (VarSizeType)_tcslen(buf);
+		_tcscpy(aBuf, value);
+	return (VarSizeType)_tcslen(value);
 }
 
 VarSizeType BIV_LoopRegSubKey(LPTSTR aBuf, LPTSTR aVarName)
@@ -15992,29 +15986,19 @@ BIF_DECL(BIF_GetKeyName)
 	// Key names are allowed even for GetKeyName() for simplicity and so that it can be
 	// used to normalise a key name; e.g. GetKeyName("Esc") returns "Escape".
 	LPTSTR key = ParamIndexToString(0, aResultToken.buf);
-	vk_type vk = TextToVK(key, NULL, true); // Pass true for the third parameter to avoid it calling TextToSC(), in case this is something like vk23sc14F.
-	sc_type sc = TextToSC(key);
-	if (!sc)
-	{
-		LPTSTR cp;
-		if (  (cp = tcscasestr(key, _T("SC"))) // TextToSC() supports SCxxx but not VKxxSCyyy.
-			&& isdigit(cp[2])  ) // Fixed in v1.1.25.03 to rule out key names containng "sc", like "Esc".
-			sc = (sc_type)_tcstoul(cp + 2, NULL, 16);
-		else
-			sc = vk_to_sc(vk);
-	}
-	else if (!vk)
-		vk = sc_to_vk(sc);
+	vk_type vk;
+	sc_type sc;
+	TextToVKandSC(key, vk, sc);
 
 	switch (ctoupper(aResultToken.marker[6]))
 	{
 	case 'V': // GetKey[V]K
 		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = vk;
+		aResultToken.value_int64 = vk ? vk : sc_to_vk(sc);
 		break;
 	case 'S': // GetKey[S]C
 		aResultToken.symbol = SYM_INTEGER;
-		aResultToken.value_int64 = sc;
+		aResultToken.value_int64 = sc ? sc : vk_to_sc(vk);
 		break;
 	default: // GetKey[N]ame
 		aResultToken.symbol = SYM_STRING;
@@ -16469,7 +16453,7 @@ BIF_DECL(BIF_OnMessage)
 // Parameters:
 // 1: Message number to monitor.
 // 2: Name of the function that will monitor the message.
-// 3: (FUTURE): A flex-list of space-delimited option words/letters.
+// 3: Maximum threads and "register first" flag.
 {
 	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
 	// Set default result in case of early return; a blank value:

@@ -59,7 +59,8 @@ extern DWORD g_HookReceiptOfLControlMeansAltGr;
 extern DWORD g_IgnoreNextLControlDown;
 extern DWORD g_IgnoreNextLControlUp;
 
-extern BYTE g_MenuMaskKey; // L38: See #MenuMaskKey.
+extern BYTE g_MenuMaskKeyVK; // For #MenuMaskKey.
+extern USHORT g_MenuMaskKeySC;
 
 // If a SendKeys() operation takes longer than this, hotkey's modifiers won't be pressed back down:
 extern int g_HotkeyModifierTimeout;
@@ -155,6 +156,7 @@ extern bool g_HSEndCharRequired;
 extern bool g_HSDetectWhenInsideWord;
 extern bool g_HSDoReset;
 extern bool g_HSResetUponMouseClick;
+extern bool g_HSSameLineAction;
 extern TCHAR g_EndChars[HS_MAX_END_CHARS + 1];
 
 // Global objects:

@@ -130,7 +130,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 	, ID_TRAY_FIRST, ID_TRAY_OPEN = ID_TRAY_FIRST
 	, ID_TRAY_HELP, ID_TRAY_WINDOWSPY, ID_TRAY_RELOADSCRIPT
 	, ID_TRAY_EDITSCRIPT, ID_TRAY_SUSPEND, ID_TRAY_PAUSE, ID_TRAY_EXIT
-	, ID_TRAY_LAST = ID_TRAY_EXIT // But this value should never hit the below. There is debug code to enforce.
+	, ID_TRAY_SEP1, ID_TRAY_SEP2, ID_TRAY_LAST = ID_TRAY_SEP2 // But this value should never hit the below. There is debug code to enforce.
 	, ID_MAIN_FIRST = 65400, ID_MAIN_LAST = 65534}; // These should match the range used by resource.h
 
 #define GUI_INDEX_TO_ID(index) (index + CONTROL_ID_FIRST)
@@ -400,6 +400,20 @@ struct ArgStruct
 
 // The following macro is used for definitions and declarations of built-in functions:
 #define BIF_DECL(name) void name(BIF_DECL_PARAMS)
+
+// NOTE FOR v1: The following macros currently aren't used much; they're for use in new code
+// to facilitate merging into the v2 branch, which uses its own versions of these macros heavily.
+// This is just the subset of the macros that don't rely on other changes.
+#define _f__oneline(act)		do { act } while (0)		// Make the macro safe to use like a function, under if(), etc.
+#define _f__ret(act)			_f__oneline( aResult = (act); return; )	// BIFs have no return value.
+#define _o__ret(act)			return (act)				// IObject::Invoke() returns ResultType.
+#define _f_throw(...)			_f__ret(g_script.ScriptError(__VA_ARGS__))
+#define _o_throw(...)			_o__ret(g_script.ScriptError(__VA_ARGS__))
+#define _f_return_FAIL			_f__ret(FAIL)
+#define _o_return_FAIL			_o__ret(FAIL)
+#define _f_retval_buf			(aResultToken.buf)
+#define _f_retval_buf_size		MAX_NUMBER_SIZE
+#define _f_number_buf			_f_retval_buf  // An alias to show intended usage, and in case the buffer size is changed.
 
 
 struct LoopFilesStruct : WIN32_FIND_DATA
@@ -1291,13 +1305,8 @@ public:
 		if (aIsRemoteRegistry)
 			*aIsRemoteRegistry = (computer_name_end != NULL);
 
-		HKEY root_key;
-		if (!_tcsicmp(key_name, _T("HKLM")) || !_tcsicmp(key_name, _T("HKEY_LOCAL_MACHINE")))       root_key = HKEY_LOCAL_MACHINE;
-		else if (!_tcsicmp(key_name, _T("HKCR")) || !_tcsicmp(key_name, _T("HKEY_CLASSES_ROOT")))   root_key = HKEY_CLASSES_ROOT;
-		else if (!_tcsicmp(key_name, _T("HKCC")) || !_tcsicmp(key_name, _T("HKEY_CURRENT_CONFIG"))) root_key = HKEY_CURRENT_CONFIG;
-		else if (!_tcsicmp(key_name, _T("HKCU")) || !_tcsicmp(key_name, _T("HKEY_CURRENT_USER")))   root_key = HKEY_CURRENT_USER;
-		else if (!_tcsicmp(key_name, _T("HKU")) || !_tcsicmp(key_name, _T("HKEY_USERS")))           root_key = HKEY_USERS;
-		else // Invalid or unsupported root key name.
+		HKEY root_key = RegConvertRootKeyType(key_name);
+		if (!root_key) // Invalid or unsupported root key name.
 			return NULL;
 
 		if (!aIsRemoteRegistry || !computer_name_end) // Either caller didn't want it opened, or it doesn't need to be.
@@ -1312,19 +1321,10 @@ public:
 		HKEY remote_key;
 		return (RegConnectRegistry(computer_name, root_key, &remote_key) == ERROR_SUCCESS) ? remote_key : NULL;
 	}
-	static LPTSTR RegConvertRootKey(LPTSTR aBuf, size_t aBufSize, HKEY aRootKey)
-	{
-		// switch() doesn't directly support expression of type HKEY:
-		if (aRootKey == HKEY_LOCAL_MACHINE)       tcslcpy(aBuf, _T("HKEY_LOCAL_MACHINE"), aBufSize);
-		else if (aRootKey == HKEY_CLASSES_ROOT)   tcslcpy(aBuf, _T("HKEY_CLASSES_ROOT"), aBufSize);
-		else if (aRootKey == HKEY_CURRENT_CONFIG) tcslcpy(aBuf, _T("HKEY_CURRENT_CONFIG"), aBufSize);
-		else if (aRootKey == HKEY_CURRENT_USER)   tcslcpy(aBuf, _T("HKEY_CURRENT_USER"), aBufSize);
-		else if (aRootKey == HKEY_USERS)          tcslcpy(aBuf, _T("HKEY_USERS"), aBufSize);
-		else if (aBufSize)                        *aBuf = '\0'; // Make it be the empty string for anything else.
-		// These are either unused or so rarely used (DYN_DATA on Win9x) that they aren't supported:
-		// HKEY_PERFORMANCE_DATA, HKEY_PERFORMANCE_TEXT, HKEY_PERFORMANCE_NLSTEXT, HKEY_DYN_DATA
-		return aBuf;
-	}
+
+	static HKEY RegConvertRootKeyType(LPTSTR aName);
+	static LPTSTR RegConvertRootKeyType(HKEY aKey);
+
 	static int RegConvertValueType(LPTSTR aValueType)
 	{
 		if (!_tcsicmp(aValueType, _T("REG_SZ"))) return REG_SZ;
@@ -1334,23 +1334,23 @@ public:
 		if (!_tcsicmp(aValueType, _T("REG_BINARY"))) return REG_BINARY;
 		return REG_NONE; // Unknown or unsupported type.
 	}
-	static LPTSTR RegConvertValueType(LPTSTR aBuf, size_t aBufSize, DWORD aValueType)
+	static LPTSTR RegConvertValueType(DWORD aValueType)
 	{
 		switch(aValueType)
 		{
-		case REG_SZ: tcslcpy(aBuf, _T("REG_SZ"), aBufSize); return aBuf;
-		case REG_EXPAND_SZ: tcslcpy(aBuf, _T("REG_EXPAND_SZ"), aBufSize); return aBuf;
-		case REG_BINARY: tcslcpy(aBuf, _T("REG_BINARY"), aBufSize); return aBuf;
-		case REG_DWORD: tcslcpy(aBuf, _T("REG_DWORD"), aBufSize); return aBuf;
-		case REG_DWORD_BIG_ENDIAN: tcslcpy(aBuf, _T("REG_DWORD_BIG_ENDIAN"), aBufSize); return aBuf;
-		case REG_LINK: tcslcpy(aBuf, _T("REG_LINK"), aBufSize); return aBuf;
-		case REG_MULTI_SZ: tcslcpy(aBuf, _T("REG_MULTI_SZ"), aBufSize); return aBuf;
-		case REG_RESOURCE_LIST: tcslcpy(aBuf, _T("REG_RESOURCE_LIST"), aBufSize); return aBuf;
-		case REG_FULL_RESOURCE_DESCRIPTOR: tcslcpy(aBuf, _T("REG_FULL_RESOURCE_DESCRIPTOR"), aBufSize); return aBuf;
-		case REG_RESOURCE_REQUIREMENTS_LIST: tcslcpy(aBuf, _T("REG_RESOURCE_REQUIREMENTS_LIST"), aBufSize); return aBuf;
-		case REG_QWORD: tcslcpy(aBuf, _T("REG_QWORD"), aBufSize); return aBuf;
-		case REG_SUBKEY: tcslcpy(aBuf, _T("KEY"), aBufSize); return aBuf;  // Custom (non-standard) type.
-		default: if (aBufSize) *aBuf = '\0'; return aBuf;  // Make it be the empty string for REG_NONE and anything else.
+		case REG_SZ: return _T("REG_SZ");
+		case REG_EXPAND_SZ: return _T("REG_EXPAND_SZ");
+		case REG_BINARY: return _T("REG_BINARY");
+		case REG_DWORD: return _T("REG_DWORD");
+		case REG_DWORD_BIG_ENDIAN: return _T("REG_DWORD_BIG_ENDIAN");
+		case REG_LINK: return _T("REG_LINK");
+		case REG_MULTI_SZ: return _T("REG_MULTI_SZ");
+		case REG_RESOURCE_LIST: return _T("REG_RESOURCE_LIST");
+		case REG_FULL_RESOURCE_DESCRIPTOR: return _T("REG_FULL_RESOURCE_DESCRIPTOR");
+		case REG_RESOURCE_REQUIREMENTS_LIST: return _T("REG_RESOURCE_REQUIREMENTS_LIST");
+		case REG_QWORD: return _T("REG_QWORD");
+		case REG_SUBKEY: return _T("KEY");  // Custom (non-standard) type.
+		default: return _T("");  // Make it be the empty string for REG_NONE and anything else.
 		}
 	}
 	static DWORD RegConvertView(LPTSTR aBuf)
@@ -2196,10 +2196,14 @@ public:
 };
 
 // LabelPtr with automatic reference-counting, for storing an object safely,
-// such as in a HotkeyVariant, UserMenuItem, etc.  In future, this could be
-// replaced with a more general smart pointer class.
+// such as in a HotkeyVariant, UserMenuItem, etc.  Its specific purpose is to
+// work with old code that wasn't concerned with reference counting.
 class LabelRef : public LabelPtr
 {
+private:
+	LabelRef(const LabelRef &); // Disable default copy constructor.
+	LabelRef & operator = (const LabelRef &); // ...and copy assignment.
+
 public:
 	LabelRef() : LabelPtr() {}
 	LabelRef(IObject *object) : LabelPtr(object)
@@ -2220,6 +2224,10 @@ public:
 			mObject->Release();
 		mObject = object;
 		return *this;
+	}
+	LabelRef & operator = (const LabelPtr &other)
+	{
+		return *this = other.ToObject();
 	}
 	~LabelRef()
 	{
@@ -2963,6 +2971,7 @@ private:
 	static ActionTypeType ConvertActionType(LPTSTR aActionTypeString);
 	static ActionTypeType ConvertOldActionType(LPTSTR aActionTypeString);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
+	void RemoveLabel(Label *aLabel);
 	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, int aArgc = 0, LPTSTR aArgMap[] = NULL);
 
 	// These aren't in the Line class because I think they're easier to implement
@@ -3344,6 +3353,8 @@ BIF_DECL(BIF_IL_Add);
 BIF_DECL(BIF_LoadPicture);
 
 BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.
+
+BIF_DECL(BIF_Hotstring);
 
 
 BIF_DECL(BIF_IsObject);
