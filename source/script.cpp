@@ -13412,6 +13412,9 @@ bool Line::ParseLoopFilePattern(LPTSTR aFilePattern, LoopFilesStruct &lfs, Resul
 	for (name_part = cp = aFilePattern; *cp; cp++)
 		if (*cp == '\\' || *cp == '/')
 			name_part = cp + 1;
+
+	if (name_part == aFilePattern && *name_part && name_part[1] == ':') // Single character followed by ':' but not '\\' or '/'.
+		name_part += 2;
 	
 	size_t pattern_length = cp - name_part;
 	if (!pattern_length // Empty pattern (aFilePattern ends with a slash).  FindFirstFile() would fail.
@@ -13456,6 +13459,12 @@ bool Line::ParseLoopFilePattern(LPTSTR aFilePattern, LoopFilesStruct &lfs, Resul
 		// cause is that the buffer is too small (and even this is unlikely on Unicode builds).
 		// With current buffer sizes, that implies the path is too long for FindFirstFile().
 		return false;
+
+	if (lfs.file_path[lfs.file_path_length - 1] != '\\') // aFilePattern was "x:pattern" with no slash.
+	{
+		lfs.file_path[lfs.file_path_length++] = '\\';
+		lfs.file_path[lfs.file_path_length] = '\0';
+	}
 	
 	// Mark the part of file_path which will contain discovered sub-directories/files.
 	// This will be appended to orig_dir to get the value of A_LoopFilePath.
