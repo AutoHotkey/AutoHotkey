@@ -12493,6 +12493,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 
 			size_t switch_value_mem_size;
 			ExprTokenType switch_value;
+			switch_value.mem_to_free = NULL;
 			if (!line->mAttribute) // Switch with no value: find the first 'true' case.
 			{
 				switch_value.symbol = SYM_INVALID;
