@@ -2750,7 +2750,7 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 				|| *cp == ']' // Property definition or reserved.
 				|| ACT_IS_LINE_PARENT(action_type) && !EndsWithOperator(buf, cp)
 				|| mClassObjectCount && !g->CurrentFunc && cp < action_end   ) // "Property {" (get/set was already handled by caller).
-				break;
+				return OK;
 		}
 		if (next_buf_length) // Skip empty/comment lines.
 		{
