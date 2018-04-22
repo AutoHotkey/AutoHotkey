@@ -11937,6 +11937,8 @@ VarSizeType FixLoopFilePath(LPTSTR aBuf, LPTSTR aPattern)
 		LPTSTR end = _tcsrchr(aBuf, '\\');
 		if (end)
 			*end = '\0';
+		else if (*aBuf && aBuf[1] == ':') // aBuf "C:x" should be "C:" for "C:" or "C:.".
+			aBuf[2] = '\0';
 	}
 	return _tcslen(aBuf);
 }

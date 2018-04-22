@@ -13417,8 +13417,7 @@ bool Line::ParseLoopFilePattern(LPTSTR aFilePattern, LoopFilesStruct &lfs, Resul
 		name_part += 2;
 	
 	size_t pattern_length = cp - name_part;
-	if (!pattern_length // Empty pattern (aFilePattern ends with a slash).  FindFirstFile() would fail.
-		|| pattern_length > _countof(lfs.pattern)) // Most likely too long to match a real path/filename.
+	if (pattern_length > _countof(lfs.pattern)) // Most likely too long to match a real path/filename.
 		return false; 
 	tmemcpy(lfs.pattern, name_part, pattern_length + 1);
 	lfs.pattern_length = pattern_length;
@@ -13515,6 +13514,18 @@ ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aCont
 	size_t file_path_length = lfs.file_path_length;
 	size_t short_path_length = lfs.short_path_length;
 	lfs.dir_length = file_path_length; // During the loop, lfs.file_path_length will include the filename.
+	
+	if (!lfs.pattern_length && lfs.orig_dir_length == 2 && lfs.orig_dir[1] == ':')
+	{
+		// Handle "C:" by changing the pattern to "." to match the directory itself,
+		// otherwise it would fail since lfs.file_path contains a trailing slash.
+		// Search for "=C:" in SetWorkingDir() for explanation of "C:" vs. "C:\".
+		lfs.pattern[0] = '.';
+		lfs.pattern[1] = '\0';
+		lfs.pattern_length = 1;
+		// Disable recursion since "." would otherwise be found in every sub-directory.
+		aRecurseSubfolders = false;
+	}
 
 	LPTSTR file_path_end = lfs.file_path + file_path_length;
 	size_t file_space_remaining = _countof(lfs.file_path) - file_path_length;
