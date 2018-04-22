@@ -920,7 +920,7 @@ public:
 		, mByteLength(0)
 		, mAttrib(VAR_ATTRIB_UNINITIALIZED)
 		// For anonymous/temporary variables:
-		, mScope(0)
+		, mScope(VAR_LOCAL)
 		, mName(_T(""))
 		// Normally set as a result of !aBuiltIn:
 		, mType(VAR_NORMAL)
