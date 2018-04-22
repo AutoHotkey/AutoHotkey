@@ -11917,6 +11917,30 @@ VarSizeType BIV_LoopFileDir(LPTSTR aBuf, LPTSTR aVarName)
 	return total_length;
 }
 
+VarSizeType FixLoopFilePath(LPTSTR aBuf, LPTSTR aPattern)
+// Fixes aBuf to account for "." and ".." as file patterns.  These match the directory itself
+// or parent directory, so for example "x\y\.." returns a directory named "x" which appears to
+// be inside "y".  Without the handling here, the invalid path "x\y\x" would be returned.
+// A small amount of temporary buffer space might be wasted compared to handling this in the BIV,
+// but this way minimizes code size (and these cases are rare anyway).
+{
+	int count = 0;
+	if (*aPattern == '.')
+	{
+		if (!aPattern[1])
+			count = 1; // aBuf "x\y\y" should be "x\y" for "x\y\.".
+		else if (aPattern[1] == '.' && !aPattern[2])
+			count = 2; // aBuf "x\y\x" should be "x" for "x\y\..".
+	}
+	for ( ; count > 0; --count)
+	{
+		LPTSTR end = _tcsrchr(aBuf, '\\');
+		if (end)
+			*end = '\0';
+	}
+	return _tcslen(aBuf);
+}
+
 VarSizeType BIV_LoopFilePath(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (!g->mLoopFile)
@@ -11933,6 +11957,7 @@ VarSizeType BIV_LoopFilePath(LPTSTR aBuf, LPTSTR aVarName)
 	{
 		tmemcpy(aBuf, lfs.orig_dir, lfs.orig_dir_length);
 		tmemcpy(aBuf + lfs.orig_dir_length, lfs.file_path_suffix, suffix_length + 1); // +1 for \0.
+		return FixLoopFilePath(aBuf, lfs.pattern);
 	}
 	return lfs.orig_dir_length + suffix_length;
 }
@@ -11964,6 +11989,7 @@ VarSizeType BIV_LoopFileLongPath(LPTSTR aBuf, LPTSTR aVarName)
 	{
 		tmemcpy(aBuf, lfs.long_dir, lfs.long_dir_length);
 		tmemcpy(aBuf + lfs.long_dir_length, lfs.file_path_suffix, suffix_length + 1); // +1 for \0.
+		return FixLoopFilePath(aBuf, lfs.pattern);
 	}
 	return lfs.long_dir_length + suffix_length;
 }
@@ -11993,6 +12019,7 @@ VarSizeType BIV_LoopFileShortPath(LPTSTR aBuf, LPTSTR aVarName)
 	{
 		tmemcpy(aBuf, lfs.short_path, lfs.short_path_length);
 		tmemcpy(aBuf + lfs.short_path_length, name, name_length + 1); // +1 for \0.
+		return FixLoopFilePath(aBuf, lfs.pattern);
 	}
 	return lfs.short_path_length + name_length;
 }
