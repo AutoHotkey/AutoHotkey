@@ -901,7 +901,7 @@ LPTSTR Object::Type()
 // Object:: Built-in Methods
 //
 
-bool Object::InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], int aValueCount)
+bool Object::InsertAt(INT_PTR aOffset, IntKeyType aKey, ExprTokenType *aValue[], int aValueCount)
 {
 	IndexType actual_count = (IndexType)aValueCount;
 	for (int i = 0; i < aValueCount; ++i)
@@ -1517,14 +1517,14 @@ template<typename T>
 Object::FieldType *Object::FindField(T val, INT_PTR left, INT_PTR right, INT_PTR &insert_pos)
 // Template used below.  left and right must be set by caller to the appropriate bounds within mFields.
 {
-	INT_PTR mid, result;
+	INT_PTR mid;
 	while (left <= right)
 	{
 		mid = (left + right) / 2;
 		
 		FieldType &field = mFields[mid];
 		
-		result = field.CompareKey(val);
+		auto result = field.CompareKey(val);
 		
 		if (result < 0)
 			right = mid - 1;
@@ -1575,7 +1575,6 @@ void Object::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_ty
 // for example, guis[WinExist()] := x ... x := guis[A_Gui] would fail because A_Gui returns a
 // string.  Strings are converted to integers only where conversion back to string produces
 // the same string, so for instance, "01" and " 1 " and "+0x8000" are left as strings.
-// Integers which are too large for IntKeyType are converted to strings, to avoid data loss.
 {
 	SymbolType inner_type = key_token.symbol;
 	if (inner_type == SYM_VAR)
@@ -1596,14 +1595,9 @@ void Object::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_ty
 	}
 	if (inner_type == SYM_INTEGER)
 	{
-		__int64 token_int = TokenToInt64(key_token);
-		key.i = IntKeyType(token_int);
-		if (__int64(key.i) == token_int) // Confirm round trip is possible.
-		{
-			key_type = SYM_INTEGER;
-			return;
-		}
-		// Round trip isn't possible, so store it as a string.
+		key.i = TokenToInt64(key_token);
+		key_type = SYM_INTEGER;
+		return;
 	}
 	key_type = SYM_STRING; // Set default for simplicity.
 	key.s = TokenToString(key_token, buf);

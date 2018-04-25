@@ -6916,7 +6916,8 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 	LPTSTR this_field, next_field;
 	LRESULT item_index;
 	TCHAR num_buf[MAX_NUMBER_SIZE];
-	INT_PTR obj_off = -1, obj_key = 0;
+	INT_PTR obj_off = -1;
+	IntKeyType obj_key = 0;
 
 	// For tab controls:
 	TCITEM tci;
