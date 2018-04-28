@@ -294,8 +294,8 @@ Action g_act[] =
 
 	, {_T("SplitPath"), 1, 6, true, NULL} // InputFilespec, OutName, OutDir, OutExt, OutNameNoExt, OutDrive
 	, {_T("RunAs"), 0, 3, false, NULL} // user, pass, domain (0 params can be passed to disable the feature)
-	, {_T("Run"), 1, 4, true, NULL}      // TargetFile, Working Dir, WinShow-Mode/UseErrorLevel, OutputVarPID
-	, {_T("RunWait"), 1, 4, true, NULL}  // TargetFile, Working Dir, WinShow-Mode/UseErrorLevel, OutputVarPID
+	, {_T("Run"), 1, 4, true, NULL}      // TargetFile, Working Dir, WinShow-Mode, OutputVarPID
+	, {_T("RunWait"), 1, 4, true, NULL}  // TargetFile, Working Dir, WinShow-Mode, OutputVarPID
 	, {_T("Download"), 2, 2, false, NULL} // URL, save-as-filename
 
 	, {_T("Send"), 1, 1, false, NULL}         // But that first param can validly be a deref that resolves to a blank param.

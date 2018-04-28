@@ -11678,7 +11678,6 @@ ResultType Line::Perform()
 	ToggleValueType toggle;  // For commands that use on/off/neutral.
 	// Use signed values for these in case they're really given an explicit negative value:
 	vk_type vk; // For GetKeyState.
-	ResultType result;  // General purpose.
 
 	// Even though the loading-parser already checked, check again, for now,
 	// at least until testing raises confidence.  UPDATE: Don't do this because
@@ -11802,16 +11801,7 @@ ResultType Line::Perform()
 		return OK;
 
 	case ACT_RUN:
-	{
-		bool use_el = tcscasestr(ARG3, _T("UseErrorLevel"));
-		result = g_script.ActionExec(ARG1, NULL, ARG2, !use_el, ARG3, NULL, use_el, true, ARGVAR4); // Be sure to pass NULL for 2nd param.
-		if (use_el)
-			// The special string ERROR is used, rather than a number like 1, because currently
-			// RunWait might in the future be able to return any value, including 259 (STATUS_PENDING).
-			result = result ? g_ErrorLevel->Assign(ERRORLEVEL_NONE) : g_ErrorLevel->Assign(_T("ERROR"));
-		// Otherwise, if result == FAIL, above already displayed the error (or threw an exception).
-		return result;
-	}
+		return g_script.ActionExec(ARG1, NULL, ARG2, true, ARG3, NULL, true, true, ARGVAR4); // Be sure to pass NULL for 2nd param.
 
 	case ACT_RUNWAIT:
 	case ACT_CLIPWAIT:
