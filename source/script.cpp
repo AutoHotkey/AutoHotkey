@@ -523,6 +523,12 @@ Script::Script()
 	for (int i = 1; i < _countof(g_BIF); ++i)
 		if (_tcsicmp(g_BIF[i-1].mName, g_BIF[i].mName) >= 0)
 			ScriptError(_T("DEBUG: g_BIF out of order."), g_BIF[i].mName);
+	for (int i = 1; i < _countof(g_BIV); ++i)
+		if (_tcsicmp(g_BIV[i-1].name, g_BIV[i].name) >= 0)
+			ScriptError(_T("DEBUG: g_BIV out of order."), g_BIV[i].name);
+	for (int i = 1; i < _countof(g_BIV_A); ++i)
+		if (_tcsicmp(g_BIV_A[i-1].name, g_BIV_A[i].name) >= 0)
+			ScriptError(_T("DEBUG: g_BIV_A out of order."), g_BIV_A[i].name);
 #endif
 	OleInitialize(NULL);
 }
