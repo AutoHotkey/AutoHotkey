@@ -1518,10 +1518,22 @@ Object::FieldType *Object::FindField(IntKeyType val, IndexType left, IndexType r
 // left and right must be set by caller to the appropriate bounds within mFields.
 {
 	INT_PTR mid;
-	while (left <= right)
+	// Optimize for common arrays such as [a,b,c] where keys are consecutive numbers starting at 1.
+	// In such cases, the needed key can be found immediately.  Benchmarks show that starting the
+	// search this way can also benefit sparse arrays, and has little effect on associative arrays
+	// (keyed with a precalculated set of 100 or 2000 random integers between 0x10000 and 0x2000000).
+	if ((mid = left + val - 1) > right)
 	{
-		mid = (left + right) / 2;
-		
+		// I couldn't come up with a data set or pattern where the standard starting calculation
+		// actually performed better, so start the search by comparing the last element's key.
+		// This improves performance when appending to an array via assignment.  Benchmarks show
+		// marginal improvements for other cases, probably due to slightly smaller code size.
+		//if (--mid != right) // Optimize for appending via incrementing index: this[n++].
+		//	mid = (left + right) / 2; // Fall back to standard binary search.
+		mid = right;
+	}
+	for ( ; left <= right; mid = (left + right) / 2)
+	{
 		FieldType &field = mFields[mid];
 		
 		auto result = val - field.key.i;
