@@ -3244,15 +3244,8 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 			else if (do_ltrim == TOGGLED_ON)
 				// Trim all leading whitespace.
 				next_buf_length = ltrim(next_buf, next_buf_length);
-			// Escape each comma and percent sign in the body of the continuation section so that
-			// the later parsing stages will see them as literals.  Although, it's not always
-			// necessary to do this (e.g. commas in the last parameter of a command don't need to
-			// be escaped, nor do percent signs in hotstrings' auto-replace text), the settings
-			// are applied unconditionally because:
-			// 1) Determining when its safe to omit the translation would add a lot of code size and complexity.
-			// 2) The translation doesn't affect the functionality of the script since escaped literals
-			//    are always de-escaped at a later stage, at least for everything that's likely to matter
-			//    or that's reasonable to put into a continuation section (e.g. a hotstring's replacement text).
+			// Insert escape characters as needed for escape characters or quote marks to be interpreted
+			// literally, as per continuation section options or detection of enclosing quote marks.
 			int replacement_count = 0;
 			if (literal_escapes) // literal_escapes must be done FIRST because otherwise it would also replace any accents added by other options.
 				replacement_count += StrReplace(next_buf, _T("`"), _T("``"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
