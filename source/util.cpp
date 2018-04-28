@@ -2802,7 +2802,7 @@ int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 	TCHAR close_char;
 	for (int mark = aStartIndex; ; ++mark)
 	{
-		if (aBuf[mark] == aDelimiter)
+		if (aBuf[mark] == aDelimiter && (aDelimiter != ':' || aBuf[mark+1] != '='))
 			return mark;
 		switch (aBuf[mark])
 		{
