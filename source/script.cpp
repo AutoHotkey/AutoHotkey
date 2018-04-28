@@ -8691,7 +8691,7 @@ unquoted_literal:
 			{
 				LPTSTR str = SimpleHeap::Malloc(this_deref_ref.marker, this_deref_ref.length);
 				if (!str)
-					return LineError(ERR_OUTOFMEM);
+					return FAIL; // Malloc already displayed an error message.
 				infix[infix_count].SetValue(str, this_deref_ref.length);
 				infix_count++;
 			}
@@ -9636,7 +9636,7 @@ end_of_infix_to_postfix:
 				// Convert this numeric literal back into a string to ensure the format is consistent.
 				// This also ensures parentheses are not present in the output, for cases like MsgBox % (1.0).
 				if (  !(aArg.text = SimpleHeap::Malloc(TokenToString(only_token, number_buf)))  )
-					return LineError(ERR_OUTOFMEM);
+					return FAIL; // Malloc already displayed an error message.
 				break;
 			case SYM_VAR: // SYM_VAR can only be VAR_NORMAL in this case.
 				// This isn't needed for ACT_ASSIGNEXPR, which does output_var->Assign(*postfix).
