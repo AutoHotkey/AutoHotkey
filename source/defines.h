@@ -219,6 +219,9 @@ struct ResultToken;
 struct IDebugProperties;
 
 
+typedef __int64 IntKeyType;
+
+
 struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 	: public IDispatch
 {
@@ -258,7 +261,7 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 	virtual void WriteProperty(LPCSTR aName, __int64 aValue) = 0;
 	virtual void WriteProperty(LPCSTR aName, IObject *aValue) = 0;
 	virtual void WriteProperty(LPCSTR aName, ExprTokenType &aValue) = 0;
-	virtual void WriteProperty(INT_PTR aKey, ExprTokenType &aValue) = 0;
+	virtual void WriteProperty(IntKeyType aKey, ExprTokenType &aValue) = 0;
 	virtual void WriteProperty(IObject *aKey, ExprTokenType &aValue) = 0;
 	virtual void BeginProperty(LPCSTR aName, LPCSTR aType, int aNumChildren, DebugCookie &aCookie) = 0;
 	virtual void EndProperty(DebugCookie aCookie) = 0;

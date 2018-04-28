@@ -146,12 +146,12 @@ public:
 // Object - Scriptable associative array.
 //
 
-#define ObjParseIntKey(s, endptr) Exp32or64(UorA(wcstol,strtol),UorA(_wcstoi64,_strtoi64))(s, endptr, 10) // Convert string to IntKeyType, setting errno = ERANGE if overflow occurs.
+//#define ObjParseIntKey(s, endptr) Exp32or64(UorA(wcstol,strtol),UorA(_wcstoi64,_strtoi64))(s, endptr, 10) // Convert string to IntKeyType, setting errno = ERANGE if overflow occurs.
+#define ObjParseIntKey(s, endptr) UorA(_wcstoi64,_strtoi64)(s, endptr, 10) // Convert string to IntKeyType, setting errno = ERANGE if overflow occurs.
 
 class Object : public ObjectBase
 {
 protected:
-	typedef INT_PTR IntKeyType; // Same size as the other union members.
 	typedef INT_PTR IndexType; // Type of index for the internal array.  Must be signed for FindKey to work correctly.
 	union KeyType // Which of its members is used depends on the field's position in the mFields array.
 	{
@@ -168,12 +168,11 @@ protected:
 			IObject *object;	// for SYM_OBJECT
 			String string;		// for SYM_STRING
 		};
-		// key and symbol probably need to be adjacent to each other to conserve memory due to 8-byte alignment.
 		KeyType key;
 		SymbolType symbol;
-
-		inline IntKeyType CompareKey(IntKeyType val) { return val - key.i; }  // Used by both int and object since they are stored separately.
-		inline int CompareKey(LPTSTR val) { return _tcsicmp(val, key.s); }
+		// key_c contains the first character of key.s. This utilizes space that would
+		// otherwise be unused due to 8-byte alignment. See FindField() for explanation.
+		TCHAR key_c;
 
 		void Clear();
 		bool Assign(LPTSTR str, size_t len = -1, bool exact_size = false);
@@ -222,8 +221,8 @@ protected:
 	bool Delete();
 	~Object();
 
-	template<typename T>
-	FieldType *FindField(T val, IndexType left, IndexType right, IndexType &insert_pos);
+	FieldType *FindField(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos);
+	FieldType *FindField(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos);
 	FieldType *FindField(SymbolType key_type, KeyType key, IndexType &insert_pos);	
 	FieldType *FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos);
 
@@ -253,7 +252,7 @@ public:
 	void ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params, ExprTokenType **aParam, int aParamCount);
 	ResultType ArrayToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax);
 	
-	inline bool GetNextItem(ExprTokenType &aToken, INT_PTR &aOffset, INT_PTR &aKey)
+	inline bool GetNextItem(ExprTokenType &aToken, INT_PTR &aOffset, IntKeyType &aKey)
 	{
 		if (++aOffset >= mKeyOffsetObject) // i.e. no more integer-keyed items.
 			return false;
@@ -347,7 +346,7 @@ public:
 	bool IsDerivedFrom(IObject *aBase);
 	
 	// Used by Object::_Insert() and Func::Call():
-	bool InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], int aValueCount);
+	bool InsertAt(INT_PTR aOffset, IntKeyType aKey, ExprTokenType *aValue[], int aValueCount);
 
 	void EndClassDefinition();
 	Object *GetUnresolvedClass(LPTSTR &aName);

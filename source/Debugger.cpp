@@ -2568,7 +2568,7 @@ void Debugger::PropertyWriter::WriteProperty(LPCSTR aName, ExprTokenType &aValue
 }
 
 
-void Debugger::PropertyWriter::WriteProperty(INT_PTR aKey, ExprTokenType &aValue)
+void Debugger::PropertyWriter::WriteProperty(IntKeyType aKey, ExprTokenType &aValue)
 {
 	mNameBuf.AppendFormat("[%Ii]", aKey);
 	_WriteProperty(aValue);

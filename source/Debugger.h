@@ -365,7 +365,7 @@ private:
 		void WriteProperty(LPCSTR aName, IObject *aValue)  { WriteProperty(aName, ExprTokenType(aValue)); }
 
 		void WriteProperty(LPCSTR aName, ExprTokenType &aValue);
-		void WriteProperty(INT_PTR aKey, ExprTokenType &aValue);
+		void WriteProperty(IntKeyType aKey, ExprTokenType &aValue);
 		void WriteProperty(IObject *aKey, ExprTokenType &aValue);
 
 		void _WriteProperty(ExprTokenType &aValue);

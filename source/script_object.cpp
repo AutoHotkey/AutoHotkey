@@ -159,6 +159,7 @@ Object *Object::Clone(BOOL aExcludeIntegerKeys)
 		// Copy key.
 		if (i >= obj.mKeyOffsetString)
 		{
+			dst.key_c = src.key_c;
 			if ( !(dst.key.s = _tcsdup(src.key.s)) )
 			{
 				// Key allocation failed. At this point, all int and object keys
@@ -901,7 +902,7 @@ LPTSTR Object::Type()
 // Object:: Built-in Methods
 //
 
-bool Object::InsertAt(INT_PTR aOffset, INT_PTR aKey, ExprTokenType *aValue[], int aValueCount)
+bool Object::InsertAt(INT_PTR aOffset, IntKeyType aKey, ExprTokenType *aValue[], int aValueCount)
 {
 	IndexType actual_count = (IndexType)aValueCount;
 	for (int i = 0; i < aValueCount; ++i)
@@ -1513,18 +1514,63 @@ int Object::Enumerator::Next(Var *aKey, Var *aVal)
 // Object:: Internal Methods
 //
 
-template<typename T>
-Object::FieldType *Object::FindField(T val, INT_PTR left, INT_PTR right, INT_PTR &insert_pos)
-// Template used below.  left and right must be set by caller to the appropriate bounds within mFields.
+Object::FieldType *Object::FindField(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos)
+// left and right must be set by caller to the appropriate bounds within mFields.
 {
-	INT_PTR mid, result;
+	INT_PTR mid;
+	// Optimize for common arrays such as [a,b,c] where keys are consecutive numbers starting at 1.
+	// In such cases, the needed key can be found immediately.  Benchmarks show that starting the
+	// search this way can also benefit sparse arrays, and has little effect on associative arrays
+	// (keyed with a precalculated set of 100 or 2000 random integers between 0x10000 and 0x2000000).
+	if ((mid = left + val - 1) > right)
+	{
+		// I couldn't come up with a data set or pattern where the standard starting calculation
+		// actually performed better, so start the search by comparing the last element's key.
+		// This improves performance when appending to an array via assignment.  Benchmarks show
+		// marginal improvements for other cases, probably due to slightly smaller code size.
+		//if (--mid != right) // Optimize for appending via incrementing index: this[n++].
+		//	mid = (left + right) / 2; // Fall back to standard binary search.
+		mid = right;
+	}
+	for ( ; left <= right; mid = (left + right) / 2)
+	{
+		FieldType &field = mFields[mid];
+		
+		auto result = val - field.key.i;
+		
+		if (result < 0)
+			right = mid - 1;
+		else if (result > 0)
+			left = mid + 1;
+		else
+			return &field;
+	}
+	insert_pos = left;
+	return NULL;
+}
+
+Object::FieldType *Object::FindField(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos)
+// left and right must be set by caller to the appropriate bounds within mFields.
+{
+	INT_PTR mid;
+	int first_char = *val;
+	if (first_char <= 'Z' && first_char >= 'A')
+		first_char += 32;
 	while (left <= right)
 	{
 		mid = (left + right) / 2;
 		
 		FieldType &field = mFields[mid];
 		
-		result = field.CompareKey(val);
+		// key_c contains the lower-case version of key.s[0].  Checking key_c first
+		// allows the _tcsicmp() call to be skipped whenever the first character differs.
+		// This also means that key.s isn't dereferenced, which means one less potential
+		// CPU cache miss (where we wait for the data to be pulled from RAM into cache).
+		// field.key_c might cause a cache miss, but it's very likely that key.s will be
+		// read into cache at the same time (but only the pointer value, not the chars).
+		int result = first_char - field.key_c;
+		if (!result)
+			result = _tcsicmp(val, field.key.s);
 		
 		if (result < 0)
 			right = mid - 1;
@@ -1550,7 +1596,7 @@ Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, IndexType
 		left = mKeyOffsetString;
 		right = mFieldCount - 1; // String keys are last in the mFields array.
 
-		return FindField<LPTSTR>(key.s, left, right, insert_pos);
+		return FindField(key.s, left, right, insert_pos);
 	}
 	else // key_type == SYM_INTEGER || key_type == SYM_OBJECT
 	{
@@ -1565,7 +1611,7 @@ Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, IndexType
 			right = mKeyOffsetString - 1; // Object keys end where String keys begin.
 		}
 		// Both may be treated as integer since left/right exclude keys of an incorrect type:
-		return FindField<IntKeyType>(key.i, left, right, insert_pos);
+		return FindField(key.i, left, right, insert_pos);
 	}
 }
 
@@ -1575,7 +1621,6 @@ void Object::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_ty
 // for example, guis[WinExist()] := x ... x := guis[A_Gui] would fail because A_Gui returns a
 // string.  Strings are converted to integers only where conversion back to string produces
 // the same string, so for instance, "01" and " 1 " and "+0x8000" are left as strings.
-// Integers which are too large for IntKeyType are converted to strings, to avoid data loss.
 {
 	SymbolType inner_type = key_token.symbol;
 	if (inner_type == SYM_VAR)
@@ -1596,14 +1641,9 @@ void Object::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_ty
 	}
 	if (inner_type == SYM_INTEGER)
 	{
-		__int64 token_int = TokenToInt64(key_token);
-		key.i = IntKeyType(token_int);
-		if (__int64(key.i) == token_int) // Confirm round trip is possible.
-		{
-			key_type = SYM_INTEGER;
-			return;
-		}
-		// Round trip isn't possible, so store it as a string.
+		key.i = TokenToInt64(key_token);
+		key_type = SYM_INTEGER;
+		return;
 	}
 	key_type = SYM_STRING; // Set default for simplicity.
 	key.s = TokenToString(key_token, buf);
@@ -1681,7 +1721,9 @@ Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, IndexType at
 	++mFieldCount; // Only after memmove above.
 	
 	// Update key-type offsets based on where and what was inserted; also update this key's ref count:
-	if (key_type != SYM_STRING)
+	if (key_type == SYM_STRING)
+		field.key_c = ctolower(*key.s);
+	else
 	{
 		// Must be either SYM_INTEGER or SYM_OBJECT, which both precede SYM_STRING.
 		++mKeyOffsetString;
