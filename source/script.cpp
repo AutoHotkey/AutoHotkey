@@ -33,266 +33,235 @@ ExprOpFunc g_ObjGet(Op_ObjInvoke, IT_GET), g_ObjSet(Op_ObjInvoke, IT_SET); // Al
 ExprOpFunc g_FuncClose(BIF_Func, FID_FuncClose);
 
 #define NA MAX_FUNCTION_PARAMS
-#define BIFn(name, minp, maxp, hasret, bif, ...) {_T(#name), bif, minp, maxp, hasret, FID_##name, __VA_ARGS__}
-#define BIF1(name, minp, maxp, hasret, ...) {_T(#name), BIF_##name, minp, maxp, hasret, 0, __VA_ARGS__}
+#define BIFn(name, minp, maxp, bif, ...) {_T(#name), bif, minp, maxp, FID_##name, __VA_ARGS__}
+#define BIF1(name, minp, maxp, ...) {_T(#name), BIF_##name, minp, maxp, 0, __VA_ARGS__}
 // The following array defines all built-in functions, their min and max parameter counts,
-// whether command-style calls give them an output var for the result, and which real C++
-// function contains their implementation.  The macros above are used to reduce repetition
-// and implement code-sharing: BIFs which share a C++ function are assigned an integer ID,
-// defined in the BuiltInFunctionID enum.  This is used instead of the previous method
-// (passing the function's name) in an attempt to reduce code size and improve readability.
+// and which real C++ function contains their implementation.  The macros above are used to
+// reduce repetition and implement code-sharing: BIFs which share a C++ function are assigned
+// an integer ID, defined in the BuiltInFunctionID enum.  Items must be in alphabetical order.
 FuncEntry g_BIF[] =
 {
-	BIF1(GuiCreate, 0, 3, true),
-	BIF1(GuiFromHwnd, 1, 2, true),
-	BIF1(GuiCtrlFromHwnd, 1, 1, true),
-
-	BIF1(IL_Create, 0, 3, true),
-	BIF1(IL_Destroy, 1, 1, true),
-	BIF1(IL_Add, 2, 4, true),
-
-	BIF1(StrLen, 1, 1, true),
-	BIF1(SubStr, 2, 3, true),
-	BIFn(Trim, 1, 2, true, BIF_Trim),
-	BIFn(LTrim, 1, 2, true, BIF_Trim),
-	BIFn(RTrim, 1, 2, true, BIF_Trim),
-	BIF1(InStr, 2, 5, true),
-	BIF1(StrSplit, 1, 4, true),
-	BIFn(StrLower, 1, 2, true, BIF_StrCase),
-	BIFn(StrUpper, 1, 2, true, BIF_StrCase),
-	BIF1(StrReplace, 2, 5, true, {4}),
-	BIF1(Sort, 1, 2, true),
-	BIFn(RegExMatch, 2, 4, true, BIF_RegEx, {3}),
-	BIFn(RegExReplace, 2, 6, true, BIF_RegEx, {4}),
-	BIF1(Format, 1, NA, true),
-	BIF1(FormatTime, 0, 2, true),
-	BIF1(ClipboardAll, 0, 2, true),
-
-	BIFn(EnvGet, 1, 1, true, BIF_Env),
-	BIFn(EnvSet, 1, 2, false, BIF_Env),
-	BIF1(SysGet, 1, 1, true),
-	BIFn(PostMessage, 1, 8, false, BIF_PostSendMessage),
-	BIFn(SendMessage, 1, 9, true, BIF_PostSendMessage),
-
-	BIF1(MsgBox, 0, 3, false),
-	BIF1(InputBox, 0, 4, true),
-
-	BIFn(Input, 0, 3, true, BIF_Input),
-	BIFn(InputEnd, 0, 0, false, BIF_Input),
-
-	BIF1(GetKeyState, 1, 2, true),
-	BIFn(GetKeyName, 1, 1, true, BIF_GetKeyName),
-	BIFn(GetKeyVK, 1, 1, true, BIF_GetKeyName),
-	BIFn(GetKeySC, 1, 1, true, BIF_GetKeyName),
-
-	BIF1(Ord, 1, 1, true),
-	BIF1(Chr, 1, 1, true),
-	BIFn(StrGet, 1, 3, true, BIF_StrGetPut),
-	BIFn(StrPut, 1, 4, true, BIF_StrGetPut),
-	BIF1(NumGet, 1, 3, true),
-	BIF1(NumPut, 2, 4, true),
-	BIF1(IsLabel, 1, 1, true),
-	BIF1(Func, 1, 1, true),
-	BIF1(IsFunc, 1, 1, true),
-	BIF1(IsByRef, 1, 1, true, {1}),
-	BIF1(DllCall, 1, NA, true),
-	BIF1(VarSetCapacity, 1, 3, true, {1}),
-	BIFn(FileExist, 1, 1, true, BIF_FileExist),
-	BIFn(DirExist, 1, 1, true, BIF_FileExist),
-	BIFn(WinExist, 0, 4, true, BIF_WinExistActive),
-	BIFn(WinActive, 0, 4, true, BIF_WinExistActive),
-	BIF1(Round, 1, 2, true),
-	BIFn(Floor, 1, 1, true, BIF_FloorCeil),
-	BIFn(Ceil, 1, 1, true, BIF_FloorCeil),
-	BIF1(Mod, 2, 2, true),
-	BIF1(Abs, 1, 1, true),
-	BIF1(Sin, 1, 1, true),
-	BIF1(Cos, 1, 1, true),
-	BIF1(Tan, 1, 1, true),
-	BIFn(ASin, 1, 1, true, BIF_ASinACos),
-	BIFn(ACos, 1, 1, true, BIF_ASinACos),
-	BIF1(ATan, 1, 1, true),
-	BIF1(Exp, 1, 1, true),
-	BIFn(Sqrt, 1, 1, true, BIF_SqrtLogLn),
-	BIFn(Log, 1, 1, true, BIF_SqrtLogLn),
-	BIFn(Ln, 1, 1, true, BIF_SqrtLogLn),
-	BIFn(Min, 1, NA, true, BIF_MinMax),
-	BIFn(Max, 1, NA, true, BIF_MinMax),
-	BIF1(DateAdd, 3, 3, true),
-	BIF1(DateDiff, 3, 3, true),
-	BIF1(Hotkey, 1, 3, false),
-	BIF1(Hotstring, 1, 3, false),
-	BIF1(SetTimer, 0, 3, false),
-	BIF1(OnMessage, 2, 3, false),
-	BIF1(CallbackCreate, 1, 3, true),
-	BIF1(CallbackFree, 1, 1, false),
-	BIF1(Type, 1, 1, true),
-	BIF1(IsObject, 1, NA, true),
-	
-	BIF1(Object, 0, NA, true),
-	BIFn(ObjAddRef, 1, 1, true, BIF_ObjAddRefRelease),
-	BIFn(ObjRelease, 1, 1, true, BIF_ObjAddRefRelease),
-	BIF1(ObjBindMethod, 1, NA, true),
-	BIF1(ObjRawSet, 3, 3, false),
-
-	BIFn(ObjInsertAt, 3, NA, false, BIF_ObjXXX),
-	BIFn(ObjDelete, 2, 3, true, BIF_ObjXXX),
-	BIFn(ObjRemoveAt, 2, 3, true, BIF_ObjXXX),
-	BIFn(ObjPush, 2, NA, true, BIF_ObjXXX),
-	BIFn(ObjPop, 1, 1, true, BIF_ObjXXX),
-	BIFn(ObjLength, 1, 1, true, BIF_ObjXXX),
-	BIFn(ObjMaxIndex, 1, 1, true, BIF_ObjXXX),
-	BIFn(ObjMinIndex, 1, 1, true, BIF_ObjXXX),
-	BIFn(ObjHasKey, 2, 2, true, BIF_ObjXXX),
-	BIFn(ObjGetCapacity, 1, 2, true, BIF_ObjXXX),
-	BIFn(ObjSetCapacity, 2, 3, true, BIF_ObjXXX),
-	BIFn(ObjGetAddress, 2, 2, true, BIF_ObjXXX),
-	BIFn(ObjClone, 1, 1, true, BIF_ObjXXX),
-	BIFn(ObjNewEnum, 1, 1, true, BIF_ObjXXX),
-
-	BIF1(Array, 0, NA, true),
-	BIF1(FileOpen, 2, 3, true),
-	
-	BIF1(ComObject, 1, 3, true),
-	BIF1(ComObjActive, 1, 1, true),
-	BIF1(ComObjCreate, 1, 2, true),
-	BIF1(ComObjGet, 1, 1, true),
-	BIF1(ComObjConnect, 1, 2, false),
-	BIF1(ComObjError, 0, 1, true),
-	BIFn(ComObjType, 1, 2, true, BIF_ComObjTypeOrValue),
-	BIFn(ComObjValue, 1, 1, true, BIF_ComObjTypeOrValue),
-	BIF1(ComObjFlags, 1, 3, true),
-	BIF1(ComObjArray, 2, 9, true),
-	BIF1(ComObjQuery, 2, 3, true),
-	
-	BIF1(Exception, 1, 3, true),
-
-	BIFn(ControlFindItem, 1, 6, true, BIF_ControlGet),
-	BIFn(ControlGetChecked, 0, 5, true, BIF_ControlGet),
-	BIFn(ControlGetEnabled, 0, 5, true, BIF_ControlGet),
-	BIFn(ControlGetVisible, 0, 5, true, BIF_ControlGet),
-	BIFn(ControlGetTab, 0, 5, true, BIF_ControlGet),
-	BIFn(ControlGetChoice, 0, 5, true, BIF_ControlGet),
-	BIFn(ControlGetList, 0, 6, true, BIF_ControlGet),
-	BIFn(ControlGetLineCount, 0, 5, true, BIF_ControlGet),
-	BIFn(ControlGetCurrentLine, 0, 5, true, BIF_ControlGet),
-	BIFn(ControlGetCurrentCol, 0, 5, true, BIF_ControlGet),
-	BIFn(ControlGetLine, 1, 6, true, BIF_ControlGet),
-	BIFn(ControlGetSelected, 0, 5, true, BIF_ControlGet),
-	BIFn(ControlGetStyle, 0, 5, true, BIF_ControlGet),
-	BIFn(ControlGetExStyle, 0, 5, true, BIF_ControlGet),
-	BIFn(ControlGetHwnd, 0, 5, true, BIF_ControlGet),
-	BIF1(ControlGetFocus, 0, 4, true),
-	BIF1(ControlGetText, 0, 5, true),
-
-	BIFn(ControlSetChecked, 1, 6, false, BIF_Control),
-	BIFn(ControlSetEnabled, 1, 6, false, BIF_Control),
-	BIFn(ControlShow, 0, 5, false, BIF_Control),
-	BIFn(ControlHide, 0, 5, false, BIF_Control),
-	BIFn(ControlSetStyle, 1, 6, false, BIF_Control),
-	BIFn(ControlSetExStyle, 1, 6, false, BIF_Control),
-	BIFn(ControlShowDropDown, 0, 5, false, BIF_Control),
-	BIFn(ControlHideDropDown, 0, 5, false, BIF_Control),
-	BIFn(ControlSetTab, 1, 6, false, BIF_Control),
-	BIFn(ControlAddItem, 1, 6, false, BIF_Control),
-	BIFn(ControlDeleteItem, 1, 6, false, BIF_Control),
-	BIFn(ControlChoose, 1, 6, false, BIF_Control),
-	BIFn(ControlChooseString, 1, 6, false, BIF_Control),
-	BIFn(ControlEditPaste, 1, 6, false, BIF_Control),
-
-	BIF1(DirSelect, 0, 3, true),
-
-	BIFn(DriveEject, 0, 2, false, BIF_Drive),
-	BIFn(DriveLock, 1, 1, false, BIF_Drive),
-	BIFn(DriveUnlock, 1, 1, false, BIF_Drive),
-	BIFn(DriveSetLabel, 1, 2, false, BIF_Drive),
-
-	BIFn(DriveGetList, 0, 1, true, BIF_DriveGet),
-	BIFn(DriveGetFilesystem, 1, 1, true, BIF_DriveGet),
-	BIFn(DriveGetLabel, 1, 1, true, BIF_DriveGet),
-	BIFn(DriveGetSerial, 1, 1, true, BIF_DriveGet),
-	BIFn(DriveGetType, 1, 1, true, BIF_DriveGet),
-	BIFn(DriveGetStatus, 1, 1, true, BIF_DriveGet),
-	BIFn(DriveGetStatusCD, 0, 1, true, BIF_DriveGet),
-	BIFn(DriveGetCapacity, 1, 1, true, BIF_DriveGet),
-	BIFn(DriveGetSpaceFree, 1, 1, true, BIF_DriveGet),
-
-	BIF1(FileAppend, 1, 3, false),
-	BIF1(FileGetAttrib, 0, 1, true),
-	BIF1(FileGetSize, 0, 2, true),
-	BIF1(FileGetTime, 0, 2, true),
-	BIF1(FileGetVersion, 0, 1, true),
-	BIF1(FileRead, 1, 2, true),
-	BIF1(FileSelect, 0, 4, true),
-
-	BIF1(IniRead, 1, 4, true),
-	BIF1(PixelGetColor, 2, 3, true),
-	BIFn(RegDelete, 0, 2, false, BIF_Reg),
-	BIFn(RegDeleteKey, 0, 1, false, BIF_Reg),
-	BIFn(RegRead, 0, 2, true, BIF_Reg),
-	BIFn(RegWrite, 0, 4, false, BIF_Reg),
-	BIFn(Random, 0, 2, true, BIF_Random),
-	BIFn(RandomSeed, 1, 1, true, BIF_Random),
-	BIFn(SoundGet, 0, 3, true, BIF_Sound),
-	BIFn(SoundSet, 1, 4, false, BIF_Sound),
-	BIF1(StatusBarGetText, 0, 5, true),
-	BIF1(CaretGetPos, 0, 2, false, {1, 2}),
-
-	BIF1(WinGetClass, 0, 4, true),
-	BIF1(WinGetText, 0, 4, true),
-	BIF1(WinGetTitle, 0, 4, true),
-	BIFn(WinGetPos, 0, 8, false, BIF_WinGetPos, {1, 2, 3, 4}),
-	BIFn(WinGetClientPos, 0, 8, false, BIF_WinGetPos, {1, 2, 3, 4}),
-	BIFn(WinGetID, 0, 4, true, BIF_WinGet),
-	BIFn(WinGetIDLast, 0, 4, true, BIF_WinGet),
-	BIFn(WinGetPID, 0, 4, true, BIF_WinGet),
-	BIFn(WinGetProcessName, 0, 4, true, BIF_WinGet),
-	BIFn(WinGetProcessPath, 0, 4, true, BIF_WinGet),
-	BIFn(WinGetCount, 0, 4, true, BIF_WinGet),
-	BIFn(WinGetList, 0, 4, true, BIF_WinGet),
-	BIFn(WinGetMinMax, 0, 4, true, BIF_WinGet),
-	BIFn(WinGetControls, 0, 4, true, BIF_WinGet),
-	BIFn(WinGetControlsHwnd, 0, 4, true, BIF_WinGet),
-	BIFn(WinGetTransparent, 0, 4, true, BIF_WinGet),
-	BIFn(WinGetTransColor, 0, 4, true, BIF_WinGet),
-	BIFn(WinGetStyle, 0, 4, true, BIF_WinGet),
-	BIFn(WinGetExStyle, 0, 4, true, BIF_WinGet),
-
-	BIFn(WinSetTransparent, 1, 5, false, BIF_WinSet),
-	BIFn(WinSetTransColor, 1, 5, false, BIF_WinSet),
-	BIFn(WinSetAlwaysOnTop, 0, 5, false, BIF_WinSet),
-	BIFn(WinSetStyle, 1, 5, false, BIF_WinSet),
-	BIFn(WinSetExStyle, 1, 5, false, BIF_WinSet),
-	BIFn(WinSetEnabled, 1, 5, false, BIF_WinSet),
-	BIFn(WinSetRegion, 0, 5, false, BIF_WinSet),
-	
-	BIF1(WinRedraw, 0, 4, false),
-	
-	BIFn(WinMoveBottom, 0, 4, false, BIF_WinMoveTopBottom),
-	BIFn(WinMoveTop, 0, 4, false, BIF_WinMoveTopBottom),
-	
-	BIFn(ProcessExist, 0, 1, true, BIF_Process),
-	BIFn(ProcessClose, 1, 1, true, BIF_Process),
-	BIFn(ProcessWait, 1, 2, true, BIF_Process),
-	BIFn(ProcessWaitClose, 1, 2, true, BIF_Process),
-
-	BIF1(ProcessSetPriority, 1, 2, false),
-
-	BIFn(MonitorGet, 0, 5, false, BIF_MonitorGet, {2, 3, 4, 5}),
-	BIFn(MonitorGetWorkArea, 0, 5, false, BIF_MonitorGet, {2, 3, 4, 5}),
-	BIFn(MonitorGetCount, 0, 0, true, BIF_MonitorGet),
-	BIFn(MonitorGetPrimary, 0, 0, true, BIF_MonitorGet),
-	BIFn(MonitorGetName, 0, 1, true, BIF_MonitorGet),
-
-	BIFn(OnExit, 1, 2, false, BIF_OnExitOrClipboard),
-	BIFn(OnClipboardChange, 1, 2, false, BIF_OnExitOrClipboard),
-
-	BIFn(MenuCreate, 0, 0, true, BIF_Menu),
-	BIFn(MenuBarCreate, 0, 0, true, BIF_Menu),
-	BIFn(MenuFromHandle, 1, 1, true, BIF_Menu),
-	BIF1(TraySetIcon, 0, 3, false),
-
-	BIF1(LoadPicture, 1, 3, true),
+	BIF1(Abs, 1, 1),
+	BIFn(ACos, 1, 1, BIF_ASinACos),
+	BIF1(Array, 0, NA),
+	BIFn(ASin, 1, 1, BIF_ASinACos),
+	BIF1(ATan, 1, 1),
+	BIF1(CallbackCreate, 1, 3),
+	BIF1(CallbackFree, 1, 1),
+	BIF1(CaretGetPos, 0, 2, {1, 2}),
+	BIFn(Ceil, 1, 1, BIF_FloorCeil),
+	BIF1(Chr, 1, 1),
+	BIF1(ClipboardAll, 0, 2),
+	BIF1(ComObjActive, 1, 1),
+	BIF1(ComObjArray, 2, 9),
+	BIF1(ComObjConnect, 1, 2),
+	BIF1(ComObjCreate, 1, 2),
+	BIF1(ComObject, 1, 3),
+	BIF1(ComObjError, 0, 1),
+	BIF1(ComObjFlags, 1, 3),
+	BIF1(ComObjGet, 1, 1),
+	BIF1(ComObjQuery, 2, 3),
+	BIFn(ComObjType, 1, 2, BIF_ComObjTypeOrValue),
+	BIFn(ComObjValue, 1, 1, BIF_ComObjTypeOrValue),
+	BIFn(ControlAddItem, 1, 6, BIF_Control),
+	BIFn(ControlChoose, 1, 6, BIF_Control),
+	BIFn(ControlChooseString, 1, 6, BIF_Control),
+	BIFn(ControlDeleteItem, 1, 6, BIF_Control),
+	BIFn(ControlEditPaste, 1, 6, BIF_Control),
+	BIFn(ControlFindItem, 1, 6, BIF_ControlGet),
+	BIFn(ControlGetChecked, 0, 5, BIF_ControlGet),
+	BIFn(ControlGetChoice, 0, 5, BIF_ControlGet),
+	BIFn(ControlGetCurrentCol, 0, 5, BIF_ControlGet),
+	BIFn(ControlGetCurrentLine, 0, 5, BIF_ControlGet),
+	BIFn(ControlGetEnabled, 0, 5, BIF_ControlGet),
+	BIFn(ControlGetExStyle, 0, 5, BIF_ControlGet),
+	BIF1(ControlGetFocus, 0, 4),
+	BIFn(ControlGetHwnd, 0, 5, BIF_ControlGet),
+	BIFn(ControlGetLine, 1, 6, BIF_ControlGet),
+	BIFn(ControlGetLineCount, 0, 5, BIF_ControlGet),
+	BIFn(ControlGetList, 0, 6, BIF_ControlGet),
+	BIFn(ControlGetSelected, 0, 5, BIF_ControlGet),
+	BIFn(ControlGetStyle, 0, 5, BIF_ControlGet),
+	BIFn(ControlGetTab, 0, 5, BIF_ControlGet),
+	BIF1(ControlGetText, 0, 5),
+	BIFn(ControlGetVisible, 0, 5, BIF_ControlGet),
+	BIFn(ControlHide, 0, 5, BIF_Control),
+	BIFn(ControlHideDropDown, 0, 5, BIF_Control),
+	BIFn(ControlSetChecked, 1, 6, BIF_Control),
+	BIFn(ControlSetEnabled, 1, 6, BIF_Control),
+	BIFn(ControlSetExStyle, 1, 6, BIF_Control),
+	BIFn(ControlSetStyle, 1, 6, BIF_Control),
+	BIFn(ControlSetTab, 1, 6, BIF_Control),
+	BIFn(ControlShow, 0, 5, BIF_Control),
+	BIFn(ControlShowDropDown, 0, 5, BIF_Control),
+	BIF1(Cos, 1, 1),
+	BIF1(DateAdd, 3, 3),
+	BIF1(DateDiff, 3, 3),
+	BIFn(DirExist, 1, 1, BIF_FileExist),
+	BIF1(DirSelect, 0, 3),
+	BIF1(DllCall, 1, NA),
+	BIFn(DriveEject, 0, 2, BIF_Drive),
+	BIFn(DriveGetCapacity, 1, 1, BIF_DriveGet),
+	BIFn(DriveGetFilesystem, 1, 1, BIF_DriveGet),
+	BIFn(DriveGetLabel, 1, 1, BIF_DriveGet),
+	BIFn(DriveGetList, 0, 1, BIF_DriveGet),
+	BIFn(DriveGetSerial, 1, 1, BIF_DriveGet),
+	BIFn(DriveGetSpaceFree, 1, 1, BIF_DriveGet),
+	BIFn(DriveGetStatus, 1, 1, BIF_DriveGet),
+	BIFn(DriveGetStatusCD, 0, 1, BIF_DriveGet),
+	BIFn(DriveGetType, 1, 1, BIF_DriveGet),
+	BIFn(DriveLock, 1, 1, BIF_Drive),
+	BIFn(DriveSetLabel, 1, 2, BIF_Drive),
+	BIFn(DriveUnlock, 1, 1, BIF_Drive),
+	BIFn(EnvGet, 1, 1, BIF_Env),
+	BIFn(EnvSet, 1, 2, BIF_Env),
+	BIF1(Exception, 1, 3),
+	BIF1(Exp, 1, 1),
+	BIF1(FileAppend, 1, 3),
+	BIFn(FileExist, 1, 1, BIF_FileExist),
+	BIF1(FileGetAttrib, 0, 1),
+	BIF1(FileGetSize, 0, 2),
+	BIF1(FileGetTime, 0, 2),
+	BIF1(FileGetVersion, 0, 1),
+	BIF1(FileOpen, 2, 3),
+	BIF1(FileRead, 1, 2),
+	BIF1(FileSelect, 0, 4),
+	BIFn(Floor, 1, 1, BIF_FloorCeil),
+	BIF1(Format, 1, NA),
+	BIF1(FormatTime, 0, 2),
+	BIF1(Func, 1, 1),
+	BIFn(GetKeyName, 1, 1, BIF_GetKeyName),
+	BIFn(GetKeySC, 1, 1, BIF_GetKeyName),
+	BIF1(GetKeyState, 1, 2),
+	BIFn(GetKeyVK, 1, 1, BIF_GetKeyName),
+	BIF1(GuiCreate, 0, 3),
+	BIF1(GuiCtrlFromHwnd, 1, 1),
+	BIF1(GuiFromHwnd, 1, 2),
+	BIF1(Hotkey, 1, 3),
+	BIF1(Hotstring, 1, 3),
+	BIF1(IL_Add, 2, 4),
+	BIF1(IL_Create, 0, 3),
+	BIF1(IL_Destroy, 1, 1),
+	BIF1(IniRead, 1, 4),
+	BIFn(Input, 0, 3, BIF_Input),
+	BIF1(InputBox, 0, 4),
+	BIFn(InputEnd, 0, 0, BIF_Input),
+	BIF1(InStr, 2, 5),
+	BIF1(IsByRef, 1, 1, {1}),
+	BIF1(IsFunc, 1, 1),
+	BIF1(IsLabel, 1, 1),
+	BIF1(IsObject, 1, NA),
+	BIFn(Ln, 1, 1, BIF_SqrtLogLn),
+	BIF1(LoadPicture, 1, 3),
+	BIFn(Log, 1, 1, BIF_SqrtLogLn),
+	BIFn(LTrim, 1, 2, BIF_Trim),
+	BIFn(Max, 1, NA, BIF_MinMax),
+	BIFn(MenuBarCreate, 0, 0, BIF_Menu),
+	BIFn(MenuCreate, 0, 0, BIF_Menu),
+	BIFn(MenuFromHandle, 1, 1, BIF_Menu),
+	BIFn(Min, 1, NA, BIF_MinMax),
+	BIF1(Mod, 2, 2),
+	BIFn(MonitorGet, 0, 5, BIF_MonitorGet, {2, 3, 4, 5}),
+	BIFn(MonitorGetCount, 0, 0, BIF_MonitorGet),
+	BIFn(MonitorGetName, 0, 1, BIF_MonitorGet),
+	BIFn(MonitorGetPrimary, 0, 0, BIF_MonitorGet),
+	BIFn(MonitorGetWorkArea, 0, 5, BIF_MonitorGet, {2, 3, 4, 5}),
+	BIF1(MsgBox, 0, 3),
+	BIF1(NumGet, 1, 3),
+	BIF1(NumPut, 2, 4),
+	BIFn(ObjAddRef, 1, 1, BIF_ObjAddRefRelease),
+	BIF1(ObjBindMethod, 1, NA),
+	BIFn(ObjClone, 1, 1, BIF_ObjXXX),
+	BIFn(ObjDelete, 2, 3, BIF_ObjXXX),
+	BIF1(Object, 0, NA),
+	BIFn(ObjGetAddress, 2, 2, BIF_ObjXXX),
+	BIFn(ObjGetCapacity, 1, 2, BIF_ObjXXX),
+	BIFn(ObjHasKey, 2, 2, BIF_ObjXXX),
+	BIFn(ObjInsertAt, 3, NA, BIF_ObjXXX),
+	BIFn(ObjLength, 1, 1, BIF_ObjXXX),
+	BIFn(ObjMaxIndex, 1, 1, BIF_ObjXXX),
+	BIFn(ObjMinIndex, 1, 1, BIF_ObjXXX),
+	BIFn(ObjNewEnum, 1, 1, BIF_ObjXXX),
+	BIFn(ObjPop, 1, 1, BIF_ObjXXX),
+	BIFn(ObjPush, 2, NA, BIF_ObjXXX),
+	BIF1(ObjRawSet, 3, 3),
+	BIFn(ObjRelease, 1, 1, BIF_ObjAddRefRelease),
+	BIFn(ObjRemoveAt, 2, 3, BIF_ObjXXX),
+	BIFn(ObjSetCapacity, 2, 3, BIF_ObjXXX),
+	BIFn(OnClipboardChange, 1, 2, BIF_OnExitOrClipboard),
+	BIFn(OnExit, 1, 2, BIF_OnExitOrClipboard),
+	BIF1(OnMessage, 2, 3),
+	BIF1(Ord, 1, 1),
+	BIF1(PixelGetColor, 2, 3),
+	BIFn(PostMessage, 1, 8, BIF_PostSendMessage),
+	BIFn(ProcessClose, 1, 1, BIF_Process),
+	BIFn(ProcessExist, 0, 1, BIF_Process),
+	BIF1(ProcessSetPriority, 1, 2),
+	BIFn(ProcessWait, 1, 2, BIF_Process),
+	BIFn(ProcessWaitClose, 1, 2, BIF_Process),
+	BIFn(Random, 0, 2, BIF_Random),
+	BIFn(RandomSeed, 1, 1, BIF_Random),
+	BIFn(RegDelete, 0, 2, BIF_Reg),
+	BIFn(RegDeleteKey, 0, 1, BIF_Reg),
+	BIFn(RegExMatch, 2, 4, BIF_RegEx, {3}),
+	BIFn(RegExReplace, 2, 6, BIF_RegEx, {4}),
+	BIFn(RegRead, 0, 2, BIF_Reg),
+	BIFn(RegWrite, 0, 4, BIF_Reg),
+	BIF1(Round, 1, 2),
+	BIFn(RTrim, 1, 2, BIF_Trim),
+	BIFn(SendMessage, 1, 9, BIF_PostSendMessage),
+	BIF1(SetTimer, 0, 3),
+	BIF1(Sin, 1, 1),
+	BIF1(Sort, 1, 2),
+	BIFn(SoundGet, 0, 3, BIF_Sound),
+	BIFn(SoundSet, 1, 4, BIF_Sound),
+	BIFn(Sqrt, 1, 1, BIF_SqrtLogLn),
+	BIF1(StatusBarGetText, 0, 5),
+	BIFn(StrGet, 1, 3, BIF_StrGetPut),
+	BIF1(StrLen, 1, 1),
+	BIFn(StrLower, 1, 2, BIF_StrCase),
+	BIFn(StrPut, 1, 4, BIF_StrGetPut),
+	BIF1(StrReplace, 2, 5, {4}),
+	BIF1(StrSplit, 1, 4),
+	BIFn(StrUpper, 1, 2, BIF_StrCase),
+	BIF1(SubStr, 2, 3),
+	BIF1(SysGet, 1, 1),
+	BIF1(Tan, 1, 1),
+	BIF1(TraySetIcon, 0, 3),
+	BIFn(Trim, 1, 2, BIF_Trim),
+	BIF1(Type, 1, 1),
+	BIF1(VarSetCapacity, 1, 3, {1}),
+	BIFn(WinActive, 0, 4, BIF_WinExistActive),
+	BIFn(WinExist, 0, 4, BIF_WinExistActive),
+	BIF1(WinGetClass, 0, 4),
+	BIFn(WinGetClientPos, 0, 8, BIF_WinGetPos, {1, 2, 3, 4}),
+	BIFn(WinGetControls, 0, 4, BIF_WinGet),
+	BIFn(WinGetControlsHwnd, 0, 4, BIF_WinGet),
+	BIFn(WinGetCount, 0, 4, BIF_WinGet),
+	BIFn(WinGetExStyle, 0, 4, BIF_WinGet),
+	BIFn(WinGetID, 0, 4, BIF_WinGet),
+	BIFn(WinGetIDLast, 0, 4, BIF_WinGet),
+	BIFn(WinGetList, 0, 4, BIF_WinGet),
+	BIFn(WinGetMinMax, 0, 4, BIF_WinGet),
+	BIFn(WinGetPID, 0, 4, BIF_WinGet),
+	BIFn(WinGetPos, 0, 8, BIF_WinGetPos, {1, 2, 3, 4}),
+	BIFn(WinGetProcessName, 0, 4, BIF_WinGet),
+	BIFn(WinGetProcessPath, 0, 4, BIF_WinGet),
+	BIFn(WinGetStyle, 0, 4, BIF_WinGet),
+	BIF1(WinGetText, 0, 4),
+	BIF1(WinGetTitle, 0, 4),
+	BIFn(WinGetTransColor, 0, 4, BIF_WinGet),
+	BIFn(WinGetTransparent, 0, 4, BIF_WinGet),
+	BIFn(WinMoveBottom, 0, 4, BIF_WinMoveTopBottom),
+	BIFn(WinMoveTop, 0, 4, BIF_WinMoveTopBottom),
+	BIF1(WinRedraw, 0, 4),
+	BIFn(WinSetAlwaysOnTop, 0, 5, BIF_WinSet),
+	BIFn(WinSetEnabled, 1, 5, BIF_WinSet),
+	BIFn(WinSetExStyle, 1, 5, BIF_WinSet),
+	BIFn(WinSetRegion, 0, 5, BIF_WinSet),
+	BIFn(WinSetStyle, 1, 5, BIF_WinSet),
+	BIFn(WinSetTransColor, 1, 5, BIF_WinSet),
+	BIFn(WinSetTransparent, 1, 5, BIF_WinSet),
 };
 #undef NA
 #undef BIFn
@@ -550,6 +519,10 @@ Script::Script()
 	if (sizeof(ActionTypeType) == 1 && g_ActionCount > 256)
 		ScriptError(_T("DEBUG: Since there are now more than 256 Action Types, the ActionTypeType")
 			_T(" typedef must be changed."));
+	// Ensure binary-search arrays are sorted correctly:
+	for (int i = 1; i < _countof(g_BIF); ++i)
+		if (_tcsicmp(g_BIF[i-1].mName, g_BIF[i].mName) >= 0)
+			ScriptError(_T("DEBUG: g_BIF out of order."), g_BIF[i].mName);
 #endif
 	OleInitialize(NULL);
 }
@@ -6703,22 +6676,11 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	// Since above didn't return, there is no match.  See if it's a built-in function that hasn't yet
 	// been added to the function list.
 
-	FuncEntry bif;
-	UCHAR *bif_output_vars = NULL;
-	bif.mBIF = NULL; // Set default.
+	FuncEntry *pbif = FindBuiltInFunc(func_name);
+	UCHAR *bif_output_vars = pbif ? pbif->mOutputVars : NULL;
 	ActionTypeType action_type = ACT_INVALID;
 
-	for (int i = 0; i < _countof(g_BIF); i++)
-	{
-		if (!_tcsicmp(g_BIF[i].mName, func_name))
-		{
-			bif = g_BIF[i]; // Struct copy.
-			bif_output_vars = g_BIF[i].mOutputVars;
-			break;
-		}
-	}
-
-	if (!bif.mBIF)
+	if (!pbif)
 	{
 		// The following handles those commands which have not yet been converted to BIFs,
 		// excluding control flow statements (which are not "functions" and can't work this way):
@@ -6727,6 +6689,8 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 			return NULL;
 		// Otherwise, there is a command with this name which can be converted to a function.
 
+		pbif = (FuncEntry *)_alloca(sizeof(FuncEntry));
+		FuncEntry &bif = *pbif;
 		bif.mBIF = BIF_PerformAction;
 		bif.mMinParams = g_act[action_type].MinParams;
 		bif.mMaxParams = g_act[action_type].MaxParams;
@@ -6752,6 +6716,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 			bif.mMaxParams--;
 		}
 	}
+	FuncEntry &bif = *pbif;
 
 	// Since above didn't return, this is a built-in function that hasn't yet been added to the list.
 	// Add it now:
@@ -6762,9 +6727,28 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	pfunc->mMinParams = bif.mMinParams;
 	pfunc->mParamCount = bif.mMaxParams;
 	pfunc->mID = (BuiltInFunctionID)bif.mID;
-	pfunc->mOutputVars = bif_output_vars; // Not bif.mOutputVars, which is on the stack (and bif_output_vars may have been overridden above).
+	pfunc->mOutputVars = bif_output_vars; // Not bif.mOutputVars, which may be temporary (and bif_output_vars may have been overridden above).
 
 	return pfunc;
+}
+
+
+
+FuncEntry *Script::FindBuiltInFunc(LPTSTR aFuncName)
+{
+	int left, right, mid, result;
+	for (left = 0, right = _countof(g_BIF) - 1; left <= right;)
+	{
+		mid = (left + right) / 2;
+		result = _tcsicmp(aFuncName, g_BIF[mid].mName);
+		if (result > 0)
+			left = mid + 1;
+		else if (result < 0)
+			right = mid - 1;
+		else // Match found.
+			return &g_BIF[mid];
+	}
+	return NULL;
 }
 
 

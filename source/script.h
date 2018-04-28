@@ -1854,7 +1854,6 @@ struct FuncEntry
 	LPCTSTR mName;
 	BuiltInFunctionType mBIF;
 	UCHAR mMinParams, mMaxParams;
-	bool mHasReturn;
 	UCHAR mID;
 	UCHAR mOutputVars[MAX_FUNC_OUTPUT_VAR];
 };
@@ -2831,6 +2830,7 @@ public:
 	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
 #endif
 	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = -1, int *apInsertPos = NULL);
+	FuncEntry *FindBuiltInFunc(LPTSTR aFuncName);
 	Func *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos, Object *aClassObject = NULL);
 
 	ResultType DefineClass(LPTSTR aBuf);
