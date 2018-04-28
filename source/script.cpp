@@ -12316,31 +12316,8 @@ BIF_DECL(BIF_PerformAction)
 	ArgStruct arg[MAX_ARGS];
 	
 	TCHAR number_buf[MAX_ARGS * MAX_NUMBER_SIZE]; // Enough for worst case.
-	Var *output_var;
-	Var stack_var;
 
-	int i = 0;
-
-	if (max_params && arg_type[0] == ARG_TYPE_OUTPUT_VAR && arg_type[1] != ARG_TYPE_OUTPUT_VAR)
-	{
-		// This command's first arg is an output variable and its second arg is not.
-		// Insert an implicit output variable to receive the return value:
-		arg[0].type = ARG_TYPE_OUTPUT_VAR;
-		arg[0].deref = (DerefType *)(output_var = &stack_var);
-		arg[0].text = _T(""); // text not needed.
-		//arg[0].length = 0;
-		arg[0].is_expression = false;
-		--aParam; // i.e. make aParam[1] the first parameter.
-		++aParamCount;
-		++i;
-	}
-	else
-	{
-		// Use ErrorLevel as the return value:
-		output_var = g_ErrorLevel;
-	}
-
-	for ( ; i < aParamCount; ++i)
+	for (int i = 0; i < aParamCount; ++i)
 	{
 		arg[i].is_expression = false;
 
@@ -12370,7 +12347,6 @@ BIF_DECL(BIF_PerformAction)
 			// are commands which assume sArgVar[] is non-NULL.
 			sntprintf(aResultToken.buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
 				, i+1, aResultToken.func->mName);
-			stack_var.Free(VAR_ALWAYS_FREE); // It might've been used as an input var.
 			_f_throw(aResultToken.buf);
 		}
 		
@@ -12407,18 +12383,13 @@ BIF_DECL(BIF_PerformAction)
 		// On failure, ExpandArgs() has called LineError(), which has thrown an exception.
 		g->ExcptLine = g_script.mCurrLine; // See comments under Perform().
 		g->InTryBlock = in_try;
-		stack_var.Free(VAR_ALWAYS_FREE); // It might've been used as an input var.
 		return;
 	}
 
-	// Back up ErrorLevel and reset it to avoid returning an irrelevant value.  As an added
-	// benefit, ErrorLevel is not affected by the function if it is used as the return value.
+	// Back up ErrorLevel and reset it so we can detect whether it is used.
 	VarBkp el_bkp;
-	if (output_var == g_ErrorLevel)
-	{
-		g_ErrorLevel->Backup(el_bkp);
-		g_ErrorLevel->MarkInitialized();
-	}
+	g_ErrorLevel->Backup(el_bkp);
+	g_ErrorLevel->MarkInitialized();
 
 
 	// PERFORM THE ACTION
@@ -12426,8 +12397,8 @@ BIF_DECL(BIF_PerformAction)
 
 	if (result == OK) // Can be OK, FAIL or EARLY_EXIT.
 	{
-		if (output_var == g_ErrorLevel 
-			&& act != ACT_RUNWAIT // ErrorLevel is an exit code (not boolean error indicator) in this case.
+		Var *output_var = g_ErrorLevel;
+		if (act != ACT_RUNWAIT // ErrorLevel is an exit code (not boolean error indicator) in this case.
 			&& output_var->HasContents()) // Commands which don't set ErrorLevel at all shouldn't return 1.
 		{
 			aResultToken.Return(!VarToBOOL(*output_var)); // Return TRUE for success, otherwise FALSE.
@@ -12457,13 +12428,11 @@ BIF_DECL(BIF_PerformAction)
 	g->InTryBlock = in_try;
 
 	// If the command did not set ErrorLevel, restore it to its previous value.
-	if (output_var == g_ErrorLevel && !output_var->HasContents())
+	if (!g_ErrorLevel->HasContents())
 	{
 		g_ErrorLevel->Free(VAR_ALWAYS_FREE); // For the unlikely case that memory was allocated but not used.
 		g_ErrorLevel->Restore(el_bkp);
 	}
-	// Free the stack variable (which may have been used as an output and/or input variable).
-	stack_var.Free(VAR_ALWAYS_FREE);
 }
 
 
