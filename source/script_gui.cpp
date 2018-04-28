@@ -394,7 +394,12 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 				if (result != OK)
 					return result; // Already displayed error.
 			}
-			_o_return_empty; // TODO
+			if (mMenu)
+			{
+				mMenu->AddRef();
+				_o_return(mMenu);
+			}
+			_o_return_empty;
 		}
 		case P_Control:
 		{
