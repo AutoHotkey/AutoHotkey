@@ -11580,6 +11580,66 @@ end:
 #endif
 
 
+void ObjectToString(ResultToken &aResultToken, ExprTokenType &aThisToken, IObject *aObject)
+{
+	// Something like this should be done for every TokenToString() call or
+	// equivalent, but major changes are needed before that will be feasible.
+	// For now, String(anytype) provides a limited workaround.
+	ExprTokenType method_name = _T("ToString");
+	ExprTokenType *params = &method_name;
+	switch (aObject->Invoke(aResultToken, aThisToken, IT_CALL, &params, 1))
+	{
+	case INVOKE_NOT_HANDLED:
+		aResultToken.Error(ERR_UNKNOWN_METHOD, _T("ToString"));
+		break;
+	case FAIL:
+		aResultToken.SetExitResult(FAIL);
+		break;
+	}
+}
+
+
+BIF_DECL(BIF_String)
+{
+	aResultToken.symbol = SYM_STRING;
+	switch (aParam[0]->symbol)
+	{
+	case SYM_STRING:
+		aResultToken.marker = aParam[0]->marker;
+		aResultToken.marker_length = aParam[0]->marker_length;
+		break;
+	case SYM_VAR:
+		if (aParam[0]->var->HasObject())
+		{
+			ObjectToString(aResultToken, *aParam[0], aParam[0]->var->Object());
+			break;
+		}
+		aResultToken.marker = aParam[0]->var->Contents();
+		aResultToken.marker_length = aParam[0]->var->CharLength();
+		break;
+	case SYM_INTEGER:
+		aResultToken.marker = ITOA64(aParam[0]->value_int64, _f_retval_buf);
+		break;
+	case SYM_FLOAT:
+		aResultToken.marker = _f_retval_buf;
+		aResultToken.marker_length = FTOA(aParam[0]->value_double, aResultToken.marker, _f_retval_buf_size);
+		break;
+	case SYM_OBJECT:
+		ObjectToString(aResultToken, *aParam[0], aParam[0]->object);
+		break;
+	case SYM_MISSING:
+		_f_throw(ERR_PARAM1_REQUIRED);
+		break;
+#ifdef _DEBUG
+	default:
+		MsgBox(_T("DEBUG: type not handled"));
+		_f_return_FAIL;
+#endif
+	}
+}
+
+
+
 BIF_DECL(BIF_StrLen)
 {
 	// Caller has ensured that there's exactly one actual parameter.
@@ -14100,6 +14160,22 @@ BIF_DECL(BIF_FloorCeil)
 	// type casting.  The below seems to fix this without breaking the answers for other inputs (which is
 	// surprisingly harder than it seemed).  There is a similar fix in BIF_Round().
 	_f_return_i((__int64)(x + (x > 0 ? 0.2 : -0.2)));
+}
+
+
+
+BIF_DECL(BIF_Integer)
+{
+	Throw_if_Param_NaN(0);
+	_f_return_i(ParamIndexToInt64(0));
+}
+
+
+
+BIF_DECL(BIF_Float)
+{
+	Throw_if_Param_NaN(0);
+	_f_return(ParamIndexToDouble(0));
 }
 
 

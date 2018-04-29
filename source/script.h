@@ -3040,6 +3040,7 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free = NULL);
 BIF_DECL(BIF_DllCall);
 #endif
 
+BIF_DECL(BIF_String);
 BIF_DECL(BIF_StrLen);
 BIF_DECL(BIF_SubStr);
 BIF_DECL(BIF_InStr);
@@ -3066,6 +3067,8 @@ BIF_DECL(BIF_FileExist);
 BIF_DECL(BIF_WinExistActive);
 BIF_DECL(BIF_Round);
 BIF_DECL(BIF_FloorCeil);
+BIF_DECL(BIF_Integer);
+BIF_DECL(BIF_Float);
 BIF_DECL(BIF_Mod);
 BIF_DECL(BIF_Abs);
 BIF_DECL(BIF_Sin);
