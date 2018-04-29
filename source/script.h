@@ -221,6 +221,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_NO_OBJECT _T("No object to invoke.")
 #define ERR_UNKNOWN_PROPERTY _T("Unknown property.")
 #define ERR_UNKNOWN_METHOD _T("Unknown method.")
+#define ERR_PROPERTY_CALL _T("Cannot call a property")
 #define ERR_NO_GUI _T("No default GUI.")
 #define ERR_NO_STATUSBAR _T("No StatusBar.")
 #define ERR_NO_LISTVIEW _T("No ListView.")
