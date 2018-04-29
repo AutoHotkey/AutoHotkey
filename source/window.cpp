@@ -483,7 +483,7 @@ HWND WinClose(HWND aWnd, int aTimeToWaitForClose, bool aKillIfHung)
 	// the values our params, some of which may be in the deref buffer.  So be sure not
 	// to refer to those strings once MsgSleep() has been done, below:
 
-	// This is the same basic code used for ACT_WINWAITCLOSE and such:
+	// This is the same basic code used for WinWaitClose and such:
 	for (;;)
 	{
 		// Seems best to always do the first one regardless of the value 

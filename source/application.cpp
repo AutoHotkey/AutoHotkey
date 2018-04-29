@@ -369,7 +369,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				if (messages_received == 0 && allow_early_return)
 				{
 					// Fix for v1.1.05.04: Since Peek() didn't find a message, avoid maxing the CPU.
-					// This specific section is needed for PerformWait() when an underlying thread
+					// This specific section is needed for BIF_Wait() when an underlying thread
 					// is displaying a dialog, and perhaps in other cases.
 					// Fix for v1.1.07.00: Avoid Sleep() if caller specified a duration of zero;
 					// otherwise SendEvent with a key delay of 0 will be slower than expected.

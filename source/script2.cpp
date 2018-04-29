@@ -790,7 +790,7 @@ ResultType Line::PerformShowWindow(ActionTypeType aActionType, LPTSTR aTitle, LP
 
 
 
-ResultType Line::PerformWait()
+BIF_DECL(BIF_Wait)
 // Since other script threads can interrupt these commands while they're running, it's important that
 // these commands not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
 // This is because an interrupting thread usually changes the values to something inappropriate for this thread.
@@ -804,37 +804,45 @@ ResultType Line::PerformWait()
 	HANDLE running_process; // For RUNWAIT
 	DWORD exit_code; // For RUNWAIT
 
-	// For ACT_KEYWAIT:
+	// For FID_KeyWait:
 	bool wait_for_keydown;
 	KeyStateTypes key_state_type;
 	JoyControls joy;
 	int joystick_id;
 	ExprTokenType token;
-	TCHAR buf[LINE_SIZE];
 
-	if (mActionType == ACT_RUNWAIT)
+	Line *waiting_line = g_script.mCurrLine;
+
+	_f_param_string_opt(arg1, 0);
+	_f_param_string_opt(arg2, 1);
+	_f_param_string_opt(arg3, 2);
+	_f_param_string_opt(arg4, 3);
+	_f_param_string_opt(arg5, 4);
+
+	if (_f_callee_id == FID_RunWait)
 	{
-		if (!g_script.ActionExec(ARG1, NULL, ARG2, true, ARG3, &running_process, true, true, ARGVAR4)) // Load-time validation has ensured that the arg is a valid output variable (e.g. not a built-in var).
-			return FAIL;
+		if (!g_script.ActionExec(arg1, NULL, arg2, true, arg3, &running_process, true, true
+			, ParamIndexToOptionalVar(4-1)))
+			_f_return_FAIL;
 		//else fall through to the waiting-phase of the operation.
 	}
 	
 	// Must NOT use ELSE-IF in line below due to ELSE further down needing to execute for RunWait.
-	if (mActionType == ACT_KEYWAIT)
+	if (_f_callee_id == FID_KeyWait)
 	{
-		if (   !(vk = TextToVK(ARG1))   )
+		if (   !(vk = TextToVK(arg1))   )
 		{
-			joy = (JoyControls)ConvertJoy(ARG1, &joystick_id);
+			joy = (JoyControls)ConvertJoy(arg1, &joystick_id);
 			if (!IS_JOYSTICK_BUTTON(joy)) // Currently, only buttons are supported.
 				// It's either an invalid key name or an unsupported Joy-something.
-				return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
+				_f_throw(ERR_PARAM1_INVALID, arg1);
 		}
 		// Set defaults:
 		wait_for_keydown = false;  // The default is to wait for the key to be released.
 		key_state_type = KEYSTATE_PHYSICAL;  // Since physical is more often used.
 		wait_indefinitely = true;
 		sleep_duration = 0;
-		for (LPTSTR cp = ARG2; *cp; ++cp)
+		for (LPTSTR cp = arg2; *cp; ++cp)
 		{
 			switch(ctoupper(*cp))
 			{
@@ -854,13 +862,13 @@ ResultType Line::PerformWait()
 			}
 		}
 	}
-	else if (   (mActionType != ACT_RUNWAIT && mActionType != ACT_CLIPWAIT && *ARG3)
-		|| (mActionType == ACT_CLIPWAIT && *ARG1)   )
+	else if (   (_f_callee_id != FID_RunWait && _f_callee_id != FID_ClipWait && *arg3)
+		|| (_f_callee_id == FID_ClipWait && *arg1)   )
 	{
 		// Since the param containing the timeout value isn't blank, it must be numeric,
 		// otherwise, the loading validation would have prevented the script from loading.
 		wait_indefinitely = false;
-		sleep_duration = (int)(ATOF(mActionType == ACT_CLIPWAIT ? ARG1 : ARG3) * 1000); // Can be zero.
+		sleep_duration = (int)(ATOF(_f_callee_id == FID_ClipWait ? arg1 : arg3) * 1000); // Can be zero.
 		if (sleep_duration < 1)
 			// Waiting 500ms in place of a "0" seems more useful than a true zero, which
 			// doesn't need to be supported because it's the same thing as something like
@@ -875,88 +883,69 @@ ResultType Line::PerformWait()
 		sleep_duration = 0; // Just to catch any bugs.
 	}
 
-	if (mActionType != ACT_RUNWAIT)
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Set default ErrorLevel to be possibly overridden later on.
+	_f_set_retval_i(TRUE); // Set default return value to be possibly overridden later on.
 
-	bool any_clipboard_format = (mActionType == ACT_CLIPWAIT && ArgToInt(2) == 1);
-
-	// Right before starting the wait-loop, make a copy of our args using the stack
-	// space in our recursion layer.  This is done in case other hotkey subroutine(s)
-	// are launched while we're waiting here, which might cause our args to be overwritten
-	// if any of them happen to be in the Deref buffer:
-	LPTSTR arg[MAX_ARGS], marker;
-	int i, space_remaining;
-	for (i = 0, space_remaining = LINE_SIZE, marker = buf; i < mArgc; ++i)
-	{
-		if (!space_remaining) // Realistically, should never happen.
-			arg[i] = _T("");
-		else
-		{
-			arg[i] = marker;  // Point it to its place in the buffer.
-			tcslcpy(marker, sArgDeref[i], space_remaining); // Make the copy.
-			marker += _tcslen(marker) + 1;  // +1 for the zero terminator of each arg.
-			space_remaining = (int)(LINE_SIZE - (marker - buf));
-		}
-	}
+	bool any_clipboard_format = (_f_callee_id == FID_ClipWait && ATOI(arg2) == 1);
 
 	for (start_time = GetTickCount();;) // start_time is initialized unconditionally for use with v1.0.30.02's new logging feature further below.
 	{ // Always do the first iteration so that at least one check is done.
-		switch(mActionType)
+		switch(_f_callee_id)
 		{
-		case ACT_WINWAIT:
-			#define SAVED_WIN_ARGS SAVED_ARG1, SAVED_ARG2, SAVED_ARG4, SAVED_ARG5
-			if (WinExist(*g, SAVED_WIN_ARGS, false, true))
+		case FID_WinWait:
+			#define SAVED_WIN_ARGS arg1, arg2, arg4, arg5
+			if (HWND found = WinExist(*g, SAVED_WIN_ARGS, false, true))
 			{
 				DoWinDelay;
-				return OK;
+				_f_return_i((size_t)found);
 			}
 			break;
-		case ACT_WINWAITCLOSE:
-			if (!WinExist(*g, SAVED_WIN_ARGS))
+		case FID_WinWaitClose:
+			if (!WinExist(*g, SAVED_WIN_ARGS, false, true))
 			{
 				DoWinDelay;
-				return OK;
+				_f_return_retval;
 			}
 			break;
-		case ACT_WINWAITACTIVE:
-			if (WinActive(*g, SAVED_WIN_ARGS, true))
+		case FID_WinWaitActive:
+			if (HWND found = WinActive(*g, SAVED_WIN_ARGS, true))
 			{
 				DoWinDelay;
-				return OK;
+				_f_return_i((size_t)found);
 			}
 			break;
-		case ACT_WINWAITNOTACTIVE:
+		case FID_WinWaitNotActive:
 			if (!WinActive(*g, SAVED_WIN_ARGS, true))
 			{
 				DoWinDelay;
-				return OK;
+				_f_return_retval;
 			}
 			break;
-		case ACT_CLIPWAIT:
+		case FID_ClipWait:
 			// Seems best to consider CF_HDROP to be a non-empty clipboard, since we
 			// support the implicit conversion of that format to text:
 			if (any_clipboard_format)
 			{
 				if (CountClipboardFormats())
-					return OK;
+					_f_return_retval;
 			}
 			else
 				if (IsClipboardFormatAvailable(CF_NATIVETEXT) || IsClipboardFormatAvailable(CF_HDROP))
-					return OK;
+					_f_return_retval;
 			break;
-		case ACT_KEYWAIT:
+		case FID_KeyWait:
 			if (vk) // Waiting for key or mouse button, not joystick.
 			{
 				if (ScriptGetKeyState(vk, key_state_type) == wait_for_keydown)
-					return OK;
+					_f_return_retval;
 			}
 			else // Waiting for joystick button
 			{
-				if (ScriptGetJoyState(joy, joystick_id, token, buf) == wait_for_keydown)
-					return OK;
+				TCHAR unused[32];
+				if (ScriptGetJoyState(joy, joystick_id, token, unused) == wait_for_keydown)
+					_f_return_retval;
 			}
 			break;
-		case ACT_RUNWAIT:
+		case FID_RunWait:
 			// Pretty nasty, but for now, nothing is done to prevent an infinite loop.
 			// In the future, maybe OpenProcess() can be used to detect if a process still
 			// exists (is there any other way?):
@@ -978,7 +967,7 @@ ResultType Line::PerformWait()
 				// to check against a return value of -1, for example, which I suspect many apps
 				// return.  AutoIt3 (and probably 2) use a signed int as well, so that is another
 				// reason to keep it this way:
-				return g_ErrorLevel->Assign((int)exit_code);
+				_f_return_i((int)exit_code);
 			}
 			break;
 		}
@@ -1000,13 +989,13 @@ ResultType Line::PerformWait()
 				{
 					// ListLines is enabled in this thread, but if it was disabled in the interrupting thread,
 					// the very last log entry will be ours.  In that case, we don't want to duplicate it.
-					int previous_log_index = (sLogNext ? sLogNext : LINE_LOG_SIZE) - 1; // Wrap around if needed (the entry can be NULL in that case).
-					if (sLog[previous_log_index] != this || sLogTick[previous_log_index] != start_time) // The previously logged line was not this one, or it was added by the interrupting thread (different start_time).
+					int previous_log_index = (Line::sLogNext ? Line::sLogNext : LINE_LOG_SIZE) - 1; // Wrap around if needed (the entry can be NULL in that case).
+					if (Line::sLog[previous_log_index] != waiting_line || Line::sLogTick[previous_log_index] != start_time) // The previously logged line was not this one, or it was added by the interrupting thread (different start_time).
 					{
-						sLog[sLogNext] = this;
-						sLogTick[sLogNext++] = start_time; // Store a special value so that Line::LogToText() can report that its "still waiting" from earlier.
-						if (sLogNext >= LINE_LOG_SIZE)
-							sLogNext = 0;
+						Line::sLog[Line::sLogNext] = waiting_line;
+						Line::sLogTick[Line::sLogNext++] = start_time; // Store a special value so that Line::LogToText() can report that its "still waiting" from earlier.
+						if (Line::sLogNext >= LINE_LOG_SIZE)
+							Line::sLogNext = 0;
 						// The lines above are the similar to those used in ExecUntil(), so the two should be
 						// maintained together.
 					}
@@ -1014,7 +1003,7 @@ ResultType Line::PerformWait()
 			}
 		}
 		else // Done waiting.
-			return g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // Since it timed out, we override the default with this.
+			_f_return_i(FALSE); // Since it timed out, we override the default with this.
 	} // for()
 }
 

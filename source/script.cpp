@@ -52,6 +52,7 @@ FuncEntry g_BIF[] =
 	BIFn(Ceil, 1, 1, BIF_FloorCeil),
 	BIF1(Chr, 1, 1),
 	BIF1(ClipboardAll, 0, 2),
+	BIFn(ClipWait, 0, 2, BIF_Wait),
 	BIF1(ComObjActive, 1, 1),
 	BIF1(ComObjArray, 2, 9),
 	BIF1(ComObjConnect, 1, 2),
@@ -151,6 +152,7 @@ FuncEntry g_BIF[] =
 	BIF1(IsFunc, 1, 1),
 	BIF1(IsLabel, 1, 1),
 	BIF1(IsObject, 1, NA),
+	BIFn(KeyWait, 1, 2, BIF_Wait),
 	BIFn(Ln, 1, 1, BIF_SqrtLogLn),
 	BIF1(LoadPicture, 1, 3),
 	BIFn(Log, 1, 1, BIF_SqrtLogLn),
@@ -209,6 +211,7 @@ FuncEntry g_BIF[] =
 	BIFn(RegWrite, 0, 4, BIF_Reg),
 	BIF1(Round, 1, 2),
 	BIFn(RTrim, 1, 2, BIF_Trim),
+	BIFn(RunWait, 1, 4, BIF_Wait, {4}),
 	BIFn(SendMessage, 1, 9, BIF_PostSendMessage),
 	BIF1(SetTimer, 0, 3),
 	BIF1(Sin, 1, 1),
@@ -262,6 +265,10 @@ FuncEntry g_BIF[] =
 	BIFn(WinSetStyle, 1, 5, BIF_WinSet),
 	BIFn(WinSetTransColor, 1, 5, BIF_WinSet),
 	BIFn(WinSetTransparent, 1, 5, BIF_WinSet),
+	BIFn(WinWait, 0, 5, BIF_Wait),
+	BIFn(WinWaitActive, 0, 5, BIF_Wait),
+	BIFn(WinWaitClose, 0, 5, BIF_Wait),
+	BIFn(WinWaitNotActive, 0, 5, BIF_Wait),
 };
 #undef NA
 #undef BIFn
@@ -11803,15 +11810,6 @@ ResultType Line::Perform()
 	case ACT_RUN:
 		return g_script.ActionExec(ARG1, NULL, ARG2, true, ARG3, NULL, true, true, ARGVAR4); // Be sure to pass NULL for 2nd param.
 
-	case ACT_RUNWAIT:
-	case ACT_CLIPWAIT:
-	case ACT_KEYWAIT:
-	case ACT_WINWAIT:
-	case ACT_WINWAITCLOSE:
-	case ACT_WINWAITACTIVE:
-	case ACT_WINWAITNOTACTIVE:
-		return PerformWait();
-
 	case ACT_WINMOVE:
 		return WinMove(EIGHT_ARGS);
 
@@ -12388,8 +12386,7 @@ BIF_DECL(BIF_PerformAction)
 	if (result == OK) // Can be OK, FAIL or EARLY_EXIT.
 	{
 		Var *output_var = g_ErrorLevel;
-		if (act != ACT_RUNWAIT // ErrorLevel is an exit code (not boolean error indicator) in this case.
-			&& output_var->HasContents()) // Commands which don't set ErrorLevel at all shouldn't return 1.
+		if (output_var->HasContents()) // Commands which don't set ErrorLevel at all shouldn't return 1.
 		{
 			aResultToken.Return(!VarToBOOL(*output_var)); // Return TRUE for success, otherwise FALSE.
 		}
@@ -12545,7 +12542,6 @@ LPTSTR Line::LogToText(LPTSTR aBuf, int aBufSize) // aBufSize should be an int t
 					// it was interrupted and later resumed by a thread.  In other words, there are now
 					// extra lines in the buffer which are considered "special" because they don't indicate
 					// a line that actually executed, but rather one that is still executing (waiting).
-					// See ACT_WINWAIT for details.
 					next_item_is_special = true; // Override the default.
 					if (i + 2 == lines_to_show) // The line after this one is not only special, but the last one that will be shown, so recalculate this one correctly.
 						elapsed = GetTickCount() - sLogTick[line_index];

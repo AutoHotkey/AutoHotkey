@@ -580,7 +580,8 @@ enum BuiltInFunctionID {
 	FID_EnvGet = 0, FID_EnvSet,
 	FID_PostMessage = 0, FID_SendMessage,
 	FID_RegRead = 0, FID_RegWrite, FID_RegDelete, FID_RegDeleteKey,
-	FID_SoundGet = 0, FID_SoundSet
+	FID_SoundGet = 0, FID_SoundSet,
+	FID_RunWait = 0, FID_ClipWait, FID_KeyWait, FID_WinWait, FID_WinWaitClose, FID_WinWaitActive, FID_WinWaitNotActive
 };
 
 
@@ -659,7 +660,6 @@ private:
 	#define SW_NONE -1
 	ResultType PerformShowWindow(ActionTypeType aActionType, LPTSTR aTitle = _T(""), LPTSTR aText = _T("")
 		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
-	ResultType PerformWait();
 
 	ResultType WinMove(LPTSTR aTitle, LPTSTR aText, LPTSTR aX, LPTSTR aY
 		, LPTSTR aWidth = _T(""), LPTSTR aHeight = _T(""), LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
@@ -961,7 +961,6 @@ public:
 			case ACT_SPLITPATH:
 			case ACT_FILEGETSHORTCUT:
 			case ACT_RUN:
-			case ACT_RUNWAIT:
 				return ARG_TYPE_OUTPUT_VAR;
 			}
 			break;
@@ -3200,6 +3199,7 @@ BIF_DECL(BIF_WinMoveTopBottom);
 BIF_DECL(BIF_Process);
 BIF_DECL(BIF_ProcessSetPriority);
 BIF_DECL(BIF_MonitorGet);
+BIF_DECL(BIF_Wait);
 
 BIF_DECL(BIF_PerformAction);
 

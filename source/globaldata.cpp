@@ -295,7 +295,6 @@ Action g_act[] =
 	, {_T("SplitPath"), 1, 6, true, NULL} // InputFilespec, OutName, OutDir, OutExt, OutNameNoExt, OutDrive
 	, {_T("RunAs"), 0, 3, false, NULL} // user, pass, domain (0 params can be passed to disable the feature)
 	, {_T("Run"), 1, 4, true, NULL}      // TargetFile, Working Dir, WinShow-Mode, OutputVarPID
-	, {_T("RunWait"), 1, 4, true, NULL}  // TargetFile, Working Dir, WinShow-Mode, OutputVarPID
 	, {_T("Download"), 2, 2, false, NULL} // URL, save-as-filename
 
 	, {_T("Send"), 1, 1, false, NULL}         // But that first param can validly be a deref that resolves to a blank param.
@@ -328,8 +327,6 @@ Action g_act[] =
 	, {_T("MouseGetPos"), 0, 5, true, {5, 0}} // 4 optional output vars: xpos, ypos, WindowID, ControlName. Finally: Mode. MinParams must be 0.
 
 	, {_T("StatusBarWait"), 0, 8, false, {2, 3, 6, 0}} // Wait-text(blank ok),seconds,part#,title,text,interval,exclude-title,exclude-text
-	, {_T("ClipWait"), 0, 2, false, {1, 2, 0}} // Seconds-to-wait (0 = 500ms), 1|0: Wait for any format, not just text/files
-	, {_T("KeyWait"), 1, 2, false, NULL} // KeyName, Options
 
 	, {_T("Sleep"), 1, 1, false, {1, 0}} // Sleep time in ms (numeric)
 
@@ -338,11 +335,6 @@ Action g_act[] =
 
 	, {_T("WinActivate"), 0, 4, false, NULL} // Passing zero params results in activating the LastUsed window.
 	, {_T("WinActivateBottom"), 0, 4, false, NULL} // Min. 0 so that 1st params can be blank and later ones not blank.
-
-	// These all use Title, Text, Timeout (in seconds not ms), Exclude-title, Exclude-text.
-	// See above for why zero is the minimum number of params for each:
-	, {_T("WinWait"), 0, 5, false, {3, 0}}, {_T("WinWaitClose"), 0, 5, false, {3, 0}}
-	, {_T("WinWaitActive"), 0, 5, false, {3, 0}}, {_T("WinWaitNotActive"), 0, 5, false, {3, 0}}
 
 	, {_T("WinMinimize"), 0, 4, false, NULL}, {_T("WinMaximize"), 0, 4, false, NULL}, {_T("WinRestore"), 0, 4, false, NULL} // std. 4 params
 	, {_T("WinHide"), 0, 4, false, NULL}, {_T("WinShow"), 0, 4, false, NULL} // std. 4 params
