@@ -13557,6 +13557,11 @@ void Script::ConvertLocalToAlias(Var &aLocal, Var *aAliasFor, int aPos, Var **aV
 
 void Script::CheckForClassOverwrite()
 {
+	// Aside from class variables, A_Args is the only variable which can contain an object
+	// at this stage.  Excluding it this way produces smaller code than checking for the
+	// "__class" key within whatever object is found.
+	Var *a_args = FindVar(_T("A_Args"));
+
 	for (Line *line = mFirstLine; line; line = line->mNextLine)
 	{
 		for (int a = 0; a < line->mArgc; ++a)
@@ -13567,7 +13572,7 @@ void Script::CheckForClassOverwrite()
 				if (!arg.is_expression) // The arg's variable is not one that needs to be dynamically resolved.
 				{
 					Var *target_var = VAR(arg);
-					if (target_var->HasObject()) // At this stage, all variables are empty except class variables.
+					if (target_var->HasObject() && target_var != a_args)
 						ScriptWarning(g_Warn_ClassOverwrite, WARNING_CLASS_OVERWRITE, target_var->mName, line);
 				}
 			}
@@ -13575,7 +13580,7 @@ void Script::CheckForClassOverwrite()
 			{
 				for (ExprTokenType *token = arg.postfix; token->symbol != SYM_INVALID; ++token)
 				{
-					if (token->symbol == SYM_VAR && token->is_lvalue && token->var->HasObject())
+					if (token->symbol == SYM_VAR && token->is_lvalue && token->var->HasObject() && token->var != a_args)
 						ScriptWarning(g_Warn_ClassOverwrite, WARNING_CLASS_OVERWRITE, token->var->mName, line);
 				}
 			}
