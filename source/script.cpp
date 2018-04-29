@@ -5844,11 +5844,14 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsFatArr
 
 		// To enhance syntax error catching, consider ByRef to be a keyword; i.e. that can never be the name
 		// of a formal parameter:
-		if (this_param.is_byref = !tcslicmp(param_start, _T("ByRef"), param_end - param_start)) // ByRef.
+		// & symbol can have an optional whitespace between it and the variable
+		// For function(&&var), the first & is accepted, but the second is caught somewhere else as an invalid character.
+		bool refAmper = 0;
+		if ( (this_param.is_byref = !tcslicmp(param_start, _T("ByRef"), param_end - param_start)) || (this_param.is_byref = refAmper = (*param_start == '&')) ) // ByRef.
 		{
-			// Omit the ByRef keyword from further consideration:
-			param_start = omit_leading_whitespace(param_end);
-			if (   !*param_start || !(param_end = StrChrAny(param_start, _T(", \t:=*)")))   ) // Look for first comma, space, tab, =, or close-paren.
+			// Omit the ByRef keyword and & symbol from further consideration:
+			param_start = omit_leading_whitespace((refAmper) ? (++param_start) : (param_end));
+			if (!*param_start || !(param_end = StrChrAny(param_start, _T(", \t:=*)")))) // Look for first comma, space, tab, =, or close-paren.
 				return ScriptError(ERR_MISSING_CLOSE_PAREN, aBuf);
 		}
 
