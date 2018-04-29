@@ -1715,7 +1715,6 @@ DEBUGGER_COMMAND(Debugger::source)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	int file_index;
-	FILE *source_file = NULL;
 
 	// Decode filename URI -> path, in-place.
 	DecodeURI(filename);
@@ -1727,93 +1726,66 @@ DEBUGGER_COMMAND(Debugger::source)
 	{
 		if (!_tcsicmp(filename_t, Line::sSourceFile[file_index]))
 		{
-			// TODO: Change this section to support different file encodings, perhaps via TextFile class.
-
-			if (!(source_file = _tfopen(filename_t, _T("rb"))))
+			TextFile tf;
+			if (!tf.Open(filename_t, DEFAULT_READ_FLAGS, g_DefaultScriptCodepage))
 				return DEBUGGER_E_CAN_NOT_OPEN_FILE;
 			
 			mResponseBuf.WriteF("<response command=\"source\" success=\"1\" transaction_id=\"%e\" encoding=\"base64\">"
 								, aTransactionId);
 
-			if (begin_line == 0 && end_line == UINT_MAX)
-			{	// RETURN THE ENTIRE FILE:
-				long file_size;
-				// Seek to end of file,
-				if (fseek(source_file, 0, SEEK_END)
-					// get file size
-					|| (file_size = ftell(source_file)) < 1
-					// and seek back to the beginning.
-					|| fseek(source_file, 0, SEEK_SET))
-					break; // fail.
+			CStringA utf8_buf;
+			TCHAR line_buf[LINE_SIZE + 2]; // May contain up to two characters of the previous line to simplify base64-encoding.
+			int line_length;
+			int line_remainder = 0;
 
-				// Reserve some space in advance to read the raw file data into.
-				if (mResponseBuf.WriteEncodeBase64(NULL, file_size) != DEBUGGER_E_OK)
-					break; // fail.
-
-				// Read into the end of the response buffer.
-				char *buf = mResponseBuf.mData + mResponseBuf.mDataSize - (file_size + 1);
-
-				if (file_size != fread(buf, 1, file_size, source_file))
-					break; // fail.
-
-				// Base64-encode and write the file data into the response buffer.
-				mResponseBuf.WriteEncodeBase64(buf, file_size, true);
-			}
-			else
-			{	// RETURN SPECIFIC LINES:
-				char line_buf[LINE_SIZE + 2]; // May contain up to two characters of the previous line to simplify base64-encoding.
-				size_t line_length;
-				int line_remainder = 0;
-
-				LineNumberType current_line = 0;
-				
-				while (fgets(line_buf + line_remainder, LINE_SIZE, source_file))
+			LineNumberType current_line = 0;
+			
+			while (-1 != (line_length = tf.ReadLine(line_buf + line_remainder, LINE_SIZE)))
+			{
+				if (++current_line >= begin_line)
 				{
-					if (++current_line >= begin_line)
-					{
-						if (current_line > end_line)
-							break; // done.
+					if (current_line > end_line)
+						break; // done.
 					
-						if (line_length = strlen(line_buf))
-						{
-							// Encode in multiples of 3 characters to avoid inserting padding characters.
-							line_remainder = line_length % 3;
-							line_length -= line_remainder;
+					// Encode in multiples of 3 characters to avoid inserting padding characters.
+					line_length += line_remainder; // Include remainder of previous line.
+					line_remainder = line_length % 3;
+					line_length -= line_remainder;
 
-							if (line_length)
-							{
-								// Base64-encode and write this line and its trailing newline character into the response buffer.
-								if (mResponseBuf.WriteEncodeBase64(line_buf, line_length) != DEBUGGER_E_OK)
-									goto break_outer_loop; // fail.
-							}
-							//else not enough data to encode in this iteration.
+					if (line_length)
+					{
+						// Convert line to UTF-8.
+						StringTCharToUTF8(line_buf, utf8_buf, line_length);
+						// Base64-encode and write this line and its trailing newline character into the response buffer.
+						if (mResponseBuf.WriteEncodeBase64(utf8_buf.GetString(), utf8_buf.GetLength()) != DEBUGGER_E_OK)
+							goto break_outer_loop; // fail.
+					}
+					//else not enough data to encode in this iteration.
 
-							if (line_remainder) // 0, 1 or 2.
-							{
-								line_buf[0] = line_buf[line_length];
-								if (line_remainder > 1)
-									line_buf[1] = line_buf[line_length + 1];
-							}
-						}
+					if (line_remainder) // 0, 1 or 2.
+					{
+						line_buf[0] = line_buf[line_length];
+						if (line_remainder > 1)
+							line_buf[1] = line_buf[line_length + 1];
 					}
 				}
-
-				// Write any left-over characters (if line_remainder is 0, this does nothing).
-				if (mResponseBuf.WriteEncodeBase64(line_buf, line_remainder) != DEBUGGER_E_OK)
-					break; // fail.
-
-				if (!current_line || current_line < begin_line)
-					break; // fail.
-				// else if (current_line < end_line) -- just return what we can.
 			}
-			fclose(source_file);
+
+			if (line_remainder) // Write any left-over characters.
+			{
+				StringTCharToUTF8(line_buf, utf8_buf, line_remainder);
+				if (mResponseBuf.WriteEncodeBase64(utf8_buf.GetString(), utf8_buf.GetLength()) != DEBUGGER_E_OK)
+					break; // fail.
+			}
+
+			if (!current_line || current_line < begin_line)
+				break; // fail.
+			// else if (current_line < end_line) -- just return what we can.
 
 			return mResponseBuf.Write("</response>");
 		}
 	}
 break_outer_loop:
-	if (source_file)
-		fclose(source_file);
 	// If we got here, one of the following is true:
 	//	- Something failed and used 'break'.
 	//	- The requested file is not a known source file of this script.
