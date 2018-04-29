@@ -209,10 +209,6 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 		|| sym == SYM_PRE_INCREMENT || sym == SYM_PRE_DECREMENT \
 		|| sym == SYM_IFF_ELSE)
 
-#define EXPR_NAN_STR	_T("")
-#define EXPR_NAN_LEN	0
-#define EXPR_NAN		EXPR_NAN_STR, EXPR_NAN_LEN
-
 
 struct ExprTokenType; // Forward declarations for use below.
 struct ResultToken;

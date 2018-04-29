@@ -14003,9 +14003,9 @@ BIF_DECL(BIF_WinExistActive)
 
 
 
-#define If_NaN_return_NaN(ParamIndex) \
+#define Throw_if_Param_NaN(ParamIndex) \
 	if (!TokenIsNumeric(*aParam[(ParamIndex)])) \
-		_f_return(EXPR_NAN)
+		_f_throw(ERR_TYPE_MISMATCH)
 
 BIF_DECL(BIF_Round)
 // For simplicity, this always yields something numeric (or a string that's numeric).
@@ -14018,7 +14018,7 @@ BIF_DECL(BIF_Round)
 	double multiplier;
 	if (aParamCount > 1)
 	{
-		If_NaN_return_NaN(1);
+		Throw_if_Param_NaN(1);
 		param2 = ParamIndexToInt(1);
 		multiplier = qmathPow(10, param2);
 	}
@@ -14027,7 +14027,7 @@ BIF_DECL(BIF_Round)
 		param2 = 0;
 		multiplier = 1;
 	}
-	If_NaN_return_NaN(0);
+	Throw_if_Param_NaN(0);
 	double value = ParamIndexToDouble(0);
 	value = (value >= 0.0 ? qmathFloor(value * multiplier + 0.5)
 		: qmathCeil(value * multiplier - 0.5)) / multiplier;
@@ -14086,7 +14086,7 @@ BIF_DECL(BIF_FloorCeil)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
-	If_NaN_return_NaN(0);
+	Throw_if_Param_NaN(0);
 	// The qmath routines are used because Floor() and Ceil() are deceptively difficult to implement in a way
 	// that gives the correct result in all permutations of the following:
 	// 1) Negative vs. positive input.
@@ -14113,20 +14113,22 @@ BIF_DECL(BIF_Mod)
 	{
 		if (param0.symbol == SYM_INTEGER && param1.symbol == SYM_INTEGER) // Both are integers.
 		{
-			if (param1.value_int64) // Not divide by zero.
-				// For performance, % is used vs. qmath for integers.
-				_f_return_i(param0.value_int64 % param1.value_int64);
+			if (param1.value_int64 == 0)
+				_f_throw(ERR_DIVIDEBYZERO);
+			// For performance, % is used vs. qmath for integers.
+			_f_return_i(param0.value_int64 % param1.value_int64);
 		}
 		else // At least one is a floating point number.
 		{
 			double dividend = TokenToDouble(param0);
 			double divisor = TokenToDouble(param1);
-			if (divisor != 0.0) // Not divide by zero.
-				_f_return(qmathFmod(dividend, divisor));
+			if (divisor == 0.0)
+				_f_throw(ERR_DIVIDEBYZERO);
+			_f_return(qmathFmod(dividend, divisor));
 		}
 	}
 	// Since above didn't return, one or both parameters were invalid.
-	_f_return_p(EXPR_NAN);
+	_f_throw(ERR_PARAM_INVALID);
 }
 
 
@@ -14164,7 +14166,7 @@ BIF_DECL(BIF_MinMax)
 				}
 				break;
 			default: // Non-operand or non-numeric string.
-				_f_return(EXPR_NAN); // Return a blank value to indicate the problem.
+				_f_throw(ERR_PARAM_INVALID);
 		}
 	}
 	// Compare found integer with found float:
@@ -14179,8 +14181,7 @@ BIF_DECL(BIF_MinMax)
 BIF_DECL(BIF_Abs)
 {
 	if (!TokenToDoubleOrInt64(*aParam[0], aResultToken)) // "Cast" token to Int64/Double depending on whether it has a decimal point.
-		// Non-operand or non-numeric string. TokenToDoubleOrInt64() has already set the result to "NaN".
-		return;
+		_f_throw(ERR_PARAM1_INVALID); // Non-operand or non-numeric string.
 	if (aResultToken.symbol == SYM_INTEGER)
 	{
 		// The following method is used instead of __abs64() to allow linking against the multi-threaded
@@ -14199,7 +14200,7 @@ BIF_DECL(BIF_Sin)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
-	If_NaN_return_NaN(0);
+	Throw_if_Param_NaN(0);
 	_f_return(qmathSin(ParamIndexToDouble(0)));
 }
 
@@ -14209,7 +14210,7 @@ BIF_DECL(BIF_Cos)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
-	If_NaN_return_NaN(0);
+	Throw_if_Param_NaN(0);
 	_f_return(qmathCos(ParamIndexToDouble(0)));
 }
 
@@ -14219,7 +14220,7 @@ BIF_DECL(BIF_Tan)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
-	If_NaN_return_NaN(0);
+	Throw_if_Param_NaN(0);
 	_f_return(qmathTan(ParamIndexToDouble(0)));
 }
 
@@ -14227,11 +14228,11 @@ BIF_DECL(BIF_Tan)
 
 BIF_DECL(BIF_ASinACos)
 {
-	If_NaN_return_NaN(0);
+	Throw_if_Param_NaN(0);
 	double value = ParamIndexToDouble(0);
 	if (value > 1 || value < -1) // ASin and ACos aren't defined for such values.
 	{
-		_f_return_p(EXPR_NAN);
+		_f_throw(ERR_PARAM1_INVALID);
 	}
 	else
 	{
@@ -14247,7 +14248,7 @@ BIF_DECL(BIF_ATan)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
 {
-	If_NaN_return_NaN(0);
+	Throw_if_Param_NaN(0);
 	_f_return(qmathAtan(ParamIndexToDouble(0)));
 }
 
@@ -14255,7 +14256,7 @@ BIF_DECL(BIF_ATan)
 
 BIF_DECL(BIF_Exp)
 {
-	If_NaN_return_NaN(0);
+	Throw_if_Param_NaN(0);
 	_f_return(qmathExp(ParamIndexToDouble(0)));
 }
 
@@ -14263,11 +14264,11 @@ BIF_DECL(BIF_Exp)
 
 BIF_DECL(BIF_SqrtLogLn)
 {
-	If_NaN_return_NaN(0);
+	Throw_if_Param_NaN(0);
 	double value = ParamIndexToDouble(0);
 	if (value < 0) // Result is undefined in these cases.
 	{
-		_f_return_p(EXPR_NAN);
+		_f_throw(ERR_PARAM1_INVALID);
 	}
 	else
 	{
@@ -16976,8 +16977,6 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 		//case SYM_OBJECT: // L31: Treat objects as empty strings (or TRUE where appropriate).
 		//case SYM_MISSING:
 		default:
-			aOutput.symbol = SYM_STRING;
-			aOutput.marker = EXPR_NAN_STR; // For completeness.  Some callers such as BIF_Abs() rely on this being done.
 			return FAIL;
 	}
 	// Since above didn't return, interpret "str" as a number.
@@ -16990,7 +16989,6 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 		aOutput.value_double = ATOF(str);
 		break;
 	default: // Not a pure number.
-		aOutput.marker = EXPR_NAN_STR; // For completeness.  Some callers such as BIF_Abs() rely on this being done.
 		return FAIL;
 	}
 	return OK; // Since above didn't return, indicate success.
