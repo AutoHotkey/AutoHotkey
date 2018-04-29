@@ -1517,12 +1517,12 @@ int Object::Enumerator::Next(Var *aKey, Var *aVal)
 Object::FieldType *Object::FindField(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos)
 // left and right must be set by caller to the appropriate bounds within mFields.
 {
-	INT_PTR mid;
+	IndexType mid;
 	// Optimize for common arrays such as [a,b,c] where keys are consecutive numbers starting at 1.
 	// In such cases, the needed key can be found immediately.  Benchmarks show that starting the
 	// search this way can also benefit sparse arrays, and has little effect on associative arrays
 	// (keyed with a precalculated set of 100 or 2000 random integers between 0x10000 and 0x2000000).
-	if ((mid = left + val - 1) > right)
+	if ((mid = left + (IndexType)val - 1) > right)
 	{
 		// I couldn't come up with a data set or pattern where the standard starting calculation
 		// actually performed better, so start the search by comparing the last element's key.
