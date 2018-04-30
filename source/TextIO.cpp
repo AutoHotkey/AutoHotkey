@@ -733,59 +733,74 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		--aParamCount; // Exclude name from param count.
 		LPTSTR name = TokenToString(*aParam[0]); // Name of method or property.
 		MemberID member = INVALID;
-
-		// Read' and Write' must be handled differently to support ReadUInt(), WriteShort(), etc.
-		if (!_tcsnicmp(name, _T("Read"), 4))
+		if (IS_INVOKE_CALL) //Check for methods
 		{
-			if (!name[4])
-				member = Read;
-			else if (!_tcsicmp(name + 4, _T("Line")))
-				member = ReadLine;
-			else
-				member = NumReadWrite;
+			//Gave up and hard coded all the parameter counts
+			#define p_exact(e,p)	if (aParamCount == p) member = e; else if (aParamCount < p) _o_throw(ERR_TOO_FEW_PARAMS); else _o_throw(ERR_TOO_MANY_PARAMS);
+			#define p_minmax(e,pmin,pmax)	if (aParamCount <= pmax && aParamCount >= pmin) member = e; else if (aParamCount < pmin) _o_throw(ERR_TOO_FEW_PARAMS); else _o_throw(ERR_TOO_MANY_PARAMS);
+			#define if_member_p_exact(s,e,p)	else if (!_tcsicmp(name, _T(s))) p_exact(e,p)
+			#define if_member_p_minmax(s,e,pmin,pmax)	else if (!_tcsicmp(name, _T(s))) p_minmax(e,pmin,pmax)
+			// Read' and Write' must be handled differently to support ReadUInt(), WriteShort(), etc.
+			if (!_tcsnicmp(name, _T("Read"), 4))
+			{
+				if (!name[4])
+					p_minmax(Read, 0, 1) //Assign Read to member if the parameter count is lequal to 0 and gequal to 1
+				else if (!_tcsicmp(name + 4, _T("Line")))
+					p_exact(ReadLine, 0)
+				else
+					p_exact(NumReadWrite, 0)
+			}
+			else if (!_tcsnicmp(name, _T("Write"), 5))
+			{
+				if (!name[5])
+					p_exact(Write, 1)
+				else if (!_tcsicmp(name + 5, _T("Line")))
+					p_minmax(WriteLine, 0, 1)
+				else
+					p_exact(NumReadWrite, 1)
+			}
+			if_member_p_exact("RawRead", RawReadWrite, 2)
+			if_member_p_exact("RawWrite", RawReadWrite, 2)
+			if_member_p_minmax("Seek", PositionMethodSet, 1, 2)
+			if_member_p_exact("Tell", PositionMethodGet, 0)
+			if_member_p_exact("Close", Close, 0)
+			#undef if_member_p_exact
+			#undef if_member_p_minmx
+			#undef p_exact
+			#undef p_minmax
+			#define if_member_rw(s,e)	else if (!_tcsicmp(name, _T(s))) member = e;                                                       //read and write property
+			#define if_member_ro(s,e)	else if (!_tcsicmp(name, _T(s))) if (IS_INVOKE_GET) member = e; else _o_throw(ERR_INVALID_USAGE);  //read only property
 		}
-		else if (!_tcsnicmp(name, _T("Write"), 5))
-		{
-			if (!name[5])
-				member = Write;
-			else if (!_tcsicmp(name + 5, _T("Line")))
-				member = WriteLine;
-			else
-				member = NumReadWrite;
-		}
-	#define if_member(s,e)	else if (!_tcsicmp(name, _T(s))) member = e;
-		if_member("RawRead", RawReadWrite)
-		if_member("RawWrite", RawReadWrite)
-		if_member("Pos", Position)
-		if_member("Length", Length)
-		if_member("AtEOF", AtEOF)
-		if_member("Handle", Handle)
-		if_member("Encoding", Encoding)
-		if_member("Close", Close)
-		// Supported for enhanced clarity:
-		//if_member("Position", Position) //removed it for consistency
-		// Legacy names:
-		if_member("Seek", PositionMethodSet)
-		if_member("Tell", PositionMethodGet)
-	#undef if_member
+		else if (aParamCount != (IS_INVOKE_SET ? 1 : 0)) 
+			_o_throw(ERR_INVALID_USAGE);
+		if_member_rw("Pos", Position)
+		//for clarity
+		if_member_rw("Position", Position) 
+		if_member_rw("Length", Length)
+		if_member_ro("AtEOF", AtEOF)
+		if_member_rw("Encoding", Encoding)
+		if_member_ro("Handle", Handle)
+	#undef if_member_rw
+	#undef if_member_ro
 		if (member == INVALID)
 			return INVOKE_NOT_HANDLED;
 
-		// Syntax validation:
+		/*
+		// Syntax validation: Already handled above
 		if (!IS_INVOKE_CALL)
 		{
 			if (member < LastMethodPlusOne)
 				// Member requires parentheses().
 				return INVOKE_NOT_HANDLED;
-			if (aParamCount != (IS_INVOKE_SET ? 1 : 0))
+			
 				// Get: disallow File.Length[newLength] and File.Seek[dist,origin].
 				// Set: disallow File[]:=PropertyName and File["Pos",dist]:=origin.
-				_o_throw(ERR_INVALID_USAGE);
 		}
 		else if (member > LastMethodPlusOne)
 		{
 			return INVOKE_NOT_HANDLED;
 		}
+		*/
 
 		aResultToken.symbol = SYM_INTEGER; // Set default return type -- the most common cases return integer.
 
@@ -948,8 +963,8 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 
 		case RawReadWrite:
 			{
-				if (aParamCount < 1)
-					_o_throw(ERR_TOO_FEW_PARAMS);
+				//if (aParamCount < 1) //replaced by syntax checks in the member lookup
+				//	_o_throw(ERR_TOO_FEW_PARAMS);
 
 				bool reading = (name[3] == 'R' || name[3] == 'r');
 
@@ -1037,14 +1052,11 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			break;
 
 		case Position:
-			if ( IS_INVOKE_GET )
+			if (IS_INVOKE_GET)
 			{
-		case PositionMethodGet: //for tell
-				if ( aParamCount == 0 ) 
-				{
-					aResultToken.value_int64 = mFile.Tell();
-					return OK;
-				}
+		case PositionMethodGet: //tell
+				aResultToken.value_int64 = mFile.Tell();
+				return OK;
 			}
 			else
 			{
@@ -1062,7 +1074,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			break;
 
 		case Length:
-			if (aParamCount == 0)
+			if (IS_INVOKE_GET)
 			{
 				aResultToken.value_int64 = mFile.Length();
 				return OK;
@@ -1093,7 +1105,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			//  - It's questionable which behaviour is more more useful, but excluding "-RAW" is definitely simpler.
 			//  - Existing scripts may rely on File.Encoding not returning "-RAW".
 			UINT codepage;
-			if (aParamCount > 0)
+			if (IS_INVOKE_SET)
 			{
 				if (TokenIsNumeric(*aParam[1]))
 					codepage = (UINT)TokenToInt64(*aParam[1]);
