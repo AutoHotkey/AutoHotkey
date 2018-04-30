@@ -419,7 +419,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// since COM fundamentally requires it:  http://msdn.microsoft.com/en-us/library/dd757710
 			prop = (Property *)field->object;
 			prop_field = field;
-			if (IS_INVOKE_SET ? prop->CanSet() : prop->CanGet())
+			if (IS_INVOKE_SET ? prop->CanSet() : IS_INVOKE_GET && prop->CanGet())
 			{
 				if (aParamCount > 2 && IS_INVOKE_SET)
 				{
