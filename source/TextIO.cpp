@@ -713,14 +713,16 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		WriteLine,
 		NumReadWrite,
 		RawReadWrite,
+		Close,
+		PositionMethodGet,
+		PositionMethodSet,
 		LastMethodPlusOne,
 		// properties
 		Position,
 		Length,
 		AtEOF,
 		Handle,
-		Encoding,
-		Close
+		Encoding
 	};
 
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -761,10 +763,10 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		if_member("Encoding", Encoding)
 		if_member("Close", Close)
 		// Supported for enhanced clarity:
-		if_member("Position", Position)
+		//if_member("Position", Position) //removed it for consistency
 		// Legacy names:
-		if_member("Seek", Position)
-		if_member("Tell", Position)
+		if_member("Seek", PositionMethodSet)
+		if_member("Tell", PositionMethodGet)
 	#undef if_member
 		if (member == INVALID)
 			return INVOKE_NOT_HANDLED;
@@ -779,6 +781,10 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				// Get: disallow File.Length[newLength] and File.Seek[dist,origin].
 				// Set: disallow File[]:=PropertyName and File["Pos",dist]:=origin.
 				_o_throw(ERR_INVALID_USAGE);
+		}
+		else if (member > LastMethodPlusOne)
+		{
+			return INVOKE_NOT_HANDLED;
 		}
 
 		aResultToken.symbol = SYM_INTEGER; // Set default return type -- the most common cases return integer.
@@ -1031,13 +1037,18 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			break;
 
 		case Position:
-			if (aParamCount == 0)
+			if ( IS_INVOKE_GET )
 			{
-				aResultToken.value_int64 = mFile.Tell();
-				return OK;
+		case PositionMethodGet: //for tell
+				if ( aParamCount == 0 ) 
+				{
+					aResultToken.value_int64 = mFile.Tell();
+					return OK;
+				}
 			}
 			else
 			{
+		case PositionMethodSet: //for seek
 				__int64 distance = TokenToInt64(*aParam[1]);
 				int origin;
 				if (aParamCount >= 2)
