@@ -417,12 +417,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// about 25% and typeid()== by about 20%.  We can safely assume that the vtable pointer is
 			// stored at the beginning of the object even though it isn't guaranteed by the C++ standard,
 			// since COM fundamentally requires it:  http://msdn.microsoft.com/en-us/library/dd757710
-
-			if (IS_INVOKE_CALL)
-			{
-				_o_throw(ERR_PROPERTY_CALL);
-			}
-
 			prop = (Property *)field->object;
 			prop_field = field;
 			if (IS_INVOKE_SET ? prop->CanSet() : prop->CanGet())
