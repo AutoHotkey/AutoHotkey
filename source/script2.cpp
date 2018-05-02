@@ -12007,7 +12007,7 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken,
 				}
 		}
 		if (p < 0 || p >= mPatternCount)
-			_o_throw(ERR_SUBPATTERN_NOT_FOUND); //nnnik: We should probably add a custom error for this
+			_o_throw(ERR_SUBPATTERN_NOT_FOUND);
 		break;
 	}
 	default:
