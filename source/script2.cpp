@@ -11908,79 +11908,18 @@ ResultType RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aP
 	return OK;
 }
 
-ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount) //nnnik: completely rewrote the Invoke method of the RegExMatch object
+ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	#define ERR_SUBPATTERN_NOT_FOUND ERR_UNKNOWN_PROPERTY //nnnik: for now - but we should probably change this
-	enum MemberID {  //nnnik: made it a lot similar to the File Object now - starting by defining an enum MemberID with all members
-		INVALID = 0,
-		// methods
-		Position, //nnnik: changed all of the mixed properties to methods
-		Length,
-		Value,
-		Name,
-		Count,
-		Mark,
-		LastMethodPlusOne,
-		//properties
-		Get
-	};
-	MemberID member = INVALID;
+	if (aParamCount < 1 || aParamCount > 2 || IS_INVOKE_SET)
+		return INVOKE_NOT_HANDLED;
 
-	if (IS_INVOKE_CALL) 
-	{ 
-		LPTSTR name = TokenToString(*aParam[0]);
-	#define if_member(s,e)	else if (!_tcsicmp(name, _T(s))) member = e;
-		if (false); //nnnik: to get the if/else ladder started
-		if_member("Pos", Position)
-		if_member("Len", Length)
-		if_member("Value", Value)
-		if_member("Name", Name)
-		if_member("Count", Count)
-		if_member("Mark", Mark)
-	#undef if_member
-
-		switch (member) //do some syntax validation and some parameter counting
-		{
-		case INVALID:
-			return INVOKE_NOT_HANDLED;
-			break;
-		case Position:
-		case Length:
-		case Value:
-		case Name:
-			if (aParamCount < 1)
-				_o_throw(ERR_TOO_FEW_PARAMS);
-			else if (aParamCount > 2)
-				_o_throw(ERR_TOO_MANY_PARAMS);
-			break;
-		case Count:
-		case Mark:
-			if (aParamCount != 1) //nnnik: since you can not have less than 1 param and recognize the first param as Mark or Count it's safe to assume that there are too many parameters
-				_o_throw(ERR_TOO_MANY_PARAMS);
-			break;
-		}
-	}
-	else if (IS_INVOKE_GET && aParamCount == 1) //nnnik: both IS_INVOKE_SET and the wrong parameter count will fall through to 
-		member = Get;
-	else 
-		_o_throw(ERR_INVALID_USAGE); //nnnik: this error
-
-	// Check for a subpattern offset/name
+	LPTSTR name;
 	int p = -1;
-	switch (member) //nnnik: to handle the parameter
+
+	// Check for a subpattern offset/name first so that a subpattern named "Pos" takes
+	// precedence over our "Pos" property when invoked like m.Pos (but not m.Pos()).
+	if (aParamCount > 1 || !IS_INVOKE_CALL)
 	{
-	case Position:
-	case Length:
-	case Value:
-	case Name:
-	{
-		if (aParamCount == 1) //nnnik: in case that the second parameter was omitted
-		{
-			p = 0; //nnnik: default to the entire match
-			break; //nnnik: and skip the lookup
-		}
-	case Get: //nnnik: in case of a Get always lookup
-		//nnnik: this part mostly remained the same
 		ExprTokenType &name_param = *aParam[aParamCount - 1];
 
 		if (TokenIsNumeric(name_param))
@@ -11989,15 +11928,15 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken,
 		}
 		else if (mPatternName) // i.e. there is at least one named subpattern.
 		{
-			LPTSTR name = TokenToString(name_param);
+			name = TokenToString(name_param);
 			for (p = 0; p < mPatternCount; ++p)
 				if (mPatternName[p] && !_tcsicmp(mPatternName[p], name))
 				{
-					if (mOffset[2 * p] < 0)
+					if (mOffset[2*p] < 0)
 						// This pattern wasn't matched, so check for one with a duplicate name.
 						for (int i = p + 1; i < mPatternCount; ++i)
 							if (mPatternName[i] && !_tcsicmp(mPatternName[i], name) // It has the same name.
-								&& mOffset[2 * i] >= 0) // It matched something.
+								&& mOffset[2*i] >= 0) // It matched something.
 							{
 								// Prefer this pattern.
 								p = i;
@@ -12006,26 +11945,65 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken,
 					break;
 				}
 		}
-		if (p < 0 || p >= mPatternCount)
-			_o_throw(ERR_SUBPATTERN_NOT_FOUND); //nnnik: We should probably add a custom error for this
-		break;
-	}
-	default:
-		break;
 	}
 
-	switch (member) //nnnik: member body
-	{ 
-	case Position:	_o_return(mOffset[2 * p] + 1); break;
-	case Length:	_o_return(mOffset[2 * p + 1]); break;
-	case Value:		//nnnik: do the same for the Value method and getting a key
-	case Get:		_o_return(mHaystack - mHaystackStart + mOffset[p * 2], mOffset[p * 2 + 1]); break;
-	case Name:		_o_return(mPatternName && mPatternName[p] ? mPatternName[p] : _T("")); break;
+	bool pattern_found = p >= 0 && p < mPatternCount;
+	
+	// Checked for named properties:
+	if (aParamCount > 1 || !pattern_found)
+	{
+		name = TokenToString(*aParam[0]);
 
-	case Count:		_o_return(mPatternCount - 1); break;
-	case Mark:		_o_return(mMark ? mMark : _T("")); break;
+		if (!pattern_found && aParamCount == 1)
+		{
+			p = 0; // For m.Pos, m.Len and m.Value, use the overall match.
+			pattern_found = true; // Relies on below returning if the property name is invalid.
+		}
+
+		if (!_tcsicmp(name, _T("Pos")))
+		{
+			if (pattern_found)
+				_o_return(mOffset[2*p] + 1);
+			return OK;
+		}
+		else if (!_tcsicmp(name, _T("Len")))
+		{
+			if (pattern_found)
+				_o_return(mOffset[2*p + 1]);
+			return OK;
+		}
+		else if (!_tcsicmp(name, _T("Count")))
+		{
+			if (aParamCount == 1)
+				_o_return(mPatternCount - 1); // Return number of subpatterns (exclude overall match).
+			return OK;
+		}
+		else if (!_tcsicmp(name, _T("Name")))
+		{
+			if (pattern_found && mPatternName && mPatternName[p])
+				_o_return(mPatternName[p]);
+			return OK;
+		}
+		else if (!_tcsicmp(name, _T("Mark")))
+		{
+			_o_return(aParamCount == 1 && mMark ? mMark : _T(""));
+		}
+		else if (_tcsicmp(name, _T("Value"))) // i.e. NOT "Value".
+		{
+			// This is something like m[n] where n is not a valid subpattern or property name,
+			// or m.Foo[n] where Foo is not a valid property name.  For the two-param case,
+			// reset pattern_found so that if n is a valid subpattern it won't be returned:
+			pattern_found = false;
+		}
 	}
-	return OK;
+
+	if (pattern_found)
+	{
+		// Gives the correct result even if there was no match (because length is 0):
+		_o_return(mHaystack - mHaystackStart + mOffset[p*2], mOffset[p*2+1]);
+	}
+
+	return INVOKE_NOT_HANDLED;
 }
 
 #ifdef CONFIG_DEBUGGER
