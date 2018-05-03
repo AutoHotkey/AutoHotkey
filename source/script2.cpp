@@ -14166,8 +14166,10 @@ BIF_DECL(BIF_FloorCeil)
 
 BIF_DECL(BIF_Integer)
 {
-	Throw_if_Param_NaN(0);
-	_f_return_i(ParamIndexToInt64(0));
+	ExprTokenType token;
+	if (ParamIndexToNumber(0, token))
+		_f_return_i(token.symbol == SYM_INTEGER ? token.value_int64 : token.value_double);
+	_f_throw(ERR_TYPE_MISMATCH);
 }
 
 
