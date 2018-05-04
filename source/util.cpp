@@ -19,7 +19,7 @@ GNU General Public License for more details.
 #include <gdiplus.h> // Used by LoadPicture().
 #include "util.h"
 #include "globaldata.h"
-
+#include "qmath.h" // for qmathpow in tcstoi64_o
 
 int GetYDay(int aMon, int aDay, bool aIsLeapYear)
 // Returns a number between 1 and 366.
@@ -344,12 +344,15 @@ SymbolType IsNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
 	if (is_hex)
 		aBuf += 2;  // Skip over the 0x prefix.
 
-	// Set defaults:
-	BOOL has_decimal_point = false;
-	BOOL has_exponent = false;
+					// Set defaults:
 	BOOL has_at_least_one_digit = false; // i.e. a string consisting of only "+", "-" or "." is not considered numeric.
-	int c; // int vs. char might squeeze a little more performance out of it (it does reduce code size by 5 bytes). Probably must stay signed vs. unsigned for some of the uses below.
+	BOOL has_decimal_point = false;
 
+	BOOL has_exponent = false;			// For scientific notation.
+	BOOL exponent_is_negative = FALSE;	// Negative exponents will be considered float.
+	BOOL exponent_is_zero = FALSE;		// Needs to be detected so that xe-0 can be detected as an integer, consitent with x*10**-0 (AHK expr.)
+
+	int c; // int vs. char might squeeze a little more performance out of it (it does reduce code size by 5 bytes). Probably must stay signed vs. unsigned for some of the uses below.
 	for (;; ++aBuf)
 	{
 		c = *aBuf;
@@ -392,16 +395,18 @@ SymbolType IsNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
 					if (ctoupper(c) != 'E' // v1.0.46.11: Support scientific notation in floating point numbers.
 						|| !has_at_least_one_digit // But it must have at least one digit to the left of the 'E'. Some callers rely on this check.
 						|| has_exponent
-						|| !aAllowFloat)
+						|| (!aAllowFloat && has_decimal_point)) // Added: "&& has_decimal_point" since 'E' alone is not enough to determine that the string is a float.
 						return PURE_NOT_NUMERIC;
 					if (aBuf[1] == '-' || aBuf[1] == '+') // The optional sign is present on the exponent.
-						++aBuf; // Omit it from further consideration so that the outer loop doesn't see it as an extra/illegal sign.
+						exponent_is_negative = aBuf[1] == '-', ++aBuf; // Omit it from further consideration so that the outer loop doesn't see it as an extra/illegal sign.
+
 					if (aBuf[1] < '0' || aBuf[1] > '9')
 						// Even if it is an 'e', ensure what follows it is a valid exponent.  Some callers rely
 						// on this check, such as ones that expect "0.6e" to be non-numeric.
 						return PURE_NOT_NUMERIC;
+					if (!exponent_is_zero) // any presence of a non-'0' character in the exponent implies that the exponent is non-zero.
+						exponent_is_zero = aBuf[1] == '0';
 					has_exponent = true;
-					has_decimal_point = true; // For simplicity, since a decimal point after the exponent isn't valid.
 				}
 			}
 			else // This character is a valid digit or hex-digit.
@@ -410,7 +415,12 @@ SymbolType IsNumeric(LPCTSTR aBuf, BOOL aAllowNegative, BOOL aAllowAllWhitespace
 	} // for()
 
 	if (has_at_least_one_digit)
+	{
+		if (has_exponent && !has_decimal_point)
+			// It is a number written in scientific notation without any decimal point.
+			return (!exponent_is_negative || exponent_is_zero) ? PURE_INTEGER : (aAllowFloat ? PURE_FLOAT : PURE_NOT_NUMERIC);
 		return has_decimal_point ? PURE_FLOAT : PURE_INTEGER;
+	}
 	else
 		return PURE_NOT_NUMERIC; // i.e. the strings "+" "-" and "." are not numeric by themselves.
 }
@@ -899,13 +909,14 @@ __int64 tcstoi64_o(LPCTSTR buf, LPCTSTR *endptr, int base)
 //  - A leading '0' does not activate base 8, since we specifically don't want that.
 //  - Only space and tab are considered whitespace, consistent with IsNumeric().
 //  - errno is never set.
+//	- Detects scientific notation and floats. Numbers written in scientific notation is not considered float if exponent is positive and the coefficient (i.e., x in xEy) is an integer.
+//	- Floats are converted to integer by calling _tstof and casting to __int64. 
 {
 	// Skip spaces and tabs.
 	LPCTSTR p = omit_leading_whitespace(buf);
-	
 	// Determine/skip sign.
 	TCHAR sign = (*p != '+' && *p != '-') ? '+' : *p++;
-	
+
 	// Handle hex prefix if allowed.
 	if (*p == '0' && (p[1] == 'x' || p[1] == 'X') && (base == 0 || base == 16) && isxdigit(p[2]))
 	{
@@ -948,6 +959,22 @@ __int64 tcstoi64_o(LPCTSTR buf, LPCTSTR *endptr, int base)
 			else
 				break;
 			i = i * base + c;
+		}
+		// Check for scientific notation and float.
+		// Doing it here because, presumably, most often *p == 0, and the calls to _tcschr are avoided.
+		LPCTSTR e_char = 0;
+		if (*p && *p == '.' || ((e_char = _tcschr(p, 'e')) || (e_char = _tcschr(p, 'E'))))
+		{
+			BOOL is_float = TRUE;
+			if (e_char) // implies no '.', so it is an integer in sci. notation, eg, 1e3 or a float like 1e-3.
+			{
+				double exponent = (double)tcstoi64_o(++e_char, 0, 10); // even if the caller of this function didn't verify that the string contains a number this recursive call cannot cause infinite recursion since e_char is advanced. Worst case would be calling this function with a string containing x number of 'e' or 'E' before the first '.' or '\0', that would cause x calls from here.
+				if (exponent >= 0)
+					i *= (__int64)qmathPow(10, exponent), is_float = FALSE;
+				// negative exponent implies float
+			}
+			if (is_float)
+				return (__int64)_tstof(buf);
 		}
 	}
 	if (endptr)
