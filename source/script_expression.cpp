@@ -1724,6 +1724,7 @@ ResultType Line::ExpandSingleArg(int aArgIndex, ExprTokenType &aResultToken, LPT
 {
 	ExprTokenType *postfix = mArg[aArgIndex].postfix;
 	if (postfix->symbol < SYM_DYNAMIC // i.e. any other operand type.
+		&& postfix->symbol != SYM_VAR // Variables must be dereferenced.
 		&& postfix[1].symbol == SYM_INVALID) // Exactly one token.
 	{
 		aResultToken.symbol = postfix->symbol;
