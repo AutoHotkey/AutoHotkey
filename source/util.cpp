@@ -963,7 +963,7 @@ __int64 tcstoi64_o(LPCTSTR buf, LPCTSTR *endptr, int base)
 		// Check for scientific notation and float.
 		// Doing it here because, presumably, most often *p == 0, and the calls to _tcschr are avoided.
 		LPCTSTR e_char = 0;
-		if (*p && *p == '.' || ((e_char = _tcschr(p, 'e')) || (e_char = _tcschr(p, 'E'))))
+		if ( *p && ( *p == '.' || (e_char = _tcschr(p, 'e')) || (e_char = _tcschr(p, 'E')) ) )
 		{
 			BOOL is_float = TRUE;
 			if (e_char) // implies no '.', so it is an integer in sci. notation, eg, 1e3 or a float like 1e-3.
