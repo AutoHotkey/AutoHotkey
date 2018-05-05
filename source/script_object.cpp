@@ -1532,6 +1532,8 @@ Object::FieldType *Object::FindField(IntKeyType val, IndexType left, IndexType r
 		//	mid = (left + right) / 2; // Fall back to standard binary search.
 		mid = right;
 	}
+	else if (mid < left) // val was negative.
+		mid = left; // As above.
 	for ( ; left <= right; mid = (left + right) / 2)
 	{
 		FieldType &field = mFields[mid];
