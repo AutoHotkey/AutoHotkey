@@ -714,7 +714,6 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		NumReadWrite,
 		RawReadWrite,
 		Close,
-		PositionMethodGet,
 		PositionMethodSet,
 		LastMethodPlusOne,
 		// properties
@@ -762,7 +761,6 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			if_member_p_exact("RawRead", RawReadWrite, 2)
 			if_member_p_exact("RawWrite", RawReadWrite, 2)
 			if_member_p_minmax("Seek", PositionMethodSet, 1, 2)
-			if_member_p_exact("Tell", PositionMethodGet, 0)
 			if_member_p_exact("Close", Close, 0)
 			#undef if_member_p_exact
 			#undef if_member_p_minmx
@@ -1060,7 +1058,6 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		case Position:
 			if (IS_INVOKE_GET_EX) //nnnik: replaced aParamCount check with IS_INVOKE_GET_EX for code clarity
 			{
-		case PositionMethodGet: //nnnik: tell
 				aResultToken.value_int64 = mFile.Tell();
 				return OK;
 			}
