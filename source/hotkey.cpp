@@ -2684,7 +2684,7 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 	, mMaxThreads(g_MaxThreadsPerHotkey)  // The value of g_MaxThreadsPerHotkey can vary during load-time.
 	, mPriority(g_HSPriority), mKeyDelay(g_HSKeyDelay), mSendMode(g_HSSendMode)  // And all these can vary too.
 	, mCaseSensitive(g_HSCaseSensitive), mConformToCase(g_HSConformToCase), mDoBackspace(g_HSDoBackspace)
-	, mOmitEndChar(g_HSOmitEndChar), mSendRaw(aHasContinuationSection ? true : g_HSSendRaw)
+	, mOmitEndChar(g_HSOmitEndChar), mSendRaw(aHasContinuationSection ? SCM_RAW_TEXT : g_HSSendRaw)
 	, mEndCharRequired(g_HSEndCharRequired), mDetectWhenInsideWord(g_HSDetectWhenInsideWord), mDoReset(g_HSDoReset)
 	, mInputLevel(g_InputLevel)
 	, mExecuteAction(g_HSSameLineAction)
