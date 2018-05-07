@@ -3413,7 +3413,7 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 			if (sTargetLayoutHasAltGr == CONDITION_TRUE) // Note that KeyEvent() might have just changed the value of sTargetLayoutHasAltGr.
 			{
 				// Indicate that control is both down and required down so that the section after this one won't
-				// release it.  Without this fix, a hotkey that sends an AltGr char such as "^ä:: SendRaw, {"
+				// release it.  Without this fix, a hotkey that sends an AltGr char such as "^ä:: Send '{Raw}{'"
 				// would fail to work under German layout because left-alt would be released after right-alt
 				// goes down.
 				aModifiersLRnow |= MOD_LCONTROL; // To reflect what KeyEvent() did above.

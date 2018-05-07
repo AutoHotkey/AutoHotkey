@@ -11707,8 +11707,8 @@ ResultType Line::Perform()
 		return ImageSearch(ArgToInt(3), ArgToInt(4), ArgToInt(5), ArgToInt(6), ARG7);
 
 	case ACT_SEND:
-	case ACT_SENDRAW:
-		SendKeys(ARG1, mActionType == ACT_SENDRAW ? SCM_RAW : SCM_NOT_RAW, g.SendMode);
+	case ACT_SENDTEXT:
+		SendKeys(ARG1, mActionType == ACT_SENDTEXT ? SCM_RAW_TEXT : SCM_NOT_RAW, g.SendMode);
 		return OK;
 	case ACT_SENDINPUT: // Raw mode is supported via {Raw} in ARG1.
 		SendKeys(ARG1, SCM_NOT_RAW, g.SendMode == SM_INPUT_FALLBACK_TO_PLAY ? SM_INPUT_FALLBACK_TO_PLAY : SM_INPUT);
@@ -11820,8 +11820,8 @@ ResultType Line::Perform()
 		return MenuSelect(ELEVEN_ARGS);
 
 	case ACT_CONTROLSEND:
-	case ACT_CONTROLSENDRAW:
-		return ControlSend(SIX_ARGS, mActionType == ACT_CONTROLSENDRAW ? SCM_RAW : SCM_NOT_RAW);
+	case ACT_CONTROLSENDTEXT:
+		return ControlSend(SIX_ARGS, mActionType == ACT_CONTROLSENDTEXT ? SCM_RAW_TEXT : SCM_NOT_RAW);
 
 	case ACT_CONTROLCLICK:
 		if (   !(vk = ConvertMouseButton(ARG4))   ) // Treats blank as "Left".

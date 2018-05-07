@@ -298,7 +298,7 @@ Action g_act[] =
 	, {_T("Download"), 2, 2, false, NULL} // URL, save-as-filename
 
 	, {_T("Send"), 1, 1, false, NULL}         // But that first param can validly be a deref that resolves to a blank param.
-	, {_T("SendRaw"), 1, 1, false, NULL}      //
+	, {_T("SendText"), 1, 1, false, NULL}      //
 	, {_T("SendInput"), 1, 1, false, NULL}    //
 	, {_T("SendPlay"), 1, 1, false, NULL}     //
 	, {_T("SendEvent"), 1, 1, false, NULL}    // (due to rarity, there is no raw counterpart for this one)
@@ -308,7 +308,7 @@ Action g_act[] =
 	// would be considered mandatory-non-blank by default.  It's easier to make all the params
 	// optional and validate elsewhere that the 2nd one specifically isn't blank:
 	, {_T("ControlSend"), 1, 6, false, NULL} // Chars-to-Send, Control, std. 4 window params.
-	, {_T("ControlSendRaw"), 1, 6, false, NULL} // Chars-to-Send, Control, std. 4 window params.
+	, {_T("ControlSendText"), 1, 6, false, NULL} // Chars-to-Send, Control, std. 4 window params.
 	, {_T("ControlClick"), 0, 8, false, {5, 0}} // Control, WinTitle, WinText, WhichButton, ClickCount, Hold/Release, ExcludeTitle, ExcludeText
 	, {_T("ControlMove"), 0, 9, false, {1, 2, 3, 4, 0}} // x, y, w, h, Control, WinTitle, WinText, ExcludeTitle, ExcludeText
 	, {_T("ControlGetPos"), 0, 9, true, NULL} // Four optional output vars: xpos, ypos, width, height, control, std. 4 window params.
