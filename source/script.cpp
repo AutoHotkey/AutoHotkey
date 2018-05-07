@@ -9415,7 +9415,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			//	x.y := z	->	x "y" z (set)
 			//	x[y] += z	->	x y (get in-place, assume 2 params) z (add) (set)
 			//	x.y[i] /= z	->	x "y" i 3 (get in-place, n params) z (div) (set)
-			if (this_postfix->deref->func == &g_ObjGet || this_postfix->deref->func == &g_ObjCall) // Allow g_ObjCall for something like x.y(i) := z, since x.y(i) can act as x.y[i] for COM objects.
+			if (this_postfix->deref->func == &g_ObjGet)
 			{
 				if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(infix_symbol))
 				{
