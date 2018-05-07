@@ -11063,9 +11063,6 @@ BIF_DECL(BIF_DllCall)
 // It has also ensured that the array has exactly aParamCount items in it.
 // Author: Marcus Sonntag (Ultra)
 {
-	// Set default result in case of early return; a blank value:
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T("");
 	HMODULE hmodule_to_free = NULL; // Set default in case of early goto; mostly for maintainability.
 	void *function; // Will hold the address of the function to be called.
 
@@ -11422,7 +11419,7 @@ has_valid_return_type:
 		switch(return_attrib.type)
 		{
 		case DLL_ARG_INT: // Listed first for performance. If the function has a void return value (formerly DLL_ARG_NONE), the value assigned here is undefined and inconsequential since the script should be designed to ignore it.
-			aResultToken.symbol = SYM_INTEGER;
+			ASSERT(aResultToken.symbol == SYM_INTEGER);
 			if (return_attrib.is_unsigned)
 				aResultToken.value_int64 = (UINT)return_value.Int; // Preserve unsigned nature upon promotion to signed 64-bit.
 			else // Signed.
@@ -11433,7 +11430,7 @@ has_valid_return_type:
 			// that will vanish when we return to our caller.  As long as every string that went into the
 			// function isn't on our stack (which is the case), there should be no way for what comes out to be
 			// on the stack either.
-			//aResultToken.symbol = SYM_STRING; // This is the default.
+			aResultToken.symbol = SYM_STRING;
 			aResultToken.marker = (LPTSTR)(return_value.Pointer ? return_value.Pointer : _T(""));
 			// Above: Fix for v1.0.33.01: Don't allow marker to be set to NULL, which prevents crash
 			// with something like the following, which in this case probably happens because the inner
@@ -11460,20 +11457,23 @@ has_valid_return_type:
 					// Now attempt to take ownership of the malloc'd memory, to return to our caller.
 					if (aResultToken.mem_to_free = result_buf.DetachBuffer())
 						aResultToken.marker = aResultToken.mem_to_free;
-					//else mem_to_free is NULL, so marker_length should be ignored.  See next comment below.
+					else
+						aResultToken.marker = _T("");
 				}
-				//else leave aResultToken as it was set at the top of this function: an empty string.
+				else
+					aResultToken.marker = _T("");
+				aResultToken.symbol = SYM_STRING;
 			}
 			break;
 		case DLL_ARG_SHORT:
-			aResultToken.symbol = SYM_INTEGER;
+			ASSERT(aResultToken.symbol == SYM_INTEGER);
 			if (return_attrib.is_unsigned)
 				aResultToken.value_int64 = return_value.Int & 0x0000FFFF; // This also forces the value into the unsigned domain of a signed int.
 			else // Signed.
 				aResultToken.value_int64 = (SHORT)(WORD)return_value.Int; // These casts properly preserve negatives.
 			break;
 		case DLL_ARG_CHAR:
-			aResultToken.symbol = SYM_INTEGER;
+			ASSERT(aResultToken.symbol == SYM_INTEGER);
 			if (return_attrib.is_unsigned)
 				aResultToken.value_int64 = return_value.Int & 0x000000FF; // This also forces the value into the unsigned domain of a signed int.
 			else // Signed.
@@ -11483,7 +11483,7 @@ has_valid_return_type:
 			// Even for unsigned 64-bit values, it seems best both for simplicity and consistency to write
 			// them back out to the script as signed values because script internals are not currently
 			// equipped to handle unsigned 64-bit values.  This has been documented.
-			aResultToken.symbol = SYM_INTEGER;
+			ASSERT(aResultToken.symbol == SYM_INTEGER);
 			aResultToken.value_int64 = return_value.Int64;
 			break;
 		case DLL_ARG_FLOAT:
