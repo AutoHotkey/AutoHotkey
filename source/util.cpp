@@ -905,18 +905,22 @@ ret0:
 __int64 tcstoi64_o(LPCTSTR buf, LPCTSTR *endptr, int base)
 // A version of _tcstoi64 which does no range checks, but instead has overflow behaviour
 // consistent with arithmetic operations.  Some behaviour may be unlike _tcstoi64/strtoll:
-//  - base must be 0 (undetermined), 10 or 16.
+//  - base must be 0 (undetermined), 10 or 16. Can be -1 to disable detection of float and sci. notation, used for recursive calls and implies base 10.
 //  - A leading '0' does not activate base 8, since we specifically don't want that.
 //  - Only space and tab are considered whitespace, consistent with IsNumeric().
 //  - errno is never set.
-//	- Detects scientific notation and floats. Numbers written in scientific notation is not considered float if exponent is positive and the coefficient (i.e., x in xEy) is an integer.
-//	- Floats are converted to integer by calling _tstof and casting to __int64. 
+//	- Detects scientific notation and floats. Numbers written in scientific notation is not considered float if the exponent is a positive integer and the coefficient (i.e., x in xEy) is an integer. Only detected for base = 10.
+//	- Floats not written in scientific notation are converted to integer by calling _tstof and casting to __int64. In case of float, endptr is set to either the '.' or the 'e'/'E' to indicate that no valid integer was found.
 {
 	// Skip spaces and tabs.
 	LPCTSTR p = omit_leading_whitespace(buf);
 	// Determine/skip sign.
 	TCHAR sign = (*p != '+' && *p != '-') ? '+' : *p++;
 
+	BOOL detect_exp = TRUE; // Detect scientific notation and floats by default. (Only for base = 10)
+	if (base == -1)			// Special value to indicate that scientific notation and floats should not be considered, avoids something like 1e1e1 being interpreted as 1e10 due to the trailing 1e1 being detected as 10 in a recursive call.
+		base = 10, detect_exp = FALSE;
+	
 	// Handle hex prefix if allowed.
 	if (*p == '0' && (p[1] == 'x' || p[1] == 'X') && (base == 0 || base == 16) && isxdigit(p[2]))
 	{
@@ -961,22 +965,40 @@ __int64 tcstoi64_o(LPCTSTR buf, LPCTSTR *endptr, int base)
 			i = i * base + c;
 		}
 		// Check for scientific notation and float.
-		// Doing it here because, presumably, most often *p == 0, and the calls to _tcschr are avoided.
-		LPCTSTR e_char = 0;
-		if ( *p && ( *p == '.' || (e_char = _tcschr(p, 'e')) || (e_char = _tcschr(p, 'E')) ) )
+		if (*p && detect_exp)
 		{
-			BOOL is_float = TRUE;
-			if (e_char) // implies no '.', so it is an integer in sci. notation, eg, 1e3 or a float like 1e-3.
+			if ((*p == 'e' || *p == 'E') && (p[1] != ' ' && p[1] != '\t')) // scientific notation, do not allow space or tab after the 'e', needs manual check since 'tcstoi64_o' omits such characters from the beginning of the string.
 			{
-				double exponent = (double)tcstoi64_o(++e_char, 0, 10); // even if the caller of this function didn't verify that the string contains a number this recursive call cannot cause infinite recursion since e_char is advanced. Worst case would be calling this function with a string containing x number of 'e' or 'E' before the first '.' or '\0', that would cause x calls from here.
-				if (exponent >= 0)
-					i *= (__int64)qmathPow(10, exponent), is_float = FALSE;
-				// negative exponent implies float
+				LPCTSTR local_endptr;
+				double exponent = (double)tcstoi64_o(++p, &local_endptr, -1);	// Pass -1 for the base to disable detection of sci.not. and float. This recursive call cannot cause infinite recursion since p is advanced.
+
+				if (local_endptr == p)						// no number followed the 'e' or 'E', invalid.
+				{
+					p--;									// set back p to the 'e' to indicate (via endptr) that no valid integer was found.
+				}
+				else										// valid scientific notation.
+				{
+					double power = qmathPow(10, exponent);
+					if (exponent >= 0)						// implies integer.
+					{
+						i *= (__int64)power;
+						p = local_endptr;					// set p to the endptr found in the recursive call.
+					}
+					else									// negative exponent implies float.
+					{
+						i = (__int64)(((double)i) * power);
+						p--;								// set back p to the 'e' to indicate (via endptr) that no valid integer was found.
+					}
+				}
 			}
-			if (is_float)
-				return (__int64)_tstof(buf);
+			else if (*p == '.')
+			{
+				i = (__int64)_tstof(buf);	// interpret the string as a float.
+				sign = '+';					// _tstof handles the sign, no need to do it manually before return below.
+			}
 		}
 	}
+
 	if (endptr)
 		*endptr = p == first ? buf : p; // Don't consider " -" numeric on its own.
 	return sign == '+' ? i : -i;
