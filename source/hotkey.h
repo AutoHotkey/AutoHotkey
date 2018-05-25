@@ -146,17 +146,20 @@ private:
 
 public:
 	static Hotkey *shk[MAX_HOTKEYS];
+
+	// 32-bit members:
+	mod_type mModifiers;  // MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, or some additive or bitwise-or combination of these.
+
+	// 16-bit members:
 	HotkeyIDType mID;  // Must be unique for each hotkey of a given thread.
 	HookActionType mHookAction;
-
-	LPTSTR mName; // Points to the label name for static hotkeys, or a dynamically-allocated string for dynamic hotkeys.
 	sc_type mSC; // Scan code.  All vk's have a scan code, but not vice versa.
 	sc_type mModifierSC; // If mModifierVK is zero, this scan code, if non-zero, will be used as the modifier.
-	mod_type mModifiers;  // MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, or some additive or bitwise-or combination of these.
-	modLR_type mModifiersLR;  // Left-right centric versions of the above.
-	modLR_type mModifiersConsolidatedLR; // The combination of mModifierVK, mModifierSC, mModifiersLR, modifiers
+	HotkeyIDType mNextCustomCombo; // ID of the next custom combo with the same suffix as this one (initialized by the hook, but only for combos).
 
 	// Keep single-byte attributes adjacent to each other to conserve memory within byte-aligned class/struct:
+	modLR_type mModifiersLR;  // Left-right centric versions of the above.
+	modLR_type mModifiersConsolidatedLR; // The combination of mModifierVK, mModifierSC, mModifiersLR, modifiers
 	vk_type mVK; // virtual-key code, e.g. VK_TAB, VK_LWIN, VK_LMENU, VK_APPS, VK_F10.  If zero, use sc below.
 	vk_type mModifierVK; // Any other virtual key that must be pressed down in order to activate "vk" itself.
 	HotkeyTypeType mType;
@@ -166,7 +169,6 @@ public:
 	#define NO_SUPPRESS_NEXT_UP_EVENT 0x08        // Bitwise: Bit #4
 	#define NO_SUPPRESS_SUFFIX_VARIES (AT_LEAST_ONE_VARIANT_HAS_TILDE | AT_LEAST_ONE_VARIANT_LACKS_TILDE) // i.e. a hotkey that has variants of both types.
 	#define NO_SUPPRESS_STATES NO_SUPPRESS_NEXT_UP_EVENT  // This is a bitwise union (currently only one item) of those of the above that represent a the key's dynamically changing state as the user types.
-
 	UCHAR mNoSuppress;  // Uses the flags above.  Normally 0, but can be overridden by using the hotkey tilde (~) prefix).
 	bool mKeybdHookMandatory;
 	bool mAllowExtraModifiers;  // False if the hotkey should not fire when extraneous modifiers are held down.
@@ -178,7 +180,9 @@ public:
 	bool mIsRegistered;  // Whether this hotkey has been successfully registered.
 	bool mParentEnabled; // When true, the individual variants' mEnabled flags matter. When false, the entire hotkey is disabled.
 	bool mConstructedOK;
-
+	
+	// 64- or 32-bit members:
+	LPTSTR mName; // Points to the label name for static hotkeys, or a dynamically-allocated string for dynamic hotkeys.
 	HotkeyVariant *mFirstVariant, *mLastVariant; // v1.0.42: Linked list of variant hotkeys created via #IfWin directives.
 
 	// Make sHotkeyCount an alias for sNextID.  Make it const to enforce modifying the value in only one way:
