@@ -5371,7 +5371,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			deref_count = 0;  // Init for each arg.
 
 			// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
-			if (ArgIsNumeric(aActionType, g_act[aActionType].NumericParams, aArg, i))
+			if (*this_new_arg.text // Not omitted.
+				&& ArgIsNumeric(aActionType, g_act[aActionType].NumericParams, aArg, i))
 			{
 				if (aActionType == ACT_WINMOVE)
 				{
