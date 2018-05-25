@@ -1960,6 +1960,7 @@ bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awPa
 	if (pgui) // i.e. we set g->GuiWindow and g->GuiDefaultWindow above.
 	{
 		pgui->Release(); // g->GuiWindow
+		g->GuiWindow = NULL; // In case of an OnError callback, which would execute on the same thread.
 		//g->GuiDefaultWindow->Release(); // This is done by ResumeUnderlyingThread().
 	}
 
@@ -2098,16 +2099,14 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 
 void ResumeUnderlyingThread(LPTSTR aSavedErrorLevel)
 {
+	if (g->ThrownToken)
+		g_script.FreeExceptionToken(g->ThrownToken);
+
 	// These two may be set by any thread, so must be released here:
 	if (g->GuiDefaultWindow)
 		g->GuiDefaultWindow->Release();
 	if (g->DialogOwner)
 		g->DialogOwner->Release();
-
-	// Check if somebody has thrown an exception and it's not been caught yet
-	if (g->ThrownToken)
-		// Display an error message
-		g_script.UnhandledException(g->ThrownToken, g->ExcptLine);
 
 	// The following section handles the switch-over to the former/underlying "g" item:
 	--g_nThreads; // Other sections below might rely on this having been done early.

@@ -3612,7 +3612,7 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 error:
 	// Only STYLE, EXSTYLE and REDRAW affect ErrorLevel for compatibility reasons,
 	// but seems best to allow the other sub-commands to throw exceptions:
-	return (use_errorlevel || g->InTryBlock) ? SetErrorLevelOrThrow() : OK;
+	return (use_errorlevel || g->InTryBlock()) ? SetErrorLevelOrThrow() : OK;
 }
 
 
@@ -5354,7 +5354,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			// DestroyWindow() upon termination so that the WM_DESTROY message winds up being
 			// received and process in this function (which is probably necessary for a clean
 			// termination of the app and all its windows):
-			g_script.ExitApp(EXIT_WM_CLOSE);
+			g_script.ExitApp(EXIT_CLOSE);
 			return 0;  // Verified correct.
 		}
 		// Otherwise, some window of ours other than our main window was destroyed
@@ -5384,9 +5384,9 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 				// and acting upon a WM_CLOSE or us calling DestroyWindow() directly) -- perhaps the window
 				// is being forcibly closed or something else abnormal happened.  Make a best effort to run
 				// the OnExit subroutine, if present, even without a main window (testing on an earlier
-				// versions shows that most commands work fine without the window). Pass the empty string
-				// to tell it to terminate after running the OnExit subroutine:
-				g_script.ExitApp(EXIT_DESTROY, _T(""));
+				// versions shows that most commands work fine without the window). For EXIT_DESTROY,
+				// it always terminates after running the OnExit subroutine:
+				g_script.ExitApp(EXIT_DESTROY);
 			// Do not do PostQuitMessage() here because we don't know the proper exit code.
 			// MSDN: "The exit value returned to the system must be the wParam parameter of
 			// the WM_QUIT message."
@@ -11372,7 +11372,7 @@ LPTSTR GetExitReasonString(ExitReasons aExitReason)
 	case EXIT_WM_QUIT:
 	case EXIT_CRITICAL:
 	case EXIT_DESTROY:
-	case EXIT_WM_CLOSE: str = _T("Close"); break;
+	case EXIT_CLOSE: str = _T("Close"); break;
 	case EXIT_ERROR: str = _T("Error"); break;
 	case EXIT_MENU: str = _T("Menu"); break;  // Standard menu, not a user-defined menu.
 	case EXIT_EXIT: str = _T("Exit"); break;  // ExitApp or Exit command.
@@ -13304,7 +13304,7 @@ has_valid_return_type:
 		// Don't bother with freeing hmodule_to_free since a critical error like this calls for minimal cleanup.
 		// The OS almost certainly frees it upon termination anyway.
 		// Call ScriptErrror() so that the user knows *which* DllCall is at fault:
-		g->InTryBlock = false; // do not throw an exception
+		g->ExcptMode = EXCPTMODE_NONE; // Do not throw an exception.
 		g_script.ScriptError(_T("This DllCall requires a prior VarSetCapacity. The program is now unstable and will exit."));
 		g_script.ExitApp(EXIT_CRITICAL); // Called this way, it will run the OnExit routine, which is debatable because it could cause more good than harm, but might avoid loss of data if the OnExit routine does something important.
 	}
@@ -16665,17 +16665,38 @@ void MsgMonitorList::Remove(MsgMonitorStruct *aMonitor)
 }
 
 
-BIF_DECL(BIF_OnExitOrClipboard)
+BIF_DECL(BIF_On)
 {
-	bool is_onexit = toupper(aResultToken.marker[2]) == 'E';
+	enum OnEventType {
+		OnExit,
+		OnError,
+		OnClipboardChange
+	} event_type;
+	MsgMonitorList *phandlers;
+	switch (tolower(aResultToken.marker[3]))
+	{
+	case 'r':
+		event_type = OnError;
+		phandlers = &g_script.mOnError;
+		break;
+	case 'l':
+		event_type = OnClipboardChange;
+		phandlers = &g_script.mOnClipboardChange;
+		break;
+	default:
+		event_type = OnExit;
+		phandlers = &g_script.mOnExit;
+		break;
+	}
+	MsgMonitorList &handlers = *phandlers;
+
 	aResultToken.SetValue(_T("")); // In all cases there is no return value.
-	MsgMonitorList &handlers = is_onexit ? g_script.mOnExit : g_script.mOnClipboardChange;
 
 	IObject *callback;
 	if (callback = TokenToFunc(*aParam[0]))
 	{
 		// Ensure this function is a valid one.
-		if (((Func *)callback)->mMinParams > 2)
+		if (((Func *)callback)->mMinParams > (event_type == OnExit ? 2 : 1))
 			callback = NULL;
 	}
 	else
@@ -16698,7 +16719,7 @@ BIF_DECL(BIF_OnExitOrClipboard)
 	case -1:
 		if (existing)
 			return;
-		if (!is_onexit)
+		if (event_type == OnClipboardChange)
 		{
 			// Do this before adding the handler so that it won't be called as a result of the
 			// SetClipboardViewer() call on Windows XP.  This won't cause existing handlers to
@@ -16718,7 +16739,7 @@ BIF_DECL(BIF_OnExitOrClipboard)
 	}
 	// In case the above enabled the clipboard listener but failed to add the handler,
 	// do this even if mode != 0:
-	if (!is_onexit && !g_script.mOnClipboardChangeLabel && !handlers.Count())
+	if (event_type == OnClipboardChange && !g_script.mOnClipboardChangeLabel && !handlers.Count())
 		g_script.EnableClipboardListener(false);
 }
 

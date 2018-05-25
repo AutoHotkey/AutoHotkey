@@ -2013,8 +2013,8 @@ int Debugger::Connect(const char *aAddress, const char *aPort)
 				switch (MessageBox(g_hWnd, DEBUGGER_ERR_FAILEDTOCONNECT, g_script.mFileSpec, MB_ABORTRETRYIGNORE | MB_ICONSTOP | MB_SETFOREGROUND | MB_APPLMODAL))
 				{
 				case IDABORT:
-					g_script.ExitApp(EXIT_ERROR, _T(""));
-					// Above should always exit, but if it doesn't, fall through to the next case:
+					g_script.ExitApp(EXIT_CLOSE);
+					// If it didn't exit (due to OnExit), fall through to the next case:
 				case IDIGNORE:
 					closesocket(s);
 					return DEBUGGER_E_INTERNAL_ERROR;
@@ -2102,8 +2102,8 @@ int Debugger::FatalError(LPCTSTR aMessage)
 
 	if (IDNO == MessageBox(g_hWnd, aMessage, g_script.mFileSpec, MB_YESNO | MB_ICONSTOP | MB_SETFOREGROUND | MB_APPLMODAL))
 	{
-		// The following will exit even if the OnExit subroutine does not use ExitApp:
-		g_script.ExitApp(EXIT_ERROR, _T(""));
+		// This might not exit, depending on OnExit:
+		g_script.ExitApp(EXIT_CLOSE);
 	}
 	return DEBUGGER_E_INTERNAL_ERROR;
 }
