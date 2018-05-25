@@ -13,6 +13,7 @@ enum ObjectMethodID { // Partially ported from v2 BuiltInFunctionID.  Used for c
 	FID_ObjInsertAt, FID_ObjDelete, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength
 	, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjGetAddress, FID_ObjClone
 	, FID_ObjNewEnum, FID_ObjMaxIndex, FID_ObjMinIndex, FID_ObjRemove, FID_ObjInsert
+	, FID_ObjCount
 };
 
 
@@ -233,21 +234,27 @@ public:
 	{
 		return (int)mKeyOffsetObject;
 	}
-	
-	bool GetItem(ExprTokenType &aToken, LPTSTR aKey)
+
+	bool GetItem(ExprTokenType &aToken, ExprTokenType &aKey)
 	{
-		KeyType key;
-		SymbolType key_type = IsPureNumeric(aKey, FALSE, FALSE, FALSE); // SYM_STRING or SYM_INTEGER.
-		if (key_type == SYM_INTEGER)
-			key.i = Exp32or64(ATOI,ATOI64)(aKey);
-		else
-			key.s = aKey;
 		IndexType insert_pos;
-		FieldType *field = FindField(key_type, key, insert_pos);
+		TCHAR buf[MAX_NUMBER_SIZE];
+		SymbolType key_type;
+		KeyType key;
+		FieldType *field = FindField(aKey, buf, key_type, key, insert_pos);
 		if (!field)
 			return false;
 		field->ToToken(aToken);
 		return true;
+	}
+	
+	bool GetItem(ExprTokenType &aToken, LPTSTR aKey)
+	{
+		ExprTokenType key;
+		key.symbol = SYM_OPERAND;
+		key.marker = aKey;
+		key.buf = NULL;
+		return GetItem(aToken, key);
 	}
 	
 	bool SetItem(ExprTokenType &aKey, ExprTokenType &aValue)
@@ -337,6 +344,7 @@ public:
 	ResultType _GetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _SetCapacity(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _GetAddress(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Count(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _Length(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _MaxIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _MinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);

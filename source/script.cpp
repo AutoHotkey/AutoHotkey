@@ -8445,6 +8445,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		BIF_OBJ_CASE(Remove, 		0, 2) // [min_key, max_key]
 		BIF_OBJ_CASE(RemoveAt,      1, 2) // position [, count]
 		BIF_OBJ_CASE(Pop,			0, 0)
+		BIF_OBJ_CASE(Count, 		0, 0)
 		BIF_OBJ_CASE(Length, 		0, 0)
 		BIF_OBJ_CASE(MinIndex, 		0, 0)
 		BIF_OBJ_CASE(MaxIndex, 		0, 0)
@@ -8460,9 +8461,23 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 			bif = BIF_ObjAddRefRelease;
 		else if (!_tcsicmp(suffix, _T("RawSet")))
 		{
-			bif = BIF_ObjRawSet;
+			bif = BIF_ObjRaw;
 			min_params = 3;
 			max_params = 3;
+		}
+		else if (!_tcsicmp(suffix, _T("RawGet")))
+		{
+			bif = BIF_ObjRaw;
+			min_params = 2;
+			max_params = 2;
+		}
+		else if (!_tcsicmp(suffix, _T("GetBase")))
+			bif = BIF_ObjBase;
+		else if (!_tcsicmp(suffix, _T("SetBase")))
+		{
+			bif = BIF_ObjBase;
+			min_params = 2;
+			max_params = 2;
 		}
 		else return NULL;
 	}
