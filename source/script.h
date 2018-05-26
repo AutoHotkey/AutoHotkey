@@ -2916,7 +2916,7 @@ private:
 	LPTSTR ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool aDisplayErrors);
 	static ActionTypeType ConvertActionType(LPTSTR aActionTypeString);
 	static ActionTypeType ConvertOldActionType(LPTSTR aActionTypeString);
-	static bool ArgIsNumeric(ActionTypeType aActionType, ActionTypeType *np, LPTSTR arg[], int nArgs);
+	static bool ArgIsNumeric(ActionTypeType aActionType, ActionTypeType *np, LPTSTR arg[], int aArgIndex, int aArgCount = -1);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
 	void RemoveLabel(Label *aLabel);
 	ResultType AddLine(ActionTypeType aActionType, LPTSTR aArg[] = NULL, int aArgc = 0, LPTSTR aArgMap[] = NULL);

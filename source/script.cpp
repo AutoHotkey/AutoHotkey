@@ -5139,7 +5139,7 @@ inline ActionTypeType Script::ConvertOldActionType(LPTSTR aActionTypeString)
 
 
 
-bool Script::ArgIsNumeric(ActionTypeType aActionType, ActionTypeType *np, LPTSTR arg[], int nArgs)
+bool Script::ArgIsNumeric(ActionTypeType aActionType, ActionTypeType *np, LPTSTR arg[], int nArgs, int aArgCount)
 {
 	// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
 	int nArgs_plus_one = nArgs + 1;
@@ -5147,7 +5147,22 @@ bool Script::ArgIsNumeric(ActionTypeType aActionType, ActionTypeType *np, LPTSTR
 		if (*np == nArgs_plus_one) // This arg is enforced to be purely numeric.
 			break;
 	if (*np) // Match found, so this is a purely numeric arg.
+	{
+		if (aActionType == ACT_WINMOVE)
+		{
+			if (nArgs > 1)
+			{
+				// i indicates this is Arg #3 or beyond, which is one of the args that is
+				// either the word "default" or a number/expression.
+				if (!_tcsicmp(arg[nArgs], _T("default"))) // It's not an expression.
+					return false;
+			}
+			else // This is the first or second arg, which are title/text vs. X/Y when aArgCount > 2.
+				if (aArgCount > 2) // Title/text are not numeric/expressions.
+					return false;
+		}
 		return true;
+	}
 	if (aActionType == ACT_TRANSFORM && (nArgs == 2 || nArgs == 3)) // i.e. the 3rd or 4th arg is about to be added.
 	{
 		// Somewhat inefficient since it has to be called for both Arg#2 and Arg#3, but seems
@@ -5372,22 +5387,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 			// As of v1.0.25, pure numeric parameters can optionally be numeric expressions, so check for that:
 			if (*this_new_arg.text // Not omitted.
-				&& ArgIsNumeric(aActionType, g_act[aActionType].NumericParams, aArg, i))
+				&& ArgIsNumeric(aActionType, g_act[aActionType].NumericParams, aArg, i, aArgc))
 			{
-				if (aActionType == ACT_WINMOVE)
-				{
-					if (i > 1)
-					{
-						// i indicates this is Arg #3 or beyond, which is one of the args that is
-						// either the word "default" or a number/expression.
-						if (!_tcsicmp(this_new_arg.text, _T("default"))) // It's not an expression.
-							break; // The loop is over because this arg was found in the list.
-					}
-					else // This is the first or second arg, which are title/text vs. X/Y when aArgc > 2.
-						if (aArgc > 2) // Title/text are not numeric/expressions.
-							break; // The loop is over because this arg was found in the list.
-				}
-				// Otherwise, it might be an expression so do the final checks.
+				// It might be an expression so do the final checks.
 				// Override the original false default of is_expression unless an exception applies.
 				// Since ACT_ASSIGNEXPR, WHILE, FOR and UNTIL aren't legacy commands, don't call
 				// LegacyArgIsExpression() for them because that would cause things like x:=%y% and
