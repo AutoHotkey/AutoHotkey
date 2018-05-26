@@ -218,6 +218,7 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 			// a full GuiType structure is constructed.  We can't actually create the Gui yet,
 			// since that would prevent +Owner%N% from working and possibly break other scripts
 			// which rely on the old behaviour.
+			if (  (GuiType::sFont || (GuiType::sFont = (FontType *)malloc(sizeof(FontType) * MAX_GUI_FONTS)))  ) // See similar line below for comments regarding sFont.
 			if (pgui = new GuiType())
 			{
 				if (pgui->mName = tmalloc(name_length + 1))
