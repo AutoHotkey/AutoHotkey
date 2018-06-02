@@ -3519,7 +3519,7 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 			}
 		} // switch()
 		if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find the first space or tab after the option.
-			goto error; // Bad option/format.
+			goto arg7_error; // Bad option/format.
 		// Now it's the space or tab (if there is one) after the option letter.  Advance by exactly one character
 		// because only one space or tab is considered the delimiter.  Any others are considered to be part of the
 		// filename (though some or all OSes might simply ignore them or tolerate them as first-try match criteria).
@@ -3551,7 +3551,7 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 	// by the search.  In other words, nothing works.  Obsolete comment: Pass "true" so that an attempt
 	// will be made to load icons as bitmaps if GDIPlus is available.
 	if (!hbitmap_image)
-		goto error;
+		goto arg7_error;
 
 	HDC hdc = GetDC(NULL);
 	if (!hdc)
@@ -3599,7 +3599,7 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 			DeleteObject(ii.hbmMask);
 		}
 		if (   !(hbitmap_image = IconToBitmap((HICON)hbitmap_image, true))   )
-			goto error;
+			goto end;
 	}
 
 	if (   !(image_pixel = getbits(hbitmap_image, hdc, image_width, image_height, image_is_16bit))   )
@@ -3789,7 +3789,7 @@ end:
 	// If found==false when execution reaches here, ErrorLevel is already set to the right value, so just
 	// clean up then return.
 	ReleaseDC(NULL, hdc);
-	if (!no_delete_bitmap)
+	if (!no_delete_bitmap && hbitmap_image)
 		DeleteObject(hbitmap_image);
 	if (sdc)
 	{
@@ -3821,8 +3821,11 @@ end:
 
 	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
+arg7_error:
+	return LineError(ERR_PARAM7_INVALID, FAIL, aImageFile);
+
 error:
-	return SetErrorLevelOrThrowInt(ERRORLEVEL_ERROR2);
+	return LineError(ERR_INTERNAL_CALL);
 }
 
 

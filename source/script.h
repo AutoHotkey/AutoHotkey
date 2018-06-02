@@ -233,6 +233,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_LENGTH _T("Invalid Length.")
 #define ERR_INVALID_ENCODING _T("Invalid Encoding.")
 #define ERR_INVALID_USAGE _T("Invalid usage.")
+#define ERR_INTERNAL_CALL _T("An internal function call failed.")
 
 #define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
