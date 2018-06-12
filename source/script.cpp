@@ -8942,11 +8942,13 @@ unquoted_literal:
 						{
 							return LineError(ERR_TOO_MANY_PARAMS, FAIL, in_param_list->marker);
 						}
-						else if (postfix_count > 1 && postfix[postfix_count-2] > stack[stack_count-1])
+						else if (postfix[postfix_count-1][-1].symbol != SYM_COMMA && postfix[postfix_count-1][-1].symbol != stack_symbol)
 						{
-							// Second-last postfix token is also within the function's parameter list,
-							// so the parameter isn't a simple value.  The checks and optimizations below
-							// aren't capable of handling this.  For example: Func(true ? "abs" : "").
+							// This parameter is more than a single operand, so may be something which can't be
+							// handled by the checks and optimizations below, such as Func(true ? "abs" : "").
+							// This limitation is a tradeoff between handling ternary correctly and completeness
+							// of validation at load-time.  If ternary could be easily excluded, errors such as
+							// CaretGetPos(x y) could be detected below.
 						}
 						else if (func->ArgIsOutputVar(in_param_list->param_count - 1))
 						{
@@ -8971,7 +8973,7 @@ unquoted_literal:
 								// var as SYM_VAR or will throw an error.
 								param1.is_lvalue = TRUE;
 							}
-							else if (!IS_OPERATOR_VALID_LVALUE(param1.symbol))
+							else //if (!IS_OPERATOR_VALID_LVALUE(param1.symbol)) // This section currently only executes for single operands.
 							{
 								sntprintf(number_buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
 									, in_param_list->param_count, func->mName);
