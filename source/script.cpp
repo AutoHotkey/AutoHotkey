@@ -10935,9 +10935,13 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 
 	// "Localize" the loop variables.
 	VarBkp var_bkp[2];
+	var[0] = var[0]->ResolveAlias(); // Required for correct handling of ByRef, super-globals (when reference precedes declaration) and upvars.
 	var[0]->Backup(var_bkp[0]);
 	if (var[1])
+	{
+		var[1] = var[1]->ResolveAlias();
 		var[1]->Backup(var_bkp[1]);
+	}
 
 	// Prepare parameters for the loop below: enum.Next(var1 [, var2])
 	param_tokens[0].SetValue(_T("Next"), 4);
