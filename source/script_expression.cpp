@@ -1516,6 +1516,22 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		// Otherwise, even if some params are SYM_MISSING, it is relatively safe to call the function.
 		// The TokenTo' set of functions will produce 0 or "" for missing params.  Although that isn't
 		// technically correct, it is simple and fairly logical.
+		if (mOutputVars)
+		{
+			// Verify that each output parameter is either a valid var or completely omitted.
+			for (int i = 0; i < MAX_FUNC_OUTPUT_VAR && mOutputVars[i]; ++i)
+			{
+				if (mOutputVars[i] <= aParamCount
+					&& aParam[mOutputVars[i]-1]->symbol != SYM_VAR
+					&& aParam[mOutputVars[i]-1]->symbol != SYM_MISSING)
+				{
+					sntprintf(aResultToken.buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
+						, mOutputVars[i], mName);
+					aResultToken.Error(aResultToken.buf);
+					return false; // Abort expression.
+				}
+			}
+		}
 
 		aResultToken.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
 		aResultToken.func = this;          // Inform function of which built-in function called it (allows code sharing/reduction).
