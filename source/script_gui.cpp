@@ -511,6 +511,13 @@ BIF_DECL(BIF_GuiCreate)
 {
 	LPTSTR options = ParamIndexToOptionalString(0, _f_number_buf);
 
+	// v1.0.44.14: sFont is created upon first use to conserve ~14 KB memory in non-GUI scripts.
+	// v1.1.29.00: sFont is created here rather than in FindOrCreateFont(), which is called by
+	// the constructor below, to avoid the need to add extra logic in several places to detect
+	// a failed/NULL array.  Previously that was done by simply terminating the script.
+	if (  !(GuiType::sFont || (GuiType::sFont = (FontType *)malloc(sizeof(FontType) * MAX_GUI_FONTS)))  )
+		_f_throw(ERR_OUTOFMEM);
+
 	GuiType* gui = new GuiType();
 	if (!gui)
 		_f_throw(ERR_OUTOFMEM); // Short msg since so rare.
@@ -7719,7 +7726,7 @@ void GuiType::Cancel()
 		VisibilityChanged(); // This may Release() and indirectly Destroy() the Gui.
 	}
 	// If this Gui was the last thing keeping the script running, exit the script:
-	g_script.ExitIfNotPersistent(EXIT_WM_CLOSE);
+	g_script.ExitIfNotPersistent(EXIT_CLOSE);
 }
 
 
@@ -8060,9 +8067,6 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 		{
 			// For simplifying other code sections, create an entry in the array for the default font
 			// (GUI constructor relies on at least one font existing in the array).
-			if (!sFont) // v1.0.44.14: Created upon first use to conserve ~14 KB memory in non-GUI scripts.
-				if (   !(sFont = (FontType *)malloc(sizeof(FontType) * MAX_GUI_FONTS))   )
-					g_script.ExitApp(EXIT_CRITICAL, ERR_OUTOFMEM); // Since this condition is so rare, just abort to avoid the need to add extra logic in several places to detect a failed/NULL array.
 			// Doesn't seem likely that DEFAULT_GUI_FONT face/size will change while a script is running,
 			// or even while the system is running for that matter.  I think it's always an 8 or 9 point
 			// font regardless of desktop's appearance/theme settings.

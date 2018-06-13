@@ -391,12 +391,52 @@ BIF_DECL(BIF_ObjBindMethod)
 // ObjRawSet - set a value without invoking any meta-functions.
 //
 
-BIF_DECL(BIF_ObjRawSet)
+BIF_DECL(BIF_ObjRaw)
 {
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
 	if (!obj)
 		_f_throw(ERR_PARAM1_INVALID);
-	if (!obj->SetItem(*aParam[1], *aParam[2]))
-		_f_throw(ERR_OUTOFMEM);
+	if (_f_callee_id == FID_ObjRawSet)
+	{
+		if (!obj->SetItem(*aParam[1], *aParam[2]))
+			_f_throw(ERR_OUTOFMEM);
+	}
+	else
+	{
+		if (obj->GetItem(aResultToken, *aParam[1]))
+		{
+			if (aResultToken.symbol == SYM_OBJECT)
+				aResultToken.object->AddRef();
+			return;
+		}
+	}
+	_f_return_empty;
+}
+
+
+//
+// ObjSetBase/ObjGetBase - Change or return Object's base without invoking any meta-functions.
+//
+
+BIF_DECL(BIF_ObjBase)
+{
+	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
+	if (!obj)
+		_f_throw(ERR_PARAM1_INVALID);
+	if (_f_callee_id == FID_ObjSetBase)
+	{
+		IObject *new_base = TokenToObject(*aParam[1]);
+		if (!new_base && !TokenIsEmptyString(*aParam[1]))
+			_f_throw(ERR_PARAM2_INVALID);
+		obj->SetBase(new_base);
+	}
+	else // ObjGetBase
+	{
+		if (IObject *obj_base = obj->Base())
+		{
+			obj_base->AddRef();
+			_f_return(obj_base);
+		}
+	}
 	_f_return_empty;
 }

@@ -101,6 +101,12 @@ enum ResultType {FAIL = 0, OK, WARN = OK, CRITICAL_ERROR  // Some things might r
 	, LOOP_BREAK, LOOP_CONTINUE
 	, EARLY_RETURN, EARLY_EXIT}; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
 
+enum ExcptModeType {EXCPTMODE_NONE = 0
+	//, EXCPTMODE_TRY = 1 // Currently unused: Try block present.  Affects SetErrorLevelOrThrow().
+	, EXCPTMODE_CATCH = 2 // Exception will be suppressed or caught.
+	, EXCPTMODE_DELETE = 4 // Unhandled exceptions will display ERR_ABORT_DELETE vs. ERR_ABORT.
+	, EXCPTMODE_LINE_WORKAROUND = 8}; // See comments in BIF_PerformAction.
+
 #define SEND_MODES { _T("Event"), _T("Input"), _T("Play"), _T("InputThenPlay") } // Must match the enum below.
 enum SendModes {SM_EVENT, SM_INPUT, SM_PLAY, SM_INPUT_FALLBACK_TO_PLAY, SM_INVALID}; // SM_EVENT must be zero.
 // In above, SM_INPUT falls back to SM_EVENT when the SendInput mode would be defeated by the presence
@@ -114,7 +120,7 @@ enum SendRawModes {SCM_NOT_RAW = FALSE, SCM_RAW, SCM_RAW_TEXT};
 typedef UCHAR SendRawType;
 
 enum ExitReasons {EXIT_NONE, EXIT_CRITICAL, EXIT_ERROR, EXIT_DESTROY, EXIT_LOGOFF, EXIT_SHUTDOWN
-	, EXIT_WM_QUIT, EXIT_WM_CLOSE, EXIT_MENU, EXIT_EXIT, EXIT_RELOAD, EXIT_SINGLEINSTANCE};
+	, EXIT_WM_QUIT, EXIT_CLOSE, EXIT_MENU, EXIT_EXIT, EXIT_RELOAD, EXIT_SINGLEINSTANCE};
 
 enum WarnType {WARN_USE_UNSET_LOCAL, WARN_USE_UNSET_GLOBAL, WARN_LOCAL_SAME_AS_GLOBAL, WARN_CLASS_OVERWRITE, WARN_ALL};
 #define WARN_TYPE_STRINGS _T("UseUnsetLocal"), _T("UseUnsetGlobal"), _T("LocalSameAsGlobal"), _T("ClassOverwrite"), _T("All")
@@ -863,9 +869,9 @@ struct global_struct
 	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
 	bool ListLinesIsEnabled;
 	UINT Encoding;
+	int ExcptMode;
 	ResultToken* ThrownToken;
-	Line* ExcptLine;
-	bool InTryBlock;
+	//inline bool InTryBlock() { return ExcptMode & EXCPTMODE_TRY; } // Currently unused.
 };
 
 inline void global_maximize_interruptibility(global_struct &g)
@@ -902,7 +908,7 @@ inline void global_clear_state(global_struct &g)
 	g.mLoopReadFile = NULL;
 	g.mLoopField = NULL;
 	g.ThrownToken = NULL;
-	g.InTryBlock = false;
+	g.ExcptMode = EXCPTMODE_NONE;
 }
 
 inline void global_init(global_struct &g)

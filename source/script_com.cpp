@@ -1606,6 +1606,8 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 
 	HRESULT result_to_return;
 	FuncResult result_token;
+	int outer_excptmode = g->ExcptMode;
+	g->ExcptMode |= EXCPTMODE_CATCH; // Indicate exceptions will be handled (by our caller, the COM client).
 
 	for (;;)
 	{
@@ -1655,6 +1657,8 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 		}
 		break;
 	}
+
+	g->ExcptMode = outer_excptmode;
 
 	// Clean up:
 	result_token.Free();

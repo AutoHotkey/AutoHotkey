@@ -1146,21 +1146,20 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// take effect regardless of whether any win/ctrl/alt/shift modifiers are currently down, even if
 		// those modifiers themselves form another valid hotkey with this suffix.  In other words,
 		// ModifierVK/SC combos take precedence over normally-modified combos:
-		int i;
-		vk_type modifier_vk;
-		sc_type modifier_sc;
-		for (i = 0; i < this_key.nModifierVK; ++i)
+		Hotkey *found_hk = NULL;
+		for (hotkey_id_temp = this_key.first_custom_combo; hotkey_id_temp != HOTKEY_ID_INVALID; )
 		{
-			vk_hotkey &this_modifier_vk = this_key.ModifierVK[i]; // For performance and convenience.
+			Hotkey &this_hk = *Hotkey::shk[hotkey_id_temp]; // hotkey_id_temp does not include flags in this case.
+			key_type &this_modifier_key = this_hk.mModifierVK ? kvk[this_hk.mModifierVK] : ksc[this_hk.mModifierSC];
 			// The following check supports the prefix+suffix pairs that have both an up hotkey and a down,
 			// such as:
 			//a & b::     ; Down.
 			//a & b up::  ; Up.
 			//MsgBox %A_ThisHotkey%
 			//return
-			if (kvk[this_modifier_vk.vk].is_down) // A prefix key qualified to trigger this suffix is down.
+			if (this_modifier_key.is_down) // A prefix key qualified to trigger this suffix is down.
 			{
-				if (this_modifier_vk.id_with_flags & HOTKEY_KEY_UP)
+				if (this_hk.mKeyUp)
 				{
 					if (!aKeyUp) // Key-up hotkey but the event is a down-event.
 					{
@@ -1169,15 +1168,14 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 						// thus desirable).  v1.0.41: This is done even if the hotkey is subject
 						// to #IfWin because it seems more correct to check those criteria at the actual time
 						// the key is released rather than now:
-						this_key.hotkey_to_fire_upon_release = this_modifier_vk.id_with_flags;
-						if (hotkey_id_with_flags != HOTKEY_ID_INVALID) // i.e. a previous iteration already found the down-event to fire.
+						this_key.hotkey_to_fire_upon_release = this_hk.mID;
+						if (found_hk) // i.e. a previous iteration already found the down-event to fire.
 							break;
 						//else continue searching for the down hotkey that goes with this up (if any).
 					}
 					else // this hotkey is qualified to fire.
 					{
-						hotkey_id_with_flags = this_modifier_vk.id_with_flags;
-						modifier_vk = this_modifier_vk.vk;
+						found_hk = &this_hk;
 						break;
 					}
 				}
@@ -1185,8 +1183,8 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				{
 					if (!aKeyUp)
 					{
-						hotkey_id_with_flags = this_modifier_vk.id_with_flags;
-						modifier_vk = this_modifier_vk.vk; // Set this now in case loop ends on its own (not via break).
+						if (!found_hk) // Use the first one found (especially important when both "a & Control" and "a & LControl" are present).
+							found_hk = &this_hk;
 						// and continue searching for the up hotkey (if any) to queue up for firing upon the key's release).
 					}
 					//else this key-down hotkey can't fire because the current event is a up-event.
@@ -1194,181 +1192,38 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 					// generates down-events (e.g. certain Dell keyboards).
 				}
 			} // qualified prefix is down
+			hotkey_id_temp = this_hk.mNextCustomCombo;
 		} // for each prefix of this suffix
-		if (hotkey_id_with_flags != HOTKEY_ID_INVALID)
+		if (found_hk)
 		{
-			// Update pPrefixKey, even though it was probably already done close to the top of the function,
-			// just in case this for-loop changed the value pPrefixKey (perhaps because there
+			// Update pPrefixKey, even though it was probably already done close to the top of the
+			// function, just in case this hotkey uses a different prefix key (perhaps because there
 			// is currently more than one prefix being held down).
 			// Since the hook is now designed to receive only left/right specific modifier keys
 			// -- never the neutral keys -- never indicate that a neutral prefix key is down because
 			// then it would never be released properly by the other main prefix/suffix handling
 			// cases of the hook.  Instead, always identify which prefix key (left or right) is
 			// in effect:
-			switch (modifier_vk)
+			switch (found_hk->mModifierVK)
 			{
 			case VK_SHIFT: pPrefixKey = kvk + (kvk[VK_RSHIFT].is_down ? VK_RSHIFT : VK_LSHIFT); break;
 			case VK_CONTROL: pPrefixKey = kvk + (kvk[VK_RCONTROL].is_down ? VK_RCONTROL : VK_LCONTROL); break;
 			case VK_MENU: pPrefixKey = kvk + (kvk[VK_RMENU].is_down ? VK_RMENU : VK_LMENU); break;
-			default: pPrefixKey = kvk + modifier_vk;
+			case 0: pPrefixKey = ksc + found_hk->mModifierSC; break;
+			default: pPrefixKey = kvk + found_hk->mModifierVK;
 			}
-		}
-		else // Now check scan codes since above didn't find a valid hotkey.
-		{
-			for (i = 0; i < this_key.nModifierSC; ++i)
+			if (found_hk->mHookAction)
+				hotkey_id_with_flags = found_hk->mHookAction;
+			else // Don't call the below for Alt-tab hotkeys and similar.
 			{
-				sc_hotkey &this_modifier_sc = this_key.ModifierSC[i]; // For performance and convenience.
-				if (ksc[this_modifier_sc.sc].is_down)
-				{
-					// See similar section above for comments about the section below:
-					if (this_modifier_sc.id_with_flags & HOTKEY_KEY_UP)
-					{
-						if (!aKeyUp)
-						{
-							this_key.hotkey_to_fire_upon_release = this_modifier_sc.id_with_flags;
-							if (hotkey_id_with_flags != HOTKEY_ID_INVALID) // i.e. a previous iteration already found the down-event to fire.
-								break;
-						}
-						else // this hotkey is qualified to fire.
-						{
-							hotkey_id_with_flags = this_modifier_sc.id_with_flags;
-							modifier_sc = this_modifier_sc.sc;
-							break;
-						}
-					}
-					else // This is a normal hotkey that fires on suffix key-down.
-					{
-						if (!aKeyUp)
-						{
-							hotkey_id_with_flags = this_modifier_sc.id_with_flags;
-							modifier_sc = this_modifier_sc.sc; // Set this now in case loop ends on its own (not via break).
-						}
-					}
-				}
-			} // for()
-			if (hotkey_id_with_flags != HOTKEY_ID_INVALID)
-				// Update pPrefixKey, even though it was probably already done close to the top of the function,
-				// just in case this for-loop changed the value pPrefixKey (perhaps because there
-				// is currently more than one prefix being held down).
-				pPrefixKey = ksc + modifier_sc;
-		} // The check for scan code vs. VK.
-		if (hotkey_id_with_flags == HOTKEY_ID_INVALID)
-		{
-			// Search again, but this time do it with this_key translated into its neutral counterpart.
-			// This avoids the need to display a warning dialog for an example such as the following,
-			// which was previously unsupported:
-			// AppsKey & Control::MsgBox %A_ThisHotkey%
-			// Note: If vk was a neutral modifier when it first came in (e.g. due to NT4), it was already
-			// translated early on (above) to be non-neutral.
-			vk_type vk_neutral = 0;  // Set default.  Note that VK_LWIN/VK_RWIN have no neutral VK.
-			switch (aVK)
-			{
-			case VK_LCONTROL:
-			case VK_RCONTROL: vk_neutral = VK_CONTROL; break;
-			case VK_LMENU:
-			case VK_RMENU:    vk_neutral = VK_MENU; break;
-			case VK_LSHIFT:
-			case VK_RSHIFT:   vk_neutral = VK_SHIFT; break;
-			}
-			if (vk_neutral)
-			{
-				// These next two for() loops are nearly the same as the ones above, so see comments there
-				// and maintain them together:
-				int max = kvk[vk_neutral].nModifierVK;
-				for (i = 0; i < max; ++i)
-				{
-					vk_hotkey &this_modifier_vk = kvk[vk_neutral].ModifierVK[i]; // For performance and convenience.
-					if (kvk[this_modifier_vk.vk].is_down)
-					{
-						// See similar section above for comments about the section below:
-						if (this_modifier_vk.id_with_flags & HOTKEY_KEY_UP)
-						{
-							if (!aKeyUp)
-							{
-								this_key.hotkey_to_fire_upon_release = this_modifier_vk.id_with_flags;
-								if (hotkey_id_with_flags != HOTKEY_ID_INVALID) // i.e. a previous iteration already found the down-event to fire.
-									break;
-							}
-							else // this hotkey is qualified to fire.
-							{
-								hotkey_id_with_flags = this_modifier_vk.id_with_flags;
-								modifier_vk = this_modifier_vk.vk;
-								break;
-							}
-						}
-						else // This is a normal hotkey that fires on suffix key-down.
-						{
-							if (!aKeyUp)
-							{
-								hotkey_id_with_flags = this_modifier_vk.id_with_flags;
-								modifier_vk = this_modifier_vk.vk; // Set this now in case loop ends on its own (not via break).
-							}
-						}
-					}
-				}
-				if (hotkey_id_with_flags != HOTKEY_ID_INVALID)
-				{
-					// See the nearly identical section above for comments on the below:
-					switch (modifier_vk)
-					{
-					case VK_SHIFT: pPrefixKey = kvk + (kvk[VK_RSHIFT].is_down ? VK_RSHIFT : VK_LSHIFT); break;
-					case VK_CONTROL: pPrefixKey = kvk + (kvk[VK_RCONTROL].is_down ? VK_RCONTROL : VK_LCONTROL); break;
-					case VK_MENU: pPrefixKey = kvk + (kvk[VK_RMENU].is_down ? VK_RMENU : VK_LMENU); break;
-					default: pPrefixKey = kvk + modifier_vk;
-					}
-				}
-				else  // Now check scan codes since above didn't find one.
-				{
-					for (max = kvk[vk_neutral].nModifierSC, i = 0; i < max; ++i)
-					{
-						sc_hotkey &this_modifier_sc = kvk[vk_neutral].ModifierSC[i]; // For performance and convenience.
-						if (ksc[this_modifier_sc.sc].is_down)
-						{
-							// See similar section above for comments about the section below:
-							if (this_modifier_sc.id_with_flags & HOTKEY_KEY_UP)
-							{
-								if (!aKeyUp)
-								{
-									this_key.hotkey_to_fire_upon_release = this_modifier_sc.id_with_flags;
-									if (hotkey_id_with_flags != HOTKEY_ID_INVALID) // i.e. a previous iteration already found the down-event to fire.
-										break;
-								}
-								else // this hotkey is qualified to fire.
-								{
-									hotkey_id_with_flags = this_modifier_sc.id_with_flags;
-									modifier_sc = this_modifier_sc.sc;
-									break;
-								}
-							}
-							else // This is a normal hotkey that fires on suffix key-down.
-							{
-								if (!aKeyUp)
-								{
-									hotkey_id_with_flags = this_modifier_sc.id_with_flags;
-									modifier_sc = this_modifier_sc.sc; // Set this now in case loop ends on its own (not via break).
-								}
-							}
-						}
-					} // for()
-					if (hotkey_id_with_flags != HOTKEY_ID_INVALID)
-						pPrefixKey = ksc + modifier_sc; // See the nearly identical section above for comments.
-				} // SC vs. VK
-			} // If this_key has a counterpart neutral modifier.
-		} // Above block searched for match using neutral modifier.
-
-		hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK; // For use both inside and outside the block below.
-		if (hotkey_id_with_flags != HOTKEY_ID_INVALID)
-		{
-			// v1.0.41:
-			if (hotkey_id_temp < Hotkey::sHotkeyCount) // Don't call the below for Alt-tab hotkeys and similar.
+				hotkey_id_with_flags = found_hk->mID; // Flags not needed.
 				if (   !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags
 					, aKeyUp, aExtraInfo, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type))   )
 					return AllowKeyToGoToSystem; // This should handle pForceToggle for us, suppressing if necessary.
-				else // The naked hotkey ID may have changed, so update it (flags currently don't matter in this case).
-					hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK; // Update in case CriterionFiringIsCertain() changed it.
+			}
+			hotkey_id_temp = hotkey_id_with_flags;
 			pPrefixKey->was_just_used = AS_PREFIX_FOR_HOTKEY;
 		}
-		//else: No "else if" here to avoid an extra indentation for the whole section below (it's not needed anyway).
 
 		// Alt-tab: Alt-tab actions that require a prefix key are handled directly here rather than via
 		// posting a message back to the main window.  In part, this is because it would be difficult
@@ -3911,39 +3766,31 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 			hotkey_id_with_flags |= HOTKEY_KEY_UP;
 		}
 
+		bool hk_is_custom_combo = hk.mModifierVK || hk.mModifierSC;
+
 		// If this is a naked (unmodified) modifier key, make it a prefix if it ever modifies any
 		// other hotkey.  This processing might be later combined with the hotkeys activation function
 		// to eliminate redundancy / improve efficiency, but then that function would probably need to
 		// init everything else here as well:
-		if (pThisKey->as_modifiersLR && !hk.mModifiersConsolidatedLR && !hk.mModifierVK && !hk.mModifierSC
+		if (pThisKey->as_modifiersLR && !hk.mModifiersConsolidatedLR && !hk_is_custom_combo
 			&& !(hk.mNoSuppress & AT_LEAST_ONE_VARIANT_HAS_TILDE)) // v1.0.45.02: ~Alt, ~Control, etc. should fire upon press-down, not release (broken by 1.0.44's PREFIX_FORCED, but I think it was probably broken in pre-1.0.41 too).
 			SetModifierAsPrefix(hk.mVK, hk.mSC);
 
-		if (hk.mModifierVK)
+		if (hk_is_custom_combo)
 		{
-			if (kvk[hk.mModifierVK].as_modifiersLR)
-				// The hotkey's ModifierVK is itself a modifier.
-				SetModifierAsPrefix(hk.mModifierVK, 0, true);
-			else
+			if (hk.mModifierVK)
 			{
-				kvk[hk.mModifierVK].used_as_prefix = PREFIX_ACTUAL;
-				if (hk.mNoSuppress & NO_SUPPRESS_PREFIX)
-					kvk[hk.mModifierVK].no_suppress |= NO_SUPPRESS_PREFIX;
-			}
-			if (pThisKey->nModifierVK < MAX_MODIFIER_VKS_PER_SUFFIX)  // else currently no error-reporting.
-			{
-				pThisKey->ModifierVK[pThisKey->nModifierVK].vk = hk.mModifierVK;
-				if (hk.mHookAction)
-					pThisKey->ModifierVK[pThisKey->nModifierVK].id_with_flags = hk.mHookAction;
+				if (kvk[hk.mModifierVK].as_modifiersLR)
+					// The hotkey's ModifierVK is itself a modifier.
+					SetModifierAsPrefix(hk.mModifierVK, 0, true);
 				else
-					pThisKey->ModifierVK[pThisKey->nModifierVK].id_with_flags = hotkey_id_with_flags;
-				++pThisKey->nModifierVK;
-				continue;
+				{
+					kvk[hk.mModifierVK].used_as_prefix = PREFIX_ACTUAL;
+					if (hk.mNoSuppress & NO_SUPPRESS_PREFIX)
+						kvk[hk.mModifierVK].no_suppress |= NO_SUPPRESS_PREFIX;
+				}
 			}
-		}
-		else
-		{
-			if (hk.mModifierSC)
+			else //if (hk.mModifierSC)
 			{
 				if (ksc[hk.mModifierSC].as_modifiersLR)  // Fixed for v1.0.35.13 (used to be kvk vs. ksc).
 					// The hotkey's ModifierSC is itself a modifier.
@@ -3958,28 +3805,22 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 					// scan code:
 					ksc[hk.mModifierSC].sc_takes_precedence = true;
 				}
-				if (pThisKey->nModifierSC < MAX_MODIFIER_SCS_PER_SUFFIX)  // else currently no error-reporting.
-				{
-					pThisKey->ModifierSC[pThisKey->nModifierSC].sc = hk.mModifierSC;
-					if (hk.mHookAction)
-						pThisKey->ModifierSC[pThisKey->nModifierSC].id_with_flags = hk.mHookAction;
-					else
-						pThisKey->ModifierSC[pThisKey->nModifierSC].id_with_flags = hotkey_id_with_flags;
-					++pThisKey->nModifierSC;
-					continue;
-				}
 			}
-			#ifndef SEND_NOSUPPRESS_PREFIX_KEY_ON_RELEASE // Search for this symbol for details.
-			else
-			{
-				// If this hotkey is a lone key with ~ prefix such as "~a::", the following ensures that
-				// the ~ prefix is respected even if the key is also used as a prefix in a custom combo,
-				// such as "a & b::".  This is consistent with the behaviour of "~a & b::".
-				if (!hk.mModifiersConsolidatedLR && (hk.mNoSuppress & AT_LEAST_ONE_VARIANT_HAS_TILDE))
-					pThisKey->no_suppress |= NO_SUPPRESS_PREFIX;
-			}
-			#endif
+			// Insert this hotkey at the front of the linked list of combos which use this suffix key.
+			hk.mNextCustomCombo = pThisKey->first_custom_combo;
+			pThisKey->first_custom_combo = hk.mID;
+			continue;
 		}
+		#ifndef SEND_NOSUPPRESS_PREFIX_KEY_ON_RELEASE // Search for this symbol for details.
+		else
+		{
+			// If this hotkey is a lone key with ~ prefix such as "~a::", the following ensures that
+			// the ~ prefix is respected even if the key is also used as a prefix in a custom combo,
+			// such as "a & b::".  This is consistent with the behaviour of "~a & b::".
+			if (!hk.mModifiersConsolidatedLR && (hk.mNoSuppress & AT_LEAST_ONE_VARIANT_HAS_TILDE))
+				pThisKey->no_suppress |= NO_SUPPRESS_PREFIX;
+		}
+		#endif
 
 		// At this point, since the above didn't "continue", this hotkey is one without a ModifierVK/SC.
 		// Put it into a temporary array, which will be later sorted:
@@ -4160,8 +4001,38 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 		}
 	}
 
+	// Support "Control", "Alt" and "Shift" as suffix keys by appending their lists of
+	// custom combos to the lists used by their left and right versions.  This avoids the
+	// need for the hook to detect these keys and perform a search through a second list.
+	// This must be done after all custom combos have been processed above, since they
+	// might be defined in any order, but the neutral hotkeys must be placed last.
+	if (kvk[VK_SHIFT].used_as_suffix) // Skip the following unless Shift, LShift or RShift was used as a suffix.
+		LinkKeysForCustomCombo(VK_SHIFT, VK_LSHIFT, VK_RSHIFT);
+	if (kvk[VK_CONTROL].used_as_suffix)
+		LinkKeysForCustomCombo(VK_CONTROL, VK_LCONTROL, VK_RCONTROL);
+	if (kvk[VK_MENU].used_as_suffix)
+		LinkKeysForCustomCombo(VK_MENU, VK_LMENU, VK_RMENU);
+
 	// Add or remove hooks, as needed.  No change is made if the hooks are already in the correct state.
 	AddRemoveHooks(hooks_to_be_active);
+}
+
+
+
+HotkeyIDType &CustomComboLast(HotkeyIDType *aFirst)
+{
+	for (; *aFirst != HOTKEY_ID_INVALID; aFirst = &Hotkey::shk[*aFirst]->mNextCustomCombo);
+	return *aFirst;
+}
+
+void LinkKeysForCustomCombo(vk_type aNeutral, vk_type aLeft, vk_type aRight)
+{
+	HotkeyIDType first_neutral = kvk[aNeutral].first_custom_combo;
+	if (first_neutral == HOTKEY_ID_INVALID)
+		return;
+	// Append the neutral key's list to the lists of the left and right keys.
+	CustomComboLast(&kvk[aLeft].first_custom_combo) = first_neutral;
+	CustomComboLast(&kvk[aRight].first_custom_combo) = first_neutral;
 }
 
 
