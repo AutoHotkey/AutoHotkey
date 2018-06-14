@@ -1592,12 +1592,16 @@ UINT Script::LoadFromFile()
 	}
 #endif
 
-	// Set the working directory to the script's directory.  This must be done after the above
-	// since the working dir may have been changed by the script's use of "#Include C:\Scripts".
+	// Set the working directory to the script's directory if it's not run from StdIn.
+	// Otherwise set it the original working dir.
+	// This must be done after the above since the working dir may have been changed by the script's use of "#Include C:\Scripts".
 	// LoadIncludedFile() also changes it, but any value other than mFileDir would have been
 	// restored by "#Include" after LoadIncludedFile() returned.  Note that A_InitialWorkingDir
 	// contains the startup-determined working directory, so no flexibility is lost.
-	SetCurrentDirectory(mFileDir);
+	if (!g_RunStdIn)
+		SetCurrentDirectory(mFileDir);
+	else
+		SetCurrentDirectory(g_WorkingDirOrig);
 
 	// Rather than do this, which seems kinda nasty if ever someday support same-line
 	// else actions such as "else return", just add two EXITs to the end of every script.
@@ -6470,10 +6474,11 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 
 		// DETERMINE PATH TO "LOCAL" LIBRARY:
 		this_lib = sLib; // For convenience and maintainability.
-		this_lib->length = BIV_ScriptDir(NULL, _T(""));
+		// Allow StdIn scripts, "*" , to be able to use initial working dir
+		//	as parent dir for local library.
+		this_lib->length = !g_RunStdIn ? BIV_ScriptDir(this_lib->path, _T("")) : BIV_InitialWorkingDir(this_lib->path, _T(""));
 		if (this_lib->length < MAX_PATH-FUNC_LOCAL_LIB_LENGTH)
 		{
-			this_lib->length = BIV_ScriptDir(this_lib->path, _T(""));
 			_tcscpy(this_lib->path + this_lib->length, FUNC_LOCAL_LIB);
 			this_lib->length += FUNC_LOCAL_LIB_LENGTH;
 		}
