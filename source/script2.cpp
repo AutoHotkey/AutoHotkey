@@ -5699,16 +5699,22 @@ BIF_DECL(BIF_StrReplace)
 	_f_param_string(source, 0, &length);
 	_f_param_string(oldstr, 1);
 	_f_param_string_opt(newstr, 2);
-	Var *output_var_count = ParamIndexToOptionalVar(3); 
-	UINT replacement_limit = (UINT)ParamIndexToOptionalInt64(4, UINT_MAX); 
 	
+	// The code for setting string_case_sense is copied from BIF_InStr, except for the parameter number. See BIF_InStr for further comments on this part.
+	StringCaseSenseType string_case_sense = (StringCaseSenseType)(!ParamIndexIsOmitted(3) && ParamIndexToBOOL(3));
+	if (g->StringCaseSense != SCS_INSENSITIVE && string_case_sense == SCS_INSENSITIVE) // Ordered for short-circuit performance.
+		string_case_sense = SCS_INSENSITIVE_LOCALE;
+	
+	Var *output_var_count = ParamIndexToOptionalVar(4); 
+	UINT replacement_limit = (UINT)ParamIndexToOptionalInt64(5, UINT_MAX); 
+	
+
 	// Note: The current implementation of StrReplace() should be able to handle any conceivable inputs
 	// without an empty string causing an infinite loop and without going infinite due to finding the
 	// search string inside of newly-inserted replace strings (e.g. replacing all occurrences
 	// of b with bcd would not keep finding b in the newly inserted bcd, infinitely).
 	LPTSTR dest;
-	UINT found_count = StrReplace(source, oldstr, newstr, (StringCaseSenseType)g->StringCaseSense
-		, replacement_limit, -1, &dest, &length); // Length of haystack is passed to improve performance because TokenToString() can often discover it instantaneously.
+	UINT found_count = StrReplace(source, oldstr, newstr, string_case_sense, replacement_limit, -1, &dest, &length); // Length of haystack is passed to improve performance because TokenToString() can often discover it instantaneously.
 
 	if (!dest) // Failure due to out of memory.
 		_f_throw(ERR_OUTOFMEM); 
@@ -11724,6 +11730,7 @@ BIF_DECL(BIF_InStr)
 	//    for every call of InStr.  It's nice to be able to omit the CaseSensitive parameter every time and know that
 	//    the behavior of both InStr and its counterpart the equals operator are always consistent with each other.
 	// 3) Avoids breaking existing scripts that may pass something other than true/false for the CaseSense parameter.
+	// BIF_StrReplace sets string_case_sense similarly, maintain together.
 	StringCaseSenseType string_case_sense = (StringCaseSenseType)(!ParamIndexIsOmitted(2) && ParamIndexToBOOL(2));
 	// Above has assigned SCS_INSENSITIVE (0) or SCS_SENSITIVE (1).  If it's insensitive, resolve it to
 	// be Locale-mode if the StringCaseSense mode is either case-sensitive or Locale-insensitive.
