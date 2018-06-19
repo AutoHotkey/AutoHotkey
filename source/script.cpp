@@ -176,6 +176,7 @@ FuncEntry g_BIF[] =
 	BIFn(ObjAddRef, 1, 1, BIF_ObjAddRefRelease),
 	BIF1(ObjBindMethod, 1, NA),
 	BIFn(ObjClone, 1, 1, BIF_ObjXXX),
+	BIFn(ObjCount, 1, 1, BIF_ObjXXX),
 	BIFn(ObjDelete, 2, 3, BIF_ObjXXX),
 	BIF1(Object, 0, NA),
 	BIFn(ObjGetAddress, 2, 2, BIF_ObjXXX),
