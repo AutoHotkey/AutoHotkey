@@ -841,6 +841,7 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 			//    they know there are other LL hooks in the system.  In any case, there's no known solution
 			//    for it, so nothing can be done.
 			mods_to_set = persistent_modifiers_for_this_SendKeys
+				| sModifiersLR_remapped // Restore any modifiers which were put in the down state by remappings or {key DownR} prior to this Send.
 				| (sInBlindMode ? 0 : (mods_down_physically_orig & ~mods_down_physically_but_not_logically_orig)); // The last item is usually 0.
 			// Above: When in blind mode, don't restore physical modifiers.  This is done to allow a hotkey
 			// such as the following to release Shift:
