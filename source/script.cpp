@@ -8211,7 +8211,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					}
 					break;
 				case '!':
-					if (cp1 == '=') // i.e. != is synonymous with <>, which is also already supported by legacy.
+					if (cp1 == '=') // i.e. !=
 					{
 						++cp; // An additional increment to have loop skip over the '=' too.
 						this_infix_item.symbol = SYM_NOTEQUAL;
@@ -8331,10 +8331,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					case '=':
 						++cp; // An additional increment to have loop skip over the '=' too.
 						this_infix_item.symbol = SYM_LTOE;
-						break;
-					case '>':
-						++cp; // An additional increment to have loop skip over the '>' too.
-						this_infix_item.symbol = SYM_NOTEQUAL;
 						break;
 					case '<':
 						if (cp[2] == '=')
