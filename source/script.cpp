@@ -715,7 +715,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		// condition is a path being too long for GetFullPathName to expand it into buf,
 		// in which case buf and mFileSpec are now empty, and this will cause LoadFromFile()
 		// to fail and the program to exit.
-		//mFileDir = _T(""); // Already done by the constructor.
+		mFileDir = g_WorkingDirOrig; // Preserve original working directory to enable local library.
 		filename_marker = buf;
 	}
 	if (   !(mFileName = SimpleHeap::Malloc(filename_marker))   )
