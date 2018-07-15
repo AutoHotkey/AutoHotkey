@@ -22,9 +22,9 @@ GNU General Public License for more details.
 EXTERN_SCRIPT;  // For g_script.
 
 // Due to control/alt/shift modifiers, quite a lot of hotkey combinations are possible, so support any
-// conceivable use.  Note: Increasing this value will increase the memory required (i.e. any arrays
-// that use this value):
-#define MAX_HOTKEYS 1000  // Raised from 700 to 1000 in v1.0.48 because at least one person needed more.
+// conceivable use.  This value is used for initial sizing of the shk array, which doubles in size each
+// time its capacity is reached (making the need for expansion rare).
+#define INITIAL_MAX_HOTKEYS 256
 
 // Note: 0xBFFF is the largest ID that can be used with RegisterHotkey().
 // But further limit this to 0x3FFF (16,383) so that the two highest order bits
@@ -145,7 +145,8 @@ private:
 	~Hotkey() {if (mIsRegistered) Unregister();}
 
 public:
-	static Hotkey *shk[MAX_HOTKEYS];
+	static Hotkey **shk;
+	static int shkMax;
 
 	// 32-bit members:
 	mod_type mModifiers;  // MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, or some additive or bitwise-or combination of these.

@@ -3581,7 +3581,7 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 			|| !(ksc = new key_type[SC_ARRAY_COUNT])
 			|| !(kvkm = new HotkeyIDType[KVKM_SIZE])
 			|| !(kscm = new HotkeyIDType[KSCM_SIZE])
-			|| !(hotkey_up = new HotkeyIDType[MAX_HOTKEYS])   )
+			|| !(hotkey_up = (HotkeyIDType *)malloc(Hotkey::shkMax * sizeof(HotkeyIDType)))   )
 		{
 			// At least one of the allocations failed.
 			// Keep all 4 objects in sync with one another (i.e. either all allocated, or all not allocated):
@@ -3655,10 +3655,10 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 		kvkm[i] = HOTKEY_ID_INVALID;
 	for (i = 0; i < KSCM_SIZE; ++i) // Simplify by viewing 2-dimensional array as a 1-dimensional array.
 		kscm[i] = HOTKEY_ID_INVALID;
-	for (i = 0; i < MAX_HOTKEYS; ++i)
+	for (i = 0; i < Hotkey::shkMax; ++i)
 		hotkey_up[i] = HOTKEY_ID_INVALID;
 
-	hk_sorted_type hk_sorted[MAX_HOTKEYS];
+	hk_sorted_type *hk_sorted = new hk_sorted_type[Hotkey::sHotkeyCount];
 	ZeroMemory(hk_sorted, sizeof(hk_sorted));
 	int hk_sorted_count = 0;
 	key_type *pThisKey = NULL;
@@ -4005,6 +4005,8 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 		}
 	}
 
+	delete[] hk_sorted;
+
 	// Support "Control", "Alt" and "Shift" as suffix keys by appending their lists of
 	// custom combos to the lists used by their left and right versions.  This avoids the
 	// need for the hook to detect these keys and perform a search through a second list.
@@ -4019,6 +4021,42 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 
 	// Add or remove hooks, as needed.  No change is made if the hooks are already in the correct state.
 	AddRemoveHooks(hooks_to_be_active);
+}
+
+
+
+bool HookAdjustMaxHotkeys(Hotkey **&aHK, int &aCurrentMax, int aNewMax)
+{
+	Hotkey **new_shk = (Hotkey **)malloc(aNewMax * sizeof(Hotkey *));
+	if (!new_shk)
+		return false;
+	HotkeyIDType *new_hotkey_up = NULL;
+	if (   hotkey_up // No allocation needed if the hooks haven't been active yet.
+		&& !(new_hotkey_up = (HotkeyIDType *)malloc(aNewMax * sizeof(HotkeyIDType)))   )
+	{
+		free(new_shk);
+		return false;
+	}
+	// From here on, success is certain.
+	if (aCurrentMax)
+	{
+		memcpy(new_shk, aHK, aCurrentMax * sizeof(Hotkey *));
+		if (hotkey_up)
+			memcpy(new_hotkey_up, hotkey_up, aCurrentMax * sizeof(HotkeyIDType));
+			// No initialization is needed for the new portion since the hook won't be aware
+			// of any new hotkeys prior to ChangeHookState(), which also refreshes hotkey_up.
+	}
+	Hotkey **old_shk = aHK;
+	HotkeyIDType *old_hotkey_up = hotkey_up;
+	aHK = new_shk;
+	hotkey_up = new_hotkey_up;
+	// At this stage, old_shk and new_shk are interchangeable.  To avoid race conditions with
+	// the hook thread, wait for it to reach a known idle state before freeing the old array.
+	WaitHookIdle();
+	aCurrentMax = aNewMax;
+	free(old_shk);
+	free(old_hotkey_up);
+	return true;
 }
 
 
@@ -4514,7 +4552,7 @@ void FreeHookMem()
 	}
 	if (hotkey_up)
 	{
-		delete [] hotkey_up;
+		free(hotkey_up);
 		hotkey_up = NULL;
 	}
 }
