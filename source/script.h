@@ -1780,8 +1780,8 @@ public:
 
 	static StringCaseSenseType ConvertStringCaseSense(LPTSTR aBuf)
 	{
-		if (!_tcsicmp(aBuf, _T("On"))) return SCS_SENSITIVE;
-		if (!_tcsicmp(aBuf, _T("Off"))) return SCS_INSENSITIVE;
+		if (!_tcsicmp(aBuf, _T("On")) || !_tcscmp(aBuf, _T("1"))) return SCS_SENSITIVE;
+		if (!_tcsicmp(aBuf, _T("Off")) || !_tcscmp(aBuf, _T("0"))) return SCS_INSENSITIVE;
 		if (!_tcsicmp(aBuf, _T("Locale"))) return SCS_INSENSITIVE_LOCALE;
 		return SCS_INVALID;
 	}
