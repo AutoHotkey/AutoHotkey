@@ -7075,7 +7075,7 @@ ResultType SoundSetGet2kXP(ResultToken &aResultToken, LPTSTR aSetting
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 
 	if (control_type_is_boolean)
-		return aResultToken.ReturnPtr(mcdMeter.dwValue ? _T("On") : _T("Off"), -1);
+		return aResultToken.Return(mcdMeter.dwValue ? TRUE : FALSE);
 	else // For all others, assume the control can have more than just ON/OFF as its allowed states.
 		// The MSDN docs imply that values fetched via the above method do not distinguish between
 		// left and right volume levels, unlike waveOutGetVolume():
@@ -7503,7 +7503,7 @@ control_fail:
 		return OK;
 
 	if (control_type_is_boolean)
-		return aResultToken.ReturnPtr(result_bool ? _T("On") : _T("Off"), -1);
+		return aResultToken.Return(result_bool);
 	else
 		return aResultToken.Return(result_float);
 }
@@ -9121,9 +9121,12 @@ VarSizeType BIV_TitleMatchModeSpeed(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_DetectHiddenWindows(LPTSTR aBuf, LPTSTR aVarName)
 {
-	return aBuf
-		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->DetectHiddenWindows ? _T("On") : _T("Off"))) // For backward compatibility (due to StringCaseSense), never change the case used here.  Fixed in v1.0.42.01 to return exact length (required).
-		: 3; // Room for either On or Off (in the estimation phase).
+	if (aBuf)
+	{
+		*aBuf++ = g->DetectHiddenWindows ? '1' : '0';
+		*aBuf = '\0';
+	}
+	return 1;
 }
 
 BIV_DECL_W(BIV_DetectHiddenWindows_Set)
@@ -9138,9 +9141,12 @@ BIV_DECL_W(BIV_DetectHiddenWindows_Set)
 
 VarSizeType BIV_DetectHiddenText(LPTSTR aBuf, LPTSTR aVarName)
 {
-	return aBuf
-		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->DetectHiddenText ? _T("On") : _T("Off"))) // For backward compatibility (due to StringCaseSense), never change the case used here. Fixed in v1.0.42.01 to return exact length (required).
-		: 3; // Room for either On or Off (in the estimation phase).
+	if (aBuf)
+	{
+		*aBuf++ = g->DetectHiddenText ? '1' : '0';
+		*aBuf = '\0';
+	}
+	return 1;
 }
 
 BIV_DECL_W(BIV_DetectHiddenText_Set)
@@ -9276,9 +9282,12 @@ BIV_DECL_W(BIV_SendLevel_Set)
 
 VarSizeType BIV_StoreCapslockMode(LPTSTR aBuf, LPTSTR aVarName)
 {
-	return aBuf
-		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->StoreCapslockMode ? _T("On") : _T("Off"))) // For backward compatibility (due to StringCaseSense), never change the case used here.
-		: 3; // Room for either On or Off (in the estimation phase).
+	if (aBuf)
+	{
+		*aBuf++ = g->StoreCapslockMode ? '1' : '0';
+		*aBuf = '\0';
+	}
+	return 1;
 }
 
 BIV_DECL_W(BIV_StoreCapslockMode_Set)
