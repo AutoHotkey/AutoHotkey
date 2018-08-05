@@ -2470,7 +2470,8 @@ examine_line:
 				goto continue_main_loop;
 			}
 		}
-		else if (mClassObjectCount && !g->CurrentFunc) // Inside a class definition (and not inside a method).
+
+		if (mClassObjectCount && !g->CurrentFunc) // Inside a class definition (and not inside a method).
 		{
 			// Check for assignment first, in case of something like "Static := 123".
 			for (cp = buf; IS_IDENTIFIER_CHAR(*cp) || *cp == '.'; ++cp);
