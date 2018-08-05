@@ -1199,10 +1199,10 @@ ResultType Object::_GetCapacity(ResultToken &aResultToken, ExprTokenType *aParam
 ResultType Object::_SetCapacity(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 // SetCapacity([field_name,] new_capacity)
 {
-	if (!aParamCount || !TokenIsNumeric(*aParam[aParamCount - 1]))
+	if (!aParamCount || !TokenIsNumeric(*aParam[aParamCount > 1]))
 		_o_throw(ERR_PARAM_INVALID);
 
-	__int64 desired_capacity = TokenToInt64(*aParam[aParamCount - 1]);
+	__int64 desired_capacity = TokenToInt64(*aParam[aParamCount > 1]);
 	if (aParamCount >= 2) // Field name was specified.
 	{
 		if (desired_capacity < 0) // Check before sign is dropped.
