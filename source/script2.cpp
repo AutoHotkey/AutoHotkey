@@ -15220,7 +15220,10 @@ BIF_DECL(BIF_CallbackCreate)
 
 BIF_DECL(BIF_CallbackFree)
 {
-	RCCallbackFunc *callbackfunc = (RCCallbackFunc *)ParamIndexToIntPtr(0);
+	INT_PTR address = ParamIndexToIntPtr(0);
+	if (address < 65536 && address >= 0) // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
+		_f_throw(ERR_PARAM1_INVALID);
+	RCCallbackFunc *callbackfunc = (RCCallbackFunc *)address;
 	callbackfunc->func->Release();
 	callbackfunc->func = NULL; // To help detect bugs.
 	GlobalFree(callbackfunc);
