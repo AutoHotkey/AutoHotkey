@@ -37,3 +37,7 @@
 	TCHAR name##_buf[MAX_NUMBER_SIZE], *name = ParamIndexToOptionalString(index, name##_buf, __VA_ARGS__)
 #define _f_param_string_opt_def(name, index, def, ...) \
 	TCHAR name##_buf[MAX_NUMBER_SIZE], *name = ParamIndexToOptionalStringDef(index, def, name##_buf, __VA_ARGS__)
+
+#define Throw_if_Param_NaN(ParamIndex) \
+	if (!TokenIsNumeric(*aParam[(ParamIndex)])) \
+		_f_throw(ERR_TYPE_MISMATCH)

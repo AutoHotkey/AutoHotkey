@@ -13071,14 +13071,12 @@ BIF_DECL(BIF_Ord)
 
 BIF_DECL(BIF_Chr)
 {
+	Throw_if_Param_NaN(0);
 	int param1 = ParamIndexToInt(0); // Convert to INT vs. UINT so that negatives can be detected.
 	LPTSTR cp = _f_retval_buf; // If necessary, it will be moved to a persistent memory location by our caller.
 	int len;
 	if (param1 < 0 || param1 > UorA(0x10FFFF, UCHAR_MAX))
-	{
-		*cp = '\0'; // Empty string indicates both Chr(0) and an out-of-bounds param1.
-		len = 0;
-	}
+		_f_throw(ERR_PARAM1_INVALID);
 #ifdef UNICODE
 	else if (param1 >= 0x10000)
 	{
@@ -14074,10 +14072,6 @@ BIF_DECL(BIF_WinExistActive)
 }
 
 
-
-#define Throw_if_Param_NaN(ParamIndex) \
-	if (!TokenIsNumeric(*aParam[(ParamIndex)])) \
-		_f_throw(ERR_TYPE_MISMATCH)
 
 BIF_DECL(BIF_Round)
 // For simplicity, this always yields something numeric (or a string that's numeric).
