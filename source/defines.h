@@ -141,7 +141,6 @@ enum ToggleValueType {TOGGLE_INVALID = 0, TOGGLED_ON, TOGGLED_OFF, ALWAYS_ON, AL
 	, TOGGLE_MOUSEMOVE, TOGGLE_MOUSEMOVEOFF};
 
 // Some things (such as ListView sorting) rely on SCS_INSENSITIVE being zero.
-// In addition, BIF_InStr relies on SCS_SENSITIVE being 1:
 enum StringCaseSenseType {SCS_INSENSITIVE, SCS_SENSITIVE, SCS_INSENSITIVE_LOCALE, SCS_INSENSITIVE_LOGICAL, SCS_INVALID};
 
 enum SymbolType // For use with ExpandExpression() and IsNumeric().
@@ -180,7 +179,8 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 #define IS_SHORT_CIRCUIT_OPERATOR(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_THEN) // Excludes SYM_IFF_ELSE, which acts as a simple jump after the THEN branch is evaluated.
 #define SYM_USES_CIRCUIT_TOKEN(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_ELSE)
 	, SYM_IS, SYM_IN, SYM_CONTAINS
-	, SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL // =, ==, <> ... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
+	, SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL, SYM_NOTEQUALCASE // =, ==, <> and !=, !==... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
+#define IS_EQUALITY_OPERATOR(symbol) (symbol >= SYM_EQUAL && symbol <= SYM_NOTEQUALCASE)
 	, SYM_GT, SYM_LT, SYM_GTOE, SYM_LTOE  // >, <, >=, <= ... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
 #define IS_RELATIONAL_OPERATOR(symbol) (symbol >= SYM_EQUAL && symbol <= SYM_LTOE)
 	, SYM_REGEXMATCH // ~=, equivalent to a RegExMatch call in two-parameter mode.

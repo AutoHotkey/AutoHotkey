@@ -11610,6 +11610,37 @@ void ObjectToString(ResultToken &aResultToken, ExprTokenType &aThisToken, IObjec
 	}
 }
 
+BIF_DECL(BIF_StrCompare)
+{
+	// In script:
+	// Result := StrCompare(str1, str2 [, CaseSensitive := false])
+	// str1, str2, the strings to compare, can be be pure numbers, such numbers are converted to strings before the comparison.
+	// CaseSensitive, the case sensitive setting to use.
+	// Result, the result of the comparison:
+	//	< 0,	if str1 is less than str2.
+	//	0,		if str1 is identical to str2.
+	//	> 0,	if str1 is greater than str2.
+
+	// Param 1 and 2, str1 and str2
+	TCHAR str1_buf[MAX_NUMBER_SIZE];	// numeric input is converted to string.
+	TCHAR str2_buf[MAX_NUMBER_SIZE];
+	LPTSTR str1 = ParamIndexToString(0, str1_buf);
+	LPTSTR str2 = ParamIndexToString(1, str2_buf);
+	// Could return 0 here if str1 == str2, but it is probably rare to call StrCompare(str_var, str_var)
+	// so for most cases that would just be an unnecessary cost, albeit low.
+	// Param 3 - CaseSensitive
+	StringCaseSenseType string_case_sense = ParamIndexToCaseSense(2);
+
+	int result;
+	switch (string_case_sense)		// Compare the strings according to the string_case_sense setting.
+	{
+	case SCS_SENSITIVE:				result = _tcscmp(str1, str2); break;
+	case SCS_INSENSITIVE:			result = _tcsicmp(str1, str2); break;
+	case SCS_INSENSITIVE_LOCALE:	result = lstrcmpi(str1, str2); break;
+	}
+	_f_return_i(result);			// Return 
+}
+
 
 BIF_DECL(BIF_String)
 {
@@ -11728,20 +11759,9 @@ BIF_DECL(BIF_InStr)
 	LPTSTR haystack = ParamIndexToString(0, _f_number_buf, (size_t *)&haystack_length);
 	size_t needle_length;
 	LPTSTR needle = ParamIndexToString(1, needle_buf, &needle_length);
-	
-	// v1.0.43.03: Rather than adding a third value to the CaseSensitive parameter, it seems better to
-	// obey StringCaseSense because:
-	// 1) It matches the behavior of the equal operator (=) in expressions.
-	// 2) It's more friendly for typical international uses because it avoids having to specify that special/third value
-	//    for every call of InStr.  It's nice to be able to omit the CaseSensitive parameter every time and know that
-	//    the behavior of both InStr and its counterpart the equals operator are always consistent with each other.
-	// 3) Avoids breaking existing scripts that may pass something other than true/false for the CaseSense parameter.
-	StringCaseSenseType string_case_sense = (StringCaseSenseType)(!ParamIndexIsOmitted(2) && ParamIndexToBOOL(2));
-	// Above has assigned SCS_INSENSITIVE (0) or SCS_SENSITIVE (1).  If it's insensitive, resolve it to
-	// be Locale-mode if the StringCaseSense mode is either case-sensitive or Locale-insensitive.
-	if (g->StringCaseSense != SCS_INSENSITIVE && string_case_sense == SCS_INSENSITIVE) // Ordered for short-circuit performance.
-		string_case_sense = SCS_INSENSITIVE_LOCALE;
 
+	StringCaseSenseType string_case_sense = ParamIndexToCaseSense(2);
+	
 	LPTSTR found_pos;
 	INT_PTR offset = 0; // Set default.
 	int occurrence_number = ParamIndexToOptionalInt(4, 1);

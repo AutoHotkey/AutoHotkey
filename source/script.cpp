@@ -227,6 +227,7 @@ FuncEntry g_BIF[] =
 	BIFn(SoundSet, 1, 4, BIF_Sound),
 	BIFn(Sqrt, 1, 1, BIF_SqrtLogLn),
 	BIF1(StatusBarGetText, 0, 5),
+	BIF1(StrCompare, 2, 3),
 	BIFn(StrGet, 1, 3, BIF_StrGetPut),
 	BIF1(String, 1, 1),
 	BIF1(StrLen, 1, 1),
@@ -7961,7 +7962,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 //		, 25             // Reserved for SYM_LOWNOT.
 //		, 26             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 28, 28, 28	 // SYM_IS, SYM_IN, SYM_CONTAINS
-		, 30, 30, 30     // SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL (lower prec. than the below so that "x < 5 = var" means "result of comparison is the boolean value in var".
+		, 30, 30, 30, 30 // SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL, SYM_NOTEQUALCASE (lower prec. than the below so that "x < 5 = var" means "result of comparison is the boolean value in var".
 		, 34, 34, 34, 34 // SYM_GT, SYM_LT, SYM_GTOE, SYM_LTOE
 		, 36             // SYM_REGEXMATCH
 		, 38             // SYM_CONCAT
@@ -8212,11 +8213,11 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					}
 					break;
 				case '!':
-					if (cp1 == '=') // i.e. != is synonymous with <>, which is also already supported by legacy.
-					{
-						++cp; // An additional increment to have loop skip over the '=' too.
-						this_infix_item.symbol = SYM_NOTEQUAL;
-					}
+					if (cp1 == '=') // i.e. != is synonymous with <>, which is also already supported by legacy, or !==.
+						// An additional increment for each '=' to have loop skip over the '=' too.
+						++cp, this_infix_item.symbol	= cp[1] == '=' // note, cp[1] is not equal to cp1 here due to ++cp
+														? (++cp, SYM_NOTEQUALCASE)	// !==
+														: SYM_NOTEQUAL;				// != 
 					else
 						// If what lies to its left is a CPARAN or OPERAND, SYM_CONCAT is not auto-inserted because:
 						// 1) Allows ! and ~ to potentially be overloaded to become binary and unary operators in the future.

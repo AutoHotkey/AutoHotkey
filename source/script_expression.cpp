@@ -882,27 +882,28 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				left_is_pure_number = TokenIsPureNumeric(left, left_is_number);
 			// Otherwise, leave left_is' uninitialized as below will short-circuit.
 			if (  !(right_is_number && left_is_number)  // i.e. they're not both numeric (or this is SYM_CONCAT).
-				|| IS_RELATIONAL_OPERATOR(this_token.symbol) && !right_is_pure_number && !left_is_pure_number  ) // i.e. if both are strings, compare them alphabetically.
+				|| IS_EQUALITY_OPERATOR(this_token.symbol) && !right_is_pure_number && !left_is_pure_number  ) // i.e. if both are strings, compare them alphabetically if operator supports it.
 			{
-				// L31: Handle binary ops supported by objects (= == !=).
+				// L31: Handle binary ops supported by objects (= == != !==).
 				switch (this_token.symbol)
 				{
 				case SYM_EQUAL:
 				case SYM_EQUALCASE:
 				case SYM_NOTEQUAL:
+				case SYM_NOTEQUALCASE:
 					IObject *right_obj = TokenToObject(right);
 					IObject *left_obj = TokenToObject(left);
 					// To support a future "implicit default value" feature, both operands must be objects.
 					// Otherwise, an object operand will be treated as its default value, currently always "".
 					// This is also consistent with unsupported operands such as < and > - i.e. because obj<""
 					// and obj>"" are always false and obj<="" and obj>="" are always true, obj must be "".
-					// When the default value feature is implemented all operators (excluding =, == and !=
+					// When the default value feature is implemented all operators (excluding =, ==, !== and !=
 					// if both operands are objects) may use the default value of any object operand.
 					// UPDATE: Above is not done because it seems more intuitive to document the other
 					// comparison operators as unsupported than for (obj == "") to evaluate to true.
 					if (right_obj || left_obj)
 					{
-						this_token.SetValue((this_token.symbol != SYM_NOTEQUAL) == (right_obj == left_obj));
+						this_token.SetValue((this_token.symbol != SYM_NOTEQUAL && this_token.symbol != SYM_NOTEQUALCASE) == (right_obj == left_obj));
 						goto push_this_token;
 					}
 				}
@@ -915,9 +916,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				result_symbol = SYM_INTEGER; // Set default.  Boolean results are treated as integers.
 				switch(this_token.symbol)
 				{
-				case SYM_EQUAL:     this_token.value_int64 = !((g->StringCaseSense == SCS_INSENSITIVE)
-										? _tcsicmp(left_string, right_string)
-										: lstrcmpi(left_string, right_string)); break; // i.e. use the "more correct mode" except when explicitly told to use the fast mode (v1.0.43.03).
+				case SYM_EQUAL:	this_token.value_int64 = !((g->StringCaseSense == SCS_INSENSITIVE)
+								? _tcsicmp(left_string, right_string)
+								: lstrcmpi(left_string, right_string)); break; // i.e. use the "more correct mode" except when explicitly told to use the fast mode (v1.0.43.03).
+				
 				case SYM_EQUALCASE: // Case sensitive.  Also supports binary data.
 					// Support basic equality checking of binary data by using tmemcmp rather than _tcscmp.
 					// The results should be the same for strings, but faster.  Length must be checked first
@@ -925,13 +927,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// As a result, the comparison is much faster when the length differs.
 					this_token.value_int64 = (left_length == right_length) && !tmemcmp(left_string, right_string, left_length);
 					break; 
-				// The rest all obey g->StringCaseSense since they have no case sensitive counterparts:
-				case SYM_NOTEQUAL:  this_token.value_int64 = g_tcscmp(left_string, right_string) ? 1 : 0; break;
-				case SYM_GT:        this_token.value_int64 = g_tcscmp(left_string, right_string) > 0; break;
-				case SYM_LT:        this_token.value_int64 = g_tcscmp(left_string, right_string) < 0; break;
-				case SYM_GTOE:      this_token.value_int64 = g_tcscmp(left_string, right_string) > -1; break;
-				case SYM_LTOE:      this_token.value_int64 = g_tcscmp(left_string, right_string) < 1; break;
-
+				case SYM_NOTEQUAL:	this_token.value_int64 = !!((g->StringCaseSense == SCS_INSENSITIVE)	// Same as SYM_EQUAL but inverted result, code copied for performance (assumed). Note the double !! instead of no !, it is for handling the strcmp functions returning -1.
+									? _tcsicmp(left_string, right_string)
+									: lstrcmpi(left_string, right_string)); break;
+				case SYM_NOTEQUALCASE:	this_token.value_int64 = !((left_length == right_length)		// Same as SYM_EQUALCASE but inverted result, code copied for performance (assumed).		
+										&& !tmemcmp(left_string, right_string, left_length) ); break;
+				
+				
 				case SYM_CONCAT:
 					// Even if the left or right is "", must copy the result to temporary memory, at least
 					// when integers and floats had to be converted to temporary strings above.
@@ -1101,21 +1103,22 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				switch(this_token.symbol)
 				{
 				// The most common cases are kept up top to enhance performance if switch() is implemented as if-else ladder.
-				case SYM_ADD:      this_token.value_int64 = left_int64 + right_int64; break;
-				case SYM_SUBTRACT: this_token.value_int64 = left_int64 - right_int64; break;
-				case SYM_MULTIPLY: this_token.value_int64 = left_int64 * right_int64; break;
+				case SYM_ADD:			this_token.value_int64 = left_int64 + right_int64; break;
+				case SYM_SUBTRACT:		this_token.value_int64 = left_int64 - right_int64; break;
+				case SYM_MULTIPLY:		this_token.value_int64 = left_int64 * right_int64; break;
 				// A look at K&R confirms that relational/comparison operations and logical-AND/OR/NOT
 				// always yield a one or a zero rather than arbitrary non-zero values:
 				case SYM_EQUALCASE: // Same behavior as SYM_EQUAL for numeric operands.
-				case SYM_EQUAL:    this_token.value_int64 = left_int64 == right_int64; break;
-				case SYM_NOTEQUAL: this_token.value_int64 = left_int64 != right_int64; break;
-				case SYM_GT:       this_token.value_int64 = left_int64 > right_int64; break;
-				case SYM_LT:       this_token.value_int64 = left_int64 < right_int64; break;
-				case SYM_GTOE:     this_token.value_int64 = left_int64 >= right_int64; break;
-				case SYM_LTOE:     this_token.value_int64 = left_int64 <= right_int64; break;
-				case SYM_BITAND:   this_token.value_int64 = left_int64 & right_int64; break;
-				case SYM_BITOR:    this_token.value_int64 = left_int64 | right_int64; break;
-				case SYM_BITXOR:   this_token.value_int64 = left_int64 ^ right_int64; break;
+				case SYM_EQUAL:			this_token.value_int64 = left_int64 == right_int64; break;
+				case SYM_NOTEQUALCASE: // Same behavior as SYM_NOTEQUAL for numeric operands.
+				case SYM_NOTEQUAL:		this_token.value_int64 = left_int64 != right_int64; break;
+				case SYM_GT:			this_token.value_int64 = left_int64 > right_int64; break;
+				case SYM_LT:			this_token.value_int64 = left_int64 < right_int64; break;
+				case SYM_GTOE:			this_token.value_int64 = left_int64 >= right_int64; break;
+				case SYM_LTOE:			this_token.value_int64 = left_int64 <= right_int64; break;
+				case SYM_BITAND:		this_token.value_int64 = left_int64 & right_int64; break;
+				case SYM_BITOR:			this_token.value_int64 = left_int64 | right_int64; break;
+				case SYM_BITXOR:		this_token.value_int64 = left_int64 ^ right_int64; break;
 				case SYM_BITSHIFTLEFT:  this_token.value_int64 = left_int64 << right_int64; break;
 				case SYM_BITSHIFTRIGHT: this_token.value_int64 = left_int64 >> right_int64; break;
 				case SYM_FLOORDIVIDE:
@@ -1172,6 +1175,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					break;
 				case SYM_EQUALCASE: // Same behavior as SYM_EQUAL for numeric operands.
 				case SYM_EQUAL:    this_token.value_int64 = left_double == right_double; break;
+				case SYM_NOTEQUALCASE: // Same behavior as SYM_NOTEQUAL for numeric operands.
 				case SYM_NOTEQUAL: this_token.value_int64 = left_double != right_double; break;
 				case SYM_GT:       this_token.value_int64 = left_double > right_double; break;
 				case SYM_LT:       this_token.value_int64 = left_double < right_double; break;
