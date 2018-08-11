@@ -8466,7 +8466,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						if (IS_SPACE_OR_TAB(cp1))
 						{
 							if (!infix_count || !IS_SPACE_OR_TAB(cp[-1])) // L31: Disallow things like "obj. name" since it seems ambiguous.  Checking infix_count ensures cp is not the beginning of the string (". " at the beginning of an expression would also be invalid).  Checking IS_SPACE_OR_TAB seems more appropriate than looking in EXPR_OPERAND_TERMINATORS; it enforces the previously unenforced but documented rule that concat-dot requires a space on either side.
-								return LineError(ERR_INVALID_DOT, FAIL, cp);
+								return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
 							this_infix_item.symbol = SYM_CONCAT;
 							break;
 						}
@@ -8498,7 +8498,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								return LineError(ERR_INVALID_CHAR, FAIL, op_end);
 
 							if (op_end == cp) // Missing identifier.
-								return LineError(ERR_INVALID_DOT, FAIL, cp-1); // Intentionally vague since the user's intention isn't clear.
+								return LineError(ERR_EXPR_SYNTAX, FAIL, cp-1); // Intentionally vague since the user's intention isn't clear.
 
 							// Output an operand for the text following '.'
 							if (op_end - cp < MAX_NUMBER_SIZE)

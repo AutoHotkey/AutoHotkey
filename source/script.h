@@ -198,7 +198,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_DIVIDEBYZERO _T("Divide by zero.")
 #define ERR_VAR_IS_READONLY _T("Not allowed as an output variable.")
 #define ERR_INVALID_CHAR _T("This character is not allowed here.")
-#define ERR_INVALID_DOT _T("Ambiguous or invalid use of \".\"")
 #define ERR_UNQUOTED_NON_ALNUM _T("Unquoted literals may only consist of alphanumeric characters/underscore.")
 #define ERR_DUPLICATE_DECLARATION _T("Duplicate declaration.")
 #define ERR_INVALID_FUNCDECL _T("Invalid function declaration.")
