@@ -1699,7 +1699,7 @@ inline LPTSTR IsClassDefinition(LPTSTR aBuf)
 	if (_tcsnicmp(aBuf, _T("Class"), 5) || !IS_SPACE_OR_TAB(aBuf[5])) // i.e. it's not "Class" followed by a space or tab.
 		return NULL;
 	LPTSTR class_name = omit_leading_whitespace(aBuf + 6);
-	if (_tcschr(EXPR_ALL_SYMBOLS EXPR_ILLEGAL_CHARS, *class_name))
+	if (_tcschr(EXPR_ALL_SYMBOLS, *class_name))
 		// It's probably something like "Class := GetClass()".
 		return NULL;
 	// Validation of the name is left up to the caller, for simplicity.
@@ -5300,7 +5300,6 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 	bool is_double_deref;
 	SymbolType wordop;
 
-	#define ERR_EXP_ILLEGAL_CHAR _T("The leftmost character above is illegal in an expression.") // "above" refers to the layout of the error dialog.
 	// ParseDerefs() won't consider escaped percent signs to be illegal, but in this case
 	// they should be since they have no meaning in expressions.  UPDATE for v1.0.44.11: The following
 	// is now commented out because it causes false positives (and fixing that probably isn't worth the
@@ -5461,14 +5460,6 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 		// Now op_end marks the end of this operand.  The end might be the zero terminator, an operator, etc.
 		operand_length = op_end - op_begin;
 
-		// Check for characters which are either illegal in expressions or reserved for future use.
-		// Illegal characters are legal when enclosed in double quotes.  So the following is
-		// done only after the above has ensured this operand is not one enclosed entirely in
-		// double quotes.  Only *op_end needs to be checked since find_identifier_end() ends at
-		// the first non-identifier character, which may be op_begin itself.
-		if (*op_end && _tcschr(EXPR_ILLEGAL_CHARS, *op_end))
-			return ScriptError(ERR_EXP_ILLEGAL_CHAR, op_end);
-
 		if (is_double_deref = (*op_end == g_DerefChar && aEndChar != g_DerefChar))
 		{
 			// This operand is the leading literal part of a double dereference.
@@ -5477,6 +5468,15 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 				return FAIL;
 			op_end = aArgText + j;
 			is_function = *op_end == '('; // Dynamic function call.
+		}
+		else if (!operand_length) // Found an illegal char.
+		{
+			// Due to other checks above, this should be possible only when *op_end is an illegal
+			// character (since it is not null, an operand terminator or identifier character).
+			// All characters are permitted in quoted strings, which were already handled above.
+			// An invalid identifier such as "bad\01" is processed as a valid var "bad" followed
+			// by a zero-length operand (triggering this section).
+			return ScriptError(ERR_EXP_ILLEGAL_CHAR, op_end);
 		}
 		else
 		{
@@ -8495,7 +8495,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							// Find the end of the operand (".operand"):
 							op_end = find_identifier_end(cp);
 							if (!_tcschr(EXPR_OPERAND_TERMINATORS, *op_end))
-								return LineError(ERR_INVALID_CHAR, FAIL, op_end);
+								return LineError(ERR_EXP_ILLEGAL_CHAR, FAIL, op_end);
 
 							if (op_end == cp) // Missing identifier.
 								return LineError(ERR_EXPR_SYNTAX, FAIL, cp-1); // Intentionally vague since the user's intention isn't clear.

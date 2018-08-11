@@ -197,7 +197,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_MOUSE_COORD _T("X & Y must be either both absent or both present.")
 #define ERR_DIVIDEBYZERO _T("Divide by zero.")
 #define ERR_VAR_IS_READONLY _T("Not allowed as an output variable.")
-#define ERR_INVALID_CHAR _T("This character is not allowed here.")
+#define ERR_EXP_ILLEGAL_CHAR _T("Illegal character in expression.")
 #define ERR_UNQUOTED_NON_ALNUM _T("Unquoted literals may only consist of alphanumeric characters/underscore.")
 #define ERR_DUPLICATE_DECLARATION _T("Duplicate declaration.")
 #define ERR_INVALID_FUNCDECL _T("Invalid function declaration.")
@@ -870,7 +870,6 @@ public:
 	#define EXPR_OPERAND_TERMINATORS_EX_DOT EXPR_COMMON _T("%+-\n") // L31: Used in a few places where '.' needs special treatment.
 	#define EXPR_OPERAND_TERMINATORS EXPR_OPERAND_TERMINATORS_EX_DOT _T(".") // L31: Used in expressions where '.' is always an operator.
 	#define EXPR_ALL_SYMBOLS EXPR_OPERAND_TERMINATORS _T("\"'")
-	#define EXPR_ILLEGAL_CHARS _T("\\;`@#$") // Characters illegal in an expression.
 	// The following HOTSTRING option recognizer is kept somewhat forgiving/non-specific for backward compatibility
 	// (e.g. scripts may have some invalid hotstring options, which are simply ignored).  This definition is here
 	// because it's related to continuation line symbols. Also, avoid ever adding "&" to hotstring options because
