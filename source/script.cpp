@@ -5433,14 +5433,25 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 
 		if (*op_begin <= '9' && *op_begin >= '0') // Numeric literal.  Numbers starting with a decimal point are handled under "case '.'".
 		{
-			if (IsHex(op_begin))
-				tcstoi64_o(op_begin, &op_end, 16);
-			else
-				_tcstod(op_begin, &op_end); // Handles both decimal integers and floating-point numbers.
-			if (_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT, *op_end)) // '\0' is included in the search.
+			// Behaviour here should match the similar section in ExpressionToPostfix().
+			tcstoi64_o(op_begin, &op_end, 0);
+			if (!IS_HEX(op_begin)) // This check is probably only needed on VC++ 2015 and later, where _tcstod allows hex.
 			{
-				pending_op_is_class = false; // Must be cleared for `new 123` to be interpreted correctly.
-				continue; // Do nothing further since pure numbers don't need any processing at this stage.
+				LPTSTR d_end;
+				_tcstod(op_begin, &d_end);
+				if (op_end < d_end && _tcschr(EXPR_OPERAND_TERMINATORS, *d_end))
+				{
+					op_end = d_end;
+					pending_op_is_class = false; // Must be reset for subsequent operands.
+					continue;
+				}
+			}
+			if (_tcschr(EXPR_OPERAND_TERMINATORS, *op_end))
+			{
+				pending_op_is_class = false; // Must be reset for subsequent operands.
+				// Do nothing further since pure numbers don't need any processing at this stage.
+				// If this number has a fractional part, it is handled by "case '.'" above.
+				continue;
 			}
 			//else: It's not valid, but let it pass through to Var::ValidateName() to generate an error message.
 		}
@@ -8541,62 +8552,57 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						}
 					}
 
-					// Find the end of this operand or keyword, even if that end extended into the next deref.
-					// StrChrAny() is not used because if *op_end is '\0', the strchr() below will find it too:
-					for (op_end = cp + 1; !_tcschr(EXPR_OPERAND_TERMINATORS, *op_end); ++op_end);
-					// Now op_end marks the end of this operand or keyword.  That end might be the zero terminator
-					// or the next operator in the expression, or just a whitespace.
-					if (*op_end == '.') // i.e. it's a floating-point literal.
-					{
-						// Update op_end to include the decimal portion of the operand:
-						do ++op_end; while (!_tcschr(EXPR_OPERAND_TERMINATORS, *op_end));
-					}
-
 unquoted_literal:
 					// This operand is a normal raw numeric-literal, or an unquoted literal string/key in
 					// an object literal, such as "{key: value}".  Word operators such as AND/OR/NOT/NEW
 					// and variable/function references don't reach this point as they are pre-parsed by
 					// ParseOperands() and placed into the "deref" array.  Unrecognized symbols should be
 					// impossible at this stage because prior validation would have caught them.
-					if (   (*op_end == '-' || *op_end == '+') && ctoupper(op_end[-1]) == 'E' // v1.0.46.11: It looks like scientific notation...
-						&& !(cp[0] == '0' && ctoupper(cp[1]) == 'X') // ...and it's not a hex number (this check avoids falsely detecting hex numbers that end in 'E' as exponents). This line fixed in v1.0.46.12.
-						&& !(cp[0] == '-' && cp[1] == '0' && ctoupper(cp[2]) == 'X') // ...and it's not a negative hex number (this check avoids falsely detecting hex numbers that end in 'E' as exponents). This line added as a fix in v1.0.47.03.
-						)
-					{
-						// Since op_end[-1] is the 'E' or an exponent, the only valid things for op_end[0] to be
-						// are + or - (it can't be a digit because the loop above would never have stopped op_end
-						// at a digit).  If it isn't + or -, it's some kind of syntax error, so doing the following
-						// seems harmless in any case:
-						do // Skip over the sign and its exponent; e.g. the "+1" in "1.0e+1".  There must be a sign in this particular sci-notation number or we would never have arrived here.
-							++op_end;
-						while (*op_end >= '0' && *op_end <= '9'); // Avoid isdigit() because it sometimes causes a debug assertion failure at: (unsigned)(c + 1) <= 256 (probably only in debug mode), and maybe only when bad data got in it due to some other bug.
-						if (!_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT, *op_end))
-							return LineError(_T("Bad numeric literal."), FAIL, cp);
-					}
 					CHECK_AUTO_CONCAT;
 					// MUST NOT REFER TO this_infix_item IN CASE ABOVE DID ++infix_count:
-					// Now determine what type of literal this is: integer, floating-point or unquoted string.
-					if (op_end - cp < MAX_NUMBER_SIZE)
-						tcslcpy(number_buf, cp, op_end - cp + 1); // +1 for null terminator.
-					else
-						*number_buf = '\0'; // For simplicity; IsNumeric() should yield the correct result.
-					switch (infix[infix_count].symbol = IsNumeric(number_buf, true, false, true))
+					ExprTokenType &this_literal = infix[infix_count];
+
+					if (*cp <= '9' && (*cp >= '0' || *cp == '+' || *cp == '-' || *cp == '.'))
 					{
-					case SYM_INTEGER:
-						infix[infix_count].value_int64 = ATOI64(number_buf);
-						break;
-					case SYM_FLOAT:
-						infix[infix_count].value_double = ATOF(number_buf);
-						break;
-					default:
-						if (*cp == '.')
-							return LineError(ERR_INVALID_DOT, FAIL, cp);
-						// SYM_STRING: either the "key" in "{key: value}" or a syntax error (might be impossible).
-						LPTSTR str = SimpleHeap::Malloc(cp, op_end - cp);
-						if (!str)
-							return FAIL; // Malloc already displayed an error message.
-						infix[infix_count].SetValue(str, op_end - cp);
+						// Looks like a number.  The checks above and IsHex() below rule out the strings
+						// "inf", "infinity", "nan" and "nanxxx", and hexadecimal floating-point numbers,
+						// which would otherwise be interpreted as valid if supported by the compiler
+						// (VC++ 2015 and later).  This is done because we don't support those values
+						// elsewhere in the code, such as in IsNumeric().
+						LPTSTR i_end, d_end;
+						__int64 i;
+						if (IsHex(cp))
+						{
+							i = tcstoi64_o(cp, &i_end, 16);
+						}
+						else
+						{
+							i = tcstoi64_o(cp, &i_end, 10);
+							double d = _tcstod(cp, &d_end);
+							if (d_end > i_end && _tcschr(EXPR_OPERAND_TERMINATORS, *d_end))
+							{
+								this_literal.symbol = SYM_FLOAT;
+								this_literal.value_double = d;
+								cp = d_end; // Have the loop process whatever lies at d_end and beyond.
+								continue;
+							}
+						}
+						if (*cp == '.') // Must be checked to avoid `(.foo)` being interpreted as `((0).foo)`.
+							return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
+						if (_tcschr(EXPR_OPERAND_TERMINATORS, *i_end))
+						{
+							this_literal.symbol = SYM_INTEGER;
+							this_literal.value_int64 = i;
+							cp = i_end; // Have the loop process whatever lies at i_end and beyond.
+							continue;
+						}
 					}
+					op_end = find_identifier_end(cp);
+					// SYM_STRING: either the "key" in "{key: value}" or a syntax error (might be impossible).
+					LPTSTR str = SimpleHeap::Malloc(cp, op_end - cp);
+					if (!str)
+						return FAIL; // Malloc already displayed an error message.
+					this_literal.SetValue(str, op_end - cp);
 					cp = op_end; // Have the loop process whatever lies at op_end and beyond.
 					continue; // "Continue" to avoid the ++cp at the bottom.
 				} // switch() for type of symbol/operand.
