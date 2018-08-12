@@ -227,6 +227,7 @@ FuncEntry g_BIF[] =
 	BIFn(SoundSet, 1, 4, BIF_Sound),
 	BIFn(Sqrt, 1, 1, BIF_SqrtLogLn),
 	BIF1(StatusBarGetText, 0, 5),
+	BIF1(StrCompare, 2, 3),
 	BIFn(StrGet, 1, 3, BIF_StrGetPut),
 	BIF1(String, 1, 1),
 	BIF1(StrLen, 1, 1),
