@@ -430,7 +430,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			// memory over to output_var via AcceptNewMem(); 2) Set mem_to_free to NULL to indicate to
 			// us that it is a user of mem_to_free.
 			
-			FuncCallData func_call;
+			UDFCallInfo func_call;
 			// Call the user-defined or built-in function.  Func::Call takes care of variadic parameter
 			// lists and stores local var backups for UDFs in func_call.  Once func_call goes out of scope,
 			// its destructor calls Var::FreeAndRestoreFunctionVars() if appropriate.
@@ -1720,7 +1720,7 @@ double_deref_fail: // For the rare cases when the name of a dynamic function cal
 
 
 
-bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic)
+bool Func::Call(UDFCallInfo &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic)
 // aFuncCall: Caller passes a variable which should go out of scope after the function call's result
 //   has been used; this automatically frees and restores a UDFs local vars (where applicable).
 // aSpaceAvailable: -1 indicates this is a regular function call.  Otherwise this must be the amount of
@@ -1826,14 +1826,14 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 					// DllCall() relies on the fact that this transformation is only done for user
 					// functions, not built-in ones such as DllCall().  This is because DllCall()
 					// sometimes needs the variable of a parameter for use as an output parameter.
-					this_param_token.var->TokenToContents(this_param_token);
+					this_param_token.var->ToToken(this_param_token);
 				}
 			}
 			// BackupFunctionVars() will also clear each local variable and formal parameter so that
 			// if that parameter or local var is assigned a value by any other means during our call
 			// to it, new memory will be allocated to hold that value rather than overwriting the
 			// underlying recursed/interrupted instance's memory, which it will need intact when it's resumed.
-			if (!Var::BackupFunctionVars(*this, aFuncCall.mBackup, aFuncCall.mBackupCount)) // Out of memory.
+			if (!Var::BackupFunctionVars(*this, aFuncCall.backup, aFuncCall.backup_count)) // Out of memory.
 			{
 				aResult = g_script.ScriptError(ERR_OUTOFMEM, mName);
 				return false;
@@ -1847,7 +1847,7 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 		// locals or formal params because it would have no legitimate origin.
 
 		// Set after above succeeds to ensure local vars are freed and the backup is restored (at some point):
-		aFuncCall.mFunc = this;
+		aFuncCall.func = this;
 		
 		for (j = 0; j < mParamCount; ++j) // For each formal parameter.
 		{
@@ -1934,15 +1934,20 @@ bool Func::Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aRe
 			mParam[mParamCount].var->AssignSkipAddRef(vararg_obj);
 		}
 
+		DEBUGGER_STACK_PUSH(&aFuncCall)
+
 		aResult = Call(&aResultToken); // Call the UDF.
+
+		DEBUGGER_STACK_POP()
+		
 	}
 	return (aResult != EARLY_EXIT && aResult != FAIL);
 }
 
 // This is used for maintainability: to ensure it's never forgotten and to reduce code repetition.
-FuncCallData::~FuncCallData()
+UDFCallInfo::~UDFCallInfo()
 {
-	if (mFunc) // mFunc != NULL implies it is a UDF and Var::BackupFunctionVars() has succeeded.
+	if (func) // func != NULL implies it is a UDF and Var::BackupFunctionVars() has succeeded.
 	{
 		// Free the memory of all the just-completed function's local variables.  This is done in
 		// both of the following cases:
@@ -1962,7 +1967,7 @@ FuncCallData::~FuncCallData()
 		//    c) To yield results consistent with when the same function is called while other instances
 		//       of itself exist on the call stack.  In other words, it would be inconsistent to make
 		//       all variables blank for case #1 above but not do it here in case #2.
-		Var::FreeAndRestoreFunctionVars(*mFunc, mBackup, mBackupCount);
+		Var::FreeAndRestoreFunctionVars(*func, backup, backup_count);
 	}
 }
 

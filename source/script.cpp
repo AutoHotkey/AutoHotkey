@@ -11892,7 +11892,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 				{
 					// This is a plain variable reference (not an expression) and the variable
 					// contains an object.
-					ARGVAR1->TokenToContents(*aResultToken);
+					ARGVAR1->ToToken(*aResultToken);
 				}
 				else
 				{

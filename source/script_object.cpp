@@ -26,7 +26,7 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 	}
 
 	// When this variable goes out of scope, Var::FreeAndRestoreFunctionVars() is called (if appropriate):
-	FuncCallData func_call;
+	UDFCallInfo func_call;
 	ResultType result;
 
 	// CALL THE FUNCTION.
@@ -1558,7 +1558,7 @@ bool Object::FieldType::Assign(ExprTokenType &aParam)
 		// format of a literal number such as 0x123 or 00001, and even less likely for a number stored
 		// in an object (even implicitly via a variadic function).  If the value is eventually passed
 		// to a COM method call, it can be important that it is passed as VT_I4 and not VT_BSTR.
-		aParam.var->TokenToContents(temp);
+		aParam.var->ToToken(temp);
 		val = &temp;
 	}
 	else
@@ -2201,7 +2201,7 @@ void Func::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageS
 	DebugCookie cookie;
 	aDebugger->BeginProperty(NULL, "object", 1, cookie);
 	if (aPage == 0)
-		aDebugger->WriteProperty("Name", mName);
+		aDebugger->WriteProperty("Name", ExprTokenType(mName));
 	aDebugger->EndProperty(cookie);
 }
 

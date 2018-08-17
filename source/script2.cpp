@@ -14075,7 +14075,7 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 	aDebugger->BeginProperty(NULL, "object", 5, rootCookie);
 	if (aPage == 0)
 	{
-		aDebugger->WriteProperty("Count", mPatternCount);
+		aDebugger->WriteProperty("Count", ExprTokenType((__int64)mPatternCount));
 
 		static LPSTR sNames[] = { "Value", "Pos", "Len", "Name" };
 #ifdef UNICODE
@@ -14099,7 +14099,7 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 				paramToken[1].symbol = SYM_INTEGER;
 				paramToken[1].value_int64 = p;
 				Invoke(resultToken, thisTokenUnused, IT_GET, param, 2);
-				aDebugger->WriteProperty(p, resultToken);
+				aDebugger->WriteProperty(paramToken[1], resultToken);
 				if (resultToken.mem_to_free)
 					free(resultToken.mem_to_free);
 			}
@@ -18682,7 +18682,7 @@ BIF_DECL(BIF_Exception)
 				// line, return the name of the function or sub which that line called.
 				// In other words, an offset of -1 gives the name of the current function and
 				// the file and number of the line which it was called from.
-				what = se[1].type == DbgStack::SE_Func ? se[1].func->mName : se[1].sub->mName;
+				what = se[1].type == DbgStack::SE_UDF ? se[1].udf->func->mName : se[1].sub->mName;
 			}
 		}
 #endif

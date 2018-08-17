@@ -244,12 +244,8 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 {
 	// For simplicity/code size, the debugger handles failures internally
 	// rather than returning an error code and requiring caller to handle it.
-	virtual void WriteProperty(LPCSTR aName, LPTSTR aValue) = 0;
-	virtual void WriteProperty(LPCSTR aName, __int64 aValue) = 0;
-	virtual void WriteProperty(LPCSTR aName, IObject *aValue) = 0;
 	virtual void WriteProperty(LPCSTR aName, ExprTokenType &aValue) = 0;
-	virtual void WriteProperty(INT_PTR aKey, ExprTokenType &aValue) = 0;
-	virtual void WriteProperty(IObject *aKey, ExprTokenType &aValue) = 0;
+	virtual void WriteProperty(ExprTokenType &aKey, ExprTokenType &aValue) = 0;
 	virtual void BeginProperty(LPCSTR aName, LPCSTR aType, int aNumChildren, DebugCookie &aCookie) = 0;
 	virtual void EndProperty(DebugCookie aCookie) = 0;
 };
@@ -350,6 +346,17 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 		ASSERT(aValue);
 		symbol = SYM_OBJECT;
 		object = aValue;
+	}
+
+	inline void CopyValueFrom(ExprTokenType &other)
+	// Copies the value of a token (by reference where applicable).  Does not object->AddRef().
+	{
+		value_int64 = other.value_int64; // Union copy.
+#ifdef _WIN64
+		// For simplicity/smaller code size, don't bother checking symbol == SYM_STRING.
+		buf = other.buf; // Already covered by the above on x86.
+#endif
+		symbol = other.symbol;
 	}
 };
 #define MAX_TOKENS 512 // Max number of operators/operands.  Seems enough to handle anything realistic, while conserving call-stack space.

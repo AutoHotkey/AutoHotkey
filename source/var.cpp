@@ -1259,6 +1259,23 @@ void Var::FreeAndRestoreFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVar
 
 
 
+// Used by the debugger.
+void VarBkp::ToToken(ExprTokenType &aValue)
+{
+	switch (mAttrib & (VAR_ATTRIB_HAS_VALID_INT64 | VAR_ATTRIB_HAS_VALID_DOUBLE | VAR_ATTRIB_OBJECT))
+	{
+	case VAR_ATTRIB_OBJECT: aValue.SetValue(mObject); break;
+	case VAR_ATTRIB_HAS_VALID_INT64: aValue.SetValue(mContentsInt64); break;
+	case VAR_ATTRIB_HAS_VALID_DOUBLE: aValue.SetValue(mContentsDouble); break;
+	default:
+		aValue.SetValue(mCharContents);
+		if (mAttrib & VAR_ATTRIB_UNINITIALIZED)
+			aValue.symbol = SYM_MISSING;
+	}
+}
+
+
+
 ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError)
 // Returns OK or FAIL.
 {

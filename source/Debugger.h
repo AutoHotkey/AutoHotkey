@@ -101,12 +101,13 @@ private:
 // Forward-declarations (this file is included in script.h before these are declared).
 class Line;
 class Func;
+struct UDFCallInfo;
 class Label;
 
 
 struct DbgStack
 {
-	enum StackEntryType {SE_Thread, SE_Sub, SE_Func};
+	enum StackEntryType {SE_Thread, SE_Sub, SE_UDF};
 	struct Entry
 	{
 		Line *line;
@@ -114,7 +115,7 @@ struct DbgStack
 		{
 			TCHAR *desc; // SE_Thread -- "auto-exec", hotkey/hotstring name, "timer", etc.
 			Label *sub; // SE_Sub
-			Func *func; // SE_Func
+			UDFCallInfo *udf; // SE_UDF
 		};
 		StackEntryType type;
 	};
@@ -167,6 +168,9 @@ struct DbgStack
 	void Push(TCHAR *aDesc);
 	void Push(Label *aSub);
 	void Push(Func *aFunc);
+	void Push(UDFCallInfo *aRecurse);
+
+	void GetLocalVars(int aDepth, Var **&aVar, Var **&aVarEnd, VarBkp *&aBkp, VarBkp *&aBkpEnd);
 };
 
 #define DEBUGGER_STACK_PUSH(aWhat)	g_Debugger.mStack.Push(aWhat);
@@ -323,63 +327,62 @@ private:
 
 	HookType mDisabledHooks;
 
+
+	enum PropertyType
+	{
+		PropNone = 0,
+		PropVar,
+		PropVarBkp,
+		PropField,
+		PropValue // Read-only pseudo-property (ExprTokenType)
+	};
+
+	struct PropertySource
+	{
+		PropertyType kind;
+		Var *var;
+		VarBkp *bkp;
+		Object::FieldType *field;
+		ExprTokenType value;
+	};
+
+	struct PropertyInfo : PropertySource
+	{
+		LPCSTR name;
+		CStringA &fullname;
+		LPSTR facet; // Initialised during writing.
+		bool is_alias, is_builtin, is_static, is_binaryclip; // Facets.
+		int page, pagesize; // Attributes which are also parameters.
+		int max_data; // Parameters.
+		int max_depth;
+
+		PropertyInfo(CStringA &aNameBuf)
+			: is_alias(false), is_builtin(false), is_static(false), is_binaryclip(false)
+			, page(0), fullname(aNameBuf) {}
+	};
+
 	
 	struct PropertyWriter : public IDebugProperties
 	{
 		Debugger &mDbg;
+		PropertyInfo &mProp;
 		IObject *mObject;
-		LPCSTR mName;
-		CStringA &mNameBuf;
 		size_t mNameLength;
-		int mPage;
-		int mPageSize;
 		int mDepth;
-		int mMaxDepth;
-		int mMaxEncodedSize;
 		int mError;
 
-		PropertyWriter(Debugger &aDbg, IObject *aObject, LPCSTR aName, CStringA &aNameBuf, int aPage, int aPageSize, int aMaxDepth, int aMaxEncodedSize)
+		PropertyWriter(Debugger &aDbg, PropertyInfo &aProp, IObject *aObject)
 			: mDbg(aDbg)
+			, mProp(aProp)
 			, mObject(aObject)
-			, mName(aName)
-			, mNameBuf(aNameBuf)
-			, mNameLength(aNameBuf.GetLength())
-			, mPage(aPage)
-			, mPageSize(aPageSize)
+			, mNameLength(aProp.fullname.GetLength())
 			, mDepth(0)
-			, mMaxDepth(aMaxDepth)
-			, mMaxEncodedSize(aMaxEncodedSize)
 			, mError(0)
 		{
 		}
 
-		void WriteProperty(LPCSTR aName, LPTSTR aValue)
-		{
-			ExprTokenType value;
-			value.symbol = SYM_STRING;
-			value.marker = aValue;
-			WriteProperty(aName, value);
-		}
-
-		void WriteProperty(LPCSTR aName, __int64 aValue)
-		{
-			ExprTokenType value;
-			value.symbol = SYM_INTEGER;
-			value.value_int64 = aValue;
-			WriteProperty(aName, value);
-		}
-		
-		void WriteProperty(LPCSTR aName, IObject *aValue)
-		{
-			ExprTokenType value;
-			value.symbol = SYM_OBJECT;
-			value.object = aValue;
-			WriteProperty(aName, value);
-		}
-
 		void WriteProperty(LPCSTR aName, ExprTokenType &aValue);
-		void WriteProperty(INT_PTR aKey, ExprTokenType &aValue);
-		void WriteProperty(IObject *aKey, ExprTokenType &aValue);
+		void WriteProperty(ExprTokenType &aKey, ExprTokenType &aValue);
 
 		void _WriteProperty(ExprTokenType &aValue);
 
@@ -404,16 +407,21 @@ private:
 
 	void AppendKeyName(CStringA &aNameBuf, size_t aParentNameLength, const char *aName);
 
-	int WritePropertyXml(Var &aVar, int aMaxEncodedSize, int aPage = 0);
-	int WritePropertyXml(IObject *aObject, const char *aName, CStringA &aNameBuf, int aPage, int aPageSize, int aDepthRemaining, int aMaxEncodedSize, char *aFacet = "");
-	int WritePropertyXml(ExprTokenType &aValue, const char *aName, CStringA &aNameBuf, int aPageSize, int aDepthRemaining, int aMaxEncodedSize);
-	int WritePropertyXml(Object::FieldType &aField, const char *aName, CStringA &aNameBuf, int aPageSize, int aDepthRemaining, int aMaxEncodedSize);
+	int GetPropertyInfo(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf);
+	int GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp, LPTSTR &aValueBuf);
+	int GetPropertyInfo(Object::FieldType &aField, PropertyInfo &aProp);
+	
+	int GetPropertyValue(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf);
+
+	int WritePropertyXml(PropertyInfo &aProp);
+	int WritePropertyXml(PropertyInfo &aProp, LPTSTR aName);
+	int WritePropertyXml(PropertyInfo &aProp, IObject *aObject);
 
 	int WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncodedSize);
-	int WritePropertyData(Var &aVar, int aMaxEncodedSize);
-	int WritePropertyData(Object::FieldType &aField, int aMaxEncodedSize);
+	int WritePropertyData(ExprTokenType &aValue, int aMaxEncodedSize);
 
-	int ParsePropertyName(const char *aFullName, int aVarScope, bool aVarMustExist, Var *&aVar, Object::FieldType *&aField);
+	int ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, bool aVarMustExist
+		, PropertySource &aResult);
 	int property_get_or_value(char **aArgV, int aArgCount, char *aTransactionId, bool aIsPropertyGet);
 	int redirect_std(char **aArgV, int aArgCount, char *aTransactionId, char *aCommandName);
 	int run_step(char **aArgV, int aArgCount, char *aTransactionId, char *aCommandName, DebuggerInternalStateType aNewState);

@@ -2193,14 +2193,15 @@ struct FuncParam
 	union {LPTSTR default_str; __int64 default_int64; double default_double;};
 };
 
-struct FuncCallData
+struct UDFCallInfo
 {
-	Func *mFunc; // If non-NULL, indicates this is a UDF whose vars will need to be freed/restored later.
-	VarBkp *mBackup; // For UDFs.
-	int mBackupCount;
-	FuncCallData() : mFunc(NULL), mBackup(NULL), mBackupCount(0) { }
-	~FuncCallData();
+	Func *func; // If non-NULL, indicates this is a UDF whose vars will need to be freed/restored later.
+	VarBkp *backup; // Backup of previous instance's local vars.  NULL if no previous instance or no vars.
+	int backup_count; // Number of previous instance's local vars.  0 if no previous instance or no vars.
+	UDFCallInfo() : func(NULL), backup(NULL), backup_count(0) {}
+	~UDFCallInfo();
 };
+
 
 typedef BIF_DECL((* BuiltInFunctionType));
 
@@ -2233,7 +2234,7 @@ public:
 	// is truly built-in, not its name.
 	bool mIsVariadic;
 
-	bool Call(FuncCallData &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false);
+	bool Call(UDFCallInfo &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false);
 
 	ResultType Call(ExprTokenType *aResultToken) // Making this a function vs. inline doesn't measurably impact performance.
 	{
@@ -2274,7 +2275,6 @@ public:
 		++mInstances;
 
 		ResultType result;
-		DEBUGGER_STACK_PUSH(this)
 		result = mJumpToLine->ExecUntil(UNTIL_BLOCK_END, aResultToken);
 #ifdef CONFIG_DEBUGGER
 		if (g_Debugger.IsConnected())
@@ -2294,7 +2294,6 @@ public:
 			}
 		}
 #endif
-		DEBUGGER_STACK_POP()
 
 		--mInstances;
 		// Restore the original value in case this function is called from inside another function.
