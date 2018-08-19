@@ -1068,7 +1068,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			// Since this object has a "base", let it count as the first field.
 			if (i == 0) // i.e. this is the first page.
 			{
-				aDebugger->WriteProperty("base", ExprTokenType(mBase));
+				aDebugger->WriteProperty("<base>", ExprTokenType(mBase));
 				// Now fall through and retrieve field[0] (unless aPageSize == 1).
 			}
 			// So 20..39 becomes 19..38 when there's a base object:
@@ -1291,8 +1291,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 	Var *var = NULL;
 	VarBkp *varbkp = NULL;
 	SymbolType key_type;
-	Object::KeyType key;
-    Object::FieldType *field;
+	Object::FieldType *field;
 	Object::IndexType insert_pos;
 	Object *obj;
 
@@ -1444,22 +1443,35 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 				c = *name_end; // Save this for the next iteration.
 				*name_end = '\0';
 			}
+			else
+				c = 0;
 			//else there won't be a next iteration.
 			key_type = IsPureNumeric(name); // SYM_INTEGER or SYM_STRING.
 		}
 		else
 			return DEBUGGER_E_INVALID_OPTIONS;
 		
-		if (key_type == SYM_STRING)
-			key.s = name;
-		else // SYM_INTEGER or SYM_OBJECT
-			key.i = Exp32or64(_ttoi,_ttoi64)(name);
-
-		if ( !(field = obj->FindField(key_type, key, insert_pos)) )
+		if (*name != '<' || name[-1] != '.') // Not a pseudo-property; i.e. ["<base>"] is always a key-value pair.
 		{
-			if (!_tcsicmp(name, _T("base")))
+			Object::KeyType key;
+			if (key_type == SYM_STRING)
+				key.s = name;
+			else // SYM_INTEGER or SYM_OBJECT
+				key.i = Exp32or64(_ttoi,_ttoi64)(name);
+			field = obj->FindField(key_type, key, insert_pos);
+		}
+		else
+			field = NULL;
+
+		if (!field)
+		{
+			// IDE should request .<base> only if it was returned by property_get or context_get,
+			// so this always means the object's base (field is always NULL).  By contrast, .base
+			// and ["base"] originate either from a key-value pair or the user "inspecting" an
+			// expression like `myObj.base`.  Since no field was found, assume it's the latter.
+			if (!_tcsicmp(name, _T("base")) || !_tcsicmp(name - 1, _T(".<base>")))
 			{
-				if (!name_end || !c)
+				if (!c)
 				{
 					// For property_set, this won't allow the base to be set (success="0").
 					// That seems okay since it could only ever be set to NULL anyway.
@@ -1478,7 +1490,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 				return DEBUGGER_E_UNKNOWN_PROPERTY;
 		}
 
-		if (!name_end || !c)
+		if (!c)
 		{
 			// All done!
 			aResult.kind = PropField;
