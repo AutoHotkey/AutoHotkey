@@ -135,15 +135,20 @@ bool Debugger::HasPendingCommand()
 
 int Debugger::EnterBreakState()
 {
-	if (mInternalState != DIS_Starting && mInternalState != DIS_Break)
-		// Send a response for the previous continuation command.
-		if (int err = SendContinuationResponse())
-			return err;
-	// Remove keyboard/mouse hooks.
-	if (mDisabledHooks = GetActiveHooks())
-		AddRemoveHooks(0, true);
-	// Set break state.
-	mInternalState = DIS_Break;
+	if (mInternalState != DIS_Break)
+	{
+		if (mInternalState != DIS_Starting)
+			// Send a response for the previous continuation command.
+			if (int err = SendContinuationResponse())
+				return err;
+		// Remove keyboard/mouse hooks.
+		if (mDisabledHooks = GetActiveHooks())
+			AddRemoveHooks(0, true);
+		// Set break state.
+		mInternalState = DIS_Break;
+	}
+	//else: no continuation command has been received so send no "response".
+	// Hooks were already removed and mDisabledHooks must not be overwritten.
 	return DEBUGGER_E_OK;
 }
 
@@ -161,6 +166,12 @@ void Debugger::ExitBreakState()
 
 int Debugger::Break()
 {
+	if (mInternalState == DIS_Break)
+		// Already in a break state, so it's likely that we are currently evaluating a
+		// DBGp command, such as when property_set releases an object which implements
+		// __delete and this causes a breakpoint to be hit.  In that case we must not
+		// re-enter the command loop until the current command has completed.
+		return DEBUGGER_E_OK;
 	int err = EnterBreakState();
 	if (!err)
 		err = ProcessCommands();
