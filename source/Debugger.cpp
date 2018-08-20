@@ -325,14 +325,35 @@ int Debugger::ParseArgs(char *aArgs, char **aArgV, int &aArgCount, char *&aTrans
 
 		if (arg_char == '-') // -- base64-encoded-data
 			break;
-		
-		// Find where this arg's value ends and the next arg begins.
-		char *next_arg = strstr(aArgs + 1, " -");
-		if (!next_arg)
-			break;
 
-		// Terminate this arg.
-		*next_arg = '\0';
+		char *next_arg;
+		if (aArgs[1] == '"')
+		{
+			char *arg_end;
+			for (arg_end = aArgs + 1, next_arg = aArgs + 2; *next_arg != '"'; ++arg_end, ++next_arg)
+			{
+				if (*next_arg == '\\')
+					++next_arg; // Currently only \\ and \" are supported; i.e. mark next char as literal.
+				if (!*next_arg)
+					return DEBUGGER_E_PARSE_ERROR;
+				// Copy the value to eliminate the quotes and escape sequences.
+				*arg_end = *next_arg;
+			}
+			*arg_end = '\0'; // Terminate this arg.
+			++next_arg;
+			if (!*next_arg)
+				break;
+			if (strncmp(next_arg, " -", 2))
+				return DEBUGGER_E_PARSE_ERROR;
+		}
+		else
+		{
+			// Find where this arg's value ends and the next arg begins.
+			next_arg = strstr(aArgs + 1, " -");
+			if (!next_arg)
+				break;
+			*next_arg = '\0'; // Terminate this arg.
+		}
 		
 		// Point aArgs to the next arg's hyphen.
 		aArgs = next_arg + 1;
