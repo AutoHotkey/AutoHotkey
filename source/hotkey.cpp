@@ -1353,7 +1353,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 // verification of the fact that this hotkey's id is always set equal to it's index in the array
 // (for performance reasons).
 {
-	if (sNextID > HOTKEY_ID_MAX)  // The latter currently probably can't happen.
+	if (sNextID > HOTKEY_ID_MAX)
 	{
 		// This will actually cause the script to terminate if this hotkey is a static (load-time)
 		// hotkey.  In the future, some other behavior is probably better:
