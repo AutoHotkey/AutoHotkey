@@ -400,6 +400,8 @@ struct ArgStruct
 	ExprTokenType *postfix;  // An array of tokens in postfix order.
 };
 
+Object* TokensToScriptObject(ExprTokenType aTokens[], int aCount);
+
 #define BIF_DECL_PARAMS ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount
 
 // The following macro is used for definitions and declarations of built-in functions:
@@ -440,6 +442,43 @@ struct ArgStruct
 #define _f_number_buf			_f_retval_buf  // An alias to show intended usage, and in case the buffer size is changed.
 #define _f_callee_id			(aResultToken.func->mID)
 
+// The following two macros are used to create a script object which can be returned from a built-in function or method.
+// Example usage:
+/*
+	BIF_DECL(MyFunc)
+	{
+		// ...
+		Object* obj_name;
+		_f_create_script_object(obj_name, key1, val1, key2, val2, ...)
+		_f_return(obj_name);
+	}
+*/
+// Note that objects which are not returned directly to the script needs to call Release() appropriately, eg,
+/*
+	Object* obja;
+	Object* objb;
+	_f_create_script_object(obja, 1, 2);
+	_f_create_script_object(objb, 1, obja);
+	obja->Release();
+	_f_return(objb);
+*/
+// Similarily, Release() should be called before eg, _f_throw();
+// For use in BIFs:
+#define _f_create_script_object(obj, ...) \
+{ \
+	ExprTokenType tokens[] = { __VA_ARGS__ }; \
+	obj = TokensToScriptObject(tokens, _countof(tokens)); \
+	if (obj == NULL) \
+		_f_throw(ERR_OUTOFMEM); \
+}
+// For use in methods:
+#define _o_create_script_object(obj, ...) \
+{ \
+	ExprTokenType tokens[] = { __VA_ARGS__ }; \
+	obj = TokensToScriptObject(tokens, _countof(tokens)); \
+	if (obj == NULL) \
+		_o_throw(ERR_OUTOFMEM); \
+}
 
 // Some of these lengths and such are based on the MSDN example at
 // http://msdn.microsoft.com/library/default.asp?url=/library/en-us/sysinfo/base/enumerating_registry_subkeys.asp:

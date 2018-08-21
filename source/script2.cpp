@@ -17524,3 +17524,17 @@ DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNam
 	CloseHandle(hproc);
 	return buf_length;
 }
+
+Object* TokensToScriptObject(ExprTokenType aTokens[], int aCount)
+{
+	/*
+	This function is used to make a script object which can be returned to the script.
+	aTokens, an array of key-value pairs to add to the new script object.
+	aCount, number tokens in aTokens.
+	*/
+	ExprTokenType **obj_params = (ExprTokenType**)alloca(aCount * sizeof (ExprTokenType*));
+	int i = 0;
+	while(i++ < aCount)
+		*obj_params++ = aTokens++;
+	return Object::Create(obj_params - aCount, aCount);
+}
