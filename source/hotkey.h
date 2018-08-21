@@ -22,23 +22,22 @@ GNU General Public License for more details.
 EXTERN_SCRIPT;  // For g_script.
 
 // Due to control/alt/shift modifiers, quite a lot of hotkey combinations are possible, so support any
-// conceivable use.  Note: Increasing this value will increase the memory required (i.e. any arrays
-// that use this value):
-#define MAX_HOTKEYS 1000  // Raised from 700 to 1000 in v1.0.48 because at least one person needed more.
+// conceivable use.  This value is used for initial sizing of the shk array, which doubles in size each
+// time its capacity is reached (making the need for expansion rare).
+#define INITIAL_MAX_HOTKEYS 256
 
 // Note: 0xBFFF is the largest ID that can be used with RegisterHotkey().
-// But further limit this to 0x3FFF (16,383) so that the two highest order bits
-// are reserved for our other uses:
-#define HOTKEY_FUTURE_USE              0x8000  // Formerly HOTKEY_NO_SUPPRESS but no longer needed for that.
-#define HOTKEY_KEY_UP                  0x4000
-#define HOTKEY_ID_MASK                 0x3FFF
+// But further limit this to 0x7FFF (32,767) so that the highest order bit
+// is reserved for our other use:
+#define HOTKEY_KEY_UP                  0x8000
+#define HOTKEY_ID_MASK                 0x7FFF
 #define HOTKEY_ID_INVALID              HOTKEY_ID_MASK
-#define HOTKEY_ID_ALT_TAB              0x3FFE
-#define HOTKEY_ID_ALT_TAB_SHIFT        0x3FFD
-#define HOTKEY_ID_ALT_TAB_MENU         0x3FFC
-#define HOTKEY_ID_ALT_TAB_AND_MENU     0x3FFB
-#define HOTKEY_ID_ALT_TAB_MENU_DISMISS 0x3FFA
-#define HOTKEY_ID_MAX                  0x3FF9  // 16377 hotkeys
+#define HOTKEY_ID_ALT_TAB              0x7FFE
+#define HOTKEY_ID_ALT_TAB_SHIFT        0x7FFD
+#define HOTKEY_ID_ALT_TAB_MENU         0x7FFC
+#define HOTKEY_ID_ALT_TAB_AND_MENU     0x7FFB
+#define HOTKEY_ID_ALT_TAB_MENU_DISMISS 0x7FFA
+#define HOTKEY_ID_MAX                  0x7FF9  // 32762 hotkeys
 #define HOTKEY_ID_ON                   0x01  // This and the next 2 are used only for convenience by ConvertAltTab().
 #define HOTKEY_ID_OFF                  0x02
 #define HOTKEY_ID_TOGGLE               0x03
@@ -145,7 +144,8 @@ private:
 	~Hotkey() {if (mIsRegistered) Unregister();}
 
 public:
-	static Hotkey *shk[MAX_HOTKEYS];
+	static Hotkey **shk;
+	static int shkMax;
 
 	// 32-bit members:
 	mod_type mModifiers;  // MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, or some additive or bitwise-or combination of these.

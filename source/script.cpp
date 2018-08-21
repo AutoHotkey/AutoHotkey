@@ -14620,10 +14620,10 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		// Label2:
 		// ...
 		// return
-		if (*ARG2)
+		if (!IsPureNumeric(ARG2, true, true, true)) // Allow it to be neg. or floating point at runtime.
 		{
 			toggle = Line::ConvertOnOff(ARG2);
-			if (!toggle && !IsPureNumeric(ARG2, true, true, true)) // Allow it to be neg. or floating point at runtime.
+			if (!toggle)
 			{
 				if (!_tcsicmp(ARG2, _T("Delete")))
 				{
