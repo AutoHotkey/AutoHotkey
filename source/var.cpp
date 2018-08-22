@@ -1062,6 +1062,23 @@ void Var::FreeAndRestoreFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVar
 
 
 
+// Used by the debugger.
+void VarBkp::ToToken(ExprTokenType &aValue)
+{
+	switch (mAttrib & VAR_ATTRIB_TYPES)
+	{
+	case VAR_ATTRIB_IS_OBJECT: aValue.SetValue(mObject); break;
+	case VAR_ATTRIB_IS_INT64: aValue.SetValue(mContentsInt64); break;
+	case VAR_ATTRIB_IS_DOUBLE: aValue.SetValue(mContentsDouble); break;
+	default:
+		aValue.SetValue(mCharContents, mByteLength / sizeof(TCHAR));
+		if (mAttrib & VAR_ATTRIB_UNINITIALIZED)
+			aValue.symbol = SYM_MISSING;
+	}
+}
+
+
+
 // Without __declspec(noinline), this produced larger code than the original, which had
 // the code essentially repeated in ValidateName().  There's no good reason to inline
 // this function (or other functions which are only called to display an error dialog).

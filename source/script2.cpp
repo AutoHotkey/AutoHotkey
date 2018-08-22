@@ -12025,7 +12025,7 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 	aDebugger->BeginProperty(NULL, "object", 5, rootCookie);
 	if (aPage == 0)
 	{
-		aDebugger->WriteProperty("Count", mPatternCount);
+		aDebugger->WriteProperty("Count", ExprTokenType((__int64)mPatternCount));
 
 		static LPSTR sNames[] = { "Value", "Pos", "Len", "Name" };
 #ifdef UNICODE
@@ -12045,7 +12045,7 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 				resultToken.InitResult(resultBuf); // Init before EACH invoke.
 				paramToken[1].SetValue(p);
 				Invoke(resultToken, thisTokenUnused, IT_GET, param, 2);
-				aDebugger->WriteProperty(p, resultToken);
+				aDebugger->WriteProperty(paramToken[1], resultToken);
 				if (resultToken.mem_to_free)
 					free(resultToken.mem_to_free);
 			}
@@ -16776,7 +16776,7 @@ BIF_DECL(BIF_Exception)
 		{
 			if (se->type == DbgStack::SE_Thread)
 				break; // Never return stack locations in other threads.
-			if (se->type == DbgStack::SE_Func && se->func->mIsBuiltIn)
+			if (se->type == DbgStack::SE_BIF)
 				continue; // Skip built-in functions such as Op_ObjInvoke (common).
 			if (++offset == 0)
 			{
@@ -16786,7 +16786,7 @@ BIF_DECL(BIF_Exception)
 				// line, return the name of the function or sub which that line called.
 				// In other words, an offset of -1 gives the name of the current function and
 				// the file and number of the line which it was called from.
-				what = se->type == DbgStack::SE_Func ? se->func->mName : se->sub->mName;
+				what = se->type == DbgStack::SE_UDF ? se->udf->func->mName : se->sub->mName;
 				break;
 			}
 		}

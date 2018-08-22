@@ -259,12 +259,8 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 {
 	// For simplicity/code size, the debugger handles failures internally
 	// rather than returning an error code and requiring caller to handle it.
-	virtual void WriteProperty(LPCSTR aName, LPTSTR aValue) = 0;
-	virtual void WriteProperty(LPCSTR aName, __int64 aValue) = 0;
-	virtual void WriteProperty(LPCSTR aName, IObject *aValue) = 0;
 	virtual void WriteProperty(LPCSTR aName, ExprTokenType &aValue) = 0;
-	virtual void WriteProperty(IntKeyType aKey, ExprTokenType &aValue) = 0;
-	virtual void WriteProperty(IObject *aKey, ExprTokenType &aValue) = 0;
+	virtual void WriteProperty(ExprTokenType &aKey, ExprTokenType &aValue) = 0;
 	virtual void BeginProperty(LPCSTR aName, LPCSTR aType, int aNumChildren, DebugCookie &aCookie) = 0;
 	virtual void EndProperty(DebugCookie aCookie) = 0;
 };

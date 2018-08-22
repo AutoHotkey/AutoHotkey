@@ -530,7 +530,7 @@ public:
 	T &operator [] (SIZET i)
 	{ return GetAt(i); }
 
-	int GetAllocLength() const
+	SIZET GetAllocLength() const
 	{ return m_pData ? m_pData->m_iSize : 0; }
 	CKuStringT& Preallocate(int nLength)
 	{

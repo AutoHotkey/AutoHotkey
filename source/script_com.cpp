@@ -1699,8 +1699,8 @@ void ComObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int a
 	{
 		// For simplicity, assume they all fit within aPageSize.
 		
-		aDebugger->WriteProperty("Value", mVal64);
-		aDebugger->WriteProperty("VarType", mVarType);
+		aDebugger->WriteProperty("Value", ExprTokenType(mVal64));
+		aDebugger->WriteProperty("VarType", ExprTokenType((__int64)mVarType));
 
 		if (mVarType == VT_DISPATCH)
 		{
@@ -1714,14 +1714,14 @@ void ComObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int a
 			aDebugger->BeginProperty("EventSink", "object", 2, sinkCookie);
 			
 			if (mEventSink->mAhkObject)
-				aDebugger->WriteProperty("Object", mEventSink->mAhkObject);
+				aDebugger->WriteProperty("Object", ExprTokenType(mEventSink->mAhkObject));
 			else
-				aDebugger->WriteProperty("Prefix", mEventSink->mPrefix);
+				aDebugger->WriteProperty("Prefix", ExprTokenType(mEventSink->mPrefix));
 			
 			OLECHAR buf[40];
 			if (!StringFromGUID2(mEventSink->mIID, buf, _countof(buf)))
 				*buf = 0;
-			aDebugger->WriteProperty("IID", (LPTSTR)(LPCTSTR)CStringTCharFromWCharIfNeeded(buf));
+			aDebugger->WriteProperty("IID", ExprTokenType((LPTSTR)(LPCTSTR)CStringTCharFromWCharIfNeeded(buf)));
 			
 			aDebugger->EndProperty(sinkCookie);
 		}

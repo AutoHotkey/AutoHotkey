@@ -61,9 +61,18 @@ class Var; // Forward declaration.
 // across two 8-byte regions in memory).
 struct VarBkp // This should be kept in sync with any changes to the Var class.  See Var for comments.
 {
-	__int64 mContentsInt64; // 64-bit members kept at the top of the struct to reduce the chance that they'll span 2 vs. 1 64-bit regions.
+	union
+	{
+		__int64 mContentsInt64; // 64-bit members kept at the top of the struct to reduce the chance that they'll span 2 vs. 1 64-bit regions.
+		double mContentsDouble;
+		IObject *mObject;
+	};
 	Var *mVar; // Used to save the target var to which these backed up contents will later be restored.
-	char *mByteContents;
+	union
+	{
+		char *mByteContents;
+		TCHAR *mCharContents;
+	};
 	union
 	{
 		VarSizeType mByteLength;
@@ -76,6 +85,8 @@ struct VarBkp // This should be kept in sync with any changes to the Var class. 
 	// Not needed in the backup:
 	//bool mIsLocal;
 	//TCHAR *mName;
+
+	void ToToken(ExprTokenType &aValue);
 };
 
 typedef VarSizeType (* BuiltInVarType)(LPTSTR aBuf, LPTSTR aVarName);

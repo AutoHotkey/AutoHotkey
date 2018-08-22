@@ -26,7 +26,8 @@ HookType Hotkey::sWhichHookNeeded = 0;
 HookType Hotkey::sWhichHookAlways = 0;
 DWORD Hotkey::sTimePrev = {0};
 DWORD Hotkey::sTimeNow = {0};
-Hotkey *Hotkey::shk[MAX_HOTKEYS] = {NULL};
+Hotkey **Hotkey::shk = NULL;
+int Hotkey::shkMax = 0;
 HotkeyIDType Hotkey::sNextID = 0;
 const HotkeyIDType &Hotkey::sHotkeyCount = Hotkey::sNextID;
 bool Hotkey::sJoystickHasHotkeys[MAX_JOYSTICKS] = {false};
@@ -232,7 +233,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// be to set mKeybdHookMandatory = true, but that would prevent the hotkey from reverting to
 	// HK_NORMAL when it no longer needs the hook.  Instead, there are now three passes.
 	bool vk_is_prefix[VK_ARRAY_COUNT] = {false};
-	bool hk_is_inactive[MAX_HOTKEYS]; // No init needed.
+	bool *hk_is_inactive = (bool *)_alloca(sHotkeyCount * sizeof(bool)); // No init needed.  Currently limited to around 16k (HOTKEY_ID_MAX).
 	bool is_win9x = g_os.IsWin9x(); // Might help performance a little by avoiding calls in loops.
 	HotkeyVariant *vp;
 	int i, j;
@@ -1345,11 +1346,12 @@ Hotkey *Hotkey::AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPT
 // Returns the address of the new hotkey on success, or NULL otherwise.
 // The caller is responsible for calling ManifestAllHotkeysHotstringsHooks(), if appropriate.
 {
-	if (   !(shk[sNextID] = new Hotkey(sNextID, aJumpToLabel, aHookAction, aName, aSuffixHasTilde, aUseErrorLevel))   )
+	if (   (shkMax <= sNextID && !HookAdjustMaxHotkeys(shk, shkMax, shkMax ? shkMax * 2 : INITIAL_MAX_HOTKEYS)) // Allocate or expand shk if needed.
+		|| !(shk[sNextID] = new Hotkey(sNextID, aJumpToLabel, aHookAction, aName, aSuffixHasTilde, aUseErrorLevel))   )
 	{
 		if (aUseErrorLevel)
 			g_ErrorLevel->Assign(HOTKEY_EL_MEM);
-		//else currently a silent failure due to rarity.
+		g_script.ScriptError(ERR_OUTOFMEM);
 		return NULL;
 	}
 	if (!shk[sNextID]->mConstructedOK)
@@ -1398,7 +1400,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 // verification of the fact that this hotkey's id is always set equal to it's index in the array
 // (for performance reasons).
 {
-	if (sHotkeyCount >= MAX_HOTKEYS || sNextID > HOTKEY_ID_MAX)  // The latter currently probably can't happen.
+	if (sNextID > HOTKEY_ID_MAX)
 	{
 		// This will actually cause the script to terminate if this hotkey is a static (load-time)
 		// hotkey.  In the future, some other behavior is probably better:
