@@ -221,6 +221,7 @@ struct ResultToken;
 struct IDebugProperties;
 
 
+// Must not be smaller than INT_PTR; see "(IntKeyType)(INT_PTR)".
 typedef __int64 IntKeyType;
 
 
