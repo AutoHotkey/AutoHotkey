@@ -1485,7 +1485,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 			if (key_type == SYM_STRING)
 				key.s = name;
 			else // SYM_INTEGER or SYM_OBJECT
-				key.i = Exp32or64(_ttoi,_ttoi64)(name);
+				key.i = (IntKeyType)_ttoi64(name);
 			field = obj->FindField(key_type, key, insert_pos);
 		}
 		else
