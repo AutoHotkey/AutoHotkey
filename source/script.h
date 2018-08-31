@@ -1322,7 +1322,7 @@ public:
 			return COORD_MODE_WINDOW;
 		else if (!_tcsicmp(aBuf, _T("Client")))
 			return COORD_MODE_CLIENT;
-		return -1;
+		return COORD_MODE_INVALID;
 	}
 
 	static CoordModeType ConvertCoordModeCmd(LPTSTR aBuf)
@@ -1333,7 +1333,7 @@ public:
 		if (!_tcsicmp(aBuf, _T("ToolTip"))) return COORD_MODE_TOOLTIP;
 		if (!_tcsicmp(aBuf, _T("Caret"))) return COORD_MODE_CARET;
 		if (!_tcsicmp(aBuf, _T("Menu"))) return COORD_MODE_MENU;
-		return -1;
+		return COORD_MODE_INVALID;
 	}
 
 	static VariableTypeType ConvertVariableTypeName(LPTSTR aBuf)
