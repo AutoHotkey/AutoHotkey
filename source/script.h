@@ -1316,7 +1316,7 @@ public:
 
 	static CoordModeType ConvertCoordMode(LPTSTR aBuf)
 	{
-		if (!aBuf || !*aBuf || !_tcsicmp(aBuf, _T("Screen")))
+		if (!_tcsicmp(aBuf, _T("Screen")))
 			return COORD_MODE_SCREEN;
 		else if (!_tcsicmp(aBuf, _T("Relative")) || !_tcsicmp(aBuf, _T("Window")))
 			return COORD_MODE_WINDOW;
@@ -1327,7 +1327,6 @@ public:
 
 	static CoordModeType ConvertCoordModeCmd(LPTSTR aBuf)
 	{
-		if (!aBuf || !*aBuf) return -1;
 		if (!_tcsicmp(aBuf, _T("Pixel"))) return COORD_MODE_PIXEL;
 		if (!_tcsicmp(aBuf, _T("Mouse"))) return COORD_MODE_MOUSE;
 		if (!_tcsicmp(aBuf, _T("ToolTip"))) return COORD_MODE_TOOLTIP;

@@ -12082,7 +12082,7 @@ ResultType Line::Perform()
 //////////////////////////////////////////////////////////////////////////
 
 	case ACT_COORDMODE:
-		return Script::SetCoordMode(ARG1, ARG2);
+		return Script::SetCoordMode(ARG1, *ARG2 ? ARG2 : _T("Screen"));
 
 	case ACT_SETDEFAULTMOUSESPEED:
 		g.DefaultMouseSpeed = (UCHAR)ArgToInt(1);
