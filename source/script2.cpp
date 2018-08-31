@@ -5187,7 +5187,7 @@ ResultType Script::SetCoordMode(LPTSTR aCommand, LPTSTR aMode)
 {
 	CoordModeType mode = Line::ConvertCoordMode(aMode);
 	CoordModeType shift = Line::ConvertCoordModeCmd(aCommand);
-	if (shift == -1 || mode == -1) // Compare directly to -1 because unsigned.
+	if (shift == COORD_MODE_INVALID || mode == COORD_MODE_INVALID)
 		return g_script.ScriptError(ERR_INVALID_VALUE, aMode);
 	g->CoordMode = (g->CoordMode & ~(COORD_MODE_MASK << shift)) | (mode << shift);
 	return OK;

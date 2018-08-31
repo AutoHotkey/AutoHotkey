@@ -753,6 +753,7 @@ enum GuiEventKinds {GUI_EVENTKIND_EVENT = 0, GUI_EVENTKIND_NOTIFY, GUI_EVENTKIND
 
 typedef USHORT CoordModeType;
 
+#define COORD_MODE_INVALID ((CoordModeType) -1)
 // Bit-field offsets:
 #define COORD_MODE_PIXEL   0
 #define COORD_MODE_MOUSE   2
