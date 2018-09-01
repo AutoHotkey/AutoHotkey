@@ -11415,6 +11415,34 @@ VarSizeType BIV_AhkVersion(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(T_AHK_VERSION);
 }
 
+VarSizeType BIV_AhkMajorVersion(LPTSTR aBuf, LPTSTR aVarName)
+{
+	LPTSTR origin = T_AHK_VERSION;
+	LPTSTR found_first = 0;
+	LPTSTR found_second = 0;
+	TCHAR needle[2];
+	needle[0] = _T('.');
+	needle[1] = _T('\0');
+	TCHAR test = needle[0];
+	if (found_first = (TCHAR*)_tcsstr(origin, needle)) {
+
+		if (!(found_second = _tcsstr(found_first + 1, needle))) {
+			needle[0] = _T('-');
+			found_second = _tcsstr(found_first, needle);
+		}
+	}
+	size_t char_length = 6;
+	if (found_second) {
+		char_length = (size_t)((UINT_PTR)found_second - (UINT_PTR)origin);
+	}
+	size_t tchar_length = char_length / sizeof(TCHAR);
+	if (aBuf) {
+		memcpy((void*)aBuf, (void*)origin, char_length);
+		aBuf[(int)tchar_length] = _T('\0');
+	}
+	return (VarSizeType)tchar_length;
+}
+
 VarSizeType BIV_AhkPath(LPTSTR aBuf, LPTSTR aVarName) // v1.0.41.
 {
 #ifdef AUTOHOTKEYSC

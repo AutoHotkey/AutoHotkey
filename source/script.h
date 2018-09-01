@@ -3142,6 +3142,7 @@ BIV_DECL_R (BIV_IconNumber);
 BIV_DECL_R (BIV_ExitReason);
 BIV_DECL_R (BIV_Space_Tab);
 BIV_DECL_R (BIV_AhkVersion);
+BIV_DECL_R (BIV_AhkMajorVersion);
 BIV_DECL_R (BIV_AhkPath);
 BIV_DECL_R (BIV_TickCount);
 BIV_DECL_R (BIV_Now);
