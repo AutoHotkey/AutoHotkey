@@ -1854,7 +1854,7 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ResultToken &aResultToken, ExprTokenTy
 				if (param > 0 && (param <= mParamCount || mIsVariadic))
 					_o_return(param > mMinParams);
 				else
-					_o_return_empty;
+					_o_throw(ERR_PARAM2_INVALID);
 			}
 			else
 				_o_return(mMinParams != mParamCount || mIsVariadic); // True if any params are optional.
@@ -1867,7 +1867,7 @@ ResultType STDMETHODCALLTYPE Func::Invoke(ResultToken &aResultToken, ExprTokenTy
 				if (param > 0 && (param <= mParamCount || mIsVariadic))
 					_o_return(param <= mParamCount && mParam[param-1].is_byref);
 				else
-					_o_return_empty;
+					_o_throw(ERR_PARAM2_INVALID);
 			}
 			else
 			{
