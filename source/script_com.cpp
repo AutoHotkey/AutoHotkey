@@ -357,14 +357,19 @@ BIF_DECL(BIF_ComObjError)
 BIF_DECL(BIF_ComObjTypeOrValue)
 {
 	ComObject *obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0]));
-	if (!obj)
-		_f_return_empty;
 	if (_f_callee_id == FID_ComObjValue)
 	{
+		if (!obj)
+		{
+			ComError(-1, aResultToken); // No COM object
+			_f_return_empty;
+		}
 		aResultToken.value_int64 = obj->mVal64;
 	}
 	else
 	{
+		if (!obj)
+			_f_return_empty; // So ComObjType(x) != "" can be used for "x is ComObject".
 		if (aParamCount < 2)
 		{
 			aResultToken.value_int64 = obj->mVarType;
@@ -439,7 +444,10 @@ BIF_DECL(BIF_ComObjFlags)
 {
 	ComObject *obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0]));
 	if (!obj)
+	{
+		ComError(-1, aResultToken); // No COM object
 		_f_return_empty;
+	}
 	if (aParamCount > 1)
 	{
 		USHORT flags, mask;
