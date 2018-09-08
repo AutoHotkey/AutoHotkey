@@ -1032,31 +1032,45 @@ ResultType Line::WinMove(LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
 
 
 
-ResultType Line::ControlSend(LPTSTR aKeysToSend, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
-	, LPTSTR aExcludeTitle, LPTSTR aExcludeText, SendRawModes aSendRaw)
+BIF_DECL(BIF_ControlSend) // ControlSend and ControlSendText.
 {
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	HWND target_window = DetermineTargetWindow(aParam + 2, aParamCount - 2);
 	if (!target_window)
 		goto error;
+	_f_param_string_opt(aControl, 1);
 	HWND control_window = _tcsicmp(aControl, _T("ahk_parent"))
 		? ControlExist(target_window, aControl) // This can return target_window itself for cases such as ahk_id %ControlHWND%.
 		: target_window;
 	if (!control_window)
 		goto error;
-	SendKeys(aKeysToSend, aSendRaw, SM_EVENT, control_window);
+	_f_param_string(aKeysToSend, 0);
+	SendKeys(aKeysToSend, (SendRawModes)_f_callee_id, SM_EVENT, control_window);
 	// But don't do WinDelay because KeyDelay should have been in effect for the above.
-	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	_f_return_b(TRUE);
 
 error:
-	return SetErrorLevelOrThrow();
+	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	_f_return_b(FALSE);
 }
 
 
 
-ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPTSTR aControl
-	, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_ControlClick)
 {
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	_f_param_string_opt(aControl, 0);
+	_f_param_string_opt(aTitle, 1);
+	_f_param_string_opt(aText, 2);
+	_f_param_string_opt(aWhichButton, 3);
+	int aVK = Line::ConvertMouseButton(aWhichButton);
+	if (!aVK)
+		_f_throw(ERR_PARAM4_INVALID, aWhichButton);
+	int aClickCount = ParamIndexToOptionalInt(4, 1);
+	_f_param_string_opt(aOptions, 5);
+	_f_param_string_opt(aExcludeTitle, 6);
+	_f_param_string_opt(aExcludeText, 7);
+
+	HWND target_window = Line::DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
 	if (!target_window)
 		goto error;
 
@@ -1161,10 +1175,13 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 	// This is done this late because it seems better to set an ErrorLevel of 1 (above) whenever the
 	// target window or control isn't found, or any other error condition occurs above:
 	if (aClickCount < 1)
+	{
 		// Allow this to simply "do nothing", because it increases flexibility
 		// in the case where the number of clicks is a dereferenced script variable
 		// that may sometimes (by intent) resolve to zero or negative:
-		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+		_f_return_b(TRUE);
+	}
 
 	RECT rect;
 	if (click.x == COORD_UNSPECIFIED || click.y == COORD_UNSPECIFIED)
@@ -1288,20 +1305,22 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 
 	DETACH_THREAD_INPUT  // Also takes into account do_activate, indirectly.
 
-	return g_ErrorLevel->Assign(ERRORLEVEL_NONE);} // Indicate success.
+	g_ErrorLevel->Assign(ERRORLEVEL_NONE);} // Indicate success.
+	_f_return_b(TRUE);
 
 error:
-	return SetErrorLevelOrThrow();
+	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	_f_return_b(FALSE);
 }
 
 
 
-ResultType Line::ControlMove(LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
-	, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_ControlMove)
 {
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	HWND target_window = DetermineTargetWindow(aParam + 5, aParamCount - 5);
 	if (!target_window)
 		goto error;
+	_f_param_string_opt(aControl, 4);
 	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
 	if (!control_window)
 		goto error;
@@ -1321,8 +1340,8 @@ ResultType Line::ControlMove(LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
 		goto error;
 	
 	POINT point;
-	point.x = *aX ? ATOI(aX) : control_rect.left;
-	point.y = *aY ? ATOI(aY) : control_rect.top;
+	point.x = ParamIndexToOptionalInt(0, control_rect.left);
+	point.y = ParamIndexToOptionalInt(1, control_rect.top);
 
 	// MoveWindow accepts coordinates relative to the control's immediate parent, which might
 	// be different to coord_parent since controls can themselves have child controls.  So if
@@ -1334,27 +1353,30 @@ ResultType Line::ControlMove(LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
 	MoveWindow(control_window
 		, point.x
 		, point.y
-		, *aWidth ? ATOI(aWidth) : control_rect.right - control_rect.left
-		, *aHeight ? ATOI(aHeight) : control_rect.bottom - control_rect.top
+		, ParamIndexToOptionalInt(2, control_rect.right - control_rect.left)
+		, ParamIndexToOptionalInt(3, control_rect.bottom - control_rect.top)
 		, TRUE);  // Do repaint.
 
 	DoControlDelay
-	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	_f_return_b(TRUE);
 
 error:
-	return SetErrorLevelOrThrow();
+	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	_f_return_b(FALSE);
 }
 
 
 
-ResultType Line::ControlGetPos(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_ControlGetPos)
 {
-	Var *output_var_x = ARGVAR1;  // Ok if NULL. Load-time validation has ensured that these are valid output variables (e.g. not built-in vars).
-	Var *output_var_y = ARGVAR2;  // Ok if NULL.
-	Var *output_var_width = ARGVAR3;  // Ok if NULL.
-	Var *output_var_height = ARGVAR4;  // Ok if NULL.
+	Var *output_var_x = ParamIndexToOptionalVar(0);
+	Var *output_var_y = ParamIndexToOptionalVar(1);
+	Var *output_var_width = ParamIndexToOptionalVar(2);
+	Var *output_var_height = ParamIndexToOptionalVar(3);
 
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	_f_param_string_opt(aControl, 4);
+	HWND target_window = DetermineTargetWindow(aParam + 5, aParamCount - 5);
 	HWND control_window = target_window ? ControlExist(target_window, aControl) : NULL; // This can return target_window itself for cases such as ahk_id %ControlHWND%.
 	if (!control_window)
 	{
@@ -1366,7 +1388,7 @@ ResultType Line::ControlGetPos(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText, LPT
 			output_var_width->Assign();
 		if (output_var_height)
 			output_var_height->Assign();
-		return OK;
+		_f_return_b(FALSE);
 	}
 
 	// Determine which window the returned coordinates should be relative to:
@@ -1379,16 +1401,12 @@ ResultType Line::ControlGetPos(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText, LPT
 	// Map the screen coordinates returned by GetWindowRect to the client area of coord_parent.
 	MapWindowPoints(NULL, coord_parent, (LPPOINT)&child_rect, 2);
 
-	if (output_var_x && !output_var_x->Assign(child_rect.left))
-		return FAIL;
-	if (output_var_y && !output_var_y->Assign(child_rect.top))
-		return FAIL;
-	if (output_var_width && !output_var_width->Assign(child_rect.right - child_rect.left))
-		return FAIL;
-	if (output_var_height && !output_var_height->Assign(child_rect.bottom - child_rect.top))
-		return FAIL;
+	output_var_x && output_var_x->Assign(child_rect.left);
+	output_var_y && output_var_y->Assign(child_rect.top);
+	output_var_width && output_var_width->Assign(child_rect.right - child_rect.left);
+	output_var_height && output_var_height->Assign(child_rect.bottom - child_rect.top);
 
-	return OK;
+	_f_return_b(TRUE);
 }
 
 
@@ -1453,12 +1471,13 @@ BOOL CALLBACK EnumChildFindSeqNum(HWND aWnd, LPARAM lParam)
 
 
 
-ResultType Line::ControlFocus(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
-	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_ControlFocus)
 {
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	bool success = false;
+	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1);
 	if (!target_window)
 		goto error;
+	_f_param_string_opt(aControl, 0);
 	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
 	if (!control_window)
 		goto error;
@@ -1468,7 +1487,7 @@ ResultType Line::ControlFocus(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 	// chance even without it):
 	ATTACH_THREAD_INPUT
 
-	bool success = SetFocus(control_window) != NULL;
+	success = SetFocus(control_window) != NULL;
 	DoControlDelay; // Done unconditionally for simplicity, and in case SetFocus() had some effect despite indicating failure.
 	// Call GetFocus() in case focus was previously NULL, since that would cause SetFocus() to return NULL even if it succeeded:
 	if (!success && GetFocus() == control_window)
@@ -1480,23 +1499,24 @@ ResultType Line::ControlFocus(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
 	// undesirable effect:
 	DETACH_THREAD_INPUT
 
-	return SetErrorLevelOrThrowBool(!success);
-
 error:
-	return SetErrorLevelOrThrow();
+	g_ErrorLevel->Assign(!success);
+	_f_return_b(success);
 }
 
 
 
-ResultType Line::ControlSetText(LPTSTR aNewText, LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
-	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_ControlSetText)
 {
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	HWND target_window = DetermineTargetWindow(aParam + 2, aParamCount - 2);
 	if (!target_window)
 		goto error;
+	_f_param_string_opt(aControl, 1);
 	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
 	if (!control_window)
 		goto error;
+
+	_f_param_string(aNewText, 0);
 	// SendMessage must be used, not PostMessage(), at least for some (probably most) apps.
 	// Also: No need to call IsWindowHung() because SendMessageTimeout() should return
 	// immediately if the OS already "knows" the window is hung:
@@ -1504,10 +1524,12 @@ ResultType Line::ControlSetText(LPTSTR aNewText, LPTSTR aControl, LPTSTR aTitle,
 	SendMessageTimeout(control_window, WM_SETTEXT, (WPARAM)0, (LPARAM)aNewText
 		, SMTO_ABORTIFHUNG, 5000, &result);
 	DoControlDelay;
-	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	_f_return_b(TRUE);
 
 error:
-	return SetErrorLevelOrThrow();
+	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	_f_return_b(FALSE);
 }
 
 

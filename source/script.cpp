@@ -67,9 +67,11 @@ FuncEntry g_BIF[] =
 	BIFn(ControlAddItem, 1, 6, BIF_Control),
 	BIFn(ControlChoose, 1, 6, BIF_Control),
 	BIFn(ControlChooseString, 1, 6, BIF_Control),
+	BIF1(ControlClick, 0, 8),
 	BIFn(ControlDeleteItem, 1, 6, BIF_Control),
 	BIFn(ControlEditPaste, 1, 6, BIF_Control),
 	BIFn(ControlFindItem, 1, 6, BIF_ControlGet),
+	BIF1(ControlFocus, 0, 5),
 	BIFn(ControlGetChecked, 0, 5, BIF_ControlGet),
 	BIFn(ControlGetChoice, 0, 5, BIF_ControlGet),
 	BIFn(ControlGetCurrentCol, 0, 5, BIF_ControlGet),
@@ -81,6 +83,7 @@ FuncEntry g_BIF[] =
 	BIFn(ControlGetLine, 1, 6, BIF_ControlGet),
 	BIFn(ControlGetLineCount, 0, 5, BIF_ControlGet),
 	BIFn(ControlGetList, 0, 6, BIF_ControlGet),
+	BIF1(ControlGetPos, 0, 9, {1, 2, 3, 4}),
 	BIFn(ControlGetSelected, 0, 5, BIF_ControlGet),
 	BIFn(ControlGetStyle, 0, 5, BIF_ControlGet),
 	BIFn(ControlGetTab, 0, 5, BIF_ControlGet),
@@ -88,11 +91,15 @@ FuncEntry g_BIF[] =
 	BIFn(ControlGetVisible, 0, 5, BIF_ControlGet),
 	BIFn(ControlHide, 0, 5, BIF_Control),
 	BIFn(ControlHideDropDown, 0, 5, BIF_Control),
+	BIF1(ControlMove, 0, 9),
+	BIFn(ControlSend, 1, 6, BIF_ControlSend),
+	BIFn(ControlSendText, 1, 6, BIF_ControlSend),
 	BIFn(ControlSetChecked, 1, 6, BIF_Control),
 	BIFn(ControlSetEnabled, 1, 6, BIF_Control),
 	BIFn(ControlSetExStyle, 1, 6, BIF_Control),
 	BIFn(ControlSetStyle, 1, 6, BIF_Control),
 	BIFn(ControlSetTab, 1, 6, BIF_Control),
+	BIF1(ControlSetText, 1, 6),
 	BIFn(ControlShow, 0, 5, BIF_Control),
 	BIFn(ControlShowDropDown, 0, 5, BIF_Control),
 	BIF1(Cos, 1, 1),
@@ -11683,8 +11690,6 @@ ResultType Line::Perform()
 	Var *output_var = OUTPUT_VAR; // Okay if NULL. Users of it should only consider it valid if their first arg is actually an output_variable.
 	global_struct &g = *::g; // Reduces code size due to replacing so many g-> with g. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
 	ToggleValueType toggle;  // For commands that use on/off/neutral.
-	// Use signed values for these in case they're really given an explicit negative value:
-	vk_type vk; // For GetKeyState.
 
 	// Even though the loading-parser already checked, check again, for now,
 	// at least until testing raises confidence.  UPDATE: Don't do this because
@@ -11816,23 +11821,6 @@ ResultType Line::Perform()
 	case ACT_MENUSELECT:
 		return MenuSelect(ELEVEN_ARGS);
 
-	case ACT_CONTROLSEND:
-	case ACT_CONTROLSENDTEXT:
-		return ControlSend(SIX_ARGS, mActionType == ACT_CONTROLSENDTEXT ? SCM_RAW_TEXT : SCM_NOT_RAW);
-
-	case ACT_CONTROLCLICK:
-		if (   !(vk = ConvertMouseButton(ARG4))   ) // Treats blank as "Left".
-			return LineError(ERR_PARAM4_INVALID, FAIL, ARG4);
-		return ControlClick(vk, *ARG5 ? ArgToInt(5) : 1, ARG6, ARG1, ARG2, ARG3, ARG7, ARG8);
-
-	case ACT_CONTROLMOVE:
-		return ControlMove(NINE_ARGS);
-	case ACT_CONTROLGETPOS:
-		return ControlGetPos(ARG5, ARG6, ARG7, ARG8, ARG9);
-	case ACT_CONTROLFOCUS:
-		return ControlFocus(FIVE_ARGS);
-	case ACT_CONTROLSETTEXT:
-		return ControlSetText(SIX_ARGS);
 	case ACT_STATUSBARWAIT:
 		return StatusBarWait(EIGHT_ARGS);
 	case ACT_WINSETTITLE:

@@ -303,19 +303,6 @@ Action g_act[] =
 	, {_T("SendPlay"), 1, 1, false, NULL}     //
 	, {_T("SendEvent"), 1, 1, false, NULL}    // (due to rarity, there is no raw counterpart for this one)
 
-	// For these, the "control" param can be blank.  The window's first visible control will
-	// be used.  For this first one, allow a minimum of zero, otherwise, the first param (control)
-	// would be considered mandatory-non-blank by default.  It's easier to make all the params
-	// optional and validate elsewhere that the 2nd one specifically isn't blank:
-	, {_T("ControlSend"), 1, 6, false, NULL} // Chars-to-Send, Control, std. 4 window params.
-	, {_T("ControlSendText"), 1, 6, false, NULL} // Chars-to-Send, Control, std. 4 window params.
-	, {_T("ControlClick"), 0, 8, false, {5, 0}} // Control, WinTitle, WinText, WhichButton, ClickCount, Hold/Release, ExcludeTitle, ExcludeText
-	, {_T("ControlMove"), 0, 9, false, {1, 2, 3, 4, 0}} // x, y, w, h, Control, WinTitle, WinText, ExcludeTitle, ExcludeText
-	, {_T("ControlGetPos"), 0, 9, true, NULL} // Four optional output vars: xpos, ypos, width, height, control, std. 4 window params.
-	, {_T("ControlFocus"), 0, 5, false, NULL}     // Control, std. 4 window params
-	, {_T("ControlSetText"), 1, 6, false, NULL}   // new text, Control, std. 4 window params
-	, {_T("Control"), 1, 7, false, NULL}   // Command, Value, Control, std. 4 window params
-
 	, {_T("SendMode"), 1, 1, false, NULL}
 	, {_T("SendLevel"), 1, 1, false, {1, 0}}
 	, {_T("CoordMode"), 1, 2, false, NULL} // Attribute, screen|relative

@@ -579,6 +579,7 @@ enum BuiltInFunctionID {
 	FID_MenuCreate = 0, FID_MenuBarCreate, FID_MenuFromHandle,
 	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlGetTab, FID_ControlFindItem, FID_ControlGetChoice, FID_ControlGetList, FID_ControlGetLineCount, FID_ControlGetCurrentLine, FID_ControlGetCurrentCol, FID_ControlGetLine, FID_ControlGetSelected, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
 	FID_ControlSetChecked = 0, FID_ControlSetEnabled, FID_ControlShow, FID_ControlHide, FID_ControlSetStyle, FID_ControlSetExStyle, FID_ControlShowDropDown, FID_ControlHideDropDown, FID_ControlSetTab, FID_ControlAddItem, FID_ControlDeleteItem, FID_ControlChoose, FID_ControlChooseString, FID_ControlEditPaste,
+	FID_ControlSend = SCM_NOT_RAW, FID_ControlSendText = SCM_RAW_TEXT,
 	FID_DriveEject = 0, FID_DriveLock, FID_DriveUnlock, FID_DriveSetLabel,
 	FID_DriveGetList = 0, FID_DriveGetFilesystem, FID_DriveGetLabel, FID_DriveGetSerial, FID_DriveGetType, FID_DriveGetStatus, FID_DriveGetStatusCD, FID_DriveGetCapacity, FID_DriveGetSpaceFree,
 	FID_EnvGet = 0, FID_EnvSet,
@@ -669,17 +670,6 @@ private:
 		, LPTSTR aWidth = _T(""), LPTSTR aHeight = _T(""), LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
 	ResultType MenuSelect(LPTSTR aTitle, LPTSTR aText, LPTSTR aMenu1, LPTSTR aMenu2
 		, LPTSTR aMenu3, LPTSTR aMenu4, LPTSTR aMenu5, LPTSTR aMenu6, LPTSTR aMenu7
-		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType ControlSend(LPTSTR aControl, LPTSTR aKeysToSend, LPTSTR aTitle, LPTSTR aText
-		, LPTSTR aExcludeTitle, LPTSTR aExcludeText, SendRawModes aSendRaw);
-	ResultType ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPTSTR aControl
-		, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType ControlMove(LPTSTR aControl, LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
-		, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType ControlGetPos(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType ControlFocus(LPTSTR aControl, LPTSTR aTitle, LPTSTR aText
-		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType ControlSetText(LPTSTR aControl, LPTSTR aNewText, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType StatusBarWait(LPTSTR aTextToWaitFor, LPTSTR aSeconds, LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 		, LPTSTR aInterval, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
@@ -922,7 +912,6 @@ public:
 			{
 			case ACT_ASSIGNEXPR:
 			case ACT_MOUSEGETPOS:
-			case ACT_CONTROLGETPOS:
 			case ACT_PIXELSEARCH:
 			case ACT_IMAGESEARCH:
 			case ACT_FOR:
@@ -935,7 +924,6 @@ public:
 			switch(aActionType)
 			{
 			case ACT_MOUSEGETPOS:
-			case ACT_CONTROLGETPOS:
 			case ACT_PIXELSEARCH:
 			case ACT_IMAGESEARCH:
 			case ACT_SPLITPATH:
@@ -948,7 +936,6 @@ public:
 		case 2:  // Arg #3
 			switch(aActionType)
 			{
-			case ACT_CONTROLGETPOS:
 			case ACT_MOUSEGETPOS:
 			case ACT_SPLITPATH:
 			case ACT_FILEGETSHORTCUT:
@@ -959,7 +946,6 @@ public:
 		case 3:  // Arg #4
 			switch(aActionType)
 			{
-			case ACT_CONTROLGETPOS:
 			case ACT_MOUSEGETPOS:
 			case ACT_SPLITPATH:
 			case ACT_FILEGETSHORTCUT:
@@ -3182,9 +3168,15 @@ BIF_DECL(BIF_Exception);
 
 
 BIF_DECL(BIF_Control);
+BIF_DECL(BIF_ControlClick);
+BIF_DECL(BIF_ControlFocus);
 BIF_DECL(BIF_ControlGet);
 BIF_DECL(BIF_ControlGetFocus);
+BIF_DECL(BIF_ControlGetPos);
 BIF_DECL(BIF_ControlGetText);
+BIF_DECL(BIF_ControlMove);
+BIF_DECL(BIF_ControlSend);
+BIF_DECL(BIF_ControlSetText);
 BIF_DECL(BIF_DirSelect);
 BIF_DECL(BIF_Drive);
 BIF_DECL(BIF_DriveGet);
