@@ -3172,6 +3172,7 @@ BIF_DECL(BIF_Control);
 BIF_DECL(BIF_ControlClick);
 BIF_DECL(BIF_ControlFocus);
 BIF_DECL(BIF_ControlGet);
+BIF_DECL(BIF_ControlGetClassNN);
 BIF_DECL(BIF_ControlGetFocus);
 BIF_DECL(BIF_ControlGetPos);
 BIF_DECL(BIF_ControlGetText);

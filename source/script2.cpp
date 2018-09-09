@@ -1445,6 +1445,35 @@ error:
 
 
 
+BIF_DECL(BIF_ControlGetClassNN)
+{
+	DETERMINE_TARGET_CONTROL(0);
+
+	if (target_window == control_window)
+		target_window = GetNonChildParent(control_window);
+
+	class_and_hwnd_type cah;
+	TCHAR class_name[WINDOW_CLASS_SIZE];
+	cah.hwnd = control_window;
+	cah.class_name = class_name;
+	if (!GetClassName(cah.hwnd, class_name, _countof(class_name) - 5)) // -5 to allow room for sequence number.
+		goto error;
+	
+	cah.class_count = 0;  // Init for the below.
+	cah.is_found = false; // Same.
+	EnumChildWindows(target_window, EnumChildFindSeqNum, (LPARAM)&cah);
+	if (!cah.is_found)
+		goto error;
+	// Append the class sequence number onto the class name:
+	sntprintfcat(class_name, _countof(class_name), _T("%d"), cah.class_count);
+	_f_return(class_name);
+
+error:
+	_f_return_empty;
+}
+
+
+
 BOOL CALLBACK EnumChildFindSeqNum(HWND aWnd, LPARAM lParam)
 {
 	class_and_hwnd_type &cah = *(class_and_hwnd_type *)lParam;  // For performance and convenience.

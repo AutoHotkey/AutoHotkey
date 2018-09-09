@@ -74,6 +74,7 @@ FuncEntry g_BIF[] =
 	BIF1(ControlFocus, 1, 5),
 	BIFn(ControlGetChecked, 1, 5, BIF_ControlGet),
 	BIFn(ControlGetChoice, 1, 5, BIF_ControlGet),
+	BIF1(ControlGetClassNN, 1, 5),
 	BIFn(ControlGetCurrentCol, 1, 5, BIF_ControlGet),
 	BIFn(ControlGetCurrentLine, 1, 5, BIF_ControlGet),
 	BIFn(ControlGetEnabled, 1, 5, BIF_ControlGet),
