@@ -380,15 +380,11 @@ BIF_DECL(BIF_Control)
 	//case FID_ControlHideDropDown:
 	}
 
-	TCHAR control_buf[MAX_NUMBER_SIZE];
-	LPTSTR aControl = ParamIndexToString(0, control_buf);
+	TCHAR classname[256 + 1];
+	// aControl might not be a ClassNN, so don't rely on it for class checks.
+	//LPTSTR aControl = ParamIndexToString(0, control_buf);
 
-	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1);
-	if (!target_window)
-		goto error;
-	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
-	if (!control_window)
-		goto error;
+	DETERMINE_TARGET_CONTROL(0);
 
 	HWND immediate_parent;  // Possibly not the same as target_window since controls can themselves have children.
 	int control_id, control_index;
@@ -493,14 +489,10 @@ BIF_DECL(BIF_Control)
 		break;
 
 	case FID_ControlAddItem:
-		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
-		{
-			GetClassName(control_window, control_buf, _countof(control_buf));
-			aControl = control_buf;
-		}
-		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. !strnicmp for TListBox/TComboBox.
+		GetClassName(control_window, classname, _countof(classname));
+		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. !strnicmp for TListBox/TComboBox.
 			msg = CB_ADDSTRING;
-		else if (tcscasestr(aControl, _T("List")))
+		else if (tcscasestr(classname, _T("List")))
 			msg = LB_ADDSTRING;
 		else
 			goto error;  // Must be ComboBox or ListBox.
@@ -516,14 +508,10 @@ BIF_DECL(BIF_Control)
 		control_index = aNumber - 1;
 		if (control_index < 0)
 			_f_throw(ERR_PARAM1_INVALID);
-		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
-		{
-			GetClassName(control_window, control_buf, _countof(control_buf));
-			aControl = control_buf;
-		}
-		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
+		GetClassName(control_window, classname, _countof(classname));
+		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 			msg = CB_DELETESTRING;
-		else if (tcscasestr(aControl, _T("List")))
+		else if (tcscasestr(classname, _T("List")))
 			msg = LB_DELETESTRING;
 		else
 			goto error;  // Must be ComboBox or ListBox.
@@ -537,18 +525,14 @@ BIF_DECL(BIF_Control)
 		control_index = aNumber - 1;
 		if (control_index < -1)
 			_f_throw(ERR_PARAM1_INVALID);
-		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
-		{
-			GetClassName(control_window, control_buf, _countof(control_buf));
-			aControl = control_buf;
-		}
-		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
+		GetClassName(control_window, classname, _countof(classname));
+		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 		{
 			msg = CB_SETCURSEL;
 			x_msg = CBN_SELCHANGE;
 			y_msg = CBN_SELENDOK;
 		}
-		else if (tcscasestr(aControl, _T("List")))
+		else if (tcscasestr(classname, _T("List")))
 		{
 			if (GetWindowLong(control_window, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
 				msg = LB_SETSEL;
@@ -583,18 +567,14 @@ BIF_DECL(BIF_Control)
 		break;
 
 	case FID_ControlChooseString:
-		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
-		{
-			GetClassName(control_window, control_buf, _countof(control_buf));
-			aControl = control_buf;
-		}
-		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
+		GetClassName(control_window, classname, _countof(classname));
+		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 		{
 			msg = CB_SELECTSTRING;
 			x_msg = CBN_SELCHANGE;
 			y_msg = CBN_SELENDOK;
 		}
-		else if (tcscasestr(aControl, _T("List")))
+		else if (tcscasestr(classname, _T("List")))
 		{
 			if (GetWindowLong(control_window, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
 				msg = LB_FINDSTRING;
@@ -682,15 +662,11 @@ BIF_DECL(BIF_ControlGet)
 		break;
 	}
 
-	TCHAR control_buf[MAX_NUMBER_SIZE];
-	LPTSTR aControl = ParamIndexToOptionalString(0, control_buf);
+	TCHAR classname[256 + 1];
+	// aControl might not be a ClassNN, so don't rely on it for class checks.
+	//LPTSTR aControl = ParamIndexToString(0, control_buf);
 
-	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1); // It can handle a negative param count.
-	if (!target_window)
-		goto error;
-	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
-	if (!control_window)
-		goto error;
+	DETERMINE_TARGET_CONTROL(0);
 
 	DWORD_PTR dwResult, index, length, item_length, u, item_count;
 	DWORD start, end;
@@ -719,14 +695,10 @@ BIF_DECL(BIF_ControlGet)
 		_f_return(index + 1);
 
 	case FID_ControlFindItem:
-		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
-		{
-			GetClassName(control_window, control_buf, _countof(control_buf));
-			aControl = control_buf;
-		}
-		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
+		GetClassName(control_window, classname, _countof(classname));
+		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 			msg = CB_FINDSTRINGEXACT;
-		else if (tcscasestr(aControl, _T("List")))
+		else if (tcscasestr(classname, _T("List")))
 			msg = LB_FINDSTRINGEXACT;
 		else // Must be ComboBox or ListBox
 			goto error;
@@ -736,18 +708,14 @@ BIF_DECL(BIF_ControlGet)
 		_f_return(index + 1);
 
 	case FID_ControlGetChoice:
-		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
-		{
-			GetClassName(control_window, control_buf, _countof(control_buf));
-			aControl = control_buf;
-		}
-		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
+		GetClassName(control_window, classname, _countof(classname));
+		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 		{
 			msg = CB_GETCURSEL;
 			x_msg = CB_GETLBTEXTLEN;
 			y_msg = CB_GETLBTEXT;
 		}
-		else if (tcscasestr(aControl, _T("List")))
+		else if (tcscasestr(classname, _T("List")))
 		{
 			msg = LB_GETCURSEL;
 			x_msg = LB_GETTEXTLEN;
@@ -776,25 +744,21 @@ BIF_DECL(BIF_ControlGet)
 		return;
 
 	case FID_ControlGetList:
-		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
-		{
-			GetClassName(control_window, control_buf, _countof(control_buf));
-			aControl = control_buf;
-		}
+		GetClassName(control_window, classname, _countof(classname));
 		//if (!_tcsnicmp(aControl, _T("SysListView32"), 13)) // Tried strcasestr(aControl, "ListView") to get it to work with IZArc's Delphi TListView1, but none of the modes or options worked.
-		if (tcscasestr(aControl, _T("SysListView32"))) // Some users said this works with "WindowsForms10.SysListView32"
+		if (tcscasestr(classname, _T("SysListView32"))) // Some users said this works with "WindowsForms10.SysListView32"
 			return ControlGetListView(aResultToken, control_window, aString); // It will also set ErrorLevel to "success" if successful.
 		// This is done here as the special LIST sub-command rather than just being built into
 		// ControlGetText because ControlGetText already has a function for ComboBoxes: it fetches
 		// the current selection.  Although ListBox does not have such a function, it seem best
 		// to consolidate both methods here.
-		if (tcscasestr(aControl, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
+		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 		{
 			msg = CB_GETCOUNT;
 			x_msg = CB_GETLBTEXTLEN;
 			y_msg = CB_GETLBTEXT;
 		}
-		else if (tcscasestr(aControl, _T("List")))
+		else if (tcscasestr(classname, _T("List")))
 		{
 			msg = LB_GETCOUNT;
 			x_msg = LB_GETTEXTLEN;

@@ -1034,15 +1034,8 @@ ResultType Line::WinMove(LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
 
 BIF_DECL(BIF_ControlSend) // ControlSend and ControlSendText.
 {
-	HWND target_window = DetermineTargetWindow(aParam + 2, aParamCount - 2);
-	if (!target_window)
-		goto error;
-	_f_param_string_opt(aControl, 1);
-	HWND control_window = _tcsicmp(aControl, _T("ahk_parent"))
-		? ControlExist(target_window, aControl) // This can return target_window itself for cases such as ahk_id %ControlHWND%.
-		: target_window;
-	if (!control_window)
-		goto error;
+	DETERMINE_TARGET_CONTROL(1);
+
 	_f_param_string(aKeysToSend, 0);
 	SendKeys(aKeysToSend, (SendRawModes)_f_callee_id, SM_EVENT, control_window);
 	// But don't do WinDelay because KeyDelay should have been in effect for the above.
@@ -1059,20 +1052,12 @@ error:
 BIF_DECL(BIF_ControlClick)
 {
 	_f_param_string_opt(aControl, 0);
-	_f_param_string_opt(aTitle, 1);
-	_f_param_string_opt(aText, 2);
 	_f_param_string_opt(aWhichButton, 3);
 	int aVK = Line::ConvertMouseButton(aWhichButton);
 	if (!aVK)
 		_f_throw(ERR_PARAM4_INVALID, aWhichButton);
 	int aClickCount = ParamIndexToOptionalInt(4, 1);
 	_f_param_string_opt(aOptions, 5);
-	_f_param_string_opt(aExcludeTitle, 6);
-	_f_param_string_opt(aExcludeText, 7);
-
-	HWND target_window = Line::DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
-	if (!target_window)
-		goto error;
 
 	// Set the defaults that will be in effect unless overridden by options:
 	KeyEventTypes event_type = KEYDOWNANDUP;
@@ -1127,12 +1112,35 @@ BIF_DECL(BIF_ControlClick)
 			break;
 		}
 	}
+	
+	// Consolidate the control and window parameters.
+	ExprTokenType *param[5];
+	int param_count = 0;
+	for (int i = 0; i < aParamCount; ++i)
+	{
+		param[param_count++] = aParam[i];
+		if (i == 2) i += 3; // Skip WhichButton, ClickCount, Options.
+	}
+	HWND target_window, control_window;
+	if (position_mode)
+	{
+		// Determine target window only.  Control will be found by position below.
+		target_window = DetermineTargetWindow(param + 1, param_count - 1);
+		control_window = NULL;
+	}
+	else
+	{
+		// Determine target window and control.
+		if (!DetermineTargetControl(control_window, target_window, aResultToken, param, param_count))
+			return; // aResultToken.SetExitResult() or Error() was already called.
+	}
+	if (!target_window)
+		goto error;
 
 	// It's debatable, but might be best for flexibility (and backward compatibility) to allow target_window to itself
 	// be a control (at least for the position_mode handler below).  For example, the script may have called SetParent
 	// to make a top-level window the child of some other window, in which case this policy allows it to be seen like
 	// a non-child.
-	HWND control_window = position_mode ? NULL : ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
 	if (!control_window) // Even if position_mode is false, the below is still attempted, as documented.
 	{
 		// New section for v1.0.24.  But only after the above fails to find a control do we consider
@@ -1317,13 +1325,7 @@ error:
 
 BIF_DECL(BIF_ControlMove)
 {
-	HWND target_window = DetermineTargetWindow(aParam + 5, aParamCount - 5);
-	if (!target_window)
-		goto error;
-	_f_param_string_opt(aControl, 4);
-	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
-	if (!control_window)
-		goto error;
+	DETERMINE_TARGET_CONTROL(4);
 	
 	// The following macro is used to keep ControlMove and ControlGetPos in sync:
 	#define CONTROL_COORD_PARENT(target, control) \
@@ -1375,21 +1377,7 @@ BIF_DECL(BIF_ControlGetPos)
 	Var *output_var_width = ParamIndexToOptionalVar(2);
 	Var *output_var_height = ParamIndexToOptionalVar(3);
 
-	_f_param_string_opt(aControl, 4);
-	HWND target_window = DetermineTargetWindow(aParam + 5, aParamCount - 5);
-	HWND control_window = target_window ? ControlExist(target_window, aControl) : NULL; // This can return target_window itself for cases such as ahk_id %ControlHWND%.
-	if (!control_window)
-	{
-		if (output_var_x)
-			output_var_x->Assign();
-		if (output_var_y)
-			output_var_y->Assign();
-		if (output_var_width)
-			output_var_width->Assign();
-		if (output_var_height)
-			output_var_height->Assign();
-		_f_return_b(FALSE);
-	}
+	DETERMINE_TARGET_CONTROL(4);
 
 	// Determine which window the returned coordinates should be relative to:
 	HWND coord_parent = CONTROL_COORD_PARENT(target_window, control_window);
@@ -1405,8 +1393,14 @@ BIF_DECL(BIF_ControlGetPos)
 	output_var_y && output_var_y->Assign(child_rect.top);
 	output_var_width && output_var_width->Assign(child_rect.right - child_rect.left);
 	output_var_height && output_var_height->Assign(child_rect.bottom - child_rect.top);
-
 	_f_return_b(TRUE);
+
+error:
+	output_var_x && output_var_x->Assign();
+	output_var_y && output_var_y->Assign();
+	output_var_width && output_var_width->Assign();
+	output_var_height && output_var_height->Assign();
+	_f_return_b(FALSE);
 }
 
 
@@ -1474,13 +1468,8 @@ BOOL CALLBACK EnumChildFindSeqNum(HWND aWnd, LPARAM lParam)
 BIF_DECL(BIF_ControlFocus)
 {
 	bool success = false;
-	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1);
-	if (!target_window)
-		goto error;
-	_f_param_string_opt(aControl, 0);
-	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
-	if (!control_window)
-		goto error;
+
+	DETERMINE_TARGET_CONTROL(0);
 
 	// Unlike many of the other Control commands, this one requires AttachThreadInput()
 	// to have any realistic chance of success (though sometimes it may work by pure
@@ -1508,13 +1497,7 @@ error:
 
 BIF_DECL(BIF_ControlSetText)
 {
-	HWND target_window = DetermineTargetWindow(aParam + 2, aParamCount - 2);
-	if (!target_window)
-		goto error;
-	_f_param_string_opt(aControl, 1);
-	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
-	if (!control_window)
-		goto error;
+	DETERMINE_TARGET_CONTROL(1);
 
 	_f_param_string(aNewText, 0);
 	// SendMessage must be used, not PostMessage(), at least for some (probably most) apps.
@@ -1536,13 +1519,7 @@ error:
 
 BIF_DECL(BIF_ControlGetText)
 {
-	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1); // It can handle a negative param count.
-	if (!target_window)
-		goto error;
-	_f_param_string_opt(aControl, 0);
-	HWND control_window = ControlExist(target_window, aControl); // This can return target_window itself for cases such as ahk_id %ControlHWND%.
-	if (!control_window)
-		goto error;
+	DETERMINE_TARGET_CONTROL(0);
 
 	// Even if control_window is NULL, we want to continue on so that the output
 	// param is set to be the empty string, which is the proper thing to do
@@ -1550,7 +1527,7 @@ BIF_DECL(BIF_ControlGetText)
 
 	// Handle the output parameter.  Note: Using GetWindowTextTimeout() vs. GetWindowText()
 	// because it is able to get text from more types of controls (e.g. large edit controls):
-	VarSizeType space_needed = control_window ? GetWindowTextTimeout(control_window) + 1 : 1; // 1 for terminator.
+	VarSizeType space_needed = GetWindowTextTimeout(control_window) + 1; // 1 for terminator.
 
 	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
@@ -1561,18 +1538,10 @@ BIF_DECL(BIF_ControlGetText)
 	// in case actual size written was off from the estimated size (since
 	// GetWindowTextLength() can return more space that will actually be required
 	// in certain circumstances, see MS docs):
-	if (control_window)
-	{
-		aResultToken.marker_length = GetWindowTextTimeout(control_window, aResultToken.marker, space_needed);
-		if (!aResultToken.marker_length) // There was no text to get or GetWindowTextTimeout() failed.
-			*aResultToken.marker = '\0';
-	}
-	else
-	{
+	aResultToken.marker_length = GetWindowTextTimeout(control_window, aResultToken.marker, space_needed);
+	if (!aResultToken.marker_length) // There was no text to get or GetWindowTextTimeout() failed.
 		*aResultToken.marker = '\0';
-		aResultToken.marker_length = 0;
-	}
-	g_ErrorLevel->Assign(!control_window);
+	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	return;
 
 error:
@@ -1967,14 +1936,9 @@ BIF_DECL(BIF_PostSendMessage)
 // sArgDeref[8]: Timeout
 {
 	bool aUseSend = _f_callee_id == FID_SendMessage;
-	_f_param_string_opt(aControl, 3);
-	HWND target_window, control_window;
-	if (   !(target_window = DetermineTargetWindow(aParam + 4, aParamCount - 4)) // It can handle a negative param count.
-		|| !(control_window = *aControl ? ControlExist(target_window, aControl) : target_window)   ) // Relies on short-circuit boolean order.
-	{
-		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-		_f_return_empty;
-	}
+	bool successful = false;
+
+	DETERMINE_TARGET_CONTROL(3);
 
 	UINT msg = ParamIndexToInt(0);
 	// Timeout increased from 2000 to 5000 in v1.0.27:
@@ -2018,13 +1982,13 @@ BIF_DECL(BIF_PostSendMessage)
 		}
 	}
 
-	bool successful;
 	DWORD_PTR dwResult;
 	if (aUseSend)
 		successful = SendMessageTimeout(control_window, msg, (WPARAM)param[0], (LPARAM)param[1], SMTO_ABORTIFHUNG, timeout, &dwResult);
 	else
 		successful = PostMessage(control_window, msg, (WPARAM)param[0], (LPARAM)param[1]);
 
+error:
 	g_ErrorLevel->Assign(successful ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR);
 	if (aUseSend && successful)
 		_f_return_i((__int64)dwResult);
@@ -8864,6 +8828,31 @@ HWND Line::DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTit
 	return WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
 }
 
+
+ResultType GetObjectHwnd(IObject *aObject, HWND &aHwnd, ResultToken &aResultToken)
+{
+	FuncResult result_token;
+	ExprTokenType hwnd_token = _T("Hwnd");
+	ExprTokenType this_token = aObject;
+	ExprTokenType *param = &hwnd_token;
+			
+	auto result = aObject->Invoke(result_token, this_token, IT_GET, &param, 1);
+
+	if (result_token.symbol != SYM_INTEGER)
+	{
+		result_token.Free();
+		if (result == FAIL)
+			return aResultToken.SetExitResult(FAIL);
+		if (result == INVOKE_NOT_HANDLED)
+			return aResultToken.Error(ERR_UNKNOWN_PROPERTY, _T("Hwnd"));
+		return aResultToken.Error(ERR_INVALID_HWND);
+	}
+
+	aHwnd = (HWND)(UINT_PTR)result_token.value_int64;
+	return OK;
+}
+
+
 HWND DetermineTargetWindow(ExprTokenType *aParam[], int aParamCount)
 {
 	TCHAR number_buf[4][MAX_NUMBER_SIZE];
@@ -8871,6 +8860,44 @@ HWND DetermineTargetWindow(ExprTokenType *aParam[], int aParamCount)
 	for (int i = 0; i < 4; i++)
 		param[i] = i < aParamCount ? TokenToString(*aParam[i], number_buf[i]) : _T("");
 	return Line::DetermineTargetWindow(param[0], param[1], param[2], param[3]);
+}
+
+
+ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	aWindow = aControl = NULL;
+
+	if (ParamIndexIsOmitted(0))
+	{
+		// Only functions which can operate on top-level windows allow Control to be
+		// omitted (and a select few other functions with more optional parameters).
+		// This replaces the old "ahk_parent" string used with ControlSend, but is
+		// also used by SendMessage.
+		aControl = aWindow = DetermineTargetWindow(aParam + 1, aParamCount - 1);
+		return OK;
+	}
+
+	HWND hwnd;
+	if (IObject *obj = ParamIndexToObject(0))
+	{
+		if (!GetObjectHwnd(obj, hwnd, aResultToken))
+			return FAIL;
+	}
+	else if (TokenIsPureNumeric(*aParam[0]) == PURE_INTEGER)
+	{
+		hwnd = (HWND)(UINT_PTR)ParamIndexToInt64(0);
+	}
+	else
+	{
+		_f_param_string(control_spec, 0);
+		aWindow = DetermineTargetWindow(aParam + 1, aParamCount - 1);
+		aControl = ControlExist(aWindow, control_spec);
+		return OK;
+	}
+	// Set both aControl and aWindow, as if ahk_id was used.
+	if (IsWindow(hwnd))
+		aWindow = aControl = hwnd;
+	return OK;
 }
 
 

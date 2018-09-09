@@ -873,15 +873,9 @@ error:
 
 
 HWND ControlExist(HWND aParentWindow, LPTSTR aClassNameAndNum)
-// This can return target_window itself for cases such as ahk_id %ControlHWND%.
 {
-	if (!aParentWindow)
+	if (!aParentWindow || !aClassNameAndNum || !*aClassNameAndNum)
 		return NULL;
-	if (!aClassNameAndNum || !*aClassNameAndNum)
-		return (GetWindowLong(aParentWindow, GWL_STYLE) & WS_CHILD) ? aParentWindow : GetTopChild(aParentWindow);
-		// Above: In v1.0.43.06, the parent window itself is returned if it's a child rather than its top child
-		// because it seems more useful and intuitive.  This change allows ahk_id %ControlHwnd% to always operate
-		// directly on the specified control's HWND rather than some sub-child.
 
 	WindowSearch ws;
 	bool is_class_name = _istdigit(aClassNameAndNum[_tcslen(aClassNameAndNum) - 1]);

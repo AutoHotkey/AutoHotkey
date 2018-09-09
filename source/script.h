@@ -232,6 +232,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_RETURN_TYPE _T("Invalid return type.")
 #define ERR_INVALID_LENGTH _T("Invalid Length.")
 #define ERR_INVALID_ENCODING _T("Invalid Encoding.")
+#define ERR_INVALID_HWND _T("Invalid HWND.")
 #define ERR_INVALID_USAGE _T("Invalid usage.")
 #define ERR_INTERNAL_CALL _T("An internal function call failed.")
 
@@ -3237,6 +3238,13 @@ bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType);
 bool ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, LPTSTR aBuf);
 
 HWND DetermineTargetWindow(ExprTokenType *aParam[], int aParamCount);
+ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+#define DETERMINE_TARGET_CONTROL(param_offset) \
+	HWND target_window, control_window; \
+	if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam + param_offset, aParamCount - param_offset)) \
+		return; \
+	if (!target_window || !control_window) \
+		goto error
 
 LPTSTR GetExitReasonString(ExitReasons aExitReason);
 
