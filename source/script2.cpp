@@ -1416,31 +1416,18 @@ BIF_DECL(BIF_ControlGetFocus)
 	if (!GetGUIThreadInfo(GetWindowThreadProcessId(target_window, NULL), &guithreadInfo))
 		goto error;
 
-	class_and_hwnd_type cah;
-	TCHAR class_name[WINDOW_CLASS_SIZE];
-	cah.hwnd = guithreadInfo.hwndFocus;
-	if (!cah.hwnd) // Not an error; it's valid (though rare) to have no focus.
-	{
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-		_f_return_empty;
-	}
-	cah.class_name = class_name;
-	if (!GetClassName(cah.hwnd, class_name, _countof(class_name) - 5)) // -5 to allow room for sequence number.
-		goto error;
-	
-	cah.class_count = 0;  // Init for the below.
-	cah.is_found = false; // Same.
-	EnumChildWindows(target_window, EnumChildFindSeqNum, (LPARAM)&cah);
-	if (!cah.is_found)
-		goto error;
-	// Append the class sequence number onto the class name set the output param to be that value:
-	sntprintfcat(class_name, _countof(class_name), _T("%d"), cah.class_count);
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-	_f_return(class_name);
+	// At this point, even an answer of "no focused control" is not an error:
+	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+	// Use IsChild() to ensure the focused control actually belongs to this window.
+	// Otherwise, a HWND will be returned if any window in the same thread has focus,
+	// including the target window itself (typically when it has no controls).
+	if (!IsChild(target_window, guithreadInfo.hwndFocus))
+		_f_return_i(0); // As documented, if "none of the target window's controls has focus, the return value is 0".
+	_f_return_i((UINT_PTR)guithreadInfo.hwndFocus);
 
 error:
 	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-	_f_return_empty;
+	_f_return_i(0);
 }
 
 
