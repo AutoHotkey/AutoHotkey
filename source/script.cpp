@@ -1530,10 +1530,18 @@ UINT Script::LoadFromFile()
 	DWORD attr = g_RunStdIn ? 0 : GetFileAttributes(mFileSpec); // v1.1.17: Don't check if reading script from stdin.
 	if (attr == MAXDWORD) // File does not exist or lacking the authorization to get its attributes.
 	{
-		TCHAR buf[MAX_PATH + 256];
-		sntprintf(buf, _countof(buf), _T("Script file not found:\n%s"), mFileSpec);
-		MsgBox(buf, MB_ICONHAND);
-		return 0;
+		if (!g_script.mErrorStdOut)
+		{
+			TCHAR buf[MAX_PATH + 256];
+			sntprintf(buf, _countof(buf), _T("%s\n%s"), ERR_SCRIPT_NOT_FOUND, mFileSpec);
+			MsgBox(buf, MB_ICONHAND);
+		}
+		else
+		{
+			Line::sSourceFile = &mFileSpec;
+			ScriptError(ERR_SCRIPT_NOT_FOUND);
+		}
+		return LOADING_FAILED;
 	}
 #endif
 

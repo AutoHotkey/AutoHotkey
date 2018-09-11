@@ -131,6 +131,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_ABORT _T("  ") ERR_ABORT_NO_SPACES
 #define WILL_EXIT _T("The program will exit.")
 #define OLD_STILL_IN_EFFECT _T("The script was not reloaded; the old version will remain in effect.")
+#define ERR_SCRIPT_NOT_FOUND _T("Script file not found.")
 #define ERR_ABORT_DELETE _T("__Delete will now return.")
 #define ERR_LINE_TOO_LONG _T("Line too long.")
 #define ERR_CONTINUATION_SECTION_TOO_LONG _T("Continuation section too long.")
