@@ -104,41 +104,43 @@ ResultType Script::DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDispla
 
 
 
-VarSizeType BIV_IPAddress(LPTSTR aBuf, LPTSTR aVarName)
+BIF_DECL(BIF_SysGetIPAddresses)
 {
 	// aaa.bbb.ccc.ddd = 15, but allow room for larger IP's in the future.
 	#define IP_ADDRESS_SIZE 32 // The maximum size of any of the strings we return, including terminator.
-	if (!aBuf)
-		return IP_ADDRESS_SIZE - 1;  // -1 since we're returning the length of the var's contents, not the size.
+
+	Object *addresses = Object::Create();
+	if (!addresses)
+		_f_throw(ERR_OUTOFMEM);
 
 	WSADATA wsadata;
 	if (WSAStartup(MAKEWORD(1, 1), &wsadata)) // Failed (it returns 0 on success).
-	{
-		*aBuf = '\0';
-		return 0;
-	}
+		_f_return(addresses);
 
 	char host_name[256];
 	gethostname(host_name, _countof(host_name));
 	HOSTENT *lpHost = gethostbyname(host_name);
 
-	// au3: How many adapters have we?
-	int adapter_count = 0;
-	while (lpHost->h_addr_list[adapter_count])
-		++adapter_count;
-
-	int adapter_index = aVarName[11] - '1'; // A_IPAddress[1-4]
-	if (adapter_index >= adapter_count)
-		_tcscpy(aBuf, _T("0.0.0.0"));
-	else
+	for (int i = 0; lpHost->h_addr_list[i]; ++i)
 	{
 		IN_ADDR inaddr;
-		memcpy(&inaddr, lpHost->h_addr_list[adapter_index], 4);
-		tcslcpy(aBuf, CStringTCharFromCharIfNeeded(inet_ntoa(inaddr)), IP_ADDRESS_SIZE);
+		memcpy(&inaddr, lpHost->h_addr_list[i], 4);
+#ifdef UNICODE
+		CStringTCharFromChar addr_buf(inet_ntoa(inaddr));
+		LPTSTR addr_str = const_cast<LPTSTR>(addr_buf.GetString());
+#else
+		LPTSTR addr_str = inet_ntoa(inaddr);
+#endif
+		if (!addresses->Append(addr_str))
+		{
+			addresses->Release();
+			WSACleanup();
+			_f_throw(ERR_OUTOFMEM);
+		}
 	}
 
 	WSACleanup();
-	return (VarSizeType)_tcslen(aBuf);
+	_f_return(addresses);
 }
 
 
