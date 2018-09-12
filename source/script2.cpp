@@ -13617,7 +13617,7 @@ BIF_DECL(BIF_StrGetPut)
 					else
 						length_is_max_size = true; // Limit to this, but stop at the first null char.
 				}
-				else if (length < 0)
+				else if (length <= 0)
 					_f_throw(ERR_INVALID_LENGTH);
 				++aParam; // Let encoding be the next param, if present.
 			}
@@ -13692,7 +13692,7 @@ BIF_DECL(BIF_StrGetPut)
 				}
 				else
 					// For consistency with the sections below, don't truncate the string.
-					char_count = 0;
+					_f_throw(ERR_INVALID_LENGTH);
 			}
 			//else: Caller just wants the the required buffer size (char_count), which will be returned below.
 			//	Note that although this seems equivalent to StrLen(), the caller might have explicitly
@@ -13743,11 +13743,7 @@ BIF_DECL(BIF_StrGetPut)
 							char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, source_length, NULL, 0, NULL, NULL);
 						}
 						if (!char_count)
-						{
-							aResultToken.symbol = SYM_STRING;
-							// aResultToken.marker is already set to "".
-							return;
-						}
+							_f_throw(ERR_INTERNAL_CALL);
 					}
 					++char_count; // + 1 for null-terminator (source_length causes it to be excluded from char_count).
 					if (length == 0) // Caller just wants the required buffer size.
@@ -13769,6 +13765,8 @@ BIF_DECL(BIF_StrGetPut)
 #ifndef UNICODE
 			}
 #endif
+			if (!char_count)
+				_f_throw(ERR_INTERNAL_CALL);
 		}
 		// Return the number of characters copied.
 		aResultToken.value_int64 = char_count;
@@ -13790,6 +13788,9 @@ BIF_DECL(BIF_StrGetPut)
 		{
 			// Conversion is required.
 			int conv_length;
+			// MS docs: "Note that, if cbMultiByte is 0, the function fails."
+			if (!length)
+				_f_return_empty;
 #ifdef UNICODE
 			// Convert multi-byte encoded string to UTF-16.
 			conv_length = MultiByteToWideChar(encoding, 0, (LPCSTR)address, length, NULL, 0);
@@ -13815,6 +13816,8 @@ BIF_DECL(BIF_StrGetPut)
 			}
 			conv_length = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (LPCWSTR)address, length, aResultToken.marker, conv_length, NULL, NULL);
 #endif
+			if (!conv_length) // This can only be failure, since ... (see below)
+				_f_throw(ERR_INTERNAL_CALL);
 			if (length == -1) // conv_length includes a null-terminator in this case.
 				--conv_length;
 			else
