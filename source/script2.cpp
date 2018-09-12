@@ -3180,7 +3180,7 @@ void PixelSearch(Var *output_var_x, Var *output_var_y
 // Author: The fast-mode PixelSearch was created by Aurelian Maga.
 {
 	// For maintainability, get options and RGB/BGR conversion out of the way early.
-	bool fast_mode = aIsPixelGetColor || tcscasestr(aOptions, _T("Fast"));
+	bool fast_mode = aIsPixelGetColor || !tcscasestr(aOptions, _T("Slow"));
 	COLORREF aColorBGR = rgb_to_bgr(aColorRGB);
 
 	// Many of the following sections are similar to those in ImageSearch(), so they should be
