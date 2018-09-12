@@ -152,6 +152,7 @@ FuncEntry g_BIF[] =
 	BIF1(IL_Add, 2, 4),
 	BIF1(IL_Create, 0, 3),
 	BIF1(IL_Destroy, 1, 1),
+	BIF1(ImageSearch, 7, 7, {1, 2}),
 	BIF1(IniRead, 1, 4),
 	BIFn(Input, 0, 3, BIF_Input),
 	BIF1(InputBox, 0, 4),
@@ -210,6 +211,7 @@ FuncEntry g_BIF[] =
 	BIF1(OnMessage, 2, 3),
 	BIF1(Ord, 1, 1),
 	BIF1(PixelGetColor, 2, 3),
+	BIF1(PixelSearch, 7, 9, {1, 2}),
 	BIFn(PostMessage, 1, 8, BIF_PostSendMessage),
 	BIFn(ProcessClose, 1, 1, BIF_Process),
 	BIFn(ProcessExist, 0, 1, BIF_Process),
@@ -11707,12 +11709,6 @@ ResultType Line::Perform()
 	{
 	case ACT_SPLITPATH:
 		return SplitPath(ARG1);
-
-	case ACT_PIXELSEARCH:
-		// ArgToInt() works on ARG7 (the color) because any valid BGR or RGB color has 0x00 in the high order byte:
-		return PixelSearch(ARGVAR1, ARGVAR2, ArgToInt(3), ArgToInt(4), ArgToInt(5), ArgToInt(6), ArgToInt(7), ArgToInt(8), ARG9, false);
-	case ACT_IMAGESEARCH:
-		return ImageSearch(ArgToInt(3), ArgToInt(4), ArgToInt(5), ArgToInt(6), ARG7);
 
 	case ACT_SEND:
 	case ACT_SENDTEXT:

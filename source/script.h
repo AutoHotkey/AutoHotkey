@@ -677,7 +677,6 @@ private:
 		, LPTSTR aInterval, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	ResultType WinSetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aNewTitle
 		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
-	ResultType ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTSTR aImageFile);
 
 	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
 
@@ -914,8 +913,6 @@ public:
 			{
 			case ACT_ASSIGNEXPR:
 			case ACT_MOUSEGETPOS:
-			case ACT_PIXELSEARCH:
-			case ACT_IMAGESEARCH:
 			case ACT_FOR:
 			case ACT_CATCH:
 				return ARG_TYPE_OUTPUT_VAR;
@@ -926,8 +923,6 @@ public:
 			switch(aActionType)
 			{
 			case ACT_MOUSEGETPOS:
-			case ACT_PIXELSEARCH:
-			case ACT_IMAGESEARCH:
 			case ACT_SPLITPATH:
 			case ACT_FILEGETSHORTCUT:
 			case ACT_FOR:
@@ -3191,8 +3186,10 @@ BIF_DECL(BIF_FileGetTime);
 BIF_DECL(BIF_FileGetVersion);
 BIF_DECL(BIF_FileRead);
 BIF_DECL(BIF_FileSelect);
+BIF_DECL(BIF_ImageSearch);
 BIF_DECL(BIF_IniRead);
 BIF_DECL(BIF_PixelGetColor);
+BIF_DECL(BIF_PixelSearch);
 BIF_DECL(BIF_Reg);
 BIF_DECL(BIF_Random);
 BIF_DECL(BIF_Sound);
@@ -3254,9 +3251,10 @@ LPTSTR GetExitReasonString(ExitReasons aExitReason);
 void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions);
 bool ControlSetTab(ResultToken &aResultToken, HWND aHwnd, DWORD aTabIndex);
 
-ResultType PixelSearch(Var *aOutputVarX, Var *aOutputVarY
+void PixelSearch(Var *aOutputVarX, Var *aOutputVarY
 	, int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
-	, int aVariation, LPTSTR aOptions, ResultToken *aIsPixelGetColor);
+	, int aVariation, LPTSTR aOptions, bool aIsPixelGetColor
+	, ResultToken &aResultToken);
 
 ResultType SoundSetGet2kXP(ResultToken &aResultToken, LPTSTR aSetting
 	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDevice);

@@ -3173,9 +3173,10 @@ end:
 
 
 
-ResultType PixelSearch(Var *output_var_x, Var *output_var_y
+void PixelSearch(Var *output_var_x, Var *output_var_y
 	, int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
-	, int aVariation, LPTSTR aOptions, ResultToken *aIsPixelGetColor)
+	, int aVariation, LPTSTR aOptions, bool aIsPixelGetColor
+	, ResultToken &aResultToken)
 // Author: The fast-mode PixelSearch was created by Aurelian Maga.
 {
 	// For maintainability, get options and RGB/BGR conversion out of the way early.
@@ -3185,10 +3186,11 @@ ResultType PixelSearch(Var *output_var_x, Var *output_var_y
 	// Many of the following sections are similar to those in ImageSearch(), so they should be
 	// maintained together.
 
-	if (output_var_x)
+	if (!aIsPixelGetColor)
+	{
 		output_var_x->Assign();  // Init to empty string regardless of whether we succeed here.
-	if (output_var_y)
 		output_var_y->Assign();  // Same.
+	}
 
 	POINT origin = {0};
 	CoordToScreen(origin, COORD_MODE_PIXEL);
@@ -3271,8 +3273,7 @@ ResultType PixelSearch(Var *output_var_x, Var *output_var_y
 		if (aIsPixelGetColor)
 		{
 			COLORREF color = screen_pixel[0] & 0x00FFFFFF; // See other 0x00FFFFFF below for explanation.
-			aIsPixelGetColor->marker_length = _stprintf(aIsPixelGetColor->marker, _T("0x%06X"), color);
-			found = true; // ErrorLevel will be set to 0 further below.
+			aResultToken.marker_length = _stprintf(aResultToken.marker, _T("0x%06X"), color);
 		}
 		else if (aVariation < 1) // Caller wants an exact match on one particular color.
 		{
@@ -3332,8 +3333,6 @@ ResultType PixelSearch(Var *output_var_x, Var *output_var_y
 		}
 
 fast_end:
-		// If found==false when execution reaches here, ErrorLevel is already set to the right value, so just
-		// clean up then return.
 		ReleaseDC(NULL, hdc);
 		if (sdc)
 		{
@@ -3348,18 +3347,18 @@ fast_end:
 		else // One of the GDI calls failed and the search wasn't carried out.
 			goto error;
 
+		if (aIsPixelGetColor)
+			return; // Return value was already set.
+
 		// Otherwise, success.  Calculate xpos and ypos of where the match was found and adjust
 		// coords to make them relative to the position of the target window (rect will contain
 		// zeroes if this doesn't need to be done):
-		if (!aIsPixelGetColor && found)
+		if (found)
 		{
-			if (output_var_x && !output_var_x->Assign((aLeft + i%screen_width) - origin.x))
-				return FAIL;
-			if (output_var_y && !output_var_y->Assign((aTop + i/screen_width) - origin.y))
-				return FAIL;
+			output_var_x->Assign((aLeft + i%screen_width) - origin.x);
+			output_var_y->Assign((aTop + i/screen_width) - origin.y);
 		}
-
-		return g_ErrorLevel->Assign(found ? ERRORLEVEL_NONE : ERRORLEVEL_ERROR); // "0" indicates success; "1" indicates search completed okay, but didn't find it.
+		_f_return_b(found);
 	}
 
 	// Otherwise (since above didn't return): fast_mode==false
@@ -3416,39 +3415,60 @@ fast_end:
 
 	ReleaseDC(NULL, hdc);
 
-	if (!found)
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // This value indicates "color not found".
-
-	// Otherwise, this pixel matches one of the specified color(s).
-	// Adjust coords to make them relative to the position of the target window
-	// (rect will contain zeroes if this doesn't need to be done):
-	if (output_var_x && !output_var_x->Assign(xpos - origin.x))
-		return FAIL;
-	if (output_var_y && !output_var_y->Assign(ypos - origin.y))
-		return FAIL;
-	// Since above didn't return:
-	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	if (found)
+	{
+		// This pixel matches one of the specified color(s).
+		// Adjust coords to make them relative to the position of the target window
+		// (rect will contain zeroes if this doesn't need to be done):
+		output_var_x->Assign(xpos - origin.x);
+		output_var_y->Assign(ypos - origin.y);
+	}
+	_f_return_b(found);
 
 error:
-	return Script::SetErrorLevelOrThrowInt(aIsPixelGetColor ? ERRORLEVEL_ERROR : ERRORLEVEL_ERROR2); // 2 means error other than "color not found".
+	_f_throw(ERR_INTERNAL_CALL);
 }
 
 
 
-ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTSTR aImageFile)
+BIF_DECL(BIF_PixelSearch)
+{
+	if (aParam[0]->symbol != SYM_VAR)
+		_f_throw(ERR_PARAM1_INVALID);
+	if (aParam[1]->symbol != SYM_VAR)
+		_f_throw(ERR_PARAM2_INVALID);
+	PixelSearch(aParam[0]->var, aParam[1]->var
+		, ParamIndexToInt(2), ParamIndexToInt(3), ParamIndexToInt(4), ParamIndexToInt(5)
+		, ParamIndexToInt(6), ParamIndexToOptionalInt(7, 0), ParamIndexToOptionalString(8)
+		, false, aResultToken);
+}
+
+
+
+//ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTSTR aImageFile)
+BIF_DECL(BIF_ImageSearch)
 // Author: ImageSearch was created by Aurelian Maga.
 {
 	// Many of the following sections are similar to those in PixelSearch(), so they should be
 	// maintained together.
-	Var *output_var_x = ARGVAR1;  // Ok if NULL. RAW wouldn't be safe because load-time validation actually
-	Var *output_var_y = ARGVAR2;  // requires a minimum of zero parameters so that the output-vars can be optional. Also:
-	// Load-time validation has ensured that these are valid output variables (e.g. not built-in vars).
+
+	if (aParam[0]->symbol != SYM_VAR)
+		_f_throw(ERR_PARAM1_INVALID);
+	if (aParam[1]->symbol != SYM_VAR)
+		_f_throw(ERR_PARAM2_INVALID);
+	Var *output_var_x = aParam[0]->var;
+	Var *output_var_y = aParam[1]->var;
+
+	int aLeft = ParamIndexToInt(2);
+	int aTop = ParamIndexToInt(3);
+	int aRight = ParamIndexToInt(4);
+	int aBottom = ParamIndexToInt(5);
+
+	_f_param_string(aImageFile, 6);
 
 	// Set default results (output variables), in case of early return:
-	if (output_var_x)
-		output_var_x->Assign();  // Init to empty string regardless of whether we succeed here.
-	if (output_var_y)
-		output_var_y->Assign(); // Same.
+	output_var_x->Assign();  // Init to empty string regardless of whether we succeed here.
+	output_var_y->Assign();  // Same.
 
 	POINT origin = {0};
 	CoordToScreen(origin, COORD_MODE_PIXEL);
@@ -3784,12 +3804,7 @@ ResultType Line::ImageSearch(int aLeft, int aTop, int aRight, int aBottom, LPTST
 		}
 	}
 
-	if (!found) // Must override ErrorLevel to its new value prior to the label below.
-		g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // "1" indicates search completed okay, but didn't find it.
-
 end:
-	// If found==false when execution reaches here, ErrorLevel is already set to the right value, so just
-	// clean up then return.
 	ReleaseDC(NULL, hdc);
 	if (!no_delete_bitmap && hbitmap_image)
 		DeleteObject(hbitmap_image);
@@ -3810,24 +3825,21 @@ end:
 	else // One of the GDI calls failed.
 		goto error;
 
-	if (!found) // Let ErrorLevel, which is either "1" or "2" as set earlier, tell the story.
-		return OK;
-
-	// Otherwise, success.  Calculate xpos and ypos of where the match was found and adjust
-	// coords to make them relative to the position of the target window (rect will contain
-	// zeroes if this doesn't need to be done):
-	if (output_var_x && !output_var_x->Assign((aLeft + i%screen_width) - origin.x))
-		return FAIL;
-	if (output_var_y && !output_var_y->Assign((aTop + i/screen_width) - origin.y))
-		return FAIL;
-
-	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	if (found)
+	{
+		// Calculate xpos and ypos of where the match was found and adjust coords to
+		// make them relative to the position of the target window (rect will contain
+		// zeroes if this doesn't need to be done):
+		output_var_x->Assign((aLeft + i%screen_width) - origin.x);
+		output_var_y->Assign((aTop + i/screen_width) - origin.y);
+	}
+	_f_return_b(found);
 
 arg7_error:
-	return LineError(ERR_PARAM7_INVALID, FAIL, aImageFile);
+	_f_throw(ERR_PARAM7_INVALID, aImageFile);
 
 error:
-	return LineError(ERR_INTERNAL_CALL);
+	_f_throw(ERR_INTERNAL_CALL);
 }
 
 

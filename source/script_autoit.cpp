@@ -189,8 +189,8 @@ BIF_DECL(BIF_PixelGetColor)
 
 	if (tcscasestr(aOptions, _T("Slow"))) // New mode for v1.0.43.10.  Takes precedence over Alt mode.
 	{
-		PixelSearch(NULL, NULL, aX, aY, aX, aY, 0, 0, aOptions, &aResultToken); // It takes care of setting ErrorLevel and the return value.
-		_f_return_retval;
+		PixelSearch(NULL, NULL, aX, aY, aX, aY, 0, 0, aOptions, true, aResultToken); // It takes care of setting the return value.
+		return;
 	}
 
 	CoordToScreen(aX, aY, COORD_MODE_PIXEL);
@@ -198,10 +198,7 @@ BIF_DECL(BIF_PixelGetColor)
 	bool use_alt_mode = tcscasestr(aOptions, _T("Alt")) != NULL; // New mode for v1.0.43.10: Two users reported that CreateDC works better in certain windows such as SciTE, at least one some systems.
 	HDC hdc = use_alt_mode ? CreateDC(_T("DISPLAY"), NULL, NULL, NULL) : GetDC(NULL);
 	if (!hdc)
-	{
-		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-		_f_return_retval;
-	}
+		_f_throw(ERR_INTERNAL_CALL);
 
 	// Assign the value as an 32-bit int to match Window Spy reports color values.
 	// Update for v1.0.21: Assigning in hex format seems much better, since it's easy to
@@ -214,7 +211,6 @@ BIF_DECL(BIF_PixelGetColor)
 	else
 		ReleaseDC(NULL, hdc);
 
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 	aResultToken.marker_length = _stprintf(aResultToken.marker, _T("0x%06X"), bgr_to_rgb(color));
 	_f_return_retval;
 }

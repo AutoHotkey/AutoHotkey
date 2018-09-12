@@ -333,10 +333,6 @@ Action g_act[] =
 
 	, {_T("WinSetTitle"), 1, 5, false, NULL} // newtitle, title, text, exclude-title, exclude-text
 
-	, {_T("PixelSearch"), 0, 9, true, {3, 4, 5, 6, 7, 8, 0}} // OutputX, OutputY, left, top, right, bottom, Color, Variation [, RGB]
-	, {_T("ImageSearch"), 0, 7, true, {3, 4, 5, 6, 0}} // OutputX, OutputY, left, top, right, bottom, ImageFile
-	// NOTE FOR THE ABOVE: 0 min args so that the output vars can be optional.
-
 	// See above for why minimum is 1 vs. 2:
 	, {_T("GroupAdd"), 1, 5, false, NULL} // Group name, WinTitle, WinText, exclude-title/text
 	, {_T("GroupActivate"), 1, 2, false, NULL}
