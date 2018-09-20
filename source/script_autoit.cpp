@@ -616,18 +616,7 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 				goto error;
 		if (dwResult == CB_ERR)  // CB_ERR == LB_ERR
 			goto error;
-		if (   !(immediate_parent = GetParent(control_window))   )
-			goto error;
-		if (   !(control_id = GetDlgCtrlID(control_window))   )
-			goto error;
-		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, x_msg)
-			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
-		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, y_msg)
-			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
-		// Otherwise break and do the end-function processing.
-		break;
+		goto notify_parent;
 
 	case CONTROL_CMD_CHOOSESTRING:
 		if (!*aControl) // Fix for v1.0.46.11: If aControl is blank, the control ID came in via a WinTitle of "ahk_id xxx".
@@ -665,6 +654,7 @@ ResultType Line::Control(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR aTi
 			if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult)
 				|| dwResult == CB_ERR) // CB_ERR == LB_ERR
 				goto error;
+	notify_parent:
 		if (   !(immediate_parent = GetParent(control_window))   )
 			goto error;
 		SetLastError(0); // Must be done to differentiate between success and failure when control has ID 0.
