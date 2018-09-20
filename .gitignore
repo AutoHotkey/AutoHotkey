@@ -1,6 +1,7 @@
 temp/
 bin/
 ipch/
+.vs/
 *.suo
 *.user
 *.ncb
