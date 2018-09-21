@@ -857,7 +857,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_ASSIGN_SUBTRACT:      this_token.symbol = SYM_SUBTRACT; break;
 				case SYM_ASSIGN_MULTIPLY:      this_token.symbol = SYM_MULTIPLY; break;
 				case SYM_ASSIGN_DIVIDE:        this_token.symbol = SYM_DIVIDE; break;
-				case SYM_ASSIGN_FLOORDIVIDE:   this_token.symbol = SYM_FLOORDIVIDE; break;
+				case SYM_ASSIGN_INTEGERDIVIDE: this_token.symbol = SYM_INTEGERDIVIDE; break;
 				case SYM_ASSIGN_BITOR:         this_token.symbol = SYM_BITOR; break;
 				case SYM_ASSIGN_BITXOR:        this_token.symbol = SYM_BITXOR; break;
 				case SYM_ASSIGN_BITAND:        this_token.symbol = SYM_BITAND; break;
@@ -1125,10 +1125,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_BITXOR:		this_token.value_int64 = left_int64 ^ right_int64; break;
 				case SYM_BITSHIFTLEFT:  this_token.value_int64 = left_int64 << right_int64; break;
 				case SYM_BITSHIFTRIGHT: this_token.value_int64 = left_int64 >> right_int64; break;
-				case SYM_FLOORDIVIDE:
-					// Since it's integer division, no need for explicit floor() of the result.
-					// Also, performance is much higher for integer vs. float division, which is part
-					// of the justification for a separate operator.
+				case SYM_INTEGERDIVIDE:
 					if (right_int64 == 0)
 						goto divide_by_zero;
 					this_token.value_int64 = left_int64 / right_int64;
@@ -1170,12 +1167,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_SUBTRACT: this_token.value_double = left_double - right_double; break;
 				case SYM_MULTIPLY: this_token.value_double = left_double * right_double; break;
 				case SYM_DIVIDE:
-				case SYM_FLOORDIVIDE:
 					if (right_double == 0.0)
 						goto divide_by_zero;
 					this_token.value_double = left_double / right_double;
-					if (this_token.symbol == SYM_FLOORDIVIDE) // Like Python, the result is floor()'d, moving to the nearest integer to the left on the number line.
-						this_token.value_double = qmathFloor(this_token.value_double); // Result is always a double when at least one of the inputs was a double.
 					break;
 				case SYM_EQUALCASE: // Same behavior as SYM_EQUAL for numeric operands.
 				case SYM_EQUAL:    this_token.value_int64 = left_double == right_double; break;
@@ -1199,6 +1193,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (left_was_negative && qmathFabs(qmathFmod(right_double, 2.0)) == 1.0) // Negative base and exactly-odd exponent (otherwise, it can only be zero or even because if not it would have returned higher above).
 						this_token.value_double = -this_token.value_double;
 					break;
+				case SYM_INTEGERDIVIDE:
+					// this case is in effect identical to the same case where both operands are integers,
+					// this redundancy avoids an extra check for this symbol in the above branch.
+					// Doubles are truncated before integer division.
+					right_int64 = TokenToInt64(right); 
+					left_int64 = TokenToInt64(left);   
+					result_symbol = SYM_INTEGER;
+					if (right_int64 == 0)
+						goto divide_by_zero;
+					this_token.value_int64 = left_int64 / right_int64;
+					break;
+
 				} // switch(this_token.symbol)
 				this_token.symbol = result_symbol; // Must be done only after the switch() above.
 			} // Result is floating point.

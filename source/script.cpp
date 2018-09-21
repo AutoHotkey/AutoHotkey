@@ -7982,7 +7982,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 50             // SYM_BITAND
 		, 54, 54         // SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT
 		, 58, 58         // SYM_ADD, SYM_SUBTRACT
-		, 62, 62, 62     // SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
+		, 62, 62, 62     // SYM_MULTIPLY, SYM_DIVIDE, SYM_INTEGERDIVIDE
 		, 72             // SYM_POWER (see note below).  Associativity kept as left-to-right for backward compatibility (e.g. 2**2**3 is 4**3=64 not 2**8=256).
 		, 25             // SYM_LOWNOT (the word "NOT": the low precedence version of logical-not).  HAS AN ODD NUMBER to indicate right-to-left evaluation order so that things like "not not var" are supports (which can be used to convert a variable into a pure 1/0 boolean value).
 		, 67,67,67,67,67 // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT, SYM_ADDRESS
@@ -8194,12 +8194,12 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						if (cp[2] == '=')
 						{
 							cp += 2; // An additional increment to have loop skip over the operator's 2nd & 3rd symbols.
-							this_infix_item.symbol = SYM_ASSIGN_FLOORDIVIDE;
+							this_infix_item.symbol = SYM_ASSIGN_INTEGERDIVIDE;
 						}
 						else
 						{
 							++cp; // An additional increment to have loop skip over the second '/' too.
-							this_infix_item.symbol = SYM_FLOORDIVIDE;
+							this_infix_item.symbol = SYM_INTEGERDIVIDE;
 						}
 					}
 					else
@@ -9537,7 +9537,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					case SYM_ASSIGN_SUBTRACT:      postfix_symbol = SYM_SUBTRACT; break;
 					case SYM_ASSIGN_MULTIPLY:      postfix_symbol = SYM_MULTIPLY; break;
 					case SYM_ASSIGN_DIVIDE:        postfix_symbol = SYM_DIVIDE; break;
-					case SYM_ASSIGN_FLOORDIVIDE:   postfix_symbol = SYM_FLOORDIVIDE; break;
+					case SYM_ASSIGN_INTEGERDIVIDE: postfix_symbol = SYM_INTEGERDIVIDE; break;
 					case SYM_ASSIGN_BITOR:         postfix_symbol = SYM_BITOR; break;
 					case SYM_ASSIGN_BITXOR:        postfix_symbol = SYM_BITXOR; break;
 					case SYM_ASSIGN_BITAND:        postfix_symbol = SYM_BITAND; break;
