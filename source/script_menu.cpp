@@ -497,7 +497,7 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, Use
 		name_dynamic = Var::sEmptyString; // So that it can be detected as a non-allocated empty string.
 	UserMenuItem *menu_item = new UserMenuItem(name_dynamic, length + 1, aMenuID, aCallback, aSubmenu, this);
 	if ( !menu_item // Should also be very rare.
-		 || (*aOptions && !UpdateOptions(menu_item, aOptions)) ) // update options
+		 || (*aOptions && UpdateOptions(menu_item, aOptions) != OK) ) // update options
 	{
 		if (name_dynamic != Var::sEmptyString)
 			free(name_dynamic);
@@ -657,7 +657,7 @@ ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, IObject *aCallback, Use
 // If a menu item becomes a submenu, we don't relinquish its ID in case it's ever made a normal item
 // again (avoids the need to re-lookup a unique ID).
 {
-	if (*aOptions && !UpdateOptions(aMenuItem, aOptions))
+	if (*aOptions && UpdateOptions(aMenuItem, aOptions) != OK)
 		return FAIL; // UpdateOptions displays an error message if aOptions contains invalid options.
 	if (!aCallback && !aSubmenu) // We were called only to update this item's options.
 		return OK;
