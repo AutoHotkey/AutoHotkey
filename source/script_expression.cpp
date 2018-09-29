@@ -1095,12 +1095,12 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			}
 
 			else if (right_is_number == PURE_INTEGER && left_is_number == PURE_INTEGER && this_token.symbol != SYM_DIVIDE
-				|| IS_BIT_OPERATOR(this_token.symbol))
+				|| IS_INTEGER_OPERATOR(this_token.symbol))
 			{
 				// Because both are integers and the operation isn't division, the result is integer.
-				// The result is also an integer for the bitwise operations listed in the if-statement
-				// above.  This is because it is not legal to perform ~, &, |, or ^ on doubles.  Any
-				// floating point operands are truncated to integers prior to doing the bitwise operation.
+				// The result is also an integer for the integer operations listed in the if-statement
+				// above.  This is because it is not legal to perform //, ~, &, |, or ^ on doubles. Any
+				// floating point operands are truncated to integers prior to doing the bitwise operation or integer division (i.e, //).
 				right_int64 = TokenToInt64(right); // It can't be SYM_STRING because in here, both right and
 				left_int64 = TokenToInt64(left);    // left are known to be numbers (otherwise an earlier "else if" would have executed instead of this one).
 				result_symbol = SYM_INTEGER; // Set default.
@@ -1193,18 +1193,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (left_was_negative && qmathFabs(qmathFmod(right_double, 2.0)) == 1.0) // Negative base and exactly-odd exponent (otherwise, it can only be zero or even because if not it would have returned higher above).
 						this_token.value_double = -this_token.value_double;
 					break;
-				case SYM_INTEGERDIVIDE:
-					// this case is in effect identical to the same case where both operands are integers,
-					// this redundancy avoids an extra check for this symbol in the above branch.
-					// Doubles are truncated before integer division.
-					right_int64 = TokenToInt64(right); 
-					left_int64 = TokenToInt64(left);   
-					result_symbol = SYM_INTEGER;
-					if (right_int64 == 0)
-						goto divide_by_zero;
-					this_token.value_int64 = left_int64 / right_int64;
-					break;
-
 				} // switch(this_token.symbol)
 				this_token.symbol = result_symbol; // Must be done only after the switch() above.
 			} // Result is floating point.

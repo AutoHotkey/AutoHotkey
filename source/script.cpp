@@ -7981,8 +7981,9 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 46             // SYM_BITXOR
 		, 50             // SYM_BITAND
 		, 54, 54         // SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT
+		, 62			 // SYM_INTEGERDIVIDE
 		, 58, 58         // SYM_ADD, SYM_SUBTRACT
-		, 62, 62, 62     // SYM_MULTIPLY, SYM_DIVIDE, SYM_INTEGERDIVIDE
+		, 62, 62	     // SYM_MULTIPLY, SYM_DIVIDE
 		, 72             // SYM_POWER (see note below).  Associativity kept as left-to-right for backward compatibility (e.g. 2**2**3 is 4**3=64 not 2**8=256).
 		, 25             // SYM_LOWNOT (the word "NOT": the low precedence version of logical-not).  HAS AN ODD NUMBER to indicate right-to-left evaluation order so that things like "not not var" are supports (which can be used to convert a variable into a pure 1/0 boolean value).
 		, 67,67,67,67,67 // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT, SYM_ADDRESS

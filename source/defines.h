@@ -186,13 +186,19 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_REGEXMATCH // ~=, equivalent to a RegExMatch call in two-parameter mode.
 	, SYM_CONCAT
 	, SYM_LOW_CONCAT // Zero-precedence concat, used so that "x%y=z%" is equivalent to "x%(y=z)%".
+	
+	// INTEGER OPERATORS START
+	// Integer operators truncates float operands to integers.
 	, SYM_BITOR // Seems more intuitive to have these higher in prec. than the above, unlike C and Perl, but like Python.
-	, SYM_BITXOR // SYM_BITOR (ABOVE) MUST BE KEPT FIRST AMONG THE BIT OPERATORS BECAUSE IT'S USED IN A RANGE-CHECK.
+	, SYM_BITXOR // SYM_BITOR (ABOVE) MUST BE KEPT FIRST AMONG THE INTEGER OPERATORS BECAUSE IT'S USED IN A RANGE-CHECK (see IS_INTEGER_OPERATOR).
 	, SYM_BITAND
-	, SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT // << >>  ALSO: SYM_BITSHIFTRIGHT MUST BE KEPT LAST AMONG THE BIT OPERATORS BECAUSE IT'S USED IN A RANGE-CHECK.
-#define IS_BIT_OPERATOR(symbol) ((symbol) <= SYM_BITSHIFTRIGHT && (symbol) >= SYM_BITOR) // Check upper bound first for short-circuit performance (because operators like +-*/ are much more frequently used).
+	, SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT // << >>  
+	, SYM_INTEGERDIVIDE	// eg, x // y ALSO : SYM_INTEGERDIVIDE MUST BE KEPT LAST AMONG THE INTEGER OPERATORS BECAUSE IT'S USED IN A RANGE-CHECK (see IS_INTEGER_OPERATOR).
+#define IS_INTEGER_OPERATOR(symbol) ((symbol) <= SYM_INTEGERDIVIDE && (symbol) >= SYM_BITOR) // Check upper bound first for short-circuit performance (because operators like +-*/ are much more frequently used).
+	// INTEGER OPERATORS END
+
 	, SYM_ADD, SYM_SUBTRACT
-	, SYM_MULTIPLY, SYM_DIVIDE, SYM_INTEGERDIVIDE
+	, SYM_MULTIPLY, SYM_DIVIDE
 	, SYM_POWER
 	, SYM_LOWNOT  // LOWNOT is the word "not", the low precedence counterpart of !
 	, SYM_NEGATIVE, SYM_POSITIVE, SYM_HIGHNOT, SYM_BITNOT, SYM_ADDRESS  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
