@@ -496,11 +496,16 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, Use
 	else
 		name_dynamic = Var::sEmptyString; // So that it can be detected as a non-allocated empty string.
 	UserMenuItem *menu_item = new UserMenuItem(name_dynamic, length + 1, aMenuID, aCallback, aSubmenu, this);
-	if (!menu_item) // Should also be very rare.
+	if ( !menu_item // Should also be very rare.
+		 || (*aOptions && UpdateOptions(menu_item, aOptions) != OK) ) // update options
 	{
 		if (name_dynamic != Var::sEmptyString)
 			free(name_dynamic);
-		return g_script.ScriptError(ERR_OUTOFMEM);
+		if (menu_item)
+			delete menu_item; 
+		else
+			g_script.ScriptError(ERR_OUTOFMEM);
+		return FAIL; // UpdateOptions displays an error message if aOptions contains invalid options.
 	}
 	if (mMenu)
 	{
@@ -526,8 +531,6 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, Use
 		mLastMenuItem = menu_item;
 	}
 	++mMenuItemCount;  // Only after memory has been successfully allocated.
-	if (*aOptions)
-		UpdateOptions(menu_item, aOptions);
 	if (_tcschr(aName, '\t')) // v1.1.04: The new item has a keyboard accelerator.
 		UpdateAccelerators();
 	return OK;
@@ -654,8 +657,8 @@ ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, IObject *aCallback, Use
 // If a menu item becomes a submenu, we don't relinquish its ID in case it's ever made a normal item
 // again (avoids the need to re-lookup a unique ID).
 {
-	if (*aOptions)
-		UpdateOptions(aMenuItem, aOptions);
+	if (*aOptions && UpdateOptions(aMenuItem, aOptions) != OK)
+		return FAIL; // UpdateOptions displays an error message if aOptions contains invalid options.
 	if (!aCallback && !aSubmenu) // We were called only to update this item's options.
 		return OK;
 
@@ -697,7 +700,7 @@ ResultType UserMenu::ModifyItem(UserMenuItem *aMenuItem, IObject *aCallback, Use
 
 
 
-void UserMenu::UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions)
+ResultType UserMenu::UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions)
 {
 	UINT new_type = aMenuItem->mMenuType; // Set default.
 
@@ -731,15 +734,19 @@ void UserMenu::UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions)
 		orig_char = *option_end;
 		*option_end = '\0';
 		// End generic option-parsing code; begin menu options.
-
-		     if (!_tcsicmp(next_option, _T("Radio"))) if (adding) new_type |= MFT_RADIOCHECK; else new_type &= ~MFT_RADIOCHECK;
-		else if (!_tcsicmp(next_option, _T("Right"))) if (adding) new_type |= MFT_RIGHTJUSTIFY; else new_type &= ~MFT_RIGHTJUSTIFY;
+		if (!_tcsicmp(next_option, _T("Radio"))) if (adding) new_type |= MFT_RADIOCHECK; else new_type &= ~MFT_RADIOCHECK;
+		else if (mMenuType == MENU_TYPE_BAR && !_tcsicmp(next_option, _T("Right"))) if (adding) new_type |= MFT_RIGHTJUSTIFY; else new_type &= ~MFT_RIGHTJUSTIFY;
 		else if (!_tcsicmp(next_option, _T("Break"))) if (adding) new_type |= MFT_MENUBREAK; else new_type &= ~MFT_MENUBREAK;
 		else if (!_tcsicmp(next_option, _T("BarBreak"))) if (adding) new_type |= MFT_MENUBARBREAK; else new_type &= ~MFT_MENUBARBREAK;
 		else if (ctoupper(*next_option) == 'P')
-			aMenuItem->mPriority = ATOI(next_option + 1);
-
+			aMenuItem->mPriority = ATOI(next_option + 1);	// invalid priority options are not detected, due to rarity and for brevity. Hence, eg Pxyz, is equivalent to P0.
+		else
+		{
+			*option_end = orig_char;
+			return g_script.ScriptError(ERR_INVALID_OPTION, next_option); // invalid option
+		}
 		*option_end = orig_char;
+
 	}
 
 	if (new_type != aMenuItem->mMenuType)
@@ -754,6 +761,7 @@ void UserMenu::UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions)
 		}
 		aMenuItem->mMenuType = (WORD)new_type;
 	}
+	return OK;
 }
 
 
