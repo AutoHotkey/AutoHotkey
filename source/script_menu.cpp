@@ -496,16 +496,17 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, Use
 	else
 		name_dynamic = Var::sEmptyString; // So that it can be detected as a non-allocated empty string.
 	UserMenuItem *menu_item = new UserMenuItem(name_dynamic, length + 1, aMenuID, aCallback, aSubmenu, this);
-	if ( !menu_item // Should also be very rare.
-		 || (*aOptions && UpdateOptions(menu_item, aOptions) != OK) ) // update options
+	if (!menu_item) // Should also be very rare.
 	{
 		if (name_dynamic != Var::sEmptyString)
 			free(name_dynamic);
-		if (menu_item)
-			delete menu_item; 
-		else
-			g_script.ScriptError(ERR_OUTOFMEM);
-		return FAIL; // UpdateOptions displays an error message if aOptions contains invalid options.
+		return g_script.ScriptError(ERR_OUTOFMEM);
+	}
+	if (*aOptions && !UpdateOptions(menu_item, aOptions))
+	{
+		// Invalid options; an error message was displayed.
+		delete menu_item; 
+		return FAIL;
 	}
 	if (mMenu)
 	{
