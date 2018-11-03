@@ -3661,7 +3661,6 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 		hotkey_up[i] = HOTKEY_ID_INVALID;
 
 	hk_sorted_type *hk_sorted = new hk_sorted_type[Hotkey::sHotkeyCount];
-	ZeroMemory(hk_sorted, sizeof(hk_sorted));
 	int hk_sorted_count = 0;
 	key_type *pThisKey = NULL;
 	for (i = 0; i < aHK_count; ++i)
