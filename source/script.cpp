@@ -2915,7 +2915,12 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 			break; // Once the first valid comment-flag is found, nothing after it can matter.
 		}
 		else // No whitespace to the left.
-			if (*prevp == g_EscapeChar) // Remove the escape char.
+		{
+			// The following is done here, at this early stage, to support escaping the comment flag in
+			// hotkeys and directives (the latter is mostly for backward-compatibility).
+			LPTSTR p;
+			for (p = prevp; p > aBuf && *p == g_EscapeChar && p[-1] == g_EscapeChar; p -= 2);
+			if (p >= aBuf && *p == g_EscapeChar) // Odd number of escape chars: remove the final escape char.
 			{
 				// The following isn't exactly correct because it prevents an include filename from ever
 				// containing the literal string "`;".  This is because attempts to escape the accent via
@@ -2929,6 +2934,7 @@ size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSect
 			}
 			// else there wasn't any whitespace to its left, so keep looking in case there's
 			// another further on in the line.
+		}
 	} // for()
 
 	return aBuf_length; // The above is responsible for keeping aBufLength up-to-date with any changes to aBuf.
