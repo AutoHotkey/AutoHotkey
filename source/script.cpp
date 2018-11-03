@@ -7870,7 +7870,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 			break;
 		case ACT_BLOCK_END:
 			if (line->mAttribute) // This is the closing brace of a function definition.
-				g->CurrentFunc = NULL; // Must be set only for the above condition because functions can of course contain types of blocks other than the function's own block.
+				g->CurrentFunc = g->CurrentFunc->mOuterFunc;
 			break;
 		case ACT_BREAK:
 		case ACT_CONTINUE:
@@ -13415,6 +13415,7 @@ ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
 		else
 			func.mUpVar = NULL;
 	}
+	g->CurrentFunc = NULL; // Reset for subsequent preparsing/execution stages.
 	return OK;
 }
 
