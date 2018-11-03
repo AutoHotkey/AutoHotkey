@@ -354,7 +354,7 @@ public:
 	#define HS_TEMPORARILY_DISABLED 0x04
 	UCHAR mExistingThreads, mMaxThreads;
 	bool mCaseSensitive, mConformToCase, mDoBackspace, mOmitEndChar, mEndCharRequired
-		, mDetectWhenInsideWord, mDoReset, mExecuteAction, mConstructedOK;
+		, mDetectWhenInsideWord, mDoReset, mConstructedOK;
 
 	static void SuspendAll(bool aSuspend);
 	ResultType PerformInNewThreadMadeByCaller();

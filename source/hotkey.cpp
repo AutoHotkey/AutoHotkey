@@ -2643,7 +2643,6 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 	, mEndCharRequired(g_HSEndCharRequired), mDetectWhenInsideWord(g_HSDetectWhenInsideWord), mDoReset(g_HSDoReset)
 	, mHotCriterion(g_HotCriterion)
 	, mInputLevel(g_InputLevel)
-	, mExecuteAction(g_HSSameLineAction)
 	, mConstructedOK(false)
 {
 	// Insist on certain qualities so that they never need to be checked other than here:
@@ -2652,9 +2651,6 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 
 	ParseOptions(aOptions);
 
-	if (mExecuteAction)
-		aReplacement = _T(""); // LoadIncludedFile() requires this (but BIF_Hotstring has its own handling of 'E').
-	
 	// To avoid memory leak, this is done only when it is certain the hotstring will be created:
 	if (   !(mString = SimpleHeap::Malloc(aHotstring))   )
 		return; // ScriptError() was already called by Malloc().
@@ -2683,8 +2679,9 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 
 void Hotstring::ParseOptions(LPTSTR aOptions)
 {
+	bool unused_X_option;
 	ParseOptions(aOptions, mPriority, mKeyDelay, mSendMode, mCaseSensitive, mConformToCase, mDoBackspace
-		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, mExecuteAction);
+		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, unused_X_option);
 }
 
 
@@ -2832,10 +2829,10 @@ BIF_DECL(BIF_Hotstring)
 	else if (aParamCount == 1 && *name != ':') // Equivalent to #Hotstring <name>
 	{
 		// TODO: Build string of current options and return it?
-		bool unused_E_option; // 'E' option is required to be passed for each Hotstring() call, for clarity.
+		bool unused_X_option; // 'X' option is required to be passed for each Hotstring() call, for clarity.
 		Hotstring::ParseOptions(name, g_HSPriority, g_HSKeyDelay, g_HSSendMode, g_HSCaseSensitive
 			, g_HSConformToCase, g_HSDoBackspace, g_HSOmitEndChar, g_HSSendRaw, g_HSEndCharRequired
-			, g_HSDetectWhenInsideWord, g_HSDoReset, unused_E_option);
+			, g_HSDetectWhenInsideWord, g_HSDoReset, unused_X_option);
 		return;
 	}
 
@@ -2855,7 +2852,7 @@ BIF_DECL(BIF_Hotstring)
 		}
 		else // Double-colon, so it's a hotstring if there's more after this (but this means no options are present).
 			if (name[2])
-				hotstring_start = name + 2; // And leave hotstring_options at its default of NULL to indicate no options.
+				hotstring_start = name + 2;
 			//else it's just a naked "::", which is invalid.
 	}
 	if (!hotstring_start)
@@ -2864,7 +2861,7 @@ BIF_DECL(BIF_Hotstring)
 	// Determine options which affect hotstring identity/uniqueness.
 	bool case_sensitive = g_HSCaseSensitive;
 	bool detect_inside_word = g_HSDetectWhenInsideWord;
-	bool execute_action = false; // Unlike the others, 'E' must be specified each time.
+	bool execute_action = false; // Unlike the others, 'X' must be specified each time.
 	bool un; int iun; SendModes sm; SendRawType sr; // Unused.
 	if (*hotstring_options)
 		Hotstring::ParseOptions(hotstring_options, iun, iun, sm, case_sensitive, un, un, un, sr, un, detect_inside_word, un, execute_action);
@@ -2873,7 +2870,7 @@ BIF_DECL(BIF_Hotstring)
 	if (!ParamIndexIsOmitted(1))
 	{
 		action_obj = ParamIndexToObject(1);
-		if (   execute_action // Caller specified 'E' option (which is ignored when passing an object).
+		if (   execute_action // Caller specified 'X' option (which is ignored when passing an object).
 			&& !action_obj // Caller did not specify an object, so must specify a function or label name.
 			&& !(action_obj = g_script.FindCallable(action))   ) // No valid label or function found.
 			_f_throw(ERR_PARAM2_INVALID, action);
