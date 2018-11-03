@@ -7114,7 +7114,7 @@ ResultType GuiType::ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilenam
 		// zero dimensions).
 		// UPDATE: For simplicity and backward-compatibility, any existing SS_BITMAP/SS_ICON
 		// style bit is not removed.
-		return FAIL;
+		return *aFilename ? FAIL : OK;
 	}
 	if (image_type == IMAGE_ICON && aControl.background_color == CLR_TRANSPARENT)
 	{
