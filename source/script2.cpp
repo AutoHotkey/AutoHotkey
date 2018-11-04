@@ -10933,123 +10933,74 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 
 
 
-void ConvertDllArgType(LPTSTR aBuf[], DYNAPARM &aDynaParam)
+void ConvertDllArgType(LPTSTR aBuf, DYNAPARM &aDynaParam)
 // Helper function for DllCall().  Updates aDynaParam's type and other attributes.
-// Caller has ensured that aBuf contains exactly two strings (though the second can be NULL).
 {
-	LPTSTR type_string;
+	LPTSTR type_string = aBuf;
 	TCHAR buf[32];
-	int i;
-
-	// Up to two iterations are done to cover the following cases:
-	// No second type because there was no SYM_VAR to get it from:
-	//	blank means int
-	//	invalid is err
-	// (for the below, note that 2nd can't be blank because var name can't be blank, and the first case above would have caught it if 2nd is NULL)
-	// 1Blank, 2Invalid: blank (but ensure is_unsigned and passed_by_address get reset)
-	// 1Blank, 2Valid: 2
-	// 1Valid, 2Invalid: 1 (second iteration would never have run, so no danger of it having erroneously reset is_unsigned/passed_by_address)
-	// 1Valid, 2Valid: 1 (same comment)
-	// 1Invalid, 2Invalid: invalid
-	// 1Invalid, 2Valid: 2
-
-	for (i = 0, type_string = aBuf[0]; i < 2 && type_string; type_string = aBuf[++i])
+	
+	if (ctoupper(*type_string) == 'U') // Unsigned
 	{
-		if (ctoupper(*type_string) == 'U') // Unsigned
+		aDynaParam.is_unsigned = true;
+		++type_string; // Omit the 'U' prefix from further consideration.
+	}
+	else
+		aDynaParam.is_unsigned = false;
+	
+	// Check for empty string before checking for pointer suffix, so that we can skip the first character.  This is needed to simplify "Ptr" type-name support.
+	if (!*type_string)
+	{
+		aDynaParam.type = DLL_ARG_INVALID; 
+		return; 
+	}
+
+	tcslcpy(buf, type_string, _countof(buf)); // Make a modifiable copy for easier parsing below.
+
+	// v1.0.30.02: The addition of 'P'.
+	// However, the current detection below relies upon the fact that none of the types currently
+	// contain the letter P anywhere in them, so it would have to be altered if that ever changes.
+	LPTSTR cp = StrChrAny(buf + 1, _T("*pP")); // Asterisk or the letter P.  Relies on the check above to ensure type_string is not empty (and buf + 1 is valid).
+	if (cp && !*omit_leading_whitespace(cp + 1)) // Additional validation: ensure nothing following the suffix.
+	{
+		aDynaParam.passed_by_address = true;
+		// Remove trailing options so that stricmp() can be used below.
+		// Allow optional space in front of asterisk (seems okay even for 'P').
+		if (IS_SPACE_OR_TAB(cp[-1]))
 		{
-			aDynaParam.is_unsigned = true;
-			++type_string; // Omit the 'U' prefix from further consideration.
+			cp = omit_trailing_whitespace(buf, cp - 1);
+			cp[1] = '\0'; // Terminate at the leftmost whitespace to remove all whitespace and the suffix.
 		}
 		else
-			aDynaParam.is_unsigned = false;
-		
-		// Check for empty string before checking for pointer suffix, so that we can skip the first character.  This is needed to simplify "Ptr" type-name support.
-		if (!*type_string)
-		{
-			// The following also serves to set the default in case this is the first iteration.
-			// Set default but perform second iteration in case the second type string isn't NULL.
-			// In other words, if the second type string is explicitly valid rather than blank,
-			// it should override the following default:
-			aDynaParam.type = DLL_ARG_INVALID;  // To assist with detection of errors like DllCall(...,flaot,n), treat empty string as an error; naked "CDecl" is now handled elsewhere.  OBSOLETE COMMENT: Assume int.  This is relied upon at least for having a return type such as a naked "CDecl".
-			continue; // OK to do this regardless of whether this is the first or second iteration.
-		}
+			*cp = '\0'; // Terminate at the suffix to remove it.
+	}
+	else
+		aDynaParam.passed_by_address = false;
 
-		tcslcpy(buf, type_string, _countof(buf)); // Make a modifiable copy for easier parsing below.
-
-		// v1.0.30.02: The addition of 'P' allows the quotes to be omitted around a pointer type.
-		// However, the current detection below relies upon the fact that not of the types currently
-		// contain the letter P anywhere in them, so it would have to be altered if that ever changes.
-		LPTSTR cp = StrChrAny(buf + 1, _T("*pP")); // Asterisk or the letter P.  Relies on the check above to ensure type_string is not empty (and buf + 1 is valid).
-		if (cp && !*omit_leading_whitespace(cp + 1)) // Additional validation: ensure nothing following the suffix.
-		{
-			aDynaParam.passed_by_address = true;
-			// Remove trailing options so that stricmp() can be used below.
-			// Allow optional space in front of asterisk (seems okay even for 'P').
-			if (IS_SPACE_OR_TAB(cp[-1]))
-			{
-				cp = omit_trailing_whitespace(buf, cp - 1);
-				cp[1] = '\0'; // Terminate at the leftmost whitespace to remove all whitespace and the suffix.
-			}
-			else
-				*cp = '\0'; // Terminate at the suffix to remove it.
-		}
-		else
-			aDynaParam.passed_by_address = false;
-
-		if (false) {} // To simplify the macro below.  It should have no effect on the compiled code.
+	if (false) {} // To simplify the macro below.  It should have no effect on the compiled code.
 #define TEST_TYPE(t, n)  else if (!_tcsicmp(buf, _T(t)))  aDynaParam.type = (n);
-		TEST_TYPE("Int",	DLL_ARG_INT) // The few most common types are kept up top for performance.
-		TEST_TYPE("Str",	DLL_ARG_STR)
+	TEST_TYPE("Int",	DLL_ARG_INT) // The few most common types are kept up top for performance.
+	TEST_TYPE("Str",	DLL_ARG_STR)
 #ifdef _WIN64
-		TEST_TYPE("Ptr",	DLL_ARG_INT64) // Ptr vs IntPtr to simplify recognition of the pointer suffix, to avoid any possible confusion with IntP, and because it is easier to type.
+	TEST_TYPE("Ptr",	DLL_ARG_INT64) // Ptr vs IntPtr to simplify recognition of the pointer suffix, to avoid any possible confusion with IntP, and because it is easier to type.
 #else
-		TEST_TYPE("Ptr",	DLL_ARG_INT)
+	TEST_TYPE("Ptr",	DLL_ARG_INT)
 #endif
-		TEST_TYPE("Short",	DLL_ARG_SHORT)
-		TEST_TYPE("Char",	DLL_ARG_CHAR)
-		TEST_TYPE("Int64",	DLL_ARG_INT64)
-		TEST_TYPE("Float",	DLL_ARG_FLOAT)
-		TEST_TYPE("Double",	DLL_ARG_DOUBLE)
-		TEST_TYPE("AStr",	DLL_ARG_ASTR)
-		TEST_TYPE("WStr",	DLL_ARG_WSTR)
+	TEST_TYPE("Short",	DLL_ARG_SHORT)
+	TEST_TYPE("Char",	DLL_ARG_CHAR)
+	TEST_TYPE("Int64",	DLL_ARG_INT64)
+	TEST_TYPE("Float",	DLL_ARG_FLOAT)
+	TEST_TYPE("Double",	DLL_ARG_DOUBLE)
+	TEST_TYPE("AStr",	DLL_ARG_ASTR)
+	TEST_TYPE("WStr",	DLL_ARG_WSTR)
 #undef TEST_TYPE
-		else // It's non-blank but an unknown type.
-		{
-			if (i > 0) // Second iteration.
-			{
-				// Reset flags to go with any blank value (i.e. !*buf) we're falling back to from the first iteration
-				// (in case our iteration changed the flags based on bogus contents of the second type_string):
-				aDynaParam.passed_by_address = false;
-				aDynaParam.is_unsigned = false;
-				//aDynaParam.type: The first iteration already set it to DLL_ARG_INT or DLL_ARG_INVALID.
-			}
-			else // First iteration, so aDynaParam.type's value will be set by the second (however, the loop's own condition will skip the second iteration if the second type_string is NULL).
-			{
-				aDynaParam.type = DLL_ARG_INVALID; // Set in case of: 1) the second iteration is skipped by the loop's own condition (since the caller doesn't always initialize "type"); or 2) the second iteration can't find a valid type.
-				continue;
-			}
-		}
-		// Since above didn't "continue", the type is explicitly valid so "return" to ensure that
-		// the second iteration doesn't run (in case this is the first iteration):
+	else // It's non-blank but an unknown type.
+	{
+		aDynaParam.type = DLL_ARG_INVALID; 
 		return;
 	}
+	return; // Since above didn't "return", the type is explicitly valid
+	
 }
-
-
-
-bool IsDllArgTypeName(LPTSTR name)
-// Test whether given name is a valid DllCall arg type (used by Script::MaybeWarnLocalSameAsGlobal).
-{
-	LPTSTR names[] = { name, NULL };
-	DYNAPARM param;
-	// An alternate method using an array of strings and tcslicmp in a loop benchmarked
-	// slightly faster than this, but didn't seem worth the extra code size. This should
-	// be more maintainable and is guaranteed to be consistent with what DllCall accepts.
-	ConvertDllArgType(names, param);
-	return param.type != DLL_ARG_INVALID;
-}
-
-
 
 void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: Contains code extracted from BIF_DllCall for reuse in ExpressionToPostfix.
 {
@@ -11197,55 +11148,35 @@ BIF_DECL(BIF_DllCall)
 	{
 		// Check validity of this arg's return type:
 		ExprTokenType &token = *aParam[aParamCount - 1];
-		LPTSTR return_type_string[2];
+		LPTSTR return_type_string;
 		switch (token.symbol)
 		{
-		case SYM_VAR: // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-			return_type_string[0] = token.var->Contents(TRUE, TRUE);	
-			return_type_string[1] = token.var->mName; // v1.0.33.01: Improve convenience by falling back to the variable's name if the contents are not appropriate.
-			break;
-		case SYM_STRING:
-			return_type_string[0] = token.marker;
-			return_type_string[1] = NULL; // Added in 1.0.48.
-			break;
-		default:
-			return_type_string[0] = _T(""); // It will be detected as invalid below.
-			return_type_string[1] = NULL;
-			break;
+		case SYM_STRING:	return_type_string = token.marker; break;						// Kept first since assumed to be most common.
+		case SYM_VAR:		return_type_string = token.var->Contents(TRUE, TRUE); break;	// SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+		default:			return_type_string = _T(""); break; // It will be detected as invalid below.
 		}
 
 		// 64-bit note: The calling convention detection code is preserved here for script compatibility.
 
-		if (!_tcsnicmp(return_type_string[0], _T("CDecl"), 5)) // Alternate calling convention.
+		if (!_tcsnicmp(return_type_string, _T("CDecl"), 5)) // Alternate calling convention.
 		{
 #ifdef WIN32_PLATFORM
 			dll_call_mode = DC_CALL_CDECL;
 #endif
-			return_type_string[0] = omit_leading_whitespace(return_type_string[0] + 5);
-			if (!*return_type_string[0])
+			return_type_string = omit_leading_whitespace(return_type_string + 5);
+			if (!*return_type_string)
 			{	// Take a shortcut since we know this empty string will be used as "Int":
 				return_attrib.type = DLL_ARG_INT;
 				goto has_valid_return_type;
 			}
 		}
-		// This next part is a little iffy because if a legitimate return type is contained in a variable
-		// that happens to be named Cdecl, Cdecl will be put into effect regardless of what's in the variable.
-		// But the convenience of being able to omit the quotes around Cdecl seems to outweigh the extreme
-		// rarity of such a thing happening.
-		else if (return_type_string[1] && !_tcsnicmp(return_type_string[1], _T("CDecl"), 5)) // Alternate calling convention.
-		{
-#ifdef WIN32_PLATFORM
-			dll_call_mode = DC_CALL_CDECL;
-#endif
-			return_type_string[1] += 5; // Support return type immediately following CDecl (this was previously supported _with_ quotes, though not documented).  OBSOLETE COMMENT: Must be NULL since return_type_string[1] is the variable's name, by definition, so it can't have any spaces in it, and thus no space delimited items after "Cdecl".
-			if (!*return_type_string[1])
-				// Pass default return type.  Don't take shortcut approach used above as return_type_string[0] should take precedence if valid.
-				return_type_string[1] = _T("Int");
-		}
-
 		ConvertDllArgType(return_type_string, return_attrib);
 		if (return_attrib.type == DLL_ARG_INVALID)
+		{
+			if (token.symbol == SYM_VAR)
+				token.var->MaybeWarnUninitialized();
 			_f_throw(ERR_INVALID_RETURN_TYPE);
+		}
 has_valid_return_type:
 		--aParamCount;  // Remove the last parameter from further consideration.
 #ifdef WIN32_PLATFORM
@@ -11269,7 +11200,7 @@ has_valid_return_type:
 	// does happen, it would probably mean the script or the program has a design flaw somewhere, such as
 	// infinite recursion).
 
-	LPTSTR arg_type_string[2];
+	LPTSTR arg_type_string;
 	int i = arg_count * sizeof(void *);
 	// for Unicode <-> ANSI charset conversion
 #ifdef UNICODE
@@ -11277,7 +11208,7 @@ has_valid_return_type:
 #else
 	CStringW **pStr = (CStringW **)
 #endif
-		_alloca(i); // _alloca vs malloc can make a significant difference to performance in some cases.
+	_alloca(i); // _alloca vs malloc can make a significant difference to performance in some cases.
 	memset(pStr, 0, i);
 
 	// Above has already ensured that after the first parameter, there are either zero additional parameters
@@ -11287,24 +11218,10 @@ has_valid_return_type:
 	{
 		switch (aParam[i]->symbol)
 		{
-		case SYM_VAR: // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-			arg_type_string[0] = aParam[i]->var->Contents(TRUE, TRUE);
-			arg_type_string[1] = aParam[i]->var->mName;
-			// v1.0.33.01: arg_type_string[1] improves convenience by falling back to the variable's name
-			// if the contents are not appropriate.  In other words, both Int and "Int" are treated the same.
-			// It's done this way to allow the variable named "Int" to actually contain some other legitimate
-			// type-name such as "Str" (in case anyone ever happens to do that).
-			break;
-		case SYM_STRING:
-			arg_type_string[0] = aParam[i]->marker;
-			arg_type_string[1] = NULL; // Added in 1.0.48.
-			break;
-		default:
-			arg_type_string[0] = _T(""); // It will be detected as invalid below.
-			arg_type_string[1] = NULL;
-			break;
+		case SYM_STRING:	arg_type_string = aParam[i]->marker; break;						// Kept first since assumed to be most common.
+		case SYM_VAR:		arg_type_string = aParam[i]->var->Contents(TRUE, TRUE); break;	// SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+		default:			arg_type_string = _T(""); break; // It will be detected as invalid below.
 		}
-
 		ExprTokenType &this_param = *aParam[i + 1];         // Resolved for performance and convenience.
 		DYNAPARM &this_dyna_param = dyna_param[arg_count];  //
 

@@ -13337,15 +13337,6 @@ void Script::MaybeWarnLocalSameAsGlobal(Func &func, Var &var)
 {
 	if (!g_Warn_LocalSameAsGlobal)
 		return;
-
-#ifdef ENABLE_DLLCALL
-	if (IsDllArgTypeName(var.mName))
-		// Exclude unquoted DllCall arg type names.  Although variable names like "str" and "ptr"
-		// might be used for other purposes, it seems far more likely that both this var and its
-		// global counterpart (if it exists) are blank vars which were used as DllCall arg types.
-		return;
-#endif
-
 	Line *line = func.mJumpToLine;
 	while (line && line->mActionType != ACT_BLOCK_BEGIN) line = line->mPrevLine;
 	if (!line) line = func.mJumpToLine;
