@@ -1142,6 +1142,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						// Throw an exception rather than returning something undefined:
 						goto divide_by_zero;
 					}
+					else if (left_int64 == 0 && right_int64 == 0)	// 0**0, not defined.
+					{
+						goto abort_with_exception;
+					}
 					else // We have a valid base and exponent and both are integers, so the calculation will always have a defined result.
 					{
 						if (left_was_negative = (left_int64 < 0))
@@ -1191,7 +1195,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					left_was_negative = (left_double < 0);
 					if (left_double == 0.0 && right_double < 0)  // In essence, this is divide-by-zero.
 						goto divide_by_zero;
-					if (left_was_negative && qmathFmod(right_double, 1.0) != 0.0) // Negative base, but exponent isn't close enough to being an integer: unsupported (to simplify code).
+					if ((left_was_negative && qmathFmod(right_double, 1.0) != 0.0)	// Negative base, but exponent isn't close enough to being an integer: unsupported (to simplify code).
+						|| (left_double == 0.0 && right_double == 0.0))				// 0.0**0.0, not defined.
 						goto abort_with_exception;
 					if (left_was_negative)
 						left_double = -left_double; // Force a positive due to the limitations of qmathPow().
