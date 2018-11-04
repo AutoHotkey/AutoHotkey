@@ -1134,9 +1134,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					this_token.value_int64 = left_int64 / right_int64;
 					break;
 				case SYM_POWER:
-					// Note: The function pow() in math.h adds about 28 KB of code size (uncompressed)!
-					// Even assuming pow() supports negative bases such as (-2)**2, its size is why it's not used.
-					// v1.0.44.11: With Laszlo's help, negative integer bases are now supported.
 					if (!left_int64 && right_int64 < 0) // In essence, this is divide-by-zero.
 					{
 						// Throw an exception rather than returning something undefined:
@@ -1144,11 +1141,17 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					}
 					else // We have a valid base and exponent and both are integers, so the calculation will always have a defined result.
 					{
+#ifdef USE_INLINE_ASM	// see qmath.h
+						// Note: The function pow() in math.h adds about 28 KB of code size (uncompressed)! That is why it's not used here.
+						// v1.0.44.11: With Laszlo's help, negative integer bases are now supported.
 						if (left_was_negative = (left_int64 < 0))
 							left_int64 = -left_int64; // Force a positive due to the limitations of qmathPow().
 						this_token.value_double = qmathPow((double)left_int64, (double)right_int64);
 						if (left_was_negative && right_int64 % 2) // Negative base and odd exponent (not zero or even).
 							this_token.value_double = -this_token.value_double;
+#else
+						this_token.value_double = pow((double)left_int64, (double)right_int64);
+#endif
 						if (right_int64 < 0)
 							result_symbol = SYM_FLOAT; // Due to negative exponent, override to float.
 						else
@@ -1186,18 +1189,22 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_GTOE:     this_token.value_int64 = left_double >= right_double; break;
 				case SYM_LTOE:     this_token.value_int64 = left_double <= right_double; break;
 				case SYM_POWER:
-					// v1.0.44.11: With Laszlo's help, negative bases are now supported as long as the exponent is not fractional.
-					// See the other SYM_POWER higher above for more details about below.
-					left_was_negative = (left_double < 0);
 					if (left_double == 0.0 && right_double < 0)  // In essence, this is divide-by-zero.
 						goto divide_by_zero;
+					left_was_negative = (left_double < 0);
 					if (left_was_negative && qmathFmod(right_double, 1.0) != 0.0) // Negative base, but exponent isn't close enough to being an integer: unsupported (to simplify code).
 						goto abort_with_exception;
+#ifdef USE_INLINE_ASM	// see qmath.h
+					// v1.0.44.11: With Laszlo's help, negative bases are now supported as long as the exponent is not fractional.
+					// See the other SYM_POWER higher above for more details about below.
 					if (left_was_negative)
 						left_double = -left_double; // Force a positive due to the limitations of qmathPow().
 					this_token.value_double = qmathPow(left_double, right_double);
 					if (left_was_negative && qmathFabs(qmathFmod(right_double, 2.0)) == 1.0) // Negative base and exactly-odd exponent (otherwise, it can only be zero or even because if not it would have returned higher above).
 						this_token.value_double = -this_token.value_double;
+#else
+					this_token.value_double = pow(left_double, right_double);
+#endif
 					break;
 				} // switch(this_token.symbol)
 				this_token.symbol = result_symbol; // Must be done only after the switch() above.
