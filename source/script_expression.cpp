@@ -1144,15 +1144,17 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					}
 					else // We have a valid base and exponent and both are integers, so the calculation will always have a defined result.
 					{
+						if (right_int64 >= 0)	// result is an integer.
+						{
+							this_token.value_int64 = pow_ll(left_int64, right_int64);
+							break;
+						}
+						result_symbol = SYM_FLOAT; // Due to negative exponent, override to float.
 						if (left_was_negative = (left_int64 < 0))
 							left_int64 = -left_int64; // Force a positive due to the limitations of qmathPow().
 						this_token.value_double = qmathPow((double)left_int64, (double)right_int64);
 						if (left_was_negative && right_int64 % 2) // Negative base and odd exponent (not zero or even).
 							this_token.value_double = -this_token.value_double;
-						if (right_int64 < 0)
-							result_symbol = SYM_FLOAT; // Due to negative exponent, override to float.
-						else
-							this_token.value_int64 = (__int64)this_token.value_double;
 					}
 					break;
 				}

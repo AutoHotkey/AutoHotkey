@@ -17524,3 +17524,71 @@ DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNam
 	CloseHandle(hproc);
 	return buf_length;
 }
+
+__int64 pow_ll(__int64 base, __int64 exp)
+{
+	/*
+	Caller must ensure exp >= 0
+	Below uses 'a^b' to denote 'raising a to the power of b'.
+	Computes and returns base^exp, returns _I64_MIN on overflow. By convention, x^0 returns 1, even when x == 0,
+	caller should ensure base is non-zero when exp is zero to handle 0^0.
+	*/
+	if (exp == 0)
+		return 1ll;
+	 
+	// For simplicity, use positive numbers below. 
+	BOOL base_is_negative = (base < 0);
+	BOOL result_is_negative = (base_is_negative && exp % 2);
+
+	base = base_is_negative ? -base : base;
+
+	// based on: https://en.wikipedia.org/wiki/Exponentiation_by_squaring (2018-11-03)
+	unsigned __int64 result = 1;
+	while (exp > 1)
+	{
+		if ((exp % 2) // exp is odd
+			&& !mul_ll(result, base, &result))
+			return _I64_MIN;
+		exp /= 2;
+		if (base >= 3037000500)
+			// Compairison is made to avoid calling mul_ll.
+			// 3037000500 is the smallest positive integer whose square is greater than 9223372036854775808, that is
+			// 3037000499^2 < 9223372036854775808 < 3037000500^2
+			return _I64_MIN;
+		base *= base;
+	}
+	if (!mul_ll(result, base, &result))
+		return _I64_MIN;
+	return result_is_negative ? -(signed __int64)result : result; // set the correct sign before returning.
+}
+
+bool mul_ll(unsigned __int64 x, unsigned __int64 y, unsigned __int64* res)
+{
+	// returns false if x*y is greater than _I64_MAX, else true and writes the result of x*y to res.	
+	// based on:
+	// https://www.fefe.de/intof.html (2018-11-03)
+
+	unsigned __int64 a = x;
+	unsigned __int64 b = y;
+
+	unsigned __int64 a0 = (a << 32) >> 32;
+	unsigned __int64 b0 = (b << 32) >> 32;
+
+	unsigned __int64 a1 = a >> 32;
+	unsigned __int64 b1 = b >> 32;
+	if (a1 && b1)
+		return false;
+
+	a = a1*b0 + a0*b1;
+	if (a > 0xffffffff)
+		return false;
+
+	x = a << 32;
+	y = a0 * b0;
+	a = x + y;
+	if (a < x || a >(unsigned __int64)_I64_MAX)
+		return false;
+
+	*res = a;
+	return true;
+}
