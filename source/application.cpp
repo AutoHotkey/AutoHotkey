@@ -2215,14 +2215,14 @@ VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime
 	// v1.0.33: The following was added to fix the fact that a MsgBox with only an OK button
 	// does not actually send back the code sent by EndDialog() above.  The HWND is checked
 	// in case "g" is no longer the original thread due to another thread having interrupted it.
-	// Consequently, MsgBox's with an OK button won't be 100% reliable with the timeout feature
-	// if an interrupting thread is running at the time the box times out.  This is in the help
-	// file as a known limitation.  Perhaps in the future it can be solved by setting some new
-	// member of "g" that tells ResumeUnderlyingThread() to keep passing back "hWnd" as threads
-	// are resumed until the thread whose g->DialogHWND matches that hwnd.  That thread's
-	// g->MsgBoxTimedOut could then be set to true just before the thread is resumed.
-	if (g->DialogHWND == hWnd) // Regardless of whether IsWindow() is true.  See also: above comment.
-		g->MsgBoxTimedOut = true;
+	// v1.1.30.01: The loop was added so that the timeout can be detected even if the thread
+	// which owns the dialog was interrupted.
+	for (auto *dialog_g = g; dialog_g >= g_array; --dialog_g)
+		if (dialog_g->DialogHWND == hWnd) // Regardless of whether IsWindow() is true.
+		{
+			dialog_g->MsgBoxTimedOut = true;
+			break;
+		}
 }
 
 
