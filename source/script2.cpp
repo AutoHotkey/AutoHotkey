@@ -17085,7 +17085,7 @@ double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex)
 
 
 LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf, size_t *aLength)
-// Supports Type() VAR_NORMAL and VAR-CLIPBOARD.
+// Supports Type() VAR_NORMAL and VAR_CLIPBOARD.
 // Returns "" on failure to simplify logic in callers.  Otherwise, it returns either aBuf (if aBuf was needed
 // for the conversion) or the token's own string.  aBuf may be NULL, in which case the caller presumably knows
 // that this token is SYM_STRING or SYM_VAR (or the caller wants "" back for anything other than those).
@@ -17094,10 +17094,11 @@ LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf, size_t *aLength)
 	LPTSTR result;
 	switch (aToken.symbol)
 	{
-	case SYM_VAR: // Caller has ensured that any SYM_VAR's Type() is VAR_NORMAL.
+	case SYM_VAR: // Caller has ensured that any SYM_VAR's Type() is VAR_NORMAL or VAR_CLIPBOARD.
+		result = aToken.var->Contents(); // Contents() vs. mCharContents in case mCharContents needs to be updated by Contents().
 		if (aLength)
-			*aLength = aToken.var->Length(); // Might also update mCharContents.
-		return aToken.var->Contents(); // Contents() vs. mCharContents in case mCharContents needs to be updated by Contents().
+			*aLength = aToken.var->Type() == VAR_NORMAL ? aToken.var->Length() : _tcslen(result);
+		return result;
 	case SYM_STRING:
 		result = aToken.marker;
 		if (aLength)
