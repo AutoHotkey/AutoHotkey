@@ -792,10 +792,6 @@ ResultType UserMenu::RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName)
 
 	if (*aNewName)
 	{
-		// Names must be unique only within each menu:
-		for (UserMenuItem *mi = mFirstMenuItem; mi; mi = mi->mNextMenuItem)
-			if (!lstrcmpi(mi->mName, aNewName)) // Match found (case insensitive).
-				return FAIL; // Caller should display an error message.
 		if (aMenuItem->mMenuType & MFT_SEPARATOR)
 		{
 			// Since this item is currently a separator, the system will have disabled it.

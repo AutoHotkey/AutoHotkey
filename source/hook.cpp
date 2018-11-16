@@ -1516,6 +1516,8 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		&& !firing_is_certain  // i.e. CriterionFiringIsCertain() wasn't already called earlier.
 		&& !(firing_is_certain = Hotkey::CriterionFiringIsCertain(hotkey_id_with_flags, aKeyUp, aExtraInfo, this_key.no_suppress, fire_with_no_suppress, &pKeyHistoryCurr->event_type)))
 	{
+		if (pKeyHistoryCurr->event_type == 'i') // This non-zero SendLevel event is being ignored due to #InputLevel, so unconditionally pass it through, like with is_ignored.
+			return AllowKeyToGoToSystem;
 		// v1.1.08: Although the hotkey corresponding to this event is disabled, it may need to
 		// be suppressed if it has a counterpart (key-down or key-up) hotkey which is enabled.
 		// This can be broken down into two cases:

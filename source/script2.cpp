@@ -16305,10 +16305,11 @@ BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete)
 			else if (!*next_option)
 				ensure_visible = adding;
 		}
-		else if (!_tcsicmp(next_option, _T("Bold")))
+		else if (!_tcsnicmp(next_option, _T("Bold"), 4))
 		{
-			// Bold%VarContainingOneOrZero isn't supported because due to rarity.  There might someday
-			// be a ternary operator to make such things easier anyway.
+			next_option += 4;
+			if (*next_option && !ATOI(next_option)) // If it's Bold0, invert the mode.
+				adding = !adding;
 			tvi.item.stateMask |= TVIS_BOLD;
 			if (adding)
 				tvi.item.state |= TVIS_BOLD;
