@@ -2023,6 +2023,7 @@ examine_line:
 					case 'r': *cp1 = '\r'; break;  // carriage return
 					case 't': *cp1 = '\t'; break;  // horizontal tab
 					case 'v': *cp1 = '\v'; break;  // vertical tab
+					case 's': *cp1 = ' '; break;   // space
 					// Otherwise, if it's not one of the above, the escape-char is considered to
 					// mark the next character as literal, regardless of what it is. Examples:
 					// `` -> `
