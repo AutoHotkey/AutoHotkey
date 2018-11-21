@@ -232,7 +232,7 @@ FuncEntry g_BIF[] =
 	BIFn(SendMessage, 1, 9, BIF_PostSendMessage),
 	BIF1(SetTimer, 0, 3),
 	BIF1(Sin, 1, 1),
-	BIF1(Sort, 1, 2),
+	BIF1(Sort, 1, 3),
 	BIFn(SoundGet, 0, 3, BIF_Sound),
 	BIFn(SoundSet, 1, 4, BIF_Sound),
 	BIFn(Sqrt, 1, 1, BIF_SqrtLogLn),

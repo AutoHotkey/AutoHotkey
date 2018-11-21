@@ -146,8 +146,9 @@ MsgMonitorList g_MsgMonitor;
 UCHAR g_SortCaseSensitive;
 bool g_SortNumeric;
 bool g_SortReverse;
+bool g_SortFuncIsCallable;
 int g_SortColumnOffset;
-Func *g_SortFunc;
+IObject *g_SortFunc;
 
 // Hot-string vars (initialized when ResetHook() is first called):
 TCHAR g_HSBuf[HS_BUF_SIZE];

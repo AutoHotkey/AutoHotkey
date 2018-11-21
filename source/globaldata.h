@@ -123,8 +123,9 @@ extern MsgMonitorList g_MsgMonitor;
 extern UCHAR g_SortCaseSensitive;
 extern bool g_SortNumeric;
 extern bool g_SortReverse;
+extern bool g_SortFuncIsCallable;
 extern int g_SortColumnOffset;
-extern Func *g_SortFunc;
+extern IObject *g_SortFunc;
 
 #define g_DerefChar   '%' // As of v2 these are constant, so even more parts of the code assume they
 #define g_EscapeChar  '`' // are at their usual default values to reduce code size/complexity.
