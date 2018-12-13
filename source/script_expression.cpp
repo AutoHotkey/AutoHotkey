@@ -1123,8 +1123,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_BITAND:		this_token.value_int64 = left_int64 & right_int64; break;
 				case SYM_BITOR:			this_token.value_int64 = left_int64 | right_int64; break;
 				case SYM_BITXOR:		this_token.value_int64 = left_int64 ^ right_int64; break;
-				case SYM_BITSHIFTLEFT:  this_token.value_int64 = left_int64 << right_int64; break;
-				case SYM_BITSHIFTRIGHT: this_token.value_int64 = left_int64 >> right_int64; break;
+				case SYM_BITSHIFTLEFT:  this_token.value_int64 = (unsigned __int64) left_int64 << right_int64; break;
+				case SYM_BITSHIFTRIGHT: this_token.value_int64 = (unsigned __int64) left_int64 >> right_int64; break;
 				case SYM_FLOORDIVIDE:
 					// Since it's integer division, no need for explicit floor() of the result.
 					// Also, performance is much higher for integer vs. float division, which is part
