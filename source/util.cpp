@@ -3041,22 +3041,24 @@ LPTSTR InStrAny(LPTSTR aStr, LPTSTR aNeedle[], int aNeedleCount, size_t &aFoundL
 
 int FTOA(double aValue, LPTSTR aBuf, int aBufSize)
 // Converts aValue to a string while trying to ensure that conversion back to double will
-// produce the same value.  Trailing 0s after the decimal point are stripped for brevity.
-// Caller must ensure there is sufficient buffer size to avoid truncating the decimal point.
+// produce the same value.  Trailing 0s after the decimal point are stripped for brevity, when not printed in scientific notation.
+// Numbers printed in scientific notation may not contain a decimal point.
+// Caller must ensure there is sufficient buffer size to avoid truncating the output.
 {
-	int result = sntprintf(aBuf, aBufSize, _T("%0.17f"), aValue);
-	for (int i = result; i > 0; --i)
+	int result = sntprintf(aBuf, aBufSize, _T("%.17g"), aValue);
+	
+	// the 'g' specifier might cause the result to lack a decimal point. 
+	// If the number is not written in scientific notation, and lacks a decimal point,
+	// add ".0" to make the string look like a float.
+	size_t search_result = _tcscspn(aBuf, _T(".e")); 
+	if (search_result == result			// if true, no decimal point, '.', or 'e' was found, add ".0",
+		&& result + 3 <= aBufSize		// but only if the buffer has room for two more characters and the null terminator,
+		&& isdigit(aBuf[result - 1]))	// and the number isn't some variation of inf or NaN.
 	{
-		if (aBuf[i - 1] != '0')
-		{
-			if (i < result)
-			{
-				if (aBuf[i - 1] == '.')
-					++i;
-				aBuf[i] = '\0';
-			}
-			return i;
-		}
+		aBuf[result] = '.';				// overwrites the current null terminator.
+		aBuf[result+1] = '0';
+		aBuf[result+2] = '\0';
+		result += 2;					// the result is the number of characters written, excluding the terminator.
 	}
 	return result;
 }
