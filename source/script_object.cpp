@@ -1212,17 +1212,33 @@ ResultType Object::_SetCapacity(ResultToken &aResultToken, ExprTokenType *aParam
 	__int64 desired_capacity = TokenToInt64(*aParam[aParamCount > 1]);
 	if (aParamCount >= 2) // Field name was specified.
 	{
-		if (desired_capacity < 0) // Check before sign is dropped.
-			_o_throw(ERR_PARAM2_INVALID);
-		size_t desired_size = (size_t)desired_capacity;
-
 		SymbolType key_type;
 		KeyType key;
 		IndexType insert_pos;
-		FieldType *field;
-
-		if ( (field = FindField(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
-			|| (field = Insert(key_type, key, insert_pos)) )
+		FieldType *field = FindField(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
+		if (desired_capacity == -1) // update length
+		{
+			// parameter validation
+			if (!field)
+				_o_throw(ERR_PARAM1_INVALID);
+			if (field->symbol != SYM_STRING) 
+				_o_throw(ERR_INVALID_VALUE);
+			
+			size_t string_length = 0;
+			size_t max_count = field->string.Capacity(); // to detect a non null-terminated string.
+			if (max_count != 0)
+			{
+				string_length = _tcsnlen(field->string.Value(), max_count);	// measure the string
+				if (string_length == max_count) 
+					_o_throw(ERR_STRING_NOT_TERMINATED);
+			}
+			field->string.Length() = string_length;	// update the string's length
+			_o_return(_TSIZE(string_length));		// return the length, excluding the null-terminator.
+		}
+		if (desired_capacity < 0) // Check before sign is dropped.
+			_o_throw(ERR_PARAM2_INVALID);
+		size_t desired_size = (size_t)desired_capacity;
+		if ( field || (field = Insert(key_type, key, insert_pos)) )
 		{	
 			// Field was successfully found or inserted.
 			if (field->symbol != SYM_STRING)

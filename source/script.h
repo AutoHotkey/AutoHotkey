@@ -236,7 +236,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_HWND _T("Invalid HWND.")
 #define ERR_INVALID_USAGE _T("Invalid usage.")
 #define ERR_INTERNAL_CALL _T("An internal function call failed.")
-
+#define ERR_STRING_NOT_TERMINATED _T("String not null-terminated.")
 #define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
 #define WARNING_USE_ENV_VARIABLE _T("An environment variable is being accessed; see #NoEnv.")
