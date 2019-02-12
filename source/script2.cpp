@@ -12506,6 +12506,7 @@ VarSizeType BIV_TimeIdlePhysical(LPTSTR aBuf, LPTSTR aVarName)
 #define  DC_BORLAND             0x0001      // Borland compat
 #define  DC_CALL_CDECL          0x0010      // __cdecl
 #define  DC_CALL_STD            0x0020      // __stdcall
+#define  DC_CALL_THISCALL		0x0040		// __thiscall
 #define  DC_RETVAL_MATH4        0x0100      // Return value in ST
 #define  DC_RETVAL_MATH8        0x0200      // Return value in ST
 
@@ -12583,6 +12584,22 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 
 #ifdef WIN32_PLATFORM
 
+	DYNAPARM this_param; // holds the this parameter in case of calling convention __thiscall
+	if (aFlags & DC_CALL_THISCALL)
+	{
+		if (aParamCount)
+		{
+			// do this early to remove the first parameter from consideration and avoid allocating stack space for it.
+			this_param = aParam[0]; // fetch the first parameter
+			aParam++;				// and "remove" it
+			aParamCount--;
+		}
+		else // in case of something odd like __thiscall f(void)
+		{
+			aFlags &= ~DC_CALL_THISCALL;	// to avoid trying to pass this_param.int_value in ecx.
+			aFlags |= DC_CALL_STD;			// to detect faulty stack pointer below. (An error)
+		}
+	}
 	// Declaring all variables early should help minimize stack interference of C code with asm.
 	DWORD *our_stack;
     int param_size;
@@ -12639,6 +12656,9 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		*our_stack = (DWORD)(size_t)aRet;  // SS:[ESP] = pMem
 	}
 
+	if (aFlags & DC_CALL_THISCALL) // pass the 'this' parameter in ecx register for __thiscall
+		_asm mov ecx, this_param.value_int
+	
 	// Call the function.
 	__try // Each try/except section adds at most 240 bytes of uncompressed code, and typically doesn't measurably affect performance.
 	{
@@ -12751,7 +12771,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 
 #ifdef WIN32_PLATFORM
 	esp_delta = esp_start - esp_end; // Positive number means too many args were passed, negative means too few.
-	if (esp_delta && (aFlags & DC_CALL_STD))
+	if (esp_delta && (aFlags & (DC_CALL_STD | DC_CALL_THISCALL)))
 	{
 		*buf = 'A'; // The 'A' prefix indicates the call was made, but with too many or too few args.
 		_itot(esp_delta, buf + 1, 10);
@@ -13042,7 +13062,7 @@ BIF_DECL(BIF_DllCall)
 	// Determine the type of return value.
 	DYNAPARM return_attrib = {0}; // Init all to default in case ConvertDllArgType() isn't called below. This struct holds the type and other attributes of the function's return value.
 #ifdef WIN32_PLATFORM
-	int dll_call_mode = DC_CALL_STD; // Set default.  Can be overridden to DC_CALL_CDECL and flags can be OR'd into it.
+	int dll_call_mode = DC_CALL_STD; // Set default.  Can be overridden to DC_CALL_CDECL or DC_CALL_THISCALL and flags can be OR'd into it.
 #endif
 	if (aParamCount % 2) // Odd number of parameters indicates the return type has been omitted, so assume BOOL/INT.
 		return_attrib.type = DLL_ARG_INT;
@@ -13069,13 +13089,14 @@ BIF_DECL(BIF_DllCall)
 		}
 
 		// 64-bit note: The calling convention detection code is preserved here for script compatibility.
-
-		if (!_tcsnicmp(return_type_string[0], _T("CDecl"), 5)) // Alternate calling convention.
+		BOOL is_this_call = false;
+		if (!_tcsnicmp(return_type_string[0], _T("CDecl"), 5)
+			|| ( is_this_call = !_tcsnicmp(return_type_string[0], _T("thiscall"), 8))) // Alternate calling convention.
 		{
 #ifdef WIN32_PLATFORM
-			dll_call_mode = DC_CALL_CDECL;
+			dll_call_mode = is_this_call ? DC_CALL_THISCALL : DC_CALL_CDECL;
 #endif
-			return_type_string[0] = omit_leading_whitespace(return_type_string[0] + 5);
+			return_type_string[0] = omit_leading_whitespace(return_type_string[0] + (is_this_call ? 8 : 5));
 			if (!*return_type_string[0])
 			{	// Take a shortcut since we know this empty string will be used as "Int":
 				return_attrib.type = DLL_ARG_INT;
@@ -13086,12 +13107,13 @@ BIF_DECL(BIF_DllCall)
 		// that happens to be named Cdecl, Cdecl will be put into effect regardless of what's in the variable.
 		// But the convenience of being able to omit the quotes around Cdecl seems to outweigh the extreme
 		// rarity of such a thing happening.
-		else if (return_type_string[1] && !_tcsnicmp(return_type_string[1], _T("CDecl"), 5)) // Alternate calling convention.
+		else if (return_type_string[1]
+			&& (!_tcsnicmp(return_type_string[1], _T("CDecl"), 5) || (is_this_call = !_tcsnicmp(return_type_string[1], _T("thiscall"), 8)))) // Alternate calling convention.
 		{
 #ifdef WIN32_PLATFORM
-			dll_call_mode = DC_CALL_CDECL;
+			dll_call_mode = is_this_call ? DC_CALL_THISCALL : DC_CALL_CDECL;
 #endif
-			return_type_string[1] += 5; // Support return type immediately following CDecl (this was previously supported _with_ quotes, though not documented).  OBSOLETE COMMENT: Must be NULL since return_type_string[1] is the variable's name, by definition, so it can't have any spaces in it, and thus no space delimited items after "Cdecl".
+			return_type_string[1] += (is_this_call ? 8 : 5); // Support return type immediately following CDecl or thiscall (this was previously supported _with_ quotes, though not documented).  OBSOLETE COMMENT: Must be NULL since return_type_string[1] is the variable's name, by definition, so it can't have any spaces in it, and thus no space delimited items after "Cdecl".
 			if (!*return_type_string[1])
 				// Pass default return type.  Don't take shortcut approach used above as return_type_string[0] should take precedence if valid.
 				return_type_string[1] = _T("Int");
