@@ -1144,7 +1144,7 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 	{
 		// These are okay even if the menu items don't exist (perhaps because the user customized the menu):
 		CheckMenuItem(mMenu, ID_TRAY_SUSPEND, g_IsSuspended ? MF_CHECKED : MF_UNCHECKED);
-		CheckMenuItem(mMenu, ID_TRAY_PAUSE, g->IsPaused ? MF_CHECKED : MF_UNCHECKED);
+		CheckMenuItem(mMenu, ID_TRAY_PAUSE, t->IsPaused ? MF_CHECKED : MF_UNCHECKED);
 	}
 
 	POINT pt;

@@ -20,7 +20,6 @@ GNU General Public License for more details.
 #include "util.h"
 #include "globaldata.h"
 
-
 int GetYDay(int aMon, int aDay, bool aIsLeapYear)
 // Returns a number between 1 and 366.
 // Caller must verify that aMon is a number between 1 and 12, and aDay is a number between 1 and 31.
@@ -3001,8 +3000,6 @@ int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 		}
 	}
 }
-
-
 
 int BalanceExpr(LPCTSTR aBuf, int aStartBalance, TCHAR aExpect[])
 {

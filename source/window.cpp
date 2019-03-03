@@ -517,7 +517,7 @@ HWND WinActive(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aEx
 		#define UPDATE_AND_RETURN_LAST_USED_WINDOW(hwnd) \
 		{\
 			if (aUpdateLastUsed && hwnd)\
-				aSettings.hWndLastUsed = hwnd;\
+				t->hWndLastUsed = hwnd;\
 			return hwnd;\
 		}
 		UPDATE_AND_RETURN_LAST_USED_WINDOW(target_window)
@@ -614,15 +614,16 @@ HWND GetValidLastUsedWindow(global_struct &aSettings)
 // Gui +LastFound
 // The launch of a GUI thread that explicitly set the last found window to be that GUI window.
 {
-	if (!aSettings.hWndLastUsed || !IsWindow(aSettings.hWndLastUsed))
+	HWND hWndLastUsed = t->hWndLastUsed;
+	if (!hWndLastUsed || !IsWindow(hWndLastUsed))
 		return NULL;
-	if (   aSettings.DetectHiddenWindows || IsWindowVisible(aSettings.hWndLastUsed)
-		|| (GetWindowLong(aSettings.hWndLastUsed, GWL_STYLE) & WS_CHILD)   ) // v1.0.40.05: Child windows (via ahk_id) are always detectible.
-		return aSettings.hWndLastUsed;
+	if (   aSettings.DetectHiddenWindows || IsWindowVisible(hWndLastUsed)
+		|| (GetWindowLong(hWndLastUsed, GWL_STYLE) & WS_CHILD)   ) // v1.0.40.05: Child windows (via ahk_id) are always detectible.
+		return hWndLastUsed;
 	// Otherwise, DetectHiddenWindows is OFF and the window is not visible.  Return NULL
 	// unless this is a GUI window belonging to this particular script, in which case
 	// the setting of DetectHiddenWindows is ignored (as of v1.0.25.13).
-	return GuiType::FindGui(aSettings.hWndLastUsed) ? aSettings.hWndLastUsed : NULL;
+	return GuiType::FindGui(hWndLastUsed) ? hWndLastUsed : NULL;
 }
 
 
@@ -1117,8 +1118,8 @@ int MsgBox(LPCTSTR aText, UINT uType, LPTSTR aTitle, double aTimeout, HWND aOwne
 
 	// v1.0.33: The following is a workaround for the fact that an MsgBox with only an OK button
 	// doesn't obey EndDialog()'s parameter:
-	g->DialogHWND = NULL;
-	g->MsgBoxTimedOut = false;
+	t->DialogHWND = NULL;
+	t->MsgBoxTimedOut = false;
 
 	// At this point, we know a dialog will be displayed.  See macro's comments for details:
 	DIALOG_PREP // Must be done prior to POST_AHK_DIALOG() below.
@@ -1155,7 +1156,7 @@ int MsgBox(LPCTSTR aText, UINT uType, LPTSTR aTitle, double aTimeout, HWND aOwne
 	// and why the behavior varies:
 	// Unfortunately, it appears that MessageBox() will return zero rather
 	// than AHK_TIMEOUT that was specified in EndDialog() at least under WinXP.
-	if (g->MsgBoxTimedOut || (!result && aTimeout > 0)) // v1.0.33: Added g->MsgBoxTimedOut, see comment higher above.
+	if (t->MsgBoxTimedOut || (!result && aTimeout > 0)) // v1.0.33: Added g->MsgBoxTimedOut, see comment higher above.
 		// Assume it timed out rather than failed, since failure should be VERY rare.
 		result = AHK_TIMEOUT;
 	// else let the caller handle the display of the error message because only it knows
@@ -1870,9 +1871,9 @@ void SetForegroundLockTimeout()
 bool DialogPrep()
 // Having it as a function vs. macro should reduce code size due to expansion of macros inside.
 {
-	bool thread_was_critical = g->ThreadIsCritical;
-	g->ThreadIsCritical = false;
-	g->AllowThreadToBeInterrupted = true;
+	bool thread_was_critical = t->ThreadIsCritical;
+	t->ThreadIsCritical = false;
+	t->AllowThreadToBeInterrupted = true;
 	if (g_KeybdHook) // Workaround added in v1.1.22.01.
 	{
 		// If a Control or Shift key is physically down, the dialog somehow recognizes this

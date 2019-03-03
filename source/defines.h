@@ -156,6 +156,9 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_VAR // An operand that is a variable's contents.
 	, SYM_OBJECT // L31: Represents an IObject interface pointer.
 	, SYM_DYNAMIC // An operand that needs further processing during the evaluation phase.
+	, SYM_UNRESOLVED_NAMESPACE_DYNAMIC_VAR // A dynamic variable reference which namespace needs to be resolved. For use with the scope operator.
+	, SYM_UNRESOLVED_NAMESPACE_VAR // A variable which namespace needs to be resolved. For use with the scope operator.
+#define IS_UNRESOLVED_NAMESPACE_VARIABLE(symbol) ((symbol) == SYM_UNRESOLVED_NAMESPACE_VAR || (symbol) == SYM_UNRESOLVED_NAMESPACE_DYNAMIC_VAR)
 	, SYM_OPERAND_END // Marks the symbol after the last operand.  This value is used below.
 	, SYM_BEGIN = SYM_OPERAND_END  // SYM_BEGIN is a special marker to simplify the code.
 #define IS_OPERAND(symbol) ((symbol) < SYM_OPERAND_END)
@@ -174,9 +177,11 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_ASSIGN_CONCAT // THIS MUST BE KEPT AS THE LAST (AND SYM_ASSIGN THE FIRST) BECAUSE THEY'RE USED IN A RANGE-CHECK.
 #define IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(symbol) (symbol <= SYM_ASSIGN_CONCAT && symbol >= SYM_ASSIGN) // Check upper bound first for short-circuit performance.
 #define IS_ASSIGNMENT_OR_POST_OP(symbol) (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(symbol) || symbol == SYM_POST_INCREMENT || symbol == SYM_POST_DECREMENT)
-	, SYM_IFF_ELSE, SYM_IFF_THEN // THESE TERNARY OPERATORS MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE BELOW.
-	, SYM_OR, SYM_AND // MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE ABOVE for the range checks below.
-#define IS_SHORT_CIRCUIT_OPERATOR(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_THEN) // Excludes SYM_IFF_ELSE, which acts as a simple jump after the THEN branch is evaluated.
+	, SYM_SCOPE_BEGIN, SYM_SCOPE	// The "scope" operator, the first scope op symbol in a series of scope resolutions yields SYM_SCOPE_BEGIN, following ones yields SYM_SCOPE.
+#define IS_SCOPE_SYM(symbol) ((symbol) == SYM_SCOPE_BEGIN || (symbol) == SYM_SCOPE)
+	, SYM_IFF_ELSE, SYM_IFF_THEN	// THESE TERNARY OPERATORS MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE BELOW.
+	, SYM_OR, SYM_AND				// MUST BE KEPT IN THIS ORDER AND ADJACENT TO THE ABOVE for the range checks below.
+#define IS_SHORT_CIRCUIT_OPERATOR(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_SCOPE_BEGIN) // Excludes SYM_IFF_ELSE, which acts as a simple jump after the THEN branch is evaluated.
 #define SYM_USES_CIRCUIT_TOKEN(symbol) ((symbol) <= SYM_AND && (symbol) >= SYM_IFF_ELSE)
 	, SYM_IS, SYM_IN, SYM_CONTAINS
 	, SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL, SYM_NOTEQUALCASE // =, ==, !=, !==... Keep this in sync with IS_RELATIONAL_OPERATOR() below.
@@ -196,13 +201,22 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_LOWNOT  // LOWNOT is the word "not", the low precedence counterpart of !
 	, SYM_NEGATIVE, SYM_POSITIVE, SYM_HIGHNOT, SYM_BITNOT, SYM_ADDRESS  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
 #define SYM_OVERRIDES_POWER_ON_STACK(symbol) ((symbol) >= SYM_LOWNOT && (symbol) <= SYM_ADDRESS) // Check lower bound first for short-circuit performance.
+	, SYM_NAMESPACE  // used with the scope operator.
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
 #define SYM_INCREMENT_OR_DECREMENT_IS_PRE(symbol) ((symbol) >= SYM_PRE_INCREMENT) // Caller has verified symbol is an INCREMENT or DECREMENT operator.
-	, SYM_NEW      // new Class()
+	, SYM_NEW		// new Class()
 #define IS_PREFIX_OPERATOR(symbol) ((symbol) >= SYM_LOWNOT && (symbol) <= SYM_NEW)
-	, SYM_FUNC     // A call to a function.
-	, SYM_COUNT    // Must be last because it's the total symbol count for everything above.
+	, SYM_FUNC		// A call to a function.
+	, SYM_UNRESOLVED_NAMESPACE_DYNAMIC_FUNC // for use with the scope operator.
+	, SYM_UNRESOLVED_NAMESPACE_FUNC			// 
+#define IS_UNRESOLVED_NAMESPACE_FUNCTION(symbol) ((symbol) == SYM_UNRESOLVED_NAMESPACE_FUNC || (symbol) == SYM_UNRESOLVED_NAMESPACE_DYNAMIC_FUNC) 
+	, SYM_COUNT		// Must be last because it's the total symbol count for everything above.
 	, SYM_INVALID = SYM_COUNT // Some callers may rely on YIELDS_AN_OPERAND(SYM_INVALID)==false.
+	
+	// These are used to simplify code in ProcessScopeResolution, they do not go in the sPrecedence array in ExpandExpression()
+	// and can be used elsewhere as long as they are absent from any input to ProcessScopeResolution (which guarantees they are absent from its output).
+	, SYM_OPAREN_PLACEHOLDER
+	, SYM_CPAREN_PLACEHOLDER
 };
 // These two are macros for maintainability (i.e. seeing them together here helps maintain them together).
 #define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) (!(token).var) // SYM_DYNAMICs are either double-derefs or built-in vars.
@@ -292,8 +306,9 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 	, int aExtraFlags = 0); // For Object.__Delete().
 
 
-struct DerefType; // Forward declarations for use below.
-class Var;        //
+struct DerefType;	// Forward declarations for use below.
+class Var;			//
+class NameSpace;	//
 struct ExprTokenType  // Something in the compiler hates the name TokenType, so using a different name.
 {
 	// Due to the presence of 8-byte members (double and __int64) this entire struct is aligned on 8-byte
@@ -312,6 +327,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				Var *var;          // for SYM_VAR and SYM_DYNAMIC
 				LPTSTR marker;     // for SYM_STRING and (while parsing) SYM_OPAREN
 				ExprTokenType *circuit_token; // for short-circuit operators
+				NameSpace *resolved_namespace;  //  for SYM_NAMESPACE, used with the scope operator
 			};
 			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).
 			{
@@ -534,7 +550,7 @@ enum enum_act {
 , ACT_CLICK, ACT_MOUSEMOVE, ACT_MOUSECLICK, ACT_MOUSECLICKDRAG, ACT_MOUSEGETPOS
 , ACT_STATUSBARWAIT
 , ACT_SLEEP
-, ACT_CRITICAL, ACT_THREAD
+, ACT_THREAD
 , ACT_WINACTIVATE, ACT_WINACTIVATEBOTTOM
 , ACT_WINMINIMIZE, ACT_WINMAXIMIZE, ACT_WINRESTORE
 , ACT_WINHIDE, ACT_WINSHOW
@@ -623,6 +639,8 @@ typedef UCHAR HookType;
 #define HOOK_FAIL  0xFF
 
 #define EXTERN_G extern global_struct *g
+#define EXTERN_T extern ScriptThread *t, *t0, t_default
+#define EXTERN_NAMESPACE extern NameSpace *g_CurrentNameSpace
 #define EXTERN_OSVER extern OS_Version g_os
 #define EXTERN_CLIPBOARD extern Clipboard g_clip
 #define EXTERN_SCRIPT extern Script g_script
@@ -672,7 +690,7 @@ typedef UCHAR HookType;
 #define LONG_OPERATION_UPDATE \
 {\
 	tick_now = GetTickCount();\
-	if (tick_now - g_script.mLastPeekTime > ::g->PeekFrequency)\
+	if (tick_now - g_script.mLastPeekTime > ::t->PeekFrequency)\
 	{\
 		if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))\
 			MsgSleep(-1);\
@@ -685,7 +703,7 @@ typedef UCHAR HookType;
 #define LONG_OPERATION_UPDATE_FOR_SENDKEYS \
 {\
 	tick_now = GetTickCount();\
-	if (tick_now - g_script.mLastPeekTime > ::g->PeekFrequency)\
+	if (tick_now - g_script.mLastPeekTime > ::t->PeekFrequency)\
 	{\
 		if (PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))\
 			SLEEP_WITHOUT_INTERRUPTION(-1) \
@@ -780,7 +798,8 @@ const SendLevelType SendLevelMax = 100;
 inline bool SendLevelIsValid(int level) { return level >= 0 && level <= SendLevelMax; }
 
 
-class Line; // Forward declaration.
+class Line;					// Forward declaration.
+struct global_struct;		// 
 typedef UCHAR HotCriterionType;
 enum HotCriterionEnum {HOT_NO_CRITERION, HOT_IF_ACTIVE, HOT_IF_NOT_ACTIVE, HOT_IF_EXIST, HOT_IF_NOT_EXIST // HOT_NO_CRITERION must be zero.
 	, HOT_IF_EXPR, HOT_IF_CALLBACK}; // Keep the last two in this order for the macro below.
@@ -789,14 +808,19 @@ struct HotkeyCriterion
 {
 	HotCriterionType Type;
 	LPTSTR WinTitle, WinText;
+	
+	// For HOT_IF_ACTIVE/EXIST it is neither safe nor accurate to reference the current namespace.
+	// For HOT_IF_EXPR and HOT_IF_CALLBACK the correct namespace must be set before starting a new thread.
+	NameSpace *criterion_namespace; // The namespace in which the criterion (i.e., the #if) resides.
 	union
 	{
 		Line *ExprLine;
 		IObject *Callback;
 	};
 	HotkeyCriterion *NextCriterion, *NextExpr;
-
+	
 	ResultType Eval(LPTSTR aHotkeyName); // For HOT_IF_EXPR and HOT_IF_CALLBACK.
+	global_struct &GetSettings();
 };
 
 
@@ -809,7 +833,8 @@ struct RegItemStruct;       //
 struct LoopReadFileStruct;  //
 class GuiType;				//
 class ScriptTimer;			//
-struct global_struct
+
+struct global_struct // This is not a NameSpace member for brevity / convenience / historical reasons.
 {
 	// 8-byte items are listed first, which might improve alignment for 64-bit processors (dubious).
 	__int64 mLoopIteration; // Signed, since script/ITOA64 aren't designed to handle unsigned.
@@ -822,12 +847,7 @@ struct global_struct
 
 	HotkeyCriterion *HotCriterion;
 	TitleMatchModes TitleMatchMode;
-	int UninterruptedLineCount; // Stored as a g-struct attribute in case OnExit func interrupts it while uninterruptible.
-	int Priority;  // This thread's priority relative to others.
-	DWORD LastError; // The result of GetLastError() after the most recent DllCall or Run.
-	EventInfoType EventInfo; // Not named "GuiEventInfo" because it applies to non-GUI events such as clipboard.
-	HWND DialogOwner; // This thread's dialog owner, if any.
-	#define THREAD_DIALOG_OWNER (IsWindow(::g->DialogOwner) ? ::g->DialogOwner : NULL)
+	
 	int WinDelay;  // negative values may be used as special flags.
 	int ControlDelay; // negative values may be used as special flags.
 	int KeyDelay;     //
@@ -836,103 +856,104 @@ struct global_struct
 	int PressDurationPlay; // 
 	int MouseDelay;     // negative values may be used as special flags.
 	int MouseDelayPlay; //
-	Func *CurrentFunc; // v1.0.46.16: The function whose body is currently being processed at load-time, or being run at runtime (if any).
-	Func *CurrentFuncGosub; // v1.0.48.02: Allows A_ThisFunc to work even when a function Gosubs an external subroutine.
-	Label *CurrentLabel; // The label that is currently awaiting its matching "return" (if any).
-	ScriptTimer *CurrentTimer; // The timer that launched this thread (if any).
-	HWND hWndLastUsed;  // In many cases, it's better to use GetValidLastUsedWindow() when referring to this.
 	//HWND hWndToRestore;
-	HWND DialogHWND;
+	
 	DWORD RegView;
 
 	// All these one-byte members are kept adjacent to make the struct smaller, which helps conserve stack space:
 	SendModes SendMode;
-	DWORD PeekFrequency; // DWORD vs. UCHAR might improve performance a little since it's checked so often.
-	DWORD ThreadStartTime;
-	int UninterruptibleDuration; // Must be int to preserve negative values found in g_script.mUninterruptibleTime.
-	DWORD CalledByIsDialogMessageOrDispatchMsg; // Detects that fact that some messages (like WM_KEYDOWN->WM_NOTIFY for UpDown controls) are translated to different message numbers by IsDialogMessage (and maybe Dispatch too).
-	bool CalledByIsDialogMessageOrDispatch; // Helps avoid launching a monitor function twice for the same message.  This would probably be okay if it were a normal global rather than in the g-struct, but due to messaging complexity, this lends peace of mind and robustness.
 	bool TitleFindFast; // Whether to use the fast mode of searching window text, or the more thorough slow mode.
 	bool DetectHiddenWindows; // Whether to detect the titles of hidden parent windows.
 	bool DetectHiddenText;    // Whether to detect the text of hidden child windows.
-	bool AllowThreadToBeInterrupted;  // Whether this thread can be interrupted by custom menu items, hotkeys, or timers.
-	bool AllowTimers; // v1.0.40.01 Whether new timer threads are allowed to start during this thread.
-	bool ThreadIsCritical; // Whether this thread has been marked (un)interruptible by the "Critical" command.
 	UCHAR DefaultMouseSpeed;
 	CoordModeType CoordMode; // Bitwise collection of flags.
 	UCHAR StringCaseSense; // On/Off/Locale
 	bool StoreCapslockMode;
 	SendLevelType SendLevel;
-	bool MsgBoxTimedOut; // Doesn't require initialization.
-	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
+	
 	bool ListLinesIsEnabled;
 	UINT Encoding;
-	int ExcptMode;
-	ResultToken* ThrownToken;
-	//inline bool InTryBlock() { return ExcptMode & EXCPTMODE_TRY; } // Currently unused.
+	
 };
 
-inline void global_maximize_interruptibility(global_struct &g)
+// Thread defaults (not complete):
+#define DEFAULT_PEEK_FREQUENCY (5)						// Default peek when not critical
+#define DEFAULT_PEEK_FREQUENCY_WHEN_CRITICAL (16)		// --- when critical
+
+
+struct ScriptThread
 {
-	g.AllowThreadToBeInterrupted = true;
-	g.UninterruptibleDuration = 0; // 0 means uninterruptibility times out instantly.  Some callers may want this so that this "g" can be used to launch other threads (e.g. threadless callbacks) using 0 as their default.
-	g.ThreadIsCritical = false;
-	g.AllowTimers = true;
+	unsigned int AllowThreadToBeInterrupted : 1;		// Whether this thread can be interrupted by custom menu items, hotkeys, or timers.
+	unsigned int AllowTimers : 1;						// v1.0.40.01 Whether new timer threads are allowed to start during this thread.
+	unsigned int ThreadIsCritical : 1;					// Whether this thread has been marked (un)interruptible by the "Critical" command.
+	unsigned int MsgBoxTimedOut : 1;					// Doesn't require initialization.
+	unsigned int IsPaused : 1;							// The latter supports better toggling via "Pause" or "Pause Toggle".
+	unsigned int CalledByIsDialogMessageOrDispatch : 1;	// Helps avoid launching a monitor function twice for the same message.  This would probably be okay if it were a normal global rather than in the g-struct, but due to messaging complexity, this lends peace of mind and robustness.
+
+	DWORD CalledByIsDialogMessageOrDispatchMsg;			// Detects that fact that some messages (like WM_KEYDOWN->WM_NOTIFY for UpDown controls) are translated to different message numbers by IsDialogMessage (and maybe Dispatch too).
+	
+	DWORD ThreadStartTime;
+	int UninterruptibleDuration;						// Must be int to preserve negative values found in g_script.mUninterruptibleTime.
+														// If set to 0, it means uninterruptibility times out instantly.  Some callers may want this so that this "g" can be used to launch other threads (e.g. threadless callbacks) using 0 as their default.
+	
+	int Priority;										// This thread's priority relative to others.
+	int ExcptMode;
+
+
+	HWND hWndLastUsed;									// In many cases, it's better to use GetValidLastUsedWindow() when referring to this.
+	HWND DialogHWND;
+	HWND DialogOwner;									// This thread's dialog owner, if any.
+	#define THREAD_DIALOG_OWNER (IsWindow(::t->DialogOwner) ? ::t->DialogOwner : NULL)
+	ResultToken* ThrownToken;
+	//inline bool InTryBlock() { return ExcptMode & EXCPTMODE_TRY; } // Currently unused.
+	ScriptTimer *CurrentTimer;							// The timer that launched this thread (if any).
+	EventInfoType EventInfo;							// Not named "GuiEventInfo" because it applies to non-GUI events such as clipboard.
+
+	Func *CurrentFunc; // v1.0.46.16: The function whose body is currently being processed at load-time, or being run at runtime (if any).
+	Func *CurrentFuncGosub; // v1.0.48.02: Allows A_ThisFunc to work even when a function Gosubs an external subroutine.
+	Label *CurrentLabel; // The label that is currently awaiting its matching "return" (if any).
+
+
+	int UninterruptedLineCount; // In case OnExit func interrupts it while uninterruptible.	Used to ensure each newly launched thread can run at least one line.
+	DWORD LastError; // The result of GetLastError() after the most recent DllCall or Run.
+	DWORD PeekFrequency; // DWORD vs. UCHAR might improve performance a little since it's checked so often.
+
+};
+
+inline void thread_maximize_interruptibility(ScriptThread &t)
+{
+	t.AllowThreadToBeInterrupted = true;
+	t.UninterruptibleDuration = 0; // 0 means uninterruptibility times out instantly.  Some callers may want this so that this "t" can be used to launch other threads (e.g. threadless callbacks) using 0 as their default.
+	t.ThreadIsCritical = false;
+	t.AllowTimers = true;
 	#define PRIORITY_MINIMUM INT_MIN
-	g.Priority = PRIORITY_MINIMUM; // Ensure minimum priority so that it can always be interrupted.
+	t.Priority = PRIORITY_MINIMUM; // Ensure minimum priority so that it can always be interrupted.
 }
 
-inline void global_clear_state(global_struct &g)
-// Reset those values that represent the condition or state created by previously executed commands
-// but that shouldn't be retained for future threads (e.g. SetTitleMatchMode should be retained for
-// future threads if it occurs in the auto-execute section, but ErrorLevel shouldn't).
-{
-	g.CurrentFunc = NULL;
-	g.CurrentFuncGosub = NULL;
-	g.CurrentLabel = NULL;
-	g.hWndLastUsed = NULL;
-	//g.hWndToRestore = NULL;
-	g.IsPaused = false;
-	g.UninterruptedLineCount = 0;
-	g.DialogOwner = NULL;
-	g.CalledByIsDialogMessageOrDispatch = false; // CalledByIsDialogMessageOrDispatchMsg doesn't need to be cleared because it's value is only considered relevant when CalledByIsDialogMessageOrDispatch==true.
-	// Above line is done because allowing it to be permanently changed by the auto-exec section
-	// seems like it would cause more confusion that it's worth.  A change to the global default
-	// or even an override/always-use-this-window-number mode can be added if there is ever a
-	// demand for it.
-	g.mLoopIteration = 0; // Zero seems preferable to 1, to indicate "no loop currently running" when a thread first starts off.  This should probably be left unchanged for backward compatibility (even though script's aren't supposed to rely on it).
-	g.mLoopFile = NULL;
-	g.mLoopRegItem = NULL;
-	g.mLoopReadFile = NULL;
-	g.mLoopField = NULL;
-	g.ThrownToken = NULL;
-	g.ExcptMode = EXCPTMODE_NONE;
-}
 
 inline void global_init(global_struct &g)
 // This isn't made a real constructor to avoid the overhead, since there are times when we
 // want to declare a local var of type global_struct without having it initialized.
 {
-	// Init struct with application defaults.  They're in a struct so that it's easier
+	// Init struct with application defaults.  
+	// Obsolete comment since adding namespaces:
+	// They're in a struct so that it's easier
 	// to save and restore their values when one hotkey interrupts another, going into
 	// deeper recursion.  When the interrupting subroutine returns, the former
 	// subroutine's values for these are restored prior to resuming execution:
-	global_clear_state(g);
+
+	g.mLoopIteration = 0; // Zero seems preferable to 1, to indicate "no loop currently running" when a thread first starts off.  This should probably be left unchanged for backward compatibility (even though script's aren't supposed to rely on it).
+	g.mLoopFile = NULL;
+	g.mLoopRegItem = NULL;
+	g.mLoopReadFile = NULL;
+	g.mLoopField = NULL;
+
 	g.HotCriterion = NULL;
 	g.SendMode = SM_INPUT;
 	g.TitleMatchMode = FIND_ANYWHERE;
 	g.TitleFindFast = true; // Since it's so much faster in many cases.
 	g.DetectHiddenWindows = false;  // Same as AutoIt2 but unlike AutoIt3; seems like a more intuitive default.
 	g.DetectHiddenText = true;  // Unlike AutoIt, which defaults to false.  This setting performs better.
-	#define DEFAULT_PEEK_FREQUENCY 5
-	g.PeekFrequency = DEFAULT_PEEK_FREQUENCY; // v1.0.46. See comments in ACT_CRITICAL.
-	g.AllowThreadToBeInterrupted = true; // Separate from g_AllowInterruption so that they can have independent values.
-	g.UninterruptibleDuration = 0; // 0 means uninterruptibility times out instantly.  Some callers may want this so that this "g" can be used to launch other threads (e.g. threadless callbacks) using 0 as their default.
-	g.AllowTimers = true;
-	g.ThreadIsCritical = false;
-	g.Priority = 0;
-	g.LastError = 0;
-	g.EventInfo = NO_EVENT_INFO;
 	g.WinDelay = 100;
 	g.ControlDelay = 20;
 	g.KeyDelay = 10;

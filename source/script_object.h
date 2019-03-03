@@ -279,6 +279,7 @@ public:
 	bool Append(ExprTokenType &aValue);
 	bool Append(LPTSTR aValue, size_t aValueLength = -1) { return Append(ExprTokenType(aValue, aValueLength)); }
 	bool Append(__int64 aValue) { return Append(ExprTokenType(aValue)); }
+	bool Append(IObject *aValue) { return Append(ExprTokenType(aValue)); }
 
 	Object *Clone(BOOL aExcludeIntegerKeys = false);
 	void ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params, ExprTokenType **aParam, int aParamCount);

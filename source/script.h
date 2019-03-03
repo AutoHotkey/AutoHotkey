@@ -26,14 +26,16 @@ GNU General Public License for more details.
 #include "Util.h" // for FileTimeToYYYYMMDD(), strlcpy()
 #include "resources/resource.h"  // For tray icon.
 #include "script_object.h"
-#include "Debugger.h"
-
+#include "Debugger.h" //
 #include "os_version.h" // For the global OS_Version object
+
 EXTERN_OSVER; // For the access to the g_os version object without having to include globaldata.h
 EXTERN_G;
+EXTERN_T;
 
 #define MAX_THREADS_LIMIT UCHAR_MAX // Uses UCHAR_MAX (255) because some variables that store a thread count are UCHARs.
 #define MAX_THREADS_DEFAULT 10 // Must not be higher than above.
+// Obsolete:
 #define TOTAL_ADDITIONAL_THREADS 2 // See below.
 // Must allow two additional threads: One for the AutoExec/idle thread and one so that ExitApp()
 // can run even when #MaxThreads has been reached.
@@ -221,6 +223,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_EXPR_MISSING_OPERAND _T("Missing operand.")
 #define ERR_TYPE_MISMATCH _T("Type mismatch.")
 #define ERR_NO_OBJECT _T("No object to invoke.")
+#define ERR_UNKNOWN_CLASS _T("Unknown class.")
 #define ERR_UNKNOWN_PROPERTY _T("Unknown property.")
 #define ERR_UNKNOWN_METHOD _T("Unknown method.")
 #define ERR_NO_GUI _T("No default GUI.")
@@ -354,25 +357,93 @@ typedef UCHAR DerefParamCountType;
 enum DerefTypeType : BYTE
 {
 	DT_VAR,			// Variable reference, including built-ins.
+	DT_UNRESOLVED_NAMESPACE_VAR, // for use with the scope operator
 	DT_DOUBLE,		// Marks the end of a double-deref.
 	DT_STRING,		// Segment of text in a text arg (delimited by '%').
 	DT_QSTRING,		// Segment of text in a quoted string (delimited by '%').
 	DT_WORDOP,		// Word operator: and, or, not, new.
 	DT_DOTPERCENT,	// Dynamic member: .%name%
 	DT_FUNCREF,		// Reference to function (for fat arrow functions).
+	DT_UNRESOLVED_NAMESPACE_FUNC, // for use with the scope operator
 	// DerefType::is_function() requires that these are last:
 	DT_FUNC,		// Function call.
-	DT_VARIADIC		// Variadic function call.
+	DT_VARIADIC	// Variadic function call.
+	
 };
 
-class Func; // Forward declaration for use below.
+template<class T>
+class SimpleList
+{
+	/*
+		To keep a simple "auto expanding" and "searchable" list.
+		Construct with aFreeItems = false to avoid calling the virtual FreeItem method in each item.
+		Derived classes should implement AreEqual and / or FreeItem as desired. See HasItem and ~SimpleList()
+
+		Methods:
+		AddItem(T t)	// add an item - returns 0 on failure else the number of items in the list
+		HasItem(T t)	// returns true if the item t is in the list, else false. AreEqual() determines if two items of type T are equal.
+
+	*/
+	bool mFreeItems;	// to indicate wheter to call free on each item in the list or not.
+	T *mList;			// the list
+	int mLastIndex;		// the number of items in the list.
+public:
+	
+	SimpleList(bool aFreeItems = false) : mList(NULL), mLastIndex(0), mFreeItems(aFreeItems) {};
+	
+	~SimpleList()
+	{
+		// Calls FreeItem for each item in the list if appropriate, frees the list.
+		if (!mList) return;
+		if (mFreeItems)
+			for (int i = 0; i < mLastIndex; ++i)
+				FreeItem(mList[i]);
+		free(mList);
+	}
+	
+	int AddItem(T t) 
+	{
+		// returns 0 on memory allocation failure.
+		// Else it returns the number of elements in the list.
+		T *new_list = (T *)realloc(mList, (mLastIndex + 1) * sizeof T);
+		if (!new_list)
+			return 0;
+		mList = new_list;
+		mList[mLastIndex] = t;
+		return ++mLastIndex;
+	}
+	bool HasItem(T t)
+	{
+		// returns true if t is in the list, else false.
+		for (int i = 0; i < mLastIndex; ++i)
+			if (AreEqual(mList[i], t))	// Virtual method, derived classes should define if appropriate.
+				return true;
+		return false;
+	}
+	T GetItem(int aIndex, bool *apWasFound = NULL)
+	{
+		if (aIndex >= mLastIndex || aIndex < 0 || mLastIndex == 0) // bound check
+		{
+			if (apWasFound) *apWasFound = false;
+			return (T)NULL;
+		}
+		if (apWasFound) *apWasFound = true;
+		return mList[aIndex];
+	}
+	virtual bool AreEqual(T t1, T t2) { return t1 == t2; } // default comparison.
+	virtual void FreeItem(T t) {}; // does nothing
+};
+
+
+class Func;			// Forward declaration for use below.
+class NameSpace;	//	-- "" --
 struct DerefType
 {
 	LPTSTR marker;
 	union
 	{
 		Var *var; // DT_VAR
-		Func *func; // DT_FUNC
+		Func *func; // DT_FUNC			
 		DerefType *next; // DT_STRING
 		SymbolType symbol; // DT_WORDOP
 	};
@@ -443,6 +514,46 @@ struct ArgStruct
 #define _f_retval_buf_size		MAX_NUMBER_SIZE
 #define _f_number_buf			_f_retval_buf  // An alias to show intended usage, and in case the buffer size is changed.
 #define _f_callee_id			(aResultToken.func->mID)
+
+// Macro to call a bif:
+// Example:
+//	CALL_BIF(StrSplit, result, _T("a,b,c"), _T(","))
+//	if (CALL_TO_BIF_FAILED(result))
+//		return FAIL;
+
+// Warning: declares variables in the current block:
+#define CALL_BIF(bif, result, ...) \
+ResultToken result; \
+TCHAR buf##result[MAX_NUMBER_LENGTH]; \
+result.InitResult(buf##result); \
+{ \
+	ExprTokenType params[] = { __VA_ARGS__ }; \
+	int param_count = _countof(params); \
+	ExprTokenType **pParams = (ExprTokenType**)alloca(param_count * sizeof (ExprTokenType*)); \
+	for (int i = 0; i < param_count; ++i) \
+		*(pParams + i) = params + i; \
+	BIF_##bif(result, pParams, param_count); \
+}
+
+// Macro to verify the call in the above macro succeeded.
+#define TOKEN_EXITED(result_token) ((result_token).Exited())
+#define CALL_TO_BIF_FAILED(result_token) TOKEN_EXITED(result_token)
+
+// Macro to append an item to an Object* and verify result:
+// Example:
+// OBJECT_APPEND(myObj, _T("Str"), FAIL)
+// Note, use non or one of the ... args.
+#define OBJECT_APPEND(obj, item, ...) \
+if (!(obj)->Append(item)) \
+	return __VA_ARGS__;
+
+// Macro for poping an Object*. 
+#define OBJECT_POP_(obj, result_token) (obj)->Remove(result_token, Object::RemoveMode::RM_Pop, 0, NULL, 0)
+#define OBJECT_POP(obj, result_token, ...) \
+OBJECT_POP_((obj), result_token) \
+if (TOKEN_EXITED) \
+	return __VA_ARGS__;
+
 
 
 // Some of these lengths and such are based on the MSDN example at
@@ -615,7 +726,9 @@ enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero du
 
 enum ThreadCommands {THREAD_CMD_INVALID, THREAD_CMD_PRIORITY, THREAD_CMD_INTERRUPT, THREAD_CMD_NOTIMERS};
 
-
+class NameSpace;						// forward declaration
+class NameSpaceList;					// -- "" --
+extern NameSpace *g_CurrentNameSpace;	
 class Label; // Forward declaration so that each can use the other.
 class Line
 {
@@ -732,6 +845,9 @@ public:
 	Line *mPrevLine, *mNextLine; // The prev & next lines adjacent to this one in the linked list; NULL if none.
 	Line *mRelatedLine;  // e.g. the "else" that belongs to this "if"
 	Line *mParentLine; // Indicates the parent (owner) of this line.
+
+	// Each line can only belong to one namespace.
+	NameSpace *mNameSpace;
 
 #ifdef CONFIG_DEBUGGER
 	Breakpoint *mBreakpoint;
@@ -885,6 +1001,9 @@ public:
 	LPTSTR ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *aResultToken
 		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize
 		, Var **aArgVar = NULL);
+	ResultType FindScopeBegin(ExprTokenType *aInfix, int &aInfixCount, int aScopeCount);
+	ResultType ResolveScopeOperands(ExprTokenType *aInfix, int &aInfixCount, int aScopeCount);
+	ResultType ProcessScopeResolution(ExprTokenType *aInfix, int &aInfixCount, int aScopeCount);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
 	ResultType EvaluateHotCriterionExpression(); // Called by HotkeyCriterion::Eval().
 
@@ -1407,6 +1526,7 @@ public:
 		: mFileIndex(aFileIndex), mLineNumber(aFileLineNumber), mActionType(aActionType)
 		, mAttribute(ATTR_NONE), mArgc(aArgc), mArg(aArg)
 		, mPrevLine(NULL), mNextLine(NULL), mRelatedLine(NULL), mParentLine(NULL)
+		, mNameSpace(g_CurrentNameSpace)
 #ifdef CONFIG_DEBUGGER
 		, mBreakpoint(NULL)
 #endif
@@ -1437,13 +1557,23 @@ class Label : public IObjectComCompatible
 public:
 	LPTSTR mName;
 	Line *mJumpToLine;
-	Label *mPrevLabel, *mNextLabel;  // Prev & Next items in linked list.
+	Label *mPrevLabel, *mNextLabel; // Prev & Next items in linked list.
+	
+	// Labels need to be "namespace aware" to allow duplicate labels across namespaces.
+	// Although it would be more natural and faster to look up labels if each namespace had its own set of labels
+	// most namespaces will probably not have (global) labels and most labels are only looked up once, at load time.
+	// Doing it this way is facilitates the implementation and doesn't infer any run time performance penalty other than for 
+	// global label look-ups.
+	// 
+	// In many cases the namespace could be determined via mJumpToLline->mNameSpace, but in at least
+	// Script::AddLabel this is not safe since mJumpToLine might be NULL. This way is also more maintainable.
+	NameSpace *mNameSpace;	
 
 	ResultType Execute()
 	// This function was added in v1.0.46.16 to support A_ThisLabel.
 	{
-		Label *prev_label =g->CurrentLabel; // This will be non-NULL when a subroutine is called from inside another subroutine.
-		g->CurrentLabel = this;
+		Label *prev_label = t->CurrentLabel; // This will be non-NULL when a subroutine is called from inside another subroutine.
+		t->CurrentLabel = this;
 		ResultType result;
 		DEBUGGER_STACK_PUSH(this)
 		// I'm pretty sure it's not valid for the following call to ExecUntil() to tell us to jump
@@ -1451,20 +1581,22 @@ public:
 		// prior to returning to us?  So the last parameter is omitted:
 		result = mJumpToLine->ExecUntil(UNTIL_RETURN); // The script loader has ensured that Label::mJumpToLine can't be NULL.
 		DEBUGGER_STACK_POP()
-		g->CurrentLabel = prev_label;
+		t->CurrentLabel = prev_label;
 		return result;
 	}
-
+	bool SetCurrentNameSpace(); // Only called by Invoke since goto / gosub cannot change the namespace.
+	
 	Label(LPTSTR aLabelName)
 		: mName(aLabelName) // Caller gave us a pointer to dynamic memory for this (or an empty string in the case of mPlaceholderLabel).
 		, mJumpToLine(NULL)
 		, mPrevLabel(NULL), mNextLabel(NULL)
+		, mNameSpace(g_CurrentNameSpace)
 	{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
-
+	
 	// IObject.
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
@@ -1678,6 +1810,8 @@ public:
 	};
 	int mParamCount; // The function's maximum number of parameters.  For UDFs, also the number of items in the mParam array.
 	int mMinParams;  // The number of mandatory parameters (populated for both UDFs and built-in's).
+	NameSpace *mNameSpace;	// Each Func can only reside in one namespace. 
+							// When calling this Func, this namespace must be set to the current one (g_CurrentNameSpace) when mIsBuiltIn and (mNameSpace != g_StandardNameSpace).
 	Label *mFirstLabel, *mLastLabel; // Linked list of private labels.
 	Func *mOuterFunc; // Func which contains this Func (usually NULL).
 	FuncList mFuncs; // List of nested functions (usually empty).
@@ -1750,8 +1884,9 @@ public:
 		// outermost function call of a line consisting only of function calls, namely ACT_EXPRESSION)
 		// would not be significant because the Return command's expression (arg1) must still be evaluated
 		// in case it calls any functions that have side-effects, e.g. "return LogThisError()".
-		Func *prev_func = g->CurrentFunc; // This will be non-NULL when a function is called from inside another function.
-		g->CurrentFunc = this;
+
+		Func *prev_func = t->CurrentFunc; // This will be non-NULL when a function is called from inside another function.
+		t->CurrentFunc = this;
 		// Although a GOTO that jumps to a position outside of the function's body could be supported,
 		// it seems best not to for these reasons:
 		// 1) The extreme rarity of a legitimate desire to intentionally do so.
@@ -1798,7 +1933,7 @@ public:
 		// Restore the original value in case this function is called from inside another function.
 		// Due to the synchronous nature of recursion and recursion-collapse, this should keep
 		// g->CurrentFunc accurate, even amidst the asynchronous saving and restoring of "g" itself:
-		g->CurrentFunc = prev_func;
+		t->CurrentFunc = prev_func;
 		return result;
 	}
 
@@ -1842,6 +1977,7 @@ public:
 		, mIsBuiltIn(aIsBuiltIn)
 		, mIsVariadic(false)
 		, mIsFuncExpression(false)
+		, mNameSpace(g_CurrentNameSpace) // ExprOpFunc overrides this, ExprOpFunc::ExprOpFunc
 	{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
@@ -1864,6 +2000,16 @@ public:
 		// parameters but actually reading 2 which are then also passed to the next function call.
 		mParamCount = 255;
 		mIsVariadic = true;
+
+		// Operators / objects do not belong to any particular namespace.
+		// For example, 
+		//
+		// guiCtrl.onEvent('Click', 'F')
+		// 
+		// should search for the function 'F' in the namespace where it is called,
+		// since the object itself do not belong to any namespace.
+		// By letting mNameSpace be NULL, Func::Call() avoids changing namespace when mIsBuiltIn == true.
+		mNameSpace = NULL;	
 	}
 };
 
@@ -1917,7 +2063,6 @@ public:
 		, mEnabled(false), mRunOnlyOnce(false), mNextTimer(NULL)  // Note that mEnabled must default to false for the counts to be right.
 	{}
 };
-
 
 
 struct MsgMonitorStruct
@@ -2592,12 +2737,8 @@ public:
 	ResultType PropertyGetPos(ResultToken &aResultToken, RECT &aPos);
 
 	ResultType ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs);
-	void SetOwnDialogs(ToggleValueType state)
-	{
-		if (state == TOGGLE_INVALID)
-			return;
-		g->DialogOwner = state == TOGGLED_ON ? mHwnd : NULL;
-	}
+	void SetOwnDialogs(ToggleValueType state);
+	
 	void GetNonClientArea(LONG &aWidth, LONG &aHeight);
 	void GetTotalWidthAndHeight(LONG &aWidth, LONG &aHeight);
 
@@ -2736,7 +2877,6 @@ protected:
 };
 
 
-
 class Script
 {
 private:
@@ -2744,25 +2884,26 @@ private:
 #ifdef CONFIG_DEBUGGER
 	friend class Debugger;
 #endif
-
-	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
-	Line *mFirstStaticLine, *mLastStaticLine; // The first and last static var initializer.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
-	FuncList mFuncs;
-	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
-	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
 	int mGlobalVarCountMax; // While loading the script, the maximum number of global declarations allowed for the current function.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
+	NameSpaceList *mNameSpaces; // A list of all (top level) namespaces (currently NAMESPACE_DEFAULT_NAMESPACE_NAME and NAMESPACE_STANDARD_NAMESPACE_NAME).
+								// These namespaces have lists of their nested namespaces. 
+								// That is, all namespaces are available through this list.	
+	int mNameSpaceDefinitionCount; // Used during loading to detect invalid namespace definitions, eg, missing '}'
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	bool mNoUpdateLabels;
-
+	
 #define MAX_NESTED_CLASSES 5
 #define MAX_CLASS_NAME_LENGTH UCHAR_MAX
+
+	Object *mUnresolvedClasses;
+#define APPEND_UNRESOLVED(item)  OBJECT_APPEND(mUnresolvedClasses, item, FAIL)
+#define POP_UNRESOLVED(result) OBJECT_POP_(mUnresolvedClasses, result)
 	int mClassObjectCount;
 	Object *mClassObject[MAX_NESTED_CLASSES]; // Class definition currently being parsed.
 	TCHAR mClassName[MAX_CLASS_NAME_LENGTH + 1]; // Only used during load-time.
-	Object *mUnresolvedClasses;
 	Property *mClassProperty;
 	LPTSTR mClassPropertyDef;
 
@@ -2772,8 +2913,6 @@ private:
 	// only mCurrLine is kept up-to-date:
 	int mCurrFileIndex;
 	LineNumberType mCombinedLineNumber; // In the case of a continuation section/line(s), this is always the top line.
-
-	bool mNoHotkeyLabels;
 
 	#define UPDATE_TIP_FIELD tcslcpy(mNIC.szTip, mTrayIconTip ? mTrayIconTip \
 		: mFileName, _countof(mNIC.szTip));
@@ -2793,9 +2932,11 @@ private:
 	ResultType ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos = NULL, TCHAR aEndChar = 0);
 	ResultType ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos = NULL, TCHAR aEndChar = 0);
 	ResultType ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos);
+	
 	ResultType ParseFatArrow(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount
 		, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR &aExprEnd);
 	ResultType ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd, LPTSTR aExprMap);
+	
 	LPTSTR ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool aDisplayErrors);
 	static ActionTypeType ConvertActionType(LPTSTR aActionTypeString, int aFirstAction, int aLastActionPlus1);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
@@ -2806,14 +2947,20 @@ private:
 	// if aStartingLine is allowed to be NULL (for recursive calls).  If they
 	// were member functions of class Line, a check for NULL would have to
 	// be done before dereferencing any line's mNextLine, for example:
-	ResultType PreparseExpressions(Line *aStartingLine);
-	ResultType PreparseStaticLines(Line *aStartingLine);
 	void PreparseHotkeyIfExpr(Line *aLine);
-	Line *PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode = NORMAL_MODE, Line *aParentLine = NULL, const ActionTypeType aLoopType = ACT_INVALID);
+	ResultType PreparseExpressions();
+	ResultType PreparseStaticLines();
+	ResultType PreparseBlocks();
+	ResultType PreparseCommands();
 	Line *PreparseBlocksStmtBody(Line *aStartingLine, Line *aParentLine = NULL, const ActionTypeType aLoopType = ACT_INVALID);
-	Line *PreparseCommands(Line *aStartingLine);
+	
 
 public:
+	ResultType PreparseExpressions(Line *aStartingLine);
+	ResultType PreparseStaticLines(Line *aStartingLine);
+	Line *PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode = NORMAL_MODE, Line *aParentLine = NULL, const ActionTypeType aLoopType = ACT_INVALID);
+	Line *PreparseCommands(Line *aStartingLine);
+
 	Line *mCurrLine;     // Seems better to make this public than make Line our friend.
 	Label *mPlaceholderLabel; // Used in place of a NULL label to simplify code.
 	LPTSTR mThisHotkeyName, mPriorHotkeyName;
@@ -2827,6 +2974,8 @@ public:
 
 	UserMenu *mFirstMenu, *mLastMenu;
 	UINT mMenuCount;
+
+	SimpleList<NameSpace *> mNameSpaceSimpleList; // A linear list off all namespaces, used for non-recursive access to any namespace.
 
 	DWORD mThisHotkeyStartTime, mPriorHotkeyStartTime;  // Tickcount timestamp of when its subroutine began.
 	TCHAR mEndChar;  // The ending character pressed to trigger the most recent non-auto-replace hotstring.
@@ -2860,7 +3009,8 @@ public:
 
 	UserMenu *mTrayMenu; // Our tray menu, which should be destroyed upon exiting the program.
     
-	ResultType Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestart);
+	ResultType Init(LPTSTR aScriptFilename, bool aIsRestart);
+	ResultType CreateArgsArrayAndErrorLevel(LPTSTR * aArgV, int aArgC);
 	ResultType CreateWindows();
 	void EnableClipboardListener(bool aEnable);
 #ifdef AUTOHOTKEYSC
@@ -2879,8 +3029,9 @@ public:
 	ResultType Reload(bool aDisplayErrors);
 	ResultType ExitApp(ExitReasons aExitReason, int aExitCode = 0);
 	void TerminateApp(ExitReasons aExitReason, int aExitCode); // L31: Added aExitReason. See script.cpp.
+	ResultType LocationCanDefineNameSpace(LPTSTR aBuf);
 	LineNumberType LoadFromFile();
-	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
+	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure, int aImporting = 0 /* for more accurate error message*/);
 	LineNumberType CurrentLine();
 	LPTSTR CurrentFile();
 
@@ -2893,15 +3044,18 @@ public:
 #ifndef AUTOHOTKEYSC
 	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
 #endif
-	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = -1, int *apInsertPos = NULL);
+	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = -1, int *apInsertPos = NULL, bool aAllowNested = true);
 	FuncEntry *FindBuiltInFunc(LPTSTR aFuncName);
 	Func *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos, Object *aClassObject = NULL);
+
+	ResultType DefineNameSpace(LPTSTR aNameSpaceName, bool aIsTopNameSpace);
 
 	ResultType DefineClass(LPTSTR aBuf);
 	ResultType DefineClassVars(LPTSTR aBuf, bool aStatic);
 	ResultType DefineClassProperty(LPTSTR aBuf, int aBufSize, Var **aFuncGlobalVar, bool &aBufHasBraceOrNotNeeded);
 	ResultType DefineClassPropertyXet(LPTSTR aBuf, int aBufSize, LPTSTR aEnd, Var **aFuncGlobalVar);
-	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
+	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength, NameSpace **aFoundNameSpace);
+	ResultType ResolveScopedClasses();
 	ResultType ResolveClasses();
 
 	static SymbolType ConvertWordOperator(LPCTSTR aWord, size_t aLength);
@@ -2965,6 +3119,7 @@ public:
 	void WarnUninitializedVar(Var *var);
 	void MaybeWarnLocalSameAsGlobal(Func &func, Var &var);
 
+	ResultType PreprocessLocalVars();
 	ResultType PreprocessLocalVars(FuncList &aFuncs);
 	ResultType PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount);
 	ResultType PreprocessFindUpVar(LPTSTR aName, Func &aOuter, Func &aInner, Var *&aFound, Var *aLocal);
@@ -2983,6 +3138,9 @@ public:
 
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
+
+	NameSpace *FindNameSpaceByName(ExprTokenType *aParam[], int aParamCount);
+	Func *FindFuncFromNameSpaceByName(ExprTokenType *aParam[], int aParamCount, LPTSTR aFuncName, bool aAllowNested = true);
 
 	Script();
 	~Script();
@@ -3022,7 +3180,6 @@ BIV_DECL_RW(BIV_SendMode);
 BIV_DECL_RW(BIV_SendLevel);
 BIV_DECL_RW(BIV_StoreCapslockMode);
 BIV_DECL_R (BIV_IsPaused);
-BIV_DECL_R (BIV_IsCritical);
 BIV_DECL_R (BIV_IsSuspended);
 BIV_DECL_R (BIV_IsCompiled);
 BIV_DECL_R (BIV_IsUnicode);
@@ -3269,6 +3426,8 @@ BIF_DECL(BIF_Process);
 BIF_DECL(BIF_ProcessSetPriority);
 BIF_DECL(BIF_MonitorGet);
 BIF_DECL(BIF_Wait);
+
+BIF_DECL(BIF_Critical);
 
 BIF_DECL(BIF_PerformAction);
 

@@ -111,7 +111,15 @@ struct DbgStack
 	enum StackEntryType {SE_Thread, SE_Sub, SE_BIF, SE_UDF};
 	struct Entry
 	{
+		
 		Line *line;
+		// For SE_Thread - store the current namespace.:
+		// For (at least) ExecuteInNewThread, this will store the "interrupted" namespace,
+		// but the relevant namespace (i.e, the "interrupting" one,) should be found from the following stack item.
+		// Doing it this way allows at least the auto-exec thread to show correct global scope.
+		// All other SE_XXX get the relevant namespace from line->mNameSpace.
+		NameSpace *current_namespace;	
+		
 		union
 		{
 			TCHAR *desc; // SE_Thread -- "auto-exec", hotkey/hotstring name, "timer", etc.
@@ -169,18 +177,21 @@ struct DbgStack
 	}
 
 	void Push(TCHAR *aDesc);
+	void Push(TCHAR * aDesc, NameSpace * aNameSpace);
 	void Push(Label *aSub);
 	void Push(Func *aFunc);
 	void Push(UDFCallInfo *aRecurse);
 
 	void GetLocalVars(int aDepth, Var **&aVar, Var **&aVarEnd, VarBkp *&aBkp, VarBkp *&aBkpEnd);
+	void GetGlobalVars(int aDepth, Var **&aVar, Var **&aVarEnd);
+	void GetNamespaceFromStack(int aDepth, NameSpace *&aNameSpace);
 };
 
 #define DEBUGGER_STACK_PUSH(aWhat)	g_Debugger.mStack.Push(aWhat);
-#define DEBUGGER_STACK_POP()		g_Debugger.mStack.Pop();
+#define DEBUGGER_STACK_POP()			g_Debugger.mStack.Pop();
 
 
-enum PropertyContextType {PC_Local=0, PC_Global};
+enum PropertyContextType {PC_Local=0, PC_Global, PC_Namespace};
 
 
 class Debugger
@@ -436,6 +447,7 @@ private:
 	int WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncodedSize);
 	int WritePropertyData(ExprTokenType &aValue, int aMaxEncodedSize);
 
+	Var *FindVarFromScopeSymbolDelimitedString(LPTSTR aString, int aDepth, bool aAllowAddVar);
 	int ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, ExprTokenType *aSetValue
 		, PropertySource &aResult);
 	int property_get_or_value(char **aArgV, int aArgCount, char *aTransactionId, bool aIsPropertyGet);

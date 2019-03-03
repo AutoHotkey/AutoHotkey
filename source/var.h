@@ -21,7 +21,9 @@ GNU General Public License for more details.
 #include "SimpleHeap.h"
 #include "clipboard.h"
 #include "util.h" // for strlcpy() & snprintf()
+
 EXTERN_CLIPBOARD;
+EXTERN_NAMESPACE;
 
 #define MAX_ALLOC_SIMPLE 64  // Do not decrease this much since it is used for the sizing of some built-in variables.
 #define SMALL_STRING_LENGTH (MAX_ALLOC_SIMPLE - 1)  // The largest string that can fit in the above.
@@ -85,7 +87,7 @@ struct VarBkp // This should be kept in sync with any changes to the Var class. 
 	// Not needed in the backup:
 	//bool mIsLocal;
 	//TCHAR *mName;
-
+	//NameSpace *mNameSpace;
 	void ToToken(ExprTokenType &aValue);
 };
 
@@ -160,7 +162,10 @@ private:
 		VarSizeType mByteCapacity; // In bytes.  Includes the space for the zero terminator.
 		BuiltInVarType mBIV;
 	};
+
+	NameSpace *mNameSpace;	// Used for built in vars.
 	AllocMethodType mHowAllocated; // Keep adjacent/contiguous with the below to save memory.
+
 	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE						0x01 // Combined with VAR_ATTRIB_IS_INT64/DOUBLE/OBJECT to indicate mContents is not current.
 	#define VAR_ATTRIB_UNINITIALIZED							0x02 // Var requires initialization before use.
 	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE_UNTIL_REASSIGNED	0x04 // Indicates that the VAR_ATTRIB_CONTENTS_OUT_OF_DATE flag should be kept until the variable is reassigned.
@@ -173,14 +178,14 @@ private:
 	#define VAR_ATTRIB_TYPES (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT) // These are mutually exclusive (but NOT_NUMERIC may be combined with OBJECT or BINARY_CLIP).
 	#define VAR_ATTRIB_OFTEN_REMOVED (VAR_ATTRIB_CACHE | VAR_ATTRIB_CONTENTS_OUT_OF_DATE | VAR_ATTRIB_UNINITIALIZED | VAR_ATTRIB_CONTENTS_OUT_OF_DATE_UNTIL_REASSIGNED)
 	VarAttribType mAttrib;  // Bitwise combination of the above flags (but many of them may be mutually exclusive).
-	#define VAR_GLOBAL			0x01
-	#define VAR_LOCAL			0x02
-	#define VAR_FORCE_LOCAL		0x04 // Flag reserved for force-local mode in functions (not used in Var::mScope).
-	#define VAR_DOWNVAR			0x08 // This var is captured by a nested function/closure (it's in Func::mDownVar).
-	#define VAR_LOCAL_FUNCPARAM	0x10 // Indicates this local var is a function's parameter.  VAR_LOCAL_DECLARED should also be set.
-	#define VAR_LOCAL_STATIC	0x20 // Indicates this local var retains its value between function calls.
-	#define VAR_DECLARED		0x40 // Indicates this var was declared somehow, not automatic.
-	#define VAR_SUPER_GLOBAL	0x80 // Indicates this global var should be visible in all functions.
+#define VAR_GLOBAL			0x01
+#define VAR_LOCAL			0x02
+#define VAR_FORCE_LOCAL		0x04 // Flag reserved for force-local mode in functions (not used in Var::mScope).
+#define VAR_DOWNVAR			0x08 // This var is captured by a nested function/closure (it's in Func::mDownVar).
+#define VAR_LOCAL_FUNCPARAM	0x10 // Indicates this local var is a function's parameter.  VAR_LOCAL_DECLARED should also be set.
+#define VAR_LOCAL_STATIC	0x20 // Indicates this local var retains its value between function calls.
+#define VAR_DECLARED		0x40 // Indicates this var was declared somehow, not automatic.
+#define VAR_SUPER_GLOBAL	0x80 // Indicates this global var should be visible in all functions.
 	UCHAR mScope;  // Bitwise combination of the above flags.
 	VarTypeType mType; // Keep adjacent/contiguous with the above due to struct alignment, to save memory.
 	// Performance: Rearranging mType and the other byte-sized members with respect to each other didn't seem
@@ -193,20 +198,14 @@ private:
 	friend class Debugger;
 #endif
 
+	void AssignBinaryNumberVV(__int64 aNumberAsInt64, VarAttribType aAttrib = VAR_ATTRIB_IS_INT64);
 	void AssignBinaryNumber(__int64 aNumberAsInt64, VarAttribType aAttrib = VAR_ATTRIB_IS_INT64)
 	{
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
 		if (var.mType == VAR_VIRTUAL)
 		{
-			// Virtual vars have no binary number cache, as their value may be calculated on-demand.
-			// Additionally, THE CACHE MUST NOT BE USED due to the union containing mVV.
-			TCHAR value_string[MAX_NUMBER_SIZE];
-			if (aAttrib & VAR_ATTRIB_IS_INT64)
-				ITOA64(aNumberAsInt64, value_string);
-			else
-				FTOA(*(double *)&aNumberAsInt64, value_string, _countof(value_string));
-			var.mVV->Set(value_string, var.mName);
+			AssignBinaryNumberVV(aNumberAsInt64, aAttrib);
 			return;
 		}
 
@@ -256,7 +255,7 @@ public:
 	// Testing shows that due to data alignment, keeping mType adjacent to the other less-than-4-size member
 	// above it reduces size of each object by 4 bytes.
 	TCHAR *mName;    // The name of the var.
-
+	
 	// sEmptyString is a special *writable* memory area for empty variables (those with zero capacity).
 	// Although making it writable does make buffer overflows difficult to detect and analyze (since they
 	// tend to corrupt the program's static memory pool), the advantages in maintainability and robustness
@@ -350,7 +349,7 @@ public:
 		aValueToAssign->AddRef(); // Must be done before Release() in case the only other reference to this object is already in var.  Such a case seems too rare to be worth optimizing by returning early.
 		return AssignSkipAddRef(aValueToAssign);
 	}
-
+	bool SetCurrentNameSpace();
 	inline IObject *&Object()
 	{
 		return (mType == VAR_ALIAS) ? mAliasFor->mObject : mObject;
@@ -589,8 +588,9 @@ public:
 	#define DISPLAY_CLASS_ERROR 3
 	#define DISPLAY_GROUP_ERROR 4
 	#define DISPLAY_METHOD_ERROR 5
+	#define DISPLAY_NAMESPACE_ERROR 6
 	#define VALIDATENAME_SUBJECT_INDEX(n) (n-1)
-	#define VALIDATENAME_SUBJECTS { _T("variable"), _T("function"), _T("class"), _T("group"), _T("method") }
+	#define VALIDATENAME_SUBJECTS { _T("variable"), _T("function"), _T("class"), _T("group"), _T("method"), _T("namespace") }
 	static ResultType ValidateName(LPCTSTR aName, int aDisplayError = DISPLAY_VAR_ERROR);
 
 	LPTSTR ObjectToText(LPTSTR aName, LPTSTR aBuf, int aBufSize);
@@ -810,17 +810,8 @@ public:
 		return sEmptyString; // For reserved vars (but this method should probably never be called for them).
 	}
 
-	ResultType AssignVirtualVar(Var &aVar)
-	// Caller has verified aVar->mType == VAR_VIRTUAL.
-	// Caller should call Close() afterward if this is VAR_CLIPBOARD.
-	// Caller should remove VAR_ATTRIB_VIRTUAL_OPEN afterward if this->mType == VAR_VIRTUAL.
-	{
-		VarSizeType len = aVar.mVV->Get(NULL, aVar.mName); // Get value size (estimate).
-		if (!AssignString(NULL, len)) // Allocate buffer.
-			return FAIL;
-		SetCharLength(aVar.mVV->Get(mCharContents, aVar.mName)); // Get value.
-		return OK;
-	}
+	ResultType AssignVirtualVar(Var &aVar);
+	
 
 	__forceinline void ConvertToNonAliasIfNecessary() // __forceinline because it's currently only called from one place.
 	// When this function actually converts an alias into a normal variable, the variable's old
@@ -866,7 +857,7 @@ public:
 		mAliasFor = aTargetVar; // Should always be non-NULL due to various checks elsewhere.
 		mType = VAR_ALIAS; // It might already be this type, so this is just in case it's VAR_NORMAL.
 	}
-
+	ResultType CloseVV(); // To close a virtual var.
 	ResultType Close()
 	{
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
@@ -874,16 +865,17 @@ public:
 		if (var.mType == VAR_CLIPBOARD && g_clip.IsReadyForWrite())
 			return g_clip.Commit(); // Writes the new clipboard contents to the clipboard and closes it.
 		if (var.mType == VAR_VIRTUAL)
-		{
-			// Commit the value in our temporary buffer.
-			ResultType result = var.mVV->Set(var.mCharContents, var.mName);
-			Free(); // Free temporary memory.
-			var.mAttrib &= ~VAR_ATTRIB_VIRTUAL_OPEN;
-			return result;
-		}
+			return CloseVV();
 		// VAR_ATTRIB_CONTENTS_OUT_OF_DATE is removed below for maintainability; it shouldn't be
 		// necessary because any caller of Close() should have previously called something that
 		// updates the flags, such as Contents().
+		
+		// The binary-clip attribute is also reset here for cases where a caller uses a variable without
+		// having called Assign() to resize it first, which can happen if the variable's capacity is already
+		// sufficient to hold the desired contents.  VAR_ATTRIB_CONTENTS_OUT_OF_DATE is also removed below
+		// for maintainability; it shouldn't be necessary because any caller of Close() should have previously
+		// called something that updates the flags, such as Contents().
+
 		var.mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
 		//else (already done above)
 		//	var.mAttrib &= ~VAR_ATTRIB_BINARY_CLIP;
@@ -900,6 +892,7 @@ public:
 		, mAttrib(VAR_ATTRIB_UNINITIALIZED) // Seems best not to init empty vars to VAR_ATTRIB_NOT_NUMERIC because it would reduce maintainability, plus finding out whether an empty var is numeric via IsNumeric() is a very fast operation.
 		, mScope(aScope)
 		, mName(aVarName) // Caller gave us a pointer to dynamic memory for this.
+		, mNameSpace(g_CurrentNameSpace)
 	{
 		if (!aBuiltIn)
 			mType = VAR_NORMAL;

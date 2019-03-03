@@ -19,6 +19,7 @@ freely, without restriction.
 #include "script_object.h"
 #include "script_com.h"
 #include "TextIO.h"
+#include "NameSpace.h"
 //#include "Debugger.h" // included by globaldata.h
 
 #ifdef CONFIG_DEBUGGER
@@ -637,37 +638,52 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 	// Due to the introduction of expressions in static initializers, lines aren't necessarily in
 	// line number order.  First determine if any static initializers match the requested lineno.
 	// If not, use the first non-static line at or following that line number.
-
-	if (g_script.mFirstStaticLine)
-		for (line = g_script.mFirstStaticLine; ; line = line->mNextLine)
-		{
-			if (line->mFileIndex == file_index && line->mLineNumber == lineno) // Exact match, unlike normal lines.
+	
+	FOR_EACH_NAMESPACE(ns)
+	{
+		if (ns->mFirstStaticLine)
+			for (line = ns->mFirstStaticLine; ; line = line->mNextLine)
 			{
-				found_line = line;
-				break;
-			}
-			if (line == g_script.mLastStaticLine)
-				break;
-		}
-	if (!found_line)
-		// If line is non-NULL, above has left it set to mLastStaticLine, which we want to exclude:
-		for (line = line ? line->mNextLine : g_script.mFirstLine; line; line = line->mNextLine)
-			if (line->mFileIndex == file_index && line->mLineNumber >= lineno)
-			{
-				// ACT_ELSE and ACT_BLOCK_BEGIN generally don't cause PreExecLine() to be called,
-				// so any breakpoint set on one of those lines would never be hit.  Attempting to
-				// set a breakpoint on one of these should act like setting a breakpoint on a line
-				// which contains no code: put the breakpoint at the next line instead.
-				// Without this check, setting a breakpoint on a line like "else Exit" would not work.
-				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_BEGIN)
-					continue;
-				// Use the first line of code at or after lineno, like Visual Studio.
-				// To display the breakpoint correctly, an IDE should use breakpoint_get.
-				if (!found_line || found_line->mLineNumber > line->mLineNumber)
+				if (line->mFileIndex == file_index && line->mLineNumber == lineno) // Exact match, unlike normal lines.
+				{
 					found_line = line;
-				// Must keep searching, since class var initializers can cause lines to be listed out of order.
-				//break;
+					goto break_twice;	// leave the outer loop too
+				}
+				if (line == ns->mLastStaticLine)
+					break;	// continue FOR_EACH_NAMESPACE
 			}
+	}
+	break_twice:
+	if (!found_line)
+	{
+		FOR_EACH_NAMESPACE(ns)
+		{
+			line = ns->mLastStaticLine; // can be null, but must be excluded
+			for (line = line ? line->mNextLine : ns->mFirstLine; line; line = line->mNextLine)
+			{
+				if (line->mFileIndex == file_index && line->mLineNumber >= lineno)
+				{
+					// ACT_ELSE and ACT_BLOCK_BEGIN generally don't cause PreExecLine() to be called,
+					// so any breakpoint set on one of those lines would never be hit.  Attempting to
+					// set a breakpoint on one of these should act like setting a breakpoint on a line
+					// which contains no code: put the breakpoint at the next line instead.
+					// Without this check, setting a breakpoint on a line like "else Exit" would not work.
+					if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_BEGIN)
+						continue;
+					// Use the first line of code at or after lineno, like Visual Studio.
+					// To display the breakpoint correctly, an IDE should use breakpoint_get.
+					if (!found_line || found_line->mLineNumber > line->mLineNumber)
+						found_line = line;
+					// Must keep searching, since class var initializers can cause lines to be listed out of order.				
+					//break;
+				}
+			}
+			// Must continue searching since another namespace might provide a better match. But if...
+			if (found_line 
+				&& found_line->mLineNumber == lineno) // ...an exact match was found, it is safe to break.
+				break; // FOR_EACH_NAMESPACE(ns)
+		}
+	}
 	if (found_line)
 	{
 		if (!found_line->mBreakpoint)
@@ -700,18 +716,20 @@ DEBUGGER_COMMAND(Debugger::breakpoint_get)
 	int breakpoint_id = atoi(ArgValue(aArgV, 0));
 
 	Line *line;
-	for (line = g_script.mFirstLine; line; line = line->mNextLine)
+	FOR_EACH_NAMESPACE(ns)
 	{
-		if (line->mBreakpoint && line->mBreakpoint->id == breakpoint_id)
+		for (line = ns->mFirstLine; line; line = line->mNextLine)
 		{
-			mResponseBuf.WriteF("<response command=\"breakpoint_get\" transaction_id=\"%e\">", aTransactionId);
-			WriteBreakpointXml(line->mBreakpoint, line);
-			mResponseBuf.Write("</response>");
+			if (line->mBreakpoint && line->mBreakpoint->id == breakpoint_id)
+			{
+				mResponseBuf.WriteF("<response command=\"breakpoint_get\" transaction_id=\"%e\">", aTransactionId);
+				WriteBreakpointXml(line->mBreakpoint, line);
+				mResponseBuf.Write("</response>");
 
-			return DEBUGGER_E_OK;
+				return DEBUGGER_E_OK;
+			}
 		}
 	}
-
 	return DEBUGGER_E_BREAKPOINT_NOT_FOUND;
 }
 
@@ -760,43 +778,45 @@ DEBUGGER_COMMAND(Debugger::breakpoint_update)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	Line *line;
-	for (line = g_script.mFirstLine; line; line = line->mNextLine)
+	FOR_EACH_NAMESPACE(ns)
 	{
-		Breakpoint *bp = line->mBreakpoint;
-
-		if (bp && bp->id == breakpoint_id)
+		for (line = ns->mFirstLine; line; line = line->mNextLine)
 		{
-			if (lineno && line->mLineNumber != lineno)
-			{
-				// Move the breakpoint within its current file.
-				int file_index = line->mFileIndex;
-				Line *old_line = line;
+			Breakpoint *bp = line->mBreakpoint;
 
-				for (line = g_script.mFirstLine; line; line = line->mNextLine)
+			if (bp && bp->id == breakpoint_id)
+			{
+				if (lineno && line->mLineNumber != lineno)
 				{
-					if (line->mFileIndex == file_index && line->mLineNumber >= lineno)
+					// Move the breakpoint within its current file.
+					int file_index = line->mFileIndex;
+					Line *old_line = line;
+
+					for (line = ns->mFirstLine; line; line = line->mNextLine)
 					{
-						line->mBreakpoint = bp;
-						break;
+						if (line->mFileIndex == file_index && line->mLineNumber >= lineno)
+						{
+							line->mBreakpoint = bp;
+							break;
+						}
 					}
+
+					// If line is NULL, the line was not found.
+					if (!line)
+						return DEBUGGER_E_BREAKPOINT_INVALID;
+
+					// Seems best to only remove the breakpoint from its previous line
+					// once we know the breakpoint_update has succeeded.
+					old_line->mBreakpoint = NULL;
 				}
 
-				// If line is NULL, the line was not found.
-				if (!line)
-					return DEBUGGER_E_BREAKPOINT_INVALID;
+				if (state != -1)
+					bp->state = state;
 
-				// Seems best to only remove the breakpoint from its previous line
-				// once we know the breakpoint_update has succeeded.
-				old_line->mBreakpoint = NULL;
+				return DEBUGGER_E_OK;
 			}
-
-			if (state != -1)
-				bp->state = state;
-
-			return DEBUGGER_E_OK;
 		}
 	}
-
 	return DEBUGGER_E_BREAKPOINT_NOT_FOUND;
 }
 
@@ -809,17 +829,19 @@ DEBUGGER_COMMAND(Debugger::breakpoint_remove)
 	int breakpoint_id = atoi(ArgValue(aArgV, 0));
 
 	Line *line;
-	for (line = g_script.mFirstLine; line; line = line->mNextLine)
+	FOR_EACH_NAMESPACE(ns)
 	{
-		if (line->mBreakpoint && line->mBreakpoint->id == breakpoint_id)
+		for (line = ns->mFirstLine; line; line = line->mNextLine)
 		{
-			delete line->mBreakpoint;
-			line->mBreakpoint = NULL;
+			if (line->mBreakpoint && line->mBreakpoint->id == breakpoint_id)
+			{
+				delete line->mBreakpoint;
+				line->mBreakpoint = NULL;
 
-			return DEBUGGER_E_OK;
+				return DEBUGGER_E_OK;
+			}
 		}
 	}
-
 	return DEBUGGER_E_BREAKPOINT_NOT_FOUND;
 }
 
@@ -831,14 +853,16 @@ DEBUGGER_COMMAND(Debugger::breakpoint_list)
 	mResponseBuf.WriteF("<response command=\"breakpoint_list\" transaction_id=\"%e\">", aTransactionId);
 	
 	Line *line;
-	for (line = g_script.mFirstLine; line; line = line->mNextLine)
+	FOR_EACH_NAMESPACE(ns)
 	{
-		if (line->mBreakpoint)
+		for (line = ns->mFirstLine; line; line = line->mNextLine)
 		{
-			WriteBreakpointXml(line->mBreakpoint, line);
+			if (line->mBreakpoint)
+			{
+				WriteBreakpointXml(line->mBreakpoint, line);
+			}
 		}
 	}
-
 	return mResponseBuf.Write("</response>");
 }
 
@@ -929,7 +953,7 @@ DEBUGGER_COMMAND(Debugger::context_names)
 		return DEBUGGER_E_INVALID_OPTIONS;
 
 	return mResponseBuf.WriteF(
-		"<response command=\"context_names\" transaction_id=\"%e\"><context name=\"Local\" id=\"0\"/><context name=\"Global\" id=\"1\"/></response>"
+		"<response command=\"context_names\" transaction_id=\"%e\"><context name=\"Local\" id=\"0\"/><context name=\"Global\" id=\"1\"/><context name=\"Namespace\" id=\"2\"/></response>"
 		, aTransactionId);
 }
 
@@ -956,10 +980,9 @@ DEBUGGER_COMMAND(Debugger::context_get)
 			return DEBUGGER_E_INVALID_OPTIONS;
 		}
 	}
-
+	
 	Var **var = NULL, **var_end = NULL; // An array of pointers-to-var.
 	VarBkp *bkp = NULL, *bkp_end = NULL;
-	
 	// TODO: Include the lazy-var arrays for completeness. Low priority since lazy-var arrays are used only for 10001+ variables, and most conventional debugger interfaces would generally not be useful with that many variables.
 	if (context_id == PC_Local)
 	{
@@ -967,34 +990,52 @@ DEBUGGER_COMMAND(Debugger::context_get)
 	}
 	else if (context_id == PC_Global)
 	{
-		var = g_script.mVar;
-		var_end = var + g_script.mVarCount;
+		mStack.GetGlobalVars(depth, var, var_end);
 	}
-	else
+	else if (context_id == PC_Namespace)
+	{
+		// Handled after the initial write to the response buf
+	}
+	else	
 		return DEBUGGER_E_INVALID_CONTEXT;
 
 	mResponseBuf.WriteF(
 		"<response command=\"context_get\" context=\"%i\" transaction_id=\"%e\">"
 		, context_id, aTransactionId);
-
-	LPTSTR value_buf = NULL;
-	CStringA name_buf;
-	PropertyInfo prop(name_buf);
-	prop.max_data = mMaxPropertyData;
-	prop.pagesize = mMaxChildren;
-	prop.max_depth = mMaxDepth;
-	for ( ; var < var_end; ++var)
-		if (  (err = GetPropertyInfo(**var, prop, value_buf))
-			|| (err = WritePropertyXml(prop, (*var)->mName))  )
-			break;
-	for ( ; bkp < bkp_end; ++bkp)
-		if (  (err = GetPropertyInfo(*bkp, prop, value_buf))
-			|| (err = WritePropertyXml(prop, bkp->mVar->mName))  )
-			break;
-	free(value_buf);
-	if (err)
-		return err;
-
+	
+	if (context_id == PC_Namespace)
+	{
+		// Writes the deepest nested namespace first
+		NameSpace *ns;
+		mStack.GetNamespaceFromStack(depth, ns);
+		if (!ns) 
+			return DEBUGGER_E_INVALID_STACK_DEPTH;
+		while (ns)
+		{
+			mResponseBuf.WriteF("<property name=\"%e\"></property>", U4T(ns->GetName()));
+			ns = ns->GetOuterNameSpace();
+		}
+	}
+	else // it is PC_Local or PC_Global
+	{
+		LPTSTR value_buf = NULL;
+		CStringA name_buf;
+		PropertyInfo prop(name_buf);
+		prop.max_data = mMaxPropertyData;
+		prop.pagesize = mMaxChildren;
+		prop.max_depth = mMaxDepth;
+		for (; var < var_end; ++var)
+			if ((err = GetPropertyInfo(**var, prop, value_buf))
+				|| (err = WritePropertyXml(prop, (*var)->mName)))
+				break;
+		for (; bkp < bkp_end; ++bkp)
+			if ((err = GetPropertyInfo(*bkp, prop, value_buf))
+				|| (err = WritePropertyXml(prop, bkp->mVar->mName)))
+				break;
+		free(value_buf);
+		if (err)
+			return err;
+	}
 	return mResponseBuf.Write("</response>");
 }
 
@@ -1314,6 +1355,14 @@ int Debugger::WritePropertyData(ExprTokenType &aValue, int aMaxEncodedSize)
 	return WritePropertyData(value, value_length, aMaxEncodedSize);
 }
 
+Var * Debugger::FindVarFromScopeSymbolDelimitedString(LPTSTR aString, int aDepth, bool aAllowAddVar)
+{
+	// aString, a OPERATOR_SCOPE_SYMBOL delitmited string. Caller is responsible for aString containing at least one delimiter
+	NameSpace *ns;
+	mStack.GetNamespaceFromStack(aDepth, ns); // Note that if the depth parameter doesn't make sense for the caller, it can use NAMESPACE_DEFAULT_NAMESPACE_NAME
+	return ns ? ns->FindVarFromScopeSymbolDelimitedString(aString, aAllowAddVar) : NULL;
+}
+
 int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, ExprTokenType *aSetValue
 	, PropertySource &aResult)
 {
@@ -1333,66 +1382,79 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		c = *name_end;
 		*name_end = '\0'; // Temporarily terminate.
 	}
-	name_length = _tcslen(name);
 
-	// Validate name for more accurate error-reporting.
-	if (name_length > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name, DISPLAY_NO_ERROR))
-		return DEBUGGER_E_INVALID_OPTIONS;
-
-	if (aDepth > 0 && aVarScope != FINDVAR_GLOBAL)
+	if (_tcsstr(name, OPERATOR_SCOPE_SYMBOL)) // Only after the above have temporarily terminated the string
 	{
-		Var **vars = NULL, **vars_end;
-		VarBkp *bkps = NULL, *bkps_end;
-		mStack.GetLocalVars(aDepth, vars, vars_end, bkps, bkps_end);
-		if (bkps)
-		{
-			for ( ; ; ++bkps)
-			{
-				if (bkps == bkps_end)
-				{
-					// No local var at that depth, so make sure to not return the wrong local.
-					aVarScope = FINDVAR_GLOBAL;
-					break;
-				}
-				if (!_tcsicmp(bkps->mVar->mName, name))
-				{
-					varbkp = bkps;
-					break;
-				}
-			}
-		}
-		else if (vars)
-		{
-			for ( ; ; ++vars)
-			{
-				if (vars == vars_end)
-				{
-					// No local var at that depth, so make sure to not return the wrong local.
-					aVarScope = FINDVAR_GLOBAL;
-					break;
-				}
-				if (!_tcsicmp((*vars)->mName, name))
-				{
-					var = *vars;
-					break;
-				}
-			}
-		}
+		// this is a scope resolution.
+		if (aVarScope & FINDVAR_GLOBAL && (var = FindVarFromScopeSymbolDelimitedString(name, aDepth, aSetValue ? true : false)))
+			name = var->mName; //
+		else
+			return DEBUGGER_E_UNKNOWN_PROPERTY;
 	}
 
-	// If we're allowed to create variables
-	if (  !varbkp && !var
-		&& (aSetValue
-		// or this variable doesn't exist
-		|| !(var = g_script.FindVar(name, name_length, NULL, aVarScope))
-			// but it is a built-in variable which hasn't been referenced yet:
-			&& g_script.GetBuiltInVar(name))  )
-		// Find or add the variable.
-		var = g_script.FindOrAddVar(name, name_length, aVarScope);
+	name_length = _tcslen(name);
+	if (!var)
+	{
+		// Validate name for more accurate error-reporting.
+		if (name_length > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name, DISPLAY_NO_ERROR))
+			return DEBUGGER_E_INVALID_OPTIONS;
+		
+		if (aDepth > 0 && aVarScope != FINDVAR_GLOBAL)
+		{
+			Var **vars = NULL, **vars_end;
+			VarBkp *bkps = NULL, *bkps_end;
+			mStack.GetLocalVars(aDepth, vars, vars_end, bkps, bkps_end);
+			if (bkps)
+			{
+				for ( ; ; ++bkps)
+				{
+					if (bkps == bkps_end)
+					{
+						// No local var at that depth, so make sure to not return the wrong local.
+						aVarScope = FINDVAR_GLOBAL;
+						break;
+					}
+					if (!_tcsicmp(bkps->mVar->mName, name))
+					{
+						varbkp = bkps;
+						break;
+					}
+				}
+			}
+			else if (vars)
+			{
+				for ( ; ; ++vars)
+				{
+					if (vars == vars_end)
+					{
+						// No local var at that depth, so make sure to not return the wrong local.
+						aVarScope = FINDVAR_GLOBAL;
+						break;
+					}
+					if (!_tcsicmp((*vars)->mName, name))
+					{
+						var = *vars;
+						break;
+					}
+				}
+			}
+		}
 
-	if (!var && !varbkp)
-		return DEBUGGER_E_UNKNOWN_PROPERTY;
+		// If we're allowed to create variables
+		NameSpace *stack_namespace;
+		mStack.GetNamespaceFromStack(aDepth, stack_namespace);
+		if (  !varbkp && !var
+			&& (aSetValue
+			// or this variable doesn't exist
+			|| !(var = stack_namespace->FindVar(name, name_length, NULL, aVarScope))
+				// but it is a built-in variable which hasn't been referenced yet:
+				&& g_script.GetBuiltInVar(name))  )
+			// Find or add the variable.
+			var = stack_namespace->FindOrAddVar(name, name_length, aVarScope);
 
+		if (!var && !varbkp)
+			return DEBUGGER_E_UNKNOWN_PROPERTY;
+	}
 	if (!name_end)
 	{
 		// Just a variable name.
@@ -1567,15 +1629,15 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		// else it's an object of built-in type.
 
 		// Attempt to invoke property.
-		int outer_excptmode = g->ExcptMode;
-		g->ExcptMode |= EXCPTMODE_CATCH; // Suppress error messages.
+		int outer_excptmode = t->ExcptMode;
+		t->ExcptMode |= EXCPTMODE_CATCH; // Suppress error messages.
 		FuncResult result_token;
 		ExprTokenType *set_this = !c ? aSetValue : NULL;
 		ExprTokenType token[] = { iobj, name }, *param[] = { token + 1, set_this };
 		auto result = iobj->Invoke(result_token, token[0], set_this ? IT_SET : IT_GET, param, set_this ? 2 : 1);
-		g->ExcptMode = outer_excptmode;
-		if (g->ThrownToken)
-			g_script.FreeExceptionToken(g->ThrownToken);
+		t->ExcptMode = outer_excptmode;
+		if (t->ThrownToken)
+			g_script.FreeExceptionToken(t->ThrownToken);
 		
 		if (result == INVOKE_NOT_HANDLED)
 			break;
@@ -1671,7 +1733,11 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 	// rather than requiring the IDE to check each context when looking up a variable.
 	//case PC_Local:	always_use = FINDVAR_LOCAL; break;
 	case PC_Local:	always_use = FINDVAR_DEFAULT; break;
-	case PC_Global:	always_use = FINDVAR_GLOBAL; break;
+	case PC_Global:	
+	case PC_Namespace:
+		always_use = FINDVAR_GLOBAL; 
+		break;
+	
 	default:
 		return DEBUGGER_E_INVALID_CONTEXT;
 	}
@@ -1781,7 +1847,10 @@ DEBUGGER_COMMAND(Debugger::property_set)
 	// For consistency with property_get, create a local only if no global exists.
 	//case PC_Local:	always_use = FINDVAR_LOCAL; break;
 	case PC_Local:	always_use = FINDVAR_DEFAULT; break;
-	case PC_Global:	always_use = FINDVAR_GLOBAL; break;
+	case PC_Global:
+	case PC_Namespace: 
+		always_use = FINDVAR_GLOBAL;
+		break;
 	default:
 		return DEBUGGER_E_INVALID_CONTEXT;
 	}
@@ -2679,12 +2748,18 @@ DbgStack::Entry *DbgStack::Push()
 
 void DbgStack::Push(TCHAR *aDesc)
 {
+	Push(aDesc, g_CurrentNameSpace);
+}
+
+void DbgStack::Push(TCHAR *aDesc, NameSpace *aNameSpace)
+{
 	Entry &s = *Push();
 	s.line = NULL;
+	s.current_namespace = aNameSpace;
 	s.desc = aDesc;
 	s.type = SE_Thread;
 }
-	
+
 void DbgStack::Push(Label *aSub)
 {
 	Entry &s = *Push();
@@ -2758,6 +2833,27 @@ void DbgStack::GetLocalVars(int aDepth, Var **&aVar, Var **&aVarEnd, VarBkp *&aB
 	aVarEnd = aVar + func.mVarCount;
 }
 
+void DbgStack::GetGlobalVars(int aDepth, Var **& aVar, Var **& aVarEnd)
+{
+	NameSpace *ns;
+	GetNamespaceFromStack(aDepth, ns);
+	if (!ns) return;
+	aVar = ns->GetVar();
+	aVarEnd = aVar + ns->GetVarCount();
+}
+
+void DbgStack::GetNamespaceFromStack(int aDepth, NameSpace *&aNameSpace)
+{
+	// For maintainability, callers should not rely on aNameSpace never being NULL.
+	DbgStack::Entry *se = mTop - aDepth;
+	if (se < mBottom)				// prevent underflow
+		aNameSpace = g_CurrentNameSpace; // This could be an error, but it can also be the case when the auto-exec thread has finished and the script is idel. Currently, do not treat as error.
+	else if (!se->line && se->type == StackEntryType::SE_Thread)
+		aNameSpace = se->current_namespace;
+	else
+		aNameSpace = se->line->mNameSpace;
+	ASSERT(aNameSpace);
+}
 
 void Debugger::PropertyWriter::WriteProperty(LPCSTR aName, ExprTokenType &aValue)
 {

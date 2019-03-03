@@ -3,6 +3,11 @@
 
 extern bool g_ComErrorNotify;
 
+struct ComEventPrefix // For BIF_ComObjConnect
+{
+	TCHAR mString[64];
+	NameSpace *mNameSpace;
+};
 
 class ComObject;
 class ComEvent : public ObjectBase
@@ -12,7 +17,7 @@ class ComEvent : public ObjectBase
 	ITypeInfo *mTypeInfo;
 	IID mIID;
 	IObject *mAhkObject;
-	TCHAR mPrefix[64];
+	ComEventPrefix mPrefix;
 
 public:
 	STDMETHODIMP QueryInterface(REFIID riid, void **ppv);

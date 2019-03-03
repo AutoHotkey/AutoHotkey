@@ -1,6 +1,7 @@
 ﻿#include "stdafx.h"
 #include "globaldata.h"
 #include "script.h"
+#include "NameSpace.h"
 #include "script_object.h"
 #include "script_com.h"
 #include "script_func_impl.h"
@@ -522,7 +523,7 @@ BIF_DECL(BIF_ComObjQuery)
 		punk = (IUnknown *)TokenToInt64(*aParam[0]);
 		if (punk < (IUnknown *)65536) // Error-detection: the first 64KB of address space is always invalid.
 		{
-			g->LastError = E_INVALIDARG; // For consistency.
+			t->LastError = E_INVALIDARG; // For consistency.
 			ComError(-1, aResultToken);
 			return;
 		}
@@ -550,7 +551,7 @@ BIF_DECL(BIF_ComObjQuery)
 		}
 	}
 
-	g->LastError = hr;
+	t->LastError = hr;
 }
 
 
@@ -1018,9 +1019,9 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	{
 		// Copy method name into our buffer, applying prefix and converting if necessary.
 		TCHAR funcName[256];
-		sntprintf(funcName, _countof(funcName), _T("%s%ws"), mPrefix, memberName);
+		sntprintf(funcName, _countof(funcName), _T("%s%ws"), mPrefix.mString, memberName);
 		// Find the script function:
-		func = g_script.FindFunc(funcName);
+		func = mPrefix.mNameSpace ? mPrefix.mNameSpace->FindFunc(funcName) : NULL;
 		dispid = DISPID_VALUE;
 		hr = func ? S_OK : DISP_E_MEMBERNOTFOUND;
 	}
@@ -1080,9 +1081,15 @@ HRESULT ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
 		if (mAhkObject = ahkObject)
 			mAhkObject->AddRef();
 		if (pfx)
-			_tcscpy(mPrefix, pfx);
+		{
+			_tcscpy(mPrefix.mString, pfx);
+			mPrefix.mNameSpace = g_CurrentNameSpace; // So that the function is searched for in the correct namespace. This can never be g_StandardNameSpace since bifs never change to the standar namespace.
+		}
 		else
-			*mPrefix = '\0'; // For maintainability.
+		{
+			*mPrefix.mString = '\0';	// For maintainability.
+			mPrefix.mNameSpace = NULL;	//
+		}
 		return OK;
 	}
 	return hr;
@@ -1612,8 +1619,8 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 
 	HRESULT result_to_return;
 	FuncResult result_token;
-	int outer_excptmode = g->ExcptMode;
-	g->ExcptMode |= EXCPTMODE_CATCH; // Indicate exceptions will be handled (by our caller, the COM client).
+	int outer_excptmode = t->ExcptMode;
+	t->ExcptMode |= EXCPTMODE_CATCH; // Indicate exceptions will be handled (by our caller, the COM client).
 
 	for (;;)
 	{
@@ -1621,10 +1628,10 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 		{
 		case FAIL:
 			result_to_return = E_FAIL;
-			if (g->ThrownToken)
+			if (t->ThrownToken)
 			{
 				Object *obj;
-				if (pExcepInfo && (obj = dynamic_cast<Object*>(TokenToObject(*g->ThrownToken)))) // MSDN: pExcepInfo "Can be NULL"
+				if (pExcepInfo && (obj = dynamic_cast<Object*>(TokenToObject(*t->ThrownToken)))) // MSDN: pExcepInfo "Can be NULL"
 				{
 					ZeroMemory(pExcepInfo, sizeof(EXCEPINFO));
 					pExcepInfo->scode = result_to_return = DISP_E_EXCEPTION;
@@ -1642,7 +1649,7 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 					if (obj->GetItem(token, _T("Line")))
 						pExcepInfo->dwHelpContext = (DWORD)TokenToInt64(token);
 				}
-				g_script.FreeExceptionToken(g->ThrownToken);
+				g_script.FreeExceptionToken(t->ThrownToken);
 			}
 			break;
 		case INVOKE_NOT_HANDLED:
@@ -1661,7 +1668,7 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 		break;
 	}
 
-	g->ExcptMode = outer_excptmode;
+	t->ExcptMode = outer_excptmode;
 
 	// Clean up:
 	result_token.Free();
@@ -1680,7 +1687,7 @@ void WriteComObjType(IDebugProperties *aDebugger, ComObject *aObject, LPCSTR aNa
 	ResultToken resultToken;
 	static Func *ComObjType = NULL;
 	if (!ComObjType)
-		ComObjType = g_script.FindFunc(_T("ComObjType")); // FIXME: Probably better to split ComObjType and ComObjValue.
+		ComObjType = g_StandardNameSpace->FindFunc(_T("ComObjType")); // FIXME: Probably better to split ComObjType and ComObjValue. Use the standard namespace for consitent result in case the current namespace overrides this function.
 	resultToken.func = ComObjType;
 	resultToken.symbol = SYM_INTEGER;
 	resultToken.marker_length = -1;
@@ -1719,7 +1726,7 @@ void ComObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int a
 			if (mEventSink->mAhkObject)
 				aDebugger->WriteProperty("Object", ExprTokenType(mEventSink->mAhkObject));
 			else
-				aDebugger->WriteProperty("Prefix", ExprTokenType(mEventSink->mPrefix));
+				aDebugger->WriteProperty("Prefix", ExprTokenType(mEventSink->mPrefix.mString));
 			
 			OLECHAR buf[40];
 			if (!StringFromGUID2(mEventSink->mIID, buf, _countof(buf)))

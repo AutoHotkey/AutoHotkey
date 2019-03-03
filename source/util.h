@@ -169,8 +169,6 @@ inline LPTSTR omit_leading_whitespace(LPTSTR aBuf)
 {
 	return (LPTSTR) omit_leading_whitespace((LPCTSTR) aBuf);
 }
-
-
 inline LPTSTR omit_leading_any(LPTSTR aBuf, LPTSTR aOmitList, size_t aLength)
 // Returns the address of the first character in aBuf that isn't a member of aOmitList.
 // But no more than aLength characters of aBuf will be considered.  If aBuf is composed
@@ -230,6 +228,18 @@ inline size_t omit_trailing_any(LPTSTR aBuf, LPTSTR aOmitList, LPTSTR aBuf_marke
 	return 1;
 }
 
+inline bool is_preceded_by_string(LPTSTR aBuf, LPTSTR aBuf_marker, LPTSTR aString, int aStringLength)
+{
+	// returns true if aBuf is preceeded only by aString and whitespace.
+	// search is stopped at aBuf_marker.
+	// aStringLength most hold the length of the symbol.
+	aBuf = omit_trailing_whitespace(aBuf_marker, aBuf);
+	if (aBuf - aStringLength < aBuf_marker) // no need to compare.
+		return false;
+	// here aBuf points to the first non-white char preceeding original aBuf 
+	aBuf -= aStringLength - 1; // Jump to the potential start of aString.
+	return !_tcsncmp(aBuf, aString, aStringLength); // compare
+}
 
 
 inline size_t ltrim(LPTSTR aStr, size_t aLength = -1)

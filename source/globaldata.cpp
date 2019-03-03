@@ -85,7 +85,6 @@ bool g_NoTrayIcon = false;
 	bool g_AllowMainWindow = false;
 #endif
 bool g_MainTimerExists = false;
-bool g_AutoExecTimerExists = false;
 bool g_InputTimerExists = false;
 bool g_DerefTimerExists = false;
 bool g_SoundWasPlayed = false;
@@ -191,8 +190,24 @@ HICON g_IconLarge;
 
 DWORD g_OriginalTimeout;
 
-global_struct g_default, g_startup, *g_array;
-global_struct *g = &g_startup; // g_startup provides a non-NULL placeholder during script loading. Afterward it's replaced with an array.
+
+global_struct  g_startup;
+global_struct *g = &g_startup;		// g_startup provides a non-NULL placeholder during script loading. Afterward it's replaced with an array.
+
+// These ScripThread variables are declared with the extern specifier in globaldata.h, see macro EXTERN_T.
+ScriptThread t_default = { 0 };		// This will hold the default thread settings to provide a quick way to copy into each new thread. Also provides a non-NULL placeholder for t during script loading.
+									// Assignment ensures all members are zero. Also see InitScriptThreads() in application.cpp
+									
+ScriptThread *t = &t_default, *t0;	// t will be an array of the scripts threads, t0 is the base address, to allow comparison (to avoid underflow) and subscript access. t will be initialized right before the script autoexecute section begins.
+
+bool g_NextThreadSkipUninterruptible;	// Used with InitNewThread and ExecUntil to enable the former to influence thread settings after the defaults for the namespace has been set in ExecUntil.
+bool g_NextThreadIsCritical;				// 
+
+NameSpace *g_DefaultNameSpace;		// This is the outer most "Script" namespace.
+NameSpace *g_StandardNameSpace;		// This is the standard  namespace, to allow a simple way to get a reference to a built in function.
+NameSpace *g_CurrentNameSpace;		// Identifies the current namespace. This should not be assigned directly, instead NameSpace::SetCurrentNameSpace() should be used.
+
+bool g_LoadFailed = false;			// used to allow optional namespaces with "#import *i".
 
 // I considered maintaining this on a per-quasi-thread basis (i.e. in global_struct), but the overhead
 // of having to check and restore the working directory when a suspended thread is resumed (especially
@@ -319,7 +334,6 @@ Action g_act[] =
 
 	, {_T("Sleep"), 1, 1, false, {1, 0}} // Sleep time in ms (numeric)
 
-	, {_T("Critical"), 0, 1, false, NULL}  // On|Off
 	, {_T("Thread"), 1, 3, false, {2, 3, 0}}  // Command, value1 (can be blank for interrupt), value2
 
 	, {_T("WinActivate"), 0, 4, false, NULL} // Passing zero params results in activating the LastUsed window.

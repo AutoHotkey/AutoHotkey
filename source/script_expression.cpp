@@ -42,7 +42,7 @@ GNU General Public License for more details.
 #include "script_object.h"
 #include "globaldata.h" // for a lot of things
 #include "qmath.h" // For ExpandExpression()
-
+#include "NameSpace.h"
 // __forceinline: Decided against it for this function because although it's only called by one caller,
 // testing shows that it wastes stack space (room for its automatic variables would be unconditionally 
 // reserved in the stack of its caller).  Also, the performance benefit of inlining this is too slight.
@@ -68,7 +68,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 // Thanks to Joost Mulders for providing the expression evaluation code upon which this function is based.
 {
 	LPTSTR target = aTarget; // "target" is used to track our usage (current position) within the aTarget buffer.
-
 	// The following must be defined early so that to_free_count is initialized and the array is guaranteed to be
 	// "in scope" in case of early "goto" (goto substantially boosts performance and reduces code size here).
 	#define MAX_EXPR_MEM_ITEMS 200 // v1.0.47.01: Raised from 100 because a line consisting entirely of concat operators can exceed it.  However, there's probably not much point to going much above MAX_TOKENS/2 because then it would reach the MAX_TOKENS limit first.
@@ -99,6 +98,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		, left_was_negative, is_pre_op; // BOOL vs. bool benchmarks slightly faster, and is slightly smaller in code size (or maybe it's cp1's int vs. char that shrunk it).
 	ExprTokenType *this_postfix, *p_postfix;
 	Var *sym_assign_var, *temp_var;
+
+	// For the scope operator: 
+	// Used to track which namespace to search in, either for a nested namespace or a var or func.
+#define ASSERT_NAMESPACE_ON_STACK ASSERT((stack_count && stack[stack_count - 1]->symbol == SYM_NAMESPACE ))
+#define POP_NAMESPACE_FROM_STACK STACK_POP;
+
+	NameSpace *target_namespace = NULL;		// when using these, take care to make them NULL if appropriate to avoid bugs
+	NameSpace *prev_namespace = NULL;		// To restore the current namespace when temporarily changing due to scope operator.
+	ExprTokenType *namespace_token = NULL;	//  
+	bool found_reserved_namespace_name;
+	bool goto_push_this_token = false;		//  Used to simplify BIV code.
+
 
 	// v1.0.44.06: EXPR_SMALL_MEM_LIMIT is the means by which _alloca() is used to boost performance a
 	// little by avoiding the overhead of malloc+free for small strings.  The limit should be something
@@ -132,9 +143,43 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		// But all are checked since that operation is just as fast:
 		if (IS_OPERAND(this_token.symbol)) // If it's an operand, just push it onto stack for use by an operator in a future iteration.
 		{
-			if (this_token.symbol == SYM_DYNAMIC) // CONVERTED HERE/EARLY TO SOMETHING *OTHER* THAN SYM_DYNAMIC so that no later stages need any handling for them as operands. SYM_DYNAMIC is quite similar to SYM_FUNC/BIF in this respect.
+			if (this_token.symbol == SYM_DYNAMIC || IS_UNRESOLVED_NAMESPACE_VARIABLE(this_token.symbol)) // CONVERTED HERE/EARLY TO SOMETHING *OTHER* THAN SYM_DYNAMIC so that no later stages need any handling for them as operands. SYM_DYNAMIC is quite similar to SYM_FUNC/BIF in this respect.
 			{
-				if (SYM_DYNAMIC_IS_DOUBLE_DEREF(this_token)) // Double-deref such as Array%i%.
+				if (this_token.symbol == SYM_UNRESOLVED_NAMESPACE_VAR)
+				{
+					ASSERT_NAMESPACE_ON_STACK;
+					namespace_token = POP_NAMESPACE_FROM_STACK;	// previously resolved by the scope operator (possibly at load time).
+					target_namespace = namespace_token->resolved_namespace;	// the resolved namespace
+					right_string = this_token.deref->marker;	// the var name
+					right_length = this_token.deref->length;	// the length of the var name
+					if (!(temp_var = target_namespace->FindOrAddVar(right_string, right_length, FINDVAR_GLOBAL))) // never find a local var with the scope operator.
+					{
+						// Above already displayed the error.  As of v1.0.31, this type of error is displayed and
+						// causes the current thread to terminate, which seems more useful than the old behavior
+						// that tolerated anything in expressions.
+						goto abort;
+					}
+					target_namespace = NULL;	// To avoid bugs
+					namespace_token = NULL;		// since these are also used for case SYM_SCOPE(_BEGIN) and SYM_UNRESOLVED_XXX
+					if (aArgVar && EXPR_IS_DONE && mArg[aArgIndex].type == ARG_TYPE_OUTPUT_VAR)
+					{
+						if (VAR_IS_READONLY(*temp_var))
+						{
+							// Having this check here allows us to display the variable name rather than its contents
+							// in the error message.
+							LineError(ERR_VAR_IS_READONLY, FAIL, temp_var->mName);
+							goto abort;
+						}
+						// Take a shortcut to allow dynamic output vars to resolve to builtin vars such as Clipboard
+						// or A_WorkingDir.  For additional comments, search for "SYM_VAR is somewhat unusual".
+						// This also ensures that the var's content is not transferred to aResultToken, which means
+						// that PerformLoopFor() is not required to check for/release an object in args 0 and 1.
+						aArgVar[aArgIndex] = temp_var;
+						goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
+					}
+					this_token.var = temp_var;
+				}
+				else if (SYM_DYNAMIC_IS_DOUBLE_DEREF(this_token)) // Double-deref such as Array%i%.
 				{
 					if (!stack_count) // Prevent stack underflow.
 						goto abort_with_exception;
@@ -159,13 +204,31 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// since it seems relatively harmless to create a blank variable in something like var := Array%i%
 					// (though it will produce a runtime error if the double resolves to an illegal variable name such
 					// as one containing spaces).
-					if (   !(temp_var = g_script.FindOrAddVar(right_string, right_length))   )
+
+					int scope; 
+					if (this_token.symbol == SYM_UNRESOLVED_NAMESPACE_DYNAMIC_VAR) // it is ... -> %var%
+					{
+						ASSERT_NAMESPACE_ON_STACK;
+						namespace_token = POP_NAMESPACE_FROM_STACK;
+						target_namespace = namespace_token->resolved_namespace;
+						scope = FINDVAR_GLOBAL;		// only allow global vars with scope op.
+					}
+					else // it is a regular %var% withtout any scope op.
+					{
+						target_namespace = g_CurrentNameSpace;
+						scope = FINDVAR_DEFAULT;	// can find both local and global vars.
+					}
+					temp_var = target_namespace->FindOrAddVar(right_string, right_length, scope);
+					namespace_token = NULL;
+					target_namespace = NULL;
+					if (!temp_var)
 					{
 						// Above already displayed the error.  As of v1.0.31, this type of error is displayed and
 						// causes the current thread to terminate, which seems more useful than the old behavior
-						// that tolerated anything in expressions.
+						// that tolerated anything in expressions.	
 						goto abort;
 					}
+					
 					if (aArgVar && EXPR_IS_DONE && mArg[aArgIndex].type == ARG_TYPE_OUTPUT_VAR)
 					{
 						if (VAR_IS_READONLY(*temp_var))
@@ -182,9 +245,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						aArgVar[aArgIndex] = temp_var;
 						goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
 					}
+					
 					this_token.var = temp_var;
 				}
-				//else: It's a built-in variable.
+				// else  // It's a built-in variable.
 
 				// Check if it's a normal variable rather than a built-in variable.
 				switch (this_token.var->Type())
@@ -200,18 +264,25 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (this_token.is_lvalue)
 					{
 						this_token.symbol = SYM_VAR;
-						goto push_this_token;
+						goto_push_this_token = true;
 					}
-					if (this_token.var->mVV->Get == BIV_LoopIndex) // v1.0.48.01: Improve performance of A_Index by treating it as an integer rather than a string in expressions (avoids conversions to/from strings).
+					else if (this_token.var->mVV->Get == BIV_LoopIndex) // v1.0.48.01: Improve performance of A_Index by treating it as an integer rather than a string in expressions (avoids conversions to/from strings).
 					{
 						this_token.SetValue(g->mLoopIteration);
-						goto push_this_token;
+						goto_push_this_token = true;
 					}
-					if (this_token.var->mVV->Get == BIV_EventInfo) // Not really useful for performance anymore, but allows it to have the correct "Integer" type.
+					else if (this_token.var->mVV->Get == BIV_EventInfo) // Not really useful for performance anymore, but allows it to have the correct "Integer" type.
 					{
-						this_token.SetValue(g->EventInfo);
+						this_token.SetValue(t->EventInfo);
+						goto_push_this_token = true;
+					}
+
+					if (goto_push_this_token)
+					{
+						goto_push_this_token = false; // to be safe.
 						goto push_this_token;
 					}
+
 					// ABOVE: Goto's and simple assignments (like the SYM_INTEGER ones above) are only a few
 					// bytes in code size, so it would probably cost more than it's worth in performance
 					// and code size to merge them into a code section shared by all of the above.  Although
@@ -253,10 +324,14 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					}
   				}
 				// Otherwise, it's a built-in variable.
+				prev_namespace = g_CurrentNameSpace;
+				this_token.var->SetCurrentNameSpace();
 				result_size = this_token.var->Get() + 1;
 				if (result_size == 1)
 				{
 					this_token.SetValue(_T(""), 0);
+					prev_namespace->SetCurrentNameSpace();
+					prev_namespace = NULL;
 					goto push_this_token;
 				}
 				// Otherwise, it's a built-in variable which is not empty. Need some memory to store it.
@@ -280,6 +355,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						|| !(result = tmalloc(result_size)))
 					{
 						LineError(ERR_OUTOFMEM, FAIL, this_token.var->mName);
+						prev_namespace->SetCurrentNameSpace();
+						prev_namespace = NULL;
 						goto abort;
 					}
 					to_free[to_free_count++] = &this_token;
@@ -288,13 +365,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				this_token.marker = result;  // Must be done after above because marker and var overlap in union.
 				this_token.marker_length = result_length;
 				this_token.symbol = SYM_STRING;
+				
+				prev_namespace->SetCurrentNameSpace();
+				prev_namespace = NULL;
+				
 			} // if (this_token.symbol == SYM_DYNAMIC)
 			goto push_this_token;
 		} // if (IS_OPERAND(this_token.symbol))
-
-		if (this_token.symbol == SYM_FUNC) // A call to a function (either built-in or defined by the script).
+		
+		if (this_token.symbol == SYM_FUNC 
+			|| IS_UNRESOLVED_NAMESPACE_FUNCTION(this_token.symbol)) // A call to a function (either built-in or defined by the script).
 		{
-			Func *func = this_token.deref->func;
+			Func *func; // = this_token.deref->func;
 			actual_param_count = this_token.deref->param_count; // For performance.
 			if (actual_param_count > stack_count) // Prevent stack underflow (probably impossible if actual_param_count is accurate).
 				goto abort_with_exception;
@@ -302,14 +384,51 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			// Pop the actual number of params involved in this function-call off the stack.
 			stack_count -= actual_param_count; // Now stack[stack_count] is the leftmost item in an array of function-parameters, which simplifies processing later on.
 			ExprTokenType **params = stack + stack_count;
-
+			if (this_token.symbol == SYM_UNRESOLVED_NAMESPACE_FUNC)
+			{
+				ASSERT_NAMESPACE_ON_STACK;
+				namespace_token = POP_NAMESPACE_FROM_STACK;
+				right_string = this_token.deref->marker;				// function name
+				right_length = this_token.deref->length;				// function name length
+				target_namespace = namespace_token->resolved_namespace;	// the resolved namespace
+				func = target_namespace->FuncFind(right_string, right_length, NULL, /*aAllowNested = */ false);
+				if (!func)
+				{
+					LineError(ERR_NONEXISTENT_FUNCTION, FAIL, right_string);
+					goto abort;
+				}
+				target_namespace = NULL;	// To avoid bugs
+				namespace_token = NULL;		// since these are also used for case SYM_SCOPE(_BEGIN) and SYM_UNRESOLVED_XXX
+			}
+			else
+				func = this_token.deref->func;
 			if (!func)
 			{
 				// This is a dynamic function call.
 				if (!stack_count) // SYM_DYNAMIC should have pushed a function name or reference onto the stack, but a syntax error may still cause this condition.
 					goto abort_with_exception;
-				stack_count--;
-				func = TokenToFunc(*stack[stack_count]); // Supports function names and function references.
+				
+				ExprTokenType *func_token = STACK_POP;
+				bool allow_nested;
+				
+				if (this_token.symbol == SYM_UNRESOLVED_NAMESPACE_DYNAMIC_FUNC) // it is " ... -> %fn%()"
+				{
+					ASSERT_NAMESPACE_ON_STACK;
+					namespace_token = POP_NAMESPACE_FROM_STACK;
+					target_namespace = namespace_token->resolved_namespace;
+					namespace_token = NULL;		// to avoid bugs
+					allow_nested = false;		// can't reference nested functions via scope op.
+				}
+				else // it is a regular %fn%() withtout any scope op.
+				{
+					target_namespace = g_CurrentNameSpace;
+					allow_nested = true;	// can find find nested functions.
+				}
+				
+				func = target_namespace->TokenToFunc(*func_token, allow_nested); // Supports function names and function references.
+
+				target_namespace = NULL; // to avoid bugs.
+
 				if (!func)
 				{
 					// This isn't a function name or reference, but it could be an object emulating
@@ -628,7 +747,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			// And very soon, the outer loop will skip over the SYM_IFF_ELSE just found above.
 			continue;
 		}
-
+		if (this_token.symbol == SYM_NAMESPACE)
+			goto push_this_token;
 		// Since the above didn't goto or continue, this token must be a unary or binary operator.
 		// Get the first operand for this operator (for non-unary operators, this is the right-side operand):
 		if (!stack_count) // Prevent stack underflow.  An expression such as -*3 causes this.
@@ -651,6 +771,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		case SYM_OR:			//
 		case SYM_LOWNOT:		//
 		case SYM_HIGHNOT:		//
+		case SYM_SCOPE_BEGIN:
+		case SYM_SCOPE:
 			break;
 			
 		case SYM_COMMA: // This can only be a statement-separator comma, not a function comma, since function commas weren't put into the postfix array.
@@ -832,7 +954,36 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			this_token.value_int64 = ~right_int64;
 			this_token.symbol = SYM_INTEGER; // Must be done only after its old value was used above. v1.0.36.07: Fixed to be SYM_INTEGER vs. right_is_number for SYM_BITNOT.
 			break;
-
+		case SYM_SCOPE:
+			ASSERT_NAMESPACE_ON_STACK;
+			namespace_token = POP_NAMESPACE_FROM_STACK;
+		// fall through:
+		case SYM_SCOPE_BEGIN:
+			right_string = TokenToString(right);
+			found_reserved_namespace_name = false;
+			if (!namespace_token)
+			{
+				if (!(target_namespace = NameSpace::GetReservedNameSpace(right_string)))
+				{	// This wasn't a reserved namespace, so search in the current namespace.
+					target_namespace = g_CurrentNameSpace;
+				}
+				else										// found a reserved name namespace.
+					found_reserved_namespace_name = true;	// Don't look for NameSpace right_string in the reserved name namespace
+			}
+			else
+				target_namespace = namespace_token->resolved_namespace;
+			namespace_token = NULL; // To avoid bugs.			
+			if (found_reserved_namespace_name
+				|| (target_namespace = target_namespace->GetNestedNameSpace(right_string, true /*aAllowReserved*/)) )
+			{
+				this_token.symbol = SYM_NAMESPACE;
+				this_token.resolved_namespace = target_namespace;
+				target_namespace = NULL;	// To avoid bugs.
+				goto push_this_token;		// Push this namespace on to the stack for use with the next SYM_SCOPE or SYM_UNRESOLVED_XXX
+			}
+			LineError(ERR_NAMESPACE_NOT_FOUND, FAIL, right_string);
+			goto abort;
+		// can't fall through here:
 		default: // NON-UNARY OPERATOR.
 			// GET THE SECOND (LEFT-SIDE) OPERAND FOR THIS OPERATOR:
 			if (!stack_count) // Prevent stack underflow.
@@ -850,7 +1001,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				{
 				case SYM_ASSIGN: // Listed first for performance (it's probably the most common because things like ++ and += aren't expressions when they're by themselves on a line).
 					if (!left.var->Assign(right)) // left.var can be VAR_CLIPBOARD in this case.
+					{
 						goto abort;
+					}
 					if (left.var->Type() != VAR_NORMAL) // Could be VAR_CLIPBOARD or VAR_VIRTUAL, which should not yield SYM_VAR (as some sections of the code wouldn't handle it correctly).
 					{
 						this_token.CopyValueFrom(right); // Doing it this way is more maintainable than other methods, and is unlikely to perform much worse.
@@ -1463,6 +1616,11 @@ abort_with_exception:
 	LineError(ERR_EXPR_EVAL);
 	// FALL THROUGH:
 abort:
+	if (prev_namespace) // It seems best to restore the previous namespace even if there was an error.
+	{
+		prev_namespace->SetCurrentNameSpace();
+		prev_namespace = NULL;
+	}
 	// The callers of this function know that the value of aResult (which contains the reason
 	// for early exit) should be considered valid/meaningful only if result_to_return is NULL.
 	result_to_return = NULL; // Use NULL to inform our caller that this entire thread is to be terminated.
@@ -1576,17 +1734,26 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		aResultToken.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
 		aResultToken.func = this;          // Inform function of which built-in function called it (allows code sharing/reduction).
 
+		// If the BIF is in the 'standard' namespace, use the current namespace' global_struct
+		// else use the global_struct of the namespace in which the BIF recides.
+		NameSpace* prev_namespace = g_CurrentNameSpace;
+		if (mNameSpace // mNameSpace can be NULL if mIsBuiltIn == true, used with ExprOpFunc, see ExprOpFunc::ExprOpFunc
+			&& mNameSpace != g_StandardNameSpace)
+			mNameSpace->SetCurrentNameSpace();
+		
 		// Push an entry onto the debugger's stack.  This has two purposes:
 		//  1) Allow CreateRuntimeException() to know which function is throwing an exception.
 		//  2) If a UDF is called before the BIF returns, it will show on the call stack.
-		//     e.g. DllCall(RegisterCallback("F")) will show DllCall while F is running.
+		//     e.g. DllCall(CallbackCreate("F")) will show DllCall while F is running.
 		DEBUGGER_STACK_PUSH(this)
 
 		// CALL THE BUILT-IN FUNCTION:
 		mBIF(aResultToken, aParam, aParamCount);
 
 		DEBUGGER_STACK_POP()
-		
+
+		prev_namespace->SetCurrentNameSpace(); // restore the previous namespace
+
 		// There shouldn't be any need to check g->ThrownToken since built-in functions
 		// currently throw exceptions via aResultToken.Error():
 		//if (g->ThrownToken)
@@ -1790,12 +1957,20 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			mParam[mParamCount].var->AssignSkipAddRef(vararg_obj);
 		}
 
+		// Set the correct namespace before the call to ensure g->CurrentFunc is set correctly
+		NameSpace *prev_namespace = g_CurrentNameSpace;
+		if (!mNameSpace->SetCurrentNameSpace())
+			prev_namespace = NULL;
 		DEBUGGER_STACK_PUSH(&recurse)
 
 		result = Call(&aResultToken); // Call the UDF.
 
 		DEBUGGER_STACK_POP()
-		
+
+		// restore previous namespace
+		if (prev_namespace)
+			prev_namespace->SetCurrentNameSpace();
+
 		// Setting this unconditionally isn't likely to perform any worse than checking for EXIT/FAIL,
 		// and likely produces smaller code.  Currently EARLY_RETURN results are possible and must be
 		// passed back in case this is a meta-function, but this should be revised at some point since

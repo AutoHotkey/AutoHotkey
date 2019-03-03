@@ -141,39 +141,19 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			break; // No more switches allowed after this point.
 		}
 	}
-
-	if (Var *var = g_script.FindOrAddVar(_T("A_Args"), 6, VAR_DECLARE_SUPER_GLOBAL))
-	{
-		// Store the remaining args in an array and assign it to "Args".
-		// If there are no args, assign an empty array so that A_Args[1]
-		// and A_Args.MaxIndex() don't cause an error.
-		Object *args = Object::CreateFromArgV(__targv + i, __argc - i);
-		if (!args)
-			return CRITICAL_ERROR;  // Realistically should never happen.
-		var->AssignSkipAddRef(args);
-	}
-	else
+	
+	// Create A_Args and ErrorLevel:
+	if (!g_script.CreateArgsArrayAndErrorLevel(__targv + i, __argc - i))
 		return CRITICAL_ERROR;
 
-	global_init(*g);  // Set defaults.
 
 // Set up the basics of the script:
 #ifdef AUTOHOTKEYSC
-	if (g_script.Init(*g, _T(""), restart_mode) != OK) 
+	if (g_script.Init(_T(""), restart_mode) != OK) 
 #else
-	if (g_script.Init(*g, script_filespec, restart_mode) != OK)  // Set up the basics of the script, using the above.
+	if (g_script.Init(script_filespec, restart_mode) != OK)  // Set up the basics of the script, using the above.
 #endif
 		return CRITICAL_ERROR;
-
-	// Set g_default now, reflecting any changes made to "g" above, in case AutoExecSection(), below,
-	// never returns, perhaps because it contains an infinite loop (intentional or not):
-	CopyMemory(&g_default, g, sizeof(global_struct));
-
-	// Use FindOrAdd vs Add for maintainability, although it shouldn't already exist:
-	if (   !(g_ErrorLevel = g_script.FindOrAddVar(_T("ErrorLevel")))   )
-		return CRITICAL_ERROR; // Error.  Above already displayed it for us.
-	// Initialize the var state to zero:
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 
 	// Could use CreateMutex() but that seems pointless because we have to discover the
 	// hWnd of the existing process so that we can close or restart it, so we would have
@@ -184,7 +164,8 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// instance terminates, so it should work ok:
 	//CreateMutex(NULL, FALSE, script_filespec); // script_filespec seems a good choice for uniqueness.
 	//if (!g_ForceLaunch && !restart_mode && GetLastError() == ERROR_ALREADY_EXISTS)
-
+	
+	ASSERT(g_CurrentNameSpace == g_DefaultNameSpace); // Make sure that the default namespace really becomes the default namespace.
 	UINT load_result = g_script.LoadFromFile();
 	if (load_result == LOADING_FAILED) // Error during load (was already displayed by the function call).
 	{
@@ -256,6 +237,9 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// because otherwise the change to the "focus stealing" setting would never be undone:
 	SetForegroundLockTimeout();
 
+	// Before creating our windows and the tray icon, initilize the ScriptThread array since the MainWindowProc relies on it existing.
+	if (!InitScriptThreads())
+		return CRITICAL_ERROR;
 	// Create all our windows and the tray icon.  This is done after all other chances
 	// to return early due to an error have passed, above.
 	if (g_script.CreateWindows() != OK)
@@ -320,9 +304,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	g_HSSameLineAction = false; // `#Hotstring X` should not affect Hotstring().
 	g_SuspendExempt = false; // #SuspendExempt should not affect Hotkey()/Hotstring().
 
-	Var *clipboard_var = g_script.FindOrAddVar(_T("Clipboard")); // Add it if it doesn't exist, in case the script accesses "Clipboard" via a dynamic variable.
-
-	// Run the auto-execute part at the top of the script (this call might never return):
+	// Run the auto-execute part at the top of each namespace (this call might never return):
 	if (!g_script.AutoExecSection()) // Can't run script at all. Due to rarity, just abort.
 		return CRITICAL_ERROR;
 	// REMEMBER: The call above will never return if one of the following happens:

@@ -289,7 +289,7 @@ void SetForegroundLockTimeout();
 // dismisses the dialog, the thread becomes critical again.
 // 
 // Update for v1.0.38.04: Rather than setting AllowInterruption unconditionally to
-// true, make it reflect the state of g->ThreadIsCritical.  This increases flexibility by allowing
+// true, make it reflect the state of t->ThreadIsCritical.  This increases flexibility by allowing
 // threads to stay interrruptible even when they're displaying a dialog.  In such cases, an
 // incoming thread-event such as a hotkey will get routed to our MainWindowProc by the dialog's
 // message pump; and from there it will get reposted to our queue, and then get pumped again.
@@ -322,8 +322,8 @@ void SetForegroundLockTimeout();
 // displaying a dialog and waiting for it to finish.
 #define DIALOG_END \
 {\
-	g->ThreadIsCritical = thread_was_critical;\
-	g->AllowThreadToBeInterrupted = !thread_was_critical;\
+	t->ThreadIsCritical = thread_was_critical;\
+	t->AllowThreadToBeInterrupted = !thread_was_critical;\
 }
 bool DialogPrep();
 

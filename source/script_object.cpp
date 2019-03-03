@@ -3,6 +3,7 @@
 #include "globaldata.h"
 #include "script.h"
 #include "application.h"
+#include "NameSpace.h"
 
 #include "script_object.h"
 #include "script_func_impl.h"
@@ -335,28 +336,28 @@ bool Object::Delete()
 		Line *curr_line = g_script.mCurrLine;
 
 		// If an exception has been thrown, temporarily clear it for execution of __Delete.
-		ResultToken *exc = g->ThrownToken;
-		g->ThrownToken = NULL;
+		ResultToken *exc = t->ThrownToken;
+		t->ThrownToken = NULL;
 		
 		// This prevents an erroneous "The current thread will exit" message when an error occurs,
 		// by causing LineError() to throw an exception:
-		int outer_excptmode = g->ExcptMode;
-		g->ExcptMode |= EXCPTMODE_DELETE;
+		int outer_excptmode = t->ExcptMode;
+		t->ExcptMode |= EXCPTMODE_DELETE;
 
 		CallMethod(mBase, this, _T("__Delete"), NULL, 0, NULL, IF_METAOBJ); // base.__Delete()
 
-		g->ExcptMode = outer_excptmode;
+		t->ExcptMode = outer_excptmode;
 
 		// Exceptions thrown by __Delete are reported immediately because they would not be handled
 		// consistently by the caller (they would typically be "thrown" by the next function call),
 		// and because the caller must be allowed to make additional __Delete calls.
-		if (g->ThrownToken)
-			g_script.FreeExceptionToken(g->ThrownToken);
+		if (t->ThrownToken)
+			g_script.FreeExceptionToken(t->ThrownToken);
 
 		// If an exception has been thrown by our caller, it's likely that it can and should be handled
 		// reliably by our caller, so restore it.
 		if (exc)
-			g->ThrownToken = exc;
+			t->ThrownToken = exc;
 
 		g_script.mCurrLine = curr_line; // Prevent misleading error reports/Exception() stack trace.
 
@@ -1970,7 +1971,13 @@ Closure::~Closure()
 ResultType STDMETHODCALLTYPE Label::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	// Labels are never returned to script, so no need to check flags or parameters.
-	return Execute();
+	// Need to set namespace so that (eg) hotkeys
+	// execute in their respective namespace only. 
+	NameSpace *prev_namespace = g_CurrentNameSpace;
+	SetCurrentNameSpace();
+	ResultType result = Execute();
+	prev_namespace->SetCurrentNameSpace(); // and restore the previous namespace so that an interrupted subroutine can continue in its relevant scope. 
+	return result;
 }
 
 ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aParamValue, int aParamCount, __int64 *aRetVal) const
@@ -2063,7 +2070,7 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UIN
 			InitNewThread(0, true, false);
 		
 		// Set last found window (as documented).
-		g->hWndLastUsed = aGui->mHwnd;
+		t->hWndLastUsed = aGui->mHwnd;
 		
 		result = CallMethod(func, func, method_name, aParamValue, aParamCount, &retval);
 		if (result == FAIL) // Callback encountered an error.
@@ -2094,13 +2101,13 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ResultToken &aResultToken, ExprT
 	// the default meta-functions, especially since "base" may become a reserved word in future.
 	if (aThisToken.symbol == SYM_VAR && !_tcsicmp(aThisToken.var->mName, _T("base"))
 		&& !aThisToken.var->HasContents() // Since scripts are able to assign to it, may as well let them use the assigned value.
-		&& g->CurrentFunc && g->CurrentFunc->mClass) // We're in a function defined within a class (i.e. a method).
+		&& t->CurrentFunc && t->CurrentFunc->mClass) // We're in a function defined within a class (i.e. a method).
 	{
-		if (IObject *this_class_base = g->CurrentFunc->mClass->Base())
+		if (IObject *this_class_base = t->CurrentFunc->mClass->Base())
 		{
 			ExprTokenType this_token;
 			this_token.symbol = SYM_VAR;
-			this_token.var = g->CurrentFunc->mParam[0].var;
+			this_token.var = t->CurrentFunc->mParam[0].var;
 			ResultType result = this_class_base->Invoke(aResultToken, this_token, (aFlags & ~IF_METAFUNC) | IF_METAOBJ, aParam, aParamCount);
 			// Avoid returning INVOKE_NOT_HANDLED in this case so that our caller never
 			// shows an "uninitialized var" warning for base.Foo() in a class method.

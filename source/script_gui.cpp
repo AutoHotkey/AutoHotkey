@@ -340,7 +340,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 			if (!ParseOptions(options, set_last_found_window, own_dialogs))
 				break; // Above already displayed an error message.
 			if (set_last_found_window)
-				g->hWndLastUsed = mHwnd;
+				t->hWndLastUsed = mHwnd;
 			SetOwnDialogs(own_dialogs);
 			_o_return_empty;
 		}
@@ -554,7 +554,7 @@ BIF_DECL(BIF_GuiCreate)
 	}
 
 	if (set_last_found_window)
-		g->hWndLastUsed = gui->mHwnd;
+		t->hWndLastUsed = gui->mHwnd;
 	gui->SetOwnDialogs(own_dialogs);
 
 	// Successful creation - add the Gui to the global list of Guis and return it
@@ -5144,7 +5144,12 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 	return OK;
 }
 
-
+void GuiType::SetOwnDialogs(ToggleValueType state)
+{
+	if (state == TOGGLE_INVALID)
+		return;
+	t->DialogOwner = state == TOGGLED_ON ? mHwnd : NULL;
+}
 
 void GuiType::GetNonClientArea(LONG &aWidth, LONG &aHeight)
 // Added for v1.0.44.13.
@@ -8182,10 +8187,10 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	// unnecessary, it adds maintainability.
 	LRESULT msg_reply;
 	if (g_MsgMonitor.Count() // Count is checked here to avoid function-call overhead.
-		&& (!g->CalledByIsDialogMessageOrDispatch || g->CalledByIsDialogMessageOrDispatchMsg != iMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
+		&& (!t->CalledByIsDialogMessageOrDispatch || t->CalledByIsDialogMessageOrDispatchMsg != iMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
 		&& MsgMonitor(hWnd, iMsg, wParam, lParam, NULL, msg_reply))
 		return msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
-	g->CalledByIsDialogMessageOrDispatch = false;
+	t->CalledByIsDialogMessageOrDispatch = false;
 	// Fixed for v1.0.40.01: The above line was added to resolve a case where our caller did make the value
 	// true but the message it sent us results in a recursive call to us (such as when the user resizes a
 	// window by dragging its borders: that apparently starts a loop in DefDlgProc that calls this
@@ -9407,7 +9412,7 @@ bool GuiType::ControlWmNotify(GuiControlType &aControl, LPNMHDR aNmHdr, INT_PTR 
 	if (g_nThreads >= g_MaxThreadsTotal)
 		return false;
 
-	if (g->Priority > 0)
+	if (t->Priority > 0)
 		return false;
 
 	VarBkp ErrorLevel_saved;

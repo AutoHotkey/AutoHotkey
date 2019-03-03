@@ -17,11 +17,64 @@ GNU General Public License for more details.
 #include "stdafx.h" // pre-compiled headers
 #include "var.h"
 #include "globaldata.h" // for g_script
-
+#include "NameSpace.h"
 
 // Init static vars:
 TCHAR Var::sEmptyString[] = _T(""); // For explanation, see its declaration in .h file.
 
+
+void Var::AssignBinaryNumberVV(__int64 aNumberAsInt64, VarAttribType aAttrib /*= VAR_ATTRIB_IS_INT64*/)
+{
+	// Caller has ensured that mType == VAR_VIRTUAL
+	NameSpace *prev_namespace = g_CurrentNameSpace; // save current namespace for later restoration
+	SetCurrentNameSpace();							// the the correct namespace for this var.
+	// Virtual vars have no binary number cache, as their value may be calculated on-demand.
+	// Additionally, THE CACHE MUST NOT BE USED due to the union containing mVV.
+	TCHAR value_string[MAX_NUMBER_SIZE];
+	if (aAttrib & VAR_ATTRIB_IS_INT64)
+		ITOA64(aNumberAsInt64, value_string);
+	else
+		FTOA(*(double *)&aNumberAsInt64, value_string, _countof(value_string));
+	
+	mVV->Set(value_string, mName);
+	prev_namespace->SetCurrentNameSpace(); // restore the previous namespace
+}
+
+ResultType Var::CloseVV()
+{
+	// relies on aliases never being VirtualVars.
+	// Commit the value in our temporary buffer.
+	NameSpace *prev_namespace = g_CurrentNameSpace; // to be restored
+	SetCurrentNameSpace();
+	ResultType result = mVV->Set(mCharContents, mName);
+	Free(); // Free temporary memory.
+	mAttrib &= ~VAR_ATTRIB_VIRTUAL_OPEN;
+	prev_namespace->SetCurrentNameSpace(); // restore
+	return result;
+}
+
+ResultType Var::AssignVirtualVar(Var &aVar)
+// Caller has verified aVar->mType == VAR_VIRTUAL.
+// Caller should call Close() afterward if this is VAR_CLIPBOARD.
+// Caller should remove VAR_ATTRIB_VIRTUAL_OPEN afterward if this->mType == VAR_VIRTUAL.
+{
+	ResultType result = OK; // set default
+	NameSpace *prev_namespace = g_CurrentNameSpace; // to be restored
+	SetCurrentNameSpace();
+
+	VarSizeType len = aVar.mVV->Get(NULL, aVar.mName); // Get value size (estimate).
+	if (!AssignString(NULL, len)) // Allocate buffer.
+		result = FAIL;
+	else
+		SetCharLength(aVar.mVV->Get(mCharContents, aVar.mName)); // Get value.
+	prev_namespace->SetCurrentNameSpace(); // restore
+	return result;
+}
+
+bool Var::SetCurrentNameSpace()
+{
+	return mNameSpace->SetCurrentNameSpace();  // To ensure BIVs operate on the correct settings.
+}
 
 ResultType Var::AssignHWND(HWND aWnd)
 {
@@ -331,7 +384,6 @@ ResultType Var::SetClipboardAll(void *aData, size_t aDataSize)
 }
 
 
-
 ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 // Returns OK or FAIL.
 // If aBuf isn't NULL, caller must ensure that aLength is either VARSIZE_MAX (which tells us that the
@@ -399,7 +451,13 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 	if (mType == VAR_VIRTUAL)
 	{
 		if (do_assign)
-			return mVV->Set((LPTSTR)aBuf, mName);
+		{
+			NameSpace *prev_namespace = g_CurrentNameSpace; // to be restored
+			SetCurrentNameSpace();
+			ResultType result = mVV->Set((LPTSTR)aBuf, mName);
+			prev_namespace->SetCurrentNameSpace(); // restore
+			return result;
+		}
 		// Since above didn't return, the caller wants to allocate some temporary memory for
 		// writing the value into, and should call Close() in order to commit the actual value.
 	}
@@ -688,11 +746,15 @@ VarSizeType Var::Get(LPTSTR aBuf)
 	}
 
 	case VAR_BUILTIN: // v1.0.46.16: VAR_BUILTIN: Call the function associated with this variable to retrieve its contents.  This change reduced uncompressed coded size by 6 KB.
-		return mBIV(aBuf, mName);
-
 	case VAR_VIRTUAL:
-		return mVV->Get(aBuf, mName);
-
+	{
+		NameSpace *prev_namespace = g_CurrentNameSpace;
+		SetCurrentNameSpace();
+		VarSizeType result;
+		result = mType == VAR_BUILTIN ? mBIV(aBuf, mName) : mVV->Get(aBuf, mName);
+		prev_namespace->SetCurrentNameSpace();
+		return result;
+	}
 	default:
 		ASSERT(FALSE && "Invalid var type");
 		if (aBuf)

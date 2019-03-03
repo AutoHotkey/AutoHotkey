@@ -86,7 +86,6 @@ extern bool g_NoTrayIcon;
 #endif
 extern bool g_DeferMessagesForUnderlyingPump;
 extern bool g_MainTimerExists;
-extern bool g_AutoExecTimerExists;
 extern bool g_InputTimerExists;
 extern bool g_DerefTimerExists;
 extern bool g_SoundWasPlayed;
@@ -169,7 +168,16 @@ extern HICON g_IconLarge;
 extern DWORD g_OriginalTimeout;
 
 EXTERN_G;
-extern global_struct g_default, *g_array;
+EXTERN_T;
+
+extern bool g_NextThreadSkipUninterruptible;
+extern bool g_NextThreadIsCritical;
+
+extern NameSpace *g_DefaultNameSpace;
+extern NameSpace *g_StandardNameSpace;
+extern NameSpace *g_CurrentNameSpace;
+
+extern bool g_LoadFailed;
 
 extern TCHAR g_WorkingDir[MAX_PATH];  // Explicit size needed here in .h file for use with sizeof().
 extern LPTSTR g_WorkingDirOrig;
@@ -228,6 +236,8 @@ extern bool g_KeyHistoryToFile;
 #define SLEEP_INTERVAL 10
 #define SLEEP_INTERVAL_HALF (int)(SLEEP_INTERVAL / 2)
 
+#define AUTO_EXEC_UNINTERRUPTIBLE_DURATION (100)
+
 enum OurTimers {TIMER_ID_MAIN = MAX_MSGBOXES + 2 // The first timers in the series are used by the MessageBoxes.  Start at +2 to give an extra margin of safety.
 	, TIMER_ID_UNINTERRUPTIBLE // Obsolete but kept as a a placeholder for backward compatibility, so that this and the other the timer-ID's stay the same, and so that obsolete IDs aren't reused for new things (in case anyone is interfacing these OnMessage() or with external applications).
 	, TIMER_ID_AUTOEXEC, TIMER_ID_INPUT, TIMER_ID_DEREF, TIMER_ID_REFRESH_INTERRUPTIBILITY};
@@ -256,34 +266,11 @@ if (!g_MainTimerExists)\
 // MsgSleep attempts to set the main timer so that it can judge how long to wait.
 // The timer fails and calls ExitApp even though a previous call to ExitApp is currently underway.
 
-// See AutoExecSectionTimeout() for why g->AllowThreadToBeInterrupted is used rather than the other var.
-// The below also sets g->ThreadStartTime and g->UninterruptibleDuration.  Notes about this:
-// In case the AutoExecute section takes a long time (or never completes), allow interruptions
-// such as hotkeys and timed subroutines after a short time. Use g->AllowThreadToBeInterrupted
-// vs. g_AllowInterruption in case commands in the AutoExecute section need exclusive use of
-// g_AllowInterruption (i.e. they might change its value to false and then back to true,
-// which would interfere with our use of that var).
 // From MSDN: "When you specify a TimerProc callback function, the default window procedure calls the
 // callback function when it processes WM_TIMER. Therefore, you need to dispatch messages in the calling thread,
 // even when you use TimerProc instead of processing WM_TIMER."  My: This is why all TimerProc type timers
 // should probably have an associated window rather than passing NULL as first param of SetTimer().
 //
-// UPDATE v1.0.48: g->ThreadStartTime and g->UninterruptibleDuration were added so that IsInterruptible()
-// won't make the AutoExec section interruptible prematurely.  In prior versions, KILL_AUTOEXEC_TIMER() did this,
-// but with the new IsInterruptible() function, doing it in KILL_AUTOEXEC_TIMER() wouldn't be reliable because
-// it might already have been done by IsInterruptible() [or vice versa], which might provide a window of
-// opportunity in which any use of Critical by the AutoExec section would be undone by the second timeout.
-// More info: Since AutoExecSection() never calls InitNewThread(), it never used to set the uninterruptible
-// timer.  Instead, it had its own timer.  But now that IsInterruptible() checks for the timeout of
-// "Thread Interrupt", AutoExec might become interruptible prematurely unless it uses the new method below.
-#define SET_AUTOEXEC_TIMER(aTimeoutValue) \
-{\
-	g->AllowThreadToBeInterrupted = false;\
-	g->ThreadStartTime = GetTickCount();\
-	g->UninterruptibleDuration = aTimeoutValue;\
-	if (!g_AutoExecTimerExists)\
-		g_AutoExecTimerExists = SetTimer(g_hWnd, TIMER_ID_AUTOEXEC, aTimeoutValue, AutoExecSectionTimeout);\
-} // v1.0.39 for above: Removed the call to ExitApp() upon failure.  See SET_MAIN_TIMER for details.
 
 #define SET_INPUT_TIMER(aTimeoutValue) \
 if (!g_InputTimerExists)\
@@ -300,13 +287,6 @@ if (!g_InputTimerExists)\
 #define KILL_MAIN_TIMER \
 if (g_MainTimerExists && KillTimer(g_hWnd, TIMER_ID_MAIN))\
 	g_MainTimerExists = false;
-
-// See above comment about g->AllowThreadToBeInterrupted.
-#define KILL_AUTOEXEC_TIMER \
-{\
-	if (g_AutoExecTimerExists && KillTimer(g_hWnd, TIMER_ID_AUTOEXEC))\
-		g_AutoExecTimerExists = false;\
-}
 
 #define KILL_INPUT_TIMER \
 if (g_InputTimerExists && KillTimer(g_hWnd, TIMER_ID_INPUT))\

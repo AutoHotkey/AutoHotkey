@@ -26,7 +26,7 @@ GNU General Public License for more details.
 #include "resources/resource.h"  // For InputBox.
 #include "TextIO.h"
 #include <Psapi.h> // for GetModuleBaseName.
-
+#include "NameSpace.h"
 #undef _WIN32_WINNT // v1.1.10.01: Redefine this just for these APIs, to avoid breaking some other commands on Win XP (such as Process Close).
 #define _WIN32_WINNT 0x0600 // Windows Vista
 #include <mmdeviceapi.h> // for SoundSet/SoundGet.
@@ -1010,7 +1010,6 @@ BIF_DECL(BIF_Wait)
 			_f_return_i(FALSE); // Since it timed out, we override the default with this.
 	} // for()
 }
-
 
 
 ResultType Line::WinMove(LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
@@ -3865,10 +3864,10 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 	// See GuiWindowProc() for details about this first section:
 	LRESULT msg_reply;
 	if (g_MsgMonitor.Count() // Count is checked here to avoid function-call overhead.
-		&& (!g->CalledByIsDialogMessageOrDispatch || g->CalledByIsDialogMessageOrDispatchMsg != iMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
+		&& (!t->CalledByIsDialogMessageOrDispatch || t->CalledByIsDialogMessageOrDispatchMsg != iMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
 		&& MsgMonitor(hWnd, iMsg, wParam, lParam, NULL, msg_reply))
 		return msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
-	g->CalledByIsDialogMessageOrDispatch = false; // v1.0.40.01.
+	t->CalledByIsDialogMessageOrDispatch = false; // v1.0.40.01.
 
 	TRANSLATE_AHK_MSG(iMsg, wParam)
 	
@@ -3929,7 +3928,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			// v1.0.33: The following is probably reliable since the AHK_DIALOG should
 			// be in front of any messages that would launch an interrupting thread.  In other
 			// words, the "g" struct should still be the one that owns this MsgBox/dialog window.
-			g->DialogHWND = top_box; // This is used to work around an AHK_TIMEOUT issue in which a MsgBox that has only an OK button fails to deliver the Timeout indicator to the script.
+			t->DialogHWND = top_box; // This is used to work around an AHK_TIMEOUT issue in which a MsgBox that has only an OK button fails to deliver the Timeout indicator to the script.
 
 			SetForegroundWindowEx(top_box);
 
@@ -4195,7 +4194,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		break;
 
 	case WM_ENTERMENULOOP:
-		CheckMenuItem(GetMenu(g_hWnd), ID_FILE_PAUSE, g->IsPaused ? MF_CHECKED : MF_UNCHECKED); // This is the menu bar in the main window; the tray menu's checkmark is updated only when the tray menu is actually displayed.
+		CheckMenuItem(GetMenu(g_hWnd), ID_FILE_PAUSE, t->IsPaused ? MF_CHECKED : MF_UNCHECKED); // This is the menu bar in the main window; the tray menu's checkmark is updated only when the tray menu is actually displayed.
 		if (!g_MenuIsVisible) // See comments in similar code in GuiWindowProc().
 			g_MenuIsVisible = MENU_TYPE_BAR;
 		break;
@@ -4354,11 +4353,11 @@ bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
 		return true;
 	case ID_TRAY_PAUSE:
 	case ID_FILE_PAUSE:
-		if (g->IsPaused)
+		if (t->IsPaused)
 			--g_nPausedThreads;
 		else
 			++g_nPausedThreads; // For this purpose the idle thread is counted as a paused thread.
-		g->IsPaused = !g->IsPaused;
+		t->IsPaused = !t->IsPaused;
 		g_script.UpdateTrayIcon();
 		return true;
 	case ID_TRAY_EXIT:
@@ -4872,10 +4871,10 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 	// See GuiWindowProc() for details about this first part:
 	LRESULT msg_reply;
 	if (g_MsgMonitor.Count() // Count is checked here to avoid function-call overhead.
-		&& (!g->CalledByIsDialogMessageOrDispatch || g->CalledByIsDialogMessageOrDispatchMsg != uMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
+		&& (!t->CalledByIsDialogMessageOrDispatch || t->CalledByIsDialogMessageOrDispatchMsg != uMsg) // v1.0.44.11: If called by IsDialog or Dispatch but they changed the message number, check if the script is monitoring that new number.
 		&& MsgMonitor(hWndDlg, uMsg, wParam, lParam, NULL, msg_reply))
 		return (BOOL)msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
-	g->CalledByIsDialogMessageOrDispatch = false; // v1.0.40.01.
+	t->CalledByIsDialogMessageOrDispatch = false; // v1.0.40.01.
 
 	HWND hControl;
 
@@ -5792,7 +5791,7 @@ BIF_DECL(BIF_StrSplit)
 		}
 	}
 	
-	Object *output_array = Object::Create();
+	Object *output_array = Object::Create(); // At least Debugger::FindVarFromScopeSymbolDelimitedString relies on this being Object *.
 	if (!output_array)
 		goto throw_outofmem;
 
@@ -8057,7 +8056,7 @@ BIF_DECL(BIF_FileRead)
 
 	DWORD bytes_actually_read;
 	BOOL result = ReadFile(hfile, output_buf, (DWORD)bytes_to_read, &bytes_actually_read, NULL);
-	g->LastError = GetLastError();
+	t->LastError = GetLastError();
 	CloseHandle(hfile);
 
 	// Upon result==success, bytes_actually_read is not checked against bytes_to_read because it
@@ -8434,7 +8433,7 @@ BOOL FileSetAttribCallback(LPTSTR file_path, WIN32_FIND_DATA &current_file, void
 	DWORD file_attrib = ((current_file.dwFileAttributes & attrib.and_mask) ^ attrib.xor_mask);
 	if (!SetFileAttributes(file_path, file_attrib))
 	{
-		g->LastError = GetLastError();
+		t->LastError = GetLastError();
 		return FALSE;
 	}
 	return TRUE;
@@ -8456,7 +8455,7 @@ int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolde
 		}
 		if (aOperateOnFolders == FILE_LOOP_INVALID) // In case runtime dereference of a var was an invalid value.
 			aOperateOnFolders = FILE_LOOP_FILES_ONLY;  // Set default.
-		g->LastError = 0; // Set default. Overridden only when a failure occurs.
+		t->LastError = 0; // Set default. Overridden only when a failure occurs.
 	}
 
 	if (_tcslen(aFilePattern) >= MAX_PATH) // Checked early to simplify other things below.
@@ -8534,7 +8533,7 @@ int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolde
 			{
 				// v1.0.45.03: Don't even try to operate upon truncated filenames in case they accidentally
 				// match the name of a real/existing file.
-				g->LastError = ERROR_BUFFER_OVERFLOW;
+				t->LastError = ERROR_BUFFER_OVERFLOW;
 				++failure_count;
 				continue;
 			}
@@ -8690,7 +8689,7 @@ BOOL FileSetTimeCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallba
 		, FILE_FLAG_NO_BUFFERING | FILE_FLAG_BACKUP_SEMANTICS, NULL);
 	if (hFile == INVALID_HANDLE_VALUE)
 	{
-		g->LastError = GetLastError();
+		t->LastError = GetLastError();
 		return FALSE;
 	}
 
@@ -8708,7 +8707,7 @@ BOOL FileSetTimeCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallba
 		success = SetFileTime(hFile, NULL, NULL, &a.Time);
 	}
 	if (!success)
-		g->LastError = GetLastError();
+		t->LastError = GetLastError();
 	CloseHandle(hFile);
 	return success;
 }
@@ -9381,27 +9380,13 @@ VarSizeType BIV_IsPaused(LPTSTR aBuf, LPTSTR aVarName) // v1.0.48: Lexikos: Adde
 	//      A_DetectHiddenWindows.
 	if (aBuf)
 	{
-		// Checking g>g_array avoids any chance of underflow, which might otherwise happen if this is
+		
+		// Checking t > t0 avoids any chance of underflow, which might otherwise happen if this is
 		// called by the AutoExec section or a threadless callback running in thread #0.
-		*aBuf++ = (g > g_array && g[-1].IsPaused) ? '1' : '0';
+		*aBuf++ = (t > t0 && t[-1].IsPaused) ? '1' : '0';
 		*aBuf = '\0';
 	}
 	return 1;
-}
-
-VarSizeType BIV_IsCritical(LPTSTR aBuf, LPTSTR aVarName) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
-{
-	if (!aBuf) // Return conservative estimate in case Critical status can ever change between the 1st and 2nd calls to this function.
-		return MAX_INTEGER_LENGTH;
-	// It seems more useful to return g->PeekFrequency than "On" or "Off" (ACT_CRITICAL ensures that
-	// g->PeekFrequency!=0 whenever g->ThreadIsCritical==true).  Also, the word "Is" in "A_IsCritical"
-	// implies a value that can be used as a boolean such as "if A_IsCritical".
-	if (g->ThreadIsCritical)
-		return (VarSizeType)_tcslen(UTOA(g->PeekFrequency, aBuf)); // ACT_CRITICAL ensures that g->PeekFrequency > 0 when critical is on.
-	// Otherwise:
-	*aBuf++ = '0';
-	*aBuf = '\0';
-	return 1; // Caller might rely on receiving actual length when aBuf!=NULL.
 }
 
 VarSizeType BIV_IsSuspended(LPTSTR aBuf, LPTSTR aVarName)
@@ -9543,13 +9528,13 @@ VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_INTEGER_SIZE];
 	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_itot(g->LastError, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
+	_itot(t->LastError, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
 	return (VarSizeType)_tcslen(target_buf);
 }
 
 BIV_DECL_W(BIV_LastError_Set)
 {
-	SetLastError(g->LastError = ATOU(aBuf));
+	SetLastError(t->LastError = ATOU(aBuf));
 	return OK;
 }
 
@@ -10490,10 +10475,10 @@ BIV_DECL_W(BIV_LoopIndex_Set)
 VarSizeType BIV_ThisFunc(LPTSTR aBuf, LPTSTR aVarName)
 {
 	LPTSTR name;
-	if (g->CurrentFunc)
-		name = g->CurrentFunc->mName;
-	else if (g->CurrentFuncGosub) // v1.0.48.02: For flexibility and backward compatibility, support A_ThisFunc even when a function Gosubs an external subroutine.
-		name = g->CurrentFuncGosub->mName;
+	if (t->CurrentFunc)
+		name = t->CurrentFunc->mName;
+	else if (t->CurrentFuncGosub) // v1.0.48.02: For flexibility and backward compatibility, support A_ThisFunc even when a function Gosubs an external subroutine.
+		name = t->CurrentFuncGosub->mName;
 	else
 		name = _T("");
 	if (aBuf)
@@ -10503,7 +10488,7 @@ VarSizeType BIV_ThisFunc(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_ThisLabel(LPTSTR aBuf, LPTSTR aVarName)
 {
-	LPTSTR name = g->CurrentLabel ? g->CurrentLabel->mName : _T("");
+	LPTSTR name = t->CurrentLabel ? t->CurrentLabel->mName : _T("");
 	if (aBuf)
 		_tcscpy(aBuf, name);
 	return (VarSizeType)_tcslen(name);
@@ -10573,13 +10558,13 @@ VarSizeType BIV_EventInfo(LPTSTR aBuf, LPTSTR aVarName)
 // We're returning the length of the var's contents, not the size.
 {
 	return aBuf
-		? (VarSizeType)_tcslen(UPTRTOA(g->EventInfo, aBuf)) // Must return exact length when aBuf isn't NULL.
+		? (VarSizeType)_tcslen(UPTRTOA(t->EventInfo, aBuf)) // Must return exact length when aBuf isn't NULL.
 		: MAX_INTEGER_LENGTH;
 }
 
 BIV_DECL_W(BIV_EventInfo_Set)
 {
-	g->EventInfo = (EventInfoType)ATOI64(aBuf);
+	t->EventInfo = (EventInfoType)ATOI64(aBuf);
 	return OK;
 }
 
@@ -10723,7 +10708,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 // return value processing.
 {
 	aException = 0;  // Set default output parameter for caller.
-	SetLastError(g->LastError); // v1.0.46.07: In case the function about to be called doesn't change last-error, this line serves to retain the script's previous last-error rather than some arbitrary one produced by AutoHotkey's own internal API calls.  This line has no measurable impact on performance.
+	SetLastError(t->LastError); // v1.0.46.07: In case the function about to be called doesn't change last-error, this line serves to retain the script's previous last-error rather than some arbitrary one produced by AutoHotkey's own internal API calls.  This line has no measurable impact on performance.
 
     DYNARESULT Res = {0}; // This struct is to be returned to caller by value.
 
@@ -10891,7 +10876,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	// call GetLastError() because: Even if we could avoid calling any API function that resets LastError
 	// (which seems unlikely) it would be difficult to maintain (and thus a source of bugs) as revisions are
 	// made in the future.
-	g->LastError = GetLastError();
+	t->LastError = GetLastError();
 
 	TCHAR buf[32];
 
@@ -11345,7 +11330,7 @@ has_valid_return_type:
 		// CriticalError always terminates the process.
 	}
 
-	if (g->ThrownToken)
+	if (t->ThrownToken)
 	{
 		// A script exception was thrown by DynaCall(), either because the called function threw a
 		// SEH exception or because the stdcall parameter list was the wrong size.  Set FAIL result
@@ -11609,6 +11594,91 @@ BIF_DECL(BIF_StrCompare)
 	case SCS_INSENSITIVE_LOCALE:	result = lstrcmpi(str1, str2); break;
 	}
 	_f_return_i(result);			// Return 
+}
+
+BIF_DECL(BIF_Critical)
+{
+	//	return_value := Critical([Param1, Param2])
+	//
+	//	Param1, type: integer.
+	//		- 0 (false), turn off critical, sets peek frequency to DEFAULT_PEEK_FREQUENCY.
+	//		- 1 (true), turn on critical, peek frequency is set to 16.
+	//		- > 1, turns on critical and defines the peek frequency
+	//	If omitted, see return_value.
+	//	Param2, type: integer.
+	//		- 0, apply settings according to Param1 to the current running thread.
+	//		- 1, apply settings according to Param1 to the namespace which incorporates the Critical function.
+	//		- 2, behaves as both 0 and 1. Not applicable if Param1 is omitted.
+	//		If omitted, Param2 defaults to 0.
+	//	return_value, type: integer.
+	//		If Param1 is omitted, returns the current setting according to Param2.
+	//		Otherwise the previous peek frequency is returned if the setting is critical, else 0 is returned.
+	//		If Param2 == 2, the setting of the namespace is returned.
+
+	
+	
+	if (!ParamIndexIsOmitted(1))
+		Throw_if_Param_NaN(1);
+	__int64 param2 = ParamIndexToOptionalInt64(1, /*Param2 default:*/ 0);
+	if (param2 < 0 || param2 > 2)
+		_f_throw(ERR_PARAM2_INVALID);
+	
+	ScriptThread &t = *::t;	// For convenience.
+	if (ParamIndexIsOmitted(0))
+	{
+		if (param2 == 0)
+			_f_return(t.ThreadIsCritical ? t.PeekFrequency : 0);
+		else if (param2 == 1)
+			_f_return(g_CurrentNameSpace->GetCritical() ? g_CurrentNameSpace->GetPeekFrequency() : 0);
+		_f_throw(ERR_PARAM2_INVALID); // Param2 cannot be 2 if Param1 was omitted.
+	}
+	// Param1 not omitted and Param2 has been verified to be valid.
+	Throw_if_Param_NaN(0);
+	__int64 param1 = ParamIndexToInt64(0);
+	if (param1 < 0 || param1 > UINT_MAX)
+		_f_throw(ERR_PARAM1_INVALID);
+	
+	// Param1 verified, and stored in new_peek.
+	DWORD new_peek = (DWORD)param1; // cast to DWORD now that it has been verified
+	
+	DWORD return_value;
+	if (param2 == 0) // Apply only to thread.
+	{
+		return_value = t.ThreadIsCritical ? t.PeekFrequency : 0;
+		t.ThreadIsCritical = (bool)new_peek;
+		DWORD thread_peek = new_peek;
+		switch (new_peek)
+		{
+		case 0:
+			// Since Critical is being turned off, allow thread to be immediately interrupted regardless of
+			// any "Thread Interrupt" settings.
+			//t.PeekFrequency = DEFAULT_PEEK_FREQUENCY;
+			thread_peek = DEFAULT_PEEK_FREQUENCY;
+			t.AllowThreadToBeInterrupted = true;
+			break;
+		case 1: 
+			thread_peek = DEFAULT_PEEK_FREQUENCY_WHEN_CRITICAL;
+			// fall through:
+		default:
+			t.AllowThreadToBeInterrupted = false;
+		}
+		t.PeekFrequency = thread_peek;
+	}
+	else	// Apply to namespace and possibly also to the thread
+	{
+		return_value = g_CurrentNameSpace->GetCritical() ? g_CurrentNameSpace->GetPeekFrequency() : 0;
+		if (new_peek)
+			g_CurrentNameSpace->MakeNameSpaceCritical(new_peek == 1 ? DEFAULT_PEEK_FREQUENCY_WHEN_CRITICAL : new_peek); // Turn on
+		else
+			g_CurrentNameSpace->MakeNameSpaceNonCritical(); // Turn off
+		if (param2 == 2) 
+			g_CurrentNameSpace->SetThreadCriticalStatus(t); // Apply also to thread
+	}
+	if (!t.AllowThreadToBeInterrupted)
+		// caller wants the thread to be critical for x ms
+		// update the last peek time to ensure it is critical for an additional x ms (disregarding inaccuracy of the "tick").
+		g_script.mLastPeekTime = GetTickCount();
+	_f_return_i(return_value);
 }
 
 BIF_DECL(BIF_String)
@@ -12067,7 +12137,7 @@ int RegExCallout(pcret_callout_block *cb)
 	Func *callout_func = (Func *)cb->user_callout;
 	if (!callout_func)
 	{
-		Var *pcre_callout_var = g_script.FindVar(_T("pcre_callout"), 12); // This may be a local of the UDF which called RegExMatch/Replace().
+		Var *pcre_callout_var = g_CurrentNameSpace->FindVar(_T("pcre_callout"), 12); // This may be a local of the UDF which called RegExMatch/Replace().
 		if (!pcre_callout_var)
 			return 0; // Seems best to ignore the callout rather than aborting the match.
 		ExprTokenType token;
@@ -12090,9 +12160,9 @@ int RegExCallout(pcret_callout_block *cb)
 	cb->pattern_position += cd.options_length;
 	
 	// Save EventInfo to be restored when we return.
-	EventInfoType EventInfo_saved = g->EventInfo;
+	EventInfoType EventInfo_saved = t->EventInfo;
 
-	g->EventInfo = (EventInfoType) cb;
+	t->EventInfo = (EventInfoType) cb;
 	
 	FuncResult result_token;
 
@@ -12158,7 +12228,7 @@ int RegExCallout(pcret_callout_block *cb)
 	else
 		number_to_return = TokenToInt64(result_token);
 	
-	g->EventInfo = EventInfo_saved;
+	t->EventInfo = EventInfo_saved;
 
 	// Behaviour of return values is defined by PCRE.
 	return (int)number_to_return;
@@ -13837,9 +13907,12 @@ BIF_DECL(BIF_Func)
 	Func *func;
 	if (_f_callee_id == FID_Func)
 	{
-		if (ParamIndexToObject(0))
-			_f_throw(ERR_PARAM1_INVALID); // For consistency with IsFunc().
-		func = g_script.FindFunc(ParamIndexToString(0));
+		if (ParamIndexToObject(aParamCount - 1)) // aParamCount has been validated to be non-zero either at load time or by subsequent callers.
+			_f_throw(aParamCount == 1 ? ERR_PARAM1_INVALID : ERR_PARAM_INVALID); // For consistency with IsFunc().
+		if (aParamCount > 1)	// passing namespace names
+			func = g_script.FindFuncFromNameSpaceByName(aParam, aParamCount - 1, ParamIndexToString(aParamCount - 1), /*aAllowNested =*/ false); // Do not allow nested in this mode. so this can be used to get a function from outside a function which has the same name a nested one.
+		else
+			func = g_script.FindFunc(ParamIndexToString(0));
 	}
 	else // FID_FuncClose (internal).
 		func = (Func *)aParam[0]->object; // No type-checking needed because this is a private/internal function.
@@ -14298,8 +14371,6 @@ BIF_DECL(BIF_MinMax)
 	aResultToken.value_int64 = param.value_int64;
 }
 
-
-
 BIF_DECL(BIF_Abs)
 {
 	if (!TokenToDoubleOrInt64(*aParam[0], aResultToken)) // "Cast" token to Int64/Double depending on whether it has a decimal point.
@@ -14576,9 +14647,9 @@ BIF_DECL(BIF_SetTimer)
 	// that allows us to figure out whether to "update or create" when searching the list of timers.
 	if (ParamIndexIsOmitted(0)) // Fully omitted, not an empty string.
 	{
-		if (g->CurrentTimer)
+		if (t->CurrentTimer)
 			// Default to the timer which launched the current thread.
-			callback = g->CurrentTimer->mCallback.ToObject();
+			callback = t->CurrentTimer->mCallback.ToObject();
 		else
 			callback = NULL;
 		if (!callback)
@@ -15040,14 +15111,14 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 	}
 	else
 	{
-		if (pause_after_execute = g->IsPaused) // Assign.
+		if (pause_after_execute = t->IsPaused) // Assign.
 		{
 			// v1.0.48: If the current thread is paused, this threadless callback would get stuck in
 			// ExecUntil()'s pause loop (keep in mind that this situation happens only when a fast-mode
 			// callback has been created without a script thread to control it, which goes against the
 			// advice in the documentation). To avoid that, it seems best to temporarily unpause the
 			// thread until the callback finishes.  But for performance, tray icon color isn't updated.
-			g->IsPaused = false;
+			t->IsPaused = false;
 			--g_nPausedThreads; // See below.
 			// If g_nPausedThreads isn't adjusted here, g_nPausedThreads could become corrupted if the
 			// callback (or some thread that interrupts it) uses the Pause command/menu-item because
@@ -15093,17 +15164,17 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 	}
 	else
 	{
-		if (g == g_array && !g_script.mAutoExecSectionIsRunning)
+		if (t == t0 && !g_script.mAutoExecSectionIsRunning)
 			// If the function just called used thread #0 and the AutoExec section isn't running, that means
 			// the AutoExec section definitely didn't launch or control the callback (even if it is running,
 			// it's not 100% certain it launched the callback). This can happen when a fast-mode callback has
 			// been invoked via message, though the documentation advises against the fast mode when there is
 			// no script thread controlling the callback.
-			global_maximize_interruptibility(*g); // In case the script function called above used commands like Critical or "Thread Interrupt", ensure the idle thread is interruptible.  This avoids having to treat the idle thread as special in other places.
+			thread_maximize_interruptibility(*t); // In case the script function called above used commands like Critical or "Thread Interrupt", ensure the idle thread is interruptible.  This avoids having to treat the idle thread as special in other places.
 		//else never alter the interruptibility of AutoExec while it's running because it has its own method to do that.
 		if (pause_after_execute) // See comments where it's defined.
 		{
-			g->IsPaused = true;
+			t->IsPaused = true;
 			++g_nPausedThreads;
 		}
 	}
@@ -16802,10 +16873,10 @@ BIF_DECL(BIF_Exception)
 		line = g_script.mCurrLine;
 		// Using the current function seems preferable even if g->CurrentLabel is a sub
 		// within the function, since the sub is internal (local) to the function.
-		if (g->CurrentFunc)
-			what = g->CurrentFunc->mName;
-		else if (g->CurrentLabel)
-			what = g->CurrentLabel->mName;
+		if (t->CurrentFunc)
+			what = t->CurrentFunc->mName;
+		else if (t->CurrentLabel)
+			what = t->CurrentLabel->mName;
 		else
 			what = _T(""); // Probably the auto-execute section?
 	}

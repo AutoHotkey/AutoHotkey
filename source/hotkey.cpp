@@ -49,11 +49,11 @@ HWND HotCriterionAllowsFiring(HotkeyCriterion *aCriterion, LPTSTR aHotkeyName)
 	{
 	case HOT_IF_ACTIVE:
 	case HOT_IF_NOT_ACTIVE:
-		found_hwnd = WinActive(g_default, aCriterion->WinTitle, aCriterion->WinText, _T(""), _T(""), false); // Thread-safe.
+		found_hwnd = WinActive(aCriterion->GetSettings(), aCriterion->WinTitle, aCriterion->WinText, _T(""), _T(""), false); // Thread-safe.
 		break;
 	case HOT_IF_EXIST:
 	case HOT_IF_NOT_EXIST:
-		found_hwnd = WinExist(g_default, aCriterion->WinTitle, aCriterion->WinText, _T(""), _T(""), false, false); // Thread-safe.
+		found_hwnd = WinExist(aCriterion->GetSettings(), aCriterion->WinTitle, aCriterion->WinText, _T(""), _T(""), false, false); // Thread-safe.
 		break;
 	// L4: Handling of #if (expression) hotkey variants.
 	case HOT_IF_EXPR:
@@ -91,7 +91,7 @@ HotkeyCriterion *FindHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, L
 	// majority of scripts, the memory savings would be insignificant.
 	HotkeyCriterion *cp;
 	for (cp = g_FirstHotCriterion; cp; cp = cp->NextCriterion)
-		if (cp->Type == aType && !_tcscmp(cp->WinTitle, aWinTitle) && !_tcscmp(cp->WinText, aWinText)) // Case insensitive.
+		if (cp->Type == aType && !_tcscmp(cp->WinTitle, aWinTitle) && !_tcscmp(cp->WinText, aWinText)) // Case sensitive.
 			return cp;
 
 	return NULL;
@@ -105,6 +105,7 @@ HotkeyCriterion *AddHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LP
 		return NULL;
 	cp->Type = aType;
 	cp->ExprLine = NULL;
+	cp->criterion_namespace = g_CurrentNameSpace;
 	if (*aWinTitle)
 	{
 		if (   !(cp->WinTitle = SimpleHeap::Malloc(aWinTitle))   )
@@ -143,7 +144,9 @@ HotkeyCriterion *AddHotkeyIfExpr()
 	HotkeyCriterion *cp;
 	if (   !(cp = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))   )
 		return NULL;
+	// caller is responsible for setting HotkeyCriterion::Type
 	cp->NextExpr = NULL;
+	cp->criterion_namespace = g_CurrentNameSpace;
 	if (g_LastHotExpr)
 		g_LastHotExpr->NextExpr = cp;
 	else
@@ -157,6 +160,7 @@ HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr)
 {
 	for (HotkeyCriterion *cp = g_FirstHotExpr; cp; cp = cp->NextExpr)
 		if (cp->Type != HOT_IF_CALLBACK // i.e. HOT_IF_EXPR or an expression optimised to be any other type.
+			&& cp->criterion_namespace == g_CurrentNameSpace	// Enabling duplicate variants across namespaces
 			&& !_tcscmp(aExpr, cp->ExprLine->mArg[0].text)) // Case-sensitive since the expression might be.
 			return cp;
 	return NULL;
@@ -184,6 +188,7 @@ void Script::PreparseHotkeyIfExpr(Line *aLine)
 	// Otherwise, it was a single call to WinExist() or WinActive() where each parameter
 	// was exactly one literal string and the result was optionally inverted with "not" or "!".
 	HotkeyCriterion *hc = (HotkeyCriterion *)aLine->mAttribute;
+	
 	// Change the parameters of this criterion.  FindHotkeyIfExpr() will still be able to
 	// find it based on the expression text since it only relies on ExprLine.
 	if (ctoupper(fn.mName[3]) == 'A')
@@ -192,6 +197,7 @@ void Script::PreparseHotkeyIfExpr(Line *aLine)
 		hc->Type = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
 	hc->WinTitle = param_count > 0 ? postfix[0].marker : _T("");
 	hc->WinText = param_count > 1 ? postfix[1].marker : _T("");
+	hc->criterion_namespace = aLine->mNameSpace;
 	// The following adds a duplicate in the event that there are two different expressions
 	// which resolve to the same criterion, such as WinExist("x","") and WinExist("x", "").
 	// In that case, only the first criterion can be referenced by its WinTitle & WinText
@@ -1700,7 +1706,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 
 
 HotkeyVariant *Hotkey::FindVariant()
-// Returns he address of the variant in this hotkey whose criterion matches the current #IfWin criterion.
+// Returns the address of the variant in this hotkey whose criterion matches the current #IfWin criterion.
 // If no match, it returns NULL.
 {
 	for (HotkeyVariant *vp = mFirstVariant; vp; vp = vp->mNextVariant)

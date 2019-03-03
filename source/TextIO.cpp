@@ -1222,11 +1222,11 @@ BIF_DECL(BIF_FileOpen)
 		aResultToken.marker = _T("");
 	}
 
-	g->LastError = GetLastError(); // Even on success, since it might provide something useful.
+	t->LastError = GetLastError(); // Even on success, since it might provide something useful.
 	return;
 
 invalid_param:
-	g->LastError = ERROR_INVALID_PARAMETER; // For consistency.
+	t->LastError = ERROR_INVALID_PARAMETER; // For consistency.
 	_f_throw(ERR_PARAM_INVALID);
 }
 

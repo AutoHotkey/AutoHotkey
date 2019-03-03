@@ -1390,7 +1390,7 @@ BIF_DECL(BIF_FileGetVersion)
 	// Locate the fixed information
 		|| !VerQueryValue(pInfo, _T("\\"), (LPVOID *)&pFFI, &uSize))
 	{
-		g->LastError = GetLastError();
+		t->LastError = GetLastError();
 		free(pInfo);
 		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 		_f_return_empty;
