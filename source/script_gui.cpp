@@ -6333,6 +6333,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				}
 				// Parse the option's number as integer first, since that's most common.  If that fails,
 				// parse as floating-point (e.g. "w" A_ScreenWidth/4 or "R1.5").
+				if (*option_value == '+')
+					option_value++;	// skip over the '+' to allow, eg, x+-n.
 				option_int = (int)tcstoi64_o(option_value, &endptr, 0); // 'E' depends on this supporting the full range of DWORD.
 				if (*endptr) // It wasn't blank or a valid integer.
 				{
