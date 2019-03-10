@@ -6327,14 +6327,12 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				case 'Y':
 					if (use_margin_offset = (*option_value == '+' && 'M' == ctoupper(option_value[1]))) // x+m or y+m.
 						option_value += 2;
-					else if (_tcschr(_T("MPS"), option_char2)) // Any other non-digit char should be picked up as an error via *endptr.
-						++option_value;
+					else if (_tcschr(_T("MPS+"), option_char2)) // Any other non-digit char should be picked up as an error via *endptr.
+						++option_value;							// Also skips over the '+' to allow, eg, x+-n
 					break;
 				}
 				// Parse the option's number as integer first, since that's most common.  If that fails,
 				// parse as floating-point (e.g. "w" A_ScreenWidth/4 or "R1.5").
-				if (*option_value == '+')
-					option_value++;	// skip over the '+' to allow, eg, x+-n.
 				option_int = (int)tcstoi64_o(option_value, &endptr, 0); // 'E' depends on this supporting the full range of DWORD.
 				if (*endptr) // It wasn't blank or a valid integer.
 				{
