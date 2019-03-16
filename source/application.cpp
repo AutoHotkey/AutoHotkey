@@ -1758,7 +1758,7 @@ bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awPa
 	};
 
 	ResultType result;
-	INT_PTR retval;
+	__int64 retval;
 
 	result = CallMethod(func, func, _T("call"), param, _countof(param), &retval);
 

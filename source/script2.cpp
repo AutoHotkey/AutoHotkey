@@ -6109,38 +6109,30 @@ int SortRandom(const void *a1, const void *a2)
 int SortUDF(const void *a1, const void *a2)
 // See comments in prior function for details.
 {
+	if (!g_SortFuncResult || g_SortFuncResult == EARLY_EXIT)
+		return 0;
+
 	// The following isn't necessary because by definition, the current thread isn't paused because it's the
 	// thing that called the sort in the first place.
 	//g_script.UpdateTrayIcon();
 
-	FuncResult result_token;
-
 	LPTSTR aStr1 = *(LPTSTR *)a1;
 	LPTSTR aStr2 = *(LPTSTR *)a2;
-	bool returned = g_SortFunc->Call(result_token, 3, FUNC_ARG_STR(aStr1), FUNC_ARG_STR(aStr2), FUNC_ARG_INT(aStr2 - aStr1));
+	ExprTokenType param[] = { aStr1, aStr2, __int64(aStr2 - aStr1) };
+	__int64 i64;
+	g_SortFuncResult = CallMethod(g_SortFunc, g_SortFunc, _T("call"), param, _countof(param), &i64);
+	// An alternative to g_SortFuncResult using 'throw' to abort qsort() produced slightly
+	// smaller code, but in release builds the program crashed with code 0xC0000409 and the
+	// catch() block never executed.
 
-	// MUST handle return_value BEFORE calling FreeAndRestoreFunctionVars() because return_value might be
-	// the contents of one of the function's local variables (which are about to be free'd).
 	int returned_int;
-	if (returned && !TokenIsEmptyString(result_token))
-	{
-		// Using float vs. int makes sort up to 46% slower, so decided to use int. Must use ATOI64 vs. ATOI
-		// because otherwise a negative might overflow/wrap into a positive (at least with the MSVC++
-		// implementation of ATOI).
-		// ATOI64()'s implementation (and probably any/all others?) truncates any decimal portion;
-		// e.g. 0.8 and 0.3 both yield 0.
-		__int64 i64 = TokenToInt64(result_token);
-		if (i64 > 0)  // Maybe there's a faster/better way to do these checks. Can't simply typecast to an int because some large positives wrap into negative, maybe vice versa.
-			returned_int = 1;
-		else if (i64 < 0)
-			returned_int = -1;
-		else
-			returned_int = 0;
-	}
+	if (i64 > 0)  // Maybe there's a faster/better way to do these checks. Can't simply typecast to an int because some large positives wrap into negative, maybe vice versa.
+		returned_int = 1;
+	else if (i64 < 0)
+		returned_int = -1;
 	else
 		returned_int = 0;
 
-	result_token.Free();
 	return returned_int;
 }
 
@@ -6153,8 +6145,10 @@ BIF_DECL(BIF_Sort)
 {
 	// Set defaults in case of early goto:
 	LPTSTR mem_to_free = NULL;
-	Func *sort_func_orig = g_SortFunc; // Because UDFs can be interrupted by other threads -- and because UDFs can themselves call Sort with some other UDF (unlikely to be sure) -- backup & restore original g_SortFunc so that the "collapsing in reverse order" behavior will automatically ensure proper operation.
+	IObject *sort_func_orig = g_SortFunc; // Because UDFs can be interrupted by other threads -- and because UDFs can themselves call Sort with some other UDF (unlikely to be sure) -- backup & restore original g_SortFunc so that the "collapsing in reverse order" behavior will automatically ensure proper operation.
+	ResultType sort_func_result_orig = g_SortFuncResult;
 	g_SortFunc = NULL; // Now that original has been saved above, reset to detect whether THIS sort uses a UDF.
+	g_SortFuncResult = OK;
 	ResultType result_to_return = OK;
 	DWORD ErrorLevel = -1; // Use -1 to mean "don't change/set ErrorLevel".
 
@@ -6170,7 +6164,7 @@ BIF_DECL(BIF_Sort)
 	bool trailing_delimiter_indicates_trailing_blank_item = false, terminate_last_item_with_delimiter = false
 		, trailing_crlf_added_temporarily = false, sort_by_naked_filename = false, sort_random = false
 		, omit_dupes = false;
-	LPTSTR cp, cp_end;
+	LPTSTR cp;
 
 	for (cp = aOptions; *cp; ++cp)
 	{
@@ -6191,28 +6185,6 @@ BIF_DECL(BIF_Sort)
 			++cp;
 			if (*cp)
 				delimiter = *cp;
-			break;
-		case 'F': // v1.0.47: Support a callback function to extend flexibility.
-			// Decided not to set ErrorLevel here because omit-dupes already uses it, and the code/docs
-			// complexity of having one take precedence over the other didn't seem worth it given rarity
-			// of errors and rarity of UDF use.
-			cp = omit_leading_whitespace(cp + 1); // Point it to the function's name.
-			if (   !(cp_end = StrChrAny(cp, _T(" \t")))   ) // Find space or tab, if any.
-				cp_end = cp + _tcslen(cp); // Point it to the terminator instead.
-			if (   !(g_SortFunc = g_script.FindFunc(cp, cp_end - cp))   )
-				goto end; // For simplicity, just abort the sort.
-			// To improve callback performance, ensure there are no ByRef parameters (for simplicity:
-			// not even ones that have default values) among the first two parameters.  This avoids the
-			// need to ensure formal parameters are non-aliases each time the callback is called.
-			if (g_SortFunc->mIsBuiltIn || g_SortFunc->mParamCount < 2 // This validation is relied upon at a later stage.
-				|| g_SortFunc->mParamCount > 3  // Reserve 4-or-more parameters for possible future use (to avoid breaking existing scripts if such features are ever added).
-				|| g_SortFunc->mParam[0].is_byref || g_SortFunc->mParam[1].is_byref) // Relies on short-circuit boolean order.
-				goto end; // For simplicity, just abort the sort.
-			// Otherwise, the function meets the minimum constraints (though for simplicity, optional parameters
-			// (default values), if any, aren't populated).
-			// Fix for v1.0.47.05: The following line now subtracts 1 in case *cp_end=='\0'; otherwise the
-			// loop's ++cp would go beyond the terminator when there are no more options.
-			cp = cp_end - 1; // In the next iteration (which also does a ++cp), resume looking for options after the function's name.
 			break;
 		case 'N':
 			g_SortNumeric = true;
@@ -6247,6 +6219,17 @@ BIF_DECL(BIF_Sort)
 			sort_by_naked_filename = true;
 		}
 	}
+
+	if (!ParamIndexIsOmitted(2))
+	{
+		if (  !(g_SortFunc = ParamIndexToObject(2))  )
+			g_SortFunc = TokenToFunc(*aParam[2]);
+		if (!g_SortFunc)
+		{
+			result_to_return = aResultToken.Error(ERR_PARAM3_INVALID);
+			goto end;
+		}
+	}
 	
 	// Check for early return only after parsing options in case an option that sets ErrorLevel is present:
 	if (!*aContents) // Input is empty, nothing to sort, return empty string.
@@ -6255,9 +6238,6 @@ BIF_DECL(BIF_Sort)
 		goto end;
 	}
 	
-	// size_t helps performance and should be plenty of capacity for many years of advancement.
-	// In addition, things like realloc() can't accept anything larger than size_t anyway,
-	// so there's no point making this 64-bit until size_t itself becomes 64-bit (it already is on some compilers?).
 	size_t item_count;
 
 	// Check how many delimiters are present:
@@ -6405,7 +6385,14 @@ BIF_DECL(BIF_Sort)
 	// Now aContents has been divided up based on delimiter.  Sort the array of pointers
 	// so that they indicate the correct ordering to copy aContents into output_var:
 	if (g_SortFunc) // Takes precedence other sorting methods.
+	{
 		qsort((void *)item, item_count, item_size, SortUDF);
+		if (!g_SortFuncResult || g_SortFuncResult == EARLY_EXIT)
+		{
+			result_to_return = g_SortFuncResult;
+			goto end;
+		}
+	}
 	else if (sort_random) // Takes precedence over all remaining options.
 		qsort((void *)item, item_count, item_size, SortRandom);
 	else
@@ -6427,8 +6414,7 @@ BIF_DECL(BIF_Sort)
 	LPTSTR item_prev = NULL;
 
 	// Copy the sorted result back into output_var.  Do all except the last item, since the last
-	// item gets special treatment depending on the options that were specified.  The call to
-	// output_var->Contents() below should never fail due to the above having prepped it:
+	// item gets special treatment depending on the options that were specified.
 	item_curr = item; // i.e. Don't use [] indexing for the reason described higher above (same applies to item += unit_size below).
 	for (dest = aResultToken.marker, i = 0; i < item_count; ++i, item_curr += unit_size)
 	{
@@ -6516,6 +6502,7 @@ end:
 	if (mem_to_free)
 		free(mem_to_free);
 	g_SortFunc = sort_func_orig;
+	g_SortFuncResult = sort_func_result_orig;
 	if (!result_to_return)
 		_f_return_FAIL;
 }
@@ -15021,7 +15008,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 
 	g_script.mLastPeekTime = GetTickCount(); // Somewhat debatable, but might help minimize interruptions when the callback is called via message (e.g. subclassing a control; overriding a WindowProc).
 
-	INT_PTR number_to_return;
+	__int64 number_to_return;
 	FuncResult result_token;
 	ExprTokenType *param, one_param;
 	int param_count;
@@ -15065,7 +15052,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 		}
 	}
 
-	return number_to_return; //return integer value to callback stub
+	return (INT_PTR)number_to_return;
 }
 
 

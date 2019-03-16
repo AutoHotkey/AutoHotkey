@@ -147,7 +147,8 @@ UCHAR g_SortCaseSensitive;
 bool g_SortNumeric;
 bool g_SortReverse;
 int g_SortColumnOffset;
-Func *g_SortFunc;
+IObject *g_SortFunc;
+ResultType g_SortFuncResult;
 
 // Hot-string vars (initialized when ResetHook() is first called):
 TCHAR g_HSBuf[HS_BUF_SIZE];
