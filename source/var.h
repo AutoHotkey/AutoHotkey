@@ -161,17 +161,17 @@ private:
 		BuiltInVarType mBIV;
 	};
 	AllocMethodType mHowAllocated; // Keep adjacent/contiguous with the below to save memory.
-	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE 0x01 // Combined with VAR_ATTRIB_IS_INT64/DOUBLE/OBJECT to indicate mContents is not current.
-	#define VAR_ATTRIB_UNINITIALIZED        0x02 // Var requires initialization before use.
-	// Unused: 0x04
-	#define VAR_ATTRIB_NOT_NUMERIC			0x08 // A prior call to IsNumeric() determined the var's value is PURE_NOT_NUMERIC.
-	#define VAR_ATTRIB_IS_INT64				0x10 // Var's proper value is in mContentsInt64.
-	#define VAR_ATTRIB_IS_DOUBLE			0x20 // Var's proper value is in mContentsDouble.
-	#define VAR_ATTRIB_IS_OBJECT		    0x40 // Var's proper value is in mObject.
-	#define VAR_ATTRIB_VIRTUAL_OPEN			0x80 // Virtual var is open for writing.
+	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE						0x01 // Combined with VAR_ATTRIB_IS_INT64/DOUBLE/OBJECT to indicate mContents is not current.
+	#define VAR_ATTRIB_UNINITIALIZED							0x02 // Var requires initialization before use.
+	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE_UNTIL_REASSIGNED	0x04 // Indicates that the VAR_ATTRIB_CONTENTS_OUT_OF_DATE flag should be kept until the variable is reassigned.
+	#define VAR_ATTRIB_NOT_NUMERIC								0x08 // A prior call to IsNumeric() determined the var's value is PURE_NOT_NUMERIC.
+	#define VAR_ATTRIB_IS_INT64									0x10 // Var's proper value is in mContentsInt64.
+	#define VAR_ATTRIB_IS_DOUBLE								0x20 // Var's proper value is in mContentsDouble.
+	#define VAR_ATTRIB_IS_OBJECT								0x40 // Var's proper value is in mObject.
+	#define VAR_ATTRIB_VIRTUAL_OPEN								0x80 // Virtual var is open for writing.
 	#define VAR_ATTRIB_CACHE (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_NOT_NUMERIC) // These three are mutually exclusive.
 	#define VAR_ATTRIB_TYPES (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT) // These are mutually exclusive (but NOT_NUMERIC may be combined with OBJECT or BINARY_CLIP).
-	#define VAR_ATTRIB_OFTEN_REMOVED (VAR_ATTRIB_CACHE | VAR_ATTRIB_CONTENTS_OUT_OF_DATE | VAR_ATTRIB_UNINITIALIZED)
+	#define VAR_ATTRIB_OFTEN_REMOVED (VAR_ATTRIB_CACHE | VAR_ATTRIB_CONTENTS_OUT_OF_DATE | VAR_ATTRIB_UNINITIALIZED | VAR_ATTRIB_CONTENTS_OUT_OF_DATE_UNTIL_REASSIGNED)
 	VarAttribType mAttrib;  // Bitwise combination of the above flags (but many of them may be mutually exclusive).
 	#define VAR_GLOBAL			0x01
 	#define VAR_LOCAL			0x02
@@ -197,7 +197,6 @@ private:
 	{
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-
 		if (var.mType == VAR_VIRTUAL)
 		{
 			// Virtual vars have no binary number cache, as their value may be calculated on-demand.
@@ -215,7 +214,7 @@ private:
 			var.ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
 
 		var.mContentsInt64 = aNumberAsInt64;
-		var.mAttrib &= ~(VAR_ATTRIB_TYPES | VAR_ATTRIB_NOT_NUMERIC | VAR_ATTRIB_UNINITIALIZED);
+		var.mAttrib &= ~(VAR_ATTRIB_TYPES | VAR_ATTRIB_NOT_NUMERIC | VAR_ATTRIB_UNINITIALIZED | VAR_ATTRIB_CONTENTS_OUT_OF_DATE_UNTIL_REASSIGNED);
 		var.mAttrib |= (VAR_ATTRIB_CONTENTS_OUT_OF_DATE | aAttrib); // Must be done prior to below.  aAttrib indicates the type of binary number.
 		
 		if (var.mType == VAR_CLIPBOARD) // Clipboard can't use either read or write caching.
@@ -234,6 +233,7 @@ private:
 			// THE FOLLOWING ISN'T NECESSARY BECAUSE THE ASSIGN() CALLS BELOW DO IT:
 			//var.mAttrib &= ~VAR_ATTRIB_CONTENTS_OUT_OF_DATE;
 			TCHAR value_string[MAX_NUMBER_SIZE];
+			bool restore_attribute = var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE_UNTIL_REASSIGNED; // The Assign() calls also clears this flag, hence, set this variable to indicate wether to restore this flag or not.
 			if (var.mAttrib & VAR_ATTRIB_IS_INT64)
 			{
 				var.Assign(ITOA64(var.mContentsInt64, value_string)); // Return value currently not checked for this or the below.
@@ -245,6 +245,8 @@ private:
 				var.mAttrib |= VAR_ATTRIB_IS_DOUBLE; // Re-enable the cache because Assign() disables it (since all other callers want that).
 			}
 			//else nothing to update, which shouldn't happen in this block unless there's a flaw or bug somewhere.
+			if (restore_attribute)
+				var.mAttrib |= VAR_ATTRIB_CONTENTS_OUT_OF_DATE_UNTIL_REASSIGNED | VAR_ATTRIB_CONTENTS_OUT_OF_DATE;
 		}
 	}
 
@@ -780,7 +782,7 @@ public:
 		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
 		if ((var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE) && aAllowUpdate) // VAR_ATTRIB_CONTENTS_OUT_OF_DATE is checked here and in the function below, for performance.
-			var.UpdateContents(); // This also clears the VAR_ATTRIB_CONTENTS_OUT_OF_DATE flag.
+			var.UpdateContents(); // This also clears the VAR_ATTRIB_CONTENTS_OUT_OF_DATE flag unless VAR_ATTRIB_CONTENTS_OUT_OF_DATE_UNTIL_REASSIGNED is set.
 		if (var.mType == VAR_NORMAL)
 		{
 			// If aAllowUpdate is FALSE, the caller just wants to compare mCharContents to another address.
