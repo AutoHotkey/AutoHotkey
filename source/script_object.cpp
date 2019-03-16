@@ -32,6 +32,11 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 
 	ResultType result = aInvokee->Invoke(result_token, this_token, IT_CALL | aExtraFlags, param, aParamCount);
 
+	// Exceptions are thrown by Invoke for too few/many parameters, but not for non-existent method.
+	// Check for that here, with the exception that objects are permitted to lack a __Delete method.
+	if (result == INVOKE_NOT_HANDLED && !(aExtraFlags & IF_METAOBJ))
+		result = g_script.ThrowRuntimeException(ERR_UNKNOWN_METHOD, NULL, aMethodName);
+
 	if (result != EARLY_EXIT && result != FAIL)
 	{
 		// Indicate to caller whether an integer value was returned (for MsgMonitor()).
