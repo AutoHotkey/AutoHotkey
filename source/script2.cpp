@@ -6145,6 +6145,7 @@ BIF_DECL(BIF_Sort)
 {
 	// Set defaults in case of early goto:
 	LPTSTR mem_to_free = NULL;
+	LPTSTR *item = NULL; // The index/pointer list used for the sort.
 	IObject *sort_func_orig = g_SortFunc; // Because UDFs can be interrupted by other threads -- and because UDFs can themselves call Sort with some other UDF (unlikely to be sure) -- backup & restore original g_SortFunc so that the "collapsing in reverse order" behavior will automatically ensure proper operation.
 	ResultType sort_func_result_orig = g_SortFuncResult;
 	g_SortFunc = NULL; // Now that original has been saved above, reset to detect whether THIS sort uses a UDF.
@@ -6229,6 +6230,7 @@ BIF_DECL(BIF_Sort)
 			result_to_return = aResultToken.Error(ERR_PARAM3_INVALID);
 			goto end;
 		}
+		g_SortFunc->AddRef(); // Ensure the object exists for the duration of the sorting.
 	}
 	
 	// Check for early return only after parsing options in case an option that sets ErrorLevel is present:
@@ -6319,7 +6321,7 @@ BIF_DECL(BIF_Sort)
 	// trailing_delimiter_indicates_trailing_blank_item is false:
 	int unit_size = sort_random ? 2 : 1;
 	size_t item_size = unit_size * sizeof(LPTSTR);
-	LPTSTR *item = (LPTSTR *)malloc((item_count + 1) * item_size);
+	item = (LPTSTR *)malloc((item_count + 1) * item_size);
 	if (!item)
 	{
 		result_to_return = aResultToken.Error(ERR_OUTOFMEM);
@@ -6474,7 +6476,6 @@ BIF_DECL(BIF_Sort)
 				--dest; // Remove the previous item's trailing delimiter there's nothing for it to delimit due to omission of this duplicate.
 		}
 	} // for()
-	free(item); // Free the index/pointer list used for the sort.
 
 	// Terminate the variable's contents.
 	if (trailing_crlf_added_temporarily) // Remove the CRLF only after its presence was used above to simplify the code by reducing the number of types/cases.
@@ -6499,8 +6500,12 @@ BIF_DECL(BIF_Sort)
 end:
 	if (ErrorLevel != -1) // A change to ErrorLevel is desired.  Compare directly to -1 due to unsigned.
 		g_ErrorLevel->Assign(ErrorLevel); // ErrorLevel is set only when dupe-mode is in effect.
+	if (!item)
+		free(item);
 	if (mem_to_free)
 		free(mem_to_free);
+	if (g_SortFunc)
+		g_SortFunc->Release();
 	g_SortFunc = sort_func_orig;
 	g_SortFuncResult = sort_func_result_orig;
 	if (!result_to_return)

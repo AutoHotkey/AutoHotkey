@@ -10710,7 +10710,7 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	else
 	{
 		ExprTokenType param = aHotkeyName;
-		INT_PTR retval;
+		__int64 retval;
 		result = LabelPtr(Callback)->ExecuteInNewThread(_T("#If"), &param, 1, &retval);
 		if (result != FAIL)
 			result = retval ? CONDITION_TRUE : CONDITION_FALSE;

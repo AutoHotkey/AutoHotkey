@@ -39,7 +39,7 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 	}
 	
 	if (aRetVal) // Always set this as some callers don't initialize it:
-		*aRetVal = result == EARLY_RETURN ? (INT_PTR)TokenToInt64(result_token) : 0;
+		*aRetVal = result == EARLY_RETURN ? TokenToInt64(result_token) : 0;
 
 	result_token.Free();
 	return result;
