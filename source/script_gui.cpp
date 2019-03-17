@@ -6327,8 +6327,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				case 'Y':
 					if (use_margin_offset = (*option_value == '+' && 'M' == ctoupper(option_value[1]))) // x+m or y+m.
 						option_value += 2;
-					else if (_tcschr(_T("MPS"), option_char2)) // Any other non-digit char should be picked up as an error via *endptr.
-						++option_value;
+					else if (_tcschr(_T("MPS+"), option_char2)) // Any other non-digit char should be picked up as an error via *endptr.
+						++option_value;							// Also skips over the '+' to allow, eg, x+-n
 					break;
 				}
 				// Parse the option's number as integer first, since that's most common.  If that fails,
