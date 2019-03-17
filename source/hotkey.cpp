@@ -2648,9 +2648,10 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 	// Insist on certain qualities so that they never need to be checked other than here:
 	if (!mJumpToLabel) // Caller has already ensured that aHotstring is not blank.
 		mJumpToLabel = g_script.mPlaceholderLabel;
-
-	ParseOptions(aOptions);
-
+	bool execute_action = false; // do not assign  mReplacement if execute_action is true.
+	ParseOptions(aOptions, mPriority, mKeyDelay, mSendMode, mCaseSensitive, mConformToCase, mDoBackspace
+		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, execute_action);
+	
 	// To avoid memory leak, this is done only when it is certain the hotstring will be created:
 	if (   !(mString = SimpleHeap::Malloc(aHotstring))   )
 		return; // ScriptError() was already called by Malloc().
@@ -2660,7 +2661,7 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 		return;
 	}
 	mStringLength = (UCHAR)_tcslen(mString);
-	if (*aReplacement)
+	if (!execute_action && *aReplacement)
 	{
 		// SimpleHeap is not used for the replacement as it can be changed at runtime by Hotstring().
 		if (   !(mReplacement = _tcsdup(aReplacement))   )
