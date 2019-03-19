@@ -188,13 +188,13 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_LOW_CONCAT // Zero-precedence concat, used so that "x%y=z%" is equivalent to "x%(y=z)%".
 	
 	// INTEGER OPERATORS START
-	// Integer operators truncates float operands to integers.
+	// Note that the below macro does not consider SYM_BITNOT or the bit-assignment operators.
 	, SYM_BITOR // Seems more intuitive to have these higher in prec. than the above, unlike C and Perl, but like Python.
 	, SYM_BITXOR // SYM_BITOR (ABOVE) MUST BE KEPT FIRST AMONG THE INTEGER OPERATORS BECAUSE IT'S USED IN A RANGE-CHECK (see IS_INTEGER_OPERATOR).
 	, SYM_BITAND
 	, SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT // << >>  
 	, SYM_INTEGERDIVIDE	// eg, x // y ALSO : SYM_INTEGERDIVIDE MUST BE KEPT LAST AMONG THE INTEGER OPERATORS BECAUSE IT'S USED IN A RANGE-CHECK (see IS_INTEGER_OPERATOR).
-#define IS_INTEGER_OPERATOR(symbol) ((symbol) <= SYM_INTEGERDIVIDE && (symbol) >= SYM_BITOR) // Check upper bound first for short-circuit performance (because operators like +-*/ are much more frequently used).
+#define IS_INTEGER_OPERATOR(symbol) ((symbol) <= SYM_INTEGERDIVIDE && (symbol) >= SYM_BITOR) // Currently not considered: SYM_BITNOT and the bit-assignment operators.
 	// INTEGER OPERATORS END
 
 	, SYM_ADD, SYM_SUBTRACT
