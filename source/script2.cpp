@@ -11444,10 +11444,7 @@ has_valid_return_type:
 		*Var::sEmptyString = '\0';
 		// Don't bother with freeing hmodule_to_free since a critical error like this calls for minimal cleanup.
 		// The OS almost certainly frees it upon termination anyway.
-		// Call ScriptErrror() so that the user knows *which* DllCall is at fault:
-		g->ExcptMode = EXCPTMODE_NONE; // Do not throw an exception.
-		g_script.ScriptError(_T("This DllCall requires a prior VarSetCapacity. The program is now unstable and will exit."));
-		g_script.ExitApp(EXIT_CRITICAL); // Called this way, it will run the OnExit function, which is debatable because it could cause more good than harm, but might avoid loss of data if the OnExit function does something important.
+		_f_critical_error(_T("This DllCall requires a prior VarSetCapacity. The program is now unstable and will exit."))
 	}
 
 	if (g->ThrownToken)
@@ -14027,7 +14024,7 @@ BIF_DECL(BIF_VarSetCapacity)
 					{
 						string_length = _tcsnlen(var.Contents(), max_count);	// measure the string
 						if (string_length == max_count)
-							_f_throw(ERR_STRING_NOT_TERMINATED);
+							_f_critical_error(ERR_STRING_NOT_TERMINATED, var.mName)
 						string_length = _TSIZE(string_length);
 					}
 					// Seems more useful to report length vs. capacity in this special case. Scripts might be able

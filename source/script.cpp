@@ -13070,7 +13070,13 @@ int Line::FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR 
 	return (int)(aBuf - aBuf_orig);
 }
 
-
+ResultType Script::CriticalScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
+{
+	// Displays an error message and terminates the script.
+	g->ExcptMode = EXCPTMODE_NONE; // Do not throw an exception.
+	ScriptError(aErrorText, aExtraInfo);
+	return ExitApp(EXIT_CRITICAL); // Called this way, it will run the OnExit function, which is debatable because it could cause more good than harm, but might avoid loss of data if the OnExit function does something important.
+}
 
 ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, ResultType aErrorType)
 // Even though this is a Script method, including it here since it shares

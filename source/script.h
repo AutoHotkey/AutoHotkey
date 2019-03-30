@@ -236,7 +236,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_HWND _T("Invalid HWND.")
 #define ERR_INVALID_USAGE _T("Invalid usage.")
 #define ERR_INTERNAL_CALL _T("An internal function call failed.")
-#define ERR_STRING_NOT_TERMINATED _T("String not null-terminated.")
+#define ERR_STRING_NOT_TERMINATED _T("String not null-terminated. The program is now unstable and will exit.")
 #define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
 #define WARNING_USE_ENV_VARIABLE _T("An environment variable is being accessed; see #NoEnv.")
@@ -421,6 +421,7 @@ struct ArgStruct
 #define _o_throw(...)			_o__ret(aResultToken.Error(__VA_ARGS__))
 #define _f_return_FAIL			_f__ret(aResultToken.SetExitResult(FAIL))
 #define _o_return_FAIL			_o__ret(aResultToken.SetExitResult(FAIL))
+#define _f_critical_error(...)	{ g_script.CriticalScriptError(__VA_ARGS__); _f_return_FAIL; } // Returns FAIL if the program doesn't terminate.
 // The _f_set_retval macros should be used with care because the integer macros assume symbol
 // is set to its default value; i.e. don't set a string and then attempt to return an integer.
 // It is also best for maintainability to avoid setting mem_to_free or an object without
@@ -2883,6 +2884,7 @@ public:
 	static ResultType SetSendMode(LPTSTR aValue);
 	static ResultType SetSendLevel(int aValue, LPTSTR aValueStr);
 
+	ResultType CriticalScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T("")); // Displays an error message and terminates the program. 
 	// Call this SciptError to avoid confusion with Line's error-displaying functions:
 	ResultType ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T("")); // , ResultType aErrorType = FAIL);
 
