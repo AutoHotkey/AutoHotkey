@@ -82,6 +82,23 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <PlatformToolset>v141</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <PlatformToolset>v141</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'">
+    <PlatformToolset>v141</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Self-contained|x64'">
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v141</PlatformToolset>
+  </PropertyGroup>
   <!-- import common config -->
   <Import Project="Config.vcxproj" />
   <!-- platform: win32 & x64 (common) -->
@@ -123,7 +140,7 @@
     <BinDir>bin\$(Platform)</BinDir>
     <BinDir Condition="'$(CharacterSet)'=='Unicode'">$(BinDir)w</BinDir>
     <BinDir Condition="'$(CharacterSet)'=='MultiByte'">$(BinDir)a</BinDir>
-    <OutDir>$(BinDir)\</OutDir>
+    <OutDir>$(BinDir)\Compiler\</OutDir>
     <OutDir Condition="$(ConfigDebug)">$(BinDir)_debug\</OutDir>
     <OutDir Condition="$(ConfigMinSize)">$(BinDir)_minimal\</OutDir>
   </PropertyGroup>
@@ -140,7 +157,7 @@
   </ItemDefinitionGroup>
   <!-- self-contained: required settings -->
   <PropertyGroup Condition="$(ConfigSC)">
-    <TargetName>AutoHotkeySC</TargetName>
+    <TargetName>Unicode 32-bit</TargetName>
     <TargetExt>.bin</TargetExt>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="$(ConfigSC)">
@@ -290,7 +307,27 @@
     </CustomBuild>
     <ClCompile>
       <TreatWarningAsError Condition="!$(ConfigDebug)">true</TreatWarningAsError>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'">..\..\..\code\breakpad\src\src</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\..\code\breakpad\src\src</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Self-contained|x64'">..\..\..\code\breakpad\src\src</AdditionalIncludeDirectories>
     </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'">..\third_party\breakpad\lib</AdditionalLibraryDirectories>
+      <GenerateDebugInformation Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'">true</GenerateDebugInformation>
+    </Link>
+    <Link>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\third_party\breakpad\lib</AdditionalLibraryDirectories>
+      <GenerateDebugInformation Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</GenerateDebugInformation>
+    </Link>
+    <ClCompile>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\..\..\code\breakpad\src\src</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">..\third_party\breakpad\lib</AdditionalLibraryDirectories>
+    </Link>
+    <Link>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Self-contained|x64'">..\third_party\breakpad\lib</AdditionalLibraryDirectories>
+    </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <CustomBuild Include="source\lib\win2kcompat.asm">

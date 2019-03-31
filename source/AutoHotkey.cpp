@@ -20,12 +20,49 @@ GNU General Public License for more details.
 #include "window.h" // For MsgBox() & SetForegroundLockTimeout()
 #include "TextIO.h"
 
+#ifndef _DEBUG
+#include "client/windows/handler/exception_handler.h"
+#pragma comment(lib, "common.lib")
+#pragma comment(lib, "exception_handler.lib")
+#pragma comment(lib, "crash_generation_client.lib")
+
+
+#include <string>
 // General note:
 // The use of Sleep() should be avoided *anywhere* in the code.  Instead, call MsgSleep().
 // The reason for this is that if the keyboard or mouse hook is installed, a straight call
 // to Sleep() will cause user keystrokes & mouse events to lag because the message pump
 // (GetMessage() or PeekMessage()) is the only means by which events are ever sent to the
 // hook functions.
+// 写完minidump后的回调函数
+static bool dumpCallback(const wchar_t* dump_path,
+	const wchar_t* minidump_id,
+	void* context,
+	EXCEPTION_POINTERS* exinfo,
+	MDRawAssertionInfo* assertion,
+	bool succeeded)
+{
+	return succeeded;
+}
+
+bool InitBreakpad(const TCHAR* path)
+{
+
+
+	google_breakpad::ExceptionHandler *pCrashHandler =
+		new google_breakpad::ExceptionHandler(path,
+			NULL,
+			dumpCallback,
+			NULL,
+			google_breakpad::ExceptionHandler::HANDLER_ALL);
+
+	if (pCrashHandler == NULL) {
+		return false;
+	}
+
+	return true;
+}
+#endif
 
 
 int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
@@ -34,6 +71,9 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	g_hInstance = hInstance;
 	InitializeCriticalSection(&g_CriticalRegExCache); // v1.0.45.04: Must be done early so that it's unconditional, so that DeleteCriticalSection() in the script destructor can also be unconditional (deleting when never initialized can crash, at least on Win 9x).
 
+	
+
+	
 	// v1.1.22+: This is done unconditionally, on startup, so that any attempts to read a drive
 	// that has no media (and possibly other errors) won't cause the system to display an error
 	// dialog that the script can't suppress.  This is known to affect floppy drives and some
@@ -45,6 +85,9 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 	if (!GetCurrentDirectory(_countof(g_WorkingDir), g_WorkingDir)) // Needed for the FileSelectFile() workaround.
 		*g_WorkingDir = '\0';
+
+	
+	
 	// Unlike the below, the above must not be Malloc'd because the contents can later change to something
 	// as large as MAX_PATH by means of the SetWorkingDir command.
 	g_WorkingDirOrig = SimpleHeap::Malloc(g_WorkingDir); // Needed by the Reload command.
@@ -54,8 +97,9 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 #ifndef AUTOHOTKEYSC
 	#ifdef _DEBUG
-		TCHAR *script_filespec = _T("Test\\Test.ahk");
+		TCHAR *script_filespec = _T("D:\\C++\\PuloversMacroCreator\\MacroCreator.ahk");
 	#else
+		InitBreakpad(g_WorkingDir);
 		TCHAR *script_filespec = NULL; // Set default as "unspecified/omitted".
 	#endif
 #endif
