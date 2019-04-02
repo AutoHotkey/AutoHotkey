@@ -23,6 +23,8 @@ GNU General Public License for more details.
 #include "application.h" // for MsgSleep()
 #include "TextIO.h"
 
+//#include "base/logging.h"
+
 // Globals that are for only this module:
 #define MAX_COMMENT_FLAG_LENGTH 15
 static TCHAR g_CommentFlag[MAX_COMMENT_FLAG_LENGTH + 1] = _T(";"); // Adjust the below for any changes.
@@ -3789,6 +3791,11 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	if (!aLineText || !*aLineText)
 		return ScriptError(_T("DEBUG: ParseAndAddLine() called incorrectly."));
 #endif
+
+//	int a = 30;
+//	a = wcscmp(aLineText, L"Gui, chMacro:ListView, InputList%A_List%");
+
+	//LOG(INFO) << aLineText;
 
 	TCHAR action_name[MAX_VAR_NAME_LENGTH + 1], *end_marker;
 	if (aActionName) // i.e. this function was called recursively with explicit values for the optional params.

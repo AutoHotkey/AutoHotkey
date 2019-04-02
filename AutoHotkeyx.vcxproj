@@ -307,16 +307,16 @@
     </CustomBuild>
     <ClCompile>
       <TreatWarningAsError Condition="!$(ConfigDebug)">true</TreatWarningAsError>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'">..\..\..\code\breakpad\src\src</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\..\code\breakpad\src\src</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'">..\..\..\code\breakpad\src\src;..\..\..\code\mini_chromium\base</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\..\..\code\breakpad\src\src;..\..\..\code\chromium-base\src</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Self-contained|x64'">..\..\..\code\breakpad\src\src</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'">..\third_party\breakpad\lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'">..\third_party\breakpad\lib;..\third_party\mini_chromium\lib;</AdditionalLibraryDirectories>
       <GenerateDebugInformation Condition="'$(Configuration)|$(Platform)'=='Self-contained|Win32'">true</GenerateDebugInformation>
     </Link>
     <Link>
-      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\third_party\breakpad\lib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">..\third_party\breakpad\lib;..\third_party\chromium-base\lib;</AdditionalLibraryDirectories>
       <GenerateDebugInformation Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</GenerateDebugInformation>
     </Link>
     <ClCompile>

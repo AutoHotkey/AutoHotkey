@@ -26,6 +26,11 @@ GNU General Public License for more details.
 #pragma comment(lib, "exception_handler.lib")
 #pragma comment(lib, "crash_generation_client.lib")
 
+#include "base/logging.h"
+#include "base/files/file_path.h"
+#include "base/path_service.h"
+#pragma comment(lib, "base.lib")
+
 
 #include <string>
 // General note:
@@ -99,8 +104,22 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	#ifdef _DEBUG
 		TCHAR *script_filespec = _T("D:\\C++\\PuloversMacroCreator\\MacroCreator.ahk");
 	#else
-		InitBreakpad(g_WorkingDir);
-		TCHAR *script_filespec = NULL; // Set default as "unspecified/omitted".
+	base::FilePath log_filename;
+	PathService::Get(base::DIR_EXE, &log_filename);
+	log_filename = log_filename.AppendASCII("autohotkey.log");
+	logging::LoggingSettings settings;
+	// log输出的位置
+	settings.logging_dest = logging::LOG_TO_FILE;
+	// log的文件名
+	settings.log_file = log_filename.value().c_str();
+	// 是否锁定log文件
+	settings.lock_log = logging::DONT_LOCK_LOG_FILE;
+	settings.delete_old = logging::DELETE_OLD_LOG_FILE;
+	logging::InitLogging(settings);
+
+	InitBreakpad(g_WorkingDir);
+	TCHAR *script_filespec = NULL; // Set default as "unspecified/omitted".
+
 	#endif
 #endif
 
