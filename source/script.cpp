@@ -4275,7 +4275,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 						if (_tcschr(_T("+-*/.|&^"), *item_end) && item_end[1] == '=')
 							break;
 						// Allowed: //= <<= >>=
-						if (_tcschr(_T("/<>"), *item_end) && item_end[1] == *item_end && item_end[2] == '=')
+						if (_tcschr(_T("/<>"), *item_end) && item_end[1] == *item_end && (item_end[2] == '=' 
+							|| (*item_end != '/' && item_end[2] == *item_end && item_end[3] == '='))) // allowed: <<<= >>>=, but not ///=
 							break;
 					}
 					return ScriptError(_T("Bad variable declaration."), item);
@@ -4440,7 +4441,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 			break;
 		case '>':
 		case '<':
-			if (action_args_2nd_char == *action_args && action_args[2] == '=') // i.e. >>= and <<=
+			if (action_args_2nd_char == *action_args && ( action_args[2] == '='	// i.e. >>= and <<=
+				|| (action_args[2] == *action_args && action_args[3] == '=') ))	// or >>>= and <<<=	
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 			break;
 		case '.': // L34: Handle dot differently now that dot is considered an action end flag. Detects some more errors and allows some valid expressions which weren't previously allowed.
@@ -4469,9 +4471,12 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 					if (*cp) // Avoid checking cp[1] and cp[2] when !*cp.
 					if (*cp == '[' // x.y[z]
 						|| cp[1] == '=' && _tcschr(_T(":+-*/|&^."), cp[0]) // Two-char assignment operator.
+						// or there are two repeated characters 
 						|| cp[1] == cp[0]
-							&& (   _tcschr(_T("/<>"), cp[0]) && cp[2] == '=' // //=, <<= or >>=
-								|| *cp == '+' || *cp == '-'   )) // x.y++ or x.y--
+						&& ( ( _tcschr(_T("/<>"), cp[0]) && cp[2] == '=' // //=, <<= or >>=
+									|| *cp == '+' || *cp == '-' ) // x.y++ or x.y--
+							// or three repeated characters:
+							|| (cp[2] == cp[0] && _tcschr(_T("<>"), cp[0]) && cp[3] == '=') )	) // <<<= or >>>=	
 					{	// Allow Set and bracketed Get as standalone expression.
 						aActionType = ACT_EXPRESSION;
 						break;
@@ -7993,7 +7998,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 86             // SYM_DOT
 		, 2,2,2,2,2,2    // SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE (to simplify the code, parentheses/brackets/braces must be lower than all operators in precedence).
 		, 6              // SYM_COMMA -- Must be just above SYM_OPAREN so it doesn't pop OPARENs off the stack.
-		, 7,7,7,7,7,7,7,7,7,7,7,7  // SYM_ASSIGN_*. THESE HAVE AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for cascading assignments such as x:=y:=1 to work.
+		, 7,7,7,7,7,7,7,7,7,7,7,7,7  // SYM_ASSIGN_*. THESE HAVE AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for cascading assignments such as x:=y:=1 to work.
 //		, 8              // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 11, 11         // SYM_IFF_ELSE, SYM_IFF_THEN (ternary conditional).  HAS AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for ternaries to perform traditionally when nested in each other without parentheses.
 //		, 12             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
@@ -8010,7 +8015,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 42             // SYM_BITOR -- Seems more intuitive to have these three higher in prec. than the above, unlike C and Perl, but like Python.
 		, 46             // SYM_BITXOR
 		, 50             // SYM_BITAND
-		, 54, 54         // SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT
+		, 54, 54, 54     // SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT, SYM_BITSHIFTRIGHT_LOGICAL
 		, 58, 58         // SYM_ADD, SYM_SUBTRACT
 		, 62, 62, 62     // SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
 		, 72             // SYM_POWER (see note below).  Associativity kept as left-to-right for backward compatibility (e.g. 2**2**3 is 4**3=64 not 2**8=256).
@@ -8360,7 +8365,14 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						else
 						{
 							++cp; // An additional increment to have loop skip over the second '>' too.
-							this_infix_item.symbol = SYM_BITSHIFTRIGHT;
+							if (cp[1] == '>') // look for a third '>'
+							{
+								++cp; // to have the loop skip the third '>'
+								// it is SYM_BITSHIFTRIGHT_LOGICAL or SYM_ASSIGN_BITSHIFTRIGHT_LOGICAL
+								this_infix_item.symbol = cp[1] == '=' ? (cp++, SYM_ASSIGN_BITSHIFTRIGHT_LOGICAL) : SYM_BITSHIFTRIGHT_LOGICAL;
+							}
+							else
+								this_infix_item.symbol = SYM_BITSHIFTRIGHT;
 						}
 						break;
 					default:
@@ -8383,7 +8395,14 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						else
 						{
 							++cp; // An additional increment to have loop skip over the second '<' too.
-							this_infix_item.symbol = SYM_BITSHIFTLEFT;
+							if (cp[1] == '<') // look for a third '<'
+							{
+								++cp; // to have the loop skip the third '<'
+								// it is <<< or <<<=, which is taken as SYM_BITSHIFTLEFT and SYM_ASSIGN_BITSHIFTLEFT. 
+								this_infix_item.symbol = cp[1] == '=' ? (cp++, SYM_ASSIGN_BITSHIFTLEFT) : SYM_BITSHIFTLEFT;
+							}
+							else
+								this_infix_item.symbol = SYM_BITSHIFTLEFT;
 						}
 						break;
 					default:
@@ -9563,17 +9582,18 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				{
 					switch (postfix_symbol)
 					{
-					case SYM_ASSIGN_ADD:           postfix_symbol = SYM_ADD; break;
-					case SYM_ASSIGN_SUBTRACT:      postfix_symbol = SYM_SUBTRACT; break;
-					case SYM_ASSIGN_MULTIPLY:      postfix_symbol = SYM_MULTIPLY; break;
-					case SYM_ASSIGN_DIVIDE:        postfix_symbol = SYM_DIVIDE; break;
-					case SYM_ASSIGN_FLOORDIVIDE:   postfix_symbol = SYM_FLOORDIVIDE; break;
-					case SYM_ASSIGN_BITOR:         postfix_symbol = SYM_BITOR; break;
-					case SYM_ASSIGN_BITXOR:        postfix_symbol = SYM_BITXOR; break;
-					case SYM_ASSIGN_BITAND:        postfix_symbol = SYM_BITAND; break;
-					case SYM_ASSIGN_BITSHIFTLEFT:  postfix_symbol = SYM_BITSHIFTLEFT; break;
-					case SYM_ASSIGN_BITSHIFTRIGHT: postfix_symbol = SYM_BITSHIFTRIGHT; break;
-					case SYM_ASSIGN_CONCAT:        postfix_symbol = SYM_CONCAT; break;
+					case SYM_ASSIGN_ADD:					postfix_symbol = SYM_ADD; break;
+					case SYM_ASSIGN_SUBTRACT:				postfix_symbol = SYM_SUBTRACT; break;
+					case SYM_ASSIGN_MULTIPLY:				postfix_symbol = SYM_MULTIPLY; break;
+					case SYM_ASSIGN_DIVIDE:					postfix_symbol = SYM_DIVIDE; break;
+					case SYM_ASSIGN_FLOORDIVIDE:			postfix_symbol = SYM_FLOORDIVIDE; break;
+					case SYM_ASSIGN_BITOR:					postfix_symbol = SYM_BITOR; break;
+					case SYM_ASSIGN_BITXOR:					postfix_symbol = SYM_BITXOR; break;
+					case SYM_ASSIGN_BITAND:					postfix_symbol = SYM_BITAND; break;
+					case SYM_ASSIGN_BITSHIFTLEFT:			postfix_symbol = SYM_BITSHIFTLEFT; break;
+					case SYM_ASSIGN_BITSHIFTRIGHT:			postfix_symbol = SYM_BITSHIFTRIGHT; break;
+					case SYM_ASSIGN_BITSHIFTRIGHT_LOGICAL:	postfix_symbol = SYM_BITSHIFTRIGHT_LOGICAL; break;
+					case SYM_ASSIGN_CONCAT:					postfix_symbol = SYM_CONCAT; break;
 					}
 					// Insert the concat or math operator before the assignment:
 					this_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
