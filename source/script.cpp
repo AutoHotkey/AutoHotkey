@@ -3524,6 +3524,44 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 #endif
 	}
 
+	if (IS_DIRECTIVE_MATCH(_T("#LoadLibrary")))
+	{
+		if (!parameter)
+		{
+			// an empty #LoadLibrary restores the default search order.
+			if (!SetDllDirectory(NULL))
+				return ScriptError(ERR_INTERNAL_CALL);
+			return CONDITION_TRUE;
+		}
+		// ignore failure if path is preceeded by "*i".
+		bool ignore_load_failure = (parameter[0] == '*' && ctoupper(parameter[1]) == 'I'); // Relies on short-circuit boolean order.
+		if (ignore_load_failure)
+		{
+			parameter += 2;
+			if (IS_SPACE_OR_TAB(*parameter)) // Skip over at most one space or tab, since others might be a literal part of the filename.
+				++parameter;
+		}
+		LPTSTR library_path;	// needs to be freed before return, unless DerefInclude return FAIL.
+		if (!DerefInclude(library_path, parameter))
+			return FAIL;
+		DWORD attr = GetFileAttributes(library_path);
+		if (attr != 0xFFFFFFFF && (attr & FILE_ATTRIBUTE_DIRECTORY)) // File exists and its a directory
+		{
+			BOOL result = SetDllDirectory(library_path);
+			free(library_path);
+			if (!result)
+				return ScriptError(ERR_INTERNAL_CALL);
+			return CONDITION_TRUE;
+		}
+		ResultType result = CONDITION_TRUE;	// set default
+		HMODULE hmodule = LoadLibrary(library_path);
+		if (!hmodule					// the library couldn't be loaded
+			&& !ignore_load_failure)	// no *i was specified
+			result = ScriptError(_T("Failed to load DLL."), library_path);
+		free(library_path);
+		return result;
+	} // end #LoadLibrary
+
 	if (IS_DIRECTIVE_MATCH(_T("#NoTrayIcon")))
 	{
 		g_NoTrayIcon = true;
@@ -12423,7 +12461,7 @@ BIF_DECL(BIF_PerformAction)
 
 
 ResultType Script::DerefInclude(LPTSTR &aOutput, LPTSTR aBuf)
-// For #Include and #IncludeAgain.
+// For #Include, #IncludeAgain and #LoadLibrary.
 // Based on Line::Deref above, but with a few differences for backward-compatibility:
 //  1) Percent signs that aren't part of a valid deref are not omitted.
 //  2) Escape sequences aren't recognized (`; is handled elsewhere).
