@@ -1531,7 +1531,7 @@ void input_type::ParseOptions(LPTSTR aOptions)
 			CaseSensitive = true;
 			break;
 		case 'I':
-			IgnoreAHKInput = true;
+			MinSendLevel = (cp[1] <= '9' && cp[1] >= '0') ? (SendLevelType)_ttoi(cp + 1) : 1;
 			break;
 		case 'M':
 			TranscribeModifiedKeys = true;

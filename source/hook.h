@@ -190,9 +190,9 @@ struct input_type
 	UINT MatchBufSize; // The capacity of the above buffer.
 	int Timeout;
 	DWORD TimeoutAt;
+	SendLevelType MinSendLevel; // The minimum SendLevel that can be captured by this input (0 allows all).
 	bool BackspaceIsUndo;
 	bool CaseSensitive;
-	bool IgnoreAHKInput; // Whether input from any AHK script is ignored for the purpose of finding a match.
 	bool TranscribeModifiedKeys; // Whether the input command will attempt to transcribe modified keys such as ^c.
 	bool Visible;
 	bool FindAnywhere;
@@ -213,12 +213,13 @@ struct input_type
 		, match(NULL), MatchBuf(NULL), MatchBufSize(0)
 		, EndChars(NULL), EndCharsMax(0), EndVK(), EndSC(), BufferLength(0)
 		// Default options:
-		, BackspaceIsUndo(true), CaseSensitive(false), IgnoreAHKInput(false), TranscribeModifiedKeys(false)
+		, MinSendLevel(0), BackspaceIsUndo(true), CaseSensitive(false), TranscribeModifiedKeys(false)
 		, Visible(false), FindAnywhere(false), BufferLengthMax(INPUT_BUFFER_SIZE - 1), Timeout(0), EndCharMode(false)
 	{
 		*Buffer = '\0';
 	}
 	inline bool InProgress() { return Status == INPUT_IN_PROGRESS; }
+	bool IsInteresting(KBDLLHOOKSTRUCT &aEvent);
 	ResultType Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length);
 	void ParseOptions(LPTSTR aOptions);
 	ResultType SetEndKeys(LPTSTR aEndKeys);

@@ -2394,7 +2394,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 
 	for (auto *input = g_input; input; input = input->Prev)
 	{
-		if (input->InProgress() && !(input->IgnoreAHKInput && aIsIgnored))
+		if (input->InProgress() && input->IsInteresting(aEvent))
 		{
 			if (input->TranscribeModifiedKeys)
 				transcribe_modified_keys = true;
@@ -2981,7 +2981,7 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 {
 	for (auto *input = g_input; input; input = input->Prev)
 	{
-		if (!input->InProgress() || (input->IgnoreAHKInput && aIsIgnored))
+		if (!input->InProgress() || !input->IsInteresting(aEvent))
 			continue;
 
 		UCHAR end_key_attributes = input->EndVK[aVK] | input->EndSC[aSC];
@@ -3018,6 +3018,13 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 	// Return value is false if caller determined that a non-Visible input is active,
 	// unless the key is one that should never be suppressed.
 	return aTreatAsVisible;
+}
+
+
+
+bool input_type::IsInteresting(KBDLLHOOKSTRUCT &aEvent)
+{
+	return MinSendLevel == 0 ? true : HotInputLevelAllowsFiring(MinSendLevel - 1, aEvent.dwExtraInfo, NULL);
 }
 
 
