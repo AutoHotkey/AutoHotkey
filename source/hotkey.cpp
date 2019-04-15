@@ -327,7 +327,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// v1.0.42: Reset sWhichHookNeeded because it's now possible that the hook was on before but no longer
 	// needed due to changing of a hotkey from hook to registered (for various reasons described above):
 	// v1.0.91: Make sure to leave the keyboard hook active if the script needs it for collecting input.
-	if (g_input.status == INPUT_IN_PROGRESS)
+	if (g_input) // There's an Input in progress (or just ending).
 		sWhichHookNeeded = HOOK_KEYBD;
 	else
 		sWhichHookNeeded = 0;

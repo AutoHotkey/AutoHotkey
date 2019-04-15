@@ -102,6 +102,7 @@ int g_nLayersNeedingTimer = 0;
 int g_nThreads = 0;
 int g_nPausedThreads = 0;
 int g_MaxHistoryKeys = 40;
+DWORD g_InputTimeoutAt = 0;
 
 // g_MaxVarCapacity is used to prevent a buggy script from consuming all available system RAM. It is defined
 // as the maximum memory size of a variable, including the string's zero terminator.
@@ -191,7 +192,7 @@ TCHAR g_EndChars[HS_MAX_END_CHARS + 1] = _T("-()[]{}:;'\"/\\,.?!\n \t");  // Hot
 
 // Global objects:
 Var *g_ErrorLevel = NULL; // Allows us (in addition to the user) to set this var to indicate success/failure.
-input_type g_input;
+input_type *g_input = NULL;
 Script g_script;
 // This made global for performance reasons (determining size of clipboard data then
 // copying contents in or out without having to close & reopen the clipboard in between):
