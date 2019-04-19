@@ -66,6 +66,10 @@ ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThis
 				input.Stop();
 			return OK;
 		}
+		else if (!_tcsicmp(name, _T("KeyOpt")))
+		{
+			return KeyOpt(aResultToken, aParam + 1, aParamCount - 1);
+		}
 		return INVOKE_NOT_HANDLED;
 	}
 
@@ -185,4 +189,42 @@ ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThis
 		return OK;
 	}
 	return INVOKE_NOT_HANDLED;
+}
+
+
+ResultType InputObject::KeyOpt(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	if (aParamCount < 2)
+		_o_throw(ERR_TOO_FEW_PARAMS);
+
+	_f_param_string(keys, 0);
+	_f_param_string(options, 1);
+
+	bool adding = true;
+	UCHAR flag, add_flags = 0, remove_flags = 0;
+	for (LPTSTR cp = options; *cp; ++cp)
+	{
+		switch (ctoupper(*cp))
+		{
+		case '+': adding = true; continue;
+		case '-': adding = false; continue;
+		case ' ': case '\t': continue;
+		case 'E': flag = END_KEY_ENABLED; break;
+		case 'I': flag = INPUT_KEY_IGNORE_TEXT; break;
+		case 'V':
+			add_flags |= INPUT_KEY_VISIBILITY_OVERRIDE; // So -V can override the default visibility.
+			flag = INPUT_KEY_VISIBLE;
+			break;
+		default: _o_throw(ERR_INVALID_OPTION, cp);
+		}
+		if (adding)
+			add_flags |= flag; // Add takes precedence over remove, so remove_flags isn't changed.
+		else
+		{
+			remove_flags |= flag;
+			add_flags &= ~flag; // Override any previous add.
+		}
+	}
+
+	return input.SetKeyFlags(keys, false, remove_flags, add_flags);
 }

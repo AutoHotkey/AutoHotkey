@@ -1475,7 +1475,7 @@ ResultType Line::Input()
 ResultType input_type::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length)
 {
 	ParseOptions(aOptions);
-	if (!SetEndKeys(aEndKeys))
+	if (!SetKeyFlags(aEndKeys))
 		return FAIL;
 	if (!SetMatchList(aMatchList, aMatchList_length))
 		return FAIL;
@@ -1572,7 +1572,7 @@ void input_type::SetTimeoutTimer()
 }
 
 
-ResultType input_type::SetEndKeys(LPTSTR aEndKeys)
+ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsRemove, UCHAR aFlagsAdd)
 {
 	vk_type vk;
 	sc_type sc = 0;
@@ -1582,11 +1582,11 @@ ResultType input_type::SetEndKeys(LPTSTR aEndKeys)
 	TCHAR *end_pos, single_char_string[2];
 	single_char_string[1] = '\0'; // Init its second character once, since the loop only changes the first char.
 	
-	const bool endchar_mode = EndCharMode;
+	const bool endchar_mode = aEndKeyMode && EndCharMode;
 	UCHAR * const end_vk = KeyVK;
 	UCHAR * const end_sc = KeySC;
 
-	for (TCHAR *end_key = aEndKeys; *end_key; ++end_key) // This a modified version of the processing loop used in SendKeys().
+	for (TCHAR *end_key = aKeys; *end_key; ++end_key) // This a modified version of the processing loop used in SendKeys().
 	{
 		vk = 0; // Set default.  Not strictly necessary but more maintainable.
 		*single_char_string = '\0';  // Set default as "this key name is not a single-char string".
@@ -1627,7 +1627,7 @@ ResultType input_type::SetEndKeys(LPTSTR aEndKeys)
 			if (  !(vk = TextToVK(end_key + 1, &modifiersLR, true))  )
 				// No virtual key, so try to find a scan code.
 				if (sc = TextToSC(end_key + 1))
-					end_sc[sc] = END_KEY_ENABLED;
+					end_sc[sc] = (end_sc[sc] & ~aFlagsRemove) | aFlagsAdd;
 
 			*end_pos = '}';  // undo the temporary termination
 
@@ -1648,10 +1648,9 @@ ResultType input_type::SetEndKeys(LPTSTR aEndKeys)
 
 		if (vk) // A valid virtual key code was discovered above.
 		{
-			end_vk[vk] |= END_KEY_ENABLED; // Use of |= is essential for cases such as ";:".
 			// Insist the shift key be down to form genuinely different symbols --
 			// namely punctuation marks -- but not for alphabetic chars.
-			if (*single_char_string && !IsCharAlpha(*single_char_string)) // v1.0.46.05: Added check for "*single_char_string" so that non-single-char strings like {F9} work as end keys even when the Shift key is being held down (this fixes the behavior to be like it was in pre-v1.0.45).
+			if (*single_char_string && aEndKeyMode && !IsCharAlpha(*single_char_string)) // v1.0.46.05: Added check for "*single_char_string" so that non-single-char strings like {F9} work as end keys even when the Shift key is being held down (this fixes the behavior to be like it was in pre-v1.0.45).
 			{
 				// Now we know it's not alphabetic, and it's not a key whose name
 				// is longer than one char such as a function key or numpad number.
@@ -1663,6 +1662,8 @@ ResultType input_type::SetEndKeys(LPTSTR aEndKeys)
 				else
 					end_vk[vk] |= END_KEY_WITHOUT_SHIFT;
 			}
+			else
+				end_vk[vk] = (end_vk[vk] & ~aFlagsRemove) | aFlagsAdd;
 		}
 	} // for()
 
@@ -1678,7 +1679,7 @@ ResultType input_type::SetEndKeys(LPTSTR aEndKeys)
 			EndCharsMax = single_char_count;
 		}
 		TCHAR *dst, *src;
-		for (dst = EndChars, src = aEndKeys; *src; ++src)
+		for (dst = EndChars, src = aKeys; *src; ++src)
 		{
 			switch (*src)
 			{
@@ -1700,7 +1701,7 @@ ResultType input_type::SetEndKeys(LPTSTR aEndKeys)
 		ASSERT(dst > EndChars);
 		*dst = '\0';
 	}
-	else // if (single_char_count)
+	else if (aEndKeyMode) // single_char_count is false
 	{
 		if (EndCharsMax)
 			*EndChars = '\0';

@@ -19,6 +19,7 @@ public:
 	}
 
 	ResultType Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length);
+	ResultType KeyOpt(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	IObject_Type_Impl("InputHook")

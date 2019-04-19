@@ -2981,24 +2981,28 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 	{
 		if (!input->InProgress() || !input->IsInteresting(aEvent))
 			continue;
+		
+		UCHAR key_flags = input->KeyVK[aVK] | input->KeySC[aSC];
+
+		bool ignore_aChar = key_flags & INPUT_KEY_IGNORE_TEXT;
 
 		// Determine visibility based on options and whether the key produced text.
 		// Negative aCharCount (dead key) is treated as text in this context.
-		bool visible = aCharCount ? input->VisibleText : input->VisibleNonText;
+		bool visible;
+		if (key_flags & INPUT_KEY_VISIBILITY_OVERRIDE)
+			visible = key_flags & INPUT_KEY_VISIBLE;
+		else
+			visible = aCharCount && !ignore_aChar ? input->VisibleText : input->VisibleNonText;
 
-		UCHAR end_key_attributes = input->KeyVK[aVK] | input->KeySC[aSC];
-		if (end_key_attributes) // A terminating keystroke has now occurred unless the shift state isn't right.
+		if (key_flags & END_KEY_ENABLED) // A terminating keystroke has now occurred unless the shift state isn't right.
 		{
-			// Caller has ensured that only one of the flags below is set (if any):
-			bool shift_must_be_down = end_key_attributes & END_KEY_WITH_SHIFT;
-			bool shift_must_not_be_down = end_key_attributes & END_KEY_WITHOUT_SHIFT;
-			bool shift_state_matters = shift_must_be_down != shift_must_not_be_down; // i.e. exactly one of them.
+			bool end_if_shift_is_down = key_flags & END_KEY_WITH_SHIFT;
+			bool end_if_shift_is_not_down = key_flags & END_KEY_WITHOUT_SHIFT;
 			bool shift_is_down = g_modifiersLR_logical & (MOD_LSHIFT | MOD_RSHIFT);
-			if (   !shift_state_matters
-				|| (shift_is_down ? shift_must_be_down : shift_must_not_be_down)  )
+			if (shift_is_down ? end_if_shift_is_down : end_if_shift_is_not_down)
 			{
 				// The shift state is correct to produce the desired end-key.
-				input->EndByKey(aVK, aSC, input->KeySC[aSC], shift_must_be_down && shift_is_down);
+				input->EndByKey(aVK, aSC, input->KeySC[aSC], shift_is_down && !end_if_shift_is_not_down);
 				if (!visible)
 					break;
 				continue;
@@ -3012,16 +3016,12 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 			visible = input->VisibleText; // Override VisibleNonText.
 			// Fall through to the check below in case this {BS} completed a dead key sequence.
 		}
-		if (aCharCount > 0)
-		{
-			if (!input->CollectChar(aChar, aCharCount))
-				break;
-		}
-		else
-		{
-			if (!visible && !(kvk[aVK].as_modifiersLR || kvk[aVK].pForceToggle))
-				break;
-		}
+
+		if (aCharCount > 0 && !ignore_aChar)
+			input->CollectChar(aChar, aCharCount);
+
+		if (!visible && !(kvk[aVK].as_modifiersLR || kvk[aVK].pForceToggle))
+			break;
 	}
 	if (input) // Early break (invisible input).
 	{
@@ -3043,7 +3043,7 @@ bool input_type::IsInteresting(KBDLLHOOKSTRUCT &aEvent)
 
 
 
-bool input_type::CollectChar(TBYTE *ch, int char_count)
+void input_type::CollectChar(TBYTE *ch, int char_count)
 {
 	TCHAR * const buffer = Buffer; // Marginally reduces code size.
 
@@ -3052,7 +3052,7 @@ bool input_type::CollectChar(TBYTE *ch, int char_count)
 		if (CaseSensitive ? _tcschr(EndChars, ch[i]) : ltcschr(EndChars, ch[i]))
 		{
 			EndByChar(ch[i]);
-			return VisibleText;
+			return;
 		}
 		if (BufferLength == BufferLengthMax)
 			break;
@@ -3070,7 +3070,7 @@ bool input_type::CollectChar(TBYTE *ch, int char_count)
 				if (_tcsstr(buffer, match[i]))
 				{
 					EndByMatch(i);
-					return VisibleText;
+					return;
 				}
 			}
 		}
@@ -3085,7 +3085,7 @@ bool input_type::CollectChar(TBYTE *ch, int char_count)
 				if (lstrcasestr(buffer, match[i]))
 				{
 					EndByMatch(i);
-					return VisibleText;
+					return;
 				}
 			}
 		}
@@ -3099,7 +3099,7 @@ bool input_type::CollectChar(TBYTE *ch, int char_count)
 				if (!_tcscmp(buffer, match[i]))
 				{
 					EndByMatch(i);
-					return VisibleText;
+					return;
 				}
 			}
 		}
@@ -3111,7 +3111,7 @@ bool input_type::CollectChar(TBYTE *ch, int char_count)
 				if (!lstrcmpi(buffer, match[i]))
 				{
 					EndByMatch(i);
-					return VisibleText;
+					return;
 				}
 			}
 		}
@@ -3120,7 +3120,6 @@ bool input_type::CollectChar(TBYTE *ch, int char_count)
 	// Otherwise, no match found.
 	if (BufferLength >= BufferLengthMax)
 		EndByLimit();
-	return VisibleText;
 }
 
 

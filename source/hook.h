@@ -170,10 +170,13 @@ enum InputStatusType {INPUT_OFF, INPUT_IN_PROGRESS, INPUT_TIMED_OUT, INPUT_TERMI
 	, INPUT_TERMINATED_BY_ENDKEY, INPUT_LIMIT_REACHED, INPUT_INTERRUPTED};
 
 // Bitwise flags for the Key arrays:
-#define END_KEY_ENABLED 0x01
-#define END_KEY_WITH_SHIFT 0x02
-#define END_KEY_WITHOUT_SHIFT 0x04
-#define INPUT_KEY_DOWN_SUPPRESSED 0x08
+#define END_KEY_WITH_SHIFT 0x01
+#define END_KEY_WITHOUT_SHIFT 0x02
+#define END_KEY_ENABLED (END_KEY_WITH_SHIFT | END_KEY_WITHOUT_SHIFT)
+#define INPUT_KEY_VISIBILITY_OVERRIDE 0x04
+#define INPUT_KEY_VISIBLE 0x08
+#define INPUT_KEY_IGNORE_TEXT 0x10
+#define INPUT_KEY_DOWN_SUPPRESSED 0x80
 
 class InputObject;
 struct input_type
@@ -225,7 +228,7 @@ struct input_type
 	ResultType Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length);
 	void ParseOptions(LPTSTR aOptions);
 	void SetTimeoutTimer();
-	ResultType SetEndKeys(LPTSTR aEndKeys);
+	ResultType SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode = true, UCHAR aFlagsRemove = 0, UCHAR aFlagsAdd = END_KEY_ENABLED);
 	ResultType SetMatchList(LPTSTR aMatchList, size_t aMatchList_length);
 	void Start();
 	void EndByMatch(UINT aMatchIndex);
@@ -235,7 +238,7 @@ struct input_type
 	void EndByLimit() { EndByReason(INPUT_LIMIT_REACHED); }
 	void EndByNewInput() { EndByReason(INPUT_INTERRUPTED); }
 	void Stop() { EndByReason(INPUT_OFF); }
-	bool CollectChar(TBYTE *ch, int char_count);
+	void CollectChar(TBYTE *ch, int char_count);
 	LPTSTR GetEndReason(LPTSTR aKeyBuf, int aKeyBufSize, bool aCombined = true);
 private:
 	void EndByReason(InputStatusType aReason);
