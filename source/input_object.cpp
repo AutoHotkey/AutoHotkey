@@ -162,8 +162,8 @@ ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThis
 	else if (!_tcsicmp(name, _T("Timeout")))
 	{
 		if (IS_INVOKE_SET)
-			input.Timeout = ParamIndexToInt(1);
-		aResultToken.SetValue(input.Timeout);
+			input.Timeout = (int)(ParamIndexToDouble(1) * 1000);
+		aResultToken.SetValue(input.Timeout / 1000.0);
 		return OK;
 	}
 	else if (!_tcsicmp(name, _T("VisibleText")))
