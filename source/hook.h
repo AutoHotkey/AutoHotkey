@@ -224,6 +224,7 @@ struct input_type
 	bool IsInteresting(KBDLLHOOKSTRUCT &aEvent);
 	ResultType Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length);
 	void ParseOptions(LPTSTR aOptions);
+	void SetTimeoutTimer();
 	ResultType SetEndKeys(LPTSTR aEndKeys);
 	ResultType SetMatchList(LPTSTR aMatchList, size_t aMatchList_length);
 	void Start();

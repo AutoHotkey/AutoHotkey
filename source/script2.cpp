@@ -1495,12 +1495,7 @@ ResultType InputStart(input_type &input, Var *output_var)
 	// Set or update the timeout timer if needed.  The timer proc takes care to end
 	// only those inputs which are due, and will reset or kill the timer as needed.
 	if (input.Timeout > 0)
-	{
-		DWORD now = GetTickCount();
-		input.TimeoutAt = now + input.Timeout;
-		if (!g_InputTimerExists || input.Timeout < int(g_InputTimeoutAt - now))
-			SET_INPUT_TIMER(input.Timeout, input.TimeoutAt)
-	}
+		input.SetTimeoutTimer();
 
 	input.Prev = g_input;
 	input.Start();
@@ -1565,6 +1560,15 @@ void input_type::ParseOptions(LPTSTR aOptions)
 			break;
 		}
 	}
+}
+
+
+void input_type::SetTimeoutTimer()
+{
+	DWORD now = GetTickCount();
+	TimeoutAt = now + Timeout;
+	if (!g_InputTimerExists || Timeout < int(g_InputTimeoutAt - now))
+		SET_INPUT_TIMER(Timeout, TimeoutAt)
 }
 
 
