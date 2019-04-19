@@ -2384,11 +2384,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 // might have adjusted vk, namely to make it a left/right specific modifier key rather than a
 // neutral one.
 {
-	// Generally, we return this value to our caller so that it will treat the event as visible
-	// if there's no input in progress, if there is but it's visible, or if this key should never
-	// be suppressed.
-	bool treat_as_visible = true;
-
 	// Transcription is done only once for all layers, so do this if any layer requests it:
 	bool transcribe_modified_keys = false;
 
@@ -2396,31 +2391,29 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	{
 		if (input->InProgress() && input->IsInteresting(aEvent))
 		{
+			if (aKeyUp && (input->KeySC[aSC] & INPUT_KEY_DOWN_SUPPRESSED))
+			{
+				input->KeySC[aSC] &= ~INPUT_KEY_DOWN_SUPPRESSED;
+				return false;
+			}
+			if (aKeyUp && (input->KeyVK[aVK] & INPUT_KEY_DOWN_SUPPRESSED))
+			{
+				input->KeyVK[aVK] &= ~INPUT_KEY_DOWN_SUPPRESSED;
+				return false;
+			}
+
 			if (input->TranscribeModifiedKeys)
 				transcribe_modified_keys = true;
-
-			if (!input->Visible)
-			{
-				if (!(kvk[aVK].pForceToggle // Never suppress toggleable keys such as CapsLock
-					|| kvk[aVK].as_modifiersLR)) // or modifier keys.
-					treat_as_visible = false;
-				break;
-			}
 		}
 	}
 
+	// The checks above suppress key-up if key-down was suppressed and the Input is still active.
+	// Otherwise, avoid suppressing key-up since it may result in the key getting stuck down.
+	// At the very least, this is needed for cases where a user presses a #z hotkey, for example,
+	// to initiate an Input.  When the user releases the LWIN/RWIN key during the input, that
+	// up-event should not be suppressed otherwise the modifier key would get "stuck down".  
 	if (aKeyUp)
-		// Always pass modifier-up events through unaltered.  At the very least, this is needed for
-		// cases where a user presses a #z hotkey, for example, to initiate an Input.  When the user
-		// releases the LWIN/RWIN key during the input, that up-event should not be suppressed
-		// otherwise the modifier key would get "stuck down".  
-		return treat_as_visible;
-
-	// Hotstrings monitor neither ignored input nor input that is invisible due to suppression by
-	// the Input command.  One reason for not monitoring ignored input is to avoid any chance of
-	// an infinite loop of keystrokes caused by one hotstring triggering itself directly or
-	// indirectly via a different hotstring:
-	bool do_monitor_hotstring = Hotstring::sEnabledCount && !aIsIgnored && treat_as_visible;
+		return true;
 
 	static vk_type sPendingDeadKeyVK = 0;
 	static sc_type sPendingDeadKeySC = 0; // Need to track this separately because sometimes default VK-to-SC mapping isn't correct.
@@ -2552,7 +2545,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 			--char_count; // Remove '\b' to simplify the backspacing and collection stages.
 	}
 	
-	if (!CollectInputHook(aEvent, aVK, aSC, ch, char_count, treat_as_visible, aIsIgnored))
+	if (!CollectInputHook(aEvent, aVK, aSC, ch, char_count, aIsIgnored))
 		return false; // Suppress.
 	
 	// More notes about dead keys: The dead key behavior of Enter/Space/Backspace is already properly
@@ -2634,7 +2627,11 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		return true; // Visible.
 	}
 	
-	if (do_monitor_hotstring)
+	// Hotstrings monitor neither ignored input nor input that is invisible due to suppression by
+	// the Input command.  One reason for not monitoring ignored input is to avoid any chance of
+	// an infinite loop of keystrokes caused by one hotstring triggering itself directly or
+	// indirectly via a different hotstring:
+	if (Hotstring::sEnabledCount && !aIsIgnored)
 	{
 		switch (aVK)
 		{
@@ -2977,14 +2974,19 @@ bool CollectHotstring(KBDLLHOOKSTRUCT &aEvent, TCHAR ch[], int char_count, HWND 
 
 
 bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, TCHAR aChar[], int aCharCount
-	, bool aTreatAsVisible, bool aIsIgnored)
+	, bool aIsIgnored)
 {
-	for (auto *input = g_input; input; input = input->Prev)
+	auto *input = g_input;
+	for (; input; input = input->Prev)
 	{
 		if (!input->InProgress() || !input->IsInteresting(aEvent))
 			continue;
 
-		UCHAR end_key_attributes = input->EndVK[aVK] | input->EndSC[aSC];
+		// Determine visibility based on options and whether the key produced text.
+		// Negative aCharCount (dead key) is treated as text in this context.
+		bool visible = aCharCount ? input->VisibleText : input->VisibleNonText;
+
+		UCHAR end_key_attributes = input->KeyVK[aVK] | input->KeySC[aSC];
 		if (end_key_attributes) // A terminating keystroke has now occurred unless the shift state isn't right.
 		{
 			// Caller has ensured that only one of the flags below is set (if any):
@@ -2996,28 +2998,40 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 				|| (shift_is_down ? shift_must_be_down : shift_must_not_be_down)  )
 			{
 				// The shift state is correct to produce the desired end-key.
-				input->EndByKey(aVK, aSC, input->EndSC[aSC], shift_must_be_down && shift_is_down);
-				if (!input->Visible)
-					break; // The situation implies aTreatAsVisible == false.
+				input->EndByKey(aVK, aSC, input->KeySC[aSC], shift_must_be_down && shift_is_down);
+				if (!visible)
+					break;
 				continue;
 			}
 		}
 
-		if (aVK == VK_BACK && !g_modifiersLR_logical)
+		if (aVK == VK_BACK && !g_modifiersLR_logical && input->BackspaceIsUndo)
 		{
-			if (input->BackspaceIsUndo && input->BufferLength)
+			if (input->BufferLength)
 				input->Buffer[--input->BufferLength] = '\0';
+			visible = input->VisibleText; // Override VisibleNonText.
 			// Fall through to the check below in case this {BS} completed a dead key sequence.
 		}
-		if (aCharCount > 0 && !input->CollectChar(aChar, aCharCount))
-			break; // The situation implies aTreatAsVisible == false.
-
-		if (!input->Visible)
-			break; // The situation implies aTreatAsVisible == false.
+		if (aCharCount > 0)
+		{
+			if (!input->CollectChar(aChar, aCharCount))
+				break;
+		}
+		else
+		{
+			if (!visible && !(kvk[aVK].as_modifiersLR || kvk[aVK].pForceToggle))
+				break;
+		}
 	}
-	// Return value is false if caller determined that a non-Visible input is active,
-	// unless the key is one that should never be suppressed.
-	return aTreatAsVisible;
+	if (input) // Early break (invisible input).
+	{
+		if (aSC)
+			input->KeySC[aSC] |= INPUT_KEY_DOWN_SUPPRESSED;
+		else
+			input->KeyVK[aVK] |= INPUT_KEY_DOWN_SUPPRESSED;
+		return false;
+	}
+	return true;
 }
 
 
@@ -3038,7 +3052,7 @@ bool input_type::CollectChar(TBYTE *ch, int char_count)
 		if (CaseSensitive ? _tcschr(EndChars, ch[i]) : ltcschr(EndChars, ch[i]))
 		{
 			EndByChar(ch[i]);
-			return Visible;
+			return VisibleText;
 		}
 		if (BufferLength == BufferLengthMax)
 			break;
@@ -3056,7 +3070,7 @@ bool input_type::CollectChar(TBYTE *ch, int char_count)
 				if (_tcsstr(buffer, match[i]))
 				{
 					EndByMatch(i);
-					return Visible;
+					return VisibleText;
 				}
 			}
 		}
@@ -3071,7 +3085,7 @@ bool input_type::CollectChar(TBYTE *ch, int char_count)
 				if (lstrcasestr(buffer, match[i]))
 				{
 					EndByMatch(i);
-					return Visible;
+					return VisibleText;
 				}
 			}
 		}
@@ -3085,7 +3099,7 @@ bool input_type::CollectChar(TBYTE *ch, int char_count)
 				if (!_tcscmp(buffer, match[i]))
 				{
 					EndByMatch(i);
-					return Visible;
+					return VisibleText;
 				}
 			}
 		}
@@ -3097,7 +3111,7 @@ bool input_type::CollectChar(TBYTE *ch, int char_count)
 				if (!lstrcmpi(buffer, match[i]))
 				{
 					EndByMatch(i);
-					return Visible;
+					return VisibleText;
 				}
 			}
 		}
@@ -3106,7 +3120,7 @@ bool input_type::CollectChar(TBYTE *ch, int char_count)
 	// Otherwise, no match found.
 	if (BufferLength >= BufferLengthMax)
 		EndByLimit();
-	return Visible;
+	return VisibleText;
 }
 
 

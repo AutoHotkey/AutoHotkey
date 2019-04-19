@@ -1460,6 +1460,7 @@ ResultType Line::Input()
 	size_t aMatchList_length = ArgLength(4); // Performs better than _tcslen(aMatchList);
 	
 	input_type input;
+	input.VisibleNonText = false; // Override InputHook default.
 	if (!input.Setup(aOptions, aEndKeys, aMatchList, aMatchList_length))
 		return FAIL;
 	// Only now is it safe to do things which might cause interruption (see comments above).
@@ -1550,7 +1551,8 @@ void input_type::ParseOptions(LPTSTR aOptions)
 			Timeout = (int)(ATOF(cp + 1) * 1000);
 			break;
 		case 'V':
-			Visible = true;
+			VisibleText = true;
+			VisibleNonText = true;
 			break;
 		case '*':
 			FindAnywhere = true;
@@ -1577,8 +1579,8 @@ ResultType input_type::SetEndKeys(LPTSTR aEndKeys)
 	single_char_string[1] = '\0'; // Init its second character once, since the loop only changes the first char.
 	
 	const bool endchar_mode = EndCharMode;
-	UCHAR * const end_vk = EndVK;
-	UCHAR * const end_sc = EndSC;
+	UCHAR * const end_vk = KeyVK;
+	UCHAR * const end_sc = KeySC;
 
 	for (TCHAR *end_key = aEndKeys; *end_key; ++end_key) // This a modified version of the processing loop used in SendKeys().
 	{

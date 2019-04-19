@@ -169,10 +169,11 @@ struct key_type
 enum InputStatusType {INPUT_OFF, INPUT_IN_PROGRESS, INPUT_TIMED_OUT, INPUT_TERMINATED_BY_MATCH
 	, INPUT_TERMINATED_BY_ENDKEY, INPUT_LIMIT_REACHED, INPUT_INTERRUPTED};
 
-// Bitwise flags for the end-key arrays:
+// Bitwise flags for the Key arrays:
 #define END_KEY_ENABLED 0x01
 #define END_KEY_WITH_SHIFT 0x02
 #define END_KEY_WITHOUT_SHIFT 0x04
+#define INPUT_KEY_DOWN_SUPPRESSED 0x08
 
 class InputObject;
 struct input_type
@@ -194,7 +195,7 @@ struct input_type
 	bool BackspaceIsUndo;
 	bool CaseSensitive;
 	bool TranscribeModifiedKeys; // Whether the input command will attempt to transcribe modified keys such as ^c.
-	bool Visible;
+	bool VisibleText, VisibleNonText;
 	bool FindAnywhere;
 	bool EndCharMode;
 	vk_type EndingVK; // The hook puts the terminating key into one of these if that's how it was terminated.
@@ -205,16 +206,17 @@ struct input_type
 	UINT EndingMatchIndex;
 	int BufferLength; // The current length of what the user entered.
 	int BufferLengthMax; // The maximum allowed length of the input.
-	UCHAR EndVK[VK_ARRAY_COUNT]; // A sparse array that indicates which VKs terminate the input.
-	UCHAR EndSC[SC_ARRAY_COUNT]; // A sparse array that indicates which SCs terminate the input.
+	UCHAR KeyVK[VK_ARRAY_COUNT]; // A sparse array of key flags by VK.
+	UCHAR KeySC[SC_ARRAY_COUNT]; // A sparse array of key flags by SC.
 	TCHAR Buffer[INPUT_BUFFER_SIZE]; // Stores the user's actual input.
 	input_type::input_type() // A simple constructor to initialize the fields that need it.
 		: Status(INPUT_OFF), Prev(NULL), ScriptObject(NULL)
 		, match(NULL), MatchBuf(NULL), MatchBufSize(0)
-		, EndChars(NULL), EndCharsMax(0), EndVK(), EndSC(), BufferLength(0)
+		, EndChars(NULL), EndCharsMax(0), KeyVK(), KeySC(), BufferLength(0)
 		// Default options:
 		, MinSendLevel(0), BackspaceIsUndo(true), CaseSensitive(false), TranscribeModifiedKeys(false)
-		, Visible(false), FindAnywhere(false), BufferLengthMax(INPUT_BUFFER_SIZE - 1), Timeout(0), EndCharMode(false)
+		, VisibleText(false), VisibleNonText(true), FindAnywhere(false), EndCharMode(false)
+		, BufferLengthMax(INPUT_BUFFER_SIZE - 1), Timeout(0)
 	{
 		*Buffer = '\0';
 	}
@@ -290,7 +292,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	, KeyHistoryItem *pKeyHistoryCurr, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost);
 bool CollectHotstring(KBDLLHOOKSTRUCT &aEvent, TCHAR aChar[], int aCharCount, HWND aActiveWindow
 	, KeyHistoryItem *pKeyHistoryCurr, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost);
-bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, TCHAR aChar[], int aCharCount, bool aTreatAsVisible, bool aIsIgnored);
+bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, TCHAR aChar[], int aCharCount, bool aIsIgnored);
 bool IsHotstringWordChar(TCHAR aChar);
 void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aKeyUp, bool aIsSuppressed);
 bool KeybdEventIsPhysical(DWORD aEventFlags, const vk_type aVK, bool aKeyUp);

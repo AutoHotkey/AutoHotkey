@@ -166,5 +166,19 @@ ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThis
 		aResultToken.SetValue(input.Timeout);
 		return OK;
 	}
+	else if (!_tcsicmp(name, _T("VisibleText")))
+	{
+		if (IS_INVOKE_SET)
+			input.VisibleText = ParamIndexToBOOL(1);
+		aResultToken.SetValue(input.VisibleText);
+		return OK;
+	}
+	else if (!_tcsicmp(name, _T("VisibleNonText")))
+	{
+		if (IS_INVOKE_SET)
+			input.VisibleNonText = ParamIndexToBOOL(1);
+		aResultToken.SetValue(input.VisibleNonText);
+		return OK;
+	}
 	return INVOKE_NOT_HANDLED;
 }
