@@ -36,8 +36,8 @@ ResultType InputObject::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchLis
 
 ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (aParamCount < (IS_INVOKE_SET ? 2 : 1))
-		return INVOKE_NOT_HANDLED;
+	if (!aParamCount)
+		_o_throw(ERR_INVALID_USAGE);
 
 	LPTSTR name = TokenToString(*aParam[0]);
 	
@@ -68,6 +68,10 @@ ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThis
 		}
 		return INVOKE_NOT_HANDLED;
 	}
+
+	if (aParamCount != (IS_INVOKE_SET ? 2 : 1))
+		_o_throw(ERR_INVALID_USAGE);
+
 	if (IS_INVOKE_GET)
 	{
 		if (!_tcsicmp(name, _T("Input")))
@@ -124,6 +128,43 @@ ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThis
 			onEnd->AddRef();
 			aResultToken.SetValue(onEnd);
 		}
+		return OK;
+	}
+	// OPTIONS
+	else if (!_tcsicmp(name, _T("BackspaceIsUndo")))
+	{
+		if (IS_INVOKE_SET)
+			input.BackspaceIsUndo = ParamIndexToBOOL(1);
+		aResultToken.SetValue(input.BackspaceIsUndo);
+		return OK;
+	}
+	else if (!_tcsicmp(name, _T("CaseSensitive")))
+	{
+		if (IS_INVOKE_SET)
+			input.CaseSensitive = ParamIndexToBOOL(1);
+		aResultToken.SetValue(input.CaseSensitive);
+		return OK;
+	}
+	else if (!_tcsicmp(name, _T("FindAnywhere")))
+	{
+		if (IS_INVOKE_SET)
+			input.FindAnywhere = ParamIndexToBOOL(1);
+		aResultToken.SetValue(input.FindAnywhere);
+		return OK;
+	}
+	else if (!_tcsicmp(name, _T("MinSendLevel")))
+	{
+		if (IS_INVOKE_SET)
+			input.MinSendLevel = (SendLevelType)ParamIndexToInt64(1);
+		aResultToken.SetValue(input.MinSendLevel);
+		return OK;
+	}
+	else if (!_tcsicmp(name, _T("Timeout")))
+	{
+		if (IS_INVOKE_SET)
+			input.Timeout = ParamIndexToInt(1);
+		aResultToken.SetValue(input.Timeout);
+		return OK;
 	}
 	return INVOKE_NOT_HANDLED;
 }
