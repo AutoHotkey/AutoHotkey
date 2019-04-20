@@ -227,7 +227,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	int gui_event_arg_count;
 	INT_PTR gui_event_ret;
 	HDROP hdrop_to_free;
-	input_type *input_being_ended;
+	input_type *input_hook;
 	DWORD tick_before, tick_after;
 	LRESULT msg_reply;
 	BOOL peek_result;
@@ -656,6 +656,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		case WM_HOTKEY:        // As a result of this app having previously called RegisterHotkey(), or from TriggerJoyHotkeys().
 		case AHK_USER_MENU:    // The user selected a custom menu item.
 		case AHK_INPUT_END:    // Input ended (sent by the hook thread).
+		case AHK_INPUT_KEYDOWN:
+		case AHK_INPUT_CHAR:
 		{
 			LabelPtr label_to_call;
 
@@ -848,10 +850,21 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				break;
 
 			case AHK_INPUT_END:
-				input_being_ended = InputRelease((input_type *)msg.wParam); // The function will verify that it is a valid input_type pointer.
-				if (!input_being_ended)
+				input_hook = InputRelease((input_type *)msg.wParam); // The function will verify that it is a valid input_type pointer.
+				if (!input_hook)
 					continue; // Invalid message or legacy Input command ending.
-				label_to_call = input_being_ended->ScriptObject->onEnd;
+				label_to_call = input_hook->ScriptObject->onEnd;
+				priority = 0;
+				break;
+
+			case AHK_INPUT_KEYDOWN:
+			case AHK_INPUT_CHAR:
+				for (input_hook = g_input; input_hook && input_hook != (input_type *)msg.wParam; input_hook = input_hook->Prev);
+				if (!input_hook)
+					continue; // Invalid message or Input already ended (and therefore may have been deleted).
+				label_to_call = msg.message == AHK_INPUT_KEYDOWN ? input_hook->ScriptObject->onKeyDown : input_hook->ScriptObject->onChar;
+				if (!label_to_call)
+					continue;
 				priority = 0;
 				break;
 
@@ -976,7 +989,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						pgui->mHdrop = NULL; // Indicate that this GUI window is ready for another drop.
 					}
 					if (msg.message == AHK_INPUT_END)
-						input_being_ended->ScriptObject->Release();
+						input_hook->ScriptObject->Release();
 					continue;
 				}
 				// If the above "continued", it seems best not to re-queue/buffer the key since
@@ -992,7 +1005,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					pgui->mHdrop = NULL; // Indicate that this GUI window is ready for another drop.
 				}
 				if (msg.message == AHK_INPUT_END)
-					input_being_ended->ScriptObject->Release();
+					input_hook->ScriptObject->Release();
 				continue;
 			}
 
@@ -1025,6 +1038,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			case AHK_GUI_ACTION: // Listed first for performance.
 			case AHK_CLIPBOARD_CHANGE:
 			case AHK_INPUT_END:
+			case AHK_INPUT_KEYDOWN:
+			case AHK_INPUT_CHAR:
 				break; // Do nothing at this stage.
 			case AHK_USER_MENU: // user-defined menu item
 				// Safer to make a full copies than point to something potentially volatile.
@@ -1383,9 +1398,33 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 			case AHK_INPUT_END:
 			{
-				ExprTokenType param = input_being_ended->ScriptObject;
+				ExprTokenType param = input_hook->ScriptObject;
 				label_to_call->ExecuteInNewThread(_T("InputHook"), &param, 1);
-				input_being_ended->ScriptObject->Release();
+				input_hook->ScriptObject->Release();
+				break;
+			}
+			
+			case AHK_INPUT_KEYDOWN:
+			{
+				ExprTokenType params[] =
+				{
+					input_hook->ScriptObject,
+					__int64(vk_type(msg.lParam)),
+					__int64(sc_type(msg.lParam >> 16)),
+				};
+				label_to_call->ExecuteInNewThread(_T("InputHook"), params, _countof(params));
+				break;
+			}
+
+			case AHK_INPUT_CHAR:
+			{
+				TCHAR chars[] = { TCHAR(msg.lParam), TCHAR(msg.lParam >> 16), '\0' };
+				ExprTokenType params[] =
+				{
+					input_hook->ScriptObject,
+					chars
+				};
+				label_to_call->ExecuteInNewThread(_T("InputHook"), params, _countof(params));
 				break;
 			}
 

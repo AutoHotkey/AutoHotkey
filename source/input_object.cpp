@@ -114,8 +114,18 @@ ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThis
 			return OK;
 		}
 	}
-	if (!_tcsicmp(name, _T("OnEnd")))
+	if (!_tcsnicmp(name, _T("On"), 2))
 	{
+		IObject **pon;
+		if (!_tcsicmp(name + 2, _T("End")))
+			pon = &onEnd;
+		else if (!_tcsicmp(name + 2, _T("KeyDown")))
+			pon = &onKeyDown;
+		else if (!_tcsicmp(name + 2, _T("Char")))
+			pon = &onChar;
+		else
+			return INVOKE_NOT_HANDLED;
+
 		if (IS_INVOKE_SET)
 		{
 			IObject *obj = ParamIndexToObject(1);
@@ -123,14 +133,14 @@ ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThis
 				obj->AddRef();
 			else if (!TokenIsEmptyString(*aParam[1]))
 				_o_throw(ERR_INVALID_VALUE);
-			if (onEnd)
-				onEnd->Release();
-			onEnd = obj;
+			if (*pon)
+				(*pon)->Release();
+			*pon = obj;
 		}
-		if (onEnd)
+		if (*pon)
 		{
-			onEnd->AddRef();
-			aResultToken.SetValue(onEnd);
+			(*pon)->AddRef();
+			aResultToken.SetValue(*pon);
 		}
 		return OK;
 	}
@@ -188,6 +198,13 @@ ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThis
 		aResultToken.SetValue(input.VisibleNonText);
 		return OK;
 	}
+	else if (!_tcsicmp(name, _T("NotifyNonText")))
+	{
+		if (IS_INVOKE_SET)
+			input.NotifyNonText = ParamIndexToBOOL(1);
+		aResultToken.SetValue(input.NotifyNonText);
+		return OK;
+	}
 	return INVOKE_NOT_HANDLED;
 }
 
@@ -211,6 +228,7 @@ ResultType InputObject::KeyOpt(ExprTokenType &aResultToken, ExprTokenType *aPara
 		case ' ': case '\t': continue;
 		case 'E': flag = END_KEY_ENABLED; break;
 		case 'I': flag = INPUT_KEY_IGNORE_TEXT; break;
+		case 'N': flag = INPUT_KEY_NOTIFY; break;
 		case 'V':
 			add_flags |= INPUT_KEY_VISIBILITY_OVERRIDE; // So -V can override the default visibility.
 			flag = INPUT_KEY_VISIBLE;

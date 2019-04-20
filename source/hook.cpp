@@ -2983,8 +2983,10 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 			continue;
 		
 		UCHAR key_flags = input->KeyVK[aVK] | input->KeySC[aSC];
-
-		bool ignore_aChar = key_flags & INPUT_KEY_IGNORE_TEXT;
+		
+		// aCharCount is negative for dead keys, which are treated as text but not collected.
+		bool treat_as_text = aCharCount && !(key_flags & INPUT_KEY_IGNORE_TEXT);
+		bool collect_chars = treat_as_text && aCharCount > 0;
 
 		// Determine visibility based on options and whether the key produced text.
 		// Negative aCharCount (dead key) is treated as text in this context.
@@ -2992,7 +2994,7 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 		if (key_flags & INPUT_KEY_VISIBILITY_OVERRIDE)
 			visible = key_flags & INPUT_KEY_VISIBLE;
 		else
-			visible = aCharCount && !ignore_aChar ? input->VisibleText : input->VisibleNonText;
+			visible = treat_as_text ? input->VisibleText : input->VisibleNonText;
 
 		if (key_flags & END_KEY_ENABLED) // A terminating keystroke has now occurred unless the shift state isn't right.
 		{
@@ -3008,7 +3010,7 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 				continue;
 			}
 		}
-
+		
 		if (aVK == VK_BACK && !g_modifiersLR_logical && input->BackspaceIsUndo)
 		{
 			if (input->BufferLength)
@@ -3017,8 +3019,27 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 			// Fall through to the check below in case this {BS} completed a dead key sequence.
 		}
 
-		if (aCharCount > 0 && !ignore_aChar)
+		if (collect_chars)
 			input->CollectChar(aChar, aCharCount);
+		
+		// Posting the notifications after CollectChar() might reduce the odds of a race condition.
+		if (((key_flags & INPUT_KEY_NOTIFY) || input->NotifyNonText && !treat_as_text)
+			&& input->ScriptObject && input->ScriptObject->onKeyDown)
+		{
+			// input is passed because the alternative would require the main thread to
+			// iterate through the Input chain and determine which ones should be notified.
+			// This would mean duplicating much of the logic that's used here, and would be
+			// complicated by the possibility of an Input being terminated while OnKeyDown
+			// is being executed (and thereby breaking the list).
+			// This leaves room only for the bare essential parameters: aVK and aSC.
+			PostMessage(g_hWnd, AHK_INPUT_KEYDOWN, (WPARAM)input, (aSC << 16) | aVK);
+		}
+		// Seems best to not collect dead key chars by default; if needed, OnDeadChar
+		// could be added, or the script could mark each dead key for OnKeyDown.
+		if (collect_chars && input->ScriptObject && input->ScriptObject->onChar)
+		{
+			PostMessage(g_hWnd, AHK_INPUT_CHAR, (WPARAM)input, (aChar[1] << 16) | aChar[0]);
+		}
 
 		if (!visible && !(kvk[aVK].as_modifiersLR || kvk[aVK].pForceToggle))
 			break;

@@ -39,7 +39,7 @@ enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_
 	, AHK_CLIPBOARD_CHANGE, AHK_HOOK_TEST_MSG, AHK_CHANGE_HOOK_STATE, AHK_GETWINDOWTEXT
 	, AHK_HOT_IF_EVAL	// HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
 	, AHK_HOOK_SYNC // For WaitHookIdle().
-	, AHK_INPUT_END
+	, AHK_INPUT_END, AHK_INPUT_KEYDOWN, AHK_INPUT_CHAR
 };
 // NOTE: TRY NEVER TO CHANGE the specific numbers of the above messages, since some users might be
 // using the Post/SendMessage commands to automate AutoHotkey itself.  Here is the original order
@@ -176,6 +176,7 @@ enum InputStatusType {INPUT_OFF, INPUT_IN_PROGRESS, INPUT_TIMED_OUT, INPUT_TERMI
 #define INPUT_KEY_VISIBILITY_OVERRIDE 0x04
 #define INPUT_KEY_VISIBLE 0x08
 #define INPUT_KEY_IGNORE_TEXT 0x10
+#define INPUT_KEY_NOTIFY 0x20
 #define INPUT_KEY_DOWN_SUPPRESSED 0x80
 
 class InputObject;
@@ -199,6 +200,7 @@ struct input_type
 	bool CaseSensitive;
 	bool TranscribeModifiedKeys; // Whether the input command will attempt to transcribe modified keys such as ^c.
 	bool VisibleText, VisibleNonText;
+	bool NotifyNonText;
 	bool FindAnywhere;
 	bool EndCharMode;
 	vk_type EndingVK; // The hook puts the terminating key into one of these if that's how it was terminated.
@@ -218,7 +220,7 @@ struct input_type
 		, EndChars(NULL), EndCharsMax(0), KeyVK(), KeySC(), BufferLength(0)
 		// Default options:
 		, MinSendLevel(0), BackspaceIsUndo(true), CaseSensitive(false), TranscribeModifiedKeys(false)
-		, VisibleText(false), VisibleNonText(true), FindAnywhere(false), EndCharMode(false)
+		, VisibleText(false), VisibleNonText(true), NotifyNonText(false), FindAnywhere(false), EndCharMode(false)
 		, BufferLengthMax(INPUT_BUFFER_SIZE - 1), Timeout(0)
 	{
 		*Buffer = '\0';
