@@ -104,6 +104,20 @@ ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThis
 				aResultToken.marker = _T("");
 			return OK;
 		}
+		else if (!_tcsicmp(name, _T("EndMods")))
+		{
+			aResultToken.symbol = SYM_STRING;
+			TCHAR *cp = aResultToken.marker = aResultToken.buf;
+			const auto mod_string = MODLR_STRING;
+			for (int i = 0; i < 8; ++i)
+				if (input.EndingMods & (1 << i))
+				{
+					*cp++ = mod_string[i*2];
+					*cp++ = mod_string[i*2+1];
+				}
+			*cp = '\0';
+			return OK;
+		}
 		else if (!_tcsicmp(name, _T("Match")))
 		{
 			aResultToken.symbol = SYM_STRING;

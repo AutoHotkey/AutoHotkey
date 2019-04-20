@@ -209,6 +209,7 @@ struct input_type
 	TCHAR EndingChar;
 	bool EndingBySC; // Whether the Ending key was one handled by VK or SC.
 	bool EndingRequiredShift; // Whether the key that terminated the input was one that needed the SHIFT key.
+	modLR_type EndingMods;
 	UINT EndingMatchIndex;
 	int BufferLength; // The current length of what the user entered.
 	int BufferLengthMax; // The maximum allowed length of the input.
@@ -219,6 +220,7 @@ struct input_type
 		: Status(INPUT_OFF), Prev(NULL), ScriptObject(NULL)
 		, match(NULL), MatchBuf(NULL), MatchBufSize(0)
 		, EndChars(NULL), EndCharsMax(0), KeyVK(), KeySC(), BufferLength(0)
+		, EndingMods(0)
 		// Default options:
 		, MinSendLevel(0), BackspaceIsUndo(true), CaseSensitive(false), TranscribeModifiedKeys(false)
 		, VisibleText(false), VisibleNonText(true), NotifyNonText(false), FindAnywhere(false), EndCharMode(false)

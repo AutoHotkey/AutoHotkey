@@ -1921,6 +1921,7 @@ void input_type::EndByChar(TCHAR aChar)
 void input_type::EndByReason(InputStatusType aReason)
 {
 	ASSERT(InProgress());
+	EndingMods = g_modifiersLR_logical; // Not relevant to all end reasons, but might be useful anyway.
 	Status = aReason;
 
 	// It's done this way rather than calling InputRelease() directly...

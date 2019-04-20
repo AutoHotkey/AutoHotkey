@@ -174,6 +174,7 @@ typedef UCHAR modLR_type; // Only the left-right win/alt/ctrl/shift rather than 
 #define MOD_RSHIFT 0x20
 #define MOD_LWIN 0x40
 #define MOD_RWIN 0x80
+#define MODLR_STRING _T("<^>^<!>!<+>+<#>#")
 
 
 struct CachedLayoutType
