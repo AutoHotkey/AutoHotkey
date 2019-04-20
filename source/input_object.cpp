@@ -205,6 +205,10 @@ ResultType InputObject::KeyOpt(ExprTokenType &aResultToken, ExprTokenType *aPara
 			add_flags |= INPUT_KEY_VISIBILITY_OVERRIDE; // So -V can override the default visibility.
 			flag = INPUT_KEY_VISIBLE;
 			break;
+		case 'Z': // Zero (reset)
+			add_flags = 0;
+			remove_flags = INPUT_KEY_OPTION_MASK;
+			continue;
 		default: _o_throw(ERR_INVALID_OPTION, cp);
 		}
 		if (adding)
@@ -214,6 +218,17 @@ ResultType InputObject::KeyOpt(ExprTokenType &aResultToken, ExprTokenType *aPara
 			remove_flags |= flag;
 			add_flags &= ~flag; // Override any previous add.
 		}
+	}
+	
+	if (!_tcsicmp(keys, _T("{All}")))
+	{
+		// Could optimize by using memset() when remove_flags == 0xFF, but that doesn't seem
+		// worthwhile since this mode is already faster than SetKeyFlags() with a single key.
+		for (int i = 0; i < _countof(input.KeyVK); ++i)
+			input.KeyVK[i] = (input.KeyVK[i] & ~remove_flags) | add_flags;
+		for (int i = 0; i < _countof(input.KeySC); ++i)
+			input.KeySC[i] = (input.KeySC[i] & ~remove_flags) | add_flags;
+		return OK;
 	}
 
 	return input.SetKeyFlags(keys, false, remove_flags, add_flags);
