@@ -145,28 +145,8 @@ ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThis
 		return OK;
 	}
 	// OPTIONS
-	else if (!_tcsicmp(name, _T("BackspaceIsUndo")))
-	{
-		if (IS_INVOKE_SET)
-			input.BackspaceIsUndo = ParamIndexToBOOL(1);
-		aResultToken.SetValue(input.BackspaceIsUndo);
-		return OK;
-	}
-	else if (!_tcsicmp(name, _T("CaseSensitive")))
-	{
-		if (IS_INVOKE_SET)
-			input.CaseSensitive = ParamIndexToBOOL(1);
-		aResultToken.SetValue(input.CaseSensitive);
-		return OK;
-	}
-	else if (!_tcsicmp(name, _T("FindAnywhere")))
-	{
-		if (IS_INVOKE_SET)
-			input.FindAnywhere = ParamIndexToBOOL(1);
-		aResultToken.SetValue(input.FindAnywhere);
-		return OK;
-	}
-	else if (!_tcsicmp(name, _T("MinSendLevel")))
+	bool *bool_option = NULL;
+	if (!_tcsicmp(name, _T("MinSendLevel")))
 	{
 		if (IS_INVOKE_SET)
 			input.MinSendLevel = (SendLevelType)ParamIndexToInt64(1);
@@ -184,25 +164,17 @@ ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThis
 		aResultToken.SetValue(input.Timeout / 1000.0);
 		return OK;
 	}
-	else if (!_tcsicmp(name, _T("VisibleText")))
+	else if (!_tcsicmp(name, _T("BackspaceIsUndo"))) bool_option = &input.BackspaceIsUndo;
+	else if (!_tcsicmp(name, _T("CaseSensitive"))) bool_option = &input.CaseSensitive;
+	else if (!_tcsicmp(name, _T("FindAnywhere"))) bool_option = &input.FindAnywhere;
+	else if (!_tcsicmp(name, _T("VisibleText"))) bool_option = &input.VisibleText;
+	else if (!_tcsicmp(name, _T("VisibleNonText"))) bool_option = &input.VisibleNonText;
+	else if (!_tcsicmp(name, _T("NotifyNonText"))) bool_option = &input.NotifyNonText;
+	if (bool_option)
 	{
 		if (IS_INVOKE_SET)
-			input.VisibleText = ParamIndexToBOOL(1);
-		aResultToken.SetValue(input.VisibleText);
-		return OK;
-	}
-	else if (!_tcsicmp(name, _T("VisibleNonText")))
-	{
-		if (IS_INVOKE_SET)
-			input.VisibleNonText = ParamIndexToBOOL(1);
-		aResultToken.SetValue(input.VisibleNonText);
-		return OK;
-	}
-	else if (!_tcsicmp(name, _T("NotifyNonText")))
-	{
-		if (IS_INVOKE_SET)
-			input.NotifyNonText = ParamIndexToBOOL(1);
-		aResultToken.SetValue(input.NotifyNonText);
+			*bool_option = ParamIndexToBOOL(1);
+		aResultToken.SetValue(*bool_option);
 		return OK;
 	}
 	return INVOKE_NOT_HANDLED;
