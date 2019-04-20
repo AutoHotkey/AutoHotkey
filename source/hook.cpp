@@ -469,7 +469,8 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	// the notch count from pKeyHistoryCurr->sc.
 	if (aVK == VK_PACKET) // Win2k/XP: VK_PACKET is used to send Unicode characters as if they were keystrokes.  sc is a 16-bit character code in that case.
 	{
-		pKeyHistoryCurr->sc = aSC = (sc_type)((PKBDLLHOOKSTRUCT)lParam)->scanCode; // Get the full value; aSC was truncated by the caller.
+		aSC = 0; // This held a truncated character code, not to be mistaken for a real scan code.
+		pKeyHistoryCurr->sc = (sc_type)((PKBDLLHOOKSTRUCT)lParam)->scanCode; // Get the full character code.
 		pKeyHistoryCurr->event_type = 'U'; // Give it a unique identifier even though it can be distinguished by the 4-digit "SC".  'U' vs 'u' to avoid confusion with 'u'=up.
 		// Artificial character input via VK_PACKET isn't supported by hotkeys, since they always work via
 		// keycode, but hotstrings and Input are supported via the macro below when #InputLevel is non-zero.
@@ -2503,10 +2504,10 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		// VK_PACKET corresponds to a SendInput event with the KEYEVENTF_UNICODE flag.
 #ifdef UNICODE
 		char_count = 1; // SendInput only supports a single 16-bit character code.
-		ch[0] = (TBYTE)aSC; // No translation needed.
+		ch[0] = (WCHAR)aEvent.scanCode; // No translation needed.
 #else
 		// Convert the Unicode character to ANSI, dropping any that can't be converted.
-		char_count = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (WCHAR *)&aSC, 1, (CHAR *)ch, _countof(ch), NULL, NULL);
+		char_count = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (WCHAR *)&aEvent.scanCode, 1, (CHAR *)ch, _countof(ch), NULL, NULL);
 #endif
 	}
 	else if (transcribe_key)
