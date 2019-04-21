@@ -1868,7 +1868,7 @@ LPTSTR input_type::GetEndReason(LPTSTR aKeyBuf, int aKeyBufSize, bool aCombined)
 			// For partial backward-compatibility, keys A-Z are upper-cased when handled by VK,
 			// but only if they actually correspond to those characters.  If this wasn't done,
 			// the character would always be lowercase since the shift state is not considered.
-			if (*key_name >= 'a' && *key_name <= 'z' && !key_name[1])
+			if (*key_name >= 'a' && *key_name <= 'z' && !key_name[1] && aCombined)
 				*key_name -= 32;
 		}
 		return aCombined ? aKeyBuf : _T("EndKey");
