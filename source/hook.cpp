@@ -2992,7 +2992,7 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 		// Determine visibility based on options and whether the key produced text.
 		// Negative aCharCount (dead key) is treated as text in this context.
 		bool visible;
-		if (key_flags & INPUT_KEY_VISIBILITY_OVERRIDE)
+		if (key_flags & INPUT_KEY_VISIBILITY_MASK)
 			visible = key_flags & INPUT_KEY_VISIBLE;
 		else
 			visible = treat_as_text ? input->VisibleText : input->VisibleNonText;

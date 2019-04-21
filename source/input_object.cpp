@@ -215,9 +215,15 @@ ResultType InputObject::KeyOpt(ExprTokenType &aResultToken, ExprTokenType *aPara
 		case 'E': flag = END_KEY_ENABLED; break;
 		case 'I': flag = INPUT_KEY_IGNORE_TEXT; break;
 		case 'N': flag = INPUT_KEY_NOTIFY; break;
+		case 'S':
+			flag = INPUT_KEY_SUPPRESS;
+			if (adding)
+				remove_flags |= INPUT_KEY_VISIBLE;
+			break;
 		case 'V':
-			add_flags |= INPUT_KEY_VISIBILITY_OVERRIDE; // So -V can override the default visibility.
 			flag = INPUT_KEY_VISIBLE;
+			if (adding)
+				remove_flags |= INPUT_KEY_SUPPRESS;
 			break;
 		case 'Z': // Zero (reset)
 			add_flags = 0;
