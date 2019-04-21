@@ -1993,6 +1993,7 @@ input_type *InputRelease(input_type *aInput)
 	aInput->Prev = NULL;
 	if (aInput->ScriptObject)
 	{
+		Hotkey::MaybeUninstallHook();
 		if (aInput->ScriptObject->onEnd)
 			return aInput; // Return for caller to call OnEnd and Release.
 		aInput->ScriptObject->Release();

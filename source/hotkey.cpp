@@ -464,6 +464,19 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 
 
 
+void Hotkey::MaybeUninstallHook()
+// Caller knows that one of the users of the keyboard hook no longer requires it,
+// and wants it uninstalled if it is no longer needed by anything else.
+{
+	// Do some quick checks to avoid scanning all hotkeys unnecessarily:
+	if (g_input || Hotstring::sEnabledCount || (sWhichHookAlways & HOOK_KEYBD))
+		return;
+	// Do more thorough checking to determine whether the hook is still needed:
+	ManifestAllHotkeysHotstringsHooks();
+}
+
+
+
 void Hotkey::AllDestructAndExit(int aExitCode)
 {
 	// PostQuitMessage() might be needed to prevent hang-on-exit.  Once this is done, no message boxes or
