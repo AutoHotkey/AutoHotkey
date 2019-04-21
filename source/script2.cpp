@@ -1626,8 +1626,7 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 			modifiersLR = 0;  // Init prior to below.
 			if (  !(vk = TextToVK(end_key + 1, &modifiersLR, true))  )
 				// No virtual key, so try to find a scan code.
-				if (sc = TextToSC(end_key + 1))
-					end_sc[sc] = (end_sc[sc] & ~aFlagsRemove) | aFlagsAdd;
+				sc = TextToSC(end_key + 1);
 
 			*end_pos = '}';  // undo the temporary termination
 
@@ -1663,7 +1662,38 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 					end_vk[vk] |= END_KEY_WITHOUT_SHIFT;
 			}
 			else
-				end_vk[vk] = (end_vk[vk] & ~aFlagsRemove) | aFlagsAdd;
+			{
+				// For backward compatibility, the Input command handles all keys by VK if
+				// one is returned by TextToVK().  Although this behaviour seems like a bug,
+				// changing it would require changing the way ErrorLevel is determined,
+				// which carries a larger risk of breaking scripts.
+				// Also handle the key by VK if it was given by number (not by key name).
+				// Otherwise, for any named key which has two possible scan codes (e.g. Up
+				// and NumpadUp), handle it by SC so that only the named key is affected.
+				bool vk_by_number = ctoupper(end_key[0]) == 'V' && ctoupper(end_key[1]) == 'K';
+				if (  !ScriptObject || vk_by_number || !(sc = vk_to_sc(vk, true))  )
+				{
+					// Handle this key by VK.
+					end_vk[vk] = (end_vk[vk] & ~aFlagsRemove) | aFlagsAdd;
+					// Apply flag removal to this key's SC as well.  This is primarily
+					// to support combinations like {All} +E, {LCtrl}{RCtrl} -E.
+					sc_type temp_sc;
+					if (  aFlagsRemove && !vk_by_number && (temp_sc = vk_to_sc(vk))  )
+					{
+						end_sc[temp_sc] &= ~aFlagsRemove; // But apply aFlagsAdd only by VK.
+						// Since aFlagsRemove implies ScriptObject != NULL and !vk_by_number
+						// was also checked, that implies vk_to_sc(vk, true) was already called
+						// and did not find a secondary SC.
+					}
+				}
+				else
+					// Convert sc to the primary scan code, which is the one named by end_key.
+					sc ^= 0x100;
+			}
+		}
+		if (sc)
+		{
+			end_sc[sc] = (end_sc[sc] & ~aFlagsRemove) | aFlagsAdd;
 		}
 	} // for()
 
@@ -1863,8 +1893,13 @@ LPTSTR input_type::GetEndReason(LPTSTR aKeyBuf, int aKeyBufSize, bool aCombined)
 		}
 		else
 		{
-			EndingBySC ? SCtoKeyName(EndingSC, key_name, aKeyBufSize)
-				: VKtoKeyName(EndingVK, key_name, aKeyBufSize);
+			*key_name = '\0';
+			if (EndingBySC)
+				SCtoKeyName(EndingSC, key_name, aKeyBufSize, false);
+			if (!*key_name && !(aCombined && EndingBySC))
+				VKtoKeyName(EndingVK, key_name, aKeyBufSize, !EndingBySC);
+			if (!*key_name)
+				sntprintf(key_name, aKeyBufSize, _T("sc%03X"), EndingSC);
 			// For partial backward-compatibility, keys A-Z are upper-cased when handled by VK,
 			// but only if they actually correspond to those characters.  If this wasn't done,
 			// the character would always be lowercase since the shift state is not considered.
