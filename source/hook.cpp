@@ -2994,6 +2994,8 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 		bool visible;
 		if (key_flags & INPUT_KEY_VISIBILITY_MASK)
 			visible = key_flags & INPUT_KEY_VISIBLE;
+		else if (kvk[aVK].as_modifiersLR || kvk[aVK].pForceToggle)
+			visible = true; // Do not suppress modifiers or toggleable keys unless specified by KeyOpt().
 		else
 			visible = treat_as_text ? input->VisibleText : input->VisibleNonText;
 
@@ -3042,7 +3044,7 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 			PostMessage(g_hWnd, AHK_INPUT_CHAR, (WPARAM)input, (aChar[1] << 16) | aChar[0]);
 		}
 
-		if (!visible && !(kvk[aVK].as_modifiersLR || kvk[aVK].pForceToggle))
+		if (!visible)
 			break;
 	}
 	if (input) // Early break (invisible input).
