@@ -229,6 +229,13 @@ struct input_type
 	{
 		*Buffer = '\0';
 	}
+	~input_type()
+	{
+		free(match);
+		free(MatchBuf);
+		if (EndCharsMax) // If zero, EndChars may point to static memory.
+			free(EndChars);
+	}
 	inline bool InProgress() { return Status == INPUT_IN_PROGRESS; }
 	bool IsInteresting(KBDLLHOOKSTRUCT &aEvent);
 	ResultType Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length);
