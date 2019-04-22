@@ -709,12 +709,17 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	//if (!vk && !sc)
 	//	return AllowKeyToGoToSystem;
 
-	// Fix for v1.1.31.02: This is done before the used_as check to ensure it doesn't get "stuck down"
-	// when a custom combination hotkey Suspends itself, thereby causing used_as to be reset to false.
-	this_key.is_down = !aKeyUp;
+	
 
 	if (!this_key.used_as_prefix && !this_key.used_as_suffix)
+	{
+		// Fix for v1.1.31.02: This is done regardless of used_as to ensure it doesn't get "stuck down"
+		// when a custom combination hotkey Suspends itself, thereby causing used_as to be reset to false.
+		// Fix for v1.1.31.03: Done conditionally because its previous value is used below.  This affects
+		// modifier keys as hotkeys, such as Shift::MsgBox.
+		this_key.is_down = !aKeyUp;
 		return AllowKeyToGoToSystem;
+	}
 
 	HotkeyIDType hotkey_id_with_flags = HOTKEY_ID_INVALID; // Set default.
 	HotkeyVariant *firing_is_certain = NULL;               //
@@ -737,6 +742,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			this_key.hotkey_to_fire_upon_release = HOTKEY_ID_INVALID;
 		}
 	}
+	this_key.is_down = !aKeyUp;
 	bool modifiers_were_corrected = false;
 
 	if (aHook == g_KeybdHook)

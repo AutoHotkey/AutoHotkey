@@ -1059,9 +1059,13 @@ int Debugger::GetPropertyValue(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf
 	}
 	else
 	{
-		aVar.ToTokenSkipAddRef(aProp.value);
 		if (aVar.IsUninitializedNormalVar())
+		{
 			aProp.value.symbol = SYM_MISSING;
+			aProp.value.marker = _T("");
+		}
+		else
+			aVar.ToTokenSkipAddRef(aProp.value);
 	}
 	return DEBUGGER_E_OK;
 }
