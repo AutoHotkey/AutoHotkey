@@ -3069,7 +3069,8 @@ bool input_type::IsInteresting(KBDLLHOOKSTRUCT &aEvent)
 
 void input_type::CollectChar(TBYTE *ch, int char_count)
 {
-	TCHAR * const buffer = Buffer; // Marginally reduces code size.
+	const auto buffer = Buffer; // Marginally reduces code size.
+	const auto match = this->match;
 
 	for (int i = 0; i < char_count; ++i)
 	{

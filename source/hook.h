@@ -164,7 +164,8 @@ struct key_type
 #define VK_ARRAY_COUNT (VK_MAX + 1)
 #define SC_ARRAY_COUNT (SC_MAX + 1)
 
-#define INPUT_BUFFER_SIZE 16384
+#define INPUT_BUFFER_SIZE 16384 // Default buffer size for Input.  Used to be the absolute max.
+#define INPUTHOOK_BUFFER_SIZE 1024 // Default buffer size for InputHook.
 
 enum InputStatusType {INPUT_OFF, INPUT_IN_PROGRESS, INPUT_TIMED_OUT, INPUT_TERMINATED_BY_MATCH
 	, INPUT_TERMINATED_BY_ENDKEY, INPUT_LIMIT_REACHED, INPUT_INTERRUPTED};
@@ -187,6 +188,9 @@ struct input_type
 	InputStatusType Status;
 	input_type *Prev;
 	InputObject *ScriptObject;
+	LPTSTR Buffer; // Stores the user's actual input.
+	int BufferLength; // The current length of what the user entered.
+	int BufferLengthMax; // The maximum allowed length of the input.
 	TCHAR *EndChars; // A string of characters that should terminate the input.
 	UINT EndCharsMax; // Current size of EndChars buffer.
 	LPTSTR *match; // Array of strings, each string is a match-phrase which if entered, terminates the input.
@@ -212,25 +216,22 @@ struct input_type
 	bool EndingRequiredShift; // Whether the key that terminated the input was one that needed the SHIFT key.
 	modLR_type EndingMods;
 	UINT EndingMatchIndex;
-	int BufferLength; // The current length of what the user entered.
-	int BufferLengthMax; // The maximum allowed length of the input.
 	UCHAR KeyVK[VK_ARRAY_COUNT]; // A sparse array of key flags by VK.
 	UCHAR KeySC[SC_ARRAY_COUNT]; // A sparse array of key flags by SC.
-	TCHAR Buffer[INPUT_BUFFER_SIZE]; // Stores the user's actual input.
 	input_type::input_type() // A simple constructor to initialize the fields that need it.
 		: Status(INPUT_OFF), Prev(NULL), ScriptObject(NULL)
-		, match(NULL), MatchBuf(NULL), MatchBufSize(0)
+		, Buffer(NULL), match(NULL), MatchBuf(NULL), MatchBufSize(0)
 		, EndChars(NULL), EndCharsMax(0), KeyVK(), KeySC(), BufferLength(0)
 		, EndingMods(0)
 		// Default options:
 		, MinSendLevel(0), BackspaceIsUndo(true), CaseSensitive(false), TranscribeModifiedKeys(false)
 		, VisibleText(false), VisibleNonText(true), NotifyNonText(false), FindAnywhere(false), EndCharMode(false)
-		, BufferLengthMax(INPUT_BUFFER_SIZE - 1), Timeout(0)
+		, BufferLengthMax(INPUTHOOK_BUFFER_SIZE - 1), Timeout(0)
 	{
-		*Buffer = '\0';
 	}
 	~input_type()
 	{
+		free(Buffer);
 		free(match);
 		free(MatchBuf);
 		if (EndCharsMax) // If zero, EndChars may point to static memory.

@@ -1461,6 +1461,7 @@ ResultType Line::Input()
 	
 	input_type input;
 	input.VisibleNonText = false; // Override InputHook default.
+	input.BufferLengthMax = INPUT_BUFFER_SIZE - 1;
 	if (!input.Setup(aOptions, aEndKeys, aMatchList, aMatchList_length))
 		return FAIL;
 	// Only now is it safe to do things which might cause interruption (see comments above).
@@ -1479,6 +1480,12 @@ ResultType input_type::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList
 		return FAIL;
 	if (!SetMatchList(aMatchList, aMatchList_length))
 		return FAIL;
+	
+	// For maintainability/simplicity/code size, it's allocated even if BufferLengthMax == 0.
+	if (  !(Buffer = tmalloc(BufferLengthMax + 1))  )
+		return g_script.ScriptError(ERR_OUTOFMEM);
+	*Buffer = '\0';
+
 	return OK;
 }
 
@@ -1536,8 +1543,8 @@ void input_type::ParseOptions(LPTSTR aOptions)
 			// Use atoi() vs. ATOI() to avoid interpreting something like 0x01C as hex
 			// when in fact the C was meant to be an option letter:
 			BufferLengthMax = _ttoi(cp + 1);
-			if (BufferLengthMax > INPUT_BUFFER_SIZE - 1)
-				BufferLengthMax = INPUT_BUFFER_SIZE - 1;
+			if (BufferLengthMax < 0)
+				BufferLengthMax = 0;
 			break;
 		case 'T':
 			// Although ATOF() supports hex, it's been documented in the help file that hex should
