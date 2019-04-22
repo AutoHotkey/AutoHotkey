@@ -252,7 +252,7 @@ struct input_type
 	void EndByLimit() { EndByReason(INPUT_LIMIT_REACHED); }
 	void EndByNewInput() { EndByReason(INPUT_INTERRUPTED); }
 	void Stop() { EndByReason(INPUT_OFF); }
-	void CollectChar(TBYTE *ch, int char_count);
+	void CollectChar(TCHAR *ch, int char_count);
 	LPTSTR GetEndReason(LPTSTR aKeyBuf, int aKeyBufSize, bool aCombined = true);
 private:
 	void EndByReason(InputStatusType aReason);

@@ -2477,7 +2477,7 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	}
 
 	int char_count;
-	TBYTE ch[3];
+	TCHAR ch[3] = { 0 };
 	BYTE key_state[256];
 	memcpy(key_state, g_PhysicalKeyState, 256);
 
@@ -3041,7 +3041,7 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 		// could be added, or the script could mark each dead key for OnKeyDown.
 		if (collect_chars && input->ScriptObject && input->ScriptObject->onChar)
 		{
-			PostMessage(g_hWnd, AHK_INPUT_CHAR, (WPARAM)input, (aChar[1] << 16) | aChar[0]);
+			PostMessage(g_hWnd, AHK_INPUT_CHAR, (WPARAM)input, ((TBYTE)aChar[1] << 16) | (TBYTE)aChar[0]);
 		}
 
 		if (!visible)
@@ -3067,7 +3067,7 @@ bool input_type::IsInteresting(KBDLLHOOKSTRUCT &aEvent)
 
 
 
-void input_type::CollectChar(TBYTE *ch, int char_count)
+void input_type::CollectChar(TCHAR *ch, int char_count)
 {
 	const auto buffer = Buffer; // Marginally reduces code size.
 	const auto match = this->match;
