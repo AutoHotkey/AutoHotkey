@@ -3080,7 +3080,11 @@ void input_type::CollectChar(TBYTE *ch, int char_count)
 			return;
 		}
 		if (BufferLength == BufferLengthMax)
+		{
+			if (!BufferLength) // For L0, collect nothing but allow OnChar, etc.
+				return;
 			break;
+		}
 		buffer[BufferLength++] = ch[i];
 		buffer[BufferLength] = '\0';
 	}
