@@ -1581,6 +1581,7 @@ void input_type::SetTimeoutTimer()
 
 ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsRemove, UCHAR aFlagsAdd)
 {
+	bool vk_by_number;
 	vk_type vk;
 	sc_type sc = 0;
 	modLR_type modifiersLR;
@@ -1631,7 +1632,24 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 			*end_pos = '\0';  // temporarily terminate the string here.
 
 			modifiersLR = 0;  // Init prior to below.
-			if (  !(vk = TextToVK(end_key + 1, &modifiersLR, true))  )
+			// For backward compatibility, the Input command handles all keys by VK if
+			// one is returned by TextToVK().  Although this behaviour seems like a bug,
+			// changing it would require changing the way ErrorLevel is determined (so
+			// that the correct name is returned for the primary SC of any key), which
+			// carries a larger risk of breaking scripts.
+			// Also handle the key by VK if it was given by number, such as {vk26}.
+			// Otherwise, for any key name which has a VK shared by two possible SCs
+			// (such as Up and NumpadUp), handle it by SC so it's identified correctly.
+			if (vk = TextToVK(end_key + 1, &modifiersLR, true))
+			{
+				vk_by_number = ctoupper(end_key[1]) == 'V' && ctoupper(end_key[2]) == 'K';
+				if (ScriptObject && !vk_by_number && (sc = vk_to_sc(vk, true)))
+				{
+					sc ^= 0x100; // Convert sc to the primary scan code, which is the one named by end_key.
+					vk = 0; // Handle it only by SC.
+				}
+			}
+			else
 				// No virtual key, so try to find a scan code.
 				sc = TextToSC(end_key + 1);
 
@@ -1670,32 +1688,17 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 			}
 			else
 			{
-				// For backward compatibility, the Input command handles all keys by VK if
-				// one is returned by TextToVK().  Although this behaviour seems like a bug,
-				// changing it would require changing the way ErrorLevel is determined,
-				// which carries a larger risk of breaking scripts.
-				// Also handle the key by VK if it was given by number (not by key name).
-				// Otherwise, for any named key which has two possible scan codes (e.g. Up
-				// and NumpadUp), handle it by SC so that only the named key is affected.
-				bool vk_by_number = ctoupper(end_key[0]) == 'V' && ctoupper(end_key[1]) == 'K';
-				if (  !ScriptObject || vk_by_number || !(sc = vk_to_sc(vk, true))  )
+				end_vk[vk] = (end_vk[vk] & ~aFlagsRemove) | aFlagsAdd;
+				// Apply flag removal to this key's SC as well.  This is primarily
+				// to support combinations like {All} +E, {LCtrl}{RCtrl} -E.
+				sc_type temp_sc;
+				if (aFlagsRemove && !vk_by_number && (temp_sc = vk_to_sc(vk)))
 				{
-					// Handle this key by VK.
-					end_vk[vk] = (end_vk[vk] & ~aFlagsRemove) | aFlagsAdd;
-					// Apply flag removal to this key's SC as well.  This is primarily
-					// to support combinations like {All} +E, {LCtrl}{RCtrl} -E.
-					sc_type temp_sc;
-					if (  aFlagsRemove && !vk_by_number && (temp_sc = vk_to_sc(vk))  )
-					{
-						end_sc[temp_sc] &= ~aFlagsRemove; // But apply aFlagsAdd only by VK.
-						// Since aFlagsRemove implies ScriptObject != NULL and !vk_by_number
-						// was also checked, that implies vk_to_sc(vk, true) was already called
-						// and did not find a secondary SC.
-					}
+					end_sc[temp_sc] &= ~aFlagsRemove; // But apply aFlagsAdd only by VK.
+					// Since aFlagsRemove implies ScriptObject != NULL and !vk_by_number
+					// was also checked, that implies vk_to_sc(vk, true) was already called
+					// and did not find a secondary SC.
 				}
-				else
-					// Convert sc to the primary scan code, which is the one named by end_key.
-					sc ^= 0x100;
 			}
 		}
 		if (sc)
