@@ -49,7 +49,7 @@ static bool sAltTabMenuIsVisible;       //
 // It's tracked this way, rather than as a count of the number of prefixes currently down, out of
 // concern that such a count might accidentally wind up above zero (due to a key-up being missed somehow)
 // and never come back down, thus penalizing performance until the program is restarted:
-static key_type *pPrefixKey;  // Initialized by ResetHook().
+key_type *pPrefixKey;  // Initialized by ResetHook().
 
 // Less memory overhead (space and performance) to allocate a solid block for multidimensional arrays:
 // These store all the valid modifier+suffix combinations (those that result in hotkey actions) except
@@ -777,6 +777,17 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 
 	bool this_toggle_key_can_be_toggled = this_key.pForceToggle && *this_key.pForceToggle == NEUTRAL; // Relies on short-circuit boolean order.
 
+	// Prior to considering whether to fire a hotkey, correct the hook's modifier state.
+	// Although this is rarely needed, there are times when the OS disables the hook, thus
+	// it is possible for it to miss keystrokes.  This should be done before pPrefixKey is
+	// consulted below as pPrefixKey itself might be corrected if it is a standard modifier.
+	// See comments in GetModifierLRState() for more info:
+	if (!modifiers_were_corrected)
+	{
+		modifiers_were_corrected = true;
+		GetModifierLRState(true);
+	}
+
 	///////////////////////////////////////////////////////////////////////////////////////
 	// CASE #1 of 4: PREFIX key has been pressed down.  But use it in this capacity only if
 	// no other prefix is already in effect or if this key isn't a suffix.  Update: Or if
@@ -846,16 +857,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// fire now rather than waiting for the key-up event.  This is done because it makes sense,
 			// it's more correct, and also it makes the behavior of a hooked ^a hotkey consistent with
 			// that of a registered ^a.
-
-			// Prior to considering whether to fire a hotkey, correct the hook's modifier state.
-			// Although this is rarely needed, there are times when the OS disables the hook, thus
-			// it is possible for it to miss keystrokes.  See comments in GetModifierLRState()
-			// for more info:
-			if (!modifiers_were_corrected)
-			{
-				modifiers_were_corrected = true;
-				GetModifierLRState(true);
-			}
 
 			// non_ignored is always used when considering whether a key combination is in place to
 			// trigger a hotkey:
@@ -1145,13 +1146,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	// it fell through from CASE #3 or #2 above).  This case can also happen if it fell through from
 	// case #1 (i.e. it already determined the value of hotkey_id_with_flags).
 	////////////////////////////////////////////////////////////////////////////////////////////////////
-	// First correct modifiers, because at this late a state, the likelihood of firing a hotkey is high.
-	// For details, see comments for "modifiers_were_corrected" above:
-	if (!modifiers_were_corrected && hotkey_id_with_flags == HOTKEY_ID_INVALID)
-	{
-		modifiers_were_corrected = true;
-		GetModifierLRState(true);
-	}
 	bool fire_with_no_suppress = false; // Set default.
 
 	if (pPrefixKey && (!aKeyUp || this_key.used_as_key_up) && hotkey_id_with_flags == HOTKEY_ID_INVALID) // Helps performance by avoiding all the below checking.

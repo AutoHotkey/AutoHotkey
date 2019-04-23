@@ -3660,6 +3660,10 @@ modLR_type GetModifierLRState(bool aExplicitlyGet)
 		// UPDATE: The following adjustment is now also relied upon by the SendInput method
 		// to correct physical modifier state during periods when the hook was temporarily removed
 		// to allow a SendInput to be uninterruptible.
+		// UPDATE: The modifier state might also become incorrect due to keyboard events which
+		// are missed due to User Interface Privelege Isolation; i.e. because a window belonging
+		// to a process with higher integrity level than our own became active while the key was
+		// down, so we saw the down event but not the up event.
 		modLR_type modifiers_wrongly_down = g_modifiersLR_logical & ~modifiersLR;
 		if (modifiers_wrongly_down)
 		{
@@ -3672,6 +3676,9 @@ modLR_type GetModifierLRState(bool aExplicitlyGet)
 			g_modifiersLR_logical_non_ignored &= ~modifiers_wrongly_down;
 			// Also adjust physical state so that the GetKeyState command will retrieve the correct values:
 			AdjustKeyState(g_PhysicalKeyState, g_modifiersLR_physical);
+			// Also reset pPrefixKey if it is one of the wrongly-down modifiers.
+			if (pPrefixKey && (pPrefixKey->as_modifiersLR & modifiers_wrongly_down))
+				pPrefixKey = NULL;
 		}
 	}
 
