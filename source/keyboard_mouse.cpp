@@ -1133,11 +1133,20 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 		// determination.  This avoids extra keystrokes, while still procrastinating the release of Ctrl/Shift so
 		// that those can be left down if the caller's next keystroke happens to need them.
 		modLR_type state_now = sSendMode ? sEventModifiersLR : GetModifierLRState();
-		modLR_type win_alt_to_be_released = ((state_now ^ aModifiersLRPersistent) & state_now) // The modifiers to be released...
+		modLR_type win_alt_to_be_released = (state_now & ~aModifiersLRPersistent) // The modifiers to be released...
 			& (MOD_LWIN|MOD_RWIN|MOD_LALT|MOD_RALT); // ... but restrict them to only Win/Alt.
 		if (win_alt_to_be_released)
-			SetModifierLRState(state_now & ~win_alt_to_be_released
-				, state_now, aTargetWindow, true, false); // It also does DoKeyDelay(g->PressDuration).
+		{
+			// Originally used the following for mods new/now: state_now & ~win_alt_to_be_released, state_now
+			// When AltGr is to be released, the above formula passes LCtrl+RAlt as the current state and just
+			// LCtrl as the new state, which results in LCtrl being pushed back down after it is released via
+			// AltGr.  Although our caller releases LCtrl if needed, it usually uses KEY_IGNORE, so if we put
+			// LCtrl down here, it would be wrongly stuck down in g_modifiersLR_logical_non_ignored, which
+			// causes ^-modified hotkeys to fire when they shouldn't and prevents non-^ hotkeys from firing.
+			// By ignoring the current modifier state and only specifying the modifiers we want released,
+			// we avoid any chance of sending any unwanted key-down:
+			SetModifierLRState(0, win_alt_to_be_released, aTargetWindow, true, false); // It also does DoKeyDelay(g->PressDuration).
+		}
 	}
 }
 
