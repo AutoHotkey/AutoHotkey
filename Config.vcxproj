@@ -36,6 +36,7 @@
       <!-- global setting -->
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <WarningLevel>Level3</WarningLevel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
       
       <!-- default -->
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -85,7 +86,6 @@
   <ItemDefinitionGroup Condition="$(ConfigDebug)">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
