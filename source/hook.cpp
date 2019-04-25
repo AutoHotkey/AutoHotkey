@@ -4314,7 +4314,7 @@ bool SystemHasAnotherKeybdHook()
 	// we want a handle to the mutex maintained here.
 	if (sKeybdMutex) // It was open originally, so update the handle the the newly opened one.
 		sKeybdMutex = mutex;
-	else // Keep it closed because the system tracks how many handles there are, deleting the mutex when zero.
+	else if (mutex) // Keep it closed because the system tracks how many handles there are, deleting the mutex when zero.
 		CloseHandle(mutex);  // This facilitates other instances of the program getting the proper last_error value.
 	return last_error == ERROR_ALREADY_EXISTS;
 }
@@ -4331,7 +4331,7 @@ bool SystemHasAnotherMouseHook()
 	// we want a handle to the mutex maintained here.
 	if (sMouseMutex) // It was open originally, so update the handle the the newly opened one.
 		sMouseMutex = mutex;
-	else // Keep it closed because the system tracks how many handles there are, deleting the mutex when zero.
+	else if (mutex) // Keep it closed because the system tracks how many handles there are, deleting the mutex when zero.
 		CloseHandle(mutex);  // This facilitates other instances of the program getting the proper last_error value.
 	return last_error == ERROR_ALREADY_EXISTS;
 }
