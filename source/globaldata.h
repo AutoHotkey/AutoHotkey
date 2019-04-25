@@ -45,6 +45,8 @@ extern modLR_type g_modifiersLR_logical;   // Tracked by hook (if hook is active
 extern modLR_type g_modifiersLR_logical_non_ignored;
 extern modLR_type g_modifiersLR_physical;  // Same as above except it's which modifiers are PHYSICALLY down.
 
+extern key_type *pPrefixKey;
+
 #ifdef FUTURE_USE_MOUSE_BUTTONS_LOGICAL
 extern WORD g_mouse_buttons_logical; // A bitwise combination of MK_LBUTTON, etc.
 #endif

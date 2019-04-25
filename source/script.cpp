@@ -10684,6 +10684,13 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	if (g_nThreads >= g_MaxThreadsTotal)
 		return CONDITION_FALSE;
 
+	bool prev_defer_messages = g_DeferMessagesForUnderlyingPump;
+	// Force the use of PeekMessage() within MsgSleep() since GetMessage() is known to stall while
+	// the system is waiting for our keyboard hook to return (last confirmed on Windows 10.0.18356).
+	// This might relate to WM_TIMER being lower priority than the input hardware processing
+	// performed by GetMessage().  MsgSleep() relies on WM_TIMER acting as a timeout for GetMessage().
+	g_DeferMessagesForUnderlyingPump = true;
+
 	// See MsgSleep() for comments about the following section.
 	VarBkp ErrorLevel_saved;
 	ErrorLevel_Backup(ErrorLevel_saved);
@@ -10730,6 +10737,8 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	g_script.mPriorHotkeyStartTime = prior_hotkey_time[1];
 
 	ResumeUnderlyingThread(ErrorLevel_saved);
+
+	g_DeferMessagesForUnderlyingPump = prev_defer_messages;
 
 	return result;
 }

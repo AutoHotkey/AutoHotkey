@@ -36,6 +36,7 @@
       <!-- global setting -->
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <WarningLevel>Level3</WarningLevel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
       
       <!-- default -->
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -85,7 +86,6 @@
   <ItemDefinitionGroup Condition="$(ConfigDebug)">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -95,14 +95,18 @@
     </Link>
   </ItemDefinitionGroup>
   
+  <!-- import standard defaults -->
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
   <!--
-    VC++ 2010, 2012, 2013 and 2015 all default to v100 toolset.  v100 produces smaller
+    VC++ 2010 and above all set PlatformToolset=v100 by default.  v100 produces smaller
     x86 (but not x64) binaries than v140 and is easier to target Win2k with, so use it
     if present.  Otherwise, try to fall back to an appropriate toolset.  Note that if
     VC++ Express 2010 is installed, there might be x86 compilers but no x64.
   -->
-  <PropertyGroup Condition="'$(PlatformToolset)' == '' and '$(VCTargetsPath10)' != '' and !Exists('$(VCTargetsPath10)\Platforms\$(Platform)\Microsoft.Cpp.$(Platform).Targets')">
-    <PlatformToolset>v$(VisualStudioVersion.Replace('.',''))</PlatformToolset>
+  <PropertyGroup Condition="'$(VCTargetsPath10)' == '' or !Exists('$(VCTargetsPath10)\Platforms\$(Platform)\Microsoft.Cpp.$(Platform).Targets')">
+    <!-- DefaultPlatformToolset contains the toolset of the current VS in 2012+ -->
+    <PlatformToolset Condition="'$(DefaultPlatformToolset)' != ''">$(DefaultPlatformToolset)</PlatformToolset>
     <PlatformToolset Condition="Exists('$(VCTargetsPath)\Platforms\$(Platform)\PlatformToolsets\$(PlatformToolset)_xp')">$(PlatformToolset)_xp</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup>
@@ -110,8 +114,7 @@
     <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
   </PropertyGroup>
 
-  <!-- import compiler and platform defaults -->
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <!-- import essential stuff -->
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="PropertySheets">
   <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" />
