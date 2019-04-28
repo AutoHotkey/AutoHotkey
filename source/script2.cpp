@@ -16273,12 +16273,14 @@ ResultType GuiControlType::TV_AddModifyDelete(ResultToken &aResultToken, int aID
 				if (!TreeView_SortChildren(control.hwnd, tvi.item.hItem, FALSE)) // Best default seems no-recurse, since typically this is used after a user edits merely a single item.
 					retval = 0; // Indicate partial failure by overriding the HTREEITEM return value set earlier.
 		}
-		else if (add_mode) // MUST BE LISTED LAST DUE TO "ELSE IF": Options valid only for TV.Add().
+		// MUST BE LISTED LAST DUE TO "ELSE IF": Options valid only for TV.Add().
+		else if (add_mode && !_tcsicmp(next_option, _T("First")))
 		{
-			if (!_tcsicmp(next_option, _T("First")))
-				tvi.hInsertAfter = TVI_FIRST; // For simplicity, the value of "adding" is ignored.
-			else if (IsNumeric(next_option, false, false, false))
-				tvi.hInsertAfter = (HTREEITEM)ATOI64(next_option); // ATOI64 vs. ATOU avoids need for extra casting to avoid compiler warning.
+			tvi.hInsertAfter = TVI_FIRST; // For simplicity, the value of "adding" is ignored.
+		}
+		else if (add_mode && IsNumeric(next_option, false, false, false))
+		{
+			tvi.hInsertAfter = (HTREEITEM)ATOI64(next_option); // ATOI64 vs. ATOU avoids need for extra casting to avoid compiler warning.
 		}
 		else
 		{
