@@ -23,56 +23,41 @@ GNU General Public License for more details.
 
 
 
-ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ObjectMember UserMenu::sMembers[] =
 {
-	if (!aParamCount) // menu[]
-		return INVOKE_NOT_HANDLED;
-	
-	LPTSTR name = ParamIndexToString(0); // Name of method or property.
-	MemberID member = INVALID;
-	--aParamCount; // Exclude name from param count.
-	++aParam; // As above, but for the param array.
+	Object_Method(Add, 0, 3),
+	Object_Method(AddStandard, 0, 0),
+	Object_Method(Insert, 0, 4),
+	Object_Method(Delete, 0, 1),
+	Object_Method(Rename, 1, 2),
+	Object_Method(Check, 1, 1),
+	Object_Method(Uncheck, 1, 1),
+	Object_Method(ToggleCheck, 1, 1),
+	Object_Method(Enable, 1, 1),
+	Object_Method(Disable, 1, 1),
+	Object_Method(ToggleEnable, 1, 1),
+	Object_Method(SetIcon, 2, 4),
+	Object_Method(Show, 0, 2),
+	Object_Method(SetColor, 0, 2),
 
-	if (0) {}
-#define if_member(s,e)	else if (!_tcsicmp(name, _T(s))) member = e;
-	if_member("Add", M_Add)
-	if_member("AddStandard", M_AddStandard)
-	if_member("Insert", M_Insert)
-	if_member("Delete", M_Delete)
-	if_member("Rename", M_Rename)
-	if_member("Check", M_Check)
-	if_member("Uncheck", M_Uncheck)
-	if_member("ToggleCheck", M_ToggleCheck)
-	if_member("Enable", M_Enable)
-	if_member("Disable", M_Disable)
-	if_member("ToggleEnable", M_ToggleEnable)
-	if_member("SetIcon", M_SetIcon)
-	if_member("Show", M_Show)
-	if_member("SetColor", M_SetColor)
-	if_member("Default", P_Default)
-	if_member("Handle", P_Handle)
-	if_member("ClickCount", P_ClickCount)
-#undef if_member
-	if (member == INVALID)
-		return INVOKE_NOT_HANDLED;
-	
-	// Syntax validation:
-	if (!IS_INVOKE_CALL)
-	{
-		if (member < LastMethodPlusOne)
-			// Member requires parentheses().
-			return INVOKE_NOT_HANDLED;
-		if (aParamCount != (IS_INVOKE_SET ? 1 : 0))
-			_o_throw(ERR_INVALID_USAGE);
-	}
-	else if (IS_INVOKE_CALL && member > LastMethodPlusOne)
-		return INVOKE_NOT_HANDLED; // Properties cannot be invoked with CALL syntax.
+	Object_Property_get_set(Default),
+	Object_Property_get    (Handle),
+	Object_Property_get_set(ClickCount)
+};
 
-	LPTSTR param1 = ParamIndexToOptionalString(0, _f_number_buf);
+ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken& aResultToken, ExprTokenType& aThisToken, int aFlags, ExprTokenType* aParam[], int aParamCount)
+{
+	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+}
+
+ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	LPTSTR param1 = (aParamCount || IS_INVOKE_SET) ? ParamIndexToString(0, _f_number_buf) : _T("");
 
 	bool ignore_existing_items = false; // These are used to simplify M_Insert, combining it with M_Add.
 	UserMenuItem **insert_at = NULL;    //
 
+	auto member = MemberID(aID);
 	switch (member)
 	{
 	case M_Show:
@@ -137,8 +122,6 @@ ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken &aResultToken, ExprTok
 	}
 
 	case P_Handle:
-		if (IS_INVOKE_SET)
-			_o_throw(ERR_INVALID_USAGE);
 		if (!mMenu)
 			Create(); // On failure (rare), we just return 0.
 		_o_return((__int64)(UINT_PTR)mMenu);

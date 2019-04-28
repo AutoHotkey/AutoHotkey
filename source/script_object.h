@@ -58,7 +58,30 @@ public:
 #ifdef CONFIG_DEBUGGER
 	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
 #endif
-};	
+};
+
+
+//
+// Helpers for IObject::Invoke implementations.
+//
+
+typedef ResultType (IObject::*ObjectMethod)(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+struct ObjectMember
+{
+	LPTSTR name;
+	ObjectMethod method;
+	UCHAR id, invokeType, minParams, maxParams;
+	static ResultType Invoke(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
+		, ResultToken& aResultToken, int aFlags, ExprTokenType* aParam[], int aParamCount);
+};
+
+#define Object_Member(name, impl, id, invokeType, ...) \
+	{ _T(#name), static_cast<ObjectMethod>(&impl), id, invokeType, __VA_ARGS__ }
+#define Object_Method_(name, minP, maxP, impl, id) Object_Member(name, impl,   id,      IT_CALL, minP, maxP)
+#define Object_Method(name, minP, maxP)            Object_Member(name, Invoke, M_##name, IT_CALL, minP, maxP)
+#define Object_Property_get(name, ...)             Object_Member(name, Invoke, P_##name, IT_GET, __VA_ARGS__)
+#define Object_Property_get_set(name, ...)         Object_Member(name, Invoke, P_##name, IT_SET, __VA_ARGS__)
+#define MAXP_VARIADIC 255
 
 
 //
@@ -510,6 +533,16 @@ public:
 	size_t Size() { return mSize; }
 	ClipboardAll(void *aData, size_t aSize) : mData(aData), mSize(aSize) {}
 	~ClipboardAll() { free(mData); }
+
+	enum MemberID
+	{
+		P_Ptr,
+		P_Size,
+		P_Data
+	};
+	static ObjectMember sMembers[];
+	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	IObject_Type_Impl("ClipboardAll")
 };

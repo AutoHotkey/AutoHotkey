@@ -206,103 +206,105 @@ public:
 };
 
 
+ObjectMember GuiType::sMembers[] =
+{
+	Object_Method_(Add, 1, 3, AddControl, GUI_CONTROL_INVALID),
+	Object_Method_(AddText, 0, 2, AddControl, GUI_CONTROL_TEXT),
+	Object_Method_(AddPic, 0, 2, AddControl, GUI_CONTROL_PIC),
+	Object_Method_(AddPicture, 0, 2, AddControl, GUI_CONTROL_PIC),
+	Object_Method_(AddGroupBox, 0, 2, AddControl, GUI_CONTROL_GROUPBOX),
+	Object_Method_(AddButton, 0, 2, AddControl, GUI_CONTROL_BUTTON),
+	Object_Method_(AddCheckBox, 0, 2, AddControl, GUI_CONTROL_CHECKBOX),
+	Object_Method_(AddRadio, 0, 2, AddControl, GUI_CONTROL_RADIO),
+	Object_Method_(AddDDL, 0, 2, AddControl, GUI_CONTROL_DROPDOWNLIST),
+	Object_Method_(AddDropDownList, 0, 2, AddControl, GUI_CONTROL_DROPDOWNLIST),
+	Object_Method_(AddComboBox, 0, 2, AddControl, GUI_CONTROL_COMBOBOX),
+	Object_Method_(AddListBox, 0, 2, AddControl, GUI_CONTROL_LISTBOX),
+	Object_Method_(AddListView, 0, 2, AddControl, GUI_CONTROL_LISTVIEW),
+	Object_Method_(AddTreeView, 0, 2, AddControl, GUI_CONTROL_TREEVIEW),
+	Object_Method_(AddEdit, 0, 2, AddControl, GUI_CONTROL_EDIT),
+	Object_Method_(AddDateTime, 0, 2, AddControl, GUI_CONTROL_DATETIME),
+	Object_Method_(AddMonthCal, 0, 2, AddControl, GUI_CONTROL_MONTHCAL),
+	Object_Method_(AddHotkey, 0, 2, AddControl, GUI_CONTROL_HOTKEY),
+	Object_Method_(AddUpDown, 0, 2, AddControl, GUI_CONTROL_UPDOWN),
+	Object_Method_(AddSlider, 0, 2, AddControl, GUI_CONTROL_SLIDER),
+	Object_Method_(AddProgress, 0, 2, AddControl, GUI_CONTROL_PROGRESS),
+	Object_Method_(AddTab, 0, 2, AddControl, GUI_CONTROL_TAB),
+	Object_Method_(AddTab2, 0, 2, AddControl, GUI_CONTROL_TAB2),
+	Object_Method_(AddTab3, 0, 2, AddControl, GUI_CONTROL_TAB3),
+	Object_Method_(AddActiveX, 0, 2, AddControl, GUI_CONTROL_ACTIVEX),
+	Object_Method_(AddLink, 0, 2, AddControl, GUI_CONTROL_LINK),
+	Object_Method_(AddCustom, 0, 2, AddControl, GUI_CONTROL_CUSTOM),
+	Object_Method_(AddStatusBar, 0, 2, AddControl, GUI_CONTROL_STATUSBAR),
+
+	Object_Method (Show, 0, 1),
+	Object_Method (Hide, 0, 0),
+	Object_Method_(Cancel, 0, 0, Invoke, M_Hide),
+	Object_Method (Destroy, 0, 0),
+	Object_Method (SetFont, 0, 2),
+	Object_Method (Options, 1, 1),
+	Object_Method_(Opt, 1, 1, Invoke, M_Options),
+	Object_Method (Minimize, 0, 0),
+	Object_Method (Maximize, 0, 0),
+	Object_Method (Restore, 0, 0),
+	Object_Method (Flash, 0, 1),
+	Object_Method (Submit, 0, 1),
+	Object_Method (_NewEnum, 0, 0),
+	Object_Method (OnEvent, 2, 3),
+
+	Object_Property_get    (Hwnd),
+	Object_Property_get_set(Title),
+	Object_Property_get_set(Name),
+	Object_Property_get    (Control, 1, 1),
+	Object_Property_get    (FocusedCtrl),
+	Object_Property_get_set(BackColor),
+	Object_Property_get_set(MarginX),
+	Object_Property_get_set(MarginY),
+	Object_Property_get_set(MenuBar),
+	Object_Property_get    (Pos),
+	Object_Property_get    (ClientPos),
+};
+
 ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (!aParamCount) // gui[]
-		return INVOKE_NOT_HANDLED;
-		
-	LPTSTR name = ParamIndexToString(0); // Name of method or property.
-	MemberID member = INVALID;
-	GuiControls ctrl_type = GUI_CONTROL_INVALID; // For AddControl.
-	--aParamCount; // Exclude name from param count.
-	++aParam; // As above, but for the param array.
-
-	// Add' must be handled differently to support AddLabel(), AddButton(), etc.
-	if (!_tcsnicmp(name, _T("Add"), 3))
-	{
-		member = M_AddControl;
-		LPTSTR ctrl_type_name = NULL;
-		if (name[3])
-			ctrl_type_name = name+3;
-		else
-		{
-			if (aParamCount < 1)
-				_o_throw(ERR_TOO_FEW_PARAMS);
-			ctrl_type_name = ParamIndexToString(0, _f_number_buf); // Pass buf for error-reporting purposes.
-			--aParamCount; // Exclude control type from param count.
-			++aParam; // As above, but for the param array.
-		}
-		ctrl_type = GuiControlType::ConvertTypeName(ctrl_type_name);
-		if (ctrl_type == GUI_CONTROL_INVALID)
-		{
-			if (name[3])
-				return INVOKE_NOT_HANDLED; // Seems more appropriate for Gui.AddSomething().
-			_o_throw(_T("Invalid control type."), ctrl_type_name);
-		}
-	}
-#define if_member(s,e)	else if (!_tcsicmp(name, _T(s))) member = e;
-	if_member("Destroy", M_Destroy)
-	if_member("Show", M_Show)
-	if_member("Hide", M_Hide)
-	if_member("Cancel", M_Hide) // Allow gui.Cancel() as a synonym for gui.Hide().
-	if_member("Minimize", M_Minimize)
-	if_member("Maximize", M_Maximize)
-	if_member("Restore", M_Restore)
-	if_member("SetFont", M_SetFont)
-	if_member("Options", M_Options)
-	if_member("Opt", M_Options) // Short-hand form of Options.
-	if_member("Flash", M_Flash)
-	if_member("Submit", M_Submit)
-	if_member("_NewEnum", M_NewEnum)
-	if_member("OnEvent", M_OnEvent)
-	if_member("Hwnd", P_Handle)
-	if_member("Title", P_Title)
-	if_member("Control", P_Control)
-	if_member("FocusedCtrl", P_FocusedCtrl)
-	if_member("MenuBar", P_MenuBar)
-	if_member("MarginX", P_MarginX)
-	if_member("MarginY", P_MarginY)
-	if_member("BackColor", P_BackColor)
-	if_member("Pos", P_Pos)
-	if_member("ClientPos", P_ClientPos)
-	if_member("Name", P_Name)
-#undef if_member
-	if (member == INVALID)
-		return INVOKE_NOT_HANDLED;
-
-	// Syntax validation:
-	if (!IS_INVOKE_CALL)
-	{
-		if (member < LastMethodPlusOne)
-			// Member requires parentheses().
-			return INVOKE_NOT_HANDLED;
-		if (aParamCount != ((IS_INVOKE_SET ? 1 : 0) + (member == P_Control ? 1 : 0)))
-			_o_throw(ERR_INVALID_USAGE);
-	}
-	else if (IS_INVOKE_CALL && member > LastMethodPlusOne)
-		return INVOKE_NOT_HANDLED; // Properties cannot be used using CALL syntax.
-
 	if (!mHwnd)
 		_o_throw(_T("The Gui is destroyed."));
 
+	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+}
+
+ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto ctrl_type = GuiControls(aID);
+	if (ctrl_type == GUI_CONTROL_INVALID) // Gui.Add(CtrlType)
+	{
+		LPTSTR ctrl_type_name = ParamIndexToString(0, _f_number_buf); // Pass buf for error-reporting purposes.
+		--aParamCount; // Exclude control type from param count.
+		++aParam; // As above, but for the param array.
+		ctrl_type = GuiControlType::ConvertTypeName(ctrl_type_name);
+		if (ctrl_type == GUI_CONTROL_INVALID)
+			_o_throw(_T("Invalid control type."), ctrl_type_name);
+	}
+	_f_param_string_opt(options, 0);
+	_f_param_string_opt(text, 1);
+	Object *text_obj = aParamCount >= 2 ? TokenToScriptObject(*aParam[1]) : NULL;
+	GuiControlType* pcontrol;
+	ResultType result = AddControl(ctrl_type, options, text, pcontrol, text_obj);
+	if (result == OK)
+	{
+		pcontrol->AddRef();
+		_o_return(pcontrol);
+	} // else: above already displayed an error message.
+	return result;
+}
+
+ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
 	TCHAR nbuf1[MAX_NUMBER_SIZE], nbuf2[MAX_NUMBER_SIZE];
 
+	auto member = MemberID(aID);
 	switch (member)
 	{
-		case M_AddControl: // Probably the most common method.
-		{
-			LPTSTR options = ParamIndexToOptionalString(0, nbuf1);
-			LPTSTR text = ParamIndexToOptionalString(1, nbuf2);
-			Object *text_obj = aParamCount >= 2 ? TokenToScriptObject(*aParam[1]) : NULL;
-			GuiControlType* pcontrol;
-			ResultType result = AddControl(ctrl_type, options, text, pcontrol, text_obj);
-			if (result == OK)
-			{
-				pcontrol->AddRef();
-				_o_return(pcontrol);
-			} // else: above already displayed an error message.
-			return result;
-		}
 		case M_Destroy:
 			Destroy();
 			_o_return_empty;
@@ -340,13 +342,13 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 			if (set_last_found_window)
 				g->hWndLastUsed = mHwnd;
 			SetOwnDialogs(own_dialogs);
-			return OK;
+			_o_return_empty;
 		}
 		case M_Submit:
 		{
 			return Submit(aResultToken, ParamIndexToOptionalBOOL(0, TRUE));
 		}
-		case M_NewEnum:
+		case M__NewEnum:
 		{
 			if (IObject *obj = new GuiTypeEnum(*this))
 				_o_return(obj);
@@ -354,18 +356,14 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		}
 		case M_OnEvent:
 		{
-			if (aParamCount < 2)
-				_o_throw(ERR_TOO_FEW_PARAMS);
 			LPTSTR event_name = ParamIndexToString(0, nbuf1);
 			GuiEventType evt = ConvertEvent(event_name);
 			if (evt < GUI_EVENT_WINDOW_FIRST || evt > GUI_EVENT_WINDOW_LAST)
 				_o_throw(ERR_PARAM1_INVALID);
 			return OnEvent(NULL, evt, GUI_EVENTKIND_EVENT, aParam, aParamCount, aResultToken);
 		}
-		case P_Handle:
+		case P_Hwnd:
 		{
-			if (IS_INVOKE_SET)
-				_o_throw(ERR_INVALID_USAGE);
 			_o_return((__int64)(UINT_PTR)mHwnd);
 		}
 		case P_Title:
@@ -403,16 +401,12 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		}
 		case P_Control:
 		{
-			if (IS_INVOKE_SET)
-				_o_throw(ERR_INVALID_USAGE);
-
 			ExprTokenType& tok = *aParam[0];
 			GuiControlType* ctrl = NULL;
 			if (TokenIsPureNumeric(tok) == SYM_INTEGER)
 			{
 				HWND hWnd = (HWND)(UINT_PTR)TokenToInt64(tok);
 				ctrl = FindControl(hWnd);
-
 			}
 			else
 			{
@@ -428,17 +422,14 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		}
 		case P_FocusedCtrl:
 		{
-			if (IS_INVOKE_SET)
-				_o_throw(ERR_INVALID_USAGE);
-
 			HWND hwnd = GetFocus();
 			GuiControlType* pcontrol = hwnd ? FindControl(hwnd) : NULL;
 			if (pcontrol)
 			{
 				pcontrol->AddRef();
-				aResultToken.Return(pcontrol);
+				_o_return(pcontrol);
 			}
-			return OK;
+			_o_return_empty;
 		}
 		case P_MarginX:
 		case P_MarginY:
@@ -476,9 +467,6 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 		case P_Pos:
 		case P_ClientPos:
 		{
-			if (IS_INVOKE_SET)
-				_o_throw(ERR_INVALID_USAGE);
-
 			RECT rect;
 			if (member == P_Pos)
 			{
@@ -606,54 +594,87 @@ BIF_DECL(BIF_GuiCtrlFromHwnd)
 	_f_return_empty;
 }
 
-typedef void (*GuiCtrlFunc)(BIF_DECL_PARAMS, GuiControlType& aControl, BuiltInFunctionID aCalleeID);
-struct GuiCtrlFuncInfo
+
+ObjectMember GuiControlType::sMembers[] =
 {
-	LPTSTR name;
-	GuiCtrlFunc func;
-	USHORT fid;
-	USHORT min_params;
+	Object_Method_(Opt, 1, 1, Invoke, M_Options),
+	Object_Method(Options, 1, 1),
+	Object_Method(Focus, 0, 0),
+	Object_Method(Move, 1, 2),
+	Object_Method(Choose, 1, 1),
+	Object_Method(OnEvent, 2, 3),
+	Object_Method(OnNotify, 2, 3),
+	Object_Method(OnCommand, 2, 3),
+	Object_Method(SetFont, 0, 2),
+
+	Object_Property_get    (Hwnd),
+	Object_Property_get    (Gui),
+	Object_Property_get_set(Name),
+	Object_Property_get    (Type),
+	Object_Property_get    (ClassNN),
+	Object_Property_get_set(Text),
+	Object_Property_get_set(Value),
+	Object_Property_get    (Pos),
+	Object_Property_get_set(Enabled),
+	Object_Property_get_set(Visible),
+	Object_Property_get    (Focused)
 };
 
-#define FUN1(name, minp, bif) {_T(#name), bif, 0, minp }
-#define FUNn(name, minp, bif, cat) {_T(#name), bif, FID_##cat##_##name, minp }
-
-static const GuiCtrlFuncInfo sListViewFuncs[] =
+ObjectMember GuiControlType::sMembersList[] =
 {
-	FUNn(GetNext, 0, BIF_LV_GetNextOrCount, LV),
-	FUNn(GetCount, 0, BIF_LV_GetNextOrCount, LV),
-	FUN1(GetText, 1, BIF_LV_GetText),
-	FUNn(Add, 0, BIF_LV_AddInsertModify, LV),
-	FUNn(Insert, 1, BIF_LV_AddInsertModify, LV),
-	FUNn(Modify, 2, BIF_LV_AddInsertModify, LV),
-	FUN1(Delete, 0, BIF_LV_Delete),
-	FUNn(InsertCol, 1, BIF_LV_InsertModifyDeleteCol, LV),
-	FUNn(ModifyCol, 0, BIF_LV_InsertModifyDeleteCol, LV),
-	FUNn(DeleteCol, 1, BIF_LV_InsertModifyDeleteCol, LV),
-	FUN1(SetImageList, 1, BIF_LV_SetImageList),
+	Object_Method_(Add, 1, 1, Invoke, M_List_Add),
+	Object_Method_(Delete, 0, 1, Invoke, M_List_Delete)
 };
 
-static const GuiCtrlFuncInfo sTreeViewFuncs[] =
+ObjectMember GuiControlType::sMembersTab[] =
 {
-	FUNn(Add, 1, BIF_TV_AddModifyDelete, TV),
-	FUNn(Modify, 1, BIF_TV_AddModifyDelete, TV),
-	FUNn(Delete, 0, BIF_TV_AddModifyDelete, TV),
-	FUNn(GetParent, 1, BIF_TV_GetRelatedItem, TV),
-	FUNn(GetChild, 1, BIF_TV_GetRelatedItem, TV),
-	FUNn(GetPrev, 1, BIF_TV_GetRelatedItem, TV),
-	FUNn(GetCount, 0, BIF_TV_GetRelatedItem, TV),
-	FUNn(GetSelection, 0, BIF_TV_GetRelatedItem, TV),
-	FUNn(GetNext, 0, BIF_TV_GetRelatedItem, TV),
-	FUNn(Get, 2, BIF_TV_Get, TV),
-	FUNn(GetText, 1, BIF_TV_Get, TV),
-	FUN1(SetImageList, 1, BIF_TV_SetImageList),
+	Object_Method_(UseTab, 0, 2, Invoke, M_Tab_UseTab)
 };
 
-static const GuiCtrlFuncInfo sStatusBarFuncs[] =
+ObjectMember GuiControlType::sMembersDate[] =
 {
-	FUNn(SetText, 1, BIF_StatusBar, SB),
-	FUNn(SetParts, 0, BIF_StatusBar, SB),
-	FUNn(SetIcon, 1, BIF_StatusBar, SB),
+	Object_Method_(SetFormat, 0, 1, Invoke, M_DateTime_SetFormat)
+};
+
+#define FUN1(name, minp, maxp, bif) Object_Member(name, bif, 0, IT_CALL, minp, maxp)
+#define FUNn(name, minp, maxp, bif, cat) Object_Member(name, bif, FID_##cat##_##name, IT_CALL, minp, maxp)
+
+ObjectMember GuiControlType::sMembersLV[] =
+{
+	FUNn(GetNext, 0, 2, LV_GetNextOrCount, LV),
+	FUNn(GetCount, 0, 1, LV_GetNextOrCount, LV),
+	FUN1(GetText, 1, 2, LV_GetText),
+	FUNn(Add, 0, MAXP_VARIADIC, LV_AddInsertModify, LV),
+	FUNn(Insert, 1, MAXP_VARIADIC, LV_AddInsertModify, LV),
+	FUNn(Modify, 2, MAXP_VARIADIC, LV_AddInsertModify, LV),
+	FUN1(Delete, 0, 1, LV_Delete),
+	FUNn(InsertCol, 1, 3, LV_InsertModifyDeleteCol, LV),
+	FUNn(ModifyCol, 0, 3, LV_InsertModifyDeleteCol, LV),
+	FUNn(DeleteCol, 1, 1, LV_InsertModifyDeleteCol, LV),
+	FUN1(SetImageList, 1, 2, LV_SetImageList),
+};
+
+ObjectMember GuiControlType::sMembersTV[] =
+{
+	FUNn(Add, 1, 3, TV_AddModifyDelete, TV),
+	FUNn(Modify, 1, 3, TV_AddModifyDelete, TV),
+	FUNn(Delete, 0, 1, TV_AddModifyDelete, TV),
+	FUNn(GetParent, 1, 1, TV_GetRelatedItem, TV),
+	FUNn(GetChild, 1, 1, TV_GetRelatedItem, TV),
+	FUNn(GetPrev, 1, 1, TV_GetRelatedItem, TV),
+	FUNn(GetCount, 0, 0, TV_GetRelatedItem, TV),
+	FUNn(GetSelection, 0, 0, TV_GetRelatedItem, TV),
+	FUNn(GetNext, 0, 2, TV_GetRelatedItem, TV),
+	FUNn(Get, 2, 2, TV_Get, TV),
+	FUNn(GetText, 1, 1, TV_Get, TV),
+	FUN1(SetImageList, 1, 2, TV_SetImageList),
+};
+
+ObjectMember GuiControlType::sMembersSB[] =
+{
+	FUNn(SetText, 1, 3, StatusBar, SB),
+	FUNn(SetParts, 0, 255, StatusBar, SB),
+	FUNn(SetIcon, 1, 3, StatusBar, SB),
 };
 
 #undef FUN1
@@ -661,111 +682,42 @@ static const GuiCtrlFuncInfo sStatusBarFuncs[] =
 
 ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (!aParamCount) // ctrl[]
-		return INVOKE_NOT_HANDLED;
-		
-	LPTSTR member_name = ParamIndexToString(0); // Name of method or property.
-	MemberID member = INVALID;
-	BuiltInFunctionID func_id; // As above.
-	--aParamCount; // Exclude name from param count.
-	++aParam; // As above, but for the param array.
-
-	// Check for this early.
 	if (!hwnd)
 		_o_throw(_T("The control is destroyed."));
 
-#define if_member(s,e) else if (!_tcsicmp(member_name, _T(s))) member = e;
-	if_member("Opt", M_Options)
-	if_member("Options", M_Options)
-	if_member("Move", M_Move)
-	if_member("Choose", M_Choose)
-	if_member("OnEvent", M_OnEvent)
-	if_member("OnNotify", M_OnNotify)
-	if_member("OnCommand", M_OnCommand)
-	if_member("SetFont", M_SetFont)
-	if_member("Focus", M_Focus)
-	if_member("Focused", P_Focused)
-	if_member("Hwnd", P_Handle)
-	if_member("Gui", P_Gui)
-	if_member("Name", P_Name)
-	if_member("Type", P_Type)
-	if_member("ClassNN", P_ClassNN)
-	if_member("Text", P_Text)
-	if_member("Value", P_Value)
-	if_member("Pos", P_Pos)
-	if_member("Enabled", P_Enabled)
-	if_member("Visible", P_Visible)
-#undef if_member
+	ResultType result;
+	ObjectMember *more_items = NULL;
+	int how_many = 0;
+
 	// Check for control-type-specific members:
-	else switch (type)
+	switch (type)
 	{
 	case GUI_CONTROL_TAB:
-		if (!_tcsicmp(member_name, _T("UseTab")))
-		{
-			member = M_Tab_UseTab;
-			break;
-		}
-		// Also check the following:
+		result = ObjectMember::Invoke(sMembersTab, _countof(sMembersTab), this, aResultToken, aFlags, aParam, aParamCount);
+		if (result != INVOKE_NOT_HANDLED)
+			return result;
+		// Also check sMembersList:
 	case GUI_CONTROL_DROPDOWNLIST:
 	case GUI_CONTROL_COMBOBOX:
-	case GUI_CONTROL_LISTBOX:
-		if (!_tcsicmp(member_name, _T("Add")))
-			member = M_List_Add;
-		else if (!_tcsicmp(member_name, _T("Delete")))
-			member = M_List_Delete;
-		break;
-	case GUI_CONTROL_DATETIME:
-		if (!_tcsicmp(member_name, _T("SetFormat")))
-			member = M_DateTime_SetFormat;
-		break;
-	case GUI_CONTROL_LISTVIEW:
-	case GUI_CONTROL_TREEVIEW:
-	case GUI_CONTROL_STATUSBAR:
-		GuiCtrlFunc func = NULL;
-		const GuiCtrlFuncInfo* func_info = NULL;
-		int func_count = 0;
-		switch (type)
-		{
-			case GUI_CONTROL_LISTVIEW:  func_info = sListViewFuncs;  func_count = _countof(sListViewFuncs);  break;
-			case GUI_CONTROL_TREEVIEW:  func_info = sTreeViewFuncs;  func_count = _countof(sTreeViewFuncs);  break;
-			case GUI_CONTROL_STATUSBAR: func_info = sStatusBarFuncs; func_count = _countof(sStatusBarFuncs); break;
-		}
-		for (int i = 0; ; i++)
-		{
-			if (i == func_count)
-				return INVOKE_NOT_HANDLED;
-			if (!_tcsicmp(member_name, func_info[i].name))
-			{
-				func_info = func_info + i;
-				func = func_info->func;
-				func_id = (BuiltInFunctionID)func_info->fid;
-				break;
-			}
-		}
-		if (aParamCount < func_info->min_params)
-			_o_throw(ERR_TOO_FEW_PARAMS);
-		// Set up aResultToken to what the TV/LV/SB functions expect.
-		aResultToken.symbol = SYM_INTEGER;
-		// Call the function.
-		func(aResultToken, aParam, aParamCount, *this, func_id);
-		return aResultToken.Result();
+	case GUI_CONTROL_LISTBOX: more_items = sMembersList; how_many = _countof(sMembersList); break;
+	case GUI_CONTROL_DATETIME: more_items = sMembersDate; how_many = _countof(sMembersDate); break;
+	case GUI_CONTROL_LISTVIEW: more_items = sMembersLV; how_many = _countof(sMembersLV); break;
+	case GUI_CONTROL_TREEVIEW: more_items = sMembersTV; how_many = _countof(sMembersTV); break;
+	case GUI_CONTROL_STATUSBAR: more_items = sMembersSB; how_many = _countof(sMembersSB); break;
 	}
-
-	if (member == INVALID)
-		return INVOKE_NOT_HANDLED;
-
-	// Syntax validation:
-	if (!IS_INVOKE_CALL)
+	if (more_items)
 	{
-		if (member < LastMethodPlusOne)
-			// Member requires parentheses().
-			return INVOKE_NOT_HANDLED;
-		if (aParamCount != (IS_INVOKE_SET ? 1 : 0))
-			_o_throw(ERR_INVALID_USAGE);
+		result = ObjectMember::Invoke(more_items, how_many, this, aResultToken, aFlags, aParam, aParamCount);
+		if (result != INVOKE_NOT_HANDLED)
+			return result;
 	}
-	else if (IS_INVOKE_CALL && member > LastMethodPlusOne)
-		return INVOKE_NOT_HANDLED; // Properties cannot be used using CALL syntax.
+	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+}
 
+
+ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto member = MemberID(aID);
 	switch (member)
 	{
 		case M_Options:
@@ -783,10 +735,9 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			_o_return_empty;
 
 		case P_Focused:
-			if (IS_INVOKE_SET)
+			//if (IS_INVOKE_SET) // Prior validation ensures this is never true.
 				// Not allowed because it's unclear what should happen when Focused := false,
 				// and because the side effects of Focus() don't fit with property semantics.
-				_o_throw(ERR_INVALID_USAGE);
 			_o_return(GetFocus() == hwnd);
 
 		case M_SetFont:
@@ -796,16 +747,12 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			return gui->ControlMove(*this, ParamIndexToOptionalString(0), ParamIndexToOptionalBOOL(1, FALSE));
 			
 		case M_Choose:
-			if (aParamCount == 0)
-				_o_throw(ERR_TOO_FEW_PARAMS);
 			return gui->ControlChoose(*this, *aParam[0]);
 
 		case M_OnEvent:
 		case M_OnNotify:
 		case M_OnCommand:
 		{
-			if (aParamCount < 2)
-				_o_throw(ERR_TOO_FEW_PARAMS);
 			UINT event_code;
 			UCHAR event_kind;
 			if (member == M_OnEvent)
@@ -833,25 +780,17 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 			_o_return_p(name ? name : _T(""));
 
 		case P_Type:
-			if (IS_INVOKE_SET)
-				_o_throw(ERR_INVALID_USAGE);
 			_o_return_p(GetTypeName());
 
-		case P_Handle:
-			if (IS_INVOKE_SET)
-				_o_throw(ERR_INVALID_USAGE);
+		case P_Hwnd:
 			_o_return((__int64)(UINT_PTR)hwnd);
 		
 		case P_Gui:
-			if (IS_INVOKE_SET)
-				_o_throw(ERR_INVALID_USAGE);
 			gui->AddRef();
 			_o_return(gui);
 		
 		case P_ClassNN:
 		{
-			if (IS_INVOKE_SET)
-				_o_throw(ERR_INVALID_USAGE);
 			class_and_hwnd_type cah;
 			cah.hwnd = hwnd;
 			cah.class_name = _f_retval_buf;
@@ -864,7 +803,6 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 				_o_throw(_T("Cannot find control.")); // Short msg since so rare.
 			// Append the class sequence number onto the class name set the output param to be that value:
 			sntprintfcat(cah.class_name, _f_retval_buf_size, _T("%d"), cah.class_count);
-
 			_o_return_p(cah.class_name);
 		}
 
@@ -894,9 +832,6 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 
 		case P_Pos:
 		{
-			if (IS_INVOKE_SET)
-				_o_throw(ERR_INVALID_USAGE); // TODO: maybe redirect to ctrl.Move(value)?
-
 			RECT rect;
 			GetWindowRect(hwnd, &rect);
 			MapWindowPoints(NULL, gui->mHwnd, (LPPOINT)&rect, 2);
@@ -974,16 +909,13 @@ ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, E
 
 		case M_List_Add:
 		{
-			if (aParamCount > 0)
+			Object* obj = TokenToScriptObject(*aParam[0]);
+			LPTSTR value = obj ? _T("") : ParamIndexToString(0, _f_number_buf);
+			gui->ControlAddContents(*this, value, 0, NULL, obj);
+			if (type == GUI_CONTROL_TAB)
 			{
-				Object* obj = TokenToScriptObject(*aParam[0]);
-				LPTSTR value = obj ? _T("") : ParamIndexToString(0, _f_number_buf);
-				gui->ControlAddContents(*this, value, 0, NULL, obj);
-				if (type == GUI_CONTROL_TAB)
-				{
-					// Appears to be necessary to resolve a redraw issue, at least for Tab3 on Windows 10.
-					InvalidateRect(gui->mHwnd, NULL, TRUE);
-				}
+				// Appears to be necessary to resolve a redraw issue, at least for Tab3 on Windows 10.
+				InvalidateRect(gui->mHwnd, NULL, TRUE);
 			}
 			_o_return_empty;
 		}

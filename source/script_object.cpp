@@ -52,6 +52,44 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 
 
 //
+// Helpers for Invoke
+//
+
+ResultType ObjectMember::Invoke(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
+	, ResultToken &aResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (IS_INVOKE_SET)
+		--aParamCount; // Let aParamCount be just the ones in [].
+	if (aParamCount < 1)
+		_o_throw(ERR_INVALID_USAGE);
+
+	LPCTSTR name = ParamIndexToString(0, _f_retval_buf);
+
+	for (int i = 0; i < aMemberCount; ++i)
+	{
+		auto &member = aMembers[i];
+		if ((INVOKE_TYPE == IT_CALL) == (member.invokeType == IT_CALL)
+			&& !_tcsicmp(member.name, name))
+		{
+			if (member.invokeType == IT_GET && IS_INVOKE_SET)
+				_o_throw(ERR_INVALID_USAGE);
+			--aParamCount;
+			++aParam;
+			if (aParamCount < member.minParams)
+				_o_throw(ERR_TOO_FEW_PARAMS);
+			if (aParamCount > member.maxParams && member.maxParams != MAXP_VARIADIC)
+				_o_throw(ERR_TOO_MANY_PARAMS);
+			for (int i = 0; i < member.minParams; ++i)
+				if (aParam[i]->symbol == SYM_MISSING)
+					_o_throw(ERR_PARAM_REQUIRED);
+			return (aThis->*member.method)(aResultToken, member.id, aFlags, aParam, aParamCount);
+		}
+	}
+	return INVOKE_NOT_HANDLED;
+}
+
+
+//
 // Object::Create - Called by BIF_Object to create a new object, optionally passing key/value pairs to set.
 //
 
@@ -2131,18 +2169,29 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ResultToken &aResultToken, ExprT
 
 
 
+ObjectMember ClipboardAll::sMembers[] =
+{
+	Object_Property_get(Ptr),
+	Object_Property_get(Size),
+	Object_Property_get(Data)
+};
+
 ResultType ClipboardAll::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (IS_INVOKE_GET && aParamCount)
+	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+}
+
+ResultType ClipboardAll::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	switch (aID)
 	{
-		LPTSTR name = ParamIndexToString(0);
-		if (!_tcsicmp(name, _T("Ptr")))
-			_o_return((size_t)mData);
-		if (!_tcsicmp(name, _T("Size")))
-			_o_return(mSize);
-		if (!_tcsicmp(name, _T("Data")))
-			// Return the data as a binary string, which can be passed to FileAppend().
-			_o_return_p((LPTSTR)mData, mSize / sizeof(TCHAR));
+	case P_Ptr:
+		_o_return((size_t)mData);
+	case P_Size:
+		_o_return(mSize);
+	case P_Data:
+		// Return the data as a binary string, which can be passed to FileAppend().
+		_o_return_p((LPTSTR)mData, mSize / sizeof(TCHAR));
 	}
 	return INVOKE_NOT_HANDLED;
 }

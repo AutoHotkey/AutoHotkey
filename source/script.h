@@ -406,7 +406,6 @@ struct ArgStruct
 
 // The following macro is used for definitions and declarations of built-in functions:
 #define BIF_DECL(name) void name(BIF_DECL_PARAMS)
-#define BIF_DECL_GUICTRL(name) void name(BIF_DECL_PARAMS, GuiControlType& control, BuiltInFunctionID aCalleeID)
 
 #define _f__oneline(act)		do { act } while (0)		// Make the macro safe to use like a function, under if(), etc.
 #define _f__ret(act)			_f__oneline( act; return; )	// BIFs have no return value.
@@ -434,6 +433,7 @@ struct ArgStruct
 #define _f_return_p(...)		_f__ret(_f_set_retval_p(__VA_ARGS__)) // Return a string which is already in persistent memory.
 #define _o_return_p(...)		_o__ret(_f_set_retval_p(__VA_ARGS__)) // Return a string which is already in persistent memory.
 #define _f_return_retval		return  // Return the value set by _f_set_retval().
+#define _o_return_retval		return OK
 #define _f_return_empty			_f_return_p(_T(""), 0)
 #define _o_return_empty			return OK  // Default return value for Invoke is "".
 #define _o_return_or_throw(p)	if (p) _o_return(p); else _o_throw(ERR_OUTOFMEM);
@@ -1977,6 +1977,8 @@ public:
 	HBRUSH mBrush;   // Background color to apply to menu.
 	COLORREF mColor; // The color that corresponds to the above.
 
+	static ObjectMember sMembers[];
+
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
 
@@ -2021,6 +2023,7 @@ public:
 	//IObject_Type_Impl("Menu")
 	LPTSTR Type() { return mMenuType == MENU_TYPE_BAR ? _T("MenuBar") : _T("Menu"); }
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions, UserMenuItem **aInsertAt);
 	ResultType InternalAppendMenu(UserMenuItem *aMenuItem, UserMenuItem *aInsertBefore = NULL);
@@ -2276,7 +2279,7 @@ struct GuiControlType : public ObjectBase
 		INVALID = 0,
 
 		// Methods
-		M_Options,
+		M_Options, // a.k.a. Opt
 		M_Focus,
 		M_Move,
 		M_Choose,
@@ -2288,10 +2291,9 @@ struct GuiControlType : public ObjectBase
 		M_List_Add,
 		M_List_Delete,
 		M_DateTime_SetFormat,
-		LastMethodPlusOne,
 
 		// Properties
-		P_Handle,
+		P_Hwnd,
 		P_Gui,
 		P_Name,
 		P_Type,
@@ -2304,10 +2306,31 @@ struct GuiControlType : public ObjectBase
 		P_Focused,
 	};
 
-	void Dispose(); // Called by GuiType::Dispose().
+	static ObjectMember sMembers[];
+	static ObjectMember sMembersList[]; // Tab, ListBox, ComboBox, DDL
+	static ObjectMember sMembersTab[];
+	static ObjectMember sMembersDate[];
+	static ObjectMember sMembersLV[];
+	static ObjectMember sMembersTV[];
+	static ObjectMember sMembersSB[];
 
+	ResultType StatusBar(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType LV_GetNextOrCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType LV_GetText(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType LV_AddInsertModify(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType LV_Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType LV_InsertModifyDeleteCol(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType LV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType TV_AddModifyDelete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType TV_GetRelatedItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType TV_Get(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType TV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	LPTSTR Type();
+
+	void Dispose(); // Called by GuiType::Dispose().
 };
 
 struct GuiControlOptionsType
@@ -2422,27 +2445,23 @@ public:
 
 	enum MemberID
 	{
-		INVALID = 0,
-
 		// Methods
 		M_Destroy,
-		M_AddControl,
+		//M_AddControl,
 		M_Show,
 		M_Hide,
 		M_SetFont,
-		M_Options,
+		M_Options, // a.k.a. Opt
 		M_Minimize,
 		M_Maximize,
 		M_Restore,
 		M_Flash,
 		M_Submit,
-		M_NewEnum,
+		M__NewEnum,
 		M_OnEvent,
 
-		LastMethodPlusOne,
-		
 		// Properties
-		P_Handle,
+		P_Hwnd,
 		P_Title,
 		P_Name,
 		P_Control,
@@ -2454,6 +2473,8 @@ public:
 		P_Pos,
 		P_ClientPos,
 	};
+
+	static ObjectMember sMembers[];
 
 	GuiType() // Constructor
 		: mHwnd(NULL), mOwner(NULL), mName(NULL)
@@ -2498,6 +2519,8 @@ public:
 	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
 	IObject_Type_Impl("Gui")
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Create(LPTSTR aTitle);
 	ResultType SetName(LPTSTR aName);
 	ResultType NameToEventHandler(LPTSTR aName, IObject *&aObject);
@@ -3099,20 +3122,6 @@ BIF_DECL(BIF_InputBox);
 BIF_DECL(BIF_GuiCreate);
 BIF_DECL(BIF_GuiFromHwnd);
 BIF_DECL(BIF_GuiCtrlFromHwnd);
-
-BIF_DECL_GUICTRL(BIF_StatusBar);
-
-BIF_DECL_GUICTRL(BIF_LV_GetNextOrCount);
-BIF_DECL_GUICTRL(BIF_LV_GetText);
-BIF_DECL_GUICTRL(BIF_LV_AddInsertModify);
-BIF_DECL_GUICTRL(BIF_LV_Delete);
-BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol);
-BIF_DECL_GUICTRL(BIF_LV_SetImageList);
-
-BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete);
-BIF_DECL_GUICTRL(BIF_TV_GetRelatedItem);
-BIF_DECL_GUICTRL(BIF_TV_Get);
-BIF_DECL_GUICTRL(BIF_TV_SetImageList);
 
 BIF_DECL(BIF_IL_Create);
 BIF_DECL(BIF_IL_Destroy);

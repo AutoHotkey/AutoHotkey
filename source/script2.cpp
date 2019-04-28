@@ -15241,18 +15241,17 @@ BIF_DECL(BIF_Menu)
 
 
 
-BIF_DECL_GUICTRL(BIF_StatusBar)
+ResultType GuiControlType::StatusBar(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	LPTSTR buf = _f_number_buf; // Must be saved early since below overwrites the union (better maintainability too).
-
-	GuiType& gui = *control.gui;
-	HWND control_hwnd = control.hwnd;
+	GuiType& gui = *this->gui;
+	HWND control_hwnd = this->hwnd;
+	LPTSTR buf = _f_number_buf;
 
 	HICON hicon;
-	switch (aCalleeID)
+	switch (aID)
 	{
 	case FID_SB_SetText:
-		_f_return_b(SendMessage(control_hwnd, SB_SETTEXT
+		_o_return(SendMessage(control_hwnd, SB_SETTEXT
 			, (WPARAM)((ParamIndexIsOmitted(1) ? 0 : ParamIndexToInt64(1) - 1) // The Part# param is present.
 				     | (ParamIndexIsOmitted(2) ? 0 : ParamIndexToInt64(2) << 8)) // The uType parameter is present.
 			, (LPARAM)ParamIndexToString(0, buf))); // Caller has ensured that there's at least one param in this mode.
@@ -15276,12 +15275,11 @@ BIF_DECL_GUICTRL(BIF_StatusBar)
 				if (hicon = (HICON)SendMessage(control_hwnd, SB_GETICON, i, 0))
 					DestroyIcon(hicon);
 
-		_f_return_b(SendMessage(control_hwnd, SB_SETPARTS, new_part_count, (LPARAM)part)
+		_o_return(SendMessage(control_hwnd, SB_SETPARTS, new_part_count, (LPARAM)part)
 			? (__int64)control_hwnd : 0); // Return HWND to provide an easy means for the script to get the bar's HWND.
 
 	//case FID_SB_SetIcon:
 	default:
-		_f_set_retval_i(0); // Set default return value.
 		int unused, icon_number;
 		icon_number = ParamIndexToOptionalInt(1, 1);
 		if (icon_number == 0) // Must be != 0 to tell LoadPicture that "icon must be loaded, never a bitmap".
@@ -15297,18 +15295,19 @@ BIF_DECL_GUICTRL(BIF_StatusBar)
 			// script doesn't load too many) since they're all destroyed by the system upon program termination.
 			if (SendMessage(control_hwnd, SB_SETICON, part_index, (LPARAM)hicon))
 			{
-				_f_set_retval_i((size_t)hicon); // Override the 0 default. This allows the script to destroy the HICON later when it doesn't need it (see comments above too).
 				if (hicon_old)
 					// Although the old icon is automatically destroyed here, the script can call SendMessage(SB_SETICON)
 					// itself if it wants to work with HICONs directly (for performance reasons, etc.)
 					DestroyIcon(hicon_old);
 			}
 			else
+			{
 				DestroyIcon(hicon);
-				// And leave retval at its default value (0).
+				hicon = NULL;
+			}
 		}
-		//else can't load icon, so leave retval at its default value (0).
-		_f_return_retval;
+		//else can't load icon, so return 0.
+		_o_return((size_t)hicon); // This allows the script to destroy the HICON later when it doesn't need it (see comments above too).
 	// SB_SetTipText() not implemented (though can be done via SendMessage in the script) because the conditions
 	// under which tooltips are displayed don't seem like something a script would want very often:
 	// This ToolTip text is displayed in two situations: 
@@ -15323,7 +15322,7 @@ BIF_DECL_GUICTRL(BIF_StatusBar)
 }
 
 
-BIF_DECL_GUICTRL(BIF_LV_GetNextOrCount)
+ResultType GuiControlType::LV_GetNextOrCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // LV.GetNext:
 // Returns: The index of the found item, or 0 on failure.
 // Parameters:
@@ -15331,24 +15330,22 @@ BIF_DECL_GUICTRL(BIF_LV_GetNextOrCount)
 // 2: Options string.
 // 3: (FUTURE): Possible for use with LV.FindItem (though I think it can only search item text, not subitem text).
 {
-	LPTSTR buf = aResultToken.buf; // Must be saved early since below overwrites the union (better maintainability too).
-
-	HWND control_hwnd = control.hwnd;
+	HWND control_hwnd = hwnd;
 
 	LPTSTR options;
-	if (aCalleeID == FID_LV_GetCount)
+	if (aID == FID_LV_GetCount)
 	{
 		options = (aParamCount > 0) ? omit_leading_whitespace(ParamIndexToString(0, _f_number_buf)) : _T("");
 		if (*options)
 		{
 			if (ctoupper(*options) == 'S')
-				_f_return_i(SendMessage(control_hwnd, LVM_GETSELECTEDCOUNT, 0, 0));
+				_o_return(SendMessage(control_hwnd, LVM_GETSELECTEDCOUNT, 0, 0));
 			else if (!_tcsnicmp(options, _T("Col"), 3)) // "Col" or "Column". Don't allow "C" by itself, so that "Checked" can be added in the future.
-				_f_return_i(control.union_lv_attrib->col_count);
+				_o_return(union_lv_attrib->col_count);
 			else
-				_f_throw(ERR_PARAM1_INVALID);
+				_o_throw(ERR_PARAM1_INVALID);
 		}
-		_f_return_i(SendMessage(control_hwnd, LVM_GETITEMCOUNT, 0, 0));
+		_o_return(SendMessage(control_hwnd, LVM_GETITEMCOUNT, 0, 0));
 	}
 	// Since above didn't return, this is GetNext() mode.
 
@@ -15373,25 +15370,25 @@ BIF_DECL_GUICTRL(BIF_LV_GetNextOrCount)
 	{
 	case '\0': // Listed first for performance.
 	case 'F':
-		_f_return_i(ListView_GetNextItem(control_hwnd, index
+		_o_return(ListView_GetNextItem(control_hwnd, index
 			, first_char ? LVNI_FOCUSED : LVNI_SELECTED) + 1); // +1 to convert to 1-based.
 	case 'C': // Checkbox: Find checked items. For performance assume that the control really has checkboxes.
 	  {
 		int item_count = ListView_GetItemCount(control_hwnd);
 		for (int i = index + 1; i < item_count; ++i) // Start at index+1 to omit the first item from the search (for consistency with the other mode above).
 			if (ListView_GetCheckState(control_hwnd, i)) // Item's box is checked.
-				_f_return_i(i + 1); // +1 to convert from zero-based to one-based.
+				_o_return(i + 1); // +1 to convert from zero-based to one-based.
 		// Since above didn't return, no match found.
-		_f_return_i(0);
+		_o_return(0);
 	  }
 	default:
-		_f_throw(ERR_PARAM1_INVALID);
+		_o_throw(ERR_PARAM1_INVALID);
 	}
 }
 
 
 
-BIF_DECL_GUICTRL(BIF_LV_GetText)
+ResultType GuiControlType::LV_GetText(ResultToken & aResultToken, int aID, int aFlags, ExprTokenType * aParam[], int aParamCount)
 // Returns: Text on success.
 // Throws on failure.
 // Parameters:
@@ -15405,11 +15402,11 @@ BIF_DECL_GUICTRL(BIF_LV_GetText)
 
 	int row_index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 	if (row_index < -1) // row_index==-1 is reserved to mean "get column heading's text".
-		_f_throw(ERR_PARAM1_INVALID);
+		_o_throw(ERR_PARAM1_INVALID);
 	// If parameter 2 is omitted, default to the first column (index 0):
 	int col_index = ParamIndexIsOmitted(1) ? 0 : ParamIndexToInt(1) - 1; // -1 to convert to zero-based.
 	if (col_index < 0)
-		_f_throw(ERR_PARAM2_INVALID);
+		_o_throw(ERR_PARAM2_INVALID);
 
 	TCHAR buf[LV_TEXT_BUF_SIZE];
 	bool result;
@@ -15420,10 +15417,10 @@ BIF_DECL_GUICTRL(BIF_LV_GetText)
 		lvc.cchTextMax = LV_TEXT_BUF_SIZE - 1;  // See notes below about -1.
 		lvc.pszText = buf;
 		lvc.mask = LVCF_TEXT;
-		if (result = SendMessage(control.hwnd, LVM_GETCOLUMN, col_index, (LPARAM)&lvc)) // Assign.
-			_f_return(lvc.pszText); // See notes below about why pszText is used instead of buf (might apply to this too).
+		if (result = SendMessage(hwnd, LVM_GETCOLUMN, col_index, (LPARAM)&lvc)) // Assign.
+			_o_return(lvc.pszText); // See notes below about why pszText is used instead of buf (might apply to this too).
 		else // On failure, it seems best to throw.
-			_f_throw(_T("Error while retrieving text."));
+			_o_throw(_T("Error while retrieving text."));
 	}
 	else // Get row's indicated item or subitem text.
 	{
@@ -15437,19 +15434,19 @@ BIF_DECL_GUICTRL(BIF_LV_GetText)
 		lvi.cchTextMax = LV_TEXT_BUF_SIZE - 1; // Note that LVM_GETITEM doesn't update this member to reflect the new length.
 		// Unlike LVM_GETITEMTEXT, LVM_GETITEM indicates success or failure, which seems more useful/preferable
 		// as a return value since a text length of zero would be ambiguous: could be an empty field or a failure.
-		if (result = SendMessage(control.hwnd, LVM_GETITEM, 0, (LPARAM)&lvi)) // Assign
+		if (result = SendMessage(hwnd, LVM_GETITEM, 0, (LPARAM)&lvi)) // Assign
 			// Must use lvi.pszText vs. buf because MSDN says: "Applications should not assume that the text will
 			// necessarily be placed in the specified buffer. The control may instead change the pszText member
 			// of the structure to point to the new text rather than place it in the buffer."
-			_f_return(lvi.pszText);
+			_o_return(lvi.pszText);
 		else // On failure, it seems best to throw.
-			_f_throw(_T("Error while retrieving text."));
+			_o_throw(_T("Error while retrieving text."));
 	}
 }
 
 
 
-BIF_DECL_GUICTRL(BIF_LV_AddInsertModify)
+ResultType GuiControlType::LV_AddInsertModify(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: For Add(), this is the options.  For Insert/Modify, it's the row index (one-based when it comes in).
@@ -15457,7 +15454,8 @@ BIF_DECL_GUICTRL(BIF_LV_AddInsertModify)
 // 3 and beyond: Additional field text.
 // In Add/Insert mode, if there are no text fields present, a blank for is appended/inserted.
 {
-	BuiltInFunctionID mode = aCalleeID;
+	GuiControlType &control = *this;
+	auto mode = BuiltInFunctionID(aID);
 	LPTSTR buf = _f_number_buf; // Resolve macro early for maintainability.
 
 	int index;
@@ -15470,7 +15468,7 @@ BIF_DECL_GUICTRL(BIF_LV_AddInsertModify)
 	{
 		index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 		if (index < -1 || (mode != FID_LV_Modify && index < 0)) // Allow -1 to mean "all rows" when in modify mode.
-			_f_throw(ERR_PARAM1_INVALID);
+			_o_throw(ERR_PARAM1_INVALID);
 		++aParam;  // Remove the first parameter from further consideration to make Insert/Modify symmetric with Add.
 		--aParamCount;
 	}
@@ -15600,7 +15598,7 @@ BIF_DECL_GUICTRL(BIF_LV_AddInsertModify)
 		{
 			aResultToken.Error(ERR_INVALID_OPTION, next_option);
 			*option_end = orig_char; // See comment below.
-			return;
+			return FAIL;
 		}
 
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
@@ -15645,7 +15643,7 @@ BIF_DECL_GUICTRL(BIF_LV_AddInsertModify)
 			if (   -1 == (lvi_sub.iItem = ListView_InsertItem(control.hwnd, &lvi))   )
 			{
 				control.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Re-enable events.
-				_f_return_i(0); // Since item can't be inserted, no reason to try attaching any subitems to it.
+				_o_return(0); // Since item can't be inserted, no reason to try attaching any subitems to it.
 			}
 			// Update iItem with the actual index assigned to the item, which might be different than the
 			// specified index if the control has an auto-sort style in effect.  This new iItem value
@@ -15706,33 +15704,31 @@ BIF_DECL_GUICTRL(BIF_LV_AddInsertModify)
 	}
 
 	control.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Re-enable events.
-	_f_return_i(result);
+	_o_return(result);
 }
 
 
 
-BIF_DECL_GUICTRL(BIF_LV_Delete)
+ResultType GuiControlType::LV_Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: Row index (one-based when it comes in).
 {
-	HWND control_hwnd = control.hwnd;
-
 	if (ParamIndexIsOmitted(0))
-		_f_return_b(SendMessage(control_hwnd, LVM_DELETEALLITEMS, 0, 0)); // Returns TRUE/FALSE.
+		_o_return(SendMessage(hwnd, LVM_DELETEALLITEMS, 0, 0)); // Returns TRUE/FALSE.
 
 	// Since above didn't return, there is a first parameter present.
 	int index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 	if (index > -1)
-		_f_return_b(SendMessage(control_hwnd, LVM_DELETEITEM, index, 0)); // Returns TRUE/FALSE.
+		_o_return(SendMessage(hwnd, LVM_DELETEITEM, index, 0)); // Returns TRUE/FALSE.
 	else
 		// Even if index==0, for safety, it seems best not to do a delete-all.
-		_f_throw(ERR_PARAM1_INVALID);
+		_o_throw(ERR_PARAM1_INVALID);
 }
 
 
 
-BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol)
+ResultType GuiControlType::LV_InsertModifyDeleteCol(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: Column index (one-based when it comes in).
@@ -15740,10 +15736,11 @@ BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol)
 // 3: New text of column
 // There are also some special modes when only zero or one parameter is present, see below.
 {
-	BuiltInFunctionID mode = aCalleeID;
+	auto mode = BuiltInFunctionID(aID);
 	LPTSTR buf = _f_number_buf; // Resolve macro early for maintainability.
-	_f_set_retval_i(0); // Set default return value.
+	aResultToken.SetValue(0); // Set default return value.
 
+	GuiControlType &control = *this;
 	GuiType &gui = *control.gui;
 	lv_attrib_type &lv_attrib = *control.union_lv_attrib;
 	DWORD view_mode = mode != 'D' ? GuiType::ControlGetListViewMode(control.hwnd) : 0;
@@ -15756,14 +15753,14 @@ BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol)
 		if (mode == FID_LV_ModifyCol)
 		{
 			if (view_mode != LVS_REPORT)
-				_f_return_retval; // Return 0 to indicate failure.
+				_o_return_retval; // Return 0 to indicate failure.
 			// Otherwise:
 			// v1.0.36.03: Don't attempt to auto-size the columns while the view is not report-view because
 			// that causes any subsequent switch to the "list" view to be corrupted (invisible icons and items):
 			for (int i = 0; ; ++i) // Don't limit it to lv_attrib.col_count in case script added extra columns via direct API calls.
 				if (!ListView_SetColumnWidth(control.hwnd, i, LVSCW_AUTOSIZE)) // Failure means last column has already been processed.
 					break;
-			_f_return_b(1); // Always successful, regardless of what happened in the loop above.
+			_o_return(1); // Always successful, regardless of what happened in the loop above.
 		}
 		// Since above didn't return, mode must be 'I' (insert).
 		index = lv_attrib.col_count; // When no insertion index was specified, append to the end of the list.
@@ -15786,7 +15783,7 @@ BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol)
 				MoveMemory(lv_attrib.col+index, lv_attrib.col+index+1, sizeof(lv_col_type)*(lv_attrib.col_count-index));
 			_f_set_retval_i(1);
 		}
-		_f_return_retval;
+		_o_return_retval;
 	}
 	// Do this prior to checking if index is in bounds so that it can support columns beyond LV_MAX_COLUMNS:
 	if (mode == FID_LV_ModifyCol && aParamCount < 2) // A single parameter is a special modify-mode to auto-size that column.
@@ -15796,12 +15793,12 @@ BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol)
 		if (view_mode == LVS_REPORT)
 			_f_set_retval_i(ListView_SetColumnWidth(control.hwnd, index, LVSCW_AUTOSIZE));
 		//else leave retval set to 0.
-		_f_return_retval;
+		_o_return_retval;
 	}
 	if (mode == FID_LV_InsertCol)
 	{
 		if (lv_attrib.col_count >= LV_MAX_COLUMNS) // No room to insert or append.
-			_f_return_retval;
+			_o_return_retval;
 		if (index >= lv_attrib.col_count) // For convenience, fall back to "append" when index too large.
 			index = lv_attrib.col_count;
 	}
@@ -15810,7 +15807,7 @@ BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol)
 	// since col-attrib array can get out of sync with actual columns that way).
 
 	if (index < 0 || index >= LV_MAX_COLUMNS) // For simplicity, do nothing else if index out of bounds.
-		_f_return_retval; // Avoid array under/overflow below.
+		_o_return_retval; // Avoid array under/overflow below.
 
 	// In addition to other reasons, must convert any numeric value to a string so that an isolated width is
 	// recognized, e.g. LV.SetCol(1, old_width + 10):
@@ -15982,7 +15979,7 @@ BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol)
 			{
 				aResultToken.Error(ERR_INVALID_OPTION, next_option);
 				*option_end = orig_char; // See comment below.
-				return;
+				return FAIL;
 			}
 		}
 
@@ -16024,7 +16021,7 @@ BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol)
 		//lvc.mask |= LVCF_ORDER;
 		//lvc.iOrder = index + 1;
 		if (   -1 == (index = ListView_InsertColumn(control.hwnd, index, &lvc))   )
-			_f_return_retval; // Since column could not be inserted, return so that below, sort-now, etc. are not done.
+			_o_return_retval; // Since column could not be inserted, return so that below, sort-now, etc. are not done.
 		_f_set_retval_i(index + 1); // +1 to convert the new index to 1-based.
 		if (index < lv_attrib.col_count) // Since col is not being appended to the end, make room in the array to insert this column.
 			MoveMemory(lv_attrib.col+index+1, lv_attrib.col+index, sizeof(lv_col_type)*(lv_attrib.col_count-index));
@@ -16050,12 +16047,12 @@ BIF_DECL_GUICTRL(BIF_LV_InsertModifyDeleteCol)
 	if (sort_now)
 		GuiType::LV_Sort(control, index, false, sort_now_direction);
 
-	_f_return_retval;
+	_o_return_retval;
 }
 
 
 
-BIF_DECL_GUICTRL(BIF_LV_SetImageList)
+ResultType GuiControlType::LV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Returns (MSDN): "handle to the image list previously associated with the control if successful; NULL otherwise."
 // Parameters:
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
@@ -16072,12 +16069,12 @@ BIF_DECL_GUICTRL(BIF_LV_SetImageList)
 		ImageList_GetIconSize(himl, &cx, &cy);
 		list_type = (cx > GetSystemMetrics(SM_CXSMICON)) ? LVSIL_NORMAL : LVSIL_SMALL;
 	}
-	_f_return_i((size_t)ListView_SetImageList(control.hwnd, himl, list_type));
+	_o_return((size_t)ListView_SetImageList(hwnd, himl, list_type));
 }
 
 
 
-BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete)
+ResultType GuiControlType::TV_AddModifyDelete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // TV.Add():
 // Returns the HTREEITEM of the item on success, zero on failure.
 // Parameters:
@@ -16093,7 +16090,8 @@ BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete)
 // Parameters for TV.Delete():
 //    1: ID of item to delete (if omitted, all items are deleted).
 {
-	BuiltInFunctionID mode = aCalleeID;
+	GuiControlType &control = *this;
+	auto mode = BuiltInFunctionID(aID);
 	LPTSTR buf = _f_number_buf; // Resolve macro early for maintainability.
 
 	if (mode == FID_TV_Delete)
@@ -16102,7 +16100,7 @@ BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete)
 		// script bug is so rare that it is never caught until the script is distributed).  Another reason
 		// is that a script might do something like TV.Delete(TV.GetSelection()), which would be desired
 		// to fail not delete-all if there's ever any way for there to be no selection.
-		_f_return_i(SendMessage(control.hwnd, TVM_DELETEITEM, 0
+		_o_return(SendMessage(control.hwnd, TVM_DELETEITEM, 0
 			, ParamIndexIsOmitted(0) ? NULL : (LPARAM)ParamIndexToInt64(0)));
 	}
 
@@ -16137,7 +16135,7 @@ BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete)
 			if (!TreeView_SelectItem(control.hwnd, tvi.item.hItem))
 				retval = 0; // Override the HTREEITEM default value set above.
 			control.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Re-enable events.
-			_f_return_i((size_t)retval);
+			_o_return((size_t)retval);
 		}
 		// Otherwise, there's a second parameter (even if it's 0 or "").
 		options = ParamIndexToString(1, buf);
@@ -16309,7 +16307,7 @@ BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete)
 			control.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Re-enable events.
 			aResultToken.Error(ERR_INVALID_OPTION, next_option);
 			*option_end = orig_char; // See comment below.
-			return;
+			return FAIL;
 		}
 
 		// If the item was not handled by the above, ignore it because it is unknown.
@@ -16345,7 +16343,7 @@ BIF_DECL_GUICTRL(BIF_TV_AddModifyDelete)
 			retval = 0; // When not in add-mode, indicate partial failure by overriding the return value set earlier (add-mode should always return the new item's ID).
 
 	control.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Re-enable events.
-	_f_return_i((size_t)retval);
+	_o_return((size_t)retval);
 }
 
 
@@ -16382,13 +16380,14 @@ HTREEITEM GetNextTreeItem(HWND aTreeHwnd, HTREEITEM aItem)
 
 
 
-BIF_DECL_GUICTRL(BIF_TV_GetRelatedItem)
+ResultType GuiControlType::TV_GetRelatedItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // TV.GetParent/Child/Selection/Next/Prev(hitem):
 // The above all return the HTREEITEM (or 0 on failure).
 // When TV.GetNext's second parameter is present, the search scope expands to include not just siblings,
 // but also children and parents, which allows a tree to be traversed from top to bottom without the script
 // having to do something fancy.
 {
+	GuiControlType &control = *this;
 	HWND control_hwnd = control.hwnd;
 
 	HTREEITEM hitem = (HTREEITEM)ParamIndexToOptionalIntPtr(0, NULL);
@@ -16396,7 +16395,7 @@ BIF_DECL_GUICTRL(BIF_TV_GetRelatedItem)
 	if (ParamIndexIsOmitted(1))
 	{
 		WPARAM flag;
-		switch (aCalleeID)
+		switch (aID)
 		{
 		case FID_TV_GetSelection: flag = TVGN_CARET; break; // TVGN_CARET is the focused item.
 		case FID_TV_GetParent: flag = TVGN_PARENT; break;
@@ -16416,12 +16415,12 @@ BIF_DECL_GUICTRL(BIF_TV_GetRelatedItem)
 			// story is with this, so for now just casting to UINT rather than something less future-proof like WORD:
 			// Older note, apparently unneeded at least on XP SP2: Cast to WORD to convert -1 through -32768 to the
 			// positive counterparts.
-			_f_return_i((UINT)SendMessage(control_hwnd, TVM_GETCOUNT, 0, 0));
+			_o_return((UINT)SendMessage(control_hwnd, TVM_GETCOUNT, 0, 0));
 		}
 		// Apparently there's no direct call to get the topmost ancestor of an item, presumably because it's rarely
 		// needed.  Therefore, no such mode is provide here yet (the syntax TV.GetParent(hitem, true) could be supported
 		// if it's ever needed).
-		_f_return_i(SendMessage(control_hwnd, TVM_GETNEXTITEM, flag, (LPARAM)hitem));
+		_o_return(SendMessage(control_hwnd, TVM_GETNEXTITEM, flag, (LPARAM)hitem));
 	}
 
 	// Since above didn't return, this TV.GetNext's 2-parameter mode, which has an expanded scope that includes
@@ -16434,29 +16433,29 @@ BIF_DECL_GUICTRL(BIF_TV_GetRelatedItem)
 	else if (first_char_upper == 'F')
 		search_checkmark = false;
 	else // Reserve other option letters/words for future use by being somewhat strict.
-		_f_throw(ERR_PARAM2_INVALID);
+		_o_throw(ERR_PARAM2_INVALID);
 
 	// When an actual item was specified, search begins at the item *after* it.  Otherwise (when NULL):
 	// It's a special mode that always considers the root node first.  Otherwise, there would be no way
 	// to start the search at the very first item in the tree to find out whether it's checked or not.
 	hitem = GetNextTreeItem(control_hwnd, hitem); // Handles the comment above.
 	if (!search_checkmark) // Simple tree traversal, so just return the next item (if any).
-		_f_return_i((size_t)hitem); // OK if NULL.
+		_o_return((size_t)hitem); // OK if NULL.
 
 	// Otherwise, search for the next item having a checkmark. For performance, it seems best to assume that
 	// the control has the checkbox style (the script would realistically never call it otherwise, so the
 	// control's style isn't checked.
 	for (; hitem; hitem = GetNextTreeItem(control_hwnd, hitem))
 		if (TreeView_GetCheckState(control_hwnd, hitem) == 1) // 0 means unchecked, -1 means "no checkbox image".
-			_f_return_i((size_t)hitem); // OK if NULL.
+			_o_return((size_t)hitem); // OK if NULL.
 	// Since above didn't return, the entire tree starting at the specified item has been searched,
 	// with no match found.
-	_f_return_i(0);
+	_o_return(0);
 }
 
 
 
-BIF_DECL_GUICTRL(BIF_TV_Get)
+ResultType GuiControlType::TV_Get(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // TV.Get()
 // Returns: Varies depending on param #2.
 // Parameters:
@@ -16468,9 +16467,9 @@ BIF_DECL_GUICTRL(BIF_TV_Get)
 // Parameters:
 //    1: HTREEITEM.
 {
-	bool get_text = aCalleeID == FID_TV_GetText;
+	bool get_text = aID == FID_TV_GetText;
 
-	HWND control_hwnd = control.hwnd;
+	HWND control_hwnd = hwnd;
 
 	if (!get_text)
 	{
@@ -16497,7 +16496,7 @@ BIF_DECL_GUICTRL(BIF_TV_Get)
 		else // For all others, anything non-zero means the flag is present.
             if (!result) // Flag not present.
 				hitem = 0;
-		_f_return_i((size_t)hitem);
+		_o_return((size_t)hitem);
 	}
 
 	TCHAR text_buf[LV_TEXT_BUF_SIZE]; // i.e. uses same size as ListView.
@@ -16512,18 +16511,18 @@ BIF_DECL_GUICTRL(BIF_TV_Get)
 		// Must use tvi.pszText vs. text_buf because MSDN says: "Applications should not assume that the text will
 		// necessarily be placed in the specified buffer. The control may instead change the pszText member
 		// of the structure to point to the new text rather than place it in the buffer."
-		_f_return(tvi.pszText);
+		_o_return(tvi.pszText);
 	}
 	else
 	{
 		// On failure, it seems best to throw an exception.
-		_f_throw(_T("Error while retrieving text."));
+		_o_throw(_T("Error while retrieving text."));
 	}
 }
 
 
 
-BIF_DECL_GUICTRL(BIF_TV_SetImageList)
+ResultType GuiControlType::TV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Returns (MSDN): "handle to the image list previously associated with the control if successful; NULL otherwise."
 // Parameters:
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
@@ -16533,7 +16532,7 @@ BIF_DECL_GUICTRL(BIF_TV_SetImageList)
 	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0);
 	int list_type;
 	list_type = ParamIndexToOptionalInt(1, TVSIL_NORMAL);
-	_f_return_i((size_t)TreeView_SetImageList(control.hwnd, himl, list_type));
+	_o_return((size_t)TreeView_SetImageList(hwnd, himl, list_type));
 }
 
 

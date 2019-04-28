@@ -2,6 +2,7 @@
 #include "TextIO.h"
 #include "script.h"
 #include "script_object.h"
+#include "script_func_impl.h"
 EXTERN_SCRIPT;
 
 UINT g_ACP = GetACP(); // Requires a reboot to change.
@@ -705,17 +706,15 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 	~FileObject() {}
 
 	enum MemberID {
-		INVALID = 0,
 		// methods
 		Read,
 		Write,
 		ReadLine,
 		WriteLine,
-		NumReadWrite,
-		RawReadWrite,
+		RawRead,
+		RawWrite,
 		Close,
-		PositionMethodSet,
-		LastMethodPlusOne,
+		Seek,
 		// properties
 		Position,
 		Length,
@@ -724,199 +723,98 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		Encoding
 	};
 
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+	static ObjectMember sMembers[];
+
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	enum NumReadWriteFlags
 	{
-		if (!aParamCount) // file[]
-			return INVOKE_NOT_HANDLED;
-		
-		--aParamCount; // Exclude name from param count.
-		LPTSTR name = TokenToString(*aParam[0]); // Name of method or property.
-		MemberID member = INVALID;
-		if (IS_INVOKE_CALL) //nnnik: Check for methods
-		{
-			//nnnik: Gave up and hard coded all the parameter counts
-			#define p_exact(e,p)	if (aParamCount == p) member = e; else if (aParamCount < p) _o_throw(ERR_TOO_FEW_PARAMS); else _o_throw(ERR_TOO_MANY_PARAMS);
-			#define p_minmax(e,pmin,pmax)	if (aParamCount <= pmax && aParamCount >= pmin) member = e; else if (aParamCount < pmin) _o_throw(ERR_TOO_FEW_PARAMS); else _o_throw(ERR_TOO_MANY_PARAMS);
-			#define if_member_p_exact(s,e,p)	else if (!_tcsicmp(name, _T(s))) p_exact(e,p)
-			#define if_member_p_minmax(s,e,pmin,pmax)	else if (!_tcsicmp(name, _T(s))) p_minmax(e,pmin,pmax)
-			// Read' and Write' must be handled differently to support ReadUInt(), WriteShort(), etc.
-			if (!_tcsnicmp(name, _T("Read"), 4))
-			{
-				if (!name[4])
-					p_minmax(Read, 0, 1) //Assign Read to member if the parameter count is lequal to 0 and gequal to 1
-				else if (!_tcsicmp(name + 4, _T("Line")))
-					p_exact(ReadLine, 0)
-				else
-					p_exact(NumReadWrite, 0)
-			}
-			else if (!_tcsnicmp(name, _T("Write"), 5))
-			{
-				if (!name[5])
-					p_exact(Write, 1)
-				else if (!_tcsicmp(name + 5, _T("Line")))
-					p_minmax(WriteLine, 0, 1)
-				else
-					p_exact(NumReadWrite, 1)
-			}
-			if_member_p_exact("RawRead", RawReadWrite, 2)
-			if_member_p_exact("RawWrite", RawReadWrite, 2)
-			if_member_p_minmax("Seek", PositionMethodSet, 1, 2)
-			if_member_p_exact("Close", Close, 0)
-			#undef if_member_p_exact
-			#undef if_member_p_minmx
-			#undef p_exact
-			#undef p_minmax
-		}
-		else //nnnik: check for properties
-		{
-			#define if_member_rw(s,e)	else if (!_tcsicmp(name, _T(s))) member = e;                                                       //nnnik: read and write property
-			#define if_member_ro(s,e)	else if (!_tcsicmp(name, _T(s))) if (IS_INVOKE_GET) member = e; else _o_throw(ERR_INVALID_USAGE);  //nnnik: read only property
-			if (false); //nnnik: to start the else if ladder
-			if_member_rw("Pos", Position)
-			//for clarity
-			if_member_rw("Position", Position)
-			if_member_rw("Length", Length)
-			if_member_ro("AtEOF", AtEOF)
-			if_member_rw("Encoding", Encoding)
-			if_member_ro("Handle", Handle)
-			if (member) //nnnik: This changes the ordering of the unknown property and invalid use errors
-				if (aParamCount != (IS_INVOKE_SET ? 1 : 0))
-					_o_throw(ERR_INVALID_USAGE);
-			#undef if_member_rw
-			#undef if_member_ro
-		}
-		if (member == INVALID)
-			return INVOKE_NOT_HANDLED;
+		F_SIZE_MASK = 0xF,
+		F_READ = 0x10,
+		F_WRITE = 0,
+		F_SIGNED = 0x20,
+		F_UNSIGNED = 0,
+		F_FLOAT = 0x40
+	};
 
-		/*
-		// Syntax validation: //nnnik: Already handled above
-		if (!IS_INVOKE_CALL)
-		{
-			if (member < LastMethodPlusOne)
-				// Member requires parentheses().
-				return INVOKE_NOT_HANDLED;
-			
-				// Get: disallow File.Length[newLength] and File.Seek[dist,origin].
-				// Set: disallow File[]:=PropertyName and File["Pos",dist]:=origin.
-		}
-		else if (member > LastMethodPlusOne)
-		{
-			return INVOKE_NOT_HANDLED;
-		}
-		*/
+	ResultType NumReadWrite(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+	{
+		const bool reading = aID & F_READ;
+		const BOOL is_signed = aID & F_SIGNED, is_float = aID & F_FLOAT;
+		const DWORD size = aID & F_SIZE_MASK;
 
+		union {
+			__int64 i8;
+			int i4;
+			short i2;
+			char i1;
+			double d;
+			float f;
+		} buf;
+
+		if (reading)
+		{
+			buf.i8 = 0;
+			if ( !mFile.Read(&buf, size) )
+				_o_return_empty; // Fail.
+
+			if (is_float)
+			{
+				_o_return((size == 4) ? buf.f : buf.d);
+			}
+			else
+			{
+				if (is_signed)
+				{
+					// sign-extend to 64-bit
+					switch (size)
+					{
+					case 4: buf.i8 = buf.i4; break;
+					case 2: buf.i8 = buf.i2; break;
+					case 1: buf.i8 = buf.i1; break;
+					//case 8: not needed.
+					}
+				}
+				//else it's unsigned. No need to zero-extend thanks to init done earlier.
+				_o_return(buf.i8);
+			}
+		}
+		else
+		{
+			ExprTokenType &token_to_write = *aParam[1];
+
+			if (is_float)
+			{
+				buf.d = TokenToDouble(token_to_write);
+				if (size == 4)
+					buf.f = (float)buf.d;
+			}
+			else
+			{
+				if (size == 8 && !is_signed && !IS_NUMERIC(token_to_write.symbol))
+					buf.i8 = (__int64)ATOU64(TokenToString(token_to_write)); // For comments, search for ATOU64 in BIF_DllCall().
+				else
+					buf.i8 = TokenToInt64(token_to_write);
+			}
+
+			DWORD bytes_written = mFile.Write(&buf, size);
+			// Return bytes_written even if it is 0:
+			_o_return(bytes_written);
+		}
+	}
+
+	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+	{
 		aResultToken.symbol = SYM_INTEGER; // Set default return type -- the most common cases return integer.
 
+		auto member = MemberID(aID);
 		switch (member)
 		{
-		case NumReadWrite:
-			{
-				bool reading = (*name == 'R' || *name == 'r');
-				LPCTSTR type = name + (reading ? 4 : 5);
-
-				// Based on BIF_NumGet:
-
-				BOOL is_signed, is_float = FALSE;
-				DWORD size = 0;
-
-				if (ctoupper(*type) == 'U') // Unsigned.
-				{
-					++type; // Remove the first character from further consideration.
-					is_signed = FALSE;
-				}
-				else
-					is_signed = TRUE;
-
-				switch(ctoupper(*type)) // Override "size" and aResultToken.symbol if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
-				{
-				case 'I':
-					if (_tcschr(type, '6')) // Int64. It's checked this way for performance, and to avoid access violation if string is bogus and too short such as "i64".
-						size = 8;
-					else
-						size = 4;
-					break;
-				case 'S': size = 2; break; // Short.
-				case 'C': size = 1; break; // Char.
-				case 'P': size = sizeof(INT_PTR); break;
-
-				case 'D': size = 8; is_float = true; break; // Double.
-				case 'F': size = 4; is_float = true; break; // Float.
-				}
-				if (!size)
-					return INVOKE_NOT_HANDLED; // Treat as unknown method, since 'type' is part of the method name.
-
-				union {
-						__int64 i8;
-						int i4;
-						short i2;
-						char i1;
-						double d;
-						float f;
-					} buf;
-
-				if (reading)
-				{
-					buf.i8 = 0;
-					if ( !mFile.Read(&buf, size) )
-						break; // Fail.
-
-					if (is_float)
-					{
-						aResultToken.value_double = (size == 4) ? buf.f : buf.d;
-						aResultToken.symbol = SYM_FLOAT;
-					}
-					else
-					{
-						if (is_signed)
-						{
-							// sign-extend to 64-bit
-							switch (size)
-							{
-							case 4: buf.i8 = buf.i4; break;
-							case 2: buf.i8 = buf.i2; break;
-							case 1: buf.i8 = buf.i1; break;
-							//case 8: not needed.
-							}
-						}
-						//else it's unsigned. No need to zero-extend thanks to init done earlier.
-						aResultToken.value_int64 = buf.i8;
-						//aResultToken.symbol = SYM_INTEGER; // This is the default.
-					}
-				}
-				else
-				{
-					if (aParamCount < 1)
-						_o_throw(ERR_PARAM1_REQUIRED);
-
-					ExprTokenType &token_to_write = *aParam[1];
-					
-					if (is_float)
-					{
-						buf.d = TokenToDouble(token_to_write);
-						if (size == 4)
-							buf.f = (float)buf.d;
-					}
-					else
-					{
-						if (size == 8 && !is_signed && !IS_NUMERIC(token_to_write.symbol))
-							buf.i8 = (__int64)ATOU64(TokenToString(token_to_write)); // For comments, search for ATOU64 in BIF_DllCall().
-						else
-							buf.i8 = TokenToInt64(token_to_write);
-					}
-					
-					DWORD bytes_written = mFile.Write(&buf, size);
-					// Return bytes_written even if it is 0:
-					aResultToken.value_int64 = bytes_written;
-				}
-				return OK;
-			}
-			break;
-
 		case Read:
 			{
 				DWORD length;
 				if (aParamCount)
-					length = (DWORD)TokenToInt64(*aParam[1]);
+					length = (DWORD)ParamIndexToInt64(0);
 				else
 					length = (DWORD)(mFile.Length() - mFile.Tell()); // We don't know the actual number of characters these bytes will translate to, but this should be sufficient.
 				if (length == -1)
@@ -952,7 +850,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				size_t chars_to_write = 0;
 				if (aParamCount)
 				{
-					LPTSTR param1 = TokenToString(*aParam[1], aResultToken.buf, &chars_to_write);
+					LPTSTR param1 = ParamIndexToString(0, _f_number_buf, &chars_to_write);
 					bytes_written = mFile.Write(param1, (DWORD)chars_to_write);
 				}
 				if (member == WriteLine && (bytes_written || !chars_to_write)) // i.e. don't attempt it if above failed.
@@ -964,16 +862,14 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			}
 			break;
 
-		case RawReadWrite:
+		case RawRead:
+		case RawWrite:
 			{
-				//if (aParamCount < 1) //nnnik: Replaced by syntax checks in the member lookup
-				//	_o_throw(ERR_TOO_FEW_PARAMS);
-
-				bool reading = (name[3] == 'R' || name[3] == 'r');
+				bool reading = member == RawRead;
 
 				LPVOID target;
 				DWORD max_size;
-				ExprTokenType &target_token = *aParam[1];
+				ExprTokenType &target_token = *aParam[0];
 				Var *target_var = NULL; // For maintainability (since target_token.symbol == SYM_VAR isn't a reliable indicator).
 				switch (target_token.symbol)
 				{
@@ -1007,7 +903,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				}
 
 				DWORD size;
-				if (aParamCount < 2 || aParam[2]->symbol == SYM_MISSING)
+				if (ParamIndexIsOmitted(1))
 				{
 					if (max_size == ~0) // Param #1 was an address.
 						_o_throw(ERR_PARAM2_REQUIRED); // (in this case).
@@ -1020,7 +916,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				}
 				else
 				{
-					size = (DWORD)TokenToInt64(*aParam[2]);
+					size = (DWORD)ParamIndexToInt64(1);
 					if (size > max_size) // Implies max_size != ~0.
 					{
 						if (!reading || !target_var)
@@ -1054,16 +950,15 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			}
 			break;
 
-	#define IS_INVOKE_GET_EX aParamCount == 0
 		case Position:
-			if (IS_INVOKE_GET_EX) //nnnik: replaced aParamCount check with IS_INVOKE_GET_EX for code clarity
+			if (IS_INVOKE_GET)
 			{
 				aResultToken.value_int64 = mFile.Tell();
 				return OK;
 			}
 			else
 			{
-		case PositionMethodSet: //nnnik: seek
+		case Seek:
 				__int64 distance = TokenToInt64(*aParam[1]);
 				int origin;
 				if (aParamCount >= 2)
@@ -1078,14 +973,14 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 
 
 		case Length:
-			if (IS_INVOKE_GET_EX) 
+			if (IS_INVOKE_GET) 
 			{
 				aResultToken.value_int64 = mFile.Length();
 				return OK;
 			}
 			else
 			{
-				if (-1 != (aResultToken.value_int64 = mFile.Length(TokenToInt64(*aParam[1]))))
+				if (-1 != (aResultToken.value_int64 = mFile.Length(ParamIndexToInt64(0))))
 					return OK;
 				// Otherwise, fall through:
 			}
@@ -1109,12 +1004,12 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			//  - It's questionable which behaviour is more more useful, but excluding "-RAW" is definitely simpler.
 			//  - Existing scripts may rely on File.Encoding not returning "-RAW".
 			UINT codepage;
-			if (!IS_INVOKE_GET_EX)
+			if (IS_INVOKE_SET)
 			{
-				if (TokenIsNumeric(*aParam[1]))
-					codepage = (UINT)TokenToInt64(*aParam[1]);
+				if (TokenIsNumeric(*aParam[0]))
+					codepage = (UINT)ParamIndexToInt64(0);
 				else
-					codepage = Line::ConvertFileEncoding(TokenToString(*aParam[1]));
+					codepage = Line::ConvertFileEncoding(ParamIndexToString(0));
 				if (codepage != -1)
 					mFile.SetCodePage(codepage & ~CP_AHKNOBOM); // Ignore "-RAW" by removing the CP_AHKNOBOM flag; see comments above.
 				// Now fall through to below and return the actual codepage.
@@ -1141,7 +1036,6 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			aResultToken.marker = name;
 			return OK;
 		}
-	#undef IS_GET_INVOKE_EX
 
 		case Close:
 			mFile.Close();
@@ -1168,6 +1062,53 @@ public:
 		return NULL;
 	}
 };
+
+
+#define File_MethodX(name, minP, maxP, f, id) Object_Member(name, f, id, IT_CALL, minP, maxP)
+#define File_Method(name, minP, maxP) File_MethodX(name, minP, maxP, Invoke, name)
+#define File_PropertyX(name, invokeType, id) Object_Member(name, Invoke, id, invokeType, 0, 0)
+#define File_Property(name, invokeType) File_PropertyX(name, invokeType, name)
+ObjectMember FileObject::sMembers[] =
+{
+	File_Method(Read, 0, 1),
+	File_Method(ReadLine, 0, 0),
+	File_MethodX(ReadChar, 0, 0, NumReadWrite, F_READ | F_SIGNED | 1),
+	File_MethodX(ReadDouble, 0, 0, NumReadWrite, F_READ | F_FLOAT | 8),
+	File_MethodX(ReadFloat, 0, 0, NumReadWrite, F_READ | F_FLOAT | 4),
+	File_MethodX(ReadInt, 0, 0, NumReadWrite, F_READ | F_SIGNED | 4),
+	File_MethodX(ReadInt64, 0, 0, NumReadWrite, F_READ | F_SIGNED | 8),
+	File_MethodX(ReadShort, 0, 0, NumReadWrite, F_READ | F_SIGNED | 2),
+	File_MethodX(ReadUChar, 0, 0, NumReadWrite, F_READ | F_UNSIGNED | 1),
+	File_MethodX(ReadUInt, 0, 0, NumReadWrite, F_READ | F_UNSIGNED | 4),
+	File_MethodX(ReadUShort, 0, 0, NumReadWrite, F_READ | F_UNSIGNED | 2),
+	File_Method(Write, 1, 1),
+	File_Method(WriteLine, 0, 1),
+	File_MethodX(WriteChar, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 1),
+	File_MethodX(WriteDouble, 1, 1, NumReadWrite, F_WRITE | F_FLOAT | 8),
+	File_MethodX(WriteFloat, 1, 1, NumReadWrite, F_WRITE | F_FLOAT | 4),
+	File_MethodX(WriteInt, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 4),
+	File_MethodX(WriteInt64, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 8),
+	File_MethodX(WriteShort, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 2),
+	File_MethodX(WriteUChar, 1, 1, NumReadWrite, F_WRITE | F_UNSIGNED | 1),
+	File_MethodX(WriteUInt, 1, 1, NumReadWrite, F_WRITE | F_UNSIGNED | 4),
+	File_MethodX(WriteUShort, 1, 1, NumReadWrite, F_WRITE | F_UNSIGNED | 2),
+	File_Method(RawRead, 2, 2),
+	File_Method(RawWrite, 2, 2),
+	File_Method(Close, 0, 0),
+	File_Method(Seek, 1, 2),
+	File_Property(AtEOF, IT_GET),
+	File_Property(Encoding, IT_SET),
+	File_Property(Handle, IT_GET),
+	File_Property(Length, IT_SET),
+	File_PropertyX(Pos, IT_SET, Position),
+	File_Property(Position, IT_SET)
+};
+
+ResultType FileObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+}
+
 
 BIF_DECL(BIF_FileOpen)
 {
