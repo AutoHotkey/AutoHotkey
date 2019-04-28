@@ -1791,6 +1791,22 @@ public:
 
 	IObject *CloseIfNeeded(); // Returns this Func or (if mUpVarCount != 0) a Closure.
 
+	enum MemberID
+	{
+		M_Call,
+		M_Bind,
+		M_IsOptional,
+		M_IsByRef,
+
+		P_Name,
+		P_MinParams,
+		P_MaxParams,
+		P_IsBuiltIn,
+		P_IsVariadic
+	};
+	static ObjectMember sMembers[];
+	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
 	// IObject.
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ULONG STDMETHODCALLTYPE AddRef() { return 1; }

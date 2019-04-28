@@ -1867,80 +1867,79 @@ ResultType STDMETHODCALLTYPE Property::Invoke(ResultToken &aResultToken, ExprTok
 // Func: Script interface, accessible via "function reference".
 //
 
+ObjectMember Func::sMembers[] =
+{
+	Object_Method(Call, 0, MAXP_VARIADIC),
+	Object_Method(Bind, 0, MAXP_VARIADIC),
+	Object_Method(IsOptional, 0, MAX_FUNCTION_PARAMS),
+	Object_Method(IsByRef, 0, MAX_FUNCTION_PARAMS),
+
+	Object_Property_get(Name),
+	Object_Property_get(MinParams),
+	Object_Property_get(MaxParams),
+	Object_Property_get(IsBuiltIn),
+	Object_Property_get(IsVariadic)
+};
+
 ResultType STDMETHODCALLTYPE Func::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	LPTSTR member;
-
-	if (!aParamCount)
-		aFlags |= IF_FUNCOBJ;
-	else
-		member = TokenToString(*aParam[0]);
-
-	if (!IS_INVOKE_CALL && !(aFlags & IF_FUNCOBJ))
+	if (aFlags & IF_FUNCOBJ)
 	{
-		if (IS_INVOKE_SET || aParamCount > 1)
-			return INVOKE_NOT_HANDLED;
-
-		     if (!_tcsicmp(member, _T("Name")))			_o_return(mName);
-		else if (!_tcsicmp(member, _T("MinParams")))	_o_return(mMinParams);
-		else if (!_tcsicmp(member, _T("MaxParams")))	_o_return(mParamCount);
-		else if (!_tcsicmp(member, _T("IsBuiltIn")))	_o_return(mIsBuiltIn);
-		else if (!_tcsicmp(member, _T("IsVariadic")))	_o_return(mIsVariadic);
-		else return INVOKE_NOT_HANDLED;
+		Call(aResultToken, aParam, aParamCount);
+		return aResultToken.Result();
 	}
+	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+}
+
+ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	switch (MemberID(aID))
+	{
+	case M_Call:
+		Call(aResultToken, aParam, aParamCount);
+		return aResultToken.Result();
+
+	case M_Bind:
+		if (BoundFunc *bf = BoundFunc::Bind(this, aParam, aParamCount, IT_CALL | IF_FUNCOBJ))
+			_o_return(bf);
+		_o_throw(ERR_OUTOFMEM);
+
+	case M_IsOptional:
+		if (aParamCount)
+		{
+			int param = ParamIndexToInt(0);
+			if (param > 0 && (param <= mParamCount || mIsVariadic))
+				_o_return(param > mMinParams);
+			else
+				_o_throw(ERR_PARAM1_INVALID);
+		}
+		else
+			_o_return(mMinParams != mParamCount || mIsVariadic); // True if any params are optional.
 	
-	if (  !(aFlags & IF_FUNCOBJ)  )
-	{
-		if (!_tcsicmp(member, _T("IsOptional")) && aParamCount <= 2)
+	case M_IsByRef:
+		if (aParamCount)
 		{
-			if (aParamCount == 2)
-			{
-				int param = (int)TokenToInt64(*aParam[1]); // One-based.
-				if (param > 0 && (param <= mParamCount || mIsVariadic))
-					_o_return(param > mMinParams);
-				else
-					_o_throw(ERR_PARAM2_INVALID);
-			}
+			int param = ParamIndexToInt(0);
+			if (param > 0 && (param <= mParamCount || mIsVariadic))
+				_o_return(param <= mParamCount && mParam[param-1].is_byref);
 			else
-				_o_return(mMinParams != mParamCount || mIsVariadic); // True if any params are optional.
+				_o_throw(ERR_PARAM1_INVALID);
 		}
-		else if (!_tcsicmp(member, _T("IsByRef")) && aParamCount <= 2 && !mIsBuiltIn)
+		else
 		{
-			if (aParamCount == 2)
-			{
-				int param = (int)TokenToInt64(*aParam[1]); // One-based.
-				if (param > 0 && (param <= mParamCount || mIsVariadic))
-					_o_return(param <= mParamCount && mParam[param-1].is_byref);
-				else
-					_o_throw(ERR_PARAM2_INVALID);
-			}
-			else
-			{
-				for (int param = 0; param < mParamCount; ++param)
-					if (mParam[param].is_byref)
-						_o_return(TRUE);
-				_o_return(FALSE);
-			}
+			for (int param = 0; param < mParamCount; ++param)
+				if (mParam[param].is_byref)
+					_o_return(TRUE);
+			_o_return(FALSE);
 		}
-		else if (!_tcsicmp(member, _T("Bind")))
-		{
-			if (BoundFunc *bf = BoundFunc::Bind(this, aParam+1, aParamCount-1, IT_CALL | IF_FUNCOBJ))
-			{
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = bf;
-				return OK;
-			}
-			_o_throw(ERR_OUTOFMEM);
-		}
-		if (_tcsicmp(member, _T("Call")))
-			return INVOKE_NOT_HANDLED; // Reserved.
-		// Called explicitly by script, such as by "%obj.funcref%()" or "x := obj.funcref, x.()"
-		// rather than implicitly, like "obj.funcref()".
-		++aParam;		// Discard the "method name" parameter.
-		--aParamCount;	// 
+
+	case P_Name: _o_return(mName);
+	case P_MinParams: _o_return(mMinParams);
+	case P_MaxParams: _o_return(mParamCount);
+	case P_IsBuiltIn: _o_return(mIsBuiltIn);
+	case P_IsVariadic: _o_return(mIsVariadic);
 	}
-	Call(aResultToken, aParam, aParamCount);
-	return aResultToken.Result();
+	return INVOKE_NOT_HANDLED;
 }
 
 
