@@ -1517,23 +1517,21 @@ void Object::FieldType::Free()
 // Enumerator
 //
 
-ResultType STDMETHODCALLTYPE EnumBase::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ObjectMember EnumBase::sMembers[] =
 {
-	if (IS_INVOKE_SET)
-		return INVOKE_NOT_HANDLED;
+	Object_Method_(Next, 0, 2, Invoke, 0)
+};
 
-	if (IS_INVOKE_CALL)
-	{
-		if (aParamCount && !_tcsicmp(ParamIndexToString(0), _T("Next")))
-		{	// This is something like enum.Next(var); exclude "Next" so it is treated below as enum[var].
-			++aParam; --aParamCount;
-		}
-		else
-			return INVOKE_NOT_HANDLED;
-	}
+ResultType EnumBase::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
 	Var *var0 = ParamIndexToOptionalVar(0);
 	Var *var1 = ParamIndexToOptionalVar(1);
 	_o_return(Next(var0, var1));
+}
+
+ResultType STDMETHODCALLTYPE EnumBase::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
 }
 
 int Object::Enumerator::Next(Var *aKey, Var *aVal)

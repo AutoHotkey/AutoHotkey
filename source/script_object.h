@@ -91,6 +91,8 @@ struct ObjectMember
 class DECLSPEC_NOVTABLE EnumBase : public ObjectBase
 {
 public:
+	static ObjectMember sMembers[];
+	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	virtual int Next(Var *aOutputVar1, Var *aOutputVar2) = 0;
 };
