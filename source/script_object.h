@@ -510,6 +510,18 @@ public:
 	static ResultType Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aPatternName
 		, int aPatternCount, int aCapturedPatternCount, LPCTSTR aMark, IObject *&aNewObject);
 	
+	enum MemberID
+	{
+		M_Value,
+		M_Pos,
+		M_Len,
+		M_Name,
+		M_Count,
+		M_Mark
+	};
+	static ObjectMember sMembers[];
+	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	IObject_Type_Impl("RegExMatch")
 

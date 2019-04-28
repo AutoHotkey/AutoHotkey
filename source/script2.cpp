@@ -11906,103 +11906,81 @@ ResultType RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aP
 	return OK;
 }
 
+
+ObjectMember RegExMatchObject::sMembers[] =
+{
+	Object_Method(Value, 0, 1),
+	Object_Method(Pos, 0, 1),
+	Object_Method(Len, 0, 1),
+	Object_Method(Name, 0, 1),
+	Object_Method(Count, 0, 0),
+	Object_Method(Mark, 0, 0),
+};
+
 ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (aParamCount < 1 || aParamCount > 2 || IS_INVOKE_SET)
-		return INVOKE_NOT_HANDLED;
+	if (IS_INVOKE_GET)
+	{
+		if (aParamCount != 1)
+			_o_throw(ERR_INVALID_USAGE);
+		return Invoke(aResultToken, M_Value, aFlags, aParam, aParamCount);
+	}
+	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+}
 
+ResultType RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	switch (aID)
+	{
+	case M_Count: _o_return(mPatternCount - 1);
+	case M_Mark: _o_return(mMark ? mMark : _T(""));
+	}
+
+	ExprTokenType &name_param = *aParam[0];
 	LPTSTR name;
-	int p = -1;
+	int p = 0;
 
-	// Check for a subpattern offset/name first so that a subpattern named "Pos" takes
-	// precedence over our "Pos" property when invoked like m.Pos (but not m.Pos()).
-	if (aParamCount > 1 || !IS_INVOKE_CALL)
+	if (TokenIsNumeric(name_param))
 	{
-		ExprTokenType &name_param = *aParam[aParamCount - 1];
-
-		if (TokenIsNumeric(name_param))
-		{
-			p = (int)TokenToInt64(name_param);
-		}
-		else if (mPatternName) // i.e. there is at least one named subpattern.
-		{
-			name = TokenToString(name_param);
-			for (p = 0; p < mPatternCount; ++p)
-				if (mPatternName[p] && !_tcsicmp(mPatternName[p], name))
-				{
-					if (mOffset[2*p] < 0)
-						// This pattern wasn't matched, so check for one with a duplicate name.
-						for (int i = p + 1; i < mPatternCount; ++i)
-							if (mPatternName[i] && !_tcsicmp(mPatternName[i], name) // It has the same name.
-								&& mOffset[2*i] >= 0) // It matched something.
-							{
-								// Prefer this pattern.
-								p = i;
-								break;
-							}
-					break;
-				}
-		}
+		p = (int)TokenToInt64(name_param);
+	}
+	else if (mPatternName) // i.e. there is at least one named subpattern.
+	{
+		name = TokenToString(name_param);
+		for (p = 0; p < mPatternCount; ++p)
+			if (mPatternName[p] && !_tcsicmp(mPatternName[p], name))
+			{
+				if (mOffset[2*p] < 0)
+					// This pattern wasn't matched, so check for one with a duplicate name.
+					for (int i = p + 1; i < mPatternCount; ++i)
+						if (mPatternName[i] && !_tcsicmp(mPatternName[i], name) // It has the same name.
+							&& mOffset[2*i] >= 0) // It matched something.
+						{
+							// Prefer this pattern.
+							p = i;
+							break;
+						}
+				break;
+			}
+	}
+	if (p < 0 || p >= mPatternCount)
+	{
+		if (IS_INVOKE_CALL)
+			_o_throw(ERR_PARAM1_INVALID);
+		return INVOKE_NOT_HANDLED;
 	}
 
-	bool pattern_found = p >= 0 && p < mPatternCount;
-	
-	// Checked for named properties:
-	if (aParamCount > 1 || !pattern_found)
+	switch (aID)
 	{
-		name = TokenToString(*aParam[0]);
-
-		if (!pattern_found && aParamCount == 1)
-		{
-			p = 0; // For m.Pos, m.Len and m.Value, use the overall match.
-			pattern_found = true; // Relies on below returning if the property name is invalid.
-		}
-
-		if (!_tcsicmp(name, _T("Pos")))
-		{
-			if (pattern_found)
-				_o_return(mOffset[2*p] + 1);
-			return OK;
-		}
-		else if (!_tcsicmp(name, _T("Len")))
-		{
-			if (pattern_found)
-				_o_return(mOffset[2*p + 1]);
-			return OK;
-		}
-		else if (!_tcsicmp(name, _T("Count")))
-		{
-			if (aParamCount == 1)
-				_o_return(mPatternCount - 1); // Return number of subpatterns (exclude overall match).
-			return OK;
-		}
-		else if (!_tcsicmp(name, _T("Name")))
-		{
-			if (pattern_found && mPatternName && mPatternName[p])
-				_o_return(mPatternName[p]);
-			return OK;
-		}
-		else if (!_tcsicmp(name, _T("Mark")))
-		{
-			_o_return(aParamCount == 1 && mMark ? mMark : _T(""));
-		}
-		else if (_tcsicmp(name, _T("Value"))) // i.e. NOT "Value".
-		{
-			// This is something like m[n] where n is not a valid subpattern or property name,
-			// or m.Foo[n] where Foo is not a valid property name.  For the two-param case,
-			// reset pattern_found so that if n is a valid subpattern it won't be returned:
-			pattern_found = false;
-		}
+	// Gives the correct result even if there was no match (because length is 0):
+	case M_Value: _o_return(mHaystack - mHaystackStart + mOffset[p*2], mOffset[p*2+1]);
+	case M_Pos: _o_return(mOffset[2*p] + 1);
+	case M_Len: _o_return(mOffset[2*p + 1]);
+	case M_Name: _o_return((mPatternName && mPatternName[p]) ? mPatternName[p] : _T(""));
 	}
-
-	if (pattern_found)
-	{
-		// Gives the correct result even if there was no match (because length is 0):
-		_o_return(mHaystack - mHaystackStart + mOffset[p*2], mOffset[p*2+1]);
-	}
-
 	return INVOKE_NOT_HANDLED;
 }
+
 
 #ifdef CONFIG_DEBUGGER
 void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
