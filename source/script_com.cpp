@@ -1648,16 +1648,13 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 			}
 			break;
 		case INVOKE_NOT_HANDLED:
-			if ((flags & IT_BITMASK) != IT_GET)
+			if ((flags & IT_BITMASK) == IT_CALL && (wFlags & DISPATCH_PROPERTYGET))
 			{
-				if (wFlags & DISPATCH_PROPERTYGET)
-				{
-					flags = IT_GET;
-					continue;
-				}
-				result_to_return = DISP_E_MEMBERNOTFOUND;
-				break;
+				flags = IT_GET;
+				continue;
 			}
+			result_to_return = DISP_E_MEMBERNOTFOUND;
+			break;
 		default:
 			result_to_return = S_OK;
 			if (pVarResult)
