@@ -1920,10 +1920,11 @@ ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 		if (aParamCount)
 		{
 			int param = ParamIndexToInt(0);
-			if (param > 0 && (param <= mParamCount || mIsVariadic))
-				_o_return(param <= mParamCount && mParam[param-1].is_byref);
-			else
+			if (param <= 0 || param > mParamCount && !mIsVariadic)
 				_o_throw(ERR_PARAM1_INVALID);
+			if (mIsBuiltIn)
+				_o_return(ArgIsOutputVar(param-1));
+			_o_return(param <= mParamCount && mParam[param-1].is_byref);
 		}
 		else
 		{
