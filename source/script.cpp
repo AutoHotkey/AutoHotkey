@@ -308,7 +308,6 @@ VarEntry g_BIV[] =
 {
 	VF(Clipboard, (BuiltInVarType)VAR_CLIPBOARD),
 	VF(False, BIV_True_False),
-	VF(ProgramFiles, BIV_SpecialFolderPath), // v1.0.43.08: Added to ease the transition to #NoEnv.,
 	VF(True, BIV_True_False)
 };
 // g_BIV_A: All built-in vars beginning with "A_".  The prefix is omitted from each
