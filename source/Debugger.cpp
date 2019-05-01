@@ -1314,7 +1314,7 @@ int Debugger::WritePropertyData(ExprTokenType &aValue, int aMaxEncodedSize)
 	return WritePropertyData(value, value_length, aMaxEncodedSize);
 }
 
-int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, bool aVarMustExist
+int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, ExprTokenType *aSetValue
 	, PropertySource &aResult)
 {
 	CStringTCharFromUTF8 name_buf(aFullName);
@@ -1324,9 +1324,6 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 	Var *var = NULL;
 	VarBkp *varbkp = NULL;
 	SymbolType key_type;
-	Object::FieldType *field;
-	Object::IndexType insert_pos;
-	Object *obj;
 
 	aResult.kind = PropNone;
 
@@ -1385,7 +1382,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 
 	// If we're allowed to create variables
 	if (  !varbkp && !var
-		&& (!aVarMustExist
+		&& (aSetValue
 		// or this variable doesn't exist
 		|| !(var = g_script.FindVar(name, name_length, NULL, aVarScope))
 			// but it is a built-in variable which hasn't been referenced yet:
@@ -1413,8 +1410,11 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 	else
 		iobj = (varbkp->mAttrib & VAR_ATTRIB_IS_OBJECT) ? varbkp->mObject : NULL;
 
-	if (  !(obj = dynamic_cast<Object *>(iobj))  )
+	if (!iobj)
 		return DEBUGGER_E_UNKNOWN_PROPERTY;
+	iobj->AddRef();
+
+	int return_value = DEBUGGER_E_UNKNOWN_PROPERTY;
 
 	// aFullName contains a '.' or '['.  Although it looks like an expression, the IDE should
 	// only pass a property name which we gave it in response to a previous command, so we
@@ -1440,7 +1440,11 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 					}
 					*dst++ = c;
 				}
-				if (*src != ']') return DEBUGGER_E_INVALID_OPTIONS;
+				if (*src != ']')
+				{
+					return_value = DEBUGGER_E_INVALID_OPTIONS;
+					break;
+				}
 				*dst = '\0'; // Only after the check above, since src might be == dst.
 				name_end = src + 1; // Set it up for the next iteration.
 				key_type = SYM_STRING;
@@ -1450,7 +1454,11 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 				// Object(n) where n is the address of a key object, as a literal signed integer.
 				name += 7;
 				name_end = _tcschr(name, ')');
-				if (!name_end || name_end[1] != ']') return DEBUGGER_E_INVALID_OPTIONS;
+				if (!name_end || name_end[1] != ']')
+				{
+					return_value = DEBUGGER_E_INVALID_OPTIONS;
+					break;
+				}
 				*name_end = '\0';
 				name_end += 2; // Set it up for the next iteration.
 				key_type = SYM_OBJECT;
@@ -1459,7 +1467,11 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 			{
 				// The only other valid form is a literal signed integer.
 				name_end = _tcschr(name, ']');
-				if (!name_end) return DEBUGGER_E_INVALID_OPTIONS;
+				if (!name_end)
+				{
+					return_value = DEBUGGER_E_INVALID_OPTIONS;
+					break;
+				}
 				*name_end = '\0'; // Although not actually necessary for _ttoi(), seems best for maintainability.
 				++name_end; // Set it up for the next iteration.
 				key_type = SYM_INTEGER;
@@ -1482,21 +1494,44 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 			key_type = IsNumeric(name); // SYM_INTEGER or SYM_STRING.
 		}
 		else
-			return DEBUGGER_E_INVALID_OPTIONS;
-		
-		if (*name != '<' || name[-1] != '.') // Not a pseudo-property; i.e. ["<base>"] is always a key-value pair.
 		{
+			return_value = DEBUGGER_E_INVALID_OPTIONS;
+			break;
+		}
+
+		auto obj = dynamic_cast<Object *>(iobj);
+
+		if (obj && (*name != '<' || name[-1] != '.')) // Not a pseudo-property; i.e. ["<base>"] is always a key-value pair.
+		{
+			Object::IndexType insert_pos;
 			Object::KeyType key;
+
 			if (key_type == SYM_STRING)
 				key.s = name;
 			else // SYM_INTEGER or SYM_OBJECT
 				key.i = (IntKeyType)_ttoi64(name);
-			field = obj->FindField(key_type, key, insert_pos);
-		}
-		else
-			field = NULL;
 
-		if (!field)
+			if (auto field = obj->FindField(key_type, key, insert_pos))
+			{
+				if (!c)
+				{
+					aResult.kind = PropField;
+					aResult.field = field;
+					aResult.owner = iobj;
+					return DEBUGGER_E_OK;
+				}
+
+				if (field->symbol != SYM_OBJECT)
+					break;
+
+				iobj = field->object;
+				iobj->AddRef(); // Keep next object alive.
+				obj->Release(); // Release previous object.
+				continue;
+			}
+		}
+
+		if (obj)
 		{
 			// IDE should request .<base> only if it was returned by property_get or context_get,
 			// so this always means the object's base (field is always NULL).  By contrast, .base
@@ -1510,32 +1545,80 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 					// That seems okay since it could only ever be set to NULL anyway.
 					aResult.kind = PropValue;
 					if (obj->mBase)
+					{
+						obj->mBase->AddRef();
+						aResult.owner = obj->mBase;
 						aResult.value.SetValue(obj->mBase);
+					}
 					else
 						aResult.value.SetValue(_T(""));
+					iobj->Release(); // No need to pass it back to caller, since base object is standalone.
 					return DEBUGGER_E_OK;
 				}
-				if (  !(obj = dynamic_cast<Object *>(obj->mBase))  )
-					return DEBUGGER_E_UNKNOWN_PROPERTY;
+
+				iobj = obj->mBase;
+				iobj->AddRef(); // Keep next object alive.
+				obj->Release(); // Release previous object.
 				continue; // Search the base object's fields.
 			}
 			else
-				return DEBUGGER_E_UNKNOWN_PROPERTY;
+				break;
 		}
+		// else it's an object of built-in type.
 
+		// Attempt to invoke property.
+		int outer_excptmode = g->ExcptMode;
+		g->ExcptMode |= EXCPTMODE_CATCH; // Suppress error messages.
+		FuncResult result_token;
+		ExprTokenType *set_this = !c ? aSetValue : NULL;
+		ExprTokenType token[] = { iobj, name }, *param[] = { token + 1, set_this };
+		auto result = iobj->Invoke(result_token, token[0], set_this ? IT_SET : IT_GET, param, set_this ? 2 : 1);
+		g->ExcptMode = outer_excptmode;
+		if (g->ThrownToken)
+			g_script.FreeExceptionToken(g->ThrownToken);
+		
+		if (result == INVOKE_NOT_HANDLED)
+			break;
+		if (!result)
+		{
+			return_value = DEBUGGER_E_EVAL_FAIL;
+			break;
+		}
+		if (set_this)
+		{
+			result_token.Free();
+			return_value = DEBUGGER_E_OK;
+			break;
+		}
+		if (result_token.symbol == SYM_OBJECT)
+		{
+			iobj->Release();
+			iobj = result_token.object;
+		}
 		if (!c)
 		{
-			// All done!
-			aResult.kind = PropField;
-			aResult.field = field;
+			if (result_token.symbol == SYM_STRING && !result_token.mem_to_free)
+			{
+				// Ensure string is not on the stack.
+				result_token.marker = result_token.mem_to_free = _tcsdup(result_token.marker);
+				if (!result_token.marker)
+					break;
+			}
+			aResult.kind = PropValue;
+			aResult.value.CopyValueFrom(result_token);
+			aResult.mem_to_free = result_token.mem_to_free;
+			aResult.owner = iobj;
 			return DEBUGGER_E_OK;
 		}
-
-		if ( field->symbol != SYM_OBJECT || !(obj = dynamic_cast<Object *>(field->object)) )
+		if (result_token.symbol != SYM_OBJECT)
+		{
+			result_token.Free();
 			// No usable target object for the next iteration, therefore the property mustn't exist.
-			return DEBUGGER_E_UNKNOWN_PROPERTY;
-
-	} // infinite loop.
+			break;
+		}
+	}
+	iobj->Release();
+	return return_value;
 }
 
 
@@ -1593,7 +1676,7 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 		return DEBUGGER_E_INVALID_CONTEXT;
 	}
 
-	if (err = ParsePropertyName(name, depth, always_use, true, prop))
+	if (err = ParsePropertyName(name, depth, always_use, NULL, prop))
 	{
 		// Var not found/invalid name.
 		if (!aIsPropertyGet)
@@ -1703,10 +1786,6 @@ DEBUGGER_COMMAND(Debugger::property_set)
 		return DEBUGGER_E_INVALID_CONTEXT;
 	}
 
-	PropertySource target;
-	if (err = ParsePropertyName(name, depth, always_use, false, target))
-		return err;
-
 	// "Data must be encoded using base64." : https://xdebug.org/docs-dbgp.php
 	// Fixed in v1.1.24.03 to expect base64 even for integer/float:
 	int value_length = (int)Base64Decode(new_value, new_value);
@@ -1726,6 +1805,10 @@ DEBUGGER_COMMAND(Debugger::property_set)
 		StringUTF8ToTChar(new_value, val_buf, value_length);
 		val.SetValue((LPTSTR)val_buf.GetString(), val_buf.GetLength());
 	}
+
+	PropertySource target;
+	if (err = ParsePropertyName(name, depth, always_use, &val, target))
+		return err;
 
 	bool success;
 	switch (target.kind)
@@ -1772,6 +1855,9 @@ DEBUGGER_COMMAND(Debugger::property_set)
 		break;
 	case PropField:
 		success = target.field->Assign(val);
+		break;
+	case PropNone: // Assignment handled by ParsePropertyName().
+		success = true;
 		break;
 	default:
 		success = false;

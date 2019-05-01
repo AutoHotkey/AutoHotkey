@@ -65,6 +65,7 @@ public:
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType SafeArrayInvoke(ResultToken &aResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	LPTSTR Type();
+	IObject_DebugWriteProperty_Def;
 
 	void ToVariant(VARIANT &aVar)
 	{
@@ -96,10 +97,6 @@ public:
 			SafeArrayDestroy(mArray);
 		}
 	}
-
-#ifdef CONFIG_DEBUGGER
-	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
-#endif
 };
 
 

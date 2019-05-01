@@ -1475,3 +1475,6 @@ BOOL UserMenu::OwnerDrawItem(LPDRAWITEMSTRUCT aParam)
 				, aParam->rcItem.left, aParam->rcItem.top
 				, menu_item->mIcon, 0, 0, 0, NULL, DI_NORMAL);
 }
+
+
+Implement_DebugWriteProperty_via_sMembers(UserMenu)

@@ -1453,9 +1453,6 @@ public:
 	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
 	ULONG STDMETHODCALLTYPE Release() { return 1; }
 	IObject_Type_Impl("Label") // Currently never called since Label isn't accessible to script.
-#ifdef CONFIG_DEBUGGER
-	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth) {}
-#endif
 };
 
 
@@ -1812,9 +1809,7 @@ public:
 	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
 	ULONG STDMETHODCALLTYPE Release() { return 1; }
 	IObject_Type_Impl("Func")
-#ifdef CONFIG_DEBUGGER
-	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
-#endif
+	IObject_DebugWriteProperty_Def;
 
 	Func(LPTSTR aFuncName, bool aIsBuiltIn) // Constructor.
 		: mName(aFuncName) // Caller gave us a pointer to dynamic memory for this.
@@ -2038,6 +2033,7 @@ public:
 	
 	//IObject_Type_Impl("Menu")
 	LPTSTR Type() { return mMenuType == MENU_TYPE_BAR ? _T("MenuBar") : _T("Menu"); }
+	IObject_DebugWriteProperty_Def;
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
@@ -2345,6 +2341,7 @@ struct GuiControlType : public ObjectBase
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	LPTSTR Type();
+	IObject_DebugWriteProperty_Def;
 
 	void Dispose(); // Called by GuiType::Dispose().
 };
@@ -2534,6 +2531,7 @@ public:
 	void Dispose();
 	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
 	IObject_Type_Impl("Gui")
+	IObject_DebugWriteProperty_Def;
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);

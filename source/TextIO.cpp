@@ -1049,6 +1049,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 	}
 
 	IObject_Type_Impl("File")
+	IObject_DebugWriteProperty_Def;
 
 	TextFile mFile;
 	
@@ -1282,3 +1283,6 @@ __int64 TextMem::_Length() const
 {
 	return mData.mLength;
 }
+
+
+Implement_DebugWriteProperty_via_sMembers(FileObject)

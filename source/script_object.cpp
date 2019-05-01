@@ -2252,7 +2252,7 @@ BIF_DECL(BIF_ClipboardAll)
 
 #ifdef CONFIG_DEBUGGER
 
-void ObjectBase::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
+void IObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
 {
 	DebugCookie cookie;
 	aDebugger->BeginProperty(NULL, "object", 0, cookie);
@@ -2265,12 +2265,37 @@ void ObjectBase::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int 
 	aDebugger->EndProperty(cookie);
 }
 
-void Func::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
+Implement_DebugWriteProperty_via_sMembers(Func)
+Implement_DebugWriteProperty_via_sMembers(ClipboardAll)
+
+void ObjectMember::DebugWriteProperty(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
+	, IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
 {
+	int num_children = 0;
+	for (int imem = 0, iprop = -1; imem < aMemberCount; ++imem)
+		if (aMembers[imem].invokeType != IT_CALL)
+			++num_children;
+	
 	DebugCookie cookie;
-	aDebugger->BeginProperty(NULL, "object", 1, cookie);
-	if (aPage == 0)
-		aDebugger->WriteProperty("Name", ExprTokenType(mName));
+	aDebugger->BeginProperty(NULL, "object", num_children, cookie);
+
+	int page_begin = aPageSize * aPage, page_end = page_begin + aPageSize;
+	for (int imem = 0, iprop = -1; imem < aMemberCount; ++imem)
+	{
+		auto &member = aMembers[imem];
+		if (member.invokeType == IT_CALL || member.minParams > 0)
+			continue;
+		++iprop;
+		if (iprop < page_begin)
+			continue;
+		if (iprop >= page_end)
+			break;
+		FuncResult result_token;
+		auto result = (aThis->*member.method)(result_token, member.id, IT_GET, NULL, 0);
+		aDebugger->WriteProperty(ExprTokenType(member.name), result_token);
+		result_token.Free();
+	}
+
 	aDebugger->EndProperty(cookie);
 }
 

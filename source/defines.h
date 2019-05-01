@@ -235,7 +235,11 @@ struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 		LPTSTR Type() { return _T(name); }
 	
 #ifdef CONFIG_DEBUGGER
-	virtual void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aMaxDepth) = 0;
+	#define IObject_DebugWriteProperty_Def \
+		void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aMaxDepth)
+	virtual IObject_DebugWriteProperty_Def;
+#else
+	#define IObject_DebugWriteProperty_Def
 #endif
 };
 

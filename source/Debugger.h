@@ -49,6 +49,7 @@ freely, without restriction.
 #define DEBUGGER_E_BREAKPOINT_NO_CODE	203 // No code on breakpoint line.
 #define DEBUGGER_E_BREAKPOINT_STATE		204 // Invalid breakpoint state.
 #define DEBUGGER_E_BREAKPOINT_NOT_FOUND	205 // No such breakpoint.
+#define DEBUGGER_E_EVAL_FAIL			206
 
 #define DEBUGGER_E_UNKNOWN_PROPERTY		300
 #define DEBUGGER_E_INVALID_STACK_DEPTH	301
@@ -352,6 +353,15 @@ private:
 		VarBkp *bkp;
 		Object::FieldType *field;
 		ExprTokenType value;
+		IObject *owner;
+		LPTSTR mem_to_free, property_name;
+		PropertySource() : owner(NULL), mem_to_free(NULL) {}
+		~PropertySource()
+		{
+			if (owner)
+				owner->Release();
+			free(mem_to_free);
+		}
 	};
 
 	struct PropertyInfo : PropertySource
@@ -426,7 +436,7 @@ private:
 	int WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncodedSize);
 	int WritePropertyData(ExprTokenType &aValue, int aMaxEncodedSize);
 
-	int ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, bool aVarMustExist
+	int ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, ExprTokenType *aSetValue
 		, PropertySource &aResult);
 	int property_get_or_value(char **aArgV, int aArgCount, char *aTransactionId, bool aIsPropertyGet);
 	int redirect_std(char **aArgV, int aArgCount, char *aTransactionId, char *aCommandName);

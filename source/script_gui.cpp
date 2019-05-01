@@ -10958,3 +10958,6 @@ bool GuiType::ConvertAccelerator(LPTSTR aString, ACCEL &aAccel)
 
 	return aAccel.key; // i.e. false if not a valid key name.
 }
+
+Implement_DebugWriteProperty_via_sMembers(GuiType)
+Implement_DebugWriteProperty_via_sMembers(GuiControlType)

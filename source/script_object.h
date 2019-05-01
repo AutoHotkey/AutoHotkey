@@ -54,10 +54,6 @@ public:
 	// and because it is likely to be more convenient and reliable than overriding
 	// Delete(), especially with a chain of derived types.
 	virtual ~ObjectBase() {}
-
-#ifdef CONFIG_DEBUGGER
-	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
-#endif
 };
 
 
@@ -73,6 +69,8 @@ struct ObjectMember
 	UCHAR id, invokeType, minParams, maxParams;
 	static ResultType Invoke(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
 		, ResultToken& aResultToken, int aFlags, ExprTokenType* aParam[], int aParamCount);
+	static void DebugWriteProperty(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
+		, IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth);
 };
 
 #define Object_Member(name, impl, id, invokeType, ...) \
@@ -82,6 +80,15 @@ struct ObjectMember
 #define Object_Property_get(name, ...)             Object_Member(name, Invoke, P_##name, IT_GET, __VA_ARGS__)
 #define Object_Property_get_set(name, ...)         Object_Member(name, Invoke, P_##name, IT_SET, __VA_ARGS__)
 #define MAXP_VARIADIC 255
+
+#ifdef CONFIG_DEBUGGER
+#define Implement_DebugWriteProperty_via_sMembers(T) \
+	void T::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth) { \
+		ObjectMember::DebugWriteProperty(sMembers, _countof(sMembers), this, aDebugger, aPage, aPageSize, aMaxDepth); \
+	}
+#else
+#define Implement_DebugWriteProperty_via_sMembers(T)
+#endif
 
 
 //
@@ -408,9 +415,7 @@ public:
 
 	static LPTSTR sMetaFuncName[];
 
-#ifdef CONFIG_DEBUGGER
-	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
-#endif
+	IObject_DebugWriteProperty_Def;
 };
 
 
@@ -526,10 +531,7 @@ public:
 
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	IObject_Type_Impl("RegExMatch")
-
-#ifdef CONFIG_DEBUGGER
-	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
-#endif
+	IObject_DebugWriteProperty_Def;
 };
 
 
@@ -559,4 +561,5 @@ public:
 
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	IObject_Type_Impl("ClipboardAll")
+	IObject_DebugWriteProperty_Def;
 };
