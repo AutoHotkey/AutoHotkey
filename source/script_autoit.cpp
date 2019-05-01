@@ -1042,7 +1042,7 @@ BIF_DECL(BIF_DirSelect)
 // This is because an interrupting thread usually changes the values to something inappropriate for this thread.
 {
 	_f_param_string_opt(aRootDir, 0);
-	_f_param_string_opt(aOptions, 1);
+	//_f_param_string_opt(aOptions, 1);
 	_f_param_string_opt(aGreeting, 2);
 
 	if (g_nFolderDialogs >= MAX_FOLDERDIALOGS)
@@ -1121,7 +1121,7 @@ BIF_DECL(BIF_DirSelect)
 	#define FSF_ALLOW_CREATE 0x01
 	#define FSF_EDITBOX      0x02
 	#define FSF_NONEWDIALOG  0x04
-	DWORD options = *aOptions ? ATOI(aOptions) : FSF_ALLOW_CREATE;
+	DWORD options = (DWORD)ParamIndexToOptionalInt(1, FSF_ALLOW_CREATE);
 	bi.ulFlags =
 		  ((options & FSF_NONEWDIALOG)    ? 0           : BIF_NEWDIALOGSTYLE) // v1.0.48: Added to support BartPE/WinPE.
 		| ((options & FSF_ALLOW_CREATE)   ? 0           : BIF_NONEWFOLDERBUTTON)
