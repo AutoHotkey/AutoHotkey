@@ -141,7 +141,6 @@ enum ToggleValueType {TOGGLE_INVALID = 0, TOGGLED_ON, TOGGLED_OFF, ALWAYS_ON, AL
 	, TOGGLE_MOUSEMOVE, TOGGLE_MOUSEMOVEOFF};
 
 // Some things (such as ListView sorting) rely on SCS_INSENSITIVE being zero.
-// In addition, BIF_InStr relies on SCS_SENSITIVE being 1:
 enum StringCaseSenseType {SCS_INSENSITIVE, SCS_SENSITIVE, SCS_INSENSITIVE_LOCALE, SCS_INSENSITIVE_LOGICAL, SCS_INVALID};
 
 enum SymbolType // For use with ExpandExpression() and IsNumeric().
