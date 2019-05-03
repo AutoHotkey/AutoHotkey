@@ -6259,24 +6259,22 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				case 'Y':
 					if (use_margin_offset = (*option_value == '+' && 'M' == ctoupper(option_value[1]))) // x+m or y+m.
 						option_value += 2;
-					else if (_tcschr(_T("MPS+"), option_char2)) // Any other non-digit char should be picked up as an error via *endptr.
+					else if (_tcschr(_T("MPS+"), option_char2)) // Any other non-digit char should be picked up as an error via IsNumeric().
 						++option_value;							// Also skips over the '+' to allow, eg, x+-n
 					break;
 				}
-				// Parse the option's number as integer first, since that's most common.  If that fails,
-				// parse as floating-point (e.g. "w" A_ScreenWidth/4 or "R1.5").
-				option_int = (int)tcstoi64_o(option_value, &endptr, 0); // 'E' depends on this supporting the full range of DWORD.
-				if (*endptr) // It wasn't blank or a valid integer.
+				// Allow both integer and floating-point for any numeric options.
+				switch (IsNumeric(option_value, TRUE, FALSE, TRUE))
 				{
-					// It's done this way rather than checking for and discarding any fractional part
-					// in case it's something unusual like "w1.0e3" or "w1e3", and to update endptr
-					// and support "R1.5".
-					option_int = (int)(option_float = (float)_tcstod(option_value, &endptr));
-					if (*endptr) // Still invalid.
-						option_char = 0; // Mark it as invalid for switch() below.
+				case PURE_INTEGER:
+					option_float = float(option_int = ATOI(option_value)); // 'E' depends on this supporting the full range of DWORD.
+					break;
+				case PURE_FLOAT:
+					option_int = int(option_float = (float)ATOF(option_value));
+					break;
+				default:
+					option_char = 0; // Mark it as invalid for switch() below.
 				}
-				else
-					option_float = (float)option_int;
 				if ((option_char == 'X' || option_char == 'Y')
 					|| (option_char == 'W' || option_char == 'H') && (option_int != -1 || option_char2 == 'P')) // Scale W/H unless it's W-1 or H-1.
 					option_int = Scale(option_int);
