@@ -892,67 +892,169 @@ ret0:
 
 
 
-__int64 tcstoi64_o(LPCTSTR buf, LPCTSTR *endptr, int base)
-// A version of _tcstoi64 which does no range checks, but instead has overflow behaviour
-// consistent with arithmetic operations.  Some behaviour may be unlike _tcstoi64/strtoll:
-//  - base must be 0 (undetermined), 10 or 16.
+template<typename T> T digitsTo(LPCTSTR p, LPCTSTR &end)
+{
+	T i = 0;
+	for (;; ++p)
+	{
+		int c = *p;
+		if (c <= '9' && c >= '0')
+			c -= '0';
+		else
+			break;
+		i = i * 10 + c;
+	}
+	end = p;
+	return i;
+}
+
+
+template<typename T> T xdigitsTo(LPCTSTR p, LPCTSTR &end)
+{
+	T i = 0;
+	for (;; ++p)
+	{
+		int c = *p;
+		if (c <= '9' && c >= '0')
+			c -= '0';
+		else if (c <= 'F' && c >= 'A')
+			c -= 'A' - 10;
+		else if (c <= 'f' && c >= 'a')
+			c -= 'a' - 10;
+		else
+			break;
+		i = i * 16 + c;
+	}
+	end = p;
+	return i;
+}
+
+
+// istrtoi64(): like _tcstoi64, but allows wrapping overflow consistent with
+// arithmetic expressions.  Some behaviour may be unlike _tcstoi64/strtoll:
+//  - Decimal and hexadecimal are always supported; caller cannot specify base.
 //  - A leading '0' does not activate base 8, since we specifically don't want that.
 //  - Only space and tab are considered whitespace, consistent with IsNumeric().
 //  - errno is never set.
+__int64 istrtoi64(LPCTSTR buf, LPCTSTR *endptr)
 {
+	// unsigned vs. signed is unlikely to matter in practice, but only unsigned has
+	// well-defined behaviour regarding overflow (that is, it wraps but technically
+	// never "overflows" according to the standard).
+	UINT64 i;
+
 	// Skip spaces and tabs.
 	LPCTSTR p = omit_leading_whitespace(buf);
 	
 	// Determine/skip sign.
-	TCHAR sign = (*p != '+' && *p != '-') ? '+' : *p++;
-	
-	// Handle hex prefix if allowed.
-	if (*p == '0' && (p[1] == 'x' || p[1] == 'X') && (base == 0 || base == 16) && isxdigit(p[2]))
+	bool negative = *p == '-';
+	if (negative || *p == '+')
+		++p;
+
+	LPCTSTR end;
+	if (IS_HEX(p))
 	{
 		p += 2;
-		base = 16;
+		i = xdigitsTo<UINT64>(p, end);
 	}
-	else if (base != 16)
+	else
 	{
-		base = 10; // Ignore any other base value since we'll only test what we need, 10 and 16.
-	}
-
-	__int64 i = 0;
-	LPCTSTR first = p;
-	// Having two separate loops keeps each one simpler, so benchmarks faster.
-	// This approach has similar code size and performance to using a pre-filled
-	// array to map '0'..'f' to their numeric values.
-	if (base == 16)
-	{
-		for (;; ++p)
-		{
-			int c = *p;
-			if (c <= '9' && c >= '0')
-				c -= '0';
-			else if (c <= 'F' && c >= 'A')
-				c -= 'A' - 10;
-			else if (c <= 'f' && c >= 'a')
-				c -= 'a' - 10;
-			else
-				break;
-			i = i * base + c;
-		}
-	}
-	else // base == 10
-	{
-		for (;; ++p)
-		{
-			int c = *p;
-			if (c <= '9' && c >= '0')
-				c -= '0';
-			else
-				break;
-			i = i * base + c;
-		}
+		i = digitsTo<UINT64>(p, end);
 	}
 	if (endptr)
-		*endptr = p == first ? buf : p; // Don't consider " -" numeric on its own.
-	return sign == '+' ? i : -i;
+		*endptr = p == end ? buf : end; // Don't consider " -" or "-0x" numeric on its own.
+	// Casting out of range unsigned to signed has "implementation defined" behaviour;
+	// Microsoft's implementation does not change the bit pattern.
+	return negative ? -(__int64)i : (__int64)i;
+}
+
+
+// nstrtoi64(): like istrtoi64, but permits scientific notation (including a decimal
+// fraction, which may be significant in combination with the exponent).
+// This function is mostly identical to istrtoi64, so comments there also apply here.
+// Attempts to merge the two functions resulted in 300-1000 bytes larger code size due
+// to inlining, how heavily these are used, and the fact that omitted parameters are
+// actually still passed by the compiler.
+__int64 nstrtoi64(LPCTSTR buf)
+{
+	UINT64 i;
+
+	LPCTSTR p = omit_leading_whitespace(buf);
+
+	bool negative = *p == '-';
+	if (negative || *p == '+')
+		++p;
+
+	if (IS_HEX(p))
+	{
+		p += 2;
+		i = xdigitsTo<UINT64>(p, p);
+	}
+	else // Decimal.
+	{
+		i = digitsTo<UINT64>(p, p);
+
+		// Check for a decimal fraction/exponent:
+		LPCTSTR end_int = p;
+		if (*p == '.')
+		{
+			do ++p;
+			while (*p <= '9' && *p >= '0');
+		}
+		LPCTSTR end_fraction = p;
+		if (*p == 'e' || *p == 'E')
+		{
+			++p;
+			bool exp_negative = *p == '-';
+			if (exp_negative || *p == '+')
+				++p;
+			UINT64 exp = digitsTo<UINT64>(p, p); // UINT64 vs. char does not affect code size; using UINT64 ensures that unreasonably large exponents produce a consistent result.
+			if (p > end_fraction + 1) // Exponent present.
+			{
+				if (!exp_negative && *end_int == '.')
+				{
+					// Parse additional digits while simultaneously applying part of the exponentiation.
+					for (p = end_int + 1; p < end_fraction && exp; ++p, --exp) // Scan from '.' to 'e'
+						i = i * 10 + (*p - '0');
+				}
+				if (exp >= (exp_negative ? 20 : 64)) // Avoid unnecessary looping for abnormally large exponents.
+				{
+					// For n * 10**64, the low 64 bits of the result are always 0.  
+					// For n / 10**20, the result is always 0 since 10**20 > _UI16_MAX > n.
+					i = 0;
+				}
+				else
+				{
+					// This section multiplies or divides i by a power of 10 without resorting to
+					// floating-point operations.  Overflow of the result is allowed and will wrap,
+					// but to get the correct result we must not wrap the multiplier.
+					while (exp >= 20) // Implies !exp_negative.  10**20 won't fit in multiplier.
+					{
+						i *= 10000000000000000000ui64;
+						exp -= 19;
+					}
+					if (exp != 0) // An exponent of 0 is valid but does not alter the result.
+					{
+						// Perform exponentiation by squaring.
+						UINT64 multiplier = 1;
+						UINT64 bs = 10;
+						while (exp > 1)
+						{
+							if (exp & 1) multiplier *= bs;
+							exp >>= 1;
+							bs *= bs;
+						}
+						multiplier *= bs;
+						if (exp_negative)
+							i /= multiplier;
+						else
+							i *= multiplier;
+					}
+				}
+			}
+		}
+	}
+	return negative ? -(__int64)i : (__int64)i;
 }
 
 

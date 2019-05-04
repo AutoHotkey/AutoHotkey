@@ -1986,7 +1986,7 @@ BIF_DECL(BIF_PostSendMessage)
 			break;
 		case SYM_STRING:
 			LPTSTR error_marker;
-			param[i-1] = (INT_PTR)tcstoi64_o(this_param.marker, &error_marker, 0);
+			param[i-1] = (INT_PTR)istrtoi64(this_param.marker, &error_marker);
 			if (!*error_marker) // Valid number or empty string.
 				break;
 			//else: It's a non-numeric string; maybe the caller forgot the &address-of operator.

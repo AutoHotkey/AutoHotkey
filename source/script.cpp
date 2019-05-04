@@ -5463,7 +5463,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 		if (*op_begin <= '9' && *op_begin >= '0') // Numeric literal.  Numbers starting with a decimal point are handled under "case '.'".
 		{
 			// Behaviour here should match the similar section in ExpressionToPostfix().
-			tcstoi64_o(op_begin, &op_end, 0);
+			istrtoi64(op_begin, &op_end);
 			if (!IS_HEX(op_begin)) // This check is probably only needed on VC++ 2015 and later, where _tcstod allows hex.
 			{
 				LPTSTR d_end;
@@ -8596,14 +8596,9 @@ unquoted_literal:
 						// (VC++ 2015 and later).  This is done because we don't support those values
 						// elsewhere in the code, such as in IsNumeric().
 						LPTSTR i_end, d_end;
-						__int64 i;
-						if (IsHex(cp))
+						__int64 i = istrtoi64(cp, &i_end);
+						if (!IsHex(cp))
 						{
-							i = tcstoi64_o(cp, &i_end, 16);
-						}
-						else
-						{
-							i = tcstoi64_o(cp, &i_end, 10);
 							double d = _tcstod(cp, &d_end);
 							if (d_end > i_end && _tcschr(EXPR_OPERAND_TERMINATORS, *d_end))
 							{

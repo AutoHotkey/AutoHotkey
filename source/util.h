@@ -426,12 +426,14 @@ inline bool IsHex(LPCTSTR aBuf) // 10/17/2006: __forceinline worsens performance
 
 
 
-__int64 tcstoi64_o(LPCTSTR buf, LPCTSTR *endptr, int base);
+__int64 istrtoi64(LPCTSTR buf, LPCTSTR *endptr);
 
-inline __int64 tcstoi64_o(LPTSTR buf, LPTSTR *endptr, int base)
+inline __int64 istrtoi64(LPTSTR buf, LPTSTR *endptr)
 {
-	return tcstoi64_o(buf, const_cast<LPCTSTR *>(endptr), base);
+	return istrtoi64(buf, const_cast<LPCTSTR *>(endptr));
 }
+
+__int64 nstrtoi64(LPCTSTR buf);
 
 // As of v1.0.30, ATOI(), ITOA() and the other related functions below are no longer macros
 // because there are too many places where something like ATOI(++cp) is done, which would be a
@@ -460,13 +462,13 @@ inline __int64 ATOI64(LPCTSTR buf)
 	//   0xFFFFFFFFFFFFFFFF == -1
 	//  0x10000000000000001 ==  1
 	//return IsHex(buf) ? _tcstoi64(buf, NULL, 16) : _ttoi64(buf);  
-	return tcstoi64_o(buf, NULL, 0);
+	return nstrtoi64(buf);
 }
 
 inline unsigned __int64 ATOU64(LPCTSTR buf)
 {
-	// Simple type-cast is sufficient since tcstoi64_o doesn't do range checks.
-	return (unsigned __int64)tcstoi64_o(buf, NULL, 0);
+	// Simple type-cast is sufficient since nstrtoi64 doesn't do range checks.
+	return (unsigned __int64)nstrtoi64(buf);
 	//return _tcstoui64(buf, NULL, IsHex(buf) ? 16 : 10);
 }
 
@@ -480,7 +482,7 @@ inline int ATOI(LPCTSTR buf)
 	// on performance; still, this method benchmarks slightly faster and produces smaller code
 	// than the older version above.  It is also behaves more consistently with ATOI64() for
 	// very large out of range values.
-	return (int)tcstoi64_o(buf, NULL, 0);
+	return (int)nstrtoi64(buf);
 }
 
 // v1.0.38.01: Make ATOU a macro that refers to ATOI64() to improve performance (takes advantage of _atoi64()
