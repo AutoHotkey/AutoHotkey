@@ -310,7 +310,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				IObject *object;
 				DerefType *deref;  // for SYM_FUNC, and (while parsing) SYM_ASSIGN etc.
 				Var *var;          // for SYM_VAR and SYM_DYNAMIC
-				LPTSTR marker;     // for SYM_STRING
+				LPTSTR marker;     // for SYM_STRING and (while parsing) SYM_OPAREN
 				ExprTokenType *circuit_token; // for short-circuit operators
 			};
 			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).

@@ -357,6 +357,7 @@ enum DerefTypeType : BYTE
 	DT_STRING,		// Segment of text in a text arg (delimited by '%').
 	DT_QSTRING,		// Segment of text in a quoted string (delimited by '%').
 	DT_WORDOP,		// Word operator: and, or, not, new.
+	DT_DOTPERCENT,	// Dynamic member: .%name%
 	DT_FUNCREF,		// Reference to function (for fat arrow functions).
 	// DerefType::is_function() requires that these are last:
 	DT_FUNC,		// Function call.

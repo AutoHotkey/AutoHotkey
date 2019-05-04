@@ -5363,18 +5363,24 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 				// handled outside the loop for simplicity.  Breaking out of the loop means that this
 				// will be seen as an operand of zero length.
 				break;
-			switch (*op_begin)
+			if (*op_begin == '.')
 			{
-			case '.':
 				// This case also handles the dot in `.=` (the `=` is skipped by the next iteration).
 				// Skip the numeric literal or identifier to the right of this, if there is one.
 				// This won't skip the signed exponent of a scientific-notation literal, but that should
 				// be OK as it will be recognized as purely numeric in the next iteration of this loop.
-				do ++op_begin; while (!_tcschr(EXPR_OPERAND_TERMINATORS, *op_begin));
-				// Considered using ParseDoubleDeref() to allow derefs like x.y%z% (meaning x["y" z]),
-				// but in addition to being redundant, it would complicate things in ExpressionToPostfix().
-				continue;
-
+				op_end = find_identifier_end(op_begin + 1);
+				if (*op_end != g_DerefChar || aEndChar == g_DerefChar)
+				{
+					op_begin = op_end;
+					continue;
+				}
+				// Otherwise, it's a dynamic property or method call.
+				++op_begin; // Skip the dot.
+				break;
+			}
+			switch (*op_begin)
+			{
 			default:
 				op_begin++;
 				continue;
@@ -5547,7 +5553,11 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 			// in this double-deref or dynamic function call:
 			aDeref[aDerefCount].marker = op_end;
 			aDeref[aDerefCount].length = 0;
-			if (is_function)
+			if (op_begin > aArgText && op_begin[-1] == '.')
+			{
+				aDeref[aDerefCount].type = DT_DOTPERCENT;
+			}
+			else if (is_function)
 			{
 				// func is initialized to NULL and left that way to indicate the call is dynamic.
 				// PreparseBlocks() relies on length == 0 meaning a dynamic function reference.
@@ -8279,6 +8289,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						infix[infix_count++].symbol = SYM_CONCAT;
 					}
 					infix[infix_count].symbol = SYM_OPAREN; // MUST NOT REFER TO this_infix_item IN CASE ABOVE DID ++infix_count.
+					infix[infix_count].marker = cp;
 					break;
 				case ')':
 					this_infix_item.symbol = SYM_CPAREN;
@@ -8511,6 +8522,12 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						// side-effect, implicit concatenation is no longer supported for floating point numbers beginning with ".".
 						if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
 						{
+							if (this_deref && this_deref->marker == cp + 1) // Dynamic member such as x.%y% or x.y%z%.
+							{
+								--infix_count; // Counter the loop's increment.
+								break;
+							}
+
 							// Ensure at least enough room for this operand and the operator further below.
 							if (infix_count > MAX_TOKENS - 2)
 								return LineError(ERR_EXPR_TOO_LONG);
@@ -8660,11 +8677,14 @@ unquoted_literal:
 			{ 
 				TCHAR c = this_deref_ref.type == DT_QSTRING ? cp[-2] : cp[-1];
 				// See CHECK_AUTO_CONCAT macro definition for comments.
-				if (!IS_SPACE_OR_TAB(c))
-					return LineError(ERR_BAD_AUTO_CONCAT, FAIL, cp);
-				if (infix_count > MAX_TOKENS - 2)
-					return LineError(ERR_EXPR_TOO_LONG);
-				infix[infix_count++].symbol = SYM_CONCAT;
+				if (c != '.') // i.e. it's not a dynamic member like .my%x%
+				{
+					if (!IS_SPACE_OR_TAB(c))
+						return LineError(ERR_BAD_AUTO_CONCAT, FAIL, cp);
+					if (infix_count > MAX_TOKENS - 2)
+						return LineError(ERR_EXPR_TOO_LONG);
+					infix[infix_count++].symbol = SYM_CONCAT;
+				}
 			}
 
 			bool can_be_optimized_out = this_deref_ref.length == 0;
@@ -8698,6 +8718,7 @@ unquoted_literal:
 				if (infix_count > MAX_TOKENS - 2)
 					return LineError(ERR_EXPR_TOO_LONG);
 				infix[infix_count].symbol = SYM_OPAREN;
+				infix[infix_count].marker = cp;
 				infix_count++;
 			}
 
@@ -8752,6 +8773,22 @@ unquoted_literal:
 			infix[infix_count].symbol = SYM_DYNAMIC;
 			infix[infix_count].var = NULL; // Indicate this is a double-deref.
 		}
+		else if (this_deref_ref.type == DT_DOTPERCENT)
+		{
+			if (*this_deref_ref.marker == '(')
+			{
+				infix[infix_count].symbol = SYM_FUNC;
+				this_deref_ref.func = &g_ObjCall;
+			}
+			else
+			{
+				infix[infix_count].symbol = SYM_DOT;
+				this_deref_ref.func = &g_ObjGet;
+			}
+			this_deref_ref.param_count = 2; // Initially two parameters: the object and identifier.
+			this_deref_ref.type = DT_FUNC;
+			infix[infix_count].deref = this_deref;
+		}
 		else if (this_deref_ref.type == DT_WORDOP)
 		{
 			if (this_deref_ref.symbol == SYM_NEW)
@@ -8778,6 +8815,7 @@ unquoted_literal:
 			infix[infix_count].symbol = SYM_FUNC;
 			infix[infix_count].deref = this_deref;
 			infix[infix_count+1].symbol = SYM_OPAREN;
+			infix[infix_count+1].marker = cp;
 			infix[infix_count+2].symbol = SYM_OBJECT;
 			infix[infix_count+2].object = this_deref_ref.func;
 			infix[infix_count+3].symbol = SYM_CPAREN;
@@ -9182,8 +9220,9 @@ unquoted_literal:
 			}
 			else if (infix_symbol == SYM_FUNC)
 				in_param_list = this_infix[-1].deref; // Store this SYM_FUNC's deref.
-			else if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol))
-				return LineError(_T("Missing operator or space before \"(\"."));
+			else if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol)
+				&& *this_infix->marker == '(') // i.e. it's not an implicit SYM_OPAREN generated by DT_STRING.
+				return LineError(_T("Missing operator or space before \"(\"."), FAIL, this_infix->marker);
 			else
 				in_param_list = NULL; // Allow multi-statement commas, even in cases like Func((x,y)).
 			STACK_PUSH(this_infix++);
