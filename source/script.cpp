@@ -1135,7 +1135,7 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 // tray icons, menus, and unowned windows such as ToolTip.
 {
 	// L31: Release objects stored in variables, where possible.
-	if (aExitCode != CRITICAL_ERROR) // i.e. Avoid making matters worse if CRITICAL_ERROR.
+	if (aExitReason != CRITICAL_ERROR) // i.e. Avoid making matters worse if CRITICAL_ERROR.
 	{
 		// Ensure the current thread is not paused and can't be interrupted
 		// in case one or more objects need to call a __delete meta-function.
