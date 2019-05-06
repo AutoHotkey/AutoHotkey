@@ -246,6 +246,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						this_token.SetValue(g_script.mTrayMenu);
 						goto push_this_token;
 					}
+					if (this_token.var->mBIV == BIV_ScriptHwnd) // As above. Can't be done by ExpressionToPostfix() as g_hWnd is NULL at that point.
+					{
+						this_token.SetValue((UINT_PTR)g_hWnd);
+						goto push_this_token;
+					}
   				}
 				// Otherwise, it's a built-in variable.
 				result_size = this_token.var->Get() + 1;

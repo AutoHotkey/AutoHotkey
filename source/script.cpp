@@ -9670,7 +9670,8 @@ end_of_infix_to_postfix:
 				}
 				else if ( !(only_token.var->mType == VAR_VIRTUAL
 					&& (only_token.var->mVV->Get == BIV_LoopIndex || only_token.var->mVV->Get == BIV_EventInfo))
-					&& !(only_token.var->mType == VAR_BUILTIN && only_token.var->mBIV == BIV_TrayMenu) ) // This exception is required for A_TrayMenu to return an object.
+					&& !(only_token.var->mType == VAR_BUILTIN && (only_token.var->mBIV == BIV_TrayMenu // This exception is required for A_TrayMenu to return an object.
+						|| only_token.var->mBIV == BIV_ScriptHwnd)) )
 				{
 					aArg.type = ARG_TYPE_INPUT_VAR;
 				}
