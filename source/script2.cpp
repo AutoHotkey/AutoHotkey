@@ -13924,14 +13924,13 @@ BIF_DECL(BIF_VarSetCapacity)
 					// Performance: Length() and Contents() will update mContents if necessary, it's unlikely to be necessary under the circumstances of this call.
 					// In any case, it seems appropriate to do it this way.
 					size_t string_length = 0;
-					size_t max_count = var.Capacity(); // to detect a non null-terminated string.
-					if (max_count != 0)
-					{
-						string_length = _tcsnlen(var.Contents(), max_count);	// measure the string
-						if (string_length == max_count)
-							g_script.CriticalError(ERR_STRING_NOT_TERMINATED, var.mName);
-						string_length = _TSIZE(string_length);
-					}
+					size_t max_count = var.CharCapacity(); // to detect a non null-terminated string.
+					if (max_count == 0)
+						max_count =  1; // Contents() == Var::sEmptyString in this case, so check it hasn't been tampered with.
+					string_length = _tcsnlen(var.Contents(), max_count);	// measure the string
+					if (string_length == max_count)
+						g_script.CriticalError(ERR_STRING_NOT_TERMINATED, var.mName);
+					string_length = _TSIZE(string_length);
 					// Seems more useful to report length vs. capacity in this special case. Scripts might be able
 					// to use this to boost performance.
 					var.ByteLength() = string_length;
