@@ -146,6 +146,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_ABORT_NO_SPACES _T("The current thread will exit.")
 #define ERR_ABORT _T("  ") ERR_ABORT_NO_SPACES
 #define WILL_EXIT _T("The program will exit.")
+#define UNSTABLE_WILL_EXIT _T("The program is now unstable and will exit.")
 #define OLD_STILL_IN_EFFECT _T("The script was not reloaded; the old version will remain in effect.")
 #define ERR_ABORT_DELETE _T("__Delete will now return.")
 #define ERR_CONTINUATION_SECTION_TOO_LONG _T("Continuation section too long.")
@@ -3072,6 +3073,7 @@ public:
 
 	// Call this SciptError to avoid confusion with Line's error-displaying functions:
 	ResultType ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T("")); // , ResultType aErrorType = FAIL);
+	ResultType CriticalError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
 	void WarnUninitializedVar(Var *var);

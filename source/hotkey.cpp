@@ -866,7 +866,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 		sDialogIsDisplayed = true;
 		g_AllowInterruption = FALSE;
 		if (MsgBox(error_text, MB_YESNO) == IDNO)
-			g_script.ExitApp(EXIT_CRITICAL); // Might not actually Exit if there's an OnExit subroutine.
+			g_script.ExitApp(EXIT_CLOSE); // Might not actually Exit if there's an OnExit subroutine.
 		g_AllowInterruption = TRUE;
 		sDialogIsDisplayed = false;
 	}

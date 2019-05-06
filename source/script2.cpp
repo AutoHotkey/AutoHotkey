@@ -11369,8 +11369,7 @@ LPTSTR GetExitReasonString(ExitReasons aExitReason)
 	// Since the below are all relatively rare, except WM_CLOSE perhaps, they are all included
 	// as one word to cut down on the number of possible words (it's easier to write OnExit
 	// routines to cover all possibilities if there are fewer of them).
-	case EXIT_WM_QUIT:
-	case EXIT_CRITICAL:
+	// Update: The redundant ExitReasons were merged to reduce code size.
 	case EXIT_DESTROY:
 	case EXIT_CLOSE: str = _T("Close"); break;
 	case EXIT_ERROR: str = _T("Error"); break;
@@ -13303,10 +13302,9 @@ has_valid_return_type:
 		*Var::sEmptyString = '\0';
 		// Don't bother with freeing hmodule_to_free since a critical error like this calls for minimal cleanup.
 		// The OS almost certainly frees it upon termination anyway.
-		// Call ScriptErrror() so that the user knows *which* DllCall is at fault:
-		g->ExcptMode = EXCPTMODE_NONE; // Do not throw an exception.
-		g_script.ScriptError(_T("This DllCall requires a prior VarSetCapacity. The program is now unstable and will exit."));
-		g_script.ExitApp(EXIT_CRITICAL); // Called this way, it will run the OnExit routine, which is debatable because it could cause more good than harm, but might avoid loss of data if the OnExit routine does something important.
+		// Call CriticalError() so that the user knows *which* DllCall is at fault:
+		g_script.CriticalError(_T("This DllCall requires a prior VarSetCapacity."));
+		// CriticalError always terminates the process.
 	}
 
 	// It seems best to have the above take precedence over "exception_occurred" below.

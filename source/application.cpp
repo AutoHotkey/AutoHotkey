@@ -1484,7 +1484,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			// The app normally terminates before WM_QUIT is ever seen here because of the way
 			// WM_CLOSE is handled by MainWindowProc().  However, this is kept here in case anything
 			// external ever explicitly posts a WM_QUIT to our thread's queue:
-			g_script.ExitApp(EXIT_WM_QUIT);
+			g_script.ExitApp(EXIT_CLOSE);
 			continue; // Since ExitApp() won't necessarily exit.
 		} // switch()
 break_out_of_main_switch:
