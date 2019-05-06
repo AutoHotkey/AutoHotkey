@@ -11951,17 +11951,14 @@ ResultType RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFla
 	case M_Mark: _o_return(mMark ? mMark : _T(""));
 	}
 
-	ExprTokenType &name_param = *aParam[0];
-	LPTSTR name;
 	int p = 0;
-
-	if (TokenIsNumeric(name_param))
+	if (aParamCount && TokenIsNumeric(*aParam[0]))
 	{
-		p = (int)TokenToInt64(name_param);
+		p = ParamIndexToInt(0);
 	}
 	else if (mPatternName) // i.e. there is at least one named subpattern.
 	{
-		name = TokenToString(name_param);
+		auto name = ParamIndexToOptionalString(0);
 		for (p = 0; p < mPatternCount; ++p)
 			if (mPatternName[p] && !_tcsicmp(mPatternName[p], name))
 			{
