@@ -505,7 +505,7 @@ Script::Script()
 	if (   !(mTrayMenu = AddMenu(MENU_TYPE_POPUP))   ) // realistically never happens
 	{
 		ScriptError(_T("No tray mem"));
-		ExitApp(EXIT_CRITICAL);
+		ExitApp(EXIT_DESTROY);
 	}
 	else
 		mTrayMenu->AppendStandardItems();
@@ -1489,7 +1489,7 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 // tray icons, menus, and unowned windows such as ToolTip.
 {
 	// L31: Release objects stored in variables, where possible.
-	if (aExitCode != CRITICAL_ERROR) // i.e. Avoid making matters worse if CRITICAL_ERROR.
+	if (aExitReason != CRITICAL_ERROR) // i.e. Avoid making matters worse if CRITICAL_ERROR.
 	{
 		// Ensure the current thread is not paused and can't be interrupted
 		// in case one or more objects need to call a __delete meta-function.
@@ -13081,11 +13081,12 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		TCHAR buf[MSGBOX_TEXT_SIZE];
 		FormatError(buf, _countof(buf), aErrorType, aErrorText, aExtraInfo, this
 			// The last parameter determines the final line of the message:
-			, (aErrorType == FAIL && g_script.mIsReadyToExecute) ? ERR_ABORT_NO_SPACES
-			: (aErrorType == CRITICAL_ERROR || aErrorType == FAIL) ? (g_script.mIsRestart ? OLD_STILL_IN_EFFECT : WILL_EXIT)
+			, (aErrorType == FAIL) ? (g_script.mIsReadyToExecute ? ERR_ABORT_NO_SPACES
+									: (g_script.mIsRestart ? OLD_STILL_IN_EFFECT : WILL_EXIT))
+			: (aErrorType == CRITICAL_ERROR) ? UNSTABLE_WILL_EXIT
 			: (aErrorType == EARLY_EXIT) ? _T("Continue running the script?")
 			: _T("For more details, read the documentation for #Warn."));
-
+		
 		g_script.mCurrLine = this;  // This needs to be set in some cases where the caller didn't.
 		
 #ifdef CONFIG_DEBUGGER
@@ -13094,22 +13095,15 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		else
 #endif
 		if (MsgBox(buf, MB_TOPMOST | (aErrorType == EARLY_EXIT ? MB_YESNO : 0)) == IDNO)
-			aErrorType = CRITICAL_ERROR;
+			// The user was asked "Continue running the script?" and answered "No".
+			// This will attempt to run the OnExit subroutine, which should be okay since that
+			// subroutine will terminate the script if it encounters another runtime error:
+			g_script.ExitApp(EXIT_ERROR);
 	}
 
 	if (aErrorType == CRITICAL_ERROR && g_script.mIsReadyToExecute)
-		// Also ask the main message loop function to quit and announce to the system that
-		// we expect it to quit.  In most cases, this is unnecessary because all functions
-		// called to get to this point will take note of the CRITICAL_ERROR and thus keep
-		// return immediately, all the way back to main.  However, there may cases
-		// when this isn't true:
-		// Note: Must do this only after MsgBox, since it appears that new dialogs can't
-		// be created once it's done.  Update: Using ExitApp() now, since it's known to be
-		// more reliable:
-		//PostQuitMessage(CRITICAL_ERROR);
-		// This will attempt to run the OnExit function, which should be okay since that function
-		// will terminate the script if it encounters another runtime error:
-		g_script.ExitApp(EXIT_ERROR);
+		// Pass EXIT_DESTROY to ensure the program always exits, regardless of OnExit.
+		g_script.ExitApp(EXIT_DESTROY);
 
 	return aErrorType; // The caller told us whether it should be a critical error or not.
 }
@@ -13211,6 +13205,20 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 		MsgBox(buf);
 	}
 	return FAIL; // See above for why it's better to return FAIL than CRITICAL_ERROR.
+}
+
+
+
+ResultType Script::CriticalError(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
+{
+	g->ExcptMode = EXCPTMODE_NONE; // Do not throw an exception.
+	if (mCurrLine)
+		mCurrLine->LineError(aErrorText, CRITICAL_ERROR, aExtraInfo);
+	// mCurrLine should always be non-NULL during runtime, and CRITICAL_ERROR should
+	// cause LineError() to exit even if an OnExit routine is present, so this is here
+	// mainly for maintainability.
+	TerminateApp(EXIT_DESTROY, CRITICAL_ERROR);
+	return FAIL; // Never executed.
 }
 
 
