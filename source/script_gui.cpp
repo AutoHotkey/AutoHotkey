@@ -6240,7 +6240,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			// Since above didn't "continue", there is text after the option letter, so take action accordingly.
 
 			LPTSTR endptr;
-			int option_int; // Only valid for [XYWHTER].
+			int option_int = 0; // Only valid for [XYWHTER].
 			float option_float; // Only valid for R.
 			TCHAR option_char2; // Only valid for [XYWH].
 			bool use_margin_offset; // Only valid for [XY].
@@ -6273,7 +6273,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					option_int = int(option_float = (float)ATOF(option_value));
 					break;
 				default:
-					option_char = 0; // Mark it as invalid for switch() below.
+					if (*option_value || !option_char2) // i.e. allow blank option_value if option_char2 was recognized above.
+						option_char = 0; // Mark it as invalid for switch() below.
 				}
 				if ((option_char == 'X' || option_char == 'Y')
 					|| (option_char == 'W' || option_char == 'H') && (option_int != -1 || option_char2 == 'P')) // Scale W/H unless it's W-1 or H-1.
