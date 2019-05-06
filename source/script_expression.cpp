@@ -323,8 +323,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					params[0]->SetValue(_T("Call"), 4);
 					params--; // Include the object, which is already in the right place.
 					actual_param_count += 2;
-					extern ExprOpFunc g_ObjCall;
-					func = &g_ObjCall;
+					extern Func *OpFunc_CallMethod;
+					func = OpFunc_CallMethod;
 				}
 				// Above has set func to a non-NULL value, but still need to verify there are enough params.
 				// Although passing too many parameters is useful (due to the limitations of variadic calls),
@@ -1501,7 +1501,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 	if (aIsVariadic) // i.e. this is a variadic function call.
 	{
 		ExprTokenType *rvalue = NULL;
-		if (mBIF == &Op_ObjInvoke && mID == IT_SET && aParamCount > 1) // x[y*]:=z
+		if (mBIF == &Op_ObjInvoke && (mID & IT_BITMASK) == IT_SET && aParamCount > 1) // x[y*]:=z
 			rvalue = aParam[--aParamCount];
 		
 		--aParamCount; // i.e. make aParamCount the count of normal params.

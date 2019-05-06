@@ -420,20 +420,25 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 
 	// If this is some object's base and is being invoked in that capacity, call
 	//	__Get/__Set/__Call as defined in this base object before searching further.
-	if (SHOULD_INVOKE_METAFUNC)
+	// Meta-functions are skipped for .__Item for these reasons:
+	//  1) They would be called for every access with [k] when __Item is not defined, 
+	//     instead of just those where [k] is not defined.  For the short term, this
+	//     breaks expectations (and scripts).  For the long term it seems redundant.
+	//  2) __Item handling is currently designed to be backward-compatible to ease
+	//     the transition.  If not present, it will cause recursion, which may then
+	//     call the meta-functions in the pre-established manner.
+	//  3) Even once the fallback behaviour is removed, it is probably more useful
+	//     for __Item and __Get/__Set to be mutually exclusive, and more intuitive
+	//     for __Item to be handled like a meta-function (don't call other meta-s
+	//     in the process of calling __Item).
+	if ((aFlags & IF_METAFUNC) && (aFlags & (IF_DEFAULT|IT_CALL)) != IF_DEFAULT)
 	{
 		key.s = sMetaFuncName[INVOKE_TYPE];
 		// Look for a meta-function definition directly in this base object.
 		if (field = FindField(SYM_STRING, key, /*out*/ insert_pos))
 		{
-			// Seems more maintainable to copy params rather than assume aParam[-1] is always valid.
-			ExprTokenType **meta_params = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
-			// Shallow copy; points to the same tokens.  Leave a space for param[0], which must be the param which
-			// identified the field (or in this case an empty space) to replace with aThisToken when appropriate.
-			memcpy(meta_params + 1, aParam, aParamCount * sizeof(ExprTokenType*));
-
 			Line *curr_line = g_script.mCurrLine;
-			ResultType r = CallField(field, aResultToken, aThisToken, aFlags, meta_params, aParamCount + 1);
+			ResultType r = CallField(field, aResultToken, aThisToken, aFlags, aParam, aParamCount);
 			g_script.mCurrLine = curr_line; // Allows exceptions thrown by later meta-functions to report a more appropriate line.
 			//if (r == EARLY_RETURN)
 				// Propagate EARLY_RETURN in case this was the __Call meta-function of a
@@ -444,18 +449,33 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		}
 	}
 	
-	int param_count_excluding_rvalue = aParamCount;
+	auto actual_param = aParam; // Actual first parameter between [] or ().
+	int actual_param_count = aParamCount; // Actual number of parameters between [] or ().
 
 	if (IS_INVOKE_SET)
 	{
 		// Due to the way expression parsing works, the result should never be negative
 		// (and any direct callers of Invoke must always pass aParamCount >= 1):
-		--param_count_excluding_rvalue;
+		--actual_param_count;
 	}
 	
-	if (param_count_excluding_rvalue && aParam[0]->symbol != SYM_MISSING)
+	ASSERT(actual_param_count || (aFlags & IF_DEFAULT));
 	{
-		field = FindField(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
+		if ((aFlags & IF_DEFAULT) || aParam[0]->symbol == SYM_MISSING)
+		{
+			key_type = SYM_STRING;
+			key.s = IS_INVOKE_CALL ? _T("Call") : _T("__Item");
+		}
+		else
+			ConvertKey(*actual_param[0], _f_number_buf, key_type, key);
+
+		if (!(aFlags & IF_DEFAULT))
+		{
+			++actual_param;
+			--actual_param_count;
+		}
+		
+		field = FindField(key_type, key, insert_pos);
 
 		static Property sProperty;
 
@@ -471,23 +491,22 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			prop_field = field;
 			if (IS_INVOKE_SET ? prop->CanSet() : IS_INVOKE_GET && prop->CanGet())
 			{
-				if (aParamCount > 2 && IS_INVOKE_SET)
+				// Prepare the parameter list: this, value, actual_param*
+				ExprTokenType **prop_param = (ExprTokenType **)_alloca((actual_param_count + 2) * sizeof(ExprTokenType *));
+				prop_param[0] = &aThisToken; // For the hidden "this" parameter in the getter/setter.
+				int prop_param_count = 1;
+				if (IS_INVOKE_SET)
 				{
-					// Do some shuffling to put value before the other parameters.  This relies on above
-					// having verified that we're handling this invocation; otherwise the parameters would
-					// need to be swapped back later in case they're passed to a base's meta-function.
-					ExprTokenType *value = aParam[aParamCount - 1];
-					for (int i = aParamCount - 1; i > 1; --i)
-						aParam[i] = aParam[i - 1];
-					aParam[1] = value; // Corresponds to the setter's hidden "value" parameter.
+					// Put the setter's hidden "value" parameter before the other parameters.
+					prop_param[prop_param_count++] = actual_param[actual_param_count];
 				}
-				ExprTokenType *name_token = aParam[0];
-				aParam[0] = &aThisToken; // For the hidden "this" parameter in the getter/setter.
-				// Pass IF_FUNCOBJ so that it'll pass all parameters to the getter/setter.
+				memcpy(prop_param + prop_param_count, actual_param, actual_param_count * sizeof(ExprTokenType *));
+				prop_param_count += actual_param_count;
+				
+				// Pass IF_DEFAULT so that it'll pass all parameters to the getter/setter.
 				// For a functor Object, we would need to pass a token representing "this" Property,
 				// but since Property::Invoke doesn't use it, we pass our aThisToken for simplicity.
-				ResultType result = prop->Invoke(aResultToken, aThisToken, aFlags | IF_FUNCOBJ, aParam, aParamCount);
-				aParam[0] = name_token;
+				ResultType result = prop->Invoke(aResultToken, aThisToken, aFlags | IF_DEFAULT, prop_param, prop_param_count);
 				return result == EARLY_RETURN ? OK : result;
 			}
 			// The property was missing get/set (whichever this invocation is), so continue as
@@ -495,11 +514,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			key_type = SYM_INVALID;
 			field = NULL;
 		}
-	}
-	else
-	{
-		key_type = SYM_INVALID; // Allow key_type checks below without requiring that param_count_excluding_rvalue also be checked.
-		field = NULL;
 	}
 	
 	if (!field)
@@ -546,18 +560,18 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			if (IS_INVOKE_CALL)
 			{
 				// Since above has not handled this call and no field exists, check for built-in methods.
-				return CallBuiltin(GetBuiltinID(key.s), aResultToken, aParam + 1, aParamCount - 1); // +/- 1 to exclude the method identifier.
+				return CallBuiltin(GetBuiltinID(key.s), aResultToken, actual_param, actual_param_count);
 			}
 			//
 			// BUILT-IN "BASE" PROPERTY
 			//
-			else if (param_count_excluding_rvalue == 1)
+			else if (actual_param_count == 0)
 			{
 				if (!_tcsicmp(key.s, _T("base")))
 				{
 					if (IS_INVOKE_SET)
 					{
-						IObject *obj = TokenToObject(*aParam[1]);
+						IObject *obj = TokenToObject(**actual_param);
 						if (obj)
 							obj->AddRef(); // for mBase
 						if (mBase)
@@ -594,19 +608,15 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		//  - Fixes X.__Call being returned instead of being called, if X.__Call is a string.
 		//  - Allows X.Y(Z) and similar to work like X.Y[Z], instead of ignoring the extra parameters.
 		if ( !(aFlags & IF_CALL_FUNC_ONLY) || (field->symbol == SYM_OBJECT && dynamic_cast<Func *>(field->object)) )
-			return CallField(field, aResultToken, aThisToken, aFlags, aParam, aParamCount);
+			return CallField(field, aResultToken, aThisToken, aFlags & ~IF_DEFAULT, actual_param, actual_param_count);
 		aFlags = (aFlags & ~(IT_BITMASK | IF_CALL_FUNC_ONLY)) | IT_GET;
 	}
 
-	// MULTIPARAM[x,y] -- may be SET[x,y]:=z or GET[x,y], but always treated like GET[x].
-	if (param_count_excluding_rvalue > 1)
+	// This next section handles both this[x,y] (handled as this.__Item[x,y]) and this.x[y]
+	// Here, we only retrieve or create the sub-object this[x]/this.x, never set the actual
+	// property (since that's handled via recursion into the sub-object).
+	if (actual_param_count > 0)
 	{
-		// This is something like this[x,y] or this[x,y]:=z.  Since it wasn't handled by a meta-mechanism above,
-		// handle only the "x" part (automatically creating and storing an object if this[x] didn't already exist
-		// and an assignment is being made) and recursively invoke.  This has at least two benefits:
-		//	1) Objects natively function as multi-dimensional arrays.
-		//	2) Automatic initialization of object-fields.
-		//		For instance, this["base","__Get"]:="MyObjGet" does not require a prior this.base:=Object().
 		IObject *obj = NULL;
 		if (field)
 		{
@@ -626,7 +636,16 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 					mBase = new Object();
 				obj = mBase; // If NULL, above failed and below will detect it.
 			}
-			// Automatically create a new object for the x part of obj[x,y]:=z.
+			else if (aFlags & IF_DEFAULT)
+			{
+				// There's no this.__Item property or key-value pair and it was not handled by __get/__set.
+				// Do not create this.__Item; instead, fall back to the old behaviour (use the next
+				// parameter as a key).  Once there are dedicated map/dictionary/array types, this
+				// and the next section should be removed (__Item should be explicitly defined).
+				obj = this;
+				// IF_DEFAULT will be removed below to prevent infinite recursion.
+			}
+			// Automatically create a new object for the x part of obj.x[y]:=z.
 			else if (IS_INVOKE_SET)
 			{
 				Object *new_obj = new Object();
@@ -651,8 +670,12 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			}
 			else if (IS_INVOKE_GET)
 			{
-				// Treat x[y,z] like x[y] when x[y] is not set: just return "", don't throw an exception.
-				// On the other hand, if x[y] is set to something which is not an object, the "if (field)"
+				// For now, x[y] (that is, x.__item[y]) is permitted since x.__item will be initialized
+				// automatically if the script assigns to x[y].
+				//if (aFlags & IF_DEFAULT)
+
+				// Treat x.y[z] like x.y when x.y is not set: just return "", don't throw an exception.
+				// On the other hand, if x.y is set to something which is not an object, the "if (field)"
 				// section above raises an error.
 				_o_return_empty;
 			}
@@ -664,8 +687,12 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// References in obj_token and obj weren't counted (AddRef wasn't called), so Release() does not
 			// need to be called before returning, and accessing obj after calling Invoke() would not be safe
 			// since it could Release() the object (by overwriting our field via script) as a side-effect.
+			if (IS_INVOKE_SET)
+				++actual_param_count;
 			// Recursively invoke obj, passing remaining parameters; remove IF_META to correctly treat obj as target:
-			return obj->Invoke(aResultToken, obj_token, aFlags & ~IF_META, aParam + 1, aParamCount - 1);
+			// Toggle IF_DEFAULT so that this[1,2] expands to this.__Item.1.__Item.2, same as this[1][2].
+			// This should be changed once a dedicated map/dictionary type is implemented.
+			return obj->Invoke(aResultToken, obj_token, (aFlags & ~IF_META) ^ IF_DEFAULT, actual_param, actual_param_count);
 			// Above may return INVOKE_NOT_HANDLED in cases such as obj[a,b] where obj[a] exists but obj[a][b] does not.
 		}
 	} // MULTIPARAM[x,y]
@@ -673,9 +700,9 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	// SET
 	else if (IS_INVOKE_SET)
 	{
-		if (!IS_INVOKE_META && param_count_excluding_rvalue)
+		if (!IS_INVOKE_META)
 		{
-			ExprTokenType &value_param = *aParam[1];
+			ExprTokenType &value_param = **actual_param;
 			// L34: Assigning an empty string no longer removes the field.
 			if ( (field || (field = prop ? prop_field : Insert(key_type, key, insert_pos)))
 				&& field->Assign(value_param) )
@@ -706,7 +733,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		}
 		// If 'this' is the target object (not its base), produce OK so that something like if(!foo.bar) is
 		// considered valid even when foo.bar has not been set.
-		if (!IS_INVOKE_META && aParamCount)
+		if (!IS_INVOKE_META)
 			_o_return_empty;
 	}
 
@@ -806,35 +833,27 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 ResultType Object::CallField(FieldType *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // aParam[0] contains the identifier of this field or an empty space (for __Get etc.).
 {
+	// Allocate a new array of param pointers that we can modify.
+	ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
+	// Where fn = this.%key%, call %fn%(this, params*).
+	ExprTokenType field_token(aField->object); // fn
+	param[0] = &aThisToken; // this
+	memcpy(param + 1, aParam, aParamCount * sizeof(ExprTokenType*)); // params*
+	++aParamCount;
+
 	if (aField->symbol == SYM_OBJECT)
 	{
-		// Allocate a new array of param pointers that we can modify.
-		ExprTokenType **params = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
-		// Shallow copy; points to the same tokens.  Skip aParam[0], which contains
-		// the key used to find aField.  We want to invoke aField.Call(this, aParams*).
-		memcpy(params + 2, aParam + 1, (aParamCount - 1) * sizeof(ExprTokenType*));
-		// Where fn = this[key], call fn.call(this, params*).
-		ExprTokenType field_token(aField->object); // fn
-		ExprTokenType method_name(_T("call"), 4); // Works with JScript functions as well, unlike "Call".
-		params[0] = &method_name; // call
-		params[1] = &aThisToken; // this
-		return aField->object->Invoke(aResultToken, field_token, IT_CALL, params, aParamCount + 1);
+		return aField->object->Invoke(aResultToken, field_token, IT_CALL|IF_DEFAULT, param, aParamCount);
 	}
 	if (aField->symbol == SYM_STRING)
 	{
 		Func *func = g_script.FindFunc(aField->string, aField->string.Length());
 		if (func)
 		{
-			ExprTokenType *tmp = aParam[0];
 			// v2: Always pass "this" as the first parameter.  The old behaviour of passing it only when called
 			// indirectly via mBase was confusing to many users, and isn't needed now that the script can do
 			// %this.func%() instead of this.func() if they don't want to pass "this".
-			// For this type of call, "this" object is included as the first parameter.  To do this, aParam[0] is
-			// temporarily overwritten with a pointer to aThisToken.  Note that aThisToken contains the original
-			// object specified in script, not the C++ "this" which is actually a meta-object/base of that object.
-			aParam[0] = &aThisToken;
-			func->Call(aResultToken, aParam, aParamCount);
-			aParam[0] = tmp;
+			func->Call(aResultToken, param, aParamCount);
 			return aResultToken.Result();
 		}
 	}
@@ -1807,16 +1826,16 @@ ResultType STDMETHODCALLTYPE Property::Invoke(ResultToken &aResultToken, ExprTok
 {
 	Func **member;
 
-	if (aFlags & IF_FUNCOBJ)
+	if (aFlags & IF_DEFAULT)
 	{
-		// Use mGet even if IS_INVOKE_CALL, for symmetry:
-		//   obj.prop()         ; Get
-		//   obj.prop() := val  ; Set (translation is performed by the preparser).
+		if (IS_INVOKE_CALL) // May be impossible due to how IF_DEFAULT is used.
+			return INVOKE_NOT_HANDLED;
+		
 		member = IS_INVOKE_SET ? &mSet : &mGet;
 	}
 	else
 	{
-		if (!aParamCount)
+		if (!aParamCount) // May be impossible as this[] would use flag IF_DEFAULT.
 			return INVOKE_NOT_HANDLED;
 
 		LPTSTR name = TokenToString(*aParam[0]);
@@ -1883,7 +1902,7 @@ ObjectMember Func::sMembers[] =
 
 ResultType STDMETHODCALLTYPE Func::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (aFlags & IF_FUNCOBJ)
+	if (aFlags == (IT_CALL | IF_DEFAULT))
 	{
 		Call(aResultToken, aParam, aParamCount);
 		return aResultToken.Result();
@@ -1900,7 +1919,7 @@ ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 		return aResultToken.Result();
 
 	case M_Bind:
-		if (BoundFunc *bf = BoundFunc::Bind(this, aParam, aParamCount, IT_CALL | IF_FUNCOBJ))
+		if (BoundFunc *bf = BoundFunc::Bind(this, aParam, aParamCount, IT_CALL | IF_DEFAULT))
 			_o_return(bf);
 		_o_throw(ERR_OUTOFMEM);
 
@@ -1946,7 +1965,7 @@ ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 
 ResultType STDMETHODCALLTYPE BoundFunc::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (  !(aFlags & IF_FUNCOBJ) && aParamCount  )
+	if (aFlags != (IT_CALL | IF_DEFAULT))
 	{
 		// No methods/properties implemented yet, except Call().
 		if (!IS_INVOKE_CALL || _tcsicmp(TokenToString(*aParam[0]), _T("Call")))
@@ -2001,9 +2020,9 @@ BoundFunc::~BoundFunc()
 
 ResultType STDMETHODCALLTYPE Closure::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (  !(aFlags & IF_FUNCOBJ) && aParamCount  )
+	if (aFlags != (IT_CALL | IF_DEFAULT))
 	{
-		if (_tcsicmp(TokenToString(*aParam[0]), _T("Call"))) // i.e. not Call.
+		if (!IS_INVOKE_CALL || _tcsicmp(ParamIndexToString(0), _T("Call"))) // i.e. not Call.
 			return mFunc->Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
 		++aParam;
 		--aParamCount;
@@ -2162,7 +2181,12 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ResultToken &aResultToken, ExprT
 	}
 
 	// Allow script-defined meta-functions to override the default behaviour:
-	return Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
+	ResultType result = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
+	if (result == INVOKE_NOT_HANDLED && (aFlags & (IF_DEFAULT|IF_METAOBJ|IT_CALL)) == (IF_DEFAULT|IF_METAOBJ))
+		// No __Item defined; provide fallback behaviour for temporary backward-compatibility.
+		// This should be removed once the paradigm shift is complete.
+		result = Object::Invoke(aResultToken, aThisToken, aFlags & ~IF_DEFAULT, aParam, aParamCount);
+	return result;
 }
 
 

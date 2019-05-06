@@ -1851,6 +1851,25 @@ public:
 	}
 };
 
+template<BuiltInFunctionType bif, int flags>
+struct ExprOpT
+{
+	static ExprOpFunc Func;
+};
+
+template<BuiltInFunctionType bif, int flags>
+ExprOpFunc ExprOpT<bif, flags>::Func(bif, flags);
+
+// ExprOp<bif, flags>() returns a Func* which calls bif with the given ID/flags.
+// The call is optimized out and replaced with a reference to a static variable,
+// which should be unique for that combination of bif and flags.
+template<BuiltInFunctionType bif, int flags>
+inline Func *ExprOp()
+{
+	// Using static ExprOpFunc directly increased code size considerably.
+	return &ExprOpT<bif, flags>::Func;
+}
+
 
 struct FuncEntry
 {

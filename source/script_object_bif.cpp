@@ -6,7 +6,7 @@
 #include "script_object.h"
 
 
-extern ExprOpFunc g_ObjGet, g_ObjSet;
+extern Func *OpFunc_GetProp, *OpFunc_GetItem, *OpFunc_SetProp, *OpFunc_SetItem;
 
 //
 // Object()
@@ -257,13 +257,17 @@ BIF_DECL(Op_ObjNew)
 
 BIF_DECL(Op_ObjIncDec)
 {
-	SymbolType op = (SymbolType)_f_callee_id;
+	SymbolType op = SymbolType(_f_callee_id & ~IF_DEFAULT);
+	
+	bool square_brackets = _f_callee_id & IF_DEFAULT;
+	Func *get_func = square_brackets ? OpFunc_GetItem : OpFunc_GetProp;
+	Func *set_func = square_brackets ? OpFunc_SetItem : OpFunc_SetProp;
 
 	ResultToken temp_result;
 	// Set the defaults expected by Op_ObjInvoke:
 	temp_result.InitResult(aResultToken.buf);
 	temp_result.symbol = SYM_INTEGER;
-	temp_result.func = &g_ObjGet;
+	temp_result.func = get_func;
 
 	// Retrieve the current value.  Do it this way instead of calling Object::Invoke
 	// so that if aParam[0] is not an object, g_MetaObject is correctly invoked.
@@ -305,17 +309,17 @@ BIF_DECL(Op_ObjIncDec)
 
 	if (op == SYM_PRE_INCREMENT || op == SYM_PRE_DECREMENT)
 	{
-		aResultToken.func = &g_ObjSet;
+		aResultToken.func = set_func;
 		// Set the new value and pass the return value of the invocation back to our caller.
 		// This should be consistent with something like x.y := x.y + 1.
 		Op_ObjInvoke(aResultToken, param, aParamCount);
 	}
 	else // SYM_POST_INCREMENT || SYM_POST_DECREMENT
 	{
-		// Must be re-initialized (and must use g_ObjSet instead of g_ObjGet):
+		// Must be re-initialized (and must use SET rather than GET):
 		temp_result.InitResult(aResultToken.buf);
 		temp_result.symbol = SYM_INTEGER;
-		temp_result.func = &g_ObjSet;
+		temp_result.func = set_func;
 		
 		// Set the new value.
 		Op_ObjInvoke(temp_result, param, aParamCount);

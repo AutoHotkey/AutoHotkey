@@ -281,7 +281,7 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define IF_METAOBJ			0x10000 // Indicates 'this' is a meta-object/base of aThisToken. Restricts some functionality and causes aThisToken to be inserted into the param list of called functions.
 #define IF_METAFUNC			0x20000 // Indicates Invoke should call a meta-function before checking the object's fields.
 #define IF_META				(IF_METAOBJ | IF_METAFUNC)	// Flags for regular recursion into base object.
-#define IF_FUNCOBJ			0x40000 // Indicates 'this' is a function, being called via another object (aParam[0]).
+#define IF_DEFAULT			0x40000 // Invoke the default member (call a function object, array indexing, etc.).
 #define IF_NEWENUM			0x80000 // Workaround for COM objects which don't resolve "_NewEnum" to DISPID_NEWENUM.
 #define IF_CALL_FUNC_ONLY	0x100000 // Used by IDispatch: call only if value is a function.
 

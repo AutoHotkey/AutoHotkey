@@ -23,14 +23,14 @@ GNU General Public License for more details.
 #include "application.h" // for MsgSleep()
 #include "TextIO.h"
 
-// Globals that are for only this module (mostly):
-static ExprOpFunc g_ObjGetInPlace(Op_ObjGetInPlace, IT_GET);
-static ExprOpFunc g_ObjNew(Op_ObjNew, IT_CALL);
-static ExprOpFunc g_ObjPreInc(Op_ObjIncDec, SYM_PRE_INCREMENT), g_ObjPreDec(Op_ObjIncDec, SYM_PRE_DECREMENT)
-				, g_ObjPostInc(Op_ObjIncDec, SYM_POST_INCREMENT), g_ObjPostDec(Op_ObjIncDec, SYM_POST_DECREMENT);
-ExprOpFunc g_ObjCall(Op_ObjInvoke, IT_CALL); // Also needed in script_expression.cpp.
-ExprOpFunc g_ObjGet(Op_ObjInvoke, IT_GET), g_ObjSet(Op_ObjInvoke, IT_SET); // Also needed in script_object_bif.cpp.
-ExprOpFunc g_FuncClose(BIF_Func, FID_FuncClose);
+
+// These are the common pseudo-Funcs, defined here mostly for readability:
+auto OpFunc_GetProp = ExprOp<Op_ObjInvoke, IT_GET>();
+auto OpFunc_GetItem = ExprOp<Op_ObjInvoke, IT_GET|IF_DEFAULT>();
+auto OpFunc_SetProp = ExprOp<Op_ObjInvoke, IT_SET>();
+auto OpFunc_SetItem = ExprOp<Op_ObjInvoke, IT_SET|IF_DEFAULT>();
+auto OpFunc_CallMethod = ExprOp<Op_ObjInvoke, IT_CALL>();
+
 
 #define NA MAX_FUNCTION_PARAMS
 #define BIFn(name, minp, maxp, bif, ...) {_T(#name), bif, minp, maxp, FID_##name, __VA_ARGS__}
@@ -4456,8 +4456,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 				for (;;) // L35: Loop to fix x.y.z() and similar.
 				{
 					id_end = find_identifier_end(id_begin);
-					if (*id_end == '(')
-					{	// Allow function/method Call as standalone expression.
+					if (*id_end == '(' // Allow function/method Call as standalone expression.
+						|| *id_end == g_DerefChar) // Allow dynamic property/method access (too hard to validate what's to the right of %).
+					{
 						aActionType = ACT_EXPRESSION;
 						break;
 					}
@@ -8314,7 +8315,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						}
 						else
 						{
-							deref_new->func = &g_ObjGet; // This may be overridden by standard_pop_into_postfix.
+							deref_new->func = OpFunc_GetItem; // This may be overridden by standard_pop_into_postfix.
 							deref_new->param_count = 1; // Initially one parameter: the target object.
 						}
 						deref_new->marker = cp; // For error-reporting.
@@ -8575,14 +8576,14 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							if (*op_end == '(')
 							{
 								new_symbol = SYM_FUNC;
-								new_deref->func = &g_ObjCall;
+								new_deref->func = OpFunc_CallMethod;
 								// DON'T DO THE FOLLOWING - must let next iteration handle '(' so it outputs a SYM_OPAREN:
 								//++op_end;
 							}
 							else
 							{
 								new_symbol = SYM_DOT; // This will be changed to SYM_FUNC at a later stage.
-								new_deref->func = &g_ObjGet; // Set default; may be overridden by standard_pop_into_postfix.
+								new_deref->func = OpFunc_GetProp; // Set default; may be overridden by standard_pop_into_postfix.
 							}
 
 							// Output the operator next - after the operand to avoid auto-concat.
@@ -8778,12 +8779,12 @@ unquoted_literal:
 			if (*this_deref_ref.marker == '(')
 			{
 				infix[infix_count].symbol = SYM_FUNC;
-				this_deref_ref.func = &g_ObjCall;
+				this_deref_ref.func = OpFunc_CallMethod;
 			}
 			else
 			{
 				infix[infix_count].symbol = SYM_DOT;
-				this_deref_ref.func = &g_ObjGet;
+				this_deref_ref.func = OpFunc_GetProp;
 			}
 			this_deref_ref.param_count = 2; // Initially two parameters: the object and identifier.
 			this_deref_ref.type = DT_FUNC;
@@ -8798,7 +8799,7 @@ unquoted_literal:
 				infix[infix_count].symbol = SYM_NEW;
 				infix[infix_count].deref = this_deref;
 				this_deref_ref.param_count = 1; // Start counting at the class object, which precedes the open-parenthesis.
-				this_deref_ref.func = &g_ObjNew; // This overwrites this_deref_ref.symbol via the union.
+				this_deref_ref.func = ExprOp<Op_ObjNew, IT_CALL>(); // This overwrites this_deref_ref.symbol via the union.
 			}
 			else
 				infix[infix_count].symbol = this_deref_ref.symbol;
@@ -8820,7 +8821,7 @@ unquoted_literal:
 			infix[infix_count+2].object = this_deref_ref.func;
 			infix[infix_count+3].symbol = SYM_CPAREN;
 			infix_count += 3; // Loop will increment once more.
-			this_deref_ref.func = &g_FuncClose;
+			this_deref_ref.func = ExprOp<BIF_Func, FID_FuncClose>();
 			this_deref_ref.param_count = 0; // Init.
 		}
 		else // this_deref is a variable.
@@ -9071,7 +9072,7 @@ unquoted_literal:
 								{
 									// Pass the Func to an internal version of Func() which will call CloseIfNeeded().
 									param1.SetValue(param_func);
-									in_param_list->func = &g_FuncClose;
+									in_param_list->func = ExprOp<BIF_Func, FID_FuncClose>();
 								}
 								else
 								{
@@ -9126,11 +9127,12 @@ unquoted_literal:
 				stack_top.symbol = SYM_FUNC; // Change this OBRACKET to FUNC (see below).
 
 				if (this_infix[1].symbol == SYM_OPAREN // i.e. "]("
+					&& *this_infix[1].marker == '(' // Not SYM_OPAREN generated by DT_STRING, such as for "].%f%".
 					&& !(stack_count > 1 && stack[stack_count - 2]->symbol == SYM_NEW)) // Not "new x[n]()" or "new {...}()"
 				{
 					// Appears to be a method call with a computed method name, such as x[y](prms).
 					if (infix_symbol == SYM_CBRACE // i.e. {...}(), seems best to reserve this for now.
-						|| in_param_list->func != &g_ObjGet // i.e. it's something like x := [y,z]().
+						|| in_param_list->func != OpFunc_GetItem // i.e. it's something like x := [y,z]().
 						|| in_param_list->param_count > 2) // i.e. x[y, ...]().
 						return LineError(_T("Unsupported method call syntax."), FAIL, in_param_list->marker); // Error message is a bit vague since this can be x[y,z]() or x.y[z]().
 					if (in_param_list->param_count == 1) // Just the target object; no method name: x[](...)
@@ -9141,7 +9143,7 @@ unquoted_literal:
 						postfix[postfix_count]->marker = _T(""); // Simplify some cases by letting it be treated as SYM_STRING.
 						++postfix_count;
 					}
-					stack_top.deref->func = &g_ObjCall; // Override the default now that we know this is a method-call.
+					stack_top.deref->func = OpFunc_CallMethod; // Override the default now that we know this is a method-call.
 					++this_infix; // Skip SYM_CBRACKET so this_infix points to SYM_OPAREN.
 					this_infix->outer_deref = stack_top.outer_deref; // This contains the old value of in_param_list.
 					// Push the open-paren over stack_top (which is now SYM_FUNC) so it will be handled
@@ -9197,18 +9199,17 @@ unquoted_literal:
 					// It can't be anything but ObjCall at this point because stack_symbol == SYM_NEW.
 					//	new Func()		; This would be SYM_VAR, SYM_OPAREN, SYM_CPAREN.
 					//	new (Func())	; stack_symbol would be SYM_OPAREN.
-					//	new x[Func()]()	; stack_symbol would be SYM_OBRACKET.
+					//	new x[Func()]	; stack_symbol would be SYM_OBRACKET.
 					//	new x Func()	; SYM_NEW would've been popped off the stack by auto-SYM_CONCAT.
-					ASSERT(this_infix[-1].deref->func == &g_ObjCall);
+					ASSERT(this_infix[-1].deref->func == OpFunc_CallMethod);
 					// It can be anything like:
 					//	new x.y(z)		; This simple case could be easily handled at an earlier stage.
 					//	new (getClass()).y(z)
-					//	new x[y](z)
 					// So at this point, this_infix[-1] has two parameters: the target object x
 					// and method name y.  Instead of calling method y of object x, we want to
 					// get property y of object x and use the result as the class to instantiate.
-					// To achieve this, we can just change ObjCall to ObjGet:
-					this_infix[-1].deref->func = &g_ObjGet;
+					// To achieve this, we can just change IT_CALL to IT_GET:
+					this_infix[-1].deref->func = OpFunc_GetProp;
 					goto standard_pop_into_postfix;
 					// Let the next iteration encounter SYM_OPAREN while stack_symbol is still
 					// SYM_NEW so that the lines below will be executed:
@@ -9477,8 +9478,11 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			//	x.y := z	->	x "y" z (set)
 			//	x[y] += z	->	x y (get in-place, assume 2 params) z (add) (set)
 			//	x.y[i] /= z	->	x "y" i 3 (get in-place, n params) z (div) (set)
-			if (this_postfix->deref->func == &g_ObjGet)
+			if (this_postfix->deref->func == OpFunc_GetProp
+				|| this_postfix->deref->func == OpFunc_GetItem)
 			{
+				bool square_brackets = this_postfix->deref->func == OpFunc_GetItem;
+				
 				if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(infix_symbol))
 				{
 					if (infix_symbol != SYM_ASSIGN)
@@ -9502,7 +9506,9 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 						that_postfix->symbol = SYM_FUNC;
 						if (  !(that_postfix->deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  ) // Must be persistent memory, unlike that_postfix itself.
 							return LineError(ERR_OUTOFMEM);
-						that_postfix->deref->func = &g_ObjGetInPlace;
+						that_postfix->deref->func = square_brackets
+							? ExprOp<Op_ObjGetInPlace, IT_GET|IF_DEFAULT>()
+							: ExprOp<Op_ObjGetInPlace, IT_GET>();
 						that_postfix->deref->type = DT_FUNC;
 						that_postfix->deref->param_count = param_count;
 					}
@@ -9511,7 +9517,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 						--postfix_count; // Discard this token; the assignment op will be converted into SYM_FUNC later.
 					}
 					this_infix->deref = stack[stack_count]->deref; // Mark this assignment as an object assignment for the section below.
-					this_infix->deref->func = &g_ObjSet;
+					this_infix->deref->func = square_brackets ? OpFunc_SetItem : OpFunc_SetProp;
 					this_infix->deref->param_count++;
 					// Now let this_infix be processed by the next iteration.
 				}
@@ -9520,11 +9526,14 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					// Post-increment/decrement has higher precedence, so check for it first:
 					if (infix_symbol == SYM_POST_INCREMENT || infix_symbol == SYM_POST_DECREMENT)
 					{
-						// Replace the func with Op_ObjIncDec to perform the operation. This has
-						// the same effect as the section above with x.y(z) := 1; i.e. x.y(z)++ is
-						// equivalent to x.y[z]++.  This is done for consistency, simplicity and
-						// because x.y(z)++ would otherwise be a useless syntax error.
-						this_postfix->deref->func = (infix_symbol == SYM_POST_INCREMENT ? &g_ObjPostInc : &g_ObjPostDec);
+						// Replace Op_ObjInvoke with Op_ObjIncDec to perform the operation.
+						this_postfix->deref->func = infix_symbol == SYM_POST_DECREMENT
+							? square_brackets
+								? ExprOp<Op_ObjIncDec, SYM_POST_DECREMENT|IF_DEFAULT>()
+								: ExprOp<Op_ObjIncDec, SYM_POST_DECREMENT>()
+							: square_brackets
+								? ExprOp<Op_ObjIncDec, SYM_POST_INCREMENT|IF_DEFAULT>()
+								: ExprOp<Op_ObjIncDec, SYM_POST_INCREMENT>();
 						++this_infix; // Discard this operator.
 					}
 					else
@@ -9532,8 +9541,14 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 						stack_symbol = stack[stack_count - 1]->symbol;
 						if (stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT)
 						{
-							// See comments in the similar section above.
-							this_postfix->deref->func = (stack_symbol == SYM_PRE_INCREMENT ? &g_ObjPreInc : &g_ObjPreDec);
+							// Replace Op_ObjInvoke with Op_ObjIncDec to perform the operation.
+							this_postfix->deref->func = infix_symbol == SYM_PRE_DECREMENT
+								? square_brackets
+									? ExprOp<Op_ObjIncDec, SYM_PRE_DECREMENT|IF_DEFAULT>()
+									: ExprOp<Op_ObjIncDec, SYM_PRE_DECREMENT>()
+								: square_brackets
+									? ExprOp<Op_ObjIncDec, SYM_PRE_INCREMENT|IF_DEFAULT>()
+									: ExprOp<Op_ObjIncDec, SYM_PRE_INCREMENT>();	
 							--stack_count; // Discard this operator.
 						}
 					}

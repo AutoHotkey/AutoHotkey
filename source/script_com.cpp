@@ -1583,7 +1583,7 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 		{
 			// This approach works well for Func, but not for an Object implementing __Call,
 			// which always expects a method name or the object whose method is being called:
-			//flags = (IT_CALL|IF_FUNCOBJ);
+			//flags = (IT_CALL|IF_DEFAULT);
 			//++first_param;
 			// This is consistent with %func%():
 			param_token[0].symbol = SYM_STRING;
@@ -1594,7 +1594,7 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 		else
 		{
 			if (flags == IT_CALL) // Obj(X) in VBScript and C#, or Obj[X] in C#
-				flags = IT_GET|IF_FUNCOBJ;
+				flags = IT_GET|IF_DEFAULT;
 			++first_param;
 		}
 	}
