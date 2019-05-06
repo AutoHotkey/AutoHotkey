@@ -1933,7 +1933,8 @@ void ResumeUnderlyingThread(VarBkp &aSavedErrorLevel)
 
 	// If this was the last running thread and the script has nothing keeping it open (hotkeys, Gui,
 	// message monitors, etc.) then it should terminate now:
-	g_script.ExitIfNotPersistent(EXIT_EXIT);
+	if (!g_OnExitIsRunning)
+		g_script.ExitIfNotPersistent(EXIT_EXIT);
 }
 
 

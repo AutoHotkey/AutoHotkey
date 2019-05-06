@@ -91,6 +91,7 @@ extern bool g_InputTimerExists;
 extern bool g_DerefTimerExists;
 extern bool g_SoundWasPlayed;
 extern bool g_IsSuspended;
+extern bool g_OnExitIsRunning;
 extern BOOL g_AllowInterruption;
 extern int g_nLayersNeedingTimer;
 extern int g_nThreads;

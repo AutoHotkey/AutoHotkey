@@ -1371,17 +1371,15 @@ ResultType Script::ExitApp(ExitReasons aExitReason, int aExitCode)
 // make the situation even worse).
 {
 	mExitReason = aExitReason;
-	// Otherwise, it's not a critical error.  Note that currently, mOnExit.Count() can only be
-	// non-zero if the script is in a runnable state (since registering an OnExit function requires
-	// that a script command has executed to do it).  If this ever changes, the !mIsReadyToExecute
-	// condition should be added to the below if statement:
-	static bool sOnExitIsRunning = false;
-	if (!mOnExit.Count() || sOnExitIsRunning)  // || !mIsReadyToExecute
+	// Note that currently, mOnExit.Count() can only be non-zero if the script is in a runnable
+	// state (since registering an OnExit function requires that the script calls OnExit()).
+	// If this ever changes, the !mIsReadyToExecute condition should be added below:
+	if (!mOnExit.Count() || g_OnExitIsRunning)
 	{
-		// In the case of sOnExitIsRunning == true:
+		// In the case of g_OnExitIsRunning == true:
 		// There is another instance of this function beneath us on the stack.  Since we have
 		// been called, this is a true exit condition and we exit immediately.
-		// MUST NOT create a new thread when sOnExitIsRunning because g_array allows only one
+		// MUST NOT create a new thread when g_OnExitIsRunning because g_array allows only one
 		// extra thread for ExitApp() (which allows it to run even when MAX_THREADS_EMERGENCY has
 		// been reached).  See TOTAL_ADDITIONAL_THREADS.
 		TerminateApp(aExitReason, aExitCode);
@@ -1424,7 +1422,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, int aExitCode)
 	BOOL g_AllowInterruption_prev = g_AllowInterruption;  // Save current setting.
 	g_AllowInterruption = FALSE; // Mark the thread just created above as permanently uninterruptible (i.e. until it finishes and is destroyed).
 
-	sOnExitIsRunning = true;
+	g_OnExitIsRunning = true;
 	DEBUGGER_STACK_PUSH(_T("OnExit"))
 
 	ExprTokenType param[] = { GetExitReasonString(aExitReason), (__int64)aExitCode };
@@ -1440,9 +1438,9 @@ ResultType Script::ExitApp(ExitReasons aExitReason, int aExitCode)
 	g_AllowInterruption = g_AllowInterruption_prev;  // Restore original setting.
 	ResumeUnderlyingThread(ErrorLevel_saved);
 	// If this OnExit thread is the last script thread and the script is not persistent, the above
-	// call recurses into this function.  sOnExitIsRunning == true prevents infinite recursion
+	// call recurses into this function.  g_OnExitIsRunning == true prevents infinite recursion
 	// in that case.  It is now safe to reset:
-	sOnExitIsRunning = false;  // In case the user wanted the thread to end normally (see above).
+	g_OnExitIsRunning = false;  // In case the user wanted the thread to end normally (see above).
 
 	return EARLY_EXIT;
 }

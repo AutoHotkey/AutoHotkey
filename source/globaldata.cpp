@@ -91,6 +91,7 @@ bool g_DerefTimerExists = false;
 bool g_SoundWasPlayed = false;
 bool g_IsSuspended = false;  // Make this separate from g_AllowInterruption since that is frequently turned off & on.
 bool g_DeferMessagesForUnderlyingPump = false;
+bool g_OnExitIsRunning = false;
 BOOL g_AllowInterruption = TRUE;  // BOOL vs. bool might improve performance a little for frequently-accessed variables.
 int g_nLayersNeedingTimer = 0;
 int g_nThreads = 0;
