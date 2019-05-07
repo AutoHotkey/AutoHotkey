@@ -5084,7 +5084,9 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			if (adding)
 			{
 				aOpt.style_add |= TBS_AUTOTICKS;
-				aOpt.tick_interval = ATOI(next_option + 12);
+				next_option += 12;
+				aOpt.tick_interval_specified = *next_option;
+				aOpt.tick_interval = ATOI(next_option);
 			}
 			else
 			{
@@ -9585,7 +9587,7 @@ void GuiType::ControlSetSliderOptions(GuiControlType &aControl, GuiControlOption
 	{
 		if (aOpt.tick_interval < 0) // This is the signal to remove the existing tickmarks.
 			SendMessage(aControl.hwnd, TBM_CLEARTICS, TRUE, 0);
-		else if (aOpt.tick_interval)
+		else if (aOpt.tick_interval_specified)
 			SendMessage(aControl.hwnd, TBM_SETTICFREQ, aOpt.tick_interval, 0);
 		else
 			// +TickInterval without a value.  TBS_AUTOTICKS was added, but doesn't take effect
