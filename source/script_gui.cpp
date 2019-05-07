@@ -5080,6 +5080,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			if (adding) aOpt.style_add |= TBS_NOTICKS; else aOpt.style_remove |= TBS_NOTICKS;
 		else if (aControl.type == GUI_CONTROL_SLIDER && !_tcsnicmp(next_option, _T("TickInterval"), 12))
 		{
+			aOpt.tick_interval_changed = true;
 			if (adding)
 			{
 				aOpt.style_add |= TBS_AUTOTICKS;
@@ -9580,12 +9581,21 @@ void GuiType::ControlSetSliderOptions(GuiControlType &aControl, GuiControlOption
 		SendMessage(aControl.hwnd, TBM_SETRANGEMIN, FALSE, aOpt.range_min); // No redraw
 		SendMessage(aControl.hwnd, TBM_SETRANGEMAX, TRUE, aOpt.range_max); // Redraw.
 	}
-	if (aOpt.tick_interval)
+	if (aOpt.tick_interval_changed)
 	{
 		if (aOpt.tick_interval < 0) // This is the signal to remove the existing tickmarks.
 			SendMessage(aControl.hwnd, TBM_CLEARTICS, TRUE, 0);
-		else // greater than zero, since zero itself it checked in one of the enclose IFs above.
+		else if (aOpt.tick_interval)
 			SendMessage(aControl.hwnd, TBM_SETTICFREQ, aOpt.tick_interval, 0);
+		else
+			// +TickInterval without a value.  TBS_AUTOTICKS was added, but doesn't take effect
+			// until TBM_SETRANGE' or TBM_SETTICFREQ is sent.  Since the script might have already
+			// set an interval and there's no TBM_GETTICFREQ, use TBM_SETRANGEMAX to set the ticks.
+			if (!aOpt.range_changed) // TBM_SETRANGEMAX wasn't already sent.
+			{
+				SendMessage(aControl.hwnd, TBM_SETRANGEMAX, TRUE
+					, SendMessage(aControl.hwnd, TBM_GETRANGEMAX, 0, 0));
+			}
 	}
 	if (aOpt.line_size > 0) // Removal is not supported, so only positive values are considered.
 		SendMessage(aControl.hwnd, TBM_SETLINESIZE, 0, aOpt.line_size);

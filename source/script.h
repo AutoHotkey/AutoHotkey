@@ -2636,6 +2636,7 @@ struct GuiControlOptionsType
 	TCHAR password_char; // When zeroed, indicates "use default password" for an edit control with the password style.
 	bool range_changed;
 	bool color_changed; // To discern when a control has been put back to the default color. [v1.0.26]
+	bool tick_interval_changed;
 	bool start_new_section;
 	bool use_theme; // v1.0.32: Provides the means for the window's current setting of mUseTheme to be overridden.
 	bool listview_no_auto_sort; // v1.0.44: More maintainable and frees up GUI_CONTROL_ATTRIB_ALTBEHAVIOR for other uses.
