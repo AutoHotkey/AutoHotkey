@@ -2303,21 +2303,24 @@ void ObjectMember::DebugWriteProperty(ObjectMember aMembers[], int aMemberCount,
 	DebugCookie cookie;
 	aDebugger->BeginProperty(NULL, "object", num_children, cookie);
 
-	int page_begin = aPageSize * aPage, page_end = page_begin + aPageSize;
-	for (int imem = 0, iprop = -1; imem < aMemberCount; ++imem)
+	if (aMaxDepth)
 	{
-		auto &member = aMembers[imem];
-		if (member.invokeType == IT_CALL || member.minParams > 0)
-			continue;
-		++iprop;
-		if (iprop < page_begin)
-			continue;
-		if (iprop >= page_end)
-			break;
-		FuncResult result_token;
-		auto result = (aThis->*member.method)(result_token, member.id, IT_GET, NULL, 0);
-		aDebugger->WriteProperty(ExprTokenType(member.name), result_token);
-		result_token.Free();
+		int page_begin = aPageSize * aPage, page_end = page_begin + aPageSize;
+		for (int imem = 0, iprop = -1; imem < aMemberCount; ++imem)
+		{
+			auto &member = aMembers[imem];
+			if (member.invokeType == IT_CALL || member.minParams > 0)
+				continue;
+			++iprop;
+			if (iprop < page_begin)
+				continue;
+			if (iprop >= page_end)
+				break;
+			FuncResult result_token;
+			auto result = (aThis->*member.method)(result_token, member.id, IT_GET, NULL, 0);
+			aDebugger->WriteProperty(ExprTokenType(member.name), result_token);
+			result_token.Free();
+		}
 	}
 
 	aDebugger->EndProperty(cookie);

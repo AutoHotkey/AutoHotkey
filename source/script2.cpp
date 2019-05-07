@@ -12001,7 +12001,7 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 {
 	DebugCookie rootCookie, cookie;
 	aDebugger->BeginProperty(NULL, "object", 5, rootCookie);
-	if (aPage == 0)
+	if (aPage == 0 && aMaxDepth)
 	{
 		aDebugger->WriteProperty("Count", ExprTokenType((__int64)mPatternCount));
 
