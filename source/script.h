@@ -2884,7 +2884,8 @@ public:
 
 	ResultType DefineClass(LPTSTR aBuf);
 	ResultType DefineClassVars(LPTSTR aBuf, bool aStatic);
-	ResultType DefineClassProperty(LPTSTR aBuf);
+	ResultType DefineClassProperty(LPTSTR aBuf, int aBufSize, Var **aFuncGlobalVar, bool &aBufHasBraceOrNotNeeded);
+	ResultType DefineClassPropertyXet(LPTSTR aBuf, int aBufSize, LPTSTR aEnd, Var **aFuncGlobalVar);
 	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
 	ResultType ResolveClasses();
 

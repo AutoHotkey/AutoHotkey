@@ -1721,6 +1721,18 @@ inline LPTSTR IsClassDefinition(LPTSTR aBuf)
 
 
 
+void RemoveBufChar0(LPTSTR aBuf, size_t &aBufLength)
+{
+	LPTSTR cp = omit_leading_whitespace(aBuf + 1);
+	aBufLength -= (cp - aBuf);
+	if (aBufLength) // Some non-whitespace remains.
+		tmemmove(aBuf, aBuf + 1, aBufLength);
+	else
+		*aBuf = '\0';
+}
+
+
+
 bool ClassHasOpenBrace(LPTSTR aBuf, size_t aBufLength, LPTSTR aNextBuf, size_t &aNextBufLength)
 {
 	if (aBuf[aBufLength - 1] == '{') // Brace on same line (OTB).
@@ -1731,12 +1743,7 @@ bool ClassHasOpenBrace(LPTSTR aBuf, size_t aBufLength, LPTSTR aNextBuf, size_t &
 	if (*aNextBuf == '{') // Brace on next line.
 	{
 		// Remove '{' from aNextBuf since ACT_BLOCK_END is unwanted in this context.
-		LPTSTR cp = omit_leading_whitespace(aNextBuf + 1);
-		aNextBufLength -= (cp - aNextBuf);
-		if (aNextBufLength) // There's something following the '{'.
-			tmemmove(aNextBuf, aNextBuf + 1, aNextBufLength);
-		else
-			*aNextBuf = '\0';
+		RemoveBufChar0(aNextBuf, aNextBufLength);
 		return true;
 	}
 	return false;
@@ -2444,16 +2451,13 @@ examine_line:
 			if (!_tcsnicmp(buf, _T("Get"), 3) || !_tcsnicmp(buf, _T("Set"), 3))
 			{
 				LPTSTR cp = omit_leading_whitespace(buf + 3);
-				if (!*cp && *next_buf == '{' || *cp == '{' && !cp[1])
+				if (!*cp && *next_buf == '{' // Brace on next line
+					|| *cp == '{' && !cp[1] // Brace on this line
+					|| *cp == '=' && cp[1] == '>') // => expr
 				{
-					// For simplicity, pass the property definition to DefineFunc instead of the actual
-					// line text, even though it makes some error messages a bit inaccurate. (That would
-					// happen anyway when DefineFunc() finds a syntax error in the parameter list.)
 					LPTSTR dot = _tcschr(mClassPropertyDef, '.');
 					dot[1] = *buf; // Replace the x in property.xet(params).
-					if (!DefineFunc(mClassPropertyDef, func_global_var))
-						return FAIL;
-					if (*cp == '{' && !AddLine(ACT_BLOCK_BEGIN))
+					if (!DefineClassPropertyXet(buf, LINE_SIZE, cp, func_global_var))
 						return FAIL;
 					goto continue_main_loop;
 				}
@@ -2506,19 +2510,24 @@ examine_line:
 						return FAIL;
 					goto continue_main_loop;
 				}
-				if (   (!*cp || *cp == '[' || (*cp == '{' && !cp[1])) // Property
-					&& ClassHasOpenBrace(buf, buf_length, next_buf, next_buf_length)   )
+				if (!*cp || *cp == '[' || *cp == '{' || (*cp == '=' && cp[1] == '>')) // Property or invalid.
 				{
-					if (!DefineClassProperty(buf))
+					if (!DefineClassProperty(buf, LINE_SIZE, func_global_var, buf_has_brace))
 						return FAIL;
+					if (!buf_has_brace)
+					{
+						if (*next_buf != '{')
+							return ScriptError(ERR_UNRECOGNIZED_ACTION, buf); // Vague message because user's intention is unknown.
+						RemoveBufChar0(next_buf, next_buf_length);
+					}
 					goto continue_main_loop;
 				}
-			}
-			if (!_tcsnicmp(buf, _T("Static"), 6) && IS_SPACE_OR_TAB(buf[6]))
-			{
-				if (!DefineClassVars(buf + 7, true))
-					return FAIL; // Above already displayed the error.
-				goto continue_main_loop; // In lieu of "continue", for performance.
+				if (!_tcsnicmp(buf, _T("Static"), 6) && IS_SPACE_OR_TAB(buf[6]))
+				{
+					if (!DefineClassVars(buf + 7, true))
+						return FAIL; // Above already displayed the error.
+					goto continue_main_loop; // In lieu of "continue", for performance.
+				}
 			}
 			// Anything not already handled above is not valid directly inside a class definition.
 			return ScriptError(ERR_INVALID_LINE_IN_CLASS_DEF, buf);
@@ -6204,29 +6213,40 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 }
 
 
-ResultType Script::DefineClassProperty(LPTSTR aBuf)
+ResultType Script::DefineClassProperty(LPTSTR aBuf, int aBufSize, Var **aFuncGlobalVar
+	, bool &aBufHasBraceOrNotNeeded)
 {
 	LPTSTR name_end = find_identifier_end(aBuf);
-	if (*name_end == '.')
-		return ScriptError(ERR_INVALID_LINE_IN_CLASS_DEF, aBuf);
-
 	LPTSTR param_start = omit_leading_whitespace(name_end);
+	LPTSTR param_end, next_token;
 	if (*param_start == '[')
 	{
-		LPTSTR param_end = aBuf + _tcslen(aBuf);
-		if (param_end[-1] != ']')
+		++param_start;
+		param_end = param_start + FindExprDelim(param_start, ']');
+		if (!*param_end)
 			return ScriptError(ERR_MISSING_CLOSE_BRACKET, aBuf);
-		*param_start = '(';
-		param_end[-1] = ')';
+		next_token = omit_leading_whitespace(param_end + 1);
 	}
 	else
-		param_start = _T("()");
-	
+	{
+		param_end = param_start;
+		next_token = param_start;
+	}
+	if (!*next_token)
+		aBufHasBraceOrNotNeeded = false;
+	else if (*next_token == '{' && !next_token[1]
+		|| *next_token == '=' && next_token[1] == '>')
+		aBufHasBraceOrNotNeeded = true;
+	else
+		return ScriptError(ERR_INVALID_LINE_IN_CLASS_DEF, aBuf);
+
 	// Save the property name and parameter list for later use with DefineFunc().
-	mClassPropertyDef = tmalloc(_tcslen(aBuf) + 7); // +7 for ".Get()\0"
+	int name_length = int(name_end - aBuf);
+	int param_length = int(param_end - param_start);
+	mClassPropertyDef = tmalloc(name_length + param_length + 7); // +7 for ".Get()\0"
 	if (!mClassPropertyDef)
 		return ScriptError(ERR_OUTOFMEM);
-	_stprintf(mClassPropertyDef, _T("%.*s.Get%s"), int(name_end - aBuf), aBuf, param_start);
+	_stprintf(mClassPropertyDef, _T("%.*s.Get(%.*s)"), name_length, aBuf, param_length, param_start);
 
 	Object *class_object = mClassObject[mClassObjectCount - 1];
 	*name_end = 0; // Terminate for aBuf use below.
@@ -6235,6 +6255,38 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf)
 	mClassProperty = new Property();
 	if (!mClassProperty || !class_object->SetItem(aBuf, mClassProperty))
 		return ScriptError(ERR_OUTOFMEM);
+
+	if (*next_token == '=') // => expr
+	{
+		// mClassPropertyDef is already set up for "Get".
+		if (!DefineClassPropertyXet(aBuf, aBufSize, next_token, aFuncGlobalVar))
+			return FAIL;
+		// Immediately close this property definition.
+		mClassProperty = NULL;
+		free(mClassPropertyDef);
+		mClassPropertyDef = NULL;
+	}
+
+	return OK;
+}
+
+
+ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, int aBufSize, LPTSTR aEnd, Var **aFuncGlobalVar)
+{
+	// For simplicity, pass the property definition to DefineFunc instead of the actual
+	// line text, even though it makes some error messages a bit inaccurate. (That would
+	// happen anyway when DefineFunc() finds a syntax error in the parameter list.)
+	if (!DefineFunc(mClassPropertyDef, aFuncGlobalVar))
+		return FAIL;
+	if (*aEnd && !AddLine(ACT_BLOCK_BEGIN)) // *aEnd is '{' or '='.
+		return FAIL;
+	if (*aEnd == '=') // => expr
+	{
+		aEnd = omit_leading_whitespace(aEnd + 2);
+		if (!ParseAndAddLine(aEnd, aBufSize - int(aEnd - aBuf), ACT_RETURN)
+			|| !AddLine(ACT_BLOCK_END))
+			return FAIL;
+	}
 	return OK;
 }
 
