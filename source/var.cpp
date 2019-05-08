@@ -1124,7 +1124,8 @@ ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError)
 			break;
 	// Reserve operator keywords.  This makes ACT_ASSIGNEXPR more consistent with ACT_EXPRESSION,
 	// such as for "and := 1" vs. "(and := 1)", though a different error message is given.
-	if (i < ACT_FIRST_COMMAND || Script::ConvertWordOperator(aName, _tcslen(aName)))
+	if (i < ACT_FIRST_COMMAND || Script::ConvertWordOperator(aName, _tcslen(aName))
+		|| !_tcsicmp(aName, _T("Local")) || !_tcsicmp(aName, _T("Global")) || !_tcsicmp(aName, _T("Static")))
 	{
 		return DisplayNameError(_T("The following reserved word must not be used as a %s name:\n\"%-1.300s\""), aDisplayError, aName);
 	}
