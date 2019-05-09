@@ -1657,7 +1657,7 @@ UINT Script::LoadFromFile()
 
 
 
-bool Script::IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace)
+bool Script::IsFunctionDefinition(LPTSTR aBuf, LPTSTR aNextBuf)
 // Helper function for LoadIncludedFile().
 // Caller passes in an aBuf containing a candidate line such as "function(x, y)"
 // Caller has ensured that aBuf is rtrim'd.
@@ -1668,41 +1668,31 @@ bool Script::IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace)
 {
 	LPTSTR action_end = find_identifier_end(aBuf);
 	// Can't be a function definition or call without an open-parenthesis as first char found by the above.
-	// In addition, if action_end isn't NULL, that confirms that the string in aBuf prior to action_end contains
-	// no spaces, tabs, colons, or equal-signs.  As a result, it can't be:
+	// action_end points at the first character which is not usable in an identifier, such as a space, tab
+	// colon or other operator symbol.  As a result, it can't be:
 	// 1) a hotstring, since they always start with at least one colon that would be caught immediately as 
 	//    first-expr-char-is-not-open-parenthesis by the above.
 	// 2) Any kind of math or assignment, such as var:=(x+y) or var+=(x+y).
 	// The only things it could be other than a function call or function definition are:
 	// Normal label that ends in single colon but contains an open-parenthesis prior to the colon, e.g. Label(x):
-	// Single-line hotkey such as KeyName::MsgBox.  But since '(' isn't valid inside KeyName, this isn't a concern.
-	// In addition, note that it isn't necessary to check for colons that lie outside of quoted strings because
-	// we're only interested in the first "word" of aBuf: If this is indeed a function call or definition, what
-	// lies to the left of its first open-parenthesis can't contain any colons anyway because the above would
-	// have caught it as first-expr-char-is-not-open-parenthesis.  In other words, there's no way for a function's
-	// opening parenthesis to occur after a legitimate/quoted colon or double-colon in its parameters.
-	// v1.0.40.04: Added condition "action_end != aBuf" to allow a hotkey or remap or hotkey such as
-	// such as "(::" to work even if it ends in a close-parenthesis such as "(::)" or "(::MsgBox )"
+	// Single-line hotkey such as KeyName::MsgBox.  But (:: is the only valid hotkey where *action_end == '(',
+	// and that's handled by excluding action_end == aBuf.
 	if (*action_end != '(' || action_end == aBuf)
 		return false;
 	// Is it a control flow statement, such as "if(condition)"?
-	TCHAR orig_char = *action_end;
 	*action_end = '\0';
 	bool is_control_flow = ConvertActionType(aBuf, ACT_FIRST_NAMED_ACTION, ACT_FIRST_COMMAND);
-	*action_end = orig_char;
+	*action_end = '(';
 	if (is_control_flow)
 		return false;
 	// It's not control flow.
-	LPTSTR aBuf_last_char = action_end + _tcslen(action_end) - 1; // Above has already ensured that action_end is "(...".
-	if (aPendingFunctionHasBrace) // Caller specified that an optional open-brace may be present at the end of aBuf.
-	{
-		if (*aPendingFunctionHasBrace = (*aBuf_last_char == '{')) // Caller has ensured that aBuf is rtrim'd.
-		{
-			*aBuf_last_char = '\0'; // For the caller, remove it from further consideration.
-			aBuf_last_char = aBuf + rtrim(aBuf, aBuf_last_char - aBuf) - 1; // Omit trailing whitespace too.
-		}
-	}
-	return *aBuf_last_char == ')'; // This last check avoids detecting a label such as "Label(x):" as a function.
+	LPTSTR param_end = action_end + FindExprDelim(action_end, ')', 1);
+	if (*param_end != ')')
+		return false;
+	LPTSTR next_token = omit_leading_whitespace(param_end + 1);
+	return *next_token == 0 && *aNextBuf == '{' // Brace on next line.
+		|| *next_token == '{' && next_token[1] == 0 // Brace on same line.
+		|| *next_token == '=' && next_token[1] == '>'; // Fn() => expr
 }
 
 
@@ -2484,17 +2474,11 @@ examine_line:
 			, phys_line_number, has_continuation_section))
 			return FAIL;
 
-		if (IsFunction(buf, &buf_has_brace)) // If true, it's either a function definition or a function call.
+		if (IsFunctionDefinition(buf, next_buf))
 		{
-			// Open brace means this is a function definition. NOTE: Both bufs were already ltrimmed by GetLine().
-			if (buf_has_brace || *next_buf == '{')
-			{
-				if (!DefineFunc(buf, func_global_var))
-					return FAIL;
-				if (buf_has_brace && !AddLine(ACT_BLOCK_BEGIN))
-					return FAIL;
-				goto continue_main_loop;
-			}
+			if (!DefineFunc(buf, func_global_var))
+				return FAIL;
+			goto continue_main_loop;
 		}
 
 		if (mClassObjectCount && !g->CurrentFunc) // Inside a class definition (and not inside a method).
@@ -5768,7 +5752,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 
 
 
-ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsFatArrow)
+ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsInExpression)
 // Returns OK or FAIL.
 // Caller has already called ValidateName() on the function, and it is known that this valid name
 // is followed immediately by an open-paren.  aFuncExceptionVar is the address of an array on
@@ -5778,7 +5762,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsFatArr
 	LPTSTR param_end, param_start = _tcschr(aBuf, '('); // Caller has ensured that this will return non-NULL.
 	int insert_pos;
 	
-	bool is_method = mClassObjectCount && !g->CurrentFunc && !aIsFatArrow;
+	bool is_method = mClassObjectCount && !g->CurrentFunc && !aIsInExpression;
 	if (is_method) // Class method or property getter/setter.
 	{
 		Object *class_object = mClassObject[mClassObjectCount - 1];
@@ -5839,7 +5823,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsFatArr
 	TCHAR buf[LINE_SIZE], *target;
 	bool param_must_have_default = false;
 
-	func.mIsFatArrow = aIsFatArrow;
+	func.mIsFuncExpression = aIsInExpression;
 
 	if (is_method)
 	{
@@ -6013,10 +5997,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsFatArr
 		//else it's ')', in which case the next iteration will handle it.
 		// Above has ensured that param_start now points to the next parameter, or ')' if none.
 	} // for() each formal parameter.
-
-	if (param_start[1]) // Something follows the ')' other than OTB (which was handled at an earlier stage).
-		return ScriptError(ERR_INVALID_FUNCDECL, aBuf);
-
+	
 	if (param_count)
 	{
 		// Allocate memory only for the actual number of parameters actually present.
@@ -6087,7 +6068,31 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsFatArr
 		mGlobalVarCountMax = aFuncGlobalVar ? MAX_FUNC_VAR_GLOBALS : 0;
 	}
 	mNextLineIsFunctionBody = false; // This is part of a workaround for functions which start with a nested function.
-	// Indicate success:
+
+	// At this point, param_start points to ')'.
+	ASSERT(*param_start == ')');
+	param_start = omit_leading_whitespace(param_start + 1);
+	if (*param_start == '{') // OTB.
+	{
+		if (!AddLine(ACT_BLOCK_BEGIN))
+			return FAIL;
+		ASSERT(!param_start[1]); // IsFunctionDefinition() verified this.
+	}
+	else if (*param_start == '=' && '>' == param_start[1]) // => expr
+	{
+		param_start = omit_leading_whitespace(param_start + 2);
+		if (!*param_start)
+			return ScriptError(ERR_INVALID_FUNCDECL, aBuf);
+		if (!AddLine(ACT_BLOCK_BEGIN)
+			|| !ParseAndAddLine(param_start, 0, ACT_RETURN)
+			|| !AddLine(ACT_BLOCK_END))
+			return FAIL;
+	}
+	else
+	{
+		// IsFunctionDefinition() permits only {, => or \0.
+		ASSERT(!*param_start);
+	}
 	return OK;
 }
 
@@ -6409,8 +6414,8 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			else
 			{
 				// Create an __Init method for this class.
-				TCHAR def[] = _T("__Init()");
-				if (!DefineFunc(def, NULL) || !AddLine(ACT_BLOCK_BEGIN)
+				TCHAR def[] = _T("__Init(){");
+				if (!DefineFunc(def, NULL)
 					|| (class_object->Base() && !ParseAndAddLine(_T("base.__Init()"), 0, ACT_EXPRESSION))) // Initialize base-class variables first. Relies on short-circuit evaluation.
 					return FAIL;
 				
@@ -7897,7 +7902,7 @@ Line *Script::PreparseBlocksStmtBody(Line *aStartingLine, Line *aParentLine, con
 		
 		if (body->mActionType == ACT_BLOCK_BEGIN && body->mAttribute) // Function body.
 		{
-			if (!((Func *)body->mAttribute)->mIsFatArrow)
+			if (!((Func *)body->mAttribute)->mIsFuncExpression)
 			{
 				// Normal function definitions aren't allowed here because it simply wouldn't make sense.
 				return body->PreparseError(_T("Unexpected function"));

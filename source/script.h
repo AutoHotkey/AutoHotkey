@@ -1699,7 +1699,7 @@ public:
 	// override in the script.  So mIsBuiltIn should always be used to determine whether the function
 	// is truly built-in, not its name.
 	bool mIsVariadic;
-	bool mIsFatArrow;
+	bool mIsFuncExpression; // Whether this function was defined *within* an expression and is therefore allowed under a control flow statement.
 
 #define MAX_FUNC_OUTPUT_VAR 7
 	bool ArgIsOutputVar(int aIndex)
@@ -1827,7 +1827,7 @@ public:
 		, mDefaultVarType(VAR_DECLARE_LOCAL)
 		, mIsBuiltIn(aIsBuiltIn)
 		, mIsVariadic(false)
-		, mIsFatArrow(false)
+		, mIsFuncExpression(false)
 	{}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
@@ -2770,7 +2770,7 @@ private:
 	ResultType GetLineContExpr(TextStream *ts, LPTSTR aBuf, size_t &aBufLength, LPTSTR aNextBuf, size_t &aNextBufLength
 		, LineNumberType &aPhysLineNumber, bool &aHasContinuationSection);
 	ResultType BalanceExprError(int aBalance, TCHAR aExpect[], LPTSTR aLineText);
-	static bool IsFunction(LPTSTR aBuf, bool *aPendingFunctionHasBrace = NULL);
+	static bool IsFunctionDefinition(LPTSTR aBuf, LPTSTR aNextBuf);
 	ResultType IsDirective(LPTSTR aBuf);
 	ResultType ConvertDirectiveBool(LPTSTR aBuf, bool &aResult, bool aDefault);
 	ResultType ParseAndAddLine(LPTSTR aLineText, int aBufSize = 0, ActionTypeType aActionType = ACT_INVALID
@@ -2874,7 +2874,7 @@ public:
 	void DeleteTimer(IObject *aLabel);
 	LPTSTR DefaultDialogTitle();
 
-	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsFatArrow = false);
+	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsInExpression = false);
 #ifndef AUTOHOTKEYSC
 	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
 #endif
