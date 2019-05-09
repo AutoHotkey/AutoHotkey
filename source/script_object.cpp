@@ -596,6 +596,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 						if (mBase)
 							mBase->Release();
 						mBase = obj; // May be NULL.
+						return OK;
 					}
 	
 					if (mBase)
@@ -725,11 +726,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// L34: Assigning an empty string no longer removes the field.
 			if ( (field || (field = prop ? prop_field : Insert(key_type, key, insert_pos)))
 				&& field->Assign(value_param) )
-			{
-				// See the similar call below for comments.
-				field->Get(aResultToken);
 				return OK;
-			}
 			_o_throw(ERR_OUTOFMEM);
 		}
 	}
@@ -742,11 +739,11 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// Caller takes care of copying the result into persistent memory when necessary, and must
 			// ensure this is done before they Release() this object.  For ExpandExpression(), there are
 			// two different danger scenarios:
-			//   1) Command % {value:"string"}.value  ; Temporary object could be released prematurely.
-			//   2) Fn( obj.value, obj := "" )        ; Object is freed by the assignment.
-			// For #1, SYM_OBJECT refs are released after the result of the expression is copied into the
-			// deref buf (as of commit d1ab199).  For #2, the value is copied immediately after we return,
-			// because the result of any BIF is assumed to be volatile if expression eval isn't finished.
+			//   1) Fn {value:"string"}.value   ; Temporary object could be released prematurely.
+			//   2) Fn( obj.value, obj := "" )  ; Object is freed by the assignment.
+			// For both cases, the value is copied immediately after we return, because the result of any
+			// BIF is assumed to be volatile if expression eval isn't finished.  The function call in #1
+			// is handled by ExpandExpression() since commit 2a276145.
 			field->Get(aResultToken);
 			return OK;
 		}
@@ -1790,11 +1787,10 @@ ResultType STDMETHODCALLTYPE Property::Invoke(ResultToken &aResultToken, ExprTok
 		{
 			if (IS_INVOKE_SET)
 			{
-				if (aParamCount != 2)
-					return OK;
 				// Allow changing the GET/SET function, since it's simple and seems harmless.
-				*member = TokenToFunc(*aParam[1]); // Can be NULL.
-				--aParamCount;
+				if (aParamCount == 2)
+					*member = TokenToFunc(*aParam[1]); // Can be NULL.
+				return OK;
 			}
 			if (*member && aParamCount == 1)
 			{

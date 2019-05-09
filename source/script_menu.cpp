@@ -103,8 +103,7 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 		{
 			if (*param1) // Since a menu item has been specified, let a later switch() handle it.
 				break;
-			if (!SetDefault())
-				return FAIL;
+			return SetDefault();
 		}
 		_o_return(mDefault ? mDefault->mName : _T(""));
 
@@ -134,6 +133,7 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 				mClickCount = 1;  // Single-click to activate menu's default item.
 			else if (mClickCount > 2)
 				mClickCount = 2;  // Double-click.
+			return OK;
 		}
 		_o_return(mClickCount);
 	}

@@ -1237,10 +1237,8 @@ ResultType STDMETHODCALLTYPE ComObject::Invoke(ResultToken &aResultToken, ExprTo
 	}
 	else if	(IS_INVOKE_SET)
 	{
-		// Allow chaining, e.g. obj2.prop := obj1.prop := val.
-		aResultToken.CopyValueFrom(*aParam[aParamCount]); // Can't be SYM_VAR at this stage because TokenToVariant() would have converted it to its contents.
-		if (aResultToken.symbol == SYM_OBJECT)
-			aResultToken.object->AddRef();
+		// Op_ObjInvoke sets the result of IT_SET.
+		VariantClear(&varResult);
 	}
 	else
 	{

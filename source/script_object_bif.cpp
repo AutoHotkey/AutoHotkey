@@ -148,6 +148,22 @@ BIF_DECL(Op_ObjInvoke)
 	{
 		aResultToken.SetExitResult(result);
 	}
+	else if (invoke_type & IT_SET)
+	{
+		aResultToken.Free();
+		aResultToken.mem_to_free = NULL;
+		auto &value = *aParam[aParamCount - 1];
+		switch (value.symbol)
+		{
+		case SYM_VAR:
+			value.var->ToToken(aResultToken);
+			break;
+		case SYM_OBJECT:
+			value.object->AddRef();
+		default:
+			aResultToken.CopyValueFrom(value);
+		}
+	}
 }
 	
 

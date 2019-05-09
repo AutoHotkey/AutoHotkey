@@ -370,8 +370,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 		{
 			if (IS_INVOKE_SET)
 			{
-				_f_set_retval_p(ParamIndexToString(0, _f_retval_buf));
-				SetWindowText(mHwnd, aResultToken.marker);
+				SetWindowText(mHwnd, ParamIndexToString(0, _f_number_buf));
 				return OK;
 			}
 			else
@@ -388,9 +387,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 		{
 			if (IS_INVOKE_SET)
 			{
-				ResultType result = SetMenu(*aParam[0]);
-				if (result != OK)
-					return result; // Already displayed error.
+				return SetMenu(*aParam[0]);
 			}
 			if (mMenu)
 			{
@@ -436,7 +433,10 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 		{
 			int& margin = member == P_MarginX ? mMarginX : mMarginY;
 			if (IS_INVOKE_SET)
+			{
 				margin = Scale(ParamIndexToInt(0)); // Seems okay to allow negative margins.
+				return OK;
+			}
 			_o_return(Unscale(margin));
 		}
 		case P_BackColor:
@@ -456,6 +456,8 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 					// Force the window to repaint so that colors take effect immediately.
 					// UpdateWindow() isn't enough sometimes/always, so do something more aggressive:
 					InvalidateRect(mHwnd, NULL, TRUE);
+				
+				return OK;
 			}
 			
 			// Return the property's proper value, which may differ from the value assigned by the script.
@@ -484,8 +486,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 			// Name is used to help identify the Gui in event handlers, and has no use outside
 			// of the script being able to assign or retrieve it using this property.
 			if (IS_INVOKE_SET)
-				if (!SetName(ParamIndexToString(0, _f_number_buf)))
-					return FAIL;
+				return SetName(ParamIndexToString(0, _f_number_buf));
 			_o_return_p(mName ? mName : _T(""));
 		}
 	}
@@ -775,8 +776,7 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 
 		case P_Name:
 			if (IS_INVOKE_SET)
-				if (!gui->ControlSetName(*this, ParamIndexToString(0, _f_number_buf)))
-					_o_return_FAIL;
+				return gui->ControlSetName(*this, ParamIndexToString(0, _f_number_buf));
 			_o_return_p(name ? name : _T(""));
 
 		case P_Type:
@@ -810,21 +810,8 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 		case P_Value:
 			if (IS_INVOKE_SET)
 			{
-				LPTSTR value = ParamIndexToString(0, _f_retval_buf);
-				if (!gui->ControlSetContents(*this, value, aResultToken, member == P_Text))
-					return FAIL;
-				// For simplicity and code size, just return the value passed by the script,
-				// even though it may differ from the type or value of the control's content.
-				// It seems best to return a pure number if one was given (e.g. for UpDown/Slider).
-				switch (TokenIsPureNumeric(*aParam[0]))
-				{
-				case PURE_INTEGER:
-					_o_return(ParamIndexToInt64(0));
-				case PURE_FLOAT:
-					_o_return(ParamIndexToDouble(0));
-				default:
-					_o_return_p(value);
-				}
+				LPTSTR value = ParamIndexToString(0, _f_number_buf);
+				return gui->ControlSetContents(*this, value, aResultToken, member == P_Text);
 			}
 			else
 				return gui->ControlGetContents(aResultToken, *this
@@ -842,14 +829,20 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 		case P_Enabled:
 		{
 			if (IS_INVOKE_SET)
+			{
 				gui->ControlSetEnabled(*this, (bool)ParamIndexToBOOL(0));
+				return OK;
+			}
 			_o_return(IsWindowEnabled(hwnd) ? 1 : 0);
 		}
 
 		case P_Visible:
 		{
 			if (IS_INVOKE_SET)
+			{
 				gui->ControlSetVisible(*this, (bool)ParamIndexToBOOL(0));
+				return OK;
+			}
 			_o_return(IsWindowVisible(hwnd) ? 1 : 0);
 		}
 

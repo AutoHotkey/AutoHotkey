@@ -1012,7 +1012,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 					codepage = Line::ConvertFileEncoding(ParamIndexToString(0));
 				if (codepage != -1)
 					mFile.SetCodePage(codepage & ~CP_AHKNOBOM); // Ignore "-RAW" by removing the CP_AHKNOBOM flag; see comments above.
-				// Now fall through to below and return the actual codepage.
+				return OK;
 			}
 			LPTSTR name;
 			codepage = mFile.GetCodePage();
