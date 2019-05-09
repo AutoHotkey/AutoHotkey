@@ -281,12 +281,8 @@ inline size_t rtrim(LPTSTR aStr, size_t aLength = -1)
 		// Otherwise, it is a space or tab...
 		if (cp == aStr) // ... and we're now at the first character of the string...
 		{
-			if (IS_SPACE_OR_TAB(*cp)) // ... and that first character is also a space or tab...
-			{
-				*cp = '\0'; // ... so the entire string is made empty...
-				return 0; // Fix for v1.0.39: Must return 0 not aLength in this case.
-			}
-			return aLength; // ... and we return in any case.
+			*cp = '\0'; // ... so the entire string is made empty.
+			return 0;
 		}
 		// else it's a space or tab, and there are still more characters to check.  Let the loop
 		// do its decrements.
