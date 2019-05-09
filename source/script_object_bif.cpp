@@ -107,7 +107,7 @@ BIF_DECL(Op_ObjInvoke)
 	else if (INVOKE_NOT_HANDLED == (result = g_MetaObject.Invoke(aResultToken, *obj_param, invoke_type | IF_META, aParam, aParamCount)))
 	{
 		// Since above did not handle it, check for attempts to access .base of non-object value (g_MetaObject itself).
-		if (   invoke_type != IT_CALL // Exclude things like "".base().
+		if (   !(invoke_type & (IT_CALL | IF_DEFAULT)) // Exclude things like "".base() and ""["base"].
 			&& aParamCount > (invoke_type == IT_SET ? 2 : 0) // SET is supported only when an index is specified: "".base[x]:=y
 			&& !_tcsicmp(TokenToString(*aParam[0]), _T("base"))   )
 		{
