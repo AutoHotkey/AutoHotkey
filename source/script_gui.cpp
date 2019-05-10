@@ -766,7 +766,7 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 			}
 			else
 			{
-				if (!TokenIsNumeric(*aParam[0]))
+				if (!ParamIndexIsNumeric(0))
 					_o_throw(ERR_PARAM1_INVALID);
 				event_code = ParamIndexToInt(0);
 				event_kind = member == M_OnNotify ? GUI_EVENTKIND_NOTIFY : GUI_EVENTKIND_COMMAND;

@@ -19,6 +19,7 @@
 #define ParamIndexToCaseSense(index)				(!ParamIndexIsOmitted(index) && ParamIndexToBOOL(index) ? SCS_SENSITIVE \
 													: (g->StringCaseSense != SCS_INSENSITIVE ? SCS_INSENSITIVE_LOCALE : SCS_INSENSITIVE) )
 
+#define ParamIndexIsNumeric(index)  (TokenIsNumeric(*aParam[(index)]))
 
 // For functions that allow "" to mean parameter is omitted.
 #define ParamIndexIsOmittedOrEmpty(index)  (ParamIndexIsOmitted(index) || TokenIsEmptyString(*aParam[(index)], TRUE))

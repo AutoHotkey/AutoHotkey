@@ -2051,7 +2051,7 @@ BIF_DECL(BIF_Process)
 		DWORD start_time;
 		if (aParamCount > 1) // The param containing the timeout value was specified.
 		{
-			if (!TokenIsNumeric(*aParam[1]))
+			if (!ParamIndexIsNumeric(1))
 				_f_throw(ERR_PARAM2_INVALID);
 			wait_indefinitely = false;
 			sleep_duration = (int)(TokenToDouble(*aParam[1]) * 1000); // Can be zero.
@@ -11956,7 +11956,7 @@ ResultType RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFla
 	int p;
 	if (ParamIndexIsOmitted(0))
 		p = 0;
-	else if (TokenIsNumeric(*aParam[0]))
+	else if (ParamIndexIsNumeric(0))
 		p = ParamIndexToInt(0);
 	else if (!mPatternName) // There are no named subpatterns, so param 0 is invalid.
 		p = -1;
@@ -14365,8 +14365,8 @@ BIF_DECL(BIF_Random)
 		init_genrand((UINT)ParamIndexToInt64(0)); // It's documented that an unsigned 32-bit number is required.
 		_f_return_empty;
 	}
-	SymbolType arg1type = aParamCount > 0 ? TokenIsNumeric(*aParam[0]) : SYM_MISSING;
-	SymbolType arg2type = aParamCount > 1 ? TokenIsNumeric(*aParam[1]) : SYM_MISSING;
+	SymbolType arg1type = aParamCount > 0 ? ParamIndexIsNumeric(0) : SYM_MISSING;
+	SymbolType arg2type = aParamCount > 1 ? ParamIndexIsNumeric(1) : SYM_MISSING;
 	bool use_float = arg1type == PURE_FLOAT || arg2type == PURE_FLOAT;
 	if (use_float)
 	{
@@ -16762,7 +16762,7 @@ BIF_DECL(BIF_Exception)
 	else
 	{
 #ifdef CONFIG_DEBUGGER
-		int offset = TokenIsNumeric(*aParam[1]) ? ParamIndexToInt(1) : 0;
+		int offset = ParamIndexIsNumeric(1) ? ParamIndexToInt(1) : 0;
 		DbgStack::Entry *se = g_Debugger.mStack.mTop;
 		while (--se >= g_Debugger.mStack.mBottom)
 		{
