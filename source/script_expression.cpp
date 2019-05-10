@@ -1831,42 +1831,6 @@ free_and_return:
 FreeVars *Func::sFreeVars = NULL;
 
 
-bool Func::Call(ResultToken &aResultToken, int aParamCount, ...)
-{
-	ASSERT(aParamCount >= 0);
-
-	// Allocate and build the parameter array
-	ExprTokenType **aParam = (ExprTokenType**) _alloca(aParamCount*sizeof(ExprTokenType*));
-	ExprTokenType *args    = (ExprTokenType*)  _alloca(aParamCount*sizeof(ExprTokenType));
-	va_list va;
-	va_start(va, aParamCount);
-	for (int i = 0; i < aParamCount; i ++)
-	{
-		ExprTokenType &cur_arg = args[i];
-		aParam[i] = &cur_arg;
-
-		// Initialize the argument structure
-		cur_arg.symbol = va_arg(va, SymbolType);
-
-		// Fill in the argument value
-		switch (cur_arg.symbol)
-		{
-			case SYM_INTEGER: cur_arg.value_int64  = va_arg(va, __int64);  break;
-			case SYM_STRING:
-				cur_arg.marker = va_arg(va, LPTSTR);
-				cur_arg.marker_length = -1;
-				break;
-			case SYM_FLOAT:   cur_arg.value_double = va_arg(va, double);   break;
-			case SYM_OBJECT:  cur_arg.object       = va_arg(va, IObject*); break;
-		}
-	}
-	va_end(va);
-
-	// Perform function call
-	return Call(aResultToken, aParam, aParamCount);
-}
-
-
 
 ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 // Caller should either provide both or omit both of the parameters.  If provided, it means

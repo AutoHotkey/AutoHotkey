@@ -12151,29 +12151,29 @@ int RegExCallout(pcret_callout_block *cb)
 	//++cb->pattern_position;
 	//++cb->start_match;
 	//++cb->current_position;
-
-	func.Call(result_token, 5
-		, FUNC_ARG_OBJ(match_object)
-		, FUNC_ARG_INT(cb->callout_number)
-		, FUNC_ARG_INT(cb->start_match + 1) // FoundPos (distinct from Match.Pos, which hasn't been set yet)
-		, FUNC_ARG_STR(const_cast<LPTSTR>(cb->subject)) // Haystack
-		, FUNC_ARG_STR(cd.re_text)); // NeedleRegEx
 	
-	int number_to_return;
-	if (result_token.Exited())
+	ExprTokenType param[] =
+	{
+		match_object,
+		cb->callout_number,
+		cb->start_match + 1, // FoundPos (distinct from Match.Pos, which hasn't been set yet)
+		const_cast<LPTSTR>(cb->subject), // Haystack
+		cd.re_text // NeedleRegEx
+	};
+	__int64 number_to_return;
+	auto result = CallMethod(&func, &func, _T("Call"), param, _countof(param), &number_to_return);
+	if (result == FAIL || result == EARLY_EXIT)
 	{
 		number_to_return = PCRE_ERROR_CALLOUT;
-		cd.result_token->SetExitResult(result_token.Result());
+		cd.result_token->SetExitResult(result);
 	}
 	else
-		number_to_return = (int)TokenToInt64(result_token);
+		number_to_return = TokenToInt64(result_token);
 	
-	result_token.Free();
-
 	g->EventInfo = EventInfo_saved;
 
 	// Behaviour of return values is defined by PCRE.
-	return number_to_return;
+	return (int)number_to_return;
 }
 
 pcret *get_compiled_regex(LPTSTR aRegEx, pcret_extra *&aExtra, int *aOptionsLength, ResultToken *aResultToken)

@@ -1721,7 +1721,6 @@ public:
 
 	// bool result indicates whether aResultToken contains a value (i.e. false for FAIL/EARLY_EXIT).
 	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false, FreeVars *aUpVars = NULL);
-	bool Call(ResultToken &aResultToken, int aParamCount, ...);
 
 // Macros for specifying arguments in Func::Call(aResultToken, aParamCount, ...)
 #define FUNC_ARG_INT(_arg)   SYM_INTEGER, static_cast<__int64>(_arg)
