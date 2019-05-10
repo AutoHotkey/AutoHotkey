@@ -959,10 +959,10 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			else
 			{
 		case Seek:
-				__int64 distance = TokenToInt64(*aParam[1]);
+				__int64 distance = ParamIndexToInt64(0);
 				int origin;
-				if (aParamCount >= 2)
-					origin = (int)TokenToInt64(*aParam[2]);
+				if (aParamCount > 1)
+					origin = ParamIndexToInt(1);
 				else // Defaulting to SEEK_END when distance is negative seems more useful than allowing it to be interpreted as an unsigned value (> 9.e18 bytes).
 					origin = (distance < 0) ? SEEK_END : SEEK_SET;
 
