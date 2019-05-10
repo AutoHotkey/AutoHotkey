@@ -1341,6 +1341,11 @@ public:
 		return VAR_TYPE_INVALID;
 	}
 
+	static bool IsValidFileCodePage(UINT aCP)
+	{
+		return aCP == 0 || aCP == 1200 || IsValidCodePage(aCP);
+	}
+
 	static UINT ConvertFileEncoding(LPTSTR aBuf)
 	// Returns the encoding with possible CP_AHKNOBOM flag, or (UINT)-1 if invalid.
 	{
@@ -1352,10 +1357,18 @@ public:
 		if (!_tcsicmp(aBuf, _T("UTF-16")))		return 1200;
 		if (!_tcsicmp(aBuf, _T("UTF-16-RAW")))	return 1200 | CP_AHKNOBOM;
 		if (!_tcsnicmp(aBuf, _T("CP"), 2) && IsNumeric(aBuf + 2, false, false))
+		{
 			// CPnnn
-			return ATOU(aBuf + 2);
+			UINT cp = ATOU(aBuf + 2);
+			// Catch invalid or (not installed) code pages early rather than
+			// failing conversion later on.
+			if (IsValidFileCodePage(cp))
+				return cp;
+		}
 		return -1;
 	}
+
+	static UINT ConvertFileEncoding(ExprTokenType &aToken);
 
 	static ResultType ValidateMouseCoords(LPTSTR aX, LPTSTR aY)
 	{

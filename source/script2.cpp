@@ -13544,13 +13544,9 @@ BIF_DECL(BIF_StrGetPut)
 		}
 		if (aParam < aParam_end)
 		{
-			if (!TokenIsNumeric(**aParam))
-			{
-				encoding = Line::ConvertFileEncoding(TokenToString(**aParam));
-				if (encoding == -1)
-					_f_throw(ERR_INVALID_ENCODING);
-			}
-			else encoding = (UINT)TokenToInt64(**aParam);
+			encoding = Line::ConvertFileEncoding(**aParam);
+			if (encoding == -1)
+				_f_throw(ERR_INVALID_ENCODING);
 		}
 	}
 	// Note: CP_AHKNOBOM is not supported; "-RAW" must be omitted.

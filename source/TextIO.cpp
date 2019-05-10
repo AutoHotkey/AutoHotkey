@@ -1006,12 +1006,10 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			UINT codepage;
 			if (IS_INVOKE_SET)
 			{
-				if (TokenIsNumeric(*aParam[0]))
-					codepage = (UINT)ParamIndexToInt64(0);
-				else
-					codepage = Line::ConvertFileEncoding(ParamIndexToString(0));
-				if (codepage != -1)
-					mFile.SetCodePage(codepage & ~CP_AHKNOBOM); // Ignore "-RAW" by removing the CP_AHKNOBOM flag; see comments above.
+				codepage = Line::ConvertFileEncoding(*aParam[0]);
+				if (codepage == -1)
+					_o_throw(ERR_INVALID_VALUE);
+				mFile.SetCodePage(codepage & ~CP_AHKNOBOM); // Ignore "-RAW" by removing the CP_AHKNOBOM flag; see comments above.
 				return OK;
 			}
 			LPTSTR name;
@@ -1185,15 +1183,9 @@ BIF_DECL(BIF_FileOpen)
 
 	if (aParamCount > 2)
 	{
-		if (!TokenIsNumeric(*aParam[2]))
-		{
-			aEncoding = Line::ConvertFileEncoding(TokenToString(*aParam[2]));
-			if (aEncoding == -1)
-			{	// Invalid param.
-				goto invalid_param;
-			}
-		}
-		else aEncoding = (UINT) TokenToInt64(*aParam[2]);
+		aEncoding = Line::ConvertFileEncoding(*aParam[2]);
+		if (aEncoding == -1)
+			goto invalid_param;
 	}
 	else aEncoding = g->Encoding;
 	
@@ -1226,6 +1218,17 @@ BIF_DECL(BIF_FileOpen)
 invalid_param:
 	g->LastError = ERROR_INVALID_PARAMETER; // For consistency.
 	_f_throw(ERR_PARAM_INVALID);
+}
+
+
+UINT Line::ConvertFileEncoding(ExprTokenType &aToken)
+{
+	if (TokenIsNumeric(aToken))
+	{
+		UINT cp = (UINT)TokenToInt64(aToken);
+		return IsValidFileCodePage(cp) ? cp : -1;
+	}
+	return ConvertFileEncoding(TokenToString(aToken));
 }
 
 
