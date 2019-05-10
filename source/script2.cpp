@@ -7966,7 +7966,7 @@ ResultType ConvertFileOptions(LPTSTR aOptions, UINT &codepage, bool &translate_c
 			else
 			{
 				codepage = Line::ConvertFileEncoding(cp);
-				if (codepage == -1)
+				if (codepage == -1 || cisdigit(*cp)) // Require "cp" prefix in FileRead/FileAppend options.
 					return g_script.ScriptError(ERR_INVALID_OPTION, cp);
 			}
 			break;

@@ -1349,17 +1349,19 @@ public:
 	static UINT ConvertFileEncoding(LPTSTR aBuf)
 	// Returns the encoding with possible CP_AHKNOBOM flag, or (UINT)-1 if invalid.
 	{
-		if (!aBuf || !*aBuf)
+		if (!*aBuf)
 			// Active codepage, equivalent to specifying CP0.
 			return CP_ACP;
 		if (!_tcsicmp(aBuf, _T("UTF-8")))		return CP_UTF8;
 		if (!_tcsicmp(aBuf, _T("UTF-8-RAW")))	return CP_UTF8 | CP_AHKNOBOM;
 		if (!_tcsicmp(aBuf, _T("UTF-16")))		return 1200;
 		if (!_tcsicmp(aBuf, _T("UTF-16-RAW")))	return 1200 | CP_AHKNOBOM;
-		if (!_tcsnicmp(aBuf, _T("CP"), 2) && IsNumeric(aBuf + 2, false, false))
+		if (!_tcsnicmp(aBuf, _T("CP"), 2))
+			aBuf += 2;
+		if (IsNumeric(aBuf, false, false))
 		{
 			// CPnnn
-			UINT cp = ATOU(aBuf + 2);
+			UINT cp = ATOU(aBuf);
 			// Catch invalid or (not installed) code pages early rather than
 			// failing conversion later on.
 			if (IsValidFileCodePage(cp))
