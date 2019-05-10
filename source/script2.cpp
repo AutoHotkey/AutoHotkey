@@ -2051,6 +2051,8 @@ BIF_DECL(BIF_Process)
 		DWORD start_time;
 		if (aParamCount > 1) // The param containing the timeout value was specified.
 		{
+			if (!TokenIsNumeric(*aParam[1]))
+				_f_throw(ERR_PARAM2_INVALID);
 			wait_indefinitely = false;
 			sleep_duration = (int)(TokenToDouble(*aParam[1]) * 1000); // Can be zero.
 			start_time = GetTickCount();
