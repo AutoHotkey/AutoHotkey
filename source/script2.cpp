@@ -13186,10 +13186,11 @@ BIF_DECL(BIF_NumGet)
 	// The following aren't covered by the check below:
 	// - Due to rarity of negative offsets, only the right-side boundary is checked, not the left.
 	// - Due to rarity and to simplify things, Float/Double aren't checked.
-	if (op.target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
+	if (!op.num_size
+		|| op.target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
 		|| op.target+op.num_size > op.right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw(ERR_PARAM_INVALID);
 	}
 
 	switch (op.num_size)
@@ -13215,11 +13216,12 @@ BIF_DECL(BIF_NumGet)
 		else
 			aResultToken.value_int64 = *(unsigned short *)op.target;
 		break;
-	default: // size 1
+	case 1:
 		if (op.is_signed) // Don't use ternary because that messes up type-casting.
 			aResultToken.value_int64 = *(char *)op.target;
 		else
 			aResultToken.value_int64 = *(unsigned char *)op.target;
+		break;
 	}
 	if (!op.is_integer)
 		aResultToken.symbol = SYM_FLOAT;
@@ -13429,7 +13431,9 @@ BIF_DECL(BIF_NumPut)
 		num_end = op.target + op.num_size; // This is used below and also as NumPut's return value. It's the address to the right of the item to be written.
 
 		// See comments in NumGet about the following section:
-		if (op.target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
+		if (!op.num_size
+			|| !TokenIsNumeric(token_to_write)
+			|| op.target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
 			|| num_end > op.right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 		{
 			_f_throw(ERR_PARAM_INVALID);
