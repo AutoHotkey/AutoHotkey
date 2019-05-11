@@ -13435,28 +13435,31 @@ BIF_DECL(BIF_NumPut)
 			_f_throw(ERR_PARAM_INVALID);
 		}
 
+		union
+		{
+			__int64 num_i64;
+			double num_f64;
+			float num_f32;
+		};
+
+		// Note that since v2.0-a083-97803aeb, TokenToInt64 supports conversion of large unsigned 64-bit
+		// numbers from strings (producing a negative value, but with the right bit representation).
+		if (op.is_integer)
+			num_i64 = TokenToInt64(token_to_write);
+		else
+		{
+			num_f64 = TokenToDouble(token_to_write);
+			if (op.num_size == 4)
+				num_f32 = (float)num_f64;
+		}
+
+		// This method benchmarked marginally faster than memcpy for the multi-param mode.
 		switch (op.num_size)
 		{
-		case 4: // Listed first for performance.
-			if (op.is_integer)
-				*(unsigned int *)op.target = (unsigned int)TokenToInt64(token_to_write);
-			else // Float (32-bit).
-				*(float *)op.target = (float)TokenToDouble(token_to_write);
-			break;
-		case 8:
-			if (op.is_integer)
-				// v1.0.48: Support unsigned 64-bit integers like DllCall does:
-				*(__int64 *)op.target = (!op.is_signed && !IS_NUMERIC(token_to_write.symbol)) // Must not be numeric because those are already signed values, so should be written out as signed so that whoever uses them can interpret negatives as large unsigned values.
-				? (__int64)ATOU64(TokenToString(token_to_write)) // For comments, search for ATOU64 in BIF_DllCall().
-				: TokenToInt64(token_to_write);
-			else // Double (64-bit).
-				*(double *)op.target = TokenToDouble(token_to_write);
-			break;
-		case 2:
-			*(unsigned short *)op.target = (unsigned short)TokenToInt64(token_to_write);
-			break;
-		default: // size 1
-			*(unsigned char *)op.target = (unsigned char)TokenToInt64(token_to_write);
+		case 8: *(UINT64 *)op.target = (UINT64)num_i64; break;
+		case 4: *(UINT32 *)op.target = (UINT32)num_i64; break;
+		case 2: *(UINT16 *)op.target = (UINT16)num_i64; break;
+		case 1: *(UINT8 *)op.target = (UINT8)num_i64; break;
 		}
 
 		n_param += 2;
