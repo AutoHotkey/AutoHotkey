@@ -533,19 +533,23 @@ public:
 
 
 //
-// ClipboardAll: Represents a blob of clipboard data (all formats retrieved from clipboard).
+// Buffer
 //
 
-class ClipboardAll : public ObjectBase
+class BufferObject : public ObjectBase
 {
+protected:
 	void *mData;
 	size_t mSize;
 
 public:
 	void *Data() { return mData; }
 	size_t Size() { return mSize; }
-	ClipboardAll(void *aData, size_t aSize) : mData(aData), mSize(aSize) {}
-	~ClipboardAll() { free(mData); }
+	ResultType Resize(size_t aNewSize);
+
+	BufferObject() = delete;
+	BufferObject(void *aData, size_t aSize) : mData(aData), mSize(aSize) {}
+	~BufferObject() { free(mData); }
 
 	enum MemberID
 	{
@@ -557,6 +561,18 @@ public:
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	IObject_Type_Impl("ClipboardAll")
 	IObject_DebugWriteProperty_Def;
+	IObject_Type_Impl("Buffer")
+};
+
+
+//
+// ClipboardAll: Represents a blob of clipboard data (all formats retrieved from clipboard).
+//
+
+class ClipboardAll : public BufferObject
+{
+public:
+	ClipboardAll(void *aData, size_t aSize) : BufferObject(aData, aSize) {}
+	IObject_Type_Impl("ClipboardAll")
 };

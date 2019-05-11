@@ -2121,31 +2121,72 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ResultToken &aResultToken, ExprT
 
 
 
-ObjectMember ClipboardAll::sMembers[] =
+//
+// Buffer
+//
+
+ObjectMember BufferObject::sMembers[] =
 {
 	Object_Property_get(Ptr),
-	Object_Property_get(Size),
+	Object_Property_get_set(Size),
 	Object_Property_get(Data)
 };
 
-ResultType ClipboardAll::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType BufferObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
 }
 
-ResultType ClipboardAll::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType BufferObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	switch (aID)
 	{
 	case P_Ptr:
 		_o_return((size_t)mData);
 	case P_Size:
+		if (IS_INVOKE_SET)
+		{
+			if (!ParamIndexIsNumeric(0))
+				_o_throw(ERR_TYPE_MISMATCH);
+			auto new_size = ParamIndexToInt64(0);
+			if (new_size < 0 || new_size > SIZE_MAX)
+				_o_throw(ERR_INVALID_VALUE);
+			if (!Resize((size_t)new_size))
+				_o_throw(ERR_OUTOFMEM);
+			return OK;
+		}
 		_o_return(mSize);
 	case P_Data:
 		// Return the data as a binary string, which can be passed to FileAppend().
 		_o_return_p((LPTSTR)mData, mSize / sizeof(TCHAR));
 	}
 	return INVOKE_NOT_HANDLED;
+}
+
+ResultType BufferObject::Resize(size_t aNewSize)
+{
+	auto new_data = realloc(mData, aNewSize);
+	if (!new_data)
+		return FAIL;
+	if (aNewSize > mSize)
+		memset((BYTE*)new_data + mSize, 0, aNewSize - mSize);
+	mData = new_data;
+	mSize = aNewSize;
+	return OK;
+}
+
+
+BIF_DECL(BIF_BufferAlloc)
+{
+	if (!ParamIndexIsNumeric(0))
+		_f_throw(ERR_TYPE_MISMATCH);
+	auto size = ParamIndexToInt64(0);
+	if (size < 0 || size > SIZE_MAX)
+		_f_throw(ERR_PARAM1_INVALID);
+	auto data = malloc((size_t)size);
+	if (!data)
+		_f_throw(ERR_OUTOFMEM);
+	_f_return(new BufferObject(data, (size_t)size));
 }
 
 
@@ -2220,7 +2261,7 @@ void IObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPa
 }
 
 Implement_DebugWriteProperty_via_sMembers(Func)
-Implement_DebugWriteProperty_via_sMembers(ClipboardAll)
+Implement_DebugWriteProperty_via_sMembers(BufferObject)
 
 void ObjectMember::DebugWriteProperty(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
 	, IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
