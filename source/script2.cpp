@@ -13092,6 +13092,38 @@ struct NumGetParams
 	BOOL is_integer = TRUE, is_signed = FALSE;
 };
 
+void ConvertNumGetType(ExprTokenType &aToken, NumGetParams &op)
+{
+	LPTSTR type = TokenToString(aToken); // No need to pass aBuf since any numeric value would not be recognized anyway.
+	if (ctoupper(*type) == 'U') // Unsigned.
+	{
+		++type; // Remove the first character from further consideration.
+		op.is_signed = FALSE;
+	}
+	else
+		op.is_signed = TRUE;
+
+	switch(ctoupper(*type)) // Override "size" and aResultToken.symbol if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
+	{
+	case 'P': // Nothing extra needed in this case.
+		op.num_size = sizeof(void *), op.is_integer = TRUE;
+		break;
+	case 'I':
+		if (_tcschr(type, '6')) // Int64. It's checked this way for performance, and to avoid access violation if string is bogus and too short such as "i64".
+			op.num_size = 8, op.is_integer = TRUE;
+		else
+			op.num_size = 4, op.is_integer = TRUE;
+		break;
+	case 'S': op.num_size = 2, op.is_integer = TRUE; break; // Short.
+	case 'C': op.num_size = 1, op.is_integer = TRUE; break; // Char.
+
+	case 'D': op.num_size = 8, op.is_integer = FALSE; break; // Double.
+	case 'F': op.num_size = 4, op.is_integer = FALSE; break; // Float.
+
+	default: op.num_size = 0; break;
+	}
+}
+
 void ConvertNumGetParams(BIF_DECL_PARAMS, NumGetParams &op)
 {
 	ExprTokenType &target_token = *aParam[0];
@@ -13133,33 +13165,7 @@ void ConvertNumGetParams(BIF_DECL_PARAMS, NumGetParams &op)
 		}
 		if (aParamCount > 1)
 		{
-			LPTSTR type = TokenToString(*aParam[1]); // No need to pass aBuf since any numeric value would not be recognized anyway.
-			if (ctoupper(*type) == 'U') // Unsigned.
-			{
-				++type; // Remove the first character from further consideration.
-				op.is_signed = FALSE;
-			}
-			else
-				op.is_signed = TRUE;
-
-			switch(ctoupper(*type)) // Override "size" and aResultToken.symbol if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
-			{
-			//case 'P': // Nothing extra needed in this case.
-			case 'I':
-				if (_tcschr(type, '6')) // Int64. It's checked this way for performance, and to avoid access violation if string is bogus and too short such as "i64".
-					op.num_size = 8;
-				else
-					op.num_size = 4;
-				break;
-			case 'S': op.num_size = 2; break; // Short.
-			case 'C': op.num_size = 1; break; // Char.
-
-			case 'D': op.num_size = 8; op.is_integer = FALSE; break; // Double.
-			case 'F': op.num_size = 4; op.is_integer = FALSE; break; // Float.
-
-			// default: For any unrecognized values, keep "size" and aResultToken.symbol at their defaults set earlier
-			// (for simplicity).
-			}
+			ConvertNumGetType(*aParam[1], op);
 		}
 	}
 }
@@ -13376,51 +13382,95 @@ BIF_DECL(BIF_Format)
 
 BIF_DECL(BIF_NumPut)
 {
-	// Load-time validation has ensured that at least the first two parameters are present.
-	ExprTokenType &token_to_write = *aParam[0];
-	ExprTokenType &target_token = *aParam[1];
-
 	NumGetParams op;
-	ConvertNumGetParams(aResultToken, aParam + 1, aParamCount - 1, op);
+	ExprTokenType **target_param;
+	int target_param_count, n_param;
+	// Load-time validation has ensured that at least the first two parameters are present.
+	if (ParamIndexIsNumeric(0))
+	{
+		// NumPut(n, target [, offset, type])
+		target_param = aParam + 1;
+		target_param_count = aParamCount - 1;
+		n_param = 0;
+		aParamCount = 1;
+	}
+	else
+	{
+		// Params can be any number of type-number pairs, followed by  target[, offset].
+		// Valid:		NumPut(t1, n1, t2, n2, p, o)
+		// Valid:		NumPut(t1, n1, t2, n2, p)
+		// Ambiguous:	NumPut(t1, n1, t2, p, o) -> ...n2, p)
+		// Valid:		NumPut(t1, n1, p, o)
+		// Invalid:		NumPut(t1, n1, t2, x)  ; Either n2 or p is missing.
+		// Valid:		NumPut(t1, n1, p)
+		// Ambiguous:	NumPut(t1, p, o) -> ...n1, p)
+		// Invalid:		NumPut(t1, p)
+		// Invalid:		NumPut(t1)
+		if (aParamCount < 3)
+			_f_throw(ERR_TYPE_MISMATCH);
+		// Split target[,offset] from aParam.
+		target_param_count = 2 - (aParamCount & 1);
+		aParamCount -= target_param_count;
+		target_param = aParam + aParamCount;
+		// Handle the first type name here to enable the loop to handle the other parameter mode.
+		ConvertNumGetType(*aParam[0], op);
+		n_param = 1;
+	}
+
+	ConvertNumGetParams(aResultToken, target_param, target_param_count, op);
 	if (aResultToken.Exited())
 		return;
 
-	aResultToken.value_int64 = op.target + op.num_size; // This is used below and also as NumPut's return value. It's the address to the right of the item to be written.  aResultToken.symbol was set to SYM_INTEGER by our caller.
-
-	// See comments in NumGet about the following section:
-	if (op.target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
-		|| (size_t)aResultToken.value_int64 > op.right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+	size_t num_end;
+	for (;; op.target = num_end)
 	{
-		_f_throw(ERR_PARAM2_INVALID);
-	}
+		ExprTokenType &token_to_write = *aParam[n_param];
 
-	switch (op.num_size)
-	{
-	case 4: // Listed first for performance.
-		if (op.is_integer)
-			*(unsigned int *)op.target = (unsigned int)TokenToInt64(token_to_write);
-		else // Float (32-bit).
-			*(float *)op.target = (float)TokenToDouble(token_to_write);
-		break;
-	case 8:
-		if (op.is_integer)
-			// v1.0.48: Support unsigned 64-bit integers like DllCall does:
-			*(__int64 *)op.target = (!op.is_signed && !IS_NUMERIC(token_to_write.symbol)) // Must not be numeric because those are already signed values, so should be written out as signed so that whoever uses them can interpret negatives as large unsigned values.
+		num_end = op.target + op.num_size; // This is used below and also as NumPut's return value. It's the address to the right of the item to be written.
+
+		// See comments in NumGet about the following section:
+		if (op.target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
+			|| num_end > op.right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+		{
+			_f_throw(ERR_PARAM_INVALID);
+		}
+
+		switch (op.num_size)
+		{
+		case 4: // Listed first for performance.
+			if (op.is_integer)
+				*(unsigned int *)op.target = (unsigned int)TokenToInt64(token_to_write);
+			else // Float (32-bit).
+				*(float *)op.target = (float)TokenToDouble(token_to_write);
+			break;
+		case 8:
+			if (op.is_integer)
+				// v1.0.48: Support unsigned 64-bit integers like DllCall does:
+				*(__int64 *)op.target = (!op.is_signed && !IS_NUMERIC(token_to_write.symbol)) // Must not be numeric because those are already signed values, so should be written out as signed so that whoever uses them can interpret negatives as large unsigned values.
 				? (__int64)ATOU64(TokenToString(token_to_write)) // For comments, search for ATOU64 in BIF_DllCall().
 				: TokenToInt64(token_to_write);
-		else // Double (64-bit).
-			*(double *)op.target = TokenToDouble(token_to_write);
-		break;
-	case 2:
-		*(unsigned short *)op.target = (unsigned short)TokenToInt64(token_to_write);
-		break;
-	default: // size 1
-		*(unsigned char *)op.target = (unsigned char)TokenToInt64(token_to_write);
+			else // Double (64-bit).
+				*(double *)op.target = TokenToDouble(token_to_write);
+			break;
+		case 2:
+			*(unsigned short *)op.target = (unsigned short)TokenToInt64(token_to_write);
+			break;
+		default: // size 1
+			*(unsigned char *)op.target = (unsigned char)TokenToInt64(token_to_write);
+		}
+
+		n_param += 2;
+		if (n_param >= aParamCount)
+			break;
+		// Convert the type name for the next number.
+		ConvertNumGetType(*aParam[n_param - 1], op);
 	}
+	ExprTokenType &target_token = **target_param;
 	if (target_token.symbol == SYM_VAR && !target_token.var->IsPureNumeric())
 		target_token.var->Close(); // This updates various attributes of the variable.
 	//else the target was an raw address.  If that address is inside some variable's contents, the above
 	// attributes would already have been removed at the time the & operator was used on the variable.
+	aResultToken.value_int64 = num_end; // aResultToken.symbol was set to SYM_INTEGER by our caller.
 }
 
 

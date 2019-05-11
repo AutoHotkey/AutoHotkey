@@ -182,7 +182,7 @@ FuncEntry g_BIF[] =
 	BIFn(MonitorGetWorkArea, 0, 5, BIF_MonitorGet, {2, 3, 4, 5}),
 	BIF1(MsgBox, 0, 3),
 	BIF1(NumGet, 1, 3),
-	BIF1(NumPut, 2, 4),
+	BIF1(NumPut, 2, NA),
 	BIFn(ObjAddRef, 1, 1, BIF_ObjAddRefRelease),
 	BIF1(ObjBindMethod, 1, NA),
 	BIFn(ObjClone, 1, 1, BIF_ObjXXX),
