@@ -8851,13 +8851,13 @@ HWND Line::DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTit
 }
 
 
-ResultType GetObjectHwnd(IObject *aObject, HWND &aHwnd, ResultToken &aResultToken)
+ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aPtr, ResultToken &aResultToken)
 {
 	FuncResult result_token;
-	ExprTokenType hwnd_token = _T("Hwnd");
+	ExprTokenType name_token = aPropName;
 	ExprTokenType this_token = aObject;
-	ExprTokenType *param = &hwnd_token;
-			
+	ExprTokenType *param = &name_token;
+
 	auto result = aObject->Invoke(result_token, this_token, IT_GET, &param, 1);
 
 	if (result_token.symbol != SYM_INTEGER)
@@ -8866,11 +8866,12 @@ ResultType GetObjectHwnd(IObject *aObject, HWND &aHwnd, ResultToken &aResultToke
 		if (result == FAIL)
 			return aResultToken.SetExitResult(FAIL);
 		if (result == INVOKE_NOT_HANDLED)
-			return aResultToken.Error(ERR_UNKNOWN_PROPERTY, _T("Hwnd"));
-		return aResultToken.Error(ERR_INVALID_HWND);
+			return aResultToken.Error(ERR_UNKNOWN_PROPERTY, aPropName);
+		aPtr = 0;
+		return OK;
 	}
 
-	aHwnd = (HWND)(UINT_PTR)result_token.value_int64;
+	aPtr = (UINT_PTR)result_token.value_int64;
 	return OK;
 }
 
@@ -8902,8 +8903,12 @@ ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aR
 	HWND hwnd;
 	if (IObject *obj = ParamIndexToObject(0))
 	{
-		if (!GetObjectHwnd(obj, hwnd, aResultToken))
+		UINT_PTR ptr;
+		if (!GetObjectPtrProperty(obj, _T("Hwnd"), ptr, aResultToken))
 			return FAIL;
+		if (!ptr)
+			return aResultToken.Error(ERR_INVALID_HWND);
+		hwnd = (HWND)ptr;
 	}
 	else if (TokenIsPureNumeric(*aParam[0]) == PURE_INTEGER)
 	{
@@ -13080,71 +13085,92 @@ BIF_DECL(BIF_Chr)
 
 
 
-BIF_DECL(BIF_NumGet)
+struct NumGetParams
 {
-	size_t right_side_bound, target; // Don't make target a pointer-type because the integer offset might not be a multiple of 4 (i.e. the below increments "target" directly by "offset" and we don't want that to use pointer math).
+	size_t target, right_side_bound;
+	size_t num_size = sizeof(DWORD_PTR);
+	BOOL is_integer = TRUE, is_signed = FALSE;
+};
+
+void ConvertNumGetParams(BIF_DECL_PARAMS, NumGetParams &op)
+{
 	ExprTokenType &target_token = *aParam[0];
-	if (target_token.symbol == SYM_VAR // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-		&& !target_token.var->IsPureNumeric()) // If the var contains a pure/binary number, its probably an address.  Scripts can't directly access Contents() in that case anyway.
+	if (IObject *obj = TokenToObject(target_token))
 	{
-		target = (size_t)target_token.var->Contents(); // Although Contents(TRUE) will force an update of mContents if necessary, it very unlikely to be necessary here because we're about to fetch a binary number from inside mContents, not a normal/text number.
-		right_side_bound = target + target_token.var->ByteCapacity(); // This is first illegal address to the right of target.
+		static BufferObject sBuffer(0, 0);
+		if (*(void **)obj == *(void **)&sBuffer) // See ""type check"" comments in Object::Invoke for comments.
+		{
+			// Some primitive benchmarks showed that this was about as fast as passing
+			// a pointer directly, whereas invoking the properties (below) doubled the
+			// overall time taken by NumGet/NumPut.
+			op.target = (size_t)((BufferObject *)obj)->Data();
+			op.right_side_bound = ((BufferObject *)obj)->Size();
+		}
+		else if (!GetObjectPtrProperty(obj, _T("Ptr"), op.target, aResultToken)
+			  || !GetObjectPtrProperty(obj, _T("Size"), op.right_side_bound, aResultToken))
+			return;
+		op.right_side_bound += op.target;
+	}
+	else if (target_token.symbol == SYM_VAR // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+		&& !target_token.var->IsPureNumeric()) // If the var contains a pure/binary number, it's probably an address.  Scripts can't directly access Contents() in that case anyway.
+	{
+		op.target = (size_t)target_token.var->Contents(); // Never needs updating because it's not pure numeric, but the default parameters support #Warn UseUnset.
+		op.right_side_bound = op.target + target_token.var->ByteCapacity(); // This is the first illegal address to the right of target.
 	}
 	else
 	{
-		target = (size_t)TokenToInt64(target_token);
-		right_side_bound = 0;
+		op.target = (size_t)TokenToInt64(target_token);
+		op.right_side_bound = SIZE_MAX;
 	}
 
 	if (aParamCount > 1) // Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
 	{
 		if (aParamCount > 2 || TokenIsNumeric(*aParam[1])) // Checking aParamCount first avoids some unnecessary work in common cases where all parameters were specified.
-			target += (ptrdiff_t)TokenToInt64(*aParam[1]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
-		else
-			// Final param was omitted but this param is non-numeric, so use it as Type instead of Offset:
-			++aParamCount, --aParam; // aParam[0] is no longer valid, but that's OK.
-	}
-
-	BOOL is_signed;
-	size_t size = sizeof(DWORD_PTR); // Set default.
-
-	if (aParamCount < 3) // The "type" parameter is absent (which is most often the case), so use defaults.
-	{
-#ifndef _WIN64 // is_signed is ignored on 64-bit builds due to lack of support for UInt64.  Explicitly disable this for maintainability.
-		is_signed = FALSE;
-#endif
-		// And keep "size" at its default set earlier.
-	}
-	else // An explicit "type" is present.
-	{
-		LPTSTR type = TokenToString(*aParam[2]); // No need to pass aBuf since any numeric value would not be recognized anyway.
-		if (ctoupper(*type) == 'U') // Unsigned.
 		{
-			++type; // Remove the first character from further consideration.
-			is_signed = FALSE;
+			op.target += (ptrdiff_t)TokenToInt64(*aParam[1]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
+			aParam++;
+			aParamCount--;
 		}
-		else
-			is_signed = TRUE;
-
-		switch(ctoupper(*type)) // Override "size" and aResultToken.symbol if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
+		if (aParamCount > 1)
 		{
-		//case 'P': // Nothing extra needed in this case.
-		case 'I':
-			if (_tcschr(type, '6')) // Int64. It's checked this way for performance, and to avoid access violation if string is bogus and too short such as "i64".
-				size = 8;
+			LPTSTR type = TokenToString(*aParam[1]); // No need to pass aBuf since any numeric value would not be recognized anyway.
+			if (ctoupper(*type) == 'U') // Unsigned.
+			{
+				++type; // Remove the first character from further consideration.
+				op.is_signed = FALSE;
+			}
 			else
-				size = 4;
-			break;
-		case 'S': size = 2; break; // Short.
-		case 'C': size = 1; break; // Char.
+				op.is_signed = TRUE;
 
-		case 'D': size = 8; aResultToken.symbol = SYM_FLOAT; break; // Double.
-		case 'F': size = 4; aResultToken.symbol = SYM_FLOAT; break; // Float.
+			switch(ctoupper(*type)) // Override "size" and aResultToken.symbol if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
+			{
+			//case 'P': // Nothing extra needed in this case.
+			case 'I':
+				if (_tcschr(type, '6')) // Int64. It's checked this way for performance, and to avoid access violation if string is bogus and too short such as "i64".
+					op.num_size = 8;
+				else
+					op.num_size = 4;
+				break;
+			case 'S': op.num_size = 2; break; // Short.
+			case 'C': op.num_size = 1; break; // Char.
 
-		// default: For any unrecognized values, keep "size" and aResultToken.symbol at their defaults set earlier
-		// (for simplicity).
+			case 'D': op.num_size = 8; op.is_integer = FALSE; break; // Double.
+			case 'F': op.num_size = 4; op.is_integer = FALSE; break; // Float.
+
+			// default: For any unrecognized values, keep "size" and aResultToken.symbol at their defaults set earlier
+			// (for simplicity).
+			}
 		}
 	}
+}
+
+
+BIF_DECL(BIF_NumGet)
+{
+	NumGetParams op;
+	ConvertNumGetParams(aResultToken, aParam, aParamCount, op);
+	if (aResultToken.Exited())
+		return;
 
 	// If the target is a variable, the following check ensures that the memory to be read lies within its capacity.
 	// This seems superior to an exception handler because exception handlers only catch illegal addresses,
@@ -13153,40 +13179,44 @@ BIF_DECL(BIF_NumGet)
 	// but those are discouraged by MSDN.
 	// The following aren't covered by the check below:
 	// - Due to rarity of negative offsets, only the right-side boundary is checked, not the left.
-	// - Due to rarity and to simplify things, Float/Double (which "return" higher above) aren't checked.
-	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
-		|| right_side_bound && target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+	// - Due to rarity and to simplify things, Float/Double aren't checked.
+	if (op.target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
+		|| op.target+op.num_size > op.right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
 		_f_throw(ERR_PARAM1_INVALID);
 	}
 
-	switch(size)
+	switch (op.num_size)
 	{
 	case 4: // Listed first for performance.
-		if (aResultToken.symbol == SYM_FLOAT)
-			aResultToken.value_double = *(float *)target;
-		else if (is_signed)
-			aResultToken.value_int64 = *(int *)target; // aResultToken.symbol was set to SYM_FLOAT or SYM_INTEGER higher above.
+		if (!op.is_integer)
+			aResultToken.value_double = *(float *)op.target;
+		else if (op.is_signed)
+			aResultToken.value_int64 = *(int *)op.target; // aResultToken.symbol defaults to SYM_INTEGER.
 		else
-			aResultToken.value_int64 = *(unsigned int *)target;
+			aResultToken.value_int64 = *(unsigned int *)op.target;
 		break;
 	case 8:
-		// The below correctly copies both DOUBLE and INT64 into the union.
-		// Unsigned 64-bit integers aren't supported because variables/expressions can't support them.
-		aResultToken.value_int64 = *(__int64 *)target;
+		if (op.is_integer)
+			// Unsigned 64-bit integers aren't supported because variables/expressions can't support them.
+			aResultToken.value_int64 = *(__int64 *)op.target;
+		else
+			aResultToken.value_double = *(double *)op.target;
 		break;
 	case 2:
-		if (is_signed) // Don't use ternary because that messes up type-casting.
-			aResultToken.value_int64 = *(short *)target;
+		if (op.is_signed) // Don't use ternary because that messes up type-casting.
+			aResultToken.value_int64 = *(short *)op.target;
 		else
-			aResultToken.value_int64 = *(unsigned short *)target;
+			aResultToken.value_int64 = *(unsigned short *)op.target;
 		break;
 	default: // size 1
-		if (is_signed) // Don't use ternary because that messes up type-casting.
-			aResultToken.value_int64 = *(char *)target;
+		if (op.is_signed) // Don't use ternary because that messes up type-casting.
+			aResultToken.value_int64 = *(char *)op.target;
 		else
-			aResultToken.value_int64 = *(unsigned char *)target;
+			aResultToken.value_int64 = *(unsigned char *)op.target;
 	}
+	if (!op.is_integer)
+		aResultToken.symbol = SYM_FLOAT;
 }
 
 
@@ -13348,107 +13378,46 @@ BIF_DECL(BIF_NumPut)
 {
 	// Load-time validation has ensured that at least the first two parameters are present.
 	ExprTokenType &token_to_write = *aParam[0];
-
-	size_t right_side_bound, target; // Don't make target a pointer-type because the integer offset might not be a multiple of 4 (i.e. the below increments "target" directly by "offset" and we don't want that to use pointer math).
 	ExprTokenType &target_token = *aParam[1];
-	if (target_token.symbol == SYM_VAR // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-		&& !target_token.var->IsPureNumeric()) // If the var contains a pure/binary number, its probably an address.  Scripts can't directly access Contents() in that case anyway.
-	{
-		target = (size_t)target_token.var->Contents(FALSE); // Pass FALSE for performance because contents is about to be overwritten, followed by a call to Close(). If something goes wrong and we return early, Contents() won't have been changed, so nothing about it needs updating.
-		right_side_bound = target + target_token.var->ByteCapacity(); // This is the first illegal address to the right of target.
-	}
-	else
-	{
-		target = (size_t)TokenToInt64(target_token);
-		right_side_bound = 0;
-	}
 
-	if (aParamCount > 2) // Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
-	{
-		if (aParamCount > 3 || TokenIsNumeric(*aParam[2])) // Checking aParamCount first avoids some unnecessary work in common cases where all parameters were specified.
-			target += (ptrdiff_t)TokenToInt64(*aParam[2]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
-		else
-			// Final param was omitted but this param is non-numeric, so use it as Type instead of Offset:
-			++aParamCount, --aParam; // aParam[0] is no longer valid, but that's OK.
-	}
+	NumGetParams op;
+	ConvertNumGetParams(aResultToken, aParam + 1, aParamCount - 1, op);
+	if (aResultToken.Exited())
+		return;
 
-	size_t size = sizeof(DWORD_PTR); // Set defaults.
-	BOOL is_integer = TRUE;   //
-	BOOL is_unsigned = (aParamCount > 3) ? FALSE : TRUE; // This one was added v1.0.48 to support unsigned __int64 the way DllCall does.
-
-	if (aParamCount > 3) // The "type" parameter is present (which is somewhat unusual).
-	{
-		LPTSTR type = TokenToString(*aParam[3]); // No need to pass aBuf since any numeric value would not be recognized anyway.
-		if (ctoupper(*type) == 'U') // Unsigned; but in the case of NumPut, it matters only for UInt64.
-		{
-			is_unsigned = TRUE;
-			++type; // Remove the first character from further consideration.
-		}
-
-		switch(ctoupper(*type)) // Override "size" and is_integer if type warrants it. Note that the above has omitted the leading "U", if present, leaving type as "Int" vs. "Uint", etc.
-		{
-		case 'P': is_unsigned = TRUE; break; // Ptr.
-		case 'I':
-			if (_tcschr(type, '6')) // Int64. It's checked this way for performance, and to avoid access violation if string is bogus and too short such as "i64".
-				size = 8;
-			else
-				size = 4;
-			//else keep "size" at its default set earlier.
-			break;
-		case 'S': size = 2; break; // Short.
-		case 'C': size = 1; break; // Char.
-
-		case 'D': size = 8; is_integer = FALSE; break; // Double.
-		case 'F': size = 4; is_integer = FALSE; break; // Float.
-
-		// default: For any unrecognized values, keep "size" and is_integer at their defaults set earlier
-		// (for simplicity).
-		}
-	}
-
-	aResultToken.value_int64 = target + size; // This is used below and also as NumPut's return value. It's the address to the right of the item to be written.  aResultToken.symbol was set to SYM_INTEGER by our caller.
+	aResultToken.value_int64 = op.target + op.num_size; // This is used below and also as NumPut's return value. It's the address to the right of the item to be written.  aResultToken.symbol was set to SYM_INTEGER by our caller.
 
 	// See comments in NumGet about the following section:
-	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
-		|| right_side_bound && (size_t)aResultToken.value_int64 > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+	if (op.target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
+		|| (size_t)aResultToken.value_int64 > op.right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
-		if (target_token.symbol == SYM_VAR)
-		{
-			// Since target_token is a var, maybe the target is out of bounds because the var
-			// hasn't been initialized (i.e. it has zero capacity).  Note that if a local var
-			// has been given semi-permanent memory in a previous call to the function, the
-			// check above might not catch it and we won't get an "uninitialized var" warning.
-			// However, for that to happen the script must use VarSetCapacity that time but
-			// not this time, which seems too rare to justify checking this every time.
-			target_token.var->MaybeWarnUninitialized();
-		}
 		_f_throw(ERR_PARAM2_INVALID);
 	}
 
-	switch(size)
+	switch (op.num_size)
 	{
 	case 4: // Listed first for performance.
-		if (is_integer)
-			*(unsigned int *)target = (unsigned int)TokenToInt64(token_to_write);
+		if (op.is_integer)
+			*(unsigned int *)op.target = (unsigned int)TokenToInt64(token_to_write);
 		else // Float (32-bit).
-			*(float *)target = (float)TokenToDouble(token_to_write);
+			*(float *)op.target = (float)TokenToDouble(token_to_write);
 		break;
 	case 8:
-		if (is_integer)
+		if (op.is_integer)
 			// v1.0.48: Support unsigned 64-bit integers like DllCall does:
-			*(__int64 *)target = (is_unsigned && !IS_NUMERIC(token_to_write.symbol)) // Must not be numeric because those are already signed values, so should be written out as signed so that whoever uses them can interpret negatives as large unsigned values.
+			*(__int64 *)op.target = (!op.is_signed && !IS_NUMERIC(token_to_write.symbol)) // Must not be numeric because those are already signed values, so should be written out as signed so that whoever uses them can interpret negatives as large unsigned values.
 				? (__int64)ATOU64(TokenToString(token_to_write)) // For comments, search for ATOU64 in BIF_DllCall().
 				: TokenToInt64(token_to_write);
 		else // Double (64-bit).
-			*(double *)target = TokenToDouble(token_to_write);
+			*(double *)op.target = TokenToDouble(token_to_write);
 		break;
 	case 2:
-		*(unsigned short *)target = (unsigned short)TokenToInt64(token_to_write);
+		*(unsigned short *)op.target = (unsigned short)TokenToInt64(token_to_write);
 		break;
 	default: // size 1
-		*(unsigned char *)target = (unsigned char)TokenToInt64(token_to_write);
+		*(unsigned char *)op.target = (unsigned char)TokenToInt64(token_to_write);
 	}
-	if (right_side_bound) // Implies (target_token.symbol == SYM_VAR && !target_token.var->IsPureNumeric()).
+	if (target_token.symbol == SYM_VAR && !target_token.var->IsPureNumeric())
 		target_token.var->Close(); // This updates various attributes of the variable.
 	//else the target was an raw address.  If that address is inside some variable's contents, the above
 	// attributes would already have been removed at the time the & operator was used on the variable.

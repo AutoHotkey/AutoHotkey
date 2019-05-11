@@ -881,11 +881,9 @@ public:
 			var.mAttrib &= ~VAR_ATTRIB_VIRTUAL_OPEN;
 			return result;
 		}
-		// The binary-clip attribute is also reset here for cases where a caller uses a variable without
-		// having called Assign() to resize it first, which can happen if the variable's capacity is already
-		// sufficient to hold the desired contents.  VAR_ATTRIB_CONTENTS_OUT_OF_DATE is also removed below
-		// for maintainability; it shouldn't be necessary because any caller of Close() should have previously
-		// called something that updates the flags, such as Contents().
+		// VAR_ATTRIB_CONTENTS_OUT_OF_DATE is removed below for maintainability; it shouldn't be
+		// necessary because any caller of Close() should have previously called something that
+		// updates the flags, such as Contents().
 		var.mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
 		//else (already done above)
 		//	var.mAttrib &= ~VAR_ATTRIB_BINARY_CLIP;
