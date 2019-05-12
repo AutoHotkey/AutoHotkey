@@ -5872,16 +5872,24 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsInExpr
 				return ScriptError(ERR_MISSING_CLOSE_PAREN, aBuf);
 		}
 
-		if (   !(param_length = param_end - param_start)   )
-			return ScriptError(ERR_MISSING_PARAM_NAME, aBuf); // Reporting aBuf vs. param_start seems more informative since Vicinity isn't shown.
-
-		if (this_param.var = FindVar(param_start, param_length, &insert_pos, FINDVAR_LOCAL))  // Assign.
-			return ScriptError(_T("Duplicate parameter."), param_start);
-		if (   !(this_param.var = AddVar(param_start, param_length, insert_pos, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM))   )	// Pass VAR_LOCAL_FUNCPARAM as last parameter to mean "it's a local but more specifically a function's parameter".
-			return FAIL; // It already displayed the error, including attempts to have reserved names as parameter names.
+		param_length = param_end - param_start;
+		if (param_length)
+		{
+			if (this_param.var = FindVar(param_start, param_length, &insert_pos, FINDVAR_LOCAL))  // Assign.
+				return ScriptError(_T("Duplicate parameter."), param_start);
+			if (   !(this_param.var = AddVar(param_start, param_length, insert_pos, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM))   )	// Pass VAR_LOCAL_FUNCPARAM as last parameter to mean "it's a local but more specifically a function's parameter".
+				return FAIL; // It already displayed the error, including attempts to have reserved names as parameter names.
+			param_start = omit_leading_whitespace(param_end);
+		}
+		else
+		{
+			if (*param_start != '*')
+				return ScriptError(ERR_MISSING_PARAM_NAME, aBuf); // Reporting aBuf vs. param_start seems more informative since Vicinity isn't shown.
+			// fn(a,*) permits surplus parameters but does not store them.
+			this_param.var = NULL;
+		}
 		
 		this_param.default_type = PARAM_DEFAULT_NONE;  // Set default.
-		param_start = omit_leading_whitespace(param_end);
 
 		if (func.mIsVariadic = (*param_start == '*'))
 		{

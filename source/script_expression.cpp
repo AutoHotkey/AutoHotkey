@@ -1773,7 +1773,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			}
 		} // for each formal parameter.
 		
-		if (mIsVariadic) // i.e. this function is capable of accepting excess params via an object/array.
+		if (mIsVariadic && mParam[mParamCount].var) // i.e. this function is capable of accepting excess params via an object/array.
 		{
 			// If the caller supplied an array of parameters, copy any key-value pairs with non-numbered keys;
 			// otherwise, just create a new object.  Either way, numbered params will be inserted below.
