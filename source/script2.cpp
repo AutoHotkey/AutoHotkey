@@ -11295,33 +11295,14 @@ has_valid_return_type:
 		//case DLL_ARG_SHORT:
 		//case DLL_ARG_CHAR:
 		//case DLL_ARG_INT64:
-			if (this_dyna_param.is_unsigned && this_dyna_param.type == DLL_ARG_INT64 && !IS_NUMERIC(this_param.symbol))
-				// The above and below also apply to BIF_NumPut(), so maintain them together.
-				// !IS_NUMERIC() is checked because such tokens are already signed values, so should be
-				// written out as signed so that whoever uses them can interpret negatives as large
-				// unsigned values.
-				// Support for unsigned values that are 32 bits wide or less is done via ATOI64() since
-				// it should be able to handle both signed and unsigned values.  However, unsigned 64-bit
-				// values probably require ATOU64(), which will prevent something like -1 from being seen
-				// as the largest unsigned 64-bit int; but more importantly there are some other issues
-				// with unsigned 64-bit numbers: The script internals use 64-bit signed values everywhere,
-				// so unsigned values can only be partially supported for incoming parameters, but probably
-				// not for outgoing parameters (values the function changed) or the return value.  Those
-				// should probably be written back out to the script as negatives so that other parts of
-				// the script, such as expressions, can see them as signed values.  In other words, if the
-				// script somehow gets a 64-bit unsigned value into a variable, and that value is larger
-				// that LLONG_MAX (i.e. too large for ATOI64 to handle), ATOU64() will be able to resolve
-				// it, but any output parameter should be written back out as a negative if it exceeds
-				// LLONG_MAX (return values can be written out as unsigned since the script can specify
-				// signed to avoid this, since they don't need the incoming detection for ATOU()).
-				this_dyna_param.value_int64 = (__int64)ATOU64(TokenToString(this_param)); // Cast should not prevent called function from seeing it as an undamaged unsigned number.
-			else
-				this_dyna_param.value_int64 = TokenToInt64(this_param);
-
-			// Values less than or equal to 32-bits wide always get copied into a single 32-bit value
-			// because they should be right justified within it for insertion onto the call stack.
-			if (this_dyna_param.type != DLL_ARG_INT64) // Shift the 32-bit value into the high-order DWORD of the 64-bit value for later use by DynaCall().
-				this_dyna_param.value_int = (int)this_dyna_param.value_int64; // Force a failure if compiler generates code for this that corrupts the union (since the same method is used for the more obscure float vs. double below).
+			// Note that since v2.0-a083-97803aeb, TokenToInt64 supports conversion of large unsigned 64-bit
+			// numbers from strings (producing a negative value, but with the right bit representation).
+			// This allows large unsigned literals and numeric strings to be passed to DllCall (regardless
+			// of whether Int64 or UInt64 is used), but the script itself will interpret the value as signed
+			// if greater than _I64_MAX.  Any UInt64 values returned by DllCall can be safely passed back
+			// without loss, and can be operated upon by the bitwise operators, although arithmetic and
+			// string conversion will treat the value as Int64.
+			this_dyna_param.value_int64 = TokenToInt64(this_param);
 		} // switch (this_dyna_param.type)
 	} // for() each arg.
     
