@@ -11233,7 +11233,7 @@ has_valid_return_type:
 				// to be stack memory, which would be invalid memory upon return to the caller).
 				// The complexity of this doesn't seem worth the rarity of the need, so this will be
 				// documented in the help file.
-				_f_throw(ERR_INVALID_ARG_TYPE);
+				_f_throw(ERR_TYPE_MISMATCH);
 			}
 			// Otherwise, it's a supported type of string.
 			this_dyna_param.ptr = TokenToString(this_param); // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
@@ -11266,7 +11266,7 @@ has_valid_return_type:
 		case DLL_ARG_xSTR:
 			// See the section above for comments.
 			if (IS_NUMERIC(this_param.symbol))
-				_f_throw(ERR_INVALID_ARG_TYPE);
+				_f_throw(ERR_TYPE_MISMATCH);
 			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
 			pStr[arg_count] = new UorA(CStringCharFromWChar,CStringWCharFromChar)(TokenToString(this_param));
 			this_dyna_param.ptr = pStr[arg_count]->GetBuffer();
