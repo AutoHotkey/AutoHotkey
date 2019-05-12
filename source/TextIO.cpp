@@ -890,15 +890,25 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 						break;
 					}
 				default:
-					if (TokenIsPureNumeric(target_token) == PURE_INTEGER)
+					if (IObject *obj = TokenToObject(target_token))
+					{
+						size_t ptr, size;
+						GetBufferObjectPtr(aResultToken, obj, ptr, size);
+						if (aResultToken.Exited())
+							return aResultToken.Result();
+						target = (LPVOID)ptr;
+						max_size = (DWORD)size;
+					}
+					else if (TokenIsPureNumeric(target_token) == PURE_INTEGER)
 					{
 						target = (LPVOID)TokenToInt64(target_token);
 						max_size = ~0; // Unknown; perform no validation.
-						if ((size_t)target >= 65536) // Basic sanity check relying on the fact that Win32 platforms reserve the first 64KB of address space.
-							break;
-						// Otherwise, it's invalid:
 					}
-					// Otherwise, it's invalid (float or object):
+					else
+						target = 0;
+					if ((size_t)target >= 65536) // Basic sanity check relying on the fact that Win32 platforms reserve the first 64KB of address space.
+						break;
+					// Otherwise, it's invalid:
 					_o_throw(ERR_PARAM1_INVALID);
 				}
 

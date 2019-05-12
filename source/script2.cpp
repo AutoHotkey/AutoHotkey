@@ -13124,22 +13124,31 @@ void ConvertNumGetType(ExprTokenType &aToken, NumGetParams &op)
 	}
 }
 
+void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, size_t &aSize)
+{
+	static BufferObject sBuffer(0, 0);
+	if (*(void **)obj == *(void **)&sBuffer) // See ""type check"" comments in Object::Invoke for comments.
+	{
+		// Some primitive benchmarks showed that this was about as fast as passing
+		// a pointer directly, whereas invoking the properties (below) doubled the
+		// overall time taken by NumGet/NumPut.
+		aPtr = (size_t)((BufferObject *)obj)->Data();
+		aSize = ((BufferObject *)obj)->Size();
+	}
+	else
+	{
+		if (GetObjectPtrProperty(obj, _T("Ptr"), aPtr, aResultToken))
+			GetObjectPtrProperty(obj, _T("Size"), aSize, aResultToken);
+	}
+}
+
 void ConvertNumGetParams(BIF_DECL_PARAMS, NumGetParams &op)
 {
 	ExprTokenType &target_token = *aParam[0];
 	if (IObject *obj = TokenToObject(target_token))
 	{
-		static BufferObject sBuffer(0, 0);
-		if (*(void **)obj == *(void **)&sBuffer) // See ""type check"" comments in Object::Invoke for comments.
-		{
-			// Some primitive benchmarks showed that this was about as fast as passing
-			// a pointer directly, whereas invoking the properties (below) doubled the
-			// overall time taken by NumGet/NumPut.
-			op.target = (size_t)((BufferObject *)obj)->Data();
-			op.right_side_bound = ((BufferObject *)obj)->Size();
-		}
-		else if (!GetObjectPtrProperty(obj, _T("Ptr"), op.target, aResultToken)
-			  || !GetObjectPtrProperty(obj, _T("Size"), op.right_side_bound, aResultToken))
+		GetBufferObjectPtr(aResultToken, obj, op.target, op.right_side_bound);
+		if (aResultToken.Exited())
 			return;
 		op.right_side_bound += op.target;
 	}
