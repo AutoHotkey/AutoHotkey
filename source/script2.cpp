@@ -8038,7 +8038,7 @@ BIF_DECL(BIF_FileRead)
 		_f_throw(ERR_OUTOFMEM); // Using this instead of "File too large." to reduce code size, since this condition is very rare (and malloc succeeding would be even rarer).
 	}
 
-	if (!bytes_to_read)
+	if (!bytes_to_read && codepage != -1) // In RAW mode, always return a zero-byte Buffer.
 	{
 		Script::SetErrorLevelsAndClose(hfile, false, 0); // Indicate success (a zero-length file results in an empty string).
 		return;
@@ -8138,20 +8138,8 @@ BIF_DECL(BIF_FileRead)
 		}
 		else // codepage == -1 ("RAW" mode)
 		{
-			// This could be text or any kind of binary data, so may not be null-terminated.
-			// Since we're returning a string, ensure it is terminated with a complete \0 TCHAR:
-			DWORD terminate_at = bytes_actually_read;
-#ifdef UNICODE
-			// Since the data might be interpreted as UTF-16, we need to ensure the null-terminator is
-			// aligned correctly, like "xxxx 0000" and not "xx00 00??" (where xx is valid data and ??
-			// is an uninitialized byte).
-			if (terminate_at & 1) // Odd number of bytes.
-				output_buf[terminate_at++] = 0; // Put an extra zero byte in and move the actual terminator right one byte.
-#endif
-			// Write final TCHAR terminator.
-			*LPTSTR(output_buf + terminate_at) = 0;
 			// Return the buffer to our caller.
-			aResultToken.AcceptMem((LPTSTR)output_buf, terminate_at / sizeof(TCHAR));
+			aResultToken.Return(new BufferObject(output_buf, bytes_actually_read));
 		}
 	}
 	else
