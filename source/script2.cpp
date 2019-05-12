@@ -11221,6 +11221,23 @@ has_valid_return_type:
 
 		// Store the each arg into a dyna_param struct, using its arg type to determine how.
 		ConvertDllArgType(arg_type_string, this_dyna_param);
+
+		if (this_dyna_param.type == DLL_ARG_INVALID)
+			_f_throw(ERR_INVALID_ARG_TYPE);
+
+		if (IObject *obj = TokenToObject(this_param))
+		{
+			// Support Buffer.Ptr, but only for "Ptr" type.  All other types are reserved for possible
+			// future use, which might be general like obj.ToValue(), or might be specific to DllCall
+			// or the particular type of this arg (Int, Float, etc.).
+			if (ctoupper(*arg_type_string) != 'P')
+				_f_throw(ERR_TYPE_MISMATCH);
+			GetBufferObjectPtr(aResultToken, obj, this_dyna_param.value_uintptr);
+			if (aResultToken.Exited())
+				return;
+			continue;
+		}
+
 		switch (this_dyna_param.type)
 		{
 		case DLL_ARG_STR:
@@ -11280,9 +11297,6 @@ has_valid_return_type:
 			if (this_dyna_param.type == DLL_ARG_FLOAT)
 				this_dyna_param.value_float = (float)this_dyna_param.value_double;
 			break;
-
-		case DLL_ARG_INVALID:
-			_f_throw(ERR_INVALID_ARG_TYPE);
 
 		default: // Namely:
 		//case DLL_ARG_INT:
@@ -13115,6 +13129,16 @@ void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, s
 		if (GetObjectPtrProperty(obj, _T("Ptr"), aPtr, aResultToken))
 			GetObjectPtrProperty(obj, _T("Size"), aSize, aResultToken);
 	}
+}
+
+void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr)
+// See above for comments.
+{
+	static BufferObject sBuffer(0, 0);
+	if (*(void **)obj == *(void **)&sBuffer)
+		aPtr = (size_t)((BufferObject *)obj)->Data();
+	else
+		GetObjectPtrProperty(obj, _T("Ptr"), aPtr, aResultToken);
 }
 
 void ConvertNumGetParams(BIF_DECL_PARAMS, NumGetParams &op)

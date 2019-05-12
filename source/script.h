@@ -3323,6 +3323,7 @@ ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
 	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDevice);
 
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, size_t &aSize);
+void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr);
 
 #endif
 
