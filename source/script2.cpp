@@ -251,6 +251,10 @@ ResultType TrayTipParseOptions(LPTSTR aOptions, NOTIFYICONDATA &nic)
 		{
 			nic.dwInfoFlags |= ATOI(option);
 		}
+		else
+		{
+			goto invalid_option;
+		}
 	}
 invalid_option:
 	return g_script.ScriptError(ERR_INVALID_OPTION, next_option);

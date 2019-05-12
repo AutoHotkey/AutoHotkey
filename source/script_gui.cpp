@@ -8023,96 +8023,66 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 		tcslcpy(font.lfFaceName, aFontName, _countof(font.lfFaceName));
 	COLORREF color = CLR_NONE; // Because we want to treat CLR_DEFAULT as a real color.
 
-	// Temp vars:
-	TCHAR color_str[32], *space_pos;
 	int point_size = 0;
 
-	for (LPTSTR cp = aOptions; *cp; ++cp)
+	LPTSTR next_option, option_end, endptr;
+	for (next_option = aOptions; *next_option; next_option = omit_leading_whitespace(option_end))
 	{
-		switch(ctoupper(*cp))
+		// Find the end of this option item:
+		if (!(option_end = StrChrAny(next_option, _T(" \t"))))  // Space or tab.
+			option_end = next_option + _tcslen(next_option); // Set to position of zero terminator instead.
+
+		// Temporarily terminate for simplicity and to reduce ambiguity:
+		TCHAR orig_char = *option_end;
+		*option_end = '\0';
+
+		if (!_tcsicmp(next_option, _T("bold")))
+			font.lfWeight = FW_BOLD;
+		else if (!_tcsicmp(next_option, _T("italic")))
+			font.lfItalic = true;
+		else if (!_tcsicmp(next_option, _T("norm")))
 		{
-		case 'B':
-			if (!_tcsnicmp(cp, _T("bold"), 4))
+			font.lfItalic = false;
+			font.lfUnderline = false;
+			font.lfStrikeOut = false;
+			font.lfWeight = FW_NORMAL;
+		}
+		else if (!_tcsicmp(next_option, _T("underline")))
+			font.lfUnderline = true;
+		else if (!_tcsicmp(next_option, _T("strike")))
+			font.lfStrikeOut = true;
+		else
+		{
+			// All of the remaining options are single-letter followed by a value:
+			TCHAR option_char = ctoupper(*next_option);
+			LPTSTR option_value = next_option + 1;
+			if (!*option_value // Does not have a value.
+				|| _tcschr(_T("SWQ"), option_char) // Or is a specific option...
+				&& !IsNumeric(option_value, FALSE, FALSE, TRUE)) // and does not have a number.
+				goto invalid_option;
+
+			switch (option_char)
 			{
-				font.lfWeight = FW_BOLD;
-				cp += 3;  // Skip over the word itself to prevent next iteration from seeing it as option letters.
+			case 'C':
+				color = ColorNameToBGR(option_value);
+				if (color == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
+				{
+					color = rgb_to_bgr(_tcstol(option_value, &endptr, 16));
+					if (*endptr)
+						goto invalid_option;
+					// if option_value does not contain something hex-numeric, black (0x00) will be assumed,
+					// which seems okay given how rare such a problem would be.
+				}
+				break;
+			case 'W': font.lfWeight = ATOI(option_value); break;
+			case 'S': point_size = (int)(_tstof(option_value) + 0.5); break; // Round to nearest int.
+			case 'Q': font.lfQuality = ATOI(option_value); break;
+			default: goto invalid_option;
 			}
-			break;
+		}
 
-		case 'I':
-			if (!_tcsnicmp(cp, _T("italic"), 6))
-			{
-				font.lfItalic = true;
-				cp += 5;  // Skip over the word itself to prevent next iteration from seeing it as option letters.
-			}
-			break;
-
-		case 'N':
-			if (!_tcsnicmp(cp, _T("norm"), 4))
-			{
-				font.lfItalic = false;
-				font.lfUnderline = false;
-				font.lfStrikeOut = false;
-				font.lfWeight = FW_NORMAL;
-				cp += 3;  // Skip over the word itself to prevent next iteration from seeing it as option letters.
-			}
-			break;
-
-		case 'U':
-			if (!_tcsnicmp(cp, _T("underline"), 9))
-			{
-				font.lfUnderline = true;
-				cp += 8;  // Skip over the word itself to prevent next iteration from seeing it as option letters.
-			}
-			break;
-
-		case 'C': // Color
-			tcslcpy(color_str, cp + 1, _countof(color_str));
-			if (space_pos = StrChrAny(color_str, _T(" \t")))  // space or tab
-				*space_pos = '\0';
-			//else a color name can still be present if it's at the end of the string.
-			color = ColorNameToBGR(color_str);
-			if (color == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
-			{
-				// For v1.0.22, this is no longer done because want to support an optional leading 0x
-				// if it is present, e.g. 0xFFAABB.  It seems _tcstol() automatically handles the
-				// optional leading "0x" if present:
-				//if (_tcslen(color_str) > 6)
-				//	color_str[6] = '\0';  // Shorten to exactly 6 chars, which happens if no space/tab delimiter is present.
-				color = rgb_to_bgr(_tcstol(color_str, NULL, 16));
-				// if color_str does not contain something hex-numeric, black (0x00) will be assumed,
-				// which seems okay given how rare such a problem would be.
-			}
-			// Skip over the color string to avoid interpreting hex digits or color names as option letters:
-			cp += _tcslen(color_str);
-			break;
-
-		// For options such as S and W:
-		// Use _ttoi()/_tstof() vs. ATOI()/ATOF() to avoid interpreting something like 0x01B as hex when in fact
-		// the B was meant to be an option letter:
-		case 'S':
-			// Seems best to allow fractional point sizes via _tstof, though it might usually get rounded
-			// by the OS anyway (at the time font is created):
-			if (!_tcsnicmp(cp, _T("strike"), 6))
-			{
-				font.lfStrikeOut = true;
-				cp += 5;  // Skip over the word itself to prevent next iteration from seeing it as option letters.
-			}
-			else
-				point_size = (int)(_tstof(cp + 1) + 0.5);  // Round to nearest int.
-			break;
-
-		case 'W':
-			font.lfWeight = _ttoi(cp + 1); // _ttoi() vs. ATOI() because some option letters (above) are also hex letters, and _ttoi() stops converting upon reaching the first non-digit character.
-			break;
-
-		case 'Q': // L19: Allow control over font quality (anti-aliasing, etc.).
-			font.lfQuality = _ttoi(cp + 1);
-			break;
-
-		// Otherwise: Ignore other characters, such as the digits that occur after the P/X/Y option letters.
-		} // switch()
-	} // for()
+		*option_end = orig_char; // Undo the temporary termination.
+	}
 
 	if (aColor) // Caller wanted color returned in an output parameter.
 		*aColor = color;
@@ -8164,6 +8134,10 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 
 	sFont[sFontCount++] = font; // Copy the newly created font's attributes into the next array element.
 	return sFontCount - 1; // The index of the newly created font.
+
+	// This "subroutine" is used to reduce code size:
+invalid_option:
+	return g_script.ScriptError(ERR_INVALID_OPTION, next_option);
 }
 
 
