@@ -13668,7 +13668,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 					char_count = MultiByteToWideChar(CP_ACP, 0, (LPCSTR)source_string, source_length, NULL, 0) + 1;
 					if (length == 0)
 					{
-						aResultToken.value_int64 = char_count;
+						aResultToken.value_int64 = char_count * (1 + (encoding == CP_UTF16));
 						return;
 					}
 					length = char_count;
@@ -13705,7 +13705,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 					++char_count; // + 1 for null-terminator (source_length causes it to be excluded from char_count).
 					if (length == 0) // Caller just wants the required buffer size.
 					{
-						aResultToken.value_int64 = char_count;
+						aResultToken.value_int64 = char_count * (1 + (encoding == CP_UTF16));
 						return;
 					}
 					// Assume there is sufficient buffer space and hope for the best:
@@ -13725,8 +13725,8 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 			if (!char_count)
 				_f_throw(GetLastError() == ERROR_INSUFFICIENT_BUFFER ? ERR_INVALID_LENGTH : ERR_INTERNAL_CALL);
 		}
-		// Return the number of characters copied.
-		aResultToken.value_int64 = char_count;
+		// Return the number of bytes written.
+		aResultToken.value_int64 = char_count * (1 + (encoding == CP_UTF16));
 	}
 	else // StrGet
 	{
