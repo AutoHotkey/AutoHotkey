@@ -13490,7 +13490,7 @@ BIF_DECL(BIF_NumPut)
 
 
 
-BIF_DECL(BIF_StrGetPut)
+BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 {
 	// To simplify flexible handling of parameters:
 	ExprTokenType **aParam_end = aParam + aParamCount;
@@ -13515,7 +13515,9 @@ BIF_DECL(BIF_StrGetPut)
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T(""); // Set default in case of early return.
 
+	IObject *buffer_obj;
 	LPVOID 	address;
+	size_t  max_bytes = SIZE_MAX;
 	int 	length = -1; // actual length
 	bool	length_is_max_size = false;
 	UINT 	encoding = UorA(CP_UTF16, CP_ACP); // native encoding
@@ -13533,6 +13535,15 @@ BIF_DECL(BIF_StrGetPut)
 	if (aParam < aParam_end && TokenIsNumeric(**aParam))
 	{
 		address = (LPVOID)TokenToInt64(**aParam);
+		++aParam;
+	}
+	else if (aParam < aParam_end && (buffer_obj = TokenToObject(**aParam)))
+	{
+		size_t ptr;
+		GetBufferObjectPtr(aResultToken, buffer_obj, ptr, max_bytes);
+		if (aResultToken.Exited())
+			return;
+		address = (LPVOID)ptr;
 		++aParam;
 	}
 	else
@@ -13554,7 +13565,7 @@ BIF_DECL(BIF_StrGetPut)
 	{
 		if (length == -1) // i.e. not StrPut(String, Encoding)
 		{
-			if (TokenIsNumeric(**aParam))
+			if (TokenIsNumeric(**aParam)) // Length parameter
 			{
 				length = (int)TokenToInt64(**aParam);
 				if (!source_string) // StrGet
@@ -13598,6 +13609,19 @@ BIF_DECL(BIF_StrGetPut)
 		|| (address == Var::sEmptyString && source_length) )
 	{
 		_f_throw(source_string ? ERR_PARAM2_INVALID : ERR_PARAM1_INVALID);
+	}
+
+	if (max_bytes != SIZE_MAX)
+	{
+		// Target is a Buffer object with known size, so limit length accordingly.
+		int max_chars = int(max_bytes >> int(encoding == CP_UTF16));
+		if (length > max_chars)
+			_f_throw(ERR_INVALID_LENGTH);
+		if (length == -1)
+		{
+			length = max_chars;
+			length_is_max_size = true;
+		}
 	}
 
 	if (source_string) // StrPut
@@ -13711,7 +13735,7 @@ BIF_DECL(BIF_StrGetPut)
 			}
 #endif
 			if (!char_count)
-				_f_throw(ERR_INTERNAL_CALL);
+				_f_throw(GetLastError() == ERROR_INSUFFICIENT_BUFFER ? ERR_INVALID_LENGTH : ERR_INTERNAL_CALL);
 		}
 		// Return the number of characters copied.
 		aResultToken.value_int64 = char_count;
