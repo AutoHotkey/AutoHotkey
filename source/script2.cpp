@@ -11214,12 +11214,8 @@ has_valid_return_type:
 	// It has also verified that the dyna_param array is large enough to hold all of the args.
 	for (arg_count = 0, i = 1; i < aParamCount; ++arg_count, i += 2)  // Same loop as used later below, so maintain them together.
 	{
-		switch (aParam[i]->symbol)
-		{
-		case SYM_STRING:	arg_type_string = aParam[i]->marker; break;						// Kept first since assumed to be most common.
-		case SYM_VAR:		arg_type_string = aParam[i]->var->Contents(TRUE, TRUE); break;	// SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-		default:			arg_type_string = _T(""); break; // It will be detected as invalid below.
-		}
+		arg_type_string = TokenToString(*aParam[i]); // aBuf not needed since numbers and "" are equally invalid.
+
 		ExprTokenType &this_param = *aParam[i + 1];         // Resolved for performance and convenience.
 		DYNAPARM &this_dyna_param = dyna_param[arg_count];  //
 
@@ -11286,8 +11282,6 @@ has_valid_return_type:
 			break;
 
 		case DLL_ARG_INVALID:
-			if (aParam[i]->symbol == SYM_VAR)
-				aParam[i]->var->MaybeWarnUninitialized();
 			_f_throw(ERR_INVALID_ARG_TYPE);
 
 		default: // Namely:
