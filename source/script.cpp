@@ -6844,6 +6844,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	pfunc->mBIF = bif.mBIF;
 	pfunc->mMinParams = bif.mMinParams;
 	pfunc->mParamCount = bif.mMaxParams;
+	pfunc->mIsVariadic = bif.mMaxParams == MAX_FUNCTION_PARAMS;
 	pfunc->mID = (BuiltInFunctionID)bif.mID;
 	pfunc->mOutputVars = bif_output_vars; // Not bif.mOutputVars, which may be temporary (and bif_output_vars may have been overridden above).
 

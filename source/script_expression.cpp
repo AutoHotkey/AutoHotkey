@@ -1534,6 +1534,12 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			aParam[aParamCount++] = rvalue; // In place of the variadic param.
 	}
 
+	if (aParamCount > mParamCount && !mIsVariadic) // v2 policy.
+	{
+		aResultToken.Error(ERR_TOO_MANY_PARAMS, mName);
+		return false;
+	}
+
 	if (mIsBuiltIn)
 	{
 		// mMinParams is validated at load-time where possible; so not for variadic or dynamic calls,

@@ -1862,7 +1862,8 @@ public:
 		// Allow any number of parameters, since these functions aren't called directly by users
 		// and might break the rules in some cases, such as Op_ObjGetInPlace() having 0 *visible*
 		// parameters but actually reading 2 which are then also passed to the next function call.
-		mParamCount = 1000;
+		mParamCount = 255;
+		mIsVariadic = true;
 	}
 };
 

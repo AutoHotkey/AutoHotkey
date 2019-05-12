@@ -13813,7 +13813,7 @@ BIF_DECL(BIF_IsLabel)
 
 BIF_DECL(BIF_IsFunc) // Lexikos: Added for use with dynamic function calls.
 // Returns a non-zero value if the function exists in the current scope.  Since a dynamic function-call
-// fails when too few parameters are passed (but not too many), the return value indicates to the caller
+// fails when too few or (in v2) too many parameters are passed, the return value indicates to the caller
 // not only that the function exists, but also how many parameters are required.  Although this may seem
 // redundant due to Func().MinParams, it has the benefit of not creating a new closure if the function
 // is a nested one with upvalues.
