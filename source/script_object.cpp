@@ -256,44 +256,21 @@ Object *Object::CloneTo(Object &obj, IndexType aStartOffset)
 
 
 //
-// Object::ArrayToParams - Used for variadic function-calls.
+// Array::ToParams - Used for variadic function-calls.
 //
 
-void Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params
-	, ExprTokenType **aParam, int aParamCount)
-// Expands this object's contents into the parameter list.  Due to the nature
-// of the parameter list, only fields with integer keys are used (named params
-// aren't supported).
-// Return value is FAIL if a required parameter was omitted or malloc() failed.
+// Copies this array's elements into the parameter list.
+// Caller has ensured param_list can fit aParamCount + Length().
+void Array::ToParams(ExprTokenType *token, ExprTokenType **param_list, ExprTokenType **aParam, int aParamCount)
 {
-	// Find the first and last field to be used.
-	int start = (int)mKeyOffsetInt;
-	int end = (int)mKeyOffsetObject; // For readability.
-	while (start < end && mFields[start].key.i < 1)
-		++start; // Skip any keys <= 0 (consistent with UDF-calling behaviour).
-	
-	int param_index;
-	IndexType field_index;
-
-	// For each extra param...
-	for (field_index = start, param_index = 0; field_index < end; ++field_index, ++param_index)
-	{
-		for ( ; param_index + 1 < (int)mFields[field_index].key.i; ++param_index)
-		{
-			token[param_index].symbol = SYM_MISSING;
-			token[param_index].marker = _T("");
-			token[param_index].marker_length = 0;
-		}
-		mFields[field_index].ToToken(token[param_index]);
-	}
+	for (index_t i = 0; i < mLength; ++i)
+		mItem[i].ToToken(token[i]);
 	
 	ExprTokenType **param_ptr = param_list;
-
-	// Init the array of param token pointers.
-	for (param_index = 0; param_index < aParamCount; ++param_index)
-		*param_ptr++ = aParam[param_index]; // Caller-supplied param token.
-	for (param_index = 0; param_index < extra_params; ++param_index)
-		*param_ptr++ = &token[param_index]; // New param.
+	for (int i = 0; i < aParamCount; ++i)
+		*param_ptr++ = aParam[i]; // Caller-supplied param token.
+	for (index_t i = 0; i < mLength; ++i)
+		*param_ptr++ = &token[i]; // New param.
 }
 
 
@@ -1584,11 +1561,13 @@ Array *Array::Create(ExprTokenType *aValue[], index_t aCount)
 	return nullptr;
 }
 
-Array *Array::Clone()
+Array *Array::Clone(BOOL aMembersOnly)
 {
 	auto arr = new Array();
 	if (!CloneTo(*arr, 0))
 		return nullptr; // CloneTo() released arr.
+	if (aMembersOnly) // Flag used in variadic calls (Func::Call).
+		return arr;
 	if (!arr->SetCapacity(mCapacity))
 		return nullptr;
 	for (index_t i = 0; i < mLength; ++i)
@@ -2205,12 +2184,12 @@ ResultType STDMETHODCALLTYPE BoundFunc::Invoke(ResultToken &aResultToken, ExprTo
 	}
 
 	// Combine the bound parameters with the supplied parameters.
-	int bound_count = mParams->MaxIndex();
+	int bound_count = mParams->Length();
 	if (bound_count > 0)
 	{
 		ExprTokenType *token = (ExprTokenType *)_alloca(bound_count * sizeof(ExprTokenType));
 		ExprTokenType **param = (ExprTokenType **)_alloca((bound_count + aParamCount) * sizeof(ExprTokenType *));
-		mParams->ArrayToParams(token, param, bound_count, NULL, 0);
+		mParams->ToParams(token, param, NULL, 0);
 		memcpy(param + bound_count, aParam, aParamCount * sizeof(ExprTokenType *));
 		aParam = param;
 		aParamCount += bound_count;
@@ -2227,7 +2206,7 @@ ResultType STDMETHODCALLTYPE BoundFunc::Invoke(ResultToken &aResultToken, ExprTo
 
 BoundFunc *BoundFunc::Bind(IObject *aFunc, ExprTokenType **aParam, int aParamCount, int aFlags)
 {
-	if (Object *params = Object::CreateArray(aParam, aParamCount))
+	if (auto params = Array::Create(aParam, aParamCount))
 	{
 		if (BoundFunc *bf = new BoundFunc(aFunc, params, aFlags))
 		{

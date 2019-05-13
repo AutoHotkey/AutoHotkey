@@ -1502,22 +1502,29 @@ normal_end_skip_output_var:
 
 bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic, FreeVars *aUpVars)
 {
-	Object *param_obj = NULL;
+	Array *param_obj = NULL;
 	if (aIsVariadic) // i.e. this is a variadic function call.
 	{
 		ExprTokenType *rvalue = NULL;
 		if (mBIF == &Op_ObjInvoke && (mID & IT_BITMASK) == IT_SET && aParamCount > 1) // x[y*]:=z
 			rvalue = aParam[--aParamCount];
 		
-		--aParamCount; // i.e. make aParamCount the count of normal params.
-		if (param_obj = dynamic_cast<Object *>(TokenToObject(*aParam[aParamCount])))
+		--aParamCount; // Exclude param_obj from aParamCount, so it's the count of normal params.
+		if (param_obj = dynamic_cast<Array *>(TokenToObject(*aParam[aParamCount])))
 		{
-			int extra_params = param_obj->MaxIndex();
-			if (extra_params > 0 || param_obj->HasNonnumericKeys())
+			int extra_params = param_obj->Length();
+			if (extra_params > 0 /*|| param_obj->HasNonnumericKeys()*/)
 			{
+				// Check total param count first (even though it's checked below) in case
+				// the array is abnormally large, to reduce the risk of stack overflow.
+				if (aParamCount + extra_params > mParamCount && !mIsVariadic) // v2 policy.
+				{
+					aResultToken.Error(ERR_TOO_MANY_PARAMS, mName);
+					return false;
+				}
 				// Calculate space required for ...
 				size_t space_needed = extra_params * sizeof(ExprTokenType) // ... new param tokens
-					+ max(mParamCount, aParamCount + extra_params) * sizeof(ExprTokenType *); // ... existing and new param pointers
+					+ (aParamCount + extra_params) * sizeof(ExprTokenType *); // ... existing and new param pointers
 				if (rvalue)
 					space_needed += sizeof(rvalue); // ... extra slot for aRValue
 				// Allocate new param list and tokens; tokens first for convenience.
@@ -1525,7 +1532,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 				ExprTokenType **param_list = (ExprTokenType **)(token + extra_params);
 				// Since built-in functions don't have variables we can directly assign to,
 				// we need to expand the param object's contents into an array of tokens:
-				param_obj->ArrayToParams(token, param_list, extra_params, aParam, aParamCount);
+				param_obj->ToParams(token, param_list, aParam, aParamCount);
 				aParam = param_list;
 				aParamCount += extra_params;
 			}
@@ -1775,9 +1782,9 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		
 		if (mIsVariadic && mParam[mParamCount].var) // i.e. this function is capable of accepting excess params via an object/array.
 		{
-			// If the caller supplied an array of parameters, copy any key-value pairs with non-numbered keys;
+			// If the caller supplied an array of parameters, copy any non-array properties of the object;
 			// otherwise, just create a new object.  Either way, numbered params will be inserted below.
-			Object *vararg_obj = param_obj ? param_obj->Clone(true) : Object::Create();
+			auto vararg_obj = param_obj ? param_obj->Clone(true) : Array::Create();
 			if (!vararg_obj)
 			{
 				aResultToken.Error(ERR_OUTOFMEM, mName); // Abort thread.
@@ -1785,7 +1792,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			}
 			if (j < aParamCount)
 				// Insert the excess parameters from the actual parameter list.
-				vararg_obj->InsertAt(0, 1, aParam + j, aParamCount - j);
+				vararg_obj->InsertAt(0, aParam + j, aParamCount - j);
 			// Assign to the "param*" var:
 			mParam[mParamCount].var->AssignSkipAddRef(vararg_obj);
 		}

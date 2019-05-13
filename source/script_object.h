@@ -286,7 +286,6 @@ public:
 	static Object *CreateArray(ExprTokenType *aValue[] = NULL, int aValueCount = 0);
 	
 	Object *Clone(BOOL aExcludeIntegerKeys = false);
-	void ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params, ExprTokenType **aParam, int aParamCount);
 	
 	inline bool GetNextItem(ExprTokenType &aToken, INT_PTR &aOffset, IntKeyType &aKey)
 	{
@@ -490,11 +489,12 @@ public:
 	bool Append(LPTSTR aValue, size_t aValueLength = -1) { return Append(ExprTokenType(aValue, aValueLength)); }
 	bool Append(__int64 aValue) { return Append(ExprTokenType(aValue)); }
 
-	Array *Clone();
+	Array *Clone(BOOL aMembersOnly = false);
 
 	static Array *Create(ExprTokenType *aValue[] = nullptr, index_t aCount = 0);
 	static Array *FromArgV(LPTSTR *aArgV, int aArgC);
 	ResultType ToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax);
+	void ToParams(ExprTokenType *token, ExprTokenType **param_list, ExprTokenType **aParam, int aParamCount);
 
 	enum MemberID
 	{
@@ -522,9 +522,9 @@ public:
 class BoundFunc : public ObjectBase
 {
 	IObject *mFunc; // Future use: bind a BoundFunc or other object.
-	Object *mParams;
+	Array *mParams;
 	int mFlags;
-	BoundFunc(IObject *aFunc, Object *aParams, int aFlags)
+	BoundFunc(IObject *aFunc, Array *aParams, int aFlags)
 		: mFunc(aFunc), mParams(aParams), mFlags(aFlags)
 	{}
 
