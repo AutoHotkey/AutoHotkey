@@ -160,17 +160,22 @@ Object *Object::CreateArray(ExprTokenType *aValue[], int aValueCount)
 // Object::Clone - Used for variadic function-calls.
 //
 
+// Creates an object and copies the content of this object to it, optionally excluding int keys.
 Object *Object::Clone(BOOL aExcludeIntegerKeys)
-// Creates an object and copies to it the fields at and after the given offset.
 {
 	IndexType aStartOffset = aExcludeIntegerKeys ? mKeyOffsetObject : 0;
 
 	Object *objptr = new Object();
 	if (!objptr|| aStartOffset >= mFieldCount)
 		return objptr;
-	
-	Object &obj = *objptr;
 
+	return CloneTo(*objptr, aStartOffset);
+}
+
+// Helper function for temporary implementation of Clone by Object and subclasses.
+// Should be eliminated once revision of the object model is complete.
+Object *Object::CloneTo(Object &obj, IndexType aStartOffset)
+{
 	// Allocate space in destination object.
 	IndexType field_count = mFieldCount - aStartOffset;
 	if (!obj.SetInternalCapacity(field_count))
@@ -744,7 +749,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// For both cases, the value is copied immediately after we return, because the result of any
 			// BIF is assumed to be volatile if expression eval isn't finished.  The function call in #1
 			// is handled by ExpandExpression() since commit 2a276145.
-			field->Get(aResultToken);
+			field->ReturnRef(aResultToken);
 			return OK;
 		}
 		// If 'this' is the target object (not its base), produce OK so that something like if(!foo.bar) is
@@ -910,6 +915,8 @@ bool Object::IsDerivedFrom(IObject *aBase)
 // Object::Type() - Returns the object's type/class name.
 //
 
+static LPTSTR sObjectTypeName = _T("Object");
+
 LPTSTR Object::Type()
 {
 	IObject *ibase;
@@ -920,7 +927,16 @@ LPTSTR Object::Type()
 	for (ibase = mBase; base = dynamic_cast<Object *>(ibase); ibase = base->mBase)
 		if (base->GetItem(value, _T("__Class")))
 			return TokenToString(value); // This object is an instance of base.
-	return _T("Object"); // This is an Object of undetermined type, like Object(), {} or [].
+	return sObjectTypeName; // This is an Object of undetermined type, like Object() or {}.
+}
+
+LPTSTR Array::Type()
+{
+	// Override default type name, but let script redefine it as per Object rules.
+	auto type = Object::Type();
+	if (type == sObjectTypeName)
+		return _T("Array");
+	return type;
 }
 
 	
@@ -1083,23 +1099,7 @@ ResultType Object::Remove(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 		}
 		// Since only one field (at maximum) can be removed in this mode, it
 		// seems more useful to return the field being removed than a count.
-		switch (aResultToken.symbol = min_field->symbol)
-		{
-		case SYM_STRING:
-			// For simplicity, just discard the memory of min_field->marker (can't return it as-is
-			// since the string isn't at the start of its memory block).  Scripts can use the 2-param
-			// mode to avoid any performance penalty this may incur.
-			TokenSetResult(aResultToken, min_field->string, min_field->string.Length());
-			break;
-		case SYM_OBJECT:
-			aResultToken.object = min_field->object;
-			min_field->symbol = SYM_INVALID; // Prevent Free() from calling object->Release(), since caller is taking ownership of the ref.
-			break;
-		//case SYM_INTEGER:
-		//case SYM_FLOAT:
-		default:
-			aResultToken.value_int64 = min_field->n_int64; // Effectively also value_double = n_double.
-		}
+		min_field->ReturnMove(aResultToken);
 		// If the key is an object, release it now because Free() doesn't.
 		// Note that object keys can only be removed in the single-item mode.
 		if (min_key_type == SYM_OBJECT)
@@ -1230,7 +1230,7 @@ ResultType Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, E
 			if (!desired_size)
 			{
 				// Caller specified zero - empty the field but do not remove it.
-				field->Clear();
+				field->AssignEmptyString();
 				_o_return(0);
 			}
 #ifdef UNICODE
@@ -1327,32 +1327,42 @@ ResultType Object::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 
 
 //
-// Object::FieldType
+// Object::Variant
 //
 
-void Object::FieldType::Clear()
+void Object::Variant::Minit()
+{
+	symbol = SYM_MISSING;
+	string.Init();
+}
+
+void Object::Variant::AssignEmptyString()
 {
 	Free();
 	symbol = SYM_STRING;
 	string.Init();
 }
 
-bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
+void Object::Variant::AssignMissing()
+{
+	Free();
+	Minit();
+}
+
+bool Object::Variant::Assign(LPTSTR str, size_t len, bool exact_size)
 {
 	if (len == -1)
 		len = _tcslen(str);
 
 	if (!len) // Check len, not *str, since it might be binary data or not null-terminated.
 	{
-		Clear();
+		AssignEmptyString();
 		return true;
 	}
 
 	if (symbol != SYM_STRING || len >= string.Capacity())
 	{
-		Free(); // Free object or previous buffer (which was too small).
-		symbol = SYM_STRING;
-		string.Init();
+		AssignEmptyString(); // Free object or previous buffer (which was too small).
 
 		size_t new_size = len + 1;
 		if (!exact_size)
@@ -1383,16 +1393,11 @@ bool Object::FieldType::Assign(LPTSTR str, size_t len, bool exact_size)
 	return true; // Success.
 }
 
-bool Object::FieldType::Assign(ExprTokenType &aParam)
+bool Object::Variant::Assign(ExprTokenType &aParam)
 {
 	ExprTokenType temp, *val; // Seems more maintainable to use a copy; avoid any possible side-effects.
 	if (aParam.symbol == SYM_VAR)
 	{
-		// Primary reason for this check: If var has a cached binary integer, we want to use it and
-		// not the stringified copy of it.  It seems unlikely that scripts will depend on the string
-		// format of a literal number such as 0x123 or 00001, and even less likely for a number stored
-		// in an object (even implicitly via a variadic function).  If the value is eventually passed
-		// to a COM method call, it can be important that it is passed as VT_I4 and not VT_BSTR.
 		aParam.var->ToTokenSkipAddRef(temp); // Skip AddRef() if applicable because it's called below.
 		val = &temp;
 	}
@@ -1403,6 +1408,9 @@ bool Object::FieldType::Assign(ExprTokenType &aParam)
 	{
 	case SYM_STRING:
 		return Assign(val->marker, val->marker_length);
+	case SYM_MISSING:
+		AssignMissing();
+		return OK;
 	case SYM_OBJECT:
 		Free(); // Free string or object, if applicable.
 		symbol = SYM_OBJECT; // Set symbol *after* calling Free().
@@ -1420,7 +1428,9 @@ bool Object::FieldType::Assign(ExprTokenType &aParam)
 	return true;
 }
 
-void Object::FieldType::Get(ExprTokenType &result)
+// Return value, knowing Variant will be kept around.
+// Copying of value can be skipped.
+void Object::Variant::ReturnRef(ResultToken &result)
 {
 	switch (result.symbol = symbol) // Assign.
 	{
@@ -1432,17 +1442,49 @@ void Object::FieldType::Get(ExprTokenType &result)
 		object->AddRef();
 		result.object = object;
 		break;
+	case SYM_MISSING:
+		result.SetValue(_T(""), 0);
+		break;
+	//case SYM_INTEGER:
+	//case SYM_FLOAT:
 	default:
 		result.value_int64 = n_int64; // Union copy.
 	}
 }
 
-void Object::FieldType::ToToken(ExprTokenType &aToken)
+// Return value, knowing Variant will shortly be deleted.
+// Value may be moved from Variant into ResultToken.
+void Object::Variant::ReturnMove(ResultToken &result)
+{
+	switch (result.symbol = symbol)
+	{
+	case SYM_STRING:
+		// For simplicity, just discard the memory of item.string (can't return it as-is since
+		// the string isn't at the start of its memory block).  Scripts can use the 2-param mode
+		// to avoid any performance penalty this may incur.
+		TokenSetResult(result, string, string.Length());
+		break;
+	case SYM_OBJECT:
+		result.object = object;
+		Minit(); // Let item forget the object ref since we are taking ownership.
+		break;
+	case SYM_MISSING:
+		result.SetValue(_T(""), 0);
+		break;
+	//case SYM_INTEGER:
+	//case SYM_FLOAT:
+	default:
+		result.value_int64 = n_int64; // Effectively also value_double = n_double.
+	}
+}
+
 // Used when we want the value as is, in a token.  Does not AddRef() or copy strings.
+void Object::Variant::ToToken(ExprTokenType &aToken)
 {
 	switch (aToken.symbol = symbol) // Assign.
 	{
 	case SYM_STRING:
+	case SYM_MISSING:
 		aToken.marker = string;
 		aToken.marker_length = string.Length();
 		break;
@@ -1451,7 +1493,7 @@ void Object::FieldType::ToToken(ExprTokenType &aToken)
 	}
 }
 
-void Object::FieldType::Free()
+void Object::Variant::Free()
 // Only the value is freed, since keys only need to be freed when a field is removed
 // entirely or the Object is being deleted.  See Object::Delete.
 // CONTAINED VALUE WILL NOT BE VALID AFTER THIS FUNCTION RETURNS.
@@ -1460,6 +1502,278 @@ void Object::FieldType::Free()
 		string.Free();
 	else if (symbol == SYM_OBJECT)
 		object->Release();
+}
+
+
+//
+// Array
+//
+
+ResultType Array::SetCapacity(index_t aNewCapacity)
+{
+	if (mLength > aNewCapacity)
+		RemoveAt(aNewCapacity, mLength - aNewCapacity);
+	auto new_item = (Variant *)realloc(mItem, sizeof(Variant) * aNewCapacity);
+	if (!new_item)
+		return FAIL;
+	for (auto i = mCapacity; i < aNewCapacity; ++i)
+		new_item[i].Minit();
+	mItem = new_item;
+	mCapacity = aNewCapacity;
+	return OK;
+}
+
+ResultType Array::EnsureCapacity(index_t aRequired)
+{
+	if (mCapacity >= aRequired)
+		return OK;
+	// Simple doubling of previous capacity, if that's enough, seems adequate.
+	// Otherwise, allocate exactly the amount required with no room to spare.
+	// v1 Object doubled in capacity when needed to add a new field, but started
+	// at 4 and did not allocate any extra space when inserting with InsertAt or
+	// Push.  By contrast, this approach:
+	//  1) Wastes no space in the possibly common case where Array::InsertAt is
+	//     called exactly once (such as when constructing the Array).
+	//  2) Expands exponentially if Push is being used repeatedly, which should
+	//     perform much better than expanding by 1 each time.
+	if (aRequired < (mCapacity << 1))
+		aRequired = (mCapacity << 1);
+	return SetCapacity(aRequired);
+}
+
+template<typename TokenT>
+ResultType Array::InsertAt(index_t aIndex, TokenT aValue[], index_t aCount)
+{
+	ASSERT(aIndex <= mLength);
+
+	if (!EnsureCapacity(mLength + aCount))
+		return FAIL;
+
+	if (aIndex < mLength)
+	{
+		memmove(mItem + aIndex + aCount, mItem + aIndex, (mLength - aIndex) * sizeof(mItem[0]));
+	}
+	for (index_t i = 0; i < aCount; ++i)
+	{
+		mItem[aIndex + i].Minit();
+		mItem[aIndex + i].Assign(aValue[i]);
+	}
+	mLength += aCount;
+	return OK;
+}
+
+template ResultType Array::InsertAt(index_t, ExprTokenType *[], index_t);
+template ResultType Array::InsertAt(index_t, ExprTokenType [], index_t);
+
+void Array::RemoveAt(index_t aIndex, index_t aCount)
+{
+	ASSERT(aIndex + aCount <= mLength);
+
+	for (index_t i = 0; i < aCount; ++i)
+	{
+		mItem[aIndex + i].AssignMissing();
+	}
+	mLength -= aCount;
+}
+
+ResultType Array::SetLength(index_t aNewLength)
+{
+	if (mLength > aNewLength)
+	{
+		RemoveAt(aNewLength, mLength - aNewLength);
+		return OK;
+	}
+	if (aNewLength > mCapacity && !SetCapacity(aNewLength))
+		return FAIL;
+	mLength = aNewLength;
+	return OK;
+}
+
+Array *Array::Create(ExprTokenType *aValue[], index_t aCount)
+{
+	auto arr = new Array();
+	if (arr->InsertAt(0, aValue, aCount))
+		return arr;
+	arr->Release();
+	return nullptr;
+}
+
+Array *Array::Clone()
+{
+	auto arr = new Array();
+	if (!CloneTo(*arr, 0))
+		return nullptr; // CloneTo() released arr.
+	if (!arr->SetCapacity(mCapacity))
+		return nullptr;
+	for (index_t i = 0; i < mLength; ++i)
+	{
+		ExprTokenType value;
+		mItem[i].ToToken(value);
+		if (!arr->mItem[i].Assign(value))
+		{
+			arr->Release();
+			return nullptr;
+		}
+	}
+	arr->mLength = mLength;
+	return arr;
+}
+
+ObjectMember Array::sMembers[] =
+{
+	Object_Property_get_set(Length),
+	Object_Property_get_set(Capacity),
+	Object_Method(InsertAt, 2, MAXP_VARIADIC),
+	Object_Method(Push, 1, MAXP_VARIADIC),
+	Object_Method(RemoveAt, 1, 2),
+	Object_Method(Pop, 0, 0),
+	Object_Method(Clone, 0, 0),
+	Object_Method(_NewEnum, 0, 0)
+};
+
+ResultType STDMETHODCALLTYPE Array::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	// Provide an approximation of the desired dispatch behaviour by using IF_META
+	// to invoke members previously defined via Object::Invoke, without handling SET
+	// at this stage since doing so would override our Length and Capacity.
+	auto result = Object::Invoke(aResultToken, aThisToken, aFlags | IF_META, aParam, aParamCount);
+	if (result != INVOKE_NOT_HANDLED)
+		return result;
+	if (aFlags & IF_DEFAULT)
+	{
+		if (IS_INVOKE_CALL)
+			return INVOKE_NOT_HANDLED;
+		if (aParamCount != (IS_INVOKE_SET ? 2 : 1))
+			_o_throw(ERR_INVALID_USAGE);
+		auto index = ParamToZeroIndex(*aParam[0]);
+		if (index >= mLength)
+			_o_throw(ERR_INVALID_INDEX, ParamIndexToString(0, _f_number_buf));
+		auto &item = mItem[index];
+		if (IS_INVOKE_GET)
+			item.ReturnRef(aResultToken);
+		else
+			if (!item.Assign(*aParam[1]))
+				_o_throw(ERR_OUTOFMEM);
+		return OK;
+	}
+	result = ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+	if (result == INVOKE_NOT_HANDLED && IS_INVOKE_SET && !IS_INVOKE_META)
+		// It wasn't a previously defined member, and this is an assignment so
+		// should create a new property.  Invoke again, without IF_META this time.
+		result = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
+	return result;
+}
+
+ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	switch (aID)
+	{
+	case P_Length:
+	case P_Capacity:
+		if (IS_INVOKE_SET)
+		{
+			auto arg64 = (UINT64)ParamIndexToInt64(0);
+			if (arg64 < 0 || arg64 > MaxIndex || !ParamIndexIsNumeric(0))
+				_o_throw(ERR_INVALID_VALUE);
+			if (!(aID == P_Capacity ? SetCapacity((index_t)arg64) : SetLength((index_t)arg64)))
+				_o_throw(ERR_OUTOFMEM);
+			return OK;
+		}
+		_o_return(aID == P_Capacity ? Capacity() : Length());
+
+	case M_InsertAt:
+	case M_Push:
+	{
+		index_t index;
+		if (aID == M_InsertAt)
+		{
+			index = ParamToZeroIndex(*aParam[0]);
+			if (index > mLength || index + (index_t)aParamCount > MaxIndex) // The second condition is very unlikely.
+				_o_throw(ERR_PARAM1_INVALID);
+			aParam++;
+			aParamCount--;
+		}
+		else
+			index = mLength;
+		if (!InsertAt(index, aParam, aParamCount))
+			_o_throw(ERR_OUTOFMEM);
+		return OK;
+	}
+
+	case M_RemoveAt:
+	case M_Pop:
+	{
+		index_t index;
+		if (aID == M_RemoveAt)
+		{
+			index = ParamToZeroIndex(*aParam[0]);
+			if (index == BadIndex)
+				_o_throw(ERR_PARAM1_INVALID);
+		}
+		else
+		{
+			if (!mLength)
+				_o_throw(_T("Array is empty."));
+			index = mLength - 1;
+		}
+		
+		index_t count = (index_t)ParamIndexToOptionalInt64(1, 1);
+		if (index + count > mLength)
+			_o_throw(ERR_PARAM2_INVALID);
+
+		if (aParamCount < 2) // Remove-and-return mode.
+		{
+			mItem[index].ReturnMove(aResultToken);
+			if (aResultToken.Exited())
+				return aResultToken.Result();
+		}
+		
+		RemoveAt(index, count);
+		return OK;
+	}
+
+	case M_Clone:
+		if (auto *arr = Clone())
+			_o_return(arr);
+		_o_throw(ERR_OUTOFMEM);
+
+	case M__NewEnum:
+		_o_return(new Enumerator(this));
+	}
+	return INVOKE_NOT_HANDLED;
+}
+
+Array::index_t Array::ParamToZeroIndex(ExprTokenType &aParam)
+{
+	if (!TokenIsNumeric(aParam))
+		return -1;
+	auto index = TokenToInt64(aParam);
+	if (index <= 0) // Let -1 be the last item and 0 be the first unused index.
+		index += mLength + 1;
+	--index; // Convert to zero-based.
+	return index >= 0 && index <= UINT_MAX ? UINT(index) : BadIndex;
+}
+
+Implement_DebugWriteProperty_via_sMembers(Array)
+
+
+int Array::Enumerator::Next(Var *aVal, Var *aReserved)
+{
+	if (mIndex < mArray->mLength)
+	{
+		auto &item = mArray->mItem[mIndex++];
+		switch (item.symbol)
+		{
+		default:	aVal->AssignString(item.string, item.string.Length());	break;
+		case SYM_INTEGER:	aVal->Assign(item.n_int64);			break;
+		case SYM_FLOAT:		aVal->Assign(item.n_double);		break;
+		case SYM_OBJECT:	aVal->Assign(item.object);			break;
+		}
+		if (aReserved)
+			aReserved->Assign();
+		return true;
+	}
+	return false;
 }
 
 

@@ -50,6 +50,13 @@ BIF_DECL(BIF_Array)
 	}
 	_f_throw(ERR_OUTOFMEM);
 }
+
+BIF_DECL(BIF_ArrayCreate)
+{
+	if (auto arr = Array::Create(aParam, aParamCount))
+		_f_return(arr);
+	_f_throw(ERR_OUTOFMEM);
+}
 	
 
 //

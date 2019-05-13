@@ -1,2 +1,3 @@
 #define BIF_DECL(name) void name(ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 #define BIF_DECL_GUICTRL(name) void name(ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, GuiControlType& control)
+#define IObject_Type_Impl(name) LPTSTR Type() { return _T(name); }

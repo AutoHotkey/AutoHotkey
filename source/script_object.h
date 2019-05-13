@@ -184,15 +184,8 @@ public:
 class Object : public ObjectBase
 {
 protected:
-	typedef INT_PTR IndexType; // Type of index for the internal array.  Must be signed for FindKey to work correctly.
-	union KeyType // Which of its members is used depends on the field's position in the mFields array.
-	{
-		LPTSTR s;
-		IntKeyType i;
-		IObject *p;
-	};
 	typedef FlatVector<TCHAR> String;
-	struct FieldType
+	struct Variant
 	{
 		union { // Which of its members is used depends on the value of symbol, below.
 			__int64 n_int64;	// for SYM_INTEGER
@@ -200,19 +193,34 @@ protected:
 			IObject *object;	// for SYM_OBJECT
 			String string;		// for SYM_STRING
 		};
-		KeyType key;
 		SymbolType symbol;
 		// key_c contains the first character of key.s. This utilizes space that would
 		// otherwise be unused due to 8-byte alignment. See FindField() for explanation.
 		TCHAR key_c;
 
-		void Clear();
+		void Minit(); // Perform minimum initialization.
 		bool Assign(LPTSTR str, size_t len = -1, bool exact_size = false);
+		void AssignEmptyString();
+		void AssignMissing();
 		bool Assign(ExprTokenType &val);
-		void Get(ExprTokenType &result);
+		bool Assign(ExprTokenType *val) { return Assign(*val); }
+		void ReturnRef(ResultToken &result);
+		void ReturnMove(ResultToken &result);
 		void Free();
 	
 		inline void ToToken(ExprTokenType &aToken); // Used when we want the value as is, in a token.  Does not AddRef() or copy strings.
+	};
+
+	typedef INT_PTR IndexType; // Type of index for the internal array.  Must be signed for FindKey to work correctly.
+	union KeyType // Which of its members is used depends on the field's position in the mFields array.
+	{
+		LPTSTR s;
+		IntKeyType i;
+		IObject *p;
+	};
+	struct FieldType : Variant
+	{
+		KeyType key;
 	};
 
 	class Enumerator : public EnumBase
@@ -270,6 +278,8 @@ protected:
 	}
 	
 	ResultType CallField(FieldType *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	Object *CloneTo(Object &aTo, IndexType aStartOffset);
 	
 public:
 	static Object *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
@@ -433,6 +443,77 @@ public:
 };
 
 extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object values.
+
+
+//
+// Array
+//
+
+class Array : public Object
+{
+public:
+	// The type of an array element index or count.
+	// Use unsigned to avoid the need to check for negatives.
+	typedef UINT index_t;
+
+private:
+	Variant *mItem = nullptr;
+	index_t mLength = 0, mCapacity = 0;
+
+	ResultType SetCapacity(index_t aNewCapacity);
+	ResultType EnsureCapacity(index_t aRequired);
+
+	index_t ParamToZeroIndex(ExprTokenType &aParam);
+
+	class Enumerator : public EnumBase
+	{
+		Array *mArray;
+		index_t mIndex = 0;
+	public:
+		Enumerator(Array *aArr) : mArray(aArr) { mArray->AddRef(); }
+		~Enumerator() { mArray->Release(); }
+		int Next(Var *, Var *);
+		IObject_Type_Impl("Array.Enumerator")
+	};
+	
+public:
+	enum : index_t
+	{
+		BadIndex = UINT_MAX, // Always >= mLength.
+		MaxIndex = INT_MAX // This would need 32GB RAM just for mItem, assuming 16 bytes per element.  Not exceeding INT_MAX might avoid some issues.
+	};
+
+	index_t Length() { return mLength; }
+	index_t Capacity() { return mCapacity; }
+	
+	ResultType SetLength(index_t aNewLength);
+
+	template<typename TokenT>
+	ResultType InsertAt(index_t aIndex, TokenT aValue[], index_t aCount);
+	void       RemoveAt(index_t aIndex, index_t aCount);
+
+	Array *Clone();
+
+	static Array *Create(ExprTokenType *aValue[], index_t aCount);
+	//static Array *FromArgV(LPTSTR *aArgV, int aArgC);
+
+	enum MemberID
+	{
+		P_Length,
+		P_Capacity,
+		M_InsertAt,
+		M_Push,
+		M_RemoveAt,
+		M_Pop,
+		M_Clone,
+		M__NewEnum
+	};
+	static ObjectMember sMembers[];
+	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	LPTSTR Type();
+	IObject_DebugWriteProperty_Def;
+};
 
 
 //
