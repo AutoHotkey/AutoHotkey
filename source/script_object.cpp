@@ -1584,6 +1584,14 @@ Array *Array::Clone(BOOL aMembersOnly)
 	return arr;
 }
 
+bool Array::ItemToToken(index_t aIndex, ExprTokenType &aToken)
+{
+	if (aIndex >= mLength)
+		return false;
+	mItem[aIndex].ToToken(aToken);
+	return true;
+}
+
 ObjectMember Array::sMembers[] =
 {
 	Object_Property_get_set(Length),

@@ -1524,7 +1524,7 @@ STDMETHODIMP IObjectComCompatible::GetIDsOfNames(REFIID riid, LPOLESTR *rgszName
 		if (!g_IdToName->Append(name))
 			return E_OUTOFMEMORY;
 		id.symbol = SYM_INTEGER;
-		id.value_int64 = g_IdToName->GetNumericItemCount();
+		id.value_int64 = g_IdToName->Length();
 		if (!g_NameToId->SetItem(name, id))
 			return E_OUTOFMEMORY;
 	}
@@ -1561,7 +1561,7 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	
 	if (dispIdMember > 0)
 	{
-		if (!g_IdToName->GetItemOffset(param_token[0], dispIdMember - 1))
+		if (!g_IdToName->ItemToToken(dispIdMember - 1, param_token[0]))
 			return DISP_E_MEMBERNOTFOUND;
 		if (IsNumeric(param_token[0].marker, FALSE, FALSE)) // o[1] in JScript produces a numeric name.
 		{

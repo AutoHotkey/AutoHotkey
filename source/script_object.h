@@ -297,19 +297,6 @@ public:
 		return true;
 	}
 
-	inline bool GetItemOffset(ExprTokenType &aToken, INT_PTR aOffset)
-	{
-		if (aOffset >= mKeyOffsetObject)
-			return false;
-		mFields[aOffset].ToToken(aToken);
-		return true;
-	}
-
-	int GetNumericItemCount()
-	{
-		return (int)mKeyOffsetObject;
-	}
-
 	bool GetItem(ExprTokenType &aToken, ExprTokenType &aKey)
 	{
 		IndexType insert_pos;
@@ -490,6 +477,8 @@ public:
 	bool Append(__int64 aValue) { return Append(ExprTokenType(aValue)); }
 
 	Array *Clone(BOOL aMembersOnly = false);
+
+	bool ItemToToken(index_t aIndex, ExprTokenType &aToken);
 
 	static Array *Create(ExprTokenType *aValue[] = nullptr, index_t aCount = 0);
 	static Array *FromArgV(LPTSTR *aArgV, int aArgC);
