@@ -287,16 +287,6 @@ public:
 	
 	Object *Clone(BOOL aExcludeIntegerKeys = false);
 	
-	inline bool GetNextItem(ExprTokenType &aToken, INT_PTR &aOffset, IntKeyType &aKey)
-	{
-		if (++aOffset >= mKeyOffsetObject) // i.e. no more integer-keyed items.
-			return false;
-		FieldType &field = mFields[aOffset];
-		aKey = field.key.i;
-		field.ToToken(aToken);
-		return true;
-	}
-
 	bool GetItem(ExprTokenType &aToken, ExprTokenType &aKey)
 	{
 		IndexType insert_pos;

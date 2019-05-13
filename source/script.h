@@ -2589,7 +2589,7 @@ public:
 	static IObject* CreateDropArray(HDROP hDrop);
 	ResultType SetMenu(ExprTokenType &aParam);
 	static void UpdateMenuBars(HMENU aMenu);
-	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Object *aObj = NULL);
+	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Array *aObj = NULL);
 	ResultType PropertyGetPos(ResultToken &aResultToken, RECT &aPos);
 
 	ResultType ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs);
@@ -2605,7 +2605,7 @@ public:
 	ResultType ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &aOpt, GuiControlType &aControl
 		, GuiIndexType aControlIndex = -1); // aControlIndex is not needed upon control creation.
 	void ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aControl);
-	void ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt = NULL, Object *aObj = NULL);
+	void ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt = NULL, Array *aObj = NULL);
 	void ControlSetChoice(GuiControlType &aControl, int aChoice);
 	ResultType ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilename, int aWidth, int aHeight, int aIconNumber);
 	ResultType Show(LPTSTR aOptions);

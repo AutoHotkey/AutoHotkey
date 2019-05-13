@@ -166,11 +166,10 @@ bool GuiControlType::SupportsEvent(GuiEventType aEvent)
 }
 
 
-// Helper function used to convert a token to a script object.
-static Object* TokenToScriptObject(ExprTokenType &token)
+// Helper function used to convert a token to an Array object.
+static Array* TokenToArray(ExprTokenType &token)
 {
-	IObject* obj = TokenToObject(token);
-	return obj ? dynamic_cast<Object*>(obj) : NULL;
+	return dynamic_cast<Array *>(TokenToObject(token));
 }
 
 
@@ -287,7 +286,7 @@ ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, E
 	}
 	_f_param_string_opt(options, 0);
 	_f_param_string_opt(text, 1);
-	Object *text_obj = aParamCount >= 2 ? TokenToScriptObject(*aParam[1]) : NULL;
+	auto text_obj = aParamCount >= 2 ? TokenToArray(*aParam[1]) : NULL;
 	GuiControlType* pcontrol;
 	ResultType result = AddControl(ctrl_type, options, text, pcontrol, text_obj);
 	if (result == OK)
@@ -902,7 +901,7 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 
 		case M_List_Add:
 		{
-			Object* obj = TokenToScriptObject(*aParam[0]);
+			auto obj = TokenToArray(*aParam[0]);
 			LPTSTR value = obj ? _T("") : ParamIndexToString(0, _f_number_buf);
 			gui->ControlAddContents(*this, value, 0, NULL, obj);
 			if (type == GUI_CONTROL_TAB)
@@ -2631,7 +2630,7 @@ void GuiType::UpdateMenuBars(HMENU aMenu)
 
 
 
-ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Object *aObj)
+ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Array *aObj)
 // Caller must have ensured that mHwnd is non-NULL (i.e. that the parent window already exists).
 {
 	apControl = NULL; // Initialize return pointer.
@@ -6818,7 +6817,7 @@ void GuiType::ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aC
 
 
 
-void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt, Object *aObj)
+void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt, Array *aObj)
 // If INT_MIN is specified for aChoice, aControl should be the ListView to which a new row is being added.
 // In that case, aOpt should be non-NULL.
 // Caller must ensure that aContent is a writable memory area, since this function temporarily
@@ -6853,8 +6852,7 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 	LPTSTR this_field, next_field;
 	LRESULT item_index;
 	TCHAR num_buf[MAX_NUMBER_SIZE];
-	INT_PTR obj_off = -1;
-	IntKeyType obj_key = 0;
+	Array::index_t obj_index = 0;
 
 	// For tab controls:
 	TCITEM tci;
@@ -6871,7 +6869,7 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 		if (aObj)
 		{
 			ExprTokenType tok;
-			if (!aObj->GetNextItem(tok, obj_off, obj_key))
+			if (!aObj->ItemToToken(obj_index++, tok))
 				break;
 			this_field = TokenToString(tok, num_buf);
 		}
