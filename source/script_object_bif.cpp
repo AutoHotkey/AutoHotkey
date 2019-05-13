@@ -43,16 +43,6 @@ BIF_DECL(BIF_Object)
 
 BIF_DECL(BIF_Array)
 {
-	if (aResultToken.object = Object::CreateArray(aParam, aParamCount))
-	{
-		aResultToken.symbol = SYM_OBJECT;
-		return;
-	}
-	_f_throw(ERR_OUTOFMEM);
-}
-
-BIF_DECL(BIF_ArrayCreate)
-{
 	if (auto arr = Array::Create(aParam, aParamCount))
 		_f_return(arr);
 	_f_throw(ERR_OUTOFMEM);

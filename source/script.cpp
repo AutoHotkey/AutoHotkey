@@ -44,7 +44,6 @@ FuncEntry g_BIF[] =
 	BIF1(Abs, 1, 1),
 	BIFn(ACos, 1, 1, BIF_ASinACos),
 	BIF1(Array, 0, NA),
-	BIF1(ArrayCreate, 0, NA),
 	BIFn(ASin, 1, 1, BIF_ASinACos),
 	BIF1(ATan, 1, 1),
 	BIF1(BufferAlloc, 1, 1),
