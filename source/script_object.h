@@ -283,7 +283,6 @@ protected:
 	
 public:
 	static Object *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
-	static Object *CreateArray(ExprTokenType *aValue[] = NULL, int aValueCount = 0);
 	
 	Object *Clone(BOOL aExcludeIntegerKeys = false);
 	
@@ -334,16 +333,6 @@ public:
 	{
 		return SetItem(aKey, ExprTokenType(aValue));
 	}
-
-	void ReduceKeys(INT_PTR aAmount)
-	{
-		for (IndexType i = 0; i < mKeyOffsetObject; ++i)
-			mFields[i].key.i -= aAmount;
-	}
-
-	int MinIndex() { return (mKeyOffsetInt < mKeyOffsetObject) ? (int)mFields[0].key.i : 0; }
-	int MaxIndex() { return (mKeyOffsetInt < mKeyOffsetObject) ? (int)mFields[mKeyOffsetObject-1].key.i : 0; }
-	bool HasNonnumericKeys() { return mKeyOffsetObject < mFieldCount; }
 
 	void SetBase(IObject *aNewBase)
 	{ 

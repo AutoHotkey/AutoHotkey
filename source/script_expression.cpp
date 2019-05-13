@@ -1513,7 +1513,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		if (param_obj = dynamic_cast<Array *>(TokenToObject(*aParam[aParamCount])))
 		{
 			int extra_params = param_obj->Length();
-			if (extra_params > 0 /*|| param_obj->HasNonnumericKeys()*/)
+			if (extra_params > 0)
 			{
 				// Check total param count first (even though it's checked below) in case
 				// the array is abnormally large, to reduce the risk of stack overflow.

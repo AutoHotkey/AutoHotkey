@@ -144,17 +144,6 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 	return obj;
 }
 
-Object *Object::CreateArray(ExprTokenType *aValue[], int aValueCount)
-{
-	Object *obj = new Object();
-	if (obj && aValueCount && !obj->InsertAt(0, 1, aValue, aValueCount))
-	{
-		obj->Release(); // InsertAt failed.
-		obj = NULL;
-	}
-	return obj;
-}
-
 
 //
 // Object::Clone - Used for variadic function-calls.
