@@ -1754,7 +1754,7 @@ ResultType GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType 
 		}
 
 		// Create object for storing the selected items.
-		Object *ret = Object::Create();
+		auto ret = Array::Create();
 		if (!ret)
 		{
 			free(item);
@@ -2567,19 +2567,20 @@ GuiEventType GuiType::ConvertEvent(LPTSTR evt)
 
 IObject* GuiType::CreateDropArray(HDROP hDrop)
 {
+	auto arr = Array::Create();
+	// The added complexity/code size of handling out-of-memory here and in MsgSleep()
+	// by aborting the new thread seems to outweigh the trivial benefits.  So assume
+	// arr is non-NULL and let the access violation occur if otherwise.
 	TCHAR buf[MAX_PATH];
 	UINT file_count = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
-	Object* obj = Object::Create();
-	ExprTokenType tok(buf);
-	ExprTokenType* pTok = &tok;
-
 	for (UINT u = 0; u < file_count; u ++)
 	{
-		DragQueryFile(hDrop, u, buf, MAX_PATH);
-		obj->InsertAt(u, u+1, &pTok, 1);
+		arr->Append(buf, DragQueryFile(hDrop, u, buf, MAX_PATH));
+		// Result not checked for reasons described above.  The likely outcome at this
+		// point would be for the event handler to either execute with fewer files than
+		// expected, or for it to raise ERR_OUTOFMEM.
 	}
-
-	return obj;
+	return arr;
 }
 
 

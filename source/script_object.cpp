@@ -298,18 +298,17 @@ void Object::ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int
 
 
 //
-// Object::ArrayToStrings - Used by BIF_StrSplit.
+// Array::ToStrings - Used by BIF_StrSplit.
 //
 
-ResultType Object::ArrayToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax)
+ResultType Array::ToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax)
 {
-	int i, j;
-	for (i = 0, j = 0; i < aStringsMax && j < mKeyOffsetObject; ++j)
-		if (SYM_STRING == mFields[j].symbol)
-			aStrings[i++] = mFields[j].string;
+	for (index_t i = 0; i < mLength; ++i)
+		if (SYM_STRING == mItem[i].symbol)
+			aStrings[i] = mItem[i].string;
 		else
 			return FAIL;
-	aStringCount = i;
+	aStringCount = mLength;
 	return OK;
 }
 
@@ -829,7 +828,7 @@ ResultType Object::CallField(FieldType *aField, ResultToken &aResultToken, ExprT
 // Helper function for WinMain()
 //
 
-Object *Object::CreateFromArgV(LPTSTR *aArgV, int aArgC)
+Array *Array::FromArgV(LPTSTR *aArgV, int aArgC)
 {
 	ExprTokenType *token = (ExprTokenType *)_alloca(aArgC * sizeof(ExprTokenType));
 	ExprTokenType **param = (ExprTokenType **)_alloca(aArgC * sizeof(ExprTokenType*));
@@ -838,7 +837,7 @@ Object *Object::CreateFromArgV(LPTSTR *aArgV, int aArgC)
 		token[j].SetValue(aArgV[j]);
 		param[j] = &token[j];
 	}
-	return CreateArray(param, aArgC);
+	return Create(param, aArgC);
 }
 
 
@@ -847,26 +846,13 @@ Object *Object::CreateFromArgV(LPTSTR *aArgV, int aArgC)
 // Helper function for StrSplit/WinGetList/WinGetControls
 //
 
-bool Object::Append(ExprTokenType &aValue)
+bool Array::Append(ExprTokenType &aValue)
 {
-	if (mFieldCount == mFieldCountMax && !Expand()) // Attempt to expand if at capacity.
+	if (mLength == MaxIndex || !EnsureCapacity(mLength + 1))
 		return false;
-
-	FieldType &field = mFields[mKeyOffsetObject];
-	if (mKeyOffsetObject < mFieldCount)
-		// For maintainability. This might never be done, because our caller
-		// doesn't use string/object keys. Move existing fields to make room:
-		memmove(&field + 1, &field, (mFieldCount - mKeyOffsetObject) * sizeof(FieldType));
-	++mFieldCount; // Only after memmove above.
-	++mKeyOffsetObject;
-	++mKeyOffsetString;
-	
-	// The following relies on the fact that callers of this function ONLY use
-	// this function, so the last integer key == the number of integer keys.
-	field.key.i = mKeyOffsetObject;
-
-	field.symbol = SYM_INVALID; // Init for Assign(): indicate that it does not contain a valid string or object.
-	return field.Assign(aValue);
+	auto &item = mItem[mLength++];
+	item.Minit();
+	return item.Assign(aValue);
 }
 
 
@@ -1592,7 +1578,7 @@ ResultType Array::SetLength(index_t aNewLength)
 Array *Array::Create(ExprTokenType *aValue[], index_t aCount)
 {
 	auto arr = new Array();
-	if (arr->InsertAt(0, aValue, aCount))
+	if (!aCount || arr->InsertAt(0, aValue, aCount))
 		return arr;
 	arr->Release();
 	return nullptr;

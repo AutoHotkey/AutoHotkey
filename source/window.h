@@ -113,7 +113,7 @@ public:
 	WindowSpec *mFirstWinSpec;  // Linked list used by the WinGroup commands.
 	ActionTypeType mActionType; // Used only by WinGroup::PerformShowWindow().
 	int mTimeToWaitForClose;    // Same.
-	Object *mArray;             // Used by WinGetList() to fetch an array of matching HWNDs.
+	Array *mArray;             // Used by WinGetList() to fetch an array of matching HWNDs.
 
 	// Controlled by the SetCandidate() method:
 	HWND mCandidateParent;
@@ -164,7 +164,7 @@ struct control_list_type
 		cl.buf_free_spot = cl.class_buf; // Points to the next available/writable place in the buf.
 	bool fetch_hwnds;         // True if fetching HWND of each control rather than its ClassNN.
 	int total_classes;        // Must be initialized to 0.
-	Object *target_array;
+	Array *target_array;
 	#define CL_CLASS_BUF_SIZE (32 * 1024) // Even if class names average 50 chars long, this supports 655 of them.
 	TCHAR class_buf[CL_CLASS_BUF_SIZE];
 	LPTSTR buf_free_spot;      // Must be initialized to point to the beginning of class_buf.

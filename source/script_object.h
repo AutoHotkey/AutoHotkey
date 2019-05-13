@@ -284,15 +284,9 @@ protected:
 public:
 	static Object *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
 	static Object *CreateArray(ExprTokenType *aValue[] = NULL, int aValueCount = 0);
-	static Object *CreateFromArgV(LPTSTR *aArgV, int aArgC);
 	
-	bool Append(ExprTokenType &aValue);
-	bool Append(LPTSTR aValue, size_t aValueLength = -1) { return Append(ExprTokenType(aValue, aValueLength)); }
-	bool Append(__int64 aValue) { return Append(ExprTokenType(aValue)); }
-
 	Object *Clone(BOOL aExcludeIntegerKeys = false);
 	void ArrayToParams(ExprTokenType *token, ExprTokenType **param_list, int extra_params, ExprTokenType **aParam, int aParamCount);
-	ResultType ArrayToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax);
 	
 	inline bool GetNextItem(ExprTokenType &aToken, INT_PTR &aOffset, IntKeyType &aKey)
 	{
@@ -492,10 +486,15 @@ public:
 	ResultType InsertAt(index_t aIndex, TokenT aValue[], index_t aCount);
 	void       RemoveAt(index_t aIndex, index_t aCount);
 
+	bool Append(ExprTokenType &aValue);
+	bool Append(LPTSTR aValue, size_t aValueLength = -1) { return Append(ExprTokenType(aValue, aValueLength)); }
+	bool Append(__int64 aValue) { return Append(ExprTokenType(aValue)); }
+
 	Array *Clone();
 
-	static Array *Create(ExprTokenType *aValue[], index_t aCount);
-	//static Array *FromArgV(LPTSTR *aArgV, int aArgC);
+	static Array *Create(ExprTokenType *aValue[] = nullptr, index_t aCount = 0);
+	static Array *FromArgV(LPTSTR *aArgV, int aArgC);
+	ResultType ToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax);
 
 	enum MemberID
 	{

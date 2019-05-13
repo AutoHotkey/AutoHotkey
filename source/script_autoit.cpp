@@ -109,7 +109,7 @@ BIF_DECL(BIF_SysGetIPAddresses)
 	// aaa.bbb.ccc.ddd = 15, but allow room for larger IP's in the future.
 	#define IP_ADDRESS_SIZE 32 // The maximum size of any of the strings we return, including terminator.
 
-	Object *addresses = Object::Create();
+	auto addresses = Array::Create();
 	if (!addresses)
 		_f_throw(ERR_OUTOFMEM);
 

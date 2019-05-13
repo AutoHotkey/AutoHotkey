@@ -2574,7 +2574,7 @@ void WinGetList(ResultToken &aResultToken, BuiltInFunctionID aCmd, LPTSTR aTitle
 	WindowSearch ws;
 	ws.mFindLastMatch = true; // Must set mFindLastMatch to get all matches rather than just the first.
 	if (aCmd == FID_WinGetList)
-		if (  !(ws.mArray = Object::Create())  )
+		if (  !(ws.mArray = Array::Create())  )
 			_f_throw(ERR_OUTOFMEM);
 	// Check if we were asked to "list" or count the active window:
 	if (USE_FOREGROUND_WINDOW(aTitle, aText, aExcludeTitle, aExcludeText))
@@ -2711,7 +2711,7 @@ void WinGetControlList(ResultToken &aResultToken, HWND aTargetWindow, bool aFetc
 // z-order of the controls will be useful information to some script authors.
 {
 	control_list_type cl; // A big struct containing room to store class names and counts for each.
-	if (  !(cl.target_array = Object::Create())  )
+	if (  !(cl.target_array = Array::Create())  )
 		_f_throw(ERR_OUTOFMEM);
 	CL_INIT_CONTROL_LIST(cl)
 	cl.fetch_hwnds = aFetchHWNDs;
@@ -5764,11 +5764,11 @@ BIF_DECL(BIF_StrSplit)
 
 	if (aParamCount > 1)
 	{
-		if (Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[1])))
+		if (auto arr = dynamic_cast<Array *>(TokenToObject(*aParam[1])))
 		{
-			aDelimiterCount = obj->GetNumericItemCount();
+			aDelimiterCount = arr->Length();
 			aDelimiterList = (LPTSTR *)_alloca(aDelimiterCount * sizeof(LPTSTR *));
-			if (!obj->ArrayToStrings(aDelimiterList, aDelimiterCount, aDelimiterCount))
+			if (!arr->ToStrings(aDelimiterList, aDelimiterCount, aDelimiterCount))
 				// Array contains something other than a string.
 				goto throw_invalid_delimiter;
 			for (int i = 0; i < aDelimiterCount; ++i)
@@ -5792,7 +5792,7 @@ BIF_DECL(BIF_StrSplit)
 		}
 	}
 	
-	Object *output_array = Object::Create();
+	auto output_array = Array::Create();
 	if (!output_array)
 		goto throw_outofmem;
 
