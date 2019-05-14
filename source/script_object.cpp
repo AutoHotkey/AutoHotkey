@@ -1659,12 +1659,6 @@ ObjectMember Array::sMembers[] =
 
 ResultType STDMETHODCALLTYPE Array::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	// Provide an approximation of the desired dispatch behaviour by using IF_META
-	// to invoke members previously defined via Object::Invoke, without handling SET
-	// at this stage since doing so would override our Length and Capacity.
-	auto result = Object::Invoke(aResultToken, aThisToken, aFlags | IF_META, aParam, aParamCount);
-	if (result != INVOKE_NOT_HANDLED)
-		return result;
 	if ((aFlags & (IF_DEFAULT|IT_CALL)) == IF_DEFAULT)
 	{
 		if (aParamCount != (IS_INVOKE_SET ? 2 : 1))
@@ -1680,10 +1674,14 @@ ResultType STDMETHODCALLTYPE Array::Invoke(ResultToken &aResultToken, ExprTokenT
 				_o_throw(ERR_OUTOFMEM);
 		return OK;
 	}
-	result = ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
-	if (result == INVOKE_NOT_HANDLED && IS_INVOKE_SET && !IS_INVOKE_META)
-		// It wasn't a previously defined member, and this is an assignment so
-		// should create a new property.  Invoke again, without IF_META this time.
+	auto result = ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+	// There's currently no support for overriding built-in Array members.
+	// That aside, this approach allows user-defined properties and methods
+	// and built-in Object members (if they aren't shadowed by Array members),
+	// which would be difficult with the current design.  This will be fixed
+	// when Object is redesigned to allow defining all built-ins via mapping,
+	// rather than virtual functions, recursion and special flags.
+	if (result == INVOKE_NOT_HANDLED)
 		result = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
 	return result;
 }
