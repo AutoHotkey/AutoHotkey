@@ -473,6 +473,8 @@ public:
 		M_Push,
 		M_RemoveAt,
 		M_Pop,
+		M_Has,
+		M_Delete,
 		M_Clone,
 		M__NewEnum
 	};

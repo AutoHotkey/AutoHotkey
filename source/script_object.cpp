@@ -1651,6 +1651,8 @@ ObjectMember Array::sMembers[] =
 	Object_Method(Push, 1, MAXP_VARIADIC),
 	Object_Method(RemoveAt, 1, 2),
 	Object_Method(Pop, 0, 0),
+	Object_Method(Has, 1, 1),
+	Object_Method(Delete, 1, 1),
 	Object_Method(Clone, 0, 0),
 	Object_Method(_NewEnum, 0, 0)
 };
@@ -1751,6 +1753,24 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		}
 		
 		RemoveAt(index, count);
+		return OK;
+	}
+	
+	case M_Has:
+	{
+		auto index = ParamToZeroIndex(*aParam[0]);
+		_o_return(index >= 0 && index < mLength && mItem[index].symbol != SYM_MISSING
+			? (index + 1) : 0);
+	}
+
+	case M_Delete:
+	{
+		auto index = ParamToZeroIndex(*aParam[0]);
+		if (index < mLength)
+		{
+			mItem[index].ReturnMove(aResultToken);
+			mItem[index].AssignMissing();
+		}
 		return OK;
 	}
 
