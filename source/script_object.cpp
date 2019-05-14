@@ -438,9 +438,8 @@ ObjectMember Object::sMembers[] =
 	Object_Method1(MaxIndex, 0, 0),
 	Object_Method1(Length, 0, 0),
 	Object_Method1(Count, 0, 0),
-	Object_Method1(SetCapacity, 1, 2),
-	Object_Method1(GetCapacity, 0, 1),
-	Object_Method1(GetAddress, 1, 1),
+	Object_Method1(SetCapacity, 1, 1),
+	Object_Method1(GetCapacity, 0, 0),
 	Object_Method1(_NewEnum, 0, 0),
 	Object_Method1(HasKey, 1, 1),
 	Object_Method1(Clone, 0, 0)
@@ -797,7 +796,6 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 	case FID_ObjHasKey:			return HasKey(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjGetCapacity:	return GetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjSetCapacity:	return SetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
-	case FID_ObjGetAddress:		return GetAddress(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjClone:			return Clone(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjNewEnum:		return _NewEnum(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjMaxIndex:		return MaxIndex(aResultToken, 0, IT_CALL, aParam, aParamCount);
@@ -1187,79 +1185,15 @@ ResultType Object::MinIndex(ResultToken &aResultToken, int aID, int aFlags, Expr
 
 ResultType Object::GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (aParamCount)
-	{
-		SymbolType key_type;
-		KeyType key;
-		IndexType insert_pos;
-		FieldType *field;
-
-		if ( (field = FindField(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
-			&& field->symbol == SYM_STRING )
-		{
-			size_t size = field->string.Capacity();
-			_o_return(size ? _TSIZE(size - 1) : 0); // -1 to exclude null-terminator.
-		}
-		//else: wrong type of field, so return an empty string.
-	}
-	else // aParamCount == 0
-	{
-		_o_return(mFieldCountMax);
-	}
-	_o_return_empty;
+	_o_return(mFieldCountMax);
 }
 
 ResultType Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-// SetCapacity([field_name,] new_capacity)
 {
-	if (!aParamCount || !TokenIsNumeric(*aParam[aParamCount > 1]))
-		_o_throw(ERR_PARAM_INVALID);
+	if (!ParamIndexIsNumeric(0))
+		_o_throw(ERR_PARAM1_INVALID);
 
-	__int64 desired_capacity = TokenToInt64(*aParam[aParamCount > 1]);
-	if (aParamCount > 1) // Field name was specified.
-	{
-		if (desired_capacity < 0) // Check before sign is dropped.
-			_o_throw(ERR_PARAM2_INVALID);
-		size_t desired_size = (size_t)desired_capacity;
-
-		SymbolType key_type;
-		KeyType key;
-		IndexType insert_pos;
-		FieldType *field;
-
-		if ( (field = FindField(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
-			|| (field = Insert(key_type, key, insert_pos)) )
-		{	
-			// Field was successfully found or inserted.
-			if (field->symbol != SYM_STRING)
-				// Wrong type of field.
-				_o_throw(ERR_INVALID_VALUE);
-			if (!desired_size)
-			{
-				// Caller specified zero - empty the field but do not remove it.
-				field->AssignEmptyString();
-				_o_return(0);
-			}
-#ifdef UNICODE
-			// Convert size in bytes to size in chars.
-			desired_size = (desired_size >> 1) + (desired_size & 1);
-#endif
-			size_t length = field->string.Length();
-			if (desired_size < length)
-				desired_size = length; // Consistent with Object.SetCapacity(n): never truncate data.
-			// Unlike VarSetCapacity: allow fields to shrink, preserves existing data.
-			if (field->string.SetCapacity(desired_size + 1)) // Like VarSetCapacity, reserve one char for the null-terminator.
-			{
-				// Return new size, excluding null-terminator.
-				_o_return(_TSIZE(desired_size));
-			}
-			// Since above didn't return, it failed.
-		}
-		// Out of memory.  Throw an error, otherwise scripts might assume success and end up corrupting the heap:
-		_o_throw(ERR_OUTOFMEM);
-	}
-	// else aParamCount == 1: set the capacity of this object.
-	IndexType desired_count = (IndexType)desired_capacity;
+	IndexType desired_count = (IndexType)ParamIndexToInt64(0);
 	if (desired_count < mFieldCount)
 	{
 		// It doesn't seem intuitive to allow SetCapacity to truncate the fields array, so just reallocate
@@ -1286,23 +1220,6 @@ ResultType Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, E
 	// debug if an error is thrown here rather than possibly later, when the array attempts to resize itself to
 	// fit new items.  This also avoids the need for scripts to check if the return value is less than expected:
 	_o_throw(ERR_OUTOFMEM);
-}
-
-ResultType Object::GetAddress(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-// GetAddress(key)
-{
-	SymbolType key_type;
-	KeyType key;
-	IndexType insert_pos;
-	FieldType *field;
-
-	if ( (field = FindField(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos))
-		&& field->symbol == SYM_STRING )
-	{
-		_o_return((__int64)field->string.Value());
-	}
-	//else: nonexistent field or wrong type.
-	_o_throw(field ? ERR_INVALID_VALUE : ERR_PARAM1_INVALID);
 }
 
 ResultType Object::_NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
