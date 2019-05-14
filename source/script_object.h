@@ -447,6 +447,7 @@ public:
 
 	bool ItemToToken(index_t aIndex, ExprTokenType &aToken);
 
+	~Array();
 	static Array *Create(ExprTokenType *aValue[] = nullptr, index_t aCount = 0);
 	static Array *FromArgV(LPTSTR *aArgV, int aArgC);
 	static Array *FromEnumerable(IObject *aEnum);

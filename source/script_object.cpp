@@ -1346,7 +1346,7 @@ void Array::RemoveAt(index_t aIndex, index_t aCount)
 	}
 	if (aIndex < mLength)
 	{
-		memmove(mItem + aIndex, mItem + aIndex + aCount, (mLength - aIndex) * sizeof(mItem[0]));
+		memmove(mItem + aIndex, mItem + aIndex + aCount, (mLength - aIndex - aCount) * sizeof(mItem[0]));
 	}
 	mLength -= aCount;
 }
@@ -1366,6 +1366,12 @@ ResultType Array::SetLength(index_t aNewLength)
 	}
 	mLength = aNewLength;
 	return OK;
+}
+
+Array::~Array()
+{
+	RemoveAt(0, mLength);
+	free(mItem);
 }
 
 Array *Array::Create(ExprTokenType *aValue[], index_t aCount)
