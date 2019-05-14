@@ -262,6 +262,61 @@ void Array::ToParams(ExprTokenType *token, ExprTokenType **param_list, ExprToken
 		*param_ptr++ = &token[i]; // New param.
 }
 
+// Calls an Enumerator repeatedly and returns an Array of all first-arg values.
+// This is used in conjunction with Array::ToParams to support other objects.
+Array *Array::FromEnumerable(IObject *aEnumerable)
+{
+	FuncResult result_token;
+	ExprTokenType t_this(aEnumerable);
+	ExprTokenType param[2], *params[2] = { param, param + 1 };
+
+	param[0].SetValue(_T("_NewEnum"), 8);
+	auto result = aEnumerable->Invoke(result_token, t_this, IT_CALL, params, 1);
+	if (result == FAIL || result == EARLY_EXIT || result == INVOKE_NOT_HANDLED)
+	{
+		if (result == INVOKE_NOT_HANDLED)
+			g_script.ScriptError(ERR_UNKNOWN_METHOD, _T("_NewEnum"));
+		return nullptr;
+	}
+	IObject *enumerator = TokenToObject(result_token);
+	if (!enumerator)
+	{
+		g_script.ScriptError(ERR_TYPE_MISMATCH, _T("_NewEnum"));
+		result_token.Free();
+		return nullptr;
+	}
+	enumerator->AddRef();
+
+	Var var;
+	t_this.SetValue(enumerator);
+	param[0].SetValue(_T("Next"), 4);
+	param[1].symbol = SYM_VAR;
+	param[1].var = &var;
+	Array *vargs = new Array();
+	for (;;)
+	{
+		result_token.Free();
+		result_token.InitResult(result_token.buf);
+		auto result = enumerator->Invoke(result_token, t_this, IT_CALL, params, 2);
+		if (result == FAIL || result == EARLY_EXIT || result == INVOKE_NOT_HANDLED)
+		{
+			if (result == INVOKE_NOT_HANDLED)
+				g_script.ScriptError(ERR_UNKNOWN_METHOD, _T("Next"));
+			vargs->Release();
+			vargs = nullptr;
+			break;
+		}
+		if (!TokenToBOOL(result_token))
+			break;
+		ExprTokenType value;
+		var.ToTokenSkipAddRef(value);
+		vargs->Append(value);
+	}
+	result_token.Free();
+	enumerator->Release();
+	return vargs;
+}
+
 
 //
 // Array::ToStrings - Used by BIF_StrSplit.

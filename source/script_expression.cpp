@@ -1502,7 +1502,8 @@ normal_end_skip_output_var:
 
 bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic, FreeVars *aUpVars)
 {
-	Array *param_obj = NULL;
+	IObject *param_obj = NULL; // Vararg object passed by caller.
+	Array *param_array = NULL; // Array of parameters, either the same as param_obj or the result of enumeration.
 	if (aIsVariadic) // i.e. this is a variadic function call.
 	{
 		ExprTokenType *rvalue = NULL;
@@ -1510,32 +1511,47 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			rvalue = aParam[--aParamCount];
 		
 		--aParamCount; // Exclude param_obj from aParamCount, so it's the count of normal params.
-		if (param_obj = dynamic_cast<Array *>(TokenToObject(*aParam[aParamCount])))
+		param_obj = TokenToObject(*aParam[aParamCount]);
+		if (!param_obj)
 		{
-			int extra_params = param_obj->Length();
-			if (extra_params > 0)
+			aResultToken.Error(ERR_TYPE_MISMATCH, _T("*"));
+			return false;
+		}
+		// It might be more correct to use the enumerator even for Array, but that could be slow.
+		// Future changes might enable efficient detection of a custom _NewEnum method, allowing
+		// us to take the more efficient path most times, but still support custom enumeration.
+		if (param_array = dynamic_cast<Array *>(param_obj))
+			param_array->AddRef();
+		else
+			if (  !(param_array = Array::FromEnumerable(param_obj))  )
 			{
-				// Check total param count first (even though it's checked below) in case
-				// the array is abnormally large, to reduce the risk of stack overflow.
-				if (aParamCount + extra_params > mParamCount && !mIsVariadic) // v2 policy.
-				{
-					aResultToken.Error(ERR_TOO_MANY_PARAMS, mName);
-					return false;
-				}
-				// Calculate space required for ...
-				size_t space_needed = extra_params * sizeof(ExprTokenType) // ... new param tokens
-					+ (aParamCount + extra_params) * sizeof(ExprTokenType *); // ... existing and new param pointers
-				if (rvalue)
-					space_needed += sizeof(rvalue); // ... extra slot for aRValue
-				// Allocate new param list and tokens; tokens first for convenience.
-				ExprTokenType *token = (ExprTokenType *)_alloca(space_needed);
-				ExprTokenType **param_list = (ExprTokenType **)(token + extra_params);
-				// Since built-in functions don't have variables we can directly assign to,
-				// we need to expand the param object's contents into an array of tokens:
-				param_obj->ToParams(token, param_list, aParam, aParamCount);
-				aParam = param_list;
-				aParamCount += extra_params;
+				aResultToken.SetExitResult(FAIL);
+				return false;
 			}
+		int extra_params = param_array->Length();
+		if (extra_params > 0)
+		{
+			// Check total param count first (even though it's checked below) in case
+			// the array is abnormally large, to reduce the risk of stack overflow.
+			if (aParamCount + extra_params > mParamCount && !mIsVariadic) // v2 policy.
+			{
+				param_array->Release();
+				aResultToken.Error(ERR_TOO_MANY_PARAMS, mName);
+				return false;
+			}
+			// Calculate space required for ...
+			size_t space_needed = extra_params * sizeof(ExprTokenType) // ... new param tokens
+				+ (aParamCount + extra_params) * sizeof(ExprTokenType *); // ... existing and new param pointers
+			if (rvalue)
+				space_needed += sizeof(rvalue); // ... extra slot for aRValue
+			// Allocate new param list and tokens; tokens first for convenience.
+			ExprTokenType *token = (ExprTokenType *)_alloca(space_needed);
+			ExprTokenType **param_list = (ExprTokenType **)(token + extra_params);
+			// Since built-in functions don't have variables we can directly assign to,
+			// we need to expand the param object's contents into an array of tokens:
+			param_array->ToParams(token, param_list, aParam, aParamCount);
+			aParam = param_list;
+			aParamCount += extra_params;
 		}
 		if (rvalue)
 			aParam[aParamCount++] = rvalue; // In place of the variadic param.
@@ -1543,6 +1559,8 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 	if (aParamCount > mParamCount && !mIsVariadic) // v2 policy.
 	{
+		if (param_array)
+			param_array->Release();
 		aResultToken.Error(ERR_TOO_MANY_PARAMS, mName);
 		return false;
 	}
@@ -1557,6 +1575,8 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		// parameters are instead detected by the absence of a default value.
 		if (aParamCount < mMinParams)
 		{
+			if (param_array)
+				param_array->Release();
 			aResultToken.Error(ERR_TOO_FEW_PARAMS, mName);
 			return false; // Abort expression.
 		}
@@ -1659,6 +1679,8 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			// underlying recursed/interrupted instance's memory, which it will need intact when it's resumed.
 			if (!Var::BackupFunctionVars(*this, recurse.backup, recurse.backup_count)) // Out of memory.
 			{
+				if (param_array)
+					param_array->Release();
 				aResultToken.Error(ERR_OUTOFMEM, mName);
 				return false;
 			}
@@ -1725,12 +1747,18 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 				if (param_obj)
 				{
-					ExprTokenType named_value;
-					if (param_obj->GetItem(named_value, this_formal_param.var->mName))
+					FuncResult rt_item;
+					ExprTokenType t_this(param_obj), t_name(this_formal_param.var->mName);
+					ExprTokenType *params = { &t_name };
+					auto r = param_obj->Invoke(rt_item, t_this, IT_GET, &params, 1);
+					if (r == FAIL || r == EARLY_EXIT)
 					{
-						this_formal_param.var->Assign(named_value);
-						continue;
+						aResultToken.SetExitResult(r);
+						goto free_and_return;
 					}
+					this_formal_param.var->Assign(rt_item);
+					rt_item.Free();
+					continue;
 				}
 			
 				switch(this_formal_param.default_type)
@@ -1782,9 +1810,10 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		
 		if (mIsVariadic && mParam[mParamCount].var) // i.e. this function is capable of accepting excess params via an object/array.
 		{
-			// If the caller supplied an array of parameters, copy any non-array properties of the object;
-			// otherwise, just create a new object.  Either way, numbered params will be inserted below.
-			auto vararg_obj = param_obj ? param_obj->Clone(true) : Array::Create();
+			// Unused named parameters in param_obj are currently discarded, pending completion of the
+			// object redesign.  Ultimately the named parameters (either key-value pairs or properties)
+			// would be enumerated and added to vararg_obj or passed to the function some other way.
+			auto vararg_obj = Array::Create();
 			if (!vararg_obj)
 			{
 				aResultToken.Error(ERR_OUTOFMEM, mName); // Abort thread.
@@ -1838,6 +1867,8 @@ free_and_return:
 			sFreeVars->Release();
 		sFreeVars = caller_free_vars;
 	}
+	if (param_array)
+		param_array->Release();
 	return !aResultToken.Exited(); // i.e. aResultToken.SetExitResult() or aResultToken.Error() was not called.
 }
 

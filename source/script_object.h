@@ -461,6 +461,7 @@ public:
 
 	static Array *Create(ExprTokenType *aValue[] = nullptr, index_t aCount = 0);
 	static Array *FromArgV(LPTSTR *aArgV, int aArgC);
+	static Array *FromEnumerable(IObject *aEnum);
 	ResultType ToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax);
 	void ToParams(ExprTokenType *token, ExprTokenType **param_list, ExprTokenType **aParam, int aParamCount);
 
