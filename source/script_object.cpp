@@ -1523,8 +1523,6 @@ ResultType Array::SetCapacity(index_t aNewCapacity)
 	auto new_item = (Variant *)realloc(mItem, sizeof(Variant) * aNewCapacity);
 	if (!new_item)
 		return FAIL;
-	for (auto i = mCapacity; i < aNewCapacity; ++i)
-		new_item[i].Minit();
 	mItem = new_item;
 	mCapacity = aNewCapacity;
 	return OK;
@@ -1578,7 +1576,11 @@ void Array::RemoveAt(index_t aIndex, index_t aCount)
 
 	for (index_t i = 0; i < aCount; ++i)
 	{
-		mItem[aIndex + i].AssignMissing();
+		mItem[aIndex + i].Free();
+	}
+	if (aIndex < mLength)
+	{
+		memmove(mItem + aIndex, mItem + aIndex + aCount, (mLength - aIndex) * sizeof(mItem[0]));
 	}
 	mLength -= aCount;
 }
@@ -1592,6 +1594,10 @@ ResultType Array::SetLength(index_t aNewLength)
 	}
 	if (aNewLength > mCapacity && !SetCapacity(aNewLength))
 		return FAIL;
+	for (index_t i = mLength; i < aNewLength; ++i)
+	{
+		mItem[i].Minit();
+	}
 	mLength = aNewLength;
 	return OK;
 }
@@ -1616,15 +1622,16 @@ Array *Array::Clone(BOOL aMembersOnly)
 		return nullptr;
 	for (index_t i = 0; i < mLength; ++i)
 	{
+		auto &new_item = arr->mItem[arr->mLength++];
+		new_item.Minit();
 		ExprTokenType value;
 		mItem[i].ToToken(value);
-		if (!arr->mItem[i].Assign(value))
+		if (!new_item.Assign(value))
 		{
 			arr->Release();
 			return nullptr;
 		}
 	}
-	arr->mLength = mLength;
 	return arr;
 }
 
@@ -1656,10 +1663,8 @@ ResultType STDMETHODCALLTYPE Array::Invoke(ResultToken &aResultToken, ExprTokenT
 	auto result = Object::Invoke(aResultToken, aThisToken, aFlags | IF_META, aParam, aParamCount);
 	if (result != INVOKE_NOT_HANDLED)
 		return result;
-	if (aFlags & IF_DEFAULT)
+	if ((aFlags & (IF_DEFAULT|IT_CALL)) == IF_DEFAULT)
 	{
-		if (IS_INVOKE_CALL)
-			return INVOKE_NOT_HANDLED;
 		if (aParamCount != (IS_INVOKE_SET ? 2 : 1))
 			_o_throw(ERR_INVALID_USAGE);
 		auto index = ParamToZeroIndex(*aParam[0]);
@@ -1724,7 +1729,7 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		if (aID == M_RemoveAt)
 		{
 			index = ParamToZeroIndex(*aParam[0]);
-			if (index == BadIndex)
+			if (index >= mLength)
 				_o_throw(ERR_PARAM1_INVALID);
 		}
 		else
@@ -1768,7 +1773,7 @@ Array::index_t Array::ParamToZeroIndex(ExprTokenType &aParam)
 	if (index <= 0) // Let -1 be the last item and 0 be the first unused index.
 		index += mLength + 1;
 	--index; // Convert to zero-based.
-	return index >= 0 && index <= UINT_MAX ? UINT(index) : BadIndex;
+	return index >= 0 && index <= MaxIndex ? UINT(index) : BadIndex;
 }
 
 Implement_DebugWriteProperty_via_sMembers(Array)
