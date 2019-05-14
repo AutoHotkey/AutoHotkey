@@ -192,17 +192,10 @@ FuncEntry g_BIF[] =
 	BIFn(ObjGetBase, 1, 1, BIF_ObjBase),
 	BIFn(ObjGetCapacity, 1, 1, BIF_ObjXXX),
 	BIFn(ObjHasKey, 2, 2, BIF_ObjXXX),
-	BIFn(ObjInsertAt, 3, NA, BIF_ObjXXX),
-	BIFn(ObjLength, 1, 1, BIF_ObjXXX),
-	BIFn(ObjMaxIndex, 1, 1, BIF_ObjXXX),
-	BIFn(ObjMinIndex, 1, 1, BIF_ObjXXX),
 	BIFn(ObjNewEnum, 1, 1, BIF_ObjXXX),
-	BIFn(ObjPop, 1, 1, BIF_ObjXXX),
-	BIFn(ObjPush, 2, NA, BIF_ObjXXX),
 	BIFn(ObjRawGet, 2, 2, BIF_ObjRaw),
 	BIFn(ObjRawSet, 3, 3, BIF_ObjRaw),
 	BIFn(ObjRelease, 1, 1, BIF_ObjAddRefRelease),
-	BIFn(ObjRemoveAt, 2, 3, BIF_ObjXXX),
 	BIFn(ObjSetBase, 2, 2, BIF_ObjBase),
 	BIFn(ObjSetCapacity, 2, 2, BIF_ObjXXX),
 	BIFn(OnClipboardChange, 1, 2, BIF_On),
@@ -6201,7 +6194,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		ResultToken result_token;
 		result_token.symbol = SYM_STRING; // Init for detecting SYM_OBJECT below.
 		// Search for class and simultaneously remove it from the unresolved list:
-		mUnresolvedClasses->Remove(result_token, Object::RM_RemoveKey, IT_CALL, &param, 1); // result_token := mUnresolvedClasses.Delete(token)
+		mUnresolvedClasses->Delete(result_token, 0, IT_CALL, &param, 1); // result_token := mUnresolvedClasses.Delete(token)
 		// If a field was found/removed, it can only be SYM_OBJECT.
 		if (result_token.symbol == SYM_OBJECT)
 		{

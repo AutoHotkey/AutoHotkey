@@ -2436,7 +2436,7 @@ ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventK
 	if (!aMaxThreads)
 	{
 		if (mon)
-			handlers.Remove(mon);
+			handlers.Delete(mon);
 		ApplyEventStyles(aControl, aEvent, false);
 		return OK;
 	}

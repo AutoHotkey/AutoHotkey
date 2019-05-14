@@ -267,7 +267,7 @@ int Debugger::ProcessCommands()
 		// Remove this command and its args from the buffer.
 		// (There may be additional commands following it.)
 		if (mCommandBuf.mDataUsed) // i.e. it hasn't been cleared as a result of disconnecting.
-			mCommandBuf.Remove(command_length + 1);
+			mCommandBuf.Delete(command_length + 1);
 
 		// If a command is received asynchronously, the debugger does not
 		// enter a break state.  In that case, we need to return after each
@@ -2641,7 +2641,7 @@ int Debugger::Buffer::ExpandIfNecessary(size_t aRequiredSize)
 }
 
 // Remove data from the front of the buffer (i.e. after it is processed).
-void Debugger::Buffer::Remove(size_t aDataSize)
+void Debugger::Buffer::Delete(size_t aDataSize)
 {
 	ASSERT(aDataSize <= mDataUsed);
 	// Move remaining data to the front of the buffer.

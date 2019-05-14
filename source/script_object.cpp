@@ -429,14 +429,7 @@ Object::~Object()
 
 ObjectMember Object::sMembers[] =
 {
-	Object_Method1(InsertAt, 2, MAXP_VARIADIC),
-	Object_Member(RemoveAt, Remove, RM_RemoveAt, IT_CALL, 1, 2),
-	Object_Method1(Push, 0, MAXP_VARIADIC),
-	Object_Member(Pop, Remove, RM_Pop, IT_CALL, 0, 0),
-	Object_Member(Delete, Remove, RM_RemoveKey, IT_CALL, 1, 2),
-	Object_Method1(MinIndex, 0, 0),
-	Object_Method1(MaxIndex, 0, 0),
-	Object_Method1(Length, 0, 0),
+	Object_Method1(Delete, 1, 2),
 	Object_Method1(Count, 0, 0),
 	Object_Method1(SetCapacity, 1, 1),
 	Object_Method1(GetCapacity, 0, 0),
@@ -786,20 +779,13 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 {
 	switch (aID)
 	{
-	case FID_ObjInsertAt:		return InsertAt(aResultToken, 0, IT_CALL, aParam, aParamCount);
-	case FID_ObjDelete:			return Remove(aResultToken, RM_RemoveKey, IT_CALL, aParam, aParamCount);
-	case FID_ObjRemoveAt:		return Remove(aResultToken, RM_RemoveAt, IT_CALL, aParam, aParamCount);
-	case FID_ObjPush:			return Push(aResultToken, 0, IT_CALL, aParam, aParamCount);
-	case FID_ObjPop:			return Remove(aResultToken, RM_Pop, IT_CALL, aParam, aParamCount);
-	case FID_ObjLength:			return Length(aResultToken, 0, IT_CALL, aParam, aParamCount);
+	case FID_ObjDelete:			return Delete(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjCount:			return Count(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjHasKey:			return HasKey(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjGetCapacity:	return GetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjSetCapacity:	return SetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjClone:			return Clone(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjNewEnum:		return _NewEnum(aResultToken, 0, IT_CALL, aParam, aParamCount);
-	case FID_ObjMaxIndex:		return MaxIndex(aResultToken, 0, IT_CALL, aParam, aParamCount);
-	case FID_ObjMinIndex:		return MinIndex(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	}
 	return INVOKE_NOT_HANDLED;
 }
@@ -950,81 +936,8 @@ LPTSTR Array::Type()
 // Object:: Built-in Methods
 //
 
-bool Object::InsertAt(INT_PTR aOffset, IntKeyType aKey, ExprTokenType *aValue[], int aValueCount)
-{
-	IndexType actual_count = (IndexType)aValueCount;
-	for (int i = 0; i < aValueCount; ++i)
-		if (aValue[i]->symbol == SYM_MISSING)
-			actual_count--;
-	IndexType need_capacity = mFieldCount + actual_count;
-	if (need_capacity > mFieldCountMax && !SetInternalCapacity(need_capacity))
-		// Fail.
-		return false;
-	FieldType *field = mFields + aOffset;
-	if (aOffset < mFieldCount)
-		memmove(field + actual_count, field, (mFieldCount - aOffset) * sizeof(FieldType));
-	mFieldCount += actual_count;
-	mKeyOffsetObject += actual_count; // ints before objects
-	mKeyOffsetString += actual_count; // and strings
-	FieldType *field_end;
-	// Set keys and copy value params into the fields.
-	for (int i = 0; i < aValueCount; ++i, ++aKey)
-	{
-		ExprTokenType &value = *(aValue[i]);
-		if (value.symbol != SYM_MISSING)
-		{
-			field->key.i = aKey;
-			field->symbol = SYM_INVALID; // Init for Assign(): indicate that it does not contain a valid string or object.
-			field->Assign(value);
-			field++;
-		}
-	}
-	// Adjust keys of fields which have been moved.
-	for (field_end = mFields + mKeyOffsetObject; field < field_end; ++field)
-	{
-		field->key.i += aValueCount; // NOT =++key.i since keys might not be contiguous.
-	}
-	return true;
-}
-
-ResultType Object::InsertAt(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-// InsertAt(index, value1, ...)
-{
-	SymbolType key_type;
-	KeyType key;
-	IndexType insert_pos;
-	FieldType *field = FindField(**aParam, _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
-	if (key_type != SYM_INTEGER)
-		_o_throw(ERR_PARAM1_INVALID, key_type == SYM_STRING ? key.s : _T(""));
-		
-	if (field)
-	{
-		insert_pos = field - mFields; // insert_pos wasn't set in this case.
-		field = NULL; // Insert, don't overwrite.
-	}
-
-	if (!InsertAt(insert_pos, key.i, aParam + 1, aParamCount - 1))
-		_o_throw(ERR_OUTOFMEM);
-	
-	_o_return_empty; // No return value.
-}
-
-ResultType Object::Push(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-// Push(value1, ...)
-{
-	IndexType insert_pos = mKeyOffsetObject; // int keys end here.;
-	IntKeyType start_index = (insert_pos ? mFields[insert_pos - 1].key.i + 1 : 1);
-	if (!InsertAt(insert_pos, start_index, aParam, aParamCount))
-		_o_throw(ERR_OUTOFMEM);
-
-	// Return the new "length" of the array.
-	_o_return(start_index + aParamCount - 1);
-}
-
-ResultType Object::Remove(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Delete(first_key [, last_key := first_key])
-// RemoveAt(index [, virtual_count := 1])
-// Pop()
 {
 	FieldType *min_field;
 	IndexType min_pos, max_pos, pos;
@@ -1035,49 +948,18 @@ ResultType Object::Remove(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 	LPTSTR number_buf = _f_number_buf;
 
 	// Find the position of "min".
-	const auto aMode = RemoveMode(aID);
-	if (aMode == RM_Pop)
-	{
-		if (mKeyOffsetObject) // i.e. at least one int field; use Length()
-		{
-			min_field = &mFields[min_pos = mKeyOffsetObject - 1];
-			min_key = min_field->key;
-			min_key_type = SYM_INTEGER;
-		}
-		else // No appropriate field to remove, just return "".
-			_o_return_empty;
-	}
-	else
-	{
-		if (!aParamCount)
-			_o_throw(ERR_TOO_FEW_PARAMS);
-
-		if (min_field = FindField(*aParam[0], number_buf, min_key_type, min_key, min_pos))
-			min_pos = min_field - mFields; // else min_pos was already set by FindField.
+	if (min_field = FindField(*aParam[0], number_buf, min_key_type, min_key, min_pos))
+		min_pos = min_field - mFields; // else min_pos was already set by FindField.
 		
-		if (min_key_type != SYM_INTEGER && aMode != RM_RemoveKey)
-			_o_throw(ERR_PARAM1_INVALID);
-	}
-	
-	if (aParamCount > 1) // Removing a range of keys. Prior validation by caller implies aMode != RM_Pop.
+	if (aParamCount > 1) // Removing a range of keys.
 	{
 		SymbolType max_key_type;
 		FieldType *max_field;
-		if (aMode == RM_RemoveAt)
-		{
-			logical_count_removed = (IntKeyType)TokenToInt64(*aParam[1]);
-			// Find the next position >= [aParam[1] + Count].
-			max_key_type = SYM_INTEGER;
-			max_key.i = min_key.i + logical_count_removed;
-			if (max_field = FindField(max_key_type, max_key, max_pos))
-				max_pos = max_field - mFields;
-		}
-		else
-		{
-			// Find the next position > [aParam[1]].
-			if (max_field = FindField(*aParam[1], number_buf, max_key_type, max_key, max_pos))
-				max_pos = max_field - mFields + 1;
-		}
+		
+		// Find the next position > [aParam[1]].
+		if (max_field = FindField(*aParam[1], number_buf, max_key_type, max_key, max_pos))
+			max_pos = max_field - mFields + 1;
+		
 		// Since the order of key-types in mFields is of no logical consequence, require that both keys be the same type.
 		// Do not allow removing a range of object keys since there is probably no meaning to their order.
 		if (max_key_type != min_key_type || max_key_type == SYM_OBJECT || max_pos < min_pos
@@ -1094,9 +976,6 @@ ResultType Object::Remove(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 	{
 		if (!min_field) // Nothing to remove.
 		{
-			if (aMode == RM_RemoveAt)
-				for (pos = min_pos; pos < mKeyOffsetObject; ++pos)
-					mFields[pos].key.i--;
 			// Our return value when only one key is given is supposed to be the value
 			// previously at this[key], which has just been removed.  Since this[key]
 			// would return "", it makes sense to return the same in this case.
@@ -1136,14 +1015,6 @@ ResultType Object::Remove(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 		if (min_key_type == SYM_INTEGER)
 		{
 			mKeyOffsetObject -= actual_count_removed;
-			if (aMode == RM_RemoveAt)
-			{
-				// Regardless of whether any fields were removed, min_pos contains the position of the field which
-				// immediately followed the specified range.  Decrement each numeric key from this position onward.
-				if (logical_count_removed > 0)
-					for (pos = min_pos; pos < mKeyOffsetObject; ++pos)
-						mFields[pos].key.i -= logical_count_removed;
-			}
 		}
 	}
 	if (aParamCount > 1)
@@ -1156,31 +1027,9 @@ ResultType Object::Remove(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 }
 
 
-ResultType Object::Length(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	IntKeyType max_index = mKeyOffsetObject ? mFields[mKeyOffsetObject - 1].key.i : 0;
-	_o_return(max_index > 0 ? max_index : 0);
-}
-
 ResultType Object::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_o_return((__int64)mFieldCount);
-}
-
-ResultType Object::MaxIndex(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	if (mKeyOffsetObject)
-		_o_return(mFields[mKeyOffsetObject - 1].key.i);
-	else
-		_o_return_empty;
-}
-
-ResultType Object::MinIndex(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	if (mKeyOffsetObject)
-		_o_return(mFields[0].key.i);
-	else
-		_o_return_empty;
 }
 
 ResultType Object::GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)

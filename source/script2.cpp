@@ -14711,7 +14711,7 @@ BIF_DECL(BIF_OnMessage)
 			// The main disadvantage to deleting message filters from the array is that the deletion might
 			// occur while the monitor is currently running, which requires more complex handling within
 			// MsgMonitor() (see its comments for details).
-			g_MsgMonitor.Remove(pmonitor);
+			g_MsgMonitor.Delete(pmonitor);
 			_f_return_retval;
 		}
 		if (aParamCount < 2) // Single-parameter mode: Report existing item's function name.
@@ -14823,7 +14823,7 @@ MsgMonitorStruct *MsgMonitorList::Add(UINT aMsg, LPTSTR aMethodName, bool aAppen
 }
 
 
-void MsgMonitorList::Remove(MsgMonitorStruct *aMonitor)
+void MsgMonitorList::Delete(MsgMonitorStruct *aMonitor)
 {
 	ASSERT(aMonitor >= mMonitor && aMonitor < mMonitor + mCount);
 
@@ -14952,7 +14952,7 @@ BIF_DECL(BIF_On)
 		break;
 	case  0:
 		if (existing)
-			handlers.Remove(existing);
+			handlers.Delete(existing);
 		break;
 	default:
 		callback->Release();

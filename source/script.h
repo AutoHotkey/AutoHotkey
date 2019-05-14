@@ -570,7 +570,7 @@ enum BuiltInFunctionID {
 	FID_Min = 0, FID_Max,
 	FID_Random = 0, FID_RandomSeed,
 	FID_ObjAddRef = 0, FID_ObjRelease,
-	FID_ObjInsertAt = 0, FID_ObjDelete, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength, FID_ObjCount, FID_ObjMaxIndex, FID_ObjMinIndex, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjClone, FID_ObjNewEnum,
+	FID_ObjDelete = 0, FID_ObjCount, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjClone, FID_ObjNewEnum,
 	FID_ObjGetBase = 0, FID_ObjSetBase,
 	FID_ObjRawGet = 0, FID_ObjRawSet,
 	FID_ComObjType = 0, FID_ComObjValue,
@@ -1955,7 +1955,7 @@ public:
 	MsgMonitorStruct *Find(UINT aMsg, LPTSTR aMethodName, UCHAR aMsgType = 0);
 	MsgMonitorStruct *Add(UINT aMsg, IObject *aCallback, bool aAppend = TRUE);
 	MsgMonitorStruct *Add(UINT aMsg, LPTSTR aMethodName, bool aAppend = TRUE);
-	void Remove(MsgMonitorStruct *aMonitor);
+	void Delete(MsgMonitorStruct *aMonitor);
 	ResultType Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex); // Used for OnExit and OnClipboardChange, but not OnMessage.
 	ResultType Call(ExprTokenType *aParamValue, int aParamCount, UINT aMsg, UCHAR aMsgType, GuiType *aGui, INT_PTR *aRetVal = NULL); // Used by GUI.
 
