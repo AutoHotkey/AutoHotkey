@@ -169,6 +169,7 @@ FuncEntry g_BIF[] =
 	BIF1(LoadPicture, 1, 3),
 	BIFn(Log, 1, 1, BIF_SqrtLogLn),
 	BIFn(LTrim, 1, 2, BIF_Trim),
+	BIF1(Map, 0, NA),
 	BIFn(Max, 1, NA, BIF_MinMax),
 	BIFn(MenuBarCreate, 0, 0, BIF_Menu),
 	BIFn(MenuCreate, 0, 0, BIF_Menu),
@@ -6514,7 +6515,7 @@ Object *Object::GetUnresolvedClass(LPTSTR &aName)
 {
 	if (!mFieldCount)
 		return NULL;
-	aName = mFields[0].key.s;
+	aName = mFields[0].name;
 	return (Object *)mFields[0].object;
 }
 

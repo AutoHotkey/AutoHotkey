@@ -1120,12 +1120,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			Object::FieldType &field = mFields[i];
 			
 			ExprTokenType key, value;
-			if (i >= mKeyOffsetString) // String
-				key.symbol = SYM_STRING, key.marker = field.key.s;
-			else if (i >= mKeyOffsetObject)
-				key.symbol = SYM_OBJECT, key.object = field.key.p;
-			else
-				key.symbol = SYM_INTEGER, key.value_int64 = field.key.i;
+			key.SetValue(field.name);
 			field.ToToken(value);
 
 			aDebugger->WriteProperty(key, value);
@@ -1503,15 +1498,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 
 		if (obj && (*name != '<' || name[-1] != '.')) // Not a pseudo-property; i.e. ["<base>"] is always a key-value pair.
 		{
-			Object::IndexType insert_pos;
-			Object::KeyType key;
-
-			if (key_type == SYM_STRING)
-				key.s = name;
-			else // SYM_INTEGER or SYM_OBJECT
-				key.i = (IntKeyType)_ttoi64(name);
-
-			if (auto field = obj->FindField(key_type, key, insert_pos))
+			if (auto field = obj->FindField(name))
 			{
 				if (!c)
 				{

@@ -204,6 +204,7 @@ protected:
 		void AssignMissing();
 		bool Assign(ExprTokenType &val);
 		bool Assign(ExprTokenType *val) { return Assign(*val); }
+		bool InitCopy(Variant &val);
 		void ReturnRef(ResultToken &result);
 		void ReturnMove(ResultToken &result);
 		void Free();
@@ -212,15 +213,10 @@ protected:
 	};
 
 	typedef INT_PTR IndexType; // Type of index for the internal array.  Must be signed for FindKey to work correctly.
-	union KeyType // Which of its members is used depends on the field's position in the mFields array.
-	{
-		LPTSTR s;
-		IntKeyType i;
-		IObject *p;
-	};
+	typedef LPTSTR name_t;
 	struct FieldType : Variant
 	{
-		KeyType key;
+		name_t name;
 	};
 
 	class Enumerator : public EnumBase
@@ -234,41 +230,29 @@ protected:
 		IObject_Type_Impl("Object.Enumerator")
 	};
 	
-	IObject *mBase;
-	FieldType *mFields;
-	IndexType mFieldCount, mFieldCountMax; // Current/max number of fields.
-
-	// Holds the index of first key of a given type within mFields.  Must be in the order: int, object, string.
-	// Compared to storing the key-type with each key-value pair, this approach saves 4 bytes per key (excluding
-	// the 8 bytes taken by the two fields below) and speeds up lookups since only the section within mFields
-	// with the appropriate type of key needs to be searched (and no need to check the type of each key).
-	// mKeyOffsetObject should be set to mKeyOffsetInt + the number of int keys.
-	// mKeyOffsetString should be set to mKeyOffsetObject + the number of object keys.
-	// mKeyOffsetObject-1, mKeyOffsetString-1 and mFieldCount-1 indicate the last index of each prior type.
-	static const IndexType mKeyOffsetInt = 0;
-	IndexType mKeyOffsetObject, mKeyOffsetString;
+private:
+	IObject *mBase = nullptr;
+	FieldType *mFields = nullptr;
+	IndexType mFieldCount = 0, mFieldCountMax = 0; // Current/max number of fields.
 
 #ifdef CONFIG_DEBUGGER
 	friend class Debugger;
 #endif
 
-	Object()
-		: mBase(NULL)
-		, mFields(NULL), mFieldCount(0), mFieldCountMax(0)
-		, mKeyOffsetObject(0), mKeyOffsetString(0)
-	{}
-
+public:
+	Object(){}
 	bool Delete();
 	~Object();
 
-	FieldType *FindField(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos);
-	FieldType *FindField(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos);
-	FieldType *FindField(SymbolType key_type, KeyType key, IndexType &insert_pos);	
-	FieldType *FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos);
-
-	void ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type, KeyType &key);
+private:
+	FieldType *FindField(name_t name, IndexType &insert_pos);
+	FieldType *FindField(name_t name)
+	{
+		IndexType insert_pos;
+		return FindField(name, insert_pos);
+	}
 	
-	FieldType *Insert(SymbolType key_type, KeyType key, IndexType at);
+	FieldType *Insert(name_t name, IndexType at);
 
 	bool SetInternalCapacity(IndexType new_capacity);
 	bool Expand()
@@ -279,60 +263,35 @@ protected:
 	
 	ResultType CallField(FieldType *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
-	Object *CloneTo(Object &aTo, IndexType aStartOffset);
+protected:
+	Object *CloneTo(Object &aTo);
 	
 public:
 	static Object *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
 	
-	Object *Clone(BOOL aExcludeIntegerKeys = false);
+	Object *Clone();
 	
-	bool GetItem(ExprTokenType &aToken, ExprTokenType &aKey)
+	bool GetItem(ExprTokenType &aToken, name_t aName)
 	{
 		IndexType insert_pos;
-		TCHAR buf[MAX_NUMBER_SIZE];
-		SymbolType key_type;
-		KeyType key;
-		FieldType *field = FindField(aKey, buf, key_type, key, insert_pos);
+		auto field = FindField(aName, insert_pos);
 		if (!field)
 			return false;
 		field->ToToken(aToken);
 		return true;
 	}
 
-	bool GetItem(ExprTokenType &aToken, LPTSTR aKey)
-	{
-		ExprTokenType key;
-		key.symbol = SYM_STRING;
-		key.marker = aKey;
-		return GetItem(aToken, key);
-	}
-	
-	bool SetItem(ExprTokenType &aKey, ExprTokenType &aValue)
+	bool SetItem(name_t aName, ExprTokenType &aValue)
 	{
 		IndexType insert_pos;
-		TCHAR buf[MAX_NUMBER_SIZE];
-		SymbolType key_type;
-		KeyType key;
-		FieldType *field = FindField(aKey, buf, key_type, key, insert_pos);
-		if (!field && !(field = Insert(key_type, key, insert_pos))) // Relies on short-circuit boolean evaluation.
+		auto field = FindField(aName, insert_pos);
+		if (!field && !(field = Insert(aName, insert_pos)))
 			return false;
 		return field->Assign(aValue);
 	}
 
-	bool SetItem(LPTSTR aKey, ExprTokenType &aValue)
-	{
-		return SetItem(ExprTokenType(aKey), aValue);
-	}
-
-	bool SetItem(LPTSTR aKey, __int64 aValue)
-	{
-		return SetItem(aKey, ExprTokenType(aValue));
-	}
-
-	bool SetItem(LPTSTR aKey, IObject *aValue)
-	{
-		return SetItem(aKey, ExprTokenType(aValue));
-	}
+	bool SetItem(name_t aName, __int64 aValue) { return SetItem(aName, ExprTokenType(aValue)); }
+	bool SetItem(name_t aName, IObject *aValue) { return SetItem(aName, ExprTokenType(aValue)); }
 
 	void SetBase(IObject *aNewBase)
 	{ 
@@ -472,6 +431,133 @@ public:
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	LPTSTR Type();
 	IObject_DebugWriteProperty_Def;
+};
+
+
+//
+// Map
+//
+
+class Map : public Object
+{
+	class Enumerator : public EnumBase
+	{
+		Map *mObject;
+		IndexType mOffset;
+	public:
+		Enumerator(Map *aObject) : mObject(aObject), mOffset(-1) { mObject->AddRef(); }
+		~Enumerator() { mObject->Release(); }
+		int Next(Var *aKey, Var *aVal);
+		IObject_Type_Impl("Map.Enumerator")
+	};
+
+	union KeyType // Which of its members is used depends on the field's position in the mFields array.
+	{
+		LPTSTR s;
+		IntKeyType i;
+		IObject *p;
+	};
+	struct FieldType : Variant
+	{
+		KeyType key;
+	};
+
+	FieldType *mFields = nullptr;
+	IndexType mFieldCount = 0, mFieldCountMax = 0;
+
+	// Holds the index of the first key of a given type within mItem.  Must be in the order: int, object, string.
+	// Compared to storing the key-type with each key-value pair, this approach saves 4 bytes per key (excluding
+	// the 8 bytes taken by the two fields below) and speeds up lookups since only the section within mFields
+	// with the appropriate type of key needs to be searched (and no need to check the type of each key).
+	// mKeyOffsetObject should be set to mKeyOffsetInt + the number of int keys.
+	// mKeyOffsetString should be set to mKeyOffsetObject + the number of object keys.
+	// mKeyOffsetObject-1, mKeyOffsetString-1 and mFieldCount-1 indicate the last index of each prior type.
+	static const IndexType mKeyOffsetInt = 0;
+	IndexType mKeyOffsetObject = 0, mKeyOffsetString = 0;
+
+	Map() {}
+	~Map();
+	 
+	FieldType *FindField(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos);
+	FieldType *FindField(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos);
+	FieldType *FindField(SymbolType key_type, KeyType key, IndexType &insert_pos);	
+	FieldType *FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos);
+
+	void ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type, KeyType &key);
+
+	FieldType *Insert(SymbolType key_type, KeyType key, IndexType at);
+
+	bool SetInternalCapacity(IndexType new_capacity);
+	bool Expand()
+		// Expands mFields by at least one field.
+	{
+		return SetInternalCapacity(mFieldCountMax ? mFieldCountMax * 2 : 4);
+	}
+
+	Map *CloneTo(Map &aTo);
+
+public:
+	static Map *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
+
+	bool GetItem(ExprTokenType &aToken, ExprTokenType &aKey)
+	{
+		IndexType insert_pos;
+		TCHAR buf[MAX_NUMBER_SIZE];
+		SymbolType key_type;
+		KeyType key;
+		FieldType *field = FindField(aKey, buf, key_type, key, insert_pos);
+		if (!field)
+			return false;
+		field->ToToken(aToken);
+		return true;
+	}
+
+	bool GetItem(ExprTokenType &aToken, LPTSTR aKey)
+	{
+		ExprTokenType key;
+		key.symbol = SYM_STRING;
+		key.marker = aKey;
+		return GetItem(aToken, key);
+	}
+
+	bool SetItem(ExprTokenType &aKey, ExprTokenType &aValue)
+	{
+		IndexType insert_pos;
+		TCHAR buf[MAX_NUMBER_SIZE];
+		SymbolType key_type;
+		KeyType key;
+		FieldType *field = FindField(aKey, buf, key_type, key, insert_pos);
+		if (!field && !(field = Insert(key_type, key, insert_pos))) // Relies on short-circuit boolean evaluation.
+			return false;
+		return field->Assign(aValue);
+	}
+
+	bool SetItem(LPTSTR aKey, ExprTokenType &aValue)
+	{
+		return SetItem(ExprTokenType(aKey), aValue);
+	}
+
+	bool SetItem(LPTSTR aKey, __int64 aValue)
+	{
+		return SetItem(aKey, ExprTokenType(aValue));
+	}
+
+	bool SetItem(LPTSTR aKey, IObject *aValue)
+	{
+		return SetItem(aKey, ExprTokenType(aValue));
+	}
+
+	// Methods callable by script.
+	ResultType Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType _NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	static ObjectMember sMembers[];
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	LPTSTR Type();
 };
 
 

@@ -90,7 +90,7 @@ ResultType ObjectMember::Invoke(ObjectMember aMembers[], int aMemberCount, IObje
 
 
 //
-// Object::Create - Called by BIF_Object to create a new object, optionally passing key/value pairs to set.
+// Object::Create - Create a new Object given an array of property name/value pairs.
 //
 
 Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
@@ -109,9 +109,6 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 		// item is inserted, a default initial capacity of 4 will be set.
 
 		TCHAR buf[MAX_NUMBER_SIZE];
-		FieldType *field;
-		SymbolType key_type;
-		KeyType key;
 		IndexType insert_pos;
 		
 		for (int i = 0; i + 1 < aParamCount; i += 2)
@@ -119,19 +116,61 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 			if (aParam[i]->symbol == SYM_MISSING || aParam[i+1]->symbol == SYM_MISSING)
 				continue; // For simplicity.
 
-			field = obj->FindField(*aParam[i], buf, key_type, key, insert_pos);
-			if (!field // Probably NULL, but calling FindField() first avoids an extra call to TokenToString() below.
-				&& key_type == SYM_STRING && !_tcsicmp(key.s, _T("base")))
+			auto name = TokenToString(*aParam[i], buf);
+
+			if (!_tcsicmp(name, _T("base")))
 			{
 				// For consistency with assignments, the following is allowed to overwrite a previous
 				// base object (although having "base" occur twice in the parameter list would be quite
 				// useless) or set mBase to NULL if the value parameter is not an object.
-				if (obj->mBase)
-					obj->mBase->Release();
-				if (obj->mBase = TokenToObject(*aParam[i + 1]))
-					obj->mBase->AddRef();
+				obj->SetBase(TokenToObject(*aParam[i + 1]));
 				continue;
 			}
+
+			auto field = obj->FindField(name, insert_pos);
+			if (  !(field
+				 || (field = obj->Insert(name, insert_pos)))
+				|| !field->Assign(*aParam[i + 1])  )
+			{	// Out of memory.
+				obj->Release();
+				return NULL;
+			}
+		}
+	}
+	return obj;
+}
+
+
+//
+// Map::Create - Create a new Map given an array of key/value pairs.
+//
+
+Map *Map::Create(ExprTokenType *aParam[], int aParamCount)
+{
+	ASSERT(!(aParamCount & 1));
+
+	Map *obj = new Map();
+	if (obj && aParamCount)
+	{
+		if (aParamCount > 8)
+			// Set initial capacity to avoid multiple expansions.
+			// For simplicity, failure is handled by the loop below.
+			obj->SetInternalCapacity(aParamCount >> 1);
+		// Otherwise, there are 4 or less key-value pairs.  When the first
+		// item is inserted, a default initial capacity of 4 will be set.
+
+		TCHAR buf[MAX_NUMBER_SIZE];
+		FieldType *field;
+		SymbolType key_type;
+		KeyType key;
+		IndexType insert_pos;
+
+		for (int i = 0; i + 1 < aParamCount; i += 2)
+		{
+			if (aParam[i]->symbol == SYM_MISSING || aParam[i+1]->symbol == SYM_MISSING)
+				continue; // For simplicity.
+
+			field = obj->FindField(*aParam[i], buf, key_type, key, insert_pos);
 			if (  !(field
 				 || (field = obj->Insert(key_type, key, insert_pos)))
 				|| !field->Assign(*aParam[i + 1])  )
@@ -149,37 +188,78 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 // Object::Clone - Used for variadic function-calls.
 //
 
-// Creates an object and copies the content of this object to it, optionally excluding int keys.
-Object *Object::Clone(BOOL aExcludeIntegerKeys)
+// Creates an object and copies the content of this object to it.
+Object *Object::Clone()
 {
-	IndexType aStartOffset = aExcludeIntegerKeys ? mKeyOffsetObject : 0;
-
-	Object *objptr = new Object();
-	if (!objptr|| aStartOffset >= mFieldCount)
-		return objptr;
-
-	return CloneTo(*objptr, aStartOffset);
+	auto objptr = new Object();
+	return CloneTo(*objptr);
 }
 
 // Helper function for temporary implementation of Clone by Object and subclasses.
 // Should be eliminated once revision of the object model is complete.
-Object *Object::CloneTo(Object &obj, IndexType aStartOffset)
+Object *Object::CloneTo(Object &obj)
 {
 	// Allocate space in destination object.
-	IndexType field_count = mFieldCount - aStartOffset;
+	IndexType field_count = mFieldCount;
 	if (!obj.SetInternalCapacity(field_count))
 	{
 		obj.Release();
 		return NULL;
 	}
 
-	FieldType *fields = obj.mFields; // Newly allocated by above.
 	int failure_count = 0; // See comment below.
 	IndexType i;
 
 	obj.mFieldCount = field_count;
-	obj.mKeyOffsetObject = mKeyOffsetObject - aStartOffset;
-	obj.mKeyOffsetString = mKeyOffsetString - aStartOffset;
+
+	for (i = 0; i < field_count; ++i)
+	{
+		FieldType &dst = obj.mFields[i];
+		FieldType &src = mFields[i];
+
+		// Copy name.
+		dst.key_c = src.key_c;
+		if ( !(dst.name = _tcsdup(src.name)) )
+		{
+			// Rather than trying to set up the object so that what we have
+			// so far is valid in order to break out of the loop, continue,
+			// make all fields valid and then allow them to be freed. 
+			++failure_count;
+		}
+
+		// Copy value.
+		if (!dst.InitCopy(src))
+			++failure_count;
+	}
+	if (failure_count)
+	{
+		// One or more memory allocations failed.  It seems best to return a clear failure
+		// indication rather than an incomplete copy.  Now that the loop above has finished,
+		// the object's contents are at least valid and it is safe to free the object:
+		obj.Release();
+		return NULL;
+	}
+	if (mBase)
+		(obj.mBase = mBase)->AddRef();
+	return &obj;
+}
+
+Map *Map::CloneTo(Map &obj)
+{
+	Object::CloneTo(obj);
+
+	if (!obj.SetInternalCapacity(mFieldCount))
+	{
+		obj.Release();
+		return NULL;
+	}
+
+	int failure_count = 0; // See Object::CloneT() for comments.
+	IndexType i;
+
+	obj.mFieldCount = mFieldCount;
+	obj.mKeyOffsetObject = mKeyOffsetObject;
+	obj.mKeyOffsetString = mKeyOffsetString;
 	if (obj.mKeyOffsetObject < 0) // Currently might always evaluate to false.
 	{
 		obj.mKeyOffsetObject = 0; // aStartOffset excluded all integer and some or all object keys.
@@ -188,10 +268,10 @@ Object *Object::CloneTo(Object &obj, IndexType aStartOffset)
 	}
 	//else no need to check mKeyOffsetString since it should always be >= mKeyOffsetObject.
 
-	for (i = 0; i < field_count; ++i)
+	for (i = 0; i < mFieldCount; ++i)
 	{
-		FieldType &dst = fields[i];
-		FieldType &src = mFields[aStartOffset + i];
+		FieldType &dst = obj.mFields[i];
+		FieldType &src = mFields[i];
 
 		// Copy key.
 		if (i >= obj.mKeyOffsetString)
@@ -201,9 +281,6 @@ Object *Object::CloneTo(Object &obj, IndexType aStartOffset)
 			{
 				// Key allocation failed. At this point, all int and object keys
 				// have been set and values for previous fields have been copied.
-				// Rather than trying to set up the object so that what we have
-				// so far is valid in order to break out of the loop, continue,
-				// make all fields valid and then allow them to be freed. 
 				++failure_count;
 			}
 		}
@@ -216,27 +293,11 @@ Object *Object::CloneTo(Object &obj, IndexType aStartOffset)
 		}
 
 		// Copy value.
-		switch (dst.symbol = src.symbol)
-		{
-		case SYM_STRING:
-			dst.string.Init();
-			if (!dst.Assign(src.string, src.string.Length(), true)) // Pass true to conserve memory (no space is allowed for future expansion).
-				++failure_count; // See failure comment further above.
-			break;
-		case SYM_OBJECT:
-			(dst.object = src.object)->AddRef();
-			break;
-		//case SYM_INTEGER:
-		//case SYM_FLOAT:
-		default:
-			dst.n_int64 = src.n_int64; // Union copy.
-		}
+		if (!dst.InitCopy(src))
+			++failure_count;
 	}
 	if (failure_count)
 	{
-		// One or more memory allocations failed.  It seems best to return a clear failure
-		// indication rather than an incomplete copy.  Now that the loop above has finished,
-		// the object's contents are at least valid and it is safe to free the object:
 		obj.Release();
 		return NULL;
 	}
@@ -343,10 +404,7 @@ bool Object::Delete()
 {
 	if (mBase)
 	{
-		KeyType key;
-		IndexType insert_pos;
-		key.s = _T("__Class");
-		if (FindField(SYM_STRING, key, insert_pos))
+		if (FindField(_T("__Class")))
 			// This object appears to be a class definition, so it would probably be
 			// undesirable to call the super-class' __Delete() meta-function for this.
 			return ObjectBase::Delete();
@@ -407,6 +465,24 @@ Object::~Object()
 	{
 		if (mFieldCount)
 		{
+			for (IndexType i = 0; i < mFieldCount; ++i)
+			{
+				free(mFields[i].name);
+				mFields[i].Free();
+			}
+		}
+		// Free fields array.
+		free(mFields);
+	}
+}
+
+
+Map::~Map()
+{
+	if (mFields)
+	{
+		if (mFieldCount)
+		{
 			IndexType i = mFieldCount - 1;
 			// Free keys: first strings, then objects (objects have a lower index in the mFields array).
 			for ( ; i >= mKeyOffsetString; --i)
@@ -424,7 +500,7 @@ Object::~Object()
 
 
 //
-// Object::Invoke
+// Invoke - dynamic dispatch
 //
 
 ObjectMember Object::sMembers[] =
@@ -445,11 +521,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
                                             ExprTokenType *aParam[],
                                             int aParamCount
                                             )
-// L40: Revised base mechanism for flexibility and to simplify some aspects.
-//		obj[] -> obj.base.__Get -> obj.base[] -> obj.base.__Get etc.
 {
-	SymbolType key_type;
-	KeyType key;
+	name_t name;
     FieldType *field, *prop_field;
 	IndexType insert_pos;
 	Property *prop = NULL; // Set default.
@@ -469,9 +542,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	//     in the process of calling __Item).
 	if ((aFlags & IF_METAFUNC) && (aFlags & (IF_DEFAULT|IT_CALL)) != IF_DEFAULT)
 	{
-		key.s = sMetaFuncName[INVOKE_TYPE];
 		// Look for a meta-function definition directly in this base object.
-		if (field = FindField(SYM_STRING, key, /*out*/ insert_pos))
+		if (field = FindField(sMetaFuncName[INVOKE_TYPE]))
 		{
 			Line *curr_line = g_script.mCurrLine;
 			ResultType r = CallField(field, aResultToken, aThisToken, aFlags, aParam, aParamCount);
@@ -498,12 +570,9 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	ASSERT(actual_param_count || (aFlags & IF_DEFAULT));
 	{
 		if ((aFlags & IF_DEFAULT) || aParam[0]->symbol == SYM_MISSING)
-		{
-			key_type = SYM_STRING;
-			key.s = IS_INVOKE_CALL ? _T("Call") : _T("__Item");
-		}
+			name = IS_INVOKE_CALL ? _T("Call") : _T("__Item");
 		else
-			ConvertKey(*actual_param[0], _f_number_buf, key_type, key);
+			name = ParamIndexToString(0, _f_number_buf);
 
 		if (!(aFlags & IF_DEFAULT))
 		{
@@ -511,7 +580,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			--actual_param_count;
 		}
 		
-		field = FindField(key_type, key, insert_pos);
+		field = FindField(name, insert_pos);
 
 		static Property sProperty;
 
@@ -547,7 +616,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			}
 			// The property was missing get/set (whichever this invocation is), so continue as
 			// if the property itself wasn't defined.
-			key_type = SYM_INVALID;
 			field = NULL;
 		}
 	}
@@ -565,13 +633,13 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// object to invoke __call.  So if this is already a meta-invocation, don't change aFlags.
 			ResultType r = mBase->Invoke(aResultToken, aThisToken, aFlags | (IS_INVOKE_META ? 0 : IF_META), aParam, aParamCount);
 			if (r != INVOKE_NOT_HANDLED // Base handled it.
-				|| key_type == SYM_INVALID) // Nothing left to do in this case.
+				|| prop) // Nothing left to do in this case.
 				return r;
 
 			// Since the above may have inserted or removed fields (including the specified one),
 			// insert_pos may no longer be correct or safe.  Updating field also allows a meta-function
 			// to initialize a field and allow processing to continue as if it already existed.
-			field = FindField(key_type, key, /*out*/ insert_pos);
+			field = FindField(name, /*out*/ insert_pos);
 			if (prop)
 			{
 				// This field was a property.
@@ -588,7 +656,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 
 		// Since the base object didn't handle this op, check for built-in properties/methods.
 		// This must apply only to the original target object (aThisToken), not one of its bases.
-		if (!IS_INVOKE_META && key_type == SYM_STRING && !field) // v1.1.16: Check field again so if __Call sets a field, it gets called.
+		if (!IS_INVOKE_META && !field) // v1.1.16: Check field again so if __Call sets a field, it gets called.
 		{
 			//
 			// BUILT-IN METHODS
@@ -603,7 +671,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			//
 			else if (actual_param_count == 0)
 			{
-				if (!_tcsicmp(key.s, _T("base")))
+				if (!_tcsicmp(name, _T("base")))
 				{
 					if (IS_INVOKE_SET)
 					{
@@ -667,7 +735,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		{
 			// This section applies only to the target object (aThisToken) and not any of its base objects.
 			// Allow obj["base",x] to access a field of obj.base; L40: This also fixes obj.base[x] which was broken by L36.
-			if (key_type == SYM_STRING && !_tcsicmp(key.s, _T("base")))
+			if (!_tcsicmp(name, _T("base")))
 			{
 				if (!mBase && IS_INVOKE_SET)
 					mBase = new Object();
@@ -688,7 +756,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				Object *new_obj = new Object();
 				if (new_obj)
 				{
-					if ( field = prop ? prop_field : Insert(key_type, key, insert_pos) )
+					if ( field = prop ? prop_field : Insert(name, insert_pos) )
 					{
 						if (prop) // Otherwise, field is already empty.
 							prop->Release();
@@ -740,8 +808,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		if (!IS_INVOKE_META)
 		{
 			ExprTokenType &value_param = **actual_param;
-			// L34: Assigning an empty string no longer removes the field.
-			if ( (field || (field = prop ? prop_field : Insert(key_type, key, insert_pos)))
+			if ( (field || (field = prop ? prop_field : Insert(name, insert_pos)))
 				&& field->Assign(value_param) )
 				return OK;
 			_o_throw(ERR_OUTOFMEM);
@@ -788,6 +855,47 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 	case FID_ObjNewEnum:		return _NewEnum(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	}
 	return INVOKE_NOT_HANDLED;
+}
+
+
+ObjectMember Map::sMembers[] =
+{
+	Object_Member(Capacity, Capacity, 0, IT_SET),
+	Object_Member(Count, Count, 0, IT_GET),
+	Object_Method1(Clone, 0, 0),
+	Object_Method1(Delete, 1, 2),
+	Object_Method1(Has, 1, 1),
+	Object_Method1(_NewEnum, 0, 0)
+};
+
+ResultType STDMETHODCALLTYPE Map::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if ((aFlags & (IF_DEFAULT|IT_CALL)) == IF_DEFAULT)
+	{
+		if (aParamCount != (IS_INVOKE_SET ? 2 : 1))
+			_o_throw(ERR_INVALID_USAGE);
+		if (IS_INVOKE_GET)
+		{
+			if (GetItem(aResultToken, *aParam[0]))
+			{
+				if (aResultToken.symbol == SYM_OBJECT)
+					aResultToken.object->AddRef();
+				return OK;
+			}
+			_o_throw(_T("Key not found."), ParamIndexToString(0, _f_number_buf));
+		}
+		else
+		{
+			if (!SetItem(*aParam[0], *aParam[1]))
+				_o_throw(ERR_OUTOFMEM);
+		}
+		return OK;
+	}
+	auto result = ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+	// See Array::Invoke for comments regarding this part:
+	if (result == INVOKE_NOT_HANDLED)
+		result = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
+	return result;
 }
 
 
@@ -874,10 +982,7 @@ void Object::EndClassDefinition()
 	for (IndexType i = mFieldCount - 1; i >= 0; --i)
 		if (mFields[i].symbol == SYM_INTEGER)
 		{
-			if (i >= mKeyOffsetString) // Must be checked since key can be an integer, such as for "0 := (expr)".
-				free(mFields[i].key.s);
-			else // At this stage it can only be an integer key.
-				--mKeyOffsetObject, --mKeyOffsetString; // Number of int/obj keys is implied by these, so they must be adjusted.
+			free(mFields[i].name);
 			if (i < --mFieldCount)
 				memmove(mFields + i, mFields + i + 1, (mFieldCount - i) * sizeof(FieldType));
 		}
@@ -930,13 +1035,41 @@ LPTSTR Array::Type()
 	return type;
 }
 
+LPTSTR Map::Type()
+{
+	// Override default type name, but let script redefine it as per Object rules.
+	auto type = Object::Type();
+	if (type == sObjectTypeName)
+		return _T("Map");
+	return type;
+}
+
 	
 
 //
-// Object:: Built-in Methods
+// Object:: and Map:: Built-in Methods
 //
 
 ResultType Object::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto field = FindField(ParamIndexToString(0, _f_number_buf));
+	if (!field)
+		_o_return_empty;
+	
+	// Return the removed value.
+	field->ReturnMove(aResultToken);
+
+	// Free the value (if not transferred to aResultToken) and name.
+	field->Free();
+	free(field->name);
+
+	// Remove the field.
+	memmove(field, field + 1, (mFieldCount - (field - mFields)) * sizeof(FieldType));
+	mFieldCount--;
+	return OK;
+}
+
+ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Delete(first_key [, last_key := first_key])
 {
 	FieldType *min_field;
@@ -950,16 +1083,16 @@ ResultType Object::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 	// Find the position of "min".
 	if (min_field = FindField(*aParam[0], number_buf, min_key_type, min_key, min_pos))
 		min_pos = min_field - mFields; // else min_pos was already set by FindField.
-		
+
 	if (aParamCount > 1) // Removing a range of keys.
 	{
 		SymbolType max_key_type;
 		FieldType *max_field;
-		
+
 		// Find the next position > [aParam[1]].
 		if (max_field = FindField(*aParam[1], number_buf, max_key_type, max_key, max_pos))
 			max_pos = max_field - mFields + 1;
-		
+
 		// Since the order of key-types in mFields is of no logical consequence, require that both keys be the same type.
 		// Do not allow removing a range of object keys since there is probably no meaning to their order.
 		if (max_key_type != min_key_type || max_key_type == SYM_OBJECT || max_pos < min_pos
@@ -1032,6 +1165,11 @@ ResultType Object::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	_o_return((__int64)mFieldCount);
 }
 
+ResultType Map::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	_o_return((__int64)mFieldCount);
+}
+
 ResultType Object::GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_o_return(mFieldCountMax);
@@ -1039,6 +1177,45 @@ ResultType Object::GetCapacity(ResultToken &aResultToken, int aID, int aFlags, E
 
 ResultType Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
+	if (!ParamIndexIsNumeric(0))
+		_o_throw(ERR_PARAM1_INVALID);
+
+	IndexType desired_count = (IndexType)ParamIndexToInt64(0);
+	if (desired_count < mFieldCount)
+	{
+		// It doesn't seem intuitive to allow SetCapacity to truncate the fields array, so just reallocate
+		// as necessary to remove any unused space.  Allow negative values since SetCapacity(-1) seems more
+		// intuitive than SetCapacity(0) when the contents aren't being discarded.
+		desired_count = mFieldCount;
+	}
+	if (!desired_count)
+	{	// Caller wants to shrink object to current contents but there aren't any, so free mFields.
+		if (mFields)
+		{
+			free(mFields);
+			mFields = NULL;
+			mFieldCountMax = 0;
+		}
+		//else mFieldCountMax should already be 0.
+		// Since mFieldCountMax and desired_size are both 0, below will return 0 and won't call SetInternalCapacity.
+	}
+	if (desired_count == mFieldCountMax || SetInternalCapacity(desired_count))
+	{
+		_o_return(mFieldCountMax);
+	}
+	// At this point, failure isn't critical since nothing is being stored yet.  However, it might be easier to
+	// debug if an error is thrown here rather than possibly later, when the array attempts to resize itself to
+	// fit new items.  This also avoids the need for scripts to check if the return value is less than expected:
+	_o_throw(ERR_OUTOFMEM);
+}
+
+ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (IS_INVOKE_GET)
+	{
+		_o_return(mFieldCountMax);
+	}
+
 	if (!ParamIndexIsNumeric(0))
 		_o_throw(ERR_PARAM1_INVALID);
 
@@ -1079,7 +1256,20 @@ ResultType Object::_NewEnum(ResultToken &aResultToken, int aID, int aFlags, Expr
 		_o_throw(ERR_OUTOFMEM);
 }
 
+ResultType Map::_NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (IObject *enm = new Enumerator(this))
+		_o_return(enm);
+	else
+		_o_throw(ERR_OUTOFMEM);
+}
+
 ResultType Object::HasKey(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	_o_return(FindField(ParamIndexToString(0, _f_number_buf)) != NULL);
+}
+
+ResultType Map::Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	SymbolType key_type;
 	KeyType key;
@@ -1093,8 +1283,14 @@ ResultType Object::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	Object *clone = Clone();
 	if (!clone)
 		_o_throw(ERR_OUTOFMEM);	
-	if (mBase)
-		(clone->mBase = mBase)->AddRef();
+	_o_return(clone);
+}
+
+ResultType Map::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto clone = new Map();
+	if (!CloneTo(*clone))
+		_o_throw(ERR_OUTOFMEM);
 	_o_return(clone);
 }
 
@@ -1201,6 +1397,25 @@ bool Object::Variant::Assign(ExprTokenType &aParam)
 	return true;
 }
 
+// Copy a value from a Variant into this uninitialized Variant.
+bool Object::Variant::InitCopy(Variant &val)
+{
+	switch (symbol = val.symbol)
+	{
+	case SYM_STRING:
+		string.Init();
+		return Assign(val.string, val.string.Length(), true); // Pass true to conserve memory (no space is allowed for future expansion).
+	case SYM_OBJECT:
+		(object = val.object)->AddRef();
+		break;
+	//case SYM_INTEGER:
+	//case SYM_FLOAT:
+	default:
+		n_int64 = val.n_int64; // Union copy.
+	}
+	return true;
+}
+
 // Return value, knowing Variant will be kept around.
 // Copying of value can be skipped.
 void Object::Variant::ReturnRef(ResultToken &result)
@@ -1276,6 +1491,7 @@ void Object::Variant::Free()
 	else if (symbol == SYM_OBJECT)
 		object->Release();
 }
+
 
 
 //
@@ -1386,7 +1602,7 @@ Array *Array::Create(ExprTokenType *aValue[], index_t aCount)
 Array *Array::Clone(BOOL aMembersOnly)
 {
 	auto arr = new Array();
-	if (!CloneTo(*arr, 0))
+	if (!CloneTo(*arr))
 		return nullptr; // CloneTo() released arr.
 	if (aMembersOnly) // Flag used in variadic calls (Func::Call).
 		return arr;
@@ -1589,6 +1805,7 @@ int Array::Enumerator::Next(Var *aVal, Var *aReserved)
 }
 
 
+
 //
 // Enumerator
 //
@@ -1617,6 +1834,26 @@ int Object::Enumerator::Next(Var *aKey, Var *aVal)
 		FieldType &field = mObject->mFields[mOffset];
 		if (aKey)
 		{
+			aKey->Assign(field.name);
+		}
+		if (aVal)
+		{
+			ExprTokenType value;
+			field.ToToken(value);
+			aVal->Assign(value);
+		}
+		return true;
+	}
+	return false;
+}
+
+int Map::Enumerator::Next(Var *aKey, Var *aVal)
+{
+	if (++mOffset < mObject->mFieldCount)
+	{
+		FieldType &field = mObject->mFields[mOffset];
+		if (aKey)
+		{
 			if (mOffset < mObject->mKeyOffsetObject) // mKeyOffsetInt < mKeyOffsetObject
 				aKey->Assign(field.key.i);
 			else if (mOffset < mObject->mKeyOffsetString) // mKeyOffsetObject < mKeyOffsetString
@@ -1626,13 +1863,9 @@ int Object::Enumerator::Next(Var *aKey, Var *aVal)
 		}
 		if (aVal)
 		{
-			switch (field.symbol)
-			{
-			case SYM_STRING:	aVal->AssignString(field.string, field.string.Length());	break;
-			case SYM_INTEGER:	aVal->Assign(field.n_int64);		break;
-			case SYM_FLOAT:		aVal->Assign(field.n_double);		break;
-			case SYM_OBJECT:	aVal->Assign(field.object);			break;
-			}
+			ExprTokenType value;
+			field.ToToken(value);
+			aVal->Assign(value);
 		}
 		return true;
 	}
@@ -1642,10 +1875,10 @@ int Object::Enumerator::Next(Var *aKey, Var *aVal)
 	
 
 //
-// Object:: Internal Methods
+// Object:: and Map:: Internal Methods
 //
 
-Object::FieldType *Object::FindField(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos)
+Map::FieldType *Map::FindField(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos)
 // left and right must be set by caller to the appropriate bounds within mFields.
 {
 	IndexType mid;
@@ -1668,9 +1901,9 @@ Object::FieldType *Object::FindField(IntKeyType val, IndexType left, IndexType r
 	for ( ; left <= right; mid = (left + right) / 2)
 	{
 		FieldType &field = mFields[mid];
-		
+
 		auto result = val - field.key.i;
-		
+
 		if (result < 0)
 			right = mid - 1;
 		else if (result > 0)
@@ -1682,11 +1915,11 @@ Object::FieldType *Object::FindField(IntKeyType val, IndexType left, IndexType r
 	return NULL;
 }
 
-Object::FieldType *Object::FindField(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos)
+Object::FieldType *Object::FindField(name_t name, IndexType &insert_pos)
 // left and right must be set by caller to the appropriate bounds within mFields.
 {
-	INT_PTR mid;
-	int first_char = *val;
+	IndexType left = 0, mid, right = mFieldCount - 1;
+	int first_char = *name;
 	if (first_char <= 'Z' && first_char >= 'A')
 		first_char += 32;
 	while (left <= right)
@@ -1695,15 +1928,15 @@ Object::FieldType *Object::FindField(LPTSTR val, IndexType left, IndexType right
 		
 		FieldType &field = mFields[mid];
 		
-		// key_c contains the lower-case version of key.s[0].  Checking key_c first
+		// key_c contains the lower-case version of field.name[0].  Checking key_c first
 		// allows the _tcsicmp() call to be skipped whenever the first character differs.
-		// This also means that key.s isn't dereferenced, which means one less potential
+		// This also means that .name isn't dereferenced, which means one less potential
 		// CPU cache miss (where we wait for the data to be pulled from RAM into cache).
 		// field.key_c might cause a cache miss, but it's very likely that key.s will be
 		// read into cache at the same time (but only the pointer value, not the chars).
 		int result = first_char - field.key_c;
 		if (!result)
-			result = _tcsicmp(val, field.key.s);
+			result = _tcsicmp(name, field.name);
 		
 		if (result < 0)
 			right = mid - 1;
@@ -1716,7 +1949,34 @@ Object::FieldType *Object::FindField(LPTSTR val, IndexType left, IndexType right
 	return NULL;
 }
 
-Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, IndexType &insert_pos)
+Map::FieldType *Map::FindField(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos)
+// left and right must be set by caller to the appropriate bounds within mFields.
+{
+	IndexType mid;
+	int first_char = *val;
+	while (left <= right)
+	{
+		mid = (left + right) / 2;
+
+		FieldType &field = mFields[mid];
+
+		// key_c contains key.s[0], cached there for performance.
+		int result = first_char - field.key_c;
+		if (!result)
+			result = _tcscmp(val, field.key.s);
+
+		if (result < 0)
+			right = mid - 1;
+		else if (result > 0)
+			left = mid + 1;
+		else
+			return &field;
+	}
+	insert_pos = left;
+	return NULL;
+}
+
+Map::FieldType *Map::FindField(SymbolType key_type, KeyType key, IndexType &insert_pos)
 // Searches for a field with the given key.  If found, a pointer to the field is returned.  Otherwise
 // NULL is returned and insert_pos is set to the index a newly created field should be inserted at.
 // key_type and key are output for creating a new field or removing an existing one correctly.
@@ -1737,7 +1997,7 @@ Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, IndexType
 		// Reuse the integer search function to reduce code size.  On 32-bit builds,
 		// this requires that the upper 32 bits of each key have been initialized.
 		return FindField((IntKeyType)(INT_PTR)key.p, left, right, insert_pos);
-	//case SYM_INTEGER:
+		//case SYM_INTEGER:
 	default:
 		left = mKeyOffsetInt;
 		right = mKeyOffsetObject - 1; // Int keys end where Object keys begin.
@@ -1745,7 +2005,7 @@ Object::FieldType *Object::FindField(SymbolType key_type, KeyType key, IndexType
 	}
 }
 
-void Object::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type, KeyType &key)
+void Map::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type, KeyType &key)
 // Converts key_token to the appropriate key_type and key.
 // The exact type of the key is not preserved, since that often produces confusing behaviour;
 // for example, guis[WinExist()] := x ... x := guis[A_Gui] would fail because A_Gui returns a
@@ -1777,46 +2037,11 @@ void Object::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_ty
 		key_type = SYM_INTEGER;
 		return;
 	}
-	key_type = SYM_STRING; // Set default for simplicity.
+	key_type = SYM_STRING;
 	key.s = TokenToString(key_token, buf);
-	if (inner_type == SYM_STRING)
-	{
-		// Only SYM_STRING needs to be checked in this way, because SYM_INTEGER already
-		// returned an integer if possible, and SYM_FLOAT never produces a decimal integer.
-		LPTSTR cp = key.s;
-		if (*cp == '-')
-		{
-			++cp;
-			if (*cp == '0')
-				return; // Things like "-0" or "-0x1" or "-007" won't round trip.
-		}
-		if (*cp == '0')
-		{
-			// "0" on its own will round trip, but anything else with a leading "0" will not.
-			if (!cp[1])
-			{
-				key.i = 0;
-				key_type = SYM_INTEGER;
-			}
-			return;
-		}
-		if (*cp <= '9' && *cp >= '1') // Rule out many non-numeric values and leading '+' or whitespace.
-		{
-			LPTSTR endptr;
-			errno = 0; // Clear any previous error number.
-			IntKeyType i = ObjParseIntKey(key.s, &endptr);
-			if (errno != ERANGE // The number is not too large for IntKeyType.
-				&& !*endptr) // There is no trailing whitespace or other non-numeric suffix.
-			{
-				key.i = i;
-				key_type = SYM_INTEGER;
-				return; // For maintainability.
-			}
-		}
-	}
 }
 
-Object::FieldType *Object::FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos)
+Map::FieldType *Map::FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos)
 // Searches for a field with the given key, where the key is a token passed from script.
 {
 	ConvertKey(key_token, aBuf, key_type, key);
@@ -1834,8 +2059,46 @@ bool Object::SetInternalCapacity(IndexType new_capacity)
 	mFieldCountMax = new_capacity;
 	return true;
 }
+
+bool Map::SetInternalCapacity(IndexType new_capacity)
+// Expands mFields to the specified number if fields.
+// Caller *must* ensure new_capacity >= 1 && new_capacity >= mFieldCount.
+{
+	FieldType *new_fields = (FieldType *)realloc(mFields, new_capacity * sizeof(FieldType));
+	if (!new_fields)
+		return false;
+	mFields = new_fields;
+	mFieldCountMax = new_capacity;
+	return true;
+}
 	
-Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, IndexType at)
+Object::FieldType *Object::Insert(name_t name, IndexType at)
+// Inserts a single field with the given key at the given offset.
+// Caller must ensure 'at' is the correct offset for this key.
+{
+	if (mFieldCount == mFieldCountMax && !Expand()  // Attempt to expand if at capacity.
+		|| !(name = _tcsdup(name)))  // Attempt to duplicate key-string.
+	{	// Out of memory.
+		return NULL;
+	}
+	// There is now definitely room in mFields for a new field.
+
+	FieldType &field = mFields[at];
+	if (at < mFieldCount)
+		// Move existing fields to make room.
+		memmove(&field + 1, &field, (mFieldCount - at) * sizeof(FieldType));
+	++mFieldCount; // Only after memmove above.
+	
+	field.key_c = ctolower(*name);
+	
+	field.name = name; // Above has already copied string or called key.p->AddRef() as appropriate.
+	field.symbol = SYM_STRING;
+	field.string.Init(); // Initialize to empty string.  Caller will likely reassign.
+
+	return &field;
+}
+
+Map::FieldType *Map::Insert(SymbolType key_type, KeyType key, IndexType at)
 // Inserts a single field with the given key at the given offset.
 // Caller must ensure 'at' is the correct offset for this key.
 {
@@ -1851,10 +2114,10 @@ Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, IndexType at
 		// Move existing fields to make room.
 		memmove(&field + 1, &field, (mFieldCount - at) * sizeof(FieldType));
 	++mFieldCount; // Only after memmove above.
-	
+
 	// Update key-type offsets based on where and what was inserted; also update this key's ref count:
 	if (key_type == SYM_STRING)
-		field.key_c = ctolower(*key.s);
+		field.key_c = *key.s;
 	else
 	{
 		// Must be either SYM_INTEGER or SYM_OBJECT, which both precede SYM_STRING.
@@ -1866,7 +2129,7 @@ Object::FieldType *Object::Insert(SymbolType key_type, KeyType key, IndexType at
 		else
 			key.p->AddRef();
 	}
-	
+
 	field.key = key; // Above has already copied string or called key.p->AddRef() as appropriate.
 	field.symbol = SYM_STRING;
 	field.string.Init(); // Initialize to empty string.  Caller will likely reassign.
@@ -1936,6 +2199,7 @@ ResultType STDMETHODCALLTYPE Property::Invoke(ResultToken &aResultToken, ExprTok
 	(*member)->Call(aResultToken, aParam, aParamCount);
 	return aResultToken.Result();
 }
+
 
 
 //

@@ -3194,6 +3194,7 @@ BIF_DECL(BIF_Type);
 BIF_DECL(BIF_IsObject);
 BIF_DECL(BIF_Object);
 BIF_DECL(BIF_Array);
+BIF_DECL(BIF_Map);
 BIF_DECL(BIF_ObjAddRefRelease);
 BIF_DECL(BIF_ObjBindMethod);
 BIF_DECL(BIF_ObjRaw);

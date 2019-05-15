@@ -47,6 +47,21 @@ BIF_DECL(BIF_Array)
 		_f_return(arr);
 	_f_throw(ERR_OUTOFMEM);
 }
+
+
+//
+// Map()
+//
+
+BIF_DECL(BIF_Map)
+{
+	if (aParamCount & 1)
+		_f_throw(ERR_PARAM_INVALID);
+	auto obj = Map::Create(aParam, aParamCount);
+	if (!obj)
+		_f_throw(ERR_OUTOFMEM);
+	_f_return(obj);
+}
 	
 
 //
@@ -417,14 +432,15 @@ BIF_DECL(BIF_ObjRaw)
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
 	if (!obj)
 		_f_throw(ERR_PARAM1_INVALID);
+	LPTSTR name = TokenToString(*aParam[1], _f_number_buf);
 	if (_f_callee_id == FID_ObjRawSet)
 	{
-		if (!obj->SetItem(*aParam[1], *aParam[2]))
+		if (!obj->SetItem(name, *aParam[2]))
 			_f_throw(ERR_OUTOFMEM);
 	}
 	else
 	{
-		if (obj->GetItem(aResultToken, *aParam[1]))
+		if (obj->GetItem(aResultToken, name))
 		{
 			if (aResultToken.symbol == SYM_OBJECT)
 				aResultToken.object->AddRef();
