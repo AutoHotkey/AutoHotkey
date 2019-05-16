@@ -93,13 +93,20 @@ ResultType ObjectMember::Invoke(ObjectMember aMembers[], int aMemberCount, IObje
 // Object::Create - Create a new Object given an array of property name/value pairs.
 //
 
+Object *Object::Create()
+{
+	Object *obj = new Object();
+	obj->SetBase(Object::sPrototype);
+	return obj;
+}
+
 Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 {
 	if (aParamCount & 1)
 		return NULL; // Odd number of parameters - reserved for future use.
 
-	Object *obj = new Object();
-	if (obj && aParamCount)
+	Object *obj = Object::Create();
+	if (aParamCount)
 	{
 		if (aParamCount > 8)
 			// Set initial capacity to avoid multiple expansions.
@@ -150,7 +157,8 @@ Map *Map::Create(ExprTokenType *aParam[], int aParamCount)
 	ASSERT(!(aParamCount & 1));
 
 	Map *map = new Map();
-	if (map && aParamCount)
+	map->SetBase(Map::sPrototype);
+	if (aParamCount)
 	{
 		if (aParamCount > 8)
 			// Set initial capacity to avoid multiple expansions.
@@ -352,7 +360,7 @@ Array *Array::FromEnumerable(IObject *aEnumerable)
 	param[0].SetValue(_T("Next"), 4);
 	param[1].symbol = SYM_VAR;
 	param[1].var = &var;
-	Array *vargs = new Array();
+	Array *vargs = Array::Create();
 	for (;;)
 	{
 		result_token.Free();
@@ -511,6 +519,8 @@ ObjectMember Object::sMembers[] =
 	Object_Method1(HasKey, 1, 1),
 	Object_Method1(Clone, 0, 0)
 };
+
+Object *Object::sPrototype = Object::CreatePrototype(_T("Object"), nullptr);
 
 ResultType STDMETHODCALLTYPE Object::Invoke(
                                             ResultToken &aResultToken,
@@ -736,7 +746,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			if (!_tcsicmp(name, _T("base")))
 			{
 				if (!mBase && IS_INVOKE_SET)
-					mBase = new Object();
+					mBase = Object::Create();
 				obj = mBase; // If NULL, above failed and below will detect it.
 			}
 			else if (aFlags & IF_DEFAULT)
@@ -751,7 +761,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// Automatically create a new object for the x part of obj.x[y]:=z.
 			else if (IS_INVOKE_SET)
 			{
-				Object *new_obj = new Object();
+				Object *new_obj = Object::Create();
 				if (new_obj)
 				{
 					if ( field = prop ? prop_field : Insert(name, insert_pos) )
@@ -865,6 +875,8 @@ ObjectMember Map::sMembers[] =
 	Object_Method1(Has, 1, 1),
 	Object_Method1(_NewEnum, 0, 0)
 };
+
+Object *Map::sPrototype = Object::CreatePrototype(_T("Map"), Object::sPrototype);
 
 ResultType STDMETHODCALLTYPE Map::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
@@ -1024,25 +1036,15 @@ LPTSTR Object::Type()
 	return sObjectTypeName; // This is an Object of undetermined type, like Object() or {}.
 }
 
-LPTSTR Array::Type()
+
+Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase)
 {
-	// Override default type name, but let script redefine it as per Object rules.
-	auto type = Object::Type();
-	if (type == sObjectTypeName)
-		return _T("Array");
-	return type;
+	auto obj = new Object();
+	obj->SetBase(aBase);
+	obj->SetItem(_T("__Class"), ExprTokenType(aClassName));
+	return obj;
 }
 
-LPTSTR Map::Type()
-{
-	// Override default type name, but let script redefine it as per Object rules.
-	auto type = Object::Type();
-	if (type == sObjectTypeName)
-		return _T("Map");
-	return type;
-}
-
-	
 
 //
 // Object:: and Map:: Built-in Methods
@@ -1590,6 +1592,7 @@ Array::~Array()
 Array *Array::Create(ExprTokenType *aValue[], index_t aCount)
 {
 	auto arr = new Array();
+	arr->SetBase(Array::sPrototype);
 	if (!aCount || arr->InsertAt(0, aValue, aCount))
 		return arr;
 	arr->Release();
@@ -1641,6 +1644,8 @@ ObjectMember Array::sMembers[] =
 	Object_Method(Clone, 0, 0),
 	Object_Method(_NewEnum, 0, 0)
 };
+
+Object *Array::sPrototype = Object::CreatePrototype(_T("Array"), Object::sPrototype);
 
 ResultType STDMETHODCALLTYPE Array::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {

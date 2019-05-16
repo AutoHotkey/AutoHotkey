@@ -267,7 +267,8 @@ protected:
 	Object *CloneTo(Object &aTo);
 	
 public:
-	static Object *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
+	static Object *Create();
+	static Object *Create(ExprTokenType *aParam[], int aParamCount);
 	
 	Object *Clone();
 	
@@ -316,6 +317,9 @@ public:
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	static ObjectMember sMembers[];
+	static Object *sPrototype;
+	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase);
+
 	ResultType CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	ResultType Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
@@ -330,6 +334,7 @@ public:
 
 	IObject_DebugWriteProperty_Def;
 };
+
 
 
 //
@@ -381,6 +386,8 @@ private:
 		int Next(Var *, Var *);
 		IObject_Type_Impl("Array.Enumerator")
 	};
+
+	Array() {}
 	
 public:
 	enum : index_t
@@ -427,9 +434,9 @@ public:
 		M__NewEnum
 	};
 	static ObjectMember sMembers[];
+	static Object *sPrototype;
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	LPTSTR Type();
 	IObject_DebugWriteProperty_Def;
 };
 
@@ -556,8 +563,8 @@ public:
 	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	static ObjectMember sMembers[];
+	static Object *sPrototype;
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	LPTSTR Type();
 };
 
 
