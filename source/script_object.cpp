@@ -127,10 +127,10 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 
 			if (!_tcsicmp(name, _T("base")))
 			{
-				// For consistency with assignments, the following is allowed to overwrite a previous
-				// base object (although having "base" occur twice in the parameter list would be quite
-				// useless) or set mBase to NULL if the value parameter is not an object.
-				obj->SetBase(TokenToObject(*aParam[i + 1]));
+				// FIXME: Invalid (non-Object) base should throw.
+				auto base = dynamic_cast<Object *>(TokenToObject(*aParam[i + 1]));
+				if (base)
+					obj->SetBase(base);
 				continue;
 			}
 
@@ -683,9 +683,10 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				{
 					if (IS_INVOKE_SET)
 					{
-						IObject *obj = TokenToObject(**actual_param);
-						if (obj)
-							obj->AddRef(); // for mBase
+						Object *obj = dynamic_cast<Object *>(TokenToObject(**actual_param));
+						if (!obj) // v2 policy: Every Object must have a base.
+							_o_throw(ERR_INVALID_VALUE);
+						obj->AddRef(); // for mBase
 						if (mBase)
 							mBase->Release();
 						mBase = obj; // May be NULL.
@@ -745,9 +746,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// Allow obj["base",x] to access a field of obj.base; L40: This also fixes obj.base[x] which was broken by L36.
 			if (!_tcsicmp(name, _T("base")))
 			{
-				if (!mBase && IS_INVOKE_SET)
-					mBase = Object::Create();
-				obj = mBase; // If NULL, above failed and below will detect it.
+				obj = mBase;
 			}
 			else if (aFlags & IF_DEFAULT)
 			{
@@ -1003,17 +1002,13 @@ void Object::EndClassDefinition()
 // Helper function for 'is' operator: is aBase a direct or indirect base object of this?
 //
 
-bool Object::IsDerivedFrom(IObject *aBase)
+bool Object::IsDerivedFrom(Object *aBase)
 {
-	IObject *ibase;
 	Object *base;
-	for (ibase = mBase; ; ibase = base->mBase)
-	{
-		if (ibase == aBase)
+	for (base = mBase; base; base = base->mBase)
+		if (base == aBase)
 			return true;
-		if (  !(base = dynamic_cast<Object *>(ibase))  )  // ibase may be NULL.
-			return false;
-	}
+	return false;
 }
 	
 
@@ -1025,12 +1020,11 @@ static LPTSTR sObjectTypeName = _T("Object");
 
 LPTSTR Object::Type()
 {
-	IObject *ibase;
 	Object *base;
 	ExprTokenType value;
 	if (GetItem(value, _T("__Class")))
 		return _T("Class"); // This object is a class.
-	for (ibase = mBase; base = dynamic_cast<Object *>(ibase); ibase = base->mBase)
+	for (base = mBase; base; base = base->mBase)
 		if (base->GetItem(value, _T("__Class")))
 			return TokenToString(value); // This object is an instance of base.
 	return sObjectTypeName; // This is an Object of undetermined type, like Object() or {}.

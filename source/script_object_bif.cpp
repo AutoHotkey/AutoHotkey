@@ -205,7 +205,7 @@ BIF_DECL(Op_ObjNew)
 
 	ExprTokenType *class_token = aParam[0]; // Save this to be restored later.
 
-	IObject *class_object = TokenToObject(*class_token);
+	auto class_object = dynamic_cast<Object *>(TokenToObject(*class_token));
 	if (!class_object)
 		_f_throw(ERR_NEW_NO_CLASS);
 
@@ -462,14 +462,14 @@ BIF_DECL(BIF_ObjBase)
 		_f_throw(ERR_PARAM1_INVALID);
 	if (_f_callee_id == FID_ObjSetBase)
 	{
-		IObject *new_base = TokenToObject(*aParam[1]);
-		if (!new_base && !TokenIsEmptyString(*aParam[1]))
+		auto new_base = dynamic_cast<Object *>(TokenToObject(*aParam[1]));
+		if (!new_base)
 			_f_throw(ERR_PARAM2_INVALID);
 		obj->SetBase(new_base);
 	}
 	else // ObjGetBase
 	{
-		if (IObject *obj_base = obj->Base())
+		if (auto obj_base = obj->Base())
 		{
 			obj_base->AddRef();
 			_f_return(obj_base);

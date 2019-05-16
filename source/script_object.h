@@ -231,7 +231,7 @@ protected:
 	};
 	
 private:
-	IObject *mBase = nullptr;
+	Object *mBase = nullptr;
 	FieldType *mFields = nullptr;
 	IndexType mFieldCount = 0, mFieldCountMax = 0; // Current/max number of fields.
 
@@ -294,7 +294,7 @@ public:
 	bool SetItem(name_t aName, __int64 aValue) { return SetItem(aName, ExprTokenType(aValue)); }
 	bool SetItem(name_t aName, IObject *aValue) { return SetItem(aName, ExprTokenType(aValue)); }
 
-	void SetBase(IObject *aNewBase)
+	void SetBase(Object *aNewBase)
 	{ 
 		if (aNewBase)
 			aNewBase->AddRef();
@@ -303,13 +303,13 @@ public:
 		mBase = aNewBase;
 	}
 
-	IObject *Base() 
+	Object *Base() 
 	{
 		return mBase; // Callers only want to call Invoke(), so no AddRef is done.
 	}
 
 	LPTSTR Type();
-	bool IsDerivedFrom(IObject *aBase);
+	bool IsDerivedFrom(Object *aBase);
 	
 	void EndClassDefinition();
 	Object *GetUnresolvedClass(LPTSTR &aName);

@@ -2313,7 +2313,7 @@ ResultType Line::ValueIsType(ExprTokenType &aResultToken, ExprTokenType &aValue,
 		}
 		// Otherwise, the comparison is invalid.
 	}
-	else if (IObject *type_obj = TokenToObject(aType))
+	else if (Object *type_obj = dynamic_cast<Object *>(TokenToObject(aType)))
 	{
 		// Is the value an object which can derive, and is it derived from type_obj?
 		Object *value_obj = dynamic_cast<Object *>(TokenToObject(aValue));
