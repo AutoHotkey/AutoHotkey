@@ -149,20 +149,19 @@ Map *Map::Create(ExprTokenType *aParam[], int aParamCount)
 {
 	ASSERT(!(aParamCount & 1));
 
-	Map *obj = new Map();
-	if (obj && aParamCount)
+	Map *map = new Map();
+	if (map && aParamCount)
 	{
 		if (aParamCount > 8)
 			// Set initial capacity to avoid multiple expansions.
 			// For simplicity, failure is handled by the loop below.
-			obj->SetInternalCapacity(aParamCount >> 1);
+			map->SetInternalCapacity(aParamCount >> 1);
 		// Otherwise, there are 4 or less key-value pairs.  When the first
 		// item is inserted, a default initial capacity of 4 will be set.
 
 		TCHAR buf[MAX_NUMBER_SIZE];
-		FieldType *field;
 		SymbolType key_type;
-		KeyType key;
+		Key key;
 		IndexType insert_pos;
 
 		for (int i = 0; i + 1 < aParamCount; i += 2)
@@ -170,17 +169,17 @@ Map *Map::Create(ExprTokenType *aParam[], int aParamCount)
 			if (aParam[i]->symbol == SYM_MISSING || aParam[i+1]->symbol == SYM_MISSING)
 				continue; // For simplicity.
 
-			field = obj->FindField(*aParam[i], buf, key_type, key, insert_pos);
-			if (  !(field
-				 || (field = obj->Insert(key_type, key, insert_pos)))
-				|| !field->Assign(*aParam[i + 1])  )
+			auto item = map->FindItem(*aParam[i], buf, key_type, key, insert_pos);
+			if (  !(item
+				 || (item = map->Insert(key_type, key, insert_pos)))
+				|| !item->Assign(*aParam[i + 1])  )
 			{	// Out of memory.
-				obj->Release();
+				map->Release();
 				return NULL;
 			}
 		}
 	}
-	return obj;
+	return map;
 }
 
 
@@ -248,7 +247,7 @@ Map *Map::CloneTo(Map &obj)
 {
 	Object::CloneTo(obj);
 
-	if (!obj.SetInternalCapacity(mFieldCount))
+	if (!obj.SetInternalCapacity(mCount))
 	{
 		obj.Release();
 		return NULL;
@@ -257,7 +256,7 @@ Map *Map::CloneTo(Map &obj)
 	int failure_count = 0; // See Object::CloneT() for comments.
 	IndexType i;
 
-	obj.mFieldCount = mFieldCount;
+	obj.mCount = mCount;
 	obj.mKeyOffsetObject = mKeyOffsetObject;
 	obj.mKeyOffsetString = mKeyOffsetString;
 	if (obj.mKeyOffsetObject < 0) // Currently might always evaluate to false.
@@ -268,10 +267,10 @@ Map *Map::CloneTo(Map &obj)
 	}
 	//else no need to check mKeyOffsetString since it should always be >= mKeyOffsetObject.
 
-	for (i = 0; i < mFieldCount; ++i)
+	for (i = 0; i < mCount; ++i)
 	{
-		FieldType &dst = obj.mFields[i];
-		FieldType &src = mFields[i];
+		Pair &dst = obj.mItem[i];
+		Pair &src = mItem[i];
 
 		// Copy key.
 		if (i >= obj.mKeyOffsetString)
@@ -280,7 +279,7 @@ Map *Map::CloneTo(Map &obj)
 			if ( !(dst.key.s = _tcsdup(src.key.s)) )
 			{
 				// Key allocation failed. At this point, all int and object keys
-				// have been set and values for previous fields have been copied.
+				// have been set and values for previous items have been copied.
 				++failure_count;
 			}
 		}
@@ -479,22 +478,21 @@ Object::~Object()
 
 Map::~Map()
 {
-	if (mFields)
+	if (mItem)
 	{
-		if (mFieldCount)
+		if (mCount)
 		{
-			IndexType i = mFieldCount - 1;
-			// Free keys: first strings, then objects (objects have a lower index in the mFields array).
+			IndexType i = mCount - 1;
+			// Free keys: first strings, then objects (objects have a lower index in the mItem array).
 			for ( ; i >= mKeyOffsetString; --i)
-				free(mFields[i].key.s);
+				free(mItem[i].key.s);
 			for ( ; i >= mKeyOffsetObject; --i)
-				mFields[i].key.p->Release();
+				mItem[i].key.p->Release();
 			// Free values.
-			while (mFieldCount) 
-				mFields[--mFieldCount].Free();
+			while (mCount) 
+				mItem[--mCount].Free();
 		}
-		// Free fields array.
-		free(mFields);
+		free(mItem);
 	}
 }
 
@@ -1072,28 +1070,28 @@ ResultType Object::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Delete(first_key [, last_key := first_key])
 {
-	FieldType *min_field;
+	Pair *min_item;
 	IndexType min_pos, max_pos, pos;
 	SymbolType min_key_type;
-	KeyType min_key, max_key;
+	Key min_key, max_key;
 	IntKeyType logical_count_removed = 1;
 
 	LPTSTR number_buf = _f_number_buf;
 
 	// Find the position of "min".
-	if (min_field = FindField(*aParam[0], number_buf, min_key_type, min_key, min_pos))
-		min_pos = min_field - mFields; // else min_pos was already set by FindField.
+	if (min_item = FindItem(*aParam[0], number_buf, min_key_type, min_key, min_pos))
+		min_pos = min_item - mItem; // else min_pos was already set by FindItem.
 
 	if (aParamCount > 1) // Removing a range of keys.
 	{
 		SymbolType max_key_type;
-		FieldType *max_field;
+		Pair *max_item;
 
 		// Find the next position > [aParam[1]].
-		if (max_field = FindField(*aParam[1], number_buf, max_key_type, max_key, max_pos))
-			max_pos = max_field - mFields + 1;
+		if (max_item = FindItem(*aParam[1], number_buf, max_key_type, max_key, max_pos))
+			max_pos = max_item - mItem + 1;
 
-		// Since the order of key-types in mFields is of no logical consequence, require that both keys be the same type.
+		// Since the order of key-types in mItem is of no logical consequence, require that both keys be the same type.
 		// Do not allow removing a range of object keys since there is probably no meaning to their order.
 		if (max_key_type != min_key_type || max_key_type == SYM_OBJECT || max_pos < min_pos
 			// min and max are different types, are objects, or max < min.
@@ -1107,40 +1105,39 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 	}
 	else // Removing a single item.
 	{
-		if (!min_field) // Nothing to remove.
+		if (!min_item) // Nothing to remove.
 		{
 			// Our return value when only one key is given is supposed to be the value
 			// previously at this[key], which has just been removed.  Since this[key]
 			// would return "", it makes sense to return the same in this case.
 			_o_return_empty;
 		}
-		// Since only one field (at maximum) can be removed in this mode, it
-		// seems more useful to return the field being removed than a count.
-		min_field->ReturnMove(aResultToken);
+		// Since only one item (at maximum) can be removed in this mode, it
+		// seems more useful to return the item being removed than a count.
+		min_item->ReturnMove(aResultToken);
 		// If the key is an object, release it now because Free() doesn't.
 		// Note that object keys can only be removed in the single-item mode.
 		if (min_key_type == SYM_OBJECT)
-			min_field->key.p->Release();
+			min_item->key.p->Release();
 		// Set max_pos for the loops below.
 		max_pos = min_pos + 1;
 	}
 
 	for (pos = min_pos; pos < max_pos; ++pos)
-		// Free each field in the range being removed.
-		mFields[pos].Free();
+		// Free each item in the range being removed.
+		mItem[pos].Free();
 
 	if (min_key_type == SYM_STRING)
 		// Free all string keys in the range being removed.
 		for (pos = min_pos; pos < max_pos; ++pos)
-			free(mFields[pos].key.s);
+			free(mItem[pos].key.s);
 
-	IndexType remaining_fields = mFieldCount - max_pos;
+	IndexType remaining_fields = mCount - max_pos;
 	if (remaining_fields)
-		// Move remaining fields left to fill the gap left by the removed range.
-		memmove(mFields + min_pos, mFields + max_pos, remaining_fields * sizeof(FieldType));
-	// Adjust count by the actual number of fields in the removed range.
+		memmove(mItem + min_pos, mItem + max_pos, remaining_fields * sizeof(Pair));
+	// Adjust count by the actual number of items in the removed range.
 	IndexType actual_count_removed = max_pos - min_pos;
-	mFieldCount -= actual_count_removed;
+	mCount -= actual_count_removed;
 	// Adjust key offsets and numeric keys as necessary.
 	if (min_key_type != SYM_STRING) // i.e. SYM_OBJECT or SYM_INTEGER
 	{
@@ -1152,7 +1149,7 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 	}
 	if (aParamCount > 1)
 	{
-		// Return actual number of fields removed:
+		// Return actual number of items removed:
 		_o_return(actual_count_removed);
 	}
 	//else result was set above.
@@ -1167,7 +1164,7 @@ ResultType Object::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 
 ResultType Map::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	_o_return((__int64)mFieldCount);
+	_o_return((__int64)mCount);
 }
 
 ResultType Object::GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1213,34 +1210,34 @@ ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 {
 	if (IS_INVOKE_GET)
 	{
-		_o_return(mFieldCountMax);
+		_o_return(mCapacity);
 	}
 
 	if (!ParamIndexIsNumeric(0))
 		_o_throw(ERR_PARAM1_INVALID);
 
 	IndexType desired_count = (IndexType)ParamIndexToInt64(0);
-	if (desired_count < mFieldCount)
+	if (desired_count < mCount)
 	{
-		// It doesn't seem intuitive to allow SetCapacity to truncate the fields array, so just reallocate
+		// It doesn't seem intuitive to allow SetCapacity to truncate the item array, so just reallocate
 		// as necessary to remove any unused space.  Allow negative values since SetCapacity(-1) seems more
 		// intuitive than SetCapacity(0) when the contents aren't being discarded.
-		desired_count = mFieldCount;
+		desired_count = mCount;
 	}
 	if (!desired_count)
-	{	// Caller wants to shrink object to current contents but there aren't any, so free mFields.
-		if (mFields)
-		{
-			free(mFields);
-			mFields = NULL;
-			mFieldCountMax = 0;
-		}
-		//else mFieldCountMax should already be 0.
-		// Since mFieldCountMax and desired_size are both 0, below will return 0 and won't call SetInternalCapacity.
-	}
-	if (desired_count == mFieldCountMax || SetInternalCapacity(desired_count))
 	{
-		_o_return(mFieldCountMax);
+		if (mItem)
+		{
+			free(mItem);
+			mItem = nullptr;
+			mCapacity = 0;
+		}
+		//else mCapacity should already be 0.
+		// Since mCapacity and desired_size are both 0, below will return 0 and won't call SetInternalCapacity.
+	}
+	if (desired_count == mCapacity || SetInternalCapacity(desired_count))
+	{
+		_o_return(mCapacity);
 	}
 	// At this point, failure isn't critical since nothing is being stored yet.  However, it might be easier to
 	// debug if an error is thrown here rather than possibly later, when the array attempts to resize itself to
@@ -1272,10 +1269,10 @@ ResultType Object::HasKey(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 ResultType Map::Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	SymbolType key_type;
-	KeyType key;
+	Key key;
 	INT_PTR insert_pos;
-	FieldType *field = FindField(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
-	_o_return(field != NULL);
+	auto item = FindItem(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
+	_o_return(item != nullptr);
 }
 
 ResultType Object::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1849,22 +1846,22 @@ int Object::Enumerator::Next(Var *aKey, Var *aVal)
 
 int Map::Enumerator::Next(Var *aKey, Var *aVal)
 {
-	if (++mOffset < mObject->mFieldCount)
+	if (++mOffset < mObject->mCount)
 	{
-		FieldType &field = mObject->mFields[mOffset];
+		auto &item = mObject->mItem[mOffset];
 		if (aKey)
 		{
 			if (mOffset < mObject->mKeyOffsetObject) // mKeyOffsetInt < mKeyOffsetObject
-				aKey->Assign(field.key.i);
+				aKey->Assign(item.key.i);
 			else if (mOffset < mObject->mKeyOffsetString) // mKeyOffsetObject < mKeyOffsetString
-				aKey->Assign(field.key.p);
-			else // mKeyOffsetString < mFieldCount
-				aKey->Assign(field.key.s);
+				aKey->Assign(item.key.p);
+			else // mKeyOffsetString < mCount
+				aKey->Assign(item.key.s);
 		}
 		if (aVal)
 		{
 			ExprTokenType value;
-			field.ToToken(value);
+			item.ToToken(value);
 			aVal->Assign(value);
 		}
 		return true;
@@ -1878,8 +1875,8 @@ int Map::Enumerator::Next(Var *aKey, Var *aVal)
 // Object:: and Map:: Internal Methods
 //
 
-Map::FieldType *Map::FindField(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos)
-// left and right must be set by caller to the appropriate bounds within mFields.
+Map::Pair *Map::FindItem(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos)
+// left and right must be set by caller to the appropriate bounds within mItem.
 {
 	IndexType mid;
 	// Optimize for common arrays such as [a,b,c] where keys are consecutive numbers starting at 1.
@@ -1900,23 +1897,22 @@ Map::FieldType *Map::FindField(IntKeyType val, IndexType left, IndexType right, 
 		mid = left; // As above.
 	for ( ; left <= right; mid = (left + right) / 2)
 	{
-		FieldType &field = mFields[mid];
+		auto &item = mItem[mid];
 
-		auto result = val - field.key.i;
+		auto result = val - item.key.i;
 
 		if (result < 0)
 			right = mid - 1;
 		else if (result > 0)
 			left = mid + 1;
 		else
-			return &field;
+			return &item;
 	}
 	insert_pos = left;
 	return NULL;
 }
 
 Object::FieldType *Object::FindField(name_t name, IndexType &insert_pos)
-// left and right must be set by caller to the appropriate bounds within mFields.
 {
 	IndexType left = 0, mid, right = mFieldCount - 1;
 	int first_char = *name;
@@ -1949,8 +1945,8 @@ Object::FieldType *Object::FindField(name_t name, IndexType &insert_pos)
 	return NULL;
 }
 
-Map::FieldType *Map::FindField(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos)
-// left and right must be set by caller to the appropriate bounds within mFields.
+Map::Pair *Map::FindItem(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos)
+// left and right must be set by caller to the appropriate bounds within mItem.
 {
 	IndexType mid;
 	int first_char = *val;
@@ -1958,29 +1954,29 @@ Map::FieldType *Map::FindField(LPTSTR val, IndexType left, IndexType right, Inde
 	{
 		mid = (left + right) / 2;
 
-		FieldType &field = mFields[mid];
+		auto &item = mItem[mid];
 
 		// key_c contains key.s[0], cached there for performance.
-		int result = first_char - field.key_c;
+		int result = first_char - item.key_c;
 		if (!result)
-			result = _tcscmp(val, field.key.s);
+			result = _tcscmp(val, item.key.s);
 
 		if (result < 0)
 			right = mid - 1;
 		else if (result > 0)
 			left = mid + 1;
 		else
-			return &field;
+			return &item;
 	}
 	insert_pos = left;
 	return NULL;
 }
 
-Map::FieldType *Map::FindField(SymbolType key_type, KeyType key, IndexType &insert_pos)
-// Searches for a field with the given key.  If found, a pointer to the field is returned.  Otherwise
-// NULL is returned and insert_pos is set to the index a newly created field should be inserted at.
-// key_type and key are output for creating a new field or removing an existing one correctly.
-// left and right must indicate the appropriate section of mFields to search, based on key type.
+Map::Pair *Map::FindItem(SymbolType key_type, Key key, IndexType &insert_pos)
+// Searches for an item with the given key.  If found, a pointer to the item is returned.  Otherwise
+// NULL is returned and insert_pos is set to the index a newly created item should be inserted at.
+// key_type and key are output for creating a new item or removing an existing one correctly.
+// left and right must indicate the appropriate section of mItem to search, based on key type.
 {
 	IndexType left, right;
 
@@ -1988,24 +1984,24 @@ Map::FieldType *Map::FindField(SymbolType key_type, KeyType key, IndexType &inse
 	{
 	case SYM_STRING:
 		left = mKeyOffsetString;
-		right = mFieldCount - 1; // String keys are last in the mFields array.
-		return FindField(key.s, left, right, insert_pos);
+		right = mCount - 1; // String keys are last in the mItem array.
+		return FindItem(key.s, left, right, insert_pos);
 	case SYM_OBJECT:
 		left = mKeyOffsetObject;
 		right = mKeyOffsetString - 1; // Object keys end where String keys begin.
 		// left and right restrict the search to just the portion with object keys.
 		// Reuse the integer search function to reduce code size.  On 32-bit builds,
 		// this requires that the upper 32 bits of each key have been initialized.
-		return FindField((IntKeyType)(INT_PTR)key.p, left, right, insert_pos);
-		//case SYM_INTEGER:
+		return FindItem((IntKeyType)(INT_PTR)key.p, left, right, insert_pos);
+	//case SYM_INTEGER:
 	default:
 		left = mKeyOffsetInt;
 		right = mKeyOffsetObject - 1; // Int keys end where Object keys begin.
-		return FindField(key.i, left, right, insert_pos);
+		return FindItem(key.i, left, right, insert_pos);
 	}
 }
 
-void Map::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type, KeyType &key)
+void Map::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type, Key &key)
 // Converts key_token to the appropriate key_type and key.
 // The exact type of the key is not preserved, since that often produces confusing behaviour;
 // for example, guis[WinExist()] := x ... x := guis[A_Gui] would fail because A_Gui returns a
@@ -2026,7 +2022,7 @@ void Map::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type,
 	if (inner_type == SYM_OBJECT)
 	{
 		key_type = SYM_OBJECT;
-		// Set i to support the way FindField() is used.  Otherwise on 32-bit builds the
+		// Set i to support the way FindItem() is used.  Otherwise on 32-bit builds the
 		// upper 32 bits would be potentially uninitialized, and searches could fail.
 		key.i = (IntKeyType)(INT_PTR)TokenToObject(key_token);
 		return;
@@ -2041,11 +2037,11 @@ void Map::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type,
 	key.s = TokenToString(key_token, buf);
 }
 
-Map::FieldType *Map::FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos)
-// Searches for a field with the given key, where the key is a token passed from script.
+Map::Pair *Map::FindItem(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, Key &key, IndexType &insert_pos)
+// Searches for an item with the given key, where the key is a token passed from script.
 {
 	ConvertKey(key_token, aBuf, key_type, key);
-	return FindField(key_type, key, insert_pos);
+	return FindItem(key_type, key, insert_pos);
 }
 	
 bool Object::SetInternalCapacity(IndexType new_capacity)
@@ -2061,14 +2057,13 @@ bool Object::SetInternalCapacity(IndexType new_capacity)
 }
 
 bool Map::SetInternalCapacity(IndexType new_capacity)
-// Expands mFields to the specified number if fields.
-// Caller *must* ensure new_capacity >= 1 && new_capacity >= mFieldCount.
+// Caller *must* ensure new_capacity >= 1 && new_capacity >= mCount.
 {
-	FieldType *new_fields = (FieldType *)realloc(mFields, new_capacity * sizeof(FieldType));
+	Pair *new_fields = (Pair *)realloc(mItem, new_capacity * sizeof(Pair));
 	if (!new_fields)
 		return false;
-	mFields = new_fields;
-	mFieldCountMax = new_capacity;
+	mItem = new_fields;
+	mCapacity = new_capacity;
 	return true;
 }
 	
@@ -2098,26 +2093,26 @@ Object::FieldType *Object::Insert(name_t name, IndexType at)
 	return &field;
 }
 
-Map::FieldType *Map::Insert(SymbolType key_type, KeyType key, IndexType at)
-// Inserts a single field with the given key at the given offset.
+Map::Pair *Map::Insert(SymbolType key_type, Key key, IndexType at)
+// Inserts a single item with the given key at the given offset.
 // Caller must ensure 'at' is the correct offset for this key.
 {
-	if (mFieldCount == mFieldCountMax && !Expand()  // Attempt to expand if at capacity.
+	if (mCount == mCapacity && !Expand()  // Attempt to expand if at capacity.
 		|| key_type == SYM_STRING && !(key.s = _tcsdup(key.s)))  // Attempt to duplicate key-string.
 	{	// Out of memory.
 		return NULL;
 	}
-	// There is now definitely room in mFields for a new field.
+	// There is now definitely room in mItem for a new item.
 
-	FieldType &field = mFields[at];
-	if (at < mFieldCount)
-		// Move existing fields to make room.
-		memmove(&field + 1, &field, (mFieldCount - at) * sizeof(FieldType));
-	++mFieldCount; // Only after memmove above.
+	auto &item = mItem[at];
+	if (at < mCount)
+		// Move existing items to make room.
+		memmove(&item + 1, &item, (mCount - at) * sizeof(Pair));
+	++mCount; // Only after memmove above.
 
 	// Update key-type offsets based on where and what was inserted; also update this key's ref count:
 	if (key_type == SYM_STRING)
-		field.key_c = *key.s;
+		item.key_c = *key.s;
 	else
 	{
 		// Must be either SYM_INTEGER or SYM_OBJECT, which both precede SYM_STRING.
@@ -2130,11 +2125,11 @@ Map::FieldType *Map::Insert(SymbolType key_type, KeyType key, IndexType at)
 			key.p->AddRef();
 	}
 
-	field.key = key; // Above has already copied string or called key.p->AddRef() as appropriate.
-	field.symbol = SYM_STRING;
-	field.string.Init(); // Initialize to empty string.  Caller will likely reassign.
+	item.key = key; // Above has already copied string or called key.p->AddRef() as appropriate.
+	item.symbol = SYM_STRING;
+	item.string.Init(); // Initialize to empty string.  Caller will likely reassign.
 
-	return &field;
+	return &item;
 }
 
 

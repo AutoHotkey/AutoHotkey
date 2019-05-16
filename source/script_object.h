@@ -451,19 +451,19 @@ class Map : public Object
 		IObject_Type_Impl("Map.Enumerator")
 	};
 
-	union KeyType // Which of its members is used depends on the field's position in the mFields array.
+	union Key // Which of its members is used depends on the field's position in the mFields array.
 	{
 		LPTSTR s;
 		IntKeyType i;
 		IObject *p;
 	};
-	struct FieldType : Variant
+	struct Pair : Variant
 	{
-		KeyType key;
+		Key key;
 	};
 
-	FieldType *mFields = nullptr;
-	IndexType mFieldCount = 0, mFieldCountMax = 0;
+	Pair *mItem = nullptr;
+	IndexType mCount = 0, mCapacity = 0;
 
 	// Holds the index of the first key of a given type within mItem.  Must be in the order: int, object, string.
 	// Compared to storing the key-type with each key-value pair, this approach saves 4 bytes per key (excluding
@@ -478,20 +478,20 @@ class Map : public Object
 	Map() {}
 	~Map();
 	 
-	FieldType *FindField(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos);
-	FieldType *FindField(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos);
-	FieldType *FindField(SymbolType key_type, KeyType key, IndexType &insert_pos);	
-	FieldType *FindField(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, KeyType &key, IndexType &insert_pos);
+	Pair *FindItem(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos);
+	Pair *FindItem(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos);
+	Pair *FindItem(SymbolType key_type, Key key, IndexType &insert_pos);	
+	Pair *FindItem(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, Key &key, IndexType &insert_pos);
 
-	void ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type, KeyType &key);
+	void ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type, Key &key);
 
-	FieldType *Insert(SymbolType key_type, KeyType key, IndexType at);
+	Pair *Insert(SymbolType key_type, Key key, IndexType at);
 
 	bool SetInternalCapacity(IndexType new_capacity);
 	bool Expand()
 		// Expands mFields by at least one field.
 	{
-		return SetInternalCapacity(mFieldCountMax ? mFieldCountMax * 2 : 4);
+		return SetInternalCapacity(mCapacity ? mCapacity * 2 : 4);
 	}
 
 	Map *CloneTo(Map &aTo);
@@ -504,11 +504,11 @@ public:
 		IndexType insert_pos;
 		TCHAR buf[MAX_NUMBER_SIZE];
 		SymbolType key_type;
-		KeyType key;
-		FieldType *field = FindField(aKey, buf, key_type, key, insert_pos);
-		if (!field)
+		Key key;
+		auto item = FindItem(aKey, buf, key_type, key, insert_pos);
+		if (!item)
 			return false;
-		field->ToToken(aToken);
+		item->ToToken(aToken);
 		return true;
 	}
 
@@ -525,11 +525,11 @@ public:
 		IndexType insert_pos;
 		TCHAR buf[MAX_NUMBER_SIZE];
 		SymbolType key_type;
-		KeyType key;
-		FieldType *field = FindField(aKey, buf, key_type, key, insert_pos);
-		if (!field && !(field = Insert(key_type, key, insert_pos))) // Relies on short-circuit boolean evaluation.
+		Key key;
+		auto item = FindItem(aKey, buf, key_type, key, insert_pos);
+		if (!item && !(item = Insert(key_type, key, insert_pos))) // Relies on short-circuit boolean evaluation.
 			return false;
-		return field->Assign(aValue);
+		return item->Assign(aValue);
 	}
 
 	bool SetItem(LPTSTR aKey, ExprTokenType &aValue)
