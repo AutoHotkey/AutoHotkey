@@ -6213,7 +6213,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 				: class_var->Assign(class_object))   ) // Assign to global variable named %class_name%.
 		return ScriptError(ERR_OUTOFMEM);
 
-	class_object->SetBase(base_class); // May be NULL.
+	class_object->SetBase(base_class ? base_class : Object::sPrototype);
 
 	++mClassObjectCount;
 	return OK;

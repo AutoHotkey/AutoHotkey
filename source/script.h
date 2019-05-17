@@ -230,7 +230,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_NO_TREEVIEW _T("No TreeView.")
 #define ERR_PCRE_EXEC _T("PCRE execution error.")
 #define ERR_ARRAY_NOT_MULTIDIM _T("Array is not multi-dimensional.")
-#define ERR_NEW_NO_CLASS _T("Missing class object for \"new\" operator.")
+#define ERR_NEW_BAD_CLASS _T("Invalid class for \"new\" operator.")
 #define ERR_INVALID_ARG_TYPE _T("Invalid arg type.")
 #define ERR_INVALID_RETURN_TYPE _T("Invalid return type.")
 #define ERR_INVALID_LENGTH _T("Invalid Length.")

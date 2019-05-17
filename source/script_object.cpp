@@ -100,7 +100,7 @@ Object *Object::Create()
 	return obj;
 }
 
-Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
+Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken)
 {
 	if (aParamCount & 1)
 		return NULL; // Odd number of parameters - reserved for future use.
@@ -125,12 +125,14 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 
 			auto name = TokenToString(*aParam[i], buf);
 
-			if (!_tcsicmp(name, _T("base")))
+			if (!_tcsicmp(name, _T("base")) && apResultToken)
 			{
-				// FIXME: Invalid (non-Object) base should throw.
 				auto base = dynamic_cast<Object *>(TokenToObject(*aParam[i + 1]));
-				if (base)
-					obj->SetBase(base);
+				if (!obj->SetBase(base, *apResultToken))
+				{
+					obj->Release();
+					return nullptr;
+				}
 				continue;
 			}
 
@@ -138,7 +140,9 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount)
 			if (  !(field
 				 || (field = obj->Insert(name, insert_pos)))
 				|| !field->Assign(*aParam[i + 1])  )
-			{	// Out of memory.
+			{
+				if (apResultToken)
+					apResultToken->Error(ERR_OUTOFMEM);
 				obj->Release();
 				return NULL;
 			}
@@ -247,7 +251,7 @@ Object *Object::CloneTo(Object &obj)
 		return NULL;
 	}
 	if (mBase)
-		(obj.mBase = mBase)->AddRef();
+		obj.SetBase(mBase);
 	return &obj;
 }
 
@@ -684,13 +688,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 					if (IS_INVOKE_SET)
 					{
 						Object *obj = dynamic_cast<Object *>(TokenToObject(**actual_param));
-						if (!obj) // v2 policy: Every Object must have a base.
-							_o_throw(ERR_INVALID_VALUE);
-						obj->AddRef(); // for mBase
-						if (mBase)
-							mBase->Release();
-						mBase = obj; // May be NULL.
-						return OK;
+						return SetBase(obj, aResultToken);
 					}
 	
 					if (mBase)
@@ -1010,7 +1008,41 @@ bool Object::IsDerivedFrom(Object *aBase)
 			return true;
 	return false;
 }
-	
+
+
+Object *Object::GetNativeBase()
+{
+	Object *base;
+	for (base = mBase; base; base = base->mBase)
+		if (base->IsNativeClassPrototype())
+			return base;
+	return nullptr;
+}
+
+
+bool Object::CanSetBase(Object *aBase)
+{
+	if (!aBase)
+		return false;
+	if (auto this_base = GetNativeBase())
+	{
+		if (!aBase->IsNativeClassPrototype())
+			aBase = aBase->GetNativeBase();
+		// Cannot change the object's native type.
+		return aBase == this_base;
+	}
+	return true;
+}
+
+
+ResultType Object::SetBase(Object *aNewBase, ResultToken &aResultToken)
+{
+	if (!CanSetBase(aNewBase))
+		return aResultToken.Error(ERR_TYPE_MISMATCH, aNewBase ? aNewBase->Type() : _T(""));
+	SetBase(aNewBase);
+	return OK;
+}
+
 
 //
 // Object::Type() - Returns the object's type/class name.
@@ -1036,6 +1068,7 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase)
 	auto obj = new Object();
 	obj->SetBase(aBase);
 	obj->SetItem(_T("__Class"), ExprTokenType(aClassName));
+	obj->mFlags |= NativeClassPrototype;
 	return obj;
 }
 
@@ -1273,6 +1306,8 @@ ResultType Map::Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTyp
 
 ResultType Object::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
+	if (GetNativeBase() != Object::sPrototype)
+		_o_throw(ERR_TYPE_MISMATCH); // Cannot construct an instance of this class using Object::Clone().
 	Object *clone = Clone();
 	if (!clone)
 		_o_throw(ERR_OUTOFMEM);	

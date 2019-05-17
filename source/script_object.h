@@ -16,6 +16,11 @@ class DECLSPEC_NOVTABLE ObjectBase : public IObjectComCompatible
 {
 protected:
 	ULONG mRefCount;
+#ifdef _WIN64
+	// Used by Object, but defined here on (x64 builds only) to utilize the space
+	// that would otherwise just be padding, due to alignment requirements.
+	UINT mFlags; 
+#endif
 	
 	virtual bool Delete()
 	{
@@ -229,6 +234,15 @@ protected:
 		int Next(Var *aKey, Var *aVal);
 		IObject_Type_Impl("Object.Enumerator")
 	};
+
+#ifndef _WIN64
+	// This is defined in ObjectBase on x64 builds to save space (due to alignment requirements).
+	UINT mFlags;
+#endif
+	enum Flags : decltype(mFlags)
+	{
+		NativeClassPrototype = 0x01
+	};
 	
 private:
 	Object *mBase = nullptr;
@@ -240,7 +254,7 @@ private:
 #endif
 
 public:
-	Object(){}
+	Object() { mFlags = 0; }
 	bool Delete();
 	~Object();
 
@@ -268,7 +282,7 @@ protected:
 	
 public:
 	static Object *Create();
-	static Object *Create(ExprTokenType *aParam[], int aParamCount);
+	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
 	
 	Object *Clone();
 	
@@ -294,6 +308,8 @@ public:
 	bool SetItem(name_t aName, __int64 aValue) { return SetItem(aName, ExprTokenType(aValue)); }
 	bool SetItem(name_t aName, IObject *aValue) { return SetItem(aName, ExprTokenType(aValue)); }
 
+	bool CanSetBase(Object *aNewBase);
+	ResultType SetBase(Object *aNewBase, ResultToken &aResultToken);
 	void SetBase(Object *aNewBase)
 	{ 
 		if (aNewBase)
@@ -303,6 +319,9 @@ public:
 		mBase = aNewBase;
 	}
 
+	bool IsNativeClassPrototype() { return mFlags & NativeClassPrototype; }
+
+	Object *GetNativeBase();
 	Object *Base() 
 	{
 		return mBase; // Callers only want to call Invoke(), so no AddRef is done.

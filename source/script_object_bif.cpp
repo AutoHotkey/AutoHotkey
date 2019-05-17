@@ -20,20 +20,18 @@ BIF_DECL(BIF_Object)
 	{
 		obj = (IObject *)TokenToInt64(*aParam[0]);
 		if (obj < (IObject *)65536) // Prevent some obvious errors.
-			obj = NULL;
+			_f_throw(ERR_PARAM1_INVALID);
 		else
 			obj->AddRef();
 	}
 	else
-		obj = Object::Create(aParam, aParamCount);
+		obj = Object::Create(aParam, aParamCount, &aResultToken);
 
 	if (obj)
 	{
 		// DO NOT ADDREF: the caller takes responsibility for the only reference.
 		_f_return(obj);
 	}
-	else
-		_f_throw(aParamCount == 1 ? ERR_PARAM1_INVALID : ERR_OUTOFMEM);
 }
 
 
@@ -206,8 +204,8 @@ BIF_DECL(Op_ObjNew)
 	ExprTokenType *class_token = aParam[0]; // Save this to be restored later.
 
 	auto class_object = dynamic_cast<Object *>(TokenToObject(*class_token));
-	if (!class_object)
-		_f_throw(ERR_NEW_NO_CLASS);
+	if (!class_object || class_object->GetNativeBase() != Object::sPrototype)
+		_f_throw(ERR_NEW_BAD_CLASS);
 
 	Object *new_object = Object::Create();
 	if (!new_object)
@@ -463,9 +461,8 @@ BIF_DECL(BIF_ObjBase)
 	if (_f_callee_id == FID_ObjSetBase)
 	{
 		auto new_base = dynamic_cast<Object *>(TokenToObject(*aParam[1]));
-		if (!new_base)
-			_f_throw(ERR_PARAM2_INVALID);
-		obj->SetBase(new_base);
+		if (!obj->SetBase(new_base, aResultToken))
+			return;
 	}
 	else // ObjGetBase
 	{
