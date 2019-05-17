@@ -169,6 +169,7 @@ FuncEntry g_BIF[] =
 	BIF1(LoadPicture, 1, 3),
 	BIFn(Log, 1, 1, BIF_SqrtLogLn),
 	BIFn(LTrim, 1, 2, BIF_Trim),
+	BIF1(Map, 0, NA),
 	BIFn(Max, 1, NA, BIF_MinMax),
 	BIFn(MenuBarCreate, 0, 0, BIF_Menu),
 	BIFn(MenuCreate, 0, 0, BIF_Menu),
@@ -189,23 +190,15 @@ FuncEntry g_BIF[] =
 	BIFn(ObjCount, 1, 1, BIF_ObjXXX),
 	BIFn(ObjDelete, 2, 3, BIF_ObjXXX),
 	BIF1(Object, 0, NA),
-	BIFn(ObjGetAddress, 2, 2, BIF_ObjXXX),
 	BIFn(ObjGetBase, 1, 1, BIF_ObjBase),
-	BIFn(ObjGetCapacity, 1, 2, BIF_ObjXXX),
+	BIFn(ObjGetCapacity, 1, 1, BIF_ObjXXX),
 	BIFn(ObjHasKey, 2, 2, BIF_ObjXXX),
-	BIFn(ObjInsertAt, 3, NA, BIF_ObjXXX),
-	BIFn(ObjLength, 1, 1, BIF_ObjXXX),
-	BIFn(ObjMaxIndex, 1, 1, BIF_ObjXXX),
-	BIFn(ObjMinIndex, 1, 1, BIF_ObjXXX),
 	BIFn(ObjNewEnum, 1, 1, BIF_ObjXXX),
-	BIFn(ObjPop, 1, 1, BIF_ObjXXX),
-	BIFn(ObjPush, 2, NA, BIF_ObjXXX),
 	BIFn(ObjRawGet, 2, 2, BIF_ObjRaw),
 	BIFn(ObjRawSet, 3, 3, BIF_ObjRaw),
 	BIFn(ObjRelease, 1, 1, BIF_ObjAddRefRelease),
-	BIFn(ObjRemoveAt, 2, 3, BIF_ObjXXX),
 	BIFn(ObjSetBase, 2, 2, BIF_ObjBase),
-	BIFn(ObjSetCapacity, 2, 3, BIF_ObjXXX),
+	BIFn(ObjSetCapacity, 2, 2, BIF_ObjXXX),
 	BIFn(OnClipboardChange, 1, 2, BIF_On),
 	BIFn(OnError, 1, 2, BIF_On),
 	BIFn(OnExit, 1, 2, BIF_On),
@@ -6202,7 +6195,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		ResultToken result_token;
 		result_token.symbol = SYM_STRING; // Init for detecting SYM_OBJECT below.
 		// Search for class and simultaneously remove it from the unresolved list:
-		mUnresolvedClasses->Remove(result_token, Object::RM_RemoveKey, IT_CALL, &param, 1); // result_token := mUnresolvedClasses.Delete(token)
+		mUnresolvedClasses->Delete(result_token, 0, IT_CALL, &param, 1); // result_token := mUnresolvedClasses.Delete(token)
 		// If a field was found/removed, it can only be SYM_OBJECT.
 		if (result_token.symbol == SYM_OBJECT)
 		{
@@ -6220,7 +6213,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 				: class_var->Assign(class_object))   ) // Assign to global variable named %class_name%.
 		return ScriptError(ERR_OUTOFMEM);
 
-	class_object->SetBase(base_class); // May be NULL.
+	class_object->SetBase(base_class ? base_class : Object::sPrototype);
 
 	++mClassObjectCount;
 	return OK;
@@ -6522,7 +6515,7 @@ Object *Object::GetUnresolvedClass(LPTSTR &aName)
 {
 	if (!mFieldCount)
 		return NULL;
-	aName = mFields[0].key.s;
+	aName = mFields[0].name;
 	return (Object *)mFields[0].object;
 }
 
@@ -6853,7 +6846,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	pfunc->mMinParams = bif.mMinParams;
 	pfunc->mParamCount = bif.mMaxParams;
 	pfunc->mIsVariadic = bif.mMaxParams == MAX_FUNCTION_PARAMS;
-	pfunc->mID = (BuiltInFunctionID)bif.mID;
+	pfunc->mFID = (BuiltInFunctionID)bif.mID;
 	pfunc->mOutputVars = bif_output_vars; // Not bif.mOutputVars, which may be temporary (and bif_output_vars may have been overridden above).
 
 	return pfunc;

@@ -147,7 +147,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		// Store the remaining args in an array and assign it to "Args".
 		// If there are no args, assign an empty array so that A_Args[1]
 		// and A_Args.MaxIndex() don't cause an error.
-		Object *args = Object::CreateFromArgV(__targv + i, __argc - i);
+		auto args = Array::FromArgV(__targv + i, __argc - i);
 		if (!args)
 			return CRITICAL_ERROR;  // Realistically should never happen.
 		var->AssignSkipAddRef(args);

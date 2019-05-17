@@ -297,7 +297,7 @@ private:
 		int WriteEncodeBase64(const char *aData, size_t aDataSize, bool aSkipBufferSizeCheck = false);
 		int Expand();
 		int ExpandIfNecessary(size_t aRequiredSize);
-		void Remove(size_t aDataSize);
+		void Delete(size_t aDataSize);
 		void Clear();
 
 		Buffer() : mData(NULL), mDataSize(0), mDataUsed(0), mFailed(FALSE) {}

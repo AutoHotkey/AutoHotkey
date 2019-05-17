@@ -1504,7 +1504,7 @@ STDMETHODIMP IObjectComCompatible::GetTypeInfo(UINT itinfo, LCID lcid, ITypeInfo
 	return E_NOTIMPL;
 }
 
-static Object *g_IdToName;
+static Array *g_IdToName;
 static Object *g_NameToId;
 
 STDMETHODIMP IObjectComCompatible::GetIDsOfNames(REFIID riid, LPOLESTR *rgszNames, UINT cNames, LCID lcid, DISPID *rgDispId)
@@ -1515,7 +1515,7 @@ STDMETHODIMP IObjectComCompatible::GetIDsOfNames(REFIID riid, LPOLESTR *rgszName
 	CStringCharFromWChar name_buf(*rgszNames);
 	LPTSTR name = const_cast<LPTSTR>(name_buf.GetString());
 #endif
-	if ( !(g_IdToName || (g_IdToName = Object::Create())) ||
+	if ( !(g_IdToName || (g_IdToName = Array::Create())) ||
 		 !(g_NameToId || (g_NameToId = Object::Create())) )
 		return E_OUTOFMEMORY;
 	ExprTokenType id;
@@ -1524,7 +1524,7 @@ STDMETHODIMP IObjectComCompatible::GetIDsOfNames(REFIID riid, LPOLESTR *rgszName
 		if (!g_IdToName->Append(name))
 			return E_OUTOFMEMORY;
 		id.symbol = SYM_INTEGER;
-		id.value_int64 = g_IdToName->GetNumericItemCount();
+		id.value_int64 = g_IdToName->Length();
 		if (!g_NameToId->SetItem(name, id))
 			return E_OUTOFMEMORY;
 	}
@@ -1561,7 +1561,7 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	
 	if (dispIdMember > 0)
 	{
-		if (!g_IdToName->GetItemOffset(param_token[0], dispIdMember - 1))
+		if (!g_IdToName->ItemToToken(dispIdMember - 1, param_token[0]))
 			return DISP_E_MEMBERNOTFOUND;
 		if (IsNumeric(param_token[0].marker, FALSE, FALSE)) // o[1] in JScript produces a numeric name.
 		{

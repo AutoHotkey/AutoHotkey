@@ -20,20 +20,18 @@ BIF_DECL(BIF_Object)
 	{
 		obj = (IObject *)TokenToInt64(*aParam[0]);
 		if (obj < (IObject *)65536) // Prevent some obvious errors.
-			obj = NULL;
+			_f_throw(ERR_PARAM1_INVALID);
 		else
 			obj->AddRef();
 	}
 	else
-		obj = Object::Create(aParam, aParamCount);
+		obj = Object::Create(aParam, aParamCount, &aResultToken);
 
 	if (obj)
 	{
 		// DO NOT ADDREF: the caller takes responsibility for the only reference.
 		_f_return(obj);
 	}
-	else
-		_f_throw(aParamCount == 1 ? ERR_PARAM1_INVALID : ERR_OUTOFMEM);
 }
 
 
@@ -43,12 +41,24 @@ BIF_DECL(BIF_Object)
 
 BIF_DECL(BIF_Array)
 {
-	if (aResultToken.object = Object::CreateArray(aParam, aParamCount))
-	{
-		aResultToken.symbol = SYM_OBJECT;
-		return;
-	}
+	if (auto arr = Array::Create(aParam, aParamCount))
+		_f_return(arr);
 	_f_throw(ERR_OUTOFMEM);
+}
+
+
+//
+// Map()
+//
+
+BIF_DECL(BIF_Map)
+{
+	if (aParamCount & 1)
+		_f_throw(ERR_PARAM_INVALID);
+	auto obj = Map::Create(aParam, aParamCount);
+	if (!obj)
+		_f_throw(ERR_OUTOFMEM);
+	_f_return(obj);
 }
 	
 
@@ -193,9 +203,9 @@ BIF_DECL(Op_ObjNew)
 
 	ExprTokenType *class_token = aParam[0]; // Save this to be restored later.
 
-	IObject *class_object = TokenToObject(*class_token);
-	if (!class_object)
-		_f_throw(ERR_NEW_NO_CLASS);
+	auto class_object = dynamic_cast<Object *>(TokenToObject(*class_token));
+	if (!class_object || class_object->GetNativeBase() != Object::sPrototype)
+		_f_throw(ERR_NEW_BAD_CLASS);
 
 	Object *new_object = Object::Create();
 	if (!new_object)
@@ -420,14 +430,15 @@ BIF_DECL(BIF_ObjRaw)
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
 	if (!obj)
 		_f_throw(ERR_PARAM1_INVALID);
+	LPTSTR name = TokenToString(*aParam[1], _f_number_buf);
 	if (_f_callee_id == FID_ObjRawSet)
 	{
-		if (!obj->SetItem(*aParam[1], *aParam[2]))
+		if (!obj->SetItem(name, *aParam[2]))
 			_f_throw(ERR_OUTOFMEM);
 	}
 	else
 	{
-		if (obj->GetItem(aResultToken, *aParam[1]))
+		if (obj->GetItem(aResultToken, name))
 		{
 			if (aResultToken.symbol == SYM_OBJECT)
 				aResultToken.object->AddRef();
@@ -449,14 +460,13 @@ BIF_DECL(BIF_ObjBase)
 		_f_throw(ERR_PARAM1_INVALID);
 	if (_f_callee_id == FID_ObjSetBase)
 	{
-		IObject *new_base = TokenToObject(*aParam[1]);
-		if (!new_base && !TokenIsEmptyString(*aParam[1]))
-			_f_throw(ERR_PARAM2_INVALID);
-		obj->SetBase(new_base);
+		auto new_base = dynamic_cast<Object *>(TokenToObject(*aParam[1]));
+		if (!obj->SetBase(new_base, aResultToken))
+			return;
 	}
 	else // ObjGetBase
 	{
-		if (IObject *obj_base = obj->Base())
+		if (auto obj_base = obj->Base())
 		{
 			obj_base->AddRef();
 			_f_return(obj_base);

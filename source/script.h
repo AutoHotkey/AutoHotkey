@@ -142,6 +142,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_NONEXISTENT_FUNCTION _T("Call to nonexistent function.")
 #define ERR_UNRECOGNIZED_DIRECTIVE _T("Unknown directive.")
 #define ERR_EXE_CORRUPTED _T("EXE corrupted")
+#define ERR_INVALID_INDEX _T("Invalid index.")
 #define ERR_INVALID_VALUE _T("Invalid value.")
 #define ERR_PARAM_INVALID _T("Invalid parameter(s).")
 #define ERR_PARAM1_INVALID _T("Parameter #1 invalid.")
@@ -229,7 +230,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_NO_TREEVIEW _T("No TreeView.")
 #define ERR_PCRE_EXEC _T("PCRE execution error.")
 #define ERR_ARRAY_NOT_MULTIDIM _T("Array is not multi-dimensional.")
-#define ERR_NEW_NO_CLASS _T("Missing class object for \"new\" operator.")
+#define ERR_NEW_BAD_CLASS _T("Invalid class for \"new\" operator.")
 #define ERR_INVALID_ARG_TYPE _T("Invalid arg type.")
 #define ERR_INVALID_RETURN_TYPE _T("Invalid return type.")
 #define ERR_INVALID_LENGTH _T("Invalid Length.")
@@ -442,7 +443,7 @@ struct ArgStruct
 #define _f_retval_buf			(aResultToken.buf)
 #define _f_retval_buf_size		MAX_NUMBER_SIZE
 #define _f_number_buf			_f_retval_buf  // An alias to show intended usage, and in case the buffer size is changed.
-#define _f_callee_id			(aResultToken.func->mID)
+#define _f_callee_id			(aResultToken.func->mFID)
 
 
 // Some of these lengths and such are based on the MSDN example at
@@ -569,7 +570,7 @@ enum BuiltInFunctionID {
 	FID_Min = 0, FID_Max,
 	FID_Random = 0, FID_RandomSeed,
 	FID_ObjAddRef = 0, FID_ObjRelease,
-	FID_ObjInsertAt = 0, FID_ObjDelete, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength, FID_ObjCount, FID_ObjMaxIndex, FID_ObjMinIndex, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjGetAddress, FID_ObjClone, FID_ObjNewEnum,
+	FID_ObjDelete = 0, FID_ObjCount, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjClone, FID_ObjNewEnum,
 	FID_ObjGetBase = 0, FID_ObjSetBase,
 	FID_ObjRawGet = 0, FID_ObjRawSet,
 	FID_ComObjType = 0, FID_ComObjValue,
@@ -1663,21 +1664,31 @@ typedef BIF_DECL((* BuiltInFunctionType));
 class Func : public IObjectComCompatible
 {
 public:
+	union {
+		int mInstances; // How many instances currently exist on the call stack (due to recursion or thread interruption).  Future use: Might be used to limit how deep recursion can go to help prevent stack overflow.
+		BuiltInFunctionID mFID; // For code sharing: this function's ID in the group of functions which share the same C++ function.
+		struct {
+			UCHAR mMID;
+			UCHAR mMIT;
+		};
+	};
 	LPTSTR mName;
 	union {
 		struct { // User-defined functions.
 			Line *mJumpToLine;
 			FuncParam *mParam; // Holds an array of FuncParams (array length: mParamCount).
-			Object *mClass; // The class which this Func was defined in, if applicable.
 		};
 		struct { // Built-in functions.
-			BuiltInFunctionType mBIF;
+			union {
+				BuiltInFunctionType mBIF;
+				ObjectMethod mBIM;
+			};
 			UCHAR *mOutputVars; // String of indices indicating which params are output vars (for BIF_PerformAction).
-			BuiltInFunctionID mID; // For code sharing: this function's ID in the group of functions which share the same C++ function.
 		};
 	};
 	int mParamCount; // The function's maximum number of parameters.  For UDFs, also the number of items in the mParam array.
 	int mMinParams;  // The number of mandatory parameters (populated for both UDFs and built-in's).
+	Object *mClass; // The class which this Func was defined in or that mBIM belongs to, if applicable.
 	Label *mFirstLabel, *mLastLabel; // Linked list of private labels.
 	Func *mOuterFunc; // Func which contains this Func (usually NULL).
 	FuncList mFuncs; // List of nested functions (usually empty).
@@ -1689,7 +1700,6 @@ public:
 	#define MAX_FUNC_UP_VARS 1000
 	int mVarCount, mVarCountMax, mLazyVarCount, mGlobalVarCount; // Count of items in the above array as well as the maximum capacity.
 	int mDownVarCount, mUpVarCount;
-	int mInstances; // How many instances currently exist on the call stack (due to recursion or thread interruption).  Future use: Might be used to limit how deep recursion can go to help prevent stack overflow.
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
 	UCHAR mDefaultVarType;
@@ -1736,12 +1746,6 @@ public:
 
 	// bool result indicates whether aResultToken contains a value (i.e. false for FAIL/EARLY_EXIT).
 	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false, FreeVars *aUpVars = NULL);
-
-// Macros for specifying arguments in Func::Call(aResultToken, aParamCount, ...)
-#define FUNC_ARG_INT(_arg)   SYM_INTEGER, static_cast<__int64>(_arg)
-#define FUNC_ARG_STR(_arg)   SYM_STRING,  static_cast<LPTSTR>(_arg)
-#define FUNC_ARG_FLOAT(_arg) SYM_FLOAT,   static_cast<double>(_arg)
-#define FUNC_ARG_OBJ(_arg)   SYM_OBJECT,  static_cast<IObject *>(_arg)
 
 	ResultType Call(ResultToken *aResultToken)
 	{
@@ -1829,15 +1833,15 @@ public:
 
 	Func(LPTSTR aFuncName, bool aIsBuiltIn) // Constructor.
 		: mName(aFuncName) // Caller gave us a pointer to dynamic memory for this.
-		, mBIF(NULL) // Also initializes mJumpToLine via union.
+		, mBIF(NULL) // Also initializes mJumpToLine and mBIM via union.
 		, mParam(NULL), mParamCount(0), mMinParams(0) // Also initializes mOutputVar via union (mParam).
 		, mOuterFunc(NULL)
 		, mFirstLabel(NULL), mLastLabel(NULL)
-		, mClass(NULL) // Also initializes mID via union.
+		, mClass(NULL)
 		, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 		, mGlobalVar(NULL), mGlobalVarCount(0)
 		, mDownVar(NULL), mDownVarCount(0), mUpVar(NULL), mUpVarCount(0), mUpVarIndex(NULL)
-		, mInstances(0)
+		, mInstances(0) // Also initializes mID via union.
 		, mDefaultVarType(VAR_DECLARE_LOCAL)
 		, mIsBuiltIn(aIsBuiltIn)
 		, mIsVariadic(false)
@@ -1858,7 +1862,7 @@ public:
 		: Func(_T("<object>"), true)
 	{
 		mBIF = aBIF;
-		mID = (BuiltInFunctionID)aID;
+		mFID = (BuiltInFunctionID)aID;
 		// Allow any number of parameters, since these functions aren't called directly by users
 		// and might break the rules in some cases, such as Op_ObjGetInPlace() having 0 *visible*
 		// parameters but actually reading 2 which are then also passed to the next function call.
@@ -1954,7 +1958,7 @@ public:
 	MsgMonitorStruct *Find(UINT aMsg, LPTSTR aMethodName, UCHAR aMsgType = 0);
 	MsgMonitorStruct *Add(UINT aMsg, IObject *aCallback, bool aAppend = TRUE);
 	MsgMonitorStruct *Add(UINT aMsg, LPTSTR aMethodName, bool aAppend = TRUE);
-	void Remove(MsgMonitorStruct *aMonitor);
+	void Delete(MsgMonitorStruct *aMonitor);
 	ResultType Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex); // Used for OnExit and OnClipboardChange, but not OnMessage.
 	ResultType Call(ExprTokenType *aParamValue, int aParamCount, UINT aMsg, UCHAR aMsgType, GuiType *aGui, INT_PTR *aRetVal = NULL); // Used by GUI.
 
@@ -2588,7 +2592,7 @@ public:
 	static IObject* CreateDropArray(HDROP hDrop);
 	ResultType SetMenu(ExprTokenType &aParam);
 	static void UpdateMenuBars(HMENU aMenu);
-	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Object *aObj = NULL);
+	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Array *aObj = NULL);
 	ResultType PropertyGetPos(ResultToken &aResultToken, RECT &aPos);
 
 	ResultType ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs);
@@ -2604,7 +2608,7 @@ public:
 	ResultType ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &aOpt, GuiControlType &aControl
 		, GuiIndexType aControlIndex = -1); // aControlIndex is not needed upon control creation.
 	void ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aControl);
-	void ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt = NULL, Object *aObj = NULL);
+	void ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt = NULL, Array *aObj = NULL);
 	void ControlSetChoice(GuiControlType &aControl, int aChoice);
 	ResultType ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilename, int aWidth, int aHeight, int aIconNumber);
 	ResultType Show(LPTSTR aOptions);
@@ -3193,6 +3197,7 @@ BIF_DECL(BIF_Type);
 BIF_DECL(BIF_IsObject);
 BIF_DECL(BIF_Object);
 BIF_DECL(BIF_Array);
+BIF_DECL(BIF_Map);
 BIF_DECL(BIF_ObjAddRefRelease);
 BIF_DECL(BIF_ObjBindMethod);
 BIF_DECL(BIF_ObjRaw);

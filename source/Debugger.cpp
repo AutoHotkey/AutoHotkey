@@ -267,7 +267,7 @@ int Debugger::ProcessCommands()
 		// Remove this command and its args from the buffer.
 		// (There may be additional commands following it.)
 		if (mCommandBuf.mDataUsed) // i.e. it hasn't been cleared as a result of disconnecting.
-			mCommandBuf.Remove(command_length + 1);
+			mCommandBuf.Delete(command_length + 1);
 
 		// If a command is received asynchronously, the debugger does not
 		// enter a break state.  In that case, we need to return after each
@@ -1120,12 +1120,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			Object::FieldType &field = mFields[i];
 			
 			ExprTokenType key, value;
-			if (i >= mKeyOffsetString) // String
-				key.symbol = SYM_STRING, key.marker = field.key.s;
-			else if (i >= mKeyOffsetObject)
-				key.symbol = SYM_OBJECT, key.object = field.key.p;
-			else
-				key.symbol = SYM_INTEGER, key.value_int64 = field.key.i;
+			key.SetValue(field.name);
 			field.ToToken(value);
 
 			aDebugger->WriteProperty(key, value);
@@ -1503,15 +1498,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 
 		if (obj && (*name != '<' || name[-1] != '.')) // Not a pseudo-property; i.e. ["<base>"] is always a key-value pair.
 		{
-			Object::IndexType insert_pos;
-			Object::KeyType key;
-
-			if (key_type == SYM_STRING)
-				key.s = name;
-			else // SYM_INTEGER or SYM_OBJECT
-				key.i = (IntKeyType)_ttoi64(name);
-
-			if (auto field = obj->FindField(key_type, key, insert_pos))
+			if (auto field = obj->FindField(name))
 			{
 				if (!c)
 				{
@@ -2641,7 +2628,7 @@ int Debugger::Buffer::ExpandIfNecessary(size_t aRequiredSize)
 }
 
 // Remove data from the front of the buffer (i.e. after it is processed).
-void Debugger::Buffer::Remove(size_t aDataSize)
+void Debugger::Buffer::Delete(size_t aDataSize)
 {
 	ASSERT(aDataSize <= mDataUsed);
 	// Move remaining data to the front of the buffer.
@@ -2697,7 +2684,7 @@ void DbgStack::Push(Func *aFunc)
 {
 	ASSERT(aFunc->mIsBuiltIn);
 	Entry &s = *Push();
-	s.line = aFunc->mJumpToLine;
+	s.line = NULL;
 	s.func = aFunc;
 	s.type = SE_BIF;
 }
