@@ -337,7 +337,7 @@ public:
 
 	static ObjectMember sMembers[];
 	static Object *sPrototype;
-	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase);
+	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount);
 
 	ResultType CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
@@ -428,7 +428,7 @@ public:
 	bool Append(LPTSTR aValue, size_t aValueLength = -1) { return Append(ExprTokenType(aValue, aValueLength)); }
 	bool Append(__int64 aValue) { return Append(ExprTokenType(aValue)); }
 
-	Array *Clone(BOOL aMembersOnly = false);
+	Array *Clone();
 
 	bool ItemToToken(index_t aIndex, ExprTokenType &aToken);
 
@@ -441,6 +441,7 @@ public:
 
 	enum MemberID
 	{
+		P___Item,
 		P_Length,
 		P_Capacity,
 		M_InsertAt,
@@ -455,7 +456,6 @@ public:
 	static ObjectMember sMembers[];
 	static Object *sPrototype;
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	IObject_DebugWriteProperty_Def;
 };
 
@@ -574,6 +574,7 @@ public:
 	}
 
 	// Methods callable by script.
+	ResultType __Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
@@ -583,7 +584,6 @@ public:
 
 	static ObjectMember sMembers[];
 	static Object *sPrototype;
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
 

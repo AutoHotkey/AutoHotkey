@@ -524,7 +524,7 @@ ObjectMember Object::sMembers[] =
 	Object_Method1(Clone, 0, 0)
 };
 
-Object *Object::sPrototype = Object::CreatePrototype(_T("Object"), nullptr);
+Object *Object::sPrototype = Object::CreatePrototype(_T("Object"), nullptr, sMembers, _countof(sMembers));
 
 ResultType STDMETHODCALLTYPE Object::Invoke(
                                             ResultToken &aResultToken,
@@ -671,17 +671,9 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		if (!IS_INVOKE_META && !field) // v1.1.16: Check field again so if __Call sets a field, it gets called.
 		{
 			//
-			// BUILT-IN METHODS
-			//
-			if (IS_INVOKE_CALL)
-			{
-				// Since above has not handled this call and no field exists, check for built-in methods.
-				return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
-			}
-			//
 			// BUILT-IN "BASE" PROPERTY
 			//
-			else if (actual_param_count == 0)
+			if (!IS_INVOKE_CALL && actual_param_count == 0)
 			{
 				if (!_tcsicmp(name, _T("base")))
 				{
@@ -865,6 +857,7 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 
 ObjectMember Map::sMembers[] =
 {
+	Object_Member(__Item, __Item, 0, IT_SET, 1, 1),
 	Object_Member(Capacity, Capacity, 0, IT_SET),
 	Object_Member(Count, Count, 0, IT_GET),
 	Object_Method1(Clone, 0, 0),
@@ -873,36 +866,26 @@ ObjectMember Map::sMembers[] =
 	Object_Method1(_NewEnum, 0, 0)
 };
 
-Object *Map::sPrototype = Object::CreatePrototype(_T("Map"), Object::sPrototype);
+Object *Map::sPrototype = Object::CreatePrototype(_T("Map"), Object::sPrototype, sMembers, _countof(sMembers));
 
-ResultType STDMETHODCALLTYPE Map::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if ((aFlags & (IF_DEFAULT|IT_CALL)) == IF_DEFAULT)
+	if (IS_INVOKE_GET)
 	{
-		if (aParamCount != (IS_INVOKE_SET ? 2 : 1))
-			_o_throw(ERR_INVALID_USAGE);
-		if (IS_INVOKE_GET)
+		if (GetItem(aResultToken, *aParam[0]))
 		{
-			if (GetItem(aResultToken, *aParam[0]))
-			{
-				if (aResultToken.symbol == SYM_OBJECT)
-					aResultToken.object->AddRef();
-				return OK;
-			}
-			_o_throw(_T("Key not found."), ParamIndexToString(0, _f_number_buf));
+			if (aResultToken.symbol == SYM_OBJECT)
+				aResultToken.object->AddRef();
+			return OK;
 		}
-		else
-		{
-			if (!SetItem(*aParam[0], *aParam[1]))
-				_o_throw(ERR_OUTOFMEM);
-		}
-		return OK;
+		_o_throw(_T("Key not found."), ParamIndexToString(0, _f_number_buf));
 	}
-	auto result = ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
-	// See Array::Invoke for comments regarding this part:
-	if (result == INVOKE_NOT_HANDLED)
-		result = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
-	return result;
+	else
+	{
+		if (!SetItem(*aParam[1], *aParam[0]))
+			_o_throw(ERR_OUTOFMEM);
+	}
+	return OK;
 }
 
 
@@ -1006,7 +989,7 @@ bool Object::IsDerivedFrom(Object *aBase)
 	for (base = mBase; base; base = base->mBase)
 		if (base == aBase)
 			return true;
-	return false;
+	return aBase == Object::sPrototype; // Should only be true when this == aBase, since every other Object should derive from it.
 }
 
 
@@ -1063,12 +1046,66 @@ LPTSTR Object::Type()
 }
 
 
-Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase)
+Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount)
 {
 	auto obj = new Object();
 	obj->SetBase(aBase);
 	obj->SetItem(_T("__Class"), ExprTokenType(aClassName));
 	obj->mFlags |= NativeClassPrototype;
+
+	TCHAR name[MAX_VAR_NAME_LENGTH + 1];
+	TCHAR *method_name = name + _stprintf(name, _T("%s."), aClassName);
+
+	for (int i = 0; i < aMemberCount; ++i)
+	{
+		const auto &member = aMember[i];
+		_tcscpy(method_name, member.name);
+		if (member.invokeType == IT_CALL)
+		{
+			auto func = new Func(SimpleHeap::Malloc(name), true);
+			func->mBIM = member.method;
+			func->mMID = member.id;
+			func->mMIT = IT_CALL;
+			func->mMinParams = member.minParams + 1; // Includes `this`.
+			func->mParamCount = member.maxParams + 1;
+			func->mClass = obj; // AddRef not needed since neither mClass nor our caller's reference to obj is ever Released.
+			obj->SetItem(member.name, func);
+			func->Release();
+		}
+		else
+		{
+			auto prop = new Property();
+
+			auto op_name = _tcschr(method_name, '\0');
+
+			_tcscpy(op_name, _T(".Get"));
+			auto func = new Func(SimpleHeap::Malloc(name), true);
+			func->mBIM = member.method;
+			func->mMID = member.id;
+			func->mMIT = IT_GET;
+			func->mMinParams = member.minParams + 1; // Includes `this`.
+			func->mParamCount = member.maxParams + 1;
+			func->mClass = obj;
+			prop->mGet = func;
+
+			if (member.invokeType == IT_SET)
+			{
+				_tcscpy(op_name, _T(".Set"));
+				func = new Func(SimpleHeap::Malloc(name), true);
+				func->mBIM = member.method;
+				func->mMID = member.id;
+				func->mMIT = IT_SET;
+				func->mMinParams = member.minParams + 2; // Includes `this` and `value`.
+				func->mParamCount = member.maxParams + 2;
+				func->mClass = obj;
+				prop->mSet = func;
+			}
+			
+			obj->SetItem(member.name, prop);
+			prop->Release();
+		}
+	}
+
 	return obj;
 }
 
@@ -1628,13 +1665,11 @@ Array *Array::Create(ExprTokenType *aValue[], index_t aCount)
 	return nullptr;
 }
 
-Array *Array::Clone(BOOL aMembersOnly)
+Array *Array::Clone()
 {
 	auto arr = new Array();
 	if (!CloneTo(*arr))
 		return nullptr; // CloneTo() released arr.
-	if (aMembersOnly) // Flag used in variadic calls (Func::Call).
-		return arr;
 	if (!arr->SetCapacity(mCapacity))
 		return nullptr;
 	for (index_t i = 0; i < mLength; ++i)
@@ -1662,6 +1697,7 @@ bool Array::ItemToToken(index_t aIndex, ExprTokenType &aToken)
 
 ObjectMember Array::sMembers[] =
 {
+	Object_Property_get_set(__Item, 1, 1),
 	Object_Property_get_set(Length),
 	Object_Property_get_set(Capacity),
 	Object_Method(InsertAt, 2, MAXP_VARIADIC),
@@ -1674,41 +1710,26 @@ ObjectMember Array::sMembers[] =
 	Object_Method(_NewEnum, 0, 0)
 };
 
-Object *Array::sPrototype = Object::CreatePrototype(_T("Array"), Object::sPrototype);
+Object *Array::sPrototype = Object::CreatePrototype(_T("Array"), Object::sPrototype, sMembers, _countof(sMembers));
 
-ResultType STDMETHODCALLTYPE Array::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if ((aFlags & (IF_DEFAULT|IT_CALL)) == IF_DEFAULT)
+	switch (aID)
 	{
-		if (aParamCount != (IS_INVOKE_SET ? 2 : 1))
-			_o_throw(ERR_INVALID_USAGE);
-		auto index = ParamToZeroIndex(*aParam[0]);
+	case P___Item:
+	{
+		auto index = ParamToZeroIndex(*aParam[aParamCount - 1]);
 		if (index >= mLength)
 			_o_throw(ERR_INVALID_INDEX, ParamIndexToString(0, _f_number_buf));
 		auto &item = mItem[index];
 		if (IS_INVOKE_GET)
 			item.ReturnRef(aResultToken);
 		else
-			if (!item.Assign(*aParam[1]))
+			if (!item.Assign(*aParam[0]))
 				_o_throw(ERR_OUTOFMEM);
 		return OK;
 	}
-	auto result = ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
-	// There's currently no support for overriding built-in Array members.
-	// That aside, this approach allows user-defined properties and methods
-	// and built-in Object members (if they aren't shadowed by Array members),
-	// which would be difficult with the current design.  This will be fixed
-	// when Object is redesigned to allow defining all built-ins via mapping,
-	// rather than virtual functions, recursion and special flags.
-	if (result == INVOKE_NOT_HANDLED)
-		result = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
-	return result;
-}
 
-ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	switch (aID)
-	{
 	case P_Length:
 	case P_Capacity:
 		if (IS_INVOKE_SET)

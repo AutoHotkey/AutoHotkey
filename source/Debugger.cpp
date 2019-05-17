@@ -2684,7 +2684,7 @@ void DbgStack::Push(Func *aFunc)
 {
 	ASSERT(aFunc->mIsBuiltIn);
 	Entry &s = *Push();
-	s.line = aFunc->mJumpToLine;
+	s.line = NULL;
 	s.func = aFunc;
 	s.type = SE_BIF;
 }

@@ -1507,7 +1507,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 	if (aIsVariadic) // i.e. this is a variadic function call.
 	{
 		ExprTokenType *rvalue = NULL;
-		if (mBIF == &Op_ObjInvoke && (mID & IT_BITMASK) == IT_SET && aParamCount > 1) // x[y*]:=z
+		if (mBIF == &Op_ObjInvoke && (mFID & IT_BITMASK) == IT_SET && aParamCount > 1) // x[y*]:=z
 			rvalue = aParam[--aParamCount];
 		
 		--aParamCount; // Exclude param_obj from aParamCount, so it's the count of normal params.
@@ -1600,8 +1600,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			}
 		}
 
-		aResultToken.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
-		aResultToken.func = this;          // Inform function of which built-in function called it (allows code sharing/reduction).
+		aResultToken.func = this; // Inform function of which built-in function called it (allows code sharing/reduction).
 
 		// Push an entry onto the debugger's stack.  This has two purposes:
 		//  1) Allow CreateRuntimeException() to know which function is throwing an exception.
@@ -1609,8 +1608,19 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		//     e.g. DllCall(RegisterCallback("F")) will show DllCall while F is running.
 		DEBUGGER_STACK_PUSH(this)
 
-		// CALL THE BUILT-IN FUNCTION:
-		mBIF(aResultToken, aParam, aParamCount);
+		if (mClass)
+		{
+			auto obj = dynamic_cast<Object *>(TokenToObject(*aParam[0]));
+			if (!obj || !(obj->IsNativeClassPrototype() ? mClass == Object::sPrototype : obj->IsDerivedFrom(mClass)))
+				aResultToken.Error(ERR_TYPE_MISMATCH);
+			else
+				(obj->*mBIM)(aResultToken, mMID, mMIT, aParam + 1, aParamCount - 1);
+		}
+		else
+		{
+			aResultToken.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
+			mBIF(aResultToken, aParam, aParamCount);
+		}
 
 		DEBUGGER_STACK_POP()
 		
