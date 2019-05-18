@@ -500,7 +500,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
                                             )
 {
 	name_t name;
-    FieldType *field, *prop_field;
+	Variant *field, *prop_field;
 	index_t insert_pos;
 	Property *prop = NULL; // Set default.
 
@@ -858,7 +858,7 @@ ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 // Internal: Object::CallField - Used by Object::Invoke to call a function/method stored in this object.
 //
 
-ResultType Object::CallField(FieldType *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::CallField(Variant *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // aParam[0] contains the identifier of this field or an empty space (for __Get etc.).
 {
 	// Allocate a new array of param pointers that we can modify.

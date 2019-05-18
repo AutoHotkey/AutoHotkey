@@ -351,7 +351,7 @@ private:
 		PropertyType kind;
 		Var *var;
 		VarBkp *bkp;
-		Object::FieldType *field;
+		Object::Variant *field;
 		ExprTokenType value;
 		IObject *owner;
 		LPTSTR mem_to_free, property_name;
@@ -425,7 +425,7 @@ private:
 
 	int GetPropertyInfo(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf);
 	int GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp, LPTSTR &aValueBuf);
-	int GetPropertyInfo(Object::FieldType &aField, PropertyInfo &aProp);
+	int GetPropertyInfo(Object::Variant &aField, PropertyInfo &aProp);
 	
 	int GetPropertyValue(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf);
 

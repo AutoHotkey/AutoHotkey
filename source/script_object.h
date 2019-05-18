@@ -308,7 +308,7 @@ private:
 		return SetInternalCapacity(mFields.Capacity() ? mFields.Capacity() * 2 : 4);
 	}
 	
-	ResultType CallField(FieldType *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallField(Variant *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	bool Delete() override;
 
@@ -319,8 +319,7 @@ public:
 	
 	bool GetItem(ExprTokenType &aToken, name_t aName)
 	{
-		index_t insert_pos;
-		auto field = FindField(aName, insert_pos);
+		auto field = FindField(aName);
 		if (!field)
 			return false;
 		field->ToToken(aToken);

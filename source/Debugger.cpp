@@ -1071,7 +1071,7 @@ int Debugger::GetPropertyValue(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf
 	return DEBUGGER_E_OK;
 }
 
-int Debugger::GetPropertyInfo(Object::FieldType &aField, PropertyInfo &aProp)
+int Debugger::GetPropertyInfo(Object::Variant &aField, PropertyInfo &aProp)
 {
 	aField.ToToken(aProp.value);
 	return DEBUGGER_E_OK;
