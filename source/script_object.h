@@ -217,8 +217,12 @@ public:
 
 class Object : public ObjectBase
 {
+public:
+	// The type of an array element index or count.
+	// Use unsigned to avoid the need to check for negatives.
+	typedef UINT index_t;
+
 protected:
-	typedef INT_PTR IndexType; // Type of index for the internal array.  Must be signed for FindKey to work correctly.
 	typedef LPTSTR name_t;
 	typedef FlatVector<TCHAR> String;
 
@@ -263,7 +267,7 @@ protected:
 	class Enumerator : public EnumBase
 	{
 		Object *mObject;
-		IndexType mOffset;
+		index_t mOffset;
 	public:
 		Enumerator(Object *aObject) : mObject(aObject), mOffset(-1) { mObject->AddRef(); }
 		~Enumerator() { mObject->Release(); }
@@ -286,18 +290,18 @@ protected:
 
 private:
 	Object *mBase = nullptr;
-	FlatVector<FieldType, IndexType> mFields;
+	FlatVector<FieldType, index_t> mFields;
 
-	FieldType *FindField(name_t name, IndexType &insert_pos);
+	FieldType *FindField(name_t name, index_t &insert_pos);
 	FieldType *FindField(name_t name)
 	{
-		IndexType insert_pos;
+		index_t insert_pos;
 		return FindField(name, insert_pos);
 	}
 	
-	FieldType *Insert(name_t name, IndexType at);
+	FieldType *Insert(name_t name, index_t at);
 
-	bool SetInternalCapacity(IndexType new_capacity);
+	bool SetInternalCapacity(index_t new_capacity);
 	bool Expand()
 	// Expands mFields by at least one field.
 	{
@@ -315,7 +319,7 @@ public:
 	
 	bool GetItem(ExprTokenType &aToken, name_t aName)
 	{
-		IndexType insert_pos;
+		index_t insert_pos;
 		auto field = FindField(aName, insert_pos);
 		if (!field)
 			return false;
@@ -325,7 +329,7 @@ public:
 
 	bool SetItem(name_t aName, ExprTokenType &aValue)
 	{
-		IndexType insert_pos;
+		index_t insert_pos;
 		auto field = FindField(aName, insert_pos);
 		if (!field && !(field = Insert(aName, insert_pos)))
 			return false;
@@ -411,11 +415,6 @@ extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object va
 
 class Array : public Object
 {
-public:
-	// The type of an array element index or count.
-	// Use unsigned to avoid the need to check for negatives.
-	typedef UINT index_t;
-
 private:
 	Variant *mItem = nullptr;
 	index_t mLength = 0, mCapacity = 0;
@@ -499,7 +498,7 @@ class Map : public Object
 	class Enumerator : public EnumBase
 	{
 		Map *mObject;
-		IndexType mOffset;
+		index_t mOffset;
 	public:
 		Enumerator(Map *aObject) : mObject(aObject), mOffset(-1) { mObject->AddRef(); }
 		~Enumerator() { mObject->Release(); }
@@ -522,7 +521,7 @@ class Map : public Object
 	};
 
 	Pair *mItem = nullptr;
-	IndexType mCount = 0, mCapacity = 0;
+	index_t mCount = 0, mCapacity = 0;
 
 	// Holds the index of the first key of a given type within mItem.  Must be in the order: int, object, string.
 	// Compared to storing the key-type with each key-value pair, this approach saves 4 bytes per key (excluding
@@ -531,22 +530,22 @@ class Map : public Object
 	// mKeyOffsetObject should be set to mKeyOffsetInt + the number of int keys.
 	// mKeyOffsetString should be set to mKeyOffsetObject + the number of object keys.
 	// mKeyOffsetObject-1, mKeyOffsetString-1 and mFieldCount-1 indicate the last index of each prior type.
-	static const IndexType mKeyOffsetInt = 0;
-	IndexType mKeyOffsetObject = 0, mKeyOffsetString = 0;
+	static const index_t mKeyOffsetInt = 0;
+	index_t mKeyOffsetObject = 0, mKeyOffsetString = 0;
 
 	Map() {}
 	~Map();
 	 
-	Pair *FindItem(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos);
-	Pair *FindItem(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos);
-	Pair *FindItem(SymbolType key_type, Key key, IndexType &insert_pos);	
-	Pair *FindItem(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, Key &key, IndexType &insert_pos);
+	Pair *FindItem(LPTSTR val, index_t left, index_t right, index_t &insert_pos);
+	Pair *FindItem(IntKeyType val, index_t left, index_t right, index_t &insert_pos);
+	Pair *FindItem(SymbolType key_type, Key key, index_t &insert_pos);	
+	Pair *FindItem(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, Key &key, index_t &insert_pos);
 
 	void ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type, Key &key);
 
-	Pair *Insert(SymbolType key_type, Key key, IndexType at);
+	Pair *Insert(SymbolType key_type, Key key, index_t at);
 
-	bool SetInternalCapacity(IndexType new_capacity);
+	bool SetInternalCapacity(index_t new_capacity);
 	
 	// Expands mItem by at least one field.
 	bool Expand()
@@ -561,7 +560,7 @@ public:
 
 	bool GetItem(ExprTokenType &aToken, ExprTokenType &aKey)
 	{
-		IndexType insert_pos;
+		index_t insert_pos;
 		TCHAR buf[MAX_NUMBER_SIZE];
 		SymbolType key_type;
 		Key key;
@@ -582,7 +581,7 @@ public:
 
 	bool SetItem(ExprTokenType &aKey, ExprTokenType &aValue)
 	{
-		IndexType insert_pos;
+		index_t insert_pos;
 		TCHAR buf[MAX_NUMBER_SIZE];
 		SymbolType key_type;
 		Key key;

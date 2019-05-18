@@ -200,7 +200,7 @@ Object *Object::CloneTo(Object &obj)
 	}
 
 	int failure_count = 0; // See comment below.
-	IndexType i;
+	index_t i;
 
 	obj.mFields.Length() = field_count;
 
@@ -247,7 +247,7 @@ Map *Map::CloneTo(Map &obj)
 	}
 
 	int failure_count = 0; // See Object::CloneT() for comments.
-	IndexType i;
+	index_t i;
 
 	obj.mCount = mCount;
 	obj.mKeyOffsetObject = mKeyOffsetObject;
@@ -461,13 +461,11 @@ Map::~Map()
 	{
 		if (mCount)
 		{
-			IndexType i = mCount - 1;
-			// Free keys: first strings, then objects (objects have a lower index in the mItem array).
-			for ( ; i >= mKeyOffsetString; --i)
-				free(mItem[i].key.s);
-			for ( ; i >= mKeyOffsetObject; --i)
+			index_t i;
+			for (i = mKeyOffsetObject; i < mKeyOffsetString; ++i)
 				mItem[i].key.p->Release();
-			// Free values.
+			for ( ; i < mCount; ++i)
+				free(mItem[i].key.s);
 			while (mCount) 
 				mItem[--mCount].Free();
 		}
@@ -503,7 +501,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 {
 	name_t name;
     FieldType *field, *prop_field;
-	IndexType insert_pos;
+	index_t insert_pos;
 	Property *prop = NULL; // Set default.
 
 	// If this is some object's base and is being invoked in that capacity, call
@@ -936,9 +934,12 @@ void Object::EndClassDefinition()
 	// conflicting declarations.  Since these variables will be added at run-time to the derived objects,
 	// we don't want them in the class object.  So delete any key-value pairs with the special marker
 	// value (currently any integer, since static initializers haven't been evaluated yet).
-	for (IndexType i = mFields.Length() - 1; i >= 0; --i)
+	for (index_t i = mFields.Length(); i > 0; )
+	{
+		i--;
 		if (mFields[i].symbol == SYM_INTEGER)
 			mFields.Remove(i, 1);
+	}
 }
 
 
@@ -1083,7 +1084,7 @@ ResultType Object::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 	if (!field)
 		_o_return_empty;
 	field->ReturnMove(aResultToken); // Return the removed value.
-	mFields.Remove(field - mFields, 1);
+	mFields.Remove((index_t)(field - mFields), 1);
 	return OK;
 }
 
@@ -1091,7 +1092,7 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 // Delete(first_key [, last_key := first_key])
 {
 	Pair *min_item;
-	IndexType min_pos, max_pos, pos;
+	index_t min_pos, max_pos, pos;
 	SymbolType min_key_type;
 	Key min_key, max_key;
 	IntKeyType logical_count_removed = 1;
@@ -1100,7 +1101,7 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 
 	// Find the position of "min".
 	if (min_item = FindItem(*aParam[0], number_buf, min_key_type, min_key, min_pos))
-		min_pos = min_item - mItem; // else min_pos was already set by FindItem.
+		min_pos = index_t(min_item - mItem); // else min_pos was already set by FindItem.
 
 	if (aParamCount > 1) // Removing a range of keys.
 	{
@@ -1109,7 +1110,7 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 
 		// Find the next position > [aParam[1]].
 		if (max_item = FindItem(*aParam[1], number_buf, max_key_type, max_key, max_pos))
-			max_pos = max_item - mItem + 1;
+			max_pos = index_t(max_item - mItem + 1);
 
 		// Since the order of key-types in mItem is of no logical consequence, require that both keys be the same type.
 		// Do not allow removing a range of object keys since there is probably no meaning to their order.
@@ -1152,11 +1153,11 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 		for (pos = min_pos; pos < max_pos; ++pos)
 			free(mItem[pos].key.s);
 
-	IndexType remaining_fields = mCount - max_pos;
+	index_t remaining_fields = mCount - max_pos;
 	if (remaining_fields)
 		memmove(mItem + min_pos, mItem + max_pos, remaining_fields * sizeof(Pair));
 	// Adjust count by the actual number of items in the removed range.
-	IndexType actual_count_removed = max_pos - min_pos;
+	index_t actual_count_removed = max_pos - min_pos;
 	mCount -= actual_count_removed;
 	// Adjust key offsets and numeric keys as necessary.
 	if (min_key_type != SYM_STRING) // i.e. SYM_OBJECT or SYM_INTEGER
@@ -1197,7 +1198,7 @@ ResultType Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, E
 	if (!ParamIndexIsNumeric(0))
 		_o_throw(ERR_PARAM1_INVALID);
 
-	IndexType desired_count = (IndexType)ParamIndexToInt64(0);
+	index_t desired_count = (index_t)ParamIndexToInt64(0);
 	if (desired_count < mFields.Length())
 	{
 		// It doesn't seem intuitive to allow SetCapacity to truncate the fields array, so just reallocate
@@ -1230,7 +1231,7 @@ ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	if (!ParamIndexIsNumeric(0))
 		_o_throw(ERR_PARAM1_INVALID);
 
-	IndexType desired_count = (IndexType)ParamIndexToInt64(0);
+	index_t desired_count = (index_t)ParamIndexToInt64(0);
 	if (desired_count < mCount)
 	{
 		// It doesn't seem intuitive to allow SetCapacity to truncate the item array, so just reallocate
@@ -1284,7 +1285,7 @@ ResultType Map::Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTyp
 {
 	SymbolType key_type;
 	Key key;
-	INT_PTR insert_pos;
+	index_t insert_pos;
 	auto item = FindItem(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
 	_o_return(item != nullptr);
 }
@@ -1878,34 +1879,18 @@ int Map::Enumerator::Next(Var *aKey, Var *aVal)
 // Object:: and Map:: Internal Methods
 //
 
-Map::Pair *Map::FindItem(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos)
+Map::Pair *Map::FindItem(IntKeyType val, index_t left, index_t right, index_t &insert_pos)
 // left and right must be set by caller to the appropriate bounds within mItem.
 {
-	IndexType mid;
-	// Optimize for common arrays such as [a,b,c] where keys are consecutive numbers starting at 1.
-	// In such cases, the needed key can be found immediately.  Benchmarks show that starting the
-	// search this way can also benefit sparse arrays, and has little effect on associative arrays
-	// (keyed with a precalculated set of 100 or 2000 random integers between 0x10000 and 0x2000000).
-	if ((mid = left + (IndexType)val - 1) > right)
+	while (left < right)
 	{
-		// I couldn't come up with a data set or pattern where the standard starting calculation
-		// actually performed better, so start the search by comparing the last element's key.
-		// This improves performance when appending to an array via assignment.  Benchmarks show
-		// marginal improvements for other cases, probably due to slightly smaller code size.
-		//if (--mid != right) // Optimize for appending via incrementing index: this[n++].
-		//	mid = (left + right) / 2; // Fall back to standard binary search.
-		mid = right;
-	}
-	else if (mid < left) // val was negative.
-		mid = left; // As above.
-	for ( ; left <= right; mid = (left + right) / 2)
-	{
+		index_t mid = left + ((right - left) >> 1);
 		auto &item = mItem[mid];
 
 		auto result = val - item.key.i;
 
 		if (result < 0)
-			right = mid - 1;
+			right = mid;
 		else if (result > 0)
 			left = mid + 1;
 		else
@@ -1915,15 +1900,15 @@ Map::Pair *Map::FindItem(IntKeyType val, IndexType left, IndexType right, IndexT
 	return NULL;
 }
 
-Object::FieldType *Object::FindField(name_t name, IndexType &insert_pos)
+Object::FieldType *Object::FindField(name_t name, index_t &insert_pos)
 {
-	IndexType left = 0, mid, right = mFields.Length() - 1;
+	index_t left = 0, mid, right = mFields.Length();
 	int first_char = *name;
 	if (first_char <= 'Z' && first_char >= 'A')
 		first_char += 32;
-	while (left <= right)
+	while (left < right)
 	{
-		mid = (left + right) / 2;
+		mid = left + ((right - left) >> 1);
 		
 		FieldType &field = mFields[mid];
 		
@@ -1938,7 +1923,7 @@ Object::FieldType *Object::FindField(name_t name, IndexType &insert_pos)
 			result = _tcsicmp(name, field.name);
 		
 		if (result < 0)
-			right = mid - 1;
+			right = mid;
 		else if (result > 0)
 			left = mid + 1;
 		else
@@ -1948,14 +1933,14 @@ Object::FieldType *Object::FindField(name_t name, IndexType &insert_pos)
 	return NULL;
 }
 
-Map::Pair *Map::FindItem(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos)
+Map::Pair *Map::FindItem(LPTSTR val, index_t left, index_t right, index_t &insert_pos)
 // left and right must be set by caller to the appropriate bounds within mItem.
 {
-	IndexType mid;
+	index_t mid;
 	int first_char = *val;
-	while (left <= right)
+	while (left < right)
 	{
-		mid = (left + right) / 2;
+		mid = left + ((right - left) >> 1);
 
 		auto &item = mItem[mid];
 
@@ -1965,7 +1950,7 @@ Map::Pair *Map::FindItem(LPTSTR val, IndexType left, IndexType right, IndexType 
 			result = _tcscmp(val, item.key.s);
 
 		if (result < 0)
-			right = mid - 1;
+			right = mid;
 		else if (result > 0)
 			left = mid + 1;
 		else
@@ -1975,23 +1960,23 @@ Map::Pair *Map::FindItem(LPTSTR val, IndexType left, IndexType right, IndexType 
 	return NULL;
 }
 
-Map::Pair *Map::FindItem(SymbolType key_type, Key key, IndexType &insert_pos)
+Map::Pair *Map::FindItem(SymbolType key_type, Key key, index_t &insert_pos)
 // Searches for an item with the given key.  If found, a pointer to the item is returned.  Otherwise
 // NULL is returned and insert_pos is set to the index a newly created item should be inserted at.
 // key_type and key are output for creating a new item or removing an existing one correctly.
 // left and right must indicate the appropriate section of mItem to search, based on key type.
 {
-	IndexType left, right;
+	index_t left, right;
 
 	switch (key_type)
 	{
 	case SYM_STRING:
 		left = mKeyOffsetString;
-		right = mCount - 1; // String keys are last in the mItem array.
+		right = mCount; // String keys are last in the mItem array.
 		return FindItem(key.s, left, right, insert_pos);
 	case SYM_OBJECT:
 		left = mKeyOffsetObject;
-		right = mKeyOffsetString - 1; // Object keys end where String keys begin.
+		right = mKeyOffsetString; // Object keys end where String keys begin.
 		// left and right restrict the search to just the portion with object keys.
 		// Reuse the integer search function to reduce code size.  On 32-bit builds,
 		// this requires that the upper 32 bits of each key have been initialized.
@@ -1999,7 +1984,7 @@ Map::Pair *Map::FindItem(SymbolType key_type, Key key, IndexType &insert_pos)
 	//case SYM_INTEGER:
 	default:
 		left = mKeyOffsetInt;
-		right = mKeyOffsetObject - 1; // Int keys end where Object keys begin.
+		right = mKeyOffsetObject; // Int keys end where Object keys begin.
 		return FindItem(key.i, left, right, insert_pos);
 	}
 }
@@ -2040,21 +2025,21 @@ void Map::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type,
 	key.s = TokenToString(key_token, buf);
 }
 
-Map::Pair *Map::FindItem(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, Key &key, IndexType &insert_pos)
+Map::Pair *Map::FindItem(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, Key &key, index_t &insert_pos)
 // Searches for an item with the given key, where the key is a token passed from script.
 {
 	ConvertKey(key_token, aBuf, key_type, key);
 	return FindItem(key_type, key, insert_pos);
 }
 	
-bool Object::SetInternalCapacity(IndexType new_capacity)
+bool Object::SetInternalCapacity(index_t new_capacity)
 // Expands mFields to the specified number if fields.
 // Caller *must* ensure new_capacity >= 1 && new_capacity >= mFields.Length().
 {
 	return mFields.SetCapacity(new_capacity);
 }
 
-bool Map::SetInternalCapacity(IndexType new_capacity)
+bool Map::SetInternalCapacity(index_t new_capacity)
 // Caller *must* ensure new_capacity >= 1 && new_capacity >= mCount.
 {
 	Pair *new_fields = (Pair *)realloc(mItem, new_capacity * sizeof(Pair));
@@ -2065,7 +2050,7 @@ bool Map::SetInternalCapacity(IndexType new_capacity)
 	return true;
 }
 	
-Object::FieldType *Object::Insert(name_t name, IndexType at)
+Object::FieldType *Object::Insert(name_t name, index_t at)
 // Inserts a single field with the given key at the given offset.
 // Caller must ensure 'at' is the correct offset for this key.
 {
@@ -2082,7 +2067,7 @@ Object::FieldType *Object::Insert(name_t name, IndexType at)
 	return &field;
 }
 
-Map::Pair *Map::Insert(SymbolType key_type, Key key, IndexType at)
+Map::Pair *Map::Insert(SymbolType key_type, Key key, index_t at)
 // Inserts a single item with the given key at the given offset.
 // Caller must ensure 'at' is the correct offset for this key.
 {
