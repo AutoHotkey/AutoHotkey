@@ -162,7 +162,7 @@ public:
 
 	T *InsertUninitialized(index_t i, index_t count)
 	{
-		ASSERT(i >= 0 && i + count <= data->length && count + data->length <= data->size);
+		ASSERT(i >= 0 && i <= data->length && count + data->length <= data->size);
 		auto p = Value() + i;
 		if (i < data->length)
 			memmove(p + count, p, (data->length - i) * sizeof(T));
@@ -378,6 +378,7 @@ public:
 	ResultType _NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType HasKey(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Base(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	static LPTSTR sMetaFuncName[];
 

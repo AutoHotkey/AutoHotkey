@@ -480,6 +480,7 @@ Map::~Map()
 
 ObjectMember Object::sMembers[] =
 {
+	Object_Member(base, Base, 0, IT_SET),
 	Object_Method1(Delete, 1, 2),
 	Object_Method1(Count, 0, 0),
 	Object_Method1(SetCapacity, 1, 1),
@@ -630,34 +631,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 					prop = NULL; // field was reassigned or removed, so ignore the property.
 			}
 		}
-
-		// Since the base object didn't handle this op, check for built-in properties/methods.
-		// This must apply only to the original target object (aThisToken), not one of its bases.
-		if (!IS_INVOKE_META && !field) // v1.1.16: Check field again so if __Call sets a field, it gets called.
-		{
-			//
-			// BUILT-IN "BASE" PROPERTY
-			//
-			if (!IS_INVOKE_CALL && actual_param_count == 0)
-			{
-				if (!_tcsicmp(name, _T("base")))
-				{
-					if (IS_INVOKE_SET)
-					{
-						Object *obj = dynamic_cast<Object *>(TokenToObject(**actual_param));
-						return SetBase(obj, aResultToken);
-					}
-	
-					if (mBase)
-					{
-						mBase->AddRef();
-						_o_return(mBase);
-					}
-					//else return empty string.
-					_o_return_empty;
-				}
-			}
-		} // if (!IS_INVOKE_META && key_type == SYM_STRING)
 	} // if (!field)
 
 	//
@@ -1075,7 +1048,7 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 
 
 //
-// Object:: and Map:: Built-in Methods
+// Object:: and Map:: Built-ins
 //
 
 ResultType Object::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1306,6 +1279,21 @@ ResultType Map::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenT
 	if (!CloneTo(*clone))
 		_o_throw(ERR_OUTOFMEM);
 	_o_return(clone);
+}
+
+ResultType Object::Base(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (IS_INVOKE_SET)
+	{
+		Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[0]));
+		return SetBase(obj, aResultToken);
+	}
+	if (mBase)
+	{
+		mBase->AddRef();
+		_o_return(mBase);
+	}
+	_o_return_empty;
 }
 
 
