@@ -114,50 +114,79 @@ public:
 // FlatVector - utility class.
 //
 
-template <typename T>
+template <typename T, typename index_t = ::size_t>
 class FlatVector
 {
 	struct Data
 	{
-		size_t size;
-		size_t length;
-		T value[1];
+		index_t size;
+		index_t length;
 	};
 	Data *data;
+	
 	static Data Empty;
-public:
-	void Init() // Not a constructor because this class is used in a union.
+
+	void FreeRange(index_t i, index_t count)
 	{
-		data = &Empty;
+		auto v = Value();
+		for (; i < count; ++i)
+			v[i].~T();
 	}
+
+public:
+	FlatVector<T, index_t>() { data = &Empty; }
+	~FlatVector<T, index_t>() { Free(); }
+	
 	void Free()
 	{
-		if (data != &Empty)
+		if (data->size)
 		{
+			FreeRange(0, data->length);
 			free(data);
 			data = &Empty;
 		}
 	}
-	bool SetCapacity(size_t new_size)
+
+	bool SetCapacity(index_t new_size)
 	{
-		Data *d = (data == &Empty) ? NULL : data;
-		size_t length = data->length;
-		const size_t header_size = sizeof(Data) - sizeof(T);
-		if (  !(d = (Data *)realloc(d, new_size * sizeof(T) + header_size))  )
+		index_t length = data->length;
+		ASSERT(new_size > 0 && new_size >= length);
+		Data *d = data->size ? data : nullptr;
+		if (  !(d = (Data *)realloc(d, new_size * sizeof(T) + sizeof(Data)))  )
 			return false;
 		data = d;
 		data->size = new_size;
 		data->length = length; // Only strictly necessary if NULL was passed to realloc.
 		return true;
 	}
-	size_t &Length() { return data->length; }
-	size_t Capacity() { return data->size; }
-	T *Value() { return data->value; }
+
+	T *InsertUninitialized(index_t i, index_t count)
+	{
+		ASSERT(i >= 0 && i + count <= data->length && count + data->length <= data->size);
+		auto p = Value() + i;
+		if (i < data->length)
+			memmove(p + count, p, (data->length - i) * sizeof(T));
+		data->length += count;
+		return p;
+	}
+
+	void Remove(index_t i, index_t count)
+	{
+		auto v = Value();
+		ASSERT(i >= 0 && i + count <= data->length);
+		FreeRange(i, count);
+		memmove(v + i, v + i + count, (data->length - i - count) * sizeof(T));
+		data->length -= count;
+	}
+
+	index_t &Length() { return data->length; }
+	index_t Capacity() { return data->size; }
+	T *Value() { return (T *)(data + 1); }
 	operator T *() { return Value(); }
 };
 
-template <typename T>
-typename FlatVector<T>::Data FlatVector<T>::Empty;
+template <typename T, typename index_t>
+typename FlatVector<T, index_t>::Data FlatVector<T, index_t>::Empty = { 0, 0 };
 
 
 //
@@ -189,7 +218,10 @@ public:
 class Object : public ObjectBase
 {
 protected:
+	typedef INT_PTR IndexType; // Type of index for the internal array.  Must be signed for FindKey to work correctly.
+	typedef LPTSTR name_t;
 	typedef FlatVector<TCHAR> String;
+
 	struct Variant
 	{
 		union { // Which of its members is used depends on the value of symbol, below.
@@ -202,6 +234,9 @@ protected:
 		// key_c contains the first character of key.s. This utilizes space that would
 		// otherwise be unused due to 8-byte alignment. See FindField() for explanation.
 		TCHAR key_c;
+
+		Variant() = delete;
+		~Variant() { Free(); }
 
 		void Minit(); // Perform minimum initialization.
 		bool Assign(LPTSTR str, size_t len = -1, bool exact_size = false);
@@ -217,11 +252,12 @@ protected:
 		inline void ToToken(ExprTokenType &aToken); // Used when we want the value as is, in a token.  Does not AddRef() or copy strings.
 	};
 
-	typedef INT_PTR IndexType; // Type of index for the internal array.  Must be signed for FindKey to work correctly.
-	typedef LPTSTR name_t;
 	struct FieldType : Variant
 	{
 		name_t name;
+
+		FieldType() = delete;
+		~FieldType() { free(name); }
 	};
 
 	class Enumerator : public EnumBase
@@ -243,22 +279,15 @@ protected:
 	{
 		NativeClassPrototype = 0x01
 	};
-	
-private:
-	Object *mBase = nullptr;
-	FieldType *mFields = nullptr;
-	IndexType mFieldCount = 0, mFieldCountMax = 0; // Current/max number of fields.
 
-#ifdef CONFIG_DEBUGGER
-	friend class Debugger;
-#endif
-
-public:
+	Object *CloneTo(Object &aTo);
 	Object() { mFlags = 0; }
-	bool Delete();
 	~Object();
 
 private:
+	Object *mBase = nullptr;
+	FlatVector<FieldType, IndexType> mFields;
+
 	FieldType *FindField(name_t name, IndexType &insert_pos);
 	FieldType *FindField(name_t name)
 	{
@@ -272,19 +301,17 @@ private:
 	bool Expand()
 	// Expands mFields by at least one field.
 	{
-		return SetInternalCapacity(mFieldCountMax ? mFieldCountMax * 2 : 4);
+		return SetInternalCapacity(mFields.Capacity() ? mFields.Capacity() * 2 : 4);
 	}
 	
 	ResultType CallField(FieldType *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
-protected:
-	Object *CloneTo(Object &aTo);
-	
+	bool Delete() override;
+
 public:
+
 	static Object *Create();
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
-	
-	Object *Clone();
 	
 	bool GetItem(ExprTokenType &aToken, name_t aName)
 	{
@@ -352,6 +379,9 @@ public:
 	static LPTSTR sMetaFuncName[];
 
 	IObject_DebugWriteProperty_Def;
+#ifdef CONFIG_DEBUGGER
+	friend class Debugger;
+#endif
 };
 
 
@@ -486,6 +516,9 @@ class Map : public Object
 	struct Pair : Variant
 	{
 		Key key;
+
+		Pair() = delete;
+		~Pair() = delete;
 	};
 
 	Pair *mItem = nullptr;

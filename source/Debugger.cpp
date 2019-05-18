@@ -1094,7 +1094,7 @@ int Debugger::WritePropertyXml(PropertyInfo &aProp, IObject *aObject)
 void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aDepth)
 {
 	DebugCookie cookie;
-	aDebugger->BeginProperty(NULL, "object", (int)mFieldCount + (mBase != NULL), cookie);
+	aDebugger->BeginProperty(NULL, "object", (int)mFields.Length() + (mBase != NULL), cookie);
 
 	if (aDepth)
 	{
@@ -1112,8 +1112,8 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			else --i; 
 			--j;
 		}
-		if (j > (int)mFieldCount)
-			j = (int)mFieldCount;
+		if (j > (int)mFields.Length())
+			j = (int)mFields.Length();
 		// For each field in the requested page...
 		for ( ; i < j; ++i)
 		{

@@ -6513,7 +6513,7 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
 Object *Object::GetUnresolvedClass(LPTSTR &aName)
 // This method is only valid for mUnresolvedClass.
 {
-	if (!mFieldCount)
+	if (!mFields.Length())
 		return NULL;
 	aName = mFields[0].name;
 	return (Object *)mFields[0].object;

@@ -116,7 +116,6 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *ap
 		// item is inserted, a default initial capacity of 4 will be set.
 
 		TCHAR buf[MAX_NUMBER_SIZE];
-		IndexType insert_pos;
 		
 		for (int i = 0; i + 1 < aParamCount; i += 2)
 		{
@@ -136,10 +135,7 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *ap
 				continue;
 			}
 
-			auto field = obj->FindField(name, insert_pos);
-			if (  !(field
-				 || (field = obj->Insert(name, insert_pos)))
-				|| !field->Assign(*aParam[i + 1])  )
+			if (!obj->SetItem(name, *aParam[i + 1]))
 			{
 				if (apResultToken)
 					apResultToken->Error(ERR_OUTOFMEM);
@@ -171,20 +167,12 @@ Map *Map::Create(ExprTokenType *aParam[], int aParamCount)
 		// Otherwise, there are 4 or less key-value pairs.  When the first
 		// item is inserted, a default initial capacity of 4 will be set.
 
-		TCHAR buf[MAX_NUMBER_SIZE];
-		SymbolType key_type;
-		Key key;
-		IndexType insert_pos;
-
 		for (int i = 0; i + 1 < aParamCount; i += 2)
 		{
 			if (aParam[i]->symbol == SYM_MISSING || aParam[i+1]->symbol == SYM_MISSING)
 				continue; // For simplicity.
 
-			auto item = map->FindItem(*aParam[i], buf, key_type, key, insert_pos);
-			if (  !(item
-				 || (item = map->Insert(key_type, key, insert_pos)))
-				|| !item->Assign(*aParam[i + 1])  )
+			if (!map->SetItem(*aParam[i], *aParam[i + 1]))
 			{	// Out of memory.
 				map->Release();
 				return NULL;
@@ -196,22 +184,15 @@ Map *Map::Create(ExprTokenType *aParam[], int aParamCount)
 
 
 //
-// Object::Clone - Used for variadic function-calls.
+// Cloning
 //
-
-// Creates an object and copies the content of this object to it.
-Object *Object::Clone()
-{
-	auto objptr = new Object();
-	return CloneTo(*objptr);
-}
 
 // Helper function for temporary implementation of Clone by Object and subclasses.
 // Should be eliminated once revision of the object model is complete.
 Object *Object::CloneTo(Object &obj)
 {
 	// Allocate space in destination object.
-	IndexType field_count = mFieldCount;
+	auto field_count = mFields.Length();
 	if (!obj.SetInternalCapacity(field_count))
 	{
 		obj.Release();
@@ -221,7 +202,7 @@ Object *Object::CloneTo(Object &obj)
 	int failure_count = 0; // See comment below.
 	IndexType i;
 
-	obj.mFieldCount = field_count;
+	obj.mFields.Length() = field_count;
 
 	for (i = 0; i < field_count; ++i)
 	{
@@ -471,20 +452,6 @@ Object::~Object()
 {
 	if (mBase)
 		mBase->Release();
-
-	if (mFields)
-	{
-		if (mFieldCount)
-		{
-			for (IndexType i = 0; i < mFieldCount; ++i)
-			{
-				free(mFields[i].name);
-				mFields[i].Free();
-			}
-		}
-		// Free fields array.
-		free(mFields);
-	}
 }
 
 
@@ -969,13 +936,9 @@ void Object::EndClassDefinition()
 	// conflicting declarations.  Since these variables will be added at run-time to the derived objects,
 	// we don't want them in the class object.  So delete any key-value pairs with the special marker
 	// value (currently any integer, since static initializers haven't been evaluated yet).
-	for (IndexType i = mFieldCount - 1; i >= 0; --i)
+	for (IndexType i = mFields.Length() - 1; i >= 0; --i)
 		if (mFields[i].symbol == SYM_INTEGER)
-		{
-			free(mFields[i].name);
-			if (i < --mFieldCount)
-				memmove(mFields + i, mFields + i + 1, (mFieldCount - i) * sizeof(FieldType));
-		}
+			mFields.Remove(i, 1);
 }
 
 
@@ -1119,17 +1082,8 @@ ResultType Object::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 	auto field = FindField(ParamIndexToString(0, _f_number_buf));
 	if (!field)
 		_o_return_empty;
-	
-	// Return the removed value.
-	field->ReturnMove(aResultToken);
-
-	// Free the value (if not transferred to aResultToken) and name.
-	field->Free();
-	free(field->name);
-
-	// Remove the field.
-	memmove(field, field + 1, (mFieldCount - (field - mFields)) * sizeof(FieldType));
-	mFieldCount--;
+	field->ReturnMove(aResultToken); // Return the removed value.
+	mFields.Remove(field - mFields, 1);
 	return OK;
 }
 
@@ -1225,7 +1179,7 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 
 ResultType Object::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	_o_return((__int64)mFieldCount);
+	_o_return((__int64)mFields.Length());
 }
 
 ResultType Map::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1235,7 +1189,7 @@ ResultType Map::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenT
 
 ResultType Object::GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	_o_return(mFieldCountMax);
+	_o_return(mFields.Capacity());
 }
 
 ResultType Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1244,27 +1198,21 @@ ResultType Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, E
 		_o_throw(ERR_PARAM1_INVALID);
 
 	IndexType desired_count = (IndexType)ParamIndexToInt64(0);
-	if (desired_count < mFieldCount)
+	if (desired_count < mFields.Length())
 	{
 		// It doesn't seem intuitive to allow SetCapacity to truncate the fields array, so just reallocate
 		// as necessary to remove any unused space.  Allow negative values since SetCapacity(-1) seems more
 		// intuitive than SetCapacity(0) when the contents aren't being discarded.
-		desired_count = mFieldCount;
+		desired_count = mFields.Length();
 	}
-	if (!desired_count)
-	{	// Caller wants to shrink object to current contents but there aren't any, so free mFields.
-		if (mFields)
-		{
-			free(mFields);
-			mFields = NULL;
-			mFieldCountMax = 0;
-		}
-		//else mFieldCountMax should already be 0.
-		// Since mFieldCountMax and desired_size are both 0, below will return 0 and won't call SetInternalCapacity.
-	}
-	if (desired_count == mFieldCountMax || SetInternalCapacity(desired_count))
+	if (desired_count == 0)
 	{
-		_o_return(mFieldCountMax);
+		mFields.Free();
+		ASSERT(desired_count == mFields.Capacity());
+	}
+	if (desired_count == mFields.Capacity() || SetInternalCapacity(desired_count))
+	{
+		_o_return(mFields.Capacity());
 	}
 	// At this point, failure isn't critical since nothing is being stored yet.  However, it might be easier to
 	// debug if an error is thrown here rather than possibly later, when the array attempts to resize itself to
@@ -1345,8 +1293,8 @@ ResultType Object::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 {
 	if (GetNativeBase() != Object::sPrototype)
 		_o_throw(ERR_TYPE_MISMATCH); // Cannot construct an instance of this class using Object::Clone().
-	Object *clone = Clone();
-	if (!clone)
+	auto clone = new Object();
+	if (!CloneTo(*clone))
 		_o_throw(ERR_OUTOFMEM);	
 	_o_return(clone);
 }
@@ -1367,14 +1315,14 @@ ResultType Map::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenT
 void Object::Variant::Minit()
 {
 	symbol = SYM_MISSING;
-	string.Init();
+	new (&string) String();
 }
 
 void Object::Variant::AssignEmptyString()
 {
 	Free();
 	symbol = SYM_STRING;
-	string.Init();
+	new (&string) String();
 }
 
 void Object::Variant::AssignMissing()
@@ -1468,7 +1416,7 @@ bool Object::Variant::InitCopy(Variant &val)
 	switch (symbol = val.symbol)
 	{
 	case SYM_STRING:
-		string.Init();
+		new (&string) String();
 		return Assign(val.string, val.string.Length(), true); // Pass true to conserve memory (no space is allowed for future expansion).
 	case SYM_OBJECT:
 		(object = val.object)->AddRef();
@@ -1552,7 +1500,7 @@ void Object::Variant::Free()
 // CONTAINED VALUE WILL NOT BE VALID AFTER THIS FUNCTION RETURNS.
 {
 	if (symbol == SYM_STRING)
-		string.Free();
+		string.~String();
 	else if (symbol == SYM_OBJECT)
 		object->Release();
 }
@@ -1881,7 +1829,7 @@ ResultType STDMETHODCALLTYPE EnumBase::Invoke(ResultToken &aResultToken, ExprTok
 
 int Object::Enumerator::Next(Var *aKey, Var *aVal)
 {
-	if (++mOffset < mObject->mFieldCount)
+	if (++mOffset < mObject->mFields.Length())
 	{
 		FieldType &field = mObject->mFields[mOffset];
 		if (aKey)
@@ -1969,7 +1917,7 @@ Map::Pair *Map::FindItem(IntKeyType val, IndexType left, IndexType right, IndexT
 
 Object::FieldType *Object::FindField(name_t name, IndexType &insert_pos)
 {
-	IndexType left = 0, mid, right = mFieldCount - 1;
+	IndexType left = 0, mid, right = mFields.Length() - 1;
 	int first_char = *name;
 	if (first_char <= 'Z' && first_char >= 'A')
 		first_char += 32;
@@ -2101,14 +2049,9 @@ Map::Pair *Map::FindItem(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_
 	
 bool Object::SetInternalCapacity(IndexType new_capacity)
 // Expands mFields to the specified number if fields.
-// Caller *must* ensure new_capacity >= 1 && new_capacity >= mFieldCount.
+// Caller *must* ensure new_capacity >= 1 && new_capacity >= mFields.Length().
 {
-	FieldType *new_fields = (FieldType *)realloc(mFields, new_capacity * sizeof(FieldType));
-	if (!new_fields)
-		return false;
-	mFields = new_fields;
-	mFieldCountMax = new_capacity;
-	return true;
+	return mFields.SetCapacity(new_capacity);
 }
 
 bool Map::SetInternalCapacity(IndexType new_capacity)
@@ -2126,25 +2069,16 @@ Object::FieldType *Object::Insert(name_t name, IndexType at)
 // Inserts a single field with the given key at the given offset.
 // Caller must ensure 'at' is the correct offset for this key.
 {
-	if (mFieldCount == mFieldCountMax && !Expand()  // Attempt to expand if at capacity.
+	if (mFields.Length() == mFields.Capacity() && !Expand()  // Attempt to expand if at capacity.
 		|| !(name = _tcsdup(name)))  // Attempt to duplicate key-string.
 	{	// Out of memory.
 		return NULL;
 	}
 	// There is now definitely room in mFields for a new field.
-
-	FieldType &field = mFields[at];
-	if (at < mFieldCount)
-		// Move existing fields to make room.
-		memmove(&field + 1, &field, (mFieldCount - at) * sizeof(FieldType));
-	++mFieldCount; // Only after memmove above.
-	
+	FieldType &field = *mFields.InsertUninitialized(at, 1);
 	field.key_c = ctolower(*name);
-	
 	field.name = name; // Above has already copied string or called key.p->AddRef() as appropriate.
-	field.symbol = SYM_STRING;
-	field.string.Init(); // Initialize to empty string.  Caller will likely reassign.
-
+	field.Minit(); // Initialize to default value.  Caller will likely reassign.
 	return &field;
 }
 
@@ -2181,8 +2115,7 @@ Map::Pair *Map::Insert(SymbolType key_type, Key key, IndexType at)
 	}
 
 	item.key = key; // Above has already copied string or called key.p->AddRef() as appropriate.
-	item.symbol = SYM_STRING;
-	item.string.Init(); // Initialize to empty string.  Caller will likely reassign.
+	item.Minit(); // Initialize to default value.  Caller will likely reassign.
 
 	return &item;
 }
