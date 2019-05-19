@@ -570,7 +570,7 @@ enum BuiltInFunctionID {
 	FID_Min = 0, FID_Max,
 	FID_Random = 0, FID_RandomSeed,
 	FID_ObjAddRef = 0, FID_ObjRelease,
-	FID_ObjDelete = 0, FID_ObjCount, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjClone, FID_ObjNewEnum,
+	FID_ObjDeleteProp = 0, FID_ObjPropCount, FID_ObjHasOwnProp, FID_ObjHasProp, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjClone, FID_ObjNewEnum,
 	FID_ObjGetBase = 0, FID_ObjSetBase,
 	FID_ObjRawGet = 0, FID_ObjRawSet,
 	FID_ComObjType = 0, FID_ComObjValue,

@@ -187,13 +187,14 @@ FuncEntry g_BIF[] =
 	BIFn(ObjAddRef, 1, 1, BIF_ObjAddRefRelease),
 	BIF1(ObjBindMethod, 1, NA),
 	BIFn(ObjClone, 1, 1, BIF_ObjXXX),
-	BIFn(ObjCount, 1, 1, BIF_ObjXXX),
-	BIFn(ObjDelete, 2, 3, BIF_ObjXXX),
+	BIFn(ObjDeleteProp, 2, 3, BIF_ObjXXX),
 	BIF1(Object, 0, NA),
 	BIFn(ObjGetBase, 1, 1, BIF_ObjBase),
 	BIFn(ObjGetCapacity, 1, 1, BIF_ObjXXX),
-	BIFn(ObjHasKey, 2, 2, BIF_ObjXXX),
+	BIFn(ObjHasOwnProp, 2, 2, BIF_ObjXXX),
+	BIFn(ObjHasProp, 2, 2, BIF_ObjXXX),
 	BIFn(ObjNewEnum, 1, 1, BIF_ObjXXX),
+	BIFn(ObjPropCount, 1, 1, BIF_ObjXXX),
 	BIFn(ObjRawGet, 2, 2, BIF_ObjRaw),
 	BIFn(ObjRawSet, 3, 3, BIF_ObjRaw),
 	BIFn(ObjRelease, 1, 1, BIF_ObjAddRefRelease),
@@ -5774,11 +5775,8 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsInExpr
 		// Check for duplicates and determine insert_pos:
 		Func *found_func;
 		ExprTokenType found_item;
-		if (!mClassProperty && class_object->GetItem(found_item, aBuf) // Must be done in addition to the below to detect conflicting var/method declarations.
-			|| (found_func = FindFunc(full_name, -1, &insert_pos))) // Must be done to determine insert_pos.
-		{
+		if (found_func = FindFunc(full_name, -1, &insert_pos)) // Must be done to determine insert_pos.
 			return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf); // The parameters are omitted due to temporary termination above.  This might make it more obvious why "X[]" and "X()" are considered duplicates.
-		}
 		
 		*param_start = '('; // Undo temporary termination.
 
@@ -6127,7 +6125,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 			// class, but store it in the "unresolved" list.  When its definition is encountered,
 			// it will be removed from the list.  If any classes remain in the list when the end
 			// of the script is reached, an error will be thrown.
-			if (mUnresolvedClasses && mUnresolvedClasses->GetItem(token, base_class_name))
+			if (mUnresolvedClasses && mUnresolvedClasses->GetOwnProp(token, base_class_name))
 			{
 				// Some other class has already referenced it.  Use the existing object:
 				base_class = (Object *)token.object;
@@ -6139,8 +6137,8 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 					// Storing the file/line index in "__Class" instead of something like "DBG" or
 					// two separate fields helps to reduce code size and maybe memory fragmentation.
 					// It will be overwritten when the class definition is encountered.
-					|| !base_class->SetItem(_T("__Class"), ((__int64)mCurrFileIndex << 32) | mCombinedLineNumber)
-					|| !mUnresolvedClasses->SetItem(base_class_name, base_class)  )
+					|| !base_class->SetOwnProp(_T("__Class"), ((__int64)mCurrFileIndex << 32) | mCombinedLineNumber)
+					|| !mUnresolvedClasses->SetOwnProp(base_class_name, base_class)  )
 					return ScriptError(ERR_OUTOFMEM);
 			}
 		}
@@ -6155,7 +6153,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	if (mClassObjectCount) // Nested class definition.
 	{
 		outer_class = mClassObject[mClassObjectCount - 1];
-		if (outer_class->GetItem(token, class_name))
+		if (outer_class->GetOwnProp(token, class_name))
 			// At this point it can only be an Object() created by a class definition.
 			class_object = (Object *)token.object;
 	}
@@ -6195,7 +6193,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		ResultToken result_token;
 		result_token.symbol = SYM_STRING; // Init for detecting SYM_OBJECT below.
 		// Search for class and simultaneously remove it from the unresolved list:
-		mUnresolvedClasses->Delete(result_token, 0, IT_CALL, &param, 1); // result_token := mUnresolvedClasses.Delete(token)
+		mUnresolvedClasses->DeleteProp(result_token, 0, IT_CALL, &param, 1); // result_token := mUnresolvedClasses.Delete(token)
 		// If a field was found/removed, it can only be SYM_OBJECT.
 		if (result_token.symbol == SYM_OBJECT)
 		{
@@ -6207,9 +6205,9 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	}
 
 	if (   !(class_object || (class_object = Object::Create()))
-		|| !(class_object->SetItem(_T("__Class"), token))
+		|| !(class_object->SetOwnProp(_T("__Class"), token))
 		|| !(mClassObjectCount
-				? outer_class->SetItem(class_name, class_object) // Assign to super_class[class_name].
+				? outer_class->SetOwnProp(class_name, class_object) // Assign to super_class[class_name].
 				: class_var->Assign(class_object))   ) // Assign to global variable named %class_name%.
 		return ScriptError(ERR_OUTOFMEM);
 
@@ -6257,10 +6255,10 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, int aBufSize, Var **aFuncGlo
 
 	Object *class_object = mClassObject[mClassObjectCount - 1];
 	*name_end = 0; // Terminate for aBuf use below.
-	if (class_object->GetItem(ExprTokenType(), aBuf))
+	if (class_object->GetOwnProp(ExprTokenType(), aBuf))
 		return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
 	mClassProperty = new Property();
-	if (!mClassProperty || !class_object->SetItem(aBuf, mClassProperty))
+	if (!mClassProperty || !class_object->SetOwnProp(aBuf, mClassProperty))
 		return ScriptError(ERR_OUTOFMEM);
 
 	if (*next_token == '=') // => expr
@@ -6315,7 +6313,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			return ScriptError(ERR_INVALID_CLASS_VAR, item);
 		orig_char = *item_end;
 		*item_end = '\0'; // Temporarily terminate.
-		bool item_exists = class_object->GetItem(temp_token, item);
+		bool item_exists = class_object->GetOwnProp(temp_token, item);
 		bool item_name_has_dot = (orig_char == '.');
 		if (item_name_has_dot)
 		{
@@ -6341,7 +6339,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 				return ScriptError(ERR_DUPLICATE_DECLARATION, item);
 			// Assign class_object[item] := "" to mark it as a class variable
 			// and allow duplicate declarations to be detected:
-			if (!class_object->SetItem(item, aStatic ? empty_token : int_token))
+			if (!class_object->SetOwnProp(item, aStatic ? empty_token : int_token))
 				return ScriptError(ERR_OUTOFMEM);
 			*item_end = orig_char; // Undo termination.
 		}
@@ -6404,9 +6402,8 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 
 		if (!aStatic)
 		{
-			ExprTokenType token;
-			if (class_object->GetItem(token, _T("__Init")) && token.symbol == SYM_OBJECT
-				&& (init_func = dynamic_cast<Func *>(token.object))) // This cast SHOULD always succeed; done for maintainability.
+			init_func = dynamic_cast<Func *>(class_object->GetMethodFunc(_T("__Init"))); // This cast SHOULD always succeed; done for maintainability.
+			if (init_func)
 			{
 				// __Init method already exists, so find the end of its body.
 				for (block_end = init_func->mJumpToLine;
@@ -6501,7 +6498,7 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
 		if (cp == key)
 			return NULL; // ScriptError(_T("Missing name."), cp);
 		*cp = '\0'; // Terminate at the delimiting dot.
-		if (!base_object->GetItem(token, key))
+		if (!base_object->GetOwnProp(token, key))
 			return NULL;
 		base_object = (Object *)token.object; // See comment about Object() above.
 	}
@@ -6527,7 +6524,7 @@ ResultType Script::ResolveClasses()
 		return OK;
 	// There is at least one unresolved class.
 	ExprTokenType token;
-	if (base->GetItem(token, _T("__Class")))
+	if (base->GetOwnProp(token, _T("__Class")))
 	{
 		// In this case (an object in the mUnresolvedClasses list), it is always an integer
 		// containing the file index and line number:
@@ -6926,7 +6923,7 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 				mClassProperty->mSet = the_new_func;
 		}
 		else
-			if (!aClassObject->SetItem(key, the_new_func))
+			if (!aClassObject->DefineMethod(key, the_new_func))
 			{
 				ScriptError(ERR_OUTOFMEM);
 				return NULL;
@@ -13339,14 +13336,14 @@ ResultType Script::UnhandledException(Line* aLine)
 	{
 		// For simplicity and safety, we call into the Object directly rather than via Invoke().
 		ExprTokenType t;
-		if (ex->GetItem(t, _T("Message")))
+		if (ex->GetOwnProp(t, _T("Message")))
 			message = TokenToString(t, message_buf);
-		if (ex->GetItem(t, _T("Extra")))
+		if (ex->GetOwnProp(t, _T("Extra")))
 			extra = TokenToString(t, extra_buf);
-		if (ex->GetItem(t, _T("Line")))
+		if (ex->GetOwnProp(t, _T("Line")))
 		{
 			LineNumberType line_no = (LineNumberType)TokenToInt64(t);
-			if (ex->GetItem(t, _T("File")))
+			if (ex->GetOwnProp(t, _T("File")))
 			{
 				LPCTSTR file = TokenToString(t);
 				// Locate the line by number and file index, then display that line instead

@@ -135,7 +135,7 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *ap
 				continue;
 			}
 
-			if (!obj->SetItem(name, *aParam[i + 1]))
+			if (!obj->SetOwnProp(name, *aParam[i + 1]))
 			{
 				if (apResultToken)
 					apResultToken->Error(ERR_OUTOFMEM);
@@ -418,7 +418,7 @@ bool Object::Delete()
 		int outer_excptmode = g->ExcptMode;
 		g->ExcptMode |= EXCPTMODE_DELETE;
 
-		CallMethod(mBase, this, _T("__Delete"), NULL, 0, NULL, IF_METAOBJ); // base.__Delete()
+		::CallMethod(mBase, this, _T("__Delete"), nullptr, 0, nullptr, IF_METAOBJ); // base.__Delete()
 
 		g->ExcptMode = outer_excptmode;
 
@@ -480,14 +480,17 @@ Map::~Map()
 
 ObjectMember Object::sMembers[] =
 {
-	Object_Member(base, Base, 0, IT_SET),
-	Object_Method1(Delete, 1, 2),
-	Object_Method1(Count, 0, 0),
-	Object_Method1(SetCapacity, 1, 1),
-	Object_Method1(GetCapacity, 0, 0),
 	Object_Method1(_NewEnum, 0, 0),
-	Object_Method1(HasKey, 1, 1),
-	Object_Method1(Clone, 0, 0)
+	Object_Member(Base, Base, 0, IT_SET),
+	Object_Method1(Clone, 0, 0),
+	Object_Method1(DefineMethod, 2, 2),
+	Object_Method1(DeleteMethod, 1, 1),
+	Object_Method1(DeleteProp, 1, 2),
+	Object_Method1(GetMethod, 1, 1),
+	Object_Method1(HasMethod, 1, 1),
+	Object_Method1(HasOwnMethod, 1, 1),
+	Object_Method1(HasOwnProp, 1, 1),
+	Object_Method1(HasProp, 1, 1)
 };
 
 Object *Object::sPrototype = Object::CreatePrototype(_T("Object"), nullptr, sMembers, _countof(sMembers));
@@ -501,9 +504,9 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
                                             )
 {
 	name_t name;
-	Variant *field, *prop_field;
+	Variant *field = nullptr, *prop_field;
 	index_t insert_pos;
-	Property *prop = NULL; // Set default.
+	Property *prop = nullptr; // Set default.
 
 	// If this is some object's base and is being invoked in that capacity, call
 	//	__Get/__Set/__Call as defined in this base object before searching further.
@@ -521,10 +524,10 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	if ((aFlags & IF_METAFUNC) && (aFlags & (IF_DEFAULT|IT_CALL)) != IF_DEFAULT)
 	{
 		// Look for a meta-function definition directly in this base object.
-		if (field = FindField(sMetaFuncName[INVOKE_TYPE]))
+		if (auto method = FindMethod(sMetaFuncName[INVOKE_TYPE]))
 		{
 			Line *curr_line = g_script.mCurrLine;
-			ResultType r = CallField(field, aResultToken, aThisToken, aFlags, aParam, aParamCount);
+			ResultType r = CallMethod(method->func, aResultToken, aThisToken, aParam, aParamCount);
 			g_script.mCurrLine = curr_line; // Allows exceptions thrown by later meta-functions to report a more appropriate line.
 			//if (r == EARLY_RETURN)
 				// Propagate EARLY_RETURN in case this was the __Call meta-function of a
@@ -534,32 +537,40 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				return r;
 		}
 	}
+
+	ASSERT(aParamCount || (aFlags & IF_DEFAULT));
+	if ((aFlags & IF_DEFAULT) || aParam[0]->symbol == SYM_MISSING)
+		name = IS_INVOKE_CALL ? _T("Call") : _T("__Item");
+	else
+		name = ParamIndexToString(0, _f_number_buf);
 	
 	auto actual_param = aParam; // Actual first parameter between [] or ().
 	int actual_param_count = aParamCount; // Actual number of parameters between [] or ().
-
-	if (IS_INVOKE_SET)
+	if (!(aFlags & IF_DEFAULT))
 	{
-		// Due to the way expression parsing works, the result should never be negative
-		// (and any direct callers of Invoke must always pass aParamCount >= 1):
+		++actual_param;
 		--actual_param_count;
 	}
-	
-	ASSERT(actual_param_count || (aFlags & IF_DEFAULT));
-	{
-		if ((aFlags & IF_DEFAULT) || aParam[0]->symbol == SYM_MISSING)
-			name = IS_INVOKE_CALL ? _T("Call") : _T("__Item");
-		else
-			name = ParamIndexToString(0, _f_number_buf);
 
-		if (!(aFlags & IF_DEFAULT))
+	if (IS_INVOKE_CALL)
+	{
+		auto method = FindMethod(name);
+		if (method)
+			return CallMethod(method->func, aResultToken, aThisToken, actual_param, actual_param_count);
+	}
+	else
+	{
+		if (IS_INVOKE_SET)
 		{
-			++actual_param;
+			// Due to the way expression parsing works, the result should never be negative
+			// (and any direct callers of Invoke must always pass aParamCount >= 1):
+			ASSERT(actual_param_count > 0);
 			--actual_param_count;
 		}
-		
 		field = FindField(name, insert_pos);
+	}
 
+	// TODO: Replace Property with a simpler struct; never pass it to the script.
 		static Property sProperty;
 
 		// v1.1.16: Handle class property accessors:
@@ -596,7 +607,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// if the property itself wasn't defined.
 			field = NULL;
 		}
-	}
 	
 	if (!field)
 	{
@@ -611,7 +621,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// object to invoke __call.  So if this is already a meta-invocation, don't change aFlags.
 			ResultType r = mBase->Invoke(aResultToken, aThisToken, aFlags | (IS_INVOKE_META ? 0 : IF_META), aParam, aParamCount);
 			if (r != INVOKE_NOT_HANDLED // Base handled it.
-				|| prop) // Nothing left to do in this case.
+				|| prop || IS_INVOKE_CALL) // Nothing left to do in these cases.
 				return r;
 
 			// Since the above may have inserted or removed fields (including the specified one),
@@ -636,23 +646,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 	//
 	// OPERATE ON A FIELD WITHIN THIS OBJECT
 	//
-
-	// CALL
-	if (IS_INVOKE_CALL)
-	{
-		if (!field)
-			return INVOKE_NOT_HANDLED;
-		// v1.1.18: The following flag is set whenever a COM client invokes with METHOD|PROPERTYGET,
-		// such as X.Y in VBScript or C#.  Some convenience is gained at the expense of purity by treating
-		// it as METHOD if X.Y is a Func object or PROPERTYGET in any other case.
-		// v1.1.19: Handling this flag here rather than in CallField() has the following benefits:
-		//  - Reduces code duplication.
-		//  - Fixes X.__Call being returned instead of being called, if X.__Call is a string.
-		//  - Allows X.Y(Z) and similar to work like X.Y[Z], instead of ignoring the extra parameters.
-		if ( !(aFlags & IF_CALL_FUNC_ONLY) || (field->symbol == SYM_OBJECT && dynamic_cast<Func *>(field->object)) )
-			return CallField(field, aResultToken, aThisToken, aFlags & ~IF_DEFAULT, actual_param, actual_param_count);
-		aFlags = (aFlags & ~(IT_BITMASK | IF_CALL_FUNC_ONLY)) | IT_GET;
-	}
 
 	// This next section handles both this[x,y] (handled as this.__Item[x,y]) and this.x[y]
 	// Here, we only retrieve or create the sub-object this[x]/this.x, never set the actual
@@ -781,9 +774,10 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 {
 	switch (aID)
 	{
-	case FID_ObjDelete:			return Delete(aResultToken, 0, IT_CALL, aParam, aParamCount);
-	case FID_ObjCount:			return Count(aResultToken, 0, IT_CALL, aParam, aParamCount);
-	case FID_ObjHasKey:			return HasKey(aResultToken, 0, IT_CALL, aParam, aParamCount);
+	case FID_ObjDeleteProp:		return DeleteProp(aResultToken, 0, IT_CALL, aParam, aParamCount);
+	case FID_ObjPropCount:		return PropCount(aResultToken, 0, IT_CALL, aParam, aParamCount);
+	case FID_ObjHasOwnProp:		return HasOwnProp(aResultToken, 0, IT_CALL, aParam, aParamCount);
+	case FID_ObjHasProp:		return HasProp(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjGetCapacity:	return GetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjSetCapacity:	return SetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjClone:			return Clone(aResultToken, 0, IT_CALL, aParam, aParamCount);
@@ -828,40 +822,21 @@ ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 
 
 //
-// Internal: Object::CallField - Used by Object::Invoke to call a function/method stored in this object.
+// Internal
 //
 
-ResultType Object::CallField(Variant *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::CallMethod(IObject *aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount)
 // aParam[0] contains the identifier of this field or an empty space (for __Get etc.).
 {
 	// Allocate a new array of param pointers that we can modify.
 	ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
-	// Where fn = this.%key%, call %fn%(this, params*).
-	ExprTokenType field_token(aField->object); // fn
+	// Call %aFunc%(this, params*).
+	ExprTokenType field_token(aFunc); // fn
 	param[0] = &aThisToken; // this
 	memcpy(param + 1, aParam, aParamCount * sizeof(ExprTokenType*)); // params*
 	++aParamCount;
 
-	if (aField->symbol == SYM_OBJECT)
-	{
-		return aField->object->Invoke(aResultToken, field_token, IT_CALL|IF_DEFAULT, param, aParamCount);
-	}
-	if (aField->symbol == SYM_STRING)
-	{
-		Func *func = g_script.FindFunc(aField->string, aField->string.Length());
-		if (func)
-		{
-			// v2: Always pass "this" as the first parameter.  The old behaviour of passing it only when called
-			// indirectly via mBase was confusing to many users, and isn't needed now that the script can do
-			// %this.func%() instead of this.func() if they don't want to pass "this".
-			func->Call(aResultToken, param, aParamCount);
-			return aResultToken.Result();
-		}
-	}
-	// The field's value is neither a function reference nor the name of a known function.
-	ExprTokenType tok;
-	aField->ToToken(tok);
-	_o_throw(ERR_NONEXISTENT_FUNCTION, TokenToString(tok, _f_number_buf));
+	return aFunc->Invoke(aResultToken, field_token, IT_CALL|IF_DEFAULT, param, aParamCount);
 }
 
 
@@ -974,10 +949,10 @@ LPTSTR Object::Type()
 {
 	Object *base;
 	ExprTokenType value;
-	if (GetItem(value, _T("__Class")))
+	if (GetOwnProp(value, _T("__Class")))
 		return _T("Class"); // This object is a class.
 	for (base = mBase; base; base = base->mBase)
-		if (base->GetItem(value, _T("__Class")))
+		if (base->GetOwnProp(value, _T("__Class")))
 			return TokenToString(value); // This object is an instance of base.
 	return sObjectTypeName; // This is an Object of undetermined type, like Object() or {}.
 }
@@ -987,7 +962,7 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 {
 	auto obj = new Object();
 	obj->SetBase(aBase);
-	obj->SetItem(_T("__Class"), ExprTokenType(aClassName));
+	obj->SetOwnProp(_T("__Class"), ExprTokenType(aClassName));
 	obj->mFlags |= NativeClassPrototype;
 
 	TCHAR name[MAX_VAR_NAME_LENGTH + 1];
@@ -1006,7 +981,7 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 			func->mMinParams = member.minParams + 1; // Includes `this`.
 			func->mParamCount = member.maxParams + 1;
 			func->mClass = obj; // AddRef not needed since neither mClass nor our caller's reference to obj is ever Released.
-			obj->SetItem(member.name, func);
+			obj->DefineMethod(member.name, func);
 			func->Release();
 		}
 		else
@@ -1038,7 +1013,7 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 				prop->mSet = func;
 			}
 			
-			obj->SetItem(member.name, prop);
+			obj->SetOwnProp(member.name, prop);
 			prop->Release();
 		}
 	}
@@ -1051,7 +1026,7 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 // Object:: and Map:: Built-ins
 //
 
-ResultType Object::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::DeleteProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	auto field = FindField(ParamIndexToString(0, _f_number_buf));
 	if (!field)
@@ -1059,6 +1034,15 @@ ResultType Object::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 	field->ReturnMove(aResultToken); // Return the removed value.
 	mFields.Remove((index_t)(field - mFields), 1);
 	return OK;
+}
+
+ResultType Object::DeleteMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto name = ParamIndexToString(0, _f_number_buf);
+	auto method = FindMethod(name);
+	if (!method)
+		_o_throw(ERR_UNKNOWN_METHOD, name);
+	_o_return(method->func);
 }
 
 ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1151,7 +1135,7 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 }
 
 
-ResultType Object::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::PropCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_o_return((__int64)mFields.Length());
 }
@@ -1249,9 +1233,24 @@ ResultType Map::_NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		_o_throw(ERR_OUTOFMEM);
 }
 
-ResultType Object::HasKey(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	_o_return(FindField(ParamIndexToString(0, _f_number_buf)) != NULL);
+	_o_return(FindField(ParamIndexToString(0, _f_number_buf)) != nullptr);
+}
+
+ResultType Object::HasProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	_o_return(HasProp(ParamIndexToString(0, _f_number_buf)));
+}
+
+ResultType Object::HasMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	_o_return(GetMethod(ParamIndexToString(0)) != nullptr);
+}
+
+ResultType Object::HasOwnMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	_o_return(FindMethod(ParamIndexToString(0)) != nullptr);
 }
 
 ResultType Map::Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1294,6 +1293,43 @@ ResultType Object::Base(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 		_o_return(mBase);
 	}
 	_o_return_empty;
+}
+
+ResultType Object::GetMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto name = ParamIndexToString(0);
+	auto method = GetMethod(name);
+	if (!method)
+		_o_throw(ERR_UNKNOWN_METHOD);
+	method->func->AddRef();
+	_o_return(method->func);
+}
+
+bool Object::DefineMethod(name_t aName, IObject *aFunc)
+{
+	index_t insert_pos;
+	auto method = FindMethod(aName, insert_pos);
+	if (!method && !(method = InsertMethod(aName, insert_pos)))
+		return false;
+	aFunc->AddRef();
+	if (method->func)
+		method->func->Release();
+	method->func = aFunc;
+	return true;
+}
+
+ResultType Object::DefineMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto name = ParamIndexToString(0);
+	if (!*name)
+		_o_throw(ERR_PARAM1_INVALID);
+	auto func = ParamIndexToObject(1);
+	if (!func)
+		_o_throw(ERR_PARAM2_INVALID);
+	if (!DefineMethod(name, func))
+		_o_throw(ERR_OUTOFMEM);
+	AddRef();
+	_o_return(this);
 }
 
 
@@ -1833,6 +1869,17 @@ int Object::Enumerator::Next(Var *aKey, Var *aVal)
 		}
 		return true;
 	}
+	// TODO: Separate Properties and Methods enumerators.
+	auto method_offset = mOffset - mObject->mFields.Length();
+	if (method_offset < mObject->mMethods.Length())
+	{
+		auto &method = mObject->mMethods[method_offset];
+		if (aKey)
+			aKey->Assign(method.name);
+		if (aVal)
+			aVal->Assign(method.func);
+		return true;
+	}
 	return false;
 }
 
@@ -1885,7 +1932,7 @@ Map::Pair *Map::FindItem(IntKeyType val, index_t left, index_t right, index_t &i
 			return &item;
 	}
 	insert_pos = left;
-	return NULL;
+	return nullptr;
 }
 
 Object::FieldType *Object::FindField(name_t name, index_t &insert_pos)
@@ -1918,7 +1965,48 @@ Object::FieldType *Object::FindField(name_t name, index_t &insert_pos)
 			return &field;
 	}
 	insert_pos = left;
-	return NULL;
+	return nullptr;
+}
+
+bool Object::HasProp(name_t name)
+{
+	return FindField(name) || mBase && mBase->HasProp(name);
+}
+
+Object::MethodType *Object::FindMethod(name_t name, index_t &insert_pos)
+{
+	index_t left = 0, mid, right = mMethods.Length();
+	//int first_char = *name;
+	//if (first_char <= 'Z' && first_char >= 'A')
+	//	first_char += 32;
+	while (left < right)
+	{
+		mid = left + ((right - left) >> 1);
+
+		auto &method = mMethods[mid];
+
+		//int result = first_char - field.key_c;
+		//if (!result)
+		int result = _tcsicmp(name, method.name);
+
+		if (result < 0)
+			right = mid;
+		else if (result > 0)
+			left = mid + 1;
+		else
+			return &method;
+	}
+	insert_pos = left;
+	return nullptr;
+}
+
+Object::MethodType *Object::GetMethod(name_t name)
+{
+	if (auto method = FindMethod(name))
+		return method;
+	if (!mBase)
+		return nullptr;
+	return mBase->GetMethod(name);
 }
 
 Map::Pair *Map::FindItem(LPTSTR val, index_t left, index_t right, index_t &insert_pos)
@@ -1945,7 +2033,7 @@ Map::Pair *Map::FindItem(LPTSTR val, index_t left, index_t right, index_t &inser
 			return &item;
 	}
 	insert_pos = left;
-	return NULL;
+	return nullptr;
 }
 
 Map::Pair *Map::FindItem(SymbolType key_type, Key key, index_t &insert_pos)
@@ -2045,7 +2133,7 @@ Object::FieldType *Object::Insert(name_t name, index_t at)
 	if (mFields.Length() == mFields.Capacity() && !Expand()  // Attempt to expand if at capacity.
 		|| !(name = _tcsdup(name)))  // Attempt to duplicate key-string.
 	{	// Out of memory.
-		return NULL;
+		return nullptr;
 	}
 	// There is now definitely room in mFields for a new field.
 	FieldType &field = *mFields.InsertUninitialized(at, 1);
@@ -2053,6 +2141,18 @@ Object::FieldType *Object::Insert(name_t name, index_t at)
 	field.name = name; // Above has already copied string or called key.p->AddRef() as appropriate.
 	field.Minit(); // Initialize to default value.  Caller will likely reassign.
 	return &field;
+}
+
+Object::MethodType *Object::InsertMethod(name_t name, index_t pos)
+{
+	if ((mMethods.Length() == mMethods.Capacity()
+		&& !mMethods.SetCapacity(mMethods.Capacity() ? mMethods.Capacity() << 1 : 1))
+		|| !(name = _tcsdup(name)))
+		return nullptr;
+	auto &method = *mMethods.InsertUninitialized(pos, 1);
+	method.name = name;
+	method.func = nullptr;
+	return &method;
 }
 
 Map::Pair *Map::Insert(SymbolType key_type, Key key, index_t at)

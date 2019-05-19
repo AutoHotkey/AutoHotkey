@@ -433,12 +433,12 @@ BIF_DECL(BIF_ObjRaw)
 	LPTSTR name = TokenToString(*aParam[1], _f_number_buf);
 	if (_f_callee_id == FID_ObjRawSet)
 	{
-		if (!obj->SetItem(name, *aParam[2]))
+		if (!obj->SetOwnProp(name, *aParam[2]))
 			_f_throw(ERR_OUTOFMEM);
 	}
 	else
 	{
-		if (obj->GetItem(aResultToken, name))
+		if (obj->GetOwnProp(aResultToken, name))
 		{
 			if (aResultToken.symbol == SYM_OBJECT)
 				aResultToken.object->AddRef();

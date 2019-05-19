@@ -264,6 +264,14 @@ protected:
 		~FieldType() { free(name); }
 	};
 
+	struct MethodType
+	{
+		name_t name;
+		IObject *func;
+		MethodType() = delete;
+		~MethodType() { func->Release(); }
+	};
+
 	class Enumerator : public EnumBase
 	{
 		Object *mObject;
@@ -291,6 +299,7 @@ protected:
 private:
 	Object *mBase = nullptr;
 	FlatVector<FieldType, index_t> mFields;
+	FlatVector<MethodType, index_t> mMethods;
 
 	FieldType *FindField(name_t name, index_t &insert_pos);
 	FieldType *FindField(name_t name)
@@ -308,7 +317,16 @@ private:
 		return SetInternalCapacity(mFields.Capacity() ? mFields.Capacity() * 2 : 4);
 	}
 	
-	ResultType CallField(Variant *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	MethodType *GetMethod(name_t name); // Recursive.
+	MethodType *InsertMethod(name_t name, index_t pos);
+	MethodType *FindMethod(name_t name, index_t &insert_pos); // Own methods only.
+	MethodType *FindMethod(name_t name) // Own methods only.
+	{
+		index_t insert_pos;
+		return FindMethod(name, insert_pos);
+	}
+
+	ResultType CallMethod(IObject *aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 
 	bool Delete() override;
 
@@ -317,7 +335,9 @@ public:
 	static Object *Create();
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
 	
-	bool GetItem(ExprTokenType &aToken, name_t aName)
+	bool HasProp(name_t aName);
+
+	bool GetOwnProp(ExprTokenType &aToken, name_t aName)
 	{
 		auto field = FindField(aName);
 		if (!field)
@@ -326,7 +346,7 @@ public:
 		return true;
 	}
 
-	bool SetItem(name_t aName, ExprTokenType &aValue)
+	bool SetOwnProp(name_t aName, ExprTokenType &aValue)
 	{
 		index_t insert_pos;
 		auto field = FindField(aName, insert_pos);
@@ -335,8 +355,18 @@ public:
 		return field->Assign(aValue);
 	}
 
-	bool SetItem(name_t aName, __int64 aValue) { return SetItem(aName, ExprTokenType(aValue)); }
-	bool SetItem(name_t aName, IObject *aValue) { return SetItem(aName, ExprTokenType(aValue)); }
+	bool SetOwnProp(name_t aName, __int64 aValue) { return SetOwnProp(aName, ExprTokenType(aValue)); }
+	bool SetOwnProp(name_t aName, IObject *aValue) { return SetOwnProp(aName, ExprTokenType(aValue)); }
+
+
+	IObject *GetMethodFunc(name_t name)
+	{
+		if (auto method = GetMethod(name))
+			return method->func;
+		return nullptr;
+	}
+
+	bool DefineMethod(name_t aName, IObject *aFunc);
 
 	bool CanSetBase(Object *aNewBase);
 	ResultType SetBase(Object *aNewBase, ResultToken &aResultToken);
@@ -371,13 +401,24 @@ public:
 
 	ResultType CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
-	ResultType Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	// Only available as functions:
 	ResultType GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType SetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType PropCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	// Methods and functions:
+	ResultType DeleteProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType HasProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType _NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType HasKey(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType DefineMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType DeleteMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType GetMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType HasMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType HasOwnMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	// Properties:
 	ResultType Base(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	static LPTSTR sMetaFuncName[];

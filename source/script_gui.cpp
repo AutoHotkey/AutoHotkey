@@ -7729,7 +7729,7 @@ ResultType GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 			value.InitResult(temp_buf);
 
 			if (  !ControlGetContents(value, control, Submit_Mode)
-				|| !ret->SetItem(control.name, value)  )
+				|| !ret->SetOwnProp(control.name, value)  )
 				goto outofmem;
 		}
 	}
@@ -7770,7 +7770,7 @@ ResultType GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 				// for multiple selections is left intact.
 				if (selection_number == -1)
 					selection_number = 0;
-				if (!ret->SetItem(group_name, selection_number)) // group_var should not be NULL since group_radios_with_name == 1
+				if (!ret->SetOwnProp(group_name, selection_number)) // group_var should not be NULL since group_radios_with_name == 1
 					goto outofmem;
 			}
 			if (u == mControlCount) // The last control in the window is a radio and its group was just processed.
@@ -7794,7 +7794,7 @@ ResultType GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 					selection_number = group_radios;
 			}
 			if (output_name)
-				if (!ret->SetItem(output_name, control_is_checked))
+				if (!ret->SetOwnProp(output_name, control_is_checked))
 					goto outofmem;
 		}
 	} // for()
