@@ -567,25 +567,22 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			ASSERT(actual_param_count > 0);
 			--actual_param_count;
 		}
+
 		field = FindField(name, insert_pos);
-	}
 
-	// TODO: Replace Property with a simpler struct; never pass it to the script.
-		static Property sProperty;
-
-		// v1.1.16: Handle class property accessors:
-		if (field && field->symbol == SYM_OBJECT && *(void **)field->object == *(void **)&sProperty)
+		if (field && field->symbol == SYM_DYNAMIC) // Property with getter/setter.
 		{
 			// The "type check" above is used for speed.  Simple benchmarks of x[1] where x := [[]]
 			// shows this check to not affect performance, whereas dynamic_cast<> hurt performance by
 			// about 25% and typeid()== by about 20%.  We can safely assume that the vtable pointer is
 			// stored at the beginning of the object even though it isn't guaranteed by the C++ standard,
 			// since COM fundamentally requires it:  http://msdn.microsoft.com/en-us/library/dd757710
-			prop = (Property *)field->object;
+			prop = field->prop;
 			prop_field = field;
-			if (IS_INVOKE_SET ? prop->CanSet() : IS_INVOKE_GET && prop->CanGet())
+			if (auto etter = IS_INVOKE_SET ? prop->Setter() : prop->Getter())
 			{
-				// Prepare the parameter list: this, value, actual_param*
+				// Prepare the parameter list: this, [value,] actual_param*
+				ExprTokenType this_etter(etter);
 				ExprTokenType **prop_param = (ExprTokenType **)_alloca((actual_param_count + 2) * sizeof(ExprTokenType *));
 				prop_param[0] = &aThisToken; // For the hidden "this" parameter in the getter/setter.
 				int prop_param_count = 1;
@@ -597,17 +594,14 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				memcpy(prop_param + prop_param_count, actual_param, actual_param_count * sizeof(ExprTokenType *));
 				prop_param_count += actual_param_count;
 				
-				// Pass IF_DEFAULT so that it'll pass all parameters to the getter/setter.
-				// For a functor Object, we would need to pass a token representing "this" Property,
-				// but since Property::Invoke doesn't use it, we pass our aThisToken for simplicity.
-				ResultType result = prop->Invoke(aResultToken, aThisToken, aFlags | IF_DEFAULT, prop_param, prop_param_count);
-				return result == EARLY_RETURN ? OK : result;
+				return etter->Invoke(aResultToken, this_etter, IT_CALL|IF_DEFAULT, prop_param, prop_param_count);
 			}
 			// The property was missing get/set (whichever this invocation is), so continue as
 			// if the property itself wasn't defined.
 			field = NULL;
 		}
-	
+	}
+
 	if (!field)
 	{
 		// This field doesn't exist, so let our base object define what happens:
@@ -631,7 +625,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			if (prop)
 			{
 				// This field was a property.
-				if (field && field->symbol == SYM_OBJECT && field->object == prop)
+				if (field && field->symbol == SYM_DYNAMIC && field->prop == prop)
 				{
 					// This field is still a property (and the same one).
 					prop_field = field; // Must update this pointer in case the field is to be overwritten.
@@ -686,8 +680,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 				{
 					if ( field = prop ? prop_field : Insert(name, insert_pos) )
 					{
-						if (prop) // Otherwise, field is already empty.
-							prop->Release();
+						field->Free(); // Overwrite the property...?
 						// Don't do field->Assign() since it would do AddRef() and we would need to counter with Release().
 						field->symbol = SYM_OBJECT;
 						field->object = obj = new_obj;
@@ -966,12 +959,12 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 	obj->mFlags |= NativeClassPrototype;
 
 	TCHAR name[MAX_VAR_NAME_LENGTH + 1];
-	TCHAR *method_name = name + _stprintf(name, _T("%s."), aClassName);
+	TCHAR *full_name = name + _stprintf(name, _T("%s."), aClassName);
 
 	for (int i = 0; i < aMemberCount; ++i)
 	{
 		const auto &member = aMember[i];
-		_tcscpy(method_name, member.name);
+		_tcscpy(full_name, member.name);
 		if (member.invokeType == IT_CALL)
 		{
 			auto func = new Func(SimpleHeap::Malloc(name), true);
@@ -986,9 +979,9 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 		}
 		else
 		{
-			auto prop = new Property();
-
-			auto op_name = _tcschr(method_name, '\0');
+			auto prop = obj->DefineProperty(full_name);
+			
+			auto op_name = _tcschr(full_name, '\0');
 
 			_tcscpy(op_name, _T(".Get"));
 			auto func = new Func(SimpleHeap::Malloc(name), true);
@@ -998,8 +991,8 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 			func->mMinParams = member.minParams + 1; // Includes `this`.
 			func->mParamCount = member.maxParams + 1;
 			func->mClass = obj;
-			prop->mGet = func;
-
+			prop->SetGetter(func);
+			
 			if (member.invokeType == IT_SET)
 			{
 				_tcscpy(op_name, _T(".Set"));
@@ -1010,11 +1003,8 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 				func->mMinParams = member.minParams + 2; // Includes `this` and `value`.
 				func->mParamCount = member.maxParams + 2;
 				func->mClass = obj;
-				prop->mSet = func;
+				prop->SetSetter(func);
 			}
-			
-			obj->SetOwnProp(member.name, prop);
-			prop->Release();
 		}
 	}
 
@@ -1332,6 +1322,21 @@ ResultType Object::DefineMethod(ResultToken &aResultToken, int aID, int aFlags, 
 	_o_return(this);
 }
 
+Property *Object::DefineProperty(name_t aName)
+{
+	index_t insert_pos;
+	auto field = FindField(aName, insert_pos);
+	if (!field && !(field = Insert(aName, insert_pos)))
+		return nullptr;
+	if (field->symbol != SYM_DYNAMIC)
+	{
+		field->Free();
+		field->symbol = SYM_DYNAMIC;
+		field->prop = new Property();
+	}
+	return field->prop;
+}
+
 
 //
 // Object::Variant
@@ -1495,6 +1500,7 @@ void Object::Variant::ReturnMove(ResultToken &result)
 		Minit(); // Let item forget the object ref since we are taking ownership.
 		break;
 	case SYM_MISSING:
+	case SYM_DYNAMIC:
 		result.SetValue(_T(""), 0);
 		break;
 	//case SYM_INTEGER:
@@ -1514,6 +1520,9 @@ void Object::Variant::ToToken(ExprTokenType &aToken)
 		aToken.marker = string;
 		aToken.marker_length = string.Length();
 		break;
+	case SYM_DYNAMIC:
+		aToken.SetValue(_T(""), 0);
+		break;
 	default:
 		aToken.value_int64 = n_int64; // Union copy.
 	}
@@ -1524,10 +1533,12 @@ void Object::Variant::Free()
 // entirely or the Object is being deleted.  See Object::Delete.
 // CONTAINED VALUE WILL NOT BE VALID AFTER THIS FUNCTION RETURNS.
 {
-	if (symbol == SYM_STRING)
-		string.~String();
-	else if (symbol == SYM_OBJECT)
-		object->Release();
+	switch (symbol)
+	{
+	case SYM_STRING: string.~String(); break;
+	case SYM_OBJECT: object->Release(); break;
+	case SYM_DYNAMIC: delete prop; break;
+	}
 }
 
 
@@ -2191,69 +2202,6 @@ Map::Pair *Map::Insert(SymbolType key_type, Key key, index_t at)
 	item.Minit(); // Initialize to default value.  Caller will likely reassign.
 
 	return &item;
-}
-
-
-//
-// Property: Invoked when a derived object gets/sets the corresponding key.
-//
-
-ResultType STDMETHODCALLTYPE Property::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	Func **member;
-
-	if (aFlags & IF_DEFAULT)
-	{
-		if (IS_INVOKE_CALL) // May be impossible due to how IF_DEFAULT is used.
-			return INVOKE_NOT_HANDLED;
-		
-		member = IS_INVOKE_SET ? &mSet : &mGet;
-	}
-	else
-	{
-		if (!aParamCount) // May be impossible as this[] would use flag IF_DEFAULT.
-			return INVOKE_NOT_HANDLED;
-
-		LPTSTR name = TokenToString(*aParam[0]);
-		
-		if (!_tcsicmp(name, _T("Get")))
-		{
-			member = &mGet;
-		}
-		else if (!_tcsicmp(name, _T("Set")))
-		{
-			member = &mSet;
-		}
-		else
-			return INVOKE_NOT_HANDLED;
-		// ALL CODE PATHS ABOVE MUST RETURN OR SET member.
-
-		if (!IS_INVOKE_CALL)
-		{
-			if (IS_INVOKE_SET)
-			{
-				// Allow changing the GET/SET function, since it's simple and seems harmless.
-				if (aParamCount == 2)
-					*member = TokenToFunc(*aParam[1]); // Can be NULL.
-				return OK;
-			}
-			if (*member && aParamCount == 1)
-			{
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = *member;
-			}
-			return OK;
-		}
-		// Since above did not return, we're explicitly calling Get or Set.
-		++aParam;      // Omit method name.
-		--aParamCount; // 
-	}
-	// Since above did not return, member must have been set to either &mGet or &mSet.
-	// However, their actual values might be NULL:
-	if (!*member)
-		return INVOKE_NOT_HANDLED;
-	(*member)->Call(aResultToken, aParam, aParamCount);
-	return aResultToken.Result();
 }
 
 

@@ -193,18 +193,37 @@ typename FlatVector<T, index_t>::Data FlatVector<T, index_t>::Empty = { 0, 0 };
 // Property: Invoked when a derived object gets/sets the corresponding key.
 //
 
-class Property : public ObjectBase
+class Property
 {
+	IObject *mGet = nullptr, *mSet = nullptr;
+
+	Property() {}
+	~Property()
+	{
+		if (mGet)
+			mGet->Release();
+		if (mSet)
+			mSet->Release();
+	}
+	friend class Object;
+
 public:
-	Func *mGet, *mSet;
+	IObject *Getter() { return mGet; }
+	IObject *Setter() { return mSet; }
 
-	bool CanGet() { return mGet; }
-	bool CanSet() { return mSet; }
+	void SetGetter(IObject *aFunc)
+	{
+		if (aFunc) aFunc->AddRef();
+		if (mGet) mGet->Release();
+		mGet = aFunc;
+	}
 
-	Property() : mGet(NULL), mSet(NULL) { }
-	
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	IObject_Type_Impl("Property")
+	void SetSetter(IObject *aFunc)
+	{
+		if (aFunc) aFunc->AddRef();
+		if (mSet) mSet->Release();
+		mSet = aFunc;
+	}
 };
 
 
@@ -233,6 +252,7 @@ protected:
 			double n_double;	// for SYM_FLOAT
 			IObject *object;	// for SYM_OBJECT
 			String string;		// for SYM_STRING
+			Property *prop;		// for SYM_DYNAMIC
 		};
 		SymbolType symbol;
 		// key_c contains the first character of key.s. This utilizes space that would
@@ -357,8 +377,7 @@ public:
 
 	bool SetOwnProp(name_t aName, __int64 aValue) { return SetOwnProp(aName, ExprTokenType(aValue)); }
 	bool SetOwnProp(name_t aName, IObject *aValue) { return SetOwnProp(aName, ExprTokenType(aValue)); }
-
-
+	
 	IObject *GetMethodFunc(name_t name)
 	{
 		if (auto method = GetMethod(name))
@@ -366,6 +385,7 @@ public:
 		return nullptr;
 	}
 
+	Property *DefineProperty(name_t aName);
 	bool DefineMethod(name_t aName, IObject *aFunc);
 
 	bool CanSetBase(Object *aNewBase);

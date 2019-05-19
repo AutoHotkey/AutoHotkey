@@ -6263,8 +6263,8 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, int aBufSize, Var **aFuncGlo
 	*name_end = 0; // Terminate for aBuf use below.
 	if (class_object->GetOwnProp(ExprTokenType(), aBuf))
 		return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
-	mClassProperty = new Property();
-	if (!mClassProperty || !class_object->SetOwnProp(aBuf, mClassProperty))
+	mClassProperty = class_object->DefineProperty(aBuf);
+	if (!mClassProperty)
 		return ScriptError(ERR_OUTOFMEM);
 
 	if (*next_token == '=') // => expr
@@ -6504,7 +6504,7 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
 		if (cp == key)
 			return NULL; // ScriptError(_T("Missing name."), cp);
 		*cp = '\0'; // Terminate at the delimiting dot.
-		if (!base_object->GetOwnProp(token, key))
+		if (!base_object->GetOwnProp(token, key) || token.symbol != SYM_OBJECT)
 			return NULL;
 		base_object = (Object *)token.object; // See comment about Object() above.
 	}
@@ -6924,9 +6924,9 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 		if (mClassProperty)
 		{
 			if (toupper(*key) == 'G')
-				mClassProperty->mGet = the_new_func;
+				mClassProperty->SetGetter(the_new_func);
 			else
-				mClassProperty->mSet = the_new_func;
+				mClassProperty->SetSetter(the_new_func);
 		}
 		else
 			if (!aClassObject->DefineMethod(key, the_new_func))
