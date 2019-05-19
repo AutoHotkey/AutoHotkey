@@ -235,7 +235,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_RETURN_TYPE _T("Invalid return type.")
 #define ERR_INVALID_LENGTH _T("Invalid Length.")
 #define ERR_INVALID_ENCODING _T("Invalid Encoding.")
-#define ERR_INVALID_HWND _T("Invalid HWND.")
 #define ERR_INVALID_USAGE _T("Invalid usage.")
 #define ERR_INTERNAL_CALL _T("An internal function call failed.")
 #define ERR_STRING_NOT_TERMINATED _T("String not null-terminated.")
@@ -3328,6 +3327,8 @@ ResultType SoundSetGet2kXP(ResultToken &aResultToken, LPTSTR aSetting
 ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
 	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDevice);
 
+ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aPtr, ResultToken &aResultToken, bool aOptional = false);
+ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aValue, ResultToken &aResultToken, bool aOptional = false);
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, size_t &aSize);
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr);
 
