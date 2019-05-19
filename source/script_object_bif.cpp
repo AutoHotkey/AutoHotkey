@@ -54,7 +54,7 @@ BIF_DECL(BIF_Array)
 BIF_DECL(BIF_Map)
 {
 	if (aParamCount & 1)
-		_f_throw(ERR_PARAM_INVALID);
+		_f_throw(ERR_PARAM_COUNT_INVALID);
 	auto obj = Map::Create(aParam, aParamCount);
 	if (!obj)
 		_f_throw(ERR_OUTOFMEM);

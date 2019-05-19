@@ -11933,7 +11933,7 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken,
 	if (IS_INVOKE_GET)
 	{
 		if (aParamCount != 1)
-			_o_throw(ERR_INVALID_USAGE);
+			_o_throw(ERR_PARAM_COUNT_INVALID);
 		return Invoke(aResultToken, M_Value, aFlags, aParam, aParamCount);
 	}
 	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);

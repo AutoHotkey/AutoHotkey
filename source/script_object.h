@@ -197,6 +197,19 @@ class Property
 {
 	IObject *mGet = nullptr, *mSet = nullptr;
 
+	void SetEtter(IObject *&aMemb, IObject *aFunc)
+	{
+		if (aFunc) aFunc->AddRef();
+		if (aMemb) aMemb->Release();
+		aMemb = aFunc;
+	}
+
+public:
+	// MaxParams is cached for performance.  It is used in cases like x.y[z]:=v to
+	// determine whether to GET and then apply the parameters to the result, or just
+	// invoke SET with parameters.
+	int MinParams = -1, MaxParams = -1;
+
 	Property() {}
 	~Property()
 	{
@@ -205,25 +218,12 @@ class Property
 		if (mSet)
 			mSet->Release();
 	}
-	friend class Object;
 
-public:
 	IObject *Getter() { return mGet; }
 	IObject *Setter() { return mSet; }
 
-	void SetGetter(IObject *aFunc)
-	{
-		if (aFunc) aFunc->AddRef();
-		if (mGet) mGet->Release();
-		mGet = aFunc;
-	}
-
-	void SetSetter(IObject *aFunc)
-	{
-		if (aFunc) aFunc->AddRef();
-		if (mSet) mSet->Release();
-		mSet = aFunc;
-	}
+	void SetGetter(IObject *aFunc) { SetEtter(mGet, aFunc); }
+	void SetSetter(IObject *aFunc) { SetEtter(mSet, aFunc); }
 };
 
 
@@ -346,7 +346,13 @@ private:
 		return FindMethod(name, insert_pos);
 	}
 
-	ResultType CallMethod(IObject *aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
+	// Call function after combining two lists of parameters.  aParam1 usually contains `this`
+	// and sometimes another parameter, while aParam2 contains caller-supplied parameters.
+	static ResultType CallAsMethod(IObject *aFunc, ResultToken &aResultToken
+		, ExprTokenType *aParam1[], int aParamCount1
+		, ExprTokenType *aParam2[], int aParamCount2);
+	ResultType CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallProperty(LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount, ExprTokenType *aValue);
 
 	bool Delete() override;
 

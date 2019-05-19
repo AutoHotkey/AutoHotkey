@@ -6289,6 +6289,12 @@ ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, int aBufSize, LPTSTR aEnd
 	// happen anyway when DefineFunc() finds a syntax error in the parameter list.)
 	if (!DefineFunc(mClassPropertyDef, aFuncGlobalVar))
 		return FAIL;
+	if (mClassProperty->MinParams == -1)
+	{
+		int hidden_params = ctoupper(*aBuf) == 'S' ? 2 : 1;
+		mClassProperty->MinParams = g->CurrentFunc->mMinParams - hidden_params;
+		mClassProperty->MaxParams = g->CurrentFunc->mParamCount - hidden_params;
+	}
 	if (*aEnd && !AddLine(ACT_BLOCK_BEGIN)) // *aEnd is '{' or '='.
 		return FAIL;
 	if (*aEnd == '=') // => expr

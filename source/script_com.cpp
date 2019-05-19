@@ -1570,8 +1570,6 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 		}
 		param[0] = &param_token[0];
 		++param_count;
-		if (flags == IT_CALL && (wFlags & DISPATCH_PROPERTYGET))
-			flags |= IF_CALL_FUNC_ONLY;
 	}
 	else
 	{

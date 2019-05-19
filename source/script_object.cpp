@@ -72,7 +72,7 @@ ResultType ObjectMember::Invoke(ObjectMember aMembers[], int aMemberCount, IObje
 			&& !_tcsicmp(member.name, name))
 		{
 			if (member.invokeType == IT_GET && IS_INVOKE_SET)
-				_o_throw(ERR_INVALID_USAGE);
+				_o_throw(ERR_PROPERTY_READONLY);
 			--aParamCount;
 			++aParam;
 			if (aParamCount < member.minParams)
@@ -418,7 +418,11 @@ bool Object::Delete()
 		int outer_excptmode = g->ExcptMode;
 		g->ExcptMode |= EXCPTMODE_DELETE;
 
-		::CallMethod(mBase, this, _T("__Delete"), nullptr, 0, nullptr, IF_METAOBJ); // base.__Delete()
+		{
+			FuncResult rt;
+			CallMethod(_T("__Delete"), IF_METAOBJ, rt, ExprTokenType(this), nullptr, 0);
+			rt.Free();
+		}
 
 		g->ExcptMode = outer_excptmode;
 
@@ -504,39 +508,6 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
                                             )
 {
 	name_t name;
-	Variant *field = nullptr, *prop_field;
-	index_t insert_pos;
-	Property *prop = nullptr; // Set default.
-
-	// If this is some object's base and is being invoked in that capacity, call
-	//	__Get/__Set/__Call as defined in this base object before searching further.
-	// Meta-functions are skipped for .__Item for these reasons:
-	//  1) They would be called for every access with [k] when __Item is not defined, 
-	//     instead of just those where [k] is not defined.  For the short term, this
-	//     breaks expectations (and scripts).  For the long term it seems redundant.
-	//  2) __Item handling is currently designed to be backward-compatible to ease
-	//     the transition.  If not present, it will cause recursion, which may then
-	//     call the meta-functions in the pre-established manner.
-	//  3) Even once the fallback behaviour is removed, it is probably more useful
-	//     for __Item and __Get/__Set to be mutually exclusive, and more intuitive
-	//     for __Item to be handled like a meta-function (don't call other meta-s
-	//     in the process of calling __Item).
-	if ((aFlags & IF_METAFUNC) && (aFlags & (IF_DEFAULT|IT_CALL)) != IF_DEFAULT)
-	{
-		// Look for a meta-function definition directly in this base object.
-		if (auto method = FindMethod(sMetaFuncName[INVOKE_TYPE]))
-		{
-			Line *curr_line = g_script.mCurrLine;
-			ResultType r = CallMethod(method->func, aResultToken, aThisToken, aParam, aParamCount);
-			g_script.mCurrLine = curr_line; // Allows exceptions thrown by later meta-functions to report a more appropriate line.
-			//if (r == EARLY_RETURN)
-				// Propagate EARLY_RETURN in case this was the __Call meta-function of a
-				// "function object" which is used as a meta-function of some other object.
-				//return EARLY_RETURN; // TODO: Detection of 'return' vs 'return empty_value'.
-			if (r != OK) // Likely EARLY_RETURN, FAIL or EARLY_EXIT.
-				return r;
-		}
-	}
 
 	ASSERT(aParamCount || (aFlags & IF_DEFAULT));
 	if ((aFlags & IF_DEFAULT) || aParam[0]->symbol == SYM_MISSING)
@@ -554,183 +525,169 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 
 	if (IS_INVOKE_CALL)
 	{
-		auto method = FindMethod(name);
-		if (method)
-			return CallMethod(method->func, aResultToken, aThisToken, actual_param, actual_param_count);
+		// This fully handles all method calls.
+		return CallMethod(name, aFlags, aResultToken, aThisToken, actual_param, actual_param_count);
 	}
-	else
+	// GET or SET a property:
+
+	bool hasprop = false; // Whether any kind of property was found.
+	bool handle_params_recursively = false;
+	bool setting = IS_INVOKE_SET;
+	IObject *etter = nullptr, *obj_for_recursion = nullptr;
+	Variant *field = nullptr;
+	index_t insert_pos, other_pos;
+	Object *that;
+
+	if (setting)
 	{
-		if (IS_INVOKE_SET)
-		{
-			// Due to the way expression parsing works, the result should never be negative
-			// (and any direct callers of Invoke must always pass aParamCount >= 1):
-			ASSERT(actual_param_count > 0);
-			--actual_param_count;
-		}
-
-		field = FindField(name, insert_pos);
-
-		if (field && field->symbol == SYM_DYNAMIC) // Property with getter/setter.
-		{
-			// The "type check" above is used for speed.  Simple benchmarks of x[1] where x := [[]]
-			// shows this check to not affect performance, whereas dynamic_cast<> hurt performance by
-			// about 25% and typeid()== by about 20%.  We can safely assume that the vtable pointer is
-			// stored at the beginning of the object even though it isn't guaranteed by the C++ standard,
-			// since COM fundamentally requires it:  http://msdn.microsoft.com/en-us/library/dd757710
-			prop = field->prop;
-			prop_field = field;
-			if (auto etter = IS_INVOKE_SET ? prop->Setter() : prop->Getter())
-			{
-				// Prepare the parameter list: this, [value,] actual_param*
-				ExprTokenType this_etter(etter);
-				ExprTokenType **prop_param = (ExprTokenType **)_alloca((actual_param_count + 2) * sizeof(ExprTokenType *));
-				prop_param[0] = &aThisToken; // For the hidden "this" parameter in the getter/setter.
-				int prop_param_count = 1;
-				if (IS_INVOKE_SET)
-				{
-					// Put the setter's hidden "value" parameter before the other parameters.
-					prop_param[prop_param_count++] = actual_param[actual_param_count];
-				}
-				memcpy(prop_param + prop_param_count, actual_param, actual_param_count * sizeof(ExprTokenType *));
-				prop_param_count += actual_param_count;
-				
-				return etter->Invoke(aResultToken, this_etter, IT_CALL|IF_DEFAULT, prop_param, prop_param_count);
-			}
-			// The property was missing get/set (whichever this invocation is), so continue as
-			// if the property itself wasn't defined.
-			field = NULL;
-		}
+		// Due to the way expression parsing works, the result should never be negative
+		// (and any direct callers of Invoke must always pass aParamCount >= 1):
+		ASSERT(actual_param_count > 0);
+		--actual_param_count;
 	}
 
-	if (!field)
+	for (that = this; that; that = that->mBase)
 	{
-		// This field doesn't exist, so let our base object define what happens:
-		//		1) __Get, __Set or __Call.  If these don't return a value, processing continues.
-		//		2) For GET and CALL only, check the base object's own fields.
-		//		3) Repeat 1 through 3 for the base object's own base.
-		if (mBase)
-		{
-			// aFlags: If caller specified IF_METAOBJ but not IF_METAFUNC, they want to recursively
-			// find and execute a specific meta-function (__new or __delete) but don't want any base
-			// object to invoke __call.  So if this is already a meta-invocation, don't change aFlags.
-			ResultType r = mBase->Invoke(aResultToken, aThisToken, aFlags | (IS_INVOKE_META ? 0 : IF_META), aParam, aParamCount);
-			if (r != INVOKE_NOT_HANDLED // Base handled it.
-				|| prop || IS_INVOKE_CALL) // Nothing left to do in these cases.
-				return r;
-
-			// Since the above may have inserted or removed fields (including the specified one),
-			// insert_pos may no longer be correct or safe.  Updating field also allows a meta-function
-			// to initialize a field and allow processing to continue as if it already existed.
-			field = FindField(name, /*out*/ insert_pos);
-			if (prop)
-			{
-				// This field was a property.
-				if (field && field->symbol == SYM_DYNAMIC && field->prop == prop)
-				{
-					// This field is still a property (and the same one).
-					prop_field = field; // Must update this pointer in case the field is to be overwritten.
-					field = NULL; // Act like the field doesn't exist (until the time comes to insert a value).
-				}
-				else
-					prop = NULL; // field was reassigned or removed, so ignore the property.
-			}
-		}
-	} // if (!field)
-
-	//
-	// OPERATE ON A FIELD WITHIN THIS OBJECT
-	//
-
-	// This next section handles both this[x,y] (handled as this.__Item[x,y]) and this.x[y]
-	// Here, we only retrieve or create the sub-object this[x]/this.x, never set the actual
-	// property (since that's handled via recursion into the sub-object).
-	if (actual_param_count > 0)
-	{
-		IObject *obj = NULL;
+		// Search each object from this to its most distance base, but set insert_pos only when
+		// searching this object, since it needs to be the position we can insert a new field at.
+		field = that->FindField(name, that == this ? insert_pos : other_pos);
 		if (field)
 		{
-			if (field->symbol == SYM_OBJECT)
-				// AddRef not used.  See below.
-				obj = field->object;
-			else if (!IS_INVOKE_META)
-				_o_throw(ERR_ARRAY_NOT_MULTIDIM);
-		}
-		else if (!IS_INVOKE_META)
-		{
-			// This section applies only to the target object (aThisToken) and not any of its base objects.
-			// Allow obj["base",x] to access a field of obj.base; L40: This also fixes obj.base[x] which was broken by L36.
-			if (!_tcsicmp(name, _T("base")))
+			if (hasprop && field->symbol != SYM_DYNAMIC)
 			{
-				obj = mBase;
-			}
-			else if (aFlags & IF_DEFAULT)
-			{
-				// There's no this.__Item property or key-value pair and it was not handled by __get/__set.
-				// Do not create this.__Item; instead, fall back to the old behaviour (use the next
-				// parameter as a key).  Once there are dedicated map/dictionary/array types, this
-				// and the next section should be removed (__Item should be explicitly defined).
-				obj = this;
-				// IF_DEFAULT will be removed below to prevent infinite recursion.
-			}
-			// Automatically create a new object for the x part of obj.x[y]:=z.
-			else if (IS_INVOKE_SET)
-			{
-				Object *new_obj = Object::Create();
-				if (new_obj)
+				// This value property has been overridden with a half-defined dynamic property.
+				if (setting)
 				{
-					if ( field = prop ? prop_field : Insert(name, insert_pos) )
-					{
-						field->Free(); // Overwrite the property...?
-						// Don't do field->Assign() since it would do AddRef() and we would need to counter with Release().
-						field->symbol = SYM_OBJECT;
-						field->object = obj = new_obj;
-					}
-					else
-					{	// Create() succeeded but Insert() failed, so free the newly created obj.
-						new_obj->Release();
-						new_obj = NULL;
-					}
+					// A derived object has overridden GET but not SET.  The default behaviour
+					// for a value property would be to write a new value in `this`, but that
+					// would override GET.  It seems safer to treat this property as read-only.
+					// It is also simpler, since field points to a field of the base object at
+					// this point (we would need to keep the result of the first FindField()).
+					field = nullptr;
 				}
-				if (!new_obj)
-					_o_throw(ERR_OUTOFMEM);
+				//else this is GET, meaning a derived object has overridden SET but not GET.
+				// In that case, inherit the value from field.
+				break;
 			}
-			else if (IS_INVOKE_GET)
+			hasprop = true;
+			if (field->symbol == SYM_DYNAMIC) // Property with getter/setter.
 			{
-				// For now, x[y] (that is, x.__item[y]) is permitted since x.__item will be initialized
-				// automatically if the script assigns to x[y].
-				//if (aFlags & IF_DEFAULT)
-
-				// Treat x.y[z] like x.y when x.y is not set: just return "", don't throw an exception.
-				// On the other hand, if x.y is set to something which is not an object, the "if (field)"
-				// section above raises an error.
-				_o_return_empty;
+				if (actual_param_count > 0 && field->prop->MaxParams == 0) // Prop cannot accept parameters.
+				{
+					setting = false; // GET this property's value.
+					handle_params_recursively = true; // Apply parameters by passing them to value->Invoke().
+				}
+				// Can this Property actually handle this operation?
+				etter = setting ? field->prop->Setter() : field->prop->Getter();
+				// Reset field to simplify detection of dynamic property vs. value.
+				// Note that field would be reset by the next iteration, if there is one.
+				field = nullptr;
+				if (!etter)
+					// This half of the property isn't implemented here, so keep searching.
+					continue;
 			}
+			break;
 		}
-		if (obj) // Object was successfully found or created.
+	}
+
+	if (!hasprop && !(aFlags & IF_DEFAULT))
+	{
+		// Look for a meta-function to invoke in place of this non-existent property.
+		if (auto method = GetMethod(sMetaFuncName[INVOKE_TYPE]))
 		{
-			// obj now contains a pointer to the object contained by this field, possibly newly created above.
-			ExprTokenType obj_token(obj);
-			// References in obj_token and obj weren't counted (AddRef wasn't called), so Release() does not
-			// need to be called before returning, and accessing obj after calling Invoke() would not be safe
-			// since it could Release() the object (by overwriting our field via script) as a side-effect.
-			if (IS_INVOKE_SET)
-				++actual_param_count;
-			// Recursively invoke obj, passing remaining parameters; remove IF_META to correctly treat obj as target:
-			// Toggle IF_DEFAULT so that this[1,2] expands to this.__Item.1.__Item.2, same as this[1][2].
-			// This should be changed once a dedicated map/dictionary type is implemented.
-			return obj->Invoke(aResultToken, obj_token, (aFlags & ~IF_META) ^ IF_DEFAULT, actual_param, actual_param_count);
-			// Above may return INVOKE_NOT_HANDLED in cases such as obj[a,b] where obj[a] exists but obj[a][b] does not.
+			ExprTokenType *this_param = &aThisToken;
+			return CallAsMethod(method->func, aResultToken, &this_param, 1, aParam, aParamCount);
 		}
-	} // MULTIPARAM[x,y]
+	}
+
+	if (etter) // Property with getter/setter.
+	{
+		// Prepare the parameter list: this, [value,] actual_param*
+		ExprTokenType this_etter(etter);
+		ExprTokenType **prop_param = (ExprTokenType **)_alloca((actual_param_count + 2) * sizeof(ExprTokenType *));
+		prop_param[0] = &aThisToken; // For the hidden "this" parameter in the getter/setter.
+		int prop_param_count = 1;
+		if (setting)
+		{
+			// Put the setter's hidden "value" parameter before the other parameters.
+			prop_param[prop_param_count++] = actual_param[actual_param_count];
+		}
+		if (!handle_params_recursively)
+		{
+			memcpy(prop_param + prop_param_count, actual_param, actual_param_count * sizeof(ExprTokenType *));
+			prop_param_count += actual_param_count;
+		}
+		// Call getter/setter.
+		auto result = etter->Invoke(aResultToken, this_etter, IT_CALL|IF_DEFAULT, prop_param, prop_param_count);
+		if (!handle_params_recursively || result == FAIL || result == EARLY_EXIT)
+			return result;
+		// Otherwise, handle_params_recursively == true.
+		if (aResultToken.symbol != SYM_OBJECT)
+		{
+			if (aResultToken.mem_to_free) // Caller may ignore mem_to_free when we return FAIL.
+			{
+				free(aResultToken.mem_to_free);
+				aResultToken.mem_to_free = nullptr;
+			}
+			// FIXME: For this.x[y] and (this.x)[y] to behave the same, this should invoke g_MetaObject.
+			_o_throw(ERR_NO_OBJECT, name);
+		}
+		obj_for_recursion = aResultToken.object;
+		//obj_for_recursion->AddRef(); // This and the next line are redundant when used together.
+		//aResultToken.Free();
+		aResultToken.SetValue(_T(""));
+	}
+
+	if (actual_param_count > 0)
+	{
+		// This section handles parameters being passed to a property, such as this.x[y],
+		// when that property doesn't accept parameters (i.e. none were declared, or the
+		// property is undefined or just a value).
+		if (!obj_for_recursion)
+		{
+			if (field && field->symbol == SYM_OBJECT)
+			{
+				obj_for_recursion = field->object;
+				obj_for_recursion->AddRef();
+			}
+			else
+				_o_throw(ERR_NO_OBJECT, name);
+		}
+		
+		if (IS_INVOKE_SET)
+			++actual_param_count; // Fix the parameter count.
+		
+		// Recursively invoke obj_for_recursion, passing remaining parameters:
+		auto result = obj_for_recursion->Invoke(aResultToken, ExprTokenType(obj_for_recursion)
+			, (aFlags & IT_BITMASK) | IF_DEFAULT, actual_param, actual_param_count);
+		
+		if (aResultToken.symbol == SYM_STRING && !aResultToken.mem_to_free && aResultToken.marker != aResultToken.buf)
+		{
+			// Before releasing obj_for_recursion, make a copy of the string in case it points
+			// to memory contained by obj_for_recursion, which might be deleted via Release().
+			TokenSetResult(aResultToken, aResultToken.marker, aResultToken.marker_length);
+		}
+		obj_for_recursion->Release();
+		if (result == INVOKE_NOT_HANDLED)
+		{
+			// Something like obj.x[y] where obj.x exists but obj.x[y] does not.  Throw here
+			// to override the default error message, which would indicate that "x" is unknown.
+			_o_throw(ERR_UNKNOWN_PROPERTY, _T("__Item"));
+		}
+		return result;
+	}
 
 	// SET
-	else if (IS_INVOKE_SET)
+	else if (setting)
 	{
+		if (!field && hasprop) // Property with getter but no setter.
+			_o_throw(ERR_PROPERTY_READONLY, name);
+		
 		if (!IS_INVOKE_META)
 		{
-			ExprTokenType &value_param = **actual_param;
-			if ( (field || (field = prop ? prop_field : Insert(name, insert_pos)))
-				&& field->Assign(value_param) )
+			if (((field && this == that) // A field already exists in this object.
+				 || (field = Insert(name, insert_pos))) // A new field is inserted.
+				&& field->Assign(**actual_param))
 				return OK;
 			_o_throw(ERR_OUTOFMEM);
 		}
@@ -752,10 +709,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			field->ReturnRef(aResultToken);
 			return OK;
 		}
-		// If 'this' is the target object (not its base), produce OK so that something like if(!foo.bar) is
-		// considered valid even when foo.bar has not been set.
-		if (!IS_INVOKE_META)
-			_o_return_empty;
+		_o_return_empty;
 	}
 
 	// Fell through from one of the sections above: invocation was not handled.
@@ -818,18 +772,35 @@ ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 // Internal
 //
 
-ResultType Object::CallMethod(IObject *aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount)
-// aParam[0] contains the identifier of this field or an empty space (for __Get etc.).
+ResultType Object::CallAsMethod(IObject *aFunc, ResultToken &aResultToken
+	, ExprTokenType *aParam1[], int aParamCount1
+	, ExprTokenType *aParam2[], int aParamCount2)
 {
 	// Allocate a new array of param pointers that we can modify.
-	ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
-	// Call %aFunc%(this, params*).
-	ExprTokenType field_token(aFunc); // fn
-	param[0] = &aThisToken; // this
-	memcpy(param + 1, aParam, aParamCount * sizeof(ExprTokenType*)); // params*
-	++aParamCount;
+	ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount1 + aParamCount2) * sizeof(ExprTokenType *));
+	ExprTokenType field_token(aFunc);
+	// Combine the two parameter lists.
+	memcpy(param, aParam1, aParamCount1 * sizeof(ExprTokenType *));
+	memcpy(param + aParamCount1, aParam2, aParamCount2 * sizeof(ExprTokenType *));
+	// return %aFunc%(aParam1*, aParam2*)
+	return aFunc->Invoke(aResultToken, field_token, IT_CALL|IF_DEFAULT, param, aParamCount1 + aParamCount2);
+}
 
-	return aFunc->Invoke(aResultToken, field_token, IT_CALL|IF_DEFAULT, param, aParamCount);
+ResultType Object::CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount)
+{
+	MethodType *method;
+	if (method = GetMethod(aName))
+	{
+		ExprTokenType *this_param = &aThisToken;
+		return CallAsMethod(method->func, aResultToken, &this_param, 1, aParam, aParamCount);
+	}
+	if (!(aFlags & IF_METAOBJ) && (method = GetMethod(sMetaFuncName[IT_CALL])))
+	{
+		ExprTokenType name_token = aName;
+		ExprTokenType *extra_params[] = { &aThisToken, &name_token };
+		return CallAsMethod(method->func, aResultToken, extra_params, 2, aParam, aParamCount);
+	}
+	return INVOKE_NOT_HANDLED;
 }
 
 
@@ -980,6 +951,8 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 		else
 		{
 			auto prop = obj->DefineProperty(full_name);
+			prop->MinParams = member.minParams;
+			prop->MaxParams = member.maxParams;
 			
 			auto op_name = _tcschr(full_name, '\0');
 
@@ -2495,7 +2468,7 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ResultToken &aResultToken, ExprT
 			ExprTokenType this_token;
 			this_token.symbol = SYM_VAR;
 			this_token.var = g->CurrentFunc->mParam[0].var;
-			ResultType result = this_class_base->Invoke(aResultToken, this_token, (aFlags & ~IF_METAFUNC) | IF_METAOBJ, aParam, aParamCount);
+			ResultType result = this_class_base->Invoke(aResultToken, this_token, aFlags | IF_METAOBJ, aParam, aParamCount);
 			// Avoid returning INVOKE_NOT_HANDLED in this case so that our caller never
 			// shows an "uninitialized var" warning for base.Foo() in a class method.
 			if (result != INVOKE_NOT_HANDLED)
