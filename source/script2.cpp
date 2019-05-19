@@ -8843,7 +8843,7 @@ HWND Line::DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTit
 }
 
 
-ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aPtr, ResultToken &aResultToken)
+ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aValue, ResultToken &aResultToken, bool aOptional)
 {
 	FuncResult result_token;
 	ExprTokenType name_token = aPropName;
@@ -8855,16 +8855,26 @@ ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aP
 	if (result_token.symbol != SYM_INTEGER)
 	{
 		result_token.Free();
-		if (result == FAIL)
-			return aResultToken.SetExitResult(FAIL);
-		if (result == INVOKE_NOT_HANDLED)
+		if (result == FAIL || result == EARLY_EXIT)
+			return aResultToken.SetExitResult(result);
+		if (result != INVOKE_NOT_HANDLED) // Property exists but is not an integer.
+			return aResultToken.Error(ERR_TYPE_MISMATCH, aPropName);
+		if (!aOptional)
 			return aResultToken.Error(ERR_UNKNOWN_PROPERTY, aPropName);
-		aPtr = 0;
-		return OK;
+		aValue = 0;
+		return result; // Let caller know it wasn't found.
 	}
 
-	aPtr = (UINT_PTR)result_token.value_int64;
+	aValue = result_token.value_int64;
 	return OK;
+}
+
+ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aPtr, ResultToken &aResultToken, bool aOptional)
+{
+	__int64 value;
+	auto result = GetObjectIntProperty(aObject, aPropName, value, aResultToken, aOptional);
+	aPtr = (UINT_PTR)value;
+	return result;
 }
 
 
@@ -8895,12 +8905,10 @@ ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aR
 	HWND hwnd;
 	if (IObject *obj = ParamIndexToObject(0))
 	{
-		UINT_PTR ptr;
-		if (!GetObjectPtrProperty(obj, _T("Hwnd"), ptr, aResultToken))
+		__int64 n;
+		if (!GetObjectIntProperty(obj, _T("Hwnd"), n, aResultToken))
 			return FAIL;
-		if (!ptr)
-			return aResultToken.Error(ERR_INVALID_HWND);
-		hwnd = (HWND)ptr;
+		hwnd = (HWND)(UINT_PTR)n;
 	}
 	else if (TokenIsPureNumeric(*aParam[0]) == PURE_INTEGER)
 	{
@@ -11925,7 +11933,7 @@ ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken,
 	if (IS_INVOKE_GET)
 	{
 		if (aParamCount != 1)
-			_o_throw(ERR_INVALID_USAGE);
+			_o_throw(ERR_PARAM_COUNT_INVALID);
 		return Invoke(aResultToken, M_Value, aFlags, aParam, aParamCount);
 	}
 	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
@@ -15128,19 +15136,10 @@ BIF_DECL(BIF_CallbackCreate)
 		_f_throw(ERR_PARAM1_INVALID);
 
 	// Get func.MinParams (if present) for validation and default parameter count.
-	ResultToken rt;
-	rt.InitResult(_f_retval_buf);
-	ExprTokenType pt(_T("MinParams"), 9);
-	ExprTokenType *pp = &pt;
-	ResultType result = func->Invoke(rt, ExprTokenType(func), IT_GET, &pp, 1);
-	rt.Free();
-	if (!result)
-	{
-		func->Release();
-		_f_return_FAIL;
-	}
-	bool has_minparams = TokenIsPureNumeric(rt);
-	int minparams = has_minparams ? (int)TokenToInt64(rt) : 0;
+	__int64 minparams;
+	bool has_minparams = GetObjectIntProperty(func, _T("MinParams"), minparams, aResultToken, true) != INVOKE_NOT_HANDLED;
+	if (aResultToken.Exited())
+		return;
 
 	LPTSTR options = ParamIndexToOptionalString(1);
 	bool pass_params_pointer = _tcschr(options, '&'); // Callback wants the address of the parameter list instead of their values.
@@ -15156,7 +15155,7 @@ BIF_DECL(BIF_CallbackCreate)
 	{
 		actual_param_count = ParamIndexToInt(2);
 		if (  actual_param_count < 0 // Invalid.
-			|| has_minparams && (pass_params_pointer ? 1 : actual_param_count) < minparams  ) // Too many mandatory parameters.
+			|| has_minparams && (pass_params_pointer ? 1 : actual_param_count) < (int)minparams  ) // Too many mandatory parameters.
 		{
 			func->Release();
 			_f_throw(ERR_PARAM3_INVALID);
@@ -15168,7 +15167,7 @@ BIF_DECL(BIF_CallbackCreate)
 		_f_throw(ERR_PARAM3_MUST_NOT_BE_BLANK);
 	}
 	else // Default to the number of mandatory formal parameters in the function's definition.
-		actual_param_count = minparams;
+		actual_param_count = (int)minparams;
 
 #ifdef WIN32_PLATFORM
 	if (!use_cdecl && actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).

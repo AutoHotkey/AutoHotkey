@@ -114,68 +114,116 @@ public:
 // FlatVector - utility class.
 //
 
-template <typename T>
+template <typename T, typename index_t = ::size_t>
 class FlatVector
 {
 	struct Data
 	{
-		size_t size;
-		size_t length;
-		T value[1];
+		index_t size;
+		index_t length;
 	};
 	Data *data;
+	
 	static Data Empty;
-public:
-	void Init() // Not a constructor because this class is used in a union.
+
+	void FreeRange(index_t i, index_t count)
 	{
-		data = &Empty;
+		auto v = Value();
+		for (; i < count; ++i)
+			v[i].~T();
 	}
+
+public:
+	FlatVector<T, index_t>() { data = &Empty; }
+	~FlatVector<T, index_t>() { Free(); }
+	
 	void Free()
 	{
-		if (data != &Empty)
+		if (data->size)
 		{
+			FreeRange(0, data->length);
 			free(data);
 			data = &Empty;
 		}
 	}
-	bool SetCapacity(size_t new_size)
+
+	bool SetCapacity(index_t new_size)
 	{
-		Data *d = (data == &Empty) ? NULL : data;
-		size_t length = data->length;
-		const size_t header_size = sizeof(Data) - sizeof(T);
-		if (  !(d = (Data *)realloc(d, new_size * sizeof(T) + header_size))  )
+		index_t length = data->length;
+		ASSERT(new_size > 0 && new_size >= length);
+		Data *d = data->size ? data : nullptr;
+		if (  !(d = (Data *)realloc(d, new_size * sizeof(T) + sizeof(Data)))  )
 			return false;
 		data = d;
 		data->size = new_size;
 		data->length = length; // Only strictly necessary if NULL was passed to realloc.
 		return true;
 	}
-	size_t &Length() { return data->length; }
-	size_t Capacity() { return data->size; }
-	T *Value() { return data->value; }
+
+	T *InsertUninitialized(index_t i, index_t count)
+	{
+		ASSERT(i >= 0 && i <= data->length && count + data->length <= data->size);
+		auto p = Value() + i;
+		if (i < data->length)
+			memmove(p + count, p, (data->length - i) * sizeof(T));
+		data->length += count;
+		return p;
+	}
+
+	void Remove(index_t i, index_t count)
+	{
+		auto v = Value();
+		ASSERT(i >= 0 && i + count <= data->length);
+		FreeRange(i, count);
+		memmove(v + i, v + i + count, (data->length - i - count) * sizeof(T));
+		data->length -= count;
+	}
+
+	index_t &Length() { return data->length; }
+	index_t Capacity() { return data->size; }
+	T *Value() { return (T *)(data + 1); }
 	operator T *() { return Value(); }
 };
 
-template <typename T>
-typename FlatVector<T>::Data FlatVector<T>::Empty;
+template <typename T, typename index_t>
+typename FlatVector<T, index_t>::Data FlatVector<T, index_t>::Empty = { 0, 0 };
 
 
 //
 // Property: Invoked when a derived object gets/sets the corresponding key.
 //
 
-class Property : public ObjectBase
+class Property
 {
+	IObject *mGet = nullptr, *mSet = nullptr;
+
+	void SetEtter(IObject *&aMemb, IObject *aFunc)
+	{
+		if (aFunc) aFunc->AddRef();
+		if (aMemb) aMemb->Release();
+		aMemb = aFunc;
+	}
+
 public:
-	Func *mGet, *mSet;
+	// MaxParams is cached for performance.  It is used in cases like x.y[z]:=v to
+	// determine whether to GET and then apply the parameters to the result, or just
+	// invoke SET with parameters.
+	int MinParams = -1, MaxParams = -1;
 
-	bool CanGet() { return mGet; }
-	bool CanSet() { return mSet; }
+	Property() {}
+	~Property()
+	{
+		if (mGet)
+			mGet->Release();
+		if (mSet)
+			mSet->Release();
+	}
 
-	Property() : mGet(NULL), mSet(NULL) { }
-	
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	IObject_Type_Impl("Property")
+	IObject *Getter() { return mGet; }
+	IObject *Setter() { return mSet; }
+
+	void SetGetter(IObject *aFunc) { SetEtter(mGet, aFunc); }
+	void SetSetter(IObject *aFunc) { SetEtter(mSet, aFunc); }
 };
 
 
@@ -188,8 +236,15 @@ public:
 
 class Object : public ObjectBase
 {
+public:
+	// The type of an array element index or count.
+	// Use unsigned to avoid the need to check for negatives.
+	typedef UINT index_t;
+
 protected:
+	typedef LPTSTR name_t;
 	typedef FlatVector<TCHAR> String;
+
 	struct Variant
 	{
 		union { // Which of its members is used depends on the value of symbol, below.
@@ -197,11 +252,15 @@ protected:
 			double n_double;	// for SYM_FLOAT
 			IObject *object;	// for SYM_OBJECT
 			String string;		// for SYM_STRING
+			Property *prop;		// for SYM_DYNAMIC
 		};
 		SymbolType symbol;
 		// key_c contains the first character of key.s. This utilizes space that would
 		// otherwise be unused due to 8-byte alignment. See FindField() for explanation.
 		TCHAR key_c;
+
+		Variant() = delete;
+		~Variant() { Free(); }
 
 		void Minit(); // Perform minimum initialization.
 		bool Assign(LPTSTR str, size_t len = -1, bool exact_size = false);
@@ -217,17 +276,26 @@ protected:
 		inline void ToToken(ExprTokenType &aToken); // Used when we want the value as is, in a token.  Does not AddRef() or copy strings.
 	};
 
-	typedef INT_PTR IndexType; // Type of index for the internal array.  Must be signed for FindKey to work correctly.
-	typedef LPTSTR name_t;
 	struct FieldType : Variant
 	{
 		name_t name;
+
+		FieldType() = delete;
+		~FieldType() { free(name); }
+	};
+
+	struct MethodType
+	{
+		name_t name;
+		IObject *func;
+		MethodType() = delete;
+		~MethodType() { func->Release(); }
 	};
 
 	class Enumerator : public EnumBase
 	{
 		Object *mObject;
-		IndexType mOffset;
+		index_t mOffset;
 	public:
 		Enumerator(Object *aObject) : mObject(aObject), mOffset(-1) { mObject->AddRef(); }
 		~Enumerator() { mObject->Release(); }
@@ -243,70 +311,88 @@ protected:
 	{
 		NativeClassPrototype = 0x01
 	};
-	
-private:
-	Object *mBase = nullptr;
-	FieldType *mFields = nullptr;
-	IndexType mFieldCount = 0, mFieldCountMax = 0; // Current/max number of fields.
 
-#ifdef CONFIG_DEBUGGER
-	friend class Debugger;
-#endif
-
-public:
+	Object *CloneTo(Object &aTo);
 	Object() { mFlags = 0; }
-	bool Delete();
 	~Object();
 
 private:
-	FieldType *FindField(name_t name, IndexType &insert_pos);
+	Object *mBase = nullptr;
+	FlatVector<FieldType, index_t> mFields;
+	FlatVector<MethodType, index_t> mMethods;
+
+	FieldType *FindField(name_t name, index_t &insert_pos);
 	FieldType *FindField(name_t name)
 	{
-		IndexType insert_pos;
+		index_t insert_pos;
 		return FindField(name, insert_pos);
 	}
 	
-	FieldType *Insert(name_t name, IndexType at);
+	FieldType *Insert(name_t name, index_t at);
 
-	bool SetInternalCapacity(IndexType new_capacity);
+	bool SetInternalCapacity(index_t new_capacity);
 	bool Expand()
 	// Expands mFields by at least one field.
 	{
-		return SetInternalCapacity(mFieldCountMax ? mFieldCountMax * 2 : 4);
+		return SetInternalCapacity(mFields.Capacity() ? mFields.Capacity() * 2 : 4);
 	}
 	
-	ResultType CallField(FieldType *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	MethodType *GetMethod(name_t name); // Recursive.
+	MethodType *InsertMethod(name_t name, index_t pos);
+	MethodType *FindMethod(name_t name, index_t &insert_pos); // Own methods only.
+	MethodType *FindMethod(name_t name) // Own methods only.
+	{
+		index_t insert_pos;
+		return FindMethod(name, insert_pos);
+	}
 
-protected:
-	Object *CloneTo(Object &aTo);
-	
+	// Call function after combining two lists of parameters.  aParam1 usually contains `this`
+	// and sometimes another parameter, while aParam2 contains caller-supplied parameters.
+	static ResultType CallAsMethod(IObject *aFunc, ResultToken &aResultToken
+		, ExprTokenType *aParam1[], int aParamCount1
+		, ExprTokenType *aParam2[], int aParamCount2);
+	ResultType CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallProperty(LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount, ExprTokenType *aValue);
+
+	bool Delete() override;
+
 public:
+
 	static Object *Create();
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
 	
-	Object *Clone();
-	
-	bool GetItem(ExprTokenType &aToken, name_t aName)
+	bool HasProp(name_t aName);
+
+	bool GetOwnProp(ExprTokenType &aToken, name_t aName)
 	{
-		IndexType insert_pos;
-		auto field = FindField(aName, insert_pos);
+		auto field = FindField(aName);
 		if (!field)
 			return false;
 		field->ToToken(aToken);
 		return true;
 	}
 
-	bool SetItem(name_t aName, ExprTokenType &aValue)
+	bool SetOwnProp(name_t aName, ExprTokenType &aValue)
 	{
-		IndexType insert_pos;
+		index_t insert_pos;
 		auto field = FindField(aName, insert_pos);
 		if (!field && !(field = Insert(aName, insert_pos)))
 			return false;
 		return field->Assign(aValue);
 	}
 
-	bool SetItem(name_t aName, __int64 aValue) { return SetItem(aName, ExprTokenType(aValue)); }
-	bool SetItem(name_t aName, IObject *aValue) { return SetItem(aName, ExprTokenType(aValue)); }
+	bool SetOwnProp(name_t aName, __int64 aValue) { return SetOwnProp(aName, ExprTokenType(aValue)); }
+	bool SetOwnProp(name_t aName, IObject *aValue) { return SetOwnProp(aName, ExprTokenType(aValue)); }
+	
+	IObject *GetMethodFunc(name_t name)
+	{
+		if (auto method = GetMethod(name))
+			return method->func;
+		return nullptr;
+	}
+
+	Property *DefineProperty(name_t aName);
+	bool DefineMethod(name_t aName, IObject *aFunc);
 
 	bool CanSetBase(Object *aNewBase);
 	ResultType SetBase(Object *aNewBase, ResultToken &aResultToken);
@@ -341,17 +427,34 @@ public:
 
 	ResultType CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
-	ResultType Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	// Only available as functions:
 	ResultType GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType SetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType PropCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	// Methods and functions:
+	ResultType DeleteProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType HasProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType _NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType HasKey(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType DefineMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType DeleteMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType GetMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType HasMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType HasOwnMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	// Properties:
+	ResultType Base(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	static LPTSTR sMetaFuncName[];
 
 	IObject_DebugWriteProperty_Def;
+#ifdef CONFIG_DEBUGGER
+	friend class Debugger;
+#endif
 };
 
 
@@ -381,11 +484,6 @@ extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object va
 
 class Array : public Object
 {
-public:
-	// The type of an array element index or count.
-	// Use unsigned to avoid the need to check for negatives.
-	typedef UINT index_t;
-
 private:
 	Variant *mItem = nullptr;
 	index_t mLength = 0, mCapacity = 0;
@@ -469,7 +567,7 @@ class Map : public Object
 	class Enumerator : public EnumBase
 	{
 		Map *mObject;
-		IndexType mOffset;
+		index_t mOffset;
 	public:
 		Enumerator(Map *aObject) : mObject(aObject), mOffset(-1) { mObject->AddRef(); }
 		~Enumerator() { mObject->Release(); }
@@ -486,10 +584,13 @@ class Map : public Object
 	struct Pair : Variant
 	{
 		Key key;
+
+		Pair() = delete;
+		~Pair() = delete;
 	};
 
 	Pair *mItem = nullptr;
-	IndexType mCount = 0, mCapacity = 0;
+	index_t mCount = 0, mCapacity = 0;
 
 	// Holds the index of the first key of a given type within mItem.  Must be in the order: int, object, string.
 	// Compared to storing the key-type with each key-value pair, this approach saves 4 bytes per key (excluding
@@ -498,22 +599,22 @@ class Map : public Object
 	// mKeyOffsetObject should be set to mKeyOffsetInt + the number of int keys.
 	// mKeyOffsetString should be set to mKeyOffsetObject + the number of object keys.
 	// mKeyOffsetObject-1, mKeyOffsetString-1 and mFieldCount-1 indicate the last index of each prior type.
-	static const IndexType mKeyOffsetInt = 0;
-	IndexType mKeyOffsetObject = 0, mKeyOffsetString = 0;
+	static const index_t mKeyOffsetInt = 0;
+	index_t mKeyOffsetObject = 0, mKeyOffsetString = 0;
 
 	Map() {}
 	~Map();
 	 
-	Pair *FindItem(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos);
-	Pair *FindItem(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos);
-	Pair *FindItem(SymbolType key_type, Key key, IndexType &insert_pos);	
-	Pair *FindItem(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, Key &key, IndexType &insert_pos);
+	Pair *FindItem(LPTSTR val, index_t left, index_t right, index_t &insert_pos);
+	Pair *FindItem(IntKeyType val, index_t left, index_t right, index_t &insert_pos);
+	Pair *FindItem(SymbolType key_type, Key key, index_t &insert_pos);	
+	Pair *FindItem(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, Key &key, index_t &insert_pos);
 
 	void ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type, Key &key);
 
-	Pair *Insert(SymbolType key_type, Key key, IndexType at);
+	Pair *Insert(SymbolType key_type, Key key, index_t at);
 
-	bool SetInternalCapacity(IndexType new_capacity);
+	bool SetInternalCapacity(index_t new_capacity);
 	
 	// Expands mItem by at least one field.
 	bool Expand()
@@ -528,7 +629,7 @@ public:
 
 	bool GetItem(ExprTokenType &aToken, ExprTokenType &aKey)
 	{
-		IndexType insert_pos;
+		index_t insert_pos;
 		TCHAR buf[MAX_NUMBER_SIZE];
 		SymbolType key_type;
 		Key key;
@@ -549,7 +650,7 @@ public:
 
 	bool SetItem(ExprTokenType &aKey, ExprTokenType &aValue)
 	{
-		IndexType insert_pos;
+		index_t insert_pos;
 		TCHAR buf[MAX_NUMBER_SIZE];
 		SymbolType key_type;
 		Key key;

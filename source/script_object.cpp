@@ -72,7 +72,7 @@ ResultType ObjectMember::Invoke(ObjectMember aMembers[], int aMemberCount, IObje
 			&& !_tcsicmp(member.name, name))
 		{
 			if (member.invokeType == IT_GET && IS_INVOKE_SET)
-				_o_throw(ERR_INVALID_USAGE);
+				_o_throw(ERR_PROPERTY_READONLY);
 			--aParamCount;
 			++aParam;
 			if (aParamCount < member.minParams)
@@ -116,7 +116,6 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *ap
 		// item is inserted, a default initial capacity of 4 will be set.
 
 		TCHAR buf[MAX_NUMBER_SIZE];
-		IndexType insert_pos;
 		
 		for (int i = 0; i + 1 < aParamCount; i += 2)
 		{
@@ -136,10 +135,7 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *ap
 				continue;
 			}
 
-			auto field = obj->FindField(name, insert_pos);
-			if (  !(field
-				 || (field = obj->Insert(name, insert_pos)))
-				|| !field->Assign(*aParam[i + 1])  )
+			if (!obj->SetOwnProp(name, *aParam[i + 1]))
 			{
 				if (apResultToken)
 					apResultToken->Error(ERR_OUTOFMEM);
@@ -171,20 +167,12 @@ Map *Map::Create(ExprTokenType *aParam[], int aParamCount)
 		// Otherwise, there are 4 or less key-value pairs.  When the first
 		// item is inserted, a default initial capacity of 4 will be set.
 
-		TCHAR buf[MAX_NUMBER_SIZE];
-		SymbolType key_type;
-		Key key;
-		IndexType insert_pos;
-
 		for (int i = 0; i + 1 < aParamCount; i += 2)
 		{
 			if (aParam[i]->symbol == SYM_MISSING || aParam[i+1]->symbol == SYM_MISSING)
 				continue; // For simplicity.
 
-			auto item = map->FindItem(*aParam[i], buf, key_type, key, insert_pos);
-			if (  !(item
-				 || (item = map->Insert(key_type, key, insert_pos)))
-				|| !item->Assign(*aParam[i + 1])  )
+			if (!map->SetItem(*aParam[i], *aParam[i + 1]))
 			{	// Out of memory.
 				map->Release();
 				return NULL;
@@ -196,22 +184,15 @@ Map *Map::Create(ExprTokenType *aParam[], int aParamCount)
 
 
 //
-// Object::Clone - Used for variadic function-calls.
+// Cloning
 //
-
-// Creates an object and copies the content of this object to it.
-Object *Object::Clone()
-{
-	auto objptr = new Object();
-	return CloneTo(*objptr);
-}
 
 // Helper function for temporary implementation of Clone by Object and subclasses.
 // Should be eliminated once revision of the object model is complete.
 Object *Object::CloneTo(Object &obj)
 {
 	// Allocate space in destination object.
-	IndexType field_count = mFieldCount;
+	auto field_count = mFields.Length();
 	if (!obj.SetInternalCapacity(field_count))
 	{
 		obj.Release();
@@ -219,9 +200,9 @@ Object *Object::CloneTo(Object &obj)
 	}
 
 	int failure_count = 0; // See comment below.
-	IndexType i;
+	index_t i;
 
-	obj.mFieldCount = field_count;
+	obj.mFields.Length() = field_count;
 
 	for (i = 0; i < field_count; ++i)
 	{
@@ -266,7 +247,7 @@ Map *Map::CloneTo(Map &obj)
 	}
 
 	int failure_count = 0; // See Object::CloneT() for comments.
-	IndexType i;
+	index_t i;
 
 	obj.mCount = mCount;
 	obj.mKeyOffsetObject = mKeyOffsetObject;
@@ -437,7 +418,11 @@ bool Object::Delete()
 		int outer_excptmode = g->ExcptMode;
 		g->ExcptMode |= EXCPTMODE_DELETE;
 
-		CallMethod(mBase, this, _T("__Delete"), NULL, 0, NULL, IF_METAOBJ); // base.__Delete()
+		{
+			FuncResult rt;
+			CallMethod(_T("__Delete"), IF_METAOBJ, rt, ExprTokenType(this), nullptr, 0);
+			rt.Free();
+		}
 
 		g->ExcptMode = outer_excptmode;
 
@@ -471,20 +456,6 @@ Object::~Object()
 {
 	if (mBase)
 		mBase->Release();
-
-	if (mFields)
-	{
-		if (mFieldCount)
-		{
-			for (IndexType i = 0; i < mFieldCount; ++i)
-			{
-				free(mFields[i].name);
-				mFields[i].Free();
-			}
-		}
-		// Free fields array.
-		free(mFields);
-	}
 }
 
 
@@ -494,13 +465,11 @@ Map::~Map()
 	{
 		if (mCount)
 		{
-			IndexType i = mCount - 1;
-			// Free keys: first strings, then objects (objects have a lower index in the mItem array).
-			for ( ; i >= mKeyOffsetString; --i)
-				free(mItem[i].key.s);
-			for ( ; i >= mKeyOffsetObject; --i)
+			index_t i;
+			for (i = mKeyOffsetObject; i < mKeyOffsetString; ++i)
 				mItem[i].key.p->Release();
-			// Free values.
+			for ( ; i < mCount; ++i)
+				free(mItem[i].key.s);
 			while (mCount) 
 				mItem[--mCount].Free();
 		}
@@ -515,13 +484,19 @@ Map::~Map()
 
 ObjectMember Object::sMembers[] =
 {
-	Object_Method1(Delete, 1, 2),
-	Object_Method1(Count, 0, 0),
-	Object_Method1(SetCapacity, 1, 1),
-	Object_Method1(GetCapacity, 0, 0),
 	Object_Method1(_NewEnum, 0, 0),
-	Object_Method1(HasKey, 1, 1),
-	Object_Method1(Clone, 0, 0)
+	Object_Member(Base, Base, 0, IT_SET),
+	Object_Method1(Clone, 0, 0),
+	Object_Method1(DefineMethod, 2, 2),
+	Object_Method1(DefineProp, 2, 2),
+	Object_Method1(DeleteMethod, 1, 1),
+	Object_Method1(DeleteProp, 1, 2),
+	Object_Method1(GetMethod, 1, 1),
+	Object_Method1(GetOwnPropDesc, 1, 1),
+	Object_Method1(HasMethod, 1, 1),
+	Object_Method1(HasOwnMethod, 1, 1),
+	Object_Method1(HasOwnProp, 1, 1),
+	Object_Method1(HasProp, 1, 1)
 };
 
 Object *Object::sPrototype = Object::CreatePrototype(_T("Object"), nullptr, sMembers, _countof(sMembers));
@@ -535,278 +510,186 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
                                             )
 {
 	name_t name;
-    FieldType *field, *prop_field;
-	IndexType insert_pos;
-	Property *prop = NULL; // Set default.
 
-	// If this is some object's base and is being invoked in that capacity, call
-	//	__Get/__Set/__Call as defined in this base object before searching further.
-	// Meta-functions are skipped for .__Item for these reasons:
-	//  1) They would be called for every access with [k] when __Item is not defined, 
-	//     instead of just those where [k] is not defined.  For the short term, this
-	//     breaks expectations (and scripts).  For the long term it seems redundant.
-	//  2) __Item handling is currently designed to be backward-compatible to ease
-	//     the transition.  If not present, it will cause recursion, which may then
-	//     call the meta-functions in the pre-established manner.
-	//  3) Even once the fallback behaviour is removed, it is probably more useful
-	//     for __Item and __Get/__Set to be mutually exclusive, and more intuitive
-	//     for __Item to be handled like a meta-function (don't call other meta-s
-	//     in the process of calling __Item).
-	if ((aFlags & IF_METAFUNC) && (aFlags & (IF_DEFAULT|IT_CALL)) != IF_DEFAULT)
-	{
-		// Look for a meta-function definition directly in this base object.
-		if (field = FindField(sMetaFuncName[INVOKE_TYPE]))
-		{
-			Line *curr_line = g_script.mCurrLine;
-			ResultType r = CallField(field, aResultToken, aThisToken, aFlags, aParam, aParamCount);
-			g_script.mCurrLine = curr_line; // Allows exceptions thrown by later meta-functions to report a more appropriate line.
-			//if (r == EARLY_RETURN)
-				// Propagate EARLY_RETURN in case this was the __Call meta-function of a
-				// "function object" which is used as a meta-function of some other object.
-				//return EARLY_RETURN; // TODO: Detection of 'return' vs 'return empty_value'.
-			if (r != OK) // Likely EARLY_RETURN, FAIL or EARLY_EXIT.
-				return r;
-		}
-	}
+	ASSERT(aParamCount || (aFlags & IF_DEFAULT));
+	if ((aFlags & IF_DEFAULT) || aParam[0]->symbol == SYM_MISSING)
+		name = IS_INVOKE_CALL ? _T("Call") : _T("__Item");
+	else
+		name = ParamIndexToString(0, _f_number_buf);
 	
 	auto actual_param = aParam; // Actual first parameter between [] or ().
 	int actual_param_count = aParamCount; // Actual number of parameters between [] or ().
+	if (!(aFlags & IF_DEFAULT))
+	{
+		++actual_param;
+		--actual_param_count;
+	}
 
-	if (IS_INVOKE_SET)
+	if (IS_INVOKE_CALL)
+	{
+		// This fully handles all method calls.
+		return CallMethod(name, aFlags, aResultToken, aThisToken, actual_param, actual_param_count);
+	}
+	// GET or SET a property:
+
+	bool hasprop = false; // Whether any kind of property was found.
+	bool handle_params_recursively = false;
+	bool setting = IS_INVOKE_SET;
+	IObject *etter = nullptr, *obj_for_recursion = nullptr;
+	Variant *field = nullptr;
+	index_t insert_pos, other_pos;
+	Object *that;
+
+	if (setting)
 	{
 		// Due to the way expression parsing works, the result should never be negative
 		// (and any direct callers of Invoke must always pass aParamCount >= 1):
+		ASSERT(actual_param_count > 0);
 		--actual_param_count;
 	}
-	
-	ASSERT(actual_param_count || (aFlags & IF_DEFAULT));
+
+	for (that = this; that; that = that->mBase)
 	{
-		if ((aFlags & IF_DEFAULT) || aParam[0]->symbol == SYM_MISSING)
-			name = IS_INVOKE_CALL ? _T("Call") : _T("__Item");
-		else
-			name = ParamIndexToString(0, _f_number_buf);
-
-		if (!(aFlags & IF_DEFAULT))
-		{
-			++actual_param;
-			--actual_param_count;
-		}
-		
-		field = FindField(name, insert_pos);
-
-		static Property sProperty;
-
-		// v1.1.16: Handle class property accessors:
-		if (field && field->symbol == SYM_OBJECT && *(void **)field->object == *(void **)&sProperty)
-		{
-			// The "type check" above is used for speed.  Simple benchmarks of x[1] where x := [[]]
-			// shows this check to not affect performance, whereas dynamic_cast<> hurt performance by
-			// about 25% and typeid()== by about 20%.  We can safely assume that the vtable pointer is
-			// stored at the beginning of the object even though it isn't guaranteed by the C++ standard,
-			// since COM fundamentally requires it:  http://msdn.microsoft.com/en-us/library/dd757710
-			prop = (Property *)field->object;
-			prop_field = field;
-			if (IS_INVOKE_SET ? prop->CanSet() : IS_INVOKE_GET && prop->CanGet())
-			{
-				// Prepare the parameter list: this, value, actual_param*
-				ExprTokenType **prop_param = (ExprTokenType **)_alloca((actual_param_count + 2) * sizeof(ExprTokenType *));
-				prop_param[0] = &aThisToken; // For the hidden "this" parameter in the getter/setter.
-				int prop_param_count = 1;
-				if (IS_INVOKE_SET)
-				{
-					// Put the setter's hidden "value" parameter before the other parameters.
-					prop_param[prop_param_count++] = actual_param[actual_param_count];
-				}
-				memcpy(prop_param + prop_param_count, actual_param, actual_param_count * sizeof(ExprTokenType *));
-				prop_param_count += actual_param_count;
-				
-				// Pass IF_DEFAULT so that it'll pass all parameters to the getter/setter.
-				// For a functor Object, we would need to pass a token representing "this" Property,
-				// but since Property::Invoke doesn't use it, we pass our aThisToken for simplicity.
-				ResultType result = prop->Invoke(aResultToken, aThisToken, aFlags | IF_DEFAULT, prop_param, prop_param_count);
-				return result == EARLY_RETURN ? OK : result;
-			}
-			// The property was missing get/set (whichever this invocation is), so continue as
-			// if the property itself wasn't defined.
-			field = NULL;
-		}
-	}
-	
-	if (!field)
-	{
-		// This field doesn't exist, so let our base object define what happens:
-		//		1) __Get, __Set or __Call.  If these don't return a value, processing continues.
-		//		2) For GET and CALL only, check the base object's own fields.
-		//		3) Repeat 1 through 3 for the base object's own base.
-		if (mBase)
-		{
-			// aFlags: If caller specified IF_METAOBJ but not IF_METAFUNC, they want to recursively
-			// find and execute a specific meta-function (__new or __delete) but don't want any base
-			// object to invoke __call.  So if this is already a meta-invocation, don't change aFlags.
-			ResultType r = mBase->Invoke(aResultToken, aThisToken, aFlags | (IS_INVOKE_META ? 0 : IF_META), aParam, aParamCount);
-			if (r != INVOKE_NOT_HANDLED // Base handled it.
-				|| prop) // Nothing left to do in this case.
-				return r;
-
-			// Since the above may have inserted or removed fields (including the specified one),
-			// insert_pos may no longer be correct or safe.  Updating field also allows a meta-function
-			// to initialize a field and allow processing to continue as if it already existed.
-			field = FindField(name, /*out*/ insert_pos);
-			if (prop)
-			{
-				// This field was a property.
-				if (field && field->symbol == SYM_OBJECT && field->object == prop)
-				{
-					// This field is still a property (and the same one).
-					prop_field = field; // Must update this pointer in case the field is to be overwritten.
-					field = NULL; // Act like the field doesn't exist (until the time comes to insert a value).
-				}
-				else
-					prop = NULL; // field was reassigned or removed, so ignore the property.
-			}
-		}
-
-		// Since the base object didn't handle this op, check for built-in properties/methods.
-		// This must apply only to the original target object (aThisToken), not one of its bases.
-		if (!IS_INVOKE_META && !field) // v1.1.16: Check field again so if __Call sets a field, it gets called.
-		{
-			//
-			// BUILT-IN "BASE" PROPERTY
-			//
-			if (!IS_INVOKE_CALL && actual_param_count == 0)
-			{
-				if (!_tcsicmp(name, _T("base")))
-				{
-					if (IS_INVOKE_SET)
-					{
-						Object *obj = dynamic_cast<Object *>(TokenToObject(**actual_param));
-						return SetBase(obj, aResultToken);
-					}
-	
-					if (mBase)
-					{
-						mBase->AddRef();
-						_o_return(mBase);
-					}
-					//else return empty string.
-					_o_return_empty;
-				}
-			}
-		} // if (!IS_INVOKE_META && key_type == SYM_STRING)
-	} // if (!field)
-
-	//
-	// OPERATE ON A FIELD WITHIN THIS OBJECT
-	//
-
-	// CALL
-	if (IS_INVOKE_CALL)
-	{
-		if (!field)
-			return INVOKE_NOT_HANDLED;
-		// v1.1.18: The following flag is set whenever a COM client invokes with METHOD|PROPERTYGET,
-		// such as X.Y in VBScript or C#.  Some convenience is gained at the expense of purity by treating
-		// it as METHOD if X.Y is a Func object or PROPERTYGET in any other case.
-		// v1.1.19: Handling this flag here rather than in CallField() has the following benefits:
-		//  - Reduces code duplication.
-		//  - Fixes X.__Call being returned instead of being called, if X.__Call is a string.
-		//  - Allows X.Y(Z) and similar to work like X.Y[Z], instead of ignoring the extra parameters.
-		if ( !(aFlags & IF_CALL_FUNC_ONLY) || (field->symbol == SYM_OBJECT && dynamic_cast<Func *>(field->object)) )
-			return CallField(field, aResultToken, aThisToken, aFlags & ~IF_DEFAULT, actual_param, actual_param_count);
-		aFlags = (aFlags & ~(IT_BITMASK | IF_CALL_FUNC_ONLY)) | IT_GET;
-	}
-
-	// This next section handles both this[x,y] (handled as this.__Item[x,y]) and this.x[y]
-	// Here, we only retrieve or create the sub-object this[x]/this.x, never set the actual
-	// property (since that's handled via recursion into the sub-object).
-	if (actual_param_count > 0)
-	{
-		IObject *obj = NULL;
+		// Search each object from this to its most distance base, but set insert_pos only when
+		// searching this object, since it needs to be the position we can insert a new field at.
+		field = that->FindField(name, that == this ? insert_pos : other_pos);
 		if (field)
 		{
-			if (field->symbol == SYM_OBJECT)
-				// AddRef not used.  See below.
-				obj = field->object;
-			else if (!IS_INVOKE_META)
-				_o_throw(ERR_ARRAY_NOT_MULTIDIM);
-		}
-		else if (!IS_INVOKE_META)
-		{
-			// This section applies only to the target object (aThisToken) and not any of its base objects.
-			// Allow obj["base",x] to access a field of obj.base; L40: This also fixes obj.base[x] which was broken by L36.
-			if (!_tcsicmp(name, _T("base")))
+			if (hasprop && field->symbol != SYM_DYNAMIC)
 			{
-				obj = mBase;
-			}
-			else if (aFlags & IF_DEFAULT)
-			{
-				// There's no this.__Item property or key-value pair and it was not handled by __get/__set.
-				// Do not create this.__Item; instead, fall back to the old behaviour (use the next
-				// parameter as a key).  Once there are dedicated map/dictionary/array types, this
-				// and the next section should be removed (__Item should be explicitly defined).
-				obj = this;
-				// IF_DEFAULT will be removed below to prevent infinite recursion.
-			}
-			// Automatically create a new object for the x part of obj.x[y]:=z.
-			else if (IS_INVOKE_SET)
-			{
-				Object *new_obj = Object::Create();
-				if (new_obj)
+				// This value property has been overridden with a half-defined dynamic property.
+				if (setting)
 				{
-					if ( field = prop ? prop_field : Insert(name, insert_pos) )
-					{
-						if (prop) // Otherwise, field is already empty.
-							prop->Release();
-						// Don't do field->Assign() since it would do AddRef() and we would need to counter with Release().
-						field->symbol = SYM_OBJECT;
-						field->object = obj = new_obj;
-					}
-					else
-					{	// Create() succeeded but Insert() failed, so free the newly created obj.
-						new_obj->Release();
-						new_obj = NULL;
-					}
+					// A derived object has overridden GET but not SET.  The default behaviour
+					// for a value property would be to write a new value in `this`, but that
+					// would override GET.  It seems safer to treat this property as read-only.
+					// It is also simpler, since field points to a field of the base object at
+					// this point (we would need to keep the result of the first FindField()).
+					field = nullptr;
 				}
-				if (!new_obj)
-					_o_throw(ERR_OUTOFMEM);
+				//else this is GET, meaning a derived object has overridden SET but not GET.
+				// In that case, inherit the value from field.
+				break;
 			}
-			else if (IS_INVOKE_GET)
+			hasprop = true;
+			if (field->symbol == SYM_DYNAMIC) // Property with getter/setter.
 			{
-				// For now, x[y] (that is, x.__item[y]) is permitted since x.__item will be initialized
-				// automatically if the script assigns to x[y].
-				//if (aFlags & IF_DEFAULT)
-
-				// Treat x.y[z] like x.y when x.y is not set: just return "", don't throw an exception.
-				// On the other hand, if x.y is set to something which is not an object, the "if (field)"
-				// section above raises an error.
-				_o_return_empty;
+				if (actual_param_count > 0 && field->prop->MaxParams == 0) // Prop cannot accept parameters.
+				{
+					setting = false; // GET this property's value.
+					handle_params_recursively = true; // Apply parameters by passing them to value->Invoke().
+				}
+				// Can this Property actually handle this operation?
+				etter = setting ? field->prop->Setter() : field->prop->Getter();
+				// Reset field to simplify detection of dynamic property vs. value.
+				// Note that field would be reset by the next iteration, if there is one.
+				field = nullptr;
+				if (!etter)
+					// This half of the property isn't implemented here, so keep searching.
+					continue;
 			}
+			break;
 		}
-		if (obj) // Object was successfully found or created.
+	}
+
+	if (!hasprop && !(aFlags & IF_DEFAULT))
+	{
+		// Look for a meta-function to invoke in place of this non-existent property.
+		if (auto method = GetMethod(sMetaFuncName[INVOKE_TYPE]))
 		{
-			// obj now contains a pointer to the object contained by this field, possibly newly created above.
-			ExprTokenType obj_token(obj);
-			// References in obj_token and obj weren't counted (AddRef wasn't called), so Release() does not
-			// need to be called before returning, and accessing obj after calling Invoke() would not be safe
-			// since it could Release() the object (by overwriting our field via script) as a side-effect.
-			if (IS_INVOKE_SET)
-				++actual_param_count;
-			// Recursively invoke obj, passing remaining parameters; remove IF_META to correctly treat obj as target:
-			// Toggle IF_DEFAULT so that this[1,2] expands to this.__Item.1.__Item.2, same as this[1][2].
-			// This should be changed once a dedicated map/dictionary type is implemented.
-			return obj->Invoke(aResultToken, obj_token, (aFlags & ~IF_META) ^ IF_DEFAULT, actual_param, actual_param_count);
-			// Above may return INVOKE_NOT_HANDLED in cases such as obj[a,b] where obj[a] exists but obj[a][b] does not.
+			ExprTokenType *this_param = &aThisToken;
+			return CallAsMethod(method->func, aResultToken, &this_param, 1, aParam, aParamCount);
 		}
-	} // MULTIPARAM[x,y]
+	}
+
+	if (etter) // Property with getter/setter.
+	{
+		// Prepare the parameter list: this, [value,] actual_param*
+		ExprTokenType this_etter(etter);
+		ExprTokenType **prop_param = (ExprTokenType **)_alloca((actual_param_count + 2) * sizeof(ExprTokenType *));
+		prop_param[0] = &aThisToken; // For the hidden "this" parameter in the getter/setter.
+		int prop_param_count = 1;
+		if (setting)
+		{
+			// Put the setter's hidden "value" parameter before the other parameters.
+			prop_param[prop_param_count++] = actual_param[actual_param_count];
+		}
+		if (!handle_params_recursively)
+		{
+			memcpy(prop_param + prop_param_count, actual_param, actual_param_count * sizeof(ExprTokenType *));
+			prop_param_count += actual_param_count;
+		}
+		// Call getter/setter.
+		auto result = etter->Invoke(aResultToken, this_etter, IT_CALL|IF_DEFAULT, prop_param, prop_param_count);
+		if (!handle_params_recursively || result == FAIL || result == EARLY_EXIT)
+			return result;
+		// Otherwise, handle_params_recursively == true.
+		if (aResultToken.symbol != SYM_OBJECT)
+		{
+			if (aResultToken.mem_to_free) // Caller may ignore mem_to_free when we return FAIL.
+			{
+				free(aResultToken.mem_to_free);
+				aResultToken.mem_to_free = nullptr;
+			}
+			// FIXME: For this.x[y] and (this.x)[y] to behave the same, this should invoke g_MetaObject.
+			_o_throw(ERR_NO_OBJECT, name);
+		}
+		obj_for_recursion = aResultToken.object;
+		//obj_for_recursion->AddRef(); // This and the next line are redundant when used together.
+		//aResultToken.Free();
+		aResultToken.SetValue(_T(""));
+	}
+
+	if (actual_param_count > 0)
+	{
+		// This section handles parameters being passed to a property, such as this.x[y],
+		// when that property doesn't accept parameters (i.e. none were declared, or the
+		// property is undefined or just a value).
+		if (!obj_for_recursion)
+		{
+			if (field && field->symbol == SYM_OBJECT)
+			{
+				obj_for_recursion = field->object;
+				obj_for_recursion->AddRef();
+			}
+			else
+				_o_throw(ERR_NO_OBJECT, name);
+		}
+		
+		if (IS_INVOKE_SET)
+			++actual_param_count; // Fix the parameter count.
+		
+		// Recursively invoke obj_for_recursion, passing remaining parameters:
+		auto result = obj_for_recursion->Invoke(aResultToken, ExprTokenType(obj_for_recursion)
+			, (aFlags & IT_BITMASK) | IF_DEFAULT, actual_param, actual_param_count);
+		
+		if (aResultToken.symbol == SYM_STRING && !aResultToken.mem_to_free && aResultToken.marker != aResultToken.buf)
+		{
+			// Before releasing obj_for_recursion, make a copy of the string in case it points
+			// to memory contained by obj_for_recursion, which might be deleted via Release().
+			TokenSetResult(aResultToken, aResultToken.marker, aResultToken.marker_length);
+		}
+		obj_for_recursion->Release();
+		if (result == INVOKE_NOT_HANDLED)
+		{
+			// Something like obj.x[y] where obj.x exists but obj.x[y] does not.  Throw here
+			// to override the default error message, which would indicate that "x" is unknown.
+			_o_throw(ERR_UNKNOWN_PROPERTY, _T("__Item"));
+		}
+		return result;
+	}
 
 	// SET
-	else if (IS_INVOKE_SET)
+	else if (setting)
 	{
+		if (!field && hasprop) // Property with getter but no setter.
+			_o_throw(ERR_PROPERTY_READONLY, name);
+		
 		if (!IS_INVOKE_META)
 		{
-			ExprTokenType &value_param = **actual_param;
-			if ( (field || (field = prop ? prop_field : Insert(name, insert_pos)))
-				&& field->Assign(value_param) )
+			if (((field && this == that) // A field already exists in this object.
+				 || (field = Insert(name, insert_pos))) // A new field is inserted.
+				&& field->Assign(**actual_param))
 				return OK;
 			_o_throw(ERR_OUTOFMEM);
 		}
@@ -828,10 +711,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			field->ReturnRef(aResultToken);
 			return OK;
 		}
-		// If 'this' is the target object (not its base), produce OK so that something like if(!foo.bar) is
-		// considered valid even when foo.bar has not been set.
-		if (!IS_INVOKE_META)
-			_o_return_empty;
+		_o_return_empty;
 	}
 
 	// Fell through from one of the sections above: invocation was not handled.
@@ -843,9 +723,10 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 {
 	switch (aID)
 	{
-	case FID_ObjDelete:			return Delete(aResultToken, 0, IT_CALL, aParam, aParamCount);
-	case FID_ObjCount:			return Count(aResultToken, 0, IT_CALL, aParam, aParamCount);
-	case FID_ObjHasKey:			return HasKey(aResultToken, 0, IT_CALL, aParam, aParamCount);
+	case FID_ObjDeleteProp:		return DeleteProp(aResultToken, 0, IT_CALL, aParam, aParamCount);
+	case FID_ObjPropCount:		return PropCount(aResultToken, 0, IT_CALL, aParam, aParamCount);
+	case FID_ObjHasOwnProp:		return HasOwnProp(aResultToken, 0, IT_CALL, aParam, aParamCount);
+	case FID_ObjHasProp:		return HasProp(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjGetCapacity:	return GetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjSetCapacity:	return SetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjClone:			return Clone(aResultToken, 0, IT_CALL, aParam, aParamCount);
@@ -890,40 +771,38 @@ ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 
 
 //
-// Internal: Object::CallField - Used by Object::Invoke to call a function/method stored in this object.
+// Internal
 //
 
-ResultType Object::CallField(FieldType *aField, ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
-// aParam[0] contains the identifier of this field or an empty space (for __Get etc.).
+ResultType Object::CallAsMethod(IObject *aFunc, ResultToken &aResultToken
+	, ExprTokenType *aParam1[], int aParamCount1
+	, ExprTokenType *aParam2[], int aParamCount2)
 {
 	// Allocate a new array of param pointers that we can modify.
-	ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
-	// Where fn = this.%key%, call %fn%(this, params*).
-	ExprTokenType field_token(aField->object); // fn
-	param[0] = &aThisToken; // this
-	memcpy(param + 1, aParam, aParamCount * sizeof(ExprTokenType*)); // params*
-	++aParamCount;
+	ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount1 + aParamCount2) * sizeof(ExprTokenType *));
+	ExprTokenType field_token(aFunc);
+	// Combine the two parameter lists.
+	memcpy(param, aParam1, aParamCount1 * sizeof(ExprTokenType *));
+	memcpy(param + aParamCount1, aParam2, aParamCount2 * sizeof(ExprTokenType *));
+	// return %aFunc%(aParam1*, aParam2*)
+	return aFunc->Invoke(aResultToken, field_token, IT_CALL|IF_DEFAULT, param, aParamCount1 + aParamCount2);
+}
 
-	if (aField->symbol == SYM_OBJECT)
+ResultType Object::CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount)
+{
+	MethodType *method;
+	if (method = GetMethod(aName))
 	{
-		return aField->object->Invoke(aResultToken, field_token, IT_CALL|IF_DEFAULT, param, aParamCount);
+		ExprTokenType *this_param = &aThisToken;
+		return CallAsMethod(method->func, aResultToken, &this_param, 1, aParam, aParamCount);
 	}
-	if (aField->symbol == SYM_STRING)
+	if (!(aFlags & IF_METAOBJ) && (method = GetMethod(sMetaFuncName[IT_CALL])))
 	{
-		Func *func = g_script.FindFunc(aField->string, aField->string.Length());
-		if (func)
-		{
-			// v2: Always pass "this" as the first parameter.  The old behaviour of passing it only when called
-			// indirectly via mBase was confusing to many users, and isn't needed now that the script can do
-			// %this.func%() instead of this.func() if they don't want to pass "this".
-			func->Call(aResultToken, param, aParamCount);
-			return aResultToken.Result();
-		}
+		ExprTokenType name_token = aName;
+		ExprTokenType *extra_params[] = { &aThisToken, &name_token };
+		return CallAsMethod(method->func, aResultToken, extra_params, 2, aParam, aParamCount);
 	}
-	// The field's value is neither a function reference nor the name of a known function.
-	ExprTokenType tok;
-	aField->ToToken(tok);
-	_o_throw(ERR_NONEXISTENT_FUNCTION, TokenToString(tok, _f_number_buf));
+	return INVOKE_NOT_HANDLED;
 }
 
 
@@ -969,13 +848,12 @@ void Object::EndClassDefinition()
 	// conflicting declarations.  Since these variables will be added at run-time to the derived objects,
 	// we don't want them in the class object.  So delete any key-value pairs with the special marker
 	// value (currently any integer, since static initializers haven't been evaluated yet).
-	for (IndexType i = mFieldCount - 1; i >= 0; --i)
+	for (index_t i = mFields.Length(); i > 0; )
+	{
+		i--;
 		if (mFields[i].symbol == SYM_INTEGER)
-		{
-			free(mFields[i].name);
-			if (i < --mFieldCount)
-				memmove(mFields + i, mFields + i + 1, (mFieldCount - i) * sizeof(FieldType));
-		}
+			mFields.Remove(i, 1);
+	}
 }
 
 
@@ -1005,23 +883,17 @@ Object *Object::GetNativeBase()
 
 bool Object::CanSetBase(Object *aBase)
 {
-	if (!aBase)
-		return false;
-	if (auto this_base = GetNativeBase())
-	{
-		if (!aBase->IsNativeClassPrototype())
-			aBase = aBase->GetNativeBase();
-		// Cannot change the object's native type.
-		return aBase == this_base;
-	}
-	return true;
+	auto new_native_base = (!aBase || aBase->IsNativeClassPrototype())
+		? aBase : aBase->GetNativeBase();
+	return new_native_base == GetNativeBase() // Cannot change native type.
+		&& !aBase->IsDerivedFrom(this); // Cannot create loops.
 }
 
 
 ResultType Object::SetBase(Object *aNewBase, ResultToken &aResultToken)
 {
 	if (!CanSetBase(aNewBase))
-		return aResultToken.Error(ERR_TYPE_MISMATCH, aNewBase ? aNewBase->Type() : _T(""));
+		return aResultToken.Error(ERR_INVALID_BASE);
 	SetBase(aNewBase);
 	return OK;
 }
@@ -1037,10 +909,10 @@ LPTSTR Object::Type()
 {
 	Object *base;
 	ExprTokenType value;
-	if (GetItem(value, _T("__Class")))
+	if (GetOwnProp(value, _T("__Class")))
 		return _T("Class"); // This object is a class.
 	for (base = mBase; base; base = base->mBase)
-		if (base->GetItem(value, _T("__Class")))
+		if (base->GetOwnProp(value, _T("__Class")))
 			return TokenToString(value); // This object is an instance of base.
 	return sObjectTypeName; // This is an Object of undetermined type, like Object() or {}.
 }
@@ -1050,16 +922,16 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 {
 	auto obj = new Object();
 	obj->SetBase(aBase);
-	obj->SetItem(_T("__Class"), ExprTokenType(aClassName));
+	obj->SetOwnProp(_T("__Class"), ExprTokenType(aClassName));
 	obj->mFlags |= NativeClassPrototype;
 
 	TCHAR name[MAX_VAR_NAME_LENGTH + 1];
-	TCHAR *method_name = name + _stprintf(name, _T("%s."), aClassName);
+	TCHAR *full_name = name + _stprintf(name, _T("%s."), aClassName);
 
 	for (int i = 0; i < aMemberCount; ++i)
 	{
 		const auto &member = aMember[i];
-		_tcscpy(method_name, member.name);
+		_tcscpy(full_name, member.name);
 		if (member.invokeType == IT_CALL)
 		{
 			auto func = new Func(SimpleHeap::Malloc(name), true);
@@ -1069,14 +941,16 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 			func->mMinParams = member.minParams + 1; // Includes `this`.
 			func->mParamCount = member.maxParams + 1;
 			func->mClass = obj; // AddRef not needed since neither mClass nor our caller's reference to obj is ever Released.
-			obj->SetItem(member.name, func);
+			obj->DefineMethod(member.name, func);
 			func->Release();
 		}
 		else
 		{
-			auto prop = new Property();
-
-			auto op_name = _tcschr(method_name, '\0');
+			auto prop = obj->DefineProperty(full_name);
+			prop->MinParams = member.minParams;
+			prop->MaxParams = member.maxParams;
+			
+			auto op_name = _tcschr(full_name, '\0');
 
 			_tcscpy(op_name, _T(".Get"));
 			auto func = new Func(SimpleHeap::Malloc(name), true);
@@ -1086,8 +960,8 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 			func->mMinParams = member.minParams + 1; // Includes `this`.
 			func->mParamCount = member.maxParams + 1;
 			func->mClass = obj;
-			prop->mGet = func;
-
+			prop->SetGetter(func);
+			
 			if (member.invokeType == IT_SET)
 			{
 				_tcscpy(op_name, _T(".Set"));
@@ -1098,11 +972,8 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 				func->mMinParams = member.minParams + 2; // Includes `this` and `value`.
 				func->mParamCount = member.maxParams + 2;
 				func->mClass = obj;
-				prop->mSet = func;
+				prop->SetSetter(func);
 			}
-			
-			obj->SetItem(member.name, prop);
-			prop->Release();
 		}
 	}
 
@@ -1111,33 +982,33 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 
 
 //
-// Object:: and Map:: Built-in Methods
+// Object:: and Map:: Built-ins
 //
 
-ResultType Object::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::DeleteProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	auto field = FindField(ParamIndexToString(0, _f_number_buf));
 	if (!field)
 		_o_return_empty;
-	
-	// Return the removed value.
-	field->ReturnMove(aResultToken);
-
-	// Free the value (if not transferred to aResultToken) and name.
-	field->Free();
-	free(field->name);
-
-	// Remove the field.
-	memmove(field, field + 1, (mFieldCount - (field - mFields)) * sizeof(FieldType));
-	mFieldCount--;
+	field->ReturnMove(aResultToken); // Return the removed value.
+	mFields.Remove((index_t)(field - mFields), 1);
 	return OK;
+}
+
+ResultType Object::DeleteMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto name = ParamIndexToString(0, _f_number_buf);
+	auto method = FindMethod(name);
+	if (!method)
+		_o_throw(ERR_UNKNOWN_METHOD, name);
+	_o_return(method->func);
 }
 
 ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Delete(first_key [, last_key := first_key])
 {
 	Pair *min_item;
-	IndexType min_pos, max_pos, pos;
+	index_t min_pos, max_pos, pos;
 	SymbolType min_key_type;
 	Key min_key, max_key;
 	IntKeyType logical_count_removed = 1;
@@ -1146,7 +1017,7 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 
 	// Find the position of "min".
 	if (min_item = FindItem(*aParam[0], number_buf, min_key_type, min_key, min_pos))
-		min_pos = min_item - mItem; // else min_pos was already set by FindItem.
+		min_pos = index_t(min_item - mItem); // else min_pos was already set by FindItem.
 
 	if (aParamCount > 1) // Removing a range of keys.
 	{
@@ -1155,7 +1026,7 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 
 		// Find the next position > [aParam[1]].
 		if (max_item = FindItem(*aParam[1], number_buf, max_key_type, max_key, max_pos))
-			max_pos = max_item - mItem + 1;
+			max_pos = index_t(max_item - mItem + 1);
 
 		// Since the order of key-types in mItem is of no logical consequence, require that both keys be the same type.
 		// Do not allow removing a range of object keys since there is probably no meaning to their order.
@@ -1198,11 +1069,11 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 		for (pos = min_pos; pos < max_pos; ++pos)
 			free(mItem[pos].key.s);
 
-	IndexType remaining_fields = mCount - max_pos;
+	index_t remaining_fields = mCount - max_pos;
 	if (remaining_fields)
 		memmove(mItem + min_pos, mItem + max_pos, remaining_fields * sizeof(Pair));
 	// Adjust count by the actual number of items in the removed range.
-	IndexType actual_count_removed = max_pos - min_pos;
+	index_t actual_count_removed = max_pos - min_pos;
 	mCount -= actual_count_removed;
 	// Adjust key offsets and numeric keys as necessary.
 	if (min_key_type != SYM_STRING) // i.e. SYM_OBJECT or SYM_INTEGER
@@ -1223,9 +1094,9 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 }
 
 
-ResultType Object::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::PropCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	_o_return((__int64)mFieldCount);
+	_o_return((__int64)mFields.Length());
 }
 
 ResultType Map::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1235,7 +1106,7 @@ ResultType Map::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenT
 
 ResultType Object::GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	_o_return(mFieldCountMax);
+	_o_return(mFields.Capacity());
 }
 
 ResultType Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1243,28 +1114,22 @@ ResultType Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, E
 	if (!ParamIndexIsNumeric(0))
 		_o_throw(ERR_PARAM1_INVALID);
 
-	IndexType desired_count = (IndexType)ParamIndexToInt64(0);
-	if (desired_count < mFieldCount)
+	index_t desired_count = (index_t)ParamIndexToInt64(0);
+	if (desired_count < mFields.Length())
 	{
 		// It doesn't seem intuitive to allow SetCapacity to truncate the fields array, so just reallocate
 		// as necessary to remove any unused space.  Allow negative values since SetCapacity(-1) seems more
 		// intuitive than SetCapacity(0) when the contents aren't being discarded.
-		desired_count = mFieldCount;
+		desired_count = mFields.Length();
 	}
-	if (!desired_count)
-	{	// Caller wants to shrink object to current contents but there aren't any, so free mFields.
-		if (mFields)
-		{
-			free(mFields);
-			mFields = NULL;
-			mFieldCountMax = 0;
-		}
-		//else mFieldCountMax should already be 0.
-		// Since mFieldCountMax and desired_size are both 0, below will return 0 and won't call SetInternalCapacity.
-	}
-	if (desired_count == mFieldCountMax || SetInternalCapacity(desired_count))
+	if (desired_count == 0)
 	{
-		_o_return(mFieldCountMax);
+		mFields.Free();
+		ASSERT(desired_count == mFields.Capacity());
+	}
+	if (desired_count == mFields.Capacity() || SetInternalCapacity(desired_count))
+	{
+		_o_return(mFields.Capacity());
 	}
 	// At this point, failure isn't critical since nothing is being stored yet.  However, it might be easier to
 	// debug if an error is thrown here rather than possibly later, when the array attempts to resize itself to
@@ -1282,7 +1147,7 @@ ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	if (!ParamIndexIsNumeric(0))
 		_o_throw(ERR_PARAM1_INVALID);
 
-	IndexType desired_count = (IndexType)ParamIndexToInt64(0);
+	index_t desired_count = (index_t)ParamIndexToInt64(0);
 	if (desired_count < mCount)
 	{
 		// It doesn't seem intuitive to allow SetCapacity to truncate the item array, so just reallocate
@@ -1327,16 +1192,31 @@ ResultType Map::_NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		_o_throw(ERR_OUTOFMEM);
 }
 
-ResultType Object::HasKey(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	_o_return(FindField(ParamIndexToString(0, _f_number_buf)) != NULL);
+	_o_return(FindField(ParamIndexToString(0, _f_number_buf)) != nullptr);
+}
+
+ResultType Object::HasProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	_o_return(HasProp(ParamIndexToString(0, _f_number_buf)));
+}
+
+ResultType Object::HasMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	_o_return(GetMethod(ParamIndexToString(0)) != nullptr);
+}
+
+ResultType Object::HasOwnMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	_o_return(FindMethod(ParamIndexToString(0)) != nullptr);
 }
 
 ResultType Map::Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	SymbolType key_type;
 	Key key;
-	INT_PTR insert_pos;
+	index_t insert_pos;
 	auto item = FindItem(*aParam[0], _f_number_buf, /*out*/ key_type, /*out*/ key, /*out*/ insert_pos);
 	_o_return(item != nullptr);
 }
@@ -1345,8 +1225,8 @@ ResultType Object::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 {
 	if (GetNativeBase() != Object::sPrototype)
 		_o_throw(ERR_TYPE_MISMATCH); // Cannot construct an instance of this class using Object::Clone().
-	Object *clone = Clone();
-	if (!clone)
+	auto clone = new Object();
+	if (!CloneTo(*clone))
 		_o_throw(ERR_OUTOFMEM);	
 	_o_return(clone);
 }
@@ -1359,6 +1239,115 @@ ResultType Map::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenT
 	_o_return(clone);
 }
 
+ResultType Object::Base(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (IS_INVOKE_SET)
+	{
+		Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[0]));
+		return SetBase(obj, aResultToken);
+	}
+	if (mBase)
+	{
+		mBase->AddRef();
+		_o_return(mBase);
+	}
+	_o_return_empty;
+}
+
+ResultType Object::GetMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto name = ParamIndexToString(0);
+	auto method = GetMethod(name);
+	if (!method)
+		_o_throw(ERR_UNKNOWN_METHOD, name);
+	method->func->AddRef();
+	_o_return(method->func);
+}
+
+bool Object::DefineMethod(name_t aName, IObject *aFunc)
+{
+	index_t insert_pos;
+	auto method = FindMethod(aName, insert_pos);
+	if (!method && !(method = InsertMethod(aName, insert_pos)))
+		return false;
+	aFunc->AddRef();
+	if (method->func)
+		method->func->Release();
+	method->func = aFunc;
+	return true;
+}
+
+ResultType Object::DefineMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto name = ParamIndexToString(0);
+	if (!*name)
+		_o_throw(ERR_PARAM1_INVALID);
+	auto func = ParamIndexToObject(1);
+	if (!func)
+		_o_throw(ERR_PARAM2_INVALID);
+	if (!DefineMethod(name, func))
+		_o_throw(ERR_OUTOFMEM);
+	AddRef();
+	_o_return(this);
+}
+
+Property *Object::DefineProperty(name_t aName)
+{
+	index_t insert_pos;
+	auto field = FindField(aName, insert_pos);
+	if (!field && !(field = Insert(aName, insert_pos)))
+		return nullptr;
+	if (field->symbol != SYM_DYNAMIC)
+	{
+		field->Free();
+		field->symbol = SYM_DYNAMIC;
+		field->prop = new Property();
+	}
+	return field->prop;
+}
+
+ResultType Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto name = ParamIndexToString(0, _f_number_buf);
+	if (!*name)
+		_o_throw(ERR_PARAM1_INVALID);
+	ExprTokenType getter, setter;
+	getter.symbol = SYM_INVALID;
+	setter.symbol = SYM_INVALID;
+	auto desc = dynamic_cast<Object *>(ParamIndexToObject(1));
+	if (!desc // Must be an Object.
+		|| desc->GetOwnProp(getter, _T("Get")) && getter.symbol != SYM_OBJECT  // If defined, must be an object.
+		|| desc->GetOwnProp(setter, _T("Set")) && setter.symbol != SYM_OBJECT) //
+		_o_throw(ERR_PARAM2_INVALID);
+	auto prop = DefineProperty(name);
+	if (!prop)
+		_o_throw(ERR_OUTOFMEM);
+	if (getter.symbol == SYM_OBJECT) prop->SetGetter(getter.object);
+	if (setter.symbol == SYM_OBJECT) prop->SetSetter(setter.object);
+	AddRef();
+	_o_return(this);
+}
+
+ResultType Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto name = ParamIndexToString(0, _f_number_buf);
+	if (!*name)
+		_o_throw(ERR_PARAM1_INVALID);
+	auto field = FindField(name);
+	if (!field)
+		_o_throw(ERR_UNKNOWN_PROPERTY, name);
+	if (field->symbol == SYM_DYNAMIC)
+	{
+		auto desc = Object::Create();
+		if (!desc || !desc->SetInternalCapacity(2))
+			_o_throw(ERR_OUTOFMEM);
+		if (auto getter = field->prop->Getter()) desc->SetOwnProp(_T("Get"), getter);
+		if (auto setter = field->prop->Setter()) desc->SetOwnProp(_T("Set"), setter);
+		_o_return(desc);
+	}
+	_o_return_empty;
+}
+
 
 //
 // Object::Variant
@@ -1367,14 +1356,14 @@ ResultType Map::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenT
 void Object::Variant::Minit()
 {
 	symbol = SYM_MISSING;
-	string.Init();
+	new (&string) String();
 }
 
 void Object::Variant::AssignEmptyString()
 {
 	Free();
 	symbol = SYM_STRING;
-	string.Init();
+	new (&string) String();
 }
 
 void Object::Variant::AssignMissing()
@@ -1468,7 +1457,7 @@ bool Object::Variant::InitCopy(Variant &val)
 	switch (symbol = val.symbol)
 	{
 	case SYM_STRING:
-		string.Init();
+		new (&string) String();
 		return Assign(val.string, val.string.Length(), true); // Pass true to conserve memory (no space is allowed for future expansion).
 	case SYM_OBJECT:
 		(object = val.object)->AddRef();
@@ -1522,6 +1511,7 @@ void Object::Variant::ReturnMove(ResultToken &result)
 		Minit(); // Let item forget the object ref since we are taking ownership.
 		break;
 	case SYM_MISSING:
+	case SYM_DYNAMIC:
 		result.SetValue(_T(""), 0);
 		break;
 	//case SYM_INTEGER:
@@ -1541,6 +1531,9 @@ void Object::Variant::ToToken(ExprTokenType &aToken)
 		aToken.marker = string;
 		aToken.marker_length = string.Length();
 		break;
+	case SYM_DYNAMIC:
+		aToken.SetValue(_T(""), 0);
+		break;
 	default:
 		aToken.value_int64 = n_int64; // Union copy.
 	}
@@ -1551,10 +1544,12 @@ void Object::Variant::Free()
 // entirely or the Object is being deleted.  See Object::Delete.
 // CONTAINED VALUE WILL NOT BE VALID AFTER THIS FUNCTION RETURNS.
 {
-	if (symbol == SYM_STRING)
-		string.Free();
-	else if (symbol == SYM_OBJECT)
-		object->Release();
+	switch (symbol)
+	{
+	case SYM_STRING: string.~String(); break;
+	case SYM_OBJECT: object->Release(); break;
+	case SYM_DYNAMIC: delete prop; break;
+	}
 }
 
 
@@ -1881,7 +1876,7 @@ ResultType STDMETHODCALLTYPE EnumBase::Invoke(ResultToken &aResultToken, ExprTok
 
 int Object::Enumerator::Next(Var *aKey, Var *aVal)
 {
-	if (++mOffset < mObject->mFieldCount)
+	if (++mOffset < mObject->mFields.Length())
 	{
 		FieldType &field = mObject->mFields[mOffset];
 		if (aKey)
@@ -1894,6 +1889,17 @@ int Object::Enumerator::Next(Var *aKey, Var *aVal)
 			field.ToToken(value);
 			aVal->Assign(value);
 		}
+		return true;
+	}
+	// TODO: Separate Properties and Methods enumerators.
+	auto method_offset = mOffset - mObject->mFields.Length();
+	if (method_offset < mObject->mMethods.Length())
+	{
+		auto &method = mObject->mMethods[method_offset];
+		if (aKey)
+			aKey->Assign(method.name);
+		if (aVal)
+			aVal->Assign(method.func);
 		return true;
 	}
 	return false;
@@ -1930,52 +1936,36 @@ int Map::Enumerator::Next(Var *aKey, Var *aVal)
 // Object:: and Map:: Internal Methods
 //
 
-Map::Pair *Map::FindItem(IntKeyType val, IndexType left, IndexType right, IndexType &insert_pos)
+Map::Pair *Map::FindItem(IntKeyType val, index_t left, index_t right, index_t &insert_pos)
 // left and right must be set by caller to the appropriate bounds within mItem.
 {
-	IndexType mid;
-	// Optimize for common arrays such as [a,b,c] where keys are consecutive numbers starting at 1.
-	// In such cases, the needed key can be found immediately.  Benchmarks show that starting the
-	// search this way can also benefit sparse arrays, and has little effect on associative arrays
-	// (keyed with a precalculated set of 100 or 2000 random integers between 0x10000 and 0x2000000).
-	if ((mid = left + (IndexType)val - 1) > right)
+	while (left < right)
 	{
-		// I couldn't come up with a data set or pattern where the standard starting calculation
-		// actually performed better, so start the search by comparing the last element's key.
-		// This improves performance when appending to an array via assignment.  Benchmarks show
-		// marginal improvements for other cases, probably due to slightly smaller code size.
-		//if (--mid != right) // Optimize for appending via incrementing index: this[n++].
-		//	mid = (left + right) / 2; // Fall back to standard binary search.
-		mid = right;
-	}
-	else if (mid < left) // val was negative.
-		mid = left; // As above.
-	for ( ; left <= right; mid = (left + right) / 2)
-	{
+		index_t mid = left + ((right - left) >> 1);
 		auto &item = mItem[mid];
 
 		auto result = val - item.key.i;
 
 		if (result < 0)
-			right = mid - 1;
+			right = mid;
 		else if (result > 0)
 			left = mid + 1;
 		else
 			return &item;
 	}
 	insert_pos = left;
-	return NULL;
+	return nullptr;
 }
 
-Object::FieldType *Object::FindField(name_t name, IndexType &insert_pos)
+Object::FieldType *Object::FindField(name_t name, index_t &insert_pos)
 {
-	IndexType left = 0, mid, right = mFieldCount - 1;
+	index_t left = 0, mid, right = mFields.Length();
 	int first_char = *name;
 	if (first_char <= 'Z' && first_char >= 'A')
 		first_char += 32;
-	while (left <= right)
+	while (left < right)
 	{
-		mid = (left + right) / 2;
+		mid = left + ((right - left) >> 1);
 		
 		FieldType &field = mFields[mid];
 		
@@ -1990,24 +1980,65 @@ Object::FieldType *Object::FindField(name_t name, IndexType &insert_pos)
 			result = _tcsicmp(name, field.name);
 		
 		if (result < 0)
-			right = mid - 1;
+			right = mid;
 		else if (result > 0)
 			left = mid + 1;
 		else
 			return &field;
 	}
 	insert_pos = left;
-	return NULL;
+	return nullptr;
 }
 
-Map::Pair *Map::FindItem(LPTSTR val, IndexType left, IndexType right, IndexType &insert_pos)
+bool Object::HasProp(name_t name)
+{
+	return FindField(name) || mBase && mBase->HasProp(name);
+}
+
+Object::MethodType *Object::FindMethod(name_t name, index_t &insert_pos)
+{
+	index_t left = 0, mid, right = mMethods.Length();
+	//int first_char = *name;
+	//if (first_char <= 'Z' && first_char >= 'A')
+	//	first_char += 32;
+	while (left < right)
+	{
+		mid = left + ((right - left) >> 1);
+
+		auto &method = mMethods[mid];
+
+		//int result = first_char - field.key_c;
+		//if (!result)
+		int result = _tcsicmp(name, method.name);
+
+		if (result < 0)
+			right = mid;
+		else if (result > 0)
+			left = mid + 1;
+		else
+			return &method;
+	}
+	insert_pos = left;
+	return nullptr;
+}
+
+Object::MethodType *Object::GetMethod(name_t name)
+{
+	if (auto method = FindMethod(name))
+		return method;
+	if (!mBase)
+		return nullptr;
+	return mBase->GetMethod(name);
+}
+
+Map::Pair *Map::FindItem(LPTSTR val, index_t left, index_t right, index_t &insert_pos)
 // left and right must be set by caller to the appropriate bounds within mItem.
 {
-	IndexType mid;
+	index_t mid;
 	int first_char = *val;
-	while (left <= right)
+	while (left < right)
 	{
-		mid = (left + right) / 2;
+		mid = left + ((right - left) >> 1);
 
 		auto &item = mItem[mid];
 
@@ -2017,33 +2048,33 @@ Map::Pair *Map::FindItem(LPTSTR val, IndexType left, IndexType right, IndexType 
 			result = _tcscmp(val, item.key.s);
 
 		if (result < 0)
-			right = mid - 1;
+			right = mid;
 		else if (result > 0)
 			left = mid + 1;
 		else
 			return &item;
 	}
 	insert_pos = left;
-	return NULL;
+	return nullptr;
 }
 
-Map::Pair *Map::FindItem(SymbolType key_type, Key key, IndexType &insert_pos)
+Map::Pair *Map::FindItem(SymbolType key_type, Key key, index_t &insert_pos)
 // Searches for an item with the given key.  If found, a pointer to the item is returned.  Otherwise
 // NULL is returned and insert_pos is set to the index a newly created item should be inserted at.
 // key_type and key are output for creating a new item or removing an existing one correctly.
 // left and right must indicate the appropriate section of mItem to search, based on key type.
 {
-	IndexType left, right;
+	index_t left, right;
 
 	switch (key_type)
 	{
 	case SYM_STRING:
 		left = mKeyOffsetString;
-		right = mCount - 1; // String keys are last in the mItem array.
+		right = mCount; // String keys are last in the mItem array.
 		return FindItem(key.s, left, right, insert_pos);
 	case SYM_OBJECT:
 		left = mKeyOffsetObject;
-		right = mKeyOffsetString - 1; // Object keys end where String keys begin.
+		right = mKeyOffsetString; // Object keys end where String keys begin.
 		// left and right restrict the search to just the portion with object keys.
 		// Reuse the integer search function to reduce code size.  On 32-bit builds,
 		// this requires that the upper 32 bits of each key have been initialized.
@@ -2051,7 +2082,7 @@ Map::Pair *Map::FindItem(SymbolType key_type, Key key, IndexType &insert_pos)
 	//case SYM_INTEGER:
 	default:
 		left = mKeyOffsetInt;
-		right = mKeyOffsetObject - 1; // Int keys end where Object keys begin.
+		right = mKeyOffsetObject; // Int keys end where Object keys begin.
 		return FindItem(key.i, left, right, insert_pos);
 	}
 }
@@ -2092,26 +2123,21 @@ void Map::ConvertKey(ExprTokenType &key_token, LPTSTR buf, SymbolType &key_type,
 	key.s = TokenToString(key_token, buf);
 }
 
-Map::Pair *Map::FindItem(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, Key &key, IndexType &insert_pos)
+Map::Pair *Map::FindItem(ExprTokenType &key_token, LPTSTR aBuf, SymbolType &key_type, Key &key, index_t &insert_pos)
 // Searches for an item with the given key, where the key is a token passed from script.
 {
 	ConvertKey(key_token, aBuf, key_type, key);
 	return FindItem(key_type, key, insert_pos);
 }
 	
-bool Object::SetInternalCapacity(IndexType new_capacity)
+bool Object::SetInternalCapacity(index_t new_capacity)
 // Expands mFields to the specified number if fields.
-// Caller *must* ensure new_capacity >= 1 && new_capacity >= mFieldCount.
+// Caller *must* ensure new_capacity >= 1 && new_capacity >= mFields.Length().
 {
-	FieldType *new_fields = (FieldType *)realloc(mFields, new_capacity * sizeof(FieldType));
-	if (!new_fields)
-		return false;
-	mFields = new_fields;
-	mFieldCountMax = new_capacity;
-	return true;
+	return mFields.SetCapacity(new_capacity);
 }
 
-bool Map::SetInternalCapacity(IndexType new_capacity)
+bool Map::SetInternalCapacity(index_t new_capacity)
 // Caller *must* ensure new_capacity >= 1 && new_capacity >= mCount.
 {
 	Pair *new_fields = (Pair *)realloc(mItem, new_capacity * sizeof(Pair));
@@ -2122,33 +2148,36 @@ bool Map::SetInternalCapacity(IndexType new_capacity)
 	return true;
 }
 	
-Object::FieldType *Object::Insert(name_t name, IndexType at)
+Object::FieldType *Object::Insert(name_t name, index_t at)
 // Inserts a single field with the given key at the given offset.
 // Caller must ensure 'at' is the correct offset for this key.
 {
-	if (mFieldCount == mFieldCountMax && !Expand()  // Attempt to expand if at capacity.
+	if (mFields.Length() == mFields.Capacity() && !Expand()  // Attempt to expand if at capacity.
 		|| !(name = _tcsdup(name)))  // Attempt to duplicate key-string.
 	{	// Out of memory.
-		return NULL;
+		return nullptr;
 	}
 	// There is now definitely room in mFields for a new field.
-
-	FieldType &field = mFields[at];
-	if (at < mFieldCount)
-		// Move existing fields to make room.
-		memmove(&field + 1, &field, (mFieldCount - at) * sizeof(FieldType));
-	++mFieldCount; // Only after memmove above.
-	
+	FieldType &field = *mFields.InsertUninitialized(at, 1);
 	field.key_c = ctolower(*name);
-	
 	field.name = name; // Above has already copied string or called key.p->AddRef() as appropriate.
-	field.symbol = SYM_STRING;
-	field.string.Init(); // Initialize to empty string.  Caller will likely reassign.
-
+	field.Minit(); // Initialize to default value.  Caller will likely reassign.
 	return &field;
 }
 
-Map::Pair *Map::Insert(SymbolType key_type, Key key, IndexType at)
+Object::MethodType *Object::InsertMethod(name_t name, index_t pos)
+{
+	if ((mMethods.Length() == mMethods.Capacity()
+		&& !mMethods.SetCapacity(mMethods.Capacity() ? mMethods.Capacity() << 1 : 1))
+		|| !(name = _tcsdup(name)))
+		return nullptr;
+	auto &method = *mMethods.InsertUninitialized(pos, 1);
+	method.name = name;
+	method.func = nullptr;
+	return &method;
+}
+
+Map::Pair *Map::Insert(SymbolType key_type, Key key, index_t at)
 // Inserts a single item with the given key at the given offset.
 // Caller must ensure 'at' is the correct offset for this key.
 {
@@ -2181,73 +2210,9 @@ Map::Pair *Map::Insert(SymbolType key_type, Key key, IndexType at)
 	}
 
 	item.key = key; // Above has already copied string or called key.p->AddRef() as appropriate.
-	item.symbol = SYM_STRING;
-	item.string.Init(); // Initialize to empty string.  Caller will likely reassign.
+	item.Minit(); // Initialize to default value.  Caller will likely reassign.
 
 	return &item;
-}
-
-
-//
-// Property: Invoked when a derived object gets/sets the corresponding key.
-//
-
-ResultType STDMETHODCALLTYPE Property::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	Func **member;
-
-	if (aFlags & IF_DEFAULT)
-	{
-		if (IS_INVOKE_CALL) // May be impossible due to how IF_DEFAULT is used.
-			return INVOKE_NOT_HANDLED;
-		
-		member = IS_INVOKE_SET ? &mSet : &mGet;
-	}
-	else
-	{
-		if (!aParamCount) // May be impossible as this[] would use flag IF_DEFAULT.
-			return INVOKE_NOT_HANDLED;
-
-		LPTSTR name = TokenToString(*aParam[0]);
-		
-		if (!_tcsicmp(name, _T("Get")))
-		{
-			member = &mGet;
-		}
-		else if (!_tcsicmp(name, _T("Set")))
-		{
-			member = &mSet;
-		}
-		else
-			return INVOKE_NOT_HANDLED;
-		// ALL CODE PATHS ABOVE MUST RETURN OR SET member.
-
-		if (!IS_INVOKE_CALL)
-		{
-			if (IS_INVOKE_SET)
-			{
-				// Allow changing the GET/SET function, since it's simple and seems harmless.
-				if (aParamCount == 2)
-					*member = TokenToFunc(*aParam[1]); // Can be NULL.
-				return OK;
-			}
-			if (*member && aParamCount == 1)
-			{
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = *member;
-			}
-			return OK;
-		}
-		// Since above did not return, we're explicitly calling Get or Set.
-		++aParam;      // Omit method name.
-		--aParamCount; // 
-	}
-	// Since above did not return, member must have been set to either &mGet or &mSet.
-	// However, their actual values might be NULL:
-	if (!*member)
-		return INVOKE_NOT_HANDLED;
-	(*member)->Call(aResultToken, aParam, aParamCount);
-	return aResultToken.Result();
 }
 
 
@@ -2541,7 +2506,7 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ResultToken &aResultToken, ExprT
 			ExprTokenType this_token;
 			this_token.symbol = SYM_VAR;
 			this_token.var = g->CurrentFunc->mParam[0].var;
-			ResultType result = this_class_base->Invoke(aResultToken, this_token, (aFlags & ~IF_METAFUNC) | IF_METAOBJ, aParam, aParamCount);
+			ResultType result = this_class_base->Invoke(aResultToken, this_token, aFlags | IF_METAOBJ, aParam, aParamCount);
 			// Avoid returning INVOKE_NOT_HANDLED in this case so that our caller never
 			// shows an "uninitialized var" warning for base.Foo() in a class method.
 			if (result != INVOKE_NOT_HANDLED)

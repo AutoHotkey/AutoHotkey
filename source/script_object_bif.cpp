@@ -54,7 +54,7 @@ BIF_DECL(BIF_Array)
 BIF_DECL(BIF_Map)
 {
 	if (aParamCount & 1)
-		_f_throw(ERR_PARAM_INVALID);
+		_f_throw(ERR_PARAM_COUNT_INVALID);
 	auto obj = Map::Create(aParam, aParamCount);
 	if (!obj)
 		_f_throw(ERR_OUTOFMEM);
@@ -433,12 +433,12 @@ BIF_DECL(BIF_ObjRaw)
 	LPTSTR name = TokenToString(*aParam[1], _f_number_buf);
 	if (_f_callee_id == FID_ObjRawSet)
 	{
-		if (!obj->SetItem(name, *aParam[2]))
+		if (!obj->SetOwnProp(name, *aParam[2]))
 			_f_throw(ERR_OUTOFMEM);
 	}
 	else
 	{
-		if (obj->GetItem(aResultToken, name))
+		if (obj->GetOwnProp(aResultToken, name))
 		{
 			if (aResultToken.symbol == SYM_OBJECT)
 				aResultToken.object->AddRef();

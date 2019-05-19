@@ -145,6 +145,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_INDEX _T("Invalid index.")
 #define ERR_INVALID_VALUE _T("Invalid value.")
 #define ERR_PARAM_INVALID _T("Invalid parameter(s).")
+#define ERR_PARAM_COUNT_INVALID _T("Invalid number of parameters.")
 #define ERR_PARAM1_INVALID _T("Parameter #1 invalid.")
 #define ERR_PARAM2_INVALID _T("Parameter #2 invalid.")
 #define ERR_PARAM3_INVALID _T("Parameter #3 invalid.")
@@ -224,19 +225,19 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_NO_OBJECT _T("No object to invoke.")
 #define ERR_UNKNOWN_PROPERTY _T("Unknown property.")
 #define ERR_UNKNOWN_METHOD _T("Unknown method.")
+#define ERR_PROPERTY_READONLY _T("Property is read-only.")
 #define ERR_NO_GUI _T("No default GUI.")
 #define ERR_NO_STATUSBAR _T("No StatusBar.")
 #define ERR_NO_LISTVIEW _T("No ListView.")
 #define ERR_NO_TREEVIEW _T("No TreeView.")
 #define ERR_PCRE_EXEC _T("PCRE execution error.")
-#define ERR_ARRAY_NOT_MULTIDIM _T("Array is not multi-dimensional.")
 #define ERR_NEW_BAD_CLASS _T("Invalid class for \"new\" operator.")
 #define ERR_INVALID_ARG_TYPE _T("Invalid arg type.")
 #define ERR_INVALID_RETURN_TYPE _T("Invalid return type.")
 #define ERR_INVALID_LENGTH _T("Invalid Length.")
 #define ERR_INVALID_ENCODING _T("Invalid Encoding.")
-#define ERR_INVALID_HWND _T("Invalid HWND.")
 #define ERR_INVALID_USAGE _T("Invalid usage.")
+#define ERR_INVALID_BASE _T("Invalid base.")
 #define ERR_INTERNAL_CALL _T("An internal function call failed.")
 #define ERR_STRING_NOT_TERMINATED _T("String not null-terminated.")
 #define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
@@ -570,7 +571,7 @@ enum BuiltInFunctionID {
 	FID_Min = 0, FID_Max,
 	FID_Random = 0, FID_RandomSeed,
 	FID_ObjAddRef = 0, FID_ObjRelease,
-	FID_ObjDelete = 0, FID_ObjCount, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjClone, FID_ObjNewEnum,
+	FID_ObjDeleteProp = 0, FID_ObjPropCount, FID_ObjHasOwnProp, FID_ObjHasProp, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjClone, FID_ObjNewEnum,
 	FID_ObjGetBase = 0, FID_ObjSetBase,
 	FID_ObjRawGet = 0, FID_ObjRawSet,
 	FID_ComObjType = 0, FID_ComObjValue,
@@ -3328,6 +3329,8 @@ ResultType SoundSetGet2kXP(ResultToken &aResultToken, LPTSTR aSetting
 ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
 	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDevice);
 
+ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aPtr, ResultToken &aResultToken, bool aOptional = false);
+ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aValue, ResultToken &aResultToken, bool aOptional = false);
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, size_t &aSize);
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr);
 

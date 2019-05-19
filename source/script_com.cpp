@@ -1519,13 +1519,13 @@ STDMETHODIMP IObjectComCompatible::GetIDsOfNames(REFIID riid, LPOLESTR *rgszName
 		 !(g_NameToId || (g_NameToId = Object::Create())) )
 		return E_OUTOFMEMORY;
 	ExprTokenType id;
-	if (!g_NameToId->GetItem(id, name))
+	if (!g_NameToId->GetOwnProp(id, name))
 	{
 		if (!g_IdToName->Append(name))
 			return E_OUTOFMEMORY;
 		id.symbol = SYM_INTEGER;
 		id.value_int64 = g_IdToName->Length();
-		if (!g_NameToId->SetItem(name, id))
+		if (!g_NameToId->SetOwnProp(name, id))
 			return E_OUTOFMEMORY;
 	}
 	*rgDispId = (DISPID)id.value_int64;
@@ -1570,8 +1570,6 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 		}
 		param[0] = &param_token[0];
 		++param_count;
-		if (flags == IT_CALL && (wFlags & DISPATCH_PROPERTYGET))
-			flags |= IF_CALL_FUNC_ONLY;
 	}
 	else
 	{
@@ -1633,13 +1631,13 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 						SysAllocString(CStringWCharFromTCharIfNeeded(TokenToString(__VA_ARGS__)))
 
 					ExprTokenType token;
-					if (obj->GetItem(token, _T("Message")))
+					if (obj->GetOwnProp(token, _T("Message")))
 						pExcepInfo->bstrDescription = SysStringFromToken(token, result_token.buf);
-					if (obj->GetItem(token, _T("What")))
+					if (obj->GetOwnProp(token, _T("What")))
 						pExcepInfo->bstrSource = SysStringFromToken(token, result_token.buf);
-					if (obj->GetItem(token, _T("File")))
+					if (obj->GetOwnProp(token, _T("File")))
 						pExcepInfo->bstrHelpFile = SysStringFromToken(token, result_token.buf);
-					if (obj->GetItem(token, _T("Line")))
+					if (obj->GetOwnProp(token, _T("Line")))
 						pExcepInfo->dwHelpContext = (DWORD)TokenToInt64(token);
 				}
 				g_script.FreeExceptionToken(g->ThrownToken);
