@@ -881,23 +881,17 @@ Object *Object::GetNativeBase()
 
 bool Object::CanSetBase(Object *aBase)
 {
-	if (!aBase)
-		return false;
-	if (auto this_base = GetNativeBase())
-	{
-		if (!aBase->IsNativeClassPrototype())
-			aBase = aBase->GetNativeBase();
-		// Cannot change the object's native type.
-		return aBase == this_base;
-	}
-	return true;
+	auto new_native_base = (!aBase || aBase->IsNativeClassPrototype())
+		? aBase : aBase->GetNativeBase();
+	return new_native_base == GetNativeBase() // Cannot change native type.
+		&& !aBase->IsDerivedFrom(this); // Cannot create loops.
 }
 
 
 ResultType Object::SetBase(Object *aNewBase, ResultToken &aResultToken)
 {
 	if (!CanSetBase(aNewBase))
-		return aResultToken.Error(ERR_TYPE_MISMATCH, aNewBase ? aNewBase->Type() : _T(""));
+		return aResultToken.Error(ERR_INVALID_BASE);
 	SetBase(aNewBase);
 	return OK;
 }
