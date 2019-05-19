@@ -488,9 +488,11 @@ ObjectMember Object::sMembers[] =
 	Object_Member(Base, Base, 0, IT_SET),
 	Object_Method1(Clone, 0, 0),
 	Object_Method1(DefineMethod, 2, 2),
+	Object_Method1(DefineProp, 2, 2),
 	Object_Method1(DeleteMethod, 1, 1),
 	Object_Method1(DeleteProp, 1, 2),
 	Object_Method1(GetMethod, 1, 1),
+	Object_Method1(GetOwnPropDesc, 1, 1),
 	Object_Method1(HasMethod, 1, 1),
 	Object_Method1(HasOwnMethod, 1, 1),
 	Object_Method1(HasOwnProp, 1, 1),
@@ -1257,7 +1259,7 @@ ResultType Object::GetMethod(ResultToken &aResultToken, int aID, int aFlags, Exp
 	auto name = ParamIndexToString(0);
 	auto method = GetMethod(name);
 	if (!method)
-		_o_throw(ERR_UNKNOWN_METHOD);
+		_o_throw(ERR_UNKNOWN_METHOD, name);
 	method->func->AddRef();
 	_o_return(method->func);
 }
@@ -1302,6 +1304,48 @@ Property *Object::DefineProperty(name_t aName)
 		field->prop = new Property();
 	}
 	return field->prop;
+}
+
+ResultType Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto name = ParamIndexToString(0, _f_number_buf);
+	if (!*name)
+		_o_throw(ERR_PARAM1_INVALID);
+	ExprTokenType getter, setter;
+	getter.symbol = SYM_INVALID;
+	setter.symbol = SYM_INVALID;
+	auto desc = dynamic_cast<Object *>(ParamIndexToObject(1));
+	if (!desc // Must be an Object.
+		|| desc->GetOwnProp(getter, _T("Get")) && getter.symbol != SYM_OBJECT  // If defined, must be an object.
+		|| desc->GetOwnProp(setter, _T("Set")) && setter.symbol != SYM_OBJECT) //
+		_o_throw(ERR_PARAM2_INVALID);
+	auto prop = DefineProperty(name);
+	if (!prop)
+		_o_throw(ERR_OUTOFMEM);
+	if (getter.symbol == SYM_OBJECT) prop->SetGetter(getter.object);
+	if (setter.symbol == SYM_OBJECT) prop->SetSetter(setter.object);
+	AddRef();
+	_o_return(this);
+}
+
+ResultType Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto name = ParamIndexToString(0, _f_number_buf);
+	if (!*name)
+		_o_throw(ERR_PARAM1_INVALID);
+	auto field = FindField(name);
+	if (!field)
+		_o_throw(ERR_UNKNOWN_PROPERTY, name);
+	if (field->symbol == SYM_DYNAMIC)
+	{
+		auto desc = Object::Create();
+		if (!desc || !desc->SetInternalCapacity(2))
+			_o_throw(ERR_OUTOFMEM);
+		if (auto getter = field->prop->Getter()) desc->SetOwnProp(_T("Get"), getter);
+		if (auto setter = field->prop->Setter()) desc->SetOwnProp(_T("Set"), setter);
+		_o_return(desc);
+	}
+	_o_return_empty;
 }
 
 
