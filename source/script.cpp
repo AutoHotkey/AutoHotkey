@@ -6105,7 +6105,6 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 
 	LPTSTR cp, class_name = aBuf;
 	Object *outer_class, *base_class = NULL;
-	Object *&class_object = mClassObject[mClassObjectCount]; // For convenience.
 	Var *class_var;
 	ExprTokenType token;
 
@@ -6148,14 +6147,20 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	if (!Var::ValidateName(class_name, DISPLAY_CLASS_ERROR))
 		return FAIL;
 
-	class_object = NULL; // This initializes the entry in the mClassObject array.
+	Object *&class_object = mClassObject[mClassObjectCount]; // For convenience.
+	class_object = nullptr;
+	bool conflict_found = false;
 	
 	if (mClassObjectCount) // Nested class definition.
 	{
 		outer_class = mClassObject[mClassObjectCount - 1];
 		if (outer_class->GetOwnProp(token, class_name))
-			// At this point it can only be an Object() created by a class definition.
-			class_object = (Object *)token.object;
+		{
+			conflict_found = true;
+			// If "continuing" a predefined class was permitted, this is where we would
+			// set class_object; but only after confirming that token contains a class.
+			// It could be a previously declared instance/static var.
+		}
 	}
 	else // Top-level class definition.
 	{
@@ -6164,7 +6169,8 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 			return FAIL;
 		if (class_var->IsObject())
 			// At this point it can only be an Object() created by a class definition.
-			class_object = (Object *)class_var->Object();
+			//class_object = (Object *)class_var->Object();
+			conflict_found = true; // Since this is an error, no need to get the object.
 		else
 			// Explicitly set the variable scope, since FindOrAddVar may have returned
 			// an existing ordinary global instead of creating a super-global.
@@ -6182,8 +6188,8 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	// For now, it seems more useful to detect a duplicate as an error rather than as
 	// a continuation of the previous definition.  Partial definitions might be allowed
 	// in future, perhaps via something like "Class Foo continued".
-	if (class_object)
-		return ScriptError(_T("Duplicate class definition."), aBuf);
+	if (conflict_found)
+		return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
 
 	token.SetValue(mClassName, length);
 	
