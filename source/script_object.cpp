@@ -1307,6 +1307,33 @@ Property *Object::DefineProperty(name_t aName)
 	return field->prop;
 }
 
+ResultType GetObjMaxParams(IObject *aObj, int &aMaxParams, ResultToken &aResultToken)
+{
+	__int64 propval;
+	auto result = GetObjectIntProperty(aObj, _T("MaxParams"), propval, aResultToken, true);
+	switch (result)
+	{
+	case FAIL:
+	case EARLY_EXIT:
+		return result;
+	case OK:
+		aMaxParams = (int)propval;
+		result = GetObjectIntProperty(aObj, _T("IsVariadic"), propval, aResultToken, true);
+		switch (result)
+		{
+		case FAIL:
+		case EARLY_EXIT:
+			return aResultToken.Result();
+		case INVOKE_NOT_HANDLED:
+			return OK;
+		case OK:
+			if (propval)
+				aMaxParams = INT_MAX;
+		}
+	}
+	return result;
+}
+
 ResultType Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	auto name = ParamIndexToString(0, _f_number_buf);
@@ -1325,6 +1352,32 @@ ResultType Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, Ex
 		_o_throw(ERR_OUTOFMEM);
 	if (getter.symbol == SYM_OBJECT) prop->SetGetter(getter.object);
 	if (setter.symbol == SYM_OBJECT) prop->SetSetter(setter.object);
+	prop->MaxParams = -1;
+	if (auto obj = prop->Getter())
+	{
+		int max_params;
+		switch (GetObjMaxParams(obj, max_params, aResultToken))
+		{
+		case FAIL:
+		case EARLY_EXIT:
+			return aResultToken.Result();
+		case OK:
+			prop->MaxParams = max_params - 1;
+		}
+	}
+	if (auto obj = prop->Setter())
+	{
+		int max_params;
+		switch (GetObjMaxParams(obj, max_params, aResultToken))
+		{
+		case FAIL:
+		case EARLY_EXIT:
+			return aResultToken.Result();
+		case OK:
+			if (prop->MaxParams < max_params - 2)
+				prop->MaxParams = max_params - 2;
+		}
+	}
 	AddRef();
 	_o_return(this);
 }
