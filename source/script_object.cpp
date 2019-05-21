@@ -500,6 +500,7 @@ ObjectMember Object::sMembers[] =
 };
 
 Object *Object::sPrototype = Object::CreatePrototype(_T("Object"), nullptr, sMembers, _countof(sMembers));
+Object *Object::sClassPrototype = Object::CreatePrototype(_T("Class"), Object::sPrototype);
 
 ResultType STDMETHODCALLTYPE Object::Invoke(
                                             ResultToken &aResultToken,
@@ -846,15 +847,15 @@ bool Array::Append(ExprTokenType &aValue)
 
 void Object::EndClassDefinition()
 {
+	auto &obj = *(Object *)GetOwnPropObj(_T("Prototype"));
 	// Instance variables were previously created as keys in the class object to prevent duplicate or
 	// conflicting declarations.  Since these variables will be added at run-time to the derived objects,
-	// we don't want them in the class object.  So delete any key-value pairs with the special marker
-	// value (currently any integer, since static initializers haven't been evaluated yet).
-	for (index_t i = mFields.Length(); i > 0; )
+	// we don't want them in the class object.  So delete any key-value pairs with "".
+	for (index_t i = obj.mFields.Length(); i > 0; )
 	{
 		i--;
-		if (mFields[i].symbol == SYM_INTEGER)
-			mFields.Remove(i, 1);
+		if (obj.mFields[i].symbol == SYM_STRING && obj.mFields[i].string.Length() == 0)
+			obj.mFields.Remove(i, 1);
 	}
 }
 
@@ -905,26 +906,40 @@ ResultType Object::SetBase(Object *aNewBase, ResultToken &aResultToken)
 // Object::Type() - Returns the object's type/class name.
 //
 
-static LPTSTR sObjectTypeName = _T("Object");
-
 LPTSTR Object::Type()
 {
 	Object *base;
 	ExprTokenType value;
 	if (GetOwnProp(value, _T("__Class")))
-		return _T("Class"); // This object is a class.
+		return _T("Prototype"); // This object is a prototype.
 	for (base = mBase; base; base = base->mBase)
 		if (base->GetOwnProp(value, _T("__Class")))
-			return TokenToString(value); // This object is an instance of base.
-	return sObjectTypeName; // This is an Object of undetermined type, like Object() or {}.
+			return TokenToString(value); // This object is an instance of that class.
+	return _T("Object"); // This is an Object of undetermined type, like Object() or {}.
+}
+
+
+Object *Object::CreateClass(Object *aPrototype)
+{
+	auto cls = new Object();
+	cls->SetBase(sClassPrototype);
+	cls->SetOwnProp(_T("Prototype"), aPrototype);
+	return cls;
+}
+
+
+Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase)
+{
+	auto obj = new Object();
+	obj->SetOwnProp(_T("__Class"), ExprTokenType(aClassName));
+	obj->SetBase(aBase);
+	return obj;
 }
 
 
 Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount)
 {
-	auto obj = new Object();
-	obj->SetBase(aBase);
-	obj->SetOwnProp(_T("__Class"), ExprTokenType(aClassName));
+	auto obj = CreatePrototype(aClassName, aBase);
 	obj->mFlags |= NativeClassPrototype;
 
 	TCHAR name[MAX_VAR_NAME_LENGTH + 1];

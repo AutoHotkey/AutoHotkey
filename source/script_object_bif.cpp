@@ -204,7 +204,11 @@ BIF_DECL(Op_ObjNew)
 	ExprTokenType *class_token = aParam[0]; // Save this to be restored later.
 
 	auto class_object = dynamic_cast<Object *>(TokenToObject(*class_token));
-	if (!class_object || class_object->GetNativeBase() != Object::sPrototype)
+	if (class_object)
+		if (auto obj = class_object->GetOwnPropObj(_T("Prototype")))
+			class_object = dynamic_cast<Object *>(obj);
+	if (!class_object // Not an Object.
+		|| (class_object->IsNativeClassPrototype() ? class_object : class_object->GetNativeBase()) != Object::sPrototype)
 		_f_throw(ERR_NEW_BAD_CLASS);
 
 	Object *new_object = Object::Create();

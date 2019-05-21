@@ -2469,29 +2469,37 @@ examine_line:
 			, phys_line_number, has_continuation_section))
 			return FAIL;
 
-		if (IsFunctionDefinition(buf, next_buf))
-		{
-			if (!DefineFunc(buf, func_global_var))
-				return FAIL;
-			goto continue_main_loop;
-		}
-
 		if (mClassObjectCount && !g->CurrentFunc) // Inside a class definition (and not inside a method).
 		{
-			// Check for assignment first, in case of something like "Static := 123".
-			for (cp = buf; IS_IDENTIFIER_CHAR(*cp) || *cp == '.'; ++cp);
-			if (cp > buf) // i.e. buf begins with an identifier.
+			LPTSTR id = buf;
+			bool is_static = false;
+			if (!_tcsnicmp(id, _T("Static"), 6) && IS_SPACE_OR_TAB(id[6]))
+			{
+				id = omit_leading_whitespace(id + 7);
+				if (IS_IDENTIFIER_CHAR(*id))
+					is_static = true;
+				else
+					id = buf;
+			}
+			if (IsFunctionDefinition(id, next_buf))
+			{
+				if (!DefineFunc(id, func_global_var, is_static))
+					return FAIL;
+				goto continue_main_loop;
+			}
+			for (cp = id; IS_IDENTIFIER_CHAR(*cp) || *cp == '.'; ++cp);
+			if (cp > id) // i.e. buf begins with an identifier.
 			{
 				cp = omit_leading_whitespace(cp);
 				if (*cp == ':' && cp[1] == '=') // This is an assignment.
 				{
-					if (!DefineClassVars(buf, false)) // See above for comments.
+					if (!DefineClassVars(id, is_static))
 						return FAIL;
 					goto continue_main_loop;
 				}
 				if (!*cp || *cp == '[' || *cp == '{' || (*cp == '=' && cp[1] == '>')) // Property or invalid.
 				{
-					if (!DefineClassProperty(buf, LINE_SIZE, func_global_var, buf_has_brace))
+					if (!DefineClassProperty(id, LINE_SIZE - int(id - buf), is_static, func_global_var, buf_has_brace))
 						return FAIL;
 					if (!buf_has_brace)
 					{
@@ -2501,15 +2509,15 @@ examine_line:
 					}
 					goto continue_main_loop;
 				}
-				if (!_tcsnicmp(buf, _T("Static"), 6) && IS_SPACE_OR_TAB(buf[6]))
-				{
-					if (!DefineClassVars(buf + 7, true))
-						return FAIL; // Above already displayed the error.
-					goto continue_main_loop; // In lieu of "continue", for performance.
-				}
 			}
 			// Anything not already handled above is not valid directly inside a class definition.
 			return ScriptError(ERR_INVALID_LINE_IN_CLASS_DEF, buf);
+		}
+		else if (IsFunctionDefinition(buf, next_buf))
+		{
+			if (!DefineFunc(buf, func_global_var))
+				return FAIL;
+			goto continue_main_loop;
 		}
 
 		// Parse the command, assignment or expression, including any same-line open brace or sub-action
@@ -2710,6 +2718,13 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 				if (action_type >= ACT_FIRST_JUMP && action_type <= ACT_LAST_JUMP // Gosub, goto, break or continue (though only the first two are likely to be needed).
 					&& orig_char != '(') // Not "Gosub(x)", which takes an expression.
 					return OK;
+
+				if (mClassObjectCount && !g->CurrentFunc // In a class body.
+					&& (action_end - action_start == 6) && !_tcsnicmp(action_start, _T("Static"), 6)) // Ignore "Static" modifier.
+				{
+					action_start = omit_leading_whitespace(action_end);
+					continue;
+				}
 			}
 		}
 		break;
@@ -5703,7 +5718,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	{
 		orig_end = aPrmEnd[1];
 		aPrmEnd[1] = '\0';
-		if (!DefineFunc(aPrmStart, NULL, true))
+		if (!DefineFunc(aPrmStart, NULL, false, true))
 			return FAIL;
 		aPrmEnd[1] = orig_end;
 	}
@@ -5712,7 +5727,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 		// Format the parameter list as needed for DefineFunc().
 		TCHAR prm[MAX_VAR_NAME_LENGTH + 4];
 		sntprintf(prm, _countof(prm), _T("(%.*s)"), aPrmEnd - aPrmStart, aPrmStart);
-		if (!DefineFunc(prm, NULL, true))
+		if (!DefineFunc(prm, NULL, false, true))
 			return FAIL;
 	}
 
@@ -5747,7 +5762,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 
 
 
-ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsInExpression)
+ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic, bool aIsInExpression)
 // Returns OK or FAIL.
 // Caller has already called ValidateName() on the function, and it is known that this valid name
 // is followed immediately by an open-paren.  aFuncExceptionVar is the address of an array on
@@ -5761,6 +5776,8 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsInExpr
 	if (is_method) // Class method or property getter/setter.
 	{
 		Object *class_object = mClassObject[mClassObjectCount - 1];
+		if (!aStatic)
+			class_object = (Object *)class_object->GetOwnPropObj(_T("Prototype"));
 
 		*param_start = '\0'; // Temporarily terminate, for simplicity.
 
@@ -5769,7 +5786,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsInExpr
 		// on by FindFunc(), BIF_OnMessage() and perhaps others.  For simplicity, allow one extra char to be
 		// printed and rely on AddFunc() detecting that the name is too long.
 		TCHAR full_name[MAX_VAR_NAME_LENGTH + 1 + 1]; // Extra +1 for null terminator.
-		_sntprintf(full_name, MAX_VAR_NAME_LENGTH + 1, _T("%s.%s"), mClassName, aBuf);
+		_sntprintf(full_name, MAX_VAR_NAME_LENGTH + 1, aStatic ? _T("%s.%s") : _T("%s.Prototype.%s"), mClassName, aBuf);
 		full_name[MAX_VAR_NAME_LENGTH + 1] = '\0'; // Must terminate at this exact point if _sntprintf hit the limit.
 		
 		// Check for duplicates and determine insert_pos:
@@ -6104,7 +6121,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		return ScriptError(_T("This class definition is nested too deep."), aBuf);
 
 	LPTSTR cp, class_name = aBuf;
-	Object *outer_class, *base_class = NULL;
+	Object *outer_class, *base_class = nullptr, *base_prototype = Object::sPrototype;
 	Var *class_var;
 	ExprTokenType token;
 
@@ -6118,29 +6135,28 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		LPTSTR base_class_name = omit_leading_whitespace(cp + 8);
 		if (!*base_class_name)
 			return ScriptError(_T("Missing class name."), cp);
-		if (  !(base_class = FindClass(base_class_name))  )
+		base_class = FindClass(base_class_name);
+		if (!base_class)
 		{
 			// This class hasn't been defined yet, but it might be.  Automatically create the
 			// class, but store it in the "unresolved" list.  When its definition is encountered,
 			// it will be removed from the list.  If any classes remain in the list when the end
 			// of the script is reached, an error will be thrown.
-			if (mUnresolvedClasses && mUnresolvedClasses->GetOwnProp(token, base_class_name))
-			{
-				// Some other class has already referenced it.  Use the existing object:
-				base_class = (Object *)token.object;
-			}
+			if (mUnresolvedClasses)
+				base_class = (Object *)mUnresolvedClasses->GetOwnPropObj(base_class_name);
 			else
+				mUnresolvedClasses = Object::Create();
+			if (!base_class)
 			{
-				if (  !mUnresolvedClasses && !(mUnresolvedClasses = Object::Create())
-					|| !(base_class = Object::Create())
-					// Storing the file/line index in "__Class" instead of something like "DBG" or
-					// two separate fields helps to reduce code size and maybe memory fragmentation.
-					// It will be overwritten when the class definition is encountered.
-					|| !base_class->SetOwnProp(_T("__Class"), ((__int64)mCurrFileIndex << 32) | mCombinedLineNumber)
+				if (   !(base_prototype = Object::CreatePrototype(base_class_name))
+					|| !(base_class = Object::CreateClass(base_prototype))
+					// This property will be removed when the class definition is encountered:
+					|| !base_class->SetOwnProp(_T("Line"), ((__int64)mCurrFileIndex << 32) | mCombinedLineNumber)
 					|| !mUnresolvedClasses->SetOwnProp(base_class_name, base_class)  )
 					return ScriptError(ERR_OUTOFMEM);
 			}
 		}
+		base_prototype = (Object *)base_class->GetOwnPropObj(_T("Prototype"));
 	}
 
 	// Validate the name even if this is a nested definition, for consistency.
@@ -6204,28 +6220,33 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		if (result_token.symbol == SYM_OBJECT)
 		{
 			// Use this object as the class.  At least one other object already refers to it as mBase.
-			// At this point class_object["__Class"] contains the file index and line number, but it
-			// will be overwritten below.
 			class_object = (Object *)result_token.object;
+			class_object->DeleteOwnProp(_T("Line")); // Remove the error reporting info.
 		}
 	}
 
-	if (   !(class_object || (class_object = Object::Create()))
-		|| !(class_object->SetOwnProp(_T("__Class"), token))
-		|| !(mClassObjectCount
-				? outer_class->SetOwnProp(class_name, class_object) // Assign to super_class[class_name].
-				: class_var->Assign(class_object))   ) // Assign to global variable named %class_name%.
-		return ScriptError(ERR_OUTOFMEM);
+	Object *prototype;
+	if (class_object)
+		prototype = (Object *)class_object->GetOwnPropObj(_T("Prototype"));
+	else
+		class_object = Object::CreateClass(prototype = Object::CreatePrototype(mClassName));
 
-	class_object->SetBase(base_class ? base_class : Object::sPrototype);
+	if (mClassObjectCount)
+		outer_class->SetOwnProp(class_name, class_object); // Assign to outer_class[class_name].
+	else
+		class_var->Assign(class_object); // Assign to global variable named %class_name%.
+
+	prototype->SetBase(base_prototype);
+	if (base_class)
+		class_object->SetBase(base_class);
 
 	++mClassObjectCount;
 	return OK;
 }
 
 
-ResultType Script::DefineClassProperty(LPTSTR aBuf, int aBufSize, Var **aFuncGlobalVar
-	, bool &aBufHasBraceOrNotNeeded)
+ResultType Script::DefineClassProperty(LPTSTR aBuf, int aBufSize, bool aStatic
+	, Var **aFuncGlobalVar, bool &aBufHasBraceOrNotNeeded)
 {
 	LPTSTR name_end = find_identifier_end(aBuf);
 	LPTSTR param_start = omit_leading_whitespace(name_end);
@@ -6260,10 +6281,13 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, int aBufSize, Var **aFuncGlo
 	_stprintf(mClassPropertyDef, _T("%.*s.Get(%.*s)"), name_length, aBuf, param_length, param_start);
 
 	Object *class_object = mClassObject[mClassObjectCount - 1];
+	if (!aStatic)
+		class_object = (Object *)class_object->GetOwnPropObj(_T("Prototype"));
 	*name_end = 0; // Terminate for aBuf use below.
-	if (class_object->GetOwnProp(ExprTokenType(), aBuf))
+	if (class_object->GetOwnPropType(aBuf) > Object::PropType::Value)
 		return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
 	mClassProperty = class_object->DefineProperty(aBuf);
+	mClassPropertyStatic = aStatic;
 	if (!mClassProperty)
 		return ScriptError(ERR_OUTOFMEM);
 
@@ -6287,7 +6311,7 @@ ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, int aBufSize, LPTSTR aEnd
 	// For simplicity, pass the property definition to DefineFunc instead of the actual
 	// line text, even though it makes some error messages a bit inaccurate. (That would
 	// happen anyway when DefineFunc() finds a syntax error in the parameter list.)
-	if (!DefineFunc(mClassPropertyDef, aFuncGlobalVar))
+	if (!DefineFunc(mClassPropertyDef, aFuncGlobalVar, mClassPropertyStatic))
 		return FAIL;
 	if (mClassProperty->MinParams == -1)
 	{
@@ -6311,13 +6335,14 @@ ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, int aBufSize, LPTSTR aEnd
 ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 {
 	Object *class_object = mClassObject[mClassObjectCount - 1];
+	if (!aStatic)
+		class_object = (Object *)class_object->GetOwnPropObj(_T("Prototype"));
+
 	LPTSTR item, item_end;
 	TCHAR orig_char, buf[LINE_SIZE];
 	size_t buf_used = 0;
-	ExprTokenType temp_token;
 	ExprTokenType empty_token(_T(""), 0);
-	ExprTokenType int_token(1i64); // Used to mark instance variables.
-					
+
 	for (item = omit_leading_whitespace(aBuf); *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
 	{
 		item_end = find_identifier_end(item);
@@ -6325,7 +6350,8 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			return ScriptError(ERR_INVALID_CLASS_VAR, item);
 		orig_char = *item_end;
 		*item_end = '\0'; // Temporarily terminate.
-		bool item_exists = class_object->GetOwnProp(temp_token, item);
+		ExprTokenType existing;
+		auto item_exists = class_object->GetOwnPropType(item);
 		bool item_name_has_dot = (orig_char == '.');
 		if (item_name_has_dot)
 		{
@@ -6334,7 +6360,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			// previously declared (and will presumably be assigned an object at runtime).
 			// Ensure that at least the root class var exists; any further validation would
 			// be impossible since the object doesn't exist yet.
-			if (!item_exists)
+			if (item_exists == Object::PropType::None)
 				return ScriptError(_T("Unknown class var."), item);
 			for (TCHAR *cp; *item_end == '.'; item_end = cp)
 			{
@@ -6347,12 +6373,18 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		}
 		else
 		{
-			if (item_exists)
+			switch (item_exists)
+			{
+			case Object::PropType::Value:
+			case Object::PropType::Object: // Prototype or nested class.
 				return ScriptError(ERR_DUPLICATE_DECLARATION, item);
-			// Assign class_object[item] := "" to mark it as a class variable
-			// and allow duplicate declarations to be detected:
-			if (!class_object->SetOwnProp(item, aStatic ? empty_token : int_token))
-				return ScriptError(ERR_OUTOFMEM);
+			case Object::PropType::None:
+				// Assign class_object[item] := "" to mark it as a value property
+				// and allow duplicate declarations to be detected:
+				if (!class_object->SetOwnProp(item, empty_token))
+					return ScriptError(ERR_OUTOFMEM);
+			// But for PropType::Dynamic, we want this line to assign to the property, so don't overwrite it.
+			}
 			*item_end = orig_char; // Undo termination.
 		}
 		size_t name_length = item_end - item;
@@ -6388,7 +6420,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		item_end += FindExprDelim(item_end); // Find the next comma which is not part of the initializer (or find end of string).
 
 		// Append "ClassNameOrThis.VarName := Initializer, " to the buffer.
-		LPCTSTR initializer = item_name_has_dot ? _T("%s.%.*s := %.*s, ") : _T("ObjRawSet(%s,\"%.*s\",(%.*s)), ");
+		LPCTSTR initializer = _T("%s.%.*s := %.*s, ");
 		int chars_written = _sntprintf(buf + buf_used, _countof(buf) - buf_used, initializer
 			, aStatic ? mClassName : _T("this"), (int)name_length, item, (int)(item_end - right_side_of_operator), right_side_of_operator);
 		if (chars_written < 0)
@@ -6426,7 +6458,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 			{
 				// Create an __Init method for this class.
 				TCHAR def[] = _T("__Init(){");
-				if (!DefineFunc(def, NULL)
+				if (!DefineFunc(def, nullptr, aStatic)
 					|| (class_object->Base() && !ParseAndAddLine(_T("base.__Init()"), 0, ACT_EXPRESSION))) // Initialize base-class variables first. Relies on short-circuit evaluation.
 					return FAIL;
 				
@@ -6536,7 +6568,7 @@ ResultType Script::ResolveClasses()
 		return OK;
 	// There is at least one unresolved class.
 	ExprTokenType token;
-	if (base->GetOwnProp(token, _T("__Class")))
+	if (base->GetOwnProp(token, _T("Line")))
 	{
 		// In this case (an object in the mUnresolvedClasses list), it is always an integer
 		// containing the file index and line number:

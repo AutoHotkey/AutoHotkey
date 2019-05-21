@@ -362,6 +362,26 @@ public:
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
 	
 	bool HasProp(name_t aName);
+	
+	enum class PropType
+	{
+		None = 0,
+		Value,
+		Object,
+		Dynamic
+	};
+	PropType GetOwnPropType(name_t aName)
+	{
+		auto field = FindField(aName);
+		if (!field)
+			return PropType::None;
+		switch (field->symbol)
+		{
+		case SYM_DYNAMIC: return PropType::Dynamic;
+		case SYM_OBJECT: return PropType::Object;
+		default: return PropType::Value;
+		}
+	}
 
 	bool GetOwnProp(ExprTokenType &aToken, name_t aName)
 	{
@@ -370,6 +390,12 @@ public:
 			return false;
 		field->ToToken(aToken);
 		return true;
+	}
+	
+	IObject *GetOwnPropObj(name_t aName)
+	{
+		auto field = FindField(aName);
+		return field && field->symbol == SYM_OBJECT ? field->object : nullptr;
 	}
 
 	bool SetOwnProp(name_t aName, ExprTokenType &aValue)
@@ -383,6 +409,13 @@ public:
 
 	bool SetOwnProp(name_t aName, __int64 aValue) { return SetOwnProp(aName, ExprTokenType(aValue)); }
 	bool SetOwnProp(name_t aName, IObject *aValue) { return SetOwnProp(aName, ExprTokenType(aValue)); }
+
+	void DeleteOwnProp(name_t aName)
+	{
+		auto field = FindField(aName);
+		if (field)
+			mFields.Remove((index_t)(field - mFields), 1);
+	}
 	
 	IObject *GetMethodFunc(name_t name)
 	{
@@ -422,7 +455,9 @@ public:
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	static ObjectMember sMembers[];
-	static Object *sPrototype;
+	static Object *sPrototype, *sClassPrototype;
+	static Object *CreateClass(Object *aPrototype);
+	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase = nullptr);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount);
 
 	ResultType CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);

@@ -2779,6 +2779,7 @@ private:
 	LineNumberType mCombinedLineNumber; // In the case of a continuation section/line(s), this is always the top line.
 
 	bool mNoHotkeyLabels;
+	bool mClassPropertyStatic;
 
 	#define UPDATE_TIP_FIELD tcslcpy(mNIC.szTip, mTrayIconTip ? mTrayIconTip \
 		: mFileName, _countof(mNIC.szTip));
@@ -2894,7 +2895,7 @@ public:
 	void DeleteTimer(IObject *aLabel);
 	LPTSTR DefaultDialogTitle();
 
-	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsInExpression = false);
+	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic = false, bool aIsInExpression = false);
 #ifndef AUTOHOTKEYSC
 	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
 #endif
@@ -2904,7 +2905,7 @@ public:
 
 	ResultType DefineClass(LPTSTR aBuf);
 	ResultType DefineClassVars(LPTSTR aBuf, bool aStatic);
-	ResultType DefineClassProperty(LPTSTR aBuf, int aBufSize, Var **aFuncGlobalVar, bool &aBufHasBraceOrNotNeeded);
+	ResultType DefineClassProperty(LPTSTR aBuf, int aBufSize, bool aStatic, Var **aFuncGlobalVar, bool &aBufHasBraceOrNotNeeded);
 	ResultType DefineClassPropertyXet(LPTSTR aBuf, int aBufSize, LPTSTR aEnd, Var **aFuncGlobalVar);
 	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
 	ResultType ResolveClasses();
