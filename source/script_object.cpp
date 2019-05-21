@@ -1001,7 +1001,8 @@ ResultType Object::DeleteMethod(ResultToken &aResultToken, int aID, int aFlags, 
 	auto method = FindMethod(name);
 	if (!method)
 		_o_throw(ERR_UNKNOWN_METHOD, name);
-	_o_return(method->func);
+	mMethods.Remove((index_t)(method - mMethods), 1);
+	_o_return_empty;
 }
 
 ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
