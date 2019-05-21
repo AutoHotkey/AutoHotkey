@@ -619,11 +619,13 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			memcpy(prop_param + prop_param_count, actual_param, actual_param_count * sizeof(ExprTokenType *));
 			prop_param_count += actual_param_count;
 		}
+		auto caller_line = g_script.mCurrLine;
 		// Call getter/setter.
 		auto result = etter->Invoke(aResultToken, this_etter, IT_CALL|IF_DEFAULT, prop_param, prop_param_count);
 		if (!handle_params_recursively || result == FAIL || result == EARLY_EXIT)
 			return result;
 		// Otherwise, handle_params_recursively == true.
+		g_script.mCurrLine = caller_line; // For error-reporting.
 		if (aResultToken.symbol != SYM_OBJECT)
 		{
 			if (aResultToken.mem_to_free) // Caller may ignore mem_to_free when we return FAIL.
