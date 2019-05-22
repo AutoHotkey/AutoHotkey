@@ -500,7 +500,6 @@ ObjectMember Object::sMembers[] =
 };
 
 Object *Object::sPrototype = Object::CreatePrototype(_T("Object"), nullptr, sMembers, _countof(sMembers));
-Object *Object::sClassPrototype = Object::CreatePrototype(_T("Class"), Object::sPrototype);
 
 ResultType STDMETHODCALLTYPE Object::Invoke(
                                             ResultToken &aResultToken,
@@ -1419,6 +1418,67 @@ ResultType Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags
 		_o_return(desc);
 	}
 	_o_return_empty;
+}
+
+
+//
+// Class object
+//
+
+ObjectMember Object::sClassMembers[] =
+{
+	Object_Method1(New, 0, MAXP_VARIADIC)
+};
+Object *Object::sClassPrototype = Object::CreatePrototype(_T("Class"), Object::sPrototype, sClassMembers, _countof(sClassMembers));
+
+ResultType Object::New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto obj = Object::Create();
+	if (!obj)
+		_o_throw(ERR_OUTOFMEM);
+	if (!obj->SetBase(dynamic_cast<Object *>(GetOwnPropObj(_T("Prototype"))), aResultToken))
+		return FAIL;
+	return obj->Construct(aResultToken, aParam, aParamCount);
+}
+
+ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	ExprTokenType this_token(this);
+	ResultType result;
+	Line *curr_line = g_script.mCurrLine;
+
+	// __Init was added so that instance variables can be initialized in the correct order
+	// (beginning at the root class and ending at class_object) before __New is called.
+	// It shouldn't be explicitly defined by the user, but auto-generated in DefineClassVars().
+	result = CallMethod(_T("__Init"), IT_CALL|IF_METAOBJ, aResultToken, this_token, nullptr, 0);
+	if (result != INVOKE_NOT_HANDLED)
+	{
+		// It's possible that __Init is user-defined (despite recommendations in the
+		// documentation) or built-in, so make sure the return value, if any, is freed:
+		aResultToken.Free();
+		// Reset to defaults for __New, invoked below.
+		aResultToken.InitResult(aResultToken.buf);
+		if (result == FAIL || result == EARLY_EXIT) // Checked only after Free() and InitResult() as caller might expect mem_to_free == NULL.
+		{
+			Release();
+			return result;
+		}
+	}
+
+	g_script.mCurrLine = curr_line; // Prevent misleading error reports/Exception() stack trace.
+
+	// __New may be defined by the script for custom initialization code.
+	result = CallMethod(_T("__New"), IT_CALL|IF_METAOBJ, aResultToken, this_token, aParam, aParamCount);
+	aResultToken.Free();
+	if (result == FAIL || result == EARLY_EXIT)
+	{
+		// An error was raised within __New() or while trying to call it, or Exit was called.
+		Release();
+		return result;
+	}
+
+	aResultToken.SetValue(this); // No AddRef().
+	return aResultToken.SetResult(OK);
 }
 
 

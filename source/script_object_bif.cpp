@@ -203,81 +203,16 @@ BIF_DECL(Op_ObjNew)
 
 	ExprTokenType *class_token = aParam[0]; // Save this to be restored later.
 
-	auto class_object = dynamic_cast<Object *>(TokenToObject(*class_token));
-	if (class_object)
-		if (auto obj = class_object->GetOwnPropObj(_T("Prototype")))
-			class_object = dynamic_cast<Object *>(obj);
-	if (!class_object // Not an Object.
-		|| (class_object->IsNativeClassPrototype() ? class_object : class_object->GetNativeBase()) != Object::sPrototype)
-		_f_throw(ERR_NEW_BAD_CLASS);
+	auto class_object = TokenToObject(*class_token);
+	if (!class_object) // Not an object.
+		_f_throw(ERR_NO_OBJECT);
 
-	Object *new_object = Object::Create();
-	if (!new_object)
-		_f_throw(ERR_OUTOFMEM);
-
-	new_object->SetBase(class_object);
-
-	ExprTokenType name_token, this_token;
-	this_token.symbol = SYM_OBJECT;
-	this_token.object = new_object;
-	name_token.symbol = SYM_STRING;
+	ExprTokenType name_token(_T("New"), 3);
 	aParam[0] = &name_token;
-
-	ResultType result;
-	LPTSTR buf = aResultToken.buf; // In case Invoke overwrites aResultToken.buf via the union.
-
-	Line *curr_line = g_script.mCurrLine;
-
-	// __Init was added so that instance variables can be initialized in the correct order
-	// (beginning at the root class and ending at class_object) before __New is called.
-	// It shouldn't be explicitly defined by the user, but auto-generated in DefineClassVars().
-	name_token.marker = _T("__Init");
-	name_token.marker_length = 6;
-	result = class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, 1);
-	if (result != INVOKE_NOT_HANDLED)
-	{
-		// It's possible that __Init is user-defined (despite recommendations in the
-		// documentation) or built-in, so make sure the return value, if any, is freed:
-		aResultToken.Free();
-		// Reset to defaults for __New, invoked below.
-		aResultToken.InitResult(buf);
-		if (result == FAIL || result == EARLY_EXIT) // Checked only after Free() and InitResult() as caller might expect mem_to_free == NULL.
-		{
-			new_object->Release();
-			aParam[0] = class_token; // Restore it to original caller-supplied value.
-			aResultToken.SetExitResult(result);
-			return;
-		}
-	}
-
-	g_script.mCurrLine = curr_line; // Prevent misleading error reports/Exception() stack trace.
-	
-	// __New may be defined by the script for custom initialization code.
-	name_token.marker = _T("__New");
-	name_token.marker_length = 5;
-	result = class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, aParamCount);
-	if (result == EARLY_RETURN || !TokenIsEmptyString(aResultToken))
-	{
-		// __New() returned a value in aResultToken, so use it as our result.  aResultToken is checked
-		// for the unlikely case that class_object is not an Object (perhaps it's a ComObject) or __New
-		// points to a built-in function.  The older behaviour for those cases was to free the unexpected
-		// return value, but this requires less code and might be useful somehow.
-		new_object->Release();
-	}
-	else if (result == FAIL || result == EARLY_EXIT)
-	{
-		// An error was raised within __New() or while trying to call it, or Exit was called.
-		new_object->Release();
-		aResultToken.SetExitResult(result);
-	}
-	else
-	{
-		// Either it wasn't handled (i.e. neither this class nor any of its super-classes define __New()),
-		// or there was no explicit "return", so just return the new object.
-		aResultToken.symbol = SYM_OBJECT;
-		aResultToken.object = new_object;
-	}
+	auto result = class_object->Invoke(aResultToken, *class_token, IT_CALL, aParam, aParamCount);
 	aParam[0] = class_token;
+	if (result == INVOKE_NOT_HANDLED)
+		_f_throw(ERR_UNKNOWN_METHOD, _T("New"));
 }
 
 

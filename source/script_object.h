@@ -349,6 +349,8 @@ private:
 	ResultType CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMeta(IObject *aFunc, LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 
+	ResultType Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+
 	bool Delete() override;
 
 public:
@@ -450,6 +452,7 @@ public:
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	static ObjectMember sMembers[];
+	static ObjectMember sClassMembers[];
 	static Object *sPrototype, *sClassPrototype;
 	static Object *CreateClass(Object *aPrototype);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase = nullptr);
@@ -475,6 +478,9 @@ public:
 	ResultType GetMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType HasMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType HasOwnMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	// Class methods:
+	ResultType New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	// Properties:
 	ResultType Base(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
