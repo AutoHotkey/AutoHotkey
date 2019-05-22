@@ -598,8 +598,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		// Look for a meta-function to invoke in place of this non-existent property.
 		if (auto method = GetMethod(sMetaFuncName[INVOKE_TYPE]))
 		{
-			ExprTokenType *this_param = &aThisToken;
-			return CallAsMethod(method->func, aResultToken, &this_param, 1, aParam, aParamCount);
+			return CallMeta(method->func, name, aFlags, aResultToken, aThisToken, actual_param, actual_param_count);
 		}
 	}
 
@@ -777,35 +776,38 @@ ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 // Internal
 //
 
-ResultType Object::CallAsMethod(IObject *aFunc, ResultToken &aResultToken
-	, ExprTokenType *aParam1[], int aParamCount1
-	, ExprTokenType *aParam2[], int aParamCount2)
-{
-	// Allocate a new array of param pointers that we can modify.
-	ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount1 + aParamCount2) * sizeof(ExprTokenType *));
-	ExprTokenType field_token(aFunc);
-	// Combine the two parameter lists.
-	memcpy(param, aParam1, aParamCount1 * sizeof(ExprTokenType *));
-	memcpy(param + aParamCount1, aParam2, aParamCount2 * sizeof(ExprTokenType *));
-	// return %aFunc%(aParam1*, aParam2*)
-	return aFunc->Invoke(aResultToken, field_token, IT_CALL|IF_DEFAULT, param, aParamCount1 + aParamCount2);
-}
-
 ResultType Object::CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount)
 {
 	MethodType *method;
 	if (method = GetMethod(aName))
 	{
-		ExprTokenType *this_param = &aThisToken;
-		return CallAsMethod(method->func, aResultToken, &this_param, 1, aParam, aParamCount);
+		ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
+		param[0] = &aThisToken;
+		memcpy(param + 1, aParam, aParamCount * sizeof(ExprTokenType *));
+		// return %func%(this, aParam*)
+		return method->func->Invoke(aResultToken, ExprTokenType(method->func), IT_CALL|IF_DEFAULT, param, aParamCount + 1);
 	}
 	if (!(aFlags & IF_METAOBJ) && (method = GetMethod(sMetaFuncName[IT_CALL])))
 	{
-		ExprTokenType name_token = aName;
-		ExprTokenType *extra_params[] = { &aThisToken, &name_token };
-		return CallAsMethod(method->func, aResultToken, extra_params, 2, aParam, aParamCount);
+		return CallMeta(method->func, aName, aFlags, aResultToken, aThisToken, aParam, aParamCount);
 	}
 	return INVOKE_NOT_HANDLED;
+}
+
+ResultType Object::CallMeta(IObject *aFunc, LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount)
+{
+	auto vargs = Array::Create(aParam, aParamCount);
+	if (!vargs)
+		_o_throw(ERR_OUTOFMEM);
+	ExprTokenType name_token(aName), args_token(vargs), *param[4];
+	param[0] = &aThisToken; // this
+	param[1] = &name_token; // name
+	param[2] = &args_token; // args
+	int param_count = 3;
+	if (IS_INVOKE_SET)
+		param[param_count++] = aParam[aParamCount]; // value
+	// return %aFunc%(this, name, args [, value])
+	return aFunc->Invoke(aResultToken, ExprTokenType(aFunc), IT_CALL|IF_DEFAULT, param, param_count);
 }
 
 

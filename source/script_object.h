@@ -346,13 +346,8 @@ private:
 		return FindMethod(name, insert_pos);
 	}
 
-	// Call function after combining two lists of parameters.  aParam1 usually contains `this`
-	// and sometimes another parameter, while aParam2 contains caller-supplied parameters.
-	static ResultType CallAsMethod(IObject *aFunc, ResultToken &aResultToken
-		, ExprTokenType *aParam1[], int aParamCount1
-		, ExprTokenType *aParam2[], int aParamCount2);
 	ResultType CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType CallProperty(LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount, ExprTokenType *aValue);
+	ResultType CallMeta(IObject *aFunc, LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 
 	bool Delete() override;
 
