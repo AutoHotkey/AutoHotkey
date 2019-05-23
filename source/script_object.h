@@ -453,10 +453,11 @@ public:
 
 	static ObjectMember sMembers[];
 	static ObjectMember sClassMembers[];
-	static Object *sPrototype, *sClassPrototype;
+	static Object *sPrototype, *sClass, *sClassPrototype, *sClassClass;
 	static Object *CreateClass(Object *aPrototype);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase = nullptr);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount);
+	static Object *CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ObjectMethod aCtor);
 
 	ResultType CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
@@ -480,6 +481,7 @@ public:
 	ResultType HasOwnMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	// Class methods:
+	template<class T>
 	ResultType New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	// Properties:
@@ -588,7 +590,7 @@ public:
 		M__NewEnum
 	};
 	static ObjectMember sMembers[];
-	static Object *sPrototype;
+	static Object *sPrototype, *sClass;
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	IObject_DebugWriteProperty_Def;
 };
@@ -721,7 +723,7 @@ public:
 	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	static ObjectMember sMembers[];
-	static Object *sPrototype;
+	static Object *sPrototype, *sClass;
 };
 
 

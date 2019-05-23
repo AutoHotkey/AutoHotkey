@@ -499,8 +499,6 @@ ObjectMember Object::sMembers[] =
 	Object_Method1(HasProp, 1, 1)
 };
 
-Object *Object::sPrototype = Object::CreatePrototype(_T("Object"), nullptr, sMembers, _countof(sMembers));
-
 ResultType STDMETHODCALLTYPE Object::Invoke(
                                             ResultToken &aResultToken,
                                             ExprTokenType &aThisToken,
@@ -742,13 +740,12 @@ ObjectMember Map::sMembers[] =
 	Object_Member(__Item, __Item, 0, IT_SET, 1, 1),
 	Object_Member(Capacity, Capacity, 0, IT_SET),
 	Object_Member(Count, Count, 0, IT_GET),
+	Object_Method1(_NewEnum, 0, 0),
 	Object_Method1(Clone, 0, 0),
 	Object_Method1(Delete, 1, 2),
-	Object_Method1(Has, 1, 1),
-	Object_Method1(_NewEnum, 0, 0)
+	Object_Method1(Has, 1, 1)
 };
 
-Object *Map::sPrototype = Object::CreatePrototype(_T("Map"), Object::sPrototype, sMembers, _countof(sMembers));
 
 ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
@@ -943,52 +940,55 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 	auto obj = CreatePrototype(aClassName, aBase);
 	obj->mFlags |= NativeClassPrototype;
 
-	TCHAR name[MAX_VAR_NAME_LENGTH + 1];
-	TCHAR *full_name = name + _stprintf(name, _T("%s."), aClassName);
+	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
+	TCHAR *name = full_name + _stprintf(full_name, _T("%s.Prototype."), aClassName);
 
 	for (int i = 0; i < aMemberCount; ++i)
 	{
 		const auto &member = aMember[i];
-		_tcscpy(full_name, member.name);
+		_tcscpy(name, member.name);
 		if (member.invokeType == IT_CALL)
 		{
-			auto func = new Func(SimpleHeap::Malloc(name), true);
+			auto func = new Func(SimpleHeap::Malloc(full_name), true);
 			func->mBIM = member.method;
 			func->mMID = member.id;
 			func->mMIT = IT_CALL;
 			func->mMinParams = member.minParams + 1; // Includes `this`.
 			func->mParamCount = member.maxParams + 1;
+			func->mIsVariadic = member.maxParams == MAXP_VARIADIC;
 			func->mClass = obj; // AddRef not needed since neither mClass nor our caller's reference to obj is ever Released.
 			obj->DefineMethod(member.name, func);
 			func->Release();
 		}
 		else
 		{
-			auto prop = obj->DefineProperty(full_name);
+			auto prop = obj->DefineProperty(name);
 			prop->MinParams = member.minParams;
 			prop->MaxParams = member.maxParams;
 			
-			auto op_name = _tcschr(full_name, '\0');
+			auto op_name = _tcschr(name, '\0');
 
 			_tcscpy(op_name, _T(".Get"));
-			auto func = new Func(SimpleHeap::Malloc(name), true);
+			auto func = new Func(SimpleHeap::Malloc(full_name), true);
 			func->mBIM = member.method;
 			func->mMID = member.id;
 			func->mMIT = IT_GET;
 			func->mMinParams = member.minParams + 1; // Includes `this`.
 			func->mParamCount = member.maxParams + 1;
+			func->mIsVariadic = member.maxParams == MAXP_VARIADIC;
 			func->mClass = obj;
 			prop->SetGetter(func);
 			
 			if (member.invokeType == IT_SET)
 			{
 				_tcscpy(op_name, _T(".Set"));
-				func = new Func(SimpleHeap::Malloc(name), true);
+				func = new Func(SimpleHeap::Malloc(full_name), true);
 				func->mBIM = member.method;
 				func->mMID = member.id;
 				func->mMIT = IT_SET;
 				func->mMinParams = member.minParams + 2; // Includes `this` and `value`.
 				func->mParamCount = member.maxParams + 2;
+				func->mIsVariadic = member.maxParams == MAXP_VARIADIC;
 				func->mClass = obj;
 				prop->SetSetter(func);
 			}
@@ -996,6 +996,31 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 	}
 
 	return obj;
+}
+
+Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ObjectMethod aCtor)
+{
+	auto class_obj = CreateClass(aPrototype);
+
+	class_obj->SetBase(aBase);
+
+	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
+	_stprintf(full_name, _T("%s.New"), aClassName);
+	auto ctor = new Func(SimpleHeap::Malloc(full_name), true);
+	ctor->mBIM = aCtor;
+	ctor->mMID = 0;
+	ctor->mMIT = IT_CALL;
+	ctor->mMinParams = 0;
+	ctor->mParamCount = MAX_FUNCTION_PARAMS;
+	ctor->mIsVariadic = true;
+	ctor->mClass = Object::sPrototype; // Safe to call on any Object.
+	class_obj->DefineMethod(_T("New"), ctor);
+	ctor->Release();
+
+	auto var = g_script.FindOrAddVar(aClassName, 0, VAR_DECLARE_SUPER_GLOBAL);
+	var->AssignSkipAddRef(class_obj);
+
+	return class_obj;
 }
 
 
@@ -1422,18 +1447,13 @@ ResultType Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags
 
 
 //
-// Class object
+// Class objects
 //
 
-ObjectMember Object::sClassMembers[] =
-{
-	Object_Method1(New, 0, MAXP_VARIADIC)
-};
-Object *Object::sClassPrototype = Object::CreatePrototype(_T("Class"), Object::sPrototype, sClassMembers, _countof(sClassMembers));
-
+template<class T>
 ResultType Object::New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	auto obj = Object::Create();
+	auto obj = T::Create();
 	if (!obj)
 		_o_throw(ERR_OUTOFMEM);
 	if (!obj->SetBase(dynamic_cast<Object *>(GetOwnPropObj(_T("Prototype"))), aResultToken))
@@ -1826,19 +1846,18 @@ bool Array::ItemToToken(index_t aIndex, ExprTokenType &aToken)
 ObjectMember Array::sMembers[] =
 {
 	Object_Property_get_set(__Item, 1, 1),
-	Object_Property_get_set(Length),
 	Object_Property_get_set(Capacity),
-	Object_Method(InsertAt, 2, MAXP_VARIADIC),
-	Object_Method(Push, 1, MAXP_VARIADIC),
-	Object_Method(RemoveAt, 1, 2),
-	Object_Method(Pop, 0, 0),
-	Object_Method(Has, 1, 1),
-	Object_Method(Delete, 1, 1),
+	Object_Property_get_set(Length),
+	Object_Member(__New, Invoke, M_Push, IT_CALL, 0, MAXP_VARIADIC),
+	Object_Method(_NewEnum, 0, 0),
 	Object_Method(Clone, 0, 0),
-	Object_Method(_NewEnum, 0, 0)
+	Object_Method(Delete, 1, 1),
+	Object_Method(Has, 1, 1),
+	Object_Method(InsertAt, 2, MAXP_VARIADIC),
+	Object_Method(Pop, 0, 0),
+	Object_Method(Push, 1, MAXP_VARIADIC),
+	Object_Method(RemoveAt, 1, 2)
 };
-
-Object *Array::sPrototype = Object::CreatePrototype(_T("Array"), Object::sPrototype, sMembers, _countof(sMembers));
 
 ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
@@ -2780,6 +2799,20 @@ BIF_DECL(BIF_ClipboardAll)
 	}
 	_f_return(new ClipboardAll(data, size));
 }
+
+
+
+//																		Direct base			Members
+Object *Object::sPrototype		= Object::CreatePrototype(_T("Object"),	nullptr,			sMembers, _countof(sMembers));
+Object *Object::sClassPrototype	= Object::CreatePrototype(_T("Class"),	Object::sPrototype);
+Object *Array::sPrototype		= Object::CreatePrototype(_T("Array"),	Object::sPrototype,	sMembers, _countof(sMembers));
+Object *Map::sPrototype			= Object::CreatePrototype(_T("Map"),	Object::sPrototype,	sMembers, _countof(sMembers));
+
+//																Direct base			Prototype			Constructor
+Object *Object::sClass		= Object::CreateClass(_T("Object"),	sClassPrototype,	sPrototype,			static_cast<ObjectMethod>(&New<Object>));
+Object *Object::sClassClass	= Object::CreateClass(_T("Class"),	Object::sClass,		sClassPrototype,	static_cast<ObjectMethod>(&New<Object>));
+Object *Array::sClass		= Object::CreateClass(_T("Array"),	Object::sClass,		sPrototype,			static_cast<ObjectMethod>(&New<Array>));
+Object *Map::sClass			= Object::CreateClass(_T("Map"),	Object::sClass,		sPrototype,			static_cast<ObjectMethod>(&New<Map>));
 
 
 

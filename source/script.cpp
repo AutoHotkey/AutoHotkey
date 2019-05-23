@@ -6121,7 +6121,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		return ScriptError(_T("This class definition is nested too deep."), aBuf);
 
 	LPTSTR cp, class_name = aBuf;
-	Object *outer_class, *base_class = nullptr, *base_prototype = Object::sPrototype;
+	Object *outer_class, *base_class = Object::sClass, *base_prototype = Object::sPrototype;
 	Var *class_var;
 	ExprTokenType token;
 
@@ -6237,8 +6237,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		class_var->Assign(class_object); // Assign to global variable named %class_name%.
 
 	prototype->SetBase(base_prototype);
-	if (base_class)
-		class_object->SetBase(base_class);
+	class_object->SetBase(base_class);
 
 	++mClassObjectCount;
 	return OK;
