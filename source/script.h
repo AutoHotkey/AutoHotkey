@@ -226,6 +226,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_UNKNOWN_PROPERTY _T("Unknown property.")
 #define ERR_UNKNOWN_METHOD _T("Unknown method.")
 #define ERR_PROPERTY_READONLY _T("Property is read-only.")
+#define ERR_NO_KEY _T("Key not found.")
 #define ERR_NO_GUI _T("No default GUI.")
 #define ERR_NO_STATUSBAR _T("No StatusBar.")
 #define ERR_NO_LISTVIEW _T("No ListView.")

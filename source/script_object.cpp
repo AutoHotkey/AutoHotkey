@@ -747,7 +747,7 @@ ObjectMember Map::sMembers[] =
 	Object_Method1(_NewEnum, 0, 0),
 	Object_Method1(Clear, 0, 0),
 	Object_Method1(Clone, 0, 0),
-	Object_Method1(Delete, 1, 2),
+	Object_Method1(Delete, 1, 1),
 	Object_Method1(Has, 1, 1)
 };
 
@@ -762,7 +762,7 @@ ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 				aResultToken.object->AddRef();
 			return OK;
 		}
-		_o_throw(_T("Key not found."), ParamIndexToString(0, _f_number_buf));
+		_o_throw(ERR_NO_KEY, ParamIndexToString(0, _f_number_buf));
 	}
 	else
 	{
@@ -1057,91 +1057,43 @@ ResultType Object::DeleteMethod(ResultToken &aResultToken, int aID, int aFlags, 
 }
 
 ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-// Delete(first_key [, last_key := first_key])
 {
-	Pair *min_item;
-	index_t min_pos, max_pos, pos;
-	SymbolType min_key_type;
-	Key min_key, max_key;
-	IntKeyType logical_count_removed = 1;
+	Pair *item;
+	index_t pos;
+	SymbolType key_type;
+	Key key;
 
-	LPTSTR number_buf = _f_number_buf;
+	if (item = FindItem(*aParam[0], _f_number_buf, key_type, key, pos))
+		pos = index_t(item - mItem); // else min_pos was already set by FindItem.
 
-	// Find the position of "min".
-	if (min_item = FindItem(*aParam[0], number_buf, min_key_type, min_key, min_pos))
-		min_pos = index_t(min_item - mItem); // else min_pos was already set by FindItem.
-
-	if (aParamCount > 1) // Removing a range of keys.
+	if (!item) // Nothing to remove.
 	{
-		SymbolType max_key_type;
-		Pair *max_item;
-
-		// Find the next position > [aParam[1]].
-		if (max_item = FindItem(*aParam[1], number_buf, max_key_type, max_key, max_pos))
-			max_pos = index_t(max_item - mItem + 1);
-
-		// Since the order of key-types in mItem is of no logical consequence, require that both keys be the same type.
-		// Do not allow removing a range of object keys since there is probably no meaning to their order.
-		if (max_key_type != min_key_type || max_key_type == SYM_OBJECT || max_pos < min_pos
-			// min and max are different types, are objects, or max < min.
-			|| (max_pos == min_pos && (max_key_type == SYM_INTEGER ? max_key.i < min_key.i : _tcsicmp(max_key.s, min_key.s) < 0)))
-			// max < min, but no keys exist in that range so (max_pos < min_pos) check above didn't catch it.
-		{
-			_o_throw(ERR_PARAM2_INVALID);
-		}
-		//else if (max_pos == min_pos): specified range is valid, but doesn't match any keys.
-		//	Continue on, adjust integer keys as necessary and return 0.
+		// Our return value when only one arg is given is supposed to be the value
+		// removed from this[arg].  Since this[arg] would throw an exception...
+		_o_throw(ERR_NO_KEY, ParamIndexToString(0, _f_number_buf));
 	}
-	else // Removing a single item.
+	// Set return value to the removed item.
+	item->ReturnMove(aResultToken);
+	// Copy item to temporary memory so that Free() and Release() can be postponed,
+	// in case they cause re-entry via __delete.  ReturnMove() may have transferred
+	// an object value, but not the key or Property getter/setter.
+	auto copy = (Pair *)_alloca(sizeof(*item));
+	memcpy(copy, item, sizeof(*item));
+	// Remove item.
+	memmove(item, item + 1, (mCount - (pos + 1)) * sizeof(Pair));
+	mCount--;
+	// Free item and keys.
+	copy->Free();
+	if (key_type == SYM_STRING)
+		free(copy->key.s);
+	else // i.e. SYM_OBJECT or SYM_INTEGER
 	{
-		if (!min_item) // Nothing to remove.
-		{
-			// Our return value when only one key is given is supposed to be the value
-			// previously at this[key], which has just been removed.  Since this[key]
-			// would return "", it makes sense to return the same in this case.
-			_o_return_empty;
-		}
-		// Since only one item (at maximum) can be removed in this mode, it
-		// seems more useful to return the item being removed than a count.
-		min_item->ReturnMove(aResultToken);
-		// If the key is an object, release it now because Free() doesn't.
-		// Note that object keys can only be removed in the single-item mode.
-		if (min_key_type == SYM_OBJECT)
-			min_item->key.p->Release();
-		// Set max_pos for the loops below.
-		max_pos = min_pos + 1;
+		mKeyOffsetString--;
+		if (key_type == SYM_INTEGER)
+			mKeyOffsetObject--;
+		else
+			copy->key.p->Release();
 	}
-
-	for (pos = min_pos; pos < max_pos; ++pos)
-		// Free each item in the range being removed.
-		mItem[pos].Free();
-
-	if (min_key_type == SYM_STRING)
-		// Free all string keys in the range being removed.
-		for (pos = min_pos; pos < max_pos; ++pos)
-			free(mItem[pos].key.s);
-
-	index_t remaining_fields = mCount - max_pos;
-	if (remaining_fields)
-		memmove(mItem + min_pos, mItem + max_pos, remaining_fields * sizeof(Pair));
-	// Adjust count by the actual number of items in the removed range.
-	index_t actual_count_removed = max_pos - min_pos;
-	mCount -= actual_count_removed;
-	// Adjust key offsets and numeric keys as necessary.
-	if (min_key_type != SYM_STRING) // i.e. SYM_OBJECT or SYM_INTEGER
-	{
-		mKeyOffsetString -= actual_count_removed;
-		if (min_key_type == SYM_INTEGER)
-		{
-			mKeyOffsetObject -= actual_count_removed;
-		}
-	}
-	if (aParamCount > 1)
-	{
-		// Return actual number of items removed:
-		_o_return(actual_count_removed);
-	}
-	//else result was set above.
 	return OK;
 }
 
