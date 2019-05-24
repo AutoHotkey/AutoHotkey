@@ -459,21 +459,24 @@ Object::~Object()
 }
 
 
-Map::~Map()
+void Map::Clear()
 {
-	if (mItem)
+	while (mCount)
 	{
-		if (mCount)
+		--mCount;
+		// Copy key before Free() since it might cause re-entry via __delete.
+		auto key = mItem[mCount].key;
+		mItem[mCount].Free();
+		if (mCount >= mKeyOffsetString)
+			free(key.s);
+		else 
 		{
-			index_t i;
-			for (i = mKeyOffsetObject; i < mKeyOffsetString; ++i)
-				mItem[i].key.p->Release();
-			for ( ; i < mCount; ++i)
-				free(mItem[i].key.s);
-			while (mCount) 
-				mItem[--mCount].Free();
+			--mKeyOffsetString;
+			if (mCount >= mKeyOffsetObject)
+				key.p->Release(); // Might also cause re-entry.
+			else
+				--mKeyOffsetObject;
 		}
-		free(mItem);
 	}
 }
 
@@ -742,6 +745,7 @@ ObjectMember Map::sMembers[] =
 	Object_Member(Capacity, Capacity, 0, IT_SET),
 	Object_Member(Count, Count, 0, IT_GET),
 	Object_Method1(_NewEnum, 0, 0),
+	Object_Method1(Clear, 0, 0),
 	Object_Method1(Clone, 0, 0),
 	Object_Method1(Delete, 1, 2),
 	Object_Method1(Has, 1, 1)
@@ -1139,6 +1143,13 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 	}
 	//else result was set above.
 	return OK;
+}
+
+
+ResultType Map::Clear(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	Clear();
+	_o_return_empty;
 }
 
 

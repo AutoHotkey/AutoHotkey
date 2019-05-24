@@ -643,7 +643,12 @@ class Map : public Object
 	index_t mKeyOffsetObject = 0, mKeyOffsetString = 0;
 
 	Map() {}
-	~Map();
+	void Clear();
+	~Map()
+	{
+		Clear();
+		free(mItem);
+	}
 	 
 	Pair *FindItem(LPTSTR val, index_t left, index_t right, index_t &insert_pos);
 	Pair *FindItem(IntKeyType val, index_t left, index_t right, index_t &insert_pos);
@@ -719,6 +724,7 @@ public:
 	ResultType __Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Clear(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType _NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
