@@ -2325,10 +2325,14 @@ ResultType Line::ValueIsType(ExprTokenType &aResultToken, ExprTokenType &aValue,
 	}
 	else if (Object *type_obj = dynamic_cast<Object *>(TokenToObject(aType)))
 	{
-		// Is the value an object which can derive, and is it derived from type_obj?
-		Object *value_obj = dynamic_cast<Object *>(TokenToObject(aValue));
-		aResultToken.value_int64 = value_obj && value_obj->IsDerivedFrom(type_obj);
-		return OK;
+		if (IObject *prototype = type_obj->GetOwnPropObj(_T("Prototype")))
+		{
+			// Is the value an object which can derive, and is it derived from type_obj?
+			Object *value_obj = dynamic_cast<Object *>(TokenToObject(aValue));
+			aResultToken.value_int64 = value_obj && value_obj->IsDerivedFrom(prototype);
+			return OK;
+		}
+		aTypeStr = type_obj->Type(); // For error-reporting.
 	}
 	else if (TokenToObject(aValue))
 	{

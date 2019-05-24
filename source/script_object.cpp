@@ -493,6 +493,7 @@ ObjectMember Object::sMembers[] =
 	Object_Method1(DeleteProp, 1, 2),
 	Object_Method1(GetMethod, 1, 1),
 	Object_Method1(GetOwnPropDesc, 1, 1),
+	Object_Method1(HasBase, 1, 1),
 	Object_Method1(HasMethod, 1, 1),
 	Object_Method1(HasOwnMethod, 1, 1),
 	Object_Method1(HasOwnProp, 1, 1),
@@ -858,17 +859,20 @@ void Object::EndClassDefinition()
 }
 
 
-//
-// Helper function for 'is' operator: is aBase a direct or indirect base object of this?
-//
 
-bool Object::IsDerivedFrom(Object *aBase)
+bool Object::IsDerivedFrom(IObject *aBase)
 {
 	Object *base;
 	for (base = mBase; base; base = base->mBase)
 		if (base == aBase)
 			return true;
 	return aBase == Object::sPrototype; // Should only be true when this == aBase, since every other Object should derive from it.
+}
+
+
+bool Object::IsInstanceOf(Object *aClass)
+{
+	return IsDerivedFrom(GetOwnPropObj(_T("Prototype")));
 }
 
 
@@ -1234,6 +1238,14 @@ ResultType Map::_NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		_o_return(enm);
 	else
 		_o_throw(ERR_OUTOFMEM);
+}
+
+ResultType Object::HasBase(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	auto obj = ParamIndexToObject(0);
+	if (!obj)
+		_o_throw(ERR_TYPE_MISMATCH);
+	_o_return(IsDerivedFrom(obj));
 }
 
 ResultType Object::HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)

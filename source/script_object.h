@@ -444,8 +444,9 @@ public:
 	}
 
 	LPTSTR Type();
-	bool IsDerivedFrom(Object *aBase);
-	
+	bool IsDerivedFrom(IObject *aBase); // Always false for non-Object objects, but IObject* allows dynamic_cast to be avoided.
+	bool IsInstanceOf(Object *aClass);
+
 	void EndClassDefinition();
 	Object *GetUnresolvedClass(LPTSTR &aName);
 	
@@ -479,6 +480,7 @@ public:
 	ResultType GetMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType HasMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType HasOwnMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType HasBase(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	// Class methods:
 	template<class T>
