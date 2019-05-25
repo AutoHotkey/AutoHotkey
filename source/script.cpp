@@ -1146,6 +1146,9 @@ ResultType Script::AutoExecSection()
 	// want a directive to affect the default settings.
 	g->HotCriterion = NULL;
 
+	if (!InitClasses())
+		return FAIL; // Treat it like a load-time error.
+
 	// v1.0.48: Due to switching from SET_UNINTERRUPTIBLE_TIMER to IsInterruptible():
 	// In spite of the comments in IsInterruptible(), periodically have a timer call IsInterruptible() due to
 	// the following scenario:
@@ -6121,6 +6124,9 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	if (mClassObjectCount == MAX_NESTED_CLASSES)
 		return ScriptError(_T("This class definition is nested too deep."), aBuf);
 
+	if (!mClasses)
+		mClasses = Array::Create();
+
 	LPTSTR cp, class_name = aBuf;
 	Object *outer_class, *base_class = Object::sClass, *base_prototype = Object::sPrototype;
 	Var *class_var;
@@ -6239,6 +6245,8 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 
 	prototype->SetBase(base_prototype);
 	class_object->SetBase(base_class);
+
+	mClasses->Append(ExprTokenType(class_object));
 
 	++mClassObjectCount;
 	return OK;
@@ -6442,68 +6450,60 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		// or at the end of the __Init method belonging to this class.  Save the current values:
 		Line *script_first_line = mFirstLine, *script_last_line = mLastLine;
 		Line *block_end;
-		Func *init_func = NULL;
+		Func *init_func = dynamic_cast<Func *>(class_object->GetOwnMethodFunc(_T("__Init"))); // This cast SHOULD always succeed; done for maintainability.
 
-		if (!aStatic)
+		if (init_func)
 		{
-			init_func = dynamic_cast<Func *>(class_object->GetMethodFunc(_T("__Init"))); // This cast SHOULD always succeed; done for maintainability.
-			if (init_func)
-			{
-				// __Init method already exists, so find the end of its body.
-				for (block_end = init_func->mJumpToLine;
-					 block_end->mActionType != ACT_BLOCK_END || !block_end->mAttribute;
-					 block_end = block_end->mNextLine);
-			}
-			else
-			{
-				// Create an __Init method for this class.
-				TCHAR def[] = _T("__Init(){");
-				if (!DefineFunc(def, nullptr, aStatic)
-					|| (class_object->Base() && !ParseAndAddLine(_T("base.__Init()"), 0, ACT_EXPRESSION))) // Initialize base-class variables first. Relies on short-circuit evaluation.
-					return FAIL;
-				
-				mLastLine->mLineNumber = 0; // Signal the debugger to skip this line while stepping in/over/out.
-				init_func = g->CurrentFunc;
-				init_func->mDefaultVarType = VAR_DECLARE_GLOBAL; // Allow global variables/class names in initializer expressions.
-				
-				if (!AddLine(ACT_BLOCK_END)) // This also resets g->CurrentFunc to NULL.
-					return FAIL;
-				block_end = mLastLine;
-				block_end->mLineNumber = 0; // See above.
-				
-				// These must be updated as one or both have changed:
-				script_first_line = mFirstLine;
-				script_last_line = mLastLine;
-			}
-			g->CurrentFunc = init_func; // g->CurrentFunc should be NULL prior to this.
-			mLastLine = block_end->mPrevLine; // i.e. insert before block_end.
-			mLastLine->mNextLine = NULL; // For maintainability; AddLine() should overwrite it regardless.
-			mCurrLine = NULL; // Fix for v1.1.09.02: Leaving this non-NULL at best causes error messages to show irrelevant vicinity lines, and at worst causes a crash because the linked list is in an inconsistent state.
+			// __Init method already exists, so find the end of its body.
+			for (block_end = init_func->mJumpToLine;
+				block_end->mActionType != ACT_BLOCK_END || !block_end->mAttribute;
+				block_end = block_end->mNextLine);
 		}
+		else
+		{
+			// Create an __Init method for this class/prototype.
+			TCHAR def[] = _T("__Init(){");
+			if (!DefineFunc(def, nullptr, aStatic))
+				return FAIL;
+			if (!aStatic)
+			{
+				if (!ParseAndAddLine(_T("base.__Init()"), 0, ACT_EXPRESSION)) // Initialize base-class variables first. Relies on short-circuit evaluation.
+					return FAIL;
+				mLastLine->mLineNumber = 0; // Signal the debugger to skip this line while stepping in/over/out.
+			}
+				
+			init_func = g->CurrentFunc;
+			init_func->mDefaultVarType = VAR_DECLARE_GLOBAL; // Allow global variables/class names in initializer expressions.
+				
+			if (!AddLine(ACT_BLOCK_END)) // This also resets g->CurrentFunc to NULL.
+				return FAIL;
+			block_end = mLastLine;
+			block_end->mLineNumber = 0; // See above.
+				
+			// These must be updated as one or both have changed:
+			script_first_line = mFirstLine;
+			script_last_line = mLastLine;
+		}
+		g->CurrentFunc = init_func; // g->CurrentFunc should be NULL prior to this.
+		mLastLine = block_end->mPrevLine; // i.e. insert before block_end.
+		mLastLine->mNextLine = nullptr; // For maintainability; AddLine() should overwrite it regardless.
+		mCurrLine = nullptr; // Fix for v1.1.09.02: Leaving this non-NULL at best causes error messages to show irrelevant vicinity lines, and at worst causes a crash because the linked list is in an inconsistent state.
 
 		mNoUpdateLabels = true;
 		if (!ParseAndAddLine(buf, LINE_SIZE))
 			return FAIL; // Above already displayed the error.
 		mNoUpdateLabels = false;
 		
-		if (aStatic)
-		{
-			mLastLine->mAttribute = (AttributeType)mLastLine->mActionType;
-			mLastLine->mActionType = ACT_STATIC; // Mark this line for the preparser.
-		}
-		else
-		{
-			if (init_func->mJumpToLine == block_end) // This can be true only for the first initializer of a class with no base-class.
-				init_func->mJumpToLine = mLastLine;
-			// Rejoin the function's block-end (and any lines following it) to the main script.
-			mLastLine->mNextLine = block_end;
-			block_end->mPrevLine = mLastLine;
-			// mFirstLine should be left as it is: if it was NULL, it now contains a pointer to our
-			// __init function's block-begin, which is now the very first executable line in the script.
-			g->CurrentFunc = NULL;
-			// Restore mLastLine so that any subsequent script lines are added at the correct point.
-			mLastLine = script_last_line;
-		}
+		if (init_func->mJumpToLine == block_end) // This can be true only for the first static initializer.
+			init_func->mJumpToLine = mLastLine;
+		// Rejoin the function's block-end (and any lines following it) to the main script.
+		mLastLine->mNextLine = block_end;
+		block_end->mPrevLine = mLastLine;
+		// mFirstLine should be left as it is: if it was NULL, it now contains a pointer to our
+		// __init function's block-begin, which is now the very first executable line in the script.
+		g->CurrentFunc = nullptr;
+		// Restore mLastLine so that any subsequent script lines are added at the correct point.
+		mLastLine = script_last_line;
 	}
 	return OK;
 }
@@ -6577,6 +6577,29 @@ ResultType Script::ResolveClasses()
 	}
 	mCurrLine = NULL;
 	return ScriptError(_T("Unknown class."), name);
+}
+
+
+ResultType Script::InitClasses()
+{
+	if (!mClasses) // No classes.
+		return OK;
+	TCHAR buf[_f_retval_buf_size];
+	ResultToken result_token;
+	ExprTokenType cls;
+	ExprTokenType param_token = _T("__Init");
+	ExprTokenType *param = &param_token;
+	for (Array::index_t i = 0; i < mClasses->Length(); ++i)
+	{
+		mClasses->ItemToToken(i, cls);
+		result_token.InitResult(buf);
+		if (!cls.object->Invoke(result_token, cls, IT_CALL | IF_METAOBJ, &param, 1))
+			return FAIL;
+		result_token.Free();
+	}
+	mClasses->Release();
+	mClasses = nullptr;
+	return OK;
 }
 
 

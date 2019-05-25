@@ -2768,6 +2768,7 @@ private:
 	Object *mClassObject[MAX_NESTED_CLASSES]; // Class definition currently being parsed.
 	TCHAR mClassName[MAX_CLASS_NAME_LENGTH + 1]; // Only used during load-time.
 	Object *mUnresolvedClasses;
+	Array *mClasses = nullptr;
 	Property *mClassProperty;
 	LPTSTR mClassPropertyDef;
 
@@ -2909,6 +2910,7 @@ public:
 	ResultType DefineClassPropertyXet(LPTSTR aBuf, int aBufSize, LPTSTR aEnd, Var **aFuncGlobalVar);
 	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
 	ResultType ResolveClasses();
+	ResultType InitClasses();
 
 	static SymbolType ConvertWordOperator(LPCTSTR aWord, size_t aLength);
 	static bool EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker);

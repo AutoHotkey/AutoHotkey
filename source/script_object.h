@@ -422,9 +422,9 @@ public:
 			mFields.Remove((index_t)(field - mFields), 1);
 	}
 	
-	IObject *GetMethodFunc(name_t name)
+	IObject *GetOwnMethodFunc(name_t name)
 	{
-		if (auto method = GetMethod(name))
+		if (auto method = FindMethod(name))
 			return method->func;
 		return nullptr;
 	}
