@@ -106,7 +106,7 @@ public:
 	static ObjectMember sMembers[];
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	virtual int Next(Var *aOutputVar1, Var *aOutputVar2) = 0;
+	virtual ResultType Next(Var *aOutputVar1, Var *aOutputVar2) = 0;
 };
 
 
@@ -307,7 +307,7 @@ protected:
 		Enumerator(Object *aObject, EnumeratorType aType)
 			: mObject(aObject), mType(aType) { mObject->AddRef(); }
 		~Enumerator() { mObject->Release(); }
-		int Next(Var *aKey, Var *aVal);
+		ResultType Next(Var *aKey, Var *aVal);
 		IObject_Type_Impl("Object.Enumerator")
 	};
 
@@ -548,7 +548,7 @@ private:
 	public:
 		Enumerator(Array *aArr) : mArray(aArr) { mArray->AddRef(); }
 		~Enumerator() { mArray->Release(); }
-		int Next(Var *, Var *);
+		ResultType Next(Var *, Var *);
 		IObject_Type_Impl("Array.Enumerator")
 	};
 
@@ -619,7 +619,7 @@ class Map : public Object
 	public:
 		Enumerator(Map *aObject) : mObject(aObject), mOffset(-1) { mObject->AddRef(); }
 		~Enumerator() { mObject->Release(); }
-		int Next(Var *aKey, Var *aVal);
+		ResultType Next(Var *aKey, Var *aVal);
 		IObject_Type_Impl("Map.Enumerator")
 	};
 

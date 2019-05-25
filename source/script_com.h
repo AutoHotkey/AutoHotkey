@@ -105,7 +105,7 @@ class ComEnum : public EnumBase
 	IEnumVARIANT *penum;
 
 public:
-	int Next(Var *aOutput, Var *aOutputType);
+	ResultType Next(Var *aOutput, Var *aOutputType);
 
 	ComEnum(IEnumVARIANT *enm)
 		: penum(enm)
@@ -133,7 +133,7 @@ class ComArrayEnum : public EnumBase
 
 public:
 	static HRESULT Begin(ComObject *aArrayObject, ComArrayEnum *&aOutput);
-	int Next(Var *aOutput, Var *aOutputType);
+	ResultType Next(Var *aOutput, Var *aOutputType);
 	~ComArrayEnum();
 	IObject_Type_Impl("ComObjArray.Enumerator")
 };

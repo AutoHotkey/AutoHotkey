@@ -190,15 +190,15 @@ public:
 		m_gui.Release();
 	}
 
-	virtual int Next(Var *aOutputVar1, Var *aOutputVar2)
+	virtual ResultType Next(Var *aOutputVar1, Var *aOutputVar2)
 	{
 		if (m_pos >= m_gui.mControlCount) // Use >= vs. == in case the Gui was destroyed.
-			return 0;
+			return CONDITION_FALSE;
 		GuiControlType* ctrl = m_gui.mControl[m_pos++];
 		aOutputVar1->AssignHWND(ctrl->hwnd);
 		if (aOutputVar2)
 			aOutputVar2->Assign(ctrl);
-		return 1;
+		return CONDITION_TRUE;
 	}
 
 	IObject_Type_Impl("Gui.Enumerator")

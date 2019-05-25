@@ -1958,7 +1958,7 @@ Array::index_t Array::ParamToZeroIndex(ExprTokenType &aParam)
 Implement_DebugWriteProperty_via_sMembers(Array)
 
 
-int Array::Enumerator::Next(Var *aVal, Var *aReserved)
+ResultType Array::Enumerator::Next(Var *aVal, Var *aReserved)
 {
 	if (mIndex < mArray->mLength)
 	{
@@ -1972,9 +1972,9 @@ int Array::Enumerator::Next(Var *aVal, Var *aReserved)
 		}
 		if (aReserved)
 			aReserved->Assign();
-		return true;
+		return CONDITION_TRUE;
 	}
-	return false;
+	return CONDITION_FALSE;
 }
 
 
@@ -1992,7 +1992,16 @@ ResultType EnumBase::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 {
 	Var *var0 = ParamIndexToOptionalVar(0);
 	Var *var1 = ParamIndexToOptionalVar(1);
-	_o_return(Next(var0, var1));
+	auto result = Next(var0, var1);
+	switch (result)
+	{
+	case CONDITION_TRUE:
+	case CONDITION_FALSE:
+		_o_return(result == CONDITION_TRUE);
+	default: // Probably FAIL or EARLY_EXIT.
+		return result;
+	}
+
 }
 
 ResultType STDMETHODCALLTYPE EnumBase::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -2002,7 +2011,7 @@ ResultType STDMETHODCALLTYPE EnumBase::Invoke(ResultToken &aResultToken, ExprTok
 	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
 }
 
-int Object::Enumerator::Next(Var *aKey, Var *aVal)
+ResultType Object::Enumerator::Next(Var *aKey, Var *aVal)
 {
 	if (mType == Enum_Properties)
 	{
@@ -2015,11 +2024,34 @@ int Object::Enumerator::Next(Var *aKey, Var *aVal)
 			}
 			if (aVal)
 			{
-				ExprTokenType value;
-				field.ToToken(value);
-				aVal->Assign(value);
+				if (field.symbol == SYM_DYNAMIC && field.prop->MaxParams < 1 && field.prop->Getter())
+				{
+					FuncResult result_token;
+					ExprTokenType getter(field.prop->Getter());
+					ExprTokenType object(mObject);
+					auto *param = &object;
+					auto result = getter.object->Invoke(result_token, getter, IT_CALL|IF_DEFAULT, &param, 1);
+					if (result == FAIL || result == EARLY_EXIT)
+						return result;
+					if (result_token.mem_to_free)
+					{
+						ASSERT(result_token.symbol == SYM_STRING && result_token.mem_to_free == result_token.marker);
+						aVal->AcceptNewMem(result_token.mem_to_free, result_token.marker_length);
+					}
+					else
+					{
+						aVal->Assign(result_token);
+						result_token.Free();
+					}
+				}
+				else
+				{
+					ExprTokenType value;
+					field.ToToken(value);
+					aVal->Assign(value);
+				}
 			}
-			return true;
+			return CONDITION_TRUE;
 		}
 	}
 	else
@@ -2031,13 +2063,13 @@ int Object::Enumerator::Next(Var *aKey, Var *aVal)
 				aKey->Assign(method.name);
 			if (aVal)
 				aVal->Assign(method.func);
-			return true;
+			return CONDITION_TRUE;
 		}
 	}
-	return false;
+	return CONDITION_FALSE;
 }
 
-int Map::Enumerator::Next(Var *aKey, Var *aVal)
+ResultType Map::Enumerator::Next(Var *aKey, Var *aVal)
 {
 	if (++mOffset < mObject->mCount)
 	{
@@ -2057,9 +2089,9 @@ int Map::Enumerator::Next(Var *aKey, Var *aVal)
 			item.ToToken(value);
 			aVal->Assign(value);
 		}
-		return true;
+		return CONDITION_TRUE;
 	}
-	return false;
+	return CONDITION_FALSE;
 }
 
 	

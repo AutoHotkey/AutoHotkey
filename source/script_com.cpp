@@ -1367,7 +1367,7 @@ LPTSTR ComObject::Type()
 }
 
 
-int ComEnum::Next(Var *aOutput, Var *aOutputType)
+ResultType ComEnum::Next(Var *aOutput, Var *aOutputType)
 {
 	VARIANT varResult = {0};
 	if (penum->Next(1, &varResult, NULL) == S_OK)
@@ -1376,9 +1376,9 @@ int ComEnum::Next(Var *aOutput, Var *aOutputType)
 			aOutputType->Assign((__int64)varResult.vt);
 		if (aOutput)
 			AssignVariant(*aOutput, varResult, false);
-		return true;
+		return CONDITION_TRUE;
 	}
-	return	false;
+	return CONDITION_FALSE;
 }
 
 
@@ -1418,7 +1418,7 @@ ComArrayEnum::~ComArrayEnum()
 	mArrayObject->Release();
 }
 
-int ComArrayEnum::Next(Var *aOutput, Var *aOutputType)
+ResultType ComArrayEnum::Next(Var *aOutput, Var *aOutputType)
 {
 	if ((mPointer += mElemSize) <= mEnd)
 	{
@@ -1438,9 +1438,9 @@ int ComArrayEnum::Next(Var *aOutput, Var *aOutputType)
 		AssignVariant(*aOutput, var);
 		if (aOutputType)
 			aOutputType->Assign(var.vt);
-		return true;
+		return CONDITION_TRUE;
 	}
-	return false;
+	return CONDITION_FALSE;
 }
 
 
