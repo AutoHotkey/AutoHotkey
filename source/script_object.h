@@ -292,12 +292,20 @@ protected:
 		~MethodType() { func->Release(); }
 	};
 
+	enum EnumeratorType
+	{
+		Enum_Properties,
+		Enum_Methods
+	};
+
 	class Enumerator : public EnumBase
 	{
 		Object *mObject;
-		index_t mOffset;
+		index_t mOffset = -1;
+		EnumeratorType mType;
 	public:
-		Enumerator(Object *aObject) : mObject(aObject), mOffset(-1) { mObject->AddRef(); }
+		Enumerator(Object *aObject, EnumeratorType aType)
+			: mObject(aObject), mType(aType) { mObject->AddRef(); }
 		~Enumerator() { mObject->Release(); }
 		int Next(Var *aKey, Var *aVal);
 		IObject_Type_Impl("Object.Enumerator")

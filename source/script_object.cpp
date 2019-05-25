@@ -487,7 +487,6 @@ void Map::Clear()
 
 ObjectMember Object::sMembers[] =
 {
-	Object_Method1(__Enum, 0, 1),
 	Object_Member(Base, Base, 0, IT_SET),
 	Object_Method1(Clone, 0, 0),
 	Object_Method1(DefineMethod, 2, 2),
@@ -500,7 +499,9 @@ ObjectMember Object::sMembers[] =
 	Object_Method1(HasMethod, 1, 1),
 	Object_Method1(HasOwnMethod, 1, 1),
 	Object_Method1(HasOwnProp, 1, 1),
-	Object_Method1(HasProp, 1, 1)
+	Object_Method1(HasProp, 1, 1),
+	Object_Member(OwnMethods, __Enum, Enum_Methods, IT_CALL, 0, 0),
+	Object_Member(OwnProps, __Enum, Enum_Properties, IT_CALL, 0, 0)
 };
 
 ResultType STDMETHODCALLTYPE Object::Invoke(
@@ -727,13 +728,14 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 	switch (aID)
 	{
 	case FID_ObjDeleteProp:		return DeleteProp(aResultToken, 0, IT_CALL, aParam, aParamCount);
-	case FID_ObjPropCount:		return PropCount(aResultToken, 0, IT_CALL, aParam, aParamCount);
+	case FID_ObjOwnPropCount:	return PropCount(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjHasOwnProp:		return HasOwnProp(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjHasProp:		return HasProp(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjGetCapacity:	return GetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjSetCapacity:	return SetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjClone:			return Clone(aResultToken, 0, IT_CALL, aParam, aParamCount);
-	case FID_ObjNewEnum:		return __Enum(aResultToken, 0, IT_CALL, aParam, aParamCount);
+	case FID_ObjOwnProps:		return __Enum(aResultToken, Enum_Properties, IT_CALL, aParam, aParamCount);
+	case FID_ObjOwnMethods:		return __Enum(aResultToken, Enum_Methods, IT_CALL, aParam, aParamCount);
 	}
 	return INVOKE_NOT_HANDLED;
 }
@@ -1189,10 +1191,7 @@ ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 
 ResultType Object::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (IObject *enm = new Enumerator(this))
-		_o_return(enm);
-	else
-		_o_throw(ERR_OUTOFMEM);
+	_o_return(new Enumerator(this, (EnumeratorType)aID));
 }
 
 ResultType Map::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -2005,31 +2004,35 @@ ResultType STDMETHODCALLTYPE EnumBase::Invoke(ResultToken &aResultToken, ExprTok
 
 int Object::Enumerator::Next(Var *aKey, Var *aVal)
 {
-	if (++mOffset < mObject->mFields.Length())
+	if (mType == Enum_Properties)
 	{
-		FieldType &field = mObject->mFields[mOffset];
-		if (aKey)
+		if (++mOffset < mObject->mFields.Length())
 		{
-			aKey->Assign(field.name);
+			FieldType &field = mObject->mFields[mOffset];
+			if (aKey)
+			{
+				aKey->Assign(field.name);
+			}
+			if (aVal)
+			{
+				ExprTokenType value;
+				field.ToToken(value);
+				aVal->Assign(value);
+			}
+			return true;
 		}
-		if (aVal)
-		{
-			ExprTokenType value;
-			field.ToToken(value);
-			aVal->Assign(value);
-		}
-		return true;
 	}
-	// TODO: Separate Properties and Methods enumerators.
-	auto method_offset = mOffset - mObject->mFields.Length();
-	if (method_offset < mObject->mMethods.Length())
+	else
 	{
-		auto &method = mObject->mMethods[method_offset];
-		if (aKey)
-			aKey->Assign(method.name);
-		if (aVal)
-			aVal->Assign(method.func);
-		return true;
+		if (++mOffset < mObject->mMethods.Length())
+		{
+			auto &method = mObject->mMethods[mOffset];
+			if (aKey)
+				aKey->Assign(method.name);
+			if (aVal)
+				aVal->Assign(method.func);
+			return true;
+		}
 	}
 	return false;
 }
