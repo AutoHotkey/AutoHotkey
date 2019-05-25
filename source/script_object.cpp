@@ -323,18 +323,18 @@ Array *Array::FromEnumerable(IObject *aEnumerable)
 	ExprTokenType t_this(aEnumerable);
 	ExprTokenType param[2], *params[2] = { param, param + 1 };
 
-	param[0].SetValue(_T("_NewEnum"), 8);
-	auto result = aEnumerable->Invoke(result_token, t_this, IT_CALL, params, 1);
+	param[0].SetValue(_T("__Enum"), 6);
+	auto result = aEnumerable->Invoke(result_token, t_this, IT_CALL | IF_NEWENUM, params, 1);
 	if (result == FAIL || result == EARLY_EXIT || result == INVOKE_NOT_HANDLED)
 	{
 		if (result == INVOKE_NOT_HANDLED)
-			g_script.ScriptError(ERR_UNKNOWN_METHOD, _T("_NewEnum"));
+			g_script.ScriptError(ERR_UNKNOWN_METHOD, _T("__Enum"));
 		return nullptr;
 	}
 	IObject *enumerator = TokenToObject(result_token);
 	if (!enumerator)
 	{
-		g_script.ScriptError(ERR_TYPE_MISMATCH, _T("_NewEnum"));
+		g_script.ScriptError(ERR_TYPE_MISMATCH, _T("__Enum"));
 		result_token.Free();
 		return nullptr;
 	}
@@ -487,7 +487,7 @@ void Map::Clear()
 
 ObjectMember Object::sMembers[] =
 {
-	Object_Method1(_NewEnum, 0, 0),
+	Object_Method1(__Enum, 0, 1),
 	Object_Member(Base, Base, 0, IT_SET),
 	Object_Method1(Clone, 0, 0),
 	Object_Method1(DefineMethod, 2, 2),
@@ -733,7 +733,7 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 	case FID_ObjGetCapacity:	return GetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjSetCapacity:	return SetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjClone:			return Clone(aResultToken, 0, IT_CALL, aParam, aParamCount);
-	case FID_ObjNewEnum:		return _NewEnum(aResultToken, 0, IT_CALL, aParam, aParamCount);
+	case FID_ObjNewEnum:		return __Enum(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	}
 	return INVOKE_NOT_HANDLED;
 }
@@ -744,7 +744,7 @@ ObjectMember Map::sMembers[] =
 	Object_Member(__Item, __Item, 0, IT_SET, 1, 1),
 	Object_Member(Capacity, Capacity, 0, IT_SET),
 	Object_Member(Count, Count, 0, IT_GET),
-	Object_Method1(_NewEnum, 0, 0),
+	Object_Method1(__Enum, 0, 1),
 	Object_Method1(Clear, 0, 0),
 	Object_Method1(Clone, 0, 0),
 	Object_Method1(Delete, 1, 1),
@@ -1187,7 +1187,7 @@ ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	_o_throw(ERR_OUTOFMEM);
 }
 
-ResultType Object::_NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (IObject *enm = new Enumerator(this))
 		_o_return(enm);
@@ -1195,7 +1195,7 @@ ResultType Object::_NewEnum(ResultToken &aResultToken, int aID, int aFlags, Expr
 		_o_throw(ERR_OUTOFMEM);
 }
 
-ResultType Map::_NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Map::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (IObject *enm = new Enumerator(this))
 		_o_return(enm);
@@ -1824,7 +1824,7 @@ ObjectMember Array::sMembers[] =
 	Object_Property_get_set(Capacity),
 	Object_Property_get_set(Length),
 	Object_Member(__New, Invoke, M_Push, IT_CALL, 0, MAXP_VARIADIC),
-	Object_Method(_NewEnum, 0, 0),
+	Object_Method(__Enum, 0, 1),
 	Object_Method(Clone, 0, 0),
 	Object_Method(Delete, 1, 1),
 	Object_Method(Has, 1, 1),
@@ -1939,7 +1939,7 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 			_o_return(arr);
 		_o_throw(ERR_OUTOFMEM);
 
-	case M__NewEnum:
+	case M___Enum:
 		_o_return(new Enumerator(this));
 	}
 	return INVOKE_NOT_HANDLED;
@@ -1986,7 +1986,7 @@ int Array::Enumerator::Next(Var *aVal, Var *aReserved)
 
 ObjectMember EnumBase::sMembers[] =
 {
-	Object_Method_(Next, 0, 2, Invoke, 0)
+	Object_Method_(Call, 0, 2, Invoke, 0)
 };
 
 ResultType EnumBase::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1998,6 +1998,8 @@ ResultType EnumBase::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 
 ResultType STDMETHODCALLTYPE EnumBase::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
+	if (aFlags & IF_DEFAULT)
+		return Invoke(aResultToken, 0, aFlags, aParam, aParamCount);
 	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
 }
 

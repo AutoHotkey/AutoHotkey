@@ -473,7 +473,7 @@ public:
 	ResultType GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType HasProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType _NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType __Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType DefineMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType DeleteMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
@@ -589,7 +589,7 @@ public:
 		M_Has,
 		M_Delete,
 		M_Clone,
-		M__NewEnum
+		M___Enum
 	};
 	static ObjectMember sMembers[];
 	static Object *sPrototype, *sClass;
@@ -726,7 +726,7 @@ public:
 	ResultType Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Clear(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType _NewEnum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType __Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 

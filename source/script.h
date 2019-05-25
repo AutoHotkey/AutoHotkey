@@ -2511,7 +2511,7 @@ public:
 		M_Restore,
 		M_Flash,
 		M_Submit,
-		M__NewEnum,
+		M___Enum,
 		M_OnEvent,
 
 		// Properties

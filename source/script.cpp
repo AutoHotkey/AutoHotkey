@@ -11064,12 +11064,18 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 	// Set up enum_token the way Invoke expects:
 	enum_token.InitResult(buf);
 
-	// Prepare to call object._NewEnum():
-	param_tokens[0].SetValue(_T("_NewEnum"), 8);
+	param_tokens[0].SetValue(_T("__Enum"), 6);
+	param_tokens[1].SetValue(mArgc - 1);
 
-	// enum := object._NewEnum()
-	result = param_tokens[2].object->Invoke(enum_token, param_tokens[2], IT_CALL | IF_NEWENUM, params, 1);
-	param_tokens[2].object->Release(); // This object reference is no longer needed.
+	// enum := object.__Enum(number of vars)
+	// IF_NEWENUM causes ComObjects to invoke a _NewEnum method or property.
+	// IF_METAOBJ causes Objects to skip the __Call meta-function if __Enum is not found.
+	result = param_tokens[2].object->Invoke(enum_token, param_tokens[2], IT_CALL | IF_NEWENUM | IF_METAOBJ, params, 2);
+	bool target_is_enumerator = result == INVOKE_NOT_HANDLED;
+	if (target_is_enumerator)
+		enum_token.SetValue(param_tokens[2].object); // Assume the target object is an enumerator function.
+	else
+		param_tokens[2].object->Release(); // This object reference is no longer needed.
 
 	if (enum_token.mem_to_free)
 		// Invoke returned memory for us to free.
@@ -11079,10 +11085,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 		return result;
 
 	if (enum_token.symbol != SYM_OBJECT)
-		if (result == INVOKE_NOT_HANDLED)
-			return LineError(ERR_UNKNOWN_METHOD, FAIL, _T("_NewEnum"));
-		else
-			return LineError(ERR_NO_OBJECT, FAIL, _T("Enumerator")); // Since it's probably rare, keep the unique part of the message short.
+		return LineError(ERR_TYPE_MISMATCH, FAIL, _T("__Enum")); // Since it's probably rare, keep the unique part of the message short.
 
 	// "Localize" the loop variables.
 	VarBkp var_bkp[2];
@@ -11094,20 +11097,19 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 		var[1]->Backup(var_bkp[1]);
 	}
 
-	// Prepare parameters for the loop below: enum.Next(var1 [, var2])
-	param_tokens[0].SetValue(_T("Next"), 4);
-	param_tokens[1].symbol = SYM_VAR;
-	param_tokens[1].var = var[0];
+	// Prepare parameters for the loop below: enum.Call(var1 [, var2])
+	param_tokens[0].symbol = SYM_VAR;
+	param_tokens[0].var = var[0];
 	if (var[1])
 	{
-		// for x,y in z  ->  enum.Next(x,y)
-		param_tokens[2].symbol = SYM_VAR;
-		param_tokens[2].var = var[1];
-		param_count = 3;
+		// for x,y in z  ->  enum.Call(x,y)
+		param_tokens[1].symbol = SYM_VAR;
+		param_tokens[1].var = var[1];
+		param_count = 2;
 	}
 	else
-		// for x in z  ->  enum.Next(x)
-		param_count = 2;
+		// for x in z  ->  enum.Call(x)
+		param_count = 1;
 
 	IObject &enumerator = *enum_token.object; // Might perform better as a reference?
 
@@ -11121,14 +11123,14 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 		// Set up result_token for each Invoke:
 		result_token.InitResult(buf);
 
-		// Call enumerator.Next(var1, var2)
-		result = enumerator.Invoke(result_token, enum_token, IT_CALL, params, param_count);
+		// enum.Call(var1, var2)
+		result = enumerator.Invoke(result_token, enum_token, IT_CALL|IF_DEFAULT, params, param_count);
 		if (result == FAIL || result == EARLY_EXIT)
 			break;
 
 		if (result == INVOKE_NOT_HANDLED)
 		{
-			result = LineError(ERR_UNKNOWN_METHOD, FAIL, _T("Next"));
+			result = LineError(ERR_UNKNOWN_METHOD, FAIL, target_is_enumerator ? _T("__Enum") : _T("Call"));
 			break;
 		}
 

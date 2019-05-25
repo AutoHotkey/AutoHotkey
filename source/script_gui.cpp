@@ -248,7 +248,7 @@ ObjectMember GuiType::sMembers[] =
 	Object_Method (Restore, 0, 0),
 	Object_Method (Flash, 0, 1),
 	Object_Method (Submit, 0, 1),
-	Object_Method (_NewEnum, 0, 0),
+	Object_Method (__Enum, 0, 1),
 	Object_Method (OnEvent, 2, 3),
 
 	Object_Property_get    (Hwnd),
@@ -347,7 +347,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 		{
 			return Submit(aResultToken, ParamIndexToOptionalBOOL(0, TRUE));
 		}
-		case M__NewEnum:
+		case M___Enum:
 		{
 			if (IObject *obj = new GuiTypeEnum(*this))
 				_o_return(obj);

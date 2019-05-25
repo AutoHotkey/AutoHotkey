@@ -1518,7 +1518,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			return false;
 		}
 		// It might be more correct to use the enumerator even for Array, but that could be slow.
-		// Future changes might enable efficient detection of a custom _NewEnum method, allowing
+		// Future changes might enable efficient detection of a custom __Enum method, allowing
 		// us to take the more efficient path most times, but still support custom enumeration.
 		if (param_array = dynamic_cast<Array *>(param_obj))
 			param_array->AddRef();

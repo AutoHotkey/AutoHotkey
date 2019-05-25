@@ -1258,7 +1258,7 @@ ResultType ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aFlags, Exp
 	{
 		LPTSTR name = TokenToString(*aParam[0]);
 		LONG retval;
-		if (!_tcsicmp(name, _T("_NewEnum")))
+		if (!_tcsicmp(name, _T("__Enum")))
 		{
 			ComArrayEnum *enm;
 			if (SUCCEEDED(hr = ComArrayEnum::Begin(this, enm)))
