@@ -342,8 +342,7 @@ private:
 		PropNone = 0,
 		PropVar,
 		PropVarBkp,
-		PropField,
-		PropValue // Read-only pseudo-property (ExprTokenType)
+		PropValue // Read-only (ExprTokenType)
 	};
 
 	struct PropertySource
@@ -398,6 +397,7 @@ private:
 		}
 
 		void WriteProperty(LPCSTR aName, ExprTokenType &aValue);
+		void WriteProperty(LPCWSTR aName, ExprTokenType &aValue);
 		void WriteProperty(ExprTokenType &aKey, ExprTokenType &aValue);
 
 		void _WriteProperty(ExprTokenType &aValue);
@@ -421,11 +421,11 @@ private:
 
 	int WriteBreakpointXml(Breakpoint *aBreakpoint, Line *aLine);
 
-	void AppendKeyName(CStringA &aNameBuf, size_t aParentNameLength, const char *aName);
+	void AppendPropertyName(CStringA &aNameBuf, size_t aParentNameLength, const char *aName);
+	void AppendStringKey(CStringA &aNameBuf, size_t aParentNameLength, const char *aKey);
 
 	int GetPropertyInfo(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf);
 	int GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp, LPTSTR &aValueBuf);
-	int GetPropertyInfo(Object::Variant &aField, PropertyInfo &aProp);
 	
 	int GetPropertyValue(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf);
 

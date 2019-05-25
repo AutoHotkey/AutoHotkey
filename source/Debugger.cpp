@@ -1071,12 +1071,6 @@ int Debugger::GetPropertyValue(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf
 	return DEBUGGER_E_OK;
 }
 
-int Debugger::GetPropertyInfo(Object::Variant &aField, PropertyInfo &aProp)
-{
-	aField.ToToken(aProp.value);
-	return DEBUGGER_E_OK;
-}
-
 
 int Debugger::WritePropertyXml(PropertyInfo &aProp, IObject *aObject)
 {
@@ -1118,12 +1112,9 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 		for ( ; i < j; ++i)
 		{
 			Object::FieldType &field = mFields[i];
-			
-			ExprTokenType key, value;
-			key.SetValue(field.name);
+			ExprTokenType value;
 			field.ToToken(value);
-
-			aDebugger->WriteProperty(key, value);
+			aDebugger->WriteProperty(field.name, value);
 		}
 	}
 
@@ -1176,35 +1167,35 @@ int Debugger::WritePropertyXml(PropertyInfo &aProp, LPTSTR aName)
 	return WritePropertyXml(aProp);
 }
 
-void Debugger::AppendKeyName(CStringA &aNameBuf, size_t aParentNameLength, const char *aName)
+void Debugger::AppendPropertyName(CStringA &aNameBuf, size_t aParentNameLength, const char *aName)
 {
+	// Property names are almost always valid identifiers, but even most invalid names
+	// should work as long as '.' and '[' are not used.  Supporting those does not seem
+	// worth any added code size.
+	aNameBuf.AppendFormat(".%s", aName);
+}
+
+void Debugger::AppendStringKey(CStringA &aNameBuf, size_t aParentNameLength, const char *aName)
+{
+	// " must be escape in some way to remove ambiguity.  Currently the v1 method is used
+	// since lexikos' version of SciTEDebug.ahk relies on it, and it isn't necessary to
+	// match the v2 expression syntax.
+	char c;
 	const char *ccp;
-	for (ccp = aName; cisalnum(*ccp) || *ccp == '_'; ++ccp);
-	if (!*ccp && ccp != aName) // If it got to the null-terminator, must be empty or alphanumeric.
+	int extra = 4; // 4 for [""].  Also count double-quote marks:
+	for (ccp = aName; *ccp; ++ccp) extra += *ccp=='"';
+	char *cp = aNameBuf.GetBufferSetLength(aParentNameLength + strlen(aName) + extra) + aParentNameLength;
+	*cp++ = '[';
+	*cp++ = '"';
+	for (ccp = aName; c = *ccp; ++ccp)
 	{
-		// Since this string is purely composed of alphanumeric characters and/or underscore,
-		// it doesn't need any quote marks (imitating expression syntax) or escaped characters.
-		aNameBuf.AppendFormat(".%s", aName);
+		*cp++ = c;
+		if (c == '"')
+			*cp++ = '"'; // i.e. replace " with ""
 	}
-	else
-	{
-		// " must be replaced with "" as in expressions to remove ambiguity.
-		char c;
-		int extra = 4; // 4 for [""].  Also count double-quote marks:
-		for (ccp = aName; *ccp; ++ccp) extra += *ccp=='"';
-		char *cp = aNameBuf.GetBufferSetLength(aParentNameLength + strlen(aName) + extra) + aParentNameLength;
-		*cp++ = '[';
-		*cp++ = '"';
-		for (ccp = aName; c = *ccp; ++ccp)
-		{
-			*cp++ = c;
-			if (c == '"')
-				*cp++ = '"'; // i.e. replace " with ""
-		}
-		*cp++ = '"';
-		*cp++ = ']';
-		aNameBuf.ReleaseBuffer();
-	}
+	*cp++ = '"';
+	*cp++ = ']';
+	aNameBuf.ReleaseBuffer();
 }
 
 int Debugger::WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncodedSize)
@@ -1418,7 +1409,8 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 	{
 		*name_end = c;
 		name = name_end + 1;
-		if (c == '[')
+		const bool brackets = c == '[';
+		if (brackets)
 		{
 			if (*name == '"')
 			{
@@ -1495,73 +1487,46 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			break;
 		}
 
-		auto obj = dynamic_cast<Object *>(iobj);
-
-		if (obj && (*name != '<' || name[-1] != '.')) // Not a pseudo-property; i.e. ["<base>"] is always a key-value pair.
+		Object *obj;
+		// IDE should request .<base> only if it was returned by property_get or context_get,
+		// so this always means the object's base.  By contrast, .base might invoke some other
+		// property (if overridden) and ["base"] should invoke __item.
+		if (!_tcsicmp(name - 1, _T(".<base>")) && (obj = dynamic_cast<Object *>(iobj)))
 		{
-			if (auto field = obj->FindField(name))
+			if (!c)
 			{
-				if (!c)
+				// For property_set, this won't allow the base to be set (success="0").
+				// That seems okay since it could only ever be set to NULL anyway.
+				aResult.kind = PropValue;
+				if (obj->mBase)
 				{
-					aResult.kind = PropField;
-					aResult.field = field;
-					aResult.owner = iobj;
-					return DEBUGGER_E_OK;
+					obj->mBase->AddRef();
+					aResult.owner = obj->mBase;
+					aResult.value.SetValue(obj->mBase);
 				}
-
-				if (field->symbol != SYM_OBJECT)
-					break;
-
-				iobj = field->object;
-				iobj->AddRef(); // Keep next object alive.
-				obj->Release(); // Release previous object.
-				continue;
+				else
+					aResult.value.SetValue(_T(""));
+				iobj->Release(); // No need to pass it back to caller, since base object is standalone.
+				return DEBUGGER_E_OK;
 			}
-		}
 
-		if (obj)
-		{
-			// IDE should request .<base> only if it was returned by property_get or context_get,
-			// so this always means the object's base (field is always NULL).  By contrast, .base
-			// and ["base"] originate either from a key-value pair or the user "inspecting" an
-			// expression like `myObj.base`.  Since no field was found, assume it's the latter.
-			if (!_tcsicmp(name, _T("base")) || !_tcsicmp(name - 1, _T(".<base>")))
-			{
-				if (!c)
-				{
-					// For property_set, this won't allow the base to be set (success="0").
-					// That seems okay since it could only ever be set to NULL anyway.
-					aResult.kind = PropValue;
-					if (obj->mBase)
-					{
-						obj->mBase->AddRef();
-						aResult.owner = obj->mBase;
-						aResult.value.SetValue(obj->mBase);
-					}
-					else
-						aResult.value.SetValue(_T(""));
-					iobj->Release(); // No need to pass it back to caller, since base object is standalone.
-					return DEBUGGER_E_OK;
-				}
-
-				iobj = obj->mBase;
-				iobj->AddRef(); // Keep next object alive.
-				obj->Release(); // Release previous object.
-				continue; // Search the base object's fields.
-			}
-			else
-				break;
+			iobj = obj->mBase;
+			iobj->AddRef(); // Keep next object alive.
+			obj->Release(); // Release previous object.
+			continue; // Search the base object's fields.
 		}
-		// else it's an object of built-in type.
 
 		// Attempt to invoke property.
-		int outer_excptmode = g->ExcptMode;
-		g->ExcptMode |= EXCPTMODE_CATCH; // Suppress error messages.
 		FuncResult result_token;
 		ExprTokenType *set_this = !c ? aSetValue : NULL;
-		ExprTokenType token[] = { iobj, name }, *param[] = { token + 1, set_this };
-		auto result = iobj->Invoke(result_token, token[0], set_this ? IT_SET : IT_GET, param, set_this ? 2 : 1);
-		g->ExcptMode = outer_excptmode;
+		ExprTokenType this_token(iobj), key_token, *param[] = { &key_token, set_this };
+		key_token.symbol = key_type;
+		if (key_type == SYM_STRING)
+			key_token.marker = name, key_token.marker_length = -1;
+		else // SYM_INTEGER or SYM_OBJECT
+			key_token.value_int64 = istrtoi64(name, nullptr);
+		int flags = (set_this ? IT_SET : IT_GET) | (brackets ? IF_DEFAULT : 0);
+		auto result = iobj->Invoke(result_token, this_token, flags, param, set_this ? 2 : 1);
 		if (g->ThrownToken)
 			g_script.FreeExceptionToken(g->ThrownToken);
 		
@@ -1694,7 +1659,6 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 	{
 	case PropVar: err = GetPropertyInfo(*prop.var, prop, value_buf); break;
 	case PropVarBkp: err = GetPropertyInfo(*prop.bkp, prop, value_buf); break;
-	case PropField: err = GetPropertyInfo(*prop.field, prop); break;
 	case PropValue: err = DEBUGGER_E_OK; break;
 	}
 	if (!err)
@@ -1840,9 +1804,6 @@ DEBUGGER_COMMAND(Debugger::property_set)
 		// Fall through:
 	case PropVar:
 		success = !VAR_IS_READONLY(*target.var) && target.var->Assign(val);
-		break;
-	case PropField:
-		success = target.field->Assign(val);
 		break;
 	case PropNone: // Assignment handled by ParsePropertyName().
 		success = true;
@@ -2754,6 +2715,12 @@ void Debugger::PropertyWriter::WriteProperty(LPCSTR aName, ExprTokenType &aValue
 }
 
 
+void Debugger::PropertyWriter::WriteProperty(LPCWSTR aName, ExprTokenType &aValue)
+{
+	WriteProperty(CStringUTF8FromWChar(aName), aValue);
+}
+
+
 void Debugger::PropertyWriter::WriteProperty(ExprTokenType &aKey, ExprTokenType &aValue)
 {
 	switch (aKey.symbol)
@@ -2762,7 +2729,7 @@ void Debugger::PropertyWriter::WriteProperty(ExprTokenType &aKey, ExprTokenType 
 	case SYM_OBJECT: mProp.fullname.AppendFormat("[Object(%Ii)]", aKey.object); break;
 	default:
 		ASSERT(aKey.symbol == SYM_STRING);
-		mDbg.AppendKeyName(mProp.fullname, mNameLength, CStringUTF8FromTChar(aKey.marker));
+		mDbg.AppendStringKey(mProp.fullname, mNameLength, CStringUTF8FromTChar(aKey.marker));
 	}
 	_WriteProperty(aValue);
 }
@@ -2807,7 +2774,7 @@ void Debugger::PropertyWriter::BeginProperty(LPCSTR aName, LPCSTR aType, int aNu
 	// aName is the raw name of this property.  Before writing it into the response,
 	// convert it to the required expression-like form.  Do this conversion within
 	// mProp.fullname so it can be used for the fullname attribute:
-	mDbg.AppendKeyName(mProp.fullname, mNameLength, aName);
+	mDbg.AppendPropertyName(mProp.fullname, mNameLength, aName);
 
 	// Find the property's "relative" name at the end of the buffer:
 	LPCSTR name = mProp.fullname.GetString() + mNameLength;

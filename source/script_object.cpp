@@ -2872,7 +2872,7 @@ void ObjectMember::DebugWriteProperty(ObjectMember aMembers[], int aMemberCount,
 				break;
 			FuncResult result_token;
 			auto result = (aThis->*member.method)(result_token, member.id, IT_GET, NULL, 0);
-			aDebugger->WriteProperty(ExprTokenType(member.name), result_token);
+			aDebugger->WriteProperty(member.name, result_token);
 			result_token.Free();
 		}
 	}

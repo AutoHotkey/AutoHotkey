@@ -12018,7 +12018,7 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 			{
 				resultToken.InitResult(resultBuf); // Init before EACH invoke.
 				paramToken[1].SetValue(p);
-				Invoke(resultToken, thisTokenUnused, IT_GET, param, 2);
+				Invoke(resultToken, thisTokenUnused, IT_CALL, param, 2);
 				aDebugger->WriteProperty(paramToken[1], resultToken);
 				if (resultToken.mem_to_free)
 					free(resultToken.mem_to_free);
