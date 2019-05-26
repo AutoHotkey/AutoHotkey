@@ -400,6 +400,7 @@ private:
 		void WriteProperty(LPCSTR aName, ExprTokenType &aValue);
 		void WriteProperty(LPCWSTR aName, ExprTokenType &aValue);
 		void WriteProperty(ExprTokenType &aKey, ExprTokenType &aValue);
+		void WriteEnumItems(IObject *aEnumerable, int aSkip);
 
 		void _WriteProperty(ExprTokenType &aValue);
 
@@ -437,7 +438,7 @@ private:
 	int WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncodedSize);
 	int WritePropertyData(ExprTokenType &aValue, int aMaxEncodedSize);
 
-	int WriteEnumProperties(PropertyInfo &aProp, IObject *aObject);
+	int WriteEnumItems(PropertyInfo &aProp, IObject *aObject);
 
 	int ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, ExprTokenType *aSetValue
 		, PropertySource &aResult);

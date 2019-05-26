@@ -1087,7 +1087,7 @@ int Debugger::WritePropertyXml(PropertyInfo &aProp, IObject *aObject)
 
 void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aDepth)
 {
-	auto enum_method = GetMethod(_T("__Enum"));
+	auto enum_method = IsNativeClassPrototype() ? nullptr : GetMethod(_T("__Enum"));
 	int num_children = (int)mFields.Length() + (mBase != nullptr) + (enum_method != nullptr);
 
 	DebugCookie cookie;
@@ -1109,66 +1109,93 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			else --i; 
 			--j;
 		}
-		if (enum_method)
-		{
-			if (i == 0)
-			{
-				DebugCookie cookie;
-				// Write an empty property; enumerate only on property_get.
-				aDebugger->BeginProperty("<enum>", "object", 1, cookie);
-				aDebugger->EndProperty(cookie);
-			}
-			else --i;
-			--j;
-		}
-		if (j > (int)mFields.Length())
-			j = (int)mFields.Length();
+		int last_field = j;
+		if (last_field > (int)mFields.Length())
+			last_field = (int)mFields.Length();
 		// For each field in the requested page...
-		for ( ; i < j; ++i)
+		for ( ; i < last_field; ++i)
 		{
 			Object::FieldType &field = mFields[i];
 			ExprTokenType value;
 			field.ToToken(value);
 			aDebugger->WriteProperty(field.name, value);
 		}
+		if (enum_method && i < j)
+		{
+			auto func = dynamic_cast<Func *>(enum_method->func);
+			if (func->mIsBuiltIn)
+			{
+				aDebugger->WriteEnumItems(this, i);
+			}
+			else
+			{
+				DebugCookie cookie;
+				// Write an empty property; enumerate only on property_get.
+				aDebugger->BeginProperty("<enum>", "object", 1, cookie);
+				aDebugger->EndProperty(cookie);
+			}
+		}
 	}
 
 	aDebugger->EndProperty(cookie);
 }
 
-int Debugger::WriteEnumProperties(PropertyInfo &aProp, IObject *aEnumerable)
+int Debugger::WriteEnumItems(PropertyInfo &aProp, IObject *aEnumerable)
+{
+	aProp.facet = "";
+	PropertyWriter pw(*this, aProp, nullptr);
+	pw.WriteEnumItems(aEnumerable, 0);
+	return pw.mError;
+}
+
+void Debugger::PropertyWriter::WriteEnumItems(IObject *aEnumerable, int aSkip)
 {
 	IObject *enumerator;
 	auto result = GetEnumerator(enumerator, aEnumerable, 2, false);
 	if (result != OK)
-		return DEBUGGER_E_EVAL_FAIL;
-
-	aProp.facet = "";
-	PropertyWriter pw(*this, aProp, enumerator);
-	DebugCookie cookie;
-	pw.BeginProperty(nullptr, "object", 1, cookie);
-	
-	Var vkey, vval;
-	ExprTokenType tkey, tval;
-	FuncResult result_token;
-	for (int i = 0, start = aProp.page * aProp.pagesize, end = start + aProp.pagesize; i < end; ++i)
 	{
-		result = CallEnumerator(enumerator, &vkey, &vval, false);
-		if (result != CONDITION_TRUE)
-			break;
-		if (i >= start)
-		{
-			vkey.ToTokenSkipAddRef(tkey);
-			vval.ToTokenSkipAddRef(tval);
-			pw.WriteProperty(tkey, tval);
-		}
+		mError = DEBUGGER_E_EVAL_FAIL;
+		return;
 	}
-	vkey.Free();
-	vval.Free();
 
-	pw.EndProperty(cookie);
+	int start = 0;
+	DebugCookie cookie;
+	bool write_main_property = !mDepth;
+	if (write_main_property)
+	{
+		if (!mObject)
+			mObject = enumerator;
+		BeginProperty(nullptr, "object", 1, cookie);
+		// mProp.page is applicable only because this is the root property.
+		start = mProp.page * mProp.pagesize;
+	}
+	start += aSkip;
+	
+	if (mProp.max_depth)
+	{
+		Var vkey, vval;
+		ExprTokenType tkey, tval;
+		FuncResult result_token;
+		for (int i = 0, end = start + mProp.pagesize; i < end; ++i)
+		{
+			result = CallEnumerator(enumerator, &vkey, &vval, false);
+			if (result != CONDITION_TRUE)
+				break;
+			if (i >= start)
+			{
+				vkey.ToTokenSkipAddRef(tkey);
+				vval.ToTokenSkipAddRef(tval);
+				WriteProperty(tkey, tval);
+			}
+		}
+		vkey.Free();
+		vval.Free();
+	}
+
+	if (write_main_property)
+		EndProperty(cookie);
+
 	enumerator->Release();
-	return DEBUGGER_E_OK;
 }
 
 int Debugger::WritePropertyXml(PropertyInfo &aProp)
@@ -1733,7 +1760,7 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 			// between UTF-8 and LPTSTR):
 			prop.name = name;
 			if (prop.kind == PropEnum)
-				err = WriteEnumProperties(prop, prop.owner);
+				err = WriteEnumItems(prop, prop.owner);
 			else
 				err = WritePropertyXml(prop);
 		}

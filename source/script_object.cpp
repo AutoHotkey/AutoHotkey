@@ -1984,8 +1984,6 @@ Array::index_t Array::ParamToZeroIndex(ExprTokenType &aParam)
 	return index >= 0 && index <= MaxIndex ? UINT(index) : BadIndex;
 }
 
-Implement_DebugWriteProperty_via_sMembers(Array)
-
 
 ResultType Array::Enumerator::Next(Var *aVal, Var *aReserved)
 {

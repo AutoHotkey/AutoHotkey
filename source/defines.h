@@ -266,6 +266,7 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 	virtual void WriteProperty(LPCSTR aName, ExprTokenType &aValue) = 0;
 	virtual void WriteProperty(LPCWSTR aName, ExprTokenType &aValue) = 0;
 	virtual void WriteProperty(ExprTokenType &aKey, ExprTokenType &aValue) = 0;
+	virtual void WriteEnumItems(IObject *aEnumerable, int aSkip) = 0;
 	virtual void BeginProperty(LPCSTR aName, LPCSTR aType, int aNumChildren, DebugCookie &aCookie) = 0;
 	virtual void EndProperty(DebugCookie aCookie) = 0;
 };

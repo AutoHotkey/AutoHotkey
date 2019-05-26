@@ -602,7 +602,6 @@ public:
 	static ObjectMember sMembers[];
 	static Object *sPrototype, *sClass;
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	IObject_DebugWriteProperty_Def;
 };
 
 
