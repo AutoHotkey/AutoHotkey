@@ -1870,7 +1870,7 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	{
 		auto index = ParamToZeroIndex(*aParam[aParamCount - 1]);
 		if (index >= mLength)
-			_o_throw(ERR_INVALID_INDEX, ParamIndexToString(0, _f_number_buf));
+			_o_throw(ERR_INVALID_INDEX, ParamIndexToString(aParamCount - 1, _f_number_buf));
 		auto &item = mItem[index];
 		if (IS_INVOKE_GET)
 			item.ReturnRef(aResultToken);
