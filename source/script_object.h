@@ -884,3 +884,8 @@ public:
 	ClipboardAll(void *aData, size_t aSize) : BufferObject(aData, aSize) {}
 	IObject_Type_Impl("ClipboardAll")
 };
+
+
+
+ResultType GetEnumerator(IObject *&aEnumerator, IObject *aEnumerable, int aVarCount, bool aDisplayError);
+ResultType CallEnumerator(IObject *aEnumerator, Var *aVar0, Var *aVar1, bool aDisplayError);

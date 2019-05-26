@@ -11064,7 +11064,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 		if (param_tokens[2].mem_to_free)
 			free(param_tokens[2].mem_to_free);
 		// The following would need to be checked if the "non-expression" optimization
-		// was enabled for ACT_FOR (currently it does not improve performance):
+		// was enabled for ACT_FOR (when last tested, it did not improve performance):
 		//if (  (ARGVARRAW3 && (param_tokens[2].object = ARGVARRAW3->ToObject()))  )
 		//{
 		//	// Arg was a simple var ref, so not evaluated as an expression, but it contained an object.
@@ -11079,37 +11079,11 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 	// Save these pointers since they will be overwritten during the loop:
 	Var *var[] = { ARGVARRAW1, ARGVARRAW2 };
 	
-	TCHAR buf[MAX_NUMBER_SIZE]; // Small buffer which may be used by object->Invoke().
-	
-	ResultToken enum_token;
-	ExprTokenType *params[] = { param_tokens, param_tokens+1, param_tokens+2 };
-	int param_count;
-
-	// Set up enum_token the way Invoke expects:
-	enum_token.InitResult(buf);
-
-	param_tokens[0].SetValue(_T("__Enum"), 6);
-	param_tokens[1].SetValue(mArgc - 1);
-
-	// enum := object.__Enum(number of vars)
-	// IF_NEWENUM causes ComObjects to invoke a _NewEnum method or property.
-	// IF_METAOBJ causes Objects to skip the __Call meta-function if __Enum is not found.
-	result = param_tokens[2].object->Invoke(enum_token, param_tokens[2], IT_CALL | IF_NEWENUM | IF_METAOBJ, params, 2);
-	bool target_is_enumerator = result == INVOKE_NOT_HANDLED;
-	if (target_is_enumerator)
-		enum_token.SetValue(param_tokens[2].object); // Assume the target object is an enumerator function.
-	else
-		param_tokens[2].object->Release(); // This object reference is no longer needed.
-
-	if (enum_token.mem_to_free)
-		// Invoke returned memory for us to free.
-		free(enum_token.mem_to_free);
-	
+	IObject *enumerator;
+	result = GetEnumerator(enumerator, param_tokens[2].object, mArgc - 1, true);
+	param_tokens[2].object->Release();
 	if (result == FAIL || result == EARLY_EXIT)
 		return result;
-
-	if (enum_token.symbol != SYM_OBJECT)
-		return LineError(ERR_TYPE_MISMATCH, FAIL, _T("__Enum")); // Since it's probably rare, keep the unique part of the message short.
 
 	// "Localize" the loop variables.
 	VarBkp var_bkp[2];
@@ -11121,49 +11095,16 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 		var[1]->Backup(var_bkp[1]);
 	}
 
-	// Prepare parameters for the loop below: enum.Call(var1 [, var2])
-	param_tokens[0].symbol = SYM_VAR;
-	param_tokens[0].var = var[0];
-	if (var[1])
-	{
-		// for x,y in z  ->  enum.Call(x,y)
-		param_tokens[1].symbol = SYM_VAR;
-		param_tokens[1].var = var[1];
-		param_count = 2;
-	}
-	else
-		// for x in z  ->  enum.Call(x)
-		param_count = 1;
-
-	IObject &enumerator = *enum_token.object; // Might perform better as a reference?
-
-	ResultToken result_token;
-
 	// Now that the enumerator expression has been evaluated, init A_Index:
 	g.mLoopIteration = 1;
 
 	for (;; ++g.mLoopIteration)
 	{
-		// Set up result_token for each Invoke:
-		result_token.InitResult(buf);
-
-		// enum.Call(var1, var2)
-		result = enumerator.Invoke(result_token, enum_token, IT_CALL|IF_DEFAULT, params, param_count);
+		result = CallEnumerator(enumerator, var[0], var[1], true);
 		if (result == FAIL || result == EARLY_EXIT)
 			break;
 
-		if (result == INVOKE_NOT_HANDLED)
-		{
-			result = LineError(ERR_UNKNOWN_METHOD, FAIL, target_is_enumerator ? _T("__Enum") : _T("Call"));
-			break;
-		}
-
-		bool next_returned_true = TokenToBOOL(result_token);
-
-		// Free any memory or object which may have been returned by Invoke:
-		result_token.Free();
-
-		if (!next_returned_true)
+		if (result != CONDITION_TRUE)
 		{	// The enumerator returned false, which means there are no more items.
 			result = OK;
 			break;
@@ -11190,7 +11131,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 		if (aUntil && aUntil->EvaluateLoopUntil(result))
 			break;
 	} // for()
-	enumerator.Release();
+	enumerator->Release();
 	var[0]->Free();
 	var[0]->Restore(var_bkp[0]);
 	if (var[1])

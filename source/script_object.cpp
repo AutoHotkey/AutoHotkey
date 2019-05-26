@@ -315,57 +315,86 @@ void Array::ToParams(ExprTokenType *token, ExprTokenType **param_list, ExprToken
 		*param_ptr++ = &token[i]; // New param.
 }
 
-// Calls an Enumerator repeatedly and returns an Array of all first-arg values.
-// This is used in conjunction with Array::ToParams to support other objects.
-Array *Array::FromEnumerable(IObject *aEnumerable)
+ResultType GetEnumerator(IObject *&aEnumerator, IObject *aEnumerable, int aVarCount, bool aDisplayError)
 {
 	FuncResult result_token;
 	ExprTokenType t_this(aEnumerable);
 	ExprTokenType param[2], *params[2] = { param, param + 1 };
-
 	param[0].SetValue(_T("__Enum"), 6);
-	auto result = aEnumerable->Invoke(result_token, t_this, IT_CALL | IF_NEWENUM, params, 1);
+	param[1].SetValue(aVarCount);
+	// enum := object.__Enum(number of vars)
+	// IF_NEWENUM causes ComObjects to invoke a _NewEnum method or property.
+	// IF_METAOBJ causes Objects to skip the __Call meta-function if __Enum is not found.
+	auto result = aEnumerable->Invoke(result_token, t_this, IT_CALL | IF_NEWENUM | IF_METAOBJ, params, 2);
+	if (result == FAIL || result == EARLY_EXIT)
+		return result;
+	if (result == INVOKE_NOT_HANDLED)
+	{
+		aEnumerator = aEnumerable;
+		aEnumerator->AddRef();
+		return OK;
+	}
+	aEnumerator = TokenToObject(result_token);
+	if (aEnumerator)
+		return OK;
+	result_token.Free();
+	if (aDisplayError)
+		g_script.ScriptError(ERR_TYPE_MISMATCH, _T("__Enum"));
+	return FAIL;
+}
+
+ResultType CallEnumerator(IObject *aEnumerator, Var *aVar0, Var *aVar1, bool aDisplayError)
+{
+	FuncResult result_token;
+	ExprTokenType t_this(aEnumerator), param[2], *params[] = { param, param + 1 };
+	param[0].symbol = SYM_VAR;
+	param[0].var = aVar0;
+	int param_count = 1;
+	if (aVar1)
+	{
+		param[1].symbol = SYM_VAR;
+		param[1].var = aVar1;
+		++param_count;
+	}
+	auto result = aEnumerator->Invoke(result_token, t_this, IT_CALL|IF_DEFAULT, params, param_count);
 	if (result == FAIL || result == EARLY_EXIT || result == INVOKE_NOT_HANDLED)
 	{
-		if (result == INVOKE_NOT_HANDLED)
-			g_script.ScriptError(ERR_UNKNOWN_METHOD, _T("__Enum"));
-		return nullptr;
+		if (result == INVOKE_NOT_HANDLED && aDisplayError)
+			return g_script.ScriptError(ERR_TYPE_MISMATCH, _T("__Enum")); // Object not callable -> wrong type of object.
+		return result;
 	}
-	IObject *enumerator = TokenToObject(result_token);
-	if (!enumerator)
-	{
-		g_script.ScriptError(ERR_TYPE_MISMATCH, _T("__Enum"));
-		result_token.Free();
-		return nullptr;
-	}
-	enumerator->AddRef();
+	result = TokenToBOOL(result_token) ? CONDITION_TRUE : CONDITION_FALSE;
+	result_token.Free();
+	return result;
+}
 
+// Calls an Enumerator repeatedly and returns an Array of all first-arg values.
+// This is used in conjunction with Array::ToParams to support other objects.
+Array *Array::FromEnumerable(IObject *aEnumerable)
+{
+	IObject *enumerator;
+	auto result = GetEnumerator(enumerator, aEnumerable, 1, true);
+	if (result == FAIL || result == EARLY_EXIT)
+		return nullptr;
+	
 	Var var;
-	t_this.SetValue(enumerator);
-	param[0].SetValue(_T("Next"), 4);
-	param[1].symbol = SYM_VAR;
-	param[1].var = &var;
 	Array *vargs = Array::Create();
 	for (;;)
 	{
-		result_token.Free();
-		result_token.InitResult(result_token.buf);
-		auto result = enumerator->Invoke(result_token, t_this, IT_CALL, params, 2);
-		if (result == FAIL || result == EARLY_EXIT || result == INVOKE_NOT_HANDLED)
+		auto result = CallEnumerator(enumerator, &var, nullptr, true);
+		if (result == FAIL)
 		{
-			if (result == INVOKE_NOT_HANDLED)
-				g_script.ScriptError(ERR_UNKNOWN_METHOD, _T("Next"));
 			vargs->Release();
 			vargs = nullptr;
 			break;
 		}
-		if (!TokenToBOOL(result_token))
+		if (result != CONDITION_TRUE)
 			break;
 		ExprTokenType value;
 		var.ToTokenSkipAddRef(value);
 		vargs->Append(value);
 	}
-	result_token.Free();
+	var.Free();
 	enumerator->Release();
 	return vargs;
 }
