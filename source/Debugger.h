@@ -342,7 +342,8 @@ private:
 		PropNone = 0,
 		PropVar,
 		PropVarBkp,
-		PropValue // Read-only (ExprTokenType)
+		PropValue, // Read-only (ExprTokenType)
+		PropEnum
 	};
 
 	struct PropertySource
@@ -353,7 +354,7 @@ private:
 		Object::Variant *field;
 		ExprTokenType value;
 		IObject *owner;
-		LPTSTR mem_to_free, property_name;
+		LPTSTR mem_to_free;
 		PropertySource() : owner(NULL), mem_to_free(NULL) {}
 		~PropertySource()
 		{
@@ -435,6 +436,8 @@ private:
 
 	int WritePropertyData(LPCTSTR aData, size_t aDataSize, int aMaxEncodedSize);
 	int WritePropertyData(ExprTokenType &aValue, int aMaxEncodedSize);
+
+	int WriteEnumProperties(PropertyInfo &aProp, IObject *aObject);
 
 	int ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, ExprTokenType *aSetValue
 		, PropertySource &aResult);

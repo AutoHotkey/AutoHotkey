@@ -1087,8 +1087,11 @@ int Debugger::WritePropertyXml(PropertyInfo &aProp, IObject *aObject)
 
 void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aDepth)
 {
+	auto enum_method = GetMethod(_T("__Enum"));
+	int num_children = (int)mFields.Length() + (mBase != nullptr) + (enum_method != nullptr);
+
 	DebugCookie cookie;
-	aDebugger->BeginProperty(NULL, "object", (int)mFields.Length() + (mBase != NULL), cookie);
+	aDebugger->BeginProperty(NULL, "object", num_children, cookie);
 
 	if (aDepth)
 	{
@@ -1106,6 +1109,18 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			else --i; 
 			--j;
 		}
+		if (enum_method)
+		{
+			if (i == 0)
+			{
+				DebugCookie cookie;
+				// Write an empty property; enumerate only on property_get.
+				aDebugger->BeginProperty("<enum>", "object", 1, cookie);
+				aDebugger->EndProperty(cookie);
+			}
+			else --i;
+			--j;
+		}
 		if (j > (int)mFields.Length())
 			j = (int)mFields.Length();
 		// For each field in the requested page...
@@ -1119,6 +1134,41 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 	}
 
 	aDebugger->EndProperty(cookie);
+}
+
+int Debugger::WriteEnumProperties(PropertyInfo &aProp, IObject *aEnumerable)
+{
+	IObject *enumerator;
+	auto result = GetEnumerator(enumerator, aEnumerable, 2, false);
+	if (result != OK)
+		return DEBUGGER_E_EVAL_FAIL;
+
+	aProp.facet = "";
+	PropertyWriter pw(*this, aProp, enumerator);
+	DebugCookie cookie;
+	pw.BeginProperty(nullptr, "object", 1, cookie);
+	
+	Var vkey, vval;
+	ExprTokenType tkey, tval;
+	FuncResult result_token;
+	for (int i = 0, start = aProp.page * aProp.pagesize, end = start + aProp.pagesize; i < end; ++i)
+	{
+		result = CallEnumerator(enumerator, &vkey, &vval, false);
+		if (result != CONDITION_TRUE)
+			break;
+		if (i >= start)
+		{
+			vkey.ToTokenSkipAddRef(tkey);
+			vval.ToTokenSkipAddRef(tval);
+			pw.WriteProperty(tkey, tval);
+		}
+	}
+	vkey.Free();
+	vval.Free();
+
+	pw.EndProperty(cookie);
+	enumerator->Release();
+	return DEBUGGER_E_OK;
 }
 
 int Debugger::WritePropertyXml(PropertyInfo &aProp)
@@ -1515,6 +1565,13 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			obj->Release(); // Release previous object.
 			continue; // Search the base object's fields.
 		}
+		else if (!_tcsicmp(name - 1, _T(".<enum>")))
+		{
+			if (c) continue;
+			aResult.kind = PropEnum;
+			aResult.owner = iobj;
+			return DEBUGGER_E_OK;
+		}
 
 		// Attempt to invoke property.
 		FuncResult result_token;
@@ -1659,7 +1716,8 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 	{
 	case PropVar: err = GetPropertyInfo(*prop.var, prop, value_buf); break;
 	case PropVarBkp: err = GetPropertyInfo(*prop.bkp, prop, value_buf); break;
-	case PropValue: err = DEBUGGER_E_OK; break;
+	case PropEnum: prop.value.SetValue(_T(""), 0); // No break.
+	default: err = DEBUGGER_E_OK; break;
 	}
 	if (!err)
 	{
@@ -1674,7 +1732,10 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 			// ParsePropertyName (which would have to take into account differences
 			// between UTF-8 and LPTSTR):
 			prop.name = name;
-			err = WritePropertyXml(prop);
+			if (prop.kind == PropEnum)
+				err = WriteEnumProperties(prop, prop.owner);
+			else
+				err = WritePropertyXml(prop);
 		}
 		else
 		{
