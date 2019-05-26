@@ -11822,6 +11822,7 @@ ResultType RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aP
 	RegExMatchObject *m = new RegExMatchObject();
 	if (!m)
 		return FAIL;
+	m->SetBase(sPrototype);
 
 	if (  aMark && !(m->mMark = _tcsdup(aMark))  )
 	{
@@ -11918,28 +11919,6 @@ ResultType RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aP
 }
 
 
-ObjectMember RegExMatchObject::sMembers[] =
-{
-	Object_Method(__Enum, 0, 1),
-	Object_Method(Value, 0, 1),
-	Object_Method(Pos, 0, 1),
-	Object_Method(Len, 0, 1),
-	Object_Method(Name, 0, 1),
-	Object_Method(Count, 0, 0),
-	Object_Method(Mark, 0, 0),
-};
-
-ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	if (IS_INVOKE_GET)
-	{
-		if (aParamCount != 1)
-			_o_throw(ERR_PARAM_COUNT_INVALID);
-		return Invoke(aResultToken, M_Value, aFlags, aParam, aParamCount);
-	}
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
-}
-
 ResultType RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	switch (aID)
@@ -12019,45 +11998,6 @@ ResultType RegExMatchObject::Enumerator::Next(Var *aKey, Var *aVal)
 	}
 	return CONDITION_TRUE;
 }
-
-
-#ifdef CONFIG_DEBUGGER
-void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
-{
-	DebugCookie rootCookie, cookie;
-	aDebugger->BeginProperty(NULL, "object", 5, rootCookie);
-	if (aPage == 0 && aMaxDepth)
-	{
-		aDebugger->WriteProperty("Count", ExprTokenType((__int64)mPatternCount));
-
-		static LPSTR sNames[] = { "Value", "Pos", "Len", "Name" };
-#ifdef UNICODE
-		static LPWSTR sNamesT[] = { _T("Value"), _T("Pos"), _T("Len"), _T("Name") };
-#else
-		static LPSTR *sNamesT = sNames;
-#endif
-		TCHAR resultBuf[_f_retval_buf_size];
-		ResultToken resultToken;
-		ExprTokenType thisTokenUnused, paramToken[2], *param[] = { &paramToken[0], &paramToken[1] };
-		for (int i = 0; i < _countof(sNames); i++)
-		{
-			aDebugger->BeginProperty(sNames[i], "array", mPatternCount - (i == 3), cookie);
-			paramToken[0].SetValue(sNamesT[i]);
-			for (int p = (i == 3); p < mPatternCount; p++)
-			{
-				resultToken.InitResult(resultBuf); // Init before EACH invoke.
-				paramToken[1].SetValue(p);
-				Invoke(resultToken, thisTokenUnused, IT_CALL, param, 2);
-				aDebugger->WriteProperty(paramToken[1], resultToken);
-				if (resultToken.mem_to_free)
-					free(resultToken.mem_to_free);
-			}
-			aDebugger->EndProperty(cookie);
-		}
-	}
-	aDebugger->EndProperty(rootCookie);
-}
-#endif
 
 
 void *pcret_resolve_user_callout(LPCTSTR aCalloutParam, int aCalloutParamLength)

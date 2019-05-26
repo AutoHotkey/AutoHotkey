@@ -2866,6 +2866,23 @@ Object *Map::sClass			= Object::CreateClass(_T("Map"),	Object::sClass,		sPrototy
 
 
 
+ObjectMember RegExMatchObject::sMembers[] =
+{
+	Object_Method(__Enum, 0, 1),
+	Object_Member(__Get, Invoke, M_Value, IT_CALL, 2, 2),
+	Object_Member(__Item, Invoke, M_Value, IT_GET, 0, 1),
+	Object_Method(Value, 0, 1),
+	Object_Method(Pos, 0, 1),
+	Object_Method(Len, 0, 1),
+	Object_Method(Name, 0, 1),
+	Object_Method(Count, 0, 0),
+	Object_Method(Mark, 0, 0),
+};
+
+Object *RegExMatchObject::sPrototype = CreatePrototype(_T("RegExMatch"), Object::sPrototype, sMembers, _countof(sMembers));
+
+
+
 #ifdef CONFIG_DEBUGGER
 
 void IObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)

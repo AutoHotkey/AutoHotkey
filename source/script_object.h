@@ -789,7 +789,7 @@ public:
 //
 // RegExMatchObject:  Returned by RegExMatch via UnquotedOutputVar.
 //
-class RegExMatchObject : public ObjectBase
+class RegExMatchObject : public Object
 {
 	LPTSTR mHaystack;
 	int mHaystackStart;
@@ -845,11 +845,8 @@ public:
 		M___Enum
 	};
 	static ObjectMember sMembers[];
+	static Object *sPrototype;
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	IObject_Type_Impl("RegExMatch")
-	IObject_DebugWriteProperty_Def;
 };
 
 
