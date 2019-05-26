@@ -794,6 +794,17 @@ class RegExMatchObject : public ObjectBase
 	int mPatternCount;
 	LPTSTR mMark;
 
+	class Enumerator : public EnumBase
+	{
+		RegExMatchObject *mObject;
+		int mPattern = -1;
+	public:
+		Enumerator(RegExMatchObject *aObject)
+			: mObject(aObject) { mObject->AddRef(); }
+		~Enumerator() { mObject->Release(); }
+		ResultType Next(Var *aKey, Var *aVal);
+	};
+
 	RegExMatchObject() : mHaystack(NULL), mOffset(NULL), mPatternName(NULL), mPatternCount(0), mMark(NULL) {}
 	
 	~RegExMatchObject()
@@ -826,7 +837,8 @@ public:
 		M_Len,
 		M_Name,
 		M_Count,
-		M_Mark
+		M_Mark,
+		M___Enum
 	};
 	static ObjectMember sMembers[];
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
