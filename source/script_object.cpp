@@ -1991,6 +1991,13 @@ ResultType Array::Enumerator::Next(Var *aVal, Var *aReserved)
 {
 	if (mIndex < mArray->mLength)
 	{
+		if (aReserved)
+		{
+			// Put the index first, only when there are two parameters.
+			if (aVal)
+				aVal->Assign((__int64)mIndex + 1);
+			aVal = aReserved;
+		}
 		auto &item = mArray->mItem[mIndex++];
 		switch (item.symbol)
 		{
@@ -1999,8 +2006,6 @@ ResultType Array::Enumerator::Next(Var *aVal, Var *aReserved)
 		case SYM_FLOAT:		aVal->Assign(item.n_double);		break;
 		case SYM_OBJECT:	aVal->Assign(item.object);			break;
 		}
-		if (aReserved)
-			aReserved->Assign();
 		return CONDITION_TRUE;
 	}
 	return CONDITION_FALSE;
