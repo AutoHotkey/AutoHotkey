@@ -115,7 +115,6 @@ public:
 	{
 		penum->Release();
 	}
-	IObject_Type_Impl("ComObject.Enumerator")
 };
 
 
@@ -135,7 +134,6 @@ public:
 	static HRESULT Begin(ComObject *aArrayObject, ComArrayEnum *&aOutput);
 	ResultType Next(Var *aOutput, Var *aOutputType);
 	~ComArrayEnum();
-	IObject_Type_Impl("ComObjArray.Enumerator")
 };
 
 

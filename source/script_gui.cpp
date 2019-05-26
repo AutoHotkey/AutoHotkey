@@ -200,8 +200,6 @@ public:
 			aOutputVar2->Assign(ctrl);
 		return CONDITION_TRUE;
 	}
-
-	IObject_Type_Impl("Gui.Enumerator")
 };
 
 

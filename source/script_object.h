@@ -107,6 +107,7 @@ public:
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	virtual ResultType Next(Var *aOutputVar1, Var *aOutputVar2) = 0;
+	IObject_Type_Impl("Enumerator")
 };
 
 
@@ -308,7 +309,6 @@ protected:
 			: mObject(aObject), mType(aType) { mObject->AddRef(); }
 		~Enumerator() { mObject->Release(); }
 		ResultType Next(Var *aKey, Var *aVal);
-		IObject_Type_Impl("Object.Enumerator")
 	};
 
 #ifndef _WIN64
@@ -549,7 +549,6 @@ private:
 		Enumerator(Array *aArr) : mArray(aArr) { mArray->AddRef(); }
 		~Enumerator() { mArray->Release(); }
 		ResultType Next(Var *, Var *);
-		IObject_Type_Impl("Array.Enumerator")
 	};
 
 	Array() {}
@@ -619,7 +618,6 @@ class Map : public Object
 		Enumerator(Map *aObject) : mObject(aObject), mOffset(-1) { mObject->AddRef(); }
 		~Enumerator() { mObject->Release(); }
 		ResultType Next(Var *aKey, Var *aVal);
-		IObject_Type_Impl("Map.Enumerator")
 	};
 
 	union Key // Which of its members is used depends on the field's position in the mItem array.
