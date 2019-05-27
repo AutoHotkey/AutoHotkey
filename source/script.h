@@ -2015,7 +2015,7 @@ struct MsgMonitorInstance
 
 #define MAX_MENU_NAME_LENGTH MAX_PATH // For both menu and menu item names.
 class UserMenuItem;  // Forward declaration since classes use each other (i.e. a menu *item* can have a submenu).
-class UserMenu : public ObjectBase
+class UserMenu : public Object
 {
 public:
 	UserMenuItem *mFirstMenuItem, *mLastMenuItem, *mDefault;
@@ -2030,6 +2030,7 @@ public:
 	COLORREF mColor; // The color that corresponds to the above.
 
 	static ObjectMember sMembers[];
+	static Object *sMenuPrototype, *sMenuBarPrototype;
 
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
@@ -2072,10 +2073,6 @@ public:
 		P_ClickCount,
 	};
 	
-	//IObject_Type_Impl("Menu")
-	LPTSTR Type() { return mMenuType == MENU_TYPE_BAR ? _T("MenuBar") : _T("Menu"); }
-	IObject_DebugWriteProperty_Def;
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions, UserMenuItem **aInsertAt);

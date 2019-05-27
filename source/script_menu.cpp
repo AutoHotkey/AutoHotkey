@@ -23,33 +23,6 @@ GNU General Public License for more details.
 
 
 
-ObjectMember UserMenu::sMembers[] =
-{
-	Object_Method(Add, 0, 3),
-	Object_Method(AddStandard, 0, 0),
-	Object_Method(Insert, 0, 4),
-	Object_Method(Delete, 0, 1),
-	Object_Method(Rename, 1, 2),
-	Object_Method(Check, 1, 1),
-	Object_Method(Uncheck, 1, 1),
-	Object_Method(ToggleCheck, 1, 1),
-	Object_Method(Enable, 1, 1),
-	Object_Method(Disable, 1, 1),
-	Object_Method(ToggleEnable, 1, 1),
-	Object_Method(SetIcon, 2, 4),
-	Object_Method(Show, 0, 2),
-	Object_Method(SetColor, 0, 2),
-
-	Object_Property_get_set(Default),
-	Object_Property_get    (Handle),
-	Object_Property_get_set(ClickCount)
-};
-
-ResultType STDMETHODCALLTYPE UserMenu::Invoke(ResultToken& aResultToken, ExprTokenType& aThisToken, int aFlags, ExprTokenType* aParam[], int aParamCount)
-{
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
-}
-
 ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	LPTSTR param1 = (aParamCount || IS_INVOKE_SET) ? ParamIndexToString(0, _f_number_buf) : _T("");
@@ -278,6 +251,7 @@ UserMenu *Script::AddMenu(MenuTypeType aMenuType)
 	UserMenu *menu = new UserMenu(aMenuType);
 	if (!menu)
 		return NULL;  // Caller should show error if desired.
+	menu->SetBase(aMenuType == MENU_TYPE_BAR ? UserMenu::sMenuBarPrototype : UserMenu::sMenuPrototype);
 	if (!mFirstMenu)
 		mFirstMenu = mLastMenu = menu;
 	else
@@ -1476,5 +1450,3 @@ BOOL UserMenu::OwnerDrawItem(LPDRAWITEMSTRUCT aParam)
 				, menu_item->mIcon, 0, 0, 0, NULL, DI_NORMAL);
 }
 
-
-Implement_DebugWriteProperty_via_sMembers(UserMenu)
