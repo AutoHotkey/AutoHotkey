@@ -1102,7 +1102,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 			// Since this object has a "base", let it count as the first field.
 			if (i == 0) // i.e. this is the first page.
 			{
-				aDebugger->WriteProperty("<base>", ExprTokenType(mBase));
+				aDebugger->WriteBaseProperty(mBase);
 				// Now fall through and retrieve field[0] (unless aPageSize == 1).
 			}
 			// So 20..39 becomes 19..38 when there's a base object:
@@ -1117,8 +1117,17 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 		{
 			Object::FieldType &field = mFields[i];
 			ExprTokenType value;
-			field.ToToken(value);
-			aDebugger->WriteProperty(field.name, value);
+			if (field.symbol == SYM_DYNAMIC)
+			{
+				if (field.prop->MinParams > 0)
+					continue;
+				aDebugger->WriteDynamicProperty(field.name);
+			}
+			else
+			{
+				field.ToToken(value);
+				aDebugger->WriteProperty(field.name, value);
+			}
 		}
 		if (enum_method && i < j)
 		{
@@ -1478,6 +1487,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 	iobj->AddRef();
 
 	int return_value = DEBUGGER_E_UNKNOWN_PROPERTY;
+	Object *obj, *this_override = nullptr;
 
 	// aFullName contains a '.' or '['.  Although it looks like an expression, the IDE should
 	// only pass a property name which we gave it in response to a previous command, so we
@@ -1564,37 +1574,33 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			break;
 		}
 
-		Object *obj;
 		// IDE should request .<base> only if it was returned by property_get or context_get,
 		// so this always means the object's base.  By contrast, .base might invoke some other
 		// property (if overridden) and ["base"] should invoke __item.
 		if (!_tcsicmp(name - 1, _T(".<base>")) && (obj = dynamic_cast<Object *>(iobj)))
 		{
-			if (!c)
-			{
-				// For property_set, this won't allow the base to be set (success="0").
-				// That seems okay since it could only ever be set to NULL anyway.
-				aResult.kind = PropValue;
-				if (obj->mBase)
-				{
-					obj->mBase->AddRef();
-					aResult.owner = obj->mBase;
-					aResult.value.SetValue(obj->mBase);
-				}
-				else
-					aResult.value.SetValue(_T(""));
-				iobj->Release(); // No need to pass it back to caller, since base object is standalone.
-				return DEBUGGER_E_OK;
-			}
-
+			if (!obj->mBase)
+				break;
 			iobj = obj->mBase;
 			iobj->AddRef(); // Keep next object alive.
-			obj->Release(); // Release previous object.
-			continue; // Search the base object's fields.
+			if (this_override) // Something like this_override.<base>.<base>.
+				obj->Release(); // Release previous base object.
+			else
+				this_override = obj;
+			if (c) continue; // Search the base object's fields.
+			// For property_set, this won't allow the base to be set (success="0").
+			// That seems okay since it could only ever be set to NULL anyway.
+			aResult.kind = PropValue;
+			aResult.owner = iobj;
+			aResult.value.SetValue(iobj);
+			aResult.this_object = this_override;
+			return DEBUGGER_E_OK;
 		}
 		else if (!_tcsicmp(name - 1, _T(".<enum>")))
 		{
 			if (c) continue;
+			if (this_override)
+				this_override->Release();
 			aResult.kind = PropEnum;
 			aResult.owner = iobj;
 			return DEBUGGER_E_OK;
@@ -1603,7 +1609,8 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		// Attempt to invoke property.
 		FuncResult result_token;
 		ExprTokenType *set_this = !c ? aSetValue : NULL;
-		ExprTokenType this_token(iobj), key_token, *param[] = { &key_token, set_this };
+		ExprTokenType this_token(this_override ? this_override : iobj)
+			, key_token, *param[] = { &key_token, set_this };
 		key_token.symbol = key_type;
 		if (key_type == SYM_STRING)
 			key_token.marker = name, key_token.marker_length = -1;
@@ -1613,6 +1620,15 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		auto result = iobj->Invoke(result_token, this_token, flags, param, set_this ? 2 : 1);
 		if (g->ThrownToken)
 			g_script.FreeExceptionToken(g->ThrownToken);
+
+		if (this_override)
+		{
+			// This is a property other than .<base>, so this_override does not apply
+			// to the result of this property, but may "own" the value in result_token.
+			iobj->Release();
+			iobj = this_override;
+			this_override = nullptr;
+		}
 		
 		if (result == INVOKE_NOT_HANDLED)
 			break;
@@ -1654,6 +1670,8 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			break;
 		}
 	}
+	if (this_override)
+		this_override->Release();
 	iobj->Release();
 	return return_value;
 }
@@ -2823,11 +2841,44 @@ void Debugger::PropertyWriter::WriteProperty(ExprTokenType &aKey, ExprTokenType 
 }
 
 
-void Debugger::PropertyWriter::_WriteProperty(ExprTokenType &aValue)
+void Debugger::PropertyWriter::WriteBaseProperty(IObject *aBase)
+{
+	mProp.fullname.Append(".<base>", 7);
+	_WriteProperty(ExprTokenType(aBase), mProp.this_object ? mProp.this_object : mObject);
+}
+
+
+void Debugger::PropertyWriter::WriteDynamicProperty(LPTSTR aName)
+{
+	FuncResult result_token;
+	ExprTokenType t_this(mProp.this_object ? mProp.this_object : mObject);
+	ExprTokenType t_name(aName), *params[] = { &t_name };
+	auto excpt_mode = g->ExcptMode;
+	g->ExcptMode |= EXCPTMODE_CATCH;
+	auto result = mObject->Invoke(result_token, t_this, IT_GET, params, 1);
+	g->ExcptMode = excpt_mode;
+	if (!result)
+	{
+		if (g->ThrownToken)
+			g_script.FreeExceptionToken(g->ThrownToken);
+		result_token.SetValue(_T("<error>"), 7);
+	}
+	mDbg.AppendPropertyName(mProp.fullname, mNameLength, CStringUTF8FromTChar(aName));
+	_WriteProperty(result_token);
+	result_token.Free();
+}
+
+
+void Debugger::PropertyWriter::_WriteProperty(ExprTokenType &aValue, IObject *aThisOverride)
 {
 	if (mError)
 		return;
 	PropertyInfo prop(mProp.fullname);
+	if (aThisOverride)
+	{
+		aThisOverride->AddRef();
+		prop.this_object = aThisOverride;
+	}
 	// Find the property's "relative" name at the end of the buffer:
 	prop.name = mProp.fullname.GetString() + mNameLength;
 	if (*prop.name == '.')

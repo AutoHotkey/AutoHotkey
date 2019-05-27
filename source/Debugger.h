@@ -353,13 +353,15 @@ private:
 		VarBkp *bkp;
 		Object::Variant *field;
 		ExprTokenType value;
-		IObject *owner;
-		LPTSTR mem_to_free;
-		PropertySource() : owner(NULL), mem_to_free(NULL) {}
+		IObject *owner = nullptr, *this_object = nullptr;
+		LPTSTR mem_to_free = nullptr;
+		PropertySource() {}
 		~PropertySource()
 		{
 			if (owner)
 				owner->Release();
+			if (this_object)
+				this_object->Release();
 			free(mem_to_free);
 		}
 	};
@@ -400,9 +402,11 @@ private:
 		void WriteProperty(LPCSTR aName, ExprTokenType &aValue);
 		void WriteProperty(LPCWSTR aName, ExprTokenType &aValue);
 		void WriteProperty(ExprTokenType &aKey, ExprTokenType &aValue);
+		void WriteBaseProperty(IObject *aBase);
+		void WriteDynamicProperty(LPTSTR aName);
 		void WriteEnumItems(IObject *aEnumerable, int aSkip);
 
-		void _WriteProperty(ExprTokenType &aValue);
+		void _WriteProperty(ExprTokenType &aValue, IObject *aThisOverride = nullptr);
 
 		void BeginProperty(LPCSTR aName, LPCSTR aType, int aNumChildren, DebugCookie &aCookie);
 		void EndProperty(DebugCookie aCookie);
