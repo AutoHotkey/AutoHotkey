@@ -700,32 +700,31 @@ __int64 TextFile::_Length() const
 
 
 // FileObject: exports TextFile interfaces to the scripts.
-class FileObject : public ObjectBase // fincs: No longer allowing the script to manipulate File objects
+class FileObject : public Object
 {
 	FileObject() {}
 	~FileObject() {}
 
 	enum MemberID {
 		// methods
-		Read,
-		Write,
-		ReadLine,
-		WriteLine,
-		RawRead,
-		RawWrite,
-		Close,
-		Seek,
+		M_Read,
+		M_Write,
+		M_ReadLine,
+		M_WriteLine,
+		M_RawRead,
+		M_RawWrite,
+		M_Close,
+		M_Seek,
 		// properties
-		Position,
-		Length,
-		AtEOF,
-		Handle,
-		Encoding
+		P_Pos,
+		P_Length,
+		P_AtEOF,
+		P_Handle,
+		P_Encoding
 	};
 
 	static ObjectMember sMembers[];
-
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	static Object *sPrototype;
 
 	enum NumReadWriteFlags
 	{
@@ -810,7 +809,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		auto member = MemberID(aID);
 		switch (member)
 		{
-		case Read:
+		case M_Read:
 			{
 				DWORD length;
 				if (aParamCount)
@@ -829,7 +828,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			}
 			break;
 		
-		case ReadLine:
+		case M_ReadLine:
 			{	// See above for comments.
 				if (!TokenSetResult(aResultToken, NULL, READ_FILE_LINE_SIZE))
 					return FAIL;
@@ -843,8 +842,8 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			}
 			break;
 
-		case Write:
-		case WriteLine:
+		case M_Write:
+		case M_WriteLine:
 			{
 				DWORD bytes_written = 0;
 				size_t chars_to_write = 0;
@@ -853,7 +852,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 					LPTSTR param1 = ParamIndexToString(0, _f_number_buf, &chars_to_write);
 					bytes_written = mFile.Write(param1, (DWORD)chars_to_write);
 				}
-				if (member == WriteLine && (bytes_written || !chars_to_write)) // i.e. don't attempt it if above failed.
+				if (member == M_WriteLine && (bytes_written || !chars_to_write)) // i.e. don't attempt it if above failed.
 				{
 					bytes_written += mFile.Write(_T("\n"), 1);
 				}
@@ -862,10 +861,10 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			}
 			break;
 
-		case RawRead:
-		case RawWrite:
+		case M_RawRead:
+		case M_RawWrite:
 			{
-				bool reading = member == RawRead;
+				bool reading = member == M_RawRead;
 
 				LPVOID target;
 				DWORD max_size;
@@ -960,7 +959,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			}
 			break;
 
-		case Position:
+		case P_Pos:
 			if (IS_INVOKE_GET)
 			{
 				aResultToken.value_int64 = mFile.Tell();
@@ -968,7 +967,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			}
 			else
 			{
-		case Seek:
+		case M_Seek:
 				__int64 distance = ParamIndexToInt64(0);
 				int origin;
 				if (aParamCount > 1)
@@ -982,7 +981,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			break;
 
 
-		case Length:
+		case P_Length:
 			if (IS_INVOKE_GET) 
 			{
 				aResultToken.value_int64 = mFile.Length();
@@ -996,15 +995,15 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			}
 			break;
 
-		case AtEOF:
+		case P_AtEOF:
 			aResultToken.value_int64 = mFile.AtEOF();
 			return OK;
 		
-		case Handle:
+		case P_Handle:
 			aResultToken.value_int64 = (UINT_PTR) mFile.Handle();
 			return OK;
 
-		case Encoding:
+		case P_Encoding:
 		{
 			// Encoding: UTF-8, UTF-16 or CPnnn.  The -RAW suffix (CP_AHKNOBOM) is not supported; it is normally
 			// stripped out when the file is opened, so passing it to SetCodePage() would break encoding/decoding
@@ -1045,7 +1044,7 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 			return OK;
 		}
 
-		case Close:
+		case M_Close:
 			mFile.Close();
 			return OK;
 		}
@@ -1056,66 +1055,58 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 		return OK;
 	}
 
-	IObject_Type_Impl("File")
-	IObject_DebugWriteProperty_Def;
-
 	TextFile mFile;
 	
 public:
-	static inline FileObject *Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
-	{
-		FileObject *fileObj = new FileObject();
-		if (fileObj && fileObj->mFile.Open(aFileSpec, aFlags, aCodePage))
-			return fileObj;
-		fileObj->Release();
-		return NULL;
-	}
+	static FileObject *Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage);
 };
 
 
-#define File_MethodX(name, minP, maxP, f, id) Object_Member(name, f, id, IT_CALL, minP, maxP)
-#define File_Method(name, minP, maxP) File_MethodX(name, minP, maxP, Invoke, name)
-#define File_PropertyX(name, invokeType, id) Object_Member(name, Invoke, id, invokeType, 0, 0)
-#define File_Property(name, invokeType) File_PropertyX(name, invokeType, name)
 ObjectMember FileObject::sMembers[] =
 {
-	File_Method(Read, 0, 1),
-	File_Method(ReadLine, 0, 0),
-	File_MethodX(ReadChar, 0, 0, NumReadWrite, F_READ | F_SIGNED | 1),
-	File_MethodX(ReadDouble, 0, 0, NumReadWrite, F_READ | F_FLOAT | 8),
-	File_MethodX(ReadFloat, 0, 0, NumReadWrite, F_READ | F_FLOAT | 4),
-	File_MethodX(ReadInt, 0, 0, NumReadWrite, F_READ | F_SIGNED | 4),
-	File_MethodX(ReadInt64, 0, 0, NumReadWrite, F_READ | F_SIGNED | 8),
-	File_MethodX(ReadShort, 0, 0, NumReadWrite, F_READ | F_SIGNED | 2),
-	File_MethodX(ReadUChar, 0, 0, NumReadWrite, F_READ | F_UNSIGNED | 1),
-	File_MethodX(ReadUInt, 0, 0, NumReadWrite, F_READ | F_UNSIGNED | 4),
-	File_MethodX(ReadUShort, 0, 0, NumReadWrite, F_READ | F_UNSIGNED | 2),
-	File_Method(Write, 1, 1),
-	File_Method(WriteLine, 0, 1),
-	File_MethodX(WriteChar, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 1),
-	File_MethodX(WriteDouble, 1, 1, NumReadWrite, F_WRITE | F_FLOAT | 8),
-	File_MethodX(WriteFloat, 1, 1, NumReadWrite, F_WRITE | F_FLOAT | 4),
-	File_MethodX(WriteInt, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 4),
-	File_MethodX(WriteInt64, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 8),
-	File_MethodX(WriteShort, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 2),
-	File_MethodX(WriteUChar, 1, 1, NumReadWrite, F_WRITE | F_UNSIGNED | 1),
-	File_MethodX(WriteUInt, 1, 1, NumReadWrite, F_WRITE | F_UNSIGNED | 4),
-	File_MethodX(WriteUShort, 1, 1, NumReadWrite, F_WRITE | F_UNSIGNED | 2),
-	File_Method(RawRead, 1, 2),
-	File_Method(RawWrite, 1, 2),
-	File_Method(Close, 0, 0),
-	File_Method(Seek, 1, 2),
-	File_Property(AtEOF, IT_GET),
-	File_Property(Encoding, IT_SET),
-	File_Property(Handle, IT_GET),
-	File_Property(Length, IT_SET),
-	File_PropertyX(Pos, IT_SET, Position),
-	File_Property(Position, IT_SET)
+	Object_Method (Close, 0, 0),
+	Object_Method (RawRead, 1, 2),
+	Object_Method (RawWrite, 1, 2),
+	Object_Method (Read, 0, 1),
+	Object_Method_(ReadChar, 0, 0, NumReadWrite, F_READ | F_SIGNED | 1),
+	Object_Method_(ReadDouble, 0, 0, NumReadWrite, F_READ | F_FLOAT | 8),
+	Object_Method_(ReadFloat, 0, 0, NumReadWrite, F_READ | F_FLOAT | 4),
+	Object_Method_(ReadInt, 0, 0, NumReadWrite, F_READ | F_SIGNED | 4),
+	Object_Method_(ReadInt64, 0, 0, NumReadWrite, F_READ | F_SIGNED | 8),
+	Object_Method (ReadLine, 0, 0),
+	Object_Method_(ReadShort, 0, 0, NumReadWrite, F_READ | F_SIGNED | 2),
+	Object_Method_(ReadUChar, 0, 0, NumReadWrite, F_READ | F_UNSIGNED | 1),
+	Object_Method_(ReadUInt, 0, 0, NumReadWrite, F_READ | F_UNSIGNED | 4),
+	Object_Method_(ReadUShort, 0, 0, NumReadWrite, F_READ | F_UNSIGNED | 2),
+	Object_Method (Seek, 1, 2),
+	Object_Method (Write, 1, 1),
+	Object_Method_(WriteChar, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 1),
+	Object_Method_(WriteDouble, 1, 1, NumReadWrite, F_WRITE | F_FLOAT | 8),
+	Object_Method_(WriteFloat, 1, 1, NumReadWrite, F_WRITE | F_FLOAT | 4),
+	Object_Method_(WriteInt, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 4),
+	Object_Method_(WriteInt64, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 8),
+	Object_Method (WriteLine, 0, 1),
+	Object_Method_(WriteShort, 1, 1, NumReadWrite, F_WRITE | F_SIGNED | 2),
+	Object_Method_(WriteUChar, 1, 1, NumReadWrite, F_WRITE | F_UNSIGNED | 1),
+	Object_Method_(WriteUInt, 1, 1, NumReadWrite, F_WRITE | F_UNSIGNED | 4),
+	Object_Method_(WriteUShort, 1, 1, NumReadWrite, F_WRITE | F_UNSIGNED | 2),
+	Object_Property_get    (AtEOF),
+	Object_Property_get_set(Encoding),
+	Object_Property_get    (Handle),
+	Object_Property_get_set(Length),
+	Object_Property_get_set(Pos)
 };
 
-ResultType FileObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+Object *FileObject::sPrototype = Object::CreatePrototype(_T("File"), Object::sPrototype, sMembers, _countof(sMembers));
+
+FileObject *FileObject::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 {
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+	FileObject *fileObj = new FileObject();
+	fileObj->SetBase(sPrototype);
+	if (fileObj && fileObj->mFile.Open(aFileSpec, aFlags, aCodePage))
+		return fileObj;
+	fileObj->Release();
+	return NULL;
 }
 
 
@@ -1296,6 +1287,3 @@ __int64 TextMem::_Length() const
 {
 	return mData.mLength;
 }
-
-
-Implement_DebugWriteProperty_via_sMembers(FileObject)
