@@ -52,22 +52,6 @@ LPTSTR GuiControlType::GetTypeName()
 	return sTypeNames[type];
 }
 
-LPTSTR GuiControlType::Type()
-// Called by the Type() built-in function.
-// This is the class name, not the Type string passed to Gui.Add().
-{
-	// A static buf is used vs. having caller pass buf because most classes can just
-	// return a static string (doing it this way reduces code size significantly).
-	// The string is copied into another buffer by our caller's caller (usually
-	// ExpandExpression) before doing anything else.
-	static TCHAR sBuf[16] // Enough for "GuiDropDownList", although it's currently "GuiDDL" ("GuiStatusBar" is the next longest).
-		= _T("Gui"); // Initialized once for all.
-	// It seems more correct to include the control type in the class/type name,
-	// since the available methods differ by control type (Add/SetParts/etc.).
-	_tcscpy(sBuf + 3, GetTypeName());
-	return sBuf;
-}
-
 GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
 {
 	static TypeAttribs sAttrib[] = { 0,
@@ -595,27 +579,26 @@ BIF_DECL(BIF_GuiCtrlFromHwnd)
 
 ObjectMember GuiControlType::sMembers[] =
 {
-	Object_Method_(Opt, 1, 1, Invoke, M_Options),
-	Object_Method(Options, 1, 1),
+	Object_Method(Choose, 1, 1),
 	Object_Method(Focus, 0, 0),
 	Object_Method(Move, 1, 2),
-	Object_Method(Choose, 1, 1),
+	Object_Method(OnCommand, 2, 3),
 	Object_Method(OnEvent, 2, 3),
 	Object_Method(OnNotify, 2, 3),
-	Object_Method(OnCommand, 2, 3),
+	Object_Method(Opt, 1, 1),
 	Object_Method(SetFont, 0, 2),
 
-	Object_Property_get    (Hwnd),
-	Object_Property_get    (Gui),
-	Object_Property_get_set(Name),
-	Object_Property_get    (Type),
 	Object_Property_get    (ClassNN),
-	Object_Property_get_set(Text),
-	Object_Property_get_set(Value),
-	Object_Property_get    (Pos),
 	Object_Property_get_set(Enabled),
-	Object_Property_get_set(Visible),
-	Object_Property_get    (Focused)
+	Object_Property_get    (Focused),
+	Object_Property_get    (Gui),
+	Object_Property_get    (Hwnd),
+	Object_Property_get_set(Name),
+	Object_Property_get    (Pos),
+	Object_Property_get_set(Text),
+	Object_Property_get    (Type),
+	Object_Property_get_set(Value),
+	Object_Property_get_set(Visible)
 };
 
 ObjectMember GuiControlType::sMembersList[] =
@@ -678,38 +661,44 @@ ObjectMember GuiControlType::sMembersSB[] =
 #undef FUN1
 #undef FUNn
 
+Object *GuiControlType::GetPrototype(GuiControls aType)
+{
+	static Object *sPrototype = CreatePrototype(_T("Gui.Control"), Object::sPrototype, sMembers, _countof(sMembers));
+	static Object *sPrototypeList = CreatePrototype(_T("Gui.List"), sPrototype, sMembersList, _countof(sMembersList));
+	static Object *sPrototypes[_countof(sTypeNames)] = {};
+	ASSERT(aType <= _countof(sPrototypes));
+	if (aType == GUI_CONTROL_TAB2 || aType == GUI_CONTROL_TAB3)
+		aType = GUI_CONTROL_TAB; // Just make them all Gui.Tab.
+	if (!sPrototypes[aType])
+	{
+		// Determine base prototype and control-type-specific members.
+		Object *base = sPrototype;
+		ObjectMember *more_items = nullptr;
+		int how_many = 0;
+		switch (aType)
+		{
+		case GUI_CONTROL_TAB: more_items = sMembersTab; how_many = _countof(sMembersTab); // Fall through:
+		case GUI_CONTROL_DROPDOWNLIST:
+		case GUI_CONTROL_COMBOBOX:
+		case GUI_CONTROL_LISTBOX: base = sPrototypeList; break;
+		case GUI_CONTROL_DATETIME: more_items = sMembersDate; how_many = _countof(sMembersDate); break;
+		case GUI_CONTROL_LISTVIEW: more_items = sMembersLV; how_many = _countof(sMembersLV); break;
+		case GUI_CONTROL_TREEVIEW: more_items = sMembersTV; how_many = _countof(sMembersTV); break;
+		case GUI_CONTROL_STATUSBAR: more_items = sMembersSB; how_many = _countof(sMembersSB); break;
+		}
+		TCHAR buf[32];
+		_sntprintf(buf, 32, _T("Gui.%s"), sTypeNames[aType]);
+		sPrototypes[aType] = CreatePrototype(buf, base, more_items, how_many);
+	}
+	return sPrototypes[aType];
+}
+
 ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (!hwnd)
 		_o_throw(_T("The control is destroyed."));
 
-	ResultType result;
-	ObjectMember *more_items = NULL;
-	int how_many = 0;
-
-	// Check for control-type-specific members:
-	switch (type)
-	{
-	case GUI_CONTROL_TAB:
-		result = ObjectMember::Invoke(sMembersTab, _countof(sMembersTab), this, aResultToken, aFlags, aParam, aParamCount);
-		if (result != INVOKE_NOT_HANDLED)
-			return result;
-		// Also check sMembersList:
-	case GUI_CONTROL_DROPDOWNLIST:
-	case GUI_CONTROL_COMBOBOX:
-	case GUI_CONTROL_LISTBOX: more_items = sMembersList; how_many = _countof(sMembersList); break;
-	case GUI_CONTROL_DATETIME: more_items = sMembersDate; how_many = _countof(sMembersDate); break;
-	case GUI_CONTROL_LISTVIEW: more_items = sMembersLV; how_many = _countof(sMembersLV); break;
-	case GUI_CONTROL_TREEVIEW: more_items = sMembersTV; how_many = _countof(sMembersTV); break;
-	case GUI_CONTROL_STATUSBAR: more_items = sMembersSB; how_many = _countof(sMembersSB); break;
-	}
-	if (more_items)
-	{
-		result = ObjectMember::Invoke(more_items, how_many, this, aResultToken, aFlags, aParam, aParamCount);
-		if (result != INVOKE_NOT_HANDLED)
-			return result;
-	}
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+	return Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
 }
 
 
@@ -718,7 +707,7 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 	auto member = MemberID(aID);
 	switch (member)
 	{
-		case M_Options:
+		case M_Opt:
 		{
 			GuiControlOptionsType go; // Its contents are not currently used here, but they might be in the future.
 			gui->ControlInitOptions(go, *this);
@@ -2655,6 +2644,8 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	GuiControlType *pcontrol = new GuiControlType(this);
 	mControl[mControlCount] = pcontrol;
 	GuiControlType &control = *pcontrol;
+
+	control.SetBase(GuiControlType::GetPrototype(aControlType));
 	
 	GuiControlOptionsType opt;
 	ControlInitOptions(opt, control);
@@ -10922,4 +10913,3 @@ bool GuiType::ConvertAccelerator(LPTSTR aString, ACCEL &aAccel)
 }
 
 Implement_DebugWriteProperty_via_sMembers(GuiType)
-Implement_DebugWriteProperty_via_sMembers(GuiControlType)

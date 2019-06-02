@@ -2191,7 +2191,7 @@ typedef UCHAR TabIndexType;
 // Keep the below in sync with the size of the types above:
 #define MAX_TAB_CONTROLS 255  // i.e. the value 255 itself is reserved to mean "doesn't belong to a tab".
 #define MAX_TABS_PER_CONTROL 256
-struct GuiControlType : public ObjectBase
+struct GuiControlType : public Object
 {
 	GuiType* gui;
 	HWND hwnd = NULL;
@@ -2324,7 +2324,7 @@ struct GuiControlType : public ObjectBase
 		INVALID = 0,
 
 		// Methods
-		M_Options, // a.k.a. Opt
+		M_Opt, // a.k.a. Opt
 		M_Focus,
 		M_Move,
 		M_Choose,
@@ -2359,6 +2359,8 @@ struct GuiControlType : public ObjectBase
 	static ObjectMember sMembersTV[];
 	static ObjectMember sMembersSB[];
 
+	static Object *GetPrototype(GuiControls aType);
+
 	ResultType StatusBar(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType LV_GetNextOrCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType LV_GetText(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
@@ -2373,8 +2375,6 @@ struct GuiControlType : public ObjectBase
 
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	LPTSTR Type();
-	IObject_DebugWriteProperty_Def;
 
 	void Dispose(); // Called by GuiType::Dispose().
 };
