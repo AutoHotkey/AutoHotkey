@@ -1611,7 +1611,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		if (mClass)
 		{
 			auto obj = dynamic_cast<Object *>(TokenToObject(*aParam[0]));
-			if (!obj || !(obj->IsNativeClassPrototype() ? mClass == Object::sPrototype : obj->IsDerivedFrom(mClass)))
+			if (!obj || !(obj->IsClassPrototype() ? mClass == Object::sPrototype : obj->IsDerivedFrom(mClass)))
 				aResultToken.Error(ERR_TYPE_MISMATCH);
 			else
 				(obj->*mBIM)(aResultToken, mMID, mMIT, aParam + 1, aParamCount - 1);

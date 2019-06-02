@@ -317,7 +317,8 @@ protected:
 #endif
 	enum Flags : decltype(mFlags)
 	{
-		NativeClassPrototype = 0x01
+		ClassPrototype = 0x01,
+		NativeClassPrototype = 0x02
 	};
 
 	Object *CloneTo(Object &aTo);
@@ -443,6 +444,7 @@ public:
 		mBase = aNewBase;
 	}
 
+	bool IsClassPrototype() { return mFlags & ClassPrototype; }
 	bool IsNativeClassPrototype() { return mFlags & NativeClassPrototype; }
 
 	Object *GetNativeBase();

@@ -1087,7 +1087,7 @@ int Debugger::WritePropertyXml(PropertyInfo &aProp, IObject *aObject)
 
 void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aDepth)
 {
-	auto enum_method = IsNativeClassPrototype() ? nullptr : GetMethod(_T("__Enum"));
+	auto enum_method = IsClassPrototype() ? nullptr : GetMethod(_T("__Enum"));
 	int num_children = (int)mFields.Length() + (mBase != nullptr) + (enum_method != nullptr);
 
 	DebugCookie cookie;

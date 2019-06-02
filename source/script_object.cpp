@@ -968,6 +968,7 @@ Object *Object::CreateClass(Object *aPrototype)
 Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase)
 {
 	auto obj = new Object();
+	obj->mFlags |= ClassPrototype;
 	obj->SetOwnProp(_T("__Class"), ExprTokenType(aClassName));
 	obj->SetBase(aBase);
 	return obj;
