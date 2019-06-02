@@ -1619,6 +1619,11 @@ bool Object::Variant::InitCopy(Variant &val)
 	case SYM_OBJECT:
 		(object = val.object)->AddRef();
 		break;
+	case SYM_DYNAMIC:
+		prop = new Property();
+		prop->SetGetter(val.prop->Getter());
+		prop->SetSetter(val.prop->Setter());
+		break;
 	//case SYM_INTEGER:
 	//case SYM_FLOAT:
 	default:
