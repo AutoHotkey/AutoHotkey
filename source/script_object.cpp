@@ -2739,11 +2739,6 @@ ObjectMember BufferObject::sMembers[] =
 	Object_Property_get(Data)
 };
 
-ResultType BufferObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
-}
-
 ResultType BufferObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	switch (aID)
@@ -2793,7 +2788,9 @@ BIF_DECL(BIF_BufferAlloc)
 	auto data = malloc((size_t)size);
 	if (!data)
 		_f_throw(ERR_OUTOFMEM);
-	_f_return(new BufferObject(data, (size_t)size));
+	auto bo = new BufferObject(data, (size_t)size);
+	bo->SetBase(BufferObject::sPrototype);
+	_f_return(bo);
 }
 
 
@@ -2866,6 +2863,10 @@ Object *Map::sClass			= Object::CreateClass(_T("Map"),	Object::sClass,		sPrototy
 
 
 
+Object *BufferObject::sPrototype = Object::CreatePrototype(_T("Buffer"), Object::sPrototype, sMembers, _countof(sMembers));
+
+
+
 ObjectMember RegExMatchObject::sMembers[] =
 {
 	Object_Method(__Enum, 0, 1),
@@ -2926,7 +2927,6 @@ void IObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPa
 }
 
 Implement_DebugWriteProperty_via_sMembers(Func)
-Implement_DebugWriteProperty_via_sMembers(BufferObject)
 
 void ObjectMember::DebugWriteProperty(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
 	, IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)

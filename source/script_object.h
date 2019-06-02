@@ -853,7 +853,7 @@ public:
 // Buffer
 //
 
-class BufferObject : public ObjectBase
+class BufferObject : public Object
 {
 protected:
 	void *mData;
@@ -875,11 +875,8 @@ public:
 		P_Data
 	};
 	static ObjectMember sMembers[];
+	static Object *sPrototype;
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	IObject_DebugWriteProperty_Def;
-	IObject_Type_Impl("Buffer")
 };
 
 
