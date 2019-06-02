@@ -235,6 +235,8 @@ public:
 //#define ObjParseIntKey(s, endptr) Exp32or64(UorA(wcstol,strtol),UorA(_wcstoi64,_strtoi64))(s, endptr, 10) // Convert string to IntKeyType, setting errno = ERANGE if overflow occurs.
 #define ObjParseIntKey(s, endptr) UorA(_wcstoi64,_strtoi64)(s, endptr, 10) // Convert string to IntKeyType, setting errno = ERANGE if overflow occurs.
 
+class Array;
+
 class Object : public ObjectBase
 {
 public:
@@ -358,15 +360,15 @@ private:
 	ResultType CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMeta(IObject *aFunc, LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 
-	ResultType Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
-
 	bool Delete() override;
 
 public:
 
 	static Object *Create();
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
-	
+
+	ResultType Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+
 	bool HasProp(name_t aName);
 	
 	enum class PropType

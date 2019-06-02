@@ -6245,10 +6245,12 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 
 	prototype->SetBase(base_prototype);
 	class_object->SetBase(base_class);
+	++mClassObjectCount;
 
+	if (!DefineClassInit(true))
+		return FAIL;
 	mClasses->Append(ExprTokenType(class_object));
 
-	++mClassObjectCount;
 	return OK;
 }
 
@@ -6462,24 +6464,11 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		else
 		{
 			// Create an __Init method for this class/prototype.
-			TCHAR def[] = _T("__Init(){");
-			if (!DefineFunc(def, nullptr, aStatic))
-				return FAIL;
-			if (!aStatic)
-			{
-				if (!ParseAndAddLine(_T("base.__Init()"), 0, ACT_EXPRESSION)) // Initialize base-class variables first. Relies on short-circuit evaluation.
-					return FAIL;
-				mLastLine->mLineNumber = 0; // Signal the debugger to skip this line while stepping in/over/out.
-			}
-				
-			init_func = g->CurrentFunc;
-			init_func->mDefaultVarType = VAR_DECLARE_GLOBAL; // Allow global variables/class names in initializer expressions.
-				
-			if (!AddLine(ACT_BLOCK_END)) // This also resets g->CurrentFunc to NULL.
+			init_func = DefineClassInit(aStatic);
+			if (!init_func)
 				return FAIL;
 			block_end = mLastLine;
-			block_end->mLineNumber = 0; // See above.
-				
+
 			// These must be updated as one or both have changed:
 			script_first_line = mFirstLine;
 			script_last_line = mLastLine;
@@ -6506,6 +6495,26 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		mLastLine = script_last_line;
 	}
 	return OK;
+}
+
+
+Func *Script::DefineClassInit(bool aStatic)
+{
+	TCHAR def[] = _T("__Init(){");
+	if (!DefineFunc(def, nullptr, aStatic))
+		return nullptr;
+	if (!aStatic)
+	{
+		if (!ParseAndAddLine(_T("base.__Init()"), 0, ACT_EXPRESSION)) // Initialize base-class variables first. Relies on short-circuit evaluation.
+			return nullptr;
+		mLastLine->mLineNumber = 0; // Signal the debugger to skip this line while stepping in/over/out.
+	}
+	auto init_func = g->CurrentFunc;
+	init_func->mDefaultVarType = VAR_DECLARE_GLOBAL; // Allow global variables/class names in initializer expressions.
+	if (!AddLine(ACT_BLOCK_END)) // This also resets g->CurrentFunc to NULL.
+		return nullptr;
+	mLastLine->mLineNumber = 0; // See above.
+	return init_func;
 }
 
 
@@ -6587,13 +6596,11 @@ ResultType Script::InitClasses()
 	TCHAR buf[_f_retval_buf_size];
 	ResultToken result_token;
 	ExprTokenType cls;
-	ExprTokenType param_token = _T("__Init");
-	ExprTokenType *param = &param_token;
 	for (Array::index_t i = 0; i < mClasses->Length(); ++i)
 	{
 		mClasses->ItemToToken(i, cls);
 		result_token.InitResult(buf);
-		if (!cls.object->Invoke(result_token, cls, IT_CALL | IF_METAOBJ, &param, 1))
+		if (!((Object *)cls.object)->Construct(result_token, nullptr, 0))
 			return FAIL;
 		result_token.Free();
 	}
