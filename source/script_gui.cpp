@@ -2269,7 +2269,7 @@ void GuiControlType::Dispose()
 	}
 	else if (type == GUI_CONTROL_LISTVIEW) // It was ensured at an earlier stage that union_lv_attrib != NULL.
 		free(union_lv_attrib);
-	else if (type == GUI_CONTROL_ACTIVEX)
+	else if (type == GUI_CONTROL_ACTIVEX && union_object)
 		union_object->Release();
 	//else do nothing, since this type has nothing more than a color stored in the union.
 	if (background_brush)
@@ -2652,10 +2652,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	////////////////////////////////////////////////////////////////////////////////////////
 	// Set defaults for the various options, to be overridden individually by any specified.
 	////////////////////////////////////////////////////////////////////////////////////////
-	GuiControlType *pcontrol = new GuiControlType();
+	GuiControlType *pcontrol = new GuiControlType(this);
 	mControl[mControlCount] = pcontrol;
 	GuiControlType &control = *pcontrol;
-	control.Initialize(this);
 	
 	GuiControlOptionsType opt;
 	ControlInitOptions(opt, control);
@@ -2703,7 +2702,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			return g_script.ScriptError(_T("Too many status bars.")); // Short msg since so rare.
 		}
 		control.tab_control_index = MAX_TAB_CONTROLS; // Indicate that bar isn't owned by any tab control.
-		// No need to do the following because ZeroMem did it:
+		// No need to do the following because constructor did it:
 		//control.tab_index = 0; // Ignored but set for maintainability/consistency.
 	}
 	else

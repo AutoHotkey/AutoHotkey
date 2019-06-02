@@ -2193,13 +2193,13 @@ typedef UCHAR TabIndexType;
 #define MAX_TABS_PER_CONTROL 256
 struct GuiControlType : public ObjectBase
 {
-	GuiType* gui; // Below code relies on this being the first field.
-	HWND hwnd;
-	LPTSTR name;
+	GuiType* gui;
+	HWND hwnd = NULL;
+	LPTSTR name = nullptr;
 	MsgMonitorList events;
 	// Keep any fields that are smaller than 4 bytes adjacent to each other.  This conserves memory
 	// due to byte-alignment.  It has been verified to save 4 bytes per struct in this case:
-	GuiControls type;
+	GuiControls type = GUI_CONTROL_INVALID;
 	// Unused: 0x01
 	#define GUI_CONTROL_ATTRIB_ALTSUBMIT           0x02
 	// Unused: 0x04
@@ -2208,22 +2208,25 @@ struct GuiControlType : public ObjectBase
 	#define GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS     0x20
 	// Unused: 0x40
 	#define GUI_CONTROL_ATTRIB_ALTBEHAVIOR         0x80 // Slider +Invert, ListView/TreeView +WantF2, Edit +WantTab
-	UCHAR attrib; // A field of option flags/bits defined above.
-	TabControlIndexType tab_control_index; // Which tab control this control belongs to, if any.
-	TabIndexType tab_index; // For type==TAB, this stores the tab control's index.  For other types, it stores the page.
+	UCHAR attrib = 0; // A field of option flags/bits defined above.
+	TabControlIndexType tab_control_index = 0; // Which tab control this control belongs to, if any.
+	TabIndexType tab_index = 0; // For type==TAB, this stores the tab control's index.  For other types, it stores the page.
 	#define CLR_TRANSPARENT 0xFF000001L
 	#define IS_AN_ACTUAL_COLOR(color) !((color) & ~0xffffff) // Produces smaller code than checking against CLR_DEFAULT || CLR_INVALID.
-	COLORREF background_color;
-	HBRUSH background_brush;
+	COLORREF background_color = CLR_INVALID;
+	HBRUSH background_brush = NULL;
 	union
 	{
 		COLORREF union_color;  // Color of the control's text.
-		HBITMAP union_hbitmap; // For PIC controls, stores the bitmap.
+		HBITMAP union_hbitmap = NULL; // For PIC controls, stores the bitmap.
 		// Note: Pic controls cannot obey the text color, but they can obey the window's background
 		// color if the picture's background is transparent (at least in the case of icons on XP).
 		lv_attrib_type *union_lv_attrib; // For ListView: Some attributes and an array of columns.
 		IObject *union_object; // For ActiveX.
 	};
+
+	GuiControlType() = delete;
+	GuiControlType(GuiType* owner) : gui(owner) {}
 
 	static LPTSTR sTypeNames[];
 	static GuiControls ConvertTypeName(LPTSTR aTypeName);
@@ -2316,14 +2319,6 @@ struct GuiControlType : public ObjectBase
 		return TypeHasAttrib(TYPE_USES_BGCOLOR);
 	}
 
-	void Initialize(GuiType* owner)
-	{
-		// Zerofill all the members of this object (except for ObjectBase members)
-		ZeroMemory(&gui, (char*)(this+1) - (char*)&gui);
-		gui = owner;
-		background_color = CLR_INVALID;
-	}
-	
 	enum MemberID
 	{
 		INVALID = 0,
