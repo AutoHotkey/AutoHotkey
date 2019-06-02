@@ -326,6 +326,7 @@ protected:
 	Object *CloneTo(Object &aTo);
 	Object() { mFlags = 0; }
 	~Object();
+	bool Delete() override;
 
 private:
 	Object *mBase = nullptr;
@@ -359,8 +360,6 @@ private:
 
 	ResultType CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMeta(IObject *aFunc, LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
-
-	bool Delete() override;
 
 public:
 

@@ -2421,7 +2421,7 @@ struct GuiControlOptionsType
 LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK TabWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam);
 
-class GuiType : public ObjectBase
+class GuiType : public Object
 {
 	// The use of 72 and 96 below comes from v1, using the font's point size in the
 	// calculation.  It's really just 11.25 * font height in pixels.  Could use 12
@@ -2497,7 +2497,7 @@ public:
 		M_Show,
 		M_Hide,
 		M_SetFont,
-		M_Options, // a.k.a. Opt
+		M_Opt,
 		M_Minimize,
 		M_Maximize,
 		M_Restore,
@@ -2510,7 +2510,7 @@ public:
 		P_Hwnd,
 		P_Title,
 		P_Name,
-		P_Control,
+		P___Item,
 		P_FocusedCtrl,
 		P_BackColor,
 		P_MarginX,
@@ -2563,8 +2563,6 @@ public:
 	void Destroy();
 	void Dispose();
 	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
-	IObject_Type_Impl("Gui")
-	IObject_DebugWriteProperty_Def;
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
@@ -2729,7 +2727,7 @@ public:
 	int ScaleSize(int x) { return mUsesDPIScaling && x != -1 ? DPIScale(x) : x; }
 
 protected:
-	bool Delete();
+	bool Delete() override;
 };
 
 

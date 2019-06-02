@@ -189,54 +189,53 @@ public:
 
 ObjectMember GuiType::sMembers[] =
 {
+	Object_Method (__Enum, 0, 1),
+
 	Object_Method_(Add, 1, 3, AddControl, GUI_CONTROL_INVALID),
-	Object_Method_(AddText, 0, 2, AddControl, GUI_CONTROL_TEXT),
-	Object_Method_(AddPic, 0, 2, AddControl, GUI_CONTROL_PIC),
-	Object_Method_(AddPicture, 0, 2, AddControl, GUI_CONTROL_PIC),
-	Object_Method_(AddGroupBox, 0, 2, AddControl, GUI_CONTROL_GROUPBOX),
+	Object_Method_(AddActiveX, 0, 2, AddControl, GUI_CONTROL_ACTIVEX),
 	Object_Method_(AddButton, 0, 2, AddControl, GUI_CONTROL_BUTTON),
 	Object_Method_(AddCheckBox, 0, 2, AddControl, GUI_CONTROL_CHECKBOX),
-	Object_Method_(AddRadio, 0, 2, AddControl, GUI_CONTROL_RADIO),
+	Object_Method_(AddComboBox, 0, 2, AddControl, GUI_CONTROL_COMBOBOX),
+	Object_Method_(AddCustom, 0, 2, AddControl, GUI_CONTROL_CUSTOM),
+	Object_Method_(AddDateTime, 0, 2, AddControl, GUI_CONTROL_DATETIME),
 	Object_Method_(AddDDL, 0, 2, AddControl, GUI_CONTROL_DROPDOWNLIST),
 	Object_Method_(AddDropDownList, 0, 2, AddControl, GUI_CONTROL_DROPDOWNLIST),
-	Object_Method_(AddComboBox, 0, 2, AddControl, GUI_CONTROL_COMBOBOX),
+	Object_Method_(AddEdit, 0, 2, AddControl, GUI_CONTROL_EDIT),
+	Object_Method_(AddGroupBox, 0, 2, AddControl, GUI_CONTROL_GROUPBOX),
+	Object_Method_(AddHotkey, 0, 2, AddControl, GUI_CONTROL_HOTKEY),
+	Object_Method_(AddLink, 0, 2, AddControl, GUI_CONTROL_LINK),
 	Object_Method_(AddListBox, 0, 2, AddControl, GUI_CONTROL_LISTBOX),
 	Object_Method_(AddListView, 0, 2, AddControl, GUI_CONTROL_LISTVIEW),
-	Object_Method_(AddTreeView, 0, 2, AddControl, GUI_CONTROL_TREEVIEW),
-	Object_Method_(AddEdit, 0, 2, AddControl, GUI_CONTROL_EDIT),
-	Object_Method_(AddDateTime, 0, 2, AddControl, GUI_CONTROL_DATETIME),
 	Object_Method_(AddMonthCal, 0, 2, AddControl, GUI_CONTROL_MONTHCAL),
-	Object_Method_(AddHotkey, 0, 2, AddControl, GUI_CONTROL_HOTKEY),
-	Object_Method_(AddUpDown, 0, 2, AddControl, GUI_CONTROL_UPDOWN),
-	Object_Method_(AddSlider, 0, 2, AddControl, GUI_CONTROL_SLIDER),
+	Object_Method_(AddPic, 0, 2, AddControl, GUI_CONTROL_PIC),
+	Object_Method_(AddPicture, 0, 2, AddControl, GUI_CONTROL_PIC),
 	Object_Method_(AddProgress, 0, 2, AddControl, GUI_CONTROL_PROGRESS),
+	Object_Method_(AddRadio, 0, 2, AddControl, GUI_CONTROL_RADIO),
+	Object_Method_(AddSlider, 0, 2, AddControl, GUI_CONTROL_SLIDER),
+	Object_Method_(AddStatusBar, 0, 2, AddControl, GUI_CONTROL_STATUSBAR),
 	Object_Method_(AddTab, 0, 2, AddControl, GUI_CONTROL_TAB),
 	Object_Method_(AddTab2, 0, 2, AddControl, GUI_CONTROL_TAB2),
 	Object_Method_(AddTab3, 0, 2, AddControl, GUI_CONTROL_TAB3),
-	Object_Method_(AddActiveX, 0, 2, AddControl, GUI_CONTROL_ACTIVEX),
-	Object_Method_(AddLink, 0, 2, AddControl, GUI_CONTROL_LINK),
-	Object_Method_(AddCustom, 0, 2, AddControl, GUI_CONTROL_CUSTOM),
-	Object_Method_(AddStatusBar, 0, 2, AddControl, GUI_CONTROL_STATUSBAR),
+	Object_Method_(AddText, 0, 2, AddControl, GUI_CONTROL_TEXT),
+	Object_Method_(AddTreeView, 0, 2, AddControl, GUI_CONTROL_TREEVIEW),
+	Object_Method_(AddUpDown, 0, 2, AddControl, GUI_CONTROL_UPDOWN),
 
-	Object_Method (Show, 0, 1),
-	Object_Method (Hide, 0, 0),
-	Object_Method_(Cancel, 0, 0, Invoke, M_Hide),
 	Object_Method (Destroy, 0, 0),
-	Object_Method (SetFont, 0, 2),
-	Object_Method (Options, 1, 1),
-	Object_Method_(Opt, 1, 1, Invoke, M_Options),
-	Object_Method (Minimize, 0, 0),
-	Object_Method (Maximize, 0, 0),
-	Object_Method (Restore, 0, 0),
 	Object_Method (Flash, 0, 1),
-	Object_Method (Submit, 0, 1),
-	Object_Method (__Enum, 0, 1),
+	Object_Method (Hide, 0, 0),
+	Object_Method (Maximize, 0, 0),
+	Object_Method (Minimize, 0, 0),
 	Object_Method (OnEvent, 2, 3),
+	Object_Method (Opt, 1, 1),
+	Object_Method (Restore, 0, 0),
+	Object_Method (SetFont, 0, 2),
+	Object_Method (Show, 0, 1),
+	Object_Method (Submit, 0, 1),
 
+	Object_Property_get    (__Item, 1, 1),
 	Object_Property_get    (Hwnd),
 	Object_Property_get_set(Title),
 	Object_Property_get_set(Name),
-	Object_Property_get    (Control, 1, 1),
 	Object_Property_get    (FocusedCtrl),
 	Object_Property_get_set(BackColor),
 	Object_Property_get_set(MarginX),
@@ -251,7 +250,7 @@ ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprToke
 	if (!mHwnd)
 		_o_throw(_T("The Gui is destroyed."));
 
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+	return Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
 }
 
 ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -313,7 +312,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 			LPTSTR font_name = ParamIndexToOptionalString(1, nbuf2); //
 			return SetCurrentFont(options, font_name);
 		}
-		case M_Options:
+		case M_Opt:
 		{
 			LPTSTR options = ParamIndexToOptionalString(0, nbuf1);
 			bool set_last_found_window = false;
@@ -377,7 +376,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 			}
 			_o_return_empty;
 		}
-		case P_Control:
+		case P___Item:
 		{
 			ExprTokenType& tok = *aParam[0];
 			GuiControlType* ctrl = NULL;
@@ -488,7 +487,10 @@ BIF_DECL(BIF_GuiCreate)
 	if (  !(GuiType::sFont || (GuiType::sFont = (FontType *)malloc(sizeof(FontType) * MAX_GUI_FONTS)))  )
 		_f_throw(ERR_OUTOFMEM);
 
+	static Object *sPrototype = Object::CreatePrototype(_T("Gui"), Object::sPrototype, GuiType::sMembers, _countof(GuiType::sMembers));
+
 	GuiType* gui = new GuiType();
+	gui->SetBase(sPrototype);
 	if (!gui)
 		_f_throw(ERR_OUTOFMEM); // Short msg since so rare.
 
@@ -2106,7 +2108,7 @@ bool GuiType::Delete() // IObject::Delete()
 	// only if mRefCount is still 1 (it's never decremented to 0).
 	if (mRefCount > 1)
 		return false;
-	return ObjectBase::Delete();
+	return Object::Delete();
 }
 
 
@@ -10911,5 +10913,3 @@ bool GuiType::ConvertAccelerator(LPTSTR aString, ACCEL &aAccel)
 
 	return aAccel.key; // i.e. false if not a valid key name.
 }
-
-Implement_DebugWriteProperty_via_sMembers(GuiType)
