@@ -896,7 +896,6 @@ public:
 		, LPTSTR aFilePath, size_t aFilePathLength);
 
 	Label *GetJumpTarget(bool aIsDereferenced);
-	Label *GetJumpTarget(bool aIsDereferenced, Func *aFunc);
 	Label *IsJumpValid(Label &aTargetLabel, bool aSilent = false);
 	BOOL IsOutsideAnyFunctionBody();
 	BOOL CheckValidFinallyJump(Line* jumpTarget);
