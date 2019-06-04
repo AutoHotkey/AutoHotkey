@@ -1661,7 +1661,7 @@ struct UDFCallInfo
 typedef BIF_DECL((* BuiltInFunctionType));
 
 
-class Func : public IObjectComCompatible
+class Func : public Object
 {
 public:
 	union {
@@ -1824,12 +1824,10 @@ public:
 	static ObjectMember sMembers[];
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
-	// IObject.
+	static Object *sPrototype;
 	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
 	ULONG STDMETHODCALLTYPE Release() { return 1; }
-	IObject_Type_Impl("Func")
-	IObject_DebugWriteProperty_Def;
 
 	Func(LPTSTR aFuncName, bool aIsBuiltIn) // Constructor.
 		: mName(aFuncName) // Caller gave us a pointer to dynamic memory for this.
@@ -1846,7 +1844,9 @@ public:
 		, mIsBuiltIn(aIsBuiltIn)
 		, mIsVariadic(false)
 		, mIsFuncExpression(false)
-	{}
+	{
+		SetBase(sPrototype);
+	}
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}

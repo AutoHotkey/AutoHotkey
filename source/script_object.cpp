@@ -2420,31 +2420,19 @@ Map::Pair *Map::Insert(SymbolType key_type, Key key, index_t at)
 
 
 //
-// Func: Script interface, accessible via "function reference".
+// Func: A function, either built-in or created by a function definition.
 //
-
-ObjectMember Func::sMembers[] =
-{
-	Object_Method(Call, 0, MAXP_VARIADIC),
-	Object_Method(Bind, 0, MAXP_VARIADIC),
-	Object_Method(IsOptional, 0, MAX_FUNCTION_PARAMS),
-	Object_Method(IsByRef, 0, MAX_FUNCTION_PARAMS),
-
-	Object_Property_get(Name),
-	Object_Property_get(MinParams),
-	Object_Property_get(MaxParams),
-	Object_Property_get(IsBuiltIn),
-	Object_Property_get(IsVariadic)
-};
 
 ResultType STDMETHODCALLTYPE Func::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (aFlags == (IT_CALL | IF_DEFAULT))
 	{
+		// Take a shortcut for performance.  Although it prevents hooking via
+		// DefineMethod, this is consistent with direct function calls.
 		Call(aResultToken, aParam, aParamCount);
 		return aResultToken.Result();
 	}
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+	return Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
 }
 
 ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -2863,6 +2851,24 @@ Object *Map::sClass			= Object::CreateClass(_T("Map"),	Object::sClass,		sPrototy
 
 
 
+ObjectMember Func::sMembers[] =
+{
+	Object_Method(Bind, 0, MAXP_VARIADIC),
+	Object_Method(Call, 0, MAXP_VARIADIC),
+	Object_Method(IsByRef, 0, MAX_FUNCTION_PARAMS),
+	Object_Method(IsOptional, 0, MAX_FUNCTION_PARAMS),
+
+	Object_Property_get(IsBuiltIn),
+	Object_Property_get(IsVariadic),
+	Object_Property_get(MaxParams),
+	Object_Property_get(MinParams),
+	Object_Property_get(Name)
+};
+
+Object *Func::sPrototype = Object::CreatePrototype(_T("Func"), Object::sPrototype, sMembers, _countof(sMembers));
+
+
+
 Object *BufferObject::sPrototype = Object::CreatePrototype(_T("Buffer"), Object::sPrototype, sMembers, _countof(sMembers));
 
 
@@ -2925,8 +2931,6 @@ void IObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPa
 	//}
 	aDebugger->EndProperty(cookie);
 }
-
-Implement_DebugWriteProperty_via_sMembers(Func)
 
 void ObjectMember::DebugWriteProperty(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
 	, IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
