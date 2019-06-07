@@ -574,7 +574,6 @@ enum BuiltInFunctionID {
 	FID_ObjDeleteProp = 0, FID_ObjOwnPropCount, FID_ObjHasOwnProp, FID_ObjHasProp, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjClone, FID_ObjOwnProps, FID_ObjOwnMethods,
 	FID_ObjGetBase = 0, FID_ObjSetBase,
 	FID_ObjRawGet = 0, FID_ObjRawSet,
-	FID_ComObjType = 0, FID_ComObjValue,
 	FID_WinGetID = 0, FID_WinGetIDLast, FID_WinGetPID, FID_WinGetProcessName, FID_WinGetProcessPath, FID_WinGetCount, FID_WinGetList, FID_WinGetMinMax, FID_WinGetControls, FID_WinGetControlsHwnd, FID_WinGetTransparent, FID_WinGetTransColor, FID_WinGetStyle, FID_WinGetExStyle,
 	FID_WinGetPos = 0, FID_WinGetClientPos,
 	FID_WinSetTransparent = 0, FID_WinSetTransColor, FID_WinSetAlwaysOnTop, FID_WinSetStyle, FID_WinSetExStyle, FID_WinSetEnabled, FID_WinSetRegion,
@@ -3217,7 +3216,8 @@ BIF_DECL(BIF_ComObjCreate);
 BIF_DECL(BIF_ComObjGet);
 BIF_DECL(BIF_ComObjConnect);
 BIF_DECL(BIF_ComObjError);
-BIF_DECL(BIF_ComObjTypeOrValue);
+BIF_DECL(BIF_ComObjType);
+BIF_DECL(BIF_ComObjValue);
 BIF_DECL(BIF_ComObjFlags);
 BIF_DECL(BIF_ComObjArray);
 BIF_DECL(BIF_ComObjQuery);
