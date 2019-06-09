@@ -578,10 +578,10 @@ public:
 	void AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength);
 	void SetLengthFromContents();
 
-	static ResultType BackupFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVarBackupCount);
+	static ResultType BackupFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &aVarBackupCount);
 	void Backup(VarBkp &aVarBkp);
 	void Restore(VarBkp &aVarBkp);
-	static void FreeAndRestoreFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVarBackupCount);
+	static void FreeAndRestoreFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &aVarBackupCount);
 
 	#define DISPLAY_NO_ERROR    0  // Must be zero.
 	#define DISPLAY_VAR_ERROR   1

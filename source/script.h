@@ -1483,15 +1483,6 @@ class LabelPtr
 protected:
 	IObject *mObject;
 	
-	enum CallableType
-	{
-		Callable_Label,
-		Callable_Func,
-		Callable_Object
-	};
-	static Line *getJumpToLine(IObject *aObject);
-	static CallableType getType(IObject *aObject);
-
 public:
 	LabelPtr() : mObject(NULL) {}
 	LabelPtr(IObject *object) : mObject(object) {}
@@ -1501,16 +1492,15 @@ public:
 	operator void *() const { return mObject; } // For comparisons and boolean eval.
 
 	// Caller beware: does not check for NULL.
-	Label *ToLabel() const { return getType(mObject) == Callable_Label ? (Label *)mObject : NULL; }
-	// Caller beware: does not check for NULL.
-	Func *ToFunc() const { return getType(mObject) == Callable_Func ? (Func *)mObject : NULL; }
+	Label *ToLabel() const;
+	Func *ToFunc() const;
 	IObject *ToObject() const { return mObject; }
 	
 	// True if it is a dynamically-allocated object, not a Label or Func.
-	bool IsLiveObject() const { return mObject && getType(mObject) == Callable_Object; }
+	bool IsLiveObject() const { return mObject && !(ToFunc() || ToLabel()); }
 	
-	// Helper methods for legacy code which deals with Labels.
-	LPTSTR Name() const;
+	// Currently only used by ListLines, listing active timers.
+	LPCTSTR Name() const;
 };
 
 // LabelPtr with automatic reference-counting, for storing an object safely,
@@ -1584,6 +1574,7 @@ struct FuncList
 
 	Func *Find(LPCTSTR aName, int *apInsertPos);
 	ResultType Insert(Func *aFunc, int aInsertPos);
+	void Replace(int aPos, Func *aFunc) { mItem[aPos] = aFunc; }
 	ResultType Alloc(int aAllocCount);
 
 	FuncList() : mItem(NULL), mCount(0), mCountMax(0) {}
@@ -1594,7 +1585,7 @@ struct FreeVars
 {
 	int mRefCount, mVarCount;
 	Var *mVar;
-	Func *mFunc;
+	UserFunc *mFunc;
 	FreeVars *mOuterVars;
 
 	void AddRef()
@@ -1610,7 +1601,7 @@ struct FreeVars
 			--mRefCount;
 	}
 
-	FreeVars *ForFunc(Func *aFunc)
+	FreeVars *ForFunc(UserFunc *aFunc)
 	{
 		FreeVars *fv = this;
 		do
@@ -1622,14 +1613,14 @@ struct FreeVars
 		return NULL;
 	}
 
-	static FreeVars *Alloc(Func &aFunc, int aVarCount, FreeVars *aOuterVars)
+	static FreeVars *Alloc(UserFunc &aFunc, int aVarCount, FreeVars *aOuterVars)
 	{
 		Var *v = aVarCount ? ::new Var[aVarCount] : NULL;
 		return new FreeVars(v, aFunc, aVarCount, aOuterVars); // Must use :: to avoid SimpleHeap.
 	}
 
 private:
-	FreeVars(Var *aVars, Func &aFunc, int aVarCount, FreeVars *aOuterVars)
+	FreeVars(Var *aVars, UserFunc &aFunc, int aVarCount, FreeVars *aOuterVars)
 		: mVar(aVars), mVarCount(aVarCount), mRefCount(1)
 		, mFunc(&aFunc), mOuterVars(aOuterVars)
 	{
@@ -1650,63 +1641,104 @@ private:
 
 struct UDFCallInfo
 {
-	Func *func;
-	VarBkp *backup; // Backup of previous instance's local vars.  NULL if no previous instance or no vars.
-	int backup_count; // Number of previous instance's local vars.  0 if no previous instance or no vars.
-	UDFCallInfo(Func *f) : func(f), backup(NULL), backup_count(0) {}
+	UserFunc *func;
+	VarBkp *backup = nullptr; // Backup of previous instance's local vars.  NULL if no previous instance or no vars.
+	int backup_count = 0; // Number of previous instance's local vars.  0 if no previous instance or no vars.
+	UDFCallInfo(UserFunc *f) : func(f) {}
 };
 
 
 typedef BIF_DECL((* BuiltInFunctionType));
 
 
-class Func : public Object
+class DECLSPEC_NOVTABLE Func : public Object
 {
 public:
-	union {
-		int mInstances; // How many instances currently exist on the call stack (due to recursion or thread interruption).  Future use: Might be used to limit how deep recursion can go to help prevent stack overflow.
-		BuiltInFunctionID mFID; // For code sharing: this function's ID in the group of functions which share the same C++ function.
-		struct {
-			UCHAR mMID;
-			UCHAR mMIT;
-		};
+	LPCTSTR mName;
+	int mParamCount = 0; // The function's maximum number of parameters.  For UDFs, also the number of items in the mParam array.
+	int mMinParams = 0;  // The number of mandatory parameters (populated for both UDFs and built-in's).
+	bool mIsVariadic = false; // Whether to allow mParamCount to be exceeded.
+
+	virtual bool IsBuiltIn() = 0; // FIXME: Should not need to rely on this.
+	virtual bool ArgIsOutputVar(int aArg) = 0;
+
+	// bool result indicates whether aResultToken contains a value (i.e. false for FAIL/EARLY_EXIT).
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false);
+	virtual bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj);
+	
+	virtual IObject *CloseIfNeeded()
+	{
+		AddRef();
+		return this;
+	}
+
+	enum MemberID
+	{
+		M_Call,
+		M_Bind,
+		M_IsOptional,
+		M_IsByRef,
+
+		P_Name,
+		P_MinParams,
+		P_MaxParams,
+		P_IsBuiltIn,
+		P_IsVariadic
 	};
-	LPTSTR mName;
-	union {
-		struct { // User-defined functions.
-			Line *mJumpToLine;
-			FuncParam *mParam; // Holds an array of FuncParams (array length: mParamCount).
-		};
-		struct { // Built-in functions.
-			union {
-				BuiltInFunctionType mBIF;
-				ObjectMethod mBIM;
-			};
-			UCHAR *mOutputVars; // String of indices indicating which params are output vars (for BIF_PerformAction).
-		};
-	};
-	int mParamCount; // The function's maximum number of parameters.  For UDFs, also the number of items in the mParam array.
-	int mMinParams;  // The number of mandatory parameters (populated for both UDFs and built-in's).
-	Object *mClass; // The class which this Func was defined in or that mBIM belongs to, if applicable.
-	Label *mFirstLabel, *mLastLabel; // Linked list of private labels.
-	Func *mOuterFunc; // Func which contains this Func (usually NULL).
-	FuncList mFuncs; // List of nested functions (usually empty).
-	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
-	Var **mGlobalVar; // Array of global declarations.
-	Var **mDownVar, **mUpVar;
-	int *mUpVarIndex;
+	static ObjectMember sMembers[];
+	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	static Object *sPrototype;
+	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	Func(LPCTSTR aFuncName)
+		: mName(aFuncName) // Caller gave us a pointer to dynamic memory for this.
+	{
+		SetBase(sPrototype);
+	}
+	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void operator delete(void *aPtr) {}
+	void operator delete[](void *aPtr) {}
+};
+
+
+class UserFunc : public Func
+{
+public:
+	int mInstances = 0; // How many instances currently exist on the call stack (due to recursion or thread interruption).  Future use: Might be used to limit how deep recursion can go to help prevent stack overflow.
+	Line *mJumpToLine = nullptr;
+	FuncParam *mParam = nullptr; // Holds an array of FuncParams (array length: mParamCount).
+	Object *mClass = nullptr; // The class or prototype object which this user-defined method was defined for, or nullptr.
+	Label *mFirstLabel = nullptr, *mLastLabel = nullptr; // Linked list of private labels.
+	UserFunc *mOuterFunc = nullptr; // Func which contains this func (usually nullptr).
+	FuncList mFuncs {}; // List of nested functions (usually empty).
+	Var **mVar = nullptr, **mLazyVar = nullptr; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
+	Var **mGlobalVar = nullptr; // Array of global declarations.
+	Var **mDownVar = nullptr, **mUpVar = nullptr;
+	int *mUpVarIndex = nullptr;
 	static FreeVars *sFreeVars;
-	#define MAX_FUNC_UP_VARS 1000
-	int mVarCount, mVarCountMax, mLazyVarCount, mGlobalVarCount; // Count of items in the above array as well as the maximum capacity.
-	int mDownVarCount, mUpVarCount;
+#define MAX_FUNC_UP_VARS 1000
+	int mVarCount = 0, mVarCountMax = 0, mLazyVarCount = 0, mGlobalVarCount = 0; // Count of items in the above array as well as the maximum capacity.
+	int mDownVarCount = 0, mUpVarCount = 0;
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
-	UCHAR mDefaultVarType;
-	#define VAR_DECLARE_GLOBAL (VAR_DECLARED | VAR_GLOBAL)
-	#define VAR_DECLARE_SUPER_GLOBAL (VAR_DECLARE_GLOBAL | VAR_SUPER_GLOBAL)
-	#define VAR_DECLARE_LOCAL  (VAR_DECLARED | VAR_LOCAL)
-	#define VAR_DECLARE_STATIC (VAR_DECLARED | VAR_LOCAL | VAR_LOCAL_STATIC)
+	bool mIsFuncExpression; // Whether this function was defined *within* an expression and is therefore allowed under a control flow statement.
+#define VAR_DECLARE_GLOBAL (VAR_DECLARED | VAR_GLOBAL)
+#define VAR_DECLARE_SUPER_GLOBAL (VAR_DECLARE_GLOBAL | VAR_SUPER_GLOBAL)
+#define VAR_DECLARE_LOCAL  (VAR_DECLARED | VAR_LOCAL)
+#define VAR_DECLARE_STATIC (VAR_DECLARED | VAR_LOCAL | VAR_LOCAL_STATIC)
 	// The last two may be combined (bitwise-OR) with VAR_FORCE_LOCAL.
+	UCHAR mDefaultVarType = VAR_DECLARE_LOCAL;
+
+	UserFunc(LPCTSTR aName) : Func(aName) {}
+
+	bool IsBuiltIn() override { return false; }
+
+	bool ArgIsOutputVar(int aArg) override
+	{
+		return aArg < mParamCount && mParam[aArg].is_byref;
+	}
 
 	bool AllowSuperGlobals()
 	{
@@ -1718,42 +1750,19 @@ public:
 		return mOuterFunc ? mOuterFunc->AllowSuperGlobals() : true;
 	}
 
-	bool mIsBuiltIn; // Determines contents of union. Keep this member adjacent/contiguous with the above.
-	// Note that it's possible for a built-in function such as WinExist() to become a normal/UDF via
-	// override in the script.  So mIsBuiltIn should always be used to determine whether the function
-	// is truly built-in, not its name.
-	bool mIsVariadic;
-	bool mIsFuncExpression; // Whether this function was defined *within* an expression and is therefore allowed under a control flow statement.
+	IObject *CloseIfNeeded() override; // Returns this UserFunc or (if mUpVarCount != 0) a Closure.
 
-#define MAX_FUNC_OUTPUT_VAR 7
-	bool ArgIsOutputVar(int aIndex)
-	{
-		// Since this function is used only to determine whether a parameter requires a writable var,
-		// ByRef parameters are not considered to be OutputVars:
-		if (!mIsBuiltIn)
-			return false;
-		if (!mOutputVars)
-			return false;
-		++aIndex; // Convert to one-based.
-		if (mBIF == &BIF_PerformAction)
-			return mOutputVars[aIndex] == ARG_TYPE_OUTPUT_VAR;
-		for (int i = 0; i < MAX_FUNC_OUTPUT_VAR && mOutputVars[i]; ++i)
-			if (mOutputVars[i] == aIndex)
-				return true;
-		return false;
-	}
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj, FreeVars *aUpVars);
 
-	// bool result indicates whether aResultToken contains a value (i.e. false for FAIL/EARLY_EXIT).
-	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false, FreeVars *aUpVars = NULL);
-
-	ResultType Call(ResultToken *aResultToken)
+	ResultType Execute(ResultToken *aResultToken)
 	{
 		// Launch the function similar to Gosub (i.e. not as a new quasi-thread):
 		// The performance gain of conditionally passing NULL in place of result (when this is the
 		// outermost function call of a line consisting only of function calls, namely ACT_EXPRESSION)
 		// would not be significant because the Return command's expression (arg1) must still be evaluated
 		// in case it calls any functions that have side-effects, e.g. "return LogThisError()".
-		Func *prev_func = g->CurrentFunc; // This will be non-NULL when a function is called from inside another function.
+		auto prev_func = g->CurrentFunc; // This will be non-NULL when a function is called from inside another function.
 		g->CurrentFunc = this;
 		// Although a GOTO that jumps to a position outside of the function's body could be supported,
 		// it seems best not to for these reasons:
@@ -1804,61 +1813,72 @@ public:
 		g->CurrentFunc = prev_func;
 		return result;
 	}
-
-	IObject *CloseIfNeeded(); // Returns this Func or (if mUpVarCount != 0) a Closure.
-
-	enum MemberID
-	{
-		M_Call,
-		M_Bind,
-		M_IsOptional,
-		M_IsByRef,
-
-		P_Name,
-		P_MinParams,
-		P_MaxParams,
-		P_IsBuiltIn,
-		P_IsVariadic
-	};
-	static ObjectMember sMembers[];
-	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-
-	static Object *sPrototype;
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
-	ULONG STDMETHODCALLTYPE Release() { return 1; }
-
-	Func(LPTSTR aFuncName, bool aIsBuiltIn) // Constructor.
-		: mName(aFuncName) // Caller gave us a pointer to dynamic memory for this.
-		, mBIF(NULL) // Also initializes mJumpToLine and mBIM via union.
-		, mParam(NULL), mParamCount(0), mMinParams(0) // Also initializes mOutputVar via union (mParam).
-		, mOuterFunc(NULL)
-		, mFirstLabel(NULL), mLastLabel(NULL)
-		, mClass(NULL)
-		, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
-		, mGlobalVar(NULL), mGlobalVarCount(0)
-		, mDownVar(NULL), mDownVarCount(0), mUpVar(NULL), mUpVarCount(0), mUpVarIndex(NULL)
-		, mInstances(0) // Also initializes mID via union.
-		, mDefaultVarType(VAR_DECLARE_LOCAL)
-		, mIsBuiltIn(aIsBuiltIn)
-		, mIsVariadic(false)
-		, mIsFuncExpression(false)
-	{
-		SetBase(sPrototype);
-	}
-	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	void operator delete(void *aPtr) {}
-	void operator delete[](void *aPtr) {}
 };
 
 
-class ExprOpFunc : public Func
+class DECLSPEC_NOVTABLE NativeFunc : public Func
+{
+protected:
+	NativeFunc(LPCTSTR aName) : Func(aName) {}
+
+public:
+	UCHAR *mOutputVars = nullptr; // String of indices indicating which params are output vars (for BIF_PerformAction).
+
+	bool IsBuiltIn() override { return true; }
+
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+};
+
+
+struct FuncEntry;
+class BuiltInFunc : public NativeFunc
+{
+public:
+	BuiltInFunctionType mBIF;
+	BuiltInFunctionID mFID; // For code sharing: this function's ID in the group of functions which share the same C++ function.
+	
+	BuiltInFunc(LPCTSTR aName) : NativeFunc(aName) {}
+	BuiltInFunc(FuncEntry &, UCHAR *aOutputVars);
+
+#define MAX_FUNC_OUTPUT_VAR 7
+	bool ArgIsOutputVar(int aIndex) override
+	{
+		if (!mOutputVars)
+			return false;
+		++aIndex; // Convert to one-based.
+		if (mBIF == &BIF_PerformAction)
+			return mOutputVars[aIndex] == ARG_TYPE_OUTPUT_VAR;
+		for (int i = 0; i < MAX_FUNC_OUTPUT_VAR && mOutputVars[i]; ++i)
+			if (mOutputVars[i] == aIndex)
+				return true;
+		return false;
+	}
+
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+};
+
+
+class BuiltInMethod : public NativeFunc
+{
+public:
+	ObjectMethod mBIM;
+	Object *mClass; // The class or prototype object which this method was defined for, and which `this` must derive from.
+	UCHAR mMID;
+	UCHAR mMIT;
+
+	BuiltInMethod(LPTSTR aName) : NativeFunc(aName) {}
+
+	bool ArgIsOutputVar(int aArg) override { return false; }
+
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+};
+
+
+class ExprOpFunc : public BuiltInFunc
 {	// ExprOpFunc: Used in combination with SYM_FUNC to implement certain operations in expressions.
 	// These are not inserted into the script's function list, so mName is used only by the debugger.
 public:
-	ExprOpFunc(BuiltInFunctionType aBIF, int aID)
-		: Func(_T("<object>"), true)
+	ExprOpFunc(BuiltInFunctionType aBIF, int aID) : BuiltInFunc(_T("<object>"))
 	{
 		mBIF = aBIF;
 		mFID = (BuiltInFunctionID)aID;
@@ -1883,7 +1903,7 @@ ExprOpFunc ExprOpT<bif, flags>::Func(bif, flags);
 // The call is optimized out and replaced with a reference to a static variable,
 // which should be unique for that combination of bif and flags.
 template<BuiltInFunctionType bif, int flags>
-inline Func *ExprOp()
+inline BuiltInFunc *ExprOp()
 {
 	// Using static ExprOpFunc directly increased code size considerably.
 	return &ExprOpT<bif, flags>::Func;
@@ -2890,10 +2910,10 @@ public:
 #endif
 	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = -1, int *apInsertPos = NULL);
 	FuncEntry *FindBuiltInFunc(LPTSTR aFuncName);
-	Func *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos, Object *aClassObject = NULL);
+	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsertPos, Object *aClassObject = NULL);
 
 	ResultType DefineClass(LPTSTR aBuf);
-	Func *DefineClassInit(bool aStatic);
+	UserFunc *DefineClassInit(bool aStatic);
 	ResultType DefineClassVars(LPTSTR aBuf, bool aStatic);
 	ResultType DefineClassProperty(LPTSTR aBuf, int aBufSize, bool aStatic, Var **aFuncGlobalVar, bool &aBufHasBraceOrNotNeeded);
 	ResultType DefineClassPropertyXet(LPTSTR aBuf, int aBufSize, LPTSTR aEnd, Var **aFuncGlobalVar);
@@ -2960,11 +2980,11 @@ public:
 
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
 	void WarnUninitializedVar(Var *var);
-	void MaybeWarnLocalSameAsGlobal(Func &func, Var &var);
+	void MaybeWarnLocalSameAsGlobal(UserFunc &func, Var &var);
 
 	ResultType PreprocessLocalVars(FuncList &aFuncs);
-	ResultType PreprocessLocalVars(Func &aFunc, Var **aVarList, int &aVarCount);
-	ResultType PreprocessFindUpVar(LPTSTR aName, Func &aOuter, Func &aInner, Var *&aFound, Var *aLocal);
+	ResultType PreprocessLocalVars(UserFunc &aFunc, Var **aVarList, int &aVarCount);
+	ResultType PreprocessFindUpVar(LPTSTR aName, UserFunc &aOuter, UserFunc &aInner, Var *&aFound, Var *aLocal);
 	void ConvertLocalToAlias(Var &aLocal, Var *aAliasFor, int aPos, Var **aVarList, int &aVarCount);
 	void CheckForClassOverwrite();
 

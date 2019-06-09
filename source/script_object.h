@@ -772,11 +772,11 @@ public:
 struct FreeVars;
 class Closure : public ObjectBase
 {
-	Func *mFunc;
+	UserFunc *mFunc;
 	FreeVars *mVars;
 
 public:
-	Closure(Func *aFunc, FreeVars *aVars)
+	Closure(UserFunc *aFunc, FreeVars *aVars)
 		: mFunc(aFunc), mVars(aVars) { }
 	~Closure();
 

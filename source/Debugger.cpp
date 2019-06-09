@@ -1131,9 +1131,9 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 		}
 		if (enum_method && i < j)
 		{
-			auto func = dynamic_cast<Func *>(enum_method->func);
-			if (func->mIsBuiltIn)
+			if (dynamic_cast<BuiltInMethod *>(enum_method->func))
 			{
+				// Built-in enumerators are always safe to call automatically.
 				aDebugger->WriteEnumItems(this, i);
 			}
 			else
@@ -2748,9 +2748,8 @@ void DbgStack::Push(Label *aSub)
 	s.type = SE_Sub;
 }
 	
-void DbgStack::Push(Func *aFunc)
+void DbgStack::Push(NativeFunc *aFunc)
 {
-	ASSERT(aFunc->mIsBuiltIn);
 	Entry &s = *Push();
 	s.line = NULL;
 	s.func = aFunc;
@@ -2766,7 +2765,7 @@ void DbgStack::Push(UDFCallInfo *aUDF)
 }
 
 
-TCHAR *DbgStack::Entry::Name()
+LPCTSTR DbgStack::Entry::Name()
 {
 	switch (type)
 	{
@@ -2793,7 +2792,7 @@ void DbgStack::GetLocalVars(int aDepth, Var **&aVar, Var **&aVarEnd, VarBkp *&aB
 			break;
 		--se;
 	}
-	Func &func = *se->udf->func;
+	auto &func = *se->udf->func;
 	if (func.mInstances > 1 && aDepth > 0)
 	{
 		while (++se <= mTop)

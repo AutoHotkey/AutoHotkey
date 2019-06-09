@@ -389,7 +389,7 @@ private: // Force code to use one of the CopyFrom() methods, for clarity.
 #define STACK_PUSH(token_ptr) stack[stack_count++] = token_ptr
 #define STACK_POP stack[--stack_count]  // To be used as the r-value for an assignment.
 
-class Func;
+class BuiltInFunc;
 enum BuiltInFunctionID;
 struct ResultToken : public ExprTokenType
 {
@@ -491,7 +491,7 @@ struct ResultToken : public ExprTokenType
 	ResultType Error(LPCTSTR aErrorText);
 	ResultType Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo);
 
-	Func *func; // For maintainability, this is separate from the ExprTokenType union.  Its main uses are func->mID and func->mOutputVars.
+	BuiltInFunc *func; // For maintainability, this is separate from the ExprTokenType union.  Its main uses are func->mID and func->mOutputVars.
 
 private:
 	// Currently can't be included in the value union because meta-functions
@@ -802,10 +802,9 @@ struct HotkeyCriterion
 };
 
 
-// Each instance of this struct generally corresponds to a quasi-thread.  The function that creates
-// a new thread typically saves the old thread's struct values on its stack so that they can later
-// be copied back into the g struct when the thread is resumed:
+// Each instance of this struct generally corresponds to a quasi-thread.
 class Func;                 // Forward declarations
+class UserFunc;             //
 class Label;                //
 struct RegItemStruct;       //
 struct LoopReadFileStruct;  //
@@ -838,8 +837,8 @@ struct global_struct
 	int PressDurationPlay; // 
 	int MouseDelay;     // negative values may be used as special flags.
 	int MouseDelayPlay; //
-	Func *CurrentFunc; // v1.0.46.16: The function whose body is currently being processed at load-time, or being run at runtime (if any).
-	Func *CurrentFuncGosub; // v1.0.48.02: Allows A_ThisFunc to work even when a function Gosubs an external subroutine.
+	UserFunc *CurrentFunc; // v1.0.46.16: The function whose body is currently being processed at load-time, or being run at runtime (if any).
+	UserFunc *CurrentFuncGosub; // v1.0.48.02: Allows A_ThisFunc to work even when a function Gosubs an external subroutine.
 	Label *CurrentLabel; // The label that is currently awaiting its matching "return" (if any).
 	ScriptTimer *CurrentTimer; // The timer that launched this thread (if any).
 	HWND hWndLastUsed;  // In many cases, it's better to use GetValidLastUsedWindow() when referring to this.

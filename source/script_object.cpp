@@ -989,7 +989,7 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 		_tcscpy(name, member.name);
 		if (member.invokeType == IT_CALL)
 		{
-			auto func = new Func(SimpleHeap::Malloc(full_name), true);
+			auto func = new BuiltInMethod(SimpleHeap::Malloc(full_name));
 			func->mBIM = member.method;
 			func->mMID = member.id;
 			func->mMIT = IT_CALL;
@@ -1009,7 +1009,7 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 			auto op_name = _tcschr(name, '\0');
 
 			_tcscpy(op_name, _T(".Get"));
-			auto func = new Func(SimpleHeap::Malloc(full_name), true);
+			auto func = new BuiltInMethod(SimpleHeap::Malloc(full_name));
 			func->mBIM = member.method;
 			func->mMID = member.id;
 			func->mMIT = IT_GET;
@@ -1022,7 +1022,7 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 			if (member.invokeType == IT_SET)
 			{
 				_tcscpy(op_name, _T(".Set"));
-				func = new Func(SimpleHeap::Malloc(full_name), true);
+				func = new BuiltInMethod(SimpleHeap::Malloc(full_name));
 				func->mBIM = member.method;
 				func->mMID = member.id;
 				func->mMIT = IT_SET;
@@ -1046,7 +1046,7 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 
 	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
 	_stprintf(full_name, _T("%s.New"), aClassName);
-	auto ctor = new Func(SimpleHeap::Malloc(full_name), true);
+	auto ctor = new BuiltInMethod(SimpleHeap::Malloc(full_name));
 	ctor->mBIM = aCtor;
 	ctor->mMID = 0;
 	ctor->mMIT = IT_CALL;
@@ -2466,22 +2466,20 @@ ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 			int param = ParamIndexToInt(0);
 			if (param <= 0 || param > mParamCount && !mIsVariadic)
 				_o_throw(ERR_PARAM1_INVALID);
-			if (mIsBuiltIn)
-				_o_return(ArgIsOutputVar(param-1));
-			_o_return(param <= mParamCount && mParam[param-1].is_byref);
+			_o_return(ArgIsOutputVar(param-1));
 		}
 		else
 		{
 			for (int param = 0; param < mParamCount; ++param)
-				if (mParam[param].is_byref)
+				if (ArgIsOutputVar(param))
 					_o_return(TRUE);
 			_o_return(FALSE);
 		}
 
-	case P_Name: _o_return(mName);
+	case P_Name: _o_return(const_cast<LPTSTR>(mName));
 	case P_MinParams: _o_return(mMinParams);
 	case P_MaxParams: _o_return(mParamCount);
-	case P_IsBuiltIn: _o_return(mIsBuiltIn);
+	case P_IsBuiltIn: _o_return(IsBuiltIn());
 	case P_IsVariadic: _o_return(mIsVariadic);
 	}
 	return INVOKE_NOT_HANDLED;
@@ -2548,11 +2546,11 @@ ResultType STDMETHODCALLTYPE Closure::Invoke(ResultToken &aResultToken, ExprToke
 	if (aFlags != (IT_CALL | IF_DEFAULT))
 	{
 		if (!IS_INVOKE_CALL || _tcsicmp(ParamIndexToString(0), _T("Call"))) // i.e. not Call.
-			return mFunc->Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
+			return mFunc->Invoke(aResultToken, ExprTokenType(mFunc), aFlags, aParam, aParamCount);
 		++aParam;
 		--aParamCount;
 	}
-	mFunc->Call(aResultToken, aParam, aParamCount, false, mVars);
+	mFunc->Call(aResultToken, aParam, aParamCount, nullptr, mVars);
 	return aResultToken.Result();
 }
 
@@ -2577,36 +2575,25 @@ ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aP
 }
 
 
-LabelPtr::CallableType LabelPtr::getType(IObject *aObject)
+Label *LabelPtr::ToLabel() const
 {
-	static const Func sFunc(NULL, false);
 	// Comparing [[vfptr]] produces smaller code and is perhaps 10% faster than dynamic_cast<>.
-	void *vfptr = *(void **)aObject;
+	void *vfptr = *(void **)mObject;
 	if (vfptr == *(void **)g_script.mPlaceholderLabel)
-		return Callable_Label;
-	if (vfptr == *(void **)&sFunc)
-		return Callable_Func;
-	return Callable_Object;
+		return (Label *)mObject;
+	return nullptr;
 }
 
-Line *LabelPtr::getJumpToLine(IObject *aObject)
+Func *LabelPtr::ToFunc() const
 {
-	switch (getType(aObject))
-	{
-	case Callable_Label: return ((Label *)aObject)->mJumpToLine;
-	case Callable_Func: return ((Func *)aObject)->mJumpToLine;
-	default: return NULL;
-	}
+	return dynamic_cast<Func *>(mObject);
 }
 
-LPTSTR LabelPtr::Name() const
+LPCTSTR LabelPtr::Name() const
 {
-	switch (getType(mObject))
-	{
-	case Callable_Label: return ((Label *)mObject)->mName;
-	case Callable_Func: return ((Func *)mObject)->mName;
-	default: return _T("Object");
-	}
+	if (auto func = ToFunc()) return func->mName;
+	if (auto lbl = ToLabel()) return lbl->mName;
+	return mObject->Type();
 }
 
 

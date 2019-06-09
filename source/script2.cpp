@@ -8858,7 +8858,11 @@ ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aVa
 		if (result == FAIL || result == EARLY_EXIT)
 			return aResultToken.SetExitResult(result);
 		if (result != INVOKE_NOT_HANDLED) // Property exists but is not an integer.
-			return aResultToken.Error(ERR_TYPE_MISMATCH, aPropName);
+		{
+			if (!TokenIsEmptyString(result_token))
+				return aResultToken.Error(ERR_TYPE_MISMATCH, aPropName);
+			result = INVOKE_NOT_HANDLED;
+		}
 		if (!aOptional)
 			return aResultToken.Error(ERR_UNKNOWN_PROPERTY, aPropName);
 		aValue = 0;
@@ -10497,7 +10501,7 @@ BIV_DECL_W(BIV_LoopIndex_Set)
 
 VarSizeType BIV_ThisFunc(LPTSTR aBuf, LPTSTR aVarName)
 {
-	LPTSTR name;
+	LPCTSTR name;
 	if (g->CurrentFunc)
 		name = g->CurrentFunc->mName;
 	else if (g->CurrentFuncGosub) // v1.0.48.02: For flexibility and backward compatibility, support A_ThisFunc even when a function Gosubs an external subroutine.
@@ -12006,8 +12010,8 @@ void *pcret_resolve_user_callout(LPCTSTR aCalloutParam, int aCalloutParamLength)
 	// In that case, the callout param becomes an integer between 0 and 255. No valid pointer
 	// could be in this range, but we must take care to check (ptr>255) rather than (ptr!=NULL).
 	Func *callout_func = g_script.FindFunc(aCalloutParam, aCalloutParamLength);
-	if (!callout_func || callout_func->mIsBuiltIn)
-		return NULL;
+	if (!callout_func)
+		return nullptr;
 	return (void *)callout_func;
 }
 
@@ -12051,7 +12055,7 @@ int RegExCallout(pcret_callout_block *cb)
 		token.symbol = SYM_VAR;
 		token.var = pcre_callout_var;
 		callout_func = TokenToFunc(token); // Allow name or reference.
-		if (!callout_func || callout_func->mIsBuiltIn)
+		if (!callout_func)
 		{
 			if (!pcre_callout_var->HasContents()) // Var exists but is empty.
 				return 0;
@@ -13827,13 +13831,14 @@ BIF_DECL(BIF_Func)
 }
 
 
-IObject *Func::CloseIfNeeded()
+IObject *UserFunc::CloseIfNeeded()
 {
 	FreeVars *fv = (mOuterFunc && sFreeVars) ? sFreeVars->ForFunc(mOuterFunc) : NULL;
 	if (!fv)
-		// Standard practice would require AddRef() here, but we have the inside
-		// knowledge that Func ignores it (since it's allocated with SimpleHeap).
+	{
+		AddRef();
 		return this;
+	}
 	Closure *cl = new Closure(this, fv);
 	fv->AddRef();
 	return cl;
@@ -14652,7 +14657,7 @@ BIF_DECL(BIF_OnMessage)
 	// very rare cases where a valid but wrong function name is given *and* that function has
 	// ByRef or optional parameters.
 	// If the parameter is not an object or a valid function...
-	if (!callback || func && (func->mIsBuiltIn || func->mMinParams > 4))
+	if (!callback || func && func->mMinParams > 4)
 		_f_throw(ERR_PARAM2_INVALID);
 
 	// Check if this message already exists in the array:
@@ -16762,7 +16767,7 @@ BIF_DECL(BIF_Exception)
 {
 	LPTSTR message = ParamIndexToString(0, _f_number_buf);
 	TCHAR what_buf[MAX_NUMBER_SIZE], extra_buf[MAX_NUMBER_SIZE];
-	LPTSTR what = NULL;
+	LPCTSTR what = NULL;
 	Line *line = NULL;
 
 	if (ParamIndexIsOmitted(1)) // "What"

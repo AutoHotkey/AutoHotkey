@@ -6,7 +6,7 @@
 #include "script_object.h"
 
 
-extern Func *OpFunc_GetProp, *OpFunc_GetItem, *OpFunc_SetProp, *OpFunc_SetItem;
+extern BuiltInFunc *OpFunc_GetProp, *OpFunc_GetItem, *OpFunc_SetProp, *OpFunc_SetItem;
 
 //
 // Object()
@@ -225,8 +225,8 @@ BIF_DECL(Op_ObjIncDec)
 	SymbolType op = SymbolType(_f_callee_id & ~IF_DEFAULT);
 	
 	bool square_brackets = _f_callee_id & IF_DEFAULT;
-	Func *get_func = square_brackets ? OpFunc_GetItem : OpFunc_GetProp;
-	Func *set_func = square_brackets ? OpFunc_SetItem : OpFunc_SetProp;
+	auto *get_func = square_brackets ? OpFunc_GetItem : OpFunc_GetProp;
+	auto *set_func = square_brackets ? OpFunc_SetItem : OpFunc_SetProp;
 
 	ResultToken temp_result;
 	// Set the defaults expected by Op_ObjInvoke:
