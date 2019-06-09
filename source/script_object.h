@@ -72,7 +72,7 @@ struct ObjectMember
 	ObjectMethod method;
 	UCHAR id, invokeType, minParams, maxParams;
 	static ResultType Invoke(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
-		, ResultToken& aResultToken, int aFlags, ExprTokenType* aParam[], int aParamCount);
+		, ResultToken& aResultToken, int aFlags, LPCTSTR aName, ExprTokenType* aParam[], int aParamCount);
 	static void DebugWriteProperty(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
 		, IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth);
 };
@@ -105,7 +105,7 @@ class DECLSPEC_NOVTABLE EnumBase : public ObjectBase
 public:
 	static ObjectMember sMembers[];
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 	virtual ResultType Next(Var *aOutputVar1, Var *aOutputVar2) = 0;
 	IObject_Type_Impl("Enumerator")
 };
@@ -461,7 +461,7 @@ public:
 	void EndClassDefinition();
 	Object *GetUnresolvedClass(LPTSTR &aName);
 	
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 
 	static ObjectMember sMembers[];
 	static ObjectMember sClassMembers[];
@@ -523,7 +523,7 @@ public:
 	ULONG STDMETHODCALLTYPE Release() { return 1; }
 	bool Delete() { return false; }
 
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 };
 
 extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object values.
@@ -749,18 +749,19 @@ public:
 
 class BoundFunc : public ObjectBase
 {
-	IObject *mFunc; // Future use: bind a BoundFunc or other object.
+	IObject *mFunc;
+	LPTSTR mMember;
 	Array *mParams;
 	int mFlags;
-	BoundFunc(IObject *aFunc, Array *aParams, int aFlags)
-		: mFunc(aFunc), mParams(aParams), mFlags(aFlags)
+	BoundFunc(IObject *aFunc, LPTSTR aMember, Array *aParams, int aFlags)
+		: mFunc(aFunc), mMember(aMember), mParams(aParams), mFlags(aFlags)
 	{}
 
 public:
-	static BoundFunc *Bind(IObject *aFunc, ExprTokenType **aParam, int aParamCount, int aFlags);
+	static BoundFunc *Bind(IObject *aFunc, int aFlags, LPCTSTR aMember, ExprTokenType **aParam, int aParamCount);
 	~BoundFunc();
 
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 	IObject_Type_Impl("BoundFunc")
 };
 
@@ -780,7 +781,7 @@ public:
 		: mFunc(aFunc), mVars(aVars) { }
 	~Closure();
 
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 	IObject_Type_Impl("Closure")
 };
 

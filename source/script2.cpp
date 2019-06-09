@@ -8846,11 +8846,9 @@ HWND Line::DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTit
 ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aValue, ResultToken &aResultToken, bool aOptional)
 {
 	FuncResult result_token;
-	ExprTokenType name_token = aPropName;
 	ExprTokenType this_token = aObject;
-	ExprTokenType *param = &name_token;
 
-	auto result = aObject->Invoke(result_token, this_token, IT_GET, &param, 1);
+	auto result = aObject->Invoke(result_token, IT_GET, aPropName, this_token, nullptr, 0);
 
 	if (result_token.symbol != SYM_INTEGER)
 	{
@@ -11581,9 +11579,7 @@ void ObjectToString(ResultToken &aResultToken, ExprTokenType &aThisToken, IObjec
 	// Something like this should be done for every TokenToString() call or
 	// equivalent, but major changes are needed before that will be feasible.
 	// For now, String(anytype) provides a limited workaround.
-	ExprTokenType method_name = _T("ToString");
-	ExprTokenType *params = &method_name;
-	switch (aObject->Invoke(aResultToken, aThisToken, IT_CALL, &params, 1))
+	switch (aObject->Invoke(aResultToken, IT_CALL, _T("ToString"), aThisToken, nullptr, 0))
 	{
 	case INVOKE_NOT_HANDLED:
 		aResultToken.Error(ERR_UNKNOWN_METHOD, _T("ToString"));

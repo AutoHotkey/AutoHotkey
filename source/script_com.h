@@ -23,7 +23,7 @@ public:
 	// the script has a reference to the object, which means either that the script
 	// itself has implemented IConnectionPoint (and why would it?), or has used the
 	// IEnumConnections interface to retrieve its own object (unlikely).
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL)
 	{
 		return INVOKE_NOT_HANDLED;
 	}
@@ -62,8 +62,9 @@ public:
 	enum { F_OWNVALUE = 1 };
 	USHORT mFlags;
 
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType SafeArrayInvoke(ResultToken &aResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
+	ResultType SafeArrayInvoke(IObject_Invoke_PARAMS_DECL);
+	ResultType ByRefInvoke(IObject_Invoke_PARAMS_DECL);
 	LPTSTR Type();
 	IObject_DebugWriteProperty_Def;
 

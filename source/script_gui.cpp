@@ -245,12 +245,12 @@ ObjectMember GuiType::sMembers[] =
 	Object_Property_get    (ClientPos),
 };
 
-ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType GuiType::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	if (!mHwnd)
 		_o_throw(_T("The Gui is destroyed."));
 
-	return Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
+	return Object::Invoke(IObject_Invoke_PARAMS);
 }
 
 ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -695,12 +695,12 @@ Object *GuiControlType::GetPrototype(GuiControls aType)
 	return sPrototypes[aType];
 }
 
-ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType GuiControlType::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	if (!hwnd)
 		_o_throw(_T("The control is destroyed."));
 
-	return Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
+	return Object::Invoke(IObject_Invoke_PARAMS);
 }
 
 

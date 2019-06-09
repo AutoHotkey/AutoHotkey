@@ -99,6 +99,17 @@ BIF_DECL(Op_ObjInvoke)
 		obj = obj_param->var->Object();
 	else
 		obj = NULL;
+
+	LPTSTR name = nullptr;
+	if (invoke_type & IF_DEFAULT)
+		invoke_type &= ~IF_DEFAULT;
+	else
+	{
+		if (aParam[0]->symbol != SYM_MISSING)
+			name = TokenToString(*aParam[0]);
+		++aParam;
+		--aParamCount;
+	}
     
 	ResultType result;
     if (obj)
@@ -109,25 +120,25 @@ BIF_DECL(Op_ObjInvoke)
 			// This is not necessary for SYM_OBJECT since that reference is already counted and cannot be released before we return.  Each object
 			// could take care not to delete itself prematurely, but it seems more proper, more reliable and more maintainable to handle it here.
 			obj->AddRef();
-        result = obj->Invoke(aResultToken, *obj_param, invoke_type, aParam, aParamCount);
+        result = obj->Invoke(aResultToken, invoke_type, name, *obj_param, aParam, aParamCount);
 		if (param_is_var)
 			obj->Release();
 	}
 	// Invoke meta-functions of g_MetaObject.
-	else if (INVOKE_NOT_HANDLED == (result = g_MetaObject.Invoke(aResultToken, *obj_param, invoke_type | IF_META, aParam, aParamCount)))
+	else if (INVOKE_NOT_HANDLED == (result = g_MetaObject.Invoke(aResultToken, invoke_type | IF_META, name, *obj_param, aParam, aParamCount)))
 	{
 		// Since above did not handle it, check for attempts to access .base of non-object value (g_MetaObject itself).
-		if (   !(invoke_type & (IT_CALL | IF_DEFAULT)) // Exclude things like "".base() and ""["base"].
+		if (   name && invoke_type != IT_CALL // Exclude things like "".base() and ""["base"].
 			&& aParamCount > (invoke_type == IT_SET ? 2 : 0) // SET is supported only when an index is specified: "".base[x]:=y
-			&& !_tcsicmp(TokenToString(*aParam[0]), _T("base"))   )
+			&& !_tcsicmp(name, _T("base"))   )
 		{
-			if (aParamCount > 1)	// "".base[x] or similar
+			if (aParamCount > 0)	// "".base[x] or similar
 			{
 				// Re-invoke g_MetaObject without meta flag or "base" param.
 				ExprTokenType base_token;
 				base_token.symbol = SYM_OBJECT;
 				base_token.object = &g_MetaObject;
-				result = g_MetaObject.Invoke(aResultToken, base_token, invoke_type, aParam + 1, aParamCount - 1);
+				result = g_MetaObject.Invoke(aResultToken, invoke_type, nullptr, base_token, aParam, aParamCount);
 			}
 			else					// "".base
 			{
@@ -151,8 +162,7 @@ BIF_DECL(Op_ObjInvoke)
 		if (!obj)
 			_f_throw(ERR_NO_OBJECT);
 		else
-			_f_throw(invoke_type == IT_CALL ? ERR_UNKNOWN_METHOD : ERR_UNKNOWN_PROPERTY
-				, aParamCount ? TokenToString(*aParam[0]) : _T(""));
+			_f_throw(invoke_type == IT_CALL ? ERR_UNKNOWN_METHOD : ERR_UNKNOWN_PROPERTY, name ? name : _T(""));
 	}
 	else if (result == FAIL || result == EARLY_EXIT) // For maintainability: SetExitResult() might not have been called.
 	{
@@ -207,10 +217,7 @@ BIF_DECL(Op_ObjNew)
 	if (!class_object) // Not an object.
 		_f_throw(ERR_NO_OBJECT);
 
-	ExprTokenType name_token(_T("New"), 3);
-	aParam[0] = &name_token;
-	auto result = class_object->Invoke(aResultToken, *class_token, IT_CALL, aParam, aParamCount);
-	aParam[0] = class_token;
+	auto result = class_object->Invoke(aResultToken, IT_CALL, _T("New"), *class_token, aParam + 1, aParamCount - 1);
 	if (result == INVOKE_NOT_HANDLED)
 		_f_throw(ERR_UNKNOWN_METHOD, _T("New"));
 }
@@ -349,10 +356,18 @@ BIF_DECL(BIF_ObjBindMethod)
 {
 	IObject *func, *bound_func;
 	if (  !(func = TokenToFunctor(*aParam[0]))  )
-	{
 		_f_throw(ERR_PARAM1_INVALID);
+	LPCTSTR name = nullptr;
+	if (aParamCount > 1)
+	{
+		if (aParam[1]->symbol != SYM_MISSING)
+			name = TokenToString(*aParam[1], _f_number_buf);
+		aParam += 2;
+		aParamCount -= 2;
 	}
-	bound_func = BoundFunc::Bind(func, aParam + 1, aParamCount - 1, IT_CALL);
+	else
+		aParamCount = 0;
+	bound_func = BoundFunc::Bind(func, IT_CALL, name, aParam, aParamCount);
 	func->Release();
 	if (!bound_func)
 		_f_throw(ERR_OUTOFMEM);

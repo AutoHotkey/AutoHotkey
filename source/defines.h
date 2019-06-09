@@ -227,8 +227,11 @@ typedef __int64 IntKeyType;
 struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 	: public IDispatch
 {
-	// See script_object.cpp for comments.
-	virtual ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount) = 0;
+	#define IObject_Invoke_PARAMS_DECL \
+		ResultToken &aResultToken, int aFlags, LPTSTR aName, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount
+	#define IObject_Invoke_PARAMS \
+		aResultToken, aFlags, aName, aThisToken, aParam, aParamCount
+	virtual ResultType Invoke(IObject_Invoke_PARAMS_DECL) = 0;
 	virtual LPTSTR Type() = 0;
 	#define IObject_Type_Impl(name) \
 		LPTSTR Type() { return _T(name); }

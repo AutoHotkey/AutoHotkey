@@ -1792,9 +1792,8 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 				if (param_obj)
 				{
 					FuncResult rt_item;
-					ExprTokenType t_this(param_obj), t_name(this_formal_param.var->mName);
-					ExprTokenType *params = { &t_name };
-					auto r = param_obj->Invoke(rt_item, t_this, IT_GET, &params, 1);
+					ExprTokenType t_this(param_obj);
+					auto r = param_obj->Invoke(rt_item, IT_GET, this_formal_param.var->mName, t_this, nullptr, 0);
 					if (r == FAIL || r == EARLY_EXIT)
 					{
 						aResultToken.SetExitResult(r);
