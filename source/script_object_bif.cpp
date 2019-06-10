@@ -294,7 +294,7 @@ BIF_DECL(Op_ObjIncDec)
 		aResultToken.SetExitResult(temp_result.Result());
 		return;
 	}
-
+	bool throw_after_free_token = false; // set default, overridden if value_to_set is non-numeric.
 	ExprTokenType current_value, value_to_set;
 	switch (value_to_set.symbol = current_value.symbol = TokenIsNumeric(temp_result))
 	{
@@ -309,14 +309,14 @@ BIF_DECL(Op_ObjIncDec)
 		break;
 
 	default: // PURE_NOT_NUMERIC == SYM_STRING.
-		// Value is non-numeric, so assign and return "".
-		value_to_set.marker = _T(""); value_to_set.marker_length = 0;
-		current_value.marker = _T(""); current_value.marker_length = 0;
+		// Value is non-numeric, so throw.
+		throw_after_free_token = true;
 	}
 
 	// Free the object or string returned by Op_ObjInvoke, if applicable.
 	temp_result.Free();
-
+	if (throw_after_free_token)
+		_f_throw(ERR_TYPE_MISMATCH);
 	// Although it's likely our caller's param array has enough space to hold the extra
 	// parameter, there's no way to know for sure whether it's safe, so we allocate our own:
 	ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
