@@ -1817,6 +1817,30 @@ public:
 };
 
 
+class Closure : public Func
+{
+	UserFunc *mFunc;
+	FreeVars *mVars;
+
+	static Object *sPrototype;
+
+public:
+	Closure(UserFunc *aFunc, FreeVars *aVars)
+		: mFunc(aFunc), mVars(aVars), Func(aFunc->mName)
+	{
+		mMinParams = aFunc->mMinParams;
+		mParamCount = aFunc->mParamCount;
+		mIsVariadic = aFunc->mIsVariadic;
+		SetBase(sPrototype);
+	}
+	~Closure();
+
+	bool IsBuiltIn() override { return false; }
+	bool ArgIsOutputVar(int aArg) override { return mFunc->ArgIsOutputVar(aArg); }
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+};
+
+
 class DECLSPEC_NOVTABLE NativeFunc : public Func
 {
 protected:

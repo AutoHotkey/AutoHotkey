@@ -2542,12 +2542,9 @@ BoundFunc::~BoundFunc()
 }
 
 
-ResultType Closure::Invoke(IObject_Invoke_PARAMS_DECL)
+bool Closure::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
 {
-	if (!IS_INVOKE_CALL || aName && _tcsicmp(aName, _T("Call"))) // i.e. not Call.
-		return mFunc->Invoke(aResultToken, aFlags, aName, ExprTokenType(mFunc), aParam, aParamCount);
-	mFunc->Call(aResultToken, aParam, aParamCount, nullptr, mVars);
-	return aResultToken.Result();
+	return mFunc->Call(aResultToken, aParam, aParamCount, aParamObj, mVars);
 }
 
 Closure::~Closure()
@@ -2843,6 +2840,7 @@ ObjectMember Func::sMembers[] =
 };
 
 Object *Func::sPrototype = Object::CreatePrototype(_T("Func"), Object::sPrototype, sMembers, _countof(sMembers));
+Object *Closure::sPrototype = Object::CreatePrototype(_T("Closure"), Func::sPrototype);
 
 Object *EnumBase::sPrototype = Object::CreatePrototype(_T("Enumerator"), Func::sPrototype);
 

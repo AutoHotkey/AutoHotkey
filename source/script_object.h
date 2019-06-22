@@ -726,26 +726,6 @@ public:
 
 
 //
-// Closure
-//
-
-struct FreeVars;
-class Closure : public ObjectBase
-{
-	UserFunc *mFunc;
-	FreeVars *mVars;
-
-public:
-	Closure(UserFunc *aFunc, FreeVars *aVars)
-		: mFunc(aFunc), mVars(aVars) { }
-	~Closure();
-
-	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
-	IObject_Type_Impl("Closure")
-};
-
-
-//
 // RegExMatchObject:  Returned by RegExMatch via UnquotedOutputVar.
 //
 class RegExMatchObject : public Object
