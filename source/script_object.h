@@ -97,21 +97,6 @@ struct ObjectMember
 
 
 //
-// EnumBase - Base class for enumerator objects following standard syntax.
-//
-
-class DECLSPEC_NOVTABLE EnumBase : public ObjectBase
-{
-public:
-	static ObjectMember sMembers[];
-	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
-	virtual ResultType Next(Var *aOutputVar1, Var *aOutputVar2) = 0;
-	IObject_Type_Impl("Enumerator")
-};
-
-
-//
 // FlatVector - utility class.
 //
 
@@ -301,17 +286,8 @@ protected:
 		Enum_Methods
 	};
 
-	class Enumerator : public EnumBase
-	{
-		Object *mObject;
-		index_t mOffset = -1;
-		EnumeratorType mType;
-	public:
-		Enumerator(Object *aObject, EnumeratorType aType)
-			: mObject(aObject), mType(aType) { mObject->AddRef(); }
-		~Enumerator() { mObject->Release(); }
-		ResultType Next(Var *aKey, Var *aVal);
-	};
+	ResultType GetEnumProp(UINT aIndex, Var *aVal, Var *aReserved);
+	ResultType GetEnumMethod(UINT aIndex, Var *aVal, Var *aReserved);
 
 #ifndef _WIN64
 	// This is defined in ObjectBase on x64 builds to save space (due to alignment requirements).
@@ -544,16 +520,6 @@ private:
 
 	index_t ParamToZeroIndex(ExprTokenType &aParam);
 
-	class Enumerator : public EnumBase
-	{
-		Array *mArray;
-		index_t mIndex = 0;
-	public:
-		Enumerator(Array *aArr) : mArray(aArr) { mArray->AddRef(); }
-		~Enumerator() { mArray->Release(); }
-		ResultType Next(Var *, Var *);
-	};
-
 	Array() {}
 	
 public:
@@ -579,6 +545,7 @@ public:
 	Array *Clone();
 
 	bool ItemToToken(index_t aIndex, ExprTokenType &aToken);
+	ResultType GetEnumItem(UINT aIndex, Var *, Var *);
 
 	~Array();
 	static Array *Create(ExprTokenType *aValue[] = nullptr, index_t aCount = 0);
@@ -613,16 +580,6 @@ public:
 
 class Map : public Object
 {
-	class Enumerator : public EnumBase
-	{
-		Map *mObject;
-		index_t mOffset;
-	public:
-		Enumerator(Map *aObject) : mObject(aObject), mOffset(-1) { mObject->AddRef(); }
-		~Enumerator() { mObject->Release(); }
-		ResultType Next(Var *aKey, Var *aVal);
-	};
-
 	union Key // Which of its members is used depends on the field's position in the mItem array.
 	{
 		LPTSTR s;
@@ -676,6 +633,8 @@ class Map : public Object
 	}
 
 	Map *CloneTo(Map &aTo);
+
+	ResultType GetEnumItem(UINT aIndex, Var *, Var *);
 
 public:
 	static Map *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
@@ -798,16 +757,7 @@ class RegExMatchObject : public Object
 	int mPatternCount;
 	LPTSTR mMark;
 
-	class Enumerator : public EnumBase
-	{
-		RegExMatchObject *mObject;
-		int mPattern = -1;
-	public:
-		Enumerator(RegExMatchObject *aObject)
-			: mObject(aObject) { mObject->AddRef(); }
-		~Enumerator() { mObject->Release(); }
-		ResultType Next(Var *aKey, Var *aVal);
-	};
+	ResultType GetEnumItem(UINT aIndex, Var *, Var *);
 
 	RegExMatchObject() : mHaystack(NULL), mOffset(NULL), mPatternName(NULL), mPatternCount(0), mMark(NULL) {}
 	

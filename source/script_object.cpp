@@ -1199,15 +1199,13 @@ ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 
 ResultType Object::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	_o_return(new Enumerator(this, (EnumeratorType)aID));
+	_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(
+		aID == Enum_Properties ? &Object::GetEnumProp : &Object::GetEnumMethod)));
 }
 
 ResultType Map::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (IObject *enm = new Enumerator(this))
-		_o_return(enm);
-	else
-		_o_throw(ERR_OUTOFMEM);
+	_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&Map::GetEnumItem)));
 }
 
 ResultType Object::HasBase(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1952,7 +1950,7 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		_o_throw(ERR_OUTOFMEM);
 
 	case M___Enum:
-		_o_return(new Enumerator(this));
+		_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&Array::GetEnumItem)));
 	}
 	return INVOKE_NOT_HANDLED;
 }
@@ -1969,18 +1967,18 @@ Array::index_t Array::ParamToZeroIndex(ExprTokenType &aParam)
 }
 
 
-ResultType Array::Enumerator::Next(Var *aVal, Var *aReserved)
+ResultType Array::GetEnumItem(UINT aIndex, Var *aVal, Var *aReserved)
 {
-	if (mIndex < mArray->mLength)
+	if (aIndex < mLength)
 	{
 		if (aReserved)
 		{
 			// Put the index first, only when there are two parameters.
 			if (aVal)
-				aVal->Assign((__int64)mIndex + 1);
+				aVal->Assign((__int64)aIndex + 1);
 			aVal = aReserved;
 		}
-		auto &item = mArray->mItem[mIndex++];
+		auto &item = mItem[aIndex];
 		switch (item.symbol)
 		{
 		default:	aVal->AssignString(item.string, item.string.Length());	break;
@@ -1999,12 +1997,7 @@ ResultType Array::Enumerator::Next(Var *aVal, Var *aReserved)
 // Enumerator
 //
 
-ObjectMember EnumBase::sMembers[] =
-{
-	Object_Method_(Call, 0, 2, Invoke, 0)
-};
-
-ResultType EnumBase::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+bool EnumBase::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
 {
 	Var *var0 = ParamIndexToOptionalVar(0);
 	Var *var1 = ParamIndexToOptionalVar(1);
@@ -2013,88 +2006,90 @@ ResultType EnumBase::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 	{
 	case CONDITION_TRUE:
 	case CONDITION_FALSE:
-		_o_return(result == CONDITION_TRUE);
+		aResultToken.SetValue(result == CONDITION_TRUE);
+		return true;
 	default: // Probably FAIL or EARLY_EXIT.
-		return result;
+		aResultToken.SetExitResult(result);
+		return false;
 	}
-
 }
 
-ResultType EnumBase::Invoke(IObject_Invoke_PARAMS_DECL)
+
+ResultType IndexEnumerator::Next(Var *var0, Var *var1)
 {
-	if (!aName)
-		return Invoke(aResultToken, 0, aFlags, aParam, aParamCount);
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aName, aParam, aParamCount);
+	return (mObject->*mGetItem)(++mIndex, var0, var1);
 }
 
-ResultType Object::Enumerator::Next(Var *aKey, Var *aVal)
+
+ResultType Object::GetEnumProp(UINT aIndex, Var *aKey, Var *aVal)
 {
-	if (mType == Enum_Properties)
+	if (aIndex < mFields.Length())
 	{
-		if (++mOffset < mObject->mFields.Length())
+		FieldType &field = mFields[aIndex];
+		if (aKey)
 		{
-			FieldType &field = mObject->mFields[mOffset];
-			if (aKey)
+			aKey->Assign(field.name);
+		}
+		if (aVal)
+		{
+			if (field.symbol == SYM_DYNAMIC && field.prop->MaxParams < 1 && field.prop->Getter())
 			{
-				aKey->Assign(field.name);
-			}
-			if (aVal)
-			{
-				if (field.symbol == SYM_DYNAMIC && field.prop->MaxParams < 1 && field.prop->Getter())
+				FuncResult result_token;
+				ExprTokenType getter(field.prop->Getter());
+				ExprTokenType object(this);
+				auto *param = &object;
+				auto result = getter.object->Invoke(result_token, IT_CALL, nullptr, getter, &param, 1);
+				if (result == FAIL || result == EARLY_EXIT)
+					return result;
+				if (result_token.mem_to_free)
 				{
-					FuncResult result_token;
-					ExprTokenType getter(field.prop->Getter());
-					ExprTokenType object(mObject);
-					auto *param = &object;
-					auto result = getter.object->Invoke(result_token, IT_CALL, nullptr, getter, &param, 1);
-					if (result == FAIL || result == EARLY_EXIT)
-						return result;
-					if (result_token.mem_to_free)
-					{
-						ASSERT(result_token.symbol == SYM_STRING && result_token.mem_to_free == result_token.marker);
-						aVal->AcceptNewMem(result_token.mem_to_free, result_token.marker_length);
-					}
-					else
-					{
-						aVal->Assign(result_token);
-						result_token.Free();
-					}
+					ASSERT(result_token.symbol == SYM_STRING && result_token.mem_to_free == result_token.marker);
+					aVal->AcceptNewMem(result_token.mem_to_free, result_token.marker_length);
 				}
 				else
 				{
-					ExprTokenType value;
-					field.ToToken(value);
-					aVal->Assign(value);
+					aVal->Assign(result_token);
+					result_token.Free();
 				}
 			}
-			return CONDITION_TRUE;
+			else
+			{
+				ExprTokenType value;
+				field.ToToken(value);
+				aVal->Assign(value);
+			}
 		}
-	}
-	else
-	{
-		if (++mOffset < mObject->mMethods.Length())
-		{
-			auto &method = mObject->mMethods[mOffset];
-			if (aKey)
-				aKey->Assign(method.name);
-			if (aVal)
-				aVal->Assign(method.func);
-			return CONDITION_TRUE;
-		}
+		return CONDITION_TRUE;
 	}
 	return CONDITION_FALSE;
 }
 
-ResultType Map::Enumerator::Next(Var *aKey, Var *aVal)
+
+ResultType Object::GetEnumMethod(UINT aIndex, Var *aKey, Var *aVal)
 {
-	if (++mOffset < mObject->mCount)
+	if (aIndex < mMethods.Length())
 	{
-		auto &item = mObject->mItem[mOffset];
+		auto &method = mMethods[aIndex];
+		if (aKey)
+			aKey->Assign(method.name);
+		if (aVal)
+			aVal->Assign(method.func);
+		return CONDITION_TRUE;
+	}
+	return CONDITION_FALSE;
+}
+
+
+ResultType Map::GetEnumItem(UINT aIndex, Var *aKey, Var *aVal)
+{
+	if (aIndex < mCount)
+	{
+		auto &item = mItem[aIndex];
 		if (aKey)
 		{
-			if (mOffset < mObject->mKeyOffsetObject) // mKeyOffsetInt < mKeyOffsetObject
+			if (aIndex < mKeyOffsetObject) // mKeyOffsetInt < mKeyOffsetObject
 				aKey->Assign(item.key.i);
-			else if (mOffset < mObject->mKeyOffsetString) // mKeyOffsetObject < mKeyOffsetString
+			else if (aIndex < mKeyOffsetString) // mKeyOffsetObject < mKeyOffsetString
 				aKey->Assign(item.key.p);
 			else // mKeyOffsetString < mCount
 				aKey->Assign(item.key.s);
@@ -2110,7 +2105,33 @@ ResultType Map::Enumerator::Next(Var *aKey, Var *aVal)
 	return CONDITION_FALSE;
 }
 
-	
+
+ResultType RegExMatchObject::GetEnumItem(UINT aIndex, Var *aKey, Var *aVal)
+{
+	if (aIndex >= (UINT)mPatternCount)
+		return CONDITION_FALSE;
+	// In single-var mode, return the subpattern values.
+	// Otherwise, return the subpattern names first and values second.
+	if (!aVal)
+	{
+		aVal = aKey;
+		aKey = nullptr;
+	}
+	if (aKey)
+	{
+		if (mPatternName && mPatternName[aIndex])
+			aKey->Assign(mPatternName[aIndex]);
+		else
+			aKey->Assign((__int64)aIndex);
+	}
+	if (aVal)
+	{
+		aVal->Assign(mHaystack - mHaystackStart + mOffset[aIndex*2], mOffset[aIndex*2+1]);
+	}
+	return CONDITION_TRUE;
+}
+
+
 
 //
 // Object:: and Map:: Internal Methods
@@ -2822,6 +2843,8 @@ ObjectMember Func::sMembers[] =
 };
 
 Object *Func::sPrototype = Object::CreatePrototype(_T("Func"), Object::sPrototype, sMembers, _countof(sMembers));
+
+Object *EnumBase::sPrototype = Object::CreatePrototype(_T("Enumerator"), Func::sPrototype);
 
 
 

@@ -158,33 +158,16 @@ static Array* TokenToArray(ExprTokenType &token)
 
 
 // Enumerator for GuiType objects.
-class GuiTypeEnum : public EnumBase
+ResultType GuiType::GetEnumItem(UINT aIndex, Var *aOutputVar1, Var *aOutputVar2)
 {
-	GuiType& m_gui;
-	GuiIndexType m_pos;
-
-public:
-	GuiTypeEnum(GuiType &gui) : m_gui(gui), m_pos(0)
-	{
-		m_gui.AddRef();
-	}
-
-	~GuiTypeEnum()
-	{
-		m_gui.Release();
-	}
-
-	virtual ResultType Next(Var *aOutputVar1, Var *aOutputVar2)
-	{
-		if (m_pos >= m_gui.mControlCount) // Use >= vs. == in case the Gui was destroyed.
-			return CONDITION_FALSE;
-		GuiControlType* ctrl = m_gui.mControl[m_pos++];
-		aOutputVar1->AssignHWND(ctrl->hwnd);
-		if (aOutputVar2)
-			aOutputVar2->Assign(ctrl);
-		return CONDITION_TRUE;
-	}
-};
+	if (aIndex >= mControlCount) // Use >= vs. == in case the Gui was destroyed.
+		return CONDITION_FALSE;
+	GuiControlType* ctrl = mControl[aIndex];
+	aOutputVar1->AssignHWND(ctrl->hwnd);
+	if (aOutputVar2)
+		aOutputVar2->Assign(ctrl);
+	return CONDITION_TRUE;
+}
 
 
 ObjectMember GuiType::sMembers[] =
@@ -330,9 +313,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 		}
 		case M___Enum:
 		{
-			if (IObject *obj = new GuiTypeEnum(*this))
-				_o_return(obj);
-			_o_throw(ERR_OUTOFMEM); // Short msg since so rare.
+			_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&GuiType::GetEnumItem)));
 		}
 		case M_OnEvent:
 		{

@@ -1696,10 +1696,6 @@ public:
 	{
 		SetBase(sPrototype);
 	}
-	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	void operator delete(void *aPtr) {}
-	void operator delete[](void *aPtr) {}
 };
 
 
@@ -1813,6 +1809,11 @@ public:
 		g->CurrentFunc = prev_func;
 		return result;
 	}
+
+	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void operator delete(void *aPtr) {}
+	void operator delete[](void *aPtr) {}
 };
 
 
@@ -1827,6 +1828,11 @@ public:
 	bool IsBuiltIn() override { return true; }
 
 	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+
+	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void operator delete(void *aPtr) {}
+	void operator delete[](void *aPtr) {}
 };
 
 
@@ -1917,6 +1923,43 @@ struct FuncEntry
 	UCHAR mMinParams, mMaxParams;
 	UCHAR mID;
 	UCHAR mOutputVars[MAX_FUNC_OUTPUT_VAR];
+};
+
+
+class DECLSPEC_NOVTABLE EnumBase : public Func
+{
+public:
+	static Object *sPrototype;
+	EnumBase() : Func(_T(""))
+	{
+		mParamCount = 2;
+		SetBase(sPrototype);
+	}
+	bool IsBuiltIn() override { return true; };
+	bool ArgIsOutputVar(int aArg) override { return true; }
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+	virtual ResultType Next(Var *, Var *) = 0;
+};
+
+
+class IndexEnumerator : public EnumBase
+{
+	Object *mObject;
+	UINT mIndex = UINT_MAX;
+	ResultType (Object::* mGetItem)(UINT aIndex, Var *aOutputVar1, Var *aOutputVar2);
+public:
+	typedef ResultType (Object::* Callback)(UINT aIndex, Var *aOutputVar1, Var *aOutputVar2);
+	IndexEnumerator(Object *aObject, Callback aGetItem) : mObject(aObject), mGetItem(aGetItem)
+	{
+		mObject->AddRef();
+		mParamCount = 2;
+		SetBase(EnumBase::sPrototype);
+	}
+	~IndexEnumerator()
+	{
+		mObject->Release();
+	}
+	ResultType Next(Var *, Var *) override;
 };
 
 
@@ -2597,6 +2640,8 @@ public:
 	// because checking for the presence of a method in the event sink could be
 	// unreliable (but maybe placing some limitations would solve that?).
 	BOOL IsMonitoring(GuiEventType aEvent) { return mEvents.IsMonitoring(aEvent); }
+
+	ResultType GetEnumItem(UINT aIndex, Var *, Var *);
 
 	static IObject* CreateDropArray(HDROP hDrop);
 	ResultType SetMenu(ExprTokenType &aParam);

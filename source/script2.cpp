@@ -11925,7 +11925,7 @@ ResultType RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFla
 	{
 	case M_Count: _o_return(mPatternCount - 1);
 	case M_Mark: _o_return(mMark ? mMark : _T(""));
-	case M___Enum: _o_return(new Enumerator(this));
+	case M___Enum: _o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&RegExMatchObject::GetEnumItem)));
 	}
 
 	int p;
@@ -11970,33 +11970,6 @@ ResultType RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFla
 	case M_Name: _o_return((mPatternName && mPatternName[p]) ? mPatternName[p] : _T(""));
 	}
 	return INVOKE_NOT_HANDLED;
-}
-
-
-ResultType RegExMatchObject::Enumerator::Next(Var *aKey, Var *aVal)
-{
-	if (++mPattern >= mObject->mPatternCount)
-		return CONDITION_FALSE;
-	// In single-var mode, return the subpattern values.
-	// Otherwise, return the subpattern names first and values second.
-	if (!aVal)
-	{
-		aVal = aKey;
-		aKey = nullptr;
-	}
-	if (aKey)
-	{
-		if (mObject->mPatternName && mObject->mPatternName[mPattern])
-			aKey->Assign(mObject->mPatternName[mPattern]);
-		else
-			aKey->Assign(mPattern);
-	}
-	if (aVal)
-	{
-		aVal->Assign(mObject->mHaystack - mObject->mHaystackStart + mObject->mOffset[mPattern*2]
-			, mObject->mOffset[mPattern*2+1]);
-	}
-	return CONDITION_TRUE;
 }
 
 
