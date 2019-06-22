@@ -956,6 +956,12 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase)
 Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount)
 {
 	auto obj = CreatePrototype(aClassName, aBase);
+	return DefineMembers(obj, aClassName, aMember, aMemberCount);
+}
+
+
+Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMember[], int aMemberCount)
+{
 	obj->mFlags |= NativeClassPrototype;
 
 	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
@@ -2811,20 +2817,6 @@ BIF_DECL(BIF_ClipboardAll)
 
 
 
-//																		Direct base			Members
-Object *Object::sPrototype		= Object::CreatePrototype(_T("Object"),	nullptr,			sMembers, _countof(sMembers));
-Object *Object::sClassPrototype	= Object::CreatePrototype(_T("Class"),	Object::sPrototype);
-Object *Array::sPrototype		= Object::CreatePrototype(_T("Array"),	Object::sPrototype,	sMembers, _countof(sMembers));
-Object *Map::sPrototype			= Object::CreatePrototype(_T("Map"),	Object::sPrototype,	sMembers, _countof(sMembers));
-
-//																Direct base			Prototype			Constructor
-Object *Object::sClass		= Object::CreateClass(_T("Object"),	sClassPrototype,	sPrototype,			static_cast<ObjectMethod>(&New<Object>));
-Object *Object::sClassClass	= Object::CreateClass(_T("Class"),	Object::sClass,		sClassPrototype,	static_cast<ObjectMethod>(&New<Object>));
-Object *Array::sClass		= Object::CreateClass(_T("Array"),	Object::sClass,		sPrototype,			static_cast<ObjectMethod>(&New<Array>));
-Object *Map::sClass			= Object::CreateClass(_T("Map"),	Object::sClass,		sPrototype,			static_cast<ObjectMethod>(&New<Map>));
-
-
-
 ObjectMember Func::sMembers[] =
 {
 	Object_Method(Bind, 0, MAXP_VARIADIC),
@@ -2839,7 +2831,34 @@ ObjectMember Func::sMembers[] =
 	Object_Property_get(Name)
 };
 
-Object *Func::sPrototype = Object::CreatePrototype(_T("Func"), Object::sPrototype, sMembers, _countof(sMembers));
+
+Object *CreateRootPrototype()
+{
+	Object::sPrototype = Object::CreatePrototype(_T("Object"), nullptr);
+	Func::sPrototype = Object::CreatePrototype(_T("Func"), Object::sPrototype);
+	// Members must be defined only after both of the above are set, since each member
+	// definition creates a BuiltInMethod, which derives from Func::sPrototype.
+	Object::DefineMembers(Object::sPrototype, _T("Object"), Object::sMembers, _countof(Object::sMembers));
+	Object::DefineMembers(Func::sPrototype, _T("Func"), Func::sMembers, _countof(Func::sMembers));
+	return Object::sPrototype;
+}
+
+Object *Func::sPrototype;
+Object *Object::sPrototype = CreateRootPrototype();
+
+//																		Direct base			Members
+Object *Object::sClassPrototype	= Object::CreatePrototype(_T("Class"),	Object::sPrototype);
+Object *Array::sPrototype		= Object::CreatePrototype(_T("Array"),	Object::sPrototype,	sMembers, _countof(sMembers));
+Object *Map::sPrototype			= Object::CreatePrototype(_T("Map"),	Object::sPrototype,	sMembers, _countof(sMembers));
+
+//																Direct base			Prototype			Constructor
+Object *Object::sClass		= Object::CreateClass(_T("Object"),	sClassPrototype,	sPrototype,			static_cast<ObjectMethod>(&New<Object>));
+Object *Object::sClassClass	= Object::CreateClass(_T("Class"),	Object::sClass,		sClassPrototype,	static_cast<ObjectMethod>(&New<Object>));
+Object *Array::sClass		= Object::CreateClass(_T("Array"),	Object::sClass,		sPrototype,			static_cast<ObjectMethod>(&New<Array>));
+Object *Map::sClass			= Object::CreateClass(_T("Map"),	Object::sClass,		sPrototype,			static_cast<ObjectMethod>(&New<Map>));
+
+
+
 Object *Closure::sPrototype = Object::CreatePrototype(_T("Closure"), Func::sPrototype);
 
 Object *EnumBase::sPrototype = Object::CreatePrototype(_T("Enumerator"), Func::sPrototype);
