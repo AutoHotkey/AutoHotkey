@@ -9607,7 +9607,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 						if (stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT)
 						{
 							// Replace Op_ObjInvoke with Op_ObjIncDec to perform the operation.
-							this_postfix->deref->func = infix_symbol == SYM_PRE_DECREMENT
+							this_postfix->deref->func = stack_symbol == SYM_PRE_DECREMENT
 								? square_brackets
 									? ExprOp<Op_ObjIncDec, SYM_PRE_DECREMENT|IF_DEFAULT>()
 									: ExprOp<Op_ObjIncDec, SYM_PRE_DECREMENT>()
