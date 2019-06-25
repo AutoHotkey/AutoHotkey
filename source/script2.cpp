@@ -13631,7 +13631,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 				else
 					*(LPSTR)address = '\0';
 			}
-			aResultToken.value_int64 = 1;
+			aResultToken.value_int64 = encoding == CP_UTF16 ? sizeof(WCHAR) : sizeof(CHAR);
 			return;
 		}
 
