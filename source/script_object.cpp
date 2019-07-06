@@ -791,17 +791,22 @@ ResultType Object::CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToke
 	MethodType *method;
 	if (method = GetMethod(aName))
 	{
-		ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
-		param[0] = &aThisToken;
-		memcpy(param + 1, aParam, aParamCount * sizeof(ExprTokenType *));
-		// return %func%(this, aParam*)
-		return method->func->Invoke(aResultToken, IT_CALL, nullptr, ExprTokenType(method->func), param, aParamCount + 1);
+		return CallMethod(method->func, aResultToken, aThisToken, aParam, aParamCount);
 	}
 	if (!(aFlags & IF_METAOBJ) && (method = GetMethod(sMetaFuncName[IT_CALL])))
 	{
 		return CallMeta(method->func, aName, aFlags, aResultToken, aThisToken, aParam, aParamCount);
 	}
 	return INVOKE_NOT_HANDLED;
+}
+
+ResultType Object::CallMethod(IObject *aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount)
+{
+	ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
+	param[0] = &aThisToken;
+	memcpy(param + 1, aParam, aParamCount * sizeof(ExprTokenType *));
+	// return %func%(this, aParam*)
+	return aFunc->Invoke(aResultToken, IT_CALL, nullptr, ExprTokenType(aFunc), param, aParamCount + 1);
 }
 
 ResultType Object::CallMeta(IObject *aFunc, LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount)
@@ -2430,7 +2435,7 @@ Map::Pair *Map::Insert(SymbolType key_type, Key key, index_t at)
 
 ResultType Func::Invoke(IObject_Invoke_PARAMS_DECL)
 {
-	if (!aName)
+	if (!aName && !HasOwnMethods())
 	{
 		// Take a shortcut for performance.  Although it prevents hooking via
 		// DefineMethod, this is consistent with direct function calls.

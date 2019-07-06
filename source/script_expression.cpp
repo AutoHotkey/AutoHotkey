@@ -1558,7 +1558,15 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			aParam[aParamCount++] = rvalue; // In place of the variadic param.
 	}
 
-	bool result = Call(aResultToken, aParam, aParamCount, param_obj);
+	bool result;
+	if (auto hook = GetOwnMethodFunc(_T("Call")))
+	{
+		CallMethod(hook, aResultToken, ExprTokenType(this), aParam, aParamCount);
+		result = !aResultToken.Exited();
+	}
+	else
+		result = Call(aResultToken, aParam, aParamCount, param_obj);
+
 	if (param_array)
 		param_array->Release();
 	return result;

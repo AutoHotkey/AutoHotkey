@@ -317,6 +317,7 @@ private:
 	}
 	
 	FieldType *Insert(name_t name, index_t at);
+	MethodType *InsertMethod(name_t name, index_t pos);
 
 	bool SetInternalCapacity(index_t new_capacity);
 	bool Expand()
@@ -324,9 +325,9 @@ private:
 	{
 		return SetInternalCapacity(mFields.Capacity() ? mFields.Capacity() * 2 : 4);
 	}
-	
+
+protected:
 	MethodType *GetMethod(name_t name); // Recursive.
-	MethodType *InsertMethod(name_t name, index_t pos);
 	MethodType *FindMethod(name_t name, index_t &insert_pos); // Own methods only.
 	MethodType *FindMethod(name_t name) // Own methods only.
 	{
@@ -335,6 +336,7 @@ private:
 	}
 
 	ResultType CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallMethod(IObject *aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMeta(IObject *aFunc, LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 
 public:
@@ -409,6 +411,8 @@ public:
 
 	Property *DefineProperty(name_t aName);
 	bool DefineMethod(name_t aName, IObject *aFunc);
+	
+	bool HasOwnMethods() { return mMethods.Length(); }
 
 	bool CanSetBase(Object *aNewBase);
 	ResultType SetBase(Object *aNewBase, ResultToken &aResultToken);
