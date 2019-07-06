@@ -1841,6 +1841,33 @@ public:
 };
 
 
+class BoundFunc : public Func
+{
+	IObject *mFunc;
+	LPTSTR mMember;
+	Array *mParams;
+	int mFlags;
+
+	BoundFunc(IObject *aFunc, LPTSTR aMember, Array *aParams, int aFlags)
+		: mFunc(aFunc), mMember(aMember), mParams(aParams), mFlags(aFlags)
+		, Func(_T(""))
+	{
+		mIsVariadic = true;
+		SetBase(sPrototype);
+	}
+
+	static Object *sPrototype;
+
+public:
+	static BoundFunc *Bind(IObject *aFunc, int aFlags, LPCTSTR aMember, ExprTokenType **aParam, int aParamCount);
+	~BoundFunc();
+	
+	bool IsBuiltIn() override { return true; }
+	bool ArgIsOutputVar(int aArg) override { return false; }
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+};
+
+
 class DECLSPEC_NOVTABLE NativeFunc : public Func
 {
 protected:

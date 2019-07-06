@@ -704,29 +704,6 @@ public:
 
 
 //
-// BoundFunc
-//
-
-class BoundFunc : public ObjectBase
-{
-	IObject *mFunc;
-	LPTSTR mMember;
-	Array *mParams;
-	int mFlags;
-	BoundFunc(IObject *aFunc, LPTSTR aMember, Array *aParams, int aFlags)
-		: mFunc(aFunc), mMember(aMember), mParams(aParams), mFlags(aFlags)
-	{}
-
-public:
-	static BoundFunc *Bind(IObject *aFunc, int aFlags, LPCTSTR aMember, ExprTokenType **aParam, int aParamCount);
-	~BoundFunc();
-
-	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
-	IObject_Type_Impl("BoundFunc")
-};
-
-
-//
 // RegExMatchObject:  Returned by RegExMatch via UnquotedOutputVar.
 //
 class RegExMatchObject : public Object

@@ -2491,12 +2491,8 @@ ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 }
 
 
-ResultType BoundFunc::Invoke(IObject_Invoke_PARAMS_DECL)
+bool BoundFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
 {
-	// No methods/properties implemented yet, except Call().
-	if (!IS_INVOKE_CALL || aName && _tcsicmp(aName, _T("Call")))
-		return INVOKE_NOT_HANDLED; // Reserved.
-
 	// Combine the bound parameters with the supplied parameters.
 	int bound_count = mParams->Length();
 	if (bound_count > 0)
@@ -2860,7 +2856,7 @@ Object *Map::sClass			= Object::CreateClass(_T("Map"),	Object::sClass,		sPrototy
 
 
 Object *Closure::sPrototype = Object::CreatePrototype(_T("Closure"), Func::sPrototype);
-
+Object *BoundFunc::sPrototype = Object::CreatePrototype(_T("BoundFunc"), Func::sPrototype);
 Object *EnumBase::sPrototype = Object::CreatePrototype(_T("Enumerator"), Func::sPrototype);
 
 
