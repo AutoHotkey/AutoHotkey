@@ -6086,6 +6086,14 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		if (hControl = GetDlgItem(hWndDlg, IDC_INPUTPROMPT))
 			SetWindowText(hControl, CURR_INPUTBOX.text);
 
+		// Use the system's current language for the button names:
+		typedef LPCWSTR(WINAPI*pfnUser)(int);
+		HMODULE hMod = LoadLibrary(L"user32.dll");
+		pfnUser mbString = (pfnUser)GetProcAddress(hMod, "MB_GetString");
+		SetWindowText(GetDlgItem(hWndDlg, IDOK), mbString(0));
+		SetWindowText(GetDlgItem(hWndDlg, IDCANCEL), mbString(1));
+		FreeLibrary(hMod);
+
 		// Don't do this check; instead allow the MoveWindow() to occur unconditionally so that
 		// the new button positions and such will override those set in the dialog's resource
 		// properties:
