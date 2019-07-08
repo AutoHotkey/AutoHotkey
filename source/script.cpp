@@ -3652,7 +3652,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			if (!*name)
 				return CONDITION_FALSE;
 		}
-
 		if (!DefineNameSpace(name, is_alternative_directive_name)) // this sets the new namespace to be the current one.
 			return FAIL; // DefineNameSpace displays the error message.
 
@@ -6360,9 +6359,13 @@ ResultType Script::DefineNameSpace(LPTSTR aNameSpaceName, bool aIsTopNameSpace)
 	if (aNameSpaceName != NAMESPACE_ANONYMOUS)
 	{
 		LPTSTR cp;
-		for (cp = aNameSpaceName; *cp && !IS_SPACE_OR_TAB(*cp); ++cp); // trim the name, it might be something like "myNamespace {".
+		for (cp = aNameSpaceName; *cp && !IS_SPACE_OR_TAB(*cp); ++cp); // trim the name.
+	
+		if (*cp && !IS_SPACE_OR_TAB(*omit_leading_whitespace(cp)))	// detect something like "MyNamespace x".
+			return ScriptError(ERR_NAMESPACE_DEFINITION_SYNTAX, aNameSpaceName);
+		
 		*cp = '\0';  // terminate the name string.
-
+		
 		if (!Var::ValidateName(aNameSpaceName, DISPLAY_NAMESPACE_ERROR))
 			return FAIL; // ValidateName displays the error message.
 	}

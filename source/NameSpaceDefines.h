@@ -63,6 +63,7 @@ GNU General Public License for more details.
 #define ERR_NAMESPACE_IN_FUNCTION _T("Functions cannot contain namespaces.")
 #define ERR_NAMESPACE_IN_CLASS _T("Classes cannot contain namespaces.")
 #define ERR_NAMESPACE_IN_BLOCK _T("This block cannot contain namespaces.")
+#define ERR_NAMESPACE_DEFINITION_SYNTAX _T("Syntax error in namespace definition.") // Also used with #import.
 #define ERR_SCOPE_OPERATOR_MISSING_VAR_OR_FUNC _T("Scope resolution operator missing its end variable or function.")
 
 // Misc
