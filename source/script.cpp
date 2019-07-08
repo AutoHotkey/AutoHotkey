@@ -7354,10 +7354,6 @@ Func *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn
 		// Also add it to the script's list of functions, to support #Warn LocalSameAsGlobal
 		// and automatic cleanup of objects in static vars on program exit.
 	}
-	/*
-	the_new_func->mOuterFunc = aIsBuiltIn ? NULL : g->CurrentFunc;
-	FuncList &funcs = the_new_func->mOuterFunc ? the_new_func->mOuterFunc->mFuncs : g_CurrentNameSpace->mFuncs;
-	*/
 	the_new_func->mOuterFunc = aIsBuiltIn ? NULL : t->CurrentFunc;
 	ResultType insert_result;
 	if (the_new_func->mOuterFunc)
