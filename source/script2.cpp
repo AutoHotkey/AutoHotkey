@@ -6278,6 +6278,19 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		return TRUE;  // i.e. completely handled here.
 	}
 
+	case WM_GETMINMAXINFO:
+	{
+		// Increase the minimum width to prevent the buttons from overlapping:
+		RECT rTmp;
+		int min_width = 0;
+		LPMINMAXINFO lpMMI = (LPMINMAXINFO)lParam;
+		GetWindowRect(GetDlgItem(hWndDlg, IDOK), &rTmp);
+		min_width += rTmp.right - rTmp.left;
+		GetWindowRect(GetDlgItem(hWndDlg, IDCANCEL), &rTmp);
+		min_width += rTmp.right - rTmp.left;
+		lpMMI->ptMinTrackSize.x = min_width + 30;
+	}
+
 	case WM_COMMAND:
 		// In this case, don't use (g_nInputBoxes - 1) as the index because it might
 		// not correspond to the g_InputBox[] array element that belongs to hWndDlg.
