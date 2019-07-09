@@ -5795,13 +5795,19 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsInExpr
 	}
 	else
 	{
-		Func *found_func = FindFunc(aBuf, param_start - aBuf, &insert_pos);
+		size_t name_length = param_start - aBuf; // The length of the function name.
+		Func *found_func = FindFunc(aBuf, name_length, &insert_pos);
 		if (found_func)
 		{
 			if (!found_func->mIsBuiltIn)
 				return ScriptError(_T("Duplicate function definition."), aBuf); // Seems more descriptive than "Function already defined."
 			else // It's a built-in function that the user wants to override with a custom definition.
 			{
+				// If the case of the user's definition does not match the one of the built-in function, use the user's.
+				if (_tcsncmp(aBuf, found_func->mName, name_length)
+					&& !(found_func->mName = SimpleHeap::Malloc(aBuf, name_length))) // Assignment intended.
+					return FAIL; // Message already shown by SimpleHeap::Malloc.
+				
 				found_func->mIsBuiltIn = false;  // Override built-in with custom.
 				found_func->mParamCount = 0; // Revert to the default appropriate for non-built-in functions.
 				found_func->mMinParams = 0;  //
@@ -5813,7 +5819,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsInExpr
 		else
 			// The value of g->CurrentFunc must be set here rather than by our caller since AddVar(), which we call,
 			// relies upon it having been done.
-			if (   !(g->CurrentFunc = AddFunc(aBuf, param_start - aBuf, false, insert_pos))   )
+			if (   !(g->CurrentFunc = AddFunc(aBuf, name_length, false, insert_pos))   )
 				return FAIL; // It already displayed the error.
 	}
 
