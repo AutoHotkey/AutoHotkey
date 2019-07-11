@@ -8856,11 +8856,10 @@ ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aP
 	{
 		result_token.Free();
 		if (result == FAIL)
-			return aResultToken.SetExitResult(FAIL);
-		if (result == INVOKE_NOT_HANDLED)
-			return aResultToken.Error(ERR_UNKNOWN_PROPERTY, aPropName);
-		aPtr = 0;
-		return OK;
+			aResultToken.SetExitResult(FAIL);
+		else if (result == INVOKE_NOT_HANDLED)
+			aResultToken.Error(ERR_UNKNOWN_PROPERTY, aPropName);
+		return FAIL;
 	}
 
 	aPtr = (UINT_PTR)result_token.value_int64;
@@ -11224,9 +11223,9 @@ has_valid_return_type:
 			// or the particular type of this arg (Int, Float, etc.).
 			if (ctoupper(*arg_type_string) != 'P')
 				_f_throw(ERR_TYPE_MISMATCH);
-			GetBufferObjectPtr(aResultToken, obj, this_dyna_param.value_uintptr);
-			if (aResultToken.Exited())
-				return;
+			
+			if (!GetBufferObjectPtr(aResultToken, obj, this_dyna_param.value_uintptr))
+				_f_throw(ERR_MISSING_PROPERTY, _T("Ptr"));
 			continue;
 		}
 
@@ -13105,7 +13104,7 @@ void ConvertNumGetType(ExprTokenType &aToken, NumGetParams &op)
 	}
 }
 
-void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, size_t &aSize)
+ResultType GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, size_t &aSize)
 {
 	static BufferObject sBuffer(0, 0);
 	if (*(void **)obj == *(void **)&sBuffer) // See ""type check"" comments in Object::Invoke for comments.
@@ -13118,29 +13117,32 @@ void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, s
 	}
 	else
 	{
-		if (GetObjectPtrProperty(obj, _T("Ptr"), aPtr, aResultToken))
-			GetObjectPtrProperty(obj, _T("Size"), aSize, aResultToken);
+		if (!GetObjectPtrProperty(obj, _T("Ptr"), aPtr, aResultToken)
+			|| !GetObjectPtrProperty(obj, _T("Size"), aSize, aResultToken))
+			return FAIL;
 	}
+	return OK;
 }
 
-void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr)
+ResultType GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr)
 // See above for comments.
 {
 	static BufferObject sBuffer(0, 0);
 	if (*(void **)obj == *(void **)&sBuffer)
 		aPtr = (size_t)((BufferObject *)obj)->Data();
 	else
-		GetObjectPtrProperty(obj, _T("Ptr"), aPtr, aResultToken);
+		return GetObjectPtrProperty(obj, _T("Ptr"), aPtr, aResultToken);
+	return OK;
 }
 
-void ConvertNumGetParams(BIF_DECL_PARAMS, NumGetParams &op)
+ResultType ConvertNumGetParams(BIF_DECL_PARAMS, NumGetParams &op)
 {
 	ExprTokenType &target_token = *aParam[0];
 	if (IObject *obj = TokenToObject(target_token))
 	{
-		GetBufferObjectPtr(aResultToken, obj, op.target, op.right_side_bound);
-		if (aResultToken.Exited())
-			return;
+		
+		if (!GetBufferObjectPtr(aResultToken, obj, op.target, op.right_side_bound))
+			return FAIL;
 		op.right_side_bound += op.target;
 	}
 	else if (target_token.symbol == SYM_VAR // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
@@ -13168,15 +13170,16 @@ void ConvertNumGetParams(BIF_DECL_PARAMS, NumGetParams &op)
 			ConvertNumGetType(*aParam[1], op);
 		}
 	}
+	return OK;
 }
 
 
 BIF_DECL(BIF_NumGet)
 {
 	NumGetParams op;
-	ConvertNumGetParams(aResultToken, aParam, aParamCount, op);
-	if (aResultToken.Exited())
-		return;
+	
+	if (!ConvertNumGetParams(aResultToken, aParam, aParamCount, op))
+		_f_throw(ERR_MISSING_PROPERTY, ERR_PTR_OR_SIZE);
 
 	// If the target is a variable, the following check ensures that the memory to be read lies within its capacity.
 	// This seems superior to an exception handler because exception handlers only catch illegal addresses,
@@ -13419,9 +13422,8 @@ BIF_DECL(BIF_NumPut)
 		n_param = 1;
 	}
 
-	ConvertNumGetParams(aResultToken, target_param, target_param_count, op);
-	if (aResultToken.Exited())
-		return;
+	if (ConvertNumGetParams(aResultToken, target_param, target_param_count, op))
+		_f_throw(ERR_MISSING_PROPERTY, ERR_PTR_OR_SIZE);
 
 	size_t num_end;
 	for (;; op.target = num_end)
@@ -13532,9 +13534,8 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 	else if (aParam < aParam_end && (buffer_obj = TokenToObject(**aParam)))
 	{
 		size_t ptr;
-		GetBufferObjectPtr(aResultToken, buffer_obj, ptr, max_bytes);
-		if (aResultToken.Exited())
-			return;
+		if (!GetBufferObjectPtr(aResultToken, buffer_obj, ptr, max_bytes))
+			_f_throw(ERR_MISSING_PROPERTY, ERR_PTR_OR_SIZE);
 		address = (LPVOID)ptr;
 		++aParam;
 	}

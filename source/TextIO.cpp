@@ -893,9 +893,8 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 					if (IObject *obj = TokenToObject(target_token))
 					{
 						size_t ptr, size;
-						GetBufferObjectPtr(aResultToken, obj, ptr, size);
-						if (aResultToken.Exited())
-							return aResultToken.Result();
+						if (!GetBufferObjectPtr(aResultToken, obj, ptr, size))
+							_o_throw(ERR_MISSING_PROPERTY, ERR_PTR_OR_SIZE);
 						target = (LPVOID)ptr;
 						max_size = (DWORD)size;
 					}

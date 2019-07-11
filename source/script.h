@@ -142,6 +142,8 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_NONEXISTENT_FUNCTION _T("Call to nonexistent function.")
 #define ERR_UNRECOGNIZED_DIRECTIVE _T("Unknown directive.")
 #define ERR_EXE_CORRUPTED _T("EXE corrupted")
+#define ERR_MISSING_PROPERTY _T("This object is missing a required property.")
+#define ERR_PTR_OR_SIZE _T("\"Ptr\" and/or \"Size\".")
 #define ERR_INVALID_VALUE _T("Invalid value.")
 #define ERR_PARAM_INVALID _T("Invalid parameter(s).")
 #define ERR_PARAM1_INVALID _T("Parameter #1 invalid.")
@@ -3323,8 +3325,8 @@ ResultType SoundSetGet2kXP(ResultToken &aResultToken, LPTSTR aSetting
 ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
 	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDevice);
 
-void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, size_t &aSize);
-void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr);
+ResultType GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, size_t &aSize);
+ResultType GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr);
 
 #endif
 
