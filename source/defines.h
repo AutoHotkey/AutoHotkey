@@ -388,7 +388,6 @@ private: // Force code to use one of the CopyFrom() methods, for clarity.
 #define STACK_POP stack[--stack_count]  // To be used as the r-value for an assignment.
 
 class Func;
-enum BuiltInFunctionID;
 struct ResultToken : public ExprTokenType
 {
 	LPTSTR buf; // Points to a buffer of _f_retval_buf_size characters for returning short strings and misc purposes.
