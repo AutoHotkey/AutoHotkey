@@ -15,6 +15,7 @@
 #define TEOF ((TCHAR)EOF)
 
 #include <locale.h> // For _locale_t, _create_locale and _free_locale.
+#include <algorithm>
 
 extern UINT g_ACP;
 
@@ -296,7 +297,7 @@ public:
 		if (!_Seek(aLength, SEEK_SET) || !SetEndOfFile(mFile))
 			return -1;
 		// Make sure we do not extend the file again.
-		_Seek(min(aLength, pos), SEEK_SET);
+		_Seek((std::min)(aLength, pos), SEEK_SET); // (std::min) - see https://stackoverflow.com/a/22023122/180275
 		return _Length();
 	}
 	HANDLE  Handle() { RollbackFilePointer(); FlushWriteBuffer(); return mFile; }
