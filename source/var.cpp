@@ -951,7 +951,7 @@ void Var::SetLengthFromContents()
 
 
 
-ResultType Var::BackupFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVarBackupCount)
+ResultType Var::BackupFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &aVarBackupCount)
 // All parameters except the first are output parameters that are set for our caller (though caller
 // is responsible for having initialized aVarBackup to NULL).
 // If there is nothing to backup, only the aVarBackupCount is changed (to zero).
@@ -1036,7 +1036,7 @@ void Var::Restore(VarBkp &aVarBkp)
 
 
 
-void Var::FreeAndRestoreFunctionVars(Func &aFunc, VarBkp *&aVarBackup, int &aVarBackupCount)
+void Var::FreeAndRestoreFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &aVarBackupCount)
 {
 	int i;
 	for (i = 0; i < aFunc.mVarCount; ++i)

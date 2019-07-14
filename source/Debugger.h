@@ -101,7 +101,7 @@ private:
 
 // Forward-declarations (this file is included in script.h before these are declared).
 class Line;
-class Func;
+class NativeFunc;
 struct UDFCallInfo;
 class Label;
 
@@ -116,11 +116,11 @@ struct DbgStack
 		{
 			TCHAR *desc; // SE_Thread -- "auto-exec", hotkey/hotstring name, "timer", etc.
 			Label *sub; // SE_Sub
-			Func *func; // SE_BIF
+			NativeFunc *func; // SE_BIF
 			UDFCallInfo *udf; // SE_UDF
 		};
 		StackEntryType type;
-		TCHAR *Name();
+		LPCTSTR Name();
 	};
 
 	Entry *mBottom, *mTop, *mTopBound;
@@ -170,7 +170,7 @@ struct DbgStack
 
 	void Push(TCHAR *aDesc);
 	void Push(Label *aSub);
-	void Push(Func *aFunc);
+	void Push(NativeFunc *aFunc);
 	void Push(UDFCallInfo *aRecurse);
 
 	void GetLocalVars(int aDepth, Var **&aVar, Var **&aVarEnd, VarBkp *&aBkp, VarBkp *&aBkpEnd);

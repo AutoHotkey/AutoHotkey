@@ -1760,7 +1760,7 @@ bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awPa
 	ResultType result;
 	__int64 retval;
 
-	result = CallMethod(func, func, _T("call"), param, _countof(param), &retval);
+	result = CallMethod(func, func, nullptr, param, _countof(param), &retval);
 
 	bool block_further_processing = (result == EARLY_RETURN);
 	if (block_further_processing)

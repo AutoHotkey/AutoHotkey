@@ -22,15 +22,13 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 	TCHAR result_buf[MAX_NUMBER_SIZE];
 	result_token.InitResult(result_buf);
 
-	ExprTokenType this_token(aThis), name_token(aMethodName);
+	ExprTokenType this_token(aThis);
 
-	++aParamCount; // For the method name.
 	ExprTokenType **param = (ExprTokenType **)_alloca(aParamCount * sizeof(ExprTokenType *));
-	param[0] = &name_token;
-	for (int i = 1; i < aParamCount; ++i)
-		param[i] = aParamValue + (i-1);
+	for (int i = 0; i < aParamCount; ++i)
+		param[i] = aParamValue + i;
 
-	ResultType result = aInvokee->Invoke(result_token, this_token, IT_CALL | aExtraFlags, param, aParamCount);
+	ResultType result = aInvokee->Invoke(result_token, IT_CALL | aExtraFlags, aMethodName, this_token, param, aParamCount);
 
 	// Exceptions are thrown by Invoke for too few/many parameters, but not for non-existent method.
 	// Check for that here, with the exception that objects are permitted to lack a __Delete method.
@@ -56,25 +54,21 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 //
 
 ResultType ObjectMember::Invoke(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
-	, ResultToken &aResultToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+	, ResultToken &aResultToken, int aFlags, LPCTSTR aName, ExprTokenType *aParam[], int aParamCount)
 {
 	if (IS_INVOKE_SET)
 		--aParamCount; // Let aParamCount be just the ones in [].
-	if (aParamCount < 1)
+	if (!aName)
 		_o_throw(ERR_INVALID_USAGE);
-
-	LPCTSTR name = ParamIndexToString(0, _f_retval_buf);
 
 	for (int i = 0; i < aMemberCount; ++i)
 	{
 		auto &member = aMembers[i];
 		if ((INVOKE_TYPE == IT_CALL) == (member.invokeType == IT_CALL)
-			&& !_tcsicmp(member.name, name))
+			&& !_tcsicmp(member.name, aName))
 		{
 			if (member.invokeType == IT_GET && IS_INVOKE_SET)
 				_o_throw(ERR_PROPERTY_READONLY);
-			--aParamCount;
-			++aParam;
 			if (aParamCount < member.minParams)
 				_o_throw(ERR_TOO_FEW_PARAMS);
 			if (aParamCount > member.maxParams && member.maxParams != MAXP_VARIADIC)
@@ -318,14 +312,11 @@ void Array::ToParams(ExprTokenType *token, ExprTokenType **param_list, ExprToken
 ResultType GetEnumerator(IObject *&aEnumerator, IObject *aEnumerable, int aVarCount, bool aDisplayError)
 {
 	FuncResult result_token;
-	ExprTokenType t_this(aEnumerable);
-	ExprTokenType param[2], *params[2] = { param, param + 1 };
-	param[0].SetValue(_T("__Enum"), 6);
-	param[1].SetValue(aVarCount);
+	ExprTokenType t_this(aEnumerable), t_count(aVarCount), *param[] = { &t_count };
 	// enum := object.__Enum(number of vars)
 	// IF_NEWENUM causes ComObjects to invoke a _NewEnum method or property.
 	// IF_METAOBJ causes Objects to skip the __Call meta-function if __Enum is not found.
-	auto result = aEnumerable->Invoke(result_token, t_this, IT_CALL | IF_NEWENUM | IF_METAOBJ, params, 2);
+	auto result = aEnumerable->Invoke(result_token, IT_CALL | IF_NEWENUM | IF_METAOBJ, _T("__Enum"), t_this, param, 1);
 	if (result == FAIL || result == EARLY_EXIT)
 		return result;
 	if (result == INVOKE_NOT_HANDLED)
@@ -356,7 +347,7 @@ ResultType CallEnumerator(IObject *aEnumerator, Var *aVar0, Var *aVar1, bool aDi
 		param[1].var = aVar1;
 		++param_count;
 	}
-	auto result = aEnumerator->Invoke(result_token, t_this, IT_CALL|IF_DEFAULT, params, param_count);
+	auto result = aEnumerator->Invoke(result_token, IT_CALL, nullptr, t_this, params, param_count);
 	if (result == FAIL || result == EARLY_EXIT || result == INVOKE_NOT_HANDLED)
 	{
 		if (result == INVOKE_NOT_HANDLED && aDisplayError)
@@ -533,29 +524,16 @@ ObjectMember Object::sMembers[] =
 	Object_Member(OwnProps, __Enum, Enum_Properties, IT_CALL, 0, 0)
 };
 
-ResultType STDMETHODCALLTYPE Object::Invoke(
-                                            ResultToken &aResultToken,
-                                            ExprTokenType &aThisToken,
-                                            int aFlags,
-                                            ExprTokenType *aParam[],
-                                            int aParamCount
-                                            )
+ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	name_t name;
-
-	ASSERT(aParamCount || (aFlags & IF_DEFAULT));
-	if ((aFlags & IF_DEFAULT) || aParam[0]->symbol == SYM_MISSING)
+	if (!aName)
 		name = IS_INVOKE_CALL ? _T("Call") : _T("__Item");
 	else
-		name = ParamIndexToString(0, _f_number_buf);
+		name = aName;
 	
 	auto actual_param = aParam; // Actual first parameter between [] or ().
 	int actual_param_count = aParamCount; // Actual number of parameters between [] or ().
-	if (!(aFlags & IF_DEFAULT))
-	{
-		++actual_param;
-		--actual_param_count;
-	}
 
 	if (IS_INVOKE_CALL)
 	{
@@ -624,7 +602,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		}
 	}
 
-	if (!hasprop && !(aFlags & IF_DEFAULT))
+	if (!hasprop && aName)
 	{
 		// Look for a meta-function to invoke in place of this non-existent property.
 		if (auto method = GetMethod(sMetaFuncName[INVOKE_TYPE]))
@@ -652,7 +630,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 		}
 		auto caller_line = g_script.mCurrLine;
 		// Call getter/setter.
-		auto result = etter->Invoke(aResultToken, this_etter, IT_CALL|IF_DEFAULT, prop_param, prop_param_count);
+		auto result = etter->Invoke(aResultToken, IT_CALL, nullptr, this_etter, prop_param, prop_param_count);
 		if (!handle_params_recursively || result == FAIL || result == EARLY_EXIT)
 			return result;
 		// Otherwise, handle_params_recursively == true.
@@ -693,8 +671,8 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			++actual_param_count; // Fix the parameter count.
 		
 		// Recursively invoke obj_for_recursion, passing remaining parameters:
-		auto result = obj_for_recursion->Invoke(aResultToken, ExprTokenType(obj_for_recursion)
-			, (aFlags & IT_BITMASK) | IF_DEFAULT, actual_param, actual_param_count);
+		auto result = obj_for_recursion->Invoke(aResultToken, (aFlags & IT_BITMASK)
+			, nullptr, ExprTokenType(obj_for_recursion), actual_param, actual_param_count);
 		
 		if (aResultToken.symbol == SYM_STRING && !aResultToken.mem_to_free && aResultToken.marker != aResultToken.buf)
 		{
@@ -813,17 +791,22 @@ ResultType Object::CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToke
 	MethodType *method;
 	if (method = GetMethod(aName))
 	{
-		ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
-		param[0] = &aThisToken;
-		memcpy(param + 1, aParam, aParamCount * sizeof(ExprTokenType *));
-		// return %func%(this, aParam*)
-		return method->func->Invoke(aResultToken, ExprTokenType(method->func), IT_CALL|IF_DEFAULT, param, aParamCount + 1);
+		return CallMethod(method->func, aResultToken, aThisToken, aParam, aParamCount);
 	}
 	if (!(aFlags & IF_METAOBJ) && (method = GetMethod(sMetaFuncName[IT_CALL])))
 	{
 		return CallMeta(method->func, aName, aFlags, aResultToken, aThisToken, aParam, aParamCount);
 	}
 	return INVOKE_NOT_HANDLED;
+}
+
+ResultType Object::CallMethod(IObject *aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount)
+{
+	ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
+	param[0] = &aThisToken;
+	memcpy(param + 1, aParam, aParamCount * sizeof(ExprTokenType *));
+	// return %func%(this, aParam*)
+	return aFunc->Invoke(aResultToken, IT_CALL, nullptr, ExprTokenType(aFunc), param, aParamCount + 1);
 }
 
 ResultType Object::CallMeta(IObject *aFunc, LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount)
@@ -839,7 +822,7 @@ ResultType Object::CallMeta(IObject *aFunc, LPTSTR aName, int aFlags, ResultToke
 	if (IS_INVOKE_SET)
 		param[param_count++] = aParam[aParamCount]; // value
 	// return %aFunc%(this, name, args [, value])
-	return aFunc->Invoke(aResultToken, ExprTokenType(aFunc), IT_CALL|IF_DEFAULT, param, param_count);
+	return aFunc->Invoke(aResultToken, IT_CALL, nullptr, ExprTokenType(aFunc), param, param_count);
 }
 
 
@@ -978,6 +961,12 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase)
 Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount)
 {
 	auto obj = CreatePrototype(aClassName, aBase);
+	return DefineMembers(obj, aClassName, aMember, aMemberCount);
+}
+
+
+Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMember[], int aMemberCount)
+{
 	obj->mFlags |= NativeClassPrototype;
 
 	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
@@ -989,7 +978,7 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 		_tcscpy(name, member.name);
 		if (member.invokeType == IT_CALL)
 		{
-			auto func = new Func(SimpleHeap::Malloc(full_name), true);
+			auto func = new BuiltInMethod(SimpleHeap::Malloc(full_name));
 			func->mBIM = member.method;
 			func->mMID = member.id;
 			func->mMIT = IT_CALL;
@@ -1009,7 +998,7 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 			auto op_name = _tcschr(name, '\0');
 
 			_tcscpy(op_name, _T(".Get"));
-			auto func = new Func(SimpleHeap::Malloc(full_name), true);
+			auto func = new BuiltInMethod(SimpleHeap::Malloc(full_name));
 			func->mBIM = member.method;
 			func->mMID = member.id;
 			func->mMIT = IT_GET;
@@ -1022,7 +1011,7 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 			if (member.invokeType == IT_SET)
 			{
 				_tcscpy(op_name, _T(".Set"));
-				func = new Func(SimpleHeap::Malloc(full_name), true);
+				func = new BuiltInMethod(SimpleHeap::Malloc(full_name));
 				func->mBIM = member.method;
 				func->mMID = member.id;
 				func->mMIT = IT_SET;
@@ -1046,7 +1035,7 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 
 	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
 	_stprintf(full_name, _T("%s.New"), aClassName);
-	auto ctor = new Func(SimpleHeap::Malloc(full_name), true);
+	auto ctor = new BuiltInMethod(SimpleHeap::Malloc(full_name));
 	ctor->mBIM = aCtor;
 	ctor->mMID = 0;
 	ctor->mMIT = IT_CALL;
@@ -1221,15 +1210,13 @@ ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 
 ResultType Object::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	_o_return(new Enumerator(this, (EnumeratorType)aID));
+	_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(
+		aID == Enum_Properties ? &Object::GetEnumProp : &Object::GetEnumMethod)));
 }
 
 ResultType Map::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (IObject *enm = new Enumerator(this))
-		_o_return(enm);
-	else
-		_o_throw(ERR_OUTOFMEM);
+	_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&Map::GetEnumItem)));
 }
 
 ResultType Object::HasBase(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1974,7 +1961,7 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		_o_throw(ERR_OUTOFMEM);
 
 	case M___Enum:
-		_o_return(new Enumerator(this));
+		_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&Array::GetEnumItem)));
 	}
 	return INVOKE_NOT_HANDLED;
 }
@@ -1991,18 +1978,18 @@ Array::index_t Array::ParamToZeroIndex(ExprTokenType &aParam)
 }
 
 
-ResultType Array::Enumerator::Next(Var *aVal, Var *aReserved)
+ResultType Array::GetEnumItem(UINT aIndex, Var *aVal, Var *aReserved)
 {
-	if (mIndex < mArray->mLength)
+	if (aIndex < mLength)
 	{
 		if (aReserved)
 		{
 			// Put the index first, only when there are two parameters.
 			if (aVal)
-				aVal->Assign((__int64)mIndex + 1);
+				aVal->Assign((__int64)aIndex + 1);
 			aVal = aReserved;
 		}
-		auto &item = mArray->mItem[mIndex++];
+		auto &item = mItem[aIndex];
 		switch (item.symbol)
 		{
 		default:	aVal->AssignString(item.string, item.string.Length());	break;
@@ -2021,12 +2008,7 @@ ResultType Array::Enumerator::Next(Var *aVal, Var *aReserved)
 // Enumerator
 //
 
-ObjectMember EnumBase::sMembers[] =
-{
-	Object_Method_(Call, 0, 2, Invoke, 0)
-};
-
-ResultType EnumBase::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+bool EnumBase::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
 {
 	Var *var0 = ParamIndexToOptionalVar(0);
 	Var *var1 = ParamIndexToOptionalVar(1);
@@ -2035,88 +2017,90 @@ ResultType EnumBase::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 	{
 	case CONDITION_TRUE:
 	case CONDITION_FALSE:
-		_o_return(result == CONDITION_TRUE);
+		aResultToken.SetValue(result == CONDITION_TRUE);
+		return true;
 	default: // Probably FAIL or EARLY_EXIT.
-		return result;
+		aResultToken.SetExitResult(result);
+		return false;
 	}
-
 }
 
-ResultType STDMETHODCALLTYPE EnumBase::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+
+ResultType IndexEnumerator::Next(Var *var0, Var *var1)
 {
-	if (aFlags & IF_DEFAULT)
-		return Invoke(aResultToken, 0, aFlags, aParam, aParamCount);
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+	return (mObject->*mGetItem)(++mIndex, var0, var1);
 }
 
-ResultType Object::Enumerator::Next(Var *aKey, Var *aVal)
+
+ResultType Object::GetEnumProp(UINT aIndex, Var *aKey, Var *aVal)
 {
-	if (mType == Enum_Properties)
+	if (aIndex < mFields.Length())
 	{
-		if (++mOffset < mObject->mFields.Length())
+		FieldType &field = mFields[aIndex];
+		if (aKey)
 		{
-			FieldType &field = mObject->mFields[mOffset];
-			if (aKey)
+			aKey->Assign(field.name);
+		}
+		if (aVal)
+		{
+			if (field.symbol == SYM_DYNAMIC && field.prop->MaxParams < 1 && field.prop->Getter())
 			{
-				aKey->Assign(field.name);
-			}
-			if (aVal)
-			{
-				if (field.symbol == SYM_DYNAMIC && field.prop->MaxParams < 1 && field.prop->Getter())
+				FuncResult result_token;
+				ExprTokenType getter(field.prop->Getter());
+				ExprTokenType object(this);
+				auto *param = &object;
+				auto result = getter.object->Invoke(result_token, IT_CALL, nullptr, getter, &param, 1);
+				if (result == FAIL || result == EARLY_EXIT)
+					return result;
+				if (result_token.mem_to_free)
 				{
-					FuncResult result_token;
-					ExprTokenType getter(field.prop->Getter());
-					ExprTokenType object(mObject);
-					auto *param = &object;
-					auto result = getter.object->Invoke(result_token, getter, IT_CALL|IF_DEFAULT, &param, 1);
-					if (result == FAIL || result == EARLY_EXIT)
-						return result;
-					if (result_token.mem_to_free)
-					{
-						ASSERT(result_token.symbol == SYM_STRING && result_token.mem_to_free == result_token.marker);
-						aVal->AcceptNewMem(result_token.mem_to_free, result_token.marker_length);
-					}
-					else
-					{
-						aVal->Assign(result_token);
-						result_token.Free();
-					}
+					ASSERT(result_token.symbol == SYM_STRING && result_token.mem_to_free == result_token.marker);
+					aVal->AcceptNewMem(result_token.mem_to_free, result_token.marker_length);
 				}
 				else
 				{
-					ExprTokenType value;
-					field.ToToken(value);
-					aVal->Assign(value);
+					aVal->Assign(result_token);
+					result_token.Free();
 				}
 			}
-			return CONDITION_TRUE;
+			else
+			{
+				ExprTokenType value;
+				field.ToToken(value);
+				aVal->Assign(value);
+			}
 		}
-	}
-	else
-	{
-		if (++mOffset < mObject->mMethods.Length())
-		{
-			auto &method = mObject->mMethods[mOffset];
-			if (aKey)
-				aKey->Assign(method.name);
-			if (aVal)
-				aVal->Assign(method.func);
-			return CONDITION_TRUE;
-		}
+		return CONDITION_TRUE;
 	}
 	return CONDITION_FALSE;
 }
 
-ResultType Map::Enumerator::Next(Var *aKey, Var *aVal)
+
+ResultType Object::GetEnumMethod(UINT aIndex, Var *aKey, Var *aVal)
 {
-	if (++mOffset < mObject->mCount)
+	if (aIndex < mMethods.Length())
 	{
-		auto &item = mObject->mItem[mOffset];
+		auto &method = mMethods[aIndex];
+		if (aKey)
+			aKey->Assign(method.name);
+		if (aVal)
+			aVal->Assign(method.func);
+		return CONDITION_TRUE;
+	}
+	return CONDITION_FALSE;
+}
+
+
+ResultType Map::GetEnumItem(UINT aIndex, Var *aKey, Var *aVal)
+{
+	if (aIndex < mCount)
+	{
+		auto &item = mItem[aIndex];
 		if (aKey)
 		{
-			if (mOffset < mObject->mKeyOffsetObject) // mKeyOffsetInt < mKeyOffsetObject
+			if (aIndex < mKeyOffsetObject) // mKeyOffsetInt < mKeyOffsetObject
 				aKey->Assign(item.key.i);
-			else if (mOffset < mObject->mKeyOffsetString) // mKeyOffsetObject < mKeyOffsetString
+			else if (aIndex < mKeyOffsetString) // mKeyOffsetObject < mKeyOffsetString
 				aKey->Assign(item.key.p);
 			else // mKeyOffsetString < mCount
 				aKey->Assign(item.key.s);
@@ -2132,7 +2116,33 @@ ResultType Map::Enumerator::Next(Var *aKey, Var *aVal)
 	return CONDITION_FALSE;
 }
 
-	
+
+ResultType RegExMatchObject::GetEnumItem(UINT aIndex, Var *aKey, Var *aVal)
+{
+	if (aIndex >= (UINT)mPatternCount)
+		return CONDITION_FALSE;
+	// In single-var mode, return the subpattern values.
+	// Otherwise, return the subpattern names first and values second.
+	if (!aVal)
+	{
+		aVal = aKey;
+		aKey = nullptr;
+	}
+	if (aKey)
+	{
+		if (mPatternName && mPatternName[aIndex])
+			aKey->Assign(mPatternName[aIndex]);
+		else
+			aKey->Assign((__int64)aIndex);
+	}
+	if (aVal)
+	{
+		aVal->Assign(mHaystack - mHaystackStart + mOffset[aIndex*2], mOffset[aIndex*2+1]);
+	}
+	return CONDITION_TRUE;
+}
+
+
 
 //
 // Object:: and Map:: Internal Methods
@@ -2420,31 +2430,19 @@ Map::Pair *Map::Insert(SymbolType key_type, Key key, index_t at)
 
 
 //
-// Func: Script interface, accessible via "function reference".
+// Func: A function, either built-in or created by a function definition.
 //
 
-ObjectMember Func::sMembers[] =
+ResultType Func::Invoke(IObject_Invoke_PARAMS_DECL)
 {
-	Object_Method(Call, 0, MAXP_VARIADIC),
-	Object_Method(Bind, 0, MAXP_VARIADIC),
-	Object_Method(IsOptional, 0, MAX_FUNCTION_PARAMS),
-	Object_Method(IsByRef, 0, MAX_FUNCTION_PARAMS),
-
-	Object_Property_get(Name),
-	Object_Property_get(MinParams),
-	Object_Property_get(MaxParams),
-	Object_Property_get(IsBuiltIn),
-	Object_Property_get(IsVariadic)
-};
-
-ResultType STDMETHODCALLTYPE Func::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	if (aFlags == (IT_CALL | IF_DEFAULT))
+	if (!aName && !HasOwnMethods())
 	{
-		Call(aResultToken, aParam, aParamCount);
+		// Take a shortcut for performance.  Although it prevents hooking via
+		// DefineMethod, this is consistent with direct function calls.
+		Call(aResultToken, aParam, aParamCount, nullptr);
 		return aResultToken.Result();
 	}
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+	return Object::Invoke(IObject_Invoke_PARAMS);
 }
 
 ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -2452,11 +2450,11 @@ ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	switch (MemberID(aID))
 	{
 	case M_Call:
-		Call(aResultToken, aParam, aParamCount);
+		Call(aResultToken, aParam, aParamCount, nullptr);
 		return aResultToken.Result();
 
 	case M_Bind:
-		if (BoundFunc *bf = BoundFunc::Bind(this, aParam, aParamCount, IT_CALL | IF_DEFAULT))
+		if (BoundFunc *bf = BoundFunc::Bind(this, IT_CALL, nullptr, aParam, aParamCount))
 			_o_return(bf);
 		_o_throw(ERR_OUTOFMEM);
 
@@ -2478,39 +2476,28 @@ ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 			int param = ParamIndexToInt(0);
 			if (param <= 0 || param > mParamCount && !mIsVariadic)
 				_o_throw(ERR_PARAM1_INVALID);
-			if (mIsBuiltIn)
-				_o_return(ArgIsOutputVar(param-1));
-			_o_return(param <= mParamCount && mParam[param-1].is_byref);
+			_o_return(ArgIsOutputVar(param-1));
 		}
 		else
 		{
 			for (int param = 0; param < mParamCount; ++param)
-				if (mParam[param].is_byref)
+				if (ArgIsOutputVar(param))
 					_o_return(TRUE);
 			_o_return(FALSE);
 		}
 
-	case P_Name: _o_return(mName);
+	case P_Name: _o_return(const_cast<LPTSTR>(mName));
 	case P_MinParams: _o_return(mMinParams);
 	case P_MaxParams: _o_return(mParamCount);
-	case P_IsBuiltIn: _o_return(mIsBuiltIn);
+	case P_IsBuiltIn: _o_return(IsBuiltIn());
 	case P_IsVariadic: _o_return(mIsVariadic);
 	}
 	return INVOKE_NOT_HANDLED;
 }
 
 
-ResultType STDMETHODCALLTYPE BoundFunc::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+bool BoundFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
 {
-	if (aFlags != (IT_CALL | IF_DEFAULT))
-	{
-		// No methods/properties implemented yet, except Call().
-		if (!IS_INVOKE_CALL || _tcsicmp(TokenToString(*aParam[0]), _T("Call")))
-			return INVOKE_NOT_HANDLED; // Reserved.
-		++aParam;
-		--aParamCount;
-	}
-
 	// Combine the bound parameters with the supplied parameters.
 	int bound_count = mParams->Length();
 	if (bound_count > 0)
@@ -2528,15 +2515,20 @@ ResultType STDMETHODCALLTYPE BoundFunc::Invoke(ResultToken &aResultToken, ExprTo
 	this_token.object = mFunc;
 
 	// Call the function or object.
-	return mFunc->Invoke(aResultToken, this_token, mFlags, aParam, aParamCount);
+	return mFunc->Invoke(aResultToken, mFlags, mMember, this_token, aParam, aParamCount);
 	//return CallFunc(*mFunc, aResultToken, params, param_count);
 }
 
-BoundFunc *BoundFunc::Bind(IObject *aFunc, ExprTokenType **aParam, int aParamCount, int aFlags)
+BoundFunc *BoundFunc::Bind(IObject *aFunc, int aFlags, LPCTSTR aMember, ExprTokenType **aParam, int aParamCount)
 {
+	LPTSTR member;
+	if (!aMember)
+		member = nullptr;
+	else if (!(member = _tcsdup(aMember)))
+		return nullptr;
 	if (auto params = Array::Create(aParam, aParamCount))
 	{
-		if (BoundFunc *bf = new BoundFunc(aFunc, params, aFlags))
+		if (BoundFunc *bf = new BoundFunc(aFunc, member, params, aFlags))
 		{
 			aFunc->AddRef();
 			// bf has taken over our reference to params.
@@ -2545,27 +2537,21 @@ BoundFunc *BoundFunc::Bind(IObject *aFunc, ExprTokenType **aParam, int aParamCou
 		// malloc failure; release params and return.
 		params->Release();
 	}
-	return NULL;
+	free(member);
+	return nullptr;
 }
 
 BoundFunc::~BoundFunc()
 {
 	mFunc->Release();
 	mParams->Release();
+	free(mMember);
 }
 
 
-ResultType STDMETHODCALLTYPE Closure::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+bool Closure::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
 {
-	if (aFlags != (IT_CALL | IF_DEFAULT))
-	{
-		if (!IS_INVOKE_CALL || _tcsicmp(ParamIndexToString(0), _T("Call"))) // i.e. not Call.
-			return mFunc->Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
-		++aParam;
-		--aParamCount;
-	}
-	mFunc->Call(aResultToken, aParam, aParamCount, false, mVars);
-	return aResultToken.Result();
+	return mFunc->Call(aResultToken, aParam, aParamCount, aParamObj, mVars);
 }
 
 Closure::~Closure()
@@ -2574,7 +2560,7 @@ Closure::~Closure()
 }
 
 
-ResultType STDMETHODCALLTYPE Label::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Label::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	// Labels are never returned to script, so no need to check flags or parameters.
 	return Execute();
@@ -2589,36 +2575,25 @@ ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aP
 }
 
 
-LabelPtr::CallableType LabelPtr::getType(IObject *aObject)
+Label *LabelPtr::ToLabel() const
 {
-	static const Func sFunc(NULL, false);
 	// Comparing [[vfptr]] produces smaller code and is perhaps 10% faster than dynamic_cast<>.
-	void *vfptr = *(void **)aObject;
+	void *vfptr = *(void **)mObject;
 	if (vfptr == *(void **)g_script.mPlaceholderLabel)
-		return Callable_Label;
-	if (vfptr == *(void **)&sFunc)
-		return Callable_Func;
-	return Callable_Object;
+		return (Label *)mObject;
+	return nullptr;
 }
 
-Line *LabelPtr::getJumpToLine(IObject *aObject)
+Func *LabelPtr::ToFunc() const
 {
-	switch (getType(aObject))
-	{
-	case Callable_Label: return ((Label *)aObject)->mJumpToLine;
-	case Callable_Func: return ((Func *)aObject)->mJumpToLine;
-	default: return NULL;
-	}
+	return dynamic_cast<Func *>(mObject);
 }
 
-LPTSTR LabelPtr::Name() const
+LPCTSTR LabelPtr::Name() const
 {
-	switch (getType(mObject))
-	{
-	case Callable_Label: return ((Label *)mObject)->mName;
-	case Callable_Func: return ((Func *)mObject)->mName;
-	default: return _T("Object");
-	}
+	if (auto func = ToFunc()) return func->mName;
+	if (auto lbl = ToLabel()) return lbl->mName;
+	return mObject->Type();
 }
 
 
@@ -2694,7 +2669,7 @@ MetaObject g_MetaObject;
 
 LPTSTR Object::sMetaFuncName[] = { _T("__Get"), _T("__Set"), _T("__Call") };
 
-ResultType STDMETHODCALLTYPE MetaObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType MetaObject::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	// For something like base.Method() in a class-defined method:
 	// It seems more useful and intuitive for this special behaviour to take precedence over
@@ -2708,7 +2683,7 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ResultToken &aResultToken, ExprT
 			ExprTokenType this_token;
 			this_token.symbol = SYM_VAR;
 			this_token.var = g->CurrentFunc->mParam[0].var;
-			ResultType result = this_class_base->Invoke(aResultToken, this_token, aFlags | IF_METAOBJ, aParam, aParamCount);
+			ResultType result = this_class_base->Invoke(aResultToken, aFlags | IF_METAOBJ, aName, this_token, aParam, aParamCount);
 			// Avoid returning INVOKE_NOT_HANDLED in this case so that our caller never
 			// shows an "uninitialized var" warning for base.Foo() in a class method.
 			if (result != INVOKE_NOT_HANDLED)
@@ -2717,13 +2692,7 @@ ResultType STDMETHODCALLTYPE MetaObject::Invoke(ResultToken &aResultToken, ExprT
 		_o_return_empty;
 	}
 
-	// Allow script-defined meta-functions to override the default behaviour:
-	ResultType result = Object::Invoke(aResultToken, aThisToken, aFlags, aParam, aParamCount);
-	if (result == INVOKE_NOT_HANDLED && (aFlags & (IF_DEFAULT|IF_METAOBJ|IT_CALL)) == (IF_DEFAULT|IF_METAOBJ))
-		// No __Item defined; provide fallback behaviour for temporary backward-compatibility.
-		// This should be removed once the paradigm shift is complete.
-		result = Object::Invoke(aResultToken, aThisToken, aFlags & ~IF_DEFAULT, aParam, aParamCount);
-	return result;
+	return Object::Invoke(IObject_Invoke_PARAMS);
 }
 
 
@@ -2738,11 +2707,6 @@ ObjectMember BufferObject::sMembers[] =
 	Object_Property_get_set(Size),
 	Object_Property_get(Data)
 };
-
-ResultType BufferObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
-}
 
 ResultType BufferObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
@@ -2793,7 +2757,9 @@ BIF_DECL(BIF_BufferAlloc)
 	auto data = malloc((size_t)size);
 	if (!data)
 		_f_throw(ERR_OUTOFMEM);
-	_f_return(new BufferObject(data, (size_t)size));
+	auto bo = new BufferObject(data, (size_t)size);
+	bo->SetBase(BufferObject::sPrototype);
+	_f_return(bo);
 }
 
 
@@ -2852,8 +2818,36 @@ BIF_DECL(BIF_ClipboardAll)
 
 
 
+ObjectMember Func::sMembers[] =
+{
+	Object_Method(Bind, 0, MAXP_VARIADIC),
+	Object_Method(Call, 0, MAXP_VARIADIC),
+	Object_Method(IsByRef, 0, MAX_FUNCTION_PARAMS),
+	Object_Method(IsOptional, 0, MAX_FUNCTION_PARAMS),
+
+	Object_Property_get(IsBuiltIn),
+	Object_Property_get(IsVariadic),
+	Object_Property_get(MaxParams),
+	Object_Property_get(MinParams),
+	Object_Property_get(Name)
+};
+
+
+Object *CreateRootPrototype()
+{
+	Object::sPrototype = Object::CreatePrototype(_T("Object"), nullptr);
+	Func::sPrototype = Object::CreatePrototype(_T("Func"), Object::sPrototype);
+	// Members must be defined only after both of the above are set, since each member
+	// definition creates a BuiltInMethod, which derives from Func::sPrototype.
+	Object::DefineMembers(Object::sPrototype, _T("Object"), Object::sMembers, _countof(Object::sMembers));
+	Object::DefineMembers(Func::sPrototype, _T("Func"), Func::sMembers, _countof(Func::sMembers));
+	return Object::sPrototype;
+}
+
+Object *Func::sPrototype;
+Object *Object::sPrototype = CreateRootPrototype();
+
 //																		Direct base			Members
-Object *Object::sPrototype		= Object::CreatePrototype(_T("Object"),	nullptr,			sMembers, _countof(sMembers));
 Object *Object::sClassPrototype	= Object::CreatePrototype(_T("Class"),	Object::sPrototype);
 Object *Array::sPrototype		= Object::CreatePrototype(_T("Array"),	Object::sPrototype,	sMembers, _countof(sMembers));
 Object *Map::sPrototype			= Object::CreatePrototype(_T("Map"),	Object::sPrototype,	sMembers, _countof(sMembers));
@@ -2863,6 +2857,60 @@ Object *Object::sClass		= Object::CreateClass(_T("Object"),	sClassPrototype,	sPr
 Object *Object::sClassClass	= Object::CreateClass(_T("Class"),	Object::sClass,		sClassPrototype,	static_cast<ObjectMethod>(&New<Object>));
 Object *Array::sClass		= Object::CreateClass(_T("Array"),	Object::sClass,		sPrototype,			static_cast<ObjectMethod>(&New<Array>));
 Object *Map::sClass			= Object::CreateClass(_T("Map"),	Object::sClass,		sPrototype,			static_cast<ObjectMethod>(&New<Map>));
+
+
+
+Object *Closure::sPrototype = Object::CreatePrototype(_T("Closure"), Func::sPrototype);
+Object *BoundFunc::sPrototype = Object::CreatePrototype(_T("BoundFunc"), Func::sPrototype);
+Object *EnumBase::sPrototype = Object::CreatePrototype(_T("Enumerator"), Func::sPrototype);
+
+
+
+Object *BufferObject::sPrototype = Object::CreatePrototype(_T("Buffer"), Object::sPrototype, sMembers, _countof(sMembers));
+
+
+
+ObjectMember RegExMatchObject::sMembers[] =
+{
+	Object_Method(__Enum, 0, 1),
+	Object_Member(__Get, Invoke, M_Value, IT_CALL, 2, 2),
+	Object_Member(__Item, Invoke, M_Value, IT_GET, 0, 1),
+	Object_Method(Value, 0, 1),
+	Object_Method(Pos, 0, 1),
+	Object_Method(Len, 0, 1),
+	Object_Method(Name, 0, 1),
+	Object_Method(Count, 0, 0),
+	Object_Method(Mark, 0, 0),
+};
+
+Object *RegExMatchObject::sPrototype = CreatePrototype(_T("RegExMatch"), Object::sPrototype, sMembers, _countof(sMembers));
+
+
+
+ObjectMember UserMenu::sMembers[] =
+{
+	Object_Method(Add, 0, 3),
+	Object_Method(AddStandard, 0, 0),
+	Object_Method(Insert, 0, 4),
+	Object_Method(Delete, 0, 1),
+	Object_Method(Rename, 1, 2),
+	Object_Method(Check, 1, 1),
+	Object_Method(Uncheck, 1, 1),
+	Object_Method(ToggleCheck, 1, 1),
+	Object_Method(Enable, 1, 1),
+	Object_Method(Disable, 1, 1),
+	Object_Method(ToggleEnable, 1, 1),
+	Object_Method(SetIcon, 2, 4),
+	Object_Method(Show, 0, 2),
+	Object_Method(SetColor, 0, 2),
+
+	Object_Property_get_set(Default),
+	Object_Property_get    (Handle),
+	Object_Property_get_set(ClickCount)
+};
+
+Object *UserMenu::sMenuPrototype = CreatePrototype(_T("Menu"), Object::sPrototype, sMembers, _countof(sMembers));
+Object *UserMenu::sMenuBarPrototype = CreatePrototype(_T("MenuBar"), sMenuPrototype);
 
 
 
@@ -2880,9 +2928,6 @@ void IObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPa
 	//}
 	aDebugger->EndProperty(cookie);
 }
-
-Implement_DebugWriteProperty_via_sMembers(Func)
-Implement_DebugWriteProperty_via_sMembers(BufferObject)
 
 void ObjectMember::DebugWriteProperty(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
 	, IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)

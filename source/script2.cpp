@@ -8846,11 +8846,9 @@ HWND Line::DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTit
 ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aValue, ResultToken &aResultToken, bool aOptional)
 {
 	FuncResult result_token;
-	ExprTokenType name_token = aPropName;
 	ExprTokenType this_token = aObject;
-	ExprTokenType *param = &name_token;
 
-	auto result = aObject->Invoke(result_token, this_token, IT_GET, &param, 1);
+	auto result = aObject->Invoke(result_token, IT_GET, aPropName, this_token, nullptr, 0);
 
 	if (result_token.symbol != SYM_INTEGER)
 	{
@@ -8858,7 +8856,11 @@ ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aVa
 		if (result == FAIL || result == EARLY_EXIT)
 			return aResultToken.SetExitResult(result);
 		if (result != INVOKE_NOT_HANDLED) // Property exists but is not an integer.
-			return aResultToken.Error(ERR_TYPE_MISMATCH, aPropName);
+		{
+			if (!TokenIsEmptyString(result_token))
+				return aResultToken.Error(ERR_TYPE_MISMATCH, aPropName);
+			result = INVOKE_NOT_HANDLED;
+		}
 		if (!aOptional)
 			return aResultToken.Error(ERR_UNKNOWN_PROPERTY, aPropName);
 		aValue = 0;
@@ -10497,7 +10499,7 @@ BIV_DECL_W(BIV_LoopIndex_Set)
 
 VarSizeType BIV_ThisFunc(LPTSTR aBuf, LPTSTR aVarName)
 {
-	LPTSTR name;
+	LPCTSTR name;
 	if (g->CurrentFunc)
 		name = g->CurrentFunc->mName;
 	else if (g->CurrentFuncGosub) // v1.0.48.02: For flexibility and backward compatibility, support A_ThisFunc even when a function Gosubs an external subroutine.
@@ -11577,9 +11579,7 @@ void ObjectToString(ResultToken &aResultToken, ExprTokenType &aThisToken, IObjec
 	// Something like this should be done for every TokenToString() call or
 	// equivalent, but major changes are needed before that will be feasible.
 	// For now, String(anytype) provides a limited workaround.
-	ExprTokenType method_name = _T("ToString");
-	ExprTokenType *params = &method_name;
-	switch (aObject->Invoke(aResultToken, aThisToken, IT_CALL, &params, 1))
+	switch (aObject->Invoke(aResultToken, IT_CALL, _T("ToString"), aThisToken, nullptr, 0))
 	{
 	case INVOKE_NOT_HANDLED:
 		aResultToken.Error(ERR_UNKNOWN_METHOD, _T("ToString"));
@@ -11822,6 +11822,7 @@ ResultType RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aP
 	RegExMatchObject *m = new RegExMatchObject();
 	if (!m)
 		return FAIL;
+	m->SetBase(sPrototype);
 
 	if (  aMark && !(m->mMark = _tcsdup(aMark))  )
 	{
@@ -11918,35 +11919,13 @@ ResultType RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aP
 }
 
 
-ObjectMember RegExMatchObject::sMembers[] =
-{
-	Object_Method(__Enum, 0, 1),
-	Object_Method(Value, 0, 1),
-	Object_Method(Pos, 0, 1),
-	Object_Method(Len, 0, 1),
-	Object_Method(Name, 0, 1),
-	Object_Method(Count, 0, 0),
-	Object_Method(Mark, 0, 0),
-};
-
-ResultType STDMETHODCALLTYPE RegExMatchObject::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	if (IS_INVOKE_GET)
-	{
-		if (aParamCount != 1)
-			_o_throw(ERR_PARAM_COUNT_INVALID);
-		return Invoke(aResultToken, M_Value, aFlags, aParam, aParamCount);
-	}
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
-}
-
 ResultType RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	switch (aID)
 	{
 	case M_Count: _o_return(mPatternCount - 1);
 	case M_Mark: _o_return(mMark ? mMark : _T(""));
-	case M___Enum: _o_return(new Enumerator(this));
+	case M___Enum: _o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&RegExMatchObject::GetEnumItem)));
 	}
 
 	int p;
@@ -11994,80 +11973,14 @@ ResultType RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFla
 }
 
 
-ResultType RegExMatchObject::Enumerator::Next(Var *aKey, Var *aVal)
-{
-	if (++mPattern >= mObject->mPatternCount)
-		return CONDITION_FALSE;
-	// In single-var mode, return the subpattern values.
-	// Otherwise, return the subpattern names first and values second.
-	if (!aVal)
-	{
-		aVal = aKey;
-		aKey = nullptr;
-	}
-	if (aKey)
-	{
-		if (mObject->mPatternName && mObject->mPatternName[mPattern])
-			aKey->Assign(mObject->mPatternName[mPattern]);
-		else
-			aKey->Assign(mPattern);
-	}
-	if (aVal)
-	{
-		aVal->Assign(mObject->mHaystack - mObject->mHaystackStart + mObject->mOffset[mPattern*2]
-			, mObject->mOffset[mPattern*2+1]);
-	}
-	return CONDITION_TRUE;
-}
-
-
-#ifdef CONFIG_DEBUGGER
-void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
-{
-	DebugCookie rootCookie, cookie;
-	aDebugger->BeginProperty(NULL, "object", 5, rootCookie);
-	if (aPage == 0 && aMaxDepth)
-	{
-		aDebugger->WriteProperty("Count", ExprTokenType((__int64)mPatternCount));
-
-		static LPSTR sNames[] = { "Value", "Pos", "Len", "Name" };
-#ifdef UNICODE
-		static LPWSTR sNamesT[] = { _T("Value"), _T("Pos"), _T("Len"), _T("Name") };
-#else
-		static LPSTR *sNamesT = sNames;
-#endif
-		TCHAR resultBuf[_f_retval_buf_size];
-		ResultToken resultToken;
-		ExprTokenType thisTokenUnused, paramToken[2], *param[] = { &paramToken[0], &paramToken[1] };
-		for (int i = 0; i < _countof(sNames); i++)
-		{
-			aDebugger->BeginProperty(sNames[i], "array", mPatternCount - (i == 3), cookie);
-			paramToken[0].SetValue(sNamesT[i]);
-			for (int p = (i == 3); p < mPatternCount; p++)
-			{
-				resultToken.InitResult(resultBuf); // Init before EACH invoke.
-				paramToken[1].SetValue(p);
-				Invoke(resultToken, thisTokenUnused, IT_CALL, param, 2);
-				aDebugger->WriteProperty(paramToken[1], resultToken);
-				if (resultToken.mem_to_free)
-					free(resultToken.mem_to_free);
-			}
-			aDebugger->EndProperty(cookie);
-		}
-	}
-	aDebugger->EndProperty(rootCookie);
-}
-#endif
-
-
 void *pcret_resolve_user_callout(LPCTSTR aCalloutParam, int aCalloutParamLength)
 {
 	// If no Func is found, pcre will handle the case where aCalloutParam is a pure integer.
 	// In that case, the callout param becomes an integer between 0 and 255. No valid pointer
 	// could be in this range, but we must take care to check (ptr>255) rather than (ptr!=NULL).
 	Func *callout_func = g_script.FindFunc(aCalloutParam, aCalloutParamLength);
-	if (!callout_func || callout_func->mIsBuiltIn)
-		return NULL;
+	if (!callout_func)
+		return nullptr;
 	return (void *)callout_func;
 }
 
@@ -12111,7 +12024,7 @@ int RegExCallout(pcret_callout_block *cb)
 		token.symbol = SYM_VAR;
 		token.var = pcre_callout_var;
 		callout_func = TokenToFunc(token); // Allow name or reference.
-		if (!callout_func || callout_func->mIsBuiltIn)
+		if (!callout_func)
 		{
 			if (!pcre_callout_var->HasContents()) // Var exists but is empty.
 				return 0;
@@ -13887,13 +13800,14 @@ BIF_DECL(BIF_Func)
 }
 
 
-IObject *Func::CloseIfNeeded()
+IObject *UserFunc::CloseIfNeeded()
 {
 	FreeVars *fv = (mOuterFunc && sFreeVars) ? sFreeVars->ForFunc(mOuterFunc) : NULL;
 	if (!fv)
-		// Standard practice would require AddRef() here, but we have the inside
-		// knowledge that Func ignores it (since it's allocated with SimpleHeap).
+	{
+		AddRef();
 		return this;
+	}
 	Closure *cl = new Closure(this, fv);
 	fv->AddRef();
 	return cl;
@@ -14712,7 +14626,7 @@ BIF_DECL(BIF_OnMessage)
 	// very rare cases where a valid but wrong function name is given *and* that function has
 	// ByRef or optional parameters.
 	// If the parameter is not an object or a valid function...
-	if (!callback || func && (func->mIsBuiltIn || func->mMinParams > 4))
+	if (!callback || func && func->mMinParams > 4)
 		_f_throw(ERR_PARAM2_INVALID);
 
 	// Check if this message already exists in the array:
@@ -16822,7 +16736,7 @@ BIF_DECL(BIF_Exception)
 {
 	LPTSTR message = ParamIndexToString(0, _f_number_buf);
 	TCHAR what_buf[MAX_NUMBER_SIZE], extra_buf[MAX_NUMBER_SIZE];
-	LPTSTR what = NULL;
+	LPCTSTR what = NULL;
 	Line *line = NULL;
 
 	if (ParamIndexIsOmitted(1)) // "What"

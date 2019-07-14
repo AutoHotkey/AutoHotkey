@@ -52,22 +52,6 @@ LPTSTR GuiControlType::GetTypeName()
 	return sTypeNames[type];
 }
 
-LPTSTR GuiControlType::Type()
-// Called by the Type() built-in function.
-// This is the class name, not the Type string passed to Gui.Add().
-{
-	// A static buf is used vs. having caller pass buf because most classes can just
-	// return a static string (doing it this way reduces code size significantly).
-	// The string is copied into another buffer by our caller's caller (usually
-	// ExpandExpression) before doing anything else.
-	static TCHAR sBuf[16] // Enough for "GuiDropDownList", although it's currently "GuiDDL" ("GuiStatusBar" is the next longest).
-		= _T("Gui"); // Initialized once for all.
-	// It seems more correct to include the control type in the class/type name,
-	// since the available methods differ by control type (Add/SetParts/etc.).
-	_tcscpy(sBuf + 3, GetTypeName());
-	return sBuf;
-}
-
 GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
 {
 	static TypeAttribs sAttrib[] = { 0,
@@ -174,85 +158,67 @@ static Array* TokenToArray(ExprTokenType &token)
 
 
 // Enumerator for GuiType objects.
-class GuiTypeEnum : public EnumBase
+ResultType GuiType::GetEnumItem(UINT aIndex, Var *aOutputVar1, Var *aOutputVar2)
 {
-	GuiType& m_gui;
-	GuiIndexType m_pos;
-
-public:
-	GuiTypeEnum(GuiType &gui) : m_gui(gui), m_pos(0)
-	{
-		m_gui.AddRef();
-	}
-
-	~GuiTypeEnum()
-	{
-		m_gui.Release();
-	}
-
-	virtual ResultType Next(Var *aOutputVar1, Var *aOutputVar2)
-	{
-		if (m_pos >= m_gui.mControlCount) // Use >= vs. == in case the Gui was destroyed.
-			return CONDITION_FALSE;
-		GuiControlType* ctrl = m_gui.mControl[m_pos++];
-		aOutputVar1->AssignHWND(ctrl->hwnd);
-		if (aOutputVar2)
-			aOutputVar2->Assign(ctrl);
-		return CONDITION_TRUE;
-	}
-};
+	if (aIndex >= mControlCount) // Use >= vs. == in case the Gui was destroyed.
+		return CONDITION_FALSE;
+	GuiControlType* ctrl = mControl[aIndex];
+	aOutputVar1->AssignHWND(ctrl->hwnd);
+	if (aOutputVar2)
+		aOutputVar2->Assign(ctrl);
+	return CONDITION_TRUE;
+}
 
 
 ObjectMember GuiType::sMembers[] =
 {
+	Object_Method (__Enum, 0, 1),
+
 	Object_Method_(Add, 1, 3, AddControl, GUI_CONTROL_INVALID),
-	Object_Method_(AddText, 0, 2, AddControl, GUI_CONTROL_TEXT),
-	Object_Method_(AddPic, 0, 2, AddControl, GUI_CONTROL_PIC),
-	Object_Method_(AddPicture, 0, 2, AddControl, GUI_CONTROL_PIC),
-	Object_Method_(AddGroupBox, 0, 2, AddControl, GUI_CONTROL_GROUPBOX),
+	Object_Method_(AddActiveX, 0, 2, AddControl, GUI_CONTROL_ACTIVEX),
 	Object_Method_(AddButton, 0, 2, AddControl, GUI_CONTROL_BUTTON),
 	Object_Method_(AddCheckBox, 0, 2, AddControl, GUI_CONTROL_CHECKBOX),
-	Object_Method_(AddRadio, 0, 2, AddControl, GUI_CONTROL_RADIO),
+	Object_Method_(AddComboBox, 0, 2, AddControl, GUI_CONTROL_COMBOBOX),
+	Object_Method_(AddCustom, 0, 2, AddControl, GUI_CONTROL_CUSTOM),
+	Object_Method_(AddDateTime, 0, 2, AddControl, GUI_CONTROL_DATETIME),
 	Object_Method_(AddDDL, 0, 2, AddControl, GUI_CONTROL_DROPDOWNLIST),
 	Object_Method_(AddDropDownList, 0, 2, AddControl, GUI_CONTROL_DROPDOWNLIST),
-	Object_Method_(AddComboBox, 0, 2, AddControl, GUI_CONTROL_COMBOBOX),
+	Object_Method_(AddEdit, 0, 2, AddControl, GUI_CONTROL_EDIT),
+	Object_Method_(AddGroupBox, 0, 2, AddControl, GUI_CONTROL_GROUPBOX),
+	Object_Method_(AddHotkey, 0, 2, AddControl, GUI_CONTROL_HOTKEY),
+	Object_Method_(AddLink, 0, 2, AddControl, GUI_CONTROL_LINK),
 	Object_Method_(AddListBox, 0, 2, AddControl, GUI_CONTROL_LISTBOX),
 	Object_Method_(AddListView, 0, 2, AddControl, GUI_CONTROL_LISTVIEW),
-	Object_Method_(AddTreeView, 0, 2, AddControl, GUI_CONTROL_TREEVIEW),
-	Object_Method_(AddEdit, 0, 2, AddControl, GUI_CONTROL_EDIT),
-	Object_Method_(AddDateTime, 0, 2, AddControl, GUI_CONTROL_DATETIME),
 	Object_Method_(AddMonthCal, 0, 2, AddControl, GUI_CONTROL_MONTHCAL),
-	Object_Method_(AddHotkey, 0, 2, AddControl, GUI_CONTROL_HOTKEY),
-	Object_Method_(AddUpDown, 0, 2, AddControl, GUI_CONTROL_UPDOWN),
-	Object_Method_(AddSlider, 0, 2, AddControl, GUI_CONTROL_SLIDER),
+	Object_Method_(AddPic, 0, 2, AddControl, GUI_CONTROL_PIC),
+	Object_Method_(AddPicture, 0, 2, AddControl, GUI_CONTROL_PIC),
 	Object_Method_(AddProgress, 0, 2, AddControl, GUI_CONTROL_PROGRESS),
+	Object_Method_(AddRadio, 0, 2, AddControl, GUI_CONTROL_RADIO),
+	Object_Method_(AddSlider, 0, 2, AddControl, GUI_CONTROL_SLIDER),
+	Object_Method_(AddStatusBar, 0, 2, AddControl, GUI_CONTROL_STATUSBAR),
 	Object_Method_(AddTab, 0, 2, AddControl, GUI_CONTROL_TAB),
 	Object_Method_(AddTab2, 0, 2, AddControl, GUI_CONTROL_TAB2),
 	Object_Method_(AddTab3, 0, 2, AddControl, GUI_CONTROL_TAB3),
-	Object_Method_(AddActiveX, 0, 2, AddControl, GUI_CONTROL_ACTIVEX),
-	Object_Method_(AddLink, 0, 2, AddControl, GUI_CONTROL_LINK),
-	Object_Method_(AddCustom, 0, 2, AddControl, GUI_CONTROL_CUSTOM),
-	Object_Method_(AddStatusBar, 0, 2, AddControl, GUI_CONTROL_STATUSBAR),
+	Object_Method_(AddText, 0, 2, AddControl, GUI_CONTROL_TEXT),
+	Object_Method_(AddTreeView, 0, 2, AddControl, GUI_CONTROL_TREEVIEW),
+	Object_Method_(AddUpDown, 0, 2, AddControl, GUI_CONTROL_UPDOWN),
 
-	Object_Method (Show, 0, 1),
-	Object_Method (Hide, 0, 0),
-	Object_Method_(Cancel, 0, 0, Invoke, M_Hide),
 	Object_Method (Destroy, 0, 0),
-	Object_Method (SetFont, 0, 2),
-	Object_Method (Options, 1, 1),
-	Object_Method_(Opt, 1, 1, Invoke, M_Options),
-	Object_Method (Minimize, 0, 0),
-	Object_Method (Maximize, 0, 0),
-	Object_Method (Restore, 0, 0),
 	Object_Method (Flash, 0, 1),
-	Object_Method (Submit, 0, 1),
-	Object_Method (__Enum, 0, 1),
+	Object_Method (Hide, 0, 0),
+	Object_Method (Maximize, 0, 0),
+	Object_Method (Minimize, 0, 0),
 	Object_Method (OnEvent, 2, 3),
+	Object_Method (Opt, 1, 1),
+	Object_Method (Restore, 0, 0),
+	Object_Method (SetFont, 0, 2),
+	Object_Method (Show, 0, 1),
+	Object_Method (Submit, 0, 1),
 
+	Object_Property_get    (__Item, 1, 1),
 	Object_Property_get    (Hwnd),
 	Object_Property_get_set(Title),
 	Object_Property_get_set(Name),
-	Object_Property_get    (Control, 1, 1),
 	Object_Property_get    (FocusedCtrl),
 	Object_Property_get_set(BackColor),
 	Object_Property_get_set(MarginX),
@@ -262,12 +228,12 @@ ObjectMember GuiType::sMembers[] =
 	Object_Property_get    (ClientPos),
 };
 
-ResultType STDMETHODCALLTYPE GuiType::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType GuiType::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	if (!mHwnd)
 		_o_throw(_T("The Gui is destroyed."));
 
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+	return Object::Invoke(IObject_Invoke_PARAMS);
 }
 
 ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -329,7 +295,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 			LPTSTR font_name = ParamIndexToOptionalString(1, nbuf2); //
 			return SetCurrentFont(options, font_name);
 		}
-		case M_Options:
+		case M_Opt:
 		{
 			LPTSTR options = ParamIndexToOptionalString(0, nbuf1);
 			bool set_last_found_window = false;
@@ -347,9 +313,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 		}
 		case M___Enum:
 		{
-			if (IObject *obj = new GuiTypeEnum(*this))
-				_o_return(obj);
-			_o_throw(ERR_OUTOFMEM); // Short msg since so rare.
+			_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&GuiType::GetEnumItem)));
 		}
 		case M_OnEvent:
 		{
@@ -393,7 +357,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 			}
 			_o_return_empty;
 		}
-		case P_Control:
+		case P___Item:
 		{
 			ExprTokenType& tok = *aParam[0];
 			GuiControlType* ctrl = NULL;
@@ -504,7 +468,10 @@ BIF_DECL(BIF_GuiCreate)
 	if (  !(GuiType::sFont || (GuiType::sFont = (FontType *)malloc(sizeof(FontType) * MAX_GUI_FONTS)))  )
 		_f_throw(ERR_OUTOFMEM);
 
+	static Object *sPrototype = Object::CreatePrototype(_T("Gui"), Object::sPrototype, GuiType::sMembers, _countof(GuiType::sMembers));
+
 	GuiType* gui = new GuiType();
+	gui->SetBase(sPrototype);
 	if (!gui)
 		_f_throw(ERR_OUTOFMEM); // Short msg since so rare.
 
@@ -595,27 +562,26 @@ BIF_DECL(BIF_GuiCtrlFromHwnd)
 
 ObjectMember GuiControlType::sMembers[] =
 {
-	Object_Method_(Opt, 1, 1, Invoke, M_Options),
-	Object_Method(Options, 1, 1),
+	Object_Method(Choose, 1, 1),
 	Object_Method(Focus, 0, 0),
 	Object_Method(Move, 1, 2),
-	Object_Method(Choose, 1, 1),
+	Object_Method(OnCommand, 2, 3),
 	Object_Method(OnEvent, 2, 3),
 	Object_Method(OnNotify, 2, 3),
-	Object_Method(OnCommand, 2, 3),
+	Object_Method(Opt, 1, 1),
 	Object_Method(SetFont, 0, 2),
 
-	Object_Property_get    (Hwnd),
-	Object_Property_get    (Gui),
-	Object_Property_get_set(Name),
-	Object_Property_get    (Type),
 	Object_Property_get    (ClassNN),
-	Object_Property_get_set(Text),
-	Object_Property_get_set(Value),
-	Object_Property_get    (Pos),
 	Object_Property_get_set(Enabled),
-	Object_Property_get_set(Visible),
-	Object_Property_get    (Focused)
+	Object_Property_get    (Focused),
+	Object_Property_get    (Gui),
+	Object_Property_get    (Hwnd),
+	Object_Property_get_set(Name),
+	Object_Property_get    (Pos),
+	Object_Property_get_set(Text),
+	Object_Property_get    (Type),
+	Object_Property_get_set(Value),
+	Object_Property_get_set(Visible)
 };
 
 ObjectMember GuiControlType::sMembersList[] =
@@ -678,38 +644,44 @@ ObjectMember GuiControlType::sMembersSB[] =
 #undef FUN1
 #undef FUNn
 
-ResultType STDMETHODCALLTYPE GuiControlType::Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+Object *GuiControlType::GetPrototype(GuiControls aType)
+{
+	static Object *sPrototype = CreatePrototype(_T("Gui.Control"), Object::sPrototype, sMembers, _countof(sMembers));
+	static Object *sPrototypeList = CreatePrototype(_T("Gui.List"), sPrototype, sMembersList, _countof(sMembersList));
+	static Object *sPrototypes[_countof(sTypeNames)] = {};
+	ASSERT(aType <= _countof(sPrototypes));
+	if (aType == GUI_CONTROL_TAB2 || aType == GUI_CONTROL_TAB3)
+		aType = GUI_CONTROL_TAB; // Just make them all Gui.Tab.
+	if (!sPrototypes[aType])
+	{
+		// Determine base prototype and control-type-specific members.
+		Object *base = sPrototype;
+		ObjectMember *more_items = nullptr;
+		int how_many = 0;
+		switch (aType)
+		{
+		case GUI_CONTROL_TAB: more_items = sMembersTab; how_many = _countof(sMembersTab); // Fall through:
+		case GUI_CONTROL_DROPDOWNLIST:
+		case GUI_CONTROL_COMBOBOX:
+		case GUI_CONTROL_LISTBOX: base = sPrototypeList; break;
+		case GUI_CONTROL_DATETIME: more_items = sMembersDate; how_many = _countof(sMembersDate); break;
+		case GUI_CONTROL_LISTVIEW: more_items = sMembersLV; how_many = _countof(sMembersLV); break;
+		case GUI_CONTROL_TREEVIEW: more_items = sMembersTV; how_many = _countof(sMembersTV); break;
+		case GUI_CONTROL_STATUSBAR: more_items = sMembersSB; how_many = _countof(sMembersSB); break;
+		}
+		TCHAR buf[32];
+		_sntprintf(buf, 32, _T("Gui.%s"), sTypeNames[aType]);
+		sPrototypes[aType] = CreatePrototype(buf, base, more_items, how_many);
+	}
+	return sPrototypes[aType];
+}
+
+ResultType GuiControlType::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	if (!hwnd)
 		_o_throw(_T("The control is destroyed."));
 
-	ResultType result;
-	ObjectMember *more_items = NULL;
-	int how_many = 0;
-
-	// Check for control-type-specific members:
-	switch (type)
-	{
-	case GUI_CONTROL_TAB:
-		result = ObjectMember::Invoke(sMembersTab, _countof(sMembersTab), this, aResultToken, aFlags, aParam, aParamCount);
-		if (result != INVOKE_NOT_HANDLED)
-			return result;
-		// Also check sMembersList:
-	case GUI_CONTROL_DROPDOWNLIST:
-	case GUI_CONTROL_COMBOBOX:
-	case GUI_CONTROL_LISTBOX: more_items = sMembersList; how_many = _countof(sMembersList); break;
-	case GUI_CONTROL_DATETIME: more_items = sMembersDate; how_many = _countof(sMembersDate); break;
-	case GUI_CONTROL_LISTVIEW: more_items = sMembersLV; how_many = _countof(sMembersLV); break;
-	case GUI_CONTROL_TREEVIEW: more_items = sMembersTV; how_many = _countof(sMembersTV); break;
-	case GUI_CONTROL_STATUSBAR: more_items = sMembersSB; how_many = _countof(sMembersSB); break;
-	}
-	if (more_items)
-	{
-		result = ObjectMember::Invoke(more_items, how_many, this, aResultToken, aFlags, aParam, aParamCount);
-		if (result != INVOKE_NOT_HANDLED)
-			return result;
-	}
-	return ObjectMember::Invoke(sMembers, _countof(sMembers), this, aResultToken, aFlags, aParam, aParamCount);
+	return Object::Invoke(IObject_Invoke_PARAMS);
 }
 
 
@@ -718,7 +690,7 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 	auto member = MemberID(aID);
 	switch (member)
 	{
-		case M_Options:
+		case M_Opt:
 		{
 			GuiControlOptionsType go; // Its contents are not currently used here, but they might be in the future.
 			gui->ControlInitOptions(go, *this);
@@ -2117,7 +2089,7 @@ bool GuiType::Delete() // IObject::Delete()
 	// only if mRefCount is still 1 (it's never decremented to 0).
 	if (mRefCount > 1)
 		return false;
-	return ObjectBase::Delete();
+	return Object::Delete();
 }
 
 
@@ -2269,7 +2241,7 @@ void GuiControlType::Dispose()
 	}
 	else if (type == GUI_CONTROL_LISTVIEW) // It was ensured at an earlier stage that union_lv_attrib != NULL.
 		free(union_lv_attrib);
-	else if (type == GUI_CONTROL_ACTIVEX)
+	else if (type == GUI_CONTROL_ACTIVEX && union_object)
 		union_object->Release();
 	//else do nothing, since this type has nothing more than a color stored in the union.
 	if (background_brush)
@@ -2652,10 +2624,11 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	////////////////////////////////////////////////////////////////////////////////////////
 	// Set defaults for the various options, to be overridden individually by any specified.
 	////////////////////////////////////////////////////////////////////////////////////////
-	GuiControlType *pcontrol = new GuiControlType();
+	GuiControlType *pcontrol = new GuiControlType(this);
 	mControl[mControlCount] = pcontrol;
 	GuiControlType &control = *pcontrol;
-	control.Initialize(this);
+
+	control.SetBase(GuiControlType::GetPrototype(aControlType));
 	
 	GuiControlOptionsType opt;
 	ControlInitOptions(opt, control);
@@ -2703,7 +2676,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			return g_script.ScriptError(_T("Too many status bars.")); // Short msg since so rare.
 		}
 		control.tab_control_index = MAX_TAB_CONTROLS; // Indicate that bar isn't owned by any tab control.
-		// No need to do the following because ZeroMem did it:
+		// No need to do the following because constructor did it:
 		//control.tab_index = 0; // Ignored but set for maintainability/consistency.
 	}
 	else
@@ -10921,6 +10894,3 @@ bool GuiType::ConvertAccelerator(LPTSTR aString, ACCEL &aAccel)
 
 	return aAccel.key; // i.e. false if not a valid key name.
 }
-
-Implement_DebugWriteProperty_via_sMembers(GuiType)
-Implement_DebugWriteProperty_via_sMembers(GuiControlType)

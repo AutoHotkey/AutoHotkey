@@ -72,7 +72,7 @@ struct ObjectMember
 	ObjectMethod method;
 	UCHAR id, invokeType, minParams, maxParams;
 	static ResultType Invoke(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
-		, ResultToken& aResultToken, int aFlags, ExprTokenType* aParam[], int aParamCount);
+		, ResultToken& aResultToken, int aFlags, LPCTSTR aName, ExprTokenType* aParam[], int aParamCount);
 	static void DebugWriteProperty(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
 		, IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth);
 };
@@ -94,21 +94,6 @@ struct ObjectMember
 #else
 #define Implement_DebugWriteProperty_via_sMembers(T)
 #endif
-
-
-//
-// EnumBase - Base class for enumerator objects following standard syntax.
-//
-
-class DECLSPEC_NOVTABLE EnumBase : public ObjectBase
-{
-public:
-	static ObjectMember sMembers[];
-	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	virtual ResultType Next(Var *aOutputVar1, Var *aOutputVar2) = 0;
-	IObject_Type_Impl("Enumerator")
-};
 
 
 //
@@ -301,17 +286,8 @@ protected:
 		Enum_Methods
 	};
 
-	class Enumerator : public EnumBase
-	{
-		Object *mObject;
-		index_t mOffset = -1;
-		EnumeratorType mType;
-	public:
-		Enumerator(Object *aObject, EnumeratorType aType)
-			: mObject(aObject), mType(aType) { mObject->AddRef(); }
-		~Enumerator() { mObject->Release(); }
-		ResultType Next(Var *aKey, Var *aVal);
-	};
+	ResultType GetEnumProp(UINT aIndex, Var *aVal, Var *aReserved);
+	ResultType GetEnumMethod(UINT aIndex, Var *aVal, Var *aReserved);
 
 #ifndef _WIN64
 	// This is defined in ObjectBase on x64 builds to save space (due to alignment requirements).
@@ -326,6 +302,7 @@ protected:
 	Object *CloneTo(Object &aTo);
 	Object() { mFlags = 0; }
 	~Object();
+	bool Delete() override;
 
 private:
 	Object *mBase = nullptr;
@@ -340,6 +317,7 @@ private:
 	}
 	
 	FieldType *Insert(name_t name, index_t at);
+	MethodType *InsertMethod(name_t name, index_t pos);
 
 	bool SetInternalCapacity(index_t new_capacity);
 	bool Expand()
@@ -347,9 +325,9 @@ private:
 	{
 		return SetInternalCapacity(mFields.Capacity() ? mFields.Capacity() * 2 : 4);
 	}
-	
+
+protected:
 	MethodType *GetMethod(name_t name); // Recursive.
-	MethodType *InsertMethod(name_t name, index_t pos);
 	MethodType *FindMethod(name_t name, index_t &insert_pos); // Own methods only.
 	MethodType *FindMethod(name_t name) // Own methods only.
 	{
@@ -358,9 +336,8 @@ private:
 	}
 
 	ResultType CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallMethod(IObject *aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMeta(IObject *aFunc, LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
-
-	bool Delete() override;
 
 public:
 
@@ -434,6 +411,8 @@ public:
 
 	Property *DefineProperty(name_t aName);
 	bool DefineMethod(name_t aName, IObject *aFunc);
+	
+	bool HasOwnMethods() { return mMethods.Length(); }
 
 	bool CanSetBase(Object *aNewBase);
 	ResultType SetBase(Object *aNewBase, ResultToken &aResultToken);
@@ -462,7 +441,7 @@ public:
 	void EndClassDefinition();
 	Object *GetUnresolvedClass(LPTSTR &aName);
 	
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 
 	static ObjectMember sMembers[];
 	static ObjectMember sClassMembers[];
@@ -470,6 +449,7 @@ public:
 	static Object *CreateClass(Object *aPrototype);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase = nullptr);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount);
+	static Object *DefineMembers(Object *aObject, LPTSTR aClassName, ObjectMember aMember[], int aMemberCount);
 	static Object *CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ObjectMethod aCtor);
 
 	ResultType CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
@@ -524,7 +504,7 @@ public:
 	ULONG STDMETHODCALLTYPE Release() { return 1; }
 	bool Delete() { return false; }
 
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 };
 
 extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object values.
@@ -544,16 +524,6 @@ private:
 	ResultType EnsureCapacity(index_t aRequired);
 
 	index_t ParamToZeroIndex(ExprTokenType &aParam);
-
-	class Enumerator : public EnumBase
-	{
-		Array *mArray;
-		index_t mIndex = 0;
-	public:
-		Enumerator(Array *aArr) : mArray(aArr) { mArray->AddRef(); }
-		~Enumerator() { mArray->Release(); }
-		ResultType Next(Var *, Var *);
-	};
 
 	Array() {}
 	
@@ -580,6 +550,7 @@ public:
 	Array *Clone();
 
 	bool ItemToToken(index_t aIndex, ExprTokenType &aToken);
+	ResultType GetEnumItem(UINT aIndex, Var *, Var *);
 
 	~Array();
 	static Array *Create(ExprTokenType *aValue[] = nullptr, index_t aCount = 0);
@@ -614,16 +585,6 @@ public:
 
 class Map : public Object
 {
-	class Enumerator : public EnumBase
-	{
-		Map *mObject;
-		index_t mOffset;
-	public:
-		Enumerator(Map *aObject) : mObject(aObject), mOffset(-1) { mObject->AddRef(); }
-		~Enumerator() { mObject->Release(); }
-		ResultType Next(Var *aKey, Var *aVal);
-	};
-
 	union Key // Which of its members is used depends on the field's position in the mItem array.
 	{
 		LPTSTR s;
@@ -677,6 +638,8 @@ class Map : public Object
 	}
 
 	Map *CloneTo(Map &aTo);
+
+	ResultType GetEnumItem(UINT aIndex, Var *, Var *);
 
 public:
 	static Map *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
@@ -745,51 +708,9 @@ public:
 
 
 //
-// BoundFunc
-//
-
-class BoundFunc : public ObjectBase
-{
-	IObject *mFunc; // Future use: bind a BoundFunc or other object.
-	Array *mParams;
-	int mFlags;
-	BoundFunc(IObject *aFunc, Array *aParams, int aFlags)
-		: mFunc(aFunc), mParams(aParams), mFlags(aFlags)
-	{}
-
-public:
-	static BoundFunc *Bind(IObject *aFunc, ExprTokenType **aParam, int aParamCount, int aFlags);
-	~BoundFunc();
-
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	IObject_Type_Impl("BoundFunc")
-};
-
-
-//
-// Closure
-//
-
-struct FreeVars;
-class Closure : public ObjectBase
-{
-	Func *mFunc;
-	FreeVars *mVars;
-
-public:
-	Closure(Func *aFunc, FreeVars *aVars)
-		: mFunc(aFunc), mVars(aVars) { }
-	~Closure();
-
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	IObject_Type_Impl("Closure")
-};
-
-
-//
 // RegExMatchObject:  Returned by RegExMatch via UnquotedOutputVar.
 //
-class RegExMatchObject : public ObjectBase
+class RegExMatchObject : public Object
 {
 	LPTSTR mHaystack;
 	int mHaystackStart;
@@ -798,16 +719,7 @@ class RegExMatchObject : public ObjectBase
 	int mPatternCount;
 	LPTSTR mMark;
 
-	class Enumerator : public EnumBase
-	{
-		RegExMatchObject *mObject;
-		int mPattern = -1;
-	public:
-		Enumerator(RegExMatchObject *aObject)
-			: mObject(aObject) { mObject->AddRef(); }
-		~Enumerator() { mObject->Release(); }
-		ResultType Next(Var *aKey, Var *aVal);
-	};
+	ResultType GetEnumItem(UINT aIndex, Var *, Var *);
 
 	RegExMatchObject() : mHaystack(NULL), mOffset(NULL), mPatternName(NULL), mPatternCount(0), mMark(NULL) {}
 	
@@ -845,11 +757,8 @@ public:
 		M___Enum
 	};
 	static ObjectMember sMembers[];
+	static Object *sPrototype;
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	IObject_Type_Impl("RegExMatch")
-	IObject_DebugWriteProperty_Def;
 };
 
 
@@ -857,7 +766,7 @@ public:
 // Buffer
 //
 
-class BufferObject : public ObjectBase
+class BufferObject : public Object
 {
 protected:
 	void *mData;
@@ -879,11 +788,8 @@ public:
 		P_Data
 	};
 	static ObjectMember sMembers[];
+	static Object *sPrototype;
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-
-	ResultType STDMETHODCALLTYPE Invoke(ResultToken &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	IObject_DebugWriteProperty_Def;
-	IObject_Type_Impl("Buffer")
 };
 
 

@@ -328,7 +328,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					params[0]->SetValue(_T("Call"), 4);
 					params--; // Include the object, which is already in the right place.
 					actual_param_count += 2;
-					extern Func *OpFunc_CallMethod;
+					extern BuiltInFunc *OpFunc_CallMethod;
 					func = OpFunc_CallMethod;
 				}
 				// Above has set func to a non-NULL value, but still need to verify there are enough params.
@@ -519,7 +519,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			}
 
 			if (make_result_persistent) // At this stage, this means that the above wasn't able to determine its correct value yet.
-			if (func->mIsBuiltIn)
+			if (func->IsBuiltIn())
 			{
 				// Since above didn't goto, "result" is not SYM_INTEGER/FLOAT/VAR, and not "".  Therefore, it's
 				// either a pointer to static memory (such as a constant string), or more likely the small buf
@@ -1500,16 +1500,17 @@ normal_end_skip_output_var:
 
 
 
-bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic, FreeVars *aUpVars)
+bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic)
 {
 	IObject *param_obj = NULL; // Vararg object passed by caller.
 	Array *param_array = NULL; // Array of parameters, either the same as param_obj or the result of enumeration.
 	if (aIsVariadic) // i.e. this is a variadic function call.
 	{
 		ExprTokenType *rvalue = NULL;
-		if (mBIF == &Op_ObjInvoke && (mFID & IT_BITMASK) == IT_SET && aParamCount > 1) // x[y*]:=z
+		if (IsBuiltIn() && ((BuiltInFunc *)this)->mBIF == &Op_ObjInvoke
+			&& (((BuiltInFunc *)this)->mFID & IT_BITMASK) == IT_SET) // x[y*]:=z
 			rvalue = aParam[--aParamCount];
-		
+
 		--aParamCount; // Exclude param_obj from aParamCount, so it's the count of normal params.
 		param_obj = TokenToObject(*aParam[aParamCount]);
 		if (!param_obj)
@@ -1523,7 +1524,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		if (param_array = dynamic_cast<Array *>(param_obj))
 			param_array->AddRef();
 		else
-			if (  !(param_array = Array::FromEnumerable(param_obj))  )
+			if (!(param_array = Array::FromEnumerable(param_obj)))
 			{
 				aResultToken.SetExitResult(FAIL);
 				return false;
@@ -1557,16 +1558,35 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			aParam[aParamCount++] = rvalue; // In place of the variadic param.
 	}
 
+	bool result;
+	if (auto hook = GetOwnMethodFunc(_T("Call")))
+	{
+		CallMethod(hook, aResultToken, ExprTokenType(this), aParam, aParamCount);
+		result = !aResultToken.Exited();
+	}
+	else
+		result = Call(aResultToken, aParam, aParamCount, param_obj);
+
+	if (param_array)
+		param_array->Release();
+	return result;
+}
+
+bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
+{
 	if (aParamCount > mParamCount && !mIsVariadic) // v2 policy.
 	{
-		if (param_array)
-			param_array->Release();
 		aResultToken.Error(ERR_TOO_MANY_PARAMS, mName);
 		return false;
 	}
+	return true;
+}
 
-	if (mIsBuiltIn)
-	{
+bool NativeFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
+{
+	if (!Func::Call(aResultToken, aParam, aParamCount, aParamObj))
+		return false;
+
 		// mMinParams is validated at load-time where possible; so not for variadic or dynamic calls,
 		// nor for calls via objects.  This check could be avoided for normal calls by instead checking
 		// in each of the above cases, but any performance gain would probably be marginal and not worth
@@ -1575,8 +1595,6 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		// parameters are instead detected by the absence of a default value.
 		if (aParamCount < mMinParams)
 		{
-			if (param_array)
-				param_array->Release();
 			aResultToken.Error(ERR_TOO_FEW_PARAMS, mName);
 			return false; // Abort expression.
 		}
@@ -1592,7 +1610,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 					&& aParam[mOutputVars[i]-1]->symbol != SYM_VAR
 					&& aParam[mOutputVars[i]-1]->symbol != SYM_MISSING)
 				{
-					sntprintf(aResultToken.buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
+					sntprintf(aResultToken.buf, _f_retval_buf_size, _T("Parameter #%i of %s must be a variable.")
 						, mOutputVars[i], mName);
 					aResultToken.Error(aResultToken.buf);
 					return false; // Abort expression.
@@ -1600,7 +1618,15 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			}
 		}
 
-		aResultToken.func = this; // Inform function of which built-in function called it (allows code sharing/reduction).
+	return true;
+}
+
+bool BuiltInFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
+{
+	if (!NativeFunc::Call(aResultToken, aParam, aParamCount, aParamObj))
+		return false;
+
+	aResultToken.func = this; // Inform function of which built-in function called it (allows code sharing/reduction).
 
 		// Push an entry onto the debugger's stack.  This has two purposes:
 		//  1) Allow CreateRuntimeException() to know which function is throwing an exception.
@@ -1608,19 +1634,8 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		//     e.g. DllCall(RegisterCallback("F")) will show DllCall while F is running.
 		DEBUGGER_STACK_PUSH(this)
 
-		if (mClass)
-		{
-			auto obj = dynamic_cast<Object *>(TokenToObject(*aParam[0]));
-			if (!obj || !(obj->IsClassPrototype() ? mClass == Object::sPrototype : obj->IsDerivedFrom(mClass)))
-				aResultToken.Error(ERR_TYPE_MISMATCH);
-			else
-				(obj->*mBIM)(aResultToken, mMID, mMIT, aParam + 1, aParamCount - 1);
-		}
-		else
-		{
-			aResultToken.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
-			mBIF(aResultToken, aParam, aParamCount);
-		}
+		aResultToken.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
+		mBIF(aResultToken, aParam, aParamCount);
 
 		DEBUGGER_STACK_POP()
 		
@@ -1628,9 +1643,38 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 		// currently throw exceptions via aResultToken.Error():
 		//if (g->ThrownToken)
 		//	aResultToken.SetExitResult(FAIL); // Abort thread.
-	}
-	else // It's not a built-in function, or it's a built-in that was overridden with a custom function.
-	{
+
+	return !aResultToken.Exited();
+}
+
+bool BuiltInMethod::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
+{
+	if (!NativeFunc::Call(aResultToken, aParam, aParamCount, aParamObj))
+		return false;
+
+	DEBUGGER_STACK_PUSH(this) // See comments in BuiltInFunc::Call.
+
+	auto obj = dynamic_cast<Object *>(TokenToObject(*aParam[0]));
+	if (!obj || !(obj->IsClassPrototype() ? mClass == Object::sPrototype : obj->IsDerivedFrom(mClass)))
+		aResultToken.Error(ERR_TYPE_MISMATCH);
+	else
+		(obj->*mBIM)(aResultToken, mMID, mMIT, aParam + 1, aParamCount - 1);
+
+	DEBUGGER_STACK_POP()
+
+	return !aResultToken.Exited();
+}
+
+bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
+{
+	return Call(aResultToken, aParam, aParamCount, aParamObj, nullptr);
+}
+
+bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *param_obj, FreeVars *aUpVars)
+{
+	if (!Func::Call(aResultToken, aParam, aParamCount, param_obj))
+		return false;
+
 		ResultType result;
 		UDFCallInfo recurse(this);
 
@@ -1689,8 +1733,6 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			// underlying recursed/interrupted instance's memory, which it will need intact when it's resumed.
 			if (!Var::BackupFunctionVars(*this, recurse.backup, recurse.backup_count)) // Out of memory.
 			{
-				if (param_array)
-					param_array->Release();
 				aResultToken.Error(ERR_OUTOFMEM, mName);
 				return false;
 			}
@@ -1758,9 +1800,8 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 				if (param_obj)
 				{
 					FuncResult rt_item;
-					ExprTokenType t_this(param_obj), t_name(this_formal_param.var->mName);
-					ExprTokenType *params = { &t_name };
-					auto r = param_obj->Invoke(rt_item, t_this, IT_GET, &params, 1);
+					ExprTokenType t_this(param_obj);
+					auto r = param_obj->Invoke(rt_item, IT_GET, this_formal_param.var->mName, t_this, nullptr, 0);
 					if (r == FAIL || r == EARLY_EXIT)
 					{
 						aResultToken.SetExitResult(r);
@@ -1838,7 +1879,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 		DEBUGGER_STACK_PUSH(&recurse)
 
-		result = Call(&aResultToken); // Call the UDF.
+		result = Execute(&aResultToken); // Execute the body of the function.
 
 		DEBUGGER_STACK_POP()
 		
@@ -1876,13 +1917,10 @@ free_and_return:
 		if (sFreeVars)
 			sFreeVars->Release();
 		sFreeVars = caller_free_vars;
-	}
-	if (param_array)
-		param_array->Release();
 	return !aResultToken.Exited(); // i.e. aResultToken.SetExitResult() or aResultToken.Error() was not called.
 }
 
-FreeVars *Func::sFreeVars = NULL;
+FreeVars *UserFunc::sFreeVars = nullptr;
 
 
 

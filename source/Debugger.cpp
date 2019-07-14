@@ -1131,9 +1131,9 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 		}
 		if (enum_method && i < j)
 		{
-			auto func = dynamic_cast<Func *>(enum_method->func);
-			if (func->mIsBuiltIn)
+			if (dynamic_cast<BuiltInMethod *>(enum_method->func))
 			{
+				// Built-in enumerators are always safe to call automatically.
 				aDebugger->WriteEnumItems(this, i);
 			}
 			else
@@ -1609,15 +1609,22 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		// Attempt to invoke property.
 		FuncResult result_token;
 		ExprTokenType *set_this = !c ? aSetValue : NULL;
-		ExprTokenType this_token(this_override ? this_override : iobj)
-			, key_token, *param[] = { &key_token, set_this };
-		key_token.symbol = key_type;
-		if (key_type == SYM_STRING)
-			key_token.marker = name, key_token.marker_length = -1;
-		else // SYM_INTEGER or SYM_OBJECT
-			key_token.value_int64 = istrtoi64(name, nullptr);
-		int flags = (set_this ? IT_SET : IT_GET) | (brackets ? IF_DEFAULT : 0);
-		auto result = iobj->Invoke(result_token, this_token, flags, param, set_this ? 2 : 1);
+		ExprTokenType t_this(this_override ? this_override : iobj), t_key, *param[2];
+		int param_count = 0;
+		if (brackets)
+		{
+			t_key.symbol = key_type;
+			if (key_type == SYM_STRING)
+				t_key.marker = name, t_key.marker_length = -1;
+			else // SYM_INTEGER or SYM_OBJECT
+				t_key.value_int64 = istrtoi64(name, nullptr);
+			param[param_count++] = &t_key;
+			name = nullptr;
+		}
+		if (set_this)
+			param[param_count++] = set_this;
+		int flags = (set_this ? IT_SET : IT_GET);
+		auto result = iobj->Invoke(result_token, flags, name, t_this, param, param_count);
 		if (g->ThrownToken)
 			g_script.FreeExceptionToken(g->ThrownToken);
 
@@ -2748,9 +2755,8 @@ void DbgStack::Push(Label *aSub)
 	s.type = SE_Sub;
 }
 	
-void DbgStack::Push(Func *aFunc)
+void DbgStack::Push(NativeFunc *aFunc)
 {
-	ASSERT(aFunc->mIsBuiltIn);
 	Entry &s = *Push();
 	s.line = NULL;
 	s.func = aFunc;
@@ -2766,7 +2772,7 @@ void DbgStack::Push(UDFCallInfo *aUDF)
 }
 
 
-TCHAR *DbgStack::Entry::Name()
+LPCTSTR DbgStack::Entry::Name()
 {
 	switch (type)
 	{
@@ -2793,7 +2799,7 @@ void DbgStack::GetLocalVars(int aDepth, Var **&aVar, Var **&aVarEnd, VarBkp *&aB
 			break;
 		--se;
 	}
-	Func &func = *se->udf->func;
+	auto &func = *se->udf->func;
 	if (func.mInstances > 1 && aDepth > 0)
 	{
 		while (++se <= mTop)
@@ -2852,10 +2858,9 @@ void Debugger::PropertyWriter::WriteDynamicProperty(LPTSTR aName)
 {
 	FuncResult result_token;
 	ExprTokenType t_this(mProp.this_object ? mProp.this_object : mObject);
-	ExprTokenType t_name(aName), *params[] = { &t_name };
 	auto excpt_mode = g->ExcptMode;
 	g->ExcptMode |= EXCPTMODE_CATCH;
-	auto result = mObject->Invoke(result_token, t_this, IT_GET, params, 1);
+	auto result = mObject->Invoke(result_token, IT_GET, aName, t_this, nullptr, 0);
 	g->ExcptMode = excpt_mode;
 	if (!result)
 	{

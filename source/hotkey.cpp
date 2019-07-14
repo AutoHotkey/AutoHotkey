@@ -176,7 +176,7 @@ void Script::PreparseHotkeyIfExpr(Line *aLine)
 	if (param_count > 2)
 		return; // Too many parameters.
 	Func &fn = *postfix[param_count].deref->func;
-	if (!fn.mIsBuiltIn || fn.mBIF != &BIF_WinExistActive)
+	if (!fn.IsBuiltIn() || ((BuiltInFunc&)fn).mBIF != &BIF_WinExistActive)
 		return; // Not WinExist() or WinActive().
 	bool invert = postfix[param_count+1].symbol == SYM_LOWNOT || postfix[param_count+1].symbol == SYM_HIGHNOT;
 	if (postfix[param_count+1+invert].symbol != SYM_INVALID)
