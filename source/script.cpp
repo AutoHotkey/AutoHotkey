@@ -13989,7 +13989,7 @@ IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR
 	aParams[6].SetValue(_T("Message"), 7);
 	aParams[7].SetValue((LPTSTR)aErrorText);
 	aParams[8].SetValue(NAMESPACE_DECLARATION_KEYWORD_NAME, NAMESPACE_DECLARATION_KEYWORD_NAME_LENGTH);
-	aParams[9].SetValue(g_CurrentNameSpace ? g_CurrentNameSpace->GetName() : _T(""));
+	aParams[9].SetValue(mNameSpace->GetName());
 	if (aExtraInfo && *aExtraInfo)
 	{
 		aParamCount += 2;
