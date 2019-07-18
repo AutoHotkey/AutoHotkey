@@ -2462,7 +2462,7 @@ examine_line:
 			else if (*buf != '{' && mNameSpaceDefinitionCount && !mOpenBlock && !t->CurrentFunc)
 			{
 				// namespace definition has ended, restore the outer namespace and continue.
-				if (!AddLine(ACT_RETURN)) // each namespace should end with a return, eg, for autoexec to work.
+				if (!AddLineNoParent(ACT_RETURN)) // each namespace should end with a return, eg, for autoexec to work.
 					return FAIL;
 				--mNameSpaceDefinitionCount;
 				// Resolve any unresolved base classes.
@@ -3672,7 +3672,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 													
 		ResultType result = LoadIncludedFile(namespace_file_path, true, ignore_load_failure, /* aImporting = */ importing) ? CONDITION_TRUE : FAIL;
 		free(namespace_file_path);
-		if (!AddLine(ACT_RETURN)) // each namespace should end with a return, eg, for autoexec to work.
+		if (!AddLineNoParent(ACT_RETURN)) // each namespace should end with a return, eg, for autoexec to work.
 			return FAIL;
 		// Restore the working directory.
 		SetCurrentDirectory(buf);
@@ -5463,6 +5463,16 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	return OK;
 }
 
+ResultType Script::AddLineNoParent(ActionTypeType aActionType, LPTSTR aArg[], int aArgc, LPTSTR aArgMap[], bool aAllArgsAreExpressions)
+{
+	// Ensures the new line isn't preceeded by a "parent line".
+	// Can be used to add ACT_RETURN when ending a namespace definition.
+	Line *last_line = g_CurrentNameSpace->mLastLine;
+	if (last_line && ACT_IS_LINE_PARENT(last_line->mActionType))
+		return last_line->LineError(ERR_EXPECTED_BLOCK_OR_ACTION);
+	return AddLine(aActionType, aArg, aArgc, aArgMap, aAllArgsAreExpressions);
+}
+
 
 
 ResultType Script::ParseDerefs(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDeref, int &aDerefCount, int *aPos, TCHAR aEndChar)
@@ -7090,7 +7100,7 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			// Fix for v1.1.06.00: If the file contains any lib #includes, it must be loaded AFTER the
 			// above writes sLib[i].path to the iLib file, otherwise the wrong filename could be written.
 			if (!LoadIncludedFile(sLib[i].path, false, false)  // Fix for v1.0.47.05: Pass false for allow-dupe because otherwise, it's possible for a stdlib file to attempt to include itself (especially via the LibNamePrefix_ method) and thus give a misleading "duplicate function" vs. "func does not exist" error message.  Obsolete: For performance, pass true for allow-dupe so that it doesn't have to check for a duplicate file (seems too rare to worry about duplicates since by definition, the function doesn't yet exist so it's file shouldn't yet be included).
-				|| (aIsAutoInclude && !AddLine(ACT_RETURN))) // each namespace should end with a return, eg, for autoexec to work.)
+				|| (aIsAutoInclude && !AddLineNoParent(ACT_RETURN))) // each namespace should end with a return, eg, for autoexec to work.)
 			{
 				aErrorWasShown = true; // Above has just displayed its error (e.g. syntax error in a line, failed to open the include file, etc).  So override the default set earlier.
 				return NULL;
