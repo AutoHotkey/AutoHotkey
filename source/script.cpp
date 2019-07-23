@@ -47,8 +47,10 @@ FuncEntry g_BIF[] =
 	BIFn(ASin, 1, 1, BIF_ASinACos),
 	BIF1(ATan, 1, 1),
 	BIF1(BufferAlloc, 1, 1),
+#ifdef ENABLE_REGISTERCALLBACK
 	BIF1(CallbackCreate, 1, 3),
 	BIF1(CallbackFree, 1, 1),
+#endif
 	BIF1(CaretGetPos, 0, 2, {1, 2}),
 	BIFn(Ceil, 1, 1, BIF_FloorCeil),
 	BIF1(Chr, 1, 1),
