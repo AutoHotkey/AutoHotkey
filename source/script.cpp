@@ -3555,7 +3555,13 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		}
 		ResultType result = CONDITION_TRUE;	// set default
 		HMODULE hmodule = LoadLibrary(library_path);
-		
+
+		if (hmodule)
+			// "Pin" the dll so that the script cannot unload it with FreeLibrary.
+			// This is done to avoid undefined behaviour when DllCall optimizations
+			// resolves a proc address in a dll loaded by this directive.
+			GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_PIN, library_path, &hmodule);  // MSDN regarding hmodule: "If the function fails, this parameter is NULL."
+
 		if (!hmodule					// the library couldn't be loaded
 			&& !ignore_load_failure)	// no *i was specified
 			result = ScriptError(_T("Failed to load DLL."), library_path);
