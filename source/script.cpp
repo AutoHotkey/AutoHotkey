@@ -111,7 +111,9 @@ FuncEntry g_BIF[] =
 	BIF1(DateDiff, 3, 3),
 	BIFn(DirExist, 1, 1, BIF_FileExist),
 	BIF1(DirSelect, 0, 3),
+#ifdef ENABLE_DLLCALL
 	BIF1(DllCall, 1, NA),
+#endif
 	BIFn(DriveEject, 0, 2, BIF_Drive),
 	BIFn(DriveGetCapacity, 1, 1, BIF_DriveGet),
 	BIFn(DriveGetFilesystem, 1, 1, BIF_DriveGet),
