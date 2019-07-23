@@ -3524,11 +3524,11 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 #endif
 	}
 
-	if (IS_DIRECTIVE_MATCH(_T("#LoadLibrary")))
+	if (IS_DIRECTIVE_MATCH(_T("#DllLoad")))
 	{
 		if (!parameter)
 		{
-			// an empty #LoadLibrary restores the default search order.
+			// an empty #DllLoad restores the default search order.
 			if (!SetDllDirectory(NULL))
 				return ScriptError(ERR_INTERNAL_CALL);
 			return CONDITION_TRUE;
@@ -3555,12 +3555,13 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		}
 		ResultType result = CONDITION_TRUE;	// set default
 		HMODULE hmodule = LoadLibrary(library_path);
+		
 		if (!hmodule					// the library couldn't be loaded
 			&& !ignore_load_failure)	// no *i was specified
 			result = ScriptError(_T("Failed to load DLL."), library_path);
 		free(library_path);
 		return result;
-	} // end #LoadLibrary
+	} // end #DllLoad
 
 	if (IS_DIRECTIVE_MATCH(_T("#NoTrayIcon")))
 	{
@@ -12461,7 +12462,7 @@ BIF_DECL(BIF_PerformAction)
 
 
 ResultType Script::DerefInclude(LPTSTR &aOutput, LPTSTR aBuf)
-// For #Include, #IncludeAgain and #LoadLibrary.
+// For #Include, #IncludeAgain and #DllLoad.
 // Based on Line::Deref above, but with a few differences for backward-compatibility:
 //  1) Percent signs that aren't part of a valid deref are not omitted.
 //  2) Escape sequences aren't recognized (`; is handled elsewhere).
