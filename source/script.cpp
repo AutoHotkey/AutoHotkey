@@ -47,8 +47,10 @@ FuncEntry g_BIF[] =
 	BIFn(ASin, 1, 1, BIF_ASinACos),
 	BIF1(ATan, 1, 1),
 	BIF1(BufferAlloc, 1, 1),
+#ifdef ENABLE_REGISTERCALLBACK
 	BIF1(CallbackCreate, 1, 3),
 	BIF1(CallbackFree, 1, 1),
+#endif
 	BIF1(CaretGetPos, 0, 2, {1, 2}),
 	BIFn(Ceil, 1, 1, BIF_FloorCeil),
 	BIF1(Chr, 1, 1),
@@ -109,7 +111,9 @@ FuncEntry g_BIF[] =
 	BIF1(DateDiff, 3, 3),
 	BIFn(DirExist, 1, 1, BIF_FileExist),
 	BIF1(DirSelect, 0, 3),
+#ifdef ENABLE_DLLCALL
 	BIF1(DllCall, 1, NA),
+#endif
 	BIFn(DriveEject, 0, 2, BIF_Drive),
 	BIFn(DriveGetCapacity, 1, 1, BIF_DriveGet),
 	BIFn(DriveGetFilesystem, 1, 1, BIF_DriveGet),
