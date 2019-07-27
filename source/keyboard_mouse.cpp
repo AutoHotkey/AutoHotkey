@@ -3408,8 +3408,21 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 			// This would cause LControl to get stuck down for hotkeys in German layout such as:
 			//   <^>!a::SendRaw, {
 			//   <^>!m::Send ^c
-			if (sTargetLayoutHasAltGr == CONDITION_TRUE && (aModifiersLRnow & MOD_LCONTROL))
-				KeyEvent(KEYUP, VK_LCONTROL, 0, NULL, false, aExtraInfo);
+			if (sTargetLayoutHasAltGr == CONDITION_TRUE)
+			{
+				if (aModifiersLRnow & MOD_LCONTROL)
+					KeyEvent(KEYUP, VK_LCONTROL, 0, NULL, false, aExtraInfo);
+				if (aModifiersLRnow & MOD_RCONTROL)
+				{
+					// Release RCtrl before pressing AltGr, because otherwise the system will not put
+					// LCtrl into effect, but it will still inject LCtrl-up when AltGr is released.
+					// With LCtrl not in effect and RCtrl being released below, AltGr would instead
+					// act as pure RAlt, which would not have the right effect.
+					// RCtrl will be put back into effect below if aModifiersLRnew & MOD_RCONTROL.
+					KeyEvent(KEYUP, VK_RCONTROL, 0, NULL, false, aExtraInfo);
+					aModifiersLRnow &= ~MOD_RCONTROL;
+				}
+			}
 			KeyEvent(KEYDOWN, VK_RMENU, 0, NULL, false, aExtraInfo);
 			if (sTargetLayoutHasAltGr == CONDITION_TRUE) // Note that KeyEvent() might have just changed the value of sTargetLayoutHasAltGr.
 			{
