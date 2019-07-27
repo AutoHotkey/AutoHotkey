@@ -3925,23 +3925,47 @@ ResultType LayoutHasAltGrDirect(HKL aLayout)
 // This is fast enough that there's no need to cache these values on startup.
 {
 	// This abbreviated definition is based on the actual definition in kbd.h (Windows DDK):
-	typedef struct tagKbdLayer {
-		PVOID pCharModifiers;
-		PVOID pVkToWcharTable;
-		PVOID pDeadKey;
-		PVOID pKeyNames;
-		PVOID pKeyNamesExt;
-		WCHAR **pKeyNamesDead;
-		USHORT  *pusVSCtoVK;
-		BYTE    bMaxVSCtoVK;
-		PVOID   pVSCtoVK_E0;
-		PVOID   pVSCtoVK_E1;
+	// Updated to use two separate struct definitions, since the pointers are qualified with
+	// KBD_LONG_POINTER, which is 64-bit when building for Wow64 (32-bit dll on 64-bit system).
+	typedef UINT64 KLP64;
+	typedef UINT KLP32;
+
+	// Struct used on 64-bit systems (by both 32-bit and 64-bit programs):
+	struct KBDTABLES64 {
+		KLP64 pCharModifiers;
+		KLP64 pVkToWcharTable;
+		KLP64 pDeadKey;
+		KLP64 pKeyNames;
+		KLP64 pKeyNamesExt;
+		KLP64 pKeyNamesDead;
+		KLP64 pusVSCtoVK;
+		BYTE  bMaxVSCtoVK;
+		KLP64 pVSCtoVK_E0;
+		KLP64 pVSCtoVK_E1;
 		// This is the one we want:
 		DWORD fLocaleFlags;
 		// Struct definition truncated.
-	} KBDTABLES, *PKBDTABLES;
+	};
+
+	// Struct used on 32-bit systems:
+	struct KBDTABLES32 {
+		KLP32 pCharModifiers;
+		KLP32 pVkToWcharTable;
+		KLP32 pDeadKey;
+		KLP32 pKeyNames;
+		KLP32 pKeyNamesExt;
+		KLP32 pKeyNamesDead;
+		KLP32 pusVSCtoVK;
+		BYTE  bMaxVSCtoVK;
+		KLP32 pVSCtoVK_E0;
+		KLP32 pVSCtoVK_E1;
+		// This is the one we want:
+		DWORD fLocaleFlags;
+		// Struct definition truncated.
+	};
+	
 	#define KLLF_ALTGR 0x0001 // Also defined in kbd.h.
-	typedef PKBDTABLES (* KbdLayerDescriptorType)();
+	typedef PVOID (* KbdLayerDescriptorType)();
 
 	ResultType result = LAYOUT_UNDETERMINED;
 
@@ -3950,8 +3974,9 @@ ResultType LayoutHasAltGrDirect(HKL aLayout)
 		KbdLayerDescriptorType kbdLayerDescriptor = (KbdLayerDescriptorType)GetProcAddress(hmod, "KbdLayerDescriptor");
 		if (kbdLayerDescriptor)
 		{
-			PKBDTABLES kl = kbdLayerDescriptor();
-			result = (kl->fLocaleFlags & KLLF_ALTGR) ? CONDITION_TRUE : CONDITION_FALSE;
+			PVOID kl = kbdLayerDescriptor();
+			DWORD flags = IsOS64Bit() ? ((KBDTABLES64 *)kl)->fLocaleFlags : ((KBDTABLES32 *)kl)->fLocaleFlags;
+			result = (flags & KLLF_ALTGR) ? CONDITION_TRUE : CONDITION_FALSE;
 		}
 		FreeLibrary(hmod);
 	}
