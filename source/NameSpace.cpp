@@ -437,6 +437,8 @@ NameSpace *NameSpace::InsertNestedNameSpace(LPTSTR aName, int aFuncsInitSize, Na
 	// making "many" calls where InsertNestedNameSpace below fails due to duplicate name. The only current caller, DefineNameSpace
 	// causes the program to end on failure.
 	NameSpace *new_namespace = new NameSpace(aName, aFuncsInitSize, aOuter, aIsTopNameSpace);
+	if (!new_namespace) // Check since `new` is overloaded to use SimpleHeap::Malloc
+		return NULL;
 	if (InsertNestedNameSpace(new_namespace))
 		return new_namespace;
 	delete new_namespace;
