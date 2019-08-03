@@ -5969,7 +5969,7 @@ DWORD GetAHKInstallDir(LPTSTR aBuf)
 //////////////
 
 ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInput, int aWidth, int aHeight
-	, int aX, int aY, double aTimeout, LPTSTR aDefault)
+	, int aX, int aY, bool aLocale, double aTimeout, LPTSTR aDefault)
 {
 	if (g_nInputBoxes >= MAX_INPUTBOXES)
 	{
@@ -6011,6 +6011,7 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInpu
 	g_InputBox[g_nInputBoxes].ypos = aY;
 	g_InputBox[g_nInputBoxes].output_var = aOutputVar;
 	g_InputBox[g_nInputBoxes].password_char = aHideInput ? '*' : '\0';
+	g_InputBox[g_nInputBoxes].locale = aLocale;
 
 	// At this point, we know a dialog will be displayed.  See macro's comments for details:
 	DIALOG_PREP
@@ -6086,14 +6087,25 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		if (hControl = GetDlgItem(hWndDlg, IDC_INPUTPROMPT))
 			SetWindowText(hControl, CURR_INPUTBOX.text);
 
-		// Use the system's current language for the button names:
-		typedef LPCWSTR(WINAPI*pfnUser)(int);
-		HMODULE hMod = GetModuleHandle(L"user32.dll");
-		pfnUser mbString = (pfnUser)GetProcAddress(hMod, "MB_GetString");
-		if (mbString)
+		// Apply button names based on the current user's locale:
+		if (CURR_INPUTBOX.locale)
 		{
-			SetWindowText(GetDlgItem(hWndDlg, IDOK), mbString(0));
-			SetWindowText(GetDlgItem(hWndDlg, IDCANCEL), mbString(1));
+			typedef LPCWSTR(WINAPI*pfnUser)(int);
+			HMODULE hMod = GetModuleHandle(L"user32.dll");
+			pfnUser mbString = (pfnUser)GetProcAddress(hMod, "MB_GetString");
+			if (mbString)
+			{
+				RECT rect;
+				HWND hbtOk = GetDlgItem(hWndDlg, IDOK);
+				HWND hbtCancel = GetDlgItem(hWndDlg, IDCANCEL);
+				SetWindowText(hbtOk, mbString(0));
+				SetWindowText(hbtCancel, mbString(1));
+				// Widen the buttons for non-English names (approx. the width of a MsgBox button):
+				GetWindowRect(hbtOk, &rect);
+				SetWindowPos(hbtOk, NULL, NULL, NULL, 88, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOREDRAW);
+				GetWindowRect(hbtCancel, &rect);
+				SetWindowPos(hbtCancel, NULL, NULL, NULL, 88, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOREDRAW);
+			}
 		}
 
 		// Don't do this check; instead allow the MoveWindow() to occur unconditionally so that
@@ -6290,7 +6302,7 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		min_width += rTmp.right - rTmp.left;
 		GetWindowRect(GetDlgItem(hWndDlg, IDCANCEL), &rTmp);
 		min_width += rTmp.right - rTmp.left;
-		lpMMI->ptMinTrackSize.x = min_width + 30;
+		lpMMI->ptMinTrackSize.x = min_width + 28;
 	}
 
 	case WM_COMMAND:

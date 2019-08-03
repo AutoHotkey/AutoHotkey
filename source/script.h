@@ -269,6 +269,7 @@ struct InputBoxType
 	DWORD timeout;
 	HWND hwnd;
 	HFONT font;
+	bool locale;
 };
 
 struct SplashType
@@ -333,7 +334,7 @@ static inline int DPIUnscale(int x)
 
 #define INPUTBOX_DEFAULT INT_MIN
 ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInput
-	, int aWidth, int aHeight, int aX, int aY, double aTimeout, LPTSTR aDefault);
+	, int aWidth, int aHeight, int aX, int aY, bool aLocale, double aTimeout, LPTSTR aDefault);
 INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);

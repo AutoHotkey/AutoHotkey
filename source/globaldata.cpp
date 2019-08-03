@@ -317,7 +317,7 @@ Action g_act[] =
 	, {_T("Else"), 0, 0, 0, NULL} // No args; it has special handling to support same-line ELSE-actions (e.g. "else if").
 
 	, {_T("MsgBox"), 0, 4, 3, NULL} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
-	, {_T("InputBox"), 1, 11, 11 H, {5, 6, 7, 8, 10, 0}} // Output var, title, prompt, hide-text (e.g. passwords), width, height, X, Y, Font (e.g. courier:8 maybe), Timeout, Default
+	, {_T("InputBox"), 1, 11, 11 H, {5, 6, 7, 8, 10, 0}} // Output var, title, prompt, hide-text (e.g. passwords), width, height, X, Y, Locale, Timeout, Default
 	, {_T("SplashTextOn"), 0, 4, 4, {1, 2, 0}} // Width, height, title, text
 	, {_T("SplashTextOff"), 0, 0, 0, NULL}
 	, {_T("Progress"), 0, 6, 6, NULL}  // Off|Percent|Options, SubText, MainText, Title, Font, FutureUse
