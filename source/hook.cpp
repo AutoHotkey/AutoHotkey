@@ -71,7 +71,9 @@ static key_type *ksc = NULL;
 #define KVKM_SIZE ((MODLR_MAX + 1)*(VK_ARRAY_COUNT))
 #define KSCM_SIZE ((MODLR_MAX + 1)*(SC_ARRAY_COUNT))
 
-// Notes about fake shift-key events (and the following variables):
+
+// Notes about fake shift-key events (there used to be some related variables defined here,
+// but they were superseded by SC_FAKE_LSHIFT and SC_FAKE_RSHIFT):
 // Used to help make a workaround for the way the keyboard driver generates physical
 // shift-key events to release the shift key whenever it is physically down during
 // the press or release of a dual-state Numpad key. These keyboard driver generated
@@ -116,25 +118,6 @@ static key_type *ksc = NULL;
 // A0  02A	 	d	0.49	Shift          	driver lazy down (but not detected as non-physical)
 // 6B  04E	 	d	0.00	Num +          	
 
-// The below timeout is for the subset of driver-generated shift-events that occur immediately
-// before or after some other keyboard event.  The elapsed time is usually zero, but using 22ms
-// here just in case slower systems or systems under load have longer delays between keystrokes:
-#define SHIFT_KEY_WORKAROUND_TIMEOUT 22
-static bool sNextPhysShiftDownIsNotPhys; // All of these are initialized by ResetHook().
-static vk_type sPriorVK;
-static sc_type sPriorSC;
-static bool sPriorEventWasKeyUp;
-static bool sPriorEventWasPhysical;
-static DWORD sPriorEventTickCount;
-static modLR_type sPriorModifiersLR_physical;
-static BYTE sPriorShiftState;
-static BYTE sPriorLShiftState;
-
-enum DualNumpadKeys	{PAD_DECIMAL, PAD_NUMPAD0, PAD_NUMPAD1, PAD_NUMPAD2, PAD_NUMPAD3
-, PAD_NUMPAD4, PAD_NUMPAD5, PAD_NUMPAD6, PAD_NUMPAD7, PAD_NUMPAD8, PAD_NUMPAD9
-, PAD_DELETE, PAD_INSERT, PAD_END, PAD_DOWN, PAD_NEXT, PAD_LEFT, PAD_CLEAR
-, PAD_RIGHT, PAD_HOME, PAD_UP, PAD_PRIOR, PAD_TOTAL_COUNT};
-static bool sPadState[PAD_TOTAL_COUNT];  // Initialized by ChangeHookState()
 
 static bool sHookSyncd; // Only valid while in WaitHookIdle().
 
@@ -493,27 +476,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// Even if the below is set to false, the event might be reclassified as artificial later (though it
 		// won't be logged as such).  See comments in KeybdEventIsPhysical() for details.
 		is_artificial = aEventFlags & LLKHF_INJECTED; // LLKHF vs. LLMHF
-		// If the scan code is extended, the key that was pressed is not a dual-state numpad key,
-		// i.e. it could be the counterpart key, such as End vs. NumpadEnd, located elsewhere on
-		// the keyboard, but we're not interested in those.  Also, Numlock must be ON because
-		// otherwise the driver will not generate those false-physical shift key events:
-		if (!(aSC & 0x100) && (IsKeyToggledOn(VK_NUMLOCK)))
-		{
-			switch (aVK)
-			{
-			case VK_DELETE: case VK_DECIMAL: sPadState[PAD_DECIMAL] = !aKeyUp; break;
-			case VK_INSERT: case VK_NUMPAD0: sPadState[PAD_NUMPAD0] = !aKeyUp; break;
-			case VK_END:    case VK_NUMPAD1: sPadState[PAD_NUMPAD1] = !aKeyUp; break;
-			case VK_DOWN:   case VK_NUMPAD2: sPadState[PAD_NUMPAD2] = !aKeyUp; break;
-			case VK_NEXT:   case VK_NUMPAD3: sPadState[PAD_NUMPAD3] = !aKeyUp; break;
-			case VK_LEFT:   case VK_NUMPAD4: sPadState[PAD_NUMPAD4] = !aKeyUp; break;
-			case VK_CLEAR:  case VK_NUMPAD5: sPadState[PAD_NUMPAD5] = !aKeyUp; break;
-			case VK_RIGHT:  case VK_NUMPAD6: sPadState[PAD_NUMPAD6] = !aKeyUp; break;
-			case VK_HOME:   case VK_NUMPAD7: sPadState[PAD_NUMPAD7] = !aKeyUp; break;
-			case VK_UP:     case VK_NUMPAD8: sPadState[PAD_NUMPAD8] = !aKeyUp; break;
-			case VK_PRIOR:  case VK_NUMPAD9: sPadState[PAD_NUMPAD9] = !aKeyUp; break;
-			}
-		}
 
 		// Track physical state of keyboard & mouse buttons. Also, if it's a modifier, let another section
 		// handle it because it's not as simple as just setting the value to true or false (e.g. if LShift
@@ -3108,40 +3070,6 @@ void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 // might have adjusted vk, namely to make it a left/right specific modifier key rather than a
 // neutral one.
 {
-	// See above notes near the first mention of SHIFT_KEY_WORKAROUND_TIMEOUT for details.
-	// This part of the workaround can be tested via "NumpadEnd::KeyHistory".  Turn on numlock,
-	// hold down shift, and press numpad1. The hotkey will fire and the status should display
-	// that the shift key is physically, but not logically down at that exact moment:
-	if (sPriorEventWasPhysical && (sPriorVK == VK_LSHIFT || sPriorVK == VK_SHIFT)  // But not RSHIFT.
-		&& (DWORD)(GetTickCount() - sPriorEventTickCount) < (DWORD)SHIFT_KEY_WORKAROUND_TIMEOUT)
-	{
-		bool current_is_dual_state = IsDualStateNumpadKey(aVK, aSC);
-		// Verified: Both down and up events for the *current* (not prior) key qualify for this:
-		bool fix_it = (!sPriorEventWasKeyUp && DualStateNumpadKeyIsDown())  // Case #4 of the workaround.
-			|| (sPriorEventWasKeyUp && aKeyUp && current_is_dual_state); // Case #5
-		if (fix_it)
-			sNextPhysShiftDownIsNotPhys = true;
-		// In the first case, both the numpad key-up and down events are eligible:
-		if (   fix_it || (sPriorEventWasKeyUp && current_is_dual_state)   )
-		{
-			// Since the prior event (the shift key) already happened (took effect) and since only
-			// now is it known that it shouldn't have been physical, undo the effects of it having
-			// been physical:
-			g_modifiersLR_physical = sPriorModifiersLR_physical;
-			g_PhysicalKeyState[VK_SHIFT] = sPriorShiftState;
-			g_PhysicalKeyState[VK_LSHIFT] = sPriorLShiftState;
-		}
-	}
-
-
-	// Must do this part prior to updating modifier state because we want to store the values
-	// as they are prior to the potentially-erroneously-physical shift key event takes effect.
-	// The state of these is also saved because we can't assume that a shift-down, for
-	// example, CHANGED the state to down, because it may have been already down before that:
-	sPriorModifiersLR_physical = g_modifiersLR_physical;
-	sPriorShiftState = g_PhysicalKeyState[VK_SHIFT];
-	sPriorLShiftState = g_PhysicalKeyState[VK_LSHIFT];
-
 	// If this function was called from SuppressThisKey(), these comments apply:
 	// Currently SuppressThisKey is only called with a modifier in the rare case
 	// when sDisguiseNextLWinUp/RWinUp is in effect.  But there may be other cases in the
@@ -3160,17 +3088,18 @@ void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 		// that instance's g_modifiersLR_logical doesn't say it's down, which is definitely wrong.  So it
 		// is now omitted below:
 		bool is_not_ignored = (aEvent.dwExtraInfo != KEY_IGNORE);
-		bool event_is_physical = KeybdEventIsPhysical(aEvent.flags, aVK, aKeyUp);
+		bool is_fake_shift = aEvent.scanCode == SC_FAKE_LSHIFT || aEvent.scanCode == SC_FAKE_RSHIFT;
+		bool event_is_physical = !is_fake_shift && KeybdEventIsPhysical(aEvent.flags, aVK, aKeyUp);
 
 		if (aKeyUp)
 		{
+			// Keep track of system-generated Shift-up events (as part of a workaround for
+			// Shift becoming stuck due to interaction between Send and the system handling
+			// of shift-numpad combinations).  Find "fake shift" for more details.
+			if (is_fake_shift)
+				g_modifiersLR_numpad_mask |= modLR;
 			if (!aIsSuppressed)
 			{
-				// Keep track of system-generated Shift-up events as part of a workaround for
-				// Shift becoming stuck due to interaction between Send and the system handling
-				// of shift-numpad combinations.  Find "fake shift" for more details.
-				if (aEvent.scanCode == SC_FAKE_LSHIFT || aEvent.scanCode == SC_FAKE_RSHIFT)
-					g_modifiersLR_numpad_mask |= modLR;
 				g_modifiersLR_logical &= ~modLR;
 				// Even if is_not_ignored == true, this is updated unconditionally on key-up events
 				// to ensure that g_modifiersLR_logical_non_ignored never says a key is down when
@@ -3230,15 +3159,6 @@ void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 			}
 		}
 	} // vk is a modifier key.
-
-	// Now that we're done using the old values (updating modifier state and calls to KeybdEventIsPhysical()
-	// above used them, as well as a section higher above), update these to their new values then call
-	// KeybdEventIsPhysical() again.
-	sPriorVK = aVK;
-	sPriorSC = aSC;
-	sPriorEventWasKeyUp = aKeyUp;
-	sPriorEventWasPhysical = KeybdEventIsPhysical(aEvent.flags, aVK, aKeyUp);
-	sPriorEventTickCount = GetTickCount();
 }
 
 
@@ -3253,20 +3173,17 @@ bool KeybdEventIsPhysical(DWORD aEventFlags, const vk_type aVK, bool aKeyUp)
 	// My: This also applies to mouse events, so use it for them too:
 	if (aEventFlags & LLKHF_INJECTED)
 		return false;
-	// So now we know it's a physical event.  But certain LSHIFT key-down events are driver-generated.
+	// So now we know it's a physical event.  But certain SHIFT key-down events are driver-generated.
 	// We want to be able to tell the difference because the Send command and other aspects
 	// of keyboard functionality need us to be accurate about which keys the user is physically
 	// holding down at any given time:
-	if (   (aVK == VK_LSHIFT || aVK == VK_SHIFT) && !aKeyUp   ) // But not RSHIFT.
+	if (   (aVK == VK_LSHIFT || aVK == VK_RSHIFT) && !aKeyUp   )
 	{
-		if (sNextPhysShiftDownIsNotPhys && !DualStateNumpadKeyIsDown())
-		{
-			sNextPhysShiftDownIsNotPhys = false;
-			return false;
-		}
-		// Otherwise (see notes about SHIFT_KEY_WORKAROUND_TIMEOUT above for details):
-		if (sPriorEventWasKeyUp && IsDualStateNumpadKey(sPriorVK, sPriorSC)
-			&& (DWORD)(GetTickCount() - sPriorEventTickCount) < (DWORD)SHIFT_KEY_WORKAROUND_TIMEOUT   )
+		// If the corresponding mask bit is set, the key was temporarily "released" by the system
+		// as part of translating a shift-numpad combination to its unshifted counterpart, and this
+		// event is the fake key-down which follows the release of the numpad key.  The system uses
+		// standard scancodes for this specific case, not SC_FAKE_LSHIFT or SC_FAKE_RSHIFT.
+		if (g_modifiersLR_numpad_mask & (aVK == VK_LSHIFT ? MOD_LSHIFT : MOD_RSHIFT))
 			return false;
 	}
 
@@ -3283,55 +3200,6 @@ bool KeybdEventIsPhysical(DWORD aEventFlags, const vk_type aVK, bool aKeyUp)
 	// events can impact the script's calls to GetKeyState("LControl", "P"), etc.
 	g_TimeLastInputPhysical = g_TimeLastInputKeyboard = GetTickCount();
 	return true;
-}
-
-
-
-bool DualStateNumpadKeyIsDown()
-{
-	// Note: GetKeyState() might not agree with us that the key is physically down because
-	// the hook may have suppressed it (e.g. if it's a hotkey).  Therefore, sPadState
-	// is the only way to know for user if the user is physically holding down a *qualified*
-	// Numpad key.  "Qualified" means that it must be a dual-state key and Numlock must have
-	// been ON at the time the key was first pressed down.  This last criteria is needed because
-	// physically holding down the shift-key will change VK generated by the driver to appear
-	// to be that of the numpad without the numlock key on.  In other words, we can't just
-	// consult the g_PhysicalKeyState array because it won't tell whether a key such as
-	// NumpadEnd is truly physically down:
-	for (int i = 0; i < PAD_TOTAL_COUNT; ++i)
-		if (sPadState[i])
-			return true;
-	return false;
-}
-
-
-
-bool IsDualStateNumpadKey(const vk_type aVK, const sc_type aSC)
-{
-	if (aSC & 0x100)  // If it's extended, it can't be a numpad key.
-		return false;
-
-	switch (aVK)
-	{
-	// It seems best to exclude the VK_DECIMAL and VK_NUMPAD0 through VK_NUMPAD9 from the below
-	// list because the callers want to know whether this is a numpad key being *modified* by
-	// the shift key (i.e. the shift key is being held down to temporarily transform the numpad
-	// key into its opposite state, overriding the fact that Numlock is ON):
-	case VK_DELETE: // NumpadDot (VK_DECIMAL)
-	case VK_INSERT: // Numpad0
-	case VK_END:    // Numpad1
-	case VK_DOWN:   // Numpad2
-	case VK_NEXT:   // Numpad3
-	case VK_LEFT:   // Numpad4
-	case VK_CLEAR:  // Numpad5 (this has been verified to be the VK that is sent, at least on my keyboard).
-	case VK_RIGHT:  // Numpad6
-	case VK_HOME:   // Numpad7
-	case VK_UP:     // Numpad8
-	case VK_PRIOR:  // Numpad9
-		return true;
-	}
-
-	return false;
 }
 
 
@@ -4492,22 +4360,9 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 		sUndisguisedMenuInEffect = false;
 		sAltTabMenuIsVisible = (FindWindow(_T("#32771"), NULL) != NULL); // I've seen indications that MS wants this to work on all operating systems.
 
-		ZeroMemory(sPadState, sizeof(sPadState));
-
 		*g_HSBuf = '\0';
 		g_HSBufLength = 0;
 		g_HShwnd = 0; // It isn't necessary to determine the actual window/control at this point since the buffer is already empty.
-
-		// Variables for the Shift+Numpad workaround:
-		sNextPhysShiftDownIsNotPhys = false;
-		sPriorVK = 0;
-		sPriorSC = 0;
-		sPriorEventWasKeyUp = false;
-		sPriorEventWasPhysical = false;
-		sPriorEventTickCount = 0;
-		sPriorModifiersLR_physical = 0;
-		sPriorShiftState = 0;  // i.e. default to "key is up".
-		sPriorLShiftState = 0; //
 
 		if (aResetKVKandKSC)
 		{

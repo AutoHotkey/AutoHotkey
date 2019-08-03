@@ -149,6 +149,7 @@ EXTERN_G;
 // Note that the system uses the normal scan codes (0x2A or 0x36) for Shift-down following
 // the Numpad keyup if no other keys were pushed.  Our hook filters out the second byte to
 // simplify the code, so these values can only be found in KBDLLHOOKSTRUCT::scanCode.
+// Find "fake shift-key events" for older and more detailed comments.
 #define SC_FAKE_LSHIFT 0x22A
 #define SC_FAKE_RSHIFT 0x236 // This is the actual scancode received by the hook, excluding the 0x100 we add for "extended" keys.
 #define SC_FAKE_LCTRL 0x21D
