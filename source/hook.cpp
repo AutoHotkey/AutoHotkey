@@ -71,7 +71,7 @@ static key_type *ksc = NULL;
 #define KVKM_SIZE ((MODLR_MAX + 1)*(VK_ARRAY_COUNT))
 #define KSCM_SIZE ((MODLR_MAX + 1)*(SC_ARRAY_COUNT))
 
-// Notes about the following variables:
+// Notes about fake shift-key events (and the following variables):
 // Used to help make a workaround for the way the keyboard driver generates physical
 // shift-key events to release the shift key whenever it is physically down during
 // the press or release of a dual-state Numpad key. These keyboard driver generated
@@ -3166,6 +3166,11 @@ void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 		{
 			if (!aIsSuppressed)
 			{
+				// Keep track of system-generated Shift-up events as part of a workaround for
+				// Shift becoming stuck due to interaction between Send and the system handling
+				// of shift-numpad combinations.  Find "fake shift" for more details.
+				if (aEvent.scanCode == SC_FAKE_LSHIFT || aEvent.scanCode == SC_FAKE_RSHIFT)
+					g_modifiersLR_numpad_mask |= modLR;
 				g_modifiersLR_logical &= ~modLR;
 				// Even if is_not_ignored == true, this is updated unconditionally on key-up events
 				// to ensure that g_modifiersLR_logical_non_ignored never says a key is down when
@@ -3200,6 +3205,7 @@ void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 		}
 		else // Modifier key was pressed down.
 		{
+			g_modifiersLR_numpad_mask &= ~modLR;
 			if (!aIsSuppressed)
 			{
 				g_modifiersLR_logical |= modLR;
@@ -4477,6 +4483,7 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 		// because we don't know the current physical state of the keyboard and such:
 
 		g_modifiersLR_physical = 0;  // Best to make this zero, otherwise keys might get stuck down after a Send.
+		g_modifiersLR_numpad_mask = 0;
 		g_modifiersLR_logical = g_modifiersLR_logical_non_ignored = (aAllModifiersUp ? 0 : GetModifierLRState(true));
 
 		ZeroMemory(g_PhysicalKeyState, sizeof(g_PhysicalKeyState));
