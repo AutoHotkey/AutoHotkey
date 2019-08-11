@@ -2645,9 +2645,17 @@ examine_line:
 				// something like foo:: from being interpreted as a generic label, so when the line fails
 				// to resolve to a command or expression, an error message will be shown.
 				buf[--buf_length] = '\0';  // Remove the trailing colon.
-				rtrim(buf, buf_length); // Has already been ltrimmed.
-				if (!AddLabel(buf, false))
-					return FAIL;
+				if (!_tcsicmp(buf, _T("Default")) && mOpenBlock && mOpenBlock->mPrevLine // "Default:" case.
+					&& mOpenBlock->mPrevLine->mActionType == ACT_SWITCH) // For backward-compatibility, it's a normal label in any other case.
+				{
+					if (!AddLine(ACT_CASE))
+						return FAIL;
+				}
+				else
+				{
+					if (!AddLabel(buf, false))
+						return FAIL;
+				}
 				goto continue_main_loop; // In lieu of "continue", for performance.
 			}
 		}
@@ -4540,6 +4548,21 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				break;
 			}
 		}
+		else if (*action_args == ':')
+		{
+			// Default isn't handled as its own action type because that would only cover the cases
+			// where there is a space after the name.  This covers "Default: subaction", "Default :"
+			// and "Default : subaction".  "Default:" on its own is handled by label-parsing.
+			if (!_tcsicmp(action_name, _T("Default")))
+			{
+				if (!AddLine(ACT_CASE))
+					return FAIL;
+				action_args = omit_leading_whitespace(action_args + 1);
+				if (!*action_args)
+					return OK;
+				return ParseAndAddLine(action_args);
+			}
+		}
 		if (!aActionType && _tcschr(EXPR_ALL_SYMBOLS, *action_args))
 		{
 			LPTSTR question_mark;
@@ -4602,29 +4625,39 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				return ScriptError(_tcsstr(aLineText, HOTKEY_FLAG) ? _T("Invalid hotkey.") : ERR_UNRECOGNIZED_ACTION, aLineText);
 		}
 	}
+
+	int mark;
+	LPTSTR subaction_start = NULL;
 	switch (aActionType)
 	{
 	case ACT_CATCH:
 		if (*action_args != '{') // i.e. "Catch varname" must be handled a different way.
 			break;
+		// Fall through:
 	case ACT_ELSE:
 	case ACT_TRY:
 	case ACT_FINALLY:
-		if (!AddLine(aActionType))
-			return FAIL;
 		if (*action_args == '{')
 		{
-			if (!AddLine(ACT_BLOCK_BEGIN))
-				return FAIL;
+			add_openbrace_afterward = true;
 			action_args = omit_leading_whitespace(action_args + 1);
 		}
-		if (!*action_args)
-			return OK;
-		// Call self recursively to parse the sub-action.  Doing this before the args are
-		// processed any further avoids some complexity, since literal_map would otherwise
-		// have to be passed recursively, in which case the action name is also expected.
-		//mCurrLine = NULL; // Seems more useful to leave this set to the line added above.
-		return ParseAndAddLine(action_args);
+		if (*action_args)
+		{
+			subaction_start = action_args;
+			*--action_args = '\0'; // Relies on there being a space, tab or brace at this position.
+		}
+		break;
+	case ACT_CASE:
+		mark = FindExprDelim(action_args, ':');
+		if (!action_args[mark])
+			return ScriptError(ERR_MISSING_COLON, aLineText);
+		action_args[mark] = '\0';
+		rtrim(action_args);
+		subaction_start = omit_leading_whitespace(action_args + mark + 1);
+		if (!*subaction_start) // Nothing to the right of ':'.
+			subaction_start = NULL;
+		break;
 	}
 
 	Action &this_action = aActionType ? g_act[aActionType] : g_old_act[aOldActionType];
@@ -4712,7 +4745,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	// new numeric parameter at the end.  Whenever possible, we want to avoid the need for
 	// the user to have to escape commas that are intended to be literal.
 	///////////////////////////////////////////////////////////////////////////////////////
-	int mark, max_params_override = 0; // Set default.
+	int max_params_override = 0; // Set default.
 	if (aActionType == ACT_MSGBOX)
 	{
 		for (int next, mark = 0, arg = 1; action_args[mark]; mark = next, ++arg)
@@ -4819,7 +4852,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	LPTSTR arg[MAX_ARGS], arg_map[MAX_ARGS];
 	ActionTypeType subaction_type = ACT_INVALID; // Must init these.
 	ActionTypeType suboldaction_type = OLD_INVALID;
-	TCHAR subaction_name[MAX_VAR_NAME_LENGTH + 1], *subaction_end_marker = NULL, *subaction_start = NULL;
+	TCHAR subaction_name[MAX_VAR_NAME_LENGTH + 1], *subaction_end_marker = NULL;
 	int max_params = max_params_override ? max_params_override : this_action.MaxParams;
 	int max_params_minus_one = max_params - 1;
 	bool is_expression;
@@ -4834,16 +4867,18 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			case ACT_IFWINNOTEXIST:
 			case ACT_IFWINACTIVE:
 			case ACT_IFWINNOTACTIVE:
-				subaction_start = action_args + mark;
-				if (subaction_end_marker = ParseActionType(subaction_name, subaction_start, false))
+				if (subaction_end_marker = ParseActionType(subaction_name, action_args + mark, false))
 					if (   !(subaction_type = ConvertActionType(subaction_name))   )
 						suboldaction_type = ConvertOldActionType(subaction_name);
 				break;
 			}
 			if (subaction_type || suboldaction_type)
+			{
 				// A valid command was found (i.e. AutoIt2-style) in place of this commands Exclude Title
 				// parameter, so don't add this item as a param to the command.
+				subaction_start = action_args + mark;
 				break;
+			}
 		}
 		arg[nArgs] = action_args + mark;
 		arg_map[nArgs] = literal_map + mark;
@@ -5016,12 +5051,14 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						// Remove this subaction from its parent line; we want it separate:
 						*delimiter = '\0';
 						rtrim(last_arg);
+						break;
 					}
 					// else leave it as-is, i.e. as part of the last param, because the delimiter
 					// found above is probably being used as a literal char even though it isn't
 					// escaped, e.g. "ifequal, var1, string with embedded, but non-escaped, commas"
 				}
-				// else, do nothing; reasoning perhaps similar to above comment.
+				// else leave it as-is; reasoning perhaps similar to above comment.
+				subaction_start = NULL; // Indicate no subaction after all.
 				break;
 			}
 		}
@@ -5032,7 +5069,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	// Loop 5 { ; Also overlaps, this time with file-pattern loop that retrieves numeric filename ending in '{'.
 	// Loop %Var% {  ; Similar, but like the above seems acceptable given extreme rarity of user intending a file pattern.
 	if ((aActionType == ACT_LOOP || aActionType == ACT_WHILE) && nArgs == 1 && arg[0][0] // A loop with exactly one, non-blank arg.
-		|| ((aActionType == ACT_FOR || aActionType == ACT_CATCH) && nArgs))
+		|| ((aActionType == ACT_FOR || aActionType == ACT_CATCH || aActionType == ACT_SWITCH) && nArgs))
 	{
 		LPTSTR arg1 = arg[nArgs - 1]; // For readability and possibly performance.
 		// A loop with the above criteria (exactly one arg) can only validly be a normal/counting loop or
@@ -5060,7 +5097,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			if (!rtrim(arg1)) // Trimmed down to nothing, so only a brace was present: remove the arg completely.
 				if (aActionType == ACT_LOOP || aActionType == ACT_CATCH)
 					nArgs = 0;    // This makes later stages recognize it as an infinite loop rather than a zero-iteration loop.
-				else // ACT_WHILE or ACT_FOR
+				else // ACT_WHILE, ACT_FOR or ACT_SWITCH
 					return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
 		}
 	}
@@ -5070,8 +5107,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	if (add_openbrace_afterward)
 		if (!AddLine(ACT_BLOCK_BEGIN))
 			return FAIL;
-	if (!subaction_type && !suboldaction_type) // There is no subaction in this case.
+	if (!subaction_start) // There is no subaction in this case.
 		return OK;
+	if (!subaction_end_marker)
+		return ParseAndAddLine(subaction_start); // Escape sequences in the subaction haven't been translated yet, in this case.
 	// Otherwise, recursively add the subaction, and any subactions it might have, beneath
 	// the line just added.  The following example:
 	// IfWinExist, x, y, IfWinNotExist, a, b, Gosub, Sub1
@@ -5177,6 +5216,8 @@ bool Script::ArgIsNumeric(ActionTypeType aActionType, ActionTypeType *np, LPTSTR
 		}
 		return true;
 	}
+	if (aActionType == ACT_CASE) // Needed because MAX_ARGS > MAX_NUMERIC_PARAMS.
+		return true;
 	if (aActionType == ACT_TRANSFORM && (nArgs == 2 || nArgs == 3)) // i.e. the 3rd or 4th arg is about to be added.
 	{
 		// Somewhat inefficient since it has to be called for both Arg#2 and Arg#3, but seems
@@ -5415,7 +5456,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				// expression because this is an arg that's marked as a number-or-expression.
 				// So telltales avoid the need for the complex check further below.
 				if (aActionType == ACT_ASSIGNEXPR || aActionType >= ACT_FOR && aActionType <= ACT_UNTIL // i.e. FOR, WHILE or UNTIL
-					|| aActionType == ACT_THROW
+					|| aActionType >= ACT_THROW && aActionType <= ACT_CASE // THROW, SWITCH or CASE
 					|| StrChrAny(this_new_arg.text, EXPR_TELLTALES)) // See above.
 					this_new_arg.is_expression = true;
 				// For backward-compatibility, ignore the previous value if this isn't Transform:
@@ -5438,7 +5479,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			//		a type mismatch error.
 			//
 			if (this_new_arg.is_expression && IsPureNumeric(this_new_arg.text, true, true, true)
-				&& aActionType != ACT_ASSIGNEXPR && aActionType != ACT_FOR && aActionType != ACT_THROW)
+				&& aActionType != ACT_ASSIGNEXPR && aActionType != ACT_FOR
+				&& (aActionType < ACT_THROW || aActionType > ACT_CASE)) // Not THROW, SWITCH or CASE.
 				this_new_arg.is_expression = false;
 
 			if (this_new_arg.is_expression)
@@ -5740,8 +5782,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				{
 					// ACT_WHILE performs less than 4% faster as a non-expression in these cases, and keeping
 					// it as an expression avoids an extra check in a performance-sensitive spot of ExpandArgs
-					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).
-					if (aActionType < ACT_FOR || aActionType > ACT_UNTIL && aActionType != ACT_THROW) // If it is FOR, WHILE, UNTIL or THROW, it would be something like "while x" in this case. Keep those as expressions for the reason above. PerformLoopFor() requires FOR's expression arg to remain an expression.
+					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).  ACT_UNTIL is treated the same way.
+					// Additionally, FOR, THROW, SWITCH and CASE are kept as expressions in all cases to
+					// simplify the code (which works around ExpandArgs() lack of support for objects).
+					if (aActionType < ACT_FOR || aActionType > ACT_UNTIL // Not FOR, WHILE or UNTIL.
+						&& (aActionType < ACT_THROW || aActionType > ACT_CASE)) // Not THROW, SWITCH or CASE.
 						this_new_arg.is_expression = false; // In addition to being an optimization, doing this might also be necessary for things like "Var := ClipboardAll" to work properly.
 					// But if aActionType is ACT_ASSIGNEXPR, it's left as ACT_ASSIGNEXPR vs. ACT_ASSIGN
 					// because it might be necessary to avoid having AutoTrim take effect for := (which
@@ -6997,6 +7042,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	if (aActionType == ACT_BLOCK_BEGIN)
 	{
 		++mCurrentFuncOpenBlockCount; // It's okay to increment unconditionally because it is reset to zero every time a new function definition is entered.
+		// While loading the script, use mParentLine to form a linked list of blocks.  mParentLine will
+		// be set more accurately (taking into account control flow statements) by PreparseBlocks().
+		the_new_line->mParentLine = mOpenBlock;
+		mOpenBlock = the_new_line;
 		// It's only necessary to check the last func, not the one(s) that come before it, to see if its
 		// mJumpToLine is NULL.  This is because our caller has made it impossible for a function
 		// to ever have been defined in the first place if it lacked its opening brace.  Search on
@@ -7043,6 +7092,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			line.mAttribute = ATTR_TRUE;  // Flag this ACT_BLOCK_END as the ending brace of a function's body.
 			g->CurrentFunc = NULL;
 		}
+		if (mOpenBlock) // !mOpenBlock would indicate a syntax error, reported at a later stage.
+			mOpenBlock = mOpenBlock->mParentLine;
 	}
 
 	// Above must be done prior to the below, since it sometimes sets mAttribute for use below.
@@ -9648,6 +9699,50 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			// Otherwise, continue processing at line's new location:
 			continue;
 		} // ActionType is IF/LOOP/TRY.
+		else if (line->mActionType == ACT_SWITCH)
+		{
+			// "Hide" the arg so that ExpandArgs() doesn't evaluate it.  This is necessary because
+			// ACT_SWITCH has special handling to support objects.
+			line->mAttribute = (AttributeType)line->mArgc;
+			line->mArgc = 0;
+			Line *switch_line = line;
+
+			line = line->mNextLine;
+			if (line->mActionType != ACT_BLOCK_BEGIN)
+				return switch_line->PreparseError(ERR_MISSING_OPEN_BRACE);
+			Line *block_begin = line;
+			block_begin->mParentLine = switch_line;
+			
+			Line *end_line = NULL;
+			for (line = line->mNextLine; line->mActionType == ACT_CASE; line = end_line)
+			{
+				// Hide the arg so that ExpandArgs() won't evaluate it.
+				line->mAttribute = (AttributeType)line->mArgc;
+				line->mArgc = 0;
+				line->mParentLine = block_begin; // Required for GOTO to work correctly.
+				// Find the next ACT_CASE or ACT_BLOCK_END:
+				end_line = PreparseBlocks(line->mNextLine, UNTIL_BLOCK_END, block_begin, aLoopType);
+				if (!end_line)
+					return NULL; // Error.
+				// Form a linked list of CASE lines within this block:
+				line->mRelatedLine = end_line;
+			}
+
+			if (!end_line) // First line is not ACT_CASE.
+			{
+				if (line->mActionType != ACT_BLOCK_END)
+					return line->PreparseError(_T("Expected Case/Default"));
+				end_line = line;
+			}
+
+			// After evaluating ACT_SWITCH, execution resumes after ACT_BLOCK_END:
+			switch_line->mRelatedLine = line = end_line->mNextLine;
+
+			if (aMode == ONLY_ONE_LINE) // Return the next unprocessed line to the caller.
+				return line;
+			// Otherwise, continue processing at line's new location:
+			continue;
+		}
 
 		// Since above didn't continue, do the switch:
 		switch (line->mActionType)
@@ -9684,6 +9779,12 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			if (aLoopType == ATTR_LOOP_OBSCURED)
 				return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			break;
+
+		case ACT_CASE:
+			if (!aParentLine || !aParentLine->mParentLine
+				|| aParentLine->mParentLine->mActionType != ACT_SWITCH)
+				return line->PreparseError(ERR_UNEXPECTED_CASE);
+			return line;
 
 		case ACT_ELSE:
 			// This happens if there's an extra ELSE in this scope level that has no IF:
@@ -12364,46 +12465,26 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			if (!token) // Unlikely.
 				return line->LineError(ERR_OUTOFMEM);
 
-			// The following is based on code from PerformLoopFor()
-
-			if (!sDerefBuf)
-			{
-				sDerefBufSize = (line->mArg[0].length < MAX_NUMBER_LENGTH ? MAX_NUMBER_LENGTH : line->mArg[0].length) + 1;
-				if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
-				{
-					sDerefBufSize = 0;
-					delete token;
-					return line->LineError(ERR_OUTOFMEM);
-				}
-			}
-
 			PRIVATIZE_S_DEREF_BUF;
-			LPTSTR our_buf_marker = our_deref_buf;
-			LPTSTR arg_deref[] = {0, 0};
-			LPTSTR strVal;
-			token->symbol = SYM_INVALID;
-			strVal = line->ExpandExpression(0, result, token, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, 0);
-			if (strVal == our_deref_buf)
-				token->mem_to_free = strVal;
+
+			result = line->ExpandSingleArg(0, *token, our_deref_buf, our_deref_buf_size);
+			
+			if (result == OK && token->symbol == SYM_STRING && token->marker == our_deref_buf)
+			{
+				// Assign ownership of our_deref_buf to token.
+				token->mem_to_free = our_deref_buf;
+				if (our_deref_buf_size > LARGE_DEREF_BUF_SIZE)
+					--sLargeDerefBufs;
+			}
 			else
 			{
-				token->mem_to_free = NULL;
 				DEPRIVATIZE_S_DEREF_BUF;
-			}
-
-			if (!strVal)
-			{
-				// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
-				delete token;
-				return result;
-			}
-
-			// Check if ExpandExpression has not returned a token at all
-			if (token->symbol == SYM_INVALID)
-			{
-				// Store the returned string in the token
-				token->symbol = SYM_STRING;
-				token->marker = strVal;
+				if (result != OK)
+				{
+					delete token;
+					return result; // Typically EARLY_EXIT or FAIL.
+				}
+				token->mem_to_free = NULL;
 			}
 
 			// Throw the newly-created token
@@ -12419,6 +12500,121 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 			line = line->mNextLine;
 			continue;
 		}
+
+		case ACT_SWITCH:
+		{
+			Line *line_to_execute = NULL;
+
+			// Privatize our deref buf so that any function calls within any of the SWITCH/CASE
+			// expressions can allocate and use their own separate deref buf.  Our deref buf
+			// will be reused for each expression evaluation.
+			PRIVATIZE_S_DEREF_BUF;
+
+			size_t switch_value_mem_size;
+			ExprTokenType switch_value;
+			switch_value.mem_to_free = NULL;
+			if (!line->mAttribute) // Switch with no value: find the first 'true' case.
+			{
+				switch_value.symbol = SYM_INVALID;
+				result = OK;
+			}
+			else
+				result = line->ExpandSingleArg(0, switch_value, our_deref_buf, our_deref_buf_size);
+			if (result == OK)
+			{
+				if (switch_value.symbol == SYM_STRING && switch_value.marker == our_deref_buf)
+				{
+					// Prevent the case expressions from reusing our_deref_buf, since we'll need it.
+					// A new buf will be allocated by ExpandSingleArg() if required, which would only
+					// be if at least one case expression is not a literal number/quoted string.
+					switch_value.mem_to_free = our_deref_buf;
+					switch_value_mem_size = our_deref_buf_size;
+					our_deref_buf = NULL;
+					our_deref_buf_size = 0;
+				}
+				// For each CASE:
+				for (Line *case_line = line->mNextLine->mNextLine; case_line->mActionType == ACT_CASE; case_line = case_line->mRelatedLine)
+				{
+					int arg, arg_count = (int)(INT_PTR)case_line->mAttribute;
+					if (!arg_count) // The default case.
+					{
+						line_to_execute = case_line->mNextLine;
+						continue;
+					}
+					for (arg = 0; arg < arg_count; ++arg)
+					{
+						ExprTokenType case_value;
+						result = case_line->ExpandSingleArg(arg, case_value, our_deref_buf, our_deref_buf_size);
+						if (result != OK)
+						{
+							line_to_execute = NULL; // Do not execute default case.
+							break;
+						}
+						bool found = switch_value.symbol == SYM_INVALID ? TokenToBOOL(case_value)
+							: TokensAreEqual(switch_value, case_value);
+						if (case_value.symbol == SYM_OBJECT)
+							case_value.object->Release();
+						if (found)
+						{
+							line_to_execute = case_line->mNextLine;
+							break;
+						}
+					}
+					if (arg < arg_count)
+						break;
+				}
+				if (switch_value.symbol == SYM_OBJECT)
+					switch_value.object->Release();
+				if (switch_value.mem_to_free)
+				{
+					if (our_deref_buf)
+					{
+						// Free the newly allocated deref buf.
+						free(our_deref_buf);
+						if (our_deref_buf_size > LARGE_DEREF_BUF_SIZE)
+							--sLargeDerefBufs;
+					}
+					// Restore original deref buf.
+					our_deref_buf = switch_value.mem_to_free;
+					our_deref_buf_size = switch_value_mem_size;
+				}
+			}
+
+			DEPRIVATIZE_S_DEREF_BUF;
+
+			if (line_to_execute)
+			{
+				// Above found a matching CASE.  Execute the lines between it and the next CASE or block-end.
+				result = line_to_execute->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
+			}
+			else
+				jump_to_line = NULL;
+
+			if (result != OK || aMode == ONLY_ONE_LINE)
+			{
+				caller_jump_to_line = jump_to_line;
+				return result;
+			}
+			
+			if (jump_to_line != NULL)
+			{
+				if (jump_to_line->mParentLine != line->mParentLine)
+				{
+					caller_jump_to_line = jump_to_line;
+					return OK;
+				}
+				line = jump_to_line;
+				continue;
+			}
+			
+			// Continue execution at the line following the block-end.
+			line = line->mRelatedLine;
+			continue;
+		}
+
+		case ACT_CASE:
+			// This is the next CASE after one that matched, so we're done.
+			return OK;
 
 		case ACT_EXIT:
 			// If this script has no hotkeys and hasn't activated one of the hooks, EXIT will cause the
@@ -13168,40 +13364,22 @@ ResultType Line::PerformLoopFor(ExprTokenType *aResultToken, bool &aContinueMain
 
 	// Save these pointers since they will be overwritten during the loop:
 	Var *var[] = { ARGVARRAW1, ARGVARRAW2 };
-	
-	if (!sDerefBuf)
-	{
-		// This must be done in case ExpandExpression() needs the deref buf for temporary storage.
-		sDerefBufSize = (mArg[2].length < MAX_NUMBER_LENGTH ? MAX_NUMBER_LENGTH : mArg[2].length) + 1; // See EXPR_BUF_SIZE macro in script_expression.cpp.
-		if ( !(sDerefBuf = tmalloc(sDerefBufSize)) )
-		{
-			sDerefBufSize = 0;
-			return LineError(ERR_OUTOFMEM);
-		}
-	}
 
+	// Although we won't need sDerefBuf since string results aren't meaningful, the deref buf
+	// must be privatized so that any function calls within the expression don't conflict with
+	// the expression's own use of the deref buf:
 	PRIVATIZE_S_DEREF_BUF;
-	LPTSTR our_buf_marker = our_deref_buf;
-	LPTSTR arg_deref[] = {0, 0}; // ExpandExpression checks these if it needs to expand the deref buffer.
-	ExprTokenType object_token;
-	object_token.symbol = SYM_INVALID; // Init in case ExpandExpression() resolves to a string, in which case it won't use enum_token.
-
-	// Since expressions aren't normally capable of resolving to an object (except for RETURN), we need to
-	// call ExpandExpression() directly and pass in a "result token" which will be used if the result is an
-	// object or number. Load-time pre-parsing has ensured there are really three args, but mArgc == 2 so
-	// this one hasn't been evaluated yet:
-	if (ExpandExpression(2, result, &object_token, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, 0))
-		result = OK;
 	
-	DEPRIVATIZE_S_DEREF_BUF
+	ExprTokenType object_token;
+	// Load-time pre-parsing has ensured there are really three args, but mArgc == 2 so this
+	// one hasn't been evaluated yet (since ExpandArgs() doesn't support objects):
+	result = ExpandSingleArg(2, object_token, our_deref_buf, our_deref_buf_size);
+	
+	DEPRIVATIZE_S_DEREF_BUF;
 
-	if (result == FAIL || result == EARLY_EXIT)
-		// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
-		return result;
-
-	if (object_token.symbol != SYM_OBJECT)
+	if (result != OK || object_token.symbol != SYM_OBJECT)
 		// The expression didn't resolve to an object, so no enumerator is available.
-		return OK;
+		return result;
 	
 	TCHAR buf[MAX_NUMBER_SIZE]; // Small buffer which may be used by object->Invoke().
 	
@@ -15834,6 +16012,11 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 			, *mArg[0].text ? mArg[0].text : VAR(mArg[0])->mName	  // i.e. don't resolve dynamic variable names.
 			, *mArg[1].text || !VAR(mArg[1]) ? mArg[1].text : VAR(mArg[1])->mName  // can be omitted.
 			, mArg[2].text);
+	else if ((mActionType == ACT_SWITCH || mActionType == ACT_CASE) && mAttribute)
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s %s%s"), g_act[mActionType].Name
+			, mArg[0].text, mActionType == ACT_CASE ? _T(":") : _T(""));
+	else if (mActionType == ACT_CASE)
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("Default:"));
 	else
 	{
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), g_act[mActionType].Name);

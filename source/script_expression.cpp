@@ -1720,6 +1720,68 @@ double_deref_fail: // For the rare cases when the name of a dynamic function cal
 
 
 
+ResultType Line::ExpandSingleArg(int aArgIndex, ExprTokenType &aResultToken, LPTSTR &aDerefBuf, size_t &aDerefBufSize)
+{
+	ExprTokenType *postfix = mArg[aArgIndex].postfix;
+	if (postfix->symbol < SYM_DYNAMIC // i.e. any other operand type.
+		&& postfix->symbol != SYM_VAR // Variables must be dereferenced.
+		&& postfix[1].symbol == SYM_INVALID) // Exactly one token.
+	{
+		aResultToken.symbol = postfix->symbol;
+		aResultToken.value_int64 = postfix->value_int64;
+#ifdef _WIN64
+		aResultToken.buf = postfix->buf;
+#endif
+		return OK;
+	}
+
+	size_t space_needed = EXPR_BUF_SIZE(mArg[aArgIndex].length);
+
+	if (aDerefBufSize < space_needed)
+	{
+		if (aDerefBuf)
+		{
+			free(aDerefBuf);
+			if (aDerefBufSize > LARGE_DEREF_BUF_SIZE)
+				--sLargeDerefBufs;
+		}
+		if ( !(aDerefBuf = tmalloc(space_needed)) )
+		{
+			aDerefBufSize = 0;
+			return LineError(ERR_OUTOFMEM);
+		}
+		aDerefBufSize = space_needed;
+		if (aDerefBufSize > LARGE_DEREF_BUF_SIZE)
+			++sLargeDerefBufs;
+	}
+
+	// Use the whole buf:
+	LPTSTR buf_marker = aDerefBuf;
+	size_t extra_size = aDerefBufSize - space_needed;
+
+	// None of the previous args (if any) are needed, so pass an array of NULLs:
+	LPTSTR arg_deref[MAX_ARGS];
+	for (int i = 0; i < aArgIndex; i++)
+		arg_deref[i] = NULL;
+
+	// Initialize aResultToken so we can detect when ExpandExpression() uses it:
+	aResultToken.symbol = SYM_INVALID;
+	
+	ResultType result;
+	LPTSTR string_result = ExpandExpression(aArgIndex, result, &aResultToken, buf_marker, aDerefBuf, aDerefBufSize, arg_deref, extra_size);
+	if (!string_result)
+		return result; // Should be EARLY_EXIT or FAIL.
+
+	if (aResultToken.symbol == SYM_INVALID) // It wasn't set by ExpandExpression().
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = string_result;
+	}
+	return OK;
+}
+
+
+
 bool Func::Call(UDFCallInfo &aFuncCall, ResultType &aResult, ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic)
 // aFuncCall: Caller passes a variable which should go out of scope after the function call's result
 //   has been used; this automatically frees and restores a UDFs local vars (where applicable).

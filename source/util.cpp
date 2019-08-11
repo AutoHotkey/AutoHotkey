@@ -2754,6 +2754,70 @@ int FindNextDelimiter(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR a
 
 
 
+// FindExprDelim: The successor to FindNextDelimiter(), ported from the v2 branch.
+int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLiteralMap)
+// Returns the index of the next delimiter, taking into account quotes, parentheses, etc.
+// If the delimiter is not found, returns the length of aBuf.
+{
+	TCHAR close_char;
+	for (int mark = aStartIndex; ; ++mark)
+	{
+		if (aBuf[mark] == aDelimiter && (aDelimiter != ':' || aBuf[mark+1] != '='))
+			return mark;
+		switch (aBuf[mark])
+		{
+		case '\0':
+			// Reached the end of the string without finding a delimiter.  Return the
+			// index of the null-terminator since that's typically what the caller wants.
+			return mark;
+		default:
+		//case '`': // May indicate an attempt to escape something when aLiteralMap==NULL, but escape has no meaning here.
+			// Not a meaningful character; just have the loop skip over it.
+			continue;
+		case '"':
+			do {
+				++mark;
+				if (!aBuf[mark])
+					return mark; // See case '\0' for comments.
+			} while (aBuf[mark] != '"');
+			continue;
+		case ')':
+		case ']':
+		case '}':
+			if (aDelimiter && aDelimiter != ':') // Caller wants to find a specific symbol and it's not this one.
+				continue; // Unbalanced parentheses etc are caught at a later stage.
+			return mark;
+		case ':':
+			if (aDelimiter // See above.
+				|| aBuf[mark + 1] == '=')
+				continue;
+			// Since aDelimiter is zero, this colon doesn't belong to a ternary expression
+			// or object literal which is part of this sub-expression, so should effectively
+			// terminate the sub-expression (likely a fat arrow function).
+			return mark;
+		case '?':
+			if (aDelimiter && aDelimiter != ':')
+				continue; // The following isn't needed in this case.
+			// Scan for the corresponding ':' (or some other closing symbol if that's missing)
+			// so that it won't terminate the sub-expression.
+			mark = FindExprDelim(aBuf, ':', mark + 1, aLiteralMap);
+			if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
+				return mark; // See case '\0' for comments.
+			continue; // The colon is also skipped via the loop's increment.
+		case '(': close_char = ')'; break;
+		case '[': close_char = ']'; break;
+		case '{': close_char = '}'; break;
+		}
+		// Since above didn't "return" or "continue":
+		mark = FindExprDelim(aBuf, close_char, mark + 1, aLiteralMap);
+		if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
+			return mark; // See case '\0' for comments.
+		// Otherwise, continue the loop.
+	} // for each character.
+}
+
+
+
 bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch)
 // Checks if aStr exists in aList (which is a comma-separated list).
 // If aStr is blank, aList must start with a delimiting comma for there to be a match.

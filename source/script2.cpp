@@ -18794,7 +18794,7 @@ SymbolType TokenIsPureNumeric(ExprTokenType &aToken)
 		return aToken.symbol;
 	case SYM_VAR:     return aToken.var->IsNonBlankIntegerOrFloat(); // Supports VAR_NORMAL and VAR_CLIPBOARD.
 	case SYM_OPERAND: return aToken.buf ? PURE_INTEGER // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
-			: IsPureNumeric(TokenToString(aToken), true, false, true);
+			: IsPureNumeric(aToken.marker, true, false, true);
 	//case SYM_STRING:
 	//case SYM_OBJECT: // L31: Objects are currently treated as empty strings in most cases.
 	//case SYM_MISSING:
@@ -19035,6 +19035,54 @@ ResultType TokenSetResult(ExprTokenType &aResultToken, LPCTSTR aResult, size_t a
 		tmemcpy(aResultToken.marker, aResult, aResultLength);
 	aResultToken.marker[aResultLength] = '\0'; // Must be done separately from the memcpy() because the memcpy() might just be taking a substring (i.e. long before result's terminator).
 	return OK;
+}
+
+
+
+SymbolType TypeOfToken(ExprTokenType &aToken)
+{
+	switch (aToken.symbol)
+	{
+	case SYM_VAR:
+		if (aToken.var->HasObject())
+			return SYM_OBJECT;
+		return aToken.var->IsNonBlankIntegerOrFloat();
+	case SYM_OPERAND:
+		if (aToken.buf) // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
+			return SYM_INTEGER;
+		// Otherwise, FALL THROUGH TO BELOW:
+	case SYM_STRING:
+		return IsPureNumeric(aToken.marker, true, false, true);
+	default:
+		return aToken.symbol;
+	}
+}
+
+
+
+BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right)
+// Compares two tokens using similar rules to SYM_EQUAL, but case sensitive if appropriate.
+{
+	SymbolType left_type = TypeOfToken(left)
+			, right_type = TypeOfToken(right);
+
+	if (left_type == SYM_OBJECT || right_type == SYM_OBJECT)
+		return TokenToObject(left) == TokenToObject(right);
+	if (left_type == PURE_NOT_NUMERIC || right_type == PURE_NOT_NUMERIC)
+	{
+		TCHAR left_buf[MAX_NUMBER_SIZE], *left_string = TokenToString(left, left_buf);
+		TCHAR right_buf[MAX_NUMBER_SIZE], *right_string = TokenToString(right, right_buf);
+		switch (g->StringCaseSense)
+		{
+		case SCS_INSENSITIVE:	return !_tcsicmp(left_string, right_string);
+		case SCS_SENSITIVE:		return !_tcscmp(left_string, right_string);
+		default:				return !lstrcmpi(left_string, right_string);
+		}
+	}
+	if (left_type == PURE_INTEGER && right_type == PURE_INTEGER)
+		return TokenToInt64(left) == TokenToInt64(right);
+	else
+		return TokenToDouble(left) == TokenToDouble(right);
 }
 
 
