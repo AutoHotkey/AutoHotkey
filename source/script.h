@@ -178,6 +178,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_BAD_AUTO_CONCAT _T("Missing space or operator before this.")
 #define ERR_MISSING_CLOSE_QUOTE _T("Missing close-quote") // No period after short phrases.
 #define ERR_MISSING_COMMA _T("Missing comma")             //
+#define ERR_MISSING_COLON _T("Missing \":\"")             //
 #define ERR_MISSING_PARAM_NAME _T("Missing parameter name.")
 #define ERR_PARAM_REQUIRED _T("Missing a required parameter.")
 #define ERR_TOO_MANY_PARAMS _T("Too many parameters passed to function.") // L31
@@ -190,6 +191,8 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_FINALLY_WITH_NO_PRECEDENT _T("FINALLY with no matching TRY or CATCH")
 #define ERR_BAD_JUMP_INSIDE_FINALLY _T("Jumps cannot exit a FINALLY block.")
 #define ERR_BAD_JUMP_OUT_OF_FUNCTION _T("Cannot jump from inside a function to outside.")
+#define ERR_UNEXPECTED_CASE _T("Case/Default must be enclosed by a Switch.")
+#define ERR_TOO_MANY_CASE_VALUES _T("Too many case values.")
 #define ERR_EXPECTED_BLOCK_OR_ACTION _T("Expected \"{\" or single-line action.")
 #define ERR_OUTOFMEM _T("Out of memory.")  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
 #define ERR_EXPR_TOO_LONG _T("Expression too complex")
@@ -886,6 +889,7 @@ public:
 	LPTSTR ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *aResultToken
 		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize
 		, Var **aArgVar = NULL);
+	ResultType ExpandSingleArg(int aArgIndex, ResultToken &aResultToken, LPTSTR &aDerefBuf, size_t &aDerefBufSize);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
 	ResultType EvaluateHotCriterionExpression(); // Called by HotkeyCriterion::Eval().
 
@@ -3408,6 +3412,7 @@ IObject *TokenToLabelOrFunctor(ExprTokenType &aToken);
 IObject *StringToLabelOrFunctor(LPTSTR aStr);
 IObject *StringToFunctor(LPTSTR aStr);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
+BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
 void SetWorkingDir(LPTSTR aNewDir, bool aSetErrorLevel = true);

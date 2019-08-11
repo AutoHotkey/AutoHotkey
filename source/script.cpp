@@ -2361,9 +2361,17 @@ examine_line:
 				// something like foo:: from being interpreted as a generic label, so when the line fails
 				// to resolve to a command or expression, an error message will be shown.
 				buf[--buf_length] = '\0';  // Remove the trailing colon.
-				rtrim(buf, buf_length); // Has already been ltrimmed.
-				if (!AddLabel(buf, false))
-					return FAIL;
+				if (!_tcsicmp(buf, _T("Default")) && mOpenBlock && mOpenBlock->mPrevLine // "Default:" case.
+					&& mOpenBlock->mPrevLine->mActionType == ACT_SWITCH) // It's a normal label in any other case.
+				{
+					if (!AddLine(ACT_CASE))
+						return FAIL;
+				}
+				else
+				{
+					if (!AddLabel(buf, false))
+						return FAIL;
+				}
 				goto continue_main_loop; // In lieu of "continue", for performance.
 			}
 		}
@@ -4588,6 +4596,21 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 				break;
 			}
 		}
+		else if (*action_args == ':')
+		{
+			// Default isn't handled as its own action type because that would only cover the cases
+			// where there is a space after the name.  This covers "Default: subaction", "Default :"
+			// and "Default : subaction".  "Default:" on its own is handled by label-parsing.
+			if (!_tcsicmp(action_name, _T("Default")))
+			{
+				if (!AddLine(ACT_CASE))
+					return FAIL;
+				action_args = omit_leading_whitespace(action_args + 1);
+				if (!*action_args)
+					return OK;
+				return ParseAndAddLine(action_args, aBufSize ? aBufSize - int(action_args - aLineText) : 0);
+			}
+		}
 		if (!aActionType && _tcschr(EXPR_ALL_SYMBOLS, *action_args))
 		{
 			LPTSTR question_mark;
@@ -4671,6 +4694,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 				return ScriptError(_T("Invalid loop type."), aLineText);
 		}
 	}
+	int mark;
+	LPTSTR subaction_start = NULL;
 	// Perform some pre-processing to allow the parameter list of a control flow statement
 	// to be enclosed in parentheses.  For goto/gosub/break/continue, this changes the param
 	// from a literal label to an expression.  For others it is just a matter of coding style.
@@ -4719,19 +4744,27 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 	case ACT_FINALLY:
 		if (end_marker && *end_marker == '(') // Seems best to treat this as an error, perhaps reserve for future use.
 			return ScriptError(ERR_EXPR_SYNTAX, aLineText);
-		if (!AddLine(aActionType))
-			return FAIL;
 		if (*action_args == '{')
 		{
-			if (!AddLine(ACT_BLOCK_BEGIN))
-				return FAIL;
+			add_openbrace_afterward = true;
 			action_args = omit_leading_whitespace(action_args + 1);
 		}
-		if (!*action_args)
-			return OK;
-		// Call self recursively to parse the sub-action.
-		//mCurrLine = NULL; // Seems more useful to leave this set to the line added above.
-		return ParseAndAddLine(action_args, aBufSize - int(action_args - aLineText));
+		if (*action_args)
+		{
+			subaction_start = action_args;
+			*--action_args = '\0'; // Relies on there being a space, tab or brace at this position.
+		}
+		break;
+	case ACT_CASE:
+		mark = FindExprDelim(action_args, ':');
+		if (!action_args[mark])
+			return ScriptError(ERR_MISSING_COLON, aLineText);
+		action_args[mark] = '\0';
+		rtrim(action_args);
+		subaction_start = omit_leading_whitespace(action_args + mark + 1);
+		if (!*subaction_start) // Nothing to the right of ':'.
+			subaction_start = NULL;
+		break;
 	}
 
 	Action &this_action = g_act[aActionType];
@@ -4771,7 +4804,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 		ConvertEscapeSequences(action_args, literal_map);
 	}
 
-	int mark;
 	if (aActionType == ACT_FOR)
 	{
 		// Validate "For" syntax and translate to conventional command syntax.
@@ -4883,7 +4915,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 
 	// Handle one-true-brace (OTB).
 	// Else, Try and Finally were already handled, since they also accept a sub-action.
-	if (nArgs && (ACT_IS_LOOP(aActionType) || aActionType == ACT_IF || aActionType == ACT_CATCH)
+	if (nArgs && (ACT_IS_LOOP(aActionType) || aActionType == ACT_IF || aActionType == ACT_CATCH || aActionType == ACT_SWITCH)
 		&& !add_openbrace_afterward) // It wasn't already handled.
 	{
 		LPTSTR arg1 = arg[nArgs - 1]; // For readability and possibly performance.
@@ -4896,7 +4928,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 			if (!rtrim(arg1)) // Trimmed down to nothing, so only a brace was present: remove the arg completely.
 				if (aActionType == ACT_LOOP || aActionType == ACT_CATCH)
 					--nArgs;
-				else // ACT_WHILE or ACT_FOR
+				else // ACT_WHILE, ACT_FOR or ACT_SWITCH
 					return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
 		}
 	}
@@ -4906,7 +4938,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 	if (add_openbrace_afterward)
 		if (!AddLine(ACT_BLOCK_BEGIN))
 			return FAIL;
-	return OK;
+	if (!subaction_start) // There is no subaction in this case.
+		return OK;
+	return ParseAndAddLine(subaction_start, aBufSize ? aBufSize - int(subaction_start - aLineText) : 0); // Escape sequences in the subaction haven't been translated yet.
 }
 
 
@@ -7881,6 +7915,50 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			// Otherwise, continue processing at line's new location:
 			continue;
 		} // ActionType is IF/LOOP/TRY.
+		else if (line->mActionType == ACT_SWITCH)
+		{
+			// "Hide" the arg so that ExpandArgs() doesn't evaluate it.  This is necessary because
+			// ACT_SWITCH has special handling to support objects.
+			line->mAttribute = (AttributeType)line->mArgc;
+			line->mArgc = 0;
+			Line *switch_line = line;
+
+			line = line->mNextLine;
+			if (line->mActionType != ACT_BLOCK_BEGIN)
+				return switch_line->PreparseError(ERR_MISSING_OPEN_BRACE);
+			Line *block_begin = line;
+			block_begin->mParentLine = switch_line;
+			
+			Line *end_line = NULL;
+			for (line = line->mNextLine; line->mActionType == ACT_CASE; line = end_line)
+			{
+				// Hide the arg so that ExpandArgs() won't evaluate it.
+				line->mAttribute = (AttributeType)line->mArgc;
+				line->mArgc = 0;
+				line->mParentLine = block_begin; // Required for GOTO to work correctly.
+				// Find the next ACT_CASE or ACT_BLOCK_END:
+				end_line = PreparseBlocks(line->mNextLine, UNTIL_BLOCK_END, block_begin, aLoopType);
+				if (!end_line)
+					return NULL; // Error.
+				// Form a linked list of CASE lines within this block:
+				line->mRelatedLine = end_line;
+			}
+
+			if (!end_line) // First line is not ACT_CASE.
+			{
+				if (line->mActionType != ACT_BLOCK_END)
+					return line->PreparseError(_T("Expected Case/Default"));
+				end_line = line;
+			}
+
+			// After evaluating ACT_SWITCH, execution resumes after ACT_BLOCK_END:
+			switch_line->mRelatedLine = line = end_line->mNextLine;
+
+			if (aMode == ONLY_ONE_LINE) // Return the next unprocessed line to the caller.
+				return line;
+			// Otherwise, continue processing at line's new location:
+			continue;
+		}
 
 		// Since above didn't continue, do the switch:
 		switch (line->mActionType)
@@ -7911,6 +7989,12 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			if (aLoopType == ACT_FINALLY)
 				return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			break;
+
+		case ACT_CASE:
+			if (!aParentLine || !aParentLine->mParentLine
+				|| aParentLine->mParentLine->mActionType != ACT_SWITCH)
+				return line->PreparseError(ERR_UNEXPECTED_CASE);
+			return line;
 
 		case ACT_ELSE:
 			// This happens if there's an extra ELSE in this scope level that has no IF:
@@ -10660,6 +10744,121 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			continue;
 		}
 
+		case ACT_SWITCH:
+		{
+			Line *line_to_execute = NULL;
+
+			// Privatize our deref buf so that any function calls within any of the SWITCH/CASE
+			// expressions can allocate and use their own separate deref buf.  Our deref buf
+			// will be reused for each expression evaluation.
+			PRIVATIZE_S_DEREF_BUF;
+
+			size_t switch_value_mem_size;
+			ResultToken switch_value;
+			switch_value.mem_to_free = NULL;
+			if (!line->mAttribute) // Switch with no value: find the first 'true' case.
+			{
+				switch_value.symbol = SYM_INVALID;
+				result = OK;
+			}
+			else
+				result = line->ExpandSingleArg(0, switch_value, our_deref_buf, our_deref_buf_size);
+			if (result == OK)
+			{
+				if (switch_value.symbol == SYM_STRING && switch_value.marker == our_deref_buf)
+				{
+					// Prevent the case expressions from reusing our_deref_buf, since we'll need it.
+					// A new buf will be allocated by ExpandSingleArg() if required, which would only
+					// be if at least one case expression is not a literal number/quoted string.
+					switch_value.mem_to_free = our_deref_buf;
+					switch_value_mem_size = our_deref_buf_size;
+					our_deref_buf = NULL;
+					our_deref_buf_size = 0;
+				}
+				// For each CASE:
+				for (Line *case_line = line->mNextLine->mNextLine; case_line->mActionType == ACT_CASE; case_line = case_line->mRelatedLine)
+				{
+					int arg, arg_count = (int)(INT_PTR)case_line->mAttribute;
+					if (!arg_count) // The default case.
+					{
+						line_to_execute = case_line->mNextLine;
+						continue;
+					}
+					for (arg = 0; arg < arg_count; ++arg)
+					{
+						ResultToken case_value;
+						result = case_line->ExpandSingleArg(arg, case_value, our_deref_buf, our_deref_buf_size);
+						if (result != OK)
+						{
+							line_to_execute = NULL; // Do not execute default case.
+							break;
+						}
+						bool found = switch_value.symbol == SYM_INVALID ? TokenToBOOL(case_value)
+							: TokensAreEqual(switch_value, case_value);
+						if (case_value.symbol == SYM_OBJECT)
+							case_value.object->Release();
+						if (found)
+						{
+							line_to_execute = case_line->mNextLine;
+							break;
+						}
+					}
+					if (arg < arg_count)
+						break;
+				}
+				if (switch_value.symbol == SYM_OBJECT)
+					switch_value.object->Release();
+				if (switch_value.mem_to_free)
+				{
+					if (our_deref_buf)
+					{
+						// Free the newly allocated deref buf.
+						free(our_deref_buf);
+						if (our_deref_buf_size > LARGE_DEREF_BUF_SIZE)
+							--sLargeDerefBufs;
+					}
+					// Restore original deref buf.
+					our_deref_buf = switch_value.mem_to_free;
+					our_deref_buf_size = switch_value_mem_size;
+				}
+			}
+
+			DEPRIVATIZE_S_DEREF_BUF;
+
+			if (line_to_execute)
+			{
+				// Above found a matching CASE.  Execute the lines between it and the next CASE or block-end.
+				result = line_to_execute->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
+			}
+			else
+				jump_to_line = NULL;
+
+			if (result != OK || aMode == ONLY_ONE_LINE)
+			{
+				caller_jump_to_line = jump_to_line;
+				return result;
+			}
+			
+			if (jump_to_line != NULL)
+			{
+				if (jump_to_line->mParentLine != line->mParentLine)
+				{
+					caller_jump_to_line = jump_to_line;
+					return OK;
+				}
+				line = jump_to_line;
+				continue;
+			}
+			
+			// Continue execution at the line following the block-end.
+			line = line->mRelatedLine;
+			continue;
+		}
+
+		case ACT_CASE:
+			// This is the next CASE after one that matched, so we're done.
+			return OK;
+
 		case ACT_BLOCK_BEGIN:
 			if (line->mAttribute) // This is the ACT_BLOCK_BEGIN that starts a function's body.
 			{
@@ -12781,6 +12980,11 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 	else if (mActionType == ACT_FOR)
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("For %s%s%s in %s")
 			, mArg[0].text, *mArg[1].text ? _T(",") : _T(""), mArg[1].text, mArg[2].text);
+	else if ((mActionType == ACT_SWITCH || mActionType == ACT_CASE) && mAttribute)
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s %s%s"), g_act[mActionType].Name
+			, mArg[0].text, mActionType == ACT_CASE ? _T(":") : _T(""));
+	else if (mActionType == ACT_CASE)
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("Default:"));
 	else
 	{
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s"), g_act[mActionType].Name);

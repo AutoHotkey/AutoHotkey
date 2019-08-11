@@ -513,7 +513,6 @@ enum enum_act {
 // any POD structures that contain an action_type field:
   ACT_INVALID = FAIL  // These should both be zero for initialization and function-return-value purposes.
 , ACT_ASSIGNEXPR
-// Actions above this line take care of calling ExpandArgs() for themselves (ACT_EXPANDS_ITS_OWN_ARGS).
 , ACT_EXPRESSION
 // Keep ACT_BLOCK_BEGIN as the first "control flow" action, for range checks with ACT_FIRST_CONTROL_FLOW:
 , ACT_BLOCK_BEGIN, ACT_BLOCK_END
@@ -528,7 +527,8 @@ enum enum_act {
 , ACT_FIRST_JUMP = ACT_BREAK, ACT_LAST_JUMP = ACT_GOSUB // Actions which accept a label name.
 , ACT_RETURN
 , ACT_TRY, ACT_CATCH, ACT_FINALLY, ACT_THROW // Keep TRY, CATCH and FINALLY together and in this order for range checks.
-, ACT_FIRST_CONTROL_FLOW = ACT_BLOCK_BEGIN, ACT_LAST_CONTROL_FLOW = ACT_THROW
+, ACT_SWITCH, ACT_CASE
+, ACT_FIRST_CONTROL_FLOW = ACT_BLOCK_BEGIN, ACT_LAST_CONTROL_FLOW = ACT_CASE
 , ACT_FIRST_COMMAND, ACT_EXIT = ACT_FIRST_COMMAND, ACT_EXITAPP // Excluded from the "CONTROL_FLOW" range above because they can be safely wrapped into a Func.
 , ACT_TOOLTIP, ACT_TRAYTIP
 , ACT_SPLITPATH
@@ -580,7 +580,7 @@ enum enum_act {
 #define ACT_IS_LINE_PARENT(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
 	|| ACT_IS_LOOP(ActionType) || (ActionType >= ACT_TRY && ActionType <= ACT_FINALLY))
 #define ACT_EXPANDS_ITS_OWN_ARGS(ActionType) (ActionType == ACT_ASSIGNEXPR || ActionType == ACT_WHILE || ActionType == ACT_FOR || ActionType == ACT_THROW)
-#define ACT_USES_SIMPLE_POSTFIX(ActionType) (ActionType == ACT_ASSIGNEXPR || ActionType == ACT_RETURN) // Actions which are optimized to use arg.postfix when is_expression == false, via the "only_token" optimization.
+#define ACT_USES_SIMPLE_POSTFIX(ActionType) (ActionType == ACT_ASSIGNEXPR || ActionType == ACT_RETURN || ActionType == ACT_SWITCH || ActionType == ACT_CASE) // Actions which are optimized to use arg.postfix when is_expression == false, via the "only_token" optimization.
 
 // For convenience in many places.  Must cast to int to avoid loss of negative values.
 #define BUF_SPACE_REMAINING ((int)(aBufSize - (aBuf - aBuf_orig)))
