@@ -250,8 +250,6 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 bool IsHotstringWordChar(TCHAR aChar);
 void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aKeyUp, bool aIsSuppressed);
 bool KeybdEventIsPhysical(DWORD aEventFlags, const vk_type aVK, bool aKeyUp);
-bool DualStateNumpadKeyIsDown();
-bool IsDualStateNumpadKey(const vk_type aVK, const sc_type aSC);
 
 void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType aWhichHookAlways);
 void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary = false);
