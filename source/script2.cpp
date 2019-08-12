@@ -860,6 +860,7 @@ input_type *InputRelease(input_type *aInput)
 		if (aInput->ScriptObject->onEnd)
 			return aInput; // Return for caller to call OnEnd and Release.
 		aInput->ScriptObject->Release();
+		g_script.ExitIfNotPersistent(EXIT_EXIT); // In case this InputHook was the only thing keeping the script running.
 	}
 	return NULL;
 }

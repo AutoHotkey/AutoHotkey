@@ -787,7 +787,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			case AHK_INPUT_END:
 				input_hook = InputRelease((input_type *)msg.wParam); // The function will verify that it is a valid input_type pointer.
 				if (!input_hook)
-					continue; // Invalid message or legacy Input command ending.
+					continue; // No OnEnd callback/invalid message.
 				priority = 0;
 				break;
 

@@ -1279,9 +1279,7 @@ bool Script::IsPersistent()
 		|| g_script.mTimerEnabledCount // At least one script timer is currently enabled.
 		|| g_MsgMonitor.Count() // At least one message monitor is active (installed by OnMessage).
 		|| mOnClipboardChange.Count() // The script is monitoring clipboard changes.
-		// The following isn't checked because there has to be at least one script thread
-		// running for it to be true, in which case we shouldn't have been called:
-		//|| (g_input.status == INPUT_IN_PROGRESS) // The hook is actively collecting input for the Input command.
+		|| g_input // At least one active Input or InputHook (but Input would imply there is a script thread running).
 		|| (mNIC.hWnd && mTrayMenu->ContainsCustomItems())) // The tray icon is visible and its menu has custom items.
 		return true;
 	for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
