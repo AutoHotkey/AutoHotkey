@@ -229,6 +229,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	int gui_event_arg_count;
 	POINT gui_point;
 	HDROP hdrop_to_free;
+	input_type *input_hook;
 	LRESULT msg_reply;
 	BOOL peek_result;
 	MSG msg;
@@ -623,6 +624,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		case AHK_GUI_ACTION:   // The user pressed a button on a GUI window, or some other actionable event. Listed before the below for performance.
 		case WM_HOTKEY:        // As a result of this app having previously called RegisterHotkey(), or from TriggerJoyHotkeys().
 		case AHK_USER_MENU:    // The user selected a custom menu item.
+		case AHK_INPUT_END:    // Input ended (sent by the hook thread).
+		case AHK_INPUT_KEYDOWN:
+		case AHK_INPUT_CHAR:
 		{
 			hdrop_to_free = NULL;  // Set default for this message's processing (simplifies code).
 			switch(msg.message)
@@ -780,6 +784,23 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				priority = 0;  // Always use default for now.
 				break;
 
+			case AHK_INPUT_END:
+				input_hook = InputRelease((input_type *)msg.wParam); // The function will verify that it is a valid input_type pointer.
+				if (!input_hook)
+					continue; // Invalid message or legacy Input command ending.
+				priority = 0;
+				break;
+
+			case AHK_INPUT_KEYDOWN:
+			case AHK_INPUT_CHAR:
+				for (input_hook = g_input; input_hook && input_hook != (input_type *)msg.wParam; input_hook = input_hook->Prev);
+				if (!input_hook)
+					continue; // Invalid message or Input already ended (and therefore may have been deleted).
+				if (!(msg.message == AHK_INPUT_KEYDOWN ? input_hook->ScriptObject->onKeyDown : input_hook->ScriptObject->onChar))
+					continue;
+				priority = 0;
+				break;
+
 			default: // hotkey
 				hk_id = msg.wParam & HOTKEY_ID_MASK;
 				if (hk_id >= Hotkey::sHotkeyCount) // Invalid hotkey ID.
@@ -888,6 +909,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					DragFinish(hdrop_to_free); // Since the drop-thread will not be launched, free the memory.
 					pgui->mHdrop = NULL; // Indicate that this GUI window is ready for another drop.
 				}
+				if (msg.message == AHK_INPUT_END)
+					input_hook->ScriptObject->Release();
 				continue;
 				// If the above "continued", it seems best not to re-queue/buffer the key since
 				// it might be a while before the number of threads drops back below the limit.
@@ -901,6 +924,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					DragFinish(hdrop_to_free); // Since the drop-thread will not be launched, free the memory.
 					pgui->mHdrop = NULL; // Indicate that this GUI window is ready for another drop.
 				}
+				if (msg.message == AHK_INPUT_END)
+					input_hook->ScriptObject->Release();
 				continue;
 			}
 
@@ -932,6 +957,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			{
 			case AHK_GUI_ACTION: // Listed first for performance.
 			case AHK_CLIPBOARD_CHANGE:
+			case AHK_INPUT_END:
+			case AHK_INPUT_KEYDOWN:
+			case AHK_INPUT_CHAR:
 			case AHK_USER_MENU: // user-defined menu item
 				break; // Do nothing at this stage.
 			default: // hotkey or hotstring
@@ -1228,6 +1256,38 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				g_script.mOnClipboardChange.Call(&param, 1, 1);
 				DEBUGGER_STACK_POP()
 				g_script.mOnClipboardChangeIsRunning = false;
+				break;
+			}
+
+			case AHK_INPUT_END:
+			{
+				ExprTokenType param = input_hook->ScriptObject;
+				LabelPtr(input_hook->ScriptObject->onEnd)->ExecuteInNewThread(_T("InputHook"), &param, 1);
+				input_hook->ScriptObject->Release();
+				break;
+			}
+			
+			case AHK_INPUT_KEYDOWN:
+			{
+				ExprTokenType params[] =
+				{
+					input_hook->ScriptObject,
+					__int64(vk_type(msg.lParam)),
+					__int64(sc_type(msg.lParam >> 16)),
+				};
+				LabelPtr(input_hook->ScriptObject->onKeyDown)->ExecuteInNewThread(_T("InputHook"), params, _countof(params));
+				break;
+			}
+
+			case AHK_INPUT_CHAR:
+			{
+				TCHAR chars[] = { TCHAR(msg.lParam), TCHAR(msg.lParam >> 16), '\0' };
+				ExprTokenType params[] =
+				{
+					input_hook->ScriptObject,
+					chars
+				};
+				LabelPtr(input_hook->ScriptObject->onChar)->ExecuteInNewThread(_T("InputHook"), params, _countof(params));
 				break;
 			}
 
@@ -2069,8 +2129,22 @@ VOID CALLBACK AutoExecSectionTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWO
 
 VOID CALLBACK InputTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 {
-	KILL_INPUT_TIMER
-	g_input.status = INPUT_TIMED_OUT;
+	int new_timer_period = 0;
+	for (auto *input = g_input; input; input = input->Prev)
+	{
+		if (input->Timeout && input->InProgress())
+		{
+			int time_left = int(input->TimeoutAt - dwTime);
+			if (time_left <= 0)
+				input->EndByTimeout();
+			else if (time_left < new_timer_period || !new_timer_period)
+				new_timer_period = time_left;
+		}
+	}
+	if (new_timer_period != 0)
+		SET_INPUT_TIMER(new_timer_period, dwTime + new_timer_period)
+	else
+		KILL_INPUT_TIMER
 }
 
 

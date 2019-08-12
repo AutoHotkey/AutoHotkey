@@ -98,6 +98,7 @@ extern int g_nLayersNeedingTimer;
 extern int g_nThreads;
 extern int g_nPausedThreads;
 extern int g_MaxHistoryKeys;
+extern DWORD g_InputTimeoutAt;
 
 extern UCHAR g_MaxThreadsPerHotkey;
 extern int g_MaxThreadsTotal;
@@ -159,7 +160,7 @@ extern TCHAR g_EndChars[HS_MAX_END_CHARS + 1];
 
 // Global objects:
 extern Var *g_ErrorLevel;
-extern input_type g_input;
+extern input_type *g_input;
 EXTERN_SCRIPT;
 EXTERN_CLIPBOARD;
 EXTERN_OSVER;
@@ -286,9 +287,12 @@ if (!g_MainTimerExists)\
 		g_AutoExecTimerExists = SetTimer(g_hWnd, TIMER_ID_AUTOEXEC, aTimeoutValue, AutoExecSectionTimeout);\
 } // v1.0.39 for above: Removed the call to ExitApp() upon failure.  See SET_MAIN_TIMER for details.
 
-#define SET_INPUT_TIMER(aTimeoutValue) \
-if (!g_InputTimerExists)\
-	g_InputTimerExists = SetTimer(g_hWnd, TIMER_ID_INPUT, aTimeoutValue, InputTimeout);
+#define SET_INPUT_TIMER(aTimeoutValue, aTimeoutAt) \
+{ \
+g_InputTimeoutAt = aTimeoutAt; \
+g_InputTimerExists = SetTimer(g_hWnd, TIMER_ID_INPUT, aTimeoutValue, InputTimeout); \
+}
+
 
 // For this one, SetTimer() is called unconditionally because our caller wants the timer reset
 // (as though it were killed and recreated) unconditionally.  MSDN's comments are a little vague

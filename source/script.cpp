@@ -162,6 +162,7 @@ FuncEntry g_BIF[] =
 	BIFn(Input, 0, 3, BIF_Input),
 	BIF1(InputBox, 0, 4),
 	BIFn(InputEnd, 0, 0, BIF_Input),
+	BIF1(InputHook, 0, 3),
 	BIF1(InStr, 2, 5),
 	BIF1(Integer, 1, 1),
 	BIF1(IsByRef, 1, 1, {1}),

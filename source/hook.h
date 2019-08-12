@@ -39,6 +39,7 @@ enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_
 	, AHK_CLIPBOARD_CHANGE, AHK_HOOK_TEST_MSG, AHK_CHANGE_HOOK_STATE, AHK_GETWINDOWTEXT
 	, AHK_HOT_IF_EVAL	// HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
 	, AHK_HOOK_SYNC // For WaitHookIdle().
+	, AHK_INPUT_END, AHK_INPUT_KEYDOWN, AHK_INPUT_CHAR
 };
 // NOTE: TRY NEVER TO CHANGE the specific numbers of the above messages, since some users might be
 // using the Post/SendMessage commands to automate AutoHotkey itself.  Here is the original order
@@ -163,46 +164,106 @@ struct key_type
 #define VK_ARRAY_COUNT (VK_MAX + 1)
 #define SC_ARRAY_COUNT (SC_MAX + 1)
 
-#define INPUT_BUFFER_SIZE 16384
+#define INPUT_BUFFER_SIZE 16384 // Default buffer size for Input.  Used to be the absolute max.
+#define INPUTHOOK_BUFFER_SIZE 1024 // Default buffer size for InputHook.
 
 enum InputStatusType {INPUT_OFF, INPUT_IN_PROGRESS, INPUT_TIMED_OUT, INPUT_TERMINATED_BY_MATCH
-	, INPUT_TERMINATED_BY_ENDKEY, INPUT_LIMIT_REACHED, INPUT_TERMINATED_BY_INPUTEND};
+	, INPUT_TERMINATED_BY_ENDKEY, INPUT_LIMIT_REACHED, INPUT_INTERRUPTED};
 
-// Bitwise flags for the end-key arrays:
-#define END_KEY_ENABLED 0x01
-#define END_KEY_WITH_SHIFT 0x02
-#define END_KEY_WITHOUT_SHIFT 0x04
+// Bitwise flags for the Key arrays:
+#define END_KEY_WITH_SHIFT 0x01
+#define END_KEY_WITHOUT_SHIFT 0x02
+#define END_KEY_ENABLED (END_KEY_WITH_SHIFT | END_KEY_WITHOUT_SHIFT)
+#define INPUT_KEY_SUPPRESS 0x04
+#define INPUT_KEY_VISIBLE 0x08
+#define INPUT_KEY_VISIBILITY_MASK (INPUT_KEY_SUPPRESS | INPUT_KEY_VISIBLE)
+#define INPUT_KEY_IGNORE_TEXT 0x10
+#define INPUT_KEY_NOTIFY 0x20
+#define INPUT_KEY_OPTION_MASK 0x7F
+#define INPUT_KEY_DOWN_SUPPRESSED 0x80
 
+class InputObject;
 struct input_type
 {
-	InputStatusType status;
-	UCHAR *EndVK; // A sparse array that indicates which VKs terminate the input.
-	UCHAR *EndSC; // A sparse array that indicates which SCs terminate the input.
+	InputStatusType Status;
+	input_type *Prev;
+	InputObject *ScriptObject;
+	LPTSTR Buffer; // Stores the user's actual input.
+	int BufferLength; // The current length of what the user entered.
+	int BufferLengthMax; // The maximum allowed length of the input.
 	TCHAR *EndChars; // A string of characters that should terminate the input.
-	vk_type EndingVK; // The hook puts the terminating key into one of these if that's how it was terminated.
-	sc_type EndingSC;
-	TCHAR EndingChar;
-	bool EndedBySC;  // Whether the Ending key was one handled by VK or SC.
-	bool EndingRequiredShift;  // Whether the key that terminated the input was one that needed the SHIFT key.
+	UINT EndCharsMax; // Current size of EndChars buffer.
 	LPTSTR *match; // Array of strings, each string is a match-phrase which if entered, terminates the input.
 	UINT MatchCount; // The number of strings currently in the array.
 	UINT MatchCountMax; // The maximum number of strings that the match array can contain.
 	#define INPUT_ARRAY_BLOCK_SIZE 1024  // The increment by which the above array expands.
 	LPTSTR MatchBuf; // The is the buffer whose contents are pointed to by the match array.
 	UINT MatchBufSize; // The capacity of the above buffer.
+	int Timeout;
+	DWORD TimeoutAt;
+	SendLevelType MinSendLevel; // The minimum SendLevel that can be captured by this input (0 allows all).
 	bool BackspaceIsUndo;
 	bool CaseSensitive;
-	bool IgnoreAHKInput; // Whether input from any AHK script is ignored for the purpose of finding a match.
 	bool TranscribeModifiedKeys; // Whether the input command will attempt to transcribe modified keys such as ^c.
-	bool Visible;
+	bool VisibleText, VisibleNonText;
+	bool NotifyNonText;
 	bool FindAnywhere;
-	LPTSTR buffer; // Stores the user's actual input.
-	int BufferLength; // The current length of what the user entered.
-	int BufferLengthMax; // The maximum allowed length of the input.
+	bool EndCharMode;
+	vk_type EndingVK; // The hook puts the terminating key into one of these if that's how it was terminated.
+	sc_type EndingSC;
+	TCHAR EndingChar;
+	bool EndingBySC; // Whether the Ending key was one handled by VK or SC.
+	bool EndingRequiredShift; // Whether the key that terminated the input was one that needed the SHIFT key.
+	modLR_type EndingMods;
+	UINT EndingMatchIndex;
+	UCHAR KeyVK[VK_ARRAY_COUNT]; // A sparse array of key flags by VK.
+	UCHAR KeySC[SC_ARRAY_COUNT]; // A sparse array of key flags by SC.
 	input_type::input_type() // A simple constructor to initialize the fields that need it.
-		: status(INPUT_OFF), match(NULL), MatchBuf(NULL), MatchBufSize(0), buffer(NULL)
-	{}
+		: Status(INPUT_OFF), Prev(NULL), ScriptObject(NULL)
+		, Buffer(NULL), match(NULL), MatchBuf(NULL), MatchBufSize(0)
+		, EndChars(NULL), EndCharsMax(0), KeyVK(), KeySC(), BufferLength(0)
+		, EndingMods(0)
+		// Default options:
+		, MinSendLevel(0), BackspaceIsUndo(true), CaseSensitive(false), TranscribeModifiedKeys(false)
+		, VisibleText(false), VisibleNonText(true), NotifyNonText(false), FindAnywhere(false), EndCharMode(false)
+		, BufferLengthMax(INPUTHOOK_BUFFER_SIZE - 1), Timeout(0)
+	{
+	}
+	~input_type()
+	{
+		free(Buffer);
+		free(match);
+		free(MatchBuf);
+		if (EndCharsMax) // If zero, EndChars may point to static memory.
+			free(EndChars);
+	}
+	inline bool InProgress() { return Status == INPUT_IN_PROGRESS; }
+	bool IsInteresting(KBDLLHOOKSTRUCT &aEvent);
+	ResultType Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length);
+	void ParseOptions(LPTSTR aOptions);
+	void SetTimeoutTimer();
+	ResultType SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode = true, UCHAR aFlagsRemove = 0, UCHAR aFlagsAdd = END_KEY_ENABLED);
+	ResultType SetMatchList(LPTSTR aMatchList, size_t aMatchList_length);
+	void Start();
+	void EndByMatch(UINT aMatchIndex);
+	void EndByKey(vk_type aVK, sc_type aSC, bool aBySC, bool aRequiredShift);
+	void EndByChar(TCHAR aChar);
+	void EndByTimeout() { EndByReason(INPUT_TIMED_OUT); }
+	void EndByLimit() { EndByReason(INPUT_LIMIT_REACHED); }
+	void EndByNewInput() { EndByReason(INPUT_INTERRUPTED); }
+	void Stop() { EndByReason(INPUT_OFF); }
+	void CollectChar(TCHAR *ch, int char_count);
+	LPTSTR GetEndReason(LPTSTR aKeyBuf, int aKeyBufSize, bool aCombined = true);
+private:
+	void EndByReason(InputStatusType aReason);
 };
+
+#include "input_object.h"
+
+ResultType InputStart(input_type &input, ResultToken *apResultToken = NULL);
+ResultType InputWait(ResultToken &aResultToken, input_type &input);
+input_type *InputRelease(input_type *aInput);
+input_type *InputFind(InputObject *object);
 
 
 //-------------------------------------------
@@ -247,6 +308,9 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 
 bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aKeyUp, bool aIsIgnored
 	, KeyHistoryItem *pKeyHistoryCurr, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost);
+bool CollectHotstring(KBDLLHOOKSTRUCT &aEvent, TCHAR aChar[], int aCharCount, HWND aActiveWindow
+	, KeyHistoryItem *pKeyHistoryCurr, WPARAM &aHotstringWparamToPost, LPARAM &aHotstringLparamToPost);
+bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, TCHAR aChar[], int aCharCount, bool aIsIgnored);
 bool IsHotstringWordChar(TCHAR aChar);
 void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC, bool aKeyUp, bool aIsSuppressed);
 bool KeybdEventIsPhysical(DWORD aEventFlags, const vk_type aVK, bool aKeyUp);

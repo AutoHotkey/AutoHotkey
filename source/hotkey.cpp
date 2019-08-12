@@ -377,7 +377,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// v1.0.42: Reset sWhichHookNeeded because it's now possible that the hook was on before but no longer
 	// needed due to changing of a hotkey from hook to registered (for various reasons described above):
 	// v1.0.91: Make sure to leave the keyboard hook active if the script needs it for collecting input.
-	if (g_input.status == INPUT_IN_PROGRESS)
+	if (g_input) // There's an Input in progress (or just ending).
 		sWhichHookNeeded = HOOK_KEYBD;
 	else
 		sWhichHookNeeded = 0;
@@ -510,6 +510,19 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// In addition...
 	if (sJoyHotkeyCount)  // Joystick hotkeys require the timer to be always on.
 		SET_MAIN_TIMER
+}
+
+
+
+void Hotkey::MaybeUninstallHook()
+// Caller knows that one of the users of the keyboard hook no longer requires it,
+// and wants it uninstalled if it is no longer needed by anything else.
+{
+	// Do some quick checks to avoid scanning all hotkeys unnecessarily:
+	if (g_input || Hotstring::sEnabledCount || (sWhichHookAlways & HOOK_KEYBD))
+		return;
+	// Do more thorough checking to determine whether the hook is still needed:
+	ManifestAllHotkeysHotstringsHooks();
 }
 
 
