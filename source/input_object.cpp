@@ -9,10 +9,47 @@
 #include "input_object.h"
 
 
+ObjectMember InputObject::sMembers[] =
+{
+	Object_Method1(KeyOpt, 2, 2),
+	Object_Method(Start, 0, 0),
+	Object_Method(Wait, 0, 1),
+	Object_Method(Stop, 0, 0),
+
+	Object_Member(BackspaceIsUndo, BoolOpt, P_BackspaceIsUndo, IT_SET),
+	Object_Member(CaseSensitive, BoolOpt, P_CaseSensitive, IT_SET),
+	Object_Property_get(EndKey),
+	Object_Property_get(EndMods),
+	Object_Property_get(EndReason),
+	Object_Member(FindAnywhere, BoolOpt, P_FindAnywhere, IT_SET),
+	Object_Property_get(InProgress),
+	Object_Property_get(Input),
+	Object_Property_get(Match),
+	Object_Property_get_set(MinSendLevel),
+	Object_Member(NotifyNonText, BoolOpt, P_NotifyNonText, IT_SET),
+	Object_Member(OnChar, OnX, P_OnChar, IT_SET),
+	Object_Member(OnEnd, OnX, P_OnEnd, IT_SET),
+	Object_Member(OnKeyDown, OnX, P_OnKeyDown, IT_SET),
+	Object_Property_get_set(Timeout),
+	Object_Member(VisibleNonText, BoolOpt, P_VisibleNonText, IT_SET),
+	Object_Member(VisibleText, BoolOpt, P_VisibleText, IT_SET),
+};
+
+Object *InputObject::sPrototype = nullptr;
+
+InputObject::InputObject()
+{
+	input.ScriptObject = this;
+	if (!sPrototype)
+		sPrototype = CreatePrototype(_T("InputHook"), Object::sPrototype, sMembers, _countof(sMembers));
+	SetBase(sPrototype);
+}
+
+
 BIF_DECL(BIF_InputHook)
 {
 	auto *input_handle = new InputObject();
-
+	
 	_f_param_string_opt(aOptions, 0);
 	_f_param_string_opt(aEndKeys, 1);
 	_f_param_string_opt(aMatchList, 2);
@@ -34,171 +71,139 @@ ResultType InputObject::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchLis
 }
 
 
-ResultType InputObject::Invoke(IObject_Invoke_PARAMS_DECL)
+ResultType InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	LPTSTR name = aName;
-	aParam--; // temp: adapt v1 code to v2.
-	aParamCount++;
-	
-	if (IS_INVOKE_CALL)
+	switch (aID)
 	{
-		if (!_tcsicmp(name, _T("Start")))
-		{
-			if (input.InProgress())
-				return OK;
-			input.Buffer[input.BufferLength = 0] = '\0';
-			return InputStart(input);
-		}
-		else if (!_tcsicmp(name, _T("Wait")))
-		{
-			UINT wait_ms = ParamIndexIsOmitted(1) ? UINT_MAX : (UINT)(ParamIndexToDouble(1) * 1000);
-			DWORD tick_start = GetTickCount();
-			while (input.InProgress() && (GetTickCount() - tick_start) < wait_ms)
-				MsgSleep();
-			aResultToken.symbol = SYM_STRING;
-			aResultToken.marker = input.GetEndReason(NULL, 0, false);
+	case M_Start:
+		if (input.InProgress())
 			return OK;
-		}
-		else if (!_tcsicmp(name, _T("Stop")))
-		{
-			if (input.InProgress())
-				input.Stop();
-			return OK;
-		}
-		else if (!_tcsicmp(name, _T("KeyOpt")))
-		{
-			return KeyOpt(aResultToken, aParam + 1, aParamCount - 1);
-		}
-		return INVOKE_NOT_HANDLED;
-	}
+		input.Buffer[input.BufferLength = 0] = '\0';
+		return InputStart(input);
 
-	if (aParamCount != (IS_INVOKE_SET ? 2 : 1))
-		_o_throw(ERR_INVALID_USAGE);
+	case M_Wait:
+		DWORD wait_ms, tick_start;
+		wait_ms = ParamIndexIsOmitted(0) ? UINT_MAX : (UINT)(ParamIndexToDouble(0) * 1000);
+		tick_start = GetTickCount();
+		while (input.InProgress() && (GetTickCount() - tick_start) < wait_ms)
+			MsgSleep();
+		// Return EndReason:
+	case P_EndReason:
+		_o_return(input.GetEndReason(NULL, 0, false));
 
-	if (IS_INVOKE_GET)
-	{
-		if (!_tcsicmp(name, _T("Input")))
-		{
-			aResultToken.symbol = SYM_STRING;
-			return TokenSetResult(aResultToken, input.Buffer, input.BufferLength);
-		}
-		else if (!_tcsicmp(name, _T("InProgress")))
-		{
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = input.InProgress();
-			return OK;
-		}
-		else if (!_tcsicmp(name, _T("EndReason")))
-		{
-			aResultToken.symbol = SYM_STRING;
-			aResultToken.marker = input.GetEndReason(NULL, 0, false);
-			return OK;
-		}
-		else if (!_tcsicmp(name, _T("EndKey")))
-		{
-			aResultToken.symbol = SYM_STRING;
-			if (input.Status == INPUT_TERMINATED_BY_ENDKEY)
-				input.GetEndReason(aResultToken.marker = _f_retval_buf, _f_retval_buf_size, false);
-			else
-				aResultToken.marker = _T("");
-			return OK;
-		}
-		else if (!_tcsicmp(name, _T("EndMods")))
-		{
-			aResultToken.symbol = SYM_STRING;
-			TCHAR *cp = aResultToken.marker = aResultToken.buf;
-			const auto mod_string = MODLR_STRING;
-			for (int i = 0; i < 8; ++i)
-				if (input.EndingMods & (1 << i))
-				{
-					*cp++ = mod_string[i*2];
-					*cp++ = mod_string[i*2+1];
-				}
-			*cp = '\0';
-			return OK;
-		}
-		else if (!_tcsicmp(name, _T("Match")))
-		{
-			aResultToken.symbol = SYM_STRING;
-			if (input.Status == INPUT_TERMINATED_BY_MATCH && input.EndingMatchIndex < input.MatchCount)
-				aResultToken.marker = input.match[input.EndingMatchIndex];
-			else
-				aResultToken.marker = _T("");
-			return OK;
-		}
-	}
-	if (!_tcsnicmp(name, _T("On"), 2))
-	{
-		IObject **pon;
-		if (!_tcsicmp(name + 2, _T("End")))
-			pon = &onEnd;
-		else if (!_tcsicmp(name + 2, _T("KeyDown")))
-			pon = &onKeyDown;
-		else if (!_tcsicmp(name + 2, _T("Char")))
-			pon = &onChar;
+	case M_Stop:
+		if (input.InProgress())
+			input.Stop();
+		return OK;
+
+	case P_Input:
+		_o_return(input.Buffer, input.BufferLength);
+
+	case P_InProgress:
+		_o_return(input.InProgress());
+
+	case P_EndKey:
+		aResultToken.symbol = SYM_STRING;
+		if (input.Status == INPUT_TERMINATED_BY_ENDKEY)
+			input.GetEndReason(aResultToken.marker = _f_retval_buf, _f_retval_buf_size, false);
 		else
-			return INVOKE_NOT_HANDLED;
+			aResultToken.marker = _T("");
+		return OK;
 
-		if (IS_INVOKE_SET)
-		{
-			IObject *obj = ParamIndexToObject(1);
-			if (obj)
-				obj->AddRef();
-			else if (!TokenIsEmptyString(*aParam[1]))
-				_o_throw(ERR_INVALID_VALUE);
-			if (*pon)
-				(*pon)->Release();
-			*pon = obj;
-		}
-		if (*pon)
-		{
-			(*pon)->AddRef();
-			aResultToken.SetValue(*pon);
-		}
+	case P_EndMods:
+	{
+		aResultToken.symbol = SYM_STRING;
+		TCHAR *cp = aResultToken.marker = aResultToken.buf;
+		const auto mod_string = MODLR_STRING;
+		for (int i = 0; i < 8; ++i)
+			if (input.EndingMods & (1 << i))
+			{
+				*cp++ = mod_string[i * 2];
+				*cp++ = mod_string[i * 2 + 1];
+			}
+		*cp = '\0';
 		return OK;
 	}
-	// OPTIONS
-	bool *bool_option = NULL;
-	if (!_tcsicmp(name, _T("MinSendLevel")))
-	{
+
+	case P_Match:
+		aResultToken.symbol = SYM_STRING;
+		if (input.Status == INPUT_TERMINATED_BY_MATCH && input.EndingMatchIndex < input.MatchCount)
+			aResultToken.marker = input.match[input.EndingMatchIndex];
+		else
+			aResultToken.marker = _T("");
+		return OK;
+
+	case P_MinSendLevel:
 		if (IS_INVOKE_SET)
+		{
 			input.MinSendLevel = (SendLevelType)ParamIndexToInt64(1);
-		aResultToken.SetValue(input.MinSendLevel);
-		return OK;
-	}
-	else if (!_tcsicmp(name, _T("Timeout")))
-	{
+			return OK;
+		}
+		_o_return(input.MinSendLevel);
+
+	case P_Timeout:
 		if (IS_INVOKE_SET)
 		{
 			input.Timeout = (int)(ParamIndexToDouble(1) * 1000);
 			if (input.InProgress() && input.Timeout > 0)
 				input.SetTimeoutTimer();
+			return OK;
 		}
-		aResultToken.SetValue(input.Timeout / 1000.0);
-		return OK;
-	}
-	else if (!_tcsicmp(name, _T("BackspaceIsUndo"))) bool_option = &input.BackspaceIsUndo;
-	else if (!_tcsicmp(name, _T("CaseSensitive"))) bool_option = &input.CaseSensitive;
-	else if (!_tcsicmp(name, _T("FindAnywhere"))) bool_option = &input.FindAnywhere;
-	else if (!_tcsicmp(name, _T("VisibleText"))) bool_option = &input.VisibleText;
-	else if (!_tcsicmp(name, _T("VisibleNonText"))) bool_option = &input.VisibleNonText;
-	else if (!_tcsicmp(name, _T("NotifyNonText"))) bool_option = &input.NotifyNonText;
-	if (bool_option)
-	{
-		if (IS_INVOKE_SET)
-			*bool_option = ParamIndexToBOOL(1);
-		aResultToken.SetValue(*bool_option);
-		return OK;
+		_o_return(input.Timeout / 1000.0);
 	}
 	return INVOKE_NOT_HANDLED;
 }
 
 
-ResultType InputObject::KeyOpt(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
+ResultType InputObject::BoolOpt(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (aParamCount < 2)
-		_o_throw(ERR_TOO_FEW_PARAMS);
+	bool *bool_option = nullptr;
+	switch (aID)
+	{
+	case P_BackspaceIsUndo: &input.BackspaceIsUndo; break;
+	case P_CaseSensitive: &input.CaseSensitive; break;
+	case P_FindAnywhere: &input.FindAnywhere; break;
+	case P_VisibleText: &input.VisibleText; break;
+	case P_VisibleNonText: &input.VisibleNonText; break;
+	case P_NotifyNonText: &input.NotifyNonText; break;
+	}
+	if (IS_INVOKE_SET)
+		*bool_option = ParamIndexToBOOL(0);
+	_o_return(*bool_option);
+}
 
+
+ResultType InputObject::OnX(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	IObject **pon;
+	switch (aID)
+	{
+	case P_OnKeyDown: pon = &onKeyDown; break;
+	case P_OnChar: pon = &onChar; break;
+	default: pon = &onEnd; break;
+	}
+	if (IS_INVOKE_SET)
+	{
+		IObject *obj = ParamIndexToObject(0);
+		if (obj)
+			obj->AddRef();
+		else if (!TokenIsEmptyString(*aParam[0]))
+			_o_throw(ERR_INVALID_VALUE);
+		if (*pon)
+			(*pon)->Release();
+		*pon = obj;
+	}
+	if (*pon)
+	{
+		(*pon)->AddRef();
+		aResultToken.SetValue(*pon);
+	}
+	return OK;
+}
+
+
+ResultType InputObject::KeyOpt(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
 	_f_param_string(keys, 0);
 	_f_param_string(options, 1);
 

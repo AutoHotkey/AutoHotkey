@@ -1,17 +1,41 @@
 #pragma once
 
-class InputObject : public ObjectBase
+class InputObject : public Object
 {
 	input_type input;
 
-public:
-	IObject *onEnd, *onKeyDown, *onChar;
-
-	InputObject() : onEnd(NULL), onKeyDown(NULL), onChar(NULL)
+	enum Members
 	{
-		input.ScriptObject = this;
-	}
+		M_Start,
+		M_Wait,
+		M_Stop,
+		//M_KeyOpt,
+		P_Input,
+		P_InProgress,
+		P_EndReason,
+		P_EndKey,
+		P_EndMods,
+		P_Match,
+		P_OnChar,
+		P_OnKeyDown,
+		P_OnEnd,
+		P_MinSendLevel,
+		P_Timeout,
+		P_BackspaceIsUndo,
+		P_CaseSensitive,
+		P_FindAnywhere,
+		P_VisibleText,
+		P_VisibleNonText,
+		P_NotifyNonText
+	};
+	
+public:
+	IObject *onEnd = nullptr, *onKeyDown = nullptr, *onChar = nullptr;
 
+	static Object *sPrototype;
+	static ObjectMember sMembers[];
+
+	InputObject();
 	~InputObject()
 	{
 		if (onEnd)
@@ -23,8 +47,8 @@ public:
 	}
 
 	ResultType Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length);
-	ResultType KeyOpt(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
-
-	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
-	IObject_Type_Impl("InputHook")
+	ResultType KeyOpt(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType OnX(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType BoolOpt(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
