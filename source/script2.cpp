@@ -712,6 +712,7 @@ ResultType InputWait(ResultToken &aResultToken, input_type &input)
 	TCHAR key_name[128];
 	g_ErrorLevel->Assign(input.GetEndReason(key_name, _countof(key_name)));
 
+	aResultToken.symbol = SYM_STRING;
 	return TokenSetResult(aResultToken, input.Buffer, input.BufferLength);
 }
 
