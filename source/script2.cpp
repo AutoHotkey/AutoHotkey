@@ -2149,16 +2149,28 @@ BIF_DECL(BIF_PostSendMessage)
 		case SYM_INTEGER:
 			param[i-1] = (INT_PTR)this_param.value_int64;
 			break;
-		case SYM_STRING:
-			LPTSTR error_marker;
-			param[i-1] = (INT_PTR)istrtoi64(this_param.marker, &error_marker);
-			if (!*error_marker) // Valid number or empty string.
+		case SYM_OBJECT: // Support Buffer-like objects, i.e, objects with a "Ptr" property.
+			size_t ptr_property_value;
+			GetBufferObjectPtr(aResultToken, this_param.object, ptr_property_value);
+			if (!aResultToken.Exited())
+			{
+				param[i - 1] = ptr_property_value;
 				break;
-			//else: It's a non-numeric string; maybe the caller forgot the &address-of operator.
-			// Note that an empty string would satisfy the check above.
+			}
+			// else fall through to throw invalid param below:
+		case SYM_STRING:
+			if (this_param.symbol != SYM_OBJECT) // Must check since can fall through from above.
+			{
+				LPTSTR error_marker;
+				param[i - 1] = (INT_PTR)istrtoi64(this_param.marker, &error_marker);
+				if (!*error_marker) // Valid number or empty string.
+					break;
+				//else: It's a non-numeric string; maybe the caller forgot the &address-of operator.
+				// Note that an empty string would satisfy the check above.
+			}
+			// Fall through:
 		default:
 			// SYM_FLOAT: Seems best to treat it as an error rather than truncating the value.
-			// SYM_OBJECT: Reserve for future use (user-defined conversion meta-functions?).
 			_f_throw(i == 1 ? ERR_PARAM2_INVALID : ERR_PARAM3_INVALID);
 		}
 	}
