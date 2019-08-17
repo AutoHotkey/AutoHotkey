@@ -6988,11 +6988,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_PARAM2_INVALID, new_raw_arg2);
 		break;
 
-	case ACT_INPUTBOX:
-		if (*NEW_RAW_ARG9)  // && !line.ArgHasDeref(9)
-			return ScriptError(_T("Parameter #9 must be blank."), NEW_RAW_ARG9);
-		break;
-
 	case ACT_IFMSGBOX:
 		if (aArgc > 0 && !line.ArgHasDeref(1) && !line.ConvertMsgBoxResult(new_raw_arg1))
 			return ScriptError(ERR_PARAM1_INVALID, new_raw_arg1);
@@ -15226,7 +15221,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			, *ARG6 ? ArgToInt(6) : INPUTBOX_DEFAULT  // Height
 			, *ARG7 ? ArgToInt(7) : INPUTBOX_DEFAULT  // Xpos
 			, *ARG8 ? ArgToInt(8) : INPUTBOX_DEFAULT  // Ypos
-			// ARG9: future use for Font name & size, e.g. "Courier:8"
+			, ctoupper(*ARG9) == 'L'  // Locale
 			, ArgToDouble(10)  // Timeout
 			, ARG11  // Initial default string for the edit field.
 			);
