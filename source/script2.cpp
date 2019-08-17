@@ -6255,15 +6255,15 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		if (CURR_INPUTBOX.locale)
 		{
 			typedef LPCWSTR(WINAPI*pfnUser)(int);
-			HMODULE hMod = GetModuleHandle(L"user32.dll");
+			HMODULE hMod = GetModuleHandle(_T("user32.dll"));
 			pfnUser mbString = (pfnUser)GetProcAddress(hMod, "MB_GetString");
 			if (mbString)
 			{
 				RECT rect;
 				HWND hbtOk = GetDlgItem(hWndDlg, IDOK);
 				HWND hbtCancel = GetDlgItem(hWndDlg, IDCANCEL);
-				SetWindowText(hbtOk, mbString(0));
-				SetWindowText(hbtCancel, mbString(1));
+				SetWindowTextW(hbtOk, mbString(0));
+				SetWindowTextW(hbtCancel, mbString(1));
 				// Widen the buttons for non-English names (approx. the width of a MsgBox button):
 				GetWindowRect(hbtOk, &rect);
 				SetWindowPos(hbtOk, NULL, NULL, NULL, 88, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOREDRAW);
