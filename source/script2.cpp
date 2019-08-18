@@ -5076,6 +5076,16 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		if (hControl = GetDlgItem(hWndDlg, IDC_INPUTPROMPT))
 			SetWindowText(hControl, CURR_INPUTBOX.text);
 
+		// Use the system's current language for the button names:
+		typedef LPCWSTR(WINAPI*pfnUser)(int);
+		HMODULE hMod = GetModuleHandle(_T("user32.dll"));
+		pfnUser mbString = (pfnUser)GetProcAddress(hMod, "MB_GetString");
+		if (mbString)
+		{
+			SetWindowTextW(GetDlgItem(hWndDlg, IDOK), mbString(0));
+			SetWindowTextW(GetDlgItem(hWndDlg, IDCANCEL), mbString(1));
+		}
+
 		// Don't do this check; instead allow the MoveWindow() to occur unconditionally so that
 		// the new button positions and such will override those set in the dialog's resource
 		// properties:
@@ -5258,6 +5268,19 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		}
 		InvalidateRect(hWndDlg, NULL, TRUE);	// force window to be redrawn
 		return TRUE;  // i.e. completely handled here.
+	}
+
+	case WM_GETMINMAXINFO:
+	{
+		// Increase the minimum width to prevent the buttons from overlapping:
+		RECT rTmp;
+		int min_width = 0;
+		LPMINMAXINFO lpMMI = (LPMINMAXINFO)lParam;
+		GetWindowRect(GetDlgItem(hWndDlg, IDOK), &rTmp);
+		min_width += rTmp.right - rTmp.left;
+		GetWindowRect(GetDlgItem(hWndDlg, IDCANCEL), &rTmp);
+		min_width += rTmp.right - rTmp.left;
+		lpMMI->ptMinTrackSize.x = min_width + 30;
 	}
 
 	case WM_COMMAND:
