@@ -2887,33 +2887,6 @@ Object *RegExMatchObject::sPrototype = CreatePrototype(_T("RegExMatch"), Object:
 
 
 
-ObjectMember UserMenu::sMembers[] =
-{
-	Object_Method(Add, 0, 3),
-	Object_Method(AddStandard, 0, 0),
-	Object_Method(Insert, 0, 4),
-	Object_Method(Delete, 0, 1),
-	Object_Method(Rename, 1, 2),
-	Object_Method(Check, 1, 1),
-	Object_Method(Uncheck, 1, 1),
-	Object_Method(ToggleCheck, 1, 1),
-	Object_Method(Enable, 1, 1),
-	Object_Method(Disable, 1, 1),
-	Object_Method(ToggleEnable, 1, 1),
-	Object_Method(SetIcon, 2, 4),
-	Object_Method(Show, 0, 2),
-	Object_Method(SetColor, 0, 2),
-
-	Object_Property_get_set(Default),
-	Object_Property_get    (Handle),
-	Object_Property_get_set(ClickCount)
-};
-
-Object *UserMenu::sMenuPrototype = CreatePrototype(_T("Menu"), Object::sPrototype, sMembers, _countof(sMembers));
-Object *UserMenu::sMenuBarPrototype = CreatePrototype(_T("MenuBar"), sMenuPrototype);
-
-
-
 #ifdef CONFIG_DEBUGGER
 
 void IObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
