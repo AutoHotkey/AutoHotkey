@@ -1082,6 +1082,7 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 		hr = S_OK;
 		dispid = DISPID_NEWENUM;
 		aName = _T("_NewEnum"); // Init for ComError().
+		aParamCount = 0;
 	}
 	else if (!aName)
 	{
