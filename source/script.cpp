@@ -2771,7 +2771,7 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 			LPTSTR cp = omit_trailing_whitespace(buf, buf + (buf_length - 2));
 			if (   *cp == ')' // Function/method definition or reserved.
 				|| *cp == ']' // Property definition or reserved.
-				|| ACT_IS_LINE_PARENT(action_type) && !EndsWithOperator(buf, cp)
+				|| (ACT_IS_LINE_PARENT(action_type) || action_type == ACT_SWITCH) && !EndsWithOperator(buf, cp)
 				|| mClassObjectCount && !g->CurrentFunc && cp < action_end   ) // "Property {" (get/set was already handled by caller).
 				return OK;
 		}
@@ -4628,7 +4628,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 			switch (ActionTypeType otb_act = ConvertActionType(action_name, ACT_FIRST_NAMED_ACTION, ACT_FIRST_COMMAND))
 			{
 			case ACT_LOOP:
-				add_openbrace_afterward = true;
+			case ACT_SWITCH:
 				if (action_args[1]) // See above.
 					break;
 				//else fall through:
@@ -4970,9 +4970,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 			add_openbrace_afterward = true;
 			*arg1_last_char = '\0';  // Since it will be fully handled here, remove the brace from further consideration.
 			if (!rtrim(arg1)) // Trimmed down to nothing, so only a brace was present: remove the arg completely.
-				if (aActionType == ACT_LOOP || aActionType == ACT_CATCH)
+				if (aActionType == ACT_LOOP || aActionType == ACT_CATCH || aActionType == ACT_SWITCH)
 					--nArgs;
-				else // ACT_WHILE, ACT_FOR or ACT_SWITCH
+				else // ACT_WHILE, ACT_FOR or ACT_IF
 					return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
 		}
 	}
