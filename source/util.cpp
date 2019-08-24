@@ -2926,7 +2926,7 @@ int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 		case ']':
 		case '}':
 		case g_delimiter:
-			if (aDelimiter && aDelimiter != ':') // Caller wants to find a specific symbol and it's not this one.
+			if (aDelimiter) // Caller wants to find a specific symbol and it's not this one.
 				continue; // Unbalanced parentheses etc are caught at a later stage.
 			return mark;
 		case ':':
