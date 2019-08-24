@@ -8364,6 +8364,18 @@ BIF_DECL(BIF_FileAppend)
 	_f_param_string_opt(aFilespec, 1);
 	_f_param_string_opt(aOptions, 2);
 
+	IObject *aBuf_obj = ParamIndexToObject(0); // Allow a Buffer-like object.
+	if (aBuf_obj)
+	{
+		size_t ptr;
+		GetBufferObjectPtr(aResultToken, aBuf_obj, ptr, aBuf_length);
+		if (aResultToken.Exited())
+			return;
+		aBuf = (LPTSTR)ptr;
+	}
+	else
+		aBuf_length *= sizeof(TCHAR); // Convert to byte count.
+
 	_f_set_retval_p(_T(""), 0); // For all non-throw cases.
 
 	// The below is avoided because want to allow "nothing" to be written to a file in case the
@@ -8383,7 +8395,7 @@ BIF_DECL(BIF_FileAppend)
 	bool file_was_already_open = ts;
 
 #ifdef CONFIG_DEBUGGER
-	if (*aFilespec == '*' && !aFilespec[1] && g_Debugger.FileAppendStdOut(aBuf))
+	if (*aFilespec == '*' && !aFilespec[1] && !aBuf_obj && g_Debugger.FileAppendStdOut(aBuf))
 	{
 		// StdOut has been redirected to the debugger, and this "FileAppend" call has been
 		// fully handled by the call above, so just return.
@@ -8402,7 +8414,7 @@ BIF_DECL(BIF_FileAppend)
 	//    file-modification time when no actual text will be appended).
 	if (!file_was_already_open)
 	{
-		codepage = g->Encoding;
+		codepage = aBuf_obj ? -1 : g->Encoding; // Never default to BOM if a Buffer object was passed.
 		bool translate_crlf_to_lf = false;
 		if (!ConvertFileOptions(aOptions, codepage, translate_crlf_to_lf, NULL))
 			_f_return_FAIL;
@@ -8438,10 +8450,10 @@ BIF_DECL(BIF_FileAppend)
 	DWORD result = 1;
 	if (aBuf_length)
 	{
-		if (codepage == -1) // "RAW" mode.
-			result = ts->Write((LPCVOID)aBuf, DWORD(aBuf_length * sizeof(TCHAR)));
+		if (codepage == -1 || aBuf_obj) // "RAW" mode.
+			result = ts->Write((LPCVOID)aBuf, (DWORD)aBuf_length);
 		else
-			result = ts->Write(aBuf, DWORD(aBuf_length));
+			result = ts->Write(aBuf, DWORD(aBuf_length / sizeof(TCHAR)));
 	}
 	//else: aBuf is empty; we've already succeeded in creating the file and have nothing further to do.
 	Script::SetErrorLevels(result == 0);
