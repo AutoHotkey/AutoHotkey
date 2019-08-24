@@ -17366,17 +17366,41 @@ ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLen
 
 
 
-SymbolType TypeOfToken(ExprTokenType &aToken)
+// TypeOfToken: Similar result to TokenIsPureNumeric, but may return SYM_OBJECT.
+SymbolType TypeOfToken(ExprTokenType &aToken, SymbolType &aIsNum)
 {
 	switch (aToken.symbol)
 	{
 	case SYM_VAR:
-		if (aToken.var->HasObject())
+		switch (aToken.var->IsPureNumericOrObject())
+		{
+		case VAR_ATTRIB_IS_INT64:
+			aIsNum = PURE_INTEGER;
+			return SYM_INTEGER;
+		case VAR_ATTRIB_IS_DOUBLE:
+			aIsNum = PURE_FLOAT;
+			return SYM_FLOAT;
+		case VAR_ATTRIB_IS_OBJECT:
+			aIsNum = PURE_NOT_NUMERIC;
 			return SYM_OBJECT;
-		return aToken.var->IsNumeric();
+		default:
+			aIsNum = aToken.var->IsNumeric();
+			return SYM_STRING;
+		}
 	case SYM_STRING:
-		return IsNumeric(aToken.marker, true, false, true);
+	case SYM_MISSING:
+		aIsNum = IsNumeric(aToken.marker, true, false, true);
+		return SYM_STRING;
+	case SYM_INTEGER:
+	case SYM_FLOAT:
+		aIsNum = aToken.symbol;
+		return aToken.symbol;
 	default:
+#ifdef _DEBUG
+		MsgBox(_T("DEBUG: Unhandled symbol type."));
+#endif
+	case SYM_OBJECT:
+		aIsNum = PURE_NOT_NUMERIC;
 		return aToken.symbol;
 	}
 }
@@ -17386,12 +17410,12 @@ SymbolType TypeOfToken(ExprTokenType &aToken)
 BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right)
 // Compares two tokens using similar rules to SYM_EQUAL, but case sensitive if appropriate.
 {
-	SymbolType left_type = TypeOfToken(left)
-			, right_type = TypeOfToken(right);
+	SymbolType left_is_numeric, left_type = TypeOfToken(left, left_is_numeric)
+			, right_is_numeric, right_type = TypeOfToken(right, right_is_numeric);
 
 	if (left_type == SYM_OBJECT || right_type == SYM_OBJECT)
 		return TokenToObject(left) == TokenToObject(right);
-	if (left_type == PURE_NOT_NUMERIC || right_type == PURE_NOT_NUMERIC)
+	if (!left_is_numeric || !right_is_numeric || (left_type == SYM_STRING && right_type == SYM_STRING))
 	{
 		TCHAR left_buf[MAX_NUMBER_SIZE], *left_string = TokenToString(left, left_buf);
 		TCHAR right_buf[MAX_NUMBER_SIZE], *right_string = TokenToString(right, right_buf);
