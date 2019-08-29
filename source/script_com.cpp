@@ -1150,12 +1150,12 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 		// Invoke PROPERTYPUT or PROPERTYGET|METHOD as appropriate:
 		hr = mDispatch->Invoke(dispid, IID_NULL, LOCALE_USER_DEFAULT, IS_INVOKE_SET ? DISPATCH_PROPERTYPUT : DISPATCH_PROPERTYGET | DISPATCH_METHOD, &dispparams, &varResult, &excepinfo, NULL);
 
-	for (int i = 1; i <= aParamCount; i++)
+	for (int i = 0; i < aParamCount; i++)
 	{
 		// TokenToVariant() in "arg" mode never calls AddRef() or SafeArrayCopy(), so the arg needs to be freed
 		// only if it is a BSTR and not one which came from a ComObject wrapper (such as ComObject(9, pbstr)).
-		if (rgvarg[i].vt == VT_BSTR && aParam[aParamCount-i]->symbol != SYM_OBJECT)
-			SysFreeString(rgvarg[i-1].bstrVal);
+		if (rgvarg[i].vt == VT_BSTR && aParam[aParamCount-(i+1)]->symbol != SYM_OBJECT)
+			SysFreeString(rgvarg[i].bstrVal);
 	}
 
 	if	(FAILED(hr))
