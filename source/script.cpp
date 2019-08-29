@@ -8803,23 +8803,10 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 								return LineError(ERR_EXPR_SYNTAX, FAIL, cp-1); // Intentionally vague since the user's intention isn't clear.
 
 							// Output an operand for the text following '.'
-							if (op_end - cp < MAX_NUMBER_SIZE)
-								tcslcpy(number_buf, cp, op_end - cp + 1); // +1 for null terminator.
-							else
-								*number_buf = '\0'; // For simplicity; IsNumeric() should yield the correct result.
-							if (IsNumeric(number_buf, false, false) == PURE_INTEGER)
-							{
-								// Seems best to treat obj.1 as obj[1] rather than obj["1"].
-								// But what about obj.001?  That's also treated as obj[1] for now.
-								infix[infix_count].SetValue(ATOI64(number_buf));
-							}
-							else
-							{
-								LPTSTR str = SimpleHeap::Malloc(cp, op_end - cp);
-								if (!str)
-									return FAIL; // Malloc already displayed an error message.
-								infix[infix_count].SetValue(str, op_end - cp);
-							}
+							LPTSTR str = SimpleHeap::Malloc(cp, op_end - cp);
+							if (!str)
+								return FAIL; // Malloc already displayed an error message.
+							infix[infix_count].SetValue(str, op_end - cp);
 
 							++infix_count;
 
