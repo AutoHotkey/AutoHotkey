@@ -100,13 +100,14 @@ BIF_DECL(Op_ObjInvoke)
 	else
 		obj = NULL;
 
+	TCHAR name_buf[MAX_NUMBER_SIZE];
 	LPTSTR name = nullptr;
 	if (invoke_type & IF_DEFAULT)
 		invoke_type &= ~IF_DEFAULT;
 	else
 	{
 		if (aParam[0]->symbol != SYM_MISSING)
-			name = TokenToString(*aParam[0]);
+			name = TokenToString(*aParam[0], name_buf);
 		++aParam;
 		--aParamCount;
 	}
