@@ -4154,7 +4154,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 // allowing the string to be split into sections without having to make temporary copies.
 {
 #ifdef _DEBUG
-	if (!aLineText || !*aLineText)
+	if (!aLineText || !*aLineText && !aActionType)
 		return ScriptError(_T("DEBUG: ParseAndAddLine() called incorrectly."));
 #endif
 
