@@ -6406,7 +6406,7 @@ ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, int aBufSize, LPTSTR aEnd
 	{
 		int hidden_params = ctoupper(*aBuf) == 'S' ? 2 : 1;
 		mClassProperty->MinParams = g->CurrentFunc->mMinParams - hidden_params;
-		mClassProperty->MaxParams = g->CurrentFunc->mParamCount - hidden_params;
+		mClassProperty->MaxParams = g->CurrentFunc->mIsVariadic ? INT_MAX : g->CurrentFunc->mParamCount - hidden_params;
 	}
 	if (*aEnd && !AddLine(ACT_BLOCK_BEGIN)) // *aEnd is '{' or '='.
 		return FAIL;
