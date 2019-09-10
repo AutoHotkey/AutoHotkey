@@ -8341,7 +8341,9 @@ BIF_DECL(BIF_FileRead)
 		else // codepage == -1 ("RAW" mode)
 		{
 			// Return the buffer to our caller.
-			aResultToken.Return(new BufferObject(output_buf, bytes_actually_read));
+			auto bo = new BufferObject(output_buf, bytes_actually_read);
+			bo->SetBase(BufferObject::sPrototype);
+			aResultToken.Return(bo);
 		}
 	}
 	else
