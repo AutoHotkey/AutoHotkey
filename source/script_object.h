@@ -801,7 +801,7 @@ class ClipboardAll : public BufferObject
 {
 public:
 	ClipboardAll(void *aData, size_t aSize) : BufferObject(aData, aSize) {}
-	IObject_Type_Impl("ClipboardAll")
+	static Object *sPrototype;
 };
 
 

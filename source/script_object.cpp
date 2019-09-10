@@ -2813,7 +2813,9 @@ BIF_DECL(BIF_ClipboardAll)
 		#endif
 		*LPTSTR(LPBYTE(data)+size) = '\0'; // Cast to LPBYTE first because size is in bytes, not TCHARs.
 	}
-	_f_return(new ClipboardAll(data, size));
+	auto obj = new ClipboardAll(data, size);
+	obj->SetBase(ClipboardAll::sPrototype);
+	_f_return(obj);
 }
 
 
@@ -2867,6 +2869,7 @@ Object *EnumBase::sPrototype = Object::CreatePrototype(_T("Enumerator"), Func::s
 
 
 Object *BufferObject::sPrototype = Object::CreatePrototype(_T("Buffer"), Object::sPrototype, sMembers, _countof(sMembers));
+Object *ClipboardAll::sPrototype = Object::CreatePrototype(_T("ClipboardAll"), BufferObject::sPrototype);
 
 
 
