@@ -5888,17 +5888,8 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic, 
 	else
 	{
 		Func *found_func = FindFunc(aBuf, param_start - aBuf, &insert_pos);
-		if (found_func)
-		{
-			if (!found_func->IsBuiltIn())
-				return ScriptError(_T("Duplicate function definition."), aBuf); // Seems more descriptive than "Function already defined."
-			else // It's a built-in function that the user wants to override with a custom definition.
-			{
-				if (  !(g->CurrentFunc = new UserFunc(found_func->mName))  )
-					return ScriptError(ERR_OUTOFMEM);
-				mFuncs.Replace(insert_pos, g->CurrentFunc);
-			}
-		}
+		if (found_func && !found_func->IsBuiltIn())
+			return ScriptError(_T("Duplicate function definition."), aBuf); // Seems more descriptive than "Function already defined."
 		else
 			// The value of g->CurrentFunc must be set here rather than by our caller since AddVar(), which we call,
 			// relies upon it having been done.
@@ -7093,11 +7084,14 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 	the_new_func->mOuterFunc = g->CurrentFunc;
 	FuncList &funcs = the_new_func->mOuterFunc ? the_new_func->mOuterFunc->mFuncs : mFuncs;
 	
-	if (!funcs.Insert(the_new_func, aInsertPos))
-	{
-		ScriptError(ERR_OUTOFMEM);
-		return NULL;
-	}
+	if (aInsertPos < funcs.mCount && !_tcsicmp(funcs.mItem[aInsertPos]->mName, new_name))
+		funcs.mItem[aInsertPos] = the_new_func;
+	else
+		if (!funcs.Insert(the_new_func, aInsertPos))
+		{
+			ScriptError(ERR_OUTOFMEM);
+			return NULL;
+		}
 
 	return the_new_func;
 }

@@ -1578,7 +1578,6 @@ struct FuncList
 
 	Func *Find(LPCTSTR aName, int *apInsertPos);
 	ResultType Insert(Func *aFunc, int aInsertPos);
-	void Replace(int aPos, Func *aFunc) { mItem[aPos] = aFunc; }
 	ResultType Alloc(int aAllocCount);
 
 	FuncList() : mItem(NULL), mCount(0), mCountMax(0) {}
