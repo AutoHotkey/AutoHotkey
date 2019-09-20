@@ -2757,6 +2757,8 @@ BIF_DECL(BIF_BufferAlloc)
 	auto data = malloc((size_t)size);
 	if (!data)
 		_f_throw(ERR_OUTOFMEM);
+	if (!ParamIndexIsOmitted(1))
+		memset(data, (char)ParamIndexToInt64(1), (size_t)size);
 	auto bo = new BufferObject(data, (size_t)size);
 	bo->SetBase(BufferObject::sPrototype);
 	_f_return(bo);
