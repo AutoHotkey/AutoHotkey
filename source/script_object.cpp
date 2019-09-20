@@ -2739,8 +2739,6 @@ ResultType BufferObject::Resize(size_t aNewSize)
 	auto new_data = realloc(mData, aNewSize);
 	if (!new_data)
 		return FAIL;
-	if (aNewSize > mSize)
-		memset((BYTE*)new_data + mSize, 0, aNewSize - mSize);
 	mData = new_data;
 	mSize = aNewSize;
 	return OK;
