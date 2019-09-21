@@ -8916,7 +8916,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// because otherwise it would probably become a CPU-maxing loop wherein the dialog or MonthCal
 		// msg pump that called us dispatches the above message right back to us, causing it to
 		// bounce around thousands of times until that other msg pump finally finishes.
-		if (!g_MenuIsVisible)
+		// UPDATE: This will backfire if the script is uninterruptible.
+		if (IsInterruptible())
 		{
 			// Handling these messages here by reposting them to our thread relieves the one who posted them
 			// from ever having to do a MsgSleep(-1), which in turn allows it or its caller to acknowledge
