@@ -1003,9 +1003,7 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	if (SUCCEEDED(hr))
 		hr = func->Invoke(dispid, riid, lcid, wFlags, &dispParams, pVarResult, pExcepInfo, puArgErr);
 
-	// It's hard to say what our caller will do if DISP_E_MEMBERNOTFOUND is returned,
-	// so just return S_OK as in previous versions:
-	return S_OK;
+	return hr;
 }
 
 HRESULT ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
@@ -1570,6 +1568,14 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 						pExcepInfo->bstrHelpFile = SysStringFromToken(token, result_token.buf);
 					if (obj->GetOwnProp(token, _T("Line")))
 						pExcepInfo->dwHelpContext = (DWORD)TokenToInt64(token);
+				}
+				else
+				{
+					// Showing an error message seems more helpful than silently returning E_FAIL.
+					// Although there's risk of our caller showing a second message or handling
+					// the error in some other way, it couldn't report anything specific since
+					// all it will have is the generic failure code.
+					g_script.UnhandledException(NULL);
 				}
 				g_script.FreeExceptionToken(g->ThrownToken);
 			}
