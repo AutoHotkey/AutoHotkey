@@ -784,8 +784,7 @@ public:
 	enum MemberID
 	{
 		P_Ptr,
-		P_Size,
-		P_Data
+		P_Size
 	};
 	static ObjectMember sMembers[];
 	static Object *sPrototype;

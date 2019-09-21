@@ -2704,8 +2704,7 @@ ResultType MetaObject::Invoke(IObject_Invoke_PARAMS_DECL)
 ObjectMember BufferObject::sMembers[] =
 {
 	Object_Property_get(Ptr),
-	Object_Property_get_set(Size),
-	Object_Property_get(Data)
+	Object_Property_get_set(Size)
 };
 
 ResultType BufferObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -2727,9 +2726,6 @@ ResultType BufferObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, 
 			return OK;
 		}
 		_o_return(mSize);
-	case P_Data:
-		// Return the data as a binary string, which can be passed to FileAppend().
-		_o_return_p((LPTSTR)mData, mSize / sizeof(TCHAR));
 	}
 	return INVOKE_NOT_HANDLED;
 }
@@ -2776,42 +2772,28 @@ BIF_DECL(BIF_ClipboardAll)
 	else
 	{
 		// Use caller-supplied data.
-		void *caller_data;
-		if (TokenIsPureNumeric(*aParam[0]))
+		size_t caller_data;
+		if (auto obj = ParamIndexToObject(0))
 		{
-			// Caller supplied an address.
-			caller_data = (void *)ParamIndexToIntPtr(0);
-			if ((size_t)caller_data < 65536) // Basic check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
-				_f_throw(ERR_PARAM1_INVALID);
-			size = -1;
+			GetBufferObjectPtr(aResultToken, obj, caller_data, size);
+			if (aResultToken.Exited())
+				return;
 		}
 		else
 		{
-			// Caller supplied a binary string or variable, such as from File.RawRead(var, n).
-			caller_data = ParamIndexToString(0, NULL, &size);
-			size *= sizeof(TCHAR);
+			// Caller supplied an address.
+			caller_data = (size_t)ParamIndexToIntPtr(0);
+			if (caller_data < 65536) // Basic check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
+				_f_throw(ERR_PARAM1_INVALID);
+			size = -1;
 		}
 		if (!ParamIndexIsOmitted(1))
 			size = (size_t)ParamIndexToIntPtr(1);
 		else if (size == -1) // i.e. it can be omitted when size != -1 (a string was passed).
 			_f_throw(ERR_PARAM2_MUST_NOT_BE_BLANK);
-		size_t extra = sizeof(TCHAR); // For an additional null-terminator in case the caller passed invalid data.
-		#ifdef UNICODE
-		if (size & 1) // Odd; not a multiple of sizeof(WCHAR).
-			++extra; // Align the null-terminator.
-		#endif
-		if (  !(data = malloc(size + extra))  ) // More likely to be due to invalid parameter than out of memory.
+		if (  !(data = malloc(size))  ) // More likely to be due to invalid parameter than out of memory.
 			_f_throw(ERR_OUTOFMEM);
-		memcpy(data, caller_data, size);
-		// Although data returned by GetClipboardAll() should already be terminated with
-		// a null UINT, the caller may have passed invalid data.  So align the data to a
-		// multiple of sizeof(TCHAR) and terminate with a proper null character in case
-		// `this.Data` is used with something expecting a null-terminated string.
-		#ifdef UNICODE
-		if (size & 1)
-			((LPBYTE)data)[size++] = 0; // Size is rounded up so that `this.Data` will not truncate the last byte.
-		#endif
-		*LPTSTR(LPBYTE(data)+size) = '\0'; // Cast to LPBYTE first because size is in bytes, not TCHARs.
+		memcpy(data, (void *)caller_data, size);
 	}
 	auto obj = new ClipboardAll(data, size);
 	obj->SetBase(ClipboardAll::sPrototype);
