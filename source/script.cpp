@@ -2701,7 +2701,7 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 	TCHAR orig_char, *action_start, *action_end;
 	ActionTypeType action_type = ACT_INVALID; // Set default.
 
-	TCHAR expect[MAX_BALANCEEXPR_DEPTH];
+	TCHAR expect[MAX_BALANCEEXPR_DEPTH], open_quote = 0;
 	int balance = BalanceExpr(buf, 0, expect);
 	if (balance <= 0 // Balanced or invalid.
 		|| next_buf_length == -1) // End of file.
@@ -2779,21 +2779,28 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 		{
 			if (next_buf_length + buf_length + 1 >= LINE_SIZE)
 				return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG);
-			balance = BalanceExpr(next_buf, balance, expect); // Adjust balance based on what we're about to append.
+			balance = BalanceExpr(next_buf, balance, expect, &open_quote); // Adjust balance based on what we're about to append.
 			buf[buf_length++] = ' '; // To ensure two distinct tokens aren't joined together.  ' ' vs. '\n' because DefineFunc() currently doesn't permit '\n'.
 			tmemcpy(buf + buf_length, next_buf, next_buf_length); // Append next_buf to this line.
 			buf_length += next_buf_length;
 			buf[buf_length] = '\0';
 		}
 		LPTSTR addition_to_balance = buf + buf_length;
-		// This serves to get the next line into next_buf but also handle any comment sections
-		// or (when balance <= 0) continuation lines/sections which follow the line just appended:
+		// This serves to get the next line into next_buf but also handles any comment sections,
+		// continuation lines (when balance <= 0) or sections which follow the line just appended:
 		if (!GetLineContinuation(fp, buf, buf_length, next_buf, next_buf_length
-			, phys_line_number, has_continuation_section, balance))
+			, phys_line_number, has_continuation_section, open_quote ? 0 : balance))
 			return FAIL;
-		if (*addition_to_balance // buf was extended via line continuation (only possible when balance <= 0).
+		if (*addition_to_balance // buf was extended.
 			 && balance >= 0)
-			balance = BalanceExpr(addition_to_balance, balance, expect); // Adjust balance based on what was appended.
+			balance = BalanceExpr(addition_to_balance, balance, expect, &open_quote); // Adjust balance based on what was appended.
+		if (open_quote)
+		{
+			// Unterminated string (continuation expressions should not automatically permit strings to span lines).
+			expect[0] = open_quote;
+			expect[1] = 0;
+			balance = -1;
+		}
 	} // do
 	while (balance > 0 && next_buf_length != -1);
 	if (balance != 0)

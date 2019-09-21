@@ -3004,10 +3004,19 @@ int FindTextDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 
 
 
-int BalanceExpr(LPCTSTR aBuf, int aStartBalance, TCHAR aExpect[])
+int BalanceExpr(LPCTSTR aBuf, int aStartBalance, TCHAR aExpect[], TCHAR *aOpenQuote)
 {
 	TCHAR quote;
-	for (int balance = aStartBalance, mark = 0;; ++mark)
+	int balance = aStartBalance, mark = 0;
+	if (aOpenQuote && *aOpenQuote)
+	{
+		mark = FindTextDelim(aBuf, *aOpenQuote, mark);
+		if (!aBuf[mark])
+			return balance;
+		*aOpenQuote = 0;
+		++mark;
+	}
+	for (;; ++mark)
 	{
 		switch (aBuf[mark])
 		{
@@ -3024,6 +3033,11 @@ int BalanceExpr(LPCTSTR aBuf, int aStartBalance, TCHAR aExpect[])
 			mark = FindTextDelim(aBuf, quote, mark + 1);
 			if (!aBuf[mark]) // i.e. it isn't safe to do ++mark.
 			{
+				if (aOpenQuote)
+				{
+					*aOpenQuote = quote;
+					return balance;
+				}
 				aExpect[0] = quote; // Expected
 				aExpect[1] = 0; // Found
 				return -1; // Since this quote is missing its close-quote, abort the continuation loop.
