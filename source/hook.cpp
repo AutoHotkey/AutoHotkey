@@ -1118,9 +1118,12 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// those modifiers themselves form another valid hotkey with this suffix.  In other words,
 		// ModifierVK/SC combos take precedence over normally-modified combos:
 		Hotkey *found_hk = NULL;
-		for (hotkey_id_temp = this_key.first_custom_combo; hotkey_id_temp != HOTKEY_ID_INVALID; )
+		for (hotkey_id_temp = this_key.first_hotkey; hotkey_id_temp != HOTKEY_ID_INVALID; )
 		{
 			Hotkey &this_hk = *Hotkey::shk[hotkey_id_temp]; // hotkey_id_temp does not include flags in this case.
+			if (!(this_hk.mModifierVK || this_hk.mModifierSC))
+				break; // Not a custom combo.
+			hotkey_id_temp = this_hk.mNextHotkey;
 			key_type &this_modifier_key = this_hk.mModifierVK ? kvk[this_hk.mModifierVK] : ksc[this_hk.mModifierSC];
 			// The following check supports the prefix+suffix pairs that have both an up hotkey and a down,
 			// such as:
@@ -1163,7 +1166,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 					// generates down-events (e.g. certain Dell keyboards).
 				}
 			} // qualified prefix is down
-			hotkey_id_temp = this_hk.mNextCustomCombo;
 		} // for each prefix of this suffix
 		if (found_hk)
 		{
@@ -3759,9 +3761,9 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 					ksc[hk.mModifierSC].sc_takes_precedence = true;
 				}
 			}
-			// Insert this hotkey at the front of the linked list of combos which use this suffix key.
-			hk.mNextCustomCombo = pThisKey->first_custom_combo;
-			pThisKey->first_custom_combo = hk.mID;
+			// Insert this hotkey at the front of the linked list of hotkeys which use this suffix key.
+			hk.mNextHotkey = pThisKey->first_hotkey;
+			pThisKey->first_hotkey = hk.mID;
 			continue;
 		}
 		#ifndef SEND_NOSUPPRESS_PREFIX_KEY_ON_RELEASE // Search for this symbol for details.
@@ -3806,6 +3808,16 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 			hk_sorted_type &this_hk = hk_sorted[i]; // For performance and convenience.
 			this_hk_is_key_up = this_hk.id_with_flags & HOTKEY_KEY_UP;
 			this_hk_id = this_hk.id_with_flags & HOTKEY_ID_MASK;
+
+			// Insert this hotkey at the front of the list of hotkeys that use this suffix key.
+			// This enables fallback between overlapping hotkeys, such as LCtrl & a, <^+a, ^+a.
+			pThisKey = this_hk.vk ? kvk + this_hk.vk : ksc + this_hk.sc;
+			// Insert after any custom combos.
+			HotkeyIDType *first = &pThisKey->first_hotkey;
+			while (*first != HOTKEY_ID_INVALID && (aHK[*first]->mModifierVK || aHK[*first]->mModifierSC))
+				first = &aHK[*first]->mNextHotkey;
+			aHK[this_hk_id]->mNextHotkey = *first;
+			*first = this_hk_id;
 
 			i_modifiers_merged = this_hk.modifiers;
 			if (this_hk.modifiersLR)
@@ -4012,18 +4024,18 @@ bool HookAdjustMaxHotkeys(Hotkey **&aHK, int &aCurrentMax, int aNewMax)
 
 HotkeyIDType &CustomComboLast(HotkeyIDType *aFirst)
 {
-	for (; *aFirst != HOTKEY_ID_INVALID; aFirst = &Hotkey::shk[*aFirst]->mNextCustomCombo);
+	for (; *aFirst != HOTKEY_ID_INVALID; aFirst = &Hotkey::shk[*aFirst]->mNextHotkey);
 	return *aFirst;
 }
 
 void LinkKeysForCustomCombo(vk_type aNeutral, vk_type aLeft, vk_type aRight)
 {
-	HotkeyIDType first_neutral = kvk[aNeutral].first_custom_combo;
+	HotkeyIDType first_neutral = kvk[aNeutral].first_hotkey;
 	if (first_neutral == HOTKEY_ID_INVALID)
 		return;
 	// Append the neutral key's list to the lists of the left and right keys.
-	CustomComboLast(&kvk[aLeft].first_custom_combo) = first_neutral;
-	CustomComboLast(&kvk[aRight].first_custom_combo) = first_neutral;
+	CustomComboLast(&kvk[aLeft].first_hotkey) = first_neutral;
+	CustomComboLast(&kvk[aRight].first_hotkey) = first_neutral;
 }
 
 

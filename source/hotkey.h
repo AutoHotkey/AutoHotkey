@@ -155,7 +155,7 @@ public:
 	HookActionType mHookAction;
 	sc_type mSC; // Scan code.  All vk's have a scan code, but not vice versa.
 	sc_type mModifierSC; // If mModifierVK is zero, this scan code, if non-zero, will be used as the modifier.
-	HotkeyIDType mNextCustomCombo; // ID of the next custom combo with the same suffix as this one (initialized by the hook, but only for combos).
+	HotkeyIDType mNextHotkey; // ID of the next hotkey with the same suffix as this one (initialized by the hook).
 
 	// Keep single-byte attributes adjacent to each other to conserve memory within byte-aligned class/struct:
 	modLR_type mModifiersLR;  // Left-right centric versions of the above.

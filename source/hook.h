@@ -123,7 +123,7 @@ struct key_type
 	// Keep sub-32-bit members contiguous to save memory without having to sacrifice performance of
 	// 32-bit alignment:
 	HotkeyIDType hotkey_to_fire_upon_release; // A up-event hotkey queued by a prior down-event.
-	HotkeyIDType first_custom_combo; // The first custom combo hotkey using this key as a suffix.
+	HotkeyIDType first_hotkey; // The first hotkey using this key as a suffix.
 	modLR_type as_modifiersLR; // If this key is a modifier, this will have the corresponding bit(s) for that key.
 	#define PREFIX_ACTUAL 1 // Values for used_as_prefix below, for places that need to distinguish between type of prefix.
 	#define PREFIX_FORCED 2 // v1.0.44: Added so that a neutral hotkey like Control can be forced to fire on key-up even though it isn't actually a prefix key.
@@ -151,7 +151,7 @@ struct key_type
 //   RButton::return
 #define RESET_KEYTYPE_ATTRIB(item) \
 {\
-	item.first_custom_combo = HOTKEY_ID_INVALID;\
+	item.first_hotkey = HOTKEY_ID_INVALID;\
 	item.used_as_prefix = 0;\
 	item.used_as_suffix = false;\
 	item.used_as_key_up = false;\
