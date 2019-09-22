@@ -769,8 +769,10 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 	}
 
 	// Since above didn't find any variant of the hotkey than can fire, check for other eligible hotkeys.
-	if (!(hk.mModifierVK || hk.mModifierSC || hk.mHookAction)) // Rule out those that aren't susceptible to the bug due to their lack of support for wildcards.
+	if (!hk.mHookAction) // Rule out those that aren't susceptible to the bug.
 	{
+		// Custom combos are no longer ruled out by the above since they allow extra modifiers and
+		// are capable of obscuring non-custom combos; e.g. LCtrl & a:: obscures <^a::, ^+a:: and so on.
 		// Fix for v1.0.46.13: Although the section higher above found no variant to fire for the
 		// caller-specified hotkey ID, it's possible that some other hotkey (one with a wildcard) is
 		// eligible to fire due to the eclipsing behavior of wildcard hotkeys.  For example:
@@ -786,18 +788,26 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 		// makes the odds vanishingly small.  That's why the following simple, high-performance loop is used
 		// rather than more a more complex one that "locates the smallest (most specific) eclipsed wildcard
 		// hotkey", or "the uppermost variant among all eclipsed wildcards that is eligible to fire".
+		// UPDATE: This now uses a linked list of hotkeys which share the same suffix key, in the order of
+		// sort_most_general_before_least, which might solve the concern about precedence.
 		mod_type modifiers = ConvertModifiersLR(g_modifiersLR_logical_non_ignored); // Neutral modifiers.
-		for (int i = 0; i < sHotkeyCount; ++i) // This loop is undesirable; but its performance impact probably isn't measurable in the majority of cases.
+		for (HotkeyIDType candidate_id = hk.mNextHotkey; candidate_id != HOTKEY_ID_INVALID; )
 		{
-			Hotkey &hk2 = *shk[i]; // For performance and convenience.
-			if (   hk2.mVK == hk.mVK // VK and SC (one of which is typically zero) must both match for
-				&& hk2.mSC == hk.mSC // this bug to have wrongly eclipsed a qualified variant of some other hotkey.
-				&& hk2.mAllowExtraModifiers // To be eclipsable by the original hotkey, a candidate must have a wildcard.
-				&& hk2.mKeyUp == aKeyUp // Seems necessary that up/down nature is the same in both.
+			Hotkey &hk2 = *shk[candidate_id]; // For performance and convenience.
+			candidate_id = hk2.mNextHotkey;
+			// Non-wildcard hotkeys are eligible for the workaround in cases like ^+a vs <^+a vs ^<+a, where
+			// the neutral modifier acts as a sort of wildcard (it permits left, right or both).  This also
+			// increases support for varying names, such as Esc vs. Escape vs. vk1B (which already partially
+			// worked if wildcards were used).
+			// However, must ensure only the allowed modifiers are down when !mAllowExtraModifiers.
+			// mVK and mSC aren't checked since the linked list only includes hotkeys for this same suffix key.
+			// This also allows the workaround to be partially applied to LCtrl vs. Ctrl and similar (as suffixes).
+			if (  (hk2.mAllowExtraModifiers || !(~hk2.mModifiersConsolidatedLR & g_modifiersLR_logical_non_ignored))
+				&& hk2.mKeyUp == hk.mKeyUp // Seems necessary that up/down nature is the same in both.
 				&& !hk2.mModifierVK // Avoid accidental matching of normal hotkeys with custom-combo "&"
 				&& !hk2.mModifierSC // hotkeys that happen to have the same mVK/SC.
 				&& !hk2.mHookAction // Might be unnecessary to check this; but just in case.
-				&& hk2.mID != hotkey_id // Don't consider the original hotkey because it's was already found ineligible.
+				&& hk2.mID != hotkey_id // Don't consider the original hotkey because it was already found ineligible.
 				&& !(hk2.mModifiers & ~modifiers) // All neutral modifiers required by the candidate are pressed.
 				&& !(hk2.mModifiersLR & ~g_modifiersLR_logical_non_ignored) // All left-right specific modifiers required by the candidate are pressed.
 				//&& hk2.mType != HK_JOYSTICK // Seems unnecessary since joystick hotkeys don't call us and even if they did, probably should be included.

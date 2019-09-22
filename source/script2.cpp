@@ -4129,8 +4129,11 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	case AHK_USER_MENU:
 		// Search for AHK_USER_MENU in GuiWindowProc() for comments about why this is done:
-		PostMessage(hWnd, iMsg, wParam, lParam);
-		MsgSleep(-1, RETURN_AFTER_MESSAGES_SPECIAL_FILTER);
+		if (IsInterruptible())
+		{
+			PostMessage(hWnd, iMsg, wParam, lParam);
+			MsgSleep(-1, RETURN_AFTER_MESSAGES_SPECIAL_FILTER);
+		}
 		return 0;
 
 	case WM_HOTKEY: // As a result of this app having previously called RegisterHotkey().

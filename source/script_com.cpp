@@ -21,7 +21,22 @@ BIF_DECL(BIF_ComObjCreate)
 	CLSID clsid, iid;
 	for (;;)
 	{
-		hr = CLSIDFromString(CStringWCharFromTCharIfNeeded(TokenToString(*aParam[0])), &clsid);
+#ifdef UNICODE
+		LPTSTR cls = TokenToString(*aParam[0]);
+#else
+		CStringWCharFromTChar cls = TokenToString(*aParam[0]);
+#endif
+		// It has been confirmed on Windows 10 that both CLSIDFromString and CLSIDFromProgID
+		// were unable to resolve a ProgID starting with '{', like "{Foo", though "Foo}" works.
+		// There are probably also guidelines and such that prohibit it.
+		if (cls[0] == '{')
+			hr = CLSIDFromString(cls, &clsid);
+		else
+			// CLSIDFromString is known to be able to resolve ProgIDs via the registry,
+			// but fails on registration-free classes such as "Microsoft.Windows.ActCtx".
+			// CLSIDFromProgID works for that, but fails when given a CLSID string
+			// (consistent with VBScript and JScript in both cases).
+			hr = CLSIDFromProgID(cls, &clsid);
 		if (FAILED(hr)) break;
 
 		if (aParamCount > 1)
