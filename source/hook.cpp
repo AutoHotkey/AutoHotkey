@@ -1537,8 +1537,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// When the user finally releases the WIN key, that release will be disguised if called
 		// for by the logic below and in AllowIt().
 		if (   (g_modifiersLR_logical & (MOD_LWIN|MOD_RWIN)) // One or both are down and may require disguising.
-			&& ((g_modifiersLR_physical & (MOD_LWIN|MOD_RWIN)) // Always disguise if physically down, for backward compatibility.
-				|| Hotkey::HotkeyRequiresModLR(hotkey_id_to_fire, MOD_LWIN|MOD_RWIN))   ) // If not physically down, avoid masking hotkeys which could be intended to send {LWin up}, such as for AppsKey::RWin.
+			&& Hotkey::HotkeyRequiresModLR(hotkey_id_to_fire, MOD_LWIN|MOD_RWIN)   ) // Avoid masking hotkeys which could be intended to send {LWin up}, such as for AppsKey::RWin.
 		{
 			sDisguiseNextMenu = true;
 			// An earlier stage has ensured that the keyboard hook is installed for suppression of LWin/RWin if
@@ -1561,8 +1560,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		if (   !sDisguiseNextMenu // It's not already going to be disguised due to the section above or a previous hotkey.
 			&& (g_modifiersLR_logical & (MOD_LALT|MOD_RALT)) // If RAlt==AltGr, it should never need disguising, but in that case LCtrl is also down, so ActiveWindowLayoutHasAltGr() isn't checked.
 			&& !(g_modifiersLR_logical & (MOD_LCONTROL|MOD_RCONTROL)) // No need to mask if Ctrl is down (the key-repeat issue that affects the WIN key does not affect ALT).
-			&& ((g_modifiersLR_physical & (MOD_LALT|MOD_RALT)) // Always disguise if physically down, for backward compatibility.
-				|| Hotkey::HotkeyRequiresModLR(hotkey_id_to_fire, MOD_LALT|MOD_RALT))   ) // If not physically down, avoid masking hotkeys which could be intended to send {Alt up}, such as for AppsKey::Alt.
+			&& Hotkey::HotkeyRequiresModLR(hotkey_id_to_fire, MOD_LALT|MOD_RALT)   ) // Avoid masking hotkeys which could be intended to send {Alt up}, such as for AppsKey::Alt.
 		{
 			if (g_KeybdHook)
 				sDisguiseNextMenu = true;
