@@ -50,6 +50,7 @@ WNDPROC g_TabClassProc = NULL;
 modLR_type g_modifiersLR_logical = 0;
 modLR_type g_modifiersLR_logical_non_ignored = 0;
 modLR_type g_modifiersLR_physical = 0;
+modLR_type g_modifiersLR_numpad_mask = 0;
 
 #ifdef FUTURE_USE_MOUSE_BUTTONS_LOGICAL
 WORD g_mouse_buttons_logical = 0;
@@ -102,6 +103,7 @@ int g_nLayersNeedingTimer = 0;
 int g_nThreads = 0;
 int g_nPausedThreads = 0;
 int g_MaxHistoryKeys = 40;
+DWORD g_InputTimeoutAt = 0;
 
 // g_MaxVarCapacity is used to prevent a buggy script from consuming all available system RAM. It is defined
 // as the maximum memory size of a variable, including the string's zero terminator.
@@ -191,7 +193,7 @@ TCHAR g_EndChars[HS_MAX_END_CHARS + 1] = _T("-()[]{}:;'\"/\\,.?!\n \t");  // Hot
 
 // Global objects:
 Var *g_ErrorLevel = NULL; // Allows us (in addition to the user) to set this var to indicate success/failure.
-input_type g_input;
+input_type *g_input = NULL;
 Script g_script;
 // This made global for performance reasons (determining size of clipboard data then
 // copying contents in or out without having to close & reopen the clipboard in between):
@@ -317,7 +319,7 @@ Action g_act[] =
 	, {_T("Else"), 0, 0, 0, NULL} // No args; it has special handling to support same-line ELSE-actions (e.g. "else if").
 
 	, {_T("MsgBox"), 0, 4, 3, NULL} // Text (if only 1 param) or: Mode-flag, Title, Text, Timeout.
-	, {_T("InputBox"), 1, 11, 11 H, {5, 6, 7, 8, 10, 0}} // Output var, title, prompt, hide-text (e.g. passwords), width, height, X, Y, Font (e.g. courier:8 maybe), Timeout, Default
+	, {_T("InputBox"), 1, 11, 11 H, {5, 6, 7, 8, 10, 0}} // Output var, title, prompt, hide-text (e.g. passwords), width, height, X, Y, Locale, Timeout, Default
 	, {_T("SplashTextOn"), 0, 4, 4, {1, 2, 0}} // Width, height, title, text
 	, {_T("SplashTextOff"), 0, 0, 0, NULL}
 	, {_T("Progress"), 0, 6, 6, NULL}  // Off|Percent|Options, SubText, MainText, Title, Font, FutureUse
@@ -411,6 +413,8 @@ Action g_act[] =
 	, {_T("Catch"), 0, 1, 0, NULL} // fincs: seems best to allow catch without a parameter
 	, {_T("Finally"), 0, 0, 0, NULL}
 	, {_T("Throw"), 0, 1, 1, {1, 0}}
+	, {_T("Switch"), 0, 1, 1, {1, 0}}
+	, {_T("Case"), 1, MAX_ARGS, MAX_ARGS, NULL}
 	, {_T("{"), 0, 0, 0, NULL}, {_T("}"), 0, 0, 0, NULL}
 
 	, {_T("WinActivate"), 0, 4, 2, NULL} // Passing zero params results in activating the LastUsed window.

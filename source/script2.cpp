@@ -1428,13 +1428,12 @@ ResultType Line::Input()
 // at a time.  Thus, if an input is ongoing and a new thread starts, and it begins its
 // own input, that input should terminate the prior input prior to beginning the new one.
 // In a "worst case" scenario, each interrupted quasi-thread could have its own
-// input, which is in turn terminated by the thread that interrupts it.  Every time
-// this function returns, it must be sure to set g_input.status to INPUT_OFF beforehand.
-// This signals the quasi-threads beneath, when they finally return, that their input
-// was terminated due to a new input that took precedence.
+// input, which is in turn terminated by the thread that interrupts it.
 {
 	if (g_os.IsWin9x()) // v1.0.44.14: For simplicity, do nothing on Win9x rather than try to see if it actually supports the hook (such as if its some kind of emulated/hybrid OS).
 		return OK; // Could also set ErrorLevel to "Timeout" and output_var to be blank, but the benefits to backward compatibility seemed too dubious.
+
+	auto *prior_input = InputFind(NULL); // Not g_input, which could belong to an object and should not be ended.
 
 	// Since other script threads can interrupt this command while it's running, it's important that
 	// this command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
@@ -1446,9 +1445,9 @@ ResultType Line::Input()
 		// This means that the user is specifically canceling the prior input (if any).  Thus, our
 		// ErrorLevel here is set to 1 or 0, but the prior input's ErrorLevel will be set to "NewInput"
 		// when its quasi-thread is resumed:
-		bool prior_input_is_being_terminated = (g_input.status == INPUT_IN_PROGRESS);
-		g_input.status = INPUT_OFF;
-		return SetErrorLevelOrThrowBool(!prior_input_is_being_terminated);
+		if (prior_input)
+			prior_input->EndByNewInput();
+		return SetErrorLevelOrThrowBool(prior_input == NULL);
 		// Above: It's considered an "error" of sorts when there is no prior input to terminate.
 	}
 
@@ -1458,83 +1457,144 @@ ResultType Line::Input()
 	LPTSTR aOptions = ARG2, aEndKeys = ARG3, aMatchList = ARG4;
 	// The aEndKeys string must be modifiable (not constant), since for performance reasons,
 	// it's allowed to be temporarily altered by this function.
-
-	// Set default in case of early return (we want these to be in effect even if
-	// FAIL is returned for our thread, since the underlying thread that had the
-	// active input prior to us didn't fail and it it needs to know how its input
-	// was terminated):
-	g_input.status = INPUT_OFF;
+	size_t aMatchList_length = ArgLength(4); // Performs better than _tcslen(aMatchList);
 	
-	//////////////////////////////////////////
-	// Set default options and parse aOptions:
-	//////////////////////////////////////////
-	g_input.BackspaceIsUndo = true;
-	g_input.CaseSensitive = false;
-	g_input.IgnoreAHKInput = false;
-	g_input.TranscribeModifiedKeys = false;
-	g_input.Visible = false;
-	g_input.FindAnywhere = false;
-	g_input.BufferLengthMax = INPUT_BUFFER_SIZE - 1;
-	int timeout = 0;
-	bool endchar_mode = false;
+	input_type input;
+	input.VisibleNonText = false; // Override InputHook default.
+	input.BufferLengthMax = INPUT_BUFFER_SIZE - 1;
+	if (!input.Setup(aOptions, aEndKeys, aMatchList, aMatchList_length))
+		return FAIL;
+	// Only now is it safe to do things which might cause interruption (see comments above).
+
+	if (prior_input)
+		prior_input->EndByNewInput();
+
+	return InputStart(input, output_var);
+}
+
+
+ResultType input_type::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length)
+{
+	ParseOptions(aOptions);
+	if (!SetKeyFlags(aEndKeys))
+		return FAIL;
+	if (!SetMatchList(aMatchList, aMatchList_length))
+		return FAIL;
+	
+	// For maintainability/simplicity/code size, it's allocated even if BufferLengthMax == 0.
+	if (  !(Buffer = tmalloc(BufferLengthMax + 1))  )
+		return g_script.ScriptError(ERR_OUTOFMEM);
+	*Buffer = '\0';
+
+	return OK;
+}
+
+
+ResultType InputStart(input_type &input, Var *output_var)
+{
+	ASSERT(!input.InProgress());
+
+	// Keep the object alive while it is active, even if the script discards it.
+	// The corresponding Release() is done when g_input is reset by InputRelease().
+	if (input.ScriptObject)
+		input.ScriptObject->AddRef();
+	
+	// Set or update the timeout timer if needed.  The timer proc takes care to end
+	// only those inputs which are due, and will reset or kill the timer as needed.
+	if (input.Timeout > 0)
+		input.SetTimeoutTimer();
+
+	input.Prev = g_input;
+	input.Start();
+	g_input = &input; // Signal the hook to start the input.
+
+	// Make script persistent.  This is mostly for backward compatibility because it is documented behavior.
+	// even though as of v1.0.42.03, the keyboard hook does not become permanent (which allows a subsequent
+	// use of the commands Suspend/Hotkey to deinstall it, which seems to add flexibility/benefit).
+	if (output_var)
+		g_persistent = true;
+	Hotkey::InstallKeybdHook(); // Install the hook (if needed).
+
+	if (!output_var)
+		return OK;
+	return InputWait(output_var, input);
+}
+
+
+void input_type::ParseOptions(LPTSTR aOptions)
+{
 	for (LPTSTR cp = aOptions; *cp; ++cp)
 	{
 		switch(ctoupper(*cp))
 		{
 		case 'B':
-			g_input.BackspaceIsUndo = false;
+			BackspaceIsUndo = false;
 			break;
 		case 'C':
-			g_input.CaseSensitive = true;
+			CaseSensitive = true;
 			break;
 		case 'I':
-			g_input.IgnoreAHKInput = true;
+			MinSendLevel = (cp[1] <= '9' && cp[1] >= '0') ? (SendLevelType)_ttoi(cp + 1) : 1;
 			break;
 		case 'M':
-			g_input.TranscribeModifiedKeys = true;
+			TranscribeModifiedKeys = true;
 			break;
 		case 'L':
 			// Use atoi() vs. ATOI() to avoid interpreting something like 0x01C as hex
 			// when in fact the C was meant to be an option letter:
-			g_input.BufferLengthMax = _ttoi(cp + 1);
-			if (g_input.BufferLengthMax > INPUT_BUFFER_SIZE - 1)
-				g_input.BufferLengthMax = INPUT_BUFFER_SIZE - 1;
+			BufferLengthMax = _ttoi(cp + 1);
+			if (BufferLengthMax < 0)
+				BufferLengthMax = 0;
 			break;
 		case 'T':
 			// Although ATOF() supports hex, it's been documented in the help file that hex should
 			// not be used (see comment above) so if someone does it anyway, some option letters
 			// might be misinterpreted:
-			timeout = (int)(ATOF(cp + 1) * 1000);
+			Timeout = (int)(ATOF(cp + 1) * 1000);
 			break;
 		case 'V':
-			g_input.Visible = true;
+			VisibleText = true;
+			VisibleNonText = true;
 			break;
 		case '*':
-			g_input.FindAnywhere = true;
+			FindAnywhere = true;
 			break;
 		case 'E':
 			// Interpret single-character keys as characters rather than converting them to VK codes.
 			// This tends to work better when using multiple keyboard layouts, but changes behaviour:
 			// for instance, an end char of "." cannot be triggered while holding Alt.
-			endchar_mode = true;
+			EndCharMode = true;
 			break;
 		}
 	}
+}
 
-	//////////////////////////////////////////////
-	// Set up sparse arrays according to aEndKeys:
-	//////////////////////////////////////////////
-	UCHAR end_vk[VK_ARRAY_COUNT] = {0};  // A sparse array that indicates which VKs terminate the input.
-	UCHAR end_sc[SC_ARRAY_COUNT] = {0};  // A sparse array that indicates which SCs terminate the input.
 
+void input_type::SetTimeoutTimer()
+{
+	DWORD now = GetTickCount();
+	TimeoutAt = now + Timeout;
+	if (!g_InputTimerExists || Timeout < int(g_InputTimeoutAt - now))
+		SET_INPUT_TIMER(Timeout, TimeoutAt)
+}
+
+
+ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsRemove, UCHAR aFlagsAdd)
+{
+	bool vk_by_number;
 	vk_type vk;
 	sc_type sc = 0;
 	modLR_type modifiersLR;
-	size_t key_text_length, single_char_count = 0;
+	size_t key_text_length;
+	UINT single_char_count = 0;
 	TCHAR *end_pos, single_char_string[2];
 	single_char_string[1] = '\0'; // Init its second character once, since the loop only changes the first char.
+	
+	const bool endchar_mode = aEndKeyMode && EndCharMode;
+	UCHAR * const end_vk = KeyVK;
+	UCHAR * const end_sc = KeySC;
 
-	for (TCHAR *end_key = aEndKeys; *end_key; ++end_key) // This a modified version of the processing loop used in SendKeys().
+	for (TCHAR *end_key = aKeys; *end_key; ++end_key) // This a modified version of the processing loop used in SendKeys().
 	{
 		vk = 0; // Set default.  Not strictly necessary but more maintainable.
 		*single_char_string = '\0';  // Set default as "this key name is not a single-char string".
@@ -1572,10 +1632,26 @@ ResultType Line::Input()
 			*end_pos = '\0';  // temporarily terminate the string here.
 
 			modifiersLR = 0;  // Init prior to below.
-			if (  !(vk = TextToVK(end_key + 1, &modifiersLR, true))  )
+			// For backward compatibility, the Input command handles all keys by VK if
+			// one is returned by TextToVK().  Although this behaviour seems like a bug,
+			// changing it would require changing the way ErrorLevel is determined (so
+			// that the correct name is returned for the primary SC of any key), which
+			// carries a larger risk of breaking scripts.
+			// Also handle the key by VK if it was given by number, such as {vk26}.
+			// Otherwise, for any key name which has a VK shared by two possible SCs
+			// (such as Up and NumpadUp), handle it by SC so it's identified correctly.
+			if (vk = TextToVK(end_key + 1, &modifiersLR, true))
+			{
+				vk_by_number = ctoupper(end_key[1]) == 'V' && ctoupper(end_key[2]) == 'K';
+				if (ScriptObject && !vk_by_number && (sc = vk_to_sc(vk, true)))
+				{
+					sc ^= 0x100; // Convert sc to the primary scan code, which is the one named by end_key.
+					vk = 0; // Handle it only by SC.
+				}
+			}
+			else
 				// No virtual key, so try to find a scan code.
-				if (sc = TextToSC(end_key + 1))
-					end_sc[sc] = END_KEY_ENABLED;
+				sc = TextToSC(end_key + 1);
 
 			*end_pos = '}';  // undo the temporary termination
 
@@ -1596,10 +1672,9 @@ ResultType Line::Input()
 
 		if (vk) // A valid virtual key code was discovered above.
 		{
-			end_vk[vk] |= END_KEY_ENABLED; // Use of |= is essential for cases such as ";:".
 			// Insist the shift key be down to form genuinely different symbols --
 			// namely punctuation marks -- but not for alphabetic chars.
-			if (*single_char_string && !IsCharAlpha(*single_char_string)) // v1.0.46.05: Added check for "*single_char_string" so that non-single-char strings like {F9} work as end keys even when the Shift key is being held down (this fixes the behavior to be like it was in pre-v1.0.45).
+			if (*single_char_string && aEndKeyMode && !IsCharAlpha(*single_char_string)) // v1.0.46.05: Added check for "*single_char_string" so that non-single-char strings like {F9} work as end keys even when the Shift key is being held down (this fixes the behavior to be like it was in pre-v1.0.45).
 			{
 				// Now we know it's not alphabetic, and it's not a key whose name
 				// is longer than one char such as a function key or numpad number.
@@ -1611,16 +1686,40 @@ ResultType Line::Input()
 				else
 					end_vk[vk] |= END_KEY_WITHOUT_SHIFT;
 			}
+			else
+			{
+				end_vk[vk] = (end_vk[vk] & ~aFlagsRemove) | aFlagsAdd;
+				// Apply flag removal to this key's SC as well.  This is primarily
+				// to support combinations like {All} +E, {LCtrl}{RCtrl} -E.
+				sc_type temp_sc;
+				if (aFlagsRemove && !vk_by_number && (temp_sc = vk_to_sc(vk)))
+				{
+					end_sc[temp_sc] &= ~aFlagsRemove; // But apply aFlagsAdd only by VK.
+					// Since aFlagsRemove implies ScriptObject != NULL and !vk_by_number
+					// was also checked, that implies vk_to_sc(vk, true) was already called
+					// and did not find a secondary SC.
+				}
+			}
+		}
+		if (sc)
+		{
+			end_sc[sc] = (end_sc[sc] & ~aFlagsRemove) | aFlagsAdd;
 		}
 	} // for()
 
-	g_input.EndChars = _T("");
-	if (single_char_count)
+	if (single_char_count)  // See single_char_count++ above for comments.
 	{
-		// See single_char_count++ above for comments.
-		g_input.EndChars = talloca(single_char_count + 1);
+		if (single_char_count > EndCharsMax)
+		{
+			// Allocate a bigger buffer.
+			if (EndCharsMax) // If zero, EndChars may point to static memory.
+				free(EndChars);
+			if (  !(EndChars = tmalloc(single_char_count + 1))  )
+				return g_script.ScriptError(ERR_OUTOFMEM);
+			EndCharsMax = single_char_count;
+		}
 		TCHAR *dst, *src;
-		for (dst = g_input.EndChars, src = aEndKeys; *src; ++src)
+		for (dst = EndChars, src = aKeys; *src; ++src)
 		{
 			switch (*src)
 			{
@@ -1639,40 +1738,49 @@ ResultType Line::Input()
 			}
 			*dst++ = *src;
 		}
+		ASSERT(dst > EndChars);
 		*dst = '\0';
 	}
+	else if (aEndKeyMode) // single_char_count is false
+	{
+		if (EndCharsMax)
+			*EndChars = '\0';
+		else
+			EndChars = _T("");
+	}
+	return OK;
+}
 
-	/////////////////////////////////////////////////
-	// Parse aMatchList into an array of key phrases:
-	/////////////////////////////////////////////////
+
+ResultType input_type::SetMatchList(LPTSTR aMatchList, size_t aMatchList_length)
+{
 	LPTSTR *realloc_temp;  // Needed since realloc returns NULL on failure but leaves original block allocated.
-	g_input.MatchCount = 0;  // Set default.
+	MatchCount = 0;  // Set default.
 	if (*aMatchList)
 	{
 		// If needed, create the array of pointers that points into MatchBuf to each match phrase:
-		if (!g_input.match)
+		if (!match)
 		{
-			if (   !(g_input.match = (LPTSTR *)malloc(INPUT_ARRAY_BLOCK_SIZE * sizeof(LPTSTR)))   )
-				return LineError(ERR_OUTOFMEM);  // Short msg. since so rare.
-			g_input.MatchCountMax = INPUT_ARRAY_BLOCK_SIZE;
+			if (   !(match = (LPTSTR *)malloc(INPUT_ARRAY_BLOCK_SIZE * sizeof(LPTSTR)))   )
+				return g_script.ScriptError(ERR_OUTOFMEM);  // Short msg. since so rare.
+			MatchCountMax = INPUT_ARRAY_BLOCK_SIZE;
 		}
 		// If needed, create or enlarge the buffer that contains all the match phrases:
-		size_t aMatchList_length = ArgLength(4); // Performs better than _tcslen(aMatchList);
 		size_t space_needed = aMatchList_length + 1;  // +1 for the final zero terminator.
-		if (space_needed > g_input.MatchBufSize)
+		if (space_needed > MatchBufSize)
 		{
-			g_input.MatchBufSize = (UINT)(space_needed > 4096 ? space_needed : 4096);
-			if (g_input.MatchBuf) // free the old one since it's too small.
-				free(g_input.MatchBuf);
-			if (   !(g_input.MatchBuf = tmalloc(g_input.MatchBufSize))   )
+			MatchBufSize = (UINT)(space_needed > 4096 ? space_needed : 4096);
+			if (MatchBuf) // free the old one since it's too small.
+				free(MatchBuf);
+			if (   !(MatchBuf = tmalloc(MatchBufSize))   )
 			{
-				g_input.MatchBufSize = 0;
-				return LineError(ERR_OUTOFMEM);  // Short msg. since so rare.
+				MatchBufSize = 0;
+				return g_script.ScriptError(ERR_OUTOFMEM);  // Short msg. since so rare.
 			}
 		}
 		// Copy aMatchList into the match buffer:
 		LPTSTR source, dest;
-		for (source = aMatchList, dest = g_input.match[g_input.MatchCount] = g_input.MatchBuf
+		for (source = aMatchList, dest = match[MatchCount] = MatchBuf
 			; *source; ++source)
 		{
 			if (*source != ',') // Not a comma, so just copy it over.
@@ -1694,88 +1802,37 @@ ResultType Line::Input()
 			// If the previous item is blank -- which I think can only happen now if the MatchList
 			// begins with an orphaned comma (since two adjacent commas resolve to one literal comma)
 			// -- don't add it to the match list:
-			if (*g_input.match[g_input.MatchCount])
+			if (*match[MatchCount])
 			{
-				++g_input.MatchCount;
-				g_input.match[g_input.MatchCount] = ++dest;
+				++MatchCount;
+				match[MatchCount] = ++dest;
 				*dest = '\0';  // Init to prevent crash on orphaned comma such as "btw,otoh,"
 			}
 			if (*(source + 1)) // There is a next element.
 			{
-				if (g_input.MatchCount >= g_input.MatchCountMax) // Rarely needed, so just realloc() to expand.
+				if (MatchCount >= MatchCountMax) // Rarely needed, so just realloc() to expand.
 				{
 					// Expand the array by one block:
-					if (   !(realloc_temp = (LPTSTR *)realloc(g_input.match  // Must use a temp variable.
-						, (g_input.MatchCountMax + INPUT_ARRAY_BLOCK_SIZE) * sizeof(LPTSTR)))   )
-						return LineError(ERR_OUTOFMEM);  // Short msg. since so rare.
-					g_input.match = realloc_temp;
-					g_input.MatchCountMax += INPUT_ARRAY_BLOCK_SIZE;
+					if (   !(realloc_temp = (LPTSTR *)realloc(match  // Must use a temp variable.
+						, (MatchCountMax + INPUT_ARRAY_BLOCK_SIZE) * sizeof(LPTSTR)))   )
+						return g_script.ScriptError(ERR_OUTOFMEM);  // Short msg. since so rare.
+					match = realloc_temp;
+					MatchCountMax += INPUT_ARRAY_BLOCK_SIZE;
 				}
 			}
 		} // for()
 		*dest = '\0';  // Terminate the last item.
 		// This check is necessary for only a single isolated case: When the match list
 		// consists of nothing except a single comma.  See above comment for details:
-		if (*g_input.match[g_input.MatchCount]) // i.e. omit empty strings from the match list.
-			++g_input.MatchCount;
+		if (*match[MatchCount]) // i.e. omit empty strings from the match list.
+			++MatchCount;
 	}
+	return OK;
+}
 
-	// Notes about the below macro:
-	// In case the Input timer has already put a WM_TIMER msg in our queue before we killed it,
-	// clean out the queue now to avoid any chance that such a WM_TIMER message will take effect
-	// later when it would be unexpected and might interfere with this input.  To avoid an
-	// unnecessary call to PeekMessage(), which has been known to yield our timeslice to other
-	// processes if the CPU is under load (which might be undesirable if this input is
-	// time-critical, such as in a game), call GetQueueStatus() to see if there are any timer
-	// messages in the queue.  I believe that GetQueueStatus(), unlike PeekMessage(), does not
-	// have the nasty/undocumented side-effect of yielding our timeslice under certain hard-to-reproduce
-	// circumstances, but Google and MSDN are completely devoid of any confirming info on this.
-	#define KILL_AND_PURGE_INPUT_TIMER \
-	if (g_InputTimerExists)\
-	{\
-		KILL_INPUT_TIMER \
-		if (HIWORD(GetQueueStatus(QS_TIMER)) & QS_TIMER)\
-			MsgSleep(-1);\
-	}
 
-	// Be sure to get rid of the timer if it exists due to a prior, ongoing input.
-	// It seems best to do this only after signaling the hook to start the input
-	// so that it's MsgSleep(-1), if it launches a new hotkey or timed subroutine,
-	// will be less likely to interrupt us during our setup of the input, i.e.
-	// it seems best that we put the input in progress prior to allowing any
-	// interruption.  UPDATE: Must do this before changing to INPUT_IN_PROGRESS
-	// because otherwise the purging of the timer message might call InputTimeout(),
-	// which in turn would set the status immediately to INPUT_TIMED_OUT:
-	KILL_AND_PURGE_INPUT_TIMER
-
-	//////////////////////////////////////////////////////////////
-	// Initialize buffers and state variables for use by the hook:
-	//////////////////////////////////////////////////////////////
-	TCHAR input_buf[INPUT_BUFFER_SIZE]; // Will contain the actual input from the user.
-	*input_buf = '\0';
-	g_input.buffer = input_buf;
-	g_input.BufferLength = 0;
-	// g_input.BufferLengthMax was set in the option parsing section.
-
-	// Point the global addresses to our memory areas on the stack:
-	g_input.EndVK = end_vk;
-	g_input.EndSC = end_sc;
-	g_input.status = INPUT_IN_PROGRESS; // Signal the hook to start the input.
-
-	// Make script persistent.  This is mostly for backward compatibility because it is documented behavior.
-	// even though as of v1.0.42.03, the keyboard hook does not become permanent (which allows a subsequent
-	// use of the commands Suspend/Hotkey to deinstall it, which seems to add flexibility/benefit).
-	g_persistent = true;
-	Hotkey::InstallKeybdHook(); // Install the hook (if needed).
-
-	// A timer is used rather than monitoring the elapsed time here directly because
-	// this script's quasi-thread might be interrupted by a Timer or Hotkey subroutine,
-	// which (if it takes a long time) would result in our Input not obeying its timeout.
-	// By using an actual timer, the TimerProc() will run when the timer expires regardless
-	// of which quasi-thread is active, and it will end our input on schedule:
-	if (timeout > 0)
-		SET_INPUT_TIMER(timeout < 10 ? 10 : timeout)
-
+ResultType InputWait(Var *output_var, input_type &input)
+{
 	//////////////////////////////////////////////////////////////////
 	// Wait for one of the following to terminate our input:
 	// 1) The hook (due a match in aEndKeys or aMatchList);
@@ -1787,27 +1844,46 @@ ResultType Line::Input()
 		// Rather than monitoring the timeout here, just wait for the incoming WM_TIMER message
 		// to take effect as a TimerProc() call during the MsgSleep():
 		MsgSleep();
-		if (g_input.status != INPUT_IN_PROGRESS)
+		if (!input.InProgress())
 			break;
 	}
+	
+	// Translate the "ending" to an ErrorLevel string.  Even if we were interrupted by another
+	// Input which terminated for a different reason, that instance had its own struct, so ours
+	// hasn't been overwritten.
+	TCHAR key_name[128];
+	g_ErrorLevel->Assign(input.GetEndReason(key_name, _countof(key_name)));
 
-	switch(g_input.status)
+	return output_var->Assign(input.Buffer, input.BufferLength);
+}
+
+
+LPTSTR input_type::GetEndReason(LPTSTR aKeyBuf, int aKeyBufSize, bool aCombined)
+{
+	switch (Status)
 	{
 	case INPUT_TIMED_OUT:
-		g_ErrorLevel->Assign(_T("Timeout"));
-		break;
+		return _T("Timeout");
 	case INPUT_TERMINATED_BY_MATCH:
-		g_ErrorLevel->Assign(_T("Match"));
-		break;
+		return _T("Match");
 	case INPUT_TERMINATED_BY_ENDKEY:
 	{
-		TCHAR key_name[128] = _T("EndKey:");
-		if (g_input.EndingChar)
+		LPTSTR key_name = aKeyBuf;
+		if (!key_name)
+			return _T("EndKey");
+		if (aCombined) // Traditional "EndKey:xxx" mode.
 		{
-			key_name[7] = g_input.EndingChar;
-			key_name[8] = '\0';
+			ASSERT(aKeyBufSize > 7);
+			_tcscpy(key_name, _T("EndKey:"));
+			key_name += 7;
+			aKeyBufSize -= 7;
 		}
-		else if (g_input.EndingRequiredShift)
+		if (EndingChar)
+		{
+			key_name[0] = EndingChar;
+			key_name[1] = '\0';
+		}
+		else if (EndingRequiredShift)
 		{
 			// Since the only way a shift key can be required in our case is if it's a key whose name
 			// is a single char (such as a shifted punctuation mark), use a diff. method to look up the
@@ -1818,43 +1894,130 @@ ResultType Line::Input()
 			// In some cases, however, bit 15 of the uScanCode parameter may be used to distinguish
 			// between a key press and a key release. The scan code is used for translating ALT+
 			// number key combinations.
-			BYTE state[256] = {0};
+			BYTE state[256] = { 0 };
 			state[VK_SHIFT] |= 0x80; // Indicate that the neutral shift key is down for conversion purposes.
 			Get_active_window_keybd_layout // Defines the variable active_window_keybd_layout for use below.
-			int count = ToUnicodeOrAsciiEx(g_input.EndingVK, vk_to_sc(g_input.EndingVK), (PBYTE)&state // Nothing is done about ToAsciiEx's dead key side-effects here because it seems to rare to be worth it (assuming its even a problem).
-				, key_name + 7, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout); // v1.0.44.03: Changed to call ToAsciiEx() so that active window's layout can be specified (see hook.cpp for details).
-			*(key_name + 7 + count) = '\0';  // Terminate the string.
+			int count = ToUnicodeOrAsciiEx(EndingVK, vk_to_sc(EndingVK), (PBYTE)&state // Nothing is done about ToAsciiEx's dead key side-effects here because it seems to rare to be worth it (assuming its even a problem).
+				, key_name, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout); // v1.0.44.03: Changed to call ToAsciiEx() so that active window's layout can be specified (see hook.cpp for details).
+			key_name[count] = '\0';  // Terminate the string.
 		}
 		else
 		{
-			g_input.EndedBySC ? SCtoKeyName(g_input.EndingSC, key_name + 7, _countof(key_name) - 7)
-				: VKtoKeyName(g_input.EndingVK, key_name + 7, _countof(key_name) - 7);
+			*key_name = '\0';
+			if (EndingBySC)
+				SCtoKeyName(EndingSC, key_name, aKeyBufSize, false);
+			if (!*key_name && !(aCombined && EndingBySC))
+				VKtoKeyName(EndingVK, key_name, aKeyBufSize, !EndingBySC);
+			if (!*key_name)
+				sntprintf(key_name, aKeyBufSize, _T("sc%03X"), EndingSC);
 			// For partial backward-compatibility, keys A-Z are upper-cased when handled by VK,
 			// but only if they actually correspond to those characters.  If this wasn't done,
 			// the character would always be lowercase since the shift state is not considered.
-			if (key_name[7] >= 'a' && key_name[7] <= 'z' && !key_name[8])
-				key_name[7] -= 32;
+			if (*key_name >= 'a' && *key_name <= 'z' && !key_name[1] && aCombined)
+				*key_name -= 32;
 		}
-		g_ErrorLevel->Assign(key_name);
-		break;
+		return aCombined ? aKeyBuf : _T("EndKey");
 	}
 	case INPUT_LIMIT_REACHED:
-		g_ErrorLevel->Assign(_T("Max"));
-		break;
-	default: // Our input was terminated due to a new input in a quasi-thread that interrupted ours.
-		g_ErrorLevel->Assign(_T("NewInput"));
-		break;
+		return _T("Max");
+	case INPUT_INTERRUPTED:
+		// Our input was terminated due to a new input in a quasi-thread that interrupted ours.
+		return _T("NewInput");
+	case INPUT_OFF:
+		return _T("Stopped");
+	default: // In progress.
+		return _T("");
 	}
+}
 
-	g_input.status = INPUT_OFF;  // See OVERVIEW above for why this must be set prior to returning.
 
-	// In case it ended for reason other than a timeout, in which case the timer is still on:
-	KILL_AND_PURGE_INPUT_TIMER
+void input_type::Start()
+{
+	ASSERT(!InProgress());
+	Status = INPUT_IN_PROGRESS;
+}
 
-	// Seems ok to assign after the kill/purge above since input_buf is our own stack variable
-	// and its contents shouldn't be affected even if KILL_AND_PURGE_INPUT_TIMER's MsgSleep()
-	// results in a new thread being created that starts a new Input:
-	return output_var->Assign(input_buf);
+void input_type::EndByMatch(UINT aMatchIndex)
+{
+	ASSERT(InProgress());
+	EndingMatchIndex = aMatchIndex;
+	EndByReason(INPUT_TERMINATED_BY_MATCH);
+}
+
+void input_type::EndByKey(vk_type aVK, sc_type aSC, bool aBySC, bool aRequiredShift)
+{
+	ASSERT(InProgress());
+	EndingVK = aVK;
+	EndingSC = aSC;
+	EndingBySC = aBySC;
+	EndingRequiredShift = aRequiredShift;
+	EndingChar = 0; // Must be zero if the above are to be used.
+	EndByReason(INPUT_TERMINATED_BY_ENDKEY);
+}
+
+void input_type::EndByChar(TCHAR aChar)
+{
+	ASSERT(aChar && InProgress());
+	EndingChar = aChar;
+	// The other EndKey related fields are ignored when Char is non-zero.
+	EndByReason(INPUT_TERMINATED_BY_ENDKEY);
+}
+
+void input_type::EndByReason(InputStatusType aReason)
+{
+	ASSERT(InProgress());
+	EndingMods = g_modifiersLR_logical; // Not relevant to all end reasons, but might be useful anyway.
+	Status = aReason;
+
+	// It's done this way rather than calling InputRelease() directly...
+	// ...so that we can rely on MsgSleep() to create a new thread for the OnEnd event.
+	// ...because InputRelease() can't be called by the hook thread.
+	// ...because some callers rely on the list not being broken by this call.
+	PostMessage(g_hWnd, AHK_INPUT_END, (WPARAM)this, 0);
+}
+
+
+input_type *InputRelease(input_type *aInput)
+{
+	if (!aInput)
+		return NULL;
+	// Input should already have ended prior to this function being called.
+	// Otherwise, removal of aInput from the chain will end input collection.
+	if (g_input == aInput)
+		g_input = aInput->Prev;
+	else
+		for (auto *input = g_input; ; input = input->Prev)
+		{
+			if (!input)
+				return NULL; // aInput is not valid (faked AHK_INPUT_END message?) or not active.
+			if (input->Prev == aInput)
+			{
+				input->Prev = aInput->Prev;
+				break;
+			}
+		}
+
+	// Ensure any pending use of aInput by the hook is finished.
+	WaitHookIdle();
+	
+	aInput->Prev = NULL;
+	if (aInput->ScriptObject)
+	{
+		Hotkey::MaybeUninstallHook();
+		if (aInput->ScriptObject->onEnd)
+			return aInput; // Return for caller to call OnEnd and Release.
+		aInput->ScriptObject->Release();
+	}
+	return NULL;
+}
+
+
+input_type *InputFind(InputObject *object)
+{
+	for (auto *input = g_input; input; input = input->Prev)
+		if (input->ScriptObject == object)
+			return input;
+	return NULL;
 }
 
 
@@ -3612,7 +3775,7 @@ ResultType Line::WinSet(LPTSTR aAttrib, LPTSTR aValue, LPTSTR aTitle, LPTSTR aTe
 error:
 	// Only STYLE, EXSTYLE and REDRAW affect ErrorLevel for compatibility reasons,
 	// but seems best to allow the other sub-commands to throw exceptions:
-	return (use_errorlevel || g->InTryBlock) ? SetErrorLevelOrThrow() : OK;
+	return (use_errorlevel || g->InTryBlock()) ? SetErrorLevelOrThrow() : OK;
 }
 
 
@@ -5241,14 +5404,18 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	case AHK_USER_MENU:
 		// Search for AHK_USER_MENU in GuiWindowProc() for comments about why this is done:
-		PostMessage(hWnd, iMsg, wParam, lParam);
-		MsgSleep(-1, RETURN_AFTER_MESSAGES_SPECIAL_FILTER);
+		if (IsInterruptible())
+		{
+			PostMessage(hWnd, iMsg, wParam, lParam);
+			MsgSleep(-1, RETURN_AFTER_MESSAGES_SPECIAL_FILTER);
+		}
 		return 0;
 
 	case WM_HOTKEY: // As a result of this app having previously called RegisterHotkey().
 	case AHK_HOOK_HOTKEY:  // Sent from this app's keyboard or mouse hook.
 	case AHK_HOTSTRING: // Added for v1.0.36.02 so that hotstrings work even while an InputBox or other non-standard msg pump is running.
 	case AHK_CLIPBOARD_CHANGE: // Added for v1.0.44 so that clipboard notifications aren't lost while the script is displaying a MsgBox or other dialog.
+	case AHK_INPUT_END:
 		// If the following facts are ever confirmed, there would be no need to post the message in cases where
 		// the MsgSleep() won't be done:
 		// 1) The mere fact that any of the above messages has been received here in MainWindowProc means that a
@@ -5354,7 +5521,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			// DestroyWindow() upon termination so that the WM_DESTROY message winds up being
 			// received and process in this function (which is probably necessary for a clean
 			// termination of the app and all its windows):
-			g_script.ExitApp(EXIT_WM_CLOSE);
+			g_script.ExitApp(EXIT_CLOSE);
 			return 0;  // Verified correct.
 		}
 		// Otherwise, some window of ours other than our main window was destroyed
@@ -5384,9 +5551,9 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 				// and acting upon a WM_CLOSE or us calling DestroyWindow() directly) -- perhaps the window
 				// is being forcibly closed or something else abnormal happened.  Make a best effort to run
 				// the OnExit subroutine, if present, even without a main window (testing on an earlier
-				// versions shows that most commands work fine without the window). Pass the empty string
-				// to tell it to terminate after running the OnExit subroutine:
-				g_script.ExitApp(EXIT_DESTROY, _T(""));
+				// versions shows that most commands work fine without the window). For EXIT_DESTROY,
+				// it always terminates after running the OnExit subroutine:
+				g_script.ExitApp(EXIT_DESTROY);
 			// Do not do PostQuitMessage() here because we don't know the proper exit code.
 			// MSDN: "The exit value returned to the system must be the wParam parameter of
 			// the WM_QUIT message."
@@ -5969,7 +6136,7 @@ DWORD GetAHKInstallDir(LPTSTR aBuf)
 //////////////
 
 ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInput, int aWidth, int aHeight
-	, int aX, int aY, double aTimeout, LPTSTR aDefault)
+	, int aX, int aY, bool aLocale, double aTimeout, LPTSTR aDefault)
 {
 	if (g_nInputBoxes >= MAX_INPUTBOXES)
 	{
@@ -6011,6 +6178,7 @@ ResultType InputBox(Var *aOutputVar, LPTSTR aTitle, LPTSTR aText, bool aHideInpu
 	g_InputBox[g_nInputBoxes].ypos = aY;
 	g_InputBox[g_nInputBoxes].output_var = aOutputVar;
 	g_InputBox[g_nInputBoxes].password_char = aHideInput ? '*' : '\0';
+	g_InputBox[g_nInputBoxes].locale = aLocale;
 
 	// At this point, we know a dialog will be displayed.  See macro's comments for details:
 	DIALOG_PREP
@@ -6085,6 +6253,27 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		SetWindowText(hWndDlg, CURR_INPUTBOX.title);
 		if (hControl = GetDlgItem(hWndDlg, IDC_INPUTPROMPT))
 			SetWindowText(hControl, CURR_INPUTBOX.text);
+
+		// Apply button names based on the current user's locale:
+		if (CURR_INPUTBOX.locale)
+		{
+			typedef LPCWSTR(WINAPI*pfnUser)(int);
+			HMODULE hMod = GetModuleHandle(_T("user32.dll"));
+			pfnUser mbString = (pfnUser)GetProcAddress(hMod, "MB_GetString");
+			if (mbString)
+			{
+				RECT rect;
+				HWND hbtOk = GetDlgItem(hWndDlg, IDOK);
+				HWND hbtCancel = GetDlgItem(hWndDlg, IDCANCEL);
+				SetWindowTextW(hbtOk, mbString(0));
+				SetWindowTextW(hbtCancel, mbString(1));
+				// Widen the buttons for non-English names (approx. the width of a MsgBox button):
+				GetWindowRect(hbtOk, &rect);
+				SetWindowPos(hbtOk, NULL, NULL, NULL, 88, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOREDRAW);
+				GetWindowRect(hbtCancel, &rect);
+				SetWindowPos(hbtCancel, NULL, NULL, NULL, 88, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOREDRAW);
+			}
+		}
 
 		// Don't do this check; instead allow the MoveWindow() to occur unconditionally so that
 		// the new button positions and such will override those set in the dialog's resource
@@ -6268,6 +6457,19 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		}
 		InvalidateRect(hWndDlg, NULL, TRUE);	// force window to be redrawn
 		return TRUE;  // i.e. completely handled here.
+	}
+
+	case WM_GETMINMAXINFO:
+	{
+		// Increase the minimum width to prevent the buttons from overlapping:
+		RECT rTmp;
+		int min_width = 0;
+		LPMINMAXINFO lpMMI = (LPMINMAXINFO)lParam;
+		GetWindowRect(GetDlgItem(hWndDlg, IDOK), &rTmp);
+		min_width += rTmp.right - rTmp.left;
+		GetWindowRect(GetDlgItem(hWndDlg, IDCANCEL), &rTmp);
+		min_width += rTmp.right - rTmp.left;
+		lpMMI->ptMinTrackSize.x = min_width + 28;
 	}
 
 	case WM_COMMAND:
@@ -11376,10 +11578,9 @@ LPTSTR GetExitReasonString(ExitReasons aExitReason)
 	// Since the below are all relatively rare, except WM_CLOSE perhaps, they are all included
 	// as one word to cut down on the number of possible words (it's easier to write OnExit
 	// routines to cover all possibilities if there are fewer of them).
-	case EXIT_WM_QUIT:
-	case EXIT_CRITICAL:
+	// Update: The redundant ExitReasons were merged to reduce code size.
 	case EXIT_DESTROY:
-	case EXIT_WM_CLOSE: str = _T("Close"); break;
+	case EXIT_CLOSE: str = _T("Close"); break;
 	case EXIT_ERROR: str = _T("Error"); break;
 	case EXIT_MENU: str = _T("Menu"); break;  // Standard menu, not a user-defined menu.
 	case EXIT_EXIT: str = _T("Exit"); break;  // ExitApp or Exit command.
@@ -13325,10 +13526,9 @@ has_valid_return_type:
 		*Var::sEmptyString = '\0';
 		// Don't bother with freeing hmodule_to_free since a critical error like this calls for minimal cleanup.
 		// The OS almost certainly frees it upon termination anyway.
-		// Call ScriptErrror() so that the user knows *which* DllCall is at fault:
-		g->InTryBlock = false; // do not throw an exception
-		g_script.ScriptError(_T("This DllCall requires a prior VarSetCapacity. The program is now unstable and will exit."));
-		g_script.ExitApp(EXIT_CRITICAL); // Called this way, it will run the OnExit routine, which is debatable because it could cause more good than harm, but might avoid loss of data if the OnExit routine does something important.
+		// Call CriticalError() so that the user knows *which* DllCall is at fault:
+		g_script.CriticalError(_T("This DllCall requires a prior VarSetCapacity."));
+		// CriticalError always terminates the process.
 	}
 
 	// It seems best to have the above take precedence over "exception_occurred" below.
@@ -14097,7 +14297,7 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 	aDebugger->BeginProperty(NULL, "object", 5, rootCookie);
 	if (aPage == 0)
 	{
-		aDebugger->WriteProperty("Count", mPatternCount);
+		aDebugger->WriteProperty("Count", ExprTokenType((__int64)mPatternCount));
 
 		static LPSTR sNames[] = { "Value", "Pos", "Len", "Name" };
 #ifdef UNICODE
@@ -14121,7 +14321,7 @@ void RegExMatchObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage
 				paramToken[1].symbol = SYM_INTEGER;
 				paramToken[1].value_int64 = p;
 				Invoke(resultToken, thisTokenUnused, IT_GET, param, 2);
-				aDebugger->WriteProperty(p, resultToken);
+				aDebugger->WriteProperty(paramToken[1], resultToken);
 				if (resultToken.mem_to_free)
 					free(resultToken.mem_to_free);
 			}
@@ -16687,17 +16887,38 @@ void MsgMonitorList::Remove(MsgMonitorStruct *aMonitor)
 }
 
 
-BIF_DECL(BIF_OnExitOrClipboard)
+BIF_DECL(BIF_On)
 {
-	bool is_onexit = toupper(aResultToken.marker[2]) == 'E';
+	enum OnEventType {
+		OnExit,
+		OnError,
+		OnClipboardChange
+	} event_type;
+	MsgMonitorList *phandlers;
+	switch (tolower(aResultToken.marker[3]))
+	{
+	case 'r':
+		event_type = OnError;
+		phandlers = &g_script.mOnError;
+		break;
+	case 'l':
+		event_type = OnClipboardChange;
+		phandlers = &g_script.mOnClipboardChange;
+		break;
+	default:
+		event_type = OnExit;
+		phandlers = &g_script.mOnExit;
+		break;
+	}
+	MsgMonitorList &handlers = *phandlers;
+
 	aResultToken.SetValue(_T("")); // In all cases there is no return value.
-	MsgMonitorList &handlers = is_onexit ? g_script.mOnExit : g_script.mOnClipboardChange;
 
 	IObject *callback;
 	if (callback = TokenToFunc(*aParam[0]))
 	{
 		// Ensure this function is a valid one.
-		if (((Func *)callback)->mMinParams > 2)
+		if (((Func *)callback)->mMinParams > (event_type == OnExit ? 2 : 1))
 			callback = NULL;
 	}
 	else
@@ -16720,7 +16941,7 @@ BIF_DECL(BIF_OnExitOrClipboard)
 	case -1:
 		if (existing)
 			return;
-		if (!is_onexit)
+		if (event_type == OnClipboardChange)
 		{
 			// Do this before adding the handler so that it won't be called as a result of the
 			// SetClipboardViewer() call on Windows XP.  This won't cause existing handlers to
@@ -16740,7 +16961,7 @@ BIF_DECL(BIF_OnExitOrClipboard)
 	}
 	// In case the above enabled the clipboard listener but failed to add the handler,
 	// do this even if mode != 0:
-	if (!is_onexit && !g_script.mOnClipboardChangeLabel && !handlers.Count())
+	if (event_type == OnClipboardChange && !g_script.mOnClipboardChangeLabel && !handlers.Count())
 		g_script.EnableClipboardListener(false);
 }
 
@@ -18105,10 +18326,11 @@ BIF_DECL(BIF_TV_AddModifyDelete)
 			else if (!*next_option)
 				ensure_visible = adding;
 		}
-		else if (!_tcsicmp(next_option, _T("Bold")))
+		else if (!_tcsnicmp(next_option, _T("Bold"), 4))
 		{
-			// Bold%VarContainingOneOrZero isn't supported because due to rarity.  There might someday
-			// be a ternary operator to make such things easier anyway.
+			next_option += 4;
+			if (*next_option && !ATOI(next_option)) // If it's Bold0, invert the mode.
+				adding = !adding;
 			tvi.item.stateMask |= TVIS_BOLD;
 			if (adding)
 				tvi.item.state |= TVIS_BOLD;
@@ -18683,7 +18905,7 @@ BIF_DECL(BIF_Exception)
 				// line, return the name of the function or sub which that line called.
 				// In other words, an offset of -1 gives the name of the current function and
 				// the file and number of the line which it was called from.
-				what = se[1].type == DbgStack::SE_Func ? se[1].func->mName : se[1].sub->mName;
+				what = se[1].type == DbgStack::SE_UDF ? se[1].udf->func->mName : se[1].sub->mName;
 			}
 		}
 #endif
@@ -18796,7 +19018,7 @@ SymbolType TokenIsPureNumeric(ExprTokenType &aToken)
 		return aToken.symbol;
 	case SYM_VAR:     return aToken.var->IsNonBlankIntegerOrFloat(); // Supports VAR_NORMAL and VAR_CLIPBOARD.
 	case SYM_OPERAND: return aToken.buf ? PURE_INTEGER // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
-			: IsPureNumeric(TokenToString(aToken), true, false, true);
+			: IsPureNumeric(aToken.marker, true, false, true);
 	//case SYM_STRING:
 	//case SYM_OBJECT: // L31: Objects are currently treated as empty strings in most cases.
 	//case SYM_MISSING:
@@ -19037,6 +19259,54 @@ ResultType TokenSetResult(ExprTokenType &aResultToken, LPCTSTR aResult, size_t a
 		tmemcpy(aResultToken.marker, aResult, aResultLength);
 	aResultToken.marker[aResultLength] = '\0'; // Must be done separately from the memcpy() because the memcpy() might just be taking a substring (i.e. long before result's terminator).
 	return OK;
+}
+
+
+
+SymbolType TypeOfToken(ExprTokenType &aToken)
+{
+	switch (aToken.symbol)
+	{
+	case SYM_VAR:
+		if (aToken.var->HasObject())
+			return SYM_OBJECT;
+		return aToken.var->IsNonBlankIntegerOrFloat();
+	case SYM_OPERAND:
+		if (aToken.buf) // The "buf" of a SYM_OPERAND is non-NULL if it's a pure integer.
+			return SYM_INTEGER;
+		// Otherwise, FALL THROUGH TO BELOW:
+	case SYM_STRING:
+		return IsPureNumeric(aToken.marker, true, false, true);
+	default:
+		return aToken.symbol;
+	}
+}
+
+
+
+BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right)
+// Compares two tokens using similar rules to SYM_EQUAL, but case sensitive if appropriate.
+{
+	SymbolType left_type = TypeOfToken(left)
+			, right_type = TypeOfToken(right);
+
+	if (left_type == SYM_OBJECT || right_type == SYM_OBJECT)
+		return TokenToObject(left) == TokenToObject(right);
+	if (left_type == PURE_NOT_NUMERIC || right_type == PURE_NOT_NUMERIC)
+	{
+		TCHAR left_buf[MAX_NUMBER_SIZE], *left_string = TokenToString(left, left_buf);
+		TCHAR right_buf[MAX_NUMBER_SIZE], *right_string = TokenToString(right, right_buf);
+		switch (g->StringCaseSense)
+		{
+		case SCS_INSENSITIVE:	return !_tcsicmp(left_string, right_string);
+		case SCS_SENSITIVE:		return !_tcscmp(left_string, right_string);
+		default:				return !lstrcmpi(left_string, right_string);
+		}
+	}
+	if (left_type == PURE_INTEGER && right_type == PURE_INTEGER)
+		return TokenToInt64(left) == TokenToInt64(right);
+	else
+		return TokenToDouble(left) == TokenToDouble(right);
 }
 
 

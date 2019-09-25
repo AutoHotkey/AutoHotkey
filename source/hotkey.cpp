@@ -26,7 +26,8 @@ HookType Hotkey::sWhichHookNeeded = 0;
 HookType Hotkey::sWhichHookAlways = 0;
 DWORD Hotkey::sTimePrev = {0};
 DWORD Hotkey::sTimeNow = {0};
-Hotkey *Hotkey::shk[MAX_HOTKEYS] = {NULL};
+Hotkey **Hotkey::shk = NULL;
+int Hotkey::shkMax = 0;
 HotkeyIDType Hotkey::sNextID = 0;
 const HotkeyIDType &Hotkey::sHotkeyCount = Hotkey::sNextID;
 bool Hotkey::sJoystickHasHotkeys[MAX_JOYSTICKS] = {false};
@@ -182,7 +183,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// be to set mKeybdHookMandatory = true, but that would prevent the hotkey from reverting to
 	// HK_NORMAL when it no longer needs the hook.  Instead, there are now three passes.
 	bool vk_is_prefix[VK_ARRAY_COUNT] = {false};
-	bool hk_is_inactive[MAX_HOTKEYS]; // No init needed.
+	bool *hk_is_inactive = (bool *)_alloca(sHotkeyCount * sizeof(bool)); // No init needed.  Currently limited to around 16k (HOTKEY_ID_MAX).
 	bool is_win9x = g_os.IsWin9x(); // Might help performance a little by avoiding calls in loops.
 	HotkeyVariant *vp;
 	int i, j;
@@ -326,7 +327,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// v1.0.42: Reset sWhichHookNeeded because it's now possible that the hook was on before but no longer
 	// needed due to changing of a hotkey from hook to registered (for various reasons described above):
 	// v1.0.91: Make sure to leave the keyboard hook active if the script needs it for collecting input.
-	if (g_input.status == INPUT_IN_PROGRESS)
+	if (g_input) // There's an Input in progress (or just ending).
 		sWhichHookNeeded = HOOK_KEYBD;
 	else
 		sWhichHookNeeded = 0;
@@ -459,6 +460,19 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// In addition...
 	if (sJoyHotkeyCount)  // Joystick hotkeys require the timer to be always on.
 		SET_MAIN_TIMER
+}
+
+
+
+void Hotkey::MaybeUninstallHook()
+// Caller knows that one of the users of the keyboard hook no longer requires it,
+// and wants it uninstalled if it is no longer needed by anything else.
+{
+	// Do some quick checks to avoid scanning all hotkeys unnecessarily:
+	if (g_input || Hotstring::sEnabledCount || (sWhichHookAlways & HOOK_KEYBD))
+		return;
+	// Do more thorough checking to determine whether the hook is still needed:
+	ManifestAllHotkeysHotstringsHooks();
 }
 
 
@@ -705,8 +719,10 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 	}
 
 	// Since above didn't find any variant of the hotkey than can fire, check for other eligible hotkeys.
-	if (!(hk.mModifierVK || hk.mModifierSC || hk.mHookAction)) // Rule out those that aren't susceptible to the bug due to their lack of support for wildcards.
+	if (!hk.mHookAction) // Rule out those that aren't susceptible to the bug.
 	{
+		// Custom combos are no longer ruled out by the above since they allow extra modifiers and
+		// are capable of obscuring non-custom combos; e.g. LCtrl & a:: obscures <^a::, ^+a:: and so on.
 		// Fix for v1.0.46.13: Although the section higher above found no variant to fire for the
 		// caller-specified hotkey ID, it's possible that some other hotkey (one with a wildcard) is
 		// eligible to fire due to the eclipsing behavior of wildcard hotkeys.  For example:
@@ -722,20 +738,28 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 		// makes the odds vanishingly small.  That's why the following simple, high-performance loop is used
 		// rather than more a more complex one that "locates the smallest (most specific) eclipsed wildcard
 		// hotkey", or "the uppermost variant among all eclipsed wildcards that is eligible to fire".
-		mod_type modifiers = ConvertModifiersLR(g_modifiersLR_logical); // Neutral modifiers.
-		for (int i = 0; i < sHotkeyCount; ++i) // This loop is undesirable; but its performance impact probably isn't measurable in the majority of cases.
+		// UPDATE: This now uses a linked list of hotkeys which share the same suffix key, in the order of
+		// sort_most_general_before_least, which might solve the concern about precedence.
+		mod_type modifiers = ConvertModifiersLR(g_modifiersLR_logical_non_ignored); // Neutral modifiers.
+		for (HotkeyIDType candidate_id = hk.mNextHotkey; candidate_id != HOTKEY_ID_INVALID; )
 		{
-			Hotkey &hk2 = *shk[i]; // For performance and convenience.
-			if (   hk2.mVK == hk.mVK // VK and SC (one of which is typically zero) must both match for
-				&& hk2.mSC == hk.mSC // this bug to have wrongly eclipsed a qualified variant of some other hotkey.
-				&& hk2.mAllowExtraModifiers // To be eclipsable by the original hotkey, a candidate must have a wildcard.
-				&& hk2.mKeyUp == aKeyUp // Seems necessary that up/down nature is the same in both.
+			Hotkey &hk2 = *shk[candidate_id]; // For performance and convenience.
+			candidate_id = hk2.mNextHotkey;
+			// Non-wildcard hotkeys are eligible for the workaround in cases like ^+a vs <^+a vs ^<+a, where
+			// the neutral modifier acts as a sort of wildcard (it permits left, right or both).  This also
+			// increases support for varying names, such as Esc vs. Escape vs. vk1B (which already partially
+			// worked if wildcards were used).
+			// However, must ensure only the allowed modifiers are down when !mAllowExtraModifiers.
+			// mVK and mSC aren't checked since the linked list only includes hotkeys for this same suffix key.
+			// This also allows the workaround to be partially applied to LCtrl vs. Ctrl and similar (as suffixes).
+			if (  (hk2.mAllowExtraModifiers || !(~hk2.mModifiersConsolidatedLR & g_modifiersLR_logical_non_ignored))
+				&& hk2.mKeyUp == hk.mKeyUp // Seems necessary that up/down nature is the same in both.
 				&& !hk2.mModifierVK // Avoid accidental matching of normal hotkeys with custom-combo "&"
 				&& !hk2.mModifierSC // hotkeys that happen to have the same mVK/SC.
 				&& !hk2.mHookAction // Might be unnecessary to check this; but just in case.
-				&& hk2.mID != hotkey_id // Don't consider the original hotkey because it's was already found ineligible.
+				&& hk2.mID != hotkey_id // Don't consider the original hotkey because it was already found ineligible.
 				&& !(hk2.mModifiers & ~modifiers) // All neutral modifiers required by the candidate are pressed.
-				&& !(hk2.mModifiersLR & ~g_modifiersLR_logical) // All left-right specific modifiers required by the candidate are pressed.
+				&& !(hk2.mModifiersLR & ~g_modifiersLR_logical_non_ignored) // All left-right specific modifiers required by the candidate are pressed.
 				//&& hk2.mType != HK_JOYSTICK // Seems unnecessary since joystick hotkeys don't call us and even if they did, probably should be included.
 				//&& hk2.mParentEnabled   ) // CriterionAllowsFiring() will check this for us.
 				)
@@ -865,7 +889,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 		sDialogIsDisplayed = true;
 		g_AllowInterruption = FALSE;
 		if (MsgBox(error_text, MB_YESNO) == IDNO)
-			g_script.ExitApp(EXIT_CRITICAL); // Might not actually Exit if there's an OnExit subroutine.
+			g_script.ExitApp(EXIT_CLOSE); // Might not actually Exit if there's an OnExit subroutine.
 		g_AllowInterruption = TRUE;
 		sDialogIsDisplayed = false;
 	}
@@ -1298,11 +1322,12 @@ Hotkey *Hotkey::AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPT
 // Returns the address of the new hotkey on success, or NULL otherwise.
 // The caller is responsible for calling ManifestAllHotkeysHotstringsHooks(), if appropriate.
 {
-	if (   !(shk[sNextID] = new Hotkey(sNextID, aJumpToLabel, aHookAction, aName, aSuffixHasTilde, aUseErrorLevel))   )
+	if (   (shkMax <= sNextID && !HookAdjustMaxHotkeys(shk, shkMax, shkMax ? shkMax * 2 : INITIAL_MAX_HOTKEYS)) // Allocate or expand shk if needed.
+		|| !(shk[sNextID] = new Hotkey(sNextID, aJumpToLabel, aHookAction, aName, aSuffixHasTilde, aUseErrorLevel))   )
 	{
 		if (aUseErrorLevel)
 			g_ErrorLevel->Assign(HOTKEY_EL_MEM);
-		//else currently a silent failure due to rarity.
+		g_script.ScriptError(ERR_OUTOFMEM);
 		return NULL;
 	}
 	if (!shk[sNextID]->mConstructedOK)
@@ -1351,7 +1376,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 // verification of the fact that this hotkey's id is always set equal to it's index in the array
 // (for performance reasons).
 {
-	if (sHotkeyCount >= MAX_HOTKEYS || sNextID > HOTKEY_ID_MAX)  // The latter currently probably can't happen.
+	if (sNextID > HOTKEY_ID_MAX)
 	{
 		// This will actually cause the script to terminate if this hotkey is a static (load-time)
 		// hotkey.  In the future, some other behavior is probably better:
@@ -2641,17 +2666,14 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 	, mEndCharRequired(g_HSEndCharRequired), mDetectWhenInsideWord(g_HSDetectWhenInsideWord), mDoReset(g_HSDoReset)
 	, mHotCriterion(g_HotCriterion)
 	, mInputLevel(g_InputLevel)
-	, mExecuteAction(g_HSSameLineAction)
 	, mConstructedOK(false)
 {
 	// Insist on certain qualities so that they never need to be checked other than here:
 	if (!mJumpToLabel) // Caller has already ensured that aHotstring is not blank.
 		mJumpToLabel = g_script.mPlaceholderLabel;
-
-	ParseOptions(aOptions);
-
-	if (mExecuteAction)
-		aReplacement = _T(""); // LoadIncludedFile() requires this (but BIF_Hotstring has its own handling of 'E').
+	bool execute_action = false; // do not assign  mReplacement if execute_action is true.
+	ParseOptions(aOptions, mPriority, mKeyDelay, mSendMode, mCaseSensitive, mConformToCase, mDoBackspace
+		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, execute_action);
 	
 	// To avoid memory leak, this is done only when it is certain the hotstring will be created:
 	if (   !(mString = SimpleHeap::Malloc(aHotstring))   )
@@ -2662,7 +2684,7 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 		return;
 	}
 	mStringLength = (UCHAR)_tcslen(mString);
-	if (*aReplacement)
+	if (!execute_action && *aReplacement)
 	{
 		// SimpleHeap is not used for the replacement as it can be changed at runtime by Hotstring().
 		if (   !(mReplacement = _tcsdup(aReplacement))   )
@@ -2681,8 +2703,9 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 
 void Hotstring::ParseOptions(LPTSTR aOptions)
 {
+	bool unused_X_option;
 	ParseOptions(aOptions, mPriority, mKeyDelay, mSendMode, mCaseSensitive, mConformToCase, mDoBackspace
-		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, mExecuteAction);
+		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, unused_X_option);
 }
 
 
@@ -2830,10 +2853,10 @@ BIF_DECL(BIF_Hotstring)
 	else if (aParamCount == 1 && *name != ':') // Equivalent to #Hotstring <name>
 	{
 		// TODO: Build string of current options and return it?
-		bool unused_E_option; // 'E' option is required to be passed for each Hotstring() call, for clarity.
+		bool unused_X_option; // 'X' option is required to be passed for each Hotstring() call, for clarity.
 		Hotstring::ParseOptions(name, g_HSPriority, g_HSKeyDelay, g_HSSendMode, g_HSCaseSensitive
 			, g_HSConformToCase, g_HSDoBackspace, g_HSOmitEndChar, g_HSSendRaw, g_HSEndCharRequired
-			, g_HSDetectWhenInsideWord, g_HSDoReset, unused_E_option);
+			, g_HSDetectWhenInsideWord, g_HSDoReset, unused_X_option);
 		return;
 	}
 
@@ -2853,7 +2876,7 @@ BIF_DECL(BIF_Hotstring)
 		}
 		else // Double-colon, so it's a hotstring if there's more after this (but this means no options are present).
 			if (name[2])
-				hotstring_start = name + 2; // And leave hotstring_options at its default of NULL to indicate no options.
+				hotstring_start = name + 2;
 			//else it's just a naked "::", which is invalid.
 	}
 	if (!hotstring_start)
@@ -2862,7 +2885,7 @@ BIF_DECL(BIF_Hotstring)
 	// Determine options which affect hotstring identity/uniqueness.
 	bool case_sensitive = g_HSCaseSensitive;
 	bool detect_inside_word = g_HSDetectWhenInsideWord;
-	bool execute_action = false; // Unlike the others, 'E' must be specified each time.
+	bool execute_action = false; // Unlike the others, 'X' must be specified each time.
 	bool un; int iun; SendModes sm; SendRawType sr; // Unused.
 	if (*hotstring_options)
 		Hotstring::ParseOptions(hotstring_options, iun, iun, sm, case_sensitive, un, un, un, sr, un, detect_inside_word, un, execute_action);
@@ -2871,7 +2894,7 @@ BIF_DECL(BIF_Hotstring)
 	if (!ParamIndexIsOmitted(1))
 	{
 		action_obj = ParamIndexToObject(1);
-		if (   execute_action // Caller specified 'E' option (which is ignored when passing an object).
+		if (   execute_action // Caller specified 'X' option (which is ignored when passing an object).
 			&& !action_obj // Caller did not specify an object, so must specify a function or label name.
 			&& !(action_obj = g_script.FindCallable(action))   ) // No valid label or function found.
 			_f_throw(ERR_PARAM2_INVALID, action);

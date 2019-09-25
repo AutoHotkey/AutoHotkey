@@ -21,7 +21,22 @@ BIF_DECL(BIF_ComObjCreate)
 	CLSID clsid, iid;
 	for (;;)
 	{
-		hr = CLSIDFromString(CStringWCharFromTCharIfNeeded(TokenToString(*aParam[0])), &clsid);
+#ifdef UNICODE
+		LPTSTR cls = TokenToString(*aParam[0]);
+#else
+		CStringWCharFromTChar cls = TokenToString(*aParam[0]);
+#endif
+		// It has been confirmed on Windows 10 that both CLSIDFromString and CLSIDFromProgID
+		// were unable to resolve a ProgID starting with '{', like "{Foo", though "Foo}" works.
+		// There are probably also guidelines and such that prohibit it.
+		if (cls[0] == '{')
+			hr = CLSIDFromString(cls, &clsid);
+		else
+			// CLSIDFromString is known to be able to resolve ProgIDs via the registry,
+			// but fails on registration-free classes such as "Microsoft.Windows.ActCtx".
+			// CLSIDFromProgID works for that, but fails when given a CLSID string
+			// (consistent with VBScript and JScript in both cases).
+			hr = CLSIDFromProgID(cls, &clsid);
 		if (FAILED(hr)) break;
 
 		if (aParamCount > 1)
@@ -750,7 +765,7 @@ void AssignVariant(Var &aArg, VARIANT &aVar, bool aRetainVar = true)
 void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, BOOL aVarIsArg)
 {
 	if (aToken.symbol == SYM_VAR)
-		aToken.var->TokenToContents(aToken);
+		aToken.var->ToToken(aToken);
 
 	switch(aToken.symbol)
 	{
@@ -1647,6 +1662,8 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	this_token.object = this;
 
 	HRESULT result_to_return;
+	int outer_excptmode = g->ExcptMode;
+	g->ExcptMode |= EXCPTMODE_CATCH; // Indicate exceptions will be handled (by our caller, the COM client).
 
 	for (;;)
 	{
@@ -1697,6 +1714,8 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 		break;
 	}
 
+	g->ExcptMode = outer_excptmode;
+
 	if (result_token.symbol == SYM_OBJECT)
 		result_token.object->Release();
 	if (result_token.mem_to_free)
@@ -1745,8 +1764,8 @@ void ComObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int a
 	{
 		// For simplicity, assume they all fit within aPageSize.
 		
-		aDebugger->WriteProperty("Value", mVal64);
-		aDebugger->WriteProperty("VarType", mVarType);
+		aDebugger->WriteProperty("Value", ExprTokenType(mVal64));
+		aDebugger->WriteProperty("VarType", ExprTokenType((__int64)mVarType));
 
 		if (mVarType == VT_DISPATCH)
 		{
@@ -1760,14 +1779,14 @@ void ComObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int a
 			aDebugger->BeginProperty("EventSink", "object", 2, sinkCookie);
 			
 			if (mEventSink->mAhkObject)
-				aDebugger->WriteProperty("Object", mEventSink->mAhkObject);
+				aDebugger->WriteProperty("Object", ExprTokenType(mEventSink->mAhkObject));
 			else
-				aDebugger->WriteProperty("Prefix", mEventSink->mPrefix);
+				aDebugger->WriteProperty("Prefix", ExprTokenType(mEventSink->mPrefix));
 			
 			OLECHAR buf[40];
 			if (!StringFromGUID2(mEventSink->mIID, buf, _countof(buf)))
 				*buf = 0;
-			aDebugger->WriteProperty("IID", (LPTSTR)(LPCTSTR)CStringTCharFromWCharIfNeeded(buf));
+			aDebugger->WriteProperty("IID", ExprTokenType((LPTSTR)(LPCTSTR)CStringTCharFromWCharIfNeeded(buf)));
 			
 			aDebugger->EndProperty(sinkCookie);
 		}

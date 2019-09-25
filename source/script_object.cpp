@@ -26,7 +26,7 @@ ResultType CallFunc(Func &aFunc, ExprTokenType &aResultToken, ExprTokenType *aPa
 	}
 
 	// When this variable goes out of scope, Var::FreeAndRestoreFunctionVars() is called (if appropriate):
-	FuncCallData func_call;
+	UDFCallInfo func_call;
 	ResultType result;
 
 	// CALL THE FUNCTION.
@@ -328,29 +328,33 @@ bool Object::Delete()
 		// executed much less often in most cases.
 		PRIVATIZE_S_DEREF_BUF;
 
+		Line *curr_line = g_script.mCurrLine;
+
 		// If an exception has been thrown, temporarily clear it for execution of __Delete.
 		ExprTokenType *exc = g->ThrownToken;
 		g->ThrownToken = NULL;
 		
 		// This prevents an erroneous "The current thread will exit" message when an error occurs,
 		// by causing LineError() to throw an exception:
-		bool in_try = g->InTryBlock;
-		g->InTryBlock = true;
+		int outer_excptmode = g->ExcptMode;
+		g->ExcptMode |= EXCPTMODE_DELETE;
 
 		CallMethod(mBase, this, sMetaFuncName[3], NULL, 0, NULL, IF_METAOBJ); // base.__Delete()
 
-		g->InTryBlock = in_try;
+		g->ExcptMode = outer_excptmode;
 
 		// Exceptions thrown by __Delete are reported immediately because they would not be handled
 		// consistently by the caller (they would typically be "thrown" by the next function call),
 		// and because the caller must be allowed to make additional __Delete calls.
 		if (g->ThrownToken)
-			g_script.UnhandledException(g->ThrownToken, NULL, _T("__Delete will now return."));
+			g_script.FreeExceptionToken(g->ThrownToken);
 
 		// If an exception has been thrown by our caller, it's likely that it can and should be handled
 		// reliably by our caller, so restore it.
 		if (exc)
 			g->ThrownToken = exc;
+
+		g_script.mCurrLine = curr_line; // Prevent misleading error reports/Exception() stack trace.
 
 		DEPRIVATIZE_S_DEREF_BUF; // L33: See above.
 
@@ -750,6 +754,9 @@ int Object::GetBuiltinID(LPCTSTR aName)
 	case 'D':
 		if (!_tcsicmp(aName, _T("Delete")))
 			return FID_ObjDelete;
+	case 'C':
+		if (!_tcsicmp(aName, _T("Count")))
+			return FID_ObjCount;
 		break;
 	}
 	// Older methods which support the _ prefix:
@@ -816,6 +823,7 @@ ResultType Object::CallBuiltin(int aID, ExprTokenType &aResultToken, ExprTokenTy
 	case_method(InsertAt);
 	case_method(RemoveAt);
 	case_method(Delete);
+	case_method(Count);
 	case_method(MinIndex);
 	case_method(GetAddress);
 	case_method(SetCapacity);
@@ -1291,6 +1299,12 @@ ResultType Object::_MinIndex(ExprTokenType &aResultToken, ExprTokenType *aParam[
 	return OK;
 }
 
+ResultType Object::_Count(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	aResultToken.SetValue((__int64)mFieldCount);
+	return OK;
+}
+
 ResultType Object::_Length(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	IntKeyType max_index = mKeyOffsetObject ? mFields[mKeyOffsetObject - 1].key.i : 0;
@@ -1548,7 +1562,7 @@ bool Object::FieldType::Assign(ExprTokenType &aParam)
 		// format of a literal number such as 0x123 or 00001, and even less likely for a number stored
 		// in an object (even implicitly via a variadic function).  If the value is eventually passed
 		// to a COM method call, it can be important that it is passed as VT_I4 and not VT_BSTR.
-		aParam.var->TokenToContents(temp);
+		aParam.var->ToToken(temp);
 		val = &temp;
 	}
 	else
@@ -2191,7 +2205,7 @@ void Func::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageS
 	DebugCookie cookie;
 	aDebugger->BeginProperty(NULL, "object", 1, cookie);
 	if (aPage == 0)
-		aDebugger->WriteProperty("Name", mName);
+		aDebugger->WriteProperty("Name", ExprTokenType(mName));
 	aDebugger->EndProperty(cookie);
 }
 

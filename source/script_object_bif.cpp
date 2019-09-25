@@ -194,6 +194,8 @@ BIF_DECL(BIF_ObjNew)
 	ResultType result;
 	LPTSTR buf = aResultToken.buf; // In case Invoke overwrites it via the union.
 
+	Line *curr_line = g_script.mCurrLine;
+
 	// __Init was added so that instance variables can be initialized in the correct order
 	// (beginning at the root class and ending at class_object) before __New is called.
 	// It shouldn't be explicitly defined by the user, but auto-generated in DefineClassVars().
@@ -222,6 +224,8 @@ BIF_DECL(BIF_ObjNew)
 			return;
 		}
 	}
+
+	g_script.mCurrLine = curr_line; // Prevent misleading error reports/Exception() stack trace.
 	
 	// __New may be defined by the script for custom initialization code.
 	name_token.marker = Object::sMetaFuncName[4]; // __New
@@ -379,6 +383,7 @@ BIF_METHOD(RemoveAt)
 BIF_METHOD(GetCapacity)
 BIF_METHOD(SetCapacity)
 BIF_METHOD(GetAddress)
+BIF_METHOD(Count)
 BIF_METHOD(Length)
 BIF_METHOD(MaxIndex)
 BIF_METHOD(MinIndex)
@@ -434,7 +439,7 @@ BIF_DECL(BIF_ObjBindMethod)
 // ObjRawSet - set a value without invoking any meta-functions.
 //
 
-BIF_DECL(BIF_ObjRawSet)
+BIF_DECL(BIF_ObjRaw)
 {
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
 	if (!obj)
@@ -442,9 +447,73 @@ BIF_DECL(BIF_ObjRawSet)
 		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
 		return;
 	}
-	if (!obj->SetItem(*aParam[1], *aParam[2]))
-		aResult = g_script.ScriptError(ERR_OUTOFMEM);
-	
+	if (ctoupper(aResultToken.marker[6]) == 'S')
+	{
+		if (!obj->SetItem(*aParam[1], *aParam[2]))
+		{
+			aResult = g_script.ScriptError(ERR_OUTOFMEM);
+			return;
+		}
+	}
+	else
+	{
+		ExprTokenType value;
+		if (obj->GetItem(value, *aParam[1]))
+		{
+			switch (value.symbol)
+			{
+			case SYM_OPERAND:
+				aResultToken.symbol = SYM_STRING;
+				aResult = TokenSetResult(aResultToken, value.marker);
+				break;
+			case SYM_OBJECT:
+				aResultToken.symbol = SYM_OBJECT;
+				aResultToken.object = value.object;
+				aResultToken.object->AddRef();
+				break;
+			default:
+				aResultToken.symbol = value.symbol;
+				aResultToken.value_int64 = value.value_int64;
+				break;
+			}
+			return;
+		}
+	}
 	aResultToken.symbol = SYM_STRING;
 	aResultToken.marker = _T("");
+}
+
+
+//
+// ObjSetBase/ObjGetBase - Change or return Object's base without invoking any meta-functions.
+//
+
+BIF_DECL(BIF_ObjBase)
+{
+	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
+	if (!obj)
+	{
+		aResult = g_script.ScriptError(ERR_PARAM1_INVALID);
+		return;
+	}
+	if (ctoupper(aResultToken.marker[3]) == 'S') // ObjSetBase
+	{
+		IObject *new_base = TokenToObject(*aParam[1]);
+		if (!new_base && !TokenIsEmptyString(*aParam[1]))
+		{
+			aResult = g_script.ScriptError(ERR_PARAM2_INVALID);
+			return;
+		}
+		obj->SetBase(new_base);
+	}
+	else // ObjGetBase
+	{
+		if (IObject *obj_base = obj->Base())
+		{
+			obj_base->AddRef();
+			aResultToken.SetValue(obj_base);
+			return;
+		}
+	}
+	aResultToken.SetValue(_T(""));
 }

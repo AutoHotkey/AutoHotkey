@@ -61,9 +61,18 @@ class Var; // Forward declaration.
 // across two 8-byte regions in memory).
 struct VarBkp // This should be kept in sync with any changes to the Var class.  See Var for comments.
 {
-	__int64 mContentsInt64; // 64-bit members kept at the top of the struct to reduce the chance that they'll span 2 vs. 1 64-bit regions.
+	union
+	{
+		__int64 mContentsInt64; // 64-bit members kept at the top of the struct to reduce the chance that they'll span 2 vs. 1 64-bit regions.
+		double mContentsDouble;
+		IObject *mObject;
+	};
 	Var *mVar; // Used to save the target var to which these backed up contents will later be restored.
-	char *mByteContents;
+	union
+	{
+		char *mByteContents;
+		TCHAR *mCharContents;
+	};
 	union
 	{
 		VarSizeType mByteLength;
@@ -76,6 +85,8 @@ struct VarBkp // This should be kept in sync with any changes to the Var class. 
 	// Not needed in the backup:
 	//bool mIsLocal;
 	//TCHAR *mName;
+
+	void ToToken(ExprTokenType &aValue);
 };
 
 #pragma warning(push)
@@ -481,7 +492,7 @@ public:
 		return OK; // Since above didn't return, indicate success.
 	}
 
-	void TokenToContents(ExprTokenType &aToken) // L31: Mostly for object support.
+	void ToTokenSkipAddRef(ExprTokenType &aToken)
 	// See ToDoubleOrInt64 for comments.
 	{
 		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
@@ -502,13 +513,19 @@ public:
 			{
 				aToken.symbol = SYM_OBJECT;
 				aToken.object = var.mObject;
-				aToken.object->AddRef();
 				return;
 			}
 			//else contains a regular string.
 			aToken.symbol = SYM_STRING;
 			aToken.marker = var.Contents();
 		}
+	}
+
+	void ToToken(ExprTokenType &aToken)
+	{
+		ToTokenSkipAddRef(aToken);
+		if (aToken.symbol == SYM_OBJECT)
+			aToken.object->AddRef();
 	}
 
 	// Not an enum so that it can be global more easily:

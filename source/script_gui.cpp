@@ -218,6 +218,7 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 			// a full GuiType structure is constructed.  We can't actually create the Gui yet,
 			// since that would prevent +Owner%N% from working and possibly break other scripts
 			// which rely on the old behaviour.
+			if (  (GuiType::sFont || (GuiType::sFont = (FontType *)malloc(sizeof(FontType) * MAX_GUI_FONTS)))  ) // See similar line below for comments regarding sFont.
 			if (pgui = new GuiType())
 			{
 				if (pgui->mName = tmalloc(name_length + 1))
@@ -317,6 +318,11 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 		// Otherwise: Create the object and (later) its window, since all the other sub-commands below need it:
 		for (;;) // For break, to reduce repetition of cleanup-on-failure code.
 		{
+			// v1.0.44.14: sFont is created upon first use to conserve ~14 KB memory in non-GUI scripts.
+			// v1.1.29.00: sFont is created here rather than in FindOrCreateFont(), which is called by
+			// the constructor below, to avoid the need to add extra logic in several places to detect
+			// a failed/NULL array.  Previously that was done by simply terminating the script.
+			if (  (GuiType::sFont || (GuiType::sFont = (FontType *)malloc(sizeof(FontType) * MAX_GUI_FONTS)))  )
 			if (pgui = new GuiType())
 			{
 				if (pgui->mControl = (GuiControlType *)malloc(GUI_CONTROL_BLOCK_SIZE * sizeof(GuiControlType)))
@@ -333,7 +339,7 @@ ResultType Script::PerformGui(LPTSTR aBuf, LPTSTR aParam2, LPTSTR aParam3, LPTST
 				}
 				delete pgui;
 			}
-			result = FAIL; // No error displayed since extremely rare.
+			result = ScriptError(ERR_OUTOFMEM);
 			goto return_the_result;
 		}
 	}
@@ -5074,10 +5080,13 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			if (adding) aOpt.style_add |= TBS_NOTICKS; else aOpt.style_remove |= TBS_NOTICKS;
 		else if (aControl.type == GUI_CONTROL_SLIDER && !_tcsnicmp(next_option, _T("TickInterval"), 12))
 		{
+			aOpt.tick_interval_changed = true;
 			if (adding)
 			{
 				aOpt.style_add |= TBS_AUTOTICKS;
-				aOpt.tick_interval = ATOI(next_option + 12);
+				next_option += 12;
+				aOpt.tick_interval_specified = *next_option;
+				aOpt.tick_interval = ATOI(next_option);
 			}
 			else
 			{
@@ -7691,9 +7700,6 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 		{
 			// For simplifying other code sections, create an entry in the array for the default font
 			// (GUI constructor relies on at least one font existing in the array).
-			if (!sFont) // v1.0.44.14: Created upon first use to conserve ~14 KB memory in non-GUI scripts.
-				if (   !(sFont = (FontType *)malloc(sizeof(FontType) * MAX_GUI_FONTS))   )
-					g_script.ExitApp(EXIT_CRITICAL, ERR_OUTOFMEM); // Since this condition is so rare, just abort to avoid the need to add extra logic in several places to detect a failed/NULL array.
 			// Doesn't seem likely that DEFAULT_GUI_FONT face/size will change while a script is running,
 			// or even while the system is running for that matter.  I think it's always an 8 or 9 point
 			// font regardless of desktop's appearance/theme settings.
@@ -8910,7 +8916,8 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		// because otherwise it would probably become a CPU-maxing loop wherein the dialog or MonthCal
 		// msg pump that called us dispatches the above message right back to us, causing it to
 		// bounce around thousands of times until that other msg pump finally finishes.
-		if (!g_MenuIsVisible)
+		// UPDATE: This will backfire if the script is uninterruptible.
+		if (IsInterruptible())
 		{
 			// Handling these messages here by reposting them to our thread relieves the one who posted them
 			// from ever having to do a MsgSleep(-1), which in turn allows it or its caller to acknowledge
@@ -9338,6 +9345,7 @@ LRESULT GuiType::CustomCtrlWmNotify(GuiIndexType aControlIndex, LPNMHDR aNmHdr)
 		returnValue = (INT_PTR)g_ErrorLevel->ToInt64(FALSE);
 
 	Release();
+	g->GuiWindow = NULL;
 	ResumeUnderlyingThread(ErrorLevel_saved);
 
 	return returnValue;
@@ -9576,12 +9584,21 @@ void GuiType::ControlSetSliderOptions(GuiControlType &aControl, GuiControlOption
 		SendMessage(aControl.hwnd, TBM_SETRANGEMIN, FALSE, aOpt.range_min); // No redraw
 		SendMessage(aControl.hwnd, TBM_SETRANGEMAX, TRUE, aOpt.range_max); // Redraw.
 	}
-	if (aOpt.tick_interval)
+	if (aOpt.tick_interval_changed)
 	{
 		if (aOpt.tick_interval < 0) // This is the signal to remove the existing tickmarks.
 			SendMessage(aControl.hwnd, TBM_CLEARTICS, TRUE, 0);
-		else // greater than zero, since zero itself it checked in one of the enclose IFs above.
+		else if (aOpt.tick_interval_specified)
 			SendMessage(aControl.hwnd, TBM_SETTICFREQ, aOpt.tick_interval, 0);
+		else
+			// +TickInterval without a value.  TBS_AUTOTICKS was added, but doesn't take effect
+			// until TBM_SETRANGE' or TBM_SETTICFREQ is sent.  Since the script might have already
+			// set an interval and there's no TBM_GETTICFREQ, use TBM_SETRANGEMAX to set the ticks.
+			if (!aOpt.range_changed) // TBM_SETRANGEMAX wasn't already sent.
+			{
+				SendMessage(aControl.hwnd, TBM_SETRANGEMAX, TRUE
+					, SendMessage(aControl.hwnd, TBM_GETRANGEMAX, 0, 0));
+			}
 	}
 	if (aOpt.line_size > 0) // Removal is not supported, so only positive values are considered.
 		SendMessage(aControl.hwnd, TBM_SETLINESIZE, 0, aOpt.line_size);

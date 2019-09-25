@@ -160,6 +160,13 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 		// But Send {Blind}{LControl down} will generate the extra events even if ctrl already down.
 		aKeys += 7; // Remove "{Blind}" from further consideration.
 
+	if (!aSendRaw && !_tcsnicmp(aKeys, _T("{Text}"), 6))
+	{
+		// Setting this early allows CapsLock and the Win+L workaround to be skipped:
+		aSendRaw = SCM_RAW_TEXT;
+		aKeys += 6;
+	}
+
 	int orig_key_delay = g.KeyDelay;
 	int orig_press_duration = g.PressDuration;
 	if (aSendModeOrig == SM_INPUT || aSendModeOrig == SM_INPUT_FALLBACK_TO_PLAY) // Caller has ensured aTargetWindow==NULL for SendInput and SendPlay modes.
@@ -235,6 +242,7 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 			&& (GetTickCount() - g_script.mThisHotkeyStartTime) < (DWORD)50 // Ensure g_script.mThisHotkeyModifiersLR is up-to-date enough to be reliable.
 			&& aSendModeOrig != SM_PLAY // SM_PLAY is reported to be incapable of locking the computer.
 			&& !sInBlindMode // The philosophy of blind-mode is that the script should have full control, so don't do any waiting during blind mode.
+			&& aSendRaw != SCM_RAW_TEXT // {Text} mode does not trigger Win+L.
 			&& g_os.IsWinVistaOrLater() // Only Vista (and presumably later OSes) check the physical state of the Windows key for Win+L.
 			&& GetCurrentThreadId() == g_MainThreadID // Exclude the hook thread because it isn't allowed to call anything like MsgSleep, nor are any calls from the hook thread within the understood/analyzed scope of this workaround.
 			)
@@ -377,7 +385,7 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 		// Only under either of the above conditions can the state of Capslock be reliably
 		// retrieved and changed.  Remember that apps like MS Word have an auto-correct feature that
 		// might make it wrongly seem that the turning off of Capslock below needs a Sleep(0) to take effect.
-		prior_capslock_state = g.StoreCapslockMode && !sInBlindMode
+		prior_capslock_state = g.StoreCapslockMode && !sInBlindMode && aSendRaw != SCM_RAW_TEXT
 			? ToggleKeyState(VK_CAPITAL, TOGGLED_OFF)
 			: TOGGLE_INVALID; // In blind mode, don't do store capslock (helps remapping and also adds flexibility).
 	}
@@ -833,6 +841,7 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 			//    they know there are other LL hooks in the system.  In any case, there's no known solution
 			//    for it, so nothing can be done.
 			mods_to_set = persistent_modifiers_for_this_SendKeys
+				| sModifiersLR_remapped // Restore any modifiers which were put in the down state by remappings or {key DownR} prior to this Send.
 				| (sInBlindMode ? 0 : (mods_down_physically_orig & ~mods_down_physically_but_not_logically_orig)); // The last item is usually 0.
 			// Above: When in blind mode, don't restore physical modifiers.  This is done to allow a hotkey
 			// such as the following to release Shift:
@@ -929,7 +938,12 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 		// there generally shouldn't be any up-events for Alt or Win because SendKey() would have already
 		// released them.  One possible exception to this is when the user physically released Alt or Win
 		// during the send (perhaps only during specific sensitive/vulnerable moments).
-		SetModifierLRState(mods_to_set, GetModifierLRState(), aTargetWindow, true, true); // It also does DoKeyDelay(g->PressDuration).
+		// g_modifiersLR_numpad_mask is used to work around an issue where our changes to shift-key state
+		// trigger the system's shift-numpad handling (usually in combination with actual user input),
+		// which in turn causes the Shift key to stick down.  If non-zero, the Shift key is currently "up"
+		// but should be "released" anyway, since the system will inject Shift-down either before the next
+		// keyboard event or after the Numpad key is released.  Find "fake shift" for more details.
+		SetModifierLRState(mods_to_set, GetModifierLRState() | g_modifiersLR_numpad_mask, aTargetWindow, true, true); // It also does DoKeyDelay(g->PressDuration).
 	} // End of non-array Send.
 
 	// For peace of mind and because that's how it was tested originally, the following is done
@@ -1124,11 +1138,20 @@ void SendKey(vk_type aVK, sc_type aSC, modLR_type aModifiersLR, modLR_type aModi
 		// determination.  This avoids extra keystrokes, while still procrastinating the release of Ctrl/Shift so
 		// that those can be left down if the caller's next keystroke happens to need them.
 		modLR_type state_now = sSendMode ? sEventModifiersLR : GetModifierLRState();
-		modLR_type win_alt_to_be_released = ((state_now ^ aModifiersLRPersistent) & state_now) // The modifiers to be released...
+		modLR_type win_alt_to_be_released = (state_now & ~aModifiersLRPersistent) // The modifiers to be released...
 			& (MOD_LWIN|MOD_RWIN|MOD_LALT|MOD_RALT); // ... but restrict them to only Win/Alt.
 		if (win_alt_to_be_released)
-			SetModifierLRState(state_now & ~win_alt_to_be_released
-				, state_now, aTargetWindow, true, false); // It also does DoKeyDelay(g->PressDuration).
+		{
+			// Originally used the following for mods new/now: state_now & ~win_alt_to_be_released, state_now
+			// When AltGr is to be released, the above formula passes LCtrl+RAlt as the current state and just
+			// LCtrl as the new state, which results in LCtrl being pushed back down after it is released via
+			// AltGr.  Although our caller releases LCtrl if needed, it usually uses KEY_IGNORE, so if we put
+			// LCtrl down here, it would be wrongly stuck down in g_modifiersLR_logical_non_ignored, which
+			// causes ^-modified hotkeys to fire when they shouldn't and prevents non-^ hotkeys from firing.
+			// By ignoring the current modifier state and only specifying the modifiers we want released,
+			// we avoid any chance of sending any unwanted key-down:
+			SetModifierLRState(0, win_alt_to_be_released, aTargetWindow, true, false); // It also does DoKeyDelay(g->PressDuration).
+		}
 	}
 }
 
@@ -3390,8 +3413,21 @@ void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, 
 			// This would cause LControl to get stuck down for hotkeys in German layout such as:
 			//   <^>!a::SendRaw, {
 			//   <^>!m::Send ^c
-			if (sTargetLayoutHasAltGr == CONDITION_TRUE && (aModifiersLRnow & MOD_LCONTROL))
-				KeyEvent(KEYUP, VK_LCONTROL, 0, NULL, false, aExtraInfo);
+			if (sTargetLayoutHasAltGr == CONDITION_TRUE)
+			{
+				if (aModifiersLRnow & MOD_LCONTROL)
+					KeyEvent(KEYUP, VK_LCONTROL, 0, NULL, false, aExtraInfo);
+				if (aModifiersLRnow & MOD_RCONTROL)
+				{
+					// Release RCtrl before pressing AltGr, because otherwise the system will not put
+					// LCtrl into effect, but it will still inject LCtrl-up when AltGr is released.
+					// With LCtrl not in effect and RCtrl being released below, AltGr would instead
+					// act as pure RAlt, which would not have the right effect.
+					// RCtrl will be put back into effect below if aModifiersLRnew & MOD_RCONTROL.
+					KeyEvent(KEYUP, VK_RCONTROL, 0, NULL, false, aExtraInfo);
+					aModifiersLRnow &= ~MOD_RCONTROL;
+				}
+			}
 			KeyEvent(KEYDOWN, VK_RMENU, 0, NULL, false, aExtraInfo);
 			if (sTargetLayoutHasAltGr == CONDITION_TRUE) // Note that KeyEvent() might have just changed the value of sTargetLayoutHasAltGr.
 			{
@@ -3651,6 +3687,10 @@ modLR_type GetModifierLRState(bool aExplicitlyGet)
 		// UPDATE: The following adjustment is now also relied upon by the SendInput method
 		// to correct physical modifier state during periods when the hook was temporarily removed
 		// to allow a SendInput to be uninterruptible.
+		// UPDATE: The modifier state might also become incorrect due to keyboard events which
+		// are missed due to User Interface Privelege Isolation; i.e. because a window belonging
+		// to a process with higher integrity level than our own became active while the key was
+		// down, so we saw the down event but not the up event.
 		modLR_type modifiers_wrongly_down = g_modifiersLR_logical & ~modifiersLR;
 		if (modifiers_wrongly_down)
 		{
@@ -3663,6 +3703,9 @@ modLR_type GetModifierLRState(bool aExplicitlyGet)
 			g_modifiersLR_logical_non_ignored &= ~modifiers_wrongly_down;
 			// Also adjust physical state so that the GetKeyState command will retrieve the correct values:
 			AdjustKeyState(g_PhysicalKeyState, g_modifiersLR_physical);
+			// Also reset pPrefixKey if it is one of the wrongly-down modifiers.
+			if (pPrefixKey && (pPrefixKey->as_modifiersLR & modifiers_wrongly_down))
+				pPrefixKey = NULL;
 		}
 	}
 
@@ -3900,23 +3943,47 @@ ResultType LayoutHasAltGrDirect(HKL aLayout)
 // This is fast enough that there's no need to cache these values on startup.
 {
 	// This abbreviated definition is based on the actual definition in kbd.h (Windows DDK):
-	typedef struct tagKbdLayer {
-		PVOID pCharModifiers;
-		PVOID pVkToWcharTable;
-		PVOID pDeadKey;
-		PVOID pKeyNames;
-		PVOID pKeyNamesExt;
-		WCHAR **pKeyNamesDead;
-		USHORT  *pusVSCtoVK;
-		BYTE    bMaxVSCtoVK;
-		PVOID   pVSCtoVK_E0;
-		PVOID   pVSCtoVK_E1;
+	// Updated to use two separate struct definitions, since the pointers are qualified with
+	// KBD_LONG_POINTER, which is 64-bit when building for Wow64 (32-bit dll on 64-bit system).
+	typedef UINT64 KLP64;
+	typedef UINT KLP32;
+
+	// Struct used on 64-bit systems (by both 32-bit and 64-bit programs):
+	struct KBDTABLES64 {
+		KLP64 pCharModifiers;
+		KLP64 pVkToWcharTable;
+		KLP64 pDeadKey;
+		KLP64 pKeyNames;
+		KLP64 pKeyNamesExt;
+		KLP64 pKeyNamesDead;
+		KLP64 pusVSCtoVK;
+		BYTE  bMaxVSCtoVK;
+		KLP64 pVSCtoVK_E0;
+		KLP64 pVSCtoVK_E1;
 		// This is the one we want:
 		DWORD fLocaleFlags;
 		// Struct definition truncated.
-	} KBDTABLES, *PKBDTABLES;
+	};
+
+	// Struct used on 32-bit systems:
+	struct KBDTABLES32 {
+		KLP32 pCharModifiers;
+		KLP32 pVkToWcharTable;
+		KLP32 pDeadKey;
+		KLP32 pKeyNames;
+		KLP32 pKeyNamesExt;
+		KLP32 pKeyNamesDead;
+		KLP32 pusVSCtoVK;
+		BYTE  bMaxVSCtoVK;
+		KLP32 pVSCtoVK_E0;
+		KLP32 pVSCtoVK_E1;
+		// This is the one we want:
+		DWORD fLocaleFlags;
+		// Struct definition truncated.
+	};
+	
 	#define KLLF_ALTGR 0x0001 // Also defined in kbd.h.
-	typedef PKBDTABLES (* KbdLayerDescriptorType)();
+	typedef PVOID (* KbdLayerDescriptorType)();
 
 	ResultType result = LAYOUT_UNDETERMINED;
 
@@ -3925,8 +3992,9 @@ ResultType LayoutHasAltGrDirect(HKL aLayout)
 		KbdLayerDescriptorType kbdLayerDescriptor = (KbdLayerDescriptorType)GetProcAddress(hmod, "KbdLayerDescriptor");
 		if (kbdLayerDescriptor)
 		{
-			PKBDTABLES kl = kbdLayerDescriptor();
-			result = (kl->fLocaleFlags & KLLF_ALTGR) ? CONDITION_TRUE : CONDITION_FALSE;
+			PVOID kl = kbdLayerDescriptor();
+			DWORD flags = IsOS64Bit() ? ((KBDTABLES64 *)kl)->fLocaleFlags : ((KBDTABLES32 *)kl)->fLocaleFlags;
+			result = (flags & KLLF_ALTGR) ? CONDITION_TRUE : CONDITION_FALSE;
 		}
 		FreeLibrary(hmod);
 	}
