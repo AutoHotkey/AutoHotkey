@@ -1658,18 +1658,14 @@ bool Line::Util_RemoveDir(LPCTSTR szInputSource, bool bRecurse)
 ///////////////////////////////////////////////////////////////////////////////
 int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite, bool bMove, DWORD &aLastError)
 {
-	TCHAR			szSource[_MAX_PATH+1];
-	TCHAR			szDest[_MAX_PATH+1];
-	TCHAR			szExpandedDest[MAX_PATH+1];
-	TCHAR			szTempPath[_MAX_PATH+1];
-	TCHAR			szDrive[_MAX_PATH+1];
-	TCHAR			szDir[_MAX_PATH+1];
-	TCHAR			szFile[_MAX_PATH+1];
-	TCHAR			szExt[_MAX_PATH+1];
+	TCHAR szSource[T_MAX_PATH];
+	TCHAR szDest[T_MAX_PATH];
+	TCHAR szDestPattern[MAX_PATH];
 
 	// Get local version of our source/dest with full path names, strip trailing \s
-	Util_GetFullPathName(szInputSource, szSource);
-	Util_GetFullPathName(szInputDest, szDest);
+	// and normalize the path separator (replace / with \).
+	Util_GetFullPathName(szInputSource, szSource, _countof(szSource));
+	Util_GetFullPathName(szInputDest, szDest, _countof(szDest));
 
 	// If the source or dest is a directory then add *.* to the end
 	if (Util_IsDir(szSource))
@@ -1687,12 +1683,14 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 	aLastError = 0; // Set default. Overridden only when a failure occurs.
 
 	// Otherwise, loop through all the matching files.
-	// Split source into file and extension (we need this info in the loop below to reconstruct the path)
-	_tsplitpath(szSource, szDrive, szDir, szFile, szExt);
-	// Note we now rely on the SOURCE being the contents of szDrive, szDir, szFile, etc.
-	size_t szTempPath_length = sntprintf(szTempPath, _countof(szTempPath), _T("%s%s"), szDrive, szDir);
-	LPTSTR append_pos = szTempPath + szTempPath_length;
-	size_t space_remaining = _countof(szTempPath) - szTempPath_length - 1;
+
+	// Locate the filename/pattern, which will be overwritten on each iteration.
+	LPTSTR source_append_pos = _tcsrchr(szSource, '\\') + 1;
+	LPTSTR dest_append_pos = _tcsrchr(szDest, '\\') + 1;
+	size_t space_remaining = _countof(szSource) - (source_append_pos - szSource) - 1;
+
+	// Copy destination filename or pattern, since it will be overwritten.
+	tcslcpy(szDestPattern, dest_append_pos, _countof(szDestPattern));
 
 	int failure_count = 0;
 	LONG_OPERATION_INIT
@@ -1716,10 +1714,10 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 			++failure_count;
 			continue;
 		}
-		_tcscpy(append_pos, findData.cFileName); // Indirectly populate szTempPath. Above has ensured this won't overflow.
+		_tcscpy(source_append_pos, findData.cFileName); // Indirectly populate szSource. Above has ensured this won't overflow.
 
 		// Expand the destination based on this found file
-		Util_ExpandFilenameWildcard(findData.cFileName, szDest, szExpandedDest);
+		Util_ExpandFilenameWildcard(findData.cFileName, szDestPattern, dest_append_pos);
 
 		// Fixed for v1.0.36.01: This section has been revised to avoid unnecessary calls; but more
 		// importantly, it now avoids the deletion and complete loss of a file when it is copied or
@@ -1742,14 +1740,14 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 			// physical file on disk (hopefully MoveFile handles all of these correctly by indicating
 			// success [below] when a file is moved onto itself, though it has only been tested for
 			// basic cases of relative vs. absolute path).
-			if (!MoveFile(szTempPath, szExpandedDest))
+			if (!MoveFile(szSource, szDest))
 			{
 				// If overwrite mode was not specified by the caller, or it was but the existing
 				// destination file cannot be deleted (perhaps because it is a folder rather than
 				// a file), or it can be deleted but the source cannot be moved, indicate a failure.
 				// But by design, continue the operation.  The following relies heavily on
 				// short-circuit boolean evaluation order:
-				if (   !(bOverwrite && DeleteFile(szExpandedDest) && MoveFile(szTempPath, szExpandedDest))   )
+				if (   !(bOverwrite && DeleteFile(szDest) && MoveFile(szSource, szDest))   )
 				{
 					aLastError = GetLastError();
 					++failure_count; // At this stage, any of the above 3 being false is cause for failure.
@@ -1759,7 +1757,7 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 			}
 		}
 		else // The mode is "Copy" vs. "Move"
-			if (!CopyFile(szTempPath, szExpandedDest, !bOverwrite)) // Force it to fail if bOverwrite==false.
+			if (!CopyFile(szSource, szDest, !bOverwrite)) // Force it to fail if bOverwrite==false.
 			{
 				aLastError = GetLastError();
 				++failure_count;
@@ -1775,18 +1773,12 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 void Line::Util_ExpandFilenameWildcard(LPCTSTR szSource, LPCTSTR szDest, LPTSTR szExpandedDest)
 {
 	// copy one.two.three  *.txt     = one.two   .txt
-	// copy one.two.three  *.*.txt   = one.two   .three  .txt
-	// copy one.two.three  *.*.*.txt = one.two   .three  ..txt
+	// copy one.two.three  *.*.txt   = one.two.  .txt  (extra asterisks are removed)
 	// copy one.two		   test      = test
-
-	TCHAR	szFileTemp[_MAX_PATH+1];
-	TCHAR	szExtTemp[_MAX_PATH+1];
 
 	TCHAR	szSrcFile[_MAX_PATH+1];
 	TCHAR	szSrcExt[_MAX_PATH+1];
 
-	TCHAR	szDestDrive[_MAX_PATH+1];
-	TCHAR	szDestDir[_MAX_PATH+1];
 	TCHAR	szDestFile[_MAX_PATH+1];
 	TCHAR	szDestExt[_MAX_PATH+1];
 
@@ -1798,8 +1790,8 @@ void Line::Util_ExpandFilenameWildcard(LPCTSTR szSource, LPCTSTR szDest, LPTSTR 
 	}
 
 	// Split source and dest into file and extension
-	_tsplitpath( szSource, szDestDrive, szDestDir, szSrcFile, szSrcExt );
-	_tsplitpath( szDest, szDestDrive, szDestDir, szDestFile, szDestExt );
+	_tsplitpath( szSource, NULL, NULL, szSrcFile, szSrcExt );
+	_tsplitpath( szDest, NULL, NULL, szDestFile, szDestExt );
 
 	// Source and Dest ext will either be ".nnnn" or "" or ".*", remove the period
 	if (szSrcExt[0] == '.')
@@ -1807,35 +1799,28 @@ void Line::Util_ExpandFilenameWildcard(LPCTSTR szSource, LPCTSTR szDest, LPTSTR 
 	if (szDestExt[0] == '.')
 		_tcscpy(szDestExt, &szDestExt[1]);
 
-	// Start of the destination with the drive and dir
-	_tcscpy(szExpandedDest, szDestDrive);
-	_tcscat(szExpandedDest, szDestDir);
-
-	// Replace first * in the destext with the srcext, remove any other *
-	Util_ExpandFilenameWildcardPart(szSrcExt, szDestExt, szExtTemp);
-
 	// Replace first * in the destfile with the srcfile, remove any other *
-	Util_ExpandFilenameWildcardPart(szSrcFile, szDestFile, szFileTemp);
-
-	// Concat the filename and extension if req
-	if (szExtTemp[0] != '\0')
+	Util_ExpandFilenameWildcardPart(szSrcFile, szDestFile, szExpandedDest);
+	
+	if (*szSrcExt || *szDestExt)
 	{
-		_tcscat(szFileTemp, _T("."));
-		_tcscat(szFileTemp, szExtTemp);	
-	}
-	else
-	{
-		// Dest extension was blank SOURCE MIGHT NOT HAVE BEEN!
-		if (szSrcExt[0] != '\0')
+		LPTSTR ext = _tcschr(szExpandedDest, '\0');
+		
+		if (!szDestExt[0])
 		{
-			_tcscat(szFileTemp, _T("."));
-			_tcscat(szFileTemp, szSrcExt);	
+			// Always include the source extension if destination extension was blank
+			// (for backward-compatibility, this is done even if a '.' was present)
+			szDestExt[0] = '*';
+			szDestExt[1] = '\0';
 		}
+
+		// Replace first * in the destext with the srcext, remove any other *
+		Util_ExpandFilenameWildcardPart(szSrcExt, szDestExt, ext + 1);
+
+		// If there's a non-blank extension, replace the filename's null terminator with .
+		if (ext[1])
+			*ext = '.';
 	}
-
-	// Now add the drive and directory bit back onto the dest
-	_tcscat(szExpandedDest, szFileTemp);
-
 }
 
 
@@ -1966,6 +1951,14 @@ void Line::Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut)
 {
 	LPTSTR szFilePart;
 	GetFullPathName(szIn, _MAX_PATH, szOut, &szFilePart);
+	strip_trailing_backslash(szOut);
+}
+
+
+
+void Line::Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut, DWORD aBufSize)
+{
+	GetFullPathName(szIn, aBufSize, szOut, NULL);
 	strip_trailing_backslash(szOut);
 }
 
