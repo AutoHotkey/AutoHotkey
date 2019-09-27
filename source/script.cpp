@@ -15259,7 +15259,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 	case ACT_FILEMOVE:
 		return SetErrorLevelOrThrowInt(Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1, true, g.LastError));
 	case ACT_FILECOPYDIR:
-		return SetErrorLevelOrThrowBool(!Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1));
+		return SetErrorLevelOrThrowBool(!Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1, false));
 	case ACT_FILEMOVEDIR:
 		if (ctoupper(*ARG3) == 'R')
 		{
@@ -15270,7 +15270,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			return SetErrorLevelOrThrowBool(!MoveFile(ARG1, ARG2));
 		}
 		// Otherwise:
-		return SetErrorLevelOrThrowBool(!Util_MoveDir(ARG1, ARG2, ArgToInt(3)));
+		return SetErrorLevelOrThrowBool(!Util_CopyDir(ARG1, ARG2, ArgToInt(3), true));
 
 	case ACT_FILECREATEDIR:
 		return FileCreateDir(ARG1);

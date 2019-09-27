@@ -1489,8 +1489,10 @@ ResultType Line::FileGetVersion(LPTSTR aFilespec)
 
 
 
-bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite)
+bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int OverwriteMode, bool bMove)
 {
+	bool bOverwrite = OverwriteMode == 1 || OverwriteMode == 2; // Strict validation for safety.
+
 	// Get the fullpathnames and strip trailing \s
 	TCHAR szSource[_MAX_PATH+2];
 	TCHAR szDest[_MAX_PATH+2];
@@ -1501,22 +1503,54 @@ bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 	if (Util_IsDir(szSource) == false)
 		return false;							// Nope
 
-	// Does the destination dir exist?
-	if (Util_IsDir(szDest))
+	// Jon on the AutoIt forums says "Well SHFileOp is way too unpredictable under 9x. Grrr."
+	// So the comments below about some OSes/old versions are probably just referring to 9x,
+	// which we don't support anymore.  Testing on Windows 2000 and Windows 10 showed that
+	// SHFileOperation can move a directory between two volumes.  However, performing copy
+	// then remove ensures nothing is removed if the copy partially fails, so it's kept this
+	// way for backward-compatibility, even though it may be inconsistent with local moves.
+	// Obsolete comment from Util_MoveDir:
+	// If the source and dest are on different volumes then we must copy rather than move
+	// as move in this case only works on some OSes.  Copy and delete (poor man's move).
+	if (bMove && Util_IsDifferentVolumes(szSource, szDest))
 	{
-		if (bOverwrite == false)
+		if (!Util_CopyDir(szSource, szDest, bOverwrite, false))
 			return false;
+		return Util_RemoveDir(szSource, true);
 	}
-	else // Although dest doesn't exist as a dir, it might be a file, which is covered below too.
+
+	// Does the destination dir exist?
+	DWORD attr = GetFileAttributes(szDest);
+	if (attr != 0xFFFFFFFF) // Destination already exists as a file or directory.
+	{
+		if (attr & FILE_ATTRIBUTE_DIRECTORY) // Dest already exists as a directory.
+		{
+			if (!bOverwrite) // Overwrite Mode is "Never".
+				return false;
+		}
+		else // Dest already exists as a file.
+			return false; // Don't even attempt to overwrite a file with a dir, regardless of mode (I think SHFileOperation refuses to do it anyway).
+	}
+	else // Dest doesn't exist.
 	{
 		// We must create the top level directory
-		if (!Util_CreateDir(szDest)) // Failure is expected to happen if szDest is an existing *file*, since a dir should never be allowed to overwrite a file (to avoid accidental loss of data).
+		// FOF_SILENT (which is included in FOF_NO_UI and means "Do not display a progress dialog box")
+		// seems to be bugged on some older OSes (such as 2k and XP).  Specifically, it answers "No" to
+		// the "confirmmkdir" dialog, which it isn't supposed to suppress, and ignores FOF_NOCONFIRMMKDIR.
+		// Creating the directory first works around this.  Win 7 is okay without this; Vista wasn't tested.
+		if (!bMove && !Util_CreateDir(szDest))
 			return false;
 	}
 
+	// The wildcard below is kept for backward-compatibility, although as indicated above, the
+	// issues alluded to below are probably only on 9x, which is no longer supported.  Adding the
+	// wildcard appears to permit copying a directory into itself (perhaps because the directory
+	// itself isn't being copied), although we still document the result as "undefined".
+	// Really old comment:
 	// To work under old versions AND new version of shell32.dll the source must be specified
 	// as "dir\*.*" and the destination directory must already exist... Goddamn Microsoft and their APIs...
-	_tcscat(szSource, _T("\\*.*"));
+	if (!bMove)
+		_tcscat(szSource, _T("\\*.*"));
 
 	// We must also make source\dest double nulled strings for the SHFileOp API
 	szSource[_tcslen(szSource)+1] = '\0';	
@@ -1526,8 +1560,10 @@ bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 	SHFILEOPSTRUCT FileOp = {0};
 	FileOp.pFrom = szSource;
 	FileOp.pTo = szDest;
-	FileOp.wFunc = FO_COPY;
-	FileOp.fFlags = FOF_SILENT | FOF_NOCONFIRMMKDIR | FOF_NOCONFIRMATION | FOF_NOERRORUI; // FOF_NO_UI ("perform the operation with no user input") is not present for in case it would break compatibility somehow, and because the other flags already present seem to make its behavior implicit.  Also, unlike FileMoveDir, FOF_MULTIDESTFILES never seems to be needed.
+	FileOp.wFunc = bMove ? FO_MOVE : FO_COPY;
+	FileOp.fFlags = FOF_NO_UI; // Set default.
+	if (OverwriteMode == 2)
+		FileOp.fFlags |= FOF_MULTIDESTFILES; // v1.0.46.07: Using the FOF_MULTIDESTFILES flag (as hinted by MSDN) overwrites/merges any existing target directory.  This logic supersedes and fixes old logic that didn't work properly when the source dir was being both renamed and moved to overwrite an existing directory.
 	// All of the below left set to NULL/FALSE by the struct initializer higher above:
 	//FileOp.hNameMappings			= NULL;
 	//FileOp.lpszProgressTitle		= NULL;
@@ -1544,64 +1580,6 @@ bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 	// valid/useful in this case (MSDN mentions this fact but isn't clear about it).
 	// The issue appears to affect only FileCopyDir, not FileMoveDir or FileRemoveDir.  It also seems
 	// unlikely to affect FileCopy/FileMove because they never copy directories.
-	return !SHFileOperation(&FileOp);
-}
-
-
-
-bool Line::Util_MoveDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int OverwriteMode)
-{
-	// Get the fullpathnames and strip trailing \s
-	TCHAR szSource[_MAX_PATH+2];
-	TCHAR szDest[_MAX_PATH+2];
-	Util_GetFullPathName(szInputSource, szSource);
-	Util_GetFullPathName(szInputDest, szDest);
-
-	// Ensure source is a directory
-	if (Util_IsDir(szSource) == false)
-		return false;							// Nope
-
-	// Does the destination dir exist?
-	DWORD attr = GetFileAttributes(szDest);
-	if (attr != 0xFFFFFFFF) // Destination already exists as a file or directory.
-	{
-		if (attr & FILE_ATTRIBUTE_DIRECTORY) // Dest already exists as a directory.
-		{
-			if (OverwriteMode != 1 && OverwriteMode != 2) // Overwrite Mode is "Never".  Strict validation for safety.
-				return false; // For consistency, mode1 actually should move the source-dir *into* the identically name dest dir.  But for backward compatibility, this change hasn't been made.
-		}
-		else // Dest already exists as a file.
-			return false; // Don't even attempt to overwrite a file with a dir, regardless of mode (I think SHFileOperation refuses to do it anyway).
-	}
-
-	if (Util_IsDifferentVolumes(szSource, szDest))
-	{
-		// If the source and dest are on different volumes then we must copy rather than move
-		// as move in this case only works on some OSes.  Copy and delete (poor man's move).
-		if (!Util_CopyDir(szSource, szDest, true))
-			return false;
-		return Util_RemoveDir(szSource, true);
-	}
-
-	// Since above didn't return, source and dest are on same volume.
-	// We must also make source\dest double nulled strings for the SHFileOp API
-	szSource[_tcslen(szSource)+1] = '\0';
-	szDest[_tcslen(szDest)+1] = '\0';
-
-	// Setup the struct
-	SHFILEOPSTRUCT FileOp = {0};
-	FileOp.pFrom = szSource;
-	FileOp.pTo = szDest;
-	FileOp.wFunc = FO_MOVE;
-	FileOp.fFlags = FOF_SILENT | FOF_NOCONFIRMMKDIR | FOF_NOCONFIRMATION | FOF_NOERRORUI; // Set default. FOF_NO_UI ("perform the operation with no user input") is not present for in case it would break compatibility somehow, and because the other flags already present seem to make its behavior implicit.
-	if (OverwriteMode == 2) // v1.0.46.07: Using the FOF_MULTIDESTFILES flag (as hinted by MSDN) overwrites/merges any existing target directory.  This logic supersedes and fixes old logic that didn't work properly when the source dir was being both renamed and moved to overwrite an existing directory.
-		FileOp.fFlags |= FOF_MULTIDESTFILES;
-	// All of the below left set to NULL/FALSE by the struct initializer higher above:
-	//FileOp.hNameMappings			= NULL;
-	//FileOp.lpszProgressTitle		= NULL;
-	//FileOp.fAnyOperationsAborted	= FALSE;
-	//FileOp.hwnd					= NULL;
-
 	return !SHFileOperation(&FileOp);
 }
 
