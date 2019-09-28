@@ -423,6 +423,45 @@ struct ArgStruct
 #define _f_number_buf			_f_retval_buf  // An alias to show intended usage, and in case the buffer size is changed.
 
 
+struct LoopFilesStruct : WIN32_FIND_DATA
+{
+	// Note that using fixed buffer sizes significantly reduces code size vs. using CString
+	// or probably any other method of dynamically allocating/expanding the buffers.  It also
+	// performs marginally better, but file system performance has a much bigger impact.
+	// Unicode builds allow for the maximum path size supported by Win32 as of 2018, although
+	// in some cases the script might need to use the \\?\ prefix to go beyond MAX_PATH.
+	// On Windows 10 v1607+, MAX_PATH limits can be lifted by opting-in to long path support
+	// via the application's manifest and LongPathsEnabled registry setting.  In any case,
+	// ANSI APIs are still limited to MAX_PATH, but MAX_PATH*2 allows for the longest path
+	// supported by FindFirstFile() concatenated with the longest filename it can return.
+	// This preserves backward-compatibility under the following set of conditions:
+	//  1) the absolute path and pattern fits within MAX_PATH;
+	//  2) the relative path and filename fits within MAX_PATH; and
+	//  3) the absolute path and filename exceeds MAX_PATH.
+	static const size_t BUF_SIZE = UorA(MAX_WIDE_PATH, MAX_PATH*2);
+	// file_path contains the full path of the directory being looped, with trailing slash.
+	// Temporarily also contains the pattern for FindFirstFile(), which is either a copy of
+	// 'pattern' or "*" for scanning sub-directories.
+	// During execution of the loop body, it contains the full path of the file.
+	TCHAR file_path[BUF_SIZE];
+	TCHAR pattern[MAX_PATH]; // Naked filename or pattern.  Allows max NTFS filename length plus a few chars.
+	TCHAR short_path[BUF_SIZE]; // Short name version of orig_dir.
+	TCHAR *file_path_suffix; // The dynamic part of file_path (used by A_LoopFilePath).
+	TCHAR *orig_dir; // Initial directory as specified by caller (used by A_LoopFilePath).
+	TCHAR *long_dir; // Full/long path of initial directory (used by A_LoopFileLongPath).
+	size_t file_path_length, pattern_length, short_path_length, orig_dir_length, long_dir_length
+		, dir_length; // Portion of file_path which is the directory, used by BIVs.
+
+	LoopFilesStruct() : orig_dir_length(0), long_dir(NULL) {}
+	~LoopFilesStruct()
+	{
+		if (orig_dir_length)
+			free(orig_dir);
+		//else: orig_dir is the constant _T("").
+		free(long_dir);
+	}
+};
+
 // Some of these lengths and such are based on the MSDN example at
 // http://msdn.microsoft.com/library/default.asp?url=/library/en-us/sysinfo/base/enumerating_registry_subkeys.asp:
 // FIX FOR v1.0.48: 
@@ -467,15 +506,18 @@ class TextStream; // TextIO
 struct LoopReadFileStruct
 {
 	TextStream *mReadFile, *mWriteFile;
-	TCHAR mWriteFileName[MAX_PATH];
+	LPTSTR mWriteFileName;
 	#define READ_FILE_LINE_SIZE (64 * 1024)  // This is also used by FileReadLine().
 	TCHAR mCurrentLine[READ_FILE_LINE_SIZE];
 	LoopReadFileStruct(TextStream *aReadFile, LPTSTR aWriteFileName)
 		: mReadFile(aReadFile), mWriteFile(NULL) // mWriteFile is opened by FileAppend() only upon first use.
+		, mWriteFileName(aWriteFileName) // Caller has passed the result of _tcsdup() for us to take over.
 	{
-		// Use our own buffer because caller's is volatile due to possibly being in the deref buffer:
-		tcslcpy(mWriteFileName, aWriteFileName, _countof(mWriteFileName));
 		*mCurrentLine = '\0';
+	}
+	~LoopReadFileStruct()
+	{
+		free(mWriteFileName);
 	}
 };
 
@@ -626,8 +668,11 @@ private:
 	bool EvaluateLoopUntil(ResultType &aResult);
 	ResultType Line::PerformLoop(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 		, __int64 aIterationLimit, bool aIsInfinite);
-	ResultType Line::PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+	ResultType PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LPTSTR aFilePattern);
+	bool ParseLoopFilePattern(LPTSTR aFilePattern, LoopFilesStruct &lfs, ResultType &aResult);
+	ResultType PerformLoopFilePattern(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LoopFilesStruct &lfs);
 	ResultType PerformLoopReg(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, HKEY aRootKeyType, HKEY aRootKey, LPTSTR aRegSubkey);
 	ResultType PerformLoopParse(ExprTokenType *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil);
@@ -669,7 +714,7 @@ private:
 	ResultType FileGetShortcut(LPTSTR aShortcutFile);
 	ResultType FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
 		, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState);
-	ResultType FileCreateDir(LPTSTR aDirSpec);
+	ResultType FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec = NULL);
 	ResultType FileRead(LPTSTR aFilespec);
 	ResultType FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber);
 	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *aCurrentReadFile);
@@ -680,16 +725,27 @@ private:
 	ResultType FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag);
 
 	typedef BOOL (* FilePatternCallback)(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
-	int FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
-		, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData
-		, bool aCalledRecursively = false);
+	struct FilePatternStruct
+	{
+		TCHAR path[T_MAX_PATH]; // Directory and naked filename or pattern.
+		TCHAR pattern[MAX_PATH]; // Naked filename or pattern.
+		size_t dir_length, pattern_length;
+		FilePatternCallback aCallback;
+		void *aCallbackData;
+		FileLoopModeType aOperateOnFolders;
+		bool aDoRecurse;
+		int failure_count;
+	};
+	ResultType FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
+		, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData);
+	void FilePatternApply(FilePatternStruct &);
 
 	ResultType FileGetAttrib(LPTSTR aFilespec);
-	int FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
-		, bool aDoRecurse, bool aCalledRecursively = false);
+	ResultType FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern
+		, FileLoopModeType aOperateOnFolders, bool aDoRecurse);
 	ResultType FileGetTime(LPTSTR aFilespec, TCHAR aWhichTime);
-	int FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
-		, FileLoopModeType aOperateOnFolders, bool aDoRecurse, bool aCalledRecursively = false);
+	ResultType FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
+		, FileLoopModeType aOperateOnFolders, bool aDoRecurse);
 	ResultType FileGetSize(LPTSTR aFilespec, LPTSTR aGranularity);
 	ResultType FileGetVersion(LPTSTR aFilespec);
 
@@ -993,8 +1049,7 @@ public:
 
 	ResultType Deref(Var *aOutputVar, LPTSTR aBuf);
 
-	static bool FileIsFilteredOut(WIN32_FIND_DATA &aCurrentFile, FileLoopModeType aFileLoopMode
-		, LPTSTR aFilePath, size_t aFilePathLength);
+	static bool FileIsFilteredOut(LoopFilesStruct &aCurrentFile, FileLoopModeType aFileLoopMode);
 
 	Label *GetJumpTarget(bool aIsDereferenced);
 	Label *IsJumpValid(Label &aTargetLabel, bool aSilent = false);
@@ -2036,8 +2091,7 @@ public:
 	void operator delete[](void *aPtr) {}
 
 	// AutoIt3 functions:
-	static bool Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite);
-	static bool Util_MoveDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int OverwriteMode);
+	static bool Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int OverwriteMode, bool bMove);
 	static bool Util_RemoveDir(LPCTSTR szInputSource, bool bRecurse);
 	static int Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite, bool bMove, DWORD &aLastError);
 	static void Util_ExpandFilenameWildcard(LPCTSTR szSource, LPCTSTR szDest, LPTSTR szExpandedDest);
@@ -2046,7 +2100,7 @@ public:
 	static bool Util_DoesFileExist(LPCTSTR szFilename);
 	static bool Util_IsDir(LPCTSTR szPath);
 	static void Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut);
-	static bool Util_IsDifferentVolumes(LPCTSTR szPath1, LPCTSTR szPath2);
+	static void Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut, DWORD aBufSize);
 };
 
 
@@ -2998,6 +3052,8 @@ public:
 	void TerminateApp(ExitReasons aExitReason, int aExitCode); // L31: Added aExitReason. See script.cpp.
 	LineNumberType LoadFromFile();
 	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
+	ResultType LoadIncludedFile(TextStream *fp);
+	ResultType OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
 	LineNumberType CurrentLine();
 	LPTSTR CurrentFile();
 
@@ -3007,6 +3063,13 @@ public:
 
 	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[]);
 #ifndef AUTOHOTKEYSC
+	struct FuncLibrary
+	{
+		LPTSTR path;
+		size_t length;
+	};
+	void InitFuncLibraries(FuncLibrary aLibs[]);
+	void InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix);
 	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
 #endif
 	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0, int *apInsertPos = NULL);
@@ -3176,10 +3239,9 @@ BIV_DECL_R (BIV_ScriptHwnd);
 BIV_DECL_R (BIV_LineNumber);
 BIV_DECL_R (BIV_LineFile);
 BIV_DECL_R (BIV_LoopFileName);
-BIV_DECL_R (BIV_LoopFileShortName);
 BIV_DECL_R (BIV_LoopFileExt);
 BIV_DECL_R (BIV_LoopFileDir);
-BIV_DECL_R (BIV_LoopFileFullPath);
+BIV_DECL_R (BIV_LoopFilePath);
 BIV_DECL_R (BIV_LoopFileLongPath);
 BIV_DECL_R (BIV_LoopFileShortPath);
 BIV_DECL_R (BIV_LoopFileTime);
@@ -3366,6 +3428,8 @@ BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
 void SetWorkingDir(LPTSTR aNewDir);
+void UpdateWorkingDir(LPTSTR aNewDir = NULL);
+LPTSTR GetWorkingDir();
 int ConvertJoy(LPTSTR aBuf, int *aJoystickID = NULL, bool aAllowOnlyButtons = false);
 bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType);
 double ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, bool aUseBoolForUpDown);

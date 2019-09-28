@@ -43,11 +43,8 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// reverted afterward, so it affected all subsequent commands.
 	SetErrorMode(SEM_FAILCRITICALERRORS);
 
-	if (!GetCurrentDirectory(_countof(g_WorkingDir), g_WorkingDir)) // Needed for the FileSelectFile() workaround.
-		*g_WorkingDir = '\0';
-	// Unlike the below, the above must not be Malloc'd because the contents can later change to something
-	// as large as MAX_PATH by means of the SetWorkingDir command.
-	g_WorkingDirOrig = SimpleHeap::Malloc(g_WorkingDir); // Needed by the Reload command.
+	UpdateWorkingDir(); // Needed for the FileSelectFile() workaround.
+	g_WorkingDirOrig = SimpleHeap::Malloc(const_cast<LPTSTR>(g_WorkingDir.GetString())); // Needed by the Reload command.
 
 	// Set defaults, to be overridden by command line args we receive:
 	bool restart_mode = false;

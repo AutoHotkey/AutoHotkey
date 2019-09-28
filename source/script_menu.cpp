@@ -173,24 +173,18 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 				mCustomIcon = new_icon;
 				mCustomIconSmall = new_icon_small;
 				mCustomIconNumber = icon_number;
-				// Allocate the full MAX_PATH in case the contents grow longer later.
-				// SimpleHeap improves avg. case mem load:
-				if (!mCustomIconFile)
-					mCustomIconFile = (LPTSTR) SimpleHeap::Malloc(MAX_PATH * sizeof(TCHAR));
-				if (mCustomIconFile)
-				{
-					TCHAR full_path[MAX_PATH], *filename_marker;
-					// If the icon was loaded from a DLL, relative->absolute conversion below may produce the
-					// wrong result (i.e. in the typical case where the DLL is not in the working directory).
-					// So in that case, get the path of the module which contained the icon (if available).
-					// Get the full path in case it's a relative path.  This is documented and it's done in case
-					// the script ever changes its working directory:
-					if (   icon_module && GetModuleFileName(icon_module, full_path, _countof(full_path))
-						|| GetFullPathName(aParam3, _countof(full_path) - 1, full_path, &filename_marker)   )
-						tcslcpy(mCustomIconFile, full_path, MAX_PATH);
-					else
-						tcslcpy(mCustomIconFile, aParam3, MAX_PATH);
-				}
+
+				TCHAR full_path[T_MAX_PATH], *filename_marker;
+				// If the icon was loaded from a DLL, relative->absolute conversion below may produce the
+				// wrong result (i.e. in the typical case where the DLL is not in the working directory).
+				// So in that case, get the path of the module which contained the icon (if available).
+				// Get the full path in case it's a relative path.  This is documented and it's done in case
+				// the script ever changes its working directory:
+				if (   icon_module && GetModuleFileName(icon_module, full_path, _countof(full_path))
+					|| GetFullPathName(aParam3, _countof(full_path) - 1, full_path, &filename_marker)   )
+					aParam3 = full_path;
+				free(mCustomIconFile);
+				mCustomIconFile = _tcsdup(aParam3); // Failure isn't checked due to rarity and for simplicity; it'll be reported as empty in that case.
 
 				if (icon_module)
 					FreeLibrary(icon_module);

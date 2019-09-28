@@ -43,6 +43,13 @@ EXTERN_SCRIPT;  // For g_script.
 #define HOTKEY_ID_TOGGLE               0x03
 #define IS_ALT_TAB(id) (id > HOTKEY_ID_MAX && id < HOTKEY_ID_INVALID)
 
+// Below: Use double-colon as delimiter to set these apart from normal labels.
+// The main reason for this is that otherwise the user would have to worry
+// about a normal label being unintentionally valid as a hotkey, e.g. "Shift:"
+// might be a legitimate label that the user forgot is also a valid hotkey:
+#define HOTKEY_FLAG _T("::")
+#define HOTKEY_FLAG_LENGTH 2
+
 #define COMPOSITE_DELIMITER _T(" & ")
 #define COMPOSITE_DELIMITER_LENGTH 3
 
