@@ -1512,7 +1512,7 @@ bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int Overwrit
 	// Obsolete comment from Util_MoveDir:
 	// If the source and dest are on different volumes then we must copy rather than move
 	// as move in this case only works on some OSes.  Copy and delete (poor man's move).
-	if (bMove && Util_IsDifferentVolumes(szSource, szDest))
+	if (bMove && (ctolower(szSource[0]) != ctolower(szDest[0]) || szSource[1] != ':'))
 	{
 		if (!Util_CopyDir(szSource, szDest, bOverwrite, false))
 			return false;
@@ -1938,36 +1938,6 @@ void Line::Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut, DWORD aBufSize)
 {
 	GetFullPathName(szIn, aBufSize, szOut, NULL);
 	strip_trailing_backslash(szOut);
-}
-
-
-
-bool Line::Util_IsDifferentVolumes(LPCTSTR szPath1, LPCTSTR szPath2)
-// Checks two paths to see if they are on the same volume.
-{
-	TCHAR			szP1Drive[_MAX_DRIVE+1];
-	TCHAR			szP2Drive[_MAX_DRIVE+1];
-
-	TCHAR			szDir[_MAX_DIR+1];
-	TCHAR			szFile[_MAX_FNAME+1];
-	TCHAR			szExt[_MAX_EXT+1];
-	
-	TCHAR			szP1[_MAX_PATH+1];	
-	TCHAR			szP2[_MAX_PATH+1];
-
-	// Get full pathnames
-	Util_GetFullPathName(szPath1, szP1);
-	Util_GetFullPathName(szPath2, szP2);
-
-	// Split the target into bits
-	_tsplitpath( szP1, szP1Drive, szDir, szFile, szExt );
-	_tsplitpath( szP2, szP2Drive, szDir, szFile, szExt );
-
-	if (szP1Drive[0] == '\0' || szP2Drive[0] == '\0')
-		// One or both paths is a UNC - assume different volumes
-		return true;
-	else
-		return _tcsicmp(szP1Drive, szP2Drive);
 }
 
 

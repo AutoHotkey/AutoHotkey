@@ -2101,7 +2101,6 @@ public:
 	static bool Util_IsDir(LPCTSTR szPath);
 	static void Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut);
 	static void Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut, DWORD aBufSize);
-	static bool Util_IsDifferentVolumes(LPCTSTR szPath1, LPCTSTR szPath2);
 };
 
 
