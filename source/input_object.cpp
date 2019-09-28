@@ -160,12 +160,12 @@ ResultType InputObject::BoolOpt(ResultToken &aResultToken, int aID, int aFlags, 
 	bool *bool_option = nullptr;
 	switch (aID)
 	{
-	case P_BackspaceIsUndo: &input.BackspaceIsUndo; break;
-	case P_CaseSensitive: &input.CaseSensitive; break;
-	case P_FindAnywhere: &input.FindAnywhere; break;
-	case P_VisibleText: &input.VisibleText; break;
-	case P_VisibleNonText: &input.VisibleNonText; break;
-	case P_NotifyNonText: &input.NotifyNonText; break;
+	case P_BackspaceIsUndo: bool_option = &input.BackspaceIsUndo; break;
+	case P_CaseSensitive: bool_option = &input.CaseSensitive; break;
+	case P_FindAnywhere: bool_option = &input.FindAnywhere; break;
+	case P_VisibleText: bool_option = &input.VisibleText; break;
+	case P_VisibleNonText: bool_option = &input.VisibleNonText; break;
+	case P_NotifyNonText: bool_option = &input.NotifyNonText; break;
 	}
 	if (IS_INVOKE_SET)
 		*bool_option = ParamIndexToBOOL(0);
