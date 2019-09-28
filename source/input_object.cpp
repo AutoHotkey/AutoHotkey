@@ -136,7 +136,7 @@ ResultType InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, E
 	case P_MinSendLevel:
 		if (IS_INVOKE_SET)
 		{
-			input.MinSendLevel = (SendLevelType)ParamIndexToInt64(1);
+			input.MinSendLevel = (SendLevelType)ParamIndexToInt64(0);
 			return OK;
 		}
 		_o_return(input.MinSendLevel);
@@ -144,7 +144,7 @@ ResultType InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, E
 	case P_Timeout:
 		if (IS_INVOKE_SET)
 		{
-			input.Timeout = (int)(ParamIndexToDouble(1) * 1000);
+			input.Timeout = (int)(ParamIndexToDouble(0) * 1000);
 			if (input.InProgress() && input.Timeout > 0)
 				input.SetTimeoutTimer();
 			return OK;
