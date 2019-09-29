@@ -502,15 +502,6 @@ Script::Script()
 	ZeroMemory(&mNIC, sizeof(mNIC));  // Constructor initializes this, to be safe.
 	mNIC.hWnd = NULL;  // Set this as an indicator that it tray icon is not installed.
 
-	// Lastly (after the above have been initialized), anything that can fail:
-	if (   !(mTrayMenu = AddMenu(MENU_TYPE_POPUP))   ) // realistically never happens
-	{
-		ScriptError(_T("No tray mem"));
-		ExitApp(EXIT_DESTROY);
-	}
-	else
-		mTrayMenu->AppendStandardItems();
-
 #ifdef _DEBUG
 	if (ID_FILE_EXIT < ID_MAIN_FIRST) // Not a very thorough check.
 		ScriptError(_T("DEBUG: ID_FILE_EXIT is too large (conflicts with IDs reserved via ID_USER_FIRST)."));
@@ -630,6 +621,13 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 // Caller has provided an empty string for aScriptFilename if this is a compiled script.
 // Otherwise, aScriptFilename can be NULL if caller hasn't determined the filename of the script yet.
 {
+	// Now that all static initializers (such as for Object::sPrototype)
+	// are guaranteed to have been executed, construct the Tray menu.
+	if (!(mTrayMenu = AddMenu(MENU_TYPE_POPUP))) // realistically never happens
+		return ScriptError(_T("No tray mem"));
+	else
+		mTrayMenu->AppendStandardItems();
+
 	mIsRestart = aIsRestart;
 	TCHAR buf[2048]; // Just to make sure we have plenty of room to do things with.
 #ifdef AUTOHOTKEYSC
