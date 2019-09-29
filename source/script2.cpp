@@ -10909,6 +10909,7 @@ struct DYNAPARM
 	DllArgTypes type;
 	bool passed_by_address;
 	bool is_unsigned; // Allows return value and output parameters to be interpreted as unsigned vs. signed.
+	bool is_hresult; // Only used for the return value.
 };
 
 #ifdef _WIN64
@@ -11380,7 +11381,14 @@ BIF_DECL(BIF_DllCall)
 				goto has_valid_return_type;
 			}
 		}
-		ConvertDllArgType(return_type_string, return_attrib);
+		if (!_tcsicmp(return_type_string, _T("HRESULT")))
+		{
+			return_attrib.type = DLL_ARG_INT;
+			return_attrib.is_unsigned = true;
+			return_attrib.is_hresult = true;
+		}
+		else
+			ConvertDllArgType(return_type_string, return_attrib);
 		if (return_attrib.type == DLL_ARG_INVALID)
 		{
 			if (token.symbol == SYM_VAR)
@@ -11563,6 +11571,11 @@ has_valid_return_type:
 		// Call CriticalError() so that the user knows *which* DllCall is at fault:
 		g_script.CriticalError(_T("This DllCall requires a prior VarSetCapacity."));
 		// CriticalError always terminates the process.
+	}
+
+	if (return_attrib.is_hresult && FAILED((HRESULT)return_value.Int) && !g->ThrownToken)
+	{
+		ThrowHresultException((HRESULT)return_value.Int);
 	}
 
 	if (g->ThrownToken)
@@ -11779,6 +11792,27 @@ has_valid_return_type:
 end:
 	if (hmodule_to_free)
 		FreeLibrary(hmodule_to_free);
+}
+
+void ThrowHresultException(HRESULT hr)
+{
+	TCHAR message[1024];
+	DWORD size = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS
+		, NULL, hr, 0, message, _countof(message), NULL);
+	if (size)
+	{
+		if (message[size - 1] == '\n')
+			message[--size] = '\0';
+		if (message[size - 1] == '\r')
+			message[--size] = '\0';
+	}
+	else
+		_tcscpy(message, _T("Function returned failure."));
+	TCHAR code[_MAX_ULTOSTR_BASE16_COUNT + 3];
+	code[0] = '0';
+	code[1] = 'x';
+	_ultot(hr, code + 2, 16);
+	g_script.ThrowRuntimeException(message, _T("DllCall"), code);
 }
 
 #endif

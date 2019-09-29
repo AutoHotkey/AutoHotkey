@@ -3220,6 +3220,7 @@ BIV_DECL_R (BIV_ScreenDPI);
 
 #ifdef ENABLE_DLLCALL
 void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free = NULL);
+void ThrowHresultException(HRESULT hr);
 BIF_DECL(BIF_DllCall);
 #endif
 
