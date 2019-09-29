@@ -169,6 +169,7 @@ FuncEntry g_BIF[] =
 	BIF1(IsFunc, 1, 1),
 	BIF1(IsLabel, 1, 1),
 	BIF1(IsObject, 1, NA),
+	BIF1(IsSet, 1, 1),
 	BIFn(KeyWait, 1, 2, BIF_Wait),
 	BIFn(Ln, 1, 1, BIF_SqrtLogLn),
 	BIF1(LoadPicture, 1, 3),

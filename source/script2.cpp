@@ -14047,6 +14047,16 @@ BIF_DECL(BIF_IsByRef)
 
 
 
+BIF_DECL(BIF_IsSet)
+{
+	if (aParam[0]->symbol != SYM_VAR)
+		_f_throw(ERR_PARAM1_INVALID);
+
+	_f_return_b(!aParam[0]->var->IsUninitializedNormalVar());
+}
+
+
+
 BIF_DECL(BIF_GetKeyState)
 {
 	TCHAR key_name_buf[MAX_NUMBER_SIZE]; // Because _f_retval_buf is used for something else below.
