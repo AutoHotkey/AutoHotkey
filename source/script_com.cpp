@@ -1079,6 +1079,14 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	if (mVarType != VT_DISPATCH || !mDispatch)
 	{
+		if (!IS_INVOKE_CALL && !_tcsicmp(aName, _T("Ptr")))
+		{
+			if (IS_INVOKE_SET || aParamCount)
+				_o_throw(ERR_INVALID_USAGE);
+			// Support passing VT_ARRAY, VT_BYREF or IUnknown to DllCall.
+			if ((mVarType & (VT_ARRAY | VT_BYREF)) || mVarType == VT_UNKNOWN || mVarType == VT_DISPATCH)
+				_o_return(mVal64);
+		}
 		if (mVarType & VT_ARRAY)
 			return SafeArrayInvoke(IObject_Invoke_PARAMS);
 		if (mVarType & VT_BYREF)
