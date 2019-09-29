@@ -714,7 +714,7 @@ private:
 	ResultType FileGetShortcut(LPTSTR aShortcutFile);
 	ResultType FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
 		, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState);
-	ResultType FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec = NULL);
+	static bool FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec = NULL);
 	ResultType FileRead(LPTSTR aFilespec);
 	ResultType FileReadLine(LPTSTR aFilespec, LPTSTR aLineNumber);
 	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *aCurrentReadFile);
@@ -2096,7 +2096,6 @@ public:
 	static int Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite, bool bMove, DWORD &aLastError);
 	static void Util_ExpandFilenameWildcard(LPCTSTR szSource, LPCTSTR szDest, LPTSTR szExpandedDest);
 	static void Util_ExpandFilenameWildcardPart(LPCTSTR szSource, LPCTSTR szDest, LPTSTR szExpandedDest);
-	static bool Util_CreateDir(LPCTSTR szDirName);
 	static bool Util_DoesFileExist(LPCTSTR szFilename);
 	static bool Util_IsDir(LPCTSTR szPath);
 	static void Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut);

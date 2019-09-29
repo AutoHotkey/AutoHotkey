@@ -9856,14 +9856,23 @@ ResultType Line::FileSelectFile(LPTSTR aOptions, LPTSTR aWorkingDir, LPTSTR aGre
 
 
 
-ResultType Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
+// As of 2019-09-29, noinline reduces code size by over 20KB on VC++ 2019.
+// Prior to merging Util_CreateDir with this, it wasn't inlined.
+DECLSPEC_NOINLINE
+bool Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 {
 	if (!aDirSpec || !*aDirSpec)
-		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
+	{
+		SetLastError(ERROR_INVALID_PARAMETER);
+		return false;
+	}
 
 	DWORD attr = GetFileAttributes(aDirSpec);
 	if (attr != 0xFFFFFFFF)  // aDirSpec already exists.
-		return SetErrorsOrThrow(!(attr & FILE_ATTRIBUTE_DIRECTORY), ERROR_ALREADY_EXISTS); // Indicate success if it already exists as a dir.
+	{
+		SetLastError(ERROR_ALREADY_EXISTS);
+		return (attr & FILE_ATTRIBUTE_DIRECTORY) != 0; // Indicate success if it already exists as a dir.
+	}
 
 	// If it has a backslash, make sure all its parent directories exist before we attempt
 	// to create this directory:
@@ -9883,7 +9892,7 @@ ResultType Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 			parent_dir = (LPTSTR)_alloca((last_backslash - aDirSpec + 1) * sizeof(TCHAR));
 			tcslcpy(parent_dir, aDirSpec, last_backslash - aDirSpec + 1); // Omits the last backslash.
 		}
-		FileCreateDir(parent_dir, parent_dir); // Recursively create all needed ancestor directories.
+		bool exists = FileCreateDir(parent_dir, parent_dir); // Recursively create all needed ancestor directories.
 		if (aCanModifyDirSpec)
 			*last_backslash = '\\'; // Undo temporary termination.
 
@@ -9893,14 +9902,14 @@ ResultType Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 		// everything succeeded.  So now, when recursion finishes creating all the ancestors of this directory
 		// our own layer here does not call CreateDirectory() when there's a trailing backslash because a previous
 		// layer already did:
-		if (!last_backslash[1] || *g_ErrorLevel->Contents() == *ERRORLEVEL_ERROR) // Compare first char of each string, which is valid because ErrorLevel is stored as a quoted/literal string rather than an integer.
-			return OK; // Let the previously set ErrorLevel (whatever it is) tell the story.
+		if (!last_backslash[1] || !exists)
+			return exists;
 	}
 
 	// The above has recursively created all parent directories of aDirSpec if needed.
 	// Now we can create aDirSpec.  Be sure to explicitly set g_ErrorLevel since it's value
 	// is now indeterminate due to action above:
-	return SetErrorsOrThrow(!CreateDirectory(aDirSpec, NULL));
+	return CreateDirectory(aDirSpec, NULL);
 }
 
 

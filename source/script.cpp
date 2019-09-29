@@ -15273,7 +15273,7 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return SetErrorLevelOrThrowBool(!Util_CopyDir(ARG1, ARG2, ArgToInt(3), true));
 
 	case ACT_FILECREATEDIR:
-		return FileCreateDir(ARG1);
+		return SetErrorsOrThrow(!FileCreateDir(ARG1));
 	case ACT_FILEREMOVEDIR:
 		return SetErrorLevelOrThrowBool(!*ARG1 // Consider an attempt to create or remove a blank dir to be an error.
 			|| !Util_RemoveDir(ARG1, ArgToInt(2) == 1)); // Relies on short-circuit evaluation.
