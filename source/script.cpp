@@ -56,6 +56,9 @@ FuncEntry g_BIF[] =
 	BIF1(Chr, 1, 1),
 	BIF1(ClipboardAll, 0, 2),
 	BIFn(ClipWait, 0, 2, BIF_Wait),
+#ifdef ENABLE_DLLCALL
+	BIFn(ComCall, 2, NA, BIF_DllCall),
+#endif
 	BIF1(ComObjActive, 1, 1),
 	BIF1(ComObjArray, 2, 9),
 	BIF1(ComObjConnect, 1, 2),
@@ -112,7 +115,7 @@ FuncEntry g_BIF[] =
 	BIFn(DirExist, 1, 1, BIF_FileExist),
 	BIF1(DirSelect, 0, 3),
 #ifdef ENABLE_DLLCALL
-	BIF1(DllCall, 1, NA),
+	BIFn(DllCall, 1, NA, BIF_DllCall),
 #endif
 	BIFn(DriveEject, 0, 2, BIF_Drive),
 	BIFn(DriveGetCapacity, 1, 1, BIF_DriveGet),

@@ -11315,14 +11315,29 @@ BIF_DECL(BIF_DllCall)
 // Author: Marcus Sonntag (Ultra)
 {
 	HMODULE hmodule_to_free = NULL; // Set default in case of early goto; mostly for maintainability.
-	void *function; // Will hold the address of the function to be called.
+	LPTSTR function_name = NULL;
+	void *function = NULL; // Will hold the address of the function to be called.
+	int vf_index = -1; // Set default: not ComCall.
 
-	// Check that the mandatory first parameter (DLL+Function) is valid.
-	// (load-time validation has ensured at least one parameter is present).
-	switch(aParam[0]->symbol)
+	if (_f_callee_id == FID_ComCall)
 	{
+		function = NULL;
+		vf_index = ParamIndexIsNumeric(0) ? (int)ParamIndexToInt64(0) : -1;
+		if (vf_index < 0) // But positive values aren't checked since there's no known upper bound.
+			_f_throw(ERR_PARAM1_INVALID);
+		// Cheat a bit to make the second arg both the source of the virtual function
+		// and the first parameter value (always an interface pointer):
+		ExprTokenType t_this_arg_type = _T("Ptr");
+		aParam[0] = &t_this_arg_type;
+	}
+	else
+	{
+		// Check that the mandatory first parameter (DLL+Function) is valid.
+		// (load-time validation has ensured at least one parameter is present).
+		switch (aParam[0]->symbol)
+		{
 		case SYM_STRING: // By far the most common, so it's listed first for performance. Also for performance, don't even consider the possibility that a quoted literal string like "33" is a function-address.
-			function = NULL; // Indicate that no function has been specified yet.
+			//function = NULL; // Already set: indicates that no function has been specified yet.
 			break;
 		case SYM_VAR:
 			// v1.0.46.08: Allow script to specify the address of a function, which might be useful for
@@ -11344,8 +11359,13 @@ BIF_DECL(BIF_DllCall)
 		case SYM_INTEGER:
 			function = (void *)aParam[0]->value_int64; // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
 			break;
-		default: // SYM_FLOAT, SYM_OBJECT or not an operand.
+		default: // SYM_FLOAT, SYM_OBJECT, SYM_MISSING or (should be impossible) something else.
 			_f_throw(ERR_PARAM1_INVALID);
+		}
+		if (!function)
+			function_name = TokenToString(*aParam[0]);
+		++aParam; // Normalize aParam to simplify ComCall vs. DllCall.
+		--aParamCount;
 	}
 
 	// Determine the type of return value.
@@ -11353,8 +11373,13 @@ BIF_DECL(BIF_DllCall)
 #ifdef WIN32_PLATFORM
 	int dll_call_mode = DC_CALL_STD; // Set default.  Can be overridden to DC_CALL_CDECL and flags can be OR'd into it.
 #endif
-	if (aParamCount % 2) // Odd number of parameters indicates the return type has been omitted, so assume BOOL/INT.
+	if ( !(aParamCount % 2) ) // An even number of parameters indicates the return type has been omitted. aParamCount excludes DllCall's first parameter at this point.
+	{
 		return_attrib.type = DLL_ARG_INT;
+		if (vf_index >= 0) // Default to HRESULT for ComCall.
+			return_attrib.is_hresult = true;
+		// Otherwise, assume normal INT (also covers BOOL).
+	}
 	else
 	{
 		// Check validity of this arg's return type:
@@ -11384,8 +11409,8 @@ BIF_DECL(BIF_DllCall)
 		if (!_tcsicmp(return_type_string, _T("HRESULT")))
 		{
 			return_attrib.type = DLL_ARG_INT;
-			return_attrib.is_unsigned = true;
 			return_attrib.is_hresult = true;
+			//return_attrib.is_unsigned = true; // Not relevant since an exception is thrown for any negative value.
 		}
 		else
 			ConvertDllArgType(return_type_string, return_attrib);
@@ -11409,7 +11434,7 @@ has_valid_return_type:
 	}
 
 	// Using stack memory, create an array of dll args large enough to hold the actual number of args present.
-	int arg_count = aParamCount/2; // Might provide one extra due to first/last params, which is inconsequential.
+	int arg_count = aParamCount/2;
 	DYNAPARM *dyna_param = arg_count ? (DYNAPARM *)_alloca(arg_count * sizeof(DYNAPARM)) : NULL;
 	// Above: _alloca() has been checked for code-bloat and it doesn't appear to be an issue.
 	// Above: Fix for v1.0.36.07: According to MSDN, on failure, this implementation of _alloca() generates a
@@ -11432,7 +11457,7 @@ has_valid_return_type:
 	// Above has already ensured that after the first parameter, there are either zero additional parameters
 	// or an even number of them.  In other words, each arg type will have an arg value to go with it.
 	// It has also verified that the dyna_param array is large enough to hold all of the args.
-	for (arg_count = 0, i = 1; i < aParamCount; ++arg_count, i += 2)  // Same loop as used later below, so maintain them together.
+	for (arg_count = 0, i = 0; i < aParamCount; ++arg_count, i += 2)  // Same loop as used later below, so maintain them together.
 	{
 		arg_type_string = TokenToString(*aParam[i]); // aBuf not needed since numbers and "" are equally invalid.
 
@@ -11534,9 +11559,14 @@ has_valid_return_type:
 		} // switch (this_dyna_param.type)
 	} // for() each arg.
     
-	if (!function) // The function's address hasn't yet been determined.
+	if (vf_index >= 0) // ComCall
 	{
-		function = GetDllProcAddress(TokenToString(*aParam[0]), &hmodule_to_free);
+		LPVOID *vftbl = *(LPVOID **)dyna_param[0].ptr;
+		function = vftbl[vf_index];
+	}
+	else if (!function) // The function's address hasn't yet been determined.
+	{
+		function = GetDllProcAddress(function_name, &hmodule_to_free);
 		if (!function)
 		{
 			// GetDllProcAddress has thrown the appropriate exception.
@@ -11719,7 +11749,7 @@ has_valid_return_type:
 
 	// Store any output parameters back into the input variables.  This allows a function to change the
 	// contents of a variable for the following arg types: String and Pointer to <various number types>.
-	for (arg_count = 0, i = 1; i < aParamCount; ++arg_count, i += 2) // Same loop as used above, so maintain them together.
+	for (arg_count = 0, i = 0; i < aParamCount; ++arg_count, i += 2) // Same loop as used above, so maintain them together.
 	{
 		ExprTokenType &this_param = *aParam[i + 1];  // Resolved for performance and convenience.
 		// The following check applies to DLL_ARG_xSTR, which is "AStr" on Unicode builds and "WStr"
