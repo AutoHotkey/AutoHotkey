@@ -11767,16 +11767,7 @@ has_valid_return_type:
 		Var &output_var = *this_param.var;                 //
 		if (this_dyna_param.type == DLL_ARG_STR) // Native string type for current build config.
 		{
-			LPTSTR contents = output_var.Contents(); // Contents() shouldn't update mContents in this case because Contents() was already called for each "str" parameter prior to calling the Dll function.
-			VarSizeType capacity = output_var.Capacity();
-			// Since the performance cost is low, ensure the string is terminated at the limit of its
-			// capacity (helps prevent crashes if DLL function didn't do its job and terminate the string,
-			// or when a function is called that deliberately doesn't terminate the string, such as
-			// RtlMoveMemory()).
-			if (capacity)
-				contents[capacity - 1] = '\0';
-			// The function might have altered Contents(), so update Length().
-			output_var.SetCharLength((VarSizeType)_tcslen(contents));
+			output_var.SetLengthFromContents();
 			output_var.Close(); // Clear the attributes of the variable to reflect the fact that the contents may have changed.
 			continue;
 		}
@@ -14203,21 +14194,10 @@ BIF_DECL(BIF_VarSetCapacity)
 			{
 				if (param1 == -1) // Adjust variable's internal length.
 				{
-					// Performance: Length() and Contents() will update mContents if necessary, it's unlikely to be necessary under the circumstances of this call.
-					// In any case, it seems appropriate to do it this way.
-					size_t string_length = 0;
-					size_t max_count = var.CharCapacity(); // to detect a non null-terminated string.
-					if (max_count == 0)
-						max_count =  1; // Contents() == Var::sEmptyString in this case, so check it hasn't been tampered with.
-					string_length = _tcsnlen(var.Contents(), max_count);	// measure the string
-					if (string_length == max_count)
-						g_script.CriticalError(ERR_STRING_NOT_TERMINATED, var.mName);
-					string_length = _TSIZE(string_length);
+					var.SetLengthFromContents();
 					// Seems more useful to report length vs. capacity in this special case. Scripts might be able
 					// to use this to boost performance.
-					var.ByteLength() = string_length;
-					aResultToken.value_int64 = string_length;
-					var.Close();
+					aResultToken.value_int64 = var.ByteLength();
 					return;
 				}
 				// x64: it's negative but not -1.

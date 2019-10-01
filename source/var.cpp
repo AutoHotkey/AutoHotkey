@@ -939,14 +939,24 @@ void Var::SetLengthFromContents()
 {
 	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-	VarSizeType capacity = var.Capacity();
-	var.UpdateContents(); // Ensure mContents and mLength are up-to-date.
-	if (capacity > 0)
+	if (var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE)
 	{
- 		var.mCharContents[capacity - 1] = '\0';  // Caller wants us to ensure it's terminated, to avoid crashing strlen() below.
-		var.mByteLength = ((VarSizeType)_tcslen(var.mCharContents)) * sizeof(TCHAR);
+		var.UpdateContents(); // Set contents and length based on numeric value.
+		return;
 	}
-	//else it has no capacity, so do nothing (it could also be a reserved/built-in variable).
+	size_t length = 0;
+	LPTSTR contents = var.mCharContents;
+	size_t max_count = var.mByteCapacity / sizeof(TCHAR);
+	// Since the performance cost is low, ensure the string is terminated at the limit of its
+	// capacity (helps prevent crashes if DLL function didn't do its job and terminate the string,
+	// or when a function is called that deliberately doesn't terminate the string, such as
+	// RtlMoveMemory()).
+	if (max_count == 0)
+		max_count = 1; // Contents() == Var::sEmptyString in this case, so check it hasn't been tampered with.
+	length = _tcsnlen(contents, max_count);
+	if (length == max_count)
+		g_script.CriticalError(ERR_STRING_NOT_TERMINATED, var.mName);
+	var.mByteLength = _TSIZE(length);
 }
 
 
