@@ -1145,6 +1145,37 @@ ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError)
 
 
 
+ResultType Var::AssignStringFromCodePage(LPCSTR aBuf, int aLength, UINT aCodePage)
+{
+#ifndef UNICODE
+	// Not done since some callers have a more effective optimization in place:
+	//if (aCodePage == CP_ACP || aCodePage == GetACP())
+		// Avoid unnecessary conversion (ACP -> UTF16 -> ACP).
+		//return AssignString(aBuf, aLength, true, false);
+	// Convert from specified codepage to UTF-16,
+	CStringWCharFromChar wide_buf(aBuf, aLength, aCodePage);
+	// then back to the active codepage:
+	return AssignStringToCodePage(wide_buf, wide_buf.GetLength(), CP_ACP);
+#else
+	int iLen = MultiByteToWideChar(aCodePage, 0, aBuf, aLength, NULL, 0);
+	if (iLen > 0) {
+		if (!AssignString(NULL, iLen, true))
+			return FAIL;
+		LPWSTR aContents = Contents(TRUE, TRUE);
+		iLen = MultiByteToWideChar(aCodePage, 0, aBuf, aLength, (LPWSTR) aContents, iLen);
+		aContents[iLen] = 0;
+		if (!iLen)
+			return FAIL;
+		SetCharLength(iLen);
+	}
+	else
+		Assign(); // Return value is ambiguous in this case: may be zero-length input or an error.  For simplicity, return OK.
+	return OK;
+#endif
+}
+
+
+
 ResultType Var::AssignStringToCodePage(LPCWSTR aBuf, int aLength, UINT aCodePage, DWORD aFlags, char aDefChar)
 {
 	char *pDefChar;
