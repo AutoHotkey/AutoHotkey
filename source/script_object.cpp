@@ -2505,6 +2505,16 @@ bool BoundFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPa
 		ExprTokenType *token = (ExprTokenType *)_alloca(bound_count * sizeof(ExprTokenType));
 		ExprTokenType **param = (ExprTokenType **)_alloca((bound_count + aParamCount) * sizeof(ExprTokenType *));
 		mParams->ToParams(token, param, NULL, 0);
+		// Fill in any missing parameters with those that were supplied.
+		// Provides greater utility than binding to the parameter's default value.
+		for (int i = 0; i < bound_count && aParamCount; ++i)
+		{
+			if (param[i]->symbol == SYM_MISSING)
+			{
+				param[i] = *(aParam++);
+				--aParamCount;
+			}
+		}
 		memcpy(param + bound_count, aParam, aParamCount * sizeof(ExprTokenType *));
 		aParam = param;
 		aParamCount += bound_count;
