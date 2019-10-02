@@ -11752,34 +11752,27 @@ has_valid_return_type:
 	for (arg_count = 0, i = 0; i < aParamCount; ++arg_count, i += 2) // Same loop as used above, so maintain them together.
 	{
 		ExprTokenType &this_param = *aParam[i + 1];  // Resolved for performance and convenience.
-		// The following check applies to DLL_ARG_xSTR, which is "AStr" on Unicode builds and "WStr"
-		// on ANSI builds.  Since the buffer is only as large as required to hold the input string,
-		// it has very limited use as an output parameter.  Thus, it seems best to ignore anything the
-		// function may have written into the buffer (primarily for performance), and just delete it:
-		if (pStr[arg_count])
-		{
-			delete pStr[arg_count];
-			continue; // Nothing further to do for this parameter.
-		}
 		if (this_param.symbol != SYM_VAR) // Output parameters are copied back only if its counterpart parameter is a naked variable.
 			continue;
 		DYNAPARM &this_dyna_param = dyna_param[arg_count]; // Resolved for performance and convenience.
 		Var &output_var = *this_param.var;                 //
-		if (this_dyna_param.type == DLL_ARG_STR) // Native string type for current build config.
+
+		if (!this_dyna_param.passed_by_address)
 		{
-			output_var.SetLengthFromContents();
-			output_var.Close(); // Clear the attributes of the variable to reflect the fact that the contents may have changed.
+			if (this_dyna_param.type == DLL_ARG_STR) // Native string type for current build config.
+			{
+				output_var.SetLengthFromContents();
+				output_var.Close(); // Clear the attributes of the variable to reflect the fact that the contents may have changed.
+			}
+			// Nothing is done for xSTR since 1) we didn't pass the variable's contents to the function
+			// so its length doesn't need updating, and 2) the buffer that was passed was only as large
+			// as the input string, so has very little practical use for output.
+			// No other types can be output parameters when !passed_by_address.
 			continue;
 		}
 
-		// Since above didn't "continue", this arg wasn't passed as a string.  Of the remaining types, only
-		// those passed by address can possibly be output parameters, so skip the rest:
-		if (!this_dyna_param.passed_by_address)
-			continue;
-
 		switch (this_dyna_param.type)
 		{
-		// case DLL_ARG_STR:  Already handled above.
 		case DLL_ARG_INT:
 			if (this_dyna_param.is_unsigned)
 				output_var.Assign((DWORD)this_dyna_param.value_int);
@@ -11807,10 +11800,27 @@ has_valid_return_type:
 		case DLL_ARG_DOUBLE:
 			output_var.Assign(this_dyna_param.value_double);
 			break;
+		case DLL_ARG_STR: // Str*
+			// The use of LPWSTR* vs. LPWSTR typically means the function will pass back the
+			// address of a string, not modify the string itself.  This is also consistent with
+			// passed_by_address for all other types.  However, it must be used carefully since
+			// there's no way for Str* to know how or whether the function requires the string
+			// to be freed (e.g. by calling CoTaskMemFree()).
+			if (this_dyna_param.ptr != output_var.Contents(FALSE, TRUE)
+				&& !output_var.AssignString((LPTSTR)this_dyna_param.ptr))
+				aResultToken.SetExitResult(FAIL);
+			break;
+		case DLL_ARG_xSTR: // AStr* on Unicode builds and WStr* on ANSI builds.
+			if (this_dyna_param.ptr != output_var.Contents(FALSE, TRUE)
+				&& !output_var.AssignStringFromCodePage(UorA(LPSTR,LPWSTR)this_dyna_param.ptr))
+				aResultToken.SetExitResult(FAIL);
 		}
 	}
 
 end:
+	for (arg_count = (aParamCount / 2) - 1; arg_count >= 0; --arg_count)
+		if (pStr[arg_count])
+			delete pStr[arg_count];
 	if (hmodule_to_free)
 		FreeLibrary(hmodule_to_free);
 }
