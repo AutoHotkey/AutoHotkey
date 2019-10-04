@@ -11329,7 +11329,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 	Var *var[] = { ARGVARRAW1, ARGVARRAW2 };
 	
 	IObject *enumerator;
-	result = GetEnumerator(enumerator, param_tokens[2].object, mArgc - 1, true);
+	result = GetEnumerator(enumerator, param_tokens[2].object, 1 + (var[1] != nullptr), true);
 	param_tokens[2].object->Release();
 	if (result == FAIL || result == EARLY_EXIT)
 		return result;
