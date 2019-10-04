@@ -404,7 +404,7 @@ private:
 		void WriteProperty(ExprTokenType &aKey, ExprTokenType &aValue);
 		void WriteBaseProperty(IObject *aBase);
 		void WriteDynamicProperty(LPTSTR aName);
-		void WriteEnumItems(IObject *aEnumerable, int aSkip);
+		void WriteEnumItems(IObject *aEnumerable, int aStart, int aEnd);
 
 		void _WriteProperty(ExprTokenType &aValue, IObject *aThisOverride = nullptr);
 

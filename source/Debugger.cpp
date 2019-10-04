@@ -1095,25 +1095,24 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 
 	if (aDepth)
 	{
-		int i = aPageSize * aPage, j = aPageSize * (aPage + 1);
+		int page_start = aPageSize * aPage, page_end = aPageSize * (aPage + 1);
 
 		if (mBase)
 		{
 			// Since this object has a "base", let it count as the first field.
-			if (i == 0) // i.e. this is the first page.
+			if (page_start == 0) // i.e. this is the first page.
 			{
 				aDebugger->WriteBaseProperty(mBase);
 				// Now fall through and retrieve field[0] (unless aPageSize == 1).
 			}
 			// So 20..39 becomes 19..38 when there's a base object:
-			else --i; 
-			--j;
+			else --page_start;
+			--page_end;
 		}
-		int last_field = j;
-		if (last_field > (int)mFields.Length())
-			last_field = (int)mFields.Length();
+		int field_count = (int)mFields.Length();
+		int i = page_start, page_end_field = min(page_end, field_count);
 		// For each field in the requested page...
-		for ( ; i < last_field; ++i)
+		for ( ; i < page_end_field; ++i)
 		{
 			Object::FieldType &field = mFields[i];
 			ExprTokenType value;
@@ -1129,12 +1128,12 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 				aDebugger->WriteProperty(field.name, value);
 			}
 		}
-		if (enum_method && i < j)
+		if (enum_method && i < page_end)
 		{
 			if (dynamic_cast<BuiltInMethod *>(enum_method->func))
 			{
 				// Built-in enumerators are always safe to call automatically.
-				aDebugger->WriteEnumItems(this, i);
+				aDebugger->WriteEnumItems(this, i - field_count, page_end - field_count);
 			}
 			else
 			{
@@ -1153,11 +1152,11 @@ int Debugger::WriteEnumItems(PropertyInfo &aProp, IObject *aEnumerable)
 {
 	aProp.facet = "";
 	PropertyWriter pw(*this, aProp, nullptr);
-	pw.WriteEnumItems(aEnumerable, 0);
+	pw.WriteEnumItems(aEnumerable, aProp.page, aProp.page + aProp.pagesize);
 	return pw.mError;
 }
 
-void Debugger::PropertyWriter::WriteEnumItems(IObject *aEnumerable, int aSkip)
+void Debugger::PropertyWriter::WriteEnumItems(IObject *aEnumerable, int aStart, int aEnd)
 {
 	IObject *enumerator;
 	auto result = GetEnumerator(enumerator, aEnumerable, 2, false);
@@ -1167,7 +1166,6 @@ void Debugger::PropertyWriter::WriteEnumItems(IObject *aEnumerable, int aSkip)
 		return;
 	}
 
-	int start = 0;
 	DebugCookie cookie;
 	bool write_main_property = !mDepth;
 	if (write_main_property)
@@ -1175,22 +1173,19 @@ void Debugger::PropertyWriter::WriteEnumItems(IObject *aEnumerable, int aSkip)
 		if (!mObject)
 			mObject = enumerator;
 		BeginProperty(nullptr, "object", 1, cookie);
-		// mProp.page is applicable only because this is the root property.
-		start = mProp.page * mProp.pagesize;
 	}
-	start += aSkip;
 	
 	if (mProp.max_depth)
 	{
 		Var vkey, vval;
 		ExprTokenType tkey, tval;
 		FuncResult result_token;
-		for (int i = 0, end = start + mProp.pagesize; i < end; ++i)
+		for (int i = 0; i < aEnd; ++i)
 		{
 			result = CallEnumerator(enumerator, &vkey, &vval, false);
 			if (result != CONDITION_TRUE)
 				break;
-			if (i >= start)
+			if (i >= aStart)
 			{
 				vkey.ToTokenSkipAddRef(tkey);
 				vval.ToTokenSkipAddRef(tval);
