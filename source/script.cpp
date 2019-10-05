@@ -5498,8 +5498,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				// For other commands, if any telltale character is present it's definitely an
 				// expression because this is an arg that's marked as a number-or-expression.
 				// So telltales avoid the need for the complex check further below.
-				if (aActionType == ACT_ASSIGNEXPR || aActionType >= ACT_FOR && aActionType <= ACT_UNTIL // i.e. FOR, WHILE or UNTIL
-					|| aActionType >= ACT_THROW && aActionType <= ACT_CASE // THROW, SWITCH or CASE
+				if (ACT_NO_LEGACY_EXPRESSION(aActionType)
 					|| StrChrAny(this_new_arg.text, EXPR_TELLTALES)) // See above.
 					this_new_arg.is_expression = true;
 				// For backward-compatibility, ignore the previous value if this isn't Transform:
@@ -5511,10 +5510,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// only a single numeric literal (or are entirely blank). At runtime, such args are expanded
 			// normally rather than having to run them through the expression evaluator. Exceptions:
 			//
-			//	a)	ACT_FOR requires an expression; it is incapable of accepting a non-expression.
-			//		Although we could treat things like "For x in 0" as load-time errors, it wouldn't
-			//		be consistent with "For x in var_containing_num" and the rarity mightn't be worth
-			//		the added code.
+			//	a)	Several control flow statements require an expression, and are incapable of accepting
+			//		a non-expression.
 			//
 			//	b)	ACT_ASSIGNEXPR should assign a cached binary integer in addition to the numeric literal.
 			//		This might perform just as well overall but is more important for consistency, especially
@@ -5522,8 +5519,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			//		a type mismatch error.
 			//
 			if (this_new_arg.is_expression && IsPureNumeric(this_new_arg.text, true, true, true)
-				&& aActionType != ACT_ASSIGNEXPR && aActionType != ACT_FOR
-				&& (aActionType < ACT_THROW || aActionType > ACT_CASE)) // Not THROW, SWITCH or CASE.
+				&& aActionType != ACT_ASSIGNEXPR && !ACT_IS_ALWAYS_EXPRESSION(aActionType))
 				this_new_arg.is_expression = false;
 
 			if (this_new_arg.is_expression)
@@ -5823,13 +5819,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				// Var := X + 1 ... Var := Var2 "xyz" ... Var := -Var2
 				if (deref_count == 1 && Var::ValidateName(this_new_arg.text, DISPLAY_NO_ERROR)) // Single isolated deref.
 				{
-					// ACT_WHILE performs less than 4% faster as a non-expression in these cases, and keeping
-					// it as an expression avoids an extra check in a performance-sensitive spot of ExpandArgs
-					// (near mActionType <= ACT_LAST_OPTIMIZED_IF).  ACT_UNTIL is treated the same way.
-					// Additionally, FOR, THROW, SWITCH and CASE are kept as expressions in all cases to
-					// simplify the code (which works around ExpandArgs() lack of support for objects).
-					if (aActionType < ACT_FOR || aActionType > ACT_UNTIL // Not FOR, WHILE or UNTIL.
-						&& (aActionType < ACT_THROW || aActionType > ACT_CASE)) // Not THROW, SWITCH or CASE.
+					if (!ACT_IS_ALWAYS_EXPRESSION(aActionType))
 						this_new_arg.is_expression = false; // In addition to being an optimization, doing this might also be necessary for things like "Var := ClipboardAll" to work properly.
 					// But if aActionType is ACT_ASSIGNEXPR, it's left as ACT_ASSIGNEXPR vs. ACT_ASSIGN
 					// because it might be necessary to avoid having AutoTrim take effect for := (which
@@ -5864,7 +5854,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// there should not be any way for non-percent derefs to get mixed in with cases
 					// 2 or 3.
 					if (!deref[0].is_function && *deref[0].marker == g_DerefChar // This appears to be case #2 or #3.
-						&& (aActionType < ACT_FOR || aActionType > ACT_UNTIL)) // Nearly doubles the speed of "while %x%" and "while Array%i%" to leave WHILE as an expression.  But y:=%x% and y:=Array%i% are about the same speed either way, and "if %x%" never reaches this point because for compatibility(?), it's the same as "if x". Additionally, PerformLoopFor() requires its only expression arg to remain an expression.
+						&& !ACT_IS_ALWAYS_EXPRESSION(aActionType)) // Nearly doubles the speed of "while %x%" and "while Array%i%" to leave WHILE as an expression.  But y:=%x% and y:=Array%i% are about the same speed either way, and "if %x%" never reaches this point because for compatibility(?), it's the same as "if x". Additionally, PerformLoopFor() requires its only expression arg to remain an expression.
 					{
 						// The comment below is probably obsolete -- and perhaps so is this entire optimization
 						// because expressions are faster now.  But in case it's necessary for anything related

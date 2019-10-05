@@ -497,6 +497,23 @@ enum enum_act_old {
 	// IfMsgBox, No
 	//     Gosub, XXX
 
+// Cases where arg.is_expression should always be true.
+// ACT_WHILE performs less than 4% faster as a non-expression in some cases, slower
+// in some other cases, and keeping it as an expression avoids an extra check in a
+// performance-sensitive spot of ExpandArgs (near mActionType <= ACT_LAST_OPTIMIZED_IF).
+// ACT_UNTIL is given the same treatment but wasn't tested extensively as a non-expression.
+// Additionally, FOR, THROW, SWITCH and CASE are kept as expressions in all cases to
+// simplify the code (which works around ExpandArgs() lack of support for objects).
+// ACT_EXPRESSION is excluded since `Saved := ClipboardAll` must be non-expression.
+#define ACT_IS_ALWAYS_EXPRESSION(ActionType) \
+	((ActionType >= ACT_FOR && ActionType <= ACT_UNTIL) \
+	|| (ActionType >= ACT_THROW && ActionType <= ACT_CASE))
+
+// Cases where the legacy rules for "numeric" params should not be applied; that is,
+// LegacyArgIsExpression() should not be called because ActionType is not legacy.
+#define ACT_NO_LEGACY_EXPRESSION(ActionType) \
+	(ActionType == ACT_ASSIGNEXPR || ACT_IS_ALWAYS_EXPRESSION(ActionType))
+
 // For convenience in many places.  Must cast to int to avoid loss of negative values.
 #define BUF_SPACE_REMAINING ((int)(aBufSize - (aBuf - aBuf_orig)))
 
