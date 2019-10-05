@@ -11553,6 +11553,8 @@ has_valid_return_type:
 		case DLL_ARG_FLOAT:
 			// This currently doesn't validate that this_dyna_param.is_unsigned==false, since it seems
 			// too rare and mostly harmless to worry about something like "Ufloat" having been specified.
+			if (!TokenIsNumeric(this_param))
+				_f_throw(ERR_TYPE_MISMATCH);
 			this_dyna_param.value_double = TokenToDouble(this_param);
 			if (this_dyna_param.type == DLL_ARG_FLOAT)
 				this_dyna_param.value_float = (float)this_dyna_param.value_double;
@@ -11563,6 +11565,8 @@ has_valid_return_type:
 		//case DLL_ARG_SHORT:
 		//case DLL_ARG_CHAR:
 		//case DLL_ARG_INT64:
+			if (!TokenIsNumeric(this_param))
+				_f_throw(ERR_TYPE_MISMATCH);
 			// Note that since v2.0-a083-97803aeb, TokenToInt64 supports conversion of large unsigned 64-bit
 			// numbers from strings (producing a negative value, but with the right bit representation).
 			// This allows large unsigned literals and numeric strings to be passed to DllCall (regardless
