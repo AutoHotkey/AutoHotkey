@@ -3326,7 +3326,6 @@ BIF_DECL(BIF_ObjXXX);
 BIF_DECL(Op_ObjInvoke);
 BIF_DECL(Op_ObjGetInPlace);
 BIF_DECL(Op_ObjIncDec);
-BIF_DECL(Op_ObjNew);
 
 
 // Advanced file IO interfaces

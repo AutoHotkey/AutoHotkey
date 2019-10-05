@@ -203,28 +203,6 @@ BIF_DECL(Op_ObjGetInPlace)
 
 
 //
-// Op_ObjNew - Handles "new" as in "new Class()".
-//
-
-BIF_DECL(Op_ObjNew)
-{
-	// Set default return value for Invoke().
-	aResultToken.symbol = SYM_STRING;
-	aResultToken.marker = _T("");
-
-	ExprTokenType *class_token = aParam[0]; // Save this to be restored later.
-
-	auto class_object = TokenToObject(*class_token);
-	if (!class_object) // Not an object.
-		_f_throw(ERR_NO_OBJECT);
-
-	auto result = class_object->Invoke(aResultToken, IT_CALL, _T("New"), *class_token, aParam + 1, aParamCount - 1);
-	if (result == INVOKE_NOT_HANDLED)
-		_f_throw(ERR_UNKNOWN_METHOD, _T("New"));
-}
-
-
-//
 // Op_ObjIncDec - Handles pre/post-increment/decrement for object fields, such as ++x[y].
 //
 

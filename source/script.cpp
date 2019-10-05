@@ -4605,12 +4605,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 
 		if (!aActionType && *end_marker != '(')
 		{
-			if (!_tcsicmp(action_name, _T("new")) && *end_marker) // Note that new(MyClass) doesn't need to be checked here because our caller pre-determines ACT_EXPRESSION based on IsFunction().
-			{
-				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
-				action_args = aLineText; // Use the line's full text for later parsing.
-			}
-			else if (*action_name < '0' || *action_name > '9') // Exclude numbers, since no function name can start with a number.
+			if (*action_name < '0' || *action_name > '9') // Exclude numbers, since no function name can start with a number.
 			{
 				// Convert function/method call statements to function/method calls.
 				int line_length = (int)_tcslen(aLineText);
@@ -5664,18 +5659,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 		else if (  operand_length < 9 && (wordop = ConvertWordOperator(op_begin, operand_length))  )
 		{
 			// It's a word operator like AND/OR/NOT.
-			if (wordop == SYM_NEW)
-			{
-				cp = omit_leading_whitespace(op_begin + 3);
-				if (IS_IDENTIFIER_CHAR(*cp) || *cp == g_DerefChar)
-				{
-					// This "new" is followed by something that could be a class name or double-deref
-					// (but might be some other var, as in `new x.y()`).  In any case, we need to avoid
-					// parsing it as a function call.
-					pending_op_is_class = true;
-				}
-			}
-			else if (wordop == SYM_IN || wordop == SYM_CONTAINS)
+			if (wordop == SYM_IN || wordop == SYM_CONTAINS)
 			{
 				return ScriptError(_T("Word reserved for future use."), op_begin);
 			}
@@ -5767,7 +5751,6 @@ SymbolType Script::ConvertWordOperator(LPCTSTR aWord, size_t aLength)
 		{ _T("or"), SYM_OR },
 		{ _T("and"), SYM_AND },
 		{ _T("not"), SYM_LOWNOT },
-		{ _T("new"), SYM_NEW },
 		{ _T("is"), SYM_IS },
 		{ _T("in"), SYM_IN },
 		{ _T("contains"), SYM_CONTAINS }
@@ -8296,7 +8279,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 77, 77         // SYM_PRE_INCREMENT, SYM_PRE_DECREMENT (higher precedence than SYM_POWER because it doesn't make sense to evaluate power first because that would cause ++/-- to fail due to operating on a non-lvalue.
 //		, 78             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 //		, 82, 82         // RESERVED FOR SYM_POST_INCREMENT, SYM_POST_DECREMENT (which are listed higher above for the performance of YIELDS_AN_OPERAND().
-		, 87             // SYM_NEW.  Unlike SYM_FUNC, SYM_DOT, etc., precedence actually matters for this one.
 		, 86             // SYM_FUNC -- Has special handling which ensures it stays tightly bound with its parameters as though it's a single operand for use by other operators; the actual value here is irrelevant.
 	};
 	// Most programming languages give exponentiation a higher precedence than unary minus and logical-not.
@@ -9043,17 +9025,7 @@ unquoted_literal:
 		}
 		else if (this_deref_ref.type == DT_WORDOP)
 		{
-			if (this_deref_ref.symbol == SYM_NEW)
-			{
-				CHECK_AUTO_CONCAT; // Something like `"X" new C().getY()` is valid, though hardly readable.
-				// Above may have incremented infix_count.
-				infix[infix_count].symbol = SYM_NEW;
-				infix[infix_count].deref = this_deref;
-				this_deref_ref.param_count = 1; // Start counting at the class object, which precedes the open-parenthesis.
-				this_deref_ref.func = ExprOp<Op_ObjNew, IT_CALL>(); // This overwrites this_deref_ref.symbol via the union.
-			}
-			else
-				infix[infix_count].symbol = this_deref_ref.symbol;
+			infix[infix_count].symbol = this_deref_ref.symbol;
 			infix[infix_count].error_reporting_marker = this_deref_ref.marker;
 		}
 		else if (this_deref_ref.type == DT_FUNCREF)
@@ -9418,35 +9390,7 @@ unquoted_literal:
 		case SYM_OPAREN:
 			// Open-parentheses always go on the stack to await their matching close-parentheses.
 			this_infix->outer_deref = in_param_list; // Save current value on the stack with this SYM_OPAREN.
-			if (stack_symbol == SYM_NEW // Something like "new Class()".
-				&& this_infix[-1].symbol != SYM_NEW) // Not "new (Class)" or "new(Class)".
-			{
-				if (infix_symbol == SYM_FUNC)
-				{
-					// It can't be anything but ObjCall at this point because stack_symbol == SYM_NEW.
-					//	new Func()		; This would be SYM_VAR, SYM_OPAREN, SYM_CPAREN.
-					//	new (Func())	; stack_symbol would be SYM_OPAREN.
-					//	new x[Func()]	; stack_symbol would be SYM_OBRACKET.
-					//	new x Func()	; SYM_NEW would've been popped off the stack by auto-SYM_CONCAT.
-					ASSERT(this_infix[-1].deref->func == OpFunc_CallMethod);
-					// It can be anything like:
-					//	new x.y(z)		; This simple case could be easily handled at an earlier stage.
-					//	new (getClass()).y(z)
-					// So at this point, this_infix[-1] has two parameters: the target object x
-					// and method name y.  Instead of calling method y of object x, we want to
-					// get property y of object x and use the result as the class to instantiate.
-					// To achieve this, we can just change IT_CALL to IT_GET:
-					this_infix[-1].deref->func = OpFunc_GetProp;
-					goto standard_pop_into_postfix;
-					// Let the next iteration encounter SYM_OPAREN while stack_symbol is still
-					// SYM_NEW so that the lines below will be executed:
-				}
-				// Now that the SYM_OPAREN of this SYM_NEW has been found, translate it to SYM_FUNC
-				// so that it will be popped off the stack immediately after its parameter list:
-				stack[stack_count - 1]->symbol = SYM_FUNC;
-				in_param_list = stack[stack_count - 1]->deref;
-			}
-			else if (infix_symbol == SYM_FUNC)
+			if (infix_symbol == SYM_FUNC)
 				in_param_list = this_infix[-1].deref; // Store this SYM_FUNC's deref.
 			else if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol)
 				&& *this_infix->marker == '(') // i.e. it's not an implicit SYM_OPAREN generated by DT_STRING.
@@ -9786,7 +9730,6 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			}
 			break;
 
-		case SYM_NEW: // This is probably something like "new Class", without "()", otherwise an earlier stage would've handled it.
 		case SYM_REGEXMATCH: // a ~= b  ->  RegExMatch(a, b)
 			this_postfix->symbol = SYM_FUNC;
 			break;

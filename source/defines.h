@@ -198,8 +198,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 #define SYM_OVERRIDES_POWER_ON_STACK(symbol) ((symbol) >= SYM_LOWNOT && (symbol) <= SYM_ADDRESS) // Check lower bound first for short-circuit performance.
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
 #define SYM_INCREMENT_OR_DECREMENT_IS_PRE(symbol) ((symbol) >= SYM_PRE_INCREMENT) // Caller has verified symbol is an INCREMENT or DECREMENT operator.
-	, SYM_NEW      // new Class()
-#define IS_PREFIX_OPERATOR(symbol) ((symbol) >= SYM_LOWNOT && (symbol) <= SYM_NEW)
+#define IS_PREFIX_OPERATOR(symbol) ((symbol) >= SYM_LOWNOT && (symbol) <= SYM_PRE_DECREMENT)
 	, SYM_FUNC     // A call to a function.
 	, SYM_COUNT    // Must be last because it's the total symbol count for everything above.
 	, SYM_INVALID = SYM_COUNT // Some callers may rely on YIELDS_AN_OPERAND(SYM_INVALID)==false.
