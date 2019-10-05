@@ -4991,7 +4991,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			, this_action.MinParams > 1 ? _T("s") : _T(""));
 		return ScriptError(error_msg, aLineText);
 	}
-	for (int i = 0; i < this_action.MinParams; ++i) // It's only safe to do this after the above.
+	for (int i = 0, non_blank_params = aActionType == ACT_CASE ? nArgs : this_action.MinParams
+		; i < non_blank_params; ++i) // It's only safe to do this after the above.
 		if (!*arg[i])
 		{
 			sntprintf(error_msg, _countof(error_msg), _T("\"%s\" requires that parameter #%u be non-blank.")
