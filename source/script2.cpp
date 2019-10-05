@@ -9081,6 +9081,21 @@ ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aVa
 	return OK;
 }
 
+ResultType SetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 aValue, ResultToken &aResultToken)
+{
+	FuncResult result_token;
+	ExprTokenType this_token = aObject, value_token = aValue, *param = &value_token;
+
+	auto result = aObject->Invoke(result_token, IT_SET, aPropName, this_token, &param, 1);
+
+	result_token.Free();
+	if (result == FAIL || result == EARLY_EXIT)
+		return aResultToken.SetExitResult(result);
+	if (result == INVOKE_NOT_HANDLED)
+		return aResultToken.Error(ERR_UNKNOWN_PROPERTY, aPropName);
+	return OK;
+}
+
 ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aPtr, ResultToken &aResultToken, bool aOptional)
 {
 	__int64 value;
@@ -11752,10 +11767,18 @@ has_valid_return_type:
 	for (arg_count = 0, i = 0; i < aParamCount; ++arg_count, i += 2) // Same loop as used above, so maintain them together.
 	{
 		ExprTokenType &this_param = *aParam[i + 1];  // Resolved for performance and convenience.
+		DYNAPARM &this_dyna_param = dyna_param[arg_count];
+
+		if (IObject * obj = TokenToObject(this_param)) // Implies the type is "Ptr" or "Ptr*".
+		{
+			if (this_dyna_param.passed_by_address)
+				SetObjectIntProperty(obj, _T("Ptr"), this_dyna_param.value_int64, aResultToken);
+			continue;
+		}
+
 		if (this_param.symbol != SYM_VAR) // Output parameters are copied back only if its counterpart parameter is a naked variable.
 			continue;
-		DYNAPARM &this_dyna_param = dyna_param[arg_count]; // Resolved for performance and convenience.
-		Var &output_var = *this_param.var;                 //
+		Var &output_var = *this_param.var;
 
 		if (!this_dyna_param.passed_by_address)
 		{
