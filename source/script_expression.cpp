@@ -947,6 +947,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_LTOE:			this_token.value_int64 = g_tcscmp(left_string, right_string) < 1; break;
 
 				case SYM_CONCAT:
+					if (TokenToObject(left) || TokenToObject(right))
+						goto type_mismatch; // Treat this as an error, especially to catch `new classname`.
 					// Even if the left or right is "", must copy the result to temporary memory, at least
 					// when integers and floats had to be converted to temporary strings above.
 					// Binary clipboard is ignored because it's documented that except for certain features,
