@@ -622,7 +622,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		if (!obj_for_recursion)
 		{
 			if (!field)
-				_o_throw(ERR_UNKNOWN_PROPERTY, name);
+				return INVOKE_NOT_HANDLED;
 			else if (field->symbol != SYM_OBJECT)
 				_o_throw(ERR_TYPE_MISMATCH, name);
 			else
@@ -634,10 +634,12 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		
 		if (IS_INVOKE_SET)
 			++actual_param_count; // Fix the parameter count.
+
+		ExprTokenType token_for_recursion = obj_for_recursion;
 		
 		// Recursively invoke obj_for_recursion, passing remaining parameters:
 		auto result = obj_for_recursion->Invoke(aResultToken, (aFlags & IT_BITMASK)
-			, nullptr, ExprTokenType(obj_for_recursion), actual_param, actual_param_count);
+			, nullptr, token_for_recursion, actual_param, actual_param_count);
 		
 		if (aResultToken.symbol == SYM_STRING && !aResultToken.mem_to_free && aResultToken.marker != aResultToken.buf)
 		{
@@ -645,22 +647,23 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 			// to memory contained by obj_for_recursion, which might be deleted via Release().
 			TokenSetResult(aResultToken, aResultToken.marker, aResultToken.marker_length);
 		}
-		obj_for_recursion->Release();
 		if (result == INVOKE_NOT_HANDLED)
 		{
 			// Something like obj.x[y] where obj.x exists but obj.x[y] does not.  Throw here
 			// to override the default error message, which would indicate that "x" is unknown.
-			_o_throw(ERR_UNKNOWN_PROPERTY, _T("__Item"));
+			result = aResultToken.UnknownMemberError(token_for_recursion, aFlags, nullptr);
 		}
+		obj_for_recursion->Release();
 		return result;
 	}
 
 	// SET
 	else if (setting)
 	{
-		if (!field && hasprop // Property with getter but no setter.
-			|| (aFlags & IF_NO_SET_PROPVAL)) // Changing value properties not permitted ("".foo := bar).
-			_o_throw(hasprop ? ERR_PROPERTY_READONLY : ERR_UNKNOWN_PROPERTY, name);
+		if (!field && hasprop) // Property with getter but no setter.
+			_o_throw(ERR_PROPERTY_READONLY, name);
+		if (aFlags & IF_NO_SET_PROPVAL) // Changing value properties not permitted ("".foo := bar).
+			return INVOKE_NOT_HANDLED;
 		
 		if (((field && this == that) // A field already exists in this object.
 				|| (field = Insert(name, insert_pos))) // A new field is inserted.
@@ -1034,7 +1037,7 @@ ResultType Object::DeleteMethod(ResultToken &aResultToken, int aID, int aFlags, 
 	auto name = ParamIndexToString(0, _f_number_buf);
 	auto method = FindMethod(name);
 	if (!method)
-		_o_throw(ERR_UNKNOWN_METHOD, name);
+		_o__ret(aResultToken.UnknownMemberError(ExprTokenType(this), IT_CALL, name));
 	mMethods.Remove((index_t)(method - mMethods), 1);
 	_o_return_empty;
 }
@@ -1222,7 +1225,7 @@ ResultType Object::GetMethod(ResultToken &aResultToken, name_t aName)
 {
 	auto method = GetMethod(aName);
 	if (!method)
-		_o_throw(ERR_UNKNOWN_METHOD, aName);
+		_o__ret(aResultToken.UnknownMemberError(ExprTokenType(this), IT_CALL, aName));
 	method->func->AddRef();
 	_o_return(method->func);
 }
@@ -1351,7 +1354,7 @@ ResultType Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags
 		_o_throw(ERR_PARAM1_INVALID);
 	auto field = FindField(name);
 	if (!field)
-		_o_throw(ERR_UNKNOWN_PROPERTY, name);
+		_o__ret(aResultToken.UnknownMemberError(ExprTokenType(this), IT_GET, name));
 	if (field->symbol == SYM_DYNAMIC)
 	{
 		auto desc = Object::Create();

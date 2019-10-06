@@ -140,7 +140,7 @@ BIF_DECL(Op_ObjInvoke)
 	
 	if (result == INVOKE_NOT_HANDLED && must_be_handled)
 	{
-		_f_throw((invoke_type & IT_CALL) ? ERR_UNKNOWN_METHOD : ERR_UNKNOWN_PROPERTY, name ? name : _T(""));
+		_f__ret(aResultToken.UnknownMemberError(*obj_param, invoke_type, name));
 	}
 	else if (result == FAIL || result == EARLY_EXIT) // For maintainability: SetExitResult() might not have been called.
 	{

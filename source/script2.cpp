@@ -9072,7 +9072,7 @@ ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aVa
 			result = INVOKE_NOT_HANDLED;
 		}
 		if (!aOptional)
-			return aResultToken.Error(ERR_UNKNOWN_PROPERTY, aPropName);
+			return aResultToken.UnknownMemberError(ExprTokenType(aObject), IT_GET, aPropName);
 		aValue = 0;
 		return result; // Let caller know it wasn't found.
 	}
@@ -9092,7 +9092,7 @@ ResultType SetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 aVal
 	if (result == FAIL || result == EARLY_EXIT)
 		return aResultToken.SetExitResult(result);
 	if (result == INVOKE_NOT_HANDLED)
-		return aResultToken.Error(ERR_UNKNOWN_PROPERTY, aPropName);
+		return aResultToken.UnknownMemberError(ExprTokenType(aObject), IT_GET, aPropName);
 	return OK;
 }
 
@@ -11884,7 +11884,7 @@ void ObjectToString(ResultToken &aResultToken, ExprTokenType &aThisToken, IObjec
 	switch (aObject->Invoke(aResultToken, IT_CALL, _T("ToString"), aThisToken, nullptr, 0))
 	{
 	case INVOKE_NOT_HANDLED:
-		aResultToken.Error(ERR_UNKNOWN_METHOD, _T("ToString"));
+		aResultToken.UnknownMemberError(aThisToken, IT_CALL, _T("ToString"));
 		break;
 	case FAIL:
 		aResultToken.SetExitResult(FAIL);
@@ -17005,30 +17005,22 @@ BIF_DECL(BIF_Trim) // L31
 
 
 BIF_DECL(BIF_Type)
-// Returns the pure type of the given value.
 {
-	LPTSTR type;
-	if (aParam[0]->symbol == SYM_VAR)
-		aParam[0]->var->ToTokenSkipAddRef(*aParam[0]);
-	switch (aParam[0]->symbol)
+	_f_return_p(TokenTypeString(*aParam[0]));
+}
+
+// Returns the type name of the given value.
+LPTSTR TokenTypeString(ExprTokenType &aToken)
+{
+	SymbolType unused;
+	switch (TypeOfToken(aToken, unused))
 	{
-	case SYM_STRING:
-		type = _T("String");
-		break;
-	case SYM_INTEGER:
-		type = _T("Integer");
-		break;
-	case SYM_FLOAT:
-		type = _T("Float");
-		break;
-	case SYM_OBJECT:
-		type = aParam[0]->object->Type();
-		break;
-	default:
-		// Default for maintainability.  Could be SYM_MISSING, but it would have to be intentional: %'type'%(,).
-		type = _T("");
+	case SYM_STRING: return _T("String");
+	case SYM_INTEGER: return _T("Integer");
+	case SYM_FLOAT: return _T("Float");
+	case SYM_OBJECT: return TokenToObject(aToken)->Type();
+	default: return _T(""); // For maintainability.
 	}
-	_f_return_p(type);
 }
 
 

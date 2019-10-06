@@ -13479,6 +13479,17 @@ ResultType ResultToken::Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 	return SetExitResult(g_script.ScriptError(aErrorText, aExtraInfo));
 }
 
+__declspec(noinline)
+ResultType ResultToken::UnknownMemberError(ExprTokenType &aObject, int aFlags, LPCTSTR aMember)
+{
+	TCHAR msg[512];
+	if (!aMember)
+		aMember = (aFlags & IT_CALL) ? _T("Call") : _T("__Item");
+	sntprintf(msg, _countof(msg), _T("This value of type \"%s\" has no %s named \"%s\".")
+		, TokenTypeString(aObject), (aFlags & IT_CALL) ? _T("method") : _T("property"), aMember);
+	return Error(msg);
+}
+
 
 
 ResultType Script::UnhandledException(Line* aLine)
