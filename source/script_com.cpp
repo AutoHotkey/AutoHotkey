@@ -1079,7 +1079,7 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	if (mVarType != VT_DISPATCH || !mDispatch)
 	{
-		if (!IS_INVOKE_CALL && !_tcsicmp(aName, _T("Ptr")))
+		if (!IS_INVOKE_CALL && aName && !_tcsicmp(aName, _T("Ptr")))
 		{
 			if (IS_INVOKE_SET || aParamCount)
 				_o_throw(ERR_INVALID_USAGE);
@@ -1205,6 +1205,9 @@ ResultType ComObject::SafeArrayInvoke(IObject_Invoke_PARAMS_DECL)
 
 	if (IS_INVOKE_CALL)
 	{
+		if (!aName)
+			return INVOKE_NOT_HANDLED;
+
 		LONG retval;
 		if (!_tcsicmp(aName, _T("__Enum")))
 		{
@@ -1290,7 +1293,7 @@ ResultType ComObject::SafeArrayInvoke(IObject_Invoke_PARAMS_DECL)
 
 ResultType ComObject::ByRefInvoke(IObject_Invoke_PARAMS_DECL)
 {
-	if (IS_INVOKE_CALL || aName)
+	if (IS_INVOKE_CALL || aName && _tcsicmp(aName, _T("__Item"))) // It's not [] or .__Item.
 		return INVOKE_NOT_HANDLED;
 
 	if (aParamCount > (IS_INVOKE_SET ? 1 : 0))
