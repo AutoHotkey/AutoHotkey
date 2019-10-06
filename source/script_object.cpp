@@ -621,13 +621,15 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		// property is undefined or just a value).
 		if (!obj_for_recursion)
 		{
-			if (field && field->symbol == SYM_OBJECT)
+			if (!field)
+				_o_throw(ERR_UNKNOWN_PROPERTY, name);
+			else if (field->symbol != SYM_OBJECT)
+				_o_throw(ERR_TYPE_MISMATCH, name);
+			else
 			{
 				obj_for_recursion = field->object;
 				obj_for_recursion->AddRef();
 			}
-			else
-				_o_throw(ERR_NO_OBJECT, name);
 		}
 		
 		if (IS_INVOKE_SET)
