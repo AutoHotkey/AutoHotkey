@@ -50,40 +50,6 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 
 
 //
-// Helpers for Invoke
-//
-
-ResultType ObjectMember::Invoke(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
-	, ResultToken &aResultToken, int aFlags, LPCTSTR aName, ExprTokenType *aParam[], int aParamCount)
-{
-	if (IS_INVOKE_SET)
-		--aParamCount; // Let aParamCount be just the ones in [].
-	if (!aName)
-		_o_throw(ERR_INVALID_USAGE);
-
-	for (int i = 0; i < aMemberCount; ++i)
-	{
-		auto &member = aMembers[i];
-		if ((INVOKE_TYPE == IT_CALL) == (member.invokeType == IT_CALL)
-			&& !_tcsicmp(member.name, aName))
-		{
-			if (member.invokeType == IT_GET && IS_INVOKE_SET)
-				_o_throw(ERR_PROPERTY_READONLY);
-			if (aParamCount < member.minParams)
-				_o_throw(ERR_TOO_FEW_PARAMS);
-			if (aParamCount > member.maxParams && member.maxParams != MAXP_VARIADIC)
-				_o_throw(ERR_TOO_MANY_PARAMS);
-			for (int i = 0; i < member.minParams; ++i)
-				if (aParam[i]->symbol == SYM_MISSING)
-					_o_throw(ERR_PARAM_REQUIRED);
-			return (aThis->*member.method)(aResultToken, member.id, aFlags, aParam, aParamCount);
-		}
-	}
-	return INVOKE_NOT_HANDLED;
-}
-
-
-//
 // Object::Create - Create a new Object given an array of property name/value pairs.
 //
 
@@ -2894,40 +2860,6 @@ void IObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPa
 	//	// tell when a property contains an object with no child properties of its own:
 	//	aDebugger->WriteProperty("Note", _T("This object doesn't support debugging."));
 	//}
-	aDebugger->EndProperty(cookie);
-}
-
-void ObjectMember::DebugWriteProperty(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
-	, IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
-{
-	int num_children = 0;
-	for (int imem = 0, iprop = -1; imem < aMemberCount; ++imem)
-		if (aMembers[imem].invokeType != IT_CALL)
-			++num_children;
-	
-	DebugCookie cookie;
-	aDebugger->BeginProperty(NULL, "object", num_children, cookie);
-
-	if (aMaxDepth)
-	{
-		int page_begin = aPageSize * aPage, page_end = page_begin + aPageSize;
-		for (int imem = 0, iprop = -1; imem < aMemberCount; ++imem)
-		{
-			auto &member = aMembers[imem];
-			if (member.invokeType == IT_CALL || member.minParams > 0)
-				continue;
-			++iprop;
-			if (iprop < page_begin)
-				continue;
-			if (iprop >= page_end)
-				break;
-			FuncResult result_token;
-			auto result = (aThis->*member.method)(result_token, member.id, IT_GET, NULL, 0);
-			aDebugger->WriteProperty(member.name, result_token);
-			result_token.Free();
-		}
-	}
-
 	aDebugger->EndProperty(cookie);
 }
 

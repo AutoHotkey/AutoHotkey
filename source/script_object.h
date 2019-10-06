@@ -71,10 +71,6 @@ struct ObjectMember
 	LPTSTR name;
 	ObjectMethod method;
 	UCHAR id, invokeType, minParams, maxParams;
-	static ResultType Invoke(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
-		, ResultToken& aResultToken, int aFlags, LPCTSTR aName, ExprTokenType* aParam[], int aParamCount);
-	static void DebugWriteProperty(ObjectMember aMembers[], int aMemberCount, IObject *const aThis
-		, IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth);
 };
 
 #define Object_Member(name, impl, id, invokeType, ...) \
@@ -85,15 +81,6 @@ struct ObjectMember
 #define Object_Property_get(name, ...)             Object_Member(name, Invoke, P_##name, IT_GET, __VA_ARGS__)
 #define Object_Property_get_set(name, ...)         Object_Member(name, Invoke, P_##name, IT_SET, __VA_ARGS__)
 #define MAXP_VARIADIC 255
-
-#ifdef CONFIG_DEBUGGER
-#define Implement_DebugWriteProperty_via_sMembers(T) \
-	void T::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth) { \
-		ObjectMember::DebugWriteProperty(sMembers, _countof(sMembers), this, aDebugger, aPage, aPageSize, aMaxDepth); \
-	}
-#else
-#define Implement_DebugWriteProperty_via_sMembers(T)
-#endif
 
 
 //
