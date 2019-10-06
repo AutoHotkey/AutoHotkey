@@ -4,6 +4,7 @@
 #include "script.h"
 
 #include "script_object.h"
+#include "script_func_impl.h"
 
 
 extern BuiltInFunc *OpFunc_GetProp, *OpFunc_GetItem, *OpFunc_SetProp, *OpFunc_SetItem;
@@ -63,14 +64,12 @@ BIF_DECL(BIF_Map)
 	
 
 //
-// BIF_IsObject - IsObject(obj)
+// IsObject
 //
 
 BIF_DECL(BIF_IsObject)
 {
-	int i;
-	for (i = 0; i < aParamCount && TokenToObject(*aParam[i]); ++i);
-	_f_return_b(i == aParamCount); // TRUE if all are objects.  Caller has ensured aParamCount > 0.
+	_f_return_b(TokenToObject(*aParam[0]) != nullptr);
 }
 	
 
@@ -81,6 +80,7 @@ BIF_DECL(BIF_IsObject)
 BIF_DECL(Op_ObjInvoke)
 {
     int invoke_type = _f_callee_id;
+	bool must_be_handled = true;
     IObject *obj;
     ExprTokenType *obj_param;
 
@@ -97,8 +97,26 @@ BIF_DECL(Op_ObjInvoke)
 		obj = obj_param->object;
 	else if (obj_param->symbol == SYM_VAR && obj_param->var->HasObject())
 		obj = obj_param->var->Object();
-	else
-		obj = NULL;
+	else if (obj_param->symbol == SYM_VAR && !_tcsicmp(obj_param->var->mName, _T("base")) // base pseudo-keyword.
+		&& !obj_param->var->HasContents() // For now, allow `base` variable to be reassigned as in v1.
+		&& g->CurrentFunc && g->CurrentFunc->mClass) // We're in a function defined within a class (i.e. a method).
+	{
+		obj = g->CurrentFunc->mClass->Base();
+		ASSERT(obj != nullptr); // Should always pass for classes created by a class definition.
+		obj_param = (ExprTokenType *)alloca(sizeof(ExprTokenType));
+		obj_param->symbol = SYM_VAR;
+		obj_param->var = g->CurrentFunc->mParam[0].var; // this
+		invoke_type |= IF_NO_SET_PROPVAL;
+		// Maybe not the best for error-detection, but this allows calls such as base.__delete()
+		// to work when the superclass has no definition, which avoids the need to check whether
+		// the superclass defines it, and ensures that any definition added later is called.
+		must_be_handled = false;
+	}
+	else // Non-object value.
+	{
+		obj = Object::ValueBase(*obj_param);
+		invoke_type |= IF_NO_SET_PROPVAL;
+	}
 
 	TCHAR name_buf[MAX_NUMBER_SIZE];
 	LPTSTR name = nullptr;
@@ -113,57 +131,16 @@ BIF_DECL(Op_ObjInvoke)
 	}
     
 	ResultType result;
-    if (obj)
+	bool param_is_var = obj_param->symbol == SYM_VAR;
+	if (param_is_var)
+		obj->AddRef(); // Ensure obj isn't deleted during the call if the variable is reassigned.
+    result = obj->Invoke(aResultToken, invoke_type, name, *obj_param, aParam, aParamCount);
+	if (param_is_var)
+		obj->Release();
+	
+	if (result == INVOKE_NOT_HANDLED && must_be_handled)
 	{
-		bool param_is_var = obj_param->symbol == SYM_VAR;
-		if (param_is_var)
-			// Since the variable may be cleared as a side-effect of the invocation, call AddRef to ensure the object does not expire prematurely.
-			// This is not necessary for SYM_OBJECT since that reference is already counted and cannot be released before we return.  Each object
-			// could take care not to delete itself prematurely, but it seems more proper, more reliable and more maintainable to handle it here.
-			obj->AddRef();
-        result = obj->Invoke(aResultToken, invoke_type, name, *obj_param, aParam, aParamCount);
-		if (param_is_var)
-			obj->Release();
-	}
-	// Invoke meta-functions of g_MetaObject.
-	else if (INVOKE_NOT_HANDLED == (result = g_MetaObject.Invoke(aResultToken, invoke_type | IF_META, name, *obj_param, aParam, aParamCount)))
-	{
-		// Since above did not handle it, check for attempts to access .base of non-object value (g_MetaObject itself).
-		if (   name && invoke_type != IT_CALL // Exclude things like "".base() and ""["base"].
-			&& aParamCount > (invoke_type == IT_SET ? 2 : 0) // SET is supported only when an index is specified: "".base[x]:=y
-			&& !_tcsicmp(name, _T("base"))   )
-		{
-			if (aParamCount > 0)	// "".base[x] or similar
-			{
-				// Re-invoke g_MetaObject without meta flag or "base" param.
-				ExprTokenType base_token;
-				base_token.symbol = SYM_OBJECT;
-				base_token.object = &g_MetaObject;
-				result = g_MetaObject.Invoke(aResultToken, invoke_type, nullptr, base_token, aParam, aParamCount);
-			}
-			else					// "".base
-			{
-				// Return a reference to g_MetaObject.  No need to AddRef as g_MetaObject ignores it.
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = &g_MetaObject;
-				result = OK;
-			}
-		}
-		else
-		{
-			// Since it wasn't handled (not even by g_MetaObject), maybe warn at this point:
-			if (obj_param->symbol == SYM_VAR)
-				obj_param->var->MaybeWarnUninitialized();
-		}
-	}
-	if (result == INVOKE_NOT_HANDLED)
-	{
-		// Invocation not handled. Either there was no target object, or the object doesn't handle
-		// this method/property.  For Object (associative arrays), only CALL should give this result.
-		if (!obj)
-			_f_throw(ERR_NO_OBJECT);
-		else
-			_f_throw(invoke_type == IT_CALL ? ERR_UNKNOWN_METHOD : ERR_UNKNOWN_PROPERTY, name ? name : _T(""));
+		_f_throw((invoke_type & IT_CALL) ? ERR_UNKNOWN_METHOD : ERR_UNKNOWN_PROPERTY, name ? name : _T(""));
 	}
 	else if (result == FAIL || result == EARLY_EXIT) // For maintainability: SetExitResult() might not have been called.
 	{
@@ -221,7 +198,7 @@ BIF_DECL(Op_ObjIncDec)
 	temp_result.func = get_func;
 
 	// Retrieve the current value.  Do it this way instead of calling Object::Invoke
-	// so that if aParam[0] is not an object, g_MetaObject is correctly invoked.
+	// so that if aParam[0] is not an object, ValueBase() is correctly invoked.
 	Op_ObjInvoke(temp_result, aParam, aParamCount);
 
 	if (temp_result.Exited()) // Implies no return value.
@@ -386,24 +363,98 @@ BIF_DECL(BIF_ObjRaw)
 // ObjSetBase/ObjGetBase - Change or return Object's base without invoking any meta-functions.
 //
 
-BIF_DECL(BIF_ObjBase)
+BIF_DECL(BIF_Base)
 {
 	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
-	if (!obj)
-		_f_throw(ERR_PARAM1_INVALID);
 	if (_f_callee_id == FID_ObjSetBase)
 	{
+		if (!obj)
+			_f_throw(ERR_PARAM1_INVALID);
 		auto new_base = dynamic_cast<Object *>(TokenToObject(*aParam[1]));
 		if (!obj->SetBase(new_base, aResultToken))
 			return;
 	}
 	else // ObjGetBase
 	{
-		if (auto obj_base = obj->Base())
+		Object *obj_base;
+		if (obj)
+			obj_base = obj->Base();
+		else
+			obj_base = Object::ValueBase(*aParam[0]);
+		if (obj_base)
 		{
 			obj_base->AddRef();
 			_f_return(obj_base);
 		}
+		// Otherwise, it's something with no base, so return "".
+		// Could be Object.Prototype, a ComObject or perhaps SYM_MISSING.
 	}
 	_f_return_empty;
+}
+
+
+bool Object::HasBase(ExprTokenType &aValue, IObject *aBase)
+{
+	if (auto obj = dynamic_cast<Object *>(TokenToObject(aValue)))
+	{
+		return obj->IsDerivedFrom(aBase);
+	}
+	if (auto value_base = Object::ValueBase(aValue))
+	{
+		return value_base == aBase || value_base->IsDerivedFrom(aBase);
+	}
+	// Something that doesn't fit in our type hierarchy, like a ComObject.
+	// Returning false seems correct and more useful than throwing.
+	// HasBase(ComObj, "".base.base) ; False, it's not a primitive value.
+	// HasBase(ComObj, Object.Prototype) ; False, it's not one of our Objects.
+	return false;
+}
+
+
+BIF_DECL(BIF_HasBase)
+{
+	auto that_base = ParamIndexToObject(1);
+	if (!that_base)
+	{
+		_f_throw(ERR_TYPE_MISMATCH);
+	}
+	_f_return_b(Object::HasBase(*aParam[0], that_base));
+}
+
+
+Object *ParamToObjectOrBase(ExprTokenType &aToken, ResultToken &aResultToken)
+{
+	Object *obj;
+	if (  (obj = dynamic_cast<Object *>(TokenToObject(aToken)))
+		|| (obj = Object::ValueBase(aToken))  )
+		return obj;
+	aResultToken.Error(ERR_TYPE_MISMATCH);
+	return nullptr;
+}
+
+
+BIF_DECL(BIF_HasProp)
+{
+	auto obj = ParamToObjectOrBase(*aParam[0], aResultToken);
+	if (!obj)
+		return;
+	_f_return_b(obj->HasProp(ParamIndexToString(1, _f_number_buf)));
+}
+
+
+BIF_DECL(BIF_HasMethod)
+{
+	auto obj = ParamToObjectOrBase(*aParam[0], aResultToken);
+	if (!obj)
+		return;
+	_f_return_b(obj->HasMethod(ParamIndexToString(1, _f_number_buf)));
+}
+
+
+BIF_DECL(BIF_GetMethod)
+{
+	auto obj = ParamToObjectOrBase(*aParam[0], aResultToken);
+	if (!obj)
+		return;
+	obj->GetMethod(aResultToken, ParamIndexToString(1, _f_number_buf));
 }

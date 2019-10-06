@@ -32,7 +32,7 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 
 	// Exceptions are thrown by Invoke for too few/many parameters, but not for non-existent method.
 	// Check for that here, with the exception that objects are permitted to lack a __Delete method.
-	if (result == INVOKE_NOT_HANDLED && !(aExtraFlags & IF_METAOBJ))
+	if (result == INVOKE_NOT_HANDLED && !(aExtraFlags & IF_BYPASS_METAFUNC))
 		result = g_script.ThrowRuntimeException(ERR_UNKNOWN_METHOD, NULL, aMethodName);
 
 	if (result != EARLY_EXIT && result != FAIL)
@@ -281,8 +281,8 @@ ResultType GetEnumerator(IObject *&aEnumerator, IObject *aEnumerable, int aVarCo
 	ExprTokenType t_this(aEnumerable), t_count(aVarCount), *param[] = { &t_count };
 	// enum := object.__Enum(number of vars)
 	// IF_NEWENUM causes ComObjects to invoke a _NewEnum method or property.
-	// IF_METAOBJ causes Objects to skip the __Call meta-function if __Enum is not found.
-	auto result = aEnumerable->Invoke(result_token, IT_CALL | IF_NEWENUM | IF_METAOBJ, _T("__Enum"), t_this, param, 1);
+	// IF_BYPASS_METAFUNC causes Objects to skip the __Call meta-function if __Enum is not found.
+	auto result = aEnumerable->Invoke(result_token, IT_CALL | IF_NEWENUM | IF_BYPASS_METAFUNC, _T("__Enum"), t_this, param, 1);
 	if (result == FAIL || result == EARLY_EXIT)
 		return result;
 	if (result == INVOKE_NOT_HANDLED)
@@ -406,7 +406,7 @@ bool Object::Delete()
 
 		{
 			FuncResult rt;
-			CallMethod(_T("__Delete"), IF_METAOBJ, rt, ExprTokenType(this), nullptr, 0);
+			CallMethod(_T("__Delete"), IF_BYPASS_METAFUNC, rt, ExprTokenType(this), nullptr, 0);
 			rt.Free();
 		}
 
@@ -473,22 +473,19 @@ void Map::Clear()
 
 ObjectMember Object::sMembers[] =
 {
-	Object_Member(Base, Base, 0, IT_SET),
 	Object_Method1(Clone, 0, 0),
 	Object_Method1(DefineMethod, 2, 2),
 	Object_Method1(DefineProp, 2, 2),
 	Object_Method1(DeleteMethod, 1, 1),
 	Object_Method1(DeleteProp, 1, 2),
-	Object_Method1(GetMethod, 1, 1),
 	Object_Method1(GetOwnPropDesc, 1, 1),
-	Object_Method1(HasBase, 1, 1),
-	Object_Method1(HasMethod, 1, 1),
 	Object_Method1(HasOwnMethod, 1, 1),
 	Object_Method1(HasOwnProp, 1, 1),
-	Object_Method1(HasProp, 1, 1),
 	Object_Member(OwnMethods, __Enum, Enum_Methods, IT_CALL, 0, 0),
 	Object_Member(OwnProps, __Enum, Enum_Properties, IT_CALL, 0, 0)
 };
+
+LPTSTR Object::sMetaFuncName[] = { _T("__Get"), _T("__Set"), _T("__Call") };
 
 ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 {
@@ -608,7 +605,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 				free(aResultToken.mem_to_free);
 				aResultToken.mem_to_free = nullptr;
 			}
-			// FIXME: For this.x[y] and (this.x)[y] to behave the same, this should invoke g_MetaObject.
+			// FIXME: For this.x[y] and (this.x)[y] to behave the same, this should invoke ValueBase().
 			_o_throw(ERR_NO_OBJECT, name);
 		}
 		obj_for_recursion = aResultToken.object;
@@ -659,17 +656,15 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 	// SET
 	else if (setting)
 	{
-		if (!field && hasprop) // Property with getter but no setter.
-			_o_throw(ERR_PROPERTY_READONLY, name);
+		if (!field && hasprop // Property with getter but no setter.
+			|| (aFlags & IF_NO_SET_PROPVAL)) // Changing value properties not permitted ("".foo := bar).
+			_o_throw(hasprop ? ERR_PROPERTY_READONLY : ERR_UNKNOWN_PROPERTY, name);
 		
-		if (!IS_INVOKE_META)
-		{
-			if (((field && this == that) // A field already exists in this object.
-				 || (field = Insert(name, insert_pos))) // A new field is inserted.
-				&& field->Assign(**actual_param))
-				return OK;
-			_o_throw(ERR_OUTOFMEM);
-		}
+		if (((field && this == that) // A field already exists in this object.
+				|| (field = Insert(name, insert_pos))) // A new field is inserted.
+			&& field->Assign(**actual_param))
+			return OK;
+		_o_throw(ERR_OUTOFMEM);
 	}
 
 	// GET
@@ -703,7 +698,6 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 	case FID_ObjDeleteProp:		return DeleteProp(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjOwnPropCount:	return PropCount(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjHasOwnProp:		return HasOwnProp(aResultToken, 0, IT_CALL, aParam, aParamCount);
-	case FID_ObjHasProp:		return HasProp(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjGetCapacity:	return GetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjSetCapacity:	return SetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjClone:			return Clone(aResultToken, 0, IT_CALL, aParam, aParamCount);
@@ -759,7 +753,7 @@ ResultType Object::CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToke
 	{
 		return CallMethod(method->func, aResultToken, aThisToken, aParam, aParamCount);
 	}
-	if (!(aFlags & IF_METAOBJ) && (method = GetMethod(sMetaFuncName[IT_CALL])))
+	if (!(aFlags & IF_BYPASS_METAFUNC) && (method = GetMethod(sMetaFuncName[IT_CALL])))
 	{
 		return CallMeta(method->func, aName, aFlags, aResultToken, aThisToken, aParam, aParamCount);
 	}
@@ -1185,27 +1179,9 @@ ResultType Map::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 	_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&Map::GetEnumItem)));
 }
 
-ResultType Object::HasBase(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	auto obj = ParamIndexToObject(0);
-	if (!obj)
-		_o_throw(ERR_TYPE_MISMATCH);
-	_o_return(IsDerivedFrom(obj));
-}
-
 ResultType Object::HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_o_return(FindField(ParamIndexToString(0, _f_number_buf)) != nullptr);
-}
-
-ResultType Object::HasProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	_o_return(HasProp(ParamIndexToString(0, _f_number_buf)));
-}
-
-ResultType Object::HasMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	_o_return(GetMethod(ParamIndexToString(0)) != nullptr);
 }
 
 ResultType Object::HasOwnMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1240,27 +1216,11 @@ ResultType Map::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenT
 	_o_return(clone);
 }
 
-ResultType Object::Base(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::GetMethod(ResultToken &aResultToken, name_t aName)
 {
-	if (IS_INVOKE_SET)
-	{
-		Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[0]));
-		return SetBase(obj, aResultToken);
-	}
-	if (mBase)
-	{
-		mBase->AddRef();
-		_o_return(mBase);
-	}
-	_o_return_empty;
-}
-
-ResultType Object::GetMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
-{
-	auto name = ParamIndexToString(0);
-	auto method = GetMethod(name);
+	auto method = GetMethod(aName);
 	if (!method)
-		_o_throw(ERR_UNKNOWN_METHOD, name);
+		_o_throw(ERR_UNKNOWN_METHOD, aName);
 	method->func->AddRef();
 	_o_return(method->func);
 }
@@ -1427,7 +1387,7 @@ ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[],
 	// __Init was added so that instance variables can be initialized in the correct order
 	// (beginning at the root class and ending at class_object) before __New is called.
 	// It shouldn't be explicitly defined by the user, but auto-generated in DefineClassVars().
-	result = CallMethod(_T("__Init"), IT_CALL|IF_METAOBJ, aResultToken, this_token, nullptr, 0);
+	result = CallMethod(_T("__Init"), IT_CALL|IF_BYPASS_METAFUNC, aResultToken, this_token, nullptr, 0);
 	if (result != INVOKE_NOT_HANDLED)
 	{
 		// It's possible that __Init is user-defined (despite recommendations in the
@@ -1445,7 +1405,7 @@ ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[],
 	g_script.mCurrLine = curr_line; // Prevent misleading error reports/Exception() stack trace.
 
 	// __New may be defined by the script for custom initialization code.
-	result = CallMethod(_T("__New"), IT_CALL|IF_METAOBJ, aResultToken, this_token, aParam, aParamCount);
+	result = CallMethod(_T("__New"), IT_CALL|IF_BYPASS_METAFUNC, aResultToken, this_token, aParam, aParamCount);
 	aResultToken.Free();
 	if (result == FAIL || result == EARLY_EXIT)
 	{
@@ -2209,6 +2169,11 @@ Object::MethodType *Object::GetMethod(name_t name)
 	return mBase->GetMethod(name);
 }
 
+bool Object::HasMethod(name_t aName)
+{
+	return GetMethod(aName) != nullptr;
+}
+
 Map::Pair *Map::FindItem(LPTSTR val, index_t left, index_t right, index_t &insert_pos)
 // left and right must be set by caller to the appropriate bounds within mItem.
 {
@@ -2638,42 +2603,6 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UIN
 
 
 //
-// MetaObject - Defines behaviour of object syntax when used on a non-object value.
-//
-
-MetaObject g_MetaObject;
-
-LPTSTR Object::sMetaFuncName[] = { _T("__Get"), _T("__Set"), _T("__Call") };
-
-ResultType MetaObject::Invoke(IObject_Invoke_PARAMS_DECL)
-{
-	// For something like base.Method() in a class-defined method:
-	// It seems more useful and intuitive for this special behaviour to take precedence over
-	// the default meta-functions, especially since "base" may become a reserved word in future.
-	if (aThisToken.symbol == SYM_VAR && !_tcsicmp(aThisToken.var->mName, _T("base"))
-		&& !aThisToken.var->HasContents() // Since scripts are able to assign to it, may as well let them use the assigned value.
-		&& g->CurrentFunc && g->CurrentFunc->mClass) // We're in a function defined within a class (i.e. a method).
-	{
-		if (IObject *this_class_base = g->CurrentFunc->mClass->Base())
-		{
-			ExprTokenType this_token;
-			this_token.symbol = SYM_VAR;
-			this_token.var = g->CurrentFunc->mParam[0].var;
-			ResultType result = this_class_base->Invoke(aResultToken, aFlags | IF_METAOBJ, aName, this_token, aParam, aParamCount);
-			// Avoid returning INVOKE_NOT_HANDLED in this case so that our caller never
-			// shows an "uninitialized var" warning for base.Foo() in a class method.
-			if (result != INVOKE_NOT_HANDLED)
-				return result;
-		}
-		_o_return_empty;
-	}
-
-	return Object::Invoke(IObject_Invoke_PARAMS);
-}
-
-
-
-//
 // Buffer
 //
 
@@ -2793,19 +2722,34 @@ ObjectMember Func::sMembers[] =
 };
 
 
-Object *CreateRootPrototype()
+Object *Object::CreateRootPrototypes()
 {
-	Object::sPrototype = Object::CreatePrototype(_T("Object"), nullptr);
-	Func::sPrototype = Object::CreatePrototype(_T("Func"), Object::sPrototype);
-	// Members must be defined only after both of the above are set, since each member
-	// definition creates a BuiltInMethod, which derives from Func::sPrototype.
-	Object::DefineMembers(Object::sPrototype, _T("Object"), Object::sMembers, _countof(Object::sMembers));
-	Object::DefineMembers(Func::sPrototype, _T("Func"), Func::sMembers, _countof(Func::sMembers));
-	return Object::sPrototype;
+	// Create the root prototypes before defining any members, since
+	// each member relies on Func::sPrototype having been initialized.
+	sAnyPrototype = CreatePrototype(_T("Any"), nullptr);
+	sPrototype = CreatePrototype(_T("Object"), sAnyPrototype);
+	Func::sPrototype = CreatePrototype(_T("Func"), Object::sPrototype);
+
+	// These methods correspond to global functions, as BuiltInMethod
+	// only handles Objects, and these must handle primitive values.
+	static const LPTSTR sFuncs[] = { _T("GetMethod"), _T("HasBase"), _T("HasMethod"), _T("HasProp") };
+	for (int i = 0; i < _countof(sFuncs); ++i)
+		sAnyPrototype->DefineMethod(sFuncs[i], g_script.FindFunc(sFuncs[i]));
+	auto prop = sAnyPrototype->DefineProperty(_T("Base"));
+	prop->MinParams = 0;
+	prop->MaxParams = 0;
+	prop->SetGetter(g_script.FindFunc(_T("ObjGetBase")));
+	prop->SetSetter(g_script.FindFunc(_T("ObjSetBase")));
+
+	DefineMembers(sPrototype, _T("Object"), sMembers, _countof(sMembers));
+	DefineMembers(Func::sPrototype, _T("Func"), Func::sMembers, _countof(Func::sMembers));
+
+	return sAnyPrototype;
 }
 
+Object *Object::sAnyPrototype = CreateRootPrototypes();
 Object *Func::sPrototype;
-Object *Object::sPrototype = CreateRootPrototype();
+Object *Object::sPrototype;
 
 //																		Direct base			Members
 Object *Object::sClassPrototype	= Object::CreatePrototype(_T("Class"),	Object::sPrototype);
@@ -2845,6 +2789,30 @@ ObjectMember RegExMatchObject::sMembers[] =
 };
 
 Object *RegExMatchObject::sPrototype = CreatePrototype(_T("RegExMatch"), Object::sPrototype, sMembers, _countof(sMembers));
+
+
+
+//
+// Primitive values as objects
+//
+
+Object *Object::sPrimitivePrototype = CreatePrototype(_T("Primitive"), Object::sAnyPrototype);
+Object *Object::sStringPrototype = CreatePrototype(_T("String"), Object::sPrimitivePrototype);
+Object *Object::sNumberPrototype = CreatePrototype(_T("Number"), Object::sPrimitivePrototype);
+Object *Object::sIntegerPrototype = CreatePrototype(_T("Integer"), Object::sNumberPrototype);
+Object *Object::sFloatPrototype = CreatePrototype(_T("Float"), Object::sNumberPrototype);
+
+Object *Object::ValueBase(ExprTokenType &aValue)
+{
+	SymbolType unused;
+	switch (TypeOfToken(aValue, unused))
+	{
+	case SYM_STRING: return Object::sStringPrototype;
+	case SYM_INTEGER: return Object::sIntegerPrototype;
+	case SYM_FLOAT: return Object::sFloatPrototype;
+	}
+	return nullptr;
+}
 
 
 

@@ -4,7 +4,7 @@
 #define IS_INVOKE_SET		(aFlags & IT_SET)
 #define IS_INVOKE_GET		(INVOKE_TYPE == IT_GET)
 #define IS_INVOKE_CALL		(aFlags & IT_CALL)
-#define IS_INVOKE_META		(aFlags & IF_METAOBJ)
+#define IS_INVOKE_META		(aFlags & IF_BYPASS_METAFUNC)
 
 #define INVOKE_NOT_HANDLED	CONDITION_FALSE
 
@@ -334,7 +334,8 @@ public:
 	ResultType Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	bool HasProp(name_t aName);
-	
+	bool HasMethod(name_t aName);
+
 	enum class PropType
 	{
 		None = 0,
@@ -433,6 +434,8 @@ public:
 	static ObjectMember sMembers[];
 	static ObjectMember sClassMembers[];
 	static Object *sPrototype, *sClass, *sClassPrototype, *sClassClass;
+
+	static Object *CreateRootPrototypes();
 	static Object *CreateClass(Object *aPrototype);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase = nullptr);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount);
@@ -451,22 +454,23 @@ public:
 	ResultType DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType HasProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType __Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType DefineMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType DeleteMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType GetMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType HasMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType GetMethod(ResultToken &aResultToken, name_t aName);
 	ResultType HasOwnMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType HasBase(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	// Class methods:
 	template<class T>
 	ResultType New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
-	// Properties:
-	ResultType Base(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	// For pseudo-objects:
+	static ObjectMember sValueMembers[];
+	static Object *sAnyPrototype, *sPrimitivePrototype, *sStringPrototype
+		, *sNumberPrototype, *sIntegerPrototype, *sFloatPrototype;
+	static Object *ValueBase(ExprTokenType &aValue);
+	static bool HasBase(ExprTokenType &aValue, IObject *aBase);
 
 	static LPTSTR sMetaFuncName[];
 
@@ -475,26 +479,6 @@ public:
 	friend class Debugger;
 #endif
 };
-
-
-
-//
-// MetaObject:	Used only by g_MetaObject (not every meta-object); see comments below.
-//
-class MetaObject : public Object
-{
-public:
-	// In addition to ensuring g_MetaObject is never "deleted", this avoids a
-	// tiny bit of work when any reference to this object is added or released.
-	// Temporary references such as when evaluating "".base.foo are most common.
-	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
-	ULONG STDMETHODCALLTYPE Release() { return 1; }
-	bool Delete() { return false; }
-
-	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
-};
-
-extern MetaObject g_MetaObject;		// Defines "object" behaviour for non-object values.
 
 
 //

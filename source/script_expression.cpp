@@ -314,7 +314,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				{
 					// This isn't a function name or reference, but it could be an object emulating
 					// a function reference.  Additionally, we want something like %emptyvar%() to
-					// invoke g_MetaObject, so this part is done even if stack[stack_count] is not
+					// invoke ValueBase(), so this part is done even if stack[stack_count] is not
 					// an object.  To "call" the object/value, we need to insert the "call" method
 					// name between the object/value and the parameter list.  There should always
 					// be room for this since the maximum number of operands at any one time <=
@@ -2427,9 +2427,7 @@ ResultType Line::ValueIsType(ExprTokenType &aResultToken, ExprTokenType &aValue,
 	{
 		if (IObject *prototype = type_obj->GetOwnPropObj(_T("Prototype")))
 		{
-			// Is the value an object which can derive, and is it derived from type_obj?
-			Object *value_obj = dynamic_cast<Object *>(TokenToObject(aValue));
-			aResultToken.value_int64 = value_obj && value_obj->IsDerivedFrom(prototype);
+			aResultToken.value_int64 = Object::HasBase(aValue, prototype);
 			return OK;
 		}
 		aTypeStr = type_obj->Type(); // For error-reporting.

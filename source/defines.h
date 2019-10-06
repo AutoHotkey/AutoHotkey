@@ -281,11 +281,11 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 // Flags used when calling Invoke; also used by g_ObjGet etc.:
 #define IT_GET				0
 #define IT_SET				1
-#define IT_CALL				2 // L40: MetaObject::Invoke relies on these being mutually-exclusive bits.
+#define IT_CALL				2
 #define IT_BITMASK			3 // bit-mask for the above.
 
-#define IF_METAOBJ			0x10000 // Indicates 'this' is a meta-object/base of aThisToken. Restricts some functionality and causes aThisToken to be inserted into the param list of called functions.
-#define IF_META				(IF_METAOBJ)	// Flags for regular recursion into base object.
+#define IF_BYPASS_METAFUNC	0x10000 // Skip invocation of meta-functions, such as when calling __Init or __Delete.
+#define IF_NO_SET_PROPVAL	0x20000 // Fail IT_SET for value properties (allow only setters/__set).
 #define IF_DEFAULT			0x40000 // Invoke the default member (call a function object, array indexing, etc.).
 #define IF_NEWENUM			0x80000 // Workaround for COM objects which don't resolve "_NewEnum" to DISPID_NEWENUM.
 
