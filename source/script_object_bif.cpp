@@ -369,7 +369,7 @@ BIF_DECL(BIF_Base)
 	if (_f_callee_id == FID_ObjSetBase)
 	{
 		if (!obj)
-			_f_throw(ERR_PARAM1_INVALID);
+			_f_throw(ERR_TYPE_MISMATCH);
 		auto new_base = dynamic_cast<Object *>(TokenToObject(*aParam[1]));
 		if (!obj->SetBase(new_base, aResultToken))
 			return;
@@ -387,7 +387,7 @@ BIF_DECL(BIF_Base)
 			_f_return(obj_base);
 		}
 		// Otherwise, it's something with no base, so return "".
-		// Could be Object.Prototype, a ComObject or perhaps SYM_MISSING.
+		// Could be Object::sAnyPrototype, a ComObject or perhaps SYM_MISSING.
 	}
 	_f_return_empty;
 }
