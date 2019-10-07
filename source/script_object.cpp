@@ -688,7 +688,6 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 			field->ReturnRef(aResultToken);
 			return OK;
 		}
-		_o_return_empty;
 	}
 
 	// Fell through from one of the sections above: invocation was not handled.
