@@ -1719,7 +1719,10 @@ bool BuiltInMethod::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int
 	DEBUGGER_STACK_PUSH(this) // See comments in BuiltInFunc::Call.
 
 	auto obj = dynamic_cast<Object *>(TokenToObject(*aParam[0]));
-	if (!obj || !(obj->IsClassPrototype() ? mClass == Object::sPrototype : obj->IsDerivedFrom(mClass)))
+	// If this method is for a built-in class derived from Object, mClass != nullptr.
+	// In that case, the method can't be called if obj is a Prototype object, since
+	// that's natively just an Object, or if obj is not derived from mClass.
+	if (!obj || mClass && (obj->IsClassPrototype() || !obj->IsDerivedFrom(mClass)))
 		aResultToken.Error(ERR_TYPE_MISMATCH);
 	else
 		(obj->*mBIM)(aResultToken, mMID, mMIT, aParam + 1, aParamCount - 1);
