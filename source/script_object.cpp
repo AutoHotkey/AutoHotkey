@@ -33,7 +33,7 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 	// Exceptions are thrown by Invoke for too few/many parameters, but not for non-existent method.
 	// Check for that here, with the exception that objects are permitted to lack a __Delete method.
 	if (result == INVOKE_NOT_HANDLED && !(aExtraFlags & IF_BYPASS_METAFUNC))
-		result = g_script.ThrowRuntimeException(ERR_UNKNOWN_METHOD, NULL, aMethodName);
+		result = g_script.ThrowRuntimeException(ERR_UNKNOWN_METHOD, NULL, aMethodName ? aMethodName : _T("Call"));
 
 	if (result != EARLY_EXIT && result != FAIL)
 	{
@@ -491,7 +491,10 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	name_t name;
 	if (!aName)
+	{
 		name = IS_INVOKE_CALL ? _T("Call") : _T("__Item");
+		aFlags |= IF_BYPASS_METAFUNC;
+	}
 	else
 		name = aName;
 	
@@ -2517,7 +2520,7 @@ ResultType Label::Invoke(IObject_Invoke_PARAMS_DECL)
 ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aParamValue, int aParamCount, __int64 *aRetVal) const
 {
 	DEBUGGER_STACK_PUSH(aNewThreadDesc)
-	ResultType result = CallMethod(mObject, mObject, _T("call"), aParamValue, aParamCount, aRetVal); // Lower-case "call" for compatibility with JScript.
+	ResultType result = CallMethod(mObject, mObject, nullptr, aParamValue, aParamCount, aRetVal);
 	DEBUGGER_STACK_POP()
 	return result;
 }
@@ -2558,7 +2561,7 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, int
 		
 		IObject *func = mMonitor[inst.index].func;
 
-		if (!CallMethod(func, func, _T("call"), aParamValue, aParamCount, &retval))
+		if (!CallMethod(func, func, nullptr, aParamValue, aParamCount, &retval))
 		{
 			result = FAIL; // Callback encountered an error.
 			break;
@@ -2587,7 +2590,7 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UIN
 			continue;
 
 		IObject *func = mon.is_method ? aGui->mEventSink : mon.func; // is_method == true implies the GUI has an event sink object.
-		LPTSTR method_name = mon.is_method ? mon.method_name : _T("call");
+		LPTSTR method_name = mon.is_method ? mon.method_name : nullptr;
 
 		if (thread_used) // Re-initialize the thread.
 			InitNewThread(0, true, false);

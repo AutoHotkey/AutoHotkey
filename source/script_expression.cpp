@@ -323,9 +323,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// effectively reserves one stack slot.
 					if (actual_param_count)
 						memmove(params + 1, params, actual_param_count * sizeof(ExprTokenType *));
-					// Insert an empty string:
+					// Insert the "use default method name" marker:
 					params[0] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
-					params[0]->SetValue(_T("Call"), 4);
+					params[0]->symbol = SYM_MISSING;
+					params[0]->marker = _T("");
+					params[0]->marker_length = 0;
 					params--; // Include the object, which is already in the right place.
 					actual_param_count += 2;
 					extern BuiltInFunc *OpFunc_CallMethod;

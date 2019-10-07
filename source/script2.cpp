@@ -6322,7 +6322,7 @@ int SortUDF(const void *a1, const void *a2)
 	LPTSTR aStr2 = *(LPTSTR *)a2;
 	ExprTokenType param[] = { aStr1, aStr2, __int64(aStr2 - aStr1) };
 	__int64 i64;
-	g_SortFuncResult = CallMethod(g_SortFunc, g_SortFunc, _T("call"), param, _countof(param), &i64);
+	g_SortFuncResult = CallMethod(g_SortFunc, g_SortFunc, nullptr, param, _countof(param), &i64);
 	// An alternative to g_SortFuncResult using 'throw' to abort qsort() produced slightly
 	// smaller code, but in release builds the program crashed with code 0xC0000409 and the
 	// catch() block never executed.
@@ -12380,7 +12380,7 @@ int RegExCallout(pcret_callout_block *cb)
 		cd.re_text // NeedleRegEx
 	};
 	__int64 number_to_return;
-	auto result = CallMethod(&func, &func, _T("Call"), param, _countof(param), &number_to_return);
+	auto result = CallMethod(&func, &func, nullptr, param, _countof(param), &number_to_return);
 	if (result == FAIL || result == EARLY_EXIT)
 	{
 		number_to_return = PCRE_ERROR_CALLOUT;
@@ -15314,7 +15314,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 			param[i].SetValue((UINT_PTR)params[i]);
 	}
 	
-	CallMethod(cb.func, cb.func, _T("call"), param, param_count, &number_to_return);
+	CallMethod(cb.func, cb.func, nullptr, param, param_count, &number_to_return);
 	// CallMethod()'s own return value is ignored because it wouldn't affect the handling below.
 	
 	if (cb.flags & CBF_CREATE_NEW_THREAD)
