@@ -7079,7 +7079,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 	the_new_func->mOuterFunc = g->CurrentFunc;
 	FuncList &funcs = the_new_func->mOuterFunc ? the_new_func->mOuterFunc->mFuncs : mFuncs;
 	
-	if (aInsertPos < funcs.mCount && !_tcsicmp(funcs.mItem[aInsertPos]->mName, new_name))
+	if (aInsertPos < funcs.mCount && *new_name && !_tcsicmp(funcs.mItem[aInsertPos]->mName, new_name))
 		funcs.mItem[aInsertPos] = the_new_func;
 	else
 		if (!funcs.Insert(the_new_func, aInsertPos))
