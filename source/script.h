@@ -3095,6 +3095,7 @@ public:
 	static ResultType SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat = NULL);
 	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat = NULL);
 	static ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
+	static ResultType ThrowWin32Exception(DWORD aError);
 	static void FreeExceptionToken(ResultToken*& aToken);
 	static void SetErrorLevels(bool aError, DWORD aLastErrorOverride = -1);
 	static void SetErrorLevelsAndClose(HANDLE aHandle, bool aError, DWORD aLastErrorOverride = -1);
@@ -3221,7 +3222,6 @@ BIV_DECL_R (BIV_ScreenDPI);
 
 #ifdef ENABLE_DLLCALL
 void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free = NULL);
-void ThrowHresultException(HRESULT hr);
 BIF_DECL(BIF_DllCall);
 #endif
 

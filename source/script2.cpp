@@ -11624,7 +11624,7 @@ has_valid_return_type:
 
 	if (return_attrib.is_hresult && FAILED((HRESULT)return_value.Int) && !g->ThrownToken)
 	{
-		ThrowHresultException((HRESULT)return_value.Int);
+		g_script.ThrowWin32Exception((DWORD)return_value.Int);
 	}
 
 	if (g->ThrownToken)
@@ -11850,27 +11850,6 @@ end:
 			delete pStr[arg_count];
 	if (hmodule_to_free)
 		FreeLibrary(hmodule_to_free);
-}
-
-void ThrowHresultException(HRESULT hr)
-{
-	TCHAR message[1024];
-	DWORD size = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS
-		, NULL, hr, 0, message, _countof(message), NULL);
-	if (size)
-	{
-		if (message[size - 1] == '\n')
-			message[--size] = '\0';
-		if (message[size - 1] == '\r')
-			message[--size] = '\0';
-	}
-	else
-		_tcscpy(message, _T("Function returned failure."));
-	TCHAR code[_MAX_ULTOSTR_BASE16_COUNT + 3];
-	code[0] = '0';
-	code[1] = 'x';
-	_ultot(hr, code + 2, 16);
-	g_script.ThrowRuntimeException(message, _T("DllCall"), code);
 }
 
 #endif

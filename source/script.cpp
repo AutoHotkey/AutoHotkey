@@ -13198,6 +13198,32 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCT
 	return g_script.mCurrLine->ThrowRuntimeException(aErrorText, aWhat, aExtraInfo);
 }
 
+ResultType Script::ThrowWin32Exception(DWORD aError)
+{
+	TCHAR message[1024];
+	DWORD size = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS
+		, NULL, aError, 0, message, _countof(message), NULL);
+	if (size)
+	{
+		if (message[size - 1] == '\n')
+			message[--size] = '\0';
+		if (message[size - 1] == '\r')
+			message[--size] = '\0';
+	}
+	else
+		_tcscpy(message, _T("Function returned failure."));
+	TCHAR code[12];
+	if ((int)aError < 0)
+	{
+		code[0] = '0';
+		code[1] = 'x';
+		_ultot(aError, code + 2, 16);
+	}
+	else
+		_itot(aError, code, 10);
+	return g_script.ThrowRuntimeException(message, nullptr, code);
+}
+
 
 //#define SHOULD_USE_ERRORLEVEL (!g->InTryBlock()) // v1 behaviour
 #define SHOULD_USE_ERRORLEVEL TRUE

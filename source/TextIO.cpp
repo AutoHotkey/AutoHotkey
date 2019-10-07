@@ -1203,21 +1203,14 @@ BIF_DECL(BIF_FileOpen)
 	else
 		aFileName = TokenToString(*aParam[0], aResultToken.buf);
 
-	if (aResultToken.object = FileObject::Open(aFileName, aFlags, aEncoding & CP_AHKCP))
-	{
+	aResultToken.object = FileObject::Open(aFileName, aFlags, aEncoding & CP_AHKCP);
+	if (aResultToken.object)
 		aResultToken.symbol = SYM_OBJECT;
-	}
 	else
-	{
-		aResultToken.symbol = SYM_STRING;
-		aResultToken.marker = _T("");
-	}
-
-	g->LastError = GetLastError(); // Even on success, since it might provide something useful.
+		aResultToken.SetExitResult(g_script.ThrowWin32Exception(GetLastError()));
 	return;
 
 invalid_param:
-	g->LastError = ERROR_INVALID_PARAMETER; // For consistency.
 	_f_throw(ERR_PARAM_INVALID);
 }
 
