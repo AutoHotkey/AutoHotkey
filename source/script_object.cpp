@@ -1417,6 +1417,12 @@ ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[],
 	// __New may be defined by the script for custom initialization code.
 	result = CallMethod(_T("__New"), IT_CALL|IF_BYPASS_METAFUNC, aResultToken, this_token, aParam, aParamCount);
 	aResultToken.Free();
+	if (result == INVOKE_NOT_HANDLED && aParamCount)
+	{
+		// Maybe the caller expects the parameters to be used in some way, but they won't
+		// since there's no __New.  Treat it the same as having __New without parameters.
+		result = aResultToken.Error(ERR_TOO_MANY_PARAMS);
+	}
 	if (result == FAIL || result == EARLY_EXIT)
 	{
 		// An error was raised within __New() or while trying to call it, or Exit was called.
