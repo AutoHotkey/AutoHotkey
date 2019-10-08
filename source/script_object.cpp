@@ -63,7 +63,10 @@ Object *Object::Create()
 Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken)
 {
 	if (aParamCount & 1)
+	{
+		apResultToken->Error(ERR_PARAM_COUNT_INVALID);
 		return NULL; // Odd number of parameters - reserved for future use.
+	}
 
 	Object *obj = Object::Create();
 	if (aParamCount)
