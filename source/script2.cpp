@@ -11580,6 +11580,8 @@ has_valid_return_type:
     
 	if (vf_index >= 0) // ComCall
 	{
+		if ((UINT_PTR)dyna_param[0].ptr < 65536) // Basic sanity check to catch null pointers and small numbers.  On Win32, the first 64KB of address space is always invalid.
+			_f_throw(ERR_PARAM2_INVALID);
 		LPVOID *vftbl = *(LPVOID **)dyna_param[0].ptr;
 		function = vftbl[vf_index];
 	}
