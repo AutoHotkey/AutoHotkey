@@ -14805,8 +14805,8 @@ BIF_DECL(BIF_Hotkey)
 BIF_DECL(BIF_SetTimer)
 {
 	IObject *callback;
-	// Note that only one timer per callback is allowed because the callback is the unique identifier
-	// that allows us to figure out whether to "update or create" when searching the list of timers.
+	// Note that only one timer per callback is allowed because the callback is the
+	// unique identifier that allows us to update or delete an existing timer.
 	if (ParamIndexIsOmitted(0)) // Fully omitted, not an empty string.
 	{
 		if (g->CurrentTimer)
@@ -14828,34 +14828,28 @@ BIF_DECL(BIF_SetTimer)
 		if (  !(callback = StringToFunctor(arg1))  )
 			_f_throw(ERR_PARAM1_INVALID, arg1);
 	}
-	ToggleValueType toggle;
-	_f_param_string_opt(arg2, 1);
-	_f_param_string_opt(arg3, 2);
-	if (!IsNumeric(arg2, true, true, true)) // Allow it to be neg. or floating point at runtime.
+	__int64 period = DEFAULT_TIMER_PERIOD;
+	int priority = 0;
+	bool update_period = false, update_priority = false;
+	if (!ParamIndexIsOmitted(1))
 	{
-		toggle = Line::ConvertOnOff(arg2);
-		if (!toggle)
+		if (!ParamIndexIsNumeric(1))
+			_f_throw(ERR_PARAM2_INVALID);
+		period = ParamIndexToInt64(1);
+		if (!period)
 		{
-			if (!_tcsicmp(arg2, _T("Delete")))
-			{
-				g_script.DeleteTimer(callback);
-				callback->Release();
-				_f_return_empty;
-			}
+			g_script.DeleteTimer(callback);
 			callback->Release();
-			_f_throw(ERR_PARAM2_INVALID, arg2);
+			_f_return_empty;
 		}
+		update_period = true;
 	}
-	else
-		toggle = TOGGLE_INVALID;
-	switch(toggle)
+	if (!ParamIndexIsOmitted(2))
 	{
-	case TOGGLED_ON:
-	case TOGGLED_OFF: g_script.UpdateOrCreateTimer(callback, _T(""), arg3, toggle == TOGGLED_ON, false); break;
-	// Timer is always (re)enabled when ARG2 specifies a numeric period or is blank + there's no ARG3.
-	// If ARG2 is blank but ARG3 (priority) isn't, tell it to update only the priority and nothing else:
-	default: g_script.UpdateOrCreateTimer(callback, arg2, arg3, true, !*arg2 && *arg3);
+		priority = ParamIndexToInt(2);
+		update_priority = true;
 	}
+	g_script.UpdateOrCreateTimer(callback, update_period, period, update_priority, priority);
 	callback->Release();
 	_f_return_empty;
 }

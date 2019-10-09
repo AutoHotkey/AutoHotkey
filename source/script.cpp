@@ -3968,8 +3968,8 @@ void ScriptTimer::Disable()
 
 
 
-ResultType Script::UpdateOrCreateTimer(IObject *aCallback, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
-	, bool aUpdatePriorityOnly)
+ResultType Script::UpdateOrCreateTimer(IObject *aCallback
+	, bool aUpdatePeriod, __int64 aPeriod, bool aUpdatePriority, int aPriority)
 // Caller should specific a blank aPeriod to prevent the timer's period from being changed
 // (i.e. if caller just wants to turn on or off an existing timer).  But if it does this
 // for a non-existent timer, that timer will be created with the default period as specified in
@@ -3994,41 +3994,41 @@ ResultType Script::UpdateOrCreateTimer(IObject *aCallback, LPTSTR aPeriod, LPTST
 		}
 		++mTimerCount;
 	}
-	// Update its members:
-	if (aEnable && !timer->mEnabled) // Must check both or the mTimerEnabledCount below will be wrong.
-	{
-		// The exception is if the timer already existed but the caller only wanted its priority changed:
-		if (!(timer_existed && aUpdatePriorityOnly))
-		{
-			timer->mEnabled = true;
-			++mTimerEnabledCount;
-			SET_MAIN_TIMER  // Ensure the API timer is always running when there is at least one enabled timed subroutine.
-		}
-		//else do nothing, leave it disabled.
-	}
-	else if (!aEnable && timer->mEnabled) // Must check both or the below count will be wrong.
-		timer->Disable();
 
-	aPeriod = omit_leading_whitespace(aPeriod); // This causes A_Space to be treated as "omitted" rather than zero, so may change the behaviour of some poorly-written scripts, but simplifies the check below which allows -0 to work.
-	if (*aPeriod) // Caller wanted us to update this member.
+	if (!timer->mEnabled)
 	{
-		__int64 period = ATOI64(aPeriod);
-		if (*aPeriod == '-') // v1.0.46.16: Support negative periods to mean "run only once".
+		timer->mEnabled = true;
+		++mTimerEnabledCount;
+		SET_MAIN_TIMER  // Ensure the API timer is always running when there is at least one enabled timed subroutine.
+		if (timer_existed)
+		{
+			// mEnabled is currently used to mark a running timer for deletion upon return.
+			// Since the timer could be recreated by a different thread which just happens
+			// to interrupt the timer thread, it seems best for consistency to reset Period
+			// and Priority as though it had already been deleted.
+			aUpdatePeriod = true;
+			aUpdatePriority = true;
+		}
+	}
+
+	if (aUpdatePeriod)
+	{
+		if (aPeriod < 0) // Support negative periods to mean "run only once".
 		{
 			timer->mRunOnlyOnce = true;
-			timer->mPeriod = (DWORD)-period;
+			timer->mPeriod = (DWORD)-aPeriod;
 		}
-		else // Positive number.  v1.0.36.33: Changed from int to DWORD, and ATOI to ATOU, to double its capacity:
+		else // Positive number.
 		{
-			timer->mPeriod = (DWORD)period; // Always use this method & check to retain compatibility with existing scripts.
+			timer->mPeriod = (DWORD)aPeriod;
 			timer->mRunOnlyOnce = false;
 		}
 	}
 
-	if (*aPriority) // Caller wants this member to be changed from its current or default value.
-		timer->mPriority = ATOI(aPriority); // Read any float in a runtime variable reference as an int.
+	if (aUpdatePriority)
+		timer->mPriority = aPriority;
 
-	if (!(timer_existed && aUpdatePriorityOnly))
+	if (aUpdatePeriod || !aUpdatePriority)
 		// Caller relies on us updating mTimeLastRun in this case.  This is done because it's more
 		// flexible, e.g. a user might want to create a timer that is triggered 5 seconds from now.
 		// In such a case, we don't want the timer's first triggering to occur immediately.
@@ -4057,15 +4057,8 @@ void Script::DeleteTimer(IObject *aLabel)
 				timer->Disable(); // Keeps track of mTimerEnabledCount and whether the main timer is needed.
 			if (timer->mExistingThreads) // This condition differs from g->CurrentTimer == timer, which only detects the "top-most" timer.
 			{
-				if (!aLabel) // Caller requested we delete a previously marked timer which
-					continue; // has now finished, but this one hasn't, so keep looking.
-				// In this case we can't delete the timer yet, so mark it for later deletion.
-				timer->mCallback = NULL;
-				// Clearing mCallback:
-				//  1) Marks the timer to be deleted after its last thread finishes.
-				//  2) Ensures any subsequently created timer will get default settings.
-				//  3) Allows the object to be freed before the timer subroutine returns
-				//     if all other references to it are released.
+				// In this case we can't delete the timer yet, but CheckScriptTimers()
+				// will check mEnabled after the callback returns and will delete it then.
 				break;
 			}
 			// Remove it from the list.

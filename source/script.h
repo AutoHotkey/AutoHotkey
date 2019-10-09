@@ -3000,9 +3000,16 @@ public:
 	LineNumberType CurrentLine();
 	LPTSTR CurrentFile();
 
-	ResultType UpdateOrCreateTimer(IObject *aLabel, LPTSTR aPeriod, LPTSTR aPriority, bool aEnable
-		, bool aUpdatePriorityOnly);
-	void DeleteTimer(IObject *aLabel);
+	enum SetTimerFlags
+	{
+		SET_TIMER_PERIOD = 1,
+		SET_TIMER_STATE = 2,
+		SET_TIMER_PRIORITY = 4,
+		SET_TIMER_RESET = 8
+	};
+	ResultType UpdateOrCreateTimer(IObject *aCallback
+		, bool aUpdatePeriod, __int64 aPeriod, bool aUpdatePriority, int aPriority);
+	void DeleteTimer(IObject *aCallback);
 	LPTSTR DefaultDialogTitle();
 
 	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic = false, bool aIsInExpression = false);
