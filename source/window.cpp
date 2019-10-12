@@ -19,6 +19,7 @@ GNU General Public License for more details.
 #include "util.h" // for strlcpy()
 #include "application.h" // for MsgSleep()
 #include "psapi.h" // for ahk_exe
+#include <dwmapi.h>
 
 
 HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
@@ -530,7 +531,7 @@ HWND WinActive(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aEx
 
 	// Only after the above check should the below be done.  This is because "IfWinActive" (with no params)
 	// should be "true" if one of the script's GUI windows is active:
-	if (!(aSettings.DetectHiddenWindows || IsWindowVisible(fore_win))) // In this case, the caller's window can't be active.
+	if (!aSettings.DetectWindow(fore_win)) // In this case, the caller's window can't be active.
 		return NULL;
 
 	WindowSearch ws;
@@ -587,7 +588,7 @@ HWND WinExist(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExc
 		if (   ws.mCriterionHwnd != HWND_BROADCAST // It's not exempt from the other checks on the two lines below.
 			&& (!IsWindow(ws.mCriterionHwnd)    // And it's either not a valid window...
 				// ...or the window is not detectible (in v1.0.40.05, child windows are detectible even if hidden):
-				|| !(aSettings.DetectHiddenWindows || IsWindowVisible(ws.mCriterionHwnd)
+				|| !(aSettings.DetectWindow(ws.mCriterionHwnd)
 					|| (GetWindowLong(ws.mCriterionHwnd, GWL_STYLE) & WS_CHILD)))   )
 			return NULL;
 
@@ -615,7 +616,7 @@ HWND GetValidLastUsedWindow(global_struct &aSettings)
 {
 	if (!aSettings.hWndLastUsed || !IsWindow(aSettings.hWndLastUsed))
 		return NULL;
-	if (   aSettings.DetectHiddenWindows || IsWindowVisible(aSettings.hWndLastUsed)
+	if (   aSettings.DetectWindow(aSettings.hWndLastUsed)
 		|| (GetWindowLong(aSettings.hWndLastUsed, GWL_STYLE) & WS_CHILD)   ) // v1.0.40.05: Child windows (via ahk_id) are always detectible.
 		return aSettings.hWndLastUsed;
 	// Otherwise, DetectHiddenWindows is OFF and the window is not visible.  Return NULL
@@ -634,7 +635,7 @@ BOOL CALLBACK EnumParentFind(HWND aWnd, LPARAM lParam)
 // through every window), it returns TRUE:
 {
 	WindowSearch &ws = *(WindowSearch *)lParam;  // For performance and convenience.
-	if (!(ws.mSettings->DetectHiddenWindows || IsWindowVisible(aWnd))) // Skip windows the script isn't supposed to detect.
+	if (!ws.mSettings->DetectWindow(aWnd)) // Skip windows the script isn't supposed to detect.
 		return TRUE;
 	ws.SetCandidate(aWnd);
 	// If this window doesn't match, continue searching for more windows (via TRUE).  Likewise, if
@@ -1348,6 +1349,27 @@ bool IsWindowHung(HWND aWnd)
 	static MyIsHungAppWindow IsHungAppWindow = (MyIsHungAppWindow)GetProcAddress(GetModuleHandle(_T("user32"))
 		, "IsHungAppWindow");
 	return IsHungAppWindow ? IsHungAppWindow(aWnd) : Slow_IsWindowHung;
+}
+
+
+
+bool IsWindowCloaked(HWND aWnd)
+{
+	static auto *pfn = (decltype(&DwmGetWindowAttribute))
+		GetProcAddress(LoadLibrary(_T("dwmapi.dll")), "DwmGetWindowAttribute");
+	if (!pfn) // Windows XP or earlier.
+		return false;
+	int cloaked = 0;
+	const int DWMWA_CLOAKED = 14; // Work around SDK troubles.
+	auto result = pfn(aWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+	return SUCCEEDED(result) && cloaked; // Result is "invalid parameter" on Windows 7.
+}
+
+
+
+bool global_struct::DetectWindow(HWND aWnd)
+{
+	return DetectHiddenWindows || (IsWindowVisible(aWnd) && !IsWindowCloaked(aWnd));
 }
 
 

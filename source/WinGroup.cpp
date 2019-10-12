@@ -415,7 +415,7 @@ BOOL CALLBACK EnumParentFindAnyExcept(HWND aWnd, LPARAM lParam)
 	// Since the following two sections apply only to GroupDeactivate (since that's our only caller),
 	// they both seem okay even in light of the ahk_group method.
 
-	if (!IsWindowVisible(aWnd))
+	if (!IsWindowVisible(aWnd) || IsWindowCloaked(aWnd))
 		// Skip these because we always want them to stay invisible, regardless
 		// of the setting for g->DetectHiddenWindows:
 		return TRUE;
@@ -489,7 +489,7 @@ BOOL CALLBACK EnumParentActUponAll(HWND aWnd, LPARAM lParam)
 
 	// Skip windows the command isn't supposed to detect.  ACT_WINSHOW is exempt because
 	// hidden windows are always detected by the WinShow command:
-	if (!(g->DetectHiddenWindows || ws.mActionType == ACT_WINSHOW || IsWindowVisible(aWnd)))
+	if (!(ws.mActionType == ACT_WINSHOW || g->DetectWindow(aWnd)))
 		return TRUE;
 
 	int nCmdShow;

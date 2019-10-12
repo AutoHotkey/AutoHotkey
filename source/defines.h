@@ -812,6 +812,7 @@ struct global_struct
 	int ExcptMode;
 	ExprTokenType* ThrownToken;
 	inline bool InTryBlock() { return ExcptMode & EXCPTMODE_TRY; }
+	bool DetectWindow(HWND aWnd);
 };
 
 inline void global_maximize_interruptibility(global_struct &g)
