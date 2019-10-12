@@ -516,10 +516,7 @@ BOOL CALLBACK EnumParentActUponAll(HWND aWnd, LPARAM lParam)
 
 			case ACT_WINMINIMIZE:
 				if (IsWindowHung(aWnd))
-				{
-					if (g_os.IsWin2000orLater())
-						nCmdShow = SW_FORCEMINIMIZE;
-				}
+					nCmdShow = SW_FORCEMINIMIZE;
 				else
 					nCmdShow = SW_MINIMIZE;
 				break;

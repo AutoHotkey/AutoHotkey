@@ -38,7 +38,7 @@ DWORD Hotkey::sJoyHotkeyCount = 0;
 HWND HotCriterionAllowsFiring(HotkeyCriterion *aCriterion, LPTSTR aHotkeyName)
 // This is a global function because it's used by both hotkeys and hotstrings.
 // In addition to being called by the hook thread, this can now be called by the main thread.
-// That happens when a WM_HOTKEY message arrives that is non-hook (such as for Win9x).
+// That happens when a WM_HOTKEY message arrives (for non-hook hotkeys, i.e. RegisterHotkey).
 // Returns a non-NULL HWND if firing is allowed.  However, if it's a global criterion or
 // a "not-criterion" such as #IfWinNotActive, (HWND)1 is returned rather than a genuine HWND.
 {
@@ -184,7 +184,6 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// HK_NORMAL when it no longer needs the hook.  Instead, there are now three passes.
 	bool vk_is_prefix[VK_ARRAY_COUNT] = {false};
 	bool *hk_is_inactive = (bool *)_alloca(sHotkeyCount * sizeof(bool)); // No init needed.  Currently limited to around 16k (HOTKEY_ID_MAX).
-	bool is_win9x = g_os.IsWin9x(); // Might help performance a little by avoiding calls in loops.
 	HotkeyVariant *vp;
 	int i, j;
 
@@ -251,10 +250,6 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 
 		if (hot.mKeyUp && hot.mVK) // No need to do the below for mSC hotkeys since their down hotkeys would already be handled by the hook.
 		{
-			// The following is done even for Win9x because "no functionality" might be preferable to
-			// partial functionality.  This might be relied upon by the remapping feature to prevent a
-			// remapping such as a::b from partially become active and having unintended side-effects
-			// (could use more review).
 			// For each key-up hotkey, search for any its counterpart that's a down-hotkey (if any).
 			// Such a hotkey should also be handled by the hook because if registered, such as
 			// "#5" (reg) and "#5 up" (hook), the hook would suppress the down event because it
@@ -262,9 +257,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 			// stuck in a logically down state).
 			for (j = 0; j < sHotkeyCount; ++j)
 			{
-				// No need to check the following because they are already hook hotkeys
-				// (except on Win9x, for which the repercussions of changing or fixing
-				// it to take these into effect have not been evaluated yet):
+				// No need to check the following because they are already hook hotkeys:
 				// mModifierVK/SC
 				// mAllowExtraModifiers
 				// mNoSuppress
@@ -275,15 +268,12 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 				if (shk[j]->mVK == hot.mVK && HK_TYPE_CAN_BECOME_KEYBD_HOOK(shk[j]->mType) // Ordered for short-circuit performance.
 					&& shk[j]->mModifiersConsolidatedLR == hot.mModifiersConsolidatedLR)
 				{
-					shk[j]->mType = HK_KEYBD_HOOK; // Done even for Win9x (see comments above).
+					shk[j]->mType = HK_KEYBD_HOOK;
 					// And if it's currently registered, it will be unregistered later below.
 				}
 			}
 		}
 
-		// v1.0.42: The following is now not done for Win9x because it seems inappropriate for
-		// a wildcard hotkey (which will be attempt-registered due to Win9x's lack of hook) to also
-		// disable hotkeys that share the same suffix as the wildcard.
 		// v1.0.40: If this is a wildcard hotkey, any hotkeys it eclipses (i.e. includes as subsets)
 		// should be made into hook hotkeys also, because otherwise they would be overridden by hook.
 		// The following criteria are checked:
@@ -297,7 +287,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 		//    still be activated by pressing RControl+a.
 		// 4) For maintainability, it doesn't check mNoSuppress because the hook is needed anyway,
 		//    so might as well handle eclipsed hotkeys with it too.
-		if (hot.mAllowExtraModifiers && !is_win9x && hot.mVK && !hot.mModifiersLR && !(hot.mModifierSC || hot.mModifierVK))
+		if (hot.mAllowExtraModifiers && hot.mVK && !hot.mModifiersLR && !(hot.mModifierSC || hot.mModifierVK))
 		{
 			for (j = 0; j < sHotkeyCount; ++j)
 			{
@@ -342,7 +332,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 		// hotkeys that interact or overlap with it in such a way that the hook is preferred.
 		// This evaluation is done here because only now that hotkeys are about to be activated do
 		// we know which ones are disabled or suspended, and thus don't need to be taken into account.
-		if (HK_TYPE_CAN_BECOME_KEYBD_HOOK(hot.mType) && !is_win9x)
+		if (HK_TYPE_CAN_BECOME_KEYBD_HOOK(hot.mType))
 		{
 			if (vk_is_prefix[hot.mVK])
 				// If it's a suffix that is also used as a prefix, use hook (this allows ^!a to work without $ when "a & b" is a hotkey).
@@ -352,9 +342,8 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 				// And if it's currently registered, it will be unregistered later below.
 			else
 			{
-				// v1.0.42: Since the above has ascertained that the OS isn't Win9x, any #IfWin
-				// keyboard hotkey must use the hook if it lacks an enabled, non-suspended, global variant.
-				// Under those conditions, the hotkey is either:
+				// v1.0.42: Any #IfWin keyboard hotkey must use the hook if it lacks an enabled,
+				// non-suspended, global variant.  Under those conditions, the hotkey is either:
 				// 1) Single-variant hotkey that has criteria (non-global).
 				// 2) Multi-variant hotkey but all variants have criteria (non-global).
 				// 3) A hotkey with a non-suppressed (~) variant (always, for code simplicity): already handled by AddVariant().
@@ -409,13 +398,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 		if (hot.mType == HK_NORMAL)
 		{
 			if (!hot.Register()) // Can't register it, usually due to some other application or the OS using it.
-				if (!is_win9x)   // If the OS supports the hook, it can be used to override the other application.
-					hot.mType = HK_KEYBD_HOOK;
-				//else it's Win9x (v1.0.42), so don't force type to hook in case this hotkey is temporarily
-				// in use by some other application.  That way, the registration will be retried next time
-				// the Suspend or Hotkey command calls this function.
-				// The old Win9x warning dialog was removed to reduce code size (since usage of
-				// Win9x is becoming very rare).
+				hot.mType = HK_KEYBD_HOOK;
 		}
 		else // mType isn't NORMAL (possibly due to something above changing it), so ensure it isn't registered.
 			if (hot.mIsRegistered) // Improves typical performance since this hotkey could be mouse, joystick, etc.
@@ -423,12 +406,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 				// to prevent the Send command from triggering the hotkey, and perhaps other side-effects.
 				hot.Unregister();
 
-		// If this is a hook hotkey and the OS is Win9x, the old warning has been removed to
-		// reduce code size (since usage of Win9x is becoming very rare).  Older comment:
-		// Since it's flagged as a hook in spite of the fact that the OS is Win9x, it means
-		// that some previous logic determined that it's not even worth trying to register
-		// it because it's just plain not supported.
-		switch (hot.mType) // It doesn't matter if the OS is Win9x because in that case, other sections just ignore hook hotkeys.
+		switch (hot.mType)
 		{
 		case HK_KEYBD_HOOK: sWhichHookNeeded |= HOOK_KEYBD; break;
 		case HK_MOUSE_HOOK: sWhichHookNeeded |= HOOK_MOUSE; break;
@@ -438,10 +416,8 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 
 	// Check if anything else requires the hook.
 	// But do this part outside of the above block because these values may have changed since
-	// this function was first called.  The Win9x warning message was removed so that scripts can be
-	// run on multiple OSes without a continual warning message just because it happens to be running
-	// on Win9x.  By design, the Num/Scroll/CapsLock AlwaysOn/Off setting stays in effect even when
-	// Suspend in ON.
+	// this function was first called.  By design, the Num/Scroll/CapsLock AlwaysOn/Off setting
+	// stays in effect even when Suspend in ON.
 	if (   Hotstring::sEnabledCount
 		|| !(g_ForceNumLock == NEUTRAL && g_ForceCapsLock == NEUTRAL && g_ForceScrollLock == NEUTRAL)   )
 		sWhichHookNeeded |= HOOK_KEYBD;
@@ -918,27 +894,10 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 	// if it was called from an ExecUntil() other than ours here:
 	g_script.mThisHotkeyModifiersLR = mModifiersConsolidatedLR;
 
-#ifdef CONFIG_WIN9X
-	bool unregistered_during_thread = mUnregisterDuringThread && mIsRegistered;
-
-	// For v1.0.23, the below allows the $ hotkey prefix to unregister the hotkey on
-	// Windows 9x, which allows the send command to send the hotkey itself without
-	// causing an infinite loop of keystrokes.  For simplicity, the hotkey is kept
-	// unregistered during the entire duration of the thread, rather than trying to
-	// selectively do it before and after each Send command of the thread:
-	if (unregistered_during_thread) // Do it every time through the loop in case the hotkey is re-registered by its own subroutine.
-		Unregister(); // This takes care of other details for us.
-#endif
-
 	// LAUNCH HOTKEY SUBROUTINE:
 	++aVariant.mExistingThreads;  // This is the thread count for this particular hotkey only.
 	ResultType result = aVariant.mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName);
 	--aVariant.mExistingThreads;
-
-#ifdef CONFIG_WIN9X
-	if (unregistered_during_thread)
-		Register();
-#endif
 
 	if (result == FAIL)
 		aVariant.mRunAgainAfterFinished = false;  // Ensure this is reset due to the error.
@@ -1166,7 +1125,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 					// It seems undesirable for #UseHook to be applied to a hotkey just because it's options
 					// were updated with the Hotkey command; therefore, #UseHook is only applied for newly
 					// created variants such as this one.  For others, the $ prefix can be applied.
-					if (g_ForceKeybdHook && !g_os.IsWin9x())
+					if (g_ForceKeybdHook)
 						hook_is_mandatory = true;
 				}
 			}
@@ -1174,15 +1133,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				// NULL label, so either it just became an alt-tab hotkey above, or it's "Hotkey, Name,, Options".
 				if (!variant) // Below relies on this check.
 					break; // Let the error-catch below report it as an error.
-#ifdef CONFIG_WIN9X
-			if (g_os.IsWin9x())
-			{
-				if (hook_is_mandatory)
-					hk->mUnregisterDuringThread = true;
-				// Skip the checks below, since the tilde prefix and #UseHook are ignored on Win9x.
-				break;
-			}
-#endif
+
 			// v1.1.15: Allow the ~tilde prefix to be added/removed from an existing hotkey variant.
 			// v1.1.19: Apply this change even if aJumpToLabel is omitted.  This is redundant if
 			// variant_was_just_created, but checking that condition seems counter-productive.
@@ -1298,14 +1249,8 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	if (use_errorlevel)
 	{
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Set default, possibly to be overridden below.
-		if (HK_TYPE_IS_HOOK(hk->mType))
-		{
-			if (g_os.IsWin9x())
-				g_ErrorLevel->Assign(HOTKEY_EL_WIN9X); // Reported even if the hotkey is disabled or suspended.
-		}
-		else // HK_NORMAL (registered hotkey).  v1.0.44.07
-			if (hk->mType != HK_JOYSTICK && !hk->mIsRegistered && (!g_IsSuspended || hk->IsExemptFromSuspend()) && !hk->IsCompletelyDisabled())
-				g_ErrorLevel->Assign(HOTKEY_EL_NOREG); // Generally affects only Win9x because other OSes should have reverted to hook when register failed.
+		if (hk->mType == HK_NORMAL && !hk->mIsRegistered && (!g_IsSuspended || hk->IsExemptFromSuspend()) && !hk->IsCompletelyDisabled())
+			g_ErrorLevel->Assign(HOTKEY_EL_NOREG); // Generally doesn't happen because it should have reverted to hook when register failed.
 	}
 	return OK;
 }
@@ -1363,9 +1308,6 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 	, mModifiersConsolidatedLR(0)
 	, mType(HK_NORMAL) // Default unless overridden to become mouse, joystick, hook, etc.
 	, mVK_WasSpecifiedByNumber(false)
-#ifdef CONFIG_WIN9X
-	, mUnregisterDuringThread(false)
-#endif
 	, mIsRegistered(false)
 	, mParentEnabled(true)
 	, mHookAction(aHookAction)   // Alt-tab and possibly other uses.
@@ -1413,7 +1355,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 		}
 
 		if (   (mHookAction == HOTKEY_ID_ALT_TAB || mHookAction == HOTKEY_ID_ALT_TAB_SHIFT)
-			&& !mModifierVK && !mModifierSC   ) // For simplicity, this section is also done for Win9x even though alt-tab hotkeys will not be activated.
+			&& !mModifierVK && !mModifierSC   )
 		{
 			TCHAR error_text[512];
 			if (mModifiers)
@@ -1437,8 +1379,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 			{
 				// If mModifiersLR contains only a single modifier key, that is valid
 				// so we convert it here to its corresponding mModifierVK for use by
-				// the hook.  For simplicity, this section is also done for Win9x even
-				// though alt-tab hotkeys will not be activated.
+				// the hook.
 				switch (mModifiersLR)
 				{
 				case MOD_LCONTROL: mModifierVK = VK_LCONTROL; break;
@@ -1479,155 +1420,77 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 			//	modifiers |= MOD_ALT;
 		}
 
-		if (g_os.IsWin9x())
+		if (HK_TYPE_CAN_BECOME_KEYBD_HOOK(mType)) // Added in v1.0.39 to make a hotkey such as "LButton & LCtrl" install the mouse hook.
 		{
-			// Fix for v1.0.25: If no VK could be found, try to find one so that the attempt
-			// to register the hotkey will have a chance of success.  This change is known to
-			// permit all the keys normally handled by scan code to work as hotkeys on Win9x.
-			// Namely: Del, Ins, Home, End, PgUp/PgDn, and the arrow keys.
-			// One of the main reasons for handling these keys by scan code is that
-			// they each have a counterpart on the Numpad, and in many cases a user would
-			// not want both to become hotkeys.  It could be argued that this should be changed
-			// For Win NT/2k/XP too, but then it would have to be documented that the $ prefix
-			// would have to be used to prevent the "both keys of the pair" behavior.  This
-			// confusion plus the chance of breaking existing scripts doesn't seem worth the
-			// small benefit of being able to avoid the keyboard hook in cases where these
-			// would be the only hotkeys using it.  If there is ever a need, a new hotkey
-			// prefix or option can be added someday to handle this, perhaps #LinkPairedKeys
-			// to avoid having yet another reserved hotkey prefix/symbol.
-			if (mSC)
-				if (mVK = sc_to_vk(mSC)) // Might always succeed in finding a non-zero VK.
-					mSC = 0;  // For maintainability, to force it to be one type or the other.
+			switch (mVK)
+			{
+			case 0: // Scan codes having no available virtual key must always be handled by the hook.
+			// In addition, to support preventing the toggleable keys from toggling, handle those
+			// with the hook also.
+			case VK_NUMLOCK:
+			case VK_CAPITAL:
+			case VK_SCROLL:
+			// When the AppsKey used as a suffix, always use the hook to handle it because registering
+			// such keys with RegisterHotkey() will fail to suppress(hide) the key-up events from the system,
+			// and the key-up for Apps key, at least in apps like Explorer, is a special event that results in
+			// the context menu appearing (though most other apps seem to use the key-down event rather than
+			// the key-up, so they would probably work okay).  Note: Of possible future use is the fact that
+			// if the Alt key is held down before pressing Appskey, it's native function does
+			// not occur.  This may be similar to the fact that LWIN and RWIN don't cause the
+			// start menu to appear if a shift key is held down.
+			case VK_APPS:
+			// Finally, the non-neutral (left-right) modifier keys (except LWin and RWin) must also
+			// be done with the hook because even if RegisterHotkey() claims to succeed on them,
+			// I'm 99% sure I tried it and the hotkeys don't actually work with that method:
+			case VK_LCONTROL:
+			case VK_RCONTROL:
+			case VK_LSHIFT:
+			case VK_RSHIFT:
+			case VK_LMENU:
+			case VK_RMENU:
+				mKeybdHookMandatory = true;
+				break;
 
-			// v1.0.42 (see comments at "mModifiersLR" further below):
-			if (mModifiersLR)
-			{
-				mModifiers |= ConvertModifiersLR(mModifiersLR); // Convert L/R modifiers into neutral ones for use with RegisterHotkey().
-				mModifiersLR = 0;
-			}
-		}
-		else // Not Win9x.
-		{
-			if (HK_TYPE_CAN_BECOME_KEYBD_HOOK(mType)) // Added in v1.0.39 to make a hotkey such as "LButton & LCtrl" install the mouse hook.
-			{
-				switch (mVK)
-				{
-				// I had trouble finding this before, so this comment serves as a means of finding the place
-				// where a hotkey with a non-zero mSC is set to type HK_KEYBD_HOOK (Win9x converts mSC to mVK higher above).
-				case 0: // Scan codes having no available virtual key must always be handled by the hook.
-				// In addition, to support preventing the toggleable keys from toggling, handle those
-				// with the hook also. But for Win9x(), attempt to register such hotkeys by not requiring the hook
-				// (due to checks above, this section doesn't run for Win9x).  This provides partial functionality
-				// on Win9x, the limitation being that the key will probably be toggled to its opposite state when
-				// it's used as a hotkey. But the user may be able to concoct a script workaround for that.
-				case VK_NUMLOCK:
-				case VK_CAPITAL:
-				case VK_SCROLL:
-				// When the AppsKey used as a suffix, always use the hook to handle it because registering
-				// such keys with RegisterHotkey() will fail to suppress(hide) the key-up events from the system,
-				// and the key-up for Apps key, at least in apps like Explorer, is a special event that results in
-				// the context menu appearing (though most other apps seem to use the key-down event rather than
-				// the key-up, so they would probably work okay).  Note: Of possible future use is the fact that
-				// if the Alt key is held down before pressing Appskey, it's native function does
-				// not occur.  This may be similar to the fact that LWIN and RWIN don't cause the
-				// start menu to appear if a shift key is held down.  For Win9x, leave it as a registered
-				// hotkey (as set higher above) it in case its limited capability is useful to someone.
-				case VK_APPS:
-				// Finally, the non-neutral (left-right) modifier keys (except LWin and RWin) must also
-				// be done with the hook because even if RegisterHotkey() claims to succeed on them,
-				// I'm 99% sure I tried it and the hotkeys don't actually work with that method:
-				case VK_LCONTROL: // But for Win9x(), attempt to register such hotkeys by not requiring the
-				case VK_RCONTROL: // hook here. RegisterHotkey() probably doesn't fail on Win9x, these
-				case VK_LSHIFT:   // L/RControl/Shift/Alt hotkeys don't actually function as hotkeys.
-				case VK_RSHIFT:   // However, it doesn't seem worth adding code to convert to neutral since
-				case VK_LMENU:    // that might break existing scripts.
-				case VK_RMENU:
+			// To prevent the Start Menu from appearing for a naked LWIN or RWIN, must
+			// handle this key with the hook (the presence of a normal modifier makes
+			// this unnecessary, at least under WinXP, because the Start Menu is
+			// never invoked when a modifier key is held down with lwin/rwin).
+			case VK_LWIN:
+			case VK_RWIN:
+			// If this hotkey is an unmodified modifier (e.g. Control::) and there
+			// are any other hotkeys that rely specifically on this modifier,
+			// have the hook handle this hotkey so that it will only fire on key-up
+			// rather than key-down.  Note: cases where this key's modifiersLR or
+			// ModifierVK/SC are non-zero -- as well as hotkeys that use sc vs. vk
+			// -- have already been set to use the keybd hook, so don't need to be
+			// handled here.  UPDATE: All the following cases have been already set
+			// to be HK_KEYBD_HOOK:
+			// - left/right ctrl/alt/shift (since RegisterHotkey() doesn't support them).
+			// - Any key with a ModifierVK/SC
+			// - The naked lwin or rwin key (due to the check above)
+			// Therefore, the only case left to be detected by this next line is the
+			// one in which the user configures the naked neutral key VK_SHIFT,
+			// VK_MENU, or VK_CONTROL.  As a safety precaution, always handle those
+			// neutral keys with the hook so that their action will only fire
+			// when the key is released (thus allowing each key to be used for its
+			// normal modifying function):
+			case VK_CONTROL:
+			case VK_MENU:
+			case VK_SHIFT:
+				if (!mModifiers && !mModifiersLR) // Modifier key as suffix and has no modifiers (or only a ModifierVK/SC).
 					mKeybdHookMandatory = true;
-					break;
+				//else keys modified by CTRL/SHIFT/ALT/WIN can always be registered normally because these
+				// modifiers are never used (are overridden) when that key is used as a ModifierVK
+				// for another key.  Example: if key1 is a ModifierVK for another key, ^key1
+				// (or any other modified versions of key1) can be registered as a hotkey because
+				// that doesn't affect the hook's ability to use key1 as a prefix:
+				break;
+			}
+		} // if HK_TYPE_CAN_BECOME_KEYBD_HOOK(mType)
 
-				// To prevent the Start Menu from appearing for a naked LWIN or RWIN, must
-				// handle this key with the hook (the presence of a normal modifier makes
-				// this unnecessary, at least under WinXP, because the Start Menu is
-				// never invoked when a modifier key is held down with lwin/rwin).
-				// But keep it NORMAL on Win9x (as set higher above) since there's a
-				// chance some people might find it useful, perhaps by doing their own
-				// workaround for the Start Menu appearing (via "Send {Ctrl}").
-				case VK_LWIN:
-				case VK_RWIN:
-				// If this hotkey is an unmodified modifier (e.g. Control::) and there
-				// are any other hotkeys that rely specifically on this modifier,
-				// have the hook handle this hotkey so that it will only fire on key-up
-				// rather than key-down.  Note: cases where this key's modifiersLR or
-				// ModifierVK/SC are non-zero -- as well as hotkeys that use sc vs. vk
-				// -- have already been set to use the keybd hook, so don't need to be
-				// handled here.  UPDATE: All the following cases have been already set
-				// to be HK_KEYBD_HOOK:
-				// - left/right ctrl/alt/shift (since RegisterHotkey() doesn't support them).
-				// - Any key with a ModifierVK/SC
-				// - The naked lwin or rwin key (due to the check above)
-				// Therefore, the only case left to be detected by this next line is the
-				// one in which the user configures the naked neutral key VK_SHIFT,
-				// VK_MENU, or VK_CONTROL.  As a safety precaution, always handle those
-				// neutral keys with the hook so that their action will only fire
-				// when the key is released (thus allowing each key to be used for its
-				// normal modifying function):
-				// If it's Win9x, this section is never reached so the hotkey is not set to be
-				// HK_KEYBD_HOOK.  This allows it to be registered as a normal hotkey in case
-				// it's of use to anyone.
-				case VK_CONTROL:
-				case VK_MENU:
-				case VK_SHIFT:
-					if (!mModifiers && !mModifiersLR) // Modifier key as suffix and has no modifiers (or only a ModifierVK/SC).
-						mKeybdHookMandatory = true;
-					//else keys modified by CTRL/SHIFT/ALT/WIN can always be registered normally because these
-					// modifiers are never used (are overridden) when that key is used as a ModifierVK
-					// for another key.  Example: if key1 is a ModifierVK for another key, ^key1
-					// (or any other modified versions of key1) can be registered as a hotkey because
-					// that doesn't affect the hook's ability to use key1 as a prefix:
-					break;
-				}
-			} // if HK_TYPE_CAN_BECOME_KEYBD_HOOK(mType)
-		} // Not Win9x.
-
-		// Below section avoids requiring the hook on Win9x in some cases because that would effectively prevent any
-		// attempt to register such hotkeys, which might work, at least for the following cases:
-		// g_ForceKeybdHook (#UseHook): Seems best to ignore it on Win9x (which is probably the documented behavior).
-		// mNoSuppress: They're supported as normal (non-tilde) hotkeys as long as RegisterHotkey succeeds.
-		// mAllowExtraModifiers: v1.0.42: The hotkey is registered along with any explicit modifiers it might have
-		//     (the wildcard part is ignored).  In prior versions, wildcard hotkeys were disabled, and so were
-		//     any non-wildcard suffixes they "eclipsed" (e.g. *^a would eclipse/disable ^!a).  Both cases are
-		//     now enabled in v1.0.42.
-		// mModifiersLR: v1.0.42: In older versions, such hotkeys were wrongly registered without any modifiers
-		//     at all.  For example, <#x would be registered simply as "x".  To correct this, it seemed best
-		//     to convert left/right modifiers (include lwin/rwin since RegisterHotkey requires the neutral "Win")
-		//     to their neutral counterparts so that an attempt can be made to register them.  This step is done
-		//     in the code section above.
-		// mModifierVK or SC: Always set to use the hook so that they're disabled on Win9x, which seems best because
-		//     there's no way to even get close to full functionality on Win9x.
-		// mVK && vk_to_sc(mVK, true): Its mVK corresponds to two scan codes, which would requires the hook
-		//     (except Win9x). The hook is required because when the hook receives a NumpadEnter keystroke
-		//     (regardless of whether NumpadEnter itself is also a hotkey), it will look up that scan code
-		//     and see that it always and unconditionally takes precedence over its VK, and thus the VK is ignored.
-		//     If that scan code has no hotkey, nothing happens (i.e. pressing NumpadEnter doesn't fire an Enter::
-		//     hotkey; it does nothing at all unless NumpadEnter:: is also a hotkey).  By contrast, if Enter
-		//     became a registered hotkey vs. hook, it would fire for both Enter and NumpadEnter unless the script
-		//     happened to have a NumpadEnter hotkey also (which we don't check due to rarity).
-		// aHookAction: In versions older than 1.0.42, most of these were disabled just because they happened
-		//     to be mModifierVK/SC hotkeys, which are always flagged as hook and thus disabled in Win9x.
-		//     However, ones that were implemented as <#x rather than "LWin & x" were inappropriately enabled.
-		//     as a naked/unmodified "x" hotkey (due to mModifiersLR paragraph above, and the fact that
-		//     aHookAction hotkeys really should be explicitly disabled since they can't function on Win9x.
-		//     This disabling-by-setting-to-type-hook is now ALSO done in ManifestAllHotkeysHotstringsHooks() because
-		//     the hotkey command is capable of changing a hotkey to/from the alt-tab type.
-		// mKeyUp: Disabled as an unintended/benevolent side-effect of older loop processing in
-		//     ManifestAllHotkeysHotstringsHooks().  This is retained, though now it's made more explicit via below,
-		//     for maintainability.
-		// Older Note: Do this for both AT_LEAST_ONE_VARIANT_HAS_TILDE and NO_SUPPRESS_PREFIX.  In the case of
-		// NO_SUPPRESS_PREFIX, the hook is needed anyway since the only way to get NO_SUPPRESS_PREFIX in
-		// effect is with a hotkey that has a ModifierVK/SC.
 		if (HK_TYPE_CAN_BECOME_KEYBD_HOOK(mType))
 			if (   (mModifiersLR || aHookAction || mKeyUp || mModifierVK || mModifierSC) // mSC is handled higher above.
-				|| !g_os.IsWin9x() && (g_ForceKeybdHook || mAllowExtraModifiers // mNoSuppress&NO_SUPPRESS_PREFIX has already been handled elsewhere. Other bits in mNoSuppress must be checked later because they can change by any variants added after *this* one.
+				|| (g_ForceKeybdHook || mAllowExtraModifiers // mNoSuppress&NO_SUPPRESS_PREFIX has already been handled elsewhere. Other bits in mNoSuppress must be checked later because they can change by any variants added after *this* one.
 					|| (mVK && !mVK_WasSpecifiedByNumber && vk_to_sc(mVK, true)))   ) // Its mVK corresponds to two scan codes (such as "ENTER").
 				mKeybdHookMandatory = true;
 			// v1.0.38.02: The check of mVK_WasSpecifiedByNumber above was added so that an explicit VK hotkey such
@@ -1846,7 +1709,7 @@ LPTSTR Hotkey::TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperti
 		case '<':
 			key_left = true;
 			break;
-		case '*': // On Win9x, an attempt will be made to register such hotkeys (ignoring the wildcard).
+		case '*':
 			if (aThisHotkey)
 				aThisHotkey->mAllowExtraModifiers = true;
 			if (aProperties)
@@ -1857,18 +1720,8 @@ LPTSTR Hotkey::TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperti
 				aProperties->suffix_has_tilde = true; // If this is the prefix's tilde rather than the suffix, it will be overridden later below.
 			break;
 		case '$':
-#ifdef CONFIG_WIN9X
-			if (g_os.IsWin9x())
-			{
-				if (aThisHotkey)
-					aThisHotkey->mUnregisterDuringThread = true;
-			}
-			else
-#endif
-				if (aThisHotkey)
-					aThisHotkey->mKeybdHookMandatory = true; // This flag will be ignored if TextToKey() decides this is a JOYSTICK or MOUSE hotkey.
-				// else ignore the flag and try to register normally, which in most cases seems better
-				// than disabling the hotkey.
+			if (aThisHotkey)
+				aThisHotkey->mKeybdHookMandatory = true; // This flag will be ignored if TextToKey() decides this is a JOYSTICK or MOUSE hotkey.
 			if (aProperties)
 				aProperties->hook_is_mandatory = true;
 			break;
@@ -2172,21 +2025,6 @@ ResultType Hotkey::Register()
 	// gets registered here one time might fail to be registered some other time (perhaps due
 	// to Suspend, followed by some other app taking ownership that hotkey, followed by
 	// de-suspend, which would then have a hotkey with the wrong modifiers in it for the hook.
-
-	// Really old method:
-	//if (   !(mIsRegistered = RegisterHotKey(NULL, id, modifiers, vk))   )
-	//	// If another app really is already using this hotkey, there's no point in trying to have the keyboard
-	//	// hook try to handle it instead because registered hotkeys take precedence over keyboard hook.
-	//	// UPDATE: For WinNT/2k/XP, this warning can be disabled because registered hotkeys can be
-	//	// overridden by the hook.  But something like this is probably needed for Win9x:
-	//	char error_text[MAX_EXEC_STRING];
-	//	snprintf(error_text, sizeof(error_text), "RegisterHotKey() of hotkey \"%s\" (id=%d, virtual key=%d, modifiers=%d) failed,"
-	//		" perhaps because another application (or Windows itself) is already using it."
-	//		"  You could try adding the line \"%s, On\" prior to its line in the script."
-	//		, text, id, vk, modifiers, g_cmd[CMD_FORCE_KEYBD_HOOK]);
-	//	MsgBox(error_text);
-	//	return FAIL;
-	//return 1;
 }
 
 

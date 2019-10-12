@@ -52,24 +52,16 @@ bool MsgSleep(int aSleepDuration = INTERVAL_UNSPECIFIED, MessageMode aMode = RET
 #define MSG_FILTER_MAX (IsInterruptible() ? 0 : WM_HOTKEY - 1)
 #define INTERRUPTIBLE_IN_EMERGENCY (g_AllowInterruption && !g_MenuIsVisible)
 
-// Do a true Sleep() for short sleeps on Win9x because it is much more accurate than the MsgSleep()
-// method on that OS, at least for when short sleeps are done on Win98SE:
 #define DoWinDelay \
 	if (::g->WinDelay > -1)\
 	{\
-		if (::g->WinDelay < 25 && g_os.IsWin9x())\
-			Sleep(::g->WinDelay);\
-		else\
-			MsgSleep(::g->WinDelay);\
+		MsgSleep(::g->WinDelay);\
 	}
 
 #define DoControlDelay \
 	if (g->ControlDelay > -1)\
 	{\
-		if (g->ControlDelay < 25 && g_os.IsWin9x())\
-			Sleep(g->ControlDelay);\
-		else\
-			MsgSleep(g->ControlDelay);\
+		MsgSleep(g->ControlDelay);\
 	}
 
 ResultType IsCycleComplete(int aSleepDuration, DWORD aStartTime, bool aAllowEarlyReturn);

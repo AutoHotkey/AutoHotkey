@@ -604,7 +604,7 @@ LPTSTR Line::RegConvertRootKeyType(HKEY aKey)
 	for (int i = 0; i < _countof(sRegRootKeyTypes); ++i)
 		if (aKey == sRegRootKeyTypes[i].key)
 			return sRegRootKeyTypes[i].long_name;
-	// These are either unused or so rarely used (DYN_DATA on Win9x) that they aren't supported:
-	// HKEY_PERFORMANCE_DATA, HKEY_PERFORMANCE_TEXT, HKEY_PERFORMANCE_NLSTEXT, HKEY_DYN_DATA
+	// These are either unused or so rarely used that they aren't supported:
+	// HKEY_PERFORMANCE_DATA, HKEY_PERFORMANCE_TEXT, HKEY_PERFORMANCE_NLSTEXT
 	return _T("");
 }
