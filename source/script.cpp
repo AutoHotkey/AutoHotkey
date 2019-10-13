@@ -2574,8 +2574,15 @@ examine_line:
 				if (*hotkey_flag)
 				{
 					if (hotstring_execute)
+					{
 						if (!ParseAndAddLine(omit_leading_whitespace(hotkey_flag)))
 							return FAIL;
+						if (ACT_IS_LINE_PARENT(mLastLine->mActionType))
+						{
+							hotkey_flag[-HOTKEY_FLAG_LENGTH] = ':';
+							return ScriptError(ERR_INVALID_SINGLELINE_HOT, buf);
+						}
+					}
 					// This is done for hotstrings with same-line action via 'X' and also auto-replace
 					// hotstrings in case gosub/goto is ever used to jump to their labels:
 					if (!AddLine(ACT_RETURN))
@@ -2591,8 +2598,15 @@ examine_line:
 					// But do put in the Return regardless, in case this label is ever jumped to
 					// via Goto/Gosub:
 					if (   !(hook_action = Hotkey::ConvertAltTab(hotkey_flag, false))   )
+					{
 						if (!ParseAndAddLine(hotkey_flag))
 							return FAIL;
+						if (ACT_IS_LINE_PARENT(mLastLine->mActionType))
+						{
+							hotkey_flag[-HOTKEY_FLAG_LENGTH] = ':';
+							return ScriptError(ERR_INVALID_SINGLELINE_HOT, buf);
+						}
+					}
 					// Also add a Return that's implicit for a single-line hotkey.
 					if (!AddLine(ACT_RETURN))
 						return FAIL;

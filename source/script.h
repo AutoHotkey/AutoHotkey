@@ -153,6 +153,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_UNRECOGNIZED_ACTION _T("This line does not contain a recognized action.")
 #define ERR_NONEXISTENT_HOTKEY _T("Nonexistent hotkey.")
 #define ERR_NONEXISTENT_VARIANT _T("Nonexistent hotkey variant (IfWin).")
+#define ERR_INVALID_SINGLELINE_HOT _T("Invalid single-line hotkey/hotstring.")
 #define ERR_NONEXISTENT_FUNCTION _T("Call to nonexistent function.")
 #define ERR_EXE_CORRUPTED _T("EXE corrupted")
 #define ERR_INVALID_VALUE _T("Invalid value.")
