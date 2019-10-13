@@ -2574,7 +2574,7 @@ examine_line:
 				if (*hotkey_flag)
 				{
 					if (hotstring_execute)
-						if (!ParseAndAddLine(hotkey_flag))
+						if (!ParseAndAddLine(omit_leading_whitespace(hotkey_flag)))
 							return FAIL;
 					// This is done for hotstrings with same-line action via 'X' and also auto-replace
 					// hotstrings in case gosub/goto is ever used to jump to their labels:
