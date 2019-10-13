@@ -3809,15 +3809,18 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 			this_hk_is_key_up = this_hk.id_with_flags & HOTKEY_KEY_UP;
 			this_hk_id = this_hk.id_with_flags & HOTKEY_ID_MASK;
 
-			// Insert this hotkey at the front of the list of hotkeys that use this suffix key.
-			// This enables fallback between overlapping hotkeys, such as LCtrl & a, <^+a, ^+a.
-			pThisKey = this_hk.vk ? kvk + this_hk.vk : ksc + this_hk.sc;
-			// Insert after any custom combos.
-			HotkeyIDType *first = &pThisKey->first_hotkey;
-			while (*first != HOTKEY_ID_INVALID && (aHK[*first]->mModifierVK || aHK[*first]->mModifierSC))
-				first = &aHK[*first]->mNextHotkey;
-			aHK[this_hk_id]->mNextHotkey = *first;
-			*first = this_hk_id;
+			if (this_hk_id <= HOTKEY_ID_MAX) // It's a valid ID and not an ALT_TAB action.
+			{
+				// Insert this hotkey at the front of the list of hotkeys that use this suffix key.
+				// This enables fallback between overlapping hotkeys, such as LCtrl & a, <^+a, ^+a.
+				pThisKey = this_hk.vk ? kvk + this_hk.vk : ksc + this_hk.sc;
+				// Insert after any custom combos.
+				HotkeyIDType *first = &pThisKey->first_hotkey;
+				while (*first != HOTKEY_ID_INVALID && (aHK[*first]->mModifierVK || aHK[*first]->mModifierSC))
+					first = &aHK[*first]->mNextHotkey;
+				aHK[this_hk_id]->mNextHotkey = *first;
+				*first = this_hk_id;
+			}
 
 			i_modifiers_merged = this_hk.modifiers;
 			if (this_hk.modifiersLR)
