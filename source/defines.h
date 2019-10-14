@@ -58,6 +58,14 @@ GNU General Public License for more details.
 // brought in and parsed.  In addition, it also allows continuation sections to be long.
 #define LINE_SIZE (16384 + 1)  // +1 for terminator.  Don't increase LINE_SIZE above 65535 without considering ArgStruct::length's type (WORD).
 
+// Maximum length of a Unicode file path, plus null-terminator.
+#define MAX_WIDE_PATH 32768
+#ifdef UNICODE
+#define T_MAX_PATH MAX_WIDE_PATH
+#else
+#define T_MAX_PATH MAX_PATH
+#endif
+
 // The following avoid having to link to OLDNAMES.lib, but they probably don't
 // reduce code size at all.
 #define stricmp(str1, str2) _stricmp(str1, str2)
@@ -809,6 +817,7 @@ class Func;                 // Forward declarations
 class UserFunc;             //
 class Label;                //
 struct RegItemStruct;       //
+struct LoopFilesStruct;
 struct LoopReadFileStruct;  //
 class GuiType;				//
 class ScriptTimer;			//
@@ -816,7 +825,7 @@ struct global_struct
 {
 	// 8-byte items are listed first, which might improve alignment for 64-bit processors (dubious).
 	__int64 mLoopIteration; // Signed, since script/ITOA64 aren't designed to handle unsigned.
-	WIN32_FIND_DATA *mLoopFile;  // The file of the current file-loop, if applicable.
+	LoopFilesStruct *mLoopFile;  // The file of the current file-loop, if applicable.
 	RegItemStruct *mLoopRegItem; // The registry subkey or value of the current registry enumeration loop.
 	LoopReadFileStruct *mLoopReadFile;  // The file whose contents are currently being read by a File-Read Loop.
 	LPTSTR mLoopField;  // The field of the current string-parsing loop.

@@ -2540,11 +2540,11 @@ IObject* GuiType::CreateDropArray(HDROP hDrop)
 	// The added complexity/code size of handling out-of-memory here and in MsgSleep()
 	// by aborting the new thread seems to outweigh the trivial benefits.  So assume
 	// arr is non-NULL and let the access violation occur if otherwise.
-	TCHAR buf[MAX_PATH];
+	TCHAR buf[T_MAX_PATH];
 	UINT file_count = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
 	for (UINT u = 0; u < file_count; u ++)
 	{
-		arr->Append(buf, DragQueryFile(hDrop, u, buf, MAX_PATH));
+		arr->Append(buf, DragQueryFile(hDrop, u, buf, _countof(buf)));
 		// Result not checked for reasons described above.  The likely outcome at this
 		// point would be for the event handler to either execute with fewer files than
 		// expected, or for it to raise ERR_OUTOFMEM.

@@ -46,8 +46,9 @@
   </application>
 </compatibility>
 <v3:application>
-	<v3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">
+	<v3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings" xmlns:ws2="http://schemas.microsoft.com/SMI/2016/WindowsSettings">
 		<dpiAware>true</dpiAware>
+		<ws2:longPathAware>true</ws2:longPathAware>
 	</v3:windowsSettings>
 </v3:application>
 <v3:trustInfo>

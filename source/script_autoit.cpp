@@ -1410,8 +1410,10 @@ BIF_DECL(BIF_FileGetVersion)
 
 
 
-bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite)
+bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int OverwriteMode, bool bMove)
 {
+	bool bOverwrite = OverwriteMode == 1 || OverwriteMode == 2; // Strict validation for safety.
+
 	// Get the fullpathnames and strip trailing \s
 	TCHAR szSource[_MAX_PATH+2];
 	TCHAR szDest[_MAX_PATH+2];
@@ -1422,22 +1424,54 @@ bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 	if (Util_IsDir(szSource) == false)
 		return false;							// Nope
 
-	// Does the destination dir exist?
-	if (Util_IsDir(szDest))
+	// Jon on the AutoIt forums says "Well SHFileOp is way too unpredictable under 9x. Grrr."
+	// So the comments below about some OSes/old versions are probably just referring to 9x,
+	// which we don't support anymore.  Testing on Windows 2000 and Windows 10 showed that
+	// SHFileOperation can move a directory between two volumes.  However, performing copy
+	// then remove ensures nothing is removed if the copy partially fails, so it's kept this
+	// way for backward-compatibility, even though it may be inconsistent with local moves.
+	// Obsolete comment from Util_MoveDir:
+	// If the source and dest are on different volumes then we must copy rather than move
+	// as move in this case only works on some OSes.  Copy and delete (poor man's move).
+	if (bMove && (ctolower(szSource[0]) != ctolower(szDest[0]) || szSource[1] != ':'))
 	{
-		if (bOverwrite == false)
+		if (!Util_CopyDir(szSource, szDest, bOverwrite, false))
 			return false;
+		return Util_RemoveDir(szSource, true);
 	}
-	else // Although dest doesn't exist as a dir, it might be a file, which is covered below too.
+
+	// Does the destination dir exist?
+	DWORD attr = GetFileAttributes(szDest);
+	if (attr != 0xFFFFFFFF) // Destination already exists as a file or directory.
+	{
+		if (attr & FILE_ATTRIBUTE_DIRECTORY) // Dest already exists as a directory.
+		{
+			if (!bOverwrite) // Overwrite Mode is "Never".
+				return false;
+		}
+		else // Dest already exists as a file.
+			return false; // Don't even attempt to overwrite a file with a dir, regardless of mode (I think SHFileOperation refuses to do it anyway).
+	}
+	else // Dest doesn't exist.
 	{
 		// We must create the top level directory
-		if (!Util_CreateDir(szDest)) // Failure is expected to happen if szDest is an existing *file*, since a dir should never be allowed to overwrite a file (to avoid accidental loss of data).
+		// FOF_SILENT (which is included in FOF_NO_UI and means "Do not display a progress dialog box")
+		// seems to be bugged on some older OSes (such as 2k and XP).  Specifically, it answers "No" to
+		// the "confirmmkdir" dialog, which it isn't supposed to suppress, and ignores FOF_NOCONFIRMMKDIR.
+		// Creating the directory first works around this.  Win 7 is okay without this; Vista wasn't tested.
+		if (!bMove && !Util_CreateDir(szDest))
 			return false;
 	}
 
+	// The wildcard below is kept for backward-compatibility, although as indicated above, the
+	// issues alluded to below are probably only on 9x, which is no longer supported.  Adding the
+	// wildcard appears to permit copying a directory into itself (perhaps because the directory
+	// itself isn't being copied), although we still document the result as "undefined".
+	// Really old comment:
 	// To work under old versions AND new version of shell32.dll the source must be specified
 	// as "dir\*.*" and the destination directory must already exist... Goddamn Microsoft and their APIs...
-	_tcscat(szSource, _T("\\*.*"));
+	if (!bMove)
+		_tcscat(szSource, _T("\\*.*"));
 
 	// We must also make source\dest double nulled strings for the SHFileOp API
 	szSource[_tcslen(szSource)+1] = '\0';	
@@ -1447,8 +1481,10 @@ bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 	SHFILEOPSTRUCT FileOp = {0};
 	FileOp.pFrom = szSource;
 	FileOp.pTo = szDest;
-	FileOp.wFunc = FO_COPY;
-	FileOp.fFlags = FOF_SILENT | FOF_NOCONFIRMMKDIR | FOF_NOCONFIRMATION | FOF_NOERRORUI; // FOF_NO_UI ("perform the operation with no user input") is not present for in case it would break compatibility somehow, and because the other flags already present seem to make its behavior implicit.  Also, unlike FileMoveDir, FOF_MULTIDESTFILES never seems to be needed.
+	FileOp.wFunc = bMove ? FO_MOVE : FO_COPY;
+	FileOp.fFlags = FOF_NO_UI; // Set default.
+	if (OverwriteMode == 2)
+		FileOp.fFlags |= FOF_MULTIDESTFILES; // v1.0.46.07: Using the FOF_MULTIDESTFILES flag (as hinted by MSDN) overwrites/merges any existing target directory.  This logic supersedes and fixes old logic that didn't work properly when the source dir was being both renamed and moved to overwrite an existing directory.
 	// All of the below left set to NULL/FALSE by the struct initializer higher above:
 	//FileOp.hNameMappings			= NULL;
 	//FileOp.lpszProgressTitle		= NULL;
@@ -1470,68 +1506,23 @@ bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 
 
 
-bool Line::Util_MoveDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int OverwriteMode)
-{
-	// Get the fullpathnames and strip trailing \s
-	TCHAR szSource[_MAX_PATH+2];
-	TCHAR szDest[_MAX_PATH+2];
-	Util_GetFullPathName(szInputSource, szSource);
-	Util_GetFullPathName(szInputDest, szDest);
-
-	// Ensure source is a directory
-	if (Util_IsDir(szSource) == false)
-		return false;							// Nope
-
-	// Does the destination dir exist?
-	DWORD attr = GetFileAttributes(szDest);
-	if (attr != 0xFFFFFFFF) // Destination already exists as a file or directory.
-	{
-		if (attr & FILE_ATTRIBUTE_DIRECTORY) // Dest already exists as a directory.
-		{
-			if (OverwriteMode != 1 && OverwriteMode != 2) // Overwrite Mode is "Never".  Strict validation for safety.
-				return false; // For consistency, mode1 actually should move the source-dir *into* the identically name dest dir.  But for backward compatibility, this change hasn't been made.
-		}
-		else // Dest already exists as a file.
-			return false; // Don't even attempt to overwrite a file with a dir, regardless of mode (I think SHFileOperation refuses to do it anyway).
-	}
-
-	if (Util_IsDifferentVolumes(szSource, szDest))
-	{
-		// If the source and dest are on different volumes then we must copy rather than move
-		// as move in this case only works on some OSes.  Copy and delete (poor man's move).
-		if (!Util_CopyDir(szSource, szDest, true))
-			return false;
-		return Util_RemoveDir(szSource, true);
-	}
-
-	// Since above didn't return, source and dest are on same volume.
-	// We must also make source\dest double nulled strings for the SHFileOp API
-	szSource[_tcslen(szSource)+1] = '\0';
-	szDest[_tcslen(szDest)+1] = '\0';
-
-	// Setup the struct
-	SHFILEOPSTRUCT FileOp = {0};
-	FileOp.pFrom = szSource;
-	FileOp.pTo = szDest;
-	FileOp.wFunc = FO_MOVE;
-	FileOp.fFlags = FOF_SILENT | FOF_NOCONFIRMMKDIR | FOF_NOCONFIRMATION | FOF_NOERRORUI; // Set default. FOF_NO_UI ("perform the operation with no user input") is not present for in case it would break compatibility somehow, and because the other flags already present seem to make its behavior implicit.
-	if (OverwriteMode == 2) // v1.0.46.07: Using the FOF_MULTIDESTFILES flag (as hinted by MSDN) overwrites/merges any existing target directory.  This logic supersedes and fixes old logic that didn't work properly when the source dir was being both renamed and moved to overwrite an existing directory.
-		FileOp.fFlags |= FOF_MULTIDESTFILES;
-	// All of the below left set to NULL/FALSE by the struct initializer higher above:
-	//FileOp.hNameMappings			= NULL;
-	//FileOp.lpszProgressTitle		= NULL;
-	//FileOp.fAnyOperationsAborted	= FALSE;
-	//FileOp.hwnd					= NULL;
-
-	return !SHFileOperation(&FileOp);
-}
-
-
-
 bool Line::Util_RemoveDir(LPCTSTR szInputSource, bool bRecurse)
 {
 	SHFILEOPSTRUCT	FileOp;
 	TCHAR			szSource[_MAX_PATH+2];
+	
+	// If recursion not on just try a standard delete on the directory (the SHFile function WILL
+	// delete a directory even if not empty no matter what flags you give it...)
+	if (bRecurse == false)
+	{
+		// v1.1.31.00: Use the original source path in case its length exceeds _MAX_PATH.
+		// Relative paths and trailing slashes are okay in this case, and Util_IsDir() is
+		// not needed since the function only removes empty directories, not files.
+		if (!RemoveDirectory(szInputSource))
+			return false;
+		else
+			return true;
+	}
 
 	// Get the fullpathnames and strip trailing \s
 	Util_GetFullPathName(szInputSource, szSource);
@@ -1539,16 +1530,6 @@ bool Line::Util_RemoveDir(LPCTSTR szInputSource, bool bRecurse)
 	// Ensure source is a directory
 	if (Util_IsDir(szSource) == false)
 		return false;							// Nope
-
-	// If recursion not on just try a standard delete on the directory (the SHFile function WILL
-	// delete a directory even if not empty no matter what flags you give it...)
-	if (bRecurse == false)
-	{
-		if (!RemoveDirectory(szSource))
-			return false;
-		else
-			return true;
-	}
 
 	// We must also make double nulled strings for the SHFileOp API
 	szSource[_tcslen(szSource)+1] = '\0';
@@ -1576,18 +1557,14 @@ bool Line::Util_RemoveDir(LPCTSTR szInputSource, bool bRecurse)
 ///////////////////////////////////////////////////////////////////////////////
 int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite, bool bMove, DWORD &aLastError)
 {
-	TCHAR			szSource[_MAX_PATH+1];
-	TCHAR			szDest[_MAX_PATH+1];
-	TCHAR			szExpandedDest[MAX_PATH+1];
-	TCHAR			szTempPath[_MAX_PATH+1];
-	TCHAR			szDrive[_MAX_PATH+1];
-	TCHAR			szDir[_MAX_PATH+1];
-	TCHAR			szFile[_MAX_PATH+1];
-	TCHAR			szExt[_MAX_PATH+1];
+	TCHAR szSource[T_MAX_PATH];
+	TCHAR szDest[T_MAX_PATH];
+	TCHAR szDestPattern[MAX_PATH];
 
 	// Get local version of our source/dest with full path names, strip trailing \s
-	Util_GetFullPathName(szInputSource, szSource);
-	Util_GetFullPathName(szInputDest, szDest);
+	// and normalize the path separator (replace / with \).
+	Util_GetFullPathName(szInputSource, szSource, _countof(szSource));
+	Util_GetFullPathName(szInputDest, szDest, _countof(szDest));
 
 	// If the source or dest is a directory then add *.* to the end
 	if (Util_IsDir(szSource))
@@ -1605,12 +1582,14 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 	aLastError = 0; // Set default. Overridden only when a failure occurs.
 
 	// Otherwise, loop through all the matching files.
-	// Split source into file and extension (we need this info in the loop below to reconstruct the path)
-	_tsplitpath(szSource, szDrive, szDir, szFile, szExt);
-	// Note we now rely on the SOURCE being the contents of szDrive, szDir, szFile, etc.
-	size_t szTempPath_length = sntprintf(szTempPath, _countof(szTempPath), _T("%s%s"), szDrive, szDir);
-	LPTSTR append_pos = szTempPath + szTempPath_length;
-	size_t space_remaining = _countof(szTempPath) - szTempPath_length - 1;
+
+	// Locate the filename/pattern, which will be overwritten on each iteration.
+	LPTSTR source_append_pos = _tcsrchr(szSource, '\\') + 1;
+	LPTSTR dest_append_pos = _tcsrchr(szDest, '\\') + 1;
+	size_t space_remaining = _countof(szSource) - (source_append_pos - szSource) - 1;
+
+	// Copy destination filename or pattern, since it will be overwritten.
+	tcslcpy(szDestPattern, dest_append_pos, _countof(szDestPattern));
 
 	int failure_count = 0;
 	LONG_OPERATION_INIT
@@ -1634,10 +1613,10 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 			++failure_count;
 			continue;
 		}
-		_tcscpy(append_pos, findData.cFileName); // Indirectly populate szTempPath. Above has ensured this won't overflow.
+		_tcscpy(source_append_pos, findData.cFileName); // Indirectly populate szSource. Above has ensured this won't overflow.
 
 		// Expand the destination based on this found file
-		Util_ExpandFilenameWildcard(findData.cFileName, szDest, szExpandedDest);
+		Util_ExpandFilenameWildcard(findData.cFileName, szDestPattern, dest_append_pos);
 
 		// Fixed for v1.0.36.01: This section has been revised to avoid unnecessary calls; but more
 		// importantly, it now avoids the deletion and complete loss of a file when it is copied or
@@ -1660,14 +1639,14 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 			// physical file on disk (hopefully MoveFile handles all of these correctly by indicating
 			// success [below] when a file is moved onto itself, though it has only been tested for
 			// basic cases of relative vs. absolute path).
-			if (!MoveFile(szTempPath, szExpandedDest))
+			if (!MoveFile(szSource, szDest))
 			{
 				// If overwrite mode was not specified by the caller, or it was but the existing
 				// destination file cannot be deleted (perhaps because it is a folder rather than
 				// a file), or it can be deleted but the source cannot be moved, indicate a failure.
 				// But by design, continue the operation.  The following relies heavily on
 				// short-circuit boolean evaluation order:
-				if (   !(bOverwrite && DeleteFile(szExpandedDest) && MoveFile(szTempPath, szExpandedDest))   )
+				if (   !(bOverwrite && DeleteFile(szDest) && MoveFile(szSource, szDest))   )
 				{
 					aLastError = GetLastError();
 					++failure_count; // At this stage, any of the above 3 being false is cause for failure.
@@ -1677,7 +1656,7 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 			}
 		}
 		else // The mode is "Copy" vs. "Move"
-			if (!CopyFile(szTempPath, szExpandedDest, !bOverwrite)) // Force it to fail if bOverwrite==false.
+			if (!CopyFile(szSource, szDest, !bOverwrite)) // Force it to fail if bOverwrite==false.
 			{
 				aLastError = GetLastError();
 				++failure_count;
@@ -1693,18 +1672,12 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 void Line::Util_ExpandFilenameWildcard(LPCTSTR szSource, LPCTSTR szDest, LPTSTR szExpandedDest)
 {
 	// copy one.two.three  *.txt     = one.two   .txt
-	// copy one.two.three  *.*.txt   = one.two   .three  .txt
-	// copy one.two.three  *.*.*.txt = one.two   .three  ..txt
+	// copy one.two.three  *.*.txt   = one.two.  .txt  (extra asterisks are removed)
 	// copy one.two		   test      = test
-
-	TCHAR	szFileTemp[_MAX_PATH+1];
-	TCHAR	szExtTemp[_MAX_PATH+1];
 
 	TCHAR	szSrcFile[_MAX_PATH+1];
 	TCHAR	szSrcExt[_MAX_PATH+1];
 
-	TCHAR	szDestDrive[_MAX_PATH+1];
-	TCHAR	szDestDir[_MAX_PATH+1];
 	TCHAR	szDestFile[_MAX_PATH+1];
 	TCHAR	szDestExt[_MAX_PATH+1];
 
@@ -1716,8 +1689,8 @@ void Line::Util_ExpandFilenameWildcard(LPCTSTR szSource, LPCTSTR szDest, LPTSTR 
 	}
 
 	// Split source and dest into file and extension
-	_tsplitpath( szSource, szDestDrive, szDestDir, szSrcFile, szSrcExt );
-	_tsplitpath( szDest, szDestDrive, szDestDir, szDestFile, szDestExt );
+	_tsplitpath( szSource, NULL, NULL, szSrcFile, szSrcExt );
+	_tsplitpath( szDest, NULL, NULL, szDestFile, szDestExt );
 
 	// Source and Dest ext will either be ".nnnn" or "" or ".*", remove the period
 	if (szSrcExt[0] == '.')
@@ -1725,35 +1698,28 @@ void Line::Util_ExpandFilenameWildcard(LPCTSTR szSource, LPCTSTR szDest, LPTSTR 
 	if (szDestExt[0] == '.')
 		_tcscpy(szDestExt, &szDestExt[1]);
 
-	// Start of the destination with the drive and dir
-	_tcscpy(szExpandedDest, szDestDrive);
-	_tcscat(szExpandedDest, szDestDir);
-
-	// Replace first * in the destext with the srcext, remove any other *
-	Util_ExpandFilenameWildcardPart(szSrcExt, szDestExt, szExtTemp);
-
 	// Replace first * in the destfile with the srcfile, remove any other *
-	Util_ExpandFilenameWildcardPart(szSrcFile, szDestFile, szFileTemp);
-
-	// Concat the filename and extension if req
-	if (szExtTemp[0] != '\0')
+	Util_ExpandFilenameWildcardPart(szSrcFile, szDestFile, szExpandedDest);
+	
+	if (*szSrcExt || *szDestExt)
 	{
-		_tcscat(szFileTemp, _T("."));
-		_tcscat(szFileTemp, szExtTemp);	
-	}
-	else
-	{
-		// Dest extension was blank SOURCE MIGHT NOT HAVE BEEN!
-		if (szSrcExt[0] != '\0')
+		LPTSTR ext = _tcschr(szExpandedDest, '\0');
+		
+		if (!szDestExt[0])
 		{
-			_tcscat(szFileTemp, _T("."));
-			_tcscat(szFileTemp, szSrcExt);	
+			// Always include the source extension if destination extension was blank
+			// (for backward-compatibility, this is done even if a '.' was present)
+			szDestExt[0] = '*';
+			szDestExt[1] = '\0';
 		}
+
+		// Replace first * in the destext with the srcext, remove any other *
+		Util_ExpandFilenameWildcardPart(szSrcExt, szDestExt, ext + 1);
+
+		// If there's a non-blank extension, replace the filename's null terminator with .
+		if (ext[1])
+			*ext = '.';
 	}
-
-	// Now add the drive and directory bit back onto the dest
-	_tcscat(szExpandedDest, szFileTemp);
-
 }
 
 
@@ -1889,32 +1855,10 @@ void Line::Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut)
 
 
 
-bool Line::Util_IsDifferentVolumes(LPCTSTR szPath1, LPCTSTR szPath2)
-// Checks two paths to see if they are on the same volume.
+void Line::Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut, DWORD aBufSize)
 {
-	TCHAR			szP1Drive[_MAX_DRIVE+1];
-	TCHAR			szP2Drive[_MAX_DRIVE+1];
-
-	TCHAR			szDir[_MAX_DIR+1];
-	TCHAR			szFile[_MAX_FNAME+1];
-	TCHAR			szExt[_MAX_EXT+1];
-	
-	TCHAR			szP1[_MAX_PATH+1];	
-	TCHAR			szP2[_MAX_PATH+1];
-
-	// Get full pathnames
-	Util_GetFullPathName(szPath1, szP1);
-	Util_GetFullPathName(szPath2, szP2);
-
-	// Split the target into bits
-	_tsplitpath( szP1, szP1Drive, szDir, szFile, szExt );
-	_tsplitpath( szP2, szP2Drive, szDir, szFile, szExt );
-
-	if (szP1Drive[0] == '\0' || szP2Drive[0] == '\0')
-		// One or both paths is a UNC - assume different volumes
-		return true;
-	else
-		return _tcsicmp(szP1Drive, szP2Drive);
+	GetFullPathName(szIn, aBufSize, szOut, NULL);
+	strip_trailing_backslash(szOut);
 }
 
 

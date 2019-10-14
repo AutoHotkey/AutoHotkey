@@ -1512,43 +1512,45 @@ ResultType FileAppend(LPTSTR aFilespec, LPTSTR aLine, bool aAppendNewline)
 
 
 
-LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFullFileSpec)
-// aFullFileSpec must be a modifiable string since it will be converted to proper case.
-// Also, it should be at least MAX_PATH is size because if it contains any short (8.3)
-// components, they will be converted into their long names.
-// Returns aFullFileSpec, the contents of which have been converted to the case used by the
-// file system.  Note: The trick of changing the current directory to be that of
-// aFullFileSpec and then calling GetFullPathName() doesn't always work.  So perhaps the
-// only easy way is to call FindFirstFile() on each directory that composes aFullFileSpec,
-// which is what is done here.  I think there's another way involving some PIDL Explorer
-// function, but that might not support UNCs correctly.
+LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFilespec, LPTSTR aBuf, size_t aBufSize, size_t &aBufLength)
+// Convert aFilespec to proper case and put the result into aBuf.
+// aFilespec and aBuf must not overlap.
+// aFilespec should be modifiable, but on return always has its original value.
+// aBufSize is the size of aBuf in WCHARs, including space for the null-terminator;
+// it should be large enough to allow expansion of short (8.3) names to long names.
+// If the final path would exceed aBufSize or if the conversion could not be completed,
+// returns NULL and leaves aBufLength unchanged; otherwise returns aBuf and sets
+// aBufLength to its length.
+// Note: GetFullPathName() doesn't perform case-correction, only string manipulation.
+// GetLongPathName() skips name components which are not 8.3-compliant.
 {
-	if (!aFullFileSpec || !*aFullFileSpec) return aFullFileSpec;
-	size_t length = _tcslen(aFullFileSpec);
-	if (length < 2 || length >= MAX_PATH) return aFullFileSpec;
+	ASSERT(aBufSize > 3);
+	ASSERT(aFilespec != aBuf);
+	if (!*aFilespec)
+		return NULL;
+	LPTSTR dir_start, dir_end;
+	size_t built_length;
 	// Start with something easy, the drive letter:
-	if (aFullFileSpec[1] == ':')
-		aFullFileSpec[0] = ctoupper(aFullFileSpec[0]);
-	// else it might be a UNC that has no drive letter.
-	TCHAR built_filespec[MAX_PATH], *dir_start, *dir_end;
-	if (dir_start = _tcschr(aFullFileSpec, ':'))
-		// MSDN: "To examine any directory other than a root directory, use an appropriate
-		// path to that directory, with no trailing backslash. For example, an argument of
-		// "C:\windows" will return information about the directory "C:\windows", not about
-		// any directory or file in "C:\windows". An attempt to open a search with a trailing
-		// backslash will always fail."
-		dir_start += 2; // Skip over the first backslash that goes with the drive letter.
+	if (aFilespec[1] == ':' && aFilespec[2] == '\\')
+	{
+		aBuf[0] = ctoupper(aFilespec[0]);
+		aBuf[1] = ':';
+		aBuf[2] = '\\';
+		// MSDN: "An attempt to open a search with a trailing backslash will always fail."
+		dir_start = aFilespec + 3; // Skip over the first backslash that goes with the drive letter.
+		built_length = 3;
+	}
 	else // it's probably a UNC
 	{
-		if (_tcsncmp(aFullFileSpec, _T("\\\\"), 2))
+		if (_tcsncmp(aFilespec, _T("\\\\"), 2))
 			// It doesn't appear to be a UNC either, so not sure how to deal with it.
-			return aFullFileSpec;
+			return NULL;
 		// I think MS says you can't use FindFirstFile() directly on a share name, so we
 		// want to omit both that and the server name from consideration (i.e. we don't attempt
 		// to find their proper case).  MSDN: "Similarly, on network shares, you can use an
 		// lpFileName of the form "\\server\service\*" but you cannot use an lpFileName that
 		// points to the share itself, such as "\\server\service".
-		dir_start = aFullFileSpec + 2;
+		dir_start = aFilespec + 2;
 		LPTSTR end_of_server_name = _tcschr(dir_start, '\\');
 		if (end_of_server_name)
 		{
@@ -1557,32 +1559,56 @@ LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFullFileSpec)
 			if (end_of_share_name)
 				dir_start = end_of_share_name + 1;
 		}
+		built_length = dir_start - aFilespec;
+		if (built_length >= aBufSize) // Too long.
+			return NULL;
+		tmemcpy(aBuf, aFilespec, built_length);
 	}
-	// Init the new string (the filespec we're building), e.g. copy just the "c:\\" part.
-	tcslcpy(built_filespec, aFullFileSpec, dir_start - aFullFileSpec + 1);
 	WIN32_FIND_DATA found_file;
+	size_t found_length;
 	HANDLE file_search;
-	for (dir_end = dir_start; dir_end = _tcschr(dir_end, '\\'); ++dir_end)
+	for ( ; dir_end = _tcschr(dir_start, '\\'); dir_start = dir_end + 1)
 	{
 		*dir_end = '\0';  // Temporarily terminate.
-		file_search = FindFirstFile(aFullFileSpec, &found_file);
+		file_search = FindFirstFile(aFilespec, &found_file);
 		*dir_end = '\\'; // Restore it before we do anything else.
 		if (file_search == INVALID_HANDLE_VALUE)
-			return aFullFileSpec;
+			return NULL;
 		FindClose(file_search);
 		// Append the case-corrected version of this directory name:
-		sntprintfcat(built_filespec, _countof(built_filespec), _T("%s\\"), found_file.cFileName);
+		found_length = _tcslen(found_file.cFileName);
+		if (built_length + found_length + 1 > aBufSize) // Too long (+1 for the slash).
+			return NULL;
+		tmemcpy(aBuf + built_length, found_file.cFileName, found_length);
+		built_length += found_length;
+		aBuf[built_length++] = '\\';
 	}
-	// Now do the filename itself:
-	if (   (file_search = FindFirstFile(aFullFileSpec, &found_file)) == INVALID_HANDLE_VALUE   )
-		return aFullFileSpec;
-	FindClose(file_search);
-	sntprintfcat(built_filespec, _countof(built_filespec), _T("%s"), found_file.cFileName);
-	// It might be possible for the new one to be longer than the old, e.g. if some 8.3 short
-	// names were converted to long names by the process.  Thus, the caller should ensure that
-	// aFullFileSpec is large enough:
-	_tcscpy(aFullFileSpec, built_filespec);
-	return aFullFileSpec;
+	if (*dir_start) // Not a path ending in '\\'.
+	{
+		// Now do the filename itself:
+		if (   (file_search = FindFirstFile(aFilespec, &found_file)) == INVALID_HANDLE_VALUE   )
+			return NULL;
+		FindClose(file_search);
+		found_length = _tcslen(found_file.cFileName);
+		if (built_length + found_length > aBufSize) // Too long.
+			return NULL;
+		tmemcpy(aBuf + built_length, found_file.cFileName, found_length);
+		built_length += found_length;
+	}
+	aBuf[built_length] = '\0';
+	aBufLength = built_length;
+	return aBuf;
+}
+
+
+
+void ConvertFilespecToCorrectCase(LPTSTR aBuf, size_t aBufSize, size_t &aBufLength)
+{
+	TCHAR built_filespec[T_MAX_PATH];
+	if (aBufSize > _countof(built_filespec))
+		aBufSize = _countof(built_filespec);
+	if (ConvertFilespecToCorrectCase(aBuf, built_filespec, aBufSize, aBufLength))
+		tmemcpy(aBuf, built_filespec, aBufLength + 1);
 }
 
 
@@ -2301,8 +2327,8 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 			if (DynGdiplusStartup && DynGdiplusStartup(&token, &gdi_input, NULL) == Gdiplus::Ok)
 			{
 #ifndef UNICODE
-				WCHAR filespec_wide[MAX_PATH];
-				ToWideChar(aFilespec, filespec_wide, MAX_PATH); // Dest. size is in wchars, not bytes.
+				WCHAR filespec_wide[MAX_WIDE_PATH]; // MAX_WIDE_PATH vs. MAX_PATH allows this to work with long paths (\\?\ prefix may be required).
+				ToWideChar(aFilespec, filespec_wide, _countof(filespec_wide)); // Dest. size is in wchars, not bytes.
 				if (DynGdipCreateBitmapFromFile(filespec_wide, &pgdi_bitmap) == Gdiplus::Ok)
 #else
 				if (DynGdipCreateBitmapFromFile(aFilespec, &pgdi_bitmap) == Gdiplus::Ok)

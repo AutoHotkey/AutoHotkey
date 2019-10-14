@@ -17,7 +17,6 @@ GNU General Public License for more details.
 #include "stdafx.h" // pre-compiled headers
 #include <olectl.h> // for OleLoadPicture()
 #include <winioctl.h> // For PREVENT_MEDIA_REMOVAL and CD lock/unlock.
-#include <typeinfo.h> // For typeid in BIF_Type.
 #include "qmath.h" // Used by Transform() [math.h incurs 2k larger code size just for ceil() & floor()]
 #include "mt19937ar-cok.h" // for sorting in random order
 #include "script.h"
@@ -6723,7 +6722,7 @@ void DriveSpace(ResultToken &aResultToken, LPTSTR aPath, bool aGetFreeSpace)
 {
 	if (!aPath || !*aPath) goto error;  // Below relies on this check.
 
-	TCHAR buf[MAX_PATH + 1];  // +1 to allow appending of backslash.
+	TCHAR buf[MAX_PATH]; // MAX_PATH vs T_MAX_PATH because testing shows it doesn't support long paths even with \\?\.
 	tcslcpy(buf, aPath, _countof(buf));
 	size_t length = _tcslen(buf);
 	if (buf[length - 1] != '\\') // Trailing backslash is present, which some of the API calls below don't like.
@@ -6763,7 +6762,7 @@ BIF_DECL(BIF_Drive)
 	LPTSTR aValue = ParamIndexToOptionalString(0, _f_number_buf);
 
 	bool successful = false;
-	TCHAR path[MAX_PATH + 1];  // +1 to allow room for trailing backslash in case it needs to be added.
+	TCHAR path[MAX_PATH]; // MAX_PATH vs. T_MAX_PATH because SetVolumeLabel() can't seem to make use of long paths.
 	size_t path_length;
 
 	// Notes about the below macro:
@@ -6945,7 +6944,7 @@ BIF_DECL(BIF_DriveGet)
 	
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Set default: indicate success.
 
-	TCHAR path[MAX_PATH + 1];  // +1 to allow room for trailing backslash in case it needs to be added.
+	TCHAR path[T_MAX_PATH]; // T_MAX_PATH vs. MAX_PATH, though testing indicates only GetDriveType() supports long paths.
 	size_t path_length;
 
 	switch(drive_get_cmd)
@@ -7726,6 +7725,10 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 		// ATOU() returns 0xFFFFFFFF for -1, which is relied upon to support the -1 sound.
 	// See http://msdn.microsoft.com/library/default.asp?url=/library/en-us/multimed/htm/_win32_play.asp
 	// for some documentation mciSendString() and related.
+	// MAX_PATH note: There's no chance this API supports long paths even on Windows 10.
+	// Research indicates it limits paths to 127 chars (not even MAX_PATH), but since there's
+	// no apparent benefit to reducing it, we'll keep this size to ensure backward-compatibility.
+	// Note that using a relative path does not help, but using short (8.3) names does.
 	TCHAR buf[MAX_PATH * 2]; // Allow room for filename and commands.
 	mciSendString(_T("status ") SOUNDPLAY_ALIAS _T(" mode"), buf, _countof(buf), NULL);
 	if (*buf) // "playing" or "stopped" (so close it before trying to re-open with a new aFilespec).
@@ -7765,62 +7768,77 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 void SetWorkingDir(LPTSTR aNewDir, bool aSetErrorLevel)
 // Sets ErrorLevel to indicate success/failure, but only if the script has begun runtime execution (callers
 // want that).
-// This function was added in v1.0.45.01 for the reasons commented further below.
-// It's similar to the one in the ahk2exe source, so maintain them together.
+// This function was added in v1.0.45.01 for the reason described below.
 {
+	// v1.0.45.01: Since A_ScriptDir omits the trailing backslash for roots of drives (such as C:),
+	// and since that variable probably shouldn't be changed for backward compatibility, provide
+	// the missing backslash to allow SetWorkingDir %A_ScriptDir% (and others) to work as expected
+	// in the root of a drive.
+	// Update in 2018: The reason it wouldn't by default is that "C:" is actually a reference to the
+	// the current directory if it's on C: drive, otherwise a reference to the path contained by the
+	// env var "=C:".  Similarly, "C:x" is a reference to "x" inside that directory.
+	// For details, see https://blogs.msdn.microsoft.com/oldnewthing/20100506-00/?p=14133
+	// Although the override here creates inconsistency between SetWorkingDir and everything else
+	// that can accept "C:", it is most likely what the user wants, and now there's also backward-
+	// compatibility to consider since this workaround has been in place since 2006.
+	// v1.1.31.00: Add the slash up-front instead of attempting SetCurrentDirectory(_T("C:"))
+	// and comparing the result, since the comparison would always yield "not equal" due to either
+	// a trailing slash or the directory being incorrect.
+	TCHAR drive_buf[4];
+	if (aNewDir[0] && aNewDir[1] == ':' && !aNewDir[2])
+	{
+		drive_buf[0] = aNewDir[0];
+		drive_buf[1] = aNewDir[1];
+		drive_buf[2] = '\\';
+		drive_buf[3] = '\0';
+		aNewDir = drive_buf;
+	}
+
 	if (!SetCurrentDirectory(aNewDir)) // Caused by nonexistent directory, permission denied, etc.
 	{
 		if (aSetErrorLevel && g_script.mIsReadyToExecute)
 			g_script.SetErrorLevelOrThrow();
 		return;
 	}
+	// Otherwise, the change to the working directory succeeded.
 
-	// Otherwise, the change to the working directory *apparently* succeeded (but is confirmed below for root drives
-	// and also because we want the absolute path in cases where aNewDir is relative).
-	TCHAR buf[_countof(g_WorkingDir)];
-	LPTSTR actual_working_dir = g_script.mIsReadyToExecute ? g_WorkingDir : buf; // i.e. don't update g_WorkingDir when our caller is the #include directive.
 	// Other than during program startup, this should be the only place where the official
 	// working dir can change.  The exception is FileSelect(), which changes the working
 	// dir as the user navigates from folder to folder.  However, the whole purpose of
 	// maintaining g_WorkingDir is to workaround that very issue.
+	if (g_script.mIsReadyToExecute) // Callers want this done only during script runtime.
+	{
+		UpdateWorkingDir(aNewDir);
+		// Since the above didn't return, it wants us to indicate success.
+		if (aSetErrorLevel) // Callers want ErrorLevel changed only during script runtime.
+			g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+	}
+}
 
-	// GetCurrentDirectory() is called explicitly, to confirm the change, in case aNewDir is a relative path.
+
+
+void UpdateWorkingDir(LPTSTR aNewDir)
+// aNewDir is NULL or a path which was just passed to SetCurrentDirectory().
+{
+	TCHAR buf[T_MAX_PATH]; // Windows 10 long path awareness enables working dir to exceed MAX_PATH.
+	// GetCurrentDirectory() is called explicitly, in case aNewDir is a relative path.
 	// We want to store the absolute path:
-	if (!GetCurrentDirectory(_countof(buf), actual_working_dir)) // Might never fail in this case, but kept for backward compatibility.
-	{
-		tcslcpy(actual_working_dir, aNewDir, _countof(buf)); // Update the global to the best info available.
-		// But ErrorLevel is set to "none" further below because the actual "set" did succeed; it's also for
-		// backward compatibility.
-	}
-	else // GetCurrentDirectory() succeeded, so it's appropriate to compare what we asked for to what was received.
-	{
-		if (aNewDir[0] && aNewDir[1] == ':' && !aNewDir[2] // Root with missing backslash. Relies on short-circuit boolean order.
-			&& _tcsicmp(aNewDir, actual_working_dir)) // The root directory we requested didn't actually get set. See below.
-		{
-			// There is some strange OS behavior here: If the current working directory is C:\anything\...
-			// and SetCurrentDirectory() is called to switch to "C:", the function reports success but doesn't
-			// actually change the directory.  However, if you first change to D: then back to C:, the change
-			// works as expected.  Presumably this is for backward compatibility with DOS days; but it's 
-			// inconvenient and seems desirable to override it in this case, especially because:
-			// v1.0.45.01: Since A_ScriptDir omits the trailing backslash for roots of drives (such as C:),
-			// and since that variable probably shouldn't be changed for backward compatibility, provide
-			// the missing backslash to allow SetWorkingDir %A_ScriptDir% (and others) to work in the root
-			// of a drive.
-			TCHAR buf_temp[8];
-			_stprintf(buf_temp, _T("%s\\"), aNewDir); // No danger of buffer overflow in this case.
-			if (SetCurrentDirectory(buf_temp))
-			{
-				if (!GetCurrentDirectory(_countof(buf), actual_working_dir)) // Might never fail in this case, but kept for backward compatibility.
-					tcslcpy(actual_working_dir, aNewDir, _countof(buf)); // But still report "no error" (below) because the Set() actually did succeed.
-					// But treat this as a success like the similar one higher above.
-			}
-			//else Set() failed; but since the original Set() succeeded (and for simplicity) report ErrorLevel "none".
-		}
-	}
+	if (GetCurrentDirectory(_countof(buf), buf)) // Might never fail in this case, but kept for backward compatibility.
+		aNewDir = buf;
+	if (aNewDir)
+		g_WorkingDir.SetString(aNewDir);
+}
 
-	// Since the above didn't return, it wants us to indicate success.
-	if (aSetErrorLevel && g_script.mIsReadyToExecute) // Callers want ErrorLevel changed only during script runtime.
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+
+
+LPTSTR GetWorkingDir()
+// Allocate a copy of the working directory from the heap.  This is used to support long
+// paths without adding 64KB of stack usage per recursive #include <> on Unicode builds.
+{
+	TCHAR buf[T_MAX_PATH];
+	if (GetCurrentDirectory(_countof(buf), buf))
+		return _tcsdup(buf);
+	return NULL;
 }
 
 
@@ -7847,12 +7865,20 @@ BIF_DECL(BIF_FileSelect)
 	TCHAR file_buf[65535];
 	*file_buf = '\0'; // Set default.
 
-	TCHAR working_dir[MAX_PATH];
+	TCHAR working_dir[MAX_PATH]; // Using T_MAX_PATH vs. MAX_PATH did not help on Windows 10.0.16299 (see below).
 	if (!aWorkingDir || !*aWorkingDir)
 		*working_dir = '\0';
 	else
 	{
-		tcslcpy(working_dir, aWorkingDir, _countof(working_dir));
+		// Compress the path if possible to support longer paths.  Without this, any path longer
+		// than MAX_PATH would be ignored, presumably because the dialog, as part of the shell,
+		// does not support long paths.  Surprisingly, although Windows 10 long path awareness
+		// does not allow us to pass a long path for working_dir, it does affect whether the long
+		// path is used in the address bar and returned filenames.
+		if (_tcslen(aWorkingDir) >= MAX_PATH)
+			GetShortPathName(aWorkingDir, working_dir, _countof(working_dir));
+		else
+			tcslcpy(working_dir, aWorkingDir, _countof(working_dir));
 		// v1.0.43.10: Support CLSIDs such as:
 		//   My Computer  ::{20d04fe0-3aea-1069-a2d8-08002b30309d}
 		//   My Documents ::{450d8fba-ad25-11d0-98a8-0800361b1103}
@@ -8088,7 +8114,7 @@ BIF_DECL(BIF_FileSelect)
 
 
 
-ResultType Line::FileCreateDir(LPTSTR aDirSpec)
+ResultType Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 {
 	if (!aDirSpec || !*aDirSpec)
 		return LineError(ERR_PARAM1_REQUIRED);
@@ -8100,13 +8126,24 @@ ResultType Line::FileCreateDir(LPTSTR aDirSpec)
 	// If it has a backslash, make sure all its parent directories exist before we attempt
 	// to create this directory:
 	LPTSTR last_backslash = _tcsrchr(aDirSpec, '\\');
-	if (last_backslash > aDirSpec) // v1.0.48.04: Changed "last_backslash" to "last_backslash > aDirSpec" so that an aDirSpec with a leading \ (but no other backslashes), such as \dir, is supported.
+	if (last_backslash > aDirSpec // v1.0.48.04: Changed "last_backslash" to "last_backslash > aDirSpec" so that an aDirSpec with a leading \ (but no other backslashes), such as \dir, is supported.
+		&& last_backslash[-1] != ':') // v1.1.31.00: Don't attempt FileCreateDir("C:") since that's equivalent to either "C:\" or the working directory (which already exists), or FileCreateDir("\\?\C:") since it always fails.
 	{
-		TCHAR parent_dir[MAX_PATH];
-		if (_tcslen(aDirSpec) >= _countof(parent_dir)) // avoid overflow
-			return SetErrorsOrThrow(true, ERROR_BUFFER_OVERFLOW);
-		tcslcpy(parent_dir, aDirSpec, last_backslash - aDirSpec + 1); // Omits the last backslash.
-		FileCreateDir(parent_dir); // Recursively create all needed ancestor directories.
+		LPTSTR parent_dir;
+		if (aCanModifyDirSpec)
+		{
+			parent_dir = aDirSpec; // Caller provided a modifiable aDirSpec.
+			*last_backslash = '\0'; // Temporarily terminate for parent directory.
+		}
+		else
+		{
+			// v1.1.31.00: Allocate a modifiable buffer to be used by all calls (supports long paths).
+			parent_dir = (LPTSTR)_alloca((last_backslash - aDirSpec + 1) * sizeof(TCHAR));
+			tcslcpy(parent_dir, aDirSpec, last_backslash - aDirSpec + 1); // Omits the last backslash.
+		}
+		FileCreateDir(parent_dir, parent_dir); // Recursively create all needed ancestor directories.
+		if (aCanModifyDirSpec)
+			*last_backslash = '\\'; // Undo temporary termination.
 
 		// v1.0.44: Fixed ErrorLevel being set to 1 when the specified directory ends in a backslash.  In such cases,
 		// two calls were made to CreateDirectory for the same folder: the first without the backslash and then with
@@ -8487,8 +8524,7 @@ ResultType Line::FileDelete(LPTSTR aFilePattern)
 	}
 
 	// Otherwise aFilePattern contains wildcards, so we'll search for all matches and delete them.
-	FilePatternApply(aFilePattern, FILE_LOOP_FILES_ONLY, false, FileDeleteCallback, NULL);
-	return OK;
+	return FilePatternApply(aFilePattern, FILE_LOOP_FILES_ONLY, false, FileDeleteCallback, NULL);
 }
 
 
@@ -8510,7 +8546,7 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	// Ahk2Exe converts it to upper-case before adding the resource. My testing showed that
 	// using lower or mixed case in some instances prevented the resource from being found.
 	// Since file paths are case-insensitive, it certainly doesn't seem harmful to do this:
-	TCHAR source[MAX_PATH];
+	TCHAR source[T_MAX_PATH];
 	size_t source_length = _tcslen(aSource);
 	if (source_length >= _countof(source))
 		// Probably can't happen; for simplicity, truncate it.
@@ -8539,8 +8575,8 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	// v1.0.35.11: Must search in A_ScriptDir by default because that's where ahk2exe will search by default.
 	// The old behavior was to search in A_WorkingDir, which seems pointless because ahk2exe would never
 	// be able to use that value if the script changes it while running.
-	TCHAR aDestPath[MAX_PATH];
-	GetFullPathName(aDest, MAX_PATH, aDestPath, NULL);
+	TCHAR aDestPath[T_MAX_PATH];
+	GetFullPathName(aDest, _countof(aDestPath), aDestPath, NULL);
 	SetCurrentDirectory(g_script.mFileDir);
 	success = CopyFile(aSource, aDestPath, !allow_overwrite);
 	SetCurrentDirectory(g_WorkingDir); // Restore to proper value.
@@ -8578,8 +8614,8 @@ struct FileSetAttribData
 	DWORD and_mask, xor_mask;
 };
 
-ResultType Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
-	, bool aDoRecurse, bool aCalledRecursively)
+ResultType Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern
+	, FileLoopModeType aOperateOnFolders, bool aDoRecurse)
 // Returns the number of files and folders that could not be changed due to an error.
 {
 	if (!*aFilePattern)
@@ -8652,70 +8688,65 @@ BOOL FileSetAttribCallback(LPTSTR file_path, WIN32_FIND_DATA &current_file, void
 
 
 
-int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
-	, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData
-	, bool aCalledRecursively)
+ResultType Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
+	, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData)
 {
-	if (!aCalledRecursively)  // i.e. Only need to do this if we're not called by ourself:
-	{
-		if (!*aFilePattern)
-		{
-			// Caller should handle this case before calling us if an exception is to be thrown.
-			SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
-			return 0;
-		}
-		if (aOperateOnFolders == FILE_LOOP_INVALID) // In case runtime dereference of a var was an invalid value.
-			aOperateOnFolders = FILE_LOOP_FILES_ONLY;  // Set default.
-		g->LastError = 0; // Set default. Overridden only when a failure occurs.
-	}
+	if (!*aFilePattern)
+		// Caller should handle this case before calling us if an exception is to be thrown.
+		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
 
-	if (_tcslen(aFilePattern) >= MAX_PATH) // Checked early to simplify other things below.
-	{
-		SetErrorsOrThrow(true, ERROR_BUFFER_OVERFLOW);
-		return 0;
-	}
+	if (aOperateOnFolders == FILE_LOOP_INVALID) // In case runtime dereference of a var was an invalid value.
+		aOperateOnFolders = FILE_LOOP_FILES_ONLY;  // Set default.
+	g->LastError = 0; // Set default. Overridden only when a failure occurs.
 
-	// Testing shows that the ANSI version of FindFirstFile() will not accept a path+pattern longer
-	// than 256 or so, even if the pattern would match files whose names are short enough to be legal.
-	// Therefore, as of v1.0.25, there is also a hard limit of MAX_PATH on all these variables.
-	// MSDN confirms this in a vague way: "In the ANSI version of FindFirstFile(), [plpFileName] is
-	// limited to MAX_PATH characters."
-	TCHAR file_pattern[MAX_PATH], file_path[MAX_PATH]; // Giving +3 extra for "*.*" seems fairly pointless because any files that actually need that extra room would fail to be retrieved by FindFirst/Next due to their inability to support paths much over 256.
-	_tcscpy(file_pattern, aFilePattern); // Make a copy in case of overwrite of deref buf during LONG_OPERATION/MsgSleep.
-	_tcscpy(file_path, aFilePattern);    // An earlier check has ensured these won't overflow.
+	FilePatternStruct fps;
 
-	size_t file_path_length; // The length of just the path portion of the filespec.
-	LPTSTR last_backslash = _tcsrchr(file_path, '\\');
+	LPTSTR last_backslash = _tcsrchr(aFilePattern, '\\');
 	if (last_backslash)
-	{
-		// Remove the filename and/or wildcard part.   But leave the trailing backslash on it for
-		// consistency with below:
-		*(last_backslash + 1) = '\0';
-		file_path_length = _tcslen(file_path);
-	}
+		fps.dir_length = last_backslash - aFilePattern + 1; // Include the slash.
 	else // Use current working directory, e.g. if user specified only *.*
-	{
-		*file_path = '\0';
-		file_path_length = 0;
-	}
-	LPTSTR append_pos = file_path + file_path_length; // For performance, copy in the unchanging part only once.  This is where the changing part gets appended.
-	size_t space_remaining = _countof(file_path) - file_path_length - 1; // Space left in file_path for the changing part.
+		fps.dir_length = 0;
+	fps.pattern_length = _tcslen(aFilePattern + fps.dir_length);
+	
+	// Testing shows that the ANSI version of FindFirstFile() will not accept a path+pattern longer
+	// than 259, even if the pattern would match files whose names are short enough to be legal.
+	if (fps.dir_length + fps.pattern_length >= _countof(fps.path)
+		|| fps.pattern_length >= _countof(fps.pattern))
+		return SetErrorsOrThrow(true, ERROR_BUFFER_OVERFLOW);
 
-	// For use with aDoRecurse, get just the naked file name/pattern:
-	LPTSTR naked_filename_or_pattern = _tcsrchr(file_pattern, '\\');
-	if (naked_filename_or_pattern)
-		++naked_filename_or_pattern;
-	else
-		naked_filename_or_pattern = file_pattern;
+	// Make copies in case of overwrite of deref buf during LONG_OPERATION/MsgSleep,
+	// and to allow modification:
+	_tcscpy(fps.path, aFilePattern); // Include the pattern initially.
+	_tcscpy(fps.pattern, aFilePattern + fps.dir_length); // Just the naked filename or pattern, for use with aDoRecurse.
 
-	if (!StrChrAny(naked_filename_or_pattern, _T("?*")))
+	if (!StrChrAny(fps.pattern, _T("?*")))
 		// Since no wildcards, always operate on this single item even if it's a folder.
 		aOperateOnFolders = FILE_LOOP_FILES_AND_FOLDERS;
+
+	// Passing the parameters this way reduces code size:
+	fps.aCallback = aCallback;
+	fps.aCallbackData = aCallbackData;
+	fps.aDoRecurse = aDoRecurse;
+	fps.aOperateOnFolders = aOperateOnFolders;
+
+	fps.failure_count = 0;
+
+	FilePatternApply(fps);
+	return SetErrorLevelOrThrowInt(fps.failure_count); // i.e. indicate success if there were no failures.
+}
+
+
+
+void Line::FilePatternApply(FilePatternStruct &fps)
+{
+	size_t dir_length = fps.dir_length; // Length of this directory (saved before recursion).
+	LPTSTR append_pos = fps.path + dir_length; // This is where the changing part gets appended.
+	size_t space_remaining = _countof(fps.path) - dir_length - 1; // Space left in file_path for the changing part.
 
 	LONG_OPERATION_INIT
 	int failure_count = 0;
 	WIN32_FIND_DATA current_file;
-	HANDLE file_search = FindFirstFile(file_pattern, &current_file);
+	HANDLE file_search = FindFirstFile(fps.path, &current_file);
 
 	if (file_search != INVALID_HANDLE_VALUE)
 	{
@@ -8733,11 +8764,11 @@ int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolde
 					|| current_file.cFileName[1] == '.' && !current_file.cFileName[2]) //
 					// Regardless of whether this folder will be recursed into, this folder
 					// will not be affected when the mode is files-only:
-					|| aOperateOnFolders == FILE_LOOP_FILES_ONLY)
+					|| fps.aOperateOnFolders == FILE_LOOP_FILES_ONLY)
 					continue; // Never operate upon or recurse into these.
 			}
 			else // It's a file, not a folder.
-				if (aOperateOnFolders == FILE_LOOP_FOLDERS_ONLY)
+				if (fps.aOperateOnFolders == FILE_LOOP_FOLDERS_ONLY)
 					continue;
 
 			if (_tcslen(current_file.cFileName) > space_remaining)
@@ -8752,7 +8783,7 @@ int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolde
 			_tcscpy(append_pos, current_file.cFileName); // Above has ensured this won't overflow.
 			//
 			// This is the part that actually does something to the file:
-			if (!aCallback(file_path, current_file, aCallbackData))
+			if (!fps.aCallback(fps.path, current_file, fps.aCallbackData))
 				++failure_count;
 			//
 		} while (FindNextFile(file_search, &current_file));
@@ -8760,29 +8791,23 @@ int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolde
 		FindClose(file_search);
 	} // if (file_search != INVALID_HANDLE_VALUE)
 
-	if (aDoRecurse && space_remaining > 2) // The space_remaining check ensures there's enough room to append "*.*" (if not, just avoid recursing into it due to rarity).
+	if (fps.aDoRecurse && space_remaining > 1) // The space_remaining check ensures there's enough room to append "*", though if false, that would imply lfs.pattern is empty.
 	{
-		// Testing shows that the ANSI version of FindFirstFile() will not accept a path+pattern longer
-		// than 256 or so, even if the pattern would match files whose names are short enough to be legal.
-		// Therefore, as of v1.0.25, there is also a hard limit of MAX_PATH on all these variables.
-		// MSDN confirms this in a vague way: "In the ANSI version of FindFirstFile(), [plpFileName] is
-		// limited to MAX_PATH characters."
-		_tcscpy(append_pos, _T("*.*")); // Above has ensured this won't overflow.
-		file_search = FindFirstFile(file_path, &current_file);
+		_tcscpy(append_pos, _T("*")); // Above has ensured this won't overflow.
+		file_search = FindFirstFile(fps.path, &current_file);
 
 		if (file_search != INVALID_HANDLE_VALUE)
 		{
-			size_t pattern_length = _tcslen(naked_filename_or_pattern);
 			do
 			{
 				LONG_OPERATION_UPDATE
 				if (!(current_file.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-					|| current_file.cFileName[0] == '.' && (!current_file.cFileName[1]     // Relies on short-circuit boolean order.
-						|| current_file.cFileName[1] == '.' && !current_file.cFileName[2]) //
-					// v1.0.45.03: Skip over folders whose full-path-names are too long to be supported by the ANSI
-					// versions of FindFirst/FindNext.  Without this fix, it might be possible for infinite recursion
-					// to occur (see PerformLoop() for more comments).
-					|| pattern_length + _tcslen(current_file.cFileName) >= space_remaining) // >= vs. > to reserve 1 for the backslash to be added between cFileName and naked_filename_or_pattern.
+					|| current_file.cFileName[0] == '.' && (!current_file.cFileName[1]      // Relies on short-circuit boolean order.
+						|| current_file.cFileName[1] == '.' && !current_file.cFileName[2])) //
+					continue;
+				size_t filename_length = _tcslen(current_file.cFileName);
+				// v1.0.45.03: Skip over folders whose paths are too long to be supported by FindFirst.
+				if (fps.pattern_length + filename_length >= space_remaining) // >= vs. > to reserve 1 for the backslash to be added between cFileName and naked_filename_or_pattern.
 					continue; // Never recurse into these.
 				// This will build the string CurrentDir+SubDir+FilePatternOrName.
 				// If FilePatternOrName doesn't contain a wildcard, the recursion
@@ -8791,19 +8816,18 @@ int Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolde
 				// tree, e.g. recursing C:\Temp\temp.txt would affect all occurrences
 				// of temp.txt both in C:\Temp and any subdirectories it might contain:
 				_stprintf(append_pos, _T("%s\\%s") // Above has ensured this won't overflow.
-					, current_file.cFileName, naked_filename_or_pattern);
+					, current_file.cFileName, fps.pattern);
+				fps.dir_length = dir_length + filename_length + 1; // Include the slash.
 				//
 				// Apply the callback to files in this subdirectory:
-				failure_count += FilePatternApply(file_path, aOperateOnFolders, aDoRecurse, aCallback, aCallbackData, true);
+				FilePatternApply(fps);
 				//
 			} while (FindNextFile(file_search, &current_file));
 			FindClose(file_search);
 		} // if (file_search != INVALID_HANDLE_VALUE)
 	} // if (aDoRecurse)
 
-	if (!aCalledRecursively) // i.e. Only need to do this if we're returning to top-level caller:
-		SetErrorLevelOrThrowInt(failure_count); // i.e. indicate success if there were no failures.
-	return failure_count;
+	fps.failure_count += failure_count; // Update failure count (produces smaller code than doing ++fps.failure_count directly).
 }
 
 
@@ -8854,7 +8878,7 @@ struct FileSetTimeData
 };
 
 ResultType Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
-	, FileLoopModeType aOperateOnFolders, bool aDoRecurse, bool aCalledRecursively)
+	, FileLoopModeType aOperateOnFolders, bool aDoRecurse)
 // Returns the number of files and folders that could not be changed due to an error.
 {
 	// Related to the comment at the top: Since the script subroutine that resulted in the call to
@@ -9156,9 +9180,7 @@ ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aR
 
 
 
-bool Line::FileIsFilteredOut(WIN32_FIND_DATA &aCurrentFile, FileLoopModeType aFileLoopMode
-	, LPTSTR aFilePath, size_t aFilePathLength)
-// Caller has ensured that aFilePath (if non-blank) has a trailing backslash.
+bool Line::FileIsFilteredOut(LoopFilesStruct &aCurrentFile, FileLoopModeType aFileLoopMode)
 {
 	if (aCurrentFile.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) // It's a folder.
 	{
@@ -9171,23 +9193,14 @@ bool Line::FileIsFilteredOut(WIN32_FIND_DATA &aCurrentFile, FileLoopModeType aFi
 		if (aFileLoopMode == FILE_LOOP_FOLDERS_ONLY)
 			return true; // Exclude this file by returning true.
 
-	// Since file was found, also prepend the file's path to its name for the caller:
-	if (*aFilePath)
-	{
-		// Seems best to check length in advance because it allows a faster move/copy method further below
-		// (in lieu of sntprintf(), which is probably quite a bit slower than the method here).
-		size_t name_length = _tcslen(aCurrentFile.cFileName);
-		if (aFilePathLength + name_length >= MAX_PATH)
-			// v1.0.45.03: Filter out filenames that would be truncated because it seems undesirable in 99% of
-			// cases to include such "faulty" data in the loop.  Most scripts would want to skip them rather than
-			// seeing the truncated names.  Furthermore, a truncated name might accidentally match the name
-			// of a legitimate non-truncated filename, which could cause such a name to get retrieved twice by
-			// the loop (or other undesirable side-effects).
-			return true;
-		//else no overflow is possible, so below can move things around inside the buffer without concern.
-		tmemmove(aCurrentFile.cFileName + aFilePathLength, aCurrentFile.cFileName, name_length + 1); // memmove() because source & dest might overlap.  +1 to include the terminator.
-		tmemcpy(aCurrentFile.cFileName, aFilePath, aFilePathLength); // Prepend in the area liberated by the above. Don't include the terminator since this is a concat operation.
-	}
+	// Since file was found, also append the file's name to its directory for the caller:
+	// Seems best to check length in advance because it allows a faster move/copy method further below
+	// (in lieu of sntprintf(), which is probably quite a bit slower than the method here).
+	size_t name_length = _tcslen(aCurrentFile.cFileName);
+	if (aCurrentFile.dir_length + name_length >= _countof(aCurrentFile.file_path)) // Should be impossible with current buffer sizes.
+		return true; // Exclude this file/folder.
+	tmemcpy(aCurrentFile.file_path + aCurrentFile.dir_length, aCurrentFile.cFileName, name_length + 1); // +1 to include the terminator.
+	aCurrentFile.file_path_length = aCurrentFile.dir_length + name_length;
 	return false; // Indicate that this file is not to be filtered out.
 }
 
@@ -10130,15 +10143,10 @@ VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName)
 	// dialog can thus change the current directory as seen by the active quasi-thread even
 	// though g_WorkingDir hasn't been updated.  It might also be possible for the working
 	// directory to change in unusual circumstances such as a network drive being lost).
-	//
-	// Fix for v1.0.43.11: Changed size below from 9999 to MAX_PATH, otherwise it fails sometimes on Win9x.
-	// Testing shows that the failure is not caused by GetCurrentDirectory() writing to the unused part of the
-	// buffer, such as zeroing it (which is good because that would require this part to be redesigned to pass
-	// the actual buffer size or use a temp buffer).  So there's something else going on to explain why the
-	// problem only occurs in longer scripts on Win98se, not in trivial ones such as Var=%A_WorkingDir%.
-	// Nor did the problem affect expression assignments such as Var:=A_WorkingDir.
-	TCHAR buf[MAX_PATH];
-	VarSizeType length = GetCurrentDirectory(MAX_PATH, buf);
+	// Update: FileSelectFile changing the current directory might be OS-specific;
+	// I could not reproduce it on Windows 10.
+	TCHAR buf[T_MAX_PATH]; // T_MAX_PATH vs. MAX_PATH only has an effect with Windows 10 long path awareness.
+	DWORD length = GetCurrentDirectory(_countof(buf), buf);
 	if (aBuf)
 		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
 	return length;
@@ -10164,8 +10172,8 @@ VarSizeType BIV_InitialWorkingDir(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_WinDir(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR buf[MAX_PATH];
-	VarSizeType length = GetWindowsDirectory(buf, MAX_PATH);
+	TCHAR buf[MAX_PATH]; // MSDN (2018): The uSize parameter "should be set to MAX_PATH."
+	VarSizeType length = GetWindowsDirectory(buf, _countof(buf));
 	if (aBuf)
 		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
 	return length;
@@ -10180,17 +10188,17 @@ VarSizeType BIV_WinDir(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_Temp(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR buf[MAX_PATH];
-	VarSizeType length = GetTempPath(MAX_PATH, buf);
+	TCHAR buf[MAX_PATH+1]; // MSDN (2018): "The maximum possible return value is MAX_PATH+1 (261)."
+	VarSizeType length = GetTempPath(_countof(buf), buf);
 	if (aBuf)
 	{
 		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
 		if (length)
 		{
 			aBuf += length - 1;
-			if (*aBuf == '\\') // For some reason, it typically yields a trailing backslash, so omit it to improve friendliness/consistency.
+			if (*aBuf == '\\') // Should always be true. MSDN: "The returned string ends with a backslash"
 			{
-				*aBuf = '\0';
+				*aBuf = '\0'; // Omit the trailing backslash to improve friendliness/consistency.
 				--length;
 			}
 		}
@@ -10209,6 +10217,10 @@ VarSizeType BIV_ComSpec(LPTSTR aBuf, LPTSTR aVarName)
 VarSizeType BIV_SpecialFolderPath(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_PATH]; // One caller relies on this being explicitly limited to MAX_PATH.
+	// SHGetFolderPath requires a buffer size of MAX_PATH, but the function was superseded
+	// by SHGetKnownFolderPath in Windows Vista, and that function returns COM-allocated
+	// memory of unknown length.  However, it seems the shell still does not support long
+	// paths as of 2018.
 	int aFolder;
 	switch (ctoupper(aVarName[2]))
 	{
@@ -10244,7 +10256,7 @@ VarSizeType BIV_SpecialFolderPath(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_MyDocuments(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple callers.
 {
-	TCHAR buf[MAX_PATH];
+	TCHAR buf[MAX_PATH]; // SHGetFolderPath requires a buffer size of MAX_PATH.  At least one caller relies on this.
 	if (SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, buf) != S_OK)
 		*buf = '\0';
 	// Since it is common (such as in networked environments) to have My Documents on the root of a drive
@@ -10448,53 +10460,30 @@ VarSizeType BIV_LineFile(LPTSTR aBuf, LPTSTR aVarName)
 }
 
 
-
 VarSizeType BIV_LoopFileName(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple callers.
 {
-	LPTSTR naked_filename;
+	LPCTSTR filename = _T("");  // Set default.
 	if (g->mLoopFile)
 	{
-		// The loop handler already prepended the script's directory in here for us:
-		if (naked_filename = _tcsrchr(g->mLoopFile->cFileName, '\\'))
-			++naked_filename;
-		else // No backslash, so just make it the entire file name.
-			naked_filename = g->mLoopFile->cFileName;
-	}
-	else
-		naked_filename = _T("");
-	if (aBuf)
-		_tcscpy(aBuf, naked_filename);
-	return (VarSizeType)_tcslen(naked_filename);
-}
-
-VarSizeType BIV_LoopFileShortName(LPTSTR aBuf, LPTSTR aVarName)
-{
-	LPTSTR short_filename = _T("");  // Set default.
-	if (g->mLoopFile)
-	{
-		if (   !*(short_filename = g->mLoopFile->cAlternateFileName)   )
-			// Files whose long name is shorter than the 8.3 usually don't have value stored here,
-			// so use the long name whenever a short name is unavailable for any reason (could
-			// also happen if NTFS has short-name generation disabled?)
-			return BIV_LoopFileName(aBuf, _T(""));
+		// cAlternateFileName can be blank if the file lacks a short name, but it can also be blank
+		// if the file's proper name complies with all 8.3 requirements (not just length), so use
+		// cFileName whenever cAlternateFileName is empty.  GetShortPathName() also behaves this way.
+		if (   ctoupper(aVarName[10]) != 'S' // It's not A_LoopFileShortName or ...
+			|| !*(filename = g->mLoopFile->cAlternateFileName)   ) // ... there's no alternate name (see above).
+			filename = g->mLoopFile->cFileName;
 	}
 	if (aBuf)
-		_tcscpy(aBuf, short_filename);
-	return (VarSizeType)_tcslen(short_filename);
+		_tcscpy(aBuf, filename);
+	return (VarSizeType)_tcslen(filename);
 }
 
 VarSizeType BIV_LoopFileExt(LPTSTR aBuf, LPTSTR aVarName)
 {
-	LPTSTR file_ext = _T("");  // Set default.
+	LPCTSTR file_ext = _T("");  // Set default.
 	if (g->mLoopFile)
 	{
-		// The loop handler already prepended the script's directory in here for us:
 		if (file_ext = _tcsrchr(g->mLoopFile->cFileName, '.'))
-		{
 			++file_ext;
-			if (_tcschr(file_ext, '\\')) // v1.0.48.01: Disqualify periods found in the path instead of the filename; e.g. path.name\FileWithNoExtension.
-				file_ext = _T("");
-		}
 		else // Reset to empty string vs. NULL.
 			file_ext = _T("");
 	}
@@ -10505,74 +10494,104 @@ VarSizeType BIV_LoopFileExt(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_LoopFileDir(LPTSTR aBuf, LPTSTR aVarName)
 {
-	LPTSTR file_dir = _T("");  // Set default.
-	LPTSTR last_backslash = NULL;
-	if (g->mLoopFile)
+	if (!g->mLoopFile)
 	{
-		// The loop handler already prepended the script's directory in here for us.
-		// But if the loop had a relative path in its FilePattern, there might be
-		// only a relative directory here, or no directory at all if the current
-		// file is in the origin/root dir of the search:
-		if (last_backslash = _tcsrchr(g->mLoopFile->cFileName, '\\'))
-		{
-			*last_backslash = '\0'; // Temporarily terminate.
-			file_dir = g->mLoopFile->cFileName;
-		}
-		else // No backslash, so there is no directory in this case.
-			file_dir = _T("");
+		if (aBuf)
+			*aBuf = '\0';
+		return 0;
 	}
-	VarSizeType length = (VarSizeType)_tcslen(file_dir);
-	if (!aBuf)
+	LoopFilesStruct &lfs = *g->mLoopFile;
+	LPTSTR dir_end = lfs.file_path + lfs.dir_length; // Start of the filename.
+	size_t suffix_length = dir_end - lfs.file_path_suffix; // Directory names\ added since the loop started.
+	size_t total_length = lfs.orig_dir_length + suffix_length;
+	if (total_length)
+		--total_length; // Omit the trailing slash.
+	if (aBuf)
 	{
-		if (last_backslash)
-			*last_backslash = '\\';  // Restore the original value.
-		return length;
+		tmemcpy(aBuf, lfs.orig_dir, lfs.orig_dir_length);
+		tmemcpy(aBuf + lfs.orig_dir_length, lfs.file_path_suffix, suffix_length);
+		aBuf[total_length] = '\0'; // This replaces the final character copied above, if any.
 	}
-	_tcscpy(aBuf, file_dir);
-	if (last_backslash)
-		*last_backslash = '\\';  // Restore the original value.
-	return length;
+	return total_length;
+}
+
+VarSizeType FixLoopFilePath(LPTSTR aBuf, LPTSTR aPattern)
+// Fixes aBuf to account for "." and ".." as file patterns.  These match the directory itself
+// or parent directory, so for example "x\y\.." returns a directory named "x" which appears to
+// be inside "y".  Without the handling here, the invalid path "x\y\x" would be returned.
+// A small amount of temporary buffer space might be wasted compared to handling this in the BIV,
+// but this way minimizes code size (and these cases are rare anyway).
+{
+	int count = 0;
+	if (*aPattern == '.')
+	{
+		if (!aPattern[1])
+			count = 1; // aBuf "x\y\y" should be "x\y" for "x\y\.".
+		else if (aPattern[1] == '.' && !aPattern[2])
+			count = 2; // aBuf "x\y\x" should be "x" for "x\y\..".
+	}
+	for ( ; count > 0; --count)
+	{
+		LPTSTR end = _tcsrchr(aBuf, '\\');
+		if (end)
+			*end = '\0';
+		else if (*aBuf && aBuf[1] == ':') // aBuf "C:x" should be "C:" for "C:" or "C:.".
+			aBuf[2] = '\0';
+	}
+	return _tcslen(aBuf);
 }
 
 VarSizeType BIV_LoopFilePath(LPTSTR aBuf, LPTSTR aVarName)
 {
-	// The loop handler already prepended the script's directory in cFileName for us:
-	LPTSTR full_path = g->mLoopFile ? g->mLoopFile->cFileName : _T("");
+	if (!g->mLoopFile)
+	{
+		if (aBuf)
+			*aBuf = '\0';
+		return 0;
+	}
+	LoopFilesStruct &lfs = *g->mLoopFile;
+	// Combine the original directory specified by the script with the dynamic part of file_path
+	// (i.e. the sub-directory and file names appended to it since the loop started):
+	size_t suffix_length = lfs.file_path_length - (lfs.file_path_suffix - lfs.file_path);
 	if (aBuf)
-		_tcscpy(aBuf, full_path);
-	return (VarSizeType)_tcslen(full_path);
+	{
+		tmemcpy(aBuf, lfs.orig_dir, lfs.orig_dir_length);
+		tmemcpy(aBuf + lfs.orig_dir_length, lfs.file_path_suffix, suffix_length + 1); // +1 for \0.
+		return FixLoopFilePath(aBuf, lfs.pattern);
+	}
+	return lfs.orig_dir_length + suffix_length;
 }
 
 VarSizeType BIV_LoopFileFullPath(LPTSTR aBuf, LPTSTR aVarName)
 {
-	TCHAR *unused, buf[MAX_PATH];
-	*buf = '\0'; // Set default.
-	if (g->mLoopFile)
+	if (!g->mLoopFile)
 	{
-		// GetFullPathName() is done in addition to ConvertFilespecToCorrectCase() for the following reasons:
-		// 1) It's currently the only easy way to get the full path of the directory in which a file resides.
-		//    For example, if a script is passed a filename via command line parameter, that file could be
-		//    either an absolute path or a relative path.  If relative, of course it's relative to A_WorkingDir.
-		//    The problem is, the script would have to manually detect this, which would probably take several
-		//    extra steps.
-		// 2) A_LoopFileLongPath is mostly intended for the following cases, and in all of them it seems
-		//    preferable to have the full/absolute path rather than the relative path:
-		//    a) Files dragged onto a .ahk script when the drag-and-drop option has been enabled via the Installer.
-		//    b) Files passed into the script via command line.
-		// The below also serves to make a copy because changing the original would yield
-		// unexpected/inconsistent results in a script that retrieves the A_LoopFileFullPath
-		// but only conditionally retrieves A_LoopFileLongPath.
-		if (!GetFullPathName(g->mLoopFile->cFileName, MAX_PATH, buf, &unused))
-			*buf = '\0'; // It might fail if NtfsDisable8dot3NameCreation is turned on in the registry, and possibly for other reasons.
-		else
-			// The below is called in case the loop is being used to convert filename specs that were passed
-			// in from the command line, which thus might not be the proper case (at least in the path
-			// portion of the filespec), as shown in the file system:
-			ConvertFilespecToCorrectCase(buf);
+		if (aBuf)
+			*aBuf = '\0';
+		return 0;
 	}
+	// GetFullPathName() is done in addition to ConvertFilespecToCorrectCase() for the following reasons:
+	// 1) It's currently the only easy way to get the full path of the directory in which a file resides.
+	//    For example, if a script is passed a filename via command line parameter, that file could be
+	//    either an absolute path or a relative path.  If relative, of course it's relative to A_WorkingDir.
+	//    The problem is, the script would have to manually detect this, which would probably take several
+	//    extra steps.
+	// 2) A_LoopFileLongPath is mostly intended for the following cases, and in all of them it seems
+	//    preferable to have the full/absolute path rather than the relative path:
+	//    a) Files dragged onto a .ahk script when the drag-and-drop option has been enabled via the Installer.
+	//    b) Files passed into the script via command line.
+	// Currently both are done by PerformLoopFilePattern(), for performance and in case the working
+	// directory changes after the Loop begins.
+	LoopFilesStruct &lfs = *g->mLoopFile;
+	// Combine long_dir with the dynamic part of file_path:
+	size_t suffix_length = lfs.file_path_length - (lfs.file_path_suffix - lfs.file_path);
 	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
-	return (VarSizeType)_tcslen(buf); // Must explicitly calculate the length rather than using the return value from GetFullPathName(), because ConvertFilespecToCorrectCase() expands 8.3 path components.
+	{
+		tmemcpy(aBuf, lfs.long_dir, lfs.long_dir_length);
+		tmemcpy(aBuf + lfs.long_dir_length, lfs.file_path_suffix, suffix_length + 1); // +1 for \0.
+		return FixLoopFilePath(aBuf, lfs.pattern);
+	}
+	return lfs.long_dir_length + suffix_length;
 }
 
 VarSizeType BIV_LoopFileShortPath(LPTSTR aBuf, LPTSTR aVarName)
@@ -10584,16 +10603,25 @@ VarSizeType BIV_LoopFileShortPath(LPTSTR aBuf, LPTSTR aVarName)
 // But to detect if that short name is really a long name, A_LoopFileShortPath could be checked
 // and if it's blank, there is no short name available.
 {
-	TCHAR buf[MAX_PATH];
-	*buf = '\0'; // Set default.
-	DWORD length = 0;        //
-	if (g->mLoopFile)
-		// The loop handler already prepended the script's directory in cFileName for us:
-		if (   !(length = GetShortPathName(g->mLoopFile->cFileName, buf, MAX_PATH))   )
-			*buf = '\0'; // It might fail if NtfsDisable8dot3NameCreation is turned on in the registry, and possibly for other reasons.
+	if (!g->mLoopFile)
+	{
+		if (aBuf)
+			*aBuf = '\0';
+		return 0;
+	}
+	LoopFilesStruct &lfs = *g->mLoopFile;
+	// MSDN says cAlternateFileName is empty if the file does not have a long name.
+	// Testing and research shows that GetShortPathName() uses the long name for a directory
+	// or file if no short name exists, so there's no check for the filename's length here.
+	LPTSTR name = *lfs.cAlternateFileName ? lfs.cAlternateFileName : lfs.cFileName;
+	size_t name_length = _tcslen(name);
 	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
-	return (VarSizeType)length;
+	{
+		tmemcpy(aBuf, lfs.short_path, lfs.short_path_length);
+		tmemcpy(aBuf + lfs.short_path_length, name, name_length + 1); // +1 for \0.
+		return FixLoopFilePath(aBuf, lfs.pattern);
+	}
+	return lfs.short_path_length + name_length;
 }
 
 VarSizeType BIV_LoopFileTime(LPTSTR aBuf, LPTSTR aVarName)
