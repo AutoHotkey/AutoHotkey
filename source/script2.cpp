@@ -439,7 +439,7 @@ void input_type::SetTimeoutTimer()
 
 ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsRemove, UCHAR aFlagsAdd)
 {
-	bool vk_by_number;
+	bool vk_by_number{};
 	vk_type vk;
 	sc_type sc = 0;
 	modLR_type modifiersLR;
