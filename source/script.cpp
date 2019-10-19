@@ -1723,34 +1723,21 @@ bool ClassHasOpenBrace(LPTSTR aBuf, size_t aBufLength, LPTSTR aNextBuf, size_t &
 	return false;
 }
 
-inline LPTSTR IsNameSpaceDefinition(LPTSTR aBuf, bool *aIsTopNameSpace)
+inline LPTSTR IsNameSpaceDefinition(LPTSTR aBuf)
 {
-	
-	// Check for the top keyword first to make it easier to pick a two word top keyword containing a space, if that is ever wanted. 
-	int len = NAMESPACE_DECLARATION_TOP_KEYWORD_NAME_LENGTH; // for brevity
-	
-	if (_tcsnicmp(aBuf, NAMESPACE_DECLARATION_TOP_KEYWORD_NAME, len)
-		|| (!IS_SPACE_OR_TAB(aBuf[len])								// i.e. it's not the top keyword followed by a space or tab.
-			&& aBuf[len] != '{' && aBuf[len] != '\0'))				// and it is not the top keyword followed by '{' or just the top keyword
-	{
-		// It is not the top keyword.
-		len = NAMESPACE_DECLARATION_KEYWORD_NAME_LENGTH;
-		if (_tcsnicmp(aBuf, NAMESPACE_DECLARATION_KEYWORD_NAME, len)
-			|| (!IS_SPACE_OR_TAB(aBuf[len])							// i.e. it's not "namespace" followed by a space or tab.
-				&& aBuf[len] != '{' && aBuf[len] != '\0'))			// and it is not "namespace{" or "namespace"
-			return NULL;
-		*aIsTopNameSpace = false;
-	}
-	else
-		*aIsTopNameSpace = true; // it is the top keyword
-	
-	if (aBuf[len] == '{' || aBuf[len] == '\0')				// it is "namespace{" or "namespace" (or the corresponding for the top keyword).
+	int len = NAMESPACE_DECLARATION_KEYWORD_NAME_LENGTH; // for brevity
+	if (_tcsnicmp(aBuf, NAMESPACE_DECLARATION_KEYWORD_NAME, len)
+		|| (!IS_SPACE_OR_TAB(aBuf[len])							// i.e. it's not "namespace" followed by a space or tab.
+			&& aBuf[len] != '{' && aBuf[len] != '\0'))			// and it is not "namespace{" or "namespace"
+		return NULL;
+
+	if (aBuf[len] == '{' || aBuf[len] == '\0')					// it is "namespace{" or "namespace".
 		return NAMESPACE_ANONYMOUS;
 
 	LPTSTR namespace_name = omit_leading_whitespace(aBuf + len + 1);
 	
 	if (*namespace_name == '{' || *namespace_name == '\0')
-		return NAMESPACE_ANONYMOUS;							// it is something like "namespace {" or "namespace" (or the corresponding for the top keyword).
+		return NAMESPACE_ANONYMOUS;								// it is something like "namespace {" or "namespace".
 	if (_tcschr(EXPR_ALL_SYMBOLS, *namespace_name))
 		// It's probably something like "NameSpace := ...". (or the corresponding for the top keyword).
 		return NULL;
@@ -2524,14 +2511,13 @@ examine_line:
 			goto continue_main_loop;
 		}
 		// Handling of namespace definition. This is similar to the handling of class classname { ... } just above
-		bool is_top_namespace;
-		if (LPTSTR namespace_name = IsNameSpaceDefinition(buf, &is_top_namespace))
+		if (LPTSTR namespace_name = IsNameSpaceDefinition(buf))
 		{
 			if (!LocationCanDefineNameSpace(buf)) // displays the error message.
 				return FAIL;
 			if (!NameSpaceHasOpenBrace(buf, buf_length, next_buf, next_buf_length))
 				return ScriptError(ERR_MISSING_OPEN_BRACE, buf);
-			if (!DefineNameSpace(namespace_name, is_top_namespace))
+			if (!DefineNameSpace(namespace_name))
 				return FAIL;
 			++mNameSpaceDefinitionCount;
 			goto continue_main_loop;
@@ -3610,8 +3596,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 #endif
 	}
 
-	if (IS_DIRECTIVE_MATCH(NAMESPACE_INCLUDE_DIRECTIVE_NAME) 
-		|| ( is_alternative_directive_name = IS_DIRECTIVE_MATCH(NAMESPACE_INCLUDE_TOP_DIRECTIVE_NAME) ) ) 	// Handle #Import path -> name		
+	if (IS_DIRECTIVE_MATCH(NAMESPACE_INCLUDE_DIRECTIVE_NAME)) 	// Handle #Import path -> name		
 	{
 		
 #ifdef AUTOHOTKEYSC
@@ -3652,7 +3637,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			if (!*name)
 				return CONDITION_FALSE;
 		}
-		if (!DefineNameSpace(name, is_alternative_directive_name)) // this sets the new namespace to be the current one.
+		if (!DefineNameSpace(name)) // this sets the new namespace to be the current one.
 			return FAIL; // DefineNameSpace displays the error message.
 
 		rtrim(path); // to allow tabs between the path and the "->" 
@@ -6362,7 +6347,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aIsInExpr
 	return OK;
 }
 
-ResultType Script::DefineNameSpace(LPTSTR aNameSpaceName, bool aIsTopNameSpace)
+ResultType Script::DefineNameSpace(LPTSTR aNameSpaceName)
 {
 	// aNameSpaceName, the name of the new namespace. This namespace will be nested in g_CurrentNameSpace, and becomes the current namesapce.
 	// Caller must save and restore g_CurrentNameSpace if appropriate.
@@ -6380,7 +6365,7 @@ ResultType Script::DefineNameSpace(LPTSTR aNameSpaceName, bool aIsTopNameSpace)
 			return FAIL; // ValidateName displays the error message.
 	}
 	NameSpace *new_namespace;
-	if (!(new_namespace = g_CurrentNameSpace->InsertNestedNameSpace(aNameSpaceName, 0, g_CurrentNameSpace, aIsTopNameSpace)))
+	if (!(new_namespace = g_CurrentNameSpace->InsertNestedNameSpace(aNameSpaceName, 0, g_CurrentNameSpace)))
 	{	
 		if (g_CurrentNameSpace->GetNestedNameSpace(aNameSpaceName))
 			return ScriptError(ERR_NAMESPACE_DUPLICATE_NAME, aNameSpaceName);

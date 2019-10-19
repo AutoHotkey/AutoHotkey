@@ -21,7 +21,6 @@ GNU General Public License for more details.
 
 #define NAMESPACE_STANDARD_NAMESPACE_NAME _T("std")		// This is the name of the standard namespace for easy access to built-in functions and possibly future addititions. This namespace is parallel to the scripts namespace.
 
-#define NAMESPACE_TOP_NAMESPACE_NAME _T("Library")
 #define NAMESPACE_OUTER_NAMESPACE_NAME _T("Outer")
 
 // For anonymous namespaces:
@@ -43,16 +42,9 @@ GNU General Public License for more details.
 #define NAMESPACE_DECLARATION_KEYWORD_NAME _T("Namespace")
 #define NAMESPACE_DECLARATION_KEYWORD_NAME_LENGTH (_countof(NAMESPACE_DECLARATION_KEYWORD_NAME) - 1) // - 1 to exclude the '\0
 
-#define NAMESPACE_DECLARATION_TOP_KEYWORD_NAME _T("Library") // This can be changed to a multiword keyword, eg, Namespace Library
-#define NAMESPACE_DECLARATION_TOP_KEYWORD_NAME_LENGTH (_countof(NAMESPACE_DECLARATION_TOP_KEYWORD_NAME) - 1) // - 1 to exclude the '\0
-
 // For including file to namespace:
 #define NAMESPACE_INCLUDE_DIRECTIVE_NAME _T("#Import")
 #define NAMESPACE_INCLUDE_DIRECTIVE_NAME_LENGTH (_countof(NAMESPACE_INCLUDE_DIRECTIVE_NAME) - 1) // - 1 to exclude the '\0'
-
-#define NAMESPACE_INCLUDE_TOP_DIRECTIVE_NAME _T("#ImportLibrary")
-#define NAMESPACE_INCLUDE_TOP_DIRECTIVE_NAME_LENGTH (_countof(NAMESPACE_INCLUDE_TOP_DIRECTIVE_NAME) - 1) // - 1 to exclude the '\0'
-
 
 // Rule for namespace names match:
 #define NAMESPACE_NAMES_MATCH(name1, name2) ((name1) != NAMESPACE_ANONYMOUS && (name2) != NAMESPACE_ANONYMOUS && !_tcsicmp( (name1), (name2)))

@@ -34,10 +34,6 @@ private:
 	NameSpace *mOuter;									// The namesspace in which this name space resides. 
 														// Having a reference to the enclosing namespace facilitates load time restoration of the outer namespace when the inner namespace definition ends.
 														// Also used by scope operator to access the enclosing scope, referenced to as NAMESPACE_OUTER_NAMESPACE_NAME.
-	// Top namespace:
-	// A top namespace can be reference to by all its nested
-	// namespaces via NAMESPACE_TOP_NAMESPACE_NAME with the scope operator
-	bool mIsTopNameSpace;								// Indicates wheter this namespace is a "top" namespace or not.
 												
 	FuncList mFuncs;									// List of functions
 	Var **mVar, **mLazyVar;								// Array of pointers-to-variable, allocated upon first use and later expanded as needed.
@@ -93,7 +89,7 @@ public:
 
 	Var *FindVarFromScopeSymbolDelimitedString(LPTSTR aString, bool aAllowAddVar, NameSpace **aFoundNameSpace = NULL);
 
-	NameSpace(LPTSTR aName, int aFuncsInitSize = 0, NameSpace *aOuter = NULL, bool aIsTopNameSpace = false) :
+	NameSpace(LPTSTR aName, int aFuncsInitSize = 0, NameSpace *aOuter = NULL) :
 		mNestedNameSpaces(NULL),
 		mOptionalNameSpaces(NULL),
 #ifndef AUTOHOTKEYSC
@@ -107,7 +103,6 @@ public:
 		mVar(NULL), mLazyVar(NULL),
 		mVarCount(0), mVarCountMax(0), mLazyVarCount(0),
 		mOuter(aOuter),
-		mIsTopNameSpace(aIsTopNameSpace),
 		mLaunchesCriticalThreads(false),
 		mPeekFrequency(DEFAULT_PEEK_FREQUENCY)
 	{
@@ -154,10 +149,9 @@ public:
 
 	global_struct &GetSettings();											// This is needed by HOT_IF_ACTIVE et al.
 
-	NameSpace *GetTopNameSpace();
 	NameSpace *GetOuterNameSpace();
 	// Methods for inserting nested namespaces:
-	NameSpace *InsertNestedNameSpace(LPTSTR aName, int aFuncsInitSize = 0, NameSpace *aOuter = NULL, bool aIsTopNameSpace = false);
+	NameSpace *InsertNestedNameSpace(LPTSTR aName, int aFuncsInitSize = 0, NameSpace *aOuter = NULL);
 	bool InsertNestedNameSpace(NameSpace *aNameSpace);
 	void RemoveLastNameSpace();
 

@@ -3048,7 +3048,7 @@ public:
 	FuncEntry *FindBuiltInFunc(LPTSTR aFuncName);
 	Func *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, bool aIsBuiltIn, int aInsertPos, Object *aClassObject = NULL);
 
-	ResultType DefineNameSpace(LPTSTR aNameSpaceName, bool aIsTopNameSpace);
+	ResultType DefineNameSpace(LPTSTR aNameSpaceName);
 
 	ResultType DefineClass(LPTSTR aBuf);
 	ResultType DefineClassVars(LPTSTR aBuf, bool aStatic);

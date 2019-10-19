@@ -275,8 +275,6 @@ NameSpace *NameSpace::GetReservedNameSpace(LPTSTR aName, NameSpace* aSource /* =
 		return NULL;
 	if (NAMESPACE_NAMES_MATCH(aName, NAMESPACE_OUTER_NAMESPACE_NAME))
 		return aSource->mOuter;
-	if (NAMESPACE_NAMES_MATCH(aName, NAMESPACE_TOP_NAMESPACE_NAME))
-		return aSource->GetTopNameSpace();
 	return NULL;
 }
 
@@ -296,14 +294,6 @@ global_struct &NameSpace::GetSettings()
 {
 	// This is needed by HOT_IF_WIN
 	return mSettings;
-}
-
-NameSpace * NameSpace::GetTopNameSpace()
-{
-	// Finds the top namespace for this namespace.
-	NameSpace *top = this; // this function can never return "this" namespace.
-	while ((top = top->GetOuterNameSpace()) && !top->mIsTopNameSpace);
-	return top;
 }
 
 NameSpace * NameSpace::GetOuterNameSpace()
@@ -423,7 +413,7 @@ Func * NameSpace::TokenToFunc(ExprTokenType & aToken, bool aAllowNested)
 	return func;
 }
 
-NameSpace *NameSpace::InsertNestedNameSpace(LPTSTR aName, int aFuncsInitSize, NameSpace *aOuter, bool aIsTopNameSpace) // public
+NameSpace *NameSpace::InsertNestedNameSpace(LPTSTR aName, int aFuncsInitSize, NameSpace *aOuter) // public
 {
 	// Creates a new namespace and inserts it in the this namespace' mNestedNameSpaces.
 	// Duplicate namespace names are detected and causes NULL to be returned. Otherwise the new namespace is returned.
@@ -436,7 +426,7 @@ NameSpace *NameSpace::InsertNestedNameSpace(LPTSTR aName, int aFuncsInitSize, Na
 	// Since using SimpleHeap::Malloc for allocation of namespaces, callers of this function should avoid
 	// making "many" calls where InsertNestedNameSpace below fails due to duplicate name. The only current caller, DefineNameSpace
 	// causes the program to end on failure.
-	NameSpace *new_namespace = new NameSpace(aName, aFuncsInitSize, aOuter, aIsTopNameSpace);
+	NameSpace *new_namespace = new NameSpace(aName, aFuncsInitSize, aOuter);
 	if (!new_namespace) // Check since `new` is overloaded to use SimpleHeap::Malloc
 		return NULL;
 	if (InsertNestedNameSpace(new_namespace))
