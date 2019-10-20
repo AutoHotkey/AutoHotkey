@@ -26,13 +26,8 @@ GNU General Public License for more details.
 #include "TextIO.h"
 #include <Psapi.h> // for GetModuleBaseName.
 
-#undef _WIN32_WINNT // v1.1.10.01: Redefine this just for these APIs, to avoid breaking some other commands on Win XP (such as Process Close).
-#define _WIN32_WINNT 0x0600 // Windows Vista
 #include <mmdeviceapi.h> // for SoundSet/SoundGet.
-#pragma warning(push)
-#pragma warning(disable:4091) // Work around a bug in the SDK used by the v140_xp toolset.
 #include <endpointvolume.h> // for SoundSet/SoundGet.
-#pragma warning(pop)
 
 #define PCRE_STATIC             // For RegEx. PCRE_STATIC tells PCRE to declare its functions for normal, static
 #include "lib_pcre/pcre/pcre.h" // linkage rather than as functions inside an external DLL.
@@ -104,7 +99,7 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 		pt.y = ATOI(aY) + origin.y;
 
 	TOOLINFO ti = {0};
-	ti.cbSize = sizeof(ti) - sizeof(void *); // Fixed for v1.0.36.05: Tooltips fail to work on Windows 2000 unless the size for the *lpReserved member in _WIN32_WINNT 0x0501 is omitted.
+	ti.cbSize = sizeof(ti);
 	ti.uFlags = TTF_TRACK;
 	ti.lpszText = aText;
 	// Note that the ToolTip won't work if ti.hwnd is assigned the HWND from GetDesktopWindow().
