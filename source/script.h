@@ -2540,7 +2540,7 @@ struct GuiControlType : public Object
 struct GuiControlOptionsType
 {
 	DWORD style_add, style_remove, exstyle_add, exstyle_remove, listview_style;
-	int listview_view; // Viewing mode, such as LVS_ICON, LVS_REPORT.  Int vs. DWORD to more easily use any negative value as "invalid".
+	int listview_view; // Viewing mode, such as LV_VIEW_ICON, LV_VIEW_DETAILS.  Int vs. DWORD to more easily use any negative value as "invalid".
 	HIMAGELIST himagelist;
 	int x, y, width, height;  // Position info.
 	float row_count;
@@ -2873,7 +2873,6 @@ public:
 	void UpdateTabDialog(HWND aTabControlHwnd);
 	void ControlGetPosOfFocusedItem(GuiControlType &aControl, POINT &aPoint);
 	static void LV_Sort(GuiControlType &aControl, int aColumnIndex, bool aSortOnlyIfEnabled, TCHAR aForceDirection = '\0');
-	static DWORD ControlGetListViewMode(HWND aWnd);
 	static IObject *ControlGetActiveX(HWND aWnd);
 	
 	void UpdateAccelerators(UserMenu &aMenu);
@@ -3217,9 +3216,6 @@ BIV_DECL_R (BIV_AhkVersion);
 BIV_DECL_R (BIV_AhkPath);
 BIV_DECL_R (BIV_TickCount);
 BIV_DECL_R (BIV_Now);
-#ifdef CONFIG_WIN9X
-BIV_DECL_R (BIV_OSType);
-#endif
 BIV_DECL_R (BIV_OSVersion);
 BIV_DECL_R (BIV_Is64bitOS);
 BIV_DECL_R (BIV_Language);

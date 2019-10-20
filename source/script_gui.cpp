@@ -2766,7 +2766,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		opt.listview_style |= LVS_EX_FULLROWSELECT|LVS_EX_HEADERDRAGDROP; // LVS_AUTOARRANGE seems to disrupt the display of the column separators and have other weird effects in Report view.
 		opt.style_add |= WS_TABSTOP|LVS_SHOWSELALWAYS; // LVS_REPORT is omitted to help catch bugs involving opt.listview_view.  WS_THICKFRAME allows the control itself to be drag-resized.
 		opt.exstyle_add |= WS_EX_CLIENTEDGE; // WS_EX_STATICEDGE/WS_EX_WINDOWEDGE/WS_BORDER(non-ex) don't look as nice. WS_EX_DLGMODALFRAME is a weird but interesting effect.
-		opt.listview_view = LVS_REPORT; // Improves maintainability by avoiding the need to check if it's -1 in other places.
+		opt.listview_view = LV_VIEW_DETAILS; // Improves maintainability by avoiding the need to check if it's -1 in other places.
 		break;
 	case GUI_CONTROL_TREEVIEW:
 		// Default style is somewhat debatable, but the familiarity of Explorer's own defaults seems best.
@@ -3101,8 +3101,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			// specified default height set above.  Also, for a pure CBS_SIMPLE combo, the OS always
 			// obeys height:
 			if ((!(style & CBS_SIMPLE) || (style & CBS_DROPDOWN)) // Not a pure CBS_SIMPLE.
-				&& g_os.IsWinXPorLater() // ... and the OS is XP+.
-				&& !(style & CBS_NOINTEGRALHEIGHT)) // ... and XP won't obey the height.
+				&& !(style & CBS_NOINTEGRALHEIGHT)) // ... and it won't obey the height.
 				calc_control_height_from_row_count = false; // Don't bother calculating the height (i.e. override the default).
 			break;
 		case GUI_CONTROL_LISTBOX:
@@ -3177,7 +3176,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// 1) The app now has a manifest, which tells OS to use common controls v6.
 		// 2) Common controls v6 will not obey the the user's specified height for the control's
 		//    list portion unless the CBS_NOINTEGRALHEIGHT style is present.
-		if ((aControlType == GUI_CONTROL_DROPDOWNLIST || aControlType == GUI_CONTROL_COMBOBOX) && g_os.IsWinXPorLater())
+		if (aControlType == GUI_CONTROL_DROPDOWNLIST || aControlType == GUI_CONTROL_COMBOBOX)
 			style |= CBS_NOINTEGRALHEIGHT; // Forcibly applied, even if removed in options.
 
 	////////////////////////////////////////////////////////////////////////////////////////////
@@ -3991,14 +3990,14 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				GUI_SETFONT  // Required before asking it for a height estimate.
 				switch (opt.listview_view)
 				{
-				case LVS_REPORT:
+				case LV_VIEW_DETAILS:
 					// The following formula has been tested on XP with the point sizes 8, 9, 10, 12, 14, and 18 for:
 					// Verdana
 					// Courier New
 					// Gui Default Font
 					// Times New Roman
 					opt.height = 4 + HIWORD(ListView_ApproximateViewRect(control.hwnd, -1, -1
-						, (WPARAM)opt.row_count - 1)); // -1 seems to be needed to make it calculate right for LVS_REPORT.
+						, (WPARAM)opt.row_count - 1)); // -1 seems to be needed to make it calculate right for LV_VIEW_DETAILS.
 					// Above: It seems best to exclude any horiz. scroll bar from consideration, even though it will
 					// block the last row if bar is present.  The bar can be dismissed by manually dragging the
 					// column dividers or using the GuiControl auto-size methods.
@@ -4024,16 +4023,16 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 					break;
 
 				default: // Namely the following:
-				//case LVS_ICON:
-				//case LVS_SMALLICON:
-				//case LVS_LIST:
+				//case LV_VIEW_ICON:
+				//case LV_VIEW_SMALLICON:
+				//case LV_VIEW_LIST:
 					// For these non-report views, it seems far better to define row_count as the number of
 					// icons that can fit vertically rather than as the total number of icons, because the
 					// latter can result in heights that vary based on too many factors, resulting in too
 					// much inconsistency.
 					GUI_SET_HDC
 					GetTextMetrics(hdc, &tm);
-					if (opt.listview_view == LVS_ICON)
+					if (opt.listview_view == LV_VIEW_ICON)
 					{
 						// The vertical space between icons is not dependent upon font size.  In other words,
 						// the control's total height to fit exactly N rows would be icon_height*N plus
@@ -5491,21 +5490,18 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		{
 			next_option += 4;
 			if (aControl.type == GUI_CONTROL_LISTVIEW) // Unconditional regardless of the value of "adding".
-				aOpt.listview_view = _tcsicmp(next_option, _T("Small")) ? LVS_ICON : LVS_SMALLICON;
+				aOpt.listview_view = _tcsicmp(next_option, _T("Small")) ? LV_VIEW_ICON : LV_VIEW_SMALLICON;
 			else
 				if (adding)
 					aOpt.icon_number = ATOI(next_option);
 				//else do nothing (not currently implemented)
 		}
 		else if (!_tcsicmp(next_option, _T("Report")))
-			aOpt.listview_view = LVS_REPORT; // Unconditional regardless of the value of "adding".
+			aOpt.listview_view = LV_VIEW_DETAILS; // Unconditional regardless of the value of "adding".
 		else if (!_tcsicmp(next_option, _T("List")))
-			aOpt.listview_view = LVS_LIST; // Unconditional regardless of the value of "adding".
+			aOpt.listview_view = LV_VIEW_LIST; // Unconditional regardless of the value of "adding".
 		else if (!_tcsicmp(next_option, _T("Tile"))) // Fortunately, subsequent changes to the control's style do not pop it out of Tile mode. It's apparently smart enough to do that only when the LVS_TYPEMASK bits change.
-		{
-			if (g_os.IsWinXPorLater()) // Checking OS version here simplifies code in other places.
-				aOpt.listview_view = LV_VIEW_TILE; // LV_VIEW_TILE is compatible with LVS values such as LVS_REPORT because it doesn't overlap/conflict with them.
-		}
+			aOpt.listview_view = LV_VIEW_TILE;
 		else if (aControl.type == GUI_CONTROL_LISTVIEW && !_tcsicmp(next_option, _T("Hdr")))
 			if (adding) aOpt.style_remove |= LVS_NOCOLUMNHEADER; else aOpt.style_add |= LVS_NOCOLUMNHEADER;
 		else if (aControl.type == GUI_CONTROL_LISTVIEW && !_tcsnicmp(next_option, _T("NoSort"), 6))
@@ -5629,7 +5625,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					// The encoding of the message's parameter depends on whether SendMessageW or SendMessageA is called.
 					// 9679 corresponds to the default bullet character on XP and later (verified with EM_GETPASSWORDCHAR).
 					if (!aOpt.password_char)
-						SendMessageW(aControl.hwnd, EM_SETPASSWORDCHAR, (g_os.IsWinXPorLater() ? 9679 : '*'), 0);
+						SendMessageW(aControl.hwnd, EM_SETPASSWORDCHAR, 9679, 0);
 					else
 						SendMessage(aControl.hwnd, EM_SETPASSWORDCHAR, (WPARAM)aOpt.password_char, 0);
 				}
@@ -6522,8 +6518,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				// the *same* view that was in effect prior to tile view wouldn't work (since the the control's
 				// style LVS_TYPEMASK bits would not have changed).  This is because LV_VIEW_TILE is a special
 				// view that cannot be set via style change.
-				if (g_os.IsWinXPorLater())
-					ListView_SetView(aControl.hwnd, aOpt.listview_view);
+				ListView_SetView(aControl.hwnd, aOpt.listview_view);
 				// Regardless of whether SetView was called above, adjust the style too so that the upcoming
 				// style change won't undo what was just done above:
 				if (aOpt.listview_view != LV_VIEW_TILE) // It was ensured earlier that listview_view can be set to LV_VIEW_TILE only for XP or later.
@@ -6925,7 +6920,7 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 		// some of the time (such as times when there will be only a few rows; 2) It simplifies the code.
 		// This method of auto-sizing each column to fit its text works much better than setting
 		// lvc.cx to ListView_GetStringWidth upon creation of the column.
-		if (ControlGetListViewMode(aControl.hwnd) == LVS_REPORT)
+		if (ListView_GetView(aControl.hwnd) == LV_VIEW_DETAILS)
 			for (int i = 0; i < requested_index; ++i) // Auto-size each column.
 				ListView_SetColumnWidth(aControl.hwnd, i, LVSCW_AUTOSIZE_USEHEADER);
 	}
@@ -10776,23 +10771,6 @@ void GuiType::LV_Sort(GuiControlType &aControl, int aColumnIndex, bool aSortOnly
 	// realistically fail.  Just update things to indicate the current sort-column and direction:
 	lv_attrib.sorted_by_col = aColumnIndex;
 	lv_attrib.is_now_sorted_ascending = lvs.sort_ascending;
-}
-
-
-
-DWORD GuiType::ControlGetListViewMode(HWND aWnd)
-// Caller has ensured that aWnd is non-NULL and a valid ListView control.
-// Returns one of the following:
-// LV_VIEW_ICON        0x0000 (LVS_ICON also equals 0x0000)
-// LV_VIEW_DETAILS     0x0001 (LVS_REPORT also equals 0x0001)
-// LV_VIEW_SMALLICON   0x0002 (LVS_SMALLICON also equals 0x0002)
-// LV_VIEW_LIST        0x0003 (LVS_LIST also equals 0x0003)
-// LV_VIEW_TILE        0x0004
-{
-	// On XP or later, use the new method of finding the view so that tile-view can be detected.
-	// Also, the following relies on the fact that LV_VIEW_ICON==LVS_ICON, LV_VIEW_DETAILS==LVS_REPORT,
-	// LVS_SMALLICON==LV_VIEW_SMALLICON, and LVS_LIST==LV_VIEW_LIST.
-	return g_os.IsWinXPorLater() ? ListView_GetView(aWnd) : (GetWindowLong(aWnd, GWL_STYLE) & LVS_TYPEMASK);
 }
 
 

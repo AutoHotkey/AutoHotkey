@@ -403,9 +403,6 @@ VarEntry g_BIV_A[] =
 	A_(MyDocuments),
 	A_x(Now, BIV_Now),
 	A_x(NowUTC, BIV_Now),
-#ifdef CONFIG_WIN9X
-	A_(OSType),
-#endif
 	A_(OSVersion),
 	A_(PriorHotkey),
 	A_(PriorKey),

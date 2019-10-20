@@ -3116,9 +3116,6 @@ BIF_DECL(BIF_SysGet)
 
 
 
-#if defined(CONFIG_WIN9X) || defined(CONFIG_WINNT4)
-#error MonitorGet: Win9x/NT4 support was removed; to restore it, load EnumDisplayMonitors dynamically.
-#endif
 BIF_DECL(BIF_MonitorGet)
 {
 	MonitorInfoPackage mip = {0};  // Improves maintainability to initialize unconditionally, here.
@@ -10028,16 +10025,6 @@ VarSizeType BIV_Now(LPTSTR aBuf, LPTSTR aVarName)
 	return (VarSizeType)_tcslen(aBuf);
 }
 
-#ifdef CONFIG_WIN9X
-VarSizeType BIV_OSType(LPTSTR aBuf, LPTSTR aVarName)
-{
-       LPTSTR type = _T("WIN32_NT");
-       if (aBuf)
-               _tcscpy(aBuf, type);
-       return (VarSizeType)_tcslen(type); // Return length of type, not aBuf.
-}
-#endif
-
 VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (aBuf)
@@ -15950,7 +15937,7 @@ ResultType GuiControlType::LV_InsertModifyDeleteCol(ResultToken &aResultToken, i
 	GuiControlType &control = *this;
 	GuiType &gui = *control.gui;
 	lv_attrib_type &lv_attrib = *control.union_lv_attrib;
-	DWORD view_mode = mode != 'D' ? GuiType::ControlGetListViewMode(control.hwnd) : 0;
+	DWORD view_mode = mode != 'D' ? ListView_GetView(control.hwnd) : 0;
 
 	int index;
 	if (!ParamIndexIsOmitted(0))
@@ -15959,7 +15946,7 @@ ResultType GuiControlType::LV_InsertModifyDeleteCol(ResultToken &aResultToken, i
 	{
 		if (mode == FID_LV_ModifyCol)
 		{
-			if (view_mode != LVS_REPORT)
+			if (view_mode != LV_VIEW_DETAILS)
 				_o_return_retval; // Return 0 to indicate failure.
 			// Otherwise:
 			// v1.0.36.03: Don't attempt to auto-size the columns while the view is not report-view because
@@ -15997,7 +15984,7 @@ ResultType GuiControlType::LV_InsertModifyDeleteCol(ResultToken &aResultToken, i
 	{
 		// v1.0.36.03: Don't attempt to auto-size the columns while the view is not report-view because
 		// that causes any subsequent switch to the "list" view to be corrupted (invisible icons and items):
-		if (view_mode == LVS_REPORT)
+		if (view_mode == LV_VIEW_DETAILS)
 			_f_set_retval_i(ListView_SetColumnWidth(control.hwnd, index, LVSCW_AUTOSIZE));
 		//else leave retval set to 0.
 		_o_return_retval;
@@ -16171,7 +16158,7 @@ ResultType GuiControlType::LV_InsertModifyDeleteCol(ResultToken &aResultToken, i
 				// updating on Windows 7 and 10 (but not XP).  As a workaround, initialise the width
 				// to 0 and then resize it afterward.  do_auto_size is overloaded for this purpose
 				// since it's already passed to ListView_SetColumnWidth().
-				if (mode == 'I' && view_mode == LVS_REPORT)
+				if (mode == 'I' && view_mode == LV_VIEW_DETAILS)
 				{
 					lvc.cx = 0; // Must be zero; if width is zero, ListView_SetColumnWidth() won't be called.
 					do_auto_size = width; // If non-zero, this is passed to ListView_SetColumnWidth().
@@ -16246,7 +16233,7 @@ ResultType GuiControlType::LV_InsertModifyDeleteCol(ResultToken &aResultToken, i
 	// Auto-size is done only at this late a stage, in case column was just created above.
 	// Note that ListView_SetColumn() apparently does not support LVSCW_AUTOSIZE_USEHEADER for it's "cx" member.
 	// do_auto_size contains the actual column width if mode == 'I' and a width was passed by the caller.
-	if (do_auto_size && view_mode == LVS_REPORT)
+	if (do_auto_size && view_mode == LV_VIEW_DETAILS)
 		ListView_SetColumnWidth(control.hwnd, index, do_auto_size); // retval was previously set to the more important result above.
 	//else v1.0.36.03: Don't attempt to auto-size the columns while the view is not report-view because
 	// that causes any subsequent switch to the "list" view to be corrupted (invisible icons and items).
@@ -17696,15 +17683,7 @@ DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNam
 		? GetModuleBaseName(hproc, NULL, aBuf, aBufSize)
 		: GetModuleFileNameEx(hproc, NULL, aBuf, aBufSize);
 
-	typedef DWORD (WINAPI *MyGetName)(HANDLE, LPTSTR, DWORD);
-#ifdef CONFIG_WIN2K
-	// This must be loaded dynamically or the program will probably not launch at all on Win2k:
-	static MyGetName lpfnGetName = (MyGetName)GetProcAddress(GetModuleHandle(_T("psapi")), "GetProcessImageFileName" WINAPI_SUFFIX);;
-#else
-	static MyGetName lpfnGetName = &GetProcessImageFileName;
-#endif
-
-	if (!buf_length && lpfnGetName)
+	if (!buf_length)
 	{
 		// Above failed, possibly for one of the following reasons:
 		//	- Our process is 32-bit, but that one is 64-bit.
@@ -17712,7 +17691,7 @@ DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNam
 		//	- We didn't have permission to use PROCESS_VM_READ access?
 		//
 		// So fall back to GetProcessImageFileName (XP or later required):
-		buf_length = lpfnGetName(hproc, aBuf, aBufSize);
+		buf_length = GetProcessImageFileName(hproc, aBuf, aBufSize);
 		if (buf_length)
 		{
 			LPTSTR cp;

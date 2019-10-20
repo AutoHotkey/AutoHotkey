@@ -2160,8 +2160,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 		// Win-L uses logical keys, unlike Ctrl-Alt-Del which uses physical keys (i.e. Win-L can be simulated,
 		// but Ctrl-Alt-Del must be physically pressed by the user):
 		if (   aVK == 'L' && !aKeyUp && (g_modifiersLR_logical == MOD_LWIN  // i.e. *no* other keys but WIN.
-			|| g_modifiersLR_logical == MOD_RWIN || g_modifiersLR_logical == (MOD_LWIN | MOD_RWIN))
-			&& g_os.IsWinXPorLater())
+			|| g_modifiersLR_logical == MOD_RWIN || g_modifiersLR_logical == (MOD_LWIN | MOD_RWIN))   )
 		{
 			// Since the user has pressed Win-L with *no* other modifier keys held down, and since
 			// this key isn't being suppressed (since we're here in this function), the computer

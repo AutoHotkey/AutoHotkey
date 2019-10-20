@@ -167,15 +167,6 @@
       <Command Condition="exists('$(PackerPath)')">$(PackerPath)$(PackerArgs) "$(TargetPath)" &amp; exit 0</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
-  <!-- win2k support -->
-  <ItemDefinitionGroup Condition="$(SupportWin2k)">
-    <ClCompile>
-      <PreprocessorDefinitions>CONFIG_WIN2K;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ClCompile>
-    <Link>
-      <MinimumRequiredVersion>5</MinimumRequiredVersion>
-    </Link>
-  </ItemDefinitionGroup>
   <!-- Visual C++ 2010 should place any newly created properties in these groups -->
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
@@ -295,9 +286,6 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <CustomBuild Include="source\lib\win2kcompat.asm">
-      <ExcludedFromBuild Condition="!$(SupportWin2k)">true</ExcludedFromBuild>
-    </CustomBuild>
     <CustomBuild Include="source\libx64call\x64call.asm">
       <ExcludedFromBuild Condition="'$(Platform)'!='x64'">true</ExcludedFromBuild>
     </CustomBuild>

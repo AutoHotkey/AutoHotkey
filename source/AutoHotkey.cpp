@@ -270,18 +270,6 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		ZeroMemory(g_KeyHistory, g_MaxHistoryKeys * sizeof(KeyHistoryItem)); // Must be zeroed.
 	//else leave it NULL as it was initialized in globaldata.
 
-	// MSDN: "Windows XP: If a manifest is used, InitCommonControlsEx is not required."
-	// Therefore, in case it's a high overhead call, it's not done on XP or later:
-	if (!g_os.IsWinXPorLater())
-	{
-		// Since InitCommonControls() is apparently incapable of initializing DateTime and MonthCal
-		// controls, InitCommonControlsEx() must be called.
-		INITCOMMONCONTROLSEX icce;
-		icce.dwSize = sizeof(INITCOMMONCONTROLSEX);
-		icce.dwICC = ICC_WIN95_CLASSES | ICC_DATE_CLASSES; // ICC_WIN95_CLASSES is equivalent to calling InitCommonControls().
-		InitCommonControlsEx(&icce);
-	}
-
 #ifdef CONFIG_DEBUGGER
 	// Initiate debug session now if applicable.
 	if (!g_DebuggerHost.IsEmpty() && g_Debugger.Connect(g_DebuggerHost, g_DebuggerPort) == DEBUGGER_E_OK)
