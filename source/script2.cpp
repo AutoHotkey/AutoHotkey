@@ -2824,16 +2824,10 @@ BIF_DECL(BIF_WinGet)
 
 	case FID_WinGetTransparent:
 	case FID_WinGetTransColor:
-		typedef BOOL (WINAPI *MyGetLayeredWindowAttributesType)(HWND, COLORREF*, BYTE*, DWORD*);
-		static MyGetLayeredWindowAttributesType MyGetLayeredWindowAttributes = (MyGetLayeredWindowAttributesType)
-			GetProcAddress(GetModuleHandle(_T("user32")), "GetLayeredWindowAttributes");
 		COLORREF color;
 		BYTE alpha;
 		DWORD flags;
-		// IMPORTANT (when considering future enhancements to these commands): Unlike
-		// SetLayeredWindowAttributes(), which works on Windows 2000, GetLayeredWindowAttributes()
-		// is supported only on XP or later.
-		if (!MyGetLayeredWindowAttributes || !(MyGetLayeredWindowAttributes(target_window, &color, &alpha, &flags)))
+		if (!(GetLayeredWindowAttributes(target_window, &color, &alpha, &flags)))
 			break;
 		if (cmd == FID_WinGetTransparent)
 		{
@@ -4004,8 +3998,6 @@ error:
 
 LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
 {
-	DWORD_PTR dwTemp;
-
 	// Detect Explorer crashes so that tray icon can be recreated.  I think this only works on Win98
 	// and beyond, since the feature was never properly implemented in Win95:
 	static UINT WM_TASKBARCREATED = RegisterWindowMessage(_T("TaskbarCreated"));
@@ -4296,21 +4288,9 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		}
 		break;
 
-	case WM_CLIPBOARDUPDATE: // For Vista and later.
-	case WM_DRAWCLIPBOARD:
+	case WM_CLIPBOARDUPDATE:
 		if (g_script.mOnClipboardChange.Count()) // In case it's a bogus msg, it's our responsibility to avoid posting the msg if there's no function to call.
 			PostMessage(g_hWnd, AHK_CLIPBOARD_CHANGE, 0, 0); // It's done this way to buffer it when the script is uninterruptible, etc.  v1.0.44: Post to g_hWnd vs. NULL so that notifications aren't lost when script is displaying a MsgBox or other dialog.
-		if (g_script.mNextClipboardViewer) // Will be NULL if there are no other windows in the chain, or if we're on Vista or later and used AddClipboardFormatListener instead of SetClipboardViewer (in which case iMsg should be WM_CLIPBOARDUPDATE).
-			SendMessageTimeout(g_script.mNextClipboardViewer, iMsg, wParam, lParam, SMTO_ABORTIFHUNG, 2000, &dwTemp);
-		return 0;
-
-	case WM_CHANGECBCHAIN:
-		// MSDN: If the next window is closing, repair the chain. 
-		if ((HWND)wParam == g_script.mNextClipboardViewer)
-			g_script.mNextClipboardViewer = (HWND)lParam;
-		// MSDN: Otherwise, pass the message to the next link. 
-		else if (g_script.mNextClipboardViewer)
-			SendMessageTimeout(g_script.mNextClipboardViewer, iMsg, wParam, lParam, SMTO_ABORTIFHUNG, 2000, &dwTemp);
 		return 0;
 
 	case AHK_GETWINDOWTEXT:

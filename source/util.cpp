@@ -1944,13 +1944,6 @@ DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBu
 
 
 
-#ifndef _WIN64
-// Load function dynamically to allow the program to launch on Win2k/XPSP1:
-typedef BOOL (WINAPI *PFN_IsWow64Process)(HANDLE, PBOOL);
-static PFN_IsWow64Process _IsWow64Process = (PFN_IsWow64Process)GetProcAddress(GetModuleHandle(_T("kernel32"))
-	, "IsWow64Process");
-#endif
-
 BOOL IsProcess64Bit(HANDLE aHandle)
 {
 	BOOL is32on64;
@@ -1963,22 +1956,21 @@ BOOL IsProcess64Bit(HANDLE aHandle)
 	// cause this, so for simplicity just assume the target process is 64-bit (like this one).
 	return TRUE;
 #else
-	if (_IsWow64Process && _IsWow64Process(GetCurrentProcess(), &is32on64))
+	if (IsWow64Process(GetCurrentProcess(), &is32on64))
 	{
 		if (is32on64)
 		{
 			// We're running under WOW64.  Since WOW64 only exists on 64-bit systems and on such systems
 			// 32-bit processes can run ONLY under WOW64, if the target process is also running under
 			// WOW64 it must be 32-bit; otherwise it must be 64-bit.
-			if (_IsWow64Process(aHandle, &is32on64))
+			if (IsWow64Process(aHandle, &is32on64))
 				return !is32on64;
 		}
 	}
 	// Since above didn't return, one of the following is true:
-	//  a) IsWow64Process doesn't exist, so the OS and all running processes must be 32-bit.
-	//  b) IsWow64Process failed on the first or second call.  MSDN isn't clear about what conditions
+	//  a) IsWow64Process failed on the first or second call.  MSDN isn't clear about what conditions
 	//     can cause this, so for simplicity just assume the target process is 32-bit (like this one).
-	//  c) The current process is not running under WOW64.  Since we know it is 32-bit (due to our use
+	//  b) The current process is not running under WOW64.  Since we know it is 32-bit (due to our use
 	//     of conditional compilation), the OS and all running processes must be 32-bit.
 	return FALSE;
 #endif
@@ -1992,7 +1984,7 @@ BOOL IsOS64Bit()
 #else
 	// If OS is 64-bit, this program must be running in WOW64.
 	BOOL is32on64;
-	if (_IsWow64Process && _IsWow64Process(GetCurrentProcess(), &is32on64))
+	if (IsWow64Process(GetCurrentProcess(), &is32on64))
 		return is32on64;
 	return FALSE;
 #endif
@@ -2817,63 +2809,6 @@ HBITMAP IconToBitmap32(HICON ahIcon, bool aDestroyIcon)
 		DestroyIcon(ahIcon);
 
 	return hbitmap;
-}
-
-
-HRESULT MySetWindowTheme(HWND hwnd, LPCWSTR pszSubAppName, LPCWSTR pszSubIdList)
-{
-	// The library must be loaded dynamically, otherwise the app will not launch on OSes older than XP.
-	// Theme DLL is normally available only on XP+, but an attempt to load it is made unconditionally
-	// in case older OSes can ever have it.
-	HRESULT hresult = !S_OK; // Set default as "failure".
-	HINSTANCE hinstTheme = LoadLibrary(_T("uxtheme"));
-	if (hinstTheme)
-	{
-		typedef HRESULT (WINAPI *MySetWindowThemeType)(HWND, LPCWSTR, LPCWSTR);
-  		MySetWindowThemeType DynSetWindowTheme = (MySetWindowThemeType)GetProcAddress(hinstTheme, "SetWindowTheme");
-		if (DynSetWindowTheme)
-			hresult = DynSetWindowTheme(hwnd, pszSubAppName, pszSubIdList);
-		FreeLibrary(hinstTheme);
-	}
-	return hresult;
-}
-
-
-
-HRESULT MyEnableThemeDialogTexture(HWND hwnd, DWORD dwFlags)
-{
-	// The library must be loaded dynamically, otherwise the app will not launch on OSes older than XP.
-	// Theme DLL is normally available only on XP+, but an attempt to load it is made unconditionally
-	// in case older OSes can ever have it.
-	HRESULT hresult = !S_OK; // Set default as "failure".
-	HINSTANCE hinstTheme = LoadLibrary(_T("uxtheme"));
-	if (hinstTheme)
-	{
-		typedef HRESULT (WINAPI *MyEnableThemeDialogTextureType)(HWND, DWORD);
-  		MyEnableThemeDialogTextureType DynEnableThemeDialogTexture = (MyEnableThemeDialogTextureType)GetProcAddress(hinstTheme, "EnableThemeDialogTexture");
-		if (DynEnableThemeDialogTexture)
-			hresult = DynEnableThemeDialogTexture(hwnd, dwFlags);
-		FreeLibrary(hinstTheme);
-	}
-	return hresult;
-}
-
-
-
-BOOL MyIsAppThemed()
-{
-	BOOL result = FALSE;
-	HINSTANCE hinstTheme = GetModuleHandle(_T("uxtheme")); // Should always succeed if app is themed.
-	if (hinstTheme)
-	{
-		typedef BOOL (WINAPI *IsAppThemedType)();
-		// Unlike IsThemeActive, IsAppThemed will return false if the "Disable visual styles"
-		// compatibility setting is turned on for this script's EXE.
-  		IsAppThemedType DynIsAppThemed = (IsAppThemedType)GetProcAddress(hinstTheme, "IsAppThemed");
-		if (DynIsAppThemed)
-			result = DynIsAppThemed();
-	}
-	return result;
 }
 
 

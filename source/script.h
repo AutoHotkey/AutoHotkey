@@ -2961,7 +2961,6 @@ public:
 	Label *mPlaceholderLabel; // Used in place of a NULL label to simplify code.
 	LPTSTR mThisHotkeyName, mPriorHotkeyName;
 	MsgMonitorList mOnExit, mOnClipboardChange, mOnError; // Event handlers for OnExit(), OnClipboardChange() and OnError().
-	HWND mNextClipboardViewer;
 	bool mOnClipboardChangeIsRunning;
 	ExitReasons mExitReason;
 

@@ -460,13 +460,6 @@ VarEntry g_BIV_A[] =
 #undef VF
 
 
-// See Script::CreateWindows() for details about the following:
-typedef BOOL (WINAPI* AddRemoveClipboardListenerType)(HWND);
-static AddRemoveClipboardListenerType MyRemoveClipboardListener = (AddRemoveClipboardListenerType)
-	GetProcAddress(GetModuleHandle(_T("user32")), "RemoveClipboardFormatListener");
-static AddRemoveClipboardListenerType MyAddClipboardListener = (AddRemoveClipboardListenerType)
-	GetProcAddress(GetModuleHandle(_T("user32")), "AddClipboardFormatListener");
-
 // General note about the methods in here:
 // Want to be able to support multiple simultaneous points of execution
 // because more than one subroutine can be executing simultaneously
@@ -480,7 +473,7 @@ Script::Script()
 	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL), mPlaceholderLabel(NULL), mFirstStaticLine(NULL), mLastStaticLine(NULL)
 	, mThisHotkeyName(_T("")), mPriorHotkeyName(_T("")), mThisHotkeyStartTime(0), mPriorHotkeyStartTime(0)
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
-	, mNextClipboardViewer(NULL), mOnClipboardChangeIsRunning(false), mExitReason(EXIT_NONE)
+	, mOnClipboardChangeIsRunning(false), mExitReason(EXIT_NONE)
 	, mFirstLabel(NULL), mLastLabel(NULL)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
@@ -923,21 +916,9 @@ void Script::EnableClipboardListener(bool aEnable)
 	if (aEnable == sEnabled) // Simplifies BIF_On.
 		return;
 	if (aEnable)
-	{
-		if (MyAddClipboardListener && MyRemoveClipboardListener) // Should be impossible for only one of these to be NULL, but check both anyway to be safe.
-			// The old clipboard viewer chain method is prone to break when some other application uses
-			// it incorrectly.  This newer method should be more reliable, but requires Vista or later:
-			MyAddClipboardListener(g_hWnd);
-		else
-			mNextClipboardViewer = SetClipboardViewer(g_hWnd);
-	}
+		AddClipboardFormatListener(g_hWnd);
 	else
-	{
-		if (MyRemoveClipboardListener && MyAddClipboardListener)
-			MyRemoveClipboardListener(g_hWnd); // MyAddClipboardListener was used.
-		else
-			ChangeClipboardChain(g_hWnd, mNextClipboardViewer); // SetClipboardViewer was used.
-	}
+		RemoveClipboardFormatListener(g_hWnd);
 	sEnabled = aEnable;
 }
 
@@ -14431,15 +14412,11 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		
 		if (ShellExecuteEx(&sei)) // Relies on short-circuit boolean order.
 		{
-			typedef DWORD (WINAPI *GetProcessIDType)(HANDLE);
-			// GetProcessID is only available on WinXP SP1 or later, so load it dynamically.
-			static GetProcessIDType fnGetProcessID = (GetProcessIDType)GetProcAddress(GetModuleHandle(_T("kernel32.dll")), "GetProcessId");
-
 			if (hprocess = sei.hProcess)
 			{
 				// A new process was created, so get its ID if possible.
-				if (aOutputVar && fnGetProcessID)
-					aOutputVar->Assign(fnGetProcessID(hprocess));
+				if (aOutputVar)
+					aOutputVar->Assign(GetProcessId(hprocess));
 			}
 			// Even if there's no process handle, it's considered a success because some
 			// system verbs and file associations do not create a new process, by design.

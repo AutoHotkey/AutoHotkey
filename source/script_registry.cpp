@@ -534,10 +534,8 @@ void RegDelete(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTS
 		RegCloseKey(hRegKey); // Close parent key.  Not sure if this needs to be done only after the above.
 		if (result == ERROR_SUCCESS)
 		{
-			typedef LONG (WINAPI * PFN_RegDeleteKeyEx)(HKEY hKey , LPCTSTR lpSubKey , REGSAM samDesired , DWORD Reserved );
-			static PFN_RegDeleteKeyEx _RegDeleteKeyEx = (PFN_RegDeleteKeyEx)GetProcAddress(GetModuleHandle(_T("advapi32")), "RegDeleteKeyEx" WINAPI_SUFFIX);
-			if (g->RegView && _RegDeleteKeyEx)
-				result = _RegDeleteKeyEx(aRootKey, aRegSubkey, g->RegView, 0);
+			if (g->RegView)
+				result = RegDeleteKeyEx(aRootKey, aRegSubkey, g->RegView, 0);
 			else
 				result = RegDeleteKey(aRootKey, aRegSubkey);
 		}

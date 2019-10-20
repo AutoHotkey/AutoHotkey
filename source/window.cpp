@@ -1318,13 +1318,9 @@ bool IsWindowHung(HWND aWnd)
 
 bool IsWindowCloaked(HWND aWnd)
 {
-	static auto *pfn = (decltype(&DwmGetWindowAttribute))
-		GetProcAddress(LoadLibrary(_T("dwmapi.dll")), "DwmGetWindowAttribute");
-	if (!pfn) // Windows XP or earlier.
-		return false;
 	int cloaked = 0;
 	const int DWMWA_CLOAKED = 14; // Work around SDK troubles.
-	auto result = pfn(aWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+	auto result = DwmGetWindowAttribute(aWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
 	return SUCCEEDED(result) && cloaked; // Result is "invalid parameter" on Windows 7.
 }
 

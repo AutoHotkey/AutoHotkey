@@ -15,6 +15,8 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
+#include <Shlwapi.h>
+#include <uxtheme.h>
 #include "script.h"
 #include "globaldata.h" // for a lot of things
 #include "application.h" // for MsgSleep()
@@ -4485,9 +4487,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			// Override the tab's window-proc so that custom background color becomes possible:
 			g_TabClassProc = (WNDPROC)SetWindowLongPtr(control.hwnd, GWLP_WNDPROC, (LONG_PTR)TabWindowProc);
 			// Doesn't work to remove theme background from tab:
-			//MyEnableThemeDialogTexture(control.hwnd, ETDT_DISABLE);
-			// The above require the following line:
-			//#include <uxtheme.h> // For EnableThemeDialogTexture()'s constants.
+			//EnableThemeDialogTexture(control.hwnd, ETDT_DISABLE);
 		}
 		break;
 		
@@ -4597,7 +4597,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		|| control.type == GUI_CONTROL_RADIO || control.type == GUI_CONTROL_GROUPBOX)) // GroupBox needs it too.
 		|| (control.type == GUI_CONTROL_GROUPBOX && control.background_color == CLR_TRANSPARENT) // Tested and found to be necessary.
 		|| (control.type == GUI_CONTROL_DROPDOWNLIST && control.background_color != CLR_INVALID))
-		MySetWindowTheme(control.hwnd, L"", L"");
+		SetWindowTheme(control.hwnd, L"", L"");
 
 	// Must set the font even if mCurrentFontIndex > 0, otherwise the bold SYSTEM_FONT will be used.
 	// Note: Neither the slider's buddies nor itself are affected by the font setting, so it's not applied.
@@ -9716,7 +9716,7 @@ void GuiType::ControlSetProgressOptions(GuiControlType &aControl, GuiControlOpti
 	if (   IS_AN_ACTUAL_COLOR(aOpt.color)
 		|| IS_AN_ACTUAL_COLOR(aOpt.color_bk)
 		|| (aStyle & PBS_SMOOTH))
-		MySetWindowTheme(aControl.hwnd, L"", L""); // Remove theme if options call for something theme can't show.
+		SetWindowTheme(aControl.hwnd, L"", L""); // Remove theme if options call for something theme can't show.
 
 	if (aOpt.range_min || aOpt.range_max) // Must check like this because although it valid for one to be zero, both should not be.
 		SendMessage(aControl.hwnd, PBM_SETRANGE32, aOpt.range_min, aOpt.range_max);
@@ -10290,7 +10290,7 @@ ResultType GuiType::CreateTabDialog(GuiControlType &aTabControl, GuiControlOptio
 	{
 		// Apply a tab control background to the tab dialog.  This also affects
 		// the backgrounds of some controls, such as Radio and Groupbox controls.
-		MyEnableThemeDialogTexture(tab_dialog, 6); // ETDT_ENABLETAB = 6
+		EnableThemeDialogTexture(tab_dialog, 6); // ETDT_ENABLETAB = 6
 		attrib |= TABDIALOG_ATTRIB_THEMED;
 	}
 	SetWindowLongPtr(tab_dialog, GWLP_USERDATA, attrib);
@@ -10369,12 +10369,14 @@ INT_PTR CALLBACK TabDialogProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lPara
 			// there are easier methods available for them:
 			//  - Text/Picture: BackgroundTrans works (and overrides this section)
 			//  - Check/Radio/Group: EnableThemeDialogTexture() is enough
+			// Unlike IsThemeActive, IsAppThemed will return false if the "Disable visual styles"
+			// compatibility setting is turned on for this script's EXE.
 			GuiControlType *pcontrol;
 			if (   uMsg == WM_CTLCOLORSTATIC
 				&& (TABDIALOG_ATTRIB_THEMED & GetWindowLongPtr(hDlg, GWLP_USERDATA))
 				&& (pcontrol = pgui->FindControl((HWND)lParam))
 				&& (pcontrol->background_color != CLR_TRANSPARENT)
-				&& MyIsAppThemed()   )
+				&& IsAppThemed()   )
 			{
 				HDC hdc = (HDC)wParam;
 				HBRUSH brush = (HBRUSH)GetProp(hDlg, _T("br"));
@@ -10626,8 +10628,8 @@ int CALLBACK LV_GeneralSort(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort)
 	int result;
 	if (lvs.col.type == LV_COL_TEXT)
 	{
-		if (lvs.col.case_sensitive == SCS_INSENSITIVE_LOGICAL) // v1.0.44.12: When this is true, caller has ensured that g_StrCmpLogicalW isn't NULL.
-			result = g_StrCmpLogicalW((LPCWSTR)field1, (LPCWSTR)lvs.lvi.pszText);
+		if (lvs.col.case_sensitive == SCS_INSENSITIVE_LOGICAL)
+			result = StrCmpLogicalW((LPCWSTR)field1, (LPCWSTR)lvs.lvi.pszText);
 		else
 			result = tcscmp2(field1, lvs.lvi.pszText, lvs.col.case_sensitive); // Must not refer to buf1/buf2 directly, see above.
 	}
@@ -10706,16 +10708,7 @@ void GuiType::LV_Sort(GuiControlType &aControl, int aColumnIndex, bool aSortOnly
 			// v1.0.44.12: Support logical sorting, which treats numeric strings as true numbers like Windows XP
 			// Explorer's sorting.  This is done here rather than in LV_ModifyCol() because it seems more
 			// maintainable/robust (plus LV_GeneralSort() relies on us to do this check).
-			if (!g_StrCmpLogicalW)
-			{
-				HINSTANCE hinstLib;
-				if (hinstLib = LoadLibrary(_T("shlwapi"))) // For code simplicity and performance-upon-reuse, once loaded it is never freed.
-					g_StrCmpLogicalW = (StrCmpLogicalW_type)GetProcAddress(hinstLib, "StrCmpLogicalW");
-			}
-			if (g_StrCmpLogicalW) // Generally, this happens only if OS is older than XP. But OS version isn't checked in case it's possible for older OSes/emulators to ever have StrCmpLogicalW().
-				lvs.lvi.cchTextMax = lvs.lvi.cchTextMax/2 - 1; // Buffer can hold only half as many Unicode characters as non-Unicode (subtract 1 for the extra-wide NULL terminator).
-			else
-				col.case_sensitive = SCS_INSENSITIVE_LOCALE; // LV_GeneralSort() relies on this fallback.  Also, it falls back to the LOCALE method because it is the closest match to LOGICAL (since testing shows that StrCmpLogicalW seems to use the user's locale).
+			lvs.lvi.cchTextMax = lvs.lvi.cchTextMax/2 - 1; // Buffer can hold only half as many Unicode characters as non-Unicode (subtract 1 for the extra-wide NULL terminator).
 		}
 		// Since LVM_SORTITEMSEX requires comctl32.dll version 5.80+, the non-Ex version is used
 		// whenever the EX version fails to work.  One reason to strongly prefer the Ex version

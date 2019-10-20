@@ -41,8 +41,6 @@ HWND g_hWndEdit = NULL;
 HFONT g_hFontEdit = NULL;
 HACCEL g_hAccelTable = NULL;
 
-typedef int (WINAPI *StrCmpLogicalW_type)(LPCWSTR, LPCWSTR);
-StrCmpLogicalW_type g_StrCmpLogicalW = NULL;
 WNDPROC g_TabClassProc = NULL;
 
 modLR_type g_modifiersLR_logical = 0;

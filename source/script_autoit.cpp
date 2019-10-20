@@ -44,22 +44,6 @@ ResultType Script::DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDispla
 		LPSTARTUPINFOW lpStartupInfo,       // startup information
 		LPPROCESS_INFORMATION lpProcessInfo // process information
 		);
-	// Get a handle to the DLL module that contains CreateProcessWithLogonW
-	HINSTANCE hinstLib = LoadLibrary(_T("advapi32"));
-	if (!hinstLib)
-	{
-		if (aDisplayErrors)
-			ScriptError(_T("RunAs: Missing advapi32.dll."));
-		return FAIL;
-	}
-	MyCreateProcessWithLogonW lpfnDLLProc = (MyCreateProcessWithLogonW)GetProcAddress(hinstLib, "CreateProcessWithLogonW");
-	if (!lpfnDLLProc)
-	{
-		FreeLibrary(hinstLib);
-		if (aDisplayErrors)
-			ScriptError(_T("CreateProcessWithLogonW.")); // Short msg since it probably never happens.
-		return FAIL;
-	}
 	// Set up wide char version that we need for CreateProcessWithLogon
 	// init structure for running programs (wide char version)
 	STARTUPINFOW wsi = {0};
@@ -85,7 +69,7 @@ ResultType Script::DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDispla
 	if (lpfnDLLProc(mRunAsUser, mRunAsDomain, mRunAsPass, LOGON_WITH_PROFILE, 0
 		, command_line_wide, 0, 0, *working_dir_wide ? working_dir_wide : NULL, &wsi, &aPI))
 #else
-	if (lpfnDLLProc(mRunAsUser, mRunAsDomain, mRunAsPass, LOGON_WITH_PROFILE, 0
+	if (CreateProcessWithLogonW(mRunAsUser, mRunAsDomain, mRunAsPass, LOGON_WITH_PROFILE, 0
 		, aCommandLine, 0, 0, aWorkingDir && *aWorkingDir ? aWorkingDir : NULL, &wsi, &aPI))
 #endif
 	{
@@ -98,7 +82,6 @@ ResultType Script::DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDispla
 	}
 	else
 		aLastError = GetLastError(); // Caller will use this to get an error message and set g->LastError if needed.
-	FreeLibrary(hinstLib);
 	return OK;
 }
 
