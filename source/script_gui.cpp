@@ -2844,8 +2844,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	case GUI_CONTROL_MONTHCAL:
 		// Testing indicates that although the MonthCal attached to a DateTime control can be navigated using
 		// the keyboard on Win2k/XP, standalone MonthCal controls don't support it, except on Vista and later.
-		if (g_os.IsWinVistaOrLater())
-			opt.style_add |= WS_TABSTOP;
+		opt.style_add |= WS_TABSTOP;
 		break;
 	// Nothing extra for these currently:
 	//case GUI_CONTROL_RADIO: This one is handled separately above the switch().
@@ -8814,27 +8813,14 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 		}
 		break;
 
-	case WM_MEASUREITEM:
-		// WM_MEASUREITEM is sent to a Gui if it has a menu bar or submenu with
-		// icons and the OS doesn't support alpha channels in menu item bitmaps.
-		if (wParam == 0 && !g_os.IsWinVistaOrLater() && GuiType::FindGui(hWnd))
-			if (UserMenu::OwnerMeasureItem((LPMEASUREITEMSTRUCT)lParam))
-				return TRUE;
-		break;
-
 
 	case WM_DRAWITEM:
 	{
-		// WM_DRAWITEM msg is received in two cases:
-		//  1) If there are GUI windows containing a tab control with custom tab colors.
-		//     The TCS_OWNERDRAWFIXED style is what causes this message to be received.
-		//  2) If there are GUI windows with icons on the menu bar or a submenu.
+		// WM_DRAWITEM msg is received by GUI windows that contain a tab control with custom tab
+		// colors.  The TCS_OWNERDRAWFIXED style is what causes this message to be received.
 		if (   !(pgui = GuiType::FindGui(hWnd))   )
 			break;
 		LPDRAWITEMSTRUCT lpdis = (LPDRAWITEMSTRUCT)lParam;
-		if (UserMenu::OwnerDrawItem(lpdis))
-			// OwnerDrawItem determined this message is for a menu icon, and it drew the icon.
-			return TRUE;
 		// Otherwise, it might be a tab control with custom tab colors:
 		control_index = (GuiIndexType)GUI_ID_TO_INDEX(lpdis->CtlID); // Convert from ID to array index. Relies on unsigned to flag as out-of-bounds.
 		if (control_index >= pgui->mControlCount // Relies on short-circuit eval order.

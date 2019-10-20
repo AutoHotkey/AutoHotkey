@@ -4345,18 +4345,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 				return cp->Eval((LPTSTR)lParam);
 		return 0;
 
-	case WM_MEASUREITEM: // L17: Measure menu icon. Not used on Windows Vista or later.
-		if (hWnd == g_hWnd && wParam == 0 && !g_os.IsWinVistaOrLater())
-			if (UserMenu::OwnerMeasureItem((LPMEASUREITEMSTRUCT)lParam))
-				return TRUE;
-		break;
-
-	case WM_DRAWITEM: // L17: Draw menu icon. Not used on Windows Vista or later.
-		if (hWnd == g_hWnd && wParam == 0 && !g_os.IsWinVistaOrLater())
-			if (UserMenu::OwnerDrawItem((LPDRAWITEMSTRUCT)lParam))
-				return TRUE;
-		break;
-
 	case WM_ENTERMENULOOP:
 		CheckMenuItem(GetMenu(g_hWnd), ID_FILE_PAUSE, g->IsPaused ? MF_CHECKED : MF_UNCHECKED); // This is the menu bar in the main window; the tray menu's checkmark is updated only when the tray menu is actually displayed.
 		if (!g_MenuIsVisible) // See comments in similar code in GuiWindowProc().
@@ -5136,22 +5124,11 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		SendMessage(hWndDlg, WM_SETICON, ICON_SMALL, small_icon);
 		SendMessage(hWndDlg, WM_SETICON, ICON_BIG, big_icon);
 
-		if(g_os.IsWinVistaOrLater())
-		{
-			// Use a more appealing font on Windows Vista and later (Segoe UI).
-			HDC hdc = GetDC(hWndDlg);
-			CURR_INPUTBOX.font = CreateFont(FONT_POINT(hdc, 10), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-					, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, _T("Segoe UI"));
-			ReleaseDC(hWndDlg, hdc); // In theory it must be done.
-
-			// Set the font.
-			SendMessage(hControl, WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
-			SendMessage(GetDlgItem(hWndDlg, IDC_INPUTEDIT), WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
-			SendMessage(GetDlgItem(hWndDlg, IDOK), WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
-			SendMessage(GetDlgItem(hWndDlg, IDCANCEL), WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
-		}
-		else
-			CURR_INPUTBOX.font = NULL;
+		// Set the font.
+		SendMessage(hControl, WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
+		SendMessage(GetDlgItem(hWndDlg, IDC_INPUTEDIT), WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
+		SendMessage(GetDlgItem(hWndDlg, IDOK), WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
+		SendMessage(GetDlgItem(hWndDlg, IDCANCEL), WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
 
 		// For the timeout, use a timer ID that doesn't conflict with MsgBox's IDs (which are the
 		// integers 1 through the max allowed number of msgboxes).  Use +3 vs. +1 for a margin of safety
@@ -7035,188 +7012,7 @@ BIF_DECL(BIF_Sound)
 	if (control_type == MIXERCONTROL_CONTROLTYPE_INVALID || aComponentType == MIXERLINE_COMPONENTTYPE_DST_UNDEFINED)
 		_f_throw(_T("Invalid Control Type or Component Type"));
 
-	if (g_os.IsWinVistaOrLater())
-		SoundSetGetVista(aResultToken, aSetting, component_type, instance_number, control_type, aDevice);
-	else
-		SoundSetGet2kXP(aResultToken, aSetting, component_type, instance_number, control_type, aDevice);
-}
-
-
-ResultType SoundSetGet2kXP(ResultToken &aResultToken, LPTSTR aSetting
-	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDevice)
-{
-	int aMixerID = *aDevice ? ATOI(aDevice) - 1 : 0;
-	if (aMixerID < 0)
-		aMixerID = 0;
-
-	double setting_percent;
-	if (SOUND_MODE_IS_SET)
-	{
-		setting_percent = ATOF(aSetting);
-		if (setting_percent < -100)
-			setting_percent = -100;
-		else if (setting_percent > 100)
-			setting_percent = 100;
-	}
-
-	// Open the specified mixer ID:
-	HMIXER hMixer;
-    if (mixerOpen(&hMixer, aMixerID, 0, 0, 0) != MMSYSERR_NOERROR)
-		return g_ErrorLevel->Assign(_T("Can't Open Specified Mixer"));
-
-	// Find out how many destinations are available on this mixer (should always be at least one):
-	int dest_count;
-	MIXERCAPS mxcaps;
-	if (mixerGetDevCaps((UINT_PTR)hMixer, &mxcaps, sizeof(mxcaps)) == MMSYSERR_NOERROR)
-		dest_count = mxcaps.cDestinations;
-	else
-		dest_count = 1;  // Assume it has one so that we can try to proceed anyway.
-
-	// Find specified line (aComponentType + aComponentInstance):
-	MIXERLINE ml = {0};
-    ml.cbStruct = sizeof(ml);
-	if (aComponentInstance == 1)  // Just get the first line of this type, the easy way.
-	{
-		ml.dwComponentType = aComponentType;
-		if (mixerGetLineInfo((HMIXEROBJ)hMixer, &ml, MIXER_GETLINEINFOF_COMPONENTTYPE) != MMSYSERR_NOERROR)
-		{
-			mixerClose(hMixer);
-			return g_ErrorLevel->Assign(_T("Mixer Doesn't Support This Component Type"));
-		}
-	}
-	else
-	{
-		// Search through each source of each destination, looking for the indicated instance
-		// number for the indicated component type:
-		int source_count;
-		bool found = false;
-		for (int d = 0, found_instance = 0; d < dest_count && !found; ++d) // For each destination of this mixer.
-		{
-			ml.dwDestination = d;
-			if (mixerGetLineInfo((HMIXEROBJ)hMixer, &ml, MIXER_GETLINEINFOF_DESTINATION) != MMSYSERR_NOERROR)
-				// Keep trying in case the others can be retrieved.
-				continue;
-			source_count = ml.cConnections;  // Make a copy of this value so that the struct can be reused.
-			for (int s = 0; s < source_count && !found; ++s) // For each source of this destination.
-			{
-				ml.dwDestination = d; // Set it again in case it was changed.
-				ml.dwSource = s;
-				if (mixerGetLineInfo((HMIXEROBJ)hMixer, &ml, MIXER_GETLINEINFOF_SOURCE) != MMSYSERR_NOERROR)
-					// Keep trying in case the others can be retrieved.
-					continue;
-				// This line can be used to show a soundcard's component types (match them against mmsystem.h):
-				//MsgBox(ml.dwComponentType);
-				if (ml.dwComponentType == aComponentType)
-				{
-					++found_instance;
-					if (found_instance == aComponentInstance)
-						found = true;
-				}
-			} // inner for()
-		} // outer for()
-		if (!found)
-		{
-			mixerClose(hMixer);
-			return g_ErrorLevel->Assign(_T("Mixer Doesn't Have That Many of That Component Type"));
-		}
-	}
-
-	// Find the mixer control (aControlType) for the above component:
-    MIXERCONTROL mc; // MSDN: "No initialization of the buffer pointed to by [pamxctrl below] is required"
-    MIXERLINECONTROLS mlc;
-	mlc.cbStruct = sizeof(mlc);
-	mlc.pamxctrl = &mc;
-	mlc.cbmxctrl = sizeof(mc);
-	mlc.dwLineID = ml.dwLineID;
-	mlc.dwControlType = aControlType;
-	mlc.cControls = 1;
-	if (mixerGetLineControls((HMIXEROBJ)hMixer, &mlc, MIXER_GETLINECONTROLSF_ONEBYTYPE) != MMSYSERR_NOERROR)
-	{
-		mixerClose(hMixer);
-		return g_ErrorLevel->Assign(_T("Component Doesn't Support This Control Type"));
-	}
-
-	// Does user want to adjust the current setting by a certain amount?
-	bool adjust_current_setting = aSetting && (*aSetting == '-' || *aSetting == '+');
-
-	// These are used in more than once place, so always initialize them here:
-	MIXERCONTROLDETAILS mcd = {0};
-    MIXERCONTROLDETAILS_UNSIGNED mcdMeter;
-	mcd.cbStruct = sizeof(MIXERCONTROLDETAILS);
-	mcd.dwControlID = mc.dwControlID;
-	mcd.cChannels = 1; // MSDN: "when an application needs to get and set all channels as if they were uniform"
-	mcd.paDetails = &mcdMeter;
-	mcd.cbDetails = sizeof(mcdMeter);
-
-	// Get the current setting of the control, if necessary:
-	if (!SOUND_MODE_IS_SET || adjust_current_setting)
-	{
-		if (mixerGetControlDetails((HMIXEROBJ)hMixer, &mcd, MIXER_GETCONTROLDETAILSF_VALUE) != MMSYSERR_NOERROR)
-		{
-			mixerClose(hMixer);
-			return g_ErrorLevel->Assign(_T("Can't Get Current Setting"));
-		}
-	}
-
-	bool control_type_is_boolean;
-	switch (aControlType)
-	{
-	case MIXERCONTROL_CONTROLTYPE_ONOFF:
-	case MIXERCONTROL_CONTROLTYPE_MUTE:
-	case MIXERCONTROL_CONTROLTYPE_MONO:
-	case MIXERCONTROL_CONTROLTYPE_LOUDNESS:
-	case MIXERCONTROL_CONTROLTYPE_STEREOENH:
-	case MIXERCONTROL_CONTROLTYPE_BASS_BOOST:
-		control_type_is_boolean = true;
-		break;
-	default: // For all others, assume the control can have more than just ON/OFF as its allowed states.
-		control_type_is_boolean = false;
-	}
-
-	if (SOUND_MODE_IS_SET)
-	{
-		if (control_type_is_boolean)
-		{
-			if (adjust_current_setting) // The user wants this toggleable control to be toggled to its opposite state:
-				mcdMeter.dwValue = (mcdMeter.dwValue > mc.Bounds.dwMinimum) ? mc.Bounds.dwMinimum : mc.Bounds.dwMaximum;
-			else // Set the value according to whether the user gave us a setting that is greater than zero:
-				mcdMeter.dwValue = (setting_percent > 0.0) ? mc.Bounds.dwMaximum : mc.Bounds.dwMinimum;
-		}
-		else // For all others, assume the control can have more than just ON/OFF as its allowed states.
-		{
-			// Make this an __int64 vs. DWORD to avoid underflow (so that a setting_percent of -100
-			// is supported whenever the difference between Min and Max is large, such as MAXDWORD):
-			__int64 specified_vol = (__int64)((mc.Bounds.dwMaximum - mc.Bounds.dwMinimum) * (setting_percent / 100.0));
-			if (adjust_current_setting)
-			{
-				// Make it a big int so that overflow/underflow can be detected:
-				__int64 vol_new = mcdMeter.dwValue + specified_vol;
-				if (vol_new < mc.Bounds.dwMinimum)
-					vol_new = mc.Bounds.dwMinimum;
-				else if (vol_new > mc.Bounds.dwMaximum)
-					vol_new = mc.Bounds.dwMaximum;
-				mcdMeter.dwValue = (DWORD)vol_new;
-			}
-			else
-				mcdMeter.dwValue = (DWORD)specified_vol; // Due to the above, it's known to be positive in this case.
-		}
-
-		MMRESULT result = mixerSetControlDetails((HMIXEROBJ)hMixer, &mcd, MIXER_GETCONTROLDETAILSF_VALUE);
-		mixerClose(hMixer);
-		return result == MMSYSERR_NOERROR ? g_ErrorLevel->Assign(ERRORLEVEL_NONE) : g_ErrorLevel->Assign(_T("Can't Change Setting"));
-	}
-
-	// Otherwise, the mode is "Get":
-	mixerClose(hMixer);
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-
-	if (control_type_is_boolean)
-		return aResultToken.Return(mcdMeter.dwValue ? TRUE : FALSE);
-	else // For all others, assume the control can have more than just ON/OFF as its allowed states.
-		// The MSDN docs imply that values fetched via the above method do not distinguish between
-		// left and right volume levels, unlike waveOutGetVolume():
-		return aResultToken.Return(   ((double)100 * (mcdMeter.dwValue - (DWORD)mc.Bounds.dwMinimum))
-			/ (mc.Bounds.dwMaximum - mc.Bounds.dwMinimum)   );
+	SoundSetGetVista(aResultToken, aSetting, component_type, instance_number, control_type, aDevice);
 }
 
 

@@ -856,8 +856,7 @@ ResultType Script::CreateWindows()
 	// Use something more appealing (monospaced seems preferable):
 	HDC hdc = GetDC(g_hWndEdit);
 	g_hFontEdit = CreateFont(FONT_POINT(hdc, 10), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-		, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE
-		, g_os.IsWinVistaOrLater() ? _T("Consolas") : _T("Lucida Console"));
+		, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, _T("Consolas"));
 	ReleaseDC(g_hWndEdit, hdc);
 	SendMessage(g_hWndEdit, WM_SETFONT, (WPARAM)g_hFontEdit, 0);
 

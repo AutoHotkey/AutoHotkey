@@ -33,13 +33,10 @@ public:
 	OS_Version() { Init(); }									// Constructor
 	void	Init(void);											// Call first before use
 
-	bool	IsWinXP(void) {return m_bWinXP;}					// Returns true if WinXP
-	bool	IsWin2003(void) {return m_bWin2003;}				// Returns true if Win2003
 	bool	IsWinVista(void) {return m_bWinVista;}				// Returns true if WinVista (v1.0.44.13)
 	bool	IsWin7(void) {return m_bWin7; }						// Returns true if Win7
 	bool	IsWin8(void) {return m_bWin8; }						// Returns true if Win8
 	bool	IsWin8_1(void) {return m_bWin8_1; }					// Returns true if Win8.1
-	bool	IsWinVistaOrLater(void) {return m_bWinVistaOrLater;}// Returns true if WinVista or later (v1.0.48.01)
 	bool	IsWin7OrLater(void) {return m_bWin7OrLater; }		// Returns true if Win7+
 	bool	IsWin10OrLater(void) {return m_dwMajorVersion >= 10;} // Excludes early pre-release builds.
 

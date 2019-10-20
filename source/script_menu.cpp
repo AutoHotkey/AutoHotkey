@@ -546,10 +546,10 @@ ResultType UserMenu::InternalAppendMenu(UserMenuItem *mi, UserMenuItem *aInsertB
 		mii.fMask |= MIIM_SUBMENU;
 		mii.hSubMenu = mi->mSubmenu->mMenu;
 	}
-	if (mi->mIcon)
+	if (mi->mBitmap)
 	{
 		mii.fMask |= MIIM_BITMAP;
-		mii.hbmpItem = g_os.IsWinVistaOrLater() ? mi->mBitmap : HBMMENU_CALLBACK;
+		mii.hbmpItem = mi->mBitmap;
 	}
 	UINT insert_at;
 	BOOL by_position;
@@ -572,7 +572,7 @@ UserMenuItem::UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, IOb
 	, mPriority(0) // default priority = 0
 	, mMenuState(MFS_ENABLED | MFS_UNCHECKED), mMenuType(*aName ? MFT_STRING : MFT_SEPARATOR)
 	, mNextMenuItem(NULL)
-	, mIcon(NULL) // L17: Initialize mIcon/mBitmap union.
+	, mBitmap(NULL) // L17: Initialize mIcon/mBitmap union.
 {
 	if (aSubmenu)
 		aSubmenu->AddRef();
@@ -1358,58 +1358,44 @@ ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int 
 	if (!*aFilename || (*aFilename == '*' && !aFilename[1]))
 		return RemoveItemIcon(aMenuItem);
 
-	if (aIconNumber == 0 && !g_os.IsWinVistaOrLater()) // The owner-draw method used on XP and older expects an icon.
-		aIconNumber = 1; // Must be != 0 to tell LoadPicture to return an icon, converting from bitmap if necessary.
-
 	int image_type;
-	HICON new_icon;
+	HBITMAP new_icon, new_copy;
 	// Currently height is always -1 and cannot be overridden. -1 means maintain aspect ratio, usually 1:1 for icons.
-	if ( !(new_icon = (HICON)LoadPicture(aFilename, aWidth, -1, image_type, aIconNumber, false)) )
+	if ( !(new_icon = LoadPicture(aFilename, aWidth, -1, image_type, aIconNumber, false)) )
 		return FAIL;
 
-	HBITMAP new_copy;
-
-	if (g_os.IsWinVistaOrLater())
+	if (image_type != IMAGE_BITMAP) // Convert to 32-bit bitmap:
 	{
-		if (image_type != IMAGE_BITMAP) // Convert to 32-bit bitmap:
-		{
-			new_copy = IconToBitmap32(new_icon, true);
-			// Even if conversion failed, we have no further use for the icon:
-			DestroyIcon(new_icon);
-			if (!new_copy)
-				return FAIL;
-			new_icon = (HICON)new_copy;
-		}
+		new_copy = IconToBitmap32((HICON)new_icon, true);
+		// Even if conversion failed, we have no further use for the icon:
+		DestroyIcon((HICON)new_icon);
+		if (!new_copy)
+			return FAIL;
+		new_icon = new_copy;
+	}
 
-		if (aMenuItem->mBitmap) // Delete previous bitmap.
-			DeleteObject(aMenuItem->mBitmap);
-	}
-	else
-	{
-		// LoadPicture already converted to icon if needed, due to aIconNumber > 0.
-		if (aMenuItem->mIcon) // Delete previous icon.
-			DestroyIcon(aMenuItem->mIcon);
-	}
-	// Also sets mBitmap via union:
-	aMenuItem->mIcon = new_icon;
+	if (aMenuItem->mBitmap) // Delete previous bitmap.
+		DeleteObject(aMenuItem->mBitmap);
+	
+	aMenuItem->mBitmap = new_icon;
 
 	if (mMenu)
 		ApplyItemIcon(aMenuItem);
 
-	return aMenuItem->mIcon ? OK : FAIL;
+	return aMenuItem->mBitmap ? OK : FAIL;
 }
 
 
 // Caller has ensured mMenu is non-NULL.
 ResultType UserMenu::ApplyItemIcon(UserMenuItem *aMenuItem)
 {
-	if (aMenuItem->mIcon) // Check mIcon/mBitmap union.
+	if (aMenuItem->mBitmap)
 	{
 		MENUITEMINFO item_info;
 		item_info.cbSize = sizeof(MENUITEMINFO);
 		item_info.fMask = MIIM_BITMAP;
 		// Set HBMMENU_CALLBACK or 32-bit bitmap as appropriate.
-		item_info.hbmpItem = g_os.IsWinVistaOrLater() ? aMenuItem->mBitmap : HBMMENU_CALLBACK;
+		item_info.hbmpItem = aMenuItem->mBitmap;
 		SetMenuItemInfo(mMenu, aMenuItem_ID, aMenuItem_MF_BY, &item_info);
 	}
 	return OK;
@@ -1418,7 +1404,7 @@ ResultType UserMenu::ApplyItemIcon(UserMenuItem *aMenuItem)
 
 ResultType UserMenu::RemoveItemIcon(UserMenuItem *aMenuItem)
 {
-	if (aMenuItem->mIcon) // Check mIcon/mBitmap union.
+	if (aMenuItem->mBitmap)
 	{
 		if (mMenu)
 		{
@@ -1426,59 +1412,11 @@ ResultType UserMenu::RemoveItemIcon(UserMenuItem *aMenuItem)
 			item_info.cbSize = sizeof(MENUITEMINFO);
 			item_info.fMask = MIIM_BITMAP;
 			item_info.hbmpItem = NULL;
-			// If g_os.IsWinVistaOrLater(), this removes the bitmap we set. Otherwise it removes HBMMENU_CALLBACK, therefore disabling owner-drawing.
 			SetMenuItemInfo(mMenu, aMenuItem_ID, aMenuItem_MF_BY, &item_info);
 		}
-		if (g_os.IsWinVistaOrLater()) // Free the appropriate union member.
-			DeleteObject(aMenuItem->mBitmap);
-		else
-			DestroyIcon(aMenuItem->mIcon);
-		aMenuItem->mIcon = NULL; // Clear mIcon/mBitmap union.
+		DeleteObject(aMenuItem->mBitmap);
+		aMenuItem->mBitmap = NULL;
 	}
 	return OK;
-}
-
-
-BOOL UserMenu::OwnerMeasureItem(LPMEASUREITEMSTRUCT aParam)
-{
-	UserMenuItem *menu_item = g_script.FindMenuItemByID(aParam->itemID);
-	if (!menu_item) // L26: Check if the menu item is one with a submenu.
-		menu_item = g_script.FindMenuItemBySubmenu((HMENU)(UINT_PTR)aParam->itemID); // Extra cast avoids warning C4312.
-
-	if (!menu_item || !menu_item->mIcon)
-		return FALSE;
-
-	BOOL size_is_valid = FALSE;
-	ICONINFO icon_info;
-	if (GetIconInfo(menu_item->mIcon, &icon_info))
-	{
-		BITMAP icon_bitmap;
-		if (GetObject(icon_info.hbmColor, sizeof(BITMAP), &icon_bitmap))
-		{
-			// Return size of icon.
-			aParam->itemWidth = icon_bitmap.bmWidth;
-			aParam->itemHeight = icon_bitmap.bmHeight;
-			size_is_valid = TRUE;
-		}
-		DeleteObject(icon_info.hbmColor);
-		DeleteObject(icon_info.hbmMask);
-	}
-	return size_is_valid;
-}
-
-
-BOOL UserMenu::OwnerDrawItem(LPDRAWITEMSTRUCT aParam)
-{
-	UserMenuItem *menu_item = g_script.FindMenuItemByID(aParam->itemID);
-	if (!menu_item) // L26: Check if the menu item is one with a submenu.
-		menu_item = g_script.FindMenuItemBySubmenu((HMENU)(UINT_PTR)aParam->itemID); // Extra cast avoids warning C4312.
-
-	if (!menu_item || !menu_item->mIcon)
-		return FALSE;
-
-	// Draw icon at actual size at requested position.
-	return DrawIconEx(aParam->hDC
-				, aParam->rcItem.left, aParam->rcItem.top
-				, menu_item->mIcon, 0, 0, 0, NULL, DI_NORMAL);
 }
 

@@ -2265,8 +2265,6 @@ public:
 	ResultType SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int aIconNumber, int aWidth);
 	ResultType ApplyItemIcon(UserMenuItem *aMenuItem);
 	ResultType RemoveItemIcon(UserMenuItem *aMenuItem);
-	static BOOL OwnerMeasureItem(LPMEASUREITEMSTRUCT aParam);
-	static BOOL OwnerDrawItem(LPDRAWITEMSTRUCT aParam);
 };
 
 
@@ -2287,23 +2285,11 @@ public:
 	WORD mMenuType;
 	UserMenuItem *mNextMenuItem;  // Next item in linked list
 	
-	union
-	{
-		// L17: Implementation of menu item icons is OS-dependent (g_os.IsWinVistaOrLater()).
-		
-		// Older versions of Windows do not support alpha channels in menu item bitmaps, so owner-drawing
-		// must be used for icons with transparent backgrounds to appear correctly. Owner-drawing also
-		// prevents the icon colours from inverting when the item is selected. DrawIcon() gives the best
-		// results, so we store the icon handle as is.
-		//
-		HICON mIcon;
-		
-		// Windows Vista and later support alpha channels via 32-bit bitmaps. Since owner-drawing prevents
-		// visual styles being applied to menus, we convert each icon to a 32-bit bitmap, calculating the
-		// alpha channel as necessary. This is done only once, when the icon is initially set.
-		//
-		HBITMAP mBitmap;
-	};
+	// For menu item icons:
+	// Windows Vista and later support alpha channels via 32-bit bitmaps. Since owner-drawing prevents
+	// visual styles being applied to menus, we convert each icon to a 32-bit bitmap, calculating the
+	// alpha channel as necessary. This is done only once, when the icon is initially set.
+	HBITMAP mBitmap;
 
 	UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, UserMenu *aMenu);
 	~UserMenuItem();
@@ -3502,8 +3488,6 @@ void PixelSearch(Var *aOutputVarX, Var *aOutputVarY
 	, int aVariation, LPTSTR aOptions, bool aIsPixelGetColor
 	, ResultToken &aResultToken);
 
-ResultType SoundSetGet2kXP(ResultToken &aResultToken, LPTSTR aSetting
-	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDevice);
 ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
 	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDevice);
 
