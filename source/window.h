@@ -253,8 +253,6 @@ int MsgBox(LPCTSTR aText = _T(""), UINT uType = MSGBOX_NORMAL, LPTSTR aTitle = N
 HWND FindOurTopDialog();
 BOOL CALLBACK EnumDialog(HWND hwnd, LPARAM lParam);
 
-HWND WindowOwnsOthers(HWND aWnd);
-BOOL CALLBACK EnumParentFindOwned(HWND aWnd, LPARAM lParam);
 HWND GetNonChildParent(HWND aWnd);
 HWND GetTopChild(HWND aParent);
 bool IsWindowHung(HWND aWnd);

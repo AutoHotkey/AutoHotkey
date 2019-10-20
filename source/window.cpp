@@ -1199,33 +1199,6 @@ BOOL CALLBACK EnumDialog(HWND aWnd, LPARAM lParam)
 
 
 
-struct owning_struct {HWND owner_hwnd; HWND first_child;};
-HWND WindowOwnsOthers(HWND aWnd)
-// Only finds owned windows if they are visible, by design.
-{
-	owning_struct own = {aWnd, NULL};
-	EnumWindows(EnumParentFindOwned, (LPARAM)&own);
-	return own.first_child;
-}
-
-
-
-BOOL CALLBACK EnumParentFindOwned(HWND aWnd, LPARAM lParam)
-{
-	HWND owner_hwnd = GetWindow(aWnd, GW_OWNER);
-	// Note: Many windows seem to own other invisible windows that have blank titles.
-	// In our case, require that it be visible because we don't want to return an invisible
-	// window to the caller because such windows aren't designed to be activated:
-	if (owner_hwnd && owner_hwnd == ((owning_struct *)lParam)->owner_hwnd && IsWindowVisible(aWnd))
-	{
-		((owning_struct *)lParam)->first_child = aWnd;
-		return FALSE; // Match found, we're done.
-	}
-	return TRUE;  // Continue enumerating.
-}
-
-
-
 HWND GetNonChildParent(HWND aWnd)
 // Returns the first ancestor of aWnd that isn't itself a child.  aWnd itself is returned if
 // it is not a child.  Returns NULL only if aWnd is NULL.  Also, it should always succeed
