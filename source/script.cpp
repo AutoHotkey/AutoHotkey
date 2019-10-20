@@ -12350,36 +12350,28 @@ ResultType Line::Perform()
 		return OK;
 
 	case ACT_GROUPADD: // Adding a WindowSpec *to* a group, not adding a group.
-	{
-		if (   !(group = (WinGroup *)mAttribute)   )
-			if (   !(group = g_script.FindGroup(ARG1, true))   )  // Last parameter -> create-if-not-found.
-				return FAIL;  // It already displayed the error for us.
+		if (   !(group = g_script.FindGroup(ARG1, true))   )  // Last parameter -> create-if-not-found.
+			return FAIL;  // It already displayed the error for us.
 		return group->AddWindow(ARG2, ARG3, ARG4, ARG5);
-	}
 	
 	case ACT_GROUPACTIVATE:
-		if (   !(group = (WinGroup *)mAttribute)   )
-			group = g_script.FindGroup(ARG1);
+		if (   !(group = g_script.FindGroup(ARG1))   )
+			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
 		// Note: This will take care of DoWinDelay if needed:
-		return SetErrorLevelOrThrowBool(!group || !group->Activate(*ARG2 && !_tcsicmp(ARG2, _T("R"))));
+		return SetErrorLevelOrThrowBool(!group->Activate(*ARG2 && !_tcsicmp(ARG2, _T("R"))));
 
 	case ACT_GROUPDEACTIVATE:
-		if (   !(group = (WinGroup *)mAttribute)   )
-			group = g_script.FindGroup(ARG1);
-		if (group)
-			group->Deactivate(*ARG2 && !_tcsicmp(ARG2, _T("R")));  // Note: It will take care of DoWinDelay if needed.
-		//else nonexistent group: By design, do nothing.
-		return OK;
+		if (   !(group = g_script.FindGroup(ARG1))   )
+			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
+		return group->Deactivate(*ARG2 && !_tcsicmp(ARG2, _T("R")));  // Note: It will take care of DoWinDelay if needed.
 
 	case ACT_GROUPCLOSE:
-		if (   !(group = (WinGroup *)mAttribute)   )
-			group = g_script.FindGroup(ARG1);
-		if (group)
-			if (*ARG2 && !_tcsicmp(ARG2, _T("A")))
-				group->ActUponAll(ACT_WINCLOSE, 0);  // Note: It will take care of DoWinDelay if needed.
-			else
-				group->CloseAndGoToNext(*ARG2 && !_tcsicmp(ARG2, _T("R")));  // Note: It will take care of DoWinDelay if needed.
-		//else nonexistent group: By design, do nothing.
+		if (   !(group = g_script.FindGroup(ARG1))   )
+			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
+		if (*ARG2 && !_tcsicmp(ARG2, _T("A")))
+			group->ActUponAll(ACT_WINCLOSE, 0);  // Note: It will take care of DoWinDelay if needed.
+		else
+			group->CloseAndGoToNext(*ARG2 && !_tcsicmp(ARG2, _T("R")));  // Note: It will take care of DoWinDelay if needed.
 		return OK;
 
 	case ACT_SOUNDBEEP:
