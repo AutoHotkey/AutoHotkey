@@ -55,11 +55,6 @@ static bool sFirstCallForThisEvent;  //
 static bool sInBlindMode;            //
 static DWORD sThisEventTime;         //
 
-// Dynamically resolve SendInput() because otherwise the app won't launch at all on Windows 95/NT-pre-SP3:
-typedef UINT (WINAPI *MySendInputType)(UINT, LPINPUT, int);
-static MySendInputType sMySendInput = (MySendInputType)GetProcAddress(GetModuleHandle(_T("user32")), "SendInput");
-// Above will be NULL for Win95/NT-pre-SP3.
-
 
 void DisguiseWinAltIfNeeded(vk_type aVK)
 // For v1.0.25, the following situation is fixed by the code below: If LWin or LAlt
@@ -190,8 +185,7 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 		// just designed to add a lot of value for typical usage because SendInput is preferred due to it
 		// being considerably faster than SendPlay, especially for long replacements when the CPU is under
 		// heavy load.
-		if (   !sMySendInput // Win95/NT-pre-SP3 don't support SendInput, so fall back to the specified mode.
-			|| SystemHasAnotherKeybdHook() // This function has been benchmarked to ensure it doesn't yield our timeslice, etc.  200 calls take 0ms according to tick-count, even when CPU is maxed.
+		if (   SystemHasAnotherKeybdHook() // This function has been benchmarked to ensure it doesn't yield our timeslice, etc.  200 calls take 0ms according to tick-count, even when CPU is maxed.
 			|| !aSendRaw && SystemHasAnotherMouseHook() && tcscasestr(aKeys, _T("{Click"))   ) // Ordered for short-circuit boolean performance.  v1.0.43.09: Fixed to be strcasestr vs. !strcasestr
 		{
 			// Need to detect in advance what type of array to build (for performance and code size).  That's why
@@ -2070,7 +2064,7 @@ void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY
 	sSendMode = g->SendMode;
 	if (sSendMode == SM_INPUT || sSendMode == SM_INPUT_FALLBACK_TO_PLAY)
 	{
-		if (!sMySendInput || SystemHasAnotherMouseHook()) // See similar section in SendKeys() for details.
+		if (SystemHasAnotherMouseHook()) // See similar section in SendKeys() for details.
 			sSendMode = (sSendMode == SM_INPUT) ? SM_EVENT : SM_PLAY;
 		else
 			sSendMode = SM_INPUT; // Resolve early so that other sections don't have to consider SM_INPUT_FALLBACK_TO_PLAY a valid value.
@@ -2802,7 +2796,6 @@ void InitEventArray(void *aMem, UINT aMaxEvents, modLR_type aModifiersLR)
 
 
 void SendEventArray(int &aFinalKeyDelay, modLR_type aModsDuringSend)
-// Caller must avoid calling this function if sMySendInput is NULL.
 // aFinalKeyDelay (which the caller should have initialized to -1 prior to calling) may be changed here
 // to the desired/final delay.  Caller must not act upon it until changing sTypeOfHookToBuild to something
 // that will allow DoKeyDelay() to do a real delay.
@@ -2826,8 +2819,7 @@ void SendEventArray(int &aFinalKeyDelay, modLR_type aModsDuringSend)
 		if (active_hooks = GetActiveHooks())
 			AddRemoveHooks(active_hooks & ~sHooksToRemoveDuringSendInput, true);
 
-		// Caller has ensured that sMySendInput isn't NULL.
-		sMySendInput(sEventCount, sEventSI, sizeof(INPUT)); // Must call dynamically-resolved version for Win95/NT compatibility.
+		SendInput(sEventCount, sEventSI, sizeof(INPUT)); // Must call dynamically-resolved version for Win95/NT compatibility.
 		// The return value is ignored because it never seems to be anything other than sEventCount, even if
 		// the Send seems to partially fail (e.g. due to hitting 5000 event maximum).
 		// Typical speed of SendInput: 10ms or less for short sends (under 100 events).

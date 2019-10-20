@@ -1009,16 +1009,11 @@ void UserMenu::ApplyColor(bool aApplyToSubmenus)
 // testing shows that the OS sets the color to white if the HBRUSH becomes invalid.
 // The caller is also responsible for calling UPDATE_GUI_MENU_BARS if desired.
 {
-	// Must fetch function address dynamically or program won't launch at all on Win95/NT:
-	typedef BOOL (WINAPI *MySetMenuInfoType)(HMENU, LPCMENUINFO);
-	static MySetMenuInfoType MySetMenuInfo = (MySetMenuInfoType)GetProcAddress(GetModuleHandle(_T("user32")), "SetMenuInfo");
-	if (!MySetMenuInfo)
-		return;
 	MENUINFO mi = {0}; 
 	mi.cbSize = sizeof(MENUINFO);
 	mi.fMask = MIM_BACKGROUND|(aApplyToSubmenus ? MIM_APPLYTOSUBMENUS : 0);
 	mi.hbrBack = mBrush;
-	MySetMenuInfo(mMenu, &mi);
+	SetMenuInfo(mMenu, &mi);
 }
 
 

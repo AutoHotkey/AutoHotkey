@@ -13221,15 +13221,9 @@ ResultType Line::ChangePauseState(ToggleValueType aChangeTo, bool aAlwaysOperate
 ResultType Line::ScriptBlockInput(bool aEnable)
 // Always returns OK for caller convenience.
 {
-	// Must be running Win98/2000+ for this function to be successful.
-	// We must dynamically load the function to retain compatibility with Win95 (program won't launch
-	// at all otherwise).
-	typedef void (CALLBACK *BlockInput)(BOOL);
-	static BlockInput lpfnDLLProc = (BlockInput)GetProcAddress(GetModuleHandle(_T("user32")), "BlockInput");
 	// Always turn input ON/OFF even if g_BlockInput says its already in the right state.  This is because
 	// BlockInput can be externally and undetectably disabled, e.g. if the user presses Ctrl-Alt-Del:
-	if (lpfnDLLProc)
-		(*lpfnDLLProc)(aEnable ? TRUE : FALSE);
+	BlockInput(aEnable ? TRUE : FALSE);
 	g_BlockInput = aEnable;
 	return OK;  // By design, it never returns FAIL.
 }

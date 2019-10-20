@@ -3194,13 +3194,7 @@ BOOL CALLBACK EnumMonitorProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMoni
 		++mip.count;
 		return TRUE;  // Enumerate all monitors so that they can be counted.
 	}
-	// GetMonitorInfo() must be dynamically loaded; otherwise, the app won't launch at all on Win95/NT.
-	typedef BOOL (WINAPI* GetMonitorInfoType)(HMONITOR, LPMONITORINFO);
-	static GetMonitorInfoType MyGetMonitorInfo = (GetMonitorInfoType)
-		GetProcAddress(GetModuleHandle(_T("user32")), "GetMonitorInfo" WINAPI_SUFFIX);
-	if (!MyGetMonitorInfo) // Shouldn't normally happen since caller wouldn't have called us if OS is Win95/NT. 
-		return FALSE;
-	if (!MyGetMonitorInfo(hMonitor, &mip.monitor_info_ex)) // Failed.  Probably very rare.
+	if (!GetMonitorInfo(hMonitor, &mip.monitor_info_ex)) // Failed.  Probably very rare.
 		return FALSE; // Due to the complexity of needing to stop at the correct monitor number, do not continue.
 		// In the unlikely event that the above fails when the caller wanted us to find the primary
 		// monitor, the caller will think the primary is the previously found monitor (if any).
@@ -10038,31 +10032,10 @@ VarSizeType BIV_Cursor(LPTSTR aBuf, LPTSTR aVarName)
 	if (!aBuf)
 		return SMALL_STRING_LENGTH;  // We're returning the length of the var's contents, not the size.
 
-	// Must fetch it at runtime, otherwise the program can't even be launched on Windows 95:
-	typedef BOOL (WINAPI *MyGetCursorInfoType)(PCURSORINFO);
-	static MyGetCursorInfoType MyGetCursorInfo = (MyGetCursorInfoType)GetProcAddress(GetModuleHandle(_T("user32")), "GetCursorInfo");
-
 	HCURSOR current_cursor;
-	if (MyGetCursorInfo) // v1.0.42.02: This method is used to avoid ATTACH_THREAD_INPUT, which interferes with double-clicking if called repeatedly at a high frequency.
-	{
-		CURSORINFO ci;
-		ci.cbSize = sizeof(CURSORINFO);
-		current_cursor = MyGetCursorInfo(&ci) ? ci.hCursor : NULL;
-	}
-	else // Windows 95 and old-service-pack versions of NT4 require the old method.
-	{
-		POINT point;
-		GetCursorPos(&point);
-		HWND target_window = WindowFromPoint(point);
-
-		// MSDN docs imply that threads must be attached for GetCursor() to work.
-		// A side-effect of attaching threads or of GetCursor() itself is that mouse double-clicks
-		// are interfered with, at least if this function is called repeatedly at a high frequency.
-		ATTACH_THREAD_INPUT
-		current_cursor = GetCursor();
-		DETACH_THREAD_INPUT
-	}
-
+	CURSORINFO ci;
+	ci.cbSize = sizeof(CURSORINFO);
+	current_cursor = GetCursorInfo(&ci) ? ci.hCursor : NULL;
 	if (!current_cursor)
 	{
 		#define CURSOR_UNKNOWN _T("Unknown")
