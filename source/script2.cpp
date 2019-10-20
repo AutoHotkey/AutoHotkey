@@ -4326,11 +4326,6 @@ ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
 	MonitorInfoPackage mip = {0};  // Improves maintainability to initialize unconditionally, here.
 	mip.monitor_info_ex.cbSize = sizeof(MONITORINFOEX); // Also improves maintainability.
 
-	// EnumDisplayMonitors() must be dynamically loaded; otherwise, the app won't launch at all on Win95/NT.
-	typedef BOOL (WINAPI* EnumDisplayMonitorsType)(HDC, LPCRECT, MONITORENUMPROC, LPARAM);
-	static EnumDisplayMonitorsType MyEnumDisplayMonitors = (EnumDisplayMonitorsType)
-		GetProcAddress(GetModuleHandle(_T("user32")), "EnumDisplayMonitors");
-
 	switch(cmd)
 	{
 	case SYSGET_CMD_METRICS: // In this case, aCmd is the value itself.
@@ -4347,20 +4342,16 @@ ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
 		// Don't use GetSystemMetrics(SM_CMONITORS) because of this:
 		// MSDN: "GetSystemMetrics(SM_CMONITORS) counts only display monitors. This is different from
 		// EnumDisplayMonitors, which enumerates display monitors and also non-display pseudo-monitors."
-		if (!MyEnumDisplayMonitors) // Since system only supports 1 monitor, the first must be primary.
-			return output_var.Assign(1); // Assign as 1 vs. "1" to use hexadecimal display if that is in effect.
 		mip.monitor_number_to_find = COUNT_ALL_MONITORS;
-		MyEnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
+		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
 		return output_var.Assign(mip.count); // Will assign zero if the API ever returns a legitimate zero.
 
 	// Even if the first monitor to be retrieved by the EnumProc is always the primary (which is doubtful
 	// since there's no mention of this in the MSDN docs) it seems best to have this sub-cmd in case that
 	// policy ever changes:
 	case SYSGET_CMD_MONITORPRIMARY:
-		if (!MyEnumDisplayMonitors) // Since system only supports 1 monitor, the first must be primary.
-			return output_var.Assign(1); // Assign as 1 vs. "1" to use hexadecimal display if that is in effect.
 		// The mip struct's values have already initialized correctly for the below:
-		MyEnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
+		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
 		return output_var.Assign(mip.count); // Will assign zero if the API ever returns a legitimate zero.
 
 	case SYSGET_CMD_MONITORAREA:
@@ -4393,36 +4384,21 @@ ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
 			return FAIL;
 
 		RECT monitor_rect;
-		if (MyEnumDisplayMonitors)
+		mip.monitor_number_to_find = ATOI(aValue);  // If this returns 0, it will default to the primary monitor.
+		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
+		if (!mip.count || (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count))
 		{
-			mip.monitor_number_to_find = ATOI(aValue);  // If this returns 0, it will default to the primary monitor.
-			MyEnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
-			if (!mip.count || (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count))
-			{
-				// With the exception of the caller having specified a non-existent monitor number, all of
-				// the ways the above can happen are probably impossible in practice.  Make all the variables
-				// blank vs. zero to indicate the problem.
-				output_var_left->Assign();
-				output_var_top->Assign();
-				output_var_right->Assign();
-				output_var_bottom->Assign();
-				return OK;
-			}
-			// Otherwise:
-			monitor_rect = (cmd == SYSGET_CMD_MONITORAREA) ? mip.monitor_info_ex.rcMonitor : mip.monitor_info_ex.rcWork;
+			// With the exception of the caller having specified a non-existent monitor number, all of
+			// the ways the above can happen are probably impossible in practice.  Make all the variables
+			// blank vs. zero to indicate the problem.
+			output_var_left->Assign();
+			output_var_top->Assign();
+			output_var_right->Assign();
+			output_var_bottom->Assign();
+			return OK;
 		}
-		else // Win95/NT: Since system only supports 1 monitor, the first must be primary.
-		{
-			if (cmd == SYSGET_CMD_MONITORAREA)
-			{
-				monitor_rect.left = 0;
-				monitor_rect.top = 0;
-				monitor_rect.right = GetSystemMetrics(SM_CXSCREEN);
-				monitor_rect.bottom = GetSystemMetrics(SM_CYSCREEN);
-			}
-			else // Work area
-				SystemParametersInfo(SPI_GETWORKAREA, 0, &monitor_rect, 0);  // Get desktop rect excluding task bar.
-		}
+		// Otherwise:
+		monitor_rect = (cmd == SYSGET_CMD_MONITORAREA) ? mip.monitor_info_ex.rcMonitor : mip.monitor_info_ex.rcWork;
 		output_var_left->Assign(monitor_rect.left);
 		output_var_top->Assign(monitor_rect.top);
 		output_var_right->Assign(monitor_rect.right);
@@ -4430,20 +4406,15 @@ ResultType Line::SysGet(LPTSTR aCmd, LPTSTR aValue)
 		return OK;
 
 	case SYSGET_CMD_MONITORNAME:
-		if (MyEnumDisplayMonitors)
-		{
-			mip.monitor_number_to_find = ATOI(aValue);  // If this returns 0, it will default to the primary monitor.
-			MyEnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
-			if (!mip.count || (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count))
-				// With the exception of the caller having specified a non-existent monitor number, all of
-				// the ways the above can happen are probably impossible in practice.  Make the variable
-				// blank to indicate the problem:
-				return output_var.Assign();
-			else
-				return output_var.Assign(mip.monitor_info_ex.szDevice);
-		}
-		else // Win95/NT: There is probably no way to find out the name of the monitor.
+		mip.monitor_number_to_find = ATOI(aValue);  // If this returns 0, it will default to the primary monitor.
+		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
+		if (!mip.count || (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count))
+			// With the exception of the caller having specified a non-existent monitor number, all of
+			// the ways the above can happen are probably impossible in practice.  Make the variable
+			// blank to indicate the problem:
 			return output_var.Assign();
+		else
+			return output_var.Assign(mip.monitor_info_ex.szDevice);
 	} // switch()
 
 	return FAIL;  // Never executed (increases maintainability and avoids compiler warning).
@@ -4459,13 +4430,7 @@ BOOL CALLBACK EnumMonitorProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMoni
 		++mip.count;
 		return TRUE;  // Enumerate all monitors so that they can be counted.
 	}
-	// GetMonitorInfo() must be dynamically loaded; otherwise, the app won't launch at all on Win95/NT.
-	typedef BOOL (WINAPI* GetMonitorInfoType)(HMONITOR, LPMONITORINFO);
-	static GetMonitorInfoType MyGetMonitorInfo = (GetMonitorInfoType)
-		GetProcAddress(GetModuleHandle(_T("user32")), "GetMonitorInfo" WINAPI_SUFFIX);
-	if (!MyGetMonitorInfo) // Shouldn't normally happen since caller wouldn't have called us if OS is Win95/NT. 
-		return FALSE;
-	if (!MyGetMonitorInfo(hMonitor, &mip.monitor_info_ex)) // Failed.  Probably very rare.
+	if (!GetMonitorInfo(hMonitor, &mip.monitor_info_ex)) // Failed.  Probably very rare.
 		return FALSE; // Due to the complexity of needing to stop at the correct monitor number, do not continue.
 		// In the unlikely event that the above fails when the caller wanted us to find the primary
 		// monitor, the caller will think the primary is the previously found monitor (if any).
@@ -8346,32 +8311,15 @@ ResultType Line::DriveSpace(LPTSTR aPath, bool aGetFreeSpace)
 		buf[length] = '\0';
 	}
 
-	// The program won't launch at all on Win95a (original Win95) unless the function address is resolved
-	// at runtime:
-	typedef BOOL (WINAPI *GetDiskFreeSpaceExType)(LPCTSTR, PULARGE_INTEGER, PULARGE_INTEGER, PULARGE_INTEGER);
-	static GetDiskFreeSpaceExType MyGetDiskFreeSpaceEx =
-		(GetDiskFreeSpaceExType)GetProcAddress(GetModuleHandle(_T("kernel32")), "GetDiskFreeSpaceEx" WINAPI_SUFFIX);
-
 	// MSDN: "The GetDiskFreeSpaceEx function returns correct values for all volumes, including those
 	// that are greater than 2 gigabytes."
 	__int64 free_space;
-	if (MyGetDiskFreeSpaceEx)  // Function is available (unpatched Win95 and WinNT might not have it).
-	{
-		ULARGE_INTEGER total, free, used;
-		if (!MyGetDiskFreeSpaceEx(buf, &free, &total, &used))
-			goto error;
-		// Casting this way allows sizes of up to 2,097,152 gigabytes:
-		free_space = (__int64)((unsigned __int64)(aGetFreeSpace ? free.QuadPart : total.QuadPart)
-			/ (1024*1024));
-	}
-	else // For unpatched versions of Win95/NT4, fall back to compatibility mode.
-	{
-		DWORD sectors_per_cluster, bytes_per_sector, free_clusters, total_clusters;
-		if (!GetDiskFreeSpace(buf, &sectors_per_cluster, &bytes_per_sector, &free_clusters, &total_clusters))
-			goto error;
-		free_space = (__int64)((unsigned __int64)((aGetFreeSpace ? free_clusters : total_clusters)
-			* sectors_per_cluster * bytes_per_sector) / (1024*1024));
-	}
+	ULARGE_INTEGER total, free, used;
+	if (!GetDiskFreeSpaceEx(buf, &free, &total, &used))
+		goto error;
+	// Casting this way allows sizes of up to 2,097,152 gigabytes:
+	free_space = (__int64)((unsigned __int64)(aGetFreeSpace ? free.QuadPart : total.QuadPart)
+		/ (1024*1024));
 
 	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 	return OUTPUT_VAR->Assign(free_space);
@@ -11850,31 +11798,10 @@ VarSizeType BIV_Cursor(LPTSTR aBuf, LPTSTR aVarName)
 	if (!aBuf)
 		return SMALL_STRING_LENGTH;  // We're returning the length of the var's contents, not the size.
 
-	// Must fetch it at runtime, otherwise the program can't even be launched on Windows 95:
-	typedef BOOL (WINAPI *MyGetCursorInfoType)(PCURSORINFO);
-	static MyGetCursorInfoType MyGetCursorInfo = (MyGetCursorInfoType)GetProcAddress(GetModuleHandle(_T("user32")), "GetCursorInfo");
-
 	HCURSOR current_cursor;
-	if (MyGetCursorInfo) // v1.0.42.02: This method is used to avoid ATTACH_THREAD_INPUT, which interferes with double-clicking if called repeatedly at a high frequency.
-	{
-		CURSORINFO ci;
-		ci.cbSize = sizeof(CURSORINFO);
-		current_cursor = MyGetCursorInfo(&ci) ? ci.hCursor : NULL;
-	}
-	else // Windows 95 and old-service-pack versions of NT4 require the old method.
-	{
-		POINT point;
-		GetCursorPos(&point);
-		HWND target_window = WindowFromPoint(point);
-
-		// MSDN docs imply that threads must be attached for GetCursor() to work.
-		// A side-effect of attaching threads or of GetCursor() itself is that mouse double-clicks
-		// are interfered with, at least if this function is called repeatedly at a high frequency.
-		ATTACH_THREAD_INPUT
-		current_cursor = GetCursor();
-		DETACH_THREAD_INPUT
-	}
-
+	CURSORINFO ci;
+	ci.cbSize = sizeof(CURSORINFO);
+	current_cursor = GetCursorInfo(&ci) ? ci.hCursor : NULL;
 	if (!current_cursor)
 	{
 		#define CURSOR_UNKNOWN _T("Unknown")

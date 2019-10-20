@@ -978,34 +978,6 @@ error:
 
 ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 {
-	// Check that we have IE3 and access to wininet.dll
-	HINSTANCE hinstLib = LoadLibrary(_T("wininet"));
-	if (!hinstLib)
-		return SetErrorLevelOrThrow();
-
-	typedef HINTERNET (WINAPI *MyInternetOpen)(LPCTSTR, DWORD, LPCTSTR, LPCTSTR, DWORD dwFlags);
-	typedef HINTERNET (WINAPI *MyInternetOpenUrl)(HINTERNET hInternet, LPCTSTR, LPCTSTR, DWORD, DWORD, LPDWORD);
-	typedef BOOL (WINAPI *MyInternetCloseHandle)(HINTERNET);
-	typedef BOOL (WINAPI *MyInternetReadFileEx)(HINTERNET, LPINTERNET_BUFFERSA, DWORD, DWORD);
-	typedef BOOL (WINAPI *MyInternetReadFile)(HINTERNET, LPVOID, DWORD, LPDWORD);
-
-	#ifndef INTERNET_OPEN_TYPE_PRECONFIG_WITH_NO_AUTOPROXY
-		#define INTERNET_OPEN_TYPE_PRECONFIG_WITH_NO_AUTOPROXY 4
-	#endif
-
-	// Get the address of all the functions we require.  It's done this way in case the system
-	// lacks MSIE v3.0+, in which case the app would probably refuse to launch at all:
- 	MyInternetOpen lpfnInternetOpen = (MyInternetOpen)GetProcAddress(hinstLib, "InternetOpen" WINAPI_SUFFIX);
-	MyInternetOpenUrl lpfnInternetOpenUrl = (MyInternetOpenUrl)GetProcAddress(hinstLib, "InternetOpenUrl" WINAPI_SUFFIX);
-	MyInternetCloseHandle lpfnInternetCloseHandle = (MyInternetCloseHandle)GetProcAddress(hinstLib, "InternetCloseHandle");
-	MyInternetReadFileEx lpfnInternetReadFileEx = (MyInternetReadFileEx)GetProcAddress(hinstLib, "InternetReadFileExA"); // InternetReadFileExW() appears unimplemented prior to Windows 7, so always use InternetReadFileExA().
-	MyInternetReadFile lpfnInternetReadFile = (MyInternetReadFile)GetProcAddress(hinstLib, "InternetReadFile"); // Called unconditionally to reduce code size and because the time required is likely insignificant compared to network latency.
-	if (!(lpfnInternetOpen && lpfnInternetOpenUrl && lpfnInternetCloseHandle && lpfnInternetReadFileEx && lpfnInternetReadFile))
-	{
-		FreeLibrary(hinstLib);
-		return SetErrorLevelOrThrow();
-	}
-
 	// v1.0.44.07: Set default to INTERNET_FLAG_RELOAD vs. 0 because the vast majority of usages would want
 	// the file to be retrieved directly rather than from the cache.
 	// v1.0.46.04: Added more no-cache flags because otherwise, it definitely falls back to the cache if
@@ -1029,19 +1001,15 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	// requests that lack a user-agent.  Furthermore, it's more professional to have one, in which case it
 	// should probably be kept as simple and unchanging as possible.  Using something like the script's name
 	// as the user agent (even if documented) seems like a bad idea because it might contain personal/sensitive info.
-	HINTERNET hInet = lpfnInternetOpen(_T("AutoHotkey"), INTERNET_OPEN_TYPE_PRECONFIG_WITH_NO_AUTOPROXY, NULL, NULL, 0);
+	HINTERNET hInet = InternetOpen(_T("AutoHotkey"), INTERNET_OPEN_TYPE_PRECONFIG_WITH_NO_AUTOPROXY, NULL, NULL, 0);
 	if (!hInet)
-	{
-		FreeLibrary(hinstLib);
 		return SetErrorLevelOrThrow();
-	}
 
 	// Open the required URL
-	HINTERNET hFile = lpfnInternetOpenUrl(hInet, aURL, NULL, 0, flags_for_open_url, 0);
+	HINTERNET hFile = InternetOpenUrl(hInet, aURL, NULL, 0, flags_for_open_url, 0);
 	if (!hFile)
 	{
-		lpfnInternetCloseHandle(hInet);
-		FreeLibrary(hinstLib);
+		InternetCloseHandle(hInet);
 		return SetErrorLevelOrThrow();
 	}
 
@@ -1049,9 +1017,8 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	FILE *fptr = _tfopen(aFilespec, _T("wb"));	// Open in binary write/destroy mode
 	if (!fptr)
 	{
-		lpfnInternetCloseHandle(hFile);
-		lpfnInternetCloseHandle(hInet);
-		FreeLibrary(hinstLib);
+		InternetCloseHandle(hFile);
+		InternetCloseHandle(hInet);
 		return SetErrorLevelOrThrow();
 	}
 
@@ -1071,7 +1038,7 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	BOOL result;
 	if (*aURL == 'h' || *aURL == 'H')
 	{
-		while (result = lpfnInternetReadFileEx(hFile, &buffers, IRF_NO_WAIT, NULL)) // Assign
+		while (result = InternetReadFileExA(hFile, &buffers, IRF_NO_WAIT, NULL)) // Assign
 		{
 			if (!buffers.dwBufferLength) // Transfer is complete.
 				break;
@@ -1083,7 +1050,7 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 	else // v1.0.48.04: This section adds support for FTP and perhaps Gopher by using InternetReadFile() instead of InternetReadFileEx().
 	{
 		DWORD number_of_bytes_read;
-		while (result = lpfnInternetReadFile(hFile, bufData, sizeof(bufData), &number_of_bytes_read))
+		while (result = InternetReadFile(hFile, bufData, sizeof(bufData), &number_of_bytes_read))
 		{
 			if (!number_of_bytes_read)
 				break;
@@ -1092,9 +1059,8 @@ ResultType Line::URLDownloadToFile(LPTSTR aURL, LPTSTR aFilespec)
 		}
 	}
 	// Close internet session:
-	lpfnInternetCloseHandle(hFile);
-	lpfnInternetCloseHandle(hInet);
-	FreeLibrary(hinstLib); // Only after the above.
+	InternetCloseHandle(hFile);
+	InternetCloseHandle(hInet);
 	// Close output file:
 	fclose(fptr);
 
@@ -2034,28 +2000,17 @@ void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed)
 
 DWORD ProcessExist(LPTSTR aProcess)
 {
-	// We must dynamically load the function or program will probably not launch at all on NT4.
-	typedef BOOL (WINAPI *PROCESSWALK)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
-	typedef HANDLE (WINAPI *CREATESNAPSHOT)(DWORD dwFlags, DWORD th32ProcessID);
-
-	static CREATESNAPSHOT lpfnCreateToolhelp32Snapshot = (CREATESNAPSHOT)GetProcAddress(GetModuleHandle(_T("kernel32")), "CreateToolhelp32Snapshot");
-    static PROCESSWALK lpfnProcess32First = (PROCESSWALK)GetProcAddress(GetModuleHandle(_T("kernel32")), "Process32First" PROCESS_API_SUFFIX);
-    static PROCESSWALK lpfnProcess32Next = (PROCESSWALK)GetProcAddress(GetModuleHandle(_T("kernel32")), "Process32Next" PROCESS_API_SUFFIX);
-
-	if (!lpfnCreateToolhelp32Snapshot || !lpfnProcess32First || !lpfnProcess32Next)
-		return 0;
-
 	PROCESSENTRY32 proc;
     proc.dwSize = sizeof(proc);
-	HANDLE snapshot = lpfnCreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-	lpfnProcess32First(snapshot, &proc);
+	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	Process32First(snapshot, &proc);
 
 	// Determine the PID if aProcess is a pure, non-negative integer (any negative number
 	// is more likely to be the name of a process [with a leading dash], rather than the PID).
 	DWORD specified_pid = IsPureNumeric(aProcess) ? ATOU(aProcess) : 0;
 	TCHAR szDrive[_MAX_PATH+1], szDir[_MAX_PATH+1], szFile[_MAX_PATH+1], szExt[_MAX_PATH+1];
 
-	while (lpfnProcess32Next(snapshot, &proc))
+	while (Process32Next(snapshot, &proc))
 	{
 		if (specified_pid && specified_pid == proc.th32ProcessID)
 		{
