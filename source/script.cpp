@@ -2355,6 +2355,8 @@ examine_line:
 					if (   !GetLineContExpr(fp, buf, buf_length, next_buf, next_buf_length, phys_line_number, has_continuation_section)
 						|| !ParseAndAddLine(buf, LINE_SIZE)   )
 						return FAIL;
+					if (ACT_IS_LINE_PARENT(mLastLine->mActionType))
+						return ScriptError(ERR_INVALID_SINGLELINE_HOT);
 				}
 				// Also add the Return that's implicit for a single-line hotkey.  This is also done for
 				// auto-replace hotstrings in case gosub/goto is ever used to jump to their labels:
@@ -4986,7 +4988,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 			, max_params > 1 ? _T("s") : _T(""));
 		return ScriptError(error_msg, aLineText);
 	}
-	for (int i = 0; i < this_action.MinParams; ++i) // It's only safe to do this after the above.
+	for (int i = 0, non_blank_params = aActionType == ACT_CASE ? nArgs : this_action.MinParams
+		; i < non_blank_params; ++i) // It's only safe to do this after the above.
 		if (!*arg[i])
 		{
 			sntprintf(error_msg, _countof(error_msg), _T("\"%s\" requires that parameter #%u be non-blank.")
@@ -6765,7 +6768,6 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 	aFileWasFound = false;
 
 	int i;
-	LPTSTR terminate_here;
 	DWORD attr;
 
 	static FuncLibrary sLib[FUNC_LIB_COUNT] = {0};
@@ -12461,7 +12463,7 @@ ResultType Line::Perform()
 		return SetErrorLevelOrThrowBool(!Util_CopyDir(ARG1, ARG2, ArgToInt(3), true));
 
 	case ACT_DIRCREATE:
-		return FileCreateDir(ARG1);
+		return SetErrorsOrThrow(!FileCreateDir(ARG1));
 	case ACT_DIRDELETE:
 		return SetErrorLevelOrThrowBool(!*ARG1 // Consider an attempt to create or remove a blank dir to be an error.
 			|| !Util_RemoveDir(ARG1, ArgToInt(2) == 1)); // Relies on short-circuit evaluation.

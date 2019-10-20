@@ -139,6 +139,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_UNRECOGNIZED_ACTION _T("This line does not contain a recognized action.")
 #define ERR_NONEXISTENT_HOTKEY _T("Nonexistent hotkey.")
 #define ERR_NONEXISTENT_VARIANT _T("Nonexistent hotkey variant (IfWin).")
+#define ERR_INVALID_SINGLELINE_HOT _T("Not valid for a single-line hotkey/hotstring.")
 #define ERR_NONEXISTENT_FUNCTION _T("Call to nonexistent function.")
 #define ERR_UNRECOGNIZED_DIRECTIVE _T("Unknown directive.")
 #define ERR_EXE_CORRUPTED _T("EXE corrupted")
@@ -695,7 +696,7 @@ private:
 	ResultType FileGetShortcut(LPTSTR aShortcutFile);
 	ResultType FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
 		, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState);
-	ResultType FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec = NULL);
+	static bool FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec = NULL);
 	ResultType FileDelete(LPTSTR aFilePattern);
 	ResultType FileRecycle(LPTSTR aFilePattern);
 	ResultType FileRecycleEmpty(LPTSTR aDriveLetter);
@@ -1482,7 +1483,6 @@ public:
 	static int Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwrite, bool bMove, DWORD &aLastError);
 	static void Util_ExpandFilenameWildcard(LPCTSTR szSource, LPCTSTR szDest, LPTSTR szExpandedDest);
 	static void Util_ExpandFilenameWildcardPart(LPCTSTR szSource, LPCTSTR szDest, LPTSTR szExpandedDest);
-	static bool Util_CreateDir(LPCTSTR szDirName);
 	static bool Util_DoesFileExist(LPCTSTR szFilename);
 	static bool Util_IsDir(LPCTSTR szPath);
 	static void Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut);

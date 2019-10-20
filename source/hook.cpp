@@ -43,7 +43,14 @@ static HANDLE sThreadHandle = NULL;
 // time it's called (currently it can be only called once):
 static bool sDisguiseNextMenu;          // Initialized by ResetHook().
 static bool sUndisguisedMenuInEffect;	//
-static bool sAltTabMenuIsVisible;       //
+
+// Whether the alt-tab menu was shown by an AltTab hotkey or alt-tab was detected
+// by the hook.  This might be inaccurate if the menu was displayed before the hook
+// was installed or the keys weren't detected because of UIPI.  If this turns out to
+// be a problem, the accuracy could be improved by additional checks with FindWindow(),
+// keeping in mind that there are at least 3 different window classes to check,
+// depending on OS and the "AltTabSettings" registry value.
+static bool sAltTabMenuIsVisible;       // Initialized by ResetHook().
 
 // The prefix key that's currently down (i.e. in effect).
 // It's tracked this way, rather than as a count of the number of prefixes currently down, out of
@@ -533,6 +540,10 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		//    close an alt-tab window it invoked (a simulated escape keystroke can apparently also close
 		//    any alt-tab menu, even one invoked by physical keystrokes; but the converse isn't true).
 		// 3) Lesser reason: Reduces code size and complexity.
+		// UPDATE in 2019: Testing on Windows 7 and 10 indicate this does not apply to the more modern
+		// versions of Alt-Tab, but it still applies if the classic Alt-Tab is restored via the registry.
+		// However, on these OSes, the user is able to press Esc to dismiss our Alt-Tab.  Other scripts
+		// (and presumably other processes) are *NOT* able to dismiss it by simulating Esc.
 		HWND alt_tab_window;
 		if ((alt_tab_window = FindWindow(_T("#32771"), NULL)) // There is an alt-tab window...
 			&& GetWindowThreadProcessId(alt_tab_window, NULL) == GetCurrentThreadId()) // ...and it's owned by the hook thread (not the main thread).
@@ -1579,8 +1590,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	{
 		case HOTKEY_ID_ALT_TAB_MENU_DISMISS: // This case must occur before HOTKEY_ID_ALT_TAB_MENU due to non-break.
 			if (!sAltTabMenuIsVisible)
-				// Even if the menu really is displayed by other means, we can't easily detect it
-				// because it's not a real window?
 				return AllowKeyToGoToSystem;  // Let the key do its native function.
 			// else fall through to the next case.
 		case HOTKEY_ID_ALT_TAB_MENU:  // These cases must occur before the Alt-tab ones due to conditional break.
@@ -1716,8 +1725,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// WheelDown::AltTab     ; But if the menu is displayed, the wheel will function normally.
 			// WheelUp::ShiftAltTab  ; But if the menu is displayed, the wheel will function normally.
 			if (!sAltTabMenuIsVisible)
-				// Even if the menu really is displayed by other means, we can't easily detect it
-				// because it's not a real window?
 				return AllowKeyToGoToSystem;
 
 			// Unlike CONTROL, SHIFT, AND ALT, the LWIN/RWIN keys don't seem to need any
@@ -2232,9 +2239,8 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 			// (due to ShiftAltTab causing sAltTabMenuIsVisible to become false):
 			//if (   sAltTabMenuIsVisible && !((g_modifiersLR_logical & MOD_LALT) || (g_modifiersLR_logical & MOD_RALT))
 			//	&& !(aKeyUp && pKeyHistoryCurr->event_type == 'h')   )  // In case the alt key itself is "AltTabMenu"
-			if (   sAltTabMenuIsVisible && // Release of Alt key or press down of Escape:
-				(aKeyUp && (aVK == VK_LMENU || aVK == VK_RMENU || aVK == VK_MENU)
-					|| !aKeyUp && aVK == VK_ESCAPE)
+			if (sAltTabMenuIsVisible && // Release of Alt key (the check above confirmed it is a modifier):
+				(aKeyUp && (aVK == VK_LMENU || aVK == VK_RMENU || aVK == VK_MENU))
 				// In case the alt key itself is "AltTabMenu":
 				&& pKeyHistoryCurr->event_type != 'h' && pKeyHistoryCurr->event_type != 's'   )
 				// It's important to reset in this case because if sAltTabMenuIsVisible were to
@@ -3804,15 +3810,18 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 			this_hk_is_key_up = this_hk.id_with_flags & HOTKEY_KEY_UP;
 			this_hk_id = this_hk.id_with_flags & HOTKEY_ID_MASK;
 
-			// Insert this hotkey at the front of the list of hotkeys that use this suffix key.
-			// This enables fallback between overlapping hotkeys, such as LCtrl & a, <^+a, ^+a.
-			pThisKey = this_hk.vk ? kvk + this_hk.vk : ksc + this_hk.sc;
-			// Insert after any custom combos.
-			HotkeyIDType *first = &pThisKey->first_hotkey;
-			while (*first != HOTKEY_ID_INVALID && (aHK[*first]->mModifierVK || aHK[*first]->mModifierSC))
-				first = &aHK[*first]->mNextHotkey;
-			aHK[this_hk_id]->mNextHotkey = *first;
-			*first = this_hk_id;
+			if (this_hk_id <= HOTKEY_ID_MAX) // It's a valid ID and not an ALT_TAB action.
+			{
+				// Insert this hotkey at the front of the list of hotkeys that use this suffix key.
+				// This enables fallback between overlapping hotkeys, such as LCtrl & a, <^+a, ^+a.
+				pThisKey = this_hk.vk ? kvk + this_hk.vk : ksc + this_hk.sc;
+				// Insert after any custom combos.
+				HotkeyIDType *first = &pThisKey->first_hotkey;
+				while (*first != HOTKEY_ID_INVALID && (aHK[*first]->mModifierVK || aHK[*first]->mModifierSC))
+					first = &aHK[*first]->mNextHotkey;
+				aHK[this_hk_id]->mNextHotkey = *first;
+				*first = this_hk_id;
+			}
 
 			i_modifiers_merged = this_hk.modifiers;
 			if (this_hk.modifiersLR)
@@ -4436,7 +4445,15 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 
 		sDisguiseNextMenu = false;
 		sUndisguisedMenuInEffect = false;
-		sAltTabMenuIsVisible = (FindWindow(_T("#32771"), NULL) != NULL); // I've seen indications that MS wants this to work on all operating systems.
+
+		// On Windows Vista and later, this definitely only works if the classic alt-tab menu
+		// has been restored via the registry.  A non-NULL result is probably only helpful for
+		// enabling the Esc key workaround in the hook (even though that isn't as critical on
+		// Windows 7 as it was on XP, since on 7 the user can dismiss it with physical Esc).
+		// A NULL result is probably more common, such as if it's been a while since the hook
+		// was removed (or Alt was released).  If the *classic* alt-tab menu isn't in use,
+		// this at least serves to reset sAltTabMenuIsVisible to false:
+		sAltTabMenuIsVisible = (FindWindow(_T("#32771"), NULL) != NULL);
 
 		*g_HSBuf = '\0';
 		g_HSBufLength = 0;

@@ -1459,7 +1459,7 @@ bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int Overwrit
 		// seems to be bugged on some older OSes (such as 2k and XP).  Specifically, it answers "No" to
 		// the "confirmmkdir" dialog, which it isn't supposed to suppress, and ignores FOF_NOCONFIRMMKDIR.
 		// Creating the directory first works around this.  Win 7 is okay without this; Vista wasn't tested.
-		if (!bMove && !Util_CreateDir(szDest))
+		if (!bMove && !FileCreateDir(szDest))
 			return false;
 	}
 
@@ -1756,54 +1756,6 @@ void Line::Util_ExpandFilenameWildcardPart(LPCTSTR szSource, LPCTSTR szDest, LPT
 		// No wildcard, straight copy of destext
 		_tcscpy(szExpandedDest, szDest);
 	}
-}
-
-
-
-bool Line::Util_CreateDir(LPCTSTR szDirName) // Recursive directory creation function.
-{
-	DWORD	dwTemp;
-	LPTSTR	szTemp = NULL;
-	LPTSTR	psz_Loc = NULL;
-	size_t  length;
-
-	dwTemp = GetFileAttributes(szDirName);
-
-	if (dwTemp == 0xffffffff) 
-	{	// error getting attribute - what was the error?
-		switch (GetLastError())
-		{
-		case ERROR_PATH_NOT_FOUND:
-			// Create path
-			length = _tcslen(szDirName);
-			if (length > MAX_PATH) // Sanity check to reduce chance of stack overflow (since this function recursively calls self).
-				return false;
-			szTemp = (LPTSTR)talloca(length+1); // Faster, and also avoids need to delete it afterward.
-			_tcscpy(szTemp, szDirName);
-			psz_Loc = _tcsrchr(szTemp, '\\');	/* find last \ */
-			if (psz_Loc == NULL)				// not found
-				return false;
-			else 
-			{
-				*psz_Loc = '\0';				// remove \ and everything after
-				if (!Util_CreateDir(szTemp))
-					return false;
-				return CreateDirectory(szDirName, NULL) ? true : false;
-			}
-			// All paths above "return".
-		case ERROR_FILE_NOT_FOUND:
-			// Create directory
-			return CreateDirectory(szDirName, NULL);
-		// Otherwise, it's some unforeseen error, so fall through to the end, which reports failure.
-		} // switch()
-	}
-	else // The specified name already exists as a file or directory.
-		if (dwTemp & FILE_ATTRIBUTE_DIRECTORY) // Fixed for v1.0.36.01 (previously it used == vs &).
-			return true;							// Directory exists, yay!
-		//else it exists, but it's a file! Not allowed, so fall through and report failure.
-			
-	return false;
-
 }
 
 
