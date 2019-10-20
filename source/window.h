@@ -32,7 +32,7 @@ GNU General Public License for more details.
 #define SET_TARGET_TO_ALLOWABLE_FOREGROUND(detect_hidden_windows) \
 {\
 	if (target_window = GetForegroundWindow())\
-		if (!(detect_hidden_windows) && !IsWindowVisible(target_window))\
+		if (!(detect_hidden_windows) && (!IsWindowVisible(target_window) || IsWindowCloaked(target_window)))\
 			target_window = NULL;\
 }
 #define IF_USE_FOREGROUND_WINDOW(detect_hidden_windows, title, text, exclude_title, exclude_text)\
@@ -258,6 +258,7 @@ BOOL CALLBACK EnumParentFindOwned(HWND aWnd, LPARAM lParam);
 HWND GetNonChildParent(HWND aWnd);
 HWND GetTopChild(HWND aParent);
 bool IsWindowHung(HWND aWnd);
+bool IsWindowCloaked(HWND aWnd);
 
 // Defaults to a low timeout because a window may have hundreds of controls, and if the window
 // is hung, each control might result in a delay of size aTimeout during an EnumWindows.

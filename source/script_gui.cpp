@@ -4137,8 +4137,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			// Now set the limit. Specifying a limit of zero opens the control to its maximum text capacity,
 			// which removes the 32K size restriction.  Testing shows that this does not increase the actual
 			// amount of memory used for controls containing small amounts of text.  All it does is allow
-			// the control to allocate more memory as the user enters text.  By specifying zero, a max
-			// of 64K becomes available on Windows 9x, and perhaps as much as 4 GB on NT/2k/XP.
+			// the control to allocate more memory as the user enters text.
 			SendMessage(control.hwnd, EM_LIMITTEXT, (WPARAM)opt.limit, 0); // EM_LIMITTEXT == EM_SETLIMITTEXT
 			if (opt.tabstop_count)
 				SendMessage(control.hwnd, EM_SETTABSTOPS, opt.tabstop_count, (LPARAM)opt.tabstop);

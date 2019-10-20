@@ -1283,9 +1283,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			}
 			// Any down control key prevents alt-tab from working.  This is similar to
 			// what's done for the shift-key above, so see those comments for details.
-			// Note: Since this is the low-level hook, the current OS must be something
-			// beyond other than Win9x, so there's no need to conditionally send
-			// VK_CONTROL instead of the left/right specific key of the pair:
 			if (g_modifiersLR_logical & MOD_LCONTROL)
 				KeyEvent(KEYUP, VK_LCONTROL);
 			if (g_modifiersLR_logical & MOD_RCONTROL)
@@ -1687,7 +1684,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 					else // Because there hasn't been a chance to update g_modifiersLR_logical yet:
 						which_alt_down = aVK;
 				if (!which_alt_down)
-					KeyEvent(KEYDOWN, VK_MENU); // Use the generic/neutral ALT key so it works with Win9x.
+					KeyEvent(KEYDOWN, VK_MENU);
 
 				KeyEvent(KEYDOWNANDUP, VK_TAB); // v1.0.28: KEYDOWNANDUP vs. KEYDOWN.
 
@@ -1741,7 +1738,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				KeyEvent(KEYUP, aVK); // Can't send sc here since it's not defined for the mouse hook.
 
 			// Even when the menu is visible, it's possible that neither of the ALT keys
-			// is down, at least under XP (probably NT and 2k also).  Not sure about Win9x:
+			// is down (such as if Ctrl+Alt+Tab was used, and perhaps other cases):
 			if (   !(g_modifiersLR_logical & (MOD_LALT | MOD_RALT))   // Neither ALT key is down 
 				|| (aKeyUp && (aVK == VK_LMENU || aVK == VK_RMENU))   ) // Or the suffix key for Alt-tab *is* an ALT key and it's being released: must push ALT down for upcoming TAB to work.
 				KeyEvent(KEYDOWN, VK_MENU);
@@ -2094,7 +2091,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 	{
 		// Since a mouse button that is physically down is not necessarily logically down -- such as
 		// when the mouse button is a suppressed hotkey -- only update the logical state (which is the
-		// state the OS believes the key to be in) when this even is non-supressed (i.e. allowed to
+		// state the OS believes the key to be in) when this event is non-supressed (i.e. allowed to
 		// go to the system):
 #ifdef FUTURE_USE_MOUSE_BUTTONS_LOGICAL
 		// THIS ENTIRE SECTION might never be necessary if it's true that GetAsyncKeyState() and
@@ -2191,8 +2188,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 		if (   (aVK == VK_DELETE || aVK == VK_DECIMAL) && !aKeyUp         // Both of these qualify, see notes.
 			&& (g_modifiersLR_physical & (MOD_LCONTROL | MOD_RCONTROL)) // At least one CTRL key is physically down.
 			&& (g_modifiersLR_physical & (MOD_LALT | MOD_RALT))         // At least one ALT key is physically down.
-			&& !(g_modifiersLR_physical & (MOD_LSHIFT | MOD_RSHIFT))    // Neither shift key is phys. down (WIN is ok).
-			&& g_os.IsWinNT4orLater()   )
+			&& !(g_modifiersLR_physical & (MOD_LSHIFT | MOD_RSHIFT))   )// Neither shift key is phys. down (WIN is ok).
 		{
 			// Similar to the above case except for Windows 2000.  I suspect it also applies to NT,
 			// but I'm not sure.  It seems safer to apply it to NT until confirmed otherwise.
@@ -3489,14 +3485,6 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 // the hooks.
 // Returns the set of hooks that are active after processing is complete.
 {
-	// v1.0.39: For simplicity and maintainability, don't even make the attempt on Win9x since it
-	// seems too rare that they would have LL hook capability somehow (such as in an emulFator).
-	// NOTE: Some sections rely on the fact that no warning dialogs are displayed if the hook is
-	// called for but the OS doesn't support it.  For example, ManifestAllHotkeysHotstringsHooks()
-	// doesn't check the OS version in many cases when marking hotkeys as hook hotkeys.
-	if (g_os.IsWin9x())
-		return;
-
 	// Determine the set of hooks that should be activated or deactivated.
 	HookType hooks_to_be_active = aWhichHook | aWhichHookAlways; // Bitwise union.
 
@@ -3564,14 +3552,8 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 
 		// This is a bit iffy because it's far from certain that these particular scan codes
 		// are really modifier keys on anything but a standard English keyboard.  However,
-		// at the very least the Win9x version must rely on something like this because a
-		// low-level hook can't be used under Win9x, and a high-level hook doesn't receive
-		// the left/right VKs at all (so the scan code must be used to tell them apart).
-		// However: it might be possible under Win9x to use MapVirtualKey() or some similar
-		// function to verify, at runtime, that the expected scan codes really do map to the
-		// expected VK.  If not, perhaps MapVirtualKey() or such can be used to search through
-		// every scan code to find out which map to VKs that are modifiers.  Any such keys
-		// found can then be initialized similar to below:
+		// long years of use haven't shown this to be a problem, and there are certainly other
+		// parts of the code that do not support custom layouts remapping the modifier keys.
 		ksc[SC_LCONTROL].as_modifiersLR = MOD_LCONTROL;
 		ksc[SC_RCONTROL].as_modifiersLR = MOD_RCONTROL;
 		ksc[SC_LALT].as_modifiersLR = MOD_LALT;
@@ -3655,13 +3637,6 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 			// the overhead of a switch stmt to *every* keypress ever made on the
 			// system, so it seems better to set up everything correctly here since
 			// this init section is only done once.
-			// Note: These switch stmts probably aren't needed under Win9x since I think
-			// it might be impossible for them to receive something like VK_LCONTROL,
-			// except *possibly* if keybd_event() is explicitly called with VK_LCONTROL
-			// and (might want to verify that -- if true, might want to keep the switches
-			// even for Win9x for safety and in case Win9x ever gets overhauled and
-			// improved in some future era, or in case Win9x is running in an emulator
-			// that expands its capabilities.
 			switch (hk.mVK)
 			{
 			case VK_MENU:
@@ -4045,7 +4020,6 @@ void LinkKeysForCustomCombo(vk_type aNeutral, vk_type aLeft, vk_type aRight)
 
 
 void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
-// Caller has already ensured that OS isn't Win9x.
 // Caller has ensured that any static memory arrays used by the hook functions have been allocated.
 // Caller is always the main thread, never the hook thread because this function isn't thread-safe
 // and it also calls PeekMessage() for the main thread.
@@ -4085,7 +4059,7 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 		// memory used by the hook thread.  The XP Task Manager's "VM Size" column (which seems much
 		// more accurate than "Mem Usage") indicates that a new thread consumes 28 KB + its stack size.
 		if (!aChangeIsTemporary) // Caller has ensured that thread already exists when aChangeIsTemporary==true.
-			if (sThreadHandle = CreateThread(NULL, 8*1024, HookThreadProc, NULL, 0, &g_HookThreadID)) // Win9x: Last parameter cannot be NULL.
+			if (sThreadHandle = CreateThread(NULL, 8*1024, HookThreadProc, NULL, 0, &g_HookThreadID))
 				SetThreadPriority(sThreadHandle, THREAD_PRIORITY_TIME_CRITICAL); // See below for explanation.
 			// The above priority level seems optimal because if some other process has high priority,
 			// the keyboard and mouse hooks will still take precedence, which avoids the mouse cursor
@@ -4325,7 +4299,7 @@ DWORD WINAPI HookThreadProc(LPVOID aUnused)
 			problem_activating_hooks = false;
 			if (msg.wParam & HOOK_KEYBD) // Activate the keyboard hook (if it isn't already).
 			{
-				if (!g_KeybdHook) // The creator of this thread has already ensured that OS isn't Win9x.
+				if (!g_KeybdHook)
 				{
 					// v1.0.39: Reset *before* hook is installed to avoid any chance that events can
 					// flow into the hook prior to the reset:
@@ -4342,7 +4316,7 @@ DWORD WINAPI HookThreadProc(LPVOID aUnused)
 
 			if (msg.wParam & HOOK_MOUSE) // Activate the mouse hook (if it isn't already).
 			{
-				if (!g_MouseHook) // The creator of this thread has already ensured that OS isn't Win9x.
+				if (!g_MouseHook)
 				{
 					if (msg.lParam) // Sender of msg. is signaling that reset should be done.
 						ResetHook(false, HOOK_MOUSE, true);

@@ -238,10 +238,6 @@ LPTSTR FileTimeToYYYYMMDD(LPTSTR aBuf, FILETIME &aTime, bool aConvertToLocalTime
 
 
 LPTSTR SystemTimeToYYYYMMDD(LPTSTR aBuf, SYSTEMTIME &aTime)
-// Returns aBuf.
-// Remember not to offer a "aConvertToLocalTime" option, because calling SystemTimeToTzSpecificLocalTime()
-// on Win9x apparently results in an invalid time because the function is implemented only as a stub on
-// those OSes.
 {
 	_stprintf(aBuf, _T("%04d%02d%02d") _T("%02d%02d%02d")
 		, aTime.wYear, aTime.wMonth, aTime.wDay
@@ -2440,11 +2436,6 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 			{
 				DestroyIcon((HICON)hbitmap); // Destroy the original HICON.
 				// Load a new one, but at the size newly calculated above.
-				// Due to an apparent bug in Windows 9x (at least Win98se), the below call will probably
-				// crash the program with a "divide error" if the specified aWidth and/or aHeight are
-				// greater than 90.  Since I don't know whether this affects all versions of Windows 9x, and
-				// all animated cursors, it seems best just to document it here and in the help file rather
-				// than limiting the dimensions of .ani (and maybe .cur) files for certain operating systems.
 				return (HBITMAP)LoadImage(NULL, aFilespec, aImageType, aWidth, aHeight, LR_LOADFROMFILE);
 			}
 		}

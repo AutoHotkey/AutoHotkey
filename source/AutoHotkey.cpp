@@ -32,7 +32,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 {
 	// Init any globals not in "struct g" that need it:
 	g_hInstance = hInstance;
-	InitializeCriticalSection(&g_CriticalRegExCache); // v1.0.45.04: Must be done early so that it's unconditional, so that DeleteCriticalSection() in the script destructor can also be unconditional (deleting when never initialized can crash, at least on Win 9x).
+	InitializeCriticalSection(&g_CriticalRegExCache); // v1.0.45.04: Must be done early so that it's unconditional, so that DeleteCriticalSection() in the script destructor can also be unconditional.
 
 	// v1.1.22+: This is done unconditionally, on startup, so that any attempts to read a drive
 	// that has no media (and possibly other errors) won't cause the system to display an error
@@ -276,29 +276,10 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	{
 		// Since InitCommonControls() is apparently incapable of initializing DateTime and MonthCal
 		// controls, InitCommonControlsEx() must be called.
-#if defined(CONFIG_WIN9X) || defined(CONFIG_WINNT4)
-		// Since Ex() requires comctl32.dll 4.70+, must get the function's address dynamically
-		// in case the program is running on Windows 95/NT without the updated DLL (otherwise
-		// the program would not launch at all).
-		typedef BOOL (WINAPI *MyInitCommonControlsExType)(LPINITCOMMONCONTROLSEX);
-		MyInitCommonControlsExType MyInitCommonControlsEx = (MyInitCommonControlsExType)
-			GetProcAddress(GetModuleHandle(_T("comctl32")), "InitCommonControlsEx"); // LoadLibrary shouldn't be necessary because comctl32 in linked by compiler.
-		if (MyInitCommonControlsEx)
-		{
-			INITCOMMONCONTROLSEX icce;
-			icce.dwSize = sizeof(INITCOMMONCONTROLSEX);
-			icce.dwICC = ICC_WIN95_CLASSES | ICC_DATE_CLASSES; // ICC_WIN95_CLASSES is equivalent to calling InitCommonControls().
-			MyInitCommonControlsEx(&icce);
-		}
-		else // InitCommonControlsEx not available, so must revert to non-Ex() to make controls work on Win95/NT4.
-			InitCommonControls();
-#else
-		// Currently only needed on Win2k, since Win9x is unsupported.
 		INITCOMMONCONTROLSEX icce;
 		icce.dwSize = sizeof(INITCOMMONCONTROLSEX);
 		icce.dwICC = ICC_WIN95_CLASSES | ICC_DATE_CLASSES; // ICC_WIN95_CLASSES is equivalent to calling InitCommonControls().
 		InitCommonControlsEx(&icce);
-#endif
 	}
 
 #ifdef CONFIG_DEBUGGER

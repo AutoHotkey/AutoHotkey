@@ -185,9 +185,6 @@ public:
 	bool mAllowExtraModifiers;  // False if the hotkey should not fire when extraneous modifiers are held down.
 	bool mKeyUp; // A hotkey that should fire on key-up.
 	bool mVK_WasSpecifiedByNumber; // A hotkey defined by something like "VK24::" or "Hotkey, VK24, ..."
-#ifdef CONFIG_WIN9X
-	bool mUnregisterDuringThread; // Win9x: Whether this hotkey should be unregistered during its own subroutine (to prevent its own Send command from firing itself).  Seems okay to apply this to all variants.
-#endif
 	bool mIsRegistered;  // Whether this hotkey has been successfully registered.
 	bool mParentEnabled; // When true, the individual variants' mEnabled flags matter. When false, the entire hotkey is disabled.
 	bool mConstructedOK;
@@ -209,7 +206,7 @@ public:
 	#define HOTKEY_EL_ALTTAB             4
 	#define HOTKEY_EL_NOTEXIST           5
 	#define HOTKEY_EL_NOTEXISTVARIANT    6
-	#define HOTKEY_EL_WIN9X              50
+	//#define HOTKEY_EL_WIN9X              50 // Reserved; no longer used.
 	#define HOTKEY_EL_NOREG              51
 	#define HOTKEY_EL_MAXCOUNT           98 // 98 allows room for other ErrorLevels to be added in between.
 	#define HOTKEY_EL_MEM                99

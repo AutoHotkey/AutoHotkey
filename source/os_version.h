@@ -33,14 +33,6 @@ public:
 	OS_Version() { Init(); }									// Constructor
 	void	Init(void);											// Call first before use
 
-#ifdef CONFIG_WIN9X
-	bool	IsWinNT(void) {return m_bWinNT;}					// Returns true if NT/2k/XP and family.
-	bool	IsWin9x(void) {return m_bWin9x;}					// Returns true if 9x
-#else // VC++ 2008: Win9x is not supported.
-	bool	IsWinNT(void) {return true;}
-	bool	IsWin9x(void) {return false;}
-#endif
-
 #ifdef CONFIG_WIN2K
 	bool	IsWin2000(void) {return m_bWin2000;}				// Returns true if Win2000
 #else
@@ -52,11 +44,6 @@ public:
 	bool	IsWin7(void) {return m_bWin7; }						// Returns true if Win7
 	bool	IsWin8(void) {return m_bWin8; }						// Returns true if Win8
 	bool	IsWin8_1(void) {return m_bWin8_1; }					// Returns true if Win8.1
-#if defined(CONFIG_WIN9X) || defined(CONFIG_WINNT4)
-	bool	IsWin2000orLater(void) {return m_bWin2000orLater;}	// Returns true if Win2000+
-#else
-	bool	IsWin2000orLater(void) {return true;}
-#endif
 #ifdef CONFIG_WIN2K
 	bool	IsWinXPorLater(void) {return m_bWinXPorLater;}		// Returns true if WinXP+
 #else
@@ -65,30 +52,6 @@ public:
 	bool	IsWinVistaOrLater(void) {return m_bWinVistaOrLater;}// Returns true if WinVista or later (v1.0.48.01)
 	bool	IsWin7OrLater(void) {return m_bWin7OrLater; }		// Returns true if Win7+
 	bool	IsWin10OrLater(void) {return m_dwMajorVersion >= 10;} // Excludes early pre-release builds.
-
-#ifdef CONFIG_WIN9X
-	bool	IsWin95(void) {return m_bWin95;}					// Returns true if 95
-	bool	IsWin98(void) {return m_bWin98;}					// Returns true if 98
-	bool	IsWinMe(void) {return m_bWinMe;}					// Returns true if Me
-	bool	IsWin95orLater(void) {return m_bWin95orLater;}		// Returns true if 95+
-	bool	IsWin98orLater(void) {return m_bWin98orLater;}		// Returns true if 98+
-	bool	IsWinMeorLater(void) {return m_bWinMeorLater;}		// Returns true if Me+
-#else // VC++ 2008: "The Windows 95, Windows 98, Windows ME, and Windows NT platforms are no longer supported."
-	bool	IsWin95(void) {return false;}
-	bool	IsWin98(void) {return false;}
-	bool	IsWinMe(void) {return false;}
-	bool	IsWin95orLater(void) {return false;}
-	bool	IsWin98orLater(void) {return false;}
-	bool	IsWinMeorLater(void) {return false;}
-#endif
-
-#ifdef CONFIG_WINNT4
-	bool	IsWinNT4(void) {return m_bWinNT4;}					// Returns true if WinNT 4
-	bool	IsWinNT4orLater(void) {return m_bWinNT4orLater;}	// Returns true if WinNT 4+
-#else
-	bool	IsWinNT4(void) {return false;}
-	bool	IsWinNT4orLater(void) {return true;}
-#endif
 
 	DWORD	BuildNumber(void) {return m_dwBuildNumber;}
 	//LPCTSTR CSD(void) {return m_szCSDVersion;}

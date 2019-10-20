@@ -19,6 +19,7 @@ GNU General Public License for more details.
 #include "util.h" // for strlcpy()
 #include "application.h" // for MsgSleep()
 #include "psapi.h" // for ahk_exe
+#include <dwmapi.h>
 
 
 HWND WinActivate(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText
@@ -196,9 +197,7 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 	HWND new_foreground_wnd;
 
 	if (!g_WinActivateForce)
-	// if (g_os.IsWin95() || (!g_os.IsWin9x() && !g_os.IsWin2000orLater())))  // Win95 or NT
-		// Try a simple approach first for these two OS's, since they don't have
-		// any restrictions on focus stealing:
+		// Try a simple approach first:
 #ifdef _DEBUG_WINACTIVATE
 #define IF_ATTEMPT_SET_FORE if (new_foreground_wnd = AttemptSetForeground(aTargetWindow, orig_foreground_wnd, win_name))
 #else
@@ -532,7 +531,7 @@ HWND WinActive(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aEx
 
 	// Only after the above check should the below be done.  This is because "IfWinActive" (with no params)
 	// should be "true" if one of the script's GUI windows is active:
-	if (!(aSettings.DetectHiddenWindows || IsWindowVisible(fore_win))) // In this case, the caller's window can't be active.
+	if (!aSettings.DetectWindow(fore_win)) // In this case, the caller's window can't be active.
 		return NULL;
 
 	WindowSearch ws;
@@ -588,7 +587,7 @@ HWND WinExist(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExc
 		if (   ws.mCriterionHwnd != HWND_BROADCAST // It's not exempt from the other checks on the two lines below.
 			&& (!IsWindow(ws.mCriterionHwnd)    // And it's either not a valid window...
 				// ...or the window is not detectible (in v1.0.40.05, child windows are detectible even if hidden):
-				|| !(aSettings.DetectHiddenWindows || IsWindowVisible(ws.mCriterionHwnd)
+				|| !(aSettings.DetectWindow(ws.mCriterionHwnd)
 					|| (GetWindowLong(ws.mCriterionHwnd, GWL_STYLE) & WS_CHILD)))   )
 			return NULL;
 
@@ -616,7 +615,7 @@ HWND GetValidLastUsedWindow(global_struct &aSettings)
 {
 	if (!aSettings.hWndLastUsed || !IsWindow(aSettings.hWndLastUsed))
 		return NULL;
-	if (   aSettings.DetectHiddenWindows || IsWindowVisible(aSettings.hWndLastUsed)
+	if (   aSettings.DetectWindow(aSettings.hWndLastUsed)
 		|| (GetWindowLong(aSettings.hWndLastUsed, GWL_STYLE) & WS_CHILD)   ) // v1.0.40.05: Child windows (via ahk_id) are always detectible.
 		return aSettings.hWndLastUsed;
 	// Otherwise, DetectHiddenWindows is OFF and the window is not visible.  Return NULL
@@ -635,19 +634,7 @@ BOOL CALLBACK EnumParentFind(HWND aWnd, LPARAM lParam)
 // through every window), it returns TRUE:
 {
 	WindowSearch &ws = *(WindowSearch *)lParam;  // For performance and convenience.
-	// According to MSDN, GetWindowText() will hang only if it's done against
-	// one of your own app's windows and that window is hung.  I suspect
-	// this might not be true in Win95, and possibly not even Win98, but
-	// it's not really an issue because GetWindowText() has to be called
-	// eventually, either here or in an EnumWindowsProc.  The only way
-	// to prevent hangs (if indeed it does hang on Win9x) would be to
-	// call something like IsWindowHung() before every call to
-	// GetWindowText(), which might result in a noticeable delay whenever
-	// we search for a window via its title (or even worse: by the title
-	// of one of its controls or child windows).  UPDATE: Trying GetWindowTextTimeout()
-	// now, which might be the best compromise.  UPDATE: It's annoyingly slow,
-	// so went back to using the old method.
-	if (!(ws.mSettings->DetectHiddenWindows || IsWindowVisible(aWnd))) // Skip windows the script isn't supposed to detect.
+	if (!ws.mSettings->DetectWindow(aWnd)) // Skip windows the script isn't supposed to detect.
 		return TRUE;
 	ws.SetCandidate(aWnd);
 	// If this window doesn't match, continue searching for more windows (via TRUE).  Likewise, if
@@ -1344,18 +1331,7 @@ bool IsWindowHung(HWND aWnd)
 	// thread and calls the appropriate window procedure.  Messages sent between threads are
 	// processed only when the receiving thread executes message retrieval code. The sending
 	// thread is blocked until the receiving thread processes the message."
-#ifdef CONFIG_WIN9X
-	if (g_os.IsWin9x())
-	{
-		typedef BOOL (WINAPI *MyIsHungThread)(DWORD);
-		static MyIsHungThread IsHungThread = (MyIsHungThread)GetProcAddress(GetModuleHandle(_T("user32"))
-			, "IsHungThread");
-		// When function not available, fall back to the old method:
-		return IsHungThread ? IsHungThread(GetWindowThreadProcessId(aWnd, NULL)) : Slow_IsWindowHung;
-	}
-#endif
 
-	// Otherwise: NT/2k/XP/2003 or later, so try to use the newer method.
 	// The use of IsHungAppWindow() (supported under Win2k+) is discouraged by MS,
 	// but it's useful to prevent the script from getting hung when it tries to do something
 	// to a hung window.
@@ -1363,6 +1339,27 @@ bool IsWindowHung(HWND aWnd)
 	static MyIsHungAppWindow IsHungAppWindow = (MyIsHungAppWindow)GetProcAddress(GetModuleHandle(_T("user32"))
 		, "IsHungAppWindow");
 	return IsHungAppWindow ? IsHungAppWindow(aWnd) : Slow_IsWindowHung;
+}
+
+
+
+bool IsWindowCloaked(HWND aWnd)
+{
+	static auto *pfn = (decltype(&DwmGetWindowAttribute))
+		GetProcAddress(LoadLibrary(_T("dwmapi.dll")), "DwmGetWindowAttribute");
+	if (!pfn) // Windows XP or earlier.
+		return false;
+	int cloaked = 0;
+	const int DWMWA_CLOAKED = 14; // Work around SDK troubles.
+	auto result = pfn(aWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+	return SUCCEEDED(result) && cloaked; // Result is "invalid parameter" on Windows 7.
+}
+
+
+
+bool global_struct::DetectWindow(HWND aWnd)
+{
+	return DetectHiddenWindows || (IsWindowVisible(aWnd) && !IsWindowCloaked(aWnd));
 }
 
 
@@ -1390,10 +1387,6 @@ int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf, INT_PTR aBufSize, UINT aTimeout
 {
 	if (!aWnd || (aBuf && aBufSize < 1)) // No HWND or no room left in buffer (some callers rely on this check).
 		return 0; // v1.0.40.04: Fixed to return 0 rather than setting aBuf to NULL and continuing (callers don't want that).
-
-	// Override for Win95 because AutoIt3 author says it might crash otherwise:
-	if (aBufSize > WINDOW_TEXT_SIZE && g_os.IsWin95())
-		aBufSize = WINDOW_TEXT_SIZE;
 
 	LRESULT result, length;
 	if (aBuf)
@@ -1841,28 +1834,15 @@ HWND WindowSearch::IsMatch(bool aInvert)
 
 void SetForegroundLockTimeout()
 {
-	// Even though they may not help in all OSs and situations, this lends peace-of-mind.
-	// (it doesn't appear to help on my XP?)
-	if (g_os.IsWin98orLater() || g_os.IsWin2000orLater())
-	{
-		// Don't check for failure since this operation isn't critical, and don't want
-		// users continually haunted by startup error if for some reason this doesn't
-		// work on their system:
-		if (SystemParametersInfo(SPI_GETFOREGROUNDLOCKTIMEOUT, 0, &g_OriginalTimeout, 0))
-			if (g_OriginalTimeout) // Anti-focus stealing measure is in effect.
-			{
-				// Set it to zero instead, disabling the measure:
-				SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, (PVOID)0, SPIF_SENDCHANGE);
-//				if (!SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, (PVOID)0, SPIF_SENDCHANGE))
-//					MsgBox("Enable focus-stealing: set-call to SystemParametersInfo() failed.");
-			}
-//			else
-//				MsgBox("Enable focus-stealing: it was already enabled.");
-//		else
-//			MsgBox("Enable focus-stealing: get-call to SystemParametersInfo() failed.");
-	}
-//	else
-//		MsgBox("Enable focus-stealing: neither needed nor supported under Win95 and WinNT.");
+	// Don't check for failure since this operation isn't critical, and don't want
+	// users continually haunted by startup error if for some reason this doesn't
+	// work on their system:
+	if (SystemParametersInfo(SPI_GETFOREGROUNDLOCKTIMEOUT, 0, &g_OriginalTimeout, 0))
+		if (g_OriginalTimeout) // Anti-focus stealing measure is in effect.
+		{
+			// Set it to zero instead, disabling the measure:
+			SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, (PVOID)0, SPIF_SENDCHANGE);
+		}
 }
 
 

@@ -32,12 +32,6 @@
 // Generates warnings to help we check whether the codes are ready to handle Unicode or not.
 //#define CONFIG_UNICODE_CHECK
 
-#if !defined(UNICODE) && (!defined(_MSC_VER) || _MSC_VER < 1500)
-// These should be defined if the compiler supports these platforms, otherwise run-time OS checks may be inaccurate.
-#define CONFIG_WIN9X
-#define CONFIG_WINNT4
-#endif
-
 // This is now defined via Config.vcxproj if supported by the current platform toolset.
 //#ifndef _WIN64
 //#define CONFIG_WIN2K

@@ -117,8 +117,6 @@ EXTERN_G;
 #define SC_NUMPAD8 SC_NUMPADUP
 #define SC_NUMPAD9 SC_NUMPADPGUP
 
-// These both have a unique vk and a unique sc (on most keyboards?), but they're listed here because
-// MapVirtualKey doesn't support them under Win9x (except maybe NumLock itself):
 #define SC_NUMLOCK 0x145
 #define SC_NUMPADDIV 0x135
 #define SC_NUMPADMULT 0x037
@@ -126,8 +124,6 @@ EXTERN_G;
 #define SC_NUMPADADD 0x04E
 #define SC_PAUSE 0x045
 
-// Note: A KeyboardProc() (hook) actually receives 0x36 for RSHIFT under both WinXP and Win98se, not 0x136.
-// All the below have been verified to be accurate under Win98se and XP (except rctrl and ralt in XP).
 #define SC_LCONTROL 0x01D
 #define SC_RCONTROL 0x11D
 #define SC_LSHIFT 0x02A
@@ -324,25 +320,13 @@ void UpdateKeyEventHistory(bool aKeyUp, vk_type aVK, sc_type aSC);
 #define KEYEVENT_PHYS(event_type, vk, sc) KeyEvent(event_type, vk, sc, NULL, false, KEY_PHYS_IGNORE)
 
 ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue);
-#ifdef CONFIG_WIN9X
-void ToggleNumlockWin9x();
-//void CapslockOffWin9x();
-#endif
 
 #define STD_MODS_TO_DISGUISE (MOD_LALT|MOD_RALT|MOD_LWIN|MOD_RWIN)
 void SetModifierLRState(modLR_type aModifiersLRnew, modLR_type aModifiersLRnow, HWND aTargetWindow
 	, bool aDisguiseDownWinAlt, bool aDisguiseUpWinAlt, DWORD aExtraInfo = KEY_IGNORE_ALL_EXCEPT_MODIFIER);
 modLR_type GetModifierLRState(bool aExplicitlyGet = false);
 
-// The IsKeyDown9xNT() method is needed because GetKeyState() does not return the proper
-// state under Win9x, at least for the modifier keys under certain conditions.  The
-// AutoIt3 author indicates that GetAsyncKeyState() is also unreliable and he uses
-// this same method, so it seems best for now.  Specify GetAsyncKeyState() first due
-// to performance of short-circuit boolean.  v1.0.42.01: Fixed to use 0x8000 vs. 0x80000000
-// with GetAsyncKeyState (though luckily, because of the way a negative short gets promoted
-// to a negative int, the old way of using 0x80000000 worked too).
-#define IsKeyDown9xNT(vk) (   (GetAsyncKeyState(vk) & 0x8000) || ((GetKeyState(vk) & 0x8000))   )
-#define IsKeyDown2kXP(vk) (GetKeyState(vk) & 0x8000)
+#define IsKeyDown(vk) (GetKeyState(vk) & 0x8000)
 #define IsKeyDownAsync(vk) (GetAsyncKeyState(vk) & 0x8000)
 #define IsKeyToggledOn(vk) (GetKeyState(vk) & 0x01)
 

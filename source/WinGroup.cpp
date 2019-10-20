@@ -405,7 +405,7 @@ BOOL CALLBACK EnumParentFindAnyExcept(HWND aWnd, LPARAM lParam)
 	// Since the following two sections apply only to GroupDeactivate (since that's our only caller),
 	// they both seem okay even in light of the ahk_group method.
 
-	if (!IsWindowVisible(aWnd))
+	if (!IsWindowVisible(aWnd) || IsWindowCloaked(aWnd))
 		// Skip these because we always want them to stay invisible, regardless
 		// of the setting for g->DetectHiddenWindows:
 		return TRUE;
@@ -418,19 +418,19 @@ BOOL CALLBACK EnumParentFindAnyExcept(HWND aWnd, LPARAM lParam)
 	// be activated (especially in this mode, which is often used to visit the user's
 	// "non-favorite" windows).  In addition, they're already visible so the user already
 	// knows about them, so there's no need to have them presented for review.
-	if (GetWindowLong(aWnd, GWL_EXSTYLE) & WS_EX_TOPMOST)
+	DWORD ex_style = GetWindowLong(aWnd, GWL_EXSTYLE);
+	if (ex_style & WS_EX_TOPMOST)
 		return TRUE;
 
-	// It probably would have been better to use the class name (ProgMan?) for this instead,
-	// but there is doubt that the same class name is used across all OSes.  The reason for
-	// doing that is to avoid ambiguity with other windows that just happen to be called
-	// "Program Manager".  See similar section in EnumParentActUponAll().
-	// Skip "Program Manager" too because activating it would serve no purpose.  This is probably
-	// the same HWND that GetShellWindow() returns, but GetShellWindow() isn't supported on
-	// Win9x or WinNT, so don't bother using it.  And GetDeskTopWindow() apparently doesn't
-	// return "Program Manager" (something with a blank title I think):
-	TCHAR win_title[20]; // Just need enough size to check for Program Manager
-	if (GetWindowText(aWnd, win_title, _countof(win_title)) && !_tcsicmp(win_title, _T("Program Manager")))
+	// Skip "Program Manager" (the Desktop) because the user probably doesn't want it
+	// activated (although that would serve the purpose of deactivating any other window),
+	// and for backward-compatibility.  For consistency, also skip the "ahk_class WorkerW"
+	// window which is the Desktop on Windows 7 and later (but is hidden on Windows 7).
+	// Since the class name is ambiguous, also check for WS_EX_TOOLWINDOW.
+	TCHAR class_name[9];
+	if (   GetClassName(aWnd, class_name, _countof(class_name))
+		&& (!_tcsicmp(class_name, _T("Progman"))
+			|| (ex_style & WS_EX_TOOLWINDOW) && !_tcsicmp(class_name, _T("WorkerW")))   )
 		return TRUE;
 
 	WindowSearch &ws = *(WindowSearch *)lParam;  // For performance and convenience.
@@ -479,7 +479,7 @@ BOOL CALLBACK EnumParentActUponAll(HWND aWnd, LPARAM lParam)
 
 	// Skip windows the command isn't supposed to detect.  ACT_WINSHOW is exempt because
 	// hidden windows are always detected by the WinShow command:
-	if (!(g->DetectHiddenWindows || ws.mActionType == ACT_WINSHOW || IsWindowVisible(aWnd)))
+	if (!(ws.mActionType == ACT_WINSHOW || g->DetectWindow(aWnd)))
 		return TRUE;
 
 	int nCmdShow;
@@ -506,10 +506,7 @@ BOOL CALLBACK EnumParentActUponAll(HWND aWnd, LPARAM lParam)
 
 			case ACT_WINMINIMIZE:
 				if (IsWindowHung(aWnd))
-				{
-					if (g_os.IsWin2000orLater())
-						nCmdShow = SW_FORCEMINIMIZE;
-				}
+					nCmdShow = SW_FORCEMINIMIZE;
 				else
 					nCmdShow = SW_MINIMIZE;
 				break;

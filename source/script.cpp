@@ -856,29 +856,18 @@ ResultType Script::CreateWindows()
 		return FAIL;
 	}
 	// FONTS: The font used by default, at least on XP, is GetStockObject(SYSTEM_FONT).
-	// It seems preferable to smaller fonts such DEFAULT_GUI_FONT(DEFAULT_GUI_FONT).
-	// For more info on pre-loaded fonts (not too many choices), see MSDN's GetStockObject().
-	if(g_os.IsWinNT())
-	{
-		// Use a more appealing font on NT versions of Windows.
-
-		// Windows NT to Windows XP -> Lucida Console
-		HDC hdc = GetDC(g_hWndEdit);
-		if(!g_os.IsWinVistaOrLater())
-			g_hFontEdit = CreateFont(FONT_POINT(hdc, 10), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-				, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, _T("Lucida Console"));
-		else // Windows Vista and later -> Consolas
-			g_hFontEdit = CreateFont(FONT_POINT(hdc, 10), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-				, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, _T("Consolas"));
-		ReleaseDC(g_hWndEdit, hdc); // In theory it must be done.
-		SendMessage(g_hWndEdit, WM_SETFONT, (WPARAM)g_hFontEdit, 0);
-	}
+	// Use something more appealing (monospaced seems preferable):
+	HDC hdc = GetDC(g_hWndEdit);
+	g_hFontEdit = CreateFont(FONT_POINT(hdc, 10), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+		, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE
+		, g_os.IsWinVistaOrLater() ? _T("Consolas") : _T("Lucida Console"));
+	ReleaseDC(g_hWndEdit, hdc);
+	SendMessage(g_hWndEdit, WM_SETFONT, (WPARAM)g_hFontEdit, 0);
 
 	// v1.0.30.05: Specifying a limit of zero opens the control to its maximum text capacity,
 	// which removes the 32K size restriction.  Testing shows that this does not increase the actual
 	// amount of memory used for controls containing small amounts of text.  All it does is allow
-	// the control to allocate more memory as needed.  By specifying zero, a max
-	// of 64K becomes available on Windows 9x, and perhaps as much as 4 GB on NT/2k/XP.
+	// the control to allocate more memory as needed.
 	SendMessage(g_hWndEdit, EM_LIMITTEXT, 0, 0);
 
 	// Some of the MSDN docs mention that an app's very first call to ShowWindow() makes that
@@ -2308,17 +2297,12 @@ examine_line:
 						}
 						if (!hk->AddVariant(mLastLabel, suffix_has_tilde))
 							return ScriptError(ERR_OUTOFMEM, buf);
-						if (hook_is_mandatory || (!g_os.IsWin9x() && g_ForceKeybdHook))
+						if (hook_is_mandatory || g_ForceKeybdHook)
 						{
 							// Require the hook for all variants of this hotkey if any variant requires it.
 							// This seems more intuitive than the old behaviour, which required $ or #UseHook
 							// to be used on the *first* variant, even though it affected all variants.
-#ifdef CONFIG_WIN9X
-							if (g_os.IsWin9x())
-								hk->mUnregisterDuringThread = true;
-							else
-#endif
-								hk->mKeybdHookMandatory = true;
+							hk->mKeybdHookMandatory = true;
 						}
 					}
 				}
@@ -3665,20 +3649,12 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#InstallKeybdHook")))
 	{
-		// It seems best not to report this warning because a user may want to use partial functionality
-		// of a script on Win9x:
-		//MsgBox("#InstallKeybdHook is not supported on Windows 95/98/Me.  This line will be ignored.");
-		if (!g_os.IsWin9x())
-			Hotkey::RequireHook(HOOK_KEYBD);
+		Hotkey::RequireHook(HOOK_KEYBD);
 		return CONDITION_TRUE;
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#InstallMouseHook")))
 	{
-		// It seems best not to report this warning because a user may want to use partial functionality
-		// of a script on Win9x:
-		//MsgBox("#InstallMouseHook is not supported on Windows 95/98/Me.  This line will be ignored.");
-		if (!g_os.IsWin9x())
-			Hotkey::RequireHook(HOOK_MOUSE);
+		Hotkey::RequireHook(HOOK_MOUSE);
 		return CONDITION_TRUE;
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#UseHook")))
@@ -12289,8 +12265,6 @@ ResultType Line::Perform()
 		return Download(TWO_ARGS);
 
 	case ACT_RUNAS:
-		if (!g_os.IsWin2000orLater()) // Do nothing if the OS doesn't support it.
-			return OK;
 		StringTCharToWChar(ARG1, g_script.mRunAsUser);
 		StringTCharToWChar(ARG2, g_script.mRunAsPass);
 		StringTCharToWChar(ARG3, g_script.mRunAsDomain);
@@ -12328,11 +12302,6 @@ ResultType Line::Perform()
 		// be enough during an extreme load depending on the exact preemption/timeslice dynamics involved).
 		// DON'T GO TOO HIGH because this setting reduces response time for ALL messages, even those that
 		// don't launch script threads (especially painting/drawing and other screen-update events).
-		// Future enhancement: Could allow the value of 16 to be customized via something like "Critical 25".
-		// However, it seems best not to allow it to go too high (say, no more than 2000) because that would
-		// cause the script to completely hang if the critical thread never finishes, or takes a long time
-		// to finish.  A configurable limit might also allow things to work better on Win9x because it has
-		// a bigger tickcount granularity.
 		// Some hardware has a tickcount granularity of 15 instead of 10, so this covers more variations.
 		DWORD peek_frequency_when_critical_is_on = 16; // Set default.  See below.
 		// v1.0.48: Below supports "Critical 0" as meaning "Off" to improve compatibility with A_IsCritical.
@@ -12688,16 +12657,7 @@ ResultType Line::Perform()
 		// it sleep more than 24.8 days or so.  It also helps performance on 32-bit hardware because
 		// MsgSleep() is so heavily called and checks the value of the first parameter frequently:
 		int sleep_time = ArgToInt(1); // Keep it signed vs. unsigned for backward compatibility (e.g. scripts that do Sleep -1).
-
-		// Do a true sleep on Win9x because the MsgSleep() method is very inaccurate on Win9x
-		// for some reason (a MsgSleep(1) causes a sleep between 10 and 55ms, for example).
-		// But only do so for short sleeps, for which the user has a greater expectation of
-		// accuracy.  UPDATE: Do not change the 25 below without also changing it in Critical's
-		// documentation.
-		if (sleep_time < 25 && sleep_time > 0 && g_os.IsWin9x()) // Ordered for short-circuit performance. v1.0.38.05: Added "sleep_time > 0" so that Sleep -1/0 will work the same on Win9x as it does on other OSes.
-			Sleep(sleep_time);
-		else
-			MsgSleep(sleep_time);
+		MsgSleep(sleep_time);
 		return OK;
 	}
 
