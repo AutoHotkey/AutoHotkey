@@ -2197,7 +2197,7 @@ BIF_DECL(BIF_Process)
 		_f_set_retval_i(0); // Set default.
 		if (pid = ProcessExist(aProcess))  // Assign
 		{
-			if (hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid))
+			if (hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pid))
 			{
 				if (TerminateProcess(hProcess, 0))
 					_f_set_retval_i(pid); // Indicate success.
