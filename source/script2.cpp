@@ -17416,61 +17416,48 @@ DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNam
 {
 	*aBuf = '\0'; // Set default.
 	HANDLE hproc;
-	if (  !(hproc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, aProcessID))  )
-		// OpenProcess failed, so try fallback access; this will probably cause the
-		// first method below to fail and fall back to GetProcessImageFileName.
-		if (  !(hproc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, aProcessID))  )
-			return 0;
+	// Windows XP/2003 would require PROCESS_QUERY_INFORMATION, but those OSes are not supported.
+	if (  !(hproc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, aProcessID))  )
+		return 0;
 
-	// Attempt these first, since they return exactly what we want and are available on Win2k:
-	DWORD buf_length = aGetNameOnly
-		? GetModuleBaseName(hproc, NULL, aBuf, aBufSize)
-		: GetModuleFileNameEx(hproc, NULL, aBuf, aBufSize);
-
-	if (!buf_length)
+	// Benchmarks showed that attempting GetModuleBaseName/GetModuleFileNameEx
+	// first did not help performance.  Also, QueryFullProcessImageName appeared
+	// to be slower than the following.
+	DWORD buf_length = GetProcessImageFileName(hproc, aBuf, aBufSize);
+	if (buf_length)
 	{
-		// Above failed, possibly for one of the following reasons:
-		//	- Our process is 32-bit, but that one is 64-bit.
-		//	- That process is running at a higher integrity level (UAC is interfering).
-		//	- We didn't have permission to use PROCESS_VM_READ access?
-		//
-		// So fall back to GetProcessImageFileName (XP or later required):
-		buf_length = GetProcessImageFileName(hproc, aBuf, aBufSize);
-		if (buf_length)
+		LPTSTR cp;
+		if (aGetNameOnly)
 		{
-			LPTSTR cp;
-			if (aGetNameOnly)
+			// Convert full path to just name.
+			cp = _tcsrchr(aBuf, '\\');
+			if (cp)
+				tmemmove(aBuf, cp + 1, _tcslen(cp)); // Includes the null terminator.
+		}
+		else
+		{
+			// Convert device path to logical path.
+			TCHAR device_path[MAX_PATH];
+			TCHAR letter[3];
+			letter[1] = ':';
+			letter[2] = '\0';
+			// For simplicity and because GetLogicalDriveStrings does not exist on Win2k, it is not used.
+			for (*letter = 'A'; *letter <= 'Z'; ++(*letter))
 			{
-				// Convert full path to just name.
-				cp = _tcsrchr(aBuf, '\\');
-				if (cp)
-					tmemmove(aBuf, cp + 1, _tcslen(cp)); // Includes the null terminator.
-			}
-			else
-			{
-				// Convert device path to logical path.
-				TCHAR device_path[MAX_PATH];
-				TCHAR letter[3];
-				letter[1] = ':';
-				letter[2] = '\0';
-				// For simplicity and because GetLogicalDriveStrings does not exist on Win2k, it is not used.
-				for (*letter = 'A'; *letter <= 'Z'; ++(*letter))
+				DWORD device_path_length = QueryDosDevice(letter, device_path, _countof(device_path));
+				if (device_path_length > 2) // Includes two null terminators.
 				{
-					DWORD device_path_length = QueryDosDevice(letter, device_path, _countof(device_path));
-					if (device_path_length > 2) // Includes two null terminators.
+					device_path_length -= 2;
+					if (!_tcsncmp(device_path, aBuf, device_path_length)
+						&& aBuf[device_path_length] == '\\') // Relies on short-circuit evaluation.
 					{
-						device_path_length -= 2;
-						if (!_tcsncmp(device_path, aBuf, device_path_length)
-							&& aBuf[device_path_length] == '\\') // Relies on short-circuit evaluation.
-						{
-							// Copy drive letter:
-							aBuf[0] = letter[0];
-							aBuf[1] = letter[1];
-							// Contract path to remove remainder of device name.
-							tmemmove(aBuf + 2, aBuf + device_path_length, buf_length - device_path_length + 1);
-							buf_length -= device_path_length - 2;
-							break;
-						}
+						// Copy drive letter:
+						aBuf[0] = letter[0];
+						aBuf[1] = letter[1];
+						// Contract path to remove remainder of device name.
+						tmemmove(aBuf + 2, aBuf + device_path_length, buf_length - device_path_length + 1);
+						buf_length -= device_path_length - 2;
+						break;
 					}
 				}
 			}
