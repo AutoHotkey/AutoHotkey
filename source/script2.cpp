@@ -270,6 +270,19 @@ ResultType Line::TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions)
 		// pass a space to ensure the TrayTip is shown.  Testing showed that Windows 10
 		// will size the notification to fit only the title, as if there was no text.
 		aText = _T(" ");
+	if (nic.dwInfoFlags & NIIF_USER)
+	{
+		// Windows 10 toast notifications display the small tray icon stretched to the
+		// large size if NIIF_USER is passed but not NIIF_LARGE_ICON.  If a large icon
+		// is passed without the flag, the notification does not show at all.
+		// But since this could change, let the script pass 0x24 to use the large icon.
+		//if (g_os.IsWin10OrLater())
+		//	nic.dwInfoFlags |= NIIF_LARGE_ICON;
+		if (nic.dwInfoFlags & NIIF_LARGE_ICON)
+			nic.hBalloonIcon = g_script.mCustomIcon ? g_script.mCustomIcon : g_IconLarge;
+		else
+			nic.hBalloonIcon = g_script.mCustomIconSmall ? g_script.mCustomIconSmall : g_IconSmall;
+	}
 	tcslcpy(nic.szInfoTitle, aTitle, _countof(nic.szInfoTitle)); // Empty title omits the title line entirely.
 	tcslcpy(nic.szInfo, aText, _countof(nic.szInfo));	// Empty text removes the balloon.
 	Shell_NotifyIcon(NIM_MODIFY, &nic);
