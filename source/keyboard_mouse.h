@@ -146,6 +146,7 @@ EXTERN_G;
 // the Numpad keyup if no other keys were pushed.  Our hook filters out the second byte to
 // simplify the code, so these values can only be found in KBDLLHOOKSTRUCT::scanCode.
 // Find "fake shift-key events" for older and more detailed comments.
+// Note that 0x0200 corresponds to SCANCODE_SIMULATED in kbd.h (DDK).
 #define SC_FAKE_LSHIFT 0x22A
 #define SC_FAKE_RSHIFT 0x236 // This is the actual scancode received by the hook, excluding the 0x100 we add for "extended" keys.
 #define SC_FAKE_LCTRL 0x21D

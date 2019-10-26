@@ -586,21 +586,6 @@ key_to_sc_type g_key_to_sc[] =
 , {_T("End"), SC_END}
 , {_T("PgUp"), SC_PGUP}
 , {_T("PgDn"), SC_PGDN}
-
-// If user specified left or right, must use scan code to distinguish *both* halves of the pair since
-// each half has same vk *and* since their generic counterparts (e.g. CONTROL vs. L/RCONTROL) are
-// already handled by vk.  Note: RWIN and LWIN don't need to be handled here because they each have
-// their own virtual keys.
-// UPDATE: For the NT/2k/XP version, now doing these by VK since it's likely to be
-// more compatible with non-standard or non-English keyboards:
-/*
-, {_T("LControl"), SC_LCONTROL}
-, {_T("RControl"), SC_RCONTROL}
-, {_T("LShift"), SC_LSHIFT}
-, {_T("RShift"), SC_RSHIFT}
-, {_T("LAlt"), SC_LALT}
-, {_T("RAlt"), SC_RALT}
-*/
 };
 
 

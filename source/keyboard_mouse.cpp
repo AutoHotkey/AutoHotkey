@@ -4442,117 +4442,49 @@ LPTSTR GetKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize, LPTSTR aD
 
 
 sc_type vk_to_sc(vk_type aVK, bool aReturnSecondary)
-// For v1.0.37.03, vk_to_sc() was converted into a function rather than being an array because if the
-// script's keyboard layout changes while it's running, the array would get out-of-date.
-// If caller passes true for aReturnSecondary, the non-primary scan code will be returned for
-// virtual keys that two scan codes (if there's only one scan code, callers rely on zero being returned).
+// If caller passes true for aReturnSecondary, the "extended" scan code will be returned for
+// virtual keys that have two scan codes and two names (if there's only one, callers rely on
+// zero being returned).  In those cases, the caller may want to know:
+//  a) Whether the hook needs to be used to identify a hotkey defined by name.
+//  b) Whether InputHook should handle the keys by SC in order to differentiate.
+//  c) Whether to retrieve the key's name by SC rather than VK.
+// In all of those cases, only keys that we've given multiple names matter.
+// Custom layouts could assign some other VK to multiple SCs, but there would
+// be no reason (or way) to differentiate them in this context.
 {
 	// Try to minimize the number mappings done manually because MapVirtualKey is a more reliable
 	// way to get the mapping if user has non-standard or custom keyboard layout.
 
 	sc_type sc = 0;
 
-	// Yield a manual translation for virtual keys that MapVirtualKey() doesn't support or for which it
-	// doesn't yield consistent result.
 	switch (aVK)
 	{
-	// Win9x is probably the main reason the modifier keys were handled this way -- testing indicates
-	// that MapVirtualKey() returns the correct result even on Win2k.  However, since Alt & Ctrl are
-	// distinguished by the extended key flag which MapVirtualKey() doesn't include, they would need
-	// to be at least partially handled here anyway.
-	case VK_LSHIFT:   sc = SC_LSHIFT; break; // Modifiers are listed first for performance.
-	case VK_RSHIFT:   sc = SC_RSHIFT; break;
-	case VK_LCONTROL: sc = SC_LCONTROL; break;
-	case VK_RCONTROL: sc = SC_RCONTROL; break;
-	case VK_LMENU:    sc = SC_LALT; break;
-	case VK_RMENU:    sc = SC_RALT; break;
-	case VK_LWIN:     sc = SC_LWIN; break;
-	case VK_RWIN:     sc = SC_RWIN; break;
+	// MapVirtualKey() returns 0xE11D, but we want the code normally received by the
+	// hook (sc045).  See sc_to_vk() for more comments.
+	case VK_PAUSE:    sc = SC_PAUSE; break;
 
-	case VK_PAUSE:    sc = SC_PAUSE; break; // Added in v1.1.26.01.
-
-	// According to http://support.microsoft.com/default.aspx?scid=kb;en-us;72583 (broken link)
-	// most or all numeric keypad keys cannot be mapped reliably under any OS. The article is
-	// a little unclear about which direction, if any, that MapVirtualKey() does work in for
-	// the numpad keys, so for peace-of-mind map them all manually for now:
-	// UPDATE: MapVirtualKey() passes testing on 2k and 10, except for the extended keys
-	// (NumpadDiv and Numlock).
-	case VK_NUMPAD0:  sc = SC_NUMPAD0; break;
-	case VK_NUMPAD1:  sc = SC_NUMPAD1; break;
-	case VK_NUMPAD2:  sc = SC_NUMPAD2; break;
-	case VK_NUMPAD3:  sc = SC_NUMPAD3; break;
-	case VK_NUMPAD4:  sc = SC_NUMPAD4; break;
-	case VK_NUMPAD5:  sc = SC_NUMPAD5; break;
-	case VK_NUMPAD6:  sc = SC_NUMPAD6; break;
-	case VK_NUMPAD7:  sc = SC_NUMPAD7; break;
-	case VK_NUMPAD8:  sc = SC_NUMPAD8; break;
-	case VK_NUMPAD9:  sc = SC_NUMPAD9; break;
-	case VK_DECIMAL:  sc = SC_NUMPADDOT; break;
-	case VK_NUMLOCK:  sc = SC_NUMLOCK; break;
-	case VK_DIVIDE:   sc = SC_NUMPADDIV; break;
-	case VK_MULTIPLY: sc = SC_NUMPADMULT; break;
-	case VK_SUBTRACT: sc = SC_NUMPADSUB; break;
-	case VK_ADD:      sc = SC_NUMPADADD; break;
-
-	// Added in v1.1.26.02 because MapVirtualKey returns the scan code for SysReq
-	// (which is what the key produces while Alt is held down):
+	// PrintScreen: MapVirtualKey() returns 0x54, which is SysReq (produced by pressing
+	// Alt+PrintScreen, but still maps to VK_SNAPSHOT).  Use sc137 for consistency with
+	// what the hook reports for the naked keypress (and therefore what a hotkey is
+	// likely to need).
 	case VK_SNAPSHOT: sc = SC_PRINTSCREEN; break;
+
+	// See comments in sc_to_vk().
+	case VK_NUMLOCK:  sc = SC_NUMLOCK; break;
 	}
 
 	if (sc) // Above found a match.
 		return aReturnSecondary ? 0 : sc; // Callers rely on zero being returned for VKs that don't have secondary SCs.
 
-	// Use the OS API's MapVirtualKey() to resolve any not manually done above:
-	if (   !(sc = MapVirtualKey(aVK, 0))   )
+	if (   !(sc = MapVirtualKey(aVK, MAPVK_VK_TO_VSC_EX))   )
 		return 0; // Indicate "no mapping".
 
-	// Turn on the extended flag for those that need it.
-	// Because MapVirtualKey can only accept (and return) naked scan codes (the low-order byte),
-	// handle extended scan codes that have a non-extended counterpart manually.
-	// Older comment: MapVirtualKey() should include 0xE0 in HIBYTE if key is extended, BUT IT DOESN'T.
-	// There doesn't appear to be any built-in function to determine whether a vk's scan code
-	// is extended or not.  See MSDN topic "keyboard input" for the below list.
-	// Note: NumpadEnter is probably the only extended key that doesn't have a unique VK of its own.
-	// So in that case, probably safest not to set the extended flag.  To send a true NumpadEnter,
-	// as well as a true NumPadDown and any other key that shares the same VK with another, the
-	// caller should specify the sc param to circumvent the need for KeyEvent() to use the below:
+	if (sc & 0xE000) // Prefix byte E0 or E1 (but E1 should only be possible for Pause/Break, which was already handled above).
+		sc = 0x0100 | (sc & 0xFF);
+
 	switch (aVK)
 	{
-	case VK_APPS:     // Application key on keyboards with LWIN/RWIN/Apps.  Not listed in MSDN as "extended"?
-	case VK_CANCEL:   // Ctrl-break
-	case VK_DIVIDE:   // NumpadDivide (slash)
-	case VK_NUMLOCK:
-	// Below are extended but were already handled and returned from higher above:
-	//case VK_LWIN:
-	//case VK_RWIN:
-	//case VK_RMENU:
-	//case VK_RCONTROL:
-	//case VK_RSHIFT: // WinXP needs this to be extended for keybd_event() to work properly.
-	// The rest are multimedia keys:
-	case VK_BROWSER_BACK:
-	case VK_BROWSER_FORWARD:
-	case VK_BROWSER_REFRESH:
-	case VK_BROWSER_STOP:
-	case VK_BROWSER_SEARCH:
-	case VK_BROWSER_FAVORITES:
-	case VK_BROWSER_HOME:
-	case VK_VOLUME_MUTE:
-	case VK_VOLUME_DOWN:
-	case VK_VOLUME_UP:
-	case VK_MEDIA_NEXT_TRACK:
-	case VK_MEDIA_PREV_TRACK:
-	case VK_MEDIA_STOP:
-	case VK_MEDIA_PLAY_PAUSE:
-	case VK_LAUNCH_MAIL:
-	case VK_LAUNCH_MEDIA_SELECT:
-	case VK_LAUNCH_APP1:
-	case VK_LAUNCH_APP2:
-		sc |= 0x0100;
-		break;
-
 	// The following virtual keys have more than one physical key, and thus more than one scan code.
-	// If the caller passed true for aReturnSecondary, the extended version of the scan code will be
-	// returned (all of the following VKs have two SCs):
 	case VK_RETURN:
 	case VK_INSERT:
 	case VK_DELETE:
@@ -4564,7 +4496,30 @@ sc_type vk_to_sc(vk_type aVK, bool aReturnSecondary)
 	case VK_DOWN:
 	case VK_LEFT:
 	case VK_RIGHT:
+		// This is likely to be incorrect for custom layouts where aVK is mapped to two SCs
+		// that differ in the low byte.  There seems to be no simple way to fix that;
+		// the complex ways would be:
+		//  - Build our own conversion table by mapping all SCs to VKs (taking care to detect
+		//    changes to the current keyboard layout).  Find the second SC that maps to aVK,
+		//    or the first one with the 0xE000 flag.  However, there's no guarantee that it
+		//    would correspond to NumpadEnter vs. Enter, or Insert vs. NumpadIns, for example.
+		//  - Load the keyboard layout dll manually and search the SC-to-VK conversion tables.
+		//    What we actually want is to differentiate Numpad keys from their non-Numpad
+		//    counter-parts, and we can do that by checking for the KBDNUMPAD flag.
+		// Custom layouts might cause these issues:
+		//  - If the scan code of the secondary key is changed, the Hotkey control (and
+		//    other sections that don't call this function) may return either "scXXX"
+		//    or a name inconsistent with the key's current VK (but if it's a custom
+		//    layout + standard keyboard, it should match the key's original function).
+		//  - The Hotkey control assumes that the HOTKEYF_EXT flag corresponds to the
+		//    secondary key, but either/both/neither could be extended on a custom layout.
+		//    If it's both/neither, the control would give no way to distinguish.
 		return aReturnSecondary ? (sc | 0x0100) : sc; // Below relies on the fact that these cases return early.
+
+	// See "case SC_RSHIFT:" in sc_to_vk() for comments.
+	case VK_RSHIFT:
+		sc |= 0x0100;
+		break;
 	}
 
 	// Since above didn't return, if aReturnSecondary==true, return 0 to indicate "no secondary SC for this VK".
@@ -4575,94 +4530,56 @@ sc_type vk_to_sc(vk_type aVK, bool aReturnSecondary)
 
 vk_type sc_to_vk(sc_type aSC)
 {
-	// These are mapped manually because MapVirtualKey() doesn't support them correctly, at least
-	// on some -- if not all -- OSs.  The main app also relies upon the values assigned below to
-	// determine which keys should be handled by scan code rather than vk:
+	// aSC is actually a combination of the last byte of the keyboard make code combined with
+	// 0x100 for the extended-key flag.  Although in most cases the flag corresponds to a prefix
+	// byte of 0xE0, it seems it's actually set by the KBDEXT flag in the keyboard layout dll
+	// (it's hard to find documentation).  A few keys have the KBDEXT flag inverted, which means
+	// we can't tell reliably which scan codes really need the 0xE0 prefix, so just handle them
+	// as special cases and hope that the flag never varies between layouts.
+	// If this approach ever fails for custom layouts, some alternatives are:
+	//  - Load the keyboard layout dll manually and check the scan code conversion tables for
+	//    the presence of the KBDEXT flag.
+	//  - Convert aSC and (aSC ^ 0x100), check the conversion of VK back to SC, and if it
+	//    round-trips use that VK instead.
+	// However, it seems that neither MSKLC nor KbdEdit provide a means to change the KBDEXT flag.
+	// US layout: https://github.com/microsoft/Windows-driver-samples/blob/master/input/layout/kbdus/kbdus.c
+	// Keyboard make codes: http://stanislavs.org/helppc/make_codes.html
+	// More low-level keyboard details: https://www.win.tue.nl/~aeb/linux/kbd/scancodes-1.html#ss1.5
 	switch (aSC)
 	{
-	// Some of the modifiers can be mapped with MapVirtualKey(), but the behaviour is not
-	// consistent for all modifiers across all OSes, so it seems best to handle them all here.
-	// For instance, LShift, LCtrl and LAlt can be mapped with MAPVK_VSC_TO_VK_EX, but RCtrl
-	// and RAlt must have 0x100 translated to 0xE000, which requires at least Windows Vista,
-	// while RShift only works as 0x36, not 0xE036, despite being an extended key.
-	case SC_LSHIFT:      return VK_LSHIFT; // Modifiers are listed first for performance.
-	case SC_RSHIFT:      return VK_RSHIFT;
-	case SC_LCONTROL:    return VK_LCONTROL;
-	case SC_RCONTROL:    return VK_RCONTROL;
-	case SC_LALT:        return VK_LMENU;
-	case SC_RALT:        return VK_RMENU;
+	// RShift doesn't have the 0xE0 prefix but has KBDEXT.  The US layout sample says
+	// "Right-hand Shift key must have KBDEXT bit set", so it's probably always set.
+	// KbdEdit seems to follow this rule when VK_RSHIFT is assigned to a non-ext key.
+	// It's definitely possible to assign RShift a different VK, but 1) it can't be
+	// done with MSKLC, and 2) KbdEdit clears the ext flag (so aSC != SC_RSHIFT).
+	case SC_RSHIFT:
+	// NumLock doesn't have the 0xE0 prefix but has KBDEXT.  Actually pressing the key
+	// will produce VK_PAUSE if CTRL is down, but with SC_NUMLOCK rather than SC_PAUSE.
+	case SC_NUMLOCK:
+		// These cases can be handled by adjusting aSC to reflect the fact that these
+		// keys don't really have the 0xE0 prefix, and allowing MapVirtualKey() to be
+		// called below in case they have been remapped.
+		aSC &= 0xFF;
+		break;
 
-	// These require explicit mapping on 2k/XP since (aSC & 0xFF) produces the wrong VK,
-	// but would work on Vista and later with 0x100 translated to 0xE000:
-	case SC_LWIN:        return VK_LWIN;
-	case SC_RWIN:        return VK_RWIN;
-
-	case SC_NUMLOCK:     return VK_NUMLOCK; // Requires explicit mapping even on Windows 10.
-	case SC_NUMPADDIV:   return VK_DIVIDE; // Requires explicit mapping on 2k/XP (see above).
-
-	// These are handled correctly by MapVirtualKey(), but are kept here to ensure consistency
-	// with the other Numpad keys (such as with unconventional custom keyboard layouts, in theory):
-	case SC_NUMPADENTER: return VK_RETURN; // Same VK as SC_ENTER, which is handled by MapVirtualKey().
-	case SC_NUMPADMULT:  return VK_MULTIPLY; // Only this key has this SC.
-	case SC_NUMPADSUB:   return VK_SUBTRACT; //
-	case SC_NUMPADADD:   return VK_ADD;      //
-
-	// The following are ambiguous because the mapping depends on Numlock.  But be careful
-	// changing the value to the other choice because some callers rely upon the values
-	// assigned below to determine which keys should be handled by scan code rather than vk.
-	// For that reason, this is done manually even though testing indicates that both of the
-	// MapVirtualKey() calls below would produce this same result (which is what happens for
-	// extended keys such as SC_DELETE).
-	case SC_NUMPADDEL:   return VK_DELETE;
-	case SC_NUMPADCLEAR: return VK_CLEAR;
-	case SC_NUMPADINS:   return VK_INSERT;
-	case SC_NUMPADUP:    return VK_UP;
-	case SC_NUMPADDOWN:  return VK_DOWN;
-	case SC_NUMPADLEFT:  return VK_LEFT;
-	case SC_NUMPADRIGHT: return VK_RIGHT;
-	case SC_NUMPADHOME:  return VK_HOME;
-	case SC_NUMPADEND:   return VK_END;
-	case SC_NUMPADPGUP:  return VK_PRIOR;
-	case SC_NUMPADPGDN:  return VK_NEXT;
-
-	// No callers currently need the following alternate virtual key mappings.  If it is ever needed,
-	// could have a new aReturnSecondary parameter that if true, causes these to be returned rather
-	// than the above:
-	//case SC_NUMPADDEL:   return VK_DECIMAL;
-	//case SC_NUMPADCLEAR: return VK_NUMPAD5; // Same key as Numpad5 on most keyboards?
-	//case SC_NUMPADINS:   return VK_NUMPAD0;
-	//case SC_NUMPADUP:    return VK_NUMPAD8;
-	//case SC_NUMPADDOWN:  return VK_NUMPAD2;
-	//case SC_NUMPADLEFT:  return VK_NUMPAD4;
-	//case SC_NUMPADRIGHT: return VK_NUMPAD6;
-	//case SC_NUMPADHOME:  return VK_NUMPAD7;
-	//case SC_NUMPADEND:   return VK_NUMPAD1;
-	//case SC_NUMPADPGUP:  return VK_NUMPAD9;
-	//case SC_NUMPADPGDN:  return VK_NUMPAD3;	
-
-	case SC_APPSKEY:	return VK_APPS; // Added in v1.1.17.00.
-	case SC_PAUSE:      return VK_PAUSE; // Added in v1.1.26.01.
-	case SC_PRINTSCREEN: return VK_SNAPSHOT; // Added in v1.1.26.02 to ensure consistency with vk_to_sc() and fix Win2k/XP.
+	// Pause actually generates 0xE1,0x1D,0x45, or in other words, E1,LCtrl,NumLock.
+	// kbd.h says "We must convert the E1+LCtrl to BREAK, then ignore the Numlock".
+	// So 0xE11D maps to and from VK_PAUSE, and 0x45 is "ignored".  However, the hook
+	// receives only 0x45, not 0xE11D (which I guess would be truncated to 0x1D/ctrl).
+	// The documentation for KbdEdit also indicates the mapping of Pause is "hard-wired":
+	// http://www.kbdedit.com/manual/low_level_edit_vk_mappings.html
+	case SC_PAUSE:
+		return VK_PAUSE;
 	}
 
 	if (aSC & 0x100) // Our extended-key flag.
 	{
-		// This section was added in v1.1.26.01 to fix multimedia keys such as Volume_Up.
-		// Passing the 0xE000 extended scan code prefix should work on Vista and up, though
-		// this appears to have not made it into the documentation at MSDN.  Details can be
-		// found in archives of Michael Kaplan's blog (the original blog has been taken down):
+		// Since it wasn't handled above, assume the extended-key flag corresponds to the 0xE0
+		// prefix byte.  Passing 0xE000 should work on Vista and up, though it appears to be
+		// documented only for MapVirtualKeyEx() as at 2019-10-26.  Details can be found in
+		// archives of Michael Kaplan's blog (the original blog has been taken down):
 		// https://web.archive.org/web/20070219075710/http://blogs.msdn.com/michkap/archive/2006/08/29/729476.aspx
-		if (UINT vk = MapVirtualKey(0xE000 | (aSC & 0xFF), MAPVK_VSC_TO_VK))
-			return vk;
-		// Since MapVirtualKey's support for 0xE000 isn't properly documented, assume that
-		// it might fail even on Vista or later.  Fall back to the old method in that case.
-		// Testing shows that it always returns 0 on XP.
+		aSC = 0xE000 | (aSC & 0xFF);
 	}
-	// Use the OS API call to resolve any not manually set above.  This should correctly
-	// resolve even elements such as SC_INSERT, which is an extended scan code, because
-	// it passes in only the low-order byte which is SC_NUMPADINS.  In the case of SC_INSERT
-	// and similar ones, MapVirtualKey() will return the same vk for both, which is correct.
-	// Only pass the LOBYTE because even if the OS supports an extended scan code, aSC uses
-	// our non-standard 0x100 rather than the standard 0xE000 (see above).
-	return MapVirtualKey((BYTE)aSC, MAPVK_VSC_TO_VK);
+	return MapVirtualKey(aSC, MAPVK_VSC_TO_VK_EX);
 }
