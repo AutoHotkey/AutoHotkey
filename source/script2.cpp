@@ -497,18 +497,13 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 			*end_pos = '\0';  // temporarily terminate the string here.
 
 			modifiersLR = 0;  // Init prior to below.
-			// For backward compatibility, the Input command handles all keys by VK if
-			// one is returned by TextToVK().  Although this behaviour seems like a bug,
-			// changing it would require changing the way ErrorLevel is determined (so
-			// that the correct name is returned for the primary SC of any key), which
-			// carries a larger risk of breaking scripts.
-			// Also handle the key by VK if it was given by number, such as {vk26}.
+			// Handle the key by VK if it was given by number, such as {vk26}.
 			// Otherwise, for any key name which has a VK shared by two possible SCs
 			// (such as Up and NumpadUp), handle it by SC so it's identified correctly.
 			if (vk = TextToVK(end_key + 1, &modifiersLR, true))
 			{
 				vk_by_number = ctoupper(end_key[1]) == 'V' && ctoupper(end_key[2]) == 'K';
-				if (ScriptObject && !vk_by_number && (sc = vk_to_sc(vk, true)))
+				if (!vk_by_number && (sc = vk_to_sc(vk, true)))
 				{
 					sc ^= 0x100; // Convert sc to the primary scan code, which is the one named by end_key.
 					vk = 0; // Handle it only by SC.
@@ -772,7 +767,7 @@ LPTSTR input_type::GetEndReason(LPTSTR aKeyBuf, int aKeyBufSize, bool aCombined)
 			*key_name = '\0';
 			if (EndingBySC)
 				SCtoKeyName(EndingSC, key_name, aKeyBufSize, false);
-			if (!*key_name && !(aCombined && EndingBySC))
+			if (!*key_name)
 				VKtoKeyName(EndingVK, key_name, aKeyBufSize, !EndingBySC);
 			if (!*key_name)
 				sntprintf(key_name, aKeyBufSize, _T("sc%03X"), EndingSC);
