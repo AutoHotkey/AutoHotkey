@@ -450,7 +450,6 @@ key_to_vk_type g_key_to_vk[] =
 // the primary vk because otherwise, if the user configures only naked-NumPadEnter to do something,
 // RegisterHotkey() would register that vk and ENTER would also be configured to do the same thing.
 , {_T("Enter"), VK_RETURN}  // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
-, {_T("Return"), VK_RETURN}
 
 , {_T("NumpadDel"), VK_DELETE}
 , {_T("NumpadIns"), VK_INSERT}
@@ -467,7 +466,6 @@ key_to_vk_type g_key_to_vk[] =
 , {_T("PrintScreen"), VK_SNAPSHOT}
 , {_T("CtrlBreak"), VK_CANCEL}  // Might want to verify this, and whether it has any peculiarities.
 , {_T("Pause"), VK_PAUSE} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
-, {_T("Break"), VK_PAUSE} // Not really meaningful, but kept for as a synonym of Pause for backward compatibility.  See CtrlBreak.
 , {_T("Help"), VK_HELP}  // VK_HELP is probably not the extended HELP key.  Not sure what this one is.
 , {_T("Sleep"), VK_SLEEP}
 
