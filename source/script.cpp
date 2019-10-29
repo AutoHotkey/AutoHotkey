@@ -12548,6 +12548,12 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ExprTokenType *aResultToken, Lin
 							line_to_execute = NULL; // Do not execute default case.
 							break;
 						}
+						if (case_value.symbol == SYM_STRING)
+						{
+							// Work around the v1 behaviour: SYM_STRING is always considered TRUE.
+							case_value.symbol = SYM_OPERAND;
+							case_value.buf = NULL;
+						}
 						bool found = switch_value.symbol == SYM_INVALID ? TokenToBOOL(case_value)
 							: TokensAreEqual(switch_value, case_value);
 						if (case_value.symbol == SYM_OBJECT)
