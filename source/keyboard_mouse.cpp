@@ -4422,7 +4422,7 @@ LPTSTR GetKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize, LPTSTR aD
 	if (!aVK)
 		aVK = sc_to_vk(aSC);
 	else
-		if (!aSC)
+		if (!aSC && (aVK == VK_RETURN || !(aSC = vk_to_sc(aVK, true)))) // Prefer the non-Numpad name.
 			aSC = vk_to_sc(aVK);
 
 	// Check SC first to properly differentiate between Home/NumpadHome, End/NumpadEnd, etc.

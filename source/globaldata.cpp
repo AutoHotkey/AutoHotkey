@@ -446,11 +446,12 @@ key_to_vk_type g_key_to_vk[] =
 // the hook from telling the difference between it and Numpad7 since the hook is currently set
 // to handle an incoming key by either vk or sc, but not both.
 
-// Even though ENTER is probably less likely to be assigned than NumpadEnter, must have ENTER as
-// the primary vk because otherwise, if the user configures only naked-NumPadEnter to do something,
-// RegisterHotkey() would register that vk and ENTER would also be configured to do the same thing.
+// For VKs with multiple SCs, such as VK_RETURN, the keyboard hook is made mandatory unless the
+// user specifies the VK by number.  This ensures that Enter:: and NumpadEnter::, for example,
+// only fire when the appropriate key is pressed.
 , {_T("Enter"), VK_RETURN}  // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
 
+// See g_key_to_sc for why these Numpad keys are handled here:
 , {_T("NumpadDel"), VK_DELETE}
 , {_T("NumpadIns"), VK_INSERT}
 , {_T("NumpadClear"), VK_CLEAR}  // same physical key as Numpad5 on most keyboards?
@@ -471,8 +472,6 @@ key_to_vk_type g_key_to_vk[] =
 
 , {_T("AppsKey"), VK_APPS}
 
-// UPDATE: For the NT/2k/XP version, now doing these by VK since it's likely to be
-// more compatible with non-standard or non-English keyboards:
 , {_T("LControl"), VK_LCONTROL} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
 , {_T("RControl"), VK_RCONTROL} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
 , {_T("LCtrl"), VK_LCONTROL} // Abbreviated versions of the above.
@@ -486,17 +485,11 @@ key_to_vk_type g_key_to_vk[] =
 , {_T("LWin"), VK_LWIN}
 , {_T("RWin"), VK_RWIN}
 
-// The left/right versions of these are handled elsewhere since their virtual keys aren't fully API-supported:
 , {_T("Control"), VK_CONTROL} // So that VKtoKeyName() delivers consistent results, always have the preferred name first.
 , {_T("Ctrl"), VK_CONTROL}  // An alternate for convenience.
 , {_T("Alt"), VK_MENU}
 , {_T("Shift"), VK_SHIFT}
-/*
-These were used to confirm the fact that you can't use RegisterHotkey() on VK_LSHIFT, even if the shift
-modifier is specified along with it:
-, {_T("LShift"), VK_LSHIFT}
-, {_T("RShift"), VK_RSHIFT}
-*/
+
 , {_T("F1"), VK_F1}
 , {_T("F2"), VK_F2}
 , {_T("F3"), VK_F3}
@@ -526,13 +519,11 @@ modifier is specified along with it:
 , {_T("LButton"), VK_LBUTTON}
 , {_T("RButton"), VK_RBUTTON}
 , {_T("MButton"), VK_MBUTTON}
-// Supported in only in Win2k and beyond:
 , {_T("XButton1"), VK_XBUTTON1}
 , {_T("XButton2"), VK_XBUTTON2}
-// Custom/fake VKs for use by the mouse hook (supported only in WinNT SP3 and beyond?):
+// Custom/fake VKs for use by the mouse hook:
 , {_T("WheelDown"), VK_WHEEL_DOWN}
 , {_T("WheelUp"), VK_WHEEL_UP}
-// Lexikos: Added fake VKs for support for horizontal scrolling in Windows Vista and later.
 , {_T("WheelLeft"), VK_WHEEL_LEFT}
 , {_T("WheelRight"), VK_WHEEL_RIGHT}
 
@@ -565,10 +556,13 @@ modifier is specified along with it:
 
 
 
+// For VKs with multiple SCs, one is handled by VK and one by SC.  Since MapVirtualKey() prefers
+// non-extended keys, we treat extended keys as secondary and handle them by SC.  This simplifies
+// the logic in vk_to_sc().  Another reason not to handle the Numlock-off Numpad keys here is that
+// extra logic would be required to prioritize the Numlock-on VKs.  By contrast, handling the
+// non-Numpad keys here requires a little extra logic in GetKeyName() to have it return the generic
+// names when a generic VK (such as VK_END) is given without SC.
 key_to_sc_type g_key_to_sc[] =
-// Even though ENTER is probably less likely to be assigned than NumpadEnter, must have ENTER as
-// the primary vk because otherwise, if the user configures only naked-NumPadEnter to do something,
-// RegisterHotkey() would register that vk and ENTER would also be configured to do the same thing.
 { {_T("NumpadEnter"), SC_NUMPADENTER}
 
 , {_T("Delete"), SC_DELETE}
