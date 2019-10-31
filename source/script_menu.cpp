@@ -113,8 +113,8 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 					// destroying it later.
 					mCustomIcon = NULL;  // To indicate that there is no custom icon.
 					mCustomIconSmall = NULL;
-					if (mCustomIconFile)
-						*mCustomIconFile = '\0';
+					free(mCustomIconFile);
+					mCustomIconFile = NULL;
 					mCustomIconNumber = 0;
 					UpdateTrayIcon(true);  // Need to use true in this case too.
 				}
