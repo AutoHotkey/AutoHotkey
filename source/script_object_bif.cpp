@@ -125,7 +125,11 @@ BIF_DECL(Op_ObjInvoke)
 	else
 	{
 		if (aParam[0]->symbol != SYM_MISSING)
+		{
 			name = TokenToString(*aParam[0], name_buf);
+			if (!*name && TokenToObject(*aParam[0]))
+				_f_throw(ERR_TYPE_MISMATCH);
+		}
 		++aParam;
 		--aParamCount;
 	}
