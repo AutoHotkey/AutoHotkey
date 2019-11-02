@@ -780,7 +780,7 @@ class FileObject : public Object
 		}
 		else
 		{
-			ExprTokenType &token_to_write = *aParam[1];
+			ExprTokenType &token_to_write = *aParam[0];
 
 			if (is_float)
 			{
