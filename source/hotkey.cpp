@@ -993,7 +993,7 @@ ResultType Hotkey::IfWin(LPTSTR aIfWin, LPTSTR aWinTitle, LPTSTR aWinText)
 
 
 
-ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj)
+ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultToken)
 // Hotkey "If"  ; Set null criterion.
 // Hotkey "If", "Exact-expression-text"
 // Hotkey "If", FunctionObject
@@ -1005,8 +1005,10 @@ ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj)
 		{
 			if (!cp) // End of the list and it wasn't found.
 			{
-				if (  !(cp = AddHotkeyIfExpr())  )
+				if (!ValidateFunctor(aExprObj, 1, aResultToken, ERR_PARAM2_INVALID))
 					return FAIL;
+				if (  !(cp = AddHotkeyIfExpr())  )
+					return aResultToken.Error(ERR_OUTOFMEM);
 				aExprObj->AddRef();
 				cp->Type = HOT_IF_CALLBACK;
 				cp->Callback = aExprObj;
@@ -1056,8 +1058,8 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	// (i.e. it's retaining its current label).
 	if (aJumpToLabel) // Provided by caller or by name lookup above.
 	{
-		// Validate after possibly resolving aJumpToLabel above so that the error message
-		// is correct (i.e. no "label not found" when a function was found but rejected).
+		// Currently using Func* cast rather than ValidateFunctor() because of the need to
+		// support UseErrorLevel (which should be removed when the Error model is revised).
 		Func *func = LabelPtr(aJumpToLabel).ToFunc();
 		if (func && func->mMinParams > 0)
 			RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, ERR_HOTKEY_FUNC_PARAMS, func->mName);

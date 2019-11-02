@@ -2387,17 +2387,15 @@ ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventK
 	else
 		if (!NameToEventHandler(name, func))
 			_o_throw(ERR_PARAM2_INVALID, name);
-	ResultType result = OnEvent(aControl, aEvent, aEventKind, func, name, max_threads);
+	ResultType result = OnEvent(aControl, aEvent, aEventKind, func, name, max_threads, aResultToken);
 	if (func)
 		func->Release();
-	if (!result)
-		_o_throw(ERR_OUTOFMEM);
-	return OK;
+	return result;
 }
 
 
 ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
-	, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads)
+	, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads, ResultToken &aResultToken)
 {
 	MsgMonitorList &handlers = aControl ? aControl->events : mEvents;
 	MsgMonitorStruct *mon;
@@ -2420,11 +2418,39 @@ ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventK
 	if (!mon)
 	{
 		if (aFunc)
+		{
+			// Since this callback is being registered for the first time, validate.
+			int param_count = 2;
+			switch (aEventKind)
+			{
+			case GUI_EVENTKIND_COMMAND:		param_count = 1; break;
+			case GUI_EVENTKIND_EVENT:
+				switch (aEvent)
+				{
+				case GUI_EVENT_DROPFILES:	param_count = 5; break;
+				case GUI_EVENT_CLOSE:
+				case GUI_EVENT_ESCAPE:		param_count = 1; break;
+				case GUI_EVENT_RESIZE:		param_count = 4; break;
+				case GUI_EVENT_CONTEXTMENU:	param_count = 5 + (aControl == nullptr); break;
+				case GUI_EVENT_CLICK:		param_count = 2 + (aControl->type == GUI_CONTROL_LINK); break;
+				case GUI_EVENT_ITEMSELECT:
+					if (aControl->type == GUI_CONTROL_TREEVIEW)
+						break;
+				case GUI_EVENT_ITEMCHECK:
+				case GUI_EVENT_ITEMEXPAND:
+					param_count = 3;
+					break;
+				}
+			}
+			if (!ValidateFunctor(aFunc, param_count, aResultToken))
+				return FAIL;
+			// Add the callback.
 			mon = handlers.Add(aEvent, aFunc, append);
+		}
 		else
 			mon = handlers.Add(aEvent, aMethodName, append);
 		if (!mon)
-			return FAIL;
+			return aResultToken.Error(ERR_OUTOFMEM);
 	}
 	mon->instance_count = 0;
 	mon->max_instances = aMaxThreads;

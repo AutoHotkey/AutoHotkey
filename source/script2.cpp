@@ -14454,7 +14454,7 @@ BIF_DECL(BIF_Hotkey)
 	{
 		if (!ParamIndexIsOmitted(1))
 			functor = TokenToFunctor(*aParam[1]);
-		result = Hotkey::IfExpr(aParam1, functor);
+		result = Hotkey::IfExpr(aParam1, functor, aResultToken);
 	}
 	else
 	{
@@ -14494,16 +14494,21 @@ BIF_DECL(BIF_SetTimer)
 		if (!callback)
 			// Either the thread was not launched by a timer or the timer has been deleted.
 			_f_throw(ERR_PARAM1_MUST_NOT_BE_BLANK);
+		callback->AddRef();
 	}
 	else
-		callback = ParamIndexToObject(0);
-	if (callback)
-		callback->AddRef();
-	else
 	{
-		LPTSTR arg1 = ParamIndexToString(0, _f_number_buf);
-		if (  !(callback = StringToFunctor(arg1))  )
-			_f_throw(ERR_PARAM1_INVALID, arg1);
+		callback = ParamIndexToObject(0);
+		if (callback)
+			callback->AddRef();
+		else
+		{
+			LPTSTR arg1 = ParamIndexToString(0, _f_number_buf);
+			if (  !(callback = StringToFunctor(arg1))  )
+				_f_throw(ERR_PARAM1_INVALID, arg1);
+		}
+		if (!ValidateFunctor(callback, 0, aResultToken))
+			return;
 	}
 	__int64 period = DEFAULT_TIMER_PERIOD;
 	int priority = 0;
@@ -14812,19 +14817,9 @@ BIF_DECL(BIF_On)
 	MsgMonitorList &handlers = *phandlers;
 
 
-	IObject *callback;
-	if (callback = TokenToFunctor(*aParam[0]))
-	{
-		// Ensure this function is a valid one (if possible).
-		if (Func *func = dynamic_cast<Func *>(callback))
-			if (func->mMinParams > (event_type == FID_OnExit ? 2 : 1))
-			{
-				callback->Release();
-				callback = NULL;
-			}
-	}
-	if (!callback)
-		_f_throw(ERR_PARAM1_INVALID);
+	IObject *callback = TokenToFunctor(*aParam[0]);
+	if (!ValidateFunctor(callback, event_type == FID_OnExit ? 2 : 1, aResultToken, ERR_PARAM1_INVALID))
+		return;
 	
 	int mode = 1; // Default.
 	if (!ParamIndexIsOmitted(1))
@@ -15049,12 +15044,19 @@ BIF_DECL(BIF_CallbackCreate)
 	int actual_param_count;
 	if (!ParamIndexIsOmittedOrEmpty(2)) // A parameter count was specified.
 	{
+		__int64 maxparams;
+		bool has_maxparams = GetObjectIntProperty(func, _T("MaxParams"), maxparams, aResultToken, true) != INVOKE_NOT_HANDLED;
+		if (aResultToken.Exited())
+			return;
+		
 		actual_param_count = ParamIndexToInt(2);
+		int script_params = pass_params_pointer ? 1 : actual_param_count;
 		if (  actual_param_count < 0 // Invalid.
-			|| has_minparams && (pass_params_pointer ? 1 : actual_param_count) < (int)minparams  ) // Too many mandatory parameters.
+			|| has_minparams && script_params < (int)minparams // Too many mandatory parameters.
+			|| has_maxparams && script_params > (int)maxparams  ) // Too few.
 		{
 			func->Release();
-			_f_throw(ERR_PARAM3_INVALID);
+			_f_throw(ERR_PARAM_COUNT_INVALID); // Seems a bit clearer than "Invalid parameter #3".
 		}
 	}
 	else if (!has_minparams || pass_params_pointer && require_param_count)
@@ -17084,6 +17086,46 @@ IObject *StringToFunctor(LPTSTR aStr)
 {
 	Func *func = g_script.FindFunc(aStr);
 	return func ? func->CloseIfNeeded() : NULL;
+}
+
+
+
+ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, LPTSTR aNullErr)
+{
+	if (!aFunc)
+		return aResultToken.Error(aNullErr);
+	__int64 min_params, max_params;
+	auto min_result = /*aParamCount < 0 ? INVOKE_NOT_HANDLED
+		:*/ GetObjectIntProperty(aFunc, _T("MinParams"), min_params, aResultToken, true);
+	if (aResultToken.Exited())
+		return FAIL; // For maintainability, consider EARLY_EXIT the same as failure (boolean false).
+	//if (aParamCount < 0) // Caller's signal to skip MinParams check.
+	//	aParamCount = -aParamCount;
+	auto max_result = aParamCount == 0 ? INVOKE_NOT_HANDLED // No need to check MaxParams when passing 0 params.
+		: GetObjectIntProperty(aFunc, _T("MaxParams"), max_params, aResultToken, true);
+	if (aResultToken.Exited())
+		return FAIL;
+	if (min_result != INVOKE_NOT_HANDLED && aParamCount < (int)min_params)
+		return aResultToken.Error(ERR_PARAM_COUNT_INVALID);
+	if (max_result != INVOKE_NOT_HANDLED && aParamCount > (int)max_params)
+	{
+		__int64 is_variadic;
+		auto result = GetObjectIntProperty(aFunc, _T("IsVariadic"), is_variadic, aResultToken, true);
+		if (aResultToken.Exited())
+			return FAIL;
+		if (result == INVOKE_NOT_HANDLED || !is_variadic)
+			return aResultToken.Error(ERR_PARAM_COUNT_INVALID);
+	}
+	// If either MinParams or MaxParams was confirmed to exist, this is likely a valid
+	// function object, so skip the following check for performance.  Otherwise, catch
+	// likely errors by checking that the object is callable.
+	if (min_result == INVOKE_NOT_HANDLED && max_result == INVOKE_NOT_HANDLED)
+		if (Object *obj = dynamic_cast<Object *>(aFunc))
+			if (!obj->HasMethod(_T("Call")))
+				return aResultToken.Error(ERR_TYPE_MISMATCH);
+		// Otherwise: COM objects can be callable via DISPID_VALUE.  There's probably
+		// no way to determine whether the object supports that without invoking it.
+	return OK;
 }
 
 

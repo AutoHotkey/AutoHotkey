@@ -178,14 +178,19 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 				_o_throw(ERR_PARAM2_INVALID);
 			callback = NULL;
 		}
-		else if (callback) 
-			callback->AddRef();
-		else // Param #2 is not an object of any kind; must be a function name.
+		else 
 		{
-			if (!*param2) // Allow the function name to default to the menu item name.
-				param2 = param1;
-			if (  !(callback = StringToFunctor(param2))  )
-				_o_throw(ERR_PARAM2_INVALID, param2);
+			// Param #2 is not a submenu.
+			if (callback) 
+				callback->AddRef();
+			else // Param #2 is not an object of any kind; must be a function name.
+			{
+				if (!*param2) // Allow the function name to default to the menu item name.
+					param2 = param1;
+				callback = StringToFunctor(param2);
+			}
+			if (!ValidateFunctor(callback, 3, aResultToken, ERR_PARAM2_INVALID))
+				return FAIL;
 		}
 	}
 

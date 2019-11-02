@@ -753,9 +753,9 @@ enum GuiEventTypes {GUI_EVENT_NONE  // NONE must be zero for any uses of ZeroMem
 	, GUI_EVENT_ITEMCHECK, GUI_EVENT_ITEMSELECT, GUI_EVENT_ITEMFOCUS, GUI_EVENT_ITEMEXPAND
 	, GUI_EVENT_ITEMEDIT
 	, GUI_EVENT_FOCUS, GUI_EVENT_LOSEFOCUS
+	, GUI_EVENT_NAMED_COUNT
 	// The rest don't have explicit names in GUI_EVENT_NAMES:
-	, GUI_EVENT_WM_COMMAND
-	, GUI_EVENT_DIGIT_0 = 48 // Here just as a reminder that from this value up to 0xFF are reserved so that a single printable character or digit (mnemonic) can be sent.
+	, GUI_EVENT_WM_COMMAND = GUI_EVENT_NAMED_COUNT
 };
 
 enum GuiEventKinds {GUI_EVENTKIND_EVENT = 0, GUI_EVENTKIND_NOTIFY, GUI_EVENTKIND_COMMAND};
