@@ -51,6 +51,7 @@ modLR_type g_modifiersLR_logical = 0;
 modLR_type g_modifiersLR_logical_non_ignored = 0;
 modLR_type g_modifiersLR_physical = 0;
 modLR_type g_modifiersLR_numpad_mask = 0;
+modLR_type g_modifiersLR_ctrlaltdel_mask = 0;
 
 #ifdef FUTURE_USE_MOUSE_BUTTONS_LOGICAL
 WORD g_mouse_buttons_logical = 0;

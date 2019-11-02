@@ -2193,7 +2193,9 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 		// probably very common because whenever the welcome screen is disabled, that's the default behavior?:
 		// Control Panel > User Accounts > Use the welcome screen for fast and easy logon
 		if (   (aVK == VK_DELETE || aVK == VK_DECIMAL) && !aKeyUp         // Both of these qualify, see notes.
-			&& (g_modifiersLR_physical & (MOD_LCONTROL | MOD_RCONTROL)) // At least one CTRL key is physically down.
+			// Below: At least one CTRL key is physically down.  physical and ctrlaltdel_mask are combined
+			// because ctrlaltdel_mask excludes fake LCtrl (from AltGr) but might not be tracked as reliably.
+			&& (g_modifiersLR_physical & g_modifiersLR_ctrlaltdel_mask & (MOD_LCONTROL | MOD_RCONTROL))
 			&& (g_modifiersLR_physical & (MOD_LALT | MOD_RALT))         // At least one ALT key is physically down.
 			&& !(g_modifiersLR_physical & (MOD_LSHIFT | MOD_RSHIFT))   )// Neither shift key is phys. down (WIN is ok).
 		{
@@ -3164,6 +3166,8 @@ void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 		// is now omitted below:
 		bool is_not_ignored = (aEvent.dwExtraInfo != KEY_IGNORE);
 		bool is_fake_shift = aEvent.scanCode == SC_FAKE_LSHIFT || aEvent.scanCode == SC_FAKE_RSHIFT;
+		bool is_fake_ctrl = aEvent.scanCode == SC_FAKE_LCTRL; // AltGr.
+		// For backward-compatibility, fake LCtrl is marked as physical.
 		bool event_is_physical = !is_fake_shift && KeybdEventIsPhysical(aEvent.flags, aVK, aKeyUp);
 
 		if (aKeyUp)
@@ -3194,6 +3198,8 @@ void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 			{
 				g_modifiersLR_physical &= ~modLR;
 				g_PhysicalKeyState[aVK] = 0;
+				if (!is_fake_ctrl)
+					g_modifiersLR_ctrlaltdel_mask &= ~modLR;
 				// If a modifier with an available neutral VK has been released, update the state
 				// of the neutral VK to be that of the opposite key (the one that wasn't released):
 				switch (aVK)
@@ -3220,6 +3226,8 @@ void UpdateKeybdState(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 			{
 				g_modifiersLR_physical |= modLR;
 				g_PhysicalKeyState[aVK] = STATE_DOWN;
+				if (!is_fake_ctrl)
+					g_modifiersLR_ctrlaltdel_mask |= modLR;
 				// If a modifier with an available neutral VK has been pressed down (unlike LWIN & RWIN),
 				// update the state of the neutral VK to be down also:
 				switch (aVK)
@@ -4418,6 +4426,7 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 
 		g_modifiersLR_physical = 0;  // Best to make this zero, otherwise keys might get stuck down after a Send.
 		g_modifiersLR_numpad_mask = 0;
+		g_modifiersLR_ctrlaltdel_mask = 0;
 		g_modifiersLR_logical = g_modifiersLR_logical_non_ignored = (aAllModifiersUp ? 0 : GetModifierLRState(true));
 
 		ZeroMemory(g_PhysicalKeyState, sizeof(g_PhysicalKeyState));
