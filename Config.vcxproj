@@ -53,6 +53,7 @@
       <StringPooling>true</StringPooling>
       <ExceptionHandling></ExceptionHandling>
       <BufferSecurityCheck>false</BufferSecurityCheck>
+      <AdditionalOptions Condition="$(PlatformToolsetVersion) &gt;= 140">/Zc:threadSafeInit- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link> <!-- note linker settings don't apply to lib_pcre -->
       <GenerateDebugInformation>false</GenerateDebugInformation>
