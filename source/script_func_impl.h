@@ -37,10 +37,20 @@
 #define ParamIndexToOptionalBOOL(index, def)		ParamIndexToOptionalType(BOOL, index, def)
 #define ParamIndexToOptionalVar(index)				(((index) < aParamCount && aParam[index]->symbol == SYM_VAR) ? aParam[index]->var : NULL)
 
-#define ParamIndexToOptionalStringDef(index, def, ...)	(ParamIndexIsOmitted(index) ? (def) : ParamIndexToString(index, __VA_ARGS__))
+inline LPTSTR _OptionalStringDefaultHelper(LPTSTR aDef, LPTSTR aBuf = NULL, size_t *aLength = NULL)
+{
+	if (aLength)
+		*aLength = _tcslen(aDef);
+	return aDef;
+}
+#define ParamIndexToOptionalStringDef(index, def, ...) \
+	(ParamIndexIsOmitted(index) ? _OptionalStringDefaultHelper(def, __VA_ARGS__) \
+								: ParamIndexToString(index, __VA_ARGS__))
 // The macro below defaults to "", since that is by far the most common default.
 // This allows it to skip the check for SYM_MISSING, which always has marker == _T("").
-#define ParamIndexToOptionalString(index, ...)		(((index) < aParamCount) ? ParamIndexToString(index, __VA_ARGS__) : _T(""))
+#define ParamIndexToOptionalString(index, ...) \
+	(((index) < aParamCount) ? ParamIndexToString(index, __VA_ARGS__) \
+							: _OptionalStringDefaultHelper(_T(""), __VA_ARGS__))
 
 #define ParamIndexToOptionalObject(index)			((index) < aParamCount ? ParamIndexToObject(index) : NULL)
 
