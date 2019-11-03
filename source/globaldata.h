@@ -56,9 +56,7 @@ extern WORD g_mouse_buttons_logical; // A bitwise combination of MK_LBUTTON, etc
 #define STATE_ON 0x01
 extern BYTE g_PhysicalKeyState[VK_ARRAY_COUNT];
 extern bool g_BlockWinKeys;
-extern DWORD g_HookReceiptOfLControlMeansAltGr;
-extern DWORD g_IgnoreNextLControlDown;
-extern DWORD g_IgnoreNextLControlUp;
+extern DWORD g_AltGrExtraInfo;
 
 extern BYTE g_MenuMaskKeyVK; // For #MenuMaskKey.
 extern USHORT g_MenuMaskKeySC;

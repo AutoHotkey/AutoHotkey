@@ -57,9 +57,7 @@ WORD g_mouse_buttons_logical = 0;
 // requires its format to be the same as that returned from GetKeyboardState():
 BYTE g_PhysicalKeyState[VK_ARRAY_COUNT] = {0};
 bool g_BlockWinKeys = false;
-DWORD g_HookReceiptOfLControlMeansAltGr = 0; // In these cases, zero is used as a false value, any others are true.
-DWORD g_IgnoreNextLControlDown = 0;          //
-DWORD g_IgnoreNextLControlUp = 0;            //
+DWORD g_AltGrExtraInfo = 0;
 
 BYTE g_MenuMaskKeyVK = VK_CONTROL; // For #MenuMaskKey.
 USHORT g_MenuMaskKeySC = SC_LCONTROL;

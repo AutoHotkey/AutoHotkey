@@ -1754,46 +1754,14 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 		if (we_turned_blockinput_off)
 			Line::ScriptBlockInput(false);
 
-		vk_type control_vk;      // When not set somewhere below, these are left uninitialized to help catch bugs.
-		HKL target_keybd_layout; //
-		ResultType r_mem, &target_layout_has_altgr = caller_is_keybd_hook ? r_mem : sTargetLayoutHasAltGr; // Same as above.
-		bool hookable_ralt, lcontrol_was_down, do_detect_altgr;
-		if (do_detect_altgr = hookable_ralt = (aVK == VK_RMENU && !put_event_into_array && g_KeybdHook)) // This is an RALT that the hook will be able to monitor.
-		{
-			if (!caller_is_keybd_hook) // sTargetKeybdLayout is set/valid only by SendKeys().
-				target_keybd_layout = sTargetKeybdLayout;
-			else
-			{
-				target_keybd_layout = GetFocusedKeybdLayout();
-				target_layout_has_altgr = LayoutHasAltGr(target_keybd_layout); // In the case of this else's "if", target_layout_has_altgr was already set properly higher above.
-			}
-			if (target_layout_has_altgr != LAYOUT_UNDETERMINED) // This layout's AltGr status is already known with certainty.
-				do_detect_altgr = false; // So don't go through the detection steps here and other places later below.
-			else
-			{
-				control_vk = VK_LCONTROL;
-				lcontrol_was_down = IsKeyDownAsync(control_vk);
-				// Add extra detection of AltGr if hook is installed, which has been show to be useful for some
-				// scripts where the other AltGr detection methods don't occur in a timely enough fashion.
-				// The following method relies upon the fact that it's impossible for the hook to receive
-				// events from the user while it's processing our keybd_event() here.  This is because
-				// any physical keystrokes that happen to occur at the exact moment of our keybd_event()
-				// will stay queued until the main event loop routes them to the hook via GetMessage().
-				g_HookReceiptOfLControlMeansAltGr = aExtraInfo;
-				// Thread-safe: g_HookReceiptOfLControlMeansAltGr isn't thread-safe, but by its very nature it probably
-				// shouldn't be (ways to do it might introduce an unwarranted amount of complexity and performance loss
-				// given that the odds of collision might be astronomically low in this case, and the consequences too
-				// mild).  The whole point of g_HookReceiptOfLControlMeansAltGr and related altgr things below is to
-				// watch what keystrokes the hook receives in response to simulating a press of the right-alt key.
-				// Due to their global/system nature, keystrokes are never thread-safe in the sense that any process
-				// in the entire system can be sending keystrokes simultaneously with ours.
-			}
-		}
+		ResultType target_layout_has_altgr = caller_is_keybd_hook ? LayoutHasAltGr(GetFocusedKeybdLayout())
+			: sTargetLayoutHasAltGr;
+		bool hookable_altgr = aVK == VK_RMENU && target_layout_has_altgr && !put_event_into_array && g_KeybdHook;
 
 		// Calculated only once for performance (and avoided entirely if not needed):
 		modLR_type key_as_modifiersLR = put_event_into_array ? KeyToModifiersLR(aVK, aSC) : 0;
 
-		bool do_key_history = !caller_is_keybd_hook // If caller is hook, don't log because it does logs it.
+		bool do_key_history = !caller_is_keybd_hook // If caller is hook, don't log because it does.
 			&& sSendMode != SM_PLAY  // In playback mode, the journal hook logs so that timestamps are accurate.
 			&& (!g_KeybdHook || sSendMode == SM_INPUT); // In the remaining cases, log only when the hook isn't installed or won't be at the time of the event.
 
@@ -1803,47 +1771,19 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 				PutKeybdEventIntoArray(key_as_modifiersLR, aVK, aSC, event_flags, aExtraInfo);
 			else
 			{
-				// In v1.0.35.07, g_IgnoreNextLControlDown/Up was added.
-				// The following global is used to flag as our own the keyboard driver's LControl-down keystroke
-				// that is triggered by RAlt-down (AltGr).  This prevents it from triggering hotkeys such as
-				// "*Control::".  It probably fixes other obscure side-effects and bugs also, since the
+				// The following global is used to flag as our own the keyboard driver's LCtrl-down keystroke
+				// that is triggered by RAlt-down (AltGr).  The hook prevents those keystrokes from triggering
+				// hotkeys such as "*Control::" anyway, but this ensures the LCtrl-down is marked as "ignored"
+				// and given the correct SendLevel.  It may fix other obscure side-effects and bugs, since the
 				// event should be considered script-generated even though indirect.  Note: The problem with
 				// having the hook detect AltGr's automatic LControl-down is that the keyboard driver seems
 				// to generate the LControl-down *before* notifying the system of the RAlt-down.  That makes
-				// it impossible for the hook to flag the LControl keystroke in advance, so it would have to
-				// retroactively undo the effects.  But that is impossible because the previous keystroke might
-				// already have wrongly fired a hotkey.
-				if (hookable_ralt && target_layout_has_altgr == CONDITION_TRUE)
-					g_IgnoreNextLControlDown = aExtraInfo; // Must be set prior to keybd_event() to be effective.
+				// it impossible for the hook to automatically adjust its SendLevel based on the RAlt-down.
+				if (hookable_altgr)
+					g_AltGrExtraInfo = aExtraInfo;
 				keybd_event(aVK, aSC_lobyte // naked scan code (the 0xE0 prefix, if any, is omitted)
 					, event_flags, aExtraInfo);
-				// The following is done by us rather than by the hook to avoid problems where:
-				// 1) The hook is removed at a critical point during the operation, preventing the variable from
-				//    being reset to false.
-				// 2) For some reason this AltGr keystroke done above did not cause LControl to go down (perhaps
-				//    because the current keyboard layout doesn't have AltGr as we thought), which would be a bug
-				//    because some other Ctrl keystroke would then be wrongly ignored.
-				g_IgnoreNextLControlDown = 0; // Unconditional reset.
-				if (do_detect_altgr)
-				{
-					do_detect_altgr = false; // Indicate to the KEYUP section later below that detection has already been done.
-					if (g_HookReceiptOfLControlMeansAltGr)
-					{
-						g_HookReceiptOfLControlMeansAltGr = 0; // Must reset promptly in case key-delay below routes physical keystrokes to hook.
-						// The following line is multipurpose:
-						// 1) Retrieves an updated value of target_layout_has_altgr in case the hook just changed it.
-						// 2) If the hook didn't change it, the target keyboard layout doesn't have an AltGr key.
-						//    Only in that case will the following line set it to FALSE (because LayoutHasAltGr only
-						//    changes the value if it's currently undetermined).
-						// Finally, this also updates sTargetLayoutHasAltGr in cases where target_layout_has_altgr
-						// is an alias/reference for it.
-						target_layout_has_altgr = LayoutHasAltGr(target_keybd_layout, CONDITION_FALSE);
-					}
-					else if (!lcontrol_was_down) // i.e. if LControl was already down, this detection method isn't possible.
-						// Called this way, it updates the specified layout as long as keybd_event's call to the hook didn't already determine it to be FALSE or TRUE:
-						target_layout_has_altgr = LayoutHasAltGr(target_keybd_layout, IsKeyDownAsync(control_vk) ? CONDITION_TRUE : CONDITION_FALSE);
-						// Above also updates sTargetLayoutHasAltGr in cases where target_layout_has_altgr is an alias/reference for it.
-				}
+				g_AltGrExtraInfo = 0; // Unconditional reset.
 			}
 
 			if (do_key_history)
@@ -1861,21 +1801,10 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 				PutKeybdEventIntoArray(key_as_modifiersLR, aVK, aSC, event_flags, aExtraInfo);
 			else
 			{
-				if (hookable_ralt && target_layout_has_altgr == CONDITION_TRUE) // See comments in similar section above for details.
-					g_IgnoreNextLControlUp = aExtraInfo; // Must be set prior to keybd_event() to be effective.
+				if (hookable_altgr) // See comments in similar section above for details.
+					g_AltGrExtraInfo = aExtraInfo;
 				keybd_event(aVK, aSC_lobyte, event_flags, aExtraInfo);
-				g_IgnoreNextLControlUp = 0; // Unconditional reset (see similar section above).
-				if (do_detect_altgr) // This should be true only when aEventType==KEYUP because otherwise the KEYDOWN event above would have set it to false.
-				{
-					if (g_HookReceiptOfLControlMeansAltGr)
-					{
-						g_HookReceiptOfLControlMeansAltGr = 0; // Must reset promptly in case key-delay below routes physical keystrokes to hook.
-						target_layout_has_altgr = LayoutHasAltGr(target_keybd_layout, CONDITION_FALSE); // See similar section above for comments.
-					}
-					else if (lcontrol_was_down) // i.e. if LControl was already up, this detection method isn't possible.
-						// See similar section above for comments:
-						target_layout_has_altgr = LayoutHasAltGr(target_keybd_layout, IsKeyDownAsync(control_vk) ? CONDITION_FALSE : CONDITION_TRUE);
-				}
+				g_AltGrExtraInfo = 0; // Unconditional reset.
 			}
 			// The following is done to avoid an extraneous artificial {LCtrl Up} later on,
 			// since the keyboard driver should insert one in response to this {RAlt Up}:
@@ -3893,7 +3822,7 @@ ResultType LayoutHasAltGrDirect(HKL aLayout)
 	#define KLLF_ALTGR 0x0001 // Also defined in kbd.h.
 	typedef PVOID (* KbdLayerDescriptorType)();
 
-	ResultType result = LAYOUT_UNDETERMINED;
+	ResultType result = FAIL;
 
 	if (HMODULE hmod = LoadKeyboardLayoutModule(aLayout))
 	{
@@ -3911,7 +3840,7 @@ ResultType LayoutHasAltGrDirect(HKL aLayout)
 
 
 
-ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr)
+ResultType LayoutHasAltGr(HKL aLayout)
 // Thread-safety: While not thoroughly thread-safe, due to the extreme simplicity of the cache array, even if
 // a collision occurs it should be inconsequential.
 // Caller must ensure that aLayout is a valid layout (special values like 0 aren't supported here).
@@ -3922,11 +3851,7 @@ ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr)
 	int i;
 	for (i = 0; i < MAX_CACHED_LAYOUTS && sCachedLayout[i].hkl; ++i)
 		if (sCachedLayout[i].hkl == aLayout) // Match Found.
-		{
-			if (aHasAltGr != LAYOUT_UNDETERMINED && sCachedLayout[i].has_altgr == LAYOUT_UNDETERMINED) // Caller relies on this.
-				sCachedLayout[i].has_altgr = aHasAltGr;
 			return sCachedLayout[i].has_altgr;
-		}
 
 	// Since above didn't return, this layout isn't cached yet.  So create a new cache entry for it and
 	// determine whether this layout has an AltGr key.  If i<MAX_CACHED_LAYOUTS (which it almost always will be),
@@ -3934,23 +3859,11 @@ ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr)
 	// overwrite an arbitrary item in the array.  An LRU/MRU algorithm (timestamp) isn't used because running out
 	// of slots seems too unlikely, and the consequences of running out are merely a slight degradation in performance.
 	CachedLayoutType &cl = sCachedLayout[(i < MAX_CACHED_LAYOUTS) ? i : MAX_CACHED_LAYOUTS-1];
-	if (aHasAltGr != LAYOUT_UNDETERMINED) // Caller determined it for us.  See top of function for explanation.
-	{
-		cl.hkl = aLayout;
-		return cl.has_altgr = aHasAltGr;
-	}
 
-	// Otherwise, do AltGr detection on this newly cached layout so that we can return the AltGr state to caller.
-	// This detection is probably not 100% reliable because there may be some layouts (especially custom ones)
-	// that have an AltGr key yet none of its characters actually require AltGr to manifest.  A more reliable
-	// way to detect AltGr would be to simulate an RALT keystroke (maybe only an up event, not a down) and have
-	// a keyboard hook catch and block it.  If the layout has altgr, the hook would see a driver-generated LCtrl
-	// keystroke immediately prior to RAlt.
-	// Performance: This loop is quite fast. Doing this section 1000 times only takes about 160ms
-	// on a 2gHz system (0.16ms per call).  UPDATE: In theory, it can be 256 (that is, around WCHAR_MAX/UCHAR_MAX)
-	// times slower on Unicode builds, so an alternative method is used there.
-#ifdef _UNICODE
-	// Read the AltGr value directly from the keyboard layout DLL.
+	// The old approach here was to call VkKeyScanEx for each character code and find any that require
+	// AltGr.  However, that was unacceptably slow for the wider character range of the Unicode build.
+	// It was also unreliable (as noted below), so required additional logic in Send and the hook to
+	// compensate.  Instead, read the AltGr value directly from the keyboard layout DLL.
 	// This method has been compared to the VkKeyScanEx method and another one using Send and hotkeys,
 	// and was found to have 100% accuracy for the 203 standard layouts on Windows 10, whereas the
 	// VkKeyScanEx method failed for two layouts:
@@ -3958,24 +3871,7 @@ ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr)
 	//   - Ukrainian has AltGr but only uses it for one character, which is also assigned to a naked
 	//     VK (so VkKeyScanEx returns that one).  Likely the key in question is absent from some keyboards.
 	cl.has_altgr = LayoutHasAltGrDirect(aLayout);
-#else
-	// Use the old VkKeyScanEx method on ANSI builds since it is faster and has smaller code size.
-	SHORT s;
-	for (cl.has_altgr = LAYOUT_UNDETERMINED, i = 32; i <= UorA(WCHAR_MAX,UCHAR_MAX); ++i) // Include Spacebar up through final ANSI character (i.e. include 255 but not 256).
-	{
-		s = VkKeyScanEx((TCHAR)i, aLayout);
-		// Check for presence of Ctrl+Alt but allow other modifiers like Shift to be present because
-		// I believe there are some layouts that manifest characters via Shift+AltGr.
-		if (s != -1 && (s & 0x600) == 0x600) // In this context, Ctrl+Alt means AltGr.
-		{
-			cl.has_altgr = CONDITION_TRUE;
-			break;
-		}
-	}
-#endif
-	// If loop didn't break, leave cl.has_altgr as LAYOUT_UNDETERMINED because we can't be sure whether AltGr is
-	// present (see other comments for details).
-	cl.hkl = aLayout; // This is done here (immediately after has_altgr was set in the loop above) rather than earlier to minimize the consequences of not being fully thread-safe.
+	cl.hkl = aLayout; // This is done here (immediately after has_altgr is set) rather than earlier to minimize the consequences of not being fully thread-safe.
 	return cl.has_altgr;
 }
 

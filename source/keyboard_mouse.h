@@ -147,8 +147,12 @@ EXTERN_G;
 // simplify the code, so these values can only be found in KBDLLHOOKSTRUCT::scanCode.
 // Find "fake shift-key events" for older and more detailed comments.
 // Note that 0x0200 corresponds to SCANCODE_SIMULATED in kbd.h (DDK).
+#define SC_FAKE_FLAG 0x200
 #define SC_FAKE_LSHIFT 0x22A
 #define SC_FAKE_RSHIFT 0x236 // This is the actual scancode received by the hook, excluding the 0x100 we add for "extended" keys.
+// Testing with the KbdEdit Demo preview mode indicates that AltGr will send this SC
+// even if the VK assigned to 0x1D is changed.  It is a combination of SCANCODE_CTRL
+// and SCANCODE_SIMULATED, which are defined in kbd.h (Windows DDK).
 #define SC_FAKE_LCTRL 0x21D
 
 // UPDATE for v1.0.39: Changed sc_type to USHORT vs. UINT to save memory in structs such as sc_hotkey.
@@ -340,9 +344,8 @@ LPTSTR ModifiersLRToText(modLR_type aModifiersLR, LPTSTR aBuf);
 DWORD GetFocusedCtrlThread(HWND *apControl = NULL, HWND aWindow = GetForegroundWindow());
 HKL GetFocusedKeybdLayout(HWND aWindow = GetForegroundWindow());
 
-#define LAYOUT_UNDETERMINED FAIL
 bool ActiveWindowLayoutHasAltGr();
-ResultType LayoutHasAltGr(HKL aLayout, ResultType aHasAltGr = LAYOUT_UNDETERMINED);
+ResultType LayoutHasAltGr(HKL aLayout);
 
 //---------------------------------------------------------------------
 

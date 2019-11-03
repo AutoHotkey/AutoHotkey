@@ -213,74 +213,12 @@ LRESULT CALLBACK LowLevelKeybdProc(int aCode, WPARAM wParam, LPARAM lParam)
 	case VK_MENU:    vk = (sc == SC_RALT)     ? VK_RMENU    : VK_LMENU; break;
 	}
 
-	// Now that the above has translated VK_CONTROL to VK_LCONTROL (if necessary):
-	if (vk == VK_LCONTROL)
+	if (event.scanCode == SC_FAKE_LCTRL && g_AltGrExtraInfo && (event.flags & LLKHF_INJECTED))
 	{
-		// The following helps hasten AltGr detection after script startup.  It's kept to supplement
-		// LayoutHasAltGr() because that function isn't 100% reliable for the reasons described there.
-		// It shouldn't be necessary to check what type of LControl event (up or down) is received, since
-		// it should be impossible for any unrelated keystrokes to be received while g_HookReceiptOfLControlMeansAltGr
-		// is true.  This is because all unrelated keystrokes stay buffered until the main thread calls GetMessage().
-		// UPDATE for v1.0.39: Now that the hook has a dedicated thread, the above is no longer 100% certain.
-		// However, I think confidence is very high that this AltGr detection method is okay as it is because:
-		// 1) Hook thread has high priority, which means it generally shouldn't get backlogged with buffered keystrokes.
-		// 2) When the main thread calls keybd_event(), there is strong evidence that the OS immediately preempts
-		//    the main thread (or executes a SendMessage(), which is the same as preemption) and gives the next
-		//    timeslice to the hook thread, which then immediately processes the incoming keystroke as long
-		//    as there are no keystrokes in the queue ahead of it (see #1).
-		// 3) Even if #1 and #2 fail to hold, the probability of misclassifying an LControl event seems very low.
-		//    If there is ever concern, adding a call to IsIgnored() below would help weed out physical keystrokes
-		//    (or those of other programs) that arrive during a vulnerable time.
-		if (g_HookReceiptOfLControlMeansAltGr)
-		{
-			// But don't reset g_HookReceiptOfLControlMeansAltGr here to avoid timing problems where the hook
-			// is installed at a time when g_HookReceiptOfLControlMeansAltGr is wrongly true because the
-			// inactive hook never made it false.  Let KeyEvent() do that.
-			Get_active_window_keybd_layout // Defines the variable active_window_keybd_layout for use below.
-			LayoutHasAltGr(active_window_keybd_layout, CONDITION_TRUE);
-			// The following must be done; otherwise, if LayoutHasAltGr hasn't yet been autodetected by the
-			// time the first AltGr keystroke comes through, that keystroke would cause LControl to get stuck down
-			// as seen in g_modifiersLR_physical.
-			event.flags |= LLKHF_INJECTED; // Flag it as artificial for any other instances of the hook that may be running.
-			event.dwExtraInfo = g_HookReceiptOfLControlMeansAltGr; // The one who set this variable put the desired ExtraInfo in it.
-		}
-		else // Since AltGr wasn't detected above, see if any other means is ready to detect it.
-		{
-			// v1.0.42.04: This section was moved out of IsIgnored() to here because:
-			// 1) Immediately correcting the incoming event simplifies other parts of the hook.
-			// 2) It allows this instance of the hook to communicate with other instances of the hook by
-			//    correcting the bogus values directly inside the event structure.  This is something those
-			//    other hooks can't do easily if the keystrokes were generated/simulated inside our instance
-			//    (due to our instance's KeyEvent() function communicating corrections via
-			//    g_HookReceiptOfLControlMeansAltGr and g_IgnoreNextLControlDown/Up).
-			//
-			// This new approach solves an AltGr keystroke's disruption of A_TimeIdlePhysical and related
-			// problems that were caused by AltGr's incoming keystroke being marked by the driver or OS as a
-			// physical event (even when the AltGr keystroke that caused it was artificial).  It might not
-			// be a perfect solution, but it's pretty complete. For example, with the exception of artificial
-			// AltGr keystrokes from non-AHK sources, it completely solves the A_TimeIdlePhysical issue because
-			// by definition, any script that *uses* A_TimeIdlePhysical in a way that the fix applies to also
-			// has the keyboard hook installed (if it only has the mouse hook installed, the fix isn't in effect,
-			// but it also doesn't matter because that script detects only mouse events as true physical events,
-			// as described in the documentation for A_TimeIdlePhysical).
-			if (key_up)
-			{
-				if (g_IgnoreNextLControlUp)
-				{
-					event.flags |= LLKHF_INJECTED; // Flag it as artificial for any other instances of the hook that may be running.
-					event.dwExtraInfo = g_IgnoreNextLControlUp; // The one who set this variable put the desired ExtraInfo in here.
-				}
-			}
-			else // key-down event
-			{
-				if (g_IgnoreNextLControlDown)
-				{
-					event.flags |= LLKHF_INJECTED; // Flag it as artificial for any other instances of the hook that may be running.
-					event.dwExtraInfo = g_IgnoreNextLControlDown; // The one who set this variable put the desired ExtraInfo in here.
-				}
-			}
-		}
-	} // if (vk == VK_LCONTROL)
+		// This LCtrl is a result of sending RAlt, which hasn't been received yet.
+		// Override dwExtraInfo, though it will only affect this hook instance.
+		event.dwExtraInfo = g_AltGrExtraInfo;
+	}
 
 	return LowLevelCommon(g_KeybdHook, aCode, wParam, lParam, vk, sc, key_up, event.dwExtraInfo, event.flags);
 }
