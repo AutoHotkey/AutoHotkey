@@ -427,13 +427,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// physically down even if it isn't logically down):
 		if (!kvk[aVK].as_modifiersLR && KeybdEventIsPhysical(aEventFlags, aVK, aKeyUp))
 			g_PhysicalKeyState[aVK] = aKeyUp ? 0 : STATE_DOWN;
-
-		// Pointer to the key record for the current key event.  Establishes this_key as an alias
-		// for the array element in kvk or ksc that corresponds to the vk or sc, respectively.
-		// I think the compiler can optimize the performance of reference variables better than
-		// pointers because the pointer indirection step is avoided.  In any case, this must be
-		// a true alias to the object, not a copy of it, because it's address (&this_key) is compared
-		// to other addresses for equality further below.
 	}
 
 	// The following is done even if key history is disabled because sAltTabMenuIsVisible relies on it:
@@ -506,6 +499,12 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// due to being a hotkey).
 	}
 
+	// Pointer to the key record for the current key event.  Establishes this_key as an alias
+	// for the array element in kvk or ksc that corresponds to the vk or sc, respectively.
+	// I think the compiler can optimize the performance of reference variables better than
+	// pointers because the pointer indirection step is avoided.  In any case, this must be
+	// a true alias to the object, not a copy of it, because it's address (&this_key) is compared
+	// to other addresses for equality further below.
 	bool sc_takes_precedence = ksc[aSC].sc_takes_precedence;
 	// Check hook type too in case a script every explicitly specifies scan code zero as a hotkey:
 	key_type &this_key = *((aHook == g_KeybdHook && sc_takes_precedence) ? (ksc + aSC) : (kvk + aVK));
