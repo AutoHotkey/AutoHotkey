@@ -16666,8 +16666,7 @@ BIF_DECL(BIF_Type)
 // Returns the type name of the given value.
 LPTSTR TokenTypeString(ExprTokenType &aToken)
 {
-	SymbolType unused;
-	switch (TypeOfToken(aToken, unused))
+	switch (TypeOfToken(aToken))
 	{
 	case SYM_STRING: return _T("String");
 	case SYM_INTEGER: return _T("Integer");
@@ -17151,6 +17150,35 @@ ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLen
 	aResultToken.marker[aLength] = '\0'; // Must be done separately from the memcpy() because the memcpy() might just be taking a substring (i.e. long before result's terminator).
 	aResultToken.marker_length = aLength;
 	return OK;
+}
+
+
+
+// TypeOfToken: Similar result to TokenIsPureNumeric, but may return SYM_OBJECT.
+SymbolType TypeOfToken(ExprTokenType &aToken)
+{
+	switch (aToken.symbol)
+	{
+	case SYM_VAR:
+		switch (aToken.var->IsPureNumericOrObject())
+		{
+		case VAR_ATTRIB_IS_INT64: return SYM_INTEGER;
+		case VAR_ATTRIB_IS_DOUBLE: return SYM_FLOAT;
+		case VAR_ATTRIB_IS_OBJECT: return SYM_OBJECT;
+		}
+		// Fall through for the default case:
+	case SYM_MISSING:
+		return SYM_STRING;
+	default:
+#ifdef _DEBUG
+		MsgBox(_T("DEBUG: Unhandled symbol type."));
+#endif
+	case SYM_STRING:
+	case SYM_INTEGER:
+	case SYM_FLOAT:
+	case SYM_OBJECT:
+		return aToken.symbol;
+	}
 }
 
 

@@ -2823,8 +2823,7 @@ Object *Object::sFloatPrototype = CreatePrototype(_T("Float"), Object::sNumberPr
 
 Object *Object::ValueBase(ExprTokenType &aValue)
 {
-	SymbolType unused;
-	switch (TypeOfToken(aValue, unused))
+	switch (TypeOfToken(aValue))
 	{
 	case SYM_STRING: return Object::sStringPrototype;
 	case SYM_INTEGER: return Object::sIntegerPrototype;
