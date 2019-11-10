@@ -273,8 +273,8 @@ ResultType Line::TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions)
 	if (nic.dwInfoFlags & NIIF_USER)
 	{
 		// Windows 10 toast notifications display the small tray icon stretched to the
-		// large size if NIIF_USER is passed but not NIIF_LARGE_ICON.  If a large icon
-		// is passed without the flag, the notification does not show at all.
+		// large size if NIIF_USER is passed but without NIIF_LARGE_ICON or hBalloonIcon.
+		// If a large icon is passed without the flag, the notification does not show at all.
 		// But since this could change, let the script pass 0x24 to use the large icon.
 		//if (g_os.IsWin10OrLater())
 		//	nic.dwInfoFlags |= NIIF_LARGE_ICON;
@@ -285,7 +285,16 @@ ResultType Line::TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions)
 	}
 	tcslcpy(nic.szInfoTitle, aTitle, _countof(nic.szInfoTitle)); // Empty title omits the title line entirely.
 	tcslcpy(nic.szInfo, aText, _countof(nic.szInfo));	// Empty text removes the balloon.
-	Shell_NotifyIcon(NIM_MODIFY, &nic);
+	if (!Shell_NotifyIcon(NIM_MODIFY, &nic) && (nic.dwInfoFlags & NIIF_USER))
+	{
+		// Passing NIIF_USER without NIIF_LARGE_ICON on Windows 10.0.19018 caused failure,
+		// even though a small icon is displayed by default (without NIIF_USER), the docs
+		// indicate it should work, and it works on Vista.  There's a good chance that
+		// removing the flag and trying again will produce the desired result, or at least
+		// show a TrayTip without the icon, which is preferable to complete failure.
+		nic.dwInfoFlags &= ~NIIF_USER;
+		Shell_NotifyIcon(NIM_MODIFY, &nic);
+	}
 	return OK; // i.e. never a critical error if it fails.
 }
 
