@@ -187,6 +187,7 @@ FuncEntry g_BIF[] =
 	BIFn(MenuBarCreate, 0, 0, BIF_Menu),
 	BIFn(MenuCreate, 0, 0, BIF_Menu),
 	BIFn(MenuFromHandle, 1, 1, BIF_Menu),
+	BIF1(MenuSelect, 0, 11),
 	BIFn(Min, 1, NA, BIF_MinMax),
 	BIF1(Mod, 2, 2),
 	BIFn(MonitorGet, 0, 5, BIF_MonitorGet, {2, 3, 4, 5}),
@@ -245,6 +246,7 @@ FuncEntry g_BIF[] =
 	BIFn(SoundSet, 1, 4, BIF_Sound),
 	BIFn(Sqrt, 1, 1, BIF_SqrtLogLn),
 	BIF1(StatusBarGetText, 0, 5),
+	BIF1(StatusBarWait, 0, 8),
 	BIF1(StrCompare, 2, 3),
 	BIFn(StrGet, 1, 3, BIF_StrGetPut),
 	BIF1(String, 1, 1),
@@ -262,7 +264,10 @@ FuncEntry g_BIF[] =
 	BIFn(Trim, 1, 2, BIF_Trim),
 	BIF1(Type, 1, 1),
 	BIF1(VarSetCapacity, 1, 3, {1}),
+	BIFn(WinActivate, 0, 4, BIF_WinActivate),
+	BIFn(WinActivateBottom, 0, 4, BIF_WinActivate),
 	BIFn(WinActive, 0, 4, BIF_WinExistActive),
+	BIFn(WinClose, 0, 5, BIF_WinShow),
 	BIFn(WinExist, 0, 4, BIF_WinExistActive),
 	BIF1(WinGetClass, 0, 4),
 	BIFn(WinGetClientPos, 0, 8, BIF_WinGetPos, {1, 2, 3, 4}),
@@ -283,16 +288,24 @@ FuncEntry g_BIF[] =
 	BIF1(WinGetTitle, 0, 4),
 	BIFn(WinGetTransColor, 0, 4, BIF_WinGet),
 	BIFn(WinGetTransparent, 0, 4, BIF_WinGet),
+	BIFn(WinHide, 0, 4, BIF_WinShow),
+	BIFn(WinKill, 0, 5, BIF_WinShow),
+	BIFn(WinMaximize, 0, 4, BIF_WinShow),
+	BIFn(WinMinimize, 0, 4, BIF_WinShow),
+	BIF1(WinMove, 0, 8),
 	BIFn(WinMoveBottom, 0, 4, BIF_WinMoveTopBottom),
 	BIFn(WinMoveTop, 0, 4, BIF_WinMoveTopBottom),
 	BIF1(WinRedraw, 0, 4),
+	BIFn(WinRestore, 0, 4, BIF_WinShow),
 	BIFn(WinSetAlwaysOnTop, 0, 5, BIF_WinSet),
 	BIFn(WinSetEnabled, 1, 5, BIF_WinSet),
 	BIFn(WinSetExStyle, 1, 5, BIF_WinSet),
 	BIFn(WinSetRegion, 0, 5, BIF_WinSet),
 	BIFn(WinSetStyle, 1, 5, BIF_WinSet),
+	BIF1(WinSetTitle, 1, 5),
 	BIFn(WinSetTransColor, 1, 5, BIF_WinSet),
 	BIFn(WinSetTransparent, 1, 5, BIF_WinSet),
+	BIFn(WinShow, 0, 4, BIF_WinShow),
 	BIFn(WinWait, 0, 5, BIF_Wait),
 	BIFn(WinWaitActive, 0, 5, BIF_Wait),
 	BIFn(WinWaitClose, 0, 5, BIF_Wait),
@@ -12180,64 +12193,6 @@ ResultType Line::Perform()
 	case ACT_MOUSEGETPOS:
 		return MouseGetPos(ArgToUInt(5));
 
-	case ACT_WINACTIVATE:
-	case ACT_WINACTIVATEBOTTOM:
-		if (WinActivate(g, FOUR_ARGS, mActionType == ACT_WINACTIVATEBOTTOM))
-			// It seems best to do these sleeps here rather than in the windowing
-			// functions themselves because that way, the program can use the
-			// windowing functions without being subject to the script's delay
-			// setting (i.e. there are probably cases when we don't need
-			// to wait, such as bringing a message box to the foreground,
-			// since no other actions will be dependent on it actually
-			// having happened:
-			DoWinDelay;
-		return OK;
-
-	case ACT_WINMINIMIZE:
-	case ACT_WINMAXIMIZE:
-	case ACT_WINRESTORE:
-	case ACT_WINHIDE:
-	case ACT_WINSHOW:
-	case ACT_WINCLOSE:
-	case ACT_WINKILL:
-	{
-		// Set initial guess for is_ahk_group (further refined later).  For ahk_group, WinText,
-		// ExcludeTitle, and ExcludeText must be blank so that they are reserved for future use
-		// (i.e. they're currently not supported since the group's own criteria take precedence):
-		bool is_ahk_group = !(_tcsnicmp(ARG1, _T("ahk_group"), 9) || *ARG2 || *ARG4);
-		// The following is not quite accurate since is_ahk_group is only a guess at this stage, but
-		// given the extreme rarity of the guess being wrong, this shortcut seems justified to reduce
-		// the code size/complexity.  A wait_time of zero seems best for group closing because it's
-		// currently implemented to do the wait after every window in the group.  In addition,
-		// this makes "WinClose ahk_group GroupName" behave identically to "GroupClose GroupName",
-		// which seems best, for consistency:
-		int wait_time = is_ahk_group ? 0 : DEFAULT_WINCLOSE_WAIT;
-		if (mActionType == ACT_WINCLOSE || mActionType == ACT_WINKILL) // ARG3 is contains the wait time.
-		{
-			if (*ARG3 && !(wait_time = (int)(1000 * ArgToDouble(3)))   )
-				wait_time = 500; // Legacy (prior to supporting floating point): 0 is defined as 500ms, which seems more useful than a true zero.
-			if (*ARG5)
-				is_ahk_group = false;  // Override the default.
-		}
-		else
-			if (*ARG3)
-				is_ahk_group = false;  // Override the default.
-		// Act upon all members of this group (WinText/ExcludeTitle/ExcludeText are ignored in this mode).
-		if (is_ahk_group && (group = g_script.FindGroup(omit_leading_whitespace(ARG1 + 9)))) // Assign.
-			return group->ActUponAll(mActionType, wait_time); // It will do DoWinDelay if appropriate.
-		//else try to act upon it as though "ahk_group something" is a literal window title.
-	
-		// Since above didn't return, it's not "ahk_group", so do the normal single-window behavior.
-		if (mActionType == ACT_WINCLOSE || mActionType == ACT_WINKILL)
-		{
-			if (WinClose(g, ARG1, ARG2, wait_time, ARG4, ARG5, mActionType == ACT_WINKILL)) // It closed something.
-				DoWinDelay;
-			return OK;
-		}
-		else
-			return PerformShowWindow(mActionType, FOUR_ARGS);
-	}
-
 	case ACT_DOWNLOAD:
 		return Download(TWO_ARGS);
 
@@ -12249,17 +12204,6 @@ ResultType Line::Perform()
 
 	case ACT_RUN:
 		return g_script.ActionExec(ARG1, NULL, ARG2, true, ARG3, NULL, true, true, ARGVAR4); // Be sure to pass NULL for 2nd param.
-
-	case ACT_WINMOVE:
-		return WinMove(EIGHT_ARGS);
-
-	case ACT_MENUSELECT:
-		return MenuSelect(ELEVEN_ARGS);
-
-	case ACT_STATUSBARWAIT:
-		return StatusBarWait(EIGHT_ARGS);
-	case ACT_WINSETTITLE:
-		return WinSetTitle(FIVE_ARGS);
 
 	case ACT_WINMINIMIZEALL:
 		PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 419, 0);
@@ -12349,7 +12293,7 @@ ResultType Line::Perform()
 		if (   !(group = g_script.FindGroup(ARG1))   )
 			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
 		if (*ARG2 && !_tcsicmp(ARG2, _T("A")))
-			group->ActUponAll(ACT_WINCLOSE, 0);  // Note: It will take care of DoWinDelay if needed.
+			group->ActUponAll(FID_WinClose, 0);  // Note: It will take care of DoWinDelay if needed.
 		else
 			group->CloseAndGoToNext(*ARG2 && !_tcsicmp(ARG2, _T("R")));  // Note: It will take care of DoWinDelay if needed.
 		return OK;

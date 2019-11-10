@@ -879,27 +879,96 @@ input_type *InputFind(InputObject *object)
 
 
 
-ResultType Line::PerformShowWindow(ActionTypeType aActionType, LPTSTR aTitle, LPTSTR aText
-	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_WinShow)
 {
-	// By design, the WinShow command must always unhide a hidden window, even if the user has
-	// specified that hidden windows should not be detected.  So set this now so that
-	// DetermineTargetWindow() will make its calls in the right mode:
-	bool need_restore = (aActionType == ACT_WINSHOW && !g->DetectHiddenWindows);
-	if (need_restore)
-		g->DetectHiddenWindows = true;
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
-	if (need_restore)
-		g->DetectHiddenWindows = false;
+	auto action = _f_callee_id;
+
+	_f_set_retval_p(_T(""), 0);
+
+	_f_param_string_opt(aTitle, 0);
+	_f_param_string_opt(aText, 1);
+	// The remaining parameters depend on which function this is.
+
+	// Set initial guess for is_ahk_group (further refined later).  For ahk_group, WinText,
+	// ExcludeTitle, and ExcludeText must be blank so that they are reserved for future use
+	// (i.e. they're currently not supported since the group's own criteria take precedence):
+	bool is_ahk_group = !_tcsnicmp(aTitle, _T("ahk_group"), 9)
+		&& ParamIndexIsOmittedOrEmpty(1) && ParamIndexIsOmittedOrEmpty(3);
+	// The following is not quite accurate since is_ahk_group is only a guess at this stage, but
+	// given the extreme rarity of the guess being wrong, this shortcut seems justified to reduce
+	// the code size/complexity.  A wait_time of zero seems best for group closing because it's
+	// currently implemented to do the wait after every window in the group.  In addition,
+	// this makes "WinClose ahk_group GroupName" behave identically to "GroupClose GroupName",
+	// which seems best, for consistency:
+	int wait_time = is_ahk_group ? 0 : DEFAULT_WINCLOSE_WAIT;
+	if (action == FID_WinClose || action == FID_WinKill) // aParam[2] contains the wait time.
+	{
+		if (!ParamIndexIsOmittedOrEmpty(2))
+			wait_time = (int)(1000 * ParamIndexToDouble(2));
+		if (!ParamIndexIsOmittedOrEmpty(4))
+			is_ahk_group = false;  // Override the default.
+	}
+	else
+		if (!ParamIndexIsOmittedOrEmpty(2))
+			is_ahk_group = false;  // Override the default.
+	if (is_ahk_group)
+		if (WinGroup *group = g_script.FindGroup(omit_leading_whitespace(aTitle + 9)))
+		{
+			group->ActUponAll(action, wait_time); // It will do DoWinDelay if appropriate.
+			_f_return_retval;
+		}
+	// Since above didn't return, it's not "ahk_group", so do the normal single-window behavior.
+
+	HWND target_window = NULL;
+	if (aParamCount > 0)
+	{
+		switch (DetermineTargetHwnd(target_window, aResultToken, *aParam[0]))
+		{
+		case FAIL: return;
+		case OK:
+			if (!target_window) // Specified a HWND of 0.
+				_f_return_retval;
+		}
+	}
+
+	if (action == FID_WinClose || action == FID_WinKill)
+	{
+		if (target_window)
+		{
+			WinClose(target_window, wait_time, action == FID_WinKill);
+			DoWinDelay;
+			_f_return_retval;
+		}
+		_f_param_string_opt(aExcludeTitle, 3);
+		_f_param_string_opt(aExcludeText, 4);
+		if (WinClose(*g, aTitle, aText, wait_time, aExcludeTitle, aExcludeText, action == FID_WinKill)) // It closed something.
+			DoWinDelay;
+		_f_return_retval;
+	}
+
 	if (!target_window)
-		return OK;
+	{
+		_f_param_string_opt(aExcludeTitle, 2);
+		_f_param_string_opt(aExcludeText, 3);
+		// By design, the WinShow command must always unhide a hidden window, even if the user has
+		// specified that hidden windows should not be detected.  So set this now so that
+		// DetermineTargetWindow() will make its calls in the right mode:
+		bool need_restore = (_f_callee_id == FID_WinShow && !g->DetectHiddenWindows);
+		if (need_restore)
+			g->DetectHiddenWindows = true;
+		target_window = Line::DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+		if (need_restore)
+			g->DetectHiddenWindows = false;
+		if (!target_window)
+			_f_return_retval;
+	}
 
 	// WinGroup's EnumParentActUponAll() is quite similar to the following, so the two should be
 	// maintained together.
 
 	int nCmdShow = SW_NONE; // Set default.
 
-	switch (aActionType)
+	switch (action)
 	{
 	// SW_FORCEMINIMIZE: supported only in Windows 2000/XP and beyond: "Minimizes a window,
 	// even if the thread that owns the window is hung. This flag should only be used when
@@ -910,7 +979,7 @@ ResultType Line::PerformShowWindow(ActionTypeType aActionType, LPTSTR aTitle, LP
 	// UPDATE: For now, not using "force" every time because it has undesirable side-effects such
 	// as the window not being restored to its maximized state after it was minimized
 	// this way.
-	case ACT_WINMINIMIZE:
+	case FID_WinMinimize:
 		if (IsWindowHung(target_window))
 		{
 			nCmdShow = SW_FORCEMINIMIZE;
@@ -921,14 +990,14 @@ ResultType Line::PerformShowWindow(ActionTypeType aActionType, LPTSTR aTitle, LP
 		else
 			nCmdShow = SW_MINIMIZE;
 		break;
-	case ACT_WINMAXIMIZE: if (!IsWindowHung(target_window)) nCmdShow = SW_MAXIMIZE; break;
-	case ACT_WINRESTORE:  if (!IsWindowHung(target_window)) nCmdShow = SW_RESTORE;  break;
+	case FID_WinMaximize: if (!IsWindowHung(target_window)) nCmdShow = SW_MAXIMIZE; break;
+	case FID_WinRestore:  if (!IsWindowHung(target_window)) nCmdShow = SW_RESTORE;  break;
 	// Seems safe to assume it's not hung in these cases, since I'm inclined to believe
 	// (untested) that hiding and showing a hung window won't lock up our thread, and
 	// there's a chance they may be effective even against hung windows, unlike the
 	// others above (except ACT_WINMINIMIZE, which has a special FORCE method):
-	case ACT_WINHIDE: nCmdShow = SW_HIDE; break;
-	case ACT_WINSHOW: nCmdShow = SW_SHOW; break;
+	case FID_WinHide: nCmdShow = SW_HIDE; break;
+	case FID_WinShow: nCmdShow = SW_SHOW; break;
 	}
 
 	// UPDATE:  Trying ShowWindowAsync()
@@ -948,10 +1017,45 @@ ResultType Line::PerformShowWindow(ActionTypeType aActionType, LPTSTR aTitle, LP
 			ShowWindow(target_window, nCmdShow);
 		//else
 		//	ShowWindowAsync(target_window, nCmdShow);
-//PostMessage(target_window, WM_SYSCOMMAND, SC_MINIMIZE, 0);
 		DoWinDelay;
 	}
-	return OK;  // Return success for all the above cases.
+	_f_return_retval;
+}
+
+
+
+BIF_DECL(BIF_WinActivate)
+{
+	_f_set_retval_p(_T(""), 0);
+
+	HWND target_hwnd;
+	if (aParamCount > 0)
+	{
+		switch (DetermineTargetHwnd(target_hwnd, aResultToken, *aParam[0]))
+		{
+		case FAIL: return;
+		case OK:
+			if (target_hwnd)
+				SetForegroundWindowEx(target_hwnd);
+			_f_return_retval;
+		}
+	}
+
+	_f_param_string_opt(aTitle, 0);
+	_f_param_string_opt(aText, 1);
+	_f_param_string_opt(aExcludeTitle, 2);
+	_f_param_string_opt(aExcludeText, 3);
+
+	if (WinActivate(*g, aTitle, aText, aExcludeTitle, aExcludeText, _f_callee_id == FID_WinActivateBottom))
+		// It seems best to do these sleeps here rather than in the windowing
+		// functions themselves because that way, the program can use the
+		// windowing functions without being subject to the script's delay
+		// setting (i.e. there are probably cases when we don't need to wait,
+		// such as bringing a message box to the foreground, since no other
+		// actions will be dependent on it actually having happened):
+		DoWinDelay;
+
+	_f_return_retval;
 }
 
 
@@ -979,18 +1083,49 @@ BIF_DECL(BIF_Wait)
 
 	Line *waiting_line = g_script.mCurrLine;
 
+	_f_set_retval_i(TRUE); // Set default return value to be possibly overridden later on.
+
 	_f_param_string_opt(arg1, 0);
 	_f_param_string_opt(arg2, 1);
 	_f_param_string_opt(arg3, 2);
 	_f_param_string_opt(arg4, 3);
 	_f_param_string_opt(arg5, 4);
+	HWND target_hwnd = NULL;
 
-	if (_f_callee_id == FID_RunWait)
+	switch (_f_callee_id)
 	{
+	case FID_RunWait:
 		if (!g_script.ActionExec(arg1, NULL, arg2, true, arg3, &running_process, true, true
 			, ParamIndexToOptionalVar(4-1)))
 			_f_return_FAIL;
 		//else fall through to the waiting-phase of the operation.
+		break;
+	case FID_WinWait:
+	case FID_WinWaitClose:
+	case FID_WinWaitActive:
+	case FID_WinWaitNotActive:
+		if (ParamIndexIsOmitted(0))
+			break;
+		// The following supports pure HWND or {Hwnd:HWND} as in other WinTitle parameters,
+		// in lieu of saving aParam[] and evaluating them vs. arg1,2,4,5 on each iteration.
+		switch (DetermineTargetHwnd(target_hwnd, aResultToken, *aParam[0]))
+		{
+		case FAIL: return;
+		case OK:
+			if (!target_hwnd) // Caller passed 0 or a value that failed an IsWindow() check.
+			{
+				// If it's 0 due to failing IsWindow(), there's no way to determine whether
+				// it was ever valid, so assume it was but that the window has been closed.
+				DoWinDelay;
+				if (_f_callee_id == FID_WinWaitClose || _f_callee_id == FID_WinWaitNotActive)
+					_f_return_retval;
+				// Otherwise, this window will never exist or be active again, so abort early.
+				// It might be more correct to just wait the timeout (or stall indefinitely),
+				// but that's probably not the user's intention.
+				_f_return_i(FALSE);
+			}
+		}
+		break;
 	}
 	
 	// Must NOT use ELSE-IF in line below due to ELSE further down needing to execute for RunWait.
@@ -1049,13 +1184,50 @@ BIF_DECL(BIF_Wait)
 		sleep_duration = 0; // Just to catch any bugs.
 	}
 
-	_f_set_retval_i(TRUE); // Set default return value to be possibly overridden later on.
-
 	bool any_clipboard_format = (_f_callee_id == FID_ClipWait && ATOI(arg2) == 1);
 
 	for (start_time = GetTickCount();;) // start_time is initialized unconditionally for use with v1.0.30.02's new logging feature further below.
 	{ // Always do the first iteration so that at least one check is done.
-		switch(_f_callee_id)
+		if (target_hwnd) // Caller passed a pure HWND or {Hwnd:HWND}.
+		{
+			// Change the behaviour a little since we know that once the HWND is destroyed,
+			// it is not meaningful to wait for another window with that same HWND.
+			if (!IsWindow(target_hwnd))
+			{
+				DoWinDelay;
+				if (_f_callee_id == FID_WinWaitClose || _f_callee_id == FID_WinWaitNotActive)
+					_f_return_retval; // Condition met.
+				// Otherwise, it would not be meaningful to wait for another window to be
+				// created with the same HWND.  It seems more useful to abort immediately
+				// but report timeout/failure than to wait for the timeout to elapse.
+				_f_return_i(FALSE);
+			}
+			if (_f_callee_id == FID_WinWait || _f_callee_id == FID_WinWaitClose)
+			{
+				// Wait for the window to become visible/hidden.  Most functions ignore
+				// DetectHiddenWindows when given a pure HWND/object (because it's more
+				// useful that way), but in this case it seems more useful and intuitive
+				// to respect DetectHiddenWindows.
+				if (g->DetectWindow(target_hwnd) == (_f_callee_id == FID_WinWait))
+				{
+					DoWinDelay;
+					if (_f_callee_id == FID_WinWaitClose)
+						_f_return_retval;
+					_f_return_i((size_t)target_hwnd);
+				}
+			}
+			else
+			{
+				if ((GetForegroundWindow() == target_hwnd) == (_f_callee_id == FID_WinWaitActive))
+				{
+					DoWinDelay;
+					if (_f_callee_id == FID_WinWaitNotActive)
+						_f_return_retval;
+					_f_return_i((size_t)target_hwnd);
+				}
+			}
+		}
+		else switch (_f_callee_id)
 		{
 		case FID_WinWait:
 			#define SAVED_WIN_ARGS arg1, arg2, arg4, arg5
@@ -1175,25 +1347,23 @@ BIF_DECL(BIF_Wait)
 
 
 
-ResultType Line::WinMove(LPTSTR aX, LPTSTR aY, LPTSTR aWidth, LPTSTR aHeight
-	, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_WinMove)
 {
-	// So that compatibility is retained, don't set ErrorLevel for commands that are native to AutoIt2
-	// but that AutoIt2 doesn't use ErrorLevel with (such as this one).
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
-	if (!target_window)
-		return OK;
+	HWND target_window;
+	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 4, aParamCount - 4))
+		return;
 	RECT rect;
-	if (!GetWindowRect(target_window, &rect))
-		return OK;  // Can't set errorlevel, see above.
-	MoveWindow(target_window
-		, *aX ? ATOI(aX) : rect.left  // X-position
-		, *aY ? ATOI(aY) : rect.top   // Y-position
-		, *aWidth ? ATOI(aWidth) : rect.right - rect.left
-		, *aHeight ? ATOI(aHeight) : rect.bottom - rect.top
-		, TRUE);  // Do repaint.
-	DoWinDelay;
-	return OK;
+	if (target_window && GetWindowRect(target_window, &rect))
+	{
+		MoveWindow(target_window
+			, ParamIndexToOptionalInt(0, rect.left) // X-position
+			, ParamIndexToOptionalInt(1, rect.top)  // Y-position
+			, ParamIndexToOptionalInt(2, rect.right - rect.left)
+			, ParamIndexToOptionalInt(3, rect.bottom - rect.top)
+			, TRUE);  // Do repaint.
+		DoWinDelay;
+	}
+	_f_return_empty;
 }
 
 
@@ -1279,25 +1449,18 @@ BIF_DECL(BIF_ControlClick)
 		}
 	}
 	
-	// Consolidate the control and window parameters.
-	ExprTokenType *param[5];
-	int param_count = 0;
-	for (int i = 0; i < aParamCount; ++i)
-	{
-		param[param_count++] = aParam[i];
-		if (i == 2) i += 3; // Skip WhichButton, ClickCount, Options.
-	}
 	HWND target_window, control_window;
 	if (position_mode)
 	{
 		// Determine target window only.  Control will be found by position below.
-		target_window = DetermineTargetWindow(param + 1, param_count - 1);
+		if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1, 3))
+			return; // aResultToken.SetExitResult() or Error() was already called.
 		control_window = NULL;
 	}
 	else
 	{
 		// Determine target window and control.
-		if (!DetermineTargetControl(control_window, target_window, aResultToken, param, param_count))
+		if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam, aParamCount, 3))
 			return; // aResultToken.SetExitResult() or Error() was already called.
 	}
 	if (!target_window)
@@ -1573,7 +1736,9 @@ error:
 
 BIF_DECL(BIF_ControlGetFocus)
 {
-	HWND target_window = DetermineTargetWindow(aParam, aParamCount);
+	HWND target_window;
+	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount))
+		return;
 	if (!target_window)
 		goto error;
 
@@ -2075,7 +2240,9 @@ BIF_DECL(BIF_StatusBarGetText)//(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 {
 	int part = ParamIndexToOptionalInt(0, 1);
 	// Note: ErrorLevel is handled by StatusBarUtil(), below.
-	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1);
+	HWND target_window;
+	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1))
+		return;
 	HWND control_window = target_window ? ControlExist(target_window, _T("msctls_statusbar321")) : NULL;
 	// Call this even if control_window is NULL because in that case, it will set the output var to
 	// be blank for us:
@@ -2084,23 +2251,27 @@ BIF_DECL(BIF_StatusBarGetText)//(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 
 
 
-ResultType Line::StatusBarWait(LPTSTR aTextToWaitFor, LPTSTR aSeconds, LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
-	, LPTSTR aInterval, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
-// Since other script threads can interrupt this command while it's running, it's important that
-// this command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
-// This is because an interrupting thread usually changes the values to something inappropriate for this thread.
+BIF_DECL(BIF_StatusBarWait)
 {
-	// Note: ErrorLevel is handled by StatusBarUtil(), below.
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
-	// Make a copy of any memory areas that are volatile (due to Deref buf being overwritten
-	// if a new hotkey subroutine is launched while we are waiting) but whose contents we
-	// need to refer to while we are waiting:
+	HWND target_window;
+	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 3, aParamCount - 3, 1))
+		return;
+
+	LPTSTR aTextToWaitFor = ParamIndexToOptionalString(0, _f_number_buf);
+	int aSeconds = ParamIndexIsOmittedOrEmpty(1) ? -1 : int(ParamIndexToDouble(1) * 1000);
+	int aPart = ParamIndexToOptionalInt(2, 0);
+	int aInterval = ParamIndexToOptionalInt(5, 50);
+
+	// Make a copy of any memory areas that are volatile (due to caller passing a variable,
+	// which could be reassigned by a new hotkey subroutine launched while we are waiting)
+	// but whose contents we need to refer to while we are waiting:
 	TCHAR text_to_wait_for[4096];
 	tcslcpy(text_to_wait_for, aTextToWaitFor, _countof(text_to_wait_for));
 	HWND control_window = target_window ? ControlExist(target_window, _T("msctls_statusbar321")) : NULL;
-	return StatusBarUtil(NULL, control_window, ATOI(aPart) // It will handle a NULL control_window or zero part# for us.
-		, text_to_wait_for, *aSeconds ? (int)(ATOF(aSeconds)*1000) : -1 // Blank->indefinite.  0 means 500ms.
-		, ATOI(aInterval));
+	// Note: ErrorLevel is handled by StatusBarUtil(), below.
+	// It will also handle a NULL control_window or zero part# for us.
+	StatusBarUtil(NULL, control_window, aPart, text_to_wait_for, aSeconds, aInterval);
+	_f_return_b(!g_ErrorLevel->ToInt64());
 }
 
 
@@ -2458,7 +2629,9 @@ BIF_DECL(BIF_WinSet)
 {
 	_f_param_string_opt(aValue, 0);
 
-	HWND target_window = DetermineTargetWindow(aParam + 1, aParamCount - 1);
+	HWND target_window;
+	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1))
+		return;
 	if (!target_window)
 	{
 		Script::SetErrorLevelOrThrow();
@@ -2649,7 +2822,10 @@ BIF_DECL(BIF_WinSet)
 
 BIF_DECL(BIF_WinRedraw)
 {
-	if (HWND target_window = DetermineTargetWindow(aParam, aParamCount))
+	HWND target_window;
+	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount))
+		return;
+	if (target_window)
 	{
 		// Seems best to always have the last param be TRUE. Also, it seems best not to call
 		// UpdateWindow(), which forces the window to immediately process a WM_PAINT message,
@@ -2667,7 +2843,10 @@ BIF_DECL(BIF_WinRedraw)
 
 BIF_DECL(BIF_WinMoveTopBottom)
 {
-	if (HWND target_window = DetermineTargetWindow(aParam, aParamCount))
+	HWND target_window;
+	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount))
+		return;
+	if (target_window)
 	{
 		HWND mode = _f_callee_id == FID_WinMoveBottom ? HWND_BOTTOM : HWND_TOP;
 		// Note: SWP_NOACTIVATE must be specified otherwise the target window often fails to move:
@@ -2681,22 +2860,23 @@ BIF_DECL(BIF_WinMoveTopBottom)
 
 
 
-ResultType Line::WinSetTitle(LPTSTR aNewTitle, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
-// Like AutoIt2, this function and others like it always return OK, even if the target window doesn't
-// exist or there action doesn't actually succeed.
+BIF_DECL(BIF_WinSetTitle)
 {
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
-	if (!target_window)
-		return OK;
-	SetWindowText(target_window, aNewTitle);
-	return OK;
+	HWND target_window;
+	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1))
+		return;
+	if (target_window)
+		SetWindowText(target_window, ParamIndexToString(0, _f_number_buf));
+	_f_return_empty;
 }
 
 
 
 BIF_DECL(BIF_WinGetTitle)
 {
-	HWND target_window = DetermineTargetWindow(aParam, aParamCount);
+	HWND target_window;
+	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount))
+		return;
 
 	int space_needed = target_window ? GetWindowTextLength(target_window) + 1 : 1; // 1 for terminator.
 	if (!TokenSetResult(aResultToken, NULL, space_needed - 1))
@@ -2721,7 +2901,9 @@ BIF_DECL(BIF_WinGetTitle)
 
 BIF_DECL(BIF_WinGetClass)
 {
-	HWND target_window = DetermineTargetWindow(aParam, aParamCount);
+	HWND target_window;
+	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount))
+		return;
 	if (!target_window)
 		_f_return_empty;
 	TCHAR class_name[WINDOW_CLASS_SIZE];
@@ -2790,7 +2972,17 @@ BIF_DECL(BIF_WinGet)
 		return;
 	}
 	// Not List or Count, so it's a function that operates on a single window.
-	HWND target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText, cmd == FID_WinGetIDLast);
+	HWND target_window = NULL;
+	if (aParamCount > 0)
+		switch (DetermineTargetHwnd(target_window, aResultToken, *aParam[0]))
+		{
+		case FAIL: return;
+		case OK:
+			if (!target_window)
+				_f_return_empty;
+		}
+	if (!target_window)
+		target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText, cmd == FID_WinGetIDLast);
 	if (!target_window)
 		_f_return_empty;
 
@@ -2939,7 +3131,9 @@ BOOL CALLBACK EnumChildGetControlList(HWND aWnd, LPARAM lParam)
 
 BIF_DECL(BIF_WinGetText)
 {
-	HWND target_window = DetermineTargetWindow(aParam, aParamCount);
+	HWND target_window;
+	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount))
+		return;
 	if (!target_window)
 	{
 		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
@@ -3023,7 +3217,9 @@ BOOL CALLBACK EnumChildGetText(HWND aWnd, LPARAM lParam)
 
 BIF_DECL(BIF_WinGetPos)
 {
-	HWND target_window = DetermineTargetWindow(aParam + 4, aParamCount - 4);
+	HWND target_window;
+	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 4, aParamCount - 4))
+		return;
 	// Even if target_window is NULL, we want to continue on so that the output
 	// variables are set to be the empty string, which is the proper thing to do
 	// rather than leaving whatever was in there before.
@@ -3052,7 +3248,7 @@ BIF_DECL(BIF_WinGetPos)
 		if (target_window)
 			var->Assign(((int *)(&rect))[i]); // Always succeeds.
 		else
-			if (!var->Assign(_T(""))) // Failure would be very unusual, but can occur for Clipboard and other built-in variables.
+			if (!var->Assign()) // Failure would be very unusual, but can occur for Clipboard and other built-in variables.
 				aResultToken.SetExitResult(FAIL);
 	}
 	_f_return((__int64)(size_t)target_window); // Return the HWND to indicate success/failure.
@@ -8836,52 +9032,70 @@ ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aP
 }
 
 
-HWND DetermineTargetWindow(ExprTokenType *aParam[], int aParamCount)
+ResultType DetermineTargetHwnd(HWND &aWindow, ResultToken &aResultToken, ExprTokenType &aToken)
 {
-	TCHAR number_buf[4][MAX_NUMBER_SIZE];
-	LPTSTR param[4];
-	for (int i = 0; i < 4; i++)
-		param[i] = i < aParamCount ? TokenToString(*aParam[i], number_buf[i]) : _T("");
-	return Line::DetermineTargetWindow(param[0], param[1], param[2], param[3]);
+	__int64 n;
+	if (IObject *obj = TokenToObject(aToken))
+	{
+		if (!GetObjectIntProperty(obj, _T("Hwnd"), n, aResultToken))
+			return FAIL;
+	}
+	else if (TokenIsPureNumeric(aToken) == PURE_INTEGER)
+		n = TokenToInt64(aToken);
+	else
+		return CONDITION_FALSE;
+	aWindow = (HWND)(UINT_PTR)n;
+	// Callers expect the return value to be either a valid HWND or 0:
+	if (!IsWindow(aWindow))
+		aWindow = 0;
+	return OK;
 }
 
 
-ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
+ResultType DetermineTargetWindow(HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount)
 {
-	aWindow = aControl = NULL;
-
-	if (ParamIndexIsOmitted(0))
+	if (aParamCount > 0)
 	{
-		// Only functions which can operate on top-level windows allow Control to be
-		// omitted (and a select few other functions with more optional parameters).
-		// This replaces the old "ahk_parent" string used with ControlSend, but is
-		// also used by SendMessage.
-		aControl = aWindow = DetermineTargetWindow(aParam + 1, aParamCount - 1);
-		return OK;
+		auto result = DetermineTargetHwnd(aWindow, aResultToken, *aParam[0]);
+		if (result != CONDITION_FALSE)
+			return result;
 	}
-
-	HWND hwnd;
-	if (IObject *obj = ParamIndexToObject(0))
+	TCHAR number_buf[4][MAX_NUMBER_SIZE];
+	LPTSTR param[4];
+	for (int i = 0, j = 0; i < 4; ++i, ++j)
 	{
-		__int64 n;
-		if (!GetObjectIntProperty(obj, _T("Hwnd"), n, aResultToken))
+		if (i == 2) j += aNonWinParamCount;
+		param[i] = j < aParamCount ? TokenToString(*aParam[j], number_buf[i]) : _T("");
+	}
+	aWindow = Line::DetermineTargetWindow(param[0], param[1], param[2], param[3]);
+	return OK;
+}
+
+
+ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount)
+{
+	aWindow = aControl = nullptr;
+	// Only functions which can operate on top-level windows allow Control to be
+	// omitted (and a select few other functions with more optional parameters).
+	// This replaces the old "ahk_parent" string used with ControlSend, but is
+	// also used by SendMessage.
+	LPTSTR control_spec = nullptr;
+	if (!ParamIndexIsOmitted(0))
+	{
+		switch (DetermineTargetHwnd(aWindow, aResultToken, *aParam[0]))
+		{
+		case OK:
+			aControl = aWindow;
+			return OK;
+		case FAIL:
 			return FAIL;
-		hwnd = (HWND)(UINT_PTR)n;
+		}
+		// Since above didn't return, it wasn't a pure Integer or object {Hwnd}.
+		control_spec = ParamIndexToString(0, _f_number_buf);
 	}
-	else if (TokenIsPureNumeric(*aParam[0]) == PURE_INTEGER)
-	{
-		hwnd = (HWND)(UINT_PTR)ParamIndexToInt64(0);
-	}
-	else
-	{
-		_f_param_string(control_spec, 0);
-		aWindow = DetermineTargetWindow(aParam + 1, aParamCount - 1);
-		aControl = ControlExist(aWindow, control_spec);
-		return OK;
-	}
-	// Set both aControl and aWindow, as if ahk_id was used.
-	if (IsWindow(hwnd))
-		aWindow = aControl = hwnd;
+	if (!DetermineTargetWindow(aWindow, aResultToken, aParam + 1, aParamCount - 1, aNonWinParamCount))
+		return FAIL;
+	aControl = control_spec ? ControlExist(aWindow, control_spec) : aWindow;
 	return OK;
 }
 
@@ -14010,15 +14224,36 @@ BIF_DECL(BIF_FileExist)
 
 BIF_DECL(BIF_WinExistActive)
 {
-	TCHAR *param[4], param_buf[4][MAX_NUMBER_SIZE];
-	for (int j = 0; j < 4; ++j) // For each formal parameter, including optional ones.
-		param[j] = ParamIndexToOptionalString(j, param_buf[j]);
+	bool hwnd_specified = false;
+	HWND hwnd;
+	if (!ParamIndexIsOmitted(0))
+	{
+		switch (DetermineTargetHwnd(hwnd, aResultToken, *aParam[0]))
+		{
+		case FAIL:
+			return;
+		case OK:
+			hwnd_specified = true;
+			// DetermineTargetHwnd() already called IsWindow() to verify hwnd.
+			// g->DetectHiddenWindows is intentionally ignored for these cases.
+			if (_f_callee_id == FID_WinActive && GetForegroundWindow() != hwnd)
+				hwnd = 0;
+			break;
+		}
+	}
 
-	HWND found_hwnd = _f_callee_id == FID_WinExist
-		? WinExist(*g, param[0], param[1], param[2], param[3], false, true)
-		: WinActive(*g, param[0], param[1], param[2], param[3], true);
+	if (!hwnd_specified) // Do not call WinExist()/WinActive() even if the specified hwnd was 0.
+	{
+		TCHAR *param[4], param_buf[4][MAX_NUMBER_SIZE];
+		for (int j = 0; j < 4; ++j) // For each formal parameter, including optional ones.
+			param[j] = ParamIndexToOptionalString(j, param_buf[j]);
 
-	_f_return((size_t)found_hwnd);
+		hwnd = _f_callee_id == FID_WinExist
+			? WinExist(*g, param[0], param[1], param[2], param[3], false, true)
+			: WinActive(*g, param[0], param[1], param[2], param[3], true);
+	}
+
+	_f_return_i((size_t)hwnd);
 }
 
 

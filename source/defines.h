@@ -544,15 +544,9 @@ enum enum_act {
 , ACT_SEND, ACT_SENDTEXT, ACT_SENDINPUT, ACT_SENDPLAY, ACT_SENDEVENT
 , ACT_SENDMODE, ACT_SENDLEVEL, ACT_COORDMODE, ACT_SETDEFAULTMOUSESPEED
 , ACT_CLICK, ACT_MOUSEMOVE, ACT_MOUSECLICK, ACT_MOUSECLICKDRAG, ACT_MOUSEGETPOS
-, ACT_STATUSBARWAIT
 , ACT_SLEEP
 , ACT_CRITICAL, ACT_THREAD
-, ACT_WINACTIVATE, ACT_WINACTIVATEBOTTOM
-, ACT_WINMINIMIZE, ACT_WINMAXIMIZE, ACT_WINRESTORE
-, ACT_WINHIDE, ACT_WINSHOW
 , ACT_WINMINIMIZEALL, ACT_WINMINIMIZEALLUNDO
-, ACT_WINCLOSE, ACT_WINKILL, ACT_WINMOVE, ACT_MENUSELECT
-, ACT_WINSETTITLE
 // Keep rarely used actions near the bottom for parsing/performance reasons:
 , ACT_GROUPADD, ACT_GROUPACTIVATE, ACT_GROUPDEACTIVATE, ACT_GROUPCLOSE
 , ACT_SOUNDBEEP, ACT_SOUNDPLAY
@@ -620,6 +614,8 @@ enum enum_act {
 #define MAX_NUMBER_SIZE (MAX_NUMBER_LENGTH + 1) // But not too large because some things might rely on this being fairly small.
 #define MAX_INTEGER_LENGTH 20                     // Max length of a 64-bit number when expressed as decimal or
 #define MAX_INTEGER_SIZE (MAX_INTEGER_LENGTH + 1) // hex string; e.g. -9223372036854775808 or (unsigned) 18446744073709551616 or (hex) -0xFFFFFFFFFFFFFFFF.
+
+#define SW_NONE -1
 
 // Hot-strings:
 // memmove() and proper detection of long hotstrings rely on buf being at least this large:

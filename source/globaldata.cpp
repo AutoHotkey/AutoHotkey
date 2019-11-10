@@ -316,25 +316,12 @@ Action g_act[] =
 	, {_T("MouseClickDrag"), 1, 7, false, {2, 3, 4, 5, 6, 0}} // which-button, x1, y1, x2, y2, speed, Relative
 	, {_T("MouseGetPos"), 0, 5, true, {5, 0}} // 4 optional output vars: xpos, ypos, WindowID, ControlName. Finally: Mode. MinParams must be 0.
 
-	, {_T("StatusBarWait"), 0, 8, false, {2, 3, 6, 0}} // Wait-text(blank ok),seconds,part#,title,text,interval,exclude-title,exclude-text
-
 	, {_T("Sleep"), 1, 1, false, {1, 0}} // Sleep time in ms (numeric)
 
 	, {_T("Critical"), 0, 1, false, NULL}  // On|Off
 	, {_T("Thread"), 1, 3, false, {2, 3, 0}}  // Command, value1 (can be blank for interrupt), value2
 
-	, {_T("WinActivate"), 0, 4, false, NULL} // Passing zero params results in activating the LastUsed window.
-	, {_T("WinActivateBottom"), 0, 4, false, NULL} // Min. 0 so that 1st params can be blank and later ones not blank.
-
-	, {_T("WinMinimize"), 0, 4, false, NULL}, {_T("WinMaximize"), 0, 4, false, NULL}, {_T("WinRestore"), 0, 4, false, NULL} // std. 4 params
-	, {_T("WinHide"), 0, 4, false, NULL}, {_T("WinShow"), 0, 4, false, NULL} // std. 4 params
 	, {_T("WinMinimizeAll"), 0, 0, false, NULL}, {_T("WinMinimizeAllUndo"), 0, 0, false, NULL}
-	, {_T("WinClose"), 0, 5, false, {3, 0}} // title, text, time-to-wait-for-close (0 = 500ms), exclude title/text
-	, {_T("WinKill"), 0, 5, false, {3, 0}} // same as WinClose.
-	, {_T("WinMove"), 0, 8, false, {1, 2, 3, 4, 0}} // xpos, ypos, width, height, title, text, exclude-title, exclude_text
-	, {_T("MenuSelect"), 0, 11, false, NULL} // WinTitle, WinText, Menu name, 6 optional sub-menu names, ExcludeTitle/Text
-
-	, {_T("WinSetTitle"), 1, 5, false, NULL} // newtitle, title, text, exclude-title, exclude-text
 
 	// See above for why minimum is 1 vs. 2:
 	, {_T("GroupAdd"), 1, 5, false, NULL} // Group name, WinTitle, WinText, exclude-title/text

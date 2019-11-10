@@ -111,7 +111,7 @@ public:
 	HWND *mAlreadyVisited;      // Array of HWNDs to exclude from consideration.
 	int mAlreadyVisitedCount;   // Count of items in the above.
 	WindowSpec *mFirstWinSpec;  // Linked list used by the WinGroup commands.
-	ActionTypeType mActionType; // Used only by WinGroup::PerformShowWindow().
+	BuiltInFunctionID mActionType; // Used only by WinGroup::PerformShowWindow().
 	int mTimeToWaitForClose;    // Same.
 	Array *mArray;             // Used by WinGetList() to fetch an array of matching HWNDs.
 

@@ -613,6 +613,8 @@ enum BuiltInFunctionID {
 	FID_WinGetPos = 0, FID_WinGetClientPos,
 	FID_WinSetTransparent = 0, FID_WinSetTransColor, FID_WinSetAlwaysOnTop, FID_WinSetStyle, FID_WinSetExStyle, FID_WinSetEnabled, FID_WinSetRegion,
 	FID_WinMoveBottom = 0, FID_WinMoveTop,
+	FID_WinShow = 0, FID_WinHide, FID_WinMinimize, FID_WinMaximize, FID_WinRestore, FID_WinClose, FID_WinKill,
+	FID_WinActivate = 0, FID_WinActivateBottom,
 	FID_ProcessExist = 0, FID_ProcessClose, FID_ProcessWait, FID_ProcessWaitClose, 
 	FID_MonitorGet = 0, FID_MonitorGetWorkArea, FID_MonitorGetCount, FID_MonitorGetPrimary, FID_MonitorGetName, 
 	FID_OnExit = 0, FID_OnClipboardChange, FID_OnError,
@@ -716,19 +718,6 @@ private:
 
 	ResultType ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID);
 	ResultType TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions);
-	#define SW_NONE -1
-	ResultType PerformShowWindow(ActionTypeType aActionType, LPTSTR aTitle = _T(""), LPTSTR aText = _T("")
-		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
-
-	ResultType WinMove(LPTSTR aTitle, LPTSTR aText, LPTSTR aX, LPTSTR aY
-		, LPTSTR aWidth = _T(""), LPTSTR aHeight = _T(""), LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
-	ResultType MenuSelect(LPTSTR aTitle, LPTSTR aText, LPTSTR aMenu1, LPTSTR aMenu2
-		, LPTSTR aMenu3, LPTSTR aMenu4, LPTSTR aMenu5, LPTSTR aMenu6, LPTSTR aMenu7
-		, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType StatusBarWait(LPTSTR aTextToWaitFor, LPTSTR aSeconds, LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
-		, LPTSTR aInterval, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType WinSetTitle(LPTSTR aTitle, LPTSTR aText, LPTSTR aNewTitle
-		, LPTSTR aExcludeTitle = _T(""), LPTSTR aExcludeText = _T(""));
 
 	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
 
@@ -3421,6 +3410,7 @@ BIF_DECL(BIF_Reg);
 BIF_DECL(BIF_Random);
 BIF_DECL(BIF_Sound);
 BIF_DECL(BIF_StatusBarGetText);
+BIF_DECL(BIF_StatusBarWait);
 BIF_DECL(BIF_CaretGetPos);
 BIF_DECL(BIF_WinGetClass);
 BIF_DECL(BIF_WinGetText);
@@ -3428,8 +3418,13 @@ BIF_DECL(BIF_WinGetTitle);
 BIF_DECL(BIF_WinGetPos);
 BIF_DECL(BIF_WinGet);
 BIF_DECL(BIF_WinSet);
+BIF_DECL(BIF_WinSetTitle);
 BIF_DECL(BIF_WinRedraw);
+BIF_DECL(BIF_WinMove);
 BIF_DECL(BIF_WinMoveTopBottom);
+BIF_DECL(BIF_WinShow);
+BIF_DECL(BIF_WinActivate);
+BIF_DECL(BIF_MenuSelect);
 BIF_DECL(BIF_Process);
 BIF_DECL(BIF_ProcessSetPriority);
 BIF_DECL(BIF_MonitorGet);
@@ -3470,8 +3465,9 @@ int ConvertJoy(LPTSTR aBuf, int *aJoystickID = NULL, bool aAllowOnlyButtons = fa
 bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType);
 bool ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, LPTSTR aBuf);
 
-HWND DetermineTargetWindow(ExprTokenType *aParam[], int aParamCount);
-ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
+ResultType DetermineTargetHwnd(HWND &aWindow, ResultToken &aResultToken, ExprTokenType &aToken);
+ResultType DetermineTargetWindow(HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount = 0);
+ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount = 0);
 #define DETERMINE_TARGET_CONTROL(param_offset) \
 	HWND target_window, control_window; \
 	if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam + param_offset, aParamCount - param_offset)) \

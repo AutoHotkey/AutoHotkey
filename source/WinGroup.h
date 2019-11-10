@@ -48,6 +48,7 @@ public:
 
 
 
+enum BuiltInFunctionID;
 class WinGroup
 {
 private:
@@ -81,7 +82,7 @@ public:
 	UINT mWindowCount;
 
 	ResultType AddWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
-	ResultType ActUponAll(ActionTypeType aActionType, int aTimeToWaitForClose);
+	void ActUponAll(BuiltInFunctionID aActionType, int aTimeToWaitForClose);
 	ResultType CloseAndGoToNext(bool aStartWithMostRecent);
 	ResultType Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec = NULL);
 	ResultType Deactivate(bool aStartWithMostRecent);

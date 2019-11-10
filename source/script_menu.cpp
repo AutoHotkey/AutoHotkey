@@ -433,7 +433,7 @@ UserMenuItem *UserMenu::FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bo
 	// This should be reasonably backwards-compatible, as any scripts that want literally
 	// "1&" as menu item text would have to actually write "1&&".
 	if (length > 1
-		&& aNameOrPos[length - 1] == '&' // Use the same convention as WinMenuSelectItem: 1&, 2&, 3&...
+		&& aNameOrPos[length - 1] == '&' // Use the same convention as MenuSelect: 1&, 2&, 3&...
 		&& aNameOrPos[length - 2] != '&') // Not &&, which means one literal &.
 		index_to_find = ATOI(aNameOrPos) - 1; // Yields -1 if aParam3 doesn't start with a number.
 	aByPos = index_to_find > -1;

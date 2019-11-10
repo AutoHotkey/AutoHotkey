@@ -195,25 +195,24 @@ BIF_DECL(BIF_PixelGetColor)
 
 
 
-ResultType Line::MenuSelect(LPTSTR aTitle, LPTSTR aText, LPTSTR aMenu1, LPTSTR aMenu2
-	, LPTSTR aMenu3, LPTSTR aMenu4, LPTSTR aMenu5, LPTSTR aMenu6, LPTSTR aMenu7
-	, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+BIF_DECL(BIF_MenuSelect)
 {
-	// Set up a temporary array make it easier to traverse nested menus & submenus
-	// in a loop.  Also add a NULL at the end to simplify the loop a little:
-	LPTSTR menu_param[] = {aMenu1, aMenu2, aMenu3, aMenu4, aMenu5, aMenu6, aMenu7, NULL};
+	const int max_menu_params = 7;
+	int menu_param_index = 2;
+	int menu_param_end = min(aParamCount, menu_param_index + max_menu_params);
 
-	HWND target_window = DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
+	HWND target_window;
+	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount, max_menu_params))
+		return;
 	if (!target_window)
 		goto error;
 
-	int first_menu_param = 0;
 	UINT message = WM_COMMAND;
 	HMENU hMenu;
-	if (!_tcsicmp(aMenu1, _T("0&")))
+	if (!_tcsicmp(ParamIndexToOptionalString(menu_param_index), _T("0&")))
 	{
 		hMenu = GetSystemMenu(target_window, FALSE);
-		first_menu_param = 1;
+		menu_param_index += 1;
 		message = WM_SYSCOMMAND;
 	}
 	else
@@ -243,11 +242,11 @@ else\
 	int pos, target_menu_pos;
 	LPTSTR this_menu_param;
 
-	for (int i = first_menu_param; ; ++i)
+	for ( ; menu_param_index < menu_param_end; ++menu_param_index)
 	{
-		this_menu_param = menu_param[i]; // For performance and convenience.
-		if (!(this_menu_param && *this_menu_param))
-			break;
+		this_menu_param = ParamIndexToOptionalString(menu_param_index, _f_number_buf);
+		if (!*this_menu_param)
+			goto error;
 		if (!hMenu)  // The nesting of submenus ended prior to the end of the list of menu search terms.
 			goto error;
 
@@ -297,16 +296,18 @@ else\
 
 	// This would happen if the outer loop above had zero iterations due to aMenu1 being NULL or blank,
 	// or if the caller specified a submenu as the target (which doesn't seem valid since an app would
-	// next expect to ever receive a message for a submenu?):
+	// never expect to ever receive a message for a submenu?):
 	if (menu_id == MENU_ITEM_IS_SUBMENU)
 		goto error;
 
 	// Since the above didn't return, the specified search hierarchy was completely found.
 	PostMessage(target_window, message, (WPARAM)menu_id, 0);
-	return g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
+	_f_return_b(TRUE);
 
 error:
-	return SetErrorLevelOrThrow();
+	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+	_f_return_b(FALSE);
 }
 
 

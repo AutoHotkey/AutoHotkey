@@ -81,10 +81,11 @@ ResultType WinGroup::AddWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle
 
 
 
-ResultType WinGroup::ActUponAll(ActionTypeType aActionType, int aTimeToWaitForClose)
+void WinGroup::ActUponAll(BuiltInFunctionID aActionType, int aTimeToWaitForClose)
 {
-	if (IsEmpty())
-		return OK;  // OK since this is the expected behavior in this case.
+	// A group should never be empty, since it is created by "adding" a set of criteria.
+	//if (IsEmpty())
+	//	return;
 	// Don't need to call Update() in this case.
 	WindowSearch ws;
 	ws.mFirstWinSpec = mFirstWindow; // Act upon all windows that match any WindowSpec in the group.
@@ -93,7 +94,6 @@ ResultType WinGroup::ActUponAll(ActionTypeType aActionType, int aTimeToWaitForCl
 	EnumWindows(EnumParentActUponAll, (LPARAM)&ws);
 	if (ws.mFoundParent) // It acted upon least one window.
 		DoWinDelay;
-	return OK;
 }
 
 
@@ -493,7 +493,7 @@ BOOL CALLBACK EnumParentActUponAll(HWND aWnd, LPARAM lParam)
 
 	// Skip windows the command isn't supposed to detect.  ACT_WINSHOW is exempt because
 	// hidden windows are always detected by the WinShow command:
-	if (!(ws.mActionType == ACT_WINSHOW || g->DetectWindow(aWnd)))
+	if (!(ws.mActionType == FID_WinShow || g->DetectWindow(aWnd)))
 		return TRUE;
 
 	int nCmdShow;
@@ -506,29 +506,29 @@ BOOL CALLBACK EnumParentActUponAll(HWND aWnd, LPARAM lParam)
 		{
 			// Match found, so aWnd is a member of the group.  In addition, IsMatch() has set
 			// the value of ws.mFoundParent to tell our caller that at least one window was acted upon.
-			// See Line::PerformShowWindow() for comments about the following section.
+			// See BIF_WinShow for comments about the following section.
 			nCmdShow = SW_NONE; // Set default each time.
 			switch (ws.mActionType)
 			{
-			case ACT_WINCLOSE:
-			case ACT_WINKILL:
+			case FID_WinClose:
+			case FID_WinKill:
 				// mTimeToWaitForClose is not done in a very efficient way here: to keep code size
 				// in check, it closes each window individually rather than sending WM_CLOSE to all
 				// the windows simultaneously and then waiting until all have vanished:
-				WinClose(aWnd, ws.mTimeToWaitForClose, ws.mActionType == ACT_WINKILL); // DoWinDelay is done by our caller.
+				WinClose(aWnd, ws.mTimeToWaitForClose, ws.mActionType == FID_WinKill); // DoWinDelay is done by our caller.
 				return TRUE; // All done with the current window, so fetch the next one.
 
-			case ACT_WINMINIMIZE:
+			case FID_WinMinimize:
 				if (IsWindowHung(aWnd))
 					nCmdShow = SW_FORCEMINIMIZE;
 				else
 					nCmdShow = SW_MINIMIZE;
 				break;
 
-			case ACT_WINMAXIMIZE: if (!IsWindowHung(aWnd)) nCmdShow = SW_MAXIMIZE; break;
-			case ACT_WINRESTORE:  if (!IsWindowHung(aWnd)) nCmdShow = SW_RESTORE;  break;
-			case ACT_WINHIDE: nCmdShow = SW_HIDE; break;
-			case ACT_WINSHOW: nCmdShow = SW_SHOW; break;
+			case FID_WinMaximize: if (!IsWindowHung(aWnd)) nCmdShow = SW_MAXIMIZE; break;
+			case FID_WinRestore:  if (!IsWindowHung(aWnd)) nCmdShow = SW_RESTORE;  break;
+			case FID_WinHide: nCmdShow = SW_HIDE; break;
+			case FID_WinShow: nCmdShow = SW_SHOW; break;
 			}
 
 			if (nCmdShow != SW_NONE)
