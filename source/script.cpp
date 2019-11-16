@@ -2170,22 +2170,10 @@ examine_line:
 						goto continue_main_loop; // It will see that remap_dest_vk is non-zero and act accordingly.
 					switch (remap_dest_vk)
 					{
-					case VK_CONTROL: // Checked in case it was specified as "Control" rather than "Ctrl".
-					case VK_SLEEP:
-						if (StrChrAny(hotkey_flag, _T(" \t,"))) // Not using g_delimiter (reduces code size/complexity).
-							break; // Any space, tab, or enter means this is a command rather than a remap destination.
-						goto continue_main_loop; // It will see that remap_dest_vk is non-zero and act accordingly.
-					// "Return" and "Pause" as destination keys are always considered commands instead.
-					// This is documented and is done to preserve backward compatibility.
-					case VK_RETURN:
-						// v1.0.40.05: Although "Return" can't be a destination, "Enter" can be.  Must compare
-						// to "Return" not "Enter" so that things like "vk0d" (the VK of "Enter") can also be a
-						// destination key:
-						if (!_tcsicmp(remap_dest, _T("Return")))
+					case VK_PAUSE:
+						if (!_tcsicmp(remap_dest, _T("Pause"))) // Specifically "Pause", not "vk13".
 							break;
-						goto continue_main_loop; // It will see that remap_dest_vk is non-zero and act accordingly.
-					case VK_PAUSE:  // Used for both "Pause" and "Break"
-						break;
+						// Fall through:
 					default: // All other VKs are valid destinations and thus the remap is valid.
 						goto continue_main_loop; // It will see that remap_dest_vk is non-zero and act accordingly.
 					}
