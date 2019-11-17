@@ -9910,7 +9910,9 @@ VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
 		// Get index for circular buffer
 		int i = (g_KeyHistoryNext + g_MaxHistoryKeys - iOffset) % g_MaxHistoryKeys;
 		// Keep looking until we hit the second valid event
-		if (g_KeyHistory[i].event_type != _T('i') && ++validEventCount > 1)
+		if (g_KeyHistory[i].event_type != _T('i') // Not an ignored event.
+			&& g_KeyHistory[i].event_type != _T('U') // Not a Unicode packet (SendInput/VK_PACKET).
+			&& ++validEventCount > 1)
 		{
 			// Find the next most recent key-down
 			if (!g_KeyHistory[i].key_up)

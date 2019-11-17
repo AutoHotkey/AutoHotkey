@@ -167,8 +167,14 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 	HWND orig_foreground_wnd = GetForegroundWindow();
 	// AutoIt3: If there is not any foreground window, then input focus is on the TaskBar.
 	// MY: It is definitely possible for GetForegroundWindow() to return NULL, even on XP.
-	if (!orig_foreground_wnd)
-		orig_foreground_wnd = FindWindow(_T("Shell_TrayWnd"), NULL);
+	// Lexikos: It can be easily reproduced by calling GetForegroundWindow() in a tight
+	//  loop on Windows 10 and switching windows with Alt+Esc.  In such cases the taskbar
+	//  is definitely NOT active, and if our caller requested activation of the taskbar,
+	//  it should not be skipped just because !orig_foreground_wnd.
+	// MSDN: "The foreground window can be NULL in certain circumstances, such as when a
+	//  window is losing activation."
+	//if (!orig_foreground_wnd)
+	//	orig_foreground_wnd = FindWindow(_T("Shell_TrayWnd"), NULL);
 
 	// Fix for v1.1.28.02: Restore the window *before* checking if it is already active.
 	// This was supposed to be done in v1.1.20, but was only done for WinTitle = "A".
