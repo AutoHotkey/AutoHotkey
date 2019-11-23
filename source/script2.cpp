@@ -4604,6 +4604,24 @@ ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLOR
 	aRight  += origin.x;
 	aBottom += origin.y;
 
+	bool right_to_left = aLeft > aRight;
+	bool bottom_to_top = aTop > aBottom;
+
+	int left = aLeft;
+	int top = aTop;
+	int right = aRight;
+	int bottom = aBottom;
+	if (right_to_left)
+	{
+		left = aRight;
+		right = aLeft;
+	}
+	if (bottom_to_top)
+	{
+		top = aBottom;
+		bottom = aTop;
+	}
+
 	if (aVariation < 0)
 		aVariation = 0;
 	if (aVariation > 255)
@@ -4648,8 +4666,8 @@ ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLOR
 		// the correct pixels are copied across."
 
 		// Create an empty bitmap to hold all the pixels currently visible on the screen (within the search area):
-		int search_width = aRight - aLeft + 1;
-		int search_height = aBottom - aTop + 1;
+		int search_width = right - left + 1;
+		int search_height = bottom - top + 1;
 		if (   !(sdc = CreateCompatibleDC(hdc)) || !(hbitmap_screen = CreateCompatibleBitmap(hdc, search_width, search_height))   )
 			goto fast_end;
 
@@ -4657,7 +4675,7 @@ ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLOR
 			goto fast_end;
 
 		// Copy the pixels in the search-area of the screen into the DC to be searched:
-		if (   !(BitBlt(sdc, 0, 0, search_width, search_height, hdc, aLeft, aTop, SRCCOPY))   )
+		if (   !(BitBlt(sdc, 0, 0, search_width, search_height, hdc, left, top, SRCCOPY))   )
 			goto fast_end;
 
 		LONG screen_width, screen_height;
@@ -4687,8 +4705,18 @@ ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLOR
 		{
 			if (screen_is_16bit)
 				aColorRGB &= 0xF8F8F8F8;
-			for (i = 0; i < screen_pixel_count; ++i)
+
+			for (int j = 0; j < screen_pixel_count; ++j)
 			{
+				if (right_to_left && bottom_to_top)
+					i = screen_pixel_count - j - 1;
+				else if (right_to_left)
+					i = j / screen_width * screen_width + screen_width - j % screen_width - 1;
+				else if (bottom_to_top)
+					i = (screen_pixel_count - j - 1) / screen_width * screen_width + j % screen_width;
+				else
+					i = j;
+
 				// Note that screen pixels sometimes have a non-zero high-order byte.  That's why
 				// bit-and with 0x00FFFFFF is done.  Otherwise, reddish/orangish colors are not properly
 				// found:
@@ -4722,8 +4750,17 @@ ResultType Line::PixelSearch(int aLeft, int aTop, int aRight, int aBottom, COLOR
 			
 			SET_COLOR_RANGE
 
-			for (i = 0; i < screen_pixel_count; ++i)
+			for (int j = 0; j < screen_pixel_count; ++j)
 			{
+				if (right_to_left && bottom_to_top)
+					i = screen_pixel_count - j - 1;
+				else if (right_to_left)
+					i = j / screen_width * screen_width + screen_width - j % screen_width - 1;
+				else if (bottom_to_top)
+					i = (screen_pixel_count - j - 1) / screen_width * screen_width + j % screen_width;
+				else
+					i = j;
+
 				// Note that screen pixels sometimes have a non-zero high-order byte.  But it doesn't
 				// matter with the below approach, since that byte is not checked in the comparison.
 				pixel = screen_pixel[i];
@@ -4762,9 +4799,9 @@ fast_end:
 		// zeroes if this doesn't need to be done):
 		if (!aIsPixelGetColor && found)
 		{
-			if (output_var_x && !output_var_x->Assign((aLeft + i%screen_width) - origin.x))
+			if (output_var_x && !output_var_x->Assign((left + i%screen_width) - origin.x))
 				return FAIL;
-			if (output_var_y && !output_var_y->Assign((aTop + i/screen_width) - origin.y))
+			if (output_var_y && !output_var_y->Assign((top + i/screen_width) - origin.y))
 				return FAIL;
 		}
 
@@ -4780,8 +4817,6 @@ fast_end:
 
 	// If the caller gives us inverted X or Y coordinates, conduct the search in reverse order.
 	// This feature was requested; it was put into effect for v1.0.25.06.
-	bool right_to_left = aLeft > aRight;
-	bool bottom_to_top = aTop > aBottom;
 	register int xpos, ypos;
 
 	if (aVariation > 0)
