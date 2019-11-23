@@ -2465,11 +2465,8 @@ examine_line:
 						goto continue_main_loop; // It will see that remap_dest_vk is non-zero and act accordingly.
 					switch (remap_dest_vk)
 					{
-					case VK_CONTROL: // Checked in case it was specified as "Control" rather than "Ctrl".
-					case VK_SLEEP:
-						if (StrChrAny(hotkey_flag, _T(" \t,"))) // Not using g_delimiter (reduces code size/complexity).
-							break; // Any space, tab, or enter means this is a command rather than a remap destination.
-						goto continue_main_loop; // It will see that remap_dest_vk is non-zero and act accordingly.
+					// "Control" and "Sleep" are permitted to be keys when no parameters are present.
+					// TextToVK() returns 0 in those cases, so there's no need to handle them here.
 					// "Return" and "Pause" as destination keys are always considered commands instead.
 					// This is documented and is done to preserve backward compatibility.
 					case VK_RETURN:
