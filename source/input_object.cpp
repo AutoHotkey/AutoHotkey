@@ -136,7 +136,7 @@ ResultType InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, E
 	case P_MinSendLevel:
 		if (IS_INVOKE_SET)
 		{
-			input.MinSendLevel = (SendLevelType)ParamIndexToInt64(1);
+			input.MinSendLevel = (SendLevelType)ParamIndexToInt64(0);
 			return OK;
 		}
 		_o_return(input.MinSendLevel);
@@ -144,7 +144,7 @@ ResultType InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, E
 	case P_Timeout:
 		if (IS_INVOKE_SET)
 		{
-			input.Timeout = (int)(ParamIndexToDouble(1) * 1000);
+			input.Timeout = (int)(ParamIndexToDouble(0) * 1000);
 			if (input.InProgress() && input.Timeout > 0)
 				input.SetTimeoutTimer();
 			return OK;
@@ -160,12 +160,12 @@ ResultType InputObject::BoolOpt(ResultToken &aResultToken, int aID, int aFlags, 
 	bool *bool_option = nullptr;
 	switch (aID)
 	{
-	case P_BackspaceIsUndo: &input.BackspaceIsUndo; break;
-	case P_CaseSensitive: &input.CaseSensitive; break;
-	case P_FindAnywhere: &input.FindAnywhere; break;
-	case P_VisibleText: &input.VisibleText; break;
-	case P_VisibleNonText: &input.VisibleNonText; break;
-	case P_NotifyNonText: &input.NotifyNonText; break;
+	case P_BackspaceIsUndo: bool_option = &input.BackspaceIsUndo; break;
+	case P_CaseSensitive: bool_option = &input.CaseSensitive; break;
+	case P_FindAnywhere: bool_option = &input.FindAnywhere; break;
+	case P_VisibleText: bool_option = &input.VisibleText; break;
+	case P_VisibleNonText: bool_option = &input.VisibleNonText; break;
+	case P_NotifyNonText: bool_option = &input.NotifyNonText; break;
 	}
 	if (IS_INVOKE_SET)
 		*bool_option = ParamIndexToBOOL(0);
