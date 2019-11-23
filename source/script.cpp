@@ -2480,7 +2480,8 @@ examine_line:
 							break;
 						goto continue_main_loop; // It will see that remap_dest_vk is non-zero and act accordingly.
 					case VK_PAUSE:  // Used for both "Pause" and "Break"
-						break;
+						if (ctoupper(*remap_dest) == 'P' || ctoupper(*remap_dest) == 'B') // Rule out vk13 and sc045.
+							break;
 					default: // All other VKs are valid destinations and thus the remap is valid.
 						goto continue_main_loop; // It will see that remap_dest_vk is non-zero and act accordingly.
 					}
