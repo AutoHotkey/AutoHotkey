@@ -2283,6 +2283,12 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	{
 		if (input->InProgress() && input->IsInteresting(aEvent))
 		{
+			if (   aKeyUp && input->ScriptObject && input->ScriptObject->onKeyUp
+				&& ( ((input->KeySC[aSC] | input->KeyVK[aVK]) & INPUT_KEY_NOTIFY)
+					|| input->NotifyNonText && !((input->KeyVK[aVK]) & INPUT_KEY_IS_TEXT) )   )
+			{
+				PostMessage(g_hWnd, AHK_INPUT_KEYUP, (WPARAM)input, (aSC << 16) | aVK);
+			}
 			if (aKeyUp && (input->KeySC[aSC] & INPUT_KEY_DOWN_SUPPRESSED))
 			{
 				input->KeySC[aSC] &= ~INPUT_KEY_DOWN_SUPPRESSED;
@@ -2917,6 +2923,16 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 
 		if (collect_chars)
 			input->CollectChar(aChar, aCharCount);
+
+		if (input->NotifyNonText)
+		{
+			// These flags enable key-up events to be classified as text or non-text based on
+			// whether key-down produced text.
+			if (treat_as_text)
+				input->KeyVK[aVK] |= INPUT_KEY_IS_TEXT;
+			else
+				input->KeyVK[aVK] &= ~INPUT_KEY_IS_TEXT; // In case keyboard layout has changed or similar.
+		}
 		
 		// Posting the notifications after CollectChar() might reduce the odds of a race condition.
 		if (((key_flags & INPUT_KEY_NOTIFY) || input->NotifyNonText && !treat_as_text)

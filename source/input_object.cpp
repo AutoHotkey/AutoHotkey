@@ -30,6 +30,7 @@ ObjectMember InputObject::sMembers[] =
 	Object_Member(OnChar, OnX, P_OnChar, IT_SET),
 	Object_Member(OnEnd, OnX, P_OnEnd, IT_SET),
 	Object_Member(OnKeyDown, OnX, P_OnKeyDown, IT_SET),
+	Object_Member(OnKeyUp, OnX, P_OnKeyUp, IT_SET),
 	Object_Property_get_set(Timeout),
 	Object_Member(VisibleNonText, BoolOpt, P_VisibleNonText, IT_SET),
 	Object_Member(VisibleText, BoolOpt, P_VisibleText, IT_SET),
@@ -179,6 +180,7 @@ ResultType InputObject::OnX(ResultToken &aResultToken, int aID, int aFlags, Expr
 	switch (aID)
 	{
 	case P_OnKeyDown: pon = &onKeyDown; break;
+	case P_OnKeyUp: pon = &onKeyUp; break;
 	case P_OnChar: pon = &onChar; break;
 	default: pon = &onEnd; break;
 	}

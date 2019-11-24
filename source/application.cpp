@@ -627,6 +627,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		case AHK_INPUT_END:    // Input ended (sent by the hook thread).
 		case AHK_INPUT_KEYDOWN:
 		case AHK_INPUT_CHAR:
+		case AHK_INPUT_KEYUP:
 		{
 			hdrop_to_free = NULL;  // Set default for this message's processing (simplifies code).
 			switch(msg.message)
@@ -793,10 +794,13 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 			case AHK_INPUT_KEYDOWN:
 			case AHK_INPUT_CHAR:
+			case AHK_INPUT_KEYUP:
 				for (input_hook = g_input; input_hook && input_hook != (input_type *)msg.wParam; input_hook = input_hook->Prev);
 				if (!input_hook)
 					continue; // Invalid message or Input already ended (and therefore may have been deleted).
-				if (!(msg.message == AHK_INPUT_KEYDOWN ? input_hook->ScriptObject->onKeyDown : input_hook->ScriptObject->onChar))
+				if (!(msg.message == AHK_INPUT_KEYDOWN ? input_hook->ScriptObject->onKeyDown
+					: msg.message == AHK_INPUT_KEYUP ? input_hook->ScriptObject->onKeyUp
+					: input_hook->ScriptObject->onChar))
 					continue;
 				priority = 0;
 				break;
@@ -958,6 +962,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			case AHK_INPUT_END:
 			case AHK_INPUT_KEYDOWN:
 			case AHK_INPUT_CHAR:
+			case AHK_INPUT_KEYUP:
 			case AHK_USER_MENU: // user-defined menu item
 				break; // Do nothing at this stage.
 			default: // hotkey or hotstring
@@ -1266,6 +1271,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			}
 			
 			case AHK_INPUT_KEYDOWN:
+			case AHK_INPUT_KEYUP:
 			{
 				ExprTokenType params[] =
 				{
@@ -1273,7 +1279,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					__int64(vk_type(msg.lParam)),
 					__int64(sc_type(msg.lParam >> 16)),
 				};
-				LabelPtr(input_hook->ScriptObject->onKeyDown)->ExecuteInNewThread(_T("InputHook"), params, _countof(params));
+				LabelPtr onKey = msg.message == AHK_INPUT_KEYDOWN ? input_hook->ScriptObject->onKeyDown : input_hook->ScriptObject->onKeyUp;
+				onKey->ExecuteInNewThread(_T("InputHook"), params, _countof(params));
 				break;
 			}
 

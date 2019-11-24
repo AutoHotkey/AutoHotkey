@@ -18,6 +18,7 @@ class InputObject : public Object
 		P_Match,
 		P_OnChar,
 		P_OnKeyDown,
+		P_OnKeyUp,
 		P_OnEnd,
 		P_MinSendLevel,
 		P_Timeout,
@@ -30,7 +31,7 @@ class InputObject : public Object
 	};
 	
 public:
-	IObject *onEnd = nullptr, *onKeyDown = nullptr, *onChar = nullptr;
+	IObject *onEnd = nullptr, *onKeyDown = nullptr, *onChar = nullptr, *onKeyUp = nullptr;
 
 	static Object *sPrototype;
 	static ObjectMember sMembers[];
@@ -44,6 +45,8 @@ public:
 			onKeyDown->Release();
 		if (onChar)
 			onChar->Release();
+		if (onKeyUp)
+			onKeyUp->Release();
 	}
 
 	ResultType Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length);
