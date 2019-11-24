@@ -135,6 +135,8 @@ ResultType InputObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThis
 			pon = &onEnd;
 		else if (!_tcsicmp(name + 2, _T("KeyDown")))
 			pon = &onKeyDown;
+		else if (!_tcsicmp(name + 2, _T("KeyUp")))
+			pon = &onKeyUp;
 		else if (!_tcsicmp(name + 2, _T("Char")))
 			pon = &onChar;
 		else

@@ -5,9 +5,9 @@ class InputObject : public ObjectBase
 	input_type input;
 
 public:
-	IObject *onEnd, *onKeyDown, *onChar;
+	IObject *onEnd, *onKeyDown, *onChar, *onKeyUp;
 
-	InputObject() : onEnd(NULL), onKeyDown(NULL), onChar(NULL)
+	InputObject() : onEnd(NULL), onKeyDown(NULL), onChar(NULL), onKeyUp(NULL)
 	{
 		input.ScriptObject = this;
 	}
@@ -20,6 +20,8 @@ public:
 			onKeyDown->Release();
 		if (onChar)
 			onChar->Release();
+		if (onKeyUp)
+			onKeyUp->Release();
 	}
 
 	ResultType Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length);

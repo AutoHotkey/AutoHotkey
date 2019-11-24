@@ -39,7 +39,7 @@ enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_
 	, AHK_CLIPBOARD_CHANGE, AHK_HOOK_TEST_MSG, AHK_CHANGE_HOOK_STATE, AHK_GETWINDOWTEXT
 	, AHK_HOT_IF_EVAL	// HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
 	, AHK_HOOK_SYNC // For WaitHookIdle().
-	, AHK_INPUT_END, AHK_INPUT_KEYDOWN, AHK_INPUT_CHAR
+	, AHK_INPUT_END, AHK_INPUT_KEYDOWN, AHK_INPUT_CHAR, AHK_INPUT_KEYUP
 };
 // NOTE: TRY NEVER TO CHANGE the specific numbers of the above messages, since some users might be
 // using the Post/SendMessage commands to automate AutoHotkey itself.  Here is the original order
@@ -179,7 +179,8 @@ enum InputStatusType {INPUT_OFF, INPUT_IN_PROGRESS, INPUT_TIMED_OUT, INPUT_TERMI
 #define INPUT_KEY_VISIBILITY_MASK (INPUT_KEY_SUPPRESS | INPUT_KEY_VISIBLE)
 #define INPUT_KEY_IGNORE_TEXT 0x10
 #define INPUT_KEY_NOTIFY 0x20
-#define INPUT_KEY_OPTION_MASK 0x7F
+#define INPUT_KEY_OPTION_MASK 0x3F
+#define INPUT_KEY_IS_TEXT 0x40
 #define INPUT_KEY_DOWN_SUPPRESSED 0x80
 
 class InputObject;

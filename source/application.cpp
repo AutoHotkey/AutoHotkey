@@ -658,6 +658,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		case AHK_INPUT_END:    // Input ended (sent by the hook thread).
 		case AHK_INPUT_KEYDOWN:
 		case AHK_INPUT_CHAR:
+		case AHK_INPUT_KEYUP:
 		{
 			LabelPtr label_to_call;
 
@@ -859,10 +860,13 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 			case AHK_INPUT_KEYDOWN:
 			case AHK_INPUT_CHAR:
+			case AHK_INPUT_KEYUP:
 				for (input_hook = g_input; input_hook && input_hook != (input_type *)msg.wParam; input_hook = input_hook->Prev);
 				if (!input_hook)
 					continue; // Invalid message or Input already ended (and therefore may have been deleted).
-				label_to_call = msg.message == AHK_INPUT_KEYDOWN ? input_hook->ScriptObject->onKeyDown : input_hook->ScriptObject->onChar;
+				label_to_call = msg.message == AHK_INPUT_KEYDOWN ? input_hook->ScriptObject->onKeyDown
+								: msg.message == AHK_INPUT_KEYUP ? input_hook->ScriptObject->onKeyUp
+								: input_hook->ScriptObject->onChar;
 				if (!label_to_call)
 					continue;
 				priority = 0;
@@ -1038,6 +1042,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			case AHK_INPUT_END:
 			case AHK_INPUT_KEYDOWN:
 			case AHK_INPUT_CHAR:
+			case AHK_INPUT_KEYUP:
 				break; // Do nothing at this stage.
 			case AHK_USER_MENU: // user-defined menu item
 				// Safer to make a full copies than point to something potentially volatile.
@@ -1403,6 +1408,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			}
 			
 			case AHK_INPUT_KEYDOWN:
+			case AHK_INPUT_KEYUP:
 			{
 				ExprTokenType params[] =
 				{
