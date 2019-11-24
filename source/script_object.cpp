@@ -1885,8 +1885,7 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	case M_Has:
 	{
 		auto index = ParamToZeroIndex(*aParam[0]);
-		_o_return(index >= 0 && index < mLength && mItem[index].symbol != SYM_MISSING
-			? (index + 1) : 0);
+		_o_return(index >= 0 && index < mLength && mItem[index].symbol != SYM_MISSING);
 	}
 
 	case M_Delete:
