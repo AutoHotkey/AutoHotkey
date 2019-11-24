@@ -1876,9 +1876,12 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 						aResultToken.SetExitResult(r);
 						goto free_and_return;
 					}
-					this_formal_param.var->Assign(rt_item);
-					rt_item.Free();
-					continue;
+					if (r != INVOKE_NOT_HANDLED)
+					{
+						this_formal_param.var->Assign(rt_item);
+						rt_item.Free();
+						continue;
+					}
 				}
 			
 				switch(this_formal_param.default_type)
