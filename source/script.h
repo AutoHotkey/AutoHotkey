@@ -627,7 +627,7 @@ enum BuiltInFunctionID {
 	FID_EnvGet = 0, FID_EnvSet,
 	FID_PostMessage = 0, FID_SendMessage,
 	FID_RegRead = 0, FID_RegWrite, FID_RegDelete, FID_RegDeleteKey,
-	FID_SoundGet = 0, FID_SoundSet,
+	FID_SoundGetVolume = 0, FID_SoundGetMute, FID_SoundGetName, FID_SoundGetInterface, FID_SoundSetVolume, FID_SoundSetMute,
 	FID_RunWait = 0, FID_ClipWait, FID_KeyWait, FID_WinWait, FID_WinWaitClose, FID_WinWaitActive, FID_WinWaitNotActive
 };
 
@@ -1126,39 +1126,6 @@ public:
 			return -1;
 	}
 
-	static DWORD SoundConvertComponentType(LPTSTR aBuf, int *aInstanceNumber = NULL)
-	{
-		LPTSTR colon_pos = _tcschr(aBuf, ':');
-		size_t length_to_check = colon_pos ? colon_pos - aBuf : _tcslen(aBuf);
-		if (aInstanceNumber) // Caller wanted the below put into the output parameter.
-		{
-			if (colon_pos)
-			{
-				*aInstanceNumber = ATOI(colon_pos + 1);
-				if (*aInstanceNumber < 1)
-					*aInstanceNumber = 1;
-			}
-			else
-				*aInstanceNumber = 1;
-		}
-		if (!tcslicmp(aBuf, _T("Master"), length_to_check)
-			|| !tcslicmp(aBuf, _T("Speakers"), length_to_check))   return MIXERLINE_COMPONENTTYPE_DST_SPEAKERS;
-		if (!tcslicmp(aBuf, _T("Headphones"), length_to_check))    return MIXERLINE_COMPONENTTYPE_DST_HEADPHONES;
-		if (!tcslicmp(aBuf, _T("Digital"), length_to_check))       return MIXERLINE_COMPONENTTYPE_SRC_DIGITAL;
-		if (!tcslicmp(aBuf, _T("Line"), length_to_check))          return MIXERLINE_COMPONENTTYPE_SRC_LINE;
-		if (!tcslicmp(aBuf, _T("Microphone"), length_to_check))    return MIXERLINE_COMPONENTTYPE_SRC_MICROPHONE;
-		if (!tcslicmp(aBuf, _T("Synth"), length_to_check))         return MIXERLINE_COMPONENTTYPE_SRC_SYNTHESIZER;
-		if (!tcslicmp(aBuf, _T("CD"), length_to_check))            return MIXERLINE_COMPONENTTYPE_SRC_COMPACTDISC;
-		if (!tcslicmp(aBuf, _T("Telephone"), length_to_check))     return MIXERLINE_COMPONENTTYPE_SRC_TELEPHONE;
-		if (!tcslicmp(aBuf, _T("PCSpeaker"), length_to_check))     return MIXERLINE_COMPONENTTYPE_SRC_PCSPEAKER;
-		if (!tcslicmp(aBuf, _T("Wave"), length_to_check))          return MIXERLINE_COMPONENTTYPE_SRC_WAVEOUT;
-		if (!tcslicmp(aBuf, _T("Aux"), length_to_check))           return MIXERLINE_COMPONENTTYPE_SRC_AUXILIARY;
-		if (!tcslicmp(aBuf, _T("Analog"), length_to_check))        return MIXERLINE_COMPONENTTYPE_SRC_ANALOG;
-		// v1.0.37.06: The following was added because it's legitimate on some sound cards such as
-		// SB Audigy's recording (dest #2) Wave/Mp3 volume:
-		if (!tcslicmp(aBuf, _T("N/A"), length_to_check))           return MIXERLINE_COMPONENTTYPE_SRC_UNDEFINED; // 0x1000
-		return MIXERLINE_COMPONENTTYPE_DST_UNDEFINED; // Zero.
-	}
 	static DWORD SoundConvertControlType(LPTSTR aBuf)
 	{
 		// v1.0.37.06: The following was added to allow unnamed control types (if any) to be accessed via number:
@@ -3484,9 +3451,6 @@ void PixelSearch(Var *aOutputVarX, Var *aOutputVarY
 	, int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
 	, int aVariation, LPTSTR aOptions, bool aIsPixelGetColor
 	, ResultToken &aResultToken);
-
-ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
-	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDevice);
 
 ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aPtr, ResultToken &aResultToken, bool aOptional = false);
 ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aValue, ResultToken &aResultToken, bool aOptional = false);

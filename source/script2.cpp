@@ -28,6 +28,7 @@ GNU General Public License for more details.
 
 #include <mmdeviceapi.h> // for SoundSet/SoundGet.
 #include <endpointvolume.h> // for SoundSet/SoundGet.
+#include <functiondiscoverykeys.h>
 
 #define PCRE_STATIC             // For RegEx. PCRE_STATIC tells PCRE to declare its functions for normal, static
 #include "lib_pcre/pcre/pcre.h" // linkage rather than as functions inside an external DLL.
@@ -7207,34 +7208,30 @@ invalid_parameter:
 
 
 
-BIF_DECL(BIF_Sound)
-// If the caller specifies NULL for aSetting, the mode will be "Get".  Otherwise, it will be "Set".
+#pragma region Sound support functions - Vista and later
+
+enum class SoundControlType
 {
-	LPTSTR aSetting = NULL;
-	if (_f_callee_id == FID_SoundSet)
+	Volume,
+	Mute,
+	Name,
+	IID
+};
+
+LPWSTR SoundDeviceGetName(IMMDevice *aDev)
+{
+	IPropertyStore *store;
+	PROPVARIANT prop;
+	if (SUCCEEDED(aDev->OpenPropertyStore(STGM_READ, &store)))
 	{
-		aSetting = ParamIndexToString(0, _f_number_buf);
-		++aParam;
-		--aParamCount;
+		if (FAILED(store->GetValue(PKEY_Device_FriendlyName, &prop)))
+			prop.pwszVal = nullptr;
+		store->Release();
+		return prop.pwszVal;
 	}
-	_f_param_string_opt(aComponentType, 0);
-	_f_param_string_opt(aControlType, 1);
-	_f_param_string_opt(aDevice, 2);
-	int instance_number = 1;  // Set default.
-	DWORD component_type = *aComponentType ? Line::SoundConvertComponentType(aComponentType, &instance_number) : MIXERLINE_COMPONENTTYPE_DST_SPEAKERS;
-	DWORD control_type = *aControlType ? Line::SoundConvertControlType(aControlType) : MIXERCONTROL_CONTROLTYPE_VOLUME;
-
-	#define SOUND_MODE_IS_SET aSetting // Boolean: i.e. if it's not NULL, the mode is "SET".
-	_f_set_retval_p(_T(""), 0); // Set default.
-
-	if (control_type == MIXERCONTROL_CONTROLTYPE_INVALID || aComponentType == MIXERLINE_COMPONENTTYPE_DST_UNDEFINED)
-		_f_throw(_T("Invalid Control Type or Component Type"));
-
-	SoundSetGetVista(aResultToken, aSetting, component_type, instance_number, control_type, aDevice);
+	return nullptr;
 }
 
-
-#pragma region Sound support functions - Vista and later
 
 HRESULT SoundSetGet_GetDevice(LPTSTR aDeviceString, IMMDevice *&aDevice)
 {
@@ -7247,24 +7244,61 @@ HRESULT SoundSetGet_GetDevice(LPTSTR aDeviceString, IMMDevice *&aDevice)
 	hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&deviceEnum);
 	if (SUCCEEDED(hr))
 	{
-		if (*aDeviceString)
+		if (!*aDeviceString)
 		{
-			int device_index = ATOI(aDeviceString) - 1;
-			if (device_index < 0)
-				device_index = 0; // For consistency with 2k/XP.
+			// Get default playback device.
+			hr = deviceEnum->GetDefaultAudioEndpoint(eRender, eConsole, &aDevice);
+		}
+		else
+		{
+			// Parse Name:Index, Name or Index.
+			int target_index = 0;
+			LPWSTR target_name = L"";
+			size_t target_name_length = 0;
+			LPTSTR delim = _tcsrchr(aDeviceString, ':');
+			if (delim)
+			{
+				target_index = ATOI(delim + 1) - 1;
+				target_name = aDeviceString;
+				target_name_length = delim - aDeviceString;
+			}
+			else if (IsNumeric(aDeviceString, FALSE, FALSE))
+			{
+				target_index = ATOI(aDeviceString) - 1;
+			}
+			else
+			{
+				target_name = aDeviceString;
+				target_name_length = _tcslen(aDeviceString);
+			}
 
 			// Enumerate devices; include unplugged devices so that indices don't change when a device is plugged in.
 			hr = deviceEnum->EnumAudioEndpoints(eAll, DEVICE_STATE_ACTIVE | DEVICE_STATE_UNPLUGGED, &devices);
 			if (SUCCEEDED(hr))
 			{
-				hr = devices->Item((UINT)device_index, &aDevice);
+				if (target_name_length)
+				{
+					IMMDevice *dev;
+					for (UINT u = 0; SUCCEEDED(hr = devices->Item(u, &dev)); ++u)
+					{
+						if (LPWSTR dev_name = SoundDeviceGetName(dev))
+						{
+							if (!_wcsnicmp(dev_name, target_name, target_name_length)
+								&& target_index-- == 0)
+							{
+								CoTaskMemFree(dev_name);
+								aDevice = dev;
+								break;
+							}
+							CoTaskMemFree(dev_name);
+						}
+						dev->Release();
+					}
+				}
+				else
+					hr = devices->Item((UINT)target_index, &aDevice);
 				devices->Release();
 			}
-		}
-		else
-		{
-			// Get default playback device.
-			hr = deviceEnum->GetDefaultAudioEndpoint(eRender, eConsole, &aDevice);
 		}
 		deviceEnum->Release();
 	}
@@ -7272,53 +7306,39 @@ HRESULT SoundSetGet_GetDevice(LPTSTR aDeviceString, IMMDevice *&aDevice)
 }
 
 
-DWORD SoundSetGet_ComponentType(GUID &aKSNodeType)
-{
-
-	struct Pair
-	{
-		const GUID *ksnodetype; // KSNODETYPE_*
-		DWORD mixertype; // MIXERLINE_COMPONENTTYPE_SRC_*
-	};
-
-	static Pair TypeMap[] =
-	{
-		// Reference: http://msdn.microsoft.com/en-us/library/windows/hardware/ff538578
-		&KSNODETYPE_MICROPHONE,				MIXERLINE_COMPONENTTYPE_SRC_MICROPHONE,
-		&KSNODETYPE_DESKTOP_MICROPHONE,		MIXERLINE_COMPONENTTYPE_SRC_MICROPHONE,
-		&KSNODETYPE_LEGACY_AUDIO_CONNECTOR,	MIXERLINE_COMPONENTTYPE_SRC_WAVEOUT,
-		&KSCATEGORY_AUDIO,					MIXERLINE_COMPONENTTYPE_SRC_WAVEOUT,
-		&KSNODETYPE_SPEAKER,				MIXERLINE_COMPONENTTYPE_SRC_WAVEOUT,
-		&KSNODETYPE_CD_PLAYER,				MIXERLINE_COMPONENTTYPE_SRC_COMPACTDISC,
-		&KSNODETYPE_SYNTHESIZER,			MIXERLINE_COMPONENTTYPE_SRC_SYNTHESIZER,
-		&KSNODETYPE_LINE_CONNECTOR,			MIXERLINE_COMPONENTTYPE_SRC_LINE,
-		&KSNODETYPE_TELEPHONE,				MIXERLINE_COMPONENTTYPE_SRC_TELEPHONE,
-		&KSNODETYPE_PHONE_LINE,				MIXERLINE_COMPONENTTYPE_SRC_TELEPHONE,
-		&KSNODETYPE_DOWN_LINE_PHONE,		MIXERLINE_COMPONENTTYPE_SRC_TELEPHONE,
-		&KSNODETYPE_ANALOG_CONNECTOR,		MIXERLINE_COMPONENTTYPE_SRC_ANALOG,
-		&KSNODETYPE_SPDIF_INTERFACE,		MIXERLINE_COMPONENTTYPE_SRC_DIGITAL
-	};
-
-	for (int i = 0; i < _countof(TypeMap); ++i)
-		if (aKSNodeType == *TypeMap[i].ksnodetype)
-			return TypeMap[i].mixertype;
-	
-	return MIXERLINE_COMPONENTTYPE_SRC_UNDEFINED;
-}
-
-
 struct SoundComponentSearch
 {
-	// Parameters set by caller:
-	DWORD target_type;
+	// Parameters of search:
+	GUID target_iid;
 	int target_instance;
-	LPCGUID target_iid;
+	SoundControlType target_control;
+	TCHAR target_name[128]; // Arbitrary; probably larger than any real component name.
 	// Internal use/results:
 	IUnknown *control;
+	LPWSTR name; // Valid only when target_control == SoundControlType::Name.
 	int count;
 	// Internal use:
 	DataFlow data_flow;
+	bool ignore_remaining_subunits;
 };
+
+
+void SoundConvertComponent(LPTSTR aBuf, SoundComponentSearch &aSearch)
+{
+	if (IsNumeric(aBuf) == PURE_INTEGER)
+	{
+		*aSearch.target_name = '\0';
+		aSearch.target_instance = ATOI(aBuf);
+	}
+	else
+	{
+		tcslcpy(aSearch.target_name, aBuf, _countof(aSearch.target_name));
+		LPTSTR colon_pos = _tcsrchr(aSearch.target_name, ':');
+		aSearch.target_instance = colon_pos ? ATOI(colon_pos + 1) : 1;
+		if (colon_pos)
+			*colon_pos = '\0';
+	}
+}
 
 
 bool SoundSetGet_FindComponent(IPart *aRoot, SoundComponentSearch &aSearch)
@@ -7328,7 +7348,9 @@ bool SoundSetGet_FindComponent(IPart *aRoot, SoundComponentSearch &aSearch)
 	IPart *part;
 	UINT part_count;
 	PartType part_type;
-	GUID sub_type;
+	LPWSTR part_name;
+	
+	bool check_name = *aSearch.target_name;
 
 	if (aSearch.data_flow == In)
 		hr = aRoot->EnumPartsIncoming(&parts);
@@ -7350,16 +7372,28 @@ bool SoundSetGet_FindComponent(IPart *aRoot, SoundComponentSearch &aSearch)
 		{
 			if (part_type == Connector)
 			{
-				if (SUCCEEDED(part->GetSubType(&sub_type)))
+				if (   part_count == 1 // Ignore Connectors with no Subunits of their own.
+					&& (!check_name || (SUCCEEDED(part->GetName(&part_name)) && !_wcsicmp(part_name, aSearch.target_name)))   )
 				{
-					if (SoundSetGet_ComponentType(sub_type) == aSearch.target_type)
+					if (++aSearch.count == aSearch.target_instance)
 					{
-						if (++aSearch.count == aSearch.target_instance)
+						switch (aSearch.target_control)
 						{
-							part->Release();
-							parts->Release();
-							return true;
+						case SoundControlType::IID:
+							// Permit retrieving the IPart or IConnector itself.  Since there may be
+							// multiple connected Subunits (and they can be enumerated or retrieved
+							// via the Connector IPart), this is only done for the Connector.
+							part->QueryInterface(aSearch.target_iid, (void **)&aSearch.control);
+							break;
+						case SoundControlType::Name:
+							// check_name would typically be false in this case, since a value of true
+							// would mean the caller already knows the component's name.
+							part->GetName(&aSearch.name);
+							break;
 						}
+						part->Release();
+						parts->Release();
+						return true;
 					}
 				}
 			}
@@ -7373,15 +7407,15 @@ bool SoundSetGet_FindComponent(IPart *aRoot, SoundComponentSearch &aSearch)
 					// it can in theory be used to control the component.  An example path might be:
 					//    Output < Master Mute < Master Volume < Sum < Mute < Volume < CD Audio
 					// Parts are considered from right to left, as we return from recursion.
-					if (aSearch.target_iid && !aSearch.control)
+					if (!aSearch.control && !aSearch.ignore_remaining_subunits)
 					{
 						// Query this part for the requested interface and let caller check the result.
-						part->Activate(CLSCTX_ALL, *aSearch.target_iid, (void **)&aSearch.control);
-						
+						part->Activate(CLSCTX_ALL, aSearch.target_iid, (void **)&aSearch.control);
+
 						// If this subunit has siblings, ignore any controls further up the line
 						// as they're likely shared by other components (i.e. master controls).
 						if (part_count > 1)
-							aSearch.target_iid = NULL;
+							aSearch.ignore_remaining_subunits = true;
 					}
 					part->Release();
 					parts->Release();
@@ -7405,7 +7439,9 @@ bool SoundSetGet_FindComponent(IMMDevice *aDevice, SoundComponentSearch &aSearch
 	IPart *part;
 
 	aSearch.count = 0;
-	aSearch.control = NULL;
+	aSearch.control = nullptr;
+	aSearch.name = nullptr;
+	aSearch.ignore_remaining_subunits = false;
 	
 	if (SUCCEEDED(aDevice->Activate(__uuidof(IDeviceTopology), CLSCTX_ALL, NULL, (void**)&topo)))
 	{
@@ -7433,13 +7469,47 @@ bool SoundSetGet_FindComponent(IMMDevice *aDevice, SoundComponentSearch &aSearch
 #pragma endregion
 
 
-ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
-	, DWORD aComponentType, int aComponentInstance, DWORD aControlType, LPTSTR aDeviceString)
+BIF_DECL(BIF_Sound)
 {
+	LPTSTR aSetting = nullptr;
+	SoundComponentSearch search;
+	if (_f_callee_id >= FID_SoundSetVolume)
+	{
+		search.target_control = SoundControlType(_f_callee_id - FID_SoundSetVolume);
+		aSetting = ParamIndexToString(0, _f_number_buf);
+		++aParam;
+		--aParamCount;
+	}
+	else
+		search.target_control = SoundControlType(_f_callee_id);
+
+	switch (search.target_control)
+	{
+	case SoundControlType::Volume:
+		search.target_iid = __uuidof(IAudioVolumeLevel);
+		break;
+	case SoundControlType::Mute:
+		search.target_iid = __uuidof(IAudioMute);
+		break;
+	case SoundControlType::IID:
+		LPTSTR iid; iid = ParamIndexToString(0);
+		if (*iid != '{' || FAILED(CLSIDFromString(iid, &search.target_iid)))
+			_f_throw(ERR_PARAM1_INVALID, iid);
+		++aParam;
+		--aParamCount;
+		break;
+	}
+
+	_f_param_string_opt(aComponent, 0);
+	_f_param_string_opt(aDevice, 1);
+
+#define SOUND_MODE_IS_SET aSetting // Boolean: i.e. if it's not NULL, the mode is "SET".
+	_f_set_retval_p(_T(""), 0); // Set default.
+
 	float setting_scalar;
 	if (SOUND_MODE_IS_SET)
 	{
-		setting_scalar = (float)(ATOF(aSetting) / 100);
+		setting_scalar = (float)(ParamIndexToDouble(0) / 100);
 		if (setting_scalar < -1)
 			setting_scalar = -1;
 		else if (setting_scalar > 1)
@@ -7452,23 +7522,35 @@ ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
 	IMMDevice *device;
 	HRESULT hr;
 
-	hr = SoundSetGet_GetDevice(aDeviceString, device);
+	hr = SoundSetGet_GetDevice(aDevice, device);
 	if (FAILED(hr))
-		return g_ErrorLevel->Assign(_T("Can't Open Specified Mixer"));
+	{
+		g_ErrorLevel->Assign(_T("Device Not Found"));
+		return;
+	}
 
 	LPCTSTR errorlevel = NULL;
 	float result_float;
 	BOOL result_bool;
-	bool control_type_is_boolean;
 
-	if (aComponentType == MIXERLINE_COMPONENTTYPE_DST_SPEAKERS) // ComponentType is Master/Speakers/omitted.
+	if (!*aComponent) // Component is Master (omitted).
 	{
-		if (aComponentInstance != 1)
+		if (search.target_control == SoundControlType::IID)
 		{
-			errorlevel = _T("Mixer Doesn't Have That Many of That Component Type");
+			void *result_ptr = nullptr;
+			if (FAILED(device->QueryInterface(search.target_iid, (void **)&result_ptr)))
+				hr = device->Activate(search.target_iid, CLSCTX_ALL, NULL, &result_ptr);
+			aResultToken.SetValue((UINT_PTR)result_ptr);
 		}
-		else if (aControlType == MIXERCONTROL_CONTROLTYPE_MUTE
-			|| aControlType == MIXERCONTROL_CONTROLTYPE_VOLUME)
+		else if (search.target_control == SoundControlType::Name)
+		{
+			if (auto name = SoundDeviceGetName(device))
+			{
+				aResultToken.Return(name);
+				CoTaskMemFree(name);
+			}
+		}
+		else
 		{
 			// For Master/Speakers, use the IAudioEndpointVolume interface.  Some devices support master
 			// volume control, but do not actually have a volume subunit (so the other method would fail).
@@ -7476,7 +7558,7 @@ ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
 			hr = device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&aev);
 			if (SUCCEEDED(hr))
 			{
-				if (aControlType == MIXERCONTROL_CONTROLTYPE_VOLUME)
+				if (search.target_control == SoundControlType::Volume)
 				{
 					if (!SOUND_MODE_IS_SET || adjust_current_setting)
 					{
@@ -7502,7 +7584,6 @@ ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
 							result_float *= 100.0;
 						} 
 					}
-					control_type_is_boolean = false;
 				}
 				else // Mute.
 				{
@@ -7514,51 +7595,33 @@ ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
 					{
 						hr = aev->SetMute(adjust_current_setting ? !result_bool : setting_scalar > 0, NULL);
 					}
-					control_type_is_boolean = true;
 				}
 				aev->Release();
 			}
 		}
-		else
-			errorlevel = _T("Component Doesn't Support This Control Type");
 	}
 	else
 	{
-		SoundComponentSearch search;
-		search.target_type = aComponentType;
-		search.target_instance = aComponentInstance;
+		SoundConvertComponent(aComponent, search);
 		
-		switch (aControlType)
-		{
-		case MIXERCONTROL_CONTROLTYPE_VOLUME:		search.target_iid = &__uuidof(IAudioVolumeLevel); break;
-		case MIXERCONTROL_CONTROLTYPE_MUTE:			search.target_iid = &__uuidof(IAudioMute); break;
-		// Since specific code would need to be written for each control type, the types below are left
-		// unimplemented.  Support for these controls is up to the audio drivers, and is completely absent
-		// from the drivers for my Realtek HD onboard audio, Logitech G330 headset and ASUS Xonar DS card.
-		//case MIXERCONTROL_CONTROLTYPE_ONOFF:
-		//case MIXERCONTROL_CONTROLTYPE_MONO:
-		//case MIXERCONTROL_CONTROLTYPE_LOUDNESS:
-		//case MIXERCONTROL_CONTROLTYPE_STEREOENH:
-		//case MIXERCONTROL_CONTROLTYPE_BASS_BOOST:
-		//case MIXERCONTROL_CONTROLTYPE_PAN:
-		//case MIXERCONTROL_CONTROLTYPE_QSOUNDPAN:
-		//case MIXERCONTROL_CONTROLTYPE_BASS:
-		//case MIXERCONTROL_CONTROLTYPE_TREBLE:
-		//case MIXERCONTROL_CONTROLTYPE_EQUALIZER:
-		default: search.target_iid = NULL;
-		}
 		if (!SoundSetGet_FindComponent(device, search))
 		{
-			if (search.count)
-				errorlevel = _T("Mixer Doesn't Have That Many of That Component Type");
-			else
-				errorlevel = _T("Mixer Doesn't Support This Component Type");
+			errorlevel = _T("Component Not Found");
+		}
+		else if (search.target_control == SoundControlType::IID)
+		{
+			aResultToken.SetValue((UINT_PTR)search.control);
+			search.control = nullptr; // Don't release it.
+		}
+		else if (search.target_control == SoundControlType::Name)
+		{
+			aResultToken.Return(search.name);
 		}
 		else if (!search.control)
 		{
 			errorlevel = _T("Component Doesn't Support This Control Type");
 		}
-		else if (aControlType == MIXERCONTROL_CONTROLTYPE_VOLUME)
+		else if (search.target_control == SoundControlType::Volume)
 		{
 			IAudioVolumeLevel *avl = (IAudioVolumeLevel *)search.control;
 				
@@ -7613,10 +7676,9 @@ ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
 			else
 			{
 				result_float = max_level * 100;
-				control_type_is_boolean = false;
 			}
 		}
-		else if (aControlType == MIXERCONTROL_CONTROLTYPE_MUTE)
+		else if (search.target_control == SoundControlType::Mute)
 		{
 			IAudioMute *am = (IAudioMute *)search.control;
 
@@ -7628,11 +7690,12 @@ ResultType SoundSetGetVista(ResultToken &aResultToken, LPTSTR aSetting
 			{
 				hr = am->SetMute(adjust_current_setting ? !result_bool : setting_scalar > 0, NULL);
 			}
-			control_type_is_boolean = true;
 		}
 control_fail:
 		if (search.control)
 			search.control->Release();
+		if (search.name)
+			CoTaskMemFree(search.name);
 	}
 
 	device->Release();
@@ -7645,17 +7708,18 @@ control_fail:
 			errorlevel = _T("Can't Get Current Setting");
 	}
 	if (errorlevel)
-		return g_ErrorLevel->Assign(errorlevel);
+		g_ErrorLevel->Assign(errorlevel);
 	else
 		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 
-	if (SOUND_MODE_IS_SET)
-		return OK;
+	if (SOUND_MODE_IS_SET || errorlevel)
+		return;
 
-	if (control_type_is_boolean)
-		return aResultToken.Return(result_bool);
-	else
-		return aResultToken.Return(result_float);
+	switch (search.target_control)
+	{
+	case SoundControlType::Volume: aResultToken.Return(result_float); break;
+	case SoundControlType::Mute: aResultToken.Return(result_bool); break;
+	}
 }
 
 
