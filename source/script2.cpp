@@ -1464,7 +1464,14 @@ ResultType Line::Input()
 	if (prior_input)
 		prior_input->EndByNewInput();
 
-	return InputStart(input, output_var);
+	ResultType input_result = InputStart(input, output_var);
+	// Ensure g_input doesn't reference input, which life time is about to end.
+	if (g_input == &input)
+	{
+		input_type *result = InputRelease(&input);
+		ASSERT(result == NULL);
+	}
+	return input_result;
 }
 
 
