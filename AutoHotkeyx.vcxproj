@@ -217,6 +217,7 @@
     <ClCompile Include="source\os_version.cpp" />
     <ClCompile Include="source\script.cpp" />
     <ClCompile Include="source\script2.cpp" />
+    <ClCompile Include="source\ScriptModules.cpp" />
     <ClCompile Include="source\script_autoit.cpp" />
     <ClCompile Include="source\script_com.cpp" />
     <ClCompile Include="source\script_expression.cpp" />
@@ -257,6 +258,8 @@
     <ClInclude Include="source\qmath.h" />
     <ClInclude Include="source\resources\resource.h" />
     <ClInclude Include="source\script.h" />
+    <ClInclude Include="source\ScriptModules.h" />
+    <ClInclude Include="source\ScriptModulesDefines.h" />
     <ClInclude Include="source\script_com.h" />
     <ClInclude Include="source\script_func_impl.h" />
     <ClInclude Include="source\script_object.h" />

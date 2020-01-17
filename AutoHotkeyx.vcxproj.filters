@@ -106,6 +106,9 @@
     <ClCompile Include="source\input_object.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="source\ScriptModules.cpp">
+      <Filter>Header Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="source\application.h">
@@ -201,6 +204,12 @@
     <ClInclude Include="source\input_object.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="source\ScriptModules.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="source\ScriptModulesDefines.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="source\resources\icon_filetype.ico">
@@ -232,9 +241,6 @@
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="source\libx64call\x64call.asm">
-      <Filter>Assembly Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="source\lib\win2kcompat.asm">
       <Filter>Assembly Files</Filter>
     </CustomBuild>
     <CustomBuild Include="source\libx64call\x64stub.asm">
