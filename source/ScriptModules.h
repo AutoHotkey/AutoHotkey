@@ -17,6 +17,9 @@ GNU General Public License for more details.
 #include "script.h"
 #include "ScriptModulesDefines.h"
 
+// Forward declaration
+class ModuleList; 
+
 class ScriptModule
 {
 private:
@@ -24,21 +27,22 @@ private:
 	ScriptModule* mOuter;								// The module in which this module resides. 
 														// Having a reference to the enclosing module facilitates load time restoration of the outer module when the inner module definition ends.
 														// Can also be used to refer to the outer module via scope resolution.
-
+	ModuleList* mNested;								// List of nested modules.
 	FuncList mFuncs;									// List of functions
-	Var** mVar, ** mLazyVar;							// Array of pointers-to-variable, allocated upon first use and later expanded as needed.
+	Var **mVar, **mLazyVar;								// Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount;			// Count of items in the above array as well as the maximum capacity.
 
 public:
 
-	static const LPTSTR sUnamedModuleName;							// All anonymous namespaces will share this name
-																			// to facilitate implementation and debugging.
+	static const LPTSTR sUnamedModuleName;				// All unnamed modules will share this name
+														// to facilitate implementation and debugging.
 
+	LPTSTR GetName() { return mName; }					// Get the name of the module.
 
 	ScriptModule(LPTSTR aName, int aFuncsInitSize = 0, ScriptModule* aOuter = NULL) :
 		mVar(NULL), mLazyVar(NULL),
 		mVarCount(0), mVarCountMax(0), mLazyVarCount(0),
-		mOuter(aOuter)
+		mOuter(aOuter), mNested(NULL)
 	{
 		if (aName != SMODULES_UNNAMED_NAME)
 			mName = SimpleHeap::Malloc(aName);	// copy the name for simplicity.
@@ -50,4 +54,28 @@ public:
 			return; // out of memory
 	}
 
+};
+
+class ModuleList
+{
+	ScriptModule** mList;			// an array of ScriptModules
+	size_t mCount;					// the number of Modules in mList
+	size_t mListSize;				// the size of mList
+public:
+	ModuleList() : mList(NULL), mCount(0), mListSize(0) {}	// constructor
+	~ModuleList()
+	{
+		if (mList)
+			free(mList);
+	}
+	// list management:
+	bool Add(ScriptModule* aModule);
+	bool IsInList(ScriptModule* aModule);
+	bool find(LPTSTR aName, ScriptModule** aFound = NULL);
+
+	// Operators
+	void* operator new(size_t aBytes) { return SimpleHeap::Malloc(aBytes); }
+	void* operator new[](size_t aBytes) { return SimpleHeap::Malloc(aBytes); }
+	void operator delete(void* aPtr) {}
+	void operator delete[](void* aPtr) {}
 };
