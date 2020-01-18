@@ -25,7 +25,7 @@ const LPTSTR ScriptModule::sUnamedModuleName = SMODULES_UNNAMED_NAME;
 #define MODULELIST_SIZE_GROW (5)
 bool ModuleList::Add(ScriptModule* aModule)
 {
-	// Adds aNameSpace to mList
+	// Adds aModule to mList
 	// return true on succsess, else false
 	if (!aModule)
 		return false;

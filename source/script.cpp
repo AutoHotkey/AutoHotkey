@@ -531,8 +531,16 @@ Script::Script()
 	ZeroMemory(&mNIC, sizeof(mNIC));  // Constructor initializes this, to be safe.
 	mNIC.hWnd = NULL;  // Set this as an indicator that it tray icon is not installed.
 
-	g_CurrentModule = new ScriptModule(SMODULES_DEFAULT_MODULE_NAME, 100);
-
+	// Initialize the script's module list and the default and standard modules.
+	mModules = new ModuleList();
+	if (!mModules // Verify since 'new' operator is overloaded.
+		|| !mModules->Add(g_CurrentModule = new ScriptModule(SMODULES_DEFAULT_MODULE_NAME, 100))
+		|| !mModules->Add(new ScriptModule(SMODULES_STANDARD_MODULE_NAME, _countof(g_BIF))))
+	{
+		ScriptError(ERR_OUTOFMEM);
+		ExitApp(EXIT_DESTROY);
+	}
+	
 
 #ifdef _DEBUG
 	if (ID_FILE_EXIT < ID_MAIN_FIRST) // Not a very thorough check.

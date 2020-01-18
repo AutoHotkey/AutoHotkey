@@ -33,6 +33,7 @@ EXTERN_OSVER; // For the access to the g_os version object without having to inc
 EXTERN_G;
 
 class ScriptModule;						// forward declaration
+class ModuleList;
 extern ScriptModule* g_CurrentModule;
 
 #define MAX_THREADS_LIMIT UCHAR_MAX // Uses UCHAR_MAX (255) because some variables that store a thread count are UCHARs.
@@ -780,7 +781,7 @@ public:
 	// wouldn't want the size of each line to be expanded by this size):
 	static LPTSTR sArgDeref[MAX_ARGS];
 
-	ScriptModule* mModule; // Every line belongs to one module.
+	ScriptModule *mModule; // Every line belongs to one module.
 
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
@@ -2782,8 +2783,6 @@ protected:
 	bool Delete() override;
 };
 
-
-
 struct DerefList
 {
 	DerefType *items;
@@ -2793,8 +2792,6 @@ struct DerefList
 	ResultType Push();
 	DerefType *Last() { return items + count - 1; }
 };
-
-
 
 class Script
 {
@@ -2823,6 +2820,9 @@ private:
 	int mGlobalVarCountMax; // While loading the script, the maximum number of global declarations allowed for the current function.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
+
+	ModuleList *mModules; // The script's modules.
+
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	bool mNoUpdateLabels;
 
