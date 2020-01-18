@@ -32,6 +32,9 @@ GNU General Public License for more details.
 EXTERN_OSVER; // For the access to the g_os version object without having to include globaldata.h
 EXTERN_G;
 
+class ScriptModule;						// forward declaration
+extern ScriptModule* g_CurrentModule;
+
 #define MAX_THREADS_LIMIT UCHAR_MAX // Uses UCHAR_MAX (255) because some variables that store a thread count are UCHARs.
 #define MAX_THREADS_DEFAULT 10 // Must not be higher than above.
 #define TOTAL_ADDITIONAL_THREADS 2 // See below.

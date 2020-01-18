@@ -22,7 +22,8 @@ GNU General Public License for more details.
 #include "window.h" // for a lot of things
 #include "application.h" // for MsgSleep()
 #include "TextIO.h"
-
+#include "ScriptModules.h"
+#include "ScriptModulesDefines.h"
 
 // These are the common pseudo-Funcs, defined here mostly for readability:
 auto OpFunc_GetProp = ExprOp<Op_ObjInvoke, IT_GET>();
@@ -529,6 +530,9 @@ Script::Script()
 	// initial Sleep(10) in ExecUntil that would otherwise occur.
 	ZeroMemory(&mNIC, sizeof(mNIC));  // Constructor initializes this, to be safe.
 	mNIC.hWnd = NULL;  // Set this as an indicator that it tray icon is not installed.
+
+	g_CurrentModule = new ScriptModule(SMODULES_DEFAULT_MODULE_NAME, 100);
+
 
 #ifdef _DEBUG
 	if (ID_FILE_EXIT < ID_MAIN_FIRST) // Not a very thorough check.

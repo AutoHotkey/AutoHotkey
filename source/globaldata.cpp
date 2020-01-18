@@ -22,6 +22,10 @@ GNU General Public License for more details.
 #include "os_version.h" // For the global OS_Version object
 
 #include "Debugger.h"
+#include "ScriptModules.h"
+
+
+ScriptModule* g_CurrentModule;		// Identifies the current module.
 
 // Since at least some of some of these (e.g. g_modifiersLR_logical) should not
 // be kept in the struct since it's not correct to save and restore their

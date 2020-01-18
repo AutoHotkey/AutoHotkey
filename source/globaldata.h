@@ -24,6 +24,8 @@ GNU General Public License for more details.
 
 #include "Debugger.h"
 
+extern ScriptModule* g_CurrentModule;
+
 extern HINSTANCE g_hInstance;
 extern DWORD g_MainThreadID;
 extern DWORD g_HookThreadID;
