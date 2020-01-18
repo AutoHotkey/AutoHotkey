@@ -780,6 +780,8 @@ public:
 	// wouldn't want the size of each line to be expanded by this size):
 	static LPTSTR sArgDeref[MAX_ARGS];
 
+	ScriptModule* mModule; // Every line belongs to one module.
+
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
 	ActionTypeType mActionType; // What type of line this is.
@@ -1372,6 +1374,7 @@ public:
 		: mFileIndex(aFileIndex), mLineNumber(aFileLineNumber), mActionType(aActionType)
 		, mAttribute(ATTR_NONE), mArgc(aArgc), mArg(aArg)
 		, mPrevLine(NULL), mNextLine(NULL), mRelatedLine(NULL), mParentLine(NULL)
+		, mModule(g_CurrentModule)
 #ifdef CONFIG_DEBUGGER
 		, mBreakpoint(NULL)
 #endif
