@@ -54,6 +54,12 @@ public:
 			return; // out of memory
 	}
 
+	// Operators
+	void* operator new(size_t aBytes) { return SimpleHeap::Malloc(aBytes); }
+	void* operator new[](size_t aBytes) { return SimpleHeap::Malloc(aBytes); }
+	void operator delete(void* aPtr) {}
+	void operator delete[](void* aPtr) {}
+
 };
 
 class ModuleList
