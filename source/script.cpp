@@ -533,9 +533,14 @@ Script::Script()
 
 	// Initialize the script's module list and the default and standard modules.
 	mModules = new ModuleList();
+	g_CurrentModule = new ScriptModule(SMODULES_DEFAULT_MODULE_NAME, 100));
+	ScriptModule* std_script_module = new ScriptModule(SMODULES_STANDARD_MODULE_NAME, _countof(g_BIF));
+	
 	if (!mModules // Verify since 'new' operator is overloaded.
-		|| !mModules->Add(g_CurrentModule = new ScriptModule(SMODULES_DEFAULT_MODULE_NAME, 100))
-		|| !mModules->Add(new ScriptModule(SMODULES_STANDARD_MODULE_NAME, _countof(g_BIF))))
+		|| !mModules->Add(g_CurrentModule)
+		|| !mModules->Add(std_script_module)
+		|| !mModuleSimpleList.AddItem(g_CurrentModule)
+		|| !mModuleSimpleList.AddItem(std_script_module) )
 	{
 		ScriptError(ERR_OUTOFMEM);
 		ExitApp(EXIT_DESTROY);

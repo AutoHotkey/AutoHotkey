@@ -373,6 +373,69 @@ enum DerefTypeType : BYTE
 	DT_VARIADIC		// Variadic function call.
 };
 
+template<class T>
+class SimpleList
+{
+	/*
+		To keep a simple "auto expanding" and "searchable" list.
+		Construct with aFreeItems = false to avoid calling the virtual FreeItem method in each item.
+		Derived classes should implement AreEqual and / or FreeItem as desired. See HasItem and ~SimpleList()
+
+		Methods:
+		AddItem(T t)	// add an item - returns 0 on failure else the number of items in the list
+		HasItem(T t)	// returns true if the item t is in the list, else false. AreEqual() determines if two items of type T are equal.
+
+	*/
+	bool mFreeItems;	// to indicate wheter to call free on each item in the list or not.
+	T* mList;			// the list
+	int mLastIndex;		// the number of items in the list.
+public:
+
+	SimpleList(bool aFreeItems = false) : mList(NULL), mLastIndex(0), mFreeItems(aFreeItems) {};
+
+	~SimpleList()
+	{
+		// Calls FreeItem for each item in the list if appropriate, frees the list.
+		if (!mList) return;
+		if (mFreeItems)
+			for (int i = 0; i < mLastIndex; ++i)
+				FreeItem(mList[i]);
+		free(mList);
+	}
+
+	int AddItem(T t)
+	{
+		// returns 0 on memory allocation failure.
+		// Else it returns the number of elements in the list.
+		T* new_list = (T*)realloc(mList, (mLastIndex + 1) * sizeof T);
+		if (!new_list)
+			return 0;
+		mList = new_list;
+		mList[mLastIndex] = t;
+		return ++mLastIndex;
+	}
+	bool HasItem(T t)
+	{
+		// returns true if t is in the list, else false.
+		for (int i = 0; i < mLastIndex; ++i)
+			if (AreEqual(mList[i], t))	// Virtual method, derived classes should define if appropriate.
+				return true;
+		return false;
+	}
+	T GetItem(int aIndex, bool* apWasFound = NULL)
+	{
+		if (aIndex >= mLastIndex || aIndex < 0 || mLastIndex == 0) // bound check
+		{
+			if (apWasFound) *apWasFound = false;
+			return (T)NULL;
+		}
+		if (apWasFound) *apWasFound = true;
+		return mList[aIndex];
+	}
+	virtual bool AreEqual(T t1, T t2) { return t1 == t2; } // default comparison.
+	virtual void FreeItem(T t) {}; // does nothing
+};
+
 class Func; // Forward declaration for use below.
 struct DerefType
 {
@@ -2822,7 +2885,7 @@ private:
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
 
 	ModuleList *mModules; // The script's modules.
-
+	
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	bool mNoUpdateLabels;
 
@@ -2946,6 +3009,8 @@ public:
 
 	UserMenu *mTrayMenu; // Our tray menu, which should be destroyed upon exiting the program.
     
+	SimpleList<ScriptModule*> mModuleSimpleList; // A linear list off all modules, used for non-recursive access to any module.
+
 	ResultType Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestart);
 	ResultType CreateWindows();
 	void EnableClipboardListener(bool aEnable);

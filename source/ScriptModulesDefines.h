@@ -42,3 +42,8 @@ GNU General Public License for more details.
 #define ERR_SMODULES_IN_CLASS _T("Classes cannot contain namespaces.")
 #define ERR_SMODULES_IN_BLOCK _T("This block cannot contain namespaces.")
 #define ERR_SMODULES_DEFINITION_SYNTAX _T("Syntax error in namespace definition.") // Also used with SMODULE_INCLUDE_DIRECTIVE_NAME.
+
+// Misc
+
+// Warning: This macro declares a variable outside the for block
+#define FOR_EACH_MODULE(mod) int Macro_Index = 0; for ( ScriptModule *mod; mod = g_script.mModuleSimpleList.GetItem(Macro_Index); ++Macro_Index)
