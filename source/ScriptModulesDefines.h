@@ -27,13 +27,20 @@ GNU General Public License for more details.
 // For literal module definitions:
 #define SMODULES_DECLARATION_KEYWORD_NAME _T("Namespace")
 #define SMODULES_DECLARATION_KEYWORD_NAME_LENGTH (_countof(SMODULES_DECLARATION_KEYWORD_NAME) - 1) // - 1 to exclude the '\0
+#define SMODULES_DECLARATION_KEYWORD_NAME_LC _T("namespace") // Lower case version for error reporting etc.
 
 // For including file to module:
-#define SMODULE_INCLUDE_DIRECTIVE_NAME _T("#Import")
-#define SMODULE_INCLUDE_DIRECTIVE_NAME_LENGTH (_countof(SMODULE_INCLUDE_DIRECTIVE_NAME) - 1) // - 1 to exclude the '\0'
+#define SMODULES_INCLUDE_DIRECTIVE_NAME _T("#Import")
+#define SMODULES_INCLUDE_DIRECTIVE_NAME_LENGTH (_countof(SMODULES_INCLUDE_DIRECTIVE_NAME) - 1) // - 1 to exclude the '\0'
+#define SMODULES_INCLUDE_DIRECTIVE_OPTIONAL_MARKER _T("*i")
+#define SMODULES_STR_EQUALS_INCLUDE_DIRECTIVE_OPTIONAL_MARKER(str) (str[0] == '*' && ctoupper(str[1]) == 'I'); // Relies on short-circuit boolean order.
+#define SMODULES_INCLUDE_DIRECTIVE_OPTIONAL_MARKER_LENGTH (_countof(SMODULES_INCLUDE_DIRECTIVE_OPTIONAL_MARKER) - 1) // - 1 to exclude the '\0'
+
+#define SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP _T("<to>") // Currently must include characters which are invalid in a path. (TOFIX)
+#define SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP_LENGTH (_countof(SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP) - 1) // - 1 to exclude the '\0'
 
 // Rule for module names match:
-#define SMODULE_NAMES_MATCH(name1, name2) ((name1) != SMODULES_UNNAMED_STR && (name2) != SMODULES_UNNAMED_STR && !_tcsicmp( (name1), (name2)))
+#define SMODULES_NAMES_MATCH(name1, name2) ((name1) != SMODULES_UNNAMED_STR && (name2) != SMODULES_UNNAMED_STR && !_tcsicmp( (name1), (name2)))
 
 // Error messages:
 #define ERR_SMODULES_NOT_FOUND _T("Namespace not found.")
@@ -41,7 +48,7 @@ GNU General Public License for more details.
 #define ERR_SMODULES_IN_FUNCTION _T("Functions cannot contain namespaces.")
 #define ERR_SMODULES_IN_CLASS _T("Classes cannot contain namespaces.")
 #define ERR_SMODULES_IN_BLOCK _T("This block cannot contain namespaces.")
-#define ERR_SMODULES_DEFINITION_SYNTAX _T("Syntax error in namespace definition.") // Also used with SMODULE_INCLUDE_DIRECTIVE_NAME.
+#define ERR_SMODULES_DEFINITION_SYNTAX _T("Syntax error in namespace definition.") // Also used with SMODULES_INCLUDE_DIRECTIVE_NAME.
 
 // Misc
 

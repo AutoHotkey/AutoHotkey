@@ -533,7 +533,7 @@ Script::Script()
 
 	// Initialize the script's module list and the default and standard modules.
 	mModules = new ModuleList();
-	g_CurrentModule = new ScriptModule(SMODULES_DEFAULT_MODULE_NAME, 100));
+	g_CurrentModule = new ScriptModule(SMODULES_DEFAULT_MODULE_NAME, 100);
 	ScriptModule* std_script_module = new ScriptModule(SMODULES_STANDARD_MODULE_NAME, _countof(g_BIF));
 	
 	if (!mModules // Verify since 'new' operator is overloaded.
@@ -1745,9 +1745,19 @@ bool ClassHasOpenBrace(LPTSTR aBuf, size_t aBufLength, LPTSTR aNextBuf, size_t &
 	return false;
 }
 
+ResultType Script::LocationCanDefineModule(LPTSTR aBuf)
+{
+	if (mClassObjectCount) // not allowed inside class body.
+		return ScriptError(ERR_SMODULES_IN_CLASS, aBuf);
+	if (g->CurrentFunc)	// not allowed inside function body.
+		return ScriptError(ERR_SMODULES_IN_FUNCTION, aBuf);
+	if (mOpenBlock)	// do this only after the check for function body, since that is more specific.
+		return mOpenBlock->LineError(ERR_SMODULES_IN_BLOCK, FAIL, aBuf);
+	return OK;
+}
 
 
-ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure)
+ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure, int aImporting)
 // Open the included file.  Returns CONDITION_TRUE if the file is to
 // be loaded, otherwise OK (duplicate/already loaded) or FAIL (error).
 // See "full_path" below for why this is separate to LoadIncludedFile().  
@@ -1797,12 +1807,11 @@ ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllo
 		// can be reliably detected (we only want to avoid including a given file more than once):
 		LPTSTR filename_marker;
 		GetFullPathName(aFileSpec, _countof(full_path), full_path, &filename_marker);
-		// Check if this file was already included.  If so, it's not an error because we want
+		// Check if this file was already included in the current module.  If so, it's not an error because we want
 		// to support automatic "include once" behavior.  So just ignore repeats:
 		if (!aAllowDuplicateInclude)
-			for (int f = 0; f < source_file_index; ++f) // Here, source_file_index==Line::sSourceFileCount
-				if (!lstrcmpi(Line::sSourceFile[f], full_path)) // Case insensitive like the file system (testing shows that "Ä" == "ä" in the NTFS, which is hopefully how lstrcmpi works regardless of locale).
-					return OK;
+			if (g_CurrentModule->HasIncludedSourceFile(full_path))
+				return OK;
 		// The file is added to the list further below, after the file has been opened, in case the
 		// opening fails and aIgnoreLoadFailure==true.
 	}
@@ -1810,10 +1819,14 @@ ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllo
 	if (!ts.Open(aFileSpec, DEFAULT_READ_FLAGS, g_DefaultScriptCodepage))
 	{
 		if (aIgnoreLoadFailure)
+		{
+			g_LoadFailed = true; // used for the SMODULES_INCLUDE_DIRECTIVE_OPTIONAL_MARKER
 			return OK;
+		}
 		TCHAR msg_text[T_MAX_PATH + 64]; // T_MAX_PATH vs. MAX_PATH because the full length could be utilized with ErrorStdOut.
 		sntprintf(msg_text, _countof(msg_text), _T("%s file \"%s\" cannot be opened.")
-			, Line::sSourceFileCount > 0 ? _T("#Include") : _T("Script"), full_path);
+			, Line::sSourceFileCount > 0	? (aImporting ? SMODULES_INCLUDE_DIRECTIVE_NAME : _T("#Include"))
+											: _T("Script"), full_path);
 		return ScriptError(msg_text);
 	}
 	
@@ -1881,7 +1894,7 @@ ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllo
 
 
 
-ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure)
+ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure, int aImporting)
 // Returns OK or FAIL.
 {
 #ifndef AUTOHOTKEYSC
@@ -1890,7 +1903,7 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 	TextMem ts;
 #endif
 
-	ResultType result = OpenIncludedFile(ts, aFileSpec, aAllowDuplicateInclude, aIgnoreLoadFailure);
+	ResultType result = OpenIncludedFile(ts, aFileSpec, aAllowDuplicateInclude, aIgnoreLoadFailure, aImporting);
 	if (result != CONDITION_TRUE)
 		return result; // OK or FAIL.
 
@@ -3676,6 +3689,95 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		return result;
 #endif
 	}
+
+	if (IS_DIRECTIVE_MATCH(SMODULES_INCLUDE_DIRECTIVE_NAME)) 	// Handle "including" modules
+	{
+
+#ifdef AUTOHOTKEYSC
+		// see #include for comments
+		return CONDITION_TRUE;
+#else
+		if (!LocationCanDefineModule(aBuf)) // displays the error message
+			return FAIL;
+		// To set the working directory use #Include dir
+		// split parameter into path and module name
+		if (!parameter)
+			return ScriptError(ERR_PARAM1_REQUIRED, aBuf);
+		bool ignore_load_failure = SMODULES_STR_EQUALS_INCLUDE_DIRECTIVE_OPTIONAL_MARKER(parameter);
+		if (ignore_load_failure)
+		{
+			parameter += SMODULES_INCLUDE_DIRECTIVE_OPTIONAL_MARKER_LENGTH;
+			if (IS_SPACE_OR_TAB(*parameter)) // Skip over at most one space or tab, since others might be a literal part of the filename.
+				++parameter;
+		}
+
+		LPTSTR path, name; // the path to the file defining the module, the end of the path, and the module name.
+		
+		if (!(name = _tcsstr(parameter, SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP))) // find the separator between the path/file and the module name (if any)
+		{
+			// there was no separator
+			name = SMODULES_UNNAMED_STR;
+			path = parameter;	// already verfied aboved.
+		}
+		else
+		{
+			// Separate module name and path.
+			if (name == parameter	// the parameter started with the separator, there is no path
+				|| *(name + SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP_LENGTH) == '\0')	// or there was no name following the separator
+				return CONDITION_FALSE;
+			path = parameter;
+			path[name - parameter] = '\0'; // extract the path
+			name += SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP_LENGTH;	// move past the separator
+			name = omit_leading_whitespace(name); // Trim leading whitespace from the name, trailing was already trimmed from parameter above
+			if (!*name)
+				return CONDITION_FALSE;
+		}
+		if (!DefineScriptModule(name)) // this sets the new module to be the current one.
+			return FAIL; // DefineScriptModule displays the error message.
+
+		rtrim(path); // to allow tabs between the path and the separator
+		LPTSTR module_file_path; // this must be freed before returning if DerefInclude succeeds.
+		if (!DerefInclude(module_file_path, path))
+			return ScriptError(ERR_OUTOFMEM);
+
+		TCHAR buf[MAX_PATH];
+		// Save the working directory because LoadIncludedFile() changes it, and we want to retain any directory
+		// set by a previous instance of "#Include DirPath" for any other instances of #Include or SMODULES_INCLUDE_DIRECTIVE_NAME below this line. 
+		if (!GetCurrentDirectory(_countof(buf) - 1, buf))
+			*buf = '\0';
+		// If it's a file or non-existent file, the below will display the error. This will also display any other errors that occur.
+		g_LoadFailed = false;
+		int importing = 1						// to indicate "true"
+			+ mModuleDefinitionCount;			// store the value mNameSpaceDefinitionCount to detect if a missing brace at the end LoadIncludeFile belongs to the import:ed file, see comments there.
+
+		ResultType result = LoadIncludedFile(module_file_path, true, ignore_load_failure, /* aImporting = */ importing) ? CONDITION_TRUE : FAIL;
+		free(module_file_path);
+		
+		// Restore the working directory.
+		SetCurrentDirectory(buf);
+
+		// Resolve any unresolved base classes.
+		//if (g_CurrentModule->mUnresolvedClasses)
+		//{
+		//	if (!ResolveClasses())
+		//		return FAIL;
+		//	g_CurrentModule->mUnresolvedClasses->Release();
+		//	g_CurrentModule->mUnresolvedClasses = NULL;
+		//}
+		g_CurrentModule->LeaveCurrentModule(); // Restores the module of the running LoadedIncludedFile() which called IsDirective.
+
+		if (g_LoadFailed && ignore_load_failure && name != SMODULES_UNNAMED_STR)
+		{
+			// add name to list of optional modules
+			// must be done after leaving the module which couldn't be loaded, because that module is optional inside its outer module.
+			g_CurrentModule->RemoveLastModule();				// remove the failed module.
+			if (!g_CurrentModule->AddOptionalModule(name))		// mark it as optional.
+				return ScriptError(ERR_OUTOFMEM);
+			g_LoadFailed = false; // to avoid bugs.
+		}
+		return result;
+#endif	// #ifdef AUTOHOTKEYSC
+	} // SMODULES_INCLUDE_DIRECTIVE_NAME
 
 	if (IS_DIRECTIVE_MATCH(_T("#DllLoad")))
 	{
@@ -6287,6 +6389,34 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic, 
 	return OK;
 }
 
+ResultType Script::DefineScriptModule(LPTSTR aModuleName)
+{
+	// aModuleName, the name of the new module. This module will be nested in g_CurrentModule, and becomes the current module.
+	// Caller must save and restore g_CurrentModule if appropriate.
+	if (aModuleName != SMODULES_UNNAMED_STR)
+	{
+		LPTSTR cp;
+		for (cp = aModuleName; *cp && !IS_SPACE_OR_TAB(*cp); ++cp); // trim the name.
+
+		if (*cp && !IS_SPACE_OR_TAB(*omit_leading_whitespace(cp)))	// detect something like "MyModule x".
+			return ScriptError(ERR_SMODULES_DEFINITION_SYNTAX, aModuleName);
+
+		*cp = '\0';  // terminate the name string.
+
+		if (!Var::ValidateName(aModuleName, DISPLAY_MODULE_ERROR))
+			return FAIL; // ValidateName displays the error message.
+	}
+	ScriptModule *new_module;
+	if (!(new_module = g_CurrentModule->InsertNestedModule(aModuleName, 0, g_CurrentModule)))
+	{
+		if (g_CurrentModule->GetNestedModule(aModuleName))
+			return ScriptError(ERR_SMODULES_DUPLICATE_NAME, aModuleName);
+		return ScriptError(ERR_OUTOFMEM);
+	}
+	mModuleSimpleList.AddItem(new_module);
+	new_module->SetCurrentModule();
+	return OK;
+}
 
 
 ResultType Script::DefineClass(LPTSTR aBuf)

@@ -27,6 +27,9 @@ GNU General Public License for more details.
 
 ScriptModule* g_CurrentModule;		// Identifies the current module.
 
+bool g_LoadFailed = false;			// used to allow optional modules.
+
+
 // Since at least some of some of these (e.g. g_modifiersLR_logical) should not
 // be kept in the struct since it's not correct to save and restore their
 // state, don't keep anything in the global_struct except those things

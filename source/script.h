@@ -2885,7 +2885,8 @@ private:
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
 
 	ModuleList *mModules; // The script's modules.
-	
+	int mModuleDefinitionCount; // Used during loading to detect invalid script module definitions, eg, missing '}'
+
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	bool mNoUpdateLabels;
 
@@ -3030,10 +3031,11 @@ public:
 	ResultType Reload(bool aDisplayErrors);
 	ResultType ExitApp(ExitReasons aExitReason, int aExitCode = 0);
 	void TerminateApp(ExitReasons aExitReason, int aExitCode); // L31: Added aExitReason. See script.cpp.
+	ResultType LocationCanDefineModule(LPTSTR aBuf);
 	LineNumberType LoadFromFile();
-	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
+	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure, int aImporting = 0);
 	ResultType LoadIncludedFile(TextStream *fp);
-	ResultType OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
+	ResultType OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure, int aImporting = 0);
 	LineNumberType CurrentLine();
 	LPTSTR CurrentFile();
 
@@ -3063,6 +3065,8 @@ public:
 	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = -1, int *apInsertPos = NULL);
 	FuncEntry *FindBuiltInFunc(LPTSTR aFuncName);
 	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsertPos, Object *aClassObject = NULL);
+
+	ResultType DefineScriptModule(LPTSTR aModuleName);
 
 	ResultType DefineClass(LPTSTR aBuf);
 	UserFunc *DefineClassInit(bool aStatic);

@@ -39,6 +39,40 @@ public:
 
 	LPTSTR GetName() { return mName; }					// Get the name of the module.
 
+	bool SetCurrentModule() { g_CurrentModule = this; return true; }	// Use this rather than direct assignment for maintainability.
+	bool LeaveCurrentModule() { return mOuter->SetCurrentModule(); }	// Sets the enclosing module to be the current module.
+
+	
+	// Only for load time
+	void RemoveLastModule();
+	bool AddOptionalModule(LPTSTR aName);
+	bool IsOptionalModule(LPTSTR aName);
+	class ModuleNameList : public SimpleList<LPTSTR>
+	{
+	public:
+		ModuleNameList() : SimpleList(true) {}
+		bool AreEqual(LPTSTR aName1, LPTSTR aName2) { return SMODULES_NAMES_MATCH(aName1, aName2); } // virtual
+		void FreeItem(LPTSTR aName) { free(aName); }	// virtual
+	} *mOptionalModules;								// A list of optional modules to allow the "*i" option for SMODULES_INCLUDE_DIRECTIVE_NAME.
+
+
+#ifndef AUTOHOTKEYSC
+	SimpleList<int>* mSourceFileIndexList;				// A list of numbers corresponding to indices in Line::sSourceFile, to allow #include duplicates across modules.
+	// For "including" modules.
+	bool AddSourceFileIndex(int aIndex);
+	void FreeSourceFileIndexList();
+	bool HasIncludedSourceFile(TCHAR aPath[]);
+#endif // #ifndef AUTOHOTKEYSC
+	// To manage nested modules:
+	ScriptModule* InsertNestedModule(LPTSTR aName, int aFuncsInitSize, ScriptModule* aOuter);
+	bool InsertNestedModule(ScriptModule* aModule);
+	ScriptModule* GetNestedModule(LPTSTR aModuleName, bool aAllowReserved = false); // returns the module if this module has a nested module with name aModuleName, else NULL.
+
+	ScriptModule* GetReservedModule(LPTSTR aName, ScriptModule* aSource);
+
+	void FreeOptionalModuleList();
+
+
 	ScriptModule(LPTSTR aName, int aFuncsInitSize = 0, ScriptModule* aOuter = NULL) :
 		mVar(NULL), mLazyVar(NULL),
 		mVarCount(0), mVarCountMax(0), mLazyVarCount(0),
@@ -77,8 +111,13 @@ public:
 	// list management:
 	bool Add(ScriptModule* aModule);
 	bool IsInList(ScriptModule* aModule);
+	void RemoveLastModule();
 	bool find(LPTSTR aName, ScriptModule** aFound = NULL);
 
+	void FreeOptionalModuleList();
+#ifndef AUTOHOTKEYSC
+	void FreeSourceFileIndexList();
+#endif
 	// Operators
 	void* operator new(size_t aBytes) { return SimpleHeap::Malloc(aBytes); }
 	void* operator new[](size_t aBytes) { return SimpleHeap::Malloc(aBytes); }
