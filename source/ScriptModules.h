@@ -76,7 +76,8 @@ public:
 	ScriptModule(LPTSTR aName, int aFuncsInitSize = 0, ScriptModule* aOuter = NULL) :
 		mVar(NULL), mLazyVar(NULL),
 		mVarCount(0), mVarCountMax(0), mLazyVarCount(0),
-		mOuter(aOuter), mNested(NULL)
+		mOuter(aOuter), mNested(NULL),
+		mOptionalModules(NULL), mSourceFileIndexList(NULL)
 	{
 		if (aName != SMODULES_UNNAMED_NAME)
 			mName = SimpleHeap::Malloc(aName);	// copy the name for simplicity.
