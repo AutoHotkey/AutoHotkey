@@ -3031,10 +3031,12 @@ public:
 	ResultType Reload(bool aDisplayErrors);
 	ResultType ExitApp(ExitReasons aExitReason, int aExitCode = 0);
 	void TerminateApp(ExitReasons aExitReason, int aExitCode); // L31: Added aExitReason. See script.cpp.
+	Line* LineIsPrecededByParentLine(); // return mLastLine if it is a parent line, else NULL
+	
 	ResultType LocationCanDefineModule(LPTSTR aBuf);
 	LineNumberType LoadFromFile();
 	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure, int aImporting = 0);
-	ResultType LoadIncludedFile(TextStream *fp);
+	ResultType LoadIncludedFile(TextStream *fp, int aImporting = 0);
 	ResultType OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure, int aImporting = 0);
 	LineNumberType CurrentLine();
 	LPTSTR CurrentFile();

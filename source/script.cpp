@@ -1745,6 +1745,40 @@ bool ClassHasOpenBrace(LPTSTR aBuf, size_t aBufLength, LPTSTR aNextBuf, size_t &
 	return false;
 }
 
+inline LPTSTR IsModuleDefinition(LPTSTR aBuf)
+{
+	int len = SMODULES_DECLARATION_KEYWORD_NAME_LENGTH; // for brevity
+	if (_tcsnicmp(aBuf, SMODULES_DECLARATION_KEYWORD_NAME, len)
+		|| (!IS_SPACE_OR_TAB(aBuf[len])							// i.e. it's not "namespace" followed by a space or tab.
+			&& aBuf[len] != '{' && aBuf[len] != '\0'))			// and it is not "namespace{" or "namespace"
+		return NULL;
+
+	if (aBuf[len] == '{' || aBuf[len] == '\0')					// it is "namespace{" or "namespace".
+		return SMODULES_UNNAMED_STR;
+
+	LPTSTR module_name = omit_leading_whitespace(aBuf + len + 1);
+
+	if (*module_name == '{' || *module_name == '\0')
+		return SMODULES_UNNAMED_STR;								// it is something like "namespace {" or "namespace".
+	if (_tcschr(EXPR_ALL_SYMBOLS, *module_name))
+		// It's probably something like "NameSpace := ...".
+		return NULL;
+	return module_name;
+}
+
+bool ModuleHasOpenBrace(LPTSTR aBuf, size_t aBufLength, LPTSTR aNextBuf, size_t& aNextBufLength)
+{
+	return ClassHasOpenBrace(aBuf, aBufLength, aNextBuf, aNextBufLength);
+}
+
+Line *Script::LineIsPrecededByParentLine()
+{
+	// return mLastLine if it is a parent line, else NULL
+	if (mLastLine && ACT_IS_LINE_PARENT(mLastLine->mActionType))
+		return mLastLine;
+	return NULL;
+}
+
 ResultType Script::LocationCanDefineModule(LPTSTR aBuf)
 {
 	if (mClassObjectCount) // not allowed inside class body.
@@ -1753,6 +1787,11 @@ ResultType Script::LocationCanDefineModule(LPTSTR aBuf)
 		return ScriptError(ERR_SMODULES_IN_FUNCTION, aBuf);
 	if (mOpenBlock)	// do this only after the check for function body, since that is more specific.
 		return mOpenBlock->LineError(ERR_SMODULES_IN_BLOCK, FAIL, aBuf);
+	
+	Line* last_line = LineIsPrecededByParentLine(); // do not allow a parent line to preceed the definition
+	if (last_line)
+		return last_line->LineError(ERR_EXPECTED_BLOCK_OR_ACTION);
+
 	return OK;
 }
 
@@ -1909,12 +1948,12 @@ ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclud
 
 	// Off-loading to another function significantly reduces code size, perhaps because
 	// the TextFile/TextMem destructor is called from fewer places (each "return"):
-	return LoadIncludedFile(&ts);
+	return LoadIncludedFile(&ts, aImporting);
 }
 
 
 
-ResultType Script::LoadIncludedFile(TextStream *fp)
+ResultType Script::LoadIncludedFile(TextStream *fp, int aImporting)
 // Returns OK or FAIL.
 {
 	// Keep this var on the stack due to recursion, which allows newly created lines to be given the
@@ -2638,6 +2677,28 @@ process_completed_line:
 						*mClassName = '\0';
 				}
 			}
+			else if (*buf != '{' && mModuleDefinitionCount && !mOpenBlock && !g->CurrentFunc)
+			{
+				
+				// Module definition has ended
+				
+				// Check that the definition doesn't end with a parent line
+				Line* last_line = LineIsPrecededByParentLine();
+				if (last_line)
+					return last_line->LineError(ERR_EXPECTED_BLOCK_OR_ACTION);
+
+				--mModuleDefinitionCount;
+
+				// Resolve any unresolved base classes.
+				//if (g_CurrentModule->mUnresolvedClasses)
+				//{
+				//	if (!ResolveClasses())
+				//		return FAIL;
+				//	g_CurrentModule->mUnresolvedClasses->Release();
+				//	g_CurrentModule->mUnresolvedClasses = NULL;
+				//}
+				g_CurrentModule->LeaveCurrentModule();
+			}
 			else // Normal block begin/end.
 			{
 				if (!AddLine(*buf == '{' ? ACT_BLOCK_BEGIN : ACT_BLOCK_END))
@@ -2685,7 +2746,18 @@ process_completed_line:
 				return FAIL;
 			goto continue_main_loop;
 		}
-
+		// Handling of module definition. This is similar to the handling of class classname { ... } just above
+		else if (LPTSTR module_name = IsModuleDefinition(buf))
+		{
+			if (!LocationCanDefineModule(buf)) // displays the error message.
+				return FAIL;
+			if (!ModuleHasOpenBrace(buf, buf_length, next_buf, next_buf_length))
+				return ScriptError(ERR_MISSING_OPEN_BRACE, buf);
+			if (!DefineScriptModule(module_name))
+				return FAIL;
+			++mModuleDefinitionCount;
+			goto continue_main_loop;
+		}
 		// Aside from goto/break/continue, anything not already handled above is either an expression
 		// or something with similar lexical requirements (i.e. balanced parentheses/brackets/braces).
 		// The following call allows any expression enclosed in ()/[]/{} to span multiple lines:
@@ -2758,15 +2830,26 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		// performance because it avoids memcpy from buf2 to buf1.
 	} // for each whole/constructed line.
 
-	if (mClassObjectCount && !source_file_index) // or mClassProperty, which implies mClassObjectCount != 0.
+	if ((mClassObjectCount || mModuleDefinitionCount)  // or mClassProperty, which implies mClassObjectCount != 0.
+		&& (!source_file_index // the brace might still be beneath an #include, if not, it will be detected later,
+			|| aImporting))	// but do not allow module or class body definitions to be incomplete while using #import.
 	{
-		// A class definition has not been closed with "}".  Previously this was detected by adding
+		// A class or module definition has not been closed with "}".  Previously this was detected by adding
 		// the open and close braces as lines, but this way is simpler and has less overhead.
-		// The downside is that the line number won't be shown; however, the class name will.
+		// The downside is that the line number won't be shown; however, the class or module name will.
 		// Seems okay not to show mClassProperty->mName since the class is missing "}" as well.
-		return ScriptError(ERR_MISSING_CLOSE_BRACE, mClassName);
-	}
 
+		// To handle SMODULES_INCLUDE_DIRECTIVE_NAME files, check that the value of mClassObjectCount is 0 and mModuleDefinitionCount is the same as when
+		// this function was called, if it was changed, it means that this file misses a brace for one of its module definitions and that is an error. 
+		// If not, the missing brace belongs to the "outer" file and if it isn't found it will be deteced later.
+		if (!mClassObjectCount && aImporting == 1 + mModuleDefinitionCount) // 1 is added when calling this function to indicate "true" in case mNameSpaceDefinitionCount == 0
+		{
+			// this file closed all its braces, the missing brace belongs to another file.
+		}
+		else
+			return ScriptError(ERR_MISSING_CLOSE_BRACE, mClassObjectCount ? mClassName : g_CurrentModule->GetName());
+	}
+	
 	++mCombinedLineNumber; // L40: Put the implicit ACT_EXIT on the line after the last physical line (for the debugger).
 
 	// This is not required, it is called by the destructor.
@@ -3764,16 +3847,27 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		//	g_CurrentModule->mUnresolvedClasses->Release();
 		//	g_CurrentModule->mUnresolvedClasses = NULL;
 		//}
+
+		// Ensure module definition doesn't end with an open block.
+		if (mOpenBlock)
+			return mOpenBlock->LineError(ERR_MISSING_CLOSE_BRACE);
+		
+		// Verify that the module doesn't end with a parent line.
+		Line* last_line = LineIsPrecededByParentLine();
+		if (last_line)
+			return last_line->LineError(ERR_EXPECTED_BLOCK_OR_ACTION);
+
 		g_CurrentModule->LeaveCurrentModule(); // Restores the module of the running LoadedIncludedFile() which called IsDirective.
 
 		if (g_LoadFailed && ignore_load_failure && name != SMODULES_UNNAMED_STR)
 		{
+			g_LoadFailed = false; // to avoid bugs.
 			// add name to list of optional modules
 			// must be done after leaving the module which couldn't be loaded, because that module is optional inside its outer module.
 			g_CurrentModule->RemoveLastModule();				// remove the failed module.
 			if (!g_CurrentModule->AddOptionalModule(name))		// mark it as optional.
 				return ScriptError(ERR_OUTOFMEM);
-			g_LoadFailed = false; // to avoid bugs.
+		
 		}
 		return result;
 #endif	// #ifdef AUTOHOTKEYSC
@@ -5587,8 +5681,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 	return OK;
 }
-
-
 
 ResultType DerefList::Push()
 {
@@ -13336,7 +13428,7 @@ int Script::FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTST
 {
 	TCHAR source_file[MAX_PATH * 2];
 	if (aLine && aLine->mFileIndex)
-		sntprintf(source_file, _countof(source_file), _T(" in #include file \"%s\""), Line::sSourceFile[aLine->mFileIndex]);
+		sntprintf(source_file, _countof(source_file), _T(" in file \"%s\""), Line::sSourceFile[aLine->mFileIndex]); // removed "#include" since it may be SMODULES_INCLUDE_DIRECTIVE_NAME
 	else
 		*source_file = '\0'; // Don't bother cluttering the display if it's the main script file.
 
