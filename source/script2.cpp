@@ -1465,12 +1465,10 @@ ResultType Line::Input()
 		prior_input->EndByNewInput();
 
 	ResultType input_result = InputStart(input, output_var);
-	// Ensure g_input doesn't reference input, which life time is about to end.
-	if (g_input == &input)
-	{
-		input_type *result = InputRelease(&input);
-		ASSERT(result == NULL);
-	}
+	// Ensure input is not present in the input chain, since its life time is about to end.
+	input_type *result = InputRelease(&input);
+	ASSERT(result == NULL);
+	
 	return input_result;
 }
 
@@ -2009,6 +2007,7 @@ input_type *InputRelease(input_type *aInput)
 		if (aInput->ScriptObject->onEnd)
 			return aInput; // Return for caller to call OnEnd and Release.
 		aInput->ScriptObject->Release();
+		aInput->ScriptObject = NULL;
 	}
 	return NULL;
 }
