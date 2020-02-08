@@ -980,6 +980,7 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 			func->mIsVariadic = member.maxParams == MAXP_VARIADIC;
 			func->mClass = type_checked;
 			prop->SetGetter(func);
+			func->Release();
 			
 			if (member.invokeType == IT_SET)
 			{
@@ -993,6 +994,7 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 				func->mIsVariadic = member.maxParams == MAXP_VARIADIC;
 				func->mClass = obj;
 				prop->SetSetter(func);
+				func->Release();
 			}
 		}
 	}
