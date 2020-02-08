@@ -264,7 +264,7 @@ protected:
 		name_t name;
 		IObject *func;
 		MethodType() = delete;
-		~MethodType() { func->Release(); }
+		~MethodType() { func->Release(); free(name); }
 	};
 
 	enum EnumeratorType
