@@ -792,7 +792,9 @@ ResultType Object::CallMeta(IObject *aFunc, LPTSTR aName, int aFlags, ResultToke
 	if (IS_INVOKE_SET)
 		param[param_count++] = aParam[aParamCount]; // value
 	// return %aFunc%(this, name, args [, value])
-	return aFunc->Invoke(aResultToken, IT_CALL, nullptr, ExprTokenType(aFunc), param, param_count);
+	ResultType aResult = aFunc->Invoke(aResultToken, IT_CALL, nullptr, ExprTokenType(aFunc), param, param_count);
+	vargs->Release();
+	return aResult;
 }
 
 
