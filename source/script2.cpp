@@ -30,6 +30,8 @@ GNU General Public License for more details.
 #include <endpointvolume.h> // for SoundSet/SoundGet.
 #include <functiondiscoverykeys.h>
 
+#include "ScriptModules.h"
+
 #define PCRE_STATIC             // For RegEx. PCRE_STATIC tells PCRE to declare its functions for normal, static
 #include "lib_pcre/pcre/pcre.h" // linkage rather than as functions inside an external DLL.
 
@@ -298,8 +300,6 @@ ResultType Line::TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions)
 	}
 	return OK; // i.e. never a critical error if it fails.
 }
-
-
 
 BIF_DECL(BIF_TraySetIcon)
 {
@@ -8848,6 +8848,12 @@ HWND Line::DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTit
 	//else // Use the "last found" window.
 	//	target_window = GetValidLastUsedWindow(*g);
 	return WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText);
+}
+
+bool Line::SetCurrentModule()
+{
+	ASSERT(mModule);
+	return mModule->SetCurrentModule();
 }
 
 

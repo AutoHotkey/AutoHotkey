@@ -28,7 +28,6 @@ private:
 														// Having a reference to the enclosing module facilitates load time restoration of the outer module when the inner module definition ends.
 														// Can also be used to refer to the outer module via scope resolution.
 	ModuleList* mNested;								// List of nested modules.
-	FuncList mFuncs;									// List of functions
 	
 	
 	void ReleaseVarObjects(Var** aVar, int aVarCount);
@@ -38,7 +37,8 @@ private:
 
 public:
 
-	Var** mVar, ** mLazyVar;								// Array of pointers-to-variable, allocated upon first use and later expanded as needed.
+	FuncList mFuncs;									// List of functions
+	Var** mVar, ** mLazyVar;							// Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount;			// Count of items in the above array as well as the maximum capacity.
 
 	static const LPTSTR sUnamedModuleName;				// All unnamed modules will share this name

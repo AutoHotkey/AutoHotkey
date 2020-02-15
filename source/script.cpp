@@ -7197,7 +7197,7 @@ Func *FuncList::Find(LPCTSTR aName, int *apInsertPos)
 
 
 
-Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertPos) // L27: Added apInsertPos for binary-search.
+Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertPos, ScriptModule* aModule /* = NULL */) // L27: Added apInsertPos for binary-search.
 // Returns the Function whose name matches aFuncName (which caller has ensured isn't NULL).
 // If it doesn't exist, NULL is returned.
 // If apInsertPos is non-NULL (i.e. caller is DefineFunc), only the current scope is searched
@@ -7217,6 +7217,9 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		return NULL;
 	}
 
+	if (!aModule)	// Do this early to avoid mistakes.
+		aModule = g_CurrentModule;
+
 	// The following copy is made because it allows the name searching to use _tcsicmp() instead of
 	// strlicmp(), which close to doubles the performance.  The copy includes only the first aVarNameLength
 	// characters from aVarName:
@@ -7226,7 +7229,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	int left;
 	for (auto scopefunc = g->CurrentFunc; ; scopefunc = scopefunc->mOuterFunc)
 	{
-		FuncList &funcs = scopefunc ? scopefunc->mFuncs : mFuncs;
+		FuncList &funcs = scopefunc ? scopefunc->mFuncs : aModule->mFuncs;
 		auto pfunc = funcs.Find(func_name, &left);
 		if (apInsertPos) // Caller is DefineFunc.
 		{
@@ -7269,7 +7272,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	// Since above didn't return, this is a built-in function that hasn't yet been added to the list.
 	// Add it now:
 	auto *pfunc = new BuiltInFunc(*pbif, bif_output_vars);
-	if (!pfunc || !mFuncs.Insert(pfunc, left)) // left contains the position within mFuncs to insert the function.  Cannot use *apInsertPos as caller may have omitted it.
+	if (!pfunc || !aModule->mFuncs.Insert(pfunc, left)) // left contains the position within mFuncs to insert the function.  Cannot use *apInsertPos as caller may have omitted it.
 	{
 		ScriptError(ERR_OUTOFMEM);
 		return nullptr;
@@ -7311,7 +7314,7 @@ FuncEntry *Script::FindBuiltInFunc(LPTSTR aFuncName)
 
 
 
-UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsertPos, Object *aClassObject)
+UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsertPos, Object *aClassObject, ScriptModule* aModule /* = NULL */)
 // Returns the address of the new function or NULL on failure.
 // The caller must already have verified that this isn't a duplicate function.
 {
@@ -7341,6 +7344,9 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 		return NULL;
 	}
 
+	if (!aModule) // Do this early to avoid mistakes.
+		aModule = g_CurrentModule;
+
 	if (aClassObject)
 	{
 		LPTSTR key = _tcsrchr(new_name, '.'); // DefineFunc() always passes "ClassName.MethodName".
@@ -7367,7 +7373,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 	}
 
 	the_new_func->mOuterFunc = g->CurrentFunc;
-	FuncList &funcs = the_new_func->mOuterFunc ? the_new_func->mOuterFunc->mFuncs : mFuncs;
+	FuncList &funcs = the_new_func->mOuterFunc ? the_new_func->mOuterFunc->mFuncs : aModule->mFuncs;
 	
 	if (aInsertPos < funcs.mCount && *new_name && !_tcsicmp(funcs.mItem[aInsertPos]->mName, new_name))
 		funcs.mItem[aInsertPos] = the_new_func;
@@ -7940,6 +7946,7 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 	DerefType *deref;
 	for (Line *line = aStartingLine; line; line = line->mNextLine)
 	{
+		line->SetCurrentModule();
 		switch (line->mActionType)
 		{
 		// Set g->CurrentFunc for use resolving names of nested functions.

@@ -805,6 +805,7 @@ private:
 	ResultType ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID);
 	ResultType TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions);
 
+
 	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
 
 public:
@@ -1003,7 +1004,8 @@ public:
 
 	static HWND DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 
-	
+	bool SetCurrentModule();
+
 	// This is in the .h file so that it's more likely the compiler's cost/benefit estimate will
 	// make it inline (since it is called from only one place).  Inline would be good since it
 	// is called frequently during script loading and is difficult to macro-ize in a way that
@@ -3064,9 +3066,9 @@ public:
 	void InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix);
 	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
 #endif
-	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = -1, int *apInsertPos = NULL);
+	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = -1, int *apInsertPos = NULL, ScriptModule* aModule = NULL);
 	FuncEntry *FindBuiltInFunc(LPTSTR aFuncName);
-	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsertPos, Object *aClassObject = NULL);
+	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsertPos, Object *aClassObject = NULL, ScriptModule *aModule = NULL);
 
 	ResultType DefineScriptModule(LPTSTR aModuleName);
 
