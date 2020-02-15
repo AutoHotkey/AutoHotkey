@@ -3833,10 +3833,12 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		ResultType result = LoadIncludedFile(module_file_path, true, ignore_load_failure, /* aImporting = */ importing) ? CONDITION_TRUE : FAIL;
 		free(module_file_path);
-		
 		// Restore the working directory.
 		SetCurrentDirectory(buf);
-
+		
+		if (!result) // to avoid multiple error messages in some cases.
+			return result;
+		
 		// Resolve any unresolved base classes.
 		//if (g_CurrentModule->mUnresolvedClasses)
 		//{
