@@ -29,10 +29,17 @@ private:
 														// Can also be used to refer to the outer module via scope resolution.
 	ModuleList* mNested;								// List of nested modules.
 	FuncList mFuncs;									// List of functions
-	Var **mVar, **mLazyVar;								// Array of pointers-to-variable, allocated upon first use and later expanded as needed.
-	int mVarCount, mVarCountMax, mLazyVarCount;			// Count of items in the above array as well as the maximum capacity.
+	
+	
+	void ReleaseVarObjects(Var** aVar, int aVarCount);
+	void ReleaseStaticVarObjects(Var** aVar, int aVarCount);
+	void ReleaseStaticVarObjects(FuncList& aFuncs);
+
 
 public:
+
+	Var** mVar, ** mLazyVar;								// Array of pointers-to-variable, allocated upon first use and later expanded as needed.
+	int mVarCount, mVarCountMax, mLazyVarCount;			// Count of items in the above array as well as the maximum capacity.
 
 	static const LPTSTR sUnamedModuleName;				// All unnamed modules will share this name
 														// to facilitate implementation and debugging.
@@ -41,6 +48,7 @@ public:
 
 	bool SetCurrentModule() { g_CurrentModule = this; return true; }	// Use this rather than direct assignment for maintainability.
 	bool LeaveCurrentModule() { return mOuter->SetCurrentModule(); }	// Sets the enclosing module to be the current module.
+
 
 	
 	// Only for load time
@@ -69,6 +77,9 @@ public:
 	ScriptModule* GetNestedModule(LPTSTR aModuleName, bool aAllowReserved = false); // returns the module if this module has a nested module with name aModuleName, else NULL.
 
 	ScriptModule* GetReservedModule(LPTSTR aName, ScriptModule* aSource);
+
+	
+	void ReleaseVarObjects();
 
 	void FreeOptionalModuleList();
 
@@ -118,6 +129,7 @@ public:
 	void FreeOptionalModuleList();
 #ifndef AUTOHOTKEYSC
 	void FreeSourceFileIndexList();
+	void ReleaseVarObjects();
 #endif
 	// Operators
 	void* operator new(size_t aBytes) { return SimpleHeap::Malloc(aBytes); }

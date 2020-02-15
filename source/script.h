@@ -3085,11 +3085,12 @@ public:
 	#define FINDVAR_DEFAULT  (VAR_LOCAL | VAR_GLOBAL)
 	#define FINDVAR_GLOBAL   VAR_GLOBAL
 	#define FINDVAR_LOCAL    VAR_LOCAL
-	Var *FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT);
+	Var *FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT, ScriptModule *aModule = NULL);
 	Var *FindVar(LPTSTR aVarName, size_t aVarNameLength = 0, int *apInsertPos = NULL
 		, int aScope = FINDVAR_DEFAULT
-		, bool *apIsLocal = NULL);
-	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope);
+		, bool *apIsLocal = NULL
+		, ScriptModule *aModule = NULL);
+	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope, ScriptModule *aModule);
 	static VarEntry *GetBuiltInVar(LPTSTR aVarName);
 
 	ResultType DerefInclude(LPTSTR &aOutput, LPTSTR aBuf);

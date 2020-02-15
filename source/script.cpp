@@ -1505,10 +1505,8 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 		// in case one or more objects need to call a __delete meta-function.
 		g_AllowInterruption = FALSE;
 		g->IsPaused = false;
-
-		ReleaseVarObjects(mVar, mVarCount);
-		ReleaseVarObjects(mLazyVar, mLazyVarCount);
-		ReleaseStaticVarObjects(mFuncs);
+		
+		mModules->ReleaseVarObjects();
 	}
 #ifdef CONFIG_DEBUGGER // L34: Exit debugger *after* the above to allow debugging of any invoked __Delete handlers.
 	g_Debugger.Exit(aExitReason);
@@ -6240,7 +6238,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic, 
 		{
 			if (this_param.var = FindVar(param_start, param_length, &insert_pos, FINDVAR_LOCAL))  // Assign.
 				return ScriptError(_T("Duplicate parameter."), param_start);
-			if (   !(this_param.var = AddVar(param_start, param_length, insert_pos, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM))   )	// Pass VAR_LOCAL_FUNCPARAM as last parameter to mean "it's a local but more specifically a function's parameter".
+			if (   !(this_param.var = AddVar(param_start, param_length, insert_pos, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM, g_CurrentModule))   )	// Pass VAR_LOCAL_FUNCPARAM as last parameter to mean "it's a local but more specifically a function's parameter".
 				return FAIL; // It already displayed the error, including attempts to have reserved names as parameter names.
 			param_start = omit_leading_whitespace(param_end);
 		}
@@ -7469,27 +7467,30 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 }
 
 
-Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aScope)
+Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aScope, ScriptModule* aModule)
 // Caller has ensured that aVarName isn't NULL.
 // Returns the Var whose name matches aVarName.  If it doesn't exist, it is created.
 {
 	if (!*aVarName)
 		return NULL;
+	if (!aModule)
+		aModule = g_CurrentModule;
 	int insert_pos;
 	bool is_local; // Used to detect which type of var should be added in case the result of the below is NULL.
 	Var *var;
-	if (var = FindVar(aVarName, aVarNameLength, &insert_pos, aScope, &is_local))
+	if (var = FindVar(aVarName, aVarNameLength, &insert_pos, aScope, &is_local, aModule))
 		return var;
 	// Otherwise, no match found, so create a new var.
 	// This will return NULL if there was a problem, in which case AddVar() will already have displayed the error:
 	return AddVar(aVarName, aVarNameLength, insert_pos
-		, (aScope & ~(VAR_LOCAL | VAR_GLOBAL)) | (is_local ? VAR_LOCAL : VAR_GLOBAL)); // When aScope == FINDVAR_DEFAULT, it contains both the "local" and "global" bits.  This ensures only the appropriate bit is set.
+		, (aScope & ~(VAR_LOCAL | VAR_GLOBAL)) | (is_local ? VAR_LOCAL : VAR_GLOBAL), aModule); // When aScope == FINDVAR_DEFAULT, it contains both the "local" and "global" bits.  This ensures only the appropriate bit is set.
 }
 
 
 
 Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, int aScope
-	, bool *apIsLocal)
+	, bool *apIsLocal
+	, ScriptModule* aModule)
 // Caller has ensured that aVarName isn't NULL.  It must also ignore the contents of apInsertPos when
 // a match (non-NULL value) is returned.
 // Returns the Var whose name matches aVarName.  If it doesn't exist, NULL is returned.
@@ -7518,6 +7519,9 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 	bool search_local = (aScope & VAR_LOCAL) && g.CurrentFunc;
 	// Above has ensured that g.CurrentFunc!=NULL whenever search_local==true.
 
+	if (!aModule) // Set early to avoid bugs.
+		aModule = g_CurrentModule; 
+
 	// Init for binary search loop:
 	int left, right, mid, result;  // left/right must be ints to allow them to go negative and detect underflow.
 	Var **var;  // An array of pointers-to-var.
@@ -7528,8 +7532,8 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 	}
 	else
 	{
-		var = mVar;
-		right = mVarCount - 1;
+		var = aModule->mVar;
+		right = aModule->mVarCount - 1;
 	}
 
 	// Binary search:
@@ -7555,8 +7559,8 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 	}
 	else
 	{
-		var = mLazyVar;
-		right = mLazyVarCount - 1;
+		var = aModule->mLazyVar;
+		right = aModule->mLazyVarCount - 1;
 	}
 
 	if (var) // There is a lazy list to search (and even if the list is empty, left must be reset to 0 below).
@@ -7602,7 +7606,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 		if (!g.CurrentFunc->AllowSuperGlobals())
 			return NULL;
 		// As a last resort, check for a super-global:
-		Var *gvar = FindVar(aVarName, aVarNameLength, NULL, FINDVAR_GLOBAL, NULL);
+		Var *gvar = FindVar(aVarName, aVarNameLength, NULL, FINDVAR_GLOBAL, NULL, aModule);
 		if (gvar && gvar->IsSuperGlobal())
 			return gvar;
 	}
@@ -7612,7 +7616,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 
 
 
-Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope)
+Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope, ScriptModule* aModule)
 // Returns the address of the new variable or NULL on failure.
 // Caller must ensure that g->CurrentFunc!=NULL whenever aIsLocal!=0.
 // Caller must ensure that aVarName isn't NULL and that this isn't a duplicate variable name.
@@ -7651,7 +7655,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 		if (aIsLocal)
 		{
 			if (  !(aScope & VAR_LOCAL_FUNCPARAM)  ) // It's not a UDF's parameter, so fall back to the global built-in variable of this name rather than displaying an error.
-				return FindOrAddVar(var_name, aVarNameLength, FINDVAR_GLOBAL); // Force find-or-create of global.
+				return FindOrAddVar(var_name, aVarNameLength, FINDVAR_GLOBAL, aModule); // Force find-or-create of global.
 			else // (aIsLocal & VAR_LOCAL_FUNCPARAM), which means "this is a local variable and a function's parameter".
 			{
 				ScriptError(_T("Illegal parameter name."), aVarName); // Short message since so rare.
@@ -7684,8 +7688,8 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	// If there's a lazy var list, aInsertPos provided by the caller is for it, so this new variable
 	// always gets inserted into that list because there's always room for one more (because the
 	// previously added variable would have purged it if it had reached capacity).
-	Var **lazy_var = aIsLocal ? g->CurrentFunc->mLazyVar : mLazyVar;
-	int &lazy_var_count = aIsLocal ? g->CurrentFunc->mLazyVarCount : mLazyVarCount; // Used further below too.
+	Var **lazy_var = aIsLocal ? g->CurrentFunc->mLazyVar : aModule->mLazyVar;
+	int &lazy_var_count = aIsLocal ? g->CurrentFunc->mLazyVarCount : aModule->mLazyVarCount; // Used further below too.
 	if (lazy_var)
 	{
 		if (aInsertPos != lazy_var_count) // Need to make room at the indicated position for this variable.
@@ -7709,9 +7713,9 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 
 	// Create references to whichever variable list (local or global) is being acted upon.  These
 	// references simplify the code:
-	Var **&var = aIsLocal ? g->CurrentFunc->mVar : mVar; // This needs to be a ref. too in case it needs to be realloc'd.
-	int &var_count = aIsLocal ? g->CurrentFunc->mVarCount : mVarCount;
-	int &var_count_max = aIsLocal ? g->CurrentFunc->mVarCountMax : mVarCountMax;
+	Var **&var = aIsLocal ? g->CurrentFunc->mVar : aModule->mVar; // This needs to be a ref. too in case it needs to be realloc'd.
+	int &var_count = aIsLocal ? g->CurrentFunc->mVarCount : aModule->mVarCount;
+	int &var_count_max = aIsLocal ? g->CurrentFunc->mVarCountMax : aModule->mVarCountMax;
 	int alloc_count;
 
 	// Since the above would have returned if the lazy list is present but not yet full, if the left side
@@ -7733,7 +7737,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 			alloc_count = 100000;
 			// This is also the threshold beyond which the lazy list is used to accelerate performance.
 			// Create the permanent lazy list:
-			Var **&lazy_var = aIsLocal ? g->CurrentFunc->mLazyVar : mLazyVar;
+			Var **&lazy_var = aIsLocal ? g->CurrentFunc->mLazyVar : aModule->mLazyVar;
 			if (   !(lazy_var = (Var **)malloc(MAX_LAZY_VARS * sizeof(Var *)))   )
 			{
 				ScriptError(ERR_OUTOFMEM);
@@ -10233,6 +10237,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 
 	for (Line *line = this; line != NULL;)
 	{
+		line->mModule->SetCurrentModule();
 		// The below must be done at least when the keybd or mouse hook is active, but is currently
 		// always done since it's a very low overhead call, and has the side-benefit of making
 		// the app maximally responsive when the script is busy.
