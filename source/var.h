@@ -50,6 +50,8 @@ typedef UINT_PTR VarSizeType;  // jackieku(2009-10-23): Change this to UINT_PTR 
 #define VARSIZE_MAX ((VarSizeType) ~0)
 #define VARSIZE_ERROR VARSIZE_MAX
 
+ResultType DisplayNameError(LPCTSTR aErrorFormat, int aDisplayError, LPCTSTR aName);
+
 class Var; // Forward declaration.
 // #pragma pack(4) not used here because although it would currently save 4 bytes per VarBkp struct (28 vs. 32),
 // it would probably reduce performance since VarBkp items are stored in contiguous array rather than a

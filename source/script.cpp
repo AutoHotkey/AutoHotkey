@@ -1585,9 +1585,10 @@ UINT Script::LoadFromFile()
 	//
 	//  2) Warn the user (if appropriate) since they probably meant it to be global.
 	//
-	if (!PreprocessLocalVars(mFuncs)
+	if (!PreprocessLocalVars()
 		|| !PreprocessLocalVars(mHotFuncs))
 		return LOADING_FAILED;
+
 	if (mHotFuncs.mItem)
 		free(mHotFuncs.mItem);
 	// Resolve any unresolved base classes.
@@ -13847,6 +13848,18 @@ void Script::MaybeWarnLocalSameAsGlobal(UserFunc &func, Var &var)
 	ScriptWarning(g_Warn_LocalSameAsGlobal, WARNING_LOCAL_SAME_AS_GLOBAL, buf, line);
 }
 
+ResultType Script::PreprocessLocalVars()
+{
+	ResultType result;
+	FOR_EACH_MODULE(mod)
+	{
+		mod->SetCurrentModule(); // The below calls relies on this being set correctly.
+		if (!(result = PreprocessLocalVars(mod->mFuncs)))
+			return result;
+	}
+	return OK;
+}
+
 
 
 ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
@@ -13918,6 +13931,8 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc, Var **aVarList, int &aVa
 	for (int v = 0; v < aVarCount; ++v)
 	{
 		Var &var = *aVarList[v];
+		if (!g_CurrentModule->ValidateName(var.mName)) // Variable names cannot collide with the name of any nested module or reserved module name.
+			return DisplayNameError(_T("The following reserved word must not be used as a %s name:\n\"%-1.300s\""), DISPLAY_VAR_ERROR, var.mName);
 		if (var.IsDeclared()) // Not a candidate for an upvar, super-global or warning.
 			continue;
 
