@@ -49,7 +49,8 @@ public:
 	bool SetCurrentModule() { g_CurrentModule = this; return true; }	// Use this rather than direct assignment for maintainability.
 	bool LeaveCurrentModule() { return mOuter->SetCurrentModule(); }	// Sets the enclosing module to be the current module.
 
-
+	bool ValidateName(LPTSTR aName);
+	
 	
 	// Only for load time
 	void RemoveLastModule();
@@ -75,8 +76,8 @@ public:
 	ScriptModule* InsertNestedModule(LPTSTR aName, int aFuncsInitSize, ScriptModule* aOuter);
 	bool InsertNestedModule(ScriptModule* aModule);
 	ScriptModule* GetNestedModule(LPTSTR aModuleName, bool aAllowReserved = false); // returns the module if this module has a nested module with name aModuleName, else NULL.
-
-	ScriptModule* GetReservedModule(LPTSTR aName, ScriptModule* aSource);
+	
+	static ScriptModule* GetReservedModule(LPTSTR aName, ScriptModule* aSource = NULL);
 
 	
 	void ReleaseVarObjects();

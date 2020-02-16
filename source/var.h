@@ -23,6 +23,8 @@ GNU General Public License for more details.
 #include "util.h" // for strlcpy() & snprintf()
 #include "ScriptModulesDefines.h"
 
+class ScriptModule; // Forward declaration.
+
 EXTERN_CLIPBOARD;
 
 #define MAX_ALLOC_SIMPLE 64  // Do not decrease this much since it is used for the sizing of some built-in variables.
@@ -555,7 +557,7 @@ public:
 	#define DISPLAY_MODULE_ERROR 6
 	#define VALIDATENAME_SUBJECT_INDEX(n) (n-1)
 	#define VALIDATENAME_SUBJECTS { _T("variable"), _T("function"), _T("class"), _T("group"), _T("method"), SMODULES_DECLARATION_KEYWORD_NAME_LC }
-	static ResultType ValidateName(LPCTSTR aName, int aDisplayError = DISPLAY_VAR_ERROR);
+	static ResultType ValidateName(LPCTSTR aName, int aDisplayError = DISPLAY_VAR_ERROR, ScriptModule *aModule = NULL);
 
 	LPTSTR ObjectToText(LPTSTR aName, LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline)

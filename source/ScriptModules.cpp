@@ -16,6 +16,14 @@ GNU General Public License for more details.
 
 const LPTSTR ScriptModule::sUnamedModuleName = SMODULES_UNNAMED_NAME;
 
+bool ScriptModule::ValidateName(LPTSTR aName)
+{
+	// return true if this name can be used as a variable name in this module, i.e., it is not the same as one of its nested module names or any of the reserved names.
+	// else returns false.
+	// Relies on being called from Var::ValidateName.
+	return !GetNestedModule(aName, true);
+}
+
 void ScriptModule::RemoveLastModule()
 {
 	// caller has ensured mNested must exist.
@@ -140,7 +148,7 @@ ScriptModule* ScriptModule::GetNestedModule(LPTSTR aModuleName, bool aAllowReser
 {
 	ScriptModule* found;
 	if (aAllowReserved)
-		if (found = GetReservedModule(aModuleName, this))
+		if (found = ScriptModule::GetReservedModule(aModuleName, this))
 			return found;
 	// not a reserved module name or not looking for one, search nested modules, if any.
 	if (!mNested)

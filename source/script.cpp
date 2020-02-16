@@ -6559,6 +6559,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	}
 
 	// Validate the name even if this is a nested definition, for consistency.
+	// Do not pass the current module to allow nested classes to be named the same as any reserved name.
 	if (!Var::ValidateName(class_name, DISPLAY_CLASS_ERROR))
 		return FAIL;
 
@@ -6587,7 +6588,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 			if (class_var->IsDeclared())
 				return ConflictingDeclarationError(_T("class"), class_var);
 		}
-		else if (  !(class_var = AddVar(class_name, 0, insert_pos, VAR_DECLARE_SUPER_GLOBAL))  )
+		else if (  !(class_var = AddVar(class_name, 0, insert_pos, VAR_DECLARE_SUPER_GLOBAL, g_CurrentModule))  )
 			return FAIL;
 		// Explicitly set the variable scope, since FindVar may have returned
 		// an existing ordinary global instead of creating a super-global.
@@ -7647,7 +7648,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	TCHAR var_name[MAX_VAR_NAME_LENGTH + 1];
 	tcslcpy(var_name, aVarName, aVarNameLength + 1);  // See explanation above.  +1 to convert length to size.
 
-	if (!Var::ValidateName(var_name))
+	if (!Var::ValidateName(var_name, DISPLAY_VAR_ERROR, aModule))
 		// Above already displayed error for us.  This can happen at loadtime or runtime (e.g. StringSplit).
 		return NULL;
 

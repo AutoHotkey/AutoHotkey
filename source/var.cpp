@@ -17,7 +17,7 @@ GNU General Public License for more details.
 #include "stdafx.h" // pre-compiled headers
 #include "var.h"
 #include "globaldata.h" // for g_script
-
+#include "ScriptModules.h"
 
 // Init static vars:
 TCHAR Var::sEmptyString[] = _T(""); // For explanation, see its declaration in .h file.
@@ -1144,7 +1144,7 @@ ResultType DisplayNameError(LPCTSTR aErrorFormat, int aDisplayError, LPCTSTR aNa
 
 
 
-ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError)
+ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError, ScriptModule *aModule /* = NULL */)
 // Returns OK or FAIL.
 {
 	if (!*aName) return FAIL; // Shouldn't be called this way.
@@ -1173,6 +1173,7 @@ ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError)
 	// such as for "and := 1" vs. "(and := 1)", though a different error message is given.
 	if (i < ACT_FIRST_COMMAND || Script::ConvertWordOperator(aName, _tcslen(aName))
 		|| !_tcsicmp(aName, _T("True")) || !_tcsicmp(aName, _T("False"))
+		|| (aModule && !aModule->ValidateName((LPTSTR)aName))
 		|| !_tcsicmp(aName, _T("Local")) || !_tcsicmp(aName, _T("Global")) || !_tcsicmp(aName, _T("Static")))
 	{
 		return DisplayNameError(_T("The following reserved word must not be used as a %s name:\n\"%-1.300s\""), aDisplayError, aName);
