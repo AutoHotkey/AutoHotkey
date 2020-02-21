@@ -1918,7 +1918,8 @@ void Util_WinKill(HWND hWnd)
 	if (!SendMessageTimeout(hWnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG, 500, &dwResult)) // Wait up to 500ms.
 	{
 		// Use more force - Mwuahaha
-		DWORD pid = GetWindowThreadProcessId(hWnd, NULL);
+		DWORD pid = 0;
+		GetWindowThreadProcessId(hWnd, &pid);
 		HANDLE hProcess = pid ? OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid) : NULL;
 		if (hProcess)
 		{
