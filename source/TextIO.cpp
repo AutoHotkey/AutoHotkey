@@ -640,7 +640,10 @@ bool TextFile::_Open(LPCTSTR aFileSpec, DWORD &aFlags)
 		{
 			HANDLE hstd = GetStdHandle(nStdHandle);
 			if (hstd == NULL)// || !DuplicateHandle(GetCurrentProcess(), hstd, GetCurrentProcess(), &hstd, 0, FALSE, DUPLICATE_SAME_ACCESS))
+			{
+				SetLastError(ERROR_INVALID_HANDLE); // Avoid "The operation completed successfully".
 				return false;
+			}
 			aFlags = (aFlags & ~ACCESS_MODE_MASK) | USEHANDLE; // Avoid calling CloseHandle(), since we don't own it.
 			mFile = hstd; // Only now that we know it's not NULL.
 			return true;
