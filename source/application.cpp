@@ -24,7 +24,7 @@ GNU General Public License for more details.
 
 bool MsgSleep(int aSleepDuration, MessageMode aMode)
 // Returns true if it launched at least one thread, and false otherwise.
-// aSleepDuration can be be zero to do a true Sleep(0), or less than 0 to avoid sleeping or
+// aSleepDuration can be zero to do a true Sleep(0), or less than 0 to avoid sleeping or
 // waiting at all (i.e. messages are checked and if there are none, the function will return
 // immediately).  aMode is either RETURN_AFTER_MESSAGES (default) or WAIT_FOR_MESSAGES.
 // If the caller doesn't specify aSleepDuration, this function will return after a
