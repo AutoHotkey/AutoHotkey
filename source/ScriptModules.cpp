@@ -21,6 +21,8 @@ bool ScriptModule::ValidateName(LPTSTR aName)
 	// return true if this name can be used as a variable name in this module, i.e., it is not the same as one of its nested module names or any of the reserved names.
 	// else returns false.
 	// Relies on being called from Var::ValidateName.
+	if SMODULES_NAMES_MATCH(aName, SMODULES_OUTER_MODULE_NAME) // Need to check since SMODULES_DEFAULT_MODULE_NAME's mOuter is NULL.
+		return false;
 	return !GetNestedModule(aName, true);
 }
 
