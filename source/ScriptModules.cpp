@@ -163,9 +163,9 @@ ScriptModule* ScriptModule::GetReservedModule(LPTSTR aName, ScriptModule* aSourc
 	// aSource, if aName doesn't match any of the "standard/default" module, find a module relative to aSource, for example aSource outer module. Can be NULL (omitted).
 	// Get one of the module whose name are reserved. See ScriptModulesDefines.h
 	if (SMODULES_NAMES_MATCH(aName, SMODULES_STANDARD_MODULE_NAME))
-		return NULL;
+		return g_script.mModuleSimpleList.GetItem(1);
 	if (SMODULES_NAMES_MATCH(aName, SMODULES_DEFAULT_MODULE_NAME))
-		return NULL;
+		return g_script.mModuleSimpleList.GetItem(0);
 
 	// Handle relative names:
 	if (!aSource)
