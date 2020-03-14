@@ -3389,6 +3389,7 @@ BIF_DECL(BIF_HasMethod);
 BIF_DECL(BIF_GetMethod);
 
 // Expression operators implemented via SYM_FUNC:
+BIF_DECL(Op_ModuleInvoke);
 BIF_DECL(Op_ObjInvoke);
 BIF_DECL(Op_ObjGetInPlace);
 BIF_DECL(Op_ObjIncDec);

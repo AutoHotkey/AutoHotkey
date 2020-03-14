@@ -42,7 +42,7 @@ GNU General Public License for more details.
 #include "script_object.h"
 #include "globaldata.h" // for a lot of things
 #include "qmath.h" // For ExpandExpression()
-
+#include "ScriptModules.h"
 // __forceinline: Decided against it for this function because although it's only called by one caller,
 // testing shows that it wastes stack space (room for its automatic variables would be unconditionally 
 // reserved in the stack of its caller).  Also, the performance benefit of inlining this is too slight.
@@ -149,6 +149,16 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						error_info = right_string;
 						goto abort_with_exception;
 					}
+
+					
+					if (ScriptModule* mod = g_CurrentModule->GetNestedModule(right_string, true))
+					{
+						// It is scope resolution, eg, "%'myModule'%...."
+						this_token.symbol = SYM_MODULE;
+						this_token.mod = mod;
+						goto push_this_token;
+					}
+
 					// In v1.0.31, FindOrAddVar() vs. FindVar() is called below to support the passing of non-existent
 					// array elements ByRef, e.g. Var:=MyFunc(Array%i%) where the MyFunc function's parameter is
 					// defined as ByRef, would effectively create the new element Array%i% if it doesn't already exist.
@@ -337,7 +347,15 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				this_token.value_int64 = result_token.value_int64;
 				this_token.symbol = result_token.symbol;
 				if (this_token.symbol == SYM_OBJECT)
+				{
+					if (to_free_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
+					{
+						this_token.object->Release();
+						LineError(ERR_OUTOFMEM);
+						goto abort;
+					}
 					to_free[to_free_count++] = &this_token; // A slot was reserved for this SYM_FUNC.
+				}
 				goto push_this_token;
 			}
 			

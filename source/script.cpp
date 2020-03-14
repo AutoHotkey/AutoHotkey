@@ -5973,9 +5973,12 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 				// so that the most recently defined function is always last in the linked
 				// list, awaiting its mJumpToLine that will appear beneath it.
 				this_deref.func = NULL;
-			else // It's a variable rather than a function.
-				if (   !(this_deref.var = FindOrAddVar(op_begin, operand_length))   )
-					return FAIL; // The called function already displayed the error.
+			else  // It's a variable rather than a function.
+			{
+				// This is handled in ExpressionToPostfix
+				//if (!(aDeref[aDerefCount].var = FindOrAddVar(op_begin, operand_length)))
+				//	return FAIL; // The called function already displayed the error.
+			}
 		}
 	}
 	if (aPos)
@@ -7478,7 +7481,6 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 	return ATOI64(sArgDeref[aArgIndex]);
 }
 
-
 Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aScope, ScriptModule* aModule)
 // Caller has ensured that aVarName isn't NULL.
 // Returns the Var whose name matches aVarName.  If it doesn't exist, it is created.
@@ -8457,16 +8459,12 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 	return mLastLine;
 }
 
-
-
 bool Script::IsLabelTarget(Line *aLine)
 {
 	Label *lbl = g->CurrentFunc ? g->CurrentFunc->mFirstLabel : mFirstLabel;
 	for ( ; lbl && lbl->mJumpToLine != aLine; lbl = lbl->mNextLabel);
 	return lbl;
 }
-
-
 
 ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 {
@@ -8486,7 +8484,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 	// Also, dimensioning explicitly by SYM_COUNT helps enforce that at compile-time:
 	static UCHAR sPrecedence[SYM_COUNT] =  // Performance: UCHAR vs. INT benches a little faster, perhaps due to the slight reduction in code size it causes.
 	{
-		0,0,0,0,0,0,0,0,0// SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_MISSING, SYM_VAR, SYM_OBJECT, SYM_DYNAMIC, SYM_SUPER, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
+		0,0,0,0,0,0,0,0,0,0  // SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_MISSING, SYM_VAR, SYM_MODULE, SYM_OBJECT, SYM_DYNAMIC, SYM_SUPER, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
+
 		, 82, 82         // SYM_POST_INCREMENT, SYM_POST_DECREMENT: Highest precedence operator so that it will work even though it comes *after* a variable name (unlike other unaries, which come before).
 		, 86             // SYM_DOT
 		, 2,2,2,2,2,2    // SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE (to simplify the code, parentheses/brackets/braces must be lower than all operators in precedence).
@@ -9024,29 +9023,94 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 							++infix_count;
 
 							SymbolType new_symbol; // Type of token: SYM_FUNC or SYM_DOT (which must be treated differently as it doesn't have parentheses).
-							DerefType *new_deref; // Holds a reference to the appropriate function, and parameter count.
-							if (   !(new_deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))   )
-								return LineError(ERR_OUTOFMEM);
-							new_deref->marker = cp - 1; // Not typically needed, set for error-reporting.
-							new_deref->param_count = 2; // Initially two parameters: the object and identifier.
-							new_deref->type = DT_FUNC;
 							
+							DerefType* new_deref = NULL; // Holds a reference to the appropriate function, and parameter count.
+							// This has not been analyzed for code size.
+							auto make_new_deref = [&](int aParamCount) {
+								// Avoid error checking for brevity, the program will fail soon somewhere else anyways. (Malloc will show the error message to indicate the problem)
+								new_deref = (DerefType*)SimpleHeap::Malloc(sizeof(DerefType));
+								new_deref->marker = cp - 1; // Not typically needed, set for error-reporting.
+								new_deref->param_count = aParamCount;
+								new_deref->type = DT_FUNC;
+							};
+							ASSERT(infix_count >= 2);
+							ScriptModule* mod = infix[infix_count - 2].symbol == SYM_MODULE ? infix[infix_count - 2].mod : NULL;
 							if (*op_end == '(')
 							{
+								
+								make_new_deref(mod ? 0 : 2 /*two parameters: the object and identifier.*/);
 								new_symbol = SYM_FUNC;
-								new_deref->func = OpFunc_CallMethod;
+								if (mod)
+								{
+									// Scope resolution - func.
+									infix_count -= 2;	// The previously resolved module and the SYM_DOT following it will be replaced by
+														// a function call									
+									new_deref->func = g_script.FindFunc(cp, op_end-cp, 0, mod);
+									
+								}
+								else
+									new_deref->func = OpFunc_CallMethod;
 								// DON'T DO THE FOLLOWING - must let next iteration handle '(' so it outputs a SYM_OPAREN:
 								//++op_end;
 							}
 							else
 							{
-								new_symbol = SYM_DOT; // This will be changed to SYM_FUNC at a later stage.
-								new_deref->func = OpFunc_GetProp; // Set default; may be overridden by standard_pop_into_postfix.
+								if (mod) // It is scope resolution
+								{
+									infix_count -= 2;	// The previously resolved module and the SYM_DOT following it will be replaced by
+														// either another module or a variable reference
+
+									// Search for a module before a variable.
+									LPTSTR op_begin = cp;
+									DerefLengthType operand_length = (DerefLengthType) (op_end - cp);
+									
+									TCHAR name[MAX_VAR_NAME_LENGTH + 1];
+									_tcsncpy(name, op_begin, operand_length);
+									name[operand_length] = '\0';
+									ScriptModule* found = mod->GetNestedModule(name, true);
+									if (found)
+									{
+										// It is resolving a series of nested modules, eg, "myOtherModule" in "myModule.myOtherModule..."
+										if (*omit_leading_whitespace(op_end) != '.')
+											// The found module must be followed by SYM_DOT.
+											return LineError(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
+										new_symbol = SYM_MODULE;
+										infix[infix_count].mod = found;
+									}
+									else 
+									{
+										// It is a variable via scope resolution.
+										Var* var;
+										if (!(var = g_script.FindOrAddVar(op_begin, operand_length, VAR_GLOBAL /* cannot resolve local vars*/, mod)))
+											return FAIL;
+
+										infix[infix_count].var = var; // Set this first to allow optimizations below to override it.
+										if (var->Type() == VAR_NORMAL) // VAR_ALIAS is taken into account (and resolved) by Type().
+										{
+											// DllCall() and possibly others rely on this having been done to support changing the
+											// value of a parameter (similar to by-ref).
+											new_symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the clipboard in the case of expression lvalues.  Search for VAR_CLIPBOARD further below for details.
+											infix[infix_count].is_lvalue = FALSE; // Set default.  This simplifies #Warn ClassOverwrite (vs. storing it in the assignment token).
+										}
+										else
+											// It is a built-in variable.
+											// Do not bother to optimize something like MyModule.true to 1.
+											// new_symbol = SYM_DYNAMIC;
+											return LineError(ERR_SMODULES_INVALID_SCOPE_RESOLUTION); // Disallow built-in vars for now
+									}
+								}
+								else
+								{
+									new_symbol = SYM_DOT; // This will be changed to SYM_FUNC at a later stage.
+									make_new_deref(2); // two parameters: the object and identifier.
+									new_deref->func = OpFunc_GetProp; // Set default; may be overridden by standard_pop_into_postfix.
+								}
 							}
 
 							// Output the operator next - after the operand to avoid auto-concat.
 							infix[infix_count].symbol = new_symbol;
-							infix[infix_count].deref = new_deref;
+							if (new_deref)
+								infix[infix_count].deref = new_deref;
 
 							// Continue processing after this operand. Outer loop will do ++infix_count.
 							cp = op_end;
@@ -9289,30 +9353,54 @@ unquoted_literal:
 		{
 			infix[infix_count].SetValue(this_deref_ref.int_value);
 		}
-		else // this_deref is a variable.
+		else // this_deref is a variable or script module.
 		{
 			CHECK_AUTO_CONCAT;
-			switch (this_deref_ref.var->Type())
+			// Search for a module before a variable.
+			// For convenience, fetch the name and its length only once:
+			LPTSTR op_begin = this_deref_ref.marker; // set in Script::ParseOperands()
+			DerefLengthType operand_length = this_deref_ref.length;
+		
+			// Copy the name and terminate for GetNestedModule
+			TCHAR name[MAX_VAR_NAME_LENGTH + 1]; 
+			_tcsncpy(name, op_begin, operand_length);
+			name[operand_length] = '\0';
+			if (ScriptModule* found = g_CurrentModule->GetNestedModule(name, true))
 			{
-			case VAR_NORMAL: // VAR_ALIAS is taken into account (and resolved) by Type().
-				// DllCall() and possibly others rely on this having been done to support changing the
-				// value of a parameter (similar to by-ref).
-				infix[infix_count].symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the VAR_VIRTUAL in the case of expression lvalues.  Search for VAR_VIRTUAL further below for details.
-				infix[infix_count].var = this_deref_ref.var;
-				infix[infix_count].is_lvalue = FALSE; // Set default.  Having this here (vs. in the assignment token) simplifies RetroactivelyFixConstants().
-				break;
-			case VAR_CONSTANT:
-				// The following is not done because:
-				//  1) It would prevent "attempted to assign to a constant" errors from showing the constant's name.
-				//  2) It makes some error messages inconsistent since ACT_ASSIGNEXPR still refers to the Var.
-				//  3) SYM_DYNAMIC still needs to handle VAR_CONSTANT for double-derefs.
-				//  4) In combination with stdlib auto-include, it might make some error messages inconsistent
-				//     since some references might be resolved to SYM_VAR before a lib is included.
-				//this_deref_ref.var->ToToken(infix[infix_count]);
-				//break;
-			default: // It's a built-in variable (including clipboard).
-				infix[infix_count].symbol = SYM_DYNAMIC;
-				infix[infix_count].var = this_deref_ref.var;
+				// First ensure that the module reference is followed by SYM_DOT.
+				LPTSTR cp = omit_leading_whitespace(op_begin + operand_length);
+				if (*cp != '.')
+					return LineError(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
+				// It is a script module followed by SYM_DOT
+				infix[infix_count].mod = found;
+				infix[infix_count].symbol = SYM_MODULE;
+			}
+			else // it is a variable
+			{
+				if (!(this_deref_ref.var = g_script.FindOrAddVar(op_begin, operand_length)))
+					return FAIL;
+				switch (this_deref_ref.var->Type())
+				{
+				case VAR_NORMAL: // VAR_ALIAS is taken into account (and resolved) by Type().
+					// DllCall() and possibly others rely on this having been done to support changing the
+					// value of a parameter (similar to by-ref).
+					infix[infix_count].symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the VAR_VIRTUAL in the case of expression lvalues.  Search for VAR_VIRTUAL further below for details.
+					infix[infix_count].var = this_deref_ref.var;
+					infix[infix_count].is_lvalue = FALSE; // Set default.  Having this here (vs. in the assignment token) simplifies RetroactivelyFixConstants().
+					break;
+				case VAR_CONSTANT:
+					// The following is not done because:
+					//  1) It would prevent "attempted to assign to a constant" errors from showing the constant's name.
+					//  2) It makes some error messages inconsistent since ACT_ASSIGNEXPR still refers to the Var.
+					//  3) SYM_DYNAMIC still needs to handle VAR_CONSTANT for double-derefs.
+					//  4) In combination with stdlib auto-include, it might make some error messages inconsistent
+					//     since some references might be resolved to SYM_VAR before a lib is included.
+					//this_deref_ref.var->ToToken(infix[infix_count]);
+					//break;
+				default: // It's a built-in variable (including clipboard).
+					infix[infix_count].symbol = SYM_DYNAMIC;
+					infix[infix_count].var = this_deref_ref.var;
+				}
 			}
 		} // Handling of the var or function in this_deref.
 

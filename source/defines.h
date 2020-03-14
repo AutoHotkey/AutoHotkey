@@ -160,6 +160,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 #define IS_NUMERIC(symbol) ((symbol) == SYM_INTEGER || (symbol) == SYM_FLOAT) // Ordered for short-circuit performance.
 	, SYM_MISSING // Only used in parameter lists.
 	, SYM_VAR // An operand that is a variable's contents.
+	, SYM_MODULE // An operand which refers to a script module.
 	, SYM_OBJECT // L31: Represents an IObject interface pointer.
 	, SYM_DYNAMIC // An operand that needs further processing during the evaluation phase.
 	, SYM_SUPER // Special operand just for the "super" keyword.  Should only ever be the first param of Op_ObjInvoke.
@@ -306,6 +307,7 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 
 struct DerefType; // Forward declarations for use below.
 class Var;        //
+class ScriptModule;
 struct ExprTokenType  // Something in the compiler hates the name TokenType, so using a different name.
 {
 	// Due to the presence of 8-byte members (double and __int64) this entire struct is aligned on 8-byte
@@ -322,6 +324,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				IObject *object;
 				DerefType *deref;  // for SYM_FUNC, and (while parsing) SYM_ASSIGN etc.
 				Var *var;          // for SYM_VAR and SYM_DYNAMIC
+				ScriptModule* mod; // for SYM_MODULE
 				LPTSTR marker;     // for SYM_STRING and (while parsing) SYM_OPAREN
 				ExprTokenType *circuit_token; // for short-circuit operators
 			};
