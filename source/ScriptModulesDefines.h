@@ -33,7 +33,7 @@ GNU General Public License for more details.
 #define SMODULES_INCLUDE_DIRECTIVE_NAME _T("#Import")
 #define SMODULES_INCLUDE_DIRECTIVE_NAME_LENGTH (_countof(SMODULES_INCLUDE_DIRECTIVE_NAME) - 1) // - 1 to exclude the '\0'
 #define SMODULES_INCLUDE_DIRECTIVE_OPTIONAL_MARKER _T("*i")
-#define SMODULES_STR_EQUALS_INCLUDE_DIRECTIVE_OPTIONAL_MARKER(str) (str[0] == '*' && ctoupper(str[1]) == 'I'); // Relies on short-circuit boolean order.
+#define SMODULES_STR_EQUALS_INCLUDE_DIRECTIVE_OPTIONAL_MARKER(str) (str[0] == '*' && ctoupper(str[1]) == 'I') // Relies on short-circuit boolean order.
 #define SMODULES_INCLUDE_DIRECTIVE_OPTIONAL_MARKER_LENGTH (_countof(SMODULES_INCLUDE_DIRECTIVE_OPTIONAL_MARKER) - 1) // - 1 to exclude the '\0'
 
 #define SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP _T("<to>") // Currently must include characters which are invalid in a path. (TOFIX)
