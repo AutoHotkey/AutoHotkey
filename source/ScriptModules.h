@@ -51,11 +51,9 @@ public:
 
 	bool ValidateName(LPTSTR aName);
 	
+	void RemoveLastModule();				// Only for load time
+	bool AddOptionalModule(LPTSTR aName);	// -- "" --
 	
-	// Only for load time
-	void RemoveLastModule();
-	bool AddOptionalModule(LPTSTR aName);
-	bool IsOptionalModule(LPTSTR aName);
 	class ModuleNameList : public SimpleList<LPTSTR>
 	{
 	public:
@@ -63,7 +61,7 @@ public:
 		bool AreEqual(LPTSTR aName1, LPTSTR aName2) { return SMODULES_NAMES_MATCH(aName1, aName2); } // virtual
 		void FreeItem(LPTSTR aName) { free(aName); }	// virtual
 	} *mOptionalModules;								// A list of optional modules to allow the "*i" option for SMODULES_INCLUDE_DIRECTIVE_NAME.
-
+	bool IsOptionalModule(LPTSTR aName);
 
 #ifndef AUTOHOTKEYSC
 	SimpleList<int>* mSourceFileIndexList;				// A list of numbers corresponding to indices in Line::sSourceFile, to allow #include duplicates across modules.
