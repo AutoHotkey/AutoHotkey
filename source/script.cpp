@@ -14254,9 +14254,11 @@ LPTSTR Script::ListVars(LPTSTR aBuf, int aBufSize) // aBufSize should be an int 
 	aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%sGlobal Variables (alphabetical)%s")
 		, current_func ? _T("\r\n\r\n") : _T(""), LIST_VARS_UNDERLINE);
 	// Start at the oldest and continue up through the newest:
-	for (int i = 0; i < mVarCount; ++i)
-		if (mVar[i]->Type() == VAR_NORMAL) // Don't bother showing VAR_CONSTANT; ToText() doesn't support VAR_VIRTUAL.
-			aBuf = mVar[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
+	Var** vars = g_CurrentModule->mVar;
+	int var_count = g_CurrentModule->mVarCount;
+	for (int i = 0; i < var_count; ++i)
+		if (vars[i]->Type() == VAR_NORMAL) // Don't bother showing VAR_CONSTANT; ToText() doesn't support VAR_VIRTUAL.
+			aBuf = vars[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
 	return aBuf;
 }
 
