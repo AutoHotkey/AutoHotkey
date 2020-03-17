@@ -79,14 +79,11 @@ bool ScriptModule::AddSourceFileIndex(int aIndex)
 	if (!mSourceFileIndexList)
 		mSourceFileIndexList = new SimpleList<int>;
 	return mSourceFileIndexList->AddItem(aIndex);
-
 }
 
 void ScriptModule::FreeSourceFileIndexList()
 {
-	// frees the list of source file indices for this module and all of its nested ones.
-	if (mNested)
-		mNested->FreeSourceFileIndexList();
+	// frees the list of source file indices for this module.
 	if (mSourceFileIndexList)
 		delete mSourceFileIndexList;
 	mSourceFileIndexList = NULL;
@@ -284,14 +281,6 @@ void ModuleList::FreeOptionalModuleList()
 	for (size_t i = 0; i < mCount; ++i)
 		mList[i]->FreeOptionalModuleList();
 }
-#ifndef AUTOHOTKEYSC
-void ModuleList::FreeSourceFileIndexList()
-{
-	// see the corresponding ScriptModule:: method of comments
-	for (size_t i = 0; i < mCount; ++i)
-		mList[i]->FreeSourceFileIndexList();
-}
-#endif
 
 #undef MODULELIST_INITIAL_SIZE
 #undef MODULELIST_SIZE_GROW

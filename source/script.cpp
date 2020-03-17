@@ -1645,6 +1645,13 @@ UINT Script::LoadFromFile()
 		|| !PreparseCommands(mFirstLine)   )
 		return LOADING_FAILED; // Error was already displayed by the above calls.
 
+#ifndef AUTOHOTKEYSC
+	FOR_EACH_MODULE(mod)
+	{
+		mod->FreeSourceFileIndexList(); // Clean up, not needed after load time.
+	}
+#endif
+
 	// Initialize the random number generator:
 	// Note: On 32-bit hardware, the generator module uses only 2506 bytes of static
 	// data, so it doesn't seem worthwhile to put it in a class (so that the mem is

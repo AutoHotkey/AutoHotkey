@@ -126,10 +126,9 @@ public:
 	bool find(LPTSTR aName, ScriptModule** aFound = NULL);
 
 	void FreeOptionalModuleList();
-#ifndef AUTOHOTKEYSC
-	void FreeSourceFileIndexList();
+
 	void ReleaseVarObjects();
-#endif
+
 	// Operators
 	void* operator new(size_t aBytes) { return SimpleHeap::Malloc(aBytes); }
 	void* operator new[](size_t aBytes) { return SimpleHeap::Malloc(aBytes); }
