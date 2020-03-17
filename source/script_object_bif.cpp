@@ -182,8 +182,8 @@ BIF_DECL(Op_ModuleInvoke)
 	++aParam;
 	--aParamCount;
 
-
-	if (invoke_type & IF_DEFAULT) // Invalid, eg, %'MyModule'%[x]
+	if ( (invoke_type & IF_DEFAULT) // Invalid, eg, %'MyModule'%[x]
+		|| !mod_param->mod )		// Invalid, referencing an optional module which wasn't loaded.
 		_f_throw(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
 
 	size_t name_length;
@@ -209,10 +209,13 @@ BIF_DECL(Op_ModuleInvoke)
 		return;
 	}
 	// Trying to resolve either a module or a variable.
-	if (ScriptModule* found = mod_param->mod->GetNestedModule(name, true))
+	ScriptModule* found = NULL;
+	if ( (found = mod_param->mod->GetNestedModule(name, true))
+		|| mod_param->mod->IsOptionalModule(name))
 	{
 		// It is a module.
-		if (invoke_type & IT_SET) // Invalid, eg, MyModule.%MyOtherModule% := val
+		if ( (invoke_type & IT_SET) // Invalid, eg, MyModule.%MyOtherModule% := val
+			|| !found)				// Invalid, referencing an optional module which wasn't loaded.
 			_f_throw(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
 
 		aResultToken.symbol = SYM_MODULE;

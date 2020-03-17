@@ -158,7 +158,12 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						this_token.mod = mod;
 						goto push_this_token;
 					}
-
+					else if (g_CurrentModule->IsOptionalModule(right_string))
+					{
+						// Dynamic reference to an optional module which couldn't be loaded.
+						LineError(ERR_SMODULES_INVALID_SCOPE_RESOLUTION, FAIL, right_string);
+						goto abort;
+					}
 					// In v1.0.31, FindOrAddVar() vs. FindVar() is called below to support the passing of non-existent
 					// array elements ByRef, e.g. Var:=MyFunc(Array%i%) where the MyFunc function's parameter is
 					// defined as ByRef, would effectively create the new element Array%i% if it doesn't already exist.

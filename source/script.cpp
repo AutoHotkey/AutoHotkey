@@ -9069,7 +9069,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 									_tcsncpy(name, op_begin, operand_length);
 									name[operand_length] = '\0';
 									ScriptModule* found = mod->GetNestedModule(name, true);
-									if (found)
+									if (found
+										|| mod->IsOptionalModule(name)) // to allow "myModule.MyOptionalModule..." at load time. Will fail if evaluated
 									{
 										// It is resolving a series of nested modules, eg, "myOtherModule" in "myModule.myOtherModule..."
 										if (*omit_leading_whitespace(op_end) != '.')
@@ -9366,14 +9367,16 @@ unquoted_literal:
 			TCHAR name[MAX_VAR_NAME_LENGTH + 1]; 
 			_tcsncpy(name, op_begin, operand_length);
 			name[operand_length] = '\0';
-			if (ScriptModule* found = g_CurrentModule->GetNestedModule(name, true))
+			ScriptModule* found = NULL;
+			if ( ( found = g_CurrentModule->GetNestedModule(name, true))
+				|| g_CurrentModule->IsOptionalModule(name) ) // to allow referring to optional modules without any loadtime error and to avoid references to optional modules ending up as var references. Evaluating the expression will yield an error.
 			{
 				// First ensure that the module reference is followed by SYM_DOT.
 				LPTSTR cp = omit_leading_whitespace(op_begin + operand_length);
 				if (*cp != '.')
 					return LineError(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
 				// It is a script module followed by SYM_DOT
-				infix[infix_count].mod = found;
+				infix[infix_count].mod = found; // can be NULL if optional.
 				infix[infix_count].symbol = SYM_MODULE;
 			}
 			else // it is a variable
@@ -13955,10 +13958,12 @@ ResultType Script::PreprocessGlobalVars()
 
 ResultType Script::PreprocessGlobalVars(Var** aVarList, int aVarCount)
 {
+	bool has_optional_modules = g_CurrentModule->mOptionalModules; // To avoid calling IsOptionalModule on every iteration if not needed.
 	for (int v = 0; v < aVarCount; ++v)
 	{
 		Var& var = *aVarList[v];
-		if (!g_CurrentModule->ValidateName(var.mName)) // Variable names cannot collide with the name of any nested module or reserved module name.
+		if ( !g_CurrentModule->ValidateName(var.mName) // Variable names cannot collide with the name of any nested module or reserved module name.
+			|| (has_optional_modules && g_CurrentModule->IsOptionalModule(var.mName)) )
 			return DisplayNameError(_T("The following reserved word must not be used as a %s name:\n\"%-1.300s\""), DISPLAY_VAR_ERROR, var.mName);
 	}
 	return OK;
@@ -14044,11 +14049,12 @@ ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
 ResultType Script::PreprocessLocalVars(UserFunc &aFunc, Var **aVarList, int &aVarCount)
 {
 	bool check_globals = aFunc.AllowSuperGlobals();
-
+	bool check_optional_modules = g_CurrentModule->mOptionalModules;
 	for (int v = 0; v < aVarCount; ++v)
 	{
 		Var &var = *aVarList[v];
-		if (!g_CurrentModule->ValidateName(var.mName)) // Variable names cannot collide with the name of any nested module or reserved module name.
+		if (!g_CurrentModule->ValidateName(var.mName) // Variable names cannot collide with the name of any nested module or reserved module name.
+			|| (check_optional_modules && g_CurrentModule->IsOptionalModule(var.mName)) )
 			return DisplayNameError(_T("The following reserved word must not be used as a %s name:\n\"%-1.300s\""), DISPLAY_VAR_ERROR, var.mName);
 		if (var.IsDeclared()) // Not a candidate for an upvar, super-global or warning.
 			continue;
