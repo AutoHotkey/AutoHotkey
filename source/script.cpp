@@ -2850,7 +2850,7 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		// To handle SMODULES_INCLUDE_DIRECTIVE_NAME files, check that the value of mClassObjectCount is 0 and mModuleDefinitionCount is the same as when
 		// this function was called, if it was changed, it means that this file misses a brace for one of its module definitions and that is an error. 
 		// If not, the missing brace belongs to the "outer" file and if it isn't found it will be deteced later.
-		if (!mClassObjectCount && aImporting == 1 + mModuleDefinitionCount) // 1 is added when calling this function to indicate "true" in case mNameSpaceDefinitionCount == 0
+		if (!mClassObjectCount && aImporting == 1 + mModuleDefinitionCount) // 1 is added when calling this function to indicate "true" in case mModuleDefinitionCount == 0
 		{
 			// this file closed all its braces, the missing brace belongs to another file.
 		}
@@ -3839,7 +3839,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// If it's a file or non-existent file, the below will display the error. This will also display any other errors that occur.
 		g_LoadFailed = false;
 		int importing = 1						// to indicate "true"
-			+ mModuleDefinitionCount;			// store the value mNameSpaceDefinitionCount to detect if a missing brace at the end LoadIncludeFile belongs to the import:ed file, see comments there.
+			+ mModuleDefinitionCount;			// store the value mModuleDefinitionCount to detect if a missing brace at the end LoadIncludeFile belongs to the imported file, see comments there.
 
 		ResultType result = LoadIncludedFile(module_file_path, true, ignore_load_failure, /* aImporting = */ importing) ? CONDITION_TRUE : FAIL;
 		free(module_file_path);
