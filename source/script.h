@@ -2907,7 +2907,6 @@ private:
 
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
-	FuncList mFuncs;
 	
 	UserFunc *mLastHotFunc;		// For hotkey/hotstring functions
 	UserFunc *mUnusedHotFunc;	// If defining a named function under a "trigger::" the implicit

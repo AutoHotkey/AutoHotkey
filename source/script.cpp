@@ -808,8 +808,6 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		}
 	}
 
-	mFuncs.Alloc(100); // For performance.  Failure is non-critical and unlikely, so ignored for code size.
-
 	return OK;
 }
 
