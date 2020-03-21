@@ -19,6 +19,7 @@ freely, without restriction.
 #include "script_object.h"
 #include "script_com.h"
 #include "TextIO.h"
+#include "ScriptModules.h"
 //#include "Debugger.h" // included by globaldata.h
 
 #ifdef CONFIG_DEBUGGER
@@ -947,8 +948,7 @@ DEBUGGER_COMMAND(Debugger::context_get)
 	}
 	else if (context_id == PC_Global)
 	{
-		var = g_script.mVar;
-		var_end = var + g_script.mVarCount;
+		mStack.GetGlobalVars(depth, var, var_end);
 	}
 	else
 		return DEBUGGER_E_INVALID_CONTEXT;
@@ -2780,6 +2780,28 @@ void DbgStack::GetLocalVars(int aDepth, Var **&aVar, Var **&aVarEnd, VarBkp *&aB
 	// Since above did not return, this instance wasn't interrupted.
 	aVar = func.mVar;
 	aVarEnd = aVar + func.mVarCount;
+}
+
+
+void DbgStack::GetModuleFromStack(int aDepth, ScriptModule*& aModule)
+{
+	// For maintainability, callers should not rely on aModule never being NULL.
+	DbgStack::Entry* se = mTop - aDepth;
+	if (se < mBottom)				// prevent underflow
+		aModule = g_CurrentModule; // This could be an error, but it can also be the case when the auto-exec thread has finished and the script is idel. Currently, do not treat as error.
+	else if (!se->line)
+		aModule = g_CurrentModule;
+	else
+		aModule = se->line->mModule;
+	ASSERT(aModule);
+}
+void DbgStack::GetGlobalVars(int aDepth, Var**& aVar, Var**& aVarEnd)
+{
+	ScriptModule* mod;
+	GetModuleFromStack(aDepth, mod);
+	if (!mod) return;
+	aVar = mod->mVar;
+	aVarEnd = aVar + mod->mVarCount;
 }
 
 

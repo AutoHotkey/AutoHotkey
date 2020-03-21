@@ -171,6 +171,8 @@ struct DbgStack
 	void Push(UDFCallInfo *aRecurse);
 
 	void GetLocalVars(int aDepth, Var **&aVar, Var **&aVarEnd, VarBkp *&aBkp, VarBkp *&aBkpEnd);
+	void GetModuleFromStack(int aDepth, ScriptModule*& aModule);
+	void GetGlobalVars(int aDepth, Var**& aVar, Var**& aVarEnd);
 };
 
 #define DEBUGGER_STACK_PUSH(aWhat)	g_Debugger.mStack.Push(aWhat);
