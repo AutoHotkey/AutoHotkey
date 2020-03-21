@@ -992,9 +992,9 @@ STDMETHODIMP ComEvent::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD 
 	{
 		// Copy method name into our buffer, applying prefix and converting if necessary.
 		TCHAR funcName[256];
-		sntprintf(funcName, _countof(funcName), _T("%s%ws"), mPrefix, memberName);
+		sntprintf(funcName, _countof(funcName), _T("%s%ws"), mPrefix.mString, memberName);
 		// Find the script function:
-		func = g_script.FindFunc(funcName);
+		func = g_script.FindFunc(funcName, -1, 0, mPrefix.mModule);
 		dispid = DISPID_VALUE;
 		hr = func ? S_OK : DISP_E_MEMBERNOTFOUND;
 	}
@@ -1052,9 +1052,15 @@ HRESULT ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
 		if (mAhkObject = ahkObject)
 			mAhkObject->AddRef();
 		if (pfx)
-			_tcscpy(mPrefix, pfx);
+		{
+			_tcscpy(mPrefix.mString, pfx);
+			mPrefix.mModule = g_CurrentModule; // So that the function is searched for in the correct namespace. This can never be g_StandardNameSpace since bifs never change to the standar namespace.
+		}
 		else
-			*mPrefix = '\0'; // For maintainability.
+		{
+			*mPrefix.mString = '\0';	// For maintainability.
+			mPrefix.mModule = NULL;	//
+		}
 		return OK;
 	}
 	return hr;
@@ -1699,7 +1705,7 @@ void ComObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int a
 			if (mEventSink->mAhkObject)
 				aDebugger->WriteProperty("Object", ExprTokenType(mEventSink->mAhkObject));
 			else
-				aDebugger->WriteProperty("Prefix", ExprTokenType(mEventSink->mPrefix));
+				aDebugger->WriteProperty("Prefix", ExprTokenType(mEventSink->mPrefix.mString));
 			
 			OLECHAR buf[40];
 			if (!StringFromGUID2(mEventSink->mIID, buf, _countof(buf)))

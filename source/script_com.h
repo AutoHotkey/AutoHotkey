@@ -3,6 +3,11 @@
 
 extern bool g_ComErrorNotify;
 
+struct ComEventPrefix // For BIF_ComObjConnect
+{
+	TCHAR mString[64];		// The prefix to which the object will be connected.
+	ScriptModule* mModule;	// To save the module in which the object is being connected to the prefix, so that the looked up function will always be the same.
+};
 
 class ComObject;
 class ComEvent : public ObjectBase
@@ -12,7 +17,8 @@ class ComEvent : public ObjectBase
 	ITypeInfo *mTypeInfo;
 	IID mIID;
 	IObject *mAhkObject;
-	TCHAR mPrefix[64];
+	ComEventPrefix mPrefix;
+
 
 public:
 	STDMETHODIMP QueryInterface(REFIID riid, void **ppv);
