@@ -522,6 +522,45 @@ __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 #define _f_number_buf			_f_retval_buf  // An alias to show intended usage, and in case the buffer size is changed.
 #define _f_callee_id			(aResultToken.func->mFID)
 
+// Macro to call a bif:
+// Example:
+//	CALL_BIF(StrSplit, result, _T("a,b,c"), _T(","))
+//	if (CALL_TO_BIF_FAILED(result))
+//		return FAIL;
+
+// Warning: declares variables in the current block:
+#define CALL_BIF(bif, result, ...) \
+ResultToken result; \
+TCHAR buf##result[MAX_NUMBER_LENGTH]; \
+result.InitResult(buf##result); \
+{ \
+	ExprTokenType params[] = { __VA_ARGS__ }; \
+	int param_count = _countof(params); \
+	ExprTokenType **pParams = (ExprTokenType**)alloca(param_count * sizeof (ExprTokenType*)); \
+	for (int i = 0; i < param_count; ++i) \
+		*(pParams + i) = params + i; \
+	BIF_##bif(result, pParams, param_count); \
+}
+
+// Macro to verify the call in the above macro succeeded.
+#define TOKEN_EXITED(result_token) ((result_token).Exited())
+#define CALL_TO_BIF_FAILED(result_token) TOKEN_EXITED((result_token))
+
+// Macro to append an item to an Array* and verify result:
+// Example:
+// ARRAY_APPEND(myArray, _T("Str"), FAIL)
+// Note, use non or one of the ... args.
+#define ARRAY_APPEND(arr, item, ...) \
+if (!(arr)->Append((item))) \
+	return __VA_ARGS__;
+
+// Macro for poping an Array*. 
+#define ARRAY_POP_(arr, result_token) (arr)->ItemToToken((arr)->Length() - 1, (result_token)) ? (arr)->RemoveAt((arr)->Length() - 1, 1) : NULL
+#define ARRAY_POP(arr, result_token, ...) \
+OBJECT_POP_((arr), (result_token)) \
+if (TOKEN_EXITED) \
+	return __VA_ARGS__;
+
 
 struct LoopFilesStruct : WIN32_FIND_DATA
 {
@@ -2895,9 +2934,13 @@ private:
 #define MAX_NESTED_CLASSES 5
 #define MAX_CLASS_NAME_LENGTH UCHAR_MAX
 	int mClassObjectCount;
+
 	Object *mClassObject[MAX_NESTED_CLASSES]; // Class definition currently being parsed.
 	TCHAR mClassName[MAX_CLASS_NAME_LENGTH + 1]; // Only used during load-time.
-	Object *mUnresolvedClasses;
+	Array *mUnresolvedClasses;
+#define APPEND_UNRESOLVED(item)  ARRAY_APPEND(mUnresolvedClasses, item, FAIL)	// See Script::DefineClass()
+#define POP_UNRESOLVED(result) ARRAY_POP_(mUnresolvedClasses, result)			// See Script::ResolveClasses()
+
 	Array *mClasses = nullptr;
 	Property *mClassProperty;
 	LPTSTR mClassPropertyDef;
@@ -3075,9 +3118,10 @@ public:
 	ResultType DefineClass(LPTSTR aBuf);
 	UserFunc *DefineClassInit(bool aStatic);
 	ResultType DefineClassVars(LPTSTR aBuf, bool aStatic);
+
 	ResultType DefineClassProperty(LPTSTR aBuf, bool aStatic, Var **aFuncGlobalVar, bool &aBufHasBraceOrNotNeeded);
 	ResultType DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd, Var **aFuncGlobalVar);
-	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
+	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0, ScriptModule *aModule = NULL);
 	ResultType ResolveClasses();
 	ResultType InitClasses();
 

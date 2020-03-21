@@ -80,6 +80,8 @@ public:
 	
 	void ReleaseVarObjects();
 
+	Object* FindClassFromDotDelimitedString(LPTSTR aString);
+
 	void FreeOptionalModuleList();
 
 

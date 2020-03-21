@@ -218,6 +218,74 @@ void ScriptModule::ReleaseVarObjects()	// public
 		mNested->ReleaseVarObjects(); // release nested last, it seems more likely that the outer module refers to the nested ones, than the other way around.
 }
 
+Object* ScriptModule::FindClassFromDotDelimitedString(LPTSTR aString)
+{
+	// aString, a dot (.) delitmited string. Relies on that each class name is verified elsewhere.
+	
+	// Call BIF_StrSplit:
+	// Array: = StrSplit(String, Delimiters, OmitChars, MaxParts : = -1)
+	CALL_BIF(StrSplit, strsplit_result,
+		aString,							// String
+		_T("."),							// Delimiters
+		_T(""))								// OmitChars
+	if (CALL_TO_BIF_FAILED(strsplit_result))
+		return NULL;	// This is probably out of memory, strsplit already displayed the error, 
+						// there will be an "Unknown class" error too but this is too rare to worry about.
+
+	Array* arr = (Array*)TokenToObject(strsplit_result);	// Array
+	
+	int count = arr->Length();			// Numbers elements in the array.
+	if (count == 1)
+		return g_script.FindClass(aString, 0, this);
+
+	ScriptModule* found_module = this;	// A resolved module in which to conduct the search
+	ScriptModule* tmp_module = NULL;	// Used to not overwrite found_module and detect errors after the loop
+	Object* class_object = NULL;		// The object to return
+
+	// For each item in array:
+	ExprTokenType token; // Will hold the value of the each element in array.
+	for (int i = 0; i < count; ++i)
+	{
+		// Get item i in the array:
+		arr->ItemToToken(i, token); 
+		LPTSTR name = token.marker;
+		size_t name_length = token.marker_length;
+		
+		if (tmp_module = found_module->GetNestedModule(name, true))
+		{
+			// It is a module, the next item in the array will be searched for in this module.
+			found_module = tmp_module;
+			continue;
+		}
+		// Here, the module is completely resolved. Find the class object within it.
+		// Example, aString = "myMod.myOtherMod.MyClass.MyNestedClass", extract
+		// class_name = "MyClass.MyNestedClass" and pass it to FindClass.
+		LPTSTR class_name;
+		
+		// Call BIF_InStr to find the i:th dot. At this stage i must be at least 1.
+		// FoundPos := InStr(Haystack, Needle , CaseSensitive := false, StartingPos := 1, Occurrence := 1)
+		CALL_BIF(InStr, instr_result,
+			aString,	// Haystack
+			_T("."),	// Needle
+			true,		// CaseSensitive
+			1,			// StartingPos
+			i);			// Occurrence
+		if (CALL_TO_BIF_FAILED(instr_result)) // Check this for maintainability.
+			return NULL; 
+		__int64 FoundPos = instr_result.value_int64;
+		class_name = aString + FoundPos; // FoundPos is 1-based so no need to +1 to move past the dot (.)
+		class_object = g_script.FindClass(class_name, 0, found_module);
+		break; // Must not continue the loop!
+	}
+	if (tmp_module == found_module) // Only to catch bugs
+	{
+		// The last iteration was resolved to a module, eg, something like "class x extends MyModule.MyNestedModule"
+		ASSERT(!class_object);
+	}
+	return class_object;
+}
+
+
 //
 //	ModuleList methods.
 //
