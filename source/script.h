@@ -2907,7 +2907,7 @@ private:
 
 	Line *mFirstLine, *mLastLine;     // The first and last lines in the linked list.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
-	
+
 	UserFunc *mLastHotFunc;		// For hotkey/hotstring functions
 	UserFunc *mUnusedHotFunc;	// If defining a named function under a "trigger::" the implicit
 								// function stored in mLastHotFunc will not be used, store it in this
@@ -2918,8 +2918,6 @@ private:
 								// changes mCount. This list's member mItem is freed after being
 								// passed to PreprocessLocalVars. Do not use this list after that. 
 
-	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
-	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
 	int mGlobalVarCountMax; // While loading the script, the maximum number of global declarations allowed for the current function.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
