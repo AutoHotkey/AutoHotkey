@@ -439,7 +439,7 @@ BIF_DECL(BIF_ComObjType)
 				{
 					aResultToken.marker = aResultToken.buf;
 #ifdef UNICODE
-					aResultToken.marker_length = StringFromGUID2(typeattr->guid, aResultToken.marker, MAX_NUMBER_SIZE);
+					aResultToken.marker_length = StringFromGUID2(typeattr->guid, aResultToken.marker, MAX_NUMBER_SIZE) - 1; // returns length including the null terminator
 #else
 					WCHAR cnvbuf[MAX_NUMBER_SIZE];
 					StringFromGUID2(typeattr->guid, cnvbuf, MAX_NUMBER_SIZE);
