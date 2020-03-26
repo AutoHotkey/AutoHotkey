@@ -561,6 +561,12 @@ OBJECT_POP_((arr), (result_token)) \
 if (TOKEN_EXITED) \
 	return __VA_ARGS__;
 
+// Macro for traversing an array:
+// Warning: declares variables in the current block:
+#define ARRAY_FOR_EACH(arr, index, result_token) \
+ResultToken result_token; \
+for (unsigned int index = 0; i < (arr)->Length() && (arr)->ItemToToken(index, result_token); ++index)
+
 
 struct LoopFilesStruct : WIN32_FIND_DATA
 {
@@ -3133,7 +3139,7 @@ public:
 		, int aScope = FINDVAR_DEFAULT
 		, bool *apIsLocal = NULL
 		, ScriptModule *aModule = NULL);
-	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope, ScriptModule *aModule);
+	Var* AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope, ScriptModule* aModule, Var* aNewVar = NULL);
 	static VarEntry *GetBuiltInVar(LPTSTR aVarName);
 
 	ResultType DerefInclude(LPTSTR &aOutput, LPTSTR aBuf);

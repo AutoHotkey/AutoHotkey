@@ -39,6 +39,15 @@ GNU General Public License for more details.
 #define SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP _T("<to>") // Currently must include characters which are invalid in a path. (TOFIX)
 #define SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP_LENGTH (_countof(SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP) - 1) // - 1 to exclude the '\0'
 
+// For importing names:
+#define SMODULES_IMPORT_VARS_DIRECTIVE_NAME _T("#UseVar")
+#define SMODULES_IMPORT_VARS_DIRECTIVE_NAME_LENGTH (_countof(SMODULES_IMPORT_VARS_DIRECTIVE_NAME) - 1) // - 1 to exclude the '\0'
+
+#define SMODULES_IMPORT_NAME_SEP _T("in")
+#define SMODULES_IMPORT_NAME_SEP_LENGTH (_countof(SMODULES_IMPORT_NAME_SEP) - 1) // - 1 to exclude the '\0'
+
+#define SMODULES_IMPORT_NAME_ALL_MARKER _T("*All")
+
 // Rule for module names match:
 #define SMODULES_NAMES_MATCH(name1, name2) ((name1) != SMODULES_UNNAMED_STR && (name2) != SMODULES_UNNAMED_STR && !_tcsicmp( (name1), (name2)))
 
@@ -50,6 +59,11 @@ GNU General Public License for more details.
 #define ERR_SMODULES_IN_BLOCK _T("This block cannot contain namespaces.")
 #define ERR_SMODULES_DEFINITION_SYNTAX _T("Syntax error in namespace definition.") // Also used with SMODULES_INCLUDE_DIRECTIVE_NAME.
 #define ERR_SMODULES_INVALID_SCOPE_RESOLUTION _T("Invalid scope resolution.")
+
+#define ERR_SMODULES_BAD_DECLARATION _T("Bad declaration.")
+#define ERR_SMODULES_VAR_NOT_FOUND _T("Variable not found.")
+#define ERR_SMODULES_UNRESOLVED_NAME _T("Could not resolve name.")
+
 // Misc
 
 // Warning: This macro declares a variable outside the for block

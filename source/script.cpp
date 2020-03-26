@@ -1562,12 +1562,20 @@ UINT Script::LoadFromFile()
 	// Load the main script file.  This will also load any files it includes with #Include.
 	if (!LoadIncludedFile(g_RunStdIn ? _T("*") : mFileSpec, false, false))
 		return LOADING_FAILED;
+
 #ifdef ENABLE_DLLCALL
 	// So that (the last occuring) "#DllLoad directory" doesn't affect calls to GetDllProcAddress for run time calls to DllCall
 	// or DllCall optimizations in Line::ExpressionToPostfix.
 	if (!SetDllDirectory(NULL))
 		return ScriptError(ERR_INTERNAL_CALL);
 #endif
+
+	FOR_EACH_MODULE(mod) 
+	{
+		if (!mod->ResolveUseParams())
+			return LOADING_FAILED;
+	}
+
 	if (!PreparseExpressions(mFirstLine))
 		return LOADING_FAILED; // Error was already displayed by the above call.
 	// ABOVE: In v1.0.47, the above may have auto-included additional files from the userlib/stdlib.
@@ -1638,9 +1646,11 @@ UINT Script::LoadFromFile()
 		return LOADING_FAILED; // Error was already displayed by the above calls.
 
 #ifndef AUTOHOTKEYSC
-	FOR_EACH_MODULE(mod)
-	{
-		mod->FreeSourceFileIndexList(); // Clean up, not needed after load time.
+	{	// New block scope due to macro
+		FOR_EACH_MODULE(mod)
+		{
+			mod->FreeSourceFileIndexList(); // Clean up, not needed after load time.
+		}
 	}
 #endif
 
@@ -3651,7 +3661,41 @@ size_t Script::GetLine(LineBuffer &aBuf, int aInContinuationSection, bool aInBlo
 	return aBuf_length; // The above is responsible for keeping aBufLength up-to-date with any changes to aBuf.
 }
 
-
+size_t split_by_word_separator(LPTSTR aStr, LPTSTR aSep, LPTSTR aEscapeChar, size_t *aLen, size_t *aPos, unsigned int aOccurance = 1) 
+{
+	// Finds the aOccurance:th aSep in aStr where aSep must be "enclosed" in whitespace. 
+	// aLen is the length the text before the separator, excluding all whitespace before the separator.
+	// aPos is the posistion first non whitespace character after the separator.
+	// Exmaple:
+	// aStr = "abcde XX 1234 XX 9999"
+	// aSep = "XX"
+	// aOccurance = 1:
+	// yields, aLen = 5, aPos = 9. Used to extract: "abcde" and "1234 XX 9999".
+	// aOccurance = 2:
+	// yeilds, aLen = 13, aPos = 17. Used to extract: "abcde XX 1234" and "9999".
+	// If the separator is preceeded by aEscapeChar (optional) it the match is ignored and the search continues.
+	size_t sep_length = _tcslen(aSep);
+	size_t esc_length = aEscapeChar ? _tcslen(aEscapeChar) : 0;
+	size_t num_hits = 0;
+	LPTSTR cp = aStr, whitespace;
+	while ( *cp && ( cp = StrChrAny(cp, _T(" \t")) ) )
+	{		
+		whitespace = cp;
+		cp++; // Move at least one char
+		cp = omit_leading_whitespace(cp);
+		if (aEscapeChar && !_tcsncmp(cp, aEscapeChar, esc_length))
+			continue; // The separator was escaped.
+		if (!_tcsncmp(cp, aSep, sep_length) && (cp[sep_length] == ' ' || cp[sep_length] == '\t'))
+		{
+			*aLen = whitespace - aStr;
+			*aPos = omit_leading_whitespace(cp + sep_length + 1) - aStr;
+			num_hits++;
+			if (num_hits >= aOccurance)
+				break; // done
+		}
+	}
+	return num_hits;
+}
 
 inline ResultType Script::IsDirective(LPTSTR aBuf)
 // aBuf must be a modifiable string since this function modifies it in the case of "#Include %A_ScriptDir%"
@@ -3857,6 +3901,32 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		return result;
 #endif	// #ifdef AUTOHOTKEYSC
 	} // SMODULES_INCLUDE_DIRECTIVE_NAME
+
+	// Check if importing names:
+	SymbolType type_symbol = SYM_INVALID;
+	if (IS_DIRECTIVE_MATCH(SMODULES_IMPORT_VARS_DIRECTIVE_NAME))
+		type_symbol = SYM_VAR;
+
+	if (type_symbol != SYM_INVALID) 	// Handle importing names.
+	{
+		if (!parameter)
+			return ScriptError(ERR_PARAM1_REQUIRED, aBuf);
+		// Separate the list of names from the source:
+		size_t name_len = 0;
+		size_t mod_start = 0;
+		if (!split_by_word_separator(parameter, SMODULES_IMPORT_NAME_SEP, _T("`"), &name_len, &mod_start)) // Split the name list and module name
+			return ScriptError(ERR_PARAM_COUNT_INVALID, aBuf);
+		TCHAR name_list[MAX_VAR_NAME_LENGTH + 1];
+		TCHAR source_name[MAX_VAR_NAME_LENGTH + 1];
+		_tcsncpy(name_list, parameter, name_len);		// Copy name_list
+		name_list[name_len] = '\0';						// terminate
+		_tcscpy(source_name, parameter + mod_start);	// Copy source_name, already terminated and trimmed of whitespace.
+		// Add the object, might be postponed to be resolved after the script has been parsed.
+		if (!g_CurrentModule->AddObject(name_list, source_name, type_symbol))
+			return FAIL;
+
+		return CONDITION_TRUE;
+	}
 
 	if (IS_DIRECTIVE_MATCH(_T("#DllLoad")))
 	{
@@ -5433,7 +5503,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// for performance reasons, that args marked as variables really are
 					// variables.  In addition, ExpandArgs() relies on this having been done.
 					this_new_arg.type = ARG_TYPE_NORMAL;
-				else
+				else if (false) 
+					// This cannot be done here since it is not known at this stage if this
+					// var name should be imported from another module (since all modules
+					// might not have been loaded)
+					// ExpressionToPostfix should handle it, but keep until it has been verified that nothing breaks.
 				{
 					// ARG_TYPE_INPUT_VAR is never encountered at this stage; it is only used by
 					// certain optimizations in ExpressionToPostfix(), which comes later.
@@ -5456,6 +5530,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					this_new_arg.deref = (DerefType *)target_var;
 					continue;
 				}
+				else
+					this_new_arg.is_expression = true;
 			}
 			else // this_new_arg.type == ARG_TYPE_NORMAL (excluding those input/output_vars that were converted to normal because they were blank, above).
 			{
@@ -7643,15 +7719,29 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 		// current assume-mode.  Therefore, if the mode is assume-global, pass the apIsLocal
 		// and apInsertPos variables to FindVar() so that it will update them to be global.
 		if (g.CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL)
-			return FindVar(aVarName, aVarNameLength, apInsertPos, FINDVAR_GLOBAL, apIsLocal);
+			return FindVar(aVarName, aVarNameLength, apInsertPos, FINDVAR_GLOBAL, apIsLocal, aModule);
 		// Otherwise, caller only wants globals which are declared in *this* function:
+		Var* gvar = NULL;
 		for (int i = 0; i < g.CurrentFunc->mGlobalVarCount; ++i)
-			if (!_tcsicmp(var_name, g.CurrentFunc->mGlobalVar[i]->mName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
-				return g.CurrentFunc->mGlobalVar[i];
+		{
+			gvar = g.CurrentFunc->mGlobalVar[i];
+			if (!_tcsicmp(var_name, gvar->mName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+			{
+				if (gvar->Type() == VAR_REPLACED)
+				{
+					// This var was replaced in the global scope, now replace it in this function's global var list. 
+					// See implemention relating to SMODULES_IMPORT_VARS_DIRECTIVE_NAME for more details.
+					gvar = FindVar(aVarName, aVarNameLength, NULL, FINDVAR_GLOBAL, NULL, aModule);
+					ASSERT(gvar && gvar->IsSuperGlobal());
+					g.CurrentFunc->mGlobalVar[i] = gvar;
+				}
+				return gvar;
+			}
+		}
 		if (!g.CurrentFunc->AllowSuperGlobals())
 			return NULL;
 		// As a last resort, check for a super-global:
-		Var *gvar = FindVar(aVarName, aVarNameLength, NULL, FINDVAR_GLOBAL, NULL, aModule);
+		gvar = FindVar(aVarName, aVarNameLength, NULL, FINDVAR_GLOBAL, NULL, aModule);
 		if (gvar && gvar->IsSuperGlobal())
 			return gvar;
 	}
@@ -7661,7 +7751,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 
 
 
-Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope, ScriptModule* aModule)
+Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope, ScriptModule* aModule, Var* aNewVar)
 // Returns the address of the new variable or NULL on failure.
 // Caller must ensure that g->CurrentFunc!=NULL whenever aIsLocal!=0.
 // Caller must ensure that aVarName isn't NULL and that this isn't a duplicate variable name.
@@ -7669,6 +7759,8 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 // Finally, aIsLocal has been provided to indicate which list, global or local, should receive this
 // new variable, as well as the type of local variable.  (See the declaration of VAR_LOCAL etc.)
 {
+	if (aNewVar)
+		aVarName = aNewVar->mName;
 	if (!*aVarName) // Should never happen, so just silently indicate failure.
 		return NULL;
 	if (!aVarNameLength) // Caller didn't specify, so use the entire string.
@@ -7684,7 +7776,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	TCHAR var_name[MAX_VAR_NAME_LENGTH + 1];
 	tcslcpy(var_name, aVarName, aVarNameLength + 1);  // See explanation above.  +1 to convert length to size.
 
-	if (!Var::ValidateName(var_name, DISPLAY_VAR_ERROR, aModule))
+	if (!aNewVar && !Var::ValidateName(var_name, DISPLAY_VAR_ERROR, aModule)) // No need to validate if aNewVar isn't NULL.
 		// Above already displayed error for us.  This can happen at loadtime or runtime (e.g. StringSplit).
 		return NULL;
 
@@ -7710,11 +7802,14 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	}
 
 	// Allocate some dynamic memory to pass to the constructor:
-	LPTSTR new_name = SimpleHeap::Malloc(var_name, aVarNameLength);
-	if (!new_name)
-		// It already displayed the error for us.
-		return NULL;
-
+	LPTSTR new_name = NULL;
+	if (!aNewVar)
+	{
+		new_name = SimpleHeap::Malloc(var_name, aVarNameLength);
+		if (!new_name)
+			// It already displayed the error for us.
+			return NULL;
+	}
 	// Below specifically tests for VAR_LOCAL and excludes other non-zero values/flags:
 	//   VAR_LOCAL_FUNCPARAM should not be made static.
 	//   VAR_LOCAL_STATIC is already static.
@@ -7723,7 +7818,8 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 		// v1.0.48: Lexikos: Current function is assume-static, so set static attribute.
 		aScope |= VAR_LOCAL_STATIC;
 
-	Var *the_new_var = new Var(new_name, builtin, aScope);
+	
+	Var *the_new_var = aNewVar ? aNewVar : new Var(new_name, builtin, aScope);
 	if (the_new_var == NULL)
 	{
 		ScriptError(ERR_OUTOFMEM);
@@ -9412,9 +9508,42 @@ unquoted_literal:
 			}
 			else // it is a variable
 			{
-				if (!(this_deref_ref.var = g_script.FindOrAddVar(op_begin, operand_length)))
+				Var* var = g_script.FindOrAddVar(op_begin, operand_length);
+				if (!var)
 					return FAIL;
-				switch (this_deref_ref.var->Type())
+				if (var->IsSuperGlobal() && g->CurrentFunc && g->CurrentFunc->mOuterFunc)
+				{
+					// The found variable is declared super global and referenced inside a nested function, verify that the outer function(s)
+					// havn't declared this var as local, if such is the case, this super global var needs to be replaced
+					// by a new local variable. PreprocessLocalVars will later "connect" the outer/inner scopes appropriately.
+					
+					//
+					// Note: It seems like the loop isn't needed, i.e., it is inconsequentail to check mOuterFunc->mOuterFunc.
+					// But it seems more intuitive (and maybe implied by the docs) that mOuterFunc->mOuterFunc should be considered too. 
+					// Leave as it is for now.
+					// 
+
+					Var* upvar;
+					auto *&current_func = g->CurrentFunc;	// For convenience
+					auto *func_restore = current_func;		// To restore the current func after the loop below.
+					while (current_func = current_func->mOuterFunc)
+					{
+						upvar = g_script.FindVar(op_begin, operand_length, NULL, FINDVAR_LOCAL);
+						if (upvar)
+							break;
+					}
+					current_func = func_restore; // Restore
+					if (upvar)
+					{
+						// Note that FindOrAddVar above didn't find any local variable above in this function,
+						// so it is safe to call AddVar here with the same name.
+						var = g_script.AddVar(op_begin, operand_length, NULL, VAR_LOCAL, g_CurrentModule);
+						if (!var)
+							return FAIL;
+					}
+				}
+				this_deref_ref.var = var;
+				switch (this_deref_ref.var->Type()) // VAR_ALIAS is taken into account (and resolved) by Type().
 				{
 				case VAR_NORMAL: // VAR_ALIAS is taken into account (and resolved) by Type().
 					// DllCall() and possibly others rely on this having been done to support changing the

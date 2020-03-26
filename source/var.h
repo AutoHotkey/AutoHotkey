@@ -40,6 +40,7 @@ enum VarTypes
 , VAR_NORMAL // Most variables, such as those created by the user, are this type.
 , VAR_CONSTANT // or as I like to say, not variable.
 , VAR_VIRTUAL
+, VAR_REPLACED	// This variable should not be used, it has been replaced by another var. Used for SMODULES_IMPORT_VARS_DIRECTIVE_NAME. 
 , VAR_LAST_TYPE = VAR_VIRTUAL
 };
 
@@ -560,7 +561,7 @@ public:
 	#define VALIDATENAME_SUBJECT_INDEX(n) (n-1)
 	#define VALIDATENAME_SUBJECTS { _T("variable"), _T("function"), _T("class"), _T("group"), _T("method"), SMODULES_DECLARATION_KEYWORD_NAME_LC }
 	static ResultType ValidateName(LPCTSTR aName, int aDisplayError = DISPLAY_VAR_ERROR, ScriptModule *aModule = NULL);
-
+	void MarkReplaced();
 	LPTSTR ObjectToText(LPTSTR aName, LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline)
 	// Caller must ensure that Type() == VAR_NORMAL.

@@ -1185,6 +1185,11 @@ ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError, ScriptModule *aMo
 	return OK;
 }
 
+void Var::MarkReplaced()
+{
+	mType = VAR_REPLACED;
+}
+
 
 
 ResultType Var::AssignStringFromCodePage(LPCSTR aBuf, int aLength, UINT aCodePage)

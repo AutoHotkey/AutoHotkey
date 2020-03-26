@@ -63,6 +63,54 @@ public:
 	} *mOptionalModules;								// A list of optional modules to allow the "*i" option for SMODULES_INCLUDE_DIRECTIVE_NAME.
 	bool IsOptionalModule(LPTSTR aName);
 
+	// Used for importing names from other modules:
+	struct UseParams
+	{
+		LPTSTR param1;	// The objects to use, eg a list of vars or funcs. Consider making param1 a union of an Array* and LPTSTR, to avoid splitting the string multiple times. Low prio.
+		union
+		{	// Identifies the scope of the object(s) to use.
+			LPTSTR str;				// SYM_STRING
+			ScriptModule* mod;		// SYM_MODULE
+		} param2;
+		SymbolType type_symbol;		// Indicates the type of the objects specified by param1.
+		
+		SymbolType scope_symbol;	// Indicates which member of param2 to use.
+		// Todo: Add line/file info for error reporting.
+		UseParams(SymbolType aScopeSymbol, SymbolType aTypeSymbol, LPTSTR aObjList, ScriptModule* aModule, LPTSTR aModuleName) :
+			param1(_tcsdup(aObjList)),
+			type_symbol(aTypeSymbol),
+			scope_symbol(aScopeSymbol)
+		{
+			if (scope_symbol == SYM_STRING) 
+				param2.str = _tcsdup(aModuleName);
+			else 
+				param2.mod = aModule;
+		}
+		~UseParams()
+		{
+			if (param1) free(param1);
+			if (scope_symbol == SYM_STRING) free(param2.str);
+		}
+		
+	};
+	class UseParamsList : public SimpleList<UseParams*>
+	{
+	public:
+		UseParamsList() : SimpleList(true) {}
+		void FreeItem(UseParams *aParams) { delete aParams; }	// virtual
+	} *mUseParams;								// A list of object to use.
+
+	ScriptModule* FindModuleFromDotDelimitedString(LPTSTR aStr);
+	bool ResolveUseParams();
+	ResultType AddObject(LPTSTR aObjList, LPTSTR aModuleName, SymbolType aTypeSymbol);
+	ResultType AddObject(UseParams* aObjs);
+	ResultType AddVarFromList(Array *aVarList, ScriptModule* aModule);
+	ResultType FindOrAddVar(LPTSTR aVarName, int aNameLength, ScriptModule* aModule);
+	ResultType AddAllVars(ScriptModule* aModule);
+	ResultType AddVar(Var* aVar);
+	ResultType ReplaceGlobalVar(Var* aVar1, Var* aVar2);
+	ResultType ReplaceVar(Var** aVars, int aVarCount, Var* aVar1, Var* aVar2);
+
 #ifndef AUTOHOTKEYSC
 	SimpleList<int>* mSourceFileIndexList;				// A list of numbers corresponding to indices in Line::sSourceFile, to allow #include duplicates across modules.
 	// For "including" modules.
@@ -89,6 +137,7 @@ public:
 		mVar(NULL), mLazyVar(NULL),
 		mVarCount(0), mVarCountMax(0), mLazyVarCount(0),
 		mOuter(aOuter), mNested(NULL),
+		mUseParams(NULL),
 		mOptionalModules(NULL), mSourceFileIndexList(NULL)
 	{
 		if (aName != SMODULES_UNNAMED_NAME)
