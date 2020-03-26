@@ -225,12 +225,10 @@ BIF_DECL(Op_ModuleInvoke)
 	{	// It is a variable.
 		if (!*name) // Eg, MyModule.%''%
 			_f_throw(ERR_DYNAMIC_BLANK);
-		Var* var = g_script.FindOrAddVar(name, name_length, VAR_GLOBAL, mod_param->mod);
-		if (!var)
-		{	// FindOrAddVar already displayed the error.
-			aResultToken.SetExitResult(FAIL);
-			return;
-		}
+		Var* var = g_script.FindVar(name, name_length, NULL, FINDVAR_SUPER_GLOBAL, NULL, mod_param->mod);
+		if (!var || !var->IsSuperGlobal())
+			_f_throw(ERR_SMODULES_VAR_NOT_FOUND, name);
+		
 		if (var->Type() == VAR_BUILTIN) // Currently doesn't support built-in vars.
 			_f_throw(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
 		if (invoke_type & IT_SET

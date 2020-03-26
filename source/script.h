@@ -3133,6 +3133,7 @@ public:
 
 	#define FINDVAR_DEFAULT  (VAR_LOCAL | VAR_GLOBAL)
 	#define FINDVAR_GLOBAL   VAR_GLOBAL
+	#define FINDVAR_SUPER_GLOBAL   VAR_SUPER_GLOBAL
 	#define FINDVAR_LOCAL    VAR_LOCAL
 	Var *FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT, ScriptModule *aModule = NULL);
 	Var *FindVar(LPTSTR aVarName, size_t aVarNameLength = 0, int *apInsertPos = NULL

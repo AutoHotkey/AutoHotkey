@@ -9210,9 +9210,10 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 									{
 										// It is a variable via scope resolution.
 										Var* var;
-										if (!(var = g_script.FindOrAddVar(op_begin, operand_length, VAR_GLOBAL /* cannot resolve local vars*/, mod)))
-											return FAIL;
-
+										if (!(var = g_script.FindVar(op_begin, operand_length, NULL, FINDVAR_SUPER_GLOBAL /* cannot resolve non-superglobal*/, NULL, mod))
+											|| !var->IsSuperGlobal() )
+											return LineError(ERR_SMODULES_VAR_NOT_FOUND, FAIL, op_begin);
+										
 										infix[infix_count].var = var; // Set this first to allow optimizations below to override it.
 										if (var->Type() == VAR_NORMAL) // VAR_ALIAS is taken into account (and resolved) by Type().
 										{
@@ -9221,11 +9222,12 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 											new_symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the clipboard in the case of expression lvalues.  Search for VAR_CLIPBOARD further below for details.
 											infix[infix_count].is_lvalue = FALSE; // Set default.  This simplifies #Warn ClassOverwrite (vs. storing it in the assignment token).
 										}
-										else
-											// It is a built-in variable.
-											// Do not bother to optimize something like MyModule.true to 1.
-											// new_symbol = SYM_DYNAMIC;
-											return LineError(ERR_SMODULES_INVALID_SCOPE_RESOLUTION); // Disallow built-in vars for now
+										// This doesn't happen since changed the above to use FindVar + FINDVAR_SUPER_GLOBAL:
+										//else
+										//	// It is a built-in variable.
+										//	// Do not bother to optimize something like MyModule.true to 1.
+										//	// new_symbol = SYM_DYNAMIC;
+										//	return LineError(ERR_SMODULES_INVALID_SCOPE_RESOLUTION); // Disallow built-in vars for now
 									}
 								}
 								else
