@@ -143,7 +143,12 @@ public:
 		mVarCount(0), mVarCountMax(0), mLazyVarCount(0),
 		mOuter(aOuter), mNested(NULL),
 		mUseParams(NULL),
-		mOptionalModules(NULL), mSourceFileIndexList(NULL)
+		mOptionalModules(NULL)
+#ifndef AUTOHOTKEYSC
+		, mSourceFileIndexList(NULL)
+#endif
+
+		
 	{
 		if (aName != SMODULES_UNNAMED_NAME)
 			mName = SimpleHeap::Malloc(aName);	// copy the name for simplicity.
