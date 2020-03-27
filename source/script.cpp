@@ -523,6 +523,7 @@ Script::Script()
 	, mCustomIcon(NULL), mCustomIconSmall(NULL) // Normally NULL unless there's a custom tray icon loaded dynamically.
 	, mCustomIconFile(NULL), mIconFrozen(false), mTrayIconTip(NULL) // Allocated on first use.
 	, mCustomIconNumber(0)
+	, mModuleDefinitionCount(0)
 {
 	// v1.0.25: mLastScriptRest (removed in v2) and mLastPeekTime are now initialized
 	// right before the auto-exec section of the script is launched, which avoids an
@@ -1508,6 +1509,13 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 #ifdef CONFIG_DEBUGGER // L34: Exit debugger *after* the above to allow debugging of any invoked __Delete handlers.
 	g_Debugger.Exit(aExitReason);
 #endif
+	
+	// Release modules.
+	FOR_EACH_MODULE(mod)
+		delete mod;
+	if (mModules)
+		delete mModules;
+	g_CurrentModule = NULL; // To detect bugs.
 
 	// We call DestroyWindow() because MainWindowProc() has left that up to us.
 	// DestroyWindow() will cause MainWindowProc() to immediately receive and process the

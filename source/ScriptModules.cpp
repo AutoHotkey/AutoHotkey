@@ -16,6 +16,17 @@ GNU General Public License for more details.
 
 const LPTSTR ScriptModule::sUnamedModuleName = SMODULES_UNNAMED_NAME;
 
+ScriptModule::~ScriptModule()
+{
+	if (mNested)
+		delete mNested;
+	if (mOptionalModules)
+		delete mOptionalModules;
+#ifndef AUTOHOTKEYSC
+	FreeSourceFileIndexList();
+#endif
+}
+
 bool ScriptModule::ValidateName(LPTSTR aName)
 {
 	// return true if this name can be used as a variable name in this module, i.e., it is not the same as one of its nested module names or any of the reserved names.
@@ -57,16 +68,6 @@ bool ScriptModule::IsOptionalModule(LPTSTR aName)
 	if (!mOptionalModules)
 		return false;
 	return mOptionalModules->HasItem(aName);
-}
-
-void ScriptModule::FreeOptionalModuleList()
-{
-	// frees the list of optional modules for this module and all of its nested ones.
-	if (mNested)
-		mNested->FreeOptionalModuleList();
-	if (mOptionalModules)
-		delete mOptionalModules;
-	mOptionalModules = NULL;
 }
 
 ScriptModule* ScriptModule::FindModuleFromDotDelimitedString(LPTSTR aString)
@@ -655,13 +656,6 @@ bool ModuleList::find(LPTSTR aName, ScriptModule **aFound)
 		}
 	}
 	return false;
-}
-
-void ModuleList::FreeOptionalModuleList()
-{
-	// see the corresponding ScriptModule:: method of comments
-	for (size_t i = 0; i < mCount; ++i)
-		mList[i]->FreeOptionalModuleList();
 }
 
 #undef MODULELIST_INITIAL_SIZE

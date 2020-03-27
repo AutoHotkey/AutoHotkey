@@ -130,13 +130,9 @@ public:
 	
 	static ScriptModule* GetReservedModule(LPTSTR aName, ScriptModule* aSource = NULL);
 
-	
 	void ReleaseVarObjects();
 
 	Object* FindClassFromDotDelimitedString(LPTSTR aString);
-
-	void FreeOptionalModuleList();
-
 
 	ScriptModule(LPTSTR aName, int aFuncsInitSize = 0, ScriptModule* aOuter = NULL) :
 		mVar(NULL), mLazyVar(NULL),
@@ -147,8 +143,6 @@ public:
 #ifndef AUTOHOTKEYSC
 		, mSourceFileIndexList(NULL)
 #endif
-
-		
 	{
 		if (aName != SMODULES_UNNAMED_NAME)
 			mName = SimpleHeap::Malloc(aName);	// copy the name for simplicity.
@@ -159,7 +153,7 @@ public:
 		if (aFuncsInitSize && !mFuncs.Alloc(aFuncsInitSize))
 			return; // out of memory
 	}
-
+	~ScriptModule();
 	// Operators
 	void* operator new(size_t aBytes) { return SimpleHeap::Malloc(aBytes); }
 	void* operator new[](size_t aBytes) { return SimpleHeap::Malloc(aBytes); }
@@ -185,8 +179,6 @@ public:
 	bool IsInList(ScriptModule* aModule);
 	void RemoveLastModule();
 	bool find(LPTSTR aName, ScriptModule** aFound = NULL);
-
-	void FreeOptionalModuleList();
 
 	void ReleaseVarObjects();
 
