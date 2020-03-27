@@ -107,9 +107,13 @@ ScriptModule* ScriptModule::FindModuleFromDotDelimitedString(LPTSTR aString)
 	return found_module;
 }
 
+//
+// Methods for "using" names - start
+//
 
 ResultType ScriptModule::AddObjectError(LPTSTR aErrorMsg, LPTSTR aExtraInfo, UseParams* aUp)
 {
+	// Used by the below methods for error reporting.
 	g_script.mCurrLine = NULL;
 	g_script.ScriptError(aErrorMsg, aExtraInfo);
 	return FAIL;
@@ -208,12 +212,13 @@ ResultType ScriptModule::AddObject(UseParams* aObjs)
 }
 ResultType ScriptModule::AddFuncFromList(Array* aFuncList, ScriptModule* aModule)
 {
-	if (aModule == GetReservedModule(SMODULES_STANDARD_MODULE_NAME))
+	// Adds all functions in aFuncList if found in aModule, to this module
+	if (aModule == GetReservedModule(SMODULES_STANDARD_MODULE_NAME)) // The standard module is not supported.
 		return AddObjectError(ERR_SMODULES_NOT_SUPPORTED, SMODULES_STANDARD_MODULE_NAME);
 	ARRAY_FOR_EACH(aFuncList, i, result)
 	{
 		if (!FindAndAddFunc(result.marker, aModule))
-			return FAIL;
+			return FAIL; // Message already shown.
 	}
 	return OK;
 }
@@ -221,18 +226,20 @@ ResultType ScriptModule::AddFuncFromList(Array* aFuncList, ScriptModule* aModule
 ResultType ScriptModule::FindAndAddFunc(LPTSTR aFuncName, ScriptModule* aModule)
 {
 	if (!_tcsicmp(aFuncName, SMODULES_IMPORT_NAME_ALL_MARKER))
-		return AddAllFuncs(aModule);	
-	Func* func = aModule->mFuncs.Find(aFuncName, NULL);
+		return AddAllFuncs(aModule);
+	// Add only one func:
+	Func* func = aModule->mFuncs.Find(aFuncName, NULL); // Find the func in the source module
 	if (!func) 
 		// This func doesn't exist
 		return AddObjectError(ERR_SMODULES_FUNC_NOT_FOUND, aFuncName);
 	
 	int insert_pos;
-	Func* this_func = mFuncs.Find(aFuncName, &insert_pos);
+	Func* this_func = mFuncs.Find(aFuncName, &insert_pos);	// search for a function with the same name in this module
 	if (this_func)
 	{
 		if (this_func == func) // This exact func already exists
 			return OK;
+		// A different function with the same name already exists in this module
 		return AddObjectError(ERR_DUPLICATE_FUNCTION, aFuncName);
 	}
 	if (!mFuncs.Insert(func, insert_pos)) // Now add it to this module
@@ -245,10 +252,10 @@ ResultType ScriptModule::AddAllFuncs(ScriptModule* aModule)
 	auto &funcs = aModule->mFuncs.mItem;
 	size_t func_count = aModule->mFuncs.mCount;
 	LPCTSTR name;
-	for (size_t i = 0; i < func_count; ++i)
+	for (size_t i = 0; i < func_count; ++i) // Visit each func in the source module's list of functions.
 	{
 		name = funcs[i]->mName;
-		if (_tcschr(name, '.')) // Avoid adding "cls.prototype.method" and such.
+		if (_tcschr(name, '.')) // Avoid adding class methods such as "cls.prototype.method".
 			continue;
 		if (!FindAndAddFunc((LPTSTR)name, aModule))
 			return FAIL; // The error message has already been displayed.
@@ -364,6 +371,12 @@ ResultType ScriptModule::ReplaceVar(Var** aVars, int aVarCount, Var* aVar1, Var*
 	}
 	return FAIL;
 }
+
+//
+// Methods for "using" names - end
+//
+
+
 
 #ifndef AUTOHOTKEYSC
 
