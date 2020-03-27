@@ -3909,6 +3909,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	SymbolType type_symbol = SYM_INVALID;
 	if (IS_DIRECTIVE_MATCH(SMODULES_IMPORT_VARS_DIRECTIVE_NAME))
 		type_symbol = SYM_VAR;
+	else if (IS_DIRECTIVE_MATCH(SMODULES_IMPORT_FUNCS_DIRECTIVE_NAME))
+		type_symbol = SYM_FUNC;
 
 	if (type_symbol != SYM_INVALID) 	// Handle importing names.
 	{

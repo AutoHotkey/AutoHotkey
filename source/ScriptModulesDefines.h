@@ -41,7 +41,7 @@ GNU General Public License for more details.
 
 // For importing names:
 #define SMODULES_IMPORT_VARS_DIRECTIVE_NAME _T("#UseVar")
-#define SMODULES_IMPORT_VARS_DIRECTIVE_NAME_LENGTH (_countof(SMODULES_IMPORT_VARS_DIRECTIVE_NAME) - 1) // - 1 to exclude the '\0'
+#define SMODULES_IMPORT_FUNCS_DIRECTIVE_NAME _T("#UseFunc")
 
 #define SMODULES_IMPORT_NAME_SEP _T("in")
 #define SMODULES_IMPORT_NAME_SEP_LENGTH (_countof(SMODULES_IMPORT_NAME_SEP) - 1) // - 1 to exclude the '\0'
@@ -60,8 +60,11 @@ GNU General Public License for more details.
 #define ERR_SMODULES_DEFINITION_SYNTAX _T("Syntax error in namespace definition.") // Also used with SMODULES_INCLUDE_DIRECTIVE_NAME.
 #define ERR_SMODULES_INVALID_SCOPE_RESOLUTION _T("Invalid scope resolution.")
 
+#define ERR_SMODULES_NOT_SUPPORTED _T("Not supported.")
+
 #define ERR_SMODULES_BAD_DECLARATION _T("Bad declaration.")
 #define ERR_SMODULES_VAR_NOT_FOUND _T("Variable not found.")
+#define ERR_SMODULES_FUNC_NOT_FOUND _T("Function not found.")
 #define ERR_SMODULES_UNRESOLVED_NAME _T("Could not resolve name.")
 
 // Misc

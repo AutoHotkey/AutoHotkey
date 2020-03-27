@@ -216,6 +216,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_EXP_ILLEGAL_CHAR _T("Illegal character in expression.")
 #define ERR_UNQUOTED_NON_ALNUM _T("Unquoted literals may only consist of alphanumeric characters/underscore.")
 #define ERR_DUPLICATE_DECLARATION _T("Duplicate declaration.")
+#define ERR_DUPLICATE_FUNCTION _T("Duplicate function definition")
 #define ERR_INVALID_FUNCDECL _T("Invalid function declaration.")
 #define ERR_INVALID_CLASS_VAR _T("Invalid class variable declaration.")
 #define ERR_INVALID_LINE_IN_CLASS_DEF _T("Not a valid method, class or property definition.")

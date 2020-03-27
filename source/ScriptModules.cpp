@@ -107,6 +107,14 @@ ScriptModule* ScriptModule::FindModuleFromDotDelimitedString(LPTSTR aString)
 	return found_module;
 }
 
+
+ResultType ScriptModule::AddObjectError(LPTSTR aErrorMsg, LPTSTR aExtraInfo, UseParams* aUp)
+{
+	g_script.mCurrLine = NULL;
+	g_script.ScriptError(aErrorMsg, aExtraInfo);
+	return FAIL;
+}
+
 bool ScriptModule::ResolveUseParams() 
 {
 	// Some names might not have been able to be imported when the relevant import directive was reached,
@@ -123,11 +131,11 @@ bool ScriptModule::ResolveUseParams()
 		{
 		case CONDITION_TRUE:
 			// Not added, no error message shown, show one.
-			g_script.mCurrLine = NULL;
+			
 			name = up->scope_symbol == SYM_MODULE
 				? up->param1		// An item in the name list couldn't be resolved. (This case might not be possible now, but added for maintainability)
 				: up->param2.str;	// The source could not be resolved.
-			g_script.ScriptError(ERR_SMODULES_UNRESOLVED_NAME, name);
+			AddObjectError(ERR_SMODULES_UNRESOLVED_NAME, name);
 			// fall through:
 		case FAIL:
 			// The error was either shown by AddObject or the above case if fell through.
@@ -150,26 +158,13 @@ ResultType ScriptModule::AddObject(LPTSTR aObjList, LPTSTR aModuleName, SymbolTy
 	// Atempts to add each object in aObjList (comma delimited) to aModuleName.
 	// The type of the objects are indicated by aTypeSymbol.
 	UseParams *up = new UseParams(SYM_STRING, aTypeSymbol, aObjList, NULL, aModuleName);
-	ResultType add_result;
-	switch (aTypeSymbol)
-	{
-	case SYM_VAR:	 // Handle this in Resolve, otherwise it might fail depending on the posistion of the directive. 
-		add_result = CONDITION_TRUE;
-		break;
-	//case something_else:	add_result = AddObject(up);
-	}
-	if (add_result != CONDITION_TRUE)
-	{
-		// It was added or something failed.
-		delete up;
-		return add_result;
-	}
-	// Save this UseParams so that it can be resolved later.
+	// Handle this later in ResolveUseParams, otherwise it might fail depending on the posistion of the directive. 
+	// Save this UseParams so that it can be resolved later:
 	if (!mUseParams)
 		mUseParams = new UseParamsList;
 	if (!mUseParams->AddItem(up))
 		return FAIL; // The program should fail so no point in doing "delete up;" here. Unlikely so avoid error message, ERR_OUTOFMEM
-	return add_result;
+	return CONDITION_TRUE;
 }
 ResultType ScriptModule::AddObject(UseParams* aObjs)
 {
@@ -184,11 +179,14 @@ ResultType ScriptModule::AddObject(UseParams* aObjs)
 			aObjs->param2.mod = mod;
 			aObjs->scope_symbol = SYM_MODULE;
 		}
+		else
+			return AddObjectError(ERR_SMODULES_NOT_FOUND, aObjs->param2.str, aObjs);
 		break;
 	case SYM_MODULE: mod = aObjs->param2.mod; break;
 	}
 	if (!mod)
 		return FAIL;
+	
 	// Call BIF_StrSplit:
 	// Array: = StrSplit(String, Delimiters, OmitChars, MaxParts : = -1)
 	CALL_BIF(StrSplit, strsplit_result,
@@ -201,34 +199,83 @@ ResultType ScriptModule::AddObject(UseParams* aObjs)
 	
 	switch (aObjs->type_symbol)
 	{
+	case SYM_FUNC: return AddFuncFromList(arr, mod);
 	case SYM_VAR: return AddVarFromList(arr, mod);
 	
 	}
 	// This shouldn't be reached:
 	return FAIL;
 }
+ResultType ScriptModule::AddFuncFromList(Array* aFuncList, ScriptModule* aModule)
+{
+	if (aModule == GetReservedModule(SMODULES_STANDARD_MODULE_NAME))
+		return AddObjectError(ERR_SMODULES_NOT_SUPPORTED, SMODULES_STANDARD_MODULE_NAME);
+	ARRAY_FOR_EACH(aFuncList, i, result)
+	{
+		if (!FindAndAddFunc(result.marker, aModule))
+			return FAIL;
+	}
+	return OK;
+}
+
+ResultType ScriptModule::FindAndAddFunc(LPTSTR aFuncName, ScriptModule* aModule)
+{
+	if (!_tcsicmp(aFuncName, SMODULES_IMPORT_NAME_ALL_MARKER))
+		return AddAllFuncs(aModule);	
+	Func* func = aModule->mFuncs.Find(aFuncName, NULL);
+	if (!func) 
+		// This func doesn't exist
+		return AddObjectError(ERR_SMODULES_FUNC_NOT_FOUND, aFuncName);
+	
+	int insert_pos;
+	Func* this_func = mFuncs.Find(aFuncName, &insert_pos);
+	if (this_func)
+	{
+		if (this_func == func) // This exact func already exists
+			return OK;
+		return AddObjectError(ERR_DUPLICATE_FUNCTION, aFuncName);
+	}
+	if (!mFuncs.Insert(func, insert_pos)) // Now add it to this module
+		return AddObjectError(ERR_OUTOFMEM);
+	return OK;
+}
+
+ResultType ScriptModule::AddAllFuncs(ScriptModule* aModule)
+{
+	auto &funcs = aModule->mFuncs.mItem;
+	size_t func_count = aModule->mFuncs.mCount;
+	LPCTSTR name;
+	for (size_t i = 0; i < func_count; ++i)
+	{
+		name = funcs[i]->mName;
+		if (_tcschr(name, '.')) // Avoid adding "cls.prototype.method" and such.
+			continue;
+		if (!FindAndAddFunc((LPTSTR)name, aModule))
+			return FAIL; // The error message has already been displayed.
+	}
+	return OK;
+}
+
 ResultType ScriptModule::AddVarFromList(Array *aVarList, ScriptModule *aModule)
 {
 	ARRAY_FOR_EACH(aVarList, i, result)
 	{
-		if (!FindOrAddVar(result.marker, (int)result.marker_length, aModule))
+		if (!FindAndAddVar(result.marker, (int)result.marker_length, aModule))
 			return FAIL;
 	}
 	return OK;
 
 }
-ResultType ScriptModule::FindOrAddVar(LPTSTR aVarName, int aNameLength, ScriptModule *aModule)
+ResultType ScriptModule::FindAndAddVar(LPTSTR aVarName, int aNameLength, ScriptModule *aModule)
 {
 	if (!_tcsicmp(aVarName, SMODULES_IMPORT_NAME_ALL_MARKER))
 		return AddAllVars(aModule);
 	// Add aVarName to this modules var list, first find it in aModule:
 	Var* var = g_script.FindVar(aVarName, aNameLength, NULL, VAR_GLOBAL, false, aModule);
 	if (!var)
-	{
-		g_script.mCurrLine = NULL;
-		g_script.ScriptError(ERR_SMODULES_VAR_NOT_FOUND, aVarName);
-		return FAIL;
-	}
+		return AddObjectError(ERR_SMODULES_VAR_NOT_FOUND, aVarName);
+		
+	
 	return AddVar(var); // Now add it to this module
 }
 ResultType ScriptModule::AddAllVars(ScriptModule *aModule) 
@@ -264,7 +311,7 @@ ResultType ScriptModule::AddVar(Var* aVar)
 		// This can happen if this module have declared this variable as super global. That should be an error.
 		// But it can also happen if the variable is declared global in a function.
 		if (var->IsSuperGlobal())
-			return g_script.ScriptError(ERR_SMODULES_BAD_DECLARATION); 
+			return AddObjectError(ERR_SMODULES_BAD_DECLARATION);
 		// Replace var with aVar.
 		ReplaceGlobalVar(var, aVar);
 		return OK;

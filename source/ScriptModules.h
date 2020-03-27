@@ -101,11 +101,16 @@ public:
 	} *mUseParams;								// A list of object to use.
 
 	ScriptModule* FindModuleFromDotDelimitedString(LPTSTR aStr);
+	
+	ResultType AddObjectError(LPTSTR aErrorMsg, LPTSTR aExtraInfo = NULL, UseParams* aUp = NULL);
 	bool ResolveUseParams();
 	ResultType AddObject(LPTSTR aObjList, LPTSTR aModuleName, SymbolType aTypeSymbol);
 	ResultType AddObject(UseParams* aObjs);
+	ResultType FindAndAddFunc(LPTSTR aFuncName, ScriptModule* aModule);
+	ResultType AddAllFuncs(ScriptModule* aModule);
+	ResultType AddFuncFromList(Array* aFuncList, ScriptModule* aModule);
 	ResultType AddVarFromList(Array *aVarList, ScriptModule* aModule);
-	ResultType FindOrAddVar(LPTSTR aVarName, int aNameLength, ScriptModule* aModule);
+	ResultType FindAndAddVar(LPTSTR aVarName, int aNameLength, ScriptModule* aModule);
 	ResultType AddAllVars(ScriptModule* aModule);
 	ResultType AddVar(Var* aVar);
 	ResultType ReplaceGlobalVar(Var* aVar1, Var* aVar2);
