@@ -1896,11 +1896,14 @@ ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllo
 	else
 		SetWorkingDir(mFileDir);
 
+
 	// This is done only after the file has been successfully opened in case aIgnoreLoadFailure==true:
 	if (source_file_index > 0)
-		if (  !(Line::sSourceFile[source_file_index] = SimpleHeap::Malloc(full_path))  )
+	{
+		if (!(Line::sSourceFile[source_file_index] = SimpleHeap::Malloc(full_path))
+			|| !g_CurrentModule->AddSourceFileIndex(source_file_index))
 			return ScriptError(ERR_OUTOFMEM);
-	//else the first file was already taken care of by another means.
+	}
 
 #else // Stand-alone mode (there are no include files in this mode since all of them were merged into the main script at the time of compiling).
 
