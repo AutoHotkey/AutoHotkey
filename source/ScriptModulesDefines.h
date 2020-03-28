@@ -21,7 +21,7 @@ GNU General Public License for more details.
 #define SMODULES_OUTER_MODULE_NAME _T("Outer")
 
 // For unnamed modules:
-#define SMODULES_UNNAMED_NAME _T("<unnamed ") SMODULES_DECLARATION_KEYWORD_NAME _T(">")	// For listlines / errors etc. This name is invalid for scripts due to '<', ' ' and '>'. This name can be any string.
+#define SMODULES_UNNAMED_NAME _T("<unnamed ") SMODULES_DECLARATION_KEYWORD_NAME _T(">")	// For listlines / errors etc. This name is invalid for scripts due to '<', ' ' and '>'. This name can be any string. At least IsDirective assumes this is not _T("").
 #define SMODULES_UNNAMED_STR (ScriptModule::sUnamedModuleName)	// This is a static string for quickly identifying an unnamed module and avoid allocating a string for each unnamed module.
 
 // For literal module definitions:
@@ -36,7 +36,7 @@ GNU General Public License for more details.
 #define SMODULES_STR_EQUALS_INCLUDE_DIRECTIVE_OPTIONAL_MARKER(str) (str[0] == '*' && ctoupper(str[1]) == 'I') // Relies on short-circuit boolean order.
 #define SMODULES_INCLUDE_DIRECTIVE_OPTIONAL_MARKER_LENGTH (_countof(SMODULES_INCLUDE_DIRECTIVE_OPTIONAL_MARKER) - 1) // - 1 to exclude the '\0'
 
-#define SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP _T("<to>") // Currently must include characters which are invalid in a path. (TOFIX)
+#define SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP _T("to") // Currently must include characters which are invalid in a path. (TOFIX)
 #define SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP_LENGTH (_countof(SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP) - 1) // - 1 to exclude the '\0'
 
 // For importing names:

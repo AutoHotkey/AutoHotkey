@@ -3696,6 +3696,7 @@ size_t split_by_word_separator(LPTSTR aStr, LPTSTR aSep, LPTSTR aEscapeChar, siz
 		cp = omit_leading_whitespace(cp);
 		if (aEscapeChar && !_tcsncmp(cp, aEscapeChar, esc_length))
 			continue; // The separator was escaped.
+		
 		if (!_tcsncmp(cp, aSep, sep_length) && (cp[sep_length] == ' ' || cp[sep_length] == '\t'))
 		{
 			*aLen = whitespace - aStr;
@@ -3843,25 +3844,28 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		LPTSTR path, name; // the path to the file defining the module, the end of the path, and the module name.
 		
-		if (!(name = _tcsstr(parameter, SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP))) // find the separator between the path/file and the module name (if any)
-		{
-			// there was no separator
-			name = SMODULES_UNNAMED_STR;
-			path = parameter;	// already verfied aboved.
-		}
-		else
-		{
-			// Separate module name and path.
-			if (name == parameter	// the parameter started with the separator, there is no path
-				|| *(name + SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP_LENGTH) == '\0')	// or there was no name following the separator
-				return CONDITION_FALSE;
-			path = parameter;
-			path[name - parameter] = '\0'; // extract the path
-			name += SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP_LENGTH;	// move past the separator
-			name = omit_leading_whitespace(name); // Trim leading whitespace from the name, trailing was already trimmed from parameter above
-			if (!*name)
-				return CONDITION_FALSE;
-		}
+		// Separate the list of names from the source:
+		size_t path_len = 0;
+		size_t mod_start = 0;
+		bool is_unnamed; // to indicate wheter the second parameter is present or not.
+		// Split the path and module name:
+		is_unnamed = !split_by_word_separator(parameter, SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP, NULL, &path_len, &mod_start, -1 /*find the last separator as it is valid inside the path parameter*/); 
+			
+		TCHAR path_param[MAX_VAR_NAME_LENGTH + 1];
+		TCHAR source_param[MAX_VAR_NAME_LENGTH + 1];
+		_tcsncpy(path_param, parameter, path_len);		// Copy path_param
+		path_param[path_len] = '\0';					// terminate
+		if (!is_unnamed)
+			_tcscpy(source_param, parameter + mod_start);	// Copy source_name, already terminated and trimmed of whitespace.
+		
+		name = is_unnamed
+			? SMODULES_UNNAMED_STR	// there was no separator
+			: source_param;
+		path = path_len
+			? path_param
+			: parameter;			// there was no separator, use the entier parameter as the path
+		ASSERT(*path && *name);
+			
 		if (!DefineScriptModule(name)) // this sets the new module to be the current one.
 			return FAIL; // DefineScriptModule displays the error message.
 
@@ -3929,7 +3933,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// Separate the list of names from the source:
 		size_t name_len = 0;
 		size_t mod_start = 0;
-		if (!split_by_word_separator(parameter, SMODULES_IMPORT_NAME_SEP, _T("`"), &name_len, &mod_start)) // Split the name list and module name
+		if (!split_by_word_separator(parameter, SMODULES_IMPORT_NAME_SEP, NULL, &name_len, &mod_start)) // Split the name list and module name
 			return ScriptError(ERR_PARAM_COUNT_INVALID, aBuf);
 		TCHAR name_list[MAX_VAR_NAME_LENGTH + 1];
 		TCHAR source_name[MAX_VAR_NAME_LENGTH + 1];
