@@ -1503,8 +1503,8 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 		// in case one or more objects need to call a __delete meta-function.
 		g_AllowInterruption = FALSE;
 		g->IsPaused = false;
-		
-		mModules->ReleaseVarObjects();
+		if (mModules)
+			mModules->ReleaseVarObjects();
 	}
 #ifdef CONFIG_DEBUGGER // L34: Exit debugger *after* the above to allow debugging of any invoked __Delete handlers.
 	g_Debugger.Exit(aExitReason);
