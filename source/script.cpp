@@ -7371,11 +7371,21 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		if (!scopefunc)
 			break;
 	}
-	// left now contains a position in the outer-most FuncList, as needed for built-in functions below.
-
+	
 	// Since above didn't return, there is no match.  See if it's a built-in function that hasn't yet
-	// been added to the function list.
-
+	// been added to the function list. Only add BIFs to the standard module, to avoid creating a new
+	// BuiltInFunc for every module which references a BIF.
+	static ScriptModule *std_module = NULL;
+	if (!std_module)
+		std_module = aModule->GetReservedModule(SMODULES_STANDARD_MODULE_NAME);
+	if (aModule != std_module)
+	{
+		ASSERT(std_module);
+		return FindFunc(aFuncName, aFuncNameLength, NULL, std_module);
+	}
+	// Here aModule is the standard module.
+	// left now contains a position in the outer-most FuncList, as needed for built-in functions below.
+	
 	FuncEntry *pbif = FindBuiltInFunc(func_name);
 	UCHAR *bif_output_vars = pbif ? pbif->mOutputVars : NULL;
 	ActionTypeType action_type = ACT_INVALID;
