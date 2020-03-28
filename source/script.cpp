@@ -9597,6 +9597,17 @@ unquoted_literal:
 	ASSERT(infix_count < infix_size);
 	infix[infix_count].symbol = SYM_INVALID;
 
+	if (mActionType == ACT_FOR
+		&& infix_count == 1
+		&& infix->symbol == SYM_VAR
+		&& aArg.type == ARG_TYPE_OUTPUT_VAR)
+	{
+		// This var is an output variable for ACT_FOR. No further processing needed:
+		aArg.is_expression = false;
+		aArg.deref = infix->deref;
+		return OK;
+	}
+
 	////////////////////////////
 	// CONVERT INFIX TO POSTFIX.
 	////////////////////////////
