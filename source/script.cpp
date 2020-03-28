@@ -3922,6 +3922,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 	if (type_symbol != SYM_INVALID) 	// Handle importing names.
 	{
+		if (g->CurrentFunc || mClassObjectCount)
+			return ScriptError(ERR_SMODULES_NOT_SUPPORTED);
 		if (!parameter)
 			return ScriptError(ERR_PARAM1_REQUIRED, aBuf);
 		// Separate the list of names from the source:
