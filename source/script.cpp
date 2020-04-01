@@ -7009,7 +7009,6 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength, ScriptMod
 	
 	// Make temporary copy which we can modify.
 	tmemcpy(class_name, aClassName, aClassNameLength);
-	class_name[aClassNameLength] = '\0';
 	class_name[aClassNameLength] = '.'; // To simplify parsing.
 	class_name[aClassNameLength + 1] = '\0';
 
