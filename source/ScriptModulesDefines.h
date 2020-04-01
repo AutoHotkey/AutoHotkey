@@ -36,7 +36,7 @@ GNU General Public License for more details.
 #define SMODULES_STR_EQUALS_INCLUDE_DIRECTIVE_OPTIONAL_MARKER(str) (str[0] == '*' && ctoupper(str[1]) == 'I') // Relies on short-circuit boolean order.
 #define SMODULES_INCLUDE_DIRECTIVE_OPTIONAL_MARKER_LENGTH (_countof(SMODULES_INCLUDE_DIRECTIVE_OPTIONAL_MARKER) - 1) // - 1 to exclude the '\0'
 
-#define SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP _T("to") // Currently must include characters which are invalid in a path. (TOFIX)
+#define SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP _T("to") // The separator is required to be enclosed in whitespace
 #define SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP_LENGTH (_countof(SMODULES_INCLUDE_DIRECTIVE_FILE_MODULE_SEP) - 1) // - 1 to exclude the '\0'
 
 // For importing names:
