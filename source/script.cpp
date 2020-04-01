@@ -6514,7 +6514,10 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		{
 			// __Init method already exists, so find the end of its body.
 			for (block_end = init_func->mJumpToLine;
-				block_end->mActionType != ACT_BLOCK_END || !block_end->mAttribute;
+															// The end of the body is a line with:
+				block_end->mActionType != ACT_BLOCK_END		// mActionType == ACT_BLOCK_END
+				&& !block_end->mAttribute;					// and mAttribute == ATTR_TRUE.
+
 				block_end = block_end->mNextLine);
 		}
 		else
