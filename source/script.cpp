@@ -9230,7 +9230,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 										|| mod->IsOptionalModule(name)) // to allow "myModule.MyOptionalModule..." at load time. Will fail if evaluated
 									{
 										// It is resolving a series of nested modules, eg, "myOtherModule" in "myModule.myOtherModule..."
-										if (*omit_leading_whitespace(op_end) != '.')
+										LPTSTR dot;
+										if (*(dot = omit_leading_whitespace(op_end)) != '.' || IS_SPACE_OR_TAB(dot[1]))
 											// The found module must be followed by SYM_DOT.
 											return LineError(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
 										new_symbol = SYM_MODULE;
@@ -9531,8 +9532,8 @@ unquoted_literal:
 				|| g_CurrentModule->IsOptionalModule(name) ) // to allow referring to optional modules without any loadtime error and to avoid references to optional modules ending up as var references. Evaluating the expression will yield an error.
 			{
 				// First ensure that the module reference is followed by SYM_DOT.
-				LPTSTR cp = omit_leading_whitespace(op_begin + operand_length);
-				if (*cp != '.')
+				LPTSTR dot = omit_leading_whitespace(op_begin + operand_length);
+				if (*dot != '.' || IS_SPACE_OR_TAB(dot[1]))
 					return LineError(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
 				// It is a script module followed by SYM_DOT
 				infix[infix_count].mod = found; // can be NULL if optional.
