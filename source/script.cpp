@@ -9181,18 +9181,20 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 							DerefType* new_deref = NULL; // Holds a reference to the appropriate function, and parameter count.
 							// This has not been analyzed for code size.
 							auto make_new_deref = [&](int aParamCount) {
-								// Avoid error checking for brevity, the program will fail soon somewhere else anyways. (Malloc will show the error message to indicate the problem)
-								new_deref = (DerefType*)SimpleHeap::Malloc(sizeof(DerefType));
+								if (!(new_deref = (DerefType*)SimpleHeap::Malloc(sizeof(DerefType))))
+									return false; // Malloc shows the error message.
 								new_deref->marker = cp - 1; // Not typically needed, set for error-reporting.
 								new_deref->param_count = aParamCount;
 								new_deref->type = DT_FUNC;
+								return true;
 							};
+#define MAKE_NEW_DEREF(aParamCount) if (!make_new_deref((aParamCount))) return FAIL;
 							ASSERT(infix_count >= 2);
 							ScriptModule* mod = infix[infix_count - 2].symbol == SYM_MODULE ? infix[infix_count - 2].mod : NULL;
 							if (*op_end == '(')
 							{
-								
-								make_new_deref(mod ? 0 : 2 /*two parameters: the object and identifier.*/);
+								// Either resolvíng a function in a module or calling a method on an object
+								MAKE_NEW_DEREF(mod ? 0 : 2 /*two parameters: the object and identifier.*/)
 								new_symbol = SYM_FUNC;
 								if (mod)
 								{
@@ -9203,13 +9205,14 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 										return LineError(ERR_NONEXISTENT_FUNCTION);
 									
 								}
-								else
+								else // Method call
 									new_deref->func = OpFunc_CallMethod;
 								// DON'T DO THE FOLLOWING - must let next iteration handle '(' so it outputs a SYM_OPAREN:
 								//++op_end;
 							}
 							else
-							{
+							{	
+								// Either resolving a module or variable in a module, or invoking a property on an object.
 								if (mod) // It is scope resolution
 								{
 									infix_count -= 2;	// The previously resolved module and the SYM_DOT following it will be replaced by
@@ -9258,10 +9261,10 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 									}
 								}
 								else
-								{
-									new_symbol = SYM_DOT; // This will be changed to SYM_FUNC at a later stage.
-									make_new_deref(2); // two parameters: the object and identifier.
-									new_deref->func = OpFunc_GetProp; // Set default; may be overridden by standard_pop_into_postfix.
+								{	// Invoking a property on an object.
+									new_symbol = SYM_DOT;				// This will be changed to SYM_FUNC at a later stage.
+									MAKE_NEW_DEREF(2)					// two parameters: the object and identifier.
+									new_deref->func = OpFunc_GetProp;	// Set default; may be overridden by standard_pop_into_postfix.
 								}
 							}
 
@@ -9269,7 +9272,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 							infix[infix_count].symbol = new_symbol;
 							if (new_deref)
 								infix[infix_count].deref = new_deref;
-
+#undef MAKE_NEW_DEREF
 							// Continue processing after this operand. Outer loop will do ++infix_count.
 							cp = op_end;
 							continue;
