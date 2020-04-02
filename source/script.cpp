@@ -3869,7 +3869,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		if (!DefineScriptModule(name)) // this sets the new module to be the current one.
 			return FAIL; // DefineScriptModule displays the error message.
 
-		rtrim(path); // to allow tabs between the path and the separator
 		LPTSTR module_file_path; // this must be freed before returning if DerefInclude succeeds.
 		if (!DerefInclude(module_file_path, path))
 			return ScriptError(ERR_OUTOFMEM);
