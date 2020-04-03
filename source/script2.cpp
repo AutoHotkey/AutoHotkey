@@ -6569,6 +6569,9 @@ BIF_DECL(BIF_Sort)
 			else
 				g_SortCaseSensitive = SCS_SENSITIVE;
 			break;
+		case 'L':
+			g_SortCaseSensitive = SCS_INSENSITIVE_LOGICAL;
+			break;
 		case 'D':
 			if (!cp[1]) // Avoids out-of-bounds when the loop's own ++cp is done.
 				break;
