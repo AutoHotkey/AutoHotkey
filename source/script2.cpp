@@ -25,6 +25,7 @@ GNU General Public License for more details.
 #include "resources/resource.h"  // For InputBox.
 #include "TextIO.h"
 #include <Psapi.h> // for GetModuleBaseName.
+#include <Shlwapi.h> // for StrCmpLogicalW
 
 #include <mmdeviceapi.h> // for SoundSet/SoundGet.
 #include <endpointvolume.h> // for SoundSet/SoundGet.
@@ -9509,8 +9510,9 @@ VarSizeType BIV_StringCaseSense(LPTSTR aBuf, LPTSTR aVarName)
 {
 	return aBuf
 		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->StringCaseSense == SCS_INSENSITIVE ? _T("Off") // For backward compatibility (due to StringCaseSense), never change the case used here.  Fixed in v1.0.42.01 to return exact length (required).
-			: (g->StringCaseSense == SCS_SENSITIVE ? _T("On") : _T("Locale"))))
-		: 6; // Room for On, Off, or Locale (in the estimation phase).
+			: (g->StringCaseSense == SCS_SENSITIVE ? _T("On") 
+				: g->StringCaseSense == SCS_INSENSITIVE_LOCALE ? _T("Locale") : _T("Logical"))))
+		: 7; // Room for On, Off, Locale or Logical (in the estimation phase).
 }
 
 BIV_DECL_W(BIV_StringCaseSense_Set)

@@ -19,7 +19,7 @@ GNU General Public License for more details.
 #include <gdiplus.h> // Used by LoadPicture().
 #include "util.h"
 #include "globaldata.h"
-
+#include <Shlwapi.h> // for StrCmpLogicalW
 
 int GetYDay(int aMon, int aDay, bool aIsLeapYear)
 // Returns a number between 1 and 366.

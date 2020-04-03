@@ -1207,6 +1207,7 @@ public:
 		if (!_tcsicmp(aBuf, _T("On")) || !_tcscmp(aBuf, _T("1"))) return SCS_SENSITIVE;
 		if (!_tcsicmp(aBuf, _T("Off")) || !_tcscmp(aBuf, _T("0"))) return SCS_INSENSITIVE;
 		if (!_tcsicmp(aBuf, _T("Locale"))) return SCS_INSENSITIVE_LOCALE;
+		if (!_tcsicmp(aBuf, _T("Logical"))) return SCS_INSENSITIVE_LOGICAL;
 		return SCS_INVALID;
 	}
 
