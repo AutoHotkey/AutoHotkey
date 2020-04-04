@@ -9197,8 +9197,10 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 									// Scope resolution - func.
 									infix_count -= 2;	// The previously resolved module and the SYM_DOT following it will be replaced by
 														// a function call									
-									if (!(new_deref->func = g_script.FindFunc(cp, op_end - cp, 0, mod)))
+									if ( (!(new_deref->func = g_script.FindFunc(cp, op_end - cp, 0, mod)))	// No function found
+										|| (new_deref->func->IsBuiltIn() && mod != g_StandardModule) )		// or it is built-in and mod isn't the standard module.
 										return LineError(ERR_NONEXISTENT_FUNCTION);
+									
 									
 								}
 								else // Method call

@@ -205,6 +205,8 @@ BIF_DECL(Op_ModuleInvoke)
 			Op_ObjInvoke(aResultToken, aParam, aParamCount);
 			return;
 		}
+		if (func->IsBuiltIn() && mod_param->mod != g_StandardModule)
+			_f_throw(ERR_SMODULES_FUNC_NOT_FOUND);
 		func->Call(aResultToken, aParam, aParamCount, false); // "false" since variadic parameters has already been expanded.
 		return;
 	}
