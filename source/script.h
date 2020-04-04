@@ -35,6 +35,8 @@ EXTERN_G;
 class ScriptModule;						// forward declaration
 class ModuleList;
 extern ScriptModule* g_CurrentModule;
+extern ScriptModule* g_StandardModule;
+
 
 #define MAX_THREADS_LIMIT UCHAR_MAX // Uses UCHAR_MAX (255) because some variables that store a thread count are UCHARs.
 #define MAX_THREADS_DEFAULT 10 // Must not be higher than above.

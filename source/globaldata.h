@@ -25,6 +25,7 @@ GNU General Public License for more details.
 #include "Debugger.h"
 
 extern ScriptModule* g_CurrentModule;
+extern ScriptModule* g_StandardModule;
 extern bool g_LoadFailed;
 
 extern HINSTANCE g_hInstance;

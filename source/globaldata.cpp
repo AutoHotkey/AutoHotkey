@@ -26,6 +26,7 @@ GNU General Public License for more details.
 
 
 ScriptModule* g_CurrentModule;		// Identifies the current module.
+ScriptModule* g_StandardModule;		// Identifies the standard module.
 
 bool g_LoadFailed = false;			// used to allow optional modules.
 

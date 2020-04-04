@@ -214,7 +214,7 @@ ResultType ScriptModule::AddObject(UseParams* aObjs)
 ResultType ScriptModule::AddFuncFromList(Array* aFuncList, ScriptModule* aModule)
 {
 	// Adds all functions in aFuncList if found in aModule, to this module
-	if (aModule == GetReservedModule(SMODULES_STANDARD_MODULE_NAME)) // The standard module is not supported.
+	if (aModule == g_StandardModule) // The standard module is not supported.
 		return AddObjectError(ERR_SMODULES_NOT_SUPPORTED, SMODULES_STANDARD_MODULE_NAME);
 	ARRAY_FOR_EACH(aFuncList, i, result)
 	{
@@ -473,7 +473,7 @@ ScriptModule* ScriptModule::GetReservedModule(LPTSTR aName, ScriptModule* aSourc
 	// aSource, if aName doesn't match any of the "standard/default" module, find a module relative to aSource, for example aSource outer module. Can be NULL (omitted).
 	// Get one of the module whose name are reserved. See ScriptModulesDefines.h
 	if (SMODULES_NAMES_MATCH(aName, SMODULES_STANDARD_MODULE_NAME))
-		return g_script.mModuleSimpleList.GetItem(1);
+		return g_StandardModule;
 	if (SMODULES_NAMES_MATCH(aName, SMODULES_DEFAULT_MODULE_NAME))
 		return g_script.mModuleSimpleList.GetItem(0);
 

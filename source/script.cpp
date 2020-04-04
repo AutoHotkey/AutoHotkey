@@ -534,13 +534,13 @@ Script::Script()
 	// Initialize the script's module list and the default and standard modules.
 	mModules = new ModuleList();
 	g_CurrentModule = new ScriptModule(SMODULES_DEFAULT_MODULE_NAME, 100);
-	ScriptModule* std_script_module = new ScriptModule(SMODULES_STANDARD_MODULE_NAME, _countof(g_BIF));
+	g_StandardModule = new ScriptModule(SMODULES_STANDARD_MODULE_NAME, _countof(g_BIF));
 	
 	if (!mModules // Verify since 'new' operator is overloaded.
 		|| !mModules->Add(g_CurrentModule)
-		|| !mModules->Add(std_script_module)
+		|| !mModules->Add(g_StandardModule)
 		|| !mModuleSimpleList.AddItem(g_CurrentModule)
-		|| !mModuleSimpleList.AddItem(std_script_module) )
+		|| !mModuleSimpleList.AddItem(g_StandardModule) )
 	{
 		ScriptError(ERR_OUTOFMEM);
 		ExitApp(EXIT_DESTROY);
@@ -7377,14 +7377,10 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	// Since above didn't return, there is no match.  See if it's a built-in function that hasn't yet
 	// been added to the function list. Only add BIFs to the standard module, to avoid creating a new
 	// BuiltInFunc for every module which references a BIF.
-	static ScriptModule *std_module = NULL;
-	if (!std_module)
-		std_module = aModule->GetReservedModule(SMODULES_STANDARD_MODULE_NAME);
-	if (aModule != std_module)
-	{
-		ASSERT(std_module);
-		return FindFunc(aFuncName, aFuncNameLength, NULL, std_module);
-	}
+	
+	if (aModule != g_StandardModule)
+		return FindFunc(aFuncName, aFuncNameLength, NULL, g_StandardModule);
+
 	// Here aModule is the standard module.
 	// left now contains a position in the outer-most FuncList, as needed for built-in functions below.
 	
