@@ -5348,7 +5348,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			}
 			else
 				func.mGlobalVar = NULL; // For maintainability.
-			line.mAttribute = ATTR_TRUE;  // Flag this ACT_BLOCK_END as the ending brace of a function's body.
+			line.mAttribute = &func;  // Flag this ACT_BLOCK_END as the ending brace of this function's body.
 			g->CurrentFunc = func.mOuterFunc;
 			if (g->CurrentFunc && !g->CurrentFunc->mJumpToLine)
 				// The outer function has no body yet, so it probably began with one or more nested functions.
@@ -6519,7 +6519,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		{
 			// __Init method already exists, so find the end of its body.
 			for (block_end = init_func->mJumpToLine;
-				block_end->mActionType != ACT_BLOCK_END || !block_end->mAttribute;
+				block_end->mActionType != ACT_BLOCK_END || block_end->mAttribute != init_func;
 				block_end = block_end->mNextLine);
 		}
 		else
