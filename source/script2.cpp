@@ -7509,7 +7509,7 @@ BIF_DECL(BIF_Sound)
 	float setting_scalar;
 	if (SOUND_MODE_IS_SET)
 	{
-		setting_scalar = (float)(ParamIndexToDouble(0) / 100);
+		setting_scalar = (float)(ATOF(aSetting) / 100);
 		if (setting_scalar < -1)
 			setting_scalar = -1;
 		else if (setting_scalar > 1)
