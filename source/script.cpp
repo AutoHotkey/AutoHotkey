@@ -9678,7 +9678,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 								: ExprOp<Op_ObjIncDec, SYM_POST_INCREMENT>();
 						++this_infix; // Discard this operator.
 					}
-					else
+					else if (infix_symbol != SYM_OPAREN) // if it is something like "++x.y.%expr%", do not apply the "++" to the "x.y" part.
 					{
 						stack_symbol = stack[stack_count - 1]->symbol;
 						if (stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT)
