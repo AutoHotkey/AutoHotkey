@@ -11680,7 +11680,7 @@ VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName)
 VarSizeType BIV_WinDir(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_PATH]; // MSDN (2018): The uSize parameter "should be set to MAX_PATH."
-	VarSizeType length = GetWindowsDirectory(buf, _countof(buf));
+	VarSizeType length = GetSystemWindowsDirectory(buf, _countof(buf));
 	if (aBuf)
 		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
 	return length;
