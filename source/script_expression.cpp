@@ -1163,6 +1163,12 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					}
 					else // We have a valid base and exponent and both are integers, so the calculation will always have a defined result.
 					{
+						if (right_int64 >= 0)	// result is an integer.
+						{
+							this_token.value_int64 = pow_ll(left_int64, right_int64);
+							break;
+						}
+						result_symbol = SYM_FLOAT; // Due to negative exponent, override to float.
 #ifdef USE_INLINE_ASM	// see qmath.h
 						// Note: The function pow() in math.h adds about 28 KB of code size (uncompressed)! That is why it's not used here.
 						// v1.0.44.11: With Laszlo's help, negative integer bases are now supported.
@@ -1174,10 +1180,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 #else
 						this_token.value_double = pow((double)left_int64, (double)right_int64);
 #endif
-						if (right_int64 < 0)
-							result_symbol = SYM_FLOAT; // Due to negative exponent, override to float.
-						else
-							this_token.value_int64 = (__int64)this_token.value_double;
 					}
 					break;
 				}

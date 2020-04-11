@@ -17891,3 +17891,26 @@ DWORD GetProcessName(DWORD aProcessID, LPTSTR aBuf, DWORD aBufSize, bool aGetNam
 	CloseHandle(hproc);
 	return buf_length;
 }
+
+__int64 pow_ll(__int64 base, __int64 exp)
+{
+	/*
+	Caller must ensure exp >= 0
+	Below uses 'a^b' to denote 'raising a to the power of b'.
+	Computes and returns base^exp. If the mathematical result doesn't fit in __int64, the result is undefined.
+	By convention, x^0 returns 1, even when x == 0,	caller should ensure base is non-zero when exp is zero to handle 0^0.
+	*/
+	if (exp == 0)
+		return 1ll;
+
+	// based on: https://en.wikipedia.org/wiki/Exponentiation_by_squaring (2018-11-03)
+	__int64 result = 1;
+	while (exp > 1)
+	{
+		if (exp % 2) // exp is odd
+			result *= base;
+		base *= base;
+		exp /= 2;
+	}
+	return result * base;
+}

@@ -398,6 +398,8 @@ struct ArgStruct
 	ExprTokenType *postfix;  // An array of tokens in postfix order.
 };
 
+__int64 pow_ll(__int64 base, __int64 exp); // integer power function
+
 #define BIF_DECL_PARAMS ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount
 
 // The following macro is used for definitions and declarations of built-in functions:
