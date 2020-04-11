@@ -6264,9 +6264,9 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 				SetWindowTextW(hbtCancel, mbString(1));
 				// Widen the buttons for non-English names (approx. the width of a MsgBox button):
 				GetWindowRect(hbtOk, &rect);
-				SetWindowPos(hbtOk, NULL, NULL, NULL, 88, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOREDRAW);
+				SetWindowPos(hbtOk, NULL, NULL, NULL, 88, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOREDRAW | SWP_NOZORDER);
 				GetWindowRect(hbtCancel, &rect);
-				SetWindowPos(hbtCancel, NULL, NULL, NULL, 88, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOREDRAW);
+				SetWindowPos(hbtCancel, NULL, NULL, NULL, 88, rect.bottom - rect.top, SWP_NOMOVE | SWP_NOREDRAW | SWP_NOZORDER);
 			}
 		}
 
