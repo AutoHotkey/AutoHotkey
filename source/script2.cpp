@@ -25,6 +25,7 @@ GNU General Public License for more details.
 #include "resources/resource.h"  // For InputBox.
 #include "TextIO.h"
 #include <Psapi.h> // for GetModuleBaseName.
+#include "shlwapi.h" // StrCmpLogicalW
 
 #include <mmdeviceapi.h> // for SoundSet/SoundGet.
 #include <endpointvolume.h> // for SoundSet/SoundGet.
@@ -11900,6 +11901,7 @@ BIF_DECL(BIF_StrCompare)
 	case SCS_SENSITIVE:				result = _tcscmp(str1, str2); break;
 	case SCS_INSENSITIVE:			result = _tcsicmp(str1, str2); break;
 	case SCS_INSENSITIVE_LOCALE:	result = lstrcmpi(str1, str2); break;
+	case SCS_INSENSITIVE_LOGICAL:	result = StrCmpLogicalW(str1, str2); break;
 	case SCS_INVALID:
 		_f_throw(ERR_PARAM3_INVALID);
 	}
@@ -12025,7 +12027,8 @@ BIF_DECL(BIF_InStr)
 	LPTSTR needle = ParamIndexToString(1, needle_buf, &needle_length);
 	
 	StringCaseSenseType string_case_sense = ParamIndexToCaseSense(2);
-	if (string_case_sense == SCS_INVALID)
+	if (string_case_sense == SCS_INVALID 
+		|| string_case_sense == SCS_INSENSITIVE_LOGICAL) // Not supported, seems more useful to throw rather than using SCS_INSENSITIVE.
 		_f_throw(ERR_PARAM3_INVALID);
 
 	LPTSTR found_pos;
@@ -17394,7 +17397,8 @@ StringCaseSenseType TokenToStringCase(ExprTokenType& aToken)
 	default: str = TokenToString(aToken); break;
 	}
 	if (str)
-		return Line::ConvertStringCaseSense(str);
+		return !_tcsicmp(str, _T("Logical"))	? SCS_INSENSITIVE_LOGICAL
+												: Line::ConvertStringCaseSense(str);
 	return int_val == 1 ? SCS_SENSITIVE						// 1	- Sensitive
 						: (int_val == 0 ? SCS_INSENSITIVE	// 0	- Insensitive
 										: SCS_INVALID);		// else - invalid.
