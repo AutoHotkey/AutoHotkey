@@ -549,6 +549,11 @@ int FTOA(double aValue, LPTSTR aBuf, int aBufSize);
 // the program when the new locale-case-insensitive mode is in effect.
 #define tcscmp2(str1, str2, string_case_sense) ((string_case_sense) == SCS_INSENSITIVE ? _tcsicmp(str1, str2) \
 	: ((string_case_sense) == SCS_INSENSITIVE_LOCALE ? lstrcmpi(str1, str2) : _tcscmp(str1, str2)))
+
+// tcscmp3 requires '#include "shlwapi.h"'
+#define tcscmp3(str1, str2, string_case_sense) ((string_case_sense) == SCS_INSENSITIVE_LOGICAL ? StrCmpLogicalW((str1), (str2)) \
+: tcscmp2((str1), (str2), (string_case_sense)) )
+
 #define g_tcscmp(str1, str2) tcscmp2(str1, str2, ::g->StringCaseSense)
 // The most common mode is listed first for performance:
 #define tcsstr2(haystack, needle, string_case_sense) ((string_case_sense) == SCS_INSENSITIVE ? tcscasestr(haystack, needle) \

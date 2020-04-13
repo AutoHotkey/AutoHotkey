@@ -25,6 +25,7 @@ GNU General Public License for more details.
 #include "resources/resource.h"  // For InputBox.
 #include "TextIO.h"
 #include <Psapi.h> // for GetModuleBaseName.
+#include "shlwapi.h" // for StrCmpLogicalW
 
 #include <mmdeviceapi.h> // for SoundSet/SoundGet.
 #include <endpointvolume.h> // for SoundSet/SoundGet.
@@ -6453,7 +6454,7 @@ int SortWithOptions(const void *a1, const void *a2)
 	}
 	// Otherwise, it's a non-numeric sort.
 	// v1.0.43.03: Added support the new locale-insensitive mode.
-	int result = tcscmp2(sort_item1, sort_item2, g_SortCaseSensitive); // Resolve large macro only once for code size reduction.
+	int result = tcscmp3(sort_item1, sort_item2, g_SortCaseSensitive); // Resolve large macro only once for code size reduction.
 	return g_SortReverse ? -result : result;
 }
 
@@ -6470,7 +6471,7 @@ int SortByNakedFilename(const void *a1, const void *a2)
 	if (cp = _tcsrchr(sort_item2, '\\'))  // Assign
 		sort_item2 = cp + 1;
 	// v1.0.43.03: Added support the new locale-insensitive mode.
-	int result = tcscmp2(sort_item1, sort_item2, g_SortCaseSensitive); // Resolve large macro only once for code size reduction.
+	int result = tcscmp3(sort_item1, sort_item2, g_SortCaseSensitive); // Resolve large macro only once for code size reduction.
 	return g_SortReverse ? -result : result;
 }
 
