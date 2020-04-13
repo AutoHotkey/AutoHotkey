@@ -241,7 +241,7 @@ FuncEntry g_BIF[] =
 	BIFn(SendMessage, 1, 9, BIF_PostSendMessage),
 	BIF1(SetTimer, 0, 3),
 	BIF1(Sin, 1, 1),
-	BIF1(Sort, 1, 3),
+	BIF1(Sort, 1, 4),
 	BIFn(SoundGetInterface, 1, 3, BIF_Sound),
 	BIFn(SoundGetMute, 0, 2, BIF_Sound),
 	BIFn(SoundGetName, 0, 2, BIF_Sound),

@@ -6546,7 +6546,9 @@ BIF_DECL(BIF_Sort)
 
 	// Resolve options.  First set defaults for options:
 	TCHAR delimiter = '\n';
-	g_SortCaseSensitive = SCS_INSENSITIVE;
+	g_SortCaseSensitive = ParamIndexToCaseSense(3);
+	if (g_SortCaseSensitive == SCS_INVALID)
+		_f_throw(ERR_PARAM4_INVALID);
 	g_SortNumeric = false;
 	g_SortReverse = false;
 	g_SortColumnOffset = 0;
@@ -6559,15 +6561,6 @@ BIF_DECL(BIF_Sort)
 	{
 		switch(_totupper(*cp))
 		{
-		case 'C':
-			if (ctoupper(cp[1]) == 'L') // v1.0.43.03: Locale-insensitive mode, which probably performs considerably worse.
-			{
-				++cp;
-				g_SortCaseSensitive = SCS_INSENSITIVE_LOCALE;
-			}
-			else
-				g_SortCaseSensitive = SCS_SENSITIVE;
-			break;
 		case 'D':
 			if (!cp[1]) // Avoids out-of-bounds when the loop's own ++cp is done.
 				break;
