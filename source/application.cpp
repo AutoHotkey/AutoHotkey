@@ -610,6 +610,13 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 			for (i = 0, msg_was_handled = false; i < g_guiCount; ++i)
 			{
+				// Avoid calling IsDialogMessage() for WM_SYSCHAR if the GUI has no controls.
+				// It seems that if a GUI has no controls, IsDialogMessage() will return true for
+				// Alt+n combinations without invoking the default processing, such as focusing
+				// a menu bar item.  IsDialogMessage() still needs to be called for some messages;
+				// at the very least, WM_KEYDOWN (VK_ESC) must be intercepted for GuiEscape to work.
+				if (!g_gui[i]->mControlCount && msg.message == WM_SYSCHAR)
+					continue;
 				// Note: indications are that IsDialogMessage() should not be called with NULL as
 				// its first parameter (perhaps as an attempt to get allow dialogs owned by our
 				// thread to be handled at once). Although it might work on some versions of Windows,
