@@ -17582,12 +17582,7 @@ BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right)
 	{
 		TCHAR left_buf[MAX_NUMBER_SIZE], *left_string = TokenToString(left, left_buf);
 		TCHAR right_buf[MAX_NUMBER_SIZE], *right_string = TokenToString(right, right_buf);
-		switch (g->StringCaseSense)
-		{
-		case SCS_INSENSITIVE:	return !_tcsicmp(left_string, right_string);
-		case SCS_SENSITIVE:		return !_tcscmp(left_string, right_string);
-		default:				return !lstrcmpi(left_string, right_string);
-		}
+		return !_tcscmp(left_string, right_string);
 	}
 	if (left_type == PURE_INTEGER && right_type == PURE_INTEGER)
 		return TokenToInt64(left) == TokenToInt64(right);
