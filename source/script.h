@@ -3423,7 +3423,7 @@ IObject *StringToLabelOrFunctor(LPTSTR aStr);
 IObject *StringToFunctor(LPTSTR aStr);
 ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, LPTSTR aNullErr = ERR_TYPE_MISMATCH);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
-BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right);
+BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right, StringCaseSenseType aStringCaseSense);
 LPTSTR TokenTypeString(ExprTokenType &aToken);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);

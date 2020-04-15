@@ -23,7 +23,6 @@ GNU General Public License for more details.
 #include "application.h" // for MsgSleep()
 #include "TextIO.h"
 
-
 // These are the common pseudo-Funcs, defined here mostly for readability:
 auto OpFunc_GetProp = ExprOp<Op_ObjInvoke, IT_GET>();
 auto OpFunc_GetItem = ExprOp<Op_ObjInvoke, IT_GET|IF_DEFAULT>();
@@ -4979,6 +4978,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 					return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
 		}
 	}
+
+	if (aActionType == ACT_SWITCH && nArgs && !*arg[0]) // Switch with paramters - only do this after the above, since it might remove one arg
+		ScriptError(ERR_PARAM1_MUST_NOT_BE_BLANK); // "Switch , y" or "Switch , " 
+	
 
 	if (!AddLine(aActionType, arg, nArgs, arg_map, all_args_are_expressions))
 		return FAIL;
@@ -10708,13 +10711,35 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			size_t switch_value_mem_size;
 			ResultToken switch_value;
 			switch_value.mem_to_free = NULL;
+			StringCaseSenseType string_case_sense = SCS_SENSITIVE;
 			if (!line->mAttribute) // Switch with no value: find the first 'true' case.
 			{
 				switch_value.symbol = SYM_INVALID;
 				result = OK;
 			}
 			else
+			{
+				// Load time validation has ensured that at least the first parameter is present in this case.
 				result = line->ExpandSingleArg(0, switch_value, our_deref_buf, our_deref_buf_size);
+				if (result == OK  // Do not bother with the CaseSensitive parameter if the switch value expression failed
+					&& line->mAttribute == (AttributeType)2) 
+				{
+					// The CaseSensitive parameter was specified
+					ResultToken case_sense_value;
+					case_sense_value.mem_to_free = NULL;
+					size_t mem_size = 0;
+					result = line->ExpandSingleArg(1, case_sense_value, case_sense_value.mem_to_free, mem_size);
+					if (result == OK)
+					{
+						// Do as ParamIndexToCaseSense:
+						string_case_sense = TokenToBOOL(case_sense_value) ? SCS_INSENSITIVE
+							: (g.StringCaseSense != SCS_INSENSITIVE ? SCS_INSENSITIVE_LOCALE : SCS_INSENSITIVE);
+
+						result = string_case_sense == SCS_INVALID ? line->LineError(ERR_PARAM2_INVALID) : OK;
+					}
+					case_sense_value.Free();
+				}
+			}
 			if (result == OK)
 			{
 				if (switch_value.symbol == SYM_STRING && switch_value.marker == our_deref_buf)
@@ -10746,7 +10771,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 							break;
 						}
 						bool found = switch_value.symbol == SYM_INVALID ? TokenToBOOL(case_value)
-							: TokensAreEqual(switch_value, case_value);
+							: TokensAreEqual(switch_value, case_value, string_case_sense);
 						if (case_value.symbol == SYM_OBJECT)
 							case_value.object->Release();
 						if (found)

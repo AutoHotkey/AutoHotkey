@@ -287,7 +287,7 @@ Action g_act[] =
 	, {_T("Catch"), 0, 1, false, NULL} // fincs: seems best to allow catch without a parameter
 	, {_T("Finally"), 0, 0, false, NULL}
 	, {_T("Throw"), 0, 1, false, {1, 0}}
-	, {_T("Switch"), 0, 1, false, {1, 0}}
+	, {_T("Switch"), 0, 2, false, {1, 0}}
 	, {_T("Case"), 1, MAX_ARGS, false, NULL}
 
 	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
