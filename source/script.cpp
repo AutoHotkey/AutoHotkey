@@ -16451,8 +16451,11 @@ ResultType Line::SetErrorsOrThrow(bool aError, DWORD aLastErrorOverride)
 	return SetErrorLevelOrThrowBool(aError);
 }
 
-
+#ifdef UNICODE
+#define ERR_PRINT(fmt, ...) _ftprintf(stderr, fmt, __VA_ARGS__, setlocale(LC_ALL, ".65001"))
+#else
 #define ERR_PRINT(fmt, ...) _ftprintf(stderr, fmt, __VA_ARGS__)
+#endif //  UNICODE
 
 ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo)
 {
