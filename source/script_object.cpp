@@ -1581,6 +1581,8 @@ bool Object::Variant::Assign(ExprTokenType &aParam)
 		object = val->object;
 		object->AddRef();
 		break;
+	case SYM_MODULE:
+		return FAIL;
 	//case SYM_INTEGER:
 	//case SYM_FLOAT:
 	default:
