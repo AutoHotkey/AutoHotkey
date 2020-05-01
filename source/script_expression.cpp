@@ -593,7 +593,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		if (!stack_count) // Prevent stack underflow.  An expression such as -*3 causes this.
 			goto abort_with_exception;
 		ExprTokenType &right = *STACK_POP;
-		if (!IS_OPERAND(right.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
+		if ( !IS_OPERAND(right.symbol) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
+			|| right.symbol == SYM_MODULE )
 			goto abort_with_exception;
 
 		switch (this_token.symbol)
@@ -1249,7 +1250,7 @@ push_this_token:
 		// v1.0.45: Take a shortcut, which in the case of SYM_STRING/OPERAND/VAR avoids one memcpy
 		// (into the deref buffer).  In some cases, this also saves from having to expand the deref buffer.
 		if (!output_var->Assign(result_token))
-			goto abort;
+			goto abort_with_exception;
 		goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
 	}
 
