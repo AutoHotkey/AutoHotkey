@@ -216,6 +216,9 @@
     <ClInclude Include="source\ScriptModules\ModuleListMethods.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="source\ScriptModules\ScriptModulesReleaseObjects.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="source\resources\icon_filetype.ico">
