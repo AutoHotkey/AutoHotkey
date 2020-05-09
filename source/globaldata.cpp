@@ -22,7 +22,7 @@ GNU General Public License for more details.
 #include "os_version.h" // For the global OS_Version object
 
 #include "Debugger.h"
-#include "ScriptModules.h"
+#include "ScriptModules\ScriptModules.h"
 
 
 ScriptModule* g_CurrentModule;		// Identifies the current module.

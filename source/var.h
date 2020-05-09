@@ -21,7 +21,7 @@ GNU General Public License for more details.
 #include "SimpleHeap.h"
 #include "clipboard.h"
 #include "util.h" // for strlcpy() & snprintf()
-#include "ScriptModulesDefines.h"
+#include "ScriptModules\ScriptModulesDefines.h"
 
 class ScriptModule; // Forward declaration.
 

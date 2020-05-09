@@ -30,7 +30,7 @@ GNU General Public License for more details.
 #include <endpointvolume.h> // for SoundSet/SoundGet.
 #include <functiondiscoverykeys.h>
 
-#include "ScriptModules.h"
+#include "ScriptModules\ScriptModules.h"
 
 #define PCRE_STATIC             // For RegEx. PCRE_STATIC tells PCRE to declare its functions for normal, static
 #include "lib_pcre/pcre/pcre.h" // linkage rather than as functions inside an external DLL.

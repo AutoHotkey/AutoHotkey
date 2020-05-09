@@ -11,10 +11,10 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 */
 
-#include "defines.h"
-#include "var.h"
-#include "globaldata.h"
-#include "script.h"
+#include "..\defines.h"
+#include "..\var.h"
+#include "..\globaldata.h"
+#include "..\script.h"
 #include "ScriptModulesDefines.h"
 
 // Forward declaration

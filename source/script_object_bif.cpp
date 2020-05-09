@@ -2,7 +2,7 @@
 #include "defines.h"
 #include "globaldata.h"
 #include "script.h"
-#include "ScriptModules.h"
+#include "ScriptModules\ScriptModules.h"
 #include "script_object.h"
 #include "script_func_impl.h"
 

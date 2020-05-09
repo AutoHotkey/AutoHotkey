@@ -11,7 +11,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 */
 
-#include "stdafx.h" // pre-compiled headers
+#include "..\stdafx.h" // pre-compiled headers
 #include "ScriptModules.h"
 
 const LPTSTR ScriptModule::sUnamedModuleName = SMODULES_UNNAMED_NAME;

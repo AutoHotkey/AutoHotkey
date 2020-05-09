@@ -17,7 +17,7 @@ GNU General Public License for more details.
 #include "stdafx.h" // pre-compiled headers
 #include "var.h"
 #include "globaldata.h" // for g_script
-#include "ScriptModules.h"
+#include "ScriptModules\ScriptModules.h"
 
 // Init static vars:
 TCHAR Var::sEmptyString[] = _T(""); // For explanation, see its declaration in .h file.

@@ -19,7 +19,7 @@ freely, without restriction.
 #include "script_object.h"
 #include "script_com.h"
 #include "TextIO.h"
-#include "ScriptModules.h"
+#include "ScriptModules\ScriptModules.h"
 //#include "Debugger.h" // included by globaldata.h
 
 #ifdef CONFIG_DEBUGGER

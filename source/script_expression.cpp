@@ -42,7 +42,7 @@ GNU General Public License for more details.
 #include "script_object.h"
 #include "globaldata.h" // for a lot of things
 #include "qmath.h" // For ExpandExpression()
-#include "ScriptModules.h"
+#include "ScriptModules\ScriptModules.h"
 // __forceinline: Decided against it for this function because although it's only called by one caller,
 // testing shows that it wastes stack space (room for its automatic variables would be unconditionally 
 // reserved in the stack of its caller).  Also, the performance benefit of inlining this is too slight.

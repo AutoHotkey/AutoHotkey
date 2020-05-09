@@ -22,8 +22,8 @@ GNU General Public License for more details.
 #include "window.h" // for a lot of things
 #include "application.h" // for MsgSleep()
 #include "TextIO.h"
-#include "ScriptModules.h"
-#include "ScriptModulesDefines.h"
+#include "ScriptModules\ScriptModules.h"
+#include "ScriptModules\ScriptModulesDefines.h"
 
 // These are the common pseudo-Funcs, defined here mostly for readability:
 auto OpFunc_GetProp = ExprOp<Op_ObjInvoke, IT_GET>();

@@ -106,7 +106,7 @@
     <ClCompile Include="source\input_object.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="source\ScriptModules.cpp">
+    <ClCompile Include="source\ScriptModules\ScriptModules.cpp">
       <Filter>Header Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -204,13 +204,16 @@
     <ClInclude Include="source\input_object.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="source\ScriptModules.h">
+    <ClInclude Include="source\ScriptModules\ScriptModules.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="source\ScriptModulesDefines.h">
+    <ClInclude Include="source\ScriptModules\ScriptModulesDefines.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="source\ScriptModulesAddNames.h">
+    <ClInclude Include="source\ScriptModules\ScriptModulesAddNames.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="source\ScriptModules\ModuleListMethods.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
