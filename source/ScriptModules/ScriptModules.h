@@ -100,7 +100,7 @@ public:
 		void FreeItem(UseParams *aParams) { delete aParams; }	// virtual
 	} *mUseParams;								// A list of object to use.
 
-	ScriptModule* FindModuleFromDotDelimitedString(LPTSTR aStr);
+	ScriptModule* FindModuleFromDotDelimitedString(LPTSTR aString);
 	
 	ResultType AddObjectError(LPTSTR aErrorMsg, LPTSTR aExtraInfo = NULL, UseParams* aUp = NULL);
 	bool ResolveUseParams();
