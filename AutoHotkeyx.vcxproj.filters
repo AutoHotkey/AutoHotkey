@@ -210,6 +210,9 @@
     <ClInclude Include="source\ScriptModulesDefines.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="source\ScriptModulesAddNames.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="source\resources\icon_filetype.ico">

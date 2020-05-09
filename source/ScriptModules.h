@@ -66,7 +66,7 @@ public:
 	// Used for importing names from other modules:
 	struct UseParams
 	{
-		LPTSTR param1;	// The objects to use, eg a list of vars or funcs. Consider making param1 a union of an Array* and LPTSTR, to avoid splitting the string multiple times. Low prio.
+		LPTSTR param1;	// The objects to use, eg a list of vars or funcs.
 		union
 		{	// Identifies the scope of the object(s) to use.
 			LPTSTR str;				// SYM_STRING
