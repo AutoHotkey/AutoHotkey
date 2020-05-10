@@ -264,6 +264,7 @@
     <ClInclude Include="source\ScriptModules\ScriptModulesAddNames.h" />
     <ClInclude Include="source\ScriptModules\ScriptModulesDefines.h" />
     <ClInclude Include="source\ScriptModules\ModuleListMethods.h" />
+    <ClInclude Include="source\ScriptModules\ScriptModulesMisc.h" />
     <ClInclude Include="source\ScriptModules\ScriptModulesNested.h" />
     <ClInclude Include="source\ScriptModules\ScriptModulesOptional.h" />
     <ClInclude Include="source\ScriptModules\ScriptModulesReleaseObjects.h" />

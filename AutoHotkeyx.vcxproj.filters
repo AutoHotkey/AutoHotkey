@@ -228,6 +228,9 @@
     <ClInclude Include="source\ScriptModules\ScriptModulesOptional.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="source\ScriptModules\ScriptModulesMisc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="source\resources\icon_filetype.ico">
