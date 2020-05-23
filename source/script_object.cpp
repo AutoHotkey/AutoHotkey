@@ -212,6 +212,7 @@ Map *Map::CloneTo(Map &obj)
 	int failure_count = 0; // See Object::CloneT() for comments.
 	index_t i;
 
+	obj.mFlags = obj.mFlags;
 	obj.mCount = mCount;
 	obj.mKeyOffsetObject = mKeyOffsetObject;
 	obj.mKeyOffsetString = mKeyOffsetString;
@@ -722,6 +723,7 @@ ObjectMember Map::sMembers[] =
 {
 	Object_Member(__Item, __Item, 0, IT_SET, 1, 1),
 	Object_Member(Capacity, Capacity, 0, IT_SET),
+	Object_Member(CaseSense, CaseSense, 0, IT_SET),
 	Object_Member(Count, Count, 0, IT_GET),
 	Object_Method1(__Enum, 0, 1),
 	Object_Method1(Clear, 0, 0),
@@ -1111,6 +1113,41 @@ ResultType Object::PropCount(ResultToken &aResultToken, int aID, int aFlags, Exp
 ResultType Map::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_o_return((__int64)mCount);
+}
+
+ResultType Map::CaseSense(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (IS_INVOKE_GET)
+	{
+		if (mFlags & MapUseLocale)
+			_o_return_p(_T("Locale"));
+		if (mFlags & MapCaseless)
+			_o_return_p(_T("Off"));
+		_o_return_p(_T("On"));
+	}
+
+	// Do not permit a change of flags if the Map contains string keys, as the expected order
+	// may not match the actual order.  To simplify the error message and documentation,
+	// the Map must be empty of other types of keys as well.
+	if (mCount)
+		_o_throw(_T("Map must be empty"));
+
+	LPTSTR value = ParamIndexToString(0, _f_number_buf);
+	switch (Line::ConvertStringCaseSense(value))
+	{
+	case SCS_SENSITIVE:
+		mFlags &= ~(MapCaseless | MapUseLocale);
+		break;
+	case SCS_INSENSITIVE_LOCALE:
+		mFlags |= (MapCaseless | MapUseLocale);
+		break;
+	case SCS_INSENSITIVE:
+		mFlags = (mFlags | MapCaseless) & ~MapUseLocale;
+		break;
+	default:
+		_o_throw(ERR_INVALID_VALUE, value);
+	}
+	return OK;
 }
 
 ResultType Object::GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -2199,18 +2236,23 @@ bool Object::HasMethod(name_t aName)
 Map::Pair *Map::FindItem(LPTSTR val, index_t left, index_t right, index_t &insert_pos)
 // left and right must be set by caller to the appropriate bounds within mItem.
 {
+	bool caseless = mFlags & MapCaseless;
+	bool use_locale = mFlags & MapUseLocale;
 	index_t mid;
-	int first_char = *val;
+	int first_char = caseless ? 0 : *val;
 	while (left < right)
 	{
 		mid = left + ((right - left) >> 1);
 
 		auto &item = mItem[mid];
 
-		// key_c contains key.s[0], cached there for performance.
+		// key_c contains key.s[0], cached there for performance if !caseless.
+		// If caseless, key_c is 0 since this simple formula is insufficient to
+		// replicate the sort order of _tcsicmp and lstrcmpi.
 		int result = first_char - item.key_c;
 		if (!result)
-			result = _tcscmp(val, item.key.s);
+			result = !caseless ? _tcscmp(val, item.key.s)
+				: use_locale ? lstrcmpi(val, item.key.s) : _tcsicmp(val, item.key.s);
 
 		if (result < 0)
 			right = mid;
@@ -2361,7 +2403,9 @@ Map::Pair *Map::Insert(SymbolType key_type, Key key, index_t at)
 
 	// Update key-type offsets based on where and what was inserted; also update this key's ref count:
 	if (key_type == SYM_STRING)
-		item.key_c = *key.s;
+	{
+		item.key_c = (mFlags & MapCaseless) ? 0 : *key.s;
+	}
 	else
 	{
 		// Must be either SYM_INTEGER or SYM_OBJECT, which both precede SYM_STRING.
