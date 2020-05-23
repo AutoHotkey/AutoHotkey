@@ -5439,8 +5439,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	else
 		do_update_labels = !mNoUpdateLabels;
 
-	Var *target_var;
 	DerefList deref;  // Will be used to temporarily store the var-deref locations in each arg.
+
 	ArgStruct *new_arg;  // We will allocate some dynamic memory for this, then hang it onto the new line.
 	LPTSTR this_aArgMap, this_aArg;
 
@@ -5484,33 +5484,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// for performance reasons, that args marked as variables really are
 					// variables.  In addition, ExpandArgs() relies on this having been done.
 					this_new_arg.type = ARG_TYPE_NORMAL;
-				else if (false) 
-					// This cannot be done here since it is not known at this stage if this
-					// var name should be imported from another module (since all modules
-					// might not have been loaded)
-					// ExpressionToPostfix should handle it, but keep until it has been verified that nothing breaks.
-				{
-					// ARG_TYPE_INPUT_VAR is never encountered at this stage; it is only used by
-					// certain optimizations in ExpressionToPostfix(), which comes later.
-					// ARG_TYPE_OUTPUT_VAR is now used only for ACT_FOR, ACT_CATCH and ACT_ASSIGNEXPR,
-					// but a dynamic assignment like %x%:=y becomes ACT_EXPRESSION since x can be any
-					// expression.  Support for %x% in FOR and CATCH doesn't seem useful, so it's
-					// dropped to simplify some things and perhaps allow more optimizations.
-					if (   !(target_var = FindOrAddVar(this_aArg))   )
-						return FAIL;  // The above already displayed the error.
-					// Currently relying on RetroactivelyFixConstants() to do this check so that LineError() is used:
-					//if (target_var->IsReadOnly())
-					//	return VarIsReadOnlyError(target_var, aActionType == ACT_ASSIGNEXPR ? INVALID_ASSIGNMENT : INVALID_OUTPUT_VAR);
-					// Rather than removing this arg from the list altogether -- which would disturb
-					// the ordering and hurt the maintainability of the code -- the next best thing
-					// in terms of saving memory is to store Var::mName in place of the arg's text
-					// if that arg is a pure variable (i.e. since the name of the variable is already
-					// stored in persistent memory, we don't need to allocate more memory):
-					this_new_arg.text = target_var->mName;
-					this_new_arg.length = (ArgLengthType)_tcslen(target_var->mName);
-					this_new_arg.deref = (DerefType *)target_var;
-					continue;
-				}
 				else
 					this_new_arg.is_expression = true;
 			}
