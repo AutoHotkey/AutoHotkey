@@ -1455,43 +1455,6 @@ ResultType Script::ExitApp(ExitReasons aExitReason, int aExitCode)
 	return EARLY_EXIT;
 }
 
-
-
-void ReleaseVarObjects(Var **aVar, int aVarCount)
-{
-	for (int v = 0; v < aVarCount; ++v)
-		if (aVar[v]->IsObject())
-			aVar[v]->ReleaseObject(); // ReleaseObject() vs Free() for performance (though probably not important at this point).
-		// Otherwise, maybe best not to free it in case an object's __Delete meta-function uses it?
-}
-
-void ReleaseStaticVarObjects(Var **aVar, int aVarCount)
-{
-	for (int v = 0; v < aVarCount; ++v)
-		if (aVar[v]->IsStatic() && aVar[v]->IsObject()) // For consistency, only free static vars (see below).
-			aVar[v]->ReleaseObject();
-}
-
-void ReleaseStaticVarObjects(FuncList &aFuncs)
-{
-	for (int i = 0; i < aFuncs.mCount; ++i)
-	{
-		if (aFuncs.mItem[i]->IsBuiltIn())
-			continue;
-		auto &f = *(UserFunc *)aFuncs.mItem[i];
-		// Since it doesn't seem feasible to release all var backups created by recursive function
-		// calls and all tokens in the 'stack' of each currently executing expression, currently
-		// only static and global variables are released.  It seems best for consistency to also
-		// avoid releasing top-level non-static local variables (i.e. which aren't in var backups).
-		ReleaseStaticVarObjects(f.mVar, f.mVarCount);
-		ReleaseStaticVarObjects(f.mLazyVar, f.mLazyVarCount);
-		if (f.mFuncs.mCount)
-			ReleaseStaticVarObjects(f.mFuncs);
-	}
-}
-
-
-
 void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 // Note that g_script's destructor takes care of most other cleanup work, such as destroying
 // tray icons, menus, and unowned windows such as ToolTip.
