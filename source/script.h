@@ -145,6 +145,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_EXE_CORRUPTED _T("EXE corrupted")
 #define ERR_INVALID_INDEX _T("Invalid index.")
 #define ERR_INVALID_VALUE _T("Invalid value.")
+#define ERR_INVALID_FUNCTOR _T("Invalid callback function.")
 #define ERR_PARAM_INVALID _T("Invalid parameter(s).")
 #define ERR_PARAM_COUNT_INVALID _T("Invalid number of parameters.")
 #define ERR_PARAM1_INVALID _T("Parameter #1 invalid.")

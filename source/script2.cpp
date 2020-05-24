@@ -17455,7 +17455,7 @@ ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResult
 	if (aResultToken.Exited())
 		return FAIL;
 	if (min_result != INVOKE_NOT_HANDLED && aParamCount < (int)min_params)
-		return aResultToken.Error(ERR_PARAM_COUNT_INVALID);
+		return aResultToken.Error(ERR_INVALID_FUNCTOR);
 	if (max_result != INVOKE_NOT_HANDLED && aParamCount > (int)max_params)
 	{
 		__int64 is_variadic;
@@ -17463,7 +17463,7 @@ ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResult
 		if (aResultToken.Exited())
 			return FAIL;
 		if (result == INVOKE_NOT_HANDLED || !is_variadic)
-			return aResultToken.Error(ERR_PARAM_COUNT_INVALID);
+			return aResultToken.Error(ERR_INVALID_FUNCTOR);
 	}
 	// If either MinParams or MaxParams was confirmed to exist, this is likely a valid
 	// function object, so skip the following check for performance.  Otherwise, catch
