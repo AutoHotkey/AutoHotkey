@@ -1175,7 +1175,7 @@ ResultType Line::FileGetShortcut(LPTSTR aShortcutFile) // Credited to Holger <Ho
 						output_var_icon->Assign(buf);
 					if (output_var_icon_idx)
 						if (*buf)
-							output_var_icon_idx->Assign(icon_index + 1);  // Convert from 0-based to 1-based for consistency with the Menu command, etc.
+							output_var_icon_idx->Assign(icon_index + (icon_index >= 0 ? 1 : 0));  // Convert from 0-based to 1-based for consistency with the Menu command, etc. but leave negative resource IDs as-is.
 						else
 							output_var_icon_idx->Assign(); // Make it blank to indicate that there is none.
 				}
@@ -1226,8 +1226,9 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 			psl->SetArguments(aArgs);
 		if (*aDescription)
 			psl->SetDescription(aDescription);
+		int icon_index = *aIconNumber ? ATOI(aIconNumber) : 0;
 		if (*aIconFile)
-			psl->SetIconLocation(aIconFile, *aIconNumber ? ATOI(aIconNumber) - 1 : 0); // Doesn't seem necessary to validate aIconNumber as not being negative, etc.
+			psl->SetIconLocation(aIconFile,  icon_index - (icon_index > 0 ? 1 : 0)); // Convert 1-based index to 0-based, but leave negative resource IDs as-is.
 		if (*aHotkey)
 		{
 			// If badly formatted, it's not a critical error, just continue.
@@ -1823,7 +1824,8 @@ void Util_WinKill(HWND hWnd)
 	if (!SendMessageTimeout(hWnd, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG, 500, &dwResult)) // Wait up to 500ms.
 	{
 		// Use more force - Mwuahaha
-		DWORD pid = GetWindowThreadProcessId(hWnd, NULL);
+		DWORD pid = 0;
+		GetWindowThreadProcessId(hWnd, &pid);
 		HANDLE hProcess = pid ? OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid) : NULL;
 		if (hProcess)
 		{

@@ -348,8 +348,11 @@ BIF_DECL(BIF_Input)
 	if (prior_input)
 		prior_input->EndByNewInput();
 
-	if (!InputStart(input, &aResultToken))
-		_f_return_FAIL;
+	InputStart(input, &aResultToken);
+	
+	// Ensure input is not present in the input chain, since its life time is about to end.
+	input_type *result = InputRelease(&input);
+	ASSERT(result == NULL);
 }
 
 
@@ -874,6 +877,7 @@ input_type *InputRelease(input_type *aInput)
 		if (aInput->ScriptObject->onEnd)
 			return aInput; // Return for caller to call OnEnd and Release.
 		aInput->ScriptObject->Release();
+		aInput->ScriptObject = NULL;
 		g_script.ExitIfNotPersistent(EXIT_EXIT); // In case this InputHook was the only thing keeping the script running.
 	}
 	return NULL;
@@ -10195,7 +10199,7 @@ VarSizeType BIV_InitialWorkingDir(LPTSTR aBuf, LPTSTR aVarName)
 VarSizeType BIV_WinDir(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_PATH]; // MSDN (2018): The uSize parameter "should be set to MAX_PATH."
-	VarSizeType length = GetWindowsDirectory(buf, _countof(buf));
+	VarSizeType length = GetSystemWindowsDirectory(buf, _countof(buf));
 	if (aBuf)
 		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
 	return length;

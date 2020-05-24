@@ -593,12 +593,20 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 			// IsDialogMessage() takes care of standard keyboard handling within the dialog,
 			// such as tab to change focus and Enter to activate the default button.
-			g->CalledByIsDialogMessageOrDispatch = true;
-			g->CalledByIsDialogMessageOrDispatchMsg = msg.message; // Added in v1.0.44.11 because it's known that IsDialogMessage can change the message number (e.g. WM_KEYDOWN->WM_NOTIFY for UpDowns)
-			msg_was_handled = IsDialogMessage(pgui->mHwnd, &msg); // Pass the dialog HWND, not msg.hwnd, which is often a control.
-			g->CalledByIsDialogMessageOrDispatch = false;
-			if (msg_was_handled) // This message was handled by IsDialogMessage() above.
-				continue; // Continue with the main message loop.
+			// Avoid calling IsDialogMessage() for WM_SYSCHAR if the GUI has no controls.
+			// It seems that if a GUI has no controls, IsDialogMessage() will return true for
+			// Alt+n combinations without invoking the default processing, such as focusing
+			// a menu bar item.  IsDialogMessage() still needs to be called for some messages;
+			// at the very least, WM_KEYDOWN (VK_ESC) must be intercepted for GuiEscape to work.
+			if (pgui->mControlCount || msg.message != WM_SYSCHAR)
+			{
+				g->CalledByIsDialogMessageOrDispatch = true;
+				g->CalledByIsDialogMessageOrDispatchMsg = msg.message; // Added in v1.0.44.11 because it's known that IsDialogMessage can change the message number (e.g. WM_KEYDOWN->WM_NOTIFY for UpDowns)
+				msg_was_handled = IsDialogMessage(pgui->mHwnd, &msg); // Pass the dialog HWND, not msg.hwnd, which is often a control.
+				g->CalledByIsDialogMessageOrDispatch = false;
+				if (msg_was_handled) // This message was handled by IsDialogMessage() above.
+					continue; // Continue with the main message loop.
+			}
 		} // if (keyboard message posted to GUI)
 
 		// v1.0.44: There's no reason to call TRANSLATE_AHK_MSG here because all WM_COMMNOTIFY messages
