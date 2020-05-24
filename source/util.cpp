@@ -2422,16 +2422,23 @@ HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, i
 			NEWHEADER *resHead = (NEWHEADER *)presdata;
 			WORD resCount = resHead->ResCount;
 			RESDIR *resDir = (RESDIR *)(resHead + 1), *chosen = resDir; // Default to the first icon.
+			int chosen_width = 0;
 			for (int i = 1; i < resCount; ++i)
 			{
+				int this_width = resDir[i].Icon.Width;
+				if (!this_width) // Workaround for 256x256 icons.
+					this_width = 256;
 				// Find the closest match for size, preferring the next larger icon if there's
 				// no exact match.  Normally the system will just pick the closest size, but
 				// at least for our icon, the 32x32 icon rendered at 20x20 looks much better
 				// than the 16x16 icon rendered at 20x20 (i.e. small icon size for 125% DPI).
-				if (resDir[i].Icon.Width > chosen->Icon.Width
-					? chosen->Icon.Width < aWidth // Current icon smaller than desired, so up-size.
-					: resDir[i].Icon.Width >= aWidth) // Current icon larger than desired, so down-size (without going below aWidth).
+				if (this_width > chosen_width
+					? chosen_width < aWidth // Current icon smaller than desired, so up-size.
+					: this_width >= aWidth) // This icon is closer to the desired size, so down-size.
+				{
 					chosen = &resDir[i];
+					chosen_width = this_width;
+				}
 			}
 			if (   (hres = FindResource(hdatafile, MAKEINTRESOURCE(chosen->IconCursorId), RT_ICON))
 				&& (hresdata = LoadResource(hdatafile, hres))
