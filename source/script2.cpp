@@ -684,7 +684,7 @@ ResultType input_type::SetMatchList(LPTSTR aMatchList, size_t aMatchList_length)
 			}
 			if (*(source + 1)) // There is a next element.
 			{
-				if (MatchCount >= MatchCountMax) // Rarely needed, so just realloc() to expand.
+				if (MatchCount >= MatchCountMax - 1) // Rarely needed, so just realloc() to expand.
 				{
 					// Expand the array by one block:
 					if (   !(realloc_temp = (LPTSTR *)realloc(match  // Must use a temp variable.
