@@ -1553,9 +1553,32 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	for (UINT i = 1; i <= cArgs; ++i)
 	{
 		VARIANTARG *pvar = &pDispParams->rgvarg[cArgs-i];
-		while (pvar->vt == (VT_BYREF | VT_VARIANT))
-			pvar = pvar->pvarVal;
-		VariantToToken(*pvar, param_token[i]);
+		if (pvar->vt & VT_BYREF)
+		{
+			// Allocate and pass a temporary Var to transparently support ByRef.
+			param_token[i].symbol = SYM_VAR;
+			param_token[i].var = new (_alloca(sizeof(Var))) Var();
+			if (pvar->vt == (VT_BYREF | VT_BSTR))
+			{
+				// Avoid an unnecessary string-copy that would be made by VariantCopyInd().
+				param_token[i].var->AssignStringW(*pvar->pbstrVal, SysStringLen(*pvar->pbstrVal));
+			}
+			else if (pvar->vt == (VT_BYREF | VT_VARIANT))
+			{
+				AssignVariant(*param_token[i].var, *pvar->pvarVal);
+			}
+			else
+			{
+				VARIANT value;
+				value.vt = VT_EMPTY;
+				VariantCopyInd(&value, pvar);
+				AssignVariant(*param_token[i].var, value, false); // false causes value's memory/ref to be transferred to var or freed.
+			}
+		}
+		else
+		{
+			VariantToToken(*pvar, param_token[i]);
+		}
 		param[i] = &param_token[i];
 	}
 	
@@ -1631,7 +1654,18 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	// Clean up:
 	result_token.Free();
 	for (UINT i = 1; i <= cArgs; ++i)
-		param_token[i].Free();
+	{
+		if (param_token[i].symbol == SYM_VAR)
+		{
+			auto &varg = pDispParams->rgvarg[cArgs-i];
+			ExprTokenType value;
+			param_token[i].var->ToTokenSkipAddRef(value);
+			TokenToVarType(value, varg.vt & ~VT_BYREF, varg.pvRecord);
+			param_token[i].var->Free();
+		}
+		else
+			param_token[i].Free();
+	}
 
 	return result_to_return;
 }

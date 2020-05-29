@@ -943,8 +943,10 @@ public:
 	}
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void *operator new(size_t aBytes, void *p) {return p;}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
+	void operator delete(void *aPtr, void *) {}
 	void operator delete[](void *aPtr) {}
 
 
