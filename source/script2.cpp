@@ -15381,7 +15381,7 @@ BIF_DECL(BIF_CallbackCreate)
 	bool has_minparams = GetObjectIntProperty(func, _T("MinParams"), minparams, aResultToken, true) != INVOKE_NOT_HANDLED;
 	if (aResultToken.Exited())
 		return;
-
+	
 	LPTSTR options = ParamIndexToOptionalString(1);
 	bool pass_params_pointer = _tcschr(options, '&'); // Callback wants the address of the parameter list instead of their values.
 #ifdef WIN32_PLATFORM
@@ -15394,19 +15394,11 @@ BIF_DECL(BIF_CallbackCreate)
 	int actual_param_count;
 	if (!ParamIndexIsOmittedOrEmpty(2)) // A parameter count was specified.
 	{
-		__int64 maxparams;
-		bool has_maxparams = GetObjectIntProperty(func, _T("MaxParams"), maxparams, aResultToken, true) != INVOKE_NOT_HANDLED;
-		if (aResultToken.Exited())
-			return;
-		
 		actual_param_count = ParamIndexToInt(2);
-		int script_params = pass_params_pointer ? 1 : actual_param_count;
-		if (  actual_param_count < 0 // Invalid.
-			|| has_minparams && script_params < (int)minparams // Too many mandatory parameters.
-			|| has_maxparams && script_params > (int)maxparams  ) // Too few.
+		if (!ValidateFunctor(func, pass_params_pointer ? 1 : actual_param_count, aResultToken))
 		{
 			func->Release();
-			_f_throw(ERR_PARAM_COUNT_INVALID); // Seems a bit clearer than "Invalid parameter #3".
+			return;
 		}
 	}
 	else if (!has_minparams || pass_params_pointer && require_param_count)
