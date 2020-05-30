@@ -240,8 +240,8 @@ BOOL CALLBACK EnumChildFind(HWND hwnd, LPARAM lParam);
 // Use a fairly long default for aCheckInterval since the contents of this function's loops
 // might be somewhat high in overhead (especially SendMessageTimeout):
 #define SB_DEFAULT_CHECK_INTERVAL 50
-ResultType StatusBarUtil(ResultToken *apResultToken, HWND aBarHwnd, int aPartNumber = 1
-	, LPTSTR aTextToWaitFor = _T(""), int aWaitTime = -1, int aCheckInterval = SB_DEFAULT_CHECK_INTERVAL);
+void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber = 1
+	, LPTSTR aTextToWaitFor = nullptr, int aWaitTime = -1, int aCheckInterval = SB_DEFAULT_CHECK_INTERVAL);
 HWND ControlExist(HWND aParentWindow, LPTSTR aClassNameAndNum = NULL);
 BOOL CALLBACK EnumControlFind(HWND aWnd, LPARAM lParam);
 

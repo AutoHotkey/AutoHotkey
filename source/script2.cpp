@@ -2217,10 +2217,9 @@ BIF_DECL(BIF_StatusBarGetText)//(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 	HWND target_window;
 	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1))
 		return;
-	HWND control_window = target_window ? ControlExist(target_window, _T("msctls_statusbar321")) : NULL;
-	// Call this even if control_window is NULL because in that case, it will set the output var to
-	// be blank for us:
-	StatusBarUtil(&aResultToken, control_window, part); // It will handle any zero part# for us.
+	HWND control_window = ControlExist(target_window, _T("msctls_statusbar321"));
+	// StatusBarUtil will handle any NULL control_window or zero part# for us.
+	StatusBarUtil(aResultToken, control_window, part);
 }
 
 
@@ -2241,11 +2240,9 @@ BIF_DECL(BIF_StatusBarWait)
 	// but whose contents we need to refer to while we are waiting:
 	TCHAR text_to_wait_for[4096];
 	tcslcpy(text_to_wait_for, aTextToWaitFor, _countof(text_to_wait_for));
-	HWND control_window = target_window ? ControlExist(target_window, _T("msctls_statusbar321")) : NULL;
-	// Note: ErrorLevel is handled by StatusBarUtil(), below.
-	// It will also handle a NULL control_window or zero part# for us.
-	StatusBarUtil(NULL, control_window, aPart, text_to_wait_for, aSeconds, aInterval);
-	_f_return_b(!g_ErrorLevel->ToInt64());
+	HWND control_window = ControlExist(target_window, _T("msctls_statusbar321"));
+	// StatusBarUtil will handle any NULL control_window or zero part# for us.
+	StatusBarUtil(aResultToken, control_window, aPart, text_to_wait_for, aSeconds, aInterval);
 }
 
 
