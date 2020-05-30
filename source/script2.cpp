@@ -1371,14 +1371,14 @@ BIF_DECL(BIF_WinMove)
 	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 4, aParamCount - 4))
 		return;
 	RECT rect;
-	if (!GetWindowRect(target_window, &rect))
+	if (!GetWindowRect(target_window, &rect)
+		|| !MoveWindow(target_window
+			, ParamIndexToOptionalInt(0, rect.left) // X-position
+			, ParamIndexToOptionalInt(1, rect.top)  // Y-position
+			, ParamIndexToOptionalInt(2, rect.right - rect.left)
+			, ParamIndexToOptionalInt(3, rect.bottom - rect.top)
+			, TRUE)) // Do repaint.
 		_f_throw(ERR_INTERNAL_CALL);
-	MoveWindow(target_window
-		, ParamIndexToOptionalInt(0, rect.left) // X-position
-		, ParamIndexToOptionalInt(1, rect.top)  // Y-position
-		, ParamIndexToOptionalInt(2, rect.right - rect.left)
-		, ParamIndexToOptionalInt(3, rect.bottom - rect.top)
-		, TRUE);  // Do repaint.
 	DoWinDelay;
 	_f_return_empty;
 }
