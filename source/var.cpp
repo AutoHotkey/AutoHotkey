@@ -445,7 +445,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 				// case, it saves memory by avoiding the overhead incurred for each separate malloc'd block).
 				if (space_needed_in_bytes <= _TSIZE(4)) // Even for aExactSize, it seems best to prevent variables from having only a zero terminator in them because that would usually waste 3 bytes due to byte alignment in SimpleHeap.
 					new_size = _TSIZE(4); // v1.0.45: Increased from 2 to 4 to exploit byte alignment in SimpleHeap.
-				else if (aExactSize) // Allows VarSetCapacity() to make more flexible use of SimpleHeap.
+				else if (aExactSize) // Allows VarSetStrCapacity() to make more flexible use of SimpleHeap.
 					new_size = space_needed_in_bytes;
 				else
 				{
@@ -508,9 +508,9 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 					// change mContents/Capacity (that would cause a memory leak for reasons described elsewhere).
 					// Make the var empty for the following reasons:
 					//  1) This condition could be caused by the script requesting a very high (possibly invalid)
-					//     capacity with VarSetCapacity().  The script might be handling the failure using TRY/CATCH,
+					//     capacity with VarSetStrCapacity().  The script might be handling the failure using TRY/CATCH,
 					//     so we want the result to be sane.
-					//  2) It's safer and more maintainable.  For instance, VarSetCapacity() sets length to 0, which
+					//  2) It's safer and more maintainable.  For instance, VarSetStrCapacity() sets length to 0, which
 					//     can produce bad/undefined results if there is no null-terminator at mCharContents[Length()]
 					//     as some other parts of the code assume.
 					//  3) It's more consistent.  If this var contained a binary number or object, it has already

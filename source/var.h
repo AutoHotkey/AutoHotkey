@@ -265,7 +265,7 @@ public:
 	// cuts down on code size due to not having to always check Capacity() and/or create more functions to
 	// protect from writing to read-only strings, which would hurt performance.
 	// The biggest offender of buffer overflow in sEmptyString is DllCall, which happens most frequently
-	// when a script forgets to call VarSetCapacity before passing a buffer to some function that writes a
+	// when a script forgets to call VarSetStrCapacity before passing a buffer to some function that writes a
 	// string to it.  There is now some code there that tries to detect when that happens.
 	static TCHAR sEmptyString[1]; // See above.
 

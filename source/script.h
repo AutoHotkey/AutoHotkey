@@ -3246,7 +3246,7 @@ BIF_DECL(BIF_IsByRef);
 BIF_DECL(BIF_IsSet);
 BIF_DECL(BIF_GetKeyState);
 BIF_DECL(BIF_GetKeyName);
-BIF_DECL(BIF_VarSetCapacity);
+BIF_DECL(BIF_VarSetStrCapacity);
 BIF_DECL(BIF_FileExist);
 BIF_DECL(BIF_WinExistActive);
 BIF_DECL(BIF_Round);

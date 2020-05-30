@@ -267,7 +267,7 @@ FuncEntry g_BIF[] =
 	BIF1(TraySetIcon, 0, 3),
 	BIFn(Trim, 1, 2, BIF_Trim),
 	BIF1(Type, 1, 1),
-	BIF1(VarSetCapacity, 1, 3, {1}),
+	BIF1(VarSetStrCapacity, 1, 2, {1}),
 	BIFn(WinActivate, 0, 4, BIF_WinActivate),
 	BIFn(WinActivateBottom, 0, 4, BIF_WinActivate),
 	BIFn(WinActive, 0, 4, BIF_WinExistActive),

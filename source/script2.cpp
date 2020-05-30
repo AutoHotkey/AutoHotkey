@@ -11541,8 +11541,8 @@ has_valid_return_type:
 			// Of course, it's not a complete solution because it doesn't stop a script from
 			// passing a variable whose capacity is non-zero yet too small to handle what the
 			// function will write to it.  But it's a far cry better than nothing because it's
-			// common for a script to forget to call VarSetCapacity before passing a buffer to some
-			// function that writes a string to it.
+			// common for a script to (unintentionally) pass an empty/uninitialized variable to
+			// some function that writes a string to it.
 			//if (this_dyna_param.str == Var::sEmptyString) // To improve performance, compare directly to Var::sEmptyString rather than calling Capacity().
 			//	this_dyna_param.str = _T(""); // Make it read-only to force an exception.  See comments above.
 			break;
@@ -11626,7 +11626,7 @@ has_valid_return_type:
 		// Don't bother with freeing hmodule_to_free since a critical error like this calls for minimal cleanup.
 		// The OS almost certainly frees it upon termination anyway.
 		// Call CriticalError() so that the user knows *which* DllCall is at fault:
-		g_script.CriticalError(_T("This DllCall requires a prior VarSetCapacity."));
+		g_script.CriticalError(_T("An invalid write to an empty variable was detected."));
 		// CriticalError always terminates the process.
 	}
 
@@ -14195,12 +14195,11 @@ BIF_DECL(BIF_GetKeyName)
 
 
 
-BIF_DECL(BIF_VarSetCapacity)
+BIF_DECL(BIF_VarSetStrCapacity)
 // Returns: The variable's new capacity.
 // Parameters:
 // 1: Target variable (unquoted).
 // 2: Requested capacity.
-// 3: Byte-value to fill the variable with (e.g. 0 to have the same effect as ZeroMemory).
 {
 	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
 	aResultToken.value_int64 = 0; // Set default. In spite of being ambiguous with the result of Free(), 0 seems a little better than -1 since it indicates "no capacity" and is also equal to "false" for easy use in expressions.
@@ -14214,14 +14213,14 @@ BIF_DECL(BIF_VarSetCapacity)
 			// to unsigned.  Var::AssignString used to have a similar check, but integer overflow caused
 			// by "* sizeof(TCHAR)" allowed some errors to go undetected.  For this same reason, we can't
 			// simply rely on SetCapacity() calling malloc() and then detecting failure.
-			if ((unsigned __int64)param1 > MAXINT_PTR)
+			if ((unsigned __int64)param1 > (MAXINT_PTR / sizeof(TCHAR)))
 			{
 				if (param1 == -1) // Adjust variable's internal length.
 				{
 					var.SetLengthFromContents();
 					// Seems more useful to report length vs. capacity in this special case. Scripts might be able
 					// to use this to boost performance.
-					aResultToken.value_int64 = var.ByteLength();
+					aResultToken.value_int64 = var.CharLength();
 					return;
 				}
 				// x64: it's negative but not -1.
@@ -14229,14 +14228,7 @@ BIF_DECL(BIF_VarSetCapacity)
 				_f_throw(ERR_PARAM2_INVALID, TokenToString(*aParam[1], _f_number_buf));
 			}
 			// Since above didn't return:
-			size_t new_capacity = (size_t)param1; // in bytes
-			if (!new_capacity && aParam[1]->symbol == SYM_MISSING)
-			{
-				// This case is likely to be rare, but allows VarSetCapacity(v,,b) to fill
-				// v with byte b up to its current capacity, rather than freeing it.
-				if (new_capacity = var.ByteCapacity())
-					new_capacity -= sizeof(TCHAR);
-			}
+			size_t new_capacity = (size_t)param1 * sizeof(TCHAR); // Chars to bytes.
 			if (new_capacity)
 			{
 				if (!var.SetCapacity(new_capacity, true)) // This also destroys the variables contents.
@@ -14244,24 +14236,9 @@ BIF_DECL(BIF_VarSetCapacity)
 					aResultToken.SetExitResult(FAIL); // ScriptError() was already called.
 					return;
 				}
-				VarSizeType capacity; // in characters
-				if (aParamCount > 2 && (capacity = var.Capacity()) > 1) // Third parameter is present and var has enough capacity to make FillMemory() meaningful.
-				{
-					--capacity; // Convert to script-POV capacity. To avoid underflow, do this only now that Capacity() is known not to be zero.
-					// The following uses capacity-1 because the last byte of a variable should always
-					// be left as a binary zero to avoid crashes and problems due to unterminated strings.
-					// In other words, a variable's usable capacity from the script's POV is always one
-					// less than its actual capacity:
-					BYTE fill_byte = (BYTE)TokenToInt64(*aParam[2]); // For simplicity, only numeric characters are supported, not something like "a" to mean the character 'a'.
-					LPTSTR contents = var.Contents();
-					FillMemory(contents, capacity * sizeof(TCHAR), fill_byte); // Last byte of variable is always left as a binary zero.
-					contents[capacity] = '\0'; // Must terminate because nothing else is explicitly responsible for doing it.
-					var.SetCharLength(fill_byte ? capacity : 0); // Length is same as capacity unless fill_byte is zero.
-				}
-				else
-					// By design, Assign() has already set the length of the variable to reflect new_capacity.
-					// This is not what is wanted in this case since it should be truly empty.
-					var.ByteLength() = 0;
+				// By design, Assign() has already set the length of the variable to reflect new_capacity.
+				// This is not what is wanted in this case since it should be truly empty.
+				var.ByteLength() = 0;
 			}
 			else // ALLOC_SIMPLE, due to its nature, will not actually be freed, which is documented.
 				var.Free();
@@ -14270,31 +14247,17 @@ BIF_DECL(BIF_VarSetCapacity)
 		{
 			// RequestedCapacity was omitted, so the var is not altered; instead, the current capacity
 			// is reported, which seems more intuitive/useful than having it do a Free(). In this case
-			// it's an input var rather than an output var, so check if it has been initialized:
+			// it's an input var rather than an output var, so check if it contains a string.
 			// v1.1.11.01: Support VarSetCapacity(var) as a means for the script to check if it
 			// has initialized a var.  In other words, don't show a warning even in that case.
+			// v2: We now have IsSet(), but it still seems reasonable to allow this without a warning.
 			//var.MaybeWarnUninitialized();
-
-			switch (var.IsPureNumericOrObject())
-			{
-			case VAR_ATTRIB_IS_INT64:
-			case VAR_ATTRIB_IS_DOUBLE:
-				// For consistency and maintainability, return the size of the usable space returned by
-				// &var even though in this case it is a pure __int64 or double.  Any script which uses
-				// &var intentionally in this context already knows what it's getting so has no need to
-				// call this function; therefore, the caller of this function probably expects the return
-				// value to exclude space for the null-terminator (sizeof(TCHAR)).
-				aResultToken.value_int64 = 8 - sizeof(TCHAR); // sizeof(__int64) or sizeof(double), minus 1 TCHAR.
-				return;
-			case VAR_ATTRIB_IS_OBJECT:
-				// For consistency, though it seems of dubious usefulness:
-				aResultToken.value_int64 = 0;
-				return;
-			}
+			if (var.IsPureNumericOrObject())
+				_f_throw(ERR_TYPE_MISMATCH);
 		}
 
-		if (aResultToken.value_int64 = var.ByteCapacity()) // Don't subtract 1 here in lieu doing it below (avoids underflow).
-			aResultToken.value_int64 -= sizeof(TCHAR); // Omit the room for the zero terminator since script capacity is defined as length vs. size.
+		if (aResultToken.value_int64 = var.CharCapacity()) // Don't subtract 1 here in lieu doing it below (avoids underflow).
+			aResultToken.value_int64 -= 1; // Omit the room for the zero terminator since script capacity is defined as length vs. size.
 	} // (aParam[0]->symbol == SYM_VAR && aParam[0]->var->Type() == VAR_NORMAL)
 	else
 		_f_throw(ERR_PARAM1_INVALID);
