@@ -204,8 +204,6 @@ BIF_DECL(BIF_MenuSelect)
 	HWND target_window;
 	if (!DetermineTargetWindow(target_window, aResultToken, aParam, aParamCount, max_menu_params))
 		return;
-	if (!target_window)
-		goto error;
 
 	UINT message = WM_COMMAND;
 	HMENU hMenu;
@@ -491,7 +489,7 @@ BIF_DECL(BIF_Control)
 		else if (tcscasestr(classname, _T("List")))
 			msg = LB_DELETESTRING;
 		else
-			goto error;  // Must be ComboBox or ListBox.
+			goto control_type_error; // Must be ComboBox or ListBox.
 		if (!SendMessageTimeout(control_window, msg, (WPARAM)control_index, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto error;
 		if (dwResult == CB_ERR)  // CB_ERR == LB_ERR
@@ -519,7 +517,7 @@ BIF_DECL(BIF_Control)
 			y_msg = LBN_DBLCLK;
 		}
 		else
-			goto error;
+			goto control_type_error; // Must be ComboBox or ListBox.
 		if (msg == LB_SETSEL) // Multi-select, so use the cumulative method.
 		{
 			if (!SendMessageTimeout(control_window, msg, control_index != -1, control_index, SMTO_ABORTIFHUNG, 2000, &dwResult))
@@ -550,7 +548,7 @@ BIF_DECL(BIF_Control)
 			y_msg = LBN_DBLCLK;
 		}
 		else
-			goto error;  // Must be ComboBox or ListBox.
+			goto control_type_error; // Must be ComboBox or ListBox.
 		DWORD_PTR item_index;
 		if (msg == LB_FINDSTRING) // Multi-select ListBox (LB_SELECTSTRING is not supported by these).
 		{
@@ -579,7 +577,6 @@ BIF_DECL(BIF_Control)
 		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, y_msg)
 			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto error;
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 		_f_return(item_index + 1); // Return the index chosen.  Might have some use if the string was ambiguous.
 
 	case FID_ControlEditPaste:
@@ -591,12 +588,13 @@ BIF_DECL(BIF_Control)
 
 	DoControlDelay;  // Seems safest to do this for all of these commands.
 success:
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-	_f_return_b(TRUE);
+	_f_return_empty;
 
 error:
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-	_f_return_b(FALSE);
+	_f_throw(ERR_INTERNAL_CALL);
+
+control_type_error:
+	_f_throw(ERR_GUI_NOT_FOR_THIS_TYPE, classname);
 }
 
 
@@ -641,8 +639,6 @@ BIF_DECL(BIF_ControlGet)
 	int control_index;
 	TCHAR *cp, *dyn_buf;
 
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Set default.
-
 	switch(control_cmd)
 	{
 	case FID_ControlGetChecked: //Must be a Button
@@ -668,7 +664,7 @@ BIF_DECL(BIF_ControlGet)
 		else if (tcscasestr(classname, _T("List")))
 			msg = LB_FINDSTRINGEXACT;
 		else // Must be ComboBox or ListBox
-			goto error;
+			goto control_type_error;
 		if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aString, SMTO_ABORTIFHUNG, 2000, &index)
 			|| index == CB_ERR) // CB_ERR == LB_ERR
 			goto error;
@@ -689,7 +685,7 @@ BIF_DECL(BIF_ControlGet)
 			y_msg = LB_GETTEXT;
 		}
 		else // Must be ComboBox or ListBox
-			goto error;
+			goto control_type_error;
 		if (!SendMessageTimeout(control_window, msg, 0, 0, SMTO_ABORTIFHUNG, 2000, &index)
 			|| index == CB_ERR  // CB_ERR == LB_ERR.  There is no selection (or very rarely, some other type of problem).
 			|| !SendMessageTimeout(control_window, x_msg, (WPARAM)index, 0, SMTO_ABORTIFHUNG, 2000, &length)
@@ -732,10 +728,12 @@ BIF_DECL(BIF_ControlGet)
 			y_msg = LB_GETTEXT;
 		}
 		else // Must be ComboBox or ListBox
-			goto error;
+			goto control_type_error;
 		if (!(SendMessageTimeout(control_window, msg, 0, 0, SMTO_ABORTIFHUNG, 5000, &item_count))
-			|| item_count < 1) // No items in ListBox/ComboBox or there was a problem getting the count.
+			|| item_count == LB_ERR) // There was a problem getting the count.
 			goto error;
+		if (!item_count)
+			_f_return_empty;
 		// Calculate the length of delimited list of items.  Length is initialized to provide enough
 		// room for each item's delimiter (the last item does not have a delimiter).
 		for (length = item_count - 1, u = 0; u < item_count; ++u)
@@ -804,13 +802,20 @@ BIF_DECL(BIF_ControlGet)
 		control_index = aNumber - 1;
 		if (control_index < 0)
 			_f_throw(ERR_PARAM1_INVALID);
+		DWORD_PTR dwLineCount;
 		// Lexikos: Not sure if the following comment is relevant (does the OS multiply by sizeof(wchar_t)?).
 		// jackieku: 32768 * sizeof(wchar_t) = 65536, which can not be stored in a unsigned 16bit integer.
 		TCHAR line_buf[32767];
 		*(LPWORD)line_buf = 32767; // EM_GETLINE requires first word of string to be set to its size.
-		if (   !SendMessageTimeout(control_window, EM_GETLINE, (WPARAM)control_index, (LPARAM)line_buf, SMTO_ABORTIFHUNG, 2000, &dwResult)
-			|| !dwResult   ) // due to the specified line number being greater than the number of lines in the edit control.
+		if (!SendMessageTimeout(control_window, EM_GETLINE, (WPARAM)control_index, (LPARAM)line_buf, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto error;
+		if (!dwResult) // Line is empty or line number is invalid.
+		{
+			if (!SendMessageTimeout(control_window, EM_GETLINECOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwLineCount))
+				goto error;
+			if ((DWORD)aNumber > dwLineCount)
+				_f_throw(ERR_PARAM1_INVALID);
+		}
 		line_buf[dwResult] = '\0'; // Ensure terminated since the API might not do it in some cases.
 		_f_return(line_buf);
 	}
@@ -836,10 +841,9 @@ BIF_DECL(BIF_ControlGet)
 		if (   !SendMessageTimeout(control_window, WM_GETTEXT, (WPARAM)(length + 1), (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 2000, &length)
 			|| !length || end > length   )
 		{
-			// The first check above is reveals a problem (ErrorLevel = 1) since the length
-			// is unexpectedly zero (above implied it shouldn't be).  The second check is also
-			// a problem because the end of the selection should not be beyond length of text
-			// that was retrieved.
+			// The first check above implies failure since the length is unexpectedly zero
+			// (above implied it shouldn't be).  The second check is also a problem because the
+			// end of the selection should not be beyond the length of text that was retrieved.
 			free(dyn_buf);
 			goto error;
 		}
@@ -865,8 +869,10 @@ BIF_DECL(BIF_ControlGet)
 	ASSERT(FALSE && "Should have returned");
 
 error:
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-	_f_return_empty;
+	_f_throw(ERR_INTERNAL_CALL);
+
+control_type_error:
+	_f_throw(ERR_GUI_NOT_FOR_THIS_TYPE, classname);
 }
 
 

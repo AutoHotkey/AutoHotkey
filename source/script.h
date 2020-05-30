@@ -215,7 +215,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_LINE_IN_PROPERTY_DEF _T("Not a valid property getter/setter.")
 #define ERR_INVALID_GUI_NAME _T("Invalid Gui name.")
 #define ERR_INVALID_OPTION _T("Invalid option.") // Generic message used by the Gui system.
-#define ERR_GUI_NOT_FOR_THIS_TYPE _T("Not supported for this control type.")
+#define ERR_GUI_NOT_FOR_THIS_TYPE _T("Not supported for this control type.") // Used by GuiControl object and Control functions.
 #define ERR_MUST_DECLARE _T("This variable must be declared.")
 #define ERR_REMOVE_THE_PERCENT _T("If this variable was not intended to be dynamic, remove the % symbols from it.")
 #define ERR_DYNAMIC_TOO_LONG _T("This dynamically built variable name is too long.  ") ERR_REMOVE_THE_PERCENT
@@ -232,6 +232,8 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_UNKNOWN_METHOD _T("Unknown method.")
 #define ERR_PROPERTY_READONLY _T("Property is read-only.")
 #define ERR_NO_KEY _T("Key not found.")
+#define ERR_NO_WINDOW _T("Target window not found.")
+#define ERR_NO_CONTROL _T("Target control not found.")
 #define ERR_NO_GUI _T("No default GUI.")
 #define ERR_NO_STATUSBAR _T("No StatusBar.")
 #define ERR_NO_LISTVIEW _T("No ListView.")
@@ -3441,9 +3443,7 @@ ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aR
 #define DETERMINE_TARGET_CONTROL(param_offset) \
 	HWND target_window, control_window; \
 	if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam + param_offset, aParamCount - param_offset)) \
-		return; \
-	if (!target_window || !control_window) \
-		goto error
+		return;
 
 LPTSTR GetExitReasonString(ExitReasons aExitReason);
 
