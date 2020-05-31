@@ -7027,8 +7027,11 @@ BIF_DECL(BIF_DriveGet)
 				found_drives[found_drives_count++] = letter;  // Store just the drive letters.
 		}
 		found_drives[found_drives_count] = '\0';  // Terminate the string of found drive letters.
-		if (!*found_drives)
-			goto error;  // Seems best to flag zero drives in the system as ErrorLevel of "1".
+		// An empty list should not be flagged as failure, even for FIXED drive_type.
+		// For example, when booting Windows PE from a REMOVABLE drive, it mounts a RAMDISK
+		// drive but there may be no FIXED drives present.
+		//if (!*found_drives)
+		//	goto error;
 		_f_return(found_drives);
 	}
 
