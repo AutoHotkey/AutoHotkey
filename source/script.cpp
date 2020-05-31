@@ -3897,7 +3897,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		size_t mod_start = 0;
 		if (!split_by_word_separator(parameter, SMODULES_IMPORT_NAME_SEP, NULL, &name_len, &mod_start)) // Split the name list and module name
 			return ScriptError(ERR_PARAM_COUNT_INVALID, aBuf);
-		TCHAR name_list[MAX_VAR_NAME_LENGTH + 1];
+
+		LPTSTR name_list = talloca(name_len + 1);
 		TCHAR source_name[MAX_VAR_NAME_LENGTH + 1];
 		_tcsncpy(name_list, parameter, name_len);		// Copy name_list
 		name_list[name_len] = '\0';						// terminate
