@@ -1285,12 +1285,10 @@ public:
 	// Returns the matching WinShow mode, or SW_SHOWNORMAL if none.
 	// These are also the modes that AutoIt3 uses.
 	{
-		// For v1.0.19, this was made more permissive (the use of strcasestr vs. stricmp) to support
-		// the optional word UseErrorLevel inside this parameter:
 		if (!aBuf || !*aBuf) return SW_SHOWNORMAL;
-		if (tcscasestr(aBuf, _T("MIN"))) return SW_MINIMIZE;
-		if (tcscasestr(aBuf, _T("MAX"))) return SW_MAXIMIZE;
-		if (tcscasestr(aBuf, _T("HIDE"))) return SW_HIDE;
+		if (!_tcsicmp(aBuf, _T("MIN"))) return SW_MINIMIZE;
+		if (!_tcsicmp(aBuf, _T("MAX"))) return SW_MAXIMIZE;
+		if (!_tcsicmp(aBuf, _T("HIDE"))) return SW_HIDE;
 		return SW_SHOWNORMAL;
 	}
 
