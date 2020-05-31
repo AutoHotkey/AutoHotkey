@@ -7067,7 +7067,7 @@ BIF_DECL(BIF_DriveGet)
 		case DRIVE_CDROM:     _f_return_p(_T("CDROM"));
 		case DRIVE_RAMDISK:   _f_return_p(_T("RAMDisk"));
 		default: // DRIVE_NO_ROOT_DIR
-			goto error;
+			_f_return_empty;
 		}
 		break;
 	}
