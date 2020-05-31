@@ -238,6 +238,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_NO_STATUSBAR _T("No StatusBar.")
 #define ERR_NO_LISTVIEW _T("No ListView.")
 #define ERR_NO_TREEVIEW _T("No TreeView.")
+#define ERR_WINDOW_HAS_NO_MENU _T("Non-existent or unsupported menu.")
 #define ERR_PCRE_EXEC _T("PCRE execution error.")
 #define ERR_INVALID_ARG_TYPE _T("Invalid arg type.")
 #define ERR_INVALID_RETURN_TYPE _T("Invalid return type.")

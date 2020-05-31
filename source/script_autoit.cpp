@@ -216,11 +216,11 @@ BIF_DECL(BIF_MenuSelect)
 	else
 		hMenu = GetMenu(target_window);
 	if (!hMenu) // Window has no menu bar.
-		goto error;
+		_f_throw(ERR_WINDOW_HAS_NO_MENU);
 
 	int menu_item_count = GetMenuItemCount(hMenu);
-	if (menu_item_count < 1) // Menu bar has no menus.
-		goto error;
+	//if (menu_item_count < 1) // Menu bar has no menus.
+	//	goto error;
 	
 #define MENU_ITEM_IS_SUBMENU 0xFFFFFFFF
 #define UPDATE_MENU_VARS(menu_pos) \
@@ -238,14 +238,14 @@ else\
 	bool match_found;
 	size_t this_menu_param_length, menu_text_length;
 	int pos, target_menu_pos;
-	LPTSTR this_menu_param;
+	LPTSTR this_menu_param = nullptr;
 
 	for ( ; menu_param_index < menu_param_end; ++menu_param_index)
 	{
+		if (!hMenu)  // The nesting of submenus ended prior to the end of the list of menu search terms.
+			goto error;
 		this_menu_param = ParamIndexToOptionalString(menu_param_index, _f_number_buf);
 		if (!*this_menu_param)
-			goto error;
-		if (!hMenu)  // The nesting of submenus ended prior to the end of the list of menu search terms.
 			goto error;
 
 		this_menu_param_length = _tcslen(this_menu_param);
@@ -300,12 +300,10 @@ else\
 
 	// Since the above didn't return, the specified search hierarchy was completely found.
 	PostMessage(target_window, message, (WPARAM)menu_id, 0);
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
-	_f_return_b(TRUE);
+	_f_return_empty;
 
 error:
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-	_f_return_b(FALSE);
+	_f_throw(ERR_PARAM_INVALID, this_menu_param);
 }
 
 
