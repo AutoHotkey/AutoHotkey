@@ -7444,10 +7444,7 @@ BIF_DECL(BIF_Sound)
 
 	hr = SoundSetGet_GetDevice(aDevice, device);
 	if (FAILED(hr))
-	{
-		g_ErrorLevel->Assign(_T("Device Not Found"));
-		return;
-	}
+		_f_throw(ERR_SOUND_DEVICE);
 
 	LPCTSTR errorlevel = NULL;
 	float result_float;
@@ -7459,7 +7456,8 @@ BIF_DECL(BIF_Sound)
 		{
 			void *result_ptr = nullptr;
 			if (FAILED(device->QueryInterface(search.target_iid, (void **)&result_ptr)))
-				hr = device->Activate(search.target_iid, CLSCTX_ALL, NULL, &result_ptr);
+				device->Activate(search.target_iid, CLSCTX_ALL, NULL, &result_ptr);
+			// For consistency with ComObjQuery, the result is returned even on failure.
 			aResultToken.SetValue((UINT_PTR)result_ptr);
 		}
 		else if (search.target_control == SoundControlType::Name)
@@ -7526,7 +7524,7 @@ BIF_DECL(BIF_Sound)
 		
 		if (!SoundSetGet_FindComponent(device, search))
 		{
-			errorlevel = _T("Component Not Found");
+			errorlevel = ERR_SOUND_COMPONENT;
 		}
 		else if (search.target_control == SoundControlType::IID)
 		{
@@ -7539,7 +7537,7 @@ BIF_DECL(BIF_Sound)
 		}
 		else if (!search.control)
 		{
-			errorlevel = _T("Component Doesn't Support This Control Type");
+			errorlevel = ERR_SOUND_CONTROLTYPE;
 		}
 		else if (search.target_control == SoundControlType::Volume)
 		{
@@ -7621,18 +7619,11 @@ control_fail:
 	device->Release();
 	
 	if (FAILED(hr))
-	{
-		if (SOUND_MODE_IS_SET)
-			errorlevel = _T("Can't Change Setting");
-		else
-			errorlevel = _T("Can't Get Current Setting");
-	}
+		errorlevel = ERR_INTERNAL_CALL;
 	if (errorlevel)
-		g_ErrorLevel->Assign(errorlevel);
-	else
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+		_f_throw(errorlevel);
 
-	if (SOUND_MODE_IS_SET || errorlevel)
+	if (SOUND_MODE_IS_SET)
 		return;
 
 	switch (search.target_control)
@@ -7648,8 +7639,11 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 {
 	LPTSTR cp = omit_leading_whitespace(aFilespec);
 	if (*cp == '*')
-		return SetErrorLevelOrThrowBool(!MessageBeep(ATOU(cp + 1)));
+	{
 		// ATOU() returns 0xFFFFFFFF for -1, which is relied upon to support the -1 sound.
+		if (!MessageBeep(ATOU(cp + 1)))
+			goto error;
+	}
 	// See http://msdn.microsoft.com/library/default.asp?url=/library/en-us/multimed/htm/_win32_play.asp
 	// for some documentation mciSendString() and related.
 	// MAX_PATH note: There's no chance this API supports long paths even on Windows 10.
@@ -7662,12 +7656,11 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 		mciSendString(_T("close ") SOUNDPLAY_ALIAS, NULL, 0, NULL);
 	sntprintf(buf, _countof(buf), _T("open \"%s\" alias ") SOUNDPLAY_ALIAS, aFilespec);
 	if (mciSendString(buf, NULL, 0, NULL)) // Failure.
-		return SetErrorLevelOrThrow();
+		goto error;
 	g_SoundWasPlayed = true;  // For use by Script's destructor.
 	if (mciSendString(_T("play ") SOUNDPLAY_ALIAS, NULL, 0, NULL)) // Failure.
-		return SetErrorLevelOrThrow();
+		goto error;
 	// Otherwise, the sound is now playing.
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 	if (!aSleepUntilDone)
 		return OK;
 	// Otherwise, caller wants us to wait until the file is done playing.  To allow our app to remain
@@ -7688,6 +7681,9 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 		MsgSleep(20);
 	}
 	return OK;
+
+error:
+	return LineError(ERR_INTERNAL_CALL);
 }
 
 
