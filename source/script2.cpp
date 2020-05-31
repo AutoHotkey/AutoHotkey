@@ -12262,8 +12262,6 @@ int RegExCallout(pcret_callout_block *cb)
 
 	g->EventInfo = (EventInfoType) cb;
 	
-	FuncResult result_token;
-
 	/*
 	callout_number:		should be available since callout number can be specified within (?C...).
 	subject:			useful when behaviour might depend on text surrounding a capture.
@@ -12323,8 +12321,6 @@ int RegExCallout(pcret_callout_block *cb)
 		number_to_return = PCRE_ERROR_CALLOUT;
 		cd.result_token->SetExitResult(result);
 	}
-	else
-		number_to_return = TokenToInt64(result_token);
 	
 	g->EventInfo = EventInfo_saved;
 
