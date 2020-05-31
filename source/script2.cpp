@@ -2320,7 +2320,11 @@ BIF_DECL(BIF_PostSendMessage)
 		successful = PostMessage(control_window, msg, (WPARAM)param[0], (LPARAM)param[1]);
 
 	if (!successful)
+	{
+		if (aUseSend && GetLastError() == ERROR_TIMEOUT)
+			_f_throw(ERR_TIMEOUT);
 		_f_throw(ERR_INTERNAL_CALL);
+	}
 	if (aUseSend)
 		_f_return_i((__int64)dwResult);
 	else
