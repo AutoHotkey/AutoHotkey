@@ -14704,7 +14704,7 @@ BIF_DECL(BIF_Hotkey)
 			else if (  !(hook_action = Hotkey::ConvertAltTab(aParam1, true))  )
 				functor = StringToLabelOrFunctor(aParam1);
 		}
-		result = Hotkey::Dynamic(aParam0, aParam1, aParam2, functor, hook_action);
+		result = Hotkey::Dynamic(aParam0, aParam1, aParam2, functor, hook_action, aResultToken);
 	}
 	
 	if (functor)

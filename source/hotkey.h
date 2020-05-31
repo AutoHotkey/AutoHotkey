@@ -151,7 +151,7 @@ private:
 
 	// For now, constructor & destructor are private so that only static methods can create new
 	// objects.  This allow proper tracking of which OS hotkey IDs have been used.
-	Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel);
+	Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde);
 	~Hotkey() {if (mIsRegistered) Unregister();}
 
 public:
@@ -200,22 +200,21 @@ public:
 
 	static void AllDestructAndExit(int exit_code);
 
-	#define HOTKEY_EL_BADLABEL           1 // OBSOLETE due to the removal of SetFormat: Set as strings so that SetFormat doesn't affect their appearance (for use with "If ErrorLevel in 5,6").
+	// Currently unused (filtered out by a macro):
+	#define HOTKEY_EL_BADLABEL           1
 	#define HOTKEY_EL_INVALID_KEYNAME    2
 	#define HOTKEY_EL_UNSUPPORTED_PREFIX 3
 	#define HOTKEY_EL_ALTTAB             4
 	#define HOTKEY_EL_NOTEXIST           5
 	#define HOTKEY_EL_NOTEXISTVARIANT    6
-	//#define HOTKEY_EL_WIN9X              50 // Reserved; no longer used.
-	#define HOTKEY_EL_NOREG              51
 	#define HOTKEY_EL_MAXCOUNT           98 // 98 allows room for other ErrorLevels to be added in between.
 	#define HOTKEY_EL_MEM                99
 	static ResultType IfWin(LPTSTR aIfWin, LPTSTR aWinTitle, LPTSTR aWinText);
 	static ResultType IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultToken);
 	static ResultType Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions
-		, IObject *aJumpToLabel, HookActionType aHookAction);
+		, IObject *aJumpToLabel, HookActionType aHookAction, ResultToken &aResultToken);
 
-	static Hotkey *AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel);
+	static Hotkey *AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde);
 	HotkeyVariant *FindVariant();
 	HotkeyVariant *AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde);
 	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC);
@@ -229,7 +228,7 @@ public:
 	static void ManifestAllHotkeysHotstringsHooks();
 	static void RequireHook(HookType aWhichHook) {sWhichHookAlways |= aWhichHook;}
 	static void MaybeUninstallHook();
-	static ResultType TextInterpret(LPTSTR aName, Hotkey *aThisHotkey, bool aUseErrorLevel);
+	static ResultType TextInterpret(LPTSTR aName, Hotkey *aThisHotkey);
 
 	struct HotkeyProperties // Struct used by TextToModifiers() and its callers.
 	{
@@ -243,7 +242,7 @@ public:
 		bool hook_is_mandatory;
 	};
 	static LPTSTR TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperties *aProperties = NULL);
-	static ResultType TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier, Hotkey *aThisHotkey, bool aUseErrorLevel);
+	static ResultType TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier, Hotkey *aThisHotkey);
 
 	static void InstallKeybdHook();
 	static void InstallMouseHook();
