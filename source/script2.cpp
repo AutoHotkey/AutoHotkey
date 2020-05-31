@@ -6833,18 +6833,18 @@ void DriveSpace(ResultToken &aResultToken, LPTSTR aPath, bool aGetFreeSpace)
 // have the same amount of free space as its root drive.  However, I'm not sure if this
 // method here actually takes that into account.
 {
-	if (!aPath || !*aPath) goto error;  // Below relies on this check.
+	ASSERT(aPath && *aPath);
 
 	TCHAR buf[MAX_PATH]; // MAX_PATH vs T_MAX_PATH because testing shows it doesn't support long paths even with \\?\.
 	tcslcpy(buf, aPath, _countof(buf));
 	size_t length = _tcslen(buf);
-	if (buf[length - 1] != '\\') // Trailing backslash is present, which some of the API calls below don't like.
+	if (buf[length - 1] != '\\' // Trailing backslash is absent,
+		&& length + 1 < _countof(buf)) // and there's room to fix it.
 	{
-		if (length + 1 >= _countof(buf)) // No room to fix it.
-			goto error;
 		buf[length++] = '\\';
 		buf[length] = '\0';
 	}
+	//else it should still work unless this is a UNC path.
 
 	// MSDN: "The GetDiskFreeSpaceEx function returns correct values for all volumes, including those
 	// that are greater than 2 gigabytes."
@@ -6856,12 +6856,10 @@ void DriveSpace(ResultToken &aResultToken, LPTSTR aPath, bool aGetFreeSpace)
 	free_space = (__int64)((unsigned __int64)(aGetFreeSpace ? free.QuadPart : total.QuadPart)
 		/ (1024*1024));
 
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 	_f_return(free_space);
 
 error:
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-	_f_return_empty;
+	_f_throw(ERR_INTERNAL_CALL);
 }
 
 
@@ -6943,8 +6941,9 @@ BIF_DECL(BIF_Drive)
 
 	} // switch()
 
-	g_ErrorLevel->Assign(!successful);
-	_f_return_b(successful);
+	if (!successful)
+		_f_throw(ERR_INTERNAL_CALL);
+	_f_return_empty;
 }
 
 
@@ -6987,14 +6986,10 @@ BIF_DECL(BIF_DriveGet)
 	
 	if (drive_get_cmd == FID_DriveGetCapacity || drive_get_cmd == FID_DriveGetSpaceFree)
 	{
-		if (!*aValue)
-			goto invalid_parameter;
 		DriveSpace(aResultToken, aValue, drive_get_cmd == FID_DriveGetSpaceFree);
 		return;
 	}
 	
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Set default: indicate success.
-
 	TCHAR path[T_MAX_PATH]; // T_MAX_PATH vs. MAX_PATH, though testing indicates only GetDriveType() supports long paths.
 	size_t path_length;
 
@@ -7013,7 +7008,7 @@ BIF_DECL(BIF_DriveGet)
 		else if (!_tcsicmp(aValue, _T("Ramdisk"))) drive_type = DRIVE_RAMDISK;
 		else if (!_tcsicmp(aValue, _T("Unknown"))) drive_type = DRIVE_UNKNOWN;
 		else
-			goto error;
+			goto invalid_parameter;
 
 		TCHAR found_drives[32];  // Need room for all 26 possible drive letters.
 		int found_drives_count;
@@ -7125,8 +7120,7 @@ BIF_DECL(BIF_DriveGet)
 	} // switch()
 
 error:
-	g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-	_f_return_empty;
+	_f_throw(ERR_INTERNAL_CALL);
 
 invalid_parameter:
 	_f_throw(ERR_PARAM1_INVALID);
