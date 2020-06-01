@@ -3239,7 +3239,9 @@ BIF_DECL(BIF_Env)
 		// validate aEnvVarName the same way we validate script variables (i.e. just let the return value
 		// determine whether there's an error).
 		LPTSTR aValue = ParamIndexIsOmitted(1) ? NULL : ParamIndexToString(1, buf);
-		_f_return_i(SetEnvironmentVariable(aEnvVarName, aValue) != FALSE);
+		if (!SetEnvironmentVariable(aEnvVarName, aValue))
+			_f_throw(ERR_INTERNAL_CALL);
+		_f_return_empty;
 	}
 
 	// GetEnvironmentVariable() could be called twice, the first time to get the actual size.  But that would
