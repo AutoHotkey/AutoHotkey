@@ -35,13 +35,14 @@ BIF_DECL(BIF_IniRead)
 	_f_param_string_opt(aFilespec, 0);
 	_f_param_string_opt(aSection, 1);
 	_f_param_string_opt(aKey, 2);
-	_f_param_string_opt(aDefault, 3);
+	_f_param_string_opt_def(aDefault, 3, nullptr);
 
 	TCHAR	szFileTemp[T_MAX_PATH];
 	TCHAR	*szFilePart, *cp;
 	TCHAR	szBuffer[65535];					// Max ini file size is 65535 under 95
 	*szBuffer = '\0';
 	TCHAR	szEmpty[] = _T("");
+
 	// Get the fullpathname (ini functions need a full path):
 	GetFullPathName(aFilespec, _countof(szFileTemp), szFileTemp, &szFilePart);
 	if (*aKey)
@@ -76,9 +77,9 @@ BIF_DECL(BIF_IniRead)
 				*cp = '\n';
 			}
 	}
-	// If the value exists but is empty, the return value and GetLastError() will both be 0,
-	// so assign ErrorLevel solely based on GetLastError():
-	g_ErrorLevel->Assign(GetLastError() ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
+	g->LastError = GetLastError();
+	if (g->LastError && !aDefault)
+		_f_throw(ERR_INTERNAL_CALL);
 	// The above function is supposed to set szBuffer to be aDefault if it can't find the
 	// file, section, or key.  In other words, it always changes the contents of szBuffer.
 	_f_return(szBuffer); // Avoid using the length the API reported because it might be inaccurate if the data contains any binary zeroes, or if the data is double-terminated, etc.
@@ -153,7 +154,8 @@ ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTS
 #ifdef UNICODE
 	}
 #endif
-	return SetErrorLevelOrThrowBool(!result);
+	g->LastError = GetLastError();
+	return result ? OK : LineError(ERR_INTERNAL_CALL);
 }
 
 
@@ -166,8 +168,9 @@ ResultType Line::IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 	// Get the fullpathname (ini functions need a full path) 
 	GetFullPathName(aFilespec, _countof(szFileTemp), szFileTemp, &szFilePart);
 	BOOL result = WritePrivateProfileString(aSection, aKey, NULL, szFileTemp);  // Returns zero on failure.
+	g->LastError = GetLastError();
 	WritePrivateProfileString(NULL, NULL, NULL, szFileTemp);	// Flush
-	return SetErrorLevelOrThrowBool(!result);
+	return result ? OK : LineError(ERR_INTERNAL_CALL);
 }
 
 
@@ -184,8 +187,8 @@ void RegRead(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR
 	result = RegOpenKeyEx(aRootKey, aRegSubkey, 0, KEY_READ | g->RegView, &hRegKey);
 	if (result != ERROR_SUCCESS)
 	{
-		Script::SetErrorLevels(true, result);
-		return;
+		g->LastError = result;
+		_f_throw(ERR_INTERNAL_CALL);
 	}
 
 	// Read the value and determine the type.  If aValueName is the empty string, the key's default value is used.
@@ -236,9 +239,6 @@ void RegRead(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR
 			if (result != ERROR_SUCCESS || !dwRes) // Relies on short-circuit boolean order.
 			{
 				*contents = '\0'; // MSDN says the contents of the buffer is undefined after the call in some cases, so reset it.
-				// Above realistically probably never happens; if it does and result != ERROR_SUCCESS,
-				// setting ErrorLevel to indicate the error seems more useful than maintaining backward-
-				// compatibility by faking success.
 			}
 			else
 			{
@@ -333,7 +333,9 @@ finish:
 	// not clear whether NULL is actually an invalid registry handle value:
 	//if (hRegKey)
 	RegCloseKey(hRegKey);
-	Script::SetErrorLevels(result != ERROR_SUCCESS, result);
+	g->LastError = result;
+	if (result != ERROR_SUCCESS)
+		_f_throw(ERR_INTERNAL_CALL);
 } // RegRead()
 
 
@@ -472,7 +474,9 @@ void RegWrite(ResultToken &aResultToken, ExprTokenType &aValue, DWORD aValueType
 	// Additionally, fall through to below:
 
 finish:
-	Script::SetErrorLevels(result != ERROR_SUCCESS, result);
+	g->LastError = result;
+	if (result != ERROR_SUCCESS)
+		_f_throw(ERR_INTERNAL_CALL);
 	_f_return_empty;
 } // RegWrite()
 
@@ -548,7 +552,9 @@ void RegDelete(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTS
 	}
 
 finish:
-	Script::SetErrorLevels(result != ERROR_SUCCESS, result);
+	g->LastError = result;
+	if (result != ERROR_SUCCESS)
+		_f_throw(ERR_INTERNAL_CALL);
 	_f_return_empty;
 } // RegDelete()
 
