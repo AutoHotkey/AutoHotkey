@@ -250,7 +250,8 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_INVALID_ENCODING _T("Invalid Encoding.")
 #define ERR_INVALID_USAGE _T("Invalid usage.")
 #define ERR_INVALID_BASE _T("Invalid base.")
-#define ERR_INTERNAL_CALL _T("An internal function call failed.")
+#define ERR_INTERNAL_CALL _T("An internal function call failed.") // Win32 function failed.  Eventually an error message should be generated based on GetLastError().
+#define ERR_FAILED _T("Failed") // A function failed to achieve its primary purpose for unspecified reason.  Equivalent to v1 throwing 1 (ErrorLevel).
 #define ERR_STRING_NOT_TERMINATED _T("String not null-terminated.")
 #define ERR_SOUND_DEVICE _T("Device not found")
 #define ERR_SOUND_COMPONENT _T("Component not found")

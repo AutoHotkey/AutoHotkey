@@ -468,13 +468,12 @@ BIF_DECL(BIF_Control)
 		else if (tcscasestr(classname, _T("List")))
 			msg = LB_ADDSTRING;
 		else
-			goto error;  // Must be ComboBox or ListBox.
+			goto control_type_error;  // Must be ComboBox or ListBox.
 		if (!SendMessageTimeout(control_window, msg, 0, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto error;
 		if (dwResult == CB_ERR || dwResult == CB_ERRSPACE) // General error or insufficient space to store it.
 			// CB_ERR == LB_ERR
 			goto error;
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE);
 		_f_return(dwResult + 1); // Return the one-based index of the new item.
 
 	case FID_ControlDeleteItem:

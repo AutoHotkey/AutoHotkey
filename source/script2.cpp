@@ -1790,19 +1790,16 @@ BIF_DECL(BIF_ControlGetClassNN)
 	cah.hwnd = control_window;
 	cah.class_name = class_name;
 	if (!GetClassName(cah.hwnd, class_name, _countof(class_name) - 5)) // -5 to allow room for sequence number.
-		goto error;
+		_f_throw(ERR_INTERNAL_CALL);
 	
 	cah.class_count = 0;  // Init for the below.
 	cah.is_found = false; // Same.
 	EnumChildWindows(target_window, EnumChildFindSeqNum, (LPARAM)&cah);
 	if (!cah.is_found)
-		goto error;
+		_f_throw(ERR_FAILED);
 	// Append the class sequence number onto the class name:
 	sntprintfcat(class_name, _countof(class_name), _T("%d"), cah.class_count);
 	_f_return(class_name);
-
-error:
-	_f_throw(ERR_INTERNAL_CALL);
 }
 
 
@@ -2562,7 +2559,7 @@ void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
 					if (cp = _tcschr(cp, REGION_DELIMITER)) // Assign
 						rr_height = ATOI(++cp);
 					else // Avoid problems with going beyond the end of the string.
-						goto error;
+						goto arg_error;
 				}
 				break;
 			case 'W':
@@ -3151,7 +3148,7 @@ BIF_DECL(BIF_WinGetText)
 	{
 		// Something went wrong, so make sure we set to empty string.
 		*sab.buf = '\0';
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw(ERR_FAILED);
 	}
 }
 
@@ -6936,6 +6933,7 @@ BIF_DECL(BIF_Drive)
 		//	return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 		TCHAR mci_string[256];
 		MCIERROR error;
+		successful = true; // GetLastError() is not relevant for this function.
 		// Note: The following comment is obsolete because research of MSDN indicates that there is no way
 		// not to wait when the tray must be physically opened or closed, at least on Windows XP.  Omitting
 		// the word "wait" from both "close cd wait" and "set cd door open/closed wait" does not help, nor
@@ -6949,7 +6947,8 @@ BIF_DECL(BIF_Drive)
 		{
 			sntprintf(mci_string, _countof(mci_string), _T("set cdaudio door %s wait"), retract ? _T("closed") : _T("open"));
 			error = mciSendString(mci_string, NULL, 0, NULL); // Open or close the tray.
-			successful = !error;
+			if (error)
+				_f_throw(ERR_FAILED); // GetLastError() not relevant.
 			break;
 		}
 		sntprintf(mci_string, _countof(mci_string), _T("open %s type cdaudio alias cd wait shareable"), aValue);
@@ -6958,7 +6957,8 @@ BIF_DECL(BIF_Drive)
 		sntprintf(mci_string, _countof(mci_string), _T("set cd door %s wait"), retract ? _T("closed") : _T("open"));
 		error = mciSendString(mci_string, NULL, 0, NULL); // Open or close the tray.
 		mciSendString(_T("close cd wait"), NULL, 0, NULL);
-		successful = !error;
+		if (error)
+			_f_throw(ERR_FAILED); // GetLastError() not relevant.
 		break;
 	}
 
@@ -7133,24 +7133,27 @@ BIF_DECL(BIF_DriveGet)
 		if (!*aValue) // When drive is omitted, operate upon default CD/DVD drive.
 		{
 			if (mciSendString(_T("status cdaudio mode"), status, _countof(status), NULL)) // Error.
-				goto error;
+				goto failed;
 		}
 		else // Operate upon a specific drive letter.
 		{
 			sntprintf(mci_string, _countof(mci_string), _T("open %s type cdaudio alias cd wait shareable"), aValue);
 			if (mciSendString(mci_string, NULL, 0, NULL)) // Error.
-				goto error;
+				goto failed;
 			MCIERROR error = mciSendString(_T("status cd mode"), status, _countof(status), NULL);
 			mciSendString(_T("close cd wait"), NULL, 0, NULL);
 			if (error)
-				goto error;
+				goto failed;
 		}
 		// Otherwise, success:
 		_f_return(status);
 
 	} // switch()
 
-error:
+failed:
+	_f_throw(ERR_FAILED);
+
+error: // Win32 error
 	_f_throw(ERR_INTERNAL_CALL);
 
 invalid_parameter:
@@ -7673,7 +7676,7 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 	{
 		// ATOU() returns 0xFFFFFFFF for -1, which is relied upon to support the -1 sound.
 		if (!MessageBeep(ATOU(cp + 1)))
-			goto error;
+			return LineError(ERR_INTERNAL_CALL);
 	}
 	// See http://msdn.microsoft.com/library/default.asp?url=/library/en-us/multimed/htm/_win32_play.asp
 	// for some documentation mciSendString() and related.
@@ -7714,7 +7717,7 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 	return OK;
 
 error:
-	return LineError(ERR_INTERNAL_CALL);
+	return LineError(ERR_FAILED);
 }
 
 
