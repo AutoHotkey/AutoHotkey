@@ -12358,8 +12358,9 @@ ResultType Line::Perform()
 	}
 
 	case ACT_SETWORKINGDIR:
-		SetWorkingDir(ARG1);
-		return !g.ThrownToken ? OK : FAIL;
+		if (!SetWorkingDir(ARG1))
+			return LineError(ERR_PARAM1_INVALID); // Hard to imagine any other cause.
+		return OK;
 
 	case ACT_FILEGETSHORTCUT:
 		return FileGetShortcut(ARG1);

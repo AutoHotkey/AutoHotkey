@@ -7719,9 +7719,8 @@ error:
 
 
 
-void SetWorkingDir(LPTSTR aNewDir, bool aSetErrorLevel)
-// Sets ErrorLevel to indicate success/failure, but only if the script has begun runtime execution (callers
-// want that).
+ResultType SetWorkingDir(LPTSTR aNewDir)
+// Throws a script runtime exception on failure, but only if the script has begun runtime execution.
 // This function was added in v1.0.45.01 for the reason described below.
 {
 	// v1.0.45.01: Since A_ScriptDir omits the trailing backslash for roots of drives (such as C:),
@@ -7749,11 +7748,7 @@ void SetWorkingDir(LPTSTR aNewDir, bool aSetErrorLevel)
 	}
 
 	if (!SetCurrentDirectory(aNewDir)) // Caused by nonexistent directory, permission denied, etc.
-	{
-		if (aSetErrorLevel && g_script.mIsReadyToExecute)
-			g_script.SetErrorLevelOrThrow();
-		return;
-	}
+		return FAIL;
 	// Otherwise, the change to the working directory succeeded.
 
 	// Other than during program startup, this should be the only place where the official
@@ -7761,12 +7756,8 @@ void SetWorkingDir(LPTSTR aNewDir, bool aSetErrorLevel)
 	// dir as the user navigates from folder to folder.  However, the whole purpose of
 	// maintaining g_WorkingDir is to workaround that very issue.
 	if (g_script.mIsReadyToExecute) // Callers want this done only during script runtime.
-	{
 		UpdateWorkingDir(aNewDir);
-		// Since the above didn't return, it wants us to indicate success.
-		if (aSetErrorLevel) // Callers want ErrorLevel changed only during script runtime.
-			g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-	}
+	return OK;
 }
 
 
@@ -10138,7 +10129,8 @@ VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName)
 
 BIV_DECL_W(BIV_WorkingDir_Set)
 {
-	SetWorkingDir(aBuf, false);
+	if (!SetWorkingDir(aBuf))
+		return g_script.ScriptError(ERR_INVALID_VALUE); // Hard to imagine any other cause.
 	return OK;
 }
 

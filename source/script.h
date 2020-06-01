@@ -3438,7 +3438,7 @@ BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right);
 LPTSTR TokenTypeString(ExprTokenType &aToken);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
-void SetWorkingDir(LPTSTR aNewDir, bool aSetErrorLevel = true);
+ResultType SetWorkingDir(LPTSTR aNewDir);
 void UpdateWorkingDir(LPTSTR aNewDir = NULL);
 LPTSTR GetWorkingDir();
 int ConvertJoy(LPTSTR aBuf, int *aJoystickID = NULL, bool aAllowOnlyButtons = false);
