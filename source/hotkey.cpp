@@ -1377,14 +1377,13 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 		if (   (mHookAction == HOTKEY_ID_ALT_TAB || mHookAction == HOTKEY_ID_ALT_TAB_SHIFT)
 			&& !mModifierVK && !mModifierSC   )
 		{
-			TCHAR error_text[512];
 			if (mModifiers)
 			{
 				// Neutral modifier has been specified.  Future enhancement: improve this
 				// to try to guess which key, left or right, should be used based on the
-				// location of the suffix key on the keyboard.
-				sntprintf(error_text, _countof(error_text), _T("The AltTab hotkey \"%s\" must specify which key (L or R)."), hotkey_name);
-				g_script.ScriptError(error_text);
+				// location of the suffix key on the keyboard.  Lexikos: Better not do that
+				// since a wrong guess will leave the user wondering why it doesn't work.
+				g_script.ScriptError(ERR_ALTTAB_MODLR, hotkey_name);
 				return;  // Key is invalid so don't give it an ID.
 			}
 			if (mModifiersLR)
@@ -1403,9 +1402,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 				case MOD_LWIN: mModifierVK = VK_LWIN; break;
 				case MOD_RWIN: mModifierVK = VK_RWIN; break;
 				default:
-					sntprintf(error_text, _countof(error_text), _T("The AltTab hotkey \"%s\" must have exactly ")
-						_T("one modifier/prefix."), hotkey_name);
-					g_script.ScriptError(error_text);
+					g_script.ScriptError(ERR_ALTTAB_ONEMOD, hotkey_name);
 					return;  // Key is invalid so don't give it an ID.
 				}
 				// Since above didn't return:
@@ -1844,7 +1841,6 @@ ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier,
 // should never reset modifiers after calling this.
 // Returns OK or FAIL.
 {
-	TCHAR error_text[512];
 	vk_type temp_vk; // No need to initialize this one.
 	sc_type temp_sc = 0;
 	modLR_type modifiersLR = 0;
@@ -1873,8 +1869,7 @@ ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier,
 		{
 			if (IS_WHEEL_VK(temp_vk))
 			{
-				sntprintf(error_text, _countof(error_text), _T("\"%s\" is not allowed as a prefix key."), aText);
-				g_script.ScriptError(error_text, aHotkeyName);
+				g_script.ScriptError(ERR_UNSUPPORTED_PREFIX, aText);
 				// When aThisHotkey==NULL, return CONDITION_FALSE to indicate to our caller that it's
 				// an invalid hotkey and we've already shown the error message.  Unlike the old method,
 				// this method respects /ErrorStdOut and avoids the second, generic error message.
@@ -1918,8 +1913,7 @@ ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier,
 					// would make loadtime's second call to create the hotkey always succeed. Also, it's
 					// more appropriate to say "key name" than "hotkey" in this message because it's only
 					// showing the one bad key name when it's a composite hotkey such as "Capslock & y".
-					sntprintf(error_text, _countof(error_text), _T("\"%s\" is not a valid key name."), aText);
-					g_script.ScriptError(error_text);
+					g_script.ScriptError(ERR_INVALID_KEYNAME, aText);
 				}
 				//else do not show an error in this case because the loader will attempt to interpret
 				// this line as a command.  If that too fails, it will show an "unrecognized action"
