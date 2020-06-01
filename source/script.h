@@ -3377,6 +3377,7 @@ BIF_DECL(BIF_FileGetTime);
 BIF_DECL(BIF_FileGetVersion);
 BIF_DECL(BIF_FileRead);
 BIF_DECL(BIF_FileSelect);
+BIF_DECL(BIF_GroupActivate);
 BIF_DECL(BIF_ImageSearch);
 BIF_DECL(BIF_IniRead);
 BIF_DECL(BIF_PixelGetColor);

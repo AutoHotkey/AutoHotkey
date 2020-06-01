@@ -153,6 +153,7 @@ FuncEntry g_BIF[] =
 	BIF1(GetKeyState, 1, 2),
 	BIFn(GetKeyVK, 1, 1, BIF_GetKeyName),
 	BIF1(GetMethod, 2, 2),
+	BIF1(GroupActivate, 1, 2),
 	BIF1(GuiCreate, 0, 3),
 	BIF1(GuiCtrlFromHwnd, 1, 1),
 	BIF1(GuiFromHwnd, 1, 2),
@@ -9979,7 +9980,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 	LPTSTR loop_field;
 
 	Line *jump_to_line; // Don't use *apJumpToLine because it might not exist.
-	Label *jump_to_label;  // For use with Gosub & Goto & GroupActivate.
+	Label *jump_to_label;  // For use with Gosub & Goto.
 	BOOL jumping_from_inside_function_to_outside;
 	ResultType if_condition, result;
 	LONG_OPERATION_INIT
@@ -12276,12 +12277,6 @@ ResultType Line::Perform()
 			return FAIL;  // It already displayed the error for us.
 		return group->AddWindow(ARG2, ARG3, ARG4, ARG5);
 	
-	case ACT_GROUPACTIVATE:
-		if (   !(group = g_script.FindGroup(ARG1))   )
-			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);
-		// Note: This will take care of DoWinDelay if needed:
-		return SetErrorLevelOrThrowBool(!group->Activate(*ARG2 && !_tcsicmp(ARG2, _T("R"))));
-
 	case ACT_GROUPDEACTIVATE:
 		if (   !(group = g_script.FindGroup(ARG1))   )
 			return LineError(ERR_PARAM1_INVALID, FAIL, ARG1);

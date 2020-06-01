@@ -28,7 +28,6 @@ int WinGroup::sAlreadyVisitedCount = 0;
 
 ResultType WinGroup::AddWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 // Caller should ensure that at least one param isn't NULL/blank.
-// GroupActivate will tell its caller to jump to aJumpToLabel if a WindowSpec isn't found.
 // This function is not thread-safe because it adds an entry to the list of window specs.
 // In addition, if this function is being called by one thread while another thread is calling IsMember(),
 // the thread-safety notes in IsMember() apply.
@@ -138,16 +137,23 @@ ResultType WinGroup::CloseAndGoToNext(bool aStartWithMostRecent)
 		}
 	}
 	//else do the activation below anyway, even though no close was done.
-	return mIsModeActivate ? Activate(aStartWithMostRecent, win_spec) : Deactivate(aStartWithMostRecent);
+	if (mIsModeActivate)
+	{
+		HWND active_window;
+		if (!Activate(aStartWithMostRecent, active_window, win_spec))
+			return FAIL;
+		return active_window ? OK : FAIL;
+	}
+	return Deactivate(aStartWithMostRecent);
 }
 
 
 
-ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec)
+ResultType WinGroup::Activate(bool aStartWithMostRecent, HWND &aHwnd, WindowSpec *aWinSpec)
 {
+	aHwnd = NULL; // Set default.
 	if (IsEmpty())
-		return OK;  // OK since this is the expected behavior in this case.
-	// Otherwise:
+		return OK;
 	if (!Update(true)) // Update our private member vars.
 		return FAIL;  // It already displayed the error for us.
 	WindowSpec *win, *win_to_activate_next = aWinSpec;
@@ -164,6 +170,7 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec)
 		{
 			group_is_active = true;
 			MarkAsVisited(active_window);
+			aHwnd = active_window;
 			return OK;
 		}
 		// else don't mark as visited even if it's a member of the group because
@@ -221,14 +228,14 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec)
 			// group isn't currently active (i.e. we're starting fresh), because otherwise
 			// windows would be activated in an order different from what was already shown
 			// the first time through the enumeration, which doesn't seem to be ever desirable:
-			, !aStartWithMostRecent || group_is_active
+			, !aStartWithMostRecent || group_is_active, true
 			, sAlreadyVisited, sAlreadyVisitedCount)   )
 		{
 			// We found a window to activate, so we're done.
 			// Probably best to do this before WinDelay in case another hotkey fires during the delay:
 			MarkAsVisited(activate_win);
+			aHwnd = activate_win;
 			DoWinDelay;
-			//MsgBox(win->mText, 0, win->mTitle);
 			break;
 		}
 		// Otherwise, no window was found to activate.
@@ -269,7 +276,7 @@ ResultType WinGroup::Activate(bool aStartWithMostRecent, WindowSpec *aWinSpec)
 				// than getting stuck on this one.
 			}
 			else 
-				return FAIL; // Let GroupActivate set ErrorLevel to indicate what happened.
+				break;
 		}
 	}
 	return OK;

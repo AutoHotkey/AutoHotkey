@@ -326,7 +326,6 @@ Action g_act[] =
 
 	// See above for why minimum is 1 vs. 2:
 	, {_T("GroupAdd"), 1, 5, false, NULL} // Group name, WinTitle, WinText, exclude-title/text
-	, {_T("GroupActivate"), 1, 2, false, NULL}
 	, {_T("GroupDeactivate"), 1, 2, false, NULL}
 	, {_T("GroupClose"), 1, 2, false, NULL}
 

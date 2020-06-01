@@ -1078,6 +1078,28 @@ BIF_DECL(BIF_WinActivate)
 
 
 
+BIF_DECL(BIF_GroupActivate)
+{
+	LPTSTR aGroup = ParamIndexToOptionalString(0, _f_number_buf);
+	WinGroup *group;
+	if (   !(group = g_script.FindGroup(aGroup, true))   ) // Last parameter -> create-if-not-found.
+		_f_return_FAIL;  // It already displayed the error for us.
+	
+	LPTSTR aMode = ParamIndexToOptionalString(1, _f_number_buf);
+	bool reverse = false;
+	if (!_tcsicmp(aMode, _T("R")))
+		reverse = true;
+	else if (*aMode)
+		_f_throw(ERR_PARAM1_INVALID, aMode);
+
+	HWND activated;
+	if (!group->Activate(reverse, activated))
+		_f_return_FAIL;
+	_f_return_i((UINT_PTR)activated);
+}
+
+
+
 BIF_DECL(BIF_Wait)
 // Since other script threads can interrupt these commands while they're running, it's important that
 // these commands not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
@@ -9218,7 +9240,7 @@ Label *Line::IsJumpValid(Label &aTargetLabel, bool aSilent)
 	// is at a more shallow level but is in some block totally unrelated to it!
 	// Returns FAIL by default, which is what we want because that value is zero:
 	if (!aSilent)
-		LineError(_T("A Goto/Gosub must not jump into a block that doesn't enclose it.")); // Omit GroupActivate from the error msg since that is rare enough to justify the increase in common-case clarity.
+		LineError(_T("A Goto/Gosub must not jump into a block that doesn't enclose it."));
 	return NULL;
 }
 
