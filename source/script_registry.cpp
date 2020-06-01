@@ -78,8 +78,13 @@ BIF_DECL(BIF_IniRead)
 			}
 	}
 	g->LastError = GetLastError();
-	if (g->LastError && !aDefault)
-		_f_throw(ERR_INTERNAL_CALL);
+	if (g->LastError)
+	{
+		if (!aDefault)
+			_f_throw(ERR_INTERNAL_CALL);
+		if (!*aKey)
+			_f_return(aDefault);
+	}
 	// The above function is supposed to set szBuffer to be aDefault if it can't find the
 	// file, section, or key.  In other words, it always changes the contents of szBuffer.
 	_f_return(szBuffer); // Avoid using the length the API reported because it might be inaccurate if the data contains any binary zeroes, or if the data is double-terminated, etc.
