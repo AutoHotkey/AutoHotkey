@@ -500,6 +500,10 @@ struct ResultToken : public ExprTokenType
 	ResultType Error(LPCTSTR aErrorText);
 	ResultType Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo);
 	ResultType UnknownMemberError(ExprTokenType &aObject, int aFlags, LPCTSTR aMember);
+	ResultType Win32Error(DWORD aError = GetLastError());
+	
+	void SetLastErrorMaybeThrow(bool aError, DWORD aLastError = GetLastError());
+	void SetLastErrorCloseAndMaybeThrow(HANDLE aHandle, bool aError, DWORD aLastError = GetLastError());
 
 	BuiltInFunc *func; // For maintainability, this is separate from the ExprTokenType union.  Its main uses are func->mID and func->mOutputVars.
 

@@ -13233,8 +13233,12 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCT
 ResultType Script::ThrowWin32Exception(DWORD aError)
 {
 	TCHAR message[1024];
-	DWORD size = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS
-		, NULL, aError, 0, message, _countof(message), NULL);
+	// Prefix the message with the error number to avoid something like
+	// "Error: The file does not exist. Specifically: 2".
+	DWORD size = (DWORD)_sntprintf(message, _countof(message)
+		, (int)aError < 0 ? _T("(0x%X) ") : _T("(%i) "), aError);
+	size += FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS
+		, NULL, aError, 0, message + size, _countof(message) - size, NULL);
 	if (size)
 	{
 		if (message[size - 1] == '\n')
@@ -13242,18 +13246,7 @@ ResultType Script::ThrowWin32Exception(DWORD aError)
 		if (message[size - 1] == '\r')
 			message[--size] = '\0';
 	}
-	else
-		_tcscpy(message, _T("Function returned failure."));
-	TCHAR code[12];
-	if ((int)aError < 0)
-	{
-		code[0] = '0';
-		code[1] = 'x';
-		_ultot(aError, code + 2, 16);
-	}
-	else
-		_itot(aError, code, 10);
-	return g_script.ThrowRuntimeException(message, nullptr, code);
+	return g_script.ThrowRuntimeException(message);
 }
 
 
@@ -13288,26 +13281,25 @@ ResultType Script::ThrowIntIfNonzero(int aErrorValue, LPCTSTR aWhat)
 }
 
 
-ResultType Line::SetLastErrorMaybeThrow(bool aError, DWORD aLastErrorOverride)
+ResultType Line::SetLastErrorMaybeThrow(bool aError, DWORD aLastError)
 {
-	// Set LastError unconditionally.
-	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
-	return ThrowIfTrue(aError);
+	g->LastError = aLastError; // Set this unconditionally.
+	return aError ? g_script.ThrowWin32Exception(aLastError) : OK;
 }
 
-void Script::SetLastErrorMaybeThrow(ResultToken &aResultToken, bool aError, DWORD aLastErrorOverride)
+void ResultToken::SetLastErrorMaybeThrow(bool aError, DWORD aLastError)
 {
-	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
+	g->LastError = aLastError; // Set this unconditionally.
 	if (aError)
-		aResultToken.Error(ERR_FAILED);
+		Win32Error(aLastError);
 }
 
-void Script::SetLastErrorCloseAndMaybeThrow(ResultToken &aResultToken, HANDLE aHandle, bool aError, DWORD aLastErrorOverride)
+void ResultToken::SetLastErrorCloseAndMaybeThrow(HANDLE aHandle, bool aError, DWORD aLastError)
 {
-	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
+	g->LastError = aLastError;
 	CloseHandle(aHandle);
 	if (aError)
-		aResultToken.Error(ERR_FAILED);
+		Win32Error(aLastError);
 }
 
 
@@ -13517,6 +13509,11 @@ ResultType ResultToken::UnknownMemberError(ExprTokenType &aObject, int aFlags, L
 	sntprintf(msg, _countof(msg), _T("This value of type \"%s\" has no %s named \"%s\".")
 		, TokenTypeString(aObject), (aFlags & IT_CALL) ? _T("method") : _T("property"), aMember);
 	return Error(msg);
+}
+
+ResultType ResultToken::Win32Error(DWORD aError)
+{
+	return SetExitResult(g_script.ThrowWin32Exception(aError));
 }
 
 

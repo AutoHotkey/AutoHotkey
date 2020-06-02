@@ -1400,7 +1400,7 @@ BIF_DECL(BIF_WinMove)
 			, ParamIndexToOptionalInt(2, rect.right - rect.left)
 			, ParamIndexToOptionalInt(3, rect.bottom - rect.top)
 			, TRUE)) // Do repaint.
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32();
 	DoWinDelay;
 	_f_return_empty;
 }
@@ -1679,7 +1679,7 @@ BIF_DECL(BIF_ControlClick)
 	_f_return_empty;
 
 error:
-	_f_throw(ERR_INTERNAL_CALL);
+	_f_throw_win32();
 
 control_error:
 	_f_throw(ERR_NO_CONTROL, aControl);
@@ -1703,7 +1703,7 @@ BIF_DECL(BIF_ControlMove)
 	RECT control_rect;
 	if (!GetWindowRect(control_window, &control_rect)
 		|| !MapWindowPoints(NULL, coord_parent, (LPPOINT)&control_rect, 2))
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32();
 	
 	POINT point;
 	point.x = ParamIndexToOptionalInt(0, control_rect.left);
@@ -1766,7 +1766,7 @@ BIF_DECL(BIF_ControlGetFocus)
 	GUITHREADINFO guithreadInfo;
 	guithreadInfo.cbSize = sizeof(GUITHREADINFO);
 	if (!GetGUIThreadInfo(GetWindowThreadProcessId(target_window, NULL), &guithreadInfo))
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32();
 
 	// Use IsChild() to ensure the focused control actually belongs to this window.
 	// Otherwise, a HWND will be returned if any window in the same thread has focus,
@@ -1790,7 +1790,7 @@ BIF_DECL(BIF_ControlGetClassNN)
 	cah.hwnd = control_window;
 	cah.class_name = class_name;
 	if (!GetClassName(cah.hwnd, class_name, _countof(class_name) - 5)) // -5 to allow room for sequence number.
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32();
 	
 	cah.class_count = 0;  // Init for the below.
 	cah.is_found = false; // Same.
@@ -2175,7 +2175,7 @@ cleanup_and_return: // This is "called" if a memory allocation failed above
 	return;
 
 error:
-	_f_throw(ERR_INTERNAL_CALL);
+	_f_throw_win32();
 }
 
 
@@ -2342,7 +2342,7 @@ BIF_DECL(BIF_PostSendMessage)
 	{
 		if (aUseSend && GetLastError() == ERROR_TIMEOUT)
 			_f_throw(ERR_TIMEOUT);
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32();
 	}
 	if (aUseSend)
 		_f_return_i((__int64)dwResult);
@@ -2492,7 +2492,7 @@ void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
 		// It's undocumented by MSDN, but apparently setting the Window's region to NULL restores it
 		// to proper working order:
 		if (!SetWindowRgn(aWnd, NULL, TRUE))
-			_f_throw(ERR_INTERNAL_CALL);
+			_f_throw_win32();
 		_f_return_empty;
 	}
 
@@ -2618,7 +2618,7 @@ arg_error:
 	_f_throw(ERR_PARAM1_INVALID);
 
 error:
-	_f_throw(ERR_INTERNAL_CALL);
+	_f_throw_win32();
 }
 
 
@@ -2808,7 +2808,7 @@ BIF_DECL(BIF_WinSet)
 
 	} // switch()
 	if (!success)
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32();
 	_f_return_empty;
 }
 
@@ -2840,7 +2840,7 @@ BIF_DECL(BIF_WinMoveTopBottom)
 	HWND mode = _f_callee_id == FID_WinMoveBottom ? HWND_BOTTOM : HWND_TOP;
 	// Note: SWP_NOACTIVATE must be specified otherwise the target window often fails to move:
 	if (!SetWindowPos(target_window, mode, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE))
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32();
 	_f_return_empty;
 }
 
@@ -2852,7 +2852,7 @@ BIF_DECL(BIF_WinSetTitle)
 	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1))
 		return;
 	if (!SetWindowText(target_window, ParamIndexToString(0, _f_number_buf)))
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32();
 	_f_return_empty;
 }
 
@@ -2884,7 +2884,7 @@ BIF_DECL(BIF_WinGetClass)
 		return;
 	TCHAR class_name[WINDOW_CLASS_SIZE];
 	if (!GetClassName(target_window, class_name, _countof(class_name)))
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32();
 	_f_return(class_name);
 }
 
@@ -3237,7 +3237,7 @@ BIF_DECL(BIF_Env)
 		// determine whether there's an error).
 		LPTSTR aValue = ParamIndexIsOmitted(1) ? NULL : ParamIndexToString(1, buf);
 		if (!SetEnvironmentVariable(aEnvVarName, aValue))
-			_f_throw(ERR_INTERNAL_CALL);
+			_f_throw_win32();
 		_f_return_empty;
 	}
 
@@ -3775,7 +3775,7 @@ fast_end:
 	_f_return_b(found);
 
 error:
-	_f_throw(ERR_INTERNAL_CALL);
+	_f_throw_win32();
 }
 
 
@@ -4188,7 +4188,7 @@ arg7_error:
 	_f_throw(ERR_PARAM7_INVALID, aImageFile);
 
 error:
-	_f_throw(ERR_INTERNAL_CALL);
+	_f_throw_win32();
 }
 
 
@@ -6876,15 +6876,12 @@ void DriveSpace(ResultToken &aResultToken, LPTSTR aPath, bool aGetFreeSpace)
 	__int64 free_space;
 	ULARGE_INTEGER total, free, used;
 	if (!GetDiskFreeSpaceEx(buf, &free, &total, &used))
-		goto error;
+		_f_throw_win32();
 	// Casting this way allows sizes of up to 2,097,152 gigabytes:
 	free_space = (__int64)((unsigned __int64)(aGetFreeSpace ? free.QuadPart : total.QuadPart)
 		/ (1024*1024));
 
 	_f_return(free_space);
-
-error:
-	_f_throw(ERR_INTERNAL_CALL);
 }
 
 
@@ -6970,7 +6967,7 @@ BIF_DECL(BIF_Drive)
 	} // switch()
 
 	if (!successful)
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32();
 	_f_return_empty;
 }
 
@@ -7150,11 +7147,11 @@ BIF_DECL(BIF_DriveGet)
 
 	} // switch()
 
-failed:
+failed: // Failure where GetLastError() isn't relevant.
 	_f_throw(ERR_FAILED);
 
 error: // Win32 error
-	_f_throw(ERR_INTERNAL_CALL);
+	_f_throw_win32();
 
 invalid_parameter:
 	_f_throw(ERR_PARAM1_INVALID);
@@ -7652,10 +7649,10 @@ control_fail:
 
 	device->Release();
 	
-	if (FAILED(hr))
-		errorlevel = ERR_INTERNAL_CALL;
 	if (errorlevel)
 		_f_throw(errorlevel);
+	if (FAILED(hr)) // This would be rare and unexpected.
+		_f_throw_win32(hr);
 
 	if (SOUND_MODE_IS_SET)
 		return;
@@ -7675,8 +7672,11 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 	if (*cp == '*')
 	{
 		// ATOU() returns 0xFFFFFFFF for -1, which is relied upon to support the -1 sound.
-		if (!MessageBeep(ATOU(cp + 1)))
-			return LineError(ERR_INTERNAL_CALL);
+		// Even if there are no enabled sound devices, MessageBeep() indicates success
+		// (tested on Windows 10).  It's hard to imagine how the script would handle a
+		// failure anyway, so just omit error checking.
+		MessageBeep(ATOU(cp + 1));
+		return OK;
 	}
 	// See http://msdn.microsoft.com/library/default.asp?url=/library/en-us/multimed/htm/_win32_play.asp
 	// for some documentation mciSendString() and related.
@@ -8190,14 +8190,14 @@ BIF_DECL(BIF_FileRead)
 		, FILE_FLAG_SEQUENTIAL_SCAN, NULL); // MSDN says that FILE_FLAG_SEQUENTIAL_SCAN will often improve performance
 	if (hfile == INVALID_HANDLE_VALUE)      // in cases like these (and it seems best even if max_bytes_to_load was specified).
 	{
-		Script::SetLastErrorMaybeThrow(aResultToken, true);
+		aResultToken.SetLastErrorMaybeThrow(true);
 		return;
 	}
 
 	unsigned __int64 bytes_to_read = GetFileSize64(hfile);
 	if (bytes_to_read == ULLONG_MAX) // GetFileSize64() failed.
 	{
-		Script::SetLastErrorCloseAndMaybeThrow(aResultToken, hfile, true);
+		aResultToken.SetLastErrorCloseAndMaybeThrow(hfile, true);
 		return;
 	}
 	// In addition to imposing the limit set by the *M option, the following check prevents an error
@@ -8227,7 +8227,7 @@ BIF_DECL(BIF_FileRead)
 
 	if (!bytes_to_read && codepage != -1) // In RAW mode, always return a zero-byte Buffer.
 	{
-		Script::SetLastErrorCloseAndMaybeThrow(aResultToken, hfile, false, 0); // Indicate success (a zero-length file results in an empty string).
+		aResultToken.SetLastErrorCloseAndMaybeThrow(hfile, false, 0); // Indicate success (a zero-length file results in an empty string).
 		return;
 	}
 
@@ -8339,7 +8339,7 @@ BIF_DECL(BIF_FileRead)
 		free(output_buf);
 	}
 
-	Script::SetLastErrorMaybeThrow(aResultToken, !result);
+	aResultToken.SetLastErrorMaybeThrow(!result);
 }
 
 
@@ -8423,7 +8423,7 @@ BIF_DECL(BIF_FileAppend)
 		ts = new TextFile; // ts was already verified NULL via !file_was_already_open.
 		if ( !ts->Open(aFilespec, flags, codepage) )
 		{
-			Script::SetLastErrorMaybeThrow(aResultToken, true);
+			aResultToken.SetLastErrorMaybeThrow(true);
 			delete ts; // Must be deleted explicitly!
 			_f_return_retval;
 		}
@@ -8443,7 +8443,7 @@ BIF_DECL(BIF_FileAppend)
 			result = ts->Write(aBuf, DWORD(aBuf_length / sizeof(TCHAR)));
 	}
 	//else: aBuf is empty; we've already succeeded in creating the file and have nothing further to do.
-	Script::SetLastErrorMaybeThrow(aResultToken, result == 0);
+	aResultToken.SetLastErrorMaybeThrow(result == 0);
 
 	if (!aCurrentReadFile)
 		delete ts;
@@ -8548,7 +8548,7 @@ BIF_DECL(BIF_FileGetAttrib)
 	DWORD attr = GetFileAttributes(aFilespec);
 	if (attr == 0xFFFFFFFF)  // Failure, probably because file doesn't exist.
 	{
-		Script::SetLastErrorMaybeThrow(aResultToken, true);
+		aResultToken.SetLastErrorMaybeThrow(true);
 		_f_return_empty;
 	}
 
@@ -8796,7 +8796,7 @@ BIF_DECL(BIF_FileGetTime)
 	HANDLE file_search = FindFirstFile(aFilespec, &found_file);
 	if (file_search == INVALID_HANDLE_VALUE)
 	{
-		Script::SetLastErrorMaybeThrow(aResultToken, true);
+		aResultToken.SetLastErrorMaybeThrow(true);
 		_f_return_empty;
 	}
 	FindClose(file_search);
@@ -8927,7 +8927,7 @@ BIF_DECL(BIF_FileGetSize)
 		HANDLE file_search = FindFirstFile(aFilespec, &found_file);
 		if (file_search == INVALID_HANDLE_VALUE)
 		{
-			Script::SetLastErrorMaybeThrow(aResultToken, true);
+			aResultToken.SetLastErrorMaybeThrow(true);
 			_f_return_empty;
 		}
 		FindClose(file_search);
@@ -13878,7 +13878,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 							char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, source_length, NULL, 0, NULL, NULL);
 						}
 						if (!char_count)
-							_f_throw(ERR_INTERNAL_CALL);
+							_f_throw_win32();
 					}
 					++char_count; // + 1 for null-terminator (source_length causes it to be excluded from char_count).
 					if (length == 0) // Caller just wants the required buffer size.
@@ -13901,7 +13901,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 			}
 #endif
 			if (!char_count)
-				_f_throw(GetLastError() == ERROR_INSUFFICIENT_BUFFER ? ERR_INVALID_LENGTH : ERR_INTERNAL_CALL);
+				_f_throw_win32();
 		}
 		// Return the number of bytes written.
 		aResultToken.value_int64 = char_count * (1 + (encoding == CP_UTF16));
@@ -13952,7 +13952,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 			conv_length = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (LPCWSTR)address, length, aResultToken.marker, conv_length, NULL, NULL);
 #endif
 			if (!conv_length) // This can only be failure, since ... (see below)
-				_f_throw(ERR_INTERNAL_CALL);
+				_f_throw_win32();
 			if (length == -1) // conv_length includes a null-terminator in this case.
 				--conv_length;
 			else

@@ -81,7 +81,7 @@ BIF_DECL(BIF_IniRead)
 	if (g->LastError)
 	{
 		if (!aDefault)
-			_f_throw(ERR_INTERNAL_CALL);
+			_f_throw_win32(g->LastError);
 		if (!*aKey)
 			_f_return(aDefault);
 	}
@@ -159,8 +159,7 @@ ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTS
 #ifdef UNICODE
 	}
 #endif
-	g->LastError = GetLastError();
-	return result ? OK : LineError(ERR_INTERNAL_CALL);
+	return SetLastErrorMaybeThrow(!result);
 }
 
 
@@ -175,7 +174,7 @@ ResultType Line::IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 	BOOL result = WritePrivateProfileString(aSection, aKey, NULL, szFileTemp);  // Returns zero on failure.
 	g->LastError = GetLastError();
 	WritePrivateProfileString(NULL, NULL, NULL, szFileTemp);	// Flush
-	return result ? OK : LineError(ERR_INTERNAL_CALL);
+	return SetLastErrorMaybeThrow(!result);
 }
 
 
@@ -193,7 +192,7 @@ void RegRead(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR
 	if (result != ERROR_SUCCESS)
 	{
 		g->LastError = result;
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32(result);
 	}
 
 	// Read the value and determine the type.  If aValueName is the empty string, the key's default value is used.
@@ -340,7 +339,7 @@ finish:
 	RegCloseKey(hRegKey);
 	g->LastError = result;
 	if (result != ERROR_SUCCESS)
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32();
 } // RegRead()
 
 
@@ -481,7 +480,7 @@ void RegWrite(ResultToken &aResultToken, ExprTokenType &aValue, DWORD aValueType
 finish:
 	g->LastError = result;
 	if (result != ERROR_SUCCESS)
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32(result);
 	_f_return_empty;
 } // RegWrite()
 
@@ -559,7 +558,7 @@ void RegDelete(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTS
 finish:
 	g->LastError = result;
 	if (result != ERROR_SUCCESS)
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32(result);
 	_f_return_empty;
 } // RegDelete()
 

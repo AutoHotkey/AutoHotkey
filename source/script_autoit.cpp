@@ -176,7 +176,7 @@ BIF_DECL(BIF_PixelGetColor)
 	bool use_alt_mode = tcscasestr(aOptions, _T("Alt")) != NULL; // New mode for v1.0.43.10: Two users reported that CreateDC works better in certain windows such as SciTE, at least one some systems.
 	HDC hdc = use_alt_mode ? CreateDC(_T("DISPLAY"), NULL, NULL, NULL) : GetDC(NULL);
 	if (!hdc)
-		_f_throw(ERR_INTERNAL_CALL);
+		_f_throw_win32();
 
 	// Assign the value as an 32-bit int to match Window Spy reports color values.
 	// Update for v1.0.21: Assigning in hex format seems much better, since it's easy to
@@ -441,7 +441,7 @@ BIF_DECL(BIF_Control)
 				goto success;
 			}
 		}
-		goto error; // As documented, DoControlDelay is not done for these.
+		goto win32_error; // As documented, DoControlDelay is not done for these.
 	}
 
 	case FID_ControlShowDropDown:
@@ -451,14 +451,14 @@ BIF_DECL(BIF_Control)
 		if (!SendMessageTimeout(control_window, CB_SHOWDROPDOWN
 			, (WPARAM)(control_cmd == FID_ControlShowDropDown)
 			, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
+			goto win32_error;
 		break;
 
 	case FID_ControlSetTab: // Must be a Tab Control
 		if (aNumber < 1)
 			_f_throw(ERR_PARAM1_INVALID);
 		if (!ControlSetTab(aResultToken, control_window, (DWORD)aNumber - 1))
-			goto error;
+			goto win32_error;
 		break;
 
 	case FID_ControlAddItem:
@@ -470,7 +470,7 @@ BIF_DECL(BIF_Control)
 		else
 			goto control_type_error;  // Must be ComboBox or ListBox.
 		if (!SendMessageTimeout(control_window, msg, 0, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
+			goto win32_error;
 		if (dwResult == CB_ERR || dwResult == CB_ERRSPACE) // General error or insufficient space to store it.
 			// CB_ERR == LB_ERR
 			goto error;
@@ -488,7 +488,7 @@ BIF_DECL(BIF_Control)
 		else
 			goto control_type_error; // Must be ComboBox or ListBox.
 		if (!SendMessageTimeout(control_window, msg, (WPARAM)control_index, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
+			goto win32_error;
 		if (dwResult == CB_ERR)  // CB_ERR == LB_ERR
 			goto error;
 		break;
@@ -518,11 +518,11 @@ BIF_DECL(BIF_Control)
 		if (msg == LB_SETSEL) // Multi-select, so use the cumulative method.
 		{
 			if (!SendMessageTimeout(control_window, msg, control_index != -1, control_index, SMTO_ABORTIFHUNG, 2000, &dwResult))
-				goto error;
+				goto win32_error;
 		}
 		else // ComboBox or single-select ListBox.
 			if (!SendMessageTimeout(control_window, msg, control_index, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-				goto error;
+				goto win32_error;
 		if (dwResult == CB_ERR && control_index != -1)  // CB_ERR == LB_ERR
 			goto error;
 		goto notify_parent;
@@ -549,36 +549,42 @@ BIF_DECL(BIF_Control)
 		DWORD_PTR item_index;
 		if (msg == LB_FINDSTRING) // Multi-select ListBox (LB_SELECTSTRING is not supported by these).
 		{
-			if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &item_index)
-				|| item_index == LB_ERR
-				|| !SendMessageTimeout(control_window, LB_SETSEL, TRUE, item_index, SMTO_ABORTIFHUNG, 2000, &dwResult)
-				|| dwResult == LB_ERR) // Relies on short-circuit boolean.
+			if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &item_index))
+				goto win32_error;
+			if (item_index == LB_ERR)
+				goto error;
+			if (!SendMessageTimeout(control_window, LB_SETSEL, TRUE, item_index, SMTO_ABORTIFHUNG, 2000, &dwResult))
+				goto win32_error;
+			if (dwResult == LB_ERR)
 				goto error;
 		}
 		else // ComboBox or single-select ListBox.
-			if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &item_index)
-				|| item_index == CB_ERR) // CB_ERR == LB_ERR
+		{
+			if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &item_index))
+				goto win32_error;
+			if (item_index == CB_ERR) // CB_ERR == LB_ERR
 				goto error;
+		}
 	notify_parent:
 		if (   !(immediate_parent = GetParent(control_window))   )
-			goto error;
+			goto win32_error;
 		SetLastError(0); // Must be done to differentiate between success and failure when control has ID 0.
 		control_id = GetDlgCtrlID(control_window);
 		if (!control_id && GetLastError()) // Both conditions must be checked (see above).
-			goto error; // Avoid sending the notification in case some other control has ID 0.
+			goto win32_error; // Avoid sending the notification in case some other control has ID 0.
 		// Proceed even if control_id == 0, since some applications are known to
 		// utilize the notification in that case (e.g. Notepad's Save As dialog).
 		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, x_msg)
 			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
+			goto win32_error;
 		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, y_msg)
 			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
+			goto win32_error;
 		_f_return(item_index + 1); // Return the index chosen.  Might have some use if the string was ambiguous.
 
 	case FID_ControlEditPaste:
 		if (!SendMessageTimeout(control_window, EM_REPLACESEL, TRUE, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
+			goto win32_error;
 		// Note: dwResult is not used by EM_REPLACESEL since it doesn't return a value.
 		break;
 	} // switch()
@@ -587,8 +593,11 @@ BIF_DECL(BIF_Control)
 success:
 	_f_return_empty;
 
-error:
-	_f_throw(ERR_INTERNAL_CALL);
+win32_error:
+	_f_throw_win32();
+
+error: // GetLastError() is no use in this case.
+	_f_throw(ERR_FAILED);
 
 control_type_error:
 	_f_throw(ERR_GUI_NOT_FOR_THIS_TYPE, classname);
@@ -640,7 +649,7 @@ BIF_DECL(BIF_ControlGet)
 	{
 	case FID_ControlGetChecked: //Must be a Button
 		if (!SendMessageTimeout(control_window, BM_GETCHECK, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
+			goto win32_error;
 		_f_return(dwResult == BST_CHECKED);
 
 	case FID_ControlGetEnabled:
@@ -651,7 +660,7 @@ BIF_DECL(BIF_ControlGet)
 
 	case FID_ControlGetTab: // must be a Tab Control
 		if (!SendMessageTimeout(control_window, TCM_GETCURSEL, 0, 0, SMTO_ABORTIFHUNG, 2000, &index))
-			goto error;
+			goto win32_error;
 		_f_return(index + 1);
 
 	case FID_ControlFindItem:
@@ -768,12 +777,12 @@ BIF_DECL(BIF_ControlGet)
 	case FID_ControlGetLineCount:  // Must be an Edit
 		// MSDN: "If the control has no text, the return value is 1. The return value will never be less than 1."
 		if (!SendMessageTimeout(control_window, EM_GETLINECOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
+			goto win32_error;
 		_f_return(dwResult);
 
 	case FID_ControlGetCurrentLine:
 		if (!SendMessageTimeout(control_window, EM_LINEFROMCHAR, -1, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
+			goto win32_error;
 		_f_return(dwResult + 1);
 
 	case FID_ControlGetCurrentCol:
@@ -782,7 +791,7 @@ BIF_DECL(BIF_ControlGet)
 		// The dwResult from the first msg below is not useful and is not checked.
 		if (   !SendMessageTimeout(control_window, EM_GETSEL, (WPARAM)&start, (LPARAM)&end, SMTO_ABORTIFHUNG, 2000, &dwResult)
 			|| !SendMessageTimeout(control_window, EM_LINEFROMCHAR, (WPARAM)start, 0, SMTO_ABORTIFHUNG, 2000, &line_number)   )
-			goto error;
+			goto win32_error;
 		if (!line_number) // Since we're on line zero, the column number is simply start+1.
 			_f_return(start + 1);  // +1 to convert from zero based.
 		// The original Au3 function repeatedly decremented the character index and called EM_LINEFROMCHAR
@@ -790,7 +799,7 @@ BIF_DECL(BIF_ControlGet)
 		// probably has been available since the dawn of time, though I've only tested it on Windows 10.
 		DWORD_PTR line_start;
 		if (!SendMessageTimeout(control_window, EM_LINEINDEX, (WPARAM)line_number, 0, SMTO_ABORTIFHUNG, 2000, &line_start))
-			goto error;
+			goto win32_error;
 		_f_return(start - line_start + 1);
 	}
 
@@ -805,11 +814,11 @@ BIF_DECL(BIF_ControlGet)
 		TCHAR line_buf[32767];
 		*(LPWORD)line_buf = 32767; // EM_GETLINE requires first word of string to be set to its size.
 		if (!SendMessageTimeout(control_window, EM_GETLINE, (WPARAM)control_index, (LPARAM)line_buf, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
+			goto win32_error;
 		if (!dwResult) // Line is empty or line number is invalid.
 		{
 			if (!SendMessageTimeout(control_window, EM_GETLINECOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwLineCount))
-				goto error;
+				goto win32_error;
 			if ((DWORD)aNumber > dwLineCount)
 				_f_throw(ERR_PARAM1_INVALID);
 		}
@@ -822,7 +831,7 @@ BIF_DECL(BIF_ControlGet)
 		// with this technique.  Au3 has the same problem with them, so for now it's just documented here
 		// as a limitation.
 		if (!SendMessageTimeout(control_window, EM_GETSEL, (WPARAM)&start, (LPARAM)&end, SMTO_ABORTIFHUNG, 2000, &dwResult))
-			goto error;
+			goto win32_error;
 		// The above sets start to be the zero-based position of the start of the selection (similar for end).
 		// If there is no selection, start and end will be equal, at least in the edit controls I tried it with.
 		// The dwResult from the above is not useful and is not checked.
@@ -865,8 +874,11 @@ BIF_DECL(BIF_ControlGet)
 	}
 	ASSERT(FALSE && "Should have returned");
 
-error:
-	_f_throw(ERR_INTERNAL_CALL);
+error: // GetLastError() might not be relevant in this case.
+	_f_throw(ERR_FAILED);
+
+win32_error:
+	_f_throw_win32();
 
 control_type_error:
 	_f_throw(ERR_GUI_NOT_FOR_THIS_TYPE, classname);
@@ -1000,8 +1012,9 @@ BIF_DECL(BIF_DirSelect)
 	}
 
 	LPMALLOC pMalloc;
-    if (SHGetMalloc(&pMalloc) != NOERROR)	// Initialize
-		_f_throw(ERR_INTERNAL_CALL);
+	HRESULT hr = SHGetMalloc(&pMalloc);
+    if (FAILED(hr))	// Initialize
+		_f_throw_win32(hr);
 
 	// v1.0.36.03: Support initial folder, which is different than the root folder because the root only
 	// controls the origin point (above which the control cannot navigate).
@@ -1317,8 +1330,8 @@ BIF_DECL(BIF_FileGetVersion)
 	DWORD dwUnused, dwSize;
 	if (   !(dwSize = GetFileVersionInfoSize(aFilespec, &dwUnused))   )  // No documented limit on how large it can be, so don't use _alloca().
 	{
-		Script::SetLastErrorMaybeThrow(aResultToken, true);
-		_f_return_empty;
+		aResultToken.SetLastErrorMaybeThrow(true);
+		return;
 	}
 
 	BYTE *pInfo = (BYTE*)malloc(dwSize);  // Allocate the size retrieved by the above.
@@ -1331,7 +1344,7 @@ BIF_DECL(BIF_FileGetVersion)
 		|| !VerQueryValue(pInfo, _T("\\"), (LPVOID *)&pFFI, &uSize))
 	{
 		free(pInfo);
-		Script::SetLastErrorMaybeThrow(aResultToken, true);
+		aResultToken.SetLastErrorMaybeThrow(true);
 		return;
 	}
 

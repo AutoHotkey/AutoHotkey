@@ -428,6 +428,7 @@ __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 #define _f_return(...)			_f__ret(aResultToken.Return(__VA_ARGS__))
 #define _o_return(...)			_o__ret(aResultToken.Return(__VA_ARGS__))
 #define _f_throw(...)			_f__ret(aResultToken.Error(__VA_ARGS__))
+#define _f_throw_win32(...)		return ((void)aResultToken.Win32Error(__VA_ARGS__))
 #define _o_throw(...)			_o__ret(aResultToken.Error(__VA_ARGS__))
 #define _f_return_FAIL			_f__ret(aResultToken.SetExitResult(FAIL))
 #define _o_return_FAIL			_o__ret(aResultToken.SetExitResult(FAIL))
@@ -1414,7 +1415,7 @@ public:
 	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	
-	ResultType SetLastErrorMaybeThrow(bool aError, DWORD aLastErrorOverride = -1);
+	ResultType SetLastErrorMaybeThrow(bool aError, DWORD aLastError = GetLastError());
 	ResultType Throw() { return ThrowIfTrue(true); }
 	ResultType ThrowIfTrue(bool aError);
 	ResultType ThrowIntIfNonzero(int aErrorValue);
@@ -3103,10 +3104,8 @@ public:
 	static ResultType ThrowIfTrue(bool aError);
 	static ResultType ThrowIntIfNonzero(int aErrorValue, LPCTSTR aWhat = NULL);
 	static ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
-	static ResultType ThrowWin32Exception(DWORD aError);
+	static ResultType ThrowWin32Exception(DWORD aError = GetLastError());
 	static void FreeExceptionToken(ResultToken*& aToken);
-	static void SetLastErrorMaybeThrow(ResultToken &aResultToken, bool aError, DWORD aLastErrorOverride = -1);
-	static void SetLastErrorCloseAndMaybeThrow(ResultToken &aResultToken, HANDLE aHandle, bool aError, DWORD aLastErrorOverride = -1);
 
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().
