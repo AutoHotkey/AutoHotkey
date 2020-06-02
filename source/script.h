@@ -3287,8 +3287,6 @@ BIF_DECL(BIF_CallbackCreate);
 BIF_DECL(BIF_CallbackFree);
 #endif
 
-BIF_DECL(BIF_Input);
-
 BIF_DECL(BIF_Menu);
 BIF_DECL(BIF_TraySetIcon);
 

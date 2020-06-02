@@ -313,49 +313,6 @@ BIF_DECL(BIF_TraySetIcon)
 
 
 
-BIF_DECL(BIF_Input)
-// OVERVIEW:
-// Although a script can have many concurrent quasi-threads, there can only be one input
-// at a time.  Thus, if an input is ongoing and a new thread starts, and it begins its
-// own input, that input should terminate the prior input prior to beginning the new one.
-// In a "worst case" scenario, each interrupted quasi-thread could have its own
-// input, which is in turn terminated by the thread that interrupts it.
-{
-	auto *prior_input = InputFind(NULL); // Not g_input, which could belong to an object and should not be ended.
-
-	if (_f_callee_id == FID_InputEnd)
-	{
-		// This means that the user is specifically canceling the prior input (if any).
-		if (prior_input)
-			prior_input->Stop();
-		_f_return_i(prior_input != NULL);
-	}
-
-	size_t aMatchList_length;
-	_f_param_string_opt(aOptions, 0);
-	_f_param_string_opt(aEndKeys, 1);
-	_f_param_string_opt(aMatchList, 2, &aMatchList_length);
-	// The aEndKeys string must be modifiable (not constant), since for performance reasons,
-	// it's allowed to be temporarily altered by this function.
-	
-	input_type input;
-	input.VisibleNonText = false; // Override InputHook default.
-	input.BufferLengthMax = INPUT_BUFFER_SIZE - 1;
-	if (!input.Setup(aOptions, aEndKeys, aMatchList, aMatchList_length))
-		_f_return_FAIL;
-	// Only now is it safe to do things which might cause interruption (see comments above).
-
-	if (prior_input)
-		prior_input->EndByNewInput();
-
-	InputStart(input, &aResultToken);
-	
-	// Ensure input is not present in the input chain, since its life time is about to end.
-	input_type *result = InputRelease(&input);
-	ASSERT(result == NULL);
-}
-
-
 ResultType input_type::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length)
 {
 	ParseOptions(aOptions);
@@ -373,7 +330,7 @@ ResultType input_type::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList
 }
 
 
-ResultType InputStart(input_type &input, ResultToken *apResultToken)
+ResultType InputStart(input_type &input)
 {
 	ASSERT(!input.InProgress());
 
@@ -393,9 +350,7 @@ ResultType InputStart(input_type &input, ResultToken *apResultToken)
 
 	Hotkey::InstallKeybdHook(); // Install the hook (if needed).
 
-	if (!apResultToken)
-		return OK;
-	return InputWait(*apResultToken, input);
+	return OK;
 }
 
 
@@ -705,35 +660,7 @@ ResultType input_type::SetMatchList(LPTSTR aMatchList, size_t aMatchList_length)
 }
 
 
-ResultType InputWait(ResultToken &aResultToken, input_type &input)
-{
-	//////////////////////////////////////////////////////////////////
-	// Wait for one of the following to terminate our input:
-	// 1) The hook (due a match in aEndKeys or aMatchList);
-	// 2) A thread that interrupts us with a new Input of its own;
-	// 3) The timer we put in effect for our timeout (if we have one).
-	//////////////////////////////////////////////////////////////////
-	for (;;)
-	{
-		// Rather than monitoring the timeout here, just wait for the incoming WM_TIMER message
-		// to take effect as a TimerProc() call during the MsgSleep():
-		MsgSleep();
-		if (!input.InProgress())
-			break;
-	}
-	
-	// Translate the "ending" to an ErrorLevel string.  Even if we were interrupted by another
-	// Input which terminated for a different reason, that instance had its own struct, so ours
-	// hasn't been overwritten.
-	TCHAR key_name[128];
-	g_ErrorLevel->Assign(input.GetEndReason(key_name, _countof(key_name)));
-
-	aResultToken.symbol = SYM_STRING;
-	return TokenSetResult(aResultToken, input.Buffer, input.BufferLength);
-}
-
-
-LPTSTR input_type::GetEndReason(LPTSTR aKeyBuf, int aKeyBufSize, bool aCombined)
+LPTSTR input_type::GetEndReason(LPTSTR aKeyBuf, int aKeyBufSize)
 {
 	switch (Status)
 	{
@@ -746,13 +673,6 @@ LPTSTR input_type::GetEndReason(LPTSTR aKeyBuf, int aKeyBufSize, bool aCombined)
 		LPTSTR key_name = aKeyBuf;
 		if (!key_name)
 			return _T("EndKey");
-		if (aCombined) // Traditional "EndKey:xxx" mode.
-		{
-			ASSERT(aKeyBufSize > 7);
-			_tcscpy(key_name, _T("EndKey:"));
-			key_name += 7;
-			aKeyBufSize -= 7;
-		}
 		if (EndingChar)
 		{
 			key_name[0] = EndingChar;
@@ -786,13 +706,10 @@ LPTSTR input_type::GetEndReason(LPTSTR aKeyBuf, int aKeyBufSize, bool aCombined)
 			if (!*key_name)
 				sntprintf(key_name, aKeyBufSize, _T("sc%03X"), EndingSC);
 		}
-		return aCombined ? aKeyBuf : _T("EndKey");
+		return _T("EndKey");
 	}
 	case INPUT_LIMIT_REACHED:
 		return _T("Max");
-	case INPUT_INTERRUPTED:
-		// Our input was terminated due to a new input in a quasi-thread that interrupted ours.
-		return _T("NewInput");
 	case INPUT_OFF:
 		return _T("Stopped");
 	default: // In progress.

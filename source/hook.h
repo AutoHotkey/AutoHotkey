@@ -168,7 +168,7 @@ struct key_type
 #define INPUTHOOK_BUFFER_SIZE 1024 // Default buffer size for InputHook.
 
 enum InputStatusType {INPUT_OFF, INPUT_IN_PROGRESS, INPUT_TIMED_OUT, INPUT_TERMINATED_BY_MATCH
-	, INPUT_TERMINATED_BY_ENDKEY, INPUT_LIMIT_REACHED, INPUT_INTERRUPTED};
+	, INPUT_TERMINATED_BY_ENDKEY, INPUT_LIMIT_REACHED};
 
 // Bitwise flags for the Key arrays:
 #define END_KEY_WITH_SHIFT 0x01
@@ -251,18 +251,16 @@ struct input_type
 	void EndByChar(TCHAR aChar);
 	void EndByTimeout() { EndByReason(INPUT_TIMED_OUT); }
 	void EndByLimit() { EndByReason(INPUT_LIMIT_REACHED); }
-	void EndByNewInput() { EndByReason(INPUT_INTERRUPTED); }
 	void Stop() { EndByReason(INPUT_OFF); }
 	void CollectChar(TCHAR *ch, int char_count);
-	LPTSTR GetEndReason(LPTSTR aKeyBuf, int aKeyBufSize, bool aCombined = true);
+	LPTSTR GetEndReason(LPTSTR aKeyBuf, int aKeyBufSize);
 private:
 	void EndByReason(InputStatusType aReason);
 };
 
 #include "input_object.h"
 
-ResultType InputStart(input_type &input, ResultToken *apResultToken = NULL);
-ResultType InputWait(ResultToken &aResultToken, input_type &input);
+ResultType InputStart(input_type &input);
 input_type *InputRelease(input_type *aInput);
 input_type *InputFind(InputObject *object);
 

@@ -90,7 +90,7 @@ ResultType InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, E
 			MsgSleep();
 		// Return EndReason:
 	case P_EndReason:
-		_o_return(input.GetEndReason(NULL, 0, false));
+		_o_return(input.GetEndReason(NULL, 0));
 
 	case M_Stop:
 		if (input.InProgress())
@@ -106,7 +106,7 @@ ResultType InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, E
 	case P_EndKey:
 		aResultToken.symbol = SYM_STRING;
 		if (input.Status == INPUT_TERMINATED_BY_ENDKEY)
-			input.GetEndReason(aResultToken.marker = _f_retval_buf, _f_retval_buf_size, false);
+			input.GetEndReason(aResultToken.marker = _f_retval_buf, _f_retval_buf_size);
 		else
 			aResultToken.marker = _T("");
 		return OK;
