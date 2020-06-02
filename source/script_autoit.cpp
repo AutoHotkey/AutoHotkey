@@ -901,14 +901,14 @@ ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 	// as the user agent (even if documented) seems like a bad idea because it might contain personal/sensitive info.
 	HINTERNET hInet = InternetOpen(_T("AutoHotkey"), INTERNET_OPEN_TYPE_PRECONFIG_WITH_NO_AUTOPROXY, NULL, NULL, 0);
 	if (!hInet)
-		return SetErrorLevelOrThrow();
+		return Throw();
 
 	// Open the required URL
 	HINTERNET hFile = InternetOpenUrl(hInet, aURL, NULL, 0, flags_for_open_url, 0);
 	if (!hFile)
 	{
 		InternetCloseHandle(hInet);
-		return SetErrorLevelOrThrow();
+		return Throw();
 	}
 
 	// Open our output file
@@ -917,7 +917,7 @@ ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 	{
 		InternetCloseHandle(hFile);
 		InternetCloseHandle(hInet);
-		return SetErrorLevelOrThrow();
+		return Throw();
 	}
 
 	BYTE bufData[1024 * 1]; // v1.0.44.11: Reduced from 8 KB to alleviate GUI window lag during Download.  Testing shows this reduction doesn't affect performance on high-speed downloads (in fact, downloads are slightly faster; I tested two sites, one at 184 KB/s and the other at 380 KB/s).  It might affect slow downloads, but that seems less likely so wasn't tested.
@@ -964,7 +964,7 @@ ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 
 	if (!result) // An error occurred during the transfer.
 		DeleteFile(aFilespec);  // Delete damaged/incomplete file.
-	return SetErrorLevelOrThrowBool(!result);
+	return ThrowIfTrue(!result);
 }
 
 
@@ -1001,7 +1001,7 @@ BIF_DECL(BIF_DirSelect)
 
 	LPMALLOC pMalloc;
     if (SHGetMalloc(&pMalloc) != NOERROR)	// Initialize
-		_f_throw(_T("SHGetMalloc")); // Short message since it probably never happens.
+		_f_throw(ERR_INTERNAL_CALL);
 
 	// v1.0.36.03: Support initial folder, which is different than the root folder because the root only
 	// controls the origin point (above which the control cannot navigate).
@@ -1092,7 +1092,6 @@ BIF_DECL(BIF_DirSelect)
 		// Due to rarity and because there doesn't seem to be any way to detect it,
 		// no exception is thrown when the function fails.  Instead, we just assume
 		// that the user pressed CANCEL (which should not be treated as an error):
-		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
 		_f_return_empty;
 	}
 
@@ -1101,7 +1100,6 @@ BIF_DECL(BIF_DirSelect)
 	pMalloc->Free(lpItemIDList);
 	pMalloc->Release();
 
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 	_f_return(Result);
 }
 
@@ -1193,7 +1191,6 @@ ResultType Line::FileGetShortcut(LPTSTR aShortcutFile) // Credited to Holger <Ho
 					// to FileCreateShortcut, not here.  But it's done here so that this command is
 					// compatible with that one.
 				}
-				g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 				bSucceeded = true;
 			}
 			ppf->Release();
@@ -1202,13 +1199,10 @@ ResultType Line::FileGetShortcut(LPTSTR aShortcutFile) // Credited to Holger <Ho
 	}
 	CoUninitialize();
 
-	if (!bSucceeded)
-		goto error;
-
-	return OK;  // ErrorLevel might still indicate failure if one of the above calls failed.
-
+	if (bSucceeded)
+		return OK;
 error:
-	return SetErrorLevelOrThrow();
+	return Throw();
 }
 
 
@@ -1258,10 +1252,7 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 			WCHAR full_path[MAX_PATH];
 			GetFullPathNameW(wsz, _countof(full_path), full_path, NULL);
 			if (SUCCEEDED(ppf->Save(full_path, TRUE)))
-			{
-				g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate success.
 				bSucceeded = true;
-			}
 			ppf->Release();
 		}
 		psl->Release();
@@ -1271,7 +1262,7 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 	if (bSucceeded)
 		return OK;
 	else
-		return SetErrorLevelOrThrow();
+		return Throw();
 }
 
 
@@ -1302,7 +1293,7 @@ ResultType Line::FileRecycle(LPTSTR aFilePattern)
 	FileOp.fFlags = FOF_SILENT | FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING;
 
 	// SHFileOperation() returns 0 on success:
-	return SetErrorLevelOrThrowBool(SHFileOperation(&FileOp));
+	return ThrowIfTrue(SHFileOperation(&FileOp));
 }
 
 
@@ -1311,7 +1302,7 @@ ResultType Line::FileRecycleEmpty(LPTSTR aDriveLetter)
 {
 	LPCTSTR szPath = *aDriveLetter ? aDriveLetter : NULL;
 	HRESULT hr = SHEmptyRecycleBin(NULL, szPath, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
-	return SetErrorLevelOrThrowBool(hr != S_OK);
+	return ThrowIfTrue(hr != S_OK);
 }
 
 
@@ -1326,7 +1317,7 @@ BIF_DECL(BIF_FileGetVersion)
 	DWORD dwUnused, dwSize;
 	if (   !(dwSize = GetFileVersionInfoSize(aFilespec, &dwUnused))   )  // No documented limit on how large it can be, so don't use _alloca().
 	{
-		Script::SetErrorLevels(true);
+		Script::SetLastErrorMaybeThrow(aResultToken, true);
 		_f_return_empty;
 	}
 
@@ -1339,10 +1330,9 @@ BIF_DECL(BIF_FileGetVersion)
 	// Locate the fixed information
 		|| !VerQueryValue(pInfo, _T("\\"), (LPVOID *)&pFFI, &uSize))
 	{
-		g->LastError = GetLastError();
 		free(pInfo);
-		g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-		_f_return_empty;
+		Script::SetLastErrorMaybeThrow(aResultToken, true);
+		return;
 	}
 
 	// extract the fields you want from pFFI
@@ -1353,7 +1343,7 @@ BIF_DECL(BIF_FileGetVersion)
 
 	free(pInfo);
 
-	Script::SetErrorLevels(false, 0); // Indicate success.
+	g->LastError = 0;
 	_f_return_p(_f_retval_buf);
 }
 

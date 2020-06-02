@@ -12315,16 +12315,11 @@ ResultType Line::Perform()
 		return FileInstall(THREE_ARGS);
 
 	case ACT_FILECOPY:
-	{
-		int error_count = Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1, false, g.LastError);
-		if (!error_count)
-			return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-		return SetErrorLevelOrThrowInt(error_count);
-	}
 	case ACT_FILEMOVE:
-		return SetErrorLevelOrThrowInt(Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1, true, g.LastError));
+		return ThrowIntIfNonzero(Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1
+			, mActionType == ACT_FILEMOVE, g.LastError));
 	case ACT_DIRCOPY:
-		return SetErrorLevelOrThrowBool(!Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1, false));
+		return ThrowIfTrue(!Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1, false));
 	case ACT_DIRMOVE:
 		if (ctoupper(*ARG3) == 'R')
 		{
@@ -12332,15 +12327,15 @@ ResultType Line::Perform()
 			// complete if the source directory is in use (due to being a working dir for a currently
 			// running process, or containing a file that is being written to).  In other words,
 			// the operation will be "all or none":
-			return SetErrorLevelOrThrowBool(!MoveFile(ARG1, ARG2));
+			return ThrowIfTrue(!MoveFile(ARG1, ARG2));
 		}
 		// Otherwise:
-		return SetErrorLevelOrThrowBool(!Util_CopyDir(ARG1, ARG2, ArgToInt(3), true));
+		return ThrowIfTrue(!Util_CopyDir(ARG1, ARG2, ArgToInt(3), true));
 
 	case ACT_DIRCREATE:
-		return SetErrorsOrThrow(!FileCreateDir(ARG1));
+		return SetLastErrorMaybeThrow(!FileCreateDir(ARG1));
 	case ACT_DIRDELETE:
-		return SetErrorLevelOrThrowBool(!*ARG1 // Consider an attempt to create or remove a blank dir to be an error.
+		return ThrowIfTrue(!*ARG1 // Consider an attempt to create or remove a blank dir to be an error.
 			|| !Util_RemoveDir(ARG1, ArgToInt(2) == 1)); // Relies on short-circuit evaluation.
 
 	case ACT_FILESETATTRIB:
@@ -13262,86 +13257,57 @@ ResultType Script::ThrowWin32Exception(DWORD aError)
 }
 
 
-//#define SHOULD_USE_ERRORLEVEL (!g->InTryBlock()) // v1 behaviour
-#define SHOULD_USE_ERRORLEVEL TRUE
-
-ResultType Line::SetErrorLevelOrThrowBool(bool aError)
+ResultType Line::ThrowIfTrue(bool aError)
 {
-	if (!aError)
-		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-	if (SHOULD_USE_ERRORLEVEL)
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return ThrowRuntimeException(ERRORLEVEL_ERROR_STR);
+	return aError ? ThrowRuntimeException(ERR_FAILED) : OK;
 }
 
-ResultType Line::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue)
+ResultType Line::ThrowIntIfNonzero(int aErrorValue)
 {
-	if ((*aErrorValue == '0' && !aErrorValue[1]) || SHOULD_USE_ERRORLEVEL)
-		return g_ErrorLevel->Assign(aErrorValue);
-	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return ThrowRuntimeException(aErrorValue);
-}
-
-ResultType Line::SetErrorLevelOrThrowInt(int aErrorValue)
-{
-	if (!aErrorValue || SHOULD_USE_ERRORLEVEL)
-		return g_ErrorLevel->Assign(aErrorValue);
+	if (!aErrorValue)
+		return OK;
 	TCHAR buf[12];
-	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return ThrowRuntimeException(_itot(aErrorValue, buf, 10));
+	return ThrowRuntimeException(ERR_FAILED, nullptr, _itot(aErrorValue, buf, 10));
 }
 
 // Logic from the above functions is duplicated in the below functions rather than calling
-// g_script.mCurrLine->SetErrorLevelOrThrow() to squeeze out a little extra performance for
+// g_script.mCurrLine->Throw() to squeeze out a little extra performance for
 // "success" cases.
 
-ResultType Script::SetErrorLevelOrThrowBool(bool aError)
+ResultType Script::ThrowIfTrue(bool aError)
 {
-	if (!aError)
-		return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-	if (SHOULD_USE_ERRORLEVEL)
-		return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
-	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return ThrowRuntimeException(ERRORLEVEL_ERROR_STR);
+	return aError ? ThrowRuntimeException(ERR_FAILED) : OK;
 }
 
-ResultType Script::SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat)
+ResultType Script::ThrowIntIfNonzero(int aErrorValue, LPCTSTR aWhat)
 {
-	if ((*aErrorValue == '0' && !aErrorValue[1]) || SHOULD_USE_ERRORLEVEL)
-		return g_ErrorLevel->Assign(aErrorValue);
-	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return ThrowRuntimeException(aErrorValue, aWhat);
-}
-
-ResultType Script::SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat)
-{
-	if (!aErrorValue || SHOULD_USE_ERRORLEVEL)
-		return g_ErrorLevel->Assign(aErrorValue);
+	if (!aErrorValue)
+		return OK;
 	TCHAR buf[12];
-	// Otherwise, an error occurred and there is a try block, so throw an exception:
-	return ThrowRuntimeException(_itot(aErrorValue, buf, 10), aWhat);
+	return ThrowRuntimeException(ERR_FAILED, aWhat, _itot(aErrorValue, buf, 10));
 }
 
 
-ResultType Line::SetErrorsOrThrow(bool aError, DWORD aLastErrorOverride)
+ResultType Line::SetLastErrorMaybeThrow(bool aError, DWORD aLastErrorOverride)
 {
-	// LastError is set even if we're going to throw an exception, for simplicity:
+	// Set LastError unconditionally.
 	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
-	return SetErrorLevelOrThrowBool(aError);
+	return ThrowIfTrue(aError);
 }
 
-void Script::SetErrorLevels(bool aError, DWORD aLastErrorOverride)
+void Script::SetLastErrorMaybeThrow(ResultToken &aResultToken, bool aError, DWORD aLastErrorOverride)
 {
 	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
-	g_ErrorLevel->Assign(aError);
+	if (aError)
+		aResultToken.Error(ERR_FAILED);
 }
 
-void Script::SetErrorLevelsAndClose(HANDLE aHandle, bool aError, DWORD aLastErrorOverride)
+void Script::SetLastErrorCloseAndMaybeThrow(ResultToken &aResultToken, HANDLE aHandle, bool aError, DWORD aLastErrorOverride)
 {
 	g->LastError = aLastErrorOverride == -1 ? GetLastError() : aLastErrorOverride;
 	CloseHandle(aHandle);
-	g_ErrorLevel->Assign(aError);
+	if (aError)
+		aResultToken.Error(ERR_FAILED);
 }
 
 

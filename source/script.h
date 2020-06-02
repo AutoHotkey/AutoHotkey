@@ -1414,11 +1414,10 @@ public:
 	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	
-	ResultType SetErrorsOrThrow(bool aError, DWORD aLastErrorOverride = -1);
-	ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
-	ResultType SetErrorLevelOrThrowBool(bool aError);        //
-	ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue); // Explicit names to avoid calling the wrong overload.
-	ResultType SetErrorLevelOrThrowInt(int aErrorValue);     //
+	ResultType SetLastErrorMaybeThrow(bool aError, DWORD aLastErrorOverride = -1);
+	ResultType Throw() { return ThrowIfTrue(true); }
+	ResultType ThrowIfTrue(bool aError);
+	ResultType ThrowIntIfNonzero(int aErrorValue);
 
 	Line(FileIndexType aFileIndex, LineNumberType aFileLineNumber, ActionTypeType aActionType
 		, ArgStruct aArg[], ArgCountType aArgc) // Constructor
@@ -3101,15 +3100,13 @@ public:
 	void CheckForClassOverwrite();
 
 	static ResultType UnhandledException(Line* aLine);
-	static ResultType SetErrorLevelOrThrow() { return SetErrorLevelOrThrowBool(true); }
-	static ResultType SetErrorLevelOrThrowBool(bool aError);
-	static ResultType SetErrorLevelOrThrowInt(int aErrorValue, LPCTSTR aWhat = NULL);
-	static ResultType SetErrorLevelOrThrowStr(LPCTSTR aErrorValue, LPCTSTR aWhat = NULL);
+	static ResultType ThrowIfTrue(bool aError);
+	static ResultType ThrowIntIfNonzero(int aErrorValue, LPCTSTR aWhat = NULL);
 	static ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	static ResultType ThrowWin32Exception(DWORD aError);
 	static void FreeExceptionToken(ResultToken*& aToken);
-	static void SetErrorLevels(bool aError, DWORD aLastErrorOverride = -1);
-	static void SetErrorLevelsAndClose(HANDLE aHandle, bool aError, DWORD aLastErrorOverride = -1);
+	static void SetLastErrorMaybeThrow(ResultToken &aResultToken, bool aError, DWORD aLastErrorOverride = -1);
+	static void SetLastErrorCloseAndMaybeThrow(ResultToken &aResultToken, HANDLE aHandle, bool aError, DWORD aLastErrorOverride = -1);
 
 
 	#define SOUNDPLAY_ALIAS _T("AHK_PlayMe")  // Used by destructor and SoundPlay().

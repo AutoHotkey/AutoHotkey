@@ -2481,7 +2481,7 @@ void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
 		//	{
 		//		// Presumably, the system deletes the former region when upon a successful call to SetWindowRgn().
 		//		if (SetWindowRgn(aWnd, hrgn, TRUE))
-		//			return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+		//			_f_return_empty;
 		//		// Otherwise, get rid of it since it didn't take effect:
 		//		DeleteObject(hrgn);
 		//	}
@@ -6930,7 +6930,7 @@ BIF_DECL(BIF_Drive)
 		//    they aren't of type DRIVE_CDROM.
 		// 3) One or both of the calls to mciSendString() will simply fail if the drive isn't of the right type.
 		//if (GetDriveType(aValue) != DRIVE_CDROM) // Testing reveals that the below method does not work on Network CD/DVD drives.
-		//	return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		//	_f_throw(ERR_FAILED);
 		TCHAR mci_string[256];
 		MCIERROR error;
 		successful = true; // GetLastError() is not relevant for this function.
@@ -7126,7 +7126,7 @@ BIF_DECL(BIF_DriveGet)
 		//    they aren't of type DRIVE_CDROM.
 		// 3) One or both of the calls to mciSendString() will simply fail if the drive isn't of the right type.
 		//if (GetDriveType(aValue) != DRIVE_CDROM) // Testing reveals that the below method does not work on Network CD/DVD drives.
-		//	return g_ErrorLevel->Assign(ERRORLEVEL_ERROR);
+		//	_f_throw(ERR_FAILED);
 		TCHAR mci_string[256], status[128];
 		// Note that there is apparently no way to determine via mciSendString() whether the tray is ejected
 		// or not, since "open" is returned even when the tray is closed but there is no media.
@@ -8006,11 +8006,8 @@ BIF_DECL(BIF_FileSelect)
 	{
 		// Currently always returning ErrorLevel, otherwise this would tell us whether an error
 		// occurred vs. the user canceling: if (CommDlgExtendedError())
-		g_ErrorLevel->Assign(ERRORLEVEL_ERROR); // User pressed CANCEL, so never throw an exception.
 		_f_return_empty;
 	}
-	else
-		g_ErrorLevel->Assign(ERRORLEVEL_NONE); // Indicate that the user pressed OK vs. CANCEL.
 
 	if (ofn.Flags & OFN_ALLOWMULTISELECT)
 	{
@@ -8193,14 +8190,14 @@ BIF_DECL(BIF_FileRead)
 		, FILE_FLAG_SEQUENTIAL_SCAN, NULL); // MSDN says that FILE_FLAG_SEQUENTIAL_SCAN will often improve performance
 	if (hfile == INVALID_HANDLE_VALUE)      // in cases like these (and it seems best even if max_bytes_to_load was specified).
 	{
-		Script::SetErrorLevels(true);
+		Script::SetLastErrorMaybeThrow(aResultToken, true);
 		return;
 	}
 
 	unsigned __int64 bytes_to_read = GetFileSize64(hfile);
 	if (bytes_to_read == ULLONG_MAX) // GetFileSize64() failed.
 	{
-		Script::SetErrorLevelsAndClose(hfile, true);
+		Script::SetLastErrorCloseAndMaybeThrow(aResultToken, hfile, true);
 		return;
 	}
 	// In addition to imposing the limit set by the *M option, the following check prevents an error
@@ -8230,7 +8227,7 @@ BIF_DECL(BIF_FileRead)
 
 	if (!bytes_to_read && codepage != -1) // In RAW mode, always return a zero-byte Buffer.
 	{
-		Script::SetErrorLevelsAndClose(hfile, false, 0); // Indicate success (a zero-length file results in an empty string).
+		Script::SetLastErrorCloseAndMaybeThrow(aResultToken, hfile, false, 0); // Indicate success (a zero-length file results in an empty string).
 		return;
 	}
 
@@ -8342,7 +8339,7 @@ BIF_DECL(BIF_FileRead)
 		free(output_buf);
 	}
 
-	Script::SetErrorLevels(!result);
+	Script::SetLastErrorMaybeThrow(aResultToken, !result);
 }
 
 
@@ -8371,7 +8368,7 @@ BIF_DECL(BIF_FileAppend)
 	// The below is avoided because want to allow "nothing" to be written to a file in case the
 	// user is doing this to reset it's timestamp (or create an empty file).
 	//if (!aBuf || !*aBuf)
-	//	return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
+	//	_f_return_retval;
 
 	// Use the read-file loop's current item if filename was explicitly left blank (i.e. not just
 	// a reference to a variable that's blank):
@@ -8389,7 +8386,7 @@ BIF_DECL(BIF_FileAppend)
 	{
 		// StdOut has been redirected to the debugger, and this "FileAppend" call has been
 		// fully handled by the call above, so just return.
-		Script::SetErrorLevels(false, 0);
+		g->LastError = 0;
 		_f_return_retval;
 	}
 #endif
@@ -8426,8 +8423,8 @@ BIF_DECL(BIF_FileAppend)
 		ts = new TextFile; // ts was already verified NULL via !file_was_already_open.
 		if ( !ts->Open(aFilespec, flags, codepage) )
 		{
+			Script::SetLastErrorMaybeThrow(aResultToken, true);
 			delete ts; // Must be deleted explicitly!
-			Script::SetErrorLevels(true);
 			_f_return_retval;
 		}
 		if (aCurrentReadFile)
@@ -8446,7 +8443,7 @@ BIF_DECL(BIF_FileAppend)
 			result = ts->Write(aBuf, DWORD(aBuf_length / sizeof(TCHAR)));
 	}
 	//else: aBuf is empty; we've already succeeded in creating the file and have nothing further to do.
-	Script::SetErrorLevels(result == 0);
+	Script::SetLastErrorMaybeThrow(aResultToken, result == 0);
 
 	if (!aCurrentReadFile)
 		delete ts;
@@ -8467,13 +8464,13 @@ ResultType Line::FileDelete(LPTSTR aFilePattern)
 	if (!*aFilePattern)
 		return LineError(ERR_PARAM1_INVALID);
 
-	// The no-wildcard case could be handled via FilePatternApply(), but it is handled here
-	// for backward-compatibility (just in case the use of FindFirstFile() affects something):
+	// The no-wildcard case could be handled via FilePatternApply(), but handling it this
+	// way ensures deleting a non-existent path without wildcards is considered a failure:
 	if (!StrChrAny(aFilePattern, _T("?*"))) // No wildcards; just a plain path/filename.
 	{
 		SetLastError(0); // For sanity: DeleteFile appears to set it only on failure.
 		// ErrorLevel will indicate failure if DeleteFile fails.
-		return SetErrorsOrThrow(!DeleteFile(aFilePattern));
+		return SetLastErrorMaybeThrow(!DeleteFile(aFilePattern));
 	}
 
 	// Otherwise aFilePattern contains wildcards, so we'll search for all matches and delete them.
@@ -8488,12 +8485,12 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	bool allow_overwrite = (ATOI(aFlag) == 1);
 #ifdef AUTOHOTKEYSC
 	if (!allow_overwrite && Util_DoesFileExist(aDest))
-		return SetErrorLevelOrThrow();
+		return Throw();
 
 	// Open the file first since it's the most likely to fail:
 	HANDLE hfile = CreateFile(aDest, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
 	if (hfile == INVALID_HANDLE_VALUE)
-		return SetErrorLevelOrThrow();
+		return Throw();
 
 	// Create a temporary copy of aSource to ensure it is the correct case (upper-case).
 	// Ahk2Exe converts it to upper-case before adding the resource. My testing showed that
@@ -8536,7 +8533,7 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 
 #endif
 
-	return SetErrorLevelOrThrowBool(!success);
+	return ThrowIfTrue(!success);
 }
 
 
@@ -8551,11 +8548,11 @@ BIF_DECL(BIF_FileGetAttrib)
 	DWORD attr = GetFileAttributes(aFilespec);
 	if (attr == 0xFFFFFFFF)  // Failure, probably because file doesn't exist.
 	{
-		Script::SetErrorLevels(true);
+		Script::SetLastErrorMaybeThrow(aResultToken, true);
 		_f_return_empty;
 	}
 
-	Script::SetErrorLevels(false, 0);
+	g->LastError = 0;
 	_f_return_p(FileAttribToStr(_f_retval_buf, attr));
 }
 
@@ -8646,7 +8643,7 @@ ResultType Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperate
 {
 	if (!*aFilePattern)
 		// Caller should handle this case before calling us if an exception is to be thrown.
-		return SetErrorsOrThrow(true, ERROR_INVALID_PARAMETER);
+		return SetLastErrorMaybeThrow(true, ERROR_INVALID_PARAMETER);
 
 	if (aOperateOnFolders == FILE_LOOP_INVALID) // In case runtime dereference of a var was an invalid value.
 		aOperateOnFolders = FILE_LOOP_FILES_ONLY;  // Set default.
@@ -8665,7 +8662,7 @@ ResultType Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperate
 	// than 259, even if the pattern would match files whose names are short enough to be legal.
 	if (fps.dir_length + fps.pattern_length >= _countof(fps.path)
 		|| fps.pattern_length >= _countof(fps.pattern))
-		return SetErrorsOrThrow(true, ERROR_BUFFER_OVERFLOW);
+		return SetLastErrorMaybeThrow(true, ERROR_BUFFER_OVERFLOW);
 
 	// Make copies in case of overwrite of deref buf during LONG_OPERATION/MsgSleep,
 	// and to allow modification:
@@ -8685,7 +8682,7 @@ ResultType Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperate
 	fps.failure_count = 0;
 
 	FilePatternApply(fps);
-	return SetErrorLevelOrThrowInt(fps.failure_count); // i.e. indicate success if there were no failures.
+	return ThrowIntIfNonzero(fps.failure_count); // i.e. indicate success if there were no failures.
 }
 
 
@@ -8799,7 +8796,7 @@ BIF_DECL(BIF_FileGetTime)
 	HANDLE file_search = FindFirstFile(aFilespec, &found_file);
 	if (file_search == INVALID_HANDLE_VALUE)
 	{
-		Script::SetErrorLevels(true);
+		Script::SetLastErrorMaybeThrow(aResultToken, true);
 		_f_return_empty;
 	}
 	FindClose(file_search);
@@ -8817,7 +8814,7 @@ BIF_DECL(BIF_FileGetTime)
 		FileTimeToLocalFileTime(&found_file.ftLastWriteTime, &local_file_time);
 	}
 
-	Script::SetErrorLevels(false, 0); // Indicate success.
+	g->LastError = 0;
 	_f_return_p(FileTimeToYYYYMMDD(_f_retval_buf, local_file_time));
 }
 
@@ -8930,7 +8927,7 @@ BIF_DECL(BIF_FileGetSize)
 		HANDLE file_search = FindFirstFile(aFilespec, &found_file);
 		if (file_search == INVALID_HANDLE_VALUE)
 		{
-			Script::SetErrorLevels(true);
+			Script::SetLastErrorMaybeThrow(aResultToken, true);
 			_f_return_empty;
 		}
 		FindClose(file_search);
@@ -8949,7 +8946,7 @@ BIF_DECL(BIF_FileGetSize)
 		// do nothing
 	}
 
-	Script::SetErrorLevels(false, 0); // Indicate success.
+	g->LastError = 0;
 	_f_return(size);
 	// The below comment is obsolete in light of the switch to 64-bit integers.  But it might
 	// be good to keep for background:
@@ -11317,11 +11314,8 @@ BIF_DECL(BIF_DllCall)
 			// A check like the following is not present due to rarity of need and because if the address
 			// is zero or negative, the same result will occur as for any other invalid address:
 			// an ErrorLevel of 0xc0000005.
-			//if (temp64 <= 0)
-			//{
-			//	g_ErrorLevel->Assign(-1); // Stage 1 error: Invalid first param.
-			//	return;
-			//}
+			//if ((UINT64)temp64 < 0x10000 || (UINT64)temp64 > UINTPTR_MAX)
+			//	_f_throw(ERR_PARAM1_INVALID); // Stage 1 error: Invalid first param.
 			//// Otherwise, assume it's a valid address:
 			//	function = (void *)temp64;
 			break;
@@ -12590,16 +12584,13 @@ break_both:
 		// The following isn't done because:
 		// 1) It seems best not to abort the caller's RegEx operation just due to a study error, since the only
 		//    error likely to happen (from looking at PCRE's source code) is out-of-memory.
-		// 2) ErrorLevel is traditionally used for error/abort conditions only, not warnings.  So it seems best
-		//    not to pollute it with a warning message that indicates, "yes it worked, but here's a warning".
-		//    ErrorLevel 0 (success) seems better and more desirable.
-		// 3) Reduced code size.
+		// 2) Reduced code size.
 		//if (error_msg)
 		//{
-			//if (aResultToken) // Only when this is non-NULL does caller want ErrorLevel changed.
+			//if (aResultToken)
 			//{
 			//	sntprintf(error_buf, sizeof(error_buf), "Study error: %s", error_msg);
-			//	g_ErrorLevel->Assign(error_buf);
+			//	aResultToken->Error(error_buf);
 			//}
 			//goto error;
 		//}

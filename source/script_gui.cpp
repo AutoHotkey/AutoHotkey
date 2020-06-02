@@ -6779,7 +6779,8 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		if (do_invalidate_rect)
 			InvalidateRect(aControl.hwnd, NULL, TRUE); // Assume there's text in the control.
 
-		g_ErrorLevel->Assign(style_needed_changing && !style_change_ok);
+		if (style_needed_changing && !style_change_ok)
+			return Script::ThrowIfTrue(true);
 	} // aControl.hwnd is not NULL
 
 	return OK;

@@ -110,7 +110,7 @@ enum ResultType {FAIL = 0, OK, WARN = OK, CRITICAL_ERROR  // Some things might r
 	, EARLY_RETURN, EARLY_EXIT}; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
 
 enum ExcptModeType {EXCPTMODE_NONE = 0
-	//, EXCPTMODE_TRY = 1 // Currently unused: Try block present.  Affects SetErrorLevelOrThrow().
+	//, EXCPTMODE_TRY = 1 // Currently unused: Try block present.
 	, EXCPTMODE_CATCH = 2 // Exception will be suppressed or caught.
 	, EXCPTMODE_DELETE = 4 // Unhandled exceptions will display ERR_ABORT_DELETE vs. ERR_ABORT.
 	, EXCPTMODE_LINE_WORKAROUND = 8}; // See comments in BIF_PerformAction.
