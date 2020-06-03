@@ -5034,11 +5034,9 @@ BIF_DECL(BIF_InputBox)
 		_f_throw(_T("The maximum number of InputBoxes has been reached."));
 	}
 	_f_param_string_opt(aText, 0);
-	_f_param_string_opt_def(aTitle, 1, NULL);
+	_f_param_string_opt_def(aTitle, 1, g_script.DefaultDialogTitle());
 	_f_param_string_opt(aOptions, 2);
 	_f_param_string_opt(aDefault, 3);
-	if (!aTitle) // Omitted, not just blank.
-		aTitle = g_script.DefaultDialogTitle();
 	// Limit the size of what we were given to prevent unreasonably huge strings from
 	// possibly causing a failure in CreateDialog().  This copying method is always done because:
 	// Make a copy of all string parameters, using the stack, because they may reside in the deref buffer
@@ -5054,7 +5052,7 @@ BIF_DECL(BIF_InputBox)
 	g_InputBox[g_nInputBoxes].title = title;
 	g_InputBox[g_nInputBoxes].text = text;
 	g_InputBox[g_nInputBoxes].default_string = default_string;
-	g_InputBox[g_nInputBoxes].result_token = &aResultToken;
+	g_InputBox[g_nInputBoxes].return_string = nullptr;
 	// Set defaults:
 	g_InputBox[g_nInputBoxes].width = INPUTBOX_DEFAULT;
 	g_InputBox[g_nInputBoxes].height = INPUTBOX_DEFAULT;
@@ -5077,26 +5075,34 @@ BIF_DECL(BIF_InputBox)
 
 	DIALOG_END
 
-	// See the comments in InputBoxProc() for why ErrorLevel is set here rather than there.
-	switch(result)
+	LPTSTR value = g_InputBox[g_nInputBoxes].return_string;
+	LPTSTR reason;
+	
+	switch (result)
 	{
-	case AHK_TIMEOUT:
-		// In this case the TimerProc already set the output variable to be what the user entered.
-		g_ErrorLevel->Assign(2);
-		break;
-	case IDOK:
-	case IDCANCEL:
-		// The output variable is set to whatever the user entered, even if the user pressed
-		// the cancel button.  This allows the cancel button to specify that a different
-		// operation should be performed on the entered text:
-		g_ErrorLevel->Assign(result == IDCANCEL ? ERRORLEVEL_ERROR : ERRORLEVEL_NONE);
-		break;
-	case -1:
-		// No need to set ErrorLevel since this is a runtime error that will kill the current quasi-thread.
-		_f_throw(_T("The InputBox window could not be displayed."));
-	case FAIL:
-		_f_return_FAIL;
+	case AHK_TIMEOUT:	reason = _T("Timeout");	break;
+	case IDOK:			reason = _T("OK");		break;
+	case IDCANCEL:		reason = _T("Cancel");	break;
+	default:			reason = nullptr;		break;
 	}
+	// result can be -1 or FAIL in case of failure, but since failure of any
+	// kind is rare, all kinds are handled the same way, below.
+
+	if (reason && value)
+	{
+		ExprTokenType argt[] = { _T("Result"), reason, _T("Value"), value };
+		ExprTokenType *args[_countof(argt)] = { argt, argt+1, argt+2, argt+3 };
+		if (Object *obj = Object::Create(args, _countof(args)))
+		{
+			free(value);
+			_f_return(obj);
+		}
+	}
+
+	free(value);
+	// Since above didn't return, result is -1 (DialogBox somehow failed),
+	// result is FAIL (something failed in InputBoxProc), or value is null.
+	_f_throw(ERR_INTERNAL_CALL);
 }
 
 
@@ -5353,20 +5359,12 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		case IDOK:
 		case IDCANCEL:
 		{
-			WORD return_value = LOWORD(wParam);  // Set default, i.e. IDOK or IDCANCEL
-			if (   !(hControl = GetDlgItem(hWndDlg, IDC_INPUTEDIT))   )
-				return_value = (WORD)FAIL;
-			else
-			{
-				// The output variable is set to whatever the user entered, even if the user pressed
-				// the cancel button.  This allows the cancel button to specify that a different
-				// operation should be performed on the entered text.
-				// NOTE: ErrorLevel must not be set here because it's possible that the user has
-				// dismissed a dialog that's underneath another, active dialog, or that's currently
-				// suspended due to a timed/hotkey subroutine running on top of it.  In other words,
-				// it's only safe to set ErrorLevel when the call to DialogProc() returns in InputBox().
-				CURR_INPUTBOX.UpdateResult(hControl);
-			}
+			// The entered text is used even if the user pressed the cancel button.  This allows the
+			// cancel button to specify that a different operation should be performed on the text.
+			WORD return_value = (WORD)FAIL;
+			if (hControl = GetDlgItem(hWndDlg, IDC_INPUTEDIT))
+				if (CURR_INPUTBOX.UpdateResult(hControl))
+					return_value = LOWORD(wParam); // IDOK or IDCANCEL
 			// Since the user pressed a button to dismiss the dialog:
 			// Kill its timer for performance reasons (might degrade perf. a little since OS has
 			// to keep track of it as long as it exists).  InputBoxTimeout() already handles things
@@ -5409,10 +5407,11 @@ VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTi
 		// someone might want a short timeout just to enter something quick and let the
 		// timeout dismiss the dialog for them (i.e. so that they don't have to press enter
 		// or a button:
+		INT_PTR result = FAIL;
 		HWND hControl = GetDlgItem(hWnd, IDC_INPUTEDIT);
-		if (hControl)
-			CURR_INPUTBOX.UpdateResult(hControl);
-		EndDialog(hWnd, AHK_TIMEOUT);
+		if (hControl && CURR_INPUTBOX.UpdateResult(hControl))
+			result = AHK_TIMEOUT;
+		EndDialog(hWnd, result);
 	}
 	KillTimer(hWnd, idEvent);
 }
@@ -5423,24 +5422,13 @@ ResultType InputBoxType::UpdateResult(HWND hControl)
 {
 	int space_needed = GetWindowTextLength(hControl) + 1;
 	// Set up the result buffer.
-	if (!TokenSetResult(*result_token, NULL, space_needed - 1))
-		// It will have already displayed the error.  Displaying errors in a callback
-		// function like this one isn't that good, since the callback won't return
-		// to its caller in a timely fashion.  However, these type of errors are so
-		// rare it's not a priority to change all the called functions (and the functions
-		// they call) to skip the displaying of errors and just return FAIL instead.
-		// In addition, this callback function has been tested with a MsgBox() call
-		// inside and it doesn't seem to cause any crashes or undesirable behavior other
-		// than the fact that the InputBox window is not dismissed until the MsgBox
-		// window is dismissed:
-		return FAIL;
+	if (  !(return_string = tmalloc(space_needed))  )
+		return FAIL; // BIF_InputBox will display an error.
 	// Write to the variable:
-	size_t len = (size_t)GetWindowText(hControl, result_token->marker, space_needed);
+	size_t len = (size_t)GetWindowText(hControl, return_string, space_needed);
 	if (!len)
 		// There was no text to get or GetWindowText() failed.
-		*result_token->marker = '\0';
-	result_token->marker_length = len;
-	result_token->symbol = SYM_STRING;
+		*return_string = '\0';
 	return OK;
 }
 

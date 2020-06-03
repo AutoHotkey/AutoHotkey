@@ -283,13 +283,14 @@ struct InputBoxType
 {
 	LPTSTR title;
 	LPTSTR text;
+	LPTSTR default_string;
+	LPTSTR return_string;
 	int width;
 	int height;
 	int xpos;
 	int ypos;
 	TCHAR password_char;
 	bool set_password_char;
-	LPTSTR default_string;
 	DWORD timeout;
 	HWND hwnd;
 	HFONT font;
