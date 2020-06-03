@@ -5217,12 +5217,6 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		SendMessage(hWndDlg, WM_SETICON, ICON_SMALL, small_icon);
 		SendMessage(hWndDlg, WM_SETICON, ICON_BIG, big_icon);
 
-		// Set the font.
-		SendMessage(hControl, WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
-		SendMessage(GetDlgItem(hWndDlg, IDC_INPUTEDIT), WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
-		SendMessage(GetDlgItem(hWndDlg, IDOK), WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
-		SendMessage(GetDlgItem(hWndDlg, IDCANCEL), WM_SETFONT, (WPARAM)CURR_INPUTBOX.font, 0);
-
 		// For the timeout, use a timer ID that doesn't conflict with MsgBox's IDs (which are the
 		// integers 1 through the max allowed number of msgboxes).  Use +3 vs. +1 for a margin of safety
 		// (e.g. in case a few extra MsgBoxes can be created directly by the program and not by
@@ -5232,14 +5226,6 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 			SetTimer(hWndDlg, INPUTBOX_TIMER_ID_OFFSET + target_index, CURR_INPUTBOX.timeout, InputBoxTimeout);
 
 		return TRUE; // i.e. let the system set the keyboard focus to the first visible control.
-	}
-
-	case WM_DESTROY:
-	{
-		if (CURR_INPUTBOX.font)
-			DeleteObject(CURR_INPUTBOX.font);
-
-		return TRUE;
 	}
 
 	case WM_SIZE:
