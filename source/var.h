@@ -26,11 +26,6 @@ EXTERN_CLIPBOARD;
 #define MAX_ALLOC_SIMPLE 64  // Do not decrease this much since it is used for the sizing of some built-in variables.
 #define SMALL_STRING_LENGTH (MAX_ALLOC_SIMPLE - 1)  // The largest string that can fit in the above.
 #define DEREF_BUF_EXPAND_INCREMENT (16 * 1024) // Reduced from 32 to 16 in v1.0.46.07 to reduce the memory utilization of deeply recursive UDFs.
-#define ERRORLEVEL_NONE		0
-#define ERRORLEVEL_ERROR	1
-#define ERRORLEVEL_ERROR2	2
-#define ERRORLEVEL_ERROR_STR _T("1")
-#define ErrorLevel_Backup(bkp) g_ErrorLevel->Backup(bkp), g_ErrorLevel->Assign(ERRORLEVEL_NONE)
 
 enum AllocMethod {ALLOC_NONE, ALLOC_SIMPLE, ALLOC_MALLOC};
 enum VarTypes

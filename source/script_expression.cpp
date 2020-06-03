@@ -2385,10 +2385,8 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 		// the clipboard has only files on it, in which case those files need
 		// to be converted into plain text:
 		return CLIPBOARD_CONTAINS_ONLY_FILES ? CONDITION_TRUE : CONDITION_FALSE;
-	if (aVar_type != VAR_NORMAL || aVar == g_ErrorLevel)
+	if (aVar_type != VAR_NORMAL)
 		// Reserved vars must always be dereferenced due to their volatile nature.
-		// As of v1.0.25.12, g_ErrorLevel is always dereferenced also so that a command that sets ErrorLevel
-		// can itself use ErrorLevel as in this example: StringReplace, EndKey, ErrorLevel, EndKey:
 		return CONDITION_TRUE;
 
 	// Before doing the below, the checks above must be done to ensure it's VAR_NORMAL.  Otherwise, things like

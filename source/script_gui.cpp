@@ -6688,9 +6688,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			// These ListView "extended styles" exist entirely separate from normal extended styles.
 			// In other words, a ListView may have three types of styles: Normal, Extended, and its
 			// own set of LV Extended styles.
-			// Since LV extended styles are not supported on Win95/NT that lack comctl32.dll 4.70+ distributed
-			// with MSIE 3.x, the following should already serve to indicate that via ErrorLevel since
-			// the replies to the macros/messages will probably be zero:
 			DWORD current_lv_style = ListView_GetExtendedListViewStyle(aControl.hwnd);
 			if (current_lv_style != aOpt.listview_style)
 			{
@@ -9391,8 +9388,6 @@ bool GuiType::ControlWmNotify(GuiControlType &aControl, LPNMHDR aNmHdr, INT_PTR 
 	if (g->Priority > 0)
 		return false;
 
-	VarBkp ErrorLevel_saved;
-	ErrorLevel_Backup(ErrorLevel_saved);
 	InitNewThread(0, false, true);
 	g_script.mLastPeekTime = GetTickCount();
 	AddRef();
@@ -9402,7 +9397,7 @@ bool GuiType::ControlWmNotify(GuiControlType &aControl, LPNMHDR aNmHdr, INT_PTR 
 		, aNmHdr->code, GUI_EVENTKIND_NOTIFY, this, &aRetVal);
 
 	Release();
-	ResumeUnderlyingThread(ErrorLevel_saved);
+	ResumeUnderlyingThread();
 
 	// Consider this notification fully handled only if a non-empty value was returned.
 	return result == EARLY_RETURN;

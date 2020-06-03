@@ -1460,7 +1460,7 @@ BIF_DECL(BIF_ControlClick)
 		ScreenToClient(control_window, &click);
 	}
 
-	// This is done this late because it seems better to set an ErrorLevel of 1 (above) whenever the
+	// This is done this late because it seems better to throw an exception whenever the
 	// target window or control isn't found, or any other error condition occurs above:
 	if (aClickCount < 1)
 	{
@@ -2149,7 +2149,6 @@ BIF_DECL(BIF_StatusBarGetText)//(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 	//, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 {
 	int part = ParamIndexToOptionalInt(0, 1);
-	// Note: ErrorLevel is handled by StatusBarUtil(), below.
 	HWND target_window;
 	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1))
 		return;
@@ -2404,7 +2403,7 @@ void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
 		//	}
 		//}
 		//// Since above didn't return:
-		//return OK; // Let ErrorLevel tell the story.
+		//return OK;
 
 		// It's undocumented by MSDN, but apparently setting the Window's region to NULL restores it
 		// to proper working order:
@@ -6347,7 +6346,6 @@ BIF_DECL(BIF_Sort)
 	g_SortFunc = NULL; // Now that original has been saved above, reset to detect whether THIS sort uses a UDF.
 	g_SortFuncResult = OK;
 	ResultType result_to_return = OK;
-	DWORD ErrorLevel = -1; // Use -1 to mean "don't change/set ErrorLevel".
 
 	_f_param_string(aContents, 0);
 	_f_param_string_opt(aOptions, 1);
@@ -6405,7 +6403,6 @@ BIF_DECL(BIF_Sort)
 			break;
 		case 'U':  // Unique.
 			omit_dupes = true;
-			ErrorLevel = 0; // Set default dupe-count to 0 in case of early return.
 			break;
 		case 'Z':
 			// By setting this to true, the final item in the list, if it ends in a delimiter,
@@ -6429,7 +6426,6 @@ BIF_DECL(BIF_Sort)
 		g_SortFunc->AddRef(); // Ensure the object exists for the duration of the sorting.
 	}
 	
-	// Check for early return only after parsing options in case an option that sets ErrorLevel is present:
 	if (!*aContents) // Input is empty, nothing to sort, return empty string.
 	{
 		result_to_return = aResultToken.Return(_T(""), 0);
@@ -6687,15 +6683,12 @@ BIF_DECL(BIF_Sort)
 		if (omit_dupe_count) // Update the length to actual whenever at least one dupe was omitted.
 		{
 			aResultToken.marker_length = _tcslen(aResultToken.marker);
-			ErrorLevel = omit_dupe_count; // Override the 0 set earlier.
 		}
 	}
 	//else it is not necessary to set the length here because its length hasn't
 	// changed since it was originally set by the above call TokenSetResult.
 
 end:
-	if (ErrorLevel != -1) // A change to ErrorLevel is desired.  Compare directly to -1 due to unsigned.
-		g_ErrorLevel->Assign(ErrorLevel); // ErrorLevel is set only when dupe-mode is in effect.
 	if (!item)
 		free(item);
 	if (mem_to_free)
@@ -7861,7 +7854,7 @@ BIF_DECL(BIF_FileSelect)
 
 	if (!result) // User pressed CANCEL vs. OK to dismiss the dialog or there was a problem displaying it.
 	{
-		// Currently always returning ErrorLevel, otherwise this would tell us whether an error
+		// Currently assuming the user canceled, otherwise this would tell us whether an error
 		// occurred vs. the user canceling: if (CommDlgExtendedError())
 		_f_return_empty;
 	}
@@ -7963,8 +7956,7 @@ bool Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 	}
 
 	// The above has recursively created all parent directories of aDirSpec if needed.
-	// Now we can create aDirSpec.  Be sure to explicitly set g_ErrorLevel since it's value
-	// is now indeterminate due to action above:
+	// Now we can create aDirSpec.
 	return CreateDirectory(aDirSpec, NULL);
 }
 
@@ -8192,7 +8184,7 @@ BIF_DECL(BIF_FileRead)
 	{
 		// ReadFile() failed.  Since MSDN does not document what is in the buffer at this stage, or
 		// whether bytes_to_read contains a valid value, it seems best to abort the entire operation
-		// rather than try to return partial file contents.  ErrorLevel will indicate the failure.
+		// rather than try to return partial file contents.  An exception will indicate the failure.
 		free(output_buf);
 	}
 
@@ -8276,7 +8268,7 @@ BIF_DECL(BIF_FileAppend)
 
 		// Open the output file (if one was specified).  Unlike the input file, this is not
 		// a critical error if it fails.  We want it to be non-critical so that FileAppend
-		// commands in the body of the loop will set ErrorLevel to indicate the problem:
+		// commands in the body of the loop will throw to indicate the problem:
 		ts = new TextFile; // ts was already verified NULL via !file_was_already_open.
 		if ( !ts->Open(aFilespec, flags, codepage) )
 		{
@@ -8326,7 +8318,6 @@ ResultType Line::FileDelete(LPTSTR aFilePattern)
 	if (!StrChrAny(aFilePattern, _T("?*"))) // No wildcards; just a plain path/filename.
 	{
 		SetLastError(0); // For sanity: DeleteFile appears to set it only on failure.
-		// ErrorLevel will indicate failure if DeleteFile fails.
 		return SetLastErrorMaybeThrow(!DeleteFile(aFilePattern));
 	}
 
@@ -11098,7 +11089,7 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 		if (   !(hmodule = GetModuleHandle(dll_name))    )
 			if (   !hmodule_to_free  ||  !(hmodule = *hmodule_to_free = LoadLibrary(dll_name))   )
 			{
-				if (hmodule_to_free) // L31: BIF_DllCall wants us to set ErrorLevel.  ExpressionToPostfix passes NULL.
+				if (hmodule_to_free) // L31: BIF_DllCall wants us to set throw.  ExpressionToPostfix passes NULL.
 					g_script.ThrowRuntimeException(_T("Failed to load DLL."), _T("DllCall"), dll_name);
 				return NULL;
 			}
@@ -11117,7 +11108,7 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 		}
 	}
 
-	if (!function && hmodule_to_free) // Caller wants us to set ErrorLevel.
+	if (!function && hmodule_to_free) // Caller wants us to throw.
 	{
 		// This must be done here since only we know for certain that the dll
 		// was loaded okay (if GetModuleHandle succeeded, nothing is passed
@@ -11132,7 +11123,6 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 
 BIF_DECL(BIF_DllCall)
 // Stores a number or a SYM_STRING result in aResultToken.
-// Sets ErrorLevel to the error code appropriate to any problem that occurred.
 // Caller has set up aParam to be viewable as a left-to-right array of params rather than a stack.
 // It has also ensured that the array has exactly aParamCount items in it.
 // Author: Marcus Sonntag (Ultra)
@@ -11170,7 +11160,7 @@ BIF_DECL(BIF_DllCall)
 				: NULL; // Not a pure integer, so fall back to normal method of considering it to be path+name.
 			// A check like the following is not present due to rarity of need and because if the address
 			// is zero or negative, the same result will occur as for any other invalid address:
-			// an ErrorLevel of 0xc0000005.
+			// an exception code of 0xc0000005.
 			//if ((UINT64)temp64 < 0x10000 || (UINT64)temp64 > UINTPTR_MAX)
 			//	_f_throw(ERR_PARAM1_INVALID); // Stage 1 error: Invalid first param.
 			//// Otherwise, assume it's a valid address:
@@ -11412,7 +11402,6 @@ has_valid_return_type:
 #ifdef _WIN64
 	return_value = DynaCall(function, dyna_param, arg_count, exception_occurred);
 #endif
-	// The above has also set g_ErrorLevel appropriately.
 
 	if (*Var::sEmptyString)
 	{
@@ -12202,12 +12191,11 @@ pcret *get_compiled_regex(LPTSTR aRegEx, pcret_extra *&aExtra, int *aOptionsLeng
 // Returns the compiled RegEx, or NULL on failure.
 // This function is called by things other than built-in functions so it should be kept general-purpose.
 // Upon failure, if aResultToken!=NULL:
-//   - ErrorLevel is set to a descriptive string other than "0".
+//   - An exception is thrown with a descriptive message on failure.
 //   - *aResultToken is set up to contain an empty string.
 // Upon success, the following output parameters are set based on the options that were specified:
 //    aGetPositionsNotSubstrings
 //    aExtra
-//    (but it doesn't change ErrorLevel on success, not even if aResultToken!=NULL)
 // L14: aOptionsLength is used by callouts to adjust cb->pattern_position to be relative to beginning of actual user-specified NeedleRegEx instead of string seen by PCRE.
 {	
 	if (!pcret_callout)
@@ -12425,7 +12413,7 @@ break_both:
 				, error_offset, error_msg);
 			// Seems best to bring the error to the user's attention rather than letting it potentially
 			// escape their notice.  This sort of error should be corrected immediately, not handled
-			// within the script (such as by checking ErrorLevel).
+			// within the script (such as by try-catch).
 			aResultToken->Error(error_buf);
 		}
 		goto error;
@@ -14437,7 +14425,7 @@ BIF_DECL(BIF_Random)
 	{
 		double rand_min = arg1type != SYM_MISSING ? ParamIndexToDouble(0) : 0;
 		double rand_max = arg2type != SYM_MISSING ? ParamIndexToDouble(1) : INT_MAX;
-		// Seems best not to use ErrorLevel for this command at all, since silly cases
+		// Seems best not to raise an error for this function at all, since silly cases
 		// such as Max > Min are too rare.  Swap the two values instead.
 		if (rand_min > rand_max)
 		{
@@ -14451,7 +14439,7 @@ BIF_DECL(BIF_Random)
 	{
 		int rand_min = arg1type != SYM_MISSING ? ParamIndexToInt(0) : 0;
 		int rand_max = arg2type != SYM_MISSING ? ParamIndexToInt(1) : INT_MAX;
-		// Seems best not to use ErrorLevel for this command at all, since silly cases
+		// Seems best not to raise an error for this function at all, since silly cases
 		// such as Max > Min are too rare.  Swap the two values instead.
 		if (rand_min > rand_max)
 		{
@@ -15013,7 +15001,6 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 	RCCallbackFunc &cb = *((RCCallbackFunc*) address);
 #endif
 
-	VarBkp ErrorLevel_saved;
 	BOOL pause_after_execute;
 
 	// NOTES ABOUT INTERRUPTIONS / CRITICAL:
@@ -15038,7 +15025,6 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 		if (g_nThreads >= g_MaxThreadsTotal) // To avoid array overflow, g_MaxThreadsTotal must not be exceeded except where otherwise documented.
 			return 0;
 		// See MsgSleep() for comments about the following section.
-		ErrorLevel_Backup(ErrorLevel_saved);
 		InitNewThread(0, false, true);
 		DEBUGGER_STACK_PUSH(_T("Callback"))
 	}
@@ -15093,7 +15079,7 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 	if (cb.flags & CBF_CREATE_NEW_THREAD)
 	{
 		DEBUGGER_STACK_POP()
-		ResumeUnderlyingThread(ErrorLevel_saved);
+		ResumeUnderlyingThread();
 	}
 	else
 	{

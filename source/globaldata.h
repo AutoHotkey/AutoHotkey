@@ -19,7 +19,7 @@ GNU General Public License for more details.
 
 #include "hook.h" // For KeyHistoryItem and probably other things.
 #include "clipboard.h"  // For the global clipboard object
-#include "script.h" // For the global script object and g_ErrorLevel
+#include "script.h" // For the global script object
 #include "os_version.h" // For the global OS_Version object
 
 #include "Debugger.h"
@@ -156,7 +156,6 @@ extern bool g_HSSameLineAction;
 extern TCHAR g_EndChars[HS_MAX_END_CHARS + 1];
 
 // Global objects:
-extern Var *g_ErrorLevel;
 extern input_type *g_input;
 EXTERN_SCRIPT;
 EXTERN_CLIPBOARD;

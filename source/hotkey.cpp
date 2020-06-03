@@ -1070,7 +1070,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		if (!hk)
 			RETURN_HOTKEY_ERROR(HOTKEY_EL_NOTEXIST, ERR_NONEXISTENT_HOTKEY, aHotkeyName);
 		if (!(variant || hk->mHookAction)) // mHookAction (alt-tab) hotkeys don't need a variant that matches the current criteria.
-			// To avoid ambiguity and also allow the script to use ErrorLevel to detect whether a variant
+			// To avoid ambiguity and also allow the script to use error handling to detect whether a variant
 			// already exists, it seems best to strictly require a matching variant rather than falling back
 			// onto some "default variant" such as the global variant (if any).
 			RETURN_HOTKEY_ERROR(HOTKEY_EL_NOTEXISTVARIANT, ERR_NONEXISTENT_VARIANT, aHotkeyName);
@@ -1301,7 +1301,7 @@ Hotkey *Hotkey::AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPT
 	if (!shk[sNextID]->mConstructedOK)
 	{
 		delete shk[sNextID];  // SimpleHeap allows deletion of most recently added item.
-		return NULL;  // The constructor already displayed the error (or updated ErrorLevel).
+		return NULL;  // The constructor already displayed the error.
 	}
 	++sNextID;
 	return shk[sNextID - 1]; // Indicate success by returning the new hotkey.

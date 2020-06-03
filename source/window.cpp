@@ -755,9 +755,7 @@ BOOL CALLBACK EnumChildFind(HWND aWnd, LPARAM lParam)
 
 void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
 	, LPTSTR aTextToWaitFor, int aWaitTime, int aCheckInterval)
-// aOutputVar is allowed to be NULL if aTextToWaitFor isn't NULL or blank. aBarHwnd is allowed
-// to be NULL because in that case, the caller wants us to set ErrorLevel appropriately and also
-// make aOutputVar empty.
+// aBarHwnd is allowed to be NULL because in that case, the caller wants us to set aresultToken appropriately.
 {
 	if (!aBarHwnd)
 		_f_throw(ERR_NO_STATUSBAR);
@@ -809,7 +807,7 @@ void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
 		{
 			// Testing confirms that LOWORD(result) [the length] does not include the zero terminator.
 			if (LOWORD(result) > WINDOW_TEXT_SIZE) // Text would be too large (very unlikely but good to check for security).
-				break; // Abort the operation and leave ErrorLevel set to its default to indicate the problem.
+				break; // Abort the operation.
 			// Retrieve the bar's text:
 			if (SendMessageTimeout(aBarHwnd, SB_GETTEXT, aPartNumber, (LPARAM)remote_buf, SMTO_ABORTIFHUNG, SB_TIMEOUT, &result))
 			{

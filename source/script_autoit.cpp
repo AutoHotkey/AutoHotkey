@@ -21,7 +21,7 @@
 #include <tlhelp32.h> // For the ProcessExist routines.
 #include <wininet.h> // For Download().
 #include "script.h"
-#include "globaldata.h" // for g_ErrorLevel and probably other globals.
+#include "globaldata.h"
 #include "window.h" // For ControlExist().
 #include "application.h" // For SLEEP_WITHOUT_INTERRUPTION and MsgSleep().
 #include "script_func_impl.h"
@@ -716,7 +716,7 @@ BIF_DECL(BIF_ControlGet)
 		GetClassName(control_window, classname, _countof(classname));
 		//if (!_tcsnicmp(aControl, _T("SysListView32"), 13)) // Tried strcasestr(aControl, "ListView") to get it to work with IZArc's Delphi TListView1, but none of the modes or options worked.
 		if (tcscasestr(classname, _T("SysListView32"))) // Some users said this works with "WindowsForms10.SysListView32"
-			return ControlGetListView(aResultToken, control_window, aString); // It will also set ErrorLevel to "success" if successful.
+			return ControlGetListView(aResultToken, control_window, aString);
 		// This is done here as the special LIST sub-command rather than just being built into
 		// ControlGetText because ControlGetText already has a function for ComboBoxes: it fetches
 		// the current selection.  Although ListBox does not have such a function, it seem best

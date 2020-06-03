@@ -93,14 +93,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 	// definitely routes to the hook, perhaps only if called regularly (i.e. a single
 	// isolated call might not help much).
 
-	// This var allows us to suspend the currently-running subroutine and run any
-	// hotkey events waiting in the message queue (if there are more than one, they
-	// will be executed in sequence prior to resuming the suspended subroutine).
-	// Never static because we could be recursed (e.g. when one hotkey interrupts
-	// a hotkey that has already been interrupted) and each recursion layer should
-	// have it's own value for this:
-	VarBkp ErrorLevel_saved;
-
 	// Decided to support a true Sleep(0) for aSleepDuration == 0, as well
 	// as no delay at all if aSleepDuration < 0.  This is needed to implement
 	// "SetKeyDelay, 0" and possibly other things.  I believe a Sleep(0)
@@ -985,13 +977,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				g_script.mThisHotkeyStartTime = GetTickCount(); // Fixed for v1.0.35.10 to not happen for GUI threads.
 			}
 
-			// Also save the ErrorLevel of the subroutine that's about to be suspended.
-			ErrorLevel_Backup(ErrorLevel_saved);
 			// Make every newly launched subroutine start off with the global default values that
 			// the user set up in the auto-execute part of the script (e.g. KeyDelay, WinDelay, etc.).
-			// However, we do not set ErrorLevel to anything special here (except for GUI threads, later
-			// below) because it's more flexible that way (i.e. the user may want one hotkey subroutine
-			// to use the value of ErrorLevel set by another):
 			InitNewThread(priority, false, true);
 			global_struct &g = *::g; // ONLY AFTER above is it safe to "lock in". Reduces code size a bit (31 bytes currently) and may improve performance.  Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
 
@@ -1316,7 +1303,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 			// v1.0.37.06: Call ResumeUnderlyingThread() even if aMode==WAIT_FOR_MESSAGES; this is for
 			// maintainability and also in case the pause command has been used to unpause the idle thread.
-			ResumeUnderlyingThread(ErrorLevel_saved);
+			ResumeUnderlyingThread();
 			// DUE TO THE --g DONE BY THE LINE ABOVE, ANYTHING BETWEEN THIS POINT AND THE NEXT '}' MUST USE :;g INSTEAD OF g.
 
 			if (aMode == WAIT_FOR_MESSAGES) // This is the idle state, so we were called directly from WinMain().
@@ -1569,7 +1556,6 @@ bool CheckScriptTimers()
 	ScriptTimer *ptimer, *next_timer;
 	BOOL at_least_one_timer_launched;
 	DWORD tick_start;
-	VarBkp ErrorLevel_saved;
 
 	// Note: It seems inconsequential if a subroutine that the below loop executes causes a
 	// new timer to be added to the linked list while the loop is still enumerating the timers.
@@ -1613,7 +1599,6 @@ bool CheckScriptTimers()
 			// seems best since some timed subroutines might take a long time to run:
 			++g_nThreads; // These are the counterparts the decrements that will be done further
 			++g;          // below by ResumeUnderlyingThread().
-			ErrorLevel_Backup(ErrorLevel_saved); // Back up the current ErrorLevel for later restoration.
 			// But never kill the main timer, since the mere fact that we're here means that
 			// there's at least one enabled timed subroutine.  Though later, performance can
 			// be optimized by killing it if there's exactly one enabled subroutine, or if
@@ -1646,9 +1631,6 @@ bool CheckScriptTimers()
 		// timed subroutine that changed any of the global struct's values.  In other words, make
 		// every newly launched subroutine start off with the global default values that
 		// the user set up in the auto-execute part of the script (e.g. KeyDelay, WinDelay, etc.).
-		// However, we do not set ErrorLevel to NONE here for performance and also because it's more
-		// flexible that way (i.e. the user may want one hotkey subroutine to use the value of
-		// ErrorLevel set by another).
 		// Pass false as 3rd param below because ++g_nThreads should be done only once rather than
 		// for each Init(), and also it's not necessary to call update the tray icon since timers
 		// won't run if there is any paused thread, thus the icon can't currently be showing "paused".
@@ -1673,7 +1655,7 @@ bool CheckScriptTimers()
 
 	if (at_least_one_timer_launched) // Since at least one subroutine was run above, restore various values for our caller.
 	{
-		ResumeUnderlyingThread(ErrorLevel_saved);
+		ResumeUnderlyingThread();
 		return true;
 	}
 	return false;
@@ -1790,8 +1772,6 @@ bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awPa
 	// Since above didn't return, the launch of the new thread is now considered unavoidable.
 
 	// See MsgSleep() for comments about the following section.
-	VarBkp ErrorLevel_saved;
-	ErrorLevel_Backup(ErrorLevel_saved);
 	InitNewThread(0, false, true);
 	DEBUGGER_STACK_PUSH(_T("OnMessage")) // Push a "thread" onto the debugger's stack.  For simplicity and performance, use the function name vs something like "message 0x123".
 
@@ -1832,7 +1812,7 @@ bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awPa
 
 	DEBUGGER_STACK_POP()
 
-	ResumeUnderlyingThread(ErrorLevel_saved);
+	ResumeUnderlyingThread();
 
 	// Check that the msg monitor still exists (it may have been deleted during the thread that just finished,
 	// either by the thread itself or some other thread that interrupted it).  The following cases are possible:
@@ -1900,9 +1880,6 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 	if (aIncrementThreadCountAndUpdateTrayIcon)
 		g_script.UpdateTrayIcon(); // Must be done ONLY AFTER updating "g" (e.g, ++g) and/or g->IsPaused.
 
-	// For performance reasons, ErrorLevel isn't reset.  See similar line in WinMain() for other reasons.
-	//g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-
 	if (g_nFileDialogs)
 		// Since there is a quasi-thread with an open file dialog underneath the one
 		// we're about to launch, set the current directory to be the one the user
@@ -1955,7 +1932,7 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 
 
 
-void ResumeUnderlyingThread(VarBkp &aSavedErrorLevel)
+void ResumeUnderlyingThread()
 {
 	if (g->ThrownToken)
 		g_script.FreeExceptionToken(g->ThrownToken);
@@ -1964,8 +1941,6 @@ void ResumeUnderlyingThread(VarBkp &aSavedErrorLevel)
 	// The following section handles the switch-over to the former/underlying "g" item:
 	--g_nThreads; // Other sections below might rely on this having been done early.
 	--g;
-	g_ErrorLevel->Free();
-	g_ErrorLevel->Restore(aSavedErrorLevel);
 	// The below relies on the above having restored "g" to be the global_struct of the underlying thread.
 
 	// If the thread to be resumed was paused and has not been unpaused above, it will automatically be

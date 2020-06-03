@@ -1237,13 +1237,6 @@ ResultType Script::AutoExecSection()
 	// the commands Critical and Thread), ensure that the very first g-item is always interruptible.
 	// This avoids having to treat the first g-item as special in various places.
 
-	// It seems best to set ErrorLevel to NONE after the auto-execute part of the script is done.
-	// However, it isn't set to NONE right before launching each new thread (e.g. hotkey subroutine)
-	// because it's more flexible that way (i.e. the user may want one hotkey subroutine to use the value
-	// of ErrorLevel set by another).  This reset was also done by LoadFromFile(), but it is done again
-	// here in case the auto-execute section changed it:
-	g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-
 	// BEFORE DOING THE BELOW, "g" and "g_default" should be set up properly in case there's an OnExit
 	// function (even non-persistent scripts can have one).
 	// See Script::IsPersistent() for a list of conditions that cause the program to continue running.
@@ -1382,8 +1375,6 @@ ResultType Script::ExitApp(ExitReasons aExitReason, int aExitCode)
 
 	// Next, save the current state of the globals so that they can be restored just prior
 	// to returning to our caller:
-	VarBkp ErrorLevel_saved;
-	ErrorLevel_Backup(ErrorLevel_saved); // Save caller's errorlevel.
 	InitNewThread(0, true, true); // Uninterruptibility is handled below. Since this special thread should always run, no checking of g_MaxThreadsTotal is done before calling this.
 
 	// Turn on uninterruptibility to forbid any hotkeys, timers, or user defined menu items
@@ -1424,7 +1415,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, int aExitCode)
 
 	// Otherwise:
 	g_AllowInterruption = g_AllowInterruption_prev;  // Restore original setting.
-	ResumeUnderlyingThread(ErrorLevel_saved);
+	ResumeUnderlyingThread();
 	// If this OnExit thread is the last script thread and the script is not persistent, the above
 	// call recurses into this function.  g_OnExitIsRunning == true prevents infinite recursion
 	// in that case.  It is now safe to reset:
@@ -4299,7 +4290,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 				
 				if (   !(var = FindOrAddVar(item, var_name_length, declare_type))   )
 					return FAIL; // It already displayed the error.
-				if (var->Type() != VAR_NORMAL || !tcslicmp(item, _T("ErrorLevel"), var_name_length)) // Shouldn't be declared either way (global or local).
+				if (var->Type() != VAR_NORMAL) // Shouldn't be declared either way (global or local).
 					return ScriptError(_T("Built-in variables must not be declared."), item);
 				if (declare_type == VAR_DECLARE_GLOBAL && g->CurrentFunc) // i.e. "global x" in a function, not "var x" (which is also VAR_DECLARE_GLOBAL).
 				{
@@ -7120,8 +7111,7 @@ size_t Line::ArgIndexLength(int aArgIndex)
 	{
 		Var &var = *sArgVar[aArgIndex]; // For performance and convenience.
 		if (   var.Type() == VAR_NORMAL  // This and below ordered for short-circuit performance based on types of input expected from caller.
-			&& !g_act[mActionType].CheckOverlap // Although the ones that have CheckOverlap == true are hereby omitted from the fast method, the nature of almost all of the highbit commands is such that their performance won't be measurably affected. See ArgMustBeDereferenced() for more info.
-			&& &var != g_ErrorLevel   ) // Mostly for maintainability because the following situation is very rare: If it's g_ErrorLevel, use the deref version instead because if g_ErrorLevel is an input variable in the caller's command, and the caller changes ErrorLevel (such as to set a default) prior to calling this function, the changed/new ErrorLevel will be used rather than its original value (which is usually undesirable).
+			&& !g_act[mActionType].CheckOverlap   ) // Although the ones that have CheckOverlap == true are hereby omitted from the fast method, the nature of almost all of the highbit commands is such that their performance won't be measurably affected. See ArgMustBeDereferenced() for more info.
 			return var.Length(); // Do it the fast way.
 	}
 	// Otherwise, length isn't known due to no variable, a built-in variable, or an environment variable.
@@ -7150,8 +7140,7 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 	{
 		Var &var = *sArgVar[aArgIndex];
 		if (   var.Type() == VAR_NORMAL  // See ArgIndexLength() for comments about this line and below.
-			&& !g_act[mActionType].CheckOverlap
-			&& &var != g_ErrorLevel   )
+			&& !g_act[mActionType].CheckOverlap   )
 			return var.ToInt64();
 	}
 	// Otherwise:
@@ -7179,8 +7168,7 @@ double Line::ArgIndexToDouble(int aArgIndex)
 	{
 		Var &var = *sArgVar[aArgIndex];
 		if (   var.Type() == VAR_NORMAL  // See ArgIndexLength() for comments about this line and below.
-			&& !g_act[mActionType].CheckOverlap
-			&& &var != g_ErrorLevel   )
+			&& !g_act[mActionType].CheckOverlap   )
 			return var.ToDouble();
 	}
 	// Otherwise:
@@ -7366,7 +7354,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	// section at loadtime displays an error for any attempt to explicitly declare built-in variables as
 	// either global or local.
 	VarEntry *builtin = GetBuiltInVar(var_name);
-	if (aIsLocal && (builtin || !_tcsicmp(var_name, _T("ErrorLevel")))) // Attempt to create built-in variable as local.
+	if (aIsLocal && builtin) // Attempt to create built-in variable as local.
 	{
 		if (aIsLocal)
 		{
@@ -10420,11 +10408,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 						tfile.Close();
 					}
 					else
-						// The open of a the input file failed.  So just set result to OK since setting the
-						// ErrorLevel isn't supported with loops (since that seems like it would be an overuse
-						// of ErrorLevel, perhaps changing its value too often when the user would want
-						// it saved -- in any case, changing that now might break existing scripts).
-						result = OK;
+						// The open of a the input file failed.
+						result = g_script.ThrowWin32Exception();
 				}
 				break;
 			case ACT_LOOP_FILE:
@@ -10448,11 +10433,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				}
 				else
 					// The open of a remote key failed (we know it's remote otherwise it should have
-					// failed earlier rather than here).  So just set result to OK since no ErrorLevel
-					// setting is supported with loops (since that seems like it would be an overuse
-					// of ErrorLevel, perhaps changing its value too often when the user would want
-					// it saved.  But in any case, changing that now might break existing scripts).
-					result = OK;
+					// failed earlier rather than here).
+					result = g_script.ThrowWin32Exception();
 				break;
 			}
 
@@ -10950,8 +10932,7 @@ ResultType Line::EvaluateCondition()
 
 	int if_condition;
 
-	// The following is ordered for short-circuit performance. No need to check if it's g_ErrorLevel
-	// (like ArgMustBeDereferenced() does) because ACT_IF doesn't internally change ErrorLevel.
+	// The following is ordered for short-circuit performance.
 	// Also, RAW is safe because loadtime validation ensured there is at least 1 arg.
 	if_condition = (ARGVARRAW1 && !*ARG1 && ARGVARRAW1->Type() == VAR_NORMAL)
 		? VarToBOOL(*ARGVARRAW1) // 30% faster than having ExpandArgs() resolve ARG1 even when it's a naked variable.
@@ -10998,8 +10979,6 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	g_DeferMessagesForUnderlyingPump = true;
 
 	// See MsgSleep() for comments about the following section.
-	VarBkp ErrorLevel_saved;
-	ErrorLevel_Backup(ErrorLevel_saved);
 	// Critical seems to improve reliability, either because the thread completes faster (i.e. before the timeout) or because we check for messages less often.
 	InitNewThread(0, false, true, true);
 	ResultType result;
@@ -11042,7 +11021,7 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	g_script.mPriorHotkeyName = prior_hotkey_name[1];
 	g_script.mPriorHotkeyStartTime = prior_hotkey_time[1];
 
-	ResumeUnderlyingThread(ErrorLevel_saved);
+	ResumeUnderlyingThread();
 
 	g_DeferMessagesForUnderlyingPump = prev_defer_messages;
 
@@ -12291,9 +12270,9 @@ ResultType Line::Perform()
 
 	case ACT_SOUNDBEEP:
 		// For simplicity and support for future/greater capabilities, no range checking is done.
-		// It simply calls the function with the two DWORD values provided. It avoids setting
-		// ErrorLevel because failure is rare and also because a script might want play a beep
-		// right before displaying an error dialog that uses the previous value of ErrorLevel.
+		// It simply calls the function with the two DWORD values provided.  Error checking is
+		// omitted because failure is rare and also because a script might want play a beep
+		// right before displaying an error dialog.
 		Beep(*ARG1 ? ArgToUInt(1) : 523, *ARG2 ? ArgToUInt(2) : 150);
 		return OK;
 
@@ -12575,7 +12554,7 @@ ResultType Line::Perform()
 
 	case ACT_OUTPUTDEBUG:
 #ifndef CONFIG_DEBUGGER
-		OutputDebugString(ARG1); // It does not return a value for the purpose of setting ErrorLevel.
+		OutputDebugString(ARG1);
 #else
 		g_Debugger.OutputDebug(ARG1);
 #endif
@@ -12706,44 +12685,18 @@ BIF_DECL(BIF_PerformAction)
 		return;
 	}
 
-	// Back up ErrorLevel and reset it so we can detect whether it is used.
-	VarBkp el_bkp;
-	g_ErrorLevel->Backup(el_bkp);
-	g_ErrorLevel->MarkInitialized();
-
 
 	// PERFORM THE ACTION
 	ResultType result = line.Perform();
 
 	if (result == OK) // Can be OK, FAIL or EARLY_EXIT.
-	{
-		Var *output_var = g_ErrorLevel;
-		if (output_var->HasContents()) // Commands which don't set ErrorLevel at all shouldn't return 1.
-		{
-			aResultToken.Return(!VarToBOOL(*output_var)); // Return TRUE for success, otherwise FALSE.
-		}
-		else
-		{
-			// Return the value of the output var if there is one, or ErrorLevel if there isn't:
-			if (!output_var->MoveMemToResultToken(aResultToken))
-				output_var->ToToken(aResultToken); // It's a number, object or Var::sEmptyString.
-		}
-	}
+		aResultToken.ReturnPtr(_T(""), 0);
 	else
-	{
 		// Pass back the result code (FAIL or EARLY_EXIT).
 		aResultToken.SetExitResult(result);
-	}
 
 
 	g->ExcptMode = outer_excptmode;
-
-	// If the command did not set ErrorLevel, restore it to its previous value.
-	if (!g_ErrorLevel->HasContents())
-	{
-		g_ErrorLevel->Free(VAR_ALWAYS_FREE); // For the unlikely case that memory was allocated but not used.
-		g_ErrorLevel->Restore(el_bkp);
-	}
 }
 
 

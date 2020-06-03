@@ -2002,7 +2002,7 @@ LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd, DWORD aExtraA
 	// Even if the PID is our own, open the process anyway to simplify the code. After all, it would be
 	// pretty silly for a script to access its own ListViews via this method.
 	if (   !(aHandle = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE | aExtraAccess, FALSE, pid))   )
-		return NULL; // Let ErrorLevel tell the story.
+		return NULL;
 	// Reason for using VirtualAllocEx(): When sending LVITEM structures to a control in a remote process, the
 	// structure and its pszText buffer must both be memory inside the remote process rather than in our own.
 	mem = VirtualAllocEx(aHandle, NULL, aSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);

@@ -18,7 +18,7 @@ GNU General Public License for more details.
 // These includes should probably a superset of those in globaldata.h:
 #include "hook.h" // For KeyHistoryItem and probably other things.
 #include "clipboard.h"  // For the global clipboard object
-#include "script.h" // For the global script object and g_ErrorLevel
+#include "script.h" // For the global script object
 #include "os_version.h" // For the global OS_Version object
 
 #include "Debugger.h"
@@ -175,7 +175,6 @@ TCHAR g_EndChars[HS_MAX_END_CHARS + 1] = _T("-()[]{}:;'\"/\\,.?!\n \t");  // Hot
 // i.e. word(synonym) and/or word/synonym
 
 // Global objects:
-Var *g_ErrorLevel = NULL; // Allows us (in addition to the user) to set this var to indicate success/failure.
 input_type *g_input = NULL;
 Script g_script;
 // This made global for performance reasons (determining size of clipboard data then

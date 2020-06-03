@@ -897,7 +897,7 @@ inline void global_maximize_interruptibility(global_struct &g)
 inline void global_clear_state(global_struct &g)
 // Reset those values that represent the condition or state created by previously executed commands
 // but that shouldn't be retained for future threads (e.g. SetTitleMatchMode should be retained for
-// future threads if it occurs in the auto-execute section, but ErrorLevel shouldn't).
+// future threads if it occurs in the auto-execute section, but A_ThisFunc shouldn't).
 {
 	g.CurrentFunc = NULL;
 	g.CurrentFuncGosub = NULL;

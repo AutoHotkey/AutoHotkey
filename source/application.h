@@ -81,8 +81,7 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 
 void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThreadCountAndUpdateTrayIcon
 	, bool aIsCritical = false);
-struct VarBkp;
-void ResumeUnderlyingThread(VarBkp &aSavedErrorLevel);
+void ResumeUnderlyingThread();
 BOOL IsInterruptible();
 
 VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
