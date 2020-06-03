@@ -77,6 +77,9 @@ HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr);
 struct HotkeyVariant
 {
 	LabelRef mJumpToLabel;
+	LabelPtr mOriginalCallback; // This is the callback set at load time. 
+								 // Keep it to allow restoring it via hotkey() function if changed
+								 // during load time (also via hotkey() function).
 	HotkeyCriterion *mHotCriterion;
 	HotkeyVariant *mNextVariant;
 	DWORD mRunAgainTime;
@@ -225,7 +228,7 @@ public:
 		, UCHAR &aNoSuppress, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
 	static modLR_type HotkeyRequiresModLR(HotkeyIDType aHotkeyIDwithoutflags, modLR_type aModLR);
 	static void TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown);
-	void PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant);
+	void PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant, LPTSTR aName);
 	static void ManifestAllHotkeysHotstringsHooks();
 	static void RequireHook(HookType aWhichHook) {sWhichHookAlways |= aWhichHook;}
 	static void MaybeUninstallHook();

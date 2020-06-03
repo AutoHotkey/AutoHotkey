@@ -1311,7 +1311,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				g.hWndLastUsed = criterion_found_hwnd; // v1.0.42. Even if the window is invalid for some reason, IsWindow() and such are called whenever the script accesses it (GetValidLastUsedWindow()).
 				g.SendLevel = variant->mInputLevel;
 				g.HotCriterion = variant->mHotCriterion; // v2: Let the Hotkey command use the criterion of this hotkey variant by default.
-				hk->PerformInNewThreadMadeByCaller(*variant);
+				hk->PerformInNewThreadMadeByCaller(*variant, hk->mName);
+				
 			}
 
 			// v1.0.37.06: Call ResumeUnderlyingThread() even if aMode==WAIT_FOR_MESSAGES; this is for

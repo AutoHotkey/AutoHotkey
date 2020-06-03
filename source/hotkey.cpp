@@ -867,7 +867,7 @@ void Hotkey::TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown)
 
 
 
-void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
+void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant, LPTSTR aName)
 // Caller is responsible for having called PerformIsAllowed() before calling us.
 // Caller must have already created a new thread for us, and must close the thread when we return.
 {
@@ -946,7 +946,10 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 
 	// LAUNCH HOTKEY SUBROUTINE:
 	++aVariant.mExistingThreads;  // This is the thread count for this particular hotkey only.
-	ResultType result = aVariant.mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName);
+
+	ExprTokenType aParams = { aName };
+	ResultType result = aVariant.mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &aParams, 1);
+	
 	--aVariant.mExistingThreads;
 
 	if (result == FAIL)
@@ -1061,8 +1064,8 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		// Currently using Func* cast rather than ValidateFunctor() because of the need to
 		// support UseErrorLevel (which should be removed when the Error model is revised).
 		Func *func = LabelPtr(aJumpToLabel).ToFunc();
-		if (func && func->mMinParams > 0)
-			RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, ERR_HOTKEY_FUNC_PARAMS, func->mName);
+		if (func && (func->mMinParams > 1 || (func->mParamCount == 0 && !func->mIsVariadic)))
+			RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, func->mParamCount == 0 ? ERR_PARAM_REQUIRED : ERR_HOTKEY_FUNC_PARAMS, func->mName);
 	}
 
 	bool suffix_has_tilde, hook_is_mandatory;
@@ -1619,6 +1622,7 @@ HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde)
 	// aJumpToLabel can be NULL for dynamic hotkeys that are hook actions such as Alt-Tab.
 	// So for maintainability and to help avg-case performance in loops, provide a non-NULL placeholder:
 	v.mJumpToLabel = aJumpToLabel ? aJumpToLabel : g_script.mPlaceholderLabel;
+	v.mOriginalCallback = g_script.mLastHotFunc;
 	v.mMaxThreads = g_MaxThreadsPerHotkey;    // The values of these can vary during load-time.
 	v.mMaxThreadsBuffer = g_MaxThreadsBuffer; //
 	v.mInputLevel = g_InputLevel;
@@ -2385,8 +2389,11 @@ ResultType Hotstring::PerformInNewThreadMadeByCaller()
 	// is still timely/accurate -- it seems best to set to "no modifiers":
 	g_script.mThisHotkeyModifiersLR = 0;
 	++mExistingThreads;  // This is the thread count for this particular hotstring only.
+	
 	ResultType result;
-	result = mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName);
+	ExprTokenType aParams = { mName };
+	result = mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &aParams, 1);
+	
 	--mExistingThreads;
 	return result ? OK : FAIL;	// Return OK on all non-failure results.
 }

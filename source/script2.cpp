@@ -4948,7 +4948,49 @@ LPTSTR Script::DefaultDialogTitle()
 	return (mFileName && *mFileName) ? mFileName : T_AHK_NAME_VERSION;
 }
 
+UserFunc* Script::CreateHotFunc(Var* aFuncGlobalVar[], int aFuncCount)
+{
+	// Should only be called during load time.
+	// Creates a new function for hotkeys and hotstrings.
+	// Caller should abort loading if this function returns nullptr.
+	
+	if (mUnusedHotFunc)
+	{
+		auto tmp = mLastHotFunc = g->CurrentFunc = mUnusedHotFunc;
+		mUnusedHotFunc = nullptr;
+		mHotFuncs.mCount++;			// DefineFunc "removed" this func previously.
+		ASSERT(mHotFuncs.mItem[mHotFuncs.mCount - 1] == tmp);
+		return tmp;
+	}
+	
+	static LPCTSTR sName = _T("<Hotkey>");
+	auto func = new UserFunc(sName);
+	
+	if (!func)
+	{
+		ScriptError(ERR_OUTOFMEM);
+		return nullptr;
+	}
+	func->mGlobalVar = aFuncGlobalVar;
+	mGlobalVarCountMax = aFuncCount;
+	
+	g->CurrentFunc = func; // Must do this before calling FindOrAddVar
 
+	// Add one parameter to hold the name of the hotkey/hotstring when triggered:
+	if (	!(func->mParam = (FuncParam*)SimpleHeap::Malloc(sizeof FuncParam))
+		||	!(func->mParam[0].var = FindOrAddVar(_T("ThisHotkey"), 10, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM)) )
+		return nullptr;
+
+	func->mParam[0].default_type = PARAM_DEFAULT_NONE;
+	func->mParam[0].is_byref = false;
+	func->mParamCount = 1;
+	func->mMinParams = 1;
+	func->mIsFuncExpression = false;
+	
+	mLastHotFunc = func;
+	mHotFuncs.Insert(func, mHotFuncs.mCount);
+	return func;
+}
 
 ResultType MsgBoxParseOptions(LPTSTR aOptions, int &aType, double &aTimeout, HWND &aOwner)
 {
@@ -14815,6 +14857,25 @@ BIF_DECL(BIF_Hotkey)
 				functor->AddRef();
 			else if (  !(hook_action = Hotkey::ConvertAltTab(aParam1, true))  )
 				functor = StringToLabelOrFunctor(aParam1);
+			if (!functor)
+			{
+				// Search for a match in the hotkey variants' "original callbacks".
+				// I.e., find the function implicitly defined by "x::action".
+				for (int i = 0; i < Hotkey::sHotkeyCount; ++i)
+				{
+					if (_tcscmp(Hotkey::shk[i]->mName, aParam0))
+						continue;
+					
+					for (HotkeyVariant* v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
+						if (v->mHotCriterion == g->HotCriterion)
+						{
+							if (functor = v->mOriginalCallback.ToFunc())
+								functor->AddRef(); // To counter the below release.
+							goto break_twice;
+						}
+				}
+			break_twice:;
+			}
 		}
 		result = Hotkey::Dynamic(aParam0, aParam1, aParam2, functor, hook_action);
 	}
