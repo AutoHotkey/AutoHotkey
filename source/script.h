@@ -293,7 +293,6 @@ struct InputBoxType
 	bool set_password_char;
 	DWORD timeout;
 	HWND hwnd;
-	ResultToken *result_token;
 
 	ResultType UpdateResult(HWND hControl);
 };

@@ -598,7 +598,6 @@ enum enum_act {
 #define AHK_TIMEOUT -2
 // And these to prevent mutual dependency problem between window.h and globaldata.h:
 #define MAX_MSGBOXES 7 // Probably best not to change this because it's used by OurTimers to set the timer IDs, which should probably be kept the same for backward compatibility.
-#define MAX_INPUTBOXES 4
 #define MAX_MSG_MONITORS 500
 
 // IMPORTANT: Before ever changing the below, note that it will impact the IDs of menu items created

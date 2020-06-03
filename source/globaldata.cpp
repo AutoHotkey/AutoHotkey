@@ -134,10 +134,8 @@ static int GetScreenDPI()
 int g_ScreenDPI = GetScreenDPI();
 MenuTypeType g_MenuIsVisible = MENU_TYPE_NONE;
 int g_nMessageBoxes = 0;
-int g_nInputBoxes = 0;
 int g_nFileDialogs = 0;
 int g_nFolderDialogs = 0;
-InputBoxType g_InputBox[MAX_INPUTBOXES];
 GuiType *g_firstGui = NULL, *g_lastGui = NULL;
 HWND g_hWndToolTip[MAX_TOOLTIPS] = {NULL};
 MsgMonitorList g_MsgMonitor;

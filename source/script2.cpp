@@ -5028,40 +5028,25 @@ ResultType InputBoxParseOptions(LPTSTR aOptions, InputBoxType &aInputBox)
 
 BIF_DECL(BIF_InputBox)
 {
-	if (g_nInputBoxes >= MAX_INPUTBOXES)
-	{
-		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
-		_f_throw(_T("The maximum number of InputBoxes has been reached."));
-	}
 	_f_param_string_opt(aText, 0);
 	_f_param_string_opt_def(aTitle, 1, g_script.DefaultDialogTitle());
 	_f_param_string_opt(aOptions, 2);
 	_f_param_string_opt(aDefault, 3);
-	// Limit the size of what we were given to prevent unreasonably huge strings from
-	// possibly causing a failure in CreateDialog().  This copying method is always done because:
-	// Make a copy of all string parameters, using the stack, because they may reside in the deref buffer
-	// and other commands (such as those in timed/hotkey subroutines) maybe overwrite the deref buffer.
-	// This is not strictly necessary since InputBoxProc() is called immediately and makes instantaneous
-	// and one-time use of these strings (not needing them after that), but it feels safer:
-	TCHAR title[DIALOG_TITLE_SIZE];
-	TCHAR text[4096];  // Size was increased in light of the fact that dialog can be made larger now.
-	TCHAR default_string[4096];
-	tcslcpy(title, aTitle, _countof(title));
-	tcslcpy(text, aText, _countof(text));
-	tcslcpy(default_string, aDefault, _countof(default_string));
-	g_InputBox[g_nInputBoxes].title = title;
-	g_InputBox[g_nInputBoxes].text = text;
-	g_InputBox[g_nInputBoxes].default_string = default_string;
-	g_InputBox[g_nInputBoxes].return_string = nullptr;
+
+	InputBoxType inputbox;
+	inputbox.title = aTitle;
+	inputbox.text = aText;
+	inputbox.default_string = aDefault;
+	inputbox.return_string = nullptr;
 	// Set defaults:
-	g_InputBox[g_nInputBoxes].width = INPUTBOX_DEFAULT;
-	g_InputBox[g_nInputBoxes].height = INPUTBOX_DEFAULT;
-	g_InputBox[g_nInputBoxes].xpos = INPUTBOX_DEFAULT;
-	g_InputBox[g_nInputBoxes].ypos = INPUTBOX_DEFAULT;
-	g_InputBox[g_nInputBoxes].password_char = '\0';
-	g_InputBox[g_nInputBoxes].timeout = 0;
+	inputbox.width = INPUTBOX_DEFAULT;
+	inputbox.height = INPUTBOX_DEFAULT;
+	inputbox.xpos = INPUTBOX_DEFAULT;
+	inputbox.ypos = INPUTBOX_DEFAULT;
+	inputbox.password_char = '\0';
+	inputbox.timeout = 0;
 	// Parse options and override defaults:
-	if (!InputBoxParseOptions(aOptions, g_InputBox[g_nInputBoxes]))
+	if (!InputBoxParseOptions(aOptions, inputbox))
 		_f_return_FAIL; // It already displayed the error.
 
 	// At this point, we know a dialog will be displayed.  See macro's comments for details:
@@ -5069,13 +5054,12 @@ BIF_DECL(BIF_InputBox)
 
 	// Specify NULL as the owner window since we want to be able to have the main window in the foreground even
 	// if there are InputBox windows.  Update: A GUI window can now be the parent if thread has that setting.
-	++g_nInputBoxes;
-	INT_PTR result = DialogBox(g_hInstance, MAKEINTRESOURCE(IDD_INPUTBOX), THREAD_DIALOG_OWNER, InputBoxProc);
-	--g_nInputBoxes;
+	INT_PTR result = DialogBoxParam(g_hInstance, MAKEINTRESOURCE(IDD_INPUTBOX), THREAD_DIALOG_OWNER
+		, InputBoxProc, (LPARAM)&inputbox);
 
 	DIALOG_END
 
-	LPTSTR value = g_InputBox[g_nInputBoxes].return_string;
+	LPTSTR value = inputbox.return_string;
 	LPTSTR reason;
 	
 	switch (result)
@@ -5121,12 +5105,6 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		return (BOOL)msg_reply; // MsgMonitor has returned "true", indicating that this message should be omitted from further processing.
 	g->CalledByIsDialogMessageOrDispatch = false; // v1.0.40.01.
 
-	HWND hControl;
-
-	// Set default array index for g_InputBox[].  Caller has ensured that g_nInputBoxes > 0:
-	int target_index = g_nInputBoxes - 1;
-	#define CURR_INPUTBOX g_InputBox[target_index]
-
 	switch(uMsg)
 	{
 	case WM_INITDIALOG:
@@ -5136,14 +5114,15 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		// anything that might take a relatively long time (e.g. SetForegroundWindowEx()):
 		CLOSE_CLIPBOARD_IF_OPEN;
 
+		SetWindowLongPtr(hWndDlg, DWLP_USER, lParam); // Store it for later use.
+		auto &CURR_INPUTBOX = *(InputBoxType *)lParam;
 		CURR_INPUTBOX.hwnd = hWndDlg;
 
 		if (CURR_INPUTBOX.password_char)
 			SendDlgItemMessage(hWndDlg, IDC_INPUTEDIT, EM_SETPASSWORDCHAR, CURR_INPUTBOX.password_char, 0);
 
 		SetWindowText(hWndDlg, CURR_INPUTBOX.title);
-		if (hControl = GetDlgItem(hWndDlg, IDC_INPUTPROMPT))
-			SetWindowText(hControl, CURR_INPUTBOX.text);
+		SetDlgItemText(hWndDlg, IDC_INPUTPROMPT, CURR_INPUTBOX.text);
 
 		// Use the system's current language for the button names:
 		typedef LPCWSTR(WINAPI*pfnUser)(int);
@@ -5151,8 +5130,8 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		pfnUser mbString = (pfnUser)GetProcAddress(hMod, "MB_GetString");
 		if (mbString)
 		{
-			SetWindowTextW(GetDlgItem(hWndDlg, IDOK), mbString(0));
-			SetWindowTextW(GetDlgItem(hWndDlg, IDCANCEL), mbString(1));
+			SetDlgItemTextW(hWndDlg, IDOK, mbString(0));
+			SetDlgItemTextW(hWndDlg, IDCANCEL, mbString(1));
 		}
 
 		// Don't do this check; instead allow the MoveWindow() to occur unconditionally so that
@@ -5217,13 +5196,10 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 		SendMessage(hWndDlg, WM_SETICON, ICON_SMALL, small_icon);
 		SendMessage(hWndDlg, WM_SETICON, ICON_BIG, big_icon);
 
-		// For the timeout, use a timer ID that doesn't conflict with MsgBox's IDs (which are the
-		// integers 1 through the max allowed number of msgboxes).  Use +3 vs. +1 for a margin of safety
-		// (e.g. in case a few extra MsgBoxes can be created directly by the program and not by
-		// the script):
-		#define INPUTBOX_TIMER_ID_OFFSET (MAX_MSGBOXES + 3)
+		// Regarding the timer ID: https://devblogs.microsoft.com/oldnewthing/20150924-00/?p=91521
+		// Basically, timer IDs need only be non-zero and unique to the given HWND.
 		if (CURR_INPUTBOX.timeout)
-			SetTimer(hWndDlg, INPUTBOX_TIMER_ID_OFFSET + target_index, CURR_INPUTBOX.timeout, InputBoxTimeout);
+			SetTimer(hWndDlg, (UINT_PTR)&CURR_INPUTBOX, CURR_INPUTBOX.timeout, InputBoxTimeout);
 
 		return TRUE; // i.e. let the system set the keyboard focus to the first visible control.
 	}
@@ -5328,35 +5304,24 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 	}
 
 	case WM_COMMAND:
-		// In this case, don't use (g_nInputBoxes - 1) as the index because it might
-		// not correspond to the g_InputBox[] array element that belongs to hWndDlg.
-		// This is because more than one input box can be on the screen at the same time.
-		// If the user choses to work with on underneath instead of the most recent one,
-		// we would be called with an hWndDlg whose index is less than the most recent
-		// one's index (g_nInputBoxes - 1).  Instead, search the array for a match.
-		// Work backward because the most recent one(s) are more likely to be a match:
-		for (; target_index > -1; --target_index)
-			if (g_InputBox[target_index].hwnd == hWndDlg)
-				break;
-		if (target_index < 0)  // Should never happen if things are designed right.
-			return FALSE;
 		switch (LOWORD(wParam))
 		{
 		case IDOK:
 		case IDCANCEL:
 		{
+			auto &CURR_INPUTBOX = *(InputBoxType *)GetWindowLongPtr(hWndDlg, DWLP_USER);
 			// The entered text is used even if the user pressed the cancel button.  This allows the
 			// cancel button to specify that a different operation should be performed on the text.
 			WORD return_value = (WORD)FAIL;
-			if (hControl = GetDlgItem(hWndDlg, IDC_INPUTEDIT))
-				if (CURR_INPUTBOX.UpdateResult(hControl))
-					return_value = LOWORD(wParam); // IDOK or IDCANCEL
+			HWND hControl = GetDlgItem(hWndDlg, IDC_INPUTEDIT);
+			if (hControl && CURR_INPUTBOX.UpdateResult(hControl))
+				return_value = LOWORD(wParam); // IDOK or IDCANCEL
 			// Since the user pressed a button to dismiss the dialog:
-			// Kill its timer for performance reasons (might degrade perf. a little since OS has
-			// to keep track of it as long as it exists).  InputBoxTimeout() already handles things
-			// right even if we don't do this:
+			// Timers belonging to a window are destroyed automatically when the window is destroyed,
+			// but it seems prudent to clean up; also, EndDialog may fail, perhaps as a result of the
+			// script interfering via OnMessage.
 			if (CURR_INPUTBOX.timeout) // It has a timer.
-				KillTimer(hWndDlg, INPUTBOX_TIMER_ID_OFFSET + target_index);
+				KillTimer(hWndDlg, (UINT_PTR)&CURR_INPUTBOX);
 			EndDialog(hWndDlg, return_value);
 			return TRUE;
 		} // case
@@ -5385,9 +5350,7 @@ VOID CALLBACK InputBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTi
 	// so case #1 is obsolete (but kept here for background/insight).
 	if (IsWindow(hWnd))
 	{
-		// This is the element in the array that corresponds to the InputBox for which
-		// this function has just been called.
-		INT_PTR target_index = idEvent - INPUTBOX_TIMER_ID_OFFSET;
+		auto &CURR_INPUTBOX = *(InputBoxType *)idEvent;
 		// Even though the dialog has timed out, we still want to write anything the user
 		// had a chance to enter into the output var.  This is because it's conceivable that
 		// someone might want a short timeout just to enter something quick and let the
