@@ -114,9 +114,9 @@ bool g_SuspendExempt = false;
 SendLevelType g_InputLevel = 0;
 HotkeyCriterion *g_FirstHotCriterion = NULL, *g_LastHotCriterion = NULL;
 
-// Global variables for #if (expression).
-UINT g_HotExprTimeout = 1000; // Timeout for #if (expression) evaluation, in milliseconds.
-HWND g_HotExprLFW = NULL; // Last Found Window of last #if expression.
+// Global variables for #HotIf (expression).
+UINT g_HotExprTimeout = 1000; // Timeout for #HotIf (expression) evaluation, in milliseconds.
+HWND g_HotExprLFW = NULL; // Last Found Window of last #HotIf expression.
 HotkeyCriterion *g_FirstHotExpr = NULL, *g_LastHotExpr = NULL;
 
 static int GetScreenDPI()

@@ -3650,8 +3650,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		return CONDITION_TRUE;
 	}
 
-	// L4: Handle #if (expression) directive.
-	if (IS_DIRECTIVE_MATCH(_T("#If")))
+	// L4: Handle #HotIf (expression) directive.
+	if (IS_DIRECTIVE_MATCH(_T("#HotIf")))
 	{
 		if (!parameter) // The omission of the parameter indicates that any existing criteria should be turned off.
 		{
@@ -3659,7 +3659,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			return CONDITION_TRUE;
 		}
 
-		// Check for a duplicate #If expression;
+		// Check for a duplicate #HotIf expression;
 		//  - Prevents duplicate hotkeys under separate copies of the same expression.
 		//  - Hotkey,If would only be able to select the first expression with the given source code.
 		//  - Conserves memory.
@@ -3689,8 +3689,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		return CONDITION_TRUE;
 	}
 
-	// L4: Allow #if timeout to be adjusted.
-	if (IS_DIRECTIVE_MATCH(_T("#IfTimeout")))
+	// L4: Allow #HotIf timeout to be adjusted.
+	if (IS_DIRECTIVE_MATCH(_T("#HotIfTimeout")))
 	{
 		if (parameter)
 			g_HotExprTimeout = ATOU(parameter);
@@ -7756,7 +7756,7 @@ ResultType Script::PreparseStaticLines(Line *aStartingLine)
 			mLastStaticLine = line;
 			break;
 		case ACT_HOTKEY_IF:
-			if (line->mArg[0].is_expression) // May be false for optimized cases like "#If somevar".
+			if (line->mArg[0].is_expression) // May be false for optimized cases like "#HotIf somevar".
 				PreparseHotkeyIfExpr(line);
 			// It's already been added to the hot-expr list, so just remove it from the script (below).
 			break;
@@ -9798,7 +9798,7 @@ end_of_infix_to_postfix:
 		&& (mActionType < ACT_FOR || mActionType > ACT_UNTIL) // It's not WHILE or UNTIL, which currently perform better as expressions, or FOR, which performs the same but currently expects aResultToken to always be set.
 		&& (mActionType != ACT_SWITCH && mActionType != ACT_CASE) // It's not SWITCH or CASE, which require a proper postfix expression.
 		&& (mActionType != ACT_THROW) // Exclude THROW to simplify variable handling (ensures vars are always dereferenced).
-		&& (mActionType != ACT_HOTKEY_IF) // #If requires the expression text not be modified.
+		&& (mActionType != ACT_HOTKEY_IF) // #HotIf requires the expression text not be modified.
 		&& ((only_symbol != SYM_VAR && only_symbol != SYM_DYNAMIC) || mActionType != ACT_RETURN) // "return var" is kept as an expression for correct handling of built-ins, locals (see "ToReturnValue") and ByRef.
 		)
 	{
