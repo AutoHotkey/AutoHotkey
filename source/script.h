@@ -631,7 +631,11 @@ enum BuiltInFunctionID {
 	FID_PostMessage = 0, FID_SendMessage,
 	FID_RegRead = 0, FID_RegWrite, FID_RegDelete, FID_RegDeleteKey,
 	FID_SoundGetVolume = 0, FID_SoundGetMute, FID_SoundGetName, FID_SoundGetInterface, FID_SoundSetVolume, FID_SoundSetMute,
-	FID_RunWait = 0, FID_ClipWait, FID_KeyWait, FID_WinWait, FID_WinWaitClose, FID_WinWaitActive, FID_WinWaitNotActive
+	FID_RunWait = 0, FID_ClipWait, FID_KeyWait, FID_WinWait, FID_WinWaitClose, FID_WinWaitActive, FID_WinWaitNotActive,
+	// Hotkey/HotIf/...
+	FID_HotIfWinActive = HOT_IF_ACTIVE, FID_HotIfWinNotActive = HOT_IF_NOT_ACTIVE,
+		FID_HotIfWinExist = HOT_IF_EXIST, FID_HotIfWinNotExist = HOT_IF_NOT_EXIST,
+		FID_Hotkey, FID_HotIf
 };
 
 

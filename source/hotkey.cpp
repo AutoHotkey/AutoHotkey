@@ -974,29 +974,10 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 	}
 }
 
-
-
-ResultType Hotkey::IfWin(LPTSTR aIfWin, LPTSTR aWinTitle, LPTSTR aWinText)
-{
-	HotCriterionType hot_criterion;
-	bool invert = !_tcsnicmp(aIfWin + 5, _T("Not"), 3);
-	if (!_tcsicmp(aIfWin + (invert ? 8 : 5), _T("Active"))) // It matches #IfWin[Not]Active.
-		hot_criterion = invert ? HOT_IF_NOT_ACTIVE : HOT_IF_ACTIVE;
-	else if (!_tcsicmp(aIfWin + (invert ? 8 : 5), _T("Exist")))
-		hot_criterion = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
-	else // It starts with IfWin but isn't Active or Exist: Don't alter the current criterion.
-		return g_script.ScriptError(ERR_PARAM1_INVALID);
-	if (!SetHotkeyCriterion(hot_criterion, aWinTitle, aWinText)) // Currently, it only fails upon out-of-memory.
-		return FAIL;
-	return OK;
-}
-
-
-
 ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultToken)
-// Hotkey "If"  ; Set null criterion.
-// Hotkey "If", "Exact-expression-text"
-// Hotkey "If", FunctionObject
+// HotIf ; Set null criterion.
+// HotIf "Exact-expression-text"
+// HotIf FunctionObject
 {
 	if (aExprObj)
 	{
@@ -1037,8 +1018,6 @@ ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultT
 	}
 	return OK;
 }
-
-
 
 ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions
 	, IObject *aJumpToLabel, HookActionType aHookAction)
