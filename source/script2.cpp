@@ -13615,6 +13615,8 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 		int max_chars = int(max_bytes >> int(encoding == CP_UTF16));
 		if (length > max_chars)
 			_f_throw(ERR_INVALID_LENGTH);
+		if (source_length > max_chars)
+			_f_throw(ERR_PARAM2_INVALID);
 		if (length == -1)
 		{
 			length = max_chars;
