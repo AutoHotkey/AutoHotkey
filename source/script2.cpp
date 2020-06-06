@@ -3221,37 +3221,30 @@ BIF_DECL(BIF_MonitorGet)
 	case FID_MonitorGetWorkArea:
 	// Params: N, Left, Top, Right, Bottom
 	{
-		mip.monitor_number_to_find = aParamCount ? (int)TokenToInt64(*aParam[0]) : 0;  // If this returns 0, it will default to the primary monitor.
+		mip.monitor_number_to_find = ParamIndexToOptionalInt(0, 0);  // If this returns 0, it will default to the primary monitor.
 		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
 		if (!mip.count || (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count))
-		{
-			// With the exception of the caller having specified a non-existent monitor number, all of
-			// the ways the above can happen are probably impossible in practice.  Make all the variables
-			// blank vs. zero (and return zero) to indicate the problem.
-			for (int i = 1; i <= 4; ++i)
-				if (i < aParamCount && aParam[i]->symbol == SYM_VAR)
-					aParam[i]->var->Assign();
-			_f_return_b(FALSE);
-		}
+			break;
 		// Otherwise:
 		LONG *monitor_rect = (LONG *)((cmd == FID_MonitorGetWorkArea) ? &mip.monitor_info_ex.rcWork : &mip.monitor_info_ex.rcMonitor);
 		for (int i = 1; i <= 4; ++i) // Params: N (0), Left (1), Top, Right, Bottom.
 			if (i < aParamCount && aParam[i]->symbol == SYM_VAR)
 				aParam[i]->var->Assign(monitor_rect[i-1]);
-		_f_return_b(TRUE);
+		_f_return_i(mip.count); // Return the monitor number.
 	}
 
 	case FID_MonitorGetName: // Param: N
-		mip.monitor_number_to_find = aParamCount ? (int)TokenToInt64(*aParam[0]) : 0;  // If this returns 0, it will default to the primary monitor.
+		mip.monitor_number_to_find = ParamIndexToOptionalInt(0, 0);  // If this returns 0, it will default to the primary monitor.
 		EnumDisplayMonitors(NULL, NULL, EnumMonitorProc, (LPARAM)&mip);
 		if (!mip.count || (mip.monitor_number_to_find && mip.monitor_number_to_find != mip.count))
-			// With the exception of the caller having specified a non-existent monitor number, all of
-			// the ways the above can happen are probably impossible in practice.  Make the return value
-			// blank to indicate the problem:
-			_f_return_empty;
-		else
-			_f_return(mip.monitor_info_ex.szDevice);
+			break;
+		_f_return(mip.monitor_info_ex.szDevice);
 	} // switch()
+	
+	// Since above didn't return, an error was detected.
+	if (!mip.count) // Might be virtually impossible.
+		_f_throw_win32();
+	_f_throw(ERR_PARAM1_INVALID);
 }
 
 
