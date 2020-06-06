@@ -976,7 +976,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 
 
 
-ResultType Hotkey::IfWin(LPTSTR aIfWin, LPTSTR aWinTitle, LPTSTR aWinText)
+ResultType Hotkey::IfWin(LPTSTR aIfWin, LPTSTR aWinTitle, LPTSTR aWinText, ResultToken &aResultToken)
 {
 	HotCriterionType hot_criterion;
 	bool invert = !_tcsnicmp(aIfWin + 5, _T("Not"), 3);
@@ -985,9 +985,9 @@ ResultType Hotkey::IfWin(LPTSTR aIfWin, LPTSTR aWinTitle, LPTSTR aWinText)
 	else if (!_tcsicmp(aIfWin + (invert ? 8 : 5), _T("Exist")))
 		hot_criterion = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;
 	else // It starts with IfWin but isn't Active or Exist: Don't alter the current criterion.
-		return g_script.ScriptError(ERR_PARAM1_INVALID);
+		return aResultToken.Error(ERR_PARAM1_INVALID);
 	if (!SetHotkeyCriterion(hot_criterion, aWinTitle, aWinText)) // Currently, it only fails upon out-of-memory.
-		return FAIL;
+		return aResultToken.SetExitResult(FAIL);
 	return OK;
 }
 
@@ -1029,7 +1029,7 @@ ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultT
 	{
 		HotkeyCriterion *cp = FindHotkeyIfExpr(aExpr);
 		if (!cp) // Expression not found.
-			return g_script.ScriptError(ERR_HOTKEY_IF_EXPR);
+			return aResultToken.Error(ERR_HOTKEY_IF_EXPR);
 		g->HotCriterion = cp;
 	}
 	return OK;

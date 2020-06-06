@@ -1210,7 +1210,7 @@ BIF_DECL(BIF_FileOpen)
 	if (aResultToken.object)
 		aResultToken.symbol = SYM_OBJECT;
 	else
-		aResultToken.SetExitResult(g_script.ThrowWin32Exception(GetLastError()));
+		aResultToken.Win32Error();
 	return;
 
 invalid_param:

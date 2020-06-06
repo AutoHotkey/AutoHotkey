@@ -33,7 +33,7 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 	// Exceptions are thrown by Invoke for too few/many parameters, but not for non-existent method.
 	// Check for that here, with the exception that objects are permitted to lack a __Delete method.
 	if (result == INVOKE_NOT_HANDLED && !(aExtraFlags & IF_BYPASS_METAFUNC))
-		result = g_script.ThrowRuntimeException(ERR_UNKNOWN_METHOD, NULL, aMethodName ? aMethodName : _T("Call"));
+		result = g_script.RuntimeError(ERR_UNKNOWN_METHOD, aMethodName ? aMethodName : _T("Call"));
 
 	if (result != EARLY_EXIT && result != FAIL)
 	{
@@ -652,7 +652,8 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		{
 			// Before releasing obj_for_recursion, make a copy of the string in case it points
 			// to memory contained by obj_for_recursion, which might be deleted via Release().
-			TokenSetResult(aResultToken, aResultToken.marker, aResultToken.marker_length);
+			if (!TokenSetResult(aResultToken, aResultToken.marker, aResultToken.marker_length))
+				result = FAIL;
 		}
 		if (result == INVOKE_NOT_HANDLED)
 		{
@@ -1337,7 +1338,7 @@ ResultType GetObjMaxParams(IObject *aObj, int &aMaxParams, ResultToken &aResultT
 		{
 		case FAIL:
 		case EARLY_EXIT:
-			return aResultToken.Result();
+			return result;
 		case INVOKE_NOT_HANDLED:
 			return OK;
 		case OK:
@@ -2605,7 +2606,7 @@ LPCTSTR LabelPtr::Name() const
 
 
 
-ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex)
+ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex, __int64 *aRetVal)
 {
 	ResultType result = OK;
 	__int64 retval = 0;
@@ -2628,6 +2629,8 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, int
 			break;
 		}
 	}
+	if (aRetVal)
+		*aRetVal = retval;
 	return result;
 }
 

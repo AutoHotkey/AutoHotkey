@@ -77,8 +77,11 @@ ResultType Var::Assign(ExprTokenType &aToken)
 
 ResultType Var::GetClipboardAll(void **aData, size_t *aDataSize)
 {
+	*aData = NULL; // Set default in case of early return or empty data.
+	*aDataSize = 0;
+
 	if (!g_clip.Open())
-		return g_script.ScriptError(CANT_OPEN_CLIPBOARD_READ);
+		return g_script.RuntimeError(CANT_OPEN_CLIPBOARD_READ);
 
 	// Calculate the size needed:
 	// EnumClipboardFormats() retrieves all formats, including synthesized formats that don't
@@ -189,8 +192,6 @@ ResultType Var::GetClipboardAll(void **aData, size_t *aDataSize)
 	if (space_needed == sizeof(format)) // This works because even a single empty format requires space beyond sizeof(format) for storing its format+size.
 	{
 		g_clip.Close();
-		*aData = NULL;
-		*aDataSize = 0;
 		return OK;
 	}
 
@@ -205,7 +206,7 @@ ResultType Var::GetClipboardAll(void **aData, size_t *aDataSize)
 	if (!binary_contents)
 	{
 		g_clip.Close();
-		return g_script.ScriptError(ERR_OUTOFMEM);
+		return g_script.RuntimeError(ERR_OUTOFMEM);
 	}
 
 	// Retrieve and store all the clipboard formats.  Because failures of GetClipboardData() are now
@@ -279,7 +280,7 @@ ResultType Var::GetClipboardAll(void **aData, size_t *aDataSize)
 ResultType Var::SetClipboardAll(void *aData, size_t aDataSize)
 {
 	if (!g_clip.Open())
-		return g_script.ScriptError(CANT_OPEN_CLIPBOARD_WRITE);
+		return g_script.RuntimeError(CANT_OPEN_CLIPBOARD_WRITE);
 	EmptyClipboard(); // Failure is not checked for since it's probably impossible under these conditions.
 
 	// In case the variable contents are incomplete or corrupted (such as having been read in from a
@@ -309,7 +310,7 @@ ResultType Var::SetClipboardAll(void *aData, size_t aDataSize)
 		if (   !(hglobal = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, size + (size == 0)))   )
 		{
 			g_clip.Close();
-			return g_script.ScriptError(ERR_OUTOFMEM); // Short msg since so rare.
+			return g_script.RuntimeError(ERR_OUTOFMEM); // Short msg since so rare.
 		}
 		if (size) // i.e. Don't try to lock memory of size zero.  It's not needed.
 		{
@@ -317,7 +318,7 @@ ResultType Var::SetClipboardAll(void *aData, size_t aDataSize)
 			{
 				GlobalFree(hglobal);
 				g_clip.Close();
-				return g_script.ScriptError(_T("GlobalLock")); // Short msg since so rare.
+				return g_script.RuntimeError(ERR_INTERNAL_CALL); // Generic msg since so rare.
 			}
 			memcpy(hglobal_locked, binary_contents, size);
 			GlobalUnlock(hglobal);
@@ -593,7 +594,7 @@ ResultType Var::AssignSkipAddRef(IObject *aValueToAssign)
 			}
 		}
 		aValueToAssign->Release();
-		return g_script.ScriptError(ERR_INVALID_VALUE, _T("An object."));
+		return g_script.RuntimeError(ERR_INVALID_VALUE, _T("An object."));
 	}
 
 	var.Free(); // If var contains an object, this will Release() it.  It will also clear any string contents and free memory if appropriate.

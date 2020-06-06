@@ -74,7 +74,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 	#define MAX_EXPR_MEM_ITEMS 200 // v1.0.47.01: Raised from 100 because a line consisting entirely of concat operators can exceed it.  However, there's probably not much point to going much above MAX_TOKENS/2 because then it would reach the MAX_TOKENS limit first.
 	ExprTokenType *to_free[MAX_EXPR_MEM_ITEMS]; // No init necessary.  In many cases, it will never be used.
 	int to_free_count = 0; // The actual number of items in use in the above array.
-	LPTSTR result_to_return = _T(""); // By contrast, NULL is used to tell the caller to abort the current thread.  That isn't done for normal syntax errors, just critical conditions such as out-of-memory.
+	LPTSTR result_to_return = _T(""); // By contrast, NULL is used to tell the caller to abort the current thread.
+	LPCTSTR error_msg = ERR_EXPR_EVAL, error_info = _T("");
 	Var *output_var = (mActionType == ACT_ASSIGNEXPR && aArgIndex == 1) ? *aArgVar : NULL; // Resolve early because it's similar in usage/scope to the above.  Plus MUST be resolved prior to calling any script-functions since they could change the values in sArgVar[].
 
 	ExprTokenType *stack[MAX_TOKENS];
@@ -143,13 +144,15 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// Do some basic validation to ensure a helpful error message is displayed on failure.
 					if (right_length == 0)
 					{
-						LineError(ERR_DYNAMIC_BLANK, FAIL, mArg[aArgIndex].text);
-						goto abort;
+						error_msg = ERR_DYNAMIC_BLANK;
+						error_info = mArg[aArgIndex].text;
+						goto abort_with_exception;
 					}
 					if (right_length > MAX_VAR_NAME_LENGTH)
 					{
-						LineError(ERR_DYNAMIC_TOO_LONG, FAIL, right_string);
-						goto abort;
+						error_msg = ERR_DYNAMIC_TOO_LONG;
+						error_info = right_string;
+						goto abort_with_exception;
 					}
 					// In v1.0.31, FindOrAddVar() vs. FindVar() is called below to support the passing of non-existent
 					// array elements ByRef, e.g. Var:=MyFunc(Array%i%) where the MyFunc function's parameter is
@@ -172,8 +175,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						{
 							// Having this check here allows us to display the variable name rather than its contents
 							// in the error message.
-							LineError(ERR_VAR_IS_READONLY, FAIL, temp_var->mName);
-							goto abort;
+							error_msg = ERR_VAR_IS_READONLY;
+							error_info = temp_var->mName;
+							goto abort_with_exception;
 						}
 						// Take a shortcut to allow dynamic output vars to resolve to builtin vars such as Clipboard
 						// or A_WorkingDir.  For additional comments, search for "SYM_VAR is somewhat unusual".
@@ -238,8 +242,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					{
 						// Having this check here allows us to display the variable name rather than its contents
 						// in the error message.
-						LineError(ERR_VAR_IS_READONLY, FAIL, this_token.var->mName);
-						goto abort;
+						error_msg = ERR_VAR_IS_READONLY;
+						error_info = this_token.var->mName;
+						goto abort_with_exception;
 					}
 					if (this_token.var->mBIV == BIV_TrayMenu) // Handled here to work around limitations of the BIV interface.
 					{
@@ -278,10 +283,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				{
 					if (to_free_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
 						|| !(result = tmalloc(result_size)))
-					{
-						LineError(ERR_OUTOFMEM, FAIL, this_token.var->mName);
-						goto abort;
-					}
+						goto outofmem;
 					to_free[to_free_count++] = &this_token;
 				}
 				result_length = this_token.var->Get(result);
@@ -390,8 +392,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (to_free_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
 					{
 						this_token.object->Release();
-						LineError(ERR_OUTOFMEM);
-						goto abort;
+						error_info = ERR_OUTOFMEM;
+						goto abort_with_exception;
 					}
 					to_free[to_free_count++] = &this_token;
 				}
@@ -497,10 +499,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					goto normal_end_skip_output_var;
 				}
 				if (to_free_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
-				{
-					LineError(ERR_OUTOFMEM, FAIL, func->mName);
-					goto abort;
-				}
+					goto outofmem;
 				// Mark it to be freed at the time we return.
 				to_free[to_free_count++] = &this_token;
 				// Invariant: any string token put in to_free must have marker set to the memory block
@@ -607,10 +606,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					//   return values are usually small, such as numbers).
 					if (to_free_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
 						|| !(this_token.marker = tmalloc(result_size)))
-					{
-						LineError(ERR_OUTOFMEM, FAIL, func->mName);
-						goto abort;
-					}
+						goto outofmem;
 					tmemcpy(this_token.marker, result, result_size); // Benches slightly faster than strcpy().
 					to_free[to_free_count++] = &this_token;
 				}
@@ -1081,10 +1077,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						// See the nearly identical section higher above for comments:
 						if (to_free_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
 							|| !(this_token.marker = tmalloc(result_size)))
-						{
-							LineError(ERR_OUTOFMEM);
-							goto abort;
-						}
+							goto outofmem;
 						to_free[to_free_count++] = &this_token;
 					}
 					if (left_length)
@@ -1409,10 +1402,7 @@ push_this_token:
 			// be unlikely for anything other than small blocks; see compiler's realloc.c):
 			LPTSTR new_buf;
 			if (   !(new_buf = tmalloc(new_buf_size))   )
-			{
-				LineError(ERR_OUTOFMEM);
-				goto abort;
-			}
+				goto outofmem;
 			if (new_buf_size > LARGE_DEREF_BUF_SIZE)
 				++sLargeDerefBufs; // And if the old deref buf was larger too, this value is decremented later below. SET_DEREF_TIMER() is handled by our caller because aDerefBufSize is updated further below, which the caller will see.
 
@@ -1466,7 +1456,8 @@ push_this_token:
 
 // ALL PATHS ABOVE SHOULD "GOTO".  TO CATCH BUGS, ANY THAT DON'T FALL INTO "ABORT" BELOW.
 abort_with_exception:
-	LineError(ERR_EXPR_EVAL);
+	if (  (aResult = LineError(error_msg, FAIL_OR_OK, error_info)) != FAIL  )
+		goto normal_end_skip_output_var;
 	// FALL THROUGH:
 abort:
 	// The callers of this function know that the value of aResult (which contains the reason
@@ -1476,13 +1467,15 @@ abort:
 	goto normal_end_skip_output_var; // output_var is skipped as part of standard abort behavior.
 
 type_mismatch:
-	LineError(ERR_TYPE_MISMATCH);
-	goto abort;
+	error_msg = ERR_TYPE_MISMATCH;
+	goto abort_with_exception;
 divide_by_zero:
-	LineError(ERR_DIVIDEBYZERO);
-	goto abort;
+	error_msg = ERR_DIVIDEBYZERO;
+	goto abort_with_exception;
+outofmem:
+	error_msg = ERR_OUTOFMEM;
+	goto abort_with_exception;
 
-//abnormal_end: // Currently the same as normal_end; it's separate to improve readability.  When this happens, result_to_return is typically "" (unless the caller overrode that default).
 //normal_end: // This isn't currently used, but is available for future-use and readability.
 	// v1.0.45: ACT_ASSIGNEXPR relies on us to set the output_var (i.e. whenever it's ARG1's is_expression==true).
 	// Our taking charge of output_var allows certain performance optimizations in other parts of this function,

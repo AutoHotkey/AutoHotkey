@@ -478,13 +478,13 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, Use
 {
 	size_t length = _tcslen(aName);
 	if (length > MAX_MENU_NAME_LENGTH)
-		return g_script.ScriptError(_T("Menu item name too long."), aName);
+		return g_script.RuntimeError(_T("Menu item name too long."), aName);
 	// After mem is allocated, the object takes charge of its later deletion:
 	LPTSTR name_dynamic;
 	if (length)
 	{
 		if (   !(name_dynamic = tmalloc(length + 1))   )  // +1 for terminator.
-			return g_script.ScriptError(ERR_OUTOFMEM);
+			return g_script.RuntimeError(ERR_OUTOFMEM);
 		_tcscpy(name_dynamic, aName);
 	}
 	else
@@ -494,7 +494,7 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, Use
 	{
 		if (name_dynamic != Var::sEmptyString)
 			free(name_dynamic);
-		return g_script.ScriptError(ERR_OUTOFMEM);
+		return g_script.RuntimeError(ERR_OUTOFMEM);
 	}
 	if (*aOptions && !UpdateOptions(menu_item, aOptions))
 	{
@@ -738,10 +738,11 @@ ResultType UserMenu::UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions)
 		else
 		{
 			*option_end = orig_char;
-			return g_script.ScriptError(ERR_INVALID_OPTION, next_option); // invalid option
+			if (!g_script.RuntimeError(ERR_INVALID_OPTION, next_option)) // invalid option
+				return FAIL;
+			// Otherwise, user wants to continue.
 		}
 		*option_end = orig_char;
-
 	}
 
 	if (new_type != aMenuItem->mMenuType)
@@ -1139,7 +1140,7 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 // displaying the menu, it might be impossible to dismiss the menu by clicking outside of it.
 {
 	if (mMenuType != MENU_TYPE_POPUP)
-		return g_script.ScriptError(ERR_INVALID_MENU_TYPE);
+		return g_script.RuntimeError(ERR_INVALID_MENU_TYPE);
 	if (!mMenuItemCount)
 		return OK;  // Consider the display of an empty menu to be a success.
 	if (!Create()) // Create if needed.  No error msg since so rare.

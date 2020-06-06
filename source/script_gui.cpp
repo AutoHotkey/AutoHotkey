@@ -255,7 +255,7 @@ ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, E
 	auto text_obj = aParamCount >= 2 ? TokenToArray(*aParam[1]) : NULL;
 	GuiControlType* pcontrol;
 	ResultType result = AddControl(ctrl_type, options, text, pcontrol, text_obj);
-	if (result == OK)
+	if (pcontrol)
 	{
 		pcontrol->AddRef();
 		_o_return(pcontrol);
@@ -949,7 +949,7 @@ ResultType GuiType::SetMenu(ExprTokenType &aParam)
 	{
 		menu = dynamic_cast<UserMenu *>(TokenToObject(aParam));
 		if (!menu || menu->mMenuType != MENU_TYPE_BAR)
-			return g_script.ScriptError(ERR_INVALID_VALUE);
+			return g_script.RuntimeError(ERR_INVALID_VALUE);
 		menu->Create(); // Ensure the menu bar physically exists.
 		menu->AddRef();
 	}
@@ -979,12 +979,12 @@ ResultType GuiType::ControlSetName(GuiControlType &aControl, LPTSTR aName)
 			{
 				if (mControl[u] == &aControl) // aControl already has this name, but upper- vs lower-case may differ.
 					break;
-				return g_script.ScriptError(_T("A control with this name already exists."), aName);
+				return g_script.RuntimeError(_T("A control with this name already exists."), aName);
 			}
 
 		aName = _tcsdup(aName);
 		if (!aName)
-			return g_script.ScriptError(ERR_OUTOFMEM);
+			return g_script.RuntimeError(ERR_OUTOFMEM);
 	}
 	if (aControl.name)
 		free(aControl.name);
@@ -1136,7 +1136,7 @@ ResultType GuiType::ControlMove(GuiControlType &aControl, LPTSTR aPos, bool aDra
 		, width == COORD_UNSPECIFIED ? rect.right - rect.left : width
 		, height == COORD_UNSPECIFIED ? rect.bottom - rect.top : height
 		, TRUE))  // Do repaint.
-		return g_script.ScriptError(_T("Can't move control.")); // Short msg since so rare.
+		return g_script.RuntimeError(_T("Can't move control.")); // Short msg since so rare.
 
 	// Note that GUI_CONTROL_UPDOWN has no special handling here.  This is because unlike slider buddies,
 	// whose only purpose is to label the control, an up-down's is also content-linked to it, so the
@@ -1192,7 +1192,7 @@ ResultType GuiType::ControlMove(GuiControlType &aControl, LPTSTR aPos, bool aDra
 ResultType GuiType::ControlSetFont(GuiControlType &aControl, LPTSTR aOptions, LPTSTR aFontName)
 {
 	if (!aControl.UsesFontAndTextColor()) // Control has no use for a font.
-		return g_script.ScriptError(ERR_GUI_NOT_FOR_THIS_TYPE);
+		return g_script.RuntimeError(ERR_GUI_NOT_FOR_THIS_TYPE);
 	COLORREF color = CLR_INVALID;
 	int font_index;
 	if (*aOptions || *aFontName) // Use specified font.
@@ -1298,7 +1298,7 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 		}
 		break;
 	default:  // Not a supported control type.
-		return g_script.ScriptError(ERR_GUI_NOT_FOR_THIS_TYPE);
+		return g_script.RuntimeError(ERR_GUI_NOT_FOR_THIS_TYPE);
 	} // switch(control.type)
 
 	LPTSTR item_string;
@@ -1383,7 +1383,7 @@ ResultType GuiType::ControlChoose(GuiControlType &aControl, ExprTokenType &aPara
 	return OK;
 
 error:
-	return g_script.ScriptError(aOneExact ? ERR_INVALID_VALUE : ERR_PARAM1_INVALID); // Invalid parameter #1 is almost definitely the cause.
+	return g_script.RuntimeError(aOneExact ? ERR_INVALID_VALUE : ERR_PARAM1_INVALID); // Invalid parameter #1 is almost definitely the cause.
 }
 
 
@@ -1697,7 +1697,7 @@ ResultType GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType
 	// other precedents where a variable is sized to something larger than it winds up carrying.
 	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
 	// this call will set up the clipboard for writing:
-	if (TokenSetResult(aResultToken, NULL, length) != OK)
+	if (!TokenSetResult(aResultToken, NULL, length))
 		return FAIL; // It already displayed the error.
 	length = SendMessage(aControl.hwnd, CB_GETLBTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
 	if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
@@ -1772,7 +1772,7 @@ ResultType GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType 
 		LRESULT length = SendMessage(aControl.hwnd, LB_GETTEXTLEN, (WPARAM)index, 0);
 		if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
 			_o_return_empty;
-		if (TokenSetResult(aResultToken, NULL, length) != OK)
+		if (!TokenSetResult(aResultToken, NULL, length))
 			return FAIL;  // It already displayed the error.
 		length = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
 		if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
@@ -2305,7 +2305,7 @@ ResultType GuiType::Create(LPTSTR aTitle)
 		wc.cbWndExtra = DLGWINDOWEXTRA;  // So that it will be the type that uses DefDlgProc() vs. DefWindowProc().
 		sGuiWinClass = RegisterClassEx(&wc);
 		if (!sGuiWinClass)
-			return g_script.ScriptError(_T("RegClass")); // Short/generic msg since so rare.
+			return g_script.RuntimeError(_T("RegClass")); // Short/generic msg since so rare.
 	}
 
 	if (   !(mHwnd = CreateWindowEx(mExStyle, WINDOW_CLASS_GUI, aTitle
@@ -2588,7 +2588,7 @@ ResultType GuiType::SetName(LPTSTR aName)
 	{
 		aName = _tcsdup(aName);
 		if (!aName)
-			return g_script.ScriptError(ERR_OUTOFMEM);
+			return g_script.RuntimeError(ERR_OUTOFMEM);
 	}
 	free(mName);
 	mName = aName;
@@ -2635,7 +2635,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	#define TOO_MANY_CONTROLS _T("Too many controls.") // Short msg since so rare.
 	if (mControlCount >= MAX_CONTROLS_PER_GUI)
-		return g_script.ScriptError(TOO_MANY_CONTROLS);
+		return g_script.RuntimeError(TOO_MANY_CONTROLS);
 	if (mControlCount >= mControlCapacity) // The section below on the above check already having been done.
 	{
 		// realloc() to keep the array contiguous, which allows better-performing methods to be
@@ -2644,7 +2644,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		GuiControlType **realloc_temp;  // Needed since realloc returns NULL on failure but leaves original block allocated.
 		if (   !(realloc_temp = (GuiControlType **)realloc(mControl  // If passed NULL, realloc() will do a malloc().
 			, (mControlCapacity + GUI_CONTROL_BLOCK_SIZE) * sizeof(GuiControlType*)))   )
-			return g_script.ScriptError(TOO_MANY_CONTROLS); // A non-specific msg since this error is so rare.
+			return g_script.RuntimeError(TOO_MANY_CONTROLS); // A non-specific msg since this error is so rare.
 		mControl = realloc_temp;
 		mControlCapacity += GUI_CONTROL_BLOCK_SIZE;
 	}
@@ -2679,7 +2679,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		if (mTabControlCount == MAX_TAB_CONTROLS)
 		{
 			delete pcontrol;
-			return g_script.ScriptError(_T("Too many tab controls.")); // Short msg since so rare.
+			return g_script.RuntimeError(_T("Too many tab controls.")); // Short msg since so rare.
 		}
 		// For now, don't allow a tab control to be create inside another tab control because it raises
 		// doubt and probably would create complications.  If it ever is allowed, note that
@@ -2701,7 +2701,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		if (mStatusBarHwnd)
 		{
 			delete pcontrol;
-			return g_script.ScriptError(_T("Too many status bars.")); // Short msg since so rare.
+			return g_script.RuntimeError(_T("Too many status bars.")); // Short msg since so rare.
 		}
 		control.tab_control_index = MAX_TAB_CONTROLS; // Indicate that bar isn't owned by any tab control.
 		// No need to do the following because constructor did it:
@@ -4555,7 +4555,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		if (opt.customClassAtom == 0)
 		{
 			delete pcontrol;
-			return g_script.ScriptError(_T("A window class is required."));
+			return g_script.RuntimeError(_T("A window class is required."));
 		}
 		control.hwnd = CreateWindowEx(exstyle, MAKEINTATOM(opt.customClassAtom), aText, style
 			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL);
@@ -4589,7 +4589,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	if (!control.hwnd)
 	{
 		delete pcontrol;
-		return g_script.ScriptError(_T("Can't create control."));
+		return g_script.RuntimeError(_T("Can't create control."));
 	}
 	// Otherwise the above control creation succeeded.
 	++mControlCount;
@@ -4859,10 +4859,14 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 						if (IsWindow(hwnd))
 							new_owner = hwnd;
 					}
-					if (new_owner && new_owner != mHwnd) // Window can't own itself!
-						mOwner = new_owner;
-					else
-						return g_script.ScriptError(_T("Invalid or nonexistent owner or parent window."), next_option);
+					if (!new_owner || new_owner == mHwnd) // Window can't own itself!
+					{
+						*option_end = orig_char; // Must restore caller's string.
+						if (!g_script.RuntimeError(_T("Invalid or nonexistent owner or parent window."), next_option))
+							return FAIL;
+						// Otherwise, user wants to continue.
+					}
+					mOwner = new_owner;
 				}
 				else
 					mOwner = g_hWnd; // Make a window owned (by script's main window) omits its taskbar button.
@@ -5082,7 +5086,12 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 					mStyle &= ~given_style;
 			}
 			else // v1.1.04: Validate Gui options.
-				return g_script.ScriptError(ERR_INVALID_OPTION, next_option);
+			{
+				*option_end = orig_char; // Must restore caller's string.
+				if (!g_script.RuntimeError(ERR_INVALID_OPTION, next_option))
+					return FAIL;
+				// Otherwise, user wants to continue.
+			}
 		}
 
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
@@ -6440,11 +6449,10 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		continue;
 	// This "subroutine" is used to reduce code size and ensure the temporary termination is undone even on failure:
 	return_error:
-		// Although it's tempting to undo the termination *after* showing the error (so that only the bad option
-		// is shown), that would cause the options parameter to appear truncated in the error line text, unless
-		// the parameter contains variables, since aOptions does not point to the arg text in that case.
 		*option_end = orig_char; // See above.
-		return g_script.ScriptError(error_message, next_option);
+		if (!g_script.RuntimeError(error_message, next_option))
+			return FAIL;
+		// Otherwise, user wants to continue.
 	} // for() each item in option list
 	
 	// If the control has already been created, apply the new style and exstyle here, if any:
@@ -6777,7 +6785,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			InvalidateRect(aControl.hwnd, NULL, TRUE); // Assume there's text in the control.
 
 		if (style_needed_changing && !style_change_ok)
-			return Script::ThrowIfTrue(true);
+			return g_script.ThrowIfTrue(true);
 	} // aControl.hwnd is not NULL
 
 	return OK;
@@ -7260,7 +7268,13 @@ ResultType GuiType::Show(LPTSTR aOptions)
 			break;
 		} // switch()
 		if (cp_end == cp)
-			return g_script.ScriptError(ERR_INVALID_OPTION, cp);
+		{
+			if (!g_script.RuntimeError(ERR_INVALID_OPTION, cp))
+				return FAIL;
+			// Otherwise, user wants to continue.  Ignore any invalid characters up to the next valid one.
+			if (!(cp_end = StrChrAny(cp_end, _T("ACMNRXYWH"))))
+				break;
+		}
 	} // for()
 
 	int width_orig = width;

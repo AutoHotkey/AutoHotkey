@@ -194,10 +194,7 @@ public:
 	inline bool HasStdErrHook() { return mStdErrMode != SR_Disabled; }
 	inline bool HasStdOutHook() { return mStdOutMode != SR_Disabled; }
 
-	TCHAR *WhatThrew()
-	{
-		return mStack.mTop >= mStack.mBottom ? mStack.mTop->Name() : _T("");
-	}
+	LPCTSTR WhatThrew();
 
 	__declspec(noinline) // Avoiding inlining should reduce the code size of ExpandExpression(), which might help performance since this is only called when the debugger is connected.
 	void PostExecFunctionCall(Line *aExpressionLine)

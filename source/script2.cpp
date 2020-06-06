@@ -47,7 +47,7 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 {
 	int window_index = *aID ? ATOI(aID) - 1 : 0;
 	if (window_index < 0 || window_index >= MAX_TOOLTIPS)
-		return LineError(_T("Max window number is ") MAX_TOOLTIPS_STR _T("."), FAIL, aID);
+		return LineError(_T("Max window number is ") MAX_TOOLTIPS_STR _T("."), FAIL_OR_OK, aID);
 	HWND tip_hwnd = g_hWndToolTip[window_index];
 
 	// Destroy windows except the first (for performance) so that resources/mem are conserved.
@@ -252,7 +252,7 @@ ResultType TrayTipParseOptions(LPTSTR aOptions, NOTIFYICONDATA &nic)
 		}
 	}
 invalid_option:
-	return g_script.ScriptError(ERR_INVALID_OPTION, next_option);
+	return g_script.RuntimeError(ERR_INVALID_OPTION, next_option);
 }
 
 
@@ -1796,10 +1796,9 @@ BIF_DECL(BIF_ControlGetText)
 	// because it is able to get text from more types of controls (e.g. large edit controls):
 	VarSizeType space_needed = GetWindowTextTimeout(control_window) + 1; // 1 for terminator.
 
-	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-	// this call will set up the clipboard for writing:
+	// Allocate memory for the return value.
 	if (!TokenSetResult(aResultToken, NULL, space_needed - 1))
-		_f_return_FAIL;  // It already displayed the error.
+		return;  // It already displayed the error.
 	aResultToken.symbol = SYM_STRING;
 	// Fetch the text directly into the buffer.  Also set the length explicitly
 	// in case actual size written was off from the estimated size (since
@@ -4901,7 +4900,7 @@ ResultType MsgBoxParseOptions(LPTSTR aOptions, int &aType, double &aTimeout, HWN
 		}
 	}
 invalid_option:
-	return g_script.ScriptError(ERR_INVALID_OPTION, next_option);
+	return g_script.RuntimeError(ERR_INVALID_OPTION, next_option);
 }
 
 
@@ -4965,7 +4964,7 @@ BIF_DECL(BIF_MsgBox)
 	//	// the user of this via a final MessageBox dialog, so our call here will
 	//	// not have any effect.  The below only takes effect if MsgBox()'s call to
 	//	// MessageBox() failed in some unexpected way:
-	//	LineError("The MsgBox could not be displayed.");
+	//	_f_throw("The MsgBox could not be displayed.");
 	// v1.1.09.02: If the MsgBox failed due to invalid options, it seems better to display
 	// an error dialog than to silently exit the thread:
 	if (!result && GetLastError() == ERROR_INVALID_MSGBOX_STYLE)
@@ -5008,7 +5007,10 @@ ResultType InputBoxParseOptions(LPTSTR aOptions, InputBoxType &aInputBox)
 				|| !IsNumeric(next_option + 1 // Or not a valid number.
 					, option_char == 'X' || option_char == 'Y' // Only X and Y allow negative numbers.
 					, FALSE, option_char == 'T')) // Only Timeout allows floating-point.
-				return g_script.ScriptError(ERR_INVALID_OPTION, next_option);
+			{
+				*option_end = orig_char; // Undo the temporary termination.
+				return g_script.RuntimeError(ERR_INVALID_OPTION, next_option);
+			}
 
 			switch (ctoupper(*next_option))
 			{
@@ -5397,7 +5399,7 @@ ResultType Script::SetCoordMode(LPTSTR aCommand, LPTSTR aMode)
 	CoordModeType mode = Line::ConvertCoordMode(aMode);
 	CoordModeType shift = Line::ConvertCoordModeCmd(aCommand);
 	if (shift == COORD_MODE_INVALID || mode == COORD_MODE_INVALID)
-		return g_script.ScriptError(ERR_INVALID_VALUE, aMode);
+		return g_script.RuntimeError(ERR_INVALID_VALUE, aMode);
 	g->CoordMode = (g->CoordMode & ~(COORD_MODE_MASK << shift)) | (mode << shift);
 	return OK;
 }
@@ -5412,7 +5414,7 @@ ResultType Script::SetSendLevel(int aValue, LPTSTR aValueStr)
 {
 	int sendLevel = aValue;
 	if (!SendLevelIsValid(sendLevel))
-		return g_script.ScriptError(ERR_INVALID_VALUE, aValueStr);
+		return g_script.RuntimeError(ERR_INVALID_VALUE, aValueStr);
 	g->SendLevel = sendLevel;
 	return OK;
 }
@@ -6345,7 +6347,6 @@ BIF_DECL(BIF_Sort)
 	ResultType sort_func_result_orig = g_SortFuncResult;
 	g_SortFunc = NULL; // Now that original has been saved above, reset to detect whether THIS sort uses a UDF.
 	g_SortFuncResult = OK;
-	ResultType result_to_return = OK;
 
 	_f_param_string(aContents, 0);
 	_f_param_string_opt(aOptions, 1);
@@ -6420,7 +6421,7 @@ BIF_DECL(BIF_Sort)
 			g_SortFunc = TokenToFunc(*aParam[2]);
 		if (!g_SortFunc)
 		{
-			result_to_return = aResultToken.Error(ERR_PARAM3_INVALID);
+			aResultToken.Error(ERR_PARAM3_INVALID);
 			goto end;
 		}
 		g_SortFunc->AddRef(); // Ensure the object exists for the duration of the sorting.
@@ -6428,7 +6429,7 @@ BIF_DECL(BIF_Sort)
 	
 	if (!*aContents) // Input is empty, nothing to sort, return empty string.
 	{
-		result_to_return = aResultToken.Return(_T(""), 0);
+		aResultToken.Return(_T(""), 0);
 		goto end;
 	}
 	
@@ -6479,7 +6480,7 @@ BIF_DECL(BIF_Sort)
 
 	if (item_count == 1) // 1 item is already sorted, and no dupes are possible.
 	{
-		result_to_return = aResultToken.Return(aContents, aContents_length);
+		aResultToken.Return(aContents, aContents_length);
 		goto end;
 	}
 
@@ -6494,7 +6495,7 @@ BIF_DECL(BIF_Sort)
 		// and that deref buffer is about to be overwritten by the execution of the script's UDF body.
 		if (   !(mem_to_free = tmalloc(aContents_length + 3))   ) // +1 for terminator and +2 in case of trailing_crlf_added_temporarily.
 		{
-			result_to_return = aResultToken.Error(ERR_OUTOFMEM);
+			aResultToken.Error(ERR_OUTOFMEM);
 			goto end;
 		}
 		tmemcpy(mem_to_free, aContents, aContents_length + 1); // memcpy() usually benches a little faster than _tcscpy().
@@ -6516,7 +6517,7 @@ BIF_DECL(BIF_Sort)
 	item = (LPTSTR *)malloc((item_count + 1) * item_size);
 	if (!item)
 	{
-		result_to_return = aResultToken.Error(ERR_OUTOFMEM);
+		aResultToken.Error(ERR_OUTOFMEM);
 		goto end;
 	}
 
@@ -6583,7 +6584,7 @@ BIF_DECL(BIF_Sort)
 		qsort((void *)item, item_count, item_size, SortUDF);
 		if (!g_SortFuncResult || g_SortFuncResult == EARLY_EXIT)
 		{
-			result_to_return = g_SortFuncResult;
+			aResultToken.SetExitResult(g_SortFuncResult);
 			goto end;
 		}
 	}
@@ -6594,10 +6595,7 @@ BIF_DECL(BIF_Sort)
 
 	// Allocate space to store the result.
 	if (!TokenSetResult(aResultToken, NULL, aContents_length))
-	{
-		result_to_return = FAIL;
 		goto end;
-	}
 	aResultToken.symbol = SYM_STRING;
 
 	// Set default in case original last item is still the last item, or if last item was omitted due to being a dupe:
@@ -6697,8 +6695,6 @@ end:
 		g_SortFunc->Release();
 	g_SortFunc = sort_func_orig;
 	g_SortFuncResult = sort_func_result_orig;
-	if (!result_to_return)
-		_f_return_FAIL;
 }
 
 
@@ -7567,7 +7563,7 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 	return OK;
 
 error:
-	return LineError(ERR_FAILED);
+	return LineError(ERR_FAILED, FAIL_OR_OK);
 }
 
 
@@ -7962,7 +7958,7 @@ bool Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 
 
 
-ResultType ConvertFileOptions(LPTSTR aOptions, UINT &codepage, bool &translate_crlf_to_lf, unsigned __int64 *pmax_bytes_to_load)
+ResultType ConvertFileOptions(ResultToken &aResultToken, LPTSTR aOptions, UINT &codepage, bool &translate_crlf_to_lf, unsigned __int64 *pmax_bytes_to_load)
 {
 	for (LPTSTR next, cp = aOptions; cp && *(cp = omit_leading_whitespace(cp)); cp = next)
 	{
@@ -8005,7 +8001,7 @@ ResultType ConvertFileOptions(LPTSTR aOptions, UINT &codepage, bool &translate_c
 			{
 				codepage = Line::ConvertFileEncoding(cp);
 				if (codepage == -1 || cisdigit(*cp)) // Require "cp" prefix in FileRead/FileAppend options.
-					return g_script.ScriptError(ERR_INVALID_OPTION, cp);
+					return aResultToken.Error(ERR_INVALID_OPTION, cp);
 			}
 			break;
 		} // switch()
@@ -8025,8 +8021,8 @@ BIF_DECL(BIF_FileRead)
 	unsigned __int64 max_bytes_to_load = ULLONG_MAX; // By default, fail if the file is too large.  See comments near bytes_to_read below.
 	UINT codepage = g->Encoding;
 
-	if (!ConvertFileOptions(aOptions, codepage, translate_crlf_to_lf, &max_bytes_to_load))
-		_f_return_FAIL; // It already displayed the error.
+	if (!ConvertFileOptions(aResultToken, aOptions, codepage, translate_crlf_to_lf, &max_bytes_to_load))
+		return; // It already displayed the error.
 
 	_f_set_retval_p(_T(""), 0); // Set default.
 
@@ -8151,7 +8147,7 @@ BIF_DECL(BIF_FileRead)
 						if (!TokenSetResult(aResultToken, NULL, wlen))
 						{
 							free(output_buf);
-							_f_return_FAIL;
+							return;
 						}
 						wlen = MultiByteToWideChar(codepage, 0, text, length, aResultToken.marker, wlen);
 						aResultToken.symbol = SYM_STRING;
@@ -8252,8 +8248,8 @@ BIF_DECL(BIF_FileAppend)
 	{
 		codepage = aBuf_obj ? -1 : g->Encoding; // Never default to BOM if a Buffer object was passed.
 		bool translate_crlf_to_lf = false;
-		if (!ConvertFileOptions(aOptions, codepage, translate_crlf_to_lf, NULL))
-			_f_return_FAIL;
+		if (!ConvertFileOptions(aResultToken, aOptions, codepage, translate_crlf_to_lf, NULL))
+			return;
 
 		DWORD flags = TextStream::APPEND | (translate_crlf_to_lf ? TextStream::EOL_CRLF : 0);
 		
@@ -8274,7 +8270,7 @@ BIF_DECL(BIF_FileAppend)
 		{
 			aResultToken.SetLastErrorMaybeThrow(true);
 			delete ts; // Must be deleted explicitly!
-			_f_return_retval;
+			return;
 		}
 		if (aCurrentReadFile)
 			aCurrentReadFile->mWriteFile = ts;
@@ -8297,8 +8293,6 @@ BIF_DECL(BIF_FileAppend)
 	if (!aCurrentReadFile)
 		delete ts;
 	// else it's the caller's responsibility, or it's caller's, to close it.
-
-	_f_return_retval;
 }
 
 
@@ -8311,7 +8305,7 @@ BOOL FileDeleteCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbac
 ResultType Line::FileDelete(LPTSTR aFilePattern)
 {
 	if (!*aFilePattern)
-		return LineError(ERR_PARAM1_INVALID);
+		return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK);
 
 	// The no-wildcard case could be handled via FilePatternApply(), but handling it this
 	// way ensures deleting a non-existent path without wildcards is considered a failure:
@@ -8397,7 +8391,7 @@ BIF_DECL(BIF_FileGetAttrib)
 	if (attr == 0xFFFFFFFF)  // Failure, probably because file doesn't exist.
 	{
 		aResultToken.SetLastErrorMaybeThrow(true);
-		_f_return_empty;
+		return;
 	}
 
 	g->LastError = 0;
@@ -8417,7 +8411,7 @@ ResultType Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern
 // Returns the number of files and folders that could not be changed due to an error.
 {
 	if (!*aFilePattern)
-		return LineError(ERR_PARAM2_INVALID);
+		return LineError(ERR_PARAM2_INVALID, FAIL_OR_OK);
 
 	// Convert the attribute string to three bit-masks: add, remove and toggle.
 	FileSetAttribData attrib;
@@ -8437,7 +8431,7 @@ ResultType Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern
 		case '\t':
 			continue;
 		default:
-			return LineError(ERR_PARAM1_INVALID, FAIL, cp);
+			return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, cp);
 		// Note that D (directory) and C (compressed) are currently not supported:
 		case 'R': mask = FILE_ATTRIBUTE_READONLY; break;
 		case 'A': mask = FILE_ATTRIBUTE_ARCHIVE; break;
@@ -8645,7 +8639,7 @@ BIF_DECL(BIF_FileGetTime)
 	if (file_search == INVALID_HANDLE_VALUE)
 	{
 		aResultToken.SetLastErrorMaybeThrow(true);
-		_f_return_empty;
+		return;
 	}
 	FindClose(file_search);
 
@@ -8695,14 +8689,14 @@ ResultType Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhich
 			|| !LocalFileTimeToFileTime(&ft, &callbackData.Time)   )  // Convert from local to UTC.
 		{
 			// Invalid parameters are the only likely cause of this condition.
-			return LineError(ERR_PARAM1_INVALID, FAIL, aYYYYMMDD);
+			return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, aYYYYMMDD);
 		}
 	}
 	else // User wants to use the current time (i.e. now) as the new timestamp.
 		GetSystemTimeAsFileTime(&callbackData.Time);
 
 	if (!*aFilePattern)
-		return LineError(ERR_PARAM2_INVALID);
+		return LineError(ERR_PARAM2_INVALID, FAIL_OR_OK);
 
 	FilePatternApply(aFilePattern, aOperateOnFolders, aDoRecurse, FileSetTimeCallback, &callbackData);
 	return OK;
@@ -8893,9 +8887,9 @@ ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aVa
 				return aResultToken.Error(ERR_TYPE_MISMATCH, aPropName);
 			result = INVOKE_NOT_HANDLED;
 		}
+		aValue = 0;
 		if (!aOptional)
 			return aResultToken.UnknownMemberError(ExprTokenType(aObject), IT_GET, aPropName);
-		aValue = 0;
 		return result; // Let caller know it wasn't found.
 	}
 
@@ -9249,7 +9243,7 @@ BIV_DECL_W(BIV_TitleMatchMode_Set)
 	case FIND_FAST: g->TitleFindFast = true; break;
 	case FIND_SLOW: g->TitleFindFast = false; break;
 	default:
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
+		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
 	}
 	return OK;
 }
@@ -9277,7 +9271,7 @@ BIV_DECL_W(BIV_DetectHiddenWindows_Set)
 	if ( (toggle = Line::ConvertOnOff(aBuf, NEUTRAL)) != NEUTRAL )
 		g->DetectHiddenWindows = (toggle == TOGGLED_ON);
 	else
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
+		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
 	return OK;
 }
 
@@ -9297,7 +9291,7 @@ BIV_DECL_W(BIV_DetectHiddenText_Set)
 	if ( (toggle = Line::ConvertOnOff(aBuf, NEUTRAL)) != NEUTRAL )
 		g->DetectHiddenText = (toggle == TOGGLED_ON);
 	else
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
+		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
 	return OK;
 }
 
@@ -9315,7 +9309,7 @@ BIV_DECL_W(BIV_StringCaseSense_Set)
 	if ( (sense = Line::ConvertStringCaseSense(aBuf)) != SCS_INVALID )
 		g->StringCaseSense = sense;
 	else
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
+		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
 	return OK;
 }
 
@@ -9436,7 +9430,7 @@ BIV_DECL_W(BIV_StoreCapslockMode_Set)
 {
 	ToggleValueType toggle = Line::ConvertOnOff(aBuf, NEUTRAL);
 	if (toggle == NEUTRAL)
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
+		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
 	g->StoreCapslockMode = (toggle == TOGGLED_ON);
 	return OK;
 }
@@ -9577,7 +9571,7 @@ BIV_DECL_W(BIV_FileEncoding_Set)
 {
 	UINT new_encoding = Line::ConvertFileEncoding(aBuf);
 	if (new_encoding == -1)
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
+		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
 	g->Encoding = new_encoding;
 	return OK;
 }
@@ -9603,7 +9597,7 @@ BIV_DECL_W(BIV_RegView_Set)
 	DWORD reg_view = Line::RegConvertView(aBuf);
 	// Validate the parameter even if it's not going to be used.
 	if (reg_view == -1)
-		return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
+		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
 	// Since these flags cause the registry functions to fail on Win2k and have no effect on
 	// any later 32-bit OS, ignore this command when the OS is 32-bit.  Leave A_RegView blank.
 	if (IsOS64Bit())
@@ -9685,7 +9679,7 @@ BIV_DECL_W(BIV_AllowMainWindow_Set)
 	// which is only sometimes compiled may execute it unconditionally.
 	// For code size, false values are ignored instead of throwing an exception.
 	//if (!ResultToBOOL(aBuf))
-	//	return g_script.ScriptError(ERR_INVALID_VALUE, aBuf);
+	//	return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
 #endif
 	return OK;
 }
@@ -9978,7 +9972,7 @@ VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName)
 BIV_DECL_W(BIV_WorkingDir_Set)
 {
 	if (!SetWorkingDir(aBuf))
-		return g_script.ScriptError(ERR_INVALID_VALUE); // Hard to imagine any other cause.
+		return g_script.RuntimeError(ERR_INVALID_VALUE); // Hard to imagine any other cause.
 	return OK;
 }
 
@@ -10193,7 +10187,7 @@ BIV_DECL_W(BIV_ScriptName_Set)
 	// For simplicity, a new buffer is allocated each time.  It is not expected to be set frequently.
 	LPTSTR script_name = _tcsdup(aBuf);
 	if (!script_name)
-		return g_script.ScriptError(ERR_OUTOFMEM);
+		return g_script.RuntimeError(ERR_OUTOFMEM);
 	free(g_script.mScriptName);
 	g_script.mScriptName = script_name;
 	return OK;
@@ -11420,7 +11414,7 @@ has_valid_return_type:
 
 	if (return_attrib.is_hresult && FAILED((HRESULT)return_value.Int) && !g->ThrownToken)
 	{
-		g_script.ThrowWin32Exception((DWORD)return_value.Int);
+		g_script.Win32Error((DWORD)return_value.Int);
 	}
 
 	if (g->ThrownToken)
@@ -14502,20 +14496,16 @@ BIF_DECL(BIF_DateAdd)
 
 BIF_DECL(BIF_DateDiff)
 {
-	// Since above didn't return, the command is being used to subtract date-time values.
-	bool failed;
+	LPTSTR error_message;
 	// If either parameter is blank, it will default to the current time:
 	__int64 time_until; // Declaring separate from initializing avoids compiler warning when not inside a block.
 	TCHAR number_buf[MAX_NUMBER_SIZE]; // Additional buf used in case both parameters are pure numbers.
 	time_until = YYYYMMDDSecondsUntil(
 		ParamIndexToString(1, _f_number_buf),
 		ParamIndexToString(0, number_buf),
-		failed);
-	if (failed) // Usually caused by an invalid component in the date-time string.
-	{
-		aResultToken.SetExitResult(FAIL); // ScriptError() was already called.
-		return;
-	}
+		error_message);
+	if (error_message) // Usually caused by an invalid component in the date-time string.
+		_f_throw(error_message);
 	switch (ctoupper(*ParamIndexToString(2)))
 	{
 	case 'S': break;
@@ -14541,7 +14531,7 @@ BIF_DECL(BIF_Hotkey)
 	
 	if (!_tcsnicmp(aParam0, _T("IfWin"), 5)) // Seems reasonable to assume that anything starting with "IfWin" can't be the name of a hotkey.
 	{
-		result = Hotkey::IfWin(aParam0, aParam1, aParam2);
+		result = Hotkey::IfWin(aParam0, aParam1, aParam2, aResultToken);
 	}
 	else if (!_tcsicmp(aParam0, _T("If")))
 	{
@@ -14911,7 +14901,7 @@ BIF_DECL(BIF_On)
 
 
 	IObject *callback = TokenToFunctor(*aParam[0]);
-	if (!ValidateFunctor(callback, event_type == FID_OnExit ? 2 : 1, aResultToken, ERR_PARAM1_INVALID))
+	if (!ValidateFunctor(callback, event_type == FID_OnClipboardChange ? 1 : 2, aResultToken, ERR_PARAM1_INVALID))
 		return;
 	
 	int mode = 1; // Default.
@@ -16828,8 +16818,7 @@ BIF_DECL(BIF_Exception)
 	else
 	{
 		// Out of memory. Seems best to alert the user.
-		MsgBox(ERR_OUTOFMEM);
-		_f_return_empty;
+		_f_throw(ERR_OUTOFMEM);
 	}
 }
 

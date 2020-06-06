@@ -929,7 +929,7 @@ void ComError(HRESULT hr, ResultToken &aResultToken, LPTSTR name, EXCEPINFO* pei
 			error_text = buf;
 		}
 
-		if (g_script.mCurrLine->LineError(error_text, EARLY_EXIT, name) == FAIL)
+		if (g_script.mCurrLine->LineError(error_text, FAIL_OR_OK, name) == FAIL)
 			aResultToken.SetExitResult(FAIL); // An exception was thrown.
 	}
 

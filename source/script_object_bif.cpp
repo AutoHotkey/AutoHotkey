@@ -33,6 +33,7 @@ BIF_DECL(BIF_Object)
 		// DO NOT ADDREF: the caller takes responsibility for the only reference.
 		_f_return(obj);
 	}
+	//else: an error was already thrown.
 }
 
 

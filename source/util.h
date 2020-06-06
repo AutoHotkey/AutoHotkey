@@ -656,7 +656,7 @@ DWORD YYYYMMDDToSystemTime2(LPTSTR aYYYYMMDD, SYSTEMTIME *aSystemTime);
 ResultType YYYYMMDDToSystemTime(LPTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool aDoValidate);
 LPTSTR FileTimeToYYYYMMDD(LPTSTR aBuf, FILETIME &aTime, bool aConvertToLocalTime = false);
 LPTSTR SystemTimeToYYYYMMDD(LPTSTR aBuf, SYSTEMTIME &aTime);
-__int64 YYYYMMDDSecondsUntil(LPTSTR aYYYYMMDDStart, LPTSTR aYYYYMMDDEnd, bool &aFailed);
+__int64 YYYYMMDDSecondsUntil(LPTSTR aYYYYMMDDStart, LPTSTR aYYYYMMDDEnd, LPTSTR &aFailed);
 __int64 FileTimeSecondsUntil(FILETIME *pftStart, FILETIME *pftEnd);
 
 SymbolType IsNumeric(LPCTSTR aBuf, BOOL aAllowNegative = false // BOOL vs. bool might squeeze a little more performance out of this frequently-called function.

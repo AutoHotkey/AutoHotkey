@@ -222,13 +222,13 @@ LPTSTR Clipboard::PrepareForWrite(size_t aAllocSize)
 	// with 16-bit Windows. They are ignored.": GMEM_DDESHARE
 	if (   !(mClipMemNew = GlobalAlloc(GMEM_MOVEABLE, aAllocSize * sizeof(TCHAR)))   )
 	{
-		g_script.ScriptError(_T("GlobalAlloc"));  // Short error message since so rare.
+		g_script.ScriptError(ERR_INTERNAL_CALL);  // Generic error message since so rare.
 		return NULL;
 	}
 	if (   !(mClipMemNewLocked = (LPTSTR)GlobalLock(mClipMemNew))   )
 	{
 		mClipMemNew = GlobalFree(mClipMemNew);  // This keeps mClipMemNew in sync with its state.
-		g_script.ScriptError(_T("GlobalLock")); // Short error message since so rare.
+		g_script.ScriptError(ERR_INTERNAL_CALL);  // Generic error message since so rare.
 		return NULL;
 	}
 	mCapacity = (UINT)aAllocSize; // Keep mCapacity in sync with the state of mClipMemNewLocked.

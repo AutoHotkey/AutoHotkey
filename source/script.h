@@ -132,6 +132,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define WILL_EXIT _T("The program will exit.")
 #define UNSTABLE_WILL_EXIT _T("The program is now unstable and will exit.")
 #define OLD_STILL_IN_EFFECT _T("The script was not reloaded; the old version will remain in effect.")
+#define ERR_CONTINUE_THREAD_Q _T("Contine the current thread?")
 #define ERR_SCRIPT_NOT_FOUND _T("Script file not found.")
 #define ERR_ABORT_DELETE _T("__Delete will now return.")
 #define ERR_LINE_TOO_LONG _T("Line too long.")
@@ -1410,7 +1411,6 @@ public:
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
-	static int FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine, LPCTSTR aFooter);
 	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	
@@ -2086,7 +2086,7 @@ public:
 	MsgMonitorStruct *Add(UINT aMsg, IObject *aCallback, bool aAppend = TRUE);
 	MsgMonitorStruct *Add(UINT aMsg, LPTSTR aMethodName, bool aAppend = TRUE);
 	void Delete(MsgMonitorStruct *aMonitor);
-	ResultType Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex); // Used for OnExit and OnClipboardChange, but not OnMessage.
+	ResultType Call(ExprTokenType *aParamValue, int aParamCount, int aInitNewThreadIndex, __int64 *aRetVal = nullptr); // Used for OnExit and OnClipboardChange, but not OnMessage.
 	ResultType Call(ExprTokenType *aParamValue, int aParamCount, UINT aMsg, UCHAR aMsgType, GuiType *aGui, INT_PTR *aRetVal = NULL); // Used by GUI.
 
 	MsgMonitorStruct& operator[] (const int aIndex) { return mMonitor[aIndex]; }
@@ -3085,9 +3085,18 @@ public:
 	static ResultType SetSendMode(LPTSTR aValue);
 	static ResultType SetSendLevel(int aValue, LPTSTR aValueStr);
 
-	// Call this SciptError to avoid confusion with Line's error-displaying functions:
+	// Call this ScriptError to avoid confusion with Line's error-displaying functions.
+	// Use it for load time errors and non-continuable runtime errors:
 	ResultType ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T("")); // , ResultType aErrorType = FAIL);
+	// CriticalError forces the program to exit after displaying an error.
+	// Bypasses try/catch but does allow OnError and OnExit callbacks.
 	ResultType CriticalError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
+	// RuntimeError allows the user to choose to continue, in which case OK is returned instead of FAIL;
+	// therefore, caller must not rely on a FAIL result to abort the overall operation.
+	ResultType RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), ResultType aErrorType = FAIL_OR_OK, Line *aLine = nullptr);
+	
+	ResultType ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine);
+	int FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine);
 
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
 	void WarnUninitializedVar(Var *var);
@@ -3099,11 +3108,13 @@ public:
 	void ConvertLocalToAlias(Var &aLocal, Var *aAliasFor, int aPos, Var **aVarList, int &aVarCount);
 	void CheckForClassOverwrite();
 
-	static ResultType UnhandledException(Line* aLine);
-	static ResultType ThrowIfTrue(bool aError);
-	static ResultType ThrowIntIfNonzero(int aErrorValue, LPCTSTR aWhat = NULL);
-	static ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
-	static ResultType ThrowWin32Exception(DWORD aError = GetLastError());
+	ResultType ThrowIfTrue(bool aError);
+	ResultType ThrowIntIfNonzero(int aErrorValue, LPCTSTR aWhat = NULL);
+	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo, Line *aLine, ResultType aErrorType);
+	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = nullptr, LPCTSTR aExtraInfo = _T(""));
+	ResultType Win32Error(DWORD aError = GetLastError());
+	
+	ResultType UnhandledException(Line* aLine, ResultType aErrorType = FAIL);
 	static void FreeExceptionToken(ResultToken*& aToken);
 
 
@@ -3461,6 +3472,7 @@ ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aP
 ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aValue, ResultToken &aResultToken, bool aOptional = false);
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, size_t &aSize);
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr);
+
 
 #endif
 

@@ -107,7 +107,9 @@ GNU General Public License for more details.
 enum ResultType {FAIL = 0, OK, WARN = OK, CRITICAL_ERROR  // Some things might rely on OK==1 (i.e. boolean "true")
 	, CONDITION_TRUE, CONDITION_FALSE
 	, LOOP_BREAK, LOOP_CONTINUE
-	, EARLY_RETURN, EARLY_EXIT}; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
+	, EARLY_RETURN, EARLY_EXIT // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
+	, FAIL_OR_OK // For LineError/RuntimeError, error is continuable.
+};
 
 enum ExcptModeType {EXCPTMODE_NONE = 0
 	//, EXCPTMODE_TRY = 1 // Currently unused: Try block present.

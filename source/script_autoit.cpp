@@ -752,8 +752,6 @@ BIF_DECL(BIF_ControlGet)
 		// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
 		// being when the item's text is retrieved.  This should be harmless, since there are many
 		// other precedents where a variable is sized to something larger than it winds up carrying.
-		// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-		// this call will set up the clipboard for writing:
 		if (!TokenSetResult(aResultToken, NULL, length))
 			return;  // It already displayed the error.
 		aResultToken.symbol = SYM_STRING;
@@ -1283,7 +1281,7 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 ResultType Line::FileRecycle(LPTSTR aFilePattern)
 {
 	if (!aFilePattern || !*aFilePattern)
-		return LineError(ERR_PARAM1_REQUIRED);  // Since this is probably not what the user intended.
+		return LineError(ERR_PARAM1_REQUIRED, FAIL_OR_OK);  // Since this is probably not what the user intended.
 
 	SHFILEOPSTRUCT FileOp;
 	TCHAR szFileTemp[_MAX_PATH+2];
