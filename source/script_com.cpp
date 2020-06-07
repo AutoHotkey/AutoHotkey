@@ -906,14 +906,23 @@ void ComError(HRESULT hr, ResultToken &aResultToken, LPTSTR name, EXCEPINFO* pei
 		error_text = _T("No valid COM object!");
 	else
 	{
-		int size = _stprintf(buf, _T("0x%08X - "), hr);
-		size += FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, hr, 0, buf + size, _countof(buf) - size, NULL);
-		if (buf[size-1] == '\n')
-			buf[--size] = '\0';
-		if (buf[size-1] == '\r')
-			buf[--size] = '\0';
+		int size = _stprintf(buf, _T("(0x%X) "), hr);
+		auto msg_buf = buf + size;
+		int msg_size = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, hr, 0, msg_buf, _countof(buf) - size - 1, NULL);
+		if (msg_size)
+		{
+			// Remove any possible trailing \r\n.
+			if (msg_buf[msg_size-1] == '\n')
+				msg_buf[--msg_size] = '\0';
+			if (msg_buf[msg_size-1] == '\r')
+				msg_buf[--msg_size] = '\0';
+			// Add a trailing \n if we'll be adding more lines below.
+			if (pei)
+				msg_buf[msg_size++] = '\n';
+		}
+		size += msg_size;
 		if (pei)
-			_vsntprintf(buf + size, _countof(buf) - size, _T("\nSource:\t\t%ws\nDescription:\t%ws\nHelpFile:\t\t%ws\nHelpContext:\t%d"), (va_list) &pei->bstrSource);
+			_sntprintf(buf + size, _countof(buf) - size, _T("%ws\nSource:\t%ws"), pei->bstrDescription, pei->bstrSource);
 		error_text = buf;
 	}
 
