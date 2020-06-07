@@ -14517,24 +14517,16 @@ BIF_DECL(BIF_DateDiff)
 
 BIF_DECL(BIF_Hotkey)
 {
-	_f_param_string(aParam0, 0);
+	_f_param_string_opt(aParam0, 0);
 	_f_param_string_opt(aParam1, 1);
 	_f_param_string_opt(aParam2, 2);
 	
-	ResultType result;
+	ResultType result = OK;
 	IObject *functor = NULL;
-	
-	if (!_tcsnicmp(aParam0, _T("IfWin"), 5)) // Seems reasonable to assume that anything starting with "IfWin" can't be the name of a hotkey.
+
+	switch (_f_callee_id) 
 	{
-		result = Hotkey::IfWin(aParam0, aParam1, aParam2, aResultToken);
-	}
-	else if (!_tcsicmp(aParam0, _T("If")))
-	{
-		if (!ParamIndexIsOmitted(1))
-			functor = TokenToFunctor(*aParam[1]);
-		result = Hotkey::IfExpr(aParam1, functor, aResultToken);
-	}
-	else
+	case FID_Hotkey:
 	{
 		HookActionType hook_action = 0;
 		if (!ParamIndexIsOmitted(1))
@@ -14545,6 +14537,17 @@ BIF_DECL(BIF_Hotkey)
 				functor = StringToLabelOrFunctor(aParam1);
 		}
 		result = Hotkey::Dynamic(aParam0, aParam1, aParam2, functor, hook_action, aResultToken);
+		break;
+	}
+	case FID_HotIf:
+		if (!ParamIndexIsOmitted(0))
+			functor = TokenToFunctor(*aParam[0]);
+		result = Hotkey::IfExpr(aParam0, functor, aResultToken);
+		break;
+	
+	default: // HotIfWinXXX
+		result = SetHotkeyCriterion(_f_callee_id, aParam0, aParam1); // Currently, it only fails upon out-of-memory.
+	
 	}
 	
 	if (functor)

@@ -209,7 +209,6 @@ public:
 	#define HOTKEY_EL_NOTEXISTVARIANT    6
 	#define HOTKEY_EL_MAXCOUNT           98 // 98 allows room for other ErrorLevels to be added in between.
 	#define HOTKEY_EL_MEM                99
-	static ResultType IfWin(LPTSTR aIfWin, LPTSTR aWinTitle, LPTSTR aWinText, ResultToken &aResultToken);
 	static ResultType IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultToken);
 	static ResultType Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions
 		, IObject *aJumpToLabel, HookActionType aHookAction, ResultToken &aResultToken);
