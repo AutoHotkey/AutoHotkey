@@ -3397,12 +3397,10 @@ end:
 
 void PixelSearch(Var *output_var_x, Var *output_var_y
 	, int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
-	, int aVariation, LPTSTR aOptions, bool aIsPixelGetColor
-	, ResultToken &aResultToken)
+	, int aVariation, bool aIsPixelGetColor, ResultToken &aResultToken)
 // Author: The fast-mode PixelSearch was created by Aurelian Maga.
 {
-	// For maintainability, get options and RGB/BGR conversion out of the way early.
-	bool fast_mode = aIsPixelGetColor || !tcscasestr(aOptions, _T("Slow"));
+	// For maintainability, get RGB/BGR conversion out of the way early.
 	COLORREF aColorBGR = rgb_to_bgr(aColorRGB);
 
 	// Many of the following sections are similar to those in ImageSearch(), so they should be
@@ -3464,93 +3462,91 @@ void PixelSearch(Var *output_var_x, Var *output_var_y
 	if (!hdc)
 		goto error;
 
-	bool found = false; // Must init here for use by "goto fast_end" and for use by both fast and slow modes.
+	bool found = false; // Must init here for use by "goto fast_end".
 
-	if (fast_mode)
+	// From this point on, "goto fast_end" will assume hdc is non-NULL but that the below might still be NULL.
+	// Therefore, all of the following must be initialized so that the "fast_end" label can detect them:
+	HDC sdc = NULL;
+	HBITMAP hbitmap_screen = NULL;
+	LPCOLORREF screen_pixel = NULL;
+	HGDIOBJ sdc_orig_select = NULL;
+
+	// Some explanation for the method below is contained in this quote from the newsgroups:
+	// "you shouldn't really be getting the current bitmap from the GetDC DC. This might
+	// have weird effects like returning the entire screen or not working. Create yourself
+	// a memory DC first of the correct size. Then BitBlt into it and then GetDIBits on
+	// that instead. This way, the provider of the DC (the video driver) can make sure that
+	// the correct pixels are copied across."
+
+	// Create an empty bitmap to hold all the pixels currently visible on the screen (within the search area):
+	int search_width = right - left + 1;
+	int search_height = bottom - top + 1;
+	if (   !(sdc = CreateCompatibleDC(hdc)) || !(hbitmap_screen = CreateCompatibleBitmap(hdc, search_width, search_height))   )
+		goto fast_end;
+
+	if (   !(sdc_orig_select = SelectObject(sdc, hbitmap_screen))   )
+		goto fast_end;
+
+	// Copy the pixels in the search-area of the screen into the DC to be searched:
+	if (   !(BitBlt(sdc, 0, 0, search_width, search_height, hdc, left, top, SRCCOPY))   )
+		goto fast_end;
+
+	LONG screen_width, screen_height;
+	bool screen_is_16bit;
+	if (   !(screen_pixel = getbits(hbitmap_screen, sdc, screen_width, screen_height, screen_is_16bit))   )
+		goto fast_end;
+
+	// Concerning 0xF8F8F8F8: "On 16bit and 15 bit color the first 5 bits in each byte are valid
+	// (in 16bit there is an extra bit but i forgot for which color). And this will explain the
+	// second problem [in the test script], since GetPixel even in 16bit will return some "valid"
+	// data in the last 3bits of each byte."
+	register int i;
+	LONG screen_pixel_count = screen_width * screen_height;
+	if (screen_is_16bit)
+		for (i = 0; i < screen_pixel_count; ++i)
+			screen_pixel[i] &= 0xF8F8F8F8;
+
+	if (aIsPixelGetColor)
 	{
-		// From this point on, "goto fast_end" will assume hdc is non-NULL but that the below might still be NULL.
-		// Therefore, all of the following must be initialized so that the "fast_end" label can detect them:
-		HDC sdc = NULL;
-		HBITMAP hbitmap_screen = NULL;
-		LPCOLORREF screen_pixel = NULL;
-		HGDIOBJ sdc_orig_select = NULL;
-
-		// Some explanation for the method below is contained in this quote from the newsgroups:
-		// "you shouldn't really be getting the current bitmap from the GetDC DC. This might
-		// have weird effects like returning the entire screen or not working. Create yourself
-		// a memory DC first of the correct size. Then BitBlt into it and then GetDIBits on
-		// that instead. This way, the provider of the DC (the video driver) can make sure that
-		// the correct pixels are copied across."
-
-		// Create an empty bitmap to hold all the pixels currently visible on the screen (within the search area):
-		int search_width = right - left + 1;
-		int search_height = bottom - top + 1;
-		if (   !(sdc = CreateCompatibleDC(hdc)) || !(hbitmap_screen = CreateCompatibleBitmap(hdc, search_width, search_height))   )
-			goto fast_end;
-
-		if (   !(sdc_orig_select = SelectObject(sdc, hbitmap_screen))   )
-			goto fast_end;
-
-		// Copy the pixels in the search-area of the screen into the DC to be searched:
-		if (   !(BitBlt(sdc, 0, 0, search_width, search_height, hdc, left, top, SRCCOPY))   )
-			goto fast_end;
-
-		LONG screen_width, screen_height;
-		bool screen_is_16bit;
-		if (   !(screen_pixel = getbits(hbitmap_screen, sdc, screen_width, screen_height, screen_is_16bit))   )
-			goto fast_end;
-
-		// Concerning 0xF8F8F8F8: "On 16bit and 15 bit color the first 5 bits in each byte are valid
-		// (in 16bit there is an extra bit but i forgot for which color). And this will explain the
-		// second problem [in the test script], since GetPixel even in 16bit will return some "valid"
-		// data in the last 3bits of each byte."
-		register int i;
-		LONG screen_pixel_count = screen_width * screen_height;
+		COLORREF color = screen_pixel[0] & 0x00FFFFFF; // See other 0x00FFFFFF below for explanation.
+		aResultToken.marker_length = _stprintf(aResultToken.marker, _T("0x%06X"), color);
+	}
+	else if (aVariation < 1) // Caller wants an exact match on one particular color.
+	{
 		if (screen_is_16bit)
-			for (i = 0; i < screen_pixel_count; ++i)
-				screen_pixel[i] &= 0xF8F8F8F8;
+			aColorRGB &= 0xF8F8F8F8;
 
-		if (aIsPixelGetColor)
+		for (int j = 0; j < screen_pixel_count; ++j)
 		{
-			COLORREF color = screen_pixel[0] & 0x00FFFFFF; // See other 0x00FFFFFF below for explanation.
-			aResultToken.marker_length = _stprintf(aResultToken.marker, _T("0x%06X"), color);
-		}
-		else if (aVariation < 1) // Caller wants an exact match on one particular color.
-		{
-			if (screen_is_16bit)
-				aColorRGB &= 0xF8F8F8F8;
+			if (right_to_left && bottom_to_top)
+				i = screen_pixel_count - j - 1;
+			else if (right_to_left)
+				i = j / screen_width * screen_width + screen_width - j % screen_width - 1;
+			else if (bottom_to_top)
+				i = (screen_pixel_count - j - 1) / screen_width * screen_width + j % screen_width;
+			else
+				i = j;
 
-			for (int j = 0; j < screen_pixel_count; ++j)
+			// Note that screen pixels sometimes have a non-zero high-order byte.  That's why
+			// bit-and with 0x00FFFFFF is done.  Otherwise, reddish/orangish colors are not properly
+			// found:
+			if ((screen_pixel[i] & 0x00FFFFFF) == aColorRGB)
 			{
-				if (right_to_left && bottom_to_top)
-					i = screen_pixel_count - j - 1;
-				else if (right_to_left)
-					i = j / screen_width * screen_width + screen_width - j % screen_width - 1;
-				else if (bottom_to_top)
-					i = (screen_pixel_count - j - 1) / screen_width * screen_width + j % screen_width;
-				else
-					i = j;
-
-				// Note that screen pixels sometimes have a non-zero high-order byte.  That's why
-				// bit-and with 0x00FFFFFF is done.  Otherwise, reddish/orangish colors are not properly
-				// found:
-				if ((screen_pixel[i] & 0x00FFFFFF) == aColorRGB)
-				{
-					found = true;
-					break;
-				}
+				found = true;
+				break;
 			}
 		}
-		else
+	}
+	else
+	{
+		// It seems more appropriate to do the 16-bit conversion prior to SET_COLOR_RANGE,
+		// rather than applying 0xF8 to each of the high/low values individually.
+		if (screen_is_16bit)
 		{
-			// It seems more appropriate to do the 16-bit conversion prior to SET_COLOR_RANGE,
-			// rather than applying 0xF8 to each of the high/low values individually.
-			if (screen_is_16bit)
-			{
-				search_red &= 0xF8;
-				search_green &= 0xF8;
-				search_blue &= 0xF8;
-			}
+			search_red &= 0xF8;
+			search_green &= 0xF8;
+			search_blue &= 0xF8;
+		}
 
 #define SET_COLOR_RANGE \
 {\
@@ -3562,123 +3558,60 @@ void PixelSearch(Var *output_var_x, Var *output_var_y
 	blue_high = (aVariation > 0xFF - search_blue) ? 0xFF : search_blue + aVariation;\
 }
 			
-			SET_COLOR_RANGE
-
-			for (int j = 0; j < screen_pixel_count; ++j)
-			{
-				if (right_to_left && bottom_to_top)
-					i = screen_pixel_count - j - 1;
-				else if (right_to_left)
-					i = j / screen_width * screen_width + screen_width - j % screen_width - 1;
-				else if (bottom_to_top)
-					i = (screen_pixel_count - j - 1) / screen_width * screen_width + j % screen_width;
-				else
-					i = j;
-
-				// Note that screen pixels sometimes have a non-zero high-order byte.  But it doesn't
-				// matter with the below approach, since that byte is not checked in the comparison.
-				pixel = screen_pixel[i];
-				red = GetBValue(pixel);   // Because pixel is in RGB vs. BGR format, red is retrieved with
-				green = GetGValue(pixel); // GetBValue() and blue is retrieved with GetRValue().
-				blue = GetRValue(pixel);
-				if (red >= red_low && red <= red_high
-					&& green >= green_low && green <= green_high
-					&& blue >= blue_low && blue <= blue_high)
-				{
-					found = true;
-					break;
-				}
-			}
-		}
-
-fast_end:
-		ReleaseDC(NULL, hdc);
-		if (sdc)
-		{
-			if (sdc_orig_select) // i.e. the original call to SelectObject() didn't fail.
-				SelectObject(sdc, sdc_orig_select); // Probably necessary to prevent memory leak.
-			DeleteDC(sdc);
-		}
-		if (hbitmap_screen)
-			DeleteObject(hbitmap_screen);
-		if (screen_pixel)
-			free(screen_pixel);
-		else // One of the GDI calls failed and the search wasn't carried out.
-			goto error;
-
-		if (aIsPixelGetColor)
-			return; // Return value was already set.
-
-		// Otherwise, success.  Calculate xpos and ypos of where the match was found and adjust
-		// coords to make them relative to the position of the target window (rect will contain
-		// zeroes if this doesn't need to be done):
-		if (found)
-		{
-			output_var_x->Assign((left + i%screen_width) - origin.x);
-			output_var_y->Assign((top + i/screen_width) - origin.y);
-		}
-		_f_return_b(found);
-	}
-
-	// Otherwise (since above didn't return): fast_mode==false
-	// This old/slower method is kept  because fast mode will break older scripts that rely on
-	// which match is found if there is more than one match (since fast mode searches the
-	// pixels in a different order (horizontally rather than vertically, I believe).
-	// In addition, there is doubt that the fast mode works in all the screen color depths, games,
-	// and other circumstances that the slow mode is known to work in.
-
-	// If the caller gives us inverted X or Y coordinates, conduct the search in reverse order.
-	// This feature was requested; it was put into effect for v1.0.25.06.
-	register int xpos, ypos;
-
-	if (aVariation > 0)
 		SET_COLOR_RANGE
 
-	for (xpos = aLeft  // It starts at aLeft even if right_to_left is true.
-		; (right_to_left ? (xpos >= aRight) : (xpos <= aRight)) // Verified correct.
-		; xpos += right_to_left ? -1 : 1)
-	{
-		for (ypos = aTop  // It starts at aTop even if bottom_to_top is true.
-			; bottom_to_top ? (ypos >= aBottom) : (ypos <= aBottom) // Verified correct.
-			; ypos += bottom_to_top ? -1 : 1)
+		for (int j = 0; j < screen_pixel_count; ++j)
 		{
-			pixel = GetPixel(hdc, xpos, ypos); // Returns a BGR value, not RGB.
-			if (aVariation < 1)  // User wanted an exact match.
+			if (right_to_left && bottom_to_top)
+				i = screen_pixel_count - j - 1;
+			else if (right_to_left)
+				i = j / screen_width * screen_width + screen_width - j % screen_width - 1;
+			else if (bottom_to_top)
+				i = (screen_pixel_count - j - 1) / screen_width * screen_width + j % screen_width;
+			else
+				i = j;
+
+			// Note that screen pixels sometimes have a non-zero high-order byte.  But it doesn't
+			// matter with the below approach, since that byte is not checked in the comparison.
+			pixel = screen_pixel[i];
+			red = GetBValue(pixel);   // Because pixel is in RGB vs. BGR format, red is retrieved with
+			green = GetGValue(pixel); // GetBValue() and blue is retrieved with GetRValue().
+			blue = GetRValue(pixel);
+			if (red >= red_low && red <= red_high
+				&& green >= green_low && green <= green_high
+				&& blue >= blue_low && blue <= blue_high)
 			{
-				if (pixel == aColorBGR)
-				{
-					found = true;
-					break;
-				}
-			}
-			else  // User specified that some variation in each of the RGB components is allowable.
-			{
-				red = GetRValue(pixel);
-				green = GetGValue(pixel);
-				blue = GetBValue(pixel);
-				if (red >= red_low && red <= red_high && green >= green_low && green <= green_high
-					&& blue >= blue_low && blue <= blue_high)
-				{
-					found = true;
-					break;
-				}
+				found = true;
+				break;
 			}
 		}
-		// Check this here rather than in the outer loop's top line because otherwise the loop's
-		// increment would make xpos too big by 1:
-		if (found)
-			break;
 	}
 
+fast_end:
 	ReleaseDC(NULL, hdc);
+	if (sdc)
+	{
+		if (sdc_orig_select) // i.e. the original call to SelectObject() didn't fail.
+			SelectObject(sdc, sdc_orig_select); // Probably necessary to prevent memory leak.
+		DeleteDC(sdc);
+	}
+	if (hbitmap_screen)
+		DeleteObject(hbitmap_screen);
+	if (screen_pixel)
+		free(screen_pixel);
+	else // One of the GDI calls failed and the search wasn't carried out.
+		goto error;
 
+	if (aIsPixelGetColor)
+		return; // Return value was already set.
+
+	// Otherwise, success.  Calculate xpos and ypos of where the match was found and adjust
+	// coords to make them relative to the position of the target window (rect will contain
+	// zeroes if this doesn't need to be done):
 	if (found)
 	{
-		// This pixel matches one of the specified color(s).
-		// Adjust coords to make them relative to the position of the target window
-		// (rect will contain zeroes if this doesn't need to be done):
-		output_var_x->Assign(xpos - origin.x);
-		output_var_y->Assign(ypos - origin.y);
+		output_var_x->Assign((left + i%screen_width) - origin.x);
+		output_var_y->Assign((top + i/screen_width) - origin.y);
 	}
 	_f_return_b(found);
 
@@ -3696,8 +3629,7 @@ BIF_DECL(BIF_PixelSearch)
 		_f_throw(ERR_PARAM2_INVALID);
 	PixelSearch(aParam[0]->var, aParam[1]->var
 		, ParamIndexToInt(2), ParamIndexToInt(3), ParamIndexToInt(4), ParamIndexToInt(5)
-		, ParamIndexToInt(6), ParamIndexToOptionalInt(7, 0), ParamIndexToOptionalString(8)
-		, false, aResultToken);
+		, ParamIndexToInt(6), ParamIndexToOptionalInt(7, 0), false, aResultToken);
 }
 
 

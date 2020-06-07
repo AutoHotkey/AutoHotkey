@@ -3478,8 +3478,7 @@ bool ControlSetTab(ResultToken &aResultToken, HWND aHwnd, DWORD aTabIndex);
 
 void PixelSearch(Var *aOutputVarX, Var *aOutputVarY
 	, int aLeft, int aTop, int aRight, int aBottom, COLORREF aColorRGB
-	, int aVariation, LPTSTR aOptions, bool aIsPixelGetColor
-	, ResultToken &aResultToken);
+	, int aVariation, bool aIsPixelGetColor, ResultToken &aResultToken);
 
 ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aPtr, ResultToken &aResultToken, bool aOptional = false);
 ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aValue, ResultToken &aResultToken, bool aOptional = false);

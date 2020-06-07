@@ -223,7 +223,7 @@ FuncEntry g_BIF[] =
 	BIF1(OnMessage, 2, 3),
 	BIF1(Ord, 1, 1),
 	BIF1(PixelGetColor, 2, 3),
-	BIF1(PixelSearch, 7, 9, {1, 2}),
+	BIF1(PixelSearch, 7, 8, {1, 2}),
 	BIFn(PostMessage, 1, 8, BIF_PostSendMessage),
 	BIFn(ProcessClose, 1, 1, BIF_Process),
 	BIFn(ProcessExist, 0, 1, BIF_Process),

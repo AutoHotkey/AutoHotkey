@@ -167,7 +167,7 @@ BIF_DECL(BIF_PixelGetColor)
 
 	if (tcscasestr(aOptions, _T("Slow"))) // New mode for v1.0.43.10.  Takes precedence over Alt mode.
 	{
-		PixelSearch(NULL, NULL, aX, aY, aX, aY, 0, 0, aOptions, true, aResultToken); // It takes care of setting the return value.
+		PixelSearch(NULL, NULL, aX, aY, aX, aY, 0, 0, true, aResultToken); // It takes care of setting the return value.
 		return;
 	}
 
