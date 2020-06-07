@@ -13119,12 +13119,6 @@ void ConvertNumGetParams(BIF_DECL_PARAMS, NumGetParams &op)
 			return;
 		op.right_side_bound += op.target;
 	}
-	else if (target_token.symbol == SYM_VAR // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-		&& !target_token.var->IsPureNumeric()) // If the var contains a pure/binary number, it's probably an address.  Scripts can't directly access Contents() in that case anyway.
-	{
-		op.target = (size_t)target_token.var->Contents(); // Never needs updating because it's not pure numeric, but the default parameters support #Warn UseUnset.
-		op.right_side_bound = op.target + target_token.var->ByteCapacity(); // This is the first illegal address to the right of target.
-	}
 	else
 	{
 		op.target = (size_t)TokenToInt64(target_token);

@@ -872,7 +872,6 @@ class FileObject : public Object
 				LPVOID target;
 				DWORD max_size;
 				ExprTokenType &target_token = *aParam[0];
-				Var *target_var = NULL; // For maintainability (since target_token.symbol == SYM_VAR isn't a reliable indicator).
 				switch (target_token.symbol)
 				{
 				case SYM_STRING:
@@ -881,16 +880,6 @@ class FileObject : public Object
 					target = target_token.marker;
 					max_size = (DWORD)(target_token.marker_length + 1) * sizeof(TCHAR); // Allow +1 to write the null-terminator (but it won't be written by default if size is omitted).
 					break;
-				case SYM_VAR:
-					if (!target_token.var->IsPureNumericOrObject())
-					{
-						target_var = target_token.var;
-						target = target_var->Contents(TRUE, reading); // Pass TRUE for aAllowUpdate just to enable uninit' warning when !reading.
-						max_size = (DWORD)target_var->ByteCapacity();
-						if (reading && max_size) // But when writing, allow the null-terminator to be included.
-							max_size -= sizeof(TCHAR); // Always reserve space for the null-terminator.
-						break;
-					}
 				default:
 					if (IObject *obj = TokenToObject(target_token))
 					{
@@ -919,42 +908,21 @@ class FileObject : public Object
 				{
 					if (max_size == ~0) // Param #1 was an address.
 						_o_throw(ERR_PARAM2_REQUIRED); // (in this case).
-					if (reading)
-						// Fill the variable (space was already reserved for the null-terminator).
-						size = max_size; // max_size != SIZE_MAX implies target_var != NULL, so this is its capacity.
-					else
+					size = max_size;
+					if (!reading)
 						// Default to the byte count of the binary string, excluding the null-terminator.
-						size = target_var ? (DWORD)target_var->ByteLength() : (max_size - sizeof(TCHAR));
+						size -= sizeof(TCHAR);
 				}
 				else
 				{
 					size = (DWORD)ParamIndexToInt64(1);
 					if (size > max_size) // Implies max_size != ~0.
-					{
-						if (!reading || !target_var)
-							_o_throw(ERR_PARAM2_INVALID); // Invalid size (param #2).
-						if (!target_var->SetCapacity(size, false))
-							return FAIL; // SetCapacity() already showed the error message.
-						target = target_var->Contents(FALSE, TRUE); // Update to the new address.
-					}
+						_o_throw(ERR_PARAM2_INVALID); // Invalid size (param #2).
 				}
 
 				DWORD result;
 				if (reading)
-				{
 					result = mFile.Read(target, size);
-					if (target_var)
-					{
-						DWORD byte_length = result;
-						#ifdef UNICODE
-						// Var capacity is always a multiple of sizeof(TCHAR), so there's always room for this:
-						if (byte_length & 1)
-							((LPBYTE)target)[byte_length++] = 0; // Round up to multiple of sizeof(TCHAR) and init to zero for predictability.
-						#endif
-						target_var->ByteLength() = byte_length; // Update variable's length.
-						*(LPTSTR)((LPBYTE)target + byte_length) = '\0'; // Ensure it is null-terminated.
-					}
-				}
 				else
 					result = mFile.Write(target, size);
 				aResultToken.value_int64 = result;
