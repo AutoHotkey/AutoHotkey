@@ -496,12 +496,13 @@ Script::Script()
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
 	, mOnClipboardChangeIsRunning(false), mExitReason(EXIT_NONE)
 	, mFirstLabel(NULL), mLastLabel(NULL)
+	, mLastHotFunc(nullptr), mUnusedHotFunc(nullptr)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
 	, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
 	, mOpenBlock(NULL), mNextLineIsFunctionBody(false), mNoUpdateLabels(false)
 	, mClassObjectCount(0), mUnresolvedClasses(NULL), mClassProperty(NULL), mClassPropertyDef(NULL)
-	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true)
+	, mCurrFileIndex(0), mCombinedLineNumber(0)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
 	, mScriptName(NULL)
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
@@ -1503,7 +1504,6 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 UINT Script::LoadFromFile()
 // Returns the number of non-comment lines that were loaded, or LOADING_FAILED on error.
 {
-	mNoHotkeyLabels = true;  // Indicate that there are no hotkey labels, since we're (re)loading the entire file.
 	mIsReadyToExecute = mAutoExecSectionIsRunning = false;
 	if (!mFileSpec || !*mFileSpec) return LOADING_FAILED;
 
@@ -1571,7 +1571,8 @@ UINT Script::LoadFromFile()
 	//
 	//  2) Warn the user (if appropriate) since they probably meant it to be global.
 	//
-	if (!PreprocessLocalVars(mFuncs))
+	if (!PreprocessLocalVars(mFuncs)
+		|| !PreprocessLocalVars(mHotFuncs))
 		return LOADING_FAILED;
 
 	// Resolve any unresolved base classes.
@@ -1892,7 +1893,7 @@ ResultType Script::LoadIncludedFile(TextStream *fp)
 	int source_file_index = Line::sSourceFileCount - 1;
 
 	// <buf> should be no larger than LINE_SIZE because some later functions rely upon that:
-	TCHAR buf1[LINE_SIZE], buf2[LINE_SIZE], remap_buf[LINE_SIZE];
+	TCHAR buf1[LINE_SIZE], buf2[LINE_SIZE];
 	LPTSTR buf = buf1, next_buf = buf2; // Oscillate between bufs to improve performance (avoids memcpy from buf2 to buf1).
 	size_t buf_length, next_buf_length;
 	bool buf_has_brace;
@@ -1908,12 +1909,6 @@ ResultType Script::LoadIncludedFile(TextStream *fp)
 	HookActionType hook_action;
 	bool is_label, suffix_has_tilde, hook_is_mandatory, hotstring_execute;
 	ResultType hotkey_validity;
-
-	// For the remap mechanism, e.g. a::b
-	vk_type remap_source_vk, remap_dest_vk = 0; // Only dest is initialized to enforce the fact that it is the flag/signal to indicate whether remapping is in progress.
-	TCHAR remap_source[32], remap_dest[32], remap_dest_modifiers[8]; // Must fit the longest key name (currently Browser_Favorites [17]), but buffer overflow is checked just in case.
-	LPTSTR remap_ptr, extra_event;
-	bool remap_source_is_combo, remap_source_is_mouse, remap_dest_is_mouse, remap_keybd_to_mouse;
 
 	#define MAX_FUNC_VAR_GLOBALS 2000
 	Var *func_global_var[MAX_FUNC_VAR_GLOBALS];
@@ -1967,20 +1962,9 @@ process_completed_line:
 		// by design, phys_line_number will be greater than mCombinedLineNumber whenever
 		// a continuation section/lines were used to build this combined line.
 
-		// The following "examine_line" label skips the following parts above:
-		// 1) The inner loop that handles continuation sections: Not needed by the callers of this label.
-		// 2) Things like the following should be skipped because callers of this label don't want the
-		//    physical line number changed (which would throw off the count of lines that lie beneath a remap):
-		//    mCombinedLineNumber = phys_line_number + 1;
-		//    ++phys_line_number;
-		// 3) "mCurrLine = NULL": Probably not necessary since it's only for error reporting.  Worst thing
-		//    that could happen is that syntax errors would be thrown off, which testing shows isn't the case.
-examine_line:
-		// "::" alone isn't a hotstring, it's a label whose name is colon.
-		// ": & somekey::" is a valid hotkey on some non-US layouts (and works even on US layouts but is
-		// equivalent to "`; & somekey::").  Hotstring detection below is thorough enough to exclude this.
 		hotstring_start = NULL;
 		hotkey_flag = NULL;
+		bool hotkey_uses_otb = false; // used for hotstrings too.
 		if (buf[0] == ':' && buf[1])
 		{
 			hotstring_options = buf + 1; // Point it to the hotstring's option letters, if any.
@@ -1999,6 +1983,7 @@ examine_line:
 					hotstring_start = buf + 2;
 				//else it's just a naked "::", which is considered to be an ordinary label whose name is colon.
 		}
+
 		if (hotstring_start)
 		{
 			// Check for 'X' option early since escape sequence processing depends on it.
@@ -2104,10 +2089,13 @@ examine_line:
 			}
 		}
 
-		// Treat a naked "::" as a normal label whose label name is colon:
 		if (is_label = (hotkey_flag && hotkey_flag > buf)) // It's a hotkey/hotstring label.
 		{
-			if (g->CurrentFunc || mClassObjectCount)
+			
+			// Allow a current function if it is mLastHotFunc, this allows stacking,
+			// x::			// mLastHotFunc created here
+			// y::action	// parsing "y::" now.
+			if ( (g->CurrentFunc && g->CurrentFunc != mLastHotFunc) || mClassObjectCount)
 			{
 				// Even if it weren't for the reasons below, the first hotkey/hotstring label in a script
 				// will end the auto-execute section with a "return".  Therefore, if this restriction here
@@ -2121,16 +2109,27 @@ examine_line:
 				// ensures that a Gosub or Goto can't jump to it from outside the function.
 				return ScriptError(_T("Hotkeys/hotstrings are not allowed inside functions or classes."), buf);
 			}
+
 			*hotkey_flag = '\0'; // Terminate so that buf is now the label itself.
 			hotkey_flag += HOTKEY_FLAG_LENGTH;  // Now hotkey_flag is the hotkey's action, if any.
+			
+			LPTSTR otb_brace = omit_leading_whitespace(hotkey_flag);
+			hotkey_uses_otb = *otb_brace == '{' && !*omit_leading_whitespace(otb_brace + 1);
 			if (!hotstring_start)
 			{
 				ltrim(hotkey_flag); // Has already been rtrimmed by GetLine().
 				// Not done because Hotkey::TextInterpret() does not allow trailing whitespace: 
 				//rtrim(buf); // Trim the new substring inside of buf (due to temp termination). It has already been ltrimmed.
+				
+				 // To use '{' as remap_dest, escape it!.
+				if (hotkey_flag[0] == g_EscapeChar && hotkey_flag[1] == '{')
+					hotkey_flag++;
+
 				cp = hotkey_flag; // Set default, conditionally overridden below (v1.0.44.07).
+				vk_type remap_dest_vk;
 				// v1.0.40: Check if this is a remap rather than hotkey:
-				if (   *hotkey_flag // This hotkey's action is on the same line as its label.
+				if (!hotkey_uses_otb   
+					&& *hotkey_flag // This hotkey's action is on the same line as its trigger definition.
 					&& (remap_dest_vk = hotkey_flag[1] ? TextToVK(cp = Hotkey::TextToModifiers(hotkey_flag, NULL)) : 0xFF)   ) // And the action appears to be a remap destination rather than a command.
 					// For above:
 					// Fix for v1.0.44.07: Set remap_dest_vk to 0xFF if hotkey_flag's length is only 1 because:
@@ -2145,6 +2144,11 @@ examine_line:
 					// the line shouldn't be a remap.  For example, I think a hotkey such as "x & y::return"
 					// would trigger such a bug.
 				{
+					
+					vk_type remap_source_vk;
+					TCHAR remap_source[32], remap_dest[32], remap_dest_modifiers[8]; // Must fit the longest key name (currently Browser_Favorites [17]), but buffer overflow is checked just in case.
+					bool remap_source_is_combo, remap_source_is_mouse, remap_dest_is_mouse, remap_keybd_to_mouse;
+
 					// These will be ignored in other stages if it turns out not to be a remap later below:
 					remap_source_vk = TextToVK(cp1 = Hotkey::TextToModifiers(buf, NULL)); // An earlier stage verified that it's a valid hotkey, though VK could be zero.
 					remap_source_is_combo = _tcsstr(cp1, COMPOSITE_DELIMITER);
@@ -2166,73 +2170,177 @@ examine_line:
 					tcslcpy(remap_dest_modifiers, hotkey_flag, _countof(remap_dest_modifiers));
 					if (cp - hotkey_flag < _countof(remap_dest_modifiers)) // Avoid reading beyond the end.
 						remap_dest_modifiers[cp - hotkey_flag] = '\0';   // Terminate at the proper end of the modifier string.
-					remap_ptr = NULL; // Init for use in the next stage.
-					// In the unlikely event that the dest key has the same name as a command, disqualify it
-					// from being a remap (as documented).  v1.0.40.05: If the destination key has any modifiers,
-					// it is unambiguously a key name rather than a command, so the switch() isn't necessary.
-					if (*remap_dest_modifiers)
-						goto continue_main_loop; // It will see that remap_dest_vk is non-zero and act accordingly.
-					switch (remap_dest_vk)
+					
+					if (!*remap_dest_modifiers	
+						&& (remap_dest_vk == VK_PAUSE)	
+						&& (!_tcsicmp(remap_dest, _T("Pause")))) // Specifically "Pause", not "vk13".
 					{
-					case VK_PAUSE:
-						if (!_tcsicmp(remap_dest, _T("Pause"))) // Specifically "Pause", not "vk13".
-							break;
-						// Fall through:
-					default: // All other VKs are valid destinations and thus the remap is valid.
-						goto continue_main_loop; // It will see that remap_dest_vk is non-zero and act accordingly.
+						// In the unlikely event that the dest key has the same name as a command, disqualify it
+						// from being a remap (as documented). 
+						// v1.0.40.05: If the destination key has any modifiers,
+						// it is unambiguously a key name rather than a command.
 					}
-					// Since above didn't goto, indicate that this is not a remap after all:
-					remap_dest_vk = 0;
+					else
+					{
+						// It is a remapping. Create one "down" and one "up" hotkey,
+						// eg, "x::y" yields,
+						// *x::
+						// {
+						// SetKeyDelay(-1), Send("{Blind}{y DownR}")
+						// }
+						// *x up::
+						// {
+						// SetKeyDelay(-1), Send("{Blind}{y Up}")
+						// }
+						// Using one line to facilitate code.
+
+						// For remapping, decided to use a "macro expansion" approach because I think it's considerably
+						// smaller in code size and complexity than other approaches would be.  I originally wanted to
+						// do it with the hook by changing the incoming event prior to passing it back out again (for
+						// example, a::b would transform an incoming 'a' keystroke into 'b' directly without having
+						// to suppress the original keystroke and simulate a new one).  Unfortunately, the low-level
+						// hooks apparently do not allow this.  Here is the test that confirmed it:
+						// if (event.vkCode == 'A')
+						// {
+						//	event.vkCode = 'B';
+						//	event.scanCode = 0x30; // Or use vk_to_sc(event.vkCode).
+						//	return CallNextHookEx(g_KeybdHook, aCode, wParam, lParam);
+						// }
+
+						if (mLastHotFunc)		
+							// Checking this to disallow stacking, eg
+							// x::
+							// y::z
+							// which would cause x:: to just do the "down"
+							// part of y::z.
+							return ScriptError(ERR_HOTKEY_MISSING_BRACE);
+
+						auto make_remap_hotkey = [&](LPTSTR aKey)
+						{
+							if (!CreateHotFunc(func_global_var, MAX_FUNC_VAR_GLOBALS))
+									return FAIL;
+							hk = Hotkey::FindHotkeyByTrueNature(aKey, suffix_has_tilde, hook_is_mandatory);
+							if (hk)
+							{
+								if (!hk->AddVariant(mLastHotFunc, suffix_has_tilde))
+									return FAIL;
+							}
+							else if (!Hotkey::AddHotkey(mLastHotFunc, HK_NORMAL, aKey, suffix_has_tilde))
+								return FAIL;
+							return OK;
+						};
+						// Start with the "down" hotkey:
+						if (!make_remap_hotkey(remap_source)) 
+							return FAIL;
+						
+						TCHAR remap_buf[LINE_SIZE];
+						cp = remap_buf;
+						cp += _stprintf(cp
+							, _T("Set%sDelay(-1),") // Does NOT need to be "-1, -1" for SetKeyDelay (see below).
+							, remap_dest_is_mouse ? _T("Mouse") : _T("Key")
+						);
+						// It seems unnecessary to set press-duration to -1 even though the auto-exec section might
+						// have set it to something higher than -1 because:
+						// 1) Press-duration doesn't apply to normal remappings since they use down-only and up-only events.
+						// 2) Although it does apply to remappings such as a::B and a::^b (due to press-duration being
+						//    applied after a change to modifier state), those remappings are fairly rare and supporting
+						//    a non-negative-one press-duration (almost always 0) probably adds a degree of flexibility
+						//    that may be desirable to keep.
+						// 3) SendInput may become the predominant SendMode, so press-duration won't often be in effect anyway.
+						// 4) It has been documented that remappings use the auto-execute section's press-duration.
+						// The primary reason for adding Key/MouseDelay -1 is to minimize the chance that a one of
+						// these hotkey threads will get buried under some other thread such as a timer, which
+						// would disrupt the remapping if #MaxThreadsPerHotkey is at its default of 1.
+						if (remap_keybd_to_mouse)
+						{
+							// Since source is keybd and dest is mouse, prevent keyboard auto-repeat from auto-repeating
+							// the mouse button (since that would be undesirable 90% of the time).  This is done
+							// by inserting a single extra IF-statement above the Send that produces the down-event:
+							cp += _stprintf(cp, _T("!GetKeyState(\"%s\")&&"), remap_dest); // Should be no risk of buffer overflow due to prior validation.
+						}
+						// Otherwise, remap_keybd_to_mouse==false.
+
+						TCHAR blind_mods[5], * next_blind_mod = blind_mods, * this_mod, * found_mod;
+						for (this_mod = _T("!#^+"); *this_mod; ++this_mod)
+						{
+							found_mod = _tcschr(remap_source, *this_mod);
+							if (found_mod && found_mod[1]) // Exclude the last char for !:: and similar.
+								*next_blind_mod++ = *this_mod;
+						}
+						*next_blind_mod = '\0';
+						LPTSTR extra_event = _T(""); // Set default.
+						switch (remap_dest_vk)
+						{
+						case VK_LMENU:
+						case VK_RMENU:
+						case VK_MENU:
+							switch (remap_source_vk)
+							{
+							case VK_LCONTROL:
+							case VK_CONTROL:
+								extra_event = _T("{LCtrl up}"); // Somewhat surprisingly, this is enough to make "Ctrl::Alt" properly remap both right and left control.
+								break;
+							case VK_RCONTROL:
+								extra_event = _T("{RCtrl up}");
+								break;
+								// Below is commented out because its only purpose was to allow a shift key remapped to alt
+								// to be able to alt-tab.  But that wouldn't work correctly due to the need for the following
+								// hotkey, which does more harm than good by impacting the normal Alt key's ability to alt-tab
+								// (if the normal Alt key isn't remapped): *Tab::Send {Blind}{Tab}
+								//case VK_LSHIFT:
+								//case VK_SHIFT:
+								//	extra_event = "{LShift up}";
+								//	break;
+								//case VK_RSHIFT:
+								//	extra_event = "{RShift up}";
+								//	break;
+							}
+							break;
+						}
+						cp += _stprintf(cp
+							, _T("Send(\"{Blind%s}%s%s{%s DownR}\")") // DownR vs. Down. See Send's DownR handler for details.
+							, blind_mods, extra_event, remap_dest_modifiers, remap_dest);
+
+						auto define_remap_func = [&]()
+						{
+							if (!AddLine(ACT_BLOCK_BEGIN)
+								|| !ParseAndAddLine(remap_buf)
+								|| !AddLine(ACT_BLOCK_END))
+								return FAIL;
+							return OK;
+						};
+						if (!define_remap_func()) // the "down" function.
+							return FAIL;
+						//
+						// "Down" is finished, proceed with "Up":
+						//
+						_stprintf(remap_buf
+							, _T("%s up") // Key-up hotkey, e.g. *LButton up::
+							, remap_source);
+						if (!make_remap_hotkey(remap_buf)) 
+							return FAIL;
+						_stprintf(remap_buf
+							, _T("Set%sDelay(-1),")
+							_T("Send(\"{Blind}{%s Up}\")\n") // Unlike the down-event above, remap_dest_modifiers is not included for the up-event; e.g. ^{b up} is inappropriate.
+							, remap_dest_is_mouse ? _T("Mouse") : _T("Key")
+							, remap_dest
+						);
+						if (!define_remap_func()) // define the "up" function.
+							return FAIL;
+						goto continue_main_loop;
+					}
+					// Since above didn't goto this is not a remap after all:
 				}
 			}
 			// else don't trim hotstrings since literal spaces in both substrings are significant.
-
-			// If this is the first hotkey label encountered, Add a return before
-			// adding the label, so that the auto-execute section is terminated.
-			// Only do this if the label is a hotkey because, for example,
-			// the user may want to fully execute a normal script that contains
-			// no hotkeys but does contain normal labels to which the execution
-			// should fall through, if specified, rather than returning.
-			// But this might result in weirdness?  Example:
-			//testlabel:
-			// Sleep, 1
-			// return
-			// ^a::
-			// return
-			// It would put the hard return in between, which is wrong.  But in the case above,
-			// the first sub shouldn't have a return unless there's a part up top that ends in Exit.
-			// So if Exit is encountered before the first hotkey, don't add the return?
-			// Even though wrong, the return is harmless because it's never executed?  Except when
-			// falling through from above into a hotkey (which probably isn't very valid anyway)?
-			// Update: Below must check if there are any true hotkey labels, not just regular labels.
-			// Otherwise, a normal (non-hotkey) label in the autoexecute section would count and
-			// thus the RETURN would never be added here, even though it should be:
 			
-			// Notes about the below macro:
-			// Fix for v1.0.34: Don't point labels to this particular RETURN so that labels
-			// can point to the very first hotkey or hotstring in a script.  For example:
-			// Goto Test
-			// Test:
-			// ^!z::ToolTip Without the fix`, this is never displayed by "Goto Test".
-			// UCHAR_MAX signals it not to point any pending labels to this RETURN.
-			// mCurrLine = NULL -> signifies that we're in transition, trying to load a new one.
-			#define CHECK_mNoHotkeyLabels \
-			if (mNoHotkeyLabels)\
-			{\
-				mNoHotkeyLabels = false;\
-				if (!AddLine(ACT_RETURN, NULL, UCHAR_MAX))\
-					return FAIL;\
-				mCurrLine = NULL;\
-			}
-			CHECK_mNoHotkeyLabels
-			// For hotstrings, the below makes the label include leading colon(s) and the full option
-			// string (if any) so that the uniqueness of labels is preserved.  For example, we want
-			// the following two hotstring labels to be unique rather than considered duplicates:
-			// ::abc::
-			// :c:abc::
-			if (!AddLabel(buf, true)) // Always add a label before adding the first line of its section.
-				return FAIL;
-			
+			auto set_last_hotfunc = [&]()
+			{
+				if (!mLastHotFunc)
+					return CreateHotFunc(func_global_var, _countof(func_global_var));
+				else
+					return mLastHotFunc;
+			};
 			if (hotstring_start)
 			{
 				if (!*hotstring_start)
@@ -2251,9 +2359,69 @@ examine_line:
 				// hotstrings are less commonly used and also because it requires more code to find
 				// hotstring duplicates (and performs a lot worse if a script has thousands of
 				// hotstrings) because of all the hotstring options.
-				if (!Hotstring::AddHotstring(mLastLabel->mName, mLastLabel, hotstring_options
-					, hotstring_start, hotstring_execute ? _T("") : hotkey_flag, has_continuation_section))
+
+
+				if (hotstring_execute && !*hotkey_flag)
+					// Do not allow execute option with blank line.
+					// Without this check, this
+					// :X:x::
+					// {
+					// }
+					// would execute the block. But the X options
+					// is supposed to mean "execute this line".
+					return ScriptError(ERR_EXPECTED_ACTION);
+
+				bool uses_text_or_raw_mode = false;
+				if (hotkey_uses_otb && hotstring_options)
+				{
+					// Never use otb if text or raw mode is in effect for this hotstring.
+					// Either explicitly or via #hotstring.
+					LPTSTR ho = hotstring_options;
+					uses_text_or_raw_mode =
+						(_tcsstr(ho, _T("T0")) || _tcsstr(ho, _T("t0")) || _tcsstr(ho, _T("R0")) || _tcsstr(ho, _T("r0")))
+						? false
+						: ( StrChrAny(ho, _T("T")) || StrChrAny(ho, _T("R")) )
+						? true
+						: g_HSSendRaw;
+				}
+
+
+				// The hotstring never uses otb if it uses X or T options (either explicitly or via #hotstring).
+				hotkey_uses_otb = hotkey_uses_otb && !hotstring_execute && !uses_text_or_raw_mode;
+				if ( (!*hotkey_flag || hotkey_uses_otb) || hotstring_execute)
+				{
+					// It is not auto-replace
+					if (!set_last_hotfunc())
+						return FAIL;
+				} 
+				else if (mLastHotFunc)
+				{
+					// It is autoreplace but an earlier hotkey or hotstring
+					// is "stacked" above, treat it as and error as it doesn't
+					// make sense. Otherwise one could write something like:
+					/*
+					::abc:: 
+					::def::text
+					x::action
+					 which would work as,
+					::def::text
+					::abc::
+					x::action
+					*/
+					// Note that if it is ":X:def::action" instead, we do not end up here and
+					// "::abc::" will also trigger "action".
+					mCombinedLineNumber--;	// It must be the previous line.
+					return ScriptError(ERR_HOTKEY_MISSING_BRACE);
+				}
+				
+				LPTSTR hotstring_name = SimpleHeap::Malloc(buf);
+				if (!hotstring_name)
 					return FAIL;
+				if (!Hotstring::AddHotstring(hotstring_name, mLastHotFunc, hotstring_options
+					, hotstring_start, hotstring_execute || hotkey_uses_otb ? _T("") : hotkey_flag, has_continuation_section))
+					return FAIL;
+				if (!mLastHotFunc)
+					goto continue_main_loop;
 			}
 			else // It's a hotkey vs. hotstring.
 			{
@@ -2277,7 +2445,9 @@ examine_line:
 							mCurrLine = NULL;  // Prevents showing unhelpful vicinity lines.
 							return ScriptError(_T("Duplicate hotkey."), buf);
 						}
-						if (!hk->AddVariant(mLastLabel, suffix_has_tilde))
+						if (!set_last_hotfunc())
+							return FAIL;
+						if (!hk->AddVariant(mLastHotFunc, suffix_has_tilde))
 							return ScriptError(ERR_OUTOFMEM, buf);
 						if (hook_is_mandatory || g_ForceKeybdHook)
 						{
@@ -2289,7 +2459,23 @@ examine_line:
 					}
 				}
 				else // No parent hotkey yet, so create it.
-					if (   !(hk = Hotkey::AddHotkey(mLastLabel, hook_action, mLastLabel->mName, suffix_has_tilde))   )
+				{
+					if (hook_action != HK_NORMAL && mLastHotFunc)
+						// A hotkey is stacked above, eg,
+						// x::
+						// y & z::altTab
+						// Not supported.
+						return ScriptError(ERR_HOTKEY_MISSING_BRACE);
+					
+					if (hook_action == HK_NORMAL 
+						&& !set_last_hotfunc())
+						return FAIL;
+					
+					TCHAR hotkey_name[MAX_VAR_NAME_LENGTH];
+					tcslcpy(hotkey_name, buf, _tcslen(buf) + 1);
+					
+					hk = Hotkey::AddHotkey(mLastHotFunc, hook_action, hotkey_name, suffix_has_tilde);
+					if (!hk)
 					{
 						if (hotkey_validity != CONDITION_TRUE)
 							return FAIL; // It already displayed the error.
@@ -2305,13 +2491,26 @@ examine_line:
 							MsgBox(msg_text);
 						}
 					}
+				}
 			}
 			if (*hotkey_flag) // This hotkey's/hotstring's action is on the same line as its label.
 			{
+				if (hotkey_uses_otb) {
+					// x::{
+					//	; code
+					// }
+					if (!AddLine(ACT_BLOCK_BEGIN))
+						return FAIL;
+				}
 				// Don't add AltTab or similar as a line, since it has no meaning as a script command.
-				// But do put in the Return regardless, in case this label is ever jumped to via Goto/Gosub:
-				if (hotstring_start ? hotstring_execute : !hook_action)
+				else if (hotstring_start ? hotstring_execute : !hook_action)
 				{
+					// Eg, ":X:abc::msgbox" or "x::msgbox", 
+					// x::
+					// {
+					// msgbox
+					// }
+					ASSERT(mLastHotFunc && mLastHotFunc == g->CurrentFunc);
 					// Remove the hotkey from buf.
 					buf_length -= hotkey_flag - buf;
 					tmemmove(buf, hotkey_flag, buf_length);
@@ -2319,15 +2518,11 @@ examine_line:
 					// Before adding the line, apply expression line-continuation logic, which hasn't
 					// been applied yet because hotkey labels can contain unbalanced ()[]{}:
 					if (   !GetLineContExpr(fp, buf, buf_length, next_buf, next_buf_length, phys_line_number, has_continuation_section)
-						|| !ParseAndAddLine(buf, LINE_SIZE)   )
+						|| !AddLine(ACT_BLOCK_BEGIN)			// Implicit start of function
+						|| !ParseAndAddLine(buf, LINE_SIZE)		// Function body - one line
+						|| !AddLine(ACT_BLOCK_END))				// Implicit end of function
 						return FAIL;
-					if (ACT_IS_LINE_PARENT(mLastLine->mActionType))
-						return ScriptError(ERR_INVALID_SINGLELINE_HOT);
 				}
-				// Also add the Return that's implicit for a single-line hotkey.  This is also done for
-				// auto-replace hotstrings in case gosub/goto is ever used to jump to their labels:
-				if (!AddLine(ACT_RETURN))
-					return FAIL;
 			}
 			goto continue_main_loop; // In lieu of "continue", for performance.
 		} // if (is_label = ...)
@@ -2374,6 +2569,8 @@ examine_line:
 				}
 				else
 				{
+					if (mLastHotFunc) // It is a label in a "stack" of hotkeys.
+						return ScriptError(ERR_HOTKEY_MISSING_BRACE);
 					if (!AddLabel(buf, false))
 						return FAIL;
 				}
@@ -2548,114 +2745,6 @@ examine_line:
 			return FAIL;
 
 continue_main_loop: // This method is used in lieu of "continue" for performance and code size reduction.
-		if (remap_dest_vk)
-		{
-			// For remapping, decided to use a "macro expansion" approach because I think it's considerably
-			// smaller in code size and complexity than other approaches would be.  I originally wanted to
-			// do it with the hook by changing the incoming event prior to passing it back out again (for
-			// example, a::b would transform an incoming 'a' keystroke into 'b' directly without having
-			// to suppress the original keystroke and simulate a new one).  Unfortunately, the low-level
-			// hooks apparently do not allow this.  Here is the test that confirmed it:
-			// if (event.vkCode == 'A')
-			// {
-			//	event.vkCode = 'B';
-			//	event.scanCode = 0x30; // Or use vk_to_sc(event.vkCode).
-			//	return CallNextHookEx(g_KeybdHook, aCode, wParam, lParam);
-			// }
-
-			if (!remap_ptr)
-			{
-				cp = remap_buf;
-				cp += _stprintf(cp
-					, _T("%s::\n") // Key-down hotkey label, e.g. *LButton::
-					  _T("Set%sDelay(-1)\n") // Does NOT need to be "-1, -1" for SetKeyDelay (see below).
-					, remap_source
-					, remap_dest_is_mouse ? _T("Mouse") : _T("Key")
-				);
-			
-				// It seems unnecessary to set press-duration to -1 even though the auto-exec section might
-				// have set it to something higher than -1 because:
-				// 1) Press-duration doesn't apply to normal remappings since they use down-only and up-only events.
-				// 2) Although it does apply to remappings such as a::B and a::^b (due to press-duration being
-				//    applied after a change to modifier state), those remappings are fairly rare and supporting
-				//    a non-negative-one press-duration (almost always 0) probably adds a degree of flexibility
-				//    that may be desirable to keep.
-				// 3) SendInput may become the predominant SendMode, so press-duration won't often be in effect anyway.
-				// 4) It has been documented that remappings use the auto-execute section's press-duration.
-				// The primary reason for adding Key/MouseDelay -1 is to minimize the chance that a one of
-				// these hotkey threads will get buried under some other thread such as a timer, which
-				// would disrupt the remapping if #MaxThreadsPerHotkey is at its default of 1.
-				if (remap_keybd_to_mouse)
-				{
-					// Since source is keybd and dest is mouse, prevent keyboard auto-repeat from auto-repeating
-					// the mouse button (since that would be undesirable 90% of the time).  This is done
-					// by inserting a single extra IF-statement above the Send that produces the down-event:
-					cp += _stprintf(cp, _T("if not GetKeyState(\"%s\")\n"), remap_dest); // Should be no risk of buffer overflow due to prior validation.
-				}
-				// Otherwise, remap_keybd_to_mouse==false.
-
-				TCHAR blind_mods[5], *next_blind_mod = blind_mods, *this_mod, *found_mod;
-				for (this_mod = _T("!#^+"); *this_mod; ++this_mod)
-				{
-					found_mod = _tcschr(remap_source, *this_mod);
-					if (found_mod && found_mod[1]) // Exclude the last char for !:: and similar.
-						*next_blind_mod++ = *this_mod;
-				}
-				*next_blind_mod = '\0';
-
-				extra_event = _T(""); // Set default.
-				switch (remap_dest_vk)
-				{
-				case VK_LMENU:
-				case VK_RMENU:
-				case VK_MENU:
-					switch (remap_source_vk)
-					{
-					case VK_LCONTROL:
-					case VK_CONTROL:
-						extra_event = _T("{LCtrl up}"); // Somewhat surprisingly, this is enough to make "Ctrl::Alt" properly remap both right and left control.
-						break;
-					case VK_RCONTROL:
-						extra_event = _T("{RCtrl up}");
-						break;
-					// Below is commented out because its only purpose was to allow a shift key remapped to alt
-					// to be able to alt-tab.  But that wouldn't work correctly due to the need for the following
-					// hotkey, which does more harm than good by impacting the normal Alt key's ability to alt-tab
-					// (if the normal Alt key isn't remapped): *Tab::Send {Blind}{Tab}
-					//case VK_LSHIFT:
-					//case VK_SHIFT:
-					//	extra_event = "{LShift up}";
-					//	break;
-					//case VK_RSHIFT:
-					//	extra_event = "{RShift up}";
-					//	break;
-					}
-					break;
-				}
-				_stprintf(cp
-					, _T("Send(\"{Blind%s}%s%s{%s DownR}\")\n") // DownR vs. Down. See Send's DownR handler for details.
-					  _T("Return\n")
-					  _T("%s up::\n") // Key-up hotkey label, e.g. *LButton up::
-					  _T("Set%sDelay(-1)\n")
-					  _T("Send(\"{Blind}{%s Up}\")\n") // Unlike the down-event above, remap_dest_modifiers is not included for the up-event; e.g. ^{b up} is inappropriate.
-					  _T("Return\n") // Last line must end with \n to simplify the code.
-					, blind_mods, extra_event, remap_dest_modifiers, remap_dest
-					, remap_source
-					, remap_dest_is_mouse ? _T("Mouse") : _T("Key")
-					, remap_dest
-				);
-
-				// Begin parsing remap_buf on the next iteration.
-				remap_ptr = remap_buf;
-			}
-			cp = _tcschr(remap_ptr, '\n'); // Always succeeds unless there's a bug.
-			tcslcpy(buf, remap_ptr, cp - remap_ptr + 1); // Copy this line into buf.
-			remap_ptr = cp + 1; // Set up remap_ptr for next iteration.
-			if (!*remap_ptr)
-				remap_dest_vk = 0; // Reset to signal that the remapping expansion will be complete after the next iteration.
-			mCurrLine = NULL; // Prevent misleading vicinity lines if an error is somehow possible.
-			goto examine_line;
-		} // if (remap_dest_vk)
 		// Since above didn't "continue", resume loading script line by line:
 		buf = next_buf;
 		buf_length = next_buf_length;
@@ -3648,6 +3737,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	// L4: Handle #HotIf (expression) directive.
 	if (IS_DIRECTIVE_MATCH(_T("#HotIf")))
 	{
+		if (g->CurrentFunc || mClassObjectCount)
+			return ScriptError(ERR_INVALID_USAGE);
 		if (!parameter) // The omission of the parameter indicates that any existing criteria should be turned off.
 		{
 			g->HotCriterion = NULL; // Indicate that no criteria are in effect for subsequent hotkeys.
@@ -5035,7 +5126,18 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	if (aActionType == ACT_INVALID)
 		return ScriptError(_T("DEBUG: BAD AddLine"), aArgc > 0 ? aArg[0] : _T(""));
 #endif
-
+	if (mLastHotFunc)
+	{
+		if (aActionType != ACT_BLOCK_BEGIN)
+			return ScriptError(ERR_HOTKEY_MISSING_BRACE);
+		// This is copied from DefineFunc:
+		else if (mLastLabel && !mLastLabel->mJumpToLine && !mNoUpdateLabels)
+		{
+			// There are one or more labels pointing at this function.
+			return ScriptError(_T("A label must not point to a function."), mLastLabel->mName);
+		}
+		mLastHotFunc = nullptr;
+	}
 	bool do_update_labels;
 	if (aArgc >= UCHAR_MAX) // Special signal from caller to avoid pointing any pending labels to this particular line.
 	{
@@ -5830,8 +5932,6 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	return OK;
 }
 
-
-
 ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic, bool aIsInExpression)
 // Returns OK or FAIL.
 // Caller has already called ValidateName() on the function, and it is known that this valid name
@@ -5842,6 +5942,17 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic, 
 	LPTSTR param_end, param_start = _tcschr(aBuf, '('); // Caller has ensured that this will return non-NULL.
 	int insert_pos;
 	
+	auto last_hotfunc = mLastHotFunc;
+	if (last_hotfunc)
+	{
+		// This means we are defining a function under a "trigger::".
+		// Then mLastHotFunc will not be used, instead all variants which have set it as its
+		// mJumpLabel will replace it with the new function defined in this call.
+		ASSERT(last_hotfunc == g->CurrentFunc);
+		g->CurrentFunc =					// To avoid nesting the new function inside it.
+			mLastHotFunc = nullptr;			// To avoid the next call AddLine demanding a ACT_BLOCK_BEGIN.										
+	}
+
 	bool is_method = mClassObjectCount && !g->CurrentFunc && !aIsInExpression;
 	if (is_method) // Class method or property getter/setter.
 	{
@@ -6084,51 +6195,47 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic, 
 	}
 	//else leave func.mParam/mParamCount set to their NULL/0 defaults.
 
-	if (mLastLabel && !mLastLabel->mJumpToLine && !mNoUpdateLabels)
+	if (mLastLabel && !mLastLabel->mJumpToLine && !mNoUpdateLabels) // AddLine does a similar check, maintain together.
 	{
-		// Check all variants of all hotkeys, since there might be multiple variants
-		// of various hotkeys defined in a row, such as:
-		// ^a::
-		// #IfWinActive B
+		// There are one or more labels pointing at this function.
+		return ScriptError(_T("A label must not point to a function."), mLastLabel->mName);
+	}
+	
+	if (last_hotfunc)
+	{
+		// Check all hotkeys, since there might be multiple
+		// hotkeys stacked:
 		// ^a::
 		// ^b::
 		//    somefunc(){ ...
 		for (int i = 0; i < Hotkey::sHotkeyCount; ++i)
 		{
-			for (HotkeyVariant *v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
-			{
-				Label *label = v->mJumpToLabel->ToLabel(); // Might be a function.
-				if (label && !label->mJumpToLine) // This hotkey label is pointing at this function.
+			for (HotkeyVariant* v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
+				if (v->mJumpToLabel == last_hotfunc)
 				{
-					// Update the hotkey to use this function instead of the label.
 					v->mJumpToLabel = &func;
-
-					// Remove this hotkey label from the list.  Each label is removed as the corresponding
-					// hotkey variant is found so that any generic labels that might be mixed in are left
-					// in the list and detected as errors later.
-					RemoveLabel(label);
+					v->mOriginalCallback = nullptr; // To avoid bugs.
+					break;	// Only one variant possible, per hotkey.
 				}
-			}
 		}
 		// Check hotstrings as well (even if a hotkey was found):
 		for (int i = Hotstring::sHotstringCount - 1; i >= 0; --i) // Start with the last one defined, for performance.
 		{
-			Label *label = Hotstring::shs[i]->mJumpToLabel->ToLabel(); // Might be a function.
-			if (!label || label->mJumpToLine)
-				// This hotstring has a function or a label which has already been resolved.
+			if (Hotstring::shs[i]->mJumpToLabel != last_hotfunc)
+				// This hotstring has a function or is auto-replace.
 				// Since hotstrings are listed in order of definition and we're iterating in
 				// the reverse order, there's no need to continue.
 				break;
-			// See hotkey section above for comments.
 			Hotstring::shs[i]->mJumpToLabel = &func;
-			RemoveLabel(label);
 		}
-		if (mLastLabel && !mLastLabel->mJumpToLine)
-			// There are one or more non-hotkey labels pointing at this function.
-			return ScriptError(_T("A label must not point to a function."), mLastLabel->mName);
-		// Since above didn't return, the label or labels must have been hotkey labels.
-		if (func.mMinParams)
-			return ScriptError(ERR_HOTKEY_FUNC_PARAMS, aBuf);
+
+		if (func.mMinParams > 1 || (func.mParamCount == 0 && !func.mIsVariadic))
+			// func must accept at least one parameter (or use *), any remaining parameters must be optional.
+			return ScriptError(func.mParamCount == 0 ? ERR_PARAM_REQUIRED : ERR_HOTKEY_FUNC_PARAMS, aBuf);
+		
+		mUnusedHotFunc = last_hotfunc;	// This function not used now, so reuse it for the 
+										// next hotkey which needs a function.
+		mHotFuncs.mCount--;				// Consider it gone from the list.
 	}
 
 	if (func.mOuterFunc)

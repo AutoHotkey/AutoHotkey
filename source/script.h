@@ -191,7 +191,8 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_TOO_MANY_PARAMS _T("Too many parameters passed to function.") // L31
 #define ERR_TOO_FEW_PARAMS _T("Too few parameters passed to function.") // L31
 #define ERR_BAD_OPTIONAL_PARAM _T("Expected \":=\"")
-#define ERR_HOTKEY_FUNC_PARAMS _T("Parameters of hotkey functions must be optional.")
+#define ERR_HOTKEY_FUNC_PARAMS _T("Only the first parameter of a hotkey function is permitted to be non-optional.")
+#define ERR_HOTKEY_MISSING_BRACE _T("Hotkey or hotstring is missing its opening brace.")
 #define ERR_ELSE_WITH_NO_IF _T("ELSE with no matching IF")
 #define ERR_UNTIL_WITH_NO_LOOP _T("UNTIL with no matching LOOP")
 #define ERR_CATCH_WITH_NO_TRY _T("CATCH with no matching TRY")
@@ -201,6 +202,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_UNEXPECTED_CASE _T("Case/Default must be enclosed by a Switch.")
 #define ERR_TOO_MANY_CASE_VALUES _T("Too many case values.")
 #define ERR_EXPECTED_BLOCK_OR_ACTION _T("Expected \"{\" or single-line action.")
+#define ERR_EXPECTED_ACTION _T("Expected single-line action.")
 #define ERR_OUTOFMEM _T("Out of memory.")  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
 #define ERR_EXPR_TOO_LONG _T("Expression too complex")
 #define ERR_TOO_MANY_REFS ERR_EXPR_TOO_LONG // No longer applies to just var/func refs. Old message: "Too many var/func refs."
@@ -1594,7 +1596,6 @@ struct FuncList
 	Func *Find(LPCTSTR aName, int *apInsertPos);
 	ResultType Insert(Func *aFunc, int aInsertPos);
 	ResultType Alloc(int aAllocCount);
-
 	FuncList() : mItem(NULL), mCount(0), mCountMax(0) {}
 };
 
@@ -2862,6 +2863,16 @@ private:
 	Line *mFirstStaticLine, *mLastStaticLine; // The first and last static var initializer.
 	Label *mFirstLabel, *mLastLabel;  // The first and last labels in the linked list.
 	FuncList mFuncs;
+	
+	UserFunc *mLastHotFunc;		// For hotkey/hotstring functions
+	UserFunc *mUnusedHotFunc;	// If defining a named function under a "trigger::" the implicit
+								// function stored in mLastHotFunc will not be used, store it in this
+								// variable for reuse.
+	FuncList mHotFuncs;			// All implicit hotkey funcs are stored here for variable processing.
+								// This list is not sorted, all insertions are done at the end.
+								// In particular, note that DefineFunc and CreateHotFunc directly
+								// changes mCount.
+
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
 	int mGlobalVarCountMax; // While loading the script, the maximum number of global declarations allowed for the current function.
@@ -2887,7 +2898,6 @@ private:
 	int mCurrFileIndex;
 	LineNumberType mCombinedLineNumber; // In the case of a continuation section/line(s), this is always the top line.
 
-	bool mNoHotkeyLabels;
 	bool mClassPropertyStatic;
 
 	#define UPDATE_TIP_FIELD tcslcpy(mNIC.szTip, mTrayIconTip ? mTrayIconTip \
@@ -3011,7 +3021,7 @@ public:
 		, bool aUpdatePeriod, __int64 aPeriod, bool aUpdatePriority, int aPriority);
 	void DeleteTimer(IObject *aCallback);
 	LPTSTR DefaultDialogTitle();
-
+	UserFunc* CreateHotFunc(Var* aFuncGlobalVar[], int aFuncCount);
 	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic = false, bool aIsInExpression = false);
 #ifndef AUTOHOTKEYSC
 	struct FuncLibrary

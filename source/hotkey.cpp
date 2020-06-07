@@ -867,7 +867,7 @@ void Hotkey::TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown)
 
 
 
-void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
+void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant, LPTSTR aName)
 // Caller is responsible for having called PerformIsAllowed() before calling us.
 // Caller must have already created a new thread for us, and must close the thread when we return.
 {
@@ -946,7 +946,10 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 
 	// LAUNCH HOTKEY SUBROUTINE:
 	++aVariant.mExistingThreads;  // This is the thread count for this particular hotkey only.
-	ResultType result = aVariant.mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName);
+
+	ExprTokenType aParams = { aName };
+	ResultType result = aVariant.mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &aParams, 1);
+	
 	--aVariant.mExistingThreads;
 
 	if (result == FAIL)
@@ -1031,7 +1034,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	// (i.e. it's retaining its current label).
 	if (aJumpToLabel)
 	{
-		if (!ValidateFunctor(aJumpToLabel, 0, aResultToken))
+		if (!ValidateFunctor(aJumpToLabel, 1, aResultToken))
 			return FAIL;
 	}
 
@@ -1547,6 +1550,7 @@ HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde)
 	// aJumpToLabel can be NULL for dynamic hotkeys that are hook actions such as Alt-Tab.
 	// So for maintainability and to help avg-case performance in loops, provide a non-NULL placeholder:
 	v.mJumpToLabel = aJumpToLabel ? aJumpToLabel : g_script.mPlaceholderLabel;
+	v.mOriginalCallback = g_script.mLastHotFunc;
 	v.mMaxThreads = g_MaxThreadsPerHotkey;    // The values of these can vary during load-time.
 	v.mMaxThreadsBuffer = g_MaxThreadsBuffer; //
 	v.mInputLevel = g_InputLevel;
@@ -2297,8 +2301,11 @@ ResultType Hotstring::PerformInNewThreadMadeByCaller()
 	// is still timely/accurate -- it seems best to set to "no modifiers":
 	g_script.mThisHotkeyModifiersLR = 0;
 	++mExistingThreads;  // This is the thread count for this particular hotstring only.
+	
 	ResultType result;
-	result = mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName);
+	ExprTokenType aParams = { mName };
+	result = mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &aParams, 1);
+	
 	--mExistingThreads;
 	return result ? OK : FAIL;	// Return OK on all non-failure results.
 }
