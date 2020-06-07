@@ -39,37 +39,20 @@ BIF_DECL(BIF_ComObjCreate)
 			hr = CLSIDFromProgID(cls, &clsid);
 		if (FAILED(hr)) break;
 
+		__int64 punk = 0;
 		if (aParamCount > 1)
 		{
 			hr = CLSIDFromString(CStringWCharFromTCharIfNeeded(TokenToString(*aParam[1])), &iid);
 			if (FAILED(hr)) break;
-			
-			IUnknown *punk;
-			hr = CoCreateInstance(clsid, NULL, CLSCTX_SERVER, iid, (void **)&punk);
-			if (FAILED(hr)) break;
-
-			// Return interface pointer, as requested.
-			aResultToken.symbol = SYM_INTEGER;
-			aResultToken.value_int64 = (__int64)punk;
 		}
 		else
-		{
-			IDispatch *pdisp;
-			hr = CoCreateInstance(clsid, NULL, CLSCTX_SERVER, IID_IDispatch, (void **)&pdisp);
-			if (FAILED(hr)) break;
-			
-			// Return dispatchable object.
-			if ( !(aResultToken.object = new ComObject(pdisp)) )
-			{
-				pdisp->Release();
-				hr = E_OUTOFMEMORY;
-				break;
-			}
-			aResultToken.symbol = SYM_OBJECT;
-		}
-		return;
+			iid = IID_IDispatch;
+
+		hr = CoCreateInstance(clsid, NULL, CLSCTX_SERVER, iid, (void **)&punk);
+		if (FAILED(hr)) break;
+
+		_f_return(new ComObject(punk, iid == IID_IDispatch ? VT_DISPATCH : VT_UNKNOWN));
 	}
-	_f_set_retval_p(_T(""), 0);
 	ComError(hr, aResultToken);
 }
 
@@ -512,11 +495,10 @@ BIF_DECL(BIF_ComObjArray)
 BIF_DECL(BIF_ComObjQuery)
 {
 	IUnknown *punk = NULL;
+	__int64 pint = 0;
 	ComObject *obj;
 	HRESULT hr;
 	
-	aResultToken.value_int64 = 0; // Set default; on 32-bit builds, only the low 32 bits may be set below.
-
 	if (obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0])))
 	{
 		// We were passed a ComObject, but does it contain an interface pointer?
@@ -530,8 +512,7 @@ BIF_DECL(BIF_ComObjQuery)
 		if (punk < (IUnknown *)65536) // Error-detection: the first 64KB of address space is always invalid.
 		{
 			g->LastError = E_INVALIDARG; // For consistency.
-			ComError(-1, aResultToken);
-			return;
+			_f_throw(ERR_PARAM1_INVALID);
 		}
 	}
 
@@ -544,7 +525,7 @@ BIF_DECL(BIF_ComObjQuery)
 			IServiceProvider *pprov;
 			if (SUCCEEDED(hr = punk->QueryInterface<IServiceProvider>(&pprov)))
 			{
-				hr = pprov->QueryService(sid, iid, (void **)&aResultToken.value_int64);
+				hr = pprov->QueryService(sid, iid, (void **)&pint);
 			}
 		}
 	}
@@ -553,11 +534,14 @@ BIF_DECL(BIF_ComObjQuery)
 		GUID iid;
 		if (SUCCEEDED(hr = CLSIDFromString(CStringWCharFromTCharIfNeeded(TokenToString(*aParam[1])), &iid)))
 		{
-			hr = punk->QueryInterface(iid, (void **)&aResultToken.value_int64);
+			hr = punk->QueryInterface(iid, (void **)&pint);
 		}
 	}
 
 	g->LastError = hr;
+	if (pint)
+		_f_return(new ComObject(pint, VT_UNKNOWN));
+	ComError(hr, aResultToken);
 }
 
 
