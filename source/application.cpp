@@ -890,7 +890,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				if (!hc || hc->Type == HOT_IF_NOT_ACTIVE || hc->Type == HOT_IF_NOT_EXIST)
 					criterion_found_hwnd = NULL; // For "NONE" and "NOT", there is no last found window.
 				else if (HOT_IF_REQUIRES_EVAL(hc->Type))
-					criterion_found_hwnd = g_HotExprLFW; // For #if WinExist(WinTitle) and similar.
+					criterion_found_hwnd = g_HotExprLFW; // For #HotIf WinExist(WinTitle) and similar.
 
 				priority = variant->mPriority;
 			} // switch(msg.message)

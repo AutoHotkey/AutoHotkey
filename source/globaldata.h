@@ -108,7 +108,7 @@ extern bool g_SuspendExempt;
 extern SendLevelType g_InputLevel;
 extern HotkeyCriterion *g_FirstHotCriterion, *g_LastHotCriterion;
 
-// Global variables for #if (expression). See globaldata.cpp for comments.
+// Global variables for #HotIf (expression). See globaldata.cpp for comments.
 extern UINT g_HotExprTimeout;
 extern HWND g_HotExprLFW;
 extern HotkeyCriterion *g_FirstHotExpr, *g_LastHotExpr;

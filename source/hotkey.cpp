@@ -55,7 +55,7 @@ HWND HotCriterionAllowsFiring(HotkeyCriterion *aCriterion, LPTSTR aHotkeyName)
 	case HOT_IF_NOT_EXIST:
 		found_hwnd = WinExist(g_default, aCriterion->WinTitle, aCriterion->WinText, _T(""), _T(""), false, false); // Thread-safe.
 		break;
-	// L4: Handling of #if (expression) hotkey variants.
+	// L4: Handling of #HotIf (expression) hotkey variants.
 	case HOT_IF_EXPR:
 	case HOT_IF_CALLBACK:
 		// Expression evaluation must be done in the main thread. If the message times out, the hotkey/hotstring is not allowed to fire.
@@ -164,7 +164,7 @@ HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr)
 
 
 void Script::PreparseHotkeyIfExpr(Line *aLine)
-// Optimize simple #If expressions into the more specific HOT_IF_ types so that they can be
+// Optimize simple #HotIf expressions into the more specific HOT_IF_ types so that they can be
 // evaluated by the hook directly, without synchronizing with the main thread.
 {
 	ExprTokenType *postfix = aLine->mArg[0].postfix;
