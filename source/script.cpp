@@ -11311,30 +11311,13 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 	if (result != OK)
 		// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
 		return result;
-
-	if (param_tokens[2].symbol != SYM_OBJECT) // Only [2] is checked; see above.
-	{
-		if (param_tokens[2].mem_to_free)
-			free(param_tokens[2].mem_to_free);
-		// The following would need to be checked if the "non-expression" optimization
-		// was enabled for ACT_FOR (when last tested, it did not improve performance):
-		//if (  (ARGVARRAW3 && (param_tokens[2].object = ARGVARRAW3->ToObject()))  )
-		//{
-		//	// Arg was a simple var ref, so not evaluated as an expression, but it contained an object.
-		//	param_tokens[2].symbol = SYM_OBJECT;
-		//	param_tokens[2].object->AddRef();
-		//}
-		//else:
-		// The expression didn't resolve to an object, so no enumerator is available.
-		return LineError(ERR_NO_OBJECT, FAIL_OR_OK);
-	}
 	
 	// Save these pointers since they will be overwritten during the loop:
 	Var *var[] = { ARGVARRAW1, ARGVARRAW2 };
 	
 	IObject *enumerator;
-	result = GetEnumerator(enumerator, param_tokens[2].object, 1 + (var[1] != nullptr), true);
-	param_tokens[2].object->Release();
+	result = GetEnumerator(enumerator, param_tokens[2], 1 + (var[1] != nullptr), true);
+	param_tokens[2].Free();
 	if (result == FAIL || result == EARLY_EXIT)
 		return result;
 

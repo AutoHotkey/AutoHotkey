@@ -1574,18 +1574,13 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 		--aParamCount; // Exclude param_obj from aParamCount, so it's the count of normal params.
 		param_obj = TokenToObject(*aParam[aParamCount]);
-		if (!param_obj)
-		{
-			aResultToken.Error(ERR_TYPE_MISMATCH, _T("*"));
-			return false;
-		}
 		// It might be more correct to use the enumerator even for Array, but that could be slow.
 		// Future changes might enable efficient detection of a custom __Enum method, allowing
 		// us to take the more efficient path most times, but still support custom enumeration.
 		if (param_array = dynamic_cast<Array *>(param_obj))
 			param_array->AddRef();
 		else
-			if (!(param_array = Array::FromEnumerable(param_obj)))
+			if (!(param_array = Array::FromEnumerable(*aParam[aParamCount])))
 			{
 				aResultToken.SetExitResult(FAIL);
 				return false;

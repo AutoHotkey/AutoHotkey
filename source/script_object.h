@@ -527,7 +527,7 @@ public:
 	~Array();
 	static Array *Create(ExprTokenType *aValue[] = nullptr, index_t aCount = 0);
 	static Array *FromArgV(LPTSTR *aArgV, int aArgC);
-	static Array *FromEnumerable(IObject *aEnum);
+	static Array *FromEnumerable(ExprTokenType &aEnum);
 	ResultType ToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax);
 	void ToParams(ExprTokenType *token, ExprTokenType **param_list, ExprTokenType **aParam, int aParamCount);
 
@@ -784,5 +784,5 @@ public:
 
 
 
-ResultType GetEnumerator(IObject *&aEnumerator, IObject *aEnumerable, int aVarCount, bool aDisplayError);
+ResultType GetEnumerator(IObject *&aEnumerator, ExprTokenType &aEnumerable, int aVarCount, bool aDisplayError);
 ResultType CallEnumerator(IObject *aEnumerator, Var *aVar0, Var *aVar1, bool aDisplayError);

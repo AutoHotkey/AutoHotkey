@@ -1159,7 +1159,7 @@ int Debugger::WriteEnumItems(PropertyInfo &aProp, IObject *aEnumerable)
 void Debugger::PropertyWriter::WriteEnumItems(IObject *aEnumerable, int aStart, int aEnd)
 {
 	IObject *enumerator;
-	auto result = GetEnumerator(enumerator, aEnumerable, 2, false);
+	auto result = GetEnumerator(enumerator, ExprTokenType(aEnumerable), 2, false);
 	if (result != OK)
 	{
 		mError = DEBUGGER_E_EVAL_FAIL;

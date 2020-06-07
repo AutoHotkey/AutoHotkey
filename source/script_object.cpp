@@ -279,19 +279,22 @@ void Array::ToParams(ExprTokenType *token, ExprTokenType **param_list, ExprToken
 		*param_ptr++ = &token[i]; // New param.
 }
 
-ResultType GetEnumerator(IObject *&aEnumerator, IObject *aEnumerable, int aVarCount, bool aDisplayError)
+ResultType GetEnumerator(IObject *&aEnumerator, ExprTokenType &aEnumerable, int aVarCount, bool aDisplayError)
 {
 	FuncResult result_token;
-	ExprTokenType t_this(aEnumerable), t_count(aVarCount), *param[] = { &t_count };
+	ExprTokenType t_count(aVarCount), *param[] = { &t_count };
+	IObject *invokee = TokenToObject(aEnumerable);
+	if (!invokee)
+		invokee = Object::ValueBase(aEnumerable);
 	// enum := object.__Enum(number of vars)
 	// IF_NEWENUM causes ComObjects to invoke a _NewEnum method or property.
 	// IF_BYPASS_METAFUNC causes Objects to skip the __Call meta-function if __Enum is not found.
-	auto result = aEnumerable->Invoke(result_token, IT_CALL | IF_NEWENUM | IF_BYPASS_METAFUNC, _T("__Enum"), t_this, param, 1);
+	auto result = invokee->Invoke(result_token, IT_CALL | IF_NEWENUM | IF_BYPASS_METAFUNC, _T("__Enum"), aEnumerable, param, 1);
 	if (result == FAIL || result == EARLY_EXIT)
 		return result;
 	if (result == INVOKE_NOT_HANDLED)
 	{
-		aEnumerator = aEnumerable;
+		aEnumerator = invokee;
 		aEnumerator->AddRef();
 		return OK;
 	}
@@ -331,7 +334,7 @@ ResultType CallEnumerator(IObject *aEnumerator, Var *aVar0, Var *aVar1, bool aDi
 
 // Calls an Enumerator repeatedly and returns an Array of all first-arg values.
 // This is used in conjunction with Array::ToParams to support other objects.
-Array *Array::FromEnumerable(IObject *aEnumerable)
+Array *Array::FromEnumerable(ExprTokenType &aEnumerable)
 {
 	IObject *enumerator;
 	auto result = GetEnumerator(enumerator, aEnumerable, 1, true);
