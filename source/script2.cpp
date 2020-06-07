@@ -1127,13 +1127,6 @@ BIF_DECL(BIF_Wait)
 		// otherwise, the loading validation would have prevented the script from loading.
 		wait_indefinitely = false;
 		sleep_duration = (int)(ATOF(_f_callee_id == FID_ClipWait ? arg1 : arg3) * 1000); // Can be zero.
-		if (sleep_duration < 1)
-			// Waiting 500ms in place of a "0" seems more useful than a true zero, which
-			// doesn't need to be supported because it's the same thing as something like
-			// "IfWinExist".  A true zero for clipboard would be the same as
-			// "IfEqual, clipboard, , xxx" (though admittedly it's higher overhead to
-			// actually fetch the contents of the clipboard).
-			sleep_duration = 500;
 	}
 	else
 	{

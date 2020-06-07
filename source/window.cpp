@@ -760,10 +760,6 @@ void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
 	if (!aBarHwnd)
 		_f_throw(ERR_NO_STATUSBAR);
 
-	// Legacy: Waiting 500ms in place of a "0" seems more useful than a true zero, which doesn't need
-	// to be supported because it's the same thing as something like "IfWinExist":
-	if (!aWaitTime)
-		aWaitTime = 500;
 	if (aCheckInterval < 1)
 		aCheckInterval = SB_DEFAULT_CHECK_INTERVAL; // Caller relies on us doing this.
 	if (aPartNumber < 1)
