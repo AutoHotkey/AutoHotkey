@@ -361,14 +361,6 @@ BIF_DECL(BIF_ComObjConnect)
 }
 
 
-BIF_DECL(BIF_ComObjError)
-{
-	aResultToken.value_int64 = g_ComErrorNotify;
-	if (aParamCount && TokenIsNumeric(*aParam[0]))
-		g_ComErrorNotify = (TokenToInt64(*aParam[0]) != 0);
-}
-
-
 BIF_DECL(BIF_ComObjValue)
 {
 	ComObject *obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0]));
@@ -889,8 +881,6 @@ void VarTypeToToken(VARTYPE aVarType, void *apValue, ResultToken &aToken)
 }
 
 
-bool g_ComErrorNotify = true;
-
 ResultType ComError(HRESULT hr)
 {
 	ResultToken errorToken;
@@ -904,33 +894,27 @@ void ComError(HRESULT hr, ResultToken &aResultToken, LPTSTR name, EXCEPINFO* pei
 	if (hr != DISP_E_EXCEPTION)
 		pei = NULL;
 
-	if (g_ComErrorNotify)
+	if (pei)
 	{
+		if (pei->pfnDeferredFillIn)
+			(*pei->pfnDeferredFillIn)(pei);
+		hr = pei->wCode ? 0x80040200 + pei->wCode : pei->scode;
+	}
+
+	TCHAR buf[4096], *error_text;
+	if (hr == -1)
+		error_text = _T("No valid COM object!");
+	else
+	{
+		int size = _stprintf(buf, _T("0x%08X - "), hr);
+		size += FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, hr, 0, buf + size, _countof(buf) - size, NULL);
+		if (buf[size-1] == '\n')
+			buf[--size] = '\0';
+		if (buf[size-1] == '\r')
+			buf[--size] = '\0';
 		if (pei)
-		{
-			if (pei->pfnDeferredFillIn)
-				(*pei->pfnDeferredFillIn)(pei);
-			hr = pei->wCode ? 0x80040200 + pei->wCode : pei->scode;
-		}
-
-		TCHAR buf[4096], *error_text;
-		if (hr == -1)
-			error_text = _T("No valid COM object!");
-		else
-		{
-			int size = _stprintf(buf, _T("0x%08X - "), hr);
-			size += FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, hr, 0, buf + size, _countof(buf) - size, NULL);
-			if (buf[size-1] == '\n')
-				buf[--size] = '\0';
-			if (buf[size-1] == '\r')
-				buf[--size] = '\0';
-			if (pei)
-				_vsntprintf(buf + size, _countof(buf) - size, _T("\nSource:\t\t%ws\nDescription:\t%ws\nHelpFile:\t\t%ws\nHelpContext:\t%d"), (va_list) &pei->bstrSource);
-			error_text = buf;
-		}
-
-		if (g_script.mCurrLine->LineError(error_text, FAIL_OR_OK, name) == FAIL)
-			aResultToken.SetExitResult(FAIL); // An exception was thrown.
+			_vsntprintf(buf + size, _countof(buf) - size, _T("\nSource:\t\t%ws\nDescription:\t%ws\nHelpFile:\t\t%ws\nHelpContext:\t%d"), (va_list) &pei->bstrSource);
+		error_text = buf;
 	}
 
 	if (pei)
@@ -939,6 +923,8 @@ void ComError(HRESULT hr, ResultToken &aResultToken, LPTSTR name, EXCEPINFO* pei
 		SysFreeString(pei->bstrDescription);
 		SysFreeString(pei->bstrHelpFile);
 	}
+
+	aResultToken.Error(error_text, name);
 }
 
 

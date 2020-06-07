@@ -64,7 +64,6 @@ FuncEntry g_BIF[] =
 	BIF1(ComObjConnect, 1, 2),
 	BIF1(ComObjCreate, 1, 2),
 	BIF1(ComObject, 1, 3),
-	BIF1(ComObjError, 0, 1),
 	BIF1(ComObjFlags, 1, 3),
 	BIF1(ComObjGet, 1, 1),
 	BIF1(ComObjQuery, 2, 3),
