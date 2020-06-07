@@ -15376,12 +15376,6 @@ BIF_DECL(BIF_CallbackCreate)
 	if (!func)
 		_f_throw(ERR_PARAM1_INVALID);
 
-	// Get func.MinParams (if present) for validation and default parameter count.
-	__int64 minparams;
-	bool has_minparams = GetObjectIntProperty(func, _T("MinParams"), minparams, aResultToken, true) != INVOKE_NOT_HANDLED;
-	if (aResultToken.Exited())
-		return;
-	
 	LPTSTR options = ParamIndexToOptionalString(1);
 	bool pass_params_pointer = _tcschr(options, '&'); // Callback wants the address of the parameter list instead of their values.
 #ifdef WIN32_PLATFORM
@@ -15401,13 +15395,29 @@ BIF_DECL(BIF_CallbackCreate)
 			return;
 		}
 	}
-	else if (!has_minparams || pass_params_pointer && require_param_count)
+	else
 	{
-		func->Release();
-		_f_throw(ERR_PARAM3_MUST_NOT_BE_BLANK);
+		// Get func.MinParams (if present) for validation and default parameter count.
+		__int64 minparams;
+		bool has_minparams = GetObjectIntProperty(func, _T("MinParams"), minparams, aResultToken, true) != INVOKE_NOT_HANDLED;
+		if (aResultToken.Exited())
+			return;
+
+		if (!has_minparams || pass_params_pointer && require_param_count)
+		{
+			func->Release();
+			_f_throw(ERR_PARAM3_MUST_NOT_BE_BLANK);
+		}
+		else // Default to the number of mandatory formal parameters in the function's definition.
+		{
+			if (!ValidateFunctor(func, pass_params_pointer ? 1 : (int)minparams, aResultToken)) // Checks MinParams again, but also verifies MaxParams/IsVariadic
+			{
+				func->Release();
+				return;
+			}
+			actual_param_count = (int)minparams;
+		}
 	}
-	else // Default to the number of mandatory formal parameters in the function's definition.
-		actual_param_count = (int)minparams;
 
 #ifdef WIN32_PLATFORM
 	if (!use_cdecl && actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).
