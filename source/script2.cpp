@@ -8840,7 +8840,10 @@ ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aVa
 	{
 		result_token.Free();
 		if (result == FAIL || result == EARLY_EXIT)
-			return aResultToken.SetExitResult(result);
+		{
+			aResultToken.SetExitResult(result);
+			return FAIL;
+		}
 		if (result != INVOKE_NOT_HANDLED) // Property exists but is not an integer.
 		{
 			if (!TokenIsEmptyString(result_token))

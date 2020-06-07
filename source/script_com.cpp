@@ -496,10 +496,10 @@ BIF_DECL(BIF_ComObjQuery)
 {
 	IUnknown *punk = NULL;
 	__int64 pint = 0;
-	ComObject *obj;
+	IObject *iobj;
 	HRESULT hr;
-	
-	if (obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0])))
+
+	if (auto *obj = dynamic_cast<ComObject *>(iobj = TokenToObject(*aParam[0])))
 	{
 		// We were passed a ComObject, but does it contain an interface pointer?
 		if (obj->mVarType == VT_UNKNOWN || obj->mVarType == VT_DISPATCH)
@@ -508,13 +508,19 @@ BIF_DECL(BIF_ComObjQuery)
 	if (!punk)
 	{
 		// Since it wasn't a valid ComObject, it should be a raw interface pointer.
-		punk = (IUnknown *)TokenToInt64(*aParam[0]);
-		if (punk < (IUnknown *)65536) // Error-detection: the first 64KB of address space is always invalid.
+		if (iobj)
 		{
-			g->LastError = E_INVALIDARG; // For consistency.
-			_f_throw(ERR_PARAM1_INVALID);
+			// ComObject isn't handled this way since it could be VT_DISPATCH.
+			UINT_PTR ptr;
+			if (GetObjectPtrProperty(iobj, _T("Ptr"), ptr, aResultToken) != OK)
+				return;
+			punk = (IUnknown *)ptr;
 		}
+		else
+			punk = (IUnknown *)TokenToInt64(*aParam[0]);
 	}
+	if (punk < (IUnknown *)65536) // Error-detection: the first 64KB of address space is always invalid.
+		_f_throw(ERR_PARAM1_INVALID);
 
 	if (aParamCount > 2) // QueryService(obj, SID, IID)
 	{
