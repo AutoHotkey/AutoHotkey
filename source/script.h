@@ -3175,7 +3175,6 @@ BIV_DECL_R (BIV_IsPaused);
 BIV_DECL_R (BIV_IsCritical);
 BIV_DECL_R (BIV_IsSuspended);
 BIV_DECL_R (BIV_IsCompiled);
-BIV_DECL_R (BIV_IsUnicode);
 BIV_DECL_RW(BIV_FileEncoding);
 BIV_DECL_RW(BIV_RegView);
 BIV_DECL_RW(BIV_LastError);

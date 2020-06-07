@@ -381,7 +381,6 @@ VarEntry g_BIV_A[] =
 	A_(IsCritical),
 	A_(IsPaused),
 	A_(IsSuspended),
-	A_(IsUnicode),
 	A_wx(KeyDelay, BIV_xDelay, BIV_xDelay_Set),
 	A_wx(KeyDelayPlay, BIV_xDelay, BIV_xDelay_Set),
 	A_wx(KeyDuration, BIV_xDelay, BIV_xDelay_Set),
@@ -9138,14 +9137,6 @@ unquoted_literal:
 				else if (this_deref_ref.var->mBIV == BIV_PtrSize)
 				{
 					infix[infix_count].SetValue(sizeof(void*));
-				}
-				else if (this_deref_ref.var->mBIV == BIV_IsUnicode)
-				{
-#ifdef UNICODE
-					infix[infix_count].SetValue(1);
-#else
-					infix[infix_count].SetValue(_T(""), 0); // See BIV_IsUnicode for comments about why it is blank.
-#endif
 				}
 				else
 				{

@@ -9479,29 +9479,6 @@ VarSizeType BIV_IsCompiled(LPTSTR aBuf, LPTSTR aVarName)
 
 
 
-VarSizeType BIV_IsUnicode(LPTSTR aBuf, LPTSTR aVarName)
-{
-#ifdef UNICODE
-	if (aBuf)
-	{
-		*aBuf++ = '1';
-		*aBuf = '\0';
-	}
-	return 1;
-#else
-	// v1.1.06: A_IsUnicode is defined so that it does not cause warnings with #Warn enabled,
-	// but left empty to encourage compatibility with older versions and AutoHotkey Basic.
-	// This prevents scripts from using expressions like A_IsUnicode+1, which would succeed
-	// if A_IsUnicode is 0 or 1 but fail if it is "".  This change has side-effects similar
-	// to those described for A_IsCompiled above.
-	if (aBuf)
-		*aBuf = '\0';
-	return 0;
-#endif
-}
-
-
-
 VarSizeType BIV_FileEncoding(LPTSTR aBuf, LPTSTR aVarName)
 {
 	// A similar section may be found under "case Encoding:" in FileObject::Invoke.  Maintain that with this:
