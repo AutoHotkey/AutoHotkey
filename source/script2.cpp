@@ -14583,7 +14583,7 @@ BIF_DECL(BIF_Hotkey)
 				// I.e., find the function implicitly defined by "x::action".
 				for (int i = 0; i < Hotkey::sHotkeyCount; ++i)
 				{
-					if (_tcscmp(Hotkey::shk[i]->mName, aParam0))
+					if (_tcscmp(Hotkey::shk[i]->mName, aParam1))
 						continue;
 					
 					for (HotkeyVariant* v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
