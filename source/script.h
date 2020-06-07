@@ -367,6 +367,7 @@ enum DerefTypeType : BYTE
 	DT_STRING,		// Segment of text in a text arg (delimited by '%').
 	DT_QSTRING,		// Segment of text in a quoted string (delimited by '%').
 	DT_WORDOP,		// Word operator: and, or, not, new.
+	DT_CONST_INT,	// Constant integer value (true, false).
 	DT_DOTPERCENT,	// Dynamic member: .%name%
 	DT_FUNCREF,		// Reference to function (for fat arrow functions).
 	// DerefType::is_function() requires that these are last:
@@ -384,6 +385,7 @@ struct DerefType
 		Func *func; // DT_FUNC
 		DerefType *next; // DT_STRING
 		SymbolType symbol; // DT_WORDOP
+		int int_value; // DT_CONST_INT
 	};
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:

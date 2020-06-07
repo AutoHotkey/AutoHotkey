@@ -336,8 +336,6 @@ FuncEntry g_BIF[] =
 VarEntry g_BIV[] =
 {
 	VF(Clipboard, (BuiltInVarType)VAR_CLIPBOARD),
-	VF(False, BIV_True_False),
-	VF(True, BIV_True_False)
 };
 // g_BIV_A: All built-in vars beginning with "A_".  The prefix is omitted from each
 // name to reduce code size and speed up the comparisons.
@@ -5766,6 +5764,14 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefType *aDe
 			aDeref[aDerefCount].type = DT_WORDOP;
 			aDeref[aDerefCount].symbol = wordop;
 		}
+		else if (!_tcsnicmp(op_begin, _T("true"), 4) || !_tcsnicmp(op_begin, _T("false"), 5))
+		{
+			aDeref[aDerefCount].marker = op_begin;
+			aDeref[aDerefCount].length = (DerefLengthType)operand_length;
+			aDeref[aDerefCount].type = DT_CONST_INT;
+			aDeref[aDerefCount].int_value = toupper(*op_begin) == 'T';
+
+		}
 		else // This operand is a variable name or function name (single deref).
 		{
 			// Store the deref's starting location, even for functions (leave it set to the start
@@ -9115,6 +9121,10 @@ unquoted_literal:
 			this_deref_ref.func = ExprOp<BIF_Func, FID_FuncClose>();
 			this_deref_ref.param_count = 0; // Init.
 		}
+		else if (this_deref_ref.type == DT_CONST_INT)
+		{
+			infix[infix_count].SetValue(this_deref_ref.int_value);
+		}
 		else // this_deref is a variable.
 		{
 			CHECK_AUTO_CONCAT;
@@ -9130,11 +9140,7 @@ unquoted_literal:
 			{
 				// The following "variables" previously had optimizations in ExpandExpression(),
 				// but since their values never change at run-time, it is better to do it here:
-				if (this_deref_ref.var->mBIV == BIV_True_False)
-				{
-					infix[infix_count].SetValue(ctoupper(*this_deref_ref.marker) == 'T');
-				}
-				else if (this_deref_ref.var->mBIV == BIV_PtrSize)
+				if (this_deref_ref.var->mBIV == BIV_PtrSize)
 				{
 					infix[infix_count].SetValue(sizeof(void*));
 				}
