@@ -77,9 +77,9 @@ HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr);
 struct HotkeyVariant
 {
 	LabelRef mJumpToLabel;
-	LabelPtr mOriginalCallback; // This is the callback set at load time. 
-								 // Keep it to allow restoring it via hotkey() function if changed
-								 // during load time (also via hotkey() function).
+	LabelPtr mOriginalCallback;	// This is the callback set at load time. 
+								// Keep it to allow restoring it via hotkey() function if changed
+								// during run time.
 	HotkeyCriterion *mHotCriterion;
 	HotkeyVariant *mNextVariant;
 	DWORD mRunAgainTime;
