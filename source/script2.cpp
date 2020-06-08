@@ -8850,7 +8850,7 @@ ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aVa
 				return aResultToken.Error(ERR_TYPE_MISMATCH, aPropName);
 			result = INVOKE_NOT_HANDLED;
 		}
-		aValue = 0;
+		//aValue = 0; // Caller should set default value for these cases.
 		if (!aOptional)
 			return aResultToken.UnknownMemberError(ExprTokenType(aObject), IT_GET, aPropName);
 		return result; // Let caller know it wasn't found.
@@ -8877,7 +8877,7 @@ ResultType SetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 aVal
 
 ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aPtr, ResultToken &aResultToken, bool aOptional)
 {
-	__int64 value;
+	__int64 value = NULL;
 	auto result = GetObjectIntProperty(aObject, aPropName, value, aResultToken, aOptional);
 	aPtr = (UINT_PTR)value;
 	return result;
@@ -8886,7 +8886,7 @@ ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aP
 
 ResultType DetermineTargetHwnd(HWND &aWindow, ResultToken &aResultToken, ExprTokenType &aToken)
 {
-	__int64 n;
+	__int64 n = NULL;
 	if (IObject *obj = TokenToObject(aToken))
 	{
 		if (!GetObjectIntProperty(obj, _T("Hwnd"), n, aResultToken))
@@ -15063,22 +15063,7 @@ BIF_DECL(BIF_CallbackCreate)
 {
 	IObject *func = TokenToFunctor(*aParam[0]);
 	if (!func)
-		_f_throw(ERR_INVALID_FUNCTOR);
-
-	// Get func.MinParams (if present) for validation and default parameter count.
-	__int64 minparams;
-	bool has_minparams = GetObjectIntProperty(func, _T("MinParams"), minparams, aResultToken, true) != INVOKE_NOT_HANDLED;
-	if (aResultToken.Exited())
-		return;
-
-	// Check whether func is callable (or assume it is if has_minparams, for performance).
-	// For clarity, this check should take precedence over ERR_PARAM3_MUST_NOT_BE_BLANK.
-	// Since MaxParams hasn't been checked yet, we don't know if it exists; however, it
-	// would be very unusual to have MaxParams and not MinParams.
-	if (!has_minparams) // See ValidateFunctor() for comments about this.
-		if (Object *obj = dynamic_cast<Object *>(func))
-			if (!obj->HasMethod(_T("Call")))
-				_f_throw(ERR_INVALID_FUNCTOR);
+		_f_throw(ERR_PARAM1_INVALID);
 
 	LPTSTR options = ParamIndexToOptionalString(1);
 	bool pass_params_pointer = _tcschr(options, '&'); // Callback wants the address of the parameter list instead of their values.
@@ -15089,35 +15074,24 @@ BIF_DECL(BIF_CallbackCreate)
 	bool require_param_count = false;
 #endif
 
-	int actual_param_count;
-	bool has_maxparams = false;
-	if (!ParamIndexIsOmittedOrEmpty(2)) // A parameter count was specified.
-	{
-		__int64 maxparams;
-		has_maxparams = GetObjectIntProperty(func, _T("MaxParams"), maxparams, aResultToken, true) != INVOKE_NOT_HANDLED;
-		if (aResultToken.Exited())
-			return;
-		
-		actual_param_count = ParamIndexToInt(2);
-		int script_params = pass_params_pointer ? 1 : actual_param_count;
-		if (  actual_param_count < 0 // Invalid.
-			|| has_minparams && script_params < (int)minparams // Too many mandatory parameters.
-			|| has_maxparams && script_params > (int)maxparams  ) // Too few.
-		{
-			func->Release();
-			_f_throw(ERR_INVALID_FUNCTOR);
-			// Not ERR_PARAM_COUNT_INVALID because it would confuse Helgef.
-			// Not ERR_PARAM3_INVALID because it might be due to pass_params_pointer vs. min/maxparams.
-		}
-	}
-	else if (!has_minparams || pass_params_pointer && require_param_count)
+	bool params_specified = !ParamIndexIsOmittedOrEmpty(2);
+	if (pass_params_pointer && require_param_count && !params_specified)
 	{
 		func->Release();
 		_f_throw(ERR_PARAM3_MUST_NOT_BE_BLANK);
 	}
-	else // Default to the number of mandatory formal parameters in the function's definition.
-		actual_param_count = (int)minparams;
 
+	int actual_param_count = params_specified ? ParamIndexToInt(2) : 0;
+	if (!ValidateFunctor(func
+		, pass_params_pointer ? 1 : actual_param_count // Count of script parameters being passed.
+		, aResultToken, nullptr
+		// Use MinParams as actual_param_count if unspecified and no & option.
+		, params_specified || pass_params_pointer ? nullptr : &actual_param_count))
+	{
+		func->Release();
+		return;
+	}
+	
 #ifdef WIN32_PLATFORM
 	if (!use_cdecl && actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).
 	{
@@ -17139,30 +17113,36 @@ IObject *StringToFunctor(LPTSTR aStr)
 
 
 
-ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, LPTSTR aNullErr)
+ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, LPTSTR aNullErr, int *aUseMinParams)
 {
 	if (!aFunc)
 		return aResultToken.Error(aNullErr);
-	__int64 min_params, max_params;
+	__int64 min_params = 0, max_params = INT_MAX;
 	auto min_result = /*aParamCount < 0 ? INVOKE_NOT_HANDLED
 		:*/ GetObjectIntProperty(aFunc, _T("MinParams"), min_params, aResultToken, true);
-	if (aResultToken.Exited())
-		return FAIL; // For maintainability, consider EARLY_EXIT the same as failure (boolean false).
-	//if (aParamCount < 0) // Caller's signal to skip MinParams check.
-	//	aParamCount = -aParamCount;
-	auto max_result = aParamCount == 0 ? INVOKE_NOT_HANDLED // No need to check MaxParams when passing 0 params.
-		: GetObjectIntProperty(aFunc, _T("MaxParams"), max_params, aResultToken, true);
-	if (aResultToken.Exited())
+	if (!min_result)
 		return FAIL;
-	if (min_result != INVOKE_NOT_HANDLED && aParamCount < (int)min_params)
+	bool has_minparams = min_result != INVOKE_NOT_HANDLED; // For readability.
+	if (aUseMinParams) // CallbackCreate's signal to default to MinParams.
+	{
+		if (!has_minparams)
+			return aResultToken.UnknownMemberError(ExprTokenType(aFunc), IT_GET, _T("MinParams"));
+		*aUseMinParams = aParamCount = (int)min_params;
+	}
+	else if (has_minparams && aParamCount < (int)min_params)
 		return aResultToken.Error(ERR_INVALID_FUNCTOR);
+	auto max_result = (aParamCount == 0 || has_minparams && min_params == aParamCount)
+		? INVOKE_NOT_HANDLED // No need to check MaxParams in the above cases.
+		: GetObjectIntProperty(aFunc, _T("MaxParams"), max_params, aResultToken, true);
+	if (!max_result)
+		return FAIL;
 	if (max_result != INVOKE_NOT_HANDLED && aParamCount > (int)max_params)
 	{
-		__int64 is_variadic;
+		__int64 is_variadic = 0;
 		auto result = GetObjectIntProperty(aFunc, _T("IsVariadic"), is_variadic, aResultToken, true);
-		if (aResultToken.Exited())
+		if (!result)
 			return FAIL;
-		if (result == INVOKE_NOT_HANDLED || !is_variadic)
+		if (!is_variadic) // or not defined.
 			return aResultToken.Error(ERR_INVALID_FUNCTOR);
 	}
 	// If either MinParams or MaxParams was confirmed to exist, this is likely a valid
@@ -17171,7 +17151,7 @@ ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResult
 	if (min_result == INVOKE_NOT_HANDLED && max_result == INVOKE_NOT_HANDLED)
 		if (Object *obj = dynamic_cast<Object *>(aFunc))
 			if (!obj->HasMethod(_T("Call")))
-				return aResultToken.Error(ERR_INVALID_FUNCTOR);
+				return aResultToken.UnknownMemberError(ExprTokenType(aFunc), IT_CALL, _T("Call"));
 		// Otherwise: COM objects can be callable via DISPID_VALUE.  There's probably
 		// no way to determine whether the object supports that without invoking it.
 	return OK;

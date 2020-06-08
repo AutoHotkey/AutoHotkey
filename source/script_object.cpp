@@ -1327,7 +1327,7 @@ Property *Object::DefineProperty(name_t aName)
 
 ResultType GetObjMaxParams(IObject *aObj, int &aMaxParams, ResultToken &aResultToken)
 {
-	__int64 propval;
+	__int64 propval = 0;
 	auto result = GetObjectIntProperty(aObj, _T("MaxParams"), propval, aResultToken, true);
 	switch (result)
 	{
@@ -1336,6 +1336,7 @@ ResultType GetObjMaxParams(IObject *aObj, int &aMaxParams, ResultToken &aResultT
 		return result;
 	case OK:
 		aMaxParams = (int)propval;
+		propval = 0;
 		result = GetObjectIntProperty(aObj, _T("IsVariadic"), propval, aResultToken, true);
 		switch (result)
 		{
