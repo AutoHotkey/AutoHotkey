@@ -323,20 +323,12 @@ FuncEntry g_BIF[] =
 #undef BIF1
 
 
-#define VF(name, fn) { _T(#name), fn, NULL }
 #define A_x(name, fn) { _T(#name), fn, NULL }
 #define A_(name) A_x(name, BIV_##name)
 #define A_wx(name, fnget, fnset) { _T(#name), fnget, fnset }
 #define A_w(name) A_wx(name, BIV_##name, BIV_##name##_Set)
-// IMPORTANT: Both of the following arrays must be kept in alphabetical order
+// IMPORTANT: The following array must be kept in alphabetical order
 // for binary search to work.  See Script::GetBuiltInVar for further comments.
-// g_BIV: All built-in vars not beginning with "A_".  Keeping these separate allows
-// the search to be limited to just these few whenever the var name does not begin
-// with "A_", as for most user-defined variables.  This helps average-case performance.
-VarEntry g_BIV[] =
-{
-	VF(Clipboard, (BuiltInVarType)VAR_CLIPBOARD),
-};
 // g_BIV_A: All built-in vars beginning with "A_".  The prefix is omitted from each
 // name to reduce code size and speed up the comparisons.
 VarEntry g_BIV_A[] =
@@ -346,6 +338,7 @@ VarEntry g_BIV_A[] =
 	A_w(AllowMainWindow),
 	A_x(AppData, BIV_SpecialFolderPath),
 	A_x(AppDataCommon, BIV_SpecialFolderPath),
+	A_x(Clipboard, (BuiltInVarType)VAR_CLIPBOARD),
 	A_x(ComputerName, BIV_UserName_ComputerName),
 	A_(ComSpec),
 	A_wx(ControlDelay, BIV_xDelay, BIV_xDelay_Set),
@@ -552,9 +545,6 @@ Script::Script()
 	for (int i = 1; i < _countof(g_BIF); ++i)
 		if (_tcsicmp(g_BIF[i-1].mName, g_BIF[i].mName) >= 0)
 			ScriptError(_T("DEBUG: g_BIF out of order."), g_BIF[i].mName);
-	for (int i = 1; i < _countof(g_BIV); ++i)
-		if (_tcsicmp(g_BIV[i-1].name, g_BIV[i].name) >= 0)
-			ScriptError(_T("DEBUG: g_BIV out of order."), g_BIV[i].name);
 	for (int i = 1; i < _countof(g_BIV_A); ++i)
 		if (_tcsicmp(g_BIV_A[i-1].name, g_BIV_A[i].name) >= 0)
 			ScriptError(_T("DEBUG: g_BIV_A out of order."), g_BIV_A[i].name);
@@ -7665,40 +7655,29 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 
 VarEntry *Script::GetBuiltInVar(LPTSTR aVarName)
 {
-	VarEntry *biv;
-	int count;
 	// This array approach saves about 9KB on code size over the old approach
 	// of a series of if's and _tcscmp calls, and performs about the same.
-	// Two arrays are used so that common dynamic vars (without "A_" prefix)
-	// don't require as long a search, and so that "A_" can be omitted from
-	// each var name in the array (to reduce code size).
+	// The "A_" prefix is omitted from each name string to reduce code size.
 	if ((aVarName[0] == 'A' || aVarName[0] == 'a') && aVarName[1] == '_')
-	{
 		aVarName += 2;
-		biv = g_BIV_A;
-		count = _countof(g_BIV_A);
-	}
 	else
-	{
-		biv = g_BIV;
-		count = _countof(g_BIV);
-	}
+		return nullptr;
 	// Using binary search vs. linear search performs a bit better (notably for
 	// rare/contrived cases like A_x%index%) and doesn't affect code size much.
 	int left, right, mid, result;
-	for (left = 0, right = count - 1; left <= right;)
+	for (left = 0, right = _countof(g_BIV_A) - 1; left <= right;)
 	{
 		mid = (left + right) / 2;
-		result = _tcsicmp(aVarName, biv[mid].name);
+		result = _tcsicmp(aVarName, g_BIV_A[mid].name);
 		if (result > 0)
 			left = mid + 1;
 		else if (result < 0)
 			right = mid - 1;
 		else // Match found.
-			return &biv[mid];
+			return &g_BIV_A[mid];
 	}
 	// Since above didn't return:
-	return NULL;
+	return nullptr;
 }
 
 
