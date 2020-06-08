@@ -1574,7 +1574,8 @@ UINT Script::LoadFromFile()
 	if (!PreprocessLocalVars(mFuncs)
 		|| !PreprocessLocalVars(mHotFuncs))
 		return LOADING_FAILED;
-
+	if (mHotFuncs.mItem)
+		free(mHotFuncs.mItem);
 	// Resolve any unresolved base classes.
 	if (mUnresolvedClasses)
 	{

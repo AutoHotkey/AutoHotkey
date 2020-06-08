@@ -2871,7 +2871,8 @@ private:
 	FuncList mHotFuncs;			// All implicit hotkey funcs are stored here for variable processing.
 								// This list is not sorted, all insertions are done at the end.
 								// In particular, note that DefineFunc and CreateHotFunc directly
-								// changes mCount.
+								// changes mCount. This list's member mItem is freed after being
+								// passed to PreprocessLocalVars. Do not use this list after that. 
 
 	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
