@@ -6209,7 +6209,18 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic, 
 				if (v->mJumpToLabel == last_hotfunc)
 				{
 					v->mJumpToLabel = &func;
-					v->mOriginalCallback = nullptr; // To avoid bugs.
+					v->mOriginalCallback = &func;	// To make scripts more maintainable and to
+													// make the hotkey() function more consistent.
+													// For example,
+													// x::{
+													// }
+													// Hotkey 'x', 'x', 'off'
+													// should be valid if the script is changed to,
+													// x::
+													// myFunc(){
+													// }
+													// Hotkey 'x', 'x', 'off'
+
 					break;	// Only one variant possible, per hotkey.
 				}
 		}
