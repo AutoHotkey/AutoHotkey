@@ -2451,6 +2451,7 @@ struct GuiControlType : public Object
 		M_OnNotify,
 		M_OnCommand,
 		M_SetFont,
+		M_Redraw,
 		M_Tab_UseTab,
 		M_List_Add,
 		M_List_Delete,
@@ -2773,7 +2774,7 @@ public:
 	ResultType ControlSetName(GuiControlType &aControl, LPTSTR aName);
 	void ControlSetEnabled(GuiControlType &aControl, bool aEnabled);
 	void ControlSetVisible(GuiControlType &aControl, bool aVisible);
-	ResultType ControlMove(GuiControlType &aControl, LPTSTR aPos, bool aDraw);
+	ResultType ControlMove(GuiControlType &aControl, LPTSTR aPos);
 	ResultType ControlSetFont(GuiControlType &aControl, LPTSTR aOptions, LPTSTR aFontName);
 	void ControlSetTextColor(GuiControlType &aControl, COLORREF aColor);
 	void ControlSetMonthCalColor(GuiControlType &aControl, COLORREF aColor, UINT aMsg);

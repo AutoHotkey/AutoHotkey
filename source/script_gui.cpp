@@ -566,11 +566,12 @@ ObjectMember GuiControlType::sMembers[] =
 {
 	Object_Method(Choose, 1, 1),
 	Object_Method(Focus, 0, 0),
-	Object_Method(Move, 1, 2),
+	Object_Method(Move, 1, 1),
 	Object_Method(OnCommand, 2, 3),
 	Object_Method(OnEvent, 2, 3),
 	Object_Method(OnNotify, 2, 3),
 	Object_Method(Opt, 1, 1),
+	Object_Method(Redraw, 0, 0),
 	Object_Method(SetFont, 0, 2),
 
 	Object_Property_get    (ClassNN),
@@ -716,7 +717,16 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 			return gui->ControlSetFont(*this, ParamIndexToOptionalString(0), ParamIndexToOptionalString(1));
 
 		case M_Move:
-			return gui->ControlMove(*this, ParamIndexToOptionalString(0), ParamIndexToOptionalBOOL(1, FALSE));
+			return gui->ControlMove(*this, ParamIndexToOptionalString(0));
+
+		case M_Redraw:
+		{
+			RECT rect;
+			GetWindowRect(hwnd, &rect); // Limit it to only that part of the client area that the control occupies.
+			MapWindowPoints(NULL, gui->mHwnd, (LPPOINT)&rect, 2); // Convert rect to client coordinates (not the same as GetClientRect()).
+			InvalidateRect(gui->mHwnd, &rect, TRUE); // Seems safer to use TRUE, not knowing all possible overlaps, etc.
+			_o_return_empty;
+		}
 			
 		case M_Choose:
 			return gui->ControlChoose(*this, *aParam[0]);
@@ -1093,7 +1103,7 @@ void GuiType::ControlSetVisible(GuiControlType &aControl, bool aVisible)
 }
 
 
-ResultType GuiType::ControlMove(GuiControlType &aControl, LPTSTR aPos, bool aDraw)
+ResultType GuiType::ControlMove(GuiControlType &aControl, LPTSTR aPos)
 {
 	RECT rect;
 	int xpos = COORD_UNSPECIFIED;
@@ -1172,18 +1182,6 @@ ResultType GuiType::ControlMove(GuiControlType &aControl, LPTSTR aPos, bool aDra
 			else
 				RemoveProp(aControl.hwnd, _T("ahk_autosize"));
 		}
-	}
-
-	// v1.0.41.02: To prevent severe flickering when resizing ListViews and other controls,
-	// the MOVE mode now avoids doing the invalidate-rect, but the MOVEDRAW mode does do it.
-	if (aDraw)
-	{
-		// This must be done, at least in cases such as GroupBox under certain themes/conditions.
-		// More than just control.hwnd must be invalided, otherwise the interior of the GroupBox retains
-		// a ghost image of whatever was in it before the move:
-		GetWindowRect(aControl.hwnd, &rect); // Limit it to only that part of the client area that is receiving the rect.
-		MapWindowPoints(NULL, mHwnd, (LPPOINT)&rect, 2); // Convert rect to client coordinates (not the same as GetClientRect()).
-		InvalidateRect(mHwnd, &rect, TRUE); // Seems safer to use TRUE, not knowing all possible overlaps, etc.
 	}
 	return OK;
 }
