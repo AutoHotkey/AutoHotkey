@@ -2446,6 +2446,7 @@ struct GuiControlType : public Object
 		M_Opt, // a.k.a. Opt
 		M_Focus,
 		M_Move,
+		M_GetPos,
 		M_Choose,
 		M_OnEvent,
 		M_OnNotify,
@@ -2465,7 +2466,6 @@ struct GuiControlType : public Object
 		P_ClassNN,
 		P_Text,
 		P_Value,
-		P_Pos,
 		P_Enabled,
 		P_Visible,
 		P_Focused,
@@ -2617,6 +2617,8 @@ public:
 		//M_AddControl,
 		M_Show,
 		M_Hide,
+		M_GetPos,
+		M_GetClientPos,
 		M_SetFont,
 		M_Opt,
 		M_Minimize,
@@ -2637,8 +2639,6 @@ public:
 		P_MarginX,
 		P_MarginY,
 		P_MenuBar,
-		P_Pos,
-		P_ClientPos,
 	};
 
 	static ObjectMember sMembers[];
@@ -2707,7 +2707,7 @@ public:
 	ResultType SetMenu(ExprTokenType &aParam);
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Array *aObj = NULL);
-	ResultType PropertyGetPos(ResultToken &aResultToken, RECT &aPos);
+	ResultType MethodGetPos(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, RECT &aPos);
 
 	ResultType ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs);
 	void SetOwnDialogs(ToggleValueType state)

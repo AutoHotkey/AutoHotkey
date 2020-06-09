@@ -207,6 +207,8 @@ ObjectMember GuiType::sMembers[] =
 
 	Object_Method (Destroy, 0, 0),
 	Object_Method (Flash, 0, 1),
+	Object_Method (GetClientPos, 0, 4),
+	Object_Method (GetPos, 0, 4),
 	Object_Method (Hide, 0, 0),
 	Object_Method (Maximize, 0, 0),
 	Object_Method (Minimize, 0, 0),
@@ -226,8 +228,6 @@ ObjectMember GuiType::sMembers[] =
 	Object_Property_get_set(MarginX),
 	Object_Property_get_set(MarginY),
 	Object_Property_get_set(MenuBar),
-	Object_Property_get    (Pos),
-	Object_Property_get    (ClientPos),
 };
 
 ResultType GuiType::Invoke(IObject_Invoke_PARAMS_DECL)
@@ -429,11 +429,11 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 			_sntprintf(_f_retval_buf, _f_retval_buf_size, _T("%06X"), bgr_to_rgb(color));
 			_o_return_p(_f_retval_buf);
 		}
-		case P_Pos:
-		case P_ClientPos:
+		case M_GetPos:
+		case M_GetClientPos:
 		{
 			RECT rect;
-			if (member == P_Pos)
+			if (member == M_GetPos)
 			{
 				GetWindowRect(mHwnd, &rect);
 			}
@@ -442,7 +442,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 				GetClientRect(mHwnd, &rect);
 				MapWindowPoints(mHwnd, NULL, (LPPOINT)&rect, 2);
 			}
-			return PropertyGetPos(aResultToken, rect);
+			return MethodGetPos(aResultToken, aParam, aParamCount, rect);
 		}
 		case P_Name:
 		{
@@ -566,6 +566,7 @@ ObjectMember GuiControlType::sMembers[] =
 {
 	Object_Method(Choose, 1, 1),
 	Object_Method(Focus, 0, 0),
+	Object_Method(GetPos, 0, 4),
 	Object_Method(Move, 0, 4),
 	Object_Method(OnCommand, 2, 3),
 	Object_Method(OnEvent, 2, 3),
@@ -580,7 +581,6 @@ ObjectMember GuiControlType::sMembers[] =
 	Object_Property_get    (Gui),
 	Object_Property_get    (Hwnd),
 	Object_Property_get_set(Name),
-	Object_Property_get    (Pos),
 	Object_Property_get_set(Text),
 	Object_Property_get    (Type),
 	Object_Property_get_set(Value),
@@ -802,13 +802,12 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 				return gui->ControlGetContents(aResultToken, *this
 					, member == P_Text ? GuiType::Text_Mode : GuiType::Value_Mode);
 
-		case P_Pos:
+		case M_GetPos:
 		{
 			RECT rect;
 			GetWindowRect(hwnd, &rect);
 			MapWindowPoints(NULL, gui->mHwnd, (LPPOINT)&rect, 2);
-
-			return gui->PropertyGetPos(aResultToken, rect);
+			return gui->MethodGetPos(aResultToken, aParam, aParamCount, rect);
 		}
 
 		case P_Enabled:
@@ -1007,20 +1006,21 @@ ResultType GuiType::ControlSetName(GuiControlType &aControl, LPTSTR aName)
 }
 
 
-ResultType GuiType::PropertyGetPos(ResultToken &aResultToken, RECT &aPos)
+ResultType GuiType::MethodGetPos(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, RECT &aPos)
 {
-	ExprTokenType values[] =
+	aPos.right -= aPos.left; // Convert to width.
+	aPos.bottom -= aPos.top; // Convert to height.
+
+	for (int i = 0; i < 4 && i < aParamCount; ++i)
 	{
-		_T("x"), Unscale(aPos.left),
-		_T("y"), Unscale(aPos.top),
-		_T("w"), Unscale(aPos.right-aPos.left),
-		_T("h"), Unscale(aPos.bottom-aPos.top)
-	};
-	ExprTokenType *param[_countof(values)];
-	for (int i = 0; i < _countof(values); ++i)
-		param[i] = &values[i];
-	IObject* obj = Object::Create(param, 8);
-	_o_return_or_throw(obj);
+		if (aParam[i]->symbol == SYM_MISSING)
+			continue;
+		if (aParam[i]->symbol != SYM_VAR)
+			_o_throw(ERR_PARAM_INVALID);
+		aParam[i]->var->Assign(Unscale(((int *)&aPos)[i]));
+	}
+
+	_o_return_empty;
 }
 
 
