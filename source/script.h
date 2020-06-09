@@ -434,6 +434,7 @@ __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 #define _f_throw(...)			_f__ret(aResultToken.Error(__VA_ARGS__))
 #define _f_throw_win32(...)		return ((void)aResultToken.Win32Error(__VA_ARGS__))
 #define _o_throw(...)			_o__ret(aResultToken.Error(__VA_ARGS__))
+#define _o_throw_win32(...)		return aResultToken.Win32Error(__VA_ARGS__)
 #define _f_return_FAIL			_f__ret(aResultToken.SetExitResult(FAIL))
 #define _o_return_FAIL			_o__ret(aResultToken.SetExitResult(FAIL))
 // The _f_set_retval macros should be used with care because the integer macros assume symbol
@@ -2617,6 +2618,7 @@ public:
 		//M_AddControl,
 		M_Show,
 		M_Hide,
+		M_Move,
 		M_GetPos,
 		M_GetClientPos,
 		M_SetFont,

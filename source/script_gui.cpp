@@ -212,6 +212,7 @@ ObjectMember GuiType::sMembers[] =
 	Object_Method (Hide, 0, 0),
 	Object_Method (Maximize, 0, 0),
 	Object_Method (Minimize, 0, 0),
+	Object_Method (Move, 0, 4),
 	Object_Method (OnEvent, 2, 3),
 	Object_Method (Opt, 1, 1),
 	Object_Method (Restore, 0, 0),
@@ -443,6 +444,20 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 				MapWindowPoints(mHwnd, NULL, (LPPOINT)&rect, 2);
 			}
 			return MethodGetPos(aResultToken, aParam, aParamCount, rect);
+		}
+		case M_Move:
+		{
+			// Like WinMove, this doesn't check if the window is minimized or do any autosizing.
+			// Unlike WinMove, this does DPI scaling.
+			RECT rect;
+			GetWindowRect(mHwnd, &rect);
+			rect.right -= rect.left; // Convert to width.
+			rect.bottom -= rect.top; // Convert to height.
+			for (int i = 0; i < aParamCount; ++i)
+				if (!ParamIndexIsOmitted(i))
+					((int *)&rect)[i] = Scale(ParamIndexToInt(i));
+			MoveWindow(mHwnd, rect.left, rect.top, rect.right, rect.bottom, TRUE);
+			_o_return_empty;
 		}
 		case P_Name:
 		{
@@ -7472,7 +7487,7 @@ ResultType GuiType::Show(LPTSTR aOptions)
 		}
 
 		// Added for v1.0.44.13:
-		// Below is done inside this block (allow_move_window) because it that way, it should always
+		// Below is done inside this block (allow_move_window) because that way, it should always
 		// execute whenever mGuiShowHasNeverBeenDone (since the window shouldn't be iconic prior to
 		// its first showing).  In addition, below must be down prior to any ShowWindow() that does
 		// a minimize or maximize because that would prevent GetWindowRect/GetClientRect calculations
