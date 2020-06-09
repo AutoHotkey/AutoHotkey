@@ -2774,7 +2774,7 @@ public:
 	ResultType ControlSetName(GuiControlType &aControl, LPTSTR aName);
 	void ControlSetEnabled(GuiControlType &aControl, bool aEnabled);
 	void ControlSetVisible(GuiControlType &aControl, bool aVisible);
-	ResultType ControlMove(GuiControlType &aControl, LPTSTR aPos);
+	ResultType ControlMove(GuiControlType &aControl, int aX, int aY, int aWidth, int aHeight);
 	ResultType ControlSetFont(GuiControlType &aControl, LPTSTR aOptions, LPTSTR aFontName);
 	void ControlSetTextColor(GuiControlType &aControl, COLORREF aColor);
 	void ControlSetMonthCalColor(GuiControlType &aControl, COLORREF aColor, UINT aMsg);

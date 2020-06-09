@@ -566,7 +566,7 @@ ObjectMember GuiControlType::sMembers[] =
 {
 	Object_Method(Choose, 1, 1),
 	Object_Method(Focus, 0, 0),
-	Object_Method(Move, 1, 1),
+	Object_Method(Move, 0, 4),
 	Object_Method(OnCommand, 2, 3),
 	Object_Method(OnEvent, 2, 3),
 	Object_Method(OnNotify, 2, 3),
@@ -717,7 +717,11 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 			return gui->ControlSetFont(*this, ParamIndexToOptionalString(0), ParamIndexToOptionalString(1));
 
 		case M_Move:
-			return gui->ControlMove(*this, ParamIndexToOptionalString(0));
+			return gui->ControlMove(*this
+				, ParamIndexToOptionalInt(0, COORD_UNSPECIFIED)
+				, ParamIndexToOptionalInt(1, COORD_UNSPECIFIED)
+				, ParamIndexToOptionalInt(2, COORD_UNSPECIFIED)
+				, ParamIndexToOptionalInt(3, COORD_UNSPECIFIED));
 
 		case M_Redraw:
 		{
@@ -1103,48 +1107,20 @@ void GuiType::ControlSetVisible(GuiControlType &aControl, bool aVisible)
 }
 
 
-ResultType GuiType::ControlMove(GuiControlType &aControl, LPTSTR aPos)
+ResultType GuiType::ControlMove(GuiControlType &aControl, int xpos, int ypos, int width, int height)
 {
 	RECT rect;
-	int xpos = COORD_UNSPECIFIED;
-	int ypos = COORD_UNSPECIFIED;
-	int width = COORD_UNSPECIFIED;
-	int height = COORD_UNSPECIFIED;
-
-	for (LPTSTR cp = aPos; *cp; ++cp)
-	{
-		switch(ctoupper(*cp))
-		{
-		// For options such as W, H, X and Y:
-		// Use _ttoi() vs. ATOI() to avoid interpreting something like 0x01B as hex when in fact
-		// the B was meant to be an option letter (though in this case, none of the hex digits are
-		// currently used as option letters):
-		case 'W':
-			width = Scale(_ttoi(cp + 1));
-			break;
-		case 'H':
-			height = Scale(_ttoi(cp + 1));
-			break;
-		case 'X':
-			xpos = Scale(_ttoi(cp + 1));
-			break;
-		case 'Y':
-			ypos = Scale(_ttoi(cp + 1));
-			break;
-		}
-	}
-
 	GetWindowRect(aControl.hwnd, &rect); // Failure seems too rare to check for.
 	POINT dest_pt = {rect.left, rect.top};
 	ScreenToClient(GetParent(aControl.hwnd), &dest_pt); // Set default x/y target position, to be possibly overridden below.
 	if (xpos != COORD_UNSPECIFIED)
-		dest_pt.x = xpos;
+		dest_pt.x = Scale(xpos);
 	if (ypos != COORD_UNSPECIFIED)
-		dest_pt.y = ypos;
+		dest_pt.y = Scale(ypos);
 
 	if (!MoveWindow(aControl.hwnd, dest_pt.x, dest_pt.y
-		, width == COORD_UNSPECIFIED ? rect.right - rect.left : width
-		, height == COORD_UNSPECIFIED ? rect.bottom - rect.top : height
+		, width == COORD_UNSPECIFIED ? rect.right - rect.left : Scale(width)
+		, height == COORD_UNSPECIFIED ? rect.bottom - rect.top : Scale(height)
 		, TRUE))  // Do repaint.
 		return g_script.RuntimeError(_T("Can't move control.")); // Short msg since so rare.
 
