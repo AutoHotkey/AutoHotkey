@@ -203,8 +203,6 @@ FuncEntry g_BIF[] =
 	BIF1(NumPut, 2, NA),
 	BIFn(ObjAddRef, 1, 1, BIF_ObjAddRefRelease),
 	BIF1(ObjBindMethod, 1, NA),
-	BIFn(ObjClone, 1, 1, BIF_ObjXXX),
-	BIFn(ObjDeleteProp, 2, 3, BIF_ObjXXX),
 	BIF1(Object, 0, NA),
 	BIFn(ObjFromPtr, 1, 1, BIF_ObjPtr),
 	BIFn(ObjFromPtrAddRef, 1, 1, BIF_ObjPtr),
