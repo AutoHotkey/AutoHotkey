@@ -54,7 +54,7 @@ LPTSTR GuiControlType::GetTypeName()
 	return sTypeNames[type];
 }
 
-GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
+GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(GuiControls aType, TypeAttribs aAttrib)
 {
 	static TypeAttribs sAttrib[] = { 0,
 		/*Text*/       TYPE_STATICBACK | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT,
@@ -63,10 +63,10 @@ GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
 		/*Button*/     TYPE_MSGBKCOLOR | TYPE_SUPPORTS_BGTRANS | TYPE_NO_SUBMIT, // Background affects only the button's border, on Windows 10.
 		/*CheckBox*/   TYPE_STATICBACK,
 		/*Radio*/      TYPE_STATICBACK | TYPE_NO_SUBMIT, // No-submit: Radio controls are handled separately, by group.
-		/*DDL*/        TYPE_MSGBKCOLOR, // Background affects only the main control, and requires -Theme.
-		/*ComboBox*/   TYPE_MSGBKCOLOR, // Background affects only the main control.
-		/*ListBox*/    TYPE_MSGBKCOLOR,
-		/*ListView*/   TYPE_SETBKCOLOR | TYPE_NO_SUBMIT | TYPE_RESERVE_UNION,
+		/*DDL*/        TYPE_MSGBKCOLOR | TYPE_HAS_ITEMS, // Background affects only the main control, and requires -Theme.
+		/*ComboBox*/   TYPE_MSGBKCOLOR | TYPE_HAS_ITEMS, // Background affects only the main control.
+		/*ListBox*/    TYPE_MSGBKCOLOR | TYPE_HAS_ITEMS,
+		/*ListView*/   TYPE_SETBKCOLOR | TYPE_NO_SUBMIT | TYPE_RESERVE_UNION | TYPE_HAS_ITEMS,
 		/*TreeView*/   TYPE_SETBKCOLOR | TYPE_NO_SUBMIT,
 		/*Edit*/       TYPE_MSGBKCOLOR,
 		/*DateTime*/   0,
@@ -75,7 +75,7 @@ GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
 		/*UpDown*/     TYPE_HAS_NO_TEXT,
 		/*Slider*/     TYPE_STATICBACK | TYPE_HAS_NO_TEXT,
 		/*Progress*/   TYPE_SETBKCOLOR | TYPE_HAS_NO_TEXT | TYPE_NO_SUBMIT,
-		/*Tab*/        TYPE_STATICBACK,
+		/*Tab*/        TYPE_STATICBACK | TYPE_HAS_ITEMS,
 		/*Tab2*/       0, // Never used since it is changed to TAB at an early stage.
 		/*Tab3*/       0, // As above.
 		/*ActiveX*/    TYPE_HAS_NO_TEXT | TYPE_NO_SUBMIT | TYPE_RESERVE_UNION,
@@ -83,7 +83,7 @@ GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(TypeAttribs aAttrib)
 		/*Custom*/     TYPE_MSGBKCOLOR | TYPE_NO_SUBMIT, // Custom controls *may* use WM_CTLCOLOR.
 		/*StatusBar*/  TYPE_SETBKCOLOR | TYPE_NO_SUBMIT,
 	};
-	return sAttrib[type] & aAttrib;
+	return sAttrib[aType] & aAttrib;
 }
 
 UCHAR **ConstructEventSupportArray()
@@ -253,7 +253,13 @@ ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, E
 	}
 	_f_param_string_opt(options, 0);
 	_f_param_string_opt(text, 1);
-	auto text_obj = aParamCount >= 2 ? TokenToArray(*aParam[1]) : NULL;
+	Array *text_obj = nullptr;
+	if (   !ParamIndexIsOmitted(1)
+		&& GuiControlType::TypeHasAttrib(ctrl_type, GuiControlType::TYPE_HAS_ITEMS)
+		&& !(text_obj = TokenToArray(*aParam[1]))   )
+	{
+		_o_throw(aID ? ERR_PARAM2_INVALID : ERR_PARAM3_INVALID);
+	}
 	GuiControlType* pcontrol;
 	ResultType result = AddControl(ctrl_type, options, text, pcontrol, text_obj);
 	if (pcontrol)
@@ -902,8 +908,9 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 		case M_List_Add:
 		{
 			auto obj = TokenToArray(*aParam[0]);
-			LPTSTR value = obj ? _T("") : ParamIndexToString(0, _f_number_buf);
-			gui->ControlAddContents(*this, value, 0, NULL, obj);
+			if (!obj)
+				_o_throw(ERR_PARAM1_INVALID);
+			gui->ControlAddItems(*this, obj);
 			if (type == GUI_CONTROL_TAB)
 			{
 				// Appears to be necessary to resolve a redraw issue, at least for Tab3 on Windows 10.
@@ -4630,7 +4637,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	///////////////////////////////////////////////////
 	// Add any content to the control and set its font.
 	///////////////////////////////////////////////////
-	ControlAddContents(control, aText, opt.choice, NULL, aObj); // Must be done after font-set above so that ListView columns can be auto-sized to fit their text.
+	ControlAddItems(control, aObj); // Must be done after font-set above so that ListView columns can be auto-sized to fit their text.
+	if (opt.choice > 0)
+		ControlSetChoice(control, opt.choice);
 
 	if (control.type == GUI_CONTROL_TAB && opt.row_count > 0)
 	{
@@ -4923,18 +4932,6 @@ ResultType GuiType::ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, Tog
 
 		else if (!_tcsicmp(next_option, _T("Caption")))
 			if (adding) mStyle |= WS_CAPTION; else mStyle = mStyle & ~WS_CAPTION;
-
-		else if (!_tcsnicmp(next_option, _T("Delimiter"), 9))
-		{
-			next_option += 9;
-			// For simplicity, the value of "adding" is ignored since no use is foreseeable for "-Delimiter".
-			if (!_tcsicmp(next_option, _T("Tab")))
-				mDelimiter = '\t';
-			else if (!_tcsicmp(next_option, _T("Space")))
-				mDelimiter = ' ';
-			else
-				mDelimiter = *next_option ? *next_option : '|';
-		}
 
 		else if (!_tcsicmp(next_option, _T("Disabled")))
 		{
@@ -6805,13 +6802,9 @@ void GuiType::ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aC
 
 
 
-void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt, Array *aObj)
-// If INT_MIN is specified for aChoice, aControl should be the ListView to which a new row is being added.
-// In that case, aOpt should be non-NULL.
-// Caller must ensure that aContent is a writable memory area, since this function temporarily
-// alters the string.
+void GuiType::ControlAddItems(GuiControlType &aControl, Array *aObj)
 {
-	if (!*aContent && !aObj)
+	if (!aObj)
 		return;
 
 	UINT msg_add;
@@ -6832,15 +6825,14 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 	case GUI_CONTROL_LISTBOX:
 		msg_add = LB_ADDSTRING;
 		break;
-	default:    // Do nothing for any other control type that doesn't require content to be added this way.
-		return; // e.g. GUI_CONTROL_SLIDER, which the caller should handle.
+	default: // Do nothing for any other control type that somehow makes its way here.
+		return;
 	}
 
-	bool temporarily_terminated = false;
-	LPTSTR this_field, next_field;
 	LRESULT item_index;
 	TCHAR num_buf[MAX_NUMBER_SIZE];
-	Array::index_t obj_index = 0;
+	Array::index_t obj_index;
+	ExprTokenType tok;
 
 	// For tab controls:
 	TCITEM tci;
@@ -6852,31 +6844,9 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 	lvc.mask = LVCF_TEXT; // Simpler just to init unconditionally rather than checking control type.
 
 	// Check *this_field at the top too, in case list ends in delimiter.
-	for (this_field = aContent; aObj || *this_field;)
+	for (obj_index = 0; aObj->ItemToToken(obj_index, tok); ++obj_index)
 	{
-		if (aObj)
-		{
-			ExprTokenType tok;
-			if (!aObj->ItemToToken(obj_index++, tok))
-				break;
-			this_field = TokenToString(tok, num_buf);
-		}
-		// Decided to use pipe as delimiter, rather than comma, because it makes the script more readable.
-		// For example, it's easier to pick out the list of choices at a glance rather than having to
-		// figure out where the commas delimit the beginning and end of "real" parameters vs. those params
-		// that are a self-contained CSV list.  Of course, the pipe character itself is "sacrificed" and
-		// cannot be used literally due to this method.  That limitation can now be avoided by specifying
-		// a custom delimiter.
-		else if (next_field = _tcschr(this_field, mDelimiter)) // Assign
-		{
-			*next_field = '\0';  // Temporarily terminate (caller has ensured this is safe).
-			temporarily_terminated = true;
-		}
-		else
-		{
-			next_field = this_field + _tcslen(this_field);  // Point it to the end of the string.
-			temporarily_terminated = false;
-		}
+		LPTSTR this_field = TokenToString(tok, num_buf);
 
 		// Add the item:
 		switch (aControl.type)
@@ -6903,27 +6873,6 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 			// For the above, item_index must be retrieved and used as the item's index because it might
 			// be different than expected if the control's SORT style is in effect.
 		}
-
-		if (temporarily_terminated)
-		{
-			*next_field = mDelimiter;  // Restore the original char.
-			++next_field;
-			if (*next_field == mDelimiter)  // An item ending in two delimiters is a default (pre-selected) item.
-			{
-				if (item_index > -1) // The item was successfully added.
-				{
-					ControlSetChoice(aControl, (int)item_index);
-					// It's not done this way because aChoice is expected to take precedence, and we can't just
-					// check aChoice != 0 because it might end up being out of bounds (in which case the choice
-					// set above will remain in effect):
-					//aChoice = item_index;
-				}
-				++next_field;  // Now this could be a third mDelimiter, which would in effect be an empty item.
-				// It can also be the zero terminator if the list ends in a delimiter, e.g. item1|item2||
-			}
-		}
-		if (!aObj)
-			this_field = next_field;
 	} // for()
 
 	if (aControl.type == GUI_CONTROL_LISTVIEW)
@@ -6944,16 +6893,13 @@ void GuiType::ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int 
 			for (int i = 0; i < requested_index; ++i) // Auto-size each column.
 				ListView_SetColumnWidth(aControl.hwnd, i, LVSCW_AUTOSIZE_USEHEADER);
 	}
-
-	// Have aChoice take precedence over any double-piped item(s) that appeared in the list:
-	if (aChoice > 0)
-		ControlSetChoice(aControl, aChoice - 1);
 }
 
 
 
 void GuiType::ControlSetChoice(GuiControlType &aControl, int aChoice)
 {
+	--aChoice; // Convert one-based to zero-based.
 	switch (aControl.type)
 	{
 	case GUI_CONTROL_TAB:

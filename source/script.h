@@ -2365,10 +2365,12 @@ struct GuiControlType : public Object
 		TYPE_HAS_NO_TEXT = 0x10, // Has no text and therefore doesn't use the font or text color.
 		TYPE_RESERVE_UNION = 0x20, // Uses the union for some other purpose, so union_color must not be set.
 		TYPE_USES_BGCOLOR = 0x40, // Uses Gui.BackColor.
+		TYPE_HAS_ITEMS = 0x80, // Add() accepts an Array of items rather than text.
 		TYPE_STATICBACK = TYPE_MSGBKCOLOR | TYPE_USES_BGCOLOR, // For brevity in the attrib array.
 	};
 	typedef UCHAR TypeAttribs;
-	TypeAttribs TypeHasAttrib(TypeAttribs aAttrib);
+	static TypeAttribs TypeHasAttrib(GuiControls aType, TypeAttribs aAttrib);
+	TypeAttribs TypeHasAttrib(TypeAttribs aAttrib) { return TypeHasAttrib(type, aAttrib); }
 
 	static UCHAR **sRaisesEvents;
 	bool SupportsEvent(GuiEventType aEvent);
@@ -2589,8 +2591,6 @@ public:
 	int mMarginX, mMarginY, mPrevX, mPrevY, mPrevWidth, mPrevHeight, mMaxExtentRight, mMaxExtentDown
 		, mSectionX, mSectionY, mMaxExtentRightSection, mMaxExtentDownSection;
 	LONG mMinWidth, mMinHeight, mMaxWidth, mMaxHeight;
-	// 16-BIT OR 8-BIT FIELDS:
-	TCHAR mDelimiter;  // The default field delimiter when adding items to ListBox, DropDownList, ListView, etc.
 	// 8-BIT FIELDS:
 	TabControlIndexType mTabControlCount;
 	TabControlIndexType mCurrentTabControlIndex; // Which tab control of the window.
@@ -2660,7 +2660,7 @@ public:
 		// removed, which implies that POPUP windows are more flexible than OVERLAPPED windows.
 		, mStyle(WS_POPUP|WS_CLIPSIBLINGS|WS_CAPTION|WS_SYSMENU|WS_MINIMIZEBOX) // WS_CLIPCHILDREN (doesn't seem helpful currently)
 		, mExStyle(0) // This and the above should not be used once the window has been created since they might get out of date.
-		, mInRadioGroup(false), mUseTheme(true), mDelimiter('|')
+		, mInRadioGroup(false), mUseTheme(true)
 		, mCurrentFontIndex(FindOrCreateFont()) // Must call this in constructor to ensure sFont array is never empty while a GUI object exists.  Omit params to tell it to find or create DEFAULT_GUI_FONT.
 		, mTabControlCount(0), mCurrentTabControlIndex(MAX_TAB_CONTROLS), mCurrentTabIndex(0)
 		, mCurrentColor(CLR_DEFAULT)
@@ -2724,7 +2724,7 @@ public:
 	ResultType ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &aOpt, GuiControlType &aControl
 		, GuiIndexType aControlIndex = -1); // aControlIndex is not needed upon control creation.
 	void ControlInitOptions(GuiControlOptionsType &aOpt, GuiControlType &aControl);
-	void ControlAddContents(GuiControlType &aControl, LPTSTR aContent, int aChoice, GuiControlOptionsType *aOpt = NULL, Array *aObj = NULL);
+	void ControlAddItems(GuiControlType &aControl, Array *aObj);
 	void ControlSetChoice(GuiControlType &aControl, int aChoice);
 	ResultType ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilename, int aWidth, int aHeight, int aIconNumber);
 	ResultType Show(LPTSTR aOptions);
