@@ -15,19 +15,7 @@ extern BuiltInFunc *OpFunc_GetProp, *OpFunc_GetItem, *OpFunc_SetProp, *OpFunc_Se
 
 BIF_DECL(BIF_Object)
 {
-	IObject *obj = NULL;
-
-	if (aParamCount == 1) // L33: POTENTIALLY UNSAFE - Cast IObject address to object reference.
-	{
-		obj = (IObject *)TokenToInt64(*aParam[0]);
-		if (obj < (IObject *)65536) // Prevent some obvious errors.
-			_f_throw(ERR_PARAM1_INVALID);
-		else
-			obj->AddRef();
-	}
-	else
-		obj = Object::Create(aParam, aParamCount, &aResultToken);
-
+	IObject *obj = Object::Create(aParam, aParamCount, &aResultToken);
 	if (obj)
 	{
 		// DO NOT ADDREF: the caller takes responsibility for the only reference.
@@ -361,6 +349,33 @@ BIF_DECL(BIF_ObjRaw)
 		}
 	}
 	_f_return_empty;
+}
+
+
+//
+// ObjPtr/ObjPtrAddRef/ObjFromPtr - Convert between object reference and IObject pointer.
+//
+
+BIF_DECL(BIF_ObjPtr)
+{
+	if (_f_callee_id >= FID_ObjFromPtr)
+	{
+		auto obj = (IObject *)ParamIndexToInt64(0);
+		if (obj < (IObject *)65536) // Prevent some obvious errors.
+			_f_throw(ERR_PARAM1_INVALID);
+		if (_f_callee_id == FID_ObjFromPtrAddRef)
+			obj->AddRef();
+		_f_return(obj);
+	}
+	else // FID_ObjPtr or FID_ObjPtrAddRef.
+	{
+		auto obj = ParamIndexToObject(0);
+		if (!obj)
+			_f_throw(ERR_TYPE_MISMATCH);
+		if (_f_callee_id == FID_ObjPtrAddRef)
+			obj->AddRef();
+		_f_return((UINT_PTR)obj);
+	}
 }
 
 

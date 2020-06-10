@@ -644,7 +644,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		case SYM_IN:
 		case SYM_CONTAINS:
 			right_is_pure_number = right_is_number = PURE_NOT_NUMERIC; // Init for convenience/maintainability.
-		case SYM_ADDRESS:
 		case SYM_AND:			// v2: These don't need it either since even numeric strings are considered "true".
 		case SYM_OR:			//
 		case SYM_LOWNOT:		//
@@ -791,31 +790,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			}
 			else // Post-inc/dec, so the non-delta version, which was already stored in this_token, should get pushed.
 				this_token.symbol = right_is_number; // Set the symbol type to match the double or int64 that was already stored higher above.
-			break;
-
-		case SYM_ADDRESS: // Take the address of a variable.
-			if (IObject *obj = TokenToObject(right))
-			{
-				this_token.SetValue((__int64)obj);
-			}
-			else if (right.symbol == SYM_VAR) // At this stage, SYM_VAR is always a normal variable, never a built-in one, so taking its address should be safe.
-			{
-				Var *right_var = right.var->ResolveAlias();
-				if (right_var->IsPureNumeric())
-				{
-					this_token.value_int64 = (__int64)&right_var->mContentsInt64; // Since the value is a pure number, this seems more useful and less confusing than returning the address of a numeric string.
-					right_var->mAttrib |= VAR_ATTRIB_CONTENTS_OUT_OF_DATE_UNTIL_REASSIGNED | VAR_ATTRIB_CONTENTS_OUT_OF_DATE; // Since the user might change the value via NumPut or DllCall.
-				}
-				else
-					this_token.value_int64 = (__int64)right_var->Contents(); // Contents() vs. mContents to support VAR_CLIPBOARD, and in case mContents needs to be updated by Contents().
-				this_token.symbol = SYM_INTEGER;
-			}
-			else if (right.symbol == SYM_STRING)
-			{
-				this_token.SetValue((__int64)right.marker);
-			}
-			else // Syntax error: operand is not an object or a variable reference.
-				goto abort_with_exception;
 			break;
 
 		case SYM_BITNOT:  // The tilde (~) operator.

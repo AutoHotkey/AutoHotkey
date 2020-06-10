@@ -13751,6 +13751,22 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 
 
 
+BIF_DECL(BIF_StrPtr)
+{
+	switch (aParam[0]->symbol)
+	{
+	case SYM_STRING:
+		_f_return((UINT_PTR)aParam[0]->marker);
+	case SYM_VAR:
+		if (!aParam[0]->var->IsPureNumericOrObject())
+			_f_return((UINT_PTR)aParam[0]->var->Contents());
+	default:
+		_f_throw(ERR_TYPE_MISMATCH);
+	}
+}
+
+
+
 BIF_DECL(BIF_IsLabel)
 // For performance and code-size reasons, this function does not currently return what
 // type of label it is (hotstring, hotkey, or generic).  To preserve the option to do

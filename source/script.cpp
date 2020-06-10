@@ -206,12 +206,16 @@ FuncEntry g_BIF[] =
 	BIFn(ObjClone, 1, 1, BIF_ObjXXX),
 	BIFn(ObjDeleteProp, 2, 3, BIF_ObjXXX),
 	BIF1(Object, 0, NA),
+	BIFn(ObjFromPtr, 1, 1, BIF_ObjPtr),
+	BIFn(ObjFromPtrAddRef, 1, 1, BIF_ObjPtr),
 	BIFn(ObjGetBase, 1, 1, BIF_Base),
 	BIFn(ObjGetCapacity, 1, 1, BIF_ObjXXX),
 	BIFn(ObjHasOwnProp, 2, 2, BIF_ObjXXX),
 	BIFn(ObjOwnMethods, 1, 1, BIF_ObjXXX),
 	BIFn(ObjOwnPropCount, 1, 1, BIF_ObjXXX),
 	BIFn(ObjOwnProps, 1, 1, BIF_ObjXXX),
+	BIFn(ObjPtr, 1, 1, BIF_ObjPtr),
+	BIFn(ObjPtrAddRef, 1, 1, BIF_ObjPtr),
 	BIFn(ObjRawGet, 2, 2, BIF_ObjRaw),
 	BIFn(ObjRawSet, 3, 3, BIF_ObjRaw),
 	BIFn(ObjRelease, 1, 1, BIF_ObjAddRefRelease),
@@ -259,6 +263,7 @@ FuncEntry g_BIF[] =
 	BIF1(String, 1, 1),
 	BIF1(StrLen, 1, 1),
 	BIFn(StrLower, 1, 2, BIF_StrCase),
+	BIF1(StrPtr, 1, 1),
 	BIFn(StrPut, 1, 4, BIF_StrGetPut),
 	BIF1(StrReplace, 2, 5, {4}),
 	BIF1(StrSplit, 1, 4),
@@ -8338,7 +8343,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 62, 62, 62     // SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
 		, 72             // SYM_POWER (see note below).  Associativity kept as left-to-right for backward compatibility (e.g. 2**2**3 is 4**3=64 not 2**8=256).
 		, 25             // SYM_LOWNOT (the word "NOT": the low precedence version of logical-not).  HAS AN ODD NUMBER to indicate right-to-left evaluation order so that things like "not not var" are supports (which can be used to convert a variable into a pure 1/0 boolean value).
-		, 67,67,67,67,67 // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT, SYM_ADDRESS
+		, 67,67,67,67    // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT
 		// NOTE: THE ABOVE MUST BE AN ODD NUMBER to indicate right-to-left evaluation order, which was added in v1.0.46 to support consecutive unary operators such as !*var !!var (!!var can be used to convert a value into a pure 1/0 boolean).
 //		, 68             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 77, 77         // SYM_PRE_INCREMENT, SYM_PRE_DECREMENT (higher precedence than SYM_POWER because it doesn't make sense to evaluate power first because that would cause ++/-- to fail due to operating on a non-lvalue.
@@ -8725,12 +8730,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 						this_infix_item.symbol = SYM_ASSIGN_BITAND;
 					}
 					else
-					{
-						// Differentiate between unary "take the address of" and the "bitwise and" operator:
-						// See '-' above for more details:
-						this_infix_item.symbol = (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
-							? SYM_BITAND : SYM_ADDRESS;
-					}
+						this_infix_item.symbol = SYM_BITAND;
 					break;
 				case '|':
 					if (cp1 == '|')
