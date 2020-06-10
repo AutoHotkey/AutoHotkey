@@ -5310,15 +5310,6 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 							aOpt.choice = 1; // Overwrite 0 to flag sys_time as both present and valid.
 						//else leave choice at its 0 default to indicate no valid Choose option was present.
 					break;
-				case GUI_CONTROL_MONTHCAL:
-					aOpt.gdtr = YYYYMMDDToSystemTime2(next_option, aOpt.sys_time);
-					// For code simplicity, both min and max must be present to enable a selected-range.
-					if (aOpt.gdtr == (GDTR_MIN | GDTR_MAX))
-						aOpt.style_add |= MCS_MULTISELECT;
-					//else never remove the style since it's valid to create a range-capable control via
-					// "Multi" that has only a single date selected (or none).  Also, if the control already
-					// exists, MSDN says that MCS_MULTISELECT cannot be added or removed.
-					break;
 				default:
 					aOpt.choice = ATOI(next_option);
 					if (aOpt.choice < 1) // Invalid: number should be 1 or greater.
