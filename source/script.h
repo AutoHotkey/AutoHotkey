@@ -952,7 +952,6 @@ public:
 		, Var **aArgVar = NULL);
 	ResultType ExpandSingleArg(int aArgIndex, ResultToken &aResultToken, LPTSTR &aDerefBuf, size_t &aDerefBufSize);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
-	ResultType EvaluateHotCriterionExpression(); // Called by HotkeyCriterion::Eval().
 
 	ResultType ValueIsType(ExprTokenType &aResultToken, ExprTokenType &aValue, LPTSTR aValueStr, ExprTokenType &aType, LPTSTR aTypeStr);
 

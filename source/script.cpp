@@ -3729,7 +3729,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	// L4: Handle #HotIf (expression) directive.
 	if (IS_DIRECTIVE_MATCH(_T("#HotIf")))
 	{
-		if (g->CurrentFunc || mClassObjectCount)
+		if (g->CurrentFunc || mClassObjectCount || mLastHotFunc)
 			return ScriptError(ERR_INVALID_USAGE);
 		if (!parameter) // The omission of the parameter indicates that any existing criteria should be turned off.
 		{
@@ -3739,31 +3739,33 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		// Check for a duplicate #HotIf expression;
 		//  - Prevents duplicate hotkeys under separate copies of the same expression.
-		//  - Hotkey,If would only be able to select the first expression with the given source code.
+		//  - HotIf would only be able to select the first expression with the given source code.
 		//  - Conserves memory.
 		if (g->HotCriterion = FindHotkeyIfExpr(parameter))
 			return CONDITION_TRUE;
 		
-		auto current_func = g->CurrentFunc;
-		g->CurrentFunc = NULL; // Use global scope.
-		mNoUpdateLabels = true; // Avoid pointing any pending labels at this line.
-		
-		if (!ParseAndAddLine(parameter, LINE_SIZE - int(parameter-aBuf), ACT_HOTKEY_IF))
-			return FAIL;
-		
-		mNoUpdateLabels = false;
-		g->CurrentFunc = current_func;
-		
-		Line *hot_expr_line = mLastLine;
+		// Create a function to return the result of the expression
+		// specified by "parameter":
 
-		// Set the new criterion.
-		if (  !(g->HotCriterion = AddHotkeyIfExpr())  )
+		Var* func_global_var[MAX_FUNC_VAR_GLOBALS];
+		CreateHotFunc(func_global_var, MAX_FUNC_VAR_GLOBALS);
+		
+		ResultToken result_token;
+		if (!Hotkey::IfExpr(NULL, mLastHotFunc, result_token))		// Set the new criterion.
 			return FAIL;
-		g->HotCriterion->Type = HOT_IF_EXPR;
-		g->HotCriterion->ExprLine = hot_expr_line;
-		g->HotCriterion->WinTitle = hot_expr_line->mArg[0].text;
-		g->HotCriterion->WinText = _T("");
-		hot_expr_line->mAttribute = g->HotCriterion;
+
+		if (!(g->HotCriterion->OriginalExpr = SimpleHeap::Malloc(parameter))) 															
+			return ScriptError(ERR_OUTOFMEM); 
+		
+		auto func = mLastHotFunc; // AddLine will set mLastHotFunc to nullptr below
+		
+		if (!AddLine(ACT_BLOCK_BEGIN)
+			|| !ParseAndAddLine(parameter, (int)_tcslen(parameter), ACT_HOTKEY_IF) // PreparseStaticLines will change this to ACT_RETURN
+			|| !AddLine(ACT_BLOCK_END))
+			return ScriptError(ERR_OUTOFMEM);
+
+		func->mJumpToLine->mAttribute = g->HotCriterion;	// Must be set for PreparseHotkeyIfExprs
+		
 		return CONDITION_TRUE;
 	}
 
@@ -7855,10 +7857,9 @@ ResultType Script::PreparseStaticLines(Line *aStartingLine)
 			mLastStaticLine = line;
 			break;
 		case ACT_HOTKEY_IF:
-			if (line->mArg[0].is_expression) // May be false for optimized cases like "#HotIf somevar".
-				PreparseHotkeyIfExpr(line);
-			// It's already been added to the hot-expr list, so just remove it from the script (below).
-			break;
+			PreparseHotkeyIfExpr(line);
+			line->mActionType = ACT_RETURN;
+			continue; // No need to "remove" this line since it is in a function.
 		default:
 			continue;
 		}
@@ -11041,20 +11042,6 @@ ResultType Line::EvaluateCondition()
 }
 
 
-// Evaluate an #If expression (in a thread created by the caller).
-ResultType Line::EvaluateHotCriterionExpression()
-{
-	g_script.mCurrLine = this; // Added in v1.1.16 to fix A_LineFile and A_LineNumber.
-
-	if (g->ListLinesIsEnabled)
-		LOG_LINE(this)
-
-	ResultType result = ExpandArgs();
-	if (result == OK)
-		result = EvaluateCondition();
-
-	return result;
-}
 
 
 // Evaluate an #If expression or callback function.
@@ -11091,21 +11078,13 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	g_script.mThisHotkeyStartTime = // Updated for consistency.
 	g_script.mLastPeekTime = GetTickCount();
 
-	// EVALUATE THE EXPRESSION OR CALL THE CALLBACK
-	if (Type == HOT_IF_EXPR)
-	{
-		DEBUGGER_STACK_PUSH(_T("#If"))
-		result = ExprLine->EvaluateHotCriterionExpression();
-		DEBUGGER_STACK_POP()
-	}
-	else
-	{
-		ExprTokenType param = aHotkeyName;
-		__int64 retval;
-		result = LabelPtr(Callback)->ExecuteInNewThread(_T("#If"), &param, 1, &retval);
-		if (result != FAIL)
-			result = retval ? CONDITION_TRUE : CONDITION_FALSE;
-	}
+	// CALL THE CALLBACK
+	ExprTokenType param = aHotkeyName;
+	__int64 retval;
+	result = LabelPtr(Callback)->ExecuteInNewThread(_T("#HotIf"), &param, 1, &retval);
+	if (result != FAIL)
+		result = retval ? CONDITION_TRUE : CONDITION_FALSE;
+	
 
 	// The following allows the expression to set the Last Found Window for the
 	// hotkey subroutine, so that #if WinActive(T) and similar behave like #IfWin.
