@@ -14210,7 +14210,7 @@ BIF_DECL(BIF_Hotkey)
 			if (functor = TokenToObject(*aParam[1]))
 				functor->AddRef();
 			else if (  !(hook_action = Hotkey::ConvertAltTab(aParam1, true))  )
-				functor = StringToLabelOrFunctor(aParam1);
+				functor = StringToFunctor(aParam1);
 			if (!functor)
 			{
 				// Search for a match in the hotkey variants' "original callbacks".
@@ -16825,15 +16825,6 @@ IObject *TokenToFunctor(ExprTokenType &aToken)
 		return obj;
 	}
 	return StringToFunctor(TokenToString(aToken)); // No need for buf (see TokenToFunc).
-}
-
-
-IObject *StringToLabelOrFunctor(LPTSTR aStr)
-// Reference is counted so CALLER MUST Release() WHEN APPROPRIATE.
-{
-	if (Label *lbl = g_script.FindLabel(aStr, false))
-		return lbl;
-	return StringToFunctor(aStr);
 }
 
 
