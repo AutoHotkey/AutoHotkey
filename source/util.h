@@ -726,6 +726,8 @@ LPTSTR ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex); // L17: Fi
 HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, int aHeight // L17: Extract icon of the appropriate size from an executable (or compatible) file.
 	, HMODULE *apModule = NULL);
 
+PWSTR GetDocumentsFolder();
+
 #if defined(_MSC_VER) && defined(_DEBUG)
 void OutputDebugStringFormat(LPCTSTR fmt, ...); // put debug message to the "Output" panel of Visual Studio.
 #endif

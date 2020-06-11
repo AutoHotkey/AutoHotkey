@@ -3028,8 +3028,6 @@ BIF_DECL(BIF_WinGetText)
 	if (!sab.total_length) // No text in window.
 		_f_return_empty;
 
-	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-	// this call will set up the clipboard for writing:
 	if (!TokenSetResult(aResultToken, NULL, sab.total_length))
 		return;  // It already displayed the error.
 	aResultToken.symbol = SYM_STRING;
@@ -4087,11 +4085,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 	case AHK_DIALOG:  // User defined msg sent from our functions MsgBox() or FileSelect().
 	{
-		// Always call this to close the clipboard if it was open (e.g. due to a script
-		// line such as "MsgBox, %clipboard%" that got us here).  Seems better just to
-		// do this rather than incurring the delay and overhead of a MsgSleep() call:
-		CLOSE_CLIPBOARD_IF_OPEN;
-		
 		// Ensure that the app's top-most window (the modal dialog) is the system's
 		// foreground window.  This doesn't use FindWindow() since it can hang in rare
 		// cases.  And GetActiveWindow, GetTopWindow, GetWindow, etc. don't seem appropriate.
@@ -5070,11 +5063,6 @@ INT_PTR CALLBACK InputBoxProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPARAM lPa
 	{
 	case WM_INITDIALOG:
 	{
-		// Clipboard may be open if its contents were used to build the text or title
-		// of this dialog (e.g. "InputBox, out, %clipboard%").  It's best to do this before
-		// anything that might take a relatively long time (e.g. SetForegroundWindowEx()):
-		CLOSE_CLIPBOARD_IF_OPEN;
-
 		SetWindowLongPtr(hWndDlg, DWLP_USER, lParam); // Store it for later use.
 		auto &CURR_INPUTBOX = *(InputBoxType *)lParam;
 		CURR_INPUTBOX.hwnd = hWndDlg;
@@ -6296,9 +6284,6 @@ int SortUDF(const void *a1, const void *a2)
 
 
 BIF_DECL(BIF_Sort)
-// Caller must ensure that aContents is modifiable (ArgMustBeDereferenced() currently ensures this) because
-// not only does this function modify it, it also needs to store its result back into output_var in a way
-// that requires that output_var not be at the same address as the contents that were sorted.
 {
 	// Set defaults in case of early goto:
 	LPTSTR mem_to_free = NULL;
@@ -6490,8 +6475,7 @@ BIF_DECL(BIF_Sort)
 	// Scan aContents and do the following:
 	// 1) Replace each delimiter with a terminator so that the individual items can be seen
 	//    as real strings by the SortWithOptions() and when copying the sorted results back
-	//    into output_vav.  It is safe to change aContents in this way because
-	//    ArgMustBeDereferenced() has ensured that those contents are in the deref buffer.
+	//    into the result.
 	// 2) Store a marker/pointer to each item (string) in aContents so that we know where
 	//    each item begins for sorting and recopying purposes.
 	LPTSTR *item_curr = item; // i.e. Don't use [] indexing for the reason in the paragraph previous to above.
@@ -9073,17 +9057,40 @@ BOOL Line::CheckValidFinallyJump(Line* jumpTarget) // v1.1.14
 // BUILT-IN VARIABLES //
 ////////////////////////
 
-VarSizeType BIV_True_False(LPTSTR aBuf, LPTSTR aVarName)
+
+BIV_DECL_R(BIV_Clipboard)
 {
-	if (aBuf)
+	auto length = g_clip.Get();
+	if (TokenSetResult(aResultToken, nullptr, length))
 	{
-		*aBuf++ = aVarName[4] ? '0': '1';
-		*aBuf = '\0';
+		aResultToken.marker_length = g_clip.Get(aResultToken.marker);
+		if (aResultToken.marker_length == CLIPBOARD_FAILURE)
+			aResultToken.SetExitResult(FAIL);
+		aResultToken.symbol = SYM_STRING;
 	}
-	return 1; // The length of the value.
+	g_clip.Close();
 }
 
-VarSizeType BIV_MMM_DDD(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_W(BIV_Clipboard_Set)
+{
+	if (auto *obj = BivRValueToObject())
+	{
+		if (ClipboardAll *cba = dynamic_cast<ClipboardAll *>(obj))
+		{
+			if (!Var::SetClipboardAll(cba->Data(), cba->Size()))
+				_f_return_FAIL;
+			return;
+		}
+		_f_throw(ERR_TYPE_MISMATCH, obj->Type());
+	}
+	size_t aLength;
+	LPTSTR aBuf = BivRValueToString(&aLength);
+	if (!g_clip.Set(aBuf, aLength))
+		_f_return_FAIL;
+}
+
+
+BIV_DECL_R(BIV_MMM_DDD)
 {
 	LPTSTR format_str;
 	switch(ctoupper(aVarName[2]))
@@ -9093,10 +9100,13 @@ VarSizeType BIV_MMM_DDD(LPTSTR aBuf, LPTSTR aVarName)
 	case 'D': format_str = (aVarName[5] ? _T("dddd") : _T("ddd")); break;
 	}
 	// Confirmed: The below will automatically use the local time (not UTC) when 3rd param is NULL.
-	return (VarSizeType)(GetDateFormat(LOCALE_USER_DEFAULT, 0, NULL, format_str, aBuf, aBuf ? 999 : 0) - 1);
+	int len = GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, nullptr, format_str, _f_retval_buf, _f_retval_buf_size, nullptr);
+	if (len && !_f_retval_buf[len - 1])
+		--len; // "Returns the number of characters written" apparently includes the terminator.
+	_f_return_p(_f_retval_buf, len);
 }
 
-VarSizeType BIV_DateTime(LPTSTR aBuf, LPTSTR aVarName)
+VarSizeType GetDateTimeBIV(LPTSTR aBuf, LPTSTR aVarName)
 {
 	if (!aBuf)
 		return 6; // Since only an estimate is needed in this mode, return the maximum length of any item.
@@ -9106,7 +9116,7 @@ VarSizeType BIV_DateTime(LPTSTR aBuf, LPTSTR aVarName)
 	// The current time is refreshed only if it's been a certain number of milliseconds since
 	// the last fetch of one of these built-in time variables.  This keeps the variables in
 	// sync with one another when they are used consecutively such as this example:
-	// Var = %A_Hour%:%A_Min%:%A_Sec%
+	// Var := A_Hour ':' A_Min ':' A_Sec
 	// Using GetTickCount() because it's very low overhead compared to the other time functions:
 	static DWORD sLastUpdate = 0; // Static should be thread + recursion safe in this case.
 	static SYSTEMTIME sST = {0}; // Init to detect when it's empty.
@@ -9162,41 +9172,35 @@ VarSizeType BIV_DateTime(LPTSTR aBuf, LPTSTR aVarName)
 	return 0; // Never reached, but avoids compiler warning.
 }
 
+BIV_DECL_R(BIV_DateTime)
+{
+	GetDateTimeBIV(_f_retval_buf, aVarName);
+	_f_return_p(_f_retval_buf);
+}
+
 BIV_DECL_R(BIV_ListLines)
 {
-	if (aBuf)
-	{
-		*aBuf++ = g->ListLinesIsEnabled ? '1' : '0';
-		*aBuf = '\0';
-	}
-	return 1;
+	_f_return_b(g->ListLinesIsEnabled);
 }
 
 BIV_DECL_W(BIV_ListLines_Set)
 {
-	g->ListLinesIsEnabled = ResultToBOOL(aBuf);
-	return OK;
+	g->ListLinesIsEnabled = BivRValueToBOOL();
 }
 
-VarSizeType BIV_TitleMatchMode(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_TitleMatchMode)
 {
 	if (g->TitleMatchMode == FIND_REGEX) // v1.0.45.
-	{
-		if (aBuf)  // For backward compatibility (due to StringCaseSense), never change the case used here:
-			_tcscpy(aBuf, _T("RegEx"));
-		return 5; // The length.
-	}
+		// For backward compatibility (due to StringCaseSense), never change the case used here:
+		_f_return_p(_T("RegEx"));
 	// Otherwise, it's a numerical mode:
-	// It's done this way in case it's ever allowed to go beyond a single-digit number.
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_itot(g->TitleMatchMode, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return (VarSizeType)_tcslen(target_buf);
+	_f_return_i(g->TitleMatchMode);
 }
 
 BIV_DECL_W(BIV_TitleMatchMode_Set)
 {
-	switch (Line::ConvertTitleMatchMode((LPTSTR)aBuf))
+	LPTSTR aBuf = BivRValueToString();
+	switch (Line::ConvertTitleMatchMode(aBuf))
 	{
 	case FIND_IN_LEADING_PART: g->TitleMatchMode = FIND_IN_LEADING_PART; break;
 	case FIND_ANYWHERE: g->TitleMatchMode = FIND_ANYWHERE; break;
@@ -9206,74 +9210,61 @@ BIV_DECL_W(BIV_TitleMatchMode_Set)
 	case FIND_FAST: g->TitleFindFast = true; break;
 	case FIND_SLOW: g->TitleFindFast = false; break;
 	default:
-		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
+		_f_throw(ERR_INVALID_VALUE, aBuf);
 	}
-	return OK;
 }
 
-VarSizeType BIV_TitleMatchModeSpeed(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_TitleMatchModeSpeed)
 {
-	if (aBuf)  // For backward compatibility (due to StringCaseSense), never change the case used here:
-		_tcscpy(aBuf, g->TitleFindFast ? _T("Fast") : _T("Slow"));
-	return 4;  // Always length 4
+	// For backward compatibility (due to StringCaseSense), never change the case used here:
+	_f_return_p(g->TitleFindFast ? _T("Fast") : _T("Slow"));
 }
 
-VarSizeType BIV_DetectHiddenWindows(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_DetectHiddenWindows)
 {
-	if (aBuf)
-	{
-		*aBuf++ = g->DetectHiddenWindows ? '1' : '0';
-		*aBuf = '\0';
-	}
-	return 1;
+	_f_return_b(g->DetectHiddenWindows);
 }
 
 BIV_DECL_W(BIV_DetectHiddenWindows_Set)
 {
+	LPTSTR aBuf = BivRValueToString();
 	ToggleValueType toggle;
 	if ( (toggle = Line::ConvertOnOff(aBuf, NEUTRAL)) != NEUTRAL )
 		g->DetectHiddenWindows = (toggle == TOGGLED_ON);
 	else
-		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
-	return OK;
+		_f_throw(ERR_INVALID_VALUE, aBuf);
 }
 
-VarSizeType BIV_DetectHiddenText(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_DetectHiddenText)
 {
-	if (aBuf)
-	{
-		*aBuf++ = g->DetectHiddenText ? '1' : '0';
-		*aBuf = '\0';
-	}
-	return 1;
+	_f_return_b(g->DetectHiddenText);
 }
 
 BIV_DECL_W(BIV_DetectHiddenText_Set)
 {
+	LPTSTR aBuf = BivRValueToString();
 	ToggleValueType toggle;
 	if ( (toggle = Line::ConvertOnOff(aBuf, NEUTRAL)) != NEUTRAL )
 		g->DetectHiddenText = (toggle == TOGGLED_ON);
 	else
-		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
-	return OK;
+		_f_throw(ERR_INVALID_VALUE, aBuf);
 }
 
-VarSizeType BIV_StringCaseSense(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_StringCaseSense)
 {
-	return aBuf
-		? (VarSizeType)_tcslen(_tcscpy(aBuf, g->StringCaseSense == SCS_INSENSITIVE ? _T("Off") // For backward compatibility (due to StringCaseSense), never change the case used here.  Fixed in v1.0.42.01 to return exact length (required).
-			: (g->StringCaseSense == SCS_SENSITIVE ? _T("On") : _T("Locale"))))
-		: 6; // Room for On, Off, or Locale (in the estimation phase).
+	// For backward compatibility (due to StringCaseSense), never change the case used here.
+	_f_return_p(g->StringCaseSense == SCS_INSENSITIVE ? _T("Off")
+			: (g->StringCaseSense == SCS_SENSITIVE ? _T("On") : _T("Locale")));
 }
 
 BIV_DECL_W(BIV_StringCaseSense_Set)
 {
+	LPTSTR aBuf = BivRValueToString();
 	StringCaseSenseType sense;
 	if ( (sense = Line::ConvertStringCaseSense(aBuf)) != SCS_INVALID )
 		g->StringCaseSense = sense;
 	else
-		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
-	return OK;
+		_f_throw(ERR_INVALID_VALUE, aBuf);
 }
 
 int& BIV_xDelay(LPTSTR aVarName)
@@ -9309,96 +9300,76 @@ int& BIV_xDelay(LPTSTR aVarName)
 	}
 }
 
-VarSizeType BIV_xDelay(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_xDelay)
 {
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	int result = BIV_xDelay(aVarName);
-	_itot(result, target_buf, 10);
-	return (VarSizeType)_tcslen(target_buf);
+	_f_return_i(BIV_xDelay(aVarName));
 }
 
 BIV_DECL_W(BIV_xDelay_Set)
 {
-	int &delay_var_ref = BIV_xDelay(aVarName);
-	delay_var_ref = ATOI(aBuf);
-	return OK;
+	BIV_xDelay(aVarName) = (int)BivRValueToInt64();
 }
 
-VarSizeType BIV_DefaultMouseSpeed(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_DefaultMouseSpeed)
 {
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_itot(g->DefaultMouseSpeed, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return (VarSizeType)_tcslen(target_buf);
+	_f_return_i(g->DefaultMouseSpeed);
 }
 
 BIV_DECL_W(BIV_DefaultMouseSpeed_Set)
 {
-	g->DefaultMouseSpeed = ATOI(aBuf);
-	return OK;
+	g->DefaultMouseSpeed = (int)BivRValueToInt64();
 }
 
-VarSizeType BIV_CoordMode(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_CoordMode)
 {
-	static LPCTSTR sCoordModes[] = COORD_MODES;
-	LPCTSTR result = sCoordModes[(g->CoordMode >> Line::ConvertCoordModeCmd(aVarName + 11)) & COORD_MODE_MASK];
-	if (aBuf)
-		_tcscpy(aBuf, result);
-	return 6; // Currently all are 6 chars.
+	static LPTSTR sCoordModes[] = COORD_MODES;
+	_f_return_p(sCoordModes[(g->CoordMode >> Line::ConvertCoordModeCmd(aVarName + 11)) & COORD_MODE_MASK]);
 }
 
 BIV_DECL_W(BIV_CoordMode_Set)
 {
-	return Script::SetCoordMode(aVarName + 11, aBuf); // A_CoordMode is 11 chars.
+	if (!Script::SetCoordMode(aVarName + 11, BivRValueToString())) // A_CoordMode is 11 chars.
+		_f_return_FAIL;
 }
 
-VarSizeType BIV_SendMode(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_SendMode)
 {
-	static LPCTSTR sSendModes[] = SEND_MODES;
-	LPCTSTR result = sSendModes[g->SendMode];
-	if (aBuf)
-		_tcscpy(aBuf, result);
-	return (VarSizeType)_tcslen(result);
+	static LPTSTR sSendModes[] = SEND_MODES;
+	_f_return_p(sSendModes[g->SendMode]);
 }
 
 BIV_DECL_W(BIV_SendMode_Set)
 {
-	return Script::SetSendMode(aBuf);
+	if (!Script::SetSendMode(BivRValueToString()))
+		_f_return_FAIL;
 }
 
-VarSizeType BIV_SendLevel(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_SendLevel)
 {
-	if (aBuf)
-		return (VarSizeType)_tcslen(_itot(g->SendLevel, aBuf, 10));  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return 3; // Enough room for the maximum SendLevel (100).
+	_f_return_i(g->SendLevel);
 }
 
 BIV_DECL_W(BIV_SendLevel_Set)
 {
-	return Script::SetSendLevel(ATOI(aBuf), aBuf);
+	if (!Script::SetSendLevel((int)BivRValueToInt64(), BivRValueToString()))
+		_f_return_FAIL;
 }
 
-VarSizeType BIV_StoreCapslockMode(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_StoreCapsLockMode)
 {
-	if (aBuf)
-	{
-		*aBuf++ = g->StoreCapslockMode ? '1' : '0';
-		*aBuf = '\0';
-	}
-	return 1;
+	_f_return_b(g->StoreCapslockMode);
 }
 
-BIV_DECL_W(BIV_StoreCapslockMode_Set)
+BIV_DECL_W(BIV_StoreCapsLockMode_Set)
 {
+	LPTSTR aBuf = BivRValueToString();
 	ToggleValueType toggle = Line::ConvertOnOff(aBuf, NEUTRAL);
 	if (toggle == NEUTRAL)
-		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
+		_f_throw(ERR_INVALID_VALUE, aBuf);
 	g->StoreCapslockMode = (toggle == TOGGLED_ON);
-	return OK;
 }
 
-VarSizeType BIV_IsPaused(LPTSTR aBuf, LPTSTR aVarName) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
+BIV_DECL_R(BIV_IsPaused) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
 {
 	// Although A_IsPaused could indicate how many threads are paused beneath the current thread,
 	// that would be a problem because it would yield a non-zero value even when the underlying thread
@@ -9410,236 +9381,164 @@ VarSizeType BIV_IsPaused(LPTSTR aBuf, LPTSTR aVarName) // v1.0.48: Lexikos: Adde
 	//    The fact that it wouldn't be likely for a function to turn off pause then turn it back on
 	//      (or vice versa), which was the main reason for storing "Off" and "On" in things like
 	//      A_DetectHiddenWindows.
-	if (aBuf)
-	{
-		// Checking g>g_array avoids any chance of underflow, which might otherwise happen if this is
-		// called by the AutoExec section or a threadless callback running in thread #0.
-		*aBuf++ = (g > g_array && g[-1].IsPaused) ? '1' : '0';
-		*aBuf = '\0';
-	}
-	return 1;
+	// Checking g>g_array avoids any chance of underflow, which might otherwise happen if this is
+	// called by the AutoExec section or a threadless callback running in thread #0.
+	_f_return_b(g > g_array && g[-1].IsPaused);
 }
 
-VarSizeType BIV_IsCritical(LPTSTR aBuf, LPTSTR aVarName) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
+BIV_DECL_R(BIV_IsCritical) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
 {
-	if (!aBuf) // Return conservative estimate in case Critical status can ever change between the 1st and 2nd calls to this function.
-		return MAX_INTEGER_LENGTH;
 	// It seems more useful to return g->PeekFrequency than "On" or "Off" (ACT_CRITICAL ensures that
 	// g->PeekFrequency!=0 whenever g->ThreadIsCritical==true).  Also, the word "Is" in "A_IsCritical"
 	// implies a value that can be used as a boolean such as "if A_IsCritical".
 	if (g->ThreadIsCritical)
-		return (VarSizeType)_tcslen(UTOA(g->PeekFrequency, aBuf)); // ACT_CRITICAL ensures that g->PeekFrequency > 0 when critical is on.
+		_f_return_i(g->PeekFrequency); // ACT_CRITICAL ensures that g->PeekFrequency > 0 when critical is on.
 	// Otherwise:
-	*aBuf++ = '0';
-	*aBuf = '\0';
-	return 1; // Caller might rely on receiving actual length when aBuf!=NULL.
+	_f_return_i(0);
 }
 
-VarSizeType BIV_IsSuspended(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_IsSuspended)
 {
-	if (aBuf)
-	{
-		*aBuf++ = g_IsSuspended ? '1' : '0';
-		*aBuf = '\0';
-	}
-	return 1;
+	_f_return_b(g_IsSuspended);
 }
 
 
 
-VarSizeType BIV_IsCompiled(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_IsCompiled)
 {
 #ifdef AUTOHOTKEYSC
-	if (aBuf)
-	{
-		*aBuf++ = '1';
-		*aBuf = '\0';
-	}
-	return 1;
+	_f_return_b(true);
 #else
-	// v1.1.06: A_IsCompiled is defined so that it does not cause warnings with #Warn enabled,
-	// but left empty for backward-compatibility.  Defining the variable (even though it is
-	// left empty) has some side-effects:
-	//
-	//  1) Uncompiled scripts can no longer assign a value to A_IsCompiled.  Even if a script
-	//     assigned A_IsCompiled:=0 to make certain calculations easier, it would have to be
-	//     done dynamically to avoid a load-time error if the script is compiled.  So this
-	//     seems unlikely to be a problem.
-	//
-	//  2) Address-of will return an empty string instead of the address of a global variable
-	//     (or the address of Var::sEmptyString if the variable hasn't been given a value).
-	//
-	//  3) A_IsCompiled will never show up in ListVars, even if the script is uncompiled.
-	//     
-	if (aBuf)
-		*aBuf = '\0';
-	return 0;
+	_f_return_b(false);
 #endif
 }
 
 
 
-VarSizeType BIV_FileEncoding(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_FileEncoding)
 {
 	// A similar section may be found under "case Encoding:" in FileObject::Invoke.  Maintain that with this:
+	LPTSTR enc;
 	switch (g->Encoding)
 	{
-#define FILEENCODING_CASE(n, s) \
-	case n: \
-		if (aBuf) \
-			_tcscpy(aBuf, _T(s)); \
-		return _countof(_T(s)) - 1;
 	// Returning readable strings for these seems more useful than returning their numeric values, especially with CP_AHKNOBOM:
-	FILEENCODING_CASE(CP_UTF8, "UTF-8")
-	FILEENCODING_CASE(CP_UTF8 | CP_AHKNOBOM, "UTF-8-RAW")
-	FILEENCODING_CASE(CP_UTF16, "UTF-16")
-	FILEENCODING_CASE(CP_UTF16 | CP_AHKNOBOM, "UTF-16-RAW")
-#undef FILEENCODING_CASE
+	case CP_UTF8:                enc = _T("UTF-8");      break;
+	case CP_UTF8 | CP_AHKNOBOM:  enc = _T("UTF-8-RAW");  break;
+	case CP_UTF16:               enc = _T("UTF-16");     break;
+	case CP_UTF16 | CP_AHKNOBOM: enc = _T("UTF-16-RAW"); break;
 	default:
 	  {
-		TCHAR buf[MAX_INTEGER_SIZE + 2]; // + 2 for "CP"
-		LPTSTR target_buf = aBuf ? aBuf : buf;
-		target_buf[0] = _T('C');
-		target_buf[1] = _T('P');
-		_itot(g->Encoding, target_buf + 2, 10);  // Always output as decimal since we aren't exactly returning a number.
-		return (VarSizeType)_tcslen(target_buf);
+		enc = _f_retval_buf;
+		enc[0] = _T('C');
+		enc[1] = _T('P');
+		_itot(g->Encoding, enc + 2, 10);
 	  }
 	}
+	_f_return_p(enc);
 }
 
 BIV_DECL_W(BIV_FileEncoding_Set)
 {
+	LPTSTR aBuf = BivRValueToString();
 	UINT new_encoding = Line::ConvertFileEncoding(aBuf);
 	if (new_encoding == -1)
-		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
+		_f_throw(ERR_INVALID_VALUE, aBuf);
 	g->Encoding = new_encoding;
-	return OK;
 }
 
 
 
-VarSizeType BIV_RegView(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_RegView)
 {
-	LPCTSTR value;
+	LPTSTR value;
 	switch (g->RegView)
 	{
 	case KEY_WOW64_32KEY: value = _T("32"); break;
 	case KEY_WOW64_64KEY: value = _T("64"); break;
 	default: value = _T("Default"); break;
 	}
-	if (aBuf)
-		_tcscpy(aBuf, value);
-	return (VarSizeType)_tcslen(value);
+	_f_return_p(value);
 }
 
 BIV_DECL_W(BIV_RegView_Set)
 {
+	LPTSTR aBuf = BivRValueToString();
 	DWORD reg_view = Line::RegConvertView(aBuf);
 	// Validate the parameter even if it's not going to be used.
 	if (reg_view == -1)
-		return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
+		_f_throw(ERR_INVALID_VALUE, aBuf);
 	// Since these flags cause the registry functions to fail on Win2k and have no effect on
-	// any later 32-bit OS, ignore this command when the OS is 32-bit.  Leave A_RegView blank.
+	// any later 32-bit OS, ignore this command when the OS is 32-bit.  Leave A_RegView = "Default".
 	if (IsOS64Bit())
 		g->RegView = reg_view;
-	return OK;
 }
 
 
 
-VarSizeType BIV_LastError(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LastError)
 {
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	_ultot(g->LastError, target_buf, 10);  // Always output as decimal vs. hex in this case (so that scripts can use "If var in list" with confidence).
-	return (VarSizeType)_tcslen(target_buf);
+	_f_return_i(g->LastError);
 }
 
 BIV_DECL_W(BIV_LastError_Set)
 {
-	SetLastError(g->LastError = ATOU(aBuf));
-	return OK;
+	SetLastError(g->LastError = (DWORD)BivRValueToInt64());
 }
 
 
 
-VarSizeType BIV_PtrSize(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_PtrSize)
 {
-	if (aBuf)
-	{
-		// Return size in bytes of a pointer in the current build.
-		*aBuf++ = '0' + sizeof(void *);
-		*aBuf = '\0';
-	}
-	return 1;
+	_f_return_i(sizeof(void *));
 }
 
 
 
-VarSizeType BIV_ScreenDPI(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_ScreenDPI)
 {
-	if (aBuf)
-		_itot(g_ScreenDPI, aBuf, 10);
-	return aBuf ? (VarSizeType)_tcslen(aBuf) : MAX_INTEGER_SIZE;
+	_f_return_i(g_ScreenDPI);
 }
 
 
 
 BIV_DECL_R(BIV_TrayMenu)
 {
-	// The actual value (an object) is resolved in ExpandExpression, to work around the
-	// limitations of the current BIV interface.  The current implementation requires that
-	// this function has a unique address, which would not be the case if COMDAT folding
-	// caused it to be "folded" with an identical function (such as A_IsCompiled, which
-	// also just returns an empty string ifndef AUTOHOTKEYSC).  So to ensure it gets a
-	// unique address, we check aVarName.
-	if (aBuf)
-		*aBuf = '\0';
-	return !_tcsicmp(aVarName, _T("A_TrayMenu")) ? 0 : 1;
+	// Currently ExpandExpression() does not automatically release objects returned
+	// by BIVs since this is the only one, and we're retaining a reference to it.
+	//g_script.mTrayMenu->AddRef();
+	_f_return(g_script.mTrayMenu);
 }
 
 
 
 BIV_DECL_R(BIV_AllowMainWindow)
 {
-	if (aBuf)
-	{
-		*aBuf++ = g_AllowMainWindow ? '1' : '0';
-		*aBuf = '\0';
-	}
-	return 1;  // Length is always 1.
+	_f_return_b(g_AllowMainWindow);
 }
 
 BIV_DECL_W(BIV_AllowMainWindow_Set)
 {
 #ifdef AUTOHOTKEYSC
-	g_script.AllowMainWindow(ResultToBOOL(aBuf));
+	g_script.AllowMainWindow(BivRValueToBOOL());
 #else
 	// It seems best to allow `A_AllowMainWindow := true`, since a script
 	// which is only sometimes compiled may execute it unconditionally.
 	// For code size, false values are ignored instead of throwing an exception.
-	//if (!ResultToBOOL(aBuf))
-	//	return g_script.RuntimeError(ERR_INVALID_VALUE, aBuf);
+	//if (!BivRValueToBOOL())
+	//	_f_throw(ERR_INVALID_VALUE, aBuf);
 #endif
-	return OK;
 }
 
 
 
-VarSizeType BIV_IconHidden(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_IconHidden)
 {
-	if (aBuf)
-	{
-		*aBuf++ = g_NoTrayIcon ? '1' : '0';
-		*aBuf = '\0';
-	}
-	return 1;  // Length is always 1.
+	_f_return_b(g_NoTrayIcon);
 }
 
 BIV_DECL_W(BIV_IconHidden_Set)
 {
-	g_script.ShowTrayIcon(!ResultToBOOL(aBuf));
-	return OK;
+	g_script.ShowTrayIcon(!BivRValueToBOOL());
 }
 
 void Script::ShowTrayIcon(bool aShow)
@@ -9667,19 +9566,15 @@ void Script::ShowTrayIcon(bool aShow)
 	}
 }
 
-VarSizeType BIV_IconTip(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_IconTip)
 {
 	// Return the custom tip if any, otherwise the default tip.
-	LPTSTR icontip = g_script.mTrayIconTip ? g_script.mTrayIconTip : g_script.mFileName;
-	if (!aBuf)
-		return (VarSizeType)_tcslen(icontip);
-	return (VarSizeType)_tcslen(_tcscpy(aBuf, icontip));
+	_f_return_p(g_script.mTrayIconTip ? g_script.mTrayIconTip : g_script.mFileName);
 }
 
 BIV_DECL_W(BIV_IconTip_Set)
 {
-	g_script.SetTrayTip(aBuf);
-	return OK;
+	g_script.SetTrayTip(BivRValueToString());
 }
 
 void Script::SetTrayTip(LPTSTR aText)
@@ -9698,41 +9593,20 @@ void Script::SetTrayTip(LPTSTR aText)
 	}
 }
 
-VarSizeType BIV_IconFile(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_IconFile)
 {
-	if (!aBuf)
-		return g_script.mCustomIconFile ? (VarSizeType)_tcslen(g_script.mCustomIconFile) : 0;
-	if (g_script.mCustomIconFile)
-		return (VarSizeType)_tcslen(_tcscpy(aBuf, g_script.mCustomIconFile));
-	else
-	{
-		*aBuf = '\0';
-		return 0;
-	}
+	_f_return_p(g_script.mCustomIconFile ? g_script.mCustomIconFile : _T(""));
 }
 
-VarSizeType BIV_IconNumber(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_IconNumber)
 {
-	TCHAR buf[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
-	if (!g_script.mCustomIconNumber) // Yield an empty string rather than the digit "0".
-	{
-		*target_buf = '\0';
-		return 0;
-	}
-	return (VarSizeType)_tcslen(UTOA(g_script.mCustomIconNumber, target_buf));
+	_f_return_i(g_script.mCustomIconNumber);
 }
 
 
 
-VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_PriorKey)
 {
-	const int bufSize = 32;
-	if (!aBuf)
-		return bufSize;
-
-	*aBuf = '\0'; // Init for error & not-found cases
-
 	int validEventCount = 0;
 	// Start at the current event (offset 1)
 	for (int iOffset = 1; iOffset <= g_MaxHistoryKeys; ++iOffset)
@@ -9747,12 +9621,12 @@ VarSizeType BIV_PriorKey(LPTSTR aBuf, LPTSTR aVarName)
 			// Find the next most recent key-down
 			if (!g_KeyHistory[i].key_up)
 			{
-				GetKeyName(g_KeyHistory[i].vk, g_KeyHistory[i].sc, aBuf, bufSize);
-				break;
+				GetKeyName(g_KeyHistory[i].vk, g_KeyHistory[i].sc, _f_retval_buf, _f_retval_buf_size);
+				_f_return_p(_f_retval_buf);
 			}
 		}
 	}
-	return (VarSizeType)_tcslen(aBuf);
+	_f_return_empty;
 }
 
 
@@ -9783,112 +9657,78 @@ LPTSTR GetExitReasonString(ExitReasons aExitReason)
 
 
 
-VarSizeType BIV_Space_Tab(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_Space_Tab)
 {
-	// Really old comment:
-	// A_Space is a built-in variable rather than using an escape sequence such as `s, because the escape
-	// sequence method doesn't work (probably because `s resolves to a space and is trimmed at some point
-	// prior to when it can be used):
-	if (aBuf)
-	{
-		*aBuf++ = aVarName[5] ? ' ' : '\t'; // A_Tab[]
-		*aBuf = '\0';
-	}
-	return 1;
+	_f_return_p(aVarName[5] ? _T(" ") : _T("\t"));
 }
 
-VarSizeType BIV_AhkVersion(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_AhkVersion)
 {
-	if (aBuf)
-		_tcscpy(aBuf, T_AHK_VERSION);
-	return (VarSizeType)_tcslen(T_AHK_VERSION);
+	_f_return_p(T_AHK_VERSION);
 }
 
-VarSizeType BIV_AhkPath(LPTSTR aBuf, LPTSTR aVarName) // v1.0.41.
+BIV_DECL_R(BIV_AhkPath)
 {
-#ifdef AUTOHOTKEYSC
-	if (aBuf)
-	{
-		size_t length;
-		if (length = GetAHKInstallDir(aBuf))
-			// Name "AutoHotkey.exe" is assumed for code size reduction and because it's not stored in the registry:
-			tcslcpy(aBuf + length, _T("\\AutoHotkey.exe"), MAX_PATH - length); // strlcpy() in case registry has a path that is too close to MAX_PATH to fit AutoHotkey.exe
-		//else leave it blank as documented.
-		return (VarSizeType)_tcslen(aBuf);
-	}
-	// Otherwise: Always return an estimate of MAX_PATH in case the registry entry changes between the
-	// first call and the second.  This is also relied upon by strlcpy() above, which zero-fills the tail
-	// of the destination up through the limit of its capacity (due to calling strncpy, which does this).
-	return MAX_PATH;
-#else
 	TCHAR buf[MAX_PATH];
-	VarSizeType length = (VarSizeType)GetModuleFileName(NULL, buf, MAX_PATH);
-	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like this one.
-	return length;
+#ifdef AUTOHOTKEYSC
+	size_t length;
+	if (length = GetAHKInstallDir(buf))
+		// Name "AutoHotkey.exe" is assumed for code size reduction and because it's not stored in the registry:
+		tcslcpy(buf + length, _T("\\AutoHotkey.exe"), MAX_PATH - length); // tcslcpy() in case registry has a path that is too close to MAX_PATH to fit AutoHotkey.exe
+	//else leave it blank as documented.
+#else
+	auto length = GetModuleFileName(NULL, buf, MAX_PATH);
 #endif
+	_f_return(buf, length);
 }
 
 
 
-VarSizeType BIV_TickCount(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_TickCount)
 {
-	return aBuf
-		? (VarSizeType)_tcslen(ITOA64(GetTickCount(), aBuf))
-		: MAX_INTEGER_LENGTH; // IMPORTANT: Conservative estimate because tick might change between 1st & 2nd calls.
+	_f_return(GetTickCount64());
 }
 
 
 
-VarSizeType BIV_Now(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_Now)
 {
-	if (!aBuf)
-		return DATE_FORMAT_LENGTH;
 	SYSTEMTIME st;
 	if (aVarName[5]) // A_Now[U]TC
 		GetSystemTime(&st);
 	else
 		GetLocalTime(&st);
-	SystemTimeToYYYYMMDD(aBuf, st);
-	return (VarSizeType)_tcslen(aBuf);
+	SystemTimeToYYYYMMDD(_f_retval_buf, st);
+	_f_return_p(_f_retval_buf);
 }
 
-VarSizeType BIV_OSVersion(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_OSVersion)
 {
-	if (aBuf)
-		_tcscpy(aBuf, g_os.Version());
-	return (VarSizeType)_tcslen(g_os.Version());
+	_f_return_p(const_cast<LPTSTR>(g_os.Version()));
 }
 
-VarSizeType BIV_Is64bitOS(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_Is64bitOS)
 {
-	if (aBuf)
-	{
-		*aBuf++ = IsOS64Bit() ? '1' : '0';
-		*aBuf = '\0';
-	}
-	return 1;
+	_f_return_b(IsOS64Bit());
 }
 
-VarSizeType BIV_Language(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_Language)
 {
-	if (aBuf)
-		_stprintf(aBuf, _T("%04hX"), GetSystemDefaultUILanguage());
-	return 4;
+	LPTSTR aBuf = _f_retval_buf;
+	_stprintf(aBuf, _T("%04hX"), GetSystemDefaultUILanguage());
+	_f_return_p(aBuf);
 }
 
-VarSizeType BIV_UserName_ComputerName(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_UserName_ComputerName)
 {
 	TCHAR buf[MAX_PATH];  // Doesn't use MAX_COMPUTERNAME_LENGTH + 1 in case longer names are allowed in the future.
 	DWORD buf_size = MAX_PATH; // Below: A_Computer[N]ame (N is the 11th char, index 10, which if present at all distinguishes between the two).
 	if (   !(aVarName[10] ? GetComputerName(buf, &buf_size) : GetUserName(buf, &buf_size))   )
 		*buf = '\0';
-	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the ones here.
-	return (VarSizeType)_tcslen(buf); // I seem to remember that the lengths returned from the above API calls aren't consistent in these cases.
+	_f_return(buf);
 }
 
-VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_WorkingDir)
 {
 	// Use GetCurrentDirectory() vs. g_WorkingDir because any in-progress FileSelect()
 	// dialog is able to keep functioning even when it's quasi-thread is suspended.  The
@@ -9899,68 +9739,48 @@ VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName)
 	// I could not reproduce it on Windows 10.
 	TCHAR buf[T_MAX_PATH]; // T_MAX_PATH vs. MAX_PATH only has an effect with Windows 10 long path awareness.
 	DWORD length = GetCurrentDirectory(_countof(buf), buf);
-	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
-	return length;
-	// Formerly the following, but I don't think it's as reliable/future-proof given the 1.0.47 comment above:
-	//return aBuf
-	//	? GetCurrentDirectory(MAX_PATH, aBuf)
-	//	: GetCurrentDirectory(0, NULL); // MSDN says that this is a valid way to call it on all OSes, and testing shows that it works on WinXP and 98se.
-		// Above avoids subtracting 1 to be conservative and to reduce code size (due to the need to otherwise check for zero and avoid subtracting 1 in that case).
+	_f_return(buf, length);
 }
 
 BIV_DECL_W(BIV_WorkingDir_Set)
 {
-	if (!SetWorkingDir(aBuf))
-		return g_script.RuntimeError(ERR_INVALID_VALUE); // Hard to imagine any other cause.
-	return OK;
+	if (!SetWorkingDir(BivRValueToString()))
+		_f_throw(ERR_INVALID_VALUE); // Hard to imagine any other cause.
 }
 
-VarSizeType BIV_InitialWorkingDir(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_InitialWorkingDir)
 {
-	if (aBuf)
-		_tcscpy(aBuf, g_WorkingDirOrig);
-	return (VarSizeType)_tcslen(g_WorkingDirOrig);
+	_f_return_p(g_WorkingDirOrig);
 }
 
-VarSizeType BIV_WinDir(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_WinDir)
 {
 	TCHAR buf[MAX_PATH]; // MSDN (2018): The uSize parameter "should be set to MAX_PATH."
 	VarSizeType length = GetSystemWindowsDirectory(buf, _countof(buf));
-	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
-	return length;
+	_f_return(buf, length);
 }
 
-VarSizeType BIV_Temp(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_Temp)
 {
 	TCHAR buf[MAX_PATH+1]; // MSDN (2018): "The maximum possible return value is MAX_PATH+1 (261)."
 	VarSizeType length = GetTempPath(_countof(buf), buf);
-	if (aBuf)
-	{
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string). This is true for ReadRegString()'s API call and may be true for other API calls like the one here.
-		if (length)
-		{
-			aBuf += length - 1;
-			if (*aBuf == '\\') // Should always be true. MSDN: "The returned string ends with a backslash"
-			{
-				*aBuf = '\0'; // Omit the trailing backslash to improve friendliness/consistency.
-				--length;
-			}
-		}
-	}
-	return length;
+	if (length)
+		if (buf[length - 1] == '\\') // Should always be true. MSDN: "The returned string ends with a backslash"
+			buf[--length] = '\0'; // Omit the trailing backslash to improve friendliness/consistency.
+	_f_return(buf, length);
 }
 
-VarSizeType BIV_ComSpec(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_ComSpec)
 {
 	TCHAR buf_temp[1]; // Just a fake buffer to pass to some API functions in lieu of a NULL, to avoid any chance of misbehavior. Keep the size at 1 so that API functions will always fail to copy to buf.
-	// Sizes/lengths/-1/return-values/etc. have been verified correct.
-	return aBuf ? GetEnvVarReliable(_T("ComSpec"), aBuf) // v1.0.46.08: Use GetEnvVarReliable() to avoid passing an inaccurate buffer size to GetEnvironmentVariable().
-		: GetEnvironmentVariable(_T("ComSpec"), buf_temp, 0); // Avoids subtracting 1 to be conservative and to reduce code size (due to the need to otherwise check for zero and avoid subtracting 1 in that case).
+	auto size_required = GetEnvironmentVariable(_T("ComSpec"), buf_temp, 0);
+	if (!TokenSetResult(aResultToken, nullptr, size_required)) // Avoids subtracting 1 to be conservative and to reduce code size (due to the need to otherwise check for zero and avoid subtracting 1 in that case).
+		return;
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker_length = GetEnvVarReliable(_T("ComSpec"), aResultToken.marker);
 }
 
-VarSizeType BIV_SpecialFolderPath(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_SpecialFolderPath)
 {
 	TCHAR buf[MAX_PATH]; // One caller relies on this being explicitly limited to MAX_PATH.
 	// SHGetFolderPath requires a buffer size of MAX_PATH, but the function was superseded
@@ -9995,12 +9815,10 @@ VarSizeType BIV_SpecialFolderPath(LPTSTR aBuf, LPTSTR aVarName)
 	}
 	if (SHGetFolderPath(NULL, aFolder, NULL, SHGFP_TYPE_CURRENT, buf) != S_OK)
 		*buf = '\0';
-	if (aBuf)
-		_tcscpy(aBuf, buf); // Must be done as a separate copy because SHGetFolderPath requires a buffer of length MAX_PATH, and aBuf is usually smaller.
-	return _tcslen(buf);
+	_f_return(buf);
 }
 
-VarSizeType BIV_MyDocuments(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple callers.
+BIV_DECL_R(BIV_MyDocuments) // Called by multiple callers.
 {
 	TCHAR buf[MAX_PATH]; // SHGetFolderPath requires a buffer size of MAX_PATH.  At least one caller relies on this.
 	if (SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, buf) != S_OK)
@@ -10009,9 +9827,7 @@ VarSizeType BIV_MyDocuments(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple 
 	// (such as a mapped drive letter), remove the backslash from something like M:\ because M: is more
 	// appropriate for most uses:
 	VarSizeType length = (VarSizeType)strip_trailing_backslash(buf);
-	if (aBuf)
-		_tcscpy(aBuf, buf); // v1.0.47: Must be done as a separate copy because passing a size of MAX_PATH for aBuf can crash when aBuf is actually smaller than that (even though it's large enough to hold the string).
-	return length;
+	_f_return(buf, length);
 }
 
 
@@ -10066,11 +9882,8 @@ BIF_DECL(BIF_CaretGetPos)
 
 
 
-VarSizeType BIV_Cursor(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_Cursor)
 {
-	if (!aBuf)
-		return SMALL_STRING_LENGTH;  // We're returning the length of the var's contents, not the size.
-
 	HCURSOR current_cursor;
 	CURSORINFO ci;
 	ci.cbSize = sizeof(CURSORINFO);
@@ -10078,8 +9891,7 @@ VarSizeType BIV_Cursor(LPTSTR aBuf, LPTSTR aVarName)
 	if (!current_cursor)
 	{
 		#define CURSOR_UNKNOWN _T("Unknown")
-		tcslcpy(aBuf, CURSOR_UNKNOWN, SMALL_STRING_LENGTH + 1);
-		return (VarSizeType)_tcslen(aBuf);
+		_f_return_p(CURSOR_UNKNOWN);
 	}
 
 	// Static so that it's initialized on first use (should help performance after the first time):
@@ -10089,71 +9901,56 @@ VarSizeType BIV_Cursor(LPTSTR aBuf, LPTSTR aVarName)
 		, LoadCursor(NULL, IDC_SIZEALL), LoadCursor(NULL, IDC_SIZENESW), LoadCursor(NULL, IDC_SIZENS)
 		, LoadCursor(NULL, IDC_SIZENWSE), LoadCursor(NULL, IDC_SIZEWE), LoadCursor(NULL, IDC_UPARROW)
 		, LoadCursor(NULL, IDC_WAIT)}; // If IDC_HAND were added, it would break existing scripts that rely on Unknown being synonymous with Hand.  If ever added, IDC_HAND should return NULL on Win95/NT.
+	static const size_t cursor_count = _countof(sCursor);
 	// The order in the below array must correspond to the order in the above array:
-	static LPTSTR sCursorName[] = {_T("AppStarting"), _T("Arrow")
+	static LPTSTR sCursorName[cursor_count + 1] = {_T("AppStarting"), _T("Arrow")
 		, _T("Cross"), _T("Help"), _T("IBeam")
 		, _T("Icon"), _T("No"), _T("Size")
 		, _T("SizeAll"), _T("SizeNESW"), _T("SizeNS")  // NESW = NorthEast+SouthWest
 		, _T("SizeNWSE"), _T("SizeWE"), _T("UpArrow")
-		, _T("Wait"), CURSOR_UNKNOWN};  // The last item is used to mark end-of-array.
-	static const size_t cursor_count = _countof(sCursor);
+		, _T("Wait"), CURSOR_UNKNOWN}; // The default item must be last.
 
 	int i;
 	for (i = 0; i < cursor_count; ++i)
 		if (sCursor[i] == current_cursor)
 			break;
 
-	tcslcpy(aBuf, sCursorName[i], SMALL_STRING_LENGTH + 1);  // If a is out-of-bounds, "Unknown" will be used.
-	return (VarSizeType)_tcslen(aBuf);
+	_f_return_p(sCursorName[i]); // If i is out-of-bounds, "Unknown" will be used.
 }
 
-VarSizeType BIV_ScreenWidth_Height(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_ScreenWidth_Height)
 {
-	return aBuf
-		? (VarSizeType)_tcslen(ITOA(GetSystemMetrics(aVarName[13] ? SM_CYSCREEN : SM_CXSCREEN), aBuf))
-		: MAX_INTEGER_LENGTH;
+	_f_return_i(GetSystemMetrics(aVarName[13] ? SM_CYSCREEN : SM_CXSCREEN));
 }
 
-VarSizeType BIV_ScriptName(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_ScriptName)
 {
-	LPTSTR script_name = g_script.mScriptName ? g_script.mScriptName : g_script.mFileName;
-	if (aBuf)
-		_tcscpy(aBuf, script_name);
-	return (VarSizeType)_tcslen(script_name);
+	_f_return_p(g_script.mScriptName ? g_script.mScriptName : g_script.mFileName);
 }
 
 BIV_DECL_W(BIV_ScriptName_Set)
 {
 	// For simplicity, a new buffer is allocated each time.  It is not expected to be set frequently.
-	LPTSTR script_name = _tcsdup(aBuf);
+	LPTSTR script_name = _tcsdup(BivRValueToString());
 	if (!script_name)
-		return g_script.RuntimeError(ERR_OUTOFMEM);
+		_f_throw(ERR_OUTOFMEM);
 	free(g_script.mScriptName);
 	g_script.mScriptName = script_name;
-	return OK;
 }
 
-VarSizeType BIV_ScriptDir(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_ScriptDir)
 {
-	if (aBuf)
-		_tcscpy(aBuf, g_script.mFileDir);
-	return _tcslen(g_script.mFileDir);
+	_f_return_p(g_script.mFileDir);
 }
 
-VarSizeType BIV_ScriptFullPath(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_ScriptFullPath)
 {
-	if (aBuf)
-		_tcscpy(aBuf, g_script.mFileSpec);
-	return _tcslen(g_script.mFileSpec);
+	_f_return_p(g_script.mFileSpec);
 }
 
-VarSizeType BIV_ScriptHwnd(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_ScriptHwnd)
 {
-	if (aBuf)
-		// For consistency with all of the other commands which return HWNDs as
-		// pure integers, this is formatted as decimal rather than hexadecimal:
-		return (VarSizeType)_tcslen(ITOA64((size_t)g_hWnd, aBuf));
-	return MAX_INTEGER_LENGTH;
+	_f_return((UINT_PTR)g_hWnd);
 }
 
 
@@ -10162,12 +9959,9 @@ LineNumberType Script::CurrentLine()
 	return mCurrLine ? mCurrLine->mLineNumber : mCombinedLineNumber;
 }
 
-VarSizeType BIV_LineNumber(LPTSTR aBuf, LPTSTR aVarName)
-// Caller has ensured that g_script.mCurrLine is not NULL.
+BIV_DECL_R(BIV_LineNumber)
 {
-	return aBuf
-		? (VarSizeType)_tcslen(ITOA(g_script.CurrentLine(), aBuf))
-		: MAX_INTEGER_LENGTH;
+	_f_return_i(g_script.CurrentLine());
 }
 
 
@@ -10176,18 +9970,15 @@ LPTSTR Script::CurrentFile()
 	return Line::sSourceFile[mCurrLine ? mCurrLine->mFileIndex : mCurrFileIndex];
 }
 
-VarSizeType BIV_LineFile(LPTSTR aBuf, LPTSTR aVarName)
-// Caller has ensured that g_script.mCurrLine is not NULL.
+BIV_DECL_R(BIV_LineFile)
 {
-	if (aBuf)
-		_tcscpy(aBuf, g_script.CurrentFile());
-	return (VarSizeType)_tcslen(g_script.CurrentFile());
+	_f_return_p(g_script.CurrentFile());
 }
 
 
-VarSizeType BIV_LoopFileName(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple callers.
+BIV_DECL_R(BIV_LoopFileName) // Called by multiple callers.
 {
-	LPCTSTR filename = _T("");  // Set default.
+	LPTSTR filename = _T("");  // Set default.
 	if (g->mLoopFile)
 	{
 		// cAlternateFileName can be blank if the file lacks a short name, but it can also be blank
@@ -10197,14 +9988,12 @@ VarSizeType BIV_LoopFileName(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple
 			|| !*(filename = g->mLoopFile->cAlternateFileName)   ) // ... there's no alternate name (see above).
 			filename = g->mLoopFile->cFileName;
 	}
-	if (aBuf)
-		_tcscpy(aBuf, filename);
-	return (VarSizeType)_tcslen(filename);
+	_f_return_p(filename);
 }
 
-VarSizeType BIV_LoopFileExt(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopFileExt)
 {
-	LPCTSTR file_ext = _T("");  // Set default.
+	LPTSTR file_ext = _T("");  // Set default.
 	if (g->mLoopFile)
 	{
 		if (file_ext = _tcsrchr(g->mLoopFile->cFileName, '.'))
@@ -10212,35 +10001,29 @@ VarSizeType BIV_LoopFileExt(LPTSTR aBuf, LPTSTR aVarName)
 		else // Reset to empty string vs. NULL.
 			file_ext = _T("");
 	}
-	if (aBuf)
-		_tcscpy(aBuf, file_ext);
-	return (VarSizeType)_tcslen(file_ext);
+	_f_return_p(file_ext);
 }
 
-VarSizeType BIV_LoopFileDir(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopFileDir)
 {
 	if (!g->mLoopFile)
-	{
-		if (aBuf)
-			*aBuf = '\0';
-		return 0;
-	}
+		_f_return_empty;
 	LoopFilesStruct &lfs = *g->mLoopFile;
 	LPTSTR dir_end = lfs.file_path + lfs.dir_length; // Start of the filename.
 	size_t suffix_length = dir_end - lfs.file_path_suffix; // Directory names\ added since the loop started.
 	size_t total_length = lfs.orig_dir_length + suffix_length;
 	if (total_length)
 		--total_length; // Omit the trailing slash.
-	if (aBuf)
-	{
-		tmemcpy(aBuf, lfs.orig_dir, lfs.orig_dir_length);
-		tmemcpy(aBuf + lfs.orig_dir_length, lfs.file_path_suffix, suffix_length);
-		aBuf[total_length] = '\0'; // This replaces the final character copied above, if any.
-	}
-	return total_length;
+	if (!TokenSetResult(aResultToken, nullptr, total_length))
+		return;
+	aResultToken.symbol = SYM_STRING;
+	LPTSTR buf = aResultToken.marker;
+	tmemcpy(buf, lfs.orig_dir, lfs.orig_dir_length);
+	tmemcpy(buf + lfs.orig_dir_length, lfs.file_path_suffix, suffix_length);
+	buf[total_length] = '\0'; // This replaces the final character copied above, if any.
 }
 
-VarSizeType FixLoopFilePath(LPTSTR aBuf, LPTSTR aPattern)
+void FixLoopFilePath(LPTSTR aBuf, LPTSTR aPattern)
 // Fixes aBuf to account for "." and ".." as file patterns.  These match the directory itself
 // or parent directory, so for example "x\y\.." returns a directory named "x" which appears to
 // be inside "y".  Without the handling here, the invalid path "x\y\x" would be returned.
@@ -10263,38 +10046,36 @@ VarSizeType FixLoopFilePath(LPTSTR aBuf, LPTSTR aPattern)
 		else if (*aBuf && aBuf[1] == ':') // aBuf "C:x" should be "C:" for "C:" or "C:.".
 			aBuf[2] = '\0';
 	}
-	return _tcslen(aBuf);
 }
 
-VarSizeType BIV_LoopFilePath(LPTSTR aBuf, LPTSTR aVarName)
+void ReturnLoopFilePath(ResultToken &aResultToken, LPTSTR aPattern, LPTSTR aPrefix, size_t aPrefixLen, LPTSTR aSuffix, size_t aSuffixLen)
+{
+	if (!TokenSetResult(aResultToken, nullptr, aPrefixLen + aSuffixLen))
+		return;
+	aResultToken.symbol = SYM_STRING;
+	LPTSTR buf = aResultToken.marker;
+	tmemcpy(buf, aPrefix, aPrefixLen);
+	tmemcpy(buf + aPrefixLen, aSuffix, aSuffixLen + 1); // +1 for \0.
+	FixLoopFilePath(buf, aPattern);
+	aResultToken.marker_length = -1; // Let caller determine actual length.
+}
+
+BIV_DECL_R(BIV_LoopFilePath)
 {
 	if (!g->mLoopFile)
-	{
-		if (aBuf)
-			*aBuf = '\0';
-		return 0;
-	}
+		_f_return_empty;
 	LoopFilesStruct &lfs = *g->mLoopFile;
 	// Combine the original directory specified by the script with the dynamic part of file_path
 	// (i.e. the sub-directory and file names appended to it since the loop started):
-	size_t suffix_length = lfs.file_path_length - (lfs.file_path_suffix - lfs.file_path);
-	if (aBuf)
-	{
-		tmemcpy(aBuf, lfs.orig_dir, lfs.orig_dir_length);
-		tmemcpy(aBuf + lfs.orig_dir_length, lfs.file_path_suffix, suffix_length + 1); // +1 for \0.
-		return FixLoopFilePath(aBuf, lfs.pattern);
-	}
-	return lfs.orig_dir_length + suffix_length;
+	ReturnLoopFilePath(aResultToken, lfs.pattern
+		, lfs.orig_dir, lfs.orig_dir_length
+		, lfs.file_path_suffix, lfs.file_path_length - (lfs.file_path_suffix - lfs.file_path));
 }
 
-VarSizeType BIV_LoopFileFullPath(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopFileFullPath)
 {
 	if (!g->mLoopFile)
-	{
-		if (aBuf)
-			*aBuf = '\0';
-		return 0;
-	}
+		_f_return_empty;
 	// GetFullPathName() is done in addition to ConvertFilespecToCorrectCase() for the following reasons:
 	// 1) It's currently the only easy way to get the full path of the directory in which a file resides.
 	//    For example, if a script is passed a filename via command line parameter, that file could be
@@ -10309,17 +10090,12 @@ VarSizeType BIV_LoopFileFullPath(LPTSTR aBuf, LPTSTR aVarName)
 	// directory changes after the Loop begins.
 	LoopFilesStruct &lfs = *g->mLoopFile;
 	// Combine long_dir with the dynamic part of file_path:
-	size_t suffix_length = lfs.file_path_length - (lfs.file_path_suffix - lfs.file_path);
-	if (aBuf)
-	{
-		tmemcpy(aBuf, lfs.long_dir, lfs.long_dir_length);
-		tmemcpy(aBuf + lfs.long_dir_length, lfs.file_path_suffix, suffix_length + 1); // +1 for \0.
-		return FixLoopFilePath(aBuf, lfs.pattern);
-	}
-	return lfs.long_dir_length + suffix_length;
+	ReturnLoopFilePath(aResultToken, lfs.pattern
+		, lfs.long_dir, lfs.long_dir_length
+		, lfs.file_path_suffix, lfs.file_path_length - (lfs.file_path_suffix - lfs.file_path));
 }
 
-VarSizeType BIV_LoopFileShortPath(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopFileShortPath)
 // Unlike GetLoopFileShortName(), this function returns blank when there is no short path.
 // This is done so that there's a way for the script to more easily tell the difference between
 // an 8.3 name not being available (due to the being disabled in the registry) and the short
@@ -10329,30 +10105,20 @@ VarSizeType BIV_LoopFileShortPath(LPTSTR aBuf, LPTSTR aVarName)
 // and if it's blank, there is no short name available.
 {
 	if (!g->mLoopFile)
-	{
-		if (aBuf)
-			*aBuf = '\0';
-		return 0;
-	}
+		_f_return_empty;
 	LoopFilesStruct &lfs = *g->mLoopFile;
 	// MSDN says cAlternateFileName is empty if the file does not have a long name.
 	// Testing and research shows that GetShortPathName() uses the long name for a directory
 	// or file if no short name exists, so there's no check for the filename's length here.
 	LPTSTR name = *lfs.cAlternateFileName ? lfs.cAlternateFileName : lfs.cFileName;
-	size_t name_length = _tcslen(name);
-	if (aBuf)
-	{
-		tmemcpy(aBuf, lfs.short_path, lfs.short_path_length);
-		tmemcpy(aBuf + lfs.short_path_length, name, name_length + 1); // +1 for \0.
-		return FixLoopFilePath(aBuf, lfs.pattern);
-	}
-	return lfs.short_path_length + name_length;
+	ReturnLoopFilePath(aResultToken, lfs.pattern
+		, lfs.short_path, lfs.short_path_length
+		, name, _tcslen(name));
 }
 
-VarSizeType BIV_LoopFileTime(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopFileTime)
 {
-	TCHAR buf[64];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
+	LPTSTR target_buf = _f_retval_buf;
 	*target_buf = '\0'; // Set default.
 	if (g->mLoopFile)
 	{
@@ -10365,24 +10131,20 @@ VarSizeType BIV_LoopFileTime(LPTSTR aBuf, LPTSTR aVarName)
 		}
 		FileTimeToYYYYMMDD(target_buf, ft, true);
 	}
-	return (VarSizeType)_tcslen(target_buf);
+	_f_return_p(target_buf);
 }
 
-VarSizeType BIV_LoopFileAttrib(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopFileAttrib)
 {
-	TCHAR buf[64];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
+	LPTSTR target_buf = _f_retval_buf;
 	*target_buf = '\0'; // Set default.
 	if (g->mLoopFile)
 		FileAttribToStr(target_buf, g->mLoopFile->dwFileAttributes);
-	return (VarSizeType)_tcslen(target_buf);
+	_f_return_p(target_buf);
 }
 
-VarSizeType BIV_LoopFileSize(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopFileSize)
 {
-	TCHAR str[MAX_INTEGER_SIZE];
-	LPTSTR target_buf = aBuf ? aBuf : str;
-	*target_buf = '\0';  // Set default.
 	if (g->mLoopFile)
 	{
 		ULARGE_INTEGER ul;
@@ -10395,20 +10157,17 @@ VarSizeType BIV_LoopFileSize(LPTSTR aBuf, LPTSTR aVarName)
 		case 'M': divider = 1024*1024; break;
 		default:  divider = 0;
 		}
-		ITOA64((__int64)(divider ? ((unsigned __int64)ul.QuadPart / divider) : ul.QuadPart), target_buf);
+		_f_return_i(divider ? ((unsigned __int64)ul.QuadPart / divider) : ul.QuadPart);
 	}
-	return (VarSizeType)_tcslen(target_buf);
+	_f_return_empty;
 }
 
-VarSizeType BIV_LoopRegType(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopRegType)
 {
-	LPTSTR value = g->mLoopRegItem ? Line::RegConvertValueType(g->mLoopRegItem->type) : _T("");
-	if (aBuf)
-		_tcscpy(aBuf, value);
-	return (VarSizeType)_tcslen(value);
+	_f_return_p(g->mLoopRegItem ? Line::RegConvertValueType(g->mLoopRegItem->type) : _T(""));
 }
 
-VarSizeType BIV_LoopRegKey(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopRegKey)
 {
 	LPTSTR rootkey = _T("");
 	LPTSTR subkey = _T("");
@@ -10418,63 +10177,51 @@ VarSizeType BIV_LoopRegKey(LPTSTR aBuf, LPTSTR aVarName)
 		rootkey = Line::RegConvertRootKeyType(g->mLoopRegItem->root_key_type);
 		subkey = g->mLoopRegItem->subkey;
 	}
-	if (aBuf)
-		return _stprintf(aBuf, _T("%s%s%s"), rootkey, *subkey ? _T("\\") : _T(""), subkey);
-	return _tcslen(rootkey) + 1 + _tcslen(subkey);
+	if (!TokenSetResult(aResultToken, nullptr, _tcslen(rootkey) + (*subkey != 0) + _tcslen(subkey)))
+		return;
+	_stprintf(aResultToken.marker, _T("%s%s%s"), rootkey, *subkey ? _T("\\") : _T(""), subkey);
+	aResultToken.symbol = SYM_STRING;
 }
 
-VarSizeType BIV_LoopRegName(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopRegName)
 {
 	// This can be either the name of a subkey or the name of a value.
-	LPTSTR str = g->mLoopRegItem ? g->mLoopRegItem->name : _T("");
-	if (aBuf)
-		_tcscpy(aBuf, str);
-	return (VarSizeType)_tcslen(str);
+	_f_return_p(g->mLoopRegItem ? g->mLoopRegItem->name : _T(""));
 }
 
-VarSizeType BIV_LoopRegTimeModified(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopRegTimeModified)
 {
-	TCHAR buf[64];
-	LPTSTR target_buf = aBuf ? aBuf : buf;
+	LPTSTR target_buf = _f_retval_buf;
 	*target_buf = '\0'; // Set default.
 	// Only subkeys (not values) have a time.
 	if (g->mLoopRegItem && g->mLoopRegItem->type == REG_SUBKEY)
 		FileTimeToYYYYMMDD(target_buf, g->mLoopRegItem->ftLastWriteTime, true);
-	return (VarSizeType)_tcslen(target_buf);
+	_f_return_p(target_buf);
 }
 
-VarSizeType BIV_LoopReadLine(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopReadLine)
 {
-	LPTSTR str = g->mLoopReadFile ? g->mLoopReadFile->mCurrentLine : _T("");
-	if (aBuf)
-		_tcscpy(aBuf, str);
-	return (VarSizeType)_tcslen(str);
+	_f_return_p(g->mLoopReadFile ? g->mLoopReadFile->mCurrentLine : _T(""));
 }
 
-VarSizeType BIV_LoopField(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopField)
 {
-	LPTSTR str = g->mLoopField ? g->mLoopField : _T("");
-	if (aBuf)
-		_tcscpy(aBuf, str);
-	return (VarSizeType)_tcslen(str);
+	_f_return_p(g->mLoopField ? g->mLoopField : _T(""));
 }
 
-VarSizeType BIV_LoopIndex(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_LoopIndex)
 {
-	return aBuf
-		? (VarSizeType)_tcslen(ITOA64(g->mLoopIteration, aBuf)) // Must return exact length when aBuf isn't NULL.
-		: MAX_INTEGER_LENGTH; // Probably performs better to return a conservative estimate for the first pass than to call ITOA64 for both passes.
+	_f_return_i(g->mLoopIteration);
 }
 
 BIV_DECL_W(BIV_LoopIndex_Set)
 {
-	g->mLoopIteration = ATOI64(aBuf);
-	return OK;
+	g->mLoopIteration = BivRValueToInt64();
 }
 
 
 
-VarSizeType BIV_ThisFunc(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_ThisFunc)
 {
 	LPCTSTR name;
 	if (g->CurrentFunc)
@@ -10483,37 +10230,26 @@ VarSizeType BIV_ThisFunc(LPTSTR aBuf, LPTSTR aVarName)
 		name = g->CurrentFuncGosub->mName;
 	else
 		name = _T("");
-	if (aBuf)
-		_tcscpy(aBuf, name);
-	return (VarSizeType)_tcslen(name);
+	_f_return_p(const_cast<LPTSTR>(name));
 }
 
-VarSizeType BIV_ThisLabel(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_ThisLabel)
 {
-	LPTSTR name = g->CurrentLabel ? g->CurrentLabel->mName : _T("");
-	if (aBuf)
-		_tcscpy(aBuf, name);
-	return (VarSizeType)_tcslen(name);
+	_f_return_p(g->CurrentLabel ? g->CurrentLabel->mName : _T(""));
 }
 
-VarSizeType BIV_ThisHotkey(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_ThisHotkey)
 {
-	if (aBuf)
-		_tcscpy(aBuf, g_script.mThisHotkeyName);
-	return (VarSizeType)_tcslen(g_script.mThisHotkeyName);
+	_f_return_p(g_script.mThisHotkeyName);
 }
 
-VarSizeType BIV_PriorHotkey(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_PriorHotkey)
 {
-	if (aBuf)
-		_tcscpy(aBuf, g_script.mPriorHotkeyName);
-	return (VarSizeType)_tcslen(g_script.mPriorHotkeyName);
+	_f_return_p(g_script.mPriorHotkeyName);
 }
 
-VarSizeType BIV_TimeSinceThisHotkey(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_TimeSinceThisHotkey)
 {
-	if (!aBuf) // IMPORTANT: Conservative estimate because the time might change between 1st & 2nd calls.
-		return MAX_INTEGER_LENGTH;
 	// It must be the type of hotkey that has a label because we want the TimeSinceThisHotkey
 	// value to be "in sync" with the value of ThisHotkey itself (i.e. use the same method
 	// to determine which hotkey is the "this" hotkey):
@@ -10523,89 +10259,78 @@ VarSizeType BIV_TimeSinceThisHotkey(LPTSTR aBuf, LPTSTR aVarName)
 		// isn't greater than about 49.  See MyGetTickCount() for explanation of %d vs. %u.
 		// Update: Using 64-bit ints now, so above is obsolete:
 		//sntprintf(str, sizeof(str), "%d", (DWORD)(GetTickCount() - g_script.mThisHotkeyStartTime));
-		ITOA64((__int64)(GetTickCount() - g_script.mThisHotkeyStartTime), aBuf);
+		_f_return_i((__int64)(GetTickCount() - g_script.mThisHotkeyStartTime));
 	else
-		_tcscpy(aBuf, _T("-1"));
-	return (VarSizeType)_tcslen(aBuf);
+		_f_return_empty; // Cause any attempt at math to throw.
 }
 
-VarSizeType BIV_TimeSincePriorHotkey(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_TimeSincePriorHotkey)
 {
-	if (!aBuf) // IMPORTANT: Conservative estimate because the time might change between 1st & 2nd calls.
-		return MAX_INTEGER_LENGTH;
 	if (*g_script.mPriorHotkeyName)
 		// See MyGetTickCount() for explanation for explanation:
 		//sntprintf(str, sizeof(str), "%d", (DWORD)(GetTickCount() - g_script.mPriorHotkeyStartTime));
-		ITOA64((__int64)(GetTickCount() - g_script.mPriorHotkeyStartTime), aBuf);
+		_f_return_i((__int64)(GetTickCount() - g_script.mPriorHotkeyStartTime));
 	else
-		_tcscpy(aBuf, _T("-1"));
-	return (VarSizeType)_tcslen(aBuf);
+		_f_return_empty; // Cause any attempt at math to throw.
 }
 
-VarSizeType BIV_EndChar(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_EndChar)
 {
-	if (aBuf)
-	{
-		if (g_script.mEndChar)
-			*aBuf++ = g_script.mEndChar;
-		//else we returned 0 previously, so MUST WRITE ONLY ONE NULL-TERMINATOR.
-		*aBuf = '\0';
-	}
-	return g_script.mEndChar ? 1 : 0; // v1.0.48.04: Fixed to support a NULL char, which happens when the hotstring has the "no ending character required" option.
+	_f_retval_buf[0] = g_script.mEndChar;
+	_f_retval_buf[1] = '\0';
+	_f_return_p(_f_retval_buf);
 }
 
 
 
-VarSizeType BIV_EventInfo(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_EventInfo)
 // We're returning the length of the var's contents, not the size.
 {
-	return aBuf
-		? (VarSizeType)_tcslen(UPTRTOA(g->EventInfo, aBuf)) // Must return exact length when aBuf isn't NULL.
-		: MAX_INTEGER_LENGTH;
+	_f_return_i(g->EventInfo);
 }
 
 BIV_DECL_W(BIV_EventInfo_Set)
 {
-	g->EventInfo = (EventInfoType)ATOI64(aBuf);
-	return OK;
+	g->EventInfo = (EventInfoType)BivRValueToInt64();
 }
 
 
 
-VarSizeType BIV_TimeIdle(LPTSTR aBuf, LPTSTR aVarName) // Called by multiple callers.
-{
-	if (!aBuf) // IMPORTANT: Conservative estimate because tick might change between 1st & 2nd calls.
-		return MAX_INTEGER_LENGTH;
-	LASTINPUTINFO lii;
-	lii.cbSize = sizeof(lii);
-	if (GetLastInputInfo(&lii))
-		ITOA64(GetTickCount() - lii.dwTime, aBuf);
-	else
-		*aBuf = '\0';
-	return (VarSizeType)_tcslen(aBuf);
-}
-
-
-
-VarSizeType BIV_TimeIdlePhysical(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_TimeIdle)
 // This is here rather than in script.h with the others because it depends on
 // hotkey.h and globaldata.h, which can't be easily included in script.h due to
 // mutual dependency issues.
 {
-	DWORD time_last_input;
+	DWORD time_last_input = 0;
 	switch (toupper(aVarName[10]))
 	{
 	case 'M': time_last_input = g_MouseHook ? g_TimeLastInputMouse : 0; break;
 	case 'K': time_last_input = g_KeybdHook ? g_TimeLastInputKeyboard : 0; break;
-	default: time_last_input = (g_KeybdHook || g_MouseHook) ? g_TimeLastInputPhysical : 0; break;
+	case 'P': time_last_input = (g_KeybdHook || g_MouseHook) ? g_TimeLastInputPhysical : 0; break;
 	}
 	// If the relevant hook is not active, default this to the same as the regular idle time:
 	if (!time_last_input)
-		return BIV_TimeIdle(aBuf, _T(""));
-	if (!aBuf)
-		return MAX_INTEGER_LENGTH; // IMPORTANT: Conservative estimate because tick might change between 1st & 2nd calls.
-	return (VarSizeType)_tcslen(ITOA64(GetTickCount() - time_last_input, aBuf)); // Switching keyboard layouts/languages sometimes sees to throw off the timestamps of the incoming events in the hook.
+	{
+		LASTINPUTINFO lii;
+		lii.cbSize = sizeof(lii);
+		if (GetLastInputInfo(&lii))
+			time_last_input = lii.dwTime;
+		else // This is rare; the possibility isn't even documented as of 2020-06-11.
+			_f_return_empty; // Cause any attempt at math to throw.
+	}
+	_f_return_i(GetTickCount() - time_last_input);
 }
+
+
+
+BIF_DECL(BIF_SetBIV)
+{
+	static VirtualVar::Setter sBiv[] = { &BIV_DetectHiddenText_Set, &BIV_DetectHiddenWindows_Set, &BIV_FileEncoding_Set, &BIV_RegView_Set, &BIV_StoreCapsLockMode_Set, &BIV_TitleMatchMode_Set, &BIV_StringCaseSense_Set };
+	auto biv = sBiv[_f_callee_id];
+	_f_set_retval_p(_T(""), 0);
+	biv(aResultToken, nullptr, *aParam[0]);
+}
+
 
 
 ////////////////////////
@@ -11128,13 +10853,7 @@ BIF_DECL(BIF_DllCall)
 	{
 		// Check validity of this arg's return type:
 		ExprTokenType &token = *aParam[aParamCount - 1];
-		LPTSTR return_type_string;
-		switch (token.symbol)
-		{
-		case SYM_STRING:	return_type_string = token.marker; break;						// Kept first since assumed to be most common.
-		case SYM_VAR:		return_type_string = token.var->Contents(TRUE, TRUE); break;	// SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
-		default:			return_type_string = _T(""); break; // It will be detected as invalid below.
-		}
+		LPTSTR return_type_string = TokenToString(token); // If non-numeric it will return "", which is detected as invalid below.
 
 		// 64-bit note: The calling convention detection code is preserved here for script compatibility.
 
@@ -16939,7 +16658,7 @@ BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar)
 
 
 __int64 TokenToInt64(ExprTokenType &aToken)
-// Caller has ensured that any SYM_VAR's Type() is VAR_NORMAL or VAR_CLIPBOARD.
+// Caller has ensured that any SYM_VAR's Type() is VAR_NORMAL.
 // Converts the contents of aToken to a 64-bit int.
 {
 	// Some callers, such as those that cast our return value to UINT, rely on the use of 64-bit
@@ -16958,7 +16677,7 @@ __int64 TokenToInt64(ExprTokenType &aToken)
 
 
 double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex)
-// Caller has ensured that any SYM_VAR's Type() is VAR_NORMAL or VAR_CLIPBOARD.
+// Caller has ensured that any SYM_VAR's Type() is VAR_NORMAL.
 // Converts the contents of aToken to a double.
 {
 	switch (aToken.symbol)
@@ -16975,7 +16694,6 @@ double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex)
 
 
 LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf, size_t *aLength)
-// Supports Type() VAR_NORMAL and VAR_CLIPBOARD.
 // Returns "" on failure to simplify logic in callers.  Otherwise, it returns either aBuf (if aBuf was needed
 // for the conversion) or the token's own string.  aBuf may be NULL, in which case the caller presumably knows
 // that this token is SYM_STRING or SYM_VAR (or the caller wants "" back for anything other than those).
@@ -16984,10 +16702,10 @@ LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf, size_t *aLength)
 	LPTSTR result;
 	switch (aToken.symbol)
 	{
-	case SYM_VAR: // Caller has ensured that any SYM_VAR's Type() is VAR_NORMAL or VAR_CLIPBOARD.
+	case SYM_VAR: // Caller has ensured that any SYM_VAR's Type() is VAR_NORMAL.
 		result = aToken.var->Contents(); // Contents() vs. mCharContents in case mCharContents needs to be updated by Contents().
 		if (aLength)
-			*aLength = aToken.var->Type() == VAR_NORMAL ? aToken.var->Length() : _tcslen(result);
+			*aLength = aToken.var->Length();
 		return result;
 	case SYM_STRING:
 		result = aToken.marker;

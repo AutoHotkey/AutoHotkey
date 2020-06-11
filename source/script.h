@@ -446,7 +446,7 @@ __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 #define _f_set_retval_i(n)		(aResultToken.value_int64 = static_cast<__int64>(n)) // Assumes symbol == SYM_INTEGER, the default for BIFs.
 #define _f_set_retval_p(...)	aResultToken.ReturnPtr(__VA_ARGS__) // Overrides the default return value but doesn't return.  Arg must already be in persistent memory.
 #define _f_return_i(n)			_f__ret(_f_set_retval_i(n)) // Return an integer.  Reduces code size vs _f_return() by assuming symbol == SYM_INTEGER, the default for BIFs.
-#define _f_return_b				_f_return_i // Boolean.  Currently just returns an int because we have no boolean type.
+#define _f_return_b(b)			_f_return_i((bool)(b)) // Boolean.  Currently just returns an int because we have no boolean type.
 #define _f_return_p(...)		_f__ret(_f_set_retval_p(__VA_ARGS__)) // Return a string which is already in persistent memory.
 #define _o_return_p(...)		_o__ret(_f_set_retval_p(__VA_ARGS__)) // Return a string which is already in persistent memory.
 #define _f_return_retval		return  // Return the value set by _f_set_retval().
@@ -651,6 +651,8 @@ enum BuiltInFunctionID {
 	FID_RegRead = 0, FID_RegWrite, FID_RegDelete, FID_RegDeleteKey,
 	FID_SoundGetVolume = 0, FID_SoundGetMute, FID_SoundGetName, FID_SoundGetInterface, FID_SoundSetVolume, FID_SoundSetMute,
 	FID_RunWait = 0, FID_ClipWait, FID_KeyWait, FID_WinWait, FID_WinWaitClose, FID_WinWaitActive, FID_WinWaitNotActive,
+	// For BIF_SetBIV (functions corresponding to built-in vars): keep the order of these in sync with the array in BIF_SetBIV.
+	FID_DetectHiddenText = 0, FID_DetectHiddenWindows, FID_FileEncoding, FID_SetRegView, FID_SetStoreCapsLockMode, FID_SetTitleMatchMode, FID_StringCaseSense,
 	// Hotkey/HotIf/...
 	FID_HotIfWinActive = HOT_IF_ACTIVE, FID_HotIfWinNotActive = HOT_IF_NOT_ACTIVE,
 		FID_HotIfWinExist = HOT_IF_EXIST, FID_HotIfWinNotExist = HOT_IF_NOT_EXIST,
@@ -3156,14 +3158,7 @@ public:
 // BUILT-IN VARIABLES //
 ////////////////////////
 
-// Declare built-in var read function.
-#define BIV_DECL_R(name) VarSizeType name(LPTSTR aBuf, LPTSTR aVarName)
-// Declare built-in var write function.
-#define BIV_DECL_W(name) ResultType name(LPTSTR aBuf, LPTSTR aVarName)
-// Declare built-in var read and write functions.
-#define BIV_DECL_RW(name) BIV_DECL_R(name); BIV_DECL_W(name##_Set)
-
-BIV_DECL_R (BIV_True_False);
+BIV_DECL_RW(BIV_Clipboard);
 BIV_DECL_R (BIV_MMM_DDD);
 BIV_DECL_R (BIV_DateTime);
 BIV_DECL_RW(BIV_ListLines);
@@ -3177,7 +3172,7 @@ BIV_DECL_RW(BIV_DefaultMouseSpeed);
 BIV_DECL_RW(BIV_CoordMode);
 BIV_DECL_RW(BIV_SendMode);
 BIV_DECL_RW(BIV_SendLevel);
-BIV_DECL_RW(BIV_StoreCapslockMode);
+BIV_DECL_RW(BIV_StoreCapsLockMode);
 BIV_DECL_R (BIV_IsPaused);
 BIV_DECL_R (BIV_IsCritical);
 BIV_DECL_R (BIV_IsSuspended);
@@ -3437,6 +3432,7 @@ BIF_DECL(BIF_MonitorGet);
 BIF_DECL(BIF_Wait);
 
 BIF_DECL(BIF_PerformAction);
+BIF_DECL(BIF_SetBIV);
 
 
 BOOL ResultToBOOL(LPTSTR aResult);

@@ -1055,7 +1055,6 @@ int Debugger::GetPropertyValue(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf
 				return DEBUGGER_E_INTERNAL_ERROR;
 		}
 		aProp.value.SetValue(aValueBuf, aVar.Get(aValueBuf));
-		CLOSE_CLIPBOARD_IF_OPEN; // Above may leave the clipboard open if aVar is Clipboard.
 	}
 	else
 	{

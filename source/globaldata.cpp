@@ -351,27 +351,20 @@ Action g_act[] =
 	, {_T("IniWrite"), 3, 4, false, NULL}  // Value, Filespec, Section, Key
 	, {_T("IniDelete"), 2, 3, false, NULL} // Filespec, Section, Key
 
-	, {_T("SetRegView"), 1, 1, false, NULL}
-
 	, {_T("OutputDebug"), 1, 1, false, NULL}
 
 	, {_T("SetKeyDelay"), 0, 3, false, {1, 2, 0}} // Delay in ms (numeric, negative allowed), PressDuration [, Play]
 	, {_T("SetMouseDelay"), 1, 2, false, {1, 0}} // Delay in ms (numeric, negative allowed) [, Play]
 	, {_T("SetWinDelay"), 1, 1, false, {1, 0}} // Delay in ms (numeric, negative allowed)
 	, {_T("SetControlDelay"), 1, 1, false, {1, 0}} // Delay in ms (numeric, negative allowed)
-	, {_T("SetTitleMatchMode"), 1, 1, false, NULL} // Allowed values: 1, 2, slow, fast
 
 	, {_T("Suspend"), 0, 1, false, NULL} // On/Off/Toggle/Permit/Blank (blank is the same as toggle)
 	, {_T("Pause"), 0, 2, false, NULL} // On/Off/Toggle/Blank (blank is the same as toggle), AlwaysAffectUnderlying
-	, {_T("StringCaseSense"), 1, 1, false, NULL} // On/Off/Locale
-	, {_T("DetectHiddenWindows"), 1, 1, false, NULL} // On/Off
-	, {_T("DetectHiddenText"), 1, 1, false, NULL} // On/Off
 	, {_T("BlockInput"), 1, 1, false, NULL} // On/Off
 
 	, {_T("SetNumlockState"), 0, 1, false, NULL} // On/Off/AlwaysOn/AlwaysOff or blank (unspecified) to return to normal.
 	, {_T("SetScrollLockState"), 0, 1, false, NULL} // same
 	, {_T("SetCapslockState"), 0, 1, false, NULL} // same
-	, {_T("SetStoreCapslockMode"), 1, 1, false, NULL} // On/Off
 
 	, {_T("KeyHistory"), 0, 2, false, NULL}, {_T("ListLines"), 0, 1, false, NULL}
 	, {_T("ListVars"), 0, 0, false, NULL}, {_T("ListHotkeys"), 0, 0, false, NULL}
@@ -380,8 +373,6 @@ Action g_act[] =
 	, {_T("Reload"), 0, 0, false, NULL}
 
 	, {_T("Shutdown"), 1, 1, false, {1, 0}} // Seems best to make the first param (the flag/code) mandatory.
-
-	, {_T("FileEncoding"), 0, 1, false, NULL}
 };
 // Below is the most maintainable way to determine the actual count?
 // Due to C++ lang. restrictions, can't easily make this a const because constants

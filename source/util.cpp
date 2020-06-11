@@ -3139,6 +3139,17 @@ int FTOA(double aValue, LPTSTR aBuf, int aBufSize)
 
 
 
+// Caller must call CoTaskMemFree() on the result when done.
+PWSTR GetDocumentsFolder()
+{
+	PWSTR path;
+	if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DONT_VERIFY, NULL, &path)))
+		return path;
+	return nullptr;
+}
+
+
+
 #if defined(_MSC_VER) && defined(_DEBUG)
 void OutputDebugStringFormat(LPCTSTR fmt, ...)
 {

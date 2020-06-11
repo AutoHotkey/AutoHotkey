@@ -128,11 +128,9 @@ BIF_DECL(BIF_SysGetIPAddresses)
 
 
 
-VarSizeType BIV_IsAdmin(LPTSTR aBuf, LPTSTR aVarName)
+BIV_DECL_R(BIV_IsAdmin)
 {
-	if (!aBuf)
-		return 1;  // The length of the string "1" or "0".
-	TCHAR result = '0';  // Default.
+	bool result = false;  // Default.
 	SC_HANDLE h = OpenSCManager(NULL, NULL, SC_MANAGER_LOCK);
 	if (h)
 	{
@@ -140,19 +138,17 @@ VarSizeType BIV_IsAdmin(LPTSTR aBuf, LPTSTR aVarName)
 		if (lock)
 		{
 			UnlockServiceDatabase(lock);
-			result = '1'; // Current user is admin.
+			result = true; // Current user is admin.
 		}
 		else
 		{
 			DWORD lastErr = GetLastError();
 			if (lastErr == ERROR_SERVICE_DATABASE_LOCKED)
-				result = '1'; // Current user is admin.
+				result = true; // Current user is admin.
 		}
 		CloseServiceHandle(h);
 	}
-	aBuf[0] = result;
-	aBuf[1] = '\0';
-	return 1; // Length of aBuf.
+	_f_return_b(result);
 }
 
 

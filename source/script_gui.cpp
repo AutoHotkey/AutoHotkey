@@ -1691,8 +1691,6 @@ ResultType GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType
 	// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
 	// being when the item's text is retrieved.  This should be harmless, since there are many
 	// other precedents where a variable is sized to something larger than it winds up carrying.
-	// Set up the var, enlarging it if necessary.  If the output_var is of type VAR_CLIPBOARD,
-	// this call will set up the clipboard for writing:
 	if (!TokenSetResult(aResultToken, NULL, length))
 		return FAIL; // It already displayed the error.
 	length = SendMessage(aControl.hwnd, CB_GETLBTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);

@@ -51,10 +51,6 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 		// non-standard msg pump beneath us on the call stack.
 	}
 
-	// The following is done here for performance reasons.  UPDATE: This probably never needs
-	// to close the clipboard now that Line::ExecUntil() also calls CLOSE_CLIPBOARD_IF_OPEN:
-	CLOSE_CLIPBOARD_IF_OPEN;
-
 	// While in mode RETURN_AFTER_MESSAGES, there are different things that can happen:
 	// 1) We launch a new hotkey subroutine, interrupting/suspending the old one.  But
 	//    subroutine calls this function again, so now it's recursed.  And thus the

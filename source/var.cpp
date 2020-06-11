@@ -32,7 +32,7 @@ ResultType Var::AssignHWND(HWND aWnd)
 
 ResultType Var::Assign(Var &aVar)
 // Assign some other variable to the "this" variable.
-// Although this->Type() can be VAR_CLIPBOARD, caller must ensure that aVar.Type()==VAR_NORMAL.
+// source_var->Type() must be VAR_NORMAL, but this->Type() can be VAR_VIRTUAL.
 // Returns OK or FAIL.
 {
 	// Below relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
@@ -59,18 +59,51 @@ ResultType Var::Assign(ExprTokenType &aToken)
 // Returns OK or FAIL.
 // Writes aToken's value into aOutputVar based on the type of the token.
 // Caller must ensure that aToken.symbol is an operand (not an operator or other symbol).
-// Caller must ensure that if aToken.symbol==SYM_VAR, aToken.var->Type()==VAR_NORMAL, not the clipboard or
-// any built-in var.  However, this->Type() can be VAR_CLIPBOARD.
 {
+	if (mType == VAR_VIRTUAL)
+		return AssignVirtual(aToken);
 	switch (aToken.symbol)
 	{
 	case SYM_INTEGER: return Assign(aToken.value_int64); // Listed first for performance because it's Likely the most common from our callers.
-	case SYM_VAR:     return Assign(*aToken.var); // Caller has ensured that var->Type()==VAR_NORMAL (it's only VAR_CLIPBOARD for certain expression lvalues, which would never be assigned here because aToken is an rvalue).
+	case SYM_VAR:     return Assign(*aToken.var);
 	case SYM_OBJECT:  return Assign(aToken.object);
 	case SYM_FLOAT:   return Assign(aToken.value_double); // Listed last because it's probably the least common.
 	}
 	// Since above didn't return, it can only be SYM_STRING.
 	return Assign(aToken.marker, aToken.marker_length);
+}
+
+
+
+ResultType Var::AssignVirtual(ExprTokenType &aValue)
+{
+	if (!mVV->Set)
+		return g_script.ScriptError(ERR_VAR_IS_READONLY, mName);
+	FuncResult result_token;
+	mVV->Set(result_token, mName, aValue);
+	return result_token.Result();
+}
+
+
+
+ResultType Var::PopulateVirtualVar()
+{
+	FuncResult result_token;
+	result_token.symbol = SYM_INTEGER; // For _f_return_i() and consistency with BIFs.
+	mVV->Get(result_token, mName);
+	if (result_token.Exited())
+		return FAIL;
+	if (result_token.mem_to_free)
+	{
+		_AcceptNewMem(result_token.mem_to_free, result_token.marker_length);
+		return OK;
+	}
+	size_t length;
+	LPTSTR value = TokenToString(result_token, result_token.buf, &length);
+	if (!AssignString(nullptr, length))
+		return FAIL;
+	tmemcpy(mCharContents, value, length + 1);
+	return OK;
 }
 
 
@@ -381,26 +414,10 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 	size_t space_needed = aLength + 1; // +1 for the zero terminator.
 	size_t space_needed_in_bytes = space_needed * sizeof(TCHAR);
 
-	if (mType == VAR_CLIPBOARD)
-	{
-		if (do_assign)
-			// Just return the result of this.  Note: The clipboard var's attributes,
-			// such as mLength, are not maintained because it's a variable whose
-			// contents usually aren't under our control.
-			return g_clip.Set(aBuf, aLength);
-		else
-			// We open it for write now, because some caller's don't call
-			// this function to write to the contents of the var, they
-			// do it themselves.  Note: Below call will have displayed
-			// any error that occurred:
-			return g_clip.PrepareForWrite(space_needed) ? OK : FAIL;
-	}
-	// Since above didn't return, this variable isn't the clipboard.
-
 	if (mType == VAR_VIRTUAL)
 	{
 		if (do_assign)
-			return mVV->Set((LPTSTR)aBuf, mName);
+			return AssignVirtual(ExprTokenType(const_cast<LPTSTR>(aBuf), aLength));
 		// Since above didn't return, the caller wants to allocate some temporary memory for
 		// writing the value into, and should call Close() in order to commit the actual value.
 	}
@@ -582,19 +599,11 @@ ResultType Var::AssignSkipAddRef(IObject *aValueToAssign)
 	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
 
-	if (var.mType != VAR_NORMAL)
+	if (var.mType == VAR_VIRTUAL)
 	{
-		if (var.mType == VAR_CLIPBOARD)
-		{
-			if (ClipboardAll *cba = dynamic_cast<ClipboardAll *>(aValueToAssign))
-			{
-				ResultType result = SetClipboardAll(cba->Data(), cba->Size());
-				aValueToAssign->Release();
-				return result;
-			}
-		}
-		aValueToAssign->Release();
-		return g_script.RuntimeError(ERR_INVALID_VALUE, _T("An object."));
+		auto result = var.AssignVirtual(ExprTokenType(aValueToAssign));
+		aValueToAssign->Release(); // Caller wanted us to take responsibility for this.
+		return result;
 	}
 
 	var.Free(); // If var contains an object, this will Release() it.  It will also clear any string contents and free memory if appropriate.
@@ -624,6 +633,23 @@ VarSizeType Var::Get(LPTSTR aBuf)
 
 	switch(mType)
 	{
+	case VAR_VIRTUAL:
+		if (!aBuf)
+		{
+			PopulateVirtualVar();
+			if (!mByteLength)
+			{
+				mAttrib &= ~VAR_ATTRIB_VIRTUAL_OPEN;
+				return 0;
+			}
+		}
+		else if (!(mAttrib & VAR_ATTRIB_VIRTUAL_OPEN))
+		{
+			*aBuf = '\0'; // There was an error populating, the caller failed to call Get(nullptr) beforehand,
+			return 0;     // or the value was legitimately blank.
+		}
+		// Since above did not return, the value has been populated and will be handled the normal way below.
+		// Fall through:
 	case VAR_NORMAL: // Listed first for performance.
 		UpdateContents();  // Update mContents and mLength, if necessary.
 		length = _CharLength();
@@ -641,8 +667,7 @@ VarSizeType Var::Get(LPTSTR aBuf)
 		{
 			// Copy the var contents into aBuf.  Although a little bit slower than CopyMemory() for large
 			// variables (say, over 100K), this loop seems much faster for small ones, which is the typical
-			// case.  Also of note is that this code section is the main bottleneck for scripts that manipulate
-			// large variables.
+			// case.
 			for (LPTSTR cp = mCharContents; *cp; *aBuf++ = *cp++); // UpdateContents() was already called higher above to update mContents.
 			*aBuf = '\0';
 		}
@@ -660,46 +685,21 @@ VarSizeType Var::Get(LPTSTR aBuf)
 		// if your forget at use the implicit "this" by accident.  So instead, just call self.
 		return mAliasFor->Get(aBuf);
 
-	// Built-in vars with volatile contents:
-	case VAR_CLIPBOARD:
-	{
-		length = (VarSizeType)g_clip.Get(aBuf); // It will also copy into aBuf if it's non-NULL.
-		if (length == CLIPBOARD_FAILURE)
-		{
-			// Above already displayed the error, so just return.
-			// If we were called only to determine the size, the
-			// next call to g_clip.Get() will not put anything into
-			// aBuf (it will either fail again, or it will return
-			// a length of zero due to the clipboard not already
-			// being open & ready), so there's no danger of future
-			// buffer overflows as a result of returning zero here.
-			// Also, due to this function's return type, there's
-			// no easy way to terminate the current hotkey
-			// subroutine (or entire script) due to this error.
-			// However, due to the fact that multiple attempts
-			// are made to open the clipboard, failure should
-			// be extremely rare.  And the user will be notified
-			// with a MsgBox anyway, during which the subroutine
-			// will be suspended:
-			length = 0;
-		}
-		if (aBuf)
-			aBuf[length] = '\0'; // Might not be necessary, but kept in case it ever is.
-		return length;
-	}
-
-	case VAR_BUILTIN: // v1.0.46.16: VAR_BUILTIN: Call the function associated with this variable to retrieve its contents.  This change reduced uncompressed coded size by 6 KB.
-		return mBIV(aBuf, mName);
-
-	case VAR_VIRTUAL:
-		return mVV->Get(aBuf, mName);
-
 	default:
 		ASSERT(FALSE && "Invalid var type");
 		if (aBuf)
 			*aBuf = '\0';
 		return 0;
 	} // switch(mType)
+}
+
+
+
+void Var::Get(ResultToken &aResultToken)
+{
+	Var &var = *ResolveAlias();
+	ASSERT(var.mType == VAR_VIRTUAL);
+	mVV->Get(aResultToken, mName);
 }
 
 
@@ -824,13 +824,13 @@ void Var::Free(int aWhenToFree, bool aExcludeAliasesAndRequireInit)
 
 ResultType Var::AppendIfRoom(LPTSTR aStr, VarSizeType aLength)
 // Returns OK if there's room enough to append aStr and it succeeds.
-// Returns FAIL otherwise (also returns FAIL for VAR_CLIPBOARD).
+// Returns FAIL otherwise (also returns FAIL for VAR_VIRTUAL).
 // Environment variables aren't supported here; instead, aStr is appended directly onto the actual/internal
 // contents of the "this" variable.
 {
 	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()):
 	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-	if (var.mType != VAR_NORMAL // e.g. VAR_CLIPBOARD. Some callers do call it this way, but even if not it should be kept for maintainability.
+	if (var.mType != VAR_NORMAL // e.g. VAR_VIRTUAL. Some callers do call it this way, but even if not it should be kept for maintainability.
 		|| var.IsObject()) // Let caller free it; not worth handling here.
 		return FAIL; // CHECK THIS FIRST, BEFORE BELOW, BECAUSE CALLERS ALWAYS WANT IT TO BE A FAILURE.
 	if (aLength)
@@ -887,47 +887,53 @@ ResultType Var::Append(LPTSTR aStr, VarSizeType aLength)
 void Var::AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 // Caller provides a new malloc'd memory block (currently must be non-NULL).  That block and its
 // contents are directly hung onto this variable in place of its old block, which is freed (except
-// in the case of VAR_CLIPBOARD, in which case the memory is copied onto the clipboard then freed).
-// Caller must ensure that mType == VAR_NORMAL or VAR_CLIPBOARD.
+// in the case of VAR_VIRTUAL, in which case the memory is passed to mVV->Set() then freed).
 // This function was added in v1.0.45 to aid callers in improving performance.
 {
 	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
 	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-	if (var.mType != VAR_NORMAL) // i.e. VAR_CLIPBOARD or VAR_VIRTUAL.
+	if (var.mType != VAR_NORMAL)
 	{
-		var.Assign(aNewMem, aLength); // Clipboard requires GlobalAlloc memory so can't directly accept aNewMem.  So just copy it the normal way.
+		var.Assign(aNewMem, aLength);
 		free(aNewMem); // Caller gave it to us to take charge of, but we have no further use for it.
 	}
 	else // VAR_NORMAL
-	{
-		var.Free(VAR_ALWAYS_FREE); // Release the variable's old memory. This also removes flags VAR_ATTRIB_OFTEN_REMOVED.
-		var.mHowAllocated = ALLOC_MALLOC; // Must always be this type to avoid complications and possible memory leaks.
-		var.mByteContents = (char *) aNewMem;
-		var.mByteLength = aLength * sizeof(TCHAR);
-		ASSERT( var.mByteLength + sizeof(TCHAR) <= _msize(aNewMem) );
-		var.mByteCapacity = (VarSizeType)_msize(aNewMem); // Get actual capacity in case it's a lot bigger than aLength+1. _msize() is only about 36 bytes of code and probably a very fast call.
-		// Already done by Free() above:
-		//mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED; // New memory is always non-binary-clip.  A new parameter could be added to change this if it's ever needed.
+		var._AcceptNewMem(aNewMem, aLength);
+}
 
-		// Shrink the memory if there's a lot of wasted space because the extra capacity is seldom utilized
-		// in real-world scripts.
-		// A simple rule seems best because shrinking is probably fast regardless of the sizes involved,
-		// plus and there's considerable rarity to ever needing capacity beyond what's in a variable
-		// (concat/append is one example).  This will leave a large percentage of extra space in small variables,
-		// but in those rare cases when a script needs to create thousands of such variables, there may be a
-		// current or future way to shrink an existing variable to contain only its current length, such as
-		// VarShrink().
-		if (var.mByteCapacity - var.mByteLength > 64)
+
+
+void Var::_AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
+// Called by AcceptNewMem() when mType == VAR_NORMAL.
+// Called by PopulateVirtualVar() when mType == VAR_VIRTUAL.
+{
+	Free(VAR_ALWAYS_FREE); // Release the variable's old memory. This also removes flags VAR_ATTRIB_OFTEN_REMOVED.
+	mHowAllocated = ALLOC_MALLOC; // Must always be this type to avoid complications and possible memory leaks.
+	mByteContents = (char *) aNewMem;
+	mByteLength = aLength * sizeof(TCHAR);
+	ASSERT( mByteLength + sizeof(TCHAR) <= _msize(aNewMem) );
+	mByteCapacity = (VarSizeType)_msize(aNewMem); // Get actual capacity in case it's a lot bigger than aLength+1. _msize() is only about 36 bytes of code and probably a very fast call.
+	// Already done by Free() above:
+	//mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED; // New memory is always non-binary-clip.  A new parameter could be added to change this if it's ever needed.
+
+	// Shrink the memory if there's a lot of wasted space because the extra capacity is seldom utilized
+	// in real-world scripts.
+	// A simple rule seems best because shrinking is probably fast regardless of the sizes involved,
+	// plus and there's considerable rarity to ever needing capacity beyond what's in a variable
+	// (concat/append is one example).  This will leave a large percentage of extra space in small variables,
+	// but in those rare cases when a script needs to create thousands of such variables, there may be a
+	// current or future way to shrink an existing variable to contain only its current length, such as
+	// VarShrink().
+	if (mByteCapacity - mByteLength > 64)
+	{
+		mByteCapacity = mByteLength + sizeof(TCHAR); // This will become the new capacity.
+		// _expand() is only about 75 bytes of uncompressed code size and probably performs very quickly
+		// when shrinking.  Also, MSDN implies that when shrinking, failure won't happen unless something
+		// is terribly wrong (e.g. corrupted heap).  But for robustness it is checked anyway:
+		if (   !(mByteContents = (char *)_expand(mByteContents, mByteCapacity))   )
 		{
-			var.mByteCapacity = var.mByteLength + sizeof(TCHAR); // This will become the new capacity.
-			// _expand() is only about 75 bytes of uncompressed code size and probably performs very quickly
-			// when shrinking.  Also, MSDN implies that when shrinking, failure won't happen unless something
-			// is terribly wrong (e.g. corrupted heap).  But for robustness it is checked anyway:
-			if (   !(var.mByteContents = (char *)_expand(var.mByteContents, var.mByteCapacity))   )
-			{
-				var.mByteLength = 0;
-				var.mByteCapacity = 0;
-			}
+			mByteLength = 0;
+			mByteCapacity = 0;
 		}
 	}
 }

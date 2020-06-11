@@ -190,106 +190,79 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				}
 				//else: It's a built-in variable.
 
-				// Check if it's a normal variable rather than a built-in variable.
-				switch (this_token.var->Type())
+				if (this_token.is_lvalue && this_token.var->IsReadOnly())
+				{
+					// Having this check here allows us to display the variable name rather than its contents
+					// in the error message.
+					error_msg = ERR_VAR_IS_READONLY;
+					error_info = this_token.var->mName;
+					goto abort_with_exception;
+				}
+
+				if (this_token.var->Type() == VAR_NORMAL || this_token.is_lvalue)
   				{
-				case VAR_CLIPBOARD:
-					if (!this_token.is_lvalue)
-						break;
-					// Otherwise, this is the target of an assignment, so must be SYM_VAR:
-				case VAR_NORMAL:
 					this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with limited exceptions) is relied upon in several places such as built-in functions.
 					goto push_this_token;
-				case VAR_VIRTUAL:
-					if (this_token.is_lvalue)
-					{
-						this_token.symbol = SYM_VAR;
-						goto push_this_token;
-					}
-					if (this_token.var->mVV->Get == BIV_LoopIndex) // v1.0.48.01: Improve performance of A_Index by treating it as an integer rather than a string in expressions (avoids conversions to/from strings).
-					{
-						this_token.SetValue(g->mLoopIteration);
-						goto push_this_token;
-					}
-					if (this_token.var->mVV->Get == BIV_EventInfo) // Not really useful for performance anymore, but allows it to have the correct "Integer" type.
-					{
-						this_token.SetValue(g->EventInfo);
-						goto push_this_token;
-					}
-					// ABOVE: Goto's and simple assignments (like the SYM_INTEGER ones above) are only a few
-					// bytes in code size, so it would probably cost more than it's worth in performance
-					// and code size to merge them into a code section shared by all of the above.  Although
-					// each comparison "this_token.var->mBIV == BIV_xxx" is surprisingly large in OBJ size,
-					// the resulting EXE does not reflect this: even 27 such comparisons and sections (all
-					// to a different BIV) don't increase the uncompressed EXE size.
-					//
-					// OTHER CANDIDATES FOR THE ABOVE:
-					// A_TickCount: Usually not performance-critical.
-					// A_GuiWidth/Height: Maybe not used in expressions often enough.
-					// A_GuiX/Y: Not performance-critical and/or too rare: Popup menu, DropFiles, PostMessage's coords.
-					// A_Gui: Hard to say.
-					// A_LastError: Seems too rare to justify the code size and loss of performance here.
-					// A_Msec: Would help but it's probably rarely used; probably has poor granularity, not likely to be better than A_TickCount.
-					// A_TimeIdle/Physical: These are seldom performance-critical.
-					//
-					// True, False, A_IsUnicode and A_PtrSize are handled in ExpressionToPostfix().
-					// Since their values never change at run-time, they are replaced at load-time
-					// with the appropriate SYM_INTEGER value.
-					//
-					break; // case VAR_VIRTUAL
-				default:
-					if (this_token.is_lvalue)
-					{
-						// Having this check here allows us to display the variable name rather than its contents
-						// in the error message.
-						error_msg = ERR_VAR_IS_READONLY;
-						error_info = this_token.var->mName;
-						goto abort_with_exception;
-					}
-					if (this_token.var->mBIV == BIV_TrayMenu) // Handled here to work around limitations of the BIV interface.
-					{
-						this_token.SetValue(g_script.mTrayMenu);
-						goto push_this_token;
-					}
-					if (this_token.var->mBIV == BIV_ScriptHwnd) // As above. Can't be done by ExpressionToPostfix() as g_hWnd is NULL at that point.
-					{
-						this_token.SetValue((UINT_PTR)g_hWnd);
-						goto push_this_token;
-					}
   				}
-				// Otherwise, it's a built-in variable.
-				result_size = this_token.var->Get() + 1;
-				if (result_size == 1)
+				
+				// FUTURE: This should be merged with the SYM_FUNC handling at some point to improve
+				// maintainability, reduce code size, and take advantage of SYM_FUNC's optimizations.
+				ResultToken result_token;
+				result_token.InitResult(left_buf);
+				result_token.symbol = SYM_INTEGER; // For _f_return_i() and consistency with BIFs.
+
+				// Call this virtual variable's getter.
+				this_token.var->Get(result_token);
+
+				if (result_token.Exited())
 				{
-					this_token.SetValue(_T(""), 0);
+					aResult = result_token.Result(); // See similar section under SYM_FUNC for comments.
+					result_to_return = NULL;
+					goto normal_end_skip_output_var;
+				}
+
+				if (result_token.symbol != SYM_STRING || result_token.marker_length == 0)
+				{
+					// Currently SYM_OBJECT is not added to to_free[] as there aren't any built-in
+					// vars that create an object or call AddRef().
+					this_token.CopyValueFrom(result_token);
 					goto push_this_token;
 				}
-				// Otherwise, it's a built-in variable which is not empty. Need some memory to store it.
-				// The following section is similar to that in the make_result_persistent section further
-				// below.  So maintain them together and see it for more comments.
-				// Must cast to int to avoid loss of negative values:
+				
+				if (result_token.marker != left_buf)
+				{
+					if (result_token.mem_to_free) // Persistent memory was already allocated for the result.
+					{
+						if (to_free_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
+						{
+							result_token.Free();
+							goto outofmem;
+						}
+						to_free[to_free_count++] = &this_token;
+						// Also push the value, below.
+					}
+					//else: Currently marker is assumed to point to persistent memory, such as a literal
+					// string, which should be safe to use at least until expression evaluation completes.
+					this_token.CopyValueFrom(result_token);
+					goto push_this_token;
+				}
+				
+				if (  (result_length = result_token.marker_length) == -1)
+					result_length = _tcslen(result_token.marker);
+				result_size = 1 + result_length;
 				if (result_size <= (int)(aDerefBufSize - (target - aDerefBuf))) // There is room at the end of our deref buf, so use it.
 				{
-					// Point result to its new, more persistent location:
-					result = target;
+					result = target; // Point result to its new, more persistent location.
 					target += result_size; // Point it to the location where the next string would be written.
 				}
-				else if (result_size < EXPR_SMALL_MEM_LIMIT && alloca_usage < EXPR_ALLOCA_LIMIT) // See comments at EXPR_SMALL_MEM_LIMIT.
-				{
+				else // if (result_size < EXPR_SMALL_MEM_LIMIT && alloca_usage < EXPR_ALLOCA_LIMIT) // See comments at EXPR_SMALL_MEM_LIMIT.
+				{	// Above: Anything longer than MAX_NUMBER_SIZE can't be in left_buf and therefore
+					// was already handled above.  alloca_usage is a safeguard but not an absolute limit.
 					result = (LPTSTR)talloca(result_size);
 					alloca_usage += result_size; // This might put alloca_usage over the limit by as much as EXPR_SMALL_MEM_LIMIT, but that is fine because it's more of a guideline than a limit.
 				}
-				else // Need to create some new persistent memory for our temporary use.
-				{
-					if (to_free_count == MAX_EXPR_MEM_ITEMS // No more slots left (should be nearly impossible).
-						|| !(result = tmalloc(result_size)))
-						goto outofmem;
-					to_free[to_free_count++] = &this_token;
-				}
-				result_length = this_token.var->Get(result);
-				this_token.marker = result;  // Must be done after above because marker and var overlap in union.
-				this_token.marker_length = result_length;
-				this_token.symbol = SYM_STRING;
+				tmemcpy(result, result_token.marker, result_length + 1);
+				this_token.SetValue(result, result_length);
 			} // if (this_token.symbol == SYM_DYNAMIC)
 			goto push_this_token;
 		} // if (IS_OPERAND(this_token.symbol))
@@ -776,11 +749,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					this_token.var = right.var;  // Make the result a variable rather than a normal operand so that its
 					this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(++x)
 				}
-				else // VAR_CLIPBOARD, which is allowed in only when it's the lvalue of an assignment or inc/dec.
+				else // VAR_VIRTUAL, which is allowed in only when it's the lvalue of an assignment or inc/dec.
 				{
-					// Clipboard isn't allowed as SYM_VAR beyond this point (to simplify the code and
-					// improve maintainability).  So use the new contents of the clipboard as the result,
-					// rather than the clipboard itself.
+					// VAR_VIRTUAL isn't allowed as SYM_VAR beyond this point (to simplify the code and
+					// improve maintainability).  So use the new contents of the variable as the result,
+					// rather than the variable itself.
 					if (right_is_number == PURE_INTEGER)
 						this_token.value_int64 += delta;
 					else // right_is_number must be PURE_FLOAT because it's the only alternative remaining.
@@ -821,9 +794,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				switch(this_token.symbol)
 				{
 				case SYM_ASSIGN: // Listed first for performance (it's probably the most common because things like ++ and += aren't expressions when they're by themselves on a line).
-					if (!left.var->Assign(right)) // left.var can be VAR_CLIPBOARD in this case.
+					if (!left.var->Assign(right)) // left.var can be VAR_VIRTUAL in this case.
 						goto abort;
-					if (left.var->Type() != VAR_NORMAL) // Could be VAR_CLIPBOARD or VAR_VIRTUAL, which should not yield SYM_VAR (as some sections of the code wouldn't handle it correctly).
+					if (left.var->Type() != VAR_NORMAL) // VAR_VIRTUAL should not yield SYM_VAR (as some sections of the code wouldn't handle it correctly).
 					{
 						this_token.CopyValueFrom(right); // Doing it this way is more maintainable than other methods, and is unlikely to perform much worse.
 					}
@@ -1007,7 +980,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 							if (left_length)
 								tmemcpy(result, left_string, left_length);  // Not +1 because don't need the zero terminator.
 							tmemcpy(result + left_length, right_string, right_length + 1); // +1 to include its zero terminator.
-							temp_var->Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_CLIPBOARD.
+							temp_var->Close(); // Must be called after Assign(NULL, ...) or when Contents() has been altered because it updates the variable's attributes and properly handles VAR_VIRTUAL.
 							if (done_and_have_an_output_var) // Fix for v1.0.48: Checking "temp_var == output_var" would not be enough for cases like v := (v := "a" . "b") . "c".
 								goto normal_end_skip_output_var; // Nothing more to do because it has even taken care of output_var already.
 							else // temp_var is from look-ahead to a future assignment.
@@ -1212,8 +1185,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				this_token.var = sym_assign_var;    // Make the result a variable rather than a normal operand so that its
 				this_token.symbol = SYM_VAR;        // address can be taken, and it can be passed ByRef. e.g. &(x+=1)
 			}
-			//else its the clipboard, so just push this_token as-is because after its assignment is done,
-			// VAR_CLIPBOARD should no longer be a SYM_VAR.  This is done to simplify the code, such as BIFs.
+			//else its VAR_VIRTUAL, so just push this_token as-is because after its assignment is done,
+			// it should no longer be a SYM_VAR.  This is done to simplify the code, such as BIFs.
 			//
 			// Now fall through and push this_token onto the stack as an operand for use by future operators.
 			// This is because by convention, an assignment like "x+=1" produces a usable operand.
@@ -2339,20 +2312,7 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 // maintain them together.
 {
 	aVar = aVar->ResolveAlias(); // Helps performance, but also necessary to accurately detect a match further below.
-	VarTypeType aVar_type = aVar->Type();
-	if (aVar_type == VAR_CLIPBOARD)
-		// Even if the clipboard is both an input and an output var, it still
-		// doesn't need to be dereferenced into the temp buffer because the
-		// clipboard has two buffers of its own.  The only exception is when
-		// the clipboard has only files on it, in which case those files need
-		// to be converted into plain text:
-		return CLIPBOARD_CONTAINS_ONLY_FILES ? CONDITION_TRUE : CONDITION_FALSE;
-	if (aVar_type != VAR_NORMAL)
-		// Reserved vars must always be dereferenced due to their volatile nature.
-		return CONDITION_TRUE;
 
-	// Before doing the below, the checks above must be done to ensure it's VAR_NORMAL.  Otherwise, things like
-	// the following won't work: StringReplace, o, A_ScriptFullPath, xxx
 	// v1.0.45: The following check improves performance slightly by avoiding the loop further below in cases
 	// where it's known that a command either doesn't have an output_var or can tolerate the output_var's
 	// contents being at the same address as that of one or more of the input-vars.  For example, the commands
@@ -2362,9 +2322,7 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 	if (!g_act[mActionType].CheckOverlap) // Commands that have this flag don't need final check
 		return CONDITION_FALSE;           // further below (though they do need the ones above).
 
-	// Since the above didn't return, we know that this is a NORMAL input var that isn't an
-	// environment variable.  Such input vars only need to be dereferenced if they are also
-	// used as an output var by the current script line:
+	// Input vars only need to be dereferenced if they are also used as an output var by the current script line:
 	Var *output_var;
 	for (int i = 0; i < mArgc; ++i)
 		if (mArg[i].type == ARG_TYPE_OUTPUT_VAR) // Implies i != aArgIndex, since this function is not called for output vars.

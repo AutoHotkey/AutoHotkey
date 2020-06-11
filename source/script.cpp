@@ -111,6 +111,8 @@ FuncEntry g_BIF[] =
 	BIF1(Cos, 1, 1),
 	BIF1(DateAdd, 3, 3),
 	BIF1(DateDiff, 3, 3),
+	BIFn(DetectHiddenText, 1, 1, BIF_SetBIV),
+	BIFn(DetectHiddenWindows, 1, 1, BIF_SetBIV),
 	BIFn(DirExist, 1, 1, BIF_FileExist),
 	BIF1(DirSelect, 0, 3),
 #ifdef ENABLE_DLLCALL
@@ -134,6 +136,7 @@ FuncEntry g_BIF[] =
 	BIF1(Exception, 1, 3),
 	BIF1(Exp, 1, 1),
 	BIF1(FileAppend, 1, 3),
+	BIFn(FileEncoding, 1, 1, BIF_SetBIV),
 	BIFn(FileExist, 1, 1, BIF_FileExist),
 	BIF1(FileGetAttrib, 0, 1),
 	BIF1(FileGetSize, 0, 2),
@@ -244,7 +247,10 @@ FuncEntry g_BIF[] =
 	BIFn(RTrim, 1, 2, BIF_Trim),
 	BIFn(RunWait, 1, 4, BIF_Wait, {4}),
 	BIFn(SendMessage, 1, 9, BIF_PostSendMessage),
+	BIFn(SetRegView, 1, 1, BIF_SetBIV),
+	BIFn(SetStoreCapsLockMode, 1, 1, BIF_SetBIV),
 	BIF1(SetTimer, 0, 3),
+	BIFn(SetTitleMatchMode, 1, 1, BIF_SetBIV),
 	BIF1(Sin, 1, 1),
 	BIF1(Sort, 1, 3),
 	BIFn(SoundGetInterface, 1, 3, BIF_Sound),
@@ -259,6 +265,7 @@ FuncEntry g_BIF[] =
 	BIF1(StrCompare, 2, 3),
 	BIFn(StrGet, 1, 3, BIF_StrGetPut),
 	BIF1(String, 1, 1),
+	BIFn(StringCaseSense, 1, 1, BIF_SetBIV),
 	BIF1(StrLen, 1, 1),
 	BIFn(StrLower, 1, 2, BIF_StrCase),
 	BIF1(StrPtr, 1, 1),
@@ -341,7 +348,7 @@ VarEntry g_BIV_A[] =
 	A_w(AllowMainWindow),
 	A_x(AppData, BIV_SpecialFolderPath),
 	A_x(AppDataCommon, BIV_SpecialFolderPath),
-	A_x(Clipboard, (BuiltInVarType)VAR_CLIPBOARD),
+	A_w(Clipboard),
 	A_x(ComputerName, BIV_UserName_ComputerName),
 	A_(ComSpec),
 	A_wx(ControlDelay, BIV_xDelay, BIV_xDelay_Set),
@@ -360,7 +367,7 @@ VarEntry g_BIV_A[] =
 	A_w(DetectHiddenText),
 	A_w(DetectHiddenWindows),
 	A_(EndChar),
-	A_w(EventInfo), // It's called "EventInfo" vs. "GuiEventInfo" because it applies to non-Gui events such as OnClipboardChange.,
+	A_w(EventInfo),
 	A_w(FileEncoding),
 	A_x(Hour, BIV_DateTime),
 	A_(IconFile),
@@ -439,7 +446,7 @@ VarEntry g_BIV_A[] =
 	A_x(StartMenuCommon, BIV_SpecialFolderPath),
 	A_x(Startup, BIV_SpecialFolderPath),
 	A_x(StartupCommon, BIV_SpecialFolderPath),
-	A_w(StoreCapslockMode),
+	A_w(StoreCapsLockMode),
 	A_w(StringCaseSense),
 	A_x(Tab, BIV_Space_Tab),
 	A_(Temp), // Debatably should be A_TempDir, but brevity seemed more popular with users, perhaps for heavy uses of the temp folder.,
@@ -447,10 +454,10 @@ VarEntry g_BIV_A[] =
 	A_(ThisHotkey),
 	A_(ThisLabel),
 	A_(TickCount),
-	A_(TimeIdle),
-	A_x(TimeIdleKeyboard, BIV_TimeIdlePhysical),
-	A_x(TimeIdleMouse, BIV_TimeIdlePhysical),
-	A_(TimeIdlePhysical),
+	A_x(TimeIdle, BIV_TimeIdle),
+	A_x(TimeIdleKeyboard, BIV_TimeIdle),
+	A_x(TimeIdleMouse, BIV_TimeIdle),
+	A_x(TimeIdlePhysical, BIV_TimeIdle),
 	A_(TimeSincePriorHotkey),
 	A_(TimeSinceThisHotkey),
 	A_w(TitleMatchMode),
@@ -675,11 +682,14 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		aScriptFilename = exe_buf; // Use the entire path, including the exe's directory.
 		if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF) // File doesn't exist, so fall back to new method.
 		{
-			aScriptFilename = def_buf;
-			VarSizeType filespec_length = BIV_MyDocuments(aScriptFilename, _T("")); // e.g. C:\Documents and Settings\Home\My Documents
-			if (filespec_length + _tcslen(suffix) + 1 > _countof(def_buf))
-				return FAIL; // Very rare, so for simplicity just abort.
-			_tcscpy(aScriptFilename + filespec_length, suffix); // Append the filename: .ahk vs. .ini seems slightly better in terms of clarity and usefulness (e.g. the ability to double click the default script to launch it).
+			if (PWSTR docs_path = GetDocumentsFolder())
+			{
+				auto len = _sntprintf(def_buf, _countof(def_buf), _T("%ws%s"), docs_path, suffix);
+				CoTaskMemFree(docs_path);
+				if (len > 0 && len < _countof(def_buf))
+					aScriptFilename = def_buf;
+				//else: Due to extreme rarity of failure, just check the same path again.
+			}
 			if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF)
 			{
 				_tcscpy(suffix, _T("\\") AHK_HELP_FILE); // Replace the executable name.
@@ -6803,9 +6813,9 @@ void Script::InitFuncLibraries(FuncLibrary aLib[])
 	InitFuncLibrary(aLib[0], mFileDir, FUNC_LOCAL_LIB);
 
 	// User lib in Documents folder.
-	TCHAR buf[MAX_PATH];
-	BIV_MyDocuments(buf, NULL);
-	InitFuncLibrary(aLib[1], buf, FUNC_USER_LIB);
+	PWSTR docs_dir = GetDocumentsFolder();
+	InitFuncLibrary(aLib[1], docs_dir, FUNC_USER_LIB);
+	CoTaskMemFree(docs_dir);
 
 	// Std lib in AutoHotkey directory.
 	InitFuncLibrary(aLib[2], mOurEXEDir, FUNC_STD_LIB);
@@ -9122,21 +9132,12 @@ unquoted_literal:
 			{
 				// DllCall() and possibly others rely on this having been done to support changing the
 				// value of a parameter (similar to by-ref).
-				infix[infix_count].symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the clipboard in the case of expression lvalues.  Search for VAR_CLIPBOARD further below for details.
+				infix[infix_count].symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the VAR_VIRTUAL in the case of expression lvalues.  Search for VAR_VIRTUAL further below for details.
 				infix[infix_count].is_lvalue = FALSE; // Set default.  This simplifies #Warn ClassOverwrite (vs. storing it in the assignment token).
 			}
 			else // It's a built-in variable (including clipboard).
 			{
-				// The following "variables" previously had optimizations in ExpandExpression(),
-				// but since their values never change at run-time, it is better to do it here:
-				if (this_deref_ref.var->mBIV == BIV_PtrSize)
-				{
-					infix[infix_count].SetValue(sizeof(void*));
-				}
-				else
-				{
-					infix[infix_count].symbol = SYM_DYNAMIC;
-				}
+				infix[infix_count].symbol = SYM_DYNAMIC;
 			}
 		} // Handling of the var or function in this_deref.
 
@@ -9176,12 +9177,11 @@ unquoted_literal:
 		{
 			if (infix_symbol == SYM_DYNAMIC)
 			{
-				// IMPORTANT: VAR_CLIPBOARD is made into SYM_VAR, but only for assignments and output var
+				// IMPORTANT: VAR_VIRTUAL is made into SYM_VAR, but only for assignments and output var
 				// parameters which are explicitly listed in g_BIF.  This allows built-in functions and
 				// other places in the code to treat SYM_VAR as though it's always VAR_NORMAL, which reduces
-				// code size and improves maintainability.
-				// Similarly, is_lvalue is set so that a dynamically resolved VAR_VIRTUAL or VAR_CLIPBOARD
-				// will yield SYM_VAR if it's the target of an assignment.  This detection is done just
+				// code size and improves maintainability.  is_lvalue is set so that a dynamically resolved
+				// var will yield SYM_VAR if it's the target of an assignment.  This detection is done just
 				// prior to pushing the assignment operator onto the stack (or popping pre-inc/dec) since
 				// that's the only time the l-value's postfix token can be detected reliably.
 				this_infix->is_lvalue = FALSE; // Set default.
@@ -9886,36 +9886,19 @@ end_of_infix_to_postfix:
 		&& ((only_symbol != SYM_VAR && only_symbol != SYM_DYNAMIC) || mActionType != ACT_RETURN) // "return var" is kept as an expression for correct handling of built-ins, locals (see "ToReturnValue") and ByRef.
 		)
 	{
-		if (only_symbol == SYM_DYNAMIC) // This needs some extra checks to ensure correct behaviour.
+		if (only_symbol == SYM_DYNAMIC // This needs some extra checks to ensure correct behaviour.
+			&& !SYM_DYNAMIC_IS_DOUBLE_DEREF(only_token)) // Checked for maintainability. Should always be the case since double-deref always has multiple tokens.
 		{
-			if (!SYM_DYNAMIC_IS_DOUBLE_DEREF(only_token)) // Checked for maintainability. Should always be the case since double-deref always has multiple tokens.
+			if (aArg.type == ARG_TYPE_OUTPUT_VAR)
 			{
-				if (aArg.type == ARG_TYPE_OUTPUT_VAR)
-				{
-					// Var must be writable, but can be A_Index or A_EventInfo in this case.
-					if (VAR_IS_READONLY(*only_token.var))
-						return LineError(ERR_VAR_IS_READONLY, FAIL, aArg.text);
-				}
-				else if ( !(only_token.var->mType == VAR_VIRTUAL
-					&& (only_token.var->mVV->Get == BIV_LoopIndex || only_token.var->mVV->Get == BIV_EventInfo))
-					&& !(only_token.var->mType == VAR_BUILTIN && (only_token.var->mBIV == BIV_TrayMenu // This exception is required for A_TrayMenu to return an object.
-						|| only_token.var->mBIV == BIV_ScriptHwnd)) )
-				{
-					aArg.type = ARG_TYPE_INPUT_VAR;
-				}
-				if (aArg.type != ARG_TYPE_NORMAL)
-				{
-					aArg.deref = (DerefType *)only_token.var;
-					aArg.is_expression = false; // Mark it as a pre-resolved var.
-					aArg.postfix = NULL;
-					return OK;
-				}
-				// Otherwise, it's A_Index or A_EventInfo, which must pass through ExpandExpression() to
-				// yield a pure integer.  Correctness seems more important than performance in this case.
-				// Performance might even be better this way because string -> number conversion is avoided.
-				// Note that a double-deref which resolves to the var A_Index or A_EventInfo will still yield
-				// a string, but that seems too rare to worry about.  Furthermore, it might be resolved in
-				// a future version by allowing built-in vars to return any type of value.
+				// Var must be writable, but can be VAR_VIRTUAL.
+				if (VAR_IS_READONLY(*only_token.var))
+					return LineError(ERR_VAR_IS_READONLY, FAIL, aArg.text);
+
+				aArg.deref = (DerefType *)only_token.var;
+				aArg.is_expression = false; // Mark it as a pre-resolved var.
+				aArg.postfix = NULL;
+				return OK;
 			}
 		}
 		else
@@ -10071,11 +10054,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 
 	for (Line *line = this; line != NULL;)
 	{
-		// If a previous command (line) had the clipboard open, perhaps because it directly accessed
-		// the clipboard via Var::Contents(), we close it here for performance reasons (see notes
-		// in Clipboard::Open() for details):
-		CLOSE_CLIPBOARD_IF_OPEN;
-
 		// The below must be done at least when the keybd or mouse hook is active, but is currently
 		// always done since it's a very low overhead call, and has the side-benefit of making
 		// the app maximally responsive when the script is busy.
@@ -12182,7 +12160,7 @@ ResultType Line::PerformAssign()
 		case VAR_NORMAL: // This can be reached via things like: x:=single_naked_var
 			// Assign var to var so data type is retained.
 			return output_var->Assign(*ARGVARRAW2);
-		// Otherwise it's VAR_CLIPBOARD or a read-only variable; continue on to do assign the normal way.
+		// Otherwise it's VAR_VIRTUAL; continue on to do assign the normal way.
 		}
 	}
 	// Since above didn't return, it's probably x:=BUILT_IN_VAR.
@@ -12527,12 +12505,6 @@ ResultType Line::Perform()
 		g.ControlDelay = ArgToInt(1);
 		return OK;
 
-	case ACT_SETSTORECAPSLOCKMODE:
-		return BIV_StoreCapslockMode_Set(ARG1, NULL);
-
-	case ACT_SETTITLEMATCHMODE:
-		return BIV_TitleMatchMode_Set(ARG1, NULL);
-
 	case ACT_SUSPEND:
 		switch (ConvertOnOffToggle(ARG1))
 		{
@@ -12554,12 +12526,7 @@ ResultType Line::Perform()
 		return OK;
 	case ACT_PAUSE:
 		return ChangePauseState(ConvertOnOffToggle(ARG1), (bool)ArgToInt(2));
-	case ACT_STRINGCASESENSE:
-		return BIV_StringCaseSense_Set(ARG1, NULL);
-	case ACT_DETECTHIDDENWINDOWS:
-		return BIV_DetectHiddenWindows_Set(ARG1, NULL);
-	case ACT_DETECTHIDDENTEXT:
-		return BIV_DetectHiddenText_Set(ARG1, NULL);
+
 	case ACT_BLOCKINPUT:
 		switch (toggle = ConvertBlockInput(ARG1))
 		{
@@ -12629,9 +12596,6 @@ ResultType Line::Perform()
 		// nothing (that fact is untested):
 		return IniDelete(ARG1, ARG2, mArgc < 3 ? NULL : ARG3);
 
-	case ACT_SETREGVIEW:
-		return BIV_RegView_Set(ARG1, NULL);
-
 	case ACT_OUTPUTDEBUG:
 #ifndef CONFIG_DEBUGGER
 		OutputDebugString(ARG1);
@@ -12642,9 +12606,6 @@ ResultType Line::Perform()
 
 	case ACT_SHUTDOWN:
 		return Util_Shutdown(ArgToInt(1)) ? OK : FAIL; // Range of ARG1 is not validated in case other values are supported in the future.
-
-	case ACT_FILEENCODING:
-		return BIV_FileEncoding_Set(ARG1, NULL);
 
 	case ACT_EXIT:
 		// Even if the script isn't persistent, this thread might've interrupted another which should
@@ -12814,13 +12775,15 @@ ResultType Script::DerefInclude(LPTSTR &aOutput, LPTSTR aBuf)
 				if (*cp1 && var_name_length && var_name_length <= MAX_VAR_NAME_LENGTH)
 				{
 					tcslcpy(var_name, cp + 1, var_name_length + 1);  // +1 to convert var_name_length to size.
-					VarEntry *biv = GetBuiltInVar(var_name);  // Only get built-in vars.
-					if (biv)
+					Var *var = FindOrAddVar(var_name, var_name_length, FINDVAR_GLOBAL);
+					if (var)
 					{
+						if (var->Type() != VAR_VIRTUAL) // Likely to be an error.
+							return ScriptError(ERR_PARAM1_INVALID, aBuf);
 						if (which_pass) // 2nd pass
-							dest += biv->type.Get(dest, var_name);
+							dest += var->Get(dest);
 						else
-							expanded_length += biv->type.Get(NULL, var_name);
+							expanded_length += var->Get();
 						cp = cp1; // For the next loop iteration, continue at the char after this reference's final deref symbol.
 						continue;
 					}
