@@ -13805,7 +13805,7 @@ BIF_DECL(BIF_VarSetStrCapacity)
 {
 	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
 	aResultToken.value_int64 = 0; // Set default. In spite of being ambiguous with the result of Free(), 0 seems a little better than -1 since it indicates "no capacity" and is also equal to "false" for easy use in expressions.
-	if (aParam[0]->symbol == SYM_VAR && aParam[0]->var->Type() == VAR_NORMAL)
+	if (aParam[0]->symbol == SYM_VAR) // Always true for SYM_VAR: aParam[0]->var->Type() == VAR_NORMAL
 	{
 		Var &var = *aParam[0]->var; // For performance and convenience.
 		if (aParamCount > 1) // Second parameter is present.
@@ -13860,7 +13860,7 @@ BIF_DECL(BIF_VarSetStrCapacity)
 
 		if (aResultToken.value_int64 = var.CharCapacity()) // Don't subtract 1 here in lieu doing it below (avoids underflow).
 			aResultToken.value_int64 -= 1; // Omit the room for the zero terminator since script capacity is defined as length vs. size.
-	} // (aParam[0]->symbol == SYM_VAR && aParam[0]->var->Type() == VAR_NORMAL)
+	} // (aParam[0]->symbol == SYM_VAR)
 	else
 		_f_throw(ERR_PARAM1_INVALID);
 }

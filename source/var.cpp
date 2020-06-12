@@ -421,6 +421,8 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 		// Since above didn't return, the caller wants to allocate some temporary memory for
 		// writing the value into, and should call Close() in order to commit the actual value.
 	}
+	else if (mType == VAR_CONSTANT) // Might be impossible, since the script should have no way to reference it.
+		return g_script.ScriptError(ERR_VAR_IS_READONLY, mName);
 
 	if (space_needed < 2) // Variable is being assigned the empty string (or a deref that resolves to it).
 	{
@@ -589,6 +591,34 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 
 	// Writing to union is safe because above already ensured that "this" isn't an alias.
 	mByteLength = aLength * sizeof(TCHAR); // aLength was verified accurate higher above.
+	return OK;
+}
+
+
+
+ResultType Var::AssignBinaryNumber(__int64 aNumberAsInt64, VarAttribType aAttrib)
+{
+	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
+	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+
+	if (var.mType == VAR_VIRTUAL)
+	{
+		// Virtual vars have no binary number cache, as their value may be calculated on-demand.
+		// Additionally, THE CACHE MUST NOT BE USED due to the union containing mVV.
+		ExprTokenType value;
+		value.symbol = (aAttrib & VAR_ATTRIB_IS_INT64) ? SYM_INTEGER : SYM_FLOAT;
+		value.value_int64 = aNumberAsInt64;
+		return var.AssignVirtual(value);
+	}
+	else if (var.mType == VAR_CONSTANT) // Might be impossible, since the script should have no way to reference it.
+		return g_script.ScriptError(ERR_VAR_IS_READONLY, mName);
+
+	if (var.mAttrib & VAR_ATTRIB_IS_OBJECT) // mObject will be overwritten below via the union.
+		var.ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
+
+	var.mContentsInt64 = aNumberAsInt64;
+	var.mAttrib &= ~(VAR_ATTRIB_TYPES | VAR_ATTRIB_NOT_NUMERIC | VAR_ATTRIB_UNINITIALIZED | VAR_ATTRIB_CONTENTS_OUT_OF_DATE_UNTIL_REASSIGNED);
+	var.mAttrib |= (VAR_ATTRIB_CONTENTS_OUT_OF_DATE | aAttrib); // Must be done prior to below.  aAttrib indicates the type of binary number.
 	return OK;
 }
 

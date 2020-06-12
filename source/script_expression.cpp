@@ -199,6 +199,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					goto abort_with_exception;
 				}
 
+				if (this_token.var->Type() == VAR_CONSTANT)
+				{
+					// Currently constants can't be local, so there should be no need to AddRef() and add to to_free[].
+					this_token.var->ToTokenSkipAddRef(this_token);
+					goto push_this_token;
+				}
+
 				if (this_token.var->Type() == VAR_NORMAL || this_token.is_lvalue)
   				{
 					this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with limited exceptions) is relied upon in several places such as built-in functions.

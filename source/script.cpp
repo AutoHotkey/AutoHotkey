@@ -1596,9 +1596,8 @@ UINT Script::LoadFromFile()
 		mUnresolvedClasses = NULL;
 	}
 
-	// Check for classes potentially being overwritten.
-	if (g_Warn_ClassOverwrite)
-		CheckForClassOverwrite();
+	if (!RetroactivelyFixConstants())
+		return LOADING_FAILED;
 
 #ifndef AUTOHOTKEYSC
 	if (mIncludeLibraryFunctionsThenExit)
@@ -4018,9 +4017,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		if (warnType == WARN_LOCAL_SAME_AS_GLOBAL || warnType == WARN_ALL)
 			g_Warn_LocalSameAsGlobal = warnMode;
 
-		if (warnType == WARN_CLASS_OVERWRITE || warnType == WARN_ALL)
-			g_Warn_ClassOverwrite = warnMode;
-
 		return CONDITION_TRUE;
 	}
 
@@ -4398,7 +4394,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 				
 				if (   !(var = FindOrAddVar(item, var_name_length, declare_type))   )
 					return FAIL; // It already displayed the error.
-				if (var->Type() != VAR_NORMAL) // Shouldn't be declared either way (global or local).
+				if (var->Type() == VAR_VIRTUAL) // Shouldn't be declared either way (global or local).
 					return ScriptError(_T("Built-in variables must not be declared."), item);
 				if (declare_type == VAR_DECLARE_GLOBAL && g->CurrentFunc) // i.e. "global x" in a function, not "var x" (which is also VAR_DECLARE_GLOBAL).
 				{
@@ -6440,7 +6436,10 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	if (mClassObjectCount)
 		outer_class->SetOwnProp(class_name, class_object); // Assign to outer_class[class_name].
 	else
+	{
 		class_var->Assign(class_object); // Assign to global variable named %class_name%.
+		class_var->MakeReadOnly();
+	}
 
 	prototype->SetBase(base_prototype);
 	class_object->SetBase(base_class);
@@ -7258,7 +7257,7 @@ size_t Line::ArgIndexLength(int aArgIndex)
 	if (sArgVar[aArgIndex])
 	{
 		Var &var = *sArgVar[aArgIndex]; // For performance and convenience.
-		if (   var.Type() == VAR_NORMAL  // This and below ordered for short-circuit performance based on types of input expected from caller.
+		if (   var.Type() != VAR_VIRTUAL  // This and below ordered for short-circuit performance based on types of input expected from caller.
 			&& !g_act[mActionType].CheckOverlap   ) // Although the ones that have CheckOverlap == true are hereby omitted from the fast method, the nature of almost all of the highbit commands is such that their performance won't be measurably affected. See ArgMustBeDereferenced() for more info.
 			return var.Length(); // Do it the fast way.
 	}
@@ -7287,7 +7286,7 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 	if (sArgVar[aArgIndex])
 	{
 		Var &var = *sArgVar[aArgIndex];
-		if (   var.Type() == VAR_NORMAL  // See ArgIndexLength() for comments about this line and below.
+		if (   var.Type() != VAR_VIRTUAL  // See ArgIndexLength() for comments about this line and below.
 			&& !g_act[mActionType].CheckOverlap   )
 			return var.ToInt64();
 	}
@@ -7315,7 +7314,7 @@ double Line::ArgIndexToDouble(int aArgIndex)
 	if (sArgVar[aArgIndex])
 	{
 		Var &var = *sArgVar[aArgIndex];
-		if (   var.Type() == VAR_NORMAL  // See ArgIndexLength() for comments about this line and below.
+		if (   var.Type() != VAR_VIRTUAL  // See ArgIndexLength() for comments about this line and below.
 			&& !g_act[mActionType].CheckOverlap   )
 			return var.ToDouble();
 	}
@@ -9156,17 +9155,27 @@ unquoted_literal:
 		else // this_deref is a variable.
 		{
 			CHECK_AUTO_CONCAT;
-			infix[infix_count].var = this_deref_ref.var; // Set this first to allow optimizations below to override it.
-			if (this_deref_ref.var->Type() == VAR_NORMAL) // VAR_ALIAS is taken into account (and resolved) by Type().
+			switch (this_deref_ref.var->Type())
 			{
+			case VAR_NORMAL: // VAR_ALIAS is taken into account (and resolved) by Type().
 				// DllCall() and possibly others rely on this having been done to support changing the
 				// value of a parameter (similar to by-ref).
 				infix[infix_count].symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the VAR_VIRTUAL in the case of expression lvalues.  Search for VAR_VIRTUAL further below for details.
-				infix[infix_count].is_lvalue = FALSE; // Set default.  This simplifies #Warn ClassOverwrite (vs. storing it in the assignment token).
-			}
-			else // It's a built-in variable (including clipboard).
-			{
+				infix[infix_count].var = this_deref_ref.var;
+				infix[infix_count].is_lvalue = FALSE; // Set default.  Having this here (vs. in the assignment token) simplifies RetroactivelyFixConstants().
+				break;
+			case VAR_CONSTANT:
+				// The following is not done because:
+				//  1) It prevents some ERR_VAR_IS_READONLY error messages from showing the constant's name.
+				//  2) It makes some error messages inconsistent since ACT_ASSIGNEXPR still refers to the Var.
+				//  3) SYM_DYNAMIC still needs to handle VAR_CONSTANT for double-derefs.
+				//  4) In combination with stdlib auto-include, it makes some error messages more inconsistent
+				//     since some references might be resolved to SYM_VAR before a lib is included.
+				//this_deref_ref.var->ToToken(infix[infix_count]);
+				//break;
+			default: // It's a built-in variable (including clipboard).
 				infix[infix_count].symbol = SYM_DYNAMIC;
+				infix[infix_count].var = this_deref_ref.var;
 			}
 		} // Handling of the var or function in this_deref.
 
@@ -9327,7 +9336,7 @@ unquoted_literal:
 							ExprTokenType &param1 = *postfix[postfix_count-1];
 							if (param1.symbol == SYM_VAR)
 							{
-								param1.is_lvalue = TRUE; // For #Warn ClassOverwrite.
+								param1.is_lvalue = TRUE;
 							}
 							else if (param1.symbol == SYM_DYNAMIC)
 							{
@@ -11038,7 +11047,7 @@ ResultType Line::EvaluateCondition()
 
 	// The following is ordered for short-circuit performance.
 	// Also, RAW is safe because loadtime validation ensured there is at least 1 arg.
-	if_condition = (ARGVARRAW1 && !*ARG1 && ARGVARRAW1->Type() == VAR_NORMAL)
+	if_condition = (ARGVARRAW1 && !*ARG1 && ARGVARRAW1->Type() != VAR_VIRTUAL)
 		? VarToBOOL(*ARGVARRAW1) // 30% faster than having ExpandArgs() resolve ARG1 even when it's a naked variable.
 		: ResultToBOOL(ARG1); // CAN'T simply check *ARG1=='1' because the loadtime routine has various ways of setting if_expresion to false for things that are normally expressions.
 
@@ -12187,6 +12196,7 @@ ResultType Line::PerformAssign()
 		switch(ARGVARRAW2->Type())
 		{
 		case VAR_NORMAL: // This can be reached via things like: x:=single_naked_var
+		case VAR_CONSTANT: // Might be impossible currently; done for maintainability.
 			// Assign var to var so data type is retained.
 			return output_var->Assign(*ARGVARRAW2);
 		// Otherwise it's VAR_VIRTUAL; continue on to do assign the normal way.
@@ -13985,13 +13995,8 @@ void Script::ConvertLocalToAlias(Var &aLocal, Var *aAliasFor, int aPos, Var **aV
 
 
 
-void Script::CheckForClassOverwrite()
+ResultType Script::RetroactivelyFixConstants()
 {
-	// Aside from class variables, A_Args is the only variable which can contain an object
-	// at this stage.  Excluding it this way produces smaller code than checking for the
-	// "__class" key within whatever object is found.
-	Var *a_args = FindVar(_T("A_Args"));
-
 	for (Line *line = mFirstLine; line; line = line->mNextLine)
 	{
 		for (int a = 0; a < line->mArgc; ++a)
@@ -14002,20 +14007,21 @@ void Script::CheckForClassOverwrite()
 				if (!arg.is_expression) // The arg's variable is not one that needs to be dynamically resolved.
 				{
 					Var *target_var = VAR(arg);
-					if (target_var->HasObject() && target_var != a_args)
-						ScriptWarning(g_Warn_ClassOverwrite, WARNING_CLASS_OVERWRITE, target_var->mName, line);
+					if (target_var->IsReadOnly())
+						return line->LineError(ERR_VAR_IS_READONLY, FAIL, target_var->mName);
 				}
 			}
 			else if (arg.is_expression)
 			{
 				for (ExprTokenType *token = arg.postfix; token->symbol != SYM_INVALID; ++token)
 				{
-					if (token->symbol == SYM_VAR && token->is_lvalue && token->var->HasObject() && token->var != a_args)
-						ScriptWarning(g_Warn_ClassOverwrite, WARNING_CLASS_OVERWRITE, token->var->mName, line);
+					if (token->symbol == SYM_VAR && token->is_lvalue && token->var->IsReadOnly())
+						return line->LineError(ERR_VAR_IS_READONLY, FAIL, token->var->mName);
 				}
 			}
 		}
 	}
+	return OK;
 }
 
 
@@ -14035,7 +14041,7 @@ LPTSTR Script::ListVars(LPTSTR aBuf, int aBufSize) // aBufSize should be an int 
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("Local Variables for %s()%s"), current_func->mName, LIST_VARS_UNDERLINE);
 		auto &func = *current_func; // For performance.
 		for (int i = 0; i < func.mVarCount; ++i)
-			if (func.mVar[i]->Type() == VAR_NORMAL) // Don't bother showing clipboard and other built-in vars.
+			if (func.mVar[i]->Type() == VAR_NORMAL) // Don't bother showing VAR_CONSTANT; ToText() doesn't support VAR_VIRTUAL.
 				aBuf = func.mVar[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
 	}
 	// v1.0.31: The description "alphabetical" is kept even though it isn't quite true
@@ -14046,7 +14052,7 @@ LPTSTR Script::ListVars(LPTSTR aBuf, int aBufSize) // aBufSize should be an int 
 		, current_func ? _T("\r\n\r\n") : _T(""), LIST_VARS_UNDERLINE);
 	// Start at the oldest and continue up through the newest:
 	for (int i = 0; i < mVarCount; ++i)
-		if (mVar[i]->Type() == VAR_NORMAL) // Don't bother showing clipboard and other built-in vars.
+		if (mVar[i]->Type() == VAR_NORMAL) // Don't bother showing VAR_CONSTANT; ToText() doesn't support VAR_VIRTUAL.
 			aBuf = mVar[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
 	return aBuf;
 }

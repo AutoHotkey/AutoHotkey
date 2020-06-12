@@ -1029,6 +1029,7 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 
 	auto var = g_script.FindOrAddVar(aClassName, 0, VAR_DECLARE_SUPER_GLOBAL);
 	var->AssignSkipAddRef(class_obj);
+	var->MakeReadOnly();
 
 	return class_obj;
 }

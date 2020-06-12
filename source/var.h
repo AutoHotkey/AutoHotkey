@@ -34,6 +34,7 @@ enum VarTypes
   // any function (namely a BIV_* function).
   VAR_ALIAS  // VAR_ALIAS must always have a non-NULL mAliasFor.  In other ways it's the same as VAR_NORMAL.  VAR_ALIAS is never seen because external users call Var::Type(), which automatically resolves ALIAS to some other type.
 , VAR_NORMAL // Most variables, such as those created by the user, are this type.
+, VAR_CONSTANT // or as I like to say, not variable.
 , VAR_VIRTUAL
 , VAR_LAST_TYPE = VAR_VIRTUAL
 };
@@ -189,29 +190,7 @@ private:
 	// Unconditionally accepts new memory, bypassing the usual redirection to Assign() for VAR_VIRTUAL.
 	void _AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength);
 
-	ResultType AssignBinaryNumber(__int64 aNumberAsInt64, VarAttribType aAttrib = VAR_ATTRIB_IS_INT64)
-	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-
-		if (var.mType == VAR_VIRTUAL)
-		{
-			// Virtual vars have no binary number cache, as their value may be calculated on-demand.
-			// Additionally, THE CACHE MUST NOT BE USED due to the union containing mVV.
-			ExprTokenType value;
-			value.symbol = (aAttrib & VAR_ATTRIB_IS_INT64) ? SYM_INTEGER : SYM_FLOAT;
-			value.value_int64 = aNumberAsInt64;
-			return var.AssignVirtual(value);
-		}
-
-		if (var.mAttrib & VAR_ATTRIB_IS_OBJECT) // mObject will be overwritten below via the union.
-			var.ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
-
-		var.mContentsInt64 = aNumberAsInt64;
-		var.mAttrib &= ~(VAR_ATTRIB_TYPES | VAR_ATTRIB_NOT_NUMERIC | VAR_ATTRIB_UNINITIALIZED | VAR_ATTRIB_CONTENTS_OUT_OF_DATE_UNTIL_REASSIGNED);
-		var.mAttrib |= (VAR_ATTRIB_CONTENTS_OUT_OF_DATE | aAttrib); // Must be done prior to below.  aAttrib indicates the type of binary number.
-		return OK;
-	}
+	ResultType AssignBinaryNumber(__int64 aNumberAsInt64, VarAttribType aAttrib = VAR_ATTRIB_IS_INT64);
 
 	void UpdateContents()
 	{
@@ -620,11 +599,19 @@ public:
 		return (mType == VAR_ALIAS) ? mAliasFor->mType : mType;
 	}
 
+	// Convert VAR_NORMAL to VAR_CONSTANT.
+	void MakeReadOnly()
+	{
+		ASSERT(mType == VAR_NORMAL); // Should never be called on VAR_ALIAS or VAR_VIRTUAL.
+		ASSERT(!(mAttrib & VAR_ATTRIB_UNINITIALIZED));
+		mType = VAR_CONSTANT;
+	}
+
 #define VAR_IS_READONLY(var) ((var).IsReadOnly()) // This used to rely on var.Type(), which is no longer enough.
 	bool IsReadOnly()
 	{
 		auto &var = *ResolveAlias();
-		return var.mType == VAR_VIRTUAL && !var.HasSetter();
+		return var.mType == VAR_CONSTANT || (var.mType == VAR_VIRTUAL && !var.HasSetter());
 	}
 
 	__forceinline bool IsStatic()

@@ -75,7 +75,6 @@ bool g_RunStdIn = false;
 WarnMode g_Warn_UseUnsetLocal = WARNMODE_MSGBOX;	// Used by #Warn directive.
 WarnMode g_Warn_UseUnsetGlobal = WARNMODE_MSGBOX;	//
 WarnMode g_Warn_LocalSameAsGlobal = WARNMODE_OFF;	//
-WarnMode g_Warn_ClassOverwrite = WARNMODE_OFF;		//
 SingleInstanceType g_AllowOnlyOneInstance = SINGLE_INSTANCE_PROMPT;
 bool g_persistent = false;  // Whether the script should stay running even after the auto-exec section finishes.
 bool g_NoTrayIcon = false;

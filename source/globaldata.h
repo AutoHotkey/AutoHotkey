@@ -75,7 +75,6 @@ extern bool g_RunStdIn;
 extern WarnMode g_Warn_UseUnsetLocal;
 extern WarnMode g_Warn_UseUnsetGlobal;
 extern WarnMode g_Warn_LocalSameAsGlobal;
-extern WarnMode g_Warn_ClassOverwrite;
 extern SingleInstanceType g_AllowOnlyOneInstance;
 extern bool g_persistent;
 extern bool g_NoTrayIcon;

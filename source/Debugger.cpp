@@ -1043,7 +1043,7 @@ int Debugger::GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp, LPTSTR &aValueB
 
 int Debugger::GetPropertyValue(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf)
 {
-	if (aProp.is_builtin = aVar.Type() != VAR_NORMAL)
+	if (aProp.is_builtin = aVar.Type() == VAR_VIRTUAL)
 	{
 		size_t approx_size = aVar.Get() + 1;
 		if (!aValueBuf || _msize(aValueBuf) < _TSIZE(approx_size))
