@@ -156,15 +156,19 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 	if (!ignore_existing_items) // i.e. Insert always inserts a new item.
 		menu_item = FindItem(param1, menu_item_prev, search_by_pos);
 
+	bool callback_was_omitted = ParamIndexIsOmitted(1);
+	
 	// Whether an existing menu item's options should be updated without updating its submenu or callback:
-	bool update_exiting_item_options = (member == M_Add && menu_item && !*param2 && *aOptions);
+	bool update_existing_item_options = (member == M_Add && menu_item && callback_was_omitted && *aOptions);
 
 	ResultType result;
 	IObject *callback = NULL;  // Set default.
 	UserMenu *submenu = NULL;    // Set default.
-	if (member == M_Add && !update_exiting_item_options) // Callbacks and submenus are only used in conjunction with the ADD command.
+	if (member == M_Add && !update_existing_item_options) // Callbacks and submenus are only used in conjunction with the ADD command.
 	{
-		callback = ParamIndexToOptionalObject(1);
+		if (callback_was_omitted)
+			_o_throw(ERR_PARAM2_MUST_NOT_BE_BLANK);
+		callback = ParamIndexToObject(1);
 		submenu = dynamic_cast<UserMenu *>(callback);
 		if (submenu) // Param #2 is a Menu object.
 		{
@@ -176,19 +180,17 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 			if (submenu == this || submenu->ContainsMenu(this)
 				|| submenu->mMenuType != MENU_TYPE_POPUP)
 				_o_throw(ERR_PARAM2_INVALID);
+			// Store only submenu, not callback.  Don't Release() this since AddRef() wasn't called
+			// (we're just borrowing the caller's reference until the menu item is constructed).
 			callback = NULL;
 		}
 		else 
 		{
 			// Param #2 is not a submenu.
-			if (callback) 
+			if (callback)
 				callback->AddRef();
-			else // Param #2 is not an object of any kind; must be a function name.
-			{
-				if (!*param2) // Allow the function name to default to the menu item name.
-					param2 = param1;
+			else
 				callback = StringToFunctor(param2);
-			}
 			if (!ValidateFunctor(callback, 3, aResultToken, ERR_PARAM2_INVALID))
 				return FAIL;
 		}
