@@ -922,6 +922,13 @@ public:
 		mAttrib &= ~VAR_ATTRIB_UNINITIALIZED;
 	}
 
+	__forceinline void MarkUninitialized()
+	{
+		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
+		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		mAttrib |= VAR_ATTRIB_UNINITIALIZED;
+	}
+
 	__forceinline void MaybeWarnUninitialized();
 
 }; // class Var

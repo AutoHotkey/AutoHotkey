@@ -6156,6 +6156,10 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic, 
 					this_param.default_type = PARAM_DEFAULT_INT;
 					this_param.default_int64 = 1;
 				}
+				else if (!_tcsicmp(buf, _T("unset")))
+				{
+					this_param.default_type = PARAM_DEFAULT_UNSET;
+				}
 				else // The only things supported other than the above are integers and floats.
 				{
 					// Vars could be supported here via FindVar(), but only globals ABOVE this point in
