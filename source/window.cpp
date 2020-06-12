@@ -271,11 +271,34 @@ HWND SetForegroundWindowEx(HWND aTargetWindow)
 			is_attached_fore_to_target = AttachThreadInput(fore_thread, target_thread, TRUE) != 0;
 	}
 
+	static bool sTriedKeyUp = false;
+
 	// The log showed that it never seemed to need more than two tries.  But there's
 	// not much harm in trying a few extra times.  The number of tries needed might
 	// vary depending on how fast the CPU is:
 	for (int i = 0; i < 5; ++i)
 	{
+		if (i == (int)g_WinActivateForce && !sTriedKeyUp) // At least one attempt failed this time, and Alt-up hasn't been tried since the process started.
+		{
+			sTriedKeyUp = true;
+			// Lexikos: Recent testing on Windows 10.0.19555 indicated that sending Alt-up was just as effective
+			// as sending double-Alt (the second Alt was probably just to counter the first one), but it should
+			// have lower risk of side-effects since there's no key-down.  One observable side-effect is that
+			// if the user happens to be holding Alt (and it wasn't suppressed due to being part of a hotkey),
+			// the window menu might light up for an instant before the window loses focus.  However, this also
+			// means that if the system is set to hide the menu mnemonics (underlines), that actually happens
+			// whereas they would normally be left visible because the window didn't catch Alt-up.
+			// The Alt-up seems to be effective at allowing ALL subsequent SetForegroundWindow() calls to succeed
+			// even without AttachThreadInput(), and even if Alt-up is just sent at program startup, so it's only
+			// done once per process.  In other words, this should stop subsequent calls from causing taskbar
+			// buttons to flash.  This doesn't seem to be necessary if AttachThreadInput() is used, so it's not
+			// done for #WinActivateForce unless there's been one failed attempt.
+			// KEY_BLOCK_THIS is used so that if this or any other scripts (running on v1.1.27+) have a hook
+			// installed, the Alt-up will be suppressed to further reduce the risk of side-effects.  Testing
+			// showed that the suppressed event worked just as well (in theory, because the system's handling
+			// of it isn't and can't be suppressed).
+			KeyEvent(KEYUP, VK_MENU, 0, NULL, false, KEY_BLOCK_THIS);
+		}
 		IF_ATTEMPT_SET_FORE
 		{
 #ifdef _DEBUG_WINACTIVATE
