@@ -13571,6 +13571,163 @@ BIF_DECL(BIF_IsByRef)
 
 
 
+BIF_DECL(BIF_IsTypeish)
+{
+	auto variable_type = (VariableTypeType)_f_callee_id;
+	bool if_condition;
+	TCHAR *cp;
+
+	// The first set of checks are for isNumber(), isInteger() and isFloat(), which permit pure numeric values.
+	switch (TypeOfToken(*aParam[0]))
+	{
+	case SYM_INTEGER:
+		switch (variable_type)
+		{
+		case VAR_TYPE_NUMBER:
+		case VAR_TYPE_INTEGER:
+			_f_return_b(true);
+		case VAR_TYPE_FLOAT:
+			_f_return_b(false);
+		default:
+			// Do not permit pure numbers for the other functions, since the results would not be intuitive.
+			// For instance, isAlnum() would return false for negative values due to '-'; isXDigit() would
+			// return true for positive integers even though they are always in decimal.
+			goto type_mismatch;
+		}
+	case SYM_FLOAT:
+		switch (variable_type)
+		{
+		case VAR_TYPE_NUMBER:
+		case VAR_TYPE_FLOAT:
+			_f_return_b(true);
+		case VAR_TYPE_INTEGER:
+			// Given that legacy "if var is float" required a decimal point in var and isFloat() is false for
+			// integers which can be represented as float, it seems inappropriate for isInteger(1.0) to be true.
+			// A function like isWholeNumber() could be added if that was needed.
+			_f_return_b(false);
+		default:
+			goto type_mismatch;
+		}
+	case SYM_OBJECT:
+		switch (variable_type)
+		{
+		case VAR_TYPE_NUMBER:
+		case VAR_TYPE_INTEGER:
+		case VAR_TYPE_FLOAT:
+			_f_return_b(false);
+		default:
+			goto type_mismatch;
+		}
+	}
+	// Since above did not return or goto, the value is a string.
+	LPTSTR aValueStr = ParamIndexToString(0);
+
+	// The remainder of this function is based on the original code for ACT_IFIS, which was removed
+	// in commit 3382e6e2.
+	switch (variable_type)
+	{
+	case VAR_TYPE_NUMBER:
+		if_condition = IsNumeric(aValueStr, true, false, true);
+		break;
+	case VAR_TYPE_INTEGER:
+		if_condition = IsNumeric(aValueStr, true, false, false);  // Passes false for aAllowFloat.
+		break;
+	case VAR_TYPE_FLOAT:
+		if_condition = (IsNumeric(aValueStr, true, false, true) == PURE_FLOAT);
+		break;
+	case VAR_TYPE_TIME:
+	{
+		SYSTEMTIME st;
+		// Also insist on numeric, because even though YYYYMMDDToFileTime() will properly convert a
+		// non-conformant string such as "2004.4", for future compatibility, we don't want to
+		// report that such strings are valid times:
+		if_condition = IsNumeric(aValueStr, false, false, false) && YYYYMMDDToSystemTime(aValueStr, st, true); // Can't call Var::IsNumeric() here because it doesn't support aAllowNegative.
+		break;
+	}
+	case VAR_TYPE_DIGIT:
+		if_condition = true;
+		for (cp = aValueStr; *cp; ++cp)
+			if (!_istdigit((UCHAR)*cp))
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+	case VAR_TYPE_XDIGIT:
+		cp = aValueStr;
+		if (!_tcsnicmp(cp, _T("0x"), 2)) // Allow 0x prefix.
+			cp += 2;
+		if_condition = true;
+		for (; *cp; ++cp)
+			if (!_istxdigit((UCHAR)*cp))
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+	case VAR_TYPE_ALNUM:
+		if_condition = true;
+		for (cp = aValueStr; *cp; ++cp)
+			//if (!IsCharAlphaNumeric(*cp)) // Use this to better support chars from non-English languages.
+			if (!aisalnum(*cp)) // But some users don't like it, Chinese users for example.
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+	case VAR_TYPE_ALPHA:
+		// Like AutoIt3, the empty string is considered to be alphabetic, which is only slightly debatable.
+		if_condition = true;
+		for (cp = aValueStr; *cp; ++cp)
+			//if (!IsCharAlpha(*cp)) // Use this to better support chars from non-English languages.
+			if (!aisalpha(*cp)) // But some users don't like it, Chinese users for example.
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+	case VAR_TYPE_UPPER:
+		if_condition = true;
+		for (cp = aValueStr; *cp; ++cp)
+			//if (!IsCharUpper(*cp)) // Use this to better support chars from non-English languages.
+			if (!aisupper(*cp)) // But some users don't like it, Chinese users for example.
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+	case VAR_TYPE_LOWER:
+		if_condition = true;
+		for (cp = aValueStr; *cp; ++cp)
+			//if (!IsCharLower(*cp)) // Use this to better support chars from non-English languages.
+			if (!aislower(*cp)) // But some users don't like it, Chinese users for example.
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+	case VAR_TYPE_SPACE:
+		if_condition = true;
+		for (cp = aValueStr; *cp; ++cp)
+			if (!_istspace(*cp))
+			{
+				if_condition = false;
+				break;
+			}
+		break;
+#ifdef DEBUG
+	default:
+		MsgBox(_T("DEBUG: Unhandled IsXStr mode."));
+#endif
+	}
+	_f_return_b(if_condition);
+
+type_mismatch:
+	_f_throw(ERR_TYPE_MISMATCH, TokenTypeString(*aParam[0]));
+}
+
+
+
 BIF_DECL(BIF_IsSet)
 {
 	if (aParam[0]->symbol != SYM_VAR)
@@ -16428,9 +16585,9 @@ LPTSTR TokenTypeString(ExprTokenType &aToken)
 {
 	switch (TypeOfToken(aToken))
 	{
-	case SYM_STRING: return _T("String");
-	case SYM_INTEGER: return _T("Integer");
-	case SYM_FLOAT: return _T("Float");
+	case SYM_STRING: return STRING_TYPE_STRING;
+	case SYM_INTEGER: return INTEGER_TYPE_STRING;
+	case SYM_FLOAT: return FLOAT_TYPE_STRING;
 	case SYM_OBJECT: return TokenToObject(aToken)->Type();
 	default: return _T(""); // For maintainability.
 	}

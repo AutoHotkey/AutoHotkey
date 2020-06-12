@@ -65,7 +65,7 @@ typedef int FileLoopModeType;
 enum VariableTypeType {VAR_TYPE_INVALID, VAR_TYPE_NUMBER, VAR_TYPE_INTEGER, VAR_TYPE_FLOAT
 	, VAR_TYPE_TIME	, VAR_TYPE_DIGIT, VAR_TYPE_XDIGIT, VAR_TYPE_ALNUM, VAR_TYPE_ALPHA
 	, VAR_TYPE_UPPER, VAR_TYPE_LOWER, VAR_TYPE_SPACE
-	, VAR_TYPE_OBJECT, VAR_TYPE_BYREF}; // v2
+	};
 
 #define ATTACH_THREAD_INPUT \
 	bool threads_are_attached = false;\
@@ -956,8 +956,6 @@ public:
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
 	ResultType EvaluateHotCriterionExpression(); // Called by HotkeyCriterion::Eval().
 
-	ResultType ValueIsType(ExprTokenType &aResultToken, ExprTokenType &aValue, LPTSTR aValueStr, ExprTokenType &aType, LPTSTR aTypeStr);
-
 	static bool FileIsFilteredOut(LoopFilesStruct &aCurrentFile, FileLoopModeType aFileLoopMode);
 
 	Label *GetJumpTarget(bool aIsDereferenced);
@@ -1349,27 +1347,6 @@ public:
 		if (!_tcsicmp(aBuf, _T("Caret"))) return COORD_MODE_CARET;
 		if (!_tcsicmp(aBuf, _T("Menu"))) return COORD_MODE_MENU;
 		return COORD_MODE_INVALID;
-	}
-
-	static VariableTypeType ConvertVariableTypeName(LPTSTR aBuf)
-	// Returns the matching type, or zero if none.
-	{
-		if (!aBuf || !*aBuf) return VAR_TYPE_INVALID;
-		if (!_tcsicmp(aBuf, _T("Integer"))) return VAR_TYPE_INTEGER;
-		if (!_tcsicmp(aBuf, _T("Float"))) return VAR_TYPE_FLOAT;
-		if (!_tcsicmp(aBuf, _T("Number"))) return VAR_TYPE_NUMBER;
-		if (!_tcsicmp(aBuf, _T("Object"))) return VAR_TYPE_OBJECT; // v2
-		if (!_tcsicmp(aBuf, _T("ByRef"))) return VAR_TYPE_BYREF; // v2
-		if (!_tcsicmp(aBuf, _T("Time"))) return VAR_TYPE_TIME;
-		if (!_tcsicmp(aBuf, _T("Date"))) return VAR_TYPE_TIME;  // "date" is just an alias for "time".
-		if (!_tcsicmp(aBuf, _T("Digit"))) return VAR_TYPE_DIGIT;
-		if (!_tcsicmp(aBuf, _T("Xdigit"))) return VAR_TYPE_XDIGIT;
-		if (!_tcsicmp(aBuf, _T("Alnum"))) return VAR_TYPE_ALNUM;
-		if (!_tcsicmp(aBuf, _T("Alpha"))) return VAR_TYPE_ALPHA;
-		if (!_tcsicmp(aBuf, _T("Upper"))) return VAR_TYPE_UPPER;
-		if (!_tcsicmp(aBuf, _T("Lower"))) return VAR_TYPE_LOWER;
-		if (!_tcsicmp(aBuf, _T("Space"))) return VAR_TYPE_SPACE;
-		return VAR_TYPE_INVALID;
 	}
 
 	static bool IsValidFileCodePage(UINT aCP)
@@ -3275,6 +3252,7 @@ BIF_DECL(BIF_IsLabel);
 BIF_DECL(BIF_IsFunc);
 BIF_DECL(BIF_Func);
 BIF_DECL(BIF_IsByRef);
+BIF_DECL(BIF_IsTypeish);
 BIF_DECL(BIF_IsSet);
 BIF_DECL(BIF_GetKeyState);
 BIF_DECL(BIF_GetKeyName);
@@ -3457,6 +3435,10 @@ ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResult
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
 BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right);
 LPTSTR TokenTypeString(ExprTokenType &aToken);
+#define STRING_TYPE_STRING _T("String")
+#define INTEGER_TYPE_STRING _T("Integer")
+#define FLOAT_TYPE_STRING _T("Float")
+BOOL TokenIsType(ExprTokenType &aToken, IObject *aType);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
 ResultType SetWorkingDir(LPTSTR aNewDir);

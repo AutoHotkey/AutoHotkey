@@ -34,6 +34,7 @@ auto OpFunc_CallMethod = ExprOp<Op_ObjInvoke, IT_CALL>();
 
 #define NA MAX_FUNCTION_PARAMS
 #define BIFn(name, minp, maxp, bif, ...) {_T(#name), bif, minp, maxp, FID_##name, __VA_ARGS__}
+#define BIFi(name, minp, maxp, bif, id, ...) {_T(#name), bif, minp, maxp, id, __VA_ARGS__}
 #define BIF1(name, minp, maxp, ...) {_T(#name), BIF_##name, minp, maxp, 0, __VA_ARGS__}
 // The following array defines all built-in functions, their min and max parameter counts,
 // and which real C++ function contains their implementation.  The macros above are used to
@@ -178,11 +179,22 @@ FuncEntry g_BIF[] =
 	BIF1(InputHook, 0, 3),
 	BIF1(InStr, 2, 5),
 	BIF1(Integer, 1, 1),
+	BIFi(IsAlnum, 1, 1, BIF_IsTypeish, VAR_TYPE_ALNUM),
+	BIFi(IsAlpha, 1, 1, BIF_IsTypeish, VAR_TYPE_ALPHA),
 	BIF1(IsByRef, 1, 1, {1}),
+	BIFi(IsDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_DIGIT),
+	BIFi(IsFloat, 1, 1, BIF_IsTypeish, VAR_TYPE_FLOAT),
 	BIF1(IsFunc, 1, 1),
+	BIFi(IsInteger, 1, 1, BIF_IsTypeish, VAR_TYPE_INTEGER),
 	BIF1(IsLabel, 1, 1),
+	BIFi(IsLower, 1, 1, BIF_IsTypeish, VAR_TYPE_LOWER),
+	BIFi(IsNumber, 1, 1, BIF_IsTypeish, VAR_TYPE_NUMBER),
 	BIF1(IsObject, 1, 1),
 	BIF1(IsSet, 1, 1),
+	BIFi(IsSpace, 1, 1, BIF_IsTypeish, VAR_TYPE_SPACE),
+	BIFi(IsTime, 1, 1, BIF_IsTypeish, VAR_TYPE_TIME),
+	BIFi(IsUpper, 1, 1, BIF_IsTypeish, VAR_TYPE_UPPER),
+	BIFi(IsXDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_XDIGIT),
 	BIFn(KeyWait, 1, 2, BIF_Wait),
 	BIFn(Ln, 1, 1, BIF_SqrtLogLn),
 	BIF1(LoadPicture, 1, 3),

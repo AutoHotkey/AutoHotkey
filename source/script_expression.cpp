@@ -1035,9 +1035,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					break;
 
 				case SYM_IS:
-					if (!ValueIsType(this_token, left, left_string, right, right_string))
-						goto abort;
-					break;
+				{
+					if (Object *right_obj = dynamic_cast<Object *>(TokenToObject(right)))
+					{
+						if (IObject *prototype = right_obj->GetOwnPropObj(_T("Prototype")))
+						{
+							this_token.value_int64 = Object::HasBase(left, prototype);
+							break;
+						}
+					}
+					// Since "break" was not used, "right" is not a valid type object.
+					goto type_mismatch;
+				}
 
 				default:
 					// All other operators do not support non-numeric operands.
@@ -2337,140 +2346,4 @@ ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[])
 	return CONDITION_FALSE;
 }
 
-
-ResultType Line::ValueIsType(ExprTokenType &aResultToken, ExprTokenType &aValue, LPTSTR aValueStr, ExprTokenType &aType, LPTSTR aTypeStr)
-{
-	VariableTypeType variable_type = ConvertVariableTypeName(aTypeStr);
-	bool if_condition;
-	TCHAR *cp;
-
-	if (variable_type == VAR_TYPE_BYREF)
-	{
-		if (aValue.symbol == SYM_VAR)
-		{
-			aResultToken.value_int64 = aValue.var->ResolveAlias() != aValue.var;
-			return OK;
-		}
-		// Otherwise, the comparison is invalid.
-	}
-	else if (Object *type_obj = dynamic_cast<Object *>(TokenToObject(aType)))
-	{
-		if (IObject *prototype = type_obj->GetOwnPropObj(_T("Prototype")))
-		{
-			aResultToken.value_int64 = Object::HasBase(aValue, prototype);
-			return OK;
-		}
-		aTypeStr = type_obj->Type(); // For error-reporting.
-	}
-	else if (TokenToObject(aValue))
-	{
-		// Since it's an object, the only type it should match is "object" (even though aValueStr
-		// is an empty string, which matches several other types).
-		aResultToken.value_int64 = variable_type == VAR_TYPE_OBJECT;
-		return OK;
-	}
-
-	// The remainder of this function is based on the original code for ACT_IFIS, which was removed
-	// in commit 3382e6e2.
-	switch (variable_type)
-	{
-	case VAR_TYPE_NUMBER:
-		if_condition = IsNumeric(aValueStr, true, false, true);
-		break;
-	case VAR_TYPE_INTEGER:
-		if_condition = IsNumeric(aValueStr, true, false, false);  // Passes false for aAllowFloat.
-		break;
-	case VAR_TYPE_FLOAT:
-		if_condition = (IsNumeric(aValueStr, true, false, true) == PURE_FLOAT);
-		break;
-	case VAR_TYPE_OBJECT:
-		// if aValue was an object, it was already handled above.
-		if_condition = false;
-		break;
-	case VAR_TYPE_TIME:
-	{
-		SYSTEMTIME st;
-		// Also insist on numeric, because even though YYYYMMDDToFileTime() will properly convert a
-		// non-conformant string such as "2004.4", for future compatibility, we don't want to
-		// report that such strings are valid times:
-		if_condition = IsNumeric(aValueStr, false, false, false) && YYYYMMDDToSystemTime(aValueStr, st, true); // Can't call Var::IsNumeric() here because it doesn't support aAllowNegative.
-		break;
-	}
-	case VAR_TYPE_DIGIT:
-		if_condition = true;
-		for (cp = aValueStr; *cp; ++cp)
-			if (!_istdigit((UCHAR)*cp))
-			{
-				if_condition = false;
-				break;
-			}
-		break;
-	case VAR_TYPE_XDIGIT:
-		cp = aValueStr;
-		if (!_tcsnicmp(cp, _T("0x"), 2)) // Allow 0x prefix.
-			cp += 2;
-		if_condition = true;
-		for (; *cp; ++cp)
-			if (!_istxdigit((UCHAR)*cp))
-			{
-				if_condition = false;
-				break;
-			}
-		break;
-	case VAR_TYPE_ALNUM:
-		if_condition = true;
-		for (cp = aValueStr; *cp; ++cp)
-			//if (!IsCharAlphaNumeric(*cp)) // Use this to better support chars from non-English languages.
-			if (!aisalnum(*cp)) // But some users don't like it, Chinese users for example.
-			{
-				if_condition = false;
-				break;
-			}
-		break;
-	case VAR_TYPE_ALPHA:
-		// Like AutoIt3, the empty string is considered to be alphabetic, which is only slightly debatable.
-		if_condition = true;
-		for (cp = aValueStr; *cp; ++cp)
-			//if (!IsCharAlpha(*cp)) // Use this to better support chars from non-English languages.
-			if (!aisalpha(*cp)) // But some users don't like it, Chinese users for example.
-			{
-				if_condition = false;
-				break;
-			}
-		break;
-	case VAR_TYPE_UPPER:
-		if_condition = true;
-		for (cp = aValueStr; *cp; ++cp)
-			//if (!IsCharUpper(*cp)) // Use this to better support chars from non-English languages.
-			if (!aisupper(*cp)) // But some users don't like it, Chinese users for example.
-			{
-				if_condition = false;
-				break;
-			}
-		break;
-	case VAR_TYPE_LOWER:
-		if_condition = true;
-		for (cp = aValueStr; *cp; ++cp)
-			//if (!IsCharLower(*cp)) // Use this to better support chars from non-English languages.
-			if (!aislower(*cp)) // But some users don't like it, Chinese users for example.
-			{
-				if_condition = false;
-				break;
-			}
-		break;
-	case VAR_TYPE_SPACE:
-		if_condition = true;
-		for (cp = aValueStr; *cp; ++cp)
-			if (!_istspace(*cp))
-			{
-				if_condition = false;
-				break;
-			}
-		break;
-	default:
-		return LineError(_T("Unsupported comparison type."), FAIL, aTypeStr);
-	}
-	aResultToken.value_int64 = if_condition;
-	return OK;
-}
 
