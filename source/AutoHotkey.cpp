@@ -17,7 +17,7 @@ GNU General Public License for more details.
 #include "stdafx.h" // pre-compiled headers
 #include "globaldata.h" // for access to many global vars
 #include "application.h" // for MsgSleep()
-#include "window.h" // For MsgBox() & SetForegroundLockTimeout()
+#include "window.h" // For MsgBox()
 #include "TextIO.h"
 
 // General note:
@@ -242,10 +242,6 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		// its main window has already been destroyed:
 		Sleep(100);
 	}
-
-	// Call this only after closing any existing instance of the program,
-	// because otherwise the change to the "focus stealing" setting would never be undone:
-	SetForegroundLockTimeout();
 
 	// Create all our windows and the tray icon.  This is done after all other chances
 	// to return early due to an error have passed, above.

@@ -535,31 +535,6 @@ void Hotkey::AllDestructAndExit(int aExitCode)
 	// at which time the OS will reclaim all remaining memory:
 	//SimpleHeap::DeleteAll();
 
-	// In light of the comments below, and due to the fact that anyone using this app
-	// is likely to want the anti-focus-stealing measure to always be disabled, I
-	// think it's best not to bother with this ever, since its results are
-	// unpredictable:
-/*	if (g_os.IsWin98orLater() || g_os.IsWin2000orLater())
-		// Restore the original timeout value that was set by WinMain().
-		// Also disables the compiler warning for the PVOID cast.
-		// Note: In many cases, this call will fail to set the value (perhaps even if
-		// SystemParametersInfo() reports success), probably because apps aren't
-		// supposed to change this value unless they currently have the input
-		// focus or something similar (and this app probably doesn't meet the criteria
-		// at this stage).  So I think what will happen is: the value set
-		// in WinMain() will stay in effect until the user reboots, at which time
-		// the default value store in the registry will once again be in effect.
-		// This limitation seems harmless.  Indeed, it's probably a good thing not to
-		// set it back afterward so that windows behave more consistently for the user
-		// regardless of whether this program is currently running.
-#ifdef _MSC_VER
-	#pragma warning( disable : 4312 )
-#endif
-		SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, (PVOID)g_OriginalTimeout, SPIF_SENDCHANGE);
-#ifdef _MSC_VER
-	#pragma warning( default : 4312 ) 
-#endif
-*/
 	// I know this isn't the preferred way to exit the program.  However, due to unusual
 	// conditions such as the script having MsgBoxes or other dialogs displayed on the screen
 	// at the time the user exits (in which case our main event loop would be "buried" underneath

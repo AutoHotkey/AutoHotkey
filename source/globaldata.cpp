@@ -185,8 +185,6 @@ OS_Version g_os;  // OS version object, courtesy of AutoIt3.
 HICON g_IconSmall;
 HICON g_IconLarge;
 
-DWORD g_OriginalTimeout;
-
 global_struct g_default, g_startup, *g_array;
 global_struct *g = &g_startup; // g_startup provides a non-NULL placeholder during script loading. Afterward it's replaced with an array.
 

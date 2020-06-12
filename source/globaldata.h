@@ -164,8 +164,6 @@ EXTERN_OSVER;
 extern HICON g_IconSmall;
 extern HICON g_IconLarge;
 
-extern DWORD g_OriginalTimeout;
-
 EXTERN_G;
 extern global_struct g_default, *g_array;
 

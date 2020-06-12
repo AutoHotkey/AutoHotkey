@@ -1803,21 +1803,6 @@ HWND WindowSearch::IsMatch(bool aInvert)
 
 
 
-void SetForegroundLockTimeout()
-{
-	// Don't check for failure since this operation isn't critical, and don't want
-	// users continually haunted by startup error if for some reason this doesn't
-	// work on their system:
-	if (SystemParametersInfo(SPI_GETFOREGROUNDLOCKTIMEOUT, 0, &g_OriginalTimeout, 0))
-		if (g_OriginalTimeout) // Anti-focus stealing measure is in effect.
-		{
-			// Set it to zero instead, disabling the measure:
-			SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, (PVOID)0, SPIF_SENDCHANGE);
-		}
-}
-
-
-
 bool DialogPrep()
 // Having it as a function vs. macro should reduce code size due to expansion of macros inside.
 {
