@@ -86,10 +86,10 @@ BIF_DECL(Op_ObjInvoke)
 		obj = obj_param->object;
 	else if (obj_param->symbol == SYM_VAR && obj_param->var->HasObject())
 		obj = obj_param->var->Object();
-	else if (obj_param->symbol == SYM_VAR && !_tcsicmp(obj_param->var->mName, _T("base")) // base pseudo-keyword.
-		&& !obj_param->var->HasContents() // For now, allow `base` variable to be reassigned as in v1.
-		&& g->CurrentFunc && g->CurrentFunc->mClass) // We're in a function defined within a class (i.e. a method).
+	else if (obj_param->symbol == SYM_SUPER)
 	{
+		if (!g->CurrentFunc || !g->CurrentFunc->mClass) // We're in a function defined within a class (i.e. a method).
+			_f_return_FAIL; // Should have been detected at load time, so just abort.
 		obj = g->CurrentFunc->mClass->Base();
 		ASSERT(obj != nullptr); // Should always pass for classes created by a class definition.
 		obj_param = (ExprTokenType *)alloca(sizeof(ExprTokenType));

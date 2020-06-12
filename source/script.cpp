@@ -5868,6 +5868,7 @@ SymbolType Script::ConvertWordOperator(LPCTSTR aWord, size_t aLength)
 		{ _T("and"), SYM_AND },
 		{ _T("not"), SYM_LOWNOT },
 		{ _T("is"), SYM_IS },
+		{ SUPER_KEYWORD, SYM_SUPER },
 		{ _T("in"), SYM_IN },
 		{ _T("contains"), SYM_CONTAINS }
 	};
@@ -6699,7 +6700,7 @@ UserFunc *Script::DefineClassInit(bool aStatic)
 		return nullptr;
 	if (!aStatic)
 	{
-		if (!ParseAndAddLine(_T("base.__Init()"), 0, ACT_EXPRESSION)) // Initialize base-class variables first. Relies on short-circuit evaluation.
+		if (!ParseAndAddLine(SUPER_KEYWORD _T(".__Init()"), 0, ACT_EXPRESSION)) // Initialize base-class variables first. Relies on short-circuit evaluation.
 			return nullptr;
 		mLastLine->mLineNumber = 0; // Signal the debugger to skip this line while stepping in/over/out.
 	}
@@ -8336,7 +8337,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 	// Also, dimensioning explicitly by SYM_COUNT helps enforce that at compile-time:
 	static UCHAR sPrecedence[SYM_COUNT] =  // Performance: UCHAR vs. INT benches a little faster, perhaps due to the slight reduction in code size it causes.
 	{
-		0,0,0,0,0,0,0,0  // SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_MISSING, SYM_VAR, SYM_OBJECT, SYM_DYNAMIC, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
+		0,0,0,0,0,0,0,0,0// SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_MISSING, SYM_VAR, SYM_OBJECT, SYM_DYNAMIC, SYM_SUPER, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
 		, 82, 82         // SYM_POST_INCREMENT, SYM_POST_DECREMENT: Highest precedence operator so that it will work even though it comes *after* a variable name (unlike other unaries, which come before).
 		, 86             // SYM_DOT
 		, 2,2,2,2,2,2    // SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE (to simplify the code, parentheses/brackets/braces must be lower than all operators in precedence).
@@ -9110,6 +9111,18 @@ unquoted_literal:
 		}
 		else if (this_deref_ref.type == DT_WORDOP)
 		{
+			if (this_deref_ref.symbol == SYM_SUPER)
+			{
+				// These checks ensure SYM_SUPER doesn't need to be specifically handled by
+				// ExpandExpression(); it will be pushed onto the stack due to IS_OPERAND()
+				// and passed to Op_ObjInvoke via SYM_FUNC.
+				LPTSTR next_op = omit_leading_whitespace(cp + this_deref_ref.length);
+				if (*next_op != '.' && *next_op != '[')
+					return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
+				if (!g->CurrentFunc || !g->CurrentFunc->mClass)
+					return LineError(_T("\"") SUPER_KEYWORD _T("\" is valid only inside a class."), FAIL, cp);
+				CHECK_AUTO_CONCAT;
+			}
 			infix[infix_count].symbol = this_deref_ref.symbol;
 			infix[infix_count].error_reporting_marker = this_deref_ref.marker;
 		}

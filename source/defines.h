@@ -162,6 +162,8 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_VAR // An operand that is a variable's contents.
 	, SYM_OBJECT // L31: Represents an IObject interface pointer.
 	, SYM_DYNAMIC // An operand that needs further processing during the evaluation phase.
+	, SYM_SUPER // Special operand just for the "super" keyword.  Should only ever be the first param of Op_ObjInvoke.
+#define SUPER_KEYWORD _T("Super")
 	, SYM_OPERAND_END // Marks the symbol after the last operand.  This value is used below.
 	, SYM_BEGIN = SYM_OPERAND_END  // SYM_BEGIN is a special marker to simplify the code.
 #define IS_OPERAND(symbol) ((symbol) < SYM_OPERAND_END)
