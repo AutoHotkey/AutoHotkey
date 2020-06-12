@@ -712,7 +712,7 @@ void Var::Free(int aWhenToFree, bool aExcludeAliasesAndRequireInit)
 // aExcludeAliasesAndRequireInit may be split into two if any caller ever wants to pass
 // true for one and not the other (currently there is only one caller who passes true).
 {
-	// Not checked because even if it's not VAR_NORMAL, there are few if any consequences to continuing.
+	// Not checked because VAR_VIRTUAL uses this to free its temporary buffer:
 	//if (mType != VAR_NORMAL) // For robustness, since callers generally shouldn't call it this way.
 	//	return;
 

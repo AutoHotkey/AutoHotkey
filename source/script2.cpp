@@ -16736,7 +16736,7 @@ SymbolType TokenIsNumeric(ExprTokenType &aToken)
 	case SYM_FLOAT:
 		return aToken.symbol;
 	case SYM_VAR: 
-		return aToken.var->IsNumeric(); // Supports VAR_NORMAL and VAR_CLIPBOARD.
+		return aToken.var->IsNumeric();
 	default: // SYM_STRING: Callers of this function expect a "numeric" result for numeric strings.
 		return IsNumeric(aToken.marker, true, false, true);
 	}

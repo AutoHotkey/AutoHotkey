@@ -396,7 +396,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			// But it seems best to optimize these cases so that commas aren't penalized.
 			else if (this_postfix[1].symbol == SYM_ASSIGN  // Next operation is ":=".
 					&& stack_count && stack[stack_count-1]->symbol == SYM_VAR // i.e. let the next iteration handle errors instead of doing it here.  Further below relies on this having been checked.
-					&& stack[stack_count-1]->var->Type() == VAR_NORMAL) // Don't do clipboard here because: 1) AcceptNewMem() doesn't support it; 2) Could probably use Assign() and then make its result be a newly added mem_count item, but the code complexity doesn't seem worth it given the rarity.
+					&& stack[stack_count-1]->var->Type() == VAR_NORMAL) // Don't do VAR_VIRTUAL here; it mustn't become a SYM_VAR result, so the result would have to be made persistent anyway.
 				internal_output_var = stack[stack_count-1]->var;
 			else
 				internal_output_var = NULL;
@@ -924,7 +924,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					}
 					else if (this_postfix[1].symbol == SYM_ASSIGN // Next operation is ":=".
 						&& stack_count && stack[stack_count-1]->symbol == SYM_VAR // i.e. let the next iteration handle it instead of doing it here.  Further below relies on this having been checked.
-						&& stack[stack_count-1]->var->Type() == VAR_NORMAL) // Don't do clipboard here because: 1) AcceptNewMem() doesn't support it; 2) Could probably use Assign() and then make its result be a newly added mem_count item, but the code complexity doesn't seem worth it given the rarity.
+						&& stack[stack_count-1]->var->Type() == VAR_NORMAL) // Don't do VAR_VIRTUAL here; it mustn't become a SYM_VAR result, so the result would have to be made persistent anyway.
 					{
 						temp_var = stack[stack_count-1]->var;
 						done_and_have_an_output_var = FALSE;
@@ -1866,7 +1866,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			//else // This parameter is passed "by value".
 			// Assign actual parameter's value to the formal parameter (which is itself a
 			// local variable in the function).  
-			// token.var's Type() is always VAR_NORMAL (e.g. never the clipboard).
+			// token.var's Type() is always VAR_NORMAL (never a built-in virtual variable).
 			// A SYM_VAR token can still happen because the previous loop's conversion of all
 			// by-value SYM_VAR operands into the appropriate operand symbol would not have
 			// happened if no backup was needed for this function (which is usually the case).
