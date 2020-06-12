@@ -273,8 +273,8 @@ protected:
 		Enum_Methods
 	};
 
-	ResultType GetEnumProp(UINT aIndex, Var *aVal, Var *aReserved);
-	ResultType GetEnumMethod(UINT aIndex, Var *aVal, Var *aReserved);
+	ResultType GetEnumProp(UINT &aIndex, Var *aName, Var *aVal);
+	ResultType GetEnumMethod(UINT &aIndex, Var *aName, Var *aVal);
 
 #ifndef _WIN64
 	// This is defined in ObjectBase on x64 builds to save space (due to alignment requirements).
@@ -522,7 +522,7 @@ public:
 	Array *Clone();
 
 	bool ItemToToken(index_t aIndex, ExprTokenType &aToken);
-	ResultType GetEnumItem(UINT aIndex, Var *, Var *);
+	ResultType GetEnumItem(UINT &aIndex, Var *, Var *);
 
 	~Array();
 	static Array *Create(ExprTokenType *aValue[] = nullptr, index_t aCount = 0);
@@ -617,7 +617,7 @@ class Map : public Object
 
 	Map *CloneTo(Map &aTo);
 
-	ResultType GetEnumItem(UINT aIndex, Var *, Var *);
+	ResultType GetEnumItem(UINT &aIndex, Var *, Var *);
 
 public:
 	static Map *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
@@ -698,7 +698,7 @@ class RegExMatchObject : public Object
 	int mPatternCount;
 	LPTSTR mMark;
 
-	ResultType GetEnumItem(UINT aIndex, Var *, Var *);
+	ResultType GetEnumItem(UINT &aIndex, Var *, Var *);
 
 	RegExMatchObject() : mHaystack(NULL), mOffset(NULL), mPatternName(NULL), mPatternCount(0), mMark(NULL) {}
 	

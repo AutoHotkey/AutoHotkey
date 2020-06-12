@@ -1966,7 +1966,7 @@ Array::index_t Array::ParamToZeroIndex(ExprTokenType &aParam)
 }
 
 
-ResultType Array::GetEnumItem(UINT aIndex, Var *aVal, Var *aReserved)
+ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved)
 {
 	if (aIndex < mLength)
 	{
@@ -2020,19 +2020,20 @@ ResultType IndexEnumerator::Next(Var *var0, Var *var1)
 }
 
 
-ResultType Object::GetEnumProp(UINT aIndex, Var *aKey, Var *aVal)
+ResultType Object::GetEnumProp(UINT &aIndex, Var *aName, Var *aVal)
 {
-	if (aIndex < mFields.Length())
+	for  ( ; aIndex < mFields.Length(); ++aIndex)
 	{
 		FieldType &field = mFields[aIndex];
-		if (aKey)
-		{
-			aKey->Assign(field.name);
-		}
 		if (aVal)
 		{
-			if (field.symbol == SYM_DYNAMIC && field.prop->MaxParams < 1 && field.prop->Getter())
+			if (field.symbol == SYM_DYNAMIC)
 			{
+				// Skip it if it can't be called without parameters, or if there's no getter in this object
+				// (consistent with inherited properties that have neither getter nor setter defined here).
+				if (field.prop->MaxParams > 0 || !field.prop->Getter())
+					continue;
+
 				FuncResult result_token;
 				ExprTokenType getter(field.prop->Getter());
 				ExprTokenType object(this);
@@ -2058,13 +2059,17 @@ ResultType Object::GetEnumProp(UINT aIndex, Var *aKey, Var *aVal)
 				aVal->Assign(value);
 			}
 		}
+		if (aName)
+		{
+			aName->Assign(field.name);
+		}
 		return CONDITION_TRUE;
 	}
 	return CONDITION_FALSE;
 }
 
 
-ResultType Object::GetEnumMethod(UINT aIndex, Var *aKey, Var *aVal)
+ResultType Object::GetEnumMethod(UINT &aIndex, Var *aKey, Var *aVal)
 {
 	if (aIndex < mMethods.Length())
 	{
@@ -2079,7 +2084,7 @@ ResultType Object::GetEnumMethod(UINT aIndex, Var *aKey, Var *aVal)
 }
 
 
-ResultType Map::GetEnumItem(UINT aIndex, Var *aKey, Var *aVal)
+ResultType Map::GetEnumItem(UINT &aIndex, Var *aKey, Var *aVal)
 {
 	if (aIndex < mCount)
 	{
@@ -2105,7 +2110,7 @@ ResultType Map::GetEnumItem(UINT aIndex, Var *aKey, Var *aVal)
 }
 
 
-ResultType RegExMatchObject::GetEnumItem(UINT aIndex, Var *aKey, Var *aVal)
+ResultType RegExMatchObject::GetEnumItem(UINT &aIndex, Var *aKey, Var *aVal)
 {
 	if (aIndex >= (UINT)mPatternCount)
 		return CONDITION_FALSE;

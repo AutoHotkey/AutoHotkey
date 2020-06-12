@@ -160,7 +160,7 @@ static Array* TokenToArray(ExprTokenType &token)
 
 
 // Enumerator for GuiType objects.
-ResultType GuiType::GetEnumItem(UINT aIndex, Var *aOutputVar1, Var *aOutputVar2)
+ResultType GuiType::GetEnumItem(UINT &aIndex, Var *aOutputVar1, Var *aOutputVar2)
 {
 	if (aIndex >= mControlCount) // Use >= vs. == in case the Gui was destroyed.
 		return CONDITION_FALSE;
