@@ -227,7 +227,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_REMOVE_THE_PERCENT _T("If this variable was not intended to be dynamic, remove the % symbols from it.")
 #define ERR_DYNAMIC_TOO_LONG _T("This dynamically built variable name is too long.  ") ERR_REMOVE_THE_PERCENT
 #define ERR_DYNAMIC_BLANK _T("This dynamic variable is blank.  ") ERR_REMOVE_THE_PERCENT
-#define ERR_HOTKEY_IF_EXPR _T("Parameter #2 must match an existing #If expression.")
+#define ERR_HOTKEY_IF_EXPR _T("Parameter #1 must match an existing #HotIf expression.")
 #define ERR_EXCEPTION _T("An exception was thrown.")
 #define ERR_INVALID_ASSIGNMENT _T("Invalid assignment.")
 #define ERR_EXPR_EVAL _T("Error evaluating expression.")
