@@ -12104,47 +12104,21 @@ ResultType Line::PerformAssign()
 {
 	// Note: This line's args have not yet been dereferenced in this case (i.e. ExpandArgs() hasn't been called).
 	// Currently, ACT_ASSIGNEXPR can occur even when mArg[1].is_expression==false, such as things like var:=5
-	// and var:=Array%i%.  Search on "is_expression = " to find such cases in the script-loading/parsing
-	// routines.
-	// This isn't checked because load-time validation now ensures that there is at least one arg:
-	//if (mArgc > 1)
-
-	if (mArg[1].is_expression)
-		return ExpandArgs(); // This will also take care of the assignment (for performance).
-
-	Var *output_var = VAR(mArg[0]);
-
-	if (mArg[1].postfix)
+	// and var:="string".  Search on "is_expression = " to find such cases in the script-loading/parsing routines.
+	
+	if (!mArg[1].is_expression)
 	{
-		// This is a single-operand expression which was turned into a non-expression.  Bypassing
-		// ExpandArgs() gives a slight performance boost in this case since the second arg never
-		// needs to be copied into the deref buffer.  For more details about this optimization,
-		// search this file for "only_token".  Examples of assignments this covers:
+		ASSERT(mArg[1].postfix);
+		// Examples of assignments this covers:
 		//		x := 123
 		//		x := 1.0
 		//		x := "quoted literal string"
-		//		x := normal_var
-		ASSERT(!mArg[0].is_expression); // Pre-resolved.  Dynamic assignments are handled as ACT_EXPRESSION.
+		//		x := normal_var  ; but not built-ins
+		Var *output_var = VAR(mArg[0]);
 		return output_var->Assign(*mArg[1].postfix);
 	}
 
-	if (!ExpandArgs())
-		return FAIL;
-
-	if (mArg[1].type == ARG_TYPE_INPUT_VAR) // An expression which resolved to just a single variable ref.
-	{
-		Var *var2 = VAR(mArg[1]);
-		switch (var2->Type())
-		{
-		case VAR_NORMAL: // This can be reached via things like: x:=single_naked_var
-		case VAR_CONSTANT: // Might be impossible currently; done for maintainability.
-			// Assign var to var so data type is retained.
-			return output_var->Assign(*var2);
-		// Otherwise it's VAR_VIRTUAL; continue on to do assign the normal way.
-		}
-	}
-	// Since above didn't return, it's ... a plain literal string?
-	return output_var->Assign(ARG2);
+	return ExpandArgs(); // ExpandExpression() will also take care of the assignment (for performance).
 }
 
 
