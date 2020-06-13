@@ -1112,85 +1112,73 @@ BIF_DECL(BIF_DirSelect)
 
 
 
-ResultType Line::FileGetShortcut(LPTSTR aShortcutFile) // Credited to Holger <Holger.Kotsch at GMX de>.
+BIF_DECL(BIF_FileGetShortcut) // Credited to Holger <Holger.Kotsch at GMX de>.
 {
-	Var *output_var_target = ARGVAR2; // These might be omitted in the parameter list, so it's okay if 
-	Var *output_var_dir = ARGVAR3;    // they resolve to NULL.  Also, load-time validation has ensured
-	Var *output_var_arg = ARGVAR4;    // that these are valid output variables (e.g. not built-in vars).
-	Var *output_var_desc = ARGVAR5;   // Load-time validation has ensured that these are valid output variables (e.g. not built-in vars).
-	Var *output_var_icon = ARGVAR6;
-	Var *output_var_icon_idx = ARGVAR7;
-	Var *output_var_show_state = ARGVAR8;
-
-	// For consistency with the behavior of other commands, the output variables are initialized to blank
-	// so that there is another way to detect failure:
-	if (output_var_target) output_var_target->Assign();
-	if (output_var_dir) output_var_dir->Assign();
-	if (output_var_arg) output_var_arg->Assign();
-	if (output_var_desc) output_var_desc->Assign();
-	if (output_var_icon) output_var_icon->Assign();
-	if (output_var_icon_idx) output_var_icon_idx->Assign();
-	if (output_var_show_state) output_var_show_state->Assign();
+	_f_param_string(aShortcutFile, 0);
+	Var *output_var[7];
+	for (int i = 0; i < _countof(output_var); ++i)
+		if (output_var[i] = ParamIndexToOptionalVar(i+1))
+			output_var[i]->Assign(); // Init to blank.  OutIconNum relies on this.
 
 	bool bSucceeded = false;
 
-	if (!Util_DoesFileExist(aShortcutFile))
+	if (!Line::Util_DoesFileExist(aShortcutFile))
 		goto error;
 
 	CoInitialize(NULL);
 	IShellLink *psl;
+	HRESULT hr;
 
-	if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)&psl)))
+	if (SUCCEEDED(hr = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID *)&psl)))
 	{
 		IPersistFile *ppf;
-		if (SUCCEEDED(psl->QueryInterface(IID_IPersistFile, (LPVOID *)&ppf)))
+		if (SUCCEEDED(hr = psl->QueryInterface(IID_IPersistFile, (LPVOID *)&ppf)))
 		{
 #ifdef UNICODE
-			if (SUCCEEDED(ppf->Load(aShortcutFile, 0)))
+			if (SUCCEEDED(hr = ppf->Load(aShortcutFile, 0)))
 #else
 			WCHAR wsz[MAX_PATH+1]; // +1 hasn't been explained, but is retained in case it's needed.
 			ToWideChar(aShortcutFile, wsz, MAX_PATH+1); // Dest. size is in wchars, not bytes.
-			if (SUCCEEDED(ppf->Load((const WCHAR*)wsz, 0)))
+			if (SUCCEEDED(hr = ppf->Load((const WCHAR*)wsz, 0)))
 #endif
 			{
 				TCHAR buf[MAX_PATH+1];
 				int icon_index, show_cmd;
 
-				if (output_var_target)
+				if (output_var[0])
 				{
 					psl->GetPath(buf, MAX_PATH, NULL, SLGP_UNCPRIORITY);
-					output_var_target->Assign(buf);
+					output_var[0]->Assign(buf);
 				}
-				if (output_var_dir)
+				if (output_var[1])
 				{
 					psl->GetWorkingDirectory(buf, MAX_PATH);
-					output_var_dir->Assign(buf);
+					output_var[1]->Assign(buf);
 				}
-				if (output_var_arg)
+				if (output_var[2])
 				{
 					psl->GetArguments(buf, MAX_PATH);
-					output_var_arg->Assign(buf);
+					output_var[2]->Assign(buf);
 				}
-				if (output_var_desc)
+				if (output_var[3])
 				{
 					psl->GetDescription(buf, MAX_PATH); // Testing shows that the OS limits it to 260 characters.
-					output_var_desc->Assign(buf);
+					output_var[3]->Assign(buf);
 				}
-				if (output_var_icon || output_var_icon_idx)
+				if (output_var[4] || output_var[5])
 				{
 					psl->GetIconLocation(buf, MAX_PATH, &icon_index);
-					if (output_var_icon)
-						output_var_icon->Assign(buf);
-					if (output_var_icon_idx)
+					if (output_var[4])
+						output_var[4]->Assign(buf);
+					if (output_var[5])
 						if (*buf)
-							output_var_icon_idx->Assign(icon_index + (icon_index >= 0 ? 1 : 0));  // Convert from 0-based to 1-based for consistency with the Menu command, etc. but leave negative resource IDs as-is.
-						else
-							output_var_icon_idx->Assign(); // Make it blank to indicate that there is none.
+							output_var[5]->Assign(icon_index + (icon_index >= 0 ? 1 : 0));  // Convert from 0-based to 1-based for consistency with the Menu command, etc. but leave negative resource IDs as-is.
+						//else: Leave it blank to indicate that there is none.
 				}
-				if (output_var_show_state)
+				if (output_var[6])
 				{
 					psl->GetShowCmd(&show_cmd);
-					output_var_show_state->Assign(show_cmd);
+					output_var[6]->Assign(show_cmd);
 					// For the above, decided not to translate them to Max/Min/Normal since other
 					// show-state numbers might be supported in the future (or are already).  In other
 					// words, this allows the flexibility to specify some number other than 1/3/7 when
@@ -1207,9 +1195,9 @@ ResultType Line::FileGetShortcut(LPTSTR aShortcutFile) // Credited to Holger <Ho
 	CoUninitialize();
 
 	if (bSucceeded)
-		return OK;
+		_f_return_empty;
 error:
-	return Throw();
+	_f_throw_win32(hr);
 }
 
 

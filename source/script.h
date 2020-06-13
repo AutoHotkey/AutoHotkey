@@ -706,12 +706,9 @@ private:
 	ResultType Perform();
 	friend BIF_DECL(BIF_PerformAction);
 
-	ResultType MouseGetPos(DWORD aOptions);
-	ResultType SplitPath(LPTSTR aFileSpec);
 	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
 	ResultType Download(LPTSTR aURL, LPTSTR aFilespec);
 
-	ResultType FileGetShortcut(LPTSTR aShortcutFile);
 	ResultType FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
 		, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState);
 	static bool FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec = NULL);
@@ -978,7 +975,6 @@ public:
 			switch(aActionType)
 			{
 			case ACT_ASSIGNEXPR:
-			case ACT_MOUSEGETPOS:
 			case ACT_FOR:
 			case ACT_CATCH:
 				return ARG_TYPE_OUTPUT_VAR;
@@ -988,45 +984,10 @@ public:
 		case 1:  // Arg #2
 			switch(aActionType)
 			{
-			case ACT_MOUSEGETPOS:
-			case ACT_SPLITPATH:
-			case ACT_FILEGETSHORTCUT:
 			case ACT_FOR:
 				return ARG_TYPE_OUTPUT_VAR;
 			}
 			break;
-
-		case 2:  // Arg #3
-			switch(aActionType)
-			{
-			case ACT_MOUSEGETPOS:
-			case ACT_SPLITPATH:
-			case ACT_FILEGETSHORTCUT:
-				return ARG_TYPE_OUTPUT_VAR;
-			}
-			break;
-
-		case 3:  // Arg #4
-			switch(aActionType)
-			{
-			case ACT_MOUSEGETPOS:
-			case ACT_SPLITPATH:
-			case ACT_FILEGETSHORTCUT:
-			case ACT_RUN:
-				return ARG_TYPE_OUTPUT_VAR;
-			}
-			break;
-
-		case 4:  // Arg #5
-		case 5:  // Arg #6
-			if (aActionType == ACT_SPLITPATH || aActionType == ACT_FILEGETSHORTCUT)
-				return ARG_TYPE_OUTPUT_VAR;
-			break;
-
-		case 6:  // Arg #7
-		case 7:  // Arg #8
-			if (aActionType == ACT_FILEGETSHORTCUT)
-				return ARG_TYPE_OUTPUT_VAR;
 		}
 		// Otherwise:
 		return ARG_TYPE_NORMAL;
@@ -3377,6 +3338,7 @@ BIF_DECL(BIF_Drive);
 BIF_DECL(BIF_DriveGet);
 BIF_DECL(BIF_FileAppend);
 BIF_DECL(BIF_FileGetAttrib);
+BIF_DECL(BIF_FileGetShortcut);
 BIF_DECL(BIF_FileGetSize);
 BIF_DECL(BIF_FileGetTime);
 BIF_DECL(BIF_FileGetVersion);
@@ -3385,11 +3347,14 @@ BIF_DECL(BIF_FileSelect);
 BIF_DECL(BIF_GroupActivate);
 BIF_DECL(BIF_ImageSearch);
 BIF_DECL(BIF_IniRead);
+BIF_DECL(BIF_MouseGetPos);
 BIF_DECL(BIF_PixelGetColor);
 BIF_DECL(BIF_PixelSearch);
 BIF_DECL(BIF_Reg);
 BIF_DECL(BIF_Random);
+BIF_DECL(BIF_Run);
 BIF_DECL(BIF_Sound);
+BIF_DECL(BIF_SplitPath);
 BIF_DECL(BIF_StatusBarGetText);
 BIF_DECL(BIF_StatusBarWait);
 BIF_DECL(BIF_CaretGetPos);

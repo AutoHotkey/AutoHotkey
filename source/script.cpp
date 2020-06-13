@@ -140,6 +140,7 @@ FuncEntry g_BIF[] =
 	BIFn(FileEncoding, 1, 1, BIF_SetBIV),
 	BIFn(FileExist, 1, 1, BIF_FileExist),
 	BIF1(FileGetAttrib, 0, 1),
+	BIF1(FileGetShortcut, 1, 8, {2, 3, 4, 5, 6, 7, 8}),
 	BIF1(FileGetSize, 0, 2),
 	BIF1(FileGetTime, 0, 2),
 	BIF1(FileGetVersion, 0, 1),
@@ -213,6 +214,7 @@ FuncEntry g_BIF[] =
 	BIFn(MonitorGetName, 0, 1, BIF_MonitorGet),
 	BIFn(MonitorGetPrimary, 0, 0, BIF_MonitorGet),
 	BIFn(MonitorGetWorkArea, 0, 5, BIF_MonitorGet, {2, 3, 4, 5}),
+	BIF1(MouseGetPos, 0, 5, {1, 2, 3, 4}),
 	BIF1(MsgBox, 0, 3),
 	BIF1(NumGet, 1, 3),
 	BIF1(NumPut, 2, NA),
@@ -257,6 +259,7 @@ FuncEntry g_BIF[] =
 	BIFn(RegWrite, 0, 4, BIF_Reg),
 	BIF1(Round, 1, 2),
 	BIFn(RTrim, 1, 2, BIF_Trim),
+	BIF1(Run, 1, 4, {4}),
 	BIFn(RunWait, 1, 4, BIF_Wait, {4}),
 	BIFn(SendMessage, 1, 9, BIF_PostSendMessage),
 	BIFn(SetRegView, 1, 1, BIF_SetBIV),
@@ -271,6 +274,7 @@ FuncEntry g_BIF[] =
 	BIFn(SoundGetVolume, 0, 2, BIF_Sound),
 	BIFn(SoundSetMute, 1, 3, BIF_Sound),
 	BIFn(SoundSetVolume, 1, 3, BIF_Sound),
+	BIF1(SplitPath, 1, 6, {2, 3, 4, 5, 6}),
 	BIFn(Sqrt, 1, 1, BIF_SqrtLogLn),
 	BIF1(StatusBarGetText, 0, 5),
 	BIF1(StatusBarWait, 0, 8),
@@ -12216,7 +12220,6 @@ ResultType Line::Perform()
 {
 	TCHAR buf_temp[MAX_REG_ITEM_SIZE]; // For registry and other things.
 	WinGroup *group; // For the group commands.
-	Var *output_var = OUTPUT_VAR; // Okay if NULL. Users of it should only consider it valid if their first arg is actually an output_variable.
 	global_struct &g = *::g; // Reduces code size due to replacing so many g-> with g. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
 	ToggleValueType toggle;  // For commands that use on/off/neutral.
 
@@ -12228,9 +12231,6 @@ ResultType Line::Perform()
 
 	switch (mActionType)
 	{
-	case ACT_SPLITPATH:
-		return SplitPath(ARG1);
-
 	case ACT_SEND:
 	case ACT_SENDTEXT:
 		SendKeys(ARG1, mActionType == ACT_SENDTEXT ? SCM_RAW_TEXT : SCM_NOT_RAW, g.SendMode);
@@ -12263,9 +12263,6 @@ ResultType Line::Perform()
 	case ACT_MOUSEMOVE:
 		return PerformMouse(mActionType, _T(""), ARG1, ARG2, _T(""), _T(""), ARG3, ARG4);
 
-	case ACT_MOUSEGETPOS:
-		return MouseGetPos(ArgToUInt(5));
-
 	case ACT_DOWNLOAD:
 		return Download(TWO_ARGS);
 
@@ -12274,9 +12271,6 @@ ResultType Line::Perform()
 		StringTCharToWChar(ARG2, g_script.mRunAsPass);
 		StringTCharToWChar(ARG3, g_script.mRunAsDomain);
 		return OK;
-
-	case ACT_RUN:
-		return g_script.ActionExec(ARG1, NULL, ARG2, true, ARG3, NULL, true, true, ARGVAR4); // Be sure to pass NULL for 2nd param.
 
 	case ACT_WINMINIMIZEALL:
 		PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 419, 0);
@@ -12431,8 +12425,6 @@ ResultType Line::Perform()
 			return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK); // Hard to imagine any other cause.
 		return OK;
 
-	case ACT_FILEGETSHORTCUT:
-		return FileGetShortcut(ARG1);
 	case ACT_FILECREATESHORTCUT:
 		return FileCreateShortcut(NINE_ARGS);
 

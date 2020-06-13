@@ -3122,6 +3122,19 @@ BIF_DECL(BIF_WinGetPos)
 
 
 
+BIF_DECL(BIF_Run)
+{
+	_f_param_string(target, 0);
+	_f_param_string_opt(working_dir, 1);
+	_f_param_string_opt(options, 2);
+	Var *output_var_pid = ParamIndexToOptionalVar(3);
+	if (!g_script.ActionExec(target, nullptr, working_dir, true, options, nullptr, true, true, output_var_pid))
+		_f_return_FAIL;
+	_f_return_empty;
+}
+
+
+
 BIF_DECL(BIF_Env)
 // Value := EnvGet(EnvVarName)
 // EnvSet(EnvVarName, Value)
@@ -5369,17 +5382,15 @@ ResultType Script::SetSendLevel(int aValue, LPTSTR aValueStr)
 
 
 
-ResultType Line::MouseGetPos(DWORD aOptions)
+BIF_DECL(BIF_MouseGetPos)
 // Returns OK or FAIL.
 {
-	// Caller should already have ensured that at least one of these will be non-NULL.
-	// The only time this isn't true is for dynamically-built variable names.  In that
-	// case, we don't worry about it if it's NULL, since the user will already have been
-	// warned:
-	Var *output_var_x = ARGVAR1;  // Ok if NULL. Load-time validation has ensured that these are valid output variables (e.g. not built-in vars).
-	Var *output_var_y = ARGVAR2;  // Ok if NULL.
-	Var *output_var_parent = ARGVAR3;  // Ok if NULL.
-	Var *output_var_child = ARGVAR4;  // Ok if NULL.
+	// Since SYM_VAR is always VAR_NORMAL, these always resolve to normal vars or nullptr:
+	Var *output_var_x = ParamIndexToOptionalVar(0);
+	Var *output_var_y = ParamIndexToOptionalVar(1);
+	Var *output_var_parent = ParamIndexToOptionalVar(2);
+	Var *output_var_child = ParamIndexToOptionalVar(3);
+	int aOptions = ParamIndexToOptionalInt(4, 0);
 
 	POINT point;
 	GetCursorPos(&point);  // Realistically, can't fail?
@@ -5389,25 +5400,26 @@ ResultType Line::MouseGetPos(DWORD aOptions)
 
 	if (output_var_x) // else the user didn't want the X coordinate, just the Y.
 		if (!output_var_x->Assign(point.x - origin.x))
-			return FAIL;
+			_f_return_FAIL;
 	if (output_var_y) // else the user didn't want the Y coordinate, just the X.
 		if (!output_var_y->Assign(point.y - origin.y))
-			return FAIL;
+			_f_return_FAIL;
+
+	_f_set_retval_p(_T(""), 0); // Set default.
 
 	if (!output_var_parent && !output_var_child)
-		return OK;
+		_f_return_retval;
+
+	if (output_var_parent)
+		output_var_parent->Assign(); // Set default: empty.
+	if (output_var_child)
+		output_var_child->Assign(); // Set default: empty.
 
 	// This is the child window.  Despite what MSDN says, WindowFromPoint() appears to fetch
 	// a non-NULL value even when the mouse is hovering over a disabled control (at least on XP).
 	HWND child_under_cursor = WindowFromPoint(point);
 	if (!child_under_cursor)
-	{
-		if (output_var_parent)
-			output_var_parent->Assign();
-		if (output_var_child)
-			output_var_child->Assign();
-		return OK;
-	}
+		_f_return_retval;
 
 	HWND parent_under_cursor = GetNonChildParent(child_under_cursor);  // Find the first ancestor that isn't a child.
 	if (output_var_parent)
@@ -5417,12 +5429,11 @@ ResultType Line::MouseGetPos(DWORD aOptions)
 		// documented feature:
 		//if (!g->DetectHiddenWindows && !IsWindowVisible(parent_under_cursor))
 		//	return output_var_parent->Assign();
-		if (!output_var_parent->AssignHWND(parent_under_cursor))
-			return FAIL;
+		output_var_parent->AssignHWND(parent_under_cursor);
 	}
 
 	if (!output_var_child)
-		return OK;
+		_f_return_retval;
 
 	// Doing it this way overcomes the limitations of WindowFromPoint() and ChildWindowFromPoint()
 	// and also better matches the control that Window Spy would think is under the cursor:
@@ -5440,25 +5451,30 @@ ResultType Line::MouseGetPos(DWORD aOptions)
 	// although probably constant, is not useful for determine which one is one top of the others).
 
 	if (parent_under_cursor == child_under_cursor) // if there's no control per se, make it blank.
-		return output_var_child->Assign();
+		_f_return_retval;
 
 	if (aOptions & 0x02) // v1.0.43.06: Bitwise flag that means "return control's HWND vs. ClassNN".
-		return output_var_child->AssignHWND(child_under_cursor);
+	{
+		output_var_child->AssignHWND(child_under_cursor);
+		_f_return_retval;
+	}
 
 	class_and_hwnd_type cah;
 	cah.hwnd = child_under_cursor;  // This is the specific control we need to find the sequence number of.
 	TCHAR class_name[WINDOW_CLASS_SIZE];
 	cah.class_name = class_name;
 	if (!GetClassName(cah.hwnd, class_name, _countof(class_name) - 5))  // -5 to allow room for sequence number.
-		return output_var_child->Assign();
+		_f_return_retval;
 	cah.class_count = 0;  // Init for the below.
 	cah.is_found = false; // Same.
 	EnumChildWindows(parent_under_cursor, EnumChildFindSeqNum, (LPARAM)&cah); // Find this control's seq. number.
 	if (!cah.is_found)
-		return output_var_child->Assign();  
+		_f_return_retval;
 	// Append the class sequence number onto the class name and set the output param to be that value:
 	sntprintfcat(class_name, _countof(class_name), _T("%d"), cah.class_count);
-	return output_var_child->Assign(class_name);
+	if (!output_var_child->Assign(class_name))
+		_f_return_FAIL;
+	_f_return_retval;
 }
 
 
@@ -6022,18 +6038,12 @@ throw_invalid_delimiter:
 
 
 
-ResultType Line::SplitPath(LPTSTR aFileSpec)
+ResultType SplitPath(LPCTSTR aFileSpec, Var *output_var_name, Var *output_var_dir, Var *output_var_ext, Var *output_var_name_no_ext, Var *output_var_drive)
 {
-	Var *output_var_name = ARGVAR2;  // i.e. Param #2. Ok if NULL.
-	Var *output_var_dir = ARGVAR3;  // Ok if NULL. Load-time validation has ensured that these are valid output variables (e.g. not built-in vars).
-	Var *output_var_ext = ARGVAR4;  // Ok if NULL.
-	Var *output_var_name_no_ext = ARGVAR5;  // Ok if NULL.
-	Var *output_var_drive = ARGVAR6;  // Ok if NULL.
-
 	// For URLs, "drive" is defined as the server name, e.g. http://somedomain.com
-	LPTSTR name = _T(""), name_delimiter = NULL, drive_end = NULL; // Set defaults to improve maintainability.
-	LPTSTR drive = omit_leading_whitespace(aFileSpec); // i.e. whitespace is considered for everything except the drive letter or server name, so that a pathless filename can have leading whitespace.
-	LPTSTR colon_double_slash = _tcsstr(aFileSpec, _T("://"));
+	LPCTSTR name = _T(""), name_delimiter = NULL, drive_end = NULL; // Set defaults to improve maintainability.
+	LPCTSTR drive = omit_leading_whitespace(aFileSpec); // i.e. whitespace is considered for everything except the drive letter or server name, so that a pathless filename can have leading whitespace.
+	LPCTSTR colon_double_slash = _tcsstr(aFileSpec, _T("://"));
 
 	if (colon_double_slash) // This is a URL such as ftp://... or http://...
 	{
@@ -6157,7 +6167,7 @@ ResultType Line::SplitPath(LPTSTR aFileSpec)
 				return FAIL;
 	}
 
-	LPTSTR ext_dot = _tcsrchr(name, '.');
+	LPCTSTR ext_dot = _tcsrchr(name, '.');
 	if (output_var_ext)
 	{
 		// Note that the OS doesn't allow filenames to end in a period.
@@ -6175,6 +6185,35 @@ ResultType Line::SplitPath(LPTSTR aFileSpec)
 		return FAIL;
 
 	return OK;
+}
+
+BIF_DECL(BIF_SplitPath)
+{
+	LPTSTR mem_to_free = nullptr;
+	_f_param_string(aFileSpec, 0);
+	Var *vars[6];
+	for (int i = 0; i < _countof(vars); ++i)
+		vars[i] = ParamIndexToOptionalVar(i);
+	if (vars[0]) // Check for overlap of input/output vars.
+	{
+		// There are cases where this could be avoided, such as by careful ordering of the assignments
+		// in SplitPath(), or when there's only one output var.  Also, real paths are generally short
+		// enough that stack memory could be used.  However, perhaps simple is best in this case.
+		for (int i = 1; i < _countof(vars); ++i)
+		{
+			if (vars[i] == vars[0])
+			{
+				aFileSpec = mem_to_free = _tcsdup(aFileSpec);
+				if (!mem_to_free)
+					_f_throw(ERR_OUTOFMEM);
+				break;
+			}
+		}
+	}
+	aResultToken.SetValue(_T(""), 0);
+	if (!SplitPath(aFileSpec, vars[1], vars[2], vars[3], vars[4], vars[5]))
+		aResultToken.SetExitResult(FAIL);
+	free(mem_to_free);
 }
 
 

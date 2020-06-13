@@ -290,9 +290,7 @@ Action g_act[] =
 	, {_T("ToolTip"), 0, 4, false, {2, 3, 4, 0}}  // Text, X, Y, ID.  If Text is omitted, the Tooltip is turned off.
 	, {_T("TrayTip"), 0, 3, false, NULL}  // Text, Title, Options
 
-	, {_T("SplitPath"), 1, 6, true, NULL} // InputFilespec, OutName, OutDir, OutExt, OutNameNoExt, OutDrive
 	, {_T("RunAs"), 0, 3, false, NULL} // user, pass, domain (0 params can be passed to disable the feature)
-	, {_T("Run"), 1, 4, true, NULL}      // TargetFile, Working Dir, WinShow-Mode, OutputVarPID
 	, {_T("Download"), 2, 2, false, NULL} // URL, save-as-filename
 
 	, {_T("Send"), 1, 1, false, NULL}         // But that first param can validly be a deref that resolves to a blank param.
@@ -309,7 +307,6 @@ Action g_act[] =
 	, {_T("MouseMove"), 2, 4, false, {1, 2, 3, 0}} // x, y, speed, option
 	, {_T("MouseClick"), 0, 7, false, {2, 3, 4, 5, 0}} // which-button, x, y, ClickCount, speed, d=hold-down/u=release, Relative
 	, {_T("MouseClickDrag"), 1, 7, false, {2, 3, 4, 5, 6, 0}} // which-button, x1, y1, x2, y2, speed, Relative
-	, {_T("MouseGetPos"), 0, 5, true, {5, 0}} // 4 optional output vars: xpos, ypos, WindowID, ControlName. Finally: Mode. MinParams must be 0.
 
 	, {_T("Sleep"), 1, 1, false, {1, 0}} // Sleep time in ms (numeric)
 
@@ -342,7 +339,6 @@ Action g_act[] =
 
 	, {_T("SetWorkingDir"), 1, 1, false, NULL} // New path
 
-	, {_T("FileGetShortcut"), 1, 8, true, NULL} // Filespec, OutTarget, OutDir, OutArg, OutDescrip, OutIcon, OutIconIndex, OutShowState.
 	, {_T("FileCreateShortcut"), 2, 9, false, {8, 9, 0}} // file, lnk [, workdir, args, desc, icon, hotkey, icon_number, run_state]
 
 	, {_T("IniWrite"), 3, 4, false, NULL}  // Value, Filespec, Section, Key
