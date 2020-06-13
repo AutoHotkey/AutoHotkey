@@ -712,7 +712,7 @@ struct Action
 	// generate a warning even when not in debug mode in the unlikely event that a constant
 	// larger than 127 is ever stored in one of these:
 	char MinParams, MaxParams;
-	bool CheckOverlap;
+	bool _unused_;
 	// Array indicating which args must be purely numeric.  The first arg is
 	// number 1, the second 2, etc (i.e. it doesn't start at zero).  The list
 	// is ended with a zero, much like a string.  The compiler will notify us

@@ -2120,9 +2120,9 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 			// Even if aResultTokens != NULL, it isn't set because our callers handle vars
 			// in different ways (and checking sArgVar is easier than checking for SYM_VAR).
 
-			switch(ArgMustBeDereferenced(the_only_var_of_this_arg, i, arg_var)) // Yes, it was called by GetExpandedArgSize() too, but a review shows it's difficult to avoid this without being worse than the disease (10/22/2006).
-			{
-			case CONDITION_FALSE:
+			// Some comments below might be obsolete.  There was previously some logic here deciding
+			// whether the variable needed to be dereferenced, but that's no longer ever necessary.
+			// Previous stages have ensured the_only_var_of_this_arg is of type VAR_NORMAL.
 				// This arg contains only a single dereference variable, and no
 				// other text at all.  So rather than copy the contents into the
 				// temp buffer, it's much better for performance (especially for
@@ -2141,24 +2141,12 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 				// to be reallocated, it would invalidate any pointer we could get from Contents()
 				// in this iteration.  So instead of calling Contents() here, store a NULL value
 				// as a special indicator for the loop below to call Contents().
-				arg_deref[i] = // The following is ordered for short-circuit performance:
-					(   mActionType == ACT_ASSIGNEXPR && i == 1  // By contrast, for the below i==anything (all args):
-					||  mActionType == ACT_IF
-					//|| mActionType == ACT_WHILE // Not necessary to check this one because loadtime leaves ACT_WHILE as an expression in all common cases.
-					) && the_only_var_of_this_arg->Type() == VAR_NORMAL // Otherwise, users of this optimization would have to reproduce more of the logic in ArgMustBeDereferenced().
-					? _T("") : NULL; // See "Update #2" and later comments above.
-				break;
-			case CONDITION_TRUE:
-				// the_only_var_of_this_arg is either a reserved var or a normal var which is either
-				// numeric or is used again in this line as an output variable.  In all these cases,
-				// it must be expanded into the buffer rather than accessed directly:
-				arg_deref[i] = our_buf_marker; // Point it to its location in the buffer.
-				our_buf_marker += the_only_var_of_this_arg->Get(our_buf_marker) + 1; // +1 for terminator.
-				break;
-			default: // FAIL should be the only other possibility.
-				result_to_return = FAIL; // ArgMustBeDereferenced() will already have displayed the error.
-				goto end;
-			}
+			arg_deref[i] = // The following is ordered for short-circuit performance:
+				(   mActionType == ACT_ASSIGNEXPR && i == 1  // By contrast, for the below i==anything (all args):
+				||  mActionType == ACT_IF
+				//|| mActionType == ACT_WHILE // Not necessary to check this one because loadtime leaves ACT_WHILE as an expression in all common cases.
+				) ? _T("") : NULL; // See "Update #2" and later comments above.
+			
 		} // for each arg.
 
 		// See "Update #3" comment above.  This must be done separately to the loop below since Contents()
@@ -2269,8 +2257,6 @@ VarSizeType Line::GetExpandedArgSize(Var *aArgVar[])
 {
 	int i;
 	VarSizeType space_needed;
-	Var *the_only_var_of_this_arg;
-	ResultType result;
 	
 	// Note: the below loop is similar to the one in ExpandArgs(), so the two should be maintained together:
 	for (i = 0, space_needed = 0; i < mArgc; ++i) // FOR EACH ARG:
@@ -2296,62 +2282,9 @@ VarSizeType Line::GetExpandedArgSize(Var *aArgVar[])
 			aArgVar[i] = VAR(this_arg);
 			continue;
 		}
-
-		if (this_arg.type == ARG_TYPE_INPUT_VAR)
-		{
-			the_only_var_of_this_arg = VAR(this_arg);
-			aArgVar[i] = the_only_var_of_this_arg; // For now, this is done regardless of whether it must be dereferenced.
-			if (   !(result = ArgMustBeDereferenced(the_only_var_of_this_arg, i, aArgVar))   )
-				return VARSIZE_ERROR;
-			if (result == CONDITION_FALSE)
-				continue;
-			//else the size of this arg is always included, so fall through to below.
-			//else caller wanted it's size unconditionally included, so continue on to below.
-			space_needed += the_only_var_of_this_arg->Get() + 1;  // +1 for the zero terminator.
-			// NOTE: Get() (with no params) can retrieve a size larger that what winds up actually
-			// being needed, so our callers should be aware that that can happen.
-			continue;
-		}
 	}
 
 	return space_needed;
-}
-
-
-
-ResultType Line::ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[]) // 10/22/2006: __forceinline didn't help enough to be worth the added code size of having two instances.
-// Shouldn't be called only for args of type ARG_TYPE_OUTPUT_VAR because they never need to be dereferenced.
-// aArgVar[] is used for performance; it's assumed to contain valid items only up to aArgIndex, not beyond
-// (since normally output vars lie to the left of all input vars, so it doesn't seem worth doing anything
-// more complicated).
-// Returns CONDITION_TRUE, CONDITION_FALSE, or FAIL.
-// There are some other functions like ArgLength() that have procedures similar to this one, so
-// maintain them together.
-{
-	aVar = aVar->ResolveAlias(); // Helps performance, but also necessary to accurately detect a match further below.
-
-	// v1.0.45: The following check improves performance slightly by avoiding the loop further below in cases
-	// where it's known that a command either doesn't have an output_var or can tolerate the output_var's
-	// contents being at the same address as that of one or more of the input-vars.  For example, the commands
-	// StringRight/Left and similar can tolerate the same address because they always produce a string whose
-	// length is less-than-or-equal to the input-string, thus Assign() will never need to free/realloc the
-	// output-var prior to assigning the input-var's contents to it (whose contents are the same as output-var).
-	if (!g_act[mActionType].CheckOverlap) // Commands that have this flag don't need final check
-		return CONDITION_FALSE;           // further below (though they do need the ones above).
-
-	// Input vars only need to be dereferenced if they are also used as an output var by the current script line:
-	Var *output_var;
-	for (int i = 0; i < mArgc; ++i)
-		if (mArg[i].type == ARG_TYPE_OUTPUT_VAR) // Implies i != aArgIndex, since this function is not called for output vars.
-		{
-			output_var = (i < aArgIndex) ? aArgVar[i] : mArg[i].is_expression ? NULL : VAR(mArg[i]); // aArgVar: See top of this function for comments.
-			if (!output_var) // Var hasn't been resolved yet.  To be safe, we must assume deref is required.
-				return CONDITION_TRUE;
-			if (output_var->ResolveAlias() == aVar)
-				return CONDITION_TRUE;
-		}
-	// Otherwise:
-	return CONDITION_FALSE;
 }
 
 

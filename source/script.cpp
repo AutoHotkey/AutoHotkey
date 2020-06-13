@@ -7261,8 +7261,7 @@ size_t Line::ArgIndexLength(int aArgIndex)
 	if (sArgVar[aArgIndex])
 	{
 		Var &var = *sArgVar[aArgIndex]; // For performance and convenience.
-		if (   var.Type() != VAR_VIRTUAL  // This and below ordered for short-circuit performance based on types of input expected from caller.
-			&& !g_act[mActionType].CheckOverlap   ) // Although the ones that have CheckOverlap == true are hereby omitted from the fast method, the nature of almost all of the highbit commands is such that their performance won't be measurably affected. See ArgMustBeDereferenced() for more info.
+		if (var.Type() != VAR_VIRTUAL)
 			return var.Length(); // Do it the fast way.
 	}
 	// Otherwise, length isn't known due to no variable, a built-in variable, or an environment variable.
@@ -7290,8 +7289,7 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 	if (sArgVar[aArgIndex])
 	{
 		Var &var = *sArgVar[aArgIndex];
-		if (   var.Type() != VAR_VIRTUAL  // See ArgIndexLength() for comments about this line and below.
-			&& !g_act[mActionType].CheckOverlap   )
+		if (var.Type() != VAR_VIRTUAL)
 			return var.ToInt64();
 	}
 	// Otherwise:
@@ -7318,8 +7316,7 @@ double Line::ArgIndexToDouble(int aArgIndex)
 	if (sArgVar[aArgIndex])
 	{
 		Var &var = *sArgVar[aArgIndex];
-		if (   var.Type() != VAR_VIRTUAL  // See ArgIndexLength() for comments about this line and below.
-			&& !g_act[mActionType].CheckOverlap   )
+		if (var.Type() != VAR_VIRTUAL)
 			return var.ToDouble();
 	}
 	// Otherwise:
@@ -12683,8 +12680,9 @@ BIF_DECL(BIF_PerformAction)
 	// An array of args is constructed containing the var or text of each parameter,
 	// which is then used by ExpandArgs() to populate sArgDeref[] and sArgVar[].  This
 	// approach is used rather than directly assigning to those arrays because it avoids
-	// having to duplicate a fair bit of logic and code, including ArgMustBeDereferenced()
-	// and allocation of the deref buffer.
+	// having to duplicate some logic and code, such as allocation of the deref buffer.
+	// This function is intended to be transitional anyway; eventually all ACT functions
+	// should be converted to BIF.
 	ArgStruct arg[MAX_ARGS];
 	
 	TCHAR number_buf[MAX_ARGS * MAX_NUMBER_SIZE]; // Enough for worst case.

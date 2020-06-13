@@ -238,14 +238,6 @@ bool g_BlockMouseMove = false;
 //    subroutine suspends the current one while its waiting, it could also overwrite the ARG
 //    deref buffer with its own values.
 
-// v1.0.45 The following macro sets the high-bit for those commands that require overlap-checking of their
-// input/output variables during runtime (commands that don't have an output variable never need this byte
-// set, and runtime performance is improved even for them).  Some of commands are given the high-bit even
-// though they might not strictly require it because rarity/performance/maintainability say it's best to do
-// so when in doubt.  UPDATE: Macro now obsolete because the flag is stored as a simple bool.
-// Search on "CheckOverlap" for more details.
-//#define H |(char)0x80
-
 Action g_act[] =
 {
 	{_T(""), 0, 0, false, NULL}  // ACT_INVALID.

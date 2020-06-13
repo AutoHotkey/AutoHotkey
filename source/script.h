@@ -995,8 +995,6 @@ public:
 
 
 
-	ResultType ArgMustBeDereferenced(Var *aVar, int aArgIndex, Var *aArgVar[]);
-
 	#define ArgHasDeref(aArgNum) ArgIndexHasDeref((aArgNum)-1)
 	bool ArgIndexHasDeref(int aArgIndex)
 	// This function should always be called in lieu of doing something like "strchr(arg.text, g_DerefChar)"
