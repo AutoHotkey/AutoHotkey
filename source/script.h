@@ -782,7 +782,6 @@ public:
 	// Static because only one line can be Expanded at a time (not to mention the fact that we
 	// wouldn't want the size of each line to be expanded by this size):
 	static LPTSTR sArgDeref[MAX_ARGS];
-	static Var *sArgVar[MAX_ARGS];
 
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
@@ -846,23 +845,6 @@ public:
 	#define SAVED_ARG3 (mArgc > 2 ? arg[2] : _T(""))
 	#define SAVED_ARG4 (mArgc > 3 ? arg[3] : _T(""))
 	#define SAVED_ARG5 (mArgc > 4 ? arg[4] : _T(""))
-
-	// For the below, it is the caller's responsibility to ensure that mArgc is
-	// large enough (either via load-time validation or a runtime check of mArgc).
-	// This is because for performance reasons, the sArgVar entry for omitted args isn't
-	// initialized, so may have an old/obsolete value from some previous command.
-	#define OUTPUT_VAR (*sArgVar) // ExpandArgs() has ensured this first ArgVar is always initialized, so there's never any need to check mArgc > 0.
-	#define ARGVARRAW1 (*sArgVar)   // i.e. sArgVar[0], and same as OUTPUT_VAR (it's a duplicate to help readability).
-	#define ARGVARRAW2 (sArgVar[1]) // It's called RAW because its user is responsible for ensuring the arg
-	#define ARGVARRAW3 (sArgVar[2]) // exists by checking mArgc at loadtime or runtime.
-	#define ARGVAR1 ARGVARRAW1 // This first one doesn't need the check below because ExpandArgs() has ensured it's initialized.
-	#define ARGVAR2 (mArgc > 1 ? sArgVar[1] : NULL) // Caller relies on the check of mArgc because for performance,
-	#define ARGVAR3 (mArgc > 2 ? sArgVar[2] : NULL) // sArgVar[] isn't initialized for parameters the script
-	#define ARGVAR4 (mArgc > 3 ? sArgVar[3] : NULL) // omitted entirely from the end of the parameter list.
-	#define ARGVAR5 (mArgc > 4 ? sArgVar[4] : NULL)
-	#define ARGVAR6 (mArgc > 5 ? sArgVar[5] : NULL)
-	#define ARGVAR7 (mArgc > 6 ? sArgVar[6] : NULL)
-	#define ARGVAR8 (mArgc > 7 ? sArgVar[7] : NULL)
 
 	#define ARG1 sArgDeref[0] // These are the expanded/resolved parameters for the currently-executing command.
 	#define ARG2 sArgDeref[1] // They're populated by ExpandArgs().
@@ -945,10 +927,9 @@ public:
 	size_t ArgIndexLength(int aArgIndex);
 
 	ResultType ExpandArgs(ResultToken *aResultTokens = NULL);
-	VarSizeType GetExpandedArgSize(Var *aArgVar[]);
+	VarSizeType GetExpandedArgSize();
 	LPTSTR ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *aResultToken
-		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize
-		, Var **aArgVar = NULL);
+		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize);
 	ResultType ExpandSingleArg(int aArgIndex, ResultToken &aResultToken, LPTSTR &aDerefBuf, size_t &aDerefBufSize);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
 	ResultType EvaluateHotCriterionExpression(); // Called by HotkeyCriterion::Eval().

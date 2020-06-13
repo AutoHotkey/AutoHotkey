@@ -7231,9 +7231,9 @@ size_t Line::ArgIndexLength(int aArgIndex)
 	// - The arg is a normal variable but it's VAR_ATTRIB_BINARY_CLIP. In such cases, our callers do not
 	//   recognize/support binary-clipboard as binary and want the apparent length of the string returned
 	//   (i.e. _tcslen(), which takes into account the position of the first binary zero wherever it may be).
-	if (sArgVar[aArgIndex])
+	if (mArg[aArgIndex].type == ARG_TYPE_INPUT_VAR)
 	{
-		Var &var = *sArgVar[aArgIndex]; // For performance and convenience.
+		Var &var = *VAR(mArg[aArgIndex]);
 		if (var.Type() != VAR_VIRTUAL)
 			return var.Length(); // Do it the fast way.
 	}
@@ -7259,9 +7259,9 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 	if (aArgIndex >= mArgc) // See ArgIndexLength() for comments.
 		return 0; // i.e. treat it as ATOI64("").
 	// SEE THIS POSITION IN ArgIndexLength() FOR IMPORTANT COMMENTS ABOUT THE BELOW.
-	if (sArgVar[aArgIndex])
+	if (mArg[aArgIndex].type == ARG_TYPE_INPUT_VAR)
 	{
-		Var &var = *sArgVar[aArgIndex];
+		Var &var = *VAR(mArg[aArgIndex]);
 		if (var.Type() != VAR_VIRTUAL)
 			return var.ToInt64();
 	}
@@ -7286,9 +7286,9 @@ double Line::ArgIndexToDouble(int aArgIndex)
 	if (aArgIndex >= mArgc) // See ArgIndexLength() for comments.
 		return 0.0; // i.e. treat it as ATOF("").
 	// SEE THIS POSITION IN ARGLENGTH() FOR IMPORTANT COMMENTS ABOUT THE BELOW.
-	if (sArgVar[aArgIndex])
+	if (mArg[aArgIndex].type == ARG_TYPE_INPUT_VAR)
 	{
-		Var &var = *sArgVar[aArgIndex];
+		Var &var = *VAR(mArg[aArgIndex]);
 		if (var.Type() != VAR_VIRTUAL)
 			return var.ToDouble();
 	}
@@ -9975,7 +9975,6 @@ LPTSTR Line::sDerefBuf = NULL;  // Buffer to hold the values of any args that ne
 size_t Line::sDerefBufSize = 0;
 int Line::sLargeDerefBufs = 0; // Keeps track of how many large bufs exist on the call-stack, for the purpose of determining when to stop the buffer-freeing timer.
 LPTSTR Line::sArgDeref[MAX_ARGS]; // No init needed.
-Var *Line::sArgVar[MAX_ARGS]; // Same.
 
 
 void Line::FreeDerefBufIfLarge()
@@ -10574,12 +10573,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				//if (!g.ThrownToken)
 				//	return line->LineError(_T("Attempt to catch nothing!"), CRITICAL_ERROR);
 
-				Var* catch_var = ARGVARRAW1;
 				ResultToken *our_token = g.ThrownToken;
 				g.ThrownToken = NULL; // Assign() may cause script to execute via __Delete, so this must be cleared first.
 
 				// Assign the thrown token to the variable if provided.
-				result = catch_var ? catch_var->Assign(*our_token) : OK;
+				result = line->mArgc ? VAR(line->mArg[0])->Assign(*our_token) : OK;
 				g_script.FreeExceptionToken(our_token);
 				if (!result)
 					return FAIL;
@@ -10995,12 +10993,9 @@ ResultType Line::EvaluateCondition()
 		return LineError(_T("DEBUG: EvaluateCondition() was called with a line that isn't a condition."));
 #endif
 
-	int if_condition;
-
 	// The following is ordered for short-circuit performance.
-	// Also, RAW is safe because loadtime validation ensured there is at least 1 arg.
-	if_condition = (ARGVARRAW1 && !*ARG1 && ARGVARRAW1->Type() != VAR_VIRTUAL)
-		? VarToBOOL(*ARGVARRAW1) // 30% faster than having ExpandArgs() resolve ARG1 even when it's a naked variable.
+	Var *var = mArg[0].type == ARG_TYPE_INPUT_VAR ? VAR(mArg[0]) : nullptr;
+	bool if_condition = var ? VarToBOOL(*var) // Not verified recently: 30% faster than having ExpandArgs() resolve ARG1 even when it's a naked variable.
 		: ResultToBOOL(ARG1); // CAN'T simply check *ARG1=='1' because the loadtime routine has various ways of setting if_expresion to false for things that are normally expressions.
 
 	return if_condition ? CONDITION_TRUE : CONDITION_FALSE;
@@ -11267,7 +11262,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 		return result;
 	
 	// Save these pointers since they will be overwritten during the loop:
-	Var *var[] = { ARGVARRAW1, ARGVARRAW2 };
+	Var *var[] = { VAR(mArg[0]), VAR(mArg[1]) };
 	
 	IObject *enumerator;
 	result = GetEnumerator(enumerator, param_tokens[2], 1 + (var[1] != nullptr), true);
@@ -12114,10 +12109,10 @@ ResultType Line::PerformAssign()
 	// This isn't checked because load-time validation now ensures that there is at least one arg:
 	//if (mArgc > 1)
 
-	Var *output_var;
-
 	if (mArg[1].is_expression)
 		return ExpandArgs(); // This will also take care of the assignment (for performance).
+
+	Var *output_var = VAR(mArg[0]);
 
 	if (mArg[1].postfix)
 	{
@@ -12130,31 +12125,25 @@ ResultType Line::PerformAssign()
 		//		x := "quoted literal string"
 		//		x := normal_var
 		ASSERT(!mArg[0].is_expression); // Pre-resolved.  Dynamic assignments are handled as ACT_EXPRESSION.
-		output_var = VAR(mArg[0]);
 		return output_var->Assign(*mArg[1].postfix);
 	}
 
-	if (!ExpandArgs()) // This also resolves OUTPUT_VAR.
+	if (!ExpandArgs())
 		return FAIL;
 
-	output_var = OUTPUT_VAR;
-
-	// sArgVar is used to enhance performance, which would otherwise be poor for dynamic variables
-	// such as Var:=Array%i% because it would have to be resolved twice (once here and once previously
-	// by ExpandArgs()) just to retain data type.
-	// ARG2 is non-blank for built-in vars, which this optimization can't be applied to.
-	if (ARGVARRAW2 && !*ARG2) // See above.  Also, RAW is safe due to the above check of mArgc > 1.
+	if (mArg[1].type == ARG_TYPE_INPUT_VAR) // An expression which resolved to just a single variable ref.
 	{
-		switch(ARGVARRAW2->Type())
+		Var *var2 = VAR(mArg[1]);
+		switch (var2->Type())
 		{
 		case VAR_NORMAL: // This can be reached via things like: x:=single_naked_var
 		case VAR_CONSTANT: // Might be impossible currently; done for maintainability.
 			// Assign var to var so data type is retained.
-			return output_var->Assign(*ARGVARRAW2);
+			return output_var->Assign(*var2);
 		// Otherwise it's VAR_VIRTUAL; continue on to do assign the normal way.
 		}
 	}
-	// Since above didn't return, it's probably x:=BUILT_IN_VAR.
+	// Since above didn't return, it's ... a plain literal string?
 	return output_var->Assign(ARG2);
 }
 
@@ -12620,9 +12609,8 @@ BIF_DECL(BIF_PerformAction)
 	ActionTypeType act = _f_callee_id;
 
 	// An array of args is constructed containing the var or text of each parameter,
-	// which is then used by ExpandArgs() to populate sArgDeref[] and sArgVar[].  This
-	// approach is used rather than directly assigning to those arrays because it avoids
-	// having to duplicate some logic and code, such as allocation of the deref buffer.
+	// which is then used by ExpandArgs() to populate sArgDeref[].  Needs review to
+	// see whether assigning to sArgDeref[] directly is now adequate.
 	// This function is intended to be transitional anyway; eventually all ACT functions
 	// should be converted to BIF.
 	ArgStruct arg[MAX_ARGS];

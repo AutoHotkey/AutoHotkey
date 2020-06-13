@@ -51,8 +51,7 @@ GNU General Public License for more details.
 //    _asm mov stack, esp
 //    MsgBox(stack);
 LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *aResultToken
-		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize
-		, Var **aArgVar)
+		, LPTSTR &aTarget, LPTSTR &aDerefBuf, size_t &aDerefBufSize, LPTSTR aArgDeref[], size_t aExtraSize)
 // Caller should ignore aResult unless this function returns NULL.
 // Returns a pointer to this expression's result, which can be one of the following:
 // 1) NULL, in which case aResult will be either FAIL or EARLY_EXIT to indicate the means by which the current
@@ -76,7 +75,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 	int to_free_count = 0; // The actual number of items in use in the above array.
 	LPTSTR result_to_return = _T(""); // By contrast, NULL is used to tell the caller to abort the current thread.
 	LPCTSTR error_msg = ERR_EXPR_EVAL, error_info = _T("");
-	Var *output_var = (mActionType == ACT_ASSIGNEXPR && aArgIndex == 1) ? *aArgVar : NULL; // Resolve early because it's similar in usage/scope to the above.  Plus MUST be resolved prior to calling any script-functions since they could change the values in sArgVar[].
+	Var *output_var = (mActionType == ACT_ASSIGNEXPR) ? VAR(mArg[0]) : NULL; // Resolve early because it's similar in usage/scope to the above.
 
 	ExprTokenType *stack[MAX_TOKENS];
 	int stack_count = 0;
@@ -1284,16 +1283,7 @@ push_this_token:
 	case SYM_FLOAT:
 		aTarget += FTOA(result_token.value_double, aTarget, MAX_NUMBER_SIZE) + 1; // +1 because that's what callers want; i.e. the position after the terminator.
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
-	case SYM_VAR:
-		// SYM_VAR is somewhat unusual at this late a stage.  Dynamic output vars were already handled by the SYM_DYNAMIC code.
-		// It is tempting to simply return now and let ExpandArgs() decide whether the var needs to be dereferenced.
-		// However, the var's length might not fit within the amount calculated by GetExpandedArgSize(), and in that
-		// case would overflow the deref buffer.  The var can be safely returned if it won't be dereferenced, but it
-		// doesn't seem worth duplicating the ArgMustBeDereferenced() logic here given the rarity of SYM_VAR results.
-		// aArgVar[] isn't set because it would be redundant, and might cause issues if the var is modified as a
-		// side-effect of a later arg (e.g. ArgLength() might return a wrong value).
-	// FALL THROUGH TO BELOW:
-	case SYM_STRING:
+	default:
 		// At this stage, we know the result has to go into our deref buffer because if a way existed to
 		// avoid that, we would already have goto/returned higher above (e.g. for ACT_ASSIGNEXPR OR ACT_EXPRESSION.
 		// Also, at this stage, the pending result can exist in one of several places:
@@ -1939,10 +1929,9 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 // Returns OK, FAIL, or EARLY_EXIT.  EARLY_EXIT occurs when a function-call inside an expression
 // used the EXIT command to terminate the thread.
 {
-	// The counterparts of sArgDeref and sArgVar kept on our stack to protect them from recursion caused by
+	// The counterpart of sArgDeref kept on our stack to protect it from recursion caused by
 	// the calling of functions in the script:
 	LPTSTR arg_deref[MAX_ARGS];
-	Var *arg_var[MAX_ARGS];
 	int i;
 
 	// Make two passes through this line's arg list.  This is done because the performance of
@@ -1953,7 +1942,7 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 	// more memory if needed.  Second pass: dereference the args into the buffer.
 
 	// First pass. It takes into account the same things as 2nd pass.
-	size_t space_needed = GetExpandedArgSize(arg_var);
+	size_t space_needed = GetExpandedArgSize();
 	if (space_needed == VARSIZE_ERROR)
 		return FAIL;  // It will have already displayed the error.
 
@@ -2015,11 +2004,7 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 	PRIVATIZE_S_DEREF_BUF;
 
 	ResultType result, result_to_return = OK;  // Set default return value.
-	Var *the_only_var_of_this_arg;
 
-	if (!mArgc)            // v1.0.45: Required by some commands that can have zero parameters (such as Random and
-		sArgVar[0] = NULL; // PixelSearch), even if it's just to allow their output-var(s) to be omitted.  This allows OUTPUT_VAR to be used without any need to check mArgC.
-	else
 	{
 		size_t extra_size = our_deref_buf_size - space_needed;
 		for (i = 0; i < mArgc; ++i) // For each arg:
@@ -2041,7 +2026,7 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 				// a variable other than some function's local variable (and a local's contents are no
 				// longer valid due to having been freed after the call [unless it's static]).
 				arg_deref[i] = ExpandExpression(i, result, aResultTokens ? &aResultTokens[i] : NULL
-					, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, extra_size, arg_var);
+					, our_buf_marker, our_deref_buf, our_deref_buf_size, arg_deref, extra_size);
 				extra_size = 0; // See comment below.
 				// v1.0.46.01: The whole point of passing extra_size is to allow an expression to write
 				// a large string to the deref buffer without having to expand it (i.e. if there happens to
@@ -2072,8 +2057,7 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 				continue;
 			}
 
-			// arg_var[i] was previously set by GetExpandedArgSize() or ExpandExpression() above.
-			if (   !(the_only_var_of_this_arg = arg_var[i])   )
+			if (this_arg.type != ARG_TYPE_INPUT_VAR)
 			{
 				if (aResultTokens && this_arg.postfix)
 				{
@@ -2121,23 +2105,20 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 
 		// See "Update #3" comment above.  This must be done separately to the loop below since Contents()
 		// may cause a warning dialog, which in turn may cause a new thread to launch, thus potentially
-		// corrupting sArgDeref/sArgVar.
+		// corrupting sArgDeref.
 		for (i = 0; i < mArgc; ++i)
 			if (arg_deref[i] == NULL)
-				arg_deref[i] = arg_var[i]->Contents();
+				arg_deref[i] = VAR(mArg[i])->Contents();
 
 		// IT'S NOT SAFE to do the following until the above loops FULLY complete because any calls made above to
 		// ExpandExpression() might call functions, which in turn might result in a recursive call to ExpandArgs(),
-		// which in turn might change the values in the static arrays sArgDeref and sArgVar.
+		// which in turn might change the values in the static array sArgDeref.
 		// Also, only when the loop ends normally is the following needed, since otherwise it's a failure condition.
 		// Now that any recursive calls to ExpandArgs() above us on the stack have collapsed back to us, it's
 		// safe to set the args of this command for use by our caller, to whom we're about to return.
 		for (i = 0; i < mArgc; ++i) // Copying actual/used elements is probably faster than using memcpy to copy both entire arrays.
-		{
 			sArgDeref[i] = arg_deref[i];
-			sArgVar[i] = arg_var[i];
-		}
-	} // mArgc > 0
+	} // redundant block
 
 	// v1.0.40.02: The following loop was added to avoid the need for the ARGn macros to provide an empty
 	// string when mArgc was too small (indicating that the parameter is absent).  This saves quite a bit
@@ -2148,9 +2129,6 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 	int max_params = g_act[mActionType].MaxParams; // Resolve once for performance.
 	for (i = mArgc; i < max_params; ++i) // START AT mArgc.  For performance, this only does the actual max args for THIS command, not MAX_ARGS.
 		sArgDeref[i] = _T("");
-		// But sArgVar isn't done (since it's more rarely used) except sArgVar[0] = NULL higher above.
-		// Therefore, users of sArgVar must check mArgC if they have any doubt how many args are present in
-		// the script line (this is now enforced via macros).
 
 	// When the main/large loop above ends normally, it falls into the label below and uses the original/default
 	// value of "result_to_return".
@@ -2220,7 +2198,7 @@ end:
 
 	
 
-VarSizeType Line::GetExpandedArgSize(Var *aArgVar[])
+VarSizeType Line::GetExpandedArgSize()
 // Returns the size, or VARSIZE_ERROR if there was a problem.
 // This function can return a size larger than what winds up actually being needed
 // (e.g. caused by ScriptGetCursor()), so our callers should be aware that that can happen.
@@ -2233,25 +2211,14 @@ VarSizeType Line::GetExpandedArgSize(Var *aArgVar[])
 	{
 		ArgStruct &this_arg = mArg[i]; // For performance and convenience.
 		
-		aArgVar[i] = NULL; // Set default.
-
 		if (this_arg.is_expression)
 		{
 			// The length used below is more room than is strictly necessary, but given how little
 			// space is typically wasted (and that only while the expression is being evaluated),
 			// it doesn't seem worth worrying about it.  See other comments at macro definition.
 			space_needed += EXPR_BUF_SIZE(this_arg.length);
-			continue;
 		}
 		// Since is_expression is false, it must be plain text or a non-dynamic input/output var.
-		
-		if (this_arg.type == ARG_TYPE_OUTPUT_VAR)
-		{
-			// Pre-resolved output vars should never be included in the space calculation,
-			// but we do need to store the var reference in aArgVar for our caller.
-			aArgVar[i] = VAR(this_arg);
-			continue;
-		}
 	}
 
 	return space_needed;
