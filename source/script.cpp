@@ -5240,18 +5240,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			if (!*this_aArg) // Some later optimizations rely on this check.
 				this_new_arg.is_expression = false; // Might already be false.
 
-			// Below will set the new var to be the constant empty string if the
-			// source var is NULL or blank.
-			// e.g. If WinTitle is unspecified (blank), but WinText is non-blank.
-			// Using empty string is much safer than NULL because these args
-			// will be frequently accessed by various functions that might
-			// not be equipped to handle NULLs.  Rather than having to remember
-			// to check for NULL in every such case, setting it to a constant
-			// empty string here should make things a lot more maintainable
-			// and less bug-prone.  If there's ever a need for the contents
-			// of this_new_arg to be modifiable (perhaps some obscure API calls require
-			// modifiable strings?) can malloc a single-char to contain the empty string.
-			// 
 			// So that it can be passed to Malloc(), first update the length to match what the text will be
 			// (if the alloc fails, an inaccurate length won't matter because it's an program-abort situation).
 			// The length must fit into a WORD, which it will since each arg is literal text from a script's line,
@@ -7223,22 +7211,18 @@ size_t Line::ArgIndexLength(int aArgIndex)
 #endif
 	if (aArgIndex >= mArgc) // Arg doesn't exist, so don't try accessing sArgVar (unlike sArgDeref, it wouldn't be valid to do so).
 		return 0; // i.e. treat it as the empty string.
-	// The length is not known and must be calculated in the following situations:
-	// - The arg consists of more than just a single isolated variable name (not possible if the arg is
-	//   ARG_TYPE_INPUT_VAR).
-	// - The arg is a built-in variable, in which case the length isn't known, so it must be derived from
-	//   the string copied into sArgDeref[] by an earlier stage.
-	// - The arg is a normal variable but it's VAR_ATTRIB_BINARY_CLIP. In such cases, our callers do not
-	//   recognize/support binary-clipboard as binary and want the apparent length of the string returned
-	//   (i.e. _tcslen(), which takes into account the position of the first binary zero wherever it may be).
-	if (mArg[aArgIndex].type == ARG_TYPE_INPUT_VAR)
+	if (!mArg[aArgIndex].is_expression && mArg[aArgIndex].postfix)
 	{
-		Var &var = *VAR(mArg[aArgIndex]);
-		if (var.Type() != VAR_VIRTUAL)
-			return var.Length(); // Do it the fast way.
+		// This is a simple constant value or variable reference.
+		switch (mArg[aArgIndex].postfix->symbol)
+		{
+		case SYM_STRING:
+			return mArg[aArgIndex].postfix->marker_length;
+		case SYM_VAR:
+			return mArg[aArgIndex].postfix->var->Length();
+		}
 	}
-	// Otherwise, length isn't known due to no variable, a built-in variable, or an environment variable.
-	// So do it the slow way.
+	// Otherwise, length isn't known, so do it the slow way.
 	return _tcslen(sArgDeref[aArgIndex]);
 }
 
@@ -7258,42 +7242,10 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 #endif
 	if (aArgIndex >= mArgc) // See ArgIndexLength() for comments.
 		return 0; // i.e. treat it as ATOI64("").
-	// SEE THIS POSITION IN ArgIndexLength() FOR IMPORTANT COMMENTS ABOUT THE BELOW.
-	if (mArg[aArgIndex].type == ARG_TYPE_INPUT_VAR)
-	{
-		Var &var = *VAR(mArg[aArgIndex]);
-		if (var.Type() != VAR_VIRTUAL)
-			return var.ToInt64();
-	}
+	if (!mArg[aArgIndex].is_expression && mArg[aArgIndex].postfix)
+		return TokenToInt64(*mArg[aArgIndex].postfix);
 	// Otherwise:
-	return ATOI64(sArgDeref[aArgIndex]); // See ArgIndexLength() for comments.
-}
-
-
-
-double Line::ArgIndexToDouble(int aArgIndex)
-// This function is similar to ArgIndexLength(), so maintain them together.
-// Callers must call this only at times when sArgDeref and sArgVar are defined/meaningful.
-// Caller must ensure that aArgIndex is 0 or greater.
-{
-#ifdef _DEBUG
-	if (aArgIndex < 0)
-	{
-		LineError(_T("DEBUG: BAD"), WARN);
-		aArgIndex = 0;  // But let it continue.
-	}
-#endif
-	if (aArgIndex >= mArgc) // See ArgIndexLength() for comments.
-		return 0.0; // i.e. treat it as ATOF("").
-	// SEE THIS POSITION IN ARGLENGTH() FOR IMPORTANT COMMENTS ABOUT THE BELOW.
-	if (mArg[aArgIndex].type == ARG_TYPE_INPUT_VAR)
-	{
-		Var &var = *VAR(mArg[aArgIndex]);
-		if (var.Type() != VAR_VIRTUAL)
-			return var.ToDouble();
-	}
-	// Otherwise:
-	return ATOF(sArgDeref[aArgIndex]); // See ArgIndexLength() for comments.
+	return ATOI64(sArgDeref[aArgIndex]);
 }
 
 
@@ -7780,19 +7732,8 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 		for (i = 0; i < line->mArgc; ++i) // For each arg.
 		{
 			ArgStruct &this_arg = line->mArg[i]; // For performance and convenience.
-			if (!this_arg.is_expression) // Plain text or a pre-resolved output var.
-			{
-				if (!this_arg.deref // Plain text.
-					&& ACT_USES_SIMPLE_POSTFIX(line->mActionType))
-				{
-					// This ensures ExpandArgs() always sets aResultTokens[i].marker.
-					this_arg.postfix = (ExprTokenType *)SimpleHeap::Malloc(sizeof(ExprTokenType));
-					this_arg.postfix->symbol = this_arg.length ? SYM_STRING : SYM_MISSING; // length == 0 indicates a completely omitted parameter, not "".
-					this_arg.postfix->marker = this_arg.text;
-					this_arg.postfix->marker_length = this_arg.length;
-				}
+			if (!this_arg.is_expression) // Plain text; i.e. goto/gosub/break/continue label.
 				continue;
-			}
 			// Otherwise, the arg will be processed by ExpressionToPostfix(), which will set is_expression
 			// based on whether the arg should be evaluated by ExpandExpression().  
 			if (this_arg.deref) // If false, no function-calls are present because the expression contains neither variables nor function calls.
@@ -9887,7 +9828,7 @@ end_of_infix_to_postfix:
 	// storing an __int64* in arg.postfix, but this new approach allows floating-point numbers
 	// and literal strings to be optimized, and the pure numeric status of floats to be retained.
 	// Unlike the old method, numeric literals are reformatted to look exactly like they would if
-	// this remained an expression; for example, MsgBox % 1.00 shows "1.0" instead of "1.00".
+	// this remained an expression; for example, MsgBox 1.00 shows "1.0" instead of "1.00".
 	ExprTokenType &only_token = *postfix[0];
 	SymbolType only_symbol = only_token.symbol;
 	if (   postfix_count == 1 && IS_OPERAND(only_symbol) // This expression is a lone operand, like (1) or "string".
@@ -9896,7 +9837,7 @@ end_of_infix_to_postfix:
 		&& (mActionType != ACT_SWITCH && mActionType != ACT_CASE) // It's not SWITCH or CASE, which require a proper postfix expression.
 		&& (mActionType != ACT_THROW) // Exclude THROW to simplify variable handling (ensures vars are always dereferenced).
 		&& (mActionType != ACT_HOTKEY_IF) // #HotIf requires the expression text not be modified.
-		&& (only_symbol != SYM_VAR || mActionType != ACT_RETURN) // "return var" is kept as an expression for correct handling of built-ins, locals (see "ToReturnValue") and ByRef.
+		&& (only_symbol != SYM_VAR || mActionType != ACT_RETURN) // "return var" is kept as an expression for correct handling of local vars (see "ToReturnValue") and ByRef.
 		)
 	{
 		// The checks above leave: ACT_ASSIGNEXPR, ACT_EXPRESSION? (ineffectual), ACT_IF,
@@ -9906,7 +9847,7 @@ end_of_infix_to_postfix:
 		case SYM_INTEGER:
 		case SYM_FLOAT:
 			// Convert this numeric literal back into a string to ensure the format is consistent.
-			// This also ensures parentheses are not present in the output, for cases like MsgBox % (1.0).
+			// This also ensures parentheses are not present in the output, for cases like MsgBox (1.0).
 			if (  !(aArg.text = SimpleHeap::Malloc(TokenToString(only_token, number_buf)))  )
 				return FAIL; // Malloc already displayed an error message.
 			break;
@@ -9930,9 +9871,6 @@ end_of_infix_to_postfix:
 			break;
 		}
 		aArg.is_expression = false;
-		if (!ACT_USES_SIMPLE_POSTFIX(mActionType) && !(mActionType == ACT_STATIC && (int)(INT_PTR)mAttribute == ACT_ASSIGNEXPR))
-			return OK;
-		// Otherwise, continue on below to copy the postfix token into persistent memory.
 	}
 
 	// Create a new postfix array and attach it to this arg of this line.
@@ -11191,7 +11129,7 @@ ResultType Line::PerformLoopWhile(ResultToken *aResultToken, bool &aContinueMain
 		// Unlike if(expression), performance isn't significantly improved to make cases like
 		// "while x" and "while %x%" into non-expressions (the latter actually performs much
 		// better as an expression).  That is why the following check is much simpler than the
-		// one used at at ACT_IF in EvaluateCondition():
+		// one used at ACT_IF in EvaluateCondition():
 		if (!ResultToBOOL(ARG1))
 			break;
 
@@ -12195,7 +12133,7 @@ ResultType Line::Perform()
 	case ACT_CRITICAL:
 	{
 		// v1.0.46: When the current thread is critical, have the script check messages less often to
-		// reduce situations where an OnMesage or GUI message must be discarded due to "thread already
+		// reduce situations where an OnMessage or GUI message must be discarded due to "thread already
 		// running".  Using 16 rather than the default of 5 solves reliability problems in a custom-menu-draw
 		// script and probably many similar scripts -- even when the system is under load (though 16 might not
 		// be enough during an extreme load depending on the exact preemption/timeslice dynamics involved).
@@ -12467,7 +12405,7 @@ ResultType Line::Perform()
 		}
 		return OK;
 	case ACT_PAUSE:
-		return ChangePauseState(ConvertOnOffToggle(ARG1), (bool)ArgToInt(2));
+		return ChangePauseState(ARG1, (bool)ArgToInt(2));
 
 	case ACT_BLOCKINPUT:
 		switch (toggle = ConvertBlockInput(ARG1))
@@ -12583,9 +12521,8 @@ BIF_DECL(BIF_PerformAction)
 	ActionTypeType act = _f_callee_id;
 
 	// An array of args is constructed containing the var or text of each parameter,
-	// which is then used by ExpandArgs() to populate sArgDeref[].  Needs review to
-	// see whether assigning to sArgDeref[] directly is now adequate.
-	// This function is intended to be transitional anyway; eventually all ACT functions
+	// which is also placed into sArgDeref[] so ExpandArgs() can be skipped.
+	// This function is intended to be transitional; eventually all ACT functions
 	// should be converted to BIF.
 	ArgStruct arg[MAX_ARGS];
 	
@@ -12594,25 +12531,19 @@ BIF_DECL(BIF_PerformAction)
 	for (int i = 0; i < aParamCount; ++i)
 	{
 		arg[i].is_expression = false;
-
-		if (aParam[i]->symbol == SYM_VAR)
-		{
-			arg[i].type = ARG_TYPE_INPUT_VAR;
-			arg[i].deref = (DerefType *)aParam[i]->var;
-			arg[i].text = _T(""); // text not needed.
-			//arg[i].length = 0;
-			continue;
-		}
-
+		arg[i].postfix = aParam[i]; // For ArgToInt64() etc.
 		arg[i].type = ARG_TYPE_NORMAL;
 		arg[i].text = TokenToString(*aParam[i], number_buf + (i * MAX_NUMBER_SIZE));
 		arg[i].deref = NULL;
-		// Since this arg contains no derefs, a pointer to the text will be copied directly
-		// into sArgDeref and length won't actually be used.  Otherwise this wouldn't always
+		Line::sArgDeref[i] = arg[i].text;
+		// length won't actually be used.  In any case, this wouldn't always
 		// work, since ArgLengthType is currently limited to 65535:
 		//arg[i].length = (ArgLengthType)_tcslen(arg[i].text);
 	}
 
+	int max_params = aResultToken.func->mParamCount;
+	for (int i = aParamCount; i < max_params; ++i)
+		Line::sArgDeref[i] = _T("");
 	
 	// Since our ArgStructs aren't fully initialized, it isn't safe to call line->ToText().
 	// To avoid that in the event of an error, make g->ExcptMode non-zero so that errors are
@@ -12620,17 +12551,8 @@ BIF_DECL(BIF_PerformAction)
 	auto outer_excptmode = g->ExcptMode;
 	g->ExcptMode |= EXCPTMODE_LINE_WORKAROUND;
 
-	// Construct a Line containing the required context for ExpandArgs() and Perform().
+	// Construct a Line containing the required context for Perform().
 	Line line(0, 0, act, arg, aParamCount);
-
-	// Expand args BEFORE RESETTING ERRORLEVEL BELOW.
-	if (!line.ExpandArgs())
-	{
-		g->ExcptMode = outer_excptmode;
-		aResultToken.SetExitResult(FAIL);
-		return;
-	}
-
 
 	// PERFORM THE ACTION
 	ResultType result = line.Perform();
@@ -12966,11 +12888,11 @@ void Line::PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause)
 
 
 
-ResultType Line::ChangePauseState(ToggleValueType aChangeTo, bool aAlwaysOperateOnUnderlyingThread)
+ResultType Line::ChangePauseState(LPTSTR aChangeTo, bool aAlwaysOperateOnUnderlyingThread)
 // Currently designed to be called only by the Pause command (ACT_PAUSE).
 // Returns OK or FAIL.
 {
-	switch (aChangeTo)
+	switch (ConvertOnOffToggle(aChangeTo))
 	{
 	case TOGGLED_ON:
 		break; // By breaking instead of returning, pause will be put into effect further below.
@@ -13001,7 +12923,7 @@ ResultType Line::ChangePauseState(ToggleValueType aChangeTo, bool aAlwaysOperate
 		break;
 	default: // TOGGLE_INVALID or some other disallowed value.
 		// We know it's a variable because otherwise the loading validation would have caught it earlier:
-		return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, ARG1);
+		return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, aChangeTo);
 	}
 
 	// Since above didn't return, pause should be turned on.

@@ -918,12 +918,10 @@ public:
 	#define IS_HOTSTRING_OPTION(chr) (cisalnum(chr) || _tcschr(_T("?*- \t"), chr))
 
 	#define ArgLength(aArgNum) ArgIndexLength((aArgNum)-1)
-	#define ArgToDouble(aArgNum) ArgIndexToDouble((aArgNum)-1)
 	#define ArgToInt64(aArgNum) ArgIndexToInt64((aArgNum)-1)
 	#define ArgToInt(aArgNum) (int)ArgToInt64(aArgNum) // Benchmarks show that having a "real" ArgToInt() that calls ATOI vs. ATOI64 (and ToInt() vs. ToInt64()) doesn't measurably improve performance.
 	#define ArgToUInt(aArgNum) (UINT)ArgToInt64(aArgNum) // Similar to what ATOU() does.
 	__int64 ArgIndexToInt64(int aArgIndex);
-	double ArgIndexToDouble(int aArgIndex);
 	size_t ArgIndexLength(int aArgIndex);
 
 	ResultType ExpandArgs(ResultToken *aResultTokens = NULL);
@@ -1334,7 +1332,7 @@ public:
 
 	static void ToggleSuspendState();
 	static void PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause);
-	ResultType ChangePauseState(ToggleValueType aChangeTo, bool aAlwaysOperateOnUnderlyingThread);
+	ResultType ChangePauseState(LPTSTR aChangeTo, bool aAlwaysOperateOnUnderlyingThread);
 	static ResultType ScriptBlockInput(bool aEnable);
 
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));

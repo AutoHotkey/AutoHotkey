@@ -2069,8 +2069,7 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 				continue;  // Don't need to use the deref buffer in this case.
 			}
 			// Since above didn't continue, this arg is a plain variable reference.
-			// Even if aResultTokens != NULL, it isn't set because our callers handle vars
-			// in different ways (and checking sArgVar is easier than checking for SYM_VAR).
+			// aResultTokens should currently always be NULL for ARG_TYPE_INPUT_VAR, so isn't filled.
 
 			// Some comments below might be obsolete.  There was previously some logic here deciding
 			// whether the variable needed to be dereferenced, but that's no longer ever necessary.
