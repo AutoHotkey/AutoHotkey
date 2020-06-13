@@ -3030,7 +3030,7 @@ public:
 		, bool aUpdatePeriod, __int64 aPeriod, bool aUpdatePriority, int aPriority);
 	void DeleteTimer(IObject *aCallback);
 	LPTSTR DefaultDialogTitle();
-	UserFunc* CreateHotFunc(Var* aFuncGlobalVar[], int aFuncCount);
+	UserFunc* CreateHotFunc(Var* aFuncGlobalVar[], int aGlobalVarCount);
 	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic = false, bool aIsInExpression = false);
 #ifndef AUTOHOTKEYSC
 	struct FuncLibrary
