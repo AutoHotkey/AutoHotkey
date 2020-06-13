@@ -5176,7 +5176,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		if (   !(new_arg = (ArgStruct *)SimpleHeap::Malloc(aArgc * sizeof(ArgStruct)))   )
 			return ScriptError(ERR_OUTOFMEM);
 
-		int i, j;
+		int i;
 
 		for (i = 0; i < aArgc; ++i)
 		{
@@ -5207,33 +5207,25 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					this_new_arg.type = ARG_TYPE_NORMAL;
 				else
 				{
-					// Does this input or output variable contain a dereference?  If so, it must
-					// be resolved at runtime (to support arrays, etc.).
-					// Find the first non-escaped dereference symbol:
-					for (j = 0; this_aArg[j] && (this_aArg[j] != g_DerefChar || (this_aArgMap && this_aArgMap[j])); ++j);
-					if (!this_aArg[j])
-					{
-						// A non-escaped deref symbol wasn't found, therefore this variable does not
-						// appear to be something that must be resolved dynamically at runtime.
-						if (   !(target_var = FindOrAddVar(this_aArg))   )
-							return FAIL;  // The above already displayed the error.
-						// If this action type is something that modifies the contents of the var, ensure the var
-						// isn't a special/reserved one:
-						if (this_new_arg.type == ARG_TYPE_OUTPUT_VAR && VAR_IS_READONLY(*target_var))
-							return ScriptError(ERR_VAR_IS_READONLY, this_aArg);
-						// Rather than removing this arg from the list altogether -- which would disturb
-						// the ordering and hurt the maintainability of the code -- the next best thing
-						// in terms of saving memory is to store Var::mName in place of the arg's text
-						// if that arg is a pure variable (i.e. since the name of the variable is already
-						// stored in persistent memory, we don't need to allocate more memory):
-						this_new_arg.text = target_var->mName;
-						this_new_arg.length = (ArgLengthType)_tcslen(target_var->mName);
-						this_new_arg.deref = (DerefType *)target_var;
-						continue;
-					}
-					// else continue on to the below so that this input or output variable name's dynamic part
-					// (e.g. array%i%) can be partially resolved.
-					this_new_arg.is_expression = true;
+					// ARG_TYPE_INPUT_VAR is never encountered at this stage; it is only used by
+					// certain optimizations in ExpressionToPostfix(), which comes later.
+					// ARG_TYPE_OUTPUT_VAR is now used only for ACT_FOR, ACT_CATCH and ACT_ASSIGNEXPR,
+					// but a dynamic assignment like %x%:=y becomes ACT_EXPRESSION since x can be any
+					// expression.  Support for %x% in FOR and CATCH doesn't seem useful, so it's
+					// dropped to simplify some things and perhaps allow more optimizations.
+					if (   !(target_var = FindOrAddVar(this_aArg))   )
+						return FAIL;  // The above already displayed the error.
+					if (target_var->IsReadOnly())
+						return ScriptError(ERR_VAR_IS_READONLY, this_aArg);
+					// Rather than removing this arg from the list altogether -- which would disturb
+					// the ordering and hurt the maintainability of the code -- the next best thing
+					// in terms of saving memory is to store Var::mName in place of the arg's text
+					// if that arg is a pure variable (i.e. since the name of the variable is already
+					// stored in persistent memory, we don't need to allocate more memory):
+					this_new_arg.text = target_var->mName;
+					this_new_arg.length = (ArgLengthType)_tcslen(target_var->mName);
+					this_new_arg.deref = (DerefType *)target_var;
+					continue;
 				}
 			}
 			else // this_new_arg.type == ARG_TYPE_NORMAL (excluding those input/output_vars that were converted to normal because they were blank, above).
@@ -9918,70 +9910,48 @@ end_of_infix_to_postfix:
 	ExprTokenType &only_token = *postfix[0];
 	SymbolType only_symbol = only_token.symbol;
 	if (   postfix_count == 1 && IS_OPERAND(only_symbol) // This expression is a lone operand, like (1) or "string".
+		&& only_symbol != SYM_DYNAMIC // Exclude built-in variables (this can't be a double-deref since that would have multiple tokens).
 		&& (mActionType < ACT_FOR || mActionType > ACT_UNTIL) // It's not WHILE or UNTIL, which currently perform better as expressions, or FOR, which performs the same but currently expects aResultToken to always be set.
 		&& (mActionType != ACT_SWITCH && mActionType != ACT_CASE) // It's not SWITCH or CASE, which require a proper postfix expression.
 		&& (mActionType != ACT_THROW) // Exclude THROW to simplify variable handling (ensures vars are always dereferenced).
 		&& (mActionType != ACT_HOTKEY_IF) // #HotIf requires the expression text not be modified.
-		&& ((only_symbol != SYM_VAR && only_symbol != SYM_DYNAMIC) || mActionType != ACT_RETURN) // "return var" is kept as an expression for correct handling of built-ins, locals (see "ToReturnValue") and ByRef.
+		&& (only_symbol != SYM_VAR || mActionType != ACT_RETURN) // "return var" is kept as an expression for correct handling of built-ins, locals (see "ToReturnValue") and ByRef.
 		)
 	{
-		if (only_symbol == SYM_DYNAMIC // This needs some extra checks to ensure correct behaviour.
-			&& !SYM_DYNAMIC_IS_DOUBLE_DEREF(only_token)) // Checked for maintainability. Should always be the case since double-deref always has multiple tokens.
+		// The checks above leave: ACT_ASSIGNEXPR, ACT_EXPRESSION? (ineffectual), ACT_IF,
+		// ACT_LOOP and co., ACT_GOTO, ACT_GOSUB, ACT_RETURN (if not var).
+		switch (only_symbol)
 		{
-			if (aArg.type == ARG_TYPE_OUTPUT_VAR)
+		case SYM_INTEGER:
+		case SYM_FLOAT:
+			// Convert this numeric literal back into a string to ensure the format is consistent.
+			// This also ensures parentheses are not present in the output, for cases like MsgBox % (1.0).
+			if (  !(aArg.text = SimpleHeap::Malloc(TokenToString(only_token, number_buf)))  )
+				return FAIL; // Malloc already displayed an error message.
+			break;
+		case SYM_VAR: // SYM_VAR can only be VAR_NORMAL in this case.
+			// This isn't needed for ACT_ASSIGNEXPR, which does output_var->Assign(*postfix).
+			aArg.type = ARG_TYPE_INPUT_VAR;
+			aArg.deref = (DerefType *)only_token.var;
+			break;
+		case SYM_STRING:
+			// If this arg will be expanded normally, it needs a pointer to the final string,
+			// without leading/trailing quotation marks and with "" resolved to ".  This doesn't
+			// apply to ACT_ASSIGNEXPR or ACT_RETURN, since they use the string token in postfix;
+			// so avoid doing this for them since it would make ListLines look wrong.  Any other
+			// commands which ordinarily expect expressions might still look wrong in ListLines,
+			// but that seems too rare and inconsequential to worry about.
+			if (  !(mActionType == ACT_ASSIGNEXPR || mActionType == ACT_RETURN)  )
 			{
-				// Var must be writable, but can be VAR_VIRTUAL.
-				if (VAR_IS_READONLY(*only_token.var))
-					return LineError(ERR_VAR_IS_READONLY, FAIL, aArg.text);
-
-				aArg.deref = (DerefType *)only_token.var;
-				aArg.is_expression = false; // Mark it as a pre-resolved var.
-				aArg.postfix = NULL;
-				return OK;
+				aArg.text = only_token.marker;
+				aArg.deref = NULL; // Discard deref array (let ArgIndexHasDeref() know there are none).
 			}
+			break;
 		}
-		else
-		{
-			if (aArg.type == ARG_TYPE_OUTPUT_VAR && only_symbol != SYM_VAR)
-				// If left as an expression, this arg would never resolve to a variable,
-				// so would always throw an exception.  It must not be converted to a
-				// non-expression as ExpandArgs() wouldn't handle it correctly.
-				return LineError(ERR_VAR_IS_READONLY, FAIL, aArg.text);
-
-			switch (only_symbol)
-			{
-			case SYM_INTEGER:
-			case SYM_FLOAT:
-				// Convert this numeric literal back into a string to ensure the format is consistent.
-				// This also ensures parentheses are not present in the output, for cases like MsgBox % (1.0).
-				if (  !(aArg.text = SimpleHeap::Malloc(TokenToString(only_token, number_buf)))  )
-					return FAIL; // Malloc already displayed an error message.
-				break;
-			case SYM_VAR: // SYM_VAR can only be VAR_NORMAL in this case.
-				// This isn't needed for ACT_ASSIGNEXPR, which does output_var->Assign(*postfix).
-				if (aArg.type != ARG_TYPE_OUTPUT_VAR)
-					aArg.type = ARG_TYPE_INPUT_VAR;
-				aArg.deref = (DerefType *)only_token.var;
-				break;
-			case SYM_STRING:
-				// If this arg will be expanded normally, it needs a pointer to the final string,
-				// without leading/trailing quotation marks and with "" resolved to ".  This doesn't
-				// apply to ACT_ASSIGNEXPR or ACT_RETURN, since they use the string token in postfix;
-				// so avoid doing this for them since it would make ListLines look wrong.  Any other
-				// commands which ordinarily expect expressions might still look wrong in ListLines,
-				// but that seems too rare and inconsequential to worry about.
-				if (  !(mActionType == ACT_ASSIGNEXPR || mActionType == ACT_RETURN)  )
-				{
-					aArg.text = only_token.marker;
-					aArg.deref = NULL; // Discard deref array (let ArgIndexHasDeref() know there are none).
-				}
-				break;
-			}
-			aArg.is_expression = false;
-			if (!ACT_USES_SIMPLE_POSTFIX(mActionType) && !(mActionType == ACT_STATIC && (int)(INT_PTR)mAttribute == ACT_ASSIGNEXPR))
-				return OK;
-			// Otherwise, continue on below to copy the postfix token into persistent memory.
-		}
+		aArg.is_expression = false;
+		if (!ACT_USES_SIMPLE_POSTFIX(mActionType) && !(mActionType == ACT_STATIC && (int)(INT_PTR)mAttribute == ACT_ASSIGNEXPR))
+			return OK;
+		// Otherwise, continue on below to copy the postfix token into persistent memory.
 	}
 
 	// Create a new postfix array and attach it to this arg of this line.

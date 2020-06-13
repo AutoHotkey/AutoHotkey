@@ -169,23 +169,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						// that tolerated anything in expressions.
 						goto abort;
 					}
-					if (aArgVar && EXPR_IS_DONE && mArg[aArgIndex].type == ARG_TYPE_OUTPUT_VAR)
-					{
-						if (VAR_IS_READONLY(*temp_var))
-						{
-							// Having this check here allows us to display the variable name rather than its contents
-							// in the error message.
-							error_msg = ERR_VAR_IS_READONLY;
-							error_info = temp_var->mName;
-							goto abort_with_exception;
-						}
-						// Take a shortcut to allow dynamic output vars to resolve to builtin vars such as Clipboard
-						// or A_WorkingDir.  For additional comments, search for "SYM_VAR is somewhat unusual".
-						// This also ensures that the var's content is not transferred to aResultToken, which means
-						// that PerformLoopFor() is not required to check for/release an object in args 0 and 1.
-						aArgVar[aArgIndex] = temp_var;
-						goto normal_end_skip_output_var; // result_to_return is left at its default of "", though its value doesn't matter as long as it isn't NULL.
-					}
 					this_token.var = temp_var;
 				}
 				//else: It's a built-in variable.
@@ -2076,19 +2059,6 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 					// to our caller (otherwise, the contents of "result" should be ignored since they're undefined).
 					result_to_return = result;
 					goto end;
-				}
-				if (this_arg.type == ARG_TYPE_OUTPUT_VAR)
-				{
-					if (!arg_var[i])
-					{
-						// This arg contains an expression which failed to produce a writable variable.
-						// The error message is vague enough to cover actual read-only vars and other
-						// expressions which don't produce any kind of variable.
-						LineError(ERR_VAR_IS_READONLY, FAIL, arg_deref[i]);
-						result_to_return = FAIL;
-						goto end;
-					}
-					//else arg_var[i] has been set to a writable variable by the double-deref code.
 				}
 				continue;
 			}
