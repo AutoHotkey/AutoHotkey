@@ -947,8 +947,8 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant, LPTSTR aNam
 	// LAUNCH HOTKEY SUBROUTINE:
 	++aVariant.mExistingThreads;  // This is the thread count for this particular hotkey only.
 
-	ExprTokenType aParams = { aName };
-	ResultType result = aVariant.mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &aParams, 1);
+	ExprTokenType params = { aName };
+	ResultType result = aVariant.mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &params, 1);
 	
 	--aVariant.mExistingThreads;
 
@@ -2303,8 +2303,8 @@ ResultType Hotstring::PerformInNewThreadMadeByCaller()
 	++mExistingThreads;  // This is the thread count for this particular hotstring only.
 	
 	ResultType result;
-	ExprTokenType aParams = { mName };
-	result = mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &aParams, 1);
+	ExprTokenType params = { mName };
+	result = mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &params, 1);
 	
 	--mExistingThreads;
 	return result ? OK : FAIL;	// Return OK on all non-failure results.
