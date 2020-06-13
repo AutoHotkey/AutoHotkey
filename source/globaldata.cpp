@@ -264,7 +264,7 @@ Action g_act[] =
 	, {_T("{"), 0, 0, false, NULL}, {_T("}"), 0, 0, false, NULL}
 
 	, {_T("Static"), 1, 1, false, {1, 0}} // ACT_STATIC (used only at load time).
-	, {_T("#If"), 0, 1, false, {1, 0}}
+	, {_T("#HotIf"), 0, 1, false, {1, 0}}
 
 	, {_T("If"), 1, 1, false, {1, 0}}
 	, {_T("Else"), 0, 0, false, NULL} // No args; it has special handling to support same-line ELSE-actions (e.g. "else if").
