@@ -175,6 +175,7 @@ ResultType GuiType::GetEnumItem(UINT &aIndex, Var *aOutputVar1, Var *aOutputVar2
 ObjectMember GuiType::sMembers[] =
 {
 	Object_Method (__Enum, 0, 1),
+	Object_Method_(__New, 0, 3, __New, 0),
 
 	Object_Method_(Add, 1, 3, AddControl, GUI_CONTROL_INVALID),
 	Object_Method_(AddActiveX, 0, 2, AddControl, GUI_CONTROL_ACTIVEX),
@@ -230,6 +231,8 @@ ObjectMember GuiType::sMembers[] =
 	Object_Property_get_set(MarginY),
 	Object_Property_get_set(MenuBar),
 };
+
+int GuiType::sMemberCount = _countof(sMembers);
 
 ResultType GuiType::Invoke(IObject_Invoke_PARAMS_DECL)
 {
@@ -480,51 +483,33 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 }
 
 
-BIF_DECL(BIF_GuiCreate)
+ResultType GuiType::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
+	if (mHwnd || mDisposed)
+		_o_throw(ERR_INVALID_USAGE);
+
 	LPTSTR options = ParamIndexToOptionalString(0, _f_number_buf);
-
-	// v1.0.44.14: sFont is created upon first use to conserve ~14 KB memory in non-GUI scripts.
-	// v1.1.29.00: sFont is created here rather than in FindOrCreateFont(), which is called by
-	// the constructor below, to avoid the need to add extra logic in several places to detect
-	// a failed/NULL array.  Previously that was done by simply terminating the script.
-	if (  !(GuiType::sFont || (GuiType::sFont = (FontType *)malloc(sizeof(FontType) * MAX_GUI_FONTS)))  )
-		_f_throw(ERR_OUTOFMEM);
-
-	static Object *sPrototype = Object::CreatePrototype(_T("Gui"), Object::sPrototype, GuiType::sMembers, _countof(GuiType::sMembers));
-
-	GuiType* gui = new GuiType();
-	gui->SetBase(sPrototype);
-	if (!gui)
-		_f_throw(ERR_OUTOFMEM); // Short msg since so rare.
 
 	bool set_last_found_window = false;
 	ToggleValueType own_dialogs = TOGGLE_INVALID;
-	if (*options && !gui->ParseOptions(options, set_last_found_window, own_dialogs))
-	{
-		gui->Release();
-		_f_return_FAIL; // ParseOptions() already displayed the error.
-	}
+	if (*options && !ParseOptions(options, set_last_found_window, own_dialogs))
+		_o_return_FAIL; // ParseOptions() already displayed the error.
 
-	gui->mControl = (GuiControlType **)malloc(GUI_CONTROL_BLOCK_SIZE * sizeof(GuiControlType*));
-	if (!gui->mControl)
-	{
-		gui->Release();
-		_f_throw(ERR_OUTOFMEM); // Short msg since so rare.
-	}
-
-	gui->mControlCapacity = GUI_CONTROL_BLOCK_SIZE;
+	mControl = (GuiControlType **)malloc(GUI_CONTROL_BLOCK_SIZE * sizeof(GuiControlType*));
+	if (!mControl)
+		_o_throw(ERR_OUTOFMEM);
+	mControlCapacity = GUI_CONTROL_BLOCK_SIZE;
 
 	if (!ParamIndexIsOmittedOrEmpty(2))
 	{
 		if (IObject* obj = TokenToObject(*aParam[2]))
 		{
 			// The caller specified an object to use as event sink.
-			gui->mEventSink = obj;
-			gui->mEventSink->AddRef();
+			obj->AddRef();
+			mEventSink = obj;
 		}
 		else
-			_f_throw(ERR_PARAM3_INVALID);
+			_o_throw(ERR_PARAM3_INVALID);
 	}
 	
 	LPTSTR title;
@@ -534,19 +519,16 @@ BIF_DECL(BIF_GuiCreate)
 		title = ParamIndexToString(1, _f_number_buf);
 
 	// Create the Gui, now that we're past all other failure points.
-	if (!gui->Create(title))
-	{
-		gui->Release();
-		_f_throw(_T("Could not create Gui.")); // Short msg since so rare.
-	}
+	if (!Create(title))
+		return FAIL; // Error already displayed.
 
 	if (set_last_found_window)
-		g->hWndLastUsed = gui->mHwnd;
-	gui->SetOwnDialogs(own_dialogs);
+		g->hWndLastUsed = mHwnd;
+	SetOwnDialogs(own_dialogs);
 
 	// Successful creation - add the Gui to the global list of Guis and return it
-	AddGuiToList(gui);
-	_f_return(gui);
+	AddGuiToList(this);
+	return OK;
 }
 
 
@@ -2279,7 +2261,7 @@ void GuiType::DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall)
 ResultType GuiType::Create(LPTSTR aTitle)
 {
 	if (mHwnd) // It already exists
-		return FAIL;  // Seems best for now, since it shouldn't really be called this way.
+		return g_script.RuntimeError(ERR_INVALID_USAGE);
 
 	// Use a separate class for GUI, which gives it a separate WindowProc and allows it to be more
 	// distinct when used with the ahk_class method of addressing windows.
@@ -2299,12 +2281,12 @@ ResultType GuiType::Create(LPTSTR aTitle)
 		wc.cbWndExtra = DLGWINDOWEXTRA;  // So that it will be the type that uses DefDlgProc() vs. DefWindowProc().
 		sGuiWinClass = RegisterClassEx(&wc);
 		if (!sGuiWinClass)
-			return g_script.RuntimeError(_T("RegClass")); // Short/generic msg since so rare.
+			return g_script.Win32Error();
 	}
 
 	if (   !(mHwnd = CreateWindowEx(mExStyle, WINDOW_CLASS_GUI, aTitle
 		, mStyle, 0, 0, 0, 0, mOwner, NULL, g_hInstance, NULL))   )
-		return FAIL;
+		return g_script.Win32Error();
 
 	// Set the user pointer in the window to this GuiType object, so that it is possible to retrieve it back from the window handle.
 	SetWindowLongPtr(mHwnd, GWLP_USERDATA, (LONG_PTR)this);
@@ -7917,6 +7899,12 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 		// If not, we create it here:
 		if (!sFontCount)
 		{
+			// sFont is created upon first use to conserve ~20 KB memory in non-GUI scripts.
+			if (  !(sFont || (sFont = (FontType *)malloc(sizeof(FontType) * MAX_GUI_FONTS)))  )
+				// The allocation is small enough that failure would indicate it's unlikely the
+				// program could continue for long, so it doesn't seem worth the added complication
+				// to support recovering from this error:
+				g_script.CriticalError(ERR_OUTOFMEM);
 			// For simplifying other code sections, create an entry in the array for the default font
 			// (GUI constructor relies on at least one font existing in the array).
 			// Doesn't seem likely that DEFAULT_GUI_FONT face/size will change while a script is running,

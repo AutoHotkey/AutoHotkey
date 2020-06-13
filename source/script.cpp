@@ -158,7 +158,6 @@ FuncEntry g_BIF[] =
 	BIFn(GetKeyVK, 1, 1, BIF_GetKeyName),
 	BIF1(GetMethod, 2, 2),
 	BIF1(GroupActivate, 1, 2),
-	BIF1(GuiCreate, 0, 3),
 	BIF1(GuiCtrlFromHwnd, 1, 1),
 	BIF1(GuiFromHwnd, 1, 2),
 	BIF1(HasBase, 2, 2),

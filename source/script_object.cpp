@@ -2869,6 +2869,11 @@ Object *RegExMatchObject::sPrototype = CreatePrototype(_T("RegExMatch"), Object:
 
 
 
+Object *GuiType::sPrototype = CreatePrototype(_T("Gui"), Object::sPrototype, sMembers, sMemberCount);
+Object *GuiType::sClass = CreateClass(_T("Gui"), Object::sClass, sPrototype, static_cast<ObjectMethod>(&New<GuiType>));
+
+
+
 //
 // Primitive values as objects
 //

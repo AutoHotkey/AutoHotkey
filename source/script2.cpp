@@ -14768,6 +14768,7 @@ void MsgMonitorList::Dispose()
 			mMonitor[mCount].func->Release();
 	}
 	free(mMonitor);
+	mMonitor = nullptr;
 	mCountMax = 0;
 	// Dispose all iterator instances to ensure Call() does not continue iterating:
 	for (MsgMonitorInstance *inst = mTop; inst; inst = inst->previous)

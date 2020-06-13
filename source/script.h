@@ -2562,6 +2562,8 @@ public:
 	};
 
 	static ObjectMember sMembers[];
+	static int sMemberCount;
+	static Object *sPrototype, *sClass;
 
 	GuiType() // Constructor
 		: mHwnd(NULL), mOwner(NULL), mName(NULL)
@@ -2599,12 +2601,15 @@ public:
 		, mDisposed(false)
 		, mVisibleRefCounted(false)
 	{
+		SetBase(sPrototype);
 	}
 
 	void Destroy();
 	void Dispose();
 	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
+	static GuiType *Create() { return new GuiType(); } // For Object::New<GuiType>().
+	ResultType __New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Create(LPTSTR aTitle);
@@ -3235,7 +3240,6 @@ BIF_DECL(BIF_MsgBox);
 BIF_DECL(BIF_InputBox);
 
 // Gui
-BIF_DECL(BIF_GuiCreate);
 BIF_DECL(BIF_GuiFromHwnd);
 BIF_DECL(BIF_GuiCtrlFromHwnd);
 
