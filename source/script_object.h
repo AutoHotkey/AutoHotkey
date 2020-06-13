@@ -97,7 +97,8 @@ class FlatVector
 	};
 	Data *data;
 	
-	static Data Empty;
+	struct OneT : public Data { char zero_buf[sizeof(T)]; }; // zero_buf guarantees zero-termination when used for strings (fixes an issue observed in debug mode).
+	static OneT Empty;
 
 	void FreeRange(index_t i, index_t count)
 	{
@@ -159,7 +160,7 @@ public:
 };
 
 template <typename T, typename index_t>
-typename FlatVector<T, index_t>::Data FlatVector<T, index_t>::Empty = { 0, 0 };
+typename FlatVector<T, index_t>::OneT FlatVector<T, index_t>::Empty;
 
 
 //
