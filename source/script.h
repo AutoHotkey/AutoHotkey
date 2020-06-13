@@ -1864,8 +1864,6 @@ public:
 		if (!mOutputVars)
 			return false;
 		++aIndex; // Convert to one-based.
-		if (mBIF == &BIF_PerformAction)
-			return mOutputVars[aIndex] == ARG_TYPE_OUTPUT_VAR;
 		for (int i = 0; i < MAX_FUNC_OUTPUT_VAR && mOutputVars[i]; ++i)
 			if (mOutputVars[i] == aIndex)
 				return true;

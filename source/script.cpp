@@ -7055,26 +7055,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		bif.mMinParams = g_act[action_type].MinParams;
 		bif.mMaxParams = g_act[action_type].MaxParams;
 		bif.mName = g_act[action_type].Name;
-		
-		// For performance, the action and arg types are "precalculated" and stored in Func::mOutputVars.
-		// This is currently only used for BIF_PerformAction and for ArgIsOutputVar(), which knows to
-		// interpret mOutputVars differently depending on whether mBIF == &BIF_PerformAction.
-		bif_output_vars = (UCHAR *)SimpleHeap::Malloc(bif.mMaxParams + 1);
-		if (!bif_output_vars)
-			return NULL;
-		// Store the action type:
-		bif_output_vars[0] = (TCHAR)action_type;
-		// Store the arg types:
-		for (int i = 0; i < bif.mMaxParams; ++i)
-			bif_output_vars[i + 1] = (TCHAR)Line::ArgIsVar(action_type, i);
-		// If the command's first arg is an output var (and its second arg isn't), it will
-		// be used as the return value.  So adjust min/max params in that case.
-		if (bif.mMaxParams && bif_output_vars[1] == ARG_TYPE_OUTPUT_VAR && bif_output_vars[2] != ARG_TYPE_OUTPUT_VAR)
-		{
-			if (bif.mMinParams)
-				bif.mMinParams--;
-			bif.mMaxParams--;
-		}
+		bif.mID = action_type;
 	}
 
 	// Since above didn't return, this is a built-in function that hasn't yet been added to the list.
@@ -12636,16 +12617,7 @@ ResultType Line::Perform()
 
 BIF_DECL(BIF_PerformAction)
 {
-	// mOutputVars was overloaded to contain the action type and arg types.
-	UCHAR *arg_type = aResultToken.func->mOutputVars;
-	ActionTypeType act = *arg_type++;
-	// Use func rather than g_act as the latter is less likely to be in the CPU cache:
-	int min_params = aResultToken.func->mMinParams;
-	int max_params = aResultToken.func->mParamCount;
-	
-	// Truncate any extra parameters and prevent overflow of arg_type[] below.
-	if (aParamCount > max_params)
-		aParamCount = max_params;
+	ActionTypeType act = _f_callee_id;
 
 	// An array of args is constructed containing the var or text of each parameter,
 	// which is then used by ExpandArgs() to populate sArgDeref[] and sArgVar[].  This
@@ -12663,33 +12635,14 @@ BIF_DECL(BIF_PerformAction)
 
 		if (aParam[i]->symbol == SYM_VAR)
 		{
-			if (arg_type[i] == ARG_TYPE_OUTPUT_VAR)
-				arg[i].type = ARG_TYPE_OUTPUT_VAR;
-			else
-				arg[i].type = ARG_TYPE_INPUT_VAR;
+			arg[i].type = ARG_TYPE_INPUT_VAR;
 			arg[i].deref = (DerefType *)aParam[i]->var;
 			arg[i].text = _T(""); // text not needed.
 			//arg[i].length = 0;
 			continue;
 		}
 
-		// If this arg is optional and it was omitted, ensure it is ARG_TYPE_NORMAL.
-		if (i >= min_params && aParam[i]->symbol == SYM_MISSING)
-			arg[i].type = ARG_TYPE_NORMAL;
-		else
-			arg[i].type = (ArgTypeType)arg_type[i];
-		
-		if (arg[i].type != ARG_TYPE_NORMAL) // It's an input or output var.
-		{
-			// This arg requires a var for output, but no var was provided by the caller.
-			// There currently aren't any commands which require input vars, but if they
-			// are reintroduced, it's important that they are detected here in case there
-			// are commands which assume sArgVar[] is non-NULL.
-			sntprintf(aResultToken.buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
-				, i+1, aResultToken.func->mName);
-			_f_throw(aResultToken.buf);
-		}
-		
+		arg[i].type = ARG_TYPE_NORMAL;
 		arg[i].text = TokenToString(*aParam[i], number_buf + (i * MAX_NUMBER_SIZE));
 		arg[i].deref = NULL;
 		// Since this arg contains no derefs, a pointer to the text will be copied directly
