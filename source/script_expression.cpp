@@ -1384,10 +1384,8 @@ push_this_token:
 
 	case SYM_OBJECT:
 		// At this point we aren't capable of returning an object, otherwise above would have
-		// already returned.  The documented fallback behaviour is for the object to be treated
-		// as an empty string.
-		result_to_return = _T("");
-		goto normal_end_skip_output_var;
+		// already returned.  So in other words, the caller wants a string, not an object.
+		goto type_mismatch;
 	} // switch (result_token.symbol)
 
 // ALL PATHS ABOVE SHOULD "GOTO".  TO CATCH BUGS, ANY THAT DON'T FALL INTO "ABORT" BELOW.
