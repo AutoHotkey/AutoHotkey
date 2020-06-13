@@ -217,6 +217,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					this_token.CopyValueFrom(result_token);
 					goto push_this_token;
 				}
+
+				result_length = result_token.marker_length;
+				if (result_length == -1)
+					result_length = _tcslen(result_token.marker);
 				
 				if (result_token.marker != left_buf)
 				{
@@ -232,12 +236,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					}
 					//else: Currently marker is assumed to point to persistent memory, such as a literal
 					// string, which should be safe to use at least until expression evaluation completes.
-					this_token.CopyValueFrom(result_token);
+					this_token.SetValue(result_token.marker, result_length);
 					goto push_this_token;
 				}
 				
-				if (  (result_length = result_token.marker_length) == -1)
-					result_length = _tcslen(result_token.marker);
 				result_size = 1 + result_length;
 				if (result_size <= (int)(aDerefBufSize - (target - aDerefBuf))) // There is room at the end of our deref buf, so use it.
 				{
