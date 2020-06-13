@@ -506,7 +506,7 @@ VarEntry g_BIV_A[] =
 
 
 Script::Script()
-	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL), mPlaceholderLabel(NULL), mFirstStaticLine(NULL), mLastStaticLine(NULL)
+	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL), mPlaceholderLabel(NULL)
 	, mThisHotkeyName(_T("")), mPriorHotkeyName(_T("")), mThisHotkeyStartTime(0), mPriorHotkeyStartTime(0)
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
 	, mOnClipboardChangeIsRunning(false), mExitReason(EXIT_NONE)
@@ -1568,14 +1568,7 @@ UINT Script::LoadFromFile()
 	// That's why the above is done prior to adding the EXIT lines and other things below.
 
 	// Preparse static initializers and #if expressions.
-	PreparseStaticLines(mFirstLine);
-	if (mFirstStaticLine)
-	{
-		// Prepend all Static initializers to the beginning of the auto-execute section.
-		mLastStaticLine->mNextLine = mFirstLine;
-		mFirstLine->mPrevLine = mLastStaticLine;
-		mFirstLine = mFirstStaticLine;
-	}
+	PreparseHotIfExprLines(mFirstLine);
 	
 	// Scan for undeclared local variables which are named the same as a global variable.
 	// This loop has two purposes (but it's all handled in PreprocessLocalVars()):
@@ -4378,13 +4371,12 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 				int i;
 				if (g->CurrentFunc)
 				{
-					for (i = 0; i < g->CurrentFunc->mParamCount; ++i) // Search by name to find both global and local declarations.
-						if (!tcslicmp(item, g->CurrentFunc->mParam[i].var->mName, var_name_length))
-							return ScriptError(_T("Parameters must not be declared."), item);
 					// Detect conflicting declarations:
 					var = FindVar(item, var_name_length, NULL, FINDVAR_LOCAL);
-					if (var && (var->Scope() & ~VAR_DECLARED) == (declare_type & ~VAR_DECLARED) && declare_type != VAR_DECLARE_STATIC)
-						var = NULL; // Allow redeclaration using same scope; e.g. "local x := 1 ... local x := 2" down two different code paths.
+					if (var && (var->Scope() == declare_type // Exact same declaration type.
+						// Declaring a var previously resolved but not declared, with the same scope:
+						|| (var->Scope() & (VAR_DECLARED|VAR_LOCAL|VAR_GLOBAL)) == (declare_type & (VAR_LOCAL|VAR_GLOBAL))))
+						var = NULL; // Allow this redeclaration; e.g. "local x := 1 ... local x := 2" down two different code paths.
 					if (!var && declare_type != VAR_DECLARE_GLOBAL)
 						for (i = 0; i < g->CurrentFunc->mGlobalVarCount; ++i) // Explicitly search this array vs calling FindVar() in case func is assume-global.
 							if (!tcslicmp(g->CurrentFunc->mGlobalVar[i]->mName, item, -1, var_name_length))
@@ -4393,7 +4385,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 								break;
 							}
 					if (var)
-						return ScriptError(var->IsDeclared() ? ERR_DUPLICATE_DECLARATION : _T("Declaration conflicts with existing var."), item);
+						return ScriptError(var->IsFuncParam() ? _T("Parameters must not be declared.")
+							: var->IsDeclared() ? ERR_DUPLICATE_DECLARATION
+							: _T("Declaration conflicts with existing var."), item);
 				}
 				
 				if (   !(var = FindOrAddVar(item, var_name_length, declare_type))   )
@@ -4481,12 +4475,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 				// so (e.g. x:=0,y:=1 is faster as separate statements), and since it is somewhat rare to
 				// have a long chain of initializers, and since these performance differences are documented,
 				// it might not be worth changing.
-				if (declare_type == VAR_DECLARE_STATIC)
-				{
-					// Avoid pointing labels or the function's mJumpToLine at a static declaration.
-					mNoUpdateLabels = true;
-				}
-				else if (belongs_to_line_above && !open_brace_was_added) // v1.0.46.01: Put braces to allow initializers to work even directly under an IF/ELSE/LOOP.  Note that the braces aren't added or needed for static initializers.
+				if (belongs_to_line_above && !open_brace_was_added) // v1.0.46.01: Put braces to allow initializers to work even directly under an IF/ELSE/LOOP.
 				{
 					if (!AddLine(ACT_BLOCK_BEGIN))
 						return FAIL;
@@ -4494,14 +4483,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 				}
 				// Call Parse() vs. AddLine() because it detects and optimizes simple assignments into
 				// non-expressions for faster runtime execution.
-				if (!ParseAndAddLine(item, aBufSize - int(item - aLineText))) // For simplicity and maintainability, call self rather than trying to set things up properly to stay in self.
+				if (!ParseAndAddLine(item, aBufSize - int(item - aLineText)
+					, declare_type == VAR_DECLARE_STATIC ? ACT_STATIC : ACT_INVALID))
 					return FAIL; // Above already displayed the error.
-				if (declare_type == VAR_DECLARE_STATIC)
-				{
-					mNoUpdateLabels = false;
-					mLastLine->mAttribute = (AttributeType)mLastLine->mActionType;
-					mLastLine->mActionType = ACT_STATIC; // Mark this line for the preparser.
-				}
 
 				*terminate_here = orig_char; // Undo the temporary termination.
 				// Set "item" for use by the next iteration:
@@ -7766,11 +7750,11 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 }
 
 
-ResultType Script::PreparseStaticLines(Line *aStartingLine)
+ResultType Script::PreparseHotIfExprLines(Line *aStartingLine)
 // Combining this and PreparseExpressions() into one loop/function currently increases
 // code size enough to affect the final EXE size, contrary to expectation.
 {
-	// Remove static var initializers and #if expression lines from the main line list so
+	// Remove #if expression lines from the main line list so
 	// that they won't be executed or interfere with PreparseBlocks().  This used to be done
 	// at an earlier stage, but that required multiple PreparseBlocks() calls to account for
 	// lines added by lib auto-includes.  Thus, it's now done after PreparseExpressions().
@@ -7781,18 +7765,6 @@ ResultType Script::PreparseStaticLines(Line *aStartingLine)
 
 		switch (line->mActionType)
 		{
-		case ACT_STATIC:
-			// Override mActionType so ACT_STATIC doesn't have to be handled at runtime:
-			line->mActionType = (ActionTypeType)(UINT_PTR)line->mAttribute;
-			// Add this line to the list of static initializers, which will be inserted above
-			// the auto-execute section later.  The main line list will be corrected below.
-			line->mPrevLine = mLastStaticLine;
-			if (mLastStaticLine)
-				mLastStaticLine->mNextLine = line;
-			else
-				mFirstStaticLine = line;
-			mLastStaticLine = line;
-			break;
 		case ACT_HOTKEY_IF:
 			if (line->mArg[0].is_expression) // May be false for optimized cases like "#HotIf somevar".
 				PreparseHotkeyIfExpr(line);
@@ -10887,6 +10859,18 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			//    var ? func() : x:=y
 			if (result != OK || aMode == ONLY_ONE_LINE)
 				return result; // Usually OK or FAIL; can also be EARLY_EXIT.
+			line = line->mNextLine;
+			continue;
+
+		case ACT_STATIC:
+			if (result != OK)
+				return result;
+			if (g.CurrentFunc && g.CurrentFunc->mJumpToLine == line)
+				g.CurrentFunc->mJumpToLine = line->mNextLine;
+			line->mPrevLine->mNextLine = line->mNextLine;
+			line->mNextLine->mPrevLine = line->mPrevLine;
+			if (aMode == ONLY_ONE_LINE)
+				return result;
 			line = line->mNextLine;
 			continue;
 

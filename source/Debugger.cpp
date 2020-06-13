@@ -634,21 +634,6 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 	}
 
 	Line *line = NULL, *found_line = NULL;
-	// Due to the introduction of expressions in static initializers, lines aren't necessarily in
-	// line number order.  First determine if any static initializers match the requested lineno.
-	// If not, use the first non-static line at or following that line number.
-
-	if (g_script.mFirstStaticLine)
-		for (line = g_script.mFirstStaticLine; ; line = line->mNextLine)
-		{
-			if (line->mFileIndex == file_index && line->mLineNumber == lineno) // Exact match, unlike normal lines.
-			{
-				found_line = line;
-				break;
-			}
-			if (line == g_script.mLastStaticLine)
-				break;
-		}
 	if (!found_line)
 		// If line is non-NULL, above has left it set to mLastStaticLine, which we want to exclude:
 		for (line = line ? line->mNextLine : g_script.mFirstLine; line; line = line->mNextLine)
