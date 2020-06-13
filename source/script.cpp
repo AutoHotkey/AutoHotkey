@@ -1137,7 +1137,7 @@ ResultType Script::AutoExecSection()
 	CopyMemory(g_array, g, sizeof(global_struct)); // Copy the temporary/startup "g" into array[0] to preserve historical behaviors that may rely on the idle thread starting with that "g".
 	g = g_array; // Must be done after above.
 
-	// v2: Ensure the Hotkey command defaults to no criterion rather than the last #IfWin.  Alternatively we
+	// v2: Ensure the Hotkey function defaults to no criterion rather than the last #HotIf WinActive/Exist().  Alternatively we
 	// could replace CopyMemory() above with global_init(), but it would need to be changed back if ever we
 	// want a directive to affect the default settings.
 	g->HotCriterion = NULL;
@@ -1258,7 +1258,7 @@ bool Script::IsPersistent()
 	// Consider the script "persistent" if any of the following conditions are true:
 	if (Hotkey::sHotkeyCount || Hotstring::sHotstringCount // At least one hotkey or hotstring exists.
 		// No attempt is made to determine if the hotkeys/hotstrings are enabled, since even if they
-		// are, it's impossible to detect whether #If/#IfWin will allow them to ever execute.
+		// are, it's impossible to detect whether #HotIf will allow them to ever execute.
 		|| g_persistent // #Persistent has been used somewhere in the script.
 		|| g_script.mTimerEnabledCount // At least one script timer is currently enabled.
 		|| g_MsgMonitor.Count() // At least one message monitor is active (installed by OnMessage).
@@ -1551,7 +1551,7 @@ UINT Script::LoadFromFile()
 	// ABOVE: In v1.0.47, the above may have auto-included additional files from the userlib/stdlib.
 	// That's why the above is done prior to adding the EXIT lines and other things below.
 
-	// Preparse static initializers and #if expressions.
+	// Preparse static initializers and #HotIf expressions.
 	PreparseStaticLines(mFirstLine);
 	if (mFirstStaticLine)
 	{
@@ -2587,7 +2587,7 @@ process_completed_line:
 					return FAIL;
 			}
 			saved_line_number = mCombinedLineNumber; // Backup in case IsDirective() processes an include file, which would change mCombinedLineNumber's value.
-			switch(IsDirective(buf)) // Note that it may alter the contents of buf, at least in the case of #IfWin.
+			switch(IsDirective(buf)) // Note that it may alter the contents of buf
 			{
 			case CONDITION_TRUE:
 				// Since the directive may have been a #include which called us recursively,
@@ -4167,8 +4167,8 @@ void Script::DeleteTimer(IObject *aLabel)
 
 Label *Script::FindLabel(LPTSTR aLabelName, bool aSearchLocal)
 // Returns the first label whose name matches aLabelName, or NULL if not found.
-// v1.0.42: Since duplicates labels are now possible (to support #IfWin variants of a particular
-// hotkey or hotstring), callers must be aware that only the first match is returned.
+
+// If duplicates labels are now possible, callers must be aware that only the first match is returned.
 // This helps performance by requiring on average only half the labels to be searched before
 // a match is found.
 {
@@ -7839,7 +7839,7 @@ ResultType Script::PreparseStaticLines(Line *aStartingLine)
 // Combining this and PreparseExpressions() into one loop/function currently increases
 // code size enough to affect the final EXE size, contrary to expectation.
 {
-	// Remove static var initializers and #if expression lines from the main line list so
+	// Remove static var initializers and #HotIf expression lines from the main line list so
 	// that they won't be executed or interfere with PreparseBlocks().  This used to be done
 	// at an earlier stage, but that required multiple PreparseBlocks() calls to account for
 	// lines added by lib auto-includes.  Thus, it's now done after PreparseExpressions().
@@ -11017,7 +11017,7 @@ ResultType Line::EvaluateCondition()
 }
 
 
-// Evaluate an #If expression (in a thread created by the caller).
+// Evaluate an #HotIf expression (in a thread created by the caller).
 ResultType Line::EvaluateHotCriterionExpression()
 {
 	g_script.mCurrLine = this; // Added in v1.1.16 to fix A_LineFile and A_LineNumber.
@@ -11033,7 +11033,7 @@ ResultType Line::EvaluateHotCriterionExpression()
 }
 
 
-// Evaluate an #If expression or callback function.
+// Evaluate an #HotIf expression or callback function.
 // This is called by MainWindowProc when it receives an AHK_HOT_IF_EVAL message.
 ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 {
@@ -11058,7 +11058,7 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	InitNewThread(0, false, true, true);
 	ResultType result;
 
-	// Update A_ThisHotkey, useful if #If calls a function to do its dirty work.
+	// Update A_ThisHotkey, useful if #HotIf calls a function to do its dirty work.
 	LPTSTR prior_hotkey_name[] = { g_script.mThisHotkeyName, g_script.mPriorHotkeyName };
 	DWORD prior_hotkey_time[] = { g_script.mThisHotkeyStartTime, g_script.mPriorHotkeyStartTime };
 	g_script.mPriorHotkeyName = g_script.mThisHotkeyName;			// For consistency
@@ -11070,7 +11070,7 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	// EVALUATE THE EXPRESSION OR CALL THE CALLBACK
 	if (Type == HOT_IF_EXPR)
 	{
-		DEBUGGER_STACK_PUSH(_T("#If"))
+		DEBUGGER_STACK_PUSH(_T("#HotIf"))
 		result = ExprLine->EvaluateHotCriterionExpression();
 		DEBUGGER_STACK_POP()
 	}
@@ -11078,13 +11078,13 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	{
 		ExprTokenType param = aHotkeyName;
 		__int64 retval;
-		result = LabelPtr(Callback)->ExecuteInNewThread(_T("#If"), &param, 1, &retval);
+		result = LabelPtr(Callback)->ExecuteInNewThread(_T("#HotIf"), &param, 1, &retval);
 		if (result != FAIL)
 			result = retval ? CONDITION_TRUE : CONDITION_FALSE;
 	}
 
 	// The following allows the expression to set the Last Found Window for the
-	// hotkey subroutine, so that #if WinActive(T) and similar behave like #IfWin.
+	// hotkey function.
 	// There may be some rare cases where the wrong hotkey gets this HWND (perhaps
 	// if there are multiple hotkey messages in the queue), but there doesn't seem
 	// to be any easy way around that.

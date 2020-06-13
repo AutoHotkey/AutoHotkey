@@ -815,10 +815,10 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// 1) A joystick hotkey from TriggerJoyHotkeys(), in which case the lParam is ignored.
 				// 2) A hotkey message sent by the OS, in which case lParam contains currently-unused info set by the OS.
 				//
-				// An incoming WM_HOTKEY can be subject to #IfWin at this stage under the following conditions:
+				// An incoming WM_HOTKEY can be subject to #HotIf Win. at this stage under the following conditions:
 				// 1) Joystick hotkey, because it relies on us to do the check so that the check is done only
 				//    once rather than twice.
-				// 2) #IfWin keybd hotkeys that were made non-hook because they have a non-suspended, global variant.
+				// 2) #HotIf Win. keybd hotkeys that were made non-hook because they have a non-suspended, global variant.
 				//
 				// If message is AHK_HOOK_HOTKEY:
 				// Rather than having the hook pass the qualified variant to us, it seems preferable
@@ -826,7 +826,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// may have changed since the message was posted, and although the hotkey might still be
 				// eligible for firing, a different variant might now be called for (e.g. due to a change
 				// in the active window).  Since most criteria hotkeys have at most only a few criteria,
-				// and since most such criteria are #IfWinActive rather than Exist, the performance will
+				// and since most such criteria are #HotIf WinActive rather than Exist, the performance will
 				// typically not be reduced much at all.  Furthermore, trading performance for greater
 				// reliability seems worth it in this case.
 				// 
@@ -836,9 +836,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				//   that have a global variant are usually non-hook, even on NT/2k/XP).
 				// - The hook avoids doing its first check of WinActive/Exist if it sees that the hotkey
 				//   has a non-suspended, global variant.  That way, hotkeys that are hook-hotkeys for
-				//   reasons other than #IfWin (such as mouse, overriding OS hotkeys, or hotkeys
+				//   reasons other than #HotIf Win. (such as mouse, overriding OS hotkeys, or hotkeys
 				//   that are too fancy for RegisterHotkey) will not have to do the check twice.
-				// - It provides the ability to set the last-found-window for #IfWinActive/Exist
+				// - It provides the ability to set the last-found-window for #HotIf WinActive/Exist
 				//   (though it's not needed for the "Not" counterparts).  This HWND could be passed
 				//   via the message, but that would require malloc-there and free-here, and might
 				//   result in memory leaks if its ever possible for messages to get discarded by the OS.
@@ -847,12 +847,12 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				//   good precaution for most users/situations because such hotkey subroutines will
 				//   often assume (for scripting simplicity) that the specified window is active or
 				//   exists when the subroutine executes its first line.
-				// - Most criterion hotkeys use #IfWinActive, which is a very fast call.  Also, although
-				//   WinText and/or "SetTitleMatchMode Slow" slow down window searches, those are rarely
+				// - Most criterion hotkeys use #HotIf WinActive(), which is a very fast call.  Also, although
+				//   WinText and/or "SetTitleMatchMode 'Slow'" slow down window searches, those are rarely
 				//   used too.
 				//
 				variant = NULL; // Set default.
-				// For #If hotkey variants, we don't want to evaluate the expression a second time. If the hook
+				// For #HotIf hotkey variants, we don't want to evaluate the expression a second time. If the hook
 				// thread determined that a specific variant should fire, it is passed via the high word of wParam:
 				if (variant_id = HIWORD(msg.wParam))
 				{
