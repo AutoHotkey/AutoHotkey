@@ -505,7 +505,8 @@ ResultType GuiType::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 		if (IObject* obj = TokenToObject(*aParam[2]))
 		{
 			// The caller specified an object to use as event sink.
-			obj->AddRef();
+			if (obj != this) // Primarily for custom GUI classes: prevent a circular reference.
+				obj->AddRef();
 			mEventSink = obj;
 		}
 		else
@@ -2189,7 +2190,7 @@ void GuiType::Dispose()
 		mMenu->Release();
 
 	mEvents.Dispose();
-	if (mEventSink)
+	if (mEventSink && this != mEventSink)
 		mEventSink->Release();
 
 	if (mIconEligibleForDestruction && mIconEligibleForDestruction != g_script.mCustomIcon) // v1.0.37.07.

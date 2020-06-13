@@ -1008,8 +1008,9 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			{
 #define EVT_ARG_ADD(_value) gui_event_args[gui_event_arg_count++].SetValue(_value)
 
-				// Set first argument
-				EVT_ARG_ADD(event_is_control_generated ? (IObject*)pcontrol : (IObject*)pgui);
+				if (event_is_control_generated || pgui->mEventSink != pgui)
+					// Set first argument
+					EVT_ARG_ADD(event_is_control_generated ? (IObject*)pcontrol : (IObject*)pgui);
 
 				switch(gui_action)
 				{
