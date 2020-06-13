@@ -276,8 +276,6 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	g_HSSameLineAction = false; // `#Hotstring X` should not affect Hotstring().
 	g_SuspendExempt = false; // #SuspendExempt should not affect Hotkey()/Hotstring().
 
-	Var *clipboard_var = g_script.FindOrAddVar(_T("Clipboard")); // Add it if it doesn't exist, in case the script accesses "Clipboard" via a dynamic variable.
-
 	// Run the auto-execute part at the top of the script (this call might never return):
 	if (!g_script.AutoExecSection()) // Can't run script at all. Due to rarity, just abort.
 		return CRITICAL_ERROR;
