@@ -2705,6 +2705,7 @@ public:
 	ResultType ControlSetName(GuiControlType &aControl, LPTSTR aName);
 	void ControlSetEnabled(GuiControlType &aControl, bool aEnabled);
 	void ControlSetVisible(GuiControlType &aControl, bool aVisible);
+	ResultType ParseMoveParams(int aCoord[4], ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType ControlMove(GuiControlType &aControl, int aX, int aY, int aWidth, int aHeight);
 	ResultType ControlSetFont(GuiControlType &aControl, LPTSTR aOptions, LPTSTR aFontName);
 	void ControlSetTextColor(GuiControlType &aControl, COLORREF aColor);

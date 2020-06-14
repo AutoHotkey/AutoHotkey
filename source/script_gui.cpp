@@ -456,6 +456,9 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 		}
 		case M_Move:
 		{
+			int coord[4];
+			if (!ParseMoveParams(coord, aResultToken, aParam, aParamCount))
+				return FAIL;
 			// Like WinMove, this doesn't check if the window is minimized or do any autosizing.
 			// Unlike WinMove, this does DPI scaling.
 			RECT rect;
@@ -463,8 +466,8 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 			rect.right -= rect.left; // Convert to width.
 			rect.bottom -= rect.top; // Convert to height.
 			for (int i = 0; i < aParamCount; ++i)
-				if (!ParamIndexIsOmitted(i))
-					((int *)&rect)[i] = Scale(ParamIndexToInt(i));
+				if (coord[i] != COORD_UNSPECIFIED)
+					((int *)&rect)[i] = Scale(coord[i]);
 			MoveWindow(mHwnd, rect.left, rect.top, rect.right, rect.bottom, TRUE);
 			_o_return_empty;
 		}
@@ -721,11 +724,10 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 			return gui->ControlSetFont(*this, ParamIndexToOptionalString(0), ParamIndexToOptionalString(1));
 
 		case M_Move:
-			return gui->ControlMove(*this
-				, ParamIndexToOptionalInt(0, COORD_UNSPECIFIED)
-				, ParamIndexToOptionalInt(1, COORD_UNSPECIFIED)
-				, ParamIndexToOptionalInt(2, COORD_UNSPECIFIED)
-				, ParamIndexToOptionalInt(3, COORD_UNSPECIFIED));
+			int coord[4];
+			if (!gui->ParseMoveParams(coord, aResultToken, aParam, aParamCount))
+				return FAIL;
+			return gui->ControlMove(*this, coord[0], coord[1], coord[2], coord[3]);
 
 		case M_Redraw:
 		{
@@ -1109,6 +1111,23 @@ void GuiType::ControlSetVisible(GuiControlType &aControl, bool aVisible)
 		// Update the control so that its current tab's controls will all be shown or hidden (now
 		// that the tab control itself has just been shown or hidden):
 		ControlUpdateCurrentTab(aControl, false);
+}
+
+
+ResultType GuiType::ParseMoveParams(int aCoord[4], ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	ResultType result = OK;
+	for (int i = 0; i < 4; ++i)
+	{
+		aCoord[i] = COORD_UNSPECIFIED; // Set default (also used in case of error).
+		if (ParamIndexIsOmitted(i))
+			continue;
+		else if (!ParamIndexIsNumeric(i))
+			result = result ? aResultToken.Error(ERR_PARAM_INVALID) : FAIL; // But continue so all of aCoord is initialized.
+		else
+			aCoord[i] = ParamIndexToInt(i);
+	}
+	return result;
 }
 
 
