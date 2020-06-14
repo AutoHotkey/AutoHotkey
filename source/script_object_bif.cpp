@@ -330,34 +330,6 @@ BIF_DECL(BIF_ObjBindMethod)
 
 
 //
-// ObjRawSet - set a value without invoking any meta-functions.
-//
-
-BIF_DECL(BIF_ObjRaw)
-{
-	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
-	if (!obj)
-		_f_throw(ERR_PARAM1_INVALID);
-	LPTSTR name = TokenToString(*aParam[1], _f_number_buf);
-	if (_f_callee_id == FID_ObjRawSet)
-	{
-		if (!obj->SetOwnProp(name, *aParam[2]))
-			_f_throw(ERR_OUTOFMEM);
-	}
-	else
-	{
-		if (obj->GetOwnProp(aResultToken, name))
-		{
-			if (aResultToken.symbol == SYM_OBJECT)
-				aResultToken.object->AddRef();
-			return;
-		}
-	}
-	_f_return_empty;
-}
-
-
-//
 // ObjPtr/ObjPtrAddRef/ObjFromPtr - Convert between object reference and IObject pointer.
 //
 

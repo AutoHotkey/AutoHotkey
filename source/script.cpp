@@ -228,8 +228,6 @@ FuncEntry g_BIF[] =
 	BIFn(ObjOwnProps, 1, 1, BIF_ObjXXX),
 	BIFn(ObjPtr, 1, 1, BIF_ObjPtr),
 	BIFn(ObjPtrAddRef, 1, 1, BIF_ObjPtr),
-	BIFn(ObjRawGet, 2, 2, BIF_ObjRaw),
-	BIFn(ObjRawSet, 3, 3, BIF_ObjRaw),
 	BIFn(ObjRelease, 1, 1, BIF_ObjAddRefRelease),
 	BIFn(ObjSetBase, 2, 2, BIF_Base),
 	BIFn(ObjSetCapacity, 2, 2, BIF_ObjXXX),

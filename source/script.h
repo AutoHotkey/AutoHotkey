@@ -629,7 +629,6 @@ enum BuiltInFunctionID {
 	FID_ObjAddRef = 0, FID_ObjRelease,
 	FID_ObjHasOwnProp = 0, FID_ObjOwnPropCount, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjOwnProps, FID_ObjOwnMethods,
 	FID_ObjGetBase = 0, FID_ObjSetBase,
-	FID_ObjRawGet = 0, FID_ObjRawSet,
 	FID_ObjPtr = 0, FID_ObjPtrAddRef, FID_ObjFromPtr, FID_ObjFromPtrAddRef,
 	FID_WinGetID = 0, FID_WinGetIDLast, FID_WinGetPID, FID_WinGetProcessName, FID_WinGetProcessPath, FID_WinGetCount, FID_WinGetList, FID_WinGetMinMax, FID_WinGetControls, FID_WinGetControlsHwnd, FID_WinGetTransparent, FID_WinGetTransColor, FID_WinGetStyle, FID_WinGetExStyle,
 	FID_WinGetPos = 0, FID_WinGetClientPos,
@@ -3270,7 +3269,6 @@ BIF_DECL(BIF_Array);
 BIF_DECL(BIF_Map);
 BIF_DECL(BIF_ObjAddRefRelease);
 BIF_DECL(BIF_ObjBindMethod);
-BIF_DECL(BIF_ObjRaw);
 BIF_DECL(BIF_ObjPtr);
 // Built-ins also available as methods -- these are available as functions for use primarily by overridden methods (i.e. where using the built-in methods isn't possible as they're no longer accessible).
 BIF_DECL(BIF_ObjXXX);
