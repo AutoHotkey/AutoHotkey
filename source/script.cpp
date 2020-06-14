@@ -13199,7 +13199,7 @@ ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR 
 	if (g_Debugger.HasStdErrHook())
 		g_Debugger.OutputDebug(buf);
 #endif
-	if (MsgBox(buf, MB_TOPMOST | (aErrorType == FAIL_OR_OK ? MB_YESNO : 0)) == IDYES)
+	if (MsgBox(buf, MB_TOPMOST | (aErrorType == FAIL_OR_OK ? MB_YESNO|MB_DEFBUTTON2 : 0)) == IDYES)
 		return OK;
 
 	if (aErrorType == CRITICAL_ERROR && mIsReadyToExecute)
@@ -13462,7 +13462,7 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 	TCHAR buf[MSGBOX_TEXT_SIZE];
 	FormatError(buf, _countof(buf), aErrorType, message, extra, aLine);
 
-	if (MsgBox(buf, aErrorType == FAIL_OR_OK ? MB_YESNO : 0) == IDYES)
+	if (MsgBox(buf, aErrorType == FAIL_OR_OK ? MB_YESNO|MB_DEFBUTTON2 : 0) == IDYES)
 	{
 		FreeExceptionToken(g.ThrownToken);
 		return OK;

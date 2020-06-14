@@ -132,7 +132,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define WILL_EXIT _T("The program will exit.")
 #define UNSTABLE_WILL_EXIT _T("The program is now unstable and will exit.")
 #define OLD_STILL_IN_EFFECT _T("The script was not reloaded; the old version will remain in effect.")
-#define ERR_CONTINUE_THREAD_Q _T("Continue the current thread?")
+#define ERR_CONTINUE_THREAD_Q _T("Try to continue anyway?")
 #define ERR_SCRIPT_NOT_FOUND _T("Script file not found.")
 #define ERR_ABORT_DELETE _T("__Delete will now return.")
 #define ERR_LINE_TOO_LONG _T("Line too long.")
