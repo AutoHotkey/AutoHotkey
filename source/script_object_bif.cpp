@@ -126,7 +126,12 @@ BIF_DECL(Op_ObjInvoke)
 	ResultType result;
 	bool param_is_var = obj_param->symbol == SYM_VAR;
 	if (param_is_var)
+	{
+		if (obj_param->var->IsUninitializedNormalVar())
+			// Treat this as an error for now.
+			_f_throw(WARNING_USE_UNSET_VARIABLE, obj_param->var->mName);
 		obj->AddRef(); // Ensure obj isn't deleted during the call if the variable is reassigned.
+	}
     result = obj->Invoke(aResultToken, invoke_type, name, *obj_param, aParam, aParamCount);
 	if (param_is_var)
 		obj->Release();
