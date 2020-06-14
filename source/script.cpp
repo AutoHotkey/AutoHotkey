@@ -516,7 +516,7 @@ Script::Script()
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
 	, mScriptName(NULL)
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
-	, mIsRestart(false), mErrorStdOut(false)
+	, mIsRestart(false), mErrorStdOut(false), mErrorStdOutCP(-1)
 #ifndef AUTOHOTKEYSC
 	, mIncludeLibraryFunctionsThenExit(NULL)
 #endif
@@ -3895,7 +3895,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#ErrorStdOut")))
 	{
-		mErrorStdOut = true;
+		SetErrorStdOut(parameter);
 		return CONDITION_TRUE;
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#KeyHistory")))
@@ -12473,11 +12473,10 @@ ResultType Line::Perform()
 		return IniDelete(ARG1, ARG2, mArgc < 3 ? NULL : ARG3);
 
 	case ACT_OUTPUTDEBUG:
-#ifndef CONFIG_DEBUGGER
-		OutputDebugString(ARG1);
-#else
-		g_Debugger.OutputDebug(ARG1);
+#ifdef CONFIG_DEBUGGER
+		if (!g_Debugger.OutputStdErr(ARG1))
 #endif
+			OutputDebugString(ARG1); // It does not return a value for the purpose of setting ErrorLevel.
 		return OK;
 
 	case ACT_SHUTDOWN:
@@ -13146,7 +13145,34 @@ void ResultToken::SetLastErrorCloseAndMaybeThrow(HANDLE aHandle, bool aError, DW
 }
 
 
-#define ERR_PRINT(fmt, ...) _ftprintf(stderr, fmt, __VA_ARGS__)
+void Script::SetErrorStdOut(LPTSTR aParam)
+{
+	mErrorStdOut = true;
+	mErrorStdOutCP = Line::ConvertFileEncoding(aParam);
+}
+
+void Script::PrintErrorStdOut(LPCTSTR aErrorText, int aLength, LPCTSTR aFile)
+{
+#ifdef CONFIG_DEBUGGER
+	if (g_Debugger.OutputStdOut(aErrorText))
+		return;
+#endif
+	TextFile tf;
+	tf.Open(aFile, TextStream::APPEND, mErrorStdOutCP);
+	tf.Write(aErrorText, aLength);
+	tf.Close();
+}
+
+// For backward compatibility, this actually prints to stderr, not stdout.
+void Script::PrintErrorStdOut(LPCTSTR aErrorText, LPCTSTR aExtraInfo, FileIndexType aFileIndex, LineNumberType aLineNumber)
+{
+	TCHAR buf[LINE_SIZE * 2];
+#define STD_ERROR_FORMAT _T("%s (%d) : ==> %s\n")
+	int n = sntprintf(buf, _countof(buf), STD_ERROR_FORMAT, Line::sSourceFile[aFileIndex], aLineNumber, aErrorText);
+	if (aExtraInfo)
+		n += sntprintf(buf + n, _countof(buf) - n, _T("     Specifically: %s\n"), aExtraInfo);
+	PrintErrorStdOut(buf, n, _T("**"));
+}
 
 ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo)
 {
@@ -13172,10 +13198,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 		// v1.0.47: Added a space before the colon as originally intended.  Toralf said, "With this minor
 		// change the error lexer of Scite recognizes this line as a Microsoft error message and it can be
 		// used to jump to that line."
-#define STD_ERROR_FORMAT _T("%s (%d) : ==> %s\n")
-		ERR_PRINT(STD_ERROR_FORMAT, Line::sSourceFile[mFileIndex], mLineNumber, aErrorText); // printf() does not significantly increase the size of the EXE, probably because it shares most of the same code with sprintf(), etc.
-		if (*aExtraInfo)
-			ERR_PRINT(_T("     Specifically: %s\n"), aExtraInfo);
+		g_script.PrintErrorStdOut(aErrorText, aExtraInfo, mFileIndex, mLineNumber);
 		return FAIL;
 	}
 
@@ -13213,8 +13236,7 @@ ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR 
 	//mCurrLine = aLine;  // This needs to be set in some cases where the caller didn't.
 		
 #ifdef CONFIG_DEBUGGER
-	if (g_Debugger.HasStdErrHook())
-		g_Debugger.OutputDebug(buf);
+	g_Debugger.OutputStdErr(buf);
 #endif
 	if (MsgBox(buf, MB_TOPMOST | (aErrorType == FAIL_OR_OK ? MB_YESNO|MB_DEFBUTTON2 : 0)) == IDYES)
 		return OK;
@@ -13290,9 +13312,7 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 	if (g_script.mErrorStdOut && !g_script.mIsReadyToExecute) // i.e. runtime errors are always displayed via dialog.
 	{
 		// See LineError() for details.
-		ERR_PRINT(STD_ERROR_FORMAT, Line::sSourceFile[mCurrFileIndex], mCombinedLineNumber, aErrorText);
-		if (*aExtraInfo)
-			ERR_PRINT(_T("     Specifically: %s\n"), aExtraInfo);
+		PrintErrorStdOut(aErrorText, aExtraInfo, mCurrFileIndex, mCombinedLineNumber);
 	}
 	else
 	{
@@ -13323,9 +13343,7 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 
 		//ShowInEditor();
 #ifdef CONFIG_DEBUGGER
-		if (g_Debugger.HasStdErrHook())
-			g_Debugger.OutputDebug(buf);
-		else
+		if (!g_Debugger.OutputStdErr(buf))
 #endif
 		MsgBox(buf);
 	}
@@ -13521,15 +13539,12 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 	}
 
 	if (warnMode == WARNMODE_STDOUT)
-#ifndef CONFIG_DEBUGGER
-		_fputts(buf, stdout);
+		PrintErrorStdOut(buf);
 	else
-		OutputDebugString(buf);
-#else
-		g_Debugger.FileAppendStdOut(buf) || _fputts(buf, stdout);
-	else
-		g_Debugger.OutputDebug(buf);
+#ifdef CONFIG_DEBUGGER
+	if (!g_Debugger.OutputStdErr(buf))
 #endif
+		OutputDebugString(buf);
 
 	// In MsgBox mode, MsgBox is in addition to OutputDebug
 	if (warnMode == WARNMODE_MSGBOX)

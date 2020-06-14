@@ -8210,7 +8210,7 @@ BIF_DECL(BIF_FileAppend)
 	bool file_was_already_open = ts;
 
 #ifdef CONFIG_DEBUGGER
-	if (*aFilespec == '*' && !aFilespec[1] && !aBuf_obj && g_Debugger.FileAppendStdOut(aBuf))
+	if (*aFilespec == '*' && !aFilespec[1] && !aBuf_obj && g_Debugger.OutputStdOut(aBuf))
 	{
 		// StdOut has been redirected to the debugger, and this "FileAppend" call has been
 		// fully handled by the call above, so just return.

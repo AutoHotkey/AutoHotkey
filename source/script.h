@@ -1293,7 +1293,7 @@ public:
 	static UINT ConvertFileEncoding(LPTSTR aBuf)
 	// Returns the encoding with possible CP_AHKNOBOM flag, or (UINT)-1 if invalid.
 	{
-		if (!*aBuf)
+		if (!aBuf || !*aBuf)
 			// Active codepage, equivalent to specifying CP0.
 			return CP_ACP;
 		if (!_tcsicmp(aBuf, _T("UTF-8")))		return CP_UTF8;
@@ -2901,6 +2901,10 @@ public:
 	bool mAutoExecSectionIsRunning;
 	bool mIsRestart; // The app is restarting rather than starting from scratch.
 	bool mErrorStdOut; // true if load-time syntax errors should be sent to stdout vs. a MsgBox.
+	UINT mErrorStdOutCP;
+	void SetErrorStdOut(LPTSTR aParam);
+	void PrintErrorStdOut(LPCTSTR aErrorText, int aLength = 0, LPCTSTR aFile = _T("*"));
+	void PrintErrorStdOut(LPCTSTR aErrorText, LPCTSTR aExtraInfo, FileIndexType aFileIndex, LineNumberType aLineNumber);
 #ifndef AUTOHOTKEYSC
 	TextStream *mIncludeLibraryFunctionsThenExit;
 #endif

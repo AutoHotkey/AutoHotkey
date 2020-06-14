@@ -2062,15 +2062,14 @@ int Debugger::WriteStreamPacket(LPCTSTR aText, LPCSTR aType)
 	return SendResponse();
 }
 
-void Debugger::OutputDebug(LPCTSTR aText)
+bool Debugger::OutputStdErr(LPCTSTR aText)
 {
 	if (mStdErrMode != SR_Disabled) // i.e. SR_Copy or SR_Redirect
 		WriteStreamPacket(aText, "stderr");
-	if (mStdErrMode != SR_Redirect) // i.e. SR_Disabled or SR_Copy
-		OutputDebugString(aText);
+	return mStdErrMode == SR_Redirect;
 }
 
-bool Debugger::FileAppendStdOut(LPCTSTR aText)
+bool Debugger::OutputStdOut(LPCTSTR aText)
 {
 	if (mStdOutMode != SR_Disabled) // i.e. SR_Copy or SR_Redirect
 		WriteStreamPacket(aText, "stdout");
