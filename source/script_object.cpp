@@ -1357,14 +1357,26 @@ ResultType Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, Ex
 	auto name = ParamIndexToString(0, _f_number_buf);
 	if (!*name)
 		_o_throw(ERR_PARAM1_INVALID);
-	ExprTokenType getter, setter;
+	ExprTokenType getter, setter, value;
 	getter.symbol = SYM_INVALID;
 	setter.symbol = SYM_INVALID;
+	value.symbol = SYM_INVALID;
 	auto desc = dynamic_cast<Object *>(ParamIndexToObject(1));
 	if (!desc // Must be an Object.
 		|| desc->GetOwnProp(getter, _T("Get")) && getter.symbol != SYM_OBJECT  // If defined, must be an object.
-		|| desc->GetOwnProp(setter, _T("Set")) && setter.symbol != SYM_OBJECT) //
+		|| desc->GetOwnProp(setter, _T("Set")) && setter.symbol != SYM_OBJECT
+		|| desc->GetOwnProp(value, _T("Value")) && (getter.symbol != SYM_INVALID || setter.symbol != SYM_INVALID)
+		// To help prevent errors, throw if none of the above properties were present.  This also serves to
+		// reserve some cases for possible future use, such as passing a function object to imply {get:...}.
+		|| getter.symbol == SYM_INVALID && setter.symbol == SYM_INVALID && value.symbol == SYM_INVALID)
 		_o_throw(ERR_PARAM2_INVALID);
+	if (value.symbol != SYM_INVALID) // Above already verified that neither Get nor Set was present.
+	{
+		if (!SetOwnProp(name, value))
+			_o_throw(ERR_OUTOFMEM);
+		AddRef();
+		_o_return(this);
+	}
 	auto prop = DefineProperty(name);
 	if (!prop)
 		_o_throw(ERR_OUTOFMEM);
@@ -1408,16 +1420,20 @@ ResultType Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags
 	auto field = FindField(name);
 	if (!field)
 		_o__ret(aResultToken.UnknownMemberError(ExprTokenType(this), IT_GET, name));
+	auto desc = Object::Create();
+	desc->SetInternalCapacity(1 + (field->symbol == SYM_DYNAMIC));
 	if (field->symbol == SYM_DYNAMIC)
 	{
-		auto desc = Object::Create();
-		if (!desc || !desc->SetInternalCapacity(2))
-			_o_throw(ERR_OUTOFMEM);
 		if (auto getter = field->prop->Getter()) desc->SetOwnProp(_T("Get"), getter);
 		if (auto setter = field->prop->Setter()) desc->SetOwnProp(_T("Set"), setter);
-		_o_return(desc);
 	}
-	_o_return_empty;
+	else
+	{
+		ExprTokenType value;
+		field->ToToken(value);
+		desc->SetOwnProp(_T("Value"), value);
+	}
+	_o_return(desc);
 }
 
 
