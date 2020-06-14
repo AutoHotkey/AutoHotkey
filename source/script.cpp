@@ -8691,7 +8691,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					else
 					{
 						this_infix_item.symbol = SYM_IFF_ELSE;
-						this_infix_item.marker = cp; // For error-reporting.
+						this_infix_item.marker = cp; // For detection of invalid object literals, and error-reporting.
 					}
 					break;
 
@@ -9389,7 +9389,26 @@ unquoted_literal:
 			if (stack_symbol == SYM_BEGIN) // An ELSE with no matching IF/THEN.
 				return LineError(_T("A \":\" is missing its \"?\"")); // Below relies on the above check having been done, to avoid underflow.
 			if (in_param_list && stack_symbol == SYM_OBRACE)
-			{	// End of key in something like {x: y}.
+			{
+				// This should be the end of a property name in something like {x: y}.
+				if (postfix_count)
+				{
+					LPTSTR cp;
+					switch (postfix[postfix_count - 1]->symbol)
+					{
+					case SYM_DYNAMIC:
+						postfix_count--;
+						break;
+					case SYM_STRING:
+						// Is this a quoted string (invalid here) or unquoted property name?
+						for (cp = this_infix->marker - 1; IS_SPACE_OR_TAB(*cp); --cp);
+						if (IS_IDENTIFIER_CHAR(*cp))
+							break;
+					default:
+						return LineError(_T("Invalid property name in object literal."), FAIL
+							, stack[stack_count - 1]->deref->marker); // Too tricky to find the beginning of this "parameter", so just point out which object literal.
+					}
+				}
 				++in_param_list->param_count;
 				++this_infix;
 				continue;
