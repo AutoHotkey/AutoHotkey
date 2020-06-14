@@ -10167,7 +10167,7 @@ ResultType Line::FileAppend(LPTSTR aFilespec, LPTSTR aBuf, LoopReadFileStruct *a
 			++aFilespec;
 		}
 #ifdef CONFIG_DEBUGGER
-		else if (!aFilespec[1] && g_Debugger.FileAppendStdOut(aBuf))
+		else if (!aFilespec[1] && g_Debugger.OutputStdOut(aBuf))
 		{
 			// StdOut has been redirected to the debugger, so return.
 			return SetErrorsOrThrow(false, 0);

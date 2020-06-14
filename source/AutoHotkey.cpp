@@ -93,8 +93,8 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			restart_mode = true;
 		else if (!_tcsicmp(param, _T("/F")) || !_tcsicmp(param, _T("/force")))
 			g_ForceLaunch = true;
-		else if (!_tcsicmp(param, _T("/ErrorStdOut")))
-			g_script.mErrorStdOut = true;
+		else if (!_tcsnicmp(param, _T("/ErrorStdOut"), 12))
+			g_script.SetErrorStdOut(param[12] == '=' ? param + 13 : NULL);
 #ifndef AUTOHOTKEYSC // i.e. the following switch is recognized only by AutoHotkey.exe (especially since recognizing new switches in compiled scripts can break them, unlike AutoHotkey.exe).
 		else if (!_tcsicmp(param, _T("/iLib"))) // v1.0.47: Build an include-file so that ahk2exe can include library functions called by the script.
 		{

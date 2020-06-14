@@ -222,8 +222,8 @@ public:
 
 	// Streams
 	int WriteStreamPacket(LPCTSTR aText, LPCSTR aType);
-	void OutputDebug(LPCTSTR aText);
-	bool FileAppendStdOut(LPCTSTR aText);
+	bool OutputStdErr(LPCTSTR aText);
+	bool OutputStdOut(LPCTSTR aText);
 
 	#define DEBUGGER_COMMAND(cmd)	int cmd(char **aArgV, int aArgCount, char *aTransactionId)
 	
