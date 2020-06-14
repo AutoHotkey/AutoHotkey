@@ -2874,6 +2874,13 @@ Object *GuiType::sClass = CreateClass(_T("Gui"), Object::sClass, sPrototype, sta
 
 
 
+Object *UserMenu::sPrototype = CreatePrototype(_T("Menu"), Object::sPrototype, sMembers, sMemberCount);
+Object *UserMenu::sBarPrototype = CreatePrototype(_T("MenuBar"), sPrototype);
+Object *UserMenu::sClass = CreateClass(_T("Menu"), Object::sClass, sPrototype, static_cast<ObjectMethod>(&New<UserMenu>));
+Object *UserMenu::sBarClass = CreateClass(_T("MenuBar"), sClass, sBarPrototype, static_cast<ObjectMethod>(&New<UserMenu::Bar>));
+
+
+
 //
 // Primitive values as objects
 //

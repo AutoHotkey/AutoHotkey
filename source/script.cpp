@@ -202,9 +202,7 @@ FuncEntry g_BIF[] =
 	BIFn(LTrim, 1, 2, BIF_Trim),
 	BIF1(Map, 0, NA),
 	BIFn(Max, 1, NA, BIF_MinMax),
-	BIFn(MenuBarCreate, 0, 0, BIF_Menu),
-	BIFn(MenuCreate, 0, 0, BIF_Menu),
-	BIFn(MenuFromHandle, 1, 1, BIF_Menu),
+	BIF1(MenuFromHandle, 1, 1),
 	BIF1(MenuSelect, 0, 11),
 	BIFn(Min, 1, NA, BIF_MinMax),
 	BIF1(Mod, 2, 2),
@@ -653,10 +651,8 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 {
 	// Now that all static initializers (such as for Object::sPrototype)
 	// are guaranteed to have been executed, construct the Tray menu.
-	if (!(mTrayMenu = AddMenu(MENU_TYPE_POPUP))) // realistically never happens
-		return ScriptError(_T("No tray mem"));
-	else
-		mTrayMenu->AppendStandardItems();
+	mTrayMenu = new UserMenu(MENU_TYPE_POPUP);
+	mTrayMenu->AppendStandardItems();
 
 	mIsRestart = aIsRestart;
 	TCHAR buf[UorA(T_MAX_PATH, 2048)]; // Just to make sure we have plenty of room to do things with.

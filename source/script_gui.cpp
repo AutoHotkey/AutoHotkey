@@ -968,7 +968,7 @@ ResultType GuiType::SetMenu(ExprTokenType &aParam)
 		menu = dynamic_cast<UserMenu *>(TokenToObject(aParam));
 		if (!menu || menu->mMenuType != MENU_TYPE_BAR)
 			return g_script.RuntimeError(ERR_INVALID_VALUE);
-		menu->Create(); // Ensure the menu bar physically exists.
+		menu->CreateHandle(); // Ensure the menu bar physically exists.
 		menu->AddRef();
 	}
 	if (mMenu)

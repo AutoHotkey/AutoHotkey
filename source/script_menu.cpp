@@ -44,9 +44,7 @@ ObjectMember UserMenu::sMembers[] =
 	Object_Property_get(Handle),
 	Object_Property_get_set(ClickCount)
 };
-
-Object *UserMenu::sMenuPrototype;
-Object *UserMenu::sMenuBarPrototype;
+int UserMenu::sMemberCount = _countof(sMembers);
 
 
 
@@ -122,7 +120,7 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 
 	case P_Handle:
 		if (!mMenu)
-			Create(); // On failure (rare), we just return 0.
+			CreateHandle(); // On failure (rare), we just return 0.
 		_o_return((__int64)(UINT_PTR)mMenu);
 
 	case P_ClickCount:
@@ -279,28 +277,27 @@ UserMenu *Script::FindMenu(HMENU aMenuHandle)
 
 
 
-UserMenu *Script::AddMenu(MenuTypeType aMenuType)
+UserMenu::UserMenu(MenuTypeType aMenuType)
+	: mMenuType(aMenuType)
+{
+	SetBase(sPrototype);
+	g_script.AddMenu(this);
+}
+
+UserMenu *Script::AddMenu(UserMenu *aMenu)
 // Returns the newly created UserMenu object.
 {
-	UserMenu *menu = new UserMenu(aMenuType);
-	if (!menu)
-		return NULL;  // Caller should show error if desired.
-	if (!UserMenu::sMenuPrototype)
-	{
-		UserMenu::sMenuPrototype = Object::CreatePrototype(_T("Menu"), Object::sPrototype, UserMenu::sMembers, _countof(UserMenu::sMembers));
-		UserMenu::sMenuBarPrototype = Object::CreatePrototype(_T("MenuBar"), UserMenu::sMenuPrototype);
-	}
-	menu->SetBase(aMenuType == MENU_TYPE_BAR ? UserMenu::sMenuBarPrototype : UserMenu::sMenuPrototype);
+	ASSERT(aMenu);
 	if (!mFirstMenu)
-		mFirstMenu = mLastMenu = menu;
+		mFirstMenu = mLastMenu = aMenu;
 	else
 	{
-		mLastMenu->mNextMenu = menu;
+		mLastMenu->mNextMenu = aMenu;
 		// This must be done after the above:
-		mLastMenu = menu;
+		mLastMenu = aMenu;
 	}
 	++mMenuCount;  // Only after memory has been successfully allocated.
-	return menu;
+	return aMenu;
 }
 
 
@@ -355,7 +352,7 @@ ResultType Script::ScriptDeleteMenu(UserMenu *aMenu)
 
 void UserMenu::Dispose()
 {
-	Destroy();
+	DestroyHandle();
 	DeleteAllItems();
 	if (mBrush) // Free the brush used for the menu's background color.
 		DeleteObject(mBrush);
@@ -548,7 +545,7 @@ ResultType UserMenu::InternalAppendMenu(UserMenuItem *mi, UserMenuItem *aInsertB
 	if (mi->mSubmenu)
 	{
 		// Ensure submenu is created so that its handle can be used below.
-		if (!mi->mSubmenu->Create())
+		if (!mi->mSubmenu->CreateHandle())
 			return FAIL;
 		mii.fMask |= MIIM_SUBMENU;
 		mii.hSubMenu = mi->mSubmenu->mMenu;
@@ -611,10 +608,10 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 ResultType UserMenu::DeleteAllItems()
 // Remove all menu items from the linked list and from the menu.
 {
-	// Fixed for v1.1.27.03: Don't attempt to take a shortcut by calling Destroy(), as it
+	// Fixed for v1.1.27.03: Don't attempt to take a shortcut by calling DestroyHandle(), as it
 	// will fail if this is a sub-menu of a menu bar.  Removing the items individually will
 	// do exactly what the user expects.  The following old comment indicates one reason
-	// Destroy() was used; that reason is now obsolete since submenus are given IDs:
+	// DestroyHandle() was used; that reason is now obsolete since submenus are given IDs:
 	// "In addition, this avoids the need to find any submenus by position:"
 	if (!mFirstMenuItem)
 		return OK;  // If there are no user-defined menu items, it's already in the correct state.
@@ -938,7 +935,7 @@ ResultType UserMenu::SetDefault(UserMenuItem *aMenuItem, bool aUpdateGuiMenuBars
 
 
 
-ResultType UserMenu::Create()
+ResultType UserMenu::CreateHandle()
 // Menu bars require non-popup menus (CreateMenu vs. CreatePopupMenu).  Rather than maintain two
 // different types of HMENUs on the rare chance that a script might try to use a menu both as
 // a popup and a menu bar, it seems best to have only one type to keep the code simple and reduce
@@ -972,7 +969,7 @@ ResultType UserMenu::Create()
 		SetMenuDefaultItem(mMenu, mDefault->mMenuID, FALSE);
 
 	// Apply background color if this menu has a non-standard one.  If this menu has submenus,
-	// they will be individually given their own background color when created via Create(),
+	// they will be individually given their own background color when created via CreateHandle(),
 	// which is why false is passed:
 	ApplyColor(false);
 
@@ -1101,7 +1098,7 @@ ResultType UserMenu::EnableStandardOpenItem(bool aEnable)
 
 
 
-void UserMenu::Destroy()
+void UserMenu::DestroyHandle()
 // Destroys the Win32 menu or marks it NULL if it has already been destroyed externally.
 // This should be called only when the UserMenu is being deleted (or the script is exiting),
 // otherwise any parent menus would still refer to the old Win32 menu.  If the UserMenu is
@@ -1145,7 +1142,7 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 		return g_script.RuntimeError(ERR_INVALID_MENU_TYPE);
 	if (!mMenuItemCount)
 		return OK;  // Consider the display of an empty menu to be a success.
-	if (!Create()) // Create if needed.  No error msg since so rare.
+	if (!CreateHandle()) // Create if needed.  No error msg since so rare.
 		return FAIL;
 	//if (!IsMenu(mMenu))
 	//	mMenu = NULL;

@@ -15122,25 +15122,14 @@ BIF_DECL(BIF_CallbackFree)
 
 
 
-BIF_DECL(BIF_Menu)
+BIF_DECL(BIF_MenuFromHandle)
 {
-	UserMenu *menu;
-	switch (_f_callee_id)
-	{
-	default:
-	//case FID_MenuCreate:
-	//case FID_MenuBarCreate:
-		if (  !(menu = g_script.AddMenu(_f_callee_id == FID_MenuCreate ? MENU_TYPE_POPUP : MENU_TYPE_BAR))  )
-			_f_throw(ERR_OUTOFMEM);
-		break;
-	case FID_MenuFromHandle:
-		menu = g_script.FindMenu((HMENU)ParamIndexToInt64(0));
-		if (menu)
-			menu->AddRef();
-		break;
-	}
+	auto *menu = g_script.FindMenu((HMENU)ParamIndexToInt64(0));
 	if (menu)
+	{
+		menu->AddRef();
 		_f_return(menu);
+	}
 	_f_return_empty;
 }
 

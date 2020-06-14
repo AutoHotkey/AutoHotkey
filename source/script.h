@@ -640,7 +640,6 @@ enum BuiltInFunctionID {
 	FID_ProcessExist = 0, FID_ProcessClose, FID_ProcessWait, FID_ProcessWaitClose, 
 	FID_MonitorGet = 0, FID_MonitorGetWorkArea, FID_MonitorGetCount, FID_MonitorGetPrimary, FID_MonitorGetName, 
 	FID_OnExit = 0, FID_OnClipboardChange, FID_OnError,
-	FID_MenuCreate = 0, FID_MenuBarCreate, FID_MenuFromHandle,
 	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlGetTab, FID_ControlFindItem, FID_ControlGetChoice, FID_ControlGetList, FID_ControlGetLineCount, FID_ControlGetCurrentLine, FID_ControlGetCurrentCol, FID_ControlGetLine, FID_ControlGetSelected, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
 	FID_ControlSetChecked = 0, FID_ControlSetEnabled, FID_ControlShow, FID_ControlHide, FID_ControlSetStyle, FID_ControlSetExStyle, FID_ControlShowDropDown, FID_ControlHideDropDown, FID_ControlSetTab, FID_ControlAddItem, FID_ControlDeleteItem, FID_ControlChoose, FID_ControlChooseString, FID_ControlEditPaste,
 	FID_ControlSend = SCM_NOT_RAW, FID_ControlSendText = SCM_RAW_TEXT,
@@ -2069,32 +2068,29 @@ struct MsgMonitorInstance
 class UserMenuItem;  // Forward declaration since classes use each other (i.e. a menu *item* can have a submenu).
 class UserMenu : public Object
 {
+	class Bar;
+
 public:
-	UserMenuItem *mFirstMenuItem, *mLastMenuItem, *mDefault;
-	UserMenu *mNextMenu;  // Next item in linked list
+	UserMenuItem *mFirstMenuItem = nullptr, *mLastMenuItem = nullptr, *mDefault = nullptr;
+	UserMenu *mNextMenu = nullptr;  // Next item in linked list
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
-	int mClickCount; // How many clicks it takes to trigger the default menu item.  2 = double-click
-	UINT mMenuItemCount;  // The count of user-defined menu items (doesn't include the standard items, if present).
+	int mClickCount = 2; // How many clicks it takes to trigger the default menu item.  2 = double-click
+	UINT mMenuItemCount = 0; // The count of user-defined menu items (doesn't include the standard items, if present).
 	MenuTypeType mMenuType; // MENU_TYPE_POPUP (via CreatePopupMenu) vs. MENU_TYPE_BAR (via CreateMenu).
-	HMENU mMenu;
-	HBRUSH mBrush;   // Background color to apply to menu.
-	COLORREF mColor; // The color that corresponds to the above.
+	HMENU mMenu = NULL;
+	HBRUSH mBrush = NULL; // Background color to apply to menu.
+	COLORREF mColor = CLR_DEFAULT; // The color that corresponds to the above.
 
 	static ObjectMember sMembers[];
-	static Object *sMenuPrototype, *sMenuBarPrototype;
+	static int sMemberCount;
+	static Object *sPrototype, *sBarPrototype, *sClass, *sBarClass;
 
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
 
-	UserMenu(MenuTypeType aMenuType) // Constructor
-		: mFirstMenuItem(NULL), mLastMenuItem(NULL), mDefault(NULL)
-		, mClickCount(2), mMenuItemCount(0), mNextMenu(NULL), mMenu(NULL)
-		, mMenuType(aMenuType)
-		, mBrush(NULL), mColor(CLR_DEFAULT)
-	{
-	}
-
+	UserMenu(MenuTypeType aMenuType);
+	static UserMenu *Create() { return new UserMenu(MENU_TYPE_POPUP); }
 	void Dispose();
 	~UserMenu();
 
@@ -2143,12 +2139,12 @@ public:
 	ResultType DisableItem(UserMenuItem *aMenuItem);
 	ResultType ToggleEnableItem(UserMenuItem *aMenuItem);
 	ResultType SetDefault(UserMenuItem *aMenuItem = NULL, bool aUpdateGuiMenuBars = true);
-	ResultType Create();
+	ResultType CreateHandle();
+	void DestroyHandle();
 	void SetColor(ExprTokenType &aColor, bool aApplyToSubmenus);
 	void ApplyColor(bool aApplyToSubmenus);
 	ResultType AppendStandardItems();
 	ResultType EnableStandardOpenItem(bool aEnable);
-	void Destroy();
 	ResultType Display(bool aForceToForeground = true, int aX = COORD_UNSPECIFIED, int aY = COORD_UNSPECIFIED);
 	UserMenuItem *FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bool &aByPos);
 	UserMenuItem *FindItemByID(UINT aID);
@@ -2159,6 +2155,17 @@ public:
 	ResultType SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int aIconNumber, int aWidth);
 	ResultType ApplyItemIcon(UserMenuItem *aMenuItem);
 	ResultType RemoveItemIcon(UserMenuItem *aMenuItem);
+};
+
+class UserMenu::Bar : public UserMenu
+{
+	Bar(const Bar &) = delete; // Never instantiated.
+
+public:
+	static UserMenu *Create()
+	{
+		return new UserMenu(MENU_TYPE_BAR);
+	}
 };
 
 
@@ -3004,7 +3011,7 @@ public:
 
 	UINT GetFreeMenuItemID();
 	UserMenu *FindMenu(HMENU aMenuHandle);
-	UserMenu *AddMenu(MenuTypeType aMenuType);
+	UserMenu *AddMenu(UserMenu *aMenu);
 	ResultType ScriptDeleteMenu(UserMenu *aMenu);
 	UserMenuItem *FindMenuItemByID(UINT aID)
 	{
@@ -3233,7 +3240,7 @@ BIF_DECL(BIF_CallbackCreate);
 BIF_DECL(BIF_CallbackFree);
 #endif
 
-BIF_DECL(BIF_Menu);
+BIF_DECL(BIF_MenuFromHandle);
 BIF_DECL(BIF_TraySetIcon);
 
 BIF_DECL(BIF_MsgBox);
