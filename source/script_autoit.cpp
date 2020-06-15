@@ -903,9 +903,15 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 		// jackieku: 32768 * sizeof(wchar_t) = 65536, which can not be stored in a unsigned 16bit integer.
 		dyn_buf = (LPTSTR)talloca(32767); // 32768 is the size Au3 uses for GETLINE and such.
 		*(LPWORD)dyn_buf = 32767; // EM_GETLINE requires first word of string to be set to its size.
-		if (   !SendMessageTimeout(control_window, EM_GETLINE, (WPARAM)control_index, (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 2000, &dwResult)
-			|| !dwResult   ) // due to the specified line number being greater than the number of lines in the edit control.
+		if (!SendMessageTimeout(control_window, EM_GETLINE, (WPARAM)control_index, (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto error;
+		if (!dwResult) // Line is empty or line number is invalid.
+		{
+			DWORD_PTR dwLineCount;
+			if (!SendMessageTimeout(control_window, EM_GETLINECOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwLineCount)
+				|| (DWORD)control_index > dwLineCount)
+				goto error;
+		}
 		dyn_buf[dwResult] = '\0'; // Ensure terminated since the API might not do it in some cases.
 		output_var.Assign(dyn_buf);
 		break;
