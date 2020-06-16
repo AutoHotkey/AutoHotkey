@@ -1511,7 +1511,7 @@ int Line::Util_CopyFile(LPCTSTR szInputSource, LPCTSTR szInputDest, bool bOverwr
 	if (hSearch == INVALID_HANDLE_VALUE)
 	{
 		aLastError = GetLastError(); // Set even in this case since FindFirstFile can fail due to actual errors, such as an invalid path.
-		return 0; // Indicate no failures.
+		return StrChrAny(const_cast<LPTSTR>(szInputSource), _T("?*")) ? 0 : 1; // Indicate failure only if there were no wildcards.
 	}
 	aLastError = 0; // Set default. Overridden only when a failure occurs.
 
