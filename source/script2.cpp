@@ -2533,8 +2533,6 @@ error:
 
 BIF_DECL(BIF_WinSet)
 {
-	_f_param_string_opt(aValue, 0);
-
 	HWND target_window;
 	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1))
 		return;
@@ -2544,22 +2542,30 @@ BIF_DECL(BIF_WinSet)
 	DWORD exstyle;
 	BuiltInFunctionID cmd = _f_callee_id;
 
+	LPTSTR aValue;
+	ToggleValueType toggle = TOGGLE_INVALID;
+	if (cmd == FID_WinSetAlwaysOnTop || cmd == FID_WinSetEnabled)
+	{
+		toggle = ParamIndexToToggleValue(0);
+		if (toggle == TOGGLE_INVALID)
+			_f_throw(ERR_PARAM1_INVALID);
+	}
+	else
+		aValue = ParamIndexToString(0, _f_number_buf);
+
 	switch (cmd)
 	{
 	case FID_WinSetAlwaysOnTop:
 	{
 		HWND topmost_or_not;
-		switch(Line::ConvertOnOffToggle(aValue))
+		switch (toggle)
 		{
 		case TOGGLED_ON: topmost_or_not = HWND_TOPMOST; break;
 		case TOGGLED_OFF: topmost_or_not = HWND_NOTOPMOST; break;
-		case NEUTRAL: // parameter was blank, so it defaults to TOGGLE.
 		case TOGGLE:
 			exstyle = GetWindowLong(target_window, GWL_EXSTYLE);
 			topmost_or_not = (exstyle & WS_EX_TOPMOST) ? HWND_NOTOPMOST : HWND_TOPMOST;
 			break;
-		default:
-			_f_throw(ERR_PARAM1_INVALID);
 		}
 		// SetWindowLong() didn't seem to work, at least not on some windows.  But this does.
 		// As of v1.0.25.14, SWP_NOACTIVATE is also specified, though its absence does not actually
@@ -2699,15 +2705,11 @@ BIF_DECL(BIF_WinSet)
 		break;
 	}
 
-	case FID_WinSetEnabled: // This is separate from WINSET_STYLE because merely changing the WS_DISABLED style is usually not as effective as calling EnableWindow().
-		switch (Line::ConvertOnOffToggle(aValue))
-		{
-		case TOGGLED_ON:	success = EnableWindow(target_window, TRUE); break;
-		case TOGGLED_OFF:	success = EnableWindow(target_window, FALSE); break;
-		case TOGGLE:		success = EnableWindow(target_window, !IsWindowEnabled(target_window)); break;
-		default:
-			_f_throw(ERR_PARAM1_INVALID);
-		}
+	case FID_WinSetEnabled:
+		if (toggle == TOGGLE)
+			toggle = IsWindowEnabled(target_window) ? TOGGLED_OFF : TOGGLED_ON;
+		EnableWindow(target_window, toggle == TOGGLED_ON); // Return value is based on previous state, not success/failure.
+		success = bool(IsWindowEnabled(target_window)) == (toggle == TOGGLED_ON);
 		break;
 
 	case FID_WinSetRegion:
@@ -9266,12 +9268,7 @@ BIV_DECL_R(BIV_DetectHiddenWindows)
 
 BIV_DECL_W(BIV_DetectHiddenWindows_Set)
 {
-	LPTSTR aBuf = BivRValueToString();
-	ToggleValueType toggle;
-	if ( (toggle = Line::ConvertOnOff(aBuf, NEUTRAL)) != NEUTRAL )
-		g->DetectHiddenWindows = (toggle == TOGGLED_ON);
-	else
-		_f_throw(ERR_INVALID_VALUE, aBuf);
+	g->DetectHiddenWindows = BivRValueToBOOL();
 }
 
 BIV_DECL_R(BIV_DetectHiddenText)
@@ -9281,12 +9278,7 @@ BIV_DECL_R(BIV_DetectHiddenText)
 
 BIV_DECL_W(BIV_DetectHiddenText_Set)
 {
-	LPTSTR aBuf = BivRValueToString();
-	ToggleValueType toggle;
-	if ( (toggle = Line::ConvertOnOff(aBuf, NEUTRAL)) != NEUTRAL )
-		g->DetectHiddenText = (toggle == TOGGLED_ON);
-	else
-		_f_throw(ERR_INVALID_VALUE, aBuf);
+	g->DetectHiddenText = BivRValueToBOOL();
 }
 
 BIV_DECL_R(BIV_StringCaseSense)
@@ -9401,11 +9393,7 @@ BIV_DECL_R(BIV_StoreCapsLockMode)
 
 BIV_DECL_W(BIV_StoreCapsLockMode_Set)
 {
-	LPTSTR aBuf = BivRValueToString();
-	ToggleValueType toggle = Line::ConvertOnOff(aBuf, NEUTRAL);
-	if (toggle == NEUTRAL)
-		_f_throw(ERR_INVALID_VALUE, aBuf);
-	g->StoreCapslockMode = (toggle == TOGGLED_ON);
+	g->StoreCapslockMode = BivRValueToBOOL();
 }
 
 BIV_DECL_R(BIV_IsPaused) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
@@ -16755,6 +16743,21 @@ BOOL TokenToBOOL(ExprTokenType &aToken)
 		return TRUE;
 	}
 }
+
+
+
+ToggleValueType TokenToToggleValue(ExprTokenType &aToken)
+{
+	if (TokenIsNumeric(aToken))
+	switch (TokenToInt64(aToken)) // Reserve other values for potential future use by requiring exact match.
+	{
+	case 1: return TOGGLED_ON;
+	case 0: return TOGGLED_OFF;
+	case -1: return TOGGLE;
+	}
+	return TOGGLE_INVALID;
+}
+
 
 
 SymbolType TokenIsNumeric(ExprTokenType &aToken)

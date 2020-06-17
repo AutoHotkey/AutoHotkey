@@ -7,6 +7,7 @@
 #define ParamIndexToNumber(index, output)			TokenToDoubleOrInt64(*aParam[(index)], output)
 #define ParamIndexToBOOL(index)						TokenToBOOL(*aParam[(index)])
 #define ParamIndexToObject(index)					TokenToObject(*aParam[(index)])
+#define ParamIndexToToggleValue(index)				TokenToToggleValue(*aParam[(index)])
 
 // Rather than adding a third value to the CaseSensitive parameter, it obeys StringCaseSense because:
 // 1) It matches the behavior of the equal operator (=) in expressions.

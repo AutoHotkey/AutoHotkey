@@ -1136,6 +1136,15 @@ public:
 		return THREAD_CMD_INVALID;
 	}
 
+	static ToggleValueType ConvertTrueFalse(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
+	// Returns aDefault if aBuf isn't either ON, OFF, or blank.
+	{
+		if (!aBuf || !*aBuf) return NEUTRAL;
+		if (!_tcsicmp(aBuf, _T("True")) || !_tcscmp(aBuf, _T("1"))) return TOGGLED_ON;
+		if (!_tcsicmp(aBuf, _T("False")) || !_tcscmp(aBuf, _T("0"))) return TOGGLED_OFF;
+		return aDefault;
+	}
+
 	static ToggleValueType ConvertOnOff(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, or blank.
 	{
@@ -1153,6 +1162,19 @@ public:
 		if (!_tcsicmp(aBuf, _T("AlwaysOn"))) return ALWAYS_ON;
 		if (!_tcsicmp(aBuf, _T("AlwaysOff"))) return ALWAYS_OFF;
 		return aDefault;
+	}
+
+	static ToggleValueType Convert10Toggle(LPTSTR aBuf)
+	{
+		if (!aBuf || !*aBuf) return NEUTRAL;
+		if (IsNumeric(aBuf, true))
+			switch (ATOI(aBuf))
+			{
+			case 1: return TOGGLED_ON;
+			case 0: return TOGGLED_OFF;
+			case -1: return TOGGLE;
+			}
+		return TOGGLE_INVALID;
 	}
 
 	static ToggleValueType ConvertOnOffToggle(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
@@ -3371,6 +3393,7 @@ BIF_DECL(BIF_SetBIV);
 BOOL ResultToBOOL(LPTSTR aResult);
 BOOL VarToBOOL(Var &aVar);
 BOOL TokenToBOOL(ExprTokenType &aToken);
+ToggleValueType TokenToToggleValue(ExprTokenType &aToken);
 SymbolType TokenIsNumeric(ExprTokenType &aToken);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aIsImpureNumeric);
@@ -3393,7 +3416,6 @@ LPTSTR TokenTypeString(ExprTokenType &aToken);
 #define STRING_TYPE_STRING _T("String")
 #define INTEGER_TYPE_STRING _T("Integer")
 #define FLOAT_TYPE_STRING _T("Float")
-BOOL TokenIsType(ExprTokenType &aToken, IObject *aType);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
 ResultType SetWorkingDir(LPTSTR aNewDir);

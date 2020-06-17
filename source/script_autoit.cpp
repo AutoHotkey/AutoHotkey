@@ -320,7 +320,9 @@ BIF_DECL(BIF_Control)
 	// Boolean parameter:
 	case FID_ControlSetChecked:
 	case FID_ControlSetEnabled:
-		aToggle = Line::ConvertOnOffToggle(ParamIndexToString(0, _f_number_buf));
+		aToggle = ParamIndexToToggleValue(0);
+		if (aToggle == TOGGLE_INVALID)
+			_f_throw(ERR_PARAM1_INVALID);
 		++aParam;
 		--aParamCount;
 		break;

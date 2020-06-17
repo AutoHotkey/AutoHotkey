@@ -3731,7 +3731,12 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#UseHook")))
 	{
-		g_ForceKeybdHook = !parameter || Line::ConvertOnOff(parameter) != TOGGLED_OFF;
+		switch (Line::ConvertTrueFalse(parameter))
+		{
+		case TOGGLE_INVALID: return ScriptError(ERR_PARAM1_INVALID, parameter);
+		case TOGGLED_OFF: g_ForceKeybdHook = false; break;
+		default: g_ForceKeybdHook = true; break; // TOGGLED_ON or NEUTRAL.
+		}
 		return CONDITION_TRUE;
 	}
 
@@ -3857,7 +3862,12 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#MaxThreadsBuffer")))
 	{
-		g_MaxThreadsBuffer = !parameter || Line::ConvertOnOff(parameter) != TOGGLED_OFF;
+		switch (Line::ConvertTrueFalse(parameter))
+		{
+		case TOGGLE_INVALID: return ScriptError(ERR_PARAM1_INVALID, parameter);
+		case TOGGLED_OFF: g_MaxThreadsBuffer = false; break;
+		default: g_MaxThreadsBuffer = true; break; // TOGGLED_ON or NEUTRAL.
+		}
 		return CONDITION_TRUE;
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#MaxThreads")))
@@ -7224,7 +7234,6 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 	// Otherwise:
 	return ATOI64(sArgDeref[aArgIndex]);
 }
-
 
 
 Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aScope)
@@ -12304,7 +12313,7 @@ ResultType Line::Perform()
 		// Otherwise:
 		return ShowMainWindow(MAIN_MODE_KEYHISTORY, false); // Pass "unrestricted" when the command is explicitly used in the script.
 	case ACT_LISTLINES:
-		if (   (toggle = ConvertOnOff(ARG1, NEUTRAL)) == NEUTRAL   )
+		if (!*ARG1)
 			return ShowMainWindow(MAIN_MODE_LINES, false); // Pass "unrestricted" when the command is explicitly used in the script.
 		// Otherwise:
 		if (g.ListLinesIsEnabled)
@@ -12320,7 +12329,7 @@ ResultType Line::Perform()
 				sLogNext = LINE_LOG_SIZE - 1;
 			sLog[sLogNext] = NULL; // Without this, one of the lines in the history would be invalid due to the circular nature of the line history array, which would also cause the line history to show the wrong chronological order in some cases.
 		}
-		g.ListLinesIsEnabled = (toggle == TOGGLED_ON);
+		g.ListLinesIsEnabled = ResultToBOOL(ARG1);
 		return OK;
 	case ACT_LISTVARS:
 		return ShowMainWindow(MAIN_MODE_VARS, false); // Pass "unrestricted" when the command is explicitly used in the script.
@@ -12382,26 +12391,16 @@ ResultType Line::Perform()
 		return OK;
 
 	case ACT_SUSPEND:
-		switch (ConvertOnOffToggle(ARG1))
-		{
-		case NEUTRAL:
-		case TOGGLE:
-			ToggleSuspendState();
-			break;
-		case TOGGLED_ON:
-			if (!g_IsSuspended)
-				ToggleSuspendState();
-			break;
-		case TOGGLED_OFF:
-			if (g_IsSuspended)
-				ToggleSuspendState();
-			break;
-		case TOGGLE_INVALID:
+		toggle = Convert10Toggle(ARG1);
+		if (toggle == TOGGLE_INVALID)
 			return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, ARG1);
-		}
+		if (toggle >= TOGGLE // i.e. TOGGLE or NEUTRAL (omitted)
+			|| ((toggle == TOGGLED_ON) != g_IsSuspended))
+			ToggleSuspendState();
 		return OK;
+
 	case ACT_PAUSE:
-		return ChangePauseState(ARG1, (bool)ArgToInt(2));
+		return ChangePauseState(ARG1, ResultToBOOL(ARG2));
 
 	case ACT_BLOCKINPUT:
 		switch (toggle = ConvertBlockInput(ARG1))
@@ -12887,7 +12886,7 @@ ResultType Line::ChangePauseState(LPTSTR aChangeTo, bool aAlwaysOperateOnUnderly
 // Currently designed to be called only by the Pause command (ACT_PAUSE).
 // Returns OK or FAIL.
 {
-	switch (ConvertOnOffToggle(aChangeTo))
+	switch (Convert10Toggle(ARG1))
 	{
 	case TOGGLED_ON:
 		break; // By breaking instead of returning, pause will be put into effect further below.
@@ -12913,11 +12912,10 @@ ResultType Line::ChangePauseState(LPTSTR aChangeTo, bool aAlwaysOperateOnUnderly
 			return OK;
 		}
 		//ELSE since the underlying thread is not paused, continue onward to do the "pause enabled" logic below.
-		// (This is the historical behavior because it allows a hotkey like F1::Pause to toggle the script's
+		// (This is the historical behavior because it allowed a hotkey like F1::Pause to toggle the script's
 		// pause state on and off -- even though what's really happening involves multiple threads.)
 		break;
 	default: // TOGGLE_INVALID or some other disallowed value.
-		// We know it's a variable because otherwise the loading validation would have caught it earlier:
 		return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, aChangeTo);
 	}
 
