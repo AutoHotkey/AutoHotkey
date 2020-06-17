@@ -1352,7 +1352,8 @@ public:
 
 	static void ToggleSuspendState();
 	static void PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause);
-	ResultType ChangePauseState(LPTSTR aChangeTo, bool aAlwaysOperateOnUnderlyingThread);
+	ResultType ChangePauseState(LPTSTR aChangeTo);
+	ResultType PauseCurrentThread();
 	static ResultType ScriptBlockInput(bool aEnable);
 
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));

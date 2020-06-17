@@ -344,7 +344,7 @@ Action g_act[] =
 	, {_T("SetControlDelay"), 1, 1, false, {1, 0}} // Delay in ms (numeric, negative allowed)
 
 	, {_T("Suspend"), 0, 1, false, NULL} // On/Off/Toggle/Permit/Blank (blank is the same as toggle)
-	, {_T("Pause"), 0, 2, false, NULL} // On/Off/Toggle/Blank (blank is the same as toggle), AlwaysAffectUnderlying
+	, {_T("Pause"), 0, 1, false, NULL} // On/Off/Toggle/Blank (blank is the same as toggle)
 	, {_T("BlockInput"), 1, 1, false, NULL} // On/Off
 
 	, {_T("SetNumlockState"), 0, 1, false, NULL} // On/Off/AlwaysOn/AlwaysOff or blank (unspecified) to return to normal.

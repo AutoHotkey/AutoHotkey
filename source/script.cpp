@@ -12400,7 +12400,7 @@ ResultType Line::Perform()
 		return OK;
 
 	case ACT_PAUSE:
-		return ChangePauseState(ARG1, ResultToBOOL(ARG2));
+		return ChangePauseState(ARG1);
 
 	case ACT_BLOCKINPUT:
 		switch (toggle = ConvertBlockInput(ARG1))
@@ -12882,14 +12882,23 @@ void Line::PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause)
 
 
 
-ResultType Line::ChangePauseState(LPTSTR aChangeTo, bool aAlwaysOperateOnUnderlyingThread)
+ResultType Line::ChangePauseState(LPTSTR aChangeTo)
 // Currently designed to be called only by the Pause command (ACT_PAUSE).
 // Returns OK or FAIL.
 {
-	switch (Convert10Toggle(ARG1))
+	auto toggle = Convert10Toggle(ARG1);
+	switch (toggle)
 	{
+	case NEUTRAL:
+		return PauseCurrentThread();
+	case TOGGLE:
+		// Update for v2: "Pause -1" is more useful if it always applies to the thread immediately beneath
+		// the current thread, since pausing the current thread would prevent a hotkey from unpausing itself
+		// by default (there's no longer a special case allowing Pause hotkeys a second thread).
+		if (g > g_array && g[-1].IsPaused) // Checking g>g_array avoids any chance of underflow, which might otherwise happen if this is called by the AutoExec section or a threadless callback running in thread #0.
+			toggle = TOGGLED_OFF;
+		// Fall through:
 	case TOGGLED_ON:
-		break; // By breaking instead of returning, pause will be put into effect further below.
 	case TOGGLED_OFF:
 		// v1.0.37.06: The old method was to unpause the the nearest paused thread on the call stack;
 		// but it was flawed because if the thread that made the flag true is interrupted, and the new
@@ -12900,33 +12909,19 @@ ResultType Line::ChangePauseState(LPTSTR aChangeTo, bool aAlwaysOperateOnUnderly
 		// (which can be the idle thread) isn't paused the following flag-change will be ignored at a later
 		// stage. This method also relies on the fact that the current thread cannot itself be paused right
 		// now because it is what got us here.
-		PauseUnderlyingThread(false); // Necessary even for the "idle thread" (otherwise, the Pause command wouldn't be able to unpause it).
+		PauseUnderlyingThread(toggle != TOGGLED_OFF); // i.e. pause if ON or fell through from TOGGLE.
 		return OK;
-	case NEUTRAL: // the user omitted the parameter entirely, which is considered the same as "toggle"
-	case TOGGLE:
-		// Update for v1.0.37.06: "Pause" and "Pause Toggle" are more useful if they always apply to the
-		// thread immediately beneath the current thread rather than "any underlying thread that's paused".
-		if (g > g_array && g[-1].IsPaused) // Checking g>g_array avoids any chance of underflow, which might otherwise happen if this is called by the AutoExec section or a threadless callback running in thread #0.
-		{
-			PauseUnderlyingThread(false);
-			return OK;
-		}
-		//ELSE since the underlying thread is not paused, continue onward to do the "pause enabled" logic below.
-		// (This is the historical behavior because it allowed a hotkey like F1::Pause to toggle the script's
-		// pause state on and off -- even though what's really happening involves multiple threads.)
-		break;
 	default: // TOGGLE_INVALID or some other disallowed value.
 		return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, aChangeTo);
 	}
+}
 
-	// Since above didn't return, pause should be turned on.
-	if (aAlwaysOperateOnUnderlyingThread) // v1.0.37.06: Allow underlying thread to be directly paused rather than pausing the current thread.
-	{
-		PauseUnderlyingThread(true); // If the underlying thread is already paused, this flag change will be ignored at a later stage.
-		return OK;
-	}
-	// Otherwise, pause the current subroutine (which by definition isn't paused since it had to be 
-	// active to call us).  It seems best not to attempt to change the Hotkey mRunAgainAfterFinished
+
+
+ResultType Line::PauseCurrentThread()
+{
+	// Pause the current subroutine (which by definition isn't paused since it had to be  active
+	// to call us).  It seems best not to attempt to change the Hotkey mRunAgainAfterFinished
 	// attribute for the current hotkey (assuming it's even a hotkey that got us here) or
 	// for them all.  This is because it's conceivable that this Pause command occurred
 	// in a background thread, such as a timed subroutine, in which case we wouldn't want the
