@@ -11500,6 +11500,9 @@ BIF_DECL(BIF_InStr)
 	INT_PTR offset = 0; // Set default.
 	int occurrence_number = ParamIndexToOptionalInt(4, 1);
 
+	if (!needle_length) // Although arguably legitimate, this is more likely an error, so throw.
+		_f_throw(ERR_PARAM2_INVALID);
+
 	if (!ParamIndexIsOmitted(3)) // There is a starting position present.
 	{
 		offset = ParamIndexToIntPtr(3); // i.e. the fourth arg.
