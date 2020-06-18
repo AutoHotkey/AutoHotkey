@@ -40,7 +40,7 @@ HWND HotCriterionAllowsFiring(HotkeyCriterion *aCriterion, LPTSTR aHotkeyName)
 // In addition to being called by the hook thread, this can now be called by the main thread.
 // That happens when a WM_HOTKEY message arrives (for non-hook hotkeys, i.e. RegisterHotkey).
 // Returns a non-NULL HWND if firing is allowed.  However, if it's a global criterion or
-// a "not-criterion" such as #IfWinNotActive, (HWND)1 is returned rather than a genuine HWND.
+// a "not-criterion" such as #HotIf Not WinActive(), (HWND)1 is returned rather than a genuine HWND.
 {
 	HWND found_hwnd;
 	if (!aCriterion)
@@ -279,8 +279,8 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 			//    which would allow it's key-down hotkey to become non-hook.  Similarly, if a
 			//    all of a prefix key's hotkeys become disabled, and that prefix is also a suffix,
 			//    those suffixes no longer need to be hook hotkeys.
-			// 3) There may be other ways, especially in the future involving #IfWin keys whose
-			//    criteria change.
+			// 3) There may be other ways, especially in the future involving #HotIf WinActive/Exist
+			//    keys whose criteria change.
 			if (hot.mType == HK_KEYBD_HOOK)
 				hot.mType = HK_NORMAL; // To possibly be overridden back to HK_KEYBD_HOOK later below; but if not, it will be registered later below.
 		}
@@ -392,7 +392,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 				// And if it's currently registered, it will be unregistered later below.
 			else
 			{
-				// v1.0.42: Any #IfWin keyboard hotkey must use the hook if it lacks an enabled,
+				// v1.0.42: Any #HotIf keyboard hotkey must use the hook if it lacks an enabled,
 				// non-suspended, global variant.  Under those conditions, the hotkey is either:
 				// 1) Single-variant hotkey that has criteria (non-global).
 				// 2) Multi-variant hotkey but all variants have criteria (non-global).
@@ -600,7 +600,7 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
 // If non-NULL, aFoundHWND is an output variable for the caller, but it is only set if a
 // non-global/criterion variant is found; that is, it isn't changed when no match is found or
 // when the match is a global variant.  Even when set, aFoundHWND will be (HWND)1 for
-// "not-criteria" such as #IfWinNotActive.
+// "not-criteria" such as #HotIf Not WinActive().
 {
 	// Check mParentEnabled in case the hotkey became disabled between the time the message was posted
 	// and the time it arrived.  A similar check is done for "suspend" later below (since "suspend"
@@ -727,10 +727,10 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 		// Fix for v1.0.46.13: Although the section higher above found no variant to fire for the
 		// caller-specified hotkey ID, it's possible that some other hotkey (one with a wildcard) is
 		// eligible to fire due to the eclipsing behavior of wildcard hotkeys.  For example:
-		//    #IfWinNotActive Untitled
-		//    q::tooltip %A_ThisHotkey% Non-notepad
-		//    #IfWinActive Untitled
-		//    *q::tooltip %A_ThisHotkey% Notepad
+		//    #HotIf Not WinActive("Untitled")
+		//    q::tooltip ThisHotkey . " Non-notepad"
+		//    #HotIf WinActive("Untitled")
+		//    *q::tooltip ThisHotkey . " Notepad"
 		// However, the logic here might not be a perfect solution because it fires the first available
 		// hotkey that has a variant whose criteria are met (which might not be exactly the desired rules
 		// of precedence).  However, I think it's extremely rare that there would be more than one hotkey
@@ -793,7 +793,7 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 	if (!aKeyUp)
 		aNoSuppress |= NO_SUPPRESS_NEXT_UP_EVENT;  // Update output parameter for the caller.
 	if (aSingleChar)
-		*aSingleChar = '#'; // '#' in KeyHistory to indicate this hotkey is disabled due to #IfWin criterion.
+		*aSingleChar = '#'; // '#' in KeyHistory to indicate this hotkey is disabled due to #HotIf WinActive/Exist() criterion.
 	return NULL;
 }
 
@@ -922,8 +922,8 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant, LPTSTR aNam
 	// LAUNCH HOTKEY SUBROUTINE:
 	++aVariant.mExistingThreads;  // This is the thread count for this particular hotkey only.
 
-	ExprTokenType aParams = { aName };
-	ResultType result = aVariant.mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &aParams, 1);
+	ExprTokenType params = { aName };
+	ResultType result = aVariant.mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &params, 1);
 	
 	--aVariant.mExistingThreads;
 
@@ -1068,9 +1068,9 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 			{
 				// LoadIncludedFile() contains logic and comments similar to this, so maintain them together.
 				// If aHookAction isn't zero, the caller is converting this hotkey into a global alt-tab
-				// hotkey (alt-tab hotkeys are never subject to #IfWin, as documented).  Thus, variant can
+				// hotkey (alt-tab hotkeys are never subject to #HotIf, as documented).  Thus, variant can
 				// be NULL because making a hotkey become alt-tab doesn't require the creation or existence
-				// of a variant matching the current #IfWin criteria.  However, continue on to process the
+				// of a variant matching the current #HotIf criteria.  However, continue on to process the
 				// Options parameter in case it contains "On" or some other keyword applicable to alt-tab.
 				hk->mHookAction = aHookAction;
 				if (!aHookAction)
@@ -1113,7 +1113,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 						// keystroke+modifiers (e.g. ^!c).
 					}
 				}
-				else // No existing variant matching current #IfWin criteria, so create a new variant.
+				else // No existing variant matching current criteria, so create a new variant.
 				{
 					if (   !(variant = hk->AddVariant(aJumpToLabel, suffix_has_tilde))   ) // Out of memory.
 						RETURN_HOTKEY_ERROR(HOTKEY_EL_MEM, ERR_OUTOFMEM, aHotkeyName);
@@ -1494,7 +1494,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 
 
 HotkeyVariant *Hotkey::FindVariant()
-// Returns he address of the variant in this hotkey whose criterion matches the current #IfWin criterion.
+// Returns he address of the variant in this hotkey whose criterion matches the current #HotIf criterion.
 // If no match, it returns NULL.
 {
 	for (HotkeyVariant *vp = mFirstVariant; vp; vp = vp->mNextVariant)
@@ -2013,8 +2013,6 @@ Hotkey *Hotkey::FindHotkeyByTrueNature(LPTSTR aName, bool &aSuffixHasTilde, bool
 // Returns the address of the hotkey if found, NULL otherwise.
 // In v1.0.42, it tries harder to find a match so that the order of modifier symbols doesn't affect the true nature of a hotkey.
 // For example, ^!c should be the same as !^c, primarily because RegisterHotkey() and the hook would consider them the same.
-// Although this may break a few existing scripts that rely on the old behavior for obscure uses such as dynamically enabling
-// a duplicate hotkey via the Hotkey command, the #IfWin directives should make up for that in most cases.
 // Primary benefits to the above:
 // 1) Catches script bugs, such as unintended duplicates.
 // 2) Allows a script to use the Hotkey command more precisely and with greater functionality.
@@ -2278,8 +2276,8 @@ ResultType Hotstring::PerformInNewThreadMadeByCaller()
 	++mExistingThreads;  // This is the thread count for this particular hotstring only.
 	
 	ResultType result;
-	ExprTokenType aParams = { mName };
-	result = mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &aParams, 1);
+	ExprTokenType params = { mName };
+	result = mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &params, 1);
 	
 	--mExistingThreads;
 	return result ? OK : FAIL;	// Return OK on all non-failure results.
@@ -2581,7 +2579,7 @@ Hotstring *Hotstring::FindHotstring(LPTSTR aHotstring, bool aCaseSensitive, bool
 		Hotstring &hs = *shs[u];
 		// hs.mEndCharRequired is not checked because although it affects the conditions for activating
 		// the hotstring, ::abbrev:: and :*:abbrev:: cannot co-exist (the latter would always take over).
-		if (   hs.mHotCriterion == aHotCriterion // Same #If criterion.
+		if (   hs.mHotCriterion == aHotCriterion // Same #HotIf criterion.
 			&& hs.mCaseSensitive == aCaseSensitive // ::BTW:: and :C:BTW:: can co-exist.
 			&& hs.mDetectWhenInsideWord == aDetectWhenInsideWord // :?:ion:: and ::ion:: can co-exist.
 			&& (aCaseSensitive ? !_tcscmp(hs.mString, aHotstring) : !lstrcmpi(hs.mString, aHotstring))   ) // :C:BTW:: and :C:btw:: can co-exist, but not ::BTW:: and ::btw::.

@@ -4736,7 +4736,7 @@ LPTSTR Script::DefaultDialogTitle()
 	return (mFileName && *mFileName) ? mFileName : T_AHK_NAME_VERSION;
 }
 
-UserFunc* Script::CreateHotFunc(Var* aFuncGlobalVar[], int aFuncCount)
+UserFunc* Script::CreateHotFunc(Var* aFuncGlobalVar[], int aGlobalVarCount)
 {
 	// Should only be called during load time.
 	// Creates a new function for hotkeys and hotstrings.
@@ -4760,7 +4760,7 @@ UserFunc* Script::CreateHotFunc(Var* aFuncGlobalVar[], int aFuncCount)
 		return nullptr;
 	}
 	func->mGlobalVar = aFuncGlobalVar;
-	mGlobalVarCountMax = aFuncCount;
+	mGlobalVarCountMax = aGlobalVarCount;
 	
 	g->CurrentFunc = func; // Must do this before calling FindOrAddVar
 
@@ -11754,16 +11754,18 @@ struct RegExCalloutData // L14: Used by BIF_RegEx to pass necessary info to RegE
 int RegExCallout(pcret_callout_block *cb)
 {
 	// It should be documented that (?C) is ignored if encountered by the hook thread,
-	// which could happen if SetTitleMatchMode,Regex and #IfWin are used. This would be a
-	// problem if the callout should affect the outcome of the match or should be called
-	// even if #IfWin will ultimately prevent the hotkey from firing. This is because:
+	// which could happen if SetTitleMatchMode,Regex and "#HotIf Winactive/Exist" are used.
+	// This would be a problem if the callout should affect the outcome of the match or 
+	// should be called even if #HotIf WinA/E. will ultimately prevent the hotkey from firing. 
+	// This is because:
 	//	- The callout cannot be called from the hook thread, and therefore cannot affect
-	//		the outcome of #IfWin when called by the hook thread.
-	//	- If #IfWin does NOT prevent the hotkey from firing, it will be reevaluated from
+	//		the outcome of #HotIf WinA/E. when called by the hook thread.
+	//	- If #HotIf WinA/E does NOT prevent the hotkey from firing, it will be reevaluated from
 	//		the main thread before the hotkey is actually fired. This will allow any
 	//		callouts to occur on the main thread.
-	//  - By contrast, if #IfWin DOES prevent the hotkey from firing, #IfWin will not be
-	//		reevaluated from the main thread, so callouts cannot occur.
+	//  - By contrast, if #HotIf WinA/E DOES prevent the hotkey from firing, 
+	//		#HotIf WinA/E will not be reevaluated from the main thread,
+	//		so callouts cannot occur.
 	if (GetCurrentThreadId() != g_MainThreadID)
 		return 0;
 
@@ -11885,7 +11887,7 @@ pcret *get_compiled_regex(LPTSTR aRegEx, pcret_extra *&aExtra, int *aOptionsLeng
 
 	// While reading from or writing to the cache, don't allow another thread entry.  This is because
 	// that thread (or this one) might write to the cache while the other one is reading/writing, which
-	// could cause loss of data integrity (the hook thread can enter here via #IfWin & SetTitleMatchMode RegEx).
+	// could cause loss of data integrity (the hook thread can enter here via #HotIf WinActive/Exist & SetTitleMatchMode RegEx).
 	// Together, Enter/LeaveCriticalSection reduce performance by only 1.4% in the tightest possible script
 	// loop that hits the first cache entry every time.  So that's the worst case except when there's an actual
 	// collision, in which case performance suffers more because internally, EnterCriticalSection() does a
