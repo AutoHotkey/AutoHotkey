@@ -2889,7 +2889,6 @@ private:
 	// were member functions of class Line, a check for NULL would have to
 	// be done before dereferencing any line's mNextLine, for example:
 	ResultType PreparseExpressions(Line *aStartingLine);
-	ResultType PreparseHotIfExprLines(Line *aStartingLine);
 	void PreparseHotkeyIfExpr(Line *aLine);
 	Line *PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode = NORMAL_MODE, Line *aParentLine = NULL, const ActionTypeType aLoopType = ACT_INVALID);
 	Line *PreparseBlocksStmtBody(Line *aStartingLine, Line *aParentLine = NULL, const ActionTypeType aLoopType = ACT_INVALID);

@@ -1560,9 +1560,6 @@ UINT Script::LoadFromFile()
 	// ABOVE: In v1.0.47, the above may have auto-included additional files from the userlib/stdlib.
 	// That's why the above is done prior to adding the EXIT lines and other things below.
 
-	// Preparse static initializers and #HotIf expressions.
-	PreparseHotIfExprLines(mFirstLine);
-	
 	// Scan for undeclared local variables which are named the same as a global variable.
 	// This loop has two purposes (but it's all handled in PreprocessLocalVars()):
 	//
@@ -3774,11 +3771,11 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		auto func = mLastHotFunc; // AddLine will set mLastHotFunc to nullptr below
 		
 		if (!AddLine(ACT_BLOCK_BEGIN)
-			|| !ParseAndAddLine(parameter, (int)_tcslen(parameter), ACT_HOTKEY_IF) // PreparseStaticLines will change this to ACT_RETURN
+			|| !ParseAndAddLine(parameter, (int)_tcslen(parameter), ACT_HOTKEY_IF) // PreparseExpressions will change this to ACT_RETURN
 			|| !AddLine(ACT_BLOCK_END))
 			return ScriptError(ERR_OUTOFMEM);
 
-		func->mJumpToLine->mAttribute = g->HotCriterion;	// Must be set for PreparseHotkeyIfExprs
+		func->mJumpToLine->mAttribute = g->HotCriterion;	// Must be set for PreparseHotkeyIfExpr
 		
 		return CONDITION_TRUE;
 	}
@@ -7748,44 +7745,14 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 			} // if (this_arg.deref)
 			if (!line->ExpressionToPostfix(this_arg)) // Doing this here, after the script has been loaded, might improve the compactness/adjacent-ness of the compiled expressions in memory, which might improve performance due to CPU caching.
 				return FAIL; // The function above already displayed the error msg.
+
+			if (line->mActionType == ACT_HOTKEY_IF)
+			{
+				PreparseHotkeyIfExpr(line);
+				line->mActionType = ACT_RETURN;
+			}
 		} // for each arg of this line
 	} // for each line
-	return OK;
-}
-
-
-ResultType Script::PreparseHotIfExprLines(Line *aStartingLine)
-// Combining this and PreparseExpressions() into one loop/function currently increases
-// code size enough to affect the final EXE size, contrary to expectation.
-{
-	// Remove #HotIf expression lines from the main line list so
-	// that they won't be executed or interfere with PreparseBlocks().  This used to be done
-	// at an earlier stage, but that required multiple PreparseBlocks() calls to account for
-	// lines added by lib auto-includes.  Thus, it's now done after PreparseExpressions().
-	for (Line *next_line, *prev_line, *line = aStartingLine; line; line = next_line)
-	{
-		next_line = line->mNextLine; // Save these since may be overwritten below.
-		prev_line = line->mPrevLine; //
-
-		switch (line->mActionType)
-		{
-		case ACT_HOTKEY_IF:
-			PreparseHotkeyIfExpr(line);
-			line->mActionType = ACT_RETURN;
-			continue; // No need to "remove" this line since it is in a function.
-		default:
-			continue;
-		}
-		// Since above didn't "continue", remove this line from the main script.
-		if (prev_line)
-			prev_line->mNextLine = next_line;
-		else // Must have been the first line; set the new first line.
-			mFirstLine = next_line;
-		if (next_line)
-			next_line->mPrevLine = prev_line;
-		else
-			mLastLine = prev_line;
-	}
 	return OK;
 }
 
@@ -10933,7 +10900,7 @@ ResultType Line::EvaluateCondition()
 // Returns CONDITION_TRUE or CONDITION_FALSE (FAIL is returned only in DEBUG mode).
 {
 #ifdef _DEBUG
-	if (mActionType != ACT_IF && mActionType != ACT_HOTKEY_IF)
+	if (mActionType != ACT_IF)
 		return LineError(_T("DEBUG: EvaluateCondition() was called with a line that isn't a condition."));
 #endif
 
