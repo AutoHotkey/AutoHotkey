@@ -56,7 +56,6 @@ HWND HotCriterionAllowsFiring(HotkeyCriterion *aCriterion, LPTSTR aHotkeyName)
 		found_hwnd = WinExist(g_default, aCriterion->WinTitle, aCriterion->WinText, _T(""), _T(""), false, false); // Thread-safe.
 		break;
 	// L4: Handling of #HotIf (expression) hotkey variants.
-	case HOT_IF_EXPR:
 	case HOT_IF_CALLBACK:
 		// Expression evaluation must be done in the main thread. If the message times out, the hotkey/hotstring is not allowed to fire.
 		DWORD_PTR res;
@@ -104,7 +103,7 @@ HotkeyCriterion *AddHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LP
 	if (   !(cp = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))   )
 		return NULL;
 	cp->Type = aType;
-	cp->ExprLine = NULL;
+	cp->OriginalExpr = nullptr;
 	if (*aWinTitle)
 	{
 		if (   !(cp->WinTitle = SimpleHeap::Malloc(aWinTitle))   )
@@ -144,6 +143,7 @@ HotkeyCriterion *AddHotkeyIfExpr()
 	if (   !(cp = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))   )
 		return NULL;
 	cp->NextExpr = NULL;
+	cp->OriginalExpr = nullptr;
 	if (g_LastHotExpr)
 		g_LastHotExpr->NextExpr = cp;
 	else
@@ -155,15 +155,14 @@ HotkeyCriterion *AddHotkeyIfExpr()
 
 HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr)
 {
-	for (HotkeyCriterion *cp = g_FirstHotExpr; cp; cp = cp->NextExpr)
-		if (cp->Type != HOT_IF_CALLBACK // i.e. HOT_IF_EXPR or an expression optimised to be any other type.
-			&& !_tcscmp(aExpr, cp->ExprLine->mArg[0].text)) // Case-sensitive since the expression might be.
+	for (HotkeyCriterion* cp = g_FirstHotExpr; cp; cp = cp->NextExpr)
+		if (cp->OriginalExpr && !_tcscmp(aExpr, cp->OriginalExpr)) // Case-sensitive since the expression might be.
 			return cp;
 	return NULL;
 }
 
 
-void Script::PreparseHotkeyIfExpr(Line *aLine)
+void Script::PreparseHotkeyIfExpr(Line* aLine)
 // Optimize simple #HotIf expressions into the more specific HOT_IF_ types so that they can be
 // evaluated by the hook directly, without synchronizing with the main thread.
 {
