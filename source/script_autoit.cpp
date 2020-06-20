@@ -613,7 +613,7 @@ BIF_DECL(BIF_ControlGet)
 	switch (control_cmd)
 	{
 	case FID_ControlFindItem: // String (required).
-	case FID_ControlGetList: // Options (optional).
+	case FID_ListViewGetContent: // Options (optional).
 		if (aParamCount)
 		{
 			aString = ParamIndexToString(0, _f_number_buf);
@@ -641,7 +641,7 @@ BIF_DECL(BIF_ControlGet)
 	DWORD start, end;
 	UINT msg, x_msg, y_msg;
 	int control_index;
-	TCHAR *cp, *dyn_buf;
+	TCHAR *dyn_buf;
 
 	switch(control_cmd)
 	{
@@ -710,11 +710,8 @@ BIF_DECL(BIF_ControlGet)
 		aResultToken.marker_length = length;  // Update to actual vs. estimated length.
 		return;
 
-	case FID_ControlGetList:
+	case FID_ControlGetItems:
 		GetClassName(control_window, classname, _countof(classname));
-		//if (!_tcsnicmp(aControl, _T("SysListView32"), 13)) // Tried strcasestr(aControl, "ListView") to get it to work with IZArc's Delphi TListView1, but none of the modes or options worked.
-		if (tcscasestr(classname, _T("SysListView32"))) // Some users said this works with "WindowsForms10.SysListView32"
-			return ControlGetListView(aResultToken, control_window, aString);
 		// This is done here as the special LIST sub-command rather than just being built into
 		// ControlGetText because ControlGetText already has a function for ComboBoxes: it fetches
 		// the current selection.  Although ListBox does not have such a function, it seem best
@@ -736,39 +733,57 @@ BIF_DECL(BIF_ControlGet)
 		if (!(SendMessageTimeout(control_window, msg, 0, 0, SMTO_ABORTIFHUNG, 5000, &item_count))
 			|| item_count == LB_ERR) // There was a problem getting the count.
 			goto error;
+		Array *items;
+		if (  !(items = Array::Create())  )
+			goto error;
 		if (!item_count)
-			_f_return_empty;
-		// Calculate the length of delimited list of items.  Length is initialized to provide enough
-		// room for each item's delimiter (the last item does not have a delimiter).
-		for (length = item_count - 1, u = 0; u < item_count; ++u)
+			_f_return(items);
+		// Calculate the required buffer size for the largest string.
+		for (length = 0, u = 0; u < item_count; ++u)
 		{
 			if (!SendMessageTimeout(control_window, x_msg, u, 0, SMTO_ABORTIFHUNG, 5000, &item_length)
 				|| item_length == LB_ERR) // Note that item_length is legitimately zero for a blank item in the list.
+			{
+				items->Release();
 				goto error;
-			length += item_length;
+			}
+			if (length < item_length)
+				length = item_length;
 		}
 		// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
 		// being when the item's text is retrieved.  This should be harmless, since there are many
 		// other precedents where a variable is sized to something larger than it winds up carrying.
-		if (!TokenSetResult(aResultToken, NULL, length))
-			return;  // It already displayed the error.
-		aResultToken.symbol = SYM_STRING;
-		for (cp = aResultToken.marker, length = item_count - 1, u = 0; u < item_count; ++u)
+		++length; // To include the null-terminator.
+		// Could use alloca when length is within a safe limit, but it seems unlikely to help
+		// performance much since the bottleneck is probably in message passing between processes.
+		// Although length is only the size of the largest item, not the total of all items,
+		// I don't know how large an item can be, so it's safest to just use malloc().
+		if (  !(dyn_buf = tmalloc(length))  )
 		{
-			if (SendMessageTimeout(control_window, y_msg, (WPARAM)u, (LPARAM)cp, SMTO_ABORTIFHUNG, 5000, &item_length)
-				&& item_length != LB_ERR)
-			{
-				length += item_length; // Accumulate actual vs. estimated length.
-				cp += item_length;  // Point it to the terminator in preparation for the next write.
-			}
-			//else do nothing, just consider this to be a blank item so that the process can continue.
-			if (u < item_count - 1)
-				*cp++ = '\n'; // Add delimiter after each item except the last (helps parsing loop).
-			// Above: In this case, seems better to use \n rather than pipe as default delimiter in case
-			// the listbox/combobox contains any real pipes.
+			items->Release();
+			goto error;
 		}
-		aResultToken.marker_length = length;  // Update it to the actual length, which can vary from the estimate.
-		return;
+		for (u = 0; u < item_count; ++u)
+		{
+			if (!SendMessageTimeout(control_window, y_msg, (WPARAM)u, (LPARAM)dyn_buf, SMTO_ABORTIFHUNG, 5000, &item_length)
+				|| item_length == LB_ERR)
+			{
+				// Just consider this to be a blank item so that the process can continue.
+				*dyn_buf = '\0';
+			}
+			if (!items->Append(dyn_buf))
+				break; // Insufficient memory.
+		}
+		free(dyn_buf);
+		if (u < item_count)
+		{
+			items->Release();
+			goto error;
+		}
+		_f_return(items);
+
+	case FID_ListViewGetContent:
+		return ControlGetListView(aResultToken, control_window, aString);
 
 	case FID_ControlGetLineCount:  // Must be an Edit
 		// MSDN: "If the control has no text, the return value is 1. The return value will never be less than 1."
