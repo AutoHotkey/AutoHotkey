@@ -337,9 +337,8 @@ BIF_DECL(BIF_Control)
 		--aParamCount;
 		break;
 	// Integer parameter:
-	case FID_ControlSetTab:
 	case FID_ControlDeleteItem:
-	case FID_ControlChoose:
+	case FID_ControlChooseIndex:
 		aNumber = ParamIndexToInt(0);
 		++aParam;
 		--aParamCount;
@@ -452,13 +451,6 @@ BIF_DECL(BIF_Control)
 			goto win32_error;
 		break;
 
-	case FID_ControlSetTab: // Must be a Tab Control
-		if (aNumber < 1)
-			_f_throw(ERR_PARAM1_INVALID);
-		if (!ControlSetTab(aResultToken, control_window, (DWORD)aNumber - 1))
-			goto win32_error;
-		break;
-
 	case FID_ControlAddItem:
 		GetClassName(control_window, classname, _countof(classname));
 		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. !strnicmp for TListBox/TComboBox.
@@ -491,7 +483,7 @@ BIF_DECL(BIF_Control)
 			goto error;
 		break;
 
-	case FID_ControlChoose:
+	case FID_ControlChooseIndex:
 		control_index = aNumber - 1;
 		if (control_index < -1)
 			_f_throw(ERR_PARAM1_INVALID);
@@ -511,8 +503,16 @@ BIF_DECL(BIF_Control)
 			x_msg = LBN_SELCHANGE;
 			y_msg = LBN_DBLCLK;
 		}
+		else if (tcscasestr(classname, _T("Tab")))
+		{
+			if (control_index < 0)
+				_f_throw(ERR_PARAM1_INVALID);
+			if (!ControlSetTab(aResultToken, control_window, (DWORD)control_index))
+				goto win32_error;
+			goto success;
+		}
 		else
-			goto control_type_error; // Must be ComboBox or ListBox.
+			goto control_type_error; // Must be ComboBox, ListBox or Tab control.
 		if (msg == LB_SETSEL) // Multi-select, so use the cumulative method.
 		{
 			if (!SendMessageTimeout(control_window, msg, control_index != -1, control_index, SMTO_ABORTIFHUNG, 2000, &dwResult))
@@ -523,6 +523,7 @@ BIF_DECL(BIF_Control)
 				goto win32_error;
 		if (dwResult == CB_ERR && control_index != -1)  // CB_ERR == LB_ERR
 			goto error;
+		_f_set_retval_p(_T(""), 0);
 		goto notify_parent;
 
 	case FID_ControlChooseString:
@@ -563,6 +564,7 @@ BIF_DECL(BIF_Control)
 			if (item_index == CB_ERR) // CB_ERR == LB_ERR
 				goto error;
 		}
+		_f_set_retval_i(item_index + 1); // Return the index chosen.  Might have some use if the string was ambiguous.
 	notify_parent:
 		if (   !(immediate_parent = GetParent(control_window))   )
 			goto win32_error;
@@ -578,7 +580,7 @@ BIF_DECL(BIF_Control)
 		if (!SendMessageTimeout(immediate_parent, WM_COMMAND, (WPARAM)MAKELONG(control_id, y_msg)
 			, (LPARAM)control_window, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto win32_error;
-		_f_return(item_index + 1); // Return the index chosen.  Might have some use if the string was ambiguous.
+		_f_return_retval;
 
 	case FID_ControlEditPaste:
 		if (!SendMessageTimeout(control_window, EM_REPLACESEL, TRUE, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult))
@@ -656,11 +658,6 @@ BIF_DECL(BIF_ControlGet)
 	case FID_ControlGetVisible:
 		_f_return(IsWindowVisible(control_window) ? 1 : 0); // Force pure boolean 0/1.
 
-	case FID_ControlGetTab: // must be a Tab Control
-		if (!SendMessageTimeout(control_window, TCM_GETCURSEL, 0, 0, SMTO_ABORTIFHUNG, 2000, &index))
-			goto win32_error;
-		_f_return(index + 1);
-
 	case FID_ControlFindItem:
 		GetClassName(control_window, classname, _countof(classname));
 		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
@@ -672,6 +669,20 @@ BIF_DECL(BIF_ControlGet)
 		if (!SendMessageTimeout(control_window, msg, -1, (LPARAM)aString, SMTO_ABORTIFHUNG, 2000, &index)
 			|| index == CB_ERR) // CB_ERR == LB_ERR
 			goto error;
+		_f_return(index + 1);
+
+	case FID_ControlGetIndex:
+		GetClassName(control_window, classname, _countof(classname));
+		if (tcscasestr(classname, _T("Combo")))
+			msg = CB_GETCURSEL;
+		else if (tcscasestr(classname, _T("List")))
+			msg = LB_GETCURSEL;
+		else if (tcscasestr(classname, _T("Tab")))
+			msg = TCM_GETCURSEL;
+		else // Must be ComboBox, ListBox or Tab control.
+			goto control_type_error;
+		if (!SendMessageTimeout(control_window, msg, 0, 0, SMTO_ABORTIFHUNG, 2000, &index))
+			goto win32_error;
 		_f_return(index + 1);
 
 	case FID_ControlGetChoice:
