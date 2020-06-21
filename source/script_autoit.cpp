@@ -331,7 +331,7 @@ BIF_DECL(BIF_Control)
 	case FID_ControlSetExStyle: // As above.
 	case FID_ControlAddItem:
 	case FID_ControlChooseString:
-	case FID_ControlEditPaste:
+	case FID_EditPaste:
 		aValue = ParamIndexToString(0, _f_number_buf);
 		++aParam;
 		--aParamCount;
@@ -582,7 +582,7 @@ BIF_DECL(BIF_Control)
 			goto win32_error;
 		_f_return_retval;
 
-	case FID_ControlEditPaste:
+	case FID_EditPaste:
 		if (!SendMessageTimeout(control_window, EM_REPLACESEL, TRUE, (LPARAM)aValue, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto win32_error;
 		// Note: dwResult is not used by EM_REPLACESEL since it doesn't return a value.
@@ -625,7 +625,7 @@ BIF_DECL(BIF_ControlGet)
 		else
 			aString = _T("");
 		break;
-	case FID_ControlGetLine: // Line number (required).
+	case FID_EditGetLine: // Line number (required).
 		// Load-time validation ensures aParamCount > 0.
 		aNumber = ParamIndexToInt(0);
 		++aParam;
@@ -796,18 +796,18 @@ BIF_DECL(BIF_ControlGet)
 	case FID_ListViewGetContent:
 		return ControlGetListView(aResultToken, control_window, aString);
 
-	case FID_ControlGetLineCount:  // Must be an Edit
+	case FID_EditGetLineCount:  // Must be an Edit
 		// MSDN: "If the control has no text, the return value is 1. The return value will never be less than 1."
 		if (!SendMessageTimeout(control_window, EM_GETLINECOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto win32_error;
 		_f_return(dwResult);
 
-	case FID_ControlGetCurrentLine:
+	case FID_EditGetCurrentLine:
 		if (!SendMessageTimeout(control_window, EM_LINEFROMCHAR, -1, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto win32_error;
 		_f_return(dwResult + 1);
 
-	case FID_ControlGetCurrentCol:
+	case FID_EditGetCurrentCol:
 	{
 		DWORD_PTR line_number;
 		// The dwResult from the first msg below is not useful and is not checked.
@@ -825,7 +825,7 @@ BIF_DECL(BIF_ControlGet)
 		_f_return(start - line_start + 1);
 	}
 
-	case FID_ControlGetLine:
+	case FID_EditGetLine:
 	{
 		control_index = aNumber - 1;
 		if (control_index < 0)
@@ -848,7 +848,7 @@ BIF_DECL(BIF_ControlGet)
 		_f_return(line_buf);
 	}
 
-	case FID_ControlGetSelected: // Must be an Edit.
+	case FID_EditGetSelectedText: // Must be an Edit.
 		// Note: The RichEdit controls of certain apps such as Metapad don't return the right selection
 		// with this technique.  Au3 has the same problem with them, so for now it's just documented here
 		// as a limitation.
