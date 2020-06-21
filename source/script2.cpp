@@ -12837,9 +12837,8 @@ void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr)
 		GetObjectPtrProperty(obj, _T("Ptr"), aPtr, aResultToken);
 }
 
-void ConvertNumGetParams(BIF_DECL_PARAMS, NumGetParams &op)
+void ConvertNumGetTarget(ResultToken &aResultToken, ExprTokenType &target_token, NumGetParams &op)
 {
-	ExprTokenType &target_token = *aParam[0];
 	if (IObject *obj = TokenToObject(target_token))
 	{
 		GetBufferObjectPtr(aResultToken, obj, op.target, op.right_side_bound);
@@ -12852,29 +12851,22 @@ void ConvertNumGetParams(BIF_DECL_PARAMS, NumGetParams &op)
 		op.target = (size_t)TokenToInt64(target_token);
 		op.right_side_bound = SIZE_MAX;
 	}
-
-	if (aParamCount > 1) // Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
-	{
-		if (aParamCount > 2 || TokenIsNumeric(*aParam[1])) // Checking aParamCount first avoids some unnecessary work in common cases where all parameters were specified.
-		{
-			op.target += (ptrdiff_t)TokenToInt64(*aParam[1]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
-			aParam++;
-			aParamCount--;
-		}
-		if (aParamCount > 1)
-		{
-			ConvertNumGetType(*aParam[1], op);
-		}
-	}
 }
 
 
 BIF_DECL(BIF_NumGet)
 {
 	NumGetParams op;
-	ConvertNumGetParams(aResultToken, aParam, aParamCount, op);
+	ConvertNumGetTarget(aResultToken, *aParam[0], op);
 	if (aResultToken.Exited())
 		return;
+	if (aParamCount > 2) // Offset was specified.
+	{
+		op.target += (ptrdiff_t)TokenToInt64(*aParam[1]);
+		aParam++;
+	}
+	// MinParams ensures there is always one more parameter.
+	ConvertNumGetType(*aParam[1], op);
 
 	// If the target is a variable, the following check ensures that the memory to be read lies within its capacity.
 	// This seems superior to an exception handler because exception handlers only catch illegal addresses,
@@ -13082,49 +13074,30 @@ BIF_DECL(BIF_Format)
 
 BIF_DECL(BIF_NumPut)
 {
+	// Params can be any non-zero number of type-number pairs, followed by target[, offset].
+	// Prior validation has ensured that there are at least three parameters.
+	//   NumPut(t1, n1, t2, n2, p, o)
+	//   NumPut(t1, n1, t2, n2, p)
+	//   NumPut(t1, n1, p, o)
+	//   NumPut(t1, n1, p)
+	
+	// Split target[,offset] from aParam.
+	bool offset_was_specified = !(aParamCount & 1);
+	aParamCount -= 1 + int(offset_was_specified);
+	ExprTokenType &target_token = *aParam[aParamCount];
+	
 	NumGetParams op;
-	ExprTokenType **target_param;
-	int target_param_count, n_param;
-	// Load-time validation has ensured that at least the first two parameters are present.
-	if (ParamIndexIsNumeric(0))
-	{
-		// NumPut(n, target [, offset, type])
-		target_param = aParam + 1;
-		target_param_count = aParamCount - 1;
-		n_param = 0;
-		aParamCount = 1;
-	}
-	else
-	{
-		// Params can be any number of type-number pairs, followed by  target[, offset].
-		// Valid:		NumPut(t1, n1, t2, n2, p, o)
-		// Valid:		NumPut(t1, n1, t2, n2, p)
-		// Ambiguous:	NumPut(t1, n1, t2, p, o) -> ...n2, p)
-		// Valid:		NumPut(t1, n1, p, o)
-		// Invalid:		NumPut(t1, n1, t2, x)  ; Either n2 or p is missing.
-		// Valid:		NumPut(t1, n1, p)
-		// Ambiguous:	NumPut(t1, p, o) -> ...n1, p)
-		// Invalid:		NumPut(t1, p)
-		// Invalid:		NumPut(t1)
-		if (aParamCount < 3)
-			_f_throw(ERR_TYPE_MISMATCH);
-		// Split target[,offset] from aParam.
-		target_param_count = 2 - (aParamCount & 1);
-		aParamCount -= target_param_count;
-		target_param = aParam + aParamCount;
-		// Handle the first type name here to enable the loop to handle the other parameter mode.
-		ConvertNumGetType(*aParam[0], op);
-		n_param = 1;
-	}
-
-	ConvertNumGetParams(aResultToken, target_param, target_param_count, op);
+	ConvertNumGetTarget(aResultToken, target_token, op);
 	if (aResultToken.Exited())
 		return;
+	if (offset_was_specified)
+		op.target += (ptrdiff_t)TokenToInt64(*aParam[aParamCount + 1]);
 
 	size_t num_end;
-	for (;; op.target = num_end)
+	for (int n_param = 1; n_param < aParamCount; n_param += 2, op.target = num_end)
 	{
-		ExprTokenType &token_to_write = *aParam[n_param];
+		ConvertNumGetType(*aParam[n_param - 1], op); // Type name.
+		ExprTokenType &token_to_write = *aParam[n_param]; // Numeric value.
 
 		num_end = op.target + op.num_size; // This is used below and also as NumPut's return value. It's the address to the right of the item to be written.
 
@@ -13163,14 +13136,7 @@ BIF_DECL(BIF_NumPut)
 		case 2: *(UINT16 *)op.target = (UINT16)num_i64; break;
 		case 1: *(UINT8 *)op.target = (UINT8)num_i64; break;
 		}
-
-		n_param += 2;
-		if (n_param >= aParamCount)
-			break;
-		// Convert the type name for the next number.
-		ConvertNumGetType(*aParam[n_param - 1], op);
 	}
-	ExprTokenType &target_token = **target_param;
 	if (target_token.symbol == SYM_VAR && !target_token.var->IsPureNumeric())
 		target_token.var->Close(); // This updates various attributes of the variable.
 	//else the target was an raw address.  If that address is inside some variable's contents, the above
