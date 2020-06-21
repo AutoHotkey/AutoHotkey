@@ -68,7 +68,6 @@ ResultType Var::Assign(ExprTokenType &aToken)
 	case SYM_VAR:     return Assign(*aToken.var);
 	case SYM_OBJECT:  return Assign(aToken.object);
 	case SYM_FLOAT:   return Assign(aToken.value_double); // Listed last because it's probably the least common.
-	case SYM_MODULE:  return FAIL;
 	}
 	// Since above didn't return, it can only be SYM_STRING.
 	return Assign(aToken.marker, aToken.marker_length);

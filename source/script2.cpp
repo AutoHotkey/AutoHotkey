@@ -16695,8 +16695,6 @@ BOOL TokenToBOOL(ExprTokenType &aToken)
 		return aToken.value_double != 0.0;
 	case SYM_STRING:
 		return ResultToBOOL(aToken.marker);
-	case SYM_MODULE:
-		return FALSE;
 	default:
 		// The only remaining valid symbol is SYM_OBJECT, which is always TRUE.
 		return TRUE;

@@ -33,6 +33,7 @@ EXTERN_OSVER; // For the access to the g_os version object without having to inc
 EXTERN_G;
 
 class ScriptModule;						// forward declaration
+class OptionalScriptModule;				// forward declaration
 class ModuleList;
 extern ScriptModule* g_CurrentModule;
 extern ScriptModule* g_StandardModule;
@@ -3440,7 +3441,6 @@ BIF_DECL(BIF_HasMethod);
 BIF_DECL(BIF_GetMethod);
 
 // Expression operators implemented via SYM_FUNC:
-BIF_DECL(Op_ModuleInvoke);
 BIF_DECL(Op_ObjInvoke);
 BIF_DECL(Op_ObjGetInPlace);
 BIF_DECL(Op_ObjIncDec);

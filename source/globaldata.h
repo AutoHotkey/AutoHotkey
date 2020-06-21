@@ -26,6 +26,8 @@ GNU General Public License for more details.
 
 extern ScriptModule* g_CurrentModule;
 extern ScriptModule* g_StandardModule;
+extern ScriptModule* g_StandardModule;
+extern OptionalScriptModule* g_OptSM;
 extern bool g_LoadFailed;
 
 extern HINSTANCE g_hInstance;

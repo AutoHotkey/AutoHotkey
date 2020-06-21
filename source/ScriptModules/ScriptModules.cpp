@@ -28,6 +28,7 @@ ScriptModule::~ScriptModule()
 }
 
 // ScriptModule methods,
+#include "ScriptModulesInvoke.h"
 #include "ScriptModulesMisc.h"				// Misc. methods.
 #include "ScriptModulesOptional.h"			// Handling of optional modules, "#Import *i ...".
 #include "ScriptModulesAddNames.h"			// Handling of #UseXXX directives.

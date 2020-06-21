@@ -8571,8 +8571,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 	// Also, dimensioning explicitly by SYM_COUNT helps enforce that at compile-time:
 	static UCHAR sPrecedence[SYM_COUNT] =  // Performance: UCHAR vs. INT benches a little faster, perhaps due to the slight reduction in code size it causes.
 	{
-		0,0,0,0,0,0,0,0,0,0  // SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_MISSING, SYM_VAR, SYM_MODULE, SYM_OBJECT, SYM_DYNAMIC, SYM_SUPER, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
-
+		0,0,0,0,0,0,0,0,0// SYM_STRING, SYM_INTEGER, SYM_FLOAT, SYM_MISSING, SYM_VAR, SYM_MODULE, SYM_OBJECT, SYM_DYNAMIC, SYM_SUPER, SYM_BEGIN (SYM_BEGIN must be lowest precedence).
 		, 82, 82         // SYM_POST_INCREMENT, SYM_POST_DECREMENT: Highest precedence operator so that it will work even though it comes *after* a variable name (unlike other unaries, which come before).
 		, 86             // SYM_DOT
 		, 2,2,2,2,2,2    // SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE (to simplify the code, parentheses/brackets/braces must be lower than all operators in precedence).
@@ -9123,7 +9122,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 							};
 #define MAKE_NEW_DEREF(aParamCount) if (!make_new_deref((aParamCount))) return FAIL;
 							ASSERT(infix_count >= 2);
-							ScriptModule* mod = infix[infix_count - 2].symbol == SYM_MODULE ? infix[infix_count - 2].mod : NULL;
+							ScriptModule* mod = infix[infix_count - 2].symbol == SYM_OBJECT ? dynamic_cast<ScriptModule *>(infix[infix_count - 2].object) : NULL;
 							if (*op_end == '(')
 							{
 								// Either resolvíng a function in a module or calling a method on an object
@@ -9165,12 +9164,11 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 										|| mod->IsOptionalModule(name)) // to allow "myModule.MyOptionalModule..." at load time. Will fail if evaluated
 									{
 										// It is resolving a series of nested modules, eg, "myOtherModule" in "myModule.myOtherModule..."
-										LPTSTR dot;
-										if (*(dot = omit_leading_whitespace(op_end)) != '.' || IS_SPACE_OR_TAB(dot[1]))
-											// The found module must be followed by SYM_DOT.
+										if (*omit_leading_whitespace(op_end) == '[')				
+											// Indexing operator, reserved for future use.
 											return LineError(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
-										new_symbol = SYM_MODULE;
-										infix[infix_count].mod = found;
+										new_symbol = SYM_OBJECT;
+										infix[infix_count].object = found ? (IObject*)found : (IObject*)g_OptSM;
 									}
 									else 
 									{
@@ -9457,7 +9455,6 @@ unquoted_literal:
 			// For convenience, fetch the name and its length only once:
 			LPTSTR op_begin = this_deref_ref.marker; // set in Script::ParseOperands()
 			DerefLengthType operand_length = this_deref_ref.length;
-		
 			// Copy the name and terminate for GetNestedModule
 			TCHAR name[MAX_VAR_NAME_LENGTH + 1]; 
 			_tcsncpy(name, op_begin, operand_length);
@@ -9466,13 +9463,12 @@ unquoted_literal:
 			if ( ( found = g_CurrentModule->GetNestedModule(name, true))
 				|| g_CurrentModule->IsOptionalModule(name) ) // to allow referring to optional modules without any loadtime error and to avoid references to optional modules ending up as var references. Evaluating the expression will yield an error.
 			{
-				// First ensure that the module reference is followed by SYM_DOT.
-				LPTSTR dot = omit_leading_whitespace(op_begin + operand_length);
-				if (*dot != '.' || IS_SPACE_OR_TAB(dot[1]))
+				if (*omit_leading_whitespace(op_begin + operand_length) == '[')
+					// Indexing operator, reserved for future use.
 					return LineError(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
 				// It is a script module followed by SYM_DOT
-				infix[infix_count].mod = found; // can be NULL if optional.
-				infix[infix_count].symbol = SYM_MODULE;
+				infix[infix_count].object = found ? (IObject*)found : (IObject*)g_OptSM;
+				infix[infix_count].symbol = SYM_OBJECT;
 			}
 			else // it is a variable
 			{

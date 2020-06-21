@@ -101,16 +101,8 @@ BIF_DECL(Op_ObjInvoke)
 		// the superclass defines it, and ensures that any definition added later is called.
 		must_be_handled = false;
 	}
-	else if (obj_param->symbol == SYM_MODULE) // It is "dynamic" scope resolution.
-	{
-		aParam--;
-		aParamCount++;
-		Op_ModuleInvoke(aResultToken, aParam, aParamCount);
-		return;
-	}
 	else // Non-object value.
 	{
-		// Op_ModuleInvoke uses code copied from this branch, maintain together
 		obj = Object::ValueBase(*obj_param);
 		invoke_type |= IF_NO_SET_PROPVAL;
 	}
@@ -142,7 +134,6 @@ BIF_DECL(Op_ObjInvoke)
     result = obj->Invoke(aResultToken, invoke_type, name, *obj_param, aParam, aParamCount);
 	if (param_is_var)
 		obj->Release();
-	// Op_ModuleInvoke uses code copied from the below if-else ladder, maintain together
 	if (result == INVOKE_NOT_HANDLED && must_be_handled)
 	{
 		_f__ret(aResultToken.UnknownMemberError(*obj_param, invoke_type, name));
@@ -167,140 +158,6 @@ BIF_DECL(Op_ObjInvoke)
 			aResultToken.CopyValueFrom(value);
 		}
 	}
-}
-
-//
-//	Called by Op_ObjInvoke to handle dynamic scope resolution, eg, MyModule.%expr%[p*] := value, MyModule.%'OtherModule'%.%'var'%, etc...
-//
-
-BIF_DECL(Op_ModuleInvoke)
-{
-	// Op_ObjInvoke have already set the result to "".
-	int invoke_type = _f_callee_id;
-
-	ExprTokenType* mod_param = *aParam; // Load-time validation has ensured at least one parameter was specified.
-	++aParam;
-	--aParamCount;
-
-	if ( (invoke_type & IF_DEFAULT) // Invalid, eg, %'MyModule'%[x]
-		|| !mod_param->mod )		// Invalid, referencing an optional module which wasn't loaded.
-		_f_throw(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
-
-	size_t name_length;
-	LPTSTR name = ParamIndexToString(0, NULL, &name_length);	// The name of the module, variable or function to resolve.
-
-	++aParam;	// Remove the function name from consideration. Might be put back below.
-	--aParamCount;
-
-	if (invoke_type & IT_CALL) // It is a function call, find the func and call it.
-	{
-		// This must be done before searching for a module since functions and modules can have the same name.
-		Func* func = g_script.FindFunc(name, name_length, 0, mod_param->mod);
-		if (!func)
-		{
-			// Invoke value base. Because MyModule.%'NonExistentFunc'%(p*) "should" be consistent with %'NonExistentFunc'%(p*).
-			aParam--;
-			aParamCount++;
-			aResultToken.func->mFID = (BuiltInFunctionID)(invoke_type | IF_DEFAULT);
-			Op_ObjInvoke(aResultToken, aParam, aParamCount);
-			return;
-		}
-		if (func->IsBuiltIn() && mod_param->mod != g_StandardModule)
-			_f_throw(ERR_SMODULES_FUNC_NOT_FOUND);
-		func->Call(aResultToken, aParam, aParamCount, false); // "false" since variadic parameters has already been expanded.
-		return;
-	}
-	// Trying to resolve either a module or a variable.
-	ScriptModule* found = NULL;
-	if ( (found = mod_param->mod->GetNestedModule(name, true))
-		|| mod_param->mod->IsOptionalModule(name))
-	{
-		// It is a module.
-		if ( (invoke_type & IT_SET) // Invalid, eg, MyModule.%MyOtherModule% := val
-			|| !found)				// Invalid, referencing an optional module which wasn't loaded.
-			_f_throw(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
-
-		aResultToken.symbol = SYM_MODULE;
-		aResultToken.mod = found;
-	}
-	else
-	{	// It is a variable.
-		if (!*name) // Eg, MyModule.%''%
-			_f_throw(ERR_DYNAMIC_BLANK);
-		Var* var = g_script.FindVar(name, name_length, NULL, FINDVAR_SUPER_GLOBAL, NULL, mod_param->mod);
-		if (!var || !var->IsSuperGlobal())
-			_f_throw(ERR_SMODULES_VAR_NOT_FOUND, name);
-		
-		if (var->Type() == VAR_BUILTIN) // Currently doesn't support built-in vars.
-			_f_throw(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
-		if (invoke_type & IT_SET
-			&& aParamCount == 1)
-		{
-			// Assiging a variable. Eg, MyModule.%expr% := value
-			if (VAR_IS_READONLY(*var)) // For maintainability
-				_f_throw(ERR_VAR_IS_READONLY);
-			// Assign the value to the variable
-			if (!(var->Assign(**aParam)))
-			{
-				// The error message should have been displayed, but the exit result must be set.
-				aResultToken.SetExitResult(FAIL);
-				return;
-			}
-			// Proceed to set the variable as the result of the assignment.
-		}
-		else if (aParamCount)
-		{
-			// Parameters were passed, eg MyModule.%expr%[p*] [ := value ]
-			// This branch contains some code from Op_ObjInvoke, maintain together. Done this ways for convenince.
-			ExprTokenType this_token;
-			this_token.symbol = SYM_VAR;
-			this_token.var = var;
-
-			// Get the obj which will be invoked:
-			IObject* obj;
-			if (var->HasObject())
-				obj = var->Object();
-			else
-			{
-				// MyModule.%expr%[p*] should be equivalent to %expr%[p*] also when %expr% is resolved to a var which doesn't contain an object.
-				obj = Object::ValueBase(*aParam[-1]);
-				invoke_type |= IF_NO_SET_PROPVAL;
-			}
-			// Addref and Release unconditionally for brevity. Done to avoid the object being deleted in case the variable is reasigned during the operation.
-			obj->AddRef();
-			ResultType result = obj->Invoke(aResultToken, invoke_type, NULL, this_token, aParam, aParamCount);
-			obj->Release();
-			if (result == INVOKE_NOT_HANDLED)
-			{
-				_f__ret(aResultToken.UnknownMemberError(*aParam[-1], invoke_type, name));
-			}
-			else if (result == FAIL || result == EARLY_EXIT) // For maintainability: SetExitResult() might not have been called.
-			{
-				aResultToken.SetExitResult(result);
-			}
-			else if (invoke_type & IT_SET)
-			{
-				aResultToken.Free();
-				aResultToken.mem_to_free = NULL;
-				auto& value = *aParam[aParamCount - 1];
-				switch (value.symbol)
-				{
-				case SYM_VAR:
-					value.var->ToToken(aResultToken);
-					break;
-				case SYM_OBJECT:
-					value.object->AddRef();
-				default:
-					aResultToken.CopyValueFrom(value);
-				}
-			}
-			return;
-		}
-		// The result is a variable, eg, MyModule.%'var'% [:= value].
-		aResultToken.symbol = SYM_VAR;
-		aResultToken.var = var;
-	}
-	return;
 }
 
 //

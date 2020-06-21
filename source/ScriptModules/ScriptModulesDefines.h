@@ -25,7 +25,8 @@ GNU General Public License for more details.
 #define SMODULES_UNNAMED_STR (ScriptModule::sUnamedModuleName)	// This is a static string for quickly identifying an unnamed module and avoid allocating a string for each unnamed module.
 
 // For literal module definitions:
-#define SMODULES_DECLARATION_KEYWORD_NAME _T("Namespace")
+#define SMODULES_DECLARATION_KEYWORD_NAME_QUOTED "Namespace"
+#define SMODULES_DECLARATION_KEYWORD_NAME _T(SMODULES_DECLARATION_KEYWORD_NAME_QUOTED)
 #define SMODULES_DECLARATION_KEYWORD_NAME_LENGTH (_countof(SMODULES_DECLARATION_KEYWORD_NAME) - 1) // - 1 to exclude the '\0
 #define SMODULES_DECLARATION_KEYWORD_NAME_LC _T("namespace") // Lower case version for error reporting etc.
 

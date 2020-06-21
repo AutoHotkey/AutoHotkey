@@ -53,12 +53,12 @@ ResultType ScriptModule::AddObject(UseParams* aObjs)
 		{	// Save it to avoid searching for it again if cannot add the objects below.
 			free(aObjs->param2.str);
 			aObjs->param2.mod = mod;
-			aObjs->scope_symbol = SYM_MODULE;
+			aObjs->scope_symbol = SYM_OBJECT;
 		}
 		else
 			return AddObjectError(ERR_SMODULES_NOT_FOUND, aObjs->param2.str, aObjs);
 		break;
-	case SYM_MODULE: mod = aObjs->param2.mod; break;
+	case SYM_OBJECT: mod = aObjs->param2.mod; break;
 	}
 	if (!mod)
 		return FAIL;
@@ -262,7 +262,7 @@ bool ScriptModule::ResolveUseParams()
 		case CONDITION_TRUE:
 			// Not added, no error message shown, show one.
 
-			name = up->scope_symbol == SYM_MODULE
+			name = up->scope_symbol == SYM_OBJECT
 				? up->param1		// An item in the name list couldn't be resolved. (This case might not be possible now, but added for maintainability)
 				: up->param2.str;	// The source could not be resolved.
 			AddObjectError(ERR_SMODULES_UNRESOLVED_NAME, name);

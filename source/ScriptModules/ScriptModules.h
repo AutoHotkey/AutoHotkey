@@ -20,7 +20,7 @@ GNU General Public License for more details.
 // Forward declaration
 class ModuleList; 
 
-class ScriptModule
+class ScriptModule : public IObjectComCompatible
 {
 private:
 	LPTSTR mName;										// Name of module.
@@ -70,7 +70,7 @@ public:
 		union
 		{	// Identifies the scope of the object(s) to use.
 			LPTSTR str;				// SYM_STRING
-			ScriptModule* mod;		// SYM_MODULE
+			ScriptModule* mod;		// SYM_OBJECT
 		} param2;
 		SymbolType type_symbol;		// Indicates the type of the objects specified by param1.
 		
@@ -99,6 +99,11 @@ public:
 		UseParamsList() : SimpleList(true) {}
 		void FreeItem(UseParams *aParams) { delete aParams; }	// virtual
 	} *mUseParams;								// A list of object to use.
+
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
+	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
+	ULONG STDMETHODCALLTYPE Release() { return 1; }
+	IObject_Type_Impl(SMODULES_DECLARATION_KEYWORD_NAME_QUOTED);
 
 	ScriptModule* FindModuleFromDotDelimitedString(LPTSTR aString);
 	
@@ -187,4 +192,15 @@ public:
 	void* operator new[](size_t aBytes) { return SimpleHeap::Malloc(aBytes); }
 	void operator delete(void* aPtr) {}
 	void operator delete[](void* aPtr) {}
+};
+
+class OptionalScriptModule : public IObjectComCompatible 
+// If a module cannot be loaded, but is optional, any refernce to it will yeild an instance of this class.
+// Invoking it will throw an exeception.
+{
+public:	
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL) { return aResultToken.Error(ERR_SMODULES_NOT_FOUND); } // Consider something more descriptive.
+	IObject_Type_Impl("OptionalNamespace")
+	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
+	ULONG STDMETHODCALLTYPE Release() { return 1; }
 };

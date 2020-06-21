@@ -150,20 +150,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						goto abort_with_exception;
 					}
 
+					{
+						ScriptModule* found;
+						if ((found = g_CurrentModule->GetNestedModule(right_string, true))
+							|| g_CurrentModule->IsOptionalModule(right_string))
+						{
+							// It is scope resolution, eg, "%'myModule'%...."
+							this_token.symbol = SYM_OBJECT;
+							this_token.object = found ? (IObject*)found : (IObject*)g_OptSM;
+							goto push_this_token;
+						}
+					}
 					
-					if (ScriptModule* mod = g_CurrentModule->GetNestedModule(right_string, true))
-					{
-						// It is scope resolution, eg, "%'myModule'%...."
-						this_token.symbol = SYM_MODULE;
-						this_token.mod = mod;
-						goto push_this_token;
-					}
-					else if (g_CurrentModule->IsOptionalModule(right_string))
-					{
-						// Dynamic reference to an optional module which couldn't be loaded.
-						LineError(ERR_SMODULES_INVALID_SCOPE_RESOLUTION, FAIL, right_string);
-						goto abort;
-					}
 					// In v1.0.31, FindOrAddVar() vs. FindVar() is called below to support the passing of non-existent
 					// array elements ByRef, e.g. Var:=MyFunc(Array%i%) where the MyFunc function's parameter is
 					// defined as ByRef, would effectively create the new element Array%i% if it doesn't already exist.
@@ -593,8 +591,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		if (!stack_count) // Prevent stack underflow.  An expression such as -*3 causes this.
 			goto abort_with_exception;
 		ExprTokenType &right = *STACK_POP;
-		if ( !IS_OPERAND(right.symbol) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
-			|| right.symbol == SYM_MODULE )
+		if ( !IS_OPERAND(right.symbol) ) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
 			goto abort_with_exception;
 
 		switch (this_token.symbol)
