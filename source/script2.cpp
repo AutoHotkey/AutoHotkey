@@ -1404,9 +1404,8 @@ BIF_DECL(BIF_ControlClick)
 	else
 	{
 		// Determine target window and control.
-		if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam, aParamCount, 3))
+		if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam, aParamCount, 3, false))
 			return; // aResultToken.SetExitResult() or Error() was already called.
-		ASSERT(control_window != NULL);
 	}
 	ASSERT(target_window != NULL);
 
@@ -8955,7 +8954,8 @@ ResultType DetermineTargetWindow(HWND &aWindow, ResultToken &aResultToken, ExprT
 }
 
 
-ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount)
+ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount
+	, int aNonWinParamCount, bool aThrowIfNotFound)
 {
 	aWindow = aControl = nullptr;
 	// Only functions which can operate on top-level windows allow Control to be
@@ -8981,7 +8981,7 @@ ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aR
 	if (!DetermineTargetWindow(aWindow, aResultToken, aParam + 1, aParamCount - 1, aNonWinParamCount))
 		return FAIL;
 	aControl = control_spec ? ControlExist(aWindow, control_spec) : aWindow;
-	if (!aControl)
+	if (!aControl && aThrowIfNotFound)
 		return aResultToken.Error(ERR_NO_CONTROL);
 	return OK;
 }

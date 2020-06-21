@@ -3426,7 +3426,7 @@ bool ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken,
 
 ResultType DetermineTargetHwnd(HWND &aWindow, ResultToken &aResultToken, ExprTokenType &aToken);
 ResultType DetermineTargetWindow(HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount = 0);
-ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount = 0);
+ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount = 0, bool aThrowIfNotFound = true);
 #define DETERMINE_TARGET_CONTROL(param_offset) \
 	HWND target_window, control_window; \
 	if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam + param_offset, aParamCount - param_offset)) \
