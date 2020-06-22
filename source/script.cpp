@@ -6418,6 +6418,12 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	if (!DefineClassInit(true))
 		return FAIL;
 	mClasses->Append(ExprTokenType(class_object));
+	
+	// This line enables a class without any static methods to be freed at program exit,
+	// or sooner if it's a nested class and the script removes it from the outer class.
+	// Classes with static methods are never freed, since the method itself retains a
+	// reference to the class.
+	class_object->Release();
 
 	return OK;
 }
@@ -6770,7 +6776,7 @@ ResultType Script::InitClasses()
 		result_token.InitResult(buf);
 		if (!((Object *)cls.object)->Construct(result_token, nullptr, 0))
 			return FAIL;
-		result_token.Free();
+		//result_token.Free(); // Construct() returned cls.object without AddRef(), so don't Free().
 	}
 	mClasses->Release();
 	mClasses = nullptr;

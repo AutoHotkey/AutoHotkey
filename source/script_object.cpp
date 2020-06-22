@@ -1494,7 +1494,7 @@ ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[],
 		return result;
 	}
 
-	aResultToken.SetValue(this); // No AddRef().
+	aResultToken.SetValue(this); // No AddRef() since Object::New() would need to Release().
 	return aResultToken.SetResult(OK);
 }
 
