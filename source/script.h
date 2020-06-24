@@ -3068,7 +3068,9 @@ public:
 	// RuntimeError allows the user to choose to continue, in which case OK is returned instead of FAIL;
 	// therefore, caller must not rely on a FAIL result to abort the overall operation.
 	ResultType RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), ResultType aErrorType = FAIL_OR_OK, Line *aLine = nullptr);
-	
+
+	ResultType ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting);
+
 	ResultType ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine);
 	int FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine);
 

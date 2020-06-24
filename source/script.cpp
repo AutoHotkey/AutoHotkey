@@ -4380,23 +4380,32 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 						|| (var->Scope() & (VAR_DECLARED|VAR_LOCAL|VAR_GLOBAL)) == (declare_type & (VAR_LOCAL|VAR_GLOBAL))))
 						var = NULL; // Allow this redeclaration; e.g. "local x := 1 ... local x := 2" down two different code paths.
 					if (!var && declare_type != VAR_DECLARE_GLOBAL)
-						for (i = 0; i < g->CurrentFunc->mGlobalVarCount; ++i) // Explicitly search this array vs calling FindVar() in case func is assume-global.
+					{
+						// Explicitly search this array vs calling FindVar() in case func is assume-global,
+						// and so that this declaration can shadow any previously declared super-global.
+						for (i = 0; i < g->CurrentFunc->mGlobalVarCount; ++i)
 							if (!tcslicmp(g->CurrentFunc->mGlobalVar[i]->mName, item, -1, var_name_length))
 							{
 								var = g->CurrentFunc->mGlobalVar[i];
 								break;
 							}
+					}
 					if (var)
-						return ScriptError(var->IsFuncParam() ? _T("Parameters must not be declared.")
-							: var->IsDeclared() ? ERR_DUPLICATE_DECLARATION
-							: _T("Declaration conflicts with existing var."), item);
+						return ConflictingDeclarationError(Var::DeclarationType(declare_type), var);
 				}
 				
 				if (   !(var = FindOrAddVar(item, var_name_length, declare_type))   )
 					return FAIL; // It already displayed the error.
-				if (var->Type() == VAR_VIRTUAL) // Shouldn't be declared either way (global or local).
-					return ScriptError(_T("Built-in variables must not be declared."), item);
-				if (declare_type == VAR_DECLARE_GLOBAL && g->CurrentFunc) // i.e. "global x" in a function, not "var x" (which is also VAR_DECLARE_GLOBAL).
+				switch (var->Type())
+				{
+				case VAR_CONSTANT:
+					if (declare_type == VAR_DECLARE_GLOBAL)
+						break; // Permit importing classes into force-local functions.
+					// Otherwise, don't permit it.
+				case VAR_VIRTUAL: // Shouldn't be declared either way (global or local).
+					return ConflictingDeclarationError(Var::DeclarationType(declare_type), var);
+				}
+				if (declare_type == VAR_DECLARE_GLOBAL && g->CurrentFunc) // i.e. "global x" in a function.
 				{
 					if (g->CurrentFunc->mGlobalVarCount >= mGlobalVarCountMax)
 						return ScriptError(_T("Too many declarations."), item); // Short message since it's so unlikely.
@@ -6353,16 +6362,18 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	else // Top-level class definition.
 	{
 		*mClassName = '\0'; // Init.
-		if (  !(class_var = FindOrAddVar(class_name, 0, VAR_DECLARE_SUPER_GLOBAL))  )
+		int insert_pos;
+		class_var = FindVar(class_name, 0, &insert_pos, VAR_DECLARE_SUPER_GLOBAL);
+		if (class_var)
+		{
+			if (class_var->IsDeclared())
+				return ConflictingDeclarationError(_T("class"), class_var);
+		}
+		else if (  !(class_var = AddVar(class_name, 0, insert_pos, VAR_DECLARE_SUPER_GLOBAL))  )
 			return FAIL;
-		if (class_var->IsObject())
-			// At this point it can only be an Object() created by a class definition.
-			//class_object = (Object *)class_var->Object();
-			conflict_found = true; // Since this is an error, no need to get the object.
-		else
-			// Explicitly set the variable scope, since FindOrAddVar may have returned
-			// an existing ordinary global instead of creating a super-global.
-			class_var->Scope() = VAR_DECLARE_SUPER_GLOBAL;
+		// Explicitly set the variable scope, since FindVar may have returned
+		// an existing ordinary global instead of creating a super-global.
+		class_var->Scope() = VAR_DECLARE_SUPER_GLOBAL;
 	}
 	
 	size_t length = _tcslen(mClassName), extra_length = _tcslen(class_name) + 1; // +1 for '.'
@@ -13292,6 +13303,26 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 		MsgBox(buf);
 	}
 	return FAIL; // See above for why it's better to return FAIL than CRITICAL_ERROR.
+}
+
+
+
+LPCTSTR VarKindForErrorMessage(Var *aVar)
+{
+	switch (aVar->Type())
+	{
+	case VAR_VIRTUAL: return _T("built-in variable");
+	case VAR_CONSTANT: return _T("class");
+	default: return Var::DeclarationType(aVar->Scope());
+	}
+}
+
+ResultType Script::ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting)
+{
+	TCHAR buf[127];
+	sntprintf(buf, _countof(buf), _T("This %s declaration conflicts with an existing %s.")
+		, aDeclType, VarKindForErrorMessage(aExisting));
+	return ScriptError(buf, aExisting->mName);
 }
 
 

@@ -658,6 +658,19 @@ public:
 		return mScope;
 	}
 
+	static LPCTSTR DeclarationType(int aDeclType)
+	{
+		if (aDeclType & VAR_LOCAL)
+		{
+			if (aDeclType & VAR_LOCAL_STATIC)
+				return _T("static");
+			if (aDeclType & VAR_LOCAL_FUNCPARAM)
+				return _T("parameter");
+			return _T("local");
+		}
+		return _T("global");
+	}
+
 	__forceinline bool IsObject() // L31: Indicates this var contains an object reference which must be released if the var is emptied.
 	{
 		return (mAttrib & VAR_ATTRIB_IS_OBJECT);
