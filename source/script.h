@@ -212,7 +212,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_WINDOW_PARAM _T("Requires at least one of its window parameters.")
 #define ERR_MOUSE_COORD _T("X & Y must be either both absent or both present.")
 #define ERR_DIVIDEBYZERO _T("Divide by zero.")
-#define ERR_VAR_IS_READONLY _T("Not allowed as an output variable.")
 #define ERR_EXP_ILLEGAL_CHAR _T("Illegal character in expression.")
 #define ERR_UNQUOTED_NON_ALNUM _T("Unquoted literals may only consist of alphanumeric characters/underscore.")
 #define ERR_DUPLICATE_DECLARATION _T("Duplicate declaration.")
@@ -1361,6 +1360,8 @@ public:
 	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	
+	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType);
+
 	ResultType SetLastErrorMaybeThrow(bool aError, DWORD aLastError = GetLastError());
 	ResultType Throw() { return ThrowIfTrue(true); }
 	ResultType ThrowIfTrue(bool aError);
@@ -3070,6 +3071,8 @@ public:
 	ResultType RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), ResultType aErrorType = FAIL_OR_OK, Line *aLine = nullptr);
 
 	ResultType ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting);
+	enum AssignmentErrorType { INVALID_ASSIGNMENT = 1, INVALID_OUTPUT_VAR };
+	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType = INVALID_ASSIGNMENT);
 
 	ResultType ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine);
 	int FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine);

@@ -77,8 +77,8 @@ ResultType Var::Assign(ExprTokenType &aToken)
 
 ResultType Var::AssignVirtual(ExprTokenType &aValue)
 {
-	if (!mVV->Set)
-		return g_script.ScriptError(ERR_VAR_IS_READONLY, mName);
+	if (!mVV->Set) // Might be impossible due to prior validation of assignments/output vars.
+		return g_script.VarIsReadOnlyError(this);
 	FuncResult result_token;
 	mVV->Set(result_token, mName, aValue);
 	return result_token.Result();
@@ -421,8 +421,8 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 		// Since above didn't return, the caller wants to allocate some temporary memory for
 		// writing the value into, and should call Close() in order to commit the actual value.
 	}
-	else if (mType == VAR_CONSTANT) // Might be impossible, since the script should have no way to reference it.
-		return g_script.ScriptError(ERR_VAR_IS_READONLY, mName);
+	else if (mType == VAR_CONSTANT) // Might be impossible due to prior validation of assignments/output vars.
+		return g_script.VarIsReadOnlyError(this);
 
 	if (space_needed < 2) // Variable is being assigned the empty string (or a deref that resolves to it).
 	{
@@ -610,8 +610,8 @@ ResultType Var::AssignBinaryNumber(__int64 aNumberAsInt64, VarAttribType aAttrib
 		value.value_int64 = aNumberAsInt64;
 		return var.AssignVirtual(value);
 	}
-	else if (var.mType == VAR_CONSTANT) // Might be impossible, since the script should have no way to reference it.
-		return g_script.ScriptError(ERR_VAR_IS_READONLY, mName);
+	else if (var.mType == VAR_CONSTANT) // Might be impossible due to prior validation of assignments/output vars.
+		return g_script.VarIsReadOnlyError(this);
 
 	if (var.mAttrib & VAR_ATTRIB_IS_OBJECT) // mObject will be overwritten below via the union.
 		var.ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().

@@ -176,9 +176,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				{
 					// Having this check here allows us to display the variable name rather than its contents
 					// in the error message.
-					error_msg = ERR_VAR_IS_READONLY;
-					error_info = this_token.var->mName;
-					goto abort_with_exception;
+					VarIsReadOnlyError(this_token.var, this_token.is_lvalue);
+					goto abort;
 				}
 
 				if (this_token.var->Type() == VAR_CONSTANT)

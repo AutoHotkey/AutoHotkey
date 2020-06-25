@@ -5210,8 +5210,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// dropped to simplify some things and perhaps allow more optimizations.
 					if (   !(target_var = FindOrAddVar(this_aArg))   )
 						return FAIL;  // The above already displayed the error.
-					if (target_var->IsReadOnly())
-						return ScriptError(ERR_VAR_IS_READONLY, this_aArg);
+					// Currently relying on RetroactivelyFixConstants() to do this check so that LineError() is used:
+					//if (target_var->IsReadOnly())
+					//	return VarIsReadOnlyError(target_var, aActionType == ACT_ASSIGNEXPR ? INVALID_ASSIGNMENT : INVALID_OUTPUT_VAR);
 					// Rather than removing this arg from the list altogether -- which would disturb
 					// the ordering and hurt the maintainability of the code -- the next best thing
 					// in terms of saving memory is to store Var::mName in place of the arg's text
@@ -9040,10 +9041,10 @@ unquoted_literal:
 				break;
 			case VAR_CONSTANT:
 				// The following is not done because:
-				//  1) It prevents some ERR_VAR_IS_READONLY error messages from showing the constant's name.
+				//  1) It would prevent "attempted to assign to a constant" errors from showing the constant's name.
 				//  2) It makes some error messages inconsistent since ACT_ASSIGNEXPR still refers to the Var.
 				//  3) SYM_DYNAMIC still needs to handle VAR_CONSTANT for double-derefs.
-				//  4) In combination with stdlib auto-include, it makes some error messages more inconsistent
+				//  4) In combination with stdlib auto-include, it might make some error messages inconsistent
 				//     since some references might be resolved to SYM_VAR before a lib is included.
 				//this_deref_ref.var->ToToken(infix[infix_count]);
 				//break;
@@ -9210,14 +9211,15 @@ unquoted_literal:
 							ExprTokenType &param1 = *postfix[postfix_count-1];
 							if (param1.symbol == SYM_VAR)
 							{
-								param1.is_lvalue = TRUE;
+								param1.is_lvalue = Script::INVALID_OUTPUT_VAR; // Mark the type of lvalue for later validation.
 							}
 							else if (param1.symbol == SYM_DYNAMIC)
 							{
 								if (param1.var) // Built-in var.
 								{
-									if (VAR_IS_READONLY(*param1.var))
-										return LineError(ERR_VAR_IS_READONLY, FAIL, param1.var->mName);
+									// Let this be checked only in RetroactivelyFixConstants(), to reduce code size:
+									//if (VAR_IS_READONLY(*param1.var))
+									//	return VarIsReadOnlyError(param1.var, Script::INVALID_OUTPUT_VAR);
 									// Convert this SYM_DYNAMIC to SYM_VAR to allow it to be passed to the function.
 									// Some functions rely on this being done only for those parameters which are listed
 									// as output vars in g_BIF or Line::ArgIsVar (since legacy commands are designed to
@@ -9226,7 +9228,7 @@ unquoted_literal:
 								}
 								// Mark this as an l-value.  If it is a double-deref, it will either produce a writable
 								// var as SYM_VAR or will throw an error.
-								param1.is_lvalue = TRUE;
+								param1.is_lvalue = Script::INVALID_OUTPUT_VAR;
 							}
 							else //if (!IS_OPERATOR_VALID_LVALUE(param1.symbol)) // This section currently only executes for single operands.
 							{
@@ -9530,13 +9532,14 @@ unquoted_literal:
 					else if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
 					{
 						ExprTokenType &target = *postfix[postfix_count - 1];
-						if (sym_postfix == SYM_DYNAMIC && target.var) // Built-in var.
+						if (sym_postfix == SYM_DYNAMIC && target.var) // Built-in var or constant.
 						{
-							if (VAR_IS_READONLY(*target.var))
-								return LineError(ERR_VAR_IS_READONLY, FAIL, target.var->mName);
+							// Let this be checked only in RetroactivelyFixConstants(), to reduce code size:
+							//if (VAR_IS_READONLY(*target.var))
+							//	return VarIsReadOnlyError(target.var, Script::INVALID_ASSIGNMENT);
 							target.symbol = SYM_VAR; // Convert to SYM_VAR.
 						}
-						target.is_lvalue = TRUE; // Mark this as the target of an assignment.
+						target.is_lvalue = Script::INVALID_ASSIGNMENT; // Mark this as the target of an assignment.
 					}
 					else if (!IS_OPERATOR_VALID_LVALUE(sym_postfix))
 						return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_infix->error_reporting_marker);
@@ -9744,13 +9747,14 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
 				{
 					ExprTokenType &target = *postfix[postfix_count - 1];
-					if (sym_postfix == SYM_DYNAMIC && target.var) // Built-in var.
+					if (sym_postfix == SYM_DYNAMIC && target.var) // Built-in var or constant.
 					{
-						if (VAR_IS_READONLY(*target.var))
-							return LineError(ERR_VAR_IS_READONLY, FAIL, target.var->mName);
+						// Let this be checked only in RetroactivelyFixConstants(), to reduce code size:
+						//if (VAR_IS_READONLY(*target.var))
+						//	return VarIsReadOnlyError(target.var, Script::INVALID_ASSIGNMENT);
 						target.symbol = SYM_VAR; // Convert to SYM_VAR.
 					}
-					target.is_lvalue = TRUE; // Mark this as the target of an assignment.
+					target.is_lvalue = Script::INVALID_ASSIGNMENT; // Mark this as the target of an assignment.
 				}
 				else if (!IS_OPERATOR_VALID_LVALUE(sym_postfix))
 					return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_postfix->error_reporting_marker);
@@ -13326,6 +13330,22 @@ ResultType Script::ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting
 }
 
 
+ResultType Script::VarIsReadOnlyError(Var *aVar, int aErrorType)
+{
+	TCHAR buf[127];
+	sntprintf(buf, _countof(buf), _T("This %s %s.")
+		, VarKindForErrorMessage(aVar)
+		, aErrorType == INVALID_ASSIGNMENT ? _T("cannot be assigned a value") : _T("cannot be used as an output variable"));
+	return ScriptError(buf, aVar->mName);
+}
+
+ResultType Line::VarIsReadOnlyError(Var *aVar, int aErrorType)
+{
+	g_script.mCurrLine = this;
+	return g_script.VarIsReadOnlyError(aVar, aErrorType);
+}
+
+
 
 ResultType Script::CriticalError(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 {
@@ -13780,6 +13800,8 @@ void Script::ConvertLocalToAlias(Var &aLocal, Var *aAliasFor, int aPos, Var **aV
 
 ResultType Script::RetroactivelyFixConstants()
 {
+	// AddLine() and ExpressionToPostfix() currently leave validation of output variables
+	// and lvalues to this function, to reduce code size.  Search for "VarIsReadOnlyError".
 	for (Line *line = mFirstLine; line; line = line->mNextLine)
 	{
 		for (int a = 0; a < line->mArgc; ++a)
@@ -13791,15 +13813,23 @@ ResultType Script::RetroactivelyFixConstants()
 				{
 					Var *target_var = VAR(arg);
 					if (target_var->IsReadOnly())
-						return line->LineError(ERR_VAR_IS_READONLY, FAIL, target_var->mName);
+						return line->VarIsReadOnlyError(target_var, INVALID_OUTPUT_VAR);
 				}
 			}
 			else if (arg.is_expression)
 			{
 				for (ExprTokenType *token = arg.postfix; token->symbol != SYM_INVALID; ++token)
 				{
-					if (token->symbol == SYM_VAR && token->is_lvalue && token->var->IsReadOnly())
-						return line->LineError(ERR_VAR_IS_READONLY, FAIL, token->var->mName);
+					if ((token->symbol == SYM_VAR || token->symbol == SYM_DYNAMIC && token->var) && token->var->IsReadOnly())
+					{
+						if (token->is_lvalue)
+							return line->VarIsReadOnlyError(token->var, token->is_lvalue);
+						// This ensures classes introduced via stdlib are consistent with other classes;
+						// i.e. passing to a ByRef parameter gives a value instead of a read-only parameter.
+						// It might also help performance.
+						if (token->var->Type() == VAR_CONSTANT)
+							token->var->ToToken(*token);
+					}
 				}
 			}
 		}
