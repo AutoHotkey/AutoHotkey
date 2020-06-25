@@ -642,7 +642,7 @@ enum BuiltInFunctionID {
 	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlFindItem, FID_ControlGetIndex, FID_ControlGetChoice, FID_ControlGetItems, FID_ListViewGetContent, FID_EditGetLineCount, FID_EditGetCurrentLine, FID_EditGetCurrentCol, FID_EditGetLine, FID_EditGetSelectedText, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
 	FID_ControlSetChecked = 0, FID_ControlSetEnabled, FID_ControlShow, FID_ControlHide, FID_ControlSetStyle, FID_ControlSetExStyle, FID_ControlShowDropDown, FID_ControlHideDropDown, FID_ControlAddItem, FID_ControlDeleteItem, FID_ControlChooseIndex, FID_ControlChooseString, FID_EditPaste,
 	FID_ControlSend = SCM_NOT_RAW, FID_ControlSendText = SCM_RAW_TEXT,
-	FID_DriveEject = 0, FID_DriveLock, FID_DriveUnlock, FID_DriveSetLabel,
+	FID_DriveEject = 0, FID_DriveLock, FID_DriveUnlock, FID_DriveSetLabel, FID_DriveRetract,
 	FID_DriveGetList = 0, FID_DriveGetFilesystem, FID_DriveGetLabel, FID_DriveGetSerial, FID_DriveGetType, FID_DriveGetStatus, FID_DriveGetStatusCD, FID_DriveGetCapacity, FID_DriveGetSpaceFree,
 	FID_EnvGet = 0, FID_EnvSet,
 	FID_PostMessage = 0, FID_SendMessage,

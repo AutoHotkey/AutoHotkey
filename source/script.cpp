@@ -112,7 +112,7 @@ FuncEntry g_BIF[] =
 #ifdef ENABLE_DLLCALL
 	BIFn(DllCall, 1, NA, BIF_DllCall),
 #endif
-	BIFn(DriveEject, 0, 2, BIF_Drive),
+	BIFn(DriveEject, 0, 1, BIF_Drive),
 	BIFn(DriveGetCapacity, 1, 1, BIF_DriveGet),
 	BIFn(DriveGetFilesystem, 1, 1, BIF_DriveGet),
 	BIFn(DriveGetLabel, 1, 1, BIF_DriveGet),
@@ -123,6 +123,7 @@ FuncEntry g_BIF[] =
 	BIFn(DriveGetStatusCD, 0, 1, BIF_DriveGet),
 	BIFn(DriveGetType, 1, 1, BIF_DriveGet),
 	BIFn(DriveLock, 1, 1, BIF_Drive),
+	BIFn(DriveRetract, 0, 1, BIF_Drive),
 	BIFn(DriveSetLabel, 1, 2, BIF_Drive),
 	BIFn(DriveUnlock, 1, 1, BIF_Drive),
 	BIFn(EditGetCurrentCol, 1, 5, BIF_ControlGet),
