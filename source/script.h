@@ -1289,7 +1289,7 @@ public:
 	{
 		if (!_tcsicmp(aBuf, _T("Screen")))
 			return COORD_MODE_SCREEN;
-		else if (!_tcsicmp(aBuf, _T("Relative")) || !_tcsicmp(aBuf, _T("Window")))
+		else if (!_tcsicmp(aBuf, _T("Window")))
 			return COORD_MODE_WINDOW;
 		else if (!_tcsicmp(aBuf, _T("Client")))
 			return COORD_MODE_CLIENT;
