@@ -16526,7 +16526,7 @@ void Script::PrintErrorStdOut(LPCTSTR aErrorText, LPCTSTR aExtraInfo, FileIndexT
 	TCHAR buf[LINE_SIZE * 2];
 #define STD_ERROR_FORMAT _T("%s (%d) : ==> %s\n")
 	int n = sntprintf(buf, _countof(buf), STD_ERROR_FORMAT, Line::sSourceFile[aFileIndex], aLineNumber, aErrorText);
-	if (aExtraInfo)
+	if (*aExtraInfo)
 		n += sntprintf(buf + n, _countof(buf) - n, _T("     Specifically: %s\n"), aExtraInfo);
 	PrintErrorStdOut(buf, n, _T("**"));
 }
