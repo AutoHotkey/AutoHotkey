@@ -55,6 +55,7 @@ enum ExecUntilMode {NORMAL_MODE, UNTIL_RETURN, UNTIL_BLOCK_END, ONLY_ONE_LINE};
 // might just match one of them:
 #define ATTR_NONE (void *)0  // Some places might rely on this being zero.
 #define ATTR_TRUE (void *)1
+#define ATTR_LINE_CAN_BE_UNREACHABLE ATTR_TRUE // A flag for ACT_RETURN and ACT_EXIT to indicate PreparseCommands() should not show a warning if the line is unreachable.
 #define ATTR_LOOP_UNKNOWN (void *)1 // Same value as the above.        // KEEP IN SYNC WITH BELOW.
 #define ATTR_LOOP_IS_UNKNOWN_OR_NONE(attr) (attr <= ATTR_LOOP_UNKNOWN) // KEEP IN SYNC WITH ABOVE.
 #define ATTR_LOOP_NORMAL (void *)2
@@ -2974,6 +2975,7 @@ private:
 	ResultType PreparseStaticLines(Line *aStartingLine);
 	Line *PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode = NORMAL_MODE, Line *aParentLine = NULL, const AttributeType aLoopType = ATTR_NONE);
 	Line *PreparseCommands(Line *aStartingLine);
+	bool IsLabelTarget(Line *aLine);
 
 public:
 	Line *mCurrLine;     // Seems better to make this public than make Line our friend.

@@ -1213,6 +1213,7 @@ UINT Script::LoadFromFile()
 	if (   LoadIncludedFile(g_RunStdIn ? _T("*") : mFileSpec, false, false) != OK
 		|| !AddLine(ACT_EXIT)) // Add an Exit to ensure lib auto-includes aren't auto-executed, for backward compatibility.
 		return LOADING_FAILED;
+	mLastLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
 
 	if (!PreparseExpressions(mFirstLine))
 		return LOADING_FAILED; // Error was already displayed by the above call.
@@ -1295,6 +1296,8 @@ UINT Script::LoadFromFile()
 	++mCombinedLineNumber;  // So that the EXITs will both show up in ListLines as the line # after the last physical one in the script.
 	if (!(AddLine(ACT_EXIT) && AddLine(ACT_EXIT))) // Second exit guaranties non-NULL mRelatedLine(s).
 		return LOADING_FAILED;
+	mLastLine->mPrevLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
+	mLastLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
 	mPlaceholderLabel->mJumpToLine = mLastLine; // To follow the rule "all labels should have a non-NULL line before the script starts running".
 
 	if (   !PreparseBlocks(mFirstLine)
@@ -2523,6 +2526,7 @@ examine_line:
 				mNoHotkeyLabels = false;\
 				if (!AddLine(ACT_RETURN, NULL, UCHAR_MAX))\
 					return FAIL;\
+				mLastLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;\
 				mCurrLine = NULL;\
 			}
 			CHECK_mNoHotkeyLabels
@@ -2574,6 +2578,7 @@ examine_line:
 					// hotstrings in case gosub/goto is ever used to jump to their labels:
 					if (!AddLine(ACT_RETURN))
 						return FAIL;
+					mLastLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
 				}
 			}
 			else // It's a hotkey vs. hotstring.
@@ -2597,6 +2602,7 @@ examine_line:
 					// Also add a Return that's implicit for a single-line hotkey.
 					if (!AddLine(ACT_RETURN))
 						return FAIL;
+					mLastLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
 				}
 				if (hk = Hotkey::FindHotkeyByTrueNature(buf, suffix_has_tilde, hook_is_mandatory)) // Parent hotkey found.  Add a child/variant hotkey for it.
 				{
@@ -3574,6 +3580,9 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		if (warnType == WARN_CLASS_OVERWRITE || warnType == WARN_ALL)
 			g_Warn_ClassOverwrite = warnMode;
+
+		if (warnType == WARN_UNREACHABLE || warnType == WARN_ALL)
+			g_Warn_Unreachable = warnMode;
 
 		return CONDITION_TRUE;
 	}
@@ -10022,9 +10031,51 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 			}
 			break;
 		}
+		// Check for unreachable code.
+		if (g_Warn_Unreachable)
+		switch (line->mActionType)
+		{
+		case ACT_RETURN:
+		case ACT_BREAK:
+		case ACT_CONTINUE:
+		case ACT_GOTO:
+		case ACT_THROW:
+		case ACT_EXIT:
+		//case ACT_EXITAPP: // Excluded since it's just a function in v2, and there can't be any expectation that the code following it will execute anyway.
+			Line *next_line = line->mNextLine;
+			if (!next_line // line is the script's last line.
+				|| next_line->mParentLine != line->mParentLine) // line is the one-line action of if/else/loop/etc.
+				break;
+			while (next_line->mActionType == ACT_BLOCK_BEGIN && next_line->mAttribute)
+				next_line = next_line->mRelatedLine; // Skip function body.
+			switch (next_line->mActionType)
+			{
+			case ACT_EXIT:
+			case ACT_RETURN:
+				if (next_line->mAttribute != ATTR_LINE_CAN_BE_UNREACHABLE)
+					break; // It's a normal Exit/Return.
+				// It's from an automatic AddLine(), so should be excluded.
+			case ACT_BLOCK_END: // There's nothing following this line in the same block.
+				continue;
+			}
+			if (IsLabelTarget(next_line))
+				break;
+			TCHAR buf[64];
+			sntprintf(buf, _countof(buf), _T("This line will never execute, due to %s preceeding it."), g_act[line->mActionType].Name);
+			ScriptWarning(g_Warn_Unreachable, buf, _T(""), next_line);
+		}
 	} // for()
 	// Return something non-NULL to indicate success:
 	return mLastLine;
+}
+
+
+
+bool Script::IsLabelTarget(Line *aLine)
+{
+	Label *lbl;
+	for (lbl = mFirstLabel; lbl && lbl->mJumpToLine != aLine; lbl = lbl->mNextLabel);
+	return lbl;
 }
 
 

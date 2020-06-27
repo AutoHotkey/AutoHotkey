@@ -81,6 +81,7 @@ extern WarnMode g_Warn_UseUnsetGlobal;
 extern WarnMode g_Warn_UseEnv;
 extern WarnMode g_Warn_LocalSameAsGlobal;
 extern WarnMode g_Warn_ClassOverwrite;
+extern WarnMode g_Warn_Unreachable;
 extern SingleInstanceType g_AllowOnlyOneInstance;
 extern bool g_persistent;
 extern bool g_NoTrayIcon;
