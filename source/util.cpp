@@ -2929,6 +2929,48 @@ LPTSTR InStrAny(LPTSTR aStr, LPTSTR aNeedle[], int aNeedleCount, size_t &aFoundL
 
 
 
+int CompareVersion(LPCTSTR a, LPCTSTR b)
+{
+	while (*a || *b)
+	{
+		// 1.1-a001 < 1.1 = 1.1.0 = 1.1.0+foo
+		LPTSTR pa, pb;
+		int ia = _tcstol(a, &pa, 10);
+		int ib = _tcstol(b, &pb, 10);
+		// If *pa is not in the set .-+\0, this component is non-numeric (and not empty).
+		// Treat non-numeric as greater than numeric (but assume any absent component is 0).
+		if (!_tcschr(_T(".-+"), *pa)) ia = INT_MAX; else a = pa;
+		if (!_tcschr(_T(".-+"), *pb)) ib = INT_MAX; else b = pb;
+		if (ia < ib) return -1;
+		if (ia > ib) return  1;
+		// They are either equal or both non-numeric.
+		if (*a == '.' || *b == '.')
+		{
+			if (*a == '.') ++a;
+			if (*b == '.') ++b;
+			continue; // On to the next component.
+		}
+		// Give -pre-release lower precedence.
+		if (*a == '-' && *b != '-') return -1;
+		if (*b == '-' && *a != '-') return  1;
+		for (;; ++a, ++b)
+		{
+			auto ac = *a == '+' || *a == '.' ? '\0' : *a; // Ignore any + suffix (treat as terminator).
+			auto bc = *b == '+' || *b == '.' ? '\0' : *b;
+			if (ac != bc) return ac < bc ? -1 : 1;
+			if (!ac) // End of both components.
+			{
+				if (*a == '.' || *b == '.')
+					break; // Try to compare the next component as numeric.
+				return 0; // Both reached the end; a and b are equal.
+			}
+		}
+	}
+	return 0;
+}
+
+
+
 #if defined(_MSC_VER) && defined(_DEBUG)
 void OutputDebugStringFormat(LPCTSTR fmt, ...)
 {
