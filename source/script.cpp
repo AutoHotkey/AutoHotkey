@@ -8316,7 +8316,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 54, 54         // SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT
 		, 58, 58         // SYM_ADD, SYM_SUBTRACT
 		, 62, 62, 62     // SYM_MULTIPLY, SYM_DIVIDE, SYM_FLOORDIVIDE
-		, 72             // SYM_POWER (see note below).  Associativity kept as left-to-right for backward compatibility (e.g. 2**2**3 is 4**3=64 not 2**8=256).
+		, 73             // SYM_POWER (see note below). Changed to right-associative for v2.
 		, 25             // SYM_LOWNOT (the word "NOT": the low precedence version of logical-not).  HAS AN ODD NUMBER to indicate right-to-left evaluation order so that things like "not not var" are supports (which can be used to convert a variable into a pure 1/0 boolean value).
 		, 67,67,67,67    // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT
 		// NOTE: THE ABOVE MUST BE AN ODD NUMBER to indicate right-to-left evaluation order, which was added in v1.0.46 to support consecutive unary operators such as !*var !!var (!!var can be used to convert a value into a pure 1/0 boolean).
@@ -8331,8 +8331,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 	// However, this rule requires a small workaround in the postfix-builder to allow 2**-2 to be
 	// evaluated as 2**(-2) rather than being seen as an error.  v1.0.45: A similar thing is required
 	// to allow the following to work: 2**!1, 2**not 0, 2**~0xFFFFFFFE, 2**&x.
-	// On a related note, the right-to-left tradition of something like 2**3**4 is not implemented (maybe in v2).
-	// Instead, the expression is evaluated from left-to-right (like other operators) to simplify the code.
 
 	ExprTokenType infix[MAX_TOKENS], *postfix[MAX_TOKENS], *stack[MAX_TOKENS + 1];  // +1 for SYM_BEGIN on the stack.
 	int infix_count = 0, postfix_count = 0, stack_count = 0;
