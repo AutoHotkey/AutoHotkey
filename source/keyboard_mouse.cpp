@@ -144,6 +144,8 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 		return;
 	global_struct &g = *::g; // Reduces code size and may improve performance.
 
+	DWORD orig_last_peek_time = g_script.mLastPeekTime;
+
 	// For performance and also to reserve future flexibility, recognize {Blind} only when it's the first item
 	// in the string.
 	modLR_type mods_excluded_from_blind = 0;
@@ -970,6 +972,18 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 
 	if (do_selective_blockinput && !blockinput_prev) // Turn it back off only if it was off before we started.
 		Line::ScriptBlockInput(false);
+
+	// The following MsgSleep(-1) solves unwanted buffering of hotkey activations while SendKeys is in progress
+	// in a non-Critical thread.  Because SLEEP_WITHOUT_INTERRUPTION is used to perform key delays, any incoming
+	// hotkey messages would be left in the queue.  It is not until the next interruptible sleep that hotkey
+	// messages may be processed, and potentially discarded due to #MaxThreadsPerHotkey (even #MaxThreadsBuffer
+	// should only allow one buffered activation).  But if the hotkey thread just calls Send in a loop and then
+	// returns, it never performs an interruptible sleep, so the hotkey messages are processed one by one after
+	// each new hotkey thread returns, even though Critical was not used.  Also note SLEEP_WITHOUT_INTERRUPTION
+	// causes g_script.mLastScriptRest to be reset, so it's unlikely that a sleep would occur between Send calls.
+	// To solve this, call MsgSleep(-1) now (unless no delays were performed, or the thread is uninterruptible):
+	if (aSendModeOrig == SM_EVENT && g_script.mLastPeekTime != orig_last_peek_time && IsInterruptible())
+		MsgSleep(-1);
 
 	// v1.0.43.03: Someone reported that when a non-autoreplace hotstring calls us to do its backspacing, the
 	// hotstring's subroutine can execute a command that activates another window owned by the script before

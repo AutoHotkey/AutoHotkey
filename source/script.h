@@ -53,6 +53,7 @@ enum ExecUntilMode {NORMAL_MODE, UNTIL_RETURN, UNTIL_BLOCK_END, ONLY_ONE_LINE};
 // might just match one of them:
 #define ATTR_NONE (void *)0  // Some places might rely on this being zero.
 #define ATTR_TRUE (void *)1
+#define ATTR_LINE_CAN_BE_UNREACHABLE ATTR_TRUE // A flag for ACT_RETURN and ACT_EXIT to indicate PreparseCommands() should not show a warning if the line is unreachable.
 typedef void *AttributeType;
 
 typedef int FileLoopModeType;
@@ -2894,6 +2895,7 @@ private:
 	Line *PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode = NORMAL_MODE, Line *aParentLine = NULL, const ActionTypeType aLoopType = ACT_INVALID);
 	Line *PreparseBlocksStmtBody(Line *aStartingLine, Line *aParentLine = NULL, const ActionTypeType aLoopType = ACT_INVALID);
 	Line *PreparseCommands(Line *aStartingLine);
+	bool IsLabelTarget(Line *aLine);
 
 public:
 	Line *mCurrLine;     // Seems better to make this public than make Line our friend.

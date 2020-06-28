@@ -1549,6 +1549,7 @@ UINT Script::LoadFromFile()
 	if (   LoadIncludedFile(g_RunStdIn ? _T("*") : mFileSpec, false, false) != OK
 		|| !AddLine(ACT_EXIT)) // Add an Exit to ensure lib auto-includes aren't auto-executed, for backward compatibility.
 		return LOADING_FAILED;
+	mLastLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
 #ifdef ENABLE_DLLCALL
 	// So that (the last occuring) "#DllLoad directory" doesn't affect calls to GetDllProcAddress for run time calls to DllCall
 	// or DllCall optimizations in Line::ExpressionToPostfix.
@@ -1620,6 +1621,8 @@ UINT Script::LoadFromFile()
 	++mCombinedLineNumber;  // So that the EXITs will both show up in ListLines as the line # after the last physical one in the script.
 	if (!(AddLine(ACT_EXIT) && AddLine(ACT_EXIT))) // Second exit guaranties non-NULL mRelatedLine(s).
 		return LOADING_FAILED;
+	mLastLine->mPrevLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
+	mLastLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
 	mPlaceholderLabel->mJumpToLine = mLastLine; // To follow the rule "all labels should have a non-NULL line before the script starts running".
 
 	if (   !PreparseBlocks(mFirstLine)
@@ -4016,7 +4019,42 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		if (warnType == WARN_LOCAL_SAME_AS_GLOBAL || warnType == WARN_ALL)
 			g_Warn_LocalSameAsGlobal = warnMode;
 
+		if (warnType == WARN_UNREACHABLE || warnType == WARN_ALL)
+			g_Warn_Unreachable = warnMode;
+
 		return CONDITION_TRUE;
+	}
+
+	if (IS_DIRECTIVE_MATCH(_T("#Requires")))
+	{
+#ifdef AUTOHOTKEYSC
+		return CONDITION_TRUE; // Omit the checks for compiled scripts to reduce code size.
+#else
+		if (!parameter)
+			return ScriptError(ERR_PARAM1_REQUIRED);
+
+		bool show_autohotkey_version = false;
+		if (!_tcsnicmp(parameter, _T("AutoHotkey"), 10))
+		{
+			if (!parameter[10]) // Just #requires AutoHotkey; would seem silly to warn the user in this case.
+				return CONDITION_TRUE;
+
+			if (IS_SPACE_OR_TAB(parameter[10]))
+			{
+				auto cp = omit_leading_whitespace(parameter + 11);
+				if (*cp == 'v')
+					++cp;
+				if (cp[0] == T_AHK_VERSION[0] && _tcschr(_T(".-+"), cp[1]) // Major version matches.
+					&& CompareVersion(cp, T_AHK_VERSION) <= 0) // Required minor and patch versions <= A_AhkVersion (also taking into account any pre-release suffix).
+					return CONDITION_TRUE;
+				show_autohotkey_version = true;
+			}
+		}
+		TCHAR buf[100];
+		sntprintf(buf, _countof(buf), _T("This script requires %s%s.")
+			, parameter, show_autohotkey_version ? _T(", but you have v") T_AHK_VERSION : _T(""));
+		return ScriptError(buf);
+#endif
 	}
 
 	// Otherwise, report that this line isn't a directive:
@@ -8199,9 +8237,51 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 					return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			break;
 		}
+		// Check for unreachable code.
+		if (g_Warn_Unreachable)
+		switch (line->mActionType)
+		{
+		case ACT_RETURN:
+		case ACT_BREAK:
+		case ACT_CONTINUE:
+		case ACT_GOTO:
+		case ACT_THROW:
+		case ACT_EXIT:
+		//case ACT_EXITAPP: // Excluded since it's just a function in v2, and there can't be any expectation that the code following it will execute anyway.
+			Line *next_line = line->mNextLine;
+			if (!next_line // line is the script's last line.
+				|| next_line->mParentLine != line->mParentLine) // line is the one-line action of if/else/loop/etc.
+				break;
+			while (next_line->mActionType == ACT_BLOCK_BEGIN && next_line->mAttribute)
+				next_line = next_line->mRelatedLine; // Skip function body.
+			switch (next_line->mActionType)
+			{
+			case ACT_EXIT:
+			case ACT_RETURN:
+				if (next_line->mAttribute != ATTR_LINE_CAN_BE_UNREACHABLE)
+					break; // It's a normal Exit/Return.
+				// It's from an automatic AddLine(), so should be excluded.
+			case ACT_BLOCK_END: // There's nothing following this line in the same block.
+				continue;
+			}
+			if (IsLabelTarget(next_line))
+				break;
+			TCHAR buf[64];
+			sntprintf(buf, _countof(buf), _T("This line will never execute, due to %s preceeding it."), g_act[line->mActionType].Name);
+			ScriptWarning(g_Warn_Unreachable, buf, _T(""), next_line);
+		}
 	} // for()
 	// Return something non-NULL to indicate success:
 	return mLastLine;
+}
+
+
+
+bool Script::IsLabelTarget(Line *aLine)
+{
+	Label *lbl;
+	for (lbl = mFirstLabel; lbl && lbl->mJumpToLine != aLine; lbl = lbl->mNextLabel);
+	return lbl;
 }
 
 
@@ -13128,7 +13208,7 @@ void Script::PrintErrorStdOut(LPCTSTR aErrorText, LPCTSTR aExtraInfo, FileIndexT
 	TCHAR buf[LINE_SIZE * 2];
 #define STD_ERROR_FORMAT _T("%s (%d) : ==> %s\n")
 	int n = sntprintf(buf, _countof(buf), STD_ERROR_FORMAT, Line::sSourceFile[aFileIndex], aLineNumber, aErrorText);
-	if (aExtraInfo)
+	if (*aExtraInfo)
 		n += sntprintf(buf + n, _countof(buf) - n, _T("     Specifically: %s\n"), aExtraInfo);
 	PrintErrorStdOut(buf, n, _T("**"));
 }

@@ -728,6 +728,8 @@ HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, i
 
 PWSTR GetDocumentsFolder();
 
+int CompareVersion(LPCTSTR a, LPCTSTR b);
+
 #if defined(_MSC_VER) && defined(_DEBUG)
 void OutputDebugStringFormat(LPCTSTR fmt, ...); // put debug message to the "Output" panel of Visual Studio.
 #endif
