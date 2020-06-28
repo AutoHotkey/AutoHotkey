@@ -618,6 +618,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			// result of the comma's left-hand sub-statement.  At this point the right-hand sub-statement
 			// has not yet been evaluated.  Like C++ and other languages, but unlike AutoHotkey v1, the
 			// rightmost operand is preserved, not the leftmost.
+			if (right.symbol == SYM_VAR) // Count this as "use" for the purpose of the warning, since it could be an error (maybe the author intended to call a function?).
+				right.var->MaybeWarnUninitialized();
 			continue;
 
 		default:
@@ -1195,6 +1197,11 @@ push_this_token:
 		STACK_PUSH(&this_token);   // Push the result onto the stack for use as an operand by a future operator.
 	} // For each item in the postfix array.
 
+	if (stack_count != 1)  // Even for multi-statement expressions, the stack should have only one item left on it:
+		goto abort_with_exception; // the overall result.  Any conditions that cause this *should* be detected at load time.
+
+	ExprTokenType &result_token = *stack[0];  // For performance and convenience.  Even for multi-statement, the bottommost item on the stack is the final result so that things like var1:=1,var2:=2 work.
+
 	// Although ACT_EXPRESSION was already checked higher above for function calls, there are other ways besides
 	// an isolated function call to have ACT_EXPRESSION.  For example: var&=3 (where &= is an operator that lacks
 	// a corresponding command).  Another example: true ? fn1() : fn2()
@@ -1203,12 +1210,11 @@ push_this_token:
 	// It seems best to avoid any chance of looking at the result since it might be invalid due to the above
 	// having taken shortcuts (since it knew the result would be discarded).
 	if (mActionType == ACT_EXPRESSION)   // A stand-alone expression whose end result doesn't matter.
+	{
+		if (result_token.symbol == SYM_VAR) // Count this as "use" for the purpose of the warning, since it could be an error (maybe the author intended to call a function?).
+			result_token.var->MaybeWarnUninitialized();
 		goto normal_end_skip_output_var; // Can't be any output_var for this action type. Also, leave result_to_return at its default of "".
-
-	if (stack_count != 1)  // Even for multi-statement expressions, the stack should have only one item left on it:
-		goto abort_with_exception; // the overall result. Examples of errors include: () ... x y ... (x + y) (x + z) ... etc. (some of these might no longer produce this issue due to auto-concat).
-
-	ExprTokenType &result_token = *stack[0];  // For performance and convenience.  Even for multi-statement, the bottommost item on the stack is the final result so that things like var1:=1,var2:=2 work.
+	}
 
 	if (output_var)
 	{
