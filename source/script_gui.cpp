@@ -234,14 +234,6 @@ ObjectMember GuiType::sMembers[] =
 
 int GuiType::sMemberCount = _countof(sMembers);
 
-ResultType GuiType::Invoke(IObject_Invoke_PARAMS_DECL)
-{
-	if (!mHwnd)
-		_o_throw(_T("The Gui is destroyed."));
-
-	return Object::Invoke(IObject_Invoke_PARAMS);
-}
-
 ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	auto ctrl_type = GuiControls(aID);
@@ -263,6 +255,8 @@ ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, E
 	{
 		_o_throw(aID ? ERR_PARAM2_INVALID : ERR_PARAM3_INVALID);
 	}
+	if (!mHwnd)
+		_o_throw(ERR_GUI_NO_WINDOW);
 	GuiControlType* pcontrol;
 	ResultType result = AddControl(ctrl_type, options, text, pcontrol, text_obj);
 	if (pcontrol)
@@ -275,6 +269,9 @@ ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, E
 
 ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
+	if (!mHwnd)
+		_o_throw(ERR_GUI_NO_WINDOW);
+
 	TCHAR nbuf1[MAX_NUMBER_SIZE], nbuf2[MAX_NUMBER_SIZE];
 
 	auto member = MemberID(aID);
