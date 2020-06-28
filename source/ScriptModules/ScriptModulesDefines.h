@@ -25,10 +25,10 @@ GNU General Public License for more details.
 #define SMODULES_UNNAMED_STR (ScriptModule::sUnamedModuleName)	// This is a static string for quickly identifying an unnamed module and avoid allocating a string for each unnamed module.
 
 // For literal module definitions:
-#define SMODULES_DECLARATION_KEYWORD_NAME_QUOTED "Namespace"
+#define SMODULES_DECLARATION_KEYWORD_NAME_QUOTED "Module"
 #define SMODULES_DECLARATION_KEYWORD_NAME _T(SMODULES_DECLARATION_KEYWORD_NAME_QUOTED)
 #define SMODULES_DECLARATION_KEYWORD_NAME_LENGTH (_countof(SMODULES_DECLARATION_KEYWORD_NAME) - 1) // - 1 to exclude the '\0
-#define SMODULES_DECLARATION_KEYWORD_NAME_LC _T("namespace") // Lower case version for error reporting etc.
+#define SMODULES_DECLARATION_KEYWORD_NAME_LC _T("module") // Lower case version for error reporting etc.
 
 // For including file to module:
 #define SMODULES_INCLUDE_DIRECTIVE_NAME _T("#Import")
@@ -53,12 +53,12 @@ GNU General Public License for more details.
 #define SMODULES_NAMES_MATCH(name1, name2) ((name1) != SMODULES_UNNAMED_STR && (name2) != SMODULES_UNNAMED_STR && !_tcsicmp( (name1), (name2)))
 
 // Error messages:
-#define ERR_SMODULES_NOT_FOUND _T("Namespace not found.")
-#define ERR_SMODULES_DUPLICATE_NAME _T("Duplicate namespace definition.")
-#define ERR_SMODULES_IN_FUNCTION _T("Functions cannot contain namespaces.")
-#define ERR_SMODULES_IN_CLASS _T("Classes cannot contain namespaces.")
-#define ERR_SMODULES_IN_BLOCK _T("This block cannot contain namespaces.")
-#define ERR_SMODULES_DEFINITION_SYNTAX _T("Syntax error in namespace definition.") // Also used with SMODULES_INCLUDE_DIRECTIVE_NAME.
+#define ERR_SMODULES_NOT_FOUND _T("Module not found.")
+#define ERR_SMODULES_DUPLICATE_NAME _T("Duplicate module definition.")
+#define ERR_SMODULES_IN_FUNCTION _T("Functions cannot contain modules.")
+#define ERR_SMODULES_IN_CLASS _T("Classes cannot contain modules.")
+#define ERR_SMODULES_IN_BLOCK _T("This block cannot contain modules.")
+#define ERR_SMODULES_DEFINITION_SYNTAX _T("Syntax error in module definition.") // Also used with SMODULES_INCLUDE_DIRECTIVE_NAME.
 #define ERR_SMODULES_INVALID_SCOPE_RESOLUTION _T("Invalid scope resolution.")
 
 #define ERR_SMODULES_NOT_SUPPORTED _T("Not supported.")

@@ -1054,7 +1054,7 @@ HRESULT ComEvent::Connect(LPTSTR pfx, IObject *ahkObject)
 		if (pfx)
 		{
 			_tcscpy(mPrefix.mString, pfx);
-			mPrefix.mModule = g_CurrentModule; // So that the function is searched for in the correct namespace. This can never be g_StandardNameSpace since bifs never change to the standar namespace.
+			mPrefix.mModule = g_CurrentModule; // So that the function is searched for in the correct module.
 		}
 		else
 		{

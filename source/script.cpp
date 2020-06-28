@@ -1730,19 +1730,19 @@ inline LPTSTR IsModuleDefinition(LPTSTR aBuf)
 {
 	int len = SMODULES_DECLARATION_KEYWORD_NAME_LENGTH; // for brevity
 	if (_tcsnicmp(aBuf, SMODULES_DECLARATION_KEYWORD_NAME, len)
-		|| (!IS_SPACE_OR_TAB(aBuf[len])							// i.e. it's not "namespace" followed by a space or tab.
-			&& aBuf[len] != '{' && aBuf[len] != '\0'))			// and it is not "namespace{" or "namespace"
+		|| (!IS_SPACE_OR_TAB(aBuf[len])							// i.e. it's not "module" followed by a space or tab.
+			&& aBuf[len] != '{' && aBuf[len] != '\0'))			// and it is not "module{" or "module"
 		return NULL;
 
-	if (aBuf[len] == '{' || aBuf[len] == '\0')					// it is "namespace{" or "namespace".
+	if (aBuf[len] == '{' || aBuf[len] == '\0')					// it is "module{" or "module".
 		return SMODULES_UNNAMED_STR;
 
 	LPTSTR module_name = omit_leading_whitespace(aBuf + len + 1);
 
 	if (*module_name == '{' || *module_name == '\0')
-		return SMODULES_UNNAMED_STR;								// it is something like "namespace {" or "namespace".
+		return SMODULES_UNNAMED_STR;								// it is something like "module {" or "module".
 	if (_tcschr(EXPR_ALL_SYMBOLS, *module_name))
-		// It's probably something like "NameSpace := ...".
+		// It's probably something like "module := ...".
 		return NULL;
 	return module_name;
 }
@@ -7003,10 +7003,10 @@ ResultType Script::ResolveClasses()
 	{
 		// Pop, LineInfo, A, B and C.D in: 
 		/*
-			namespace A {
+			module A {
 LineInfo:		class B extends C.D {
 				}
-				namespace C {
+				module C {
 					class D {
 					}
 				}

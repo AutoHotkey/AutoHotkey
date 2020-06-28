@@ -200,7 +200,7 @@ class OptionalScriptModule : public IObjectComCompatible
 {
 public:	
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL) { return aResultToken.Error(ERR_SMODULES_NOT_FOUND); } // Consider something more descriptive.
-	IObject_Type_Impl("OptionalNamespace")
+	IObject_Type_Impl("OptionalModule")
 	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
 	ULONG STDMETHODCALLTYPE Release() { return 1; }
 };
