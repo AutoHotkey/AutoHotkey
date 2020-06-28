@@ -5433,7 +5433,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 		}
 		else if (!_tcsnicmp(next_option, _T("Background"), 10))
 		{
-			next_option += 10;  // To help maintainability, point it to the optional suffix here.
+			auto option_value = next_option + 10;
 
 			// Reset background properties to simplify the next section.
 			aControl.background_color = CLR_INVALID;
@@ -5443,13 +5443,12 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				aControl.background_brush = NULL;
 			}
 
-			if (!_tcsicmp(next_option, _T("Trans")))
+			if (!_tcsicmp(option_value, _T("Trans")))
 			{
 				if (adding)
 				{
 					if (!aControl.SupportsBackgroundTrans())
 					{
-						next_option -= 10;
 						error_message = ERR_GUI_NOT_FOR_THIS_TYPE;
 						goto return_error;
 					}
@@ -5459,20 +5458,25 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			}
 			else if (adding)
 			{
-				if (*next_option)
+				if (*option_value)
 				{
 					if (!aControl.SupportsBackgroundColor())
 					{
-						next_option -= 10;
 						error_message = ERR_GUI_NOT_FOR_THIS_TYPE;
 						goto return_error;
 					}
-					aOpt.color_bk = ColorNameToBGR(next_option);
-					if (aOpt.color_bk == CLR_NONE) // A matching color name was not found, so assume it's in hex format.
+					aOpt.color_bk = ColorNameToBGR(option_value);
+					if (aOpt.color_bk == CLR_NONE) // A matching color name was not found, so check for hex format.
+					{
 						// It seems _tcstol() automatically handles the optional leading "0x" if present:
-						aOpt.color_bk = rgb_to_bgr(_tcstol(next_option, NULL, 16));
-						// if next_option did not contain something hex-numeric, black (0x00) will be assumed,
-						// which seems okay given how rare such a problem would be.
+						LPTSTR end_ptr;
+						aOpt.color_bk = rgb_to_bgr(_tcstol(option_value, &end_ptr, 16));
+						if (*end_ptr)
+						{
+							error_message = ERR_INVALID_OPTION;
+							goto return_error;
+						}
+					}
 					if (aOpt.color_bk != CLR_DEFAULT && aControl.RequiresBackgroundBrush())
 					{
 						aControl.background_brush = CreateSolidBrush(aOpt.color_bk);
