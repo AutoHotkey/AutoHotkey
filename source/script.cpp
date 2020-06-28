@@ -1549,7 +1549,6 @@ UINT Script::LoadFromFile()
 	if (   LoadIncludedFile(g_RunStdIn ? _T("*") : mFileSpec, false, false) != OK
 		|| !AddLine(ACT_EXIT)) // Add an Exit to ensure lib auto-includes aren't auto-executed, for backward compatibility.
 		return LOADING_FAILED;
-	mLastLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
 #ifdef ENABLE_DLLCALL
 	// So that (the last occuring) "#DllLoad directory" doesn't affect calls to GetDllProcAddress for run time calls to DllCall
 	// or DllCall optimizations in Line::ExpressionToPostfix.
@@ -1621,8 +1620,6 @@ UINT Script::LoadFromFile()
 	++mCombinedLineNumber;  // So that the EXITs will both show up in ListLines as the line # after the last physical one in the script.
 	if (!(AddLine(ACT_EXIT) && AddLine(ACT_EXIT))) // Second exit guaranties non-NULL mRelatedLine(s).
 		return LOADING_FAILED;
-	mLastLine->mPrevLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
-	mLastLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
 	mPlaceholderLabel->mJumpToLine = mLastLine; // To follow the rule "all labels should have a non-NULL line before the script starts running".
 
 	if (   !PreparseBlocks(mFirstLine)
@@ -8246,6 +8243,9 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 		case ACT_CONTINUE:
 		case ACT_GOTO:
 		case ACT_THROW:
+		// v2: ACT_EXIT is always from AddLine(ACT_EXIT), since a script calling Exit would produce ACT_EXPRESSION.
+		// Exit could be parsed as both ACT_EXIT and as a function, but that would create minor inconsistencies
+		// between "Exit" and "(x && Exit())", or Exit called directly vs. called via a separate function.
 		case ACT_EXIT:
 		//case ACT_EXITAPP: // Excluded since it's just a function in v2, and there can't be any expectation that the code following it will execute anyway.
 			Line *next_line = line->mNextLine;
@@ -8256,11 +8256,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 				next_line = next_line->mRelatedLine; // Skip function body.
 			switch (next_line->mActionType)
 			{
-			case ACT_EXIT:
-			case ACT_RETURN:
-				if (next_line->mAttribute != ATTR_LINE_CAN_BE_UNREACHABLE)
-					break; // It's a normal Exit/Return.
-				// It's from an automatic AddLine(), so should be excluded.
+			case ACT_EXIT: // v2: It's from an automatic AddLine(), so should be excluded.
 			case ACT_BLOCK_END: // There's nothing following this line in the same block.
 				continue;
 			}
