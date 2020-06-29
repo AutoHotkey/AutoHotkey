@@ -3305,6 +3305,7 @@ BIF_DECL(BIF_IsLabel);
 BIF_DECL(BIF_IsFunc);
 BIF_DECL(BIF_Func);
 BIF_DECL(BIF_IsByRef);
+BIF_DECL(BIF_IsSet);
 BIF_DECL(BIF_GetKeyState);
 BIF_DECL(BIF_GetKeyName);
 BIF_DECL(BIF_VarSetCapacity);
