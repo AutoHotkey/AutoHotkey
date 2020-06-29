@@ -28,6 +28,9 @@ GNU General Public License for more details.
 // hook functions.
 
 
+int MainExecuteScript();
+
+
 int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
 {
 	// Init any globals not in "struct g" that need it:
@@ -323,17 +326,44 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		// don't write-cache it either.
 		clipboard_var->DisableCache();
 
-	// Run the auto-execute part at the top of the script (this call might never return):
-	if (!g_script.AutoExecSection()) // Can't run script at all. Due to rarity, just abort.
-		return CRITICAL_ERROR;
-	// REMEMBER: The call above will never return if one of the following happens:
-	// 1) The AutoExec section never finishes (e.g. infinite loop).
-	// 2) The AutoExec function uses the Exit or ExitApp command to terminate the script.
-	// 3) The script isn't persistent and its last line is reached (in which case an ExitApp is implicit).
+	return MainExecuteScript();
+}
 
-	// Call it in this special mode to kick off the main event loop.
-	// Be sure to pass something >0 for the first param or it will
-	// return (and we never want this to return):
-	MsgSleep(SLEEP_INTERVAL, WAIT_FOR_MESSAGES);
+
+int MainExecuteScript()
+{
+	__try
+	{
+		// Run the auto-execute part at the top of the script (this call might never return):
+		if (!g_script.AutoExecSection()) // Can't run script at all. Due to rarity, just abort.
+			return CRITICAL_ERROR;
+		// REMEMBER: The call above will never return if one of the following happens:
+		// 1) The AutoExec section never finishes (e.g. infinite loop).
+		// 2) The AutoExec function uses the Exit or ExitApp command to terminate the script.
+		// 3) The script isn't persistent and its last line is reached (in which case an ExitApp is implicit).
+
+		// Call it in this special mode to kick off the main event loop.
+		// Be sure to pass something >0 for the first param or it will
+		// return (and we never want this to return):
+		MsgSleep(SLEEP_INTERVAL, WAIT_FOR_MESSAGES);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER)
+	{
+		LPCTSTR msg;
+		auto ecode = GetExceptionCode();
+		switch (ecode)
+		{
+		// Having specific messages for the most common exceptions seems worth the added code size.
+		// The term "stack overflow" is not used because it is probably less easily understood by
+		// the average user, and is not useful as a search term due to stackoverflow.com.
+		case EXCEPTION_STACK_OVERFLOW: msg = _T("Function recursion limit exceeded."); break;
+		case EXCEPTION_ACCESS_VIOLATION: msg = _T("Invalid memory read/write."); break;
+		default: msg = _T("System exception 0x%X."); break;
+		}
+		TCHAR buf[127];
+		sntprintf(buf, _countof(buf), msg, ecode);
+		g_script.CriticalError(buf);
+		return ecode;
+	}
 	return 0; // Never executed; avoids compiler warning.
 }
