@@ -1150,6 +1150,10 @@ ResultType Script::AutoExecSection()
 	// could replace CopyMemory() above with global_init(), but it would need to be changed back if ever we
 	// want a directive to affect the default settings.
 	g->HotCriterion = NULL;
+	
+	// Must be done before InitClasses(), otherwise destroying a Gui in a class constructor
+	// would terminate the script:
+	++g_nThreads;
 
 	if (!InitClasses())
 		return FAIL; // Treat it like a load-time error.
@@ -1207,7 +1211,6 @@ ResultType Script::AutoExecSection()
 		// to avoid an unnecessary Sleep(10) that would otherwise occur in ExecUntil:
 		mLastPeekTime = GetTickCount();
 
-		++g_nThreads;
 		DEBUGGER_STACK_PUSH(_T("Auto-execute"))
 		ExecUntil_result = mFirstLine->ExecUntil(UNTIL_RETURN); // Might never return (e.g. infinite loop or ExitApp).
 		DEBUGGER_STACK_POP()
