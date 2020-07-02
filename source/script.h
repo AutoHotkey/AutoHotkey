@@ -354,7 +354,7 @@ typedef WORD FileIndexType; // Use WORD to conserve memory due to its use in the
 #define MAX_FUNCTION_PARAMS UCHAR_MAX // Also conserves stack space to support future attributes such as param default values.
 
 typedef WORD DerefLengthType; // WORD might perform better than UCHAR, but this can be changed to UCHAR if another field is ever needed in the struct.
-typedef UCHAR DerefParamCountType;
+typedef int DerefParamCountType;
 
 // Traditionally DerefType was used to hold var and func references, which are parsed at an
 // early stage, but when the capability to nest expressions between percent signs was added,
@@ -386,11 +386,11 @@ struct DerefType
 		SymbolType symbol; // DT_WORDOP
 		int int_value; // DT_CONST_INT
 	};
+	DerefParamCountType param_count; // The actual number of parameters present in this function *call*.  Left uninitialized except for functions.
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
 	DerefTypeType type;
 	bool is_function() { return type >= DT_FUNC; }
-	DerefParamCountType param_count; // The actual number of parameters present in this function *call*.  Left uninitialized except for functions.
 	DerefLengthType length; // Listed only after byte-sized fields, due to it being a WORD.
 };
 
