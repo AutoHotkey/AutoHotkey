@@ -2380,7 +2380,7 @@ void Hotstring::DoReplace(LPARAM alParam)
 
 
 
-ResultType Hotstring::AddHotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring
+ResultType Hotstring::AddHotstring(LPTSTR aName, IObjectPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring
 		, LPTSTR aReplacement, bool aHasContinuationSection, UCHAR aSuspend)
 // Caller provides aJumpToLabel rather than a Line* because at the time a hotkey or hotstring
 // is created, the label's destination line is not yet known.  So the label is used a placeholder.
@@ -2429,7 +2429,7 @@ ResultType Hotstring::AddHotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR a
 
 
 
-Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
+Hotstring::Hotstring(LPTSTR aName, IObjectPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
 	, bool aHasContinuationSection, UCHAR aSuspend)
 	: mJumpToLabel(aJumpToLabel)  // Any NULL value will cause failure further below.
 	, mName(aName)
@@ -2696,7 +2696,7 @@ BIF_DECL(BIF_Hotstring)
 		// Update the replacement string or function/label, if specified.
 		if (action_obj || *action)
 		{
-			LabelPtr new_label = action_obj ? action_obj : g_script.mPlaceholderLabel; // Other parts may rely on mJumpToLabel always being non-NULL.
+			IObjectPtr new_label = action_obj ? action_obj : g_script.mPlaceholderLabel; // Other parts may rely on mJumpToLabel always being non-NULL.
 			LPTSTR new_replacement = NULL; // Set default: not auto-replace.
 			if (!action_obj) // Caller specified a replacement string ('E' option was handled above).
 			{

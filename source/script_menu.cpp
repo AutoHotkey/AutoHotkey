@@ -638,7 +638,7 @@ UserMenuItem::~UserMenuItem()
 {
 	if (mName != Var::sEmptyString)
 		free(mName);
-	// mCallback is handled by ~LabelRef().
+	// mCallback is handled by ~IObjectRef().
 	if (mSubmenu)
 		mSubmenu->Release();
 }

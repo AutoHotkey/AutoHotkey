@@ -76,8 +76,8 @@ HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr);
 
 struct HotkeyVariant
 {
-	LabelRef mJumpToLabel;
-	LabelPtr mOriginalCallback;	// This is the callback set at load time. 
+	IObjectRef mJumpToLabel;
+	IObjectPtr mOriginalCallback;	// This is the callback set at load time. 
 								// Keep it to allow restoring it via hotkey() function if changed
 								// during run time.
 	HotkeyCriterion *mHotCriterion;
@@ -348,7 +348,7 @@ public:
 	static HotstringIDType sHotstringCountMax;
 	static UINT sEnabledCount; // v1.1.28.00: For performance, such as avoiding calling ToAsciiEx() in the hook.
 
-	LabelRef mJumpToLabel;
+	IObjectRef mJumpToLabel;
 	LPTSTR mName;
 	LPTSTR mString, mReplacement;
 	HotkeyCriterion *mHotCriterion;
@@ -371,7 +371,7 @@ public:
 	ResultType PerformInNewThreadMadeByCaller();
 	void DoReplace(LPARAM alParam);
 	static Hotstring *FindHotstring(LPTSTR aHotstring, bool aCaseSensitive, bool aDetectWhenInsideWord, HotkeyCriterion *aHotCriterion);
-	static ResultType AddHotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring
+	static ResultType AddHotstring(LPTSTR aName, IObjectPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring
 		, LPTSTR aReplacement, bool aHasContinuationSection, UCHAR aSuspend = FALSE);
 	static void ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
 		, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, SendRawType &aSendRaw
@@ -379,7 +379,7 @@ public:
 	void ParseOptions(LPTSTR aOptions);
 
 	// Constructor & destructor:
-	Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
+	Hotstring(LPTSTR aName, IObjectPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
 		, bool aHasContinuationSection, UCHAR aSuspend);
 	~Hotstring() {}  // Note that mReplacement is sometimes malloc'd, sometimes from SimpleHeap, and sometimes the empty string.
 

@@ -1257,7 +1257,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 			case AHK_INPUT_END:
 			{
 				ExprTokenType param = input_hook->ScriptObject;
-				LabelPtr(input_hook->ScriptObject->onEnd)->ExecuteInNewThread(_T("InputHook"), &param, 1);
+				IObjectPtr(input_hook->ScriptObject->onEnd)->ExecuteInNewThread(_T("InputHook"), &param, 1);
 				input_hook->ScriptObject->Release();
 				break;
 			}
@@ -1271,7 +1271,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					__int64(vk_type(msg.lParam)),
 					__int64(sc_type(msg.lParam >> 16)),
 				};
-				LabelPtr onKey = msg.message == AHK_INPUT_KEYDOWN ? input_hook->ScriptObject->onKeyDown : input_hook->ScriptObject->onKeyUp;
+				IObjectPtr onKey = msg.message == AHK_INPUT_KEYDOWN ? input_hook->ScriptObject->onKeyDown : input_hook->ScriptObject->onKeyUp;
 				onKey->ExecuteInNewThread(_T("InputHook"), params, _countof(params));
 				break;
 			}
@@ -1284,7 +1284,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					input_hook->ScriptObject,
 					chars
 				};
-				LabelPtr(input_hook->ScriptObject->onChar)->ExecuteInNewThread(_T("InputHook"), params, _countof(params));
+				IObjectPtr(input_hook->ScriptObject->onChar)->ExecuteInNewThread(_T("InputHook"), params, _countof(params));
 				break;
 			}
 
