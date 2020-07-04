@@ -1549,8 +1549,7 @@ UINT Script::LoadFromFile()
 	// function library auto-inclusions to be processed correctly.
 
 	// Load the main script file.  This will also load any files it includes with #Include.
-	if (   LoadIncludedFile(g_RunStdIn ? _T("*") : mFileSpec, false, false) != OK
-		|| !AddLine(ACT_EXIT)) // Add an Exit to ensure lib auto-includes aren't auto-executed, for backward compatibility.
+	if (!LoadIncludedFile(g_RunStdIn ? _T("*") : mFileSpec, false, false))
 		return LOADING_FAILED;
 #ifdef ENABLE_DLLCALL
 	// So that (the last occuring) "#DllLoad directory" doesn't affect calls to GetDllProcAddress for run time calls to DllCall
