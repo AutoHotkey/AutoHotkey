@@ -841,7 +841,7 @@ void Hotkey::TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown)
 
 
 
-void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant, LPTSTR aName)
+void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 // Caller is responsible for having called PerformIsAllowed() before calling us.
 // Caller must have already created a new thread for us, and must close the thread when we return.
 {
@@ -921,7 +921,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant, LPTSTR aNam
 	// LAUNCH HOTKEY SUBROUTINE:
 	++aVariant.mExistingThreads;  // This is the thread count for this particular hotkey only.
 
-	ExprTokenType params = { aName };
+	ExprTokenType params = { mName };
 	ResultType result = aVariant.mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &params, 1);
 	
 	--aVariant.mExistingThreads;
