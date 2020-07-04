@@ -18790,6 +18790,57 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_StrCount)
+{
+	// Load-time validation has already ensured that at least two actual parameters are present.
+	TCHAR needle_buf[MAX_NUMBER_SIZE];
+	LPTSTR haystack = ParamIndexToString(0, aResultToken.buf);
+	LPTSTR needle = ParamIndexToString(1, needle_buf);
+
+	StringCaseSenseType string_case_sense = (StringCaseSenseType)(!ParamIndexIsOmitted(2) && ParamIndexToInt64(2));
+	// Above has assigned SCS_INSENSITIVE (0) or SCS_SENSITIVE (1)
+
+	LPTSTR found_pos;
+	INT_PTR offset = 1; // Set default.
+	// For offset validation we need to know the length of haystack:
+	INT_PTR haystack_length = ParamIndexLength(0, haystack);
+	if (!ParamIndexIsOmitted(3)) // There is a starting position present.
+		offset = ParamIndexToIntPtr(3); // i.e. the fourth arg.
+
+	if (offset == 0)
+	{
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+		return;
+	}
+	if (offset < 0) // Same convention as (AHK v2's) RegExMatch/Replace(): Treat negative StartingPos as a position relative to the end of the string.
+	{
+		offset += haystack_length;
+		if (offset < 0)
+			offset = 0;
+	}
+	else
+		--offset; // Convert to zero-based.
+	if (offset >= haystack_length)
+	{
+		aResultToken.value_int64 = 0;
+		return;
+	}
+
+	size_t needle_length = ParamIndexLength(1, needle);
+	int i;
+	int count = 0;
+	for (i = 1, found_pos = haystack + offset; ; ++i, found_pos += needle_length)
+	{
+		if (!(found_pos = tcsstr2(found_pos, needle, string_case_sense)))
+			break;
+		count++;
+	}
+	aResultToken.value_int64 = count;
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
