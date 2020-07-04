@@ -2048,7 +2048,9 @@ ResultType Object::GetEnumProp(UINT &aIndex, Var *aName, Var *aVal)
 			{
 				// Skip it if it can't be called without parameters, or if there's no getter in this object
 				// (consistent with inherited properties that have neither getter nor setter defined here).
-				if (field.prop->MaxParams > 0 || !field.prop->Getter())
+				// Also skip if this is a class prototype, since that isn't an instance of the class and
+				// therefore isn't a valid target for a method/property call.
+				if (field.prop->MaxParams > 0 || !field.prop->Getter() || IsClassPrototype())
 					continue;
 
 				FuncResult result_token;
