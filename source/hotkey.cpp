@@ -922,7 +922,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant, LPTSTR aNam
 	++aVariant.mExistingThreads;  // This is the thread count for this particular hotkey only.
 
 	ExprTokenType params = { aName };
-	ResultType result = aVariant.mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &params, 1);
+	ResultType result = aVariant.mCallback->ExecuteInNewThread(g_script.mThisHotkeyName, &params, 1);
 	
 	--aVariant.mExistingThreads;
 
@@ -994,21 +994,21 @@ ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultT
 }
 
 ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions
-	, IObject *aJumpToLabel, HookActionType aHookAction, ResultToken &aResultToken)
+	, IObject *aCallback, HookActionType aHookAction, ResultToken &aResultToken)
 // Creates, updates, enables, or disables a hotkey dynamically (while the script is running).
 // Returns OK or FAIL.
 {
 	// This macro was used to support UseErrorLevel in previous versions.
 	#define RETURN_HOTKEY_ERROR(level, msg, info) return aResultToken.Error(msg, info)
 
-	if (!aJumpToLabel && !aHookAction && *aLabelName)
+	if (!aCallback && !aHookAction && *aLabelName)
 		RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, ERR_PARAM2_INVALID, aLabelName);
-	// Caller has ensured that aJumpToLabel and aHookAction can't both be non-zero.  Furthermore,
+	// Caller has ensured that aCallback and aHookAction can't both be non-zero.  Furthermore,
 	// both can be zero/NULL only when the caller is updating an existing hotkey to have new options
 	// (i.e. it's retaining its current label).
-	if (aJumpToLabel)
+	if (aCallback)
 	{
-		if (!ValidateFunctor(aJumpToLabel, 1, aResultToken))
+		if (!ValidateFunctor(aCallback, 1, aResultToken))
 			return FAIL;
 	}
 
@@ -1051,9 +1051,9 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				hk = AddHotkey(NULL, aHookAction, aHotkeyName, suffix_has_tilde);
 			else // COMMAND (create hotkey): Hotkey, Name, LabelName [, Options]
 			{
-				if (!aJumpToLabel) // Caller is trying to set new aOptions for a nonexistent hotkey.
+				if (!aCallback) // Caller is trying to set new aOptions for a nonexistent hotkey.
 					RETURN_HOTKEY_ERROR(HOTKEY_EL_NOTEXIST, ERR_NONEXISTENT_HOTKEY, aHotkeyName);
-				hk = AddHotkey(aJumpToLabel, 0, aHotkeyName, suffix_has_tilde);
+				hk = AddHotkey(aCallback, 0, aHotkeyName, suffix_has_tilde);
 			}
 			if (!hk)
 				return FAIL; // AddHotkey() already displayed the error.
@@ -1096,14 +1096,14 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 			
 			// If the above changed the action from an Alt-tab type to non-alt-tab, there may be a label present
 			// to be applied to the existing variant (or created as a new variant).
-			if (aJumpToLabel) // COMMAND (update hotkey): Hotkey, Name, LabelName [, Options]
+			if (aCallback) // COMMAND (update hotkey): Hotkey, Name, LabelName [, Options]
 			{
 				// If there's a matching variant, update it's label. Otherwise, create a new variant.
 				if (variant) // There's an existing variant...
 				{
-					if (aJumpToLabel != variant->mJumpToLabel) // ...and it's label is being changed.
+					if (aCallback != variant->mCallback) // ...and it's label is being changed.
 					{
-						variant->mJumpToLabel = aJumpToLabel;
+						variant->mCallback = aCallback;
 						// Older comment:
 						// If this hotkey is currently a static hotkey (one not created by the Hotkey command):
 						// Even though it's about to be transformed into a dynamic hotkey via the Hotkey command,
@@ -1114,7 +1114,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				}
 				else // No existing variant matching current criteria, so create a new variant.
 				{
-					if (   !(variant = hk->AddVariant(aJumpToLabel, suffix_has_tilde))   ) // Out of memory.
+					if (   !(variant = hk->AddVariant(aCallback, suffix_has_tilde))   ) // Out of memory.
 						RETURN_HOTKEY_ERROR(HOTKEY_EL_MEM, ERR_OUTOFMEM, aHotkeyName);
 					variant_was_just_created = true;
 					update_all_hotkeys = true;
@@ -1131,7 +1131,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 					break; // Let the error-catch below report it as an error.
 
 			// v1.1.15: Allow the ~tilde prefix to be added/removed from an existing hotkey variant.
-			// v1.1.19: Apply this change even if aJumpToLabel is omitted.  This is redundant if
+			// v1.1.19: Apply this change even if aCallback is omitted.  This is redundant if
 			// variant_was_just_created, but checking that condition seems counter-productive.
 			if (variant->mNoSuppress = suffix_has_tilde)
 				hk->mNoSuppress |= AT_LEAST_ONE_VARIANT_HAS_TILDE;
@@ -1238,18 +1238,18 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 
 
 
-Hotkey *Hotkey::AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde)
-// Caller provides aJumpToLabel rather than a Line* because at the time a hotkey or hotstring
+Hotkey *Hotkey::AddHotkey(IObject *aCallback, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde)
+// Caller provides aCallback rather than a Line* because at the time a hotkey or hotstring
 // is created, the label's destination line is not yet known.  So the label is used a placeholder.
-// Caller must ensure that either aJumpToLabel or aName is not NULL.
+// Caller must ensure that either aCallback or aName is not NULL.
 // aName is NULL whenever the caller is creating a static hotkey, at loadtime (i.e. one that
-// points to a hotkey label rather than a normal label).  The only time aJumpToLabel should
+// points to a hotkey label rather than a normal label).  The only time aCallback should
 // be NULL is when the caller is creating a dynamic hotkey that has an aHookAction.
 // Returns the address of the new hotkey on success, or NULL otherwise.
 // The caller is responsible for calling ManifestAllHotkeysHotstringsHooks(), if appropriate.
 {
 	if (   (shkMax <= sNextID && !HookAdjustMaxHotkeys(shk, shkMax, shkMax ? shkMax * 2 : INITIAL_MAX_HOTKEYS)) // Allocate or expand shk if needed.
-		|| !(shk[sNextID] = new Hotkey(sNextID, aJumpToLabel, aHookAction, aName, aSuffixHasTilde))   )
+		|| !(shk[sNextID] = new Hotkey(sNextID, aCallback, aHookAction, aName, aSuffixHasTilde))   )
 	{
 		g_script.ScriptError(ERR_OUTOFMEM);
 		return NULL;
@@ -1265,15 +1265,15 @@ Hotkey *Hotkey::AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPT
 
 
 
-Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName
+Hotkey::Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction, LPTSTR aName
 	, bool aSuffixHasTilde)
 // Constructor.
-// Caller provides aJumpToLabel rather than a Line* because at the time a hotkey or hotstring
+// Caller provides aCallback rather than a Line* because at the time a hotkey or hotstring
 // is created, the label's destination line is not yet known.  So the label is used a placeholder.
-// Even if the caller-provided aJumpToLabel is NULL, a non-NULL mJumpToLabel will be stored in
+// Even if the caller-provided aCallback is NULL, a non-NULL mCallback will be stored in
 // each hotkey/variant so that NULL doesn't have to be constantly checked during script runtime.
 	: mID(HOTKEY_ID_INVALID)  // Default until overridden.
-	// Caller must ensure that either aName or aJumpToLabel isn't NULL.
+	// Caller must ensure that either aName or aCallback isn't NULL.
 	, mVK(0)
 	, mSC(0)
 	, mModifiers(0)
@@ -1475,7 +1475,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 
 	// To avoid memory leak, this is done only when it is certain the hotkey will be created:
 	if (   !(mName = aName ? SimpleHeap::Malloc(aName) : hotkey_name)
-		|| !(AddVariant(aJumpToLabel, aSuffixHasTilde))   ) // Too rare to worry about freeing the other if only one fails.
+		|| !(AddVariant(aCallback, aSuffixHasTilde))   ) // Too rare to worry about freeing the other if only one fails.
 	{
 		g_script.ScriptError(ERR_OUTOFMEM);
 		return;
@@ -1504,9 +1504,9 @@ HotkeyVariant *Hotkey::FindVariant()
 
 
 
-HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde)
+HotkeyVariant *Hotkey::AddVariant(IObject *aCallback, bool aSuffixHasTilde)
 // Returns NULL upon out-of-memory; otherwise, the address of the new variant.
-// Even if aJumpToLabel is NULL, a non-NULL mJumpToLabel will be stored in each variant so that
+// Even if aCallback is NULL, a non-NULL mCallback will be stored in each variant so that
 // NULL doesn't have to be constantly checked during script runtime.
 // The caller is responsible for calling ManifestAllHotkeysHotstringsHooks(), if appropriate.
 {
@@ -1521,9 +1521,9 @@ HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde)
 	// mRunAgainTime
 	// mPriority (default priority is always 0)
 	HotkeyVariant &v = *vp;
-	// aJumpToLabel can be NULL for dynamic hotkeys that are hook actions such as Alt-Tab.
+	// aCallback can be NULL for dynamic hotkeys that are hook actions such as Alt-Tab.
 	// So for maintainability and to help avg-case performance in loops, provide a non-NULL placeholder:
-	v.mJumpToLabel = aJumpToLabel ? aJumpToLabel : g_script.mPlaceholderLabel;
+	v.mCallback = aCallback ? aCallback : g_script.mPlaceholderLabel;
 	v.mOriginalCallback = g_script.mLastHotFunc;
 	v.mMaxThreads = g_MaxThreadsPerHotkey;    // The values of these can vary during load-time.
 	v.mMaxThreadsBuffer = g_MaxThreadsBuffer; //
@@ -2276,7 +2276,7 @@ ResultType Hotstring::PerformInNewThreadMadeByCaller()
 	
 	ResultType result;
 	ExprTokenType params = { mName };
-	result = mJumpToLabel->ExecuteInNewThread(g_script.mThisHotkeyName, &params, 1);
+	result = mCallback->ExecuteInNewThread(g_script.mThisHotkeyName, &params, 1);
 	
 	--mExistingThreads;
 	return result ? OK : FAIL;	// Return OK on all non-failure results.
@@ -2380,9 +2380,9 @@ void Hotstring::DoReplace(LPARAM alParam)
 
 
 
-ResultType Hotstring::AddHotstring(LPTSTR aName, IObjectPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring
+ResultType Hotstring::AddHotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR aHotstring
 		, LPTSTR aReplacement, bool aHasContinuationSection, UCHAR aSuspend)
-// Caller provides aJumpToLabel rather than a Line* because at the time a hotkey or hotstring
+// Caller provides aCallback rather than a Line* because at the time a hotkey or hotstring
 // is created, the label's destination line is not yet known.  So the label is used a placeholder.
 // Returns OK or FAIL.
 // Caller has ensured that aHotstringOptions is blank if there are no options.  Otherwise, aHotstringOptions
@@ -2413,7 +2413,7 @@ ResultType Hotstring::AddHotstring(LPTSTR aName, IObjectPtr aJumpToLabel, LPTSTR
 		sHotstringCountMax += HOTSTRING_BLOCK_SIZE;
 	}
 
-	if (   !(shs[sHotstringCount] = new Hotstring(aName, aJumpToLabel, aOptions, aHotstring, aReplacement, aHasContinuationSection, aSuspend))   )
+	if (   !(shs[sHotstringCount] = new Hotstring(aName, aCallback, aOptions, aHotstring, aReplacement, aHasContinuationSection, aSuspend))   )
 		return g_script.ScriptError(ERR_OUTOFMEM); // Short msg. since so rare.
 	if (!shs[sHotstringCount]->mConstructedOK)
 	{
@@ -2429,9 +2429,9 @@ ResultType Hotstring::AddHotstring(LPTSTR aName, IObjectPtr aJumpToLabel, LPTSTR
 
 
 
-Hotstring::Hotstring(LPTSTR aName, IObjectPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
+Hotstring::Hotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
 	, bool aHasContinuationSection, UCHAR aSuspend)
-	: mJumpToLabel(aJumpToLabel)  // Any NULL value will cause failure further below.
+	: mCallback(aCallback)  // Any NULL value will cause failure further below.
 	, mName(aName)
 	, mString(NULL), mReplacement(NULL), mStringLength(0)
 	, mHotCriterion(g->HotCriterion)
@@ -2447,8 +2447,8 @@ Hotstring::Hotstring(LPTSTR aName, IObjectPtr aJumpToLabel, LPTSTR aOptions, LPT
 	, mConstructedOK(false)
 {
 	// Insist on certain qualities so that they never need to be checked other than here:
-	if (!mJumpToLabel) // Caller has already ensured that aHotstring is not blank.
-		mJumpToLabel = g_script.mPlaceholderLabel;
+	if (!mCallback) // Caller has already ensured that aHotstring is not blank.
+		mCallback = g_script.mPlaceholderLabel;
 	bool execute_action = false; // do not assign  mReplacement if execute_action is true.
 	ParseOptions(aOptions, mPriority, mKeyDelay, mSendMode, mCaseSensitive, mConformToCase, mDoBackspace
 		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, execute_action);
@@ -2696,7 +2696,7 @@ BIF_DECL(BIF_Hotstring)
 		// Update the replacement string or function/label, if specified.
 		if (action_obj || *action)
 		{
-			IObjectPtr new_label = action_obj ? action_obj : g_script.mPlaceholderLabel; // Other parts may rely on mJumpToLabel always being non-NULL.
+			IObjectPtr new_label = action_obj ? action_obj : g_script.mPlaceholderLabel; // Other parts may rely on mCallback always being non-NULL.
 			LPTSTR new_replacement = NULL; // Set default: not auto-replace.
 			if (!action_obj) // Caller specified a replacement string ('E' option was handled above).
 			{
@@ -2719,9 +2719,9 @@ BIF_DECL(BIF_Hotstring)
 					free(existing->mReplacement);
 				existing->mReplacement = new_replacement;
 			}
-			if (new_label != existing->mJumpToLabel)
+			if (new_label != existing->mCallback)
 			{
-				existing->mJumpToLabel = new_label;
+				existing->mCallback = new_label;
 			}
 		}
 		// Update the hotstring's options.  Note that mCaseSensitive and mDetectWhenInsideWord

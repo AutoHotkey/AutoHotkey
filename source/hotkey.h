@@ -76,7 +76,7 @@ HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr);
 
 struct HotkeyVariant
 {
-	IObjectRef mJumpToLabel;
+	IObjectRef mCallback;
 	IObjectPtr mOriginalCallback;	// This is the callback set at load time. 
 								// Keep it to allow restoring it via hotkey() function if changed
 								// during run time.
@@ -154,7 +154,7 @@ private:
 
 	// For now, constructor & destructor are private so that only static methods can create new
 	// objects.  This allow proper tracking of which OS hotkey IDs have been used.
-	Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde);
+	Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde);
 	~Hotkey() {if (mIsRegistered) Unregister();}
 
 public:
@@ -214,11 +214,11 @@ public:
 	#define HOTKEY_EL_MEM                99
 	static ResultType IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultToken);
 	static ResultType Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions
-		, IObject *aJumpToLabel, HookActionType aHookAction, ResultToken &aResultToken);
+		, IObject *aCallback, HookActionType aHookAction, ResultToken &aResultToken);
 
-	static Hotkey *AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde);
+	static Hotkey *AddHotkey(IObject *aCallback, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde);
 	HotkeyVariant *FindVariant();
-	HotkeyVariant *AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde);
+	HotkeyVariant *AddVariant(IObject *aCallback, bool aSuffixHasTilde);
 	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC);
 	HotkeyVariant *CriterionAllowsFiring(HWND *aFoundHWND = NULL);
 	static HotkeyVariant *CriterionAllowsFiring(HotkeyIDType aHotkeyID, HWND &aFoundHWND);
@@ -348,7 +348,7 @@ public:
 	static HotstringIDType sHotstringCountMax;
 	static UINT sEnabledCount; // v1.1.28.00: For performance, such as avoiding calling ToAsciiEx() in the hook.
 
-	IObjectRef mJumpToLabel;
+	IObjectRef mCallback;
 	LPTSTR mName;
 	LPTSTR mString, mReplacement;
 	HotkeyCriterion *mHotCriterion;
@@ -371,7 +371,7 @@ public:
 	ResultType PerformInNewThreadMadeByCaller();
 	void DoReplace(LPARAM alParam);
 	static Hotstring *FindHotstring(LPTSTR aHotstring, bool aCaseSensitive, bool aDetectWhenInsideWord, HotkeyCriterion *aHotCriterion);
-	static ResultType AddHotstring(LPTSTR aName, IObjectPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring
+	static ResultType AddHotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR aHotstring
 		, LPTSTR aReplacement, bool aHasContinuationSection, UCHAR aSuspend = FALSE);
 	static void ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
 		, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, SendRawType &aSendRaw
@@ -379,7 +379,7 @@ public:
 	void ParseOptions(LPTSTR aOptions);
 
 	// Constructor & destructor:
-	Hotstring(LPTSTR aName, IObjectPtr aJumpToLabel, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
+	Hotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
 		, bool aHasContinuationSection, UCHAR aSuspend);
 	~Hotstring() {}  // Note that mReplacement is sometimes malloc'd, sometimes from SimpleHeap, and sometimes the empty string.
 
