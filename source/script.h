@@ -135,8 +135,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_CONTINUE_THREAD_Q _T("Try to continue anyway?")
 #define ERR_SCRIPT_NOT_FOUND _T("Script file not found.")
 #define ERR_ABORT_DELETE _T("__Delete will now return.")
-#define ERR_LINE_TOO_LONG _T("Line too long.")
-#define ERR_CONTINUATION_SECTION_TOO_LONG _T("Continuation section too long.")
 #define ERR_UNRECOGNIZED_ACTION _T("This line does not contain a recognized action.")
 #define ERR_NONEXISTENT_HOTKEY _T("Nonexistent hotkey.")
 #define ERR_NONEXISTENT_VARIANT _T("Nonexistent hotkey variant (IfWin).")
@@ -353,7 +351,7 @@ typedef WORD FileIndexType; // Use WORD to conserve memory due to its use in the
 #define MAX_VAR_NAME_LENGTH (UCHAR_MAX - 2)
 #define MAX_FUNCTION_PARAMS UCHAR_MAX // Also conserves stack space to support future attributes such as param default values.
 
-typedef WORD DerefLengthType; // WORD might perform better than UCHAR, but this can be changed to UCHAR if another field is ever needed in the struct.
+typedef UINT DerefLengthType;
 typedef int DerefParamCountType;
 
 // Traditionally DerefType was used to hold var and func references, which are parsed at an
@@ -395,7 +393,7 @@ struct DerefType
 };
 
 typedef UCHAR ArgTypeType;  // UCHAR vs. an enum, to save memory.
-typedef WORD ArgLengthType; // Relies on the fact that an arg's literal text can't be longer than LINE_SIZE.
+typedef UINT ArgLengthType;
 #define ARG_TYPE_NORMAL     (UCHAR)0
 #define ARG_TYPE_INPUT_VAR  (UCHAR)1
 #define ARG_TYPE_OUTPUT_VAR (UCHAR)2
@@ -2875,16 +2873,30 @@ private:
 		: mFileName, _countof(mNIC.szTip));
 	NOTIFYICONDATA mNIC; // For ease of adding and deleting our tray icon.
 
-	size_t GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, bool aInBlockComment, TextStream *ts);
-	ResultType GetLineContinuation(TextStream *ts, LPTSTR aBuf, size_t &aBufLength, LPTSTR aNextBuf, size_t &aNextBufLength
+	struct LineBuffer
+	{
+		TCHAR *p = nullptr;
+		size_t length = 0;
+		size_t size = 0;
+		const size_t EXPANSION_INTERVAL = 0x1000;
+		const size_t RESERVED_SPACE = 3; // Allow for a null-terminator and appending "()" for call statements.
+		size_t Capacity() { ASSERT(size); return size - RESERVED_SPACE; }
+		ResultType Expand();
+		ResultType EnsureCapacity(size_t aLength);
+		ResultType Realloc(size_t aNewSize);
+		~LineBuffer() { free(p); }
+		operator LPTSTR() const { return p; }
+	};
+	size_t GetLine(LineBuffer &aBuf, int aInContinuationSection, bool aInBlockComment, TextStream *ts);
+	ResultType GetLineContinuation(TextStream *ts, LineBuffer &aBuf, LineBuffer &aNextBuf
 		, LineNumberType &aPhysLineNumber, bool &aHasContinuationSection, int aExprBalance = 0);
-	ResultType GetLineContExpr(TextStream *ts, LPTSTR aBuf, size_t &aBufLength, LPTSTR aNextBuf, size_t &aNextBufLength
+	ResultType GetLineContExpr(TextStream *ts, LineBuffer &aBuf, LineBuffer &aNextBuf
 		, LineNumberType &aPhysLineNumber, bool &aHasContinuationSection);
 	ResultType BalanceExprError(int aBalance, TCHAR aExpect[], LPTSTR aLineText);
 	static bool IsFunctionDefinition(LPTSTR aBuf, LPTSTR aNextBuf);
 	ResultType IsDirective(LPTSTR aBuf);
 	ResultType ConvertDirectiveBool(LPTSTR aBuf, bool &aResult, bool aDefault);
-	ResultType ParseAndAddLine(LPTSTR aLineText, int aBufSize = 0, ActionTypeType aActionType = ACT_INVALID
+	ResultType ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType = ACT_INVALID
 		, LPTSTR aLiteralMap = NULL, size_t aLiteralMapLength = 0);
 	ResultType ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDeref, int *aPos = NULL, TCHAR aEndChar = 0);
 	ResultType ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDeref, int *aPos);
@@ -3014,8 +3026,8 @@ public:
 	ResultType DefineClass(LPTSTR aBuf);
 	UserFunc *DefineClassInit(bool aStatic);
 	ResultType DefineClassVars(LPTSTR aBuf, bool aStatic);
-	ResultType DefineClassProperty(LPTSTR aBuf, int aBufSize, bool aStatic, Var **aFuncGlobalVar, bool &aBufHasBraceOrNotNeeded);
-	ResultType DefineClassPropertyXet(LPTSTR aBuf, int aBufSize, LPTSTR aEnd, Var **aFuncGlobalVar);
+	ResultType DefineClassProperty(LPTSTR aBuf, bool aStatic, Var **aFuncGlobalVar, bool &aBufHasBraceOrNotNeeded);
+	ResultType DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd, Var **aFuncGlobalVar);
 	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
 	ResultType ResolveClasses();
 	ResultType InitClasses();

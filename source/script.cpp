@@ -1893,10 +1893,8 @@ ResultType Script::LoadIncludedFile(TextStream *fp)
 	// correct file number even when some #include's have been encountered in the middle of the script:
 	int source_file_index = Line::sSourceFileCount - 1;
 
-	// <buf> should be no larger than LINE_SIZE because some later functions rely upon that:
-	TCHAR buf1[LINE_SIZE], buf2[LINE_SIZE];
-	LPTSTR buf = buf1, next_buf = buf2; // Oscillate between bufs to improve performance (avoids memcpy from buf2 to buf1).
-	size_t buf_length, next_buf_length;
+	LineBuffer buf, next_buf;
+	size_t &buf_length = buf.length, &next_buf_length = next_buf.length;
 	bool buf_has_brace;
 
 	// File is now open, read lines from it.
@@ -1925,11 +1923,13 @@ ResultType Script::LoadIncludedFile(TextStream *fp)
 	LineNumberType phys_line_number = 0;
 #endif
 	
+	if (!buf.Expand() || !next_buf.Expand())
+		return ScriptError(ERR_OUTOFMEM);
+
 	// buf is initialized this way rather than calling GetLine() to simplify handling of comment
 	// sections beginning at the first line, and to reduce code size by having GetLine() only
 	// called from one place:
 	*buf = '\0';
-	buf_length = 0;
 
 	while (buf_length != -1)  // Compare directly to -1 since length is unsigned.
 	{
@@ -1945,11 +1945,7 @@ ResultType Script::LoadIncludedFile(TextStream *fp)
 		// indirectly by calling something that changed it:
 		mCurrLine = NULL;  // To signify that we're in transition, trying to load a new one.
 
-		if (buf_length == LINE_SIZE - 1) // The documented limit is 16383 (LINE_SIZE - 2).
-			return ScriptError(ERR_LINE_TOO_LONG);
-
-		if (!GetLineContinuation(fp, buf, buf_length, next_buf, next_buf_length
-			, phys_line_number, has_continuation_section))
+		if (!GetLineContinuation(fp, buf, next_buf, phys_line_number, has_continuation_section))
 			return FAIL;
 
 process_completed_line:
@@ -2518,9 +2514,9 @@ process_completed_line:
 					buf[buf_length] = '\0';
 					// Before adding the line, apply expression line-continuation logic, which hasn't
 					// been applied yet because hotkey labels can contain unbalanced ()[]{}:
-					if (   !GetLineContExpr(fp, buf, buf_length, next_buf, next_buf_length, phys_line_number, has_continuation_section)
+					if (   !GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section)
 						|| !AddLine(ACT_BLOCK_BEGIN)			// Implicit start of function
-						|| !ParseAndAddLine(buf, LINE_SIZE)		// Function body - one line
+						|| !ParseAndAddLine(buf)				// Function body - one line
 						|| !AddLine(ACT_BLOCK_END))				// Implicit end of function
 						return FAIL;
 				}
@@ -2584,7 +2580,7 @@ process_completed_line:
 			if (!_tcsnicmp(buf, _T("#HotIf"), 6) && IS_SPACE_OR_TAB(buf[6]))
 			{
 				// Allow an expression enclosed in ()/[]/{} to span multiple lines:
-				if (!GetLineContExpr(fp, buf, buf_length, next_buf, next_buf_length, phys_line_number, has_continuation_section))
+				if (!GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section))
 					return FAIL;
 			}
 			saved_line_number = mCombinedLineNumber; // Backup in case IsDirective() processes an include file, which would change mCombinedLineNumber's value.
@@ -2641,9 +2637,11 @@ process_completed_line:
 					return FAIL;
 			}
 			// Allow the remainder of the line to be treated as a separate line:
-			if (   *(buf = omit_leading_whitespace(buf + 1))   )
+			LPTSTR cp = omit_leading_whitespace(buf + 1);
+			if (*cp)
 			{
-				buf_length = _tcslen(buf); // Update.
+				buf_length -= (cp - buf);
+				tmemmove(buf, cp, buf_length + 1);
 				mCurrLine = NULL;  // To signify that we're in transition, trying to load a new line.
 				goto process_completed_line; // Have the main loop process the contents of "buf" as though it came in from the script.
 			}
@@ -2661,7 +2659,7 @@ process_completed_line:
 				{
 					LPTSTR dot = _tcschr(mClassPropertyDef, '.');
 					dot[1] = *buf; // Replace the x in property.xet(params).
-					if (!DefineClassPropertyXet(buf, LINE_SIZE, cp, func_global_var))
+					if (!DefineClassPropertyXet(buf, cp, func_global_var))
 						return FAIL;
 					goto continue_main_loop;
 				}
@@ -2684,8 +2682,7 @@ process_completed_line:
 		// Aside from goto/gosub/break/continue, anything not already handled above is either an expression
 		// or something with similar lexical requirements (i.e. balanced parentheses/brackets/braces).
 		// The following call allows any expression enclosed in ()/[]/{} to span multiple lines:
-		if (!GetLineContExpr(fp, buf, buf_length, next_buf, next_buf_length
-			, phys_line_number, has_continuation_section))
+		if (!GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section))
 			return FAIL;
 
 		if (mClassObjectCount && !g->CurrentFunc) // Inside a class definition (and not inside a method).
@@ -2718,7 +2715,7 @@ process_completed_line:
 				}
 				if (!*cp || *cp == '[' || *cp == '{' || (*cp == '=' && cp[1] == '>')) // Property or invalid.
 				{
-					if (!DefineClassProperty(id, LINE_SIZE - int(id - buf), is_static, func_global_var, buf_has_brace))
+					if (!DefineClassProperty(id, is_static, func_global_var, buf_has_brace))
 						return FAIL;
 					if (!buf_has_brace)
 					{
@@ -2742,15 +2739,15 @@ process_completed_line:
 		// Parse the command, assignment or expression, including any same-line open brace or sub-action
 		// for ELSE, TRY, CATCH or FINALLY.  Unlike braces at the start of a line (processed above), this
 		// does not allow directives or labels to the right of the command.
-		if (!ParseAndAddLine(buf, LINE_SIZE))
+		if (!ParseAndAddLine(buf))
 			return FAIL;
 
 continue_main_loop: // This method is used in lieu of "continue" for performance and code size reduction.
 		// Since above didn't "continue", resume loading script line by line:
-		buf = next_buf;
+		swap(buf.p, next_buf.p);
+		swap(buf.size, next_buf.size);
 		buf_length = next_buf_length;
-		next_buf = (buf == buf1) ? buf2 : buf1;
-		// The line above alternates buffers (toggles next_buf to be the unused buffer), which helps
+		// The lines above alternate buffers (toggles next_buf to be the unused buffer), which helps
 		// performance because it avoids memcpy from buf2 to buf1.
 	} // for each whole/constructed line.
 
@@ -2786,7 +2783,33 @@ bool Script::EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker)
 
 
 
-ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_length, LPTSTR next_buf, size_t &next_buf_length
+ResultType Script::LineBuffer::EnsureCapacity(size_t aLength)
+{
+	aLength += RESERVED_SPACE;
+	return size < aLength ? Realloc(aLength) : OK;
+}
+
+ResultType Script::LineBuffer::Expand()
+{
+	return Realloc(size + EXPANSION_INTERVAL);
+}
+
+ResultType Script::LineBuffer::Realloc(size_t aNewSize)
+{
+	// The buffer typically needs to grow incrementally while joining lines in a continuation section.
+	// Expanding in large increments avoids multiple reallocs in most files.
+	size_t newsize = (aNewSize + EXPANSION_INTERVAL - 1) / EXPANSION_INTERVAL * EXPANSION_INTERVAL;
+	LPTSTR newp = (LPTSTR)realloc(p, sizeof(TCHAR) * newsize);
+	if (!newp)
+		return FAIL;
+	p = newp;
+	size = newsize;
+	return OK;
+}
+
+
+
+ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &next_buf
 	, LineNumberType &phys_line_number, bool &has_continuation_section)
 // Determine whether buf has an unclosed (/[/{, and if so, complete the expression by
 // appending subsequent lines until the number of opening and closing symbols balances out.
@@ -2794,8 +2817,11 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 // buf) by a previous call to GetLineContinuation(), but **only up to the unbalanced line**;
 // any subsequent contination is handled by this function.
 {
-	TCHAR orig_char, *action_start, *action_end;
 	ActionTypeType action_type = ACT_INVALID; // Set default.
+	ptrdiff_t action_end_pos = 0;
+
+	size_t &buf_length = buf.length;
+	const size_t next_buf_length = next_buf.length;
 
 	TCHAR expect[MAX_BALANCEEXPR_DEPTH], open_quote = 0;
 	int balance = BalanceExpr(buf, 0, expect);
@@ -2804,12 +2830,12 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 		return balance == 0 ? OK : BalanceExprError(balance, expect, buf);
 	
 	// Perform rough checking for this line's action type.
-	for (action_start = buf; ; )
+	for (LPTSTR action_start = buf; ; )
 	{
-		action_end = find_identifier_end(action_start);
+		LPTSTR action_end = find_identifier_end(action_start);
 		if (action_end > action_start)
 		{
-			orig_char = *action_end;
+			TCHAR orig_char = *action_end;
 			// This relies on names of control flow statements being invalid for use as var/func names:
 			if (IS_SPACE_OR_TAB(orig_char) || orig_char == '(' || orig_char == '{') // '{' supports "else{".
 			{
@@ -2838,6 +2864,7 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 				}
 			}
 		}
+		action_end_pos = action_end - buf; // Use position since action_end will be invalidated if buf is reallocated.
 		break;
 	}
 
@@ -2868,28 +2895,27 @@ ResultType Script::GetLineContExpr(TextStream *fp, LPTSTR buf, size_t &buf_lengt
 			if (   *cp == ')' // Function/method definition or reserved.
 				|| *cp == ']' // Property definition or reserved.
 				|| (ACT_IS_LINE_PARENT(action_type) || action_type == ACT_SWITCH) && !EndsWithOperator(buf, cp)
-				|| mClassObjectCount && !g->CurrentFunc && cp < action_end   ) // "Property {" (get/set was already handled by caller).
+				|| mClassObjectCount && !g->CurrentFunc && (cp - buf) < action_end_pos) // "Property {" (get/set was already handled by caller).
 				return OK;
 		}
 		if (next_buf_length) // Skip empty/comment lines.
 		{
-			if (next_buf_length + buf_length + 1 >= LINE_SIZE)
-				return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG);
+			if (!buf.EnsureCapacity(next_buf_length + buf_length + 1))
+				return ScriptError(ERR_OUTOFMEM);
 			balance = BalanceExpr(next_buf, balance, expect, &open_quote); // Adjust balance based on what we're about to append.
 			buf[buf_length++] = ' '; // To ensure two distinct tokens aren't joined together.  ' ' vs. '\n' because DefineFunc() currently doesn't permit '\n'.
 			tmemcpy(buf + buf_length, next_buf, next_buf_length); // Append next_buf to this line.
 			buf_length += next_buf_length;
 			buf[buf_length] = '\0';
 		}
-		LPTSTR addition_to_balance = buf + buf_length;
+		auto prev_length = buf_length; // Store length vs. pointer since buf may be reallocated below.
 		// This serves to get the next line into next_buf but also handles any comment sections,
 		// continuation lines (when balance <= 0) or sections which follow the line just appended:
-		if (!GetLineContinuation(fp, buf, buf_length, next_buf, next_buf_length
+		if (!GetLineContinuation(fp, buf, next_buf
 			, phys_line_number, has_continuation_section, open_quote ? 0 : balance))
 			return FAIL;
-		if (*addition_to_balance // buf was extended.
-			 && balance >= 0)
-			balance = BalanceExpr(addition_to_balance, balance, expect, &open_quote); // Adjust balance based on what was appended.
+		if (buf_length > prev_length && balance >= 0)
+			balance = BalanceExpr(buf + prev_length, balance, expect, &open_quote); // Adjust balance based on what was appended.
 		if (open_quote)
 		{
 			// Unterminated string (continuation expressions should not automatically permit strings to span lines).
@@ -2940,7 +2966,7 @@ ResultType Script::BalanceExprError(int aBalance, TCHAR aExpect[], LPTSTR aLineT
 
 
 
-ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_length, LPTSTR next_buf, size_t &next_buf_length
+ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuffer &next_buf
 	, LineNumberType &phys_line_number, bool &has_continuation_section, int expr_balance)
 {
 	bool do_rtrim, literal_escapes, literal_quotes;
@@ -2951,10 +2977,14 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 	TCHAR indent_char, suffix[16];
 	size_t suffix_length;
 
-	LPTSTR next_option, option_end, cp, hotkey_flag, quote_marker;
+	LPTSTR next_option, option_end, cp, hotkey_flag;
 	TCHAR orig_char, quote_char;
 	bool in_comment_section, is_continuation_line, hotstring_options_all_valid;
+	int quote_pos;
 	int continuation_line_count;
+
+	auto &buf_length = buf.length;
+	auto &next_buf_length = next_buf.length;
 
 	// Read in the next line (if that next line is the start of a continuation section, append
 	// it to the line currently being processed:
@@ -2962,7 +2992,7 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 	{
 		// This increment relies on the fact that this loop always has at least one iteration:
 		++phys_line_number; // Tracks phys. line number in *this* file (independent of any recursion caused by #Include).
-		next_buf_length = GetLine(next_buf, LINE_SIZE - 1, in_continuation_section, in_comment_section, fp);
+		next_buf_length = GetLine(next_buf, in_continuation_section, in_comment_section, fp);
 		if (!in_continuation_section)
 		{
 			// v2: The comment-end is allowed at the end of the line (vs. just the start) to reduce
@@ -3040,7 +3070,7 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 				case 'I': // IS, IN
 				case 'C': // CONTAINS (future use)
 					// See comments in the default section further below.
-					cp = find_identifier_end(next_buf);
+					cp = find_identifier_end<LPTSTR>(next_buf);
 					// Although (x)and(y) is technically valid, it's quite unusual.  The space or tab requirement is kept
 					// as the simplest way to allow method definitions to use these as names (when called, the leading dot
 					// ensures there is no ambiguity).  Note that checking if we're inside a class definition is not
@@ -3156,8 +3186,8 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 
 				if (is_continuation_line)
 				{
-					if (buf_length + next_buf_length >= LINE_SIZE - 1) // -1 to account for the extra space added below.
-						return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, next_buf);
+					if (!buf.EnsureCapacity(buf_length + next_buf_length + 1)) // -1 to account for the extra space added below.
+						return ScriptError(ERR_OUTOFMEM);
 					if (*next_buf != ',') // Insert space before expression operators so that built/combined expression works correctly (some operators like 'and', 'or' and concat currently require spaces on either side) and also for readability of ListLines.
 						buf[buf_length++] = ' ';
 					tmemcpy(buf + buf_length, next_buf, next_buf_length + 1); // Append this line to prev. and include the zero terminator.
@@ -3262,25 +3292,25 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 			// it won't matter whether the quote marks are escaped or not.
 			if (!has_continuation_section)
 			{
-				quote_marker = buf; // Init.
+				quote_pos = 0; // Init.
 				quote_char = 0;
 			}
 			for (;;)
 			{
 				if (quote_char) // quote_marker is within a string.
 				{
-					quote_marker += FindTextDelim(quote_marker, quote_char);
-					if (!*quote_marker) // No end quote yet.
+					quote_pos += FindTextDelim(buf + quote_pos, quote_char);
+					if (!buf[quote_pos]) // No end quote yet.
 						break;
-					++quote_marker; // Skip the end quote.
+					++quote_pos; // Skip the end quote.
 				}
-				for ( ; *quote_marker && *quote_marker != '"' && *quote_marker != '\''; ++quote_marker);
-				if (  !(quote_char = *quote_marker)  )
+				for ( ; buf[quote_pos] && buf[quote_pos] != '"' && buf[quote_pos] != '\''; ++quote_pos);
+				if (  !(quote_char = buf[quote_pos])  )
 					break;
-				++quote_marker; // Continue scanning after the start quote.
+				++quote_pos; // Continue scanning after the start quote.
 			}
 			literal_quotes = quote_char != 0; // true if this section starts inside a quoted string.
-			// quote_marker and quote_char are retained between iterations of the outer loop to ensure
+			// quote_pos and quote_char are retained between iterations of the outer loop to ensure
 			// correct detection when there are multiple continuation sections, and to avoid re-scanning
 			// the entire buf for each new section.
 
@@ -3303,15 +3333,14 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 		if (*next_buf == ')')
 		{
 			in_continuation_section = 0; // Facilitates back-to-back continuation sections and proper incrementing of phys_line_number.
-			next_buf_length = rtrim(next_buf); // Done because GetLine() wouldn't have done it due to have told it we're in a continuation section.
+			next_buf_length = rtrim(next_buf, next_buf_length); // Done because GetLine() wouldn't have done it due to have told it we're in a continuation section.
 			// Anything that lies to the right of the close-parenthesis gets appended verbatim, with
 			// no trimming (for flexibility) and no options-driven translation:
-			cp = next_buf + 1;  // Use temp var cp to avoid altering next_buf (for maintainability).
+			cp = next_buf + 1;  // Use temp var cp to avoid a memcpy.
 			--next_buf_length;  // This is now the length of cp, not next_buf.
 		}
 		else
 		{
-			cp = next_buf;
 			// To support continuation sections following a naked action name such as "return", add a space.
 			// Checking for an action name at the start of buf would be insufficient due to try/else/finally,
 			// hotkeys with same-line action, etc. so perform only very basic checking.  This probably also
@@ -3372,21 +3401,25 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 				next_buf_length = ltrim(next_buf, next_buf_length);
 			// Insert escape characters as needed for escape characters or quote marks to be interpreted
 			// literally, as per continuation section options or detection of enclosing quote marks.
-			int replacement_count = 0;
+			// For simplicity, allow for worst-case expansion.  In most cases next_buf won't need to be
+			// expanded, and if it is, that space may be reused for subsequent lines.  Using the mode of
+			// StrReplace that allocates memory would require larger code and might increase the number
+			// of buffer expansions needed.
+			if ((literal_escapes || literal_quotes) && !next_buf.EnsureCapacity(next_buf_length * 2))
+				return ScriptError(ERR_OUTOFMEM);
 			if (literal_escapes) // literal_escapes must be done FIRST because otherwise it would also replace any accents added by other options.
-				replacement_count += StrReplace(next_buf, _T("`"), _T("``"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
+				StrReplace(next_buf, _T("`"), _T("``"), SCS_SENSITIVE, UINT_MAX, -1, nullptr, &next_buf_length);
 			if (literal_quotes)
 			{
-				replacement_count += StrReplace(next_buf, _T("'"), _T("`'"), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
-				replacement_count += StrReplace(next_buf, _T("\""), _T("`\""), SCS_SENSITIVE, UINT_MAX, LINE_SIZE);
+				StrReplace(next_buf, _T("'"), _T("`'"), SCS_SENSITIVE, UINT_MAX, -1, nullptr, &next_buf_length);
+				StrReplace(next_buf, _T("\""), _T("`\""), SCS_SENSITIVE, UINT_MAX, -1, nullptr, &next_buf_length);
 			}
-			if (replacement_count) // Update the length if any actual replacements were done.
-				next_buf_length = _tcslen(next_buf);
+			cp = next_buf;
 		} // Handling of a normal line within a continuation section.
 
 		// Must check the combined length only after anything that might have expanded the string above.
-		if (buf_length + next_buf_length + suffix_length >= LINE_SIZE)
-			return ScriptError(ERR_CONTINUATION_SECTION_TOO_LONG, cp);
+		if (!buf.EnsureCapacity(buf_length + next_buf_length + suffix_length))
+			return ScriptError(ERR_OUTOFMEM);
 
 		++continuation_line_count;
 		// Append this continuation line onto the primary line.
@@ -3412,19 +3445,27 @@ ResultType Script::GetLineContinuation(TextStream *fp, LPTSTR buf, size_t &buf_l
 
 
 
-size_t Script::GetLine(LPTSTR aBuf, int aMaxCharsToRead, int aInContinuationSection, bool aInBlockComment, TextStream *ts)
+size_t Script::GetLine(LineBuffer &aBuf, int aInContinuationSection, bool aInBlockComment, TextStream *ts)
 {
 	size_t aBuf_length = 0;
-
-	if (!aBuf || !ts) return -1;
-	if (aMaxCharsToRead < 1) return 0;
-	if (  !(aBuf_length = ts->ReadLine(aBuf, aMaxCharsToRead))  ) // end-of-file or error
+	for (;;)
 	{
-		*aBuf = '\0';  // Reset since on error, contents added by fgets() are indeterminate.
-		return -1;
+		auto aBuf_capacity = aBuf.Capacity();
+		auto read_length = ts->ReadLine(aBuf + aBuf_length, (DWORD)(aBuf_capacity - aBuf_length));
+		if (!read_length && !aBuf_length) // End of file was reached and there's no line text from a previous iteration.
+		{
+			aBuf[0] = '\0';
+			return -1;
+		}
+		aBuf_length += read_length;
+		if (aBuf[aBuf_length - 1] == '\n')
+			--aBuf_length;
+		if (aBuf_length < aBuf_capacity)
+			break; // It read one complete line, either finding a line ending or reaching end of file.
+		// This line is at least the size of aBuf, so expand aBuf to read more.
+		if (!aBuf.Expand())
+			return -1;
 	}
-	if (aBuf[aBuf_length-1] == '\n')
-		--aBuf_length;
 	aBuf[aBuf_length] = '\0';
 
 	if (aInContinuationSection)
@@ -3774,7 +3815,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		auto func = mLastHotFunc; // AddLine will set mLastHotFunc to nullptr below
 		
 		if (!AddLine(ACT_BLOCK_BEGIN)
-			|| !ParseAndAddLine(parameter, (int)_tcslen(parameter), ACT_HOTKEY_IF) // PreparseExpressions will change this to ACT_RETURN
+			|| !ParseAndAddLine(parameter, ACT_HOTKEY_IF) // PreparseExpressions will change this to ACT_RETURN
 			|| !AddLine(ACT_BLOCK_END))
 			return ScriptError(ERR_OUTOFMEM);
 
@@ -4284,17 +4325,19 @@ void Script::RemoveLabel(Label *aLabel)
 
 
 
-ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeType aActionType
-	, LPTSTR aLiteralMap, size_t aLiteralMapLength)
+ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType, LPTSTR aLiteralMap, size_t aLiteralMapLength)
 // Returns OK or FAIL.
 // aLineText needs to be a string whose contents are modifiable (though the string won't be made any
 // longer than it is now, so it doesn't have to be of size LINE_SIZE). This helps performance by
 // allowing the string to be split into sections without having to make temporary copies.
+// aLineText must point to a buffer with room to append "()" if it may contain a function call statement
+// (which is only possible when aActionType is ACT_INVALID/omitted or an ACT with possible subaction).
 {
 #ifdef _DEBUG
 	if (!aLineText || !*aLineText && !aActionType)
 		return ScriptError(_T("DEBUG: ParseAndAddLine() called incorrectly."));
 #endif
+	size_t line_length = _tcslen(aLineText); // Length is needed in a couple of places.
 
 	TCHAR action_name[MAX_VAR_NAME_LENGTH + 1], *end_marker;
 	if (aActionType) // Currently can be ACT_EXPRESSION or ACT_HOTKEY_IF.
@@ -4532,8 +4575,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 				}
 				// Call Parse() vs. AddLine() because it detects and optimizes simple assignments into
 				// non-expressions for faster runtime execution.
-				if (!ParseAndAddLine(item, aBufSize - int(item - aLineText)
-					, declare_type == VAR_DECLARE_STATIC ? ACT_STATIC : ACT_INVALID))
+				if (!ParseAndAddLine(item, declare_type == VAR_DECLARE_STATIC ? ACT_STATIC : ACT_INVALID))
 					return FAIL; // Above already displayed the error.
 
 				*terminate_here = orig_char; // Undo the temporary termination.
@@ -4737,9 +4779,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 			if (*action_name < '0' || *action_name > '9') // Exclude numbers, since no function name can start with a number.
 			{
 				// Convert function/method call statements to function/method calls.
-				int line_length = (int)_tcslen(aLineText);
-				if (line_length + bool(*end_marker) >= aBufSize) // This should never be true since LoadIncludedFile() enforces a max length of LINE_SIZE - 2.
-					return ScriptError(ERR_LINE_TOO_LONG);
 				if (*end_marker) // Replace space or tab with parenthesis.
 					*end_marker = '(';
 				else
@@ -4785,7 +4824,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 				action_args = omit_leading_whitespace(action_args + 1);
 				if (!*action_args)
 					return OK;
-				return ParseAndAddLine(action_args, aBufSize ? aBufSize - int(action_args - aLineText) : 0);
+				return ParseAndAddLine(action_args);
 			}
 		}
 		if (!aActionType && _tcschr(EXPR_ALL_SYMBOLS, *action_args))
@@ -4896,7 +4935,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 	case ACT_CONTINUE: //
 		if (end_marker && *end_marker == '(')
 		{
-			LPTSTR last_char = end_marker + _tcslen(end_marker) - 1;
+			LPTSTR last_char = aLineText + line_length - 1;
 			if (*last_char == '{' && aActionType == ACT_FOR)
 			{
 				add_openbrace_afterward = true;
@@ -4951,28 +4990,20 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 	// This section must occur after all other changes to the pointer value action_args have
 	// occurred above.
 	//////////////////////////////////////////////////////////////////////////////////////////////
-	// The size of this relies on the fact that caller made sure that aLineText isn't
-	// longer than LINE_SIZE.  Also, it seems safer to use char rather than bool, even
-	// though on most compilers they're the same size.  Char is always of size 1, but bool
-	// can be bigger depending on platform/compiler:
-	TCHAR literal_map[LINE_SIZE];
-	ZeroMemory(literal_map, sizeof(literal_map));  // Must be fully zeroed for this purpose.
+	LPTSTR literal_map;
 	if (aLiteralMap)
 	{
-		// Since literal map is NOT a string, just an array of char values, be sure to
-		// use memcpy() vs. _tcscpy() on it.  Also, caller's aLiteralMap starts at aLineText,
-		// so adjust it so that it starts at the newly found position of action_args instead:
-		int map_offset = (int)(action_args - aLineText);
-		int map_length = (int)(aLiteralMapLength - map_offset);
-		if (map_length > 0)
-			tmemcpy(literal_map, aLiteralMap + map_offset, map_length);
+		// Caller's aLiteralMap starts at aLineText, so adjust it so that it starts at the newly
+		// found position of action_args instead:
+		literal_map = aLiteralMap + (action_args - aLineText);
 	}
 	else
 	{
+		literal_map = (LPTSTR)_alloca(sizeof(TCHAR) * line_length);
+		ZeroMemory(literal_map, sizeof(TCHAR) * line_length);  // Must be fully zeroed for this purpose.
 		// Resolve escaped sequences and make a map of which characters in the string should
 		// be interpreted literally rather than as their native function.  In other words,
-		// convert any escape sequences in order from left to right (this order is important,
-		// e.g. ``% should evaluate to `g_DerefChar not `LITERAL_PERCENT.  This part must be
+		// convert any escape sequences in order from left to right.  This part must be
 		// done *after* checking for comment-flags that appear to the right of a valid line, above.
 		// How literal comment-flags (e.g. semicolons) work:
 		//string1; string2 <-- not a problem since string2 won't be considered a comment by the above.
@@ -5118,7 +5149,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, int aBufSize, ActionTypeTyp
 			return FAIL;
 	if (!subaction_start) // There is no subaction in this case.
 		return OK;
-	return ParseAndAddLine(subaction_start, aBufSize ? aBufSize - int(subaction_start - aLineText) : 0); // Escape sequences in the subaction haven't been translated yet.
+	return ParseAndAddLine(subaction_start); // Escape sequences in the subaction haven't been translated yet.
 }
 
 
@@ -5844,10 +5875,11 @@ ResultType Script::ParseFatArrow(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 {
 	if (!aDeref.Push())
 		return ScriptError(ERR_OUTOFMEM);
-	int j = FindExprDelim(aArgText, 0, int(aExpr - aArgText), aArgMap);
-	if (!ParseFatArrow(*aDeref.Last(), aPrmStart, aPrmEnd, aExpr, aArgText + j, aArgMap + j))
+	int expr_start_pos = int(aExpr - aArgText);
+	int expr_end_pos = FindExprDelim(aArgText, 0, expr_start_pos, aArgMap);
+	if (!ParseFatArrow(*aDeref.Last(), aPrmStart, aPrmEnd, aExpr, aArgText + expr_end_pos, aArgMap + expr_start_pos))
 		return FAIL;
-	aExprEnd = aArgText + j;
+	aExprEnd = aArgText + expr_end_pos;
 	return OK;
 }
 
@@ -5887,7 +5919,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	for (; aExprEnd > aExpr && IS_SPACE_OR_TAB(aExprEnd[-1]); --aExprEnd);
 	orig_end = *aExprEnd;
 	*aExprEnd = '\0';
-	if (!ParseAndAddLine(aExpr, 0, ACT_RETURN, aExprMap, aExprEnd - aExpr))
+	if (!ParseAndAddLine(aExpr, ACT_RETURN, aExprMap, aExprEnd - aExpr))
 		return FAIL;
 	*aExprEnd = orig_end;
 
@@ -6259,7 +6291,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic, 
 		if (!*param_start)
 			return ScriptError(ERR_INVALID_FUNCDECL, aBuf);
 		if (!AddLine(ACT_BLOCK_BEGIN)
-			|| !ParseAndAddLine(param_start, 0, ACT_RETURN)
+			|| !ParseAndAddLine(param_start, ACT_RETURN)
 			|| !AddLine(ACT_BLOCK_END))
 			return FAIL;
 	}
@@ -6420,8 +6452,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 }
 
 
-ResultType Script::DefineClassProperty(LPTSTR aBuf, int aBufSize, bool aStatic
-	, Var **aFuncGlobalVar, bool &aBufHasBraceOrNotNeeded)
+ResultType Script::DefineClassProperty(LPTSTR aBuf, bool aStatic, Var **aFuncGlobalVar, bool &aBufHasBraceOrNotNeeded)
 {
 	LPTSTR name_end = find_identifier_end(aBuf);
 	LPTSTR param_start = omit_leading_whitespace(name_end);
@@ -6469,7 +6500,7 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, int aBufSize, bool aStatic
 	if (*next_token == '=') // => expr
 	{
 		// mClassPropertyDef is already set up for "Get".
-		if (!DefineClassPropertyXet(aBuf, aBufSize, next_token, aFuncGlobalVar))
+		if (!DefineClassPropertyXet(aBuf, next_token, aFuncGlobalVar))
 			return FAIL;
 		// Immediately close this property definition.
 		mClassProperty = NULL;
@@ -6481,7 +6512,7 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, int aBufSize, bool aStatic
 }
 
 
-ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, int aBufSize, LPTSTR aEnd, Var **aFuncGlobalVar)
+ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd, Var **aFuncGlobalVar)
 {
 	// For simplicity, pass the property definition to DefineFunc instead of the actual
 	// line text, even though it makes some error messages a bit inaccurate. (That would
@@ -6499,7 +6530,7 @@ ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, int aBufSize, LPTSTR aEnd
 	if (*aEnd == '=') // => expr
 	{
 		aEnd = omit_leading_whitespace(aEnd + 2);
-		if (!ParseAndAddLine(aEnd, aBufSize - int(aEnd - aBuf), ACT_RETURN)
+		if (!ParseAndAddLine(aEnd, ACT_RETURN)
 			|| !AddLine(ACT_BLOCK_END))
 			return FAIL;
 	}
@@ -6644,7 +6675,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		mCurrLine = nullptr; // Fix for v1.1.09.02: Leaving this non-NULL at best causes error messages to show irrelevant vicinity lines, and at worst causes a crash because the linked list is in an inconsistent state.
 
 		mNoUpdateLabels = true;
-		if (!ParseAndAddLine(buf, LINE_SIZE))
+		if (!ParseAndAddLine(buf))
 			return FAIL; // Above already displayed the error.
 		mNoUpdateLabels = false;
 		
@@ -6670,7 +6701,7 @@ UserFunc *Script::DefineClassInit(bool aStatic)
 		return nullptr;
 	if (!aStatic)
 	{
-		if (!ParseAndAddLine(SUPER_KEYWORD _T(".__Init()"), 0, ACT_EXPRESSION)) // Initialize base-class variables first. Relies on short-circuit evaluation.
+		if (!ParseAndAddLine(SUPER_KEYWORD _T(".__Init()"), ACT_EXPRESSION)) // Initialize base-class variables first. Relies on short-circuit evaluation.
 			return nullptr;
 		mLastLine->mLineNumber = 0; // Signal the debugger to skip this line while stepping in/over/out.
 	}
