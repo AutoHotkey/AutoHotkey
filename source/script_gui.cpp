@@ -6923,6 +6923,8 @@ ResultType GuiType::ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilenam
 	int image_type;
 	HBITMAP new_image = LoadPicture(aFilename, aWidth, aHeight, image_type, aIconNumber
 		, aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT);
+	if (!new_image && *aFilename)
+		return FAIL; // Caller will report the error.
 
 	// In light of the below, it seems best to delete the bitmaps whenever the control changes
 	// to a new image or whenever the control is destroyed.  Otherwise, if a control or its
@@ -6954,16 +6956,11 @@ ResultType GuiType::ControlLoadPicture(GuiControlType &aControl, LPTSTR aFilenam
 		else // union_hbitmap is a bitmap
 			DeleteObject((HGDIOBJ)SendMessage(aControl.hwnd, STM_SETIMAGE, IMAGE_BITMAP, NULL));
 	aControl.union_hbitmap = new_image;
-	// For backward-compatibility, the above is done even if the image failed to load.
 	if (!new_image)
 	{
-		// By design, no error is reported.  The picture is simply not displayed, nor is its
-		// style set to SS_BITMAP/SS_ICON, which allows the control to have the specified size
-		// yet lack an image (SS_BITMAP/SS_ICON tend to cause the control to auto-size to
-		// zero dimensions).
-		// UPDATE: For simplicity and backward-compatibility, any existing SS_BITMAP/SS_ICON
-		// style bit is not removed.
-		return *aFilename ? FAIL : OK;
+		// By design, no error is reported for a blank aFilename.
+		// For simplicity, any existing SS_BITMAP/SS_ICON style bit is not removed.
+		return OK;
 	}
 	if (image_type == IMAGE_ICON && aControl.background_color == CLR_TRANSPARENT)
 	{
