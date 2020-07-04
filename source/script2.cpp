@@ -18790,6 +18790,78 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_StrJoin)
+{
+	if (aParamCount < 2)
+		goto return_empty_string;
+
+	LPTSTR *aPadList = NULL;
+	int aPadCount = 0;
+	// Handle pad string array. (Based on BIF_StrSplit.)
+	if (Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[0])))
+	{
+		aPadCount = obj->GetNumericItemCount();
+		aPadList = (LPTSTR *)_alloca(aPadCount * sizeof(LPTSTR *));
+		if (!obj->ArrayToStrings(aPadList, aPadCount, aPadCount))
+			// Array contains something other than a string.
+			goto return_empty_string;
+	}
+	else
+	{
+		aPadList = (LPTSTR *)_alloca(sizeof(LPTSTR *));
+		*aPadList = TokenToString(*aParam[0]);
+		aPadCount = 1;
+	}
+
+	int count = aParamCount - 1; // Count of strings to join.
+	int count_trail_pad = (count-1) % aPadCount; // Count of remainder pad strings.
+	int len_array_pad = 0; // Length of one cycle of pad strings.
+	int len_trail_pad = 0; // Length of remainder pad strings.
+	int len_pad = 0; //Length of one pad string.
+
+	int *aPadListLen = (int *)_alloca(aPadCount * 4);
+	for (int i = 0; i < aPadCount; ++i)
+	{
+		len_pad = (int)(_tcslen(aPadList[i]));
+		aPadListLen[i] = len_pad;
+		len_array_pad += len_pad;
+		if (i < count_trail_pad)
+			len_trail_pad += len_pad;
+	}
+
+	int len_out = 0;
+	for (int i = 1; i < aParamCount; ++i)
+		len_out += (int)_tcslen(ParamIndexToString(i));
+	len_out += ((count-1) / aPadCount) * len_array_pad + len_trail_pad + 1;
+	TCHAR *output = new TCHAR[len_out];
+
+	int j = 0;
+	int len_temp = 0;
+	int len_item;
+	for (int i = 1; i < aParamCount-1; ++i)
+	{
+		len_item = (int)_tcslen(ParamIndexToString(i));
+		tmemcpy(output+len_temp, ParamIndexToString(i), len_item);
+		len_pad = aPadListLen[j];
+		tmemcpy(output+len_temp+len_item, aPadList[j], len_pad);
+		len_temp += len_item+len_pad;
+		j = (j + 1) % aPadCount;
+	}
+	len_item = (int)_tcslen(ParamIndexToString(aParamCount-1));
+	tmemcpy(output+len_temp, ParamIndexToString(aParamCount-1), len_item);
+
+	*(output+len_out-1) = '\0';
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = output;
+	return;
+
+return_empty_string:
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
