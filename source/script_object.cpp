@@ -958,6 +958,8 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 		if (member.invokeType == IT_CALL)
 		{
 			auto func = new BuiltInMethod(SimpleHeap::Malloc(full_name));
+			if (!func)
+				return nullptr;
 			func->mBIM = member.method;
 			func->mMID = member.id;
 			func->mMIT = IT_CALL;
@@ -978,6 +980,8 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 
 			_tcscpy(op_name, _T(".Get"));
 			auto func = new BuiltInMethod(SimpleHeap::Malloc(full_name));
+			if (!func)
+				return nullptr;
 			func->mBIM = member.method;
 			func->mMID = member.id;
 			func->mMIT = IT_GET;
@@ -992,6 +996,8 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 			{
 				_tcscpy(op_name, _T(".Set"));
 				func = new BuiltInMethod(SimpleHeap::Malloc(full_name));
+				if (!func)
+					return nullptr;
 				func->mBIM = member.method;
 				func->mMID = member.id;
 				func->mMIT = IT_SET;
@@ -1017,6 +1023,8 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
 	_stprintf(full_name, _T("%s.New"), aClassName);
 	auto ctor = new BuiltInMethod(SimpleHeap::Malloc(full_name));
+	if (!ctor)
+		return nullptr;
 	ctor->mBIM = aCtor;
 	ctor->mMID = 0;
 	ctor->mMIT = IT_CALL;
@@ -2827,7 +2835,12 @@ Object *Object::CreateRootPrototypes()
 	// only handles Objects, and these must handle primitive values.
 	static const LPTSTR sFuncs[] = { _T("GetMethod"), _T("HasBase"), _T("HasMethod"), _T("HasProp") };
 	for (int i = 0; i < _countof(sFuncs); ++i)
-		sAnyPrototype->DefineMethod(sFuncs[i], g_script.FindFunc(sFuncs[i]));
+	{
+		auto func = g_script.FindFunc(sFuncs[i]);
+		if (!func)
+			return sAnyPrototype; // out of mem, the program should fail soon somewhere else.
+		sAnyPrototype->DefineMethod(sFuncs[i], func);
+	}
 	auto prop = sAnyPrototype->DefineProperty(_T("Base"));
 	prop->MinParams = 0;
 	prop->MaxParams = 0;

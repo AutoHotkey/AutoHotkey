@@ -24,7 +24,34 @@ SimpleHeap *SimpleHeap::sLast  = NULL;
 char *SimpleHeap::sMostRecentlyAllocated = NULL;
 UINT SimpleHeap::sBlockCount = 0;
 
+
+// Malloc never returns NULL. If allocation fails a message is shown
+// and the program terminates. Typically called only during load time.
+
 LPTSTR SimpleHeap::Malloc(LPTSTR aBuf, size_t aLength)
+{
+	LPTSTR ret = Alloc(aBuf, aLength);
+	if (!ret)
+		g_script.TerminateApp(EXIT_DESTROY, CRITICAL_ERROR); // Alloc has already shown the error message.
+	return ret;
+}
+
+void* SimpleHeap::Malloc(size_t aSize)
+{
+	void* ret = Alloc(aSize);
+	if (!ret)
+	{
+		g_script.ScriptError(ERR_OUTOFMEM);
+		g_script.TerminateApp(EXIT_DESTROY, CRITICAL_ERROR);
+	}
+	return ret;
+}
+
+// Alloc can return NULL. Callers should verify the return value.
+// Typically used during run time, when an allocation failure shouldn't
+// terminate the program, cf Malloc.
+
+LPTSTR SimpleHeap::Alloc(LPTSTR aBuf, size_t aLength)
 // v1.0.44.14: Added aLength to improve performance in cases where callers already know the length.
 // If aLength is at its default of -1, the length will be calculated here.
 // Caller must ensure that aBuf isn't NULL.
@@ -34,7 +61,7 @@ LPTSTR SimpleHeap::Malloc(LPTSTR aBuf, size_t aLength)
 	if (aLength == -1) // Caller wanted us to calculate it.  Compare directly to -1 since aLength is unsigned.
 		aLength = _tcslen(aBuf);
 	LPTSTR new_buf;
-	if (   !(new_buf = (LPTSTR)SimpleHeap::Malloc((aLength + 1) * sizeof(TCHAR)))   ) // +1 for the zero terminator.
+	if (   !(new_buf = (LPTSTR)SimpleHeap::Alloc((aLength + 1) * sizeof(TCHAR)))   ) // +1 for the zero terminator.
 	{
 		g_script.ScriptError(ERR_OUTOFMEM, aBuf);
 		return NULL; // Callers may rely on NULL vs. "" being returned in the event of failure.
@@ -46,7 +73,7 @@ LPTSTR SimpleHeap::Malloc(LPTSTR aBuf, size_t aLength)
 	return new_buf;
 }
 
-void* SimpleHeap::Malloc(size_t aSize)
+void* SimpleHeap::Alloc(size_t aSize)
 // This could be made more memory efficient by searching old blocks for sufficient
 // free space to handle <size> prior to creating a new block.  But the whole point
 // of this class is that it's only called to allocate relatively small objects,

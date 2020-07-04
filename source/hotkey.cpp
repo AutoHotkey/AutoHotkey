@@ -100,20 +100,20 @@ HotkeyCriterion *FindHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, L
 HotkeyCriterion *AddHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText)
 {
 	HotkeyCriterion *cp;
-	if (   !(cp = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))   )
+	if (   !(cp = (HotkeyCriterion *)SimpleHeap::Alloc(sizeof(HotkeyCriterion)))   )
 		return NULL;
 	cp->Type = aType;
 	cp->OriginalExpr = nullptr;
 	if (*aWinTitle)
 	{
-		if (   !(cp->WinTitle = SimpleHeap::Malloc(aWinTitle))   )
+		if (   !(cp->WinTitle = SimpleHeap::Alloc(aWinTitle))   )
 			return NULL;
 	}
 	else
 		cp->WinTitle = _T("");
 	if (*aWinText)
 	{
-		if (   !(cp->WinText = SimpleHeap::Malloc(aWinText))   )
+		if (   !(cp->WinText = SimpleHeap::Alloc(aWinText))   )
 			return NULL;
 	}
 	else
@@ -140,7 +140,7 @@ HotkeyCriterion *AddHotkeyCriterion(HotkeyCriterion *cp)
 HotkeyCriterion *AddHotkeyIfExpr()
 {
 	HotkeyCriterion *cp;
-	if (   !(cp = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))   )
+	if (   !(cp = (HotkeyCriterion *)SimpleHeap::Alloc(sizeof(HotkeyCriterion)))   )
 		return NULL;
 	cp->NextExpr = NULL;
 	cp->OriginalExpr = nullptr;
@@ -1474,7 +1474,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 	// If mKeybdHookMandatory==true, ManifestAllHotkeysHotstringsHooks() will set mType to HK_KEYBD_HOOK for us.
 
 	// To avoid memory leak, this is done only when it is certain the hotkey will be created:
-	if (   !(mName = aName ? SimpleHeap::Malloc(aName) : hotkey_name)
+	if (   !(mName = aName ? SimpleHeap::Alloc(aName) : hotkey_name)
 		|| !(AddVariant(aJumpToLabel, aSuffixHasTilde))   ) // Too rare to worry about freeing the other if only one fails.
 	{
 		g_script.ScriptError(ERR_OUTOFMEM);
@@ -1511,7 +1511,7 @@ HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde)
 // The caller is responsible for calling ManifestAllHotkeysHotstringsHooks(), if appropriate.
 {
 	HotkeyVariant *vp;
-	if (   !(vp = (HotkeyVariant *)SimpleHeap::Malloc(sizeof(HotkeyVariant)))   )
+	if (   !(vp = (HotkeyVariant *)SimpleHeap::Alloc(sizeof(HotkeyVariant)))   )
 		return NULL;
 	ZeroMemory(vp, sizeof(HotkeyVariant));
 	// The following members are left at 0/NULL by the above:
@@ -2454,9 +2454,9 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, execute_action);
 	
 	// To avoid memory leak, this is done only when it is certain the hotstring will be created:
-	if (   !(mString = SimpleHeap::Malloc(aHotstring))   )
+	if (   !(mString = SimpleHeap::Alloc(aHotstring))   )
 		return; // ScriptError() was already called by Malloc().
-	if (   g_script.mIsReadyToExecute && !(mName = SimpleHeap::Malloc(aName))   ) // mName already contains persistent memory when we're called at load time.
+	if (   g_script.mIsReadyToExecute && !(mName = SimpleHeap::Alloc(aName))   ) // mName already contains persistent memory when we're called at load time.
 	{
 		SimpleHeap::Delete(mString); // SimpleHeap allows deletion of most recently added item.
 		return;

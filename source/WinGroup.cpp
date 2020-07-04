@@ -52,13 +52,13 @@ ResultType WinGroup::AddWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle
 				&& !_tcscmp(win->mExcludeTitle, aExcludeTitle) && !_tcscmp(win->mExcludeText, aExcludeText))
 				return OK;
 
-	// SimpleHeap::Malloc() will set these new vars to the constant empty string if their
+	// SimpleHeap::Alloc() will set these new vars to the constant empty string if their
 	// corresponding params are blank:
 	LPTSTR new_title, new_text, new_exclude_title, new_exclude_text;
-	if (!(new_title = SimpleHeap::Malloc(aTitle))) return FAIL; // It already displayed the error for us.
-	if (!(new_text = SimpleHeap::Malloc(aText)))return FAIL;
-	if (!(new_exclude_title = SimpleHeap::Malloc(aExcludeTitle))) return FAIL;
-	if (!(new_exclude_text = SimpleHeap::Malloc(aExcludeText)))   return FAIL;
+	if (!(new_title = SimpleHeap::Alloc(aTitle))) return FAIL; // It already displayed the error for us.
+	if (!(new_text = SimpleHeap::Alloc(aText)))return FAIL;
+	if (!(new_exclude_title = SimpleHeap::Alloc(aExcludeTitle))) return FAIL;
+	if (!(new_exclude_text = SimpleHeap::Alloc(aExcludeText)))   return FAIL;
 
 	// The precise method by which the follows steps are done should be thread-safe even if
 	// some other thread calls IsMember() in the middle of the operation.  But any changes
@@ -367,7 +367,7 @@ inline ResultType WinGroup::Update(bool aIsModeActivate)
 		// Getting it from SimpleHeap reduces overhead for the avg. case (i.e. the first
 		// block of SimpleHeap is usually never fully used, and this array won't even
 		// be allocated for short scripts that don't even using window groups.
-		if (   !(sAlreadyVisited = (HWND *)SimpleHeap::Malloc(MAX_ALREADY_VISITED * sizeof(HWND)))   )
+		if (   !(sAlreadyVisited = (HWND *)SimpleHeap::Alloc(MAX_ALREADY_VISITED * sizeof(HWND)))   )
 			return FAIL;  // It already displayed the error for us.
 	return OK;
 }

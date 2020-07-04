@@ -55,6 +55,10 @@ public:
 //	static UINT GetBlockCount() {return sBlockCount;}
 	static LPTSTR Malloc(LPTSTR aBuf, size_t aLength = -1); // Return a block of memory to the caller and copy aBuf into it.
 	static void* Malloc(size_t aSize); // Return a block of memory to the caller.
+	
+	static LPTSTR Alloc(LPTSTR aBuf, size_t aLength = -1); // Return a block of memory to the caller and copy aBuf into it.
+	static void* Alloc(size_t aSize); // Return a block of memory to the caller.
+
 	static void Delete(void *aPtr);
 	//static void DeleteAll();
 };
