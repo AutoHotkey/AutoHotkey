@@ -13468,12 +13468,36 @@ ResultType ResultToken::UnknownMemberError(ExprTokenType &aObject, int aFlags, L
 	return Error(msg);
 }
 
+__declspec(noinline)
 ResultType ResultToken::Win32Error(DWORD aError)
 {
 	if (g_script.Win32Error(aError) == FAIL)
 		return SetExitResult(FAIL);
 	SetValue(_T(""), 0);
 	return FAIL;
+}
+
+__declspec(noinline)
+ResultType ResultToken::TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue)
+{
+	TCHAR number_buf[MAX_NUMBER_SIZE];
+	LPTSTR actual_type, value_as_string;
+	if (aActualValue.symbol == SYM_VAR && aActualValue.var->IsUninitializedNormalVar())
+		actual_type = _T("unset variable"), value_as_string = aActualValue.var->mName;
+	else
+		actual_type = TokenTypeString(aActualValue), value_as_string = TokenToString(aActualValue, number_buf);
+	return TypeError(aExpectedType, actual_type, value_as_string);
+}
+
+ResultType ResultToken::TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LPTSTR aExtraInfo)
+{
+	auto an = [](LPCTSTR thing) {
+		return _tcschr(_T("aeiou"), ctolower(*thing)) ? _T("n") : _T("");
+	};
+	TCHAR msg[512];
+	sntprintf(msg, _countof(msg), _T("Expected a%s %s but got a%s %s.")
+		, an(aExpectedType), aExpectedType, an(aActualType), aActualType);
+	return Error(msg, aExtraInfo);
 }
 
 

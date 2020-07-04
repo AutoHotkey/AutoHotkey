@@ -74,6 +74,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 	int to_free_count = 0; // The actual number of items in use in the above array.
 	LPTSTR result_to_return = _T(""); // By contrast, NULL is used to tell the caller to abort the current thread.
 	LPCTSTR error_msg = ERR_EXPR_EVAL, error_info = _T("");
+	ExprTokenType *error_value;
 	Var *output_var = (mActionType == ACT_ASSIGNEXPR) ? VAR(mArg[0]) : NULL; // Resolve early because it's similar in usage/scope to the above.
 
 	ExprTokenType **stack = (ExprTokenType **)_alloca(mArg[aArgIndex].max_stack * sizeof(ExprTokenType *));
@@ -650,7 +651,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			else if (right_is_number == PURE_FLOAT)
 				this_token.value_double = -TokenToDouble(right, FALSE); // Pass FALSE for aCheckForHex since PURE_FLOAT is never hex.
 			else // String.  Seems best to consider the application of unary minus to a string to be a failure.
+			{
+				error_info = _T("Number");
+				error_value = &right;
 				goto type_mismatch;
+			}
 			// Since above didn't "break":
 			this_token.symbol = right_is_number;
 			break;
@@ -659,7 +664,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			if (right_is_number)
 				TokenToDoubleOrInt64(right, this_token);
 			else
+			{
+				error_info = _T("Number");
+				error_value = &right;
 				goto type_mismatch; // For consistency with unary minus (see above).
+			}
 			break;
 
 		case SYM_POST_INCREMENT: // These were added in v1.0.46.  It doesn't seem worth translating them into
@@ -670,7 +679,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				goto abort_with_exception;
 			is_pre_op = SYM_INCREMENT_OR_DECREMENT_IS_PRE(this_token.symbol); // Store this early because its symbol will soon be overwritten.
 			if (right_is_number == PURE_NOT_NUMERIC) // Not numeric: invalid operation.
+			{
+				error_info = _T("Number");
+				error_value = &right;
 				goto type_mismatch;
+			}
 
 			// DUE TO CODE SIZE AND PERFORMANCE decided not to support things like the following:
 			// -> ++++i ; This one actually works because pre-ops produce a variable (usable by future pre-ops).
@@ -733,7 +746,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 		case SYM_BITNOT:  // The tilde (~) operator.
 			if (right_is_number == PURE_NOT_NUMERIC) // String.  Seems best to consider the application of '*' or '~' to a non-numeric string to be a failure.
+			{
+				error_info = _T("Number");
+				error_value = &right;
 				goto type_mismatch;
+			}
 			// Since above didn't "break": right_is_number is PURE_INTEGER or PURE_FLOAT.
 			right_int64 = TokenToInt64(right); // Although PURE_FLOAT can't be hex, for simplicity and due to the rarity of encountering a PURE_FLOAT in this case, the slight performance reduction of calling TokenToInt64() is done for both PURE_FLOAT and PURE_INTEGER.
 			// Note that it is not legal to perform ~, &, |, or ^ on doubles.  Because of this,
@@ -858,8 +875,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_LTOE:			this_token.value_int64 = g_tcscmp(left_string, right_string) < 1; break;
 
 				case SYM_CONCAT:
-					if (TokenToObject(left) || TokenToObject(right))
+					if (TokenToObject(left))
+					{
+						error_info = _T("String");
+						error_value = &left;
 						goto type_mismatch; // Treat this as an error, especially to catch `new classname`.
+					}
+					if (TokenToObject(right))
+					{
+						error_info = _T("String");
+						error_value = &right;
+						goto type_mismatch; // Treat this as an error, especially to catch `new classname`.
+					}
 					// Even if the left or right is "", must copy the result to temporary memory, at least
 					// when integers and floats had to be converted to temporary strings above.
 					// Binary clipboard is ignored because it's documented that except for certain features,
@@ -1010,11 +1037,15 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						}
 					}
 					// Since "break" was not used, "right" is not a valid type object.
+					error_info = _T("Object");
+					error_value = &right;
 					goto type_mismatch;
 				}
 
 				default:
 					// All other operators do not support non-numeric operands.
+					error_info = _T("Number");
+					error_value = &right;
 					goto type_mismatch;
 				}
 				this_token.symbol = result_symbol; // Must be done only after the switch() above.
@@ -1366,12 +1397,17 @@ push_this_token:
 	case SYM_OBJECT:
 		// At this point we aren't capable of returning an object, otherwise above would have
 		// already returned.  So in other words, the caller wants a string, not an object.
+		error_info = _T("String");
+		error_value = &result_token;
 		goto type_mismatch;
 	} // switch (result_token.symbol)
 
 // ALL PATHS ABOVE SHOULD "GOTO".  TO CATCH BUGS, ANY THAT DON'T FALL INTO "ABORT" BELOW.
 abort_with_exception:
-	if (  (aResult = LineError(error_msg, FAIL_OR_OK, error_info)) != FAIL  )
+	aResult = LineError(error_msg, FAIL_OR_OK, error_info);
+	// FALL THROUGH:
+abort_if_result:
+	if (aResult != FAIL)
 		goto normal_end_skip_output_var;
 	// FALL THROUGH:
 abort:
@@ -1382,8 +1418,8 @@ abort:
 	goto normal_end_skip_output_var; // output_var is skipped as part of standard abort behavior.
 
 type_mismatch:
-	error_msg = ERR_TYPE_MISMATCH;
-	goto abort_with_exception;
+	aResult = ResultToken().TypeError(error_info, *error_value);
+	goto abort_if_result;
 divide_by_zero:
 	error_msg = ERR_DIVIDEBYZERO;
 	goto abort_with_exception;
@@ -1630,7 +1666,15 @@ bool BuiltInMethod::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int
 	// In that case, the method can't be called if obj is a Prototype object, since
 	// that's natively just an Object, or if obj is not derived from mClass.
 	if (!obj || mClass && (obj->IsClassPrototype() || !obj->IsDerivedFrom(mClass)))
-		aResultToken.Error(ERR_TYPE_MISMATCH);
+	{
+		LPCTSTR expected_type;
+		ExprTokenType value;
+		if (mClass->GetOwnProp(value, _T("__Class")) && value.symbol == SYM_STRING)
+			expected_type = value.marker;
+		else
+			expected_type = _T("?"); // Script may have tampered with the prototype.
+		aResultToken.TypeError(expected_type, *aParam[0]);
+	}
 	else
 		(obj->*mBIM)(aResultToken, mMID, mMIT, aParam + 1, aParamCount - 1);
 

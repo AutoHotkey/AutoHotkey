@@ -9122,7 +9122,7 @@ BIV_DECL_W(BIV_Clipboard_Set)
 				_f_return_FAIL;
 			return;
 		}
-		_f_throw(ERR_TYPE_MISMATCH, obj->Type());
+		_f_throw_type(_T("ClipboardAll"), obj->Type());
 	}
 	size_t aLength;
 	LPTSTR aBuf = BivRValueToString(&aLength);
@@ -10985,7 +10985,7 @@ has_valid_return_type:
 				// to be stack memory, which would be invalid memory upon return to the caller).
 				// The complexity of this doesn't seem worth the rarity of the need, so this will be
 				// documented in the help file.
-				_f_throw(ERR_TYPE_MISMATCH);
+				_f_throw_type(_T("String"), this_param);
 			}
 			// Otherwise, it's a supported type of string.
 			this_dyna_param.ptr = TokenToString(this_param); // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
@@ -11018,7 +11018,7 @@ has_valid_return_type:
 		case DLL_ARG_xSTR:
 			// See the section above for comments.
 			if (IS_NUMERIC(this_param.symbol))
-				_f_throw(ERR_TYPE_MISMATCH);
+				_f_throw_type(_T("String"), this_param);
 			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
 			pStr[arg_count] = new UorA(CStringCharFromWChar,CStringWCharFromChar)(TokenToString(this_param));
 			this_dyna_param.ptr = pStr[arg_count]->GetBuffer();
@@ -11029,7 +11029,7 @@ has_valid_return_type:
 			// This currently doesn't validate that this_dyna_param.is_unsigned==false, since it seems
 			// too rare and mostly harmless to worry about something like "Ufloat" having been specified.
 			if (!TokenIsNumeric(this_param))
-				_f_throw(ERR_TYPE_MISMATCH);
+				_f_throw_type(_T("Number"), this_param);
 			this_dyna_param.value_double = TokenToDouble(this_param);
 			if (this_dyna_param.type == DLL_ARG_FLOAT)
 				this_dyna_param.value_float = (float)this_dyna_param.value_double;
@@ -11041,7 +11041,7 @@ has_valid_return_type:
 		//case DLL_ARG_CHAR:
 		//case DLL_ARG_INT64:
 			if (!TokenIsNumeric(this_param))
-				_f_throw(ERR_TYPE_MISMATCH);
+				_f_throw_type(_T("Number"), this_param);
 			// Note that since v2.0-a083-97803aeb, TokenToInt64 supports conversion of large unsigned 64-bit
 			// numbers from strings (producing a negative value, but with the right bit representation).
 			// This allows large unsigned literals and numeric strings to be passed to DllCall (regardless
@@ -13478,7 +13478,7 @@ BIF_DECL(BIF_StrPtr)
 		if (!aParam[0]->var->IsPureNumericOrObject())
 			_f_return((UINT_PTR)aParam[0]->var->Contents());
 	default:
-		_f_throw(ERR_TYPE_MISMATCH);
+		_f_throw_type(_T("String"), *aParam[0]);
 	}
 }
 
@@ -13721,7 +13721,7 @@ BIF_DECL(BIF_IsTypeish)
 	_f_return_b(if_condition);
 
 type_mismatch:
-	_f_throw(ERR_TYPE_MISMATCH, TokenTypeString(*aParam[0]));
+	_f_throw_type(_T("String"), *aParam[0]);
 }
 
 
@@ -13853,7 +13853,7 @@ BIF_DECL(BIF_VarSetStrCapacity)
 			// v2: We now have IsSet(), but it still seems reasonable to allow this without a warning.
 			//var.MaybeWarnUninitialized();
 			if (var.IsPureNumericOrObject())
-				_f_throw(ERR_TYPE_MISMATCH);
+				_f_throw_type(_T("String"), *aParam[0]);
 		}
 
 		if (aResultToken.value_int64 = var.CharCapacity()) // Don't subtract 1 here in lieu doing it below (avoids underflow).

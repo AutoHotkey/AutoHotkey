@@ -500,6 +500,8 @@ struct ResultToken : public ExprTokenType
 	ResultType Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo);
 	ResultType UnknownMemberError(ExprTokenType &aObject, int aFlags, LPCTSTR aMember);
 	ResultType Win32Error(DWORD aError = GetLastError());
+	ResultType TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue);
+	ResultType TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LPTSTR aExtraInfo = _T(""));
 	
 	void SetLastErrorMaybeThrow(bool aError, DWORD aLastError = GetLastError());
 	void SetLastErrorCloseAndMaybeThrow(HANDLE aHandle, bool aError, DWORD aLastError = GetLastError());

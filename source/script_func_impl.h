@@ -64,7 +64,7 @@ inline LPTSTR _OptionalStringDefaultHelper(LPTSTR aDef, LPTSTR aBuf = NULL, size
 
 #define Throw_if_Param_NaN(ParamIndex) \
 	if (!TokenIsNumeric(*aParam[(ParamIndex)])) \
-		_f_throw(ERR_TYPE_MISMATCH)
+		_f_throw_type(_T("Number"), *aParam[(ParamIndex)])
 
 
 #define BivRValueToString(...)  TokenToString(aValue, _f_number_buf, __VA_ARGS__)

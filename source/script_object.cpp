@@ -33,7 +33,7 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 	// Exceptions are thrown by Invoke for too few/many parameters, but not for non-existent method.
 	// Check for that here, with the exception that objects are permitted to lack a __Delete method.
 	if (result == INVOKE_NOT_HANDLED && !(aExtraFlags & IF_BYPASS_METAFUNC))
-		result = g_script.RuntimeError(ERR_UNKNOWN_METHOD, aMethodName ? aMethodName : _T("Call"));
+		result = ResultToken().UnknownMemberError(this_token, IT_CALL, aMethodName);
 
 	if (result != EARLY_EXIT && result != FAIL)
 	{
@@ -324,7 +324,7 @@ ResultType CallEnumerator(IObject *aEnumerator, Var *aVar0, Var *aVar1, bool aDi
 	if (result == FAIL || result == EARLY_EXIT || result == INVOKE_NOT_HANDLED)
 	{
 		if (result == INVOKE_NOT_HANDLED && aDisplayError)
-			return g_script.ScriptError(ERR_TYPE_MISMATCH, _T("__Enum")); // Object not callable -> wrong type of object.
+			return g_script.ScriptError(ERR_NOT_ENUMERABLE); // Object not callable -> wrong type of object.
 		return result;
 	}
 	result = TokenToBOOL(result_token) ? CONDITION_TRUE : CONDITION_FALSE;
@@ -616,7 +616,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 				aResultToken.mem_to_free = nullptr;
 			}
 			// FIXME: For this.x[y] and (this.x)[y] to behave the same, this should invoke ValueBase().
-			_o_throw(ERR_NO_OBJECT, name);
+			_o_throw(ERR_TYPE_MISMATCH, name);
 		}
 		obj_for_recursion = aResultToken.object;
 		//obj_for_recursion->AddRef(); // This and the next line are redundant when used together.
@@ -634,6 +634,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 			if (!field)
 				return INVOKE_NOT_HANDLED;
 			else if (field->symbol != SYM_OBJECT)
+				// FIXME: see similar line above.
 				_o_throw(ERR_TYPE_MISMATCH, name);
 			else
 			{
@@ -2717,7 +2718,7 @@ ResultType BufferObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, 
 		if (IS_INVOKE_SET)
 		{
 			if (!ParamIndexIsNumeric(0))
-				_o_throw(ERR_TYPE_MISMATCH);
+				_o_throw(ERR_INVALID_VALUE);
 			auto new_size = ParamIndexToInt64(0);
 			if (new_size < 0 || new_size > SIZE_MAX)
 				_o_throw(ERR_INVALID_VALUE);
@@ -2744,7 +2745,7 @@ ResultType BufferObject::Resize(size_t aNewSize)
 BIF_DECL(BIF_BufferAlloc)
 {
 	if (!ParamIndexIsNumeric(0))
-		_f_throw(ERR_TYPE_MISMATCH);
+		_f_throw(ERR_PARAM1_INVALID);
 	auto size = ParamIndexToInt64(0);
 	if (size < 0 || size > SIZE_MAX)
 		_f_throw(ERR_PARAM1_INVALID);

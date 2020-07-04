@@ -117,7 +117,7 @@ BIF_DECL(Op_ObjInvoke)
 		{
 			name = TokenToString(*aParam[0], name_buf);
 			if (!*name && TokenToObject(*aParam[0]))
-				_f_throw(ERR_TYPE_MISMATCH);
+				_f_throw_type(_T("String"), *aParam[0]);
 		}
 		++aParam;
 		--aParamCount;
@@ -204,7 +204,7 @@ BIF_DECL(Op_ObjIncDec)
 		aResultToken.SetExitResult(temp_result.Result());
 		return;
 	}
-	bool throw_after_free_token = false; // set default, overridden if value_to_set is non-numeric.
+
 	ExprTokenType current_value, value_to_set;
 	switch (value_to_set.symbol = current_value.symbol = TokenIsNumeric(temp_result))
 	{
@@ -220,13 +220,15 @@ BIF_DECL(Op_ObjIncDec)
 
 	default: // PURE_NOT_NUMERIC == SYM_STRING.
 		// Value is non-numeric, so throw.
-		throw_after_free_token = true;
+		aResultToken.TypeError(_T("Number"), temp_result);
+		temp_result.Free();
+		return;
 	}
 
 	// Free the object or string returned by Op_ObjInvoke, if applicable.
+	// It's theoretically possible for a numeric string to require this.
 	temp_result.Free();
-	if (throw_after_free_token)
-		_f_throw(ERR_TYPE_MISMATCH);
+
 	// Although it's likely our caller's param array has enough space to hold the extra
 	// parameter, there's no way to know for sure whether it's safe, so we allocate our own:
 	ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
@@ -282,7 +284,7 @@ BIF_DECL(BIF_ObjXXX)
 	if (obj)
 		obj->CallBuiltin(_f_callee_id, aResultToken, aParam + 1, aParamCount - 1);
 	else
-		_f_throw(ERR_NO_OBJECT);
+		_f_throw_type(_T("Object"), *aParam[0]);
 }
 
 
@@ -348,7 +350,7 @@ BIF_DECL(BIF_ObjPtr)
 	{
 		auto obj = ParamIndexToObject(0);
 		if (!obj)
-			_f_throw(ERR_TYPE_MISMATCH);
+			_f_throw_type(_T("object"), *aParam[0]);
 		if (_f_callee_id == FID_ObjPtrAddRef)
 			obj->AddRef();
 		_f_return((UINT_PTR)obj);
@@ -366,7 +368,7 @@ BIF_DECL(BIF_Base)
 	if (_f_callee_id == FID_ObjSetBase)
 	{
 		if (!obj)
-			_f_throw(ERR_TYPE_MISMATCH);
+			_f_throw_type(_T("Object"), *aParam[0]);
 		auto new_base = dynamic_cast<Object *>(TokenToObject(*aParam[1]));
 		if (!obj->SetBase(new_base, aResultToken))
 			return;
@@ -412,9 +414,7 @@ BIF_DECL(BIF_HasBase)
 {
 	auto that_base = ParamIndexToObject(1);
 	if (!that_base)
-	{
-		_f_throw(ERR_TYPE_MISMATCH);
-	}
+		_f_throw_type(_T("object"), *aParam[1]);
 	_f_return_b(Object::HasBase(*aParam[0], that_base));
 }
 
@@ -425,7 +425,7 @@ Object *ParamToObjectOrBase(ExprTokenType &aToken, ResultToken &aResultToken)
 	if (  (obj = dynamic_cast<Object *>(TokenToObject(aToken)))
 		|| (obj = Object::ValueBase(aToken))  )
 		return obj;
-	aResultToken.Error(ERR_TYPE_MISMATCH);
+	aResultToken.Error(ERR_PARAM1_INVALID);
 	return nullptr;
 }
 
