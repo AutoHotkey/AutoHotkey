@@ -518,7 +518,8 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 	bool hasprop = false; // Whether any kind of property was found.
 	bool handle_params_recursively = false;
 	bool setting = IS_INVOKE_SET;
-	IObject *etter = nullptr, *obj_for_recursion = nullptr;
+	ResultToken token_for_recursion;
+	IObject *etter = nullptr;
 	Variant *field = nullptr;
 	index_t insert_pos, other_pos;
 	Object *that;
@@ -608,19 +609,9 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 			return result;
 		// Otherwise, handle_params_recursively == true.
 		g_script.mCurrLine = caller_line; // For error-reporting.
-		if (aResultToken.symbol != SYM_OBJECT)
-		{
-			if (aResultToken.mem_to_free) // Caller may ignore mem_to_free when we return FAIL.
-			{
-				free(aResultToken.mem_to_free);
-				aResultToken.mem_to_free = nullptr;
-			}
-			// FIXME: For this.x[y] and (this.x)[y] to behave the same, this should invoke ValueBase().
-			_o_throw(ERR_TYPE_MISMATCH, name);
-		}
-		obj_for_recursion = aResultToken.object;
-		//obj_for_recursion->AddRef(); // This and the next line are redundant when used together.
-		//aResultToken.Free();
+		token_for_recursion.CopyValueFrom(aResultToken);
+		token_for_recursion.mem_to_free = aResultToken.mem_to_free;
+		aResultToken.mem_to_free = nullptr;
 		aResultToken.SetValue(_T(""));
 	}
 
@@ -629,24 +620,22 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		// This section handles parameters being passed to a property, such as this.x[y],
 		// when that property doesn't accept parameters (i.e. none were declared, or the
 		// property is undefined or just a value).
-		if (!obj_for_recursion)
+		if (!etter)
 		{
 			if (!field)
 				return INVOKE_NOT_HANDLED;
-			else if (field->symbol != SYM_OBJECT)
-				// FIXME: see similar line above.
-				_o_throw(ERR_TYPE_MISMATCH, name);
-			else
-			{
-				obj_for_recursion = field->object;
-				obj_for_recursion->AddRef();
-			}
+			field->ToToken(token_for_recursion);
 		}
 		
 		if (IS_INVOKE_SET)
 			++actual_param_count; // Fix the parameter count.
 
-		ExprTokenType token_for_recursion = obj_for_recursion;
+		IObject *obj_for_recursion = TokenToObject(token_for_recursion);
+		if (!obj_for_recursion)
+		{
+			obj_for_recursion = ValueBase(token_for_recursion);
+			aFlags |= IF_NO_SET_PROPVAL;
+		}
 		
 		// Recursively invoke obj_for_recursion, passing remaining parameters:
 		auto result = obj_for_recursion->Invoke(aResultToken, (aFlags & IT_BITMASK)
@@ -665,7 +654,8 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 			// to override the default error message, which would indicate that "x" is unknown.
 			result = aResultToken.UnknownMemberError(token_for_recursion, aFlags, nullptr);
 		}
-		obj_for_recursion->Release();
+		if (etter)
+			token_for_recursion.Free();
 		return result;
 	}
 
