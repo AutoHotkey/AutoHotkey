@@ -18790,6 +18790,109 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_Range)
+{
+	bool has_floats = FALSE;
+	ExprTokenType param;
+	for (int i = 0; i < aParamCount; ++i)
+	{
+		ParamIndexToNumber(i, param);
+		switch (param.symbol)
+		{
+			case SYM_INTEGER:
+				break;
+			case SYM_FLOAT:
+				has_floats = TRUE;
+				break;
+			default:
+				aResultToken.symbol = SYM_STRING;
+				aResultToken.marker = _T("");
+				return;
+		}
+	}
+
+	int count;
+	double fStart = 0;
+	double fEnd;
+	double fStep = 0;
+	__int64 iStart = 0;
+	__int64 iEnd;
+	__int64 iStep = 0;
+	if (has_floats)
+	{
+		fStart = ParamIndexToDouble(0);
+		if (ParamIndexIsOmitted(1))
+		{
+			fEnd = fStart;
+			fStart = 1.0;
+		}
+		else
+			fEnd = ParamIndexToDouble(1);
+		if (ParamIndexIsOmitted(2))
+			fStep = 1.0;
+		else
+			fStep = ParamIndexToDouble(2);
+		if (fEnd == 0.0)
+		{
+			aResultToken.symbol = SYM_STRING;
+			aResultToken.marker = _T("");
+			return;
+		}
+
+		count = (int)(qmathFabs((fEnd - fStart) / fStep)) + 1;
+		fStep = (fEnd >= fStart ? 1.0 : -1.0) * qmathFabs(fStep);
+	}
+	else
+	{
+		iStart = ParamIndexToInt64(0);
+		if (ParamIndexIsOmitted(1))
+		{
+			iEnd = iStart;
+			iStart = 1;
+		}
+		else
+			iEnd = ParamIndexToInt64(1);
+		if (ParamIndexIsOmitted(2))
+			iStep = 1;
+		else
+			iStep = ParamIndexToInt64(2);
+		if (iEnd == 0)
+		{
+			aResultToken.symbol = SYM_STRING;
+			aResultToken.marker = _T("");
+			return;
+		}
+
+		count = (int)(_abs64((iEnd - iStart) / iStep)) + 1;
+		iStep = (iEnd >= iStart ? 1 : -1) * _abs64(iStep);
+	}
+
+	Object *output_array = Object::Create();
+	aResultToken.symbol = SYM_OBJECT;
+	aResultToken.object = output_array;
+	ExprTokenType *output1 = (ExprTokenType*)_alloca(count * sizeof(ExprTokenType));
+	ExprTokenType **output2 = (ExprTokenType**)_alloca(count * sizeof(ExprTokenType*));
+	for (int i = 0; i < count; i++)
+	{
+		if (has_floats)
+		{
+			output1[i].symbol = SYM_FLOAT;
+			output1[i].value_double = fStart + i * fStep;
+		}
+		else
+		{
+			output1[i].symbol = SYM_INTEGER;
+			output1[i].value_int64 = iStart + i * iStep;
+		}
+		output2[i] = &output1[i];
+	}
+
+	ExprTokenType result_token;
+	output_array->_Push(result_token, output2, count);
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
