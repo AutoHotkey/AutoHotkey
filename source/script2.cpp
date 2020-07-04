@@ -18790,6 +18790,36 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_StrRept)
+{
+	aResultToken.symbol = SYM_STRING;
+	int len = (int)_tcslen(ParamIndexToString(0));
+	int count = (int)ParamIndexToInt64(1);
+	if (len == 0 || count < 1)
+	{
+		aResultToken.marker = _T("");
+		return;
+	}
+
+	LPTSTR output = tmalloc(len*count+1); // +1 for zero terminator.
+	tmemcpy(output, ParamIndexToString(0), len);
+
+	int len_temp = len;
+	while (len_temp*2 <= len*count)
+	{
+		tmemcpy(output+len_temp, output, len_temp);
+		len_temp *= 2;
+	}
+
+	int count_trail = count - (len_temp/len);
+	tmemcpy(output+len_temp, output, len*count_trail);
+
+	*(output+len*count) = '\0';
+	aResultToken.marker = output;
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
