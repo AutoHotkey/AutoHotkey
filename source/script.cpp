@@ -4226,7 +4226,7 @@ void Script::DeleteTimer(IObject *aLabel)
 
 
 
-Label *Script::FindLabel(LPTSTR aLabelName, bool aSearchLocal)
+Label *Script::FindLabel(LPTSTR aLabelName)
 // Returns the first label whose name matches aLabelName, or NULL if not found.
 
 // If duplicates labels are now possible, callers must be aware that only the first match is returned.
@@ -4235,11 +4235,11 @@ Label *Script::FindLabel(LPTSTR aLabelName, bool aSearchLocal)
 {
 	if (!aLabelName || !*aLabelName) return NULL;
 	Label *label;
-	if (g->CurrentFunc && aSearchLocal)
-		for (label = g->CurrentFunc->mFirstLabel; label != NULL; label = label->mNextLabel)
-			if (!_tcsicmp(label->mName, aLabelName))
-				return label;
-	for (label = mFirstLabel; label != NULL; label = label->mNextLabel)
+	if (g->CurrentFunc)
+		label = g->CurrentFunc->mFirstLabel; // Search only local labels, since global labels aren't valid jump targets in this case.
+	else
+		label = mFirstLabel;
+	for ( ; label; label = label->mNextLabel)
 		if (!_tcsicmp(label->mName, aLabelName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 			return label; // Match found.
 	return NULL; // No match found.
@@ -4254,17 +4254,14 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 		return FAIL; // For now, silent failure because callers should check this beforehand.
 	Label *&first_label = g->CurrentFunc ? g->CurrentFunc->mFirstLabel : mFirstLabel;
 	Label *&last_label  = g->CurrentFunc ? g->CurrentFunc->mLastLabel  : mLastLabel;
-	if (!aAllowDupe)
+	if (!aAllowDupe && FindLabel(aLabelName))
 	{
-		// Not using FindLabel() because we want to allow func-local labels to overshadow global ones:
-		for (Label *label = first_label; label != NULL; label = label->mNextLabel)
-			if (!_tcsicmp(label->mName, aLabelName))
-				// Don't attempt to dereference label->mJumpToLine because it might not
-				// exist yet.  Example:
-				// label1:
-				// label1:  <-- This would be a dupe-error but it doesn't yet have an mJumpToLine.
-				// return
-				return ScriptError(_T("Duplicate label."), aLabelName);
+		// Don't attempt to dereference label->mJumpToLine because it might not
+		// exist yet.  Example:
+		// label1:
+		// label1:  <-- This would be a dupe-error but it doesn't yet have an mJumpToLine.
+		// return
+		return ScriptError(_T("Duplicate label."), aLabelName);
 	}
 	LPTSTR new_name = SimpleHeap::Malloc(aLabelName);
 	if (!new_name)
@@ -8113,9 +8110,14 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 				int n = is_numeric ? _ttoi(loop_name) : 1;
 				// Find the nth innermost loop which encloses this line:
 				for (loop_line = line->mParentLine; loop_line; loop_line = loop_line->mParentLine)
+				{
 					if (ACT_IS_LOOP(loop_line->mActionType)) // Any type of LOOP, FOR or WHILE.
 						if (--n < 1)
 							break;
+					if (loop_line->mActionType == ACT_BLOCK_BEGIN && loop_line->mAttribute
+						|| loop_line->mActionType == ACT_FINALLY)
+						break; // Stop the search here since any outer loop would be an invalid target.
+				}
 				if (!loop_line || n != 0)
 					return line->PreparseError(ERR_PARAM1_INVALID);
 				if (!is_numeric)
@@ -8143,10 +8145,6 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 						if (loop_line->mActionType == ACT_UNTIL)
 							loop_line = loop_line->mNextLine;
 					}
-					if (g->CurrentFunc && loop_line->IsOutsideAnyFunctionBody())
-						return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
-					if (!line->CheckValidFinallyJump(loop_line))
-						return NULL; // Error already shown.
 				}
 				line->mRelatedLine = loop_line;
 			}
@@ -8158,14 +8156,8 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 			if (line->ArgHasDeref(1))
 				// Since the jump-point contains a deref, it must be resolved at runtime:
 				line->mRelatedLine = NULL;
-  			else
-			{
-				if (   !line->GetJumpTarget(false)
-					|| !line->CheckValidFinallyJump(((Label *)(line->mRelatedLine))->mJumpToLine)   )
-					return NULL; // Error was already displayed by called function.
-				if (g->CurrentFunc && ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
-					return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
-			}
+  			else if (!line->GetJumpTarget(false))
+				return NULL; // Error was already displayed by the called function.
 			break;
 
 		case ACT_RETURN:
@@ -10223,7 +10215,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				// we want to resolve the label every time through the loop in case the variable
 				// that contains the label changes, e.g. Goto(VarContainingLabelName)
 				if (   !(jump_to_label = line->GetJumpTarget(true))   )
-					return FAIL; // Error was already displayed by called function.
+					return FAIL; // Error was already displayed by the called function.
 			// One or both of these lines can be NULL.  But the preparser should have
 			// ensured that all we need to do is a simple compare to determine
 			// whether this Goto should be handled by this layer or its caller

@@ -196,7 +196,6 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_CATCH_WITH_NO_TRY _T("CATCH with no matching TRY")
 #define ERR_FINALLY_WITH_NO_PRECEDENT _T("FINALLY with no matching TRY or CATCH")
 #define ERR_BAD_JUMP_INSIDE_FINALLY _T("Jumps cannot exit a FINALLY block.")
-#define ERR_BAD_JUMP_OUT_OF_FUNCTION _T("Cannot jump from inside a function to outside.")
 #define ERR_UNEXPECTED_CASE _T("Case/Default must be enclosed by a Switch.")
 #define ERR_TOO_MANY_CASE_VALUES _T("Too many case values.")
 #define ERR_EXPECTED_BLOCK_OR_ACTION _T("Expected \"{\" or single-line action.")
@@ -204,7 +203,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_OUTOFMEM _T("Out of memory.")  // Used by RegEx too, so don't change it without also changing RegEx to keep the former string.
 #define ERR_EXPR_TOO_LONG _T("Expression too complex")
 #define ERR_TOO_MANY_REFS ERR_EXPR_TOO_LONG // No longer applies to just var/func refs. Old message: "Too many var/func refs."
-#define ERR_NO_LABEL _T("Target label does not exist.")
+#define ERR_NO_LABEL _T("Label not found in current scope.")
 #define ERR_INVALID_MENU_TYPE _T("Invalid menu type.")
 #define ERR_INVALID_SUBMENU _T("Invalid submenu.")
 #define ERR_WINDOW_PARAM _T("Requires at least one of its window parameters.")
@@ -931,8 +930,7 @@ public:
 
 	Label *GetJumpTarget(bool aIsDereferenced);
 	Label *IsJumpValid(Label &aTargetLabel, bool aSilent = false);
-	BOOL IsOutsideAnyFunctionBody();
-	BOOL CheckValidFinallyJump(Line* jumpTarget);
+	BOOL CheckValidFinallyJump(Line* jumpTarget, bool aSilent = false);
 
 	static HWND DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 
@@ -3021,7 +3019,7 @@ public:
 
 	WinGroup *FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound = false);
 	ResultType AddGroup(LPTSTR aGroupName);
-	Label *FindLabel(LPTSTR aLabelName, bool aSearchLocal = true);
+	Label *FindLabel(LPTSTR aLabelName);
 
 	ResultType DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow
 		, Var *aOutputVar, PROCESS_INFORMATION &aPI, bool &aSuccess, HANDLE &aNewProcess, DWORD &aLastError);

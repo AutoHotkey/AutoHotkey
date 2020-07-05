@@ -9021,6 +9021,8 @@ Label *Line::GetJumpTarget(bool aIsDereferenced)
 		LineError(ERR_NO_LABEL, FAIL, target_label);
 		return NULL;
 	}
+	// If g->CurrentFunc, label is never outside the function since it would not
+	// have been found by FindLabel().  So there's no need to check for that here.
 	if (!aIsDereferenced)
 		mRelatedLine = (Line *)label; // The script loader has ensured that label->mJumpToLine isn't NULL.
 	// else don't update it, because that would permanently resolve the jump target, and we want it to stay dynamic.
@@ -9042,10 +9044,14 @@ Label *Line::IsJumpValid(Label &aTargetLabel, bool aSilent)
 	//	return OK;
 	// The above check is also necessary to avoid dereferencing a NULL pointer below.
 
+	if (!CheckValidFinallyJump(aTargetLabel.mJumpToLine, aSilent))
+		return NULL;
+
 	Line *parent_line_of_label_line;
 	if (   !(parent_line_of_label_line = aTargetLabel.mJumpToLine->mParentLine)   )
 		// A Goto can always jump to a point anywhere in the outermost layer
-		// (i.e. outside all blocks) without restriction:
+		// (i.e. outside all blocks) without restriction (except from inside a
+		// function to outside, but in that case the label would not be found):
 		return &aTargetLabel; // Indicate success.
 
 	// So now we know this Goto is attempting to jump into a block somewhere.  Is that
@@ -9065,16 +9071,7 @@ Label *Line::IsJumpValid(Label &aTargetLabel, bool aSilent)
 }
 
 
-BOOL Line::IsOutsideAnyFunctionBody() // v1.0.48.02
-{
-	for (Line *ancestor = mParentLine; ancestor != NULL; ancestor = ancestor->mParentLine)
-		if (ancestor->mAttribute && ancestor->mActionType == ACT_BLOCK_BEGIN) // Ordered for short-circuit performance.
-			return FALSE; // Non-zero mAttribute marks an open-brace as belonging to a function's body, so indicate this line is inside a function.
-	return TRUE; // Indicate that this line is not inside any function body.
-}
-
-
-BOOL Line::CheckValidFinallyJump(Line* jumpTarget) // v1.1.14
+BOOL Line::CheckValidFinallyJump(Line* jumpTarget, bool aSilent)
 {
 	Line* jumpParent = jumpTarget->mParentLine;
 	for (Line *ancestor = mParentLine; ancestor != NULL; ancestor = ancestor->mParentLine)
@@ -9083,7 +9080,8 @@ BOOL Line::CheckValidFinallyJump(Line* jumpTarget) // v1.1.14
 			return TRUE; // We found the common ancestor.
 		if (ancestor->mActionType == ACT_FINALLY)
 		{
-			LineError(ERR_BAD_JUMP_INSIDE_FINALLY);
+			if (!aSilent)
+				LineError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			return FALSE; // The common ancestor is outside the FINALLY block and thus this jump is invalid.
 		}
 	}
@@ -13475,12 +13473,6 @@ BIF_DECL(BIF_StrPtr)
 
 
 BIF_DECL(BIF_IsLabel)
-// For performance and code-size reasons, this function does not currently return what
-// type of label it is (hotstring, hotkey, or generic).  To preserve the option to do
-// this in the future, it has been documented that the function returns non-zero rather
-// than "true".  However, if performance is an issue (since scripts that use IsLabel are
-// often performance sensitive), it might be better to add a second parameter that tells
-// IsLabel to look up the type of label, and return it as a number or letter.
 {
 	_f_return_b(g_script.FindLabel(ParamIndexToString(0, _f_number_buf)) ? 1 : 0);
 }
