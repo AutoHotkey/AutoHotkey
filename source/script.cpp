@@ -1905,7 +1905,7 @@ ResultType Script::LoadIncludedFile(TextStream *fp)
 	Hotkey *hk;
 	LineNumberType saved_line_number;
 	HookActionType hook_action;
-	bool is_label, suffix_has_tilde, hook_is_mandatory, hotstring_execute;
+	bool suffix_has_tilde, hook_is_mandatory, hotstring_execute;
 	ResultType hotkey_validity;
 
 	#define MAX_FUNC_VAR_GLOBALS 2000
@@ -2085,7 +2085,7 @@ process_completed_line:
 			}
 		}
 
-		if (is_label = (hotkey_flag && hotkey_flag > buf)) // It's a hotkey/hotstring label.
+		if (hotkey_flag && hotkey_flag > buf) // It's a hotkey/hotstring label.
 		{
 			
 			// Allow a current function if it is mLastHotFunc, this allows stacking,
@@ -2521,41 +2521,23 @@ process_completed_line:
 				}
 			}
 			goto continue_main_loop; // In lieu of "continue", for performance.
-		} // if (is_label = ...)
+		} // if (hotkey_flag && hotkey_flag > buf)
 
 		// Otherwise, not a hotkey or hotstring.  Check if it's a generic, non-hotkey label:
 		if (buf[buf_length - 1] == ':' // Labels must end in a colon (buf was previously rtrimmed).
 			&& (!mClassObjectCount || g->CurrentFunc)) // Not directly inside a class body or property definition (but inside a method is okay).
 		{
-			if (buf_length == 1) // v1.0.41.01: Properly handle the fact that this line consists of only a colon.
-				return ScriptError(ERR_UNRECOGNIZED_ACTION, buf);
 			// Labels (except hotkeys) must contain no whitespace, delimiters, or escape-chars.
 			// This is to avoid problems where a legitimate action-line ends in a colon,
-			// such as "WinActivate SomeTitle" and "#Include c:".
-			// We allow hotkeys to violate this since they may contain commas, and since a normal
-			// script line (i.e. just a plain command) is unlikely to ever end in a double-colon:
-			for (cp = buf, is_label = true; *cp; ++cp)
-				if (IS_SPACE_OR_TAB(*cp) || *cp == g_delimiter || *cp == g_EscapeChar)
-				{
-					is_label = false;
-					break;
-				}
-			if (is_label // It's a generic label, since valid hotkeys and hotstrings have already been handled.
-				&& !(buf[buf_length - 2] == ':' && buf_length > 2)) // i.e. allow "::" as a normal label, but consider anything else with double-colon to be an error (reported at a later stage).
+			// such as "#Include c:", and for sanity (so labels can be readily recognized).
+			// We allow hotkeys to violate this since they may contain commas, but they must
+			// also be a valid combination of symbols and key names, so there is no ambiguity.
+			// v2.0: Require label names to use the same set of characters as other identifiers.
+			// Aside from consistency and ensuring readability, this might enable future changes
+			// to the parser or new syntax.
+			cp = find_identifier_end<LPTSTR>(buf);
+			if ((cp - buf + 1) == buf_length && cp > buf)
 			{
-				// v1.0.44.04: Fixed this check by moving it after the above loop.
-				// Above has ensured buf_length>1, so it's safe to check for double-colon:
-				// v1.0.44.03: Don't allow anything that ends in "::" (other than a line consisting only
-				// of "::") to be a normal label.  Assume it's a command instead (if it actually isn't, a
-				// later stage will report it as "invalid hotkey"). This change avoids the situation in
-				// which a hotkey like ^!ä:: is seen as invalid because the current keyboard layout doesn't
-				// have a "ä" key. Without this change, if such a hotkey appears at the top of the script,
-				// its subroutine would execute immediately as a normal label, which would be especially
-				// bad if the hotkey were something like the "Shutdown" command.
-				// Update: Hotkeys with single-character names like ^!ä are now handled earlier, so that
-				// anything else with double-colon can be detected as an error.  The checks above prevent
-				// something like foo:: from being interpreted as a generic label, so when the line fails
-				// to resolve to a command or expression, an error message will be shown.
 				buf[--buf_length] = '\0';  // Remove the trailing colon.
 				if (!_tcsicmp(buf, _T("Default")) && mOpenBlock && mOpenBlock->mPrevLine // "Default:" case.
 					&& mOpenBlock->mPrevLine->mActionType == ACT_SWITCH) // It's a normal label in any other case.
@@ -2849,11 +2831,6 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 						return OK; // This is unconditionally a block-begin, not an expression.
 					continue; // Parse any same-line action instead.
 				}
-
-				// Rule out something like "Gosub (" which is intended to execute "(::".
-				if (action_type >= ACT_FIRST_JUMP && action_type <= ACT_LAST_JUMP // Gosub, goto, break or continue (though only the first two are likely to be needed).
-					&& orig_char != '(') // Not "Gosub(x)", which takes an expression.
-					return OK;
 
 				if (mClassObjectCount && !g->CurrentFunc // In a class body.
 					&& (action_end - action_start == 6) && !_tcsnicmp(action_start, _T("Static"), 6)) // Ignore "Static" modifier.
