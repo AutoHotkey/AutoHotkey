@@ -8226,8 +8226,8 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 
 bool Script::IsLabelTarget(Line *aLine)
 {
-	Label *lbl;
-	for (lbl = mFirstLabel; lbl && lbl->mJumpToLine != aLine; lbl = lbl->mNextLabel);
+	Label *lbl = g->CurrentFunc ? g->CurrentFunc->mFirstLabel : mFirstLabel;
+	for ( ; lbl && lbl->mJumpToLine != aLine; lbl = lbl->mNextLabel);
 	return lbl;
 }
 
