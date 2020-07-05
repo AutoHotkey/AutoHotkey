@@ -267,8 +267,7 @@ Action g_act[] =
 	, {_T("While"), 1, 1, false, {1, 0}} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
 	, {_T("Until"), 1, 1, false, {1, 0}} // Until expression (follows a Loop)
 	, {_T("Break"), 0, 1, false, NULL}, {_T("Continue"), 0, 1, false, NULL}
-	, {_T("Goto"), 1, 1, false, NULL}
-	, {_T("Gosub"), 1, 1, false, NULL}   // Label (or dereference that resolves to a label).
+	, {_T("Goto"), 1, 1, false, NULL}	// Label (or dereference that resolves to a label).
 	, {_T("Return"), 0, 1, false, {1, 0}}
 	, {_T("Try"), 0, 0, false, NULL}
 	, {_T("Catch"), 0, 1, false, NULL} // fincs: seems best to allow catch without a parameter

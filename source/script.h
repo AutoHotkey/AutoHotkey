@@ -1713,7 +1713,7 @@ public:
 
 	ResultType Execute(ResultToken *aResultToken)
 	{
-		// Launch the function similar to Gosub (i.e. not as a new quasi-thread):
+		// Launch the function (not as a new quasi-thread):
 		// The performance gain of conditionally passing NULL in place of result (when this is the
 		// outermost function call of a line consisting only of function calls, namely ACT_EXPRESSION)
 		// would not be significant because the Return command's expression (arg1) must still be evaluated
@@ -1726,8 +1726,7 @@ public:
 		// 2) The fact that any return encountered after the Goto cannot provide a return value for
 		//    the function because load-time validation checks for this (it's preferable not to
 		//    give up this check, since it is an informative error message and might also help catch
-		//    bugs in the script).  Gosub does not suffer from this because the return that brings it
-		//    back into the function body belongs to the Gosub and not the function itself.
+		//    bugs in the script).
 		// 3) More difficult to maintain because we have handle jump_to_line the same way ExecUntil() does,
 		//    checking aResult the same way it does, then checking jump_to_line the same way it does, etc.
 		// Fix for v1.0.31.05: g->mLoopFile and the other g_script members that follow it are

@@ -2102,7 +2102,7 @@ process_completed_line:
 				// local variables.  But that is not appropriate and it's likely to cause problems even
 				// if it were.  It doesn't seem useful in any case.  By contrast, normal labels can
 				// safely exist inside a function body and since the body is a block, other validation
-				// ensures that a Gosub or Goto can't jump to it from outside the function.
+				// ensures that a Goto can't jump to it from outside the function.
 				return ScriptError(_T("Hotkeys/hotstrings are not allowed inside functions or classes."), buf);
 			}
 
@@ -2660,7 +2660,7 @@ process_completed_line:
 			goto continue_main_loop;
 		}
 
-		// Aside from goto/gosub/break/continue, anything not already handled above is either an expression
+		// Aside from goto/break/continue, anything not already handled above is either an expression
 		// or something with similar lexical requirements (i.e. balanced parentheses/brackets/braces).
 		// The following call allows any expression enclosed in ()/[]/{} to span multiple lines:
 		if (!GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section))
@@ -4889,7 +4889,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	int mark;
 	LPTSTR subaction_start = NULL;
 	// Perform some pre-processing to allow the parameter list of a control flow statement
-	// to be enclosed in parentheses.  For goto/gosub/break/continue, this changes the param
+	// to be enclosed in parentheses.  For goto/break/continue, this changes the param
 	// from a literal label to an expression.  For others it is just a matter of coding style.
 	// No pre-processing is needed for statements with exactly one parameter, since they will
 	// be interpreted correctly with or without parentheses.
@@ -4906,7 +4906,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 	case ACT_CATCH:
 		end_marker = action_args; // Handle both "for(...)" and "for (...)" below.
 	case ACT_GOTO:
-	case ACT_GOSUB:
 	case ACT_BREAK:    // These only support constant expressions (checked later).
 	case ACT_CONTINUE: //
 		if (end_marker && *end_marker == '(')
@@ -5017,7 +5016,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			in[2] = g_delimiter; // Insert another delimiter so the expression is always arg 3.
 	}
 
-	// v2: All statements accept expressions by default, except goto/gosub/break/continue.
+	// v2: All statements accept expressions by default, except goto/break/continue.
 	// At this stage it isn't necessary to differentiate between variables and expressions.
 	if (aActionType > ACT_LAST_JUMP || aActionType < ACT_FIRST_JUMP)
 		all_args_are_expressions = true;
@@ -5037,7 +5036,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		arg[nArgs] = action_args + mark;
 		arg_map[nArgs] = literal_map + mark;
 
-		is_expression = all_args_are_expressions; // This would be false for goto/gosub/break/continue.
+		is_expression = all_args_are_expressions; // This would be false for goto/break/continue.
 
 		// Find the end of the above arg:
 		if (is_expression)
@@ -7721,7 +7720,7 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 		for (i = 0; i < line->mArgc; ++i) // For each arg.
 		{
 			ArgStruct &this_arg = line->mArg[i]; // For performance and convenience.
-			if (!this_arg.is_expression) // Plain text; i.e. goto/gosub/break/continue label.
+			if (!this_arg.is_expression) // Plain text; i.e. goto/break/continue label.
 				continue;
 			// Otherwise, the arg will be processed by ExpressionToPostfix(), which will set is_expression
 			// based on whether the arg should be evaluated by ExpandExpression().  
@@ -8155,8 +8154,8 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 			}
 			break;
 
-		case ACT_GOSUB: // These two must be done here (i.e. *after* all the script lines have been added),
-		case ACT_GOTO:  // so that labels both above and below each Gosub/Goto can be resolved.
+						// This must be done here (i.e. *after* all the script lines have been added),
+		case ACT_GOTO:  // so that labels both above and below each Goto can be resolved.
 			if (line->ArgHasDeref(1))
 				// Since the jump-point contains a deref, it must be resolved at runtime:
 				line->mRelatedLine = NULL;
@@ -8165,14 +8164,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 				if (!line->GetJumpTarget(false))
 					return NULL; // Error was already displayed by called function.
 				if (g->CurrentFunc && ((Label *)(line->mRelatedLine))->mJumpToLine->IsOutsideAnyFunctionBody()) // Relies on above call to GetJumpTarget() having set line->mRelatedLine.
-				{
-					if (line->mActionType == ACT_GOTO)
-						return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
-					// Since this Gosub and its target line are both inside a function, they must both
-					// be in the same function because otherwise GetJumpTarget() would have reported
-					// the target as invalid.
-					line->mAttribute = ATTR_TRUE; // v1.0.48.02: To improve runtime performance, mark this Gosub as having a target that is outside of any function body.
-				}
+					return line->PreparseError(ERR_BAD_JUMP_OUT_OF_FUNCTION);
 				if (line->mActionType == ACT_GOTO && !line->CheckValidFinallyJump(((Label *)(line->mRelatedLine))->mJumpToLine))
 					return NULL; // Error already displayed above.
 				//else leave mAttribute at its line-constructor default of ATTR_NONE.
@@ -9862,7 +9854,7 @@ end_of_infix_to_postfix:
 		)
 	{
 		// The checks above leave: ACT_ASSIGNEXPR, ACT_EXPRESSION? (ineffectual), ACT_IF,
-		// ACT_LOOP and co., ACT_GOTO, ACT_GOSUB, ACT_RETURN (if not var).
+		// ACT_LOOP and co., ACT_GOTO and ACT_RETURN (if not var).
 		switch (only_symbol)
 		{
 		case SYM_INTEGER:
@@ -10005,8 +9997,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 	LPTSTR loop_field;
 
 	Line *jump_to_line; // Don't use *apJumpToLine because it might not exist.
-	Label *jump_to_label;  // For use with Gosub & Goto.
-	BOOL jumping_from_inside_function_to_outside;
+	Label *jump_to_label;  // For use with Goto.
 	ResultType if_condition, result;
 	LONG_OPERATION_INIT
 	global_struct &g = *::g; // Reduces code size and may improve performance. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
@@ -10148,9 +10139,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 					// will then know it should either BREAK or CONTINUE.
 					//
 					// EARLY_RETURN can occur if this if's action was a block and that block contained a RETURN,
-					// or if this if's only action is RETURN.  It can't occur if we just executed a Gosub,
-					// because that Gosub would have been done from a deeper recursion layer (and executing
-					// a Gosub in ONLY_ONE_LINE mode can never return EARLY_RETURN).
+					// or if this if's only action is RETURN.
 					//
 					caller_jump_to_line = jump_to_line; // Tell the caller to handle this jump (if applicable). jump_to_line==NULL is ok.
 					return result;
@@ -10228,54 +10217,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			} // if_condition == CONDITION_FALSE
 			continue; // Let the for-loop process the new location specified by <line>.
 
-		case ACT_GOSUB:
-			// A single gosub can cause an infinite loop if misused (i.e. recursive gosubs),
-			// so be sure to do this to prevent the program from hanging:
-			if (line->mRelatedLine)
-			{
-				jump_to_label = (Label *)line->mRelatedLine;
-				jumping_from_inside_function_to_outside = (line->mAttribute == ATTR_TRUE); // ATTR_TRUE was set by loadtime routines for any ACT_GOSUB that needs it.
-			}
-			else
-			{
-				// The label is a dereference, otherwise it would have been resolved at load-time.
-				// So pass "true" below because don't want to update its mRelatedLine.  This is because
-				// the label should be resolved every time through the loop in case the variable that
-				// contains the label changes, e.g. Gosub, %MyLabel%
-				if (   !(jump_to_label = line->GetJumpTarget(true))   )
-					return FAIL; // Error was already displayed by called function.
-				// Below is ordered for short-circuit performance.
-				jumping_from_inside_function_to_outside = g.CurrentFunc && jump_to_label->mJumpToLine->IsOutsideAnyFunctionBody();
-			}
-
-			// v1.0.48.02: When a Gosub that lies inside a function body jumps outside of the function,
-			// any references to dynamic variables should resolve to globals not locals. In addition,
-			// GUI commands that lie inside such an external subroutine (such as GuiControl and
-			// GuiControlGet) should behave as though they are not inside the function.
-			if (jumping_from_inside_function_to_outside)
-			{
-				g.CurrentFuncGosub = g.CurrentFunc;
-				g.CurrentFunc = NULL;
-			}
-			result = jump_to_label->Execute();
-			if (jumping_from_inside_function_to_outside)
-			{
-				g.CurrentFunc = g.CurrentFuncGosub;
-				g.CurrentFuncGosub = NULL; // Seems more maintainable to do it here vs. when the UDF returns, but debatable which is better overall for performance.
-			}
-
-			// Must do these return conditions in this specific order:
-			if (result == FAIL || result == EARLY_EXIT)
-				return result;
-			if (aMode == ONLY_ONE_LINE)
-				// This Gosub doesn't want its caller to know that the gosub's
-				// subroutine returned early:
-				return (result == EARLY_RETURN) ? OK : result;
-			// If the above didn't return, the subroutine finished successfully and
-			// we should now continue on with the line after the Gosub:
-			line = line->mNextLine;
-			continue;  // Resume looping starting at the above line.  "continue" is actually slight faster than "break" in these cases.
-
 		case ACT_GOTO:
 			// A single goto can cause an infinite loop if misused, so be sure to do this to
 			// prevent the program from hanging:
@@ -10283,7 +10224,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				// The label is a dereference, otherwise it would have been resolved at load-time.
 				// So send true because we don't want to update its mRelatedLine.  This is because
 				// we want to resolve the label every time through the loop in case the variable
-				// that contains the label changes, e.g. Gosub, %MyLabel%
+				// that contains the label changes, e.g. Goto(MyLabel)
 				if (   !(jump_to_label = line->GetJumpTarget(true))   )
 					return FAIL; // Error was already displayed by called function.
 			// Now that the Goto is certain to occur:
@@ -10305,15 +10246,14 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 
 		case ACT_RETURN:
 			// Although a return is really just a kind of block-end, keep it separate
-			// because when a return is encountered inside a block, it has a double function:
-			// to first break out of all enclosing blocks and then return from the gosub.
+			// because when a return is encountered inside a block, it has to
+			// to first break out of all enclosing blocks.
 			// NOTE: The return's ARG1 expression has been evaluated by ExpandArgs() above,
 			// which is desirable *even* if aResultToken is NULL (i.e. the caller will be
 			// ignoring the return value) in case the return's expression calls a function
 			// which has side-effects.  For example, "return LogThisEvent()".
 			if (aMode != UNTIL_RETURN)
-				// Tells the caller to return early if it's not the Gosub that directly
-				// brought us into this subroutine.  i.e. it allows us to escape from
+				// Tells the caller to return early. It allows us to escape from
 				// any number of nested blocks in order to get back out of their
 				// recursive layers and back to the place this RETURN has meaning
 				// to someone (at the right recursion layer):
@@ -10490,7 +10430,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			// This change was made feasible by making the A_LoopXXX attributes thread-specific, which prevents
 			// interrupting threads from affecting the values our thread sees here.  So that change protects
 			// against thread interruptions, and this backup/restore change here keeps the Loop variables in
-			// sync with the current nesting level (braces, gosub, etc.)
+			// sync with the current nesting level (braces etc.)
 			// 
 			// The memory for structs like g.mLoopFile resides in the stack of an instance of PerformLoop(),
 			// which is our caller or our caller's caller, etc.  In other words, it shouldn't be possible for
@@ -10888,16 +10828,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			continue;  // Resume looping starting at the above line.  "continue" is actually slightly faster than "break" in these cases.
 
 		case ACT_BLOCK_END:
-			if (aMode != UNTIL_BLOCK_END)
-				// Rajat found a way for this to happen that basically amounts to this:
-				// If within a loop you gosub a label that is also inside of the block, and
-				// that label sometimes doesn't return (i.e. due to a missing "return" somewhere
-				// in its flow of control), the loop(s)'s block-end symbols will be encountered
-				// by the subroutine, and these symbols don't have meaning to it.  In other words,
-				// the subroutine has put us into a waiting-for-return state rather than a
-				// waiting-for-block-end state, so when block-end's are encountered, that is
-				// considered a runtime error:
-				return line->LineError(_T("A \"return\" must be encountered prior to this \"}\"."));  // Former error msg was "Unexpected end-of-block (Gosub without Return?)."
 			return OK; // It's the caller's responsibility to resume execution at the next line, if appropriate.
 
 		// ACT_ELSE can happen when one of the cases in this switch failed to properly handle
@@ -12086,7 +12016,7 @@ ResultType Line::Perform()
 // Performs only this line's action.
 // Returns OK or FAIL.
 // The function should not be called to perform any flow-control actions such as
-// Goto, Gosub, Return, Block-Begin, Block-End, If, Else, etc.
+// Goto, Return, Block-Begin, Block-End, If, Else, etc.
 {
 	TCHAR buf_temp[MAX_REG_ITEM_SIZE]; // For registry and other things.
 	WinGroup *group; // For the group commands.
@@ -13919,7 +13849,7 @@ LPTSTR Script::ListVars(LPTSTR aBuf, int aBufSize) // aBufSize should be an int 
 // into aBuf and returning the position in aBuf of its new string terminator.
 {
 	LPTSTR aBuf_orig = aBuf;
-	auto current_func = g->CurrentFunc ? g->CurrentFunc : g->CurrentFuncGosub;
+	auto current_func = g->CurrentFunc;
 	if (current_func)
 	{
 		// This definition might help compiler string pooling by ensuring it stays the same for both usages:
