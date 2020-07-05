@@ -1262,8 +1262,8 @@ ResultType UserMenu::Display(bool aForceToForeground, int aX, int aY)
 	// The root problem here is that it would not be intuitive to allow the command after
 	// "Menu, MyMenu, Show" should to run before the menu item's subroutine launches as a new thread.
 	// 
-	// You could argue that selecting a menu item should immediately Gosub the selected menu item's
-	// subroutine rather than queuing it up as a new thread.  However, even if that is a better method,
+	// You could argue that selecting a menu item should immediately execute the selected menu item's
+	// callback rather than queuing it up as a new thread.  However, even if that is a better method,
 	// it would break existing scripts that rely on new-thread behavior (such as fresh default for
 	// SetKeyDelay).
 	//

@@ -278,7 +278,7 @@ public:
 	}
 
 	
-	// Stack - keeps track of threads, function calls and gosubs.
+	// Stack - keeps track of threads and function calls.
 	DbgStack mStack;
 
 private:

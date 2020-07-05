@@ -536,8 +536,8 @@ enum enum_act {
 , ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE
 , ACT_FOR, ACT_WHILE, ACT_UNTIL // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
 , ACT_BREAK, ACT_CONTINUE
-, ACT_GOTO, ACT_GOSUB
-, ACT_FIRST_JUMP = ACT_BREAK, ACT_LAST_JUMP = ACT_GOSUB // Actions which accept a label name.
+, ACT_GOTO
+, ACT_FIRST_JUMP = ACT_BREAK, ACT_LAST_JUMP = ACT_GOTO // Actions which accept a label name.
 , ACT_RETURN
 , ACT_TRY, ACT_CATCH, ACT_FINALLY, ACT_THROW // Keep TRY, CATCH and FINALLY together and in this order for range checks.
 , ACT_SWITCH, ACT_CASE
@@ -840,7 +840,6 @@ struct global_struct
 	int MouseDelay;     // negative values may be used as special flags.
 	int MouseDelayPlay; //
 	UserFunc *CurrentFunc; // v1.0.46.16: The function whose body is currently being processed at load-time, or being run at runtime (if any).
-	UserFunc *CurrentFuncGosub; // v1.0.48.02: Allows A_ThisFunc to work even when a function Gosubs an external subroutine.
 	Label *CurrentLabel; // The label that is currently awaiting its matching "return" (if any).
 	ScriptTimer *CurrentTimer; // The timer that launched this thread (if any).
 	HWND hWndLastUsed;  // In many cases, it's better to use GetValidLastUsedWindow() when referring to this.
@@ -892,7 +891,6 @@ inline void global_clear_state(global_struct &g)
 // future threads if it occurs in the auto-execute section, but A_ThisFunc shouldn't).
 {
 	g.CurrentFunc = NULL;
-	g.CurrentFuncGosub = NULL;
 	g.CurrentLabel = NULL;
 	g.hWndLastUsed = NULL;
 	//g.hWndToRestore = NULL;

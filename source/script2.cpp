@@ -9024,7 +9024,6 @@ Label *Line::GetJumpTarget(bool aIsDereferenced)
 	if (!aIsDereferenced)
 		mRelatedLine = (Line *)label; // The script loader has ensured that label->mJumpToLine isn't NULL.
 	// else don't update it, because that would permanently resolve the jump target, and we want it to stay dynamic.
-	// Seems best to do this even for GOSUBs even though it's a bit weird:
 	return IsJumpValid(*label);
 	// Any error msg was already displayed by the above call.
 }
@@ -9036,7 +9035,7 @@ Label *Line::IsJumpValid(Label &aTargetLabel, bool aSilent)
 {
 	// aTargetLabel can be NULL if this Goto's target is the physical end of the script.
 	// And such a destination is always valid, regardless of where aOrigin is.
-	// UPDATE: It's no longer possible for the destination of a Goto or Gosub to be
+	// UPDATE: It's no longer possible for the destination of a Goto to be
 	// NULL because the script loader has ensured that the end of the script always has
 	// an extra ACT_EXIT that serves as an anchor for any final labels in the script:
 	//if (aTargetLabel == NULL)
@@ -9045,11 +9044,11 @@ Label *Line::IsJumpValid(Label &aTargetLabel, bool aSilent)
 
 	Line *parent_line_of_label_line;
 	if (   !(parent_line_of_label_line = aTargetLabel.mJumpToLine->mParentLine)   )
-		// A Goto/Gosub can always jump to a point anywhere in the outermost layer
+		// A Goto can always jump to a point anywhere in the outermost layer
 		// (i.e. outside all blocks) without restriction:
 		return &aTargetLabel; // Indicate success.
 
-	// So now we know this Goto/Gosub is attempting to jump into a block somewhere.  Is that
+	// So now we know this Goto is attempting to jump into a block somewhere.  Is that
 	// block a legal place to jump?:
 
 	for (Line *ancestor = mParentLine; ancestor != NULL; ancestor = ancestor->mParentLine)
@@ -9061,7 +9060,7 @@ Label *Line::IsJumpValid(Label &aTargetLabel, bool aSilent)
 	// is at a more shallow level but is in some block totally unrelated to it!
 	// Returns FAIL by default, which is what we want because that value is zero:
 	if (!aSilent)
-		LineError(_T("A Goto/Gosub must not jump into a block that doesn't enclose it."));
+		LineError(_T("A Goto must not jump into a block that doesn't enclose it."));
 	return NULL;
 }
 
@@ -10251,8 +10250,6 @@ BIV_DECL_R(BIV_ThisFunc)
 	LPCTSTR name;
 	if (g->CurrentFunc)
 		name = g->CurrentFunc->mName;
-	else if (g->CurrentFuncGosub) // v1.0.48.02: For flexibility and backward compatibility, support A_ThisFunc even when a function Gosubs an external subroutine.
-		name = g->CurrentFuncGosub->mName;
 	else
 		name = _T("");
 	_f_return_p(const_cast<LPTSTR>(name));
