@@ -103,19 +103,17 @@ private:
 class Line;
 class NativeFunc;
 struct UDFCallInfo;
-class Label;
 
 
 struct DbgStack
 {
-	enum StackEntryType {SE_Thread, SE_Sub, SE_BIF, SE_UDF};
+	enum StackEntryType {SE_Thread, SE_BIF, SE_UDF};
 	struct Entry
 	{
 		Line *line;
 		union
 		{
 			TCHAR *desc; // SE_Thread -- "auto-exec", hotkey/hotstring name, "timer", etc.
-			Label *sub; // SE_Sub
 			NativeFunc *func; // SE_BIF
 			UDFCallInfo *udf; // SE_UDF
 		};
@@ -169,7 +167,6 @@ struct DbgStack
 	}
 
 	void Push(TCHAR *aDesc);
-	void Push(Label *aSub);
 	void Push(NativeFunc *aFunc);
 	void Push(UDFCallInfo *aRecurse);
 

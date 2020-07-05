@@ -870,8 +870,6 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 				// !se->line implies se->type == SE_Thread.
 				if (se[1].type == DbgStack::SE_UDF)
 					line = se[1].udf->func->mJumpToLine;
-				else if (se[1].type == DbgStack::SE_Sub)
-					line = se[1].sub->mJumpToLine;
 				else
 					// The auto-execute thread is probably the only one that can exist without
 					// a Sub or Func entry immediately above it.  As se != mStack.mTop, se->line
@@ -895,9 +893,6 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 				break;
 			case DbgStack::SE_BIF:
 				mResponseBuf.WriteF("%e()", U4T(se->func->mName));
-				break;
-			case DbgStack::SE_Sub:
-				mResponseBuf.WriteF("%e sub", U4T(se->sub->mName)); // %e because label/hotkey names may contain almost anything.
 				break;
 			}
 			mResponseBuf.Write("\"/>");
@@ -2725,14 +2720,6 @@ void DbgStack::Push(TCHAR *aDesc)
 	s.type = SE_Thread;
 }
 	
-void DbgStack::Push(Label *aSub)
-{
-	Entry &s = *Push();
-	s.line = aSub->mJumpToLine;
-	s.sub  = aSub;
-	s.type = SE_Sub;
-}
-	
 void DbgStack::Push(NativeFunc *aFunc)
 {
 	Entry &s = *Push();
@@ -2754,8 +2741,6 @@ LPCTSTR DbgStack::Entry::Name()
 {
 	switch (type)
 	{
-	case SE_Sub:
-		return sub->mName;
 	case SE_UDF:
 		return udf->func->mName;
 	case SE_BIF:

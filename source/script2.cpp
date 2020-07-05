@@ -16592,8 +16592,6 @@ BIF_DECL(BIF_Exception)
 		// within the function, since the sub is internal (local) to the function.
 		if (g->CurrentFunc)
 			what = g->CurrentFunc->mName;
-		else if (g->CurrentLabel)
-			what = g->CurrentLabel->mName;
 		else
 			what = _T(""); // Probably the auto-execute section?
 	}
@@ -16616,7 +16614,7 @@ BIF_DECL(BIF_Exception)
 				// line, return the name of the function or sub which that line called.
 				// In other words, an offset of -1 gives the name of the current function and
 				// the file and number of the line which it was called from.
-				what = se->type == DbgStack::SE_UDF ? se->udf->func->mName : se->sub->mName;
+				what = se->udf->func->mName;
 				break;
 			}
 		}

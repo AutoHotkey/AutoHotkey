@@ -1521,9 +1521,7 @@ HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde)
 	// mRunAgainTime
 	// mPriority (default priority is always 0)
 	HotkeyVariant &v = *vp;
-	// aJumpToLabel can be NULL for dynamic hotkeys that are hook actions such as Alt-Tab.
-	// So for maintainability and to help avg-case performance in loops, provide a non-NULL placeholder:
-	v.mJumpToLabel = aJumpToLabel ? aJumpToLabel : g_script.mPlaceholderLabel;
+	v.mJumpToLabel = aJumpToLabel;
 	v.mOriginalCallback = g_script.mLastHotFunc;
 	v.mMaxThreads = g_MaxThreadsPerHotkey;    // The values of these can vary during load-time.
 	v.mMaxThreadsBuffer = g_MaxThreadsBuffer; //
@@ -2448,7 +2446,7 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 {
 	// Insist on certain qualities so that they never need to be checked other than here:
 	if (!mJumpToLabel) // Caller has already ensured that aHotstring is not blank.
-		mJumpToLabel = g_script.mPlaceholderLabel;
+		return;
 	bool execute_action = false; // do not assign  mReplacement if execute_action is true.
 	ParseOptions(aOptions, mPriority, mKeyDelay, mSendMode, mCaseSensitive, mConformToCase, mDoBackspace
 		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, execute_action);
@@ -2696,7 +2694,6 @@ BIF_DECL(BIF_Hotstring)
 		// Update the replacement string or function/label, if specified.
 		if (action_obj || *action)
 		{
-			LabelPtr new_label = action_obj ? action_obj : g_script.mPlaceholderLabel; // Other parts may rely on mJumpToLabel always being non-NULL.
 			LPTSTR new_replacement = NULL; // Set default: not auto-replace.
 			if (!action_obj) // Caller specified a replacement string ('E' option was handled above).
 			{
@@ -2719,9 +2716,9 @@ BIF_DECL(BIF_Hotstring)
 					free(existing->mReplacement);
 				existing->mReplacement = new_replacement;
 			}
-			if (new_label != existing->mJumpToLabel)
+			if (action_obj != existing->mJumpToLabel)
 			{
-				existing->mJumpToLabel = new_label;
+				existing->mJumpToLabel = action_obj;
 			}
 		}
 		// Update the hotstring's options.  Note that mCaseSensitive and mDetectWhenInsideWord

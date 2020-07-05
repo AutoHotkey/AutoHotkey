@@ -1394,28 +1394,12 @@ public:
 
 
 
-class Label : public IObjectComCompatible
+class Label
 {
 public:
 	LPTSTR mName;
 	Line *mJumpToLine;
 	Label *mPrevLabel, *mNextLabel;  // Prev & Next items in linked list.
-
-	ResultType Execute()
-	// This function was added in v1.0.46.16 to support A_ThisLabel.
-	{
-		Label *prev_label =g->CurrentLabel; // This will be non-NULL when a subroutine is called from inside another subroutine.
-		g->CurrentLabel = this;
-		ResultType result;
-		DEBUGGER_STACK_PUSH(this)
-		// I'm pretty sure it's not valid for the following call to ExecUntil() to tell us to jump
-		// somewhere, because the called function, or a layer even deeper, should handle the goto
-		// prior to returning to us?  So the last parameter is omitted:
-		result = mJumpToLine->ExecUntil(UNTIL_RETURN); // The script loader has ensured that Label::mJumpToLine can't be NULL.
-		DEBUGGER_STACK_POP()
-		g->CurrentLabel = prev_label;
-		return result;
-	}
 
 	Label(LPTSTR aLabelName)
 		: mName(aLabelName) // Caller gave us a pointer to dynamic memory for this (or an empty string in the case of mPlaceholderLabel).
@@ -1426,12 +1410,6 @@ public:
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
-
-	// IObject.
-	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
-	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
-	ULONG STDMETHODCALLTYPE Release() { return 1; }
-	IObject_Type_Impl("Label") // Currently never called since Label isn't accessible to script.
 };
 
 
@@ -1454,12 +1432,8 @@ public:
 	operator void *() const { return mObject; } // For comparisons and boolean eval.
 
 	// Caller beware: does not check for NULL.
-	Label *ToLabel() const;
 	Func *ToFunc() const;
 	IObject *ToObject() const { return mObject; }
-	
-	// True if it is a dynamically-allocated object, not a Label or Func.
-	bool IsLiveObject() const { return mObject && !(ToFunc() || ToLabel()); }
 	
 	// Currently only used by ListLines, listing active timers.
 	LPCTSTR Name() const;

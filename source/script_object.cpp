@@ -2585,12 +2585,6 @@ Closure::~Closure()
 }
 
 
-ResultType Label::Invoke(IObject_Invoke_PARAMS_DECL)
-{
-	// Labels are never returned to script, so no need to check flags or parameters.
-	return Execute();
-}
-
 ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aParamValue, int aParamCount, __int64 *aRetVal) const
 {
 	DEBUGGER_STACK_PUSH(aNewThreadDesc)
@@ -2600,15 +2594,6 @@ ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aP
 }
 
 
-Label *LabelPtr::ToLabel() const
-{
-	// Comparing [[vfptr]] produces smaller code and is perhaps 10% faster than dynamic_cast<>.
-	void *vfptr = *(void **)mObject;
-	if (vfptr == *(void **)g_script.mPlaceholderLabel)
-		return (Label *)mObject;
-	return nullptr;
-}
-
 Func *LabelPtr::ToFunc() const
 {
 	return dynamic_cast<Func *>(mObject);
@@ -2617,7 +2602,6 @@ Func *LabelPtr::ToFunc() const
 LPCTSTR LabelPtr::Name() const
 {
 	if (auto func = ToFunc()) return func->mName;
-	if (auto lbl = ToLabel()) return lbl->mName;
 	return mObject->Type();
 }
 
