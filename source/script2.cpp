@@ -7727,7 +7727,14 @@ BIF_DECL(BIF_FileSelect)
 		// that separates the allowed file extensions.  The API docs specify that there
 		// should be no spaces in the pattern itself, even though it's okay if they exist
 		// in the displayed name of the file-type:
-		StrReplace(pattern, _T(" "), _T(""), SCS_SENSITIVE);
+		// Update by Lexikos: Don't remove spaces, since that gives incorrect behaviour for more
+		// complex patterns like "prefix *.ext" (where the space should be considered part of the
+		// pattern).  Although the docs for OPENFILENAMEW say "Do not include spaces", it may be
+		// just because spaces are considered part of the pattern.  On the other hand, the docs
+		// relating to IFileDialog::SetFileTypes() say nothing about spaces; and in fact, using a
+		// pattern like "*.cpp; *.h" will work correctly (possibly due to how leading spaces work
+		// with the file system).
+		//StrReplace(pattern, _T(" "), _T(""), SCS_SENSITIVE);
 		filters[0].pszName = aFilter;
 		filters[0].pszSpec = pattern;
 		++filter_count;
