@@ -7832,53 +7832,36 @@ BIF_DECL(BIF_FileSelect)
 	if (*g_WorkingDir)
 		SetCurrentDirectory(g_WorkingDir);
 
-	if (!result) // User pressed CANCEL vs. OK to dismiss the dialog or there was a problem displaying it.
-	{
-		// Currently assuming the user canceled, otherwise this would tell us whether an error
-		// occurred vs. the user canceling: if (CommDlgExtendedError())
-		_f_return_empty;
-	}
-
 	if (ofn.Flags & OFN_ALLOWMULTISELECT)
 	{
-		LPTSTR cp;
+		auto *files = Array::Create();
+		if (!result) // See similar check below for comments.
+			_f_return(files); // Empty array.
 		// If the first terminator in file_buf is also the last, the user selected only
 		// a single file:
 		size_t length = _tcslen(file_buf);
 		if (!file_buf[length + 1]) // The list contains only a single file (full path and name).
 		{
-			// v1.0.25.05: To make the result of selecting one file the same as selecting multiple files
-			// -- and thus easier to work with in a script -- convert the result into the multi-file
-			// format (folder as first item and naked filename as second):
-			if (cp = _tcsrchr(file_buf, '\\'))
-			{
-				*cp = '\n';
-				// If the folder is the root folder, add a backslash so that selecting a single
-				// file yields the same reported folder as selecting multiple files.  One reason
-				// for doing it this way is that SetCurrentDirectory() requires a backslash after
-				// a root folder to succeed.  This allows a script to use SetWorkingDir to change
-				// to the selected folder before operating on each of the selected/naked filenames.
-				if (cp - file_buf == 2 && cp[-1] == ':') // e.g. "C:"
-				{
-					tmemmove(cp + 1, cp, _tcslen(cp) + 1); // Make room to insert backslash (since only one file was selcted, the buf is large enough).
-					*cp = '\\';
-				}
-			}
+			files->Append(file_buf, length);
 		}
-		else // More than one file was selected.
+		else // More than one file was selected, so the list contains the directory first, then filenames.
 		{
-			// Use the same method as the old multi-select format except don't provide a
-			// linefeed after the final item.  That final linefeed would make parsing via
-			// a parsing loop more complex because a parsing loop would see a blank item
-			// at the end of the list:
-			for (cp = file_buf;;)
+			file_buf[length++] = '\\'; // Join the dir and first filename.
+			LPTSTR append_pos = file_buf + length;
+			for (LPTSTR name = append_pos; auto name_length = _tcslen(name); )
 			{
-				for (; *cp; ++cp); // Find the next terminator.
-				if (!cp[1]) // This is the last file because it's double-terminated, so we're done.
-					break;
-				*cp = '\n'; // Replace zero-delimiter with a visible/printable delimiter, for the user.
+				files->Append(file_buf, length + name_length);
+				name += name_length + 1;
+				tmemmove(append_pos, name, name_length + 1);
 			}
 		}
+		_f_return(files);
+	}
+	if (!result) // User pressed CANCEL vs. OK to dismiss the dialog or there was a problem displaying it.
+	{
+		// Currently assuming the user canceled, otherwise this would tell us whether an error
+		// occurred vs. the user canceling: if (CommDlgExtendedError())
+		_f_return_empty;
 	}
 	_f_return(file_buf);
 }
