@@ -463,7 +463,6 @@ VarEntry g_BIV_A[] =
 	A_(Temp), // Debatably should be A_TempDir, but brevity seemed more popular with users, perhaps for heavy uses of the temp folder.,
 	A_(ThisFunc),
 	A_(ThisHotkey),
-	A_(ThisLabel),
 	A_(TickCount),
 	A_x(TimeIdle, BIV_TimeIdle),
 	A_x(TimeIdleKeyboard, BIV_TimeIdle),
@@ -10225,8 +10224,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				// that contains the label changes, e.g. Goto(VarContainingLabelName)
 				if (   !(jump_to_label = line->GetJumpTarget(true))   )
 					return FAIL; // Error was already displayed by called function.
-			// Now that the Goto is certain to occur:
-			g.CurrentLabel = jump_to_label; // v1.0.46.16: Support A_ThisLabel.
 			// One or both of these lines can be NULL.  But the preparser should have
 			// ensured that all we need to do is a simple compare to determine
 			// whether this Goto should be handled by this layer or its caller

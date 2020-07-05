@@ -3181,7 +3181,6 @@ BIV_DECL_R (BIV_LoopReadLine);
 BIV_DECL_R (BIV_LoopField);
 BIV_DECL_RW(BIV_LoopIndex);
 BIV_DECL_R (BIV_ThisFunc);
-BIV_DECL_R (BIV_ThisLabel);
 BIV_DECL_R (BIV_ThisHotkey);
 BIV_DECL_R (BIV_PriorHotkey);
 BIV_DECL_R (BIV_TimeSinceThisHotkey);

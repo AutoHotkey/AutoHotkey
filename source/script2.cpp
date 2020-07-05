@@ -10255,11 +10255,6 @@ BIV_DECL_R(BIV_ThisFunc)
 	_f_return_p(const_cast<LPTSTR>(name));
 }
 
-BIV_DECL_R(BIV_ThisLabel)
-{
-	_f_return_p(g->CurrentLabel ? g->CurrentLabel->mName : _T(""));
-}
-
 BIV_DECL_R(BIV_ThisHotkey)
 {
 	_f_return_p(g_script.mThisHotkeyName);
