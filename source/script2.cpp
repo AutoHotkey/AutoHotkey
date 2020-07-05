@@ -7719,6 +7719,7 @@ BIF_DECL(BIF_FileSelect)
 		else // No open-paren, so assume the entire string is the filter.
 			tcslcpy(pattern, aFilter, _countof(pattern));
 	}
+	UINT filter_count = 0;
 	COMDLG_FILTERSPEC filters[2];
 	if (*pattern)
 	{
@@ -7727,21 +7728,16 @@ BIF_DECL(BIF_FileSelect)
 		// should be no spaces in the pattern itself, even though it's okay if they exist
 		// in the displayed name of the file-type:
 		StrReplace(pattern, _T(" "), _T(""), SCS_SENSITIVE);
-		// Also include the All Files (*.*) filter, since there doesn't seem to be much
-		// point to making this an option.  This is because the user could always type
-		// *.* (or *) and press ENTER in the filename field and achieve the same result:
 		filters[0].pszName = aFilter;
 		filters[0].pszSpec = pattern;
-		filters[1].pszName = _T("All Files (*.*)");
-		filters[1].pszSpec = _T("*.*");
+		++filter_count;
 	}
-	else
-	{
-		filters[0].pszName = _T("All Files (*.*)");
-		filters[0].pszSpec = _T("*.*");
-		filters[1].pszName = _T("Text Documents (*.txt)");
-		filters[1].pszSpec = _T("*.txt");
-	}
+	// Always include the All Files (*.*) filter, since there doesn't seem to be much
+	// point to making this an option.  This is because the user could always type
+	// *.* (or *) and press ENTER in the filename field and achieve the same result:
+	filters[filter_count].pszName = _T("All Files (*.*)");
+	filters[filter_count].pszSpec = _T("*.*");
+	++filter_count;
 
 	// v1.0.43.09: OFN_NODEREFERENCELINKS is now omitted by default because most people probably want a click
 	// on a shortcut to navigate to the shortcut's target rather than select the shortcut and end the dialog.
@@ -7798,7 +7794,7 @@ BIF_DECL(BIF_FileSelect)
 
 	pfd->SetOptions(flags);
 	pfd->SetTitle(greeting);
-	pfd->SetFileTypes(_countof(filters), filters);
+	pfd->SetFileTypes(filter_count, filters);
 	pfd->SetFileName(default_file_name);
 
 	if (*working_dir && default_file_name != working_dir)
