@@ -7636,12 +7636,7 @@ BIF_DECL(BIF_FileSelect)
 	_f_param_string_opt(aGreeting, 2);
 	_f_param_string_opt(aFilter, 3);
 	
-	// Large in case more than one file is allowed to be selected.
-	// The call to GetOpenFileName() may fail if the first character of the buffer isn't NULL
-	// because it then thinks the buffer contains the default filename, which if it's uninitialized
-	// may be a string that's too long.
-	TCHAR file_buf[65535];
-	*file_buf = '\0'; // Set default.
+	LPCTSTR default_file_name = _T("");
 
 	TCHAR working_dir[MAX_PATH]; // Using T_MAX_PATH vs. MAX_PATH did not help on Windows 10.0.16299 (see below).
 	if (!aWorkingDir || !*aWorkingDir)
@@ -7686,15 +7681,12 @@ BIF_DECL(BIF_FileSelect)
 			LPTSTR last_backslash;
 			if (last_backslash = _tcsrchr(working_dir, '\\'))
 			{
-				tcslcpy(file_buf, last_backslash + 1, _countof(file_buf)); // Set the default filename.
+				default_file_name = last_backslash + 1;
 				*last_backslash = '\0'; // Make the working directory just the file's path.
 			}
 			else // The entire working_dir string is the default file (unless this is a clsid).
 				if (!is_clsid)
-				{
-					tcslcpy(file_buf, working_dir, _countof(file_buf));
-					*working_dir = '\0';  // This signals it to use the default directory.
-				}
+					default_file_name = working_dir; // This signals it to use the default directory.
 				//else leave working_dir set to the entire clsid string in case it's somehow valid.
 		}
 		// else it is a directory, so just leave working_dir set as it was initially.
@@ -7708,9 +7700,8 @@ BIF_DECL(BIF_FileSelect)
 		// from one another, which may help script automation in rare cases:
 		sntprintf(greeting, _countof(greeting), _T("Select File - %s"), g_script.DefaultDialogTitle());
 
-	// The filter must be terminated by two NULL characters.  One is explicit, the other automatic:
-	TCHAR filter[1024], pattern[1024];
-	*filter = '\0'; *pattern = '\0'; // Set default.
+	TCHAR pattern[1024];
+	*pattern = '\0'; // Set default.
 	if (*aFilter)
 	{
 		LPTSTR pattern_start = _tcschr(aFilter, '(');
@@ -7724,43 +7715,39 @@ BIF_DECL(BIF_FileSelect)
 			LPTSTR pattern_end = _tcsrchr(pattern, ')'); // strrchr() in case there are other literal parentheses.
 			if (pattern_end)
 				*pattern_end = '\0';  // If parentheses are empty, this will set pattern to be the empty string.
-			else // no closing paren, so set to empty string as an indicator:
-				*pattern = '\0';
-
 		}
 		else // No open-paren, so assume the entire string is the filter.
 			tcslcpy(pattern, aFilter, _countof(pattern));
-		if (*pattern)
-		{
-			// Remove any spaces present in the pattern, such as a space after every semicolon
-			// that separates the allowed file extensions.  The API docs specify that there
-			// should be no spaces in the pattern itself, even though it's okay if they exist
-			// in the displayed name of the file-type:
-			StrReplace(pattern, _T(" "), _T(""), SCS_SENSITIVE);
-			// Also include the All Files (*.*) filter, since there doesn't seem to be much
-			// point to making this an option.  This is because the user could always type
-			// *.* and press ENTER in the filename field and achieve the same result:
-			sntprintf(filter, _countof(filter), _T("%s%c%s%cAll Files (*.*)%c*.*%c")
-				, aFilter, '\0', pattern, '\0', '\0', '\0'); // The final '\0' double-terminates by virtue of the fact that sntprintf() itself provides a final terminator.
-		}
-		else
-			*filter = '\0';  // It will use a standard default below.
+	}
+	COMDLG_FILTERSPEC filters[2];
+	if (*pattern)
+	{
+		// Remove any spaces present in the pattern, such as a space after every semicolon
+		// that separates the allowed file extensions.  The API docs specify that there
+		// should be no spaces in the pattern itself, even though it's okay if they exist
+		// in the displayed name of the file-type:
+		StrReplace(pattern, _T(" "), _T(""), SCS_SENSITIVE);
+		// Also include the All Files (*.*) filter, since there doesn't seem to be much
+		// point to making this an option.  This is because the user could always type
+		// *.* (or *) and press ENTER in the filename field and achieve the same result:
+		filters[0].pszName = aFilter;
+		filters[0].pszSpec = pattern;
+		filters[1].pszName = _T("All Files (*.*)");
+		filters[1].pszSpec = _T("*.*");
+	}
+	else
+	{
+		filters[0].pszName = _T("All Files (*.*)");
+		filters[0].pszSpec = _T("*.*");
+		filters[1].pszName = _T("Text Documents (*.txt)");
+		filters[1].pszSpec = _T("*.txt");
 	}
 
-	OPENFILENAME ofn = {0};
-	ofn.lStructSize = sizeof(OPENFILENAME);
-	ofn.hwndOwner = THREAD_DIALOG_OWNER; // Can be NULL, which is used instead of main window since no need to have main window forced into the background for this.
-	ofn.lpstrTitle = greeting;
-	ofn.lpstrFilter = *filter ? filter : _T("All Files (*.*)\0*.*\0Text Documents (*.txt)\0*.txt\0");
-	ofn.lpstrFile = file_buf;
-	ofn.nMaxFile = _countof(file_buf) - 1; // -1 to be extra safe.
-	// Specifying NULL will make it default to the last used directory (at least in Win2k):
-	ofn.lpstrInitialDir = *working_dir ? working_dir : NULL;
-
-	// Note that the OFN_NOCHANGEDIR flag is ineffective in some cases, so we'll use a custom
-	// workaround instead.  MSDN: "Windows NT 4.0/2000/XP: This flag is ineffective for GetOpenFileName."
-	// In addition, it does not prevent the CWD from changing while the user navigates from folder to
-	// folder in the dialog.
+	// v1.0.43.09: OFN_NODEREFERENCELINKS is now omitted by default because most people probably want a click
+	// on a shortcut to navigate to the shortcut's target rather than select the shortcut and end the dialog.
+	// v2: Testing on Windows 7 and 10 indicated IFileDialog doesn't change the working directory while the
+	// user navigates, unlike GetOpenFileName/GetSaveFileName, and doesn't appear to affect the CWD at all.
+	DWORD flags = FOS_NOCHANGEDIR; // FOS_NOCHANGEDIR according to MS: "Don't change the current working directory."
 
 	// For v1.0.25.05, the new "M" letter is used for a new multi-select method since the old multi-select
 	// is faulty in the following ways:
@@ -7772,12 +7759,11 @@ BIF_DECL(BIF_FileSelect)
 	// 2) The last item in the list is terminated by a linefeed, which is not as easily used with a
 	//    parsing loop as shown in example in the help file.
 	bool always_use_save_dialog = false; // Set default.
-	bool new_multi_select_method = false; // Set default.
 	switch (ctoupper(*aOptions))
 	{
 	case 'M':  // Multi-select.
 		++aOptions;
-		new_multi_select_method = true;
+		flags |= FOS_ALLOWMULTISELECT;
 		break;
 	case 'S': // Have a "Save" button rather than an "Open" button.
 		++aOptions;
@@ -7786,84 +7772,101 @@ BIF_DECL(BIF_FileSelect)
 	}
 
 	int options = ATOI(aOptions);
-	// v1.0.43.09: OFN_NODEREFERENCELINKS is now omitted by default because most people probably want a click
-	// on a shortcut to navigate to the shortcut's target rather than select the shortcut and end the dialog.
-	ofn.Flags = OFN_HIDEREADONLY | OFN_EXPLORER;  // OFN_HIDEREADONLY: Hides the Read Only check box.
-	if (options & 0x20) // v1.0.43.09.
-		ofn.Flags |= OFN_NODEREFERENCELINKS;
+	if (options & 0x20)
+		flags |= FOS_NODEREFERENCELINKS;
 	if (options & 0x10)
-		ofn.Flags |= OFN_OVERWRITEPROMPT;
+		flags |= FOS_OVERWRITEPROMPT;
 	if (options & 0x08)
-		ofn.Flags |= OFN_CREATEPROMPT;
-	if (new_multi_select_method)
-		ofn.Flags |= OFN_ALLOWMULTISELECT;
+		flags |= FOS_CREATEPROMPT;
 	if (options & 0x02)
-		ofn.Flags |= OFN_PATHMUSTEXIST;
+		flags |= FOS_PATHMUSTEXIST;
 	if (options & 0x01)
-		ofn.Flags |= OFN_FILEMUSTEXIST;
+		flags |= FOS_FILEMUSTEXIST;
+
+	// Despite old documentation indicating it was due to an "OS quirk", previous versions were specifically
+	// designed to enable the Save button when OFN_OVERWRITEPROMPT is present but not OFN_CREATEPROMPT, since
+	// the former requires the Save dialog while the latter requires the Open dialog.  If both options are
+	// present, the caller must specify or omit 'S' to choose the dialog type, and one option has no effect.
+	if ((flags & FOS_OVERWRITEPROMPT) && !(flags & FOS_CREATEPROMPT))
+		always_use_save_dialog = true;
+
+	IFileDialog *pfd = NULL;
+	HRESULT hr = CoCreateInstance(always_use_save_dialog ? CLSID_FileSaveDialog : CLSID_FileOpenDialog,
+		NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd));
+	if (FAILED(hr))
+		_f_throw_win32(hr);
+
+	pfd->SetOptions(flags);
+	pfd->SetTitle(greeting);
+	pfd->SetFileTypes(_countof(filters), filters);
+	pfd->SetFileName(default_file_name);
+
+	if (*working_dir && default_file_name != working_dir)
+	{
+		IShellItem *psi;
+		if (SUCCEEDED(SHCreateItemFromParsingName(working_dir, nullptr, IID_PPV_ARGS(&psi))))
+		{
+			pfd->SetFolder(psi);
+			psi->Release();
+		}
+	}
 
 	// At this point, we know a dialog will be displayed.  See macro's comments for details:
 	DIALOG_PREP
 	POST_AHK_DIALOG(0) // Do this only after the above. Must pass 0 for timeout in this case.
-
 	++g_nFileDialogs;
-	// Below: OFN_CREATEPROMPT doesn't seem to work with GetSaveFileName(), so always
-	// use GetOpenFileName() in that case:
-	BOOL result = (always_use_save_dialog || ((ofn.Flags & OFN_OVERWRITEPROMPT) && !(ofn.Flags & OFN_CREATEPROMPT)))
-		? GetSaveFileName(&ofn) : GetOpenFileName(&ofn);
+	auto result = pfd->Show(THREAD_DIALOG_OWNER);
 	--g_nFileDialogs;
-
 	DIALOG_END
 
-	// Both GetOpenFileName() and GetSaveFileName() change the working directory as a side-effect
-	// of their operation.  The below is not a 100% workaround for the problem because even while
-	// a new quasi-thread is running (having interrupted this one while the dialog is still
-	// displayed), the dialog is still functional, and as a result, the dialog changes the
-	// working directory every time the user navigates to a new folder.
-	// This is only needed when the user pressed OK, since the dialog auto-restores the
-	// working directory if CANCEL is pressed or the window was closed by means other than OK.
-	// UPDATE: No, it's needed for CANCEL too because GetSaveFileName/GetOpenFileName will restore
-	// the working dir to the wrong dir if the user changed it (via SetWorkingDir) while the
-	// dialog was displayed.
-	// Restore the original working directory so that any threads suspended beneath this one,
-	// and any newly launched ones if there aren't any suspended threads, will have the directory
-	// that the user expects.  NOTE: It's possible for g_WorkingDir to have changed via the
-	// SetWorkingDir command while the dialog was displayed (e.g. a newly launched quasi-thread):
-	if (*g_WorkingDir)
-		SetCurrentDirectory(g_WorkingDir);
-
-	if (ofn.Flags & OFN_ALLOWMULTISELECT)
+	if (flags & FOS_ALLOWMULTISELECT)
 	{
 		auto *files = Array::Create();
-		if (!result) // See similar check below for comments.
-			_f_return(files); // Empty array.
-		// If the first terminator in file_buf is also the last, the user selected only
-		// a single file:
-		size_t length = _tcslen(file_buf);
-		if (!file_buf[length + 1]) // The list contains only a single file (full path and name).
+		IFileOpenDialog *pfod;
+		if (SUCCEEDED(result) && SUCCEEDED(pfd->QueryInterface(&pfod)))
 		{
-			files->Append(file_buf, length);
-		}
-		else // More than one file was selected, so the list contains the directory first, then filenames.
-		{
-			file_buf[length++] = '\\'; // Join the dir and first filename.
-			LPTSTR append_pos = file_buf + length;
-			for (LPTSTR name = append_pos; auto name_length = _tcslen(name); )
+			IShellItemArray *penum;
+			if (SUCCEEDED(pfod->GetResults(&penum)))
 			{
-				files->Append(file_buf, length + name_length);
-				name += name_length + 1;
-				tmemmove(append_pos, name, name_length + 1);
+				DWORD count = 0;
+				penum->GetCount(&count);
+				for (DWORD i = 0; i < count; ++i)
+				{
+					IShellItem *psi;
+					if (SUCCEEDED(penum->GetItemAt(i, &psi)))
+					{
+						LPWSTR filename;
+						if (SUCCEEDED(psi->GetDisplayName(SIGDN_FILESYSPATH, &filename)))
+						{
+							files->Append(filename);
+							CoTaskMemFree(filename);
+						}
+						psi->Release();
+					}
+				}
+				penum->Release();
 			}
+			pfod->Release();
 		}
+		pfd->Release();
 		_f_return(files);
 	}
-	if (!result) // User pressed CANCEL vs. OK to dismiss the dialog or there was a problem displaying it.
+	aResultToken.SetValue(_T(""), 0); // Set default.
+	IShellItem *psi;
+	if (SUCCEEDED(result) && SUCCEEDED(pfd->GetResult(&psi)))
 	{
-		// Currently assuming the user canceled, otherwise this would tell us whether an error
-		// occurred vs. the user canceling: if (CommDlgExtendedError())
-		_f_return_empty;
+		LPWSTR filename;
+		if (SUCCEEDED(psi->GetDisplayName(SIGDN_FILESYSPATH, &filename)))
+		{
+			aResultToken.Return(filename);
+			CoTaskMemFree(filename);
+		}
+		psi->Release();
 	}
-	_f_return(file_buf);
+	//else: User pressed CANCEL vs. OK to dismiss the dialog or there was a problem displaying it.
+		// Currently assuming the user canceled, otherwise this would tell us whether an error
+		// occurred vs. the user canceling: if (result != HRESULT_FROM_WIN32(ERROR_CANCELLED))
+	pfd->Release();
 }
 
 

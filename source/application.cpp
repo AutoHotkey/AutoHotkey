@@ -1441,27 +1441,6 @@ break_out_of_main_switch:
 				g->CalledByIsDialogMessageOrDispatchMsg = msg.message; // Added in v1.0.44.11 because it's known that IsDialogMessage can change the message number (e.g. WM_KEYDOWN->WM_NOTIFY for UpDowns)
 				if (IsDialogMessage(fore_window, &msg))  // This message is for it, so let it process it.
 				{
-					// If it is likely that a FileSelect dialog is active, this
-					// section attempt to retain the current directory as the user
-					// navigates from folder to folder.  This is done because it is
-					// possible that our caller is a quasi-thread other than the one
-					// that originally launched the FileSelect (i.e. that dialog
-					// is in a suspended thread), in which case the user's navigation
-					// would cause the active threads working dir to change unexpectedly
-					// unless the below is done.  This is not a complete fix since if
-					// a message pump other than this one is running (e.g. that of a
-					// MessageBox()), these messages will not be detected:
-					if (g_nFileDialogs) // See MsgSleep() for comments on this.
-						// The below two messages that are likely connected with a user
-						// navigating to a different folder within the FileSelect dialog.
-						// That avoids changing the directory for every message, since there
-						// can easily be thousands of such messages every second if the
-						// user is moving the mouse.  UPDATE: This doesn't work, so for now,
-						// just call SetCurrentDirectory() for every message, which does work.
-						// A brief test of CPU utilization indicates that SetCurrentDirectory()
-						// is not a very high overhead call when it is called many times here:
-						//if (msg.message == WM_ERASEBKGND || msg.message == WM_DELETEITEM)
-						SetCurrentDirectory(g_WorkingDir);
 					g->CalledByIsDialogMessageOrDispatch = false;
 					continue;  // This message is done, so start a new iteration to get another msg.
 				}
@@ -1877,25 +1856,6 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 	// in the right state (which it usually, since paused threads are rare), UpdateTrayIcon() is a very fast call.
 	if (aIncrementThreadCountAndUpdateTrayIcon)
 		g_script.UpdateTrayIcon(); // Must be done ONLY AFTER updating "g" (e.g, ++g) and/or g->IsPaused.
-
-	if (g_nFileDialogs)
-		// Since there is a quasi-thread with an open file dialog underneath the one
-		// we're about to launch, set the current directory to be the one the user
-		// would expect to be in effect.  This is not a 100% fix/workaround for the
-		// fact that the dialog changes the working directory as the user navigates
-		// from folder to folder because the dialog can still function even when its
-		// quasi-thread is suspended (i.e. while our new thread being launched here
-		// is in the middle of running).  In other words, the user can still use
-		// the dialog of a suspended quasi-thread, and thus change the working
-		// directory indirectly.  But that should be very rare and I don't see an
-		// easy way to fix it completely without using a "HOOK function to monitor
-		// the WM_NOTIFY message", calling SetCurrentDirectory() after every script
-		// line executes (which seems too high in overhead to be justified), or
-		// something similar.  Note changing to a new directory here does not seem
-		// to hurt the ongoing FileSelect() dialog.  In other words, the dialog
-		// does not seem to care that its changing of the directory as the user
-		// navigates is "undone" here:
-		SetCurrentDirectory(g_WorkingDir);
 
 	if (aSkipUninterruptible)
 		return;
