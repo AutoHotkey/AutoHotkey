@@ -7692,14 +7692,6 @@ BIF_DECL(BIF_FileSelect)
 		// else it is a directory, so just leave working_dir set as it was initially.
 	}
 
-	TCHAR greeting[1024];
-	if (aGreeting && *aGreeting)
-		tcslcpy(greeting, aGreeting, _countof(greeting));
-	else
-		// Use a more specific title so that the dialogs of different scripts can be distinguished
-		// from one another, which may help script automation in rare cases:
-		sntprintf(greeting, _countof(greeting), _T("Select File - %s"), g_script.DefaultDialogTitle());
-
 	TCHAR pattern[1024];
 	*pattern = '\0'; // Set default.
 	if (*aFilter)
@@ -7764,6 +7756,13 @@ BIF_DECL(BIF_FileSelect)
 	bool always_use_save_dialog = false; // Set default.
 	switch (ctoupper(*aOptions))
 	{
+	case 'D':
+		++aOptions;
+		flags |= FOS_PICKFOLDERS;
+		if (*aFilter)
+			_f_throw(ERR_PARAM4_MUST_BE_BLANK);
+		filter_count = 0;
+		break;
 	case 'M':  // Multi-select.
 		++aOptions;
 		flags |= FOS_ALLOWMULTISELECT;
@@ -7773,6 +7772,15 @@ BIF_DECL(BIF_FileSelect)
 		always_use_save_dialog = true;
 		break;
 	}
+
+	TCHAR greeting[1024];
+	if (aGreeting && *aGreeting)
+		tcslcpy(greeting, aGreeting, _countof(greeting));
+	else
+		// Use a more specific title so that the dialogs of different scripts can be distinguished
+		// from one another, which may help script automation in rare cases:
+		sntprintf(greeting, _countof(greeting), _T("Select %s - %s")
+			, (flags & FOS_PICKFOLDERS) ? _T("Folder") : _T("File"), g_script.DefaultDialogTitle());
 
 	int options = ATOI(aOptions);
 	if (options & 0x20)
@@ -7790,7 +7798,7 @@ BIF_DECL(BIF_FileSelect)
 	// designed to enable the Save button when OFN_OVERWRITEPROMPT is present but not OFN_CREATEPROMPT, since
 	// the former requires the Save dialog while the latter requires the Open dialog.  If both options are
 	// present, the caller must specify or omit 'S' to choose the dialog type, and one option has no effect.
-	if ((flags & FOS_OVERWRITEPROMPT) && !(flags & FOS_CREATEPROMPT))
+	if ((flags & FOS_OVERWRITEPROMPT) && !(flags & (FOS_CREATEPROMPT | FOS_PICKFOLDERS)))
 		always_use_save_dialog = true;
 
 	IFileDialog *pfd = NULL;
@@ -7801,7 +7809,8 @@ BIF_DECL(BIF_FileSelect)
 
 	pfd->SetOptions(flags);
 	pfd->SetTitle(greeting);
-	pfd->SetFileTypes(filter_count, filters);
+	if (filter_count)
+		pfd->SetFileTypes(filter_count, filters);
 	pfd->SetFileName(default_file_name);
 
 	if (*working_dir && default_file_name != working_dir)
