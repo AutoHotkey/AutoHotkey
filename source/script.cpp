@@ -2154,7 +2154,7 @@ process_completed_line:
 					sntprintf(remap_source, _countof(remap_source), _T("%s%s%s")
 						, remap_source_is_combo ? _T("") : _T("*") // v1.1.27.01: Omit * when the remap source is a custom combo.
 						, _tcslen(cp1) == 1 && IsCharUpper(*cp1) ? _T("+") : _T("")  // Allow A::b to be different than a::b.
-						, buf); // Include any modifiers too, e.g. ^b::c.
+						, static_cast<LPTSTR>(buf)); // Include any modifiers too, e.g. ^b::c.
 					if (*cp == '"' || *cp == g_EscapeChar) // Need to escape these.
 					{
 						*remap_dest = g_EscapeChar;
@@ -2483,7 +2483,7 @@ process_completed_line:
 #endif
 						{
 							TCHAR msg_text[128];
-							sntprintf(msg_text, _countof(msg_text), _T("Note: The hotkey %s will not be active because it does not exist in the current keyboard layout."), buf);
+							sntprintf(msg_text, _countof(msg_text), _T("Note: The hotkey %s will not be active because it does not exist in the current keyboard layout."), static_cast<LPTSTR>(buf));
 							MsgBox(msg_text);
 						}
 					}
