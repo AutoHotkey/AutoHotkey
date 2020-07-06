@@ -76,8 +76,8 @@ GuiControlType::TypeAttribs GuiControlType::TypeHasAttrib(GuiControls aType, Typ
 		/*Slider*/     TYPE_STATICBACK | TYPE_HAS_NO_TEXT,
 		/*Progress*/   TYPE_SETBKCOLOR | TYPE_HAS_NO_TEXT | TYPE_NO_SUBMIT,
 		/*Tab*/        TYPE_STATICBACK | TYPE_HAS_ITEMS,
-		/*Tab2*/       0, // Never used since it is changed to TAB at an early stage.
-		/*Tab3*/       0, // As above.
+		/*Tab2*/       TYPE_STATICBACK | TYPE_HAS_ITEMS, // Only used prior to control construction; at least TYPE_HAS_ITEMS is needed here.
+		/*Tab3*/       TYPE_STATICBACK | TYPE_HAS_ITEMS, // As above.
 		/*ActiveX*/    TYPE_HAS_NO_TEXT | TYPE_NO_SUBMIT | TYPE_RESERVE_UNION,
 		/*Link*/       TYPE_STATICBACK | TYPE_NO_SUBMIT,
 		/*Custom*/     TYPE_MSGBKCOLOR | TYPE_NO_SUBMIT, // Custom controls *may* use WM_CTLCOLOR.
