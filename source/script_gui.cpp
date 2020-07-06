@@ -895,6 +895,8 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 			gui->ControlAddItems(*this, obj);
 			if (type == GUI_CONTROL_TAB)
 			{
+				// Adding tabs may change the space usable by the tab dialog.
+				gui->UpdateTabDialog(hwnd);
 				// Appears to be necessary to resolve a redraw issue, at least for Tab3 on Windows 10.
 				InvalidateRect(gui->mHwnd, NULL, TRUE);
 			}
@@ -921,6 +923,11 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 			else // Delete all items.
 			{
 				SendMessage(hwnd, msg_all, 0, 0);
+			}
+			if (type == GUI_CONTROL_TAB)
+			{
+				// Removing tabs may change the space usable by the tab dialog.
+				gui->UpdateTabDialog(hwnd);
 			}
 			_o_return_empty;
 		}
