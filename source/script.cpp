@@ -2092,16 +2092,13 @@ process_completed_line:
 			// y::action	// parsing "y::" now.
 			if ( (g->CurrentFunc && g->CurrentFunc != mLastHotFunc) || mClassObjectCount)
 			{
-				// Even if it weren't for the reasons below, the first hotkey/hotstring label in a script
-				// will end the auto-execute section with a "return".  Therefore, if this restriction here
-				// is ever removed, be sure that that extra return doesn't get put inside the function.
-				//
-				// The reason for not allowing hotkeys and hotstrings inside a function's body is that
-				// when the subroutine is launched, the hotstring/hotkey would be using the function's
-				// local variables.  But that is not appropriate and it's likely to cause problems even
-				// if it were.  It doesn't seem useful in any case.  By contrast, normal labels can
-				// safely exist inside a function body and since the body is a block, other validation
-				// ensures that a Goto can't jump to it from outside the function.
+				// The reason for not allowing hotkeys and hotstrings inside a function's body is that it
+				// would create a nested function that could be called without ever calling the outer function.
+				// If the hotkey function became a closure, activating the hotkey would at best merely raise an
+				// error since it would not be associated with any particular call to the outer function.
+				// Currently CreateHotFunc() isn't set up to permit it; e.g. it doesn't set mOuterFunc or
+				// mDownVar, so a hotkey inside a function would reset g->CurrentFunc to nullptr for the
+				// remainder of the outer function and would crash if the hotkey references any outer vars.
 				return ScriptError(_T("Hotkeys/hotstrings are not allowed inside functions or classes."), buf);
 			}
 
