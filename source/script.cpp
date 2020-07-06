@@ -10816,16 +10816,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			continue;  // Resume looping starting at the above line.  "continue" is actually slightly faster than "break" in these cases.
 
 		case ACT_BLOCK_END:
-			if (aMode != UNTIL_BLOCK_END)
-				// Rajat found a way for this to happen that basically amounts to this:
-				// If within a loop you gosub a label that is also inside of the block, and
-				// that label sometimes doesn't return (i.e. due to a missing "return" somewhere
-				// in its flow of control), the loop(s)'s block-end symbols will be encountered
-				// by the subroutine, and these symbols don't have meaning to it.  In other words,
-				// the subroutine has put us into a waiting-for-return state rather than a
-				// waiting-for-block-end state, so when block-end's are encountered, that is
-				// considered a runtime error:
-				return line->LineError(_T("A \"return\" must be encountered prior to this \"}\"."));
+			// v2: This check is disabled to reduce code size, as it doesn't seem to be needed
+			// now that GOSUB has been removed.  Validation in PreparseBlocks() should make it
+			// impossible to produce this condition:
+			//if (aMode != UNTIL_BLOCK_END)
+			//	return line->LineError(_T("A \"return\" must be encountered prior to this \"}\"."));
 			return OK; // It's the caller's responsibility to resume execution at the next line, if appropriate.
 
 		// ACT_ELSE can happen when one of the cases in this switch failed to properly handle
