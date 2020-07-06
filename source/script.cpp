@@ -2802,7 +2802,7 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 	ptrdiff_t action_end_pos = 0;
 
 	size_t &buf_length = buf.length;
-	const size_t next_buf_length = next_buf.length;
+	size_t &next_buf_length = next_buf.length;
 
 	TCHAR expect[MAX_BALANCEEXPR_DEPTH], open_quote = 0;
 	int balance = BalanceExpr(buf, 0, expect);
