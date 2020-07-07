@@ -226,7 +226,7 @@ public:
 		, UCHAR &aNoSuppress, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
 	static modLR_type HotkeyRequiresModLR(HotkeyIDType aHotkeyIDwithoutflags, modLR_type aModLR);
 	static void TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown);
-	void PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant, LPTSTR aName);
+	void PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant);
 	static void ManifestAllHotkeysHotstringsHooks();
 	static void RequireHook(HookType aWhichHook) {sWhichHookAlways |= aWhichHook;}
 	static void MaybeUninstallHook();
