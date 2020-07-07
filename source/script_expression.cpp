@@ -1516,6 +1516,7 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 {
 	IObject *param_obj = NULL; // Vararg object passed by caller.
 	Array *param_array = NULL; // Array of parameters, either the same as param_obj or the result of enumeration.
+	ExprTokenType* token = nullptr; // Used for variadic calls.
 	if (aIsVariadic) // i.e. this is a variadic function call.
 	{
 		ExprTokenType *rvalue = NULL;
@@ -1553,7 +1554,12 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 			if (rvalue)
 				space_needed += sizeof(rvalue); // ... extra slot for aRValue
 			// Allocate new param list and tokens; tokens first for convenience.
-			ExprTokenType *token = (ExprTokenType *)_alloca(space_needed);
+			token = (ExprTokenType *)_malloca(space_needed);
+			if (!token)
+			{
+				aResultToken.Error(ERR_OUTOFMEM);
+				return false;
+			}
 			ExprTokenType **param_list = (ExprTokenType **)(token + extra_params);
 			// Since built-in functions don't have variables we can directly assign to,
 			// we need to expand the param object's contents into an array of tokens:
@@ -1576,6 +1582,9 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 
 	if (param_array)
 		param_array->Release();
+	if (token)
+		_freea(token);
+	
 	return result;
 }
 
