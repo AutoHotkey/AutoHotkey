@@ -8272,7 +8272,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 	// to allow the following to work: 2**!1, 2**not 0, 2**~0xFFFFFFFE, 2**&x.
 
 	ExprTokenType *infix = NULL;
-	int infix_size = 0, infix_count = 0;
+	int infix_size = 0, infix_count = 0, allow_for_extra_postfix = 0;
 	const int INFIX_GROWTH = 128; // Amount to grow by each time expansion is needed.  Rarely needed more than once (from zero).
 	const int INFIX_MIN_SPACE = 5; // Minimum space to allow prior to each iteration or deref-processing.  Room for auto-concat, two tokens for `.id`, `. ("s")` for DT_STRING, and `f(fn)` for DT_FUNCREF; plus the final SYM_INVALID.
 
@@ -8847,6 +8847,8 @@ unquoted_literal:
 					cp = op_end; // Have the loop process whatever lies at op_end and beyond.
 					continue; // "Continue" to avoid the ++cp at the bottom.
 				} // switch() for type of symbol/operand.
+				if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(this_infix_item.symbol))
+					++allow_for_extra_postfix;
 				++cp; // i.e. increment only if a "continue" wasn't encountered somewhere above. Although maintainability is reduced to do this here, it avoids dozens of ++cp in other places.
 			} // for each token in this section of raw/literal text.
 		} // End of processing of raw/literal text (such as operators) that lie to the left of this_deref.
@@ -9074,7 +9076,8 @@ unquoted_literal:
 	// CONVERT INFIX TO POSTFIX.
 	////////////////////////////
 
-	ExprTokenType **postfix = (ExprTokenType **)_alloca(infix_count * sizeof(ExprTokenType *));
+	int max_postfix_count = infix_count + allow_for_extra_postfix;
+	ExprTokenType **postfix = (ExprTokenType **)_alloca(max_postfix_count * sizeof(ExprTokenType *));
 	ExprTokenType **stack = (ExprTokenType **)_alloca((infix_count + 1) * sizeof(ExprTokenType *));  // +1 for SYM_BEGIN on the stack.
 	int postfix_count = 0, stack_count = 0;
 	// Above dimensions the stack to be as large as the infix/postfix arrays to cover worst-case
@@ -9810,7 +9813,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				assign_op->symbol = SYM_FUNC; // An earlier stage already set up the func and param_count.
 			}
 		}
-		ASSERT(postfix_count < infix_count);
+		ASSERT(postfix_count < max_postfix_count);
 		++postfix_count;
 	} // End of loop that builds postfix array from the infix array.
 end_of_infix_to_postfix:
