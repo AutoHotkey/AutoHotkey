@@ -2737,6 +2737,11 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		return ScriptError(ERR_MISSING_CLOSE_BRACE, mClassName);
 	}
 
+	if (mLastHotFunc)
+		// A hotkey at the end of the file, with no function body.  Checking for this here
+		// ensures mJumpToLine is always non-null for later stages.
+		return ScriptError(ERR_HOTKEY_MISSING_BRACE);
+
 	++mCombinedLineNumber; // L40: Put the implicit ACT_EXIT on the line after the last physical line (for the debugger).
 
 	// This is not required, it is called by the destructor.
