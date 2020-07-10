@@ -52,14 +52,14 @@ ResultType ScriptModule::Invoke(IObject_Invoke_PARAMS_DECL)
 		if (!var || !var->IsSuperGlobal())
 			SM_RETURN_ERROR(ERR_SMODULES_VAR_NOT_FOUND, aName);
 
-		if (var->Type() == VAR_BUILTIN) // Doesn't support built-in vars.
+		if (var->Type() == VAR_VIRTUAL) // Doesn't support built-in vars.
 			SM_RETURN_ERROR(ERR_SMODULES_INVALID_SCOPE_RESOLUTION);
 		if (invoke_type & IT_SET
 			&& aParamCount == 1)
 		{
 			// Assiging a variable. Eg, MyModule.%expr% := value
 			if (VAR_IS_READONLY(*var)) // For maintainability
-				SM_RETURN_ERROR(ERR_VAR_IS_READONLY);
+				return	g_script.VarIsReadOnlyError(var, Script::AssignmentErrorType::INVALID_ASSIGNMENT);
 			// Assign the value to the variable
 			if (!(var->Assign(**aParam)))
 			{
