@@ -10653,7 +10653,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			// will be reused for each expression evaluation.
 			PRIVATIZE_S_DEREF_BUF;
 
-			size_t switch_value_mem_size;
+			size_t switch_value_mem_size = 0;
 			ResultToken switch_value;
 			switch_value.mem_to_free = NULL;
 			if (!line->mAttribute) // Switch with no value: find the first 'true' case.
@@ -10706,9 +10706,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 					if (arg < arg_count)
 						break;
 				}
-				if (switch_value.symbol == SYM_OBJECT)
-					switch_value.object->Release();
-				if (switch_value.mem_to_free)
+				if (switch_value_mem_size)
 				{
 					if (our_deref_buf)
 					{
@@ -10721,6 +10719,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 					our_deref_buf = switch_value.mem_to_free;
 					our_deref_buf_size = switch_value_mem_size;
 				}
+				else
+					switch_value.Free();
 			}
 
 			DEPRIVATIZE_S_DEREF_BUF;
