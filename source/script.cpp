@@ -9087,7 +9087,10 @@ unquoted_literal:
 	// CONVERT INFIX TO POSTFIX.
 	////////////////////////////
 
-	int max_postfix_count = infix_count + allow_for_extra_postfix;
+	// postfix may need to be a bit bigger than infix: Allow an extra slot for each compound assignment,
+	// in case it targets an object/property and therefore needs to be expanded.  Also allow an extra slot
+	// to be temporarily occupied by a short-circuit operator popped from the stack.
+	int max_postfix_count = infix_count + allow_for_extra_postfix + 1;
 	ExprTokenType **postfix = (ExprTokenType **)_alloca(max_postfix_count * sizeof(ExprTokenType *));
 	ExprTokenType **stack = (ExprTokenType **)_alloca((infix_count + 1) * sizeof(ExprTokenType *));  // +1 for SYM_BEGIN on the stack.
 	int postfix_count = 0, stack_count = 0;
@@ -9112,6 +9115,7 @@ unquoted_literal:
 
 	for (;;) // While SYM_BEGIN is still on the stack, continue iterating.
 	{
+		ASSERT(postfix_count < max_postfix_count);
 		ExprTokenType *&this_postfix = postfix[postfix_count]; // Resolve early, especially for use by "goto". Reduces code size a bit, though it doesn't measurably help performance.
 		infix_symbol = this_infix->symbol;                     //
 		stack_symbol = stack[stack_count - 1]->symbol; // Frequently used, so resolve only once to help performance.
@@ -9824,7 +9828,6 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				assign_op->symbol = SYM_FUNC; // An earlier stage already set up the func and param_count.
 			}
 		}
-		ASSERT(postfix_count < max_postfix_count);
 		++postfix_count;
 	} // End of loop that builds postfix array from the infix array.
 end_of_infix_to_postfix:
