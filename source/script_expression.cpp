@@ -350,15 +350,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				this_token.value_int64 = result_token.value_int64;
 				this_token.symbol = result_token.symbol;
 				if (this_token.symbol == SYM_OBJECT)
-				{
-					if (to_free_count == MAX_EXPR_MEM_ITEMS) // No more slots left (should be nearly impossible).
-					{
-						this_token.object->Release();
-						LineError(ERR_OUTOFMEM);
-						goto abort;
-					}
 					to_free[to_free_count++] = &this_token; // A slot was reserved for this SYM_FUNC.
-				}
+				
 				goto push_this_token;
 			}
 			
