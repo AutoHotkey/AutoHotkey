@@ -9072,6 +9072,12 @@ unquoted_literal:
 		// The outer loop will now do ++infix for us.
 	} // For each deref in this expression, and also for the final literal/raw text to the right of the last deref.
 
+	if (infix_count == 0)
+		// Probably something like "Loop Parse, foo, `n" since an empty expression wouldn't make it this far.
+		// infix_size is 0 in this case, so cannot continue.  An alternative would be to treat this as a blank
+		// parameter, but it's probably more useful to treat it as an error (maybe "`n" was intended).
+		return LineError(ERR_EXPR_SYNTAX);
+
 	// Terminate the array with a special item.  This allows infix-to-postfix conversion to do a faster
 	// traversal of the infix array.
 	ASSERT(infix_count < infix_size);
