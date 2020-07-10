@@ -13213,12 +13213,17 @@ int Script::FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTST
 	if (aLine)
 		aBuf = aLine->VicinityToText(aBuf, BUF_SPACE_REMAINING);
 	// What now?:
-	LPCTSTR footer = (g->ExcptMode & EXCPTMODE_DELETE) ? ERR_ABORT_DELETE
-		: (aErrorType == FAIL) ? (mIsReadyToExecute ? ERR_ABORT_NO_SPACES
-		: (mIsRestart ? OLD_STILL_IN_EFFECT : WILL_EXIT))
-		: (aErrorType == CRITICAL_ERROR) ? UNSTABLE_WILL_EXIT
-		: (aErrorType == FAIL_OR_OK) ? ERR_CONTINUE_THREAD_Q
-		: _T("For more details, read the documentation for #Warn.");
+	LPCTSTR footer;
+	switch (aErrorType)
+	{
+	case WARN: footer = ERR_WARNING_FOOTER; break;
+	case FAIL_OR_OK: footer = ERR_CONTINUE_THREAD_Q; break;
+	case CRITICAL_ERROR: footer = UNSTABLE_WILL_EXIT; break;
+	default: footer = (g->ExcptMode & EXCPTMODE_DELETE) ? ERR_ABORT_DELETE
+		: mIsReadyToExecute ? ERR_ABORT_NO_SPACES
+		: mIsRestart ? OLD_STILL_IN_EFFECT
+		: WILL_EXIT;
+	}
 	aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("\n%s"), footer);
 	
 	return (int)(aBuf - aBuf_orig);
