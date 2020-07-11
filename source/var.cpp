@@ -1175,6 +1175,7 @@ ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError, ScriptModule *aMo
 		|| !_tcsicmp(aName, _T("True")) || !_tcsicmp(aName, _T("False"))
 		|| (aModule && !aModule->ValidateName((LPTSTR)aName))
 		|| !_tcsicmp(aName, _T("Local")) || !_tcsicmp(aName, _T("Global")) || !_tcsicmp(aName, _T("Static"))
+		|| !_tcsicmp(aName, SMODULES_IMPORT_VARS_DECLARATION_KEYWORD) || !_tcsicmp(aName, SMODULES_IMPORT_FUNCS_DECLARATION_KEYWORD)
 		|| (aDisplayError == DISPLAY_MODULE_ERROR		// Do not allow modules to be named the same as
 			&& ( Script::GetBuiltInVar((LPTSTR)aName)	// any built-in var or "special variable".
 			|| (!_tcsicmp(aName, _T("A_Args")) || !_tcsicmp(aName, _T("ErrorLevel")) || !_tcsicmp(aName, _T("this")) || !_tcsicmp(aName, _T("value")) )	)	)	)

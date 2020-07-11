@@ -3879,36 +3879,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 #endif	// #ifdef AUTOHOTKEYSC
 	} // SMODULES_INCLUDE_DIRECTIVE_NAME
 
-	// Check if importing names:
-	SymbolType type_symbol = SYM_INVALID;
-	if (IS_DIRECTIVE_MATCH(SMODULES_IMPORT_VARS_DIRECTIVE_NAME))
-		type_symbol = SYM_VAR;
-	else if (IS_DIRECTIVE_MATCH(SMODULES_IMPORT_FUNCS_DIRECTIVE_NAME))
-		type_symbol = SYM_FUNC;
-
-	if (type_symbol != SYM_INVALID) 	// Handle importing names.
-	{
-		if (g->CurrentFunc || mClassObjectCount)
-			return ScriptError(ERR_SMODULES_NOT_SUPPORTED);
-		if (!parameter)
-			return ScriptError(ERR_PARAM1_REQUIRED, aBuf);
-		// Separate the list of names from the source:
-		size_t name_len = 0;
-		size_t mod_start = 0;
-		if (!split_by_word_separator(parameter, SMODULES_IMPORT_NAME_SEP, NULL, &name_len, &mod_start)) // Split the name list and module name
-			return ScriptError(ERR_PARAM_COUNT_INVALID, aBuf);
-
-		LPTSTR name_list = talloca(name_len + 1);
-		TCHAR source_name[MAX_VAR_NAME_LENGTH + 1];
-		_tcsncpy(name_list, parameter, name_len);		// Copy name_list
-		name_list[name_len] = '\0';						// terminate
-		_tcscpy(source_name, parameter + mod_start);	// Copy source_name, already terminated and trimmed of whitespace.
-		// Add the object, might be postponed to be resolved after the script has been parsed.
-		if (!g_CurrentModule->AddObject(name_list, source_name, type_symbol))
-			return FAIL;
-
-		return CONDITION_TRUE;
-	}
 
 	if (IS_DIRECTIVE_MATCH(_T("#DllLoad")))
 	{
@@ -4586,6 +4556,51 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				{
 					cp = aLineText + 6; // The character after the declaration word.
 					declare_type = VAR_DECLARE_STATIC;
+				}
+				else if (!_tcsnicmp(aLineText, _T("Use"), 3)) // Static also implies local (for functions that default to global).
+				{
+					
+					// Check if importing names:
+					SymbolType type_symbol = SYM_INVALID;
+					LPTSTR parameter = nullptr;
+					if (!_tcsnicmp(aLineText, SMODULES_IMPORT_VARS_DECLARATION_KEYWORD
+						, SMODULES_IMPORT_VARS_DECLARATION_KEYWORD_LENGTH))
+					{
+						parameter = aLineText + SMODULES_IMPORT_VARS_DECLARATION_KEYWORD_LENGTH;
+						type_symbol = SYM_VAR;
+					}
+					else if (!_tcsnicmp(aLineText, SMODULES_IMPORT_FUNCS_DECLARATION_KEYWORD
+						, SMODULES_IMPORT_FUNCS_DECLARATION_KEYWORD_LENGTH))
+					{
+						parameter = aLineText + SMODULES_IMPORT_FUNCS_DECLARATION_KEYWORD_LENGTH;
+						type_symbol = SYM_FUNC;
+					}
+					if (parameter && !IS_SPACE_OR_TAB(*parameter))
+						// It something like "UseXXXabc" which is valid as variable or function name,
+						// or something like "UseXXX:=x" which shouldn't be valid but will be detected elsewhere.
+						break; 
+					if (type_symbol != SYM_INVALID) 	// Handle importing names.
+					{
+						if (g->CurrentFunc || mClassObjectCount)
+							return ScriptError(ERR_SMODULES_NOT_SUPPORTED);
+						if (!*parameter)
+							return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
+						// Separate the list of names from the source:
+						size_t name_len = 0;
+						size_t mod_start = 0;
+						if (!split_by_word_separator(parameter, SMODULES_IMPORT_NAME_SEP, NULL, &name_len, &mod_start)) // Split the name list and module name
+							return ScriptError(ERR_PARAM_COUNT_INVALID, aLineText);
+
+						LPTSTR name_list = talloca(name_len + 1);
+						TCHAR source_name[MAX_VAR_NAME_LENGTH + 1];
+						_tcsncpy(name_list, parameter, name_len);		// Copy name_list
+						name_list[name_len] = '\0';						// terminate
+						_tcscpy(source_name, parameter + mod_start);	// Copy source_name, already terminated and trimmed of whitespace.
+						// Add the object, might be postponed to be resolved after the script has been parsed.
+						if (!g_CurrentModule->AddObject(name_list, source_name, type_symbol))
+							return FAIL;
+						return OK;
+					}
 				}
 				else // It's not the word "global", "local", or static, so no further checking is done.
 					break;
