@@ -13616,6 +13616,16 @@ BIF_DECL(BIF_IsTypeish)
 	}
 	// Since above did not return or goto, the value is a string.
 	LPTSTR aValueStr = ParamIndexToString(0);
+	auto string_case_sense = ParamIndexToCaseSense(1); // For IsAlpha, IsAlnum, IsUpper, IsLower.
+	switch (string_case_sense)
+	{
+	case SCS_INSENSITIVE: // This case also executes when the parameter is omitted, such as for functions which don't have this parameter.
+	case SCS_SENSITIVE: // Insensitive vs. sensitive doesn't mean anything for these functions, but seems fair to allow either, rather than requiring 0 or deviating from the CaseSense convention by requiring "".
+	case SCS_INSENSITIVE_LOCALE: // 'Locale'
+		break;
+	default:
+		_f_throw(ERR_PARAM2_INVALID);
+	}
 
 	// The remainder of this function is based on the original code for ACT_IFIS, which was removed
 	// in commit 3382e6e2.
@@ -13663,8 +13673,7 @@ BIF_DECL(BIF_IsTypeish)
 	case VAR_TYPE_ALNUM:
 		if_condition = true;
 		for (cp = aValueStr; *cp; ++cp)
-			//if (!IsCharAlphaNumeric(*cp)) // Use this to better support chars from non-English languages.
-			if (!aisalnum(*cp)) // But some users don't like it, Chinese users for example.
+			if (string_case_sense == SCS_INSENSITIVE_LOCALE ? !IsCharAlphaNumeric(*cp) : !cisalnum(*cp))
 			{
 				if_condition = false;
 				break;
@@ -13674,8 +13683,7 @@ BIF_DECL(BIF_IsTypeish)
 		// Like AutoIt3, the empty string is considered to be alphabetic, which is only slightly debatable.
 		if_condition = true;
 		for (cp = aValueStr; *cp; ++cp)
-			//if (!IsCharAlpha(*cp)) // Use this to better support chars from non-English languages.
-			if (!aisalpha(*cp)) // But some users don't like it, Chinese users for example.
+			if (string_case_sense == SCS_INSENSITIVE_LOCALE ? !IsCharAlpha(*cp) : !cisalpha(*cp))
 			{
 				if_condition = false;
 				break;
@@ -13684,8 +13692,7 @@ BIF_DECL(BIF_IsTypeish)
 	case VAR_TYPE_UPPER:
 		if_condition = true;
 		for (cp = aValueStr; *cp; ++cp)
-			//if (!IsCharUpper(*cp)) // Use this to better support chars from non-English languages.
-			if (!aisupper(*cp)) // But some users don't like it, Chinese users for example.
+			if (string_case_sense == SCS_INSENSITIVE_LOCALE ? !IsCharUpper(*cp) : !cisupper(*cp))
 			{
 				if_condition = false;
 				break;
@@ -13694,8 +13701,7 @@ BIF_DECL(BIF_IsTypeish)
 	case VAR_TYPE_LOWER:
 		if_condition = true;
 		for (cp = aValueStr; *cp; ++cp)
-			//if (!IsCharLower(*cp)) // Use this to better support chars from non-English languages.
-			if (!aislower(*cp)) // But some users don't like it, Chinese users for example.
+			if (string_case_sense == SCS_INSENSITIVE_LOCALE ? !IsCharLower(*cp) : !cislower(*cp))
 			{
 				if_condition = false;
 				break;
