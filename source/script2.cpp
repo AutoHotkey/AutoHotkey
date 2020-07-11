@@ -25,6 +25,7 @@ GNU General Public License for more details.
 #include "resources/resource.h"  // For InputBox.
 #include "TextIO.h"
 #include <Psapi.h> // for GetModuleBaseName.
+#include "shlwapi.h" // StrCmpLogicalW
 
 #include <mmdeviceapi.h> // for SoundSet/SoundGet.
 #include <endpointvolume.h> // for SoundSet/SoundGet.
@@ -11360,6 +11361,9 @@ BIF_DECL(BIF_StrCompare)
 	case SCS_SENSITIVE:				result = _tcscmp(str1, str2); break;
 	case SCS_INSENSITIVE:			result = _tcsicmp(str1, str2); break;
 	case SCS_INSENSITIVE_LOCALE:	result = lstrcmpi(str1, str2); break;
+	case SCS_INSENSITIVE_LOGICAL:	result = StrCmpLogicalW(str1, str2); break;
+	case SCS_INVALID:
+		_f_throw(ERR_PARAM3_INVALID);
 	}
 	_f_return_i(result);			// Return 
 }
@@ -11483,6 +11487,9 @@ BIF_DECL(BIF_InStr)
 	LPTSTR needle = ParamIndexToString(1, needle_buf, &needle_length);
 	
 	StringCaseSenseType string_case_sense = ParamIndexToCaseSense(2);
+	if (string_case_sense == SCS_INVALID 
+		|| string_case_sense == SCS_INSENSITIVE_LOGICAL) // Not supported, seems more useful to throw rather than using SCS_INSENSITIVE.
+		_f_throw(ERR_PARAM3_INVALID);
 
 	LPTSTR found_pos;
 	INT_PTR offset = 0; // Set default.
@@ -16916,7 +16923,38 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 	return OK; // Since above didn't return, indicate success.
 }
 
+StringCaseSenseType TokenToStringCase(ExprTokenType& aToken)
+{
+	// Pure integers 1 and 0 corresponds to SCS_SENSITIVE and SCS_INSENSITIVE, respectively.
+	// Pure floats returns SCS_INVALID.
+	// For strings see Line::ConvertStringCaseSense.
+	LPTSTR str = NULL;
+	__int64 int_val = 0;
+	switch (aToken.symbol)
+	{
+	case SYM_VAR:
+		
+		switch (aToken.var->IsPureNumeric())
+		{
+		case PURE_INTEGER: int_val = aToken.var->ToInt64(); break;
+		case PURE_NOT_NUMERIC: str = aToken.var->Contents(); break;
+		case PURE_FLOAT: 
+		default:	
+			return SCS_INVALID;
+		}
+		break;
 
+	case SYM_INTEGER: int_val = TokenToInt64(aToken); break;
+	case SYM_FLOAT: return SCS_INVALID;
+	default: str = TokenToString(aToken); break;
+	}
+	if (str)
+		return !_tcsicmp(str, _T("Logical"))	? SCS_INSENSITIVE_LOGICAL
+												: Line::ConvertStringCaseSense(str);
+	return int_val == 1 ? SCS_SENSITIVE						// 1	- Sensitive
+						: (int_val == 0 ? SCS_INSENSITIVE	// 0	- Insensitive
+										: SCS_INVALID);		// else - invalid.
+}
 
 IObject *TokenToObject(ExprTokenType &aToken)
 // L31: Returns IObject* from SYM_OBJECT or SYM_VAR (where var->HasObject()), NULL for other tokens.

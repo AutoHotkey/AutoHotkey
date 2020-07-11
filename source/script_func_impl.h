@@ -8,17 +8,9 @@
 #define ParamIndexToBOOL(index)						TokenToBOOL(*aParam[(index)])
 #define ParamIndexToObject(index)					TokenToObject(*aParam[(index)])
 #define ParamIndexToToggleValue(index)				TokenToToggleValue(*aParam[(index)])
-
-// Rather than adding a third value to the CaseSensitive parameter, it obeys StringCaseSense because:
-// 1) It matches the behavior of the equal operator (=) in expressions.
-// 2) It's more friendly for typical international uses because it avoids having to specify that special/third value
-//    for every call of InStr.  It's nice to be able to omit the CaseSensitive parameter every time and know that
-//    the behavior of both InStr and its counterpart the equals operator are always consistent with each other.
-// If the parameter is (false or omitted) insensitive, resolve it to be Locale-mode if the StringCaseSense mode is
-// either case-sensitive or Locale-insensitive.
-// The parameter is assumed to be optional and always defaults to false.
-#define ParamIndexToCaseSense(index)				(!ParamIndexIsOmitted(index) && ParamIndexToBOOL(index) ? SCS_SENSITIVE \
-													: (g->StringCaseSense != SCS_INSENSITIVE ? SCS_INSENSITIVE_LOCALE : SCS_INSENSITIVE) )
+													
+// Omitted parameter returns SCS_INSENSITIVE.
+#define ParamIndexToCaseSense(index)				(ParamIndexIsOmitted((index)) ? SCS_INSENSITIVE : TokenToStringCase(*aParam[(index)]))
 
 #define ParamIndexIsNumeric(index)  (TokenIsNumeric(*aParam[(index)]))
 
