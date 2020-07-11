@@ -818,7 +818,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				left_is_pure_number = TokenIsPureNumeric(left, left_is_number);
 			// Otherwise, leave left_is' uninitialized as below will short-circuit.
 			if (  !(right_is_number && left_is_number)  // i.e. they're not both numeric (or this is SYM_CONCAT).
-				|| IS_RELATIONAL_OPERATOR(this_token.symbol) && !right_is_pure_number && !left_is_pure_number  ) // i.e. if both are strings, compare them alphabetically.
+				|| IS_EQUALITY_OPERATOR(this_token.symbol) && !right_is_pure_number && !left_is_pure_number  ) // i.e. if both are strings, compare them alphabetically if the operator supports it.
 			{
 				// L31: Handle binary ops supported by objects (= == != !==).
 				switch (this_token.symbol)
@@ -865,12 +865,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 				case SYM_NOTEQUALCASE:	this_token.value_int64 = !((left_length == right_length)		// Same as SYM_EQUALCASE but inverted result, code copied for performance (assumed).		
 										&& !tmemcmp(left_string, right_string, left_length) ); break;
-				// The rest all obey g->StringCaseSense since they have no case sensitive counterparts:
-				case SYM_GT:			this_token.value_int64 = g_tcscmp(left_string, right_string) > 0; break;
-				case SYM_LT:			this_token.value_int64 = g_tcscmp(left_string, right_string) < 0; break;
-				case SYM_GTOE:			this_token.value_int64 = g_tcscmp(left_string, right_string) > -1; break;
-				case SYM_LTOE:			this_token.value_int64 = g_tcscmp(left_string, right_string) < 1; break;
-
+				
 				case SYM_CONCAT:
 					if (TokenToObject(left))
 					{
