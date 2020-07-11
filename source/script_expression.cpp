@@ -852,9 +852,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				result_symbol = SYM_INTEGER; // Set default.  Boolean results are treated as integers.
 				switch(this_token.symbol)
 				{
-				case SYM_EQUAL:	this_token.value_int64 = !((g->StringCaseSense == SCS_INSENSITIVE)
-								? _tcsicmp(left_string, right_string)
-								: lstrcmpi(left_string, right_string)); break; // i.e. use the "more correct mode" except when explicitly told to use the fast mode (v1.0.43.03).
+				case SYM_EQUAL:	this_token.value_int64 = !_tcsicmp(left_string, right_string); break; // Case-insensitive string comparison.
 				
 				case SYM_EQUALCASE: // Case sensitive.  Also supports binary data.
 					// Support basic equality checking of binary data by using tmemcmp rather than _tcscmp.
@@ -863,9 +861,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// As a result, the comparison is much faster when the length differs.
 					this_token.value_int64 = (left_length == right_length) && !tmemcmp(left_string, right_string, left_length);
 					break; 
-				case SYM_NOTEQUAL:	this_token.value_int64 = !!((g->StringCaseSense == SCS_INSENSITIVE)	// Same as SYM_EQUAL but inverted result, code copied for performance (assumed). Note the double !! instead of no !, it is for handling the strcmp functions returning -1.
-									? _tcsicmp(left_string, right_string)
-									: lstrcmpi(left_string, right_string)); break;
+				case SYM_NOTEQUAL:	this_token.value_int64 = !!_tcsicmp(left_string, right_string); break; // Same as SYM_EQUAL but inverted result, code copied for performance (assumed). Note the double !! instead of no !, it is for handling the strcmp functions returning -1.
+
 				case SYM_NOTEQUALCASE:	this_token.value_int64 = !((left_length == right_length)		// Same as SYM_EQUALCASE but inverted result, code copied for performance (assumed).		
 										&& !tmemcmp(left_string, right_string, left_length) ); break;
 				// The rest all obey g->StringCaseSense since they have no case sensitive counterparts:
