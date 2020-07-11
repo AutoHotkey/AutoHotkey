@@ -1915,7 +1915,7 @@ void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEvent
 		}
 		else // Mouse button/name and/or Down/Up/Repeat-count is present.
 		{
-			if (temp_vk = Line::ConvertMouseButton(next_option, true, true))
+			if (temp_vk = Line::ConvertMouseButton(next_option, true))
 				aVK = temp_vk;
 			else
 			{
@@ -2066,13 +2066,11 @@ void MouseClickDrag(vk_type aVK, int aX1, int aY1, int aX2, int aY2, int aSpeed,
 	//if (aSpeed < 2)
 	//	aSpeed = 2;
 
-	// v1.0.43: Translate logical buttons into physical ones.  Which physical button it becomes depends
+	// v2.0: Always translate logical buttons into physical ones.  Which physical button it becomes depends
 	// on whether the mouse buttons are swapped via the Control Panel.  Note that journal playback doesn't
 	// need the swap because every aspect of it is "logical".
-	if (aVK == VK_LBUTTON_LOGICAL)
-		aVK = sSendMode != SM_PLAY && GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON;
-	else if (aVK == VK_RBUTTON_LOGICAL)
-		aVK = sSendMode != SM_PLAY && GetSystemMetrics(SM_SWAPBUTTON) ? VK_LBUTTON : VK_RBUTTON;
+	if ((aVK == VK_LBUTTON || aVK == VK_RBUTTON) && sSendMode != SM_PLAY && GetSystemMetrics(SM_SWAPBUTTON))
+		aVK = (aVK == VK_LBUTTON) ? VK_RBUTTON : VK_LBUTTON;
 
 	// MSDN: If [event_flags] is not MOUSEEVENTF_WHEEL, [MOUSEEVENTF_HWHEEL,] MOUSEEVENTF_XDOWN,
 	// or MOUSEEVENTF_XUP, then [event_data] should be zero. 
@@ -2206,12 +2204,10 @@ void MouseClick(vk_type aVK, int aX, int aY, int aRepeatCount, int aSpeed, KeyEv
 	// MSDN: If [event_flags] is not MOUSEEVENTF_WHEEL, MOUSEEVENTF_XDOWN, or MOUSEEVENTF_XUP, then [event_data]
 	// should be zero. 
 
-	// v1.0.43: Translate logical buttons into physical ones.  Which physical button it becomes depends
+	// v2.0: Always translate logical buttons into physical ones.  Which physical button it becomes depends
 	// on whether the mouse buttons are swapped via the Control Panel.
-	if (aVK == VK_LBUTTON_LOGICAL)
-		aVK = sSendMode != SM_PLAY && GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON;
-	else if (aVK == VK_RBUTTON_LOGICAL)
-		aVK = sSendMode != SM_PLAY && GetSystemMetrics(SM_SWAPBUTTON) ? VK_LBUTTON : VK_RBUTTON;
+	if ((aVK == VK_LBUTTON || aVK == VK_RBUTTON) && sSendMode != SM_PLAY && GetSystemMetrics(SM_SWAPBUTTON))
+		aVK = (aVK == VK_LBUTTON) ? VK_RBUTTON : VK_LBUTTON;
 
 	switch (aVK)
 	{

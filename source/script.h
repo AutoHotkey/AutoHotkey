@@ -1262,12 +1262,12 @@ public:
 		return SW_SHOWNORMAL;
 	}
 
-	static int ConvertMouseButton(LPTSTR aBuf, bool aAllowWheel = true, bool aUseLogicalButton = false)
+	static int ConvertMouseButton(LPTSTR aBuf, bool aAllowWheel = true)
 	// Returns the matching VK, or zero if none.
 	{
 		if (!*aBuf || !_tcsicmp(aBuf, _T("LEFT")) || !_tcsicmp(aBuf, _T("L")))
-			return aUseLogicalButton ? VK_LBUTTON_LOGICAL : VK_LBUTTON; // Some callers rely on this default when !*aBuf.
-		if (!_tcsicmp(aBuf, _T("RIGHT")) || !_tcsicmp(aBuf, _T("R"))) return aUseLogicalButton ? VK_RBUTTON_LOGICAL : VK_RBUTTON;
+			return VK_LBUTTON; // Some callers rely on this default when !*aBuf.
+		if (!_tcsicmp(aBuf, _T("RIGHT")) || !_tcsicmp(aBuf, _T("R"))) return VK_RBUTTON;
 		if (!_tcsicmp(aBuf, _T("MIDDLE")) || !_tcsicmp(aBuf, _T("M"))) return VK_MBUTTON;
 		if (!_tcsicmp(aBuf, _T("X1"))) return VK_XBUTTON1;
 		if (!_tcsicmp(aBuf, _T("X2"))) return VK_XBUTTON2;
