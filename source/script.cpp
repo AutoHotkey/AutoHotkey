@@ -1546,9 +1546,10 @@ UINT Script::LoadFromFile()
 		if (!mod->ResolveUseParams())
 			return LOADING_FAILED;
 	}
-
+	auto current_line = mCurrLine;
 	if (!PreparseExpressions(mFirstLine))
 		return LOADING_FAILED; // Error was already displayed by the above call.
+	mCurrLine = current_line;
 	// ABOVE: In v1.0.47, the above may have auto-included additional files from the userlib/stdlib.
 	// That's why the above is done prior to adding the EXIT lines and other things below.
 
@@ -8055,6 +8056,7 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 	for (Line *line = aStartingLine; line; line = line->mNextLine)
 	{
 		line->SetCurrentModule();
+		mCurrLine = line; // To improve error messages in some cases.
 		switch (line->mActionType)
 		{
 		// Set g->CurrentFunc for use resolving names of nested functions.
