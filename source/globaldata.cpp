@@ -474,8 +474,8 @@ key_to_vk_type g_key_to_vk[] =
 , {_T("F24"), VK_F24}
 
 // Mouse buttons:
-, {_T("LButton"), VK_LBUTTON_LOGICAL}
-, {_T("RButton"), VK_RBUTTON_LOGICAL}
+, {_T("LButton"), VK_LBUTTON}
+, {_T("RButton"), VK_RBUTTON}
 , {_T("MButton"), VK_MBUTTON}
 , {_T("XButton1"), VK_XBUTTON1}
 , {_T("XButton2"), VK_XBUTTON2}

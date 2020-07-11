@@ -1953,7 +1953,10 @@ ResultType PerformMouse(ActionTypeType aActionType, LPTSTR aButton, LPTSTR aX1, 
 	else
 		// ConvertMouseButton() treats blank as "Left":
 		if (   !(vk = Line::ConvertMouseButton(aButton, aActionType == ACT_MOUSECLICK))   )
-			vk = VK_LBUTTON_LOGICAL; // Treat invalid button names as "Left".
+			vk = VK_LBUTTON; // See below.
+			// v1.0.43: Seems harmless (due to rarity) to treat invalid button names as "Left" (keeping in
+			// mind that due to loadtime validation, invalid buttons are possible only when the button name is
+			// contained in a variable, e.g. MouseClick %ButtonName%.
 
 	KeyEventTypes event_type = KEYDOWNANDUP;  // Set defaults.
 	int repeat_count = 1;                     //

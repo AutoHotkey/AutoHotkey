@@ -281,13 +281,13 @@ LRESULT CALLBACK LowLevelMouseProc(int aCode, WPARAM wParam, LPARAM lParam)
 			sc = (wheel_delta > 0 ? wheel_delta : -wheel_delta); // Note that sc is unsigned.
 			key_up = false; // Always consider wheel movements to be "key down" events.
 			break;
-		case WM_LBUTTONUP: vk = VK_LBUTTON_LOGICAL;	break;
-		case WM_RBUTTONUP: vk = VK_RBUTTON_LOGICAL; break;
+		case WM_LBUTTONUP: vk = VK_LBUTTON;	break;
+		case WM_RBUTTONUP: vk = VK_RBUTTON; break;
 		case WM_MBUTTONUP: vk = VK_MBUTTON; break;
 		case WM_NCXBUTTONUP:  // NC means non-client.
 		case WM_XBUTTONUP: vk = (HIWORD(event.mouseData) == XBUTTON1) ? VK_XBUTTON1 : VK_XBUTTON2; break;
-		case WM_LBUTTONDOWN: vk = VK_LBUTTON_LOGICAL; key_up = false; break;
-		case WM_RBUTTONDOWN: vk = VK_RBUTTON_LOGICAL; key_up = false; break;
+		case WM_LBUTTONDOWN: vk = VK_LBUTTON; key_up = false; break;
+		case WM_RBUTTONDOWN: vk = VK_RBUTTON; key_up = false; break;
 		case WM_MBUTTONDOWN: vk = VK_MBUTTON; key_up = false; break;
 		case WM_NCXBUTTONDOWN:
 		case WM_XBUTTONDOWN: vk = (HIWORD(event.mouseData) == XBUTTON1) ? VK_XBUTTON1 : VK_XBUTTON2; key_up = false; break;
@@ -570,7 +570,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// 3) Right-click should invoke another instance of the context menu (or dismiss existing menu, depending
 		//    on where the click occurs) if user clicks outside of our thread's existing context menu.
 		HWND menu_hwnd;
-		if (   (aVK == VK_LBUTTON_LOGICAL || aVK == VK_RBUTTON_LOGICAL) && (g_MenuIsVisible // Ordered for short-circuit performance.
+		if (   (aVK == VK_LBUTTON || aVK == VK_RBUTTON) && (g_MenuIsVisible // Ordered for short-circuit performance.
 				|| ((menu_hwnd = FindWindow(_T("#32768"), NULL))
 					&& GetWindowThreadProcessId(menu_hwnd, NULL) == g_MainThreadID))   ) // Don't call GetCurrentThreadId() because our thread is different than main's.
 		{
@@ -2241,7 +2241,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 	} // Keyboard vs. mouse hook.
 
 	// Since above didn't return, this keystroke is being passed through rather than suppressed.
-	if (g_HSResetUponMouseClick && (aVK == VK_LBUTTON_LOGICAL || aVK == VK_RBUTTON_LOGICAL)) // v1.0.42.03
+	if (g_HSResetUponMouseClick && (aVK == VK_LBUTTON || aVK == VK_RBUTTON)) // v1.0.42.03
 	{
 		*g_HSBuf = '\0';
 		g_HSBufLength = 0;
@@ -4336,8 +4336,8 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 #ifdef FUTURE_USE_MOUSE_BUTTONS_LOGICAL
 		g_mouse_buttons_logical = 0;
 #endif
-		g_PhysicalKeyState[VK_LBUTTON_LOGICAL] = 0;
-		g_PhysicalKeyState[VK_RBUTTON_LOGICAL] = 0;
+		g_PhysicalKeyState[VK_LBUTTON] = 0;
+		g_PhysicalKeyState[VK_RBUTTON] = 0;
 		g_PhysicalKeyState[VK_MBUTTON] = 0;
 		g_PhysicalKeyState[VK_XBUTTON1] = 0;
 		g_PhysicalKeyState[VK_XBUTTON2] = 0;
@@ -4351,8 +4351,8 @@ void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 
 		if (aResetKVKandKSC)
 		{
-			ResetKeyTypeState(kvk[VK_LBUTTON_LOGICAL]);
-			ResetKeyTypeState(kvk[VK_RBUTTON_LOGICAL]);
+			ResetKeyTypeState(kvk[VK_LBUTTON]);
+			ResetKeyTypeState(kvk[VK_RBUTTON]);
 			ResetKeyTypeState(kvk[VK_MBUTTON]);
 			ResetKeyTypeState(kvk[VK_XBUTTON1]);
 			ResetKeyTypeState(kvk[VK_XBUTTON2]);

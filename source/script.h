@@ -1262,7 +1262,7 @@ public:
 		return SW_SHOWNORMAL;
 	}
 
-	static int ConvertMouseButton(LPTSTR aBuf, bool aAllowWheel = true, bool aUseLogicalButton = true)
+	static int ConvertMouseButton(LPTSTR aBuf, bool aAllowWheel = true, bool aUseLogicalButton = false)
 	// Returns the matching VK, or zero if none.
 	{
 		if (!*aBuf || !_tcsicmp(aBuf, _T("LEFT")) || !_tcsicmp(aBuf, _T("L")))
