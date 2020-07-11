@@ -8892,12 +8892,13 @@ unquoted_literal:
 
 			if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
 			{ 
-				TCHAR c = this_deref_ref.type == DT_QSTRING ? cp[-2] : cp[-1];
+				LPTSTR start_of_literal = cp - (this_deref_ref.type == DT_QSTRING);
+				TCHAR c = start_of_literal[-1];
 				// See CHECK_AUTO_CONCAT macro definition for comments.
 				if (c != '.') // i.e. it's not a dynamic member like .my%x%
 				{
 					if (!IS_SPACE_OR_TAB(c))
-						return LineError(ERR_BAD_AUTO_CONCAT, FAIL, cp);
+						return LineError(ERR_BAD_AUTO_CONCAT, FAIL, start_of_literal);
 					infix[infix_count++].symbol = SYM_CONCAT;
 				}
 			}
