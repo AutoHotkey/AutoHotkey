@@ -745,18 +745,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			break;
 
 		case SYM_BITNOT:  // The tilde (~) operator.
-			if (right_is_number == PURE_NOT_NUMERIC) // String.  Seems best to consider the application of '*' or '~' to a non-numeric string to be a failure.
+			if (right_is_number != PURE_INTEGER) // String.  Seems best to consider the application of '*' or '~' to a non-numeric string to be a failure.
 			{
 				error_info = _T("Number");
 				error_value = &right;
 				goto type_mismatch;
 			}
-			// Since above didn't "break": right_is_number is PURE_INTEGER or PURE_FLOAT.
-			right_int64 = TokenToInt64(right); // Although PURE_FLOAT can't be hex, for simplicity and due to the rarity of encountering a PURE_FLOAT in this case, the slight performance reduction of calling TokenToInt64() is done for both PURE_FLOAT and PURE_INTEGER.
-			// Note that it is not legal to perform ~, &, |, or ^ on doubles.  Because of this,
-			// any floating point operand is truncated to an integer above.
+			// Since above didn't "goto": right_is_number is PURE_INTEGER.
+			right_int64 = TokenToInt64(right); // The slight performance reduction of calling TokenToInt64() is done for brevity.
+			
+			// Note that it is not legal to perform ~, &, |, or ^ on doubles.  
 			// Treat it as a 64-bit signed value, since no other aspects of the program
-			// (e.g. IfEqual) will recognize an unsigned 64 bit number.
+			// will recognize an unsigned 64 bit number.
 			this_token.value_int64 = ~right_int64;
 			this_token.symbol = SYM_INTEGER; // Must be done only after its old value was used above. v1.0.36.07: Fixed to be SYM_INTEGER vs. right_is_number for SYM_BITNOT.
 			break;
@@ -793,7 +793,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_ASSIGN_SUBTRACT:      this_token.symbol = SYM_SUBTRACT; break;
 				case SYM_ASSIGN_MULTIPLY:      this_token.symbol = SYM_MULTIPLY; break;
 				case SYM_ASSIGN_DIVIDE:        this_token.symbol = SYM_DIVIDE; break;
-				case SYM_ASSIGN_FLOORDIVIDE:   this_token.symbol = SYM_FLOORDIVIDE; break;
+				case SYM_ASSIGN_INTEGERDIVIDE: this_token.symbol = SYM_INTEGERDIVIDE; break;
 				case SYM_ASSIGN_BITOR:         this_token.symbol = SYM_BITOR; break;
 				case SYM_ASSIGN_BITXOR:        this_token.symbol = SYM_BITXOR; break;
 				case SYM_ASSIGN_BITAND:        this_token.symbol = SYM_BITAND; break;
@@ -1043,13 +1043,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				this_token.symbol = result_symbol; // Must be done only after the switch() above.
 			}
 
-			else if (right_is_number == PURE_INTEGER && left_is_number == PURE_INTEGER && this_token.symbol != SYM_DIVIDE
-				|| IS_BIT_OPERATOR(this_token.symbol))
+			else if (right_is_number == PURE_INTEGER && left_is_number == PURE_INTEGER && this_token.symbol != SYM_DIVIDE)
 			{
 				// Because both are integers and the operation isn't division, the result is integer.
-				// The result is also an integer for the bitwise operations listed in the if-statement
-				// above.  This is because it is not legal to perform ~, &, |, or ^ on doubles.  Any
-				// floating point operands are truncated to integers prior to doing the bitwise operation.
 				right_int64 = TokenToInt64(right); // It can't be SYM_STRING because in here, both right and
 				left_int64 = TokenToInt64(left);    // left are known to be numbers (otherwise an earlier "else if" would have executed instead of this one).
 				result_symbol = SYM_INTEGER; // Set default.
@@ -1080,10 +1076,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						? left_int64 << right_int64
 						: left_int64 >> right_int64;
 					break;
-				case SYM_FLOORDIVIDE:
-					// Since it's integer division, no need for explicit floor() of the result.
-					// Also, performance is much higher for integer vs. float division, which is part
-					// of the justification for a separate operator.
+				case SYM_INTEGERDIVIDE:
 					if (right_int64 == 0)
 						goto divide_by_zero;
 					this_token.value_int64 = left_int64 / right_int64;
@@ -1134,12 +1127,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_SUBTRACT: this_token.value_double = left_double - right_double; break;
 				case SYM_MULTIPLY: this_token.value_double = left_double * right_double; break;
 				case SYM_DIVIDE:
-				case SYM_FLOORDIVIDE:
 					if (right_double == 0.0)
 						goto divide_by_zero;
 					this_token.value_double = left_double / right_double;
-					if (this_token.symbol == SYM_FLOORDIVIDE) // Like Python, the result is floor()'d, moving to the nearest integer to the left on the number line.
-						this_token.value_double = qmathFloor(this_token.value_double); // Result is always a double when at least one of the inputs was a double.
 					break;
 				case SYM_EQUALCASE: // Same behavior as SYM_EQUAL for numeric operands.
 				case SYM_EQUAL:    this_token.value_int64 = left_double == right_double; break;
@@ -1168,6 +1158,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					this_token.value_double = pow(left_double, right_double);
 #endif
 					break;
+				default:
+					if (IS_INTEGER_OPERATOR(this_token.symbol))
+					{
+						error_info = _T("Integer");
+						error_value = left_is_number == PURE_INTEGER ? &right : &left;
+						goto type_mismatch; // floats are not supported for the integer operators.
+					}
+					// this is should not be reachable.
+#ifdef _DEBUG
+					LineError(_T("Unhandled float operation.")); // To help catch bugs.
+					goto abort;
+#endif
 				} // switch(this_token.symbol)
 				this_token.symbol = result_symbol; // Must be done only after the switch() above.
 			} // Result is floating point.
