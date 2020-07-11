@@ -529,7 +529,7 @@ int FTOA(double aValue, LPTSTR aBuf, int aBufSize);
 
 
 
-// v1.0.43.03: The following macros support the new "StringCaseSense Locale" setting.  This setting performs
+// The following macros support StringCaseSense parameters (0, 1, 'Locale').  Locale mode performs
 // 1 to 10 times slower for most things, but has the benefit of seeing characters like ä and Ä as identical
 // when insensitive.  MSDN implies that lstrcmpi() is the same as:
 //     CompareString(LOCALE_USER_DEFAULT, NORM_IGNORECASE, ...)
@@ -540,11 +540,9 @@ int FTOA(double aValue, LPTSTR aBuf, int aBufSize);
 // the program when the new locale-case-insensitive mode is in effect.
 #define tcscmp2(str1, str2, string_case_sense) ((string_case_sense) == SCS_INSENSITIVE ? _tcsicmp(str1, str2) \
 	: ((string_case_sense) == SCS_INSENSITIVE_LOCALE ? lstrcmpi(str1, str2) : _tcscmp(str1, str2)))
-#define g_tcscmp(str1, str2) tcscmp2(str1, str2, ::g->StringCaseSense)
 // The most common mode is listed first for performance:
 #define tcsstr2(haystack, needle, string_case_sense) ((string_case_sense) == SCS_INSENSITIVE ? tcscasestr(haystack, needle) \
 	: ((string_case_sense) == SCS_INSENSITIVE_LOCALE ? lstrcasestr(haystack, needle) : _tcsstr(haystack, needle)))
-#define g_tcsstr(haystack, needle) tcsstr2(haystack, needle, ::g->StringCaseSense)
 // For the following, caller must ensure that len1 and len2 aren't beyond the terminated length of the string
 // because CompareString() might not stop at the terminator when a length is specified.  Also, CompareString()
 // returns 0 on failure, but failure occurs only when parameter/flag is invalid, which should never happen in
@@ -710,7 +708,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 HBITMAP IconToBitmap(HICON ahIcon, bool aDestroyIcon);
 HBITMAP IconToBitmap32(HICON aIcon, bool aDestroyIcon); // Lexikos: Used for menu icons on Vista+. Creates a 32-bit (ARGB) device-independent bitmap from an icon.
 int CALLBACK FontEnumProc(ENUMLOGFONTEX *lpelfe, NEWTEXTMETRICEX *lpntme, DWORD FontType, LPARAM lParam);
-bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch);
+//bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch);
 LPTSTR InStrAny(LPTSTR aStr, LPTSTR aNeedle[], int aNeedleCount, size_t &aFoundLen);
 
 LPTSTR ResourceIndexToId(HMODULE aModule, LPCTSTR aType, int aIndex); // L17: Find integer ID of resource from index. i.e. IconNumber -> resource ID.

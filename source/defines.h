@@ -869,7 +869,6 @@ struct global_struct
 	bool ThreadIsCritical; // Whether this thread has been marked (un)interruptible by the "Critical" command.
 	UCHAR DefaultMouseSpeed;
 	CoordModeType CoordMode; // Bitwise collection of flags.
-	UCHAR StringCaseSense; // On/Off/Locale
 	bool StoreCapslockMode;
 	SendLevelType SendLevel;
 	bool MsgBoxTimedOut; // Doesn't require initialization.
@@ -954,7 +953,6 @@ inline void global_init(global_struct &g)
 	#define MAX_MOUSE_SPEED 100
 	g.DefaultMouseSpeed = DEFAULT_MOUSE_SPEED;
 	g.CoordMode = 0;  // All the flags it contains are off by default.
-	g.StringCaseSense = SCS_INSENSITIVE;  // AutoIt2 default, and it does seem best.
 	g.StoreCapslockMode = true;  // AutoIt2 (and probably 3's) default, and it makes a lot of sense.
 	g.SendLevel = 0;
 	g.ListLinesIsEnabled = true;

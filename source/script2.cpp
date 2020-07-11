@@ -9235,7 +9235,7 @@ BIV_DECL_W(BIV_ListLines_Set)
 BIV_DECL_R(BIV_TitleMatchMode)
 {
 	if (g->TitleMatchMode == FIND_REGEX) // v1.0.45.
-		// For backward compatibility (due to StringCaseSense), never change the case used here:
+		// For backward compatibility (due to possible use of case-sensitive comparison), never change the case used here:
 		_f_return_p(_T("RegEx"));
 	// Otherwise, it's a numerical mode:
 	_f_return_i(g->TitleMatchMode);
@@ -9260,7 +9260,7 @@ BIV_DECL_W(BIV_TitleMatchMode_Set)
 
 BIV_DECL_R(BIV_TitleMatchModeSpeed)
 {
-	// For backward compatibility (due to StringCaseSense), never change the case used here:
+	// For backward compatibility (due to possible use of case-sensitive comparison), never change the case used here:
 	_f_return_p(g->TitleFindFast ? _T("Fast") : _T("Slow"));
 }
 
@@ -9282,23 +9282,6 @@ BIV_DECL_R(BIV_DetectHiddenText)
 BIV_DECL_W(BIV_DetectHiddenText_Set)
 {
 	g->DetectHiddenText = BivRValueToBOOL();
-}
-
-BIV_DECL_R(BIV_StringCaseSense)
-{
-	// For backward compatibility (due to StringCaseSense), never change the case used here.
-	_f_return_p(g->StringCaseSense == SCS_INSENSITIVE ? _T("Off")
-			: (g->StringCaseSense == SCS_SENSITIVE ? _T("On") : _T("Locale")));
-}
-
-BIV_DECL_W(BIV_StringCaseSense_Set)
-{
-	LPTSTR aBuf = BivRValueToString();
-	StringCaseSenseType sense;
-	if ( (sense = Line::ConvertStringCaseSense(aBuf)) != SCS_INVALID )
-		g->StringCaseSense = sense;
-	else
-		_f_throw(ERR_INVALID_VALUE, aBuf);
 }
 
 int& BIV_xDelay(LPTSTR aVarName)
@@ -10348,7 +10331,7 @@ BIV_DECL_R(BIV_TimeIdle)
 
 BIF_DECL(BIF_SetBIV)
 {
-	static VirtualVar::Setter sBiv[] = { &BIV_DetectHiddenText_Set, &BIV_DetectHiddenWindows_Set, &BIV_FileEncoding_Set, &BIV_RegView_Set, &BIV_StoreCapsLockMode_Set, &BIV_TitleMatchMode_Set, &BIV_StringCaseSense_Set };
+	static VirtualVar::Setter sBiv[] = { &BIV_DetectHiddenText_Set, &BIV_DetectHiddenWindows_Set, &BIV_FileEncoding_Set, &BIV_RegView_Set, &BIV_StoreCapsLockMode_Set, &BIV_TitleMatchMode_Set };
 	auto biv = sBiv[_f_callee_id];
 	_f_set_retval_p(_T(""), 0);
 	biv(aResultToken, nullptr, *aParam[0]);

@@ -647,7 +647,7 @@ enum BuiltInFunctionID {
 	FID_SoundGetVolume = 0, FID_SoundGetMute, FID_SoundGetName, FID_SoundGetInterface, FID_SoundSetVolume, FID_SoundSetMute,
 	FID_RunWait = 0, FID_ClipWait, FID_KeyWait, FID_WinWait, FID_WinWaitClose, FID_WinWaitActive, FID_WinWaitNotActive,
 	// For BIF_SetBIV (functions corresponding to built-in vars): keep the order of these in sync with the array in BIF_SetBIV.
-	FID_DetectHiddenText = 0, FID_DetectHiddenWindows, FID_FileEncoding, FID_SetRegView, FID_SetStoreCapsLockMode, FID_SetTitleMatchMode, FID_StringCaseSense,
+	FID_DetectHiddenText = 0, FID_DetectHiddenWindows, FID_FileEncoding, FID_SetRegView, FID_SetStoreCapsLockMode, FID_SetTitleMatchMode,
 	// Hotkey/HotIf/...
 	FID_HotIfWinActive = HOT_IF_ACTIVE, FID_HotIfWinNotActive = HOT_IF_NOT_ACTIVE,
 		FID_HotIfWinExist = HOT_IF_EXIST, FID_HotIfWinNotExist = HOT_IF_NOT_EXIST,
@@ -3118,7 +3118,6 @@ BIV_DECL_RW(BIV_TitleMatchMode);
 BIV_DECL_R (BIV_TitleMatchModeSpeed); // Write is handled by BIV_TitleMatchMode_Set.
 BIV_DECL_RW(BIV_DetectHiddenWindows);
 BIV_DECL_RW(BIV_DetectHiddenText);
-BIV_DECL_RW(BIV_StringCaseSense);
 BIV_DECL_RW(BIV_xDelay);
 BIV_DECL_RW(BIV_DefaultMouseSpeed);
 BIV_DECL_RW(BIV_CoordMode);

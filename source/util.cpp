@@ -3015,6 +3015,7 @@ int BalanceExpr(LPCTSTR aBuf, int aStartBalance, TCHAR aExpect[], TCHAR *aOpenQu
 
 
 
+#if 0 // Currently unused.
 bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch)
 // Checks if aStr exists in aList (which is a comma-separated list).
 // If aStr is blank, aList must start with a delimiting comma for there to be a match.
@@ -3068,6 +3069,7 @@ bool IsStringInList(LPTSTR aStr, LPTSTR aList, bool aFindExactMatch)
 
 	return false;  // No match found.
 }
+#endif
 
 
 
