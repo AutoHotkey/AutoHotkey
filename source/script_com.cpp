@@ -1066,7 +1066,17 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 	{
 		if (!IS_INVOKE_CALL && aName && !_tcsicmp(aName, _T("Ptr")))
 		{
-			if (IS_INVOKE_SET || aParamCount)
+			if (IS_INVOKE_SET && (mVarType == VT_UNKNOWN || mVarType == VT_DISPATCH) && !mUnknown)
+			{
+				// Allow this assignment only in the specific cases indicated above, to avoid ambiguity
+				// about what to do with the old value.  This operation is specifically intended for use
+				// with DllCall; i.e. DllCall(..., "ptr*", o := ComObject(13,0)) to wrap a returned ptr.
+				// Assigning zero is permitted and there is no AddRef because the caller wants us to
+				// Release the interface pointer automatically.
+				mUnknown = (IUnknown *)ParamIndexToInt64(0);
+				return OK;
+			}
+			if (aParamCount)
 				_o_throw(ERR_INVALID_USAGE);
 			// Support passing VT_ARRAY, VT_BYREF or IUnknown to DllCall.
 			if ((mVarType & (VT_ARRAY | VT_BYREF)) || mVarType == VT_UNKNOWN || mVarType == VT_DISPATCH)
