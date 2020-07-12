@@ -89,7 +89,7 @@ public:
 	DWORD mCriteria; // Which criteria are currently in effect (ID, PID, Class, Title, etc.)
 
 	// Controlled and initialized by SetCriteria():
-	global_struct *mSettings;                 // Settings such as TitleMatchMode and DetectHiddenWindows.
+	ScriptThreadSettings *mSettings;           // Settings such as TitleMatchMode and DetectHiddenWindows.
 	TCHAR mCriterionTitle[SEARCH_PHRASE_SIZE]; // For storing the title.
 	TCHAR mCriterionClass[SEARCH_PHRASE_SIZE]; // For storing the "ahk_class" class name.
 	size_t mCriterionTitleLength;             // Length of mCriterionTitle.
@@ -133,7 +133,7 @@ public:
 		}
 	}
 
-	ResultType SetCriteria(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType SetCriteria(ScriptThreadSettings &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 	void UpdateCandidateAttributes();
 	HWND IsMatch(bool aInvert = false);
 
@@ -313,16 +313,8 @@ int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf = NULL, INT_PTR aBufSize = 0, UI
 // dispatch them to a Window Proc).
 // GetQueueStatus() is used because unlike PeekMessage() or GetMessage(), it might not yield
 // our timeslice if the CPU is under heavy load, which would be good to improve performance here.
-#define DIALOG_PREP bool thread_was_critical = DialogPrep();
-// v1.0.40.01: Turning off critical during the dialog is relied upon by ResumeUnderlyingThread(),
-// UninterruptibleTimeout(), and KILL_AUTOEXEC_TIMER.  Doing it this way also seems more maintainable
-// than some other approach such as storing a new flag in the "g" struct that says whether it is currently
-// displaying a dialog and waiting for it to finish.
-#define DIALOG_END \
-{\
-	g->ThreadIsCritical = thread_was_critical;\
-	g->AllowThreadToBeInterrupted = !thread_was_critical;\
-}
-bool DialogPrep();
+#define DIALOG_PREP DialogPrep();
+#define DIALOG_END g->AllowThreadToBeInterrupted = !g->ThreadIsCritical;
+void DialogPrep();
 
 #endif

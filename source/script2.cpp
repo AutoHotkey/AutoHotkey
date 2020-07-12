@@ -16579,8 +16579,6 @@ BIF_DECL(BIF_Exception)
 	if (ParamIndexIsOmitted(1)) // "What"
 	{
 		line = g_script.mCurrLine;
-		// Using the current function seems preferable even if g->CurrentLabel is a sub
-		// within the function, since the sub is internal (local) to the function.
 		if (g->CurrentFunc)
 			what = g->CurrentFunc->mName;
 		else

@@ -83,7 +83,6 @@ bool g_NoTrayIcon = false;
 	bool g_AllowMainWindow = false;
 #endif
 bool g_MainTimerExists = false;
-bool g_AutoExecTimerExists = false;
 bool g_InputTimerExists = false;
 bool g_DerefTimerExists = false;
 bool g_SoundWasPlayed = false;
@@ -185,7 +184,7 @@ OS_Version g_os;  // OS version object, courtesy of AutoIt3.
 HICON g_IconSmall;
 HICON g_IconLarge;
 
-global_struct g_default, g_startup, *g_array;
+global_struct g_startup, *g_array;
 global_struct *g = &g_startup; // g_startup provides a non-NULL placeholder during script loading. Afterward it's replaced with an array.
 
 // I considered maintaining this on a per-quasi-thread basis (i.e. in global_struct), but the overhead

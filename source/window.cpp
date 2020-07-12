@@ -1351,7 +1351,7 @@ bool IsWindowCloaked(HWND aWnd)
 
 
 
-bool global_struct::DetectWindow(HWND aWnd)
+bool ScriptThreadSettings::DetectWindow(HWND aWnd)
 {
 	return DetectHiddenWindows || (IsWindowVisible(aWnd) && !IsWindowCloaked(aWnd));
 }
@@ -1471,7 +1471,7 @@ int GetWindowTextTimeout(HWND aWnd, LPTSTR aBuf, INT_PTR aBufSize, UINT aTimeout
 
 
 
-ResultType WindowSearch::SetCriteria(global_struct &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
+ResultType WindowSearch::SetCriteria(ScriptThreadSettings &aSettings, LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 // Returns FAIL if the new criteria can't possibly match a window (due to ahk_id being in invalid
 // window or the specified ahk_group not existing).  Otherwise, it returns OK.
 // Callers must ensure that aText, aExcludeTitle, and aExcludeText point to buffers whose contents
@@ -1826,11 +1826,11 @@ HWND WindowSearch::IsMatch(bool aInvert)
 
 
 
-bool DialogPrep()
+void DialogPrep()
 // Having it as a function vs. macro should reduce code size due to expansion of macros inside.
 {
-	bool thread_was_critical = g->ThreadIsCritical;
-	g->ThreadIsCritical = false;
+	// Make the thread immediately interruptible but don't change g->ThreadIsCritical,
+	// since DIALOG_END will refer to it when resetting g->AllowThreadToBeInterrupted.
 	g->AllowThreadToBeInterrupted = true;
 	if (g_KeybdHook) // Workaround added in v1.1.22.01.
 	{
@@ -1862,5 +1862,4 @@ bool DialogPrep()
 	}
 	if (HIWORD(GetQueueStatus(QS_ALLEVENTS))) // See DIALOG_PREP for explanation.
 		MsgSleep(-1);
-	return thread_was_critical; // Caller is responsible for using this to later restore g->ThreadIsCritical.
 }

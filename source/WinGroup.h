@@ -87,7 +87,7 @@ public:
 	ResultType Activate(bool aStartWithMostRecent, HWND &aHwnd, WindowSpec *aWinSpec = nullptr);
 	ResultType Deactivate(bool aStartWithMostRecent);
 	bool IsEmpty() {return mFirstWindow == NULL;}
-	WindowSpec *IsMember(HWND aWnd, global_struct &aSettings);
+	WindowSpec *IsMember(HWND aWnd, ScriptThreadSettings &aSettings);
 	WinGroup(LPTSTR aGroupName)
 		// The caller must ensure that aGroupName is non-null and non-empty-string.
 		: mName(aGroupName) // Caller gave us a pointer to dynamic memory for this.

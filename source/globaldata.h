@@ -86,7 +86,6 @@ extern bool g_NoTrayIcon;
 #endif
 extern bool g_DeferMessagesForUnderlyingPump;
 extern bool g_MainTimerExists;
-extern bool g_AutoExecTimerExists;
 extern bool g_InputTimerExists;
 extern bool g_DerefTimerExists;
 extern bool g_SoundWasPlayed;
@@ -165,7 +164,8 @@ extern HICON g_IconSmall;
 extern HICON g_IconLarge;
 
 EXTERN_G;
-extern global_struct g_default, *g_array;
+extern global_struct *g_array;
+#define g_default g_array[0]
 
 extern CString g_WorkingDir;
 extern LPTSTR g_WorkingDirOrig;
@@ -272,14 +272,14 @@ if (!g_MainTimerExists)\
 // More info: Since AutoExecSection() never calls InitNewThread(), it never used to set the uninterruptible
 // timer.  Instead, it had its own timer.  But now that IsInterruptible() checks for the timeout of
 // "Thread Interrupt", AutoExec might become interruptible prematurely unless it uses the new method below.
+//
+// v2.0: There's no longer an AutoExec timer, so this just sets the uninterruptible duration.
 #define SET_AUTOEXEC_TIMER(aTimeoutValue) \
 {\
 	g->AllowThreadToBeInterrupted = false;\
 	g->ThreadStartTime = GetTickCount();\
 	g->UninterruptibleDuration = aTimeoutValue;\
-	if (!g_AutoExecTimerExists)\
-		g_AutoExecTimerExists = SetTimer(g_hWnd, TIMER_ID_AUTOEXEC, aTimeoutValue, AutoExecSectionTimeout);\
-} // v1.0.39 for above: Removed the call to ExitApp() upon failure.  See SET_MAIN_TIMER for details.
+}
 
 #define SET_INPUT_TIMER(aTimeoutValue, aTimeoutAt) \
 { \
@@ -299,13 +299,6 @@ g_InputTimerExists = SetTimer(g_hWnd, TIMER_ID_INPUT, aTimeoutValue, InputTimeou
 #define KILL_MAIN_TIMER \
 if (g_MainTimerExists && KillTimer(g_hWnd, TIMER_ID_MAIN))\
 	g_MainTimerExists = false;
-
-// See above comment about g->AllowThreadToBeInterrupted.
-#define KILL_AUTOEXEC_TIMER \
-{\
-	if (g_AutoExecTimerExists && KillTimer(g_hWnd, TIMER_ID_AUTOEXEC))\
-		g_AutoExecTimerExists = false;\
-}
 
 #define KILL_INPUT_TIMER \
 if (g_InputTimerExists && KillTimer(g_hWnd, TIMER_ID_INPUT))\

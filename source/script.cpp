@@ -1140,7 +1140,7 @@ ResultType Script::AutoExecSection()
 	// #MaxThreads, an appropriately sized array can be allocated:
 	if (   !(g_array = (global_struct *)malloc((g_MaxThreadsTotal+TOTAL_ADDITIONAL_THREADS) * sizeof(global_struct)))   )
 		return FAIL; // Due to rarity, just abort. It wouldn't be safe to run ExitApp() due to possibility of an OnExit function.
-	CopyMemory(g_array, g, sizeof(global_struct)); // Copy the temporary/startup "g" into array[0] to preserve historical behaviors that may rely on the idle thread starting with that "g".
+	CopyMemory(g_array, g, sizeof(global_struct)); // Copy the temporary/startup "g" into array[0].
 	g = g_array; // Must be done after above.
 
 	// v2: Ensure the Hotkey function defaults to no criterion rather than the last #HotIf WinActive/Exist().  Alternatively we
@@ -1182,26 +1182,7 @@ ResultType Script::AutoExecSection()
 		// And continue on to do normal exit routine so that the right ExitCode is returned by the program.
 	else
 	{
-		// Choose a timeout that's a reasonable compromise between the following competing priorities:
-		// 1) That we want hotkeys to be responsive as soon as possible after the program launches
-		//    in case the user launches by pressing ENTER on a script, for example, and then immediately
-		//    tries to use a hotkey.  In addition, we want any timed subroutines to start running ASAP
-		//    because in rare cases the user might rely upon that happening.
-		// 2) To support the case when the auto-execute section never finishes (such as when it contains
-		//    an infinite loop to do background processing), yet we still want to allow the script
-		//    to put custom defaults into effect globally (for things such as KeyDelay).
-		// Obviously, the above approach has its flaws; there are ways to construct a script that would
-		// result in unexpected behavior.  However, the combination of this approach with the fact that
-		// the global defaults are updated *again* when/if the auto-execute section finally completes
-		// raises the expectation of proper behavior to a very high level.  In any case, I'm not sure there
-		// is any better approach that wouldn't break existing scripts or require a redesign of some kind.
-		// If this method proves unreliable due to disk activity slowing the program down to a crawl during
-		// the critical milliseconds after launch, one thing that might fix that is to have ExecUntil()
-		// be forced to run a minimum of, say, 100 lines (if there are that many) before allowing the
-		// timer expiration to have its effect.  But that's getting complicated and I'd rather not do it
-		// unless someone actually reports that such a thing ever happens.  Still, to reduce the chance
-		// of such a thing ever happening, it seems best to boost the timeout from 50 up to 100:
-		SET_AUTOEXEC_TIMER(100);
+		SET_AUTOEXEC_TIMER(100); // Currently this only marks the auto-execute thread as uninterruptible for the time indicated.
 		mAutoExecSectionIsRunning = true;
 
 		// v1.0.25: This is now done here, closer to the actual execution of the first line in the script,
@@ -1211,45 +1192,21 @@ ResultType Script::AutoExecSection()
 		DEBUGGER_STACK_PUSH(_T("Auto-execute"))
 		ExecUntil_result = mFirstLine->ExecUntil(UNTIL_RETURN); // Might never return (e.g. infinite loop or ExitApp).
 		DEBUGGER_STACK_POP()
-		--g_nThreads;
-		// Our caller will take care of setting g_default properly.
 
-		KILL_AUTOEXEC_TIMER // See also: AutoExecSectionTimeout().
 		mAutoExecSectionIsRunning = false;
 	}
 	// REMEMBER: The ExecUntil() call above will never return if the AutoExec section never finishes
 	// (e.g. infinite loop) or it uses Exit/ExitApp.
 
+	--g_nThreads;
+
 	// Check if an exception has been thrown
 	if (g->ThrownToken)
 		g_script.FreeExceptionToken(g->ThrownToken);
 
-	// The below is done even if AutoExecSectionTimeout() already set the values once.
-	// This is because when the AutoExecute section finally does finish, by definition it's
-	// supposed to store the global settings that are currently in effect as the default values.
-	// In other words, the only purpose of AutoExecSectionTimeout() is to handle cases where
-	// the AutoExecute section takes a long time to complete, or never completes (perhaps because
-	// it is being used by the script as a "background thread" of sorts):
-	// Save the values of KeyDelay, WinDelay etc. in case they were changed by the auto-execute part
-	// of the script.  These new defaults will be put into effect whenever a new hotkey subroutine
-	// is launched.  Each launched subroutine may then change the values for its own purposes without
-	// affecting the settings for other subroutines:
-	global_clear_state(*g);  // Start with a "clean slate" in both g_default and g (in case things like InitNewThread() check some of the values in g prior to launching a new thread).
-
-	// Always want g_default.AllowInterruption==true so that InitNewThread()  doesn't have to
-	// set it except when Critical or "Thread Interrupt" require it.  If the auto-execute section ended
-	// without anyone needing to call IsInterruptible() on it, AllowInterruption could be false
-	// even when Critical is off.
-	// Even if the still-running AutoExec section has turned on Critical, the assignment below is still okay
-	// because InitNewThread() adjusts AllowInterruption based on the value of ThreadIsCritical.
-	// See similar code in AutoExecSectionTimeout().
-	g->AllowThreadToBeInterrupted = true; // Mostly for the g_default line below. See comments above.
-	CopyMemory(&g_default, g, sizeof(global_struct)); // g->IsPaused has been set to false higher above in case it's ever possible that it's true as a result of AutoExecSection().
-	// After this point, the values in g_default should never be changed.
+	// Now that the auto-execute thread has finished, ensure that the very first g-item is always
+	// interruptible.  This avoids having to treat the first g-item as special in various places.
 	global_maximize_interruptibility(*g); // See below.
-	// Now that any changes made by the AutoExec section have been saved to g_default (including
-	// the commands Critical and Thread), ensure that the very first g-item is always interruptible.
-	// This avoids having to treat the first g-item as special in various places.
 
 	// BEFORE DOING THE BELOW, "g" and "g_default" should be set up properly in case there's an OnExit
 	// function (even non-persistent scripts can have one).
@@ -12114,6 +12071,14 @@ ResultType Line::Perform()
 		{
 			g.PeekFrequency = peek_frequency_when_critical_is_on;
 			g.AllowThreadToBeInterrupted = false;
+			// Ensure uninterruptibility never times out.  IsInterruptible() relies on this to avoid the
+			// need to check g->ThreadIsCritical, which in turn allows global_maximize_interruptibility()
+			// and DialogPrep() to avoid resetting g->ThreadIsCritical, which allows it to reliably be
+			// used as the default setting for new threads, even when the auto-execute thread itself
+			// (or the idle thread) needs to be interruptible, such as while displaying a dialog.
+			// In other words, g->ThreadIsCritical only represents the desired setting as set by the
+			// script, and isn't the actual mechanism used to make the thread uninterruptible.
+			g.UninterruptibleDuration = -1;
 		}
 		else // Critical has been turned off.
 		{

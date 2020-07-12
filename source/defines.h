@@ -810,34 +810,52 @@ struct HotkeyCriterion
 };
 
 
-// Each instance of this struct generally corresponds to a quasi-thread.
 class Func;                 // Forward declarations
 class UserFunc;             //
 class Label;                //
 struct RegItemStruct;       //
-struct LoopFilesStruct;
+struct LoopFilesStruct;     //
 struct LoopReadFileStruct;  //
 class GuiType;				//
 class ScriptTimer;			//
-struct global_struct
+
+struct ScriptThreadState
 {
-	// 8-byte items are listed first, which might improve alignment for 64-bit processors (dubious).
 	__int64 mLoopIteration; // Signed, since script/ITOA64 aren't designed to handle unsigned.
 	LoopFilesStruct *mLoopFile;  // The file of the current file-loop, if applicable.
 	RegItemStruct *mLoopRegItem; // The registry subkey or value of the current registry enumeration loop.
 	LoopReadFileStruct *mLoopReadFile;  // The file whose contents are currently being read by a File-Read Loop.
 	LPTSTR mLoopField;  // The field of the current string-parsing loop.
-	// v1.0.44.14: The above mLoop attributes were moved into this structure from the script class
-	// because they're more appropriate as thread-attributes rather than being global to the entire script.
 
-	HotkeyCriterion *HotCriterion;
-	TitleMatchModes TitleMatchMode;
-	int UninterruptedLineCount; // Stored as a g-struct attribute in case OnExit func interrupts it while uninterruptible.
-	int Priority;  // This thread's priority relative to others.
-	DWORD LastError; // The result of GetLastError() after the most recent DllCall or Run.
-	EventInfoType EventInfo; // Not named "GuiEventInfo" because it applies to non-GUI events such as clipboard.
+	UserFunc *CurrentFunc; // v1.0.46.16: The function whose body is currently being processed at load-time, or being run at runtime (if any).
+	ScriptTimer *CurrentTimer; // The timer that launched this thread (if any).
+	HWND hWndLastUsed;  // In many cases, it's better to use GetValidLastUsedWindow() when referring to this.
+	EventInfoType EventInfo;
+	HWND DialogHWND; // MsgBox being shown by this thread.
 	HWND DialogOwner; // This thread's dialog owner, if any.
-	#define THREAD_DIALOG_OWNER (IsWindow(::g->DialogOwner) ? ::g->DialogOwner : NULL)
+#define THREAD_DIALOG_OWNER (IsWindow(::g->DialogOwner) ? ::g->DialogOwner : NULL)
+	ResultToken* ThrownToken;
+
+	int ExcptMode;
+	DWORD LastError; // The result of GetLastError() after the most recent DllCall or Run.
+	int Priority;  // This thread's priority relative to others.
+	int UninterruptedLineCount; // Stored as a g-struct attribute in case OnExit func interrupts it while uninterruptible.
+	int UninterruptibleDuration; // Must be int to preserve negative values found in g_script.mUninterruptibleTime.
+	DWORD ThreadStartTime;
+	DWORD CalledByIsDialogMessageOrDispatchMsg; // Detects the fact that some messages (like WM_KEYDOWN->WM_NOTIFY for UpDown controls) are translated to different message numbers by IsDialogMessage (and maybe Dispatch too).
+
+	bool IsPaused;
+	bool MsgBoxTimedOut; // Meaningful only while a MsgBox call is in progress.
+	bool CalledByIsDialogMessageOrDispatch; // Helps avoid launching a monitor function twice for the same message.  This would probably be okay if it were a normal global rather than in the g-struct, but due to messaging complexity, this lends peace of mind and robustness.
+	bool AllowThreadToBeInterrupted; // Whether this thread can be interrupted by custom menu items, hotkeys, or timers.  Separate from g_AllowInterruption because that's for use by ongoing operations, such as SendKeys, and should override the thread's setting.
+};
+
+struct ScriptThreadSettings
+{
+	HotkeyCriterion *HotCriterion;
+
+	DWORD PeekFrequency; // DWORD vs. UCHAR might improve performance a little since it's checked so often.
+	TitleMatchModes TitleMatchMode;
 	int WinDelay;  // negative values may be used as special flags.
 	int ControlDelay; // negative values may be used as special flags.
 	int KeyDelay;     //
@@ -846,86 +864,80 @@ struct global_struct
 	int PressDurationPlay; // 
 	int MouseDelay;     // negative values may be used as special flags.
 	int MouseDelayPlay; //
-	UserFunc *CurrentFunc; // v1.0.46.16: The function whose body is currently being processed at load-time, or being run at runtime (if any).
-	Label *CurrentLabel; // The label that is currently awaiting its matching "return" (if any).
-	ScriptTimer *CurrentTimer; // The timer that launched this thread (if any).
-	HWND hWndLastUsed;  // In many cases, it's better to use GetValidLastUsedWindow() when referring to this.
-	//HWND hWndToRestore;
-	HWND DialogHWND;
 	DWORD RegView;
+	SendModes SendMode;
+	UINT Encoding;
+
+	CoordModeType CoordMode; // Bitwise collection of flags.
 
 	// All these one-byte members are kept adjacent to make the struct smaller, which helps conserve stack space:
-	SendModes SendMode;
-	DWORD PeekFrequency; // DWORD vs. UCHAR might improve performance a little since it's checked so often.
-	DWORD ThreadStartTime;
-	int UninterruptibleDuration; // Must be int to preserve negative values found in g_script.mUninterruptibleTime.
-	DWORD CalledByIsDialogMessageOrDispatchMsg; // Detects that fact that some messages (like WM_KEYDOWN->WM_NOTIFY for UpDown controls) are translated to different message numbers by IsDialogMessage (and maybe Dispatch too).
-	bool CalledByIsDialogMessageOrDispatch; // Helps avoid launching a monitor function twice for the same message.  This would probably be okay if it were a normal global rather than in the g-struct, but due to messaging complexity, this lends peace of mind and robustness.
 	bool TitleFindFast; // Whether to use the fast mode of searching window text, or the more thorough slow mode.
 	bool DetectHiddenWindows; // Whether to detect the titles of hidden parent windows.
 	bool DetectHiddenText;    // Whether to detect the text of hidden child windows.
-	bool AllowThreadToBeInterrupted;  // Whether this thread can be interrupted by custom menu items, hotkeys, or timers.
 	bool AllowTimers; // v1.0.40.01 Whether new timer threads are allowed to start during this thread.
 	bool ThreadIsCritical; // Whether this thread has been marked (un)interruptible by the "Critical" command.
 	UCHAR DefaultMouseSpeed;
-	CoordModeType CoordMode; // Bitwise collection of flags.
 	bool StoreCapslockMode;
 	SendLevelType SendLevel;
-	bool MsgBoxTimedOut; // Doesn't require initialization.
-	bool IsPaused; // The latter supports better toggling via "Pause" or "Pause Toggle".
 	bool ListLinesIsEnabled;
-	UINT Encoding;
-	int ExcptMode;
-	ResultToken* ThrownToken;
+
 	//inline bool InTryBlock() { return ExcptMode & EXCPTMODE_TRY; } // Currently unused.
 	bool DetectWindow(HWND aWnd);
 };
 
-inline void global_maximize_interruptibility(global_struct &g)
+// global_struct is a combination of thread state (things specific to a thread that
+// are reset for each new thread and should not be affected by the default thread)
+// and thread settings (which are copied from the default thread).
+// Each instance of this struct generally corresponds to a quasi-thread.
+struct global_struct : public ScriptThreadState, public ScriptThreadSettings { };
+
+inline void global_maximize_interruptibility(ScriptThreadState &g)
 {
-	g.AllowThreadToBeInterrupted = true;
-	g.UninterruptibleDuration = 0; // 0 means uninterruptibility times out instantly.  Some callers may want this so that this "g" can be used to launch other threads (e.g. threadless callbacks) using 0 as their default.
-	g.ThreadIsCritical = false;
-	g.AllowTimers = true;
+	//g.AllowThreadToBeInterrupted = true; // Not necessary since its value isn't used when !g_nThreads.
 	#define PRIORITY_MINIMUM INT_MIN
 	g.Priority = PRIORITY_MINIMUM; // Ensure minimum priority so that it can always be interrupted.
+	// The following can't be reset because their values (as set by the auto-execute section) are
+	// used by new threads.  Instead, interruption and timers are always permitted when !g_nThreads.
+	//g.ThreadIsCritical = false;
+	//g.AllowTimers = true;
 }
 
-inline void global_clear_state(global_struct &g)
+inline void global_clear_state(ScriptThreadState &g)
 // Reset those values that represent the condition or state created by previously executed commands
 // but that shouldn't be retained for future threads (e.g. SetTitleMatchMode should be retained for
 // future threads if it occurs in the auto-execute section, but A_ThisFunc shouldn't).
 {
-	g.CurrentFunc = NULL;
-	g.CurrentLabel = NULL;
-	g.hWndLastUsed = NULL;
-	//g.hWndToRestore = NULL;
-	g.IsPaused = false;
-	g.UninterruptedLineCount = 0;
-	g.DialogOwner = NULL;
-	g.CalledByIsDialogMessageOrDispatch = false; // CalledByIsDialogMessageOrDispatchMsg doesn't need to be cleared because it's value is only considered relevant when CalledByIsDialogMessageOrDispatch==true.
+	ZeroMemory(&g, sizeof(g));
+	g.AllowThreadToBeInterrupted = true;
+	// All of the following are handled by zero-initialization above:
+	//g.CurrentFunc = NULL;
+	//g.hWndLastUsed = NULL;
+	//g.IsPaused = false;
+	//g.Priority = 0;
+	//g.UninterruptedLineCount = 0;
+	//g.DialogOwner = NULL;
+	//g.CalledByIsDialogMessageOrDispatch = false; // CalledByIsDialogMessageOrDispatchMsg doesn't need to be cleared because it's value is only considered relevant when CalledByIsDialogMessageOrDispatch==true.
 	// Above line is done because allowing it to be permanently changed by the auto-exec section
 	// seems like it would cause more confusion that it's worth.  A change to the global default
 	// or even an override/always-use-this-window-number mode can be added if there is ever a
 	// demand for it.
-	g.mLoopIteration = 0; // Zero seems preferable to 1, to indicate "no loop currently running" when a thread first starts off.  This should probably be left unchanged for backward compatibility (even though script's aren't supposed to rely on it).
-	g.mLoopFile = NULL;
-	g.mLoopRegItem = NULL;
-	g.mLoopReadFile = NULL;
-	g.mLoopField = NULL;
-	g.ThrownToken = NULL;
-	g.ExcptMode = EXCPTMODE_NONE;
+	//g.mLoopIteration = 0; // Zero seems preferable to 1, to indicate "no loop currently running" when a thread first starts off.  This should probably be left unchanged for backward compatibility (even though script's aren't supposed to rely on it).
+	//g.mLoopFile = NULL;
+	//g.mLoopRegItem = NULL;
+	//g.mLoopReadFile = NULL;
+	//g.mLoopField = NULL;
+	//g.ThrownToken = NULL;
+	//g.ExcptMode = EXCPTMODE_NONE;
+	//g.LastError = 0;
+	//g.EventInfo = NO_EVENT_INFO;
 }
 
-inline void global_init(global_struct &g)
-// This isn't made a real constructor to avoid the overhead, since there are times when we
-// want to declare a local var of type global_struct without having it initialized.
+inline void global_set_defaults(ScriptThreadSettings &g)
 {
 	// Init struct with application defaults.  They're in a struct so that it's easier
 	// to save and restore their values when one hotkey interrupts another, going into
 	// deeper recursion.  When the interrupting subroutine returns, the former
 	// subroutine's values for these are restored prior to resuming execution:
-	global_clear_state(g);
 	g.HotCriterion = NULL;
 	g.SendMode = SM_INPUT;
 	g.TitleMatchMode = FIND_ANYWHERE;
@@ -934,13 +946,8 @@ inline void global_init(global_struct &g)
 	g.DetectHiddenText = true;  // Unlike AutoIt, which defaults to false.  This setting performs better.
 	#define DEFAULT_PEEK_FREQUENCY 5
 	g.PeekFrequency = DEFAULT_PEEK_FREQUENCY; // v1.0.46. See comments in ACT_CRITICAL.
-	g.AllowThreadToBeInterrupted = true; // Separate from g_AllowInterruption so that they can have independent values.
-	g.UninterruptibleDuration = 0; // 0 means uninterruptibility times out instantly.  Some callers may want this so that this "g" can be used to launch other threads (e.g. threadless callbacks) using 0 as their default.
 	g.AllowTimers = true;
 	g.ThreadIsCritical = false;
-	g.Priority = 0;
-	g.LastError = 0;
-	g.EventInfo = NO_EVENT_INFO;
 	g.WinDelay = 100;
 	g.ControlDelay = 20;
 	g.KeyDelay = 10;
@@ -958,6 +965,16 @@ inline void global_init(global_struct &g)
 	g.ListLinesIsEnabled = true;
 	g.Encoding = CP_ACP;
 }
+
+// Initialize g and set application defaults.  This is called only once, since new
+// threads get a copy of the current settings of the auto-execute thread (g_array[0])
+// combined with a cleared state.
+inline void global_init(global_struct &g)
+{
+	global_clear_state(g);
+	global_set_defaults(g);
+}
+
 
 #ifdef UNICODE
 #define WINAPI_SUFFIX "W"

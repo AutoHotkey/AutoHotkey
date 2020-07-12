@@ -1527,7 +1527,9 @@ bool CheckScriptTimers()
 	// v1.0.48: Since g_IdleIsPaused was removed (to simplify a lot of things), g_nPausedThreads now
 	// counts the idle thread if it's paused.  Also, to avoid array overflow, g_MaxThreadsTotal must not
 	// be exceeded except where otherwise documented.
-	if (g_nPausedThreads > 0 || !g->AllowTimers || g_nThreads >= g_MaxThreadsTotal || !IsInterruptible()) // See above.
+	// v2.0: g->AllowTimers is ignored when !g_nThreads so that its value can be retained for use as
+	// the default for new threads, after the auto-execute thread finishes.
+	if (g_nPausedThreads > 0 || (!g->AllowTimers && g_nThreads) || g_nThreads >= g_MaxThreadsTotal || !IsInterruptible()) // See above.
 		return false;
 
 	ScriptTimer *ptimer, *next_timer;
@@ -1844,11 +1846,16 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 	if (aIncrementThreadCountAndUpdateTrayIcon)
 	{
 		++g_nThreads; // It is the caller's responsibility to avoid calling us if the thread count is too high.
-		++g; // Once g_array[0] is used by AutoExec section, it's never used by any other thread BECAUSE THE AUTO-EXEC SECTION MIGHT NEVER FINISH, in which case it needs to keep consulting the values in g_array[0].
+		// Once g_array[0] is used by AutoExec section, it's never used by any other thread because:
+		//  1) the auto-execute thread might never finish, in which case it needs to keep consulting the values in g_array[0].
+		//  2) it's used to retain the default settings for each newly launched thread.
+		++g; 
 	}
-	memcpy(g, &g_default, sizeof(global_struct)); // memcpy() benches a hair faster than CopyMemory() in this spot. But I suspect they map to the same code internally, so it's probably a coincidence.
+	// Copy only settings, not state, from the auto-execute thread.
+	memcpy(static_cast<ScriptThreadSettings*>(g), static_cast<ScriptThreadSettings*>(&g_default), sizeof(ScriptThreadSettings));
 
 	global_struct &g = *::g; // Must be done AFTER the ++g above. Reduces code size and may improve performance.
+	global_clear_state(g);
 	g.Priority = aPriority;
 
 	// If the current quasi-thread is paused, the thread we're about to launch will not be, so the tray icon
@@ -1866,7 +1873,7 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 	if (g_script.mUninterruptibleTime && g_script.mUninterruptedLineCountMax // Both components must be non-zero to start off uninterruptible.
 		|| g.ThreadIsCritical) // v1.0.38.04.
 	{
-		g.AllowThreadToBeInterrupted = false; // Fairly old comment: Use g.AllowThreadToBeInterrupted vs. g_AllowInterruption in case g_AllowInterruption just happens to have been set to true for some other reason (e.g. SendKeys()):
+		g.AllowThreadToBeInterrupted = false;
 		if (!g.ThreadIsCritical)
 		{
 			if (g_script.mUninterruptibleTime < 0) // A setting of -1 (or any negative) means the thread's uninterruptibility never times out.
@@ -1875,8 +1882,10 @@ void InitNewThread(int aPriority, bool aSkipUninterruptible, bool aIncrementThre
 			else // It's now known to be >0 (due to various checks above).
 			{
 				// For backward compatibility, "lock in" the time this thread will become interruptible
-				// because that's how previous versions behaved (i.e. "Thread, Interrupt, %NewTimeout%"
+				// because that's how previous versions behaved (i.e. 'Thread "Interrupt", NewTimeout'
 				// doesn't affect the current thread, only the thread creation behavior in the future).
+				// This also makes it more predictable, since AllowThreadToBeInterrupted is only changed
+				// when IsInterruptible() is called, which might not happen in between changes to the setting.
 				// For explanation of why two fields instead of one are used, see comments in IsInterruptible().
 				g.ThreadStartTime = GetTickCount();
 				g.UninterruptibleDuration = g_script.mUninterruptibleTime;
@@ -1914,18 +1923,6 @@ void ResumeUnderlyingThread()
 	// need it, lends maintainability and peace of mind.
 	g_script.UpdateTrayIcon();
 
-	// UPDATE v1.0.48: The following no longer seems necessary because the whole point of it
-	// was to protect against SET_UNINTERRUPTIBLE_TIMER firing for the interrupting thread rather
-	// than the thread that's about to be resumed. That is no longer possible due to the way
-	// interruptibility is handled now.
-	// OLDER (v1.0.38.04): Make it reflect the state of ThreadIsCritical for cases where
-	// a critical thread was interrupted by an OnExit or OnMessage thread.  Upon being resumed after
-	// such an emergency interruption, a critical thread should be uninterruptible again.
-	//g->AllowThreadToBeInterrupted = !g->ThreadIsCritical;
-	// ABOVE: if g==g_array now, g->ThreadIsCritical==true should be possible only when the AutoExec
-	// section is still running (and it has turned on Critical), or if a threadless CallbackCreate()
-	// function is running in the idle thread (the docs discourage that).
-
 	// If this was the last running thread and the script has nothing keeping it open (hotkeys, Gui,
 	// message monitors, etc.) then it should terminate now:
 	if (!g_OnExitIsRunning)
@@ -1947,6 +1944,9 @@ BOOL IsInterruptible()
 	// g->AllowThreadToBeInterrupted in several places.
 	if (!INTERRUPTIBLE_IN_EMERGENCY)
 		return FALSE; // Since it's not even emergency-interruptible, it can't be ordinary-interruptible.
+	if (!g_nThreads) // Except in the above case, we're always interruptible if no threads are running.
+		return TRUE; // This is necessary to allow g_array[0].ThreadIsCritical to hold the default
+					 // setting without it preventing threads from launching after auto-exec finishes.
 	// Otherwise, update g->AllowThreadToBeInterrupted (if necessary) and use that to determine the final answer.
 	// Below are the reasons for having g->UninterruptibleDuration as a field separate from g->ThreadStartTime
 	// (i.e. this is why they aren't merged into one called TimeThreadWillBecomeInterruptible):
@@ -1977,14 +1977,13 @@ BOOL IsInterruptible()
 	// because GetTickCount() updates in increments of 15 or 16 and therefore 16 can be virtually no time
 	// at all.  It might also be needed for larger values if the system is busy.
 	if (   !g->AllowThreadToBeInterrupted // Those who check whether g->AllowThreadToBeInterrupted==false should then check whether it should be made true.
-		&& !g->ThreadIsCritical // Must take precedence over the checks below.
-		&& g->UninterruptibleDuration > -1 // Must take precedence over the below. For backward compatibility, g_script.mUninterruptibleTime is not checked because it's supposed to go into effect during thread creation, not after the thread is running and has possibly changed the timeout via "Thread Interrupt".
+		&& g->UninterruptibleDuration > -1 // Must take precedence over the below.  g_script.mUninterruptibleTime is not checked because it's supposed to go into effect during thread creation, not after the thread is running and has possibly changed the timeout via 'Thread "Interrupt"'.
 		&& (DWORD)(GetTickCount()- g->ThreadStartTime) >= (DWORD)g->UninterruptibleDuration // See big comment section above.
 		&& g->UninterruptedLineCount // In case of "Critical" on the first line.  See v2.0 comment above.
 		)
 		// Once the thread becomes interruptible by any means, g->ThreadStartTime/UninterruptibleDuration
 		// can never matter anymore because only Critical (never "Thread Interrupt") can turn off the
-		// interruptibility again, at which time only Critical can ever re-enable interruptibility.
+		// interruptibility again, and it resets g->UninterruptibleDuration.
 		g->AllowThreadToBeInterrupted = true; // Avoids issues with 49.7 day limit of 32-bit TickCount, and also helps performance future callers of this function (they can skip most of the checking above).
 	//else g->AllowThreadToBeInterrupted is already up-to-date.
 	return (BOOL)g->AllowThreadToBeInterrupted;
@@ -2020,44 +2019,6 @@ VOID CALLBACK MsgBoxTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime
 			dialog_g->MsgBoxTimedOut = true;
 			break;
 		}
-}
-
-
-
-VOID CALLBACK AutoExecSectionTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
-// See the comments in AutoHotkey.cpp for an explanation of this function.
-{
-	// Since this was called, it means the AutoExec section hasn't yet finished (otherwise
-	// this timer would have been killed before we got here).  UPDATE: I don't think this is
-	// necessarily true.  I think it's possible for the WM_TIMER msg (since even TimerProc()
-	// timers use WM_TIMER msgs) to be still buffered in the queue even though its timer
-	// has been killed (killing the timer does not auto-purge any pending messages for
-	// that timer, and it is risky/problematic to try to do so manually).  Therefore, although
-	// we kill the timer here, we also do a double check further below to make sure
-	// the desired action hasn't already occurred.  Finally, the macro is used here because
-	// it's possible that the timer has already been killed, so we don't want to risk any
-	// problems that might arise from killing a non-existent timer (which this prevents).
-	KILL_AUTOEXEC_TIMER
-
-	// This is a double-check because it's possible for the WM_TIMER message to have
-	// been received (thus calling this TimerProc() function) even though the timer
-	// was already killed by AutoExecSection().  In that case, we don't want to update
-	// the global defaults again because the g struct might have incorrect/unintended
-	// values by now:
-	if (!g_script.mAutoExecSectionIsRunning)
-		return;
-
-	// Otherwise, it's still running (or paused). So update global DEFAULTS, which are for all threads
-	// launched in the future:
-	CopyMemory(&g_default, g_array, sizeof(global_struct)); // v1.0.48: Use the first element in g_array (which by definition belongs to the auto-exec thread); don't use g because it might point to something higher than g_array[0] (i.e. if some other thread interrupted the auto-exec thread).
-	global_clear_state(g_default);  // Only clear g_default, not g.  This also ensures that IsPaused gets set to false in case it's true in "g".
-	g_default.AllowThreadToBeInterrupted = true; // See below.
-	// Always want g_default.AllowInterruption==true so that InitNewThread() doesn't have to set it
-	// except when Critical or "Thread Interrupt" require it.  The still-running AutoExec section can have
-	// a false value for this (even without Critical turned on) if no one has needed to call IsInterruptible().
-	// Even if the still-running AutoExec section has turned on Critical, the above assignment is still okay
-	// because InitNewThread() adjusts AllowInterruption based on the value of ThreadIsCritical.
-	// See similar code in AutoExecSection().
 }
 
 

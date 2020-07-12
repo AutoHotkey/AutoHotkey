@@ -165,10 +165,6 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 #endif
 		return CRITICAL_ERROR;
 
-	// Set g_default now, reflecting any changes made to "g" above, in case AutoExecSection(), below,
-	// never returns, perhaps because it contains an infinite loop (intentional or not):
-	CopyMemory(&g_default, g, sizeof(global_struct));
-
 	// Could use CreateMutex() but that seems pointless because we have to discover the
 	// hWnd of the existing process so that we can close or restart it, so we would have
 	// to do this check anyway, which serves both purposes.  Alt method is this:

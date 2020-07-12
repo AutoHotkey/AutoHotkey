@@ -374,7 +374,7 @@ inline ResultType WinGroup::Update(bool aIsModeActivate)
 
 
 
-WindowSpec *WinGroup::IsMember(HWND aWnd, global_struct &aSettings)
+WindowSpec *WinGroup::IsMember(HWND aWnd, ScriptThreadSettings &aSettings)
 // Thread-safety: This function is thread-safe even when the main thread happens to be calling AddWindow()
 // and changing the linked list while it's being traversed here by the hook thread.  However, any subsequent
 // changes to this function or AddWindow() must be carefully reviewed.
