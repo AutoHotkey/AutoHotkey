@@ -364,7 +364,7 @@ public:
 		// trigger a second warning if we didn't suppress ours and StdOut/OutputDebug warn mode is in effect.
 		// IF-IS is the only caller that wouldn't cause a warning, but in that case ExpandArgs() would have
 		// already caused one.
-		SymbolType is_pure_numeric = ::IsNumeric(var.Contents(FALSE), true, false, true); // Contents() vs. mContents to support VAR_VIRTUAL lvalue in a pure expression such as "a_clipboard:=1,a_clipboard+=5"
+		SymbolType is_pure_numeric = ::IsNumeric(var.Contents(), true, false, true); // Contents() vs. mContents to support VAR_VIRTUAL lvalue in a pure expression such as "a_clipboard:=1,a_clipboard+=5"
 		if (is_pure_numeric == PURE_NOT_NUMERIC && var.mType != VAR_VIRTUAL)
 			var.mAttrib |= VAR_ATTRIB_NOT_NUMERIC;
 		return is_pure_numeric;
