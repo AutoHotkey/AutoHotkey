@@ -1132,15 +1132,6 @@ public:
 		return THREAD_CMD_INVALID;
 	}
 
-	static ToggleValueType ConvertTrueFalse(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
-	// Returns aDefault if aBuf isn't either ON, OFF, or blank.
-	{
-		if (!aBuf || !*aBuf) return NEUTRAL;
-		if (!_tcsicmp(aBuf, _T("True")) || !_tcscmp(aBuf, _T("1"))) return TOGGLED_ON;
-		if (!_tcsicmp(aBuf, _T("False")) || !_tcscmp(aBuf, _T("0"))) return TOGGLED_OFF;
-		return aDefault;
-	}
-
 	static ToggleValueType ConvertOnOff(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, or blank.
 	{

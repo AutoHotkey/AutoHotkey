@@ -3720,12 +3720,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#UseHook")))
 	{
-		switch (Line::ConvertTrueFalse(parameter))
-		{
-		case TOGGLE_INVALID: return ScriptError(ERR_PARAM1_INVALID, parameter);
-		case TOGGLED_OFF: g_ForceKeybdHook = false; break;
-		default: g_ForceKeybdHook = true; break; // TOGGLED_ON or NEUTRAL.
-		}
+		if (!ConvertDirectiveBool(parameter, g_ForceKeybdHook, true))
+			return ScriptError(ERR_PARAM1_INVALID, parameter);
 		return CONDITION_TRUE;
 	}
 
@@ -3853,12 +3849,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#MaxThreadsBuffer")))
 	{
-		switch (Line::ConvertTrueFalse(parameter))
-		{
-		case TOGGLE_INVALID: return ScriptError(ERR_PARAM1_INVALID, parameter);
-		case TOGGLED_OFF: g_MaxThreadsBuffer = false; break;
-		default: g_MaxThreadsBuffer = true; break; // TOGGLED_ON or NEUTRAL.
-		}
+		if (!ConvertDirectiveBool(parameter, g_MaxThreadsBuffer, true))
+			return ScriptError(ERR_PARAM1_INVALID, parameter);
 		return CONDITION_TRUE;
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#MaxThreads")))
