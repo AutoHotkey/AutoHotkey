@@ -1876,7 +1876,7 @@ void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEvent
 	// Set defaults for all output parameters for caller.
 	aX = COORD_UNSPECIFIED;
 	aY = COORD_UNSPECIFIED;
-	aVK = VK_LBUTTON_LOGICAL; // v1.0.43: Logical vs. physical for {Click} and Click-cmd, in case user has buttons swapped via control panel.
+	aVK = VK_LBUTTON;
 	aEventType = KEYDOWNANDUP;
 	aRepeatCount = 1;
 	aMoveOffset = false;
