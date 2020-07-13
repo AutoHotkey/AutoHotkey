@@ -4877,7 +4877,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		if (end_marker && *end_marker == '(')
 		{
 			LPTSTR last_char = aLineText + line_length - 1;
-			if (*last_char == '{' && aActionType == ACT_FOR)
+			if (*last_char == '{' && (aActionType == ACT_FOR || aActionType == ACT_CATCH))
 			{
 				add_openbrace_afterward = true;
 				last_char = omit_trailing_whitespace(end_marker, last_char - 1);
