@@ -2421,9 +2421,9 @@ HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, i
 
 			NEWHEADER *resHead = (NEWHEADER *)presdata;
 			WORD resCount = resHead->ResCount;
-			RESDIR *resDir = (RESDIR *)(resHead + 1), *chosen = resDir; // Default to the first icon.
+			RESDIR *resDir = (RESDIR *)(resHead + 1), *chosen = NULL;
 			int chosen_width = 0;
-			for (int i = 1; i < resCount; ++i)
+			for (int i = 0; i < resCount; ++i)
 			{
 				int this_width = resDir[i].Icon.Width;
 				if (!this_width) // Workaround for 256x256 icons.
@@ -2440,7 +2440,8 @@ HICON ExtractIconFromExecutable(LPTSTR aFilespec, int aIconNumber, int aWidth, i
 					chosen_width = this_width;
 				}
 			}
-			if (   (hres = FindResource(hdatafile, MAKEINTRESOURCE(chosen->IconCursorId), RT_ICON))
+			if (   (chosen) // It would be NULL if there were no icons.
+				&& (hres = FindResource(hdatafile, MAKEINTRESOURCE(chosen->IconCursorId), RT_ICON))
 				&& (hresdata = LoadResource(hdatafile, hres))
 				&& (presdata = LockResource(hresdata))   )
 			{
