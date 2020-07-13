@@ -29,7 +29,8 @@ private:
 														// Can also be used to refer to the outer module via scope resolution.
 	ModuleList* mNested;								// List of nested modules.
 	
-	
+#include "ScriptModulesAddNamesMembers.h"
+
 	void ReleaseVarObjects(Var** aVar, int aVarCount);
 	void ReleaseStaticVarObjects(Var** aVar, int aVarCount);
 	void ReleaseStaticVarObjects(FuncList& aFuncs);
@@ -37,7 +38,9 @@ private:
 
 public:
 
-	FuncList mFuncs;									// List of functions
+	FuncList mFuncs;									// List of functions defined in this module.
+	FuncList mUsedFuncs;								// List of functions imported from other modules.
+
 	Var** mVar, ** mLazyVar;							// Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	int mVarCount, mVarCountMax, mLazyVarCount;			// Count of items in the above array as well as the maximum capacity.
 
@@ -51,6 +54,8 @@ public:
 
 	bool ValidateName(LPTSTR aName);
 	
+	Func* FindFunc(LPCTSTR aFuncName, int* apInsertPos = nullptr);
+
 	void RemoveLastModule();				// Only for load time
 	bool AddOptionalModule(LPTSTR aName);	// -- "" --
 	
@@ -63,42 +68,7 @@ public:
 	} *mOptionalModules;								// A list of optional modules to allow the "*i" option for SMODULES_INCLUDE_DIRECTIVE_NAME.
 	bool IsOptionalModule(LPTSTR aName);
 
-	// Used for importing names from other modules:
-	struct UseParams
-	{
-		LPTSTR param1;	// The objects to use, eg a list of vars or funcs.
-		union
-		{	// Identifies the scope of the object(s) to use.
-			LPTSTR str;				// SYM_STRING
-			ScriptModule* mod;		// SYM_OBJECT
-		} param2;
-		SymbolType type_symbol;		// Indicates the type of the objects specified by param1.
-		
-		SymbolType scope_symbol;	// Indicates which member of param2 to use.
-		// Todo: Add line/file info for error reporting.
-		UseParams(SymbolType aScopeSymbol, SymbolType aTypeSymbol, LPTSTR aObjList, ScriptModule* aModule, LPTSTR aModuleName) :
-			param1(_tcsdup(aObjList)),
-			type_symbol(aTypeSymbol),
-			scope_symbol(aScopeSymbol)
-		{
-			if (scope_symbol == SYM_STRING) 
-				param2.str = _tcsdup(aModuleName);
-			else 
-				param2.mod = aModule;
-		}
-		~UseParams()
-		{
-			if (param1) free(param1);
-			if (scope_symbol == SYM_STRING) free(param2.str);
-		}
-		
-	};
-	class UseParamsList : public SimpleList<UseParams*>
-	{
-	public:
-		UseParamsList() : SimpleList(true) {}
-		void FreeItem(UseParams *aParams) { delete aParams; }	// virtual
-	} *mUseParams;								// A list of object to use.
+
 
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 	ULONG STDMETHODCALLTYPE AddRef() { return 1; }
@@ -111,7 +81,7 @@ public:
 	bool ResolveUseParams();
 	ResultType AddObject(LPTSTR aObjList, LPTSTR aModuleName, SymbolType aTypeSymbol);
 	ResultType AddObject(UseParams* aObjs);
-	ResultType FindAndAddFunc(LPTSTR aFuncName, ScriptModule* aModule);
+	ResultType FindAndAddFunc(LPTSTR aFuncName, ScriptModule* aModule, bool aAllowConflict = false);
 	ResultType AddAllFuncs(ScriptModule* aModule);
 	ResultType AddFuncFromList(Array* aFuncList, ScriptModule* aModule);
 	ResultType AddVarFromList(Array *aVarList, ScriptModule* aModule);

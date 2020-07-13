@@ -95,26 +95,63 @@ ResultType ScriptModule::AddFuncFromList(Array* aFuncList, ScriptModule* aModule
 	return OK;
 }
 
-ResultType ScriptModule::FindAndAddFunc(LPTSTR aFuncName, ScriptModule* aModule)
+ResultType ScriptModule::FindAndAddFunc(LPTSTR aFuncName, ScriptModule* aModule, bool aAllowConflict)
 {
+	
+	// aAllowConflict should be true if an explicit function definition takes precedence
+	// over a declaration. Currently, aAllowConflict is only true when importing "*all" funcs.
+	// It is difficult to imagine another case where passing true would make sense.
+
 	if (!_tcsicmp(aFuncName, SMODULES_IMPORT_NAME_ALL_MARKER))
 		return AddAllFuncs(aModule);
-	// Add only one func:
-	Func* func = aModule->mFuncs.Find(aFuncName, NULL); // Find the func in the source module
+	// From this point, handle only one function.
+	
+	auto current_func = mCurrentUseParam->current_func; // might be nullptr.
+	
+	// First, check for a conflicting function definition 
+	// in the list of expicitly defined functions.
+	{
+		auto& funcs = current_func ? current_func->mFuncs : mFuncs;
+		int left;
+		auto defined_func = funcs.Find(aFuncName, &left);
+		if (defined_func)
+		{	// There already exist an explicitly defined function with this name in this scope.
+			if (!aAllowConflict)
+				return AddObjectError(ERR_DUPLICATE_DECLARATION, aFuncName);
+			else
+				// If it ever becomes relevant, note that aFuncName is not guaranteed,
+				// by the logic of this method, to exist in aModule at this return site. 
+				// However, when adding this code, this isn't relevant, 
+				// but acutally guaranteed by the current use of this method.
+				return OK;
+		}
+	}
+	
+	auto func = aModule->mFuncs.Find(aFuncName, NULL); // Find the func in the source module
 	if (!func)
 		// This func doesn't exist
 		return AddObjectError(ERR_SMODULES_FUNC_NOT_FOUND, aFuncName);
 
 	int insert_pos;
-	Func* this_func = mFuncs.Find(aFuncName, &insert_pos);	// search for a function with the same name in this module
-	if (this_func)
+	auto &used_funcs = current_func ? current_func->mUsedFuncs : mUsedFuncs;
+	auto used_func = used_funcs.Find(aFuncName, &insert_pos);	// search for a function with the same name in the "used scope"
+	
+	if (used_func)
 	{
-		if (this_func == func) // This exact func already exists
+		if ( used_func == func	 // This exact func already exists in this scope.
+								 // Seems best to allow this in case, for example, multiple includes in the same scope
+								 // uses the same library and imports funcs from it.
+			 || aAllowConflict ) // Or conflicts are allowed. This can happen if a scope imports all names
+								 // names from two modules which each defines a function named aFuncName.
+								 // This makes the declaration positional as the first import will take precedence
+								 // but it also makes scripts more maintainable so seems worth it.
+								 // If conflicts are known by script the author,
+								 // it can make explicit declarations before importing all.
 			return OK;
-		// A different function with the same name already exists in this module
-		return AddObjectError(ERR_DUPLICATE_FUNCTION, aFuncName);
+		// A different function with the same name already exists in this scope
+		return AddObjectError(ERR_DUPLICATE_DECLARATION, aFuncName);
 	}
-	if (!mFuncs.Insert(func, insert_pos)) // Now add it to this module
+	if (!used_funcs.Insert(func, insert_pos)) // Now add it to this scope
 		return AddObjectError(ERR_OUTOFMEM);
 	return OK;
 }
@@ -129,7 +166,7 @@ ResultType ScriptModule::AddAllFuncs(ScriptModule* aModule)
 		name = funcs[i]->mName;
 		if (_tcschr(name, '.')) // Avoid adding class methods such as "cls.prototype.method".
 			continue;
-		if (!FindAndAddFunc((LPTSTR)name, aModule))
+		if (!FindAndAddFunc((LPTSTR)name, aModule, /* aAllowConflict = */ true))
 			return FAIL; // The error message has already been displayed.
 	}
 	return OK;
@@ -257,6 +294,7 @@ bool ScriptModule::ResolveUseParams()
 	int i = 0;
 	while (up = mUseParams->GetItem(i)) // GetItem does the bound checks
 	{
+		mCurrentUseParam = up;
 		switch (AddObject(up))
 		{
 		case CONDITION_TRUE:

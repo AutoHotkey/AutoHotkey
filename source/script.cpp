@@ -1546,6 +1546,7 @@ UINT Script::LoadFromFile()
 		if (!mod->ResolveUseParams())
 			return LOADING_FAILED;
 	}
+	
 	auto current_line = mCurrLine;
 	if (!PreparseExpressions(mFirstLine))
 		return LOADING_FAILED; // Error was already displayed by the above call.
@@ -4582,8 +4583,11 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						break; 
 					if (type_symbol != SYM_INVALID) 	// Handle importing names.
 					{
-						if (g->CurrentFunc || mClassObjectCount)
-							return ScriptError(ERR_SMODULES_NOT_SUPPORTED);
+						if (	// Funcs not acceptable inside a class body unless inside a method/prop definition:
+								(type_symbol == SYM_FUNC && mClassObjectCount && !g->CurrentFunc)
+								// Vars not acceptable inside function and method (yet) or class body:
+							||	(type_symbol == SYM_VAR && (mClassObjectCount || g->CurrentFunc))		) 
+							return ScriptError(ERR_SMODULES_NOT_SUPPORTED); 
 						if (!*parameter)
 							return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
 						// Separate the list of names from the source:
@@ -7300,7 +7304,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 			*apInsertPos = 0; // Unnamed (fat arrow) functions rely on this.
 		return NULL;
 	}
-
+	
 	if (!aModule)	// Do this early to avoid mistakes.
 		aModule = g_CurrentModule;
 
@@ -7311,22 +7315,46 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	tcslcpy(func_name, aFuncName, aFuncNameLength + 1);  // +1 to convert length to size.
 
 	int left;
-	for (auto scopefunc = g->CurrentFunc; ; scopefunc = scopefunc->mOuterFunc)
+	
+	auto call_find = [=, &left](FuncList& funcs, int *apInsertPos)
 	{
-		FuncList &funcs = scopefunc ? scopefunc->mFuncs : aModule->mFuncs;
 		auto pfunc = funcs.Find(func_name, &left);
 		if (apInsertPos) // Caller is DefineFunc.
-		{
 			*apInsertPos = left;
-			if (scopefunc) // Nested functions may "shadow" built-in functions without replacing them globally.
-				return pfunc; // Search no further, even if nullptr.
+		return pfunc;
+	};
+	Func* found_func;
+	// First, search in function scope
+	if (g->CurrentFunc)
+	{
+		for (bool check_used = true;; check_used = false) 
+			// Search the current func and all its outer functions.
+			// Two iterations:
+			// 1) Check all the "used" lists
+			// 2) Check all the "explicitly defined" lists
+		{
+			for (auto scopefunc = g->CurrentFunc ; scopefunc ; scopefunc = scopefunc->mOuterFunc)
+			{				
+				if ( (found_func = call_find(check_used ? scopefunc->mUsedFuncs : scopefunc->mFuncs, check_used ? nullptr : apInsertPos))
+					|| apInsertPos)		// Nested functions may "shadow" built-in functions without replacing them globally.
+										// Search no further, even if nullptr.
+					return found_func;
+			}
+			if (!check_used)
+				break;
 		}
-		if (pfunc)
-			return pfunc;
-		if (!scopefunc)
-			break;
 	}
 	
+	// Second, search in module scope
+	bool allow_used = aModule == g_CurrentModule;	// Only search in the "used" list if 
+													// the current module is conducting
+													// the search.
+	
+	if ( (found_func = call_find(aModule->mFuncs, apInsertPos))
+		|| (allow_used && (found_func = call_find(aModule->mUsedFuncs, nullptr))) )
+		return found_func;
+		
+
 	// Since above didn't return, there is no match.  See if it's a built-in function that hasn't yet
 	// been added to the function list. Only add BIFs to the standard module, to avoid creating a new
 	// BuiltInFunc for every module which references a BIF.

@@ -1762,6 +1762,7 @@ public:
 	Label *mFirstLabel = nullptr, *mLastLabel = nullptr; // Linked list of private labels.
 	UserFunc *mOuterFunc = nullptr; // Func which contains this func (usually nullptr).
 	FuncList mFuncs {}; // List of nested functions (usually empty).
+	FuncList mUsedFuncs{}; // List of imported functions (usually empty).
 	Var **mVar = nullptr, **mLazyVar = nullptr; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	Var **mGlobalVar = nullptr; // Array of global declarations.
 	Var **mDownVar = nullptr, **mUpVar = nullptr;
