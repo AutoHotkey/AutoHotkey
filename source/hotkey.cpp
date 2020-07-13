@@ -2444,9 +2444,6 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 	, mSuspendExempt(g_SuspendExempt)
 	, mConstructedOK(false)
 {
-	// Insist on certain qualities so that they never need to be checked other than here:
-	if (!mJumpToLabel) // Caller has already ensured that aHotstring is not blank.
-		return;
 	bool execute_action = false; // do not assign  mReplacement if execute_action is true.
 	ParseOptions(aOptions, mPriority, mKeyDelay, mSendMode, mCaseSensitive, mConformToCase, mDoBackspace
 		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, execute_action);
