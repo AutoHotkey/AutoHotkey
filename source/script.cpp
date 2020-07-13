@@ -3554,6 +3554,13 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 #else
 		if (!parameter)
 			return ScriptError(ERR_PARAM1_REQUIRED, aBuf);
+		
+		// Permit quote marks around the parameter.  In future, quote marks might be required,
+		// or the parameter might be evaluated as an expression.
+		parameter = strip_quote_marks(parameter);
+		if (!*parameter)
+			return ScriptError(ERR_PARAM1_INVALID);
+
 		// v1.0.32:
 		bool ignore_load_failure = (parameter[0] == '*' && ctoupper(parameter[1]) == 'I'); // Relies on short-circuit boolean order.
 		if (ignore_load_failure)
@@ -3633,6 +3640,11 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				return ScriptError(ERR_INTERNAL_CALL);
 			return CONDITION_TRUE;
 		}
+
+		// Permit quote marks around the parameter.  In future, quote marks might be required,
+		// or the parameter might be evaluated as an expression.
+		parameter = strip_quote_marks(parameter);
+
 		// ignore failure if path is preceeded by "*i".
 		bool ignore_load_failure = (parameter[0] == '*' && ctoupper(parameter[1]) == 'I'); // Relies on short-circuit boolean order.
 		if (ignore_load_failure)
@@ -3884,6 +3896,9 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#ErrorStdOut")))
 	{
+		// Permit quote marks around the parameter.  In future, quote marks might be required,
+		// or the parameter might be evaluated as an expression.
+		parameter = strip_quote_marks(parameter);
 		SetErrorStdOut(parameter);
 		return CONDITION_TRUE;
 	}
