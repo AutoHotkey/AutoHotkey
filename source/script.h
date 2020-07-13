@@ -1351,7 +1351,11 @@ public:
 	
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType);
 
-	ResultType SetLastErrorMaybeThrow(bool aError, DWORD aLastError = GetLastError());
+	// Must not use "= GetLastError()" as a parameter default since the order of evaluation
+	// of parameters is not guaranteed left to right; i.e. if the first parameter is a call
+	// to a Win32 function, GetLastError() might be called too soon.  Use overloads instead:
+	ResultType SetLastErrorMaybeThrow(bool aError) { return SetLastErrorMaybeThrow(aError, GetLastError()); }
+	ResultType SetLastErrorMaybeThrow(bool aError, DWORD aLastError);
 	ResultType Throw() { return ThrowIfTrue(true); }
 	ResultType ThrowIfTrue(bool aError);
 	ResultType ThrowIntIfNonzero(int aErrorValue);
