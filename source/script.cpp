@@ -3900,6 +3900,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// or the parameter might be evaluated as an expression.
 		parameter = strip_quote_marks(parameter);
 		SetErrorStdOut(parameter);
+		if (mErrorStdOutCP == -1)
+			return ScriptError(ERR_PARAM1_INVALID, parameter);
 		return CONDITION_TRUE;
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#KeyHistory")))
@@ -13078,8 +13080,14 @@ void ResultToken::SetLastErrorCloseAndMaybeThrow(HANDLE aHandle, bool aError, DW
 
 void Script::SetErrorStdOut(LPTSTR aParam)
 {
-	mErrorStdOut = true;
 	mErrorStdOutCP = Line::ConvertFileEncoding(aParam);
+	// Seems best not to print errors to stderr if the encoding was invalid.  Current behaviour
+	// for an encoding of -1 would be to print only the ASCII characters and drop the rest, but
+	// if our caller is expecting UTF-16, it won't be readable.
+	mErrorStdOut = mErrorStdOutCP != -1;
+	// If invalid, no error is shown here because this function might be called early, before
+	// Line::sSourceFile[0] is given its value.  Instead, errors appearing as dialogs should
+	// be a sufficient clue that the /ErrorStdOut= value was invalid.
 }
 
 void Script::PrintErrorStdOut(LPCTSTR aErrorText, int aLength, LPCTSTR aFile)
