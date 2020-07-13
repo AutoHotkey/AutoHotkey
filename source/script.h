@@ -2959,7 +2959,10 @@ private:
 	// only mCurrLine is kept up-to-date:
 	int mCurrFileIndex;
 	LineNumberType mCombinedLineNumber; // In the case of a continuation section/line(s), this is always the top line.
-
+public:
+	__declspec(noinline) __int64 GetFileLineInfo() { return (__int64(mCurrFileIndex) << 32) | mCombinedLineNumber; };
+	__declspec(noinline) void SetFileLineInfo(__int64 aInfo) { mCurrFileIndex = int(aInfo >> 32); mCombinedLineNumber = LineNumberType(aInfo); }
+private:
 	bool mClassPropertyStatic;
 
 	#define UPDATE_TIP_FIELD tcslcpy(mNIC.szTip, mTrayIconTip ? mTrayIconTip \

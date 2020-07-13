@@ -25,6 +25,7 @@ ResultType ScriptModule::AddObjectError(LPTSTR aErrorMsg, LPTSTR aExtraInfo, Use
 {
 	// Used by the below methods for error reporting.
 	g_script.mCurrLine = NULL;
+	g_script.SetFileLineInfo(mCurrentUseParam->line_file_info);
 	g_script.ScriptError(aErrorMsg, aExtraInfo);
 	return FAIL;
 }

@@ -3,6 +3,7 @@
 // Used for importing names from other modules:
 struct UseParams
 {
+	__int64 line_file_info;		// line/file info for error reporting.
 	UserFunc* current_func;
 	LPTSTR param1;	// The objects to use, eg a list of vars or funcs.
 	union
@@ -11,9 +12,10 @@ struct UseParams
 		ScriptModule* mod;		// SYM_OBJECT
 	} param2;
 	SymbolType type_symbol;		// Indicates the type of the objects specified by param1.
-
 	SymbolType scope_symbol;	// Indicates which member of param2 to use.
-	// Todo: Add line/file info for error reporting.
+	
+	
+
 	UseParams(SymbolType aScopeSymbol, SymbolType aTypeSymbol, LPTSTR aObjList, ScriptModule* aModule, LPTSTR aModuleName) :
 		param1(_tcsdup(aObjList)),
 		type_symbol(aTypeSymbol),
@@ -24,6 +26,7 @@ struct UseParams
 		else
 			param2.mod = aModule;
 		current_func = g->CurrentFunc;
+		line_file_info = g_script.GetFileLineInfo();
 	}
 	~UseParams()
 	{

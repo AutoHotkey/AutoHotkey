@@ -6586,7 +6586,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 			
 			APPEND_UNRESOLVED((__int64)(INT_PTR)base_class_copy);
 			APPEND_UNRESOLVED((__int64)(INT_PTR)g_CurrentModule);
-			APPEND_UNRESOLVED((__int64)((__int64)mCurrFileIndex << 32) | mCombinedLineNumber);
+			APPEND_UNRESOLVED(GetFileLineInfo());
 
 			// The base class will be created when its definition is encountered,
 			// the class which is now being defined will be assigned its base class after the script has loaded
@@ -7011,7 +7011,7 @@ ResultType Script::ResolveClasses()
 	Object* base_object;		// The base which will be resolved by the above string
 	Object* class_object;		// The class object which was defined by the class name preceeding the extends keyword
 	ScriptModule* mod;			// The module in which the class definition took place.
-	__int64 line_info;			// For error reporting. Line and file index info.
+	__int64 line_file_info;		// For error reporting. Line and file index info.
 
 	// Init result:
 	TCHAR result_buf[MAX_NUMBER_LENGTH];	// It might currently be impossible that this wouldn't suffice, 
@@ -7039,7 +7039,7 @@ LineInfo:		class B extends C.D {
 
 		// Pop the line info (LineInfo) for error reporting.
 		POP_UNRESOLVED(result);
-		line_info = result.value_int64; // this line info points to the line: "class B extends C.D"
+		line_file_info = result.value_int64; // this line info points to the line: "class B extends C.D"
 
 		// Pop the module in which the class was defined (A)
 		POP_UNRESOLVED(result);
@@ -7052,8 +7052,7 @@ LineInfo:		class B extends C.D {
 		base_object = mod->FindClassFromDotDelimitedString(base_class_name);
 		if (!base_object)
 		{
-			mCurrFileIndex = int(line_info >> 32);
-			mCombinedLineNumber = LineNumberType(line_info);
+			SetFileLineInfo(line_file_info);
 			mCurrLine = NULL;
 			ScriptError(_T("Unknown class."), base_class_name);
 			// The program should terminate anyways so no need to do this:
