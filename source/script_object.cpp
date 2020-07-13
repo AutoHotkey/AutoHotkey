@@ -113,6 +113,7 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *ap
 
 //
 // Map::Create - Create a new Map given an array of key/value pairs.
+// Map::SetItems - Add or set items given an array of key/value pairs.
 //
 
 Map *Map::Create(ExprTokenType *aParam[], int aParamCount)
@@ -121,28 +122,44 @@ Map *Map::Create(ExprTokenType *aParam[], int aParamCount)
 
 	Map *map = new Map();
 	map->SetBase(Map::sPrototype);
-	if (aParamCount)
+	if (aParamCount && !map->SetItems(aParam, aParamCount))
 	{
-		if (aParamCount > 8)
-			// Set initial capacity to avoid multiple expansions.
-			// For simplicity, failure is handled by the loop below.
-			map->SetInternalCapacity(aParamCount >> 1);
-		// Otherwise, there are 4 or less key-value pairs.  When the first
-		// item is inserted, a default initial capacity of 4 will be set.
-
-		for (int i = 0; i + 1 < aParamCount; i += 2)
-		{
-			if (aParam[i]->symbol == SYM_MISSING || aParam[i+1]->symbol == SYM_MISSING)
-				continue; // For simplicity.
-
-			if (!map->SetItem(*aParam[i], *aParam[i + 1]))
-			{	// Out of memory.
-				map->Release();
-				return NULL;
-			}
-		}
+		// Out of memory.
+		map->Release();
+		return NULL;
 	}
 	return map;
+}
+
+ResultType Map::SetItems(ExprTokenType *aParam[], int aParamCount)
+{
+	ASSERT(!(aParamCount & 1)); // Caller should verify and throw.
+
+	if (!aParamCount)
+		return OK;
+
+	// Calculate the maximum number of items that will exist after all items are added.
+	// There may be an excess if some items already exist, so instead of allocating this
+	// exact amount up front, postpone it until the last possible moment.
+	index_t max_capacity_required = mCapacity + (aParamCount >> 1);
+
+	for (int i = 0; i + 1 < aParamCount; i += 2)
+	{
+		if (aParam[i]->symbol == SYM_MISSING || aParam[i+1]->symbol == SYM_MISSING)
+			continue; // For simplicity.
+
+		// See comments above.  HasItem() is checked so that the capacity won't be expanded
+		// unnecessarily if all of the remaining items already exist.  This produces smaller
+		// code than inlining FindItem()/Assign() here and benchmarks faster than allowing
+		// unnecessary expansion for a case like Map('c',x,'b',x,'a',x).set('a',y,'b',y).
+		if (mCapacity == mCount && !HasItem(*aParam[i]))
+			SetInternalCapacity(max_capacity_required);
+
+		if (!SetItem(*aParam[i], *aParam[i + 1]))
+			return FAIL; // Out of memory.
+	}
+
+	return OK;
 }
 
 
@@ -722,7 +739,8 @@ ObjectMember Map::sMembers[] =
 	Object_Method1(Clear, 0, 0),
 	Object_Method1(Clone, 0, 0),
 	Object_Method1(Delete, 1, 1),
-	Object_Method1(Has, 1, 1)
+	Object_Method1(Has, 1, 1),
+	Object_Method1(Set, 0, MAXP_VARIADIC)  // Allow 0 for flexibility with variadic calls.
 };
 
 
@@ -745,6 +763,18 @@ ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 	}
 	return OK;
 }
+
+
+ResultType Map::Set(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (aParamCount & 1)
+		_o_throw(ERR_PARAM_COUNT_INVALID);
+	if (!SetItems(aParam, aParamCount))
+		_o_throw(ERR_OUTOFMEM);
+	AddRef();
+	_o_return(this);
+}
+
 
 
 //

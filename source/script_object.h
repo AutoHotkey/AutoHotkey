@@ -623,6 +623,11 @@ class Map : public Object
 public:
 	static Map *Create(ExprTokenType *aParam[] = NULL, int aParamCount = 0);
 
+	bool HasItem(ExprTokenType &aKey)
+	{
+		return GetItem(ExprTokenType(), aKey); // Conserves code size vs. calling FindItem() directly and is unlikely to perform worse.
+	}
+
 	bool GetItem(ExprTokenType &aToken, ExprTokenType &aKey)
 	{
 		index_t insert_pos;
@@ -671,8 +676,11 @@ public:
 		return SetItem(aKey, ExprTokenType(aValue));
 	}
 
+	ResultType SetItems(ExprTokenType *aParam[], int aParamCount);
+
 	// Methods callable by script.
 	ResultType __Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Set(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType CaseSense(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
