@@ -374,7 +374,7 @@ inline size_t strip_trailing_backslash(LPTSTR aPath)
 // Otherwise returns aBuf+1 after terminating at the trailing quote mark.
 inline LPTSTR strip_quote_marks(LPTSTR aBuf)
 {
-	if (!(*aBuf == '"' || *aBuf == '\''))
+	if (!aBuf || !(*aBuf == '"' || *aBuf == '\''))
 		return aBuf;
 	LPTSTR end = _tcschr(aBuf + 1, '\0');
 	if (end[-1] != *aBuf)
