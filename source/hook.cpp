@@ -1361,7 +1361,12 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		{
 			if (!aKeyUp) // Key-up hotkey but the event is a down-event.
 			{
-				this_key.hotkey_to_fire_upon_release = hotkey_id_with_flags; // Seem comments above in other occurrences of this line.
+				// Fixed for v1.1.33.01: Any key-up hotkey already found by the custom combo section
+				// should take precedence over this hotkey.  This fixes "a up::" erroneously taking
+				// precedence over "b & a up::" when "a::" is not defined, which resulted in either
+				// firing the wrong hotkey or firing the right hotkey but not suppressing the key.
+				if (this_key.hotkey_to_fire_upon_release == HOTKEY_ID_INVALID)
+					this_key.hotkey_to_fire_upon_release = hotkey_id_with_flags; // See comments above in other occurrences of this line.
 				hotkey_id_with_flags = HOTKEY_ID_INVALID;
 			}
 			//else hotkey_id_with_flags contains the up-hotkey that is now eligible for firing.
