@@ -1412,8 +1412,13 @@ abort:
 	goto normal_end_skip_output_var; // output_var is skipped as part of standard abort behavior.
 
 type_mismatch:
-	aResult = ResultToken().TypeError(error_info, *error_value);
-	goto abort_if_result;
+	{
+		ResultToken temp_result;
+		temp_result.SetResult(OK);
+		temp_result.TypeError(error_info, *error_value);
+		aResult = temp_result.Result(); // FAIL to abort, OK if user or OnError requested continuation.
+		goto abort_if_result;
+	}
 divide_by_zero:
 	error_msg = ERR_DIVIDEBYZERO;
 	goto abort_with_exception;
