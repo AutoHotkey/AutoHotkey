@@ -3509,8 +3509,7 @@ size_t Script::GetLine(LineBuffer &aBuf, int aInContinuationSection, bool aInBlo
 
 
 inline ResultType Script::IsDirective(LPTSTR aBuf)
-// aBuf must be a modifiable string since this function modifies it in the case of "#Include %A_ScriptDir%"
-// changes it.  It must also be large enough to accept the replacement of %A_ScriptDir% with a larger string.
+// aBuf must be a modifiable string as it may be temporarily terminated at different points.
 // Returns CONDITION_TRUE, CONDITION_FALSE, or FAIL.
 // Note: Don't assume that every line in the script that starts with '#' is a directive
 // because hotkeys can legitimately start with that as well.  i.e., the following line should
@@ -3528,16 +3527,21 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		if (!*(parameter = omit_leading_whitespace(directive_end)))
 			parameter = NULL;
 
-	int value; // Helps detect values that are too large, since some of the target globals are UCHAR.
-
-	// Use _tcsnicmp() so that a match is found as long as aBuf starts with the string in question.
-	// e.g. so that "#SingleInstance, on" will still work too, but
-	// "#a::run, something, "#SingleInstance" (i.e. a hotkey) will not be falsely detected
-	// due to using a more lenient function such as tcscasestr().
-	// UPDATE: Using strlicmp() now so that overlapping names, such as #MaxThreads and #MaxThreadsPerHotkey,
-	// won't get mixed up:
-	#define IS_DIRECTIVE_MATCH(directive) (!tcslicmp(aBuf, directive, directive_name_length))
-	size_t directive_name_length = directive_end - aBuf; // To avoid calculating it every time in the macro above.
+	// Make a null-terminated copy of the potential directive name, if not already terminated,
+	// so that overlapping names such as #MaxThreads and #MaxThreadsPerHotkey won't get mixed up.
+	// This significantly reduces code size vs. using tcslicmp() in IS_DIRECTIVE_MATCH().
+	LPCTSTR directive_name;
+	TCHAR directive_name_buf[32];
+	if (directive_end - aBuf >= _countof(directive_name_buf))
+		return CONDITION_FALSE;
+	if (*directive_end)
+	{
+		tcslcpy(directive_name_buf, aBuf, directive_end - aBuf + 1);
+		directive_name = directive_name_buf;
+	}
+	else
+		directive_name = aBuf;
+	#define IS_DIRECTIVE_MATCH(directive) (!_tcsicmp(directive_name, directive))
 
 	bool is_include_again = false; // Set default in case of short-circuit boolean.
 	if (IS_DIRECTIVE_MATCH(_T("#Include")) || (is_include_again = IS_DIRECTIVE_MATCH(_T("#IncludeAgain"))))
@@ -3826,7 +3830,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		if (parameter)
 		{
 			// Use value as a temp holder since it's int vs. UCHAR and can thus detect very large or negative values:
-			value = ATOI(parameter);  // parameter was set to the right position by the above macro
+			int value = ATOI(parameter);  // parameter was set to the right position by the above macro
 			if (value > MAX_THREADS_LIMIT) // For now, keep this limited to prevent stack overflow due to too many pseudo-threads.
 				value = MAX_THREADS_LIMIT; // UPDATE: To avoid array overflow, this limit must by obeyed except where otherwise documented.
 			else if (value < 1)
@@ -3849,7 +3853,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	{
 		if (parameter)
 		{
-			value = ATOI(parameter);  // parameter was set to the right position by the above macro
+			int value = ATOI(parameter);  // parameter was set to the right position by the above macro
 			if (value > MAX_THREADS_LIMIT) // For now, keep this limited to prevent stack overflow due to too many pseudo-threads.
 				value = MAX_THREADS_LIMIT; // UPDATE: To avoid array overflow, this limit must by obeyed except where otherwise documented.
 			else if (value < 1)
