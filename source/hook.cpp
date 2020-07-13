@@ -1403,7 +1403,13 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			}
 			else // hotkey_id_with_flags contains the down-hotkey that is now eligible for firing. But check if there's an up-event to queue up for later.
 				if (hotkey_id_temp < Hotkey::sHotkeyCount)
-					this_key.hotkey_to_fire_upon_release = hotkey_up[hotkey_id_temp];
+				{
+					// Fixed for v1.1.33.01: Any key-up hotkey already found by the custom combo section
+					// should take precedence over this hotkey.  This fixes "b & a up::" not suppressing
+					// "a" when "a::" is defined but disabled by #If and "b & a::" is not defined.
+					if (this_key.hotkey_to_fire_upon_release == HOTKEY_ID_INVALID)
+						this_key.hotkey_to_fire_upon_release = hotkey_up[hotkey_id_temp];
+				}
 		}
 
 		// Check hotkey_id_with_flags again now that the above possibly changed it:
