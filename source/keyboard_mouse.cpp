@@ -4081,7 +4081,7 @@ TCHAR VKtoChar(vk_type aVK, HKL aKeybdLayout)
 
 
 
-sc_type TextToSC(LPTSTR aText)
+sc_type TextToSC(LPTSTR aText, bool *aSpecifiedByNumber)
 {
 	if (!*aText) return 0;
 	for (int i = 0; i < g_key_to_sc_count; ++i)
@@ -4092,7 +4092,11 @@ sc_type TextToSC(LPTSTR aText)
 	{
 		LPTSTR endptr;
 		sc_type sc = (sc_type)_tcstol(aText + 2, &endptr, 16);  // Convert from hex.
-		return *endptr ? 0 : sc; // Fixed for v1.1.27: Disallow any invalid suffix so that hotkeys like a::scb() are not misinterpreted as remappings.
+		if (*endptr)
+			return 0; // Fixed for v1.1.27: Disallow any invalid suffix so that hotkeys like a::scb() are not misinterpreted as remappings.
+		if (aSpecifiedByNumber)
+			*aSpecifiedByNumber = true; // Override caller-set default.
+		return sc;
 	}
 	return 0; // Indicate "not found".
 }

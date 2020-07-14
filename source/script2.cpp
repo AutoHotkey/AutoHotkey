@@ -1581,7 +1581,7 @@ void input_type::SetTimeoutTimer()
 
 ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsRemove, UCHAR aFlagsAdd)
 {
-	bool vk_by_number;
+	bool vk_by_number, sc_by_number;
 	vk_type vk;
 	sc_type sc = 0;
 	modLR_type modifiersLR;
@@ -1631,6 +1631,7 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 
 			*end_pos = '\0';  // temporarily terminate the string here.
 
+			sc_by_number = false; // Set default.
 			modifiersLR = 0;  // Init prior to below.
 			// For backward compatibility, the Input command handles all keys by VK if
 			// one is returned by TextToVK().  Although this behaviour seems like a bug,
@@ -1651,7 +1652,7 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 			}
 			else
 				// No virtual key, so try to find a scan code.
-				sc = TextToSC(end_key + 1);
+				sc = TextToSC(end_key + 1, &sc_by_number);
 
 			*end_pos = '}';  // undo the temporary termination
 
@@ -1701,7 +1702,7 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 				}
 			}
 		}
-		if (sc)
+		if (sc || sc_by_number) // Fixed for v1.1.33.02: Allow sc000 for setting/unsetting flags for any events that lack a scan code.
 		{
 			end_sc[sc] = (end_sc[sc] & ~aFlagsRemove) | aFlagsAdd;
 		}
