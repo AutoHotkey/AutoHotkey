@@ -541,12 +541,12 @@ enum enum_act {
 , ACT_ELSE
 , ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE
 , ACT_FOR, ACT_WHILE, ACT_UNTIL // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
-, ACT_BREAK, ACT_CONTINUE
+, ACT_BREAK, ACT_CONTINUE // Keep ACT_FOR..ACT_CONTINUE together for ACT_EXPANDS_ITS_OWN_ARGS.
 , ACT_GOTO
 , ACT_FIRST_JUMP = ACT_BREAK, ACT_LAST_JUMP = ACT_GOTO // Actions which accept a label name.
 , ACT_RETURN
 , ACT_TRY, ACT_CATCH, ACT_FINALLY, ACT_THROW // Keep TRY, CATCH and FINALLY together and in this order for range checks.
-, ACT_SWITCH, ACT_CASE
+, ACT_SWITCH, ACT_CASE // Keep ACT_TRY..ACT_CASE together for ACT_EXPANDS_ITS_OWN_ARGS.
 , ACT_FIRST_CONTROL_FLOW = ACT_BLOCK_BEGIN, ACT_LAST_CONTROL_FLOW = ACT_CASE
 , ACT_FIRST_COMMAND, ACT_EXIT = ACT_FIRST_COMMAND, ACT_EXITAPP // Excluded from the "CONTROL_FLOW" range above because they can be safely wrapped into a Func.
 , ACT_TOOLTIP, ACT_TRAYTIP
@@ -588,7 +588,13 @@ enum enum_act {
 #define ACT_IS_LOOP_EXCLUDING_WHILE(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_FOR)
 #define ACT_IS_LINE_PARENT(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
 	|| ACT_IS_LOOP(ActionType) || (ActionType >= ACT_TRY && ActionType <= ACT_FINALLY))
-#define ACT_EXPANDS_ITS_OWN_ARGS(ActionType) (ActionType == ACT_ASSIGNEXPR || ActionType == ACT_WHILE || ActionType == ACT_FOR || ActionType == ACT_THROW)
+// The following groups of action types do not need ExpandArgs() called by ExecUntil(),
+// for one of the following reasons: 1) action has no args, 2) action's args are
+// always fully resolved at load time, 3) action is never executed by ExecUntil(),
+// 4) action needs to be the one to call ExpandArgs(), or does so for optimization.
+#define ACT_EXPANDS_ITS_OWN_ARGS(ActionType) (ActionType == ACT_ASSIGNEXPR \
+	|| (ActionType >= ACT_FOR && ActionType <= ACT_CONTINUE) \
+	|| (ActionType >= ACT_TRY && ActionType <= ACT_CASE))
 
 // For convenience in many places.  Must cast to int to avoid loss of negative values.
 #define BUF_SPACE_REMAINING ((int)(aBufSize - (aBuf - aBuf_orig)))
