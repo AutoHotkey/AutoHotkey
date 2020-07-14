@@ -220,7 +220,6 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 };
 // These two are macros for maintainability (i.e. seeing them together here helps maintain them together).
 #define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) (!(token).var) // SYM_DYNAMICs are either double-derefs or built-in vars.
-#define SYM_DYNAMIC_IS_WRITABLE(token) ((token)->var && (token)->var->Type() <= VAR_LAST_WRITABLE) // i.e. it's the clipboard, not a built-in variable or double-deref.
 
 // This should include all operators which can produce SYM_VAR for a subsequent assignment:
 #define IS_OPERATOR_VALID_LVALUE(sym) \
