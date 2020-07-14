@@ -3076,7 +3076,7 @@ public:
 	ResultType PreprocessLocalVars(UserFunc &aFunc, Var **aVarList, int &aVarCount);
 	ResultType PreprocessFindUpVar(LPTSTR aName, UserFunc &aOuter, UserFunc &aInner, Var *&aFound, Var *aLocal);
 	void ConvertLocalToAlias(Var &aLocal, Var *aAliasFor, int aPos, Var **aVarList, int &aVarCount);
-	ResultType RetroactivelyFixConstants();
+	ResultType PreparseVarRefs();
 
 	ResultType ThrowIfTrue(bool aError);
 	ResultType ThrowIntIfNonzero(int aErrorValue, LPCTSTR aWhat = NULL);

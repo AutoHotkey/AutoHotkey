@@ -1539,7 +1539,7 @@ UINT Script::LoadFromFile()
 		mUnresolvedClasses = NULL;
 	}
 
-	if (!RetroactivelyFixConstants())
+	if (!PreparseVarRefs())
 		return LOADING_FAILED;
 
 #ifndef AUTOHOTKEYSC
@@ -5218,7 +5218,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					// dropped to simplify some things and perhaps allow more optimizations.
 					if (   !(target_var = FindOrAddVar(this_aArg))   )
 						return FAIL;  // The above already displayed the error.
-					// Currently relying on RetroactivelyFixConstants() to do this check so that LineError() is used:
+					// Currently relying on PreparseVarRefs() to do this check so that LineError() is used:
 					//if (target_var->IsReadOnly())
 					//	return VarIsReadOnlyError(target_var, aActionType == ACT_ASSIGNEXPR ? INVALID_ASSIGNMENT : INVALID_OUTPUT_VAR);
 					// Rather than removing this arg from the list altogether -- which would disturb
@@ -8952,7 +8952,8 @@ unquoted_literal:
 		else if (this_deref_ref.type == DT_DOUBLE) // Marks the end of a var double-dereference.
 		{
 			infix[infix_count].symbol = SYM_DYNAMIC;
-			infix[infix_count].var = NULL; // Indicate this is a double-deref.
+			infix[infix_count].var = nullptr; // Indicate this is a double-deref.
+			infix[infix_count].is_lvalue = FALSE; // Set default.
 		}
 		else if (this_deref_ref.type == DT_DOTPERCENT)
 		{
@@ -9011,28 +9012,13 @@ unquoted_literal:
 		else // this_deref is a variable.
 		{
 			CHECK_AUTO_CONCAT;
-			switch (this_deref_ref.var->Type())
-			{
-			case VAR_NORMAL: // VAR_ALIAS is taken into account (and resolved) by Type().
-				// DllCall() and possibly others rely on this having been done to support changing the
-				// value of a parameter (similar to by-ref).
-				infix[infix_count].symbol = SYM_VAR; // Type() is VAR_NORMAL as verified above; but SYM_VAR can be the VAR_VIRTUAL in the case of expression lvalues.  Search for VAR_VIRTUAL further below for details.
-				infix[infix_count].var = this_deref_ref.var;
-				infix[infix_count].is_lvalue = FALSE; // Set default.  Having this here (vs. in the assignment token) simplifies RetroactivelyFixConstants().
-				break;
-			case VAR_CONSTANT:
-				// The following is not done because:
-				//  1) It would prevent "attempted to assign to a constant" errors from showing the constant's name.
-				//  2) It makes some error messages inconsistent since ACT_ASSIGNEXPR still refers to the Var.
-				//  3) SYM_DYNAMIC still needs to handle VAR_CONSTANT for double-derefs.
-				//  4) In combination with stdlib auto-include, it might make some error messages inconsistent
-				//     since some references might be resolved to SYM_VAR before a lib is included.
-				//this_deref_ref.var->ToToken(infix[infix_count]);
-				//break;
-			default: // It's a built-in variable (including clipboard).
-				infix[infix_count].symbol = SYM_DYNAMIC;
-				infix[infix_count].var = this_deref_ref.var;
-			}
+			// Use SYM_VAR for both built-in and normal vars at this stage, since some normal vars
+			// might become read-only later on anyway.  This simplifies some parts, as non-dynamic
+			// references are always SYM_VAR and SYM_DYNAMIC has only one meaning.  A later stage
+			// will validate and translate each SYM_VAR as needed.
+			infix[infix_count].symbol = SYM_VAR;
+			infix[infix_count].var = this_deref_ref.var;
+			infix[infix_count].is_lvalue = FALSE; // Set default, for detection of how this var ref is used.
 		} // Handling of the var or function in this_deref.
 
 		// Finally, jump over the dereference text. Note that in the case of an expression, there might not
@@ -9093,17 +9079,6 @@ unquoted_literal:
 		// Put operands into the postfix array immediately, then move on to the next infix item:
 		if (IS_OPERAND(infix_symbol))
 		{
-			if (infix_symbol == SYM_DYNAMIC)
-			{
-				// IMPORTANT: VAR_VIRTUAL is made into SYM_VAR, but only for assignments and output var
-				// parameters which are explicitly listed in g_BIF.  This allows built-in functions and
-				// other places in the code to treat SYM_VAR as though it's always VAR_NORMAL, which reduces
-				// code size and improves maintainability.  is_lvalue is set so that a dynamically resolved
-				// var will yield SYM_VAR if it's the target of an assignment.  This detection is done just
-				// prior to pushing the assignment operator onto the stack (or popping pre-inc/dec) since
-				// that's the only time the l-value's postfix token can be detected reliably.
-				this_infix->is_lvalue = FALSE; // Set default.
-			}
 			this_postfix = this_infix++;
 			++postfix_count;
 			continue; // Doing a goto to a hypothetical "standard_postfix" (in lieu of these last 3 lines) reduced performance and didn't help code size.
@@ -9214,25 +9189,11 @@ unquoted_literal:
 						else if (func->ArgIsOutputVar(in_param_list->param_count - 1))
 						{
 							ExprTokenType &param1 = *postfix[postfix_count-1];
-							if (param1.symbol == SYM_VAR)
+							if (param1.symbol == SYM_VAR || param1.symbol == SYM_DYNAMIC)
 							{
-								param1.is_lvalue = Script::INVALID_OUTPUT_VAR; // Mark the type of lvalue for later validation.
-							}
-							else if (param1.symbol == SYM_DYNAMIC)
-							{
-								if (param1.var) // Built-in var.
-								{
-									// Let this be checked only in RetroactivelyFixConstants(), to reduce code size:
-									//if (VAR_IS_READONLY(*param1.var))
-									//	return VarIsReadOnlyError(param1.var, Script::INVALID_OUTPUT_VAR);
-									// Convert this SYM_DYNAMIC to SYM_VAR to allow it to be passed to the function.
-									// Some functions rely on this being done only for those parameters which are listed
-									// as output vars in g_BIF or Line::ArgIsVar (since legacy commands are designed to
-									// allow Clipboard etc. as output vars).  This must not be done for ByRef parameters.
-									param1.symbol = SYM_VAR;
-								}
 								// Mark this as an l-value.  If it is a double-deref, it will either produce a writable
-								// var as SYM_VAR or will throw an error.
+								// var as SYM_VAR or will throw an error.  Other load-time checks will raise an error
+								// if this is SYM_VAR and it turns out to be a constant/read-only variable.
 								param1.is_lvalue = Script::INVALID_OUTPUT_VAR;
 							}
 							else //if (!IS_OPERATOR_VALID_LVALUE(param1.symbol)) // This section currently only executes for single operands.
@@ -9398,6 +9359,7 @@ unquoted_literal:
 					switch (postfix[postfix_count - 1]->symbol)
 					{
 					case SYM_DYNAMIC:
+						// This is the end of a dynamic property name in something like {%x%: y}.
 						postfix_count--;
 						break;
 					case SYM_STRING:
@@ -9537,13 +9499,6 @@ unquoted_literal:
 					else if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
 					{
 						ExprTokenType &target = *postfix[postfix_count - 1];
-						if (sym_postfix == SYM_DYNAMIC && target.var) // Built-in var or constant.
-						{
-							// Let this be checked only in RetroactivelyFixConstants(), to reduce code size:
-							//if (VAR_IS_READONLY(*target.var))
-							//	return VarIsReadOnlyError(target.var, Script::INVALID_ASSIGNMENT);
-							target.symbol = SYM_VAR; // Convert to SYM_VAR.
-						}
 						target.is_lvalue = Script::INVALID_ASSIGNMENT; // Mark this as the target of an assignment.
 					}
 					else if (!IS_OPERATOR_VALID_LVALUE(sym_postfix))
@@ -9747,21 +9702,11 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 		case SYM_PRE_DECREMENT:
 			if (postfix_count)
 			{
-				SymbolType sym_postfix = postfix[postfix_count-1]->symbol;
+				ExprTokenType &target = *postfix[postfix_count - 1];
 				// This is nearly identical to the section for assignments under "if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))":
-				if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
-				{
-					ExprTokenType &target = *postfix[postfix_count - 1];
-					if (sym_postfix == SYM_DYNAMIC && target.var) // Built-in var or constant.
-					{
-						// Let this be checked only in RetroactivelyFixConstants(), to reduce code size:
-						//if (VAR_IS_READONLY(*target.var))
-						//	return VarIsReadOnlyError(target.var, Script::INVALID_ASSIGNMENT);
-						target.symbol = SYM_VAR; // Convert to SYM_VAR.
-					}
+				if (target.symbol == SYM_VAR || target.symbol == SYM_DYNAMIC)
 					target.is_lvalue = Script::INVALID_ASSIGNMENT; // Mark this as the target of an assignment.
-				}
-				else if (!IS_OPERATOR_VALID_LVALUE(sym_postfix))
+				else if (!IS_OPERATOR_VALID_LVALUE(target.symbol))
 					return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_postfix->error_reporting_marker);
 			}
 			break;
@@ -9819,12 +9764,13 @@ end_of_infix_to_postfix:
 	ExprTokenType &only_token = *postfix[0];
 	SymbolType only_symbol = only_token.symbol;
 	if (   postfix_count == 1 && IS_OPERAND(only_symbol) // This expression is a lone operand, like (1) or "string".
-		&& only_symbol != SYM_DYNAMIC // Exclude built-in variables (this can't be a double-deref since that would have multiple tokens).
 		&& (mActionType < ACT_FOR || mActionType > ACT_UNTIL) // It's not WHILE or UNTIL, which currently perform better as expressions, or FOR, which performs the same but currently expects aResultToken to always be set.
 		&& (mActionType != ACT_SWITCH && mActionType != ACT_CASE) // It's not SWITCH or CASE, which require a proper postfix expression.
 		&& (mActionType != ACT_THROW) // Exclude THROW to simplify variable handling (ensures vars are always dereferenced).
 		&& (mActionType != ACT_HOTKEY_IF) // #HotIf requires the expression text not be modified.
-		&& (only_symbol != SYM_VAR || mActionType != ACT_RETURN) // "return var" is kept as an expression for correct handling of local vars (see "ToReturnValue") and ByRef.
+		&& (only_symbol != SYM_VAR
+			|| (mActionType != ACT_RETURN // "return var" is kept as an expression for correct handling of local vars (see "ToReturnValue") and ByRef.
+				&& only_token.var->Type() != VAR_VIRTUAL)) // VAR_VIRTUAL must be an expression.
 		)
 	{
 		// The checks above leave: ACT_ASSIGNEXPR, ACT_EXPRESSION? (ineffectual), ACT_IF,
@@ -13799,7 +13745,7 @@ void Script::ConvertLocalToAlias(Var &aLocal, Var *aAliasFor, int aPos, Var **aV
 
 
 
-ResultType Script::RetroactivelyFixConstants()
+ResultType Script::PreparseVarRefs()
 {
 	// AddLine() and ExpressionToPostfix() currently leave validation of output variables
 	// and lvalues to this function, to reduce code size.  Search for "VarIsReadOnlyError".
@@ -13821,7 +13767,9 @@ ResultType Script::RetroactivelyFixConstants()
 			{
 				for (ExprTokenType *token = arg.postfix; token->symbol != SYM_INVALID; ++token)
 				{
-					if ((token->symbol == SYM_VAR || token->symbol == SYM_DYNAMIC && token->var) && token->var->IsReadOnly())
+					if (token->symbol != SYM_VAR)
+						continue;
+					if (token->var->IsReadOnly())
 					{
 						if (token->is_lvalue)
 							return line->VarIsReadOnlyError(token->var, token->is_lvalue);
@@ -13829,7 +13777,16 @@ ResultType Script::RetroactivelyFixConstants()
 						// i.e. passing to a ByRef parameter gives a value instead of a read-only parameter.
 						// It might also help performance.
 						if (token->var->Type() == VAR_CONSTANT)
+						{
 							token->var->ToToken(*token);
+							continue;
+						}
+					}
+					if (!token->is_lvalue && token->var->Type() == VAR_VIRTUAL)
+					{
+						// Convert this virtual var to SYM_DYNAMIC for evaluation by ExpandExpression.
+						token->symbol = SYM_DYNAMIC;
+						++arg.max_alloc;
 					}
 				}
 			}

@@ -90,8 +90,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 	__int64 right_int64, left_int64;
 	LPTSTR right_string, left_string;
 	size_t right_length, left_length;
-	TCHAR left_buf[MAX_NUMBER_SIZE];  // BIF_OnMessage and SYM_DYNAMIC rely on this one being large enough to hold MAX_VAR_NAME_LENGTH.
-	TCHAR right_buf[MAX_NUMBER_SIZE]; // Only needed for holding numbers
+	TCHAR left_buf[max(MAX_NUMBER_SIZE, _f_retval_buf_size)];
+	TCHAR right_buf[MAX_NUMBER_SIZE];
 	LPTSTR result; // "result" is used for return values and also the final result.
 	VarSizeType result_length;
 	size_t result_size, alloca_usage = 0; // v1.0.45: Track amount of alloca mem to avoid stress on stack from extreme expressions (mostly theoretical).
@@ -112,20 +112,17 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 	// that marks the end of the postfix array.
 	for (this_postfix = postfix; this_postfix->symbol != SYM_INVALID; ++this_postfix) // Using pointer vs. index (e.g. postfix[i]) reduces OBJ code size by ~122 and seems to perform at least as well.
 	{
-		// Set default early to simplify the code.  All struct members are needed: symbol_type (e.g. in
-		// cases such as this token being an ordinary operand), circuit_token to preserve loadtime info,
-		// buf for SYM_DYNAMIC, and marker (in cases such as literal strings).  Also, this_token is used
+		// Set default early to simplify the code.  All struct members may be needed.  Also, this_token is used
 		// almost everywhere further below in preference to this_postfix because:
 		// 1) The various SYM_ASSIGN_* operators (e.g. SYM_ASSIGN_CONCAT) are changed to different operators
 		//    to simplify the code.  So must use the changed/new value in this_token, not the original value in
 		//    this_postfix.
 		// 2) Using a particular variable very frequently might help compiler to optimize that variable to
 		//    generate faster code.
+		// 3) It might help performance due to locality of reference/CPU caching (this_token is on the stack).
 		ExprTokenType &this_token = *(ExprTokenType *)_alloca(sizeof(ExprTokenType)); // Saves a lot of stack space, and seems to perform just as well as something like the following (at the cost of ~82 byte increase in OBJ code size): ExprTokenType &this_token = new_token[new_token_count++]
 		this_token.CopyExprFrom(*this_postfix); // See comment section above.
 
-		// At this stage, operands in the postfix array should be SYM_STRING, SYM_INTEGER, SYM_FLOAT or SYM_DYNAMIC.
-		// But all are checked since that operation is just as fast:
 		if (IS_OPERAND(this_token.symbol)) // If it's an operand, just push it onto stack for use by an operator in a future iteration.
 		{
 			if (this_token.symbol == SYM_DYNAMIC) // CONVERTED HERE/EARLY TO SOMETHING *OTHER* THAN SYM_DYNAMIC so that no later stages need any handling for them as operands. SYM_DYNAMIC is quite similar to SYM_FUNC/BIF in this respect.
