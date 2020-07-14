@@ -1396,7 +1396,7 @@ public:
 	Label *mPrevLabel, *mNextLabel;  // Prev & Next items in linked list.
 
 	Label(LPTSTR aLabelName)
-		: mName(aLabelName) // Caller gave us a pointer to dynamic memory for this (or an empty string in the case of mPlaceholderLabel).
+		: mName(aLabelName) // Caller gave us a pointer to dynamic memory for this.
 		, mJumpToLine(NULL)
 		, mPrevLabel(NULL), mNextLabel(NULL)
 	{}
@@ -2888,7 +2888,6 @@ private:
 
 public:
 	Line *mCurrLine;     // Seems better to make this public than make Line our friend.
-	Label *mPlaceholderLabel; // Used in place of a NULL label to simplify code.
 	LPTSTR mThisHotkeyName, mPriorHotkeyName;
 	MsgMonitorList mOnExit, mOnClipboardChange, mOnError; // Event handlers for OnExit(), OnClipboardChange() and OnError().
 	bool mOnClipboardChangeIsRunning;

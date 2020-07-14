@@ -498,7 +498,7 @@ VarEntry g_BIV_A[] =
 
 
 Script::Script()
-	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL), mPlaceholderLabel(NULL)
+	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL)
 	, mThisHotkeyName(_T("")), mPriorHotkeyName(_T("")), mThisHotkeyStartTime(0), mPriorHotkeyStartTime(0)
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
 	, mOnClipboardChangeIsRunning(false), mExitReason(EXIT_NONE)
@@ -1491,13 +1491,6 @@ UINT Script::LoadFromFile()
 	}
 #endif
 
-	// v1.0.42: Placeholder to use in place of a NULL label to simplify code in some places.
-	// This must be created before loading the script because it's relied upon when creating
-	// hotkeys to provide an alternative to having a NULL label. It will be given a non-NULL
-	// mJumpToLine further down.
-	if (   !(mPlaceholderLabel = new Label(_T("")))   ) // Not added to linked list since it's never looked up.
-		return LOADING_FAILED;
-
 	// L4: Changed this next section to support lines added for #if (expression).
 	// Each #if (expression) is pre-parsed *before* the main script in order for
 	// function library auto-inclusions to be processed correctly.
@@ -1576,7 +1569,6 @@ UINT Script::LoadFromFile()
 	++mCombinedLineNumber;  // So that the EXITs will both show up in ListLines as the line # after the last physical one in the script.
 	if (!(AddLine(ACT_EXIT) && AddLine(ACT_EXIT))) // Second exit guaranties non-NULL mRelatedLine(s).
 		return LOADING_FAILED;
-	mPlaceholderLabel->mJumpToLine = mLastLine; // To follow the rule "all labels should have a non-NULL line before the script starts running".
 
 	if (   !PreparseBlocks(mFirstLine)
 		|| !PreparseCommands(mFirstLine)   )
