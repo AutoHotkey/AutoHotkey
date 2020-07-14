@@ -969,11 +969,9 @@ public:
 
 
 	#define ArgHasDeref(aArgNum) ArgIndexHasDeref((aArgNum)-1)
-	bool ArgIndexHasDeref(int aArgIndex)
-	// This function should always be called in lieu of doing something like "strchr(arg.text, g_DerefChar)"
-	// because that method is unreliable due to the possible presence of literal (escaped) g_DerefChars
-	// in the text.
+	// Returns true if this arg requires evaluation at runtime.
 	// Caller must ensure that aArgIndex is 0 or greater.
+	bool ArgIndexHasDeref(int aArgIndex)
 	{
 #ifdef _DEBUG
 		if (aArgIndex < 0)
@@ -985,11 +983,13 @@ public:
 		if (aArgIndex >= mArgc) // Arg doesn't exist.
 			return false;
 		ArgStruct &arg = mArg[aArgIndex]; // For performance.
-		// Return false if it's not of a type caller wants deemed to have derefs.
 		if (arg.type == ARG_TYPE_NORMAL)
-			return arg.deref && arg.deref[0].marker // Relies on short-circuit boolean evaluation order to prevent NULL-deref.
-				|| arg.is_expression; // Return true for this case since most callers assume the arg is a simple literal string if we return false.
-		else // Callers rely on input variables being seen as "true" because sometimes single isolated derefs are converted into ARG_TYPE_INPUT_VAR at load-time.
+			// Simple literal values are converted to non-expressions where possible,
+			// so if this is true, the arg requires evaluation at runtime:
+			return arg.is_expression;
+		else
+			// ARG_TYPE_INPUT_VAR is currently only used by ExpressionToPostfix();
+			// i.e. when the expression is just a simple variable reference.
 			return (arg.type == ARG_TYPE_INPUT_VAR);
 	}
 

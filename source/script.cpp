@@ -8053,7 +8053,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 		case ACT_CONTINUE:
 			if (line->mArgc)
 			{
-				if (line->ArgHasDeref(1) || line->mArg->is_expression)
+				if (line->ArgHasDeref(1))
 					// It seems unlikely that computing the target loop at runtime would be useful.
 					// For simplicity, rule out things like "break %var%" and "break % func()":
 					return line->PreparseError(ERR_PARAM1_INVALID); //_T("Target label of Break/Continue cannot be dynamic."));
@@ -9734,11 +9734,6 @@ end_of_infix_to_postfix:
 
 	if (!postfix_count) // The code below relies on this check.  This can't be an empty (omitted) expression because an earlier check would've turned it into a non-expression.
 		return LineError(ERR_EXPR_SYNTAX, FAIL, aArg.text);
-
-	// ExpressionToPostfix() also handles unquoted string args (i.e. to support expressions
-	// between percent signs).  Now that the postfix array is constructed, is_expression
-	// should indicate how the arg should be evaluated rather than its original syntax.
-	aArg.is_expression = true;
 
 	// The following enables ExpandExpression() to be skipped in common cases for ACT_ASSIGNEXPR
 	// and ACT_RETURN.  A similar optimization used to be done for simple literal integers by
