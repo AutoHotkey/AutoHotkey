@@ -7861,10 +7861,6 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 		} // ActionType is IF/LOOP/TRY.
 		else if (line->mActionType == ACT_SWITCH)
 		{
-			// "Hide" the arg so that ExpandArgs() doesn't evaluate it.  This is necessary because
-			// ACT_SWITCH has special handling to support objects.
-			line->mAttribute = (AttributeType)line->mArgc;
-			line->mArgc = 0;
 			Line *switch_line = line;
 
 			line = line->mNextLine;
@@ -7876,9 +7872,6 @@ Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aPa
 			Line *end_line = NULL;
 			for (line = line->mNextLine; line->mActionType == ACT_CASE; line = end_line)
 			{
-				// Hide the arg so that ExpandArgs() won't evaluate it.
-				line->mAttribute = (AttributeType)line->mArgc;
-				line->mArgc = 0;
 				line->mParentLine = block_begin; // Required for GOTO to work correctly.
 				// Find the next ACT_CASE or ACT_BLOCK_END:
 				end_line = PreparseBlocks(line->mNextLine, UNTIL_BLOCK_END, block_begin, aLoopType);
@@ -10573,7 +10566,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			size_t switch_value_mem_size = 0;
 			ResultToken switch_value;
 			switch_value.mem_to_free = NULL;
-			if (!line->mAttribute) // Switch with no value: find the first 'true' case.
+			if (!line->mArgc) // Switch with no value: find the first 'true' case.
 			{
 				switch_value.symbol = SYM_INVALID;
 				result = OK;
@@ -10595,7 +10588,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				// For each CASE:
 				for (Line *case_line = line->mNextLine->mNextLine; case_line->mActionType == ACT_CASE; case_line = case_line->mRelatedLine)
 				{
-					int arg, arg_count = (int)(INT_PTR)case_line->mAttribute;
+					int arg, arg_count = case_line->mArgc;
 					if (!arg_count) // The default case.
 					{
 						line_to_execute = case_line->mNextLine;
@@ -12686,9 +12679,9 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 	else if (mActionType == ACT_FOR)
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("For %s%s%s in %s")
 			, mArg[0].text, *mArg[1].text ? _T(",") : _T(""), mArg[1].text, mArg[2].text);
-	else if ((mActionType == ACT_SWITCH || mActionType == ACT_CASE) && mAttribute)
-		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s %s%s"), g_act[mActionType].Name
-			, mArg[0].text, mActionType == ACT_CASE ? _T(":") : _T(""));
+	else if (mActionType == ACT_CASE && mArgc)
+		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s %s:"), g_act[mActionType].Name
+			, mArg[0].text);
 	else if (mActionType == ACT_CASE)
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("Default:"));
 	else
