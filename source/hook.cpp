@@ -2987,7 +2987,7 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 			if (shift_is_down ? end_if_shift_is_down : end_if_shift_is_not_down)
 			{
 				// The shift state is correct to produce the desired end-key.
-				input->EndByKey(aVK, aSC, input->KeySC[aSC], shift_is_down && !end_if_shift_is_not_down);
+				input->EndByKey(aVK, aSC, input->KeySC[aSC] && (aSC || !input->KeyVK[aVK]), shift_is_down && !end_if_shift_is_not_down);
 				if (!visible)
 					break;
 				continue;
