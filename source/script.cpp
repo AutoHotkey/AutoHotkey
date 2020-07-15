@@ -5318,7 +5318,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(_T("Return's parameter should be blank except inside a function."));
 	}
 
-	if (mNextLineIsFunctionBody && do_update_labels) // do_update_labels: false for '#if expr' and 'static var:=expr', neither of which should be treated as part of the function's body.
+	if (mNextLineIsFunctionBody)
 	{
 		g->CurrentFunc->mJumpToLine = the_new_line;
 		mNextLineIsFunctionBody = false;
@@ -5854,10 +5854,6 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	if (!ParseAndAddLine(aExpr, ACT_RETURN, aExprMap, aExprEnd - aExpr))
 		return FAIL;
 	*aExprEnd = orig_end;
-
-	// mNoUpdateLabels prevents this from being done in AddLine():
-	g->CurrentFunc->mJumpToLine = mLastLine;
-	mNextLineIsFunctionBody = false;
 
 	aDeref.type = DT_FUNCREF;
 	aDeref.marker = aPrmStart; // Mark the entire fat arrow expression as a function deref.
