@@ -1502,7 +1502,10 @@ UINT Script::LoadFromFile()
 	// So that (the last occuring) "#DllLoad directory" doesn't affect calls to GetDllProcAddress for run time calls to DllCall
 	// or DllCall optimizations in Line::ExpressionToPostfix.
 	if (!SetDllDirectory(NULL))
-		return ScriptError(ERR_INTERNAL_CALL);
+	{
+		ScriptError(ERR_INTERNAL_CALL);
+		return LOADING_FAILED;
+	}
 #endif
 	if (!PreparseExpressions(mFirstLine))
 		return LOADING_FAILED; // Error was already displayed by the above call.
