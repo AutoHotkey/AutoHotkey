@@ -5146,14 +5146,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		}
 		mLastHotFunc = nullptr;
 	}
-	bool do_update_labels;
-	if (aArgc >= UCHAR_MAX) // Special signal from caller to avoid pointing any pending labels to this particular line.
-	{
-		aArgc -= UCHAR_MAX;
-		do_update_labels = false;
-	}
-	else
-		do_update_labels = !mNoUpdateLabels;
 
 	Var *target_var;
 	DerefList deref;  // Will be used to temporarily store the var-deref locations in each arg.
@@ -5357,12 +5349,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// UPDATE: In addition, keep searching backward through the labels until a non-NULL
 	// mJumpToLine is found.  All the ones with a NULL should point to this new line to
 	// support cases where one label immediately follows another in the script.
-	// Example:
-	// #a::  <-- don't leave this label with a NULL jumppoint.
-	// LaunchA:
-	// ...
-	// return
-	if (do_update_labels)
+	if (!mNoUpdateLabels)
 	{
 		for (Label *label = g->CurrentFunc ? g->CurrentFunc->mLastLabel : mLastLabel;
 			label != NULL && label->mJumpToLine == NULL; label = label->mPrevLabel)
