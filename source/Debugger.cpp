@@ -937,18 +937,13 @@ DEBUGGER_COMMAND(Debugger::context_get)
 		}
 	}
 
-	Var **var = NULL, **var_end = NULL; // An array of pointers-to-var.
+	VarList *vars = nullptr;
 	VarBkp *bkp = NULL, *bkp_end = NULL;
 	
 	if (context_id == PC_Local)
-	{
-		mStack.GetLocalVars(depth, var, var_end, bkp, bkp_end);
-	}
+		mStack.GetLocalVars(depth, vars, bkp, bkp_end);
 	else if (context_id == PC_Global)
-	{
-		var = g_script.mVar;
-		var_end = var + g_script.mVarCount;
-	}
+		vars = &g_script.mVars;
 	else
 		return DEBUGGER_E_INVALID_CONTEXT;
 
@@ -962,9 +957,10 @@ DEBUGGER_COMMAND(Debugger::context_get)
 	prop.max_data = mMaxPropertyData;
 	prop.pagesize = mMaxChildren;
 	prop.max_depth = mMaxDepth;
-	for ( ; var < var_end; ++var)
-		if (  (err = GetPropertyInfo(**var, prop, value_buf))
-			|| (err = WritePropertyXml(prop, (*var)->mName))  )
+	int var_count = vars ? vars->mCount : 0;
+	for (int i = 0; i < var_count; ++i)
+		if (  (err = GetPropertyInfo(*vars->mItem[i], prop, value_buf))
+			|| (err = WritePropertyXml(prop, vars->mItem[i]->mName))  )
 			break;
 	for ( ; bkp < bkp_end; ++bkp)
 		if (  (err = GetPropertyInfo(*bkp, prop, value_buf))
@@ -1386,9 +1382,9 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 
 	if (aDepth > 0 && aVarScope != FINDVAR_GLOBAL)
 	{
-		Var **vars = NULL, **vars_end;
-		VarBkp *bkps = NULL, *bkps_end;
-		mStack.GetLocalVars(aDepth, vars, vars_end, bkps, bkps_end);
+		VarList *vars = nullptr;
+		VarBkp *bkps = nullptr, *bkps_end;
+		mStack.GetLocalVars(aDepth, vars, bkps, bkps_end);
 		if (bkps)
 		{
 			for ( ; ; ++bkps)
@@ -1408,20 +1404,9 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		}
 		else if (vars)
 		{
-			for ( ; ; ++vars)
-			{
-				if (vars == vars_end)
-				{
-					// No local var at that depth, so make sure to not return the wrong local.
-					aVarScope = FINDVAR_GLOBAL;
-					break;
-				}
-				if (!_tcsicmp((*vars)->mName, name))
-				{
-					var = *vars;
-					break;
-				}
-			}
+			if (  !(var = vars->Find(name))  )
+				// No local var at that depth, so make sure to not return the wrong local.
+				aVarScope = FINDVAR_GLOBAL;
 		}
 	}
 
@@ -2750,7 +2735,7 @@ LPCTSTR DbgStack::Entry::Name()
 }
 
 
-void DbgStack::GetLocalVars(int aDepth, Var **&aVar, Var **&aVarEnd, VarBkp *&aBkp, VarBkp *&aBkpEnd)
+void DbgStack::GetLocalVars(int aDepth,  VarList *&aVars, VarBkp *&aBkp, VarBkp *&aBkpEnd)
 {
 	DbgStack::Entry *se = mTop - aDepth;
 	for (;;)
@@ -2777,8 +2762,7 @@ void DbgStack::GetLocalVars(int aDepth, Var **&aVar, Var **&aVarEnd, VarBkp *&aB
 		}
 	}
 	// Since above did not return, this instance wasn't interrupted.
-	aVar = func.mVar;
-	aVarEnd = aVar + func.mVarCount;
+	aVars = &func.mVars;
 }
 
 

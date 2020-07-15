@@ -506,7 +506,6 @@ Script::Script()
 	, mLastHotFunc(nullptr), mUnusedHotFunc(nullptr)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
-	, mVar(NULL), mVarCount(0), mVarCountMax(0)
 	, mOpenBlock(NULL), mNextLineIsFunctionBody(false), mNoUpdateLabels(false)
 	, mClassObjectCount(0), mUnresolvedClasses(NULL), mClassProperty(NULL), mClassPropertyDef(NULL)
 	, mCurrFileIndex(0), mCombinedLineNumber(0)
@@ -1397,19 +1396,25 @@ ResultType Script::ExitApp(ExitReasons aExitReason, int aExitCode)
 
 
 
-void ReleaseVarObjects(Var **aVar, int aVarCount)
+void ReleaseVarObjects(VarList &aVars)
 {
-	for (int v = 0; v < aVarCount; ++v)
-		if (aVar[v]->IsObject())
-			aVar[v]->ReleaseObject(); // ReleaseObject() vs Free() for performance (though probably not important at this point).
+	for (int v = 0; v < aVars.mCount; ++v)
+	{
+		Var &var = *aVars.mItem[v];
+		if (var.IsObject())
+			var.ReleaseObject(); // ReleaseObject() vs Free() for performance (though probably not important at this point).
 		// Otherwise, maybe best not to free it in case an object's __Delete meta-function uses it?
+	}
 }
 
-void ReleaseStaticVarObjects(Var **aVar, int aVarCount)
+void ReleaseStaticVarObjects(VarList &aVars)
 {
-	for (int v = 0; v < aVarCount; ++v)
-		if (aVar[v]->IsStatic() && aVar[v]->IsObject()) // For consistency, only free static vars (see below).
-			aVar[v]->ReleaseObject();
+	for (int v = 0; v < aVars.mCount; ++v)
+	{
+		Var &var = *aVars.mItem[v];
+		if (var.IsStatic() && var.IsObject()) // For consistency, only free static vars (see below).
+			var.ReleaseObject();
+	}
 }
 
 void ReleaseStaticVarObjects(FuncList &aFuncs)
@@ -1423,7 +1428,7 @@ void ReleaseStaticVarObjects(FuncList &aFuncs)
 		// calls and all tokens in the 'stack' of each currently executing expression, currently
 		// only static and global variables are released.  It seems best for consistency to also
 		// avoid releasing top-level non-static local variables (i.e. which aren't in var backups).
-		ReleaseStaticVarObjects(f.mVar, f.mVarCount);
+		ReleaseStaticVarObjects(f.mVars);
 		if (f.mFuncs.mCount)
 			ReleaseStaticVarObjects(f.mFuncs);
 	}
@@ -1443,7 +1448,7 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 		g_AllowInterruption = FALSE;
 		g->IsPaused = false;
 
-		ReleaseVarObjects(mVar, mVarCount);
+		ReleaseVarObjects(mVars);
 		ReleaseStaticVarObjects(mFuncs);
 	}
 #ifdef CONFIG_DEBUGGER // L34: Exit debugger *after* the above to allow debugging of any invoked __Delete handlers.
@@ -6881,7 +6886,8 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 
 
 
-Func *FuncList::Find(LPCTSTR aName, int *apInsertPos)
+template<typename T, int S>
+T *ScriptItemList<T, S>::Find(LPCTSTR aName, int *apInsertPos)
 {
 	// Using a binary searchable array vs a linked list speeds up dynamic function calls, on average.
 	int left, right, mid, result;
@@ -7093,12 +7099,13 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 
 
 
-ResultType FuncList::Insert(Func *aFunc, int aInsertPos)
+template<typename T, int INITIAL_SIZE>
+ResultType ScriptItemList<T, INITIAL_SIZE>::Insert(T *aFunc, int aInsertPos)
 {
 	if (mCount == mCountMax)
 	{
 		// Allocate or expand function list.
-		if (!Alloc(mCountMax ? mCountMax * 2 : 4)) // Initial count is small since functions aren't expected to contain many nested functions.
+		if (!Alloc(mCountMax ? mCountMax * 2 : INITIAL_SIZE))
 			return FAIL;
 	}
 
@@ -7112,9 +7119,10 @@ ResultType FuncList::Insert(Func *aFunc, int aInsertPos)
 
 
 
-ResultType FuncList::Alloc(int aAllocCount)
+template<typename T, int S>
+ResultType ScriptItemList<T,S>::Alloc(int aAllocCount)
 {
-	Func **temp = (Func **)realloc(mItem, aAllocCount * sizeof(Func *)); // If passed NULL, realloc() will do a malloc().
+	T **temp = (T **)realloc(mItem, aAllocCount * sizeof(T *)); // If passed NULL, realloc() will do a malloc().
 	if (!temp)
 		return FAIL;
 	mItem = temp;
@@ -7228,38 +7236,13 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 	bool search_local = (aScope & VAR_LOCAL) && g.CurrentFunc;
 	// Above has ensured that g.CurrentFunc!=NULL whenever search_local==true.
 
-	// Init for binary search loop:
-	int left, right, mid, result;  // left/right must be ints to allow them to go negative and detect underflow.
-	Var **var;  // An array of pointers-to-var.
-	if (search_local)
-	{
-		var = g.CurrentFunc->mVar;
-		right = g.CurrentFunc->mVarCount - 1;
-	}
-	else
-	{
-		var = mVar;
-		right = mVarCount - 1;
-	}
+	VarList &vars = search_local ? g.CurrentFunc->mVars : mVars;
 
-	// Binary search:
-	for (left = 0; left <= right;) // "right" was already initialized above.
-	{
-		mid = (left + right) / 2;
-		result = _tcsicmp(var_name, var[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
-		if (result > 0)
-			left = mid + 1;
-		else if (result < 0)
-			right = mid - 1;
-		else // Match found.
-			return var[mid];
-	}
+	if (Var *found = vars.Find(var_name, apInsertPos))
+		return found;
 
-	// Since above didn't return, no match was found and "left" always contains the position where aVarName
+	// Since above didn't return, no match was found and apInsertPos was set to the position where aVarName
 	// should be inserted to keep the list sorted.
-	// Set the output parameter, if present:
-	if (apInsertPos) // Caller wants this value even if we'll be resorting to searching the global list below.
-		*apInsertPos = left; // This is the index a newly inserted item should have to keep alphabetical order.
 	
 	if (apIsLocal) // Its purpose is to inform caller of type it would have been in case we don't find a match.
 		*apIsLocal = search_local;
@@ -7353,53 +7336,13 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 		// v1.0.48: Lexikos: Current function is assume-static, so set static attribute.
 		aScope |= VAR_LOCAL_STATIC;
 
+	VarList &vars = aIsLocal ? g->CurrentFunc->mVars : mVars;
 	Var *the_new_var = new Var(new_name, builtin, aScope);
-	if (the_new_var == NULL)
+	if (!the_new_var || !vars.Insert(the_new_var, aInsertPos))
 	{
 		ScriptError(ERR_OUTOFMEM);
 		return NULL;
 	}
-
-	// Create references to whichever variable list (local or global) is being acted upon.  These
-	// references simplify the code:
-	Var **&var = aIsLocal ? g->CurrentFunc->mVar : mVar; // This needs to be a ref. too in case it needs to be realloc'd.
-	int &var_count = aIsLocal ? g->CurrentFunc->mVarCount : mVarCount;
-	int &var_count_max = aIsLocal ? g->CurrentFunc->mVarCountMax : mVarCountMax;
-	int alloc_count;
-
-	if (var_count == var_count_max)
-	{
-		// Increase by orders of magnitude each time because realloc() is probably an expensive operation
-		// in terms of hurting performance.  So here, a little bit of memory is sacrificed to improve
-		// the expected level of performance for scripts that use hundreds of thousands of variables.
-		if (!var_count_max)
-			alloc_count = aIsLocal ? 100 : 1000;  // 100 conserves memory since every function needs such a block, and most functions have much fewer than 100 local variables.
-		else if (var_count_max < 1000)
-			alloc_count = 1000;
-		else if (var_count_max < 10000)
-			alloc_count = 10000;
-		else if (var_count_max < 100000)
-			alloc_count = 100000;
-		else if (var_count_max < 1000000)
-			alloc_count = 1000000;
-		else
-			alloc_count = var_count_max + 1000000;  // i.e. continue to increase by 4MB (1M*4) each time.
-
-		Var **temp = (Var **)realloc(var, alloc_count * sizeof(Var *)); // If passed NULL, realloc() will do a malloc().
-		if (!temp)
-		{
-			ScriptError(ERR_OUTOFMEM);
-			return NULL;
-		}
-		var = temp;
-		var_count_max = alloc_count;
-	}
-
-	if (aInsertPos != var_count) // Need to make room at the indicated position for this variable.
-		memmove(var + aInsertPos + 1, var + aInsertPos, (var_count - aInsertPos) * sizeof(Var *));
-	//else both are zero or the item is being inserted at the end of the list, so it's easy.
-	var[aInsertPos] = the_new_var;
-	++var_count;
 	return the_new_var;
 }
 
@@ -13386,7 +13329,7 @@ ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
 			// misleading (and both cases seem better than using the script's very last line).
 			mCurrLine = func.mJumpToLine->mPrevLine;
 			// Preprocess this function's local variables.
-			if (!PreprocessLocalVars(func, func.mVar, func.mVarCount))
+			if (!PreprocessLocalVars(func))
 				return FAIL; // Script will exit, so OK to leave mUpVar in an invalid state.
 		}
 		if (func.mFuncs.mCount)
@@ -13425,13 +13368,15 @@ ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
 
 
 
-ResultType Script::PreprocessLocalVars(UserFunc &aFunc, Var **aVarList, int &aVarCount)
+ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 {
 	bool check_globals = aFunc.AllowSuperGlobals();
 
-	for (int v = 0; v < aVarCount; ++v)
+	Var **vars = aFunc.mVars.mItem;
+	int var_count = aFunc.mVars.mCount;
+	for (int v = 0; v < var_count; ++v)
 	{
-		Var &var = *aVarList[v];
+		Var &var = *vars[v];
 		if (var.IsDeclared()) // Not a candidate for an upvar, super-global or warning.
 			continue;
 
@@ -13453,7 +13398,7 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc, Var **aVarList, int &aVa
 					continue;
 				case VAR_GLOBAL:
 					// There's only one "instance" of this variable, so alias it directly.
-					ConvertLocalToAlias(var, ovar, v, aVarList, aVarCount);
+					ConvertLocalToAlias(var, ovar, v, vars, var_count);
 					--v; // Counter the loop's increment since var has been removed.
 					continue;
 				}
@@ -13470,7 +13415,7 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc, Var **aVarList, int &aVa
 		{
 			// Make this local variable an alias for the super-global. Above has already
 			// verified this var was not declared and therefore isn't a function parameter.
-			ConvertLocalToAlias(var, global_var, v, aVarList, aVarCount);
+			ConvertLocalToAlias(var, global_var, v, vars, var_count);
 			--v; // Counter the loop's increment since var has been removed.
 		}
 		else
@@ -13629,17 +13574,17 @@ LPTSTR Script::ListVars(LPTSTR aBuf, int aBufSize) // aBufSize should be an int 
 		#define LIST_VARS_UNDERLINE _T("\r\n--------------------------------------------------\r\n")
 		// Start at the oldest and continue up through the newest:
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("Local Variables for %s()%s"), current_func->mName, LIST_VARS_UNDERLINE);
-		auto &func = *current_func; // For performance.
-		for (int i = 0; i < func.mVarCount; ++i)
-			if (func.mVar[i]->Type() == VAR_NORMAL) // Don't bother showing VAR_CONSTANT; ToText() doesn't support VAR_VIRTUAL.
-				aBuf = func.mVar[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
+		auto &vars = current_func->mVars; // For performance.
+		for (int i = 0; i < vars.mCount; ++i)
+			if (vars.mItem[i]->Type() == VAR_NORMAL) // Don't bother showing VAR_CONSTANT; ToText() doesn't support VAR_VIRTUAL.
+				aBuf = vars.mItem[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
 	}
 	aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%sGlobal Variables (alphabetical)%s")
 		, current_func ? _T("\r\n\r\n") : _T(""), LIST_VARS_UNDERLINE);
 	// Start at the oldest and continue up through the newest:
-	for (int i = 0; i < mVarCount; ++i)
-		if (mVar[i]->Type() == VAR_NORMAL) // Don't bother showing VAR_CONSTANT; ToText() doesn't support VAR_VIRTUAL.
-			aBuf = mVar[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
+	for (int i = 0; i < mVars.mCount; ++i)
+		if (mVars.mItem[i]->Type() == VAR_NORMAL) // Don't bother showing VAR_CONSTANT; ToText() doesn't support VAR_VIRTUAL.
+			aBuf = mVars.mItem[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
 	return aBuf;
 }
 

@@ -626,6 +626,8 @@ enum enum_act {
 #define MAX_INTEGER_LENGTH 20                     // Max length of a 64-bit number when expressed as decimal or
 #define MAX_INTEGER_SIZE (MAX_INTEGER_LENGTH + 1) // hex string; e.g. -9223372036854775808 or (unsigned) 18446744073709551616 or (hex) -0xFFFFFFFFFFFFFFFF.
 
+#define VARLIST_INITIAL_SIZE 32
+
 #define SW_NONE -1
 
 // Hot-strings:

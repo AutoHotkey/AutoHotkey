@@ -104,6 +104,8 @@ class Line;
 class NativeFunc;
 struct UDFCallInfo;
 
+template<typename T, int S> struct ScriptItemList;
+typedef ScriptItemList<Var, VARLIST_INITIAL_SIZE> VarList;
 
 struct DbgStack
 {
@@ -170,7 +172,7 @@ struct DbgStack
 	void Push(NativeFunc *aFunc);
 	void Push(UDFCallInfo *aRecurse);
 
-	void GetLocalVars(int aDepth, Var **&aVar, Var **&aVarEnd, VarBkp *&aBkp, VarBkp *&aBkpEnd);
+	void GetLocalVars(int aDepth, VarList *&aVars, VarBkp *&aBkp, VarBkp *&aBkpEnd);
 };
 
 #define DEBUGGER_STACK_PUSH(aWhat)	g_Debugger.mStack.Push(aWhat);

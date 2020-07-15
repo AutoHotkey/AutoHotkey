@@ -1004,7 +1004,7 @@ ResultType Var::BackupFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &aV
 // If there is nothing to backup, only the aVarBackupCount is changed (to zero).
 // Returns OK or FAIL.
 {
-	if (   !(aVarBackupCount = aFunc.mVarCount)   )  // Nothing needs to be backed up.
+	if (   !(aVarBackupCount = aFunc.mVars.mCount)   )  // Nothing needs to be backed up.
 		return OK; // Leave aVarBackup set to NULL as set by the caller.
 
 	// NOTES ABOUT MALLOC(): Apparently, the implementation of malloc() is quite good, at least for small blocks
@@ -1023,9 +1023,9 @@ ResultType Var::BackupFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &aV
 
 	// Note that Backup() does not make the variable empty after backing it up because that is something
 	// that must be done by our caller at a later stage.
-	for (i = 0; i < aFunc.mVarCount; ++i)
-		if (!aFunc.mVar[i]->IsStatic()) // Don't bother backing up statics because they won't need to be restored.
-			aFunc.mVar[i]->Backup(aVarBackup[aVarBackupCount++]);
+	for (i = 0; i < aFunc.mVars.mCount; ++i)
+		if (!aFunc.mVars.mItem[i]->IsStatic()) // Don't bother backing up statics because they won't need to be restored.
+			aFunc.mVars.mItem[i]->Backup(aVarBackup[aVarBackupCount++]);
 	return OK;
 }
 
@@ -1083,8 +1083,8 @@ void Var::Restore(VarBkp &aVarBkp)
 void Var::FreeAndRestoreFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &aVarBackupCount)
 {
 	int i;
-	for (i = 0; i < aFunc.mVarCount; ++i)
-		aFunc.mVar[i]->Free(VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC, true); // Pass "true" to exclude aliases, since their targets should not be freed (they don't belong to this function). Also resets the "uninitialized" attribute.
+	for (i = 0; i < aFunc.mVars.mCount; ++i)
+		aFunc.mVars.mItem[i]->Free(VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC, true); // Pass "true" to exclude aliases, since their targets should not be freed (they don't belong to this function). Also resets the "uninitialized" attribute.
 
 	// The freeing (above) MUST be done prior to the restore-from-backup below (otherwise there would be
 	// a memory leak).  Static variables are never backed up and thus do not exist in the aVarBackup array.

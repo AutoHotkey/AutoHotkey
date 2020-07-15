@@ -1496,17 +1496,21 @@ struct FuncResult : public ResultToken
 };
 
 
-class Func;
-struct FuncList
+// List of named script items, sorted by mName for binary search.
+template<typename T, int INITIAL_SIZE>
+struct ScriptItemList
 {
-	Func **mItem;
-	int mCount, mCountMax;
+	T **mItem = nullptr;
+	int mCount = 0, mCountMax = 0;
 
-	Func *Find(LPCTSTR aName, int *apInsertPos);
-	ResultType Insert(Func *aFunc, int aInsertPos);
+	T *Find(LPCTSTR aName, int *apInsertPos = nullptr);
+	ResultType Insert(T *aItem, int aInsertPos);
 	ResultType Alloc(int aAllocCount);
-	FuncList() : mItem(NULL), mCount(0), mCountMax(0) {}
 };
+
+class Func;
+typedef ScriptItemList<Func, 4> FuncList; // Initial count is small since functions aren't expected to contain many nested functions.
+typedef ScriptItemList<Var, VARLIST_INITIAL_SIZE> VarList;
 
 
 struct FreeVars
@@ -1637,13 +1641,13 @@ public:
 	Label *mFirstLabel = nullptr, *mLastLabel = nullptr; // Linked list of private labels.
 	UserFunc *mOuterFunc = nullptr; // Func which contains this func (usually nullptr).
 	FuncList mFuncs {}; // List of nested functions (usually empty).
-	Var **mVar = nullptr; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
+	VarList mVars {}; // Sorted list of local variables.
 	Var **mGlobalVar = nullptr; // Array of global declarations.
 	Var **mDownVar = nullptr, **mUpVar = nullptr;
 	int *mUpVarIndex = nullptr;
 	static FreeVars *sFreeVars;
 #define MAX_FUNC_UP_VARS 1000
-	int mVarCount = 0, mVarCountMax = 0, mGlobalVarCount = 0; // Count of items in the above array as well as the maximum capacity.
+	int mGlobalVarCount = 0; // Count of items in the above array.
 	int mDownVarCount = 0, mUpVarCount = 0;
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
@@ -2808,8 +2812,7 @@ private:
 								// changes mCount. This list's member mItem is freed after being
 								// passed to PreprocessLocalVars. Do not use this list after that. 
 
-	Var **mVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
-	int mVarCount, mVarCountMax; // Count of items in the above array as well as the maximum capacity.
+	VarList mVars; // Sorted list of global variables.
 	int mGlobalVarCountMax; // While loading the script, the maximum number of global declarations allowed for the current function.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
@@ -3072,7 +3075,7 @@ public:
 	void MaybeWarnLocalSameAsGlobal(UserFunc &func, Var &var);
 
 	ResultType PreprocessLocalVars(FuncList &aFuncs);
-	ResultType PreprocessLocalVars(UserFunc &aFunc, Var **aVarList, int &aVarCount);
+	ResultType PreprocessLocalVars(UserFunc &aFunc);
 	ResultType PreprocessFindUpVar(LPTSTR aName, UserFunc &aOuter, UserFunc &aInner, Var *&aFound, Var *aLocal);
 	void ConvertLocalToAlias(Var &aLocal, Var *aAliasFor, int aPos, Var **aVarList, int &aVarCount);
 	ResultType PreparseVarRefs();
