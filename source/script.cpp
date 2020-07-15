@@ -7326,22 +7326,22 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	// First, search in function scope
 	if (g->CurrentFunc)
 	{
-		for (bool check_used = true;; check_used = false) 
+		for (auto scopefunc = g->CurrentFunc ; scopefunc ; scopefunc = scopefunc->mOuterFunc)
+		{				
 			// Search the current func and all its outer functions.
-			// Two iterations:
-			// 1) Check all the "used" lists
-			// 2) Check all the "explicitly defined" lists
-		{
-			for (auto scopefunc = g->CurrentFunc ; scopefunc ; scopefunc = scopefunc->mOuterFunc)
-			{				
-				if ( (found_func = call_find(check_used ? scopefunc->mUsedFuncs : scopefunc->mFuncs, check_used ? nullptr : apInsertPos))
-					|| apInsertPos)		// Nested functions may "shadow" built-in functions without replacing them globally.
-										// Search no further, even if nullptr.
+			// alternate between the "used" list and the explicitly defined.
+			for (bool check_used = true;; check_used = false)
+			{
+				if ((found_func = call_find(check_used ? scopefunc->mUsedFuncs : scopefunc->mFuncs, check_used ? nullptr : apInsertPos))
+					|| (!check_used && apInsertPos))	// Nested functions may "shadow" built-in functions without replacing them globally.
+														// Search no further, even if nullptr.
 					return found_func;
+				if (!check_used)
+					break;
 			}
-			if (!check_used)
-				break;
 		}
+			
+		
 	}
 	
 	// Second, search in module scope
