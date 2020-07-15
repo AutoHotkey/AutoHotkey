@@ -7691,13 +7691,13 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 			} // if (this_arg.deref)
 			if (!line->ExpressionToPostfix(this_arg)) // Doing this here, after the script has been loaded, might improve the compactness/adjacent-ness of the compiled expressions in memory, which might improve performance due to CPU caching.
 				return FAIL; // The function above already displayed the error msg.
-
-			if (line->mActionType == ACT_HOTKEY_IF)
-			{
-				PreparseHotkeyIfExpr(line);
-				line->mActionType = ACT_RETURN;
-			}
 		} // for each arg of this line
+
+		if (line->mActionType == ACT_HOTKEY_IF)
+		{
+			PreparseHotkeyIfExpr(line);
+			line->mActionType = ACT_RETURN;
+		}
 	} // for each line
 	return OK;
 }
