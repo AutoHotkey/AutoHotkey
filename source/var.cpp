@@ -1004,7 +1004,7 @@ ResultType Var::BackupFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &aV
 // If there is nothing to backup, only the aVarBackupCount is changed (to zero).
 // Returns OK or FAIL.
 {
-	if (   !(aVarBackupCount = aFunc.mVarCount + aFunc.mLazyVarCount)   )  // Nothing needs to be backed up.
+	if (   !(aVarBackupCount = aFunc.mVarCount)   )  // Nothing needs to be backed up.
 		return OK; // Leave aVarBackup set to NULL as set by the caller.
 
 	// NOTES ABOUT MALLOC(): Apparently, the implementation of malloc() is quite good, at least for small blocks
@@ -1026,9 +1026,6 @@ ResultType Var::BackupFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &aV
 	for (i = 0; i < aFunc.mVarCount; ++i)
 		if (!aFunc.mVar[i]->IsStatic()) // Don't bother backing up statics because they won't need to be restored.
 			aFunc.mVar[i]->Backup(aVarBackup[aVarBackupCount++]);
-	for (i = 0; i < aFunc.mLazyVarCount; ++i)
-		if (!aFunc.mLazyVar[i]->IsStatic()) // Don't bother backing up statics because they won't need to be restored.
-			aFunc.mLazyVar[i]->Backup(aVarBackup[aVarBackupCount++]);
 	return OK;
 }
 
@@ -1088,8 +1085,6 @@ void Var::FreeAndRestoreFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &
 	int i;
 	for (i = 0; i < aFunc.mVarCount; ++i)
 		aFunc.mVar[i]->Free(VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC, true); // Pass "true" to exclude aliases, since their targets should not be freed (they don't belong to this function). Also resets the "uninitialized" attribute.
-	for (i = 0; i < aFunc.mLazyVarCount; ++i)
-		aFunc.mLazyVar[i]->Free(VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC, true);
 
 	// The freeing (above) MUST be done prior to the restore-from-backup below (otherwise there would be
 	// a memory leak).  Static variables are never backed up and thus do not exist in the aVarBackup array.

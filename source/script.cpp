@@ -506,7 +506,7 @@ Script::Script()
 	, mLastHotFunc(nullptr), mUnusedHotFunc(nullptr)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
 	, mFirstMenu(NULL), mLastMenu(NULL), mMenuCount(0)
-	, mVar(NULL), mVarCount(0), mVarCountMax(0), mLazyVar(NULL), mLazyVarCount(0)
+	, mVar(NULL), mVarCount(0), mVarCountMax(0)
 	, mOpenBlock(NULL), mNextLineIsFunctionBody(false), mNoUpdateLabels(false)
 	, mClassObjectCount(0), mUnresolvedClasses(NULL), mClassProperty(NULL), mClassPropertyDef(NULL)
 	, mCurrFileIndex(0), mCombinedLineNumber(0)
@@ -1424,7 +1424,6 @@ void ReleaseStaticVarObjects(FuncList &aFuncs)
 		// only static and global variables are released.  It seems best for consistency to also
 		// avoid releasing top-level non-static local variables (i.e. which aren't in var backups).
 		ReleaseStaticVarObjects(f.mVar, f.mVarCount);
-		ReleaseStaticVarObjects(f.mLazyVar, f.mLazyVarCount);
 		if (f.mFuncs.mCount)
 			ReleaseStaticVarObjects(f.mFuncs);
 	}
@@ -1445,7 +1444,6 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 		g->IsPaused = false;
 
 		ReleaseVarObjects(mVar, mVarCount);
-		ReleaseVarObjects(mLazyVar, mLazyVarCount);
 		ReleaseStaticVarObjects(mFuncs);
 	}
 #ifdef CONFIG_DEBUGGER // L34: Exit debugger *after* the above to allow debugging of any invoked __Delete handlers.
@@ -7257,39 +7255,8 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 			return var[mid];
 	}
 
-	// Since above didn't return, no match was found in the main list, so search the lazy list if there
-	// is one.  If there's no lazy list, the value of "left" established above will be used as the
-	// insertion point further below:
-	if (search_local)
-	{
-		var = g.CurrentFunc->mLazyVar;
-		right = g.CurrentFunc->mLazyVarCount - 1;
-	}
-	else
-	{
-		var = mLazyVar;
-		right = mLazyVarCount - 1;
-	}
-
-	if (var) // There is a lazy list to search (and even if the list is empty, left must be reset to 0 below).
-	{
-		// Binary search:
-		for (left = 0; left <= right;)  // "right" was already initialized above.
-		{
-			mid = (left + right) / 2;
-			result = _tcsicmp(var_name, var[mid]->mName); // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
-			if (result > 0)
-				left = mid + 1;
-			else if (result < 0)
-				right = mid - 1;
-			else // Match found.
-				return var[mid];
-		}
-	}
-
 	// Since above didn't return, no match was found and "left" always contains the position where aVarName
-	// should be inserted to keep the list sorted.  The item is always inserted into the lazy list unless
-	// there is no lazy list.
+	// should be inserted to keep the list sorted.
 	// Set the output parameter, if present:
 	if (apInsertPos) // Caller wants this value even if we'll be resorting to searching the global list below.
 		*apInsertPos = left; // This is the index a newly inserted item should have to keep alphabetical order.
@@ -7393,32 +7360,6 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 		return NULL;
 	}
 
-	// If there's a lazy var list, aInsertPos provided by the caller is for it, so this new variable
-	// always gets inserted into that list because there's always room for one more (because the
-	// previously added variable would have purged it if it had reached capacity).
-	Var **lazy_var = aIsLocal ? g->CurrentFunc->mLazyVar : mLazyVar;
-	int &lazy_var_count = aIsLocal ? g->CurrentFunc->mLazyVarCount : mLazyVarCount; // Used further below too.
-	if (lazy_var)
-	{
-		if (aInsertPos != lazy_var_count) // Need to make room at the indicated position for this variable.
-			memmove(lazy_var + aInsertPos + 1, lazy_var + aInsertPos, (lazy_var_count - aInsertPos) * sizeof(Var *));
-		//else both are zero or the item is being inserted at the end of the list, so it's easy.
-		lazy_var[aInsertPos] = the_new_var;
-		++lazy_var_count;
-		// In a testing creating between 200,000 and 400,000 variables, using a size of 1000 vs. 500 improves
-		// the speed by 17%, but when you subtract out the binary search time (leaving only the insert time),
-		// the increase is more like 34%.  But there is a diminishing return after that: Going to 2000 only
-		// gains 20%, and to 4000 only gains an addition 10%.  Therefore, to conserve memory in functions that
-		// have so many variables that the lazy list is used, a good trade-off seems to be 2000 (8 KB of memory)
-		// per function that needs it.
-		#define MAX_LAZY_VARS 2000 // Don't make this larger than 90000 without altering the incremental increase of alloc_count further below.
-		if (lazy_var_count < MAX_LAZY_VARS) // The lazy list hasn't yet reached capacity, so no need to merge it into the main list.
-			return the_new_var;
-	}
-
-	// Since above didn't return, either there is no lazy list or the lazy list is full and needs to be
-	// merged into the main list.
-
 	// Create references to whichever variable list (local or global) is being acted upon.  These
 	// references simplify the code:
 	Var **&var = aIsLocal ? g->CurrentFunc->mVar : mVar; // This needs to be a ref. too in case it needs to be realloc'd.
@@ -7426,10 +7367,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 	int &var_count_max = aIsLocal ? g->CurrentFunc->mVarCountMax : mVarCountMax;
 	int alloc_count;
 
-	// Since the above would have returned if the lazy list is present but not yet full, if the left side
-	// of the OR below is false, it also means that lazy_var is NULL.  Thus lazy_var==NULL is implicit for the
-	// right side of the OR:
-	if ((lazy_var && var_count + MAX_LAZY_VARS > var_count_max) || var_count == var_count_max)
+	if (var_count == var_count_max)
 	{
 		// Increase by orders of magnitude each time because realloc() is probably an expensive operation
 		// in terms of hurting performance.  So here, a little bit of memory is sacrificed to improve
@@ -7438,20 +7376,10 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 			alloc_count = aIsLocal ? 100 : 1000;  // 100 conserves memory since every function needs such a block, and most functions have much fewer than 100 local variables.
 		else if (var_count_max < 1000)
 			alloc_count = 1000;
-		else if (var_count_max < 9999) // Making this 9999 vs. 10000 allows an exact/whole number of lazy_var blocks to fit into main indices between 10000 and 99999
-			alloc_count = 9999;
+		else if (var_count_max < 10000)
+			alloc_count = 10000;
 		else if (var_count_max < 100000)
-		{
 			alloc_count = 100000;
-			// This is also the threshold beyond which the lazy list is used to accelerate performance.
-			// Create the permanent lazy list:
-			Var **&lazy_var = aIsLocal ? g->CurrentFunc->mLazyVar : mLazyVar;
-			if (   !(lazy_var = (Var **)malloc(MAX_LAZY_VARS * sizeof(Var *)))   )
-			{
-				ScriptError(ERR_OUTOFMEM);
-				return NULL;
-			}
-		}
 		else if (var_count_max < 1000000)
 			alloc_count = 1000000;
 		else
@@ -7467,85 +7395,11 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 		var_count_max = alloc_count;
 	}
 
-	if (!lazy_var)
-	{
-		if (aInsertPos != var_count) // Need to make room at the indicated position for this variable.
-			memmove(var + aInsertPos + 1, var + aInsertPos, (var_count - aInsertPos) * sizeof(Var *));
-		//else both are zero or the item is being inserted at the end of the list, so it's easy.
-		var[aInsertPos] = the_new_var;
-		++var_count;
-		return the_new_var;
-	}
-	//else the variable was already inserted into the lazy list, so the above is not done.
-
-	// Since above didn't return, the lazy list is not only present, but full because otherwise it
-	// would have returned higher above.
-
-	// Since the lazy list is now at its max capacity, merge it into the main list (if the
-	// main list was at capacity, this section relies upon the fact that the above already
-	// increased its capacity by an amount far larger than the number of items contained
-	// in the lazy list).
-
-	// LAZY LIST: Although it's not nearly as good as hashing (which might be implemented in the future,
-	// though it would be no small undertaking since it affects so many design aspects, both load-time
-	// and runtime for scripts), this method of accelerating insertions into a binary search array is
-	// enormously beneficial because it improves the scalability of binary-search by two orders
-	// of magnitude (from about 100,000 variables to at least 5M).  Credit for the idea goes to Lazlo.
-	// DETAILS:
-	// The fact that this merge operation is so much faster than total work required
-	// to insert each one into the main list is the whole reason for having the lazy
-	// list.  In other words, the large memmove() that would otherwise be required
-	// to insert each new variable into the main list is completely avoided.  Large memmove()s
-	// become dramatically more costly than small ones because apparently they can't fit into
-	// the CPU cache, so the operation would take hundreds or even thousands of times longer
-	// depending on the speed difference between main memory and CPU cache.  But above and
-	// beyond the CPU cache issue, the lazy sorting method results in vastly less memory
-	// being moved than would have been required without it, so even if the CPU doesn't have
-	// a cache, the lazy list method vastly increases performance for scripts that have more
-	// than 100,000 variables, allowing at least 5 million variables to be created without a
-	// dramatic reduction in performance.
-
-	LPTSTR target_name;
-	Var **insert_pos, **insert_pos_prev;
-	int i, left, right, mid;
-
-	// Append any items from the lazy list to the main list that are alphabetically greater than
-	// the last item in the main list.  Above has already ensured that the main list is large enough
-	// to accept all items in the lazy list.
-	for (i = lazy_var_count - 1, target_name = var[var_count - 1]->mName
-		; i > -1 && _tcsicmp(target_name, lazy_var[i]->mName) < 0
-		; --i);
-	// Above is a self-contained loop.
-	// Now do a separate loop to append (in the *correct* order) anything found above.
-	for (int j = i + 1; j < lazy_var_count; ++j) // Might have zero iterations.
-		var[var_count++] = lazy_var[j];
-	lazy_var_count = i + 1; // The number of items that remain after moving out those that qualified.
-
-	// This will have zero iterations if the above already moved them all:
-	for (insert_pos = var + var_count, i = lazy_var_count - 1; i > -1; --i)
-	{
-		// Modified binary search that relies on the fact that caller has ensured a match will never
-		// be found in the main list for each item in the lazy list:
-		for (target_name = lazy_var[i]->mName, left = 0, right = (int)(insert_pos - var - 1); left <= right;)
-		{
-			mid = (left + right) / 2;
-			if (_tcsicmp(target_name, var[mid]->mName) > 0) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
-				left = mid + 1;
-			else // it must be < 0 because caller has ensured it can't be equal (i.e. that there will be no match)
-				right = mid - 1;
-		}
-		// Now "left" contains the insertion point and is known to be less than var_count due to a previous
-		// set of loops above.  Make a gap there large enough to hold all items because that allows a
-		// smaller total amount of memory to be moved by shifting the gap to the left in the main list,
-		// gradually filling it as we go:
-		insert_pos_prev = insert_pos;  // "prev" is the now the position of the beginning of the gap, but the gap is about to be shifted left by moving memory right.
-		insert_pos = var + left; // This is where it *would* be inserted if we weren't doing the accelerated merge.
-		memmove(insert_pos + i + 1, insert_pos, (insert_pos_prev - insert_pos) * sizeof(Var *));
-		var[left + i] = lazy_var[i]; // Now insert this item at the far right side of the gap just created.
-	}
-	var_count += lazy_var_count;
-	lazy_var_count = 0;  // Indicate that the lazy var list is now empty.
-
+	if (aInsertPos != var_count) // Need to make room at the indicated position for this variable.
+		memmove(var + aInsertPos + 1, var + aInsertPos, (var_count - aInsertPos) * sizeof(Var *));
+	//else both are zero or the item is being inserted at the end of the list, so it's easy.
+	var[aInsertPos] = the_new_var;
+	++var_count;
 	return the_new_var;
 }
 
@@ -13532,8 +13386,7 @@ ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
 			// misleading (and both cases seem better than using the script's very last line).
 			mCurrLine = func.mJumpToLine->mPrevLine;
 			// Preprocess this function's local variables.
-			if (   !PreprocessLocalVars(func, func.mVar, func.mVarCount)
-				|| !PreprocessLocalVars(func, func.mLazyVar, func.mLazyVarCount)   )
+			if (!PreprocessLocalVars(func, func.mVar, func.mVarCount))
 				return FAIL; // Script will exit, so OK to leave mUpVar in an invalid state.
 		}
 		if (func.mFuncs.mCount)
@@ -13781,10 +13634,6 @@ LPTSTR Script::ListVars(LPTSTR aBuf, int aBufSize) // aBufSize should be an int 
 			if (func.mVar[i]->Type() == VAR_NORMAL) // Don't bother showing VAR_CONSTANT; ToText() doesn't support VAR_VIRTUAL.
 				aBuf = func.mVar[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
 	}
-	// v1.0.31: The description "alphabetical" is kept even though it isn't quite true
-	// when the lazy variable list exists, since those haven't yet been sorted into the main list.
-	// However, 99.9% of scripts do not use the lazy list, so it seems too rare to worry about other
-	// than document it in the ListVars command in the help file:
 	aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%sGlobal Variables (alphabetical)%s")
 		, current_func ? _T("\r\n\r\n") : _T(""), LIST_VARS_UNDERLINE);
 	// Start at the oldest and continue up through the newest:

@@ -940,7 +940,6 @@ DEBUGGER_COMMAND(Debugger::context_get)
 	Var **var = NULL, **var_end = NULL; // An array of pointers-to-var.
 	VarBkp *bkp = NULL, *bkp_end = NULL;
 	
-	// TODO: Include the lazy-var arrays for completeness. Low priority since lazy-var arrays are used only for 10001+ variables, and most conventional debugger interfaces would generally not be useful with that many variables.
 	if (context_id == PC_Local)
 	{
 		mStack.GetLocalVars(depth, var, var_end, bkp, bkp_end);

@@ -1637,13 +1637,13 @@ public:
 	Label *mFirstLabel = nullptr, *mLastLabel = nullptr; // Linked list of private labels.
 	UserFunc *mOuterFunc = nullptr; // Func which contains this func (usually nullptr).
 	FuncList mFuncs {}; // List of nested functions (usually empty).
-	Var **mVar = nullptr, **mLazyVar = nullptr; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
+	Var **mVar = nullptr; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
 	Var **mGlobalVar = nullptr; // Array of global declarations.
 	Var **mDownVar = nullptr, **mUpVar = nullptr;
 	int *mUpVarIndex = nullptr;
 	static FreeVars *sFreeVars;
 #define MAX_FUNC_UP_VARS 1000
-	int mVarCount = 0, mVarCountMax = 0, mLazyVarCount = 0, mGlobalVarCount = 0; // Count of items in the above array as well as the maximum capacity.
+	int mVarCount = 0, mVarCountMax = 0, mGlobalVarCount = 0; // Count of items in the above array as well as the maximum capacity.
 	int mDownVarCount = 0, mUpVarCount = 0;
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
@@ -2808,8 +2808,8 @@ private:
 								// changes mCount. This list's member mItem is freed after being
 								// passed to PreprocessLocalVars. Do not use this list after that. 
 
-	Var **mVar, **mLazyVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
-	int mVarCount, mVarCountMax, mLazyVarCount; // Count of items in the above array as well as the maximum capacity.
+	Var **mVar; // Array of pointers-to-variable, allocated upon first use and later expanded as needed.
+	int mVarCount, mVarCountMax; // Count of items in the above array as well as the maximum capacity.
 	int mGlobalVarCountMax; // While loading the script, the maximum number of global declarations allowed for the current function.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
