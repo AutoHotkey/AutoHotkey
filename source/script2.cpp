@@ -10805,7 +10805,7 @@ BIF_DECL(BIF_DllCall)
 			_f_throw(ERR_PARAM1_INVALID);
 		// Cheat a bit to make the second arg both the source of the virtual function
 		// and the first parameter value (always an interface pointer):
-		ExprTokenType t_this_arg_type = _T("Ptr");
+		static ExprTokenType t_this_arg_type = _T("Ptr");
 		aParam[0] = &t_this_arg_type;
 	}
 	else
