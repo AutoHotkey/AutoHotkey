@@ -2884,6 +2884,7 @@ private:
 	// if aStartingLine is allowed to be NULL (for recursive calls).  If they
 	// were member functions of class Line, a check for NULL would have to
 	// be done before dereferencing any line's mNextLine, for example:
+	ResultType PreparseFuncRefs(Line *aStartingLine);
 	ResultType PreparseExpressions(Line *aStartingLine);
 	void PreparseHotkeyIfExpr(Line *aLine);
 	Line *PreparseCommands(Line *aStartingLine);

@@ -1501,7 +1501,16 @@ UINT Script::LoadFromFile()
 	// Load the main script file.  This will also load any files it includes with #Include.
 	if (!LoadIncludedFile(g_RunStdIn ? _T("*") : mFileSpec, false, false))
 		return LOADING_FAILED;
-	
+
+	// Resolve all non-dynamic function references at this exact point to ensure that
+	// all auto-includes are processed before any of the following checks or calls.
+	// This improves maintainability, since the following stages don't need to account
+	// for auto-includes adding more lines or changing global state, such as #DllLoad
+	// overriding the SetDllDirectory(NULL) call below.  It may also improve flexibility.
+	// If auto-includes are removed, this could be merged into ExpressionToPostfix.
+	if (!PreparseFuncRefs(mFirstLine))
+		return LOADING_FAILED;
+
 #ifdef ENABLE_DLLCALL
 	// So that (the last occuring) "#DllLoad directory" doesn't affect calls to GetDllProcAddress for run time calls to DllCall
 	// or DllCall optimizations in Line::ExpressionToPostfix.
@@ -7522,10 +7531,9 @@ ResultType Script::AddGroup(LPTSTR aGroupName)
 
 
 
-ResultType Script::PreparseExpressions(Line *aStartingLine)
+ResultType Script::PreparseFuncRefs(Line *aStartingLine)
 {
-	int i;
-	DerefType *deref;
+	// See LoadFromFile() for comments about the use of this function.
 	for (Line *line = aStartingLine; line; line = line->mNextLine)
 	{
 		switch (line->mActionType)
@@ -7534,24 +7542,19 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 		case ACT_BLOCK_BEGIN:
 			if (line->mAttribute)
 				g->CurrentFunc = (UserFunc *)line->mAttribute;
-			break;
+			continue;
 		case ACT_BLOCK_END:
 			if (line->mAttribute)
 				g->CurrentFunc = g->CurrentFunc->mOuterFunc;
-			break;
+			continue;
 		}
-		// Check if any of each arg's derefs are function calls.  If so, do some validation and
-		// preprocessing to set things up for better runtime performance:
-		for (i = 0; i < line->mArgc; ++i) // For each arg.
+		for (int i = 0; i < line->mArgc; ++i) // For each arg.
 		{
 			ArgStruct &this_arg = line->mArg[i]; // For performance and convenience.
-			if (!this_arg.is_expression) // Plain text; i.e. goto/break/continue label.
+			if (!this_arg.is_expression // Plain text; i.e. goto/break/continue label.
+				|| !this_arg.deref) // The expression contains neither variables nor function calls.
 				continue;
-			// Otherwise, the arg will be processed by ExpressionToPostfix(), which will set is_expression
-			// based on whether the arg should be evaluated by ExpandExpression().  
-			if (this_arg.deref) // If false, no function-calls are present because the expression contains neither variables nor function calls.
-			{
-			for (deref = this_arg.deref; deref->marker; ++deref) // For each deref.
+			for (auto deref = this_arg.deref; deref->marker; ++deref) // For each deref.
 			{
 				if (!deref->is_function() || !deref->length || deref->func) // Zero length means a dynamic function call.
 					continue;
@@ -7570,7 +7573,37 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 #endif
 				}
 			} // for each deref of this arg
-			} // if (this_arg.deref)
+		} // for each arg of this line
+	} // for each line
+	return OK;
+}
+
+
+
+ResultType Script::PreparseExpressions(Line *aStartingLine)
+{
+	for (Line *line = aStartingLine; line; line = line->mNextLine)
+	{
+		switch (line->mActionType)
+		{
+		// Set g->CurrentFunc to establish correct context for ExpressionToPostfix.
+		case ACT_BLOCK_BEGIN:
+			if (line->mAttribute)
+				g->CurrentFunc = (UserFunc *)line->mAttribute;
+			continue;
+		case ACT_BLOCK_END:
+			if (line->mAttribute)
+				g->CurrentFunc = g->CurrentFunc->mOuterFunc;
+			continue;
+		}
+
+		for (int i = 0; i < line->mArgc; ++i) // For each arg.
+		{
+			ArgStruct &this_arg = line->mArg[i]; // For performance and convenience.
+			if (!this_arg.is_expression) // Plain text; i.e. goto/break/continue label.
+				continue;
+			// Otherwise, convert the expression text to postfix form and set is_expression
+			// based on whether the arg should be evaluated by ExpandExpression():
 			if (!line->ExpressionToPostfix(this_arg)) // Doing this here, after the script has been loaded, might improve the compactness/adjacent-ness of the compiled expressions in memory, which might improve performance due to CPU caching.
 				return FAIL; // The function above already displayed the error msg.
 		} // for each arg of this line
