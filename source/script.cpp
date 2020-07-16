@@ -1520,25 +1520,23 @@ UINT Script::LoadFromFile()
 		return LOADING_FAILED;
 	}
 #endif
-	if (!PreparseExpressions(mFirstLine))
+	// Preparse all expressions and resolve all variable references.  The outer-most scope
+	// is preparsed first, then each function, working inward through all nested functions.
+	// All of a function's non-dynamic local variables are created before variable names
+	// are resolved in nested functions.
+	if (!PreparseExpressions(mFirstLine)
+		|| !PreparseExpressions(mFuncs)
+		|| !PreparseExpressions(mHotFuncs))
 		return LOADING_FAILED; // Error was already displayed by the above call.
-	// ABOVE: In v1.0.47, the above may have auto-included additional files from the userlib/stdlib.
-	// That's why the above is done prior to adding the EXIT lines and other things below.
 
-	// Scan for undeclared local variables which are named the same as a global variable.
-	// This loop has two purposes (but it's all handled in PreprocessLocalVars()):
-	//
-	//  1) Allow super-global variables to be referenced above the point of declaration.
-	//     This is a bit of a hack to work around the fact that variable references are
-	//     resolved as they are encountered, before all declarations have been processed.
-	//
-	//  2) Warn the user (if appropriate) since they probably meant it to be global.
-	//
+	// Do some processing of local variables to support closures and #Warn LocalSameAsGlobal.
+	// This must be done after PreparseExpressions() has resolved all variable references.
 	if (!PreprocessLocalVars(mFuncs)
 		|| !PreprocessLocalVars(mHotFuncs))
 		return LOADING_FAILED;
-	if (mHotFuncs.mItem)
-		free(mHotFuncs.mItem);
+
+	free(mHotFuncs.mItem); // Not needed beyond this point.
+
 	// Resolve any unresolved base classes.
 	if (mUnresolvedClasses)
 	{
@@ -7125,6 +7123,13 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 	}
 
 	the_new_func->mOuterFunc = g->CurrentFunc;
+	
+	// The general rule is that a nested function's namespace includes all of the names that
+	// were in the outer function's namespace by default.  In other words, if the outer function
+	// is assume-global, the nested function should also default to assume-global.
+	if (the_new_func->mOuterFunc && the_new_func->mOuterFunc->IsAssumeGlobal())
+		the_new_func->mDefaultVarType = VAR_GLOBAL; // Not VAR_DECLARE_GLOBAL, which would prevent referencing of outer vars.
+
 	FuncList &funcs = the_new_func->mOuterFunc ? the_new_func->mOuterFunc->mFuncs : mFuncs;
 	
 	if (aInsertPos < funcs.mCount && *new_name && !_tcsicmp(funcs.mItem[aInsertPos]->mName, new_name))
@@ -7235,11 +7240,14 @@ Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aScope)
 {
 	if (!*aVarName)
 		return NULL;
+	ResultType result = OK; // Must set default.
 	VarList *varlist;
 	int insert_pos;
 	Var *var;
-	if (var = FindVar(aVarName, aVarNameLength, aScope, &varlist, &insert_pos))
+	if (var = FindVar(aVarName, aVarNameLength, aScope, &varlist, &insert_pos, &result))
 		return var;
+	if (!result) // An error was displayed.
+		return nullptr;
 	// Otherwise, no match found, so create a new var.
 	bool is_local = varlist != &mVars;
 	// This will return NULL if there was a problem, in which case AddVar() will already have displayed the error:
@@ -7250,7 +7258,7 @@ Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aScope)
 
 
 Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int aScope
-	, VarList **apList, int *apInsertPos)
+	, VarList **apList, int *apInsertPos, ResultType *aDisplayError)
 // Caller has ensured that aVarName isn't NULL.  It must also ignore the contents of apInsertPos when
 // a match (non-NULL value) is returned.
 // Returns the Var whose name matches aVarName.  If it doesn't exist, NULL is returned.
@@ -7289,15 +7297,19 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int aScope
 	if (apList)
 		*apList = &vars;
 
-	// Since no match was found, if this is a local fall back to searching the list of globals at runtime
-	// if the caller didn't insist on a particular type:
+	// Since no match was found, if this is a local fall back to searching outer functions and the
+	// list of globals if the caller didn't insist on a particular type:
 	if (search_local && aScope == FINDVAR_DEFAULT)
 	{
+		// Search outer functions, if applicable:
+		if (g.CurrentFunc->mOuterFunc)
+			if (Var *found = FindUpVar(var_name, *g.CurrentFunc, aDisplayError))
+				return found;
 		// In this case, callers want to fall back to globals when a local wasn't found.  However,
 		// they want the insertion (if our caller will be doing one) to insert according to the
 		// current assume-mode.  Therefore, if the mode is assume-global, pass the apList
 		// and apInsertPos variables to FindVar() so that it will update them to be global.
-		if (g.CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL)
+		if (g.CurrentFunc->IsAssumeGlobal())
 			return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL, apList, apInsertPos);
 		// Otherwise, caller only wants globals which are declared in *this* function:
 		for (int i = 0; i < g.CurrentFunc->mGlobalVarCount; ++i)
@@ -7312,6 +7324,73 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int aScope
 	}
 	// Otherwise, since above didn't return:
 	return NULL; // No match.
+}
+
+
+
+Var *Script::FindUpVar(LPTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError)
+{
+	// Do not search outer if inner is force-local or *explicitly* assume-global, since in those
+	// cases a local or global var should be returned in preference to anything defined by outer.
+	if ((aInner.mDefaultVarType & VAR_FORCE_LOCAL) || aInner.mDefaultVarType == VAR_DECLARE_GLOBAL)
+		return nullptr;
+	auto &outer = *aInner.mOuterFunc;
+	Var *outer_var;
+	if (  !(outer_var = outer.mVars.Find(aVarName))
+		&& !(outer.mOuterFunc && (outer_var = FindUpVar(aVarName, outer, aDisplayError)))  )
+		return nullptr;
+	if (!outer_var->IsNonStaticLocal())
+		return outer_var;
+	// Since this local variable is not static, things need to be set up so that the inner
+	// function will capture it as an upvar at the appropriate time.
+	if (mIsReadyToExecute)
+	{
+		// This dynamic reference resolved to a variable that hasn't been captured by the
+		// current function, so is not safe to return.
+		if (aDisplayError)
+			*aDisplayError = RuntimeError(ERR_DYNAMIC_UPVAR, aVarName);
+		return nullptr;
+	}
+	if (!outer.ValidateDownVar(*outer_var))
+	{
+		if (aDisplayError)
+			*aDisplayError = FAIL;
+		return nullptr;
+	}
+	outer_var->Scope() |= VAR_DOWNVAR;
+	// At this point aInner doesn't have a variable by this name, so create one:
+	int insert_pos;
+	aInner.mVars.Find(aVarName, &insert_pos);
+	Var *inner_var = AddVar(aVarName, 0, &aInner.mVars, insert_pos, VAR_LOCAL);
+	if (!inner_var)
+	{
+		if (aDisplayError)
+			*aDisplayError = FAIL; // Error already displayed.
+		return nullptr;
+	}
+	inner_var->UpdateAliasNoResolve(outer_var); // Temporarily point the upvar to its downvar for later processing.
+	return inner_var;
+}
+
+
+
+ResultType UserFunc::ValidateDownVar(Var &aVar)
+{
+	if (!aVar.IsFuncParam())
+		return OK;
+	// ByRef parameters cannot be upvalues with the current implementation since it is
+	// impossible to predict (for dynamic function or method calls) which variables will
+	// be passed ByRef.  In other words, the caller's Var would have a fixed, unknown
+	// duration and therefore could not be safely captured by a closure.
+	// If this restriction is removed, make sure to update BIF_IsByRef.
+	for (int p = 0; p < mParamCount; ++p)
+		if (mParam[p].var == &aVar)
+		{
+			if (mParam[p].is_byref)
+				return g_script.ScriptError(_T("ByRef parameters cannot be upvalues."), aVar.mName);
+			break;
+		}
+	return OK;
 }
 
 
@@ -7529,20 +7608,14 @@ ResultType Script::PreparseFuncRefs(Line *aStartingLine)
 
 ResultType Script::PreparseExpressions(Line *aStartingLine)
 {
-	for (Line *line = aStartingLine; line; line = line->mNextLine)
+	for (Line *line = aStartingLine; line; line = line->mNextLine) // For each line.
 	{
-		switch (line->mActionType)
-		{
-		// Set g->CurrentFunc to establish correct context for ExpressionToPostfix.
-		case ACT_BLOCK_BEGIN:
-			if (line->mAttribute)
-				g->CurrentFunc = (UserFunc *)line->mAttribute;
-			continue;
-		case ACT_BLOCK_END:
-			if (line->mAttribute)
-				g->CurrentFunc = g->CurrentFunc->mOuterFunc;
-			continue;
-		}
+		// Skip any function bodies.
+		while (line->mActionType == ACT_BLOCK_BEGIN && line->mAttribute)
+			if (  !(line = line->mRelatedLine)  )
+				return OK;
+		if (line->mActionType == ACT_BLOCK_END && line->mAttribute)
+			return OK; // End of this function.
 
 		for (int i = 0; i < line->mArgc; ++i) // For each arg.
 		{
@@ -7551,16 +7624,29 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 				continue;
 			// Otherwise, convert the expression text to postfix form and set is_expression
 			// based on whether the arg should be evaluated by ExpandExpression():
+			mCurrLine = line; // For error reporting in FindVar() and perhaps other places.
 			if (!line->ExpressionToPostfix(this_arg)) // Doing this here, after the script has been loaded, might improve the compactness/adjacent-ness of the compiled expressions in memory, which might improve performance due to CPU caching.
 				return FAIL; // The function above already displayed the error msg.
-		} // for each arg of this line
-
-		if (line->mActionType == ACT_HOTKEY_IF)
-		{
-			PreparseHotkeyIfExpr(line);
-			line->mActionType = ACT_RETURN;
 		}
-	} // for each line
+	}
+	return OK;
+}
+
+
+
+ResultType Script::PreparseExpressions(FuncList &aFuncs)
+{
+	for (int i = 0; i < aFuncs.mCount; ++i)
+	{
+		if (aFuncs.mItem[i]->IsBuiltIn())
+			continue;
+		auto &func = *(UserFunc *)aFuncs.mItem[i];
+		g->CurrentFunc = &func;
+		if (!PreparseExpressions(func.mJumpToLine) // Preparse the entire body first.
+			|| !PreparseExpressions(func.mFuncs)) // Then preparse nested functions.
+			return FAIL;
+	}
+	g->CurrentFunc = nullptr;
 	return OK;
 }
 
@@ -7694,6 +7780,11 @@ Line *Script::PreparseCommands(Line *aStartingLine)
   			else if (!line->GetJumpTarget(false))
 				return NULL; // Error was already displayed by the called function.
 			break;
+
+		case ACT_HOTKEY_IF:
+			PreparseHotkeyIfExpr(line);
+			line->mActionType = ACT_RETURN;
+			break; // No need for the ACT_RETURN validation performed below in this case.
 
 		case ACT_RETURN:
 			for (Line *parent = line->mParentLine; parent; parent = parent->mParentLine)
@@ -8557,8 +8648,7 @@ unquoted_literal:
 		{
 			// Make a function call to an internal version of Func() which accepts the function
 			// reference and returns the function itself or a closure.  Which that will be depends
-			// on processing which hasn't been done yet (PreprocessLocalVars), except for global
-			// functions, which are never closures.
+			// on var references which haven't been resolved yet (unless it's a global function).
 			infix[infix_count].symbol = SYM_FUNC;
 			infix[infix_count].deref = this_deref;
 			infix[infix_count+1].symbol = SYM_OPAREN;
@@ -13127,61 +13217,16 @@ void Script::MaybeWarnLocalSameAsGlobal(UserFunc &func, Var &var)
 
 
 ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
-// Caller has verified aFunc.mIsBuiltIn == false.
 {
-	Var *upvar[MAX_FUNC_UP_VARS], *downvar[MAX_FUNC_UP_VARS];
-	int upvarindex[MAX_FUNC_UP_VARS];
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
 		if (aFuncs.mItem[i]->IsBuiltIn())
 			continue;
 		auto &func = *(UserFunc *)aFuncs.mItem[i];
-		// Set temporary buffers for use processing this func and nested functions:
-		func.mUpVar = upvar;
-		func.mUpVarIndex = upvarindex;
-		// No pre-processing is needed for this func if it is force-local.  However, if only
-		// the outer func is force-local, we still need to process upvars (but super-globals
-		// and warnings are skipped in that case).
-		if (  !(func.mDefaultVarType & VAR_FORCE_LOCAL)  )
-		{
-			// For error-reporting, using the open brace vs. mJumpToLine itself seems less 
-			// misleading (and both cases seem better than using the script's very last line).
-			mCurrLine = func.mJumpToLine->mPrevLine;
-			// Preprocess this function's local variables.
-			if (!PreprocessLocalVars(func))
-				return FAIL; // Script will exit, so OK to leave mUpVar in an invalid state.
-		}
-		if (func.mFuncs.mCount)
-		{
-			func.mDownVar = downvar;
-
-			// Preprocess this function's nested functions.
-			if (!PreprocessLocalVars(func.mFuncs))
-				return FAIL; // Script will exit, so OK to leave mDownVar in an invalid state.
-
-			if (func.mDownVarCount)
-			{
-				func.mDownVar = (Var **)SimpleHeap::Malloc(func.mDownVarCount * sizeof(Var *));
-				if (!func.mDownVar)
-					return ScriptError(ERR_OUTOFMEM);
-				memcpy(func.mDownVar, downvar, func.mDownVarCount * sizeof(Var *));
-			}
-			else
-				func.mDownVar = NULL;
-		}
-		if (func.mUpVarCount)
-		{
-			func.mUpVar = (Var **)SimpleHeap::Malloc(func.mUpVarCount * sizeof(Var *));
-			func.mUpVarIndex = (int *)SimpleHeap::Malloc(func.mUpVarCount * sizeof(int));
-			if (!func.mUpVar || !func.mUpVarIndex)
-				return ScriptError(ERR_OUTOFMEM);
-			memcpy(func.mUpVar, upvar, func.mUpVarCount * sizeof(Var *));
-			memcpy(func.mUpVarIndex, upvarindex, func.mUpVarCount * sizeof(int));
-		}
-		else
-			func.mUpVar = NULL;
+		if (!PreprocessLocalVars(func) // Process func first so mDownVar is allocated if needed.
+			|| !PreprocessLocalVars(func.mFuncs)) // Process nested functions.
+			return FAIL;
 	}
-	g->CurrentFunc = NULL; // Reset for subsequent preparsing/execution stages.
 	return OK;
 }
 
@@ -13193,38 +13238,18 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 
 	Var **vars = aFunc.mVars.mItem;
 	int var_count = aFunc.mVars.mCount;
+	int upvar_count = 0;
+	int downvar_count = 0;
 	for (int v = 0; v < var_count; ++v)
 	{
 		Var &var = *vars[v];
-		if (var.IsDeclared()) // Not a candidate for an upvar, super-global or warning.
-			continue;
 
-		if (aFunc.mOuterFunc)
-		{
-			Var *ovar;
-			if (!PreprocessFindUpVar(var.mName, *aFunc.mOuterFunc, aFunc, ovar, &var))
-				return FAIL;
+		if (var.IsAlias()) // At this stage only upvars are aliases.
+			++upvar_count;
+		if (var.Scope() & VAR_DOWNVAR)
+			++downvar_count;
 
-			if (ovar)
-			{
-				switch (ovar->Scope() & (VAR_GLOBAL | VAR_LOCAL_STATIC))
-				{
-				case VAR_LOCAL_STATIC:
-					// There's only one "instance" of this variable, so alias it directly.
-					// Leave it in aVarList so that it appears in ListVars.
-					var.UpdateAlias(ovar);
-					var.Scope() |= VAR_LOCAL_STATIC; // Disable backup/restore of this var when aFunc.mInstances > 0, for performance.
-					continue;
-				case VAR_GLOBAL:
-					// There's only one "instance" of this variable, so alias it directly.
-					ConvertLocalToAlias(var, ovar, v, vars, var_count);
-					--v; // Counter the loop's increment since var has been removed.
-					continue;
-				}
-			}
-		}
-
-		if (!check_globals)
+		if (!check_globals || var.IsDeclared())
 			continue;
 
 		Var *global_var = FindVar(var.mName, 0, FINDVAR_GLOBAL);
@@ -13234,88 +13259,51 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 		// a chance the user intended it to be global. So consider warning the user:
 		MaybeWarnLocalSameAsGlobal(aFunc, var);
 	}
-	return OK;
-}
-
-
-
-ResultType Script::PreprocessFindUpVar(LPTSTR aName, UserFunc &aOuter, UserFunc &aInner, Var *&aFound, Var *aLocal)
-{
-	g->CurrentFunc = &aOuter;
-	// If aOuter is assume-global, add the variable as global if no variable is found.
-	// Otherwise, the presence of a global variable reference *anywhere in the script*
-	// would affect whether the one in aInner is global, which is counter-intuitive.
-	aFound = (aOuter.mDefaultVarType == VAR_DECLARE_GLOBAL) ? FindOrAddVar(aName) : FindVar(aName);
-	if (!aFound)
+	if (upvar_count)
 	{
-		if (aOuter.mOuterFunc && !(aOuter.mDefaultVarType & VAR_FORCE_LOCAL))
+		// Upvars are vars local to an outer function which are referenced by aFunc.
+		// They might be local to aFunc.mOuterFunc or one further out.  In the latter
+		// case, aFunc.mOuterFunc contains a downvar which is also one of its upvars.
+		aFunc.mUpVar = (Var **)SimpleHeap::Malloc(upvar_count * sizeof(Var *));
+		aFunc.mUpVarIndex = (int *)SimpleHeap::Malloc(upvar_count * sizeof(int));
+		if (!aFunc.mUpVar || !aFunc.mUpVarIndex)
+			return ScriptError(ERR_OUTOFMEM);
+		ASSERT(aFunc.mUpVarCount == 0);
+
+		auto &outer = *aFunc.mOuterFunc; // Always non-null when upvar_count > 0.
+		for (int v = 0; v < var_count; ++v)
 		{
-			if (!PreprocessFindUpVar(aName, *aOuter.mOuterFunc, aOuter, aFound, NULL))
-				return FAIL;
+			Var &var = *vars[v];
+			if (!var.IsAlias()) // At this stage only upvars are aliases.
+				continue;
+
+			// At this stage outer.mDownVar has been allocated but would not contain
+			// &var unless it was referenced by a previous nested function.
+			Var *downvar = var.ResolveAlias(); // FindUpVar() set var to be an alias of the corresponding downvar.
+			var.ConvertToNonAliasIfNecessary(); // From this point on, it's not permitted to be a multiple level alias.
+			int d;
+			for (d = 0; d < outer.mDownVarCount; ++d)
+				if (outer.mDownVar[d] == downvar)
+					break;
+			if (d == outer.mDownVarCount)
+				outer.mDownVar[outer.mDownVarCount++] = downvar;
+
+			aFunc.mUpVar[aFunc.mUpVarCount] = &var;
+			aFunc.mUpVarIndex[aFunc.mUpVarCount] = d;
+			++aFunc.mUpVarCount;
 		}
-		if (!aFound)
-			return OK;
+		ASSERT(aFunc.mUpVarCount == upvar_count);
 	}
-	if (!aFound->IsNonStaticLocal())
+	if (downvar_count)
 	{
-		// There's only one "instance" of this variable, so alias it directly.
-		return OK;
+		// Downvars are vars local to aFunc which are referenced by a nested function.
+		aFunc.mDownVar = (Var **)SimpleHeap::Malloc(downvar_count * sizeof(Var *));
+		if (!aFunc.mDownVar)
+			return ScriptError(ERR_OUTOFMEM);
+		// The list is populated when a nested function is processed by the section above.
+		ASSERT(aFunc.mDownVarCount == 0);
 	}
-	if (aFound->IsFuncParam())
-	{
-		// ByRef parameters cannot be upvalues with the current implementation since it is
-		// impossible to predict (for dynamic function or method calls) which variables will
-		// be passed ByRef.  In other words, the caller's Var would have a fixed, unknown
-		// duration and therefore could not be safely captured by a closure.
-		// If this restriction is removed, make sure to update BIF_IsByRef.
-		for (int p = 0; p < aOuter.mParamCount; ++p)
-			if (aOuter.mParam[p].var == aFound)
-			{
-				if (aOuter.mParam[p].is_byref)
-					return ScriptError(_T("ByRef parameters cannot be upvalues."), aFound->mName);
-				break;
-			}
-	}
-	int d;
-	for (d = 0; d < aOuter.mDownVarCount; ++d)
-		if (aOuter.mDownVar[d] == aFound)
-			break;
-	if (d == aOuter.mDownVarCount)
-	{
-		if (d >= MAX_FUNC_UP_VARS)
-			return ScriptError(_T("Too many upvalues."), aOuter.mName);
-		aOuter.mDownVar[aOuter.mDownVarCount++] = aFound;
-		aFound->Scope() |= VAR_DOWNVAR;
-	}
-	if (!aLocal)
-	{
-		// aInner hasn't yet referenced this var, so create a local alias to allow it
-		// to "bubble up" to the inner function (our caller).
-		g->CurrentFunc = &aInner;
-		if (  !(aLocal = FindOrAddVar(aName, 0, FINDVAR_LOCAL))  )
-			return FAIL;
-		aFound = aLocal;
-	}
-	// If aInner is assume-static, aLocal should be static at this point (but not VAR_DECLARED).
-	// Ensure aLocal is non-static so that if aInner is interrupted by a different closure of the
-	// same function, aLocal's mAliasFor will be restored correctly when the interrupter returns.
-	aLocal->Scope() &= ~VAR_LOCAL_STATIC;
-	// Because all upvars are also downvars of the outer function, the MAX_FUNC_UP_VARS
-	// check above is sufficient to prevent overflow for mUpVar as well.
-	aInner.mUpVar[aInner.mUpVarCount] = aLocal;
-	aInner.mUpVarIndex[aInner.mUpVarCount] = d;
-	++aInner.mUpVarCount;
 	return OK;
-}
-
-
-
-void Script::ConvertLocalToAlias(Var &aLocal, Var *aAliasFor, int aPos, Var **aVarList, int &aVarCount)
-{
-	aLocal.UpdateAlias(aAliasFor);
-	// Remove the variable from the local list to prevent it from being shown in
-	// ListVars or being reset when the function returns.
-	memmove(aVarList + aPos, aVarList + aPos + 1, (--aVarCount - aPos) * sizeof(Var *));
 }
 
 

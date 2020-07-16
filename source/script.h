@@ -225,6 +225,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_REMOVE_THE_PERCENT _T("If this variable was not intended to be dynamic, remove the % symbols from it.")
 #define ERR_DYNAMIC_TOO_LONG _T("This dynamically built variable name is too long.  ") ERR_REMOVE_THE_PERCENT
 #define ERR_DYNAMIC_BLANK _T("This dynamic variable is blank.  ") ERR_REMOVE_THE_PERCENT
+#define ERR_DYNAMIC_UPVAR _T("This dynamic variable is not included in this closure.")
 #define ERR_HOTKEY_IF_EXPR _T("Parameter #1 must match an existing #HotIf expression.")
 #define ERR_EXCEPTION _T("An exception was thrown.")
 #define ERR_INVALID_ASSIGNMENT _T("Invalid assignment.")
@@ -1669,6 +1670,8 @@ public:
 		return aArg < mParamCount && mParam[aArg].is_byref;
 	}
 
+	ResultType ValidateDownVar(Var &aVar);
+
 	bool AllowSuperGlobals()
 	{
 		// A function allows super-globals unless it is force-local or contained by another
@@ -1677,6 +1680,11 @@ public:
 		if (mDefaultVarType & VAR_FORCE_LOCAL)
 			return false;
 		return mOuterFunc ? mOuterFunc->AllowSuperGlobals() : true;
+	}
+
+	bool IsAssumeGlobal()
+	{
+		return mDefaultVarType & VAR_GLOBAL;
 	}
 
 	IObject *CloseIfNeeded() override; // Returns this UserFunc or (if mUpVarCount != 0) a Closure.
@@ -2807,10 +2815,10 @@ private:
 	UserFunc *mUnusedHotFunc;	// If defining a named function under a "trigger::" the implicit
 								// function stored in mLastHotFunc will not be used, store it in this
 								// variable for reuse.
-	FuncList mHotFuncs;			// All implicit hotkey funcs are stored here for variable processing.
+	FuncList mHotFuncs;			// All implicit hotkey funcs, stored for some delayed processing.
 								// This list is not sorted, all insertions are done at the end.
 								// In particular, note that DefineFunc and CreateHotFunc directly
-								// changes mCount. This list's member mItem is freed after being
+								// change mCount. This list's member mItem is freed after being
 								// passed to PreprocessLocalVars. Do not use this list after that. 
 
 	VarList mVars; // Sorted list of global variables.
@@ -2886,6 +2894,7 @@ private:
 	// be done before dereferencing any line's mNextLine, for example:
 	ResultType PreparseFuncRefs(Line *aStartingLine);
 	ResultType PreparseExpressions(Line *aStartingLine);
+	ResultType PreparseExpressions(FuncList &aFuncs);
 	void PreparseHotkeyIfExpr(Line *aLine);
 	Line *PreparseCommands(Line *aStartingLine);
 	bool IsLabelTarget(Line *aLine);
@@ -3009,7 +3018,8 @@ public:
 	#define FINDVAR_LOCAL    VAR_LOCAL
 	Var *FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT);
 	Var *FindVar(LPTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT
-		, VarList **apList = nullptr, int *apInsertPos = nullptr);
+		, VarList **apList = nullptr, int *apInsertPos = nullptr, ResultType *aDisplayError = nullptr);
+	Var *FindUpVar(LPTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError);
 	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope);
 	static VarEntry *GetBuiltInVar(LPTSTR aVarName);
 
@@ -3076,8 +3086,6 @@ public:
 
 	ResultType PreprocessLocalVars(FuncList &aFuncs);
 	ResultType PreprocessLocalVars(UserFunc &aFunc);
-	ResultType PreprocessFindUpVar(LPTSTR aName, UserFunc &aOuter, UserFunc &aInner, Var *&aFound, Var *aLocal);
-	void ConvertLocalToAlias(Var &aLocal, Var *aAliasFor, int aPos, Var **aVarList, int &aVarCount);
 	ResultType PreparseVarRefs();
 
 	ResultType ThrowIfTrue(bool aError);

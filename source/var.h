@@ -599,6 +599,11 @@ public:
 		return (mType == VAR_ALIAS) ? mAliasFor->mType : mType;
 	}
 
+	bool IsAlias()
+	{
+		return mType == VAR_ALIAS;
+	}
+
 	// Convert VAR_NORMAL to VAR_CONSTANT.
 	void MakeReadOnly()
 	{
@@ -802,11 +807,12 @@ public:
 
 	__forceinline Var *ResolveAlias()
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
+		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()),
+		// except at load time (for upvars), where the caller relies on this resolving only one level.
 		return (mType == VAR_ALIAS) ? mAliasFor : this; // Return target if it's an alias, or itself if not.
 	}
 
-	__forceinline void UpdateAlias(Var *aTargetVar) // __forceinline because it's currently only called from one place.
+	void UpdateAlias(Var *aTargetVar)
 	// Caller must ensure that aTargetVar isn't NULL.
 	// When this function actually converts a normal variable into an alias , the variable's old
 	// attributes (especially mContents and mCapacity) are hidden/suppressed by virtue of all Var:: methods
@@ -831,6 +837,14 @@ public:
 		if (aTargetVar == this)
 			return;
 
+		UpdateAliasNoResolve(aTargetVar);
+	}
+
+	// This function is used during load time to indicate which downvar an upvar corresponds to,
+	// for later processing.  It might create a multiple-level alias, which must be undone before
+	// the script begins executing.  Caller must ensure aTargetVar != nullptr && aTargetVar != this.
+	void UpdateAliasNoResolve(Var *aTargetVar)
+	{
 		mAliasFor = aTargetVar; // Should always be non-NULL due to various checks elsewhere.
 		mType = VAR_ALIAS; // It might already be this type, so this is just in case it's VAR_NORMAL.
 	}
