@@ -3007,10 +3007,9 @@ public:
 	#define FINDVAR_GLOBAL   VAR_GLOBAL
 	#define FINDVAR_LOCAL    VAR_LOCAL
 	Var *FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT);
-	Var *FindVar(LPTSTR aVarName, size_t aVarNameLength = 0, int *apInsertPos = NULL
-		, int aScope = FINDVAR_DEFAULT
-		, bool *apIsLocal = NULL);
-	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope);
+	Var *FindVar(LPTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT
+		, VarList **apList = nullptr, int *apInsertPos = nullptr);
+	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope);
 	static VarEntry *GetBuiltInVar(LPTSTR aVarName);
 
 	ResultType DerefInclude(LPTSTR &aOutput, LPTSTR aBuf);

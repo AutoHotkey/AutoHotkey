@@ -1414,7 +1414,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 	if (  !varbkp && !var
 		&& (aSetValue
 		// or this variable doesn't exist
-		|| !(var = g_script.FindVar(name, name_length, NULL, aVarScope))
+		|| !(var = g_script.FindVar(name, name_length, aVarScope))
 			// but it is a built-in variable which hasn't been referenced yet:
 			&& g_script.GetBuiltInVar(name))  )
 		// Find or add the variable.

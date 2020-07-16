@@ -4395,7 +4395,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				if (g->CurrentFunc)
 				{
 					// Detect conflicting declarations:
-					var = FindVar(item, var_name_length, NULL, FINDVAR_LOCAL);
+					var = FindVar(item, var_name_length, FINDVAR_LOCAL);
 					if (var && (var->Scope() == declare_type // Exact same declaration type.
 						// Declaring a var previously resolved but not declared, with the same scope:
 						|| (var->Scope() & (VAR_DECLARED|VAR_LOCAL|VAR_GLOBAL)) == (declare_type & (VAR_LOCAL|VAR_GLOBAL))))
@@ -5981,9 +5981,10 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic, 
 		param_length = param_end - param_start;
 		if (param_length)
 		{
-			if (this_param.var = FindVar(param_start, param_length, &insert_pos, FINDVAR_LOCAL))  // Assign.
+			VarList *varlist;
+			if (this_param.var = FindVar(param_start, param_length, FINDVAR_LOCAL, &varlist, &insert_pos))  // Assign.
 				return ScriptError(_T("Duplicate parameter."), param_start);
-			if (   !(this_param.var = AddVar(param_start, param_length, insert_pos, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM))   )	// Pass VAR_LOCAL_FUNCPARAM as last parameter to mean "it's a local but more specifically a function's parameter".
+			if (   !(this_param.var = AddVar(param_start, param_length, varlist, insert_pos, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM))   )	// Pass VAR_LOCAL_FUNCPARAM as last parameter to mean "it's a local but more specifically a function's parameter".
 				return FAIL; // It already displayed the error, including attempts to have reserved names as parameter names.
 			param_start = omit_leading_whitespace(param_end);
 		}
@@ -6295,14 +6296,15 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	else // Top-level class definition.
 	{
 		*mClassName = '\0'; // Init.
+		VarList *varlist;
 		int insert_pos;
-		class_var = FindVar(class_name, 0, &insert_pos, VAR_DECLARE_SUPER_GLOBAL);
+		class_var = FindVar(class_name, 0, FINDVAR_GLOBAL, &varlist, &insert_pos);
 		if (class_var)
 		{
 			if (class_var->IsDeclared())
 				return ConflictingDeclarationError(_T("class"), class_var);
 		}
-		else if (  !(class_var = AddVar(class_name, 0, insert_pos, VAR_DECLARE_SUPER_GLOBAL))  )
+		else if (  !(class_var = AddVar(class_name, 0, varlist, insert_pos, VAR_DECLARE_SUPER_GLOBAL))  )
 			return FAIL;
 		// Explicitly set the variable scope, since FindVar may have returned
 		// an existing ordinary global instead of creating a super-global.
@@ -6654,7 +6656,7 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
 
 	// Get base variable; e.g. "MyClass" in "MyClass.MySubClass".
 	cp = _tcschr(class_name + 1, '.');
-	Var *base_var = FindVar(class_name, cp - class_name, NULL, FINDVAR_GLOBAL);
+	Var *base_var = FindVar(class_name, cp - class_name, FINDVAR_GLOBAL);
 	if (!base_var)
 		return NULL;
 
@@ -7193,21 +7195,22 @@ Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aScope)
 {
 	if (!*aVarName)
 		return NULL;
+	VarList *varlist;
 	int insert_pos;
-	bool is_local; // Used to detect which type of var should be added in case the result of the below is NULL.
 	Var *var;
-	if (var = FindVar(aVarName, aVarNameLength, &insert_pos, aScope, &is_local))
+	if (var = FindVar(aVarName, aVarNameLength, aScope, &varlist, &insert_pos))
 		return var;
 	// Otherwise, no match found, so create a new var.
+	bool is_local = varlist != &mVars;
 	// This will return NULL if there was a problem, in which case AddVar() will already have displayed the error:
-	return AddVar(aVarName, aVarNameLength, insert_pos
+	return AddVar(aVarName, aVarNameLength, varlist, insert_pos
 		, (aScope & ~(VAR_LOCAL | VAR_GLOBAL)) | (is_local ? VAR_LOCAL : VAR_GLOBAL)); // When aScope == FINDVAR_DEFAULT, it contains both the "local" and "global" bits.  This ensures only the appropriate bit is set.
 }
 
 
 
-Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, int aScope
-	, bool *apIsLocal)
+Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int aScope
+	, VarList **apList, int *apInsertPos)
 // Caller has ensured that aVarName isn't NULL.  It must also ignore the contents of apInsertPos when
 // a match (non-NULL value) is returned.
 // Returns the Var whose name matches aVarName.  If it doesn't exist, NULL is returned.
@@ -7241,11 +7244,10 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 	if (Var *found = vars.Find(var_name, apInsertPos))
 		return found;
 
-	// Since above didn't return, no match was found and apInsertPos was set to the position where aVarName
-	// should be inserted to keep the list sorted.
-	
-	if (apIsLocal) // Its purpose is to inform caller of type it would have been in case we don't find a match.
-		*apIsLocal = search_local;
+	// Since above didn't return, no match was found and apInsertPos was set to the position within
+	// apList where aVarName should be inserted to keep the list sorted.
+	if (apList)
+		*apList = &vars;
 
 	// Since no match was found, if this is a local fall back to searching the list of globals at runtime
 	// if the caller didn't insist on a particular type:
@@ -7253,10 +7255,10 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 	{
 		// In this case, callers want to fall back to globals when a local wasn't found.  However,
 		// they want the insertion (if our caller will be doing one) to insert according to the
-		// current assume-mode.  Therefore, if the mode is assume-global, pass the apIsLocal
+		// current assume-mode.  Therefore, if the mode is assume-global, pass the apList
 		// and apInsertPos variables to FindVar() so that it will update them to be global.
 		if (g.CurrentFunc->mDefaultVarType == VAR_DECLARE_GLOBAL)
-			return FindVar(aVarName, aVarNameLength, apInsertPos, FINDVAR_GLOBAL, apIsLocal);
+			return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL, apList, apInsertPos);
 		// Otherwise, caller only wants globals which are declared in *this* function:
 		for (int i = 0; i < g.CurrentFunc->mGlobalVarCount; ++i)
 			if (!_tcsicmp(var_name, g.CurrentFunc->mGlobalVar[i]->mName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
@@ -7264,7 +7266,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 		if (!g.CurrentFunc->AllowSuperGlobals())
 			return NULL;
 		// As a last resort, check for a super-global:
-		Var *gvar = FindVar(aVarName, aVarNameLength, NULL, FINDVAR_GLOBAL, NULL);
+		Var *gvar = FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL);
 		if (gvar && gvar->IsSuperGlobal())
 			return gvar;
 	}
@@ -7274,7 +7276,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int *apInsertPos, i
 
 
 
-Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int aScope)
+Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope)
 // Returns the address of the new variable or NULL on failure.
 // Caller must ensure that g->CurrentFunc!=NULL whenever aIsLocal!=0.
 // Caller must ensure that aVarName isn't NULL and that this isn't a duplicate variable name.
@@ -7336,9 +7338,8 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, int aInsertPos, int 
 		// v1.0.48: Lexikos: Current function is assume-static, so set static attribute.
 		aScope |= VAR_LOCAL_STATIC;
 
-	VarList &vars = aIsLocal ? g->CurrentFunc->mVars : mVars;
 	Var *the_new_var = new Var(new_name, builtin, aScope);
-	if (!the_new_var || !vars.Insert(the_new_var, aInsertPos))
+	if (!the_new_var || !aList->Insert(the_new_var, aInsertPos))
 	{
 		ScriptError(ERR_OUTOFMEM);
 		return NULL;
@@ -13276,7 +13277,7 @@ void Script::WarnUninitializedVar(Var *var)
 
 	bool isNonStaticLocal = var->IsNonStaticLocal();
 	LPCTSTR varClass = isNonStaticLocal ? _T("local") : (isGlobal ? _T("global") : _T("static"));
-	LPCTSTR sameNameAsGlobal = (isNonStaticLocal && FindVar(var->mName, 0, NULL, FINDVAR_GLOBAL)) ? _T(" with same name as a global") : _T("");
+	LPCTSTR sameNameAsGlobal = (isNonStaticLocal && FindVar(var->mName, 0, FINDVAR_GLOBAL)) ? _T(" with same name as a global") : _T("");
 	TCHAR buf[DIALOG_TITLE_SIZE], *cp = buf;
 
 	int buf_space_remaining = (int)_countof(buf);
@@ -13408,7 +13409,7 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 		if (!check_globals)
 			continue;
 
-		Var *global_var = FindVar(var.mName, 0, NULL, FINDVAR_GLOBAL);
+		Var *global_var = FindVar(var.mName, 0, FINDVAR_GLOBAL);
 		if (!global_var) // No global variable with that name.
 			continue;
 		if (global_var->IsSuperGlobal())
