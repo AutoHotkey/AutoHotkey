@@ -53,8 +53,6 @@ public:
 	bool LeaveCurrentModule() { return mOuter->SetCurrentModule(); }	// Sets the enclosing module to be the current module.
 
 	bool ValidateName(LPTSTR aName);
-	
-	Func* FindFunc(LPCTSTR aFuncName, int* apInsertPos = nullptr);
 
 	void RemoveLastModule();				// Only for load time
 	bool AddOptionalModule(LPTSTR aName);	// -- "" --
