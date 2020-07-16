@@ -1501,6 +1501,7 @@ UINT Script::LoadFromFile()
 	// Load the main script file.  This will also load any files it includes with #Include.
 	if (!LoadIncludedFile(g_RunStdIn ? _T("*") : mFileSpec, false, false))
 		return LOADING_FAILED;
+	
 #ifdef ENABLE_DLLCALL
 	// So that (the last occuring) "#DllLoad directory" doesn't affect calls to GetDllProcAddress for run time calls to DllCall
 	// or DllCall optimizations in Line::ExpressionToPostfix.
@@ -1556,28 +1557,16 @@ UINT Script::LoadFromFile()
 	// contains the startup-determined working directory, so no flexibility is lost.
 	SetCurrentDirectory(mFileDir);
 
-	// Rather than do this, which seems kinda nasty if ever someday support same-line
-	// else actions such as "else return", just add two EXITs to the end of every script.
-	// That way, if the first EXIT added accidentally "corrects" an actionless ELSE
-	// or IF, the second one will serve as the anchoring end-point (mRelatedLine) for that
-	// IF or ELSE.  In other words, since we never want mRelatedLine to be NULL, this should
-	// make absolutely sure of that:
-	//if (mLastLine->mActionType == ACT_ELSE ||
-	//	ACT_IS_IF(mLastLine->mActionType)
-	//	...
-	// Second ACT_EXIT: even if the last line of the script is already "exit", always add
-	// another one in case the script ends in a label.  That way, every label will have
+	// Even if the last line of the script is already "exit", always add another
+	// one in case the script ends in a label.  That way, every label will have
 	// a non-NULL target, which simplifies other aspects of script execution.
 	// Making sure that all scripts end with an EXIT ensures that if the script
 	// file ends with ELSEless IF or an ELSE, that IF's or ELSE's mRelatedLine
 	// will be non-NULL, which further simplifies script execution.
-	// Not done since it's number doesn't much matter: ++mCombinedLineNumber;
-	++mCombinedLineNumber;  // So that the EXITs will both show up in ListLines as the line # after the last physical one in the script.
-	if (!(AddLine(ACT_EXIT) && AddLine(ACT_EXIT))) // Second exit guaranties non-NULL mRelatedLine(s).
+	if (!AddLine(ACT_EXIT))
 		return LOADING_FAILED;
 
-	if (   !PreparseBlocks(mFirstLine)
-		|| !PreparseCommands(mFirstLine)   )
+	if (!PreparseCommands(mFirstLine))
 		return LOADING_FAILED; // Error was already displayed by the above calls.
 
 	// Initialize the random number generator:
@@ -1843,6 +1832,8 @@ ResultType Script::LoadIncludedFile(TextStream *fp)
 	// Keep this var on the stack due to recursion, which allows newly created lines to be given the
 	// correct file number even when some #include's have been encountered in the middle of the script:
 	int source_file_index = Line::sSourceFileCount - 1;
+
+	bool blocks_previously_open = mOpenBlock || mClassObjectCount; // For error detection.
 
 	LineBuffer buf, next_buf;
 	size_t &buf_length = buf.length, &next_buf_length = next_buf.length;
@@ -2681,8 +2672,16 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		// performance because it avoids memcpy from buf2 to buf1.
 	} // for each whole/constructed line.
 
-	if (mClassObjectCount && !source_file_index) // or mClassProperty, which implies mClassObjectCount != 0.
+	// The following checks detect errors where a "}" was missed or there's an If/Else/etc.
+	// or hotkey at the end of the file with no corresponding body.  Although it's possible
+	// that another file might follow this one and fill in the missing part, it's much more
+	// likely to be an error.  blocks_previously_open is checked rather than source_file_index
+	// so that errors in auto-includes are detected.
+
+	if (!blocks_previously_open && (mOpenBlock || mClassObjectCount))
 	{
+		if (mOpenBlock)
+			return mOpenBlock->LineError(ERR_MISSING_CLOSE_BRACE);
 		// A class definition has not been closed with "}".  Previously this was detected by adding
 		// the open and close braces as lines, but this way is simpler and has less overhead.
 		// The downside is that the line number won't be shown; however, the class name will.
@@ -2690,15 +2689,15 @@ continue_main_loop: // This method is used in lieu of "continue" for performance
 		return ScriptError(ERR_MISSING_CLOSE_BRACE, mClassName);
 	}
 
+	if (mPendingParentLine) // If, Else, Loop, etc. without a block or action.
+		return mPendingParentLine->LineUnexpectedError();
+
 	if (mLastHotFunc)
 		// A hotkey at the end of the file, with no function body.  Checking for this here
 		// ensures mJumpToLine is always non-null for later stages.
 		return ScriptError(ERR_HOTKEY_MISSING_BRACE);
 
 	++mCombinedLineNumber; // L40: Put the implicit ACT_EXIT on the line after the last physical line (for the debugger).
-
-	// This is not required, it is called by the destructor.
-	// fp->Close();
 	return OK;
 }
 
@@ -4383,7 +4382,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			size_t var_name_length;
 			LPTSTR item;
 
-			for (belongs_to_line_above = mLastLine && ACT_IS_LINE_PARENT(mLastLine->mActionType)
+			for (belongs_to_line_above = mPendingParentLine
 				, open_brace_was_added = false, item = cp
 				; *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
 			{
@@ -5316,20 +5315,83 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(_T("Return's parameter should be blank except inside a function."));
 	}
 
+	// This next section and the block-begin/end sections below are responsible
+	// for setting up the relationships of lines (mParentLine and mRelatedLine).
+	// This was previously done as a separate pass, but doing it here enables
+	// all subsequent stages to rely on the relationships already being defined.
+	// It also reduced code size.
+	switch (aActionType)
+	{
+	case ACT_CASE:
+		if (!(mOpenBlock && mOpenBlock->mPrevLine && mOpenBlock->mPrevLine->mActionType == ACT_SWITCH)
+			|| mPendingParentLine)
+			return line.LineUnexpectedError();
+		Line *last_case;
+		if ((last_case = mOpenBlock->mNextLine) && last_case != &line)
+		{
+			// Form a linked list of CASE lines for this SWITCH.
+			while (last_case->mRelatedLine)
+				last_case = last_case->mRelatedLine;
+			last_case->mRelatedLine = &line;
+		}
+		break;
+	case ACT_ELSE:
+	case ACT_UNTIL:
+	case ACT_CATCH:
+	case ACT_FINALLY:
+		bool expected = false;
+		Line *parent = mPendingRelatedLine;
+		if (parent)
+		{
+			if (parent->mActionType == ACT_BLOCK_BEGIN) parent = parent->mParentLine;
+			enum_act parent_act = parent ? (enum_act)parent->mActionType : ACT_INVALID;
+			switch (aActionType)
+			{
+			case ACT_ELSE: expected = parent_act == ACT_IF; break;
+			case ACT_UNTIL: expected = ACT_IS_LOOP_EXCLUDING_WHILE(parent_act); break;
+			case ACT_CATCH: expected = parent_act == ACT_TRY; break;
+			case ACT_FINALLY: expected = parent_act == ACT_TRY || parent_act == ACT_CATCH; break;
+			}
+		}
+		if (!expected)
+			return line.LineUnexpectedError();
+		line.mParentLine = parent->mParentLine; // Not parent itself, since an ELSE can't jump into its IF's body.
+		break;
+	}
+	while (mPendingRelatedLine) // A completed block or a parent line with a single-line action, waiting for its mRelatedLine.
+	{
+		mPendingRelatedLine->mRelatedLine = &line;
+		// Regardless of whether mPendingRelatedLine is a block-begin or parent line,
+		// its own parent also needs its mRelatedLine set, unless that's an open block.
+		mPendingRelatedLine = mPendingRelatedLine->mParentLine;
+		if (mPendingRelatedLine && mPendingRelatedLine->mActionType == ACT_BLOCK_BEGIN)
+			mPendingRelatedLine = nullptr;
+	}
+	if (mPendingParentLine) // A line waiting for block or single-line action.
+	{
+		line.mParentLine = mPendingParentLine;
+		if (aActionType != ACT_BLOCK_BEGIN)
+			mPendingRelatedLine = mPendingParentLine; // The next line will be the parent's mRelatedLine.
+		mPendingParentLine = nullptr;
+	}
+	if (ACT_IS_LINE_PARENT(aActionType))
+	{
+		mPendingParentLine = &line;
+		mPendingRelatedLine = nullptr;
+	}
+	// If no parent line was determined above, this line belongs to the current block.
+	if (!line.mParentLine)
+		line.mParentLine = mOpenBlock;
+
 	if (mNextLineIsFunctionBody)
 	{
 		g->CurrentFunc->mJumpToLine = the_new_line;
 		mNextLineIsFunctionBody = false;
 	}
 
-	// No checking for unbalanced blocks is done here.  That is done by PreparseBlocks() because
-	// it displays more informative error messages:
+	// Now that we've finished using the previous value of mOpenBlock, check the following:
 	if (aActionType == ACT_BLOCK_BEGIN)
 	{
-		// While loading the script, use mParentLine to form a linked list of blocks for the purpose of
-		// identifying the end of each function.  mParentLine will be set more accurately (taking into
-		// account control flow statements) by PreparseBlocks().
-		the_new_line->mParentLine = mOpenBlock;
 		mOpenBlock = the_new_line;
 		// It's only necessary to check the last func, not the one(s) that come before it, to see if its
 		// mJumpToLine is NULL.  This is because our caller has made it impossible for a function
@@ -5395,8 +5457,19 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	//    local_label:
 	// }
 
-	if (aActionType == ACT_BLOCK_END && mOpenBlock) // !mOpenBlock would indicate a syntax error, reported at a later stage.
+	if (aActionType == ACT_BLOCK_END)
 	{
+		if (!mOpenBlock || line.mParentLine != mOpenBlock)
+			return line.LineUnexpectedError();
+		mPendingRelatedLine = mOpenBlock; // The next line will be the block-begin's mRelatedLine, and possibly its parent's mRelatedLine.
+
+		// Rather than checking whether each newly added line is being added into a Switch,
+		// just verify here that the first line of each Switch is valid:
+		if (mOpenBlock->mPrevLine && mOpenBlock->mPrevLine->mActionType == ACT_SWITCH
+			&& mOpenBlock->mNextLine->mActionType != ACT_CASE
+			&& mOpenBlock->mNextLine != &line)
+			return mOpenBlock->mNextLine->LineError(_T("Expected Case/Default."));
+
 		if (g->CurrentFunc && g->CurrentFunc == mOpenBlock->mAttribute)
 		{
 			auto &func = *g->CurrentFunc;
@@ -5421,7 +5494,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 				// The outer function has no body yet, so it probably began with one or more nested functions.
 				mNextLineIsFunctionBody = true;
 		}
-		mOpenBlock = mOpenBlock->mParentLine;
+		do
+			mOpenBlock = mOpenBlock->mParentLine;
+		while (mOpenBlock && mOpenBlock->mActionType != ACT_BLOCK_BEGIN);
 	}
 
 	return OK;
@@ -5816,6 +5891,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	// Avoid pointing any pending labels at the fat arrow function's body (let the caller
 	// finish adding the line which contains this expression and make it the label's target).
 	bool nolabels = mNoUpdateLabels; // Could be true if this line is a static declaration.
+	Line *parent_line = mPendingParentLine;
 	mNoUpdateLabels = true;
 
 	if (*aPrmEnd == ')') // `() => e` or `fn() => e`, not `v => e`.
@@ -5857,6 +5933,11 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 		return FAIL;
 
 	mNoUpdateLabels = nolabels;
+	if (parent_line)
+	{
+		mPendingParentLine = parent_line;
+		mPendingRelatedLine = nullptr;
+	}
 
 	return OK;
 }
@@ -6597,10 +6678,13 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		mLastLine->mNextLine = nullptr; // For maintainability; AddLine() should overwrite it regardless.
 		mCurrLine = nullptr; // Fix for v1.1.09.02: Leaving this non-NULL at best causes error messages to show irrelevant vicinity lines, and at worst causes a crash because the linked list is in an inconsistent state.
 
+		Line *prl = mPendingRelatedLine; // This was set by AddLine(ACT_BLOCK_END) if DefineClassInit() was just called.
+		mPendingRelatedLine = nullptr;
 		mNoUpdateLabels = true;
 		if (!ParseAndAddLine(buf))
 			return FAIL; // Above already displayed the error.
 		mNoUpdateLabels = false;
+		mPendingRelatedLine = prl;
 		
 		if (init_func->mJumpToLine == block_end) // This can be true only for the first static initializer.
 			init_func->mJumpToLine = mLastLine;
@@ -7502,318 +7586,6 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 
 
 
-Line *Script::PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode, Line *aParentLine, const ActionTypeType aLoopType)
-// Will return NULL to the top-level caller if there's an error, or if
-// mLastLine is NULL (i.e. the script is empty).
-{
-	Line *line_temp;
-
-	for (Line *line = aStartingLine; line != NULL;)
-	{
-		// All lines in our recursion layer are assigned to the line or block that the caller specified:
-		line->mParentLine = aParentLine; // Can be NULL.
-
-		if (ACT_IS_IF(line->mActionType) // IF but not ELSE, which is handled by its IF, or as an error below.
-			|| ACT_IS_LOOP(line->mActionType) // LOOP, WHILE or FOR.
-			|| line->mActionType == ACT_TRY) // CATCH and FINALLY are excluded so they're caught as errors below.
-		{
-			line_temp = line->mNextLine;  // line_temp is now this IF's or LOOP's or TRY's action-line.
-			// The following is commented out because all scripts end in ACT_EXIT:
-			//if (line_temp == NULL) // This is an orphan IF/LOOP (has no action-line) at the end of the script.
-			//	return line->PreparseError(_T("Q")); // Placeholder. Formerly "This if-statement or loop has no action."
-
-			// Checks such as the following are omitted because any such errors are detected automatically
-			// by recursion into this function; i.e. if this IF/LOOP/TRY's action is an ELSE, it will be
-			// detected as having no associated IF.
-			//#define IS_BAD_ACTION_LINE_TYPE(act) ((act) == ACT_ELSE || (act) == ACT_BLOCK_END || (act) == ACT_CATCH || (act) == ACT_FINALLY)
-			//#define IS_BAD_ACTION_LINE(l) IS_BAD_ACTION_LINE_TYPE((l)->mActionType)
-			//if (IS_BAD_ACTION_LINE(line_temp))
-			//	return line->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
-
-			// Lexikos: This section once maintained separate variables for file-pattern, registry, file-reading
-			// and parsing loops. The intention seemed to be to validate certain commands such as FileAppend
-			// differently depending on whether they're contained within a qualifying type of loop (even if some
-			// other type of loop lies in between). However, that validation apparently wasn't implemented,
-			// and implementing it now seems unnecessary. Doing so would also remove a useful capability:
-			//
-			//	Loop, Read, %InputFile%, %OutputFile%
-			//	{
-			//		MyFunc(A_LoopReadLine)
-			//	}
-			//	MyFunc(line) {
-			//		... do some processing on %line% ...
-			//		FileAppend, %line%	; This line could be considered an error, though it works in practice.
-			//	}
-			//
-
-			// Recurse to group the line or lines which are this line's action or body as a
-			// single entity and find the line below it.  This must be done even if line_temp
-			// isn't an IF/ELSE/LOOP/BLOCK_BEGIN because all lines need mParentLine set by this
-			// function, and some other types such as BREAK/CONTINUE also need special handling.
-			line_temp = PreparseBlocksStmtBody(line_temp, line, ACT_IS_LOOP(line->mActionType) ? line->mActionType : aLoopType);
-			// If not an error, line_temp is now either:
-			// 1) If this if's/loop's action was a BEGIN_BLOCK: The line after the end of the block.
-			// 2) If this if's/loop's action was another IF or LOOP:
-			//    a) the line after that if's else's action; or (if it doesn't have one):
-			//    b) the line after that if's/loop's action
-			// 3) If this if's/loop's action was some single-line action: the line after that action.
-			// In all of the above cases, line_temp is now the line where we
-			// would expect to find an ELSE for this IF, if it has one.
-
-			// line_temp is NULL if an error occurred, but should never be NULL in any other
-			// case because all scripts end in ACT_EXIT:
-			if (line_temp == NULL)
-				return NULL; // Error.
-
-			// Set this line's mRelatedLine to the line after its action/body.  For an IF,
-			// this is the line to which we jump at runtime when the IF is finished (whether
-			// it's condition was true or false), thus skipping over any nested IF's that
-			// aren't in blocks beneath it.  If there's no ELSE, the below value serves as
-			// the jumppoint we go to when the if-statement is finished.  Example:
-			// if x
-			//   if y
-			//     if z
-			//       action1
-			//     else
-			//       action2
-			// action3
-			// x's jumppoint should be action3 so that all the nested if's under the
-			// first one can be skipped after the "if x" line is recursively evaluated.
-			// Because of this behavior (and the fact that all scripts end in ACT_EXIT),
-			// all IFs will have a related line.
-			line->mRelatedLine = line_temp;
-
-			// Even if aMode == ONLY_ONE_LINE, an IF and its ELSE count as a single
-			// statement (one line) due to its very nature (at least for this purpose),
-			// so always continue on to evaluate the IF's ELSE, if present.  This also
-			// applies to the CATCH or FINALLY belonging to a TRY or CATCH.
-			for (bool line_belongs;; )
-			{
-				// Determine whether line_temp belongs to (is associated with) line.
-				// At this point, line is either an IF/LOOP/TRY from above, or an
-				// ELSE/CATCH/FINALLY handled by the previous iteration of this loop.
-				// line_temp is the line after line's action/body.
-				switch (line_temp->mActionType)
-				{
-				case ACT_ELSE: line_belongs = ACT_IS_IF(line->mActionType); break;
-				case ACT_CATCH: line_belongs = (line->mActionType == ACT_TRY); break;
-				case ACT_FINALLY: line_belongs = (line->mActionType == ACT_TRY || line->mActionType == ACT_CATCH); break;
-				default: line_belongs = false; break;
-				}
-				if (!line_belongs)
-					break;
-				// Each line's mParentLine must be set appropriately for named loops to work.
-				line_temp->mParentLine = line->mParentLine;
-				// Set it up so that line is the ELSE/CATCH/FINALLY and line_temp is it's action.
-				// Later, line_temp will be the line after the action/body, and will be checked
-				// by the next iteration in case this is a TRY..CATCH and line_temp is FINALLY.
-				line = line_temp; // ELSE/CATCH/FINALLY
-				line_temp = line->mNextLine; // line's action/body.
-				// The following case should be impossible because all scripts end in ACT_EXIT.
-				// Thus, it's commented out:
-				//if (line_temp == NULL) // An else with no action.
-				//	return line->PreparseError(_T("This ELSE has no action."));
-				//if (IS_BAD_ACTION_LINE(line_temp)) // See "#define IS_BAD_ACTION_LINE" for comments.
-				//	return line->PreparseError(ERR_EXPECTED_BLOCK_OR_ACTION);
-				// Assign to line_temp rather than line:
-				line_temp = PreparseBlocksStmtBody(line_temp, line
-					, line->mActionType == ACT_FINALLY ? ACT_FINALLY : aLoopType);
-				if (line_temp == NULL)
-					return NULL; // Error.
-				// Set this ELSE/CATCH/FINALLY's jumppoint.  This is similar to the jumppoint
-				// set for an IF/LOOP/TRY, so see related comments above:
-				line->mRelatedLine = line_temp;
-			}
-			if (line_temp->mActionType == ACT_UNTIL
-				&& ACT_IS_LOOP_EXCLUDING_WHILE(line->mActionType)) // WHILE is excluded because PerformLoopWhile() doesn't handle UNTIL, due to rarity of need.
-			{
-				// For consistency/maintainability:
-				line_temp->mParentLine = line->mParentLine;
-				// Continue processing *after* UNTIL.
-				line = line_temp->mNextLine;
-			}
-			else // continue processing from line_temp's position
-				line = line_temp;
-
-			// All cases above have ensured that line is now the first line beyond the
-			// scope of the IF/LOOP/TRY and any associated statements.
-
-			if (aMode == ONLY_ONE_LINE) // Return the next unprocessed line to the caller.
-				return line;
-			// Otherwise, continue processing at line's new location:
-			continue;
-		} // ActionType is IF/LOOP/TRY.
-		else if (line->mActionType == ACT_SWITCH)
-		{
-			Line *switch_line = line;
-
-			line = line->mNextLine;
-			if (line->mActionType != ACT_BLOCK_BEGIN)
-				return switch_line->PreparseError(ERR_MISSING_OPEN_BRACE);
-			Line *block_begin = line;
-			block_begin->mParentLine = switch_line;
-			
-			Line *end_line = NULL;
-			for (line = line->mNextLine; line->mActionType == ACT_CASE; line = end_line)
-			{
-				line->mParentLine = block_begin; // Required for GOTO to work correctly.
-				// Find the next ACT_CASE or ACT_BLOCK_END:
-				end_line = PreparseBlocks(line->mNextLine, UNTIL_BLOCK_END, block_begin, aLoopType);
-				if (!end_line)
-					return NULL; // Error.
-				// Form a linked list of CASE lines within this block:
-				line->mRelatedLine = end_line;
-			}
-
-			if (!end_line) // First line is not ACT_CASE.
-			{
-				if (line->mActionType != ACT_BLOCK_END)
-					return line->PreparseError(_T("Expected Case/Default"));
-				end_line = line;
-			}
-
-			// After evaluating ACT_SWITCH, execution resumes after ACT_BLOCK_END:
-			switch_line->mRelatedLine = line = end_line->mNextLine;
-
-			if (aMode == ONLY_ONE_LINE) // Return the next unprocessed line to the caller.
-				return line;
-			// Otherwise, continue processing at line's new location:
-			continue;
-		}
-
-		// Since above didn't continue, do the switch:
-		switch (line->mActionType)
-		{
-		case ACT_BLOCK_BEGIN:
-			line_temp = PreparseBlocks(line->mNextLine, UNTIL_BLOCK_END, line, line->mAttribute ? 0 : aLoopType); // mAttribute usage: don't consider a function's body to be inside the loop, since it can be called from outside.
-			// "line_temp" is now either NULL due to an error, or the location of the END_BLOCK itself.
-			if (line_temp == NULL)
-				return NULL; // Error.
-			// The BLOCK_BEGIN's mRelatedLine should point to the line *after* the BLOCK_END:
-			line->mRelatedLine = line_temp->mNextLine;
-			// Since any lines contained inside this block would already have been handled by
-			// the recursion in the above call, continue searching from the end of this block:
-			line = line_temp;
-			break;
-		case ACT_BLOCK_END:
-			if (aMode == UNTIL_BLOCK_END)
-				// Return line rather than line->mNextLine because, if we're at the end of
-				// the script, it's up to the caller to differentiate between that condition
-				// and the condition where NULL is an error indicator.
-				return line;
-			// Otherwise, we found an end-block we weren't looking for.
-			return line->PreparseError(ERR_UNEXPECTED_CLOSE_BRACE);
-		case ACT_BREAK:
-		case ACT_CONTINUE:
-			if (!aLoopType)
-				return line->PreparseError(_T("Break/Continue must be enclosed by a Loop."));
-			if (aLoopType == ACT_FINALLY)
-				return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
-			break;
-
-		case ACT_CASE:
-			if (!aParentLine || !aParentLine->mParentLine
-				|| aParentLine->mParentLine->mActionType != ACT_SWITCH)
-				return line->PreparseError(ERR_UNEXPECTED_CASE);
-			return line;
-
-		case ACT_ELSE:
-			// This happens if there's an extra ELSE in this scope level that has no IF:
-			return line->PreparseError(ERR_ELSE_WITH_NO_IF);
-
-		case ACT_UNTIL:
-			// Similar to above.
-			return line->PreparseError(ERR_UNTIL_WITH_NO_LOOP);
-
-		case ACT_CATCH:
-			// Similar to above.
-			return line->PreparseError(ERR_CATCH_WITH_NO_TRY);
-
-		case ACT_FINALLY:
-			// Similar to above.
-			return line->PreparseError(ERR_FINALLY_WITH_NO_PRECEDENT);
-		} // switch()
-
-		line = line->mNextLine; // If NULL due to physical end-of-script, the for-loop's condition will catch it.
-		if (aMode == ONLY_ONE_LINE) // Return the next unprocessed line to the caller.
-			// In this case, line shouldn't be (and probably can't be?) NULL because the line after
-			// a single-line action shouldn't be the physical end of the script.  That's because
-			// the loader has ensured that all scripts now end in ACT_EXIT.  And that final
-			// ACT_EXIT should never be parsed here in ONLY_ONE_LINE mode because the only time
-			// that mode is used is for the action of an IF, an ELSE, or possibly a LOOP.
-			// In all of those cases, the final ACT_EXIT line in the script (which is explicitly
-			// inserted by the loader) cannot be the line that was just processed by the
-			// switch().  Therefore, the above assignment should not have set line to NULL
-			// (which is good because NULL would probably be construed as "failure" by our
-			// caller in this case):
-			return line;
-		// else just continue the for-loop at the new value of line.
-	} // for()
-
-	// End of script has been reached.  line is now NULL so don't dereference it.
-
-	// If we were still looking for an EndBlock to match up with a begin, that's an error.
-	// This indicates that at least one BLOCK_BEGIN is missing a BLOCK_END.  Let the error
-	// message point at the most recent BLOCK_BEGIN (aParentLine) rather than at mLastLine,
-	// which points to an EXIT which was added automatically by LoadFromFile().
-	if (aMode == UNTIL_BLOCK_END)
-		return aParentLine->PreparseError(ERR_MISSING_CLOSE_BRACE);
-
-	// If we were told to process a single line, we were recursed and it should have returned above,
-	// so it's an error here (can happen if we were called with aStartingLine == NULL?):
-	if (aMode == ONLY_ONE_LINE)
-		return mLastLine->PreparseError(_T("Q")); // Placeholder since probably impossible.  Formerly "The script ended while an action was still expected."
-
-	// Otherwise, return something non-NULL to indicate success to the top-level caller:
-	return mLastLine;
-}
-
-
-
-Line *Script::PreparseBlocksStmtBody(Line *aStartingLine, Line *aParentLine, const ActionTypeType aLoopType)
-{
-	Line *body, *line_after;
-	for (body = aStartingLine;; body = line_after)
-	{
-		// Preparse the function body and find the line after it.
-		line_after = PreparseBlocks(body, ONLY_ONE_LINE, aParentLine, aLoopType);
-		if (line_after == NULL)
-			return NULL; // Error.
-		
-		if (body->mActionType == ACT_BLOCK_BEGIN && body->mAttribute) // Function body.
-		{
-			if (!((UserFunc *)body->mAttribute)->mIsFuncExpression)
-			{
-				// Normal function definitions aren't allowed here because it simply wouldn't make sense.
-				return body->PreparseError(_T("Unexpected function"));
-			}
-			// This fat arrow function was defined inside an expression, but due to the nature of the parser,
-			// its lines have been added before that expression.  line_after is either the line containing the
-			// expression or another fat arrow function from the same expression.  Continue the loop until the
-			// whole lot has been processed as one group.
-		}
-		else
-			break;
-	}
-	if (body != aStartingLine)
-	{
-		// One or more fat arrow functions were processed by the loop above.
-		// body is the line which contains the `=>` operator(s).
-		// line_after is the line after body, or after body's own body if it has one.
-		Line *block_end = body->mPrevLine;
-		// Move the blocks below the expression to ensure proper evaluation of aParentLine's body.
-		aParentLine->mNextLine = body; // parent -> expression
-		body->mPrevLine = aParentLine; // parent <- expression
-		body->mNextLine = aStartingLine; // expression -> block-begin
-		aStartingLine->mPrevLine = body; // expression <- block-begin
-		block_end->mNextLine = line_after; // block-end -> the line after expression
-		line_after->mPrevLine = block_end; // block-end <- the line after expression
-	}
-	return line_after;
-}
-
-
-
 Line *Script::PreparseCommands(Line *aStartingLine)
 // Preparse any commands which might rely on blocks having been fully preparsed,
 // such as any command which has a jump target (label).
@@ -7831,51 +7603,95 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 			break;
 		case ACT_BLOCK_END:
 			if (line->mAttribute) // This is the closing brace of a function definition.
-				g->CurrentFunc = g->CurrentFunc->mOuterFunc;
+			{
+				auto &func = *(UserFunc *)line->mAttribute;
+
+				g->CurrentFunc = func.mOuterFunc;
+
+				Line *block_begin = line->mParentLine;
+				Line *parent = block_begin->mParentLine;
+
+				if (func.mIsFuncExpression // =>
+					&& line->mNextLine->mActionType != ACT_BLOCK_BEGIN // Not followed by another =>
+					&& block_begin->mParentLine
+					&& block_begin->mParentLine->mActionType != ACT_BLOCK_BEGIN)
+				{
+					// This fat arrow function's parent line is a statement with a single-line
+					// action, but that action is currently separated from its parent by one or
+					// more fat arrow functions.  It won't work that way because If/Else/Loop/etc.
+					// all skip an initial ACT_BLOCK_BEGIN (to avoid an extra ExecUntil call),
+					// which would result in executing the function's body instead of skipping it.
+					Line *body = line->mNextLine;
+				#ifdef KEEP_FAT_ARROW_FUNCTIONS_IN_LINE_LIST // Currently unused.
+					block_begin = parent->mNextLine; // In case there are multiple fat arrow functions on one line.
+					Line *after_body = parent->mRelatedLine;
+					Line *body_end = after_body->mPrevLine; // In case body is multiple lines (such as a nested IF or LOOP).
+					// Swap the statement body and fat arrow functions around to make it work:
+					parent   ->mNextLine = body       , body       ->mPrevLine = parent;
+					body_end ->mNextLine = block_begin, block_begin->mPrevLine = body_end;
+					line     ->mNextLine = after_body , after_body ->mPrevLine = line;
+				#else
+					// Remove the fat arrow functions to allow the correct body to execute.
+					// This relies on there being no need for the fat arrow functions to
+					// remain in the Line list after this point (so for instance, there's
+					// no possibility of setting a breakpoint in one of these functions).
+					parent->mNextLine = body, body->mPrevLine = parent;
+				#endif
+				}
+				else if (parent && parent->mActionType != ACT_BLOCK_BEGIN)
+				{
+					// This is a normal function definition directly under If/Else/Loop/etc.
+					// It would execute incorrectly as described above, so raise an error.
+					return block_begin->PreparseError(_T("Unexpected function"));
+				}
+			}
 			break;
 		case ACT_BREAK:
 		case ACT_CONTINUE:
-			if (line->mArgc)
 			{
 				if (line->ArgHasDeref(1))
 					// It seems unlikely that computing the target loop at runtime would be useful.
-					// For simplicity, rule out things like "break %var%" and "break % func()":
+					// For simplicity, rule out things like "break(var)" and "break(func())":
 					return line->PreparseError(ERR_PARAM1_INVALID); //_T("Target label of Break/Continue cannot be dynamic."));
-				LPTSTR loop_name = line->mArg[0].text;
-				Label *loop_label;
-				Line *loop_line;
-				bool is_numeric = IsNumeric(loop_name);
-				// If loop_name is a label, find the innermost loop (#1) for validation purposes:
-				int n = is_numeric ? _ttoi(loop_name) : 1;
-				// Find the nth innermost loop which encloses this line:
-				for (loop_line = line->mParentLine; loop_line; loop_line = loop_line->mParentLine)
-				{
-					if (ACT_IS_LOOP(loop_line->mActionType)) // Any type of LOOP, FOR or WHILE.
-						if (--n < 1)
-							break;
-					if (loop_line->mActionType == ACT_BLOCK_BEGIN && loop_line->mAttribute
-						|| loop_line->mActionType == ACT_FINALLY)
-						break; // Stop the search here since any outer loop would be an invalid target.
-				}
-				if (!loop_line || n != 0)
-					return line->PreparseError(ERR_PARAM1_INVALID);
-				if (!is_numeric)
+				LPTSTR loop_name = line_raw_arg1;
+				Label *loop_label = nullptr;
+				Line *loop_line, *innermost_loop = nullptr;
+				if (*loop_name && !IsNumeric(loop_name))
 				{
 					// Target is a named loop.
 					if ( !(loop_label = FindLabel(loop_name)) )
 						return line->PreparseError(ERR_NO_LABEL, loop_name);
-					Line *innermost_loop = loop_line;
-					loop_line = loop_label->mJumpToLine;
-					// Ensure the label points to a LOOP, FOR or WHILE which encloses this line.
-					// Use innermost_loop as the starting-point of the "jump" to ensure the target
-					// isn't a loop *inside* the current loop:
-					if (   !ACT_IS_LOOP(loop_line->mActionType)
-						|| !innermost_loop->IsJumpValid(*loop_label, true)   )
-						return line->PreparseError(ERR_PARAM1_INVALID); //_T("Target label does not point to an appropriate Loop."));
-					if (loop_line == innermost_loop)
-						loop_line = NULL; // Since a normal break/continue will work in this case.
+					// loop_label->mJumpToLine is used only to identify the line in the loop below.
+					// This approach ensures the loop is a valid target.  The previous approach using
+					// innermost_loop->IsJumpValid() failed to detect cases where the target loop is
+					// a valid goto target but doesn't enclose this BREAK/CONTINUE.
 				}
-				if (loop_line) // i.e. it wasn't determined to be this line's direct parent, which is always valid.
+				int n = loop_label ? 0 : *loop_name ? _ttoi(loop_name) : 1;
+				// For n > 0, find the nth innermost loop which encloses this line.
+				// Otherwise, determine whether loop_label points to a valid loop.
+				for (loop_line = line->mParentLine; loop_line; loop_line = loop_line->mParentLine)
+				{
+					if (ACT_IS_LOOP(loop_line->mActionType)) // Any type of LOOP, FOR or WHILE.
+					{
+						if (!innermost_loop)
+							innermost_loop = loop_line;
+						if (--n == 0) // == not <=, so "break 0" and negative values are detected as invalid.
+							break;
+						if (loop_label && loop_label->mJumpToLine == loop_line)
+							break;
+					}
+					if (loop_line->mActionType == ACT_BLOCK_BEGIN && loop_line->mAttribute
+						|| loop_line->mActionType == ACT_FINALLY)
+					{
+						loop_line = nullptr;
+						break; // Stop the search here since any outer loop would be an invalid target.
+					}
+				}
+				if (!innermost_loop)
+					return line->PreparseError(_T("Break/Continue must be enclosed by a Loop."));
+				if (!loop_line)
+					return line->PreparseError(ERR_PARAM1_INVALID);
+				if (loop_line != innermost_loop)
 				{
 					if (line->mActionType == ACT_BREAK)
 					{
@@ -7884,8 +7700,8 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 						if (loop_line->mActionType == ACT_UNTIL)
 							loop_line = loop_line->mNextLine;
 					}
+					line->mRelatedLine = loop_line;
 				}
-				line->mRelatedLine = loop_line;
 			}
 			break;
 
@@ -10365,7 +10181,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 					our_deref_buf_size = 0;
 				}
 				// For each CASE:
-				for (Line *case_line = line->mNextLine->mNextLine; case_line->mActionType == ACT_CASE; case_line = case_line->mRelatedLine)
+				for (Line *case_line = line->mNextLine->mNextLine; case_line && case_line->mActionType == ACT_CASE; case_line = case_line->mRelatedLine)
 				{
 					int arg, arg_count = case_line->mArgc;
 					if (!arg_count) // The default case.
@@ -13030,6 +12846,14 @@ ResultType Line::VarIsReadOnlyError(Var *aVar, int aErrorType)
 {
 	g_script.mCurrLine = this;
 	return g_script.VarIsReadOnlyError(aVar, aErrorType);
+}
+
+
+ResultType Line::LineUnexpectedError()
+{
+	TCHAR buf[127];
+	sntprintf(buf, _countof(buf), _T("Unexpected \"%s\""), g_act[mActionType].Name);
+	return LineError(buf);
 }
 
 

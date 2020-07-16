@@ -1350,6 +1350,7 @@ public:
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType);
+	ResultType LineUnexpectedError();
 
 	// Must not use "= GetLastError()" as a parameter default since the order of evaluation
 	// of parameters is not guaranteed left to right; i.e. if the first parameter is a call
@@ -2816,6 +2817,7 @@ private:
 	int mGlobalVarCountMax; // While loading the script, the maximum number of global declarations allowed for the current function.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
+	Line *mPendingParentLine, *mPendingRelatedLine;
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	bool mNoUpdateLabels;
 
@@ -2884,8 +2886,6 @@ private:
 	// be done before dereferencing any line's mNextLine, for example:
 	ResultType PreparseExpressions(Line *aStartingLine);
 	void PreparseHotkeyIfExpr(Line *aLine);
-	Line *PreparseBlocks(Line *aStartingLine, ExecUntilMode aMode = NORMAL_MODE, Line *aParentLine = NULL, const ActionTypeType aLoopType = ACT_INVALID);
-	Line *PreparseBlocksStmtBody(Line *aStartingLine, Line *aParentLine = NULL, const ActionTypeType aLoopType = ACT_INVALID);
 	Line *PreparseCommands(Line *aStartingLine);
 	bool IsLabelTarget(Line *aLine);
 
