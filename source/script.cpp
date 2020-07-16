@@ -5161,7 +5161,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		mLastHotFunc = nullptr;
 	}
 
-	Var *target_var;
 	DerefList deref;  // Will be used to temporarily store the var-deref locations in each arg.
 	ArgStruct *new_arg;  // We will allocate some dynamic memory for this, then hang it onto the new line.
 	LPTSTR this_aArgMap, this_aArg;
@@ -5187,60 +5186,17 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			this_aArg = aArg[i];                        // For performance and convenience.
 			this_aArgMap = aArgMap ? aArgMap[i] : NULL; // Same.
 			ArgStruct &this_new_arg = new_arg[i];       // Same.
-			this_new_arg.is_expression = false;         // Set default early, for maintainability.
-			this_new_arg.postfix = NULL;                // Same.  ExpressionToPostfix() may override it even when setting is_expression back to false.
+			this_new_arg.postfix = NULL;                // Set default early, for maintainability.
 
-			// Before allocating memory for this Arg's text, first check if it's a pure
-			// variable.  If it is, we store it differently (and there's no need to resolve
-			// escape sequences in these cases, since var names can't contain them):
-			this_new_arg.type = Line::ArgIsVar(aActionType, i);
-			// Since some vars are optional, the below allows them all to be blank or
-			// not present in the arg list.  If a mandatory var is blank at this stage,
-			// it's okay because all mandatory args are validated to be non-blank elsewhere:
-			if (this_new_arg.type != ARG_TYPE_NORMAL)
-			{
-				if (!*this_aArg)
-					// An optional input or output variable has been omitted, so indicate
-					// that this arg is not a variable, just a normal empty arg.  Functions
-					// such as ListLines() rely on this having been done because they assume,
-					// for performance reasons, that args marked as variables really are
-					// variables.  In addition, ExpandArgs() relies on this having been done.
-					this_new_arg.type = ARG_TYPE_NORMAL;
-				else
-				{
-					// ARG_TYPE_INPUT_VAR is never encountered at this stage; it is only used by
-					// certain optimizations in ExpressionToPostfix(), which comes later.
-					// ARG_TYPE_OUTPUT_VAR is now used only for ACT_FOR, ACT_CATCH and ACT_ASSIGNEXPR,
-					// but a dynamic assignment like %x%:=y becomes ACT_EXPRESSION since x can be any
-					// expression.  Support for %x% in FOR and CATCH doesn't seem useful, so it's
-					// dropped to simplify some things and perhaps allow more optimizations.
-					if (   !(target_var = FindOrAddVar(this_aArg))   )
-						return FAIL;  // The above already displayed the error.
-					// Currently relying on PreparseVarRefs() to do this check so that LineError() is used:
-					//if (target_var->IsReadOnly())
-					//	return VarIsReadOnlyError(target_var, aActionType == ACT_ASSIGNEXPR ? INVALID_ASSIGNMENT : INVALID_OUTPUT_VAR);
-					// Rather than removing this arg from the list altogether -- which would disturb
-					// the ordering and hurt the maintainability of the code -- the next best thing
-					// in terms of saving memory is to store Var::mName in place of the arg's text
-					// if that arg is a pure variable (i.e. since the name of the variable is already
-					// stored in persistent memory, we don't need to allocate more memory):
-					this_new_arg.text = target_var->mName;
-					this_new_arg.length = (ArgLengthType)_tcslen(target_var->mName);
-					this_new_arg.deref = (DerefType *)target_var;
-					continue;
-				}
-			}
-			else // this_new_arg.type == ARG_TYPE_NORMAL (excluding those input/output_vars that were converted to normal because they were blank, above).
-			{
-				if (aAllArgsAreExpressions)
-				{
-					// Caller has determined all args should be expressions.
-					this_new_arg.is_expression = true;
-				}
-			}
-
-			if (!*this_aArg) // Some later optimizations rely on this check.
-				this_new_arg.is_expression = false; // Might already be false.
+			// Determine whether this arg is ARG_TYPE_NORMAL or ARG_TYPE_OUTPUT_VAR.  Blank args are
+			// set to ARG_TYPE_NORMAL for maintainability, so ARG_TYPE_OUTPUT_VAR always has a non-null
+			// var at runtime.  ARG_TYPE_INPUT_VAR is never encountered at this stage; it is only used
+			// by certain optimizations in ExpressionToPostfix(), which comes later.
+			this_new_arg.type = *this_aArg ? Line::ArgIsVar(aActionType, i) : ARG_TYPE_NORMAL;
+			
+			// All non-blank args are handled by ExpressionToPostfix, except where caller has indicated
+			// this action type does not accept an expression (e.g. "goto label").
+			this_new_arg.is_expression = *this_aArg && aAllArgsAreExpressions;
 
 			// So that it can be passed to Malloc(), first update the length to match what the text will be
 			// (if the alloc fails, an inaccurate length won't matter because it's an program-abort situation).
@@ -5794,16 +5750,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 			this_deref.marker = op_begin;
 			this_deref.length = (DerefLengthType)operand_length;
 			this_deref.type = is_function ? DT_FUNC : DT_VAR;
-			if (is_function)
-				// Set to NULL to catch bugs.  It must and will be filled in at a later stage
-				// because the setting of each function's mJumpToLine relies upon the fact that
-				// functions are added to the linked list only upon being formally defined
-				// so that the most recently defined function is always last in the linked
-				// list, awaiting its mJumpToLine that will appear beneath it.
-				this_deref.func = NULL;
-			else // It's a variable rather than a function.
-				if (   !(this_deref.var = FindOrAddVar(op_begin, operand_length))   )
-					return FAIL; // The called function already displayed the error.
+			this_deref.var = nullptr; // To be resolved later.  Also sets func via union.
 		}
 	}
 	if (aPos)
@@ -8630,6 +8577,8 @@ unquoted_literal:
 		else // this_deref is a variable.
 		{
 			CHECK_AUTO_CONCAT;
+			if (!(this_deref_ref.var = g_script.FindOrAddVar(this_deref_ref.marker, this_deref_ref.length)))
+				return FAIL;
 			// Use SYM_VAR for both built-in and normal vars at this stage, since some normal vars
 			// might become read-only later on anyway.  This simplifies some parts, as non-dynamic
 			// references are always SYM_VAR and SYM_DYNAMIC has only one meaning.  A later stage
@@ -8651,6 +8600,18 @@ unquoted_literal:
 		// infix_size is 0 in this case, so cannot continue.  An alternative would be to treat this as a blank
 		// parameter, but it's probably more useful to treat it as an error (maybe "`n" was intended).
 		return LineError(ERR_EXPR_SYNTAX);
+
+	if (aArg.type == ARG_TYPE_OUTPUT_VAR)
+	{
+		if (infix_count == 1 && infix->symbol == SYM_DYNAMIC && infix->var->IsReadOnly())
+			return VarIsReadOnlyError(infix->var, Script::INVALID_OUTPUT_VAR);
+		else if (infix_count != 1 || infix->symbol != SYM_VAR)
+			return LineError(ERR_EXPR_SYNTAX, FAIL, aArg.text);
+		// This var is an output variable.  No further processing needed:
+		aArg.is_expression = false;
+		aArg.deref = infix->deref;
+		return OK;
+	}
 
 	// Terminate the array with a special item.  This allows infix-to-postfix conversion to do a faster
 	// traversal of the infix array.
@@ -13269,14 +13230,6 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 		Var *global_var = FindVar(var.mName, 0, FINDVAR_GLOBAL);
 		if (!global_var) // No global variable with that name.
 			continue;
-		if (global_var->IsSuperGlobal())
-		{
-			// Make this local variable an alias for the super-global. Above has already
-			// verified this var was not declared and therefore isn't a function parameter.
-			ConvertLocalToAlias(var, global_var, v, vars, var_count);
-			--v; // Counter the loop's increment since var has been removed.
-		}
-		else
 		// Since this undeclared local variable has the same name as a global, there's
 		// a chance the user intended it to be global. So consider warning the user:
 		MaybeWarnLocalSameAsGlobal(aFunc, var);
