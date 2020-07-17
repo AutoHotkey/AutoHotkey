@@ -758,11 +758,6 @@ void Var::Free(int aWhenToFree, bool aExcludeAliasesAndRequireInit)
 		return;
 	}
 
-	// Must check this one first because caller relies not only on var not being freed in this case,
-	// but also on its contents not being set to an empty string:
-	if (aWhenToFree == VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC && IsStatic())
-		return; // This is the only case in which the variable ISN'T made blank.
-
 	if (mAttrib & VAR_ATTRIB_IS_OBJECT)
 		ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
 
@@ -805,7 +800,7 @@ void Var::Free(int aWhenToFree, bool aExcludeAliasesAndRequireInit)
 			// aWhenToFree==VAR_FREE_IF_LARGE: the memory is not freed if it is a small area because
 			// it might help reduce memory fragmentation and improve performance in cases where
 			// the memory will soon be needed again (in which case one free+malloc is saved).
-			if (   aWhenToFree < VAR_ALWAYS_FREE_LAST  // Fixed for v1.0.40.07 to prevent memory leak in recursive script-function calls.
+			if (   aWhenToFree == VAR_ALWAYS_FREE
 				|| aWhenToFree == VAR_FREE_IF_LARGE && mByteCapacity > (4 * 1024)   )
 			{
 				free(mByteContents);
@@ -1024,8 +1019,7 @@ ResultType Var::BackupFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &aV
 	// Note that Backup() does not make the variable empty after backing it up because that is something
 	// that must be done by our caller at a later stage.
 	for (i = 0; i < aFunc.mVars.mCount; ++i)
-		if (!aFunc.mVars.mItem[i]->IsStatic()) // Don't bother backing up statics because they won't need to be restored.
-			aFunc.mVars.mItem[i]->Backup(aVarBackup[aVarBackupCount++]);
+		aFunc.mVars.mItem[i]->Backup(aVarBackup[aVarBackupCount++]);
 	return OK;
 }
 
@@ -1084,7 +1078,7 @@ void Var::FreeAndRestoreFunctionVars(UserFunc &aFunc, VarBkp *&aVarBackup, int &
 {
 	int i;
 	for (i = 0; i < aFunc.mVars.mCount; ++i)
-		aFunc.mVars.mItem[i]->Free(VAR_ALWAYS_FREE_BUT_EXCLUDE_STATIC, true); // Pass "true" to exclude aliases, since their targets should not be freed (they don't belong to this function). Also resets the "uninitialized" attribute.
+		aFunc.mVars.mItem[i]->Free(VAR_ALWAYS_FREE, true); // Pass "true" to exclude aliases, since their targets should not be freed (they don't belong to this function). Also resets the "uninitialized" attribute.
 
 	// The freeing (above) MUST be done prior to the restore-from-backup below (otherwise there would be
 	// a memory leak).  Static variables are never backed up and thus do not exist in the aVarBackup array.

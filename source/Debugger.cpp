@@ -937,13 +937,17 @@ DEBUGGER_COMMAND(Debugger::context_get)
 		}
 	}
 
-	VarList *vars = nullptr;
+	// Two lists are used to support static and non-static variables, both of which
+	// are seen to be in "local" context, since they are in the same namespace (and
+	// it never makes sense to have a static and non-static with the same name).
+	// Non-static variables are expected to be used more often, so are listed first.
+	VarList *var_lists[2] = { nullptr, nullptr };
 	VarBkp *bkp = NULL, *bkp_end = NULL;
 	
 	if (context_id == PC_Local)
-		mStack.GetLocalVars(depth, vars, bkp, bkp_end);
+		mStack.GetLocalVars(depth, var_lists[0], var_lists[1], bkp, bkp_end);
 	else if (context_id == PC_Global)
-		vars = g_script.GlobalVars();
+		var_lists[0] = g_script.GlobalVars();
 	else
 		return DEBUGGER_E_INVALID_CONTEXT;
 
@@ -957,15 +961,21 @@ DEBUGGER_COMMAND(Debugger::context_get)
 	prop.max_data = mMaxPropertyData;
 	prop.pagesize = mMaxChildren;
 	prop.max_depth = mMaxDepth;
-	int var_count = vars ? vars->mCount : 0;
-	for (int i = 0; i < var_count; ++i)
-		if (  (err = GetPropertyInfo(*vars->mItem[i], prop, value_buf))
-			|| (err = WritePropertyXml(prop, vars->mItem[i]->mName))  )
-			break;
 	for ( ; bkp < bkp_end; ++bkp)
 		if (  (err = GetPropertyInfo(*bkp, prop, value_buf))
 			|| (err = WritePropertyXml(prop, bkp->mVar->mName))  )
 			break;
+	for (int j = 0; j < _countof(var_lists); ++j)
+	{
+		if (!var_lists[j])
+			continue;
+		Var **vars = var_lists[j]->mItem;
+		int var_count = var_lists[j]->mCount;
+		for (int i = 0; i < var_count; ++i)
+			if (  (err = GetPropertyInfo(*vars[i], prop, value_buf))
+				|| (err = WritePropertyXml(prop, vars[i]->mName))  )
+				break;
+	}
 	free(value_buf);
 	if (err)
 		return err;
@@ -1382,9 +1392,9 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 
 	if (aDepth > 0 && aVarScope != FINDVAR_GLOBAL)
 	{
-		VarList *vars = nullptr;
+		VarList *vars = nullptr, *static_vars = nullptr;
 		VarBkp *bkps = nullptr, *bkps_end;
-		mStack.GetLocalVars(aDepth, vars, bkps, bkps_end);
+		mStack.GetLocalVars(aDepth, vars, static_vars, bkps, bkps_end);
 		if (bkps)
 		{
 			for ( ; ; ++bkps)
@@ -1403,9 +1413,13 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			}
 		}
 		else if (vars)
+			var = vars->Find(name);
+		if (!varbkp && !var)
 		{
-			if (  !(var = vars->Find(name))  )
-				// No local var at that depth, so make sure to not return the wrong local.
+			// No local var or backup found, so check static vars.  Can't rely on FindVar
+			// to do this since it might search the wrong function (because aDepth > 0).
+			if (  !static_vars || !(var = static_vars->Find(name))  )
+				// No local var at this depth, so make sure to not return the wrong local.
 				aVarScope = FINDVAR_GLOBAL;
 		}
 	}
@@ -2735,7 +2749,7 @@ LPCTSTR DbgStack::Entry::Name()
 }
 
 
-void DbgStack::GetLocalVars(int aDepth,  VarList *&aVars, VarBkp *&aBkp, VarBkp *&aBkpEnd)
+void DbgStack::GetLocalVars(int aDepth,  VarList *&aVars, VarList *&aStaticVars, VarBkp *&aBkp, VarBkp *&aBkpEnd)
 {
 	DbgStack::Entry *se = mTop - aDepth;
 	for (;;)
@@ -2747,6 +2761,7 @@ void DbgStack::GetLocalVars(int aDepth,  VarList *&aVars, VarBkp *&aBkp, VarBkp 
 		--se;
 	}
 	auto &func = *se->udf->func;
+	aStaticVars = &func.mStaticVars;
 	if (func.mInstances > 1 && aDepth > 0)
 	{
 		while (++se <= mTop)

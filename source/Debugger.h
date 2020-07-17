@@ -172,7 +172,7 @@ struct DbgStack
 	void Push(NativeFunc *aFunc);
 	void Push(UDFCallInfo *aRecurse);
 
-	void GetLocalVars(int aDepth, VarList *&aVars, VarBkp *&aBkp, VarBkp *&aBkpEnd);
+	void GetLocalVars(int aDepth, VarList *&aVars, VarList *&aStaticVars, VarBkp *&aBkp, VarBkp *&aBkpEnd);
 };
 
 #define DEBUGGER_STACK_PUSH(aWhat)	g_Debugger.mStack.Push(aWhat);

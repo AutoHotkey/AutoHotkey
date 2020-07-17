@@ -1644,7 +1644,8 @@ public:
 	Label *mFirstLabel = nullptr, *mLastLabel = nullptr; // Linked list of private labels.
 	UserFunc *mOuterFunc = nullptr; // Func which contains this func (usually nullptr).
 	FuncList mFuncs {}; // List of nested functions (usually empty).
-	VarList mVars {}; // Sorted list of local variables.
+	VarList mVars {}; // Sorted list of non-static local variables.
+	VarList mStaticVars {}; // Sorted list of static variables.
 	Var **mGlobalVar = nullptr; // Array of global declarations.
 	Var **mDownVar = nullptr, **mUpVar = nullptr;
 	int *mUpVarIndex = nullptr;
@@ -1676,7 +1677,11 @@ public:
 	// Find a local (not global or nonlocal/outer) variable.
 	Var *FindLocalVar(LPCTSTR aName, size_t aNameLength)
 	{
-		return mVars.Find(aName, aNameLength);
+		if (Var *var = mVars.Find(aName, aNameLength))
+			return var;
+		if (Var *var = mStaticVars.Find(aName, aNameLength))
+			return var;
+		return nullptr;
 	}
 
 	bool AllowSuperGlobals()

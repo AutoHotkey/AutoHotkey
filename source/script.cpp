@@ -1407,16 +1407,6 @@ void ReleaseVarObjects(VarList &aVars)
 	}
 }
 
-void ReleaseStaticVarObjects(VarList &aVars)
-{
-	for (int v = 0; v < aVars.mCount; ++v)
-	{
-		Var &var = *aVars.mItem[v];
-		if (var.IsStatic() && var.IsObject()) // For consistency, only free static vars (see below).
-			var.ReleaseObject();
-	}
-}
-
 void ReleaseStaticVarObjects(FuncList &aFuncs)
 {
 	for (int i = 0; i < aFuncs.mCount; ++i)
@@ -1428,7 +1418,7 @@ void ReleaseStaticVarObjects(FuncList &aFuncs)
 		// calls and all tokens in the 'stack' of each currently executing expression, currently
 		// only static and global variables are released.  It seems best for consistency to also
 		// avoid releasing top-level non-static local variables (i.e. which aren't in var backups).
-		ReleaseStaticVarObjects(f.mVars);
+		ReleaseVarObjects(f.mStaticVars);
 		if (f.mFuncs.mCount)
 			ReleaseStaticVarObjects(f.mFuncs);
 	}
@@ -7299,15 +7289,23 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int aScope
 	bool search_local = (aScope & VAR_LOCAL) && g.CurrentFunc;
 	// Above has ensured that g.CurrentFunc!=NULL whenever search_local==true.
 
-	VarList &vars = search_local ? g.CurrentFunc->mVars : *GlobalVars();
-
-	if (Var *found = vars.Find(var_name, apInsertPos))
-		return found;
-
-	// Since above didn't return, no match was found and apInsertPos was set to the position within
-	// apList where aVarName should be inserted to keep the list sorted.
-	if (apList)
-		*apList = &vars;
+	if (search_local)
+	{
+		auto &func = *g.CurrentFunc;
+		int nonstatic_pos, static_pos;
+		if (Var *found = func.mVars.Find(var_name, &nonstatic_pos)) return found;
+		if (Var *found = func.mStaticVars.Find(var_name, &static_pos)) return found;
+		bool add_static = (aScope & VAR_LOCAL_STATIC)
+			|| aScope == FINDVAR_DEFAULT && (func.mDefaultVarType & VAR_LOCAL_STATIC);
+		if (apList) *apList = add_static ? &func.mStaticVars : &func.mVars;
+		if (apInsertPos) *apInsertPos = add_static ? static_pos : nonstatic_pos;
+	}
+	else
+	{
+		auto varlist = GlobalVars();
+		if (Var *found = varlist->Find(var_name, apInsertPos)) return found;
+		if (apList) *apList = varlist;
+	}
 
 	// Since no match was found, if this is a local fall back to searching outer functions and the
 	// list of globals if the caller didn't insist on a particular type:
@@ -7348,11 +7346,11 @@ Var *Script::FindUpVar(LPTSTR aVarName, UserFunc &aInner, ResultType *aDisplayEr
 		return nullptr;
 	auto &outer = *aInner.mOuterFunc;
 	Var *outer_var;
+	if (  (outer_var = outer.mStaticVars.Find(aVarName))  )
+		return outer_var;
 	if (  !(outer_var = outer.mVars.Find(aVarName))
 		&& !(outer.mOuterFunc && (outer_var = FindUpVar(aVarName, outer, aDisplayError)))  )
 		return nullptr;
-	if (!outer_var->IsNonStaticLocal())
-		return outer_var;
 	// Since this local variable is not static, things need to be set up so that the inner
 	// function will capture it as an upvar at the appropriate time.
 	if (mIsReadyToExecute)
@@ -13378,6 +13376,14 @@ ResultType Script::PreparseVarRefs()
 
 
 
+LPTSTR ListVarsHelper(LPTSTR aBuf, int aBufSize, LPTSTR aBuf_orig, VarList &aVars)
+{
+	for (int i = 0; i < aVars.mCount; ++i)
+		if (aVars.mItem[i]->Type() == VAR_NORMAL) // Don't bother showing VAR_CONSTANT; ToText() doesn't support VAR_VIRTUAL.
+			aBuf = aVars.mItem[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
+	return aBuf;
+}
+
 LPTSTR Script::ListVars(LPTSTR aBuf, int aBufSize) // aBufSize should be an int to preserve negatives from caller (caller relies on this).
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // Translates this script's list of variables into text equivalent, putting the result
@@ -13387,21 +13393,26 @@ LPTSTR Script::ListVars(LPTSTR aBuf, int aBufSize) // aBufSize should be an int 
 	auto current_func = g->CurrentFunc;
 	if (current_func)
 	{
-		// This definition might help compiler string pooling by ensuring it stays the same for both usages:
+		// This definition might help compiler string pooling by ensuring it stays the same for all usages:
 		#define LIST_VARS_UNDERLINE _T("\r\n--------------------------------------------------\r\n")
-		// Start at the oldest and continue up through the newest:
-		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("Local Variables for %s()%s"), current_func->mName, LIST_VARS_UNDERLINE);
-		auto &vars = current_func->mVars; // For performance.
-		for (int i = 0; i < vars.mCount; ++i)
-			if (vars.mItem[i]->Type() == VAR_NORMAL) // Don't bother showing VAR_CONSTANT; ToText() doesn't support VAR_VIRTUAL.
-				aBuf = vars.mItem[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
+		if (current_func->mVars.mCount || !current_func->mStaticVars.mCount)
+		{
+			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("Local Variables for %s()%s")
+				, current_func->mName, LIST_VARS_UNDERLINE);
+			aBuf = ListVarsHelper(aBuf, aBufSize, aBuf_orig, current_func->mVars);
+		}
+		do {
+			if (current_func->mStaticVars.mCount)
+			{
+				aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%sStatic Variables for %s()%s")
+					, (aBuf > aBuf_orig) ? _T("\r\n\r\n") : _T(""), current_func->mName, LIST_VARS_UNDERLINE);
+				aBuf = ListVarsHelper(aBuf, aBufSize, aBuf_orig, current_func->mStaticVars);
+			}
+		} while (current_func = current_func->mOuterFunc);
 	}
 	aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%sGlobal Variables (alphabetical)%s")
-		, current_func ? _T("\r\n\r\n") : _T(""), LIST_VARS_UNDERLINE);
-	// Start at the oldest and continue up through the newest:
-	for (int i = 0; i < mVars.mCount; ++i)
-		if (mVars.mItem[i]->Type() == VAR_NORMAL) // Don't bother showing VAR_CONSTANT; ToText() doesn't support VAR_VIRTUAL.
-			aBuf = mVars.mItem[i]->ToText(aBuf, BUF_SPACE_REMAINING, true);
+		, (aBuf > aBuf_orig) ? _T("\r\n\r\n") : _T(""), LIST_VARS_UNDERLINE);
+	aBuf = ListVarsHelper(aBuf, aBufSize, aBuf_orig, mVars);
 	return aBuf;
 }
 
