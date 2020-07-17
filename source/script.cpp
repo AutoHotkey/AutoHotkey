@@ -4402,9 +4402,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				{
 					// Detect conflicting declarations:
 					var = g->CurrentFunc->FindLocalVar(item, var_name_length);
-					if (var && (var->Scope() == declare_type // Exact same declaration type.
-						// Declaring a var previously resolved but not declared, with the same scope:
-						|| (var->Scope() & (VAR_DECLARED|VAR_LOCAL|VAR_GLOBAL)) == (declare_type & (VAR_LOCAL|VAR_GLOBAL))))
+					if (var && var->Scope() == declare_type) // Exact same declaration type.
 						var = NULL; // Allow this redeclaration; e.g. "local x := 1 ... local x := 2" down two different code paths.
 					if (!var && declare_type != VAR_DECLARE_GLOBAL)
 					{
