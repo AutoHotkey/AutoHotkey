@@ -10455,8 +10455,14 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 		case ACT_STATIC:
 			if (result != OK)
 				return result;
+			// If this is the function's first line, must update mJumpToLine so that it will skip this one.
 			if (g.CurrentFunc && g.CurrentFunc->mJumpToLine == line)
 				g.CurrentFunc->mJumpToLine = line->mNextLine;
+			// Update any If/Else/Loop or similar (there can be multiple nested) that immediately precedes
+			// this line so that they do not jump to this one after executing their body.
+			for (Line *parent = line->mPrevLine->mParentLine; parent && parent->mRelatedLine == line; parent = parent->mParentLine)
+				parent->mRelatedLine = line->mNextLine;
+			// Remove this line from the main list, so that it won't be executed again during normal flow.
 			line->mPrevLine->mNextLine = line->mNextLine;
 			line->mNextLine->mPrevLine = line->mPrevLine;
 			if (aMode == ONLY_ONE_LINE)
