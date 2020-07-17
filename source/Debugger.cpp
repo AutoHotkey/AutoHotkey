@@ -943,7 +943,7 @@ DEBUGGER_COMMAND(Debugger::context_get)
 	if (context_id == PC_Local)
 		mStack.GetLocalVars(depth, vars, bkp, bkp_end);
 	else if (context_id == PC_Global)
-		vars = &g_script.mVars;
+		vars = g_script.GlobalVars();
 	else
 		return DEBUGGER_E_INVALID_CONTEXT;
 

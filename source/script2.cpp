@@ -4762,11 +4762,11 @@ UserFunc* Script::CreateHotFunc(Var* aFuncGlobalVar[], int aGlobalVarCount)
 	func->mGlobalVar = aFuncGlobalVar;
 	mGlobalVarCountMax = aGlobalVarCount;
 	
-	g->CurrentFunc = func; // Must do this before calling FindOrAddVar
+	g->CurrentFunc = func; // Must do this before calling AddVar
 
 	// Add one parameter to hold the name of the hotkey/hotstring when triggered:
 	if (	!(func->mParam = (FuncParam*)SimpleHeap::Malloc(sizeof FuncParam))
-		||	!(func->mParam[0].var = FindOrAddVar(_T("ThisHotkey"), 10, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM)) )
+		||	!(func->mParam[0].var = AddVar(_T("ThisHotkey"), 10, &func->mVars, 0, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM)) )
 		return nullptr;
 
 	func->mParam[0].default_type = PARAM_DEFAULT_NONE;

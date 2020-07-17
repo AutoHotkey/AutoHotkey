@@ -1506,6 +1506,7 @@ struct ScriptItemList
 	int mCount = 0, mCountMax = 0;
 
 	T *Find(LPCTSTR aName, int *apInsertPos = nullptr);
+	T *Find(LPCTSTR aName, size_t aNameLength, int *apInsertPos = nullptr);
 	ResultType Insert(T *aItem, int aInsertPos);
 	ResultType Alloc(int aAllocCount);
 };
@@ -1671,6 +1672,12 @@ public:
 	}
 
 	ResultType ValidateDownVar(Var &aVar);
+
+	// Find a local (not global or nonlocal/outer) variable.
+	Var *FindLocalVar(LPCTSTR aName, size_t aNameLength)
+	{
+		return mVars.Find(aName, aNameLength);
+	}
 
 	bool AllowSuperGlobals()
 	{
@@ -3022,6 +3029,11 @@ public:
 	Var *FindUpVar(LPTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError);
 	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope);
 	static VarEntry *GetBuiltInVar(LPTSTR aVarName);
+
+	// Alias to improve clarity and reduce code size (if compiler chooses not to inline; due to how parameter defaults work):
+	Var *FindGlobalVar(LPTSTR aVarName, size_t aVarNameLength = 0) { return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL); }
+	// For maintainability.
+	VarList *GlobalVars() { return &mVars; }
 
 	ResultType DerefInclude(LPTSTR &aOutput, LPTSTR aBuf);
 
