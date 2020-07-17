@@ -10088,6 +10088,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 					break; // It's a normal Exit/Return.
 				// It's from an automatic AddLine(), so should be excluded.
 			case ACT_BLOCK_END: // There's nothing following this line in the same block.
+			case ACT_CASE:
 				continue;
 			}
 			if (IsLabelTarget(next_line))
