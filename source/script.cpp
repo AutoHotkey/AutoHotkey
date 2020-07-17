@@ -4497,20 +4497,11 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				TCHAR orig_char = *terminate_here;
 				*terminate_here = '\0'; // Temporarily terminate (it might already be the terminator, but that's harmless).
 
-				// PERFORMANCE: As of v1.0.48 (with cached binary numbers and pre-postfixed expressions),
-				// assignments of literal integers to variables are up to 10% slower when done as a combined
-				// (comma-separated) expression rather than each as a separate line.  However,  this slowness
-				// eventually disappears and may even reverse as more and more such expressions are combined
-				// into a single expression (e.g. the following is almost the same speed either way:
-				// x:=1,y:=22,z:=333,a:=4444,b:=55555).  By contrast, assigning a literal string, another
-				// variable, or a complex expression is the opposite: they are always faster when done via
-				// commas, and they continue to get faster and faster as more expressions are merged into a
-				// single comma-separated expression. In light of this, a future version could combine ONLY
-				// those declarations that have initializers into a single comma-separately expression rather
-				// than making a separate expression for each.  However, since it's not always faster to do
-				// so (e.g. x:=0,y:=1 is faster as separate statements), and since it is somewhat rare to
-				// have a long chain of initializers, and since these performance differences are documented,
-				// it might not be worth changing.
+				// Performance note: Simple assignments of a literal number or string to a variable currently
+				// perform better standalone than combined with the comma operator.  This is almost certainly
+				// due to optimizations which avoid the need to call ExpandExpression for those cases.
+				// If this ever changes, note that the braces added below are needed for ACT_STATIC regardless
+				// of how many initializers there are, due to the way it removes its own Line after execution.
 				if (belongs_to_line_above && !open_brace_was_added) // v1.0.46.01: Put braces to allow initializers to work even directly under an IF/ELSE/LOOP.
 				{
 					if (!AddLine(ACT_BLOCK_BEGIN))
