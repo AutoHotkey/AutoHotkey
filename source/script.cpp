@@ -13165,8 +13165,7 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 
 void Script::WarnUninitializedVar(Var *var)
 {
-	bool isGlobal = !var->IsLocal();
-	WarnMode warnMode = isGlobal ? g_Warn_UseUnsetGlobal : g_Warn_UseUnsetLocal;
+	WarnMode warnMode = var->IsLocal() ? g_Warn_UseUnsetLocal : g_Warn_UseUnsetGlobal;
 	if (!warnMode)
 		return;
 
@@ -13177,14 +13176,10 @@ void Script::WarnUninitializedVar(Var *var)
 	if (warnMode == WARNMODE_MSGBOX)
 		var->MarkInitialized();
 
-	bool isNonStaticLocal = var->IsNonStaticLocal();
-	LPCTSTR varClass = isNonStaticLocal ? _T("local") : (isGlobal ? _T("global") : _T("static"));
-	LPCTSTR sameNameAsGlobal = (isNonStaticLocal && FindGlobalVar(var->mName)) ? _T(" with same name as a global") : _T("");
-	TCHAR buf[DIALOG_TITLE_SIZE], *cp = buf;
-
-	int buf_space_remaining = (int)_countof(buf);
-	sntprintf(cp, buf_space_remaining, _T("%s  (a %s variable%s)"), var->mName, varClass, sameNameAsGlobal);
-
+	bool isUndeclaredLocal = (var->Scope() & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL;
+	LPCTSTR sameNameAsGlobal = isUndeclaredLocal && FindGlobalVar(var->mName) ? _T("  (same name as a global)") : _T("");
+	TCHAR buf[DIALOG_TITLE_SIZE];
+	sntprintf(buf, _countof(buf), _T("%s %s%s"), Var::DeclarationType(var->Scope()), var->mName, sameNameAsGlobal);
 	ScriptWarning(warnMode, WARNING_USE_UNSET_VARIABLE, buf);
 }
 
