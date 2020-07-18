@@ -7327,7 +7327,7 @@ Var *Script::FindUpVar(LPTSTR aVarName, UserFunc &aInner, ResultType *aDisplayEr
 	// At this point aInner doesn't have a variable by this name, so create one:
 	int insert_pos;
 	aInner.mVars.Find(aVarName, &insert_pos);
-	Var *inner_var = AddVar(aVarName, 0, &aInner.mVars, insert_pos, VAR_LOCAL);
+	Var *inner_var = AddVar(aVarName, 0, &aInner.mVars, insert_pos, VAR_LOCAL | VAR_DECLARED); // VAR_DECLARED suppresses checking for a global for #Warn LocalSameAsGlobal or when #Warn UseUnset is triggered.
 	if (!inner_var)
 	{
 		if (aDisplayError)
