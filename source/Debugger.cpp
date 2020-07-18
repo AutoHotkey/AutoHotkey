@@ -1390,7 +1390,12 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 	if (name_length > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name, DISPLAY_NO_ERROR))
 		return DEBUGGER_E_INVALID_OPTIONS;
 
-	if (aDepth > 0 && aVarScope != FINDVAR_GLOBAL)
+	if (aVarScope == FINDVAR_GLOBAL)
+	{
+		// Currently global context is the same at all depths.
+		aDepth = 0; // Allow FindOrAddVar() below.
+	}
+	else if (aDepth > 0)
 	{
 		VarList *vars = nullptr, *static_vars = nullptr;
 		VarBkp *bkps = nullptr, *bkps_end;
@@ -1418,14 +1423,13 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		{
 			// No local var or backup found, so check static vars.  Can't rely on FindVar
 			// to do this since it might search the wrong function (because aDepth > 0).
-			if (  !static_vars || !(var = static_vars->Find(name))  )
-				// No local var at this depth, so make sure to not return the wrong local.
-				aVarScope = FINDVAR_GLOBAL;
+			if (static_vars)
+				var = static_vars->Find(name);
 		}
 	}
 
 	// If we're allowed to create variables
-	if (  !varbkp && !var
+	if (  !var && !varbkp && !aDepth
 		&& (aSetValue
 		// or this variable doesn't exist
 		|| !(var = g_script.FindVar(name, name_length, aVarScope))
