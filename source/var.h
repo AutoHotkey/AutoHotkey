@@ -234,7 +234,6 @@ public:
 	// string to it.  There is now some code there that tries to detect when that happens.
 	static TCHAR sEmptyString[1]; // See above.
 
-	VarSizeType Get(LPTSTR aBuf = NULL);
 	void Get(ResultToken &aResultToken);
 	ResultType AssignHWND(HWND aWnd);
 	ResultType Assign(Var &aVar);
