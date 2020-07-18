@@ -4736,7 +4736,7 @@ LPTSTR Script::DefaultDialogTitle()
 	return (mFileName && *mFileName) ? mFileName : T_AHK_NAME_VERSION;
 }
 
-UserFunc* Script::CreateHotFunc(Var* aFuncGlobalVar[], int aGlobalVarCount)
+UserFunc* Script::CreateHotFunc()
 {
 	// Should only be called during load time.
 	// Creates a new function for hotkeys and hotstrings.
@@ -4759,8 +4759,6 @@ UserFunc* Script::CreateHotFunc(Var* aFuncGlobalVar[], int aGlobalVarCount)
 		ScriptError(ERR_OUTOFMEM);
 		return nullptr;
 	}
-	func->mGlobalVar = aFuncGlobalVar;
-	mGlobalVarCountMax = aGlobalVarCount;
 	
 	g->CurrentFunc = func; // Must do this before calling AddVar
 

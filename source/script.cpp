@@ -1848,9 +1848,6 @@ ResultType Script::LoadIncludedFile(TextStream *fp)
 	bool suffix_has_tilde, hook_is_mandatory, hotstring_execute;
 	ResultType hotkey_validity;
 
-	#define MAX_FUNC_VAR_GLOBALS 2000
-	Var *func_global_var[MAX_FUNC_VAR_GLOBALS];
-
 	// Init both for main file and any included files loaded by this function:
 	mCurrFileIndex = source_file_index;  // source_file_index is kept on the stack due to recursion (from #include).
 
@@ -2150,7 +2147,7 @@ process_completed_line:
 
 						auto make_remap_hotkey = [&](LPTSTR aKey)
 						{
-							if (!CreateHotFunc(func_global_var, MAX_FUNC_VAR_GLOBALS))
+							if (!CreateHotFunc())
 									return FAIL;
 							hk = Hotkey::FindHotkeyByTrueNature(aKey, suffix_has_tilde, hook_is_mandatory);
 							if (hk)
@@ -2270,7 +2267,7 @@ process_completed_line:
 			auto set_last_hotfunc = [&]()
 			{
 				if (!mLastHotFunc)
-					return CreateHotFunc(func_global_var, _countof(func_global_var));
+					return CreateHotFunc();
 				else
 					return mLastHotFunc;
 			};
@@ -2577,7 +2574,7 @@ process_completed_line:
 				{
 					LPTSTR dot = _tcschr(mClassPropertyDef, '.');
 					dot[1] = *buf; // Replace the x in property.xet(params).
-					if (!DefineClassPropertyXet(buf, cp, func_global_var))
+					if (!DefineClassPropertyXet(buf, cp))
 						return FAIL;
 					goto continue_main_loop;
 				}
@@ -2617,7 +2614,7 @@ process_completed_line:
 			}
 			if (IsFunctionDefinition(id, next_buf))
 			{
-				if (!DefineFunc(id, func_global_var, is_static))
+				if (!DefineFunc(id, is_static))
 					return FAIL;
 				goto continue_main_loop;
 			}
@@ -2633,7 +2630,7 @@ process_completed_line:
 				}
 				if (!*cp || *cp == '[' || *cp == '{' || (*cp == '=' && cp[1] == '>')) // Property or invalid.
 				{
-					if (!DefineClassProperty(id, is_static, func_global_var, buf_has_brace))
+					if (!DefineClassProperty(id, is_static, buf_has_brace))
 						return FAIL;
 					if (!buf_has_brace)
 					{
@@ -2649,7 +2646,7 @@ process_completed_line:
 		}
 		else if (IsFunctionDefinition(buf, next_buf))
 		{
-			if (!DefineFunc(buf, func_global_var))
+			if (!DefineFunc(buf))
 				return FAIL;
 			goto continue_main_loop;
 		}
@@ -3740,8 +3737,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// Create a function to return the result of the expression
 		// specified by "parameter":
 
-		Var* func_global_var[MAX_FUNC_VAR_GLOBALS];
-		CreateHotFunc(func_global_var, MAX_FUNC_VAR_GLOBALS);
+		CreateHotFunc();
 		
 		ResultToken result_token;
 		if (!Hotkey::IfExpr(NULL, mLastHotFunc, result_token))		// Set the new criterion.
@@ -4331,19 +4327,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				if (mNextLineIsFunctionBody)
 				{
 					if (declare_type == VAR_DECLARE_LOCAL)
-					{
 						// v1.1.27: "local" by itself restricts globals to only those declared inside the function.
 						declare_type |= VAR_FORCE_LOCAL;
-						if (auto outer = g->CurrentFunc->mOuterFunc)
-						{
-							// Exclude all global declarations of the outer function.  This relies on the lack of
-							// duplicate checking below (so that a re-declaration above this line will take effect
-							// even if it was already declared in the outer function).
-							g->CurrentFunc->mGlobalVar += outer->mGlobalVarCount;
-							g->CurrentFunc->mGlobalVarCount -= outer->mGlobalVarCount;
-							mGlobalVarCountMax -= outer->mGlobalVarCount;
-						}
-					}
 					// v1.1.27: Allow "local" and "static" to be combined, leaving the restrictions on globals in place.
 					else if (g->CurrentFunc->mDefaultVarType == (VAR_DECLARE_LOCAL | VAR_FORCE_LOCAL) && declare_type == VAR_DECLARE_STATIC)
 					{
@@ -4386,53 +4371,75 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				LPTSTR item_end = find_identifier_end(item + 1);
 				var_name_length = (VarSizeType)(item_end - item);
 
-				Var *var = NULL;
-				int i;
+				Var *var = nullptr;
+				Var *global_var = nullptr;
+				if (declare_type & VAR_GLOBAL)
+				{
+					// This is done separately since it may also need to be added to mStaticVars:
+					if (  !(global_var = FindOrAddVar(item, var_name_length, declare_type))  )
+						return FAIL; // It already displayed the error.
+				}
+
 				if (g->CurrentFunc)
 				{
-					// Detect conflicting declarations:
-					var = g->CurrentFunc->FindLocalVar(item, var_name_length);
-					if (var && var->Scope() == declare_type) // Exact same declaration type.
-						var = NULL; // Allow this redeclaration; e.g. "local x := 1 ... local x := 2" down two different code paths.
-					if (!var && declare_type != VAR_DECLARE_GLOBAL)
+					VarList &varlist = (declare_type & (VAR_LOCAL_STATIC | VAR_GLOBAL)) ? g->CurrentFunc->mStaticVars : g->CurrentFunc->mVars;
+					VarList &conflicts = (declare_type & (VAR_LOCAL_STATIC | VAR_GLOBAL)) ? g->CurrentFunc->mVars : g->CurrentFunc->mStaticVars;
+					var = conflicts.Find(item, var_name_length);
+					if (!var)
 					{
-						// Explicitly search this array vs calling FindVar() in case func is assume-global,
-						// and so that this declaration can shadow any previously declared super-global.
-						for (i = 0; i < g->CurrentFunc->mGlobalVarCount; ++i)
-							if (!tcslicmp(g->CurrentFunc->mGlobalVar[i]->mName, item, -1, var_name_length))
+						int insert_pos;
+						var = varlist.Find(item, var_name_length, &insert_pos);
+						if (!var)
+						{
+							if (global_var) // Implies (declare_type & VAR_GLOBAL) != 0.
 							{
-								var = g->CurrentFunc->mGlobalVar[i];
-								break;
+								// Insert could be skipped if the function is assume-global or the variable is
+								// super-global (and the function not force-local), but isn't for these reasons:
+								//  - When !mNextLineIsFunctionBody, mDefaultVarType might still be changed.
+								//  - It seems harmless to add any explicitly declared globals here.
+								//  - There might be some reason to refer to the declared globals in future.
+								if (!varlist.Insert(global_var, insert_pos))
+									return ScriptError(ERR_OUTOFMEM);
+								var = global_var;
 							}
+							else
+							{
+								var = AddVar(item, var_name_length, &varlist, insert_pos, declare_type);
+								if (!var)
+									return FAIL; // It already displayed the error.
+							}
+						}
 					}
-					if (var)
+					// Detect the following conflicts:
+					//  - Declaring local but found a static/global in conflicts, or vice versa.
+					//  - Declaring static but found a global in varlist, or vice versa.
+					//  - Declaring local but found a parameter in varlist.
+					// But permit the following:
+					//  - Exact duplicate declarations, such as for two different code paths.
+					//  - Declaring a global which is already super-global, or a class.
+					if ((var->Scope() & ~VAR_SUPER_GLOBAL) != declare_type)
 						return ConflictingDeclarationError(Var::DeclarationType(declare_type), var);
 				}
+				else
+					var = global_var;
 				
-				if (   !(var = FindOrAddVar(item, var_name_length, declare_type))   )
-					return FAIL; // It already displayed the error.
 				switch (var->Type())
 				{
 				case VAR_CONSTANT:
 					if (declare_type == VAR_DECLARE_GLOBAL)
 						break; // Permit importing classes into force-local functions.
-					// Otherwise, don't permit it.
+				// Otherwise, don't permit it.
 				case VAR_VIRTUAL: // Shouldn't be declared either way (global or local).
 					return ConflictingDeclarationError(Var::DeclarationType(declare_type), var);
 				}
-				if (declare_type == VAR_DECLARE_GLOBAL && g->CurrentFunc) // i.e. "global x" in a function.
-				{
-					if (g->CurrentFunc->mGlobalVarCount >= mGlobalVarCountMax)
-						return ScriptError(_T("Too many declarations."), item); // Short message since it's so unlikely.
-					g->CurrentFunc->mGlobalVar[g->CurrentFunc->mGlobalVarCount++] = var;
-				}
-				else
-				{
-					// Ensure the VAR_DECLARED and (if appropriate) VAR_SUPER_GLOBAL flags are set,
-					// in case this var was added to the list via a reference prior to the declaration.
-					// Checks above have already ruled out conflicting declarations.
-					var->Scope() = declare_type;
-				}
+
+				// If this is a super-global declaration, ensure the flag is added in case the var already
+				// existed due to a previous declaration inside a function.  VAR_DECLARED should already be
+				// present since no undeclared vars have been resolved at this stage (and checks above rely
+				// on this).  VAR_LOCAL_STATIC should always be present if this is "static", otherwise an
+				// error would have been raised.
+				if (declare_type & VAR_SUPER_GLOBAL)
+					var->Scope() |= VAR_SUPER_GLOBAL;
 
 				item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
 
@@ -5414,24 +5421,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 		if (g->CurrentFunc && g->CurrentFunc == mOpenBlock->mAttribute)
 		{
-			auto &func = *g->CurrentFunc;
-			if (func.mOuterFunc)
-				// At this point both functions point to the same buffer, but maybe different portions.
-				// Reverse any adjustment that may have been made by a force-local declaration.
-				mGlobalVarCountMax += int(func.mGlobalVar - func.mOuterFunc->mGlobalVar);
-			if (func.mGlobalVarCount)
-			{
-				// Now that there can be no more "global" declarations, copy the list into persistent memory.
-				Var **global_vars;
-				if (  !(global_vars = (Var **)SimpleHeap::Malloc(func.mGlobalVarCount * sizeof(Var *)))  )
-					return ScriptError(ERR_OUTOFMEM);
-				memcpy(global_vars, func.mGlobalVar, func.mGlobalVarCount * sizeof(Var *));
-				func.mGlobalVar = global_vars;
-			}
-			else
-				func.mGlobalVar = NULL; // For maintainability.
-			line.mAttribute = &func;  // Flag this ACT_BLOCK_END as the ending brace of this function's body.
-			g->CurrentFunc = func.mOuterFunc;
+			line.mAttribute = g->CurrentFunc;  // Flag this ACT_BLOCK_END as the ending brace of this function's body.
+			g->CurrentFunc = g->CurrentFunc->mOuterFunc;  // Step out of this function.
 			if (g->CurrentFunc && !g->CurrentFunc->mJumpToLine)
 				// The outer function has no body yet, so it probably began with one or more nested functions.
 				mNextLineIsFunctionBody = true;
@@ -5831,7 +5822,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	{
 		orig_end = aPrmEnd[1];
 		aPrmEnd[1] = '\0';
-		if (!DefineFunc(aPrmStart, NULL, false, true))
+		if (!DefineFunc(aPrmStart, false, true))
 			return FAIL;
 		aPrmEnd[1] = orig_end;
 	}
@@ -5840,7 +5831,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 		// Format the parameter list as needed for DefineFunc().
 		TCHAR prm[MAX_VAR_NAME_LENGTH + 4];
 		sntprintf(prm, _countof(prm), _T("(%.*s)"), aPrmEnd - aPrmStart, aPrmStart);
-		if (!DefineFunc(prm, NULL, false, true))
+		if (!DefineFunc(prm, false, true))
 			return FAIL;
 	}
 
@@ -5875,7 +5866,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	return OK;
 }
 
-ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic, bool aIsInExpression)
+ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 // Returns OK or FAIL.
 // Caller has already called ValidateName() on the function, and it is known that this valid name
 // is followed immediately by an open-paren.  aFuncExceptionVar is the address of an array on
@@ -6197,17 +6188,6 @@ ResultType Script::DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic, 
 		mHotFuncs.mCount--;				// Consider it gone from the list.
 	}
 
-	if (func.mOuterFunc)
-	{
-		// Inherit the global declarations of the outer function.
-		func.mGlobalVar = func.mOuterFunc->mGlobalVar; // Usually the same as aFuncGlobalVar, but maybe not if #include was used.
-		func.mGlobalVarCount = func.mOuterFunc->mGlobalVarCount;
-	}
-	else
-	{
-		func.mGlobalVar = aFuncGlobalVar; // Use the stack-allocated space provided by our caller.
-		mGlobalVarCountMax = aFuncGlobalVar ? MAX_FUNC_VAR_GLOBALS : 0;
-	}
 	mNextLineIsFunctionBody = false; // This is part of a workaround for functions which start with a nested function.
 
 	// At this point, param_start points to ')'.
@@ -6390,7 +6370,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 }
 
 
-ResultType Script::DefineClassProperty(LPTSTR aBuf, bool aStatic, Var **aFuncGlobalVar, bool &aBufHasBraceOrNotNeeded)
+ResultType Script::DefineClassProperty(LPTSTR aBuf, bool aStatic, bool &aBufHasBraceOrNotNeeded)
 {
 	LPTSTR name_end = find_identifier_end(aBuf);
 	LPTSTR param_start = omit_leading_whitespace(name_end);
@@ -6438,7 +6418,7 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, bool aStatic, Var **aFuncGlo
 	if (*next_token == '=') // => expr
 	{
 		// mClassPropertyDef is already set up for "Get".
-		if (!DefineClassPropertyXet(aBuf, next_token, aFuncGlobalVar))
+		if (!DefineClassPropertyXet(aBuf, next_token))
 			return FAIL;
 		// Immediately close this property definition.
 		mClassProperty = NULL;
@@ -6450,12 +6430,12 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, bool aStatic, Var **aFuncGlo
 }
 
 
-ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd, Var **aFuncGlobalVar)
+ResultType Script::DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd)
 {
 	// For simplicity, pass the property definition to DefineFunc instead of the actual
 	// line text, even though it makes some error messages a bit inaccurate. (That would
 	// happen anyway when DefineFunc() finds a syntax error in the parameter list.)
-	if (!DefineFunc(mClassPropertyDef, aFuncGlobalVar, mClassPropertyStatic))
+	if (!DefineFunc(mClassPropertyDef, mClassPropertyStatic))
 		return FAIL;
 	if (mClassProperty->MinParams == -1)
 	{
@@ -6638,7 +6618,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 UserFunc *Script::DefineClassInit(bool aStatic)
 {
 	TCHAR def[] = _T("__Init(){");
-	if (!DefineFunc(def, nullptr, aStatic))
+	if (!DefineFunc(def, aStatic))
 		return nullptr;
 	if (!aStatic)
 	{
@@ -7315,22 +7295,20 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int aScope
 		if (g.CurrentFunc->mOuterFunc)
 			if (Var *found = FindUpVar(var_name, *g.CurrentFunc, aDisplayError))
 				return found;
-		// In this case, callers want to fall back to globals when a local wasn't found.  However,
+		// No local var was found, nor was a global declared in this function (otherwise it would
+		// have been found in g.CurrentFunc->mStaticVars), so caller wants to fall back to a global
+		// in this case only if the function is assume-global or the var is super-global.  However,
 		// they want the insertion (if our caller will be doing one) to insert according to the
-		// current assume-mode.  Therefore, if the mode is assume-global, pass the apList
-		// and apInsertPos variables to FindVar() so that it will update them to be global.
+		// current assume-mode.  Therefore, if the mode is assume-global, pass apList/apInsertPos
+		// to FindVar() so that it will update them to be global.
 		if (g.CurrentFunc->IsAssumeGlobal())
 			return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL, apList, apInsertPos);
-		// Otherwise, caller only wants globals which are declared in *this* function:
-		for (int i = 0; i < g.CurrentFunc->mGlobalVarCount; ++i)
-			if (!_tcsicmp(var_name, g.CurrentFunc->mGlobalVar[i]->mName)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
-				return g.CurrentFunc->mGlobalVar[i];
-		if (!g.CurrentFunc->AllowSuperGlobals())
-			return NULL;
-		// As a last resort, check for a super-global:
-		Var *gvar = FindGlobalVar(aVarName, aVarNameLength);
-		if (gvar && gvar->IsSuperGlobal())
-			return gvar;
+		if (g.CurrentFunc->AllowSuperGlobals())
+		{
+			Var *found = FindGlobalVar(aVarName, aVarNameLength);
+			if (found && found->IsSuperGlobal())
+				return found;
+		}
 	}
 	// Otherwise, since above didn't return:
 	return NULL; // No match.

@@ -1646,12 +1646,10 @@ public:
 	FuncList mFuncs {}; // List of nested functions (usually empty).
 	VarList mVars {}; // Sorted list of non-static local variables.
 	VarList mStaticVars {}; // Sorted list of static variables.
-	Var **mGlobalVar = nullptr; // Array of global declarations.
 	Var **mDownVar = nullptr, **mUpVar = nullptr;
 	int *mUpVarIndex = nullptr;
 	static FreeVars *sFreeVars;
 #define MAX_FUNC_UP_VARS 1000
-	int mGlobalVarCount = 0; // Count of items in the above array.
 	int mDownVarCount = 0, mUpVarCount = 0;
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
@@ -2834,7 +2832,6 @@ private:
 								// passed to PreprocessLocalVars. Do not use this list after that. 
 
 	VarList mVars; // Sorted list of global variables.
-	int mGlobalVarCountMax; // While loading the script, the maximum number of global declarations allowed for the current function.
 	WinGroup *mFirstGroup, *mLastGroup;  // The first and last variables in the linked list.
 	Line *mOpenBlock; // While loading the script, this is the beginning of a block which is currently open.
 	Line *mPendingParentLine, *mPendingRelatedLine;
@@ -2997,8 +2994,8 @@ public:
 		, bool aUpdatePeriod, __int64 aPeriod, bool aUpdatePriority, int aPriority);
 	void DeleteTimer(IObject *aCallback);
 	LPTSTR DefaultDialogTitle();
-	UserFunc* CreateHotFunc(Var* aFuncGlobalVar[], int aGlobalVarCount);
-	ResultType DefineFunc(LPTSTR aBuf, Var *aFuncGlobalVar[], bool aStatic = false, bool aIsInExpression = false);
+	UserFunc* CreateHotFunc();
+	ResultType DefineFunc(LPTSTR aBuf, bool aStatic = false, bool aIsInExpression = false);
 #ifndef AUTOHOTKEYSC
 	struct FuncLibrary
 	{
@@ -3016,8 +3013,8 @@ public:
 	ResultType DefineClass(LPTSTR aBuf);
 	UserFunc *DefineClassInit(bool aStatic);
 	ResultType DefineClassVars(LPTSTR aBuf, bool aStatic);
-	ResultType DefineClassProperty(LPTSTR aBuf, bool aStatic, Var **aFuncGlobalVar, bool &aBufHasBraceOrNotNeeded);
-	ResultType DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd, Var **aFuncGlobalVar);
+	ResultType DefineClassProperty(LPTSTR aBuf, bool aStatic, bool &aBufHasBraceOrNotNeeded);
+	ResultType DefineClassPropertyXet(LPTSTR aBuf, LPTSTR aEnd);
 	Object *FindClass(LPCTSTR aClassName, size_t aClassNameLength = 0);
 	ResultType ResolveClasses();
 	ResultType InitClasses();
