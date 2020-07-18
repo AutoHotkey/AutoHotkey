@@ -4331,25 +4331,13 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					return OK;
 				}
 				// Otherwise, it occurs too far down in the body.
-				return ScriptError(ERR_UNRECOGNIZED_ACTION, aLineText); // Vague error since so rare.
+				return ScriptError(ERR_UNEXPECTED_DECL, aLineText);
 			}
 			
 			// Since above didn't break or return, a variable is being declared.
 
-			// Using "break" at this point causes the line to be parsed as a command-style function
-			// call.  We don't want that to happen for "local" or "static", even when they are not
-			// inside a function, so they are treated as errors.  The reasons are:
-			//
-			//  1) A vague error message is better than a specific but misleading one.
-			//
-			//  2) These keywords should be reserved for possible future use (lexical scope).
-			//
-			//  3) If a Local() or Static() function actually exists, command-style syntax could
-			//     only be used to call it from global scope.  Better to require function syntax
-			//     always be used with such a function, since that will work anywhere.
-			//
 			if (!g->CurrentFunc && (declare_type & VAR_LOCAL))
-				return ScriptError(ERR_UNRECOGNIZED_ACTION, aLineText); // Vague error since so rare.
+				return ScriptError(ERR_UNEXPECTED_DECL, aLineText);
 
 			bool open_brace_was_added, belongs_to_line_above;
 			size_t var_name_length;
@@ -4461,7 +4449,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					// //= <<= >>=
 					if (_tcschr(_T("/<>"), *item_end) && item_end[1] == *item_end && item_end[2] == '=')
 						break;
-					return ScriptError(_T("Bad variable declaration."), item);
+					return ScriptError(ERR_INVALID_VARDECL, item);
 				}
 
 				// Since above didn't "continue", this declared variable also has an initializer.
