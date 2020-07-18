@@ -152,14 +152,14 @@ private:
 	};
 	VarSizeType mByteCapacity = 0; // In bytes.  Includes the space for the zero terminator.
 	AllocMethodType mHowAllocated = ALLOC_NONE; // Keep adjacent/contiguous with the below to save memory.
-	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE						0x01 // Combined with VAR_ATTRIB_IS_INT64/DOUBLE/OBJECT to indicate mContents is not current.
-	#define VAR_ATTRIB_UNINITIALIZED							0x02 // Var requires initialization before use.
-	// Reserved: 0x04
-	#define VAR_ATTRIB_NOT_NUMERIC								0x08 // A prior call to IsNumeric() determined the var's value is PURE_NOT_NUMERIC.
-	#define VAR_ATTRIB_IS_INT64									0x10 // Var's proper value is in mContentsInt64.
-	#define VAR_ATTRIB_IS_DOUBLE								0x20 // Var's proper value is in mContentsDouble.
-	#define VAR_ATTRIB_IS_OBJECT								0x40 // Var's proper value is in mObject.
-	#define VAR_ATTRIB_VIRTUAL_OPEN								0x80 // Virtual var is open for writing.
+	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE	0x01 // Combined with VAR_ATTRIB_IS_INT64/DOUBLE/OBJECT to indicate mContents is not current.
+	#define VAR_ATTRIB_UNINITIALIZED		0x02 // Var requires initialization before use.
+	#define VAR_ATTRIB_HAS_ASSIGNMENT		0x04 // Used during load time to detect vars that are not assigned anywhere.
+	#define VAR_ATTRIB_NOT_NUMERIC			0x08 // A prior call to IsNumeric() determined the var's value is PURE_NOT_NUMERIC.
+	#define VAR_ATTRIB_IS_INT64				0x10 // Var's proper value is in mContentsInt64.
+	#define VAR_ATTRIB_IS_DOUBLE			0x20 // Var's proper value is in mContentsDouble.
+	#define VAR_ATTRIB_IS_OBJECT			0x40 // Var's proper value is in mObject.
+	#define VAR_ATTRIB_VIRTUAL_OPEN			0x80 // Virtual var is open for writing.
 	#define VAR_ATTRIB_CACHE (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_NOT_NUMERIC) // These three are mutually exclusive.
 	#define VAR_ATTRIB_TYPES (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT) // These are mutually exclusive (but NOT_NUMERIC may be combined with OBJECT or BINARY_CLIP).
 	#define VAR_ATTRIB_OFTEN_REMOVED (VAR_ATTRIB_CACHE | VAR_ATTRIB_CONTENTS_OUT_OF_DATE | VAR_ATTRIB_UNINITIALIZED)
@@ -668,6 +668,16 @@ public:
 			return _T("local");
 		}
 		return _T("global");
+	}
+
+	bool IsAssignedSomewhere()
+	{
+		return mAttrib & VAR_ATTRIB_HAS_ASSIGNMENT;
+	}
+
+	void MarkAssignedSomewhere()
+	{
+		mAttrib |= VAR_ATTRIB_HAS_ASSIGNMENT;
 	}
 
 	__forceinline bool IsObject() // L31: Indicates this var contains an object reference which must be released if the var is emptied.

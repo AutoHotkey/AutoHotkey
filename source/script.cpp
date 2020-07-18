@@ -1516,7 +1516,8 @@ UINT Script::LoadFromFile()
 	// are resolved in nested functions.
 	if (!PreparseExpressions(mFirstLine)
 		|| !PreparseExpressions(mFuncs)
-		|| !PreparseExpressions(mHotFuncs))
+		|| !PreparseExpressions(mHotFuncs)
+		|| !PreparseVarRefs())
 		return LOADING_FAILED; // Error was already displayed by the above call.
 
 	// Do some processing of local variables to support closures.
@@ -1535,9 +1536,6 @@ UINT Script::LoadFromFile()
 		mUnresolvedClasses->Release();
 		mUnresolvedClasses = NULL;
 	}
-
-	if (!PreparseVarRefs())
-		return LOADING_FAILED;
 
 #ifndef AUTOHOTKEYSC
 	if (mIncludeLibraryFunctionsThenExit)
@@ -7425,6 +7423,10 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, VarList *aList, int 
 		ScriptError(ERR_OUTOFMEM);
 		return NULL;
 	}
+
+	if (aScope & VAR_LOCAL_FUNCPARAM)
+		the_new_var->MarkAssignedSomewhere();
+
 	return the_new_var;
 }
 
@@ -8648,14 +8650,12 @@ unquoted_literal:
 		else // this_deref is a variable.
 		{
 			CHECK_AUTO_CONCAT;
-			if (!(this_deref_ref.var = g_script.FindOrAddVar(this_deref_ref.marker, this_deref_ref.length)))
-				return FAIL;
 			// Use SYM_VAR for both built-in and normal vars at this stage, since some normal vars
 			// might become read-only later on anyway.  This simplifies some parts, as non-dynamic
 			// references are always SYM_VAR and SYM_DYNAMIC has only one meaning.  A later stage
 			// will validate and translate each SYM_VAR as needed.
 			infix[infix_count].symbol = SYM_VAR;
-			infix[infix_count].var = this_deref_ref.var;
+			infix[infix_count].deref = &this_deref_ref;
 			infix[infix_count].is_lvalue = FALSE; // Set default, for detection of how this var ref is used.
 		} // Handling of the var or function in this_deref.
 
@@ -8674,14 +8674,9 @@ unquoted_literal:
 
 	if (aArg.type == ARG_TYPE_OUTPUT_VAR)
 	{
-		if (infix_count == 1 && infix->symbol == SYM_DYNAMIC && infix->var->IsReadOnly())
-			return VarIsReadOnlyError(infix->var, Script::INVALID_OUTPUT_VAR);
-		else if (infix_count != 1 || infix->symbol != SYM_VAR)
+		if (infix_count != 1 || infix->symbol != SYM_VAR)
 			return LineError(ERR_EXPR_SYNTAX, FAIL, aArg.text);
-		// This var is an output variable.  No further processing needed:
-		aArg.is_expression = false;
-		aArg.deref = infix->deref;
-		return OK;
+		infix->is_lvalue = Script::VARREF_OUTPUT_VAR;
 	}
 
 	// Terminate the array with a special item.  This allows infix-to-postfix conversion to do a faster
@@ -8826,8 +8821,14 @@ unquoted_literal:
 						}
 						else if (!bif)
 						{
-							// Skip the checks below.
+							ExprTokenType &param1 = *postfix[postfix_count-1];
+							if (param1.symbol == SYM_VAR
+								&& func->ArgIsOutputVar(in_param_list->param_count - 1))
+							{
+								param1.is_lvalue = Script::VARREF_BYREF;
+							}
 						}
+						// The rest of the checks are for calls to built-in functions only:
 						else if (postfix[postfix_count-1][-1].symbol != SYM_COMMA && postfix[postfix_count-1][-1].symbol != stack_symbol)
 						{
 							// This parameter is more than a single operand, so may be something which can't be
@@ -8836,15 +8837,19 @@ unquoted_literal:
 							// of validation at load-time.  If ternary could be easily excluded, errors such as
 							// CaretGetPos(x y) could be detected below.
 						}
-						else if (func->ArgIsOutputVar(in_param_list->param_count - 1))
+						else if (func->ArgIsOutputVar(in_param_list->param_count - 1)
+							|| bif == BIF_IsSet)
 						{
 							ExprTokenType &param1 = *postfix[postfix_count-1];
-							if (param1.symbol == SYM_VAR || param1.symbol == SYM_DYNAMIC)
+							if (param1.symbol == SYM_VAR)
 							{
 								// Mark this as an l-value.  If it is a double-deref, it will either produce a writable
 								// var as SYM_VAR or will throw an error.  Other load-time checks will raise an error
 								// if this is SYM_VAR and it turns out to be a constant/read-only variable.
-								param1.is_lvalue = Script::INVALID_OUTPUT_VAR;
+								if (bif == BIF_IsSet)
+									param1.is_lvalue = Script::VARREF_ISSET;
+								else
+									param1.is_lvalue = Script::VARREF_OUTPUT_VAR;
 							}
 							else //if (!IS_OPERATOR_VALID_LVALUE(param1.symbol)) // This section currently only executes for single operands.
 							{
@@ -9149,7 +9154,7 @@ unquoted_literal:
 					else if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
 					{
 						ExprTokenType &target = *postfix[postfix_count - 1];
-						target.is_lvalue = Script::INVALID_ASSIGNMENT; // Mark this as the target of an assignment.
+						target.is_lvalue = Script::VARREF_LVALUE; // Mark this as the target of an assignment.
 					}
 					else if (!IS_OPERATOR_VALID_LVALUE(sym_postfix))
 						return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_infix->error_reporting_marker);
@@ -9355,7 +9360,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				ExprTokenType &target = *postfix[postfix_count - 1];
 				// This is nearly identical to the section for assignments under "if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))":
 				if (target.symbol == SYM_VAR || target.symbol == SYM_DYNAMIC)
-					target.is_lvalue = Script::INVALID_ASSIGNMENT; // Mark this as the target of an assignment.
+					target.is_lvalue = Script::VARREF_LVALUE; // Mark this as the target of an assignment.
 				else if (!IS_OPERATOR_VALID_LVALUE(target.symbol))
 					return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_postfix->error_reporting_marker);
 			}
@@ -9413,9 +9418,7 @@ end_of_infix_to_postfix:
 		&& (mActionType != ACT_SWITCH && mActionType != ACT_CASE) // It's not SWITCH or CASE, which require a proper postfix expression.
 		&& (mActionType != ACT_THROW) // Exclude THROW to simplify variable handling (ensures vars are always dereferenced).
 		&& (mActionType != ACT_HOTKEY_IF) // #HotIf requires the expression text not be modified.
-		&& (only_symbol != SYM_VAR
-			|| (mActionType != ACT_RETURN // "return var" is kept as an expression for correct handling of local vars (see "ToReturnValue") and ByRef.
-				&& only_token.var->Type() != VAR_VIRTUAL)) // VAR_VIRTUAL must be an expression.
+		&& (only_symbol != SYM_VAR || mActionType != ACT_RETURN) // "return var" is kept as an expression for correct handling of local vars (see "ToReturnValue") and ByRef.
 		)
 	{
 		// The checks above leave: ACT_ASSIGNEXPR, ACT_EXPRESSION? (ineffectual), ACT_IF,
@@ -9428,11 +9431,7 @@ end_of_infix_to_postfix:
 			// This also ensures parentheses are not present in the output, for cases like MsgBox (1.0).
 			if (  !(aArg.text = SimpleHeap::Malloc(TokenToString(only_token, number_buf)))  )
 				return FAIL; // Malloc already displayed an error message.
-			break;
-		case SYM_VAR: // SYM_VAR can only be VAR_NORMAL in this case.
-			// This isn't needed for ACT_ASSIGNEXPR, which does output_var->Assign(*postfix).
-			aArg.type = ARG_TYPE_INPUT_VAR;
-			aArg.deref = (DerefType *)only_token.var;
+			aArg.is_expression = false;
 			break;
 		case SYM_STRING:
 			// If this arg will be expanded normally, it needs a pointer to the final string,
@@ -9446,9 +9445,14 @@ end_of_infix_to_postfix:
 				aArg.text = only_token.marker;
 				aArg.deref = NULL; // Discard deref array (let ArgIndexHasDeref() know there are none).
 			}
+			aArg.is_expression = false;
+			break;
+		case SYM_VAR:
+			// Since is_expression is still true, this is only a hint for a later stage:
+			if (aArg.type != ARG_TYPE_OUTPUT_VAR)
+				aArg.type = ARG_TYPE_INPUT_VAR;
 			break;
 		}
-		aArg.is_expression = false;
 	}
 
 	// Create a new postfix array and attach it to this arg of this line.
@@ -9475,6 +9479,22 @@ end_of_infix_to_postfix:
 		// Count the tokens which potentially use to_free[].
 		if (new_token.symbol == SYM_DYNAMIC || new_token.symbol == SYM_FUNC || new_token.symbol == SYM_CONCAT)
 			++max_alloc;
+		// Resolve variable references for assignments and output vars.  Leave all others
+		// for later to facilitate detecting variables which are not assigned anywhere.
+		if (new_token.symbol == SYM_VAR && new_token.is_lvalue)
+		{
+			new_token.var = g_script.FindOrAddVar(new_token.deref->marker, new_token.deref->length);
+			if (!new_token.var)
+				return FAIL;
+			if (new_token.var->IsReadOnly() && VARREF_IS_WRITE(new_token.is_lvalue))
+				return VarIsReadOnlyError(new_token.var, new_token.is_lvalue);
+			new_token.var->MarkAssignedSomewhere();
+			if (aArg.type == ARG_TYPE_OUTPUT_VAR)
+			{
+				aArg.deref = (DerefType *)new_token.var;
+				aArg.is_expression = false;
+			}
+		}
 	}
 	aArg.postfix[postfix_count].symbol = SYM_INVALID;  // Special item to mark the end of the array.
 	aArg.max_stack = max_stack;
@@ -12914,7 +12934,7 @@ ResultType Script::VarIsReadOnlyError(Var *aVar, int aErrorType)
 	TCHAR buf[127];
 	sntprintf(buf, _countof(buf), _T("This %s %s.")
 		, VarKindForErrorMessage(aVar)
-		, aErrorType == INVALID_ASSIGNMENT ? _T("cannot be assigned a value") : _T("cannot be used as an output variable"));
+		, aErrorType == VARREF_LVALUE ? _T("cannot be assigned a value") : _T("cannot be used as an output variable"));
 	return ScriptError(buf, aVar->mName);
 }
 
@@ -13161,7 +13181,7 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 
 
 
-void Script::WarnUninitializedVar(Var *var)
+void Script::WarnUninitializedVar(Var *var, bool aPredictive)
 {
 	WarnMode warnMode = var->IsLocal() ? g_Warn_UseUnsetLocal : g_Warn_UseUnsetGlobal;
 	if (!warnMode)
@@ -13172,13 +13192,13 @@ void Script::WarnUninitializedVar(Var *var)
 	// uninitialized because it may be beneficial to see the quantity and various locations of uninitialized
 	// uses, and doesn't present the same user interface problem that multiple message boxes can.)
 	if (warnMode == WARNMODE_MSGBOX)
-		var->MarkInitialized();
+		aPredictive ? var->MarkAssignedSomewhere() : var->MarkInitialized();
 
 	bool isUndeclaredLocal = (var->Scope() & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL;
 	LPCTSTR sameNameAsGlobal = isUndeclaredLocal && FindGlobalVar(var->mName) ? _T("  (same name as a global)") : _T("");
 	TCHAR buf[DIALOG_TITLE_SIZE];
 	sntprintf(buf, _countof(buf), _T("%s %s%s"), Var::DeclarationType(var->Scope()), var->mName, sameNameAsGlobal);
-	ScriptWarning(warnMode, WARNING_USE_UNSET_VARIABLE, buf);
+	ScriptWarning(warnMode, aPredictive ? WARNING_ALWAYS_UNSET_VARIABLE : WARNING_USE_UNSET_VARIABLE, buf);
 }
 
 
@@ -13284,43 +13304,60 @@ ResultType Script::PreparseVarRefs()
 	// and lvalues to this function, to reduce code size.  Search for "VarIsReadOnlyError".
 	for (Line *line = mFirstLine; line; line = line->mNextLine)
 	{
+		switch (line->mActionType)
+		{ // Establish context for FindOrAddVar:
+		case ACT_BLOCK_BEGIN: if (line->mAttribute) g->CurrentFunc = (UserFunc *)line->mAttribute; break;
+		case ACT_BLOCK_END: if (line->mAttribute) g->CurrentFunc = g->CurrentFunc->mOuterFunc; break;
+		}
+
 		for (int a = 0; a < line->mArgc; ++a)
 		{
 			ArgStruct &arg = line->mArg[a];
-			if (arg.type == ARG_TYPE_OUTPUT_VAR)
+			if (!arg.is_expression)
+				continue;
+			
+			ExprTokenType *token;
+			for (token = arg.postfix; token->symbol != SYM_INVALID; ++token)
 			{
-				if (!arg.is_expression) // The arg's variable is not one that needs to be dynamically resolved.
+				if (token->symbol != SYM_VAR || token->is_lvalue) // Not a var, or already resolved by ExpressionToPostfix.
+					continue;
+				if (  !(token->var = FindOrAddVar(token->deref->marker, token->deref->length))  )
+					return FAIL;
+				if (token->var->IsAlias()) // Upvar.
+					continue;
+				switch (token->var->Type())
 				{
-					Var *target_var = VAR(arg);
-					if (target_var->IsReadOnly())
-						return line->VarIsReadOnlyError(target_var, INVALID_OUTPUT_VAR);
+				case VAR_CONSTANT:
+					// This ensures classes introduced via stdlib are consistent with other classes;
+					// i.e. passing to a ByRef parameter gives a value instead of a read-only parameter.
+					// It might also help performance.
+					token->var->ToToken(*token);
+					continue;
+				case VAR_VIRTUAL:
+					// Convert this virtual var to SYM_DYNAMIC for evaluation by ExpandExpression.
+					token->symbol = SYM_DYNAMIC;
+					++arg.max_alloc;
+					break;
+				default:
+					if (!token->var->IsAssignedSomewhere())
+					{
+						mCurrLine = line;
+						WarnUninitializedVar(token->var, true);
+					}
 				}
 			}
-			else if (arg.is_expression)
+			if (arg.type == ARG_TYPE_INPUT_VAR)
 			{
-				for (ExprTokenType *token = arg.postfix; token->symbol != SYM_INVALID; ++token)
+				if (arg.postfix->var->Type() != VAR_VIRTUAL)
 				{
-					if (token->symbol != SYM_VAR)
-						continue;
-					if (token->var->IsReadOnly())
-					{
-						if (token->is_lvalue)
-							return line->VarIsReadOnlyError(token->var, token->is_lvalue);
-						// This ensures classes introduced via stdlib are consistent with other classes;
-						// i.e. passing to a ByRef parameter gives a value instead of a read-only parameter.
-						// It might also help performance.
-						if (token->var->Type() == VAR_CONSTANT)
-						{
-							token->var->ToToken(*token);
-							continue;
-						}
-					}
-					if (!token->is_lvalue && token->var->Type() == VAR_VIRTUAL)
-					{
-						// Convert this virtual var to SYM_DYNAMIC for evaluation by ExpandExpression.
-						token->symbol = SYM_DYNAMIC;
-						++arg.max_alloc;
-					}
+					// Can't be ARG_TYPE_INPUT_VAR after all, as VAR_VIRTUAL requires ExpandExpression.
+					arg.type = ARG_TYPE_NORMAL;
+				}
+				else
+				{
+					// This arg can be optimized by avoiding ExpandExpression.
+					arg.deref = (DerefType *)arg.postfix->var;
+					arg.is_expression = false;
 				}
 			}
 		}

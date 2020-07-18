@@ -260,6 +260,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_SOUND_CONTROLTYPE _T("Component doesn't support this control type")
 #define ERR_TIMEOUT _T("Timeout")
 #define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
+#define WARNING_ALWAYS_UNSET_VARIABLE _T("This variable appears to never be assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
 #define WARNING_USE_ENV_VARIABLE _T("An environment variable is being accessed; see #NoEnv.")
 #define WARNING_CLASS_OVERWRITE _T("Class may be overwritten.")
@@ -3091,14 +3092,16 @@ public:
 	ResultType RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), ResultType aErrorType = FAIL_OR_OK, Line *aLine = nullptr);
 
 	ResultType ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting);
-	enum AssignmentErrorType { INVALID_ASSIGNMENT = 1, INVALID_OUTPUT_VAR };
-	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType = INVALID_ASSIGNMENT);
+	enum VarRefUsageType { VARREF_READ = 0, VARREF_BYREF, VARREF_ISSET
+		, VARREF_LVALUE, VARREF_OUTPUT_VAR };
+#define VARREF_IS_WRITE(is_lvalue) ((is_lvalue) >= Script::VARREF_LVALUE)
+	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType = VARREF_LVALUE);
 
 	ResultType ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine);
 	int FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine);
 
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
-	void WarnUninitializedVar(Var *var);
+	void WarnUninitializedVar(Var *aVar, bool aPredictive = false);
 	void WarnLocalSameAsGlobal(LPCTSTR aVarName);
 
 	ResultType PreprocessLocalVars(FuncList &aFuncs);
