@@ -4451,17 +4451,16 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					}
 					// Colon with no following '='. Fall through to the default case.
 				default:
-					if (declare_type != VAR_DECLARE_STATIC)
-					{
-						// Since this global or local variable might already have a value,
-						// compound assignments are valid (although not very conventional).
-						// Allowed: += -= *= /= .= |= &= ^=
-						if (_tcschr(_T("+-*/.|&^"), *item_end) && item_end[1] == '=')
-							break;
-						// Allowed: //= <<= >>=
-						if (_tcschr(_T("/<>"), *item_end) && item_end[1] == *item_end && item_end[2] == '=')
-							break;
-					}
+					// Since this variable might already have a value, compound assignments are
+					// permitted (although not very conventional).  This is mostly for globals,
+					// which might only be referenced on this one line (and outside the function),
+					// but might have some utility with "static" due to its once-only nature.
+					// += -= *= /= .= |= &= ^=
+					if (_tcschr(_T("+-*/.|&^"), *item_end) && item_end[1] == '=')
+						break;
+					// //= <<= >>=
+					if (_tcschr(_T("/<>"), *item_end) && item_end[1] == *item_end && item_end[2] == '=')
+						break;
 					return ScriptError(_T("Bad variable declaration."), item);
 				}
 
