@@ -4361,32 +4361,34 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 
 				if (g->CurrentFunc)
 				{
-					VarList &varlist = (declare_type & (VAR_LOCAL_STATIC | VAR_GLOBAL)) ? g->CurrentFunc->mStaticVars : g->CurrentFunc->mVars;
-					VarList &conflicts = (declare_type & (VAR_LOCAL_STATIC | VAR_GLOBAL)) ? g->CurrentFunc->mVars : g->CurrentFunc->mStaticVars;
-					var = conflicts.Find(item, var_name_length);
+					int insert_pos;
+					VarList *varlist;
+					ResultType result = OK;
+					// Search both locals and statics so any conflicts are detected, but set insert_pos
+					// according to which list we want to insert into.  For "global", we want to insert
+					// into the static list to make it accessible to the function.
+					int insert_into = global_var ? (VAR_LOCAL_STATIC | VAR_LOCAL) : declare_type;
+					var = FindVar(item, var_name_length, insert_into, &varlist, &insert_pos, &result);
 					if (!var)
 					{
-						int insert_pos;
-						var = varlist.Find(item, var_name_length, &insert_pos);
-						if (!var)
+						if (!result)
+							return result;
+						if (global_var) // Implies (declare_type & VAR_GLOBAL) != 0.
 						{
-							if (global_var) // Implies (declare_type & VAR_GLOBAL) != 0.
-							{
-								// Insert could be skipped if the function is assume-global or the variable is
-								// super-global (and the function not force-local), but isn't for these reasons:
-								//  - When !mNextLineIsFunctionBody, mDefaultVarType might still be changed.
-								//  - It seems harmless to add any explicitly declared globals here.
-								//  - There might be some reason to refer to the declared globals in future.
-								if (!varlist.Insert(global_var, insert_pos))
-									return ScriptError(ERR_OUTOFMEM);
-								var = global_var;
-							}
-							else
-							{
-								var = AddVar(item, var_name_length, &varlist, insert_pos, declare_type);
-								if (!var)
-									return FAIL; // It already displayed the error.
-							}
+							// Insert could be skipped if the function is assume-global or the variable is
+							// super-global (and the function not force-local), but isn't for these reasons:
+							//  - When !mNextLineIsFunctionBody, mDefaultVarType might still be changed.
+							//  - It seems harmless to add any explicitly declared globals here.
+							//  - There might be some reason to refer to the declared globals in future.
+							if (!varlist->Insert(global_var, insert_pos))
+								return ScriptError(ERR_OUTOFMEM);
+							var = global_var;
+						}
+						else
+						{
+							var = AddVar(item, var_name_length, varlist, insert_pos, declare_type);
+							if (!var)
+								return FAIL; // It already displayed the error.
 						}
 					}
 					// Detect the following conflicts:
@@ -5965,9 +5967,10 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		param_length = param_end - param_start;
 		if (param_length)
 		{
-			if (this_param.var = func.mVars.Find(param_start, param_length, &insert_pos))  // Assign.
-				return ScriptError(_T("Duplicate parameter."), param_start);
-			if (   !(this_param.var = AddVar(param_start, param_length, &func.mVars, insert_pos, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM))   )	// Pass VAR_LOCAL_FUNCPARAM as last parameter to mean "it's a local but more specifically a function's parameter".
+			VarList *varlist; // FindVar() should always set this to &func.mVars, but best to pass it for maintainability.
+			if (this_param.var = FindVar(param_start, param_length, FINDVAR_LOCAL, &varlist, &insert_pos))
+				return ConflictingDeclarationError(_T("parameter"), this_param.var);
+			if (   !(this_param.var = AddVar(param_start, param_length, varlist, insert_pos, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM))   )	// Pass VAR_LOCAL_FUNCPARAM as last parameter to mean "it's a local but more specifically a function's parameter".
 				return FAIL; // It already displayed the error, including attempts to have reserved names as parameter names.
 			param_start = omit_leading_whitespace(param_end);
 		}
@@ -7289,7 +7292,14 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int aScope
 		}
 	}
 	// Otherwise, since above didn't return:
-	return NULL; // No match.
+	if (auto *builtin = GetBuiltInVar(var_name))
+	{
+		Var *var = FindOrAddBuiltInVar(var_name, builtin);
+		if (!var && aDisplayError)
+			*aDisplayError = FAIL;
+		return var;
+	}
+	return nullptr;
 }
 
 
@@ -7390,25 +7400,6 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, VarList *aList, int 
 
 	bool aIsLocal = (aScope & VAR_LOCAL);
 
-	// Not necessary or desirable to add built-in variables to a function's list of locals.  Always keep
-	// built-in vars in the global list for efficiency and to keep them out of ListVars.  Note that another
-	// section at loadtime displays an error for any attempt to explicitly declare built-in variables as
-	// either global or local.
-	VarEntry *builtin = GetBuiltInVar(var_name);
-	if (aIsLocal && builtin) // Attempt to create built-in variable as local.
-	{
-		if (aIsLocal)
-		{
-			if (  !(aScope & VAR_LOCAL_FUNCPARAM)  ) // It's not a UDF's parameter, so fall back to the global built-in variable of this name rather than displaying an error.
-				return FindOrAddVar(var_name, aVarNameLength, FINDVAR_GLOBAL); // Force find-or-create of global.
-			else // (aIsLocal & VAR_LOCAL_FUNCPARAM), which means "this is a local variable and a function's parameter".
-			{
-				ScriptError(_T("Illegal parameter name."), aVarName); // Short message since so rare.
-				return NULL;
-			}
-		}
-	}
-
 	if ((aScope & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL // This is an implicit local.
 		&& g_Warn_LocalSameAsGlobal && !mIsReadyToExecute // Not enabled at runtime because of overlap with #Warn UseUnset, and dynamic assignments in assume-local mode are less likely to be intended global.
 		&& FindGlobalVar(var_name, aVarNameLength))
@@ -7428,11 +7419,30 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, VarList *aList, int 
 		// v1.0.48: Lexikos: Current function is assume-static, so set static attribute.
 		aScope |= VAR_LOCAL_STATIC;
 
-	Var *the_new_var = new Var(new_name, builtin, aScope);
+	Var *the_new_var = new Var(new_name, nullptr, aScope);
 	if (!the_new_var || !aList->Insert(the_new_var, aInsertPos))
 	{
 		ScriptError(ERR_OUTOFMEM);
 		return NULL;
+	}
+	return the_new_var;
+}
+
+
+
+Var *Script::FindOrAddBuiltInVar(LPTSTR aVarName, VarEntry *aVarEntry)
+{
+	int insert_pos;
+	if (Var *found = mVars.Find(aVarName, &insert_pos))
+		return found; // Perhaps caller didn't search mVars due to force-local?
+	LPTSTR name = SimpleHeap::Malloc(aVarName);
+	if (!name)
+		return nullptr;
+	Var *the_new_var = new Var(name, aVarEntry, VAR_DECLARE_SUPER_GLOBAL);
+	if (!the_new_var || !mVars.Insert(the_new_var, insert_pos))
+	{
+		ScriptError(ERR_OUTOFMEM);
+		return nullptr;
 	}
 	return the_new_var;
 }

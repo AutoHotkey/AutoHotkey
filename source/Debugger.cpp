@@ -1428,15 +1428,14 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		}
 	}
 
-	// If we're allowed to create variables
-	if (  !var && !varbkp && !aDepth
-		&& (aSetValue
-		// or this variable doesn't exist
-		|| !(var = g_script.FindVar(name, name_length, aVarScope))
-			// but it is a built-in variable which hasn't been referenced yet:
-			&& g_script.GetBuiltInVar(name))  )
-		// Find or add the variable.
-		var = g_script.FindOrAddVar(name, name_length, aVarScope);
+	VarList *varlist;
+	int insert_pos;
+	if (  !var && !varbkp
+		&& !(var = g_script.FindVar(name, name_length, aVarScope, &varlist, &insert_pos))
+		&& !aDepth // Do not create variables when aDepth > 0, as g->CurrentFunc isn't the target function.
+		&& aSetValue  ) // Avoid creating empty variables.
+		var = g_script.AddVar(name, name_length, varlist, insert_pos
+			, ((aVarScope & VAR_LOCAL) && g->CurrentFunc) ? VAR_LOCAL : VAR_GLOBAL);
 
 	if (!var && !varbkp)
 		return DEBUGGER_E_UNKNOWN_PROPERTY;
