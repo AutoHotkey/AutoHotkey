@@ -3098,7 +3098,7 @@ public:
 
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
 	void WarnUninitializedVar(Var *var);
-	void MaybeWarnLocalSameAsGlobal(UserFunc &func, Var &var);
+	void WarnLocalSameAsGlobal(LPCTSTR aVarName);
 
 	ResultType PreprocessLocalVars(FuncList &aFuncs);
 	ResultType PreprocessLocalVars(UserFunc &aFunc);

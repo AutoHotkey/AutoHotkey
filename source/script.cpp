@@ -1519,7 +1519,7 @@ UINT Script::LoadFromFile()
 		|| !PreparseExpressions(mHotFuncs))
 		return LOADING_FAILED; // Error was already displayed by the above call.
 
-	// Do some processing of local variables to support closures and #Warn LocalSameAsGlobal.
+	// Do some processing of local variables to support closures.
 	// This must be done after PreparseExpressions() has resolved all variable references.
 	if (!PreprocessLocalVars(mFuncs)
 		|| !PreprocessLocalVars(mHotFuncs))
@@ -7409,6 +7409,11 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, VarList *aList, int 
 		}
 	}
 
+	if ((aScope & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL // This is an implicit local.
+		&& g_Warn_LocalSameAsGlobal && !mIsReadyToExecute // Not enabled at runtime because of overlap with #Warn UseUnset, and dynamic assignments in assume-local mode are less likely to be intended global.
+		&& FindGlobalVar(var_name, aVarNameLength))
+		WarnLocalSameAsGlobal(var_name);
+
 	// Allocate some dynamic memory to pass to the constructor:
 	LPTSTR new_name = SimpleHeap::Malloc(var_name, aVarNameLength);
 	if (!new_name)
@@ -13163,22 +13168,17 @@ void Script::WarnUninitializedVar(Var *var)
 
 
 
-void Script::MaybeWarnLocalSameAsGlobal(UserFunc &func, Var &var)
-// Caller has verified the following:
-//  1) var is not a declared variable.
-//  2) a global variable with the same name definitely exists.
+void Script::WarnLocalSameAsGlobal(LPCTSTR aVarName)
+// Relies on the following pre-conditions:
+//  1) It is an implicit (not declared) variable.
+//  2) Caller has verified that a global variable exists with the same name.
+//  3) g_Warn_LocalSameAsGlobal is on (true).
+//  4) g->CurrentFunc is the function which contains this variable.
 {
-	if (!g_Warn_LocalSameAsGlobal)
-		return;
-	Line *line = func.mJumpToLine;
-	while (line && line->mActionType != ACT_BLOCK_BEGIN) line = line->mPrevLine;
-	if (!line) line = func.mJumpToLine;
-
-	TCHAR buf[DIALOG_TITLE_SIZE], *cp = buf;
-	int buf_space_remaining = (int)_countof(buf);
-	sntprintf(cp, buf_space_remaining, _T("%s  (in function %s)"), var.mName, func.mName);
-	
-	ScriptWarning(g_Warn_LocalSameAsGlobal, WARNING_LOCAL_SAME_AS_GLOBAL, buf, line);
+	auto func_name = g->CurrentFunc ? g->CurrentFunc->mName : _T("");
+	TCHAR buf[DIALOG_TITLE_SIZE];
+	sntprintf(buf, _countof(buf), _T("%s  (in function %s)"), aVarName, func_name);
+	ScriptWarning(g_Warn_LocalSameAsGlobal, WARNING_LOCAL_SAME_AS_GLOBAL, buf);
 }
 
 
@@ -13201,8 +13201,6 @@ ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
 
 ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 {
-	bool check_globals = aFunc.AllowSuperGlobals();
-
 	Var **vars = aFunc.mVars.mItem;
 	int var_count = aFunc.mVars.mCount;
 	int upvar_count = 0;
@@ -13215,16 +13213,6 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 			++upvar_count;
 		if (var.Scope() & VAR_DOWNVAR)
 			++downvar_count;
-
-		if (!check_globals || var.IsDeclared())
-			continue;
-
-		Var *global_var = FindGlobalVar(var.mName);
-		if (!global_var) // No global variable with that name.
-			continue;
-		// Since this undeclared local variable has the same name as a global, there's
-		// a chance the user intended it to be global. So consider warning the user:
-		MaybeWarnLocalSameAsGlobal(aFunc, var);
 	}
 	if (upvar_count)
 	{
