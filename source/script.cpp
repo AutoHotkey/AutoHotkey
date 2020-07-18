@@ -9435,16 +9435,10 @@ end_of_infix_to_postfix:
 			break;
 		case SYM_STRING:
 			// If this arg will be expanded normally, it needs a pointer to the final string,
-			// without leading/trailing quotation marks and with "" resolved to ".  This doesn't
-			// apply to ACT_ASSIGNEXPR or ACT_RETURN, since they use the string token in postfix;
-			// so avoid doing this for them since it would make ListLines look wrong.  Any other
-			// commands which ordinarily expect expressions might still look wrong in ListLines,
-			// but that seems too rare and inconsequential to worry about.
-			if (  !(mActionType == ACT_ASSIGNEXPR || mActionType == ACT_RETURN)  )
-			{
-				aArg.text = only_token.marker;
-				aArg.deref = NULL; // Discard deref array (let ArgIndexHasDeref() know there are none).
-			}
+			// without leading/trailing quotation marks.  This doesn't apply to ACT_ASSIGNEXPR or
+			// ACT_RETURN, since they use the string token in postfix.  Line::ToText compensates
+			// for this by adding quotes.
+			aArg.text = only_token.marker;
 			aArg.is_expression = false;
 			break;
 		case SYM_VAR:
@@ -12382,10 +12376,7 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 		{
 			bool quote = mArg[i].type == ARG_TYPE_NORMAL
 				&& !mArg[i].is_expression && !(mArg[i].postfix && mArg[i].postfix->symbol != SYM_STRING);
-			// This method a little more efficient than using snprintfcat().
-			// Also, always use the arg's text for input and output args whose variables haven't
-			// been resolved at load-time, since the text has everything in it we want to display
-			// and thus there's no need to "resolve" dynamic variables here (e.g. array%i%).
+			// This method is a little more efficient than using snprintfcat().
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, quote ? _T("%s \"%s\"") : _T("%s %s")
 				, i == 0 ? _T("") : _T(",")
 				, mArg[i].text);
