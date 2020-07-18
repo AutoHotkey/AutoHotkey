@@ -205,7 +205,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				if (result_token.symbol != SYM_STRING || result_token.marker_length == 0)
 				{
 					// Currently SYM_OBJECT is not added to to_free[] as there aren't any built-in
-					// vars that create an object or call AddRef().
+					// vars that create an object or call AddRef().  If that's changed, must update
+					// BIV_TrayMenu and Debugger::GetPropertyValue.
 					this_token.CopyValueFrom(result_token);
 					goto push_this_token;
 				}

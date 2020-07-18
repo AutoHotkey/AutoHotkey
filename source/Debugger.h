@@ -348,17 +348,17 @@ private:
 		Var *var;
 		VarBkp *bkp;
 		Object::Variant *field;
-		ExprTokenType value;
-		IObject *owner = nullptr, *this_object = nullptr;
-		LPTSTR mem_to_free = nullptr;
-		PropertySource() {}
+		ResultToken value;
+		IObject *this_object = nullptr;
+		PropertySource(LPTSTR aResultBuf)
+		{
+			value.InitResult(aResultBuf);
+		}
 		~PropertySource()
 		{
-			if (owner)
-				owner->Release();
 			if (this_object)
 				this_object->Release();
-			free(mem_to_free);
+			value.Free();
 		}
 	};
 
@@ -367,12 +367,13 @@ private:
 		LPCSTR name;
 		CStringA &fullname;
 		LPSTR facet; // Initialised during writing.
-		bool is_alias, is_builtin, is_static; // Facets.
-		int page, pagesize; // Attributes which are also parameters.
+		bool is_alias = false, is_builtin = false, is_static = false; // Facets.
+		int page = 0, pagesize; // Attributes which are also parameters.
 		int max_data; // Parameters.
 		int max_depth;
 
-		PropertyInfo(CStringA &aNameBuf) : is_alias(false), is_builtin(false), is_static(false), page(0), fullname(aNameBuf) {}
+		PropertyInfo(CStringA &aNameBuf, LPTSTR aResultBuf)
+			: PropertySource(aResultBuf), fullname(aNameBuf) {}
 	};
 
 	
@@ -426,10 +427,10 @@ private:
 	void AppendPropertyName(CStringA &aNameBuf, size_t aParentNameLength, const char *aName);
 	void AppendStringKey(CStringA &aNameBuf, size_t aParentNameLength, const char *aKey);
 
-	int GetPropertyInfo(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf);
-	int GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp, LPTSTR &aValueBuf);
+	int GetPropertyInfo(Var &aVar, PropertyInfo &aProp);
+	int GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp);
 	
-	int GetPropertyValue(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf);
+	int GetPropertyValue(Var &aVar, PropertySource &aProp);
 
 	int WritePropertyXml(PropertyInfo &aProp);
 	int WritePropertyXml(PropertyInfo &aProp, LPTSTR aName);

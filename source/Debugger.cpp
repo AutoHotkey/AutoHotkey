@@ -955,14 +955,14 @@ DEBUGGER_COMMAND(Debugger::context_get)
 		"<response command=\"context_get\" context=\"%i\" transaction_id=\"%e\">"
 		, context_id, aTransactionId);
 
-	LPTSTR value_buf = NULL;
+	TCHAR value_buf[_f_retval_buf_size];
 	CStringA name_buf;
-	PropertyInfo prop(name_buf);
+	PropertyInfo prop(name_buf, value_buf);
 	prop.max_data = mMaxPropertyData;
 	prop.pagesize = mMaxChildren;
 	prop.max_depth = mMaxDepth;
 	for ( ; bkp < bkp_end; ++bkp)
-		if (  (err = GetPropertyInfo(*bkp, prop, value_buf))
+		if (  (err = GetPropertyInfo(*bkp, prop))
 			|| (err = WritePropertyXml(prop, bkp->mVar->mName))  )
 			break;
 	for (int j = 0; j < _countof(var_lists); ++j)
@@ -972,11 +972,10 @@ DEBUGGER_COMMAND(Debugger::context_get)
 		Var **vars = var_lists[j]->mItem;
 		int var_count = var_lists[j]->mCount;
 		for (int i = 0; i < var_count; ++i)
-			if (  (err = GetPropertyInfo(*vars[i], prop, value_buf))
+			if (  (err = GetPropertyInfo(*vars[i], prop))
 				|| (err = WritePropertyXml(prop, vars[i]->mName))  )
 				break;
 	}
-	free(value_buf);
 	if (err)
 		return err;
 
@@ -1009,40 +1008,44 @@ DEBUGGER_COMMAND(Debugger::property_value)
 }
 
 
-int Debugger::GetPropertyInfo(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf)
+int Debugger::GetPropertyInfo(Var &aVar, PropertyInfo &aProp)
 {
 	aProp.is_alias = aVar.mType == VAR_ALIAS;
 	aProp.is_static = aVar.IsStatic();
-	return GetPropertyValue(aVar, aProp, aValueBuf);
+	aProp.is_builtin = aVar.mType == VAR_VIRTUAL;
+	return GetPropertyValue(aVar, aProp);
 }
 
-int Debugger::GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp, LPTSTR &aValueBuf)
+int Debugger::GetPropertyInfo(VarBkp &aBkp, PropertyInfo &aProp)
 {
 	aProp.is_static = false;
-	aProp.is_builtin = false;
 	if (aProp.is_alias = aBkp.mType == VAR_ALIAS)
-		return GetPropertyValue(*aBkp.mAliasFor, aProp, aValueBuf);
+	{
+		aProp.is_builtin = aBkp.mAliasFor->mType == VAR_VIRTUAL;
+		return GetPropertyValue(*aBkp.mAliasFor, aProp);
+	}
+	aProp.is_builtin = false;
 	aBkp.ToToken(aProp.value);
 	return DEBUGGER_E_OK;
 }
 
-int Debugger::GetPropertyValue(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf)
+int Debugger::GetPropertyValue(Var &aVar, PropertySource &aProp)
 {
-	if (aProp.is_builtin = aVar.Type() == VAR_VIRTUAL)
+	if (aVar.Type() == VAR_VIRTUAL)
 	{
-		size_t approx_size = aVar.Get() + 1;
-		if (!aValueBuf || _msize(aValueBuf) < _TSIZE(approx_size))
-		{
-			free(aValueBuf);
-			if (approx_size < MAX_PATH)
-				approx_size = MAX_PATH; // Big enough for most built-in vars (avoids repeated reallocation for context_get).
-			if (!(aValueBuf = tmalloc(approx_size)))
-				return DEBUGGER_E_INTERNAL_ERROR;
-		}
-		aProp.value.SetValue(aValueBuf, aVar.Get(aValueBuf));
+		aProp.value.Free();
+		aProp.value.InitResult(aProp.value.buf);
+		aProp.value.symbol = SYM_INTEGER; // Virtual vars, like BIFs, expect this default.
+		aVar.Get(aProp.value);
+		if (aProp.value.symbol == SYM_OBJECT)
+			aProp.value.object->AddRef(); // See comments in ExpandExpression and BIV_TrayMenu.
+		if (aProp.value.Exited())
+			return DEBUGGER_E_EVAL_FAIL;
 	}
 	else
 	{
+		aProp.value.Free();
+		aProp.value.mem_to_free = nullptr; // Any value would be overwritten but this must be cleared manually.
 		if (aVar.IsUninitializedNormalVar())
 		{
 			aProp.value.symbol = SYM_MISSING;
@@ -1050,7 +1053,7 @@ int Debugger::GetPropertyValue(Var &aVar, PropertyInfo &aProp, LPTSTR &aValueBuf
 			aProp.value.marker_length = 0;
 		}
 		else
-			aVar.ToTokenSkipAddRef(aProp.value);
+			aVar.ToToken(aProp.value);
 	}
 	return DEBUGGER_E_OK;
 }
@@ -1431,13 +1434,22 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			aResult.bkp = varbkp, aResult.kind = PropVarBkp;
 		return DEBUGGER_E_OK;
 	}
-	IObject *iobj;
+	IObject *iobj = nullptr;
 	if (varbkp && varbkp->mType == VAR_ALIAS)
 		var = varbkp->mAliasFor;
 	if (var)
-		iobj = var->HasObject() ? var->Object() : NULL;
+	{
+		auto error = GetPropertyValue(*var, aResult); // Supports built-in vars.
+		if (error)
+			return error;
+		if (aResult.value.symbol == SYM_OBJECT)
+			iobj = aResult.value.object;
+	}
 	else
-		iobj = (varbkp->mAttrib & VAR_ATTRIB_IS_OBJECT) ? varbkp->mObject : NULL;
+	{
+		if (varbkp->mAttrib & VAR_ATTRIB_IS_OBJECT) 
+			iobj = varbkp->mObject;
+	}
 
 	if (!iobj)
 		return DEBUGGER_E_UNKNOWN_PROPERTY;
@@ -1548,7 +1560,6 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			// For property_set, this won't allow the base to be set (success="0").
 			// That seems okay since it could only ever be set to NULL anyway.
 			aResult.kind = PropValue;
-			aResult.owner = iobj;
 			aResult.value.SetValue(iobj);
 			aResult.this_object = this_override;
 			return DEBUGGER_E_OK;
@@ -1559,12 +1570,11 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			if (this_override)
 				this_override->Release();
 			aResult.kind = PropEnum;
-			aResult.owner = iobj;
+			aResult.value.SetValue(iobj);
 			return DEBUGGER_E_OK;
 		}
 
 		// Attempt to invoke property.
-		FuncResult result_token;
 		ExprTokenType *set_this = !c ? aSetValue : NULL;
 		ExprTokenType t_this(this_override ? this_override : iobj), t_key, *param[2];
 		int param_count = 0;
@@ -1581,7 +1591,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		if (set_this)
 			param[param_count++] = set_this;
 		int flags = (set_this ? IT_SET : IT_GET);
-		auto result = iobj->Invoke(result_token, flags, name, t_this, param, param_count);
+		auto result = iobj->Invoke(aResult.value, flags, name, t_this, param, param_count);
 		if (g->ThrownToken)
 			g_script.FreeExceptionToken(g->ThrownToken);
 
@@ -1601,38 +1611,20 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 			return_value = DEBUGGER_E_EVAL_FAIL;
 			break;
 		}
-		if (set_this)
+		if (!c)
 		{
-			result_token.Free();
+			if (!set_this)
+				aResult.kind = PropValue;
 			return_value = DEBUGGER_E_OK;
 			break;
 		}
-		if (result_token.symbol == SYM_OBJECT)
-		{
-			iobj->Release();
-			iobj = result_token.object;
-		}
-		if (!c)
-		{
-			if (result_token.symbol == SYM_STRING && !result_token.mem_to_free)
-			{
-				// Ensure string is not on the stack.
-				result_token.marker = result_token.mem_to_free = _tcsdup(result_token.marker);
-				if (!result_token.marker)
-					break;
-			}
-			aResult.kind = PropValue;
-			aResult.value.CopyValueFrom(result_token);
-			aResult.mem_to_free = result_token.mem_to_free;
-			aResult.owner = iobj;
-			return DEBUGGER_E_OK;
-		}
-		if (result_token.symbol != SYM_OBJECT)
-		{
-			result_token.Free();
+		if (aResult.value.symbol != SYM_OBJECT)
 			// No usable target object for the next iteration, therefore the property mustn't exist.
 			break;
-		}
+		iobj->Release();
+		iobj = aResult.value.object;
+		//aResult.value.Free(); // Must not due to the line above.
+		aResult.value.InitResult(aResult.value.buf);
 	}
 	if (this_override)
 		this_override->Release();
@@ -1649,7 +1641,8 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 	char *name = NULL;
 	int context_id = 0, depth = 0; // Var context and stack depth.
 	CStringA name_buf;
-	PropertyInfo prop(name_buf);
+	TCHAR value_buf[_f_retval_buf_size];
+	PropertyInfo prop(name_buf, value_buf);
 	prop.pagesize = mMaxChildren;
 	prop.max_data = aIsPropertyGet ? mMaxPropertyData : 1024*1024*1024; // Limit property_value to 1GB by default.
 	prop.max_depth = mMaxDepth; // Max property nesting depth.
@@ -1720,11 +1713,10 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 	}
 	//else var and field were set by the called function.
 
-	LPTSTR value_buf = NULL;
 	switch (prop.kind)
 	{
-	case PropVar: err = GetPropertyInfo(*prop.var, prop, value_buf); break;
-	case PropVarBkp: err = GetPropertyInfo(*prop.bkp, prop, value_buf); break;
+	case PropVar: err = GetPropertyInfo(*prop.var, prop); break;
+	case PropVarBkp: err = GetPropertyInfo(*prop.bkp, prop); break;
 	case PropEnum: prop.value.SetValue(_T(""), 0); // No break.
 	default: err = DEBUGGER_E_OK; break;
 	}
@@ -1742,7 +1734,7 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 			// between UTF-8 and LPTSTR):
 			prop.name = name;
 			if (prop.kind == PropEnum)
-				err = WriteEnumItems(prop, prop.owner);
+				err = WriteEnumItems(prop, prop.value.object);
 			else
 				err = WritePropertyXml(prop);
 		}
@@ -1754,7 +1746,6 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 			err = WritePropertyData(prop.value, prop.max_data);
 		}
 	}
-	free(value_buf);
 	return err ? err : mResponseBuf.Write("</response>");
 }
 
@@ -1828,7 +1819,8 @@ DEBUGGER_COMMAND(Debugger::property_set)
 		val.SetValue((LPTSTR)val_buf.GetString(), val_buf.GetLength());
 	}
 
-	PropertySource target;
+	TCHAR value_buf[_f_retval_buf_size];
+	PropertySource target(value_buf);
 	if (err = ParsePropertyName(name, depth, always_use, &val, target))
 		return err;
 
@@ -2824,7 +2816,7 @@ void Debugger::PropertyWriter::_WriteProperty(ExprTokenType &aValue, IObject *aT
 {
 	if (mError)
 		return;
-	PropertyInfo prop(mProp.fullname);
+	PropertyInfo prop(mProp.fullname, mProp.value.buf);
 	if (aThisOverride)
 	{
 		aThisOverride->AddRef();
@@ -2836,6 +2828,8 @@ void Debugger::PropertyWriter::_WriteProperty(ExprTokenType &aValue, IObject *aT
 		prop.name++;
 	// Write the property (and if it contains an object, any child properties):
 	prop.value.CopyValueFrom(aValue);
+	if (aValue.symbol == SYM_OBJECT)
+		aValue.object->AddRef();
 	//prop.page = 0; // "the childrens pages are always the first page."
 	prop.pagesize = mProp.pagesize;
 	prop.max_data = mProp.max_data;
