@@ -4306,18 +4306,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 
 			if (*cp && !IS_SPACE_OR_TAB(*cp)) // There is a character following the word local but it's not a space or tab.
 				break; // It doesn't qualify as being the global or local keyword because it's something like global2.
-			if (*cp && *(cp = omit_leading_whitespace(cp))) // Probably always a true stmt since caller rtrimmed it, but even if not it's handled correctly.
+			if (*cp && *(cp = omit_leading_whitespace(cp))) // Second *cp is probably always non-null since caller rtrimmed it, but even if not it's handled correctly.
 			{
-				// Check whether the first character is an operator by seeing if it alone would be a
-				// valid variable name.  If it's not valid, this doesn't qualify as the global or local
-				// keyword because it's something like this instead:
-				// local := xyz
-				// local += 3
-				TCHAR orig_char = cp[1];
-				cp[1] = '\0'; // Temporarily terminate.
-				ResultType result = Var::ValidateName(cp, DISPLAY_NO_ERROR);
-				cp[1] = orig_char; // Undo the termination.
-				if (!result) // It's probably operator, e.g. local = %var%
+				if (!IS_IDENTIFIER_CHAR(*cp))
 					break;
 			}
 			else // It's the word "global", "local", "static" by itself.
