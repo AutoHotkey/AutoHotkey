@@ -142,16 +142,16 @@ private:
 	};
 	union
 	{
+		LPTSTR mCharContents = sEmptyString; // Invariant: Anyone setting mByteCapacity to 0 must also set mCharContents to the empty string.
 		char *mByteContents;
-		LPTSTR mCharContents;
 	};
 	union
 	{
+		Var *mAliasFor = nullptr; // The variable for which this variable is an alias.
 		VarSizeType mByteLength;  // How much is actually stored in it currently, excluding the zero terminator.
-		Var *mAliasFor;           // The variable for which this variable is an alias.
 	};
-	VarSizeType mByteCapacity; // In bytes.  Includes the space for the zero terminator.
-	AllocMethodType mHowAllocated; // Keep adjacent/contiguous with the below to save memory.
+	VarSizeType mByteCapacity = 0; // In bytes.  Includes the space for the zero terminator.
+	AllocMethodType mHowAllocated = ALLOC_NONE; // Keep adjacent/contiguous with the below to save memory.
 	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE						0x01 // Combined with VAR_ATTRIB_IS_INT64/DOUBLE/OBJECT to indicate mContents is not current.
 	#define VAR_ATTRIB_UNINITIALIZED							0x02 // Var requires initialization before use.
 	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE_UNTIL_REASSIGNED	0x04 // Indicates that the VAR_ATTRIB_CONTENTS_OUT_OF_DATE flag should be kept until the variable is reassigned.
@@ -869,47 +869,31 @@ public:
 	}
 
 	// Constructor:
-	Var(LPTSTR aVarName, VarEntry *aBuiltIn, UCHAR aScope)
+	Var(LPTSTR aVarName, UCHAR aScope)
 		// The caller must ensure that aVarName is non-null.
-		: mCharContents(sEmptyString) // Invariant: Anyone setting mCapacity to 0 must also set mContents to the empty string.
-		// Doesn't need initialization: , mContentsInt64(NULL)
-		, mByteLength(0) // This also initializes mAliasFor within the same union.
-		, mHowAllocated(ALLOC_NONE)
+		: mScope(aScope)
 		, mAttrib(VAR_ATTRIB_UNINITIALIZED) // Seems best not to init empty vars to VAR_ATTRIB_NOT_NUMERIC because it would reduce maintainability, plus finding out whether an empty var is numeric via IsNumeric() is a very fast operation.
-		, mScope(aScope)
 		, mName(aVarName) // Caller gave us a pointer to dynamic memory for this.
+		, mType(VAR_NORMAL)
 	{
-		if (!aBuiltIn)
-			mType = VAR_NORMAL;
-		else if ((UINT_PTR)aBuiltIn->type.Get <= VAR_LAST_TYPE) // Relies on the fact that numbers less than VAR_LAST_TYPE can never realistically match the address of any function.
-			mType = (VarTypeType)(UINT_PTR)aBuiltIn->type.Get;
-		else
-		{
-			mType = VAR_VIRTUAL;
-			mVV = &aBuiltIn->type;
-		}
-		mByteCapacity = 0;
-		if (mType != VAR_NORMAL)
-			mAttrib = 0; // Any vars that aren't VAR_NORMAL are considered initialized, by definition.
 	}
 
-	Var()
-		//: Var(_T(""), NULL, 0) // Not supported by Visual C++ 2010.
-		// Initialized as above:
-		: mCharContents(sEmptyString)
-		, mByteLength(0)
-		, mAttrib(VAR_ATTRIB_UNINITIALIZED)
-		// For anonymous/temporary variables:
-		, mScope(VAR_LOCAL)
-		, mName(_T(""))
-		// Normally set as a result of !aBuiltIn:
-		, mType(VAR_NORMAL)
-		, mByteCapacity(0)
+	Var(LPTSTR aVarName, VarEntry *aBuiltIn, UCHAR aScope)
+		// The caller must ensure that aVarName is non-null.
+		: mScope(aScope)
+		, mName(aVarName) // Caller gave us a pointer to dynamic memory for this.
+		, mAttrib(0) // Any vars that aren't VAR_NORMAL are considered initialized, by definition.
+		, mType(VAR_VIRTUAL)
+		, mVV(&aBuiltIn->type)
+	{
+	}
+
+	Var() : Var(_T(""), 0)
+	{
 		// Vars constructed this way are for temporary use, and therefore must have mHowAllocated set
 		// as below to prevent the use of SimpleHeap::Malloc().  Otherwise, each Var could allocate
 		// some memory which cannot be freed until the program exits.
-		, mHowAllocated(ALLOC_MALLOC)
-	{
+		mHowAllocated = ALLOC_MALLOC;
 	}
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}

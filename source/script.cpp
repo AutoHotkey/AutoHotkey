@@ -7419,7 +7419,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, VarList *aList, int 
 		// v1.0.48: Lexikos: Current function is assume-static, so set static attribute.
 		aScope |= VAR_LOCAL_STATIC;
 
-	Var *the_new_var = new Var(new_name, nullptr, aScope);
+	Var *the_new_var = new Var(new_name, aScope);
 	if (!the_new_var || !aList->Insert(the_new_var, aInsertPos))
 	{
 		ScriptError(ERR_OUTOFMEM);
