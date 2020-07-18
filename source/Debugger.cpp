@@ -1390,52 +1390,34 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 	if (name_length > MAX_VAR_NAME_LENGTH || !Var::ValidateName(name, DISPLAY_NO_ERROR))
 		return DEBUGGER_E_INVALID_OPTIONS;
 
-	if (aVarScope == FINDVAR_GLOBAL)
+	VarList *vars = nullptr;
+	bool search_local = (aVarScope & VAR_LOCAL) && g->CurrentFunc;
+	if (search_local && aDepth > 0)
 	{
-		// Currently global context is the same at all depths.
-		aDepth = 0; // Allow FindOrAddVar() below.
-	}
-	else if (aDepth > 0)
-	{
-		VarList *vars = nullptr, *static_vars = nullptr;
-		VarBkp *bkps = nullptr, *bkps_end;
+		VarList *static_vars = nullptr;
+		VarBkp *bkps = nullptr, *bkps_end = nullptr;
 		mStack.GetLocalVars(aDepth, vars, static_vars, bkps, bkps_end);
-		if (bkps)
-		{
-			for ( ; ; ++bkps)
+		for ( ; bkps < bkps_end; ++bkps)
+			if (!_tcsicmp(bkps->mVar->mName, name))
 			{
-				if (bkps == bkps_end)
-				{
-					// No local var at that depth, so make sure to not return the wrong local.
-					aVarScope = FINDVAR_GLOBAL;
-					break;
-				}
-				if (!_tcsicmp(bkps->mVar->mName, name))
-				{
-					varbkp = bkps;
-					break;
-				}
+				varbkp = bkps;
+				break;
 			}
-		}
-		else if (vars)
-			var = vars->Find(name);
-		if (!varbkp && !var)
-		{
-			// No local var or backup found, so check static vars.  Can't rely on FindVar
-			// to do this since it might search the wrong function (because aDepth > 0).
-			if (static_vars)
-				var = static_vars->Find(name);
-		}
+		if (!varbkp && static_vars)
+			var = static_vars->Find(name);
 	}
 
-	VarList *varlist;
-	int insert_pos;
-	if (  !var && !varbkp
-		&& !(var = g_script.FindVar(name, name_length, aVarScope, &varlist, &insert_pos))
-		&& !aDepth // Do not create variables when aDepth > 0, as g->CurrentFunc isn't the target function.
-		&& aSetValue  ) // Avoid creating empty variables.
-		var = g_script.AddVar(name, name_length, varlist, insert_pos
-			, ((aVarScope & VAR_LOCAL) && g->CurrentFunc) ? VAR_LOCAL : VAR_GLOBAL);
+	if (!var && !varbkp)
+	{
+		int insert_pos;
+		if (vars) // Use this first to support aDepth.
+			var = vars->Find(name, &insert_pos);
+		if (!var) // Use FindVar to support built-ins and globals.
+			var = g_script.FindVar(name, name_length, aVarScope, &vars, &insert_pos);
+		if (!var && aSetValue) // Avoid creating empty variables.
+			var = g_script.AddVar(name, name_length, vars, insert_pos
+				, search_local ? VAR_LOCAL : VAR_GLOBAL);
+	}
 
 	if (!var && !varbkp)
 		return DEBUGGER_E_UNKNOWN_PROPERTY;
