@@ -96,6 +96,7 @@ ResultType Var::PopulateVirtualVar()
 	if (result_token.mem_to_free)
 	{
 		_AcceptNewMem(result_token.mem_to_free, result_token.marker_length);
+		mAttrib |= VAR_ATTRIB_VIRTUAL_OPEN;
 		return OK;
 	}
 	size_t length;

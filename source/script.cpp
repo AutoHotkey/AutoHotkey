@@ -12100,9 +12100,8 @@ ResultType Script::DerefInclude(LPTSTR &aOutput, LPTSTR aBuf)
 //  3) It is restricted to built-in vars to reduce the risk of breaking any scripts
 //     that use percent sign literally in a filename.  Most other vars are empty anyway.
 {
-	aOutput = NULL; // Set default.
+	aOutput = nullptr; // Set default.
 
-	TCHAR var_name[MAX_VAR_NAME_LENGTH + 1];
 	VarSizeType expanded_length;
 	size_t var_name_length;
 	LPTSTR cp, cp1, dest;
@@ -12133,16 +12132,22 @@ ResultType Script::DerefInclude(LPTSTR &aOutput, LPTSTR aBuf)
 				var_name_length = cp1 - cp - 1;
 				if (*cp1 && var_name_length && var_name_length <= MAX_VAR_NAME_LENGTH)
 				{
-					tcslcpy(var_name, cp + 1, var_name_length + 1);  // +1 to convert var_name_length to size.
-					Var *var = FindOrAddVar(var_name, var_name_length, FINDVAR_GLOBAL);
-					if (var)
+					Var *var = FindVar(cp + 1, var_name_length, FINDVAR_GLOBAL);
+					if (var && var->Type() == VAR_VIRTUAL)
 					{
-						if (var->Type() != VAR_VIRTUAL) // Likely to be an error.
-							return ScriptError(ERR_PARAM1_INVALID, aBuf);
 						if (which_pass) // 2nd pass
-							dest += var->Get(dest);
+						{
+							size_t var_length = var->CharLength();
+							tmemcpy(dest, var->Contents(), var_length);
+							var->Free();
+							dest += var_length;
+						}
 						else
-							expanded_length += var->Get();
+						{
+							if (!var->PopulateVirtualVar())
+								return FAIL;
+							expanded_length += var->CharLength();
+						}
 						cp = cp1; // For the next loop iteration, continue at the char after this reference's final deref symbol.
 						continue;
 					}
