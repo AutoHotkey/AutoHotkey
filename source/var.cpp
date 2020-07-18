@@ -617,7 +617,7 @@ ResultType Var::AssignBinaryNumber(__int64 aNumberAsInt64, VarAttribType aAttrib
 		var.ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
 
 	var.mContentsInt64 = aNumberAsInt64;
-	var.mAttrib &= ~(VAR_ATTRIB_TYPES | VAR_ATTRIB_NOT_NUMERIC | VAR_ATTRIB_UNINITIALIZED | VAR_ATTRIB_CONTENTS_OUT_OF_DATE_UNTIL_REASSIGNED);
+	var.mAttrib &= ~(VAR_ATTRIB_TYPES | VAR_ATTRIB_NOT_NUMERIC | VAR_ATTRIB_UNINITIALIZED);
 	var.mAttrib |= (VAR_ATTRIB_CONTENTS_OUT_OF_DATE | aAttrib); // Must be done prior to below.  aAttrib indicates the type of binary number.
 	return OK;
 }
