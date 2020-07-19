@@ -1459,6 +1459,8 @@ ResultType Line::ExpandSingleArg(int aArgIndex, ResultToken &aResultToken, LPTST
 #ifdef _WIN64
 		aResultToken.marker_length = postfix->marker_length;
 #endif
+		if (aResultToken.symbol == SYM_OBJECT) // This can happen for VAR_CONSTANT or optimised Func("x").
+			aResultToken.object->AddRef();
 		return OK;
 	}
 
