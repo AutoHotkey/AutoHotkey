@@ -324,20 +324,11 @@ ResultType GetEnumerator(IObject *&aEnumerator, ExprTokenType &aEnumerable, int 
 	return FAIL;
 }
 
-ResultType CallEnumerator(IObject *aEnumerator, Var *aVar0, Var *aVar1, bool aDisplayError)
+ResultType CallEnumerator(IObject *aEnumerator, ExprTokenType *aParam[], int aParamCount, bool aDisplayError)
 {
 	FuncResult result_token;
-	ExprTokenType t_this(aEnumerator), param[2], *params[] = { param, param + 1 };
-	param[0].symbol = SYM_VAR;
-	param[0].var = aVar0;
-	int param_count = 1;
-	if (aVar1)
-	{
-		param[1].symbol = SYM_VAR;
-		param[1].var = aVar1;
-		++param_count;
-	}
-	auto result = aEnumerator->Invoke(result_token, IT_CALL, nullptr, t_this, params, param_count);
+	ExprTokenType t_this(aEnumerator);
+	auto result = aEnumerator->Invoke(result_token, IT_CALL, nullptr, t_this, aParam, aParamCount);
 	if (result == FAIL || result == EARLY_EXIT || result == INVOKE_NOT_HANDLED)
 	{
 		if (result == INVOKE_NOT_HANDLED && aDisplayError)
@@ -359,10 +350,13 @@ Array *Array::FromEnumerable(ExprTokenType &aEnumerable)
 		return nullptr;
 	
 	Var var;
+	ExprTokenType tvar, *param = &tvar;
+	tvar.symbol = SYM_VAR;
+	tvar.var = &var;
 	Array *vargs = Array::Create();
 	for (;;)
 	{
-		auto result = CallEnumerator(enumerator, &var, nullptr, true);
+		auto result = CallEnumerator(enumerator, &param, 1, true);
 		if (result == FAIL)
 		{
 			vargs->Release();

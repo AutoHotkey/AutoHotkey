@@ -944,7 +944,7 @@ public:
 	// make it inline (since it is called from only one place).  Inline would be good since it
 	// is called frequently during script loading and is difficult to macro-ize in a way that
 	// retains readability.
-	static ArgTypeType ArgIsVar(ActionTypeType aActionType, int aArgIndex)
+	static ArgTypeType ArgIsVar(ActionTypeType aActionType, int aArgIndex, int aArgCount)
 	{
 		switch(aArgIndex)
 		{
@@ -956,17 +956,9 @@ public:
 			case ACT_CATCH:
 				return ARG_TYPE_OUTPUT_VAR;
 			}
-			break;
-
-		case 1:  // Arg #2
-			switch(aActionType)
-			{
-			case ACT_FOR:
-				return ARG_TYPE_OUTPUT_VAR;
-			}
-			break;
 		}
-		// Otherwise:
+		if (aActionType == ACT_FOR)
+			return aArgIndex == aArgCount - 1 ? ARG_TYPE_NORMAL : ARG_TYPE_OUTPUT_VAR;
 		return ARG_TYPE_NORMAL;
 	}
 

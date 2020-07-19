@@ -1166,10 +1166,14 @@ void Debugger::PropertyWriter::WriteEnumItems(IObject *aEnumerable, int aStart, 
 	{
 		Var vkey, vval;
 		ExprTokenType tkey, tval;
-		FuncResult result_token;
+		ExprTokenType tparam[2], *param[] = { tparam, tparam + 1 };
+		tparam[0].symbol = SYM_VAR;
+		tparam[0].var = &vkey;
+		tparam[1].symbol = SYM_VAR;
+		tparam[1].var = &vval;
 		for (int i = 0; i < aEnd; ++i)
 		{
-			result = CallEnumerator(enumerator, &vkey, &vval, false);
+			result = CallEnumerator(enumerator, param, 2, false);
 			if (result != CONDITION_TRUE)
 				break;
 			if (i >= aStart)

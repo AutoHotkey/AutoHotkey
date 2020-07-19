@@ -1955,8 +1955,8 @@ FreeVars *UserFunc::sFreeVars = nullptr;
 
 
 ResultType Line::ExpandArgs(ResultToken *aResultTokens)
-// Caller should either provide both or omit both of the parameters.  If provided, it means
-// caller already called GetExpandedArgSize for us.
+// aResultTokens is non-null if the caller wants results that aren't strings.  Caller is
+// responsible for freeing the tokens either after successful use or before aborting, on failure.
 // Returns OK, FAIL, or EARLY_EXIT.  EARLY_EXIT occurs when a function-call inside an expression
 // used the EXIT command to terminate the thread.
 {
@@ -2213,15 +2213,6 @@ end:
 	// such as WinWait, that large deref buffer would never get freed.
 	if (sDerefBufSize > LARGE_DEREF_BUF_SIZE)
 		SET_DEREF_TIMER(10000) // Reset the timer right before the deref buf is possibly about to become idle.
-
-	if (aResultTokens && result_to_return != OK)
-	{
-		// For maintainability, release any objects here.  Caller was responsible for ensuring
-		// aResultTokens is initialized and has at least mArgc elements.  Caller must assume
-		// contents of aResultTokens are invalid if we return != OK.
-		for (int i = 0; i < mArgc; ++i)
-			aResultTokens[i].Free();
-	}
 
 	return result_to_return;
 }

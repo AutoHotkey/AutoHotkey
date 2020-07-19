@@ -4926,28 +4926,23 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		// Validate "For" syntax and translate to conventional command syntax.
 		// "For x,y in z" -> "For x,y, z"
 		// "For x in y"   -> "For x,, y"
-		LPTSTR in;
-		for (in = action_args; *in; ++in)
-			if (IS_SPACE_OR_TAB(*in)
-				&& tolower(in[1]) == 'i'
-				&& tolower(in[2]) == 'n'
-				&& IS_SPACE_OR_TAB(in[3])) // Relies on short-circuit boolean evaluation.
-				break;
-		if (!*in)
-			return ScriptError(_T("This \"For\" is missing its \"in\"."), aLineText);
-		int vars = 1;
-		for (mark = (int)(in - action_args); mark > 0; --mark)
-			if (action_args[mark] == g_delimiter)
-				++vars;
-		in[1] = g_delimiter; // Replace "in" with a conventional delimiter.
-		if (vars > 1)
-		{	// Something like "For x,y in z".
-			if (vars > 2)
-				return ScriptError(_T("Syntax error or too many variables in \"For\" statement."), aLineText);
-			in[2] = ' ';
+		//return ScriptError(_T("This \"For\" is missing its \"in\"."), aLineText);
+		LPTSTR cp;
+		for (cp = action_args; IS_LEADING_IDENTIFIER_CHAR(*cp); )
+		{
+			do ++cp; while (IS_IDENTIFIER_CHAR(*cp));
+			// At this point, *cp cannot point to an identifier char due to the line above.
+			while (IS_SPACE_OR_TAB(*cp)) ++cp;
+			// Now if *cp points at an identifier char, it must have been preceded by a space/tab.
+			if (*cp != g_delimiter)
+				break; // It's either invalid or the end of the var list.
+			do ++cp; while (IS_SPACE_OR_TAB(*cp));
 		}
-		else
-			in[2] = g_delimiter; // Insert another delimiter so the expression is always arg 3.
+		if (  !(ctolower(cp[0]) == 'i' && ctolower(cp[1]) == 'n' && IS_SPACE_OR_TAB(cp[2]))  )
+			return ScriptError(ERR_EXPR_SYNTAX, aLineText);
+		// Replace "in" with a normal arg delimiter.
+		cp[0] = g_delimiter;
+		cp[1] = ' ';
 	}
 
 	// v2: All statements accept expressions by default, except goto/break/continue.
@@ -5154,7 +5149,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// set to ARG_TYPE_NORMAL for maintainability, so ARG_TYPE_OUTPUT_VAR always has a non-null
 			// var at runtime.  ARG_TYPE_INPUT_VAR is never encountered at this stage; it is only used
 			// by certain optimizations in ExpressionToPostfix(), which comes later.
-			this_new_arg.type = *this_aArg ? Line::ArgIsVar(aActionType, i) : ARG_TYPE_NORMAL;
+			this_new_arg.type = *this_aArg ? Line::ArgIsVar(aActionType, i, aArgc) : ARG_TYPE_NORMAL;
 			
 			// All non-blank args are handled by ExpressionToPostfix, except where caller has indicated
 			// this action type does not accept an expression (e.g. "goto label").
@@ -7638,6 +7633,7 @@ ResultType Script::PreparseExpressions(FuncList &aFuncs)
 Line *Script::PreparseCommands(Line *aStartingLine)
 // Preparse any commands which might rely on blocks having been fully preparsed,
 // such as any command which has a jump target (label).
+// Also perform some late-stage optimizations and validation.
 {
 	for (Line *line = aStartingLine; line; line = line->mNextLine)
 	{
@@ -7773,6 +7769,34 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 			for (Line *parent = line->mParentLine; parent; parent = parent->mParentLine)
 				if (parent->mActionType == ACT_FINALLY)
 					return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
+			break;
+
+		case ACT_FOR:
+			// Construct these arrays so that PerformLoopFor doesn't need to.
+			// This relies on ARG_TYPE_OUTPUT_VAR always being resolved at load-time,
+			// prior to this function being called (which is currently always the case).
+			int var_count = line->mArgc - 1;
+			line->mAttribute = SimpleHeap::Malloc(
+				sizeof(ExprTokenType*) * var_count +
+				sizeof(ExprTokenType) * var_count
+			);
+			auto param = (ExprTokenType**)line->mAttribute;
+			auto token = (ExprTokenType*)(param + var_count);
+			for (int i = 0; i < var_count; ++i)
+			{
+				param[i] = token + i;
+				if (line->mArg[i].type == ARG_TYPE_OUTPUT_VAR)
+				{
+					token[i].symbol = SYM_VAR;
+					token[i].var = VAR(line->mArg[i]);
+				}
+				else // Omitted.
+				{
+					token[i].symbol = SYM_MISSING;
+					token[i].marker = _T("");
+					token[i].marker_length = 0;
+				}
+			}
 			break;
 		}
 		// Check for unreachable code.
@@ -10727,43 +10751,46 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 	Line *jump_to_line;
 	global_struct &g = *::g; // Might slightly speed up the loop below.
 
-	ResultToken param_tokens[3];
-	// param_tokens[0..1] aren't used because those args are ARG_TYPE_OUTPUT_VAR,
-	// but must be initialized for the cleanup code in ExpandArgs() which runs if
-	// a runtime error occurred and/or the thread is exiting.
-	for (int i = 0; i < _countof(param_tokens); ++i)
-		param_tokens[i].InitResult(NULL); // buf can be NULL because this isn't ACT_RETURN.
-
-	result = ExpandArgs(param_tokens);
+	ResultToken enum_token;
+	enum_token.InitResult(nullptr); // buf can be null because this isn't ACT_RETURN.
+	PRIVATIZE_S_DEREF_BUF;
+	result = ExpandSingleArg(mArgc - 1, enum_token, our_deref_buf, our_deref_buf_size);
+	DEPRIVATIZE_S_DEREF_BUF;
 	if (result != OK)
 		// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
 		return result;
 	
-	// Save these pointers since they will be overwritten during the loop:
-	Var *var[] = { VAR(mArg[0]), VAR(mArg[1]) };
+	auto var_param = (ExprTokenType **)mAttribute; // See PreparseCommands.
+	int var_count = mArgc - 1;
 	
 	IObject *enumerator;
-	result = GetEnumerator(enumerator, param_tokens[2], 1 + (var[1] != nullptr), true);
-	param_tokens[2].Free();
+	result = GetEnumerator(enumerator, enum_token, var_count, true);
+	enum_token.Free();
 	if (result == FAIL || result == EARLY_EXIT)
 		return result;
 
 	// "Localize" the loop variables.
-	VarBkp var_bkp[2];
-	var[0] = var[0]->ResolveAlias(); // Required for correct handling of ByRef, super-globals (when reference precedes declaration) and upvars.
-	var[0]->Backup(var_bkp[0]);
-	if (var[1])
-	{
-		var[1] = var[1]->ResolveAlias();
-		var[1]->Backup(var_bkp[1]);
-	}
+	auto var_bkp = (VarBkp *)_alloca(sizeof(VarBkp) * var_count);
+	for (int i = 0; i < var_count; ++i)
+		if (var_param[i]->symbol == SYM_VAR)
+		{
+			var_param[i]->var->Backup(var_bkp[i]);
+			// If var is a ByRef parameter or upvar, convert it to a normal local variable
+			// in case the body of the loop calls functions that refer to the original var.
+			// It will be restored to its previous alias by Restore() after the loop.
+			// If this wasn't done, it would be necessary to resolve the alias before calling
+			// Backup(), otherwise it only saves mAliasFor, not mAliasFor's value.  That would
+			// mean var_param couldn't be preallocated, since a recursive function call might
+			// reenter the same For loop, which would overwrite the vars.
+			var_param[i]->var->ConvertToNonAliasIfNecessary();
+		}
 
 	// Now that the enumerator expression has been evaluated, init A_Index:
 	g.mLoopIteration = 1;
 
 	for (;; ++g.mLoopIteration)
 	{
-		result = CallEnumerator(enumerator, var[0], var[1], true);
+		result = CallEnumerator(enumerator, var_param, var_count, true);
 		if (result == FAIL || result == EARLY_EXIT)
 			break;
 
@@ -10795,13 +10822,12 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 			break;
 	} // for()
 	enumerator->Release();
-	var[0]->Free();
-	var[0]->Restore(var_bkp[0]);
-	if (var[1])
-	{
-		var[1]->Free();
-		var[1]->Restore(var_bkp[1]);
-	}
+	for (int i = 0; i < var_count; ++i)
+		if (var_param[i]->symbol == SYM_VAR)
+		{
+			var_param[i]->var->Free();
+			var_param[i]->var->Restore(var_bkp[i]);
+		}
 	return result; // The script's loop is now over.
 }
 
