@@ -672,7 +672,11 @@ public:
 
 	bool IsAssignedSomewhere()
 	{
-		return mAttrib & VAR_ATTRIB_HAS_ASSIGNMENT;
+		//return mAttrib & VAR_ATTRIB_HAS_ASSIGNMENT;
+		return mAttrib != VAR_ATTRIB_UNINITIALIZED;
+		// When this function is called (at load time), any of the other attributes
+		// would mean that this var has a value, which means that it doesn't require
+		// an assignment.  If it lacks all attributes, it's presumably a built-in var.
 	}
 
 	void MarkAssignedSomewhere()
