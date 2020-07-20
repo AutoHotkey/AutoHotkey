@@ -526,6 +526,12 @@ Script::Script()
 	// initial Sleep(10) in ExecUntil that would otherwise occur.
 	ZeroMemory(&mNIC, sizeof(mNIC));  // Constructor initializes this, to be safe.
 	mNIC.hWnd = NULL;  // Set this as an indicator that it tray icon is not installed.
+	
+	// This is done here rather than in Init() because by then CreateRootPrototypes()
+	// definitely would have already caused functions to be added to the list.
+	mFuncs.Alloc(100); // Avoid multiple reallocations for simple scripts.
+	FindFunc(_T("Array"));  // This ensures they aren't inserted while PreparseExpressions
+	FindFunc(_T("Object")); // is iterating over mFuncs.
 
 #ifdef _DEBUG
 	if (ID_FILE_EXIT < ID_MAIN_FIRST) // Not a very thorough check.
@@ -787,8 +793,6 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 				return FAIL;  // It already displayed the error for us.
 		}
 	}
-
-	mFuncs.Alloc(100); // For performance.  Failure is non-critical and unlikely, so ignored for code size.
 
 	return OK;
 }
@@ -7600,6 +7604,7 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 			ArgStruct &this_arg = line->mArg[i]; // For performance and convenience.
 			if (!this_arg.is_expression) // Plain text; i.e. goto/break/continue label.
 				continue;
+			ASSERT(!this_arg.postfix);
 			// Otherwise, convert the expression text to postfix form and set is_expression
 			// based on whether the arg should be evaluated by ExpandExpression():
 			mCurrLine = line; // For error reporting in FindVar() and perhaps other places.
