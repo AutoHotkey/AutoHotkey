@@ -2819,7 +2819,7 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 			LPTSTR cp = omit_trailing_whitespace(buf, buf + (buf_length - 2));
 			if (   *cp == ')' // Function/method definition or reserved.
 				|| *cp == ']' // Property definition or reserved.
-				|| (ACT_IS_LINE_PARENT(action_type) || action_type == ACT_SWITCH) && !EndsWithOperator(buf, cp)
+				|| ACT_IS_LINE_PARENT(action_type) && !EndsWithOperator(buf, cp)
 				|| mClassObjectCount && !g->CurrentFunc && (cp - buf) < action_end_pos) // "Property {" (get/set was already handled by caller).
 				return OK;
 		}

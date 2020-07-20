@@ -587,7 +587,8 @@ enum enum_act {
 #define ACT_IS_LOOP(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_WHILE)
 #define ACT_IS_LOOP_EXCLUDING_WHILE(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_FOR)
 #define ACT_IS_LINE_PARENT(ActionType) (ACT_IS_IF(ActionType) || ActionType == ACT_ELSE \
-	|| ACT_IS_LOOP(ActionType) || (ActionType >= ACT_TRY && ActionType <= ACT_FINALLY))
+	|| ACT_IS_LOOP(ActionType) || (ActionType >= ACT_TRY && ActionType <= ACT_FINALLY) \
+	|| ActionType == ACT_SWITCH)
 // The following groups of action types do not need ExpandArgs() called by ExecUntil(),
 // for one of the following reasons: 1) action has no args, 2) action's args are
 // always fully resolved at load time, 3) action is never executed by ExecUntil(),
