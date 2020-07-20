@@ -13370,7 +13370,7 @@ ResultType Script::PreparseVarRefs()
 			}
 			if (arg.type == ARG_TYPE_INPUT_VAR)
 			{
-				if (arg.postfix->var->Type() != VAR_VIRTUAL)
+				if (arg.postfix->var->Type() == VAR_VIRTUAL)
 				{
 					// Can't be ARG_TYPE_INPUT_VAR after all, as VAR_VIRTUAL requires ExpandExpression.
 					arg.type = ARG_TYPE_NORMAL;
