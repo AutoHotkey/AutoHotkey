@@ -5267,9 +5267,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	case ACT_FINALLY:
 		bool expected = false;
 		Line *parent = mPendingRelatedLine;
-		if (parent)
+		for (;; parent = parent->mParentLine)
 		{
-			if (parent->mActionType == ACT_BLOCK_BEGIN) parent = parent->mParentLine;
+			if (!parent)
+				return line.LineUnexpectedError();
 			enum_act parent_act = parent ? (enum_act)parent->mActionType : ACT_INVALID;
 			switch (aActionType)
 			{
@@ -5278,9 +5279,9 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			case ACT_CATCH: expected = parent_act == ACT_TRY; break;
 			case ACT_FINALLY: expected = parent_act == ACT_TRY || parent_act == ACT_CATCH; break;
 			}
+			if (expected)
+				break;
 		}
-		if (!expected)
-			return line.LineUnexpectedError();
 		line.mParentLine = parent->mParentLine; // Not parent itself, since an ELSE can't jump into its IF's body.
 		break;
 	}
