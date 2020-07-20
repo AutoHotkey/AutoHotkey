@@ -2248,9 +2248,10 @@ BIF_DECL(BIF_PostSendMessage)
 
 	if (!successful)
 	{
-		if (aUseSend && GetLastError() == ERROR_TIMEOUT)
+		auto last_error = GetLastError();
+		if (aUseSend && last_error == ERROR_TIMEOUT)
 			_f_throw(ERR_TIMEOUT);
-		_f_throw_win32();
+		_f_throw_win32(last_error); // Passing last_error reduces code size due to the implied additional GetLastError() call when omitting this parameter.
 	}
 	if (aUseSend)
 		_f_return_i((__int64)dwResult);
@@ -3464,9 +3465,13 @@ void PixelSearch(Var *output_var_x, Var *output_var_y
 	}
 	//else leave uninitialized since they won't be used.
 
+	DWORD first_error = 0;
 	HDC hdc = GetDC(NULL);
 	if (!hdc)
+	{
+		first_error = GetLastError();
 		goto error;
+	}
 
 	bool found = false; // Must init here for use by "goto fast_end".
 
@@ -3594,6 +3599,7 @@ void PixelSearch(Var *output_var_x, Var *output_var_y
 	}
 
 fast_end:
+	first_error = GetLastError(); // Might help to ensure the correct error number is thrown on failure.
 	ReleaseDC(NULL, hdc);
 	if (sdc)
 	{
@@ -3622,7 +3628,7 @@ fast_end:
 	_f_return_b(found);
 
 error:
-	_f_throw_win32();
+	_f_throw_win32(first_error);
 }
 
 
@@ -3770,9 +3776,11 @@ BIF_DECL(BIF_ImageSearch)
 	if (!hbitmap_image)
 		goto arg7_error;
 
+	DWORD first_error = 0;
 	HDC hdc = GetDC(NULL);
 	if (!hdc)
 	{
+		first_error = GetLastError();
 		if (!no_delete_bitmap)
 		{
 			if (image_type == IMAGE_ICON)
@@ -4000,6 +4008,7 @@ BIF_DECL(BIF_ImageSearch)
 	}
 
 end:
+	first_error = GetLastError();
 	ReleaseDC(NULL, hdc);
 	if (!no_delete_bitmap && hbitmap_image)
 		DeleteObject(hbitmap_image);
@@ -4034,7 +4043,7 @@ arg7_error:
 	_f_throw(ERR_PARAM7_INVALID, aImageFile);
 
 error:
-	_f_throw_win32();
+	_f_throw_win32(first_error);
 }
 
 

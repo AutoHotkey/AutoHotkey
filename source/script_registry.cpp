@@ -339,7 +339,7 @@ finish:
 	RegCloseKey(hRegKey);
 	g->LastError = result;
 	if (result != ERROR_SUCCESS)
-		_f_throw_win32();
+		_f_throw_win32(g->LastError);
 } // RegRead()
 
 
