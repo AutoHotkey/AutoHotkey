@@ -35,9 +35,8 @@ ResultType Var::Assign(Var &aVar)
 // source_var->Type() must be VAR_NORMAL, but this->Type() can be VAR_VIRTUAL.
 // Returns OK or FAIL.
 {
-	// Below relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-	Var &source_var = aVar.mType == VAR_ALIAS ? *aVar.mAliasFor : aVar;
-	Var &target_var = *(mType == VAR_ALIAS ? mAliasFor : this);
+	Var &target_var = *ResolveAlias();
+	Var &source_var = *aVar.ResolveAlias();
 
 	switch (source_var.mAttrib & VAR_ATTRIB_TYPES) // This switch() method should squeeze a little more performance out of it compared to doing "&" for every attribute.  Only works for attributes that are mutually-exclusive, which these are.
 	{
@@ -599,27 +598,27 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 
 ResultType Var::AssignBinaryNumber(__int64 aNumberAsInt64, VarAttribType aAttrib)
 {
-	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+	if (mType == VAR_ALIAS)
+		return mAliasFor->AssignBinaryNumber(aNumberAsInt64, aAttrib);
 
-	if (var.mType == VAR_VIRTUAL)
+	if (mType == VAR_VIRTUAL)
 	{
 		// Virtual vars have no binary number cache, as their value may be calculated on-demand.
 		// Additionally, THE CACHE MUST NOT BE USED due to the union containing mVV.
 		ExprTokenType value;
 		value.symbol = (aAttrib & VAR_ATTRIB_IS_INT64) ? SYM_INTEGER : SYM_FLOAT;
 		value.value_int64 = aNumberAsInt64;
-		return var.AssignVirtual(value);
+		return AssignVirtual(value);
 	}
-	else if (var.mType == VAR_CONSTANT) // Might be impossible due to prior validation of assignments/output vars.
+	else if (mType == VAR_CONSTANT) // Might be impossible due to prior validation of assignments/output vars.
 		return g_script.VarIsReadOnlyError(this);
 
-	if (var.mAttrib & VAR_ATTRIB_IS_OBJECT) // mObject will be overwritten below via the union.
-		var.ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
+	if (mAttrib & VAR_ATTRIB_IS_OBJECT) // mObject will be overwritten below via the union.
+		ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
 
-	var.mContentsInt64 = aNumberAsInt64;
-	var.mAttrib &= ~(VAR_ATTRIB_TYPES | VAR_ATTRIB_NOT_NUMERIC | VAR_ATTRIB_UNINITIALIZED);
-	var.mAttrib |= (VAR_ATTRIB_CONTENTS_OUT_OF_DATE | aAttrib); // Must be done prior to below.  aAttrib indicates the type of binary number.
+	mContentsInt64 = aNumberAsInt64;
+	mAttrib &= ~(VAR_ATTRIB_TYPES | VAR_ATTRIB_NOT_NUMERIC | VAR_ATTRIB_UNINITIALIZED);
+	mAttrib |= (VAR_ATTRIB_CONTENTS_OUT_OF_DATE | aAttrib); // Must be done prior to below.  aAttrib indicates the type of binary number.
 	return OK;
 }
 
@@ -627,25 +626,25 @@ ResultType Var::AssignBinaryNumber(__int64 aNumberAsInt64, VarAttribType aAttrib
 
 ResultType Var::AssignSkipAddRef(IObject *aValueToAssign)
 {
-	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+	if (mType == VAR_ALIAS)
+		return mAliasFor->AssignSkipAddRef(aValueToAssign);
 
-	if (var.mType == VAR_VIRTUAL)
+	if (mType == VAR_VIRTUAL)
 	{
-		auto result = var.AssignVirtual(ExprTokenType(aValueToAssign));
+		auto result = AssignVirtual(ExprTokenType(aValueToAssign));
 		aValueToAssign->Release(); // Caller wanted us to take responsibility for this.
 		return result;
 	}
 
-	var.Free(); // If var contains an object, this will Release() it.  It will also clear any string contents and free memory if appropriate.
+	Free(); // If var contains an object, this will Release() it.  It will also clear any string contents and free memory if appropriate.
 		
-	var.mObject = aValueToAssign;
+	mObject = aValueToAssign;
 		
 	// Already done by Free() above:
 	//mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_UNINITIALIZED);
 
 	// Mark this variable to indicate it contains an object (objects are never considered numeric).
-	var.mAttrib |= VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_NOT_NUMERIC;
+	mAttrib |= VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_NOT_NUMERIC;
 
 	return OK;
 }
@@ -654,8 +653,9 @@ ResultType Var::AssignSkipAddRef(IObject *aValueToAssign)
 
 void Var::Get(ResultToken &aResultToken)
 {
-	Var &var = *ResolveAlias();
-	ASSERT(var.mType == VAR_VIRTUAL);
+	if (mType == VAR_ALIAS)
+		return mAliasFor->Get(aResultToken);
+	ASSERT(mType == VAR_VIRTUAL);
 	mVV->Get(aResultToken, mName);
 }
 
@@ -780,27 +780,27 @@ ResultType Var::AppendIfRoom(LPTSTR aStr, VarSizeType aLength)
 // Environment variables aren't supported here; instead, aStr is appended directly onto the actual/internal
 // contents of the "this" variable.
 {
-	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()):
-	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-	if (var.mType != VAR_NORMAL // e.g. VAR_VIRTUAL. Some callers do call it this way, but even if not it should be kept for maintainability.
-		|| var.IsObject()) // Let caller free it; not worth handling here.
+	if (mType == VAR_ALIAS)
+		return mAliasFor->AppendIfRoom(aStr, aLength);
+	if (mType != VAR_NORMAL // e.g. VAR_VIRTUAL. Some callers do call it this way, but even if not it should be kept for maintainability.
+		|| IsObject()) // Let caller free it; not worth handling here.
 		return FAIL; // CHECK THIS FIRST, BEFORE BELOW, BECAUSE CALLERS ALWAYS WANT IT TO BE A FAILURE.
 	if (aLength)
 	{
-		VarSizeType var_length = var.Length(); // Get the apparent length because one caller is a concat that wants consistent behavior of the .= operator regardless of whether this shortcut succeeds or not.
+		VarSizeType var_length = Length(); // Get the apparent length because one caller is a concat that wants consistent behavior of the .= operator regardless of whether this shortcut succeeds or not.
 		VarSizeType new_length = var_length + aLength;
-		if (new_length >= var._CharCapacity()) // Not enough room.
+		if (new_length >= _CharCapacity()) // Not enough room.
 			return FAIL;
-		tmemmove(var.mCharContents + var_length, aStr, aLength);  // mContents was updated via Length() above. Use memmove() vs. memcpy() in case there's any overlap between source and dest.
-		var.mCharContents[new_length] = '\0'; // Terminate it as a separate step in case caller passed a length shorter than the apparent length of aStr.
-		var.mByteLength = new_length * sizeof(TCHAR);
+		tmemmove(mCharContents + var_length, aStr, aLength);  // mContents was updated via Length() above. Use memmove() vs. memcpy() in case there's any overlap between source and dest.
+		mCharContents[new_length] = '\0'; // Terminate it as a separate step in case caller passed a length shorter than the apparent length of aStr.
+		mByteLength = new_length * sizeof(TCHAR);
 	}
 	// Even if nothing was appended above, set the attributes so n:=1,n.="" produces a String, not an Integer.
 	// If this is a binary-clip variable, appending has probably "corrupted" it; so don't allow it to ever be
 	// put back onto the clipboard as binary data (the routine that does that is designed to detect corruption,
 	// but it might not be perfect since corruption is so rare).  Also remove the other flags that are no longer
 	// appropriate:
-	var.mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED; // This also removes VAR_ATTRIB_NOT_NUMERIC because appending some digits to an empty variable would make it numeric.
+	mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED; // This also removes VAR_ATTRIB_NOT_NUMERIC because appending some digits to an empty variable would make it numeric.
 	return OK;
 }
 
@@ -842,15 +842,15 @@ void Var::AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 // in the case of VAR_VIRTUAL, in which case the memory is passed to mVV->Set() then freed).
 // This function was added in v1.0.45 to aid callers in improving performance.
 {
-	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-	if (var.mType != VAR_NORMAL)
+	if (mType == VAR_ALIAS)
+		return mAliasFor->AcceptNewMem(aNewMem, aLength);
+	if (mType != VAR_NORMAL)
 	{
-		var.Assign(aNewMem, aLength);
+		Assign(aNewMem, aLength);
 		free(aNewMem); // Caller gave it to us to take charge of, but we have no further use for it.
 	}
 	else // VAR_NORMAL
-		var._AcceptNewMem(aNewMem, aLength);
+		_AcceptNewMem(aNewMem, aLength);
 }
 
 
@@ -896,16 +896,16 @@ void Var::SetLengthFromContents()
 // Function added in v1.0.43.06.  It updates the mLength member to reflect the actual current length of mContents.
 // Caller must ensure that Type() is VAR_NORMAL.
 {
-	// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-	Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-	if (var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE)
+	if (mType == VAR_ALIAS)
+		return mAliasFor->SetLengthFromContents();
+	if (mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE)
 	{
-		var.UpdateContents(); // Set contents and length based on numeric value.
+		UpdateContents(); // Set contents and length based on numeric value.
 		return;
 	}
 	size_t length = 0;
-	LPTSTR contents = var.mCharContents;
-	size_t max_count = var.mByteCapacity / sizeof(TCHAR);
+	LPTSTR contents = mCharContents;
+	size_t max_count = mByteCapacity / sizeof(TCHAR);
 	// Since the performance cost is low, ensure the string is terminated at the limit of its
 	// capacity (helps prevent crashes if DLL function didn't do its job and terminate the string,
 	// or when a function is called that deliberately doesn't terminate the string, such as
@@ -914,8 +914,8 @@ void Var::SetLengthFromContents()
 		max_count = 1; // Contents() == Var::sEmptyString in this case, so check it hasn't been tampered with.
 	length = _tcsnlen(contents, max_count);
 	if (length == max_count)
-		g_script.CriticalError(ERR_STRING_NOT_TERMINATED, var.mName);
-	var.mByteLength = _TSIZE(length);
+		g_script.CriticalError(ERR_STRING_NOT_TERMINATED, mName);
+	mByteLength = _TSIZE(length);
 }
 
 

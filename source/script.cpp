@@ -13324,7 +13324,7 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 
 			// At this stage outer.mDownVar has been allocated but would not contain
 			// &var unless it was referenced by a previous nested function.
-			Var *downvar = var.ResolveAlias(); // FindUpVar() set var to be an alias of the corresponding downvar.
+			Var *downvar = var.GetAliasFor(); // FindUpVar() set var to be an alias of the corresponding downvar.
 			var.ConvertToNonAliasIfNecessary(); // From this point on, it's not permitted to be a multiple level alias.
 			int d;
 			for (d = 0; d < outer.mDownVarCount; ++d)

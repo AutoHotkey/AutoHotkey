@@ -194,22 +194,21 @@ private:
 
 	void UpdateContents()
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		if (var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE)
+		ASSERT(mType != VAR_ALIAS); // Caller has already resolved aliases.
+		if (mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE)
 		{
 			// THE FOLLOWING ISN'T NECESSARY BECAUSE THE ASSIGN() CALLS BELOW DO IT:
-			//var.mAttrib &= ~VAR_ATTRIB_CONTENTS_OUT_OF_DATE;
+			//mAttrib &= ~VAR_ATTRIB_CONTENTS_OUT_OF_DATE;
 			TCHAR value_string[MAX_NUMBER_SIZE];
-			if (var.mAttrib & VAR_ATTRIB_IS_INT64)
+			if (mAttrib & VAR_ATTRIB_IS_INT64)
 			{
-				var.Assign(ITOA64(var.mContentsInt64, value_string)); // Return value currently not checked for this or the below.
-				var.mAttrib |= VAR_ATTRIB_IS_INT64; // Re-enable the cache because Assign() disables it (since all other callers want that).
+				Assign(ITOA64(mContentsInt64, value_string)); // Return value currently not checked for this or the below.
+				mAttrib |= VAR_ATTRIB_IS_INT64; // Re-enable the cache because Assign() disables it (since all other callers want that).
 			}
-			else if (var.mAttrib & VAR_ATTRIB_IS_DOUBLE)
+			else if (mAttrib & VAR_ATTRIB_IS_DOUBLE)
 			{
-				var.Assign(value_string, FTOA(var.mContentsDouble, value_string, _countof(value_string)));
-				var.mAttrib |= VAR_ATTRIB_IS_DOUBLE; // Re-enable the cache because Assign() disables it (since all other callers want that).
+				Assign(value_string, FTOA(mContentsDouble, value_string, _countof(value_string)));
+				mAttrib |= VAR_ATTRIB_IS_DOUBLE; // Re-enable the cache because Assign() disables it (since all other callers want that).
 			}
 			//else nothing to update, which shouldn't happen in this block unless there's a flaw or bug somewhere.
 		}
@@ -306,30 +305,31 @@ public:
 
 	ResultType AssignSkipAddRef(IObject *aValueToAssign);
 
-	inline ResultType Assign(IObject *aValueToAssign)
+	ResultType Assign(IObject *aValueToAssign)
 	{
 		aValueToAssign->AddRef(); // Must be done before Release() in case the only other reference to this object is already in var.  Such a case seems too rare to be worth optimizing by returning early.
 		return AssignSkipAddRef(aValueToAssign);
 	}
 
-	inline IObject *&Object()
+	IObject *&Object()
 	{
-		return (mType == VAR_ALIAS) ? mAliasFor->mObject : mObject;
+		Var &var = *ResolveAlias();
+		return var.mObject;
 	}
 
 	IObject *ToObject()
 	{
-		if (mType == VAR_ALIAS)
-			return mAliasFor->ToObject();
-		if (IsObject())
-			return mObject;
-		MaybeWarnUninitialized();
+		Var &var = *ResolveAlias();
+		if (var.IsObject())
+			return var.mObject;
+		var.MaybeWarnUninitialized();
 		return NULL;
 	}
 
 	void ReleaseObject()
 	// Caller has ensured that IsObject() == true, not just HasObject().
 	{
+		ASSERT(IsObject());
 		// Remove the attributes applied by AssignSkipAddRef().
 		mAttrib &= ~(VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_NOT_NUMERIC);
 		// MUST BE DONE AFTER THE ABOVE IN CASE IT TRIGGERS __Delete:
@@ -341,8 +341,7 @@ public:
 
 	SymbolType IsNumeric()
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		Var &var = *ResolveAlias();
 		switch (var.mAttrib & VAR_ATTRIB_CACHE) // This switch() method should squeeze a little more performance out of it compared to doing "&" for every attribute.  Only works for attributes that are mutually-exclusive, which these are.
 		{
 		case VAR_ATTRIB_IS_INT64: return PURE_INTEGER;
@@ -370,8 +369,7 @@ public:
 	// Unlike IsNumeric(), this is purely based on whether a pure number was assigned to this variable.
 	// Implicitly supports all types of variables, since these attributes are used only by VAR_NORMAL.
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		Var &var = *ResolveAlias();
 		switch (var.mAttrib & VAR_ATTRIB_CACHE)
 		{
 		case VAR_ATTRIB_IS_INT64: return PURE_INTEGER;
@@ -380,22 +378,20 @@ public:
 		return PURE_NOT_NUMERIC;
 	}
 
-	inline int IsPureNumericOrObject()
+	int IsPureNumericOrObject()
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		return (var.mAttrib & (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT));
+		Var &var = *ResolveAlias();
+		return var.mAttrib & (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT);
 	}
 
 	__int64 ToInt64()
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		Var &var = *ResolveAlias();
 		if (var.mAttrib & VAR_ATTRIB_IS_INT64)
 			return var.mContentsInt64;
 		if (var.mAttrib & VAR_ATTRIB_IS_DOUBLE)
 			// Since mContentsDouble is the true value of this var, cast it to __int64 rather than
-			// calling ATOI64(var.Contents()), which might produce a different result in some cases.
+			// calling ATOI64(Contents()), which might produce a different result in some cases.
 			return (__int64)var.mContentsDouble;
 		// Otherwise, this var does not contain a pure number.
 		return ATOI64(var.Contents()); // Call Contents() vs. using mContents in case of VAR_VIRTUAL or VAR_ATTRIB_IS_DOUBLE, and also for maintainability.
@@ -403,8 +399,7 @@ public:
 
 	double ToDouble()
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		Var &var = *ResolveAlias();
 		if (var.mAttrib & VAR_ATTRIB_IS_DOUBLE)
 			return var.mContentsDouble;
 		if (var.mAttrib & VAR_ATTRIB_IS_INT64)
@@ -416,8 +411,7 @@ public:
 	ResultType ToDoubleOrInt64(ExprTokenType &aToken)
 	// aToken.var is the same as the "this" var. Converts var into a number and stores it numerically in aToken.
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		Var &var = *ResolveAlias();
 		switch (aToken.symbol = var.IsNumeric())
 		{
 		case PURE_INTEGER:
@@ -435,7 +429,7 @@ public:
 	void ToTokenSkipAddRef(ExprTokenType &aToken)
 	// See ToDoubleOrInt64 for comments.
 	{
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		Var &var = *ResolveAlias();
 		switch (var.mAttrib & VAR_ATTRIB_TYPES)
 		{
 		case VAR_ATTRIB_IS_INT64:
@@ -477,7 +471,7 @@ public:
 
 	bool ToReturnValue(ResultToken &aResultToken)
 	{
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		Var &var = *ResolveAlias();
 		// Caller may have checked attrib/type, but check it anyway for maintainability:
 		if ((var.mAttrib & (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_UNINITIALIZED)) != 0
 			// For static/global variables, return a direct pointer to Contents() and
@@ -489,15 +483,13 @@ public:
 		}
 		if (mType == VAR_ALIAS)
 			// This var is an alias for another var.  Even though the target is local,
-			// there's no quick way to determine if it's a local of this function, so
-			// it's best to assume that we can't steal its memory.  Instead we rely on
-			// ExpandExpression copying the string into the deref buffer.
+			// it's most likely not a local of the same function, so not about to be freed.
 			return false;
 		// Var is local.  Since the function is returning, the var is about to be freed.
 		// Instead of copying and then freeing its contents, let the caller take ownership:
-		if (var.mHowAllocated == ALLOC_MALLOC && var.mByteCapacity)
+		if (mHowAllocated == ALLOC_MALLOC && mByteCapacity)
 		{
-			// var.mCharContents was allocated with malloc(); pass it back to the caller.
+			// mCharContents was allocated with malloc(); pass it back to the caller.
 			aResultToken.StealMem(&var);
 		}
 		else
@@ -507,8 +499,8 @@ public:
 			// because this isn't a number and therefore never needs UpdateContents().
 			// Although Contents() should be harmless, we want to be absolutely sure
 			// length isn't increased since that could cause buffer overflow.
-			memcpy(aResultToken.marker = aResultToken.buf, var.mCharContents, var.mByteLength + sizeof(TCHAR));
-			aResultToken.marker_length = var.mByteLength / sizeof(TCHAR);
+			memcpy(aResultToken.marker = aResultToken.buf, mCharContents, mByteLength + sizeof(TCHAR));
+			aResultToken.marker_length = mByteLength / sizeof(TCHAR);
 		}
 		return true;
 	}
@@ -556,8 +548,7 @@ public:
 	// Translates this var into its text equivalent, putting the result into aBuf and
 	// returning the position in aBuf of its new string terminator.
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		Var &var = *ResolveAlias();
 		// v1.0.44.14: Changed it so that ByRef/Aliases report their own name rather than the target's/caller's
 		// (it seems more useful and intuitive).
 		var.UpdateContents(); // Update mContents and mLength for use below.
@@ -587,10 +578,10 @@ public:
 		return aBuf;
 	}
 
-	__forceinline VarTypeType Type()
+	VarTypeType Type()
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		return (mType == VAR_ALIAS) ? mAliasFor->mType : mType;
+		Var &var = *ResolveAlias();
+		return var.mType;
 	}
 
 	bool IsAlias()
@@ -613,12 +604,12 @@ public:
 		return var.mType == VAR_CONSTANT || (var.mType == VAR_VIRTUAL && !var.HasSetter());
 	}
 
-	__forceinline bool IsStatic()
+	bool IsStatic()
 	{
 		return (mScope & VAR_LOCAL_STATIC);
 	}
 
-	__forceinline bool IsLocal()
+	bool IsLocal()
 	{
 		// Since callers want to know whether this variable is local, even if it's a local alias for a
 		// global, don't use the method below:
@@ -626,7 +617,7 @@ public:
 		return (mScope & VAR_LOCAL);
 	}
 
-	__forceinline bool IsNonStaticLocal()
+	bool IsNonStaticLocal()
 	{
 		// Since callers want to know whether this variable is local, even if it's a local alias for a
 		// global, don't resolve VAR_ALIAS.
@@ -636,23 +627,23 @@ public:
 		return (mScope & (VAR_LOCAL|VAR_LOCAL_STATIC)) == VAR_LOCAL;
 	}
 
-	__forceinline bool IsFuncParam()
+	bool IsFuncParam()
 	{
 		return (mScope & VAR_LOCAL_FUNCPARAM);
 	}
 
-	__forceinline bool IsDeclared()
+	bool IsDeclared()
 	// Returns true if this is a declared var, such as "local var", "static var" or a func param.
 	{
 		return (mScope & VAR_DECLARED);
 	}
 
-	__forceinline bool IsSuperGlobal()
+	bool IsSuperGlobal()
 	{
 		return (mScope & VAR_SUPER_GLOBAL);
 	}
 
-	__forceinline UCHAR &Scope()
+	UCHAR &Scope()
 	{
 		return mScope;
 	}
@@ -684,23 +675,21 @@ public:
 		mAttrib |= VAR_ATTRIB_HAS_ASSIGNMENT;
 	}
 
-	__forceinline bool IsObject() // L31: Indicates this var contains an object reference which must be released if the var is emptied.
+	bool IsObject() // L31: Indicates this var contains an object reference which must be released if the var is emptied.
 	{
 		return (mAttrib & VAR_ATTRIB_IS_OBJECT);
 	}
 
-	__forceinline bool HasObject() // L31: Indicates this var's effective value is an object reference.
+	bool HasObject() // L31: Indicates this var's effective value is an object reference.
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		return (var.mAttrib & VAR_ATTRIB_IS_OBJECT);
+		Var &var = *ResolveAlias();
+		return var.IsObject();
 	}
 
 	VarSizeType ByteCapacity()
 	// Capacity includes the zero terminator (though if capacity is zero, there will also be a zero terminator in mContents due to it being "").
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		Var &var = *ResolveAlias();
 		return var.mByteCapacity;
 	}
 
@@ -718,12 +707,10 @@ public:
 	// A fast alternative to Length() that avoids updating mContents.
 	// Caller must ensure that Type() is VAR_NORMAL.
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		// mAttrib is checked because mByteLength isn't applicable when the var contains a pure number
-		// or an object.  VAR_ATTRIB_BINARY_CLIP is also included, but doesn't affect the result because
-		// mByteLength is always non-zero in that case.
-		return (var.mAttrib & VAR_ATTRIB_TYPES) ? TRUE : var.mByteLength != 0;
+		Var &var = *ResolveAlias();
+		// mAttrib is checked because mByteLength isn't applicable when the var contains
+		// a pure number or an object.
+		return (var.mAttrib & VAR_ATTRIB_TYPES) ? TRUE : mByteLength != 0;
 	}
 
 	VarSizeType &ByteLength()
@@ -731,12 +718,11 @@ public:
 	// because their lengths aren't knowable without calling Get().
 	// Returns a reference so that caller can use this function as an lvalue.
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
+		Var &var = *ResolveAlias();
 		// There's no apparent reason to avoid using mByteLength for VAR_VIRTUAL,
 		// so it's used temporarily despite the comments below.  Even if mByteLength
 		// isn't always accurate, it's no less accurate than a static variable would be.
-		//if (var.mType == VAR_NORMAL)
+		//if (mType == VAR_NORMAL)
 		{
 			if (var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE)
 				var.UpdateContents();  // Update mContents (and indirectly, mByteLength).
@@ -778,32 +764,32 @@ public:
 	// would almost always have called Assign(NULL, ...) prior to calling Contents(), which would have
 	// cleared the VAR_ATTRIB_CONTENTS_OUT_OF_DATE flag.
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		if ((var.mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE) && aAllowUpdate) // VAR_ATTRIB_CONTENTS_OUT_OF_DATE is checked here and in the function below, for performance.
-			var.UpdateContents(); // This also clears the VAR_ATTRIB_CONTENTS_OUT_OF_DATE.
-		if (var.mType == VAR_NORMAL)
+		if (mType == VAR_ALIAS)
+			return mAliasFor->Contents();
+		if ((mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE) && aAllowUpdate) // VAR_ATTRIB_CONTENTS_OUT_OF_DATE is checked here and in the function below, for performance.
+			UpdateContents(); // This also clears the VAR_ATTRIB_CONTENTS_OUT_OF_DATE.
+		if (mType == VAR_NORMAL)
 		{
 			// If aAllowUpdate is FALSE, the caller just wants to compare mCharContents to another address.
 			// Otherwise, the caller is probably going to use mCharContents and might want a warning:
 			if (aAllowUpdate && !aNoWarnUninitializedVar)
-				var.MaybeWarnUninitialized();
+				MaybeWarnUninitialized();
 		}
-		if (var.mType == VAR_VIRTUAL && !(var.mAttrib & VAR_ATTRIB_VIRTUAL_OPEN) && aAllowUpdate)
+		if (mType == VAR_VIRTUAL && !(mAttrib & VAR_ATTRIB_VIRTUAL_OPEN) && aAllowUpdate)
 		{
 			// This var isn't open for writing, so populate mCharContents with its current value.
-			var.PopulateVirtualVar();
+			PopulateVirtualVar();
 			// The following ensures the contents are updated each time Contents() is called:
-			var.mAttrib &= ~VAR_ATTRIB_VIRTUAL_OPEN;
+			mAttrib &= ~VAR_ATTRIB_VIRTUAL_OPEN;
 		}
-		return var.mCharContents;
+		return mCharContents;
 	}
 
 	// Populate a virtual var with its current value, as a string.
 	// Caller has verified aVar->mType == VAR_VIRTUAL.
 	ResultType PopulateVirtualVar();
 
-	__forceinline void ConvertToNonAliasIfNecessary() // __forceinline because it's currently only called from one place.
+	void ConvertToNonAliasIfNecessary() // __forceinline because it's currently only called from one place.
 	// When this function actually converts an alias into a normal variable, the variable's old
 	// attributes (especially mContents and mCapacity) become dominant again.  This prevents a memory
 	// leak in a case where a UDF is defined to provide a default value for a ByRef parameter, and is
@@ -813,11 +799,16 @@ public:
 		mType = VAR_NORMAL; // It might already be this type, so this is just in case it's VAR_ALIAS.
 	}
 
-	__forceinline Var *ResolveAlias()
+	Var *GetAliasFor()
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()),
-		// except at load time (for upvars), where the caller relies on this resolving only one level.
-		return (mType == VAR_ALIAS) ? mAliasFor : this; // Return target if it's an alias, or itself if not.
+		ASSERT(mType == VAR_ALIAS);
+		return mAliasFor;
+	}
+
+	Var *ResolveAlias()
+	{
+		// Return target if it's an alias, or itself if not.
+		return mType == VAR_ALIAS ? mAliasFor->ResolveAlias() : this;
 	}
 
 	void UpdateAlias(Var *aTargetVar)
@@ -859,22 +850,20 @@ public:
 
 	ResultType Close()
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		if (var.mType == VAR_VIRTUAL)
+		if (mType == VAR_ALIAS)
+			return mAliasFor->Close();
+		if (mType == VAR_VIRTUAL)
 		{
 			// Commit the value in our temporary buffer.
-			auto result = var.AssignVirtual(ExprTokenType(var.mCharContents, var.CharLength()));
+			auto result = AssignVirtual(ExprTokenType(mCharContents, CharLength()));
 			Free(); // Free temporary memory.
-			var.mAttrib &= ~VAR_ATTRIB_VIRTUAL_OPEN;
+			mAttrib &= ~VAR_ATTRIB_VIRTUAL_OPEN;
 			return result;
 		}
 		// VAR_ATTRIB_CONTENTS_OUT_OF_DATE is removed below for maintainability; it shouldn't be
 		// necessary because any caller of Close() should have previously called something that
 		// updates the flags, such as Contents().
-		var.mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
-		//else (already done above)
-		//	var.mAttrib &= ~VAR_ATTRIB_BINARY_CLIP;
+		mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
 		return OK; // In all other cases.
 	}
 
@@ -914,28 +903,25 @@ public:
 	void operator delete[](void *aPtr) {}
 
 
-	__forceinline bool IsUninitializedNormalVar()
+	bool IsUninitializedNormalVar()
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		return (var.mAttrib & VAR_ATTRIB_UNINITIALIZED);
+		Var &var = *ResolveAlias();
+		return var.mAttrib & VAR_ATTRIB_UNINITIALIZED;
 	}
 
-	__forceinline void MarkInitialized()
+	void MarkInitialized()
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		mAttrib &= ~VAR_ATTRIB_UNINITIALIZED;
+		Var &var = *ResolveAlias();
+		var.mAttrib &= ~VAR_ATTRIB_UNINITIALIZED;
 	}
 
-	__forceinline void MarkUninitialized()
+	void MarkUninitialized()
 	{
-		// Relies on the fact that aliases can't point to other aliases (enforced by UpdateAlias()).
-		Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
-		mAttrib |= VAR_ATTRIB_UNINITIALIZED;
+		Var &var = *ResolveAlias();
+		var.mAttrib |= VAR_ATTRIB_UNINITIALIZED;
 	}
 
-	__forceinline void MaybeWarnUninitialized();
+	void MaybeWarnUninitialized();
 
 }; // class Var
 #pragma pack(pop) // Calling pack with no arguments restores the default value (which is 8, but "the alignment of a member will be on a boundary that is either a multiple of n or a multiple of the size of the member, whichever is smaller.")
