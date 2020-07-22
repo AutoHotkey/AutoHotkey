@@ -8851,35 +8851,32 @@ unquoted_literal:
 						}
 						else if (!bif)
 						{
-							ExprTokenType &param1 = *postfix[postfix_count-1];
-							if (param1.symbol == SYM_VAR
+							// See the next section for comments.
+							ExprTokenType &param_last = *postfix[postfix_count-1];
+							if ((param_last.symbol == SYM_VAR || param_last.symbol == SYM_DYNAMIC)
 								&& func->ArgIsOutputVar(in_param_list->param_count - 1))
 							{
-								param1.is_lvalue = Script::VARREF_BYREF;
+								param_last.is_lvalue = Script::VARREF_BYREF;
 							}
 						}
 						// The rest of the checks are for calls to built-in functions only:
-						else if (postfix[postfix_count-1][-1].symbol != SYM_COMMA && postfix[postfix_count-1][-1].symbol != stack_symbol)
-						{
-							// This parameter is more than a single operand, so may be something which can't be
-							// handled by the checks and optimizations below, such as Func(true ? "abs" : "").
-							// This limitation is a tradeoff between handling ternary correctly and completeness
-							// of validation at load-time.  If ternary could be easily excluded, errors such as
-							// CaretGetPos(x y) could be detected below.
-						}
 						else if (func->ArgIsOutputVar(in_param_list->param_count - 1)
 							|| bif == BIF_IsSet)
 						{
-							ExprTokenType &param1 = *postfix[postfix_count-1];
-							if (param1.symbol == SYM_VAR)
+							// This retrieves the last token in the parameter; if that's SYM_VAR or SYM_DYNAMIC,
+							// it will end up being passed to this parameter, so should be flagged as an lvalue.
+							// Known limitation: If the parameter's value is determined by a short-circuit op,
+							// the first branch won't be flagged; e.g. f(1 ? "" : a).
+							ExprTokenType &param_last = *postfix[postfix_count-1];
+							if (param_last.symbol == SYM_VAR || param_last.symbol == SYM_DYNAMIC)
 							{
 								// Mark this as an l-value.  If it is a double-deref, it will either produce a writable
 								// var as SYM_VAR or will throw an error.  Other load-time checks will raise an error
 								// if this is SYM_VAR and it turns out to be a constant/read-only variable.
 								if (bif == BIF_IsSet)
-									param1.is_lvalue = Script::VARREF_ISSET;
+									param_last.is_lvalue = Script::VARREF_ISSET;
 								else
-									param1.is_lvalue = Script::VARREF_OUTPUT_VAR;
+									param_last.is_lvalue = Script::VARREF_OUTPUT_VAR;
 							}
 							else //if (!IS_OPERATOR_VALID_LVALUE(param1.symbol)) // This section currently only executes for single operands.
 							{
@@ -8887,6 +8884,11 @@ unquoted_literal:
 									, in_param_list->param_count, func->mName);
 								return LineError(number_buf);
 							}
+						}
+						else if (postfix[postfix_count-1][-1].symbol != SYM_COMMA && postfix[postfix_count-1][-1].symbol != stack_symbol)
+						{
+							// This parameter is more than a single operand, so may be something which can't be
+							// handled by the checks and optimizations below, such as Func(true ? "abs" : "").
 						}
 						#ifdef ENABLE_DLLCALL
 						else if (bif == &BIF_DllCall // Implies mIsBuiltIn == true.
