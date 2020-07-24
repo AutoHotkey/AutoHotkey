@@ -7346,7 +7346,7 @@ Var *Script::FindUpVar(LPTSTR aVarName, UserFunc &aInner, ResultType *aDisplayEr
 			*aDisplayError = FAIL; // Error already displayed.
 		return nullptr;
 	}
-	inner_var->UpdateAliasNoResolve(outer_var); // Temporarily point the upvar to its downvar for later processing.
+	inner_var->SetAliasDirect(outer_var); // Temporarily point the upvar to its downvar for later processing.
 	return inner_var;
 }
 
@@ -10796,14 +10796,9 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 		if (var_param[i]->symbol == SYM_VAR)
 		{
 			var_param[i]->var->Backup(var_bkp[i]);
-			// If var is a ByRef parameter or upvar, convert it to a normal local variable
-			// in case the body of the loop calls functions that refer to the original var.
-			// It will be restored to its previous alias by Restore() after the loop.
-			// If this wasn't done, it would be necessary to resolve the alias before calling
-			// Backup(), otherwise it only saves mAliasFor, not mAliasFor's value.  That would
-			// mean var_param couldn't be preallocated, since a recursive function call might
-			// reenter the same For loop, which would overwrite the vars.
-			var_param[i]->var->ConvertToNonAliasIfNecessary();
+			// If var was a ByRef parameter or upvar, Backup() has backed up the alias and
+			// converted it to a normal local variable, so any assignment in the loop below
+			// will not affect the original target variable, only the local alias.
 		}
 
 	// Now that the enumerator expression has been evaluated, init A_Index:

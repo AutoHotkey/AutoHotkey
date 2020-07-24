@@ -108,6 +108,47 @@ ResultType Var::PopulateVirtualVar()
 
 
 
+void Var::UpdateAlias(Var *aTargetVar)
+// Caller must ensure that aTargetVar isn't NULL.
+// When this function actually converts a normal variable into an alias , the variable's old
+// attributes (especially mContents and mCapacity) are hidden/suppressed by virtue of all Var::
+// methods obeying VAR_ALIAS and resolving it to be the target variable.  This prevents a memory
+// leak in a case where a UDF is defined to provide a default value for a ByRef parameter, and is
+// called both with and without that parameter.
+{
+	IObject *ref = aTargetVar->mType == VAR_ALIAS && aTargetVar->IsObject()
+		? aTargetVar->mObject : nullptr;
+
+	// BELOW IS THE MEANS BY WHICH ALIASES AREN'T ALLOWED TO POINT TO OTHER ALIASES, ONLY DIRECTLY TO
+	// THE TARGET VAR.
+	// Resolve aliases-to-aliases for performance.  A caller may ask to create an alias
+	// to an alias when a function calls another function and passes to it one of its own
+	// byref-params, or if the target var has had its reference taken with GetRef().
+	while (aTargetVar->mType == VAR_ALIAS)
+		aTargetVar = aTargetVar->mAliasFor;
+
+	// The following is done only after the above in case there's ever a way for the above
+	// to circle back to become this variable.
+	// Prevent potential infinite loops in other methods by refusing to change an alias
+	// to point to itself.
+	if (aTargetVar == this)
+		return;
+
+	SetAliasDirect(aTargetVar);
+	
+	// Done last in case it causes interruption:
+	ASSERT(!IsObject());
+	//if (IsObject())
+	//	ReleaseObject();
+	if (ref)
+	{
+		_SetObject(ref);
+		ref->AddRef();
+	}
+}
+
+
+
 ResultType Var::GetClipboardAll(void **aData, size_t *aDataSize)
 {
 	*aData = NULL; // Set default in case of early return or empty data.
@@ -638,14 +679,11 @@ ResultType Var::AssignSkipAddRef(IObject *aValueToAssign)
 
 	Free(); // If var contains an object, this will Release() it.  It will also clear any string contents and free memory if appropriate.
 		
-	mObject = aValueToAssign;
-		
 	// Already done by Free() above:
 	//mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_UNINITIALIZED);
 
-	// Mark this variable to indicate it contains an object (objects are never considered numeric).
-	mAttrib |= VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_NOT_NUMERIC;
-
+	_SetObject(aValueToAssign);
+	
 	return OK;
 }
 
@@ -661,13 +699,13 @@ void Var::Get(ResultToken &aResultToken)
 
 
 
-void Var::Free(int aWhenToFree, bool aExcludeAliasesAndRequireInit)
+void Var::Free(int aWhenToFree, bool aClearAliasesAndRequireInit)
 // The name "Free" is a little misleading because this function:
 // ALWAYS sets the variable to be blank (except for static variables and aExcludeAliases==true).
 // BUT ONLY SOMETIMES frees the memory, depending on various factors described further below.
 // Caller must be aware that ALLOC_SIMPLE (due to its nature) is never freed.
-// aExcludeAliasesAndRequireInit may be split into two if any caller ever wants to pass
-// true for one and not the other (currently there is only one caller who passes true).
+// aClearAliasesAndRequireInit may be split into two if any caller ever wants to pass
+// true for one and not the other.
 {
 	// Not checked because VAR_VIRTUAL uses this to free its temporary buffer:
 	//if (mType != VAR_NORMAL) // For robustness, since callers generally shouldn't call it this way.
@@ -675,31 +713,35 @@ void Var::Free(int aWhenToFree, bool aExcludeAliasesAndRequireInit)
 
 	if (mType == VAR_ALIAS) // For simplicity and reduced code size, just make a recursive call to self.
 	{
-		if (!aExcludeAliasesAndRequireInit)
+		if (!aClearAliasesAndRequireInit)
+		{
 			// For maintainability, it seems best not to use the following method:
 			//    Var &var = *(mType == VAR_ALIAS ? mAliasFor : this);
 			// If that were done, bugs would be easy to introduce in a long function like this one
 			// if your forget at use the implicit "this" by accident.  So instead, just call self.
 			mAliasFor->Free(aWhenToFree);
-		//else caller didn't want the target of the alias freed, so do nothing.
-		return;
+			return;
+		}
+		mType = VAR_NORMAL; // Revert alias to normal variable.
 	}
-
-	if (mAttrib & VAR_ATTRIB_IS_OBJECT)
-		ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
 
 	mByteLength = 0; // Writing to union is safe because above already ensured that "this" isn't an alias.
 	// Even if it isn't free'd, variable will be made blank.  So it seems proper to always remove
-	// the binary_clip attribute (since it can't be used that way after it's been made blank) and
 	// the uninitialized attribute (since *we* are initializing it).  Some callers may rely on us
 	// removing these attributes:
-	mAttrib &= ~(VAR_ATTRIB_OFTEN_REMOVED | VAR_ATTRIB_IS_OBJECT);
+	mAttrib &= ~VAR_ATTRIB_OFTEN_REMOVED;
 
-	if (aExcludeAliasesAndRequireInit)
+	if (aClearAliasesAndRequireInit)
 		// Caller requires this var to be considered uninitialized from now on.  This attribute may
 		// have been removed above, but there was no cost involved.  It might not have been set in
 		// the first place, so we must add it here anyway:
 		mAttrib |= VAR_ATTRIB_UNINITIALIZED;
+
+	if (mAttrib & VAR_ATTRIB_IS_OBJECT)
+	{
+		ReleaseObject(); // This removes the attribute prior to calling Release() and potentially __Delete().
+		return; // Best to return at this point since Release() may have caused reentry into this function.
+	}
 
 	switch (mHowAllocated)
 	{
@@ -980,8 +1022,8 @@ void Var::Backup(VarBkp &aVarBkp)
 	// its backup intact but allowing this variable (or formal parameter) to be given a new value in the future:
 	mByteCapacity = 0;             // Invariant: Anyone setting mCapacity to 0 must also set...
 	mCharContents = sEmptyString;  // ...mContents to the empty string.
-	if (mType != VAR_ALIAS) // Fix for v1.0.42.07: Don't reset mLength if the other member of the union is in effect.
-		mByteLength = 0;        // Otherwise, functions that recursively pass ByRef parameters can crash because mType stays as VAR_ALIAS.
+	mByteLength = 0;
+	mType = VAR_NORMAL;
 	mHowAllocated = ALLOC_MALLOC; // Never NONE because that would permit SIMPLE. See comments higher above.
 	mAttrib = VAR_ATTRIB_UNINITIALIZED; // The function's new recursion layer should consider this var uninitialized, even if it was initialized by the previous layer.
 }

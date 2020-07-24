@@ -161,7 +161,7 @@ private:
 	#define VAR_ATTRIB_IS_OBJECT			0x40 // Var's proper value is in mObject.
 	#define VAR_ATTRIB_VIRTUAL_OPEN			0x80 // Virtual var is open for writing.
 	#define VAR_ATTRIB_CACHE (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_NOT_NUMERIC) // These three are mutually exclusive.
-	#define VAR_ATTRIB_TYPES (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT) // These are mutually exclusive (but NOT_NUMERIC may be combined with OBJECT or BINARY_CLIP).
+	#define VAR_ATTRIB_TYPES (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT) // These are mutually exclusive (but NOT_NUMERIC may be combined with OBJECT).
 	#define VAR_ATTRIB_OFTEN_REMOVED (VAR_ATTRIB_CACHE | VAR_ATTRIB_CONTENTS_OUT_OF_DATE | VAR_ATTRIB_UNINITIALIZED)
 	VarAttribType mAttrib;  // Bitwise combination of the above flags (but many of them may be mutually exclusive).
 	#define VAR_GLOBAL			0x01
@@ -212,6 +212,13 @@ private:
 			}
 			//else nothing to update, which shouldn't happen in this block unless there's a flaw or bug somewhere.
 		}
+	}
+
+	void _SetObject(IObject *aObject)
+	{
+		mObject = aObject;
+		// Mark this variable to indicate it contains an object (objects are never considered numeric).
+		mAttrib |= VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_NOT_NUMERIC;
 	}
 
 	VarSizeType _CharLength() { return mByteLength / sizeof(TCHAR); }
@@ -311,7 +318,7 @@ public:
 		return AssignSkipAddRef(aValueToAssign);
 	}
 
-	IObject *&Object()
+	IObject *Object()
 	{
 		Var &var = *ResolveAlias();
 		return var.mObject;
@@ -811,38 +818,12 @@ public:
 		return mType == VAR_ALIAS ? mAliasFor->ResolveAlias() : this;
 	}
 
-	void UpdateAlias(Var *aTargetVar)
-	// Caller must ensure that aTargetVar isn't NULL.
-	// When this function actually converts a normal variable into an alias , the variable's old
-	// attributes (especially mContents and mCapacity) are hidden/suppressed by virtue of all Var:: methods
-	// obeying VAR_ALIAS and resolving it to be the target variable.  This prevents a memory
-	// leak in a case where a UDF is defined to provide a default value for a ByRef parameter, and is
-	// called both with and without that parameter.
-	{
-		// BELOW IS THE MEANS BY WHICH ALIASES AREN'T ALLOWED TO POINT TO OTHER ALIASES, ONLY DIRECTLY TO
-		// THE TARGET VAR.
-		// Resolve aliases-to-aliases for performance and to increase the expectation of
-		// reliability since a chain of aliases-to-aliases might break if an alias in
-		// the middle is ever allowed to revert to a non-alias (or gets deleted).
-		// A caller may ask to create an alias to an alias when a function calls another
-		// function and passes to it one of its own byref-params.
-		while (aTargetVar->mType == VAR_ALIAS)
-			aTargetVar = aTargetVar->mAliasFor;
-
-		// The following is done only after the above in case there's ever a way for the above
-		// to circle back to become this variable.
-		// Prevent potential infinite loops in other methods by refusing to change an alias
-		// to point to itself.
-		if (aTargetVar == this)
-			return;
-
-		UpdateAliasNoResolve(aTargetVar);
-	}
+	void UpdateAlias(Var *aTargetVar);
 
 	// This function is used during load time to indicate which downvar an upvar corresponds to,
 	// for later processing.  It might create a multiple-level alias, which must be undone before
 	// the script begins executing.  Caller must ensure aTargetVar != nullptr && aTargetVar != this.
-	void UpdateAliasNoResolve(Var *aTargetVar)
+	void SetAliasDirect(Var *aTargetVar)
 	{
 		mAliasFor = aTargetVar; // Should always be non-NULL due to various checks elsewhere.
 		mType = VAR_ALIAS; // It might already be this type, so this is just in case it's VAR_NORMAL.

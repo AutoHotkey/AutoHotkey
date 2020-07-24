@@ -1818,11 +1818,12 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 		{
 			FuncParam &this_formal_param = mParam[j]; // For performance and convenience.
 
+			// Assignments below rely on ByRef parameters having already been reset to VAR_NORMAL
+			// by Free() or Backup(); but check is_byref because downvars can be VAR_ALIAS.
+			ASSERT(!this_formal_param.is_byref || this_formal_param.var->Type() != VAR_ALIAS);
+
 			if (j >= aParamCount || aParam[j]->symbol == SYM_MISSING)
 			{
-				if (this_formal_param.is_byref) // v1.0.46.13: Allow ByRef parameters to be optional by converting an omitted-actual into a non-alias formal/local.
-					this_formal_param.var->ConvertToNonAliasIfNecessary(); // Convert from alias-to-normal, if necessary.
-
 				if (param_obj)
 				{
 					FuncResult rt_item;
@@ -1861,15 +1862,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			{
 				// Note that the previous loop might not have checked things like the following because that
 				// loop never ran unless a backup was needed:
-				if (token.symbol != SYM_VAR)
-				{
-					// L60: Seems more useful and in the spirit of AutoHotkey to allow ByRef parameters
-					// to act like regular parameters when no var was specified.  If we force script
-					// authors to pass a variable, they may pass a temporary variable which is then
-					// discarded, adding a little overhead and impacting the readability of the script.
-					this_formal_param.var->ConvertToNonAliasIfNecessary();
-				}
-				else
+				if (token.symbol == SYM_VAR)
 				{
 					this_formal_param.var->UpdateAlias(token.var); // Make the formal parameter point directly to the actual parameter's contents.
 					continue;
