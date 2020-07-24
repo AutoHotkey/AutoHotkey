@@ -12395,9 +12395,6 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 			, mActionType == ACT_IF ? _T("if ") : _T("")
 			, mArg[0].text
 			, mActionType == ACT_ASSIGNEXPR ? _T(" := ") : _T(""), RAW_ARG2);
-	else if (mActionType == ACT_FOR)
-		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("For %s%s%s in %s")
-			, mArg[0].text, *mArg[1].text ? _T(",") : _T(""), mArg[1].text, mArg[2].text);
 	else if (mActionType == ACT_CASE && mArgc)
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s %s:"), g_act[mActionType].Name
 			, mArg[0].text);
@@ -12412,7 +12409,7 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 				&& !mArg[i].is_expression && !(mArg[i].postfix && mArg[i].postfix->symbol != SYM_STRING);
 			// This method is a little more efficient than using snprintfcat().
 			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, quote ? _T("%s \"%s\"") : _T("%s %s")
-				, i == 0 ? _T("") : _T(",")
+				, i == 0 ? _T("") : (i + 1 == mArgc && mActionType == ACT_FOR) ? _T(" in") : _T(",")
 				, mArg[i].text);
 		}
 	}
