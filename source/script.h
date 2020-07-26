@@ -3093,7 +3093,8 @@ public:
 	int FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine);
 
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
-	void WarnUninitializedVar(Var *aVar, bool aPredictive = false);
+	void WarnUnassignedVar(Var *aVar);
+	void WarnUninitializedVar(Var *aVar);
 	void WarnLocalSameAsGlobal(LPCTSTR aVarName);
 
 	ResultType PreprocessLocalVars(FuncList &aFuncs);

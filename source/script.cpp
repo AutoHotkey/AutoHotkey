@@ -13210,9 +13210,29 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 
 
 
-void Script::WarnUninitializedVar(Var *var, bool aPredictive)
+void Script::WarnUnassignedVar(Var *var)
+// Separating this from WarnUninitializedVar() was observed to produce smaller code.
 {
-	WarnMode warnMode = aPredictive ? g_Warn_VarUnset : var->IsLocal() ? g_Warn_UseUnsetLocal : g_Warn_UseUnsetGlobal;
+	auto warnMode = g_Warn_VarUnset;
+	if (!warnMode)
+		return;
+
+	// Show only one MsgBox per var, but list all references when using StdOut/OutputDebug.
+	if (warnMode == WARNMODE_MSGBOX)
+		var->MarkAssignedSomewhere();
+
+	bool isUndeclaredLocal = (var->Scope() & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL;
+	LPCTSTR sameNameAsGlobal = isUndeclaredLocal && FindGlobalVar(var->mName) ? _T("  (same name as a global)") : _T("");
+	TCHAR buf[DIALOG_TITLE_SIZE];
+	sntprintf(buf, _countof(buf), _T("%s %s%s"), Var::DeclarationType(var->Scope()), var->mName, sameNameAsGlobal);
+	ScriptWarning(warnMode, WARNING_ALWAYS_UNSET_VARIABLE, buf);
+}
+
+
+
+void Script::WarnUninitializedVar(Var *var)
+{
+	auto warnMode = var->IsLocal() ? g_Warn_UseUnsetLocal : g_Warn_UseUnsetGlobal;
 	if (!warnMode)
 		return;
 
@@ -13221,13 +13241,13 @@ void Script::WarnUninitializedVar(Var *var, bool aPredictive)
 	// uninitialized because it may be beneficial to see the quantity and various locations of uninitialized
 	// uses, and doesn't present the same user interface problem that multiple message boxes can.)
 	if (warnMode == WARNMODE_MSGBOX)
-		aPredictive ? var->MarkAssignedSomewhere() : var->MarkInitialized();
+		var->MarkInitialized();
 
 	bool isUndeclaredLocal = (var->Scope() & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL;
 	LPCTSTR sameNameAsGlobal = isUndeclaredLocal && FindGlobalVar(var->mName) ? _T("  (same name as a global)") : _T("");
 	TCHAR buf[DIALOG_TITLE_SIZE];
 	sntprintf(buf, _countof(buf), _T("%s %s%s"), Var::DeclarationType(var->Scope()), var->mName, sameNameAsGlobal);
-	ScriptWarning(warnMode, aPredictive ? WARNING_ALWAYS_UNSET_VARIABLE : WARNING_USE_UNSET_VARIABLE, buf);
+	ScriptWarning(warnMode, WARNING_USE_UNSET_VARIABLE, buf);
 }
 
 
@@ -13371,7 +13391,7 @@ ResultType Script::PreparseVarRefs()
 					if (!token->var->IsAssignedSomewhere())
 					{
 						mCurrLine = line;
-						WarnUninitializedVar(token->var, true);
+						WarnUnassignedVar(token->var);
 					}
 				}
 			}
