@@ -234,9 +234,6 @@
     <CustomBuild Include="source\libx64call\x64call.asm">
       <Filter>Assembly Files</Filter>
     </CustomBuild>
-    <CustomBuild Include="source\lib\win2kcompat.asm">
-      <Filter>Assembly Files</Filter>
-    </CustomBuild>
     <CustomBuild Include="source\libx64call\x64stub.asm">
       <Filter>Assembly Files</Filter>
     </CustomBuild>
