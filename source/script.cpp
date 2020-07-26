@@ -4000,6 +4000,9 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		if (warnType == WARN_UNREACHABLE || warnType == WARN_ALL)
 			g_Warn_Unreachable = warnMode;
 
+		if (warnType == WARN_VAR_UNSET || warnType == WARN_ALL)
+			g_Warn_VarUnset = warnMode;
+
 		return CONDITION_TRUE;
 	}
 
@@ -13209,7 +13212,7 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 
 void Script::WarnUninitializedVar(Var *var, bool aPredictive)
 {
-	WarnMode warnMode = var->IsLocal() ? g_Warn_UseUnsetLocal : g_Warn_UseUnsetGlobal;
+	WarnMode warnMode = aPredictive ? g_Warn_VarUnset : var->IsLocal() ? g_Warn_UseUnsetLocal : g_Warn_UseUnsetGlobal;
 	if (!warnMode)
 		return;
 
