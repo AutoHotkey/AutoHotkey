@@ -15,8 +15,11 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
+#include "defines.h"
+#include "script_object.h"
 #include "var.h"
 #include "globaldata.h" // for g_script
+#include <utility>
 
 
 // Init static vars:
@@ -145,6 +148,78 @@ void Var::UpdateAlias(Var *aTargetVar)
 		_SetObject(ref);
 		ref->AddRef();
 	}
+}
+
+
+
+IObject *Var::GetRef()
+{
+	auto target_var = this;
+	if (mType == VAR_ALIAS)
+	{
+		if (mAttrib & VAR_ATTRIB_IS_OBJECT)
+		{
+			mObject->AddRef();
+			return mObject;
+		}
+		target_var = mAliasFor;
+	}
+	auto ref = new VarRef();
+	if (!target_var->MoveToNewFreeVar(*ref))
+	{
+		ref->Release();
+		return nullptr;
+	}
+	if (mType == VAR_ALIAS)
+	{
+		ref->AddRef();
+		target_var->_SetObject(ref);
+		target_var->SetAliasDirect(ref);
+	}
+	ref->AddRef();
+	_SetObject(ref);
+	SetAliasDirect(ref);
+	return ref;
+}
+
+
+
+ResultType Var::MoveToNewFreeVar(Var &aFV)
+{
+	ASSERT(aFV.mType == VAR_NORMAL && mType == VAR_NORMAL);
+	ASSERT(aFV.mHowAllocated == ALLOC_MALLOC);
+	if (mAttrib & VAR_ATTRIB_TYPES)
+	{
+		aFV.mContentsInt64 = mContentsInt64;
+		aFV.mAttrib = (mAttrib & (VAR_ATTRIB_TYPES | VAR_ATTRIB_CACHE))
+			| VAR_ATTRIB_CONTENTS_OUT_OF_DATE;
+		mAttrib &= ~VAR_ATTRIB_TYPES; // Mainly to remove VAR_ATTRIB_IS_OBJECT.
+	}
+	else if (mHowAllocated == ALLOC_SIMPLE && !(mScope & (VAR_GLOBAL | VAR_LOCAL_STATIC)))
+	{
+		// Don't transfer a SimpleHeap buffer to freevars since that would cause the
+		// buffer to be lost permanently when the freevar is deleted (such as after
+		// the function returns and the VarRef's reference count reaches 0).
+		if (!aFV.Assign(mCharContents, CharLength()))
+			return FAIL;
+		//mAttrib = VAR_ATTRIB_UNINITIALIZED;
+		//*mCharContents = '\0';
+		//mByteLength = 0;
+		return OK;
+	}
+	else
+	{
+		if (!(mAttrib & VAR_ATTRIB_UNINITIALIZED))
+		{
+			aFV.mAttrib &= ~VAR_ATTRIB_UNINITIALIZED;
+			mAttrib |= VAR_ATTRIB_UNINITIALIZED;
+		}
+	}
+	std::swap(aFV.mHowAllocated, mHowAllocated);
+	std::swap(aFV.mByteContents, mByteContents);
+	std::swap(aFV.mByteCapacity, mByteCapacity);
+	std::swap(aFV.mByteLength, mByteLength);
+	return OK;
 }
 
 

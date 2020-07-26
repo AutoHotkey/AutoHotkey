@@ -818,16 +818,22 @@ public:
 		return mType == VAR_ALIAS ? mAliasFor->ResolveAlias() : this;
 	}
 
+	// Makes this var an alias of aTargetVar, or aTargetVar's target if it's an alias.
+	// Copies any internal mObject ref used for managing the lifetime of the alias.
 	void UpdateAlias(Var *aTargetVar);
 
-	// This function is used during load time to indicate which downvar an upvar corresponds to,
-	// for later processing.  It might create a multiple-level alias, which must be undone before
-	// the script begins executing.  Caller must ensure aTargetVar != nullptr && aTargetVar != this.
+	// Unconditionally makes this var an alias of aTargetVar, without resolving aliases.
+	// Caller must ensure aTargetVar != nullptr && aTargetVar != this.
 	void SetAliasDirect(Var *aTargetVar)
 	{
 		mAliasFor = aTargetVar; // Should always be non-NULL due to various checks elsewhere.
 		mType = VAR_ALIAS; // It might already be this type, so this is just in case it's VAR_NORMAL.
 	}
+
+	// Retrieves the IObject interface for managing this var's lifetime,
+	// converting this var to an alias for a new freevar if needed.
+	IObject *GetRef();
+	ResultType MoveToNewFreeVar(Var &aOther);
 
 	ResultType Close()
 	{
@@ -908,11 +914,28 @@ public:
 #pragma pack(pop) // Calling pack with no arguments restores the default value (which is 8, but "the alignment of a member will be on a boundary that is either a multiple of n or a multiple of the size of the member, whichever is smaller.")
 #pragma warning(pop)
 
+
+class VarRef : public ObjectBase, public Var
+{
+public:
+	VarRef() {}
+
+	~VarRef()
+	{
+		Free(VAR_ALWAYS_FREE, true);
+	}
+
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL) { return INVOKE_NOT_HANDLED; }
+	IObject_Type_Impl("VarRef");
+};
+
+
 inline void ResultToken::StealMem(Var *aVar)
 // Caller must ensure that aVar->mType == VAR_NORMAL and aVar->mHowAllocated == ALLOC_MALLOC.
 {
 	VarSizeType length = aVar->Length(); // Must not be combined with the line below, as the compiler is free to evaluate parameters in whatever order.
 	AcceptMem(aVar->StealMem(), length);
 }
+
 
 #endif

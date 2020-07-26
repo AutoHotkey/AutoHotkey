@@ -21,11 +21,11 @@ GNU General Public License for more details.
 #include "defines.h"
 #include "SimpleHeap.h" // for overloaded new/delete operators.
 #include "keyboard_mouse.h" // for modLR_type
+#include "script_object.h"
 #include "var.h" // for a script's variables.
 #include "WinGroup.h" // for a script's Window Groups.
 #include "Util.h" // for FileTimeToYYYYMMDD(), strlcpy()
 #include "resources/resource.h"  // For tray icon.
-#include "script_object.h"
 #include "Debugger.h"
 
 #include "os_version.h" // For the global OS_Version object
@@ -1664,8 +1664,6 @@ public:
 	{
 		return aArg < mParamCount && mParam[aArg].is_byref;
 	}
-
-	ResultType ValidateDownVar(Var &aVar);
 
 	// Find a local (not global or nonlocal/outer) variable.
 	Var *FindLocalVar(LPCTSTR aName, size_t aNameLength)

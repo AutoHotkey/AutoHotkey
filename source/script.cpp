@@ -7329,12 +7329,6 @@ Var *Script::FindUpVar(LPTSTR aVarName, UserFunc &aInner, ResultType *aDisplayEr
 			*aDisplayError = RuntimeError(ERR_DYNAMIC_UPVAR, aVarName);
 		return nullptr;
 	}
-	if (!outer.ValidateDownVar(*outer_var))
-	{
-		if (aDisplayError)
-			*aDisplayError = FAIL;
-		return nullptr;
-	}
 	outer_var->Scope() |= VAR_DOWNVAR;
 	// At this point aInner doesn't have a variable by this name, so create one:
 	int insert_pos;
@@ -7348,27 +7342,6 @@ Var *Script::FindUpVar(LPTSTR aVarName, UserFunc &aInner, ResultType *aDisplayEr
 	}
 	inner_var->SetAliasDirect(outer_var); // Temporarily point the upvar to its downvar for later processing.
 	return inner_var;
-}
-
-
-
-ResultType UserFunc::ValidateDownVar(Var &aVar)
-{
-	if (!aVar.IsFuncParam())
-		return OK;
-	// ByRef parameters cannot be upvalues with the current implementation since it is
-	// impossible to predict (for dynamic function or method calls) which variables will
-	// be passed ByRef.  In other words, the caller's Var would have a fixed, unknown
-	// duration and therefore could not be safely captured by a closure.
-	// If this restriction is removed, make sure to update BIF_IsByRef.
-	for (int p = 0; p < mParamCount; ++p)
-		if (mParam[p].var == &aVar)
-		{
-			if (mParam[p].is_byref)
-				return g_script.ScriptError(_T("ByRef parameters cannot be upvalues."), aVar.mName);
-			break;
-		}
-	return OK;
 }
 
 

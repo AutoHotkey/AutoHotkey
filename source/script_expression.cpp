@@ -1739,7 +1739,31 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			for (j = 0; j < aParamCount; ++j) // For each actual parameter.
 			{
 				ExprTokenType &this_param_token = *aParam[j]; // stack[stack_count] is the first actual parameter. A check higher above has already ensured that this line won't cause stack overflow.
-				if (this_param_token.symbol == SYM_VAR && !(j < mParamCount && mParam[j].is_byref))
+				if (this_param_token.symbol != SYM_VAR)
+					continue;
+				Var &param_var = *this_param_token.var;
+				Var &target_var = *param_var.ResolveAlias();
+				if (j < mParamCount && mParam[j].is_byref)
+				{
+					// If the target or actual var is local, it could be local to this function, in which
+					// case it's about to be reset.  Enable the function to receive its own local variable
+					// ByRef by moving its storage into a VarRef and aliasing that instead.
+					if (target_var.IsNonStaticLocal()) // Safest to assume it's a local of this function.
+					{
+						// target_var is necessarily not a freevar (due to either GetRef or a closure)
+						// because in that case IsNonStaticLocal would be false.
+						if (!param_var.GetRef()) // Convert it to a freevar ref.
+							return false;
+						this_param_token.var = param_var.GetAliasFor();
+					}
+					else //if (param_var.IsNonStaticLocal()) // No need to check this.
+					{
+						// Ensure the token points to the target of any alias, since the alias itself
+						// will be reset below.  This will have no effect if param_var isn't an alias.
+						this_param_token.var = &target_var;
+					}
+				}
+				else
 				{
 					// Since this formal parameter is passed by value, if it's SYM_VAR, convert it to
 					// a non-var to allow the variables to be backed up and reset further below without
@@ -1750,7 +1774,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 					// sometimes needs the variable of a parameter for use as an output parameter.
 					// Skip AddRef() if this is an object because Release() won't be called, and
 					// AddRef() will be called when the object is assigned to a parameter.
-					this_param_token.var->ToTokenSkipAddRef(this_param_token);
+					target_var.ToTokenSkipAddRef(this_param_token);
 				}
 			}
 			// BackupFunctionVars() will also clear each local variable and formal parameter so that
@@ -1784,7 +1808,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			// vars for the lifetime of the script, make them aliases for newly allocated vars:
 			sFreeVars = FreeVars::Alloc(*this, mDownVarCount, aUpVars);
 			for (int i = 0; i < mDownVarCount; ++i)
-				mDownVar[i]->UpdateAlias(sFreeVars->mVar + i);
+				mDownVar[i]->SetAliasDirect(sFreeVars->mVar + i);
 		}
 		else
 			sFreeVars = NULL;
@@ -1819,8 +1843,9 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			FuncParam &this_formal_param = mParam[j]; // For performance and convenience.
 
 			// Assignments below rely on ByRef parameters having already been reset to VAR_NORMAL
-			// by Free() or Backup(); but check is_byref because downvars can be VAR_ALIAS.
-			ASSERT(!this_formal_param.is_byref || this_formal_param.var->Type() != VAR_ALIAS);
+			// by Free() or Backup(), except when it's a downvar, which should be VAR_ALIAS.
+			ASSERT((this_formal_param.var->Scope() & VAR_DOWNVAR) ? this_formal_param.var->ResolveAlias()->Scope() == 0
+				: !this_formal_param.var->IsAlias());
 
 			if (j >= aParamCount || aParam[j]->symbol == SYM_MISSING)
 			{
@@ -1864,6 +1889,17 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 				// loop never ran unless a backup was needed:
 				if (token.symbol == SYM_VAR)
 				{
+					if (this_formal_param.var->Scope() & VAR_DOWNVAR) // This parameter's var is referenced by one or more closures.
+					{
+						// Make sure the caller's var (token.var) points to a ref-counted freevar.
+						auto ref = token.var->GetRef();
+						if (!ref)
+							goto free_and_return;
+						ASSERT(this_formal_param.var->IsAlias());
+						// Point our freevar to the caller's freevar, for use by our closures.
+						this_formal_param.var->GetAliasFor()->UpdateAlias(token.var);
+						// Also update our local alias below.
+					}
 					this_formal_param.var->UpdateAlias(token.var); // Make the formal parameter point directly to the actual parameter's contents.
 					continue;
 				}
