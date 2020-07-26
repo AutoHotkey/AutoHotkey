@@ -5815,6 +5815,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 
 	if (!AddLine(ACT_BLOCK_BEGIN))
 		return FAIL;
+	auto block_begin = mLastLine;
 
 	if (!g->CurrentFunc->mOuterFunc)
 		g->CurrentFunc->mDefaultVarType = VAR_DECLARE_GLOBAL;
@@ -5838,7 +5839,7 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	if (parent_line)
 	{
 		mPendingParentLine = parent_line;
-		mPendingRelatedLine = nullptr;
+		mPendingRelatedLine = block_begin; // This ensures block_begin->mRelatedLine is set for PreparseExpressions.
 	}
 
 	return OK;
@@ -7663,10 +7664,13 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 				Line *parent = block_begin->mParentLine;
 
 				if (func.mIsFuncExpression // =>
-					&& line->mNextLine->mActionType != ACT_BLOCK_BEGIN // Not followed by another =>
 					&& block_begin->mParentLine
 					&& block_begin->mParentLine->mActionType != ACT_BLOCK_BEGIN)
 				{
+					if (line->mNextLine->mActionType == ACT_BLOCK_BEGIN) // It could only be a fat arrow block-begin under these conditions.
+						// There's another =>function after this one (defined within the same
+						// expression), so just continue until the last =>function is found.
+						continue;
 					// This fat arrow function's parent line is a statement with a single-line
 					// action, but that action is currently separated from its parent by one or
 					// more fat arrow functions.  It won't work that way because If/Else/Loop/etc.
