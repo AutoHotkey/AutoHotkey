@@ -165,11 +165,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				}
 				//else: It's a built-in variable.
 
-				if (this_token.is_lvalue && this_token.var->IsReadOnly())
+				if (VARREF_IS_WRITE(this_token.var_usage) && this_token.var->IsReadOnly())
 				{
 					// Having this check here allows us to display the variable name rather than its contents
 					// in the error message.
-					VarIsReadOnlyError(this_token.var, this_token.is_lvalue);
+					VarIsReadOnlyError(this_token.var, this_token.var_usage);
 					goto abort;
 				}
 
@@ -180,7 +180,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					goto push_this_token;
 				}
 
-				if (this_token.var->Type() == VAR_NORMAL || this_token.is_lvalue)
+				if (this_token.var->Type() == VAR_NORMAL || VARREF_IS_WRITE(this_token.var_usage))
   				{
 					this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with limited exceptions) is relied upon in several places such as built-in functions.
 					goto push_this_token;

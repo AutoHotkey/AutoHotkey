@@ -8602,7 +8602,7 @@ unquoted_literal:
 		{
 			infix[infix_count].symbol = SYM_DYNAMIC;
 			infix[infix_count].var = nullptr; // Indicate this is a double-deref.
-			infix[infix_count].is_lvalue = FALSE; // Set default.
+			infix[infix_count].var_usage = FALSE; // Set default.
 		}
 		else if (this_deref_ref.type == DT_DOTPERCENT)
 		{
@@ -8666,7 +8666,7 @@ unquoted_literal:
 			// will validate and translate each SYM_VAR as needed.
 			infix[infix_count].symbol = SYM_VAR;
 			infix[infix_count].deref = &this_deref_ref;
-			infix[infix_count].is_lvalue = FALSE; // Set default, for detection of how this var ref is used.
+			infix[infix_count].var_usage = FALSE; // Set default, for detection of how this var ref is used.
 		} // Handling of the var or function in this_deref.
 
 		// Finally, jump over the dereference text. Note that in the case of an expression, there might not
@@ -8686,7 +8686,7 @@ unquoted_literal:
 	{
 		if (infix_count != 1 || infix->symbol != SYM_VAR)
 			return LineError(ERR_EXPR_SYNTAX, FAIL, aArg.text);
-		infix->is_lvalue = Script::VARREF_OUTPUT_VAR;
+		infix->var_usage = Script::VARREF_OUTPUT_VAR;
 	}
 
 	// Terminate the array with a special item.  This allows infix-to-postfix conversion to do a faster
@@ -8833,19 +8833,19 @@ unquoted_literal:
 							if (!func || func->mName[0] == '<') // Relies on ExprOpFunc using "<object>" as the name.
 							{
 								// Mark this as a potential l-value.
-								param_last.is_lvalue = Script::VARREF_DYNAMIC_PARAM;
+								param_last.var_usage = Script::VARREF_DYNAMIC_PARAM;
 							}
 							else if (func->ArgIsOutputVar(in_param_list->param_count - 1))
 							{
 								// Mark this as an l-value.  If it is a double-deref, it will either produce a writable
 								// var as SYM_VAR or will throw an error.  Other load-time checks will raise an error
 								// if this is SYM_VAR and it turns out to be a constant/read-only variable.
-								param_last.is_lvalue = bif ? Script::VARREF_OUTPUT_VAR : Script::VARREF_BYREF;
+								param_last.var_usage = bif ? Script::VARREF_OUTPUT_VAR : Script::VARREF_BYREF;
 							}
 							else if (bif == BIF_IsSet)
 							{
 								// Mark this so that IsSet(v) suppresses any warnings about v lacking an assignment.
-								param_last.is_lvalue = Script::VARREF_ISSET;
+								param_last.var_usage = Script::VARREF_ISSET;
 							}
 						}
 
@@ -9172,7 +9172,7 @@ unquoted_literal:
 					else if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
 					{
 						ExprTokenType &target = *postfix[postfix_count - 1];
-						target.is_lvalue = Script::VARREF_LVALUE; // Mark this as the target of an assignment.
+						target.var_usage = Script::VARREF_LVALUE; // Mark this as the target of an assignment.
 					}
 					else if (!IS_OPERATOR_VALID_LVALUE(sym_postfix))
 						return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_infix->error_reporting_marker);
@@ -9378,7 +9378,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				ExprTokenType &target = *postfix[postfix_count - 1];
 				// This is nearly identical to the section for assignments under "if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))":
 				if (target.symbol == SYM_VAR || target.symbol == SYM_DYNAMIC)
-					target.is_lvalue = Script::VARREF_LVALUE; // Mark this as the target of an assignment.
+					target.var_usage = Script::VARREF_LVALUE; // Mark this as the target of an assignment.
 				else if (!IS_OPERATOR_VALID_LVALUE(target.symbol))
 					return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_postfix->error_reporting_marker);
 			}
@@ -9488,18 +9488,25 @@ end_of_infix_to_postfix:
 			++max_stack;
 		else if (new_token.symbol == SYM_FUNC)
 			max_stack += new_token.deref->func ? 1 : 2; // Reserve 1 extra for dynamic calls.
-		// Count the tokens which potentially use to_free[].
-		if (new_token.symbol == SYM_DYNAMIC || new_token.symbol == SYM_FUNC || new_token.symbol == SYM_CONCAT)
-			++max_alloc;
 		// Resolve variable references for assignments and output vars.  Leave all others
 		// for later to facilitate detecting variables which are not assigned anywhere.
-		if (new_token.symbol == SYM_VAR && new_token.is_lvalue)
+		if (new_token.symbol == SYM_VAR && new_token.var_usage != Script::VARREF_READ)
 		{
 			new_token.var = g_script.FindOrAddVar(new_token.deref->marker, new_token.deref->length);
 			if (!new_token.var)
 				return FAIL;
-			if (new_token.var->IsReadOnly() && VARREF_IS_WRITE(new_token.is_lvalue))
-				return VarIsReadOnlyError(new_token.var, new_token.is_lvalue);
+			if (VARREF_IS_WRITE(new_token.var_usage)) // Direct assignment or output var of built-in function.
+			{
+				if (new_token.var->IsReadOnly())
+					return VarIsReadOnlyError(new_token.var, new_token.var_usage);
+				// Leave this as SYM_VAR even if it's VAR_VIRTUAL, which is supported for this var_usage.
+			}
+			else if (new_token.var->Type() == VAR_VIRTUAL
+				&& new_token.var_usage != Script::VARREF_ISSET) // Let IsSet(A_Whatever) work.
+			{
+				// Convert it to SYM_DYNAMIC for evaluation by ExpandExpression.
+				new_token.symbol = SYM_DYNAMIC;
+			}
 			new_token.var->MarkAssignedSomewhere();
 			if (aArg.type == ARG_TYPE_OUTPUT_VAR)
 			{
@@ -9507,6 +9514,9 @@ end_of_infix_to_postfix:
 				aArg.is_expression = false;
 			}
 		}
+		// Count the tokens which potentially use to_free[].
+		if (new_token.symbol == SYM_DYNAMIC || new_token.symbol == SYM_FUNC || new_token.symbol == SYM_CONCAT)
+			++max_alloc;
 	}
 	aArg.postfix[postfix_count].symbol = SYM_INVALID;  // Special item to mark the end of the array.
 	aArg.max_stack = max_stack;
@@ -13342,7 +13352,8 @@ ResultType Script::PreparseVarRefs()
 			ExprTokenType *token;
 			for (token = arg.postfix; token->symbol != SYM_INVALID; ++token)
 			{
-				if (token->symbol != SYM_VAR || token->is_lvalue) // Not a var, or already resolved by ExpressionToPostfix.
+				if (token->symbol != SYM_VAR // Not a var.
+					|| token->var_usage != VARREF_READ) // Already resolved by ExpressionToPostfix.
 					continue;
 				if (  !(token->var = FindOrAddVar(token->deref->marker, token->deref->length))  )
 					return FAIL;

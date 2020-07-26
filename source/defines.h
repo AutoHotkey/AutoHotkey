@@ -336,7 +336,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				DerefType *outer_deref; // Used by ExpressionToPostfix().
 				LPTSTR error_reporting_marker; // Used by ExpressionToPostfix() for binary and unary operators.
 				size_t marker_length;
-				int is_lvalue;		// for SYM_DYNAMIC and SYM_VAR (at load time)
+				int var_usage;		// for SYM_DYNAMIC and SYM_VAR (at load time)
 			};
 		};  
 	};
