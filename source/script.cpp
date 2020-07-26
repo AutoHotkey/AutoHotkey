@@ -8848,6 +8848,34 @@ unquoted_literal:
 						++in_param_list->param_count;
 
 						auto *bif = func && func->IsBuiltIn() ? ((BuiltInFunc *)func)->mBIF : nullptr;
+
+						// This retrieves the last token in the parameter; if that's SYM_VAR or SYM_DYNAMIC,
+						// it will end up being passed to this parameter, so should be flagged as a potential
+						// l-value unless this parameter is known to be input-only.
+						// Known limitation: If the parameter's value is determined by a short-circuit op,
+						// the first branch won't be flagged; e.g. f(1 ? "" : a).
+						ExprTokenType &param_last = *postfix[postfix_count-1];
+						if (param_last.symbol == SYM_VAR || param_last.symbol == SYM_DYNAMIC)
+						{
+							if (!func || func->mName[0] == '<') // Relies on ExprOpFunc using "<object>" as the name.
+							{
+								// Mark this as a potential l-value.
+								param_last.is_lvalue = Script::VARREF_DYNAMIC_PARAM;
+							}
+							else if (func->ArgIsOutputVar(in_param_list->param_count - 1))
+							{
+								// Mark this as an l-value.  If it is a double-deref, it will either produce a writable
+								// var as SYM_VAR or will throw an error.  Other load-time checks will raise an error
+								// if this is SYM_VAR and it turns out to be a constant/read-only variable.
+								param_last.is_lvalue = bif ? Script::VARREF_OUTPUT_VAR : Script::VARREF_BYREF;
+							}
+							else if (bif == BIF_IsSet)
+							{
+								// Mark this so that IsSet(v) suppresses any warnings about v lacking an assignment.
+								param_last.is_lvalue = Script::VARREF_ISSET;
+							}
+						}
+
 						if (!func)
 						{
 							// Skip the checks below.
@@ -8858,34 +8886,14 @@ unquoted_literal:
 						}
 						else if (!bif)
 						{
-							// See the next section for comments.
-							ExprTokenType &param_last = *postfix[postfix_count-1];
-							if ((param_last.symbol == SYM_VAR || param_last.symbol == SYM_DYNAMIC)
-								&& func->ArgIsOutputVar(in_param_list->param_count - 1))
-							{
-								param_last.is_lvalue = Script::VARREF_BYREF;
-							}
+							// Skip the checks below.
 						}
 						// The rest of the checks are for calls to built-in functions only:
 						else if (func->ArgIsOutputVar(in_param_list->param_count - 1)
 							|| bif == BIF_IsSet)
 						{
-							// This retrieves the last token in the parameter; if that's SYM_VAR or SYM_DYNAMIC,
-							// it will end up being passed to this parameter, so should be flagged as an lvalue.
-							// Known limitation: If the parameter's value is determined by a short-circuit op,
-							// the first branch won't be flagged; e.g. f(1 ? "" : a).
-							ExprTokenType &param_last = *postfix[postfix_count-1];
-							if (param_last.symbol == SYM_VAR || param_last.symbol == SYM_DYNAMIC)
-							{
-								// Mark this as an l-value.  If it is a double-deref, it will either produce a writable
-								// var as SYM_VAR or will throw an error.  Other load-time checks will raise an error
-								// if this is SYM_VAR and it turns out to be a constant/read-only variable.
-								if (bif == BIF_IsSet)
-									param_last.is_lvalue = Script::VARREF_ISSET;
-								else
-									param_last.is_lvalue = Script::VARREF_OUTPUT_VAR;
-							}
-							else //if (!IS_OPERATOR_VALID_LVALUE(param1.symbol)) // This section currently only executes for single operands.
+							if (param_last.symbol != SYM_VAR && param_last.symbol != SYM_DYNAMIC
+								&& !IS_OPERATOR_VALID_LVALUE(param_last.symbol))
 							{
 								sntprintf(number_buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
 									, in_param_list->param_count, func->mName);
@@ -8902,12 +8910,11 @@ unquoted_literal:
 							&& in_param_list->param_count == 1) // i.e. this is the end of the first param.
 						{
 							// Optimise DllCall by resolving function addresses at load-time where possible.
-							ExprTokenType &param1 = *postfix[postfix_count-1];
-							if (param1.symbol == SYM_STRING)
+							if (param_last.symbol == SYM_STRING)
 							{
-								void *function = GetDllProcAddress(param1.marker);
+								void *function = GetDllProcAddress(param_last.marker);
 								if (function)
-									param1.SetValue((__int64)function);
+									param_last.SetValue((__int64)function);
 								// Otherwise, one of the following is true:
 								//  a) A file was specified and is not already loaded.  GetDllProcAddress avoids
 								//     loading any dlls since doing so may have undesired side-effects.  The file
@@ -8920,25 +8927,24 @@ unquoted_literal:
 						#endif
 						else if (bif == &BIF_Func)
 						{
-							ExprTokenType &param1 = *postfix[postfix_count-1];
-							if (param1.symbol == SYM_STRING && infix_symbol == SYM_CPAREN) // Checking infix_symbol ensures errors such as Func(a,b) are handled correctly.
+							if (param_last.symbol == SYM_STRING && infix_symbol == SYM_CPAREN) // Checking infix_symbol ensures errors such as Func(a,b) are handled correctly.
 							{
 								// Reduce the cost of repeated calls to Func() by resolving the function name now. 
-								Func *param_func = g_script.FindFunc(param1.marker, param1.marker_length);
+								Func *param_func = g_script.FindFunc(param_last.marker, param_last.marker_length);
 								if (param_func)
 								{
 									// Pass the Func to an internal version of Func() which will call CloseIfNeeded().
-									param1.SetValue(param_func);
+									param_last.SetValue(param_func);
 									in_param_list->func = ExprOp<BIF_Func, FID_FuncClose>();
 								}
 								else
 								{
-									param1.SetValue(_T(""), 0);
+									param_last.SetValue(_T(""), 0);
 								}
 								if (!param_func || param_func->IsBuiltIn() || !((UserFunc *)param_func)->mOuterFunc)
 								{
 									// The function either doesn't exist or is not nested.  In both cases, the value
-									// in param1 would always be the result of Func(), so skip the function call.
+									// in param_last would always be the result of Func(), so skip the function call.
 									ASSERT(stack_symbol == SYM_OPAREN && stack[stack_count - 2]->symbol == SYM_FUNC);
 									in_param_list = stack[stack_count - 1]->outer_deref;
 									stack_count -= 2;

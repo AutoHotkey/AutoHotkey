@@ -1878,7 +1878,7 @@ class ExprOpFunc : public BuiltInFunc
 {	// ExprOpFunc: Used in combination with SYM_FUNC to implement certain operations in expressions.
 	// These are not inserted into the script's function list, so mName is used only by the debugger.
 public:
-	ExprOpFunc(BuiltInFunctionType aBIF, int aID) : BuiltInFunc(_T("<object>"))
+	ExprOpFunc(BuiltInFunctionType aBIF, int aID) : BuiltInFunc(_T("<object>")) // ExpressionToPostfix relies on the name beginning with '<'.
 	{
 		mBIF = aBIF;
 		mFID = (BuiltInFunctionID)aID;
@@ -3085,7 +3085,7 @@ public:
 
 	ResultType ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting);
 	enum VarRefUsageType { VARREF_READ = 0, VARREF_BYREF, VARREF_ISSET
-		, VARREF_LVALUE, VARREF_OUTPUT_VAR };
+		, VARREF_DYNAMIC_PARAM, VARREF_LVALUE, VARREF_OUTPUT_VAR };
 #define VARREF_IS_WRITE(is_lvalue) ((is_lvalue) >= Script::VARREF_LVALUE)
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType = VARREF_LVALUE);
 
