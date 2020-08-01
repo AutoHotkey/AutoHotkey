@@ -772,7 +772,7 @@ public:
 	// cleared the VAR_ATTRIB_CONTENTS_OUT_OF_DATE flag.
 	{
 		if (mType == VAR_ALIAS)
-			return mAliasFor->Contents();
+			return mAliasFor->Contents(aAllowUpdate, aNoWarnUninitializedVar);
 		if ((mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE) && aAllowUpdate) // VAR_ATTRIB_CONTENTS_OUT_OF_DATE is checked here and in the function below, for performance.
 			UpdateContents(); // This also clears the VAR_ATTRIB_CONTENTS_OUT_OF_DATE.
 		if (mType == VAR_NORMAL)
