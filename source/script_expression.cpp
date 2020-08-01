@@ -413,8 +413,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					goto normal_end_skip_output_var; // No need to restore circuit_token because the expression is finished.
 				// Next operation is ":=" and above has verified the target is SYM_VAR and VAR_NORMAL.
 				--stack_count; // STACK_POP;
-				this_token.var = internal_output_var; // Make the result a variable rather than a normal operand so that its
-				this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
+				this_token.SetVar(internal_output_var);
 				++this_postfix; // We've fully handled the assignment.
 				goto push_this_token;
 			}
@@ -723,8 +722,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				//    ++x and --x produce an lvalue (though it's undocumented).
 				if (right.var->Type() == VAR_NORMAL)
 				{
-					this_token.var = right.var;  // Make the result a variable rather than a normal operand so that its
-					this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(++x)
+					this_token.SetVar(right.var);
 				}
 				else // VAR_VIRTUAL, which is allowed in only when it's the lvalue of an assignment or inc/dec.
 				{
@@ -778,14 +776,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (!left.var->Assign(right)) // left.var can be VAR_VIRTUAL in this case.
 						goto abort;
 					if (left.var->Type() != VAR_NORMAL) // VAR_VIRTUAL should not yield SYM_VAR (as some sections of the code wouldn't handle it correctly).
-					{
 						this_token.CopyValueFrom(right); // Doing it this way is more maintainable than other methods, and is unlikely to perform much worse.
-					}
 					else
-					{
-						this_token.var = left.var;   // Make the result a variable rather than a normal operand so that its
-						this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
-					}
+						this_token.SetVar(left.var);
 					goto push_this_token;
 				case SYM_ASSIGN_ADD:           this_token.symbol = SYM_ADD; break;
 				case SYM_ASSIGN_SUBTRACT:      this_token.symbol = SYM_SUBTRACT; break;
@@ -891,8 +884,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						// not be converted to SYM_VAR.
 						if (!sym_assign_var->Append(right_string, (VarSizeType)right_length))
 							goto abort;
-						this_token.var = sym_assign_var; // Make the result a variable rather than a normal operand so that its
-						this_token.symbol = SYM_VAR;     // address can be taken, and it can be passed ByRef. e.g. &(x+=1)
+						this_token.SetVar(sym_assign_var);
 						goto push_this_token; // Skip over all other sections such as subsequent checks of sym_assign_var because it was all taken care of here.
 					}
 					// Otherwise, fall back to the other concat methods:
@@ -940,8 +932,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 								else // temp_var is from look-ahead to a future assignment.
 								{
 									++this_postfix;
-									this_token.var = STACK_POP->var; // Make the result a variable rather than a normal operand so that its
-									this_token.symbol = SYM_VAR;     // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
+									this_token.SetVar(STACK_POP->var);
 									goto push_this_token;
 								}
 							}
@@ -969,8 +960,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 							else // temp_var is from look-ahead to a future assignment.
 							{
 								++this_postfix;
-								this_token.var = STACK_POP->var; // Make the result a variable rather than a normal operand so that its
-								this_token.symbol = SYM_VAR;     // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
+								this_token.SetVar(STACK_POP->var);
 								goto push_this_token;
 							}
 						}
@@ -1178,10 +1168,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			if (!sym_assign_var->Assign(this_token)) // Assign the result (based on its type) to the target variable.
 				goto abort;
 			if (sym_assign_var->Type() == VAR_NORMAL)
-			{
-				this_token.var = sym_assign_var;    // Make the result a variable rather than a normal operand so that its
-				this_token.symbol = SYM_VAR;        // address can be taken, and it can be passed ByRef. e.g. &(x+=1)
-			}
+				this_token.SetVar(sym_assign_var);
 			//else its VAR_VIRTUAL, so just push this_token as-is because after its assignment is done,
 			// it should no longer be a SYM_VAR.  This is done to simplify the code, such as BIFs.
 			//

@@ -395,6 +395,18 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 		return CopyValueFrom(other); // Currently nothing needs to be done differently.
 	}
 
+	// Assignments yield a variable using this function so that it can be passed ByRef,
+	// and because in some cases it avoids an extra memory allocation or string copy
+	// (that would otherwise be necessary to ensure the string value is not freed or
+	// overwritten by a subsequent concat/function call while still on the stack).
+	// Yielding SYM_VAR means subsequent assignments may affect it, but in a safer way
+	// that doesn't risk dangling pointers.
+	void SetVar(Var *aVar)
+	{
+		symbol = SYM_VAR;
+		var = aVar;
+	}
+
 private: // Force code to use one of the CopyFrom() methods, for clarity.
 	ExprTokenType & operator = (ExprTokenType &other)
 	{

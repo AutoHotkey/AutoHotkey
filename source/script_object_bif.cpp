@@ -93,8 +93,7 @@ BIF_DECL(Op_ObjInvoke)
 		obj = g->CurrentFunc->mClass->Base();
 		ASSERT(obj != nullptr); // Should always pass for classes created by a class definition.
 		obj_param = (ExprTokenType *)alloca(sizeof(ExprTokenType));
-		obj_param->symbol = SYM_VAR;
-		obj_param->var = g->CurrentFunc->mParam[0].var; // this
+		obj_param->SetVar(g->CurrentFunc->mParam[0].var); // this
 		invoke_type |= IF_NO_SET_PROPVAL;
 		// Maybe not the best for error-detection, but this allows calls such as base.__delete()
 		// to work when the superclass has no definition, which avoids the need to check whether
