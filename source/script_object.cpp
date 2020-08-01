@@ -2009,13 +2009,16 @@ ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved)
 				aVal->Assign((__int64)aIndex + 1);
 			aVal = aReserved;
 		}
-		auto &item = mItem[aIndex];
-		switch (item.symbol)
+		if (aVal)
 		{
-		default:	aVal->AssignString(item.string, item.string.Length());	break;
-		case SYM_INTEGER:	aVal->Assign(item.n_int64);			break;
-		case SYM_FLOAT:		aVal->Assign(item.n_double);		break;
-		case SYM_OBJECT:	aVal->Assign(item.object);			break;
+			auto &item = mItem[aIndex];
+			switch (item.symbol)
+			{
+			default:	aVal->AssignString(item.string, item.string.Length());	break;
+			case SYM_INTEGER:	aVal->Assign(item.n_int64);			break;
+			case SYM_FLOAT:		aVal->Assign(item.n_double);		break;
+			case SYM_OBJECT:	aVal->Assign(item.object);			break;
+			}
 		}
 		return CONDITION_TRUE;
 	}
