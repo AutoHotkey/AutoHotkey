@@ -263,7 +263,7 @@ Action g_act[] =
 	, {_T("Loop Reg"), 1, 2, false, {1, 2, 0}} // Key [, Mode]
 	, {_T("Loop Read"), 1, 2, false, {1, 2, 0}} // InputFile [, OutputFile]
 	, {_T("Loop Parse"), 1, 3, false, {1, 2, 3, 0}} // InputString [, Delimiters, OmitChars]
-	, {_T("For"), 1, MAX_ARGS, false, NULL}  // For vars in expression
+	, {_T("For"), 0, MAX_ARGS, false, NULL}  // For vars in expression
 	, {_T("While"), 1, 1, false, {1, 0}} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
 	, {_T("Until"), 1, 1, false, {1, 0}} // Until expression (follows a Loop)
 	, {_T("Break"), 0, 1, false, NULL}, {_T("Continue"), 0, 1, false, NULL}

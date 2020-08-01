@@ -4933,22 +4933,19 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		// Validate "For" syntax and translate to conventional command syntax.
 		// "For x,y in z" -> "For x,y, z"
 		// "For x in y"   -> "For x,, y"
-		//return ScriptError(_T("This \"For\" is missing its \"in\"."), aLineText);
 		LPTSTR cp;
-		for (cp = action_args; IS_LEADING_IDENTIFIER_CHAR(*cp); )
+		for (cp = action_args; ; )
 		{
-			do ++cp; while (IS_IDENTIFIER_CHAR(*cp));
-			// At this point, *cp cannot point to an identifier char due to the line above.
+			if (ctolower(cp[0]) == 'i' && ctolower(cp[1]) == 'n' && IS_SPACE_OR_TAB(cp[2]))
+				break;
+			if (!IS_LEADING_IDENTIFIER_CHAR(*cp) && *cp != g_delimiter)
+				return ScriptError(ERR_EXPR_SYNTAX, aLineText);
+			while (IS_IDENTIFIER_CHAR(*cp)) ++cp;
+			if (*cp == g_delimiter) ++cp;
 			while (IS_SPACE_OR_TAB(*cp)) ++cp;
-			// Now if *cp points at an identifier char, it must have been preceded by a space/tab.
-			if (*cp != g_delimiter)
-				break; // It's either invalid or the end of the var list.
-			do ++cp; while (IS_SPACE_OR_TAB(*cp));
 		}
-		if (  !(ctolower(cp[0]) == 'i' && ctolower(cp[1]) == 'n' && IS_SPACE_OR_TAB(cp[2]))  )
-			return ScriptError(ERR_EXPR_SYNTAX, aLineText);
-		// Replace "in" with a normal arg delimiter.
-		cp[0] = g_delimiter;
+		// Replace "in" with a normal arg delimiter, or space if there are no vars.
+		cp[0] = cp == action_args ? ' ' : g_delimiter;
 		cp[1] = ' ';
 	}
 

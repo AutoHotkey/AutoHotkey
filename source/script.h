@@ -952,7 +952,6 @@ public:
 			switch(aActionType)
 			{
 			case ACT_ASSIGNEXPR:
-			case ACT_FOR:
 			case ACT_CATCH:
 				return ARG_TYPE_OUTPUT_VAR;
 			}
