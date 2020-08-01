@@ -10948,23 +10948,25 @@ has_valid_return_type:
 		if (this_dyna_param.type == DLL_ARG_INVALID)
 			_f_throw(ERR_INVALID_ARG_TYPE);
 
-		if (IObject *obj = TokenToObject(this_param))
+		IObject *this_param_obj = TokenToObject(this_param);
+		if (this_param_obj)
 		{
 			// Support Buffer.Ptr, but only for "Ptr" type.  All other types are reserved for possible
 			// future use, which might be general like obj.ToValue(), or might be specific to DllCall
 			// or the particular type of this arg (Int, Float, etc.).
-			if (ctoupper(*arg_type_string) != 'P')
-				_f_throw(ERR_TYPE_MISMATCH);
-			GetBufferObjectPtr(aResultToken, obj, this_dyna_param.value_uintptr);
-			if (aResultToken.Exited())
-				return;
-			continue;
+			if (ctoupper(*arg_type_string) == 'P')
+			{
+				GetBufferObjectPtr(aResultToken, this_param_obj, this_dyna_param.value_uintptr);
+				if (aResultToken.Exited())
+					return;
+				continue;
+			}
 		}
 
 		switch (this_dyna_param.type)
 		{
 		case DLL_ARG_STR:
-			if (IS_NUMERIC(this_param.symbol))
+			if (IS_NUMERIC(this_param.symbol) || this_param_obj)
 			{
 				// For now, string args must be real strings rather than floats or ints.  An alternative
 				// to this would be to convert it to number using persistent memory from the caller (which
@@ -11005,7 +11007,7 @@ has_valid_return_type:
 			break;
 		case DLL_ARG_xSTR:
 			// See the section above for comments.
-			if (IS_NUMERIC(this_param.symbol))
+			if (IS_NUMERIC(this_param.symbol) || this_param_obj)
 				_f_throw_type(_T("String"), this_param);
 			// String needing translation: ASTR on Unicode build, WSTR on ANSI build.
 			pStr[arg_count] = new UorA(CStringCharFromWChar,CStringWCharFromChar)(TokenToString(this_param));
