@@ -1026,9 +1026,10 @@ ResultType GuiType::MethodGetPos(ResultToken &aResultToken, ExprTokenType *aPara
 	{
 		if (aParam[i]->symbol == SYM_MISSING)
 			continue;
-		if (aParam[i]->symbol != SYM_VAR)
+		Var *var = ParamIndexToOutputVar(i);
+		if (!var)
 			_o_throw(ERR_PARAM_INVALID);
-		aParam[i]->var->Assign(Unscale(((int *)&aPos)[i]));
+		var->Assign(Unscale(((int *)&aPos)[i]));
 	}
 
 	_o_return_empty;

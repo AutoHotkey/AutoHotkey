@@ -1145,7 +1145,7 @@ BIF_DECL(BIF_FileGetShortcut) // Credited to Holger <Holger.Kotsch at GMX de>.
 	_f_param_string(aShortcutFile, 0);
 	Var *output_var[7];
 	for (int i = 0; i < _countof(output_var); ++i)
-		if (output_var[i] = ParamIndexToOptionalVar(i+1))
+		if (output_var[i] = ParamIndexToOutputVar(i+1))
 			output_var[i]->Assign(); // Init to blank.  OutIconNum relies on this.
 
 	bool bSucceeded = false;

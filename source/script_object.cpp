@@ -2030,8 +2030,8 @@ ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved)
 
 bool EnumBase::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
 {
-	Var *var0 = ParamIndexToOptionalVar(0);
-	Var *var1 = ParamIndexToOptionalVar(1);
+	Var *var0 = ParamIndexToOutputVar(0);
+	Var *var1 = ParamIndexToOutputVar(1);
 	auto result = Next(var0, var1);
 	switch (result)
 	{

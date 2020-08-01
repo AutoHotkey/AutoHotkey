@@ -1054,7 +1054,7 @@ BIF_DECL(BIF_Wait)
 	{
 	case FID_RunWait:
 		if (!g_script.ActionExec(arg1, NULL, arg2, true, arg3, &running_process, true, true
-			, ParamIndexToOptionalVar(4-1)))
+			, ParamIndexToOutputVar(4-1)))
 			_f_return_FAIL;
 		//else fall through to the waiting-phase of the operation.
 		break;
@@ -1641,10 +1641,10 @@ BIF_DECL(BIF_ControlMove)
 
 BIF_DECL(BIF_ControlGetPos)
 {
-	Var *output_var_x = ParamIndexToOptionalVar(0);
-	Var *output_var_y = ParamIndexToOptionalVar(1);
-	Var *output_var_width = ParamIndexToOptionalVar(2);
-	Var *output_var_height = ParamIndexToOptionalVar(3);
+	Var *output_var_x = ParamIndexToOutputVar(0);
+	Var *output_var_y = ParamIndexToOutputVar(1);
+	Var *output_var_width = ParamIndexToOutputVar(2);
+	Var *output_var_height = ParamIndexToOutputVar(3);
 
 	DETERMINE_TARGET_CONTROL(4);
 
@@ -3115,7 +3115,7 @@ BIF_DECL(BIF_WinGetPos)
 
 	for (int i = 0; i < 4; ++i)
 	{
-		Var *var = ParamIndexToOptionalVar(i);
+		Var *var = ParamIndexToOutputVar(i);
 		if (!var)
 			continue;
 		var->Assign(((int *)(&rect))[i]); // Always succeeds.
@@ -3130,7 +3130,7 @@ BIF_DECL(BIF_Run)
 	_f_param_string(target, 0);
 	_f_param_string_opt(working_dir, 1);
 	_f_param_string_opt(options, 2);
-	Var *output_var_pid = ParamIndexToOptionalVar(3);
+	Var *output_var_pid = ParamIndexToOutputVar(3);
 	if (!g_script.ActionExec(target, nullptr, working_dir, true, options, nullptr, true, true, output_var_pid))
 		_f_return_FAIL;
 	_f_return_empty;
@@ -3235,8 +3235,8 @@ BIF_DECL(BIF_MonitorGet)
 		// Otherwise:
 		LONG *monitor_rect = (LONG *)((cmd == FID_MonitorGetWorkArea) ? &mip.monitor_info_ex.rcWork : &mip.monitor_info_ex.rcMonitor);
 		for (int i = 1; i <= 4; ++i) // Params: N (0), Left (1), Top, Right, Bottom.
-			if (i < aParamCount && aParam[i]->symbol == SYM_VAR)
-				aParam[i]->var->Assign(monitor_rect[i-1]);
+			if (Var *var = ParamIndexToOutputVar(i))
+				var->Assign(monitor_rect[i-1]);
 		_f_return_i(mip.count); // Return the monitor number.
 	}
 
@@ -3635,11 +3635,13 @@ error:
 
 BIF_DECL(BIF_PixelSearch)
 {
-	if (aParam[0]->symbol != SYM_VAR)
+	Var *output_var_x = ParamIndexToOutputVar(0);
+	Var *output_var_y = ParamIndexToOutputVar(1);
+	if (!output_var_x)
 		_f_throw(ERR_PARAM1_INVALID);
-	if (aParam[1]->symbol != SYM_VAR)
+	if (!output_var_y)
 		_f_throw(ERR_PARAM2_INVALID);
-	PixelSearch(aParam[0]->var, aParam[1]->var
+	PixelSearch(output_var_x, output_var_y
 		, ParamIndexToInt(2), ParamIndexToInt(3), ParamIndexToInt(4), ParamIndexToInt(5)
 		, ParamIndexToInt(6), ParamIndexToOptionalInt(7, 0), false, aResultToken);
 }
@@ -3653,12 +3655,12 @@ BIF_DECL(BIF_ImageSearch)
 	// Many of the following sections are similar to those in PixelSearch(), so they should be
 	// maintained together.
 
-	if (aParam[0]->symbol != SYM_VAR)
+	Var *output_var_x = ParamIndexToOutputVar(0);
+	Var *output_var_y = ParamIndexToOutputVar(1);
+	if (!output_var_x)
 		_f_throw(ERR_PARAM1_INVALID);
-	if (aParam[1]->symbol != SYM_VAR)
+	if (!output_var_y)
 		_f_throw(ERR_PARAM2_INVALID);
-	Var *output_var_x = aParam[0]->var;
-	Var *output_var_y = aParam[1]->var;
 
 	int aLeft = ParamIndexToInt(2);
 	int aTop = ParamIndexToInt(3);
@@ -5395,10 +5397,10 @@ BIF_DECL(BIF_MouseGetPos)
 // Returns OK or FAIL.
 {
 	// Since SYM_VAR is always VAR_NORMAL, these always resolve to normal vars or nullptr:
-	Var *output_var_x = ParamIndexToOptionalVar(0);
-	Var *output_var_y = ParamIndexToOptionalVar(1);
-	Var *output_var_parent = ParamIndexToOptionalVar(2);
-	Var *output_var_child = ParamIndexToOptionalVar(3);
+	Var *output_var_x = ParamIndexToOutputVar(0);
+	Var *output_var_y = ParamIndexToOutputVar(1);
+	Var *output_var_parent = ParamIndexToOutputVar(2);
+	Var *output_var_child = ParamIndexToOutputVar(3);
 	int aOptions = ParamIndexToOptionalInt(4, 0);
 
 	POINT point;
@@ -5893,7 +5895,7 @@ BIF_DECL(BIF_StrReplace)
 		|| string_case_sense == SCS_INSENSITIVE_LOGICAL) // Not supported, seems more useful to throw rather than using SCS_INSENSITIVE.
 		_f_throw(ERR_PARAM4_INVALID);
 
-	Var *output_var_count = ParamIndexToOptionalVar(4); 
+	Var *output_var_count = ParamIndexToOutputVar(4); 
 	UINT replacement_limit = (UINT)ParamIndexToOptionalInt64(5, UINT_MAX); 
 	
 
@@ -6209,7 +6211,7 @@ BIF_DECL(BIF_SplitPath)
 	_f_param_string(aFileSpec, 0);
 	Var *vars[6];
 	for (int i = 0; i < _countof(vars); ++i)
-		vars[i] = ParamIndexToOptionalVar(i);
+		vars[i] = ParamIndexToOutputVar(i);
 	if (vars[0]) // Check for overlap of input/output vars.
 	{
 		// There are cases where this could be avoided, such as by careful ordering of the assignments
@@ -9854,8 +9856,8 @@ BIV_DECL_R(BIV_MyDocuments) // Called by multiple callers.
 
 BIF_DECL(BIF_CaretGetPos)
 {
-	Var *varX = ParamIndexToOptionalVar(0);
-	Var *varY = ParamIndexToOptionalVar(1);
+	Var *varX = ParamIndexToOutputVar(0);
+	Var *varY = ParamIndexToOutputVar(1);
 	
 	// I believe only the foreground window can have a caret position due to relationship with focused control.
 	HWND target_window = GetForegroundWindow(); // Variable must be named target_window for ATTACH_THREAD_INPUT.
@@ -12205,7 +12207,7 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	// as the haystack, needle, or replacement (i.e. the same memory), don't set output_var_count until
 	// immediately prior to returning.  Otherwise, haystack, needle, or replacement would corrupted while
 	// it's still being used here.
-	Var *output_var_count = ParamIndexToOptionalVar(3);
+	Var *output_var_count = ParamIndexToOutputVar(3);
 	int replacement_count = 0; // This value will be stored in output_var_count, but only at the very end due to the reason above.
 
 	// Get the replacement text (if any) from the incoming parameters.  If it was omitted, treat it as "".
@@ -12697,18 +12699,17 @@ BIF_DECL(BIF_RegEx)
 		aResultToken.value_int64 = match_offset + 1; // i.e. the position of the entire-pattern match is the function's return value.
 	}
 
-	if (aParamCount < 3 || aParam[2]->symbol != SYM_VAR) // No output var, so nothing more to do.
+	Var *output_var = ParamIndexToOutputVar(2);
+	if (!output_var)
 		return;
 
-	Var &output_var = *aParam[2]->var;
-	
 	IObject *match_object;
 	if (!RegExCreateMatchArray(haystack, re, extra, offset, pattern_count, captured_pattern_count, match_object))
 		aResultToken.Error(ERR_OUTOFMEM);
 	if (match_object)
-		output_var.AssignSkipAddRef(match_object);
+		output_var->AssignSkipAddRef(match_object);
 	else // Out-of-memory or there were no captured patterns.
-		output_var.Assign();
+		output_var->Assign();
 }
 
 
@@ -13794,66 +13795,65 @@ BIF_DECL(BIF_VarSetStrCapacity)
 // 1: Target variable (unquoted).
 // 2: Requested capacity.
 {
-	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
-	aResultToken.value_int64 = 0; // Set default. In spite of being ambiguous with the result of Free(), 0 seems a little better than -1 since it indicates "no capacity" and is also equal to "false" for easy use in expressions.
-	if (aParam[0]->symbol == SYM_VAR) // Always true for SYM_VAR: aParam[0]->var->Type() == VAR_NORMAL
-	{
-		Var &var = *aParam[0]->var; // For performance and convenience.
-		if (aParamCount > 1) // Second parameter is present.
-		{
-			__int64 param1 = TokenToInt64(*aParam[1]);
-			// Check for invalid values, in particular small negatives which end up large when converted
-			// to unsigned.  Var::AssignString used to have a similar check, but integer overflow caused
-			// by "* sizeof(TCHAR)" allowed some errors to go undetected.  For this same reason, we can't
-			// simply rely on SetCapacity() calling malloc() and then detecting failure.
-			if ((unsigned __int64)param1 > (MAXINT_PTR / sizeof(TCHAR)))
-			{
-				if (param1 == -1) // Adjust variable's internal length.
-				{
-					var.SetLengthFromContents();
-					// Seems more useful to report length vs. capacity in this special case. Scripts might be able
-					// to use this to boost performance.
-					aResultToken.value_int64 = var.CharLength();
-					return;
-				}
-				// x64: it's negative but not -1.
-				// x86: it's either >2GB or negative and not -1.
-				_f_throw(ERR_PARAM2_INVALID, TokenToString(*aParam[1], _f_number_buf));
-			}
-			// Since above didn't return:
-			size_t new_capacity = (size_t)param1 * sizeof(TCHAR); // Chars to bytes.
-			if (new_capacity)
-			{
-				if (!var.SetCapacity(new_capacity, true)) // This also destroys the variables contents.
-				{
-					aResultToken.SetExitResult(FAIL); // ScriptError() was already called.
-					return;
-				}
-				// By design, Assign() has already set the length of the variable to reflect new_capacity.
-				// This is not what is wanted in this case since it should be truly empty.
-				var.ByteLength() = 0;
-			}
-			else // ALLOC_SIMPLE, due to its nature, will not actually be freed, which is documented.
-				var.Free();
-		} // if (aParamCount > 1)
-		else
-		{
-			// RequestedCapacity was omitted, so the var is not altered; instead, the current capacity
-			// is reported, which seems more intuitive/useful than having it do a Free(). In this case
-			// it's an input var rather than an output var, so check if it contains a string.
-			// v1.1.11.01: Support VarSetCapacity(var) as a means for the script to check if it
-			// has initialized a var.  In other words, don't show a warning even in that case.
-			// v2: We now have IsSet(), but it still seems reasonable to allow this without a warning.
-			//var.MaybeWarnUninitialized();
-			if (var.IsPureNumericOrObject())
-				_f_throw_type(_T("String"), *aParam[0]);
-		}
-
-		if (aResultToken.value_int64 = var.CharCapacity()) // Don't subtract 1 here in lieu doing it below (avoids underflow).
-			aResultToken.value_int64 -= 1; // Omit the room for the zero terminator since script capacity is defined as length vs. size.
-	} // (aParam[0]->symbol == SYM_VAR)
-	else
+	Var *target_var = ParamIndexToOutputVar(0);
+	if (!target_var)
 		_f_throw(ERR_PARAM1_INVALID);
+	Var &var = *target_var;
+	ASSERT(var.Type() == VAR_NORMAL); // Should always be true.
+
+	if (aParamCount > 1) // Second parameter is present.
+	{
+		__int64 param1 = TokenToInt64(*aParam[1]);
+		// Check for invalid values, in particular small negatives which end up large when converted
+		// to unsigned.  Var::AssignString used to have a similar check, but integer overflow caused
+		// by "* sizeof(TCHAR)" allowed some errors to go undetected.  For this same reason, we can't
+		// simply rely on SetCapacity() calling malloc() and then detecting failure.
+		if ((unsigned __int64)param1 > (MAXINT_PTR / sizeof(TCHAR)))
+		{
+			if (param1 == -1) // Adjust variable's internal length.
+			{
+				var.SetLengthFromContents();
+				// Seems more useful to report length vs. capacity in this special case. Scripts might be able
+				// to use this to boost performance.
+				aResultToken.value_int64 = var.CharLength();
+				return;
+			}
+			// x64: it's negative but not -1.
+			// x86: it's either >2GB or negative and not -1.
+			_f_throw(ERR_PARAM2_INVALID, TokenToString(*aParam[1], _f_number_buf));
+		}
+		// Since above didn't return:
+		size_t new_capacity = (size_t)param1 * sizeof(TCHAR); // Chars to bytes.
+		if (new_capacity)
+		{
+			if (!var.SetCapacity(new_capacity, true)) // This also destroys the variables contents.
+			{
+				aResultToken.SetExitResult(FAIL); // ScriptError() was already called.
+				return;
+			}
+			// By design, Assign() has already set the length of the variable to reflect new_capacity.
+			// This is not what is wanted in this case since it should be truly empty.
+			var.ByteLength() = 0;
+		}
+		else // ALLOC_SIMPLE, due to its nature, will not actually be freed, which is documented.
+			var.Free();
+	} // if (aParamCount > 1)
+	else
+	{
+		// RequestedCapacity was omitted, so the var is not altered; instead, the current capacity
+		// is reported, which seems more intuitive/useful than having it do a Free(). In this case
+		// it's an input var rather than an output var, so check if it contains a string.
+		// v1.1.11.01: Support VarSetCapacity(var) as a means for the script to check if it
+		// has initialized a var.  In other words, don't show a warning even in that case.
+		// v2: We now have IsSet(), but it still seems reasonable to allow this without a warning.
+		//var.MaybeWarnUninitialized();
+		if (var.IsPureNumericOrObject())
+			_f_throw_type(_T("String"), *aParam[0]);
+	}
+
+	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
+	if (aResultToken.value_int64 = var.CharCapacity()) // Don't subtract 1 here in lieu doing it below (avoids underflow).
+		aResultToken.value_int64 -= 1; // Omit the room for the zero terminator since script capacity is defined as length vs. size.
 }
 
 
@@ -16488,7 +16488,7 @@ BIF_DECL(BIF_LoadPicture)
 	// h := LoadPicture(filename [, options, ByRef image_type])
 	LPTSTR filename = ParamIndexToString(0, aResultToken.buf);
 	LPTSTR options = ParamIndexToOptionalString(1);
-	Var *image_type_var = ParamIndexToOptionalVar(2);
+	Var *image_type_var = ParamIndexToOutputVar(2);
 
 	int width = -1;
 	int height = -1;
