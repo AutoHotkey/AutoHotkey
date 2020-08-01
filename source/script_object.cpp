@@ -791,11 +791,15 @@ ResultType Object::CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToke
 
 ResultType Object::CallMethod(IObject *aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount)
 {
-	ExprTokenType **param = (ExprTokenType **)_alloca((aParamCount + 1) * sizeof(ExprTokenType *));
+	ExprTokenType **param = (ExprTokenType **)_malloca((aParamCount + 1) * sizeof(ExprTokenType *));
+	if (!param)
+		_o_throw(ERR_OUTOFMEM);
 	param[0] = &aThisToken;
 	memcpy(param + 1, aParam, aParamCount * sizeof(ExprTokenType *));
 	// return %func%(this, aParam*)
-	return aFunc->Invoke(aResultToken, IT_CALL, nullptr, ExprTokenType(aFunc), param, aParamCount + 1);
+	auto invoke_result = aFunc->Invoke(aResultToken, IT_CALL, nullptr, ExprTokenType(aFunc), param, aParamCount + 1);
+	_freea(param);
+	return invoke_result;
 }
 
 ResultType Object::CallMeta(IObject *aFunc, LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount)
