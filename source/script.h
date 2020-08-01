@@ -2640,7 +2640,6 @@ public:
 	ResultType AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Create(LPTSTR aTitle);
 	ResultType SetName(LPTSTR aName);
-	ResultType NameToEventHandler(LPTSTR aName, IObject *&aObject);
 	ResultType OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken);
 	ResultType OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads, ResultToken &aResultToken);
 	void ApplyEventStyles(GuiControlType *aControl, UINT aEvent, bool aAdded);
@@ -3433,8 +3432,6 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 StringCaseSenseType TokenToStringCase(ExprTokenType& aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
 Func *TokenToFunc(ExprTokenType &aToken);
-IObject *TokenToFunctor(ExprTokenType &aToken);
-IObject *StringToFunctor(LPTSTR aStr);
 ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, LPTSTR aNullErr = ERR_TYPE_MISMATCH, int *aMinParams = nullptr);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
 BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right);

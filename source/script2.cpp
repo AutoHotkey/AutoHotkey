@@ -6421,8 +6421,6 @@ BIF_DECL(BIF_Sort)
 	if (!ParamIndexIsOmitted(2))
 	{
 		if (  !(g_SortFunc = ParamIndexToObject(2))  )
-			g_SortFunc = TokenToFunc(*aParam[2]);
-		if (!g_SortFunc)
 		{
 			aResultToken.Error(ERR_PARAM3_INVALID);
 			goto end;
@@ -14344,7 +14342,7 @@ BIF_DECL(BIF_Hotkey)
 	_f_param_string_opt(aParam2, 2);
 	
 	ResultType result = OK;
-	IObject *functor = NULL;
+	IObject *functor = nullptr;
 
 	switch (_f_callee_id) 
 	{
@@ -14353,11 +14351,7 @@ BIF_DECL(BIF_Hotkey)
 		HookActionType hook_action = 0;
 		if (!ParamIndexIsOmitted(1))
 		{
-			if (functor = TokenToObject(*aParam[1]))
-				functor->AddRef();
-			else if (  !(hook_action = Hotkey::ConvertAltTab(aParam1, true))  )
-				functor = StringToFunctor(aParam1);
-			if (!functor)
+			if (  !(functor = ParamIndexToObject(1))  )
 			{
 				// Search for a match in the hotkey variants' "original callbacks".
 				// I.e., find the function implicitly defined by "x::action".
@@ -14369,20 +14363,20 @@ BIF_DECL(BIF_Hotkey)
 					for (HotkeyVariant* v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
 						if (v->mHotCriterion == g->HotCriterion)
 						{
-							if (functor = v->mOriginalCallback.ToFunc())
-								functor->AddRef(); // To counter the below release.
+							functor = v->mOriginalCallback.ToFunc();
 							goto break_twice;
 						}
 				}
 			break_twice:;
 			}
+			if (!functor)
+				hook_action = Hotkey::ConvertAltTab(aParam1, true);
 		}
 		result = Hotkey::Dynamic(aParam0, aParam1, aParam2, functor, hook_action, aResultToken);
 		break;
 	}
 	case FID_HotIf:
-		if (!ParamIndexIsOmitted(0))
-			functor = TokenToFunctor(*aParam[0]);
+		functor = ParamIndexToOptionalObject(0);
 		result = Hotkey::IfExpr(aParam0, functor, aResultToken);
 		break;
 	
@@ -14391,9 +14385,6 @@ BIF_DECL(BIF_Hotkey)
 	
 	}
 	
-	if (functor)
-		functor->Release();
-
 	if (!result)
 		_f_return_FAIL;
 	_f_return_empty;
@@ -14416,20 +14407,11 @@ BIF_DECL(BIF_SetTimer)
 		if (!callback)
 			// Either the thread was not launched by a timer or the timer has been deleted.
 			_f_throw(ERR_PARAM1_MUST_NOT_BE_BLANK);
-		callback->AddRef();
 	}
 	else
 	{
 		callback = ParamIndexToObject(0);
-		if (callback)
-			callback->AddRef();
-		else
-		{
-			LPTSTR arg1 = ParamIndexToString(0, _f_number_buf);
-			if (  !(callback = StringToFunctor(arg1))  )
-				_f_throw(ERR_PARAM1_INVALID, arg1);
-		}
-		if (!ValidateFunctor(callback, 0, aResultToken))
+		if (!ValidateFunctor(callback, 0, aResultToken, ERR_PARAM1_INVALID))
 			return;
 	}
 	__int64 period = DEFAULT_TIMER_PERIOD;
@@ -14443,7 +14425,6 @@ BIF_DECL(BIF_SetTimer)
 		if (!period)
 		{
 			g_script.DeleteTimer(callback);
-			callback->Release();
 			_f_return_empty;
 		}
 		update_period = true;
@@ -14454,7 +14435,6 @@ BIF_DECL(BIF_SetTimer)
 		update_priority = true;
 	}
 	g_script.UpdateOrCreateTimer(callback, update_period, period, update_priority, priority);
-	callback->Release();
 	_f_return_empty;
 }
 
@@ -14474,7 +14454,6 @@ BIF_DECL(BIF_OnMessage)
 	UINT specified_msg = (UINT)ParamIndexToInt64(0); // Parameter #1
 
 	// Set defaults:
-	IObject *callback = NULL;
 	bool mode_is_delete = false;
 	int max_instances = 1;
 	bool call_it_last = true;
@@ -14494,20 +14473,8 @@ BIF_DECL(BIF_OnMessage)
 			mode_is_delete = true;
 	}
 
-	// Parameter #2: The callback to add or remove.  Must be an object or a function name.
-	Func *func; // Func for validation of parameters, where possible.
-	if (callback = TokenToObject(*aParam[1]))
-		func = dynamic_cast<Func *>(callback);
-	else
-		callback = func = g_script.FindFunc(TokenToString(*aParam[1]));
-	// Notes about func validation: ByRef and optional parameters are allowed for flexibility.
-	// For example, a function may be called directly by the script to set static vars which
-	// are used when a message arrives.  Raising an error might help catch bugs, but only in
-	// very rare cases where a valid but wrong function name is given *and* that function has
-	// ByRef or optional parameters.
-	// If the parameter is not an object or a valid function...
-	if (!callback || func && func->mMinParams > 4)
-		_f_throw(ERR_PARAM2_INVALID);
+	// Parameter #2: The callback to add or remove.  Must be an object.
+	IObject *callback = TokenToObject(*aParam[1]);
 
 	// Check if this message already exists in the array:
 	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(specified_msg, callback);
@@ -14516,12 +14483,10 @@ BIF_DECL(BIF_OnMessage)
 	{
 		if (mode_is_delete) // Delete a non-existent item.
 			_f_return_retval; // Yield the default return value set earlier (an empty string).
+		if (!ValidateFunctor(callback, 4, aResultToken, ERR_PARAM2_INVALID))
+			return;
 		// From this point on, it is certain that an item will be added to the array.
-		if (func)
-			callback = func->CloseIfNeeded(); // Returns a new reference, if not a new object.
 		pmonitor = g_MsgMonitor.Add(specified_msg, callback, call_it_last);
-		if (func)
-			callback->Release();
 		if (!pmonitor)
 			_f_throw(ERR_OUTOFMEM);
 	}
@@ -14740,7 +14705,7 @@ BIF_DECL(BIF_On)
 	MsgMonitorList &handlers = *phandlers;
 
 
-	IObject *callback = TokenToFunctor(*aParam[0]);
+	IObject *callback = ParamIndexToObject(0);
 	if (!ValidateFunctor(callback, event_type == FID_OnClipboardChange ? 1 : 2, aResultToken, ERR_PARAM1_INVALID))
 		return;
 	
@@ -14755,10 +14720,7 @@ BIF_DECL(BIF_On)
 	case  1:
 	case -1:
 		if (existing)
-		{
-			callback->Release();
 			return;
-		}
 		if (event_type == FID_OnClipboardChange)
 		{
 			// Do this before adding the handler so that it won't be called as a result of the
@@ -14767,24 +14729,19 @@ BIF_DECL(BIF_On)
 			g_script.EnableClipboardListener(true);
 		}
 		if (!handlers.Add(0, callback, mode == 1))
-		{
-			callback->Release();
 			_f_throw(ERR_OUTOFMEM);
-		}
 		break;
 	case  0:
 		if (existing)
 			handlers.Delete(existing);
 		break;
 	default:
-		callback->Release();
 		_f_throw(ERR_PARAM2_INVALID);
 	}
 	// In case the above enabled the clipboard listener but failed to add the handler,
 	// do this even if mode != 0:
 	if (event_type == FID_OnClipboardChange && !handlers.Count())
 		g_script.EnableClipboardListener(false);
-	callback->Release();
 }
 
 
@@ -14943,7 +14900,7 @@ BIF_DECL(BIF_CallbackCreate)
 // Author: Original x86 RegisterCallback() was created by Jonathan Rennison (JGR).
 //   x64 support by fincs.  Various changes by Lexikos.
 {
-	IObject *func = TokenToFunctor(*aParam[0]);
+	IObject *func = ParamIndexToObject(0);
 	if (!func)
 		_f_throw(ERR_PARAM1_INVALID);
 
@@ -14958,10 +14915,7 @@ BIF_DECL(BIF_CallbackCreate)
 
 	bool params_specified = !ParamIndexIsOmittedOrEmpty(2);
 	if (pass_params_pointer && require_param_count && !params_specified)
-	{
-		func->Release();
 		_f_throw(ERR_PARAM3_MUST_NOT_BE_BLANK);
-	}
 
 	int actual_param_count = params_specified ? ParamIndexToInt(2) : 0;
 	if (!ValidateFunctor(func
@@ -14970,7 +14924,6 @@ BIF_DECL(BIF_CallbackCreate)
 		// Use MinParams as actual_param_count if unspecified and no & option.
 		, params_specified || pass_params_pointer ? nullptr : &actual_param_count))
 	{
-		func->Release();
 		return;
 	}
 	
@@ -14995,10 +14948,7 @@ BIF_DECL(BIF_CallbackCreate)
 	//						memory and the VirtualProtect function to grant PAGE_EXECUTE access."
 	RCCallbackFunc *callbackfunc=(RCCallbackFunc*) GlobalAlloc(GMEM_FIXED,sizeof(RCCallbackFunc));	//allocate structure off process heap, automatically RWE and fixed.
 	if (!callbackfunc)
-	{
-		func->Release();
 		_f_throw(ERR_OUTOFMEM);
-	}
 	RCCallbackFunc &cb = *callbackfunc; // For convenience and possible code-size reduction.
 
 #ifdef WIN32_PLATFORM
@@ -15040,6 +14990,7 @@ BIF_DECL(BIF_CallbackCreate)
 	cb.callfuncptr = RegisterCallbackCStub;
 #endif
 
+	func->AddRef();
 	cb.func = func;
 	cb.actual_param_count = actual_param_count;
 	cb.flags = 0;
@@ -16987,31 +16938,6 @@ Func *TokenToFunc(ExprTokenType &aToken)
 			func = g_script.FindFunc(func_name);
 	}
 	return func;
-}
-
-
-
-IObject *TokenToFunctor(ExprTokenType &aToken)
-// Returns an object if aToken contains an object or function name.
-// Reference is counted so CALLER MUST Release() WHEN APPROPRIATE.
-// For nested functions with upvalues, this returns a Closure, whereas TokenToFunc
-// returns the base Func (which can't be called after the outer function returns).
-{
-	if (IObject *obj = TokenToObject(aToken))
-	{
-		obj->AddRef();
-		return obj;
-	}
-	return StringToFunctor(TokenToString(aToken)); // No need for buf (see TokenToFunc).
-}
-
-
-
-IObject *StringToFunctor(LPTSTR aStr)
-// Reference is counted so CALLER MUST Release() WHEN APPROPRIATE.
-{
-	Func *func = g_script.FindFunc(aStr);
-	return func ? func->CloseIfNeeded() : NULL;
 }
 
 

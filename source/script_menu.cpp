@@ -53,7 +53,7 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 	LPTSTR param1 = (aParamCount || IS_INVOKE_SET) ? ParamIndexToString(0, _f_number_buf) : _T("");
 
 	bool ignore_existing_items = false; // These are used to simplify M_Insert, combining it with M_Add.
-	UserMenuItem **insert_at = NULL;    //
+	UserMenuItem **insert_at = nullptr; //
 
 	auto member = MemberID(aID);
 	switch (member)
@@ -159,9 +159,8 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 	// Whether an existing menu item's options should be updated without updating its submenu or callback:
 	bool update_existing_item_options = (member == M_Add && menu_item && callback_was_omitted && *aOptions);
 
-	ResultType result;
-	IObject *callback = NULL;  // Set default.
-	UserMenu *submenu = NULL;    // Set default.
+	IObject *callback = nullptr;
+	UserMenu *submenu = nullptr;
 	if (member == M_Add && !update_existing_item_options) // Callbacks and submenus are only used in conjunction with the ADD command.
 	{
 		if (callback_was_omitted)
@@ -178,17 +177,11 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 			if (submenu == this || submenu->ContainsMenu(this)
 				|| submenu->mMenuType != MENU_TYPE_POPUP)
 				_o_throw(ERR_PARAM2_INVALID);
-			// Store only submenu, not callback.  Don't Release() this since AddRef() wasn't called
-			// (we're just borrowing the caller's reference until the menu item is constructed).
-			callback = NULL;
+			callback = nullptr; // Store only submenu, not callback.
 		}
 		else 
 		{
 			// Param #2 is not a submenu.
-			if (callback)
-				callback->AddRef();
-			else
-				callback = StringToFunctor(param2);
 			if (!ValidateFunctor(callback, 3, aResultToken, ERR_PARAM2_INVALID))
 				return FAIL;
 		}
@@ -198,8 +191,6 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 	{
 		if (member != M_Add || search_by_pos)
 		{
-			if (callback)
-				callback->Release();
 			// Seems best not to create menu items on-demand like this because they might get put into
 			// an incorrect position (i.e. it seems better that menu changes be kept separate from
 			// menu additions):
@@ -209,15 +200,8 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 		// Otherwise: Adding a new item that doesn't yet exist.
 		UINT item_id = g_script.GetFreeMenuItemID();
 		if (!item_id) // All ~64000 IDs are in use!
-		{
-			if (callback)
-				callback->Release();
 			_o_throw(_T("Too many menu items."), param1); // Short msg since so rare.
-		}
-		result = AddItem(param1, item_id, callback, submenu, aOptions, insert_at);
-		if (callback)
-			callback->Release();
-		return result;
+		return AddItem(param1, item_id, callback, submenu, aOptions, insert_at);
 	} // if (!menu_item)
 
 	// Above has found the correct menu_item to operate upon (it already returned if
@@ -231,10 +215,7 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 		// This is only reached if the ADD command is being used to update the callback, submenu, or
 		// options of an existing menu item (since it would have returned above if the item was
 		// just newly created).
-		result = ModifyItem(menu_item, callback, submenu, aOptions);
-		if (callback)
-			callback->Release();
-		return result;
+		return ModifyItem(menu_item, callback, submenu, aOptions);
 	case M_Rename:
 		if (!RenameItem(menu_item, param2))
 			_o_throw(_T("Rename failed (name too long?)."), param2);

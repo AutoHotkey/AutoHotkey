@@ -2350,24 +2350,6 @@ ResultType GuiType::Create(LPTSTR aTitle)
 }
 
 
-
-ResultType GuiType::NameToEventHandler(LPTSTR aName, IObject *&aObject)
-{
-	if (!*aName)
-		return FAIL;
-	if (!mEventSink)
-	{
-		Func *func = g_script.FindFunc(aName);
-		if (!func)
-			return FAIL;
-		aObject = func->CloseIfNeeded();
-		return OK;
-	}
-	aObject = NULL;
-	return OK;
-}
-
-
 ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 	, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken)
 {
@@ -2381,17 +2363,11 @@ ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventK
 		_o_throw(ERR_PARAM3_INVALID);
 
 	TCHAR nbuf[MAX_NUMBER_SIZE];
-	IObject *func = TokenToObject(*aParam[1]);
-	LPTSTR name = func ? NULL : TokenToString(*aParam[1], nbuf);
-	if (func)
-		func->AddRef();
-	else
-		if (!NameToEventHandler(name, func))
-			_o_throw(ERR_PARAM2_INVALID, name);
-	ResultType result = OnEvent(aControl, aEvent, aEventKind, func, name, max_threads, aResultToken);
-	if (func)
-		func->Release();
-	return result;
+	IObject *func = ParamIndexToObject(1);
+	LPTSTR name = func ? nullptr : ParamIndexToString(1, nbuf);
+	if (!func && !mEventSink)
+		_o_throw(ERR_PARAM2_INVALID, name);
+	return OnEvent(aControl, aEvent, aEventKind, func, name, max_threads, aResultToken);
 }
 
 

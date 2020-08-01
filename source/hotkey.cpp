@@ -2660,20 +2660,16 @@ BIF_DECL(BIF_Hotstring)
 	// Determine options which affect hotstring identity/uniqueness.
 	bool case_sensitive = g_HSCaseSensitive;
 	bool detect_inside_word = g_HSDetectWhenInsideWord;
-	bool execute_action = false; // Unlike the others, 'X' must be specified each time.
 	bool un; int iun; SendModes sm; SendRawType sr; // Unused.
 	if (*hotstring_options)
-		Hotstring::ParseOptions(hotstring_options, iun, iun, sm, case_sensitive, un, un, un, sr, un, detect_inside_word, un, execute_action);
+		Hotstring::ParseOptions(hotstring_options, iun, iun, sm, case_sensitive, un, un, un, sr, un, detect_inside_word, un, un);
 	
 	IObject *action_obj = NULL;
 	if (!ParamIndexIsOmitted(1))
 	{
 		if (action_obj = ParamIndexToObject(1))
 			action_obj->AddRef();
-		else // Caller did not specify an object, so must specify a function name.
-			if (   execute_action // Caller specified 'X' option (which is ignored when passing an object).
-				&& !(action_obj = StringToFunctor(action))   ) // No valid function found.
-				_f_throw(ERR_PARAM2_INVALID, action);
+		// Otherwise, it's always replacement text (the 'X' option is ignored at runtime).
 	}
 
 	ToggleValueType toggle = NEUTRAL;

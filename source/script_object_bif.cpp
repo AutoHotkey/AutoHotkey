@@ -102,7 +102,7 @@ BIF_DECL(BIF_ObjAddRefRelease)
 BIF_DECL(BIF_ObjBindMethod)
 {
 	IObject *func, *bound_func;
-	if (  !(func = TokenToFunctor(*aParam[0]))  )
+	if (  !(func = ParamIndexToObject(0))  )
 		_f_throw(ERR_PARAM1_INVALID);
 	LPCTSTR name = nullptr;
 	if (aParamCount > 1)
@@ -115,7 +115,6 @@ BIF_DECL(BIF_ObjBindMethod)
 	else
 		aParamCount = 0;
 	bound_func = BoundFunc::Bind(func, IT_CALL, name, aParam, aParamCount);
-	func->Release();
 	if (!bound_func)
 		_f_throw(ERR_OUTOFMEM);
 	_f_return(bound_func);
