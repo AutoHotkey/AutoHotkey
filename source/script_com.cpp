@@ -1406,8 +1406,8 @@ ResultType ComArrayEnum::Next(Var *aOutput, Var *aOutputType)
 			var.vt = mType;
 			memcpy(&var.lVal, mPointer, mElemSize);
 		}
-		// Copy value into var.
-		AssignVariant(*aOutput, var);
+		if (aOutput)
+			AssignVariant(*aOutput, var);
 		if (aOutputType)
 			aOutputType->Assign(var.vt);
 		return CONDITION_TRUE;
