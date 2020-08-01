@@ -3017,16 +3017,16 @@ public:
 	#define FINDVAR_DEFAULT  (VAR_LOCAL | VAR_GLOBAL)
 	#define FINDVAR_GLOBAL   VAR_GLOBAL
 	#define FINDVAR_LOCAL    VAR_LOCAL
-	Var *FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT);
-	Var *FindVar(LPTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT
+	Var *FindOrAddVar(LPCTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT);
+	Var *FindVar(LPCTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT
 		, VarList **apList = nullptr, int *apInsertPos = nullptr, ResultType *aDisplayError = nullptr);
-	Var *FindUpVar(LPTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError);
-	Var *AddVar(LPTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope);
-	Var *FindOrAddBuiltInVar(LPTSTR aVarName, VarEntry *aVarEntry);
-	static VarEntry *GetBuiltInVar(LPTSTR aVarName);
+	Var *FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError);
+	Var *AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope);
+	Var *FindOrAddBuiltInVar(LPCTSTR aVarName, VarEntry *aVarEntry);
+	static VarEntry *GetBuiltInVar(LPCTSTR aVarName);
 
 	// Alias to improve clarity and reduce code size (if compiler chooses not to inline; due to how parameter defaults work):
-	Var *FindGlobalVar(LPTSTR aVarName, size_t aVarNameLength = 0) { return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL); }
+	Var *FindGlobalVar(LPCTSTR aVarName, size_t aVarNameLength = 0) { return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL); }
 	// For maintainability.
 	VarList *GlobalVars() { return &mVars; }
 

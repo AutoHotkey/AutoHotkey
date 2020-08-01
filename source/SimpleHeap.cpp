@@ -24,7 +24,7 @@ SimpleHeap *SimpleHeap::sLast  = NULL;
 char *SimpleHeap::sMostRecentlyAllocated = NULL;
 UINT SimpleHeap::sBlockCount = 0;
 
-LPTSTR SimpleHeap::Malloc(LPTSTR aBuf, size_t aLength)
+LPTSTR SimpleHeap::Malloc(LPCTSTR aBuf, size_t aLength)
 // v1.0.44.14: Added aLength to improve performance in cases where callers already know the length.
 // If aLength is at its default of -1, the length will be calculated here.
 // Caller must ensure that aBuf isn't NULL.

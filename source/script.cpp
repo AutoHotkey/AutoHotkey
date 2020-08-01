@@ -7196,7 +7196,7 @@ __int64 Line::ArgIndexToInt64(int aArgIndex)
 }
 
 
-Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aScope)
+Var *Script::FindOrAddVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope)
 // Caller has ensured that aVarName isn't NULL.
 // Returns the Var whose name matches aVarName.  If it doesn't exist, it is created.
 {
@@ -7219,7 +7219,7 @@ Var *Script::FindOrAddVar(LPTSTR aVarName, size_t aVarNameLength, int aScope)
 
 
 
-Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int aScope
+Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 	, VarList **apList, int *apInsertPos, ResultType *aDisplayError)
 // Caller has ensured that aVarName isn't NULL.  It must also ignore the contents of apInsertPos when
 // a match (non-NULL value) is returned.
@@ -7303,7 +7303,7 @@ Var *Script::FindVar(LPTSTR aVarName, size_t aVarNameLength, int aScope
 
 
 
-Var *Script::FindUpVar(LPTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError)
+Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError)
 {
 	// Do not search outer if inner is force-local or *explicitly* assume-global, since in those
 	// cases a local or global var should be returned in preference to anything defined by outer.
@@ -7343,7 +7343,7 @@ Var *Script::FindUpVar(LPTSTR aVarName, UserFunc &aInner, ResultType *aDisplayEr
 
 
 
-Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope)
+Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope)
 // Returns the address of the new variable or NULL on failure.
 // Caller must ensure that g->CurrentFunc!=NULL whenever aIsLocal!=0.
 // Caller must ensure that aVarName isn't NULL and that this isn't a duplicate variable name.
@@ -7406,7 +7406,7 @@ Var *Script::AddVar(LPTSTR aVarName, size_t aVarNameLength, VarList *aList, int 
 
 
 
-Var *Script::FindOrAddBuiltInVar(LPTSTR aVarName, VarEntry *aVarEntry)
+Var *Script::FindOrAddBuiltInVar(LPCTSTR aVarName, VarEntry *aVarEntry)
 {
 	int insert_pos;
 	if (Var *found = mVars.Find(aVarName, &insert_pos))
@@ -7425,7 +7425,7 @@ Var *Script::FindOrAddBuiltInVar(LPTSTR aVarName, VarEntry *aVarEntry)
 
 
 
-VarEntry *Script::GetBuiltInVar(LPTSTR aVarName)
+VarEntry *Script::GetBuiltInVar(LPCTSTR aVarName)
 {
 	// This array approach saves about 9KB on code size over the old approach
 	// of a series of if's and _tcscmp calls, and performs about the same.
