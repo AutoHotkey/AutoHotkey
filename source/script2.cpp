@@ -11736,7 +11736,7 @@ void *pcret_resolve_user_callout(LPCTSTR aCalloutParam, int aCalloutParamLength)
 	// If no Func is found, pcre will handle the case where aCalloutParam is a pure integer.
 	// In that case, the callout param becomes an integer between 0 and 255. No valid pointer
 	// could be in this range, but we must take care to check (ptr>255) rather than (ptr!=NULL).
-	Func *callout_func = g_script.FindFunc(aCalloutParam, aCalloutParamLength);
+	IObject *callout_func = g_script.FindFunc(aCalloutParam, aCalloutParamLength);
 	if (!callout_func)
 		return nullptr;
 	return (void *)callout_func;
@@ -11774,16 +11774,13 @@ int RegExCallout(pcret_callout_block *cb)
 		return 0;
 	RegExCalloutData &cd = *(RegExCalloutData *)cb->callout_data;
 
-	Func *callout_func = (Func *)cb->user_callout;
+	auto callout_func = (IObject *)cb->user_callout;
 	if (!callout_func)
 	{
 		Var *pcre_callout_var = g_script.FindVar(_T("pcre_callout"), 12); // This may be a local of the UDF which called RegExMatch/Replace().
 		if (!pcre_callout_var)
 			return 0; // Seems best to ignore the callout rather than aborting the match.
-		ExprTokenType token;
-		token.symbol = SYM_VAR;
-		token.var = pcre_callout_var;
-		callout_func = TokenToFunc(token); // Allow name or reference.
+		callout_func = pcre_callout_var->ToObject();
 		if (!callout_func)
 		{
 			if (!pcre_callout_var->HasContents()) // Var exists but is empty.
@@ -11793,8 +11790,6 @@ int RegExCallout(pcret_callout_block *cb)
 			return PCRE_ERROR_CALLOUT;
 		}
 	}
-
-	Func &func = *callout_func;
 
 	// Adjust offset to account for options, which are excluded from the regex passed to PCRE.
 	cb->pattern_position += cd.options_length;
@@ -11857,7 +11852,7 @@ int RegExCallout(pcret_callout_block *cb)
 		cd.re_text // NeedleRegEx
 	};
 	__int64 number_to_return;
-	auto result = CallMethod(&func, &func, nullptr, param, _countof(param), &number_to_return);
+	auto result = CallMethod(callout_func, callout_func, nullptr, param, _countof(param), &number_to_return);
 	if (result == FAIL || result == EARLY_EXIT)
 	{
 		number_to_return = PCRE_ERROR_CALLOUT;
