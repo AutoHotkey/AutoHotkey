@@ -717,7 +717,7 @@ public:
 		Var &var = *ResolveAlias();
 		// mAttrib is checked because mByteLength isn't applicable when the var contains
 		// a pure number or an object.
-		return (var.mAttrib & VAR_ATTRIB_TYPES) ? TRUE : mByteLength != 0;
+		return (var.mAttrib & VAR_ATTRIB_TYPES) ? TRUE : var.mByteLength != 0;
 	}
 
 	VarSizeType &ByteLength()
