@@ -1488,10 +1488,6 @@ UINT Script::LoadFromFile()
 	}
 #endif
 
-	// L4: Changed this next section to support lines added for #if (expression).
-	// Each #if (expression) is pre-parsed *before* the main script in order for
-	// function library auto-inclusions to be processed correctly.
-
 	// Load the main script file.  This will also load any files it includes with #Include.
 	if (!LoadIncludedFile(g_RunStdIn ? _T("*") : mFileSpec, false, false))
 		return LOADING_FAILED;
