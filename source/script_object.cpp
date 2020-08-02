@@ -366,7 +366,10 @@ Array *Array::FromEnumerable(ExprTokenType &aEnumerable)
 		if (result != CONDITION_TRUE)
 			break;
 		ExprTokenType value;
-		var.ToTokenSkipAddRef(value);
+		if (var.IsUninitializedNormalVar())
+			value.symbol = SYM_MISSING;
+		else
+			var.ToTokenSkipAddRef(value);
 		vargs->Append(value);
 	}
 	var.Free();
