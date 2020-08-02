@@ -586,8 +586,6 @@ Script::Script()
 	// This is done here rather than in Init() because by then CreateRootPrototypes()
 	// definitely would have already caused functions to be added to the list.
 	mFuncs.Alloc(100); // Avoid multiple reallocations for simple scripts.
-	FindFunc(_T("Array"));  // This ensures they aren't inserted while PreparseExpressions
-	FindFunc(_T("Object")); // is iterating over mFuncs.
 
 #ifdef _DEBUG
 	if (ID_FILE_EXIT < ID_MAIN_FIRST) // Not a very thorough check.
@@ -8166,7 +8164,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						if (!callsite)
 							return LineError(ERR_OUTOFMEM);
 						if (  !(infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))  )
-							callsite->func = g_script.FindFunc(_T("Array"));
+							callsite->func = ExprOp<BIF_Array, 0>();
 						else
 							callsite->flags = IT_GET; // This may be overridden by standard_pop_into_postfix.
 						this_infix_item.callsite = callsite;
@@ -8183,7 +8181,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					this_infix_item.callsite = new CallSite();
 					if (!this_infix_item.callsite)
 						return LineError(ERR_OUTOFMEM);
-					this_infix_item.callsite->func = g_script.FindFunc(_T("Object"));
+					this_infix_item.callsite->func = ExprOp<BIF_Object, 0>();
 					this_infix_item.symbol = SYM_OBRACE;
 					break;
 				case '}':
@@ -8288,7 +8286,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						this_infix_item.callsite = new CallSite();
 						if (!this_infix_item.callsite)
 							return LineError(ERR_OUTOFMEM);
-						this_infix_item.callsite->func = g_script.FindFunc(_T("RegExMatch"));
+						this_infix_item.callsite->func = ExprOp<BIF_RegEx, FID_RegExMatch>();
 						this_infix_item.callsite->param_count = 2;
 						this_infix_item.symbol = SYM_REGEXMATCH;
 					}
