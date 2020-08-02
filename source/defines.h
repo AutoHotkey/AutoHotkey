@@ -224,8 +224,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 // This should include all operators which can produce SYM_VAR for a subsequent assignment:
 #define IS_OPERATOR_VALID_LVALUE(sym) \
 	(IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(sym) \
-		|| sym == SYM_PRE_INCREMENT || sym == SYM_PRE_DECREMENT \
-		|| sym == SYM_IFF_ELSE)
+		|| sym == SYM_PRE_INCREMENT || sym == SYM_PRE_DECREMENT)
 
 
 struct ExprTokenType; // Forward declarations for use below.
