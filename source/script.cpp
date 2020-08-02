@@ -5426,7 +5426,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 	size_t operand_length;
 	TCHAR close_char, *cp;
 	int j;
-	bool is_function, pending_op_is_class = false;
+	bool is_function;
 	bool is_double_deref;
 	SymbolType wordop;
 
@@ -5562,13 +5562,11 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 				if (op_end < d_end && _tcschr(EXPR_OPERAND_TERMINATORS, *d_end))
 				{
 					op_end = d_end;
-					pending_op_is_class = false; // Must be reset for subsequent operands.
 					continue;
 				}
 			}
 			if (_tcschr(EXPR_OPERAND_TERMINATORS, *op_end))
 			{
-				pending_op_is_class = false; // Must be reset for subsequent operands.
 				// Do nothing further since pure numbers don't need any processing at this stage.
 				// If this number has a fractional part, it is handled by "case '.'" above.
 				continue;
@@ -5622,12 +5620,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 				continue;
 			}
 			is_function	= *op_end == '(';
-		}			
-
-		// If the "new" operator directly precedes this operand, it can't be a function name.
-		// This only applies to operands at the same recursion/nesting level as the operator.
-		if (pending_op_is_class)
-			pending_op_is_class = is_function = false;
+		}
 
 		if (!aDeref.Push())
 			return ScriptError(ERR_OUTOFMEM);
