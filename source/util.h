@@ -60,21 +60,20 @@ GNU General Public License for more details.
 #define ltoupper(ch) (TBYTE)(UINT_PTR)CharUpper((LPTSTR)(TBYTE)(ch))  // For performance, some callers don't want return value cast to char.
 
 
-// Locale independent ctype (applied to the ASCII characters only)
-// isctype/iswctype affects the some non-ASCII characters.
+// Locale independent ctype (applied to the ASCII characters only).
 inline int cisctype(TBYTE c, int type)
 {
 	return (c & (~0x7F)) ? 0 : _isctype(c, type);
 }
 
-#define cisalpha(c)		cisctype(c, _ALPHA)
-#define cisalnum(c)		cisctype(c, _ALPHA | _DIGIT)
-#define cisdigit(c)		cisctype(c, _DIGIT)
-#define cisxdigit(c)	cisctype(c, _HEX)
-#define cisupper(c)		cisctype(c, _UPPER)
-#define cislower(c)		cisctype(c, _LOWER)
-#define cisprint(c)		cisctype(c, _ALPHA | _BLANK | _DIGIT | _PUNCT)
-#define cisspace(c)		cisctype(c, _SPACE)
+inline int cisalpha(TBYTE c)  { return ((c & ~0x7F) ? 0 : isalpha(c)); }
+inline int cisalnum(TBYTE c)  { return ((c & ~0x7F) ? 0 : isalnum(c)); }
+inline int cisdigit(TBYTE c)  { return ((c & ~0x7F) ? 0 : isdigit(c)); }
+inline int cisxdigit(TBYTE c) { return ((c & ~0x7F) ? 0 : isxdigit(c)); }
+inline int cisupper(TBYTE c)  { return ((c & ~0x7F) ? 0 : isupper(c)); }
+inline int cislower(TBYTE c)  { return ((c & ~0x7F) ? 0 : islower(c)); }
+inline int cisprint(TBYTE c)  { return ((c & ~0x7F) ? 0 : isprint(c)); }
+inline int cisspace(TBYTE c)  { return ((c & ~0x7F) ? 0 : isspace(c)); }
 
 // The results of toupper/tolower are implementations dependent (see below), though the test results are OK in VS2008's CRT.
 // MDSN: In order for toupper to give the expected results, __isascii and islower must both return nonzero.
@@ -385,10 +384,10 @@ inline LPTSTR strip_quote_marks(LPTSTR aBuf)
 
 
 
-// If this is ever changed to allow symbols which are also valid hotkey modifiers,
-// be sure to update IsFunction() to allow for cases like "$(::fn_call()":
-#define IS_IDENTIFIER_CHAR(c) (cisalnum(c) || (c) == '_' || ((UINT)(c) > 0x7F))
-#define IS_LEADING_IDENTIFIER_CHAR(c) (((UINT)(c) > 0x7F) || isalpha(c) || (c) == '_')
+// For the following, checking for non-ASCII first avoids undefined behaviour in
+// isalnum/isalpha, which produce smaller code than using cisalnum/cisalpha.
+#define IS_IDENTIFIER_CHAR(c)			(UINT(c) > 0x7F || isalnum(c) || (c) == '_')
+#define IS_LEADING_IDENTIFIER_CHAR(c)	(UINT(c) > 0x7F || isalpha(c) || (c) == '_')
 template<typename T> inline T find_identifier_end(T aBuf)
 // Locates the next character which is not valid in an identifier (var, func, or obj.key name).
 {
