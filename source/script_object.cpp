@@ -2000,8 +2000,15 @@ Array::index_t Array::ParamToZeroIndex(ExprTokenType &aParam)
 
 ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved)
 {
-	if (aIndex < mLength)
+	while (aIndex < mLength)
 	{
+		auto &item = mItem[aIndex];
+		if (item.symbol == SYM_MISSING)
+		{
+			// Skip missing indices.
+			++aIndex; 
+			continue;
+		}
 		if (aReserved)
 		{
 			// Put the index first, only when there are two parameters.
@@ -2009,7 +2016,6 @@ ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved)
 				aVal->Assign((__int64)aIndex + 1);
 			aVal = aReserved;
 		}
-		auto &item = mItem[aIndex];
 		switch (item.symbol)
 		{
 		default:	aVal->AssignString(item.string, item.string.Length());	break;
