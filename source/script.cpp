@@ -596,25 +596,12 @@ Script::Script()
 		ScriptError(_T("DEBUG: MAX_CONTROLS_PER_GUI is too large (conflicts with IDs reserved via ID_USER_FIRST)."));
 	if (g_ActionCount != ACT_LAST_NAMED_ACTION + 1)
 		ScriptError(_T("DEBUG: g_act and enum_act are out of sync."));
-	int LargestMaxParams, i, j;
-	ActionTypeType *np;
+	int LargestMaxParams, i;
 	// Find the Largest value of MaxParams used by any command and make sure it
 	// isn't something larger than expected by the parsing routines:
 	for (LargestMaxParams = i = 0; i < g_ActionCount; ++i)
-	{
 		if (g_act[i].MaxParams > LargestMaxParams)
 			LargestMaxParams = g_act[i].MaxParams;
-		// This next part has been tested and it does work, but only if one of the arrays
-		// contains exactly MAX_NUMERIC_PARAMS number of elements and isn't zero terminated.
-		// Relies on short-circuit boolean order:
-		for (np = g_act[i].NumericParams, j = 0; j < MAX_NUMERIC_PARAMS && *np; ++j, ++np);
-		if (j >= MAX_NUMERIC_PARAMS)
-		{
-			ScriptError(_T("DEBUG: At least one command has a NumericParams array that isn't zero-terminated.")
-				_T("  This would result in reading beyond the bounds of the array."));
-			return;
-		}
-	}
 	if (LargestMaxParams > MAX_ARGS)
 		ScriptError(_T("DEBUG: At least one command supports more arguments than allowed."));
 	if (sizeof(ActionTypeType) == 1 && g_ActionCount > 256)

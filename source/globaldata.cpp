@@ -212,10 +212,6 @@ bool g_BlockMouseMove = false;
 // many mutual dependency problems between modules).  Note: Action names must not contain any
 // spaces or tabs because within a script, those characters can be used in lieu of a delimiter
 // to separate the action-type-name from the first parameter.
-// Note about the sub-array: Since the parent array is global, it would be automatically
-// zero-filled if we didn't provide specific initialization.  But since we do, I'm not sure
-// what value the unused elements in the NumericParams subarray will have.  Therefore, it seems
-// safest to always terminate these subarrays with an explicit zero, below.
 
 // STEPS TO ADD A NEW COMMAND:
 // 1) Add an entry to the command enum in script.h.
@@ -223,17 +219,11 @@ bool g_BlockMouseMove = false;
 //    The first item is the command name, the second is the minimum number of parameters (e.g.
 //    if you enter 3, the first 3 args are mandatory) and the third is the maximum number of
 //    parameters (the user need not escape commas within the last parameter).
-//    The subarray should indicate the param numbers that must be numeric (first param is numbered 1,
-//    not zero).  That subarray should be terminated with an explicit zero to be safe and
-//    so that the compiler will complain if the sub-array size needs to be increased to
-//    accommodate all the elements in the new sub-array, including room for its 0 terminator.
 //    Note: If you use a value for MinParams than is greater than zero, remember than any params
 //    beneath that threshold will also be required to be non-blank (i.e. user can't omit them even
-//    if later, non-blank params are provided).  UPDATE: For a parameter to recognize an expression
-//    such as x+100, it must be listed in the sub-array as a pure numeric parameter.
+//    if later, non-blank params are provided).
 // 3) If the new command has any params that are output or input vars, change Line::ArgIsVar().
-// 4) Add any desired load-time validation in Script::AddLine() in an syntax-checking section.
-// 5) Implement the command in Line::Perform() or Line::EvaluateCondition (if it's an IF).
+// 4) Implement the command in Line::ExecUntil().
 //    If the command waits for anything (e.g. calls MsgSleep()), be sure to make a local
 //    copy of any ARG values that are needed during the wait period, because if another hotkey
 //    subroutine suspends the current one while its waiting, it could also overwrite the ARG
@@ -241,41 +231,44 @@ bool g_BlockMouseMove = false;
 
 Action g_act[] =
 {
-	{_T(""), 0, 0, false, NULL}  // ACT_INVALID.
+	{_T(""), 0, 0}  // ACT_INVALID.
 
 	// ASSIGNEXPR: Give it a name for Line::ToText().
 	// 1st param is the target, 2nd (optional) is the value:
-	, {_T(":="), 2, 2, false, {2, 0}} // Same, though param #2 is flagged as numeric so that expression detection is automatic.
+	, {_T(":="), 2, 2} // Same, though param #2 is flagged as numeric so that expression detection is automatic.
 
 	// ACT_EXPRESSION, which is a stand-alone expression outside of any IF or assignment-command;
 	// e.g. fn1(123, fn2(y)) or x&=3
 	// Its name should be "" so that Line::ToText() will properly display it.
-	, {_T(""), 1, 1, false, {1, 0}}
-	, {_T("{"), 0, 0, false, NULL}, {_T("}"), 0, 0, false, NULL}
+	, {_T(""), 1, 1}
 
-	, {_T("Static"), 1, 1, false, {1, 0}} // ACT_STATIC (used only at load time).
-	, {_T("#HotIf"), 0, 1, false, {1, 0}}
-	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
+	, {_T("{"), 0, 0}
+	, {_T("}"), 0, 0}
 
-	, {_T("If"), 1, 1, false, {1, 0}}
-	, {_T("Else"), 0, 0, false, NULL} // No args; it has special handling to support same-line ELSE-actions (e.g. "else if").
-	, {_T("Loop"), 0, 1, false, {1, 0}} // IterationCount
-	, {_T("Loop Files"), 1, 2, false, {1, 2, 0}} // FilePattern [, Mode] -- Files vs File for clarity.
-	, {_T("Loop Reg"), 1, 2, false, {1, 2, 0}} // Key [, Mode]
-	, {_T("Loop Read"), 1, 2, false, {1, 2, 0}} // InputFile [, OutputFile]
-	, {_T("Loop Parse"), 1, 3, false, {1, 2, 3, 0}} // InputString [, Delimiters, OmitChars]
-	, {_T("For"), 0, MAX_ARGS, false, NULL}  // For vars in expression
-	, {_T("While"), 1, 1, false, {1, 0}} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
-	, {_T("Until"), 1, 1, false, {1, 0}} // Until expression (follows a Loop)
-	, {_T("Break"), 0, 1, false, NULL}, {_T("Continue"), 0, 1, false, NULL}
-	, {_T("Goto"), 1, 1, false, NULL}
-	, {_T("Return"), 0, 1, false, {1, 0}}
-	, {_T("Try"), 0, 0, false, NULL}
-	, {_T("Catch"), 0, 1, false, NULL} // fincs: seems best to allow catch without a parameter
-	, {_T("Finally"), 0, 0, false, NULL}
-	, {_T("Throw"), 0, 1, false, {1, 0}}
-	, {_T("Switch"), 0, 1, false, {1, 0}}
-	, {_T("Case"), 1, MAX_ARGS, false, NULL}
+	, {_T("Static"), 1, 1} // ACT_STATIC (used only at load time).
+	, {_T("#HotIf"), 0, 1}
+	, {_T("Exit"), 0, 1} // ExitCode
+
+	, {_T("If"), 1, 1}
+	, {_T("Else"), 0, 0} // No args; it has special handling to support same-line ELSE-actions (e.g. "else if").
+	, {_T("Loop"), 0, 1} // IterationCount
+	, {_T("Loop Files"), 1, 2} // FilePattern [, Mode] -- Files vs File for clarity.
+	, {_T("Loop Reg"), 1, 2} // Key [, Mode]
+	, {_T("Loop Read"), 1, 2} // InputFile [, OutputFile]
+	, {_T("Loop Parse"), 1, 3} // InputString [, Delimiters, OmitChars]
+	, {_T("For"), 0, MAX_ARGS}  // For vars in expression
+	, {_T("While"), 1, 1} // LoopCondition.  v1.0.48: Lexikos: Added g_act entry for ACT_WHILE.
+	, {_T("Until"), 1, 1} // Until expression (follows a Loop)
+	, {_T("Break"), 0, 1}
+	, {_T("Continue"), 0, 1}
+	, {_T("Goto"), 1, 1}
+	, {_T("Return"), 0, 1}
+	, {_T("Try"), 0, 0}
+	, {_T("Catch"), 0, 1} // fincs: seems best to allow catch without a parameter
+	, {_T("Finally"), 0, 0}
+	, {_T("Throw"), 0, 1}
+	, {_T("Switch"), 0, 1}
+	, {_T("Case"), 1, MAX_ARGS}
 };
 // Below is the most maintainable way to determine the actual count?
 // Due to C++ lang. restrictions, can't easily make this a const because constants
