@@ -255,6 +255,7 @@ Action g_act[] =
 
 	, {_T("Static"), 1, 1, false, {1, 0}} // ACT_STATIC (used only at load time).
 	, {_T("#HotIf"), 0, 1, false, {1, 0}}
+	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
 
 	, {_T("If"), 1, 1, false, {1, 0}}
 	, {_T("Else"), 0, 0, false, NULL} // No args; it has special handling to support same-line ELSE-actions (e.g. "else if").
@@ -275,89 +276,6 @@ Action g_act[] =
 	, {_T("Throw"), 0, 1, false, {1, 0}}
 	, {_T("Switch"), 0, 1, false, {1, 0}}
 	, {_T("Case"), 1, MAX_ARGS, false, NULL}
-
-	, {_T("Exit"), 0, 1, false, {1, 0}} // ExitCode
-	, {_T("ExitApp"), 0, 1, false, {1, 0}} // ExitCode
-
-	, {_T("ToolTip"), 0, 4, false, {2, 3, 4, 0}}  // Text, X, Y, ID.  If Text is omitted, the Tooltip is turned off.
-	, {_T("TrayTip"), 0, 3, false, NULL}  // Text, Title, Options
-
-	, {_T("RunAs"), 0, 3, false, NULL} // user, pass, domain (0 params can be passed to disable the feature)
-	, {_T("Download"), 2, 2, false, NULL} // URL, save-as-filename
-
-	, {_T("Send"), 1, 1, false, NULL}         // But that first param can validly be a deref that resolves to a blank param.
-	, {_T("SendText"), 1, 1, false, NULL}      //
-	, {_T("SendInput"), 1, 1, false, NULL}    //
-	, {_T("SendPlay"), 1, 1, false, NULL}     //
-	, {_T("SendEvent"), 1, 1, false, NULL}    // (due to rarity, there is no raw counterpart for this one)
-
-	, {_T("SendMode"), 1, 1, false, NULL}
-	, {_T("SendLevel"), 1, 1, false, {1, 0}}
-	, {_T("CoordMode"), 1, 2, false, NULL} // Attribute, screen|relative
-	, {_T("SetDefaultMouseSpeed"), 1, 1, false, {1, 0}} // speed (numeric)
-	, {_T("Click"), 0, 6, false, NULL} // Flex-list of options.
-	, {_T("MouseMove"), 2, 4, false, {1, 2, 3, 0}} // x, y, speed, option
-	, {_T("MouseClick"), 0, 7, false, {2, 3, 4, 5, 0}} // which-button, x, y, ClickCount, speed, d=hold-down/u=release, Relative
-	, {_T("MouseClickDrag"), 1, 7, false, {2, 3, 4, 5, 6, 0}} // which-button, x1, y1, x2, y2, speed, Relative
-
-	, {_T("Sleep"), 1, 1, false, {1, 0}} // Sleep time in ms (numeric)
-
-	, {_T("Critical"), 0, 1, false, NULL}  // On|Off
-	, {_T("Thread"), 1, 3, false, {2, 3, 0}}  // Command, value1 (can be blank for interrupt), value2
-
-	, {_T("WinMinimizeAll"), 0, 0, false, NULL}, {_T("WinMinimizeAllUndo"), 0, 0, false, NULL}
-
-	// See above for why minimum is 1 vs. 2:
-	, {_T("GroupAdd"), 1, 5, false, NULL} // Group name, WinTitle, WinText, exclude-title/text
-	, {_T("GroupDeactivate"), 1, 2, false, NULL}
-	, {_T("GroupClose"), 1, 2, false, NULL}
-
-	, {_T("SoundBeep"), 0, 2, false, {1, 2, 0}} // Frequency, Duration.
-	, {_T("SoundPlay"), 1, 2, false, NULL} // Filename [, wait]
-
-	, {_T("FileDelete"), 1, 1, false, NULL} // filename or pattern
-	, {_T("FileRecycle"), 1, 1, false, NULL} // filename or pattern
-	, {_T("FileRecycleEmpty"), 0, 1, false, NULL} // optional drive letter (all bins will be emptied if absent.
-	, {_T("FileInstall"), 2, 3, false, {3, 0}} // source, dest, flag (1/0, where 1=overwrite)
-	, {_T("FileCopy"), 2, 3, false, {3, 0}} // source, dest, flag
-	, {_T("FileMove"), 2, 3, false, {3, 0}} // source, dest, flag
-	, {_T("DirCopy"), 2, 3, false, {3, 0}} // source, dest, flag
-	, {_T("DirMove"), 2, 3, false, NULL} // source, dest, flag (which can be non-numeric in this case)
-	, {_T("DirCreate"), 1, 1, false, NULL} // dir name
-	, {_T("DirDelete"), 1, 2, false, {2, 0}} // dir name, flag
-
-	, {_T("FileSetAttrib"), 1, 3, false, NULL} // Attribute(s), FilePattern, Mode
-	, {_T("FileSetTime"), 0, 4, false, {1, 0}} // datetime (YYYYMMDDHH24MISS), FilePattern, WhichTime, Mode
-
-	, {_T("SetWorkingDir"), 1, 1, false, NULL} // New path
-
-	, {_T("FileCreateShortcut"), 2, 9, false, {8, 9, 0}} // file, lnk [, workdir, args, desc, icon, hotkey, icon_number, run_state]
-
-	, {_T("IniWrite"), 3, 4, false, NULL}  // Value, Filespec, Section, Key
-	, {_T("IniDelete"), 2, 3, false, NULL} // Filespec, Section, Key
-
-	, {_T("OutputDebug"), 1, 1, false, NULL}
-
-	, {_T("SetKeyDelay"), 0, 3, false, {1, 2, 0}} // Delay in ms (numeric, negative allowed), PressDuration [, Play]
-	, {_T("SetMouseDelay"), 1, 2, false, {1, 0}} // Delay in ms (numeric, negative allowed) [, Play]
-	, {_T("SetWinDelay"), 1, 1, false, {1, 0}} // Delay in ms (numeric, negative allowed)
-	, {_T("SetControlDelay"), 1, 1, false, {1, 0}} // Delay in ms (numeric, negative allowed)
-
-	, {_T("Suspend"), 0, 1, false, NULL} // On/Off/Toggle/Permit/Blank (blank is the same as toggle)
-	, {_T("Pause"), 0, 1, false, NULL} // On/Off/Toggle/Blank (blank is the same as toggle)
-	, {_T("BlockInput"), 1, 1, false, NULL} // On/Off
-
-	, {_T("SetNumlockState"), 0, 1, false, NULL} // On/Off/AlwaysOn/AlwaysOff or blank (unspecified) to return to normal.
-	, {_T("SetScrollLockState"), 0, 1, false, NULL} // same
-	, {_T("SetCapslockState"), 0, 1, false, NULL} // same
-
-	, {_T("KeyHistory"), 0, 2, false, NULL}, {_T("ListLines"), 0, 1, false, NULL}
-	, {_T("ListVars"), 0, 0, false, NULL}, {_T("ListHotkeys"), 0, 0, false, NULL}
-
-	, {_T("Edit"), 0, 0, false, NULL}
-	, {_T("Reload"), 0, 0, false, NULL}
-
-	, {_T("Shutdown"), 1, 1, false, {1, 0}} // Seems best to make the first param (the flag/code) mandatory.
 };
 // Below is the most maintainable way to determine the actual count?
 // Due to C++ lang. restrictions, can't easily make this a const because constants

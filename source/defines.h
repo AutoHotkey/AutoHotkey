@@ -558,7 +558,8 @@ enum enum_act {
 , ACT_BLOCK_BEGIN, ACT_BLOCK_END
 , ACT_STATIC
 , ACT_HOTKEY_IF // Must be before ACT_FIRST_COMMAND.
-, ACT_FIRST_NAMED_ACTION, ACT_IF = ACT_FIRST_NAMED_ACTION
+, ACT_EXIT // Used both with BIF_PerformAction and AddLine(), but excluded from the "named" range below so the function is preferred.
+, ACT_IF, ACT_FIRST_NAMED_ACTION = ACT_IF
 , ACT_ELSE
 , ACT_LOOP, ACT_LOOP_FILE, ACT_LOOP_REG, ACT_LOOP_READ, ACT_LOOP_PARSE
 , ACT_FOR, ACT_WHILE, ACT_UNTIL // Keep LOOP, FOR, WHILE and UNTIL together and in this order for range checks in various places.
@@ -568,8 +569,11 @@ enum enum_act {
 , ACT_RETURN
 , ACT_TRY, ACT_CATCH, ACT_FINALLY, ACT_THROW // Keep TRY, CATCH and FINALLY together and in this order for range checks.
 , ACT_SWITCH, ACT_CASE // Keep ACT_TRY..ACT_CASE together for ACT_EXPANDS_ITS_OWN_ARGS.
-, ACT_FIRST_CONTROL_FLOW = ACT_BLOCK_BEGIN, ACT_LAST_CONTROL_FLOW = ACT_CASE
-, ACT_FIRST_COMMAND, ACT_EXIT = ACT_FIRST_COMMAND, ACT_EXITAPP // Excluded from the "CONTROL_FLOW" range above because they can be safely wrapped into a Func.
+, ACT_LAST_NAMED_ACTION = ACT_CASE
+// ================================================================================
+// All others are not included in g_act, and are only used with BIF_PerformAction:
+// ================================================================================
+, ACT_EXITAPP
 , ACT_TOOLTIP, ACT_TRAYTIP
 , ACT_RUNAS, ACT_DOWNLOAD
 , ACT_SEND, ACT_SENDTEXT, ACT_SENDINPUT, ACT_SENDPLAY, ACT_SENDEVENT
@@ -595,15 +599,8 @@ enum enum_act {
 , ACT_KEYHISTORY, ACT_LISTLINES, ACT_LISTVARS, ACT_LISTHOTKEYS
 , ACT_EDIT, ACT_RELOAD
 , ACT_SHUTDOWN
-// It's safer to use g_ActionCount, which is calculated immediately after the array is declared
-// and initialized, at which time we know its true size.  However, the following lets us detect
-// when the size of the array doesn't match the enum (in debug mode):
-#ifdef _DEBUG
-, ACT_COUNT
-#endif
 };
 
-#define ACT_IS_CONTROL_FLOW(ActionType) (ActionType <= ACT_LAST_CONTROL_FLOW && ActionType >= ACT_FIRST_CONTROL_FLOW)
 #define ACT_IS_IF(ActionType) (ActionType == ACT_IF)
 #define ACT_IS_LOOP(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_WHILE)
 #define ACT_IS_LOOP_EXCLUDING_WHILE(ActionType) (ActionType >= ACT_LOOP && ActionType <= ACT_FOR)

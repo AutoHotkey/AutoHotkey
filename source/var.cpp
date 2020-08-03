@@ -1196,15 +1196,11 @@ ResultType Var::ValidateName(LPCTSTR aName, int aDisplayError)
 		return OK;
 	// Reserve names of control flow statements.  Aside from being more "pure" and allowing
 	// future improvements, it should also help catch syntax errors such as "if (foo) break".
-	// Note that some names don't get this far as they aren't interpreted as functions.
-	// For example, if(), while() and a few others.
-	int i;
-	for (i = ACT_FIRST_NAMED_ACTION; i < ACT_FIRST_COMMAND; ++i)
-		if (!_tcsicmp(g_act[i].Name, aName))
-			break;
+	// Note that since these statements allow parentheses, they only get here for variable names.
 	// Reserve operator keywords.  This makes ACT_ASSIGNEXPR more consistent with ACT_EXPRESSION,
 	// such as for "and := 1" vs. "(and := 1)", though a different error message is given.
-	if (i < ACT_FIRST_COMMAND || Script::ConvertWordOperator(aName, _tcslen(aName))
+	if (   Script::ConvertActionType(aName)
+		|| Script::ConvertWordOperator(aName, _tcslen(aName))
 		|| !_tcsicmp(aName, _T("True")) || !_tcsicmp(aName, _T("False"))
 		|| !_tcsicmp(aName, _T("Local")) || !_tcsicmp(aName, _T("Global")) || !_tcsicmp(aName, _T("Static")))
 	{

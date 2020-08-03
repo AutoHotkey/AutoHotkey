@@ -28,6 +28,7 @@ GNU General Public License for more details.
 #define BIFn(name, minp, maxp, bif, ...) {_T(#name), bif, minp, maxp, FID_##name, __VA_ARGS__}
 #define BIFi(name, minp, maxp, bif, id, ...) {_T(#name), bif, minp, maxp, id, __VA_ARGS__}
 #define BIF1(name, minp, maxp, ...) {_T(#name), BIF_##name, minp, maxp, 0, __VA_ARGS__}
+#define BIFA(name, minp, maxp, act) {_T(#name), BIF_PerformAction, minp, maxp, act}
 // The following array defines all built-in functions, their min and max parameter counts,
 // and which real C++ function contains their implementation.  The macros above are used to
 // reduce repetition and implement code-sharing: BIFs which share a C++ function are assigned
@@ -39,6 +40,7 @@ FuncEntry g_BIF[] =
 	BIF1(Array, 0, NA),
 	BIFn(ASin, 1, 1, BIF_ASinACos),
 	BIF1(ATan, 1, 1),
+	BIFA(BlockInput, 1, 1, ACT_BLOCKINPUT),
 	BIF1(BufferAlloc, 1, 2),
 #ifdef ENABLE_REGISTERCALLBACK
 	BIF1(CallbackCreate, 1, 3),
@@ -47,6 +49,7 @@ FuncEntry g_BIF[] =
 	BIF1(CaretGetPos, 0, 2, {1, 2}),
 	BIFn(Ceil, 1, 1, BIF_FloorCeil),
 	BIF1(Chr, 1, 1),
+	BIFA(Click, 0, 6, ACT_CLICK),
 	BIF1(ClipboardAll, 0, 2),
 	BIFn(ClipWait, 0, 2, BIF_Wait),
 #ifdef ENABLE_DLLCALL
@@ -94,16 +97,23 @@ FuncEntry g_BIF[] =
 	BIF1(ControlSetText, 2, 6),
 	BIFn(ControlShow, 1, 5, BIF_Control),
 	BIFn(ControlShowDropDown, 1, 5, BIF_Control),
+	BIFA(CoordMode, 1, 2, ACT_COORDMODE),
 	BIF1(Cos, 1, 1),
+	BIFA(Critical, 0, 1, ACT_CRITICAL),
 	BIF1(DateAdd, 3, 3),
 	BIF1(DateDiff, 3, 3),
 	BIFn(DetectHiddenText, 1, 1, BIF_SetBIV),
 	BIFn(DetectHiddenWindows, 1, 1, BIF_SetBIV),
+	BIFA(DirCopy, 2, 3, ACT_DIRCOPY),
+	BIFA(DirCreate, 1, 1, ACT_DIRCREATE),
+	BIFA(DirDelete, 1, 2, ACT_DIRDELETE),
 	BIFn(DirExist, 1, 1, BIF_FileExist),
+	BIFA(DirMove, 2, 3, ACT_DIRMOVE),
 	BIF1(DirSelect, 0, 3),
 #ifdef ENABLE_DLLCALL
 	BIFn(DllCall, 1, NA, BIF_DllCall),
 #endif
+	BIFA(Download, 2, 2, ACT_DOWNLOAD),
 	BIFn(DriveEject, 0, 2, BIF_Drive),
 	BIFn(DriveGetCapacity, 1, 1, BIF_DriveGet),
 	BIFn(DriveGetFilesystem, 1, 1, BIF_DriveGet),
@@ -117,6 +127,7 @@ FuncEntry g_BIF[] =
 	BIFn(DriveLock, 1, 1, BIF_Drive),
 	BIFn(DriveSetLabel, 1, 2, BIF_Drive),
 	BIFn(DriveUnlock, 1, 1, BIF_Drive),
+	BIFA(Edit, 0, 0, ACT_EDIT),
 	BIFn(EditGetCurrentCol, 1, 5, BIF_ControlGet),
 	BIFn(EditGetCurrentLine, 1, 5, BIF_ControlGet),
 	BIFn(EditGetLine, 2, 6, BIF_ControlGet),
@@ -126,8 +137,13 @@ FuncEntry g_BIF[] =
 	BIFn(EnvGet, 1, 1, BIF_Env),
 	BIFn(EnvSet, 1, 2, BIF_Env),
 	BIF1(Exception, 1, 3),
+	BIFA(Exit, 0, 1, ACT_EXIT),
+	BIFA(ExitApp, 0, 1, ACT_EXITAPP),
 	BIF1(Exp, 1, 1),
 	BIF1(FileAppend, 1, 3),
+	BIFA(FileCopy, 2, 3, ACT_FILECOPY),
+	BIFA(FileCreateShortcut, 2, 9, ACT_FILECREATESHORTCUT),
+	BIFA(FileDelete, 1, 1, ACT_FILEDELETE),
 	BIFn(FileEncoding, 1, 1, BIF_SetBIV),
 	BIFn(FileExist, 1, 1, BIF_FileExist),
 	BIF1(FileGetAttrib, 0, 1),
@@ -135,9 +151,15 @@ FuncEntry g_BIF[] =
 	BIF1(FileGetSize, 0, 2),
 	BIF1(FileGetTime, 0, 2),
 	BIF1(FileGetVersion, 0, 1),
+	BIFA(FileInstall, 2, 3, ACT_FILEINSTALL),
+	BIFA(FileMove, 2, 3, ACT_FILEMOVE),
 	BIF1(FileOpen, 2, 3),
 	BIF1(FileRead, 1, 2),
+	BIFA(FileRecycle, 1, 1, ACT_FILERECYCLE),
+	BIFA(FileRecycleEmpty, 0, 1, ACT_FILERECYCLEEMPTY),
 	BIF1(FileSelect, 0, 4),
+	BIFA(FileSetAttrib, 1, 3, ACT_FILESETATTRIB),
+	BIFA(FileSetTime, 0, 4, ACT_FILESETTIME),
 	BIF1(Float, 1, 1),
 	BIFn(Floor, 1, 1, BIF_FloorCeil),
 	BIF1(Format, 1, NA),
@@ -149,6 +171,9 @@ FuncEntry g_BIF[] =
 	BIFn(GetKeyVK, 1, 1, BIF_GetKeyName),
 	BIF1(GetMethod, 2, 2),
 	BIF1(GroupActivate, 1, 2),
+	BIFA(GroupAdd, 1, 5, ACT_GROUPADD),
+	BIFA(GroupClose, 1, 2, ACT_GROUPCLOSE),
+	BIFA(GroupDeactivate, 1, 2, ACT_GROUPDEACTIVATE),
 	BIF1(GuiCtrlFromHwnd, 1, 1),
 	BIF1(GuiFromHwnd, 1, 2),
 	BIF1(HasBase, 2, 2),
@@ -165,7 +190,9 @@ FuncEntry g_BIF[] =
 	BIF1(IL_Create, 0, 3),
 	BIF1(IL_Destroy, 1, 1),
 	BIF1(ImageSearch, 7, 7, {1, 2}),
+	BIFA(IniDelete, 2, 3, ACT_INIDELETE),
 	BIF1(IniRead, 1, 4),
+	BIFA(IniWrite, 3, 4, ACT_INIWRITE),
 	BIF1(InputBox, 0, 4),
 	BIF1(InputHook, 0, 3),
 	BIF1(InStr, 2, 5),
@@ -186,7 +213,11 @@ FuncEntry g_BIF[] =
 	BIFi(IsTime, 1, 1, BIF_IsTypeish, VAR_TYPE_TIME),
 	BIFi(IsUpper, 1, 2, BIF_IsTypeish, VAR_TYPE_UPPER),
 	BIFi(IsXDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_XDIGIT),
+	BIFA(KeyHistory, 0, 2, ACT_KEYHISTORY),
 	BIFn(KeyWait, 1, 2, BIF_Wait),
+	BIFA(ListHotkeys, 0, 0, ACT_LISTHOTKEYS),
+	BIFA(ListLines, 0, 1, ACT_LISTLINES),
+	BIFA(ListVars, 0, 0, ACT_LISTVARS),
 	BIFn(ListViewGetContent, 0, 6, BIF_ControlGet),
 	BIFn(Ln, 1, 1, BIF_SqrtLogLn),
 	BIF1(LoadPicture, 1, 3, {3}),
@@ -203,7 +234,10 @@ FuncEntry g_BIF[] =
 	BIFn(MonitorGetName, 0, 1, BIF_MonitorGet),
 	BIFn(MonitorGetPrimary, 0, 0, BIF_MonitorGet),
 	BIFn(MonitorGetWorkArea, 0, 5, BIF_MonitorGet, {2, 3, 4, 5}),
+	BIFA(MouseClick, 0, 7, ACT_MOUSECLICK),
+	BIFA(MouseClickDrag, 1, 7, ACT_MOUSECLICKDRAG),
 	BIF1(MouseGetPos, 0, 5, {1, 2, 3, 4}),
+	BIFA(MouseMove, 2, 4, ACT_MOUSEMOVE),
 	BIF1(MsgBox, 0, 3),
 	BIF1(NumGet, 2, 3),
 	BIF1(NumPut, 3, NA),
@@ -228,6 +262,8 @@ FuncEntry g_BIF[] =
 	BIFn(OnExit, 1, 2, BIF_On),
 	BIF1(OnMessage, 2, 3),
 	BIF1(Ord, 1, 1),
+	BIFA(OutputDebug, 1, 1, ACT_OUTPUTDEBUG),
+	BIFA(Pause, 0, 1, ACT_PAUSE),
 	BIF1(PixelGetColor, 2, 3),
 	BIF1(PixelSearch, 7, 8, {1, 2}),
 	BIFn(PostMessage, 1, 8, BIF_PostSendMessage),
@@ -244,21 +280,43 @@ FuncEntry g_BIF[] =
 	BIFn(RegExReplace, 2, 6, BIF_RegEx, {4}),
 	BIFn(RegRead, 0, 2, BIF_Reg),
 	BIFn(RegWrite, 0, 4, BIF_Reg),
+	BIFA(Reload, 0, 0, ACT_RELOAD),
 	BIF1(Round, 1, 2),
 	BIFn(RTrim, 1, 2, BIF_Trim),
 	BIF1(Run, 1, 4, {4}),
+	BIFA(RunAs, 0, 3, ACT_RUNAS),
 	BIFn(RunWait, 1, 4, BIF_Wait, {4}),
+	BIFA(Send, 1, 1, ACT_SEND),
+	BIFA(SendEvent, 1, 1, ACT_SENDEVENT),
+	BIFA(SendInput, 1, 1, ACT_SENDINPUT),
+	BIFA(SendLevel, 1, 1, ACT_SENDLEVEL),
 	BIFn(SendMessage, 1, 9, BIF_PostSendMessage),
+	BIFA(SendMode, 1, 1, ACT_SENDMODE),
+	BIFA(SendPlay, 1, 1, ACT_SENDPLAY),
+	BIFA(SendText, 1, 1, ACT_SENDTEXT),
+	BIFA(SetCapslockState, 0, 1, ACT_SETCAPSLOCKSTATE),
+	BIFA(SetControlDelay, 1, 1, ACT_SETCONTROLDELAY),
+	BIFA(SetDefaultMouseSpeed, 1, 1, ACT_SETDEFAULTMOUSESPEED),
+	BIFA(SetKeyDelay, 0, 3, ACT_SETKEYDELAY),
+	BIFA(SetMouseDelay, 1, 2, ACT_SETMOUSEDELAY),
+	BIFA(SetNumlockState, 0, 1, ACT_SETNUMLOCKSTATE),
 	BIFn(SetRegView, 1, 1, BIF_SetBIV),
+	BIFA(SetScrollLockState, 0, 1, ACT_SETSCROLLLOCKSTATE),
 	BIFn(SetStoreCapsLockMode, 1, 1, BIF_SetBIV),
 	BIF1(SetTimer, 0, 3),
 	BIFn(SetTitleMatchMode, 1, 1, BIF_SetBIV),
+	BIFA(SetWinDelay, 1, 1, ACT_SETWINDELAY),
+	BIFA(SetWorkingDir, 1, 1, ACT_SETWORKINGDIR),
+	BIFA(Shutdown, 1, 1, ACT_SHUTDOWN),
 	BIF1(Sin, 1, 1),
+	BIFA(Sleep, 1, 1, ACT_SLEEP),
 	BIF1(Sort, 1, 3),
+	BIFA(SoundBeep, 0, 2, ACT_SOUNDBEEP),
 	BIFn(SoundGetInterface, 1, 3, BIF_Sound),
 	BIFn(SoundGetMute, 0, 2, BIF_Sound),
 	BIFn(SoundGetName, 0, 2, BIF_Sound),
 	BIFn(SoundGetVolume, 0, 2, BIF_Sound),
+	BIFA(SoundPlay, 1, 2, ACT_SOUNDPLAY),
 	BIFn(SoundSetMute, 1, 3, BIF_Sound),
 	BIFn(SoundSetVolume, 1, 3, BIF_Sound),
 	BIF1(SplitPath, 1, 6, {2, 3, 4, 5, 6}),
@@ -276,10 +334,14 @@ FuncEntry g_BIF[] =
 	BIF1(StrSplit, 1, 4),
 	BIFn(StrUpper, 1, 2, BIF_StrCase),
 	BIF1(SubStr, 2, 3),
+	BIFA(Suspend, 0, 1, ACT_SUSPEND),
 	BIF1(SysGet, 1, 1),
 	BIF1(SysGetIPAddresses, 0, 0),
 	BIF1(Tan, 1, 1),
+	BIFA(Thread, 1, 3, ACT_THREAD),
+	BIFA(ToolTip, 0, 4, ACT_TOOLTIP),
 	BIF1(TraySetIcon, 0, 3),
+	BIFA(TrayTip, 0, 3, ACT_TRAYTIP),
 	BIFn(Trim, 1, 2, BIF_Trim),
 	BIF1(Type, 1, 1),
 	BIF1(VarSetStrCapacity, 1, 2, {1}),
@@ -311,6 +373,8 @@ FuncEntry g_BIF[] =
 	BIFn(WinKill, 0, 5, BIF_WinShow),
 	BIFn(WinMaximize, 0, 4, BIF_WinShow),
 	BIFn(WinMinimize, 0, 4, BIF_WinShow),
+	BIFA(WinMinimizeAll, 0, 0, ACT_WINMINIMIZEALL),
+	BIFA(WinMinimizeAllUndo, 0, 0, ACT_WINMINIMIZEALLUNDO),
 	BIF1(WinMove, 0, 8),
 	BIFn(WinMoveBottom, 0, 4, BIF_WinMoveTopBottom),
 	BIFn(WinMoveTop, 0, 4, BIF_WinMoveTopBottom),
@@ -530,7 +594,7 @@ Script::Script()
 		ScriptError(_T("DEBUG: ID_FILE_EXIT is too large (conflicts with IDs reserved via ID_USER_FIRST)."));
 	if (MAX_CONTROLS_PER_GUI > ID_USER_FIRST - 3)
 		ScriptError(_T("DEBUG: MAX_CONTROLS_PER_GUI is too large (conflicts with IDs reserved via ID_USER_FIRST)."));
-	if (g_ActionCount != ACT_COUNT) // This enum value only exists in debug mode.
+	if (g_ActionCount != ACT_LAST_NAMED_ACTION + 1)
 		ScriptError(_T("DEBUG: g_act and enum_act are out of sync."));
 	int LargestMaxParams, i, j;
 	ActionTypeType *np;
@@ -1599,7 +1663,7 @@ bool Script::IsFunctionDefinition(LPTSTR aBuf, LPTSTR aNextBuf)
 		return false;
 	// Is it a control flow statement, such as "if(condition)"?
 	*action_end = '\0';
-	bool is_control_flow = ConvertActionType(aBuf, ACT_FIRST_NAMED_ACTION, ACT_FIRST_COMMAND);
+	bool is_control_flow = ConvertActionType(aBuf);
 	*action_end = '(';
 	if (is_control_flow)
 		return false;
@@ -2758,7 +2822,7 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 			if (IS_SPACE_OR_TAB(orig_char) || orig_char == '(' || orig_char == '{') // '{' supports "else{".
 			{
 				*action_end = '\0';
-				action_type = ConvertActionType(action_start, ACT_FIRST_NAMED_ACTION, ACT_FIRST_COMMAND);
+				action_type = ConvertActionType(action_start);
 				*action_end = orig_char;
 
 				if (action_type == ACT_ELSE || action_type == ACT_TRY || action_type == ACT_FINALLY)
@@ -4677,7 +4741,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 
 	if (!aActionType && could_be_named_action) // Caller nor logic above has yet determined the action.
 	{
-		aActionType = ConvertActionType(action_name, ACT_FIRST_NAMED_ACTION, ACT_FIRST_COMMAND); // Is this line a control flow statement?
+		aActionType = ConvertActionType(action_name); // Is this line a control flow statement?
 
 		if (!aActionType && *end_marker != '(')
 		{
@@ -4702,7 +4766,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		// things like "Loop{ string" are reported as errors (in case user intended an object literal).
 		if (*action_args == '{')
 		{
-			switch (ActionTypeType otb_act = ConvertActionType(action_name, ACT_FIRST_NAMED_ACTION, ACT_FIRST_COMMAND))
+			switch (ActionTypeType otb_act = ConvertActionType(action_name))
 			{
 			case ACT_LOOP:
 			case ACT_SWITCH:
@@ -5072,13 +5136,13 @@ inline LPTSTR Script::ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool
 
 
 
-inline ActionTypeType Script::ConvertActionType(LPTSTR aActionTypeString, int aFirstAction, int aLastActionPlus1)
+inline ActionTypeType Script::ConvertActionType(LPCTSTR aActionTypeString)
 // inline since it's called so often, but don't keep it in the .h due to #include issues.
 {
 	// For the loop's index:
 	// Use an int rather than ActionTypeType since it's sure to be large enough to go beyond
 	// 256 if there happen to be exactly 256 actions in the array:
- 	for (int action_type = aFirstAction; action_type < aLastActionPlus1; ++action_type)
+ 	for (int action_type = ACT_FIRST_NAMED_ACTION; action_type <= ACT_LAST_NAMED_ACTION; ++action_type)
 		if (!_tcsicmp(aActionTypeString, g_act[action_type].Name)) // Match found.
 			return action_type;
 	return ACT_INVALID;  // On failure to find a match.
@@ -6944,30 +7008,10 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	// been added to the function list.
 
 	FuncEntry *pbif = FindBuiltInFunc(func_name);
-	UCHAR *bif_output_vars = pbif ? pbif->mOutputVars : NULL;
-	ActionTypeType action_type = ACT_INVALID;
-
 	if (!pbif)
-	{
-		// The following handles those commands which have not yet been converted to BIFs,
-		// excluding control flow statements (which are not "functions" and can't work this way):
-		action_type = ConvertActionType(func_name, ACT_FIRST_COMMAND, g_ActionCount);
-		if (action_type == ACT_INVALID)
-			return NULL;
-		// Otherwise, there is a command with this name which can be converted to a function.
+		return nullptr;
 
-		pbif = (FuncEntry *)_alloca(sizeof(FuncEntry));
-		FuncEntry &bif = *pbif;
-		bif.mBIF = BIF_PerformAction;
-		bif.mMinParams = g_act[action_type].MinParams;
-		bif.mMaxParams = g_act[action_type].MaxParams;
-		bif.mName = g_act[action_type].Name;
-		bif.mID = action_type;
-	}
-
-	// Since above didn't return, this is a built-in function that hasn't yet been added to the list.
-	// Add it now:
-	auto *pfunc = new BuiltInFunc(*pbif, bif_output_vars);
+	auto *pfunc = new BuiltInFunc(*pbif, pbif->mOutputVars);
 	if (!pfunc || !mFuncs.Insert(pfunc, left)) // left contains the position within mFuncs to insert the function.  Cannot use *apInsertPos as caller may have omitted it.
 	{
 		ScriptError(ERR_OUTOFMEM);
