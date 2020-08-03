@@ -84,7 +84,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 	///////////////////////////////
 	// EVALUATE POSTFIX EXPRESSION
 	///////////////////////////////
-	int i, actual_param_count, delta;
+	int i, delta;
 	SymbolType right_is_number, left_is_number, right_is_pure_number, left_is_pure_number, result_symbol;
 	double right_double, left_double;
 	__int64 right_int64, left_int64;
@@ -95,7 +95,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 	LPTSTR result; // "result" is used for return values and also the final result.
 	VarSizeType result_length;
 	size_t result_size, alloca_usage = 0; // v1.0.45: Track amount of alloca mem to avoid stress on stack from extreme expressions (mostly theoretical).
-	BOOL done, done_and_have_an_output_var, make_result_persistent, left_branch_is_true
+	BOOL done, done_and_have_an_output_var, left_branch_is_true
 		, left_was_negative, is_pre_op; // BOOL vs. bool benchmarks slightly faster, and is slightly smaller in code size (or maybe it's cp1's int vs. char that shrunk it).
 	ExprTokenType *this_postfix, *p_postfix;
 	Var *sym_assign_var, *temp_var;
@@ -244,56 +244,77 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			goto push_this_token;
 		} // if (IS_OPERAND(this_token.symbol))
 
-		if (this_token.symbol == SYM_FUNC) // A call to a function (either built-in or defined by the script).
+		if (this_token.symbol == SYM_FUNC)
 		{
-			Func *func = this_token.deref->func;
-			actual_param_count = this_token.deref->param_count; // For performance.
-			if (actual_param_count > stack_count) // Prevent stack underflow (probably impossible if actual_param_count is accurate).
+			auto func = this_token.callsite->func; // For convenience and because any modifications should not be persistent.
+			auto member = this_token.callsite->member;
+			auto flags = this_token.callsite->flags;
+			auto param_count = this_token.callsite->param_count;
+			if (param_count > stack_count) // Prevent stack underflow (probably impossible if actual_param_count is accurate).
 				goto abort_with_exception;
 			// Adjust the stack early to simplify.  Above already confirmed that the following won't underflow.
 			// Pop the actual number of params involved in this function-call off the stack.
-			stack_count -= actual_param_count; // Now stack[stack_count] is the leftmost item in an array of function-parameters, which simplifies processing later on.
+			int prev_stack_count = stack_count;
+			stack_count -= param_count;
 			ExprTokenType **params = stack + stack_count;
+			ExprTokenType *func_token;
 
-			if (!func)
+			if (flags & EIF_STACK_MEMBER)
+			{
+				if (!stack_count)
+					goto abort_with_exception;
+				stack_count--;
+				flags &= ~EIF_STACK_MEMBER;
+				if (stack[stack_count]->symbol != SYM_MISSING)
+				{
+					member = TokenToString(*stack[stack_count], right_buf);
+					if (!*member && TokenToObject(*stack[stack_count]))
+					{
+						error_info = _T("String");
+						error_value = stack[stack_count];
+						goto type_mismatch;
+					}
+				}
+			}
+
+			if (func)
+			{
+				func_token = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+				func_token->SetValue(func);
+			}
+			else
 			{
 				// This is a dynamic function call.
 				if (!stack_count) // SYM_DYNAMIC should have pushed a function name or reference onto the stack, but a syntax error may still cause this condition.
 					goto abort_with_exception;
 				stack_count--;
-				func = TokenToFunc(*stack[stack_count]); // Supports function names and function references.
+				func_token = stack[stack_count];
+				func = TokenToObject(*func_token);
+				if (!func)
+					func = g_script.FindFunc(TokenToString(*func_token, left_buf));
 				if (!func)
 				{
-					// This isn't a function name or reference, but it could be an object emulating
-					// a function reference.  Additionally, we want something like %emptyvar%() to
-					// invoke ValueBase(), so this part is done even if stack[stack_count] is not
-					// an object.  To "call" the object/value, we need to insert the "call" method
-					// name between the object/value and the parameter list.  There should always
-					// be room for this since 1 stack slot was reserved for each dynamic call.
-					if (actual_param_count)
-						memmove(params + 1, params, actual_param_count * sizeof(ExprTokenType *));
-					// Insert the "use default method name" marker:
-					params[0] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
-					params[0]->symbol = SYM_MISSING;
-					params[0]->marker = _T("");
-					params[0]->marker_length = 0;
-					params--; // Include the object, which is already in the right place.
-					actual_param_count += 2;
-					extern BuiltInFunc *OpFunc_CallMethod;
-					func = OpFunc_CallMethod;
+					if (func_token->symbol == SYM_SUPER)
+					{
+						// Invoke the super-class but pass the current function's "this".
+						ASSERT(g->CurrentFunc && g->CurrentFunc->mClass);
+						func = g->CurrentFunc->mClass->Base();
+						ASSERT(func);
+						func_token->SetVar(g->CurrentFunc->mParam[0].var);
+					}
+					else
+					{
+						// Invoke a substitute object but pass func_token as "this".
+						func = Object::ValueBase(*func_token);
+					}
+					flags |= IF_NO_SET_PROPVAL;
 				}
-				// Above has set func to a non-NULL value, but still need to verify there are enough params.
-				// Although passing too many parameters is useful (due to the limitations of variadic calls),
-				// passing too few parameters (and treating the missing ones as optional) seems a little
-				// inappropriate because it would allow the function's caller to second-guess the function's
-				// designer (the designer could provide a default value if a parameter is capable of being
-				// omitted). Another issue might be misbehavior by built-in functions that assume that the
-				// minimum number of parameters are present due to prior validation.  So either all the
-				// built-in functions would have to be reviewed, or the minimum would have to be enforced
-				// for them but not user-defined functions, which is inconsistent.  Finally, allowing too-
-				// few parameters seems like it would reduce the ability to detect script bugs at runtime.
-				// Param count is now checked in Func::Call(), so doesn't need to be checked here.
+				ASSERT(func);
 			}
+
+			if (flags & EIF_LEAVE_PARAMS)
+				// Leave params on the stack for the next part of a compound assignment.
+				stack_count = prev_stack_count;
 			
 			// The following two steps are done for built-in functions inside Func::Call:
 			//result_token.symbol = SYM_INTEGER; // Set default return type so that functions don't have to do it if they return INTs.
@@ -306,17 +327,30 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			ResultToken result_token;
 			result_token.InitResult(left_buf); // But we'll take charge of its contents INSTEAD of calling Free().
 
-			// Call the user-defined or built-in function.
-			if (!func->Call(result_token, params, actual_param_count, this_token.deref->type == DT_VARIADIC))
+			// Invoke the function or object.
+			bool keep_alive = func_token->symbol == SYM_VAR;
+			if (keep_alive) // Might help performance to avoid these virtual calls in common cases.
+				func->AddRef(); // Ensure the object isn't deleted during the call, by an assignment.
+			ResultType invoke_result;
+			if (flags & EIF_VARIADIC)
+				invoke_result = VariadicCall(func, result_token, flags, member, *func_token, params, param_count);
+			else
+				invoke_result = func->Invoke(result_token, flags, member, *func_token, params, param_count);
+			if (keep_alive)
+				func->Release();
+
+			switch (invoke_result)
 			{
-				// Func::Call returning false indicates an EARLY_EXIT or FAIL result, meaning that the
-				// thread should exit or transfer control to a Catch statement.  Abort the remainder
-				// of this expression and pass the result back to our caller:
-				aResult = result_token.Result();
+			case FAIL:
+			case EARLY_EXIT:
+				aResult = invoke_result;
 				result_to_return = NULL; // Use NULL to inform our caller that this thread is finished (whether through normal means such as Exit or a critical error).
 				// Above: The callers of this function know that the value of aResult (which already contains the
 				// reason for early exit) should be considered valid/meaningful only if result_to_return is NULL.
 				goto normal_end_skip_output_var; // output_var is left unchanged in these cases.
+			case INVOKE_NOT_HANDLED:
+				aResult = result_token.UnknownMemberError(*func_token, flags, member);
+				goto abort_if_result;
 			}
 
 #ifdef CONFIG_DEBUGGER
@@ -325,6 +359,16 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				g_Debugger.PostExecFunctionCall(this);
 #endif
 			g_script.mCurrLine = this; // For error-reporting.
+
+			if (flags & IT_SET)
+			{
+				result_token.Free();
+				auto &value = *params[param_count - 1];
+				// value came from a previous part of this expression, so it's already in to_free[]
+				// if appropriate, and we can just push it back onto the stack.
+				this_token.CopyValueFrom(value);
+				goto push_this_token;
+			}
 
 			if (result_token.symbol != SYM_STRING)
 			{
@@ -419,7 +463,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			}
 			// Otherwise, there's no output_var or the expression isn't finished yet, so do normal processing.
 				
-			make_result_persistent = true; // Set default.
 			this_token.symbol = SYM_STRING;
 			this_token.marker_length = result_length;
 
@@ -455,18 +498,15 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				goto push_this_token;
 			}
 
-			if (make_result_persistent) // At this stage, this means that the above wasn't able to determine its correct value yet.
-			if (func->IsBuiltIn())
-			{
-				// Since above didn't goto, "result" is not SYM_INTEGER/FLOAT/VAR, and not "".  Therefore, it's
-				// either a pointer to static memory (such as a constant string), or more likely the small buf
-				// we gave to the BIF for storing small strings.  For simplicity assume it's the buf, which is
-				// volatile and must be made persistent if called for below.
-				make_result_persistent = !done;
-			}
-			else // It's not a built-in function.
+			bool make_result_persistent;
 			{
 				// Since above didn't goto, the result may need to be copied to a more persistent location.
+
+				// For BIFs, "result" can be any of the following (some of which were handled above):
+				//  - mem_to_free:  Allocated by TokenSetResult().
+				//  - left_buf:  Copied there by TokenSetResult() or via _f_retval_buf.
+				//  - Static memory, such as a literal string.
+				//  - Others that might be volatile.
 
 				// For UDFs, "result" can be any of the following (some of which were handled above):
 				//	- mem_to_free:  Passed back from some other function call.
@@ -1498,73 +1538,49 @@ ResultType Line::ExpandSingleArg(int aArgIndex, ResultToken &aResultToken, LPTST
 
 
 
-bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic)
+ResultType VariadicCall(IObject *aObj, IObject_Invoke_PARAMS_DECL)
 {
-	IObject *param_obj = NULL; // Vararg object passed by caller.
-	Array *param_array = NULL; // Array of parameters, either the same as param_obj or the result of enumeration.
+	IObject *param_obj = nullptr; // Vararg object passed by caller.
+	Array *param_array = nullptr; // Array of parameters, either the same as param_obj or the result of enumeration.
 	ExprTokenType* token = nullptr; // Used for variadic calls.
-	if (aIsVariadic) // i.e. this is a variadic function call.
-	{
-		ExprTokenType *rvalue = NULL;
-		if (IsBuiltIn() && ((BuiltInFunc *)this)->mBIF == &Op_ObjInvoke
-			&& (((BuiltInFunc *)this)->mFID & IT_BITMASK) == IT_SET) // x[y*]:=z
-			rvalue = aParam[--aParamCount];
 
-		--aParamCount; // Exclude param_obj from aParamCount, so it's the count of normal params.
-		param_obj = TokenToObject(*aParam[aParamCount]);
-		// It might be more correct to use the enumerator even for Array, but that could be slow.
-		// Future changes might enable efficient detection of a custom __Enum method, allowing
-		// us to take the more efficient path most times, but still support custom enumeration.
-		if (param_array = dynamic_cast<Array *>(param_obj))
-			param_array->AddRef();
-		else
-			if (!(param_array = Array::FromEnumerable(*aParam[aParamCount])))
-			{
-				aResultToken.SetExitResult(FAIL);
-				return false;
-			}
-		int extra_params = param_array->Length();
-		if (extra_params > 0)
-		{
-			// Check total param count first (even though it's checked below) in case
-			// the array is abnormally large, to reduce the risk of stack overflow.
-			if (aParamCount + extra_params > mParamCount && !mIsVariadic) // v2 policy.
-			{
-				param_array->Release();
-				aResultToken.Error(ERR_TOO_MANY_PARAMS, mName);
-				return false;
-			}
-			// Calculate space required for ...
-			size_t space_needed = extra_params * sizeof(ExprTokenType) // ... new param tokens
-				+ (aParamCount + extra_params) * sizeof(ExprTokenType *); // ... existing and new param pointers
-			if (rvalue)
-				space_needed += sizeof(rvalue); // ... extra slot for aRValue
-			// Allocate new param list and tokens; tokens first for convenience.
-			token = (ExprTokenType *)_malloca(space_needed);
-			if (!token)
-			{
-				aResultToken.Error(ERR_OUTOFMEM);
-				return false;
-			}
-			ExprTokenType **param_list = (ExprTokenType **)(token + extra_params);
-			// Since built-in functions don't have variables we can directly assign to,
-			// we need to expand the param object's contents into an array of tokens:
-			param_array->ToParams(token, param_list, aParam, aParamCount);
-			aParam = param_list;
-			aParamCount += extra_params;
-		}
-		if (rvalue)
-			aParam[aParamCount++] = rvalue; // In place of the variadic param.
-	}
+	ExprTokenType *rvalue = IS_INVOKE_SET ? aParam[--aParamCount] : nullptr;
 
-	bool result;
-	if (auto hook = GetOwnMethodFunc(_T("Call")))
-	{
-		CallMethod(hook, aResultToken, ExprTokenType(this), aParam, aParamCount);
-		result = !aResultToken.Exited();
-	}
+	--aParamCount; // Exclude param_obj from aParamCount, so it's the count of normal params.
+	param_obj = TokenToObject(*aParam[aParamCount]);
+	// It might be more correct to use the enumerator even for Array, but that could be slow.
+	// Future changes might enable efficient detection of a custom __Enum method, allowing
+	// us to take the more efficient path most times, but still support custom enumeration.
+	if (param_array = dynamic_cast<Array *>(param_obj))
+		param_array->AddRef();
 	else
-		result = Call(aResultToken, aParam, aParamCount, param_obj);
+		if (!(param_array = Array::FromEnumerable(*aParam[aParamCount])))
+			return aResultToken.SetExitResult(FAIL);
+	int extra_params = param_array->Length();
+	if (extra_params > 0)
+	{
+		// Calculate space required for ...
+		size_t space_needed = extra_params * sizeof(ExprTokenType) // ... new param tokens
+			+ (aParamCount + extra_params) * sizeof(ExprTokenType *); // ... existing and new param pointers
+		if (rvalue)
+			space_needed += sizeof(rvalue); // ... extra slot for aRValue
+		// Allocate new param list and tokens; tokens first for convenience.
+		token = (ExprTokenType *)_malloca(space_needed);
+		if (!token)
+			return aResultToken.Error(ERR_OUTOFMEM);
+		ExprTokenType **param_list = (ExprTokenType **)(token + extra_params);
+		// Since built-in functions don't have variables we can directly assign to,
+		// we need to expand the param object's contents into an array of tokens:
+		param_array->ToParams(token, param_list, aParam, aParamCount);
+		aParam = param_list;
+		aParamCount += extra_params;
+	}
+	if (rvalue)
+		aParam[aParamCount++] = rvalue; // In place of the variadic param.
+
+	aResultToken.named_params = param_obj;
+
+	auto result = aObj->Invoke(aResultToken, aFlags, aName, aThisToken, aParam, aParamCount);
 
 	if (param_array)
 		param_array->Release();
@@ -1574,7 +1590,9 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 	return result;
 }
 
-bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
+
+
+bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	if (aParamCount > mParamCount && !mIsVariadic) // v2 policy.
 	{
@@ -1584,9 +1602,9 @@ bool Func::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCo
 	return true;
 }
 
-bool NativeFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
+bool NativeFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	if (!Func::Call(aResultToken, aParam, aParamCount, aParamObj))
+	if (!Func::Call(aResultToken, aParam, aParamCount))
 		return false;
 
 		// mMinParams is validated at load-time where possible; so not for variadic or dynamic calls,
@@ -1623,9 +1641,9 @@ bool NativeFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aP
 	return true;
 }
 
-bool BuiltInFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
+bool BuiltInFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	if (!NativeFunc::Call(aResultToken, aParam, aParamCount, aParamObj))
+	if (!NativeFunc::Call(aResultToken, aParam, aParamCount))
 		return false;
 
 	aResultToken.func = this; // Inform function of which built-in function called it (allows code sharing/reduction).
@@ -1649,9 +1667,9 @@ bool BuiltInFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int a
 	return !aResultToken.Exited();
 }
 
-bool BuiltInMethod::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
+bool BuiltInMethod::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	if (!NativeFunc::Call(aResultToken, aParam, aParamCount, aParamObj))
+	if (!NativeFunc::Call(aResultToken, aParam, aParamCount))
 		return false;
 
 	DEBUGGER_STACK_PUSH(this) // See comments in BuiltInFunc::Call.
@@ -1678,14 +1696,14 @@ bool BuiltInMethod::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int
 	return !aResultToken.Exited();
 }
 
-bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
+bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	return Call(aResultToken, aParam, aParamCount, aParamObj, nullptr);
+	return Call(aResultToken, aParam, aParamCount, nullptr);
 }
 
-bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *param_obj, FreeVars *aUpVars)
+bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, FreeVars *aUpVars)
 {
-	if (!Func::Call(aResultToken, aParam, aParamCount, param_obj))
+	if (!Func::Call(aResultToken, aParam, aParamCount))
 		return false;
 
 		ResultType result;
@@ -1836,11 +1854,11 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 
 			if (j >= aParamCount || aParam[j]->symbol == SYM_MISSING)
 			{
-				if (param_obj)
+				if (aResultToken.named_params)
 				{
 					FuncResult rt_item;
-					ExprTokenType t_this(param_obj);
-					auto r = param_obj->Invoke(rt_item, IT_GET, this_formal_param.var->mName, t_this, nullptr, 0);
+					ExprTokenType t_this(aResultToken.named_params);
+					auto r = aResultToken.named_params->Invoke(rt_item, IT_GET, this_formal_param.var->mName, t_this, nullptr, 0);
 					if (r == FAIL || r == EARLY_EXIT)
 					{
 						aResultToken.SetExitResult(r);

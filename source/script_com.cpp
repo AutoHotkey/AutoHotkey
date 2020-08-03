@@ -1180,7 +1180,7 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 	}
 	else if	(IS_INVOKE_SET)
 	{
-		// Op_ObjInvoke sets the result of IT_SET.
+		// aResultToken's value is ignored by ExpandExpression() for IT_SET.
 		VariantClear(&varResult);
 	}
 	else

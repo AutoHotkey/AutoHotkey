@@ -16603,7 +16603,7 @@ BIF_DECL(BIF_Exception)
 			if (se->type == DbgStack::SE_Thread)
 				break; // Never return stack locations in other threads.
 			if (se->type == DbgStack::SE_BIF)
-				continue; // Skip built-in functions such as Op_ObjInvoke (common).
+				continue; // Skip built-in functions.
 			if (++offset == 0)
 			{
 				line = se > g_Debugger.mStack.mBottom ? se[-1].line : se->line;

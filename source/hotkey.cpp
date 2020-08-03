@@ -170,12 +170,14 @@ void Script::PreparseHotkeyIfExpr(Line* aLine)
 	int param_count = 0;
 	while (postfix[param_count].symbol == SYM_STRING)
 		++param_count;
-	if (postfix[param_count].symbol != SYM_FUNC)
-		return; // Not a function call, or it doesn't only accept strings.
+	if (postfix[param_count].symbol != SYM_FUNC // Not a function call, or it doesn't only accept strings.
+		|| param_count > 2 // Too many parameters.
+		|| !postfix[param_count].callsite->func) // Dynamic target.
+		return;
 	if (param_count > 2)
 		return; // Too many parameters.
-	Func &fn = *postfix[param_count].deref->func;
-	if (!fn.IsBuiltIn() || ((BuiltInFunc&)fn).mBIF != &BIF_WinExistActive)
+	auto fn = dynamic_cast<BuiltInFunc*>(postfix[param_count].callsite->func);
+	if (!fn || fn->mBIF != &BIF_WinExistActive)
 		return; // Not WinExist() or WinActive().
 	bool invert = postfix[param_count+1].symbol == SYM_LOWNOT || postfix[param_count+1].symbol == SYM_HIGHNOT;
 	if (postfix[param_count+1+invert].symbol != SYM_INVALID)
@@ -185,7 +187,7 @@ void Script::PreparseHotkeyIfExpr(Line* aLine)
 	HotkeyCriterion *hc = (HotkeyCriterion *)aLine->mAttribute;
 	// Change the parameters of this criterion.  FindHotkeyIfExpr() will still be able to
 	// find it based on the expression text since it only relies on ExprLine.
-	if (ctoupper(fn.mName[3]) == 'A')
+	if (ctoupper(fn->mName[3]) == 'A')
 		hc->Type = invert ? HOT_IF_NOT_ACTIVE : HOT_IF_ACTIVE;
 	else
 		hc->Type = invert ? HOT_IF_NOT_EXIST : HOT_IF_EXIST;

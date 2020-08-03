@@ -162,7 +162,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_VAR // An operand that is a variable's contents.
 	, SYM_OBJECT // L31: Represents an IObject interface pointer.
 	, SYM_DYNAMIC // An operand that needs further processing during the evaluation phase.
-	, SYM_SUPER // Special operand just for the "super" keyword.  Should only ever be the first param of Op_ObjInvoke.
+	, SYM_SUPER // Special operand just for the "super" keyword.  Should only ever appear as the target of SYM_FUNC with callsite->func == nullptr.
 #define SUPER_KEYWORD _T("Super")
 	, SYM_OPERAND_END // Marks the symbol after the last operand.  This value is used below.
 	, SYM_BEGIN = SYM_OPERAND_END  // SYM_BEGIN is a special marker to simplify the code.
@@ -301,6 +301,12 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define IF_NO_SET_PROPVAL	0x20000 // Fail IT_SET for value properties (allow only setters/__set).
 #define IF_DEFAULT			0x40000 // Invoke the default member (call a function object, array indexing, etc.).
 #define IF_NEWENUM			0x80000 // Workaround for COM objects which don't resolve "_NewEnum" to DISPID_NEWENUM.
+#define IF_BITMASK			0xF0000
+
+#define EIF_VARIADIC		0x01000
+#define EIF_STACK_MEMBER	0x02000
+#define EIF_LEAVE_PARAMS	0x04000
+#define EIF_BITMASK			0x07000
 
 
 // Helper function for event handlers and __Delete:
@@ -310,6 +316,7 @@ ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
 
 
 struct DerefType; // Forward declarations for use below.
+struct CallSite;  //
 class Var;        //
 struct ExprTokenType  // Something in the compiler hates the name TokenType, so using a different name.
 {
@@ -325,14 +332,15 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 			union // These nested structs and unions minimize the token size by overlapping data.
 			{
 				IObject *object;
-				DerefType *deref;  // for SYM_FUNC, and (while parsing) SYM_ASSIGN etc.
-				Var *var;          // for SYM_VAR and SYM_DYNAMIC
-				LPTSTR marker;     // for SYM_STRING and (while parsing) SYM_OPAREN
+				CallSite *callsite;   // for SYM_FUNC, and (while parsing) SYM_ASSIGN etc.
+				DerefType *var_deref; // for SYM_VAR while parsing
+				Var *var;             // for SYM_VAR and SYM_DYNAMIC
+				LPTSTR marker;        // for SYM_STRING and (while parsing) SYM_OPAREN
 				ExprTokenType *circuit_token; // for short-circuit operators
 			};
 			union // Due to the outermost union, this doesn't increase the total size of the struct on x86 builds (but it does on x64).
 			{
-				DerefType *outer_deref; // Used by ExpressionToPostfix().
+				CallSite *outer_param_list; // Used by ExpressionToPostfix().
 				LPTSTR error_reporting_marker; // Used by ExpressionToPostfix() for binary and unary operators.
 				size_t marker_length;
 				int var_usage;		// for SYM_DYNAMIC and SYM_VAR (at load time)
@@ -420,6 +428,7 @@ struct ResultToken : public ExprTokenType
 {
 	LPTSTR buf; // Points to a buffer of _f_retval_buf_size characters for returning short strings and misc purposes.
 	LPTSTR mem_to_free; // Callee stores memory allocated for the result here.  Must be NULL or equal to marker.
+	IObject *named_params; // Variadic callers may pass named parameters via properties of this.
 
 	// Utility function for initializing result tokens.
 	void InitResult(LPTSTR aResultBuf)
@@ -428,7 +437,8 @@ struct ResultToken : public ExprTokenType
 		marker = _T("");
 		marker_length = -1; // Helps code size to do this here instead of in ReturnPtr(), which should be inlined.
 		buf = aResultBuf;
-		mem_to_free = NULL;
+		mem_to_free = nullptr;
+		named_params = nullptr;
 		result = OK;
 	}
 

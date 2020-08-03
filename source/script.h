@@ -386,12 +386,28 @@ struct DerefType
 		SymbolType symbol; // DT_WORDOP
 		int int_value; // DT_CONST_INT
 	};
-	DerefParamCountType param_count; // The actual number of parameters present in this function *call*.  Left uninitialized except for functions.
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
 	DerefTypeType type;
-	bool is_function() { return type >= DT_FUNC; }
+	bool is_function() { return type == DT_FUNC; }
+	UCHAR substring_count;
 	DerefLengthType length; // Listed only after byte-sized fields, due to it being a WORD.
+};
+
+struct CallSite
+{
+	IObject *func = nullptr;
+	LPTSTR member = nullptr;
+	int flags = IT_CALL;
+	int param_count = 0;
+	
+	bool is_variadic() { return flags & EIF_VARIADIC; }
+	void is_variadic(bool b) { if (b) flags |= EIF_VARIADIC; else flags &= ~EIF_VARIADIC; }
+	
+	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void operator delete(void *aPtr) {}  // Intentionally does nothing.
+	void operator delete[](void *aPtr) {}
 };
 
 typedef UCHAR ArgTypeType;  // UCHAR vs. an enum, to save memory.
@@ -1568,6 +1584,9 @@ private:
 };
 
 
+ResultType VariadicCall(IObject *aObj, IObject_Invoke_PARAMS_DECL);
+
+
 struct UDFCallInfo
 {
 	UserFunc *func;
@@ -1592,8 +1611,7 @@ public:
 	virtual bool ArgIsOutputVar(int aArg) = 0;
 
 	// bool result indicates whether aResultToken contains a value (i.e. false for FAIL/EARLY_EXIT).
-	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, bool aIsVariadic = false);
-	virtual bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj);
+	virtual bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	
 	virtual IObject *CloseIfNeeded()
 	{
@@ -1691,8 +1709,8 @@ public:
 
 	IObject *CloseIfNeeded() override; // Returns this UserFunc or (if mUpVarCount != 0) a Closure.
 
-	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
-	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj, FreeVars *aUpVars);
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, FreeVars *aUpVars);
 
 	// Execute the body of the function.
 	ResultType Execute(ResultToken *aResultToken)
@@ -1779,7 +1797,7 @@ public:
 
 	bool IsBuiltIn() override { return false; }
 	bool ArgIsOutputVar(int aArg) override { return mFunc->ArgIsOutputVar(aArg); }
-	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
 };
 
 
@@ -1806,7 +1824,7 @@ public:
 	
 	bool IsBuiltIn() override { return true; }
 	bool ArgIsOutputVar(int aArg) override { return false; }
-	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
 };
 
 
@@ -1820,7 +1838,7 @@ public:
 
 	bool IsBuiltIn() override { return true; }
 
-	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
 
 	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
 	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
@@ -1851,7 +1869,7 @@ public:
 		return false;
 	}
 
-	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
 };
 
 
@@ -1867,7 +1885,7 @@ public:
 
 	bool ArgIsOutputVar(int aArg) override { return false; }
 
-	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
 };
 
 
@@ -1880,8 +1898,7 @@ public:
 		mBIF = aBIF;
 		mFID = (BuiltInFunctionID)aID;
 		// Allow any number of parameters, since these functions aren't called directly by users
-		// and might break the rules in some cases, such as Op_ObjGetInPlace() having 0 *visible*
-		// parameters but actually reading 2 which are then also passed to the next function call.
+		// and might break the rules in some cases.
 		mParamCount = 255;
 		mIsVariadic = true;
 	}
@@ -1928,7 +1945,7 @@ public:
 	}
 	bool IsBuiltIn() override { return true; };
 	bool ArgIsOutputVar(int aArg) override { return true; }
-	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj) override;
+	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
 	virtual ResultType Next(Var *, Var *) = 0;
 };
 
@@ -3318,11 +3335,6 @@ BIF_DECL(BIF_HasBase);
 BIF_DECL(BIF_HasProp);
 BIF_DECL(BIF_HasMethod);
 BIF_DECL(BIF_GetMethod);
-
-// Expression operators implemented via SYM_FUNC:
-BIF_DECL(Op_ObjInvoke);
-BIF_DECL(Op_ObjGetInPlace);
-BIF_DECL(Op_ObjIncDec);
 
 
 // Advanced file IO interfaces

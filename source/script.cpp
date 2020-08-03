@@ -24,14 +24,6 @@ GNU General Public License for more details.
 #include "TextIO.h"
 
 
-// These are the common pseudo-Funcs, defined here mostly for readability:
-auto OpFunc_GetProp = ExprOp<Op_ObjInvoke, IT_GET>();
-auto OpFunc_GetItem = ExprOp<Op_ObjInvoke, IT_GET|IF_DEFAULT>();
-auto OpFunc_SetProp = ExprOp<Op_ObjInvoke, IT_SET>();
-auto OpFunc_SetItem = ExprOp<Op_ObjInvoke, IT_SET|IF_DEFAULT>();
-auto OpFunc_CallMethod = ExprOp<Op_ObjInvoke, IT_CALL>();
-
-
 #define NA MAX_FUNCTION_PARAMS
 #define BIFn(name, minp, maxp, bif, ...) {_T(#name), bif, minp, maxp, FID_##name, __VA_ARGS__}
 #define BIFi(name, minp, maxp, bif, id, ...) {_T(#name), bif, minp, maxp, id, __VA_ARGS__}
@@ -5553,7 +5545,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 			this_deref.next = NULL;
 			this_deref.marker = op_begin + 1;
 			this_deref.length = DerefLengthType(op_end - (op_begin + 1));
-			this_deref.param_count = 1;
+			this_deref.substring_count = 1;
 			++op_end;
 			// op_end is now set correctly to allow the outer loop to continue.
 			continue;
@@ -5720,7 +5712,7 @@ ResultType Script::ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefList &
 		this_deref.next = NULL;
 		this_deref.marker = op_begin;
 		this_deref.length = DerefLengthType(op_end - op_begin);
-		this_deref.param_count = ++count;
+		this_deref.substring_count = ++count;
 
 		if (last)
 			last->next = &this_deref;
@@ -7897,7 +7889,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 	// to re-detect whether each symbol is an operand vs. operator at multiple stages.
 	///////////////////////////////////////////////////////////////////////////////////////////////
 	LPTSTR op_end, cp;
-	DerefType *deref, *this_deref, *deref_new;
+	DerefType *deref, *this_deref;
 	int cp1; // int vs. char benchmarks slightly faster, and is slightly smaller in code size.
 	TCHAR number_buf[MAX_NUMBER_SIZE];
 
@@ -7929,7 +7921,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					break; // Break out of inner loop so that bottom of the outer loop will process this_deref itself.
 
 				ExprTokenType &this_infix_item = infix[infix_count]; // Might help reduce code size since it's referenced many places below.
-				this_infix_item.deref = NULL; // Init needed for SYM_ASSIGN and related; a non-NULL deref means it should be converted to an object-assignment.
+				this_infix_item.callsite = nullptr; // Init needed for SYM_ASSIGN and related; a non-NULL value means it should be converted to an object-assignment.
 				this_infix_item.error_reporting_marker = cp; // Used for reporting syntax errors with unary and binary operators, and may be overwritten via union for other symbols.
 
 				// Auto-concat requires a space or tab for the following reasons:
@@ -8142,30 +8134,19 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						// L36: This is something like obj.x[y] or obj.x[y]:=z, which should be treated
 						//		as a single operation such as ObjGet(obj,"x",y) or ObjSet(obj,"x",y,z).
 						--infix_count;
-						// Below will change the SYM_DOT token into SYM_OBRACKET, keeping the existing deref struct.
+						// Below will change the SYM_DOT token into SYM_OBRACKET, keeping the existing callsite struct.
 					}
 					else
 					{
-						if (  !(deref_new = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  )
+						auto callsite = new CallSite();
+						if (!callsite)
 							return LineError(ERR_OUTOFMEM);
 						if (  !(infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))  )
-						{	// Array constructor; e.g. x := [1,2,3]
-							deref_new->func = g_script.FindFunc(_T("Array"));
-							deref_new->param_count = 0;
-						}
+							callsite->func = g_script.FindFunc(_T("Array"));
 						else
-						{
-							deref_new->func = OpFunc_GetItem; // This may be overridden by standard_pop_into_postfix.
-							deref_new->param_count = 1; // Initially one parameter: the target object.
-						}
-						deref_new->marker = cp; // For error-reporting.
-						deref_new->type = DT_FUNC;
-						this_infix_item.deref = deref_new;
+							callsite->flags = IT_GET; // This may be overridden by standard_pop_into_postfix.
+						this_infix_item.callsite = callsite;
 					}
-					// This SYM_OBRACKET will be converted to SYM_FUNC after we determine what type of operation
-					// is being performed.  SYM_FUNC requires a deref structure to point to the appropriate 
-					// function; we will also use it to count parameters as each SYM_COMMA is encountered.
-					// deref->func will be set at a later stage.  deref->is_function need not be set.
 					// DO NOT USE this_infix_item in case above did --infix_count.
 					infix[infix_count].symbol = SYM_OBRACKET;
 					break;
@@ -8175,13 +8156,10 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 				case '{':
 					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
 						return LineError(_T("Unexpected \"{\""));
-					if (  !(deref_new = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  )
+					this_infix_item.callsite = new CallSite();
+					if (!this_infix_item.callsite)
 						return LineError(ERR_OUTOFMEM);
-					deref_new->func = g_script.FindFunc(_T("Object"));
-					deref_new->type = DT_FUNC;
-					deref_new->param_count = 0;
-					deref_new->marker = cp; // For error-reporting.
-					this_infix_item.deref = deref_new;
+					this_infix_item.callsite->func = g_script.FindFunc(_T("Object"));
 					this_infix_item.symbol = SYM_OBRACE;
 					break;
 				case '}':
@@ -8283,11 +8261,11 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					if (cp1 == '=')
 					{
 						++cp;
-						if (   !(this_infix_item.deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))   )
+						this_infix_item.callsite = new CallSite();
+						if (!this_infix_item.callsite)
 							return LineError(ERR_OUTOFMEM);
-						this_infix_item.deref->func = g_script.FindFunc(_T("RegExMatch"));
-						this_infix_item.deref->type = DT_FUNC;
-						this_infix_item.deref->param_count = 2;
+						this_infix_item.callsite->func = g_script.FindFunc(_T("RegExMatch"));
+						this_infix_item.callsite->param_count = 2;
 						this_infix_item.symbol = SYM_REGEXMATCH;
 					}
 					else
@@ -8375,38 +8353,29 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 							if (op_end == cp) // Missing identifier.
 								return LineError(ERR_EXPR_SYNTAX, FAIL, cp-1); // Intentionally vague since the user's intention isn't clear.
 
-							// Output an operand for the text following '.'
-							LPTSTR str = SimpleHeap::Malloc(cp, op_end - cp);
-							if (!str)
+							auto callsite = new CallSite();
+							if (!callsite)
+								return LineError(ERR_OUTOFMEM);
+							if (  !(callsite->member = SimpleHeap::Malloc(cp, op_end - cp))  )
 								return FAIL; // Malloc already displayed an error message.
-							infix[infix_count].SetValue(str, op_end - cp);
-
-							++infix_count;
 
 							SymbolType new_symbol; // Type of token: SYM_FUNC or SYM_DOT (which must be treated differently as it doesn't have parentheses).
-							DerefType *new_deref; // Holds a reference to the appropriate function, and parameter count.
-							if (   !(new_deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))   )
-								return LineError(ERR_OUTOFMEM);
-							new_deref->marker = cp - 1; // Not typically needed, set for error-reporting.
-							new_deref->param_count = 2; // Initially two parameters: the object and identifier.
-							new_deref->type = DT_FUNC;
-							
 							if (*op_end == '(')
 							{
 								new_symbol = SYM_FUNC;
-								new_deref->func = OpFunc_CallMethod;
+								callsite->flags = IT_CALL;
 								// DON'T DO THE FOLLOWING - must let next iteration handle '(' so it outputs a SYM_OPAREN:
 								//++op_end;
 							}
 							else
 							{
 								new_symbol = SYM_DOT; // This will be changed to SYM_FUNC at a later stage.
-								new_deref->func = OpFunc_GetProp; // Set default; may be overridden by standard_pop_into_postfix.
+								callsite->flags = IT_GET; // Set default; may be overridden by standard_pop_into_postfix.
 							}
 
 							// Output the operator next - after the operand to avoid auto-concat.
 							infix[infix_count].symbol = new_symbol;
-							infix[infix_count].deref = new_deref;
+							infix[infix_count].callsite = callsite;
 
 							// Continue processing after this operand. Outer loop will do ++infix_count.
 							cp = op_end;
@@ -8465,6 +8434,10 @@ unquoted_literal:
 				} // switch() for type of symbol/operand.
 				if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(this_infix_item.symbol))
 					++allow_for_extra_postfix;
+				else if (this_infix_item.symbol == SYM_POST_INCREMENT || this_infix_item.symbol == SYM_POST_DECREMENT)
+					allow_for_extra_postfix += 4;
+				else if (this_infix_item.symbol == SYM_PRE_INCREMENT || this_infix_item.symbol == SYM_PRE_DECREMENT)
+					allow_for_extra_postfix += 2;
 				++cp; // i.e. increment only if a "continue" wasn't encountered somewhere above. Although maintainability is reduced to do this here, it avoids dozens of ++cp in other places.
 			} // for each token in this section of raw/literal text.
 		} // End of processing of raw/literal text (such as operators) that lie to the left of this_deref.
@@ -8488,16 +8461,17 @@ unquoted_literal:
 		{
 			if (this_deref_ref.length) // Non-dynamic. For dynamic calls like %x%(), auto-concat has already been handled.
 				CHECK_AUTO_CONCAT;
+			infix[infix_count].callsite = new CallSite();
+			if (!infix[infix_count].callsite)
+				return LineError(ERR_OUTOFMEM);
+			infix[infix_count].callsite->func = this_deref_ref.func;
 			infix[infix_count].symbol = SYM_FUNC;
-			infix[infix_count].deref = this_deref;
-			// L31: Initialize param_count to zero to work with new method of parameter counting required for ObjGet/Set/Call. (See SYM_COMMA and SYM_'PAREN handling.)
-			this_deref_ref.param_count = 0;
 		}
 		else if (this_deref_ref.type == DT_STRING || this_deref_ref.type == DT_QSTRING)
 		{
 			bool is_end_of_string = !this_deref_ref.next;
-			bool is_start_of_string = this_deref_ref.param_count == 1;
-			bool require_paren = this_deref_ref.param_count > 1 || this_deref_ref.next;
+			bool is_start_of_string = this_deref_ref.substring_count == 1;
+			bool require_paren = this_deref_ref.substring_count > 1 || this_deref_ref.next;
 
 			cp = this_deref_ref.marker; // This is done in case omit_leading_whitespace() skipped over leading whitespace of a string.
 
@@ -8599,19 +8573,20 @@ unquoted_literal:
 		}
 		else if (this_deref_ref.type == DT_DOTPERCENT)
 		{
+			auto callsite = new CallSite();
+			if (!callsite)
+				return LineError(ERR_OUTOFMEM);
 			if (*this_deref_ref.marker == '(')
 			{
 				infix[infix_count].symbol = SYM_FUNC;
-				this_deref_ref.func = OpFunc_CallMethod;
+				callsite->flags = IT_CALL | EIF_STACK_MEMBER;
 			}
 			else
 			{
 				infix[infix_count].symbol = SYM_DOT;
-				this_deref_ref.func = OpFunc_GetProp;
+				callsite->flags = IT_GET | EIF_STACK_MEMBER;
 			}
-			this_deref_ref.param_count = 2; // Initially two parameters: the object and identifier.
-			this_deref_ref.type = DT_FUNC;
-			infix[infix_count].deref = this_deref;
+			infix[infix_count].callsite = callsite;
 		}
 		else if (this_deref_ref.type == DT_WORDOP)
 		{
@@ -8619,7 +8594,7 @@ unquoted_literal:
 			{
 				// These checks ensure SYM_SUPER doesn't need to be specifically handled by
 				// ExpandExpression(); it will be pushed onto the stack due to IS_OPERAND()
-				// and passed to Op_ObjInvoke via SYM_FUNC.
+				// and handled directly by SYM_FUNC.
 				LPTSTR next_op = omit_leading_whitespace(cp + this_deref_ref.length);
 				if (*next_op != '.' && *next_op != '[')
 					return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
@@ -8635,16 +8610,18 @@ unquoted_literal:
 			// Make a function call to an internal version of Func() which accepts the function
 			// reference and returns the function itself or a closure.  Which that will be depends
 			// on var references which haven't been resolved yet (unless it's a global function).
+			auto callsite = new CallSite();
+			if (!callsite)
+				return LineError(ERR_OUTOFMEM);
+			callsite->func = ExprOp<BIF_Func, FID_FuncClose>();
 			infix[infix_count].symbol = SYM_FUNC;
-			infix[infix_count].deref = this_deref;
+			infix[infix_count].callsite = callsite;
 			infix[infix_count+1].symbol = SYM_OPAREN;
 			infix[infix_count+1].marker = cp;
 			infix[infix_count+2].symbol = SYM_OBJECT;
 			infix[infix_count+2].object = this_deref_ref.func;
 			infix[infix_count+3].symbol = SYM_CPAREN;
 			infix_count += 3; // Loop will increment once more.
-			this_deref_ref.func = ExprOp<BIF_Func, FID_FuncClose>();
-			this_deref_ref.param_count = 0; // Init.
 		}
 		else if (this_deref_ref.type == DT_CONST_INT)
 		{
@@ -8658,7 +8635,7 @@ unquoted_literal:
 			// references are always SYM_VAR and SYM_DYNAMIC has only one meaning.  A later stage
 			// will validate and translate each SYM_VAR as needed.
 			infix[infix_count].symbol = SYM_VAR;
-			infix[infix_count].deref = &this_deref_ref;
+			infix[infix_count].var_deref = &this_deref_ref;
 			infix[infix_count].var_usage = FALSE; // Set default, for detection of how this var ref is used.
 		} // Handling of the var or function in this_deref.
 
@@ -8715,7 +8692,7 @@ unquoted_literal:
 
 	SymbolType stack_symbol, infix_symbol, sym_prev, sym_next;
 	ExprTokenType *this_infix = infix;
-	DerefType *in_param_list = NULL; // While processing the parameter list of a function-call, this points to its deref (for parameter counting and as an indicator).
+	CallSite *in_param_list = nullptr; // The function call site of the parameter list which directly contains the current token.
 
 	for (;;) // While SYM_BEGIN is still on the stack, continue iterating.
 	{
@@ -8770,7 +8747,7 @@ unquoted_literal:
 			}
 			else if (IS_OPAREN_LIKE(stack_symbol))
 			{
-				Func *func = in_param_list->func; // Can be NULL, e.g. for dynamic function calls.
+				Func *func = dynamic_cast<Func*>(in_param_list->func); // Can be NULL, e.g. for dynamic function calls.
 				if (infix_symbol == SYM_COMMA || this_infix[-1].symbol != stack_symbol) // i.e. not an empty parameter list.
 				{
 					// Accessing this_infix[-1] here is necessarily safe since in_param_list is
@@ -8848,7 +8825,7 @@ unquoted_literal:
 						}
 						else if (in_param_list->param_count > func->mParamCount && !func->mIsVariadic)
 						{
-							return LineError(ERR_TOO_MANY_PARAMS, FAIL, in_param_list->marker);
+							return LineError(ERR_TOO_MANY_PARAMS, FAIL, func->mName);
 						}
 						else if (!bif)
 						{
@@ -8912,7 +8889,7 @@ unquoted_literal:
 									// The function either doesn't exist or is not nested.  In both cases, the value
 									// in param_last would always be the result of Func(), so skip the function call.
 									ASSERT(stack_symbol == SYM_OPAREN && stack[stack_count - 2]->symbol == SYM_FUNC);
-									in_param_list = stack[stack_count - 1]->outer_deref;
+									in_param_list = stack[stack_count - 1]->outer_param_list;
 									stack_count -= 2;
 									++this_infix;
 									continue;
@@ -8929,8 +8906,8 @@ unquoted_literal:
 
 				// Enforce mMinParams:
 				if (func && infix_symbol == SYM_CPAREN && in_param_list->param_count < func->mMinParams
-					&& in_param_list->type != DT_VARIADIC) // Check this last since it will probably be rare.
-					return LineError(ERR_TOO_FEW_PARAMS, FAIL, in_param_list->marker);
+					&& !in_param_list->is_variadic())
+					return LineError(ERR_TOO_FEW_PARAMS, FAIL, func->mName);
 			}
 				
 			switch (infix_symbol)
@@ -8940,7 +8917,7 @@ unquoted_literal:
 				--stack_count; // Remove this open-paren from the stack, since it is now complete.
 				++this_infix;  // Since this pair of parentheses is done, move on to the next token in the infix expression.
 
-				in_param_list = stack[stack_count]->outer_deref; // Restore in_param_list to the value it had when SYM_OPAREN was pushed onto the stack.
+				in_param_list = stack[stack_count]->outer_param_list; // Restore in_param_list to the value it had when SYM_OPAREN was pushed onto the stack.
 
 				if (stack[stack_count-1]->symbol == SYM_FUNC) // i.e. topmost item on stack is SYM_FUNC.
 				{
@@ -8955,7 +8932,7 @@ unquoted_literal:
 				//--stack_count; // DON'T DO THIS.
 				stack_top.symbol = SYM_FUNC; // Change this OBRACKET to FUNC (see below).
 				++this_infix; // Since this pair of brackets is done, move on to the next token in the infix expression.
-				in_param_list = stack_top.outer_deref; // Restore in_param_list to the value it had when '[' was pushed onto the stack.					
+				in_param_list = stack_top.outer_param_list; // Restore in_param_list to the value it had when '[' was pushed onto the stack.					
 				goto standard_pop_into_postfix; // Pop the token (now SYM_FUNC) into the postfix array to immediately follow its params.
 			}
 
@@ -8990,9 +8967,9 @@ unquoted_literal:
 // ABOVE CASE FALLS INTO BELOW.
 		case SYM_OPAREN:
 			// Open-parentheses always go on the stack to await their matching close-parentheses.
-			this_infix->outer_deref = in_param_list; // Save current value on the stack with this SYM_OPAREN.
+			this_infix->outer_param_list = in_param_list; // Save current value on the stack with this SYM_OPAREN.
 			if (infix_symbol == SYM_FUNC)
-				in_param_list = this_infix[-1].deref; // Store this SYM_FUNC's deref.
+				in_param_list = this_infix[-1].callsite; // Store this SYM_FUNC's deref.
 			else if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol)
 				&& *this_infix->marker == '(') // i.e. it's not an implicit SYM_OPAREN generated by DT_STRING.
 				return LineError(_T("Missing operator or space before \"(\"."), FAIL, this_infix->marker);
@@ -9003,8 +8980,8 @@ unquoted_literal:
 			
 		case SYM_OBRACKET:
 		case SYM_OBRACE:
-			this_infix->outer_deref = in_param_list; // Save current value on the stack with this SYM_OBRACKET.
-			in_param_list = this_infix->deref; // This deref holds param_count and other info for the current parameter list.
+			this_infix->outer_param_list = in_param_list; // Save current value on the stack with this SYM_OBRACKET.
+			in_param_list = this_infix->callsite;
 			STACK_PUSH(this_infix++); // Push this '[' onto the stack to await its ']'.
 			break;
 
@@ -9034,8 +9011,7 @@ unquoted_literal:
 						if (IS_IDENTIFIER_CHAR(*cp))
 							break;
 					default:
-						return LineError(_T("Invalid property name in object literal."), FAIL
-							, stack[stack_count - 1]->deref->marker); // Too tricky to find the beginning of this "parameter", so just point out which object literal.
+						return LineError(_T("Invalid property name in object literal."));
 					}
 				}
 				++in_param_list->param_count;
@@ -9088,7 +9064,7 @@ unquoted_literal:
 		case SYM_MULTIPLY:
 			if (in_param_list && (this_infix[1].symbol == SYM_CPAREN || this_infix[1].symbol == SYM_CBRACKET)) // Func(params*) or obj.foo[params*]
 			{
-				in_param_list->type = DT_VARIADIC;
+				in_param_list->is_variadic(true);
 				++this_infix;
 				continue;
 			}
@@ -9160,7 +9136,7 @@ unquoted_literal:
 					// assignment operators which have been marked with a non-NULL deref, indicating
 					// that the target is an object's property.  Postfix operators which apply to an
 					// object's property are fully handled in the standard_pop_into_postfix section.
-					if (this_infix->deref) // Object property.  Takes precedence over the next checks.
+					if (this_infix->callsite) // Object property.  Takes precedence over the next checks.
 					{}  // Nothing needed here.
 					else if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
 					{
@@ -9264,79 +9240,77 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 			//	x.y := z	->	x "y" z (set)
 			//	x[y] += z	->	x y (get in-place, assume 2 params) z (add) (set)
 			//	x.y[i] /= z	->	x "y" i 3 (get in-place, n params) z (div) (set)
-			if (this_postfix->deref->func == OpFunc_GetProp
-				|| this_postfix->deref->func == OpFunc_GetItem)
+			if ((this_postfix->callsite->flags & IT_BITMASK) == IT_GET)
 			{
-				bool square_brackets = this_postfix->deref->func == OpFunc_GetItem;
+				bool square_brackets = !this_postfix->callsite->member;
 				
 				if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(infix_symbol))
 				{
+					auto callsite = this_postfix->callsite; // To be reused below.
 					if (infix_symbol != SYM_ASSIGN)
 					{
-						int param_count = this_postfix->deref->param_count; // Number of parameters preceding the assignment operator.
-						if (param_count != 2)
-						{
-							// Pass the actual param count via a separate token:
-							this_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
-							this_postfix->symbol = SYM_INTEGER;
-							this_postfix->value_int64 = param_count;
-							postfix_count++;
-							param_count = 1; // ExpandExpression should consider there to be only one param; the others should be left on the stack.
-						}
-						else
-						{
-							param_count = 0; // Omit the "param count" token to indicate the most common case: two params.
-						}
-						ExprTokenType *&that_postfix = postfix[postfix_count]; // In case above did postfix_count++.
-						that_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
-						that_postfix->symbol = SYM_FUNC;
-						if (  !(that_postfix->deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))  ) // Must be persistent memory, unlike that_postfix itself.
+						// Give it a new callsite since the original one will be reused below
+						// (so that there's no redundant allocation for the SYM_ASSIGN case).
+						this_postfix->callsite = new CallSite();
+						if (!this_postfix->callsite)
 							return LineError(ERR_OUTOFMEM);
-						that_postfix->deref->func = square_brackets
-							? ExprOp<Op_ObjGetInPlace, IT_GET|IF_DEFAULT>()
-							: ExprOp<Op_ObjGetInPlace, IT_GET>();
-						that_postfix->deref->type = DT_FUNC;
-						that_postfix->deref->param_count = param_count;
+						this_postfix->callsite->flags		= callsite->flags | EIF_LEAVE_PARAMS;
+						this_postfix->callsite->member		= callsite->member;
+						this_postfix->callsite->param_count	= callsite->param_count;
 					}
 					else
 					{
 						--postfix_count; // Discard this token; the assignment op will be converted into SYM_FUNC later.
 					}
-					this_infix->deref = stack[stack_count]->deref; // Mark this assignment as an object assignment for the section below.
-					this_infix->deref->func = square_brackets ? OpFunc_SetItem : OpFunc_SetProp;
-					this_infix->deref->param_count++;
-					// Now let this_infix be processed by the next iteration.
+					callsite->flags = IT_SET | (callsite->flags & ~IT_GET);
+					callsite->param_count++; // Include the value to be assigned.
+					this_infix->callsite = callsite;
+					// Now let this_infix be processed by the next iteration, and eventually
+					// have its symbol changed to SYM_FUNC.
 				}
 				else if (!IS_OPERAND(infix_symbol))
 				{
+					stack_symbol = stack[stack_count - 1]->symbol;
 					// Post-increment/decrement has higher precedence, so check for it first:
-					if (infix_symbol == SYM_POST_INCREMENT || infix_symbol == SYM_POST_DECREMENT)
+					bool is_post_op = (infix_symbol == SYM_POST_INCREMENT || infix_symbol == SYM_POST_DECREMENT);
+					if (   is_post_op
+						|| infix_symbol != SYM_OPAREN // If it is something like "++x.y.%expr%", do not apply the "++" to the "x.y" part.
+						&& (stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT)   )
 					{
-						// Replace Op_ObjInvoke with Op_ObjIncDec to perform the operation.
-						this_postfix->deref->func = infix_symbol == SYM_POST_DECREMENT
-							? square_brackets
-								? ExprOp<Op_ObjIncDec, SYM_POST_DECREMENT|IF_DEFAULT>()
-								: ExprOp<Op_ObjIncDec, SYM_POST_DECREMENT>()
-							: square_brackets
-								? ExprOp<Op_ObjIncDec, SYM_POST_INCREMENT|IF_DEFAULT>()
-								: ExprOp<Op_ObjIncDec, SYM_POST_INCREMENT>();
-						++this_infix; // Discard this operator.
-					}
-					else if (infix_symbol != SYM_OPAREN) // if it is something like "++x.y.%expr%", do not apply the "++" to the "x.y" part.
-					{
-						stack_symbol = stack[stack_count - 1]->symbol;
-						if (stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT)
+						auto get_token = this_postfix;
+						auto get_callsite = get_token->callsite;
+
+						auto set_callsite = new CallSite();
+						if (!set_callsite)
+							return LineError(ERR_OUTOFMEM);
+						set_callsite->member      = get_callsite->member;
+						set_callsite->flags       = IT_SET | (get_callsite->flags & ~IT_GET);
+						set_callsite->param_count = get_callsite->param_count + 1;
+						
+						get_callsite->flags |= EIF_LEAVE_PARAMS;
+
+						bool is_increment = is_post_op ? infix_symbol == SYM_POST_INCREMENT
+							: stack_symbol == SYM_PRE_INCREMENT;
+						// Drop the pre/post operator since it's fully handled here, but reuse the token:
+						auto n_token = is_post_op ? this_infix++ : stack[--stack_count];
+						n_token->SetValue(is_increment ? 1 : -1);
+
+						postfix[postfix_count + 1] = n_token;
+						postfix[postfix_count + 2] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+						postfix[postfix_count + 2]->symbol = SYM_ADD;
+						postfix[postfix_count + 3] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+						postfix[postfix_count + 3]->symbol = SYM_FUNC;
+						postfix[postfix_count + 3]->callsite = set_callsite;
+						if (is_post_op)
 						{
-							// Replace Op_ObjInvoke with Op_ObjIncDec to perform the operation.
-							this_postfix->deref->func = stack_symbol == SYM_PRE_DECREMENT
-								? square_brackets
-									? ExprOp<Op_ObjIncDec, SYM_PRE_DECREMENT|IF_DEFAULT>()
-									: ExprOp<Op_ObjIncDec, SYM_PRE_DECREMENT>()
-								: square_brackets
-									? ExprOp<Op_ObjIncDec, SYM_PRE_INCREMENT|IF_DEFAULT>()
-									: ExprOp<Op_ObjIncDec, SYM_PRE_INCREMENT>();	
-							--stack_count; // Discard this operator.
+							// Subtract from the result to get back to the original value.
+							postfix[postfix_count + 4] = n_token;
+							postfix[postfix_count + 5] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+							postfix[postfix_count + 5]->symbol = SYM_SUBTRACT;
+							postfix_count += 5; // Account for the extra tokens; a final ++ is done below.
 						}
+						else
+							postfix_count += 3;
 					}
 				}
 				// Otherwise, IS_OPERAND(infix_symbol) == true, which should only be possible
@@ -9380,9 +9354,9 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 		default:
 			if (!IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(postfix_symbol))
 				break;
-			if (this_postfix->deref)
+			if (this_postfix->callsite)
 			{
-				// An earlier iteration of the SYM_FUNC section above used deref to mark this as an object assignment.
+				// An earlier iteration of the SYM_FUNC section above used callsite to mark this as an object assignment.
 				ExprTokenType *assign_op = this_postfix;
 				if (postfix_symbol != SYM_ASSIGN) // e.g. += or .=
 				{
@@ -9403,10 +9377,9 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					// Insert the concat or math operator before the assignment:
 					this_postfix = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
 					this_postfix->symbol = postfix_symbol;
-					this_postfix->circuit_token = NULL;
 					postfix[++postfix_count] = assign_op;
 				}
-				assign_op->symbol = SYM_FUNC; // An earlier stage already set up the func and param_count.
+				assign_op->symbol = SYM_FUNC; // An earlier stage already set up assign_op->callsite.
 			}
 		}
 		++postfix_count;
@@ -9477,15 +9450,13 @@ end_of_infix_to_postfix:
 		}
 		// Simple calculation: only operands and SYM_FUNC can increase the stack count,
 		// so this finds the worst-case stack requirement (or slightly higher).
-		if (IS_OPERAND(new_token.symbol))
+		if (IS_OPERAND(new_token.symbol) || new_token.symbol == SYM_FUNC)
 			++max_stack;
-		else if (new_token.symbol == SYM_FUNC)
-			max_stack += new_token.deref->func ? 1 : 2; // Reserve 1 extra for dynamic calls.
 		// Resolve variable references for assignments and output vars.  Leave all others
 		// for later to facilitate detecting variables which are not assigned anywhere.
 		if (new_token.symbol == SYM_VAR && new_token.var_usage != Script::VARREF_READ)
 		{
-			new_token.var = g_script.FindOrAddVar(new_token.deref->marker, new_token.deref->length);
+			new_token.var = g_script.FindOrAddVar(new_token.var_deref->marker, new_token.var_deref->length);
 			if (!new_token.var)
 				return FAIL;
 			if (VARREF_IS_WRITE(new_token.var_usage)) // Direct assignment or output var of built-in function.
@@ -13348,7 +13319,7 @@ ResultType Script::PreparseVarRefs()
 				if (token->symbol != SYM_VAR // Not a var.
 					|| token->var_usage != VARREF_READ) // Already resolved by ExpressionToPostfix.
 					continue;
-				if (  !(token->var = FindOrAddVar(token->deref->marker, token->deref->length))  )
+				if (  !(token->var = FindOrAddVar(token->var_deref->marker, token->var_deref->length))  )
 					return FAIL;
 				if (token->var->IsAlias()) // Upvar.
 					continue;

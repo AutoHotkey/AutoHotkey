@@ -2031,7 +2031,7 @@ ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved)
 // Enumerator
 //
 
-bool EnumBase::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
+bool EnumBase::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	Var *var0 = ParamIndexToOutputVar(0);
 	Var *var1 = ParamIndexToOutputVar(1);
@@ -2479,9 +2479,8 @@ ResultType Func::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	if (!aName && !HasOwnMethods())
 	{
-		// Take a shortcut for performance.  Although it prevents hooking via
-		// DefineMethod, this is consistent with direct function calls.
-		Call(aResultToken, aParam, aParamCount, nullptr);
+		// Take a shortcut for performance.
+		Call(aResultToken, aParam, aParamCount);
 		return aResultToken.Result();
 	}
 	return Object::Invoke(IObject_Invoke_PARAMS);
@@ -2492,7 +2491,7 @@ ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	switch (MemberID(aID))
 	{
 	case M_Call:
-		Call(aResultToken, aParam, aParamCount, nullptr);
+		Call(aResultToken, aParam, aParamCount);
 		return aResultToken.Result();
 
 	case M_Bind:
@@ -2538,7 +2537,7 @@ ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 }
 
 
-bool BoundFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
+bool BoundFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	// Combine the bound parameters with the supplied parameters.
 	int bound_count = mParams->Length();
@@ -2601,9 +2600,9 @@ BoundFunc::~BoundFunc()
 }
 
 
-bool Closure::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, IObject *aParamObj)
+bool Closure::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	return mFunc->Call(aResultToken, aParam, aParamCount, aParamObj, mVars);
+	return mFunc->Call(aResultToken, aParam, aParamCount, mVars);
 }
 
 Closure::~Closure()
