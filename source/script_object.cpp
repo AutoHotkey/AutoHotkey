@@ -734,6 +734,7 @@ ObjectMember Map::sMembers[] =
 	Object_Member(CaseSense, CaseSense, 0, IT_SET),
 	Object_Member(Count, Count, 0, IT_GET),
 	Object_Method1(__Enum, 0, 1),
+	Object_Member(__New, Set, 0, IT_CALL, 0, MAXP_VARIADIC),
 	Object_Method1(Clear, 0, 0),
 	Object_Method1(Clone, 0, 0),
 	Object_Method1(Delete, 1, 1),
