@@ -617,7 +617,11 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		// Call getter/setter.
 		auto result = etter->Invoke(aResultToken, IT_CALL, nullptr, this_etter, prop_param, prop_param_count);
 		if (!handle_params_recursively || result == FAIL || result == EARLY_EXIT)
+		{
+			if (result == INVOKE_NOT_HANDLED)
+				return aResultToken.UnknownMemberError(this_etter, IT_CALL, nullptr);
 			return result;
+		}
 		// Otherwise, handle_params_recursively == true.
 		g_script.mCurrLine = caller_line; // For error-reporting.
 		token_for_recursion.CopyValueFrom(aResultToken);
