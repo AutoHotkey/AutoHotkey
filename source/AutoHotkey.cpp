@@ -281,7 +281,10 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 int MainExecuteScript()
 {
+	
+#ifndef _DEBUG
 	__try
+#endif
 	{
 		// Run the auto-execute part at the top of the script (this call might never return):
 		if (!g_script.AutoExecSection()) // Can't run script at all. Due to rarity, just abort.
@@ -296,6 +299,7 @@ int MainExecuteScript()
 		// return (and we never want this to return):
 		MsgSleep(SLEEP_INTERVAL, WAIT_FOR_MESSAGES);
 	}
+#ifndef _DEBUG
 	__except (EXCEPTION_EXECUTE_HANDLER)
 	{
 		LPCTSTR msg;
@@ -314,5 +318,6 @@ int MainExecuteScript()
 		g_script.CriticalError(buf);
 		return ecode;
 	}
+#endif 
 	return 0; // Never executed; avoids compiler warning.
 }

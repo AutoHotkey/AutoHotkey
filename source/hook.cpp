@@ -1293,7 +1293,12 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		{
 			if (!aKeyUp) // Key-up hotkey but the event is a down-event.
 			{
-				this_key.hotkey_to_fire_upon_release = hotkey_id_with_flags; // Seem comments above in other occurrences of this line.
+				// Fixed for v1.1.33.01: Any key-up hotkey already found by the custom combo section
+				// should take precedence over this hotkey.  This fixes "a up::" erroneously taking
+				// precedence over "b & a up::" when "a::" is not defined, which resulted in either
+				// firing the wrong hotkey or firing the right hotkey but not suppressing the key.
+				if (this_key.hotkey_to_fire_upon_release == HOTKEY_ID_INVALID)
+					this_key.hotkey_to_fire_upon_release = hotkey_id_with_flags; // See comments above in other occurrences of this line.
 				hotkey_id_with_flags = HOTKEY_ID_INVALID;
 			}
 			//else hotkey_id_with_flags contains the up-hotkey that is now eligible for firing.
@@ -1330,7 +1335,13 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			}
 			else // hotkey_id_with_flags contains the down-hotkey that is now eligible for firing. But check if there's an up-event to queue up for later.
 				if (hotkey_id_temp < Hotkey::sHotkeyCount)
-					this_key.hotkey_to_fire_upon_release = hotkey_up[hotkey_id_temp];
+				{
+					// Fixed for v1.1.33.01: Any key-up hotkey already found by the custom combo section
+					// should take precedence over this hotkey.  This fixes "b & a up::" not suppressing
+					// "a" when "a::" is defined but disabled by #If and "b & a::" is not defined.
+					if (this_key.hotkey_to_fire_upon_release == HOTKEY_ID_INVALID)
+						this_key.hotkey_to_fire_upon_release = hotkey_up[hotkey_id_temp];
+				}
 		}
 
 		// Check hotkey_id_with_flags again now that the above possibly changed it:
@@ -1403,6 +1414,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				, 0 // Not applicable here, only affects aSingleChar and return value
 				, this_key.no_suppress // Unused and won't be altered because above is "true".
 				, fire_with_no_suppress, NULL); // fire_with_no_suppress is the value we really need to get back from it.
+			this_key.hotkey_down_was_suppressed = !fire_with_no_suppress; // Fixed for v1.1.33.01: If this isn't set, the key-up won't be suppressed even after the key-down is.
 			return fire_with_no_suppress ? AllowKeyToGoToSystem : SuppressThisKey;
 		}
 		//else an eligible hotkey was found.
@@ -2903,7 +2915,7 @@ bool CollectInputHook(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type 
 			if (shift_is_down ? end_if_shift_is_down : end_if_shift_is_not_down)
 			{
 				// The shift state is correct to produce the desired end-key.
-				input->EndByKey(aVK, aSC, input->KeySC[aSC], shift_is_down && !end_if_shift_is_not_down);
+				input->EndByKey(aVK, aSC, input->KeySC[aSC] && (aSC || !input->KeyVK[aVK]), shift_is_down && !end_if_shift_is_not_down);
 				if (!visible)
 					break;
 				continue;
