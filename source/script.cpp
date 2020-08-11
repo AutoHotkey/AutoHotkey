@@ -13370,9 +13370,10 @@ ResultType Script::PreparseVarRefs()
 			}
 			if (arg.type == ARG_TYPE_INPUT_VAR)
 			{
-				if (arg.postfix->var->Type() == VAR_VIRTUAL)
+				if (arg.postfix->symbol != SYM_VAR || arg.postfix->var->Type() == VAR_VIRTUAL)
 				{
-					// Can't be ARG_TYPE_INPUT_VAR after all, as VAR_VIRTUAL requires ExpandExpression.
+					// Can't be ARG_TYPE_INPUT_VAR after all, as VAR_VIRTUAL requires ExpandExpression
+					// and VAR_CONSTANT is converted to SYM_OBJECT above.
 					arg.type = ARG_TYPE_NORMAL;
 				}
 				else
