@@ -9298,7 +9298,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					// Post-increment/decrement has higher precedence, so check for it first:
 					bool is_post_op = (infix_symbol == SYM_POST_INCREMENT || infix_symbol == SYM_POST_DECREMENT);
 					if (   is_post_op
-						|| infix_symbol != SYM_OPAREN // If it is something like "++x.y.%expr%", do not apply the "++" to the "x.y" part.
+						|| infix_symbol != SYM_DOT && infix_symbol != SYM_OPAREN // Do not apply the "++" to the "x.y" part of "++x.y.z" (SYM_DOT) or "++x.y.%z%" (SYM_OPAREN).
 						&& (stack_symbol == SYM_PRE_INCREMENT || stack_symbol == SYM_PRE_DECREMENT)   )
 					{
 						auto get_token = this_postfix;
