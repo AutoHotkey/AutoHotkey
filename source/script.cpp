@@ -12585,7 +12585,7 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCT
 	// stack, which implies no script code can be executing.
 	ASSERT(!g->ThrownToken);
 
-	if (!aLine)
+	if (!aLine || !aLine->mLineNumber) // The mLineNumber check is a workaround for BIF_PerformAction.
 		aLine = mCurrLine;
 
 	ResultToken *token;
