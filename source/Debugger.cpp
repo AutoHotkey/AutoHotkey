@@ -1721,7 +1721,7 @@ int Debugger::property_get_or_value(char **aArgV, int aArgCount, char *aTransact
 	{
 	case PropVar: err = GetPropertyInfo(*prop.var, prop); break;
 	case PropVarBkp: err = GetPropertyInfo(*prop.bkp, prop); break;
-	case PropEnum: prop.value.SetValue(_T(""), 0); // No break.
+	//case PropEnum: // value already set by ParsePropertyName().
 	default: err = DEBUGGER_E_OK; break;
 	}
 	if (!err)
