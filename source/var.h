@@ -483,13 +483,14 @@ public:
 		if ((var.mAttrib & (VAR_ATTRIB_IS_INT64 | VAR_ATTRIB_IS_DOUBLE | VAR_ATTRIB_IS_OBJECT | VAR_ATTRIB_UNINITIALIZED)) != 0
 			// For static/global variables, return a direct pointer to Contents() and
 			// let the caller copy it into persistent memory if needed.
-			|| !var.IsNonStaticLocal())
+			|| (var.Scope() & (VAR_LOCAL_STATIC | VAR_GLOBAL)))
 		{
 			var.ToToken(aResultToken);
 			return true;
 		}
+		// var is either local or a free var (this is an upvar/downvar).
 		if (mType == VAR_ALIAS)
-			// This var is an alias for another var.  Even though the target is local,
+			// This var is an alias for another var.  Even if the target is local,
 			// it's most likely not a local of the same function, so not about to be freed.
 			return false;
 		// Var is local.  Since the function is returning, the var is about to be freed.
