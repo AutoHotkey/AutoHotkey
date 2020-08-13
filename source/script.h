@@ -396,7 +396,7 @@ struct DerefType
 
 struct CallSite
 {
-	IObject *func = nullptr;
+	Func *func = nullptr;
 	LPTSTR member = nullptr;
 	int flags = IT_CALL;
 	int param_count = 0;
@@ -1360,6 +1360,7 @@ public:
 	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	
+	ResultType ValidateVarUsage(Var *aVar, int aUsage);
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType);
 	ResultType LineUnexpectedError();
 
@@ -3098,8 +3099,8 @@ public:
 	ResultType RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), ResultType aErrorType = FAIL_OR_OK, Line *aLine = nullptr);
 
 	ResultType ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting);
-	enum VarRefUsageType { VARREF_READ = 0, VARREF_BYREF, VARREF_ISSET
-		, VARREF_DYNAMIC_PARAM, VARREF_LVALUE, VARREF_OUTPUT_VAR };
+	enum VarRefUsageType { VARREF_READ = 0, VARREF_REF, VARREF_ISSET
+		, VARREF_LVALUE, VARREF_OUTPUT_VAR };
 #define VARREF_IS_WRITE(is_lvalue) ((is_lvalue) >= Script::VARREF_LVALUE)
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType = VARREF_LVALUE);
 
@@ -3256,7 +3257,6 @@ BIF_DECL(BIF_StrPtr);
 BIF_DECL(BIF_IsLabel);
 BIF_DECL(BIF_IsFunc);
 BIF_DECL(BIF_Func);
-BIF_DECL(BIF_IsByRef);
 BIF_DECL(BIF_IsTypeish);
 BIF_DECL(BIF_IsSet);
 BIF_DECL(BIF_GetKeyState);
@@ -3431,6 +3431,7 @@ double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE);
 LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL, size_t *aLength = NULL);
 ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOutput);
 StringCaseSenseType TokenToStringCase(ExprTokenType& aToken);
+Var *TokenToOutputVar(ExprTokenType &aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
 Func *TokenToFunc(ExprTokenType &aToken);
 IObject *TokenToFunctor(ExprTokenType &aToken);

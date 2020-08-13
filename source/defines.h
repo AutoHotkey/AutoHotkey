@@ -209,7 +209,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_MULTIPLY, SYM_DIVIDE
 	, SYM_POWER
 	, SYM_LOWNOT  // LOWNOT is the word "not", the low precedence counterpart of !
-	, SYM_NEGATIVE, SYM_POSITIVE, SYM_HIGHNOT, SYM_BITNOT  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
+	, SYM_NEGATIVE, SYM_POSITIVE, SYM_REF, SYM_HIGHNOT, SYM_BITNOT  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
 #define SYM_OVERRIDES_POWER_ON_STACK(symbol) ((symbol) >= SYM_LOWNOT && (symbol) <= SYM_BITNOT) // Check lower bound first for short-circuit performance.
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
 #define SYM_INCREMENT_OR_DECREMENT_IS_PRE(symbol) ((symbol) >= SYM_PRE_INCREMENT) // Caller has verified symbol is an INCREMENT or DECREMENT operator.
@@ -402,6 +402,13 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 		return CopyValueFrom(other); // Currently nothing needs to be done differently.
 	}
 
+	void SetVarRef(Var *aVar)
+	{
+		symbol = SYM_VAR;
+		var = aVar;
+		var_usage = 1; // FIXME: VARREF_REF
+	}
+
 	// Assignments yield a variable using this function so that it can be passed ByRef,
 	// and because in some cases it avoids an extra memory allocation or string copy
 	// (that would otherwise be necessary to ensure the string value is not freed or
@@ -412,6 +419,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	{
 		symbol = SYM_VAR;
 		var = aVar;
+		var_usage = 0;
 	}
 
 private: // Force code to use one of the CopyFrom() methods, for clarity.

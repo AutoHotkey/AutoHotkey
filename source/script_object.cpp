@@ -349,10 +349,8 @@ Array *Array::FromEnumerable(ExprTokenType &aEnumerable)
 	if (result == FAIL || result == EARLY_EXIT)
 		return nullptr;
 	
-	Var var;
-	ExprTokenType tvar, *param = &tvar;
-	tvar.symbol = SYM_VAR;
-	tvar.var = &var;
+	auto varref = new VarRef();
+	ExprTokenType tvar { varref }, *param = &tvar;
 	Array *vargs = Array::Create();
 	for (;;)
 	{
@@ -366,10 +364,10 @@ Array *Array::FromEnumerable(ExprTokenType &aEnumerable)
 		if (result != CONDITION_TRUE)
 			break;
 		ExprTokenType value;
-		var.ToTokenSkipAddRef(value);
+		varref->ToTokenSkipAddRef(value);
 		vargs->Append(value);
 	}
-	var.Free();
+	varref->Release();
 	enumerator->Release();
 	return vargs;
 }

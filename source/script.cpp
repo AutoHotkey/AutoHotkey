@@ -199,7 +199,6 @@ FuncEntry g_BIF[] =
 	BIF1(Integer, 1, 1),
 	BIFi(IsAlnum, 1, 2, BIF_IsTypeish, VAR_TYPE_ALNUM),
 	BIFi(IsAlpha, 1, 2, BIF_IsTypeish, VAR_TYPE_ALPHA),
-	BIF1(IsByRef, 1, 1, {1}),
 	BIFi(IsDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_DIGIT),
 	BIFi(IsFloat, 1, 1, BIF_IsTypeish, VAR_TYPE_FLOAT),
 	BIF1(IsFunc, 1, 1),
@@ -208,7 +207,7 @@ FuncEntry g_BIF[] =
 	BIFi(IsLower, 1, 2, BIF_IsTypeish, VAR_TYPE_LOWER),
 	BIFi(IsNumber, 1, 1, BIF_IsTypeish, VAR_TYPE_NUMBER),
 	BIF1(IsObject, 1, 1),
-	BIF1(IsSet, 1, 1),
+	BIF1(IsSet, 1, 1, {1}),
 	BIFi(IsSpace, 1, 1, BIF_IsTypeish, VAR_TYPE_SPACE),
 	BIFi(IsTime, 1, 1, BIF_IsTypeish, VAR_TYPE_TIME),
 	BIFi(IsUpper, 1, 2, BIF_IsTypeish, VAR_TYPE_UPPER),
@@ -5977,24 +5976,14 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		if (*param_start == ')') // No more params.
 			break;
 
-		// Must start the search at param_start, not param_start+1, so that something like fn(, x) will be properly handled:
-		if (   !*param_start || !(param_end = StrChrAny(param_start, _T(", \t:=*)")))   ) // Look for first comma, space, tab, =, or close-paren.
-			return ScriptError(ERR_MISSING_CLOSE_PAREN, aBuf);
-
 		if (param_count >= MAX_FUNCTION_PARAMS)
 			return ScriptError(_T("Too many params."), param_start); // Short msg since so rare.
 		FuncParam &this_param = param[param_count]; // For performance and convenience.
 
-		// To enhance syntax error catching, consider ByRef to be a keyword; i.e. that can never be the name
-		// of a formal parameter:
-		if (this_param.is_byref = !tcslicmp(param_start, _T("ByRef"), param_end - param_start)) // ByRef.
-		{
-			// Omit the ByRef keyword from further consideration:
-			param_start = omit_leading_whitespace(param_end);
-			if (   !*param_start || !(param_end = StrChrAny(param_start, _T(", \t:=*)")))   ) // Look for first comma, space, tab, =, or close-paren.
-				return ScriptError(ERR_MISSING_CLOSE_PAREN, aBuf);
-		}
-
+		if (this_param.is_byref = (*param_start == '&')) // ByRef.
+			param_start = omit_leading_whitespace(param_start + 1);
+		
+		param_end = find_identifier_end(param_start);
 		param_length = param_end - param_start;
 		if (param_length)
 		{
@@ -7765,34 +7754,6 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 				if (parent->mActionType == ACT_FINALLY)
 					return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			break;
-
-		case ACT_FOR:
-			// Construct these arrays so that PerformLoopFor doesn't need to.
-			// This relies on ARG_TYPE_OUTPUT_VAR always being resolved at load-time,
-			// prior to this function being called (which is currently always the case).
-			int var_count = line->mArgc - 1;
-			line->mAttribute = SimpleHeap::Malloc(
-				sizeof(ExprTokenType*) * var_count +
-				sizeof(ExprTokenType) * var_count
-			);
-			auto param = (ExprTokenType**)line->mAttribute;
-			auto token = (ExprTokenType*)(param + var_count);
-			for (int i = 0; i < var_count; ++i)
-			{
-				param[i] = token + i;
-				if (line->mArg[i].type == ARG_TYPE_OUTPUT_VAR)
-				{
-					token[i].symbol = SYM_VAR;
-					token[i].var = VAR(line->mArg[i]);
-				}
-				else // Omitted.
-				{
-					token[i].symbol = SYM_MISSING;
-					token[i].marker = _T("");
-					token[i].marker_length = 0;
-				}
-			}
-			break;
 		}
 		// Check for unreachable code.
 		if (g_Warn_Unreachable)
@@ -7889,7 +7850,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 		, 62, 62	     // SYM_MULTIPLY, SYM_DIVIDE
 		, 73             // SYM_POWER (see note below). Changed to right-associative for v2.
 		, 25             // SYM_LOWNOT (the word "NOT": the low precedence version of logical-not).  HAS AN ODD NUMBER to indicate right-to-left evaluation order so that things like "not not var" are supports (which can be used to convert a variable into a pure 1/0 boolean value).
-		, 67,67,67,67    // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT
+		, 67,67,67,67,67 // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_REF, SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT
 		// NOTE: THE ABOVE MUST BE AN ODD NUMBER to indicate right-to-left evaluation order, which was added in v1.0.46 to support consecutive unary operators such as !*var !!var (!!var can be used to convert a value into a pure 1/0 boolean).
 //		, 68             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 77, 77         // SYM_PRE_INCREMENT, SYM_PRE_DECREMENT (higher precedence than SYM_POWER because it doesn't make sense to evaluate power first because that would cause ++/-- to fail due to operating on a non-lvalue.
@@ -8256,7 +8217,12 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						this_infix_item.symbol = SYM_ASSIGN_BITAND;
 					}
 					else
-						this_infix_item.symbol = SYM_BITAND;
+					{
+						// Differentiate between unary "take a reference to" and the "bitwise and" operator:
+						// See '-' above for more details:
+						this_infix_item.symbol = (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
+							? SYM_BITAND : SYM_REF;
+					}
 					break;
 				case '|':
 					if (cp1 == '|')
@@ -8593,7 +8559,7 @@ unquoted_literal:
 		{
 			infix[infix_count].symbol = SYM_DYNAMIC;
 			infix[infix_count].var = nullptr; // Indicate this is a double-deref.
-			infix[infix_count].var_usage = FALSE; // Set default.
+			infix[infix_count].var_usage = Script::VARREF_READ; // Set default.
 		}
 		else if (this_deref_ref.type == DT_DOTPERCENT)
 		{
@@ -8660,7 +8626,7 @@ unquoted_literal:
 			// will validate and translate each SYM_VAR as needed.
 			infix[infix_count].symbol = SYM_VAR;
 			infix[infix_count].var_deref = &this_deref_ref;
-			infix[infix_count].var_usage = FALSE; // Set default, for detection of how this var ref is used.
+			infix[infix_count].var_usage = Script::VARREF_READ; // Set default, for detection of how this var ref is used.
 		} // Handling of the var or function in this_deref.
 
 		// Finally, jump over the dereference text. Note that in the case of an expression, there might not
@@ -8771,7 +8737,7 @@ unquoted_literal:
 			}
 			else if (IS_OPAREN_LIKE(stack_symbol))
 			{
-				Func *func = dynamic_cast<Func*>(in_param_list->func); // Can be NULL, e.g. for dynamic function calls.
+				Func *func = in_param_list->func; // Can be NULL, e.g. for dynamic function calls.
 				if (infix_symbol == SYM_COMMA || this_infix[-1].symbol != stack_symbol) // i.e. not an empty parameter list.
 				{
 					// Accessing this_infix[-1] here is necessarily safe since in_param_list is
@@ -8816,32 +8782,7 @@ unquoted_literal:
 
 						auto *bif = func && func->IsBuiltIn() ? ((BuiltInFunc *)func)->mBIF : nullptr;
 
-						// This retrieves the last token in the parameter; if that's SYM_VAR or SYM_DYNAMIC,
-						// it will end up being passed to this parameter, so should be flagged as a potential
-						// l-value unless this parameter is known to be input-only.
-						// Known limitation: If the parameter's value is determined by a short-circuit op,
-						// the first branch won't be flagged; e.g. f(1 ? "" : a).
 						ExprTokenType &param_last = *postfix[postfix_count-1];
-						if (param_last.symbol == SYM_VAR || param_last.symbol == SYM_DYNAMIC)
-						{
-							if (!func || func->mName[0] == '<') // Relies on ExprOpFunc using "<object>" as the name.
-							{
-								// Mark this as a potential l-value.
-								param_last.var_usage = Script::VARREF_DYNAMIC_PARAM;
-							}
-							else if (func->ArgIsOutputVar(in_param_list->param_count - 1))
-							{
-								// Mark this as an l-value.  If it is a double-deref, it will either produce a writable
-								// var as SYM_VAR or will throw an error.  Other load-time checks will raise an error
-								// if this is SYM_VAR and it turns out to be a constant/read-only variable.
-								param_last.var_usage = bif ? Script::VARREF_OUTPUT_VAR : Script::VARREF_BYREF;
-							}
-							else if (bif == BIF_IsSet)
-							{
-								// Mark this so that IsSet(v) suppresses any warnings about v lacking an assignment.
-								param_last.var_usage = Script::VARREF_ISSET;
-							}
-						}
 
 						if (!func)
 						{
@@ -8856,17 +8797,6 @@ unquoted_literal:
 							// Skip the checks below.
 						}
 						// The rest of the checks are for calls to built-in functions only:
-						else if (func->ArgIsOutputVar(in_param_list->param_count - 1)
-							|| bif == BIF_IsSet)
-						{
-							if (param_last.symbol != SYM_VAR && param_last.symbol != SYM_DYNAMIC
-								&& !IS_OPERATOR_VALID_LVALUE(param_last.symbol))
-							{
-								sntprintf(number_buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
-									, in_param_list->param_count, func->mName);
-								return LineError(number_buf);
-							}
-						}
 						else if (postfix[postfix_count-1][-1].symbol != SYM_COMMA && postfix[postfix_count-1][-1].symbol != stack_symbol)
 						{
 							// This parameter is more than a single operand, so may be something which can't be
@@ -9362,6 +9292,37 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 		case SYM_IFF_THEN:
 			return LineError(_T("A \"?\" is missing its \":\""), FAIL, this_postfix->marker);
 
+		case SYM_REF:
+			postfix_symbol = postfix[postfix_count - 1]->symbol;
+			if (in_param_list && in_param_list->func // Currently in a function's parameter list,
+				&& (infix_symbol == SYM_COMMA || infix_symbol == SYM_CPAREN) // at the end of a parameter,
+				&& (stack[stack_count - 1]->symbol == SYM_OPAREN) // this is the last operator in this parameter,
+				&& in_param_list->func->ArgIsOutputVar(in_param_list->param_count)) // and it's an output parameter.
+			{
+				if (in_param_list->func->IsBuiltIn()
+					&& (postfix_symbol == SYM_VAR || postfix_symbol == SYM_DYNAMIC))
+				{
+					// Set var_usage to indicate which vars are valid in this context.
+					auto bif = ((BuiltInFunc *)in_param_list->func)->mBIF;
+					postfix[postfix_count - 1]->var_usage =
+						bif == BIF_VarSetStrCapacity ? Script::VARREF_REF :
+						bif == BIF_IsSet			 ? Script::VARREF_ISSET :
+													   Script::VARREF_OUTPUT_VAR;
+					// This parameter supports passing SYM_VAR with var_usage != VARREF_READ
+					// in place of a VarRef (via TokenToOutputVar), so drop this SYM_REF.
+					continue;
+				}
+				this_postfix->var_usage = Script::VARREF_REF; // This SYM_REF may produce SYM_VAR or a VarRef.
+				this_postfix->callsite = in_param_list;
+			}
+			else
+				this_postfix->var_usage = Script::VARREF_READ; // This SYM_REF should produce a VarRef.
+			if (postfix_symbol == SYM_VAR || postfix_symbol == SYM_DYNAMIC)
+				postfix[postfix_count - 1]->var_usage = Script::VARREF_REF;
+			else if (!IS_OPERATOR_VALID_LVALUE(postfix_symbol))
+				return LineError(_T("\"&\" requires a variable."));
+			break;
+
 		case SYM_PRE_INCREMENT:
 		case SYM_PRE_DECREMENT:
 			if (postfix_count)
@@ -9483,18 +9444,8 @@ end_of_infix_to_postfix:
 			new_token.var = g_script.FindOrAddVar(new_token.var_deref->marker, new_token.var_deref->length);
 			if (!new_token.var)
 				return FAIL;
-			if (VARREF_IS_WRITE(new_token.var_usage)) // Direct assignment or output var of built-in function.
-			{
-				if (new_token.var->IsReadOnly())
-					return VarIsReadOnlyError(new_token.var, new_token.var_usage);
-				// Leave this as SYM_VAR even if it's VAR_VIRTUAL, which is supported for this var_usage.
-			}
-			else if (new_token.var->Type() == VAR_VIRTUAL
-				&& new_token.var_usage != Script::VARREF_ISSET) // Let IsSet(A_Whatever) work.
-			{
-				// Convert it to SYM_DYNAMIC for evaluation by ExpandExpression.
-				new_token.symbol = SYM_DYNAMIC;
-			}
+			if (!ValidateVarUsage(new_token.var, new_token.var_usage))
+				return FAIL;
 			new_token.var->MarkAssignedSomewhere();
 			if (aArg.type == ARG_TYPE_OUTPUT_VAR)
 			{
@@ -9503,7 +9454,8 @@ end_of_infix_to_postfix:
 			}
 		}
 		// Count the tokens which potentially use to_free[].
-		if (new_token.symbol == SYM_DYNAMIC || new_token.symbol == SYM_FUNC || new_token.symbol == SYM_CONCAT)
+		if (new_token.symbol == SYM_DYNAMIC || new_token.symbol == SYM_FUNC
+			|| new_token.symbol == SYM_CONCAT || new_token.symbol == SYM_REF)
 			++max_alloc;
 	}
 	aArg.postfix[postfix_count].symbol = SYM_INVALID;  // Special item to mark the end of the array.
@@ -10752,7 +10704,6 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 		// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
 		return result;
 	
-	auto var_param = (ExprTokenType **)mAttribute; // See PreparseCommands.
 	int var_count = mArgc - 1;
 	
 	IObject *enumerator;
@@ -10763,18 +10714,32 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 
 	// "Localize" the loop variables.
 	auto var_bkp = (VarBkp *)_alloca(sizeof(VarBkp) * var_count);
+	auto var_param = (ExprTokenType**)_alloca(sizeof(ExprTokenType*) * var_count);
 	for (int i = 0; i < var_count; ++i)
-		if (var_param[i]->symbol == SYM_VAR)
+	{
+		ExprTokenType &token = *(ExprTokenType*)_alloca(sizeof(ExprTokenType));
+		var_param[i] = &token;
+		if (mArg[i].type == ARG_TYPE_OUTPUT_VAR)
 		{
-			var_param[i]->var->Backup(var_bkp[i]);
-			// If var was a ByRef parameter or upvar, Backup() has backed up the alias and
-			// converted it to a normal local variable, so any assignment in the loop below
-			// will not affect the original target variable, only the local alias.
+			auto var = VAR(mArg[i]);
+			var->Backup(var_bkp[i]);
+			token.symbol = SYM_OBJECT;
+			token.object = var->GetRef();
+			if (token.object)
+				continue;
+			result = FAIL;
+			var_count = i + 1; // Restore var_bkp and free any previous refs.
 		}
+		// Omitted.
+		token.symbol = SYM_MISSING;
+		token.marker = _T("");
+		token.marker_length = 0;
+	}
 
 	// Now that the enumerator expression has been evaluated, init A_Index:
 	g.mLoopIteration = 1;
 
+	if (result != FAIL)
 	for (;; ++g.mLoopIteration)
 	{
 		result = CallEnumerator(enumerator, var_param, var_count, true);
@@ -10810,11 +10775,12 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 	} // for()
 	enumerator->Release();
 	for (int i = 0; i < var_count; ++i)
-		if (var_param[i]->symbol == SYM_VAR)
-		{
-			var_param[i]->var->Free();
-			var_param[i]->var->Restore(var_bkp[i]);
-		}
+	{
+		if (mArg[i].type == ARG_TYPE_OUTPUT_VAR)
+			VAR(mArg[i])->Restore(var_bkp[i]);
+		if (var_param[i]->symbol == SYM_OBJECT)
+			var_param[i]->object->Release();
+	}
 	return result; // The script's loop is now over.
 }
 
@@ -12930,12 +12896,25 @@ ResultType Script::ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting
 }
 
 
+ResultType Line::ValidateVarUsage(Var *aVar, int aUsage)
+{
+	if (   (aUsage != Script::VARREF_READ)
+		&& (aUsage != Script::VARREF_ISSET) // IsSet permits any var.
+		&& (aUsage == Script::VARREF_REF
+			? aVar->Type() != VAR_NORMAL // Aliasing VAR_VIRTUAL is currently unsupported.
+			: aVar->IsReadOnly())   )
+		return VarIsReadOnlyError(aVar, aUsage);
+	return OK;
+}
+
 ResultType Script::VarIsReadOnlyError(Var *aVar, int aErrorType)
 {
 	TCHAR buf[127];
-	sntprintf(buf, _countof(buf), _T("This %s %s.")
+	sntprintf(buf, _countof(buf), _T("This %s cannot %s.")
 		, VarKindForErrorMessage(aVar)
-		, aErrorType == VARREF_LVALUE ? _T("cannot be assigned a value") : _T("cannot be used as an output variable"));
+		, aErrorType == VARREF_LVALUE ? _T("be assigned a value")
+		: aErrorType == VARREF_REF ? _T("have its reference taken")
+		: _T("be used as an output variable"));
 	return ScriptError(buf, aVar->mName);
 }
 

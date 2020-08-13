@@ -1164,13 +1164,8 @@ void Debugger::PropertyWriter::WriteEnumItems(IObject *aEnumerable, int aStart, 
 	
 	if (mProp.max_depth)
 	{
-		Var vkey, vval;
-		ExprTokenType tkey, tval;
-		ExprTokenType tparam[2], *param[] = { tparam, tparam + 1 };
-		tparam[0].symbol = SYM_VAR;
-		tparam[0].var = &vkey;
-		tparam[1].symbol = SYM_VAR;
-		tparam[1].var = &vval;
+		auto vkey = new VarRef(), vval = new VarRef();
+		ExprTokenType tparam[] = { vkey, vval }, *param[] = { tparam, tparam + 1 };
 		for (int i = 0; i < aEnd; ++i)
 		{
 			result = CallEnumerator(enumerator, param, 2, false);
@@ -1178,13 +1173,14 @@ void Debugger::PropertyWriter::WriteEnumItems(IObject *aEnumerable, int aStart, 
 				break;
 			if (i >= aStart)
 			{
-				vkey.ToTokenSkipAddRef(tkey);
-				vval.ToTokenSkipAddRef(tval);
+				ExprTokenType tkey, tval;
+				vkey->ToTokenSkipAddRef(tkey);
+				vval->ToTokenSkipAddRef(tval);
 				WriteProperty(tkey, tval);
 			}
 		}
-		vkey.Free();
-		vval.Free();
+		vkey->Release();
+		vval->Release();
 	}
 
 	if (write_main_property)

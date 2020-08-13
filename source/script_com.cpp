@@ -1547,32 +1547,33 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	
 	for (UINT i = 1; i <= cArgs; ++i)
 	{
-		VARIANTARG *pvar = &pDispParams->rgvarg[cArgs-i];
-		if (pvar->vt & VT_BYREF)
+		VARIANTARG &varg = pDispParams->rgvarg[cArgs-i];
+		if (varg.vt & VT_BYREF)
 		{
 			// Allocate and pass a temporary Var to transparently support ByRef.
-			param_token[i].symbol = SYM_VAR;
-			param_token[i].var = new (_alloca(sizeof(Var))) Var();
-			if (pvar->vt == (VT_BYREF | VT_BSTR))
+			auto varref = new VarRef();
+			param_token[i].SetValue(varref);
+			param_token[i].mem_to_free = nullptr;
+			if (varg.vt == (VT_BYREF | VT_BSTR))
 			{
 				// Avoid an unnecessary string-copy that would be made by VariantCopyInd().
-				param_token[i].var->AssignStringW(*pvar->pbstrVal, SysStringLen(*pvar->pbstrVal));
+				varref->AssignStringW(*varg.pbstrVal, SysStringLen(*varg.pbstrVal));
 			}
-			else if (pvar->vt == (VT_BYREF | VT_VARIANT))
+			else if (varg.vt == (VT_BYREF | VT_VARIANT))
 			{
-				AssignVariant(*param_token[i].var, *pvar->pvarVal);
+				AssignVariant(*varref, *varg.pvarVal);
 			}
 			else
 			{
 				VARIANT value;
 				value.vt = VT_EMPTY;
-				VariantCopyInd(&value, pvar);
-				AssignVariant(*param_token[i].var, value, false); // false causes value's memory/ref to be transferred to var or freed.
+				VariantCopyInd(&value, &varg);
+				AssignVariant(*varref, value, false); // false causes value's memory/ref to be transferred to var or freed.
 			}
 		}
 		else
 		{
-			VariantToToken(*pvar, param_token[i]);
+			VariantToToken(varg, param_token[i]);
 		}
 		param[i] = &param_token[i];
 	}
@@ -1650,16 +1651,16 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	result_token.Free();
 	for (UINT i = 1; i <= cArgs; ++i)
 	{
-		if (param_token[i].symbol == SYM_VAR)
+		VARIANTARG &varg = pDispParams->rgvarg[cArgs-i];
+		if (varg.vt & VT_BYREF)
 		{
-			auto &varg = pDispParams->rgvarg[cArgs-i];
+			ASSERT(param_token[i].symbol == SYM_OBJECT && dynamic_cast<VarRef *>(param_token[i].object));
+			auto varref = (VarRef *)param_token[i].object;
 			ExprTokenType value;
-			param_token[i].var->ToTokenSkipAddRef(value);
+			varref->ToTokenSkipAddRef(value);
 			TokenToVarType(value, varg.vt & ~VT_BYREF, varg.pvRecord);
-			param_token[i].var->Free();
 		}
-		else
-			param_token[i].Free();
+		param_token[i].Free();
 	}
 
 	return result_to_return;

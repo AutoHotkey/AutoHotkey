@@ -6211,10 +6211,11 @@ BIF_DECL(BIF_SplitPath)
 	LPTSTR mem_to_free = nullptr;
 	_f_param_string(aFileSpec, 0);
 	Var *vars[6];
-	for (int i = 0; i < _countof(vars); ++i)
+	for (int i = 1; i < _countof(vars); ++i)
 		vars[i] = ParamIndexToOutputVar(i);
-	if (vars[0]) // Check for overlap of input/output vars.
+	if (aParam[0]->symbol == SYM_VAR) // Check for overlap of input/output vars.
 	{
+		vars[0] = aParam[0]->var;
 		// There are cases where this could be avoided, such as by careful ordering of the assignments
 		// in SplitPath(), or when there's only one output var.  Also, real paths are generally short
 		// enough that stack memory could be used.  However, perhaps simple is best in this case.
@@ -10938,31 +10939,36 @@ has_valid_return_type:
 	// It has also verified that the dyna_param array is large enough to hold all of the args.
 	for (arg_count = 0, i = 0; i < aParamCount; ++arg_count, i += 2)  // Same loop as used later below, so maintain them together.
 	{
+		// Store each arg into a dyna_param struct, using its arg type to determine how.
+		DYNAPARM &this_dyna_param = dyna_param[arg_count];
+
 		arg_type_string = TokenToString(*aParam[i]); // aBuf not needed since numbers and "" are equally invalid.
-
-		ExprTokenType &this_param = *aParam[i + 1];         // Resolved for performance and convenience.
-		DYNAPARM &this_dyna_param = dyna_param[arg_count];  //
-
-		// Store the each arg into a dyna_param struct, using its arg type to determine how.
 		ConvertDllArgType(arg_type_string, this_dyna_param);
-
 		if (this_dyna_param.type == DLL_ARG_INVALID)
 			_f_throw(ERR_INVALID_ARG_TYPE);
 
-		IObject *this_param_obj = TokenToObject(this_param);
+		IObject *this_param_obj = TokenToObject(*aParam[i + 1]);
 		if (this_param_obj)
 		{
-			// Support Buffer.Ptr, but only for "Ptr" type.  All other types are reserved for possible
-			// future use, which might be general like obj.ToValue(), or might be specific to DllCall
-			// or the particular type of this arg (Int, Float, etc.).
-			if (ctoupper(*arg_type_string) == 'P')
+			if ((this_dyna_param.passed_by_address || this_dyna_param.type == DLL_ARG_STR)
+				&& dynamic_cast<VarRef*>(this_param_obj))
 			{
+				aParam[i + 1] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+				aParam[i + 1]->SetVarRef(static_cast<VarRef*>(this_param_obj));
+				this_param_obj = nullptr;
+			}
+			else if (ctoupper(*arg_type_string) == 'P')
+			{
+				// Support Buffer.Ptr, but only for "Ptr" type.  All other types are reserved for possible
+				// future use, which might be general like obj.ToValue(), or might be specific to DllCall
+				// or the particular type of this arg (Int, Float, etc.).
 				GetBufferObjectPtr(aResultToken, this_param_obj, this_dyna_param.value_uintptr);
 				if (aResultToken.Exited())
 					return;
 				continue;
 			}
 		}
+		ExprTokenType &this_param = *aParam[i + 1];
 
 		switch (this_dyna_param.type)
 		{
@@ -11247,8 +11253,8 @@ has_valid_return_type:
 			continue;
 		}
 
-		if (this_param.symbol != SYM_VAR) // Output parameters are copied back only if its counterpart parameter is a naked variable.
-			continue;
+		if (this_param.symbol != SYM_VAR || this_param.var_usage == Script::VARREF_READ)
+			continue; // Output parameters are copied back only if provided with a VarRef (&variable).
 		Var &output_var = *this_param.var;
 
 		if (!this_dyna_param.passed_by_address)
@@ -13537,28 +13543,6 @@ IObject *UserFunc::CloseIfNeeded()
 }
 
 
-BIF_DECL(BIF_IsByRef)
-{
-	if (aParam[0]->symbol != SYM_VAR)
-	{
-		// Incorrect usage.
-		_f_throw(ERR_PARAM1_INVALID);
-	}
-	else
-	{
-		// Return true if the var is a function parameter which currently holds an alias for
-		// another var, unless it is a downvar (an alias for a free variable, rather than one
-		// passed by the caller).  The current implementation does not allow ByRef parameters
-		// to be downvars; if that is changed, this will need to differentiate between an alias
-		// to one of this function's own free variables and an alias to any other variable
-		// (including free variables from another function, or another instance of this function).
-		Var &var = *aParam[0]->var;
-		_f_return_b(var.ResolveAlias() != &var
-			&& (var.Scope() & (VAR_LOCAL_FUNCPARAM | VAR_DOWNVAR)) == VAR_LOCAL_FUNCPARAM);
-	}
-}
-
-
 
 BIF_DECL(BIF_IsTypeish)
 {
@@ -13725,10 +13709,10 @@ type_mismatch:
 
 BIF_DECL(BIF_IsSet)
 {
-	if (aParam[0]->symbol != SYM_VAR)
+	Var *var = ParamIndexToOutputVar(0);
+	if (!var)
 		_f_throw(ERR_PARAM1_INVALID);
-
-	_f_return_b(!aParam[0]->var->IsUninitializedNormalVar());
+	_f_return_b(!var->IsUninitializedNormalVar());
 }
 
 
@@ -16928,6 +16912,8 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 	return OK; // Since above didn't return, indicate success.
 }
 
+
+
 StringCaseSenseType TokenToStringCase(ExprTokenType& aToken)
 {
 	// Pure integers 1 and 0 corresponds to SCS_SENSITIVE and SCS_INSENSITIVE, respectively.
@@ -16960,6 +16946,17 @@ StringCaseSenseType TokenToStringCase(ExprTokenType& aToken)
 						: (int_val == 0 ? SCS_INSENSITIVE	// 0	- Insensitive
 										: SCS_INVALID);		// else - invalid.
 }
+
+
+
+Var *TokenToOutputVar(ExprTokenType &aToken)
+{
+	if (aToken.symbol == SYM_VAR && aToken.var_usage != Script::VARREF_READ)
+		return aToken.var;
+	return dynamic_cast<VarRef *>(TokenToObject(aToken));
+}
+
+
 
 IObject *TokenToObject(ExprTokenType &aToken)
 // L31: Returns IObject* from SYM_OBJECT or SYM_VAR (where var->HasObject()), NULL for other tokens.
