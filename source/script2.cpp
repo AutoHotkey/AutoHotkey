@@ -11783,7 +11783,7 @@ int RegExCallout(pcret_callout_block *cb)
 	Func *callout_func = (Func *)cb->user_callout;
 	if (!callout_func)
 	{
-		Var *pcre_callout_var = g_script.FindVar(_T("pcre_callout"), 12); // This may be a local of the UDF which called RegExMatch/Replace().
+		Var *pcre_callout_var = g_script.FindVar(_T("pcre_callout"), 12, FINDVAR_FOR_READ); // This may be a local of the UDF which called RegExMatch/Replace().
 		if (!pcre_callout_var)
 			return 0; // Seems best to ignore the callout rather than aborting the match.
 		ExprTokenType token;

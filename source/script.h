@@ -3032,11 +3032,14 @@ public:
 	static SymbolType ConvertWordOperator(LPCTSTR aWord, size_t aLength);
 	static bool EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker);
 
-	#define FINDVAR_DEFAULT  (VAR_LOCAL | VAR_GLOBAL)
-	#define FINDVAR_GLOBAL   VAR_GLOBAL
-	#define FINDVAR_LOCAL    VAR_LOCAL
-	Var *FindOrAddVar(LPCTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT);
-	Var *FindVar(LPCTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT
+	#define FINDVAR_DEFAULT			(VAR_LOCAL | VAR_GLOBAL)
+	#define FINDVAR_GLOBAL			VAR_GLOBAL
+	#define FINDVAR_LOCAL			VAR_LOCAL
+	#define FINDVAR_GLOBAL_FALLBACK	0x100
+	#define FINDVAR_FOR_WRITE		FINDVAR_DEFAULT
+	#define FINDVAR_FOR_READ		(FINDVAR_DEFAULT | FINDVAR_GLOBAL_FALLBACK)
+	Var *FindOrAddVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope);
+	Var *FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 		, VarList **apList = nullptr, int *apInsertPos = nullptr, ResultType *aDisplayError = nullptr);
 	Var *FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError);
 	Var *AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope);
@@ -3099,9 +3102,9 @@ public:
 	ResultType RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), ResultType aErrorType = FAIL_OR_OK, Line *aLine = nullptr);
 
 	ResultType ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting);
-	enum VarRefUsageType { VARREF_READ = 0, VARREF_REF, VARREF_ISSET
-		, VARREF_LVALUE, VARREF_OUTPUT_VAR };
-#define VARREF_IS_WRITE(is_lvalue) ((is_lvalue) >= Script::VARREF_LVALUE)
+	enum VarRefUsageType { VARREF_READ = 0, VARREF_ISSET
+		, VARREF_REF, VARREF_LVALUE, VARREF_OUTPUT_VAR };
+#define VARREF_IS_WRITE(var_usage) ((var_usage) >= Script::VARREF_REF)
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType = VARREF_LVALUE);
 
 	ResultType ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine);

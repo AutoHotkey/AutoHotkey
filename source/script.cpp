@@ -6300,11 +6300,8 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 			if (class_var->IsDeclared())
 				return ConflictingDeclarationError(_T("class"), class_var);
 		}
-		else if (  !(class_var = AddVar(class_name, class_name_length, varlist, insert_pos, VAR_DECLARE_SUPER_GLOBAL))  )
+		else if (  !(class_var = AddVar(class_name, class_name_length, varlist, insert_pos, VAR_DECLARE_GLOBAL))  )
 			return FAIL;
-		// Explicitly set the variable scope, since FindVar may have returned
-		// an existing ordinary global instead of creating a super-global.
-		class_var->Scope() = VAR_DECLARE_SUPER_GLOBAL;
 	}
 	
 	size_t length = _tcslen(mClassName), extra_length = class_name_length + 1; // +1 for '.'
@@ -7257,7 +7254,7 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 		if (Var *found = func.mVars.Find(var_name, &nonstatic_pos)) return found;
 		if (Var *found = func.mStaticVars.Find(var_name, &static_pos)) return found;
 		bool add_static = (aScope & VAR_LOCAL_STATIC)
-			|| aScope == FINDVAR_DEFAULT && (func.mDefaultVarType & VAR_LOCAL_STATIC);
+			|| !(aScope & VAR_DECLARED) && (func.mDefaultVarType & VAR_LOCAL_STATIC);
 		if (apList) *apList = add_static ? &func.mStaticVars : &func.mVars;
 		if (apInsertPos) *apInsertPos = add_static ? static_pos : nonstatic_pos;
 	}
@@ -7270,7 +7267,7 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 
 	// Since no match was found, if this is a local fall back to searching outer functions and the
 	// list of globals if the caller didn't insist on a particular type:
-	if (search_local && aScope == FINDVAR_DEFAULT)
+	if (search_local && (aScope & VAR_GLOBAL))
 	{
 		// Search outer functions, if applicable:
 		if (g.CurrentFunc->mOuterFunc)
@@ -7287,7 +7284,7 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 		if (g.CurrentFunc->AllowSuperGlobals())
 		{
 			Var *found = FindGlobalVar(aVarName, aVarNameLength);
-			if (found && found->IsSuperGlobal())
+			if (found && (found->IsSuperGlobal() || (aScope & FINDVAR_GLOBAL_FALLBACK)))
 				return found;
 		}
 	}
@@ -9441,7 +9438,7 @@ end_of_infix_to_postfix:
 		// for later to facilitate detecting variables which are not assigned anywhere.
 		if (new_token.symbol == SYM_VAR && new_token.var_usage != Script::VARREF_READ)
 		{
-			new_token.var = g_script.FindOrAddVar(new_token.var_deref->marker, new_token.var_deref->length);
+			new_token.var = g_script.FindOrAddVar(new_token.var_deref->marker, new_token.var_deref->length, FINDVAR_FOR_WRITE);
 			if (!new_token.var)
 				return FAIL;
 			if (!ValidateVarUsage(new_token.var, new_token.var_usage))
@@ -12125,7 +12122,7 @@ ResultType Script::DerefInclude(LPTSTR &aOutput, LPTSTR aBuf)
 				var_name_length = cp1 - cp - 1;
 				if (*cp1 && var_name_length && var_name_length <= MAX_VAR_NAME_LENGTH)
 				{
-					Var *var = FindVar(cp + 1, var_name_length, FINDVAR_GLOBAL);
+					Var *var = FindGlobalVar(cp + 1, var_name_length);
 					if (var && var->Type() == VAR_VIRTUAL)
 					{
 						if (which_pass) // 2nd pass
@@ -13322,7 +13319,7 @@ ResultType Script::PreparseVarRefs()
 				if (token->symbol != SYM_VAR // Not a var.
 					|| token->var_usage != VARREF_READ) // Already resolved by ExpressionToPostfix.
 					continue;
-				if (  !(token->var = FindOrAddVar(token->var_deref->marker, token->var_deref->length))  )
+				if (  !(token->var = FindOrAddVar(token->var_deref->marker, token->var_deref->length, FINDVAR_FOR_READ))  )
 					return FAIL;
 				if (token->var->IsAlias()) // Upvar.
 					continue;
