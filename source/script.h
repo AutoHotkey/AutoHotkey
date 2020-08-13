@@ -381,7 +381,7 @@ struct DerefType
 	union
 	{
 		Var *var; // DT_VAR
-		Func *func; // DT_FUNC
+		Func *func; // DT_FUNC and DT_FUNCREF
 		DerefType *next; // DT_STRING
 		SymbolType symbol; // DT_WORDOP
 		int int_value; // DT_CONST_INT
@@ -622,7 +622,6 @@ enum JoyControls {JOYCTRL_INVALID, JOYCTRL_XPOS, JOYCTRL_YPOS, JOYCTRL_ZPOS
 // it helps the compiler to reduce code size.
 enum BuiltInFunctionID {
 	FID_DllCall = 0, FID_ComCall,
-	FID_Func = 0, FID_FuncClose,
 	FID_LV_GetNext = 0, FID_LV_GetCount,
 	FID_LV_Add = 0, FID_LV_Insert, FID_LV_Modify,
 	FID_LV_InsertCol = 0, FID_LV_ModifyCol, FID_LV_DeleteCol,
@@ -1540,11 +1539,11 @@ struct FreeVars
 
 	void Release()
 	{
-		if (mRefCount == 1)
-			delete this;
-		else
-			--mRefCount;
+		if (--mRefCount == 0)
+			FullyReleased();
 	}
+
+	bool FullyReleased(ULONG aRefPendingRelease = 0);
 
 	FreeVars *ForFunc(UserFunc *aFunc)
 	{
@@ -1581,6 +1580,13 @@ private:
 			mVar[i].Free(VAR_ALWAYS_FREE, true); // Pass "true" to exclude aliases, since their targets should not be freed (they don't belong to this function).
 		::delete[] mVar; // Must use :: to avoid SimpleHeap.
 	}
+};
+
+
+struct ClosureInfo
+{
+	Var *var;
+	UserFunc *func;
 };
 
 
@@ -1655,14 +1661,15 @@ public:
 	Object *mClass = nullptr; // The class or prototype object which this user-defined method was defined for, or nullptr.
 	Label *mFirstLabel = nullptr, *mLastLabel = nullptr; // Linked list of private labels.
 	UserFunc *mOuterFunc = nullptr; // Func which contains this func (usually nullptr).
-	FuncList mFuncs {}; // List of nested functions (usually empty).
 	VarList mVars {}; // Sorted list of non-static local variables.
 	VarList mStaticVars {}; // Sorted list of static variables.
 	Var **mDownVar = nullptr, **mUpVar = nullptr;
 	int *mUpVarIndex = nullptr;
+	ClosureInfo *mClosure = nullptr; // Array of nested functions containing upvars.
 	static FreeVars *sFreeVars;
 #define MAX_FUNC_UP_VARS 1000
 	int mDownVarCount = 0, mUpVarCount = 0;
+	int mClosureCount = 0;
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
 	bool mIsFuncExpression; // Whether this function was defined *within* an expression and is therefore allowed under a control flow statement.
@@ -1784,16 +1791,29 @@ class Closure : public Func
 
 	static Object *sPrototype;
 
+	enum Flags : decltype(mFlags)
+	{
+		ClosureGroupedFlag = LastObjectFlag << 1
+	};
+
 public:
-	Closure(UserFunc *aFunc, FreeVars *aVars)
+	Closure(UserFunc *aFunc, FreeVars *aVars, bool aIsGrouped)
 		: mFunc(aFunc), mVars(aVars), Func(aFunc->mName)
 	{
+		if (aIsGrouped)
+		{
+			mFlags |= ClosureGroupedFlag;
+			mRefCount = 0;
+		}
+		else
+			aVars->AddRef();
 		mMinParams = aFunc->mMinParams;
 		mParamCount = aFunc->mParamCount;
 		mIsVariadic = aFunc->mIsVariadic;
 		SetBase(sPrototype);
 	}
 	~Closure();
+	bool Delete() override;
 
 	bool IsBuiltIn() override { return false; }
 	bool ArgIsOutputVar(int aArg) override { return mFunc->ArgIsOutputVar(aArg); }
@@ -3012,11 +3032,11 @@ public:
 	};
 	void InitFuncLibraries(FuncLibrary aLibs[]);
 	void InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix);
-	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
+	void IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
 #endif
-	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = -1, int *apInsertPos = NULL);
-	FuncEntry *FindBuiltInFunc(LPTSTR aFuncName);
-	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsertPos, Object *aClassObject = NULL);
+	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0);
+	static FuncEntry *GetBuiltInFunc(LPTSTR aFuncName);
+	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aClassObject = NULL);
 
 	ResultType DefineClass(LPTSTR aBuf);
 	UserFunc *DefineClassInit(bool aStatic);
@@ -3113,6 +3133,7 @@ public:
 	ResultType PreprocessLocalVars(FuncList &aFuncs);
 	ResultType PreprocessLocalVars(UserFunc &aFunc);
 	ResultType PreparseVarRefs();
+	void CountNestedFuncRefs(UserFunc &aWithin, LPCTSTR aFuncName);
 
 	ResultType ThrowIfTrue(bool aError);
 	ResultType ThrowIntIfNonzero(int aErrorValue, LPCTSTR aWhat = NULL);
@@ -3320,9 +3341,9 @@ BIF_DECL(BIF_Type);
 BIF_DECL(BIF_IsObject);
 
 
-BIF_DECL(BIF_Object);
-BIF_DECL(BIF_Array);
-BIF_DECL(BIF_Map);
+BIF_DECL(Op_Object);
+BIF_DECL(Op_Array);
+
 BIF_DECL(BIF_ObjAddRefRelease);
 BIF_DECL(BIF_ObjBindMethod);
 BIF_DECL(BIF_ObjPtr);
@@ -3335,6 +3356,7 @@ BIF_DECL(BIF_HasProp);
 BIF_DECL(BIF_HasMethod);
 BIF_DECL(BIF_GetMethod);
 
+BIF_DECL(Op_FuncClose);
 
 // Advanced file IO interfaces
 BIF_DECL(BIF_FileOpen);
@@ -3431,7 +3453,6 @@ LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL, size_t *aLength 
 ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOutput);
 StringCaseSenseType TokenToStringCase(ExprTokenType& aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
-Func *TokenToFunc(ExprTokenType &aToken);
 ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, LPTSTR aNullErr = ERR_TYPE_MISMATCH, int *aMinParams = nullptr);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
 BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right);

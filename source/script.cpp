@@ -37,7 +37,6 @@ FuncEntry g_BIF[] =
 {
 	BIF1(Abs, 1, 1),
 	BIFn(ACos, 1, 1, BIF_ASinACos),
-	BIF1(Array, 0, NA),
 	BIFn(ASin, 1, 1, BIF_ASinACos),
 	BIF1(ATan, 1, 1),
 	BIFA(BlockInput, 1, 1, ACT_BLOCKINPUT),
@@ -223,7 +222,6 @@ FuncEntry g_BIF[] =
 	BIF1(LoadPicture, 1, 3, {3}),
 	BIFn(Log, 1, 1, BIF_SqrtLogLn),
 	BIFn(LTrim, 1, 2, BIF_Trim),
-	BIF1(Map, 0, NA),
 	BIFn(Max, 1, NA, BIF_MinMax),
 	BIF1(MenuFromHandle, 1, 1),
 	BIF1(MenuSelect, 0, 11),
@@ -243,7 +241,6 @@ FuncEntry g_BIF[] =
 	BIF1(NumPut, 3, NA),
 	BIFn(ObjAddRef, 1, 1, BIF_ObjAddRefRelease),
 	BIF1(ObjBindMethod, 1, NA),
-	BIF1(Object, 0, NA),
 	BIFn(ObjFromPtr, 1, 1, BIF_ObjPtr),
 	BIFn(ObjFromPtrAddRef, 1, 1, BIF_ObjPtr),
 	BIFn(ObjGetBase, 1, 1, BIF_Base),
@@ -1456,16 +1453,13 @@ void ReleaseStaticVarObjects(FuncList &aFuncs)
 {
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
-		if (aFuncs.mItem[i]->IsBuiltIn())
-			continue;
+		ASSERT(!aFuncs.mItem[i]->IsBuiltIn());
 		auto &f = *(UserFunc *)aFuncs.mItem[i];
 		// Since it doesn't seem feasible to release all var backups created by recursive function
 		// calls and all tokens in the 'stack' of each currently executing expression, currently
 		// only static and global variables are released.  It seems best for consistency to also
 		// avoid releasing top-level non-static local variables (i.e. which aren't in var backups).
 		ReleaseVarObjects(f.mStaticVars);
-		if (f.mFuncs.mCount)
-			ReleaseStaticVarObjects(f.mFuncs);
 	}
 }
 
@@ -3611,7 +3605,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				// Save the working directory; see the similar line below for details.
 				LPTSTR prev_dir = GetWorkingDir();
 				// Attempt to include a script file based on the same rules as func() auto-include:
-				FindFuncInLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found, false);
+				IncludeLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found, false);
 				// Restore the working directory.
 				if (prev_dir)
 				{
@@ -5677,21 +5671,11 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 
 		if (is_double_deref)
 		{
-			// Mark the end of the sub-expression which computes the variable name or function
-			// in this double-deref or dynamic function call:
+			// Mark the end of this dynamic reference.
 			this_deref.marker = op_end;
 			this_deref.length = 0;
 			if (op_begin > aArgText && op_begin[-1] == '.')
-			{
 				this_deref.type = DT_DOTPERCENT;
-			}
-			else if (is_function)
-			{
-				// func is initialized to NULL and left that way to indicate the call is dynamic.
-				// PreparseBlocks() relies on length == 0 meaning a dynamic function reference.
-				this_deref.func = NULL;
-				this_deref.type = DT_FUNC;
-			}
 			else
 				this_deref.type = DT_DOUBLE;
 		}
@@ -5726,7 +5710,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 			this_deref.marker = op_begin;
 			this_deref.length = (DerefLengthType)operand_length;
 			this_deref.type = is_function ? DT_FUNC : DT_VAR;
-			this_deref.var = nullptr; // To be resolved later.  Also sets func via union.
+			this_deref.var = nullptr; // To be resolved later.
 		}
 	}
 	if (aPos)
@@ -5913,28 +5897,18 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		_sntprintf(full_name, MAX_VAR_NAME_LENGTH + 1, aStatic ? _T("%s.%s") : _T("%s.Prototype.%s"), mClassName, aBuf);
 		full_name[MAX_VAR_NAME_LENGTH + 1] = '\0'; // Must terminate at this exact point if _sntprintf hit the limit.
 		
-		// Check for duplicates and determine insert_pos:
-		Func *found_func;
-		ExprTokenType found_item;
-		if (found_func = FindFunc(full_name, -1, &insert_pos)) // Must be done to determine insert_pos.
-			return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf); // The parameters are omitted due to temporary termination above.  This might make it more obvious why "X[]" and "X()" are considered duplicates.
-		
 		*param_start = '('; // Undo temporary termination.
 
 		// Below passes class_object for AddFunc() to store the func "by reference" in it:
-		if (  !(g->CurrentFunc = AddFunc(full_name, -1, insert_pos, class_object))  )
+		if (  !(g->CurrentFunc = AddFunc(full_name, -1, class_object))  )
 			return FAIL;
 	}
 	else
 	{
-		Func *found_func = FindFunc(aBuf, param_start - aBuf, &insert_pos);
-		if (found_func && !found_func->IsBuiltIn())
-			return ScriptError(_T("Duplicate function definition."), aBuf); // Seems more descriptive than "Function already defined."
-		else
-			// The value of g->CurrentFunc must be set here rather than by our caller since AddVar(), which we call,
-			// relies upon it having been done.
-			if (   !(g->CurrentFunc = AddFunc(aBuf, param_start - aBuf, insert_pos))   )
-				return FAIL; // It already displayed the error.
+		// The value of g->CurrentFunc must be set here rather than by our caller since AddVar(), which we call,
+		// relies upon it having been done.
+		if (   !(g->CurrentFunc = AddFunc(aBuf, param_start - aBuf))   )
+			return FAIL; // It already displayed the error.
 	}
 
 	auto &func = *g->CurrentFunc; // For performance and convenience.
@@ -6789,7 +6763,7 @@ void Script::InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSu
 	aLib.length = length;
 }
 
-Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude)
+void Script::IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude)
 // Caller must ensure that aFuncName doesn't already exist as a defined function.
 // If aFuncNameLength is 0, the entire length of aFuncName is used.
 {
@@ -6808,7 +6782,7 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = _tcslen(aFuncName);
 	if (aFuncNameLength > MAX_VAR_NAME_LENGTH) // Too long to fit in the allowed space, and also too long to be a valid function name.
-		return NULL;
+		return;
 
 	TCHAR *dest, *first_underscore, class_name_buf[MAX_VAR_NAME_LENGTH + 1];
 	LPTSTR naked_filename = aFuncName;               // Set up for the first iteration.
@@ -6859,16 +6833,10 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			// Fix for v1.1.06.00: If the file contains any lib #includes, it must be loaded AFTER the
 			// above writes sLib[i].path to the iLib file, otherwise the wrong filename could be written.
 			if (!LoadIncludedFile(sLib[i].path, false, false)) // Fix for v1.0.47.05: Pass false for allow-dupe because otherwise, it's possible for a stdlib file to attempt to include itself (especially via the LibNamePrefix_ method) and thus give a misleading "duplicate function" vs. "func does not exist" error message.  Obsolete: For performance, pass true for allow-dupe so that it doesn't have to check for a duplicate file (seems too rare to worry about duplicates since by definition, the function doesn't yet exist so it's file shouldn't yet be included).
-			{
 				aErrorWasShown = true; // Above has just displayed its error (e.g. syntax error in a line, failed to open the include file, etc).  So override the default set earlier.
-				return NULL;
-			}
 			
 			g->CurrentFunc = current_func; // Restore.
-
-			// Now that a matching filename has been found, it seems best to stop searching here even if that
-			// file doesn't actually contain the requested function.  This helps library authors catch bugs/typos.
-			return FindFunc(aFuncName, aFuncNameLength);
+			return; // A file was found, so look no further.
 		} // for() each library directory.
 
 		// Now that the first iteration is done, set up for the second one that searches by class/prefix.
@@ -6889,7 +6857,6 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 	} // 2-iteration for().
 
 	// Since above didn't return, no match found in any library.
-	return NULL;
 }
 
 #endif
@@ -6945,65 +6912,12 @@ T *ScriptItemList<T, S>::Find(LPCTSTR aName, size_t aNameLength, int *apInsertPo
 
 
 
-Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertPos) // L27: Added apInsertPos for binary-search.
-// Returns the Function whose name matches aFuncName (which caller has ensured isn't NULL).
-// If it doesn't exist, NULL is returned.
-// If apInsertPos is non-NULL (i.e. caller is DefineFunc), only the current scope is searched
-// and built-in functions are returned only if g->CurrentFunc == NULL (so that nested functions
-// "shadow" built-in functions but do not actually replace them globally).
+Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength)
 {
-	if (aFuncNameLength == -1) // Caller didn't specify, so use the entire string.
-		aFuncNameLength = _tcslen(aFuncName);
-
-	// For the below, no error is reported because callers don't want that.  Instead, simply return
-	// NULL to indicate that names that are illegal or too long are not found.  If the caller later
-	// tries to add the function, it will get an error then:
-	if (aFuncNameLength > MAX_VAR_NAME_LENGTH || !aFuncNameLength)
-	{
-		if (apInsertPos)
-			*apInsertPos = 0; // Unnamed (fat arrow) functions rely on this.
-		return NULL;
-	}
-
-	// The following copy is made because it allows the name searching to use _tcsicmp() instead of
-	// strlicmp(), which close to doubles the performance.  The copy includes only the first aVarNameLength
-	// characters from aVarName:
-	TCHAR func_name[MAX_VAR_NAME_LENGTH + 1];
-	tcslcpy(func_name, aFuncName, aFuncNameLength + 1);  // +1 to convert length to size.
-
-	int left;
-	for (auto scopefunc = g->CurrentFunc; ; scopefunc = scopefunc->mOuterFunc)
-	{
-		FuncList &funcs = scopefunc ? scopefunc->mFuncs : mFuncs;
-		auto pfunc = funcs.Find(func_name, &left);
-		if (apInsertPos) // Caller is DefineFunc.
-		{
-			*apInsertPos = left;
-			if (scopefunc) // Nested functions may "shadow" built-in functions without replacing them globally.
-				return pfunc; // Search no further, even if nullptr.
-		}
-		if (pfunc)
-			return pfunc;
-		if (!scopefunc)
-			break;
-	}
-	// left now contains a position in the outer-most FuncList, as needed for built-in functions below.
-
-	// Since above didn't return, there is no match.  See if it's a built-in function that hasn't yet
-	// been added to the function list.
-
-	FuncEntry *pbif = FindBuiltInFunc(func_name);
-	if (!pbif)
-		return nullptr;
-
-	auto *pfunc = new BuiltInFunc(*pbif, pbif->mOutputVars);
-	if (!pfunc || !mFuncs.Insert(pfunc, left)) // left contains the position within mFuncs to insert the function.  Cannot use *apInsertPos as caller may have omitted it.
-	{
-		ScriptError(ERR_OUTOFMEM);
-		return nullptr;
-	}
-
-	return pfunc;
+	if (Var *var = FindVar(aFuncName, aFuncNameLength))
+		if (var->Type() == VAR_CONSTANT)
+			return dynamic_cast<Func *>(var->ToObject());
+	return nullptr;
 }
 
 
@@ -7020,7 +6934,7 @@ BuiltInFunc::BuiltInFunc(FuncEntry &bif, UCHAR *aOutputVars) : BuiltInFunc(bif.m
 
 
 
-FuncEntry *Script::FindBuiltInFunc(LPTSTR aFuncName)
+FuncEntry *Script::GetBuiltInFunc(LPTSTR aFuncName)
 {
 	int left, right, mid, result;
 	for (left = 0, right = _countof(g_BIF) - 1; left <= right;)
@@ -7039,7 +6953,7 @@ FuncEntry *Script::FindBuiltInFunc(LPTSTR aFuncName)
 
 
 
-UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsertPos, Object *aClassObject)
+UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aClassObject)
 // Returns the address of the new function or NULL on failure.
 // The caller must already have verified that this isn't a duplicate function.
 {
@@ -7049,7 +6963,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 	if (aFuncNameLength > MAX_VAR_NAME_LENGTH) // FindFunc(), BIF_OnMessage() and perhaps others rely on this limit being enforced.
 	{
 		ScriptError(_T("Function name too long."), aFuncName);
-		return NULL;
+		return nullptr;
 	}
 
 	// ValidateName requires that the name be null-terminated, but it isn't in this case.
@@ -7057,16 +6971,16 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 	// since the script currently always exits if an error occurs anywhere below:
 	LPTSTR new_name = SimpleHeap::Malloc((LPTSTR)aFuncName, aFuncNameLength);
 	if (!new_name)
-		return NULL; // Above already displayed the error for us.
+		return nullptr; // Above already displayed the error for us.
 
 	if (!aClassObject && *new_name && !Var::ValidateName(new_name, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
-		return NULL; // Above already displayed the error for us.
+		return nullptr; // Above already displayed the error for us.
 
 	auto the_new_func = new UserFunc(new_name);
 	if (!the_new_func)
 	{
 		ScriptError(ERR_OUTOFMEM);
-		return NULL;
+		return nullptr;
 	}
 
 	if (aClassObject)
@@ -7074,24 +6988,53 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 		LPTSTR key = _tcsrchr(new_name, '.'); // DefineFunc() always passes "ClassName.MethodName".
 		++key;
 		if (!Var::ValidateName(key, DISPLAY_METHOD_ERROR))
-			return NULL;
+			return nullptr;
 		if (mClassProperty)
 		{
-			if (toupper(*key) == 'G')
+			bool is_getter = ctoupper(*key) == 'G';
+			if (is_getter ? mClassProperty->Getter() : mClassProperty->Setter())
+			{
+				ScriptError(ERR_DUPLICATE_DECLARATION, new_name);
+				return nullptr;
+			}
+			if (is_getter)
 				mClassProperty->SetGetter(the_new_func);
 			else
 				mClassProperty->SetSetter(the_new_func);
 		}
 		else
+		{
+			if (aClassObject->HasOwnMethod(key))
+			{
+				ScriptError(ERR_DUPLICATE_DECLARATION, new_name);
+				return nullptr;
+			}
 			if (!aClassObject->DefineMethod(key, the_new_func))
 			{
 				ScriptError(ERR_OUTOFMEM);
-				return NULL;
+				return nullptr;
 			}
+		}
 		aClassObject->AddRef(); // In case the script clears the class var.
 		the_new_func->mClass = aClassObject;
 		// Also add it to the script's list of functions, to support #Warn LocalSameAsGlobal
 		// and automatic cleanup of objects in static vars on program exit.
+	}
+	else if (aFuncNameLength)
+	{
+		Var *var = FindOrAddVar(aFuncName, aFuncNameLength
+			, (g->CurrentFunc ? VAR_DECLARE_LOCAL : VAR_DECLARE_SUPER_GLOBAL));
+		if (!var)
+			return nullptr;
+		if (!var->IsUninitializedNormalVar())
+		{
+			ConflictingDeclarationError(_T("function"), var);
+			return nullptr;
+		}
+		if (!g->CurrentFunc)
+			var->Scope() |= VAR_SUPER_GLOBAL; // In case of a previous global declaration.
+		var->Assign(the_new_func);
+		var->MakeReadOnly();
 	}
 
 	the_new_func->mOuterFunc = g->CurrentFunc;
@@ -7102,16 +7045,11 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 	if (the_new_func->mOuterFunc && the_new_func->mOuterFunc->IsAssumeGlobal())
 		the_new_func->mDefaultVarType = VAR_GLOBAL; // Not VAR_DECLARE_GLOBAL, which would prevent referencing of outer vars.
 
-	FuncList &funcs = the_new_func->mOuterFunc ? the_new_func->mOuterFunc->mFuncs : mFuncs;
-	
-	if (aInsertPos < funcs.mCount && *new_name && !_tcsicmp(funcs.mItem[aInsertPos]->mName, new_name))
-		funcs.mItem[aInsertPos] = the_new_func;
-	else
-		if (!funcs.Insert(the_new_func, aInsertPos))
-		{
-			ScriptError(ERR_OUTOFMEM);
-			return NULL;
-		}
+	if (!mFuncs.Insert(the_new_func, mFuncs.mCount))
+	{
+		ScriptError(ERR_OUTOFMEM);
+		return nullptr;
+	}
 
 	return the_new_func;
 }
@@ -7273,8 +7211,33 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 	else
 	{
 		auto varlist = GlobalVars();
-		if (Var *found = varlist->Find(var_name, apInsertPos)) return found;
+		int insert_pos;
+		if (Var *found = varlist->Find(var_name, &insert_pos)) return found;
 		if (apList) *apList = varlist;
+		if (apInsertPos) *apInsertPos = insert_pos;
+
+		// Built-in functions can be shadowed, so are checked only in this section.
+		if (auto *bif = GetBuiltInFunc(var_name))
+		{
+			auto *func = new BuiltInFunc(*bif, bif->mOutputVars);
+			if (!func)
+			{
+				if (aDisplayError)
+					*aDisplayError = ScriptError(ERR_OUTOFMEM);
+				return nullptr;
+			}
+			Var *var = AddVar(var_name, aVarNameLength, varlist, insert_pos, VAR_DECLARE_SUPER_GLOBAL);
+			if (!var)
+			{
+				if (aDisplayError)
+					*aDisplayError = FAIL;
+				func->Release();
+				return nullptr;
+			}
+			var->AssignSkipAddRef(func);
+			var->MakeReadOnly();
+			return var;
+		}
 	}
 
 	// Since no match was found, if this is a local fall back to searching outer functions and the
@@ -7336,7 +7299,12 @@ Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayE
 			*aDisplayError = RuntimeError(ERR_DYNAMIC_UPVAR, aVarName);
 		return nullptr;
 	}
-	outer_var->Scope() |= VAR_DOWNVAR;
+	ASSERT(!outer.mDownVar && !aInner.mUpVar); // PreprocessLocalVars has not yet been called.
+	if (!(outer_var->Scope() & VAR_DOWNVAR))
+	{
+		outer.mDownVarCount++;
+		outer_var->Scope() |= VAR_DOWNVAR;
+	}
 	// At this point aInner doesn't have a variable by this name, so create one:
 	int insert_pos;
 	aInner.mVars.Find(aVarName, &insert_pos);
@@ -7347,8 +7315,36 @@ Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayE
 			*aDisplayError = FAIL; // Error already displayed.
 		return nullptr;
 	}
+	bool is_function = outer_var->Type() == VAR_CONSTANT;
+	if (!is_function && ++aInner.mUpVarCount == 1) // This function's first definite upvar.
+	{
+		// Count all references to aInner as upvars (except the one in outer).
+		CountNestedFuncRefs(outer, aInner.mName);
+	}
 	inner_var->SetAliasDirect(outer_var); // Temporarily point the upvar to its downvar for later processing.
 	return inner_var;
+}
+
+
+
+void Script::CountNestedFuncRefs(UserFunc &aWithin, LPCTSTR aFuncName)
+{
+	for (int i = 0; i < aWithin.mVars.mCount; ++i)
+	{
+		Var &nfv = *aWithin.mVars.mItem[i];
+		if (nfv.Type() == VAR_CONSTANT)
+		{
+			ASSERT(nfv.HasObject() && dynamic_cast<UserFunc*>(nfv.Object()));
+			auto &nf = *(UserFunc *)nfv.Object();
+			Var *uv = nf.mVars.Find(aFuncName);
+			if (uv && uv->IsAlias())
+			{
+				nf.mUpVarCount++;
+				if (uv->Scope() & VAR_DOWNVAR)
+					CountNestedFuncRefs(nf, aFuncName);
+			}
+		}
+	}
 }
 
 
@@ -7531,7 +7527,7 @@ ResultType Script::PreparseFuncRefs(Line *aStartingLine)
 	{
 		switch (line->mActionType)
 		{
-		// Set g->CurrentFunc for use resolving names of nested functions.
+		// Set context for resolving names.
 		case ACT_BLOCK_BEGIN:
 			if (line->mAttribute)
 				g->CurrentFunc = (UserFunc *)line->mAttribute;
@@ -7549,21 +7545,35 @@ ResultType Script::PreparseFuncRefs(Line *aStartingLine)
 				continue;
 			for (auto deref = this_arg.deref; deref->marker; ++deref) // For each deref.
 			{
-				if (!deref->is_function() || !deref->length || deref->func) // Zero length means a dynamic function call.
+				if (!deref->is_function())
 					continue;
-				if (   !(deref->func = FindFunc(deref->marker, deref->length))   )
-				{
+				ASSERT(!deref->func && deref->length);
+				Var *var = FindVar(deref->marker, deref->length);
+				// If no var was found, this name hasn't been declared for the current scope.
 #ifndef AUTOHOTKEYSC
+				// Try to auto-include a library only if function definitions within it could
+				// affect the current scope (i.e. the function is not force-local, or the var
+				// was already declared global).
+				if (  !var && !(g->CurrentFunc && (g->CurrentFunc->mDefaultVarType & VAR_FORCE_LOCAL))
+					|| var && !var->IsLocal() && var->IsUninitializedNormalVar()  )
+				{
 					bool error_was_shown, file_was_found;
-					if (   !(deref->func = FindFuncInLibrary(deref->marker, deref->length, error_was_shown, file_was_found, true))   )
-					{
-						// When above already displayed the proximate cause of the error, it's usually
-						// undesirable to show the cascade effects of that error in a second dialog:
-						return error_was_shown ? FAIL : line->LineError(ERR_NONEXISTENT_FUNCTION, FAIL, deref->marker);
-					}
-#else
-					return line->LineError(ERR_NONEXISTENT_FUNCTION, FAIL, deref->marker);
+					IncludeLibrary(deref->marker, deref->length, error_was_shown, file_was_found, true);
+					if (error_was_shown)
+						return FAIL;
+					if (file_was_found)
+						var = FindVar(deref->marker, deref->length);
+				}
 #endif
+				// If var is still not found, it's definitely not a declared global or local, class,
+				// parameter, or function.  If a non-constant var was found, it's definitely not a
+				// defined function.  If it's not a defined function, resolve it as a var later.
+				// Also produce DT_VAR (and therefore SYM_VAR) if it's a local function, since it may
+				// be a closure, in which case each call to the function gives it a different value.
+				if (  !var || var->Type() != VAR_CONSTANT || var->IsLocal()
+					|| !(deref->func = dynamic_cast<Func*>(var->ToObject()))  )
+				{
+					deref->type = DT_VAR;
 				}
 			} // for each deref of this arg
 		} // for each arg of this line
@@ -7606,13 +7616,13 @@ ResultType Script::PreparseExpressions(FuncList &aFuncs)
 {
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
-		if (aFuncs.mItem[i]->IsBuiltIn())
-			continue;
+		ASSERT(!aFuncs.mItem[i]->IsBuiltIn());
 		auto &func = *(UserFunc *)aFuncs.mItem[i];
 		g->CurrentFunc = &func;
-		if (!PreparseExpressions(func.mJumpToLine) // Preparse the entire body first.
-			|| !PreparseExpressions(func.mFuncs)) // Then preparse nested functions.
+		if (!PreparseExpressions(func.mJumpToLine)) // Preparse this function's body.
 			return FAIL;
+		// Nested functions will be preparsed next, due to the fact that they immediately
+		// follow the outer function in aFuncs.
 	}
 	g->CurrentFunc = nullptr;
 	return OK;
@@ -8164,7 +8174,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						if (!callsite)
 							return LineError(ERR_OUTOFMEM);
 						if (  !(infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))  )
-							callsite->func = ExprOp<BIF_Array, 0>();
+							callsite->func = ExprOp<Op_Array, 0>();
 						else
 							callsite->flags = IT_GET; // This may be overridden by standard_pop_into_postfix.
 						this_infix_item.callsite = callsite;
@@ -8181,7 +8191,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					this_infix_item.callsite = new CallSite();
 					if (!this_infix_item.callsite)
 						return LineError(ERR_OUTOFMEM);
-					this_infix_item.callsite->func = ExprOp<BIF_Object, 0>();
+					this_infix_item.callsite->func = ExprOp<Op_Object, 0>();
 					this_infix_item.symbol = SYM_OBRACE;
 					break;
 				case '}':
@@ -8635,7 +8645,7 @@ unquoted_literal:
 			auto callsite = new CallSite();
 			if (!callsite)
 				return LineError(ERR_OUTOFMEM);
-			callsite->func = ExprOp<BIF_Func, FID_FuncClose>();
+			callsite->func = ExprOp<Op_FuncClose, 0>();
 			infix[infix_count].symbol = SYM_FUNC;
 			infix[infix_count].callsite = callsite;
 			infix[infix_count+1].symbol = SYM_OPAREN;
@@ -8770,6 +8780,15 @@ unquoted_literal:
 			else if (IS_OPAREN_LIKE(stack_symbol))
 			{
 				Func *func = dynamic_cast<Func*>(in_param_list->func); // Can be NULL, e.g. for dynamic function calls.
+				if (!func)
+				{
+					// Calls to local functions aren't preresolved into in_param_list at this point
+					// as they may be closures, but a Func* is present and usable for validation.
+					auto &target = stack[stack_count - 1][-1];
+					if (target.symbol == SYM_VAR && target.var_deref->var && target.var_deref->var->HasObject())
+						func = dynamic_cast<Func*>(target.var_deref->var->Object());
+				}
+
 				if (infix_symbol == SYM_COMMA || this_infix[-1].symbol != stack_symbol) // i.e. not an empty parameter list.
 				{
 					// Accessing this_infix[-1] here is necessarily safe since in_param_list is
@@ -8890,36 +8909,6 @@ unquoted_literal:
 							}
 						}
 						#endif
-						else if (bif == &BIF_Func)
-						{
-							if (param_last.symbol == SYM_STRING && infix_symbol == SYM_CPAREN) // Checking infix_symbol ensures errors such as Func(a,b) are handled correctly.
-							{
-								// Reduce the cost of repeated calls to Func() by resolving the function name now. 
-								Func *param_func = g_script.FindFunc(param_last.marker, param_last.marker_length);
-								if (param_func)
-								{
-									// Pass the Func to an internal version of Func() which will call CloseIfNeeded().
-									param_last.SetValue(param_func);
-									in_param_list->func = ExprOp<BIF_Func, FID_FuncClose>();
-								}
-								else
-								{
-									param_last.SetValue(_T(""), 0);
-								}
-								if (!param_func || param_func->IsBuiltIn() || !((UserFunc *)param_func)->mOuterFunc)
-								{
-									// The function either doesn't exist or is not nested.  In both cases, the value
-									// in param_last would always be the result of Func(), so skip the function call.
-									ASSERT(stack_symbol == SYM_OPAREN && stack[stack_count - 2]->symbol == SYM_FUNC);
-									in_param_list = stack[stack_count - 1]->outer_param_list;
-									stack_count -= 2;
-									++this_infix;
-									continue;
-								}
-								// There's not enough information at this stage to determine whether this nested
-								// function needs CloseIfNeeded() to be called, so we must assume that it does.
-							}
-						}
 
 						if (stack_symbol == SYM_OBRACE && (in_param_list->param_count & 1)) // i.e. an odd number of parameters, which means no "key:" was specified.
 							return LineError(_T("Missing \"key:\" in object literal."));
@@ -8994,7 +8983,16 @@ unquoted_literal:
 				in_param_list = this_infix[-1].callsite; // Store this SYM_FUNC's deref.
 			else if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol)
 				&& *this_infix->marker == '(') // i.e. it's not an implicit SYM_OPAREN generated by DT_STRING.
-				return LineError(_T("Missing operator or space before \"(\"."), FAIL, this_infix->marker);
+			{
+				// This is a function call with something other than a known function name,
+				// so this_infix[-1] is the object to be called (or an error).
+				auto token = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+				token->symbol = SYM_FUNC;
+				token->callsite = in_param_list = new CallSite();
+				if (!in_param_list)
+					return LineError(ERR_OUTOFMEM);
+				STACK_PUSH(token);
+			}
 			else
 				in_param_list = NULL; // Allow multi-statement commas, even in cases like Func((x,y)).
 			STACK_PUSH(this_infix++);
@@ -12914,7 +12912,7 @@ LPCTSTR VarKindForErrorMessage(Var *aVar)
 	switch (aVar->Type())
 	{
 	case VAR_VIRTUAL: return _T("built-in variable");
-	case VAR_CONSTANT: return _T("class");
+	case VAR_CONSTANT: return aVar->Object()->Type();
 	default: return Var::DeclarationType(aVar->Scope());
 	}
 }
@@ -13241,12 +13239,12 @@ ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
 {
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
-		if (aFuncs.mItem[i]->IsBuiltIn())
-			continue;
+		ASSERT(!aFuncs.mItem[i]->IsBuiltIn());
 		auto &func = *(UserFunc *)aFuncs.mItem[i];
-		if (!PreprocessLocalVars(func) // Process func first so mDownVar is allocated if needed.
-			|| !PreprocessLocalVars(func.mFuncs)) // Process nested functions.
+		if (!PreprocessLocalVars(func))
 			return FAIL;
+		// Nested functions will be preparsed next, due to the fact that they immediately
+		// follow the outer function in aFuncs.
 	}
 	return OK;
 }
@@ -13257,60 +13255,113 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 {
 	Var **vars = aFunc.mVars.mItem;
 	int var_count = aFunc.mVars.mCount;
-	int upvar_count = 0;
-	int downvar_count = 0;
+	int closure_count = 0, non_closure_count = 0;
 	for (int v = 0; v < var_count; ++v)
 	{
 		Var &var = *vars[v];
-
-		if (var.IsAlias()) // At this stage only upvars are aliases.
-			++upvar_count;
-		if (var.Scope() & VAR_DOWNVAR)
-			++downvar_count;
+		if (var.Type() == VAR_CONSTANT)
+		{
+			// Currently only nested functions create local constants, but this could be
+			// a local constant or an upvar alias for a non-local constant.
+			ASSERT(var.HasObject() && dynamic_cast<UserFunc *>(var.Object()));
+			auto &func = *(UserFunc *)var.Object();
+			if (!func.mUpVarCount)
+			{
+				// This function doesn't need to be a closure, so convert it to static.
+				int insert_pos;
+				aFunc.mStaticVars.Find(var.mName, &insert_pos);
+				aFunc.mStaticVars.Insert(&var, insert_pos);
+				var.Scope() |= VAR_LOCAL_STATIC;
+				++non_closure_count;
+				if (var.Scope() & VAR_DOWNVAR)
+				{
+					var.Scope() &= ~VAR_DOWNVAR;
+					--aFunc.mDownVarCount;
+				}
+			}
+			else if (!var.IsAlias()) // At this stage only upvars are aliases.
+			{
+				// This is a closure of aFunc and not an alias for an outer function's
+				// nested function constant.
+				++closure_count;
+			}
+		}
 	}
-	if (upvar_count)
+	if (non_closure_count) // One or more static vars are to be removed from mVars.
+	{
+		int dst = 0;
+		for (int src = 0; src < var_count; ++src)
+			if (!vars[src]->IsStatic())
+				vars[dst++] = vars[src];
+		aFunc.mVars.mCount = var_count = dst;
+	}
+	if (closure_count)
+	{
+		aFunc.mClosure = (ClosureInfo *)SimpleHeap::Malloc(closure_count * sizeof(ClosureInfo));
+		for (int v = 0; v < var_count; ++v)
+		{
+			Var &var = *vars[v];
+			if (!var.IsAlias() && var.Type() == VAR_CONSTANT)
+			{
+				ASSERT(var.IsObject() && dynamic_cast<UserFunc *>(var.Object()));
+				auto &ci = aFunc.mClosure[aFunc.mClosureCount++];
+				ci.var = &var;
+				ci.func = (UserFunc *)var.Object();
+			}
+		}
+		ASSERT(aFunc.mClosureCount == closure_count);
+	}
+	if (aFunc.mUpVarCount)
 	{
 		// Upvars are vars local to an outer function which are referenced by aFunc.
 		// They might be local to aFunc.mOuterFunc or one further out.  In the latter
 		// case, aFunc.mOuterFunc contains a downvar which is also one of its upvars.
-		aFunc.mUpVar = (Var **)SimpleHeap::Malloc(upvar_count * sizeof(Var *));
-		aFunc.mUpVarIndex = (int *)SimpleHeap::Malloc(upvar_count * sizeof(int));
+		aFunc.mUpVar = (Var **)SimpleHeap::Malloc(aFunc.mUpVarCount * sizeof(Var *));
+		aFunc.mUpVarIndex = (int *)SimpleHeap::Malloc(aFunc.mUpVarCount * sizeof(int));
 		if (!aFunc.mUpVar || !aFunc.mUpVarIndex)
 			return ScriptError(ERR_OUTOFMEM);
-		ASSERT(aFunc.mUpVarCount == 0);
 
-		auto &outer = *aFunc.mOuterFunc; // Always non-null when upvar_count > 0.
+		auto &outer = *aFunc.mOuterFunc; // Always non-null when aFunc.mUpVarCount > 0.
+		int upvar_count = 0;
 		for (int v = 0; v < var_count; ++v)
 		{
 			Var &var = *vars[v];
 			if (!var.IsAlias()) // At this stage only upvars are aliases.
 				continue;
 
-			// At this stage outer.mDownVar has been allocated but would not contain
-			// &var unless it was referenced by a previous nested function.
 			Var *downvar = var.GetAliasFor(); // FindUpVar() set var to be an alias of the corresponding downvar.
-			var.ConvertToNonAliasIfNecessary(); // From this point on, it's not permitted to be a multiple level alias.
 			int d;
-			for (d = 0; d < outer.mDownVarCount; ++d)
+			for (d = 0; ; ++d)
+			{
+				ASSERT(d < outer.mDownVarCount);
 				if (outer.mDownVar[d] == downvar)
 					break;
-			if (d == outer.mDownVarCount)
-				outer.mDownVar[outer.mDownVarCount++] = downvar;
+			}
 
-			aFunc.mUpVar[aFunc.mUpVarCount] = &var;
-			aFunc.mUpVarIndex[aFunc.mUpVarCount] = d;
-			++aFunc.mUpVarCount;
+			ASSERT(upvar_count < aFunc.mUpVarCount);
+			aFunc.mUpVar[upvar_count] = &var;
+			aFunc.mUpVarIndex[upvar_count] = d;
+			++upvar_count;
 		}
-		ASSERT(aFunc.mUpVarCount == upvar_count);
+		ASSERT(upvar_count == aFunc.mUpVarCount);
 	}
-	if (downvar_count)
+	if (aFunc.mDownVarCount)
 	{
 		// Downvars are vars local to aFunc which are referenced by a nested function.
-		aFunc.mDownVar = (Var **)SimpleHeap::Malloc(downvar_count * sizeof(Var *));
+		aFunc.mDownVar = (Var **)SimpleHeap::Malloc(aFunc.mDownVarCount * sizeof(Var *));
 		if (!aFunc.mDownVar)
 			return ScriptError(ERR_OUTOFMEM);
-		// The list is populated when a nested function is processed by the section above.
-		ASSERT(aFunc.mDownVarCount == 0);
+		
+		int downvar_count = 0;
+		for (int v = 0; v < var_count; ++v)
+		{
+			if (vars[v]->Scope() & VAR_DOWNVAR)
+			{
+				ASSERT(downvar_count < aFunc.mDownVarCount);
+				aFunc.mDownVar[downvar_count++] = vars[v];
+			}
+		}
+		ASSERT(downvar_count == aFunc.mDownVarCount);
 	}
 	return OK;
 }
@@ -13351,7 +13402,8 @@ ResultType Script::PreparseVarRefs()
 					// This ensures classes introduced via stdlib are consistent with other classes;
 					// i.e. passing to a ByRef parameter gives a value instead of a read-only parameter.
 					// It might also help performance.
-					token->var->ToToken(*token);
+					if (!token->var->IsLocal())
+						token->var->ToToken(*token);
 					continue;
 				case VAR_VIRTUAL:
 					// Convert this virtual var to SYM_DYNAMIC for evaluation by ExpandExpression.

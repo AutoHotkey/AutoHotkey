@@ -13,7 +13,7 @@ extern BuiltInFunc *OpFunc_GetProp, *OpFunc_GetItem, *OpFunc_SetProp, *OpFunc_Se
 // Object()
 //
 
-BIF_DECL(BIF_Object)
+BIF_DECL(Op_Object)
 {
 	IObject *obj = Object::Create(aParam, aParamCount, &aResultToken);
 	if (obj)
@@ -29,26 +29,11 @@ BIF_DECL(BIF_Object)
 // BIF_Array - Array(items*)
 //
 
-BIF_DECL(BIF_Array)
+BIF_DECL(Op_Array)
 {
 	if (auto arr = Array::Create(aParam, aParamCount))
 		_f_return(arr);
 	_f_throw(ERR_OUTOFMEM);
-}
-
-
-//
-// Map()
-//
-
-BIF_DECL(BIF_Map)
-{
-	if (aParamCount & 1)
-		_f_throw(ERR_PARAM_COUNT_INVALID);
-	auto obj = Map::Create(aParam, aParamCount);
-	if (!obj)
-		_f_throw(ERR_OUTOFMEM);
-	_f_return(obj);
 }
 	
 

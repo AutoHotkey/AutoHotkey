@@ -136,6 +136,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// Do some basic validation to ensure a helpful error message is displayed on failure.
 					if (right_length == 0)
 					{
+						if (IObject *obj = TokenToObject(right)) // Temporary; to facilitate testing/comparison.
+						{
+							this_token.SetValue(obj);
+							goto push_this_token;
+						}
 						error_msg = ERR_DYNAMIC_BLANK;
 						error_info = mArg[aArgIndex].text;
 						goto abort_with_exception;
@@ -175,7 +180,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 				if (this_token.var->Type() == VAR_CONSTANT)
 				{
-					// Currently constants can't be local, so there should be no need to AddRef() and add to to_free[].
+					// There should be no need to AddRef() and add to to_free[], since even if
+					// a constant is local, it could only be released when the function returns.
 					this_token.var->ToTokenSkipAddRef(this_token);
 					goto push_this_token;
 				}
@@ -1493,7 +1499,7 @@ ResultType Line::ExpandSingleArg(int aArgIndex, ResultToken &aResultToken, LPTST
 #ifdef _WIN64
 		aResultToken.marker_length = postfix->marker_length;
 #endif
-		if (aResultToken.symbol == SYM_OBJECT) // This can happen for VAR_CONSTANT or optimised Func("x").
+		if (aResultToken.symbol == SYM_OBJECT) // This can happen for VAR_CONSTANT.
 			aResultToken.object->AddRef();
 		return OK;
 	}
@@ -1813,7 +1819,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 		if (sFreeVars && mOuterFunc && !aUpVars)
 			aUpVars = sFreeVars->ForFunc(mOuterFunc);
 
-		if (mDownVarCount || aUpVars)
+		if (mDownVarCount)
 		{
 			// These local vars need to persist after the function returns (and be independent of
 			// any other instances of this function).  Since we really only have one set of local
@@ -1847,6 +1853,19 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 					// in which case inner_free_var is now an alias for outer_free_var->mAliasFor.
 				}
 				mUpVar[i]->UpdateAlias(outer_free_var);
+			}
+		}
+
+		if (mClosureCount)
+		{
+			ASSERT(sFreeVars);
+			for (int i = 0; i < mClosureCount; ++i)
+			{
+				auto closure = new Closure(mClosure[i].func, sFreeVars
+					, mClosure[i].var->Scope() & VAR_DOWNVAR); // Closures in downvars have lifetime tied to sFreeVars.
+				Var *var = mClosure[i].var->ResolveAlias();
+				var->AssignSkipAddRef(closure);
+				var->MakeReadOnly();
 			}
 		}
 

@@ -43,7 +43,12 @@ public:
 			// is copied to another variable (AddRef() is called).  To gracefully handle this, let
 			// implementors decide when to delete and just decrement mRefCount if it doesn't happen.
 			if (Delete())
-				return 0;
+				return 0; // Object was deleted, so cannot check or decrement --mRefCount.
+			// If the object is implemented correctly, false was returned because:
+			//  a) mRefCount > 1; e.g. __delete has "resurrected" the object by storing a reference.
+			//  b) There are no more counted references to this object, but its lifetime is tied to
+			//     another object, which can "resurrect" this one.  The other object must have some
+			//     way to delete this one when appropriate, such as by calling AddRef() & Release().
 			// Implementor has ensured Delete() returns false only if delete wasn't called (due to
 			// remaining references to this), so we must assume mRefCount > 1.  If Delete() really
 			// deletes the object and (erroneously) returns false, checking if mRefCount is still
@@ -51,6 +56,8 @@ public:
 		}
 		return --mRefCount;
 	}
+
+	ULONG RefCount() { return mRefCount; }
 
 	ObjectBase() : mRefCount(1) {}
 
@@ -402,6 +409,7 @@ public:
 	Property *DefineProperty(name_t aName);
 	bool DefineMethod(name_t aName, IObject *aFunc);
 	
+	bool HasOwnMethod(name_t aName) { return FindMethod(aName); }
 	bool HasOwnMethods() { return mMethods.Length(); }
 
 	bool CanSetBase(Object *aNewBase);

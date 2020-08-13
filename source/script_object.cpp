@@ -1039,7 +1039,7 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 	class_obj->SetBase(aBase);
 
 	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
-	_stprintf(full_name, _T("%s.New"), aClassName);
+	_stprintf(full_name, _T("%s.Call"), aClassName);
 	auto ctor = new BuiltInMethod(SimpleHeap::Malloc(full_name));
 	ctor->mBIM = aCtor;
 	ctor->mMID = 0;
@@ -1048,7 +1048,8 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 	ctor->mParamCount = MAX_FUNCTION_PARAMS;
 	ctor->mIsVariadic = true;
 	ctor->mClass = nullptr; // Safe to call on any Object.
-	class_obj->DefineMethod(_T("New"), ctor);
+	class_obj->DefineMethod(_T("Call"), ctor);
+	class_obj->DefineMethod(_T("New"), ctor); // Temporary; to facilitate testing/comparison.
 	ctor->Release();
 
 	auto var = g_script.FindOrAddVar(aClassName, 0, VAR_DECLARE_SUPER_GLOBAL);
@@ -2616,7 +2617,50 @@ bool Closure::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPara
 
 Closure::~Closure()
 {
-	mVars->Release();
+	if (!(mFlags & ClosureGroupedFlag))
+		mVars->Release();
+}
+
+bool Closure::Delete()
+{
+	if ((mFlags & ClosureGroupedFlag) && !mVars->FullyReleased(mRefCount))
+		return false;
+	return Func::Delete();
+}
+
+bool FreeVars::FullyReleased(ULONG aRefPendingRelease)
+{
+	// This function is part of a workaround for circular references that occur because all closures
+	// have a reference to this FreeVars, while any closure referenced by itself or another closure
+	// has a reference in mVar[].
+	if (mRefCount)
+		return mRefCount < 0;
+	int circular_closures = 0;
+	for (int i = 0; i < mVarCount; ++i)
+		if (mVar[i].Type() == VAR_CONSTANT)
+		{
+			ASSERT(mVar[i].HasObject() && dynamic_cast<ObjectBase*>(mVar[i].Object())); // Any object in VAR_CONSTANT must derive from ObjectBase.
+			auto obj = (ObjectBase *)mVar[i].Object();
+			if (obj->RefCount() && aRefPendingRelease == 0)
+				return false;
+			--aRefPendingRelease;
+			++circular_closures;
+		}
+	--mRefCount; // Now that delete is certain, make this non-zero to prevent reentry.
+	if (circular_closures)
+	{
+		// All closures in downvars have mRefCount == 0, meaning their only reference is the
+		// uncounted one in mVar[].  In order to free the object properly, mRefCount needs to
+		// be restored to 1 prior to Release(), which will be called by Var::Free().
+		for (int i = 0; i < mVarCount; ++i)
+			if (mVar[i].Type() == VAR_CONSTANT)
+			{
+				auto obj = (ObjectBase *)mVar[i].Object();
+				obj->AddRef();
+			}
+	}
+	delete this;
+	return true;
 }
 
 

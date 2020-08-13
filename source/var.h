@@ -600,7 +600,7 @@ public:
 	// Convert VAR_NORMAL to VAR_CONSTANT.
 	void MakeReadOnly()
 	{
-		ASSERT(mType == VAR_NORMAL); // Should never be called on VAR_ALIAS or VAR_VIRTUAL.
+		ASSERT(mType == VAR_NORMAL || mType == VAR_CONSTANT); // Should never be called on VAR_ALIAS or VAR_VIRTUAL.
 		ASSERT(!(mAttrib & VAR_ATTRIB_UNINITIALIZED));
 		mType = VAR_CONSTANT;
 	}

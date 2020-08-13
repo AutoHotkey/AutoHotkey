@@ -11734,10 +11734,8 @@ void *pcret_resolve_user_callout(LPCTSTR aCalloutParam, int aCalloutParamLength)
 	// If no Func is found, pcre will handle the case where aCalloutParam is a pure integer.
 	// In that case, the callout param becomes an integer between 0 and 255. No valid pointer
 	// could be in this range, but we must take care to check (ptr>255) rather than (ptr!=NULL).
-	IObject *callout_func = g_script.FindFunc(aCalloutParam, aCalloutParamLength);
-	if (!callout_func)
-		return nullptr;
-	return (void *)callout_func;
+	auto callout_var = g_script.FindVar(aCalloutParam, aCalloutParamLength);
+	return callout_var ? callout_var->ToObject() : nullptr;
 }
 
 struct RegExCalloutData // L14: Used by BIF_RegEx to pass necessary info to RegExCallout.
@@ -13500,15 +13498,9 @@ BIF_DECL(BIF_Func)
 // Returns a reference to an existing user-defined or built-in function, as an object.
 // Returns a new closure if the function has upvalues.
 {
-	Func *func;
-	if (_f_callee_id == FID_Func)
-	{
-		if (ParamIndexToObject(0))
-			_f_throw(ERR_PARAM1_INVALID); // For consistency with IsFunc().
-		func = g_script.FindFunc(ParamIndexToString(0));
-	}
-	else // FID_FuncClose (internal).
-		func = (Func *)aParam[0]->object; // No type-checking needed because this is a private/internal function.
+	if (ParamIndexToObject(0))
+		_f_throw(ERR_PARAM1_INVALID); // For consistency with IsFunc().
+	auto func = g_script.FindFunc(ParamIndexToString(0));
 	if (func)
 		_f_return(func->CloseIfNeeded());
 	else
@@ -13516,17 +13508,24 @@ BIF_DECL(BIF_Func)
 }
 
 
+
+BIF_DECL(Op_FuncClose)
+// Returns the Func aParam[0] itself or a new closure if it has upvalues.
+{
+	Func *func = (Func *)aParam[0]->object; // No type-checking needed because this is a private/internal function.
+	_f_return(func->CloseIfNeeded());
+}
+
+
 IObject *UserFunc::CloseIfNeeded()
 {
-	FreeVars *fv = (mOuterFunc && sFreeVars) ? sFreeVars->ForFunc(mOuterFunc) : NULL;
+	FreeVars *fv = (mUpVarCount && mOuterFunc && sFreeVars) ? sFreeVars->ForFunc(mOuterFunc) : NULL;
 	if (!fv)
 	{
 		AddRef();
 		return this;
 	}
-	Closure *cl = new Closure(this, fv);
-	fv->AddRef();
-	return cl;
+	return new Closure(this, fv, false);
 }
 
 
@@ -16918,26 +16917,6 @@ IObject *TokenToObject(ExprTokenType &aToken)
 		return aToken.var->ToObject();
 
 	return NULL;
-}
-
-
-
-Func *TokenToFunc(ExprTokenType &aToken)
-{
-	// No need for buf since function names can't be pure numeric:
-	//TCHAR buf[MAX_NUMBER_SIZE];
-	Func *func;
-	if (  !(func = dynamic_cast<Func *>(TokenToObject(aToken)))  )
-	{
-		LPTSTR func_name = TokenToString(aToken);
-		// Dynamic function calls rely on the following check to avoid a lengthy and
-		// futile search through all function and action names when aToken is an object
-		// emulating a function.  The check works because TokenToString() returns ""
-		// when aToken is an object (or a pure number, since no buffer was passed).
-		if (*func_name)
-			func = g_script.FindFunc(func_name);
-	}
-	return func;
 }
 
 
