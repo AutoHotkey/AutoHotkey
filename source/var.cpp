@@ -152,6 +152,16 @@ void Var::UpdateAlias(Var *aTargetVar)
 
 
 
+void Var::UpdateAlias(VarRef *aTargetVar)
+{
+	ASSERT(!IsObject());
+	SetAliasDirect(aTargetVar);
+	_SetObject(aTargetVar);
+	aTargetVar->AddRef();
+}
+
+
+
 IObject *Var::GetRef()
 {
 	auto target_var = this;
@@ -171,14 +181,8 @@ IObject *Var::GetRef()
 		return nullptr;
 	}
 	if (mType == VAR_ALIAS)
-	{
-		ref->AddRef();
-		target_var->_SetObject(ref);
-		target_var->SetAliasDirect(ref);
-	}
-	ref->AddRef();
-	_SetObject(ref);
-	SetAliasDirect(ref);
+		target_var->UpdateAlias(ref);
+	UpdateAlias(ref);
 	return ref;
 }
 

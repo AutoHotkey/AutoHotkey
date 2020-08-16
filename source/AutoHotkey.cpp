@@ -142,7 +142,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		}
 	}
 
-	if (Var *var = g_script.FindOrAddVar(_T("A_Args"), 6, VAR_DECLARE_SUPER_GLOBAL))
+	if (Var *var = g_script.FindOrAddVar(_T("A_Args"), 6, VAR_DECLARE_GLOBAL))
 	{
 		// Store the remaining args in an array and assign it to "Args".
 		// If there are no args, assign an empty array so that A_Args[1]

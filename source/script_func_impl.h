@@ -8,7 +8,9 @@
 #define ParamIndexToBOOL(index)						TokenToBOOL(*aParam[(index)])
 #define ParamIndexToObject(index)					TokenToObject(*aParam[(index)])
 #define ParamIndexToToggleValue(index)				TokenToToggleValue(*aParam[(index)])
-													
+
+#define ParamIndexToOutputVar(index)				((index) < aParamCount ? TokenToOutputVar(*aParam[(index)]) : nullptr)
+
 // Omitted parameter returns SCS_INSENSITIVE.
 #define ParamIndexToCaseSense(index)				(ParamIndexIsOmitted((index)) ? SCS_INSENSITIVE : TokenToStringCase(*aParam[(index)]))
 
@@ -29,8 +31,6 @@
 #define ParamIndexToOptionalInt64(index, def)		ParamIndexToOptionalType(Int64, index, def)
 #define ParamIndexToOptionalBOOL(index, def)		ParamIndexToOptionalType(BOOL, index, def)
 #define ParamIndexToOptionalVar(index)				(((index) < aParamCount && aParam[index]->symbol == SYM_VAR) ? aParam[index]->var : NULL)
-
-#define ParamIndexToOutputVar ParamIndexToOptionalVar
 
 inline LPTSTR _OptionalStringDefaultHelper(LPTSTR aDef, LPTSTR aBuf = NULL, size_t *aLength = NULL)
 {

@@ -349,10 +349,8 @@ Array *Array::FromEnumerable(ExprTokenType &aEnumerable)
 	if (result == FAIL || result == EARLY_EXIT)
 		return nullptr;
 	
-	Var var;
-	ExprTokenType tvar, *param = &tvar;
-	tvar.symbol = SYM_VAR;
-	tvar.var = &var;
+	auto varref = new VarRef();
+	ExprTokenType tvar { varref }, *param = &tvar;
 	Array *vargs = Array::Create();
 	for (;;)
 	{
@@ -366,10 +364,10 @@ Array *Array::FromEnumerable(ExprTokenType &aEnumerable)
 		if (result != CONDITION_TRUE)
 			break;
 		ExprTokenType value;
-		var.ToTokenSkipAddRef(value);
+		varref->ToTokenSkipAddRef(value);
 		vargs->Append(value);
 	}
-	var.Free();
+	varref->Release();
 	enumerator->Release();
 	return vargs;
 }
@@ -1052,7 +1050,7 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 	class_obj->DefineMethod(_T("New"), ctor); // Temporary; to facilitate testing/comparison.
 	ctor->Release();
 
-	auto var = g_script.FindOrAddVar(aClassName, 0, VAR_DECLARE_SUPER_GLOBAL);
+	auto var = g_script.FindOrAddVar(aClassName, 0, VAR_DECLARE_GLOBAL);
 	var->AssignSkipAddRef(class_obj);
 	var->MakeReadOnly();
 

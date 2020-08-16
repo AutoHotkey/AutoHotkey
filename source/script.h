@@ -396,7 +396,7 @@ struct DerefType
 
 struct CallSite
 {
-	IObject *func = nullptr;
+	Func *func = nullptr;
 	LPTSTR member = nullptr;
 	int flags = IT_CALL;
 	int param_count = 0;
@@ -1359,6 +1359,7 @@ public:
 	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
 	
+	ResultType ValidateVarUsage(Var *aVar, int aUsage);
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType);
 	ResultType LineUnexpectedError();
 
@@ -3050,11 +3051,14 @@ public:
 	static SymbolType ConvertWordOperator(LPCTSTR aWord, size_t aLength);
 	static bool EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker);
 
-	#define FINDVAR_DEFAULT  (VAR_LOCAL | VAR_GLOBAL)
-	#define FINDVAR_GLOBAL   VAR_GLOBAL
-	#define FINDVAR_LOCAL    VAR_LOCAL
-	Var *FindOrAddVar(LPCTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT);
-	Var *FindVar(LPCTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT
+	#define FINDVAR_DEFAULT			(VAR_LOCAL | VAR_GLOBAL)
+	#define FINDVAR_GLOBAL			VAR_GLOBAL
+	#define FINDVAR_LOCAL			VAR_LOCAL
+	#define FINDVAR_GLOBAL_FALLBACK	0x100
+	#define FINDVAR_FOR_WRITE		FINDVAR_DEFAULT
+	#define FINDVAR_FOR_READ		(FINDVAR_DEFAULT | FINDVAR_GLOBAL_FALLBACK)
+	Var *FindOrAddVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope);
+	Var *FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope = FINDVAR_FOR_READ
 		, VarList **apList = nullptr, int *apInsertPos = nullptr, ResultType *aDisplayError = nullptr);
 	Var *FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError);
 	Var *AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope);
@@ -3117,9 +3121,9 @@ public:
 	ResultType RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), ResultType aErrorType = FAIL_OR_OK, Line *aLine = nullptr);
 
 	ResultType ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting);
-	enum VarRefUsageType { VARREF_READ = 0, VARREF_BYREF, VARREF_ISSET
-		, VARREF_DYNAMIC_PARAM, VARREF_LVALUE, VARREF_OUTPUT_VAR };
-#define VARREF_IS_WRITE(is_lvalue) ((is_lvalue) >= Script::VARREF_LVALUE)
+	enum VarRefUsageType { VARREF_READ = 0, VARREF_ISSET
+		, VARREF_REF, VARREF_LVALUE, VARREF_OUTPUT_VAR };
+#define VARREF_IS_WRITE(var_usage) ((var_usage) >= Script::VARREF_REF)
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType = VARREF_LVALUE);
 
 	ResultType ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine);
@@ -3276,7 +3280,6 @@ BIF_DECL(BIF_StrPtr);
 BIF_DECL(BIF_IsLabel);
 BIF_DECL(BIF_IsFunc);
 BIF_DECL(BIF_Func);
-BIF_DECL(BIF_IsByRef);
 BIF_DECL(BIF_IsTypeish);
 BIF_DECL(BIF_IsSet);
 BIF_DECL(BIF_GetKeyState);
@@ -3452,6 +3455,7 @@ double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE);
 LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL, size_t *aLength = NULL);
 ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOutput);
 StringCaseSenseType TokenToStringCase(ExprTokenType& aToken);
+Var *TokenToOutputVar(ExprTokenType &aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
 ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, LPTSTR aNullErr = ERR_TYPE_MISMATCH, int *aMinParams = nullptr);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);

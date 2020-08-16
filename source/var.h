@@ -99,6 +99,8 @@ struct VarEntry
 	VirtualVar type;
 };
 
+class VarRef;
+
 #pragma warning(push)
 #pragma warning(disable: 4995 4996)
 
@@ -822,6 +824,7 @@ public:
 	// Makes this var an alias of aTargetVar, or aTargetVar's target if it's an alias.
 	// Copies any internal mObject ref used for managing the lifetime of the alias.
 	void UpdateAlias(Var *aTargetVar);
+	void UpdateAlias(VarRef *aTargetVar);
 
 	// Unconditionally makes this var an alias of aTargetVar, without resolving aliases.
 	// Caller must ensure aTargetVar != nullptr && aTargetVar != this.
