@@ -731,12 +731,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		case SYM_REF:
 			if (right.symbol != SYM_VAR) // Syntax error?
 				goto abort_with_exception;
-			if (this_token.var_usage == Script::VARREF_REF)
+			if (this_token.var_usage != Script::VARREF_READ)
 			{
+				if (this_token.var_usage != Script::VARREF_REF)
+				{
+					// VARREF_ISSET or VARREF_OUTPUT_VAR -> SYM_VAR.
+					this_token.SetVarRef(right.var);
+					goto push_this_token;
+				}
 				Var *target_var = right.var->ResolveAlias();
 				if (!target_var->IsNonStaticLocal()
-					|| this_token.callsite->func->IsBuiltIn()
-					|| !((UserFunc *)this_token.callsite->func)->mInstances)
+					|| !this_token.object
+					|| !((UserFunc *)this_token.object)->mInstances)
 				{
 					// target_var definitely isn't a local var of the function being called,
 					// so it's safe to pass as SYM_VAR.
@@ -744,6 +750,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					goto push_this_token;
 				}
 			}
+			ASSERT(right.var->Type() == VAR_NORMAL);
 			this_token.SetValue(right.var->GetRef());
 			if (!this_token.object)
 				goto outofmem;

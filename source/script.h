@@ -945,6 +945,7 @@ public:
 	ResultType ExpandSingleArg(int aArgIndex, ResultToken &aResultToken, LPTSTR &aDerefBuf, size_t &aDerefBufSize);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
 	ResultType ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix);
+	ResultType FinalizeExpression(ArgStruct &aArg);
 
 	static bool FileIsFilteredOut(LoopFilesStruct &aCurrentFile, FileLoopModeType aFileLoopMode);
 

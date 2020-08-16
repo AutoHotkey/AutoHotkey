@@ -7758,6 +7758,12 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 					return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			break;
 		}
+
+		// Finalize and optimize postfix expressions.
+		for (int i = 0; i < line->mArgc; ++i)
+			if (line->mArg[i].is_expression && !line->FinalizeExpression(line->mArg[i]))
+				return nullptr;
+
 		// Check for unreachable code.
 		if (g_Warn_Unreachable)
 		switch (line->mActionType)
@@ -7910,6 +7916,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 
 				ExprTokenType &this_infix_item = infix[infix_count]; // Might help reduce code size since it's referenced many places below.
 				this_infix_item.callsite = nullptr; // Init needed for SYM_ASSIGN and related; a non-NULL value means it should be converted to an object-assignment.
+				// Above: SYM_REF and possibly others may rely on this zero-initializing the union.
 				this_infix_item.error_reporting_marker = cp; // Used for reporting syntax errors with unary and binary operators, and may be overwritten via union for other symbols.
 
 				// Auto-concat requires a space or tab for the following reasons:
@@ -8223,8 +8230,13 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					{
 						// Differentiate between unary "take a reference to" and the "bitwise and" operator:
 						// See '-' above for more details:
-						this_infix_item.symbol = (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
-							? SYM_BITAND : SYM_REF;
+						if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
+							this_infix_item.symbol = SYM_BITAND;
+						else
+						{
+							this_infix_item.symbol = SYM_REF;
+							this_infix_item.var_usage = Script::VARREF_READ; // Set default: assume a VarRef is needed.
+						}
 					}
 					break;
 				case '|':
@@ -8740,16 +8752,6 @@ unquoted_literal:
 			}
 			else if (IS_OPAREN_LIKE(stack_symbol))
 			{
-				Func *func = in_param_list->func; // Can be NULL, e.g. for dynamic function calls.
-				if (!func)
-				{
-					// Calls to local functions aren't preresolved into in_param_list at this point
-					// as they may be closures, but a Func* is present and usable for validation.
-					auto &target = stack[stack_count - 1][-1];
-					if (target.symbol == SYM_VAR && target.var_deref->var && target.var_deref->var->HasObject())
-						func = dynamic_cast<Func*>(target.var_deref->var->Object());
-				}
-
 				if (infix_symbol == SYM_COMMA || this_infix[-1].symbol != stack_symbol) // i.e. not an empty parameter list.
 				{
 					// Accessing this_infix[-1] here is necessarily safe since in_param_list is
@@ -8757,9 +8759,6 @@ unquoted_literal:
 					SymbolType prev_sym = this_infix[-1].symbol;
 					if (prev_sym == SYM_COMMA || prev_sym == stack_symbol) // Empty parameter.
 					{
-						if (func && in_param_list->param_count < func->mMinParams) // Is this parameter mandatory?
-							return LineError(ERR_PARAM_REQUIRED);
-
 						int num_blank_params = 0;
 						while (this_infix->symbol == SYM_COMMA)
 						{
@@ -8792,58 +8791,10 @@ unquoted_literal:
 						// This is SYM_COMMA or SYM_CPAREN/BRACKET/BRACE at the end of a parameter.
 						++in_param_list->param_count;
 
-						auto *bif = func && func->IsBuiltIn() ? ((BuiltInFunc *)func)->mBIF : nullptr;
-
-						ExprTokenType &param_last = *postfix[postfix_count-1];
-
-						if (!func)
-						{
-							// Skip the checks below.
-						}
-						else if (in_param_list->param_count > func->mParamCount && !func->mIsVariadic)
-						{
-							return LineError(ERR_TOO_MANY_PARAMS, FAIL, func->mName);
-						}
-						else if (!bif)
-						{
-							// Skip the checks below.
-						}
-						// The rest of the checks are for calls to built-in functions only:
-						else if (postfix[postfix_count-1][-1].symbol != SYM_COMMA && postfix[postfix_count-1][-1].symbol != stack_symbol)
-						{
-							// This parameter is more than a single operand, so may be something which can't be
-							// handled by the checks and optimizations below, such as Func(true ? "abs" : "").
-						}
-						#ifdef ENABLE_DLLCALL
-						else if (bif == &BIF_DllCall // Implies mIsBuiltIn == true.
-							&& in_param_list->param_count == 1) // i.e. this is the end of the first param.
-						{
-							// Optimise DllCall by resolving function addresses at load-time where possible.
-							if (param_last.symbol == SYM_STRING)
-							{
-								void *function = GetDllProcAddress(param_last.marker);
-								if (function)
-									param_last.SetValue((__int64)function);
-								// Otherwise, one of the following is true:
-								//  a) A file was specified and is not already loaded.  GetDllProcAddress avoids
-								//     loading any dlls since doing so may have undesired side-effects.  The file
-								//     might not exist at this stage, but might when DllCall is actually called.
-								//	b) The function could not be found.  This is not considered an error since the
-								//     absence of certain functions (e.g. IsWow64Process) may have some meaning to
-								//     the script; or the function may be non-essential.
-							}
-						}
-						#endif
-
 						if (stack_symbol == SYM_OBRACE && (in_param_list->param_count & 1)) // i.e. an odd number of parameters, which means no "key:" was specified.
 							return LineError(_T("Missing \"key:\" in object literal."));
 					}
 				}
-
-				// Enforce mMinParams:
-				if (func && infix_symbol == SYM_CPAREN && in_param_list->param_count < func->mMinParams
-					&& !in_param_list->is_variadic())
-					return LineError(ERR_TOO_FEW_PARAMS, FAIL, func->mName);
 			}
 				
 			switch (infix_symbol)
@@ -9285,29 +9236,6 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 
 		case SYM_REF:
 			postfix_symbol = postfix[postfix_count - 1]->symbol;
-			if (in_param_list && in_param_list->func // Currently in a function's parameter list,
-				&& (infix_symbol == SYM_COMMA || infix_symbol == SYM_CPAREN) // at the end of a parameter,
-				&& (stack[stack_count - 1]->symbol == SYM_OPAREN) // this is the last operator in this parameter,
-				&& in_param_list->func->ArgIsOutputVar(in_param_list->param_count)) // and it's an output parameter.
-			{
-				if (in_param_list->func->IsBuiltIn()
-					&& (postfix_symbol == SYM_VAR || postfix_symbol == SYM_DYNAMIC))
-				{
-					// Set var_usage to indicate which vars are valid in this context.
-					auto bif = ((BuiltInFunc *)in_param_list->func)->mBIF;
-					postfix[postfix_count - 1]->var_usage =
-						bif == BIF_VarSetStrCapacity ? Script::VARREF_REF :
-						bif == BIF_IsSet			 ? Script::VARREF_ISSET :
-													   Script::VARREF_OUTPUT_VAR;
-					// This parameter supports passing SYM_VAR with var_usage != VARREF_READ
-					// in place of a VarRef (via TokenToOutputVar), so drop this SYM_REF.
-					continue;
-				}
-				this_postfix->var_usage = Script::VARREF_REF; // This SYM_REF may produce SYM_VAR or a VarRef.
-				this_postfix->callsite = in_param_list;
-			}
-			else
-				this_postfix->var_usage = Script::VARREF_READ; // This SYM_REF should produce a VarRef.
 			if (postfix_symbol == SYM_VAR || postfix_symbol == SYM_DYNAMIC)
 				postfix[postfix_count - 1]->var_usage = Script::VARREF_REF;
 			else if (!IS_OPERATOR_VALID_LVALUE(postfix_symbol))
@@ -9435,7 +9363,8 @@ end_of_infix_to_postfix:
 			new_token.var = g_script.FindOrAddVar(new_token.var_deref->marker, new_token.var_deref->length, FINDVAR_FOR_WRITE);
 			if (!new_token.var)
 				return FAIL;
-			if (!ValidateVarUsage(new_token.var, new_token.var_usage))
+			if (new_token.var_usage != Script::VARREF_REF // Validation of REF is left to FinalizeExpression().
+				&& !ValidateVarUsage(new_token.var, new_token.var_usage))
 				return FAIL;
 			new_token.var->MarkAssignedSomewhere();
 			if (aArg.type == ARG_TYPE_OUTPUT_VAR)
@@ -9455,6 +9384,148 @@ end_of_infix_to_postfix:
 
 	return OK;
 }
+
+
+
+ResultType Line::FinalizeExpression(ArgStruct &aArg)
+{
+	auto postfix = aArg.postfix;
+	auto stack = (ExprTokenType **)_alloca(aArg.max_stack * sizeof(ExprTokenType **));
+	int stack_count = 0;
+
+	for (auto this_postfix = aArg.postfix; this_postfix->symbol != SYM_INVALID; ++this_postfix)
+	{
+		auto postfix_symbol = this_postfix->symbol;
+		if (IS_OPERAND(postfix_symbol))
+		{
+			if (postfix_symbol == SYM_DYNAMIC && !this_postfix->var)
+				--stack_count;
+			stack[stack_count++] = this_postfix;
+		}
+		else if (IS_POSTFIX_OPERATOR(postfix_symbol) || IS_PREFIX_OPERATOR(postfix_symbol))
+		{
+			if (stack_count < 1)
+				return LineError(ERR_EXPR_SYNTAX);
+			stack[stack_count - 1] = this_postfix;
+		}
+		else if (SYM_USES_CIRCUIT_TOKEN(postfix_symbol))
+		{
+			if (stack_count < 1)
+				return LineError(ERR_EXPR_SYNTAX);
+			if (this_postfix->symbol != SYM_IFF_THEN)
+			{
+				stack[stack_count - 1] = this_postfix;
+				this_postfix = this_postfix->circuit_token;
+			}
+			else
+				--stack_count;
+		}
+		else if (postfix_symbol == SYM_COMMA)
+		{
+			--stack_count;
+		}
+		else if (postfix_symbol != SYM_FUNC)
+		{
+			if (stack_count < 2)
+				return LineError(ERR_EXPR_SYNTAX);
+			stack[--stack_count] = this_postfix;
+		}
+		else // SYM_FUNC
+		{
+			int prev_stack_count = stack_count;
+			int param_count = this_postfix->callsite->param_count;
+			stack_count -= param_count;
+			auto param = stack + stack_count;
+			bool call_call = !this_postfix->callsite->member;
+			if (call_call && (this_postfix->callsite->flags & EIF_STACK_MEMBER))
+			{
+				--stack_count;
+				call_call = false;
+			}
+			if (stack_count < 0)
+				return LineError(ERR_EXPR_SYNTAX);
+			Func *func = nullptr;
+			ExprTokenType *func_op = nullptr;
+			if (this_postfix->callsite->func)
+				func = dynamic_cast<Func*>(this_postfix->callsite->func);
+			else
+			{
+				if (stack_count < 1)
+					return LineError(ERR_EXPR_SYNTAX);
+				func_op = stack[--stack_count];
+				if (func_op->symbol == SYM_VAR && func_op->var->HasObject())
+					func = dynamic_cast<Func*>(func_op->var->Object());
+			}
+			if (this_postfix->callsite->flags & EIF_LEAVE_PARAMS)
+				stack_count = prev_stack_count;
+			if (func)
+			{
+				if (this_postfix->callsite->is_variadic())
+					--param_count; // Exclude the array parameter, which resolves to 0 or more parameters.
+				if (param_count < func->mMinParams && !this_postfix->callsite->is_variadic())
+					return LineError(ERR_TOO_FEW_PARAMS, FAIL, func->mName);
+				if (param_count > func->mParamCount && !func->mIsVariadic)
+					return LineError(ERR_TOO_MANY_PARAMS, FAIL, func->mName);
+
+				auto *bif = func && func->IsBuiltIn() ? ((BuiltInFunc *)func)->mBIF : nullptr;
+
+				for (int i = 0; i < param_count; ++i)
+				{
+					switch (param[i]->symbol)
+					{
+					case SYM_MISSING:
+						if (i < func->mMinParams)
+							return LineError(ERR_PARAM_REQUIRED);
+						break;
+					case SYM_REF:
+						if (func->ArgIsOutputVar(i))
+						{
+							// Permit VAR_VIRTUAL for built-in functions and all var types for IsSet().
+							// Optimize SYM_REF by allowing it to pass SYM_VAR directly where possible.
+							param[i]->var_usage =
+								(!bif || bif == BIF_VarSetStrCapacity) ? Script::VARREF_REF
+								: bif == BIF_IsSet					   ? Script::VARREF_ISSET
+								:										 Script::VARREF_OUTPUT_VAR;
+							if (!bif)
+								param[i]->object = func; // Used during runtime to detect when a VarRef is needed due to recursion (func->mInstances).
+							if (param[i][-1].symbol == SYM_DYNAMIC)
+								param[i][-1].var_usage = param[i]->var_usage;
+						}
+						break;
+					}
+				}
+
+				if (bif == &BIF_DllCall && param_count)
+				{
+					if (param[0]->symbol == SYM_STRING)
+					{
+						if (void *function = GetDllProcAddress(param[0]->marker))
+							param[0]->SetValue((__int64)function);
+					}
+				}
+			}
+			stack[stack_count++] = this_postfix;
+		} // SYM_FUNC
+	} // postfix loop
+
+	if (stack_count != 1)
+		return LineError(ERR_EXPR_SYNTAX);
+
+	for (auto this_postfix = aArg.postfix; this_postfix->symbol != SYM_INVALID; ++this_postfix)
+	{
+		if (this_postfix->symbol == SYM_REF && this_postfix[-1].symbol == SYM_VAR)
+		{
+			// Now that var_usage has been set for any SYM_REF operators in postfix that are passed
+			// to functions, ensure the var being referenced is valid for the given var_usage.
+			int var_usage = this_postfix->var_usage == Script::VARREF_READ ? Script::VARREF_REF : this_postfix->var_usage;
+			if (!ValidateVarUsage(this_postfix[-1].var, var_usage))
+				return FAIL;
+		}
+	}
+
+	return OK;
+}
+
 
 //-------------------------------------------------------------------------------------
 
