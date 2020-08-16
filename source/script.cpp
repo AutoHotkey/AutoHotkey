@@ -7009,7 +7009,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 	else if (aFuncNameLength)
 	{
 		Var *var = FindOrAddVar(aFuncName, aFuncNameLength
-			, (g->CurrentFunc ? VAR_DECLARE_LOCAL : VAR_DECLARE_SUPER_GLOBAL));
+			, (g->CurrentFunc ? VAR_DECLARE_LOCAL : VAR_DECLARE_GLOBAL));
 		if (!var)
 			return nullptr;
 		if (!var->IsUninitializedNormalVar())
@@ -7017,8 +7017,6 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 			ConflictingDeclarationError(_T("function"), var);
 			return nullptr;
 		}
-		if (!g->CurrentFunc)
-			var->Scope() |= VAR_SUPER_GLOBAL; // In case of a previous global declaration.
 		var->Assign(the_new_func);
 		var->MakeReadOnly();
 	}
@@ -7212,7 +7210,7 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 					*aDisplayError = ScriptError(ERR_OUTOFMEM);
 				return nullptr;
 			}
-			Var *var = AddVar(var_name, aVarNameLength, varlist, insert_pos, VAR_DECLARE_SUPER_GLOBAL);
+			Var *var = AddVar(var_name, aVarNameLength, varlist, insert_pos, VAR_DECLARE_GLOBAL);
 			if (!var)
 			{
 				if (aDisplayError)
