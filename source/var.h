@@ -329,10 +329,7 @@ public:
 	IObject *ToObject()
 	{
 		Var &var = *ResolveAlias();
-		if (var.IsObject())
-			return var.mObject;
-		var.MaybeWarnUninitialized();
-		return NULL;
+		return var.IsObject() ? var.mObject : nullptr;
 	}
 
 	void ReleaseObject()
@@ -768,23 +765,16 @@ public:
 	//	return (BYTE *) CharContents(aAllowUpdate);
 	//}
 
-	TCHAR *Contents(BOOL aAllowUpdate = TRUE, BOOL aNoWarnUninitializedVar = FALSE)
+	TCHAR *Contents(BOOL aAllowUpdate = TRUE)
 	// Callers should almost always pass TRUE for aAllowUpdate because any caller who wants to READ from
 	// mContents would almost always want it up-to-date.  Any caller who wants to WRITE to mContents would
 	// would almost always have called Assign(NULL, ...) prior to calling Contents(), which would have
 	// cleared the VAR_ATTRIB_CONTENTS_OUT_OF_DATE flag.
 	{
 		if (mType == VAR_ALIAS)
-			return mAliasFor->Contents(aAllowUpdate, aNoWarnUninitializedVar);
+			return mAliasFor->Contents(aAllowUpdate);
 		if ((mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE) && aAllowUpdate) // VAR_ATTRIB_CONTENTS_OUT_OF_DATE is checked here and in the function below, for performance.
 			UpdateContents(); // This also clears the VAR_ATTRIB_CONTENTS_OUT_OF_DATE.
-		if (mType == VAR_NORMAL)
-		{
-			// If aAllowUpdate is FALSE, the caller just wants to compare mCharContents to another address.
-			// Otherwise, the caller is probably going to use mCharContents and might want a warning:
-			if (aAllowUpdate && !aNoWarnUninitializedVar)
-				MaybeWarnUninitialized();
-		}
 		if (mType == VAR_VIRTUAL && !(mAttrib & VAR_ATTRIB_VIRTUAL_OPEN) && aAllowUpdate)
 		{
 			// This var isn't open for writing, so populate mCharContents with its current value.
@@ -911,8 +901,6 @@ public:
 		Var &var = *ResolveAlias();
 		var.mAttrib |= VAR_ATTRIB_UNINITIALIZED;
 	}
-
-	void MaybeWarnUninitialized();
 
 }; // class Var
 #pragma pack(pop) // Calling pack with no arguments restores the default value (which is 8, but "the alignment of a member will be on a boundary that is either a multiple of n or a multiple of the size of the member, whichever is smaller.")
