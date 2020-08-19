@@ -4007,12 +4007,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// The following series of "if" statements was confirmed to produce smaller code
 		// than a switch() with a final case WARN_ALL that duplicates all of the assignments:
 
-		if (warnType == WARN_USE_UNSET_LOCAL || warnType == WARN_ALL)
-			g_Warn_UseUnsetLocal = warnMode;
-
-		if (warnType == WARN_USE_UNSET_GLOBAL || warnType == WARN_ALL)
-			g_Warn_UseUnsetGlobal = warnMode;
-
 		if (warnType == WARN_LOCAL_SAME_AS_GLOBAL || warnType == WARN_ALL)
 			g_Warn_LocalSameAsGlobal = warnMode;
 
@@ -11559,6 +11553,8 @@ ResultType Line::PerformAssign()
 		//		x := 1.0
 		//		x := "quoted literal string"
 		//		x := normal_var  ; but not built-ins
+		if (mArg[1].postfix->symbol == SYM_VAR && mArg[1].postfix->var->IsUninitializedNormalVar())
+			return g_script.VarUnsetError(mArg[1].postfix->var);
 		Var *output_var = VAR(mArg[0]);
 		return output_var->Assign(*mArg[1].postfix);
 	}
@@ -13150,7 +13146,6 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 
 
 void Script::WarnUnassignedVar(Var *var)
-// Separating this from WarnUninitializedVar() was observed to produce smaller code.
 {
 	auto warnMode = g_Warn_VarUnset;
 	if (!warnMode)
@@ -13169,24 +13164,13 @@ void Script::WarnUnassignedVar(Var *var)
 
 
 
-void Script::WarnUninitializedVar(Var *var)
+ResultType Script::VarUnsetError(Var *var)
 {
-	auto warnMode = var->IsLocal() ? g_Warn_UseUnsetLocal : g_Warn_UseUnsetGlobal;
-	if (!warnMode)
-		return;
-
-	// Note: If warning mode is MsgBox, this method has side effect of marking the var initialized, so that
-	// only a single message box gets raised per variable.  (In other modes, e.g. OutputDebug, the var remains
-	// uninitialized because it may be beneficial to see the quantity and various locations of uninitialized
-	// uses, and doesn't present the same user interface problem that multiple message boxes can.)
-	if (warnMode == WARNMODE_MSGBOX)
-		var->MarkInitialized();
-
 	bool isUndeclaredLocal = (var->Scope() & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL;
 	LPCTSTR sameNameAsGlobal = isUndeclaredLocal && FindGlobalVar(var->mName) ? _T("  (same name as a global)") : _T("");
 	TCHAR buf[DIALOG_TITLE_SIZE];
 	sntprintf(buf, _countof(buf), _T("%s %s%s"), Var::DeclarationType(var->Scope()), var->mName, sameNameAsGlobal);
-	ScriptWarning(warnMode, WARNING_USE_UNSET_VARIABLE, buf);
+	return RuntimeError(ERR_VAR_UNSET, buf);
 }
 
 

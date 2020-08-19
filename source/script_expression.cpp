@@ -189,6 +189,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 				if (this_token.var->Type() == VAR_NORMAL || VARREF_IS_WRITE(this_token.var_usage))
   				{
+					if (this_token.var->IsUninitializedNormalVar() && this_token.var_usage == Script::VARREF_READ)
+					{
+						error_value = &this_token;
+						goto unset_var;
+					}
 					this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with limited exceptions) is relied upon in several places such as built-in functions.
 					goto push_this_token;
   				}
@@ -248,6 +253,14 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				tmemcpy(result, result_token.marker, result_length + 1);
 				this_token.SetValue(result, result_length);
 			} // if (this_token.symbol == SYM_DYNAMIC)
+			if (this_token.symbol == SYM_VAR)
+			{
+				if (this_token.var->IsUninitializedNormalVar() && this_token.var_usage == Script::VARREF_READ)
+				{
+					error_value = &this_token;
+					goto unset_var;
+				}
+			}
 			goto push_this_token;
 		} // if (IS_OPERAND(this_token.symbol))
 
@@ -645,8 +658,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			// result of the comma's left-hand sub-statement.  At this point the right-hand sub-statement
 			// has not yet been evaluated.  Like C++ and other languages, but unlike AutoHotkey v1, the
 			// rightmost operand is preserved, not the leftmost.
-			if (right.symbol == SYM_VAR) // Count this as "use" for the purpose of the warning, since it could be an error (maybe the author intended to call a function?).
-				right.var->MaybeWarnUninitialized();
 			continue;
 
 		default:
@@ -1278,11 +1289,7 @@ push_this_token:
 	// It seems best to avoid any chance of looking at the result since it might be invalid due to the above
 	// having taken shortcuts (since it knew the result would be discarded).
 	if (mActionType == ACT_EXPRESSION)   // A stand-alone expression whose end result doesn't matter.
-	{
-		if (result_token.symbol == SYM_VAR) // Count this as "use" for the purpose of the warning, since it could be an error (maybe the author intended to call a function?).
-			result_token.var->MaybeWarnUninitialized();
 		goto normal_end_skip_output_var; // Can't be any output_var for this action type. Also, leave result_to_return at its default of "".
-	}
 
 	if (output_var)
 	{
@@ -1494,6 +1501,9 @@ divide_by_zero:
 outofmem:
 	error_msg = ERR_OUTOFMEM;
 	goto abort_with_exception;
+unset_var:
+	aResult = g_script.VarUnsetError(error_value->var);
+	goto abort_if_result;
 
 //normal_end: // This isn't currently used, but is available for future-use and readability.
 	// v1.0.45: ACT_ASSIGNEXPR relies on us to set the output_var (i.e. whenever it's ARG1's is_expression==true).
@@ -2170,6 +2180,12 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 			}
 			// Since above didn't continue, this arg is a plain variable reference.
 			// aResultTokens should currently always be NULL for ARG_TYPE_INPUT_VAR, so isn't filled.
+
+			if (VAR(mArg[i])->IsUninitializedNormalVar())
+			{
+				result_to_return = g_script.VarUnsetError(VAR(mArg[i]));
+				goto end;
+			}
 
 			// Some comments below might be obsolete.  There was previously some logic here deciding
 			// whether the variable needed to be dereferenced, but that's no longer ever necessary.

@@ -17,7 +17,7 @@
 #define ParamIndexIsNumeric(index)  (TokenIsNumeric(*aParam[(index)]))
 
 // For functions that allow "" to mean parameter is omitted.
-#define ParamIndexIsOmittedOrEmpty(index)  (ParamIndexIsOmitted(index) || TokenIsEmptyString(*aParam[(index)], TRUE))
+#define ParamIndexIsOmittedOrEmpty(index)  (ParamIndexIsOmitted(index) || TokenIsEmptyString(*aParam[(index)]))
 
 // For functions that don't allow "" to mean parameter is omitted.
 #define ParamIndexIsOmitted(index)  ((index) >= aParamCount || aParam[(index)]->symbol == SYM_MISSING)

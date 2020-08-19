@@ -259,7 +259,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_SOUND_COMPONENT _T("Component not found")
 #define ERR_SOUND_CONTROLTYPE _T("Component doesn't support this control type")
 #define ERR_TIMEOUT _T("Timeout")
-#define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
+#define ERR_VAR_UNSET _T("This variable has not been assigned a value.")
 #define WARNING_ALWAYS_UNSET_VARIABLE _T("This variable appears to never be assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
 #define WARNING_USE_ENV_VARIABLE _T("An environment variable is being accessed; see #NoEnv.")
@@ -3121,13 +3121,13 @@ public:
 		, VARREF_REF, VARREF_LVALUE, VARREF_OUTPUT_VAR };
 #define VARREF_IS_WRITE(var_usage) ((var_usage) >= Script::VARREF_REF)
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType = VARREF_LVALUE);
+	ResultType VarUnsetError(Var *aVar);
 
 	ResultType ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine);
 	int FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine);
 
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
 	void WarnUnassignedVar(Var *aVar);
-	void WarnUninitializedVar(Var *aVar);
 	void WarnLocalSameAsGlobal(LPCTSTR aVarName);
 
 	ResultType PreprocessLocalVars(FuncList &aFuncs);
@@ -3441,7 +3441,6 @@ SymbolType TokenIsNumeric(ExprTokenType &aToken);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aIsImpureNumeric);
 BOOL TokenIsEmptyString(ExprTokenType &aToken);
-BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar); // Same as TokenIsEmptyString but optionally warns if the token is an uninitialized var.
 SymbolType TypeOfToken(ExprTokenType &aToken);
 SymbolType TypeOfToken(ExprTokenType &aToken, SymbolType &aIsNum);
 __int64 TokenToInt64(ExprTokenType &aToken);

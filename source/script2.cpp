@@ -10893,11 +10893,7 @@ BIF_DECL(BIF_DllCall)
 		else
 			ConvertDllArgType(return_type_string, return_attrib);
 		if (return_attrib.type == DLL_ARG_INVALID)
-		{
-			if (token.symbol == SYM_VAR)
-				token.var->MaybeWarnUninitialized();
 			_f_throw(ERR_INVALID_RETURN_TYPE);
-		}
 has_valid_return_type:
 		--aParamCount;  // Remove the last parameter from further consideration.
 #ifdef WIN32_PLATFORM
@@ -11304,12 +11300,12 @@ has_valid_return_type:
 			// passed_by_address for all other types.  However, it must be used carefully since
 			// there's no way for Str* to know how or whether the function requires the string
 			// to be freed (e.g. by calling CoTaskMemFree()).
-			if (this_dyna_param.ptr != output_var.Contents(FALSE, TRUE)
+			if (this_dyna_param.ptr != output_var.Contents(FALSE)
 				&& !output_var.AssignString((LPTSTR)this_dyna_param.ptr))
 				aResultToken.SetExitResult(FAIL);
 			break;
 		case DLL_ARG_xSTR: // AStr* on Unicode builds and WStr* on ANSI builds.
-			if (this_dyna_param.ptr != output_var.Contents(FALSE, TRUE)
+			if (this_dyna_param.ptr != output_var.Contents(FALSE)
 				&& !output_var.AssignStringFromCodePage(UorA(LPSTR,LPWSTR)this_dyna_param.ptr))
 				aResultToken.SetExitResult(FAIL);
 		}
@@ -13792,10 +13788,6 @@ BIF_DECL(BIF_VarSetStrCapacity)
 		// RequestedCapacity was omitted, so the var is not altered; instead, the current capacity
 		// is reported, which seems more intuitive/useful than having it do a Free(). In this case
 		// it's an input var rather than an output var, so check if it contains a string.
-		// v1.1.11.01: Support VarSetCapacity(var) as a means for the script to check if it
-		// has initialized a var.  In other words, don't show a warning even in that case.
-		// v2: We now have IsSet(), but it still seems reasonable to allow this without a warning.
-		//var.MaybeWarnUninitialized();
 		if (var.IsPureNumericOrObject())
 			_f_throw_type(_T("String"), *aParam[0]);
 	}
@@ -16569,10 +16561,7 @@ BOOL ResultToBOOL(LPTSTR aResult)
 BOOL VarToBOOL(Var &aVar)
 {
 	if (!aVar.HasContents()) // Must be checked first because otherwise IsNumeric() would consider "" to be non-numeric and thus TRUE.  For performance, it also exploits the binary number cache.
-	{
-		aVar.MaybeWarnUninitialized();
 		return FALSE;
-	}
 	switch (aVar.IsNumeric())
 	{
 	case PURE_INTEGER:
@@ -16696,15 +16685,6 @@ BOOL TokenIsEmptyString(ExprTokenType &aToken)
 	default:
 		return FALSE;
 	}
-}
-
-
-BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar)
-{
-	if (aWarnUninitializedVar && aToken.symbol == SYM_VAR)
-		aToken.var->MaybeWarnUninitialized();
-
-	return TokenIsEmptyString(aToken);
 }
 
 
