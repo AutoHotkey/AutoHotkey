@@ -368,10 +368,7 @@ enum DerefTypeType : BYTE
 	DT_WORDOP,		// Word operator: and, or, not, new.
 	DT_CONST_INT,	// Constant integer value (true, false).
 	DT_DOTPERCENT,	// Dynamic member: .%name%
-	DT_FUNCREF,		// Reference to function (for fat arrow functions).
-	// DerefType::is_function() requires that these are last:
-	DT_FUNC,		// Function call.
-	DT_VARIADIC		// Variadic function call.
+	DT_FUNCREF		// Reference to function (for fat arrow functions).
 };
 
 class Func; // Forward declaration for use below.
@@ -381,7 +378,7 @@ struct DerefType
 	union
 	{
 		Var *var; // DT_VAR
-		Func *func; // DT_FUNC and DT_FUNCREF
+		Func *func; // DT_FUNCREF
 		DerefType *next; // DT_STRING
 		SymbolType symbol; // DT_WORDOP
 		int int_value; // DT_CONST_INT
@@ -389,7 +386,6 @@ struct DerefType
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
 	DerefTypeType type;
-	bool is_function() { return type == DT_FUNC; }
 	UCHAR substring_count;
 	DerefLengthType length; // Listed only after byte-sized fields, due to it being a WORD.
 };
@@ -2930,7 +2926,6 @@ private:
 	// if aStartingLine is allowed to be NULL (for recursive calls).  If they
 	// were member functions of class Line, a check for NULL would have to
 	// be done before dereferencing any line's mNextLine, for example:
-	ResultType PreparseFuncRefs(Line *aStartingLine);
 	ResultType PreparseExpressions(Line *aStartingLine);
 	ResultType PreparseExpressions(FuncList &aFuncs);
 	void PreparseHotkeyIfExpr(Line *aLine);

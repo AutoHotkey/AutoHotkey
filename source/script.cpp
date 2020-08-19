@@ -1526,15 +1526,6 @@ UINT Script::LoadFromFile()
 	if (!LoadIncludedFile(g_RunStdIn ? _T("*") : mFileSpec, false, false))
 		return LOADING_FAILED;
 
-	// Resolve all non-dynamic function references at this exact point to ensure that
-	// all auto-includes are processed before any of the following checks or calls.
-	// This improves maintainability, since the following stages don't need to account
-	// for auto-includes adding more lines or changing global state, such as #DllLoad
-	// overriding the SetDllDirectory(NULL) call below.  It may also improve flexibility.
-	// If auto-includes are removed, this could be merged into ExpressionToPostfix.
-	if (!PreparseFuncRefs(mFirstLine))
-		return LOADING_FAILED;
-
 #ifdef ENABLE_DLLCALL
 	// So that (the last occuring) "#DllLoad directory" doesn't affect calls to GetDllProcAddress for run time calls to DllCall
 	// or DllCall optimizations in Line::ExpressionToPostfix.
@@ -5550,11 +5541,8 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 						if (aDeref.count)
 						{
 							DerefType &d = *aDeref.Last();
-							if (d.type == DT_FUNC && d.marker + d.length == op_begin)
-							{
+							if (d.type == DT_VAR && d.marker + d.length == op_begin)
 								op_begin = d.marker;
-								--aDeref.count;
-							}
 						}
 						if (!ParseFatArrow(aArgText, aArgMap, aDeref, op_begin, close_paren, cp + 2, op_begin))
 							return FAIL;
@@ -5701,14 +5689,14 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 			this_deref.type = DT_CONST_INT;
 			this_deref.int_value = toupper(*op_begin) == 'T';
 		}
-		else // This operand is a variable name or function name (single deref).
+		else // This operand is a variable name or function name.
 		{
 			// Store the deref's starting location, even for functions (leave it set to the start
 			// of the function's name for use when doing error reporting at other stages -- i.e.
 			// don't set it to the address of the first param or closing-paren-if-no-params):
 			this_deref.marker = op_begin;
 			this_deref.length = (DerefLengthType)operand_length;
-			this_deref.type = is_function ? DT_FUNC : DT_VAR;
+			this_deref.type = DT_VAR;
 			this_deref.var = nullptr; // To be resolved later.
 		}
 	}
@@ -7299,8 +7287,9 @@ Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayE
 			*aDisplayError = FAIL; // Error already displayed.
 		return nullptr;
 	}
-	bool is_function = outer_var->Type() == VAR_CONSTANT;
-	if (!is_function && ++aInner.mUpVarCount == 1) // This function's first definite upvar.
+	ASSERT(outer_var->Type() != VAR_CONSTANT || outer_var->HasObject() && dynamic_cast<UserFunc*>(outer_var->Object()));
+	bool indefinite = outer_var->Type() == VAR_CONSTANT && !((UserFunc *)outer_var->Object())->mUpVarCount;
+	if (!indefinite && ++aInner.mUpVarCount == 1) // This function's first definite upvar.
 	{
 		// Count all references to aInner as upvars (except the one in outer).
 		CountNestedFuncRefs(outer, aInner.mName);
@@ -7499,69 +7488,6 @@ ResultType Script::AddGroup(LPTSTR aGroupName)
 		mLastGroup->mNextGroup = the_new_group;
 	// This must be done after the above:
 	mLastGroup = the_new_group;
-	return OK;
-}
-
-
-
-ResultType Script::PreparseFuncRefs(Line *aStartingLine)
-{
-	// See LoadFromFile() for comments about the use of this function.
-	for (Line *line = aStartingLine; line; line = line->mNextLine)
-	{
-		switch (line->mActionType)
-		{
-		// Set context for resolving names.
-		case ACT_BLOCK_BEGIN:
-			if (line->mAttribute)
-				g->CurrentFunc = (UserFunc *)line->mAttribute;
-			continue;
-		case ACT_BLOCK_END:
-			if (line->mAttribute)
-				g->CurrentFunc = g->CurrentFunc->mOuterFunc;
-			continue;
-		}
-		for (int i = 0; i < line->mArgc; ++i) // For each arg.
-		{
-			ArgStruct &this_arg = line->mArg[i]; // For performance and convenience.
-			if (!this_arg.is_expression // Plain text; i.e. goto/break/continue label.
-				|| !this_arg.deref) // The expression contains neither variables nor function calls.
-				continue;
-			for (auto deref = this_arg.deref; deref->marker; ++deref) // For each deref.
-			{
-				if (!deref->is_function())
-					continue;
-				ASSERT(!deref->func && deref->length);
-				Var *var = FindVar(deref->marker, deref->length);
-				// If no var was found, this name hasn't been declared for the current scope.
-#ifndef AUTOHOTKEYSC
-				// Try to auto-include a library only if function definitions within it could
-				// affect the current scope (i.e. the function is not force-local, or the var
-				// was already declared global).
-				if (  !var && !(g->CurrentFunc && (g->CurrentFunc->mDefaultVarType & VAR_FORCE_LOCAL))
-					|| var && !var->IsLocal() && var->IsUninitializedNormalVar()  )
-				{
-					bool error_was_shown, file_was_found;
-					IncludeLibrary(deref->marker, deref->length, error_was_shown, file_was_found, true);
-					if (error_was_shown)
-						return FAIL;
-					if (file_was_found)
-						var = FindVar(deref->marker, deref->length);
-				}
-#endif
-				// If var is still not found, it's definitely not a declared global or local, class,
-				// parameter, or function.  If a non-constant var was found, it's definitely not a
-				// defined function.  If it's not a defined function, resolve it as a var later.
-				// Also produce DT_VAR (and therefore SYM_VAR) if it's a local function, since it may
-				// be a closure, in which case each call to the function gives it a different value.
-				if (  !var || var->Type() != VAR_CONSTANT || var->IsLocal()
-					|| !(deref->func = dynamic_cast<Func*>(var->ToObject()))  )
-				{
-					deref->type = DT_VAR;
-				}
-			} // for each deref of this arg
-		} // for each arg of this line
-	} // for each line
 	return OK;
 }
 
@@ -8462,17 +8388,7 @@ unquoted_literal:
 		// THE ABOVE HAS NOW PROCESSED ANY/ALL RAW/LITERAL TEXT THAT LIES TO THE LEFT OF this_deref.
 		// SO NOW PROCESS THIS_DEREF ITSELF.
 		DerefType &this_deref_ref = *this_deref; // Boosts performance slightly.
-		if (this_deref_ref.is_function()) // Above has ensured that at this stage, this_deref!=NULL.
-		{
-			if (this_deref_ref.length) // Non-dynamic. For dynamic calls like %x%(), auto-concat has already been handled.
-				CHECK_AUTO_CONCAT;
-			infix[infix_count].callsite = new CallSite();
-			if (!infix[infix_count].callsite)
-				return LineError(ERR_OUTOFMEM);
-			infix[infix_count].callsite->func = this_deref_ref.func;
-			infix[infix_count].symbol = SYM_FUNC;
-		}
-		else if (this_deref_ref.type == DT_STRING || this_deref_ref.type == DT_QSTRING)
+		if (this_deref_ref.type == DT_STRING || this_deref_ref.type == DT_QSTRING)
 		{
 			bool is_end_of_string = !this_deref_ref.next;
 			bool is_start_of_string = this_deref_ref.substring_count == 1;
@@ -8612,6 +8528,14 @@ unquoted_literal:
 		}
 		else if (this_deref_ref.type == DT_FUNCREF)
 		{
+			if (*this_deref_ref.func->mName)
+			{
+				// This reference isn't needed, as it was preceded by a SYM_VAR.
+				ASSERT(this_deref > aArg.deref && this_deref[-1].type == DT_VAR && this_deref[-1].marker + this_deref[-1].length == cp);
+				cp = this_deref_ref.marker + this_deref_ref.length; // Not +=, since it overlaps with the previous deref.
+				--infix_count; // Counter the loop's increment.
+				continue;
+			}
 			// Make a function call to an internal version of Func() which accepts the function
 			// reference and returns the function itself or a closure.  Which that will be depends
 			// on var references which haven't been resolved yet (unless it's a global function).
@@ -9346,6 +9270,7 @@ end_of_infix_to_postfix:
 	{
 		ExprTokenType &new_token = aArg.postfix[i];
 		new_token.CopyExprFrom(*postfix[i]);
+		ASSERT((UINT)new_token.symbol < SYM_COUNT);
 		if (SYM_USES_CIRCUIT_TOKEN(new_token.symbol)) // Adjust each circuit_token address to be relative to the new array rather than the temp/infix array.
 		{
 			// circuit_token should always be non-NULL at this point.
@@ -9396,6 +9321,7 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 	for (auto this_postfix = aArg.postfix; this_postfix->symbol != SYM_INVALID; ++this_postfix)
 	{
 		auto postfix_symbol = this_postfix->symbol;
+		ASSERT((UINT)postfix_symbol < SYM_COUNT);
 		if (IS_OPERAND(postfix_symbol))
 		{
 			if (postfix_symbol == SYM_DYNAMIC && !this_postfix->var)
@@ -9455,6 +9381,8 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 				func_op = stack[--stack_count];
 				if (func_op->symbol == SYM_VAR && func_op->var->HasObject())
 					func = dynamic_cast<Func*>(func_op->var->Object());
+				else if (func_op->symbol == SYM_OBJECT)
+					func = dynamic_cast<Func*>(func_op->object);
 			}
 			if (this_postfix->callsite->flags & EIF_LEAVE_PARAMS)
 				stack_count = prev_stack_count;

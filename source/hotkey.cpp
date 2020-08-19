@@ -167,18 +167,18 @@ void Script::PreparseHotkeyIfExpr(Line* aLine)
 // evaluated by the hook directly, without synchronizing with the main thread.
 {
 	ExprTokenType *postfix = aLine->mArg[0].postfix;
+	if (postfix[0].symbol != SYM_OBJECT)
+		return;
+	auto fn = dynamic_cast<BuiltInFunc*>(postfix[0].object);
+	if (!fn || fn->mBIF != &BIF_WinExistActive)
+		return; // Not WinExist() or WinActive().
+	++postfix;
 	int param_count = 0;
 	while (postfix[param_count].symbol == SYM_STRING)
 		++param_count;
 	if (postfix[param_count].symbol != SYM_FUNC // Not a function call, or it doesn't only accept strings.
-		|| param_count > 2 // Too many parameters.
-		|| !postfix[param_count].callsite->func) // Dynamic target.
+		|| param_count > 2) // Too many parameters.
 		return;
-	if (param_count > 2)
-		return; // Too many parameters.
-	auto fn = dynamic_cast<BuiltInFunc*>(postfix[param_count].callsite->func);
-	if (!fn || fn->mBIF != &BIF_WinExistActive)
-		return; // Not WinExist() or WinActive().
 	bool invert = postfix[param_count+1].symbol == SYM_LOWNOT || postfix[param_count+1].symbol == SYM_HIGHNOT;
 	if (postfix[param_count+1+invert].symbol != SYM_INVALID)
 		return; // There's more to the expression.
