@@ -13485,36 +13485,6 @@ BIF_DECL(BIF_IsLabel)
 
 
 
-BIF_DECL(BIF_IsFunc) // Lexikos: Added for use with dynamic function calls.
-// Returns a non-zero value if the function exists in the current scope.  Since a dynamic function-call
-// fails when too few or (in v2) too many parameters are passed, the return value indicates to the caller
-// not only that the function exists, but also how many parameters are required.  Although this may seem
-// redundant due to Func().MinParams, it has the benefit of not creating a new closure if the function
-// is a nested one with upvalues.
-{
-	if (ParamIndexToObject(0))
-		_f_throw(ERR_PARAM1_INVALID); // Seems worthwhile to avoid confusion.
-	Func *func = g_script.FindFunc(ParamIndexToString(0));
-	_f_return_i(func ? (__int64)func->mMinParams+1 : 0);
-}
-
-
-
-BIF_DECL(BIF_Func)
-// Returns a reference to an existing user-defined or built-in function, as an object.
-// Returns a new closure if the function has upvalues.
-{
-	if (ParamIndexToObject(0))
-		_f_throw(ERR_PARAM1_INVALID); // For consistency with IsFunc().
-	auto func = g_script.FindFunc(ParamIndexToString(0));
-	if (func)
-		_f_return(func->CloseIfNeeded());
-	else
-		_f_return_empty;
-}
-
-
-
 BIF_DECL(Op_FuncClose)
 // Returns the Func aParam[0] itself or a new closure if it has upvalues.
 {
