@@ -142,11 +142,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					// Do some basic validation to ensure a helpful error message is displayed on failure.
 					if (right_length == 0)
 					{
-						if (IObject *obj = TokenToObject(right)) // Temporary; to facilitate testing/comparison.
-						{
-							this_token.SetValue(obj);
-							goto push_this_token;
-						}
 						error_msg = ERR_DYNAMIC_BLANK;
 						error_info = mArg[aArgIndex].text;
 						goto abort_with_exception;

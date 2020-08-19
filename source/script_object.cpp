@@ -1047,7 +1047,6 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 	ctor->mIsVariadic = true;
 	ctor->mClass = nullptr; // Safe to call on any Object.
 	class_obj->DefineMethod(_T("Call"), ctor);
-	class_obj->DefineMethod(_T("New"), ctor); // Temporary; to facilitate testing/comparison.
 	ctor->Release();
 
 	auto var = g_script.FindOrAddVar(aClassName, 0, VAR_DECLARE_GLOBAL);
