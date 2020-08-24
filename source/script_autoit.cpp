@@ -1325,7 +1325,11 @@ ResultType Line::FileRecycleEmpty(LPTSTR aDriveLetter)
 {
 	LPCTSTR szPath = *aDriveLetter ? aDriveLetter : NULL;
 	HRESULT hr = SHEmptyRecycleBin(NULL, szPath, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
-	return ThrowIfTrue(hr != S_OK);
+	// Throw no error for E_UNEXPECTED, since that is returned in the common case where the
+	// recycle bin is already empty.  Seems more useful and user-friendly to ignore it.
+	if (hr != S_OK && hr != E_UNEXPECTED)
+		return g_script.Win32Error(hr);
+	return OK;
 }
 
 
