@@ -56,13 +56,13 @@ void* SimpleHeap::Malloc(size_t aSize)
 // potentially large linked list or maintaining and traversing an array of
 // "under-utilized" blocks.
 {
-	if (aSize < 1 || aSize > BLOCK_SIZE)
+	if (aSize < 1)
 		return NULL;
 	if (!sFirst) // We need at least one block to do anything, so create it.
-		if (   !(sFirst = CreateBlock())   )
+		if (   !(sFirst = CreateBlock(aSize))   )
 			return NULL;
 	if (aSize > sLast->mSpaceAvailable)
-		if (   !(sLast->mNextBlock = CreateBlock())   )
+		if (   !(sLast->mNextBlock = CreateBlock(aSize))   )
 			return NULL;
 	sMostRecentlyAllocated = sLast->mFreeMarker; // THIS IS NOW THE NEWLY ALLOCATED BLOCK FOR THE CALLER, which is 32-bit aligned because the previous call to this function (i.e. the logic below) set it up that way.
 	// v1.0.40.04: Set up the NEXT chunk to be aligned on a 32-bit boundary (the first chunk in each block
@@ -116,7 +116,7 @@ void SimpleHeap::Delete(void *aPtr)
 
 
 
-SimpleHeap *SimpleHeap::CreateBlock()
+SimpleHeap *SimpleHeap::CreateBlock(SIZE_T aSize)
 // Added for v1.0.40.04 to try to solve the fact that some functions such as GetRawInputDeviceList()
 // will sometimes fail if passed memory from SimpleHeap. Although this change didn't actually solve
 // the issue (it turned out to be a 32-bit alignment issue), using malloc() appears to save memory
@@ -127,13 +127,13 @@ SimpleHeap *SimpleHeap::CreateBlock()
 	if (   !(block = new SimpleHeap)   )
 		return NULL;
 	// The new block's mFreeMarker starts off pointing to the first byte in the new block:
-	if (   !(block->mBlock = block->mFreeMarker = (char *)malloc(BLOCK_SIZE))   )
+	if (   !(block->mBlock = block->mFreeMarker = (char *)malloc(aSize = (aSize < BLOCK_SIZE ? BLOCK_SIZE : aSize + (BLOCK_SIZE - aSize % BLOCK_SIZE))))   )
 	{
 		delete block;
 		return NULL;
 	}
 	// Since above didn't return, block was successfully created:
-	block->mSpaceAvailable = BLOCK_SIZE;
+	block->mSpaceAvailable = aSize;
 	sLast = block;  // Constructing a new block always results in it becoming the current block.
 	++sBlockCount;
 	return block;

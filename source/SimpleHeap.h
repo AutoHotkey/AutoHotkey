@@ -48,7 +48,7 @@ private:
 	static char *sMostRecentlyAllocated; // For use with Delete().
 	SimpleHeap *mNextBlock;  // The object after this one in the linked list; NULL if none.
 
-	static SimpleHeap *CreateBlock();
+	static SimpleHeap *CreateBlock(SIZE_T aSize);
 	SimpleHeap();  // Private constructor, since we want only the static methods to be able to create new objects.
 	~SimpleHeap();
 public:
