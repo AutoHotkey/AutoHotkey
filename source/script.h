@@ -639,7 +639,7 @@ enum BuiltInFunctionID {
 	FID_Min = 0, FID_Max,
 	FID_Random = 0, FID_RandomSeed,
 	FID_ObjAddRef = 0, FID_ObjRelease,
-	FID_ObjHasOwnProp = 0, FID_ObjOwnPropCount, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjOwnProps, FID_ObjOwnMethods,
+	FID_ObjHasOwnProp = 0, FID_ObjOwnPropCount, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjOwnProps,
 	FID_ObjGetBase = 0, FID_ObjSetBase,
 	FID_ObjPtr = 0, FID_ObjPtrAddRef, FID_ObjFromPtr, FID_ObjFromPtrAddRef,
 	FID_WinGetID = 0, FID_WinGetIDLast, FID_WinGetPID, FID_WinGetProcessName, FID_WinGetProcessPath, FID_WinGetCount, FID_WinGetList, FID_WinGetMinMax, FID_WinGetControls, FID_WinGetControlsHwnd, FID_WinGetTransparent, FID_WinGetTransColor, FID_WinGetStyle, FID_WinGetExStyle,

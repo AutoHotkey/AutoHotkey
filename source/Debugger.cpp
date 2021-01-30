@@ -1117,7 +1117,7 @@ void Object::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPag
 		}
 		if (enum_method && i < page_end)
 		{
-			if (dynamic_cast<BuiltInMethod *>(enum_method->func))
+			if (dynamic_cast<BuiltInMethod *>(enum_method))
 			{
 				// Built-in enumerators are always safe to call automatically.
 				aDebugger->WriteEnumItems(this, i - field_count, page_end - field_count);

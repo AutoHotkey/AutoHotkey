@@ -243,7 +243,6 @@ FuncEntry g_BIF[] =
 	BIFn(ObjGetBase, 1, 1, BIF_Base),
 	BIFn(ObjGetCapacity, 1, 1, BIF_ObjXXX),
 	BIFn(ObjHasOwnProp, 2, 2, BIF_ObjXXX),
-	BIFn(ObjOwnMethods, 1, 1, BIF_ObjXXX),
 	BIFn(ObjOwnPropCount, 1, 1, BIF_ObjXXX),
 	BIFn(ObjOwnProps, 1, 1, BIF_ObjXXX),
 	BIFn(ObjPtr, 1, 1, BIF_ObjPtr),
@@ -6516,7 +6515,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		// or at the end of the __Init method belonging to this class.  Save the current values:
 		Line *script_first_line = mFirstLine, *script_last_line = mLastLine;
 		Line *block_end;
-		auto init_func = (UserFunc *)class_object->GetOwnMethodFunc(_T("__Init")); // Can only be a user-defined function or nullptr at this stage.
+		auto init_func = (UserFunc *)class_object->GetOwnPropObj(_T("__Init")); // Can only be a user-defined function or nullptr at this stage.
 
 		if (init_func)
 		{
@@ -6970,7 +6969,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 		}
 		else
 		{
-			if (aClassObject->HasOwnMethod(key))
+			if (aClassObject->HasOwnProp(key))
 			{
 				ScriptError(ERR_DUPLICATE_DECLARATION, new_name);
 				return nullptr;

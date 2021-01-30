@@ -35,15 +35,6 @@
           </ArrayItems>
         </Expand>
       </Synthetic>
-      <Synthetic Name="Methods">
-        <DisplayString>{mMethods.data->size,d}</DisplayString>
-        <Expand>
-          <ArrayItems>
-            <Size>mMethods.data->size</Size>
-            <ValuePointer>(MethodType *)(mMethods.data + 1)</ValuePointer>
-          </ArrayItems>
-        </Expand>
-      </Synthetic>
     </Expand>
   </Type>
 </AutoVisualizer>
