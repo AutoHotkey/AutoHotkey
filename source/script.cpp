@@ -7386,6 +7386,7 @@ Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int
 
 	if ((aScope & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL // This is an implicit local.
 		&& g_Warn_LocalSameAsGlobal && !mIsReadyToExecute // Not enabled at runtime because of overlap with #Warn UseUnset, and dynamic assignments in assume-local mode are less likely to be intended global.
+		&& !(g->CurrentFunc->mDefaultVarType & VAR_FORCE_LOCAL)
 		&& FindGlobalVar(var_name, aVarNameLength))
 		WarnLocalSameAsGlobal(var_name);
 
