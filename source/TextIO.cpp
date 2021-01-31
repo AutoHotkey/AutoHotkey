@@ -909,7 +909,7 @@ class FileObject : public Object
 					if (max_size == ~0) // Param #1 was an address.
 						_o_throw(ERR_PARAM2_REQUIRED); // (in this case).
 					size = max_size;
-					if (!reading)
+					if (!reading && target_token.symbol == SYM_STRING)
 						// Default to the byte count of the binary string, excluding the null-terminator.
 						size -= sizeof(TCHAR);
 				}
