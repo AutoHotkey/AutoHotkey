@@ -11774,8 +11774,10 @@ int RegExCallout(pcret_callout_block *cb)
 		return 0;
 	RegExCalloutData &cd = *(RegExCalloutData *)cb->callout_data;
 
-	Func *callout_func = (Func *)cb->user_callout;
-	if (!callout_func)
+	IObject *callout_func = (IObject *)cb->user_callout;
+	if (callout_func)
+		callout_func->AddRef();
+	else
 	{
 		Var *pcre_callout_var = g_script.FindVar(_T("pcre_callout"), 12); // This may be a local of the UDF which called RegExMatch/Replace().
 		if (!pcre_callout_var)
@@ -11783,7 +11785,7 @@ int RegExCallout(pcret_callout_block *cb)
 		ExprTokenType token;
 		token.symbol = SYM_VAR;
 		token.var = pcre_callout_var;
-		callout_func = TokenToFunc(token); // Allow name or reference.
+		callout_func = TokenToFunctor(token); // Allow name or reference.
 		if (!callout_func)
 		{
 			if (!pcre_callout_var->HasContents()) // Var exists but is empty.
@@ -11793,8 +11795,6 @@ int RegExCallout(pcret_callout_block *cb)
 			return PCRE_ERROR_CALLOUT;
 		}
 	}
-
-	Func &func = *callout_func;
 
 	// Adjust offset to account for options, which are excluded from the regex passed to PCRE.
 	cb->pattern_position += cd.options_length;
@@ -11835,6 +11835,7 @@ int RegExCallout(pcret_callout_block *cb)
 	IObject *match_object;
 	if (!RegExCreateMatchArray(cb->subject, cd.re, cd.extra, cb->offset_vector, cd.pattern_count, cb->capture_top, match_object))
 	{
+		callout_func->Release();
 		cd.result_token->Error(ERR_OUTOFMEM);
 		return PCRE_ERROR_CALLOUT; // Abort.
 	}
@@ -11857,7 +11858,7 @@ int RegExCallout(pcret_callout_block *cb)
 		cd.re_text // NeedleRegEx
 	};
 	__int64 number_to_return;
-	auto result = CallMethod(&func, &func, nullptr, param, _countof(param), &number_to_return);
+	auto result = CallMethod(callout_func, callout_func, nullptr, param, _countof(param), &number_to_return);
 	if (result == FAIL || result == EARLY_EXIT)
 	{
 		number_to_return = PCRE_ERROR_CALLOUT;
@@ -11866,6 +11867,7 @@ int RegExCallout(pcret_callout_block *cb)
 	
 	g->EventInfo = EventInfo_saved;
 
+	callout_func->Release();
 	// Behaviour of return values is defined by PCRE.
 	return (int)number_to_return;
 }
