@@ -16976,26 +16976,6 @@ IObject *TokenToObject(ExprTokenType &aToken)
 
 
 
-Func *TokenToFunc(ExprTokenType &aToken)
-{
-	// No need for buf since function names can't be pure numeric:
-	//TCHAR buf[MAX_NUMBER_SIZE];
-	Func *func;
-	if (  !(func = dynamic_cast<Func *>(TokenToObject(aToken)))  )
-	{
-		LPTSTR func_name = TokenToString(aToken);
-		// Dynamic function calls rely on the following check to avoid a lengthy and
-		// futile search through all function and action names when aToken is an object
-		// emulating a function.  The check works because TokenToString() returns ""
-		// when aToken is an object (or a pure number, since no buffer was passed).
-		if (*func_name)
-			func = g_script.FindFunc(func_name);
-	}
-	return func;
-}
-
-
-
 IObject *TokenToFunctor(ExprTokenType &aToken)
 // Returns an object if aToken contains an object or function name.
 // Reference is counted so CALLER MUST Release() WHEN APPROPRIATE.
