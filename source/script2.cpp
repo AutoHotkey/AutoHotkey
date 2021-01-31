@@ -1047,8 +1047,7 @@ BIF_DECL(BIF_Wait)
 	_f_param_string_opt(arg1, 0);
 	_f_param_string_opt(arg2, 1);
 	_f_param_string_opt(arg3, 2);
-	_f_param_string_opt(arg4, 3);
-	_f_param_string_opt(arg5, 4);
+
 	HWND target_hwnd = NULL;
 
 	switch (_f_callee_id)
@@ -1086,6 +1085,10 @@ BIF_DECL(BIF_Wait)
 		}
 		break;
 	}
+
+	// These are declared/accessed after "case FID_RunWait:" to avoid a UseUnset warning.
+	_f_param_string_opt(arg4, 3);
+	_f_param_string_opt(arg5, 4);
 	
 	// Must NOT use ELSE-IF in line below due to ELSE further down needing to execute for RunWait.
 	if (_f_callee_id == FID_KeyWait)
