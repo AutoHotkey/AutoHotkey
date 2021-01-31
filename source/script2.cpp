@@ -10612,9 +10612,9 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	{
 		_itot(esp_delta, buf, 10);
 		if (esp_delta > 0)
-			g_script.ThrowRuntimeException(_T("Parameter list too large, or call requires CDecl."), _T("DllCall"), buf);
+			g_script.ThrowRuntimeException(_T("Parameter list too large, or call requires CDecl."), buf);
 		else
-			g_script.ThrowRuntimeException(_T("Parameter list too small."), _T("DllCall"), buf);
+			g_script.ThrowRuntimeException(_T("Parameter list too small."), buf);
 	}
 	else
 #endif
@@ -10626,7 +10626,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		buf[0] = '0';
 		buf[1] = 'x';
 		_ultot(aException, buf + 2, 16);
-		g_script.ThrowRuntimeException(ERR_EXCEPTION, _T("DllCall"), buf);
+		g_script.ThrowRuntimeException(ERR_EXCEPTION, buf);
 	}
 
 	return Res;
@@ -10766,7 +10766,7 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 			if (   !hmodule_to_free  ||  !(hmodule = *hmodule_to_free = LoadLibrary(dll_name))   )
 			{
 				if (hmodule_to_free) // L31: BIF_DllCall wants us to set throw.  ExpressionToPostfix passes NULL.
-					g_script.ThrowRuntimeException(_T("Failed to load DLL."), _T("DllCall"), dll_name);
+					g_script.ThrowRuntimeException(_T("Failed to load DLL."), dll_name);
 				return NULL;
 			}
 		if (   !(function = (void *)GetProcAddress(hmodule, function_name))   )
@@ -10789,7 +10789,7 @@ void *GetDllProcAddress(LPCTSTR aDllFileFunc, HMODULE *hmodule_to_free) // L31: 
 		// This must be done here since only we know for certain that the dll
 		// was loaded okay (if GetModuleHandle succeeded, nothing is passed
 		// back to the caller).
-		g_script.ThrowRuntimeException(ERR_NONEXISTENT_FUNCTION, _T("DllCall"), _tfunction_name);
+		g_script.ThrowRuntimeException(ERR_NONEXISTENT_FUNCTION, _tfunction_name);
 	}
 
 	return function;

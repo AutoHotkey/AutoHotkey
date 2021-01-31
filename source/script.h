@@ -1358,7 +1358,7 @@ public:
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
 	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
-	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
+	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 	
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType);
 	ResultType LineUnexpectedError();
@@ -3116,9 +3116,9 @@ public:
 	ResultType PreparseVarRefs();
 
 	ResultType ThrowIfTrue(bool aError);
-	ResultType ThrowIntIfNonzero(int aErrorValue, LPCTSTR aWhat = NULL);
-	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo, Line *aLine, ResultType aErrorType);
-	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = nullptr, LPCTSTR aExtraInfo = _T(""));
+	ResultType ThrowIntIfNonzero(int aErrorValue);
+	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine, ResultType aErrorType);
+	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 	ResultType Win32Error(DWORD aError = GetLastError());
 	
 	ResultType UnhandledException(Line* aLine, ResultType aErrorType = FAIL);

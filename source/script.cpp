@@ -12577,12 +12577,12 @@ IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR
 }
 
 
-ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
+ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 {
-	return g_script.ThrowRuntimeException(aErrorText, aWhat, aExtraInfo, this, FAIL);
+	return g_script.ThrowRuntimeException(aErrorText, aExtraInfo, this, FAIL);
 }
 
-ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo
+ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo
 	, Line *aLine, ResultType aErrorType)
 {
 	// ThrownToken should only be non-NULL while control is being passed up the
@@ -12594,7 +12594,7 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCT
 
 	ResultToken *token;
 	if (   !(token = new ResultToken)
-		|| !(token->object = aLine->CreateRuntimeException(aErrorText, aWhat, aExtraInfo))   )
+		|| !(token->object = aLine->CreateRuntimeException(aErrorText, nullptr, aExtraInfo))   )
 	{
 		// Out of memory. It's likely that we were called for this very reason.
 		// Since we don't even have enough memory to allocate an exception object,
@@ -12618,9 +12618,9 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCT
 	return FAIL;
 }
 
-ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
+ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 {
-	return ThrowRuntimeException(aErrorText, aWhat, aExtraInfo, mCurrLine, FAIL);
+	return ThrowRuntimeException(aErrorText, aExtraInfo, mCurrLine, FAIL);
 }
 
 
@@ -12654,7 +12654,7 @@ ResultType Line::ThrowIntIfNonzero(int aErrorValue)
 	if (!aErrorValue)
 		return OK;
 	TCHAR buf[12];
-	return ThrowRuntimeException(ERR_FAILED, nullptr, _itot(aErrorValue, buf, 10));
+	return ThrowRuntimeException(ERR_FAILED, _itot(aErrorValue, buf, 10));
 }
 
 // Logic from the above functions is duplicated in the below functions rather than calling
@@ -12666,12 +12666,12 @@ ResultType Script::ThrowIfTrue(bool aError)
 	return aError ? ThrowRuntimeException(ERR_FAILED) : OK;
 }
 
-ResultType Script::ThrowIntIfNonzero(int aErrorValue, LPCTSTR aWhat)
+ResultType Script::ThrowIntIfNonzero(int aErrorValue)
 {
 	if (!aErrorValue)
 		return OK;
 	TCHAR buf[12];
-	return ThrowRuntimeException(ERR_FAILED, aWhat, _itot(aErrorValue, buf, 10));
+	return ThrowRuntimeException(ERR_FAILED, _itot(aErrorValue, buf, 10));
 }
 
 
@@ -12773,7 +12773,7 @@ ResultType Script::RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultTy
 		aLine = mCurrLine;
 	
 	if ((g->ExcptMode || mOnError.Count()) && aErrorType != WARN)
-		return ThrowRuntimeException(aErrorText, nullptr, aExtraInfo, aLine, aErrorType);
+		return ThrowRuntimeException(aErrorText, aExtraInfo, aLine, aErrorType);
 
 	return ShowError(aErrorText, aErrorType, aExtraInfo, aLine);
 }
