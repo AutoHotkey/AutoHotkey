@@ -8925,7 +8925,7 @@ unquoted_literal:
 						}
 
 						if (stack_symbol == SYM_OBRACE && (in_param_list->param_count & 1)) // i.e. an odd number of parameters, which means no "key:" was specified.
-							return LineError(_T("Missing \"key:\" in object literal."));
+							return LineError(_T("Missing \"propertyname:\" in object literal."));
 					}
 				}
 
