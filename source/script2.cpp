@@ -6420,14 +6420,12 @@ BIF_DECL(BIF_Sort)
 
 	if (!ParamIndexIsOmitted(2))
 	{
-		if (  !(g_SortFunc = ParamIndexToObject(2))  )
-			g_SortFunc = TokenToFunc(*aParam[2]);
+		g_SortFunc = TokenToFunctor(*aParam[2]);
 		if (!g_SortFunc)
 		{
 			aResultToken.Error(ERR_PARAM3_INVALID);
 			goto end;
 		}
-		g_SortFunc->AddRef(); // Ensure the object exists for the duration of the sorting.
 	}
 	
 	if (!*aContents) // Input is empty, nothing to sort, return empty string.
