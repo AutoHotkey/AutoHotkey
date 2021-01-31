@@ -8440,7 +8440,10 @@ unquoted_literal:
 						}
 						if (*cp == '.') // Must be checked to avoid `(.foo)` being interpreted as `((0).foo)`.
 							return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
-						if (_tcschr(EXPR_OPERAND_TERMINATORS, *i_end))
+						if (_tcschr(EXPR_OPERAND_TERMINATORS, *i_end)
+							// Exclude property names composed of digits, in an object literal:
+							&& !(*omit_leading_whitespace(i_end) == ':' && infix_count
+								&& (infix[infix_count-1].symbol == SYM_OBRACE || infix[infix_count-1].symbol == SYM_COMMA)))
 						{
 							this_literal.symbol = SYM_INTEGER;
 							this_literal.value_int64 = i;
