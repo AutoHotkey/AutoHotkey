@@ -15267,7 +15267,6 @@ ResultType GuiControlType::LV_GetText(ResultToken & aResultToken, int aID, int a
 		_o_throw_param(1);
 
 	TCHAR buf[LV_TEXT_BUF_SIZE];
-	bool result;
 
 	if (row_index == -1) // Special mode to get column's text.
 	{
@@ -15275,10 +15274,10 @@ ResultType GuiControlType::LV_GetText(ResultToken & aResultToken, int aID, int a
 		lvc.cchTextMax = LV_TEXT_BUF_SIZE - 1;  // See notes below about -1.
 		lvc.pszText = buf;
 		lvc.mask = LVCF_TEXT;
-		if (result = SendMessage(hwnd, LVM_GETCOLUMN, col_index, (LPARAM)&lvc)) // Assign.
+		if (SendMessage(hwnd, LVM_GETCOLUMN, col_index, (LPARAM)&lvc)) // Assign.
 			_o_return(lvc.pszText); // See notes below about why pszText is used instead of buf (might apply to this too).
 		else // On failure, it seems best to throw.
-			_o_throw(_T("Error while retrieving text."));
+			_o_throw(ERR_FAILED);
 	}
 	else // Get row's indicated item or subitem text.
 	{
@@ -15292,13 +15291,13 @@ ResultType GuiControlType::LV_GetText(ResultToken & aResultToken, int aID, int a
 		lvi.cchTextMax = LV_TEXT_BUF_SIZE - 1; // Note that LVM_GETITEM doesn't update this member to reflect the new length.
 		// Unlike LVM_GETITEMTEXT, LVM_GETITEM indicates success or failure, which seems more useful/preferable
 		// as a return value since a text length of zero would be ambiguous: could be an empty field or a failure.
-		if (result = SendMessage(hwnd, LVM_GETITEM, 0, (LPARAM)&lvi)) // Assign
+		if (SendMessage(hwnd, LVM_GETITEM, 0, (LPARAM)&lvi)) // Assign
 			// Must use lvi.pszText vs. buf because MSDN says: "Applications should not assume that the text will
 			// necessarily be placed in the specified buffer. The control may instead change the pszText member
 			// of the structure to point to the new text rather than place it in the buffer."
 			_o_return(lvi.pszText);
 		else // On failure, it seems best to throw.
-			_o_throw(_T("Error while retrieving text."));
+			_o_throw(ERR_FAILED);
 	}
 }
 
@@ -16376,7 +16375,7 @@ ResultType GuiControlType::TV_Get(ResultToken &aResultToken, int aID, int aFlags
 	else
 	{
 		// On failure, it seems best to throw an exception.
-		_o_throw(_T("Error while retrieving text."));
+		_o_throw(ERR_FAILED);
 	}
 }
 
