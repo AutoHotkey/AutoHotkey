@@ -965,7 +965,7 @@ ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultT
 		{
 			if (!cp) // End of the list and it wasn't found.
 			{
-				if (!ValidateFunctor(aExprObj, 1, aResultToken, ERR_PARAM2_INVALID))
+				if (!ValidateFunctor(aExprObj, 1, aResultToken))
 					return FAIL;
 				if (  !(cp = AddHotkeyIfExpr())  )
 					return aResultToken.MemoryError();

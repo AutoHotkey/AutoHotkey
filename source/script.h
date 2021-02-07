@@ -3442,7 +3442,7 @@ StringCaseSenseType TokenToStringCase(ExprTokenType& aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
 IObject *TokenToFunctor(ExprTokenType &aToken);
 IObject *StringToFunctor(LPTSTR aStr);
-ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, LPTSTR aNullErr = ERR_TYPE_MISMATCH, int *aMinParams = nullptr);
+ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, int *aMinParams = nullptr);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
 BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right);
 LPTSTR TokenTypeString(ExprTokenType &aToken);

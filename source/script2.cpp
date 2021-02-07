@@ -14755,7 +14755,9 @@ BIF_DECL(BIF_On)
 
 
 	IObject *callback = TokenToFunctor(*aParam[0]);
-	if (!ValidateFunctor(callback, event_type == FID_OnClipboardChange ? 1 : 2, aResultToken, ERR_PARAM1_INVALID))
+	if (!callback)
+		_f_throw_param(0);
+	if (!ValidateFunctor(callback, event_type == FID_OnClipboardChange ? 1 : 2, aResultToken))
 		return;
 	
 	int mode = 1; // Default.
@@ -14980,7 +14982,7 @@ BIF_DECL(BIF_CallbackCreate)
 	int actual_param_count = params_specified ? ParamIndexToInt(2) : 0;
 	if (!ValidateFunctor(func
 		, pass_params_pointer ? 1 : actual_param_count // Count of script parameters being passed.
-		, aResultToken, nullptr
+		, aResultToken
 		// Use MinParams as actual_param_count if unspecified and no & option.
 		, params_specified || pass_params_pointer ? nullptr : &actual_param_count))
 	{
@@ -17009,10 +17011,9 @@ IObject *StringToFunctor(LPTSTR aStr)
 
 
 
-ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, LPTSTR aNullErr, int *aUseMinParams)
+ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, int *aUseMinParams)
 {
-	if (!aFunc)
-		return aResultToken.Error(aNullErr, ErrorPrototype::Type);
+	ASSERT(aFunc);
 	__int64 min_params = 0, max_params = INT_MAX;
 	auto min_result = /*aParamCount < 0 ? INVOKE_NOT_HANDLED
 		:*/ GetObjectIntProperty(aFunc, _T("MinParams"), min_params, aResultToken, true);

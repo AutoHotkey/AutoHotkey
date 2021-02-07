@@ -188,8 +188,9 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 			if (callback)
 				callback->AddRef();
 			else
-				callback = StringToFunctor(param2);
-			if (!ValidateFunctor(callback, 3, aResultToken, ERR_PARAM2_INVALID))
+				if ( !(callback = StringToFunctor(param2)) )
+					_o_throw_param(1);
+			if (!ValidateFunctor(callback, 3, aResultToken))
 				return FAIL;
 		}
 	}
