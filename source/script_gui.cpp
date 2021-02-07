@@ -797,10 +797,7 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 		case P_Text:
 		case P_Value:
 			if (IS_INVOKE_SET)
-			{
-				LPTSTR value = ParamIndexToString(0, _f_number_buf);
-				return gui->ControlSetContents(*this, value, aResultToken, member == P_Text);
-			}
+				return gui->ControlSetContents(*this, *aParam[0], aResultToken, member == P_Text);
 			else
 				return gui->ControlGetContents(aResultToken, *this
 					, member == P_Text ? GuiType::Text_Mode : GuiType::Value_Mode);
@@ -1390,10 +1387,11 @@ error:
 }
 
 
-ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText)
+ResultType GuiType::ControlSetContents(GuiControlType &aControl, ExprTokenType &aValue, ResultToken &aResultToken, bool aIsText)
 // aContents: The content as a string.
 // aResultToken: Used only to set an exit result in the event of an error.
 {
+	LPTSTR aContents = TokenToString(aValue, aResultToken.buf);
 	// Control types for which Text and Value both have special handling:
 	switch (aControl.type)
 	{
@@ -1402,7 +1400,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 	case GUI_CONTROL_LISTBOX:
 	case GUI_CONTROL_TAB:
 		return ControlSetChoice(aControl, aContents, aResultToken, aIsText);
-	
+
 	case GUI_CONTROL_EDIT:
 		return ControlSetEdit(aControl, aContents, aResultToken, aIsText);
 
@@ -1411,7 +1409,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 			_o_throw(ERR_GUI_NOT_FOR_THIS_TYPE); // Let the user know the control doesn't support this.
 		else
 			return ControlSetDateTime(aControl, aContents, aResultToken);
-	
+
 	case GUI_CONTROL_TEXT:
 		// It seems sensible to treat the caption text of a Text control as its "value",
 		// since displaying text is its only purpose; it's just for output only, whereas
@@ -1433,13 +1431,26 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, LPTSTR aContent
 	switch (aControl.type)
 	{
 	case GUI_CONTROL_RADIO: // Same as below.
-	case GUI_CONTROL_CHECKBOX: return ControlSetCheck(aControl, aContents, aResultToken);
 	case GUI_CONTROL_PIC: return ControlSetPic(aControl, aContents, aResultToken);
 	case GUI_CONTROL_MONTHCAL: return ControlSetMonthCal(aControl, aContents, aResultToken);
 	case GUI_CONTROL_HOTKEY: return ControlSetHotkey(aControl, aContents, aResultToken);
-	case GUI_CONTROL_UPDOWN: return ControlSetUpDown(aControl, aContents, aResultToken);
-	case GUI_CONTROL_SLIDER: return ControlSetSlider(aControl, aContents, aResultToken);
-	case GUI_CONTROL_PROGRESS: return ControlSetProgress(aControl, aContents, aResultToken);
+
+	case GUI_CONTROL_CHECKBOX:
+	case GUI_CONTROL_UPDOWN:
+	case GUI_CONTROL_SLIDER:
+	case GUI_CONTROL_PROGRESS:
+	{
+		if (!TokenIsNumeric(aValue))
+			_o_throw_type(_T("Number"), aValue);
+		int value = (int)TokenToInt64(aValue);
+		switch (aControl.type)
+		{
+		case GUI_CONTROL_UPDOWN: return ControlSetUpDown(aControl, value, aResultToken);
+		case GUI_CONTROL_SLIDER: return ControlSetSlider(aControl, value, aResultToken);
+		case GUI_CONTROL_PROGRESS: return ControlSetProgress(aControl, value, aResultToken);
+		case GUI_CONTROL_CHECKBOX: return ControlSetCheck(aControl, value, aResultToken);
+		}
+	}
 
 	// Already handled in the switch() above:
 	//case GUI_CONTROL_DATETIME:
@@ -1543,11 +1554,8 @@ ResultType GuiType::ControlSetPic(GuiControlType &aControl, LPTSTR aContents, Re
 }
 
 
-ResultType GuiType::ControlSetCheck(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+ResultType GuiType::ControlSetCheck(GuiControlType &aControl, int checked, ResultToken &aResultToken)
 {
-	if (!IsNumeric(aContents, TRUE, FALSE))
-		_o_throw(ERR_INVALID_VALUE, ErrorPrototype::Type);
-	WPARAM checked = ATOI(aContents);
 	if (  !(checked == 0 || checked == 1 || (aControl.type == GUI_CONTROL_CHECKBOX && checked == -1))  )
 		_o_throw_value(ERR_INVALID_VALUE);
 	if (checked == -1)
@@ -1952,11 +1960,8 @@ ResultType GuiType::ControlGetHotkey(ResultToken &aResultToken, GuiControlType &
 }
 
 
-ResultType GuiType::ControlSetUpDown(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+ResultType GuiType::ControlSetUpDown(GuiControlType &aControl, int new_pos, ResultToken &aResultToken)
 {
-	if (!IsNumeric(aContents, TRUE, FALSE))
-		_o_throw(ERR_INVALID_VALUE, ErrorPrototype::Type);
-	int new_pos = ATOI(aContents);
 	// MSDN: "If the parameter is outside the control's specified range, nPos will be set to the nearest
 	// valid value."
 	SendMessage(aControl.hwnd, UDM_SETPOS32, 0, new_pos);
@@ -1974,13 +1979,11 @@ ResultType GuiType::ControlGetUpDown(ResultToken &aResultToken, GuiControlType &
 }
 
 
-ResultType GuiType::ControlSetSlider(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+ResultType GuiType::ControlSetSlider(GuiControlType &aControl, int aValue, ResultToken &aResultToken)
 {
-	if (!IsNumeric(aContents, TRUE, FALSE))
-		_o_throw(ERR_INVALID_VALUE, ErrorPrototype::Type);
 	// Confirmed this fact from MSDN: That the control automatically deals with out-of-range values
 	// by setting slider to min or max:
-	SendMessage(aControl.hwnd, TBM_SETPOS, TRUE, ControlInvertSliderIfNeeded(aControl, ATOI(aContents)));
+	SendMessage(aControl.hwnd, TBM_SETPOS, TRUE, ControlInvertSliderIfNeeded(aControl, aValue));
 	// Above msg has no return value.
 	return OK; // Don't break since don't want the other actions below to be taken.
 }
@@ -1995,13 +1998,11 @@ ResultType GuiType::ControlGetSlider(ResultToken &aResultToken, GuiControlType &
 }
 
 
-ResultType GuiType::ControlSetProgress(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+ResultType GuiType::ControlSetProgress(GuiControlType &aControl, int aValue, ResultToken &aResultToken)
 {
-	if (!IsNumeric(aContents, TRUE, FALSE))
-		_o_throw(ERR_INVALID_VALUE, ErrorPrototype::Type);
 	// Confirmed through testing (PBM_DELTAPOS was also tested): The control automatically deals
 	// with out-of-range values by setting bar to min or max.  
-	SendMessage(aControl.hwnd, PBM_SETPOS, ATOI(aContents), 0);
+	SendMessage(aControl.hwnd, PBM_SETPOS, aValue, 0);
 	return OK;
 }
 
