@@ -190,7 +190,7 @@ ResultType InputObject::OnX(ResultToken &aResultToken, int aID, int aFlags, Expr
 		if (obj)
 			obj->AddRef();
 		else if (!TokenIsEmptyString(*aParam[0]))
-			_o_throw(ERR_INVALID_VALUE);
+			_o_throw_type(_T("object"), *aParam[0]);
 		if (*pon)
 			(*pon)->Release();
 		*pon = obj;
@@ -235,7 +235,7 @@ ResultType InputObject::KeyOpt(ResultToken &aResultToken, int aID, int aFlags, E
 			add_flags = 0;
 			remove_flags = INPUT_KEY_OPTION_MASK;
 			continue;
-		default: _o_throw(ERR_INVALID_OPTION, cp);
+		default: _o_throw_value(ERR_INVALID_OPTION, cp);
 		}
 		if (adding)
 			add_flags |= flag; // Add takes precedence over remove, so remove_flags isn't changed.

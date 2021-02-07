@@ -139,6 +139,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_UNRECOGNIZED_ACTION _T("This line does not contain a recognized action.")
 #define ERR_NONEXISTENT_HOTKEY _T("Nonexistent hotkey.")
 #define ERR_NONEXISTENT_VARIANT _T("Nonexistent hotkey variant (IfWin).")
+#define ERR_NONEXISTENT_HOTSTRING _T("Nonexistent hotstring.")
 #define ERR_INVALID_KEYNAME _T("Invalid key name.")
 #define ERR_UNSUPPORTED_PREFIX _T("Unsupported prefix key.")
 #define ERR_ALTTAB_MODLR _T("This AltTab hotkey must specify which key (L or R).")
@@ -448,10 +449,17 @@ __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 #define _f_return(...)			_f__ret(aResultToken.Return(__VA_ARGS__))
 #define _o_return(...)			_o__ret(aResultToken.Return(__VA_ARGS__))
 #define _f_throw(...)			_f__ret(aResultToken.Error(__VA_ARGS__))
+#define _f_throw_param(_prm_, ...)	return ((void)aResultToken.ParamError(_prm_, aParam[_prm_], __VA_ARGS__))
 #define _f_throw_win32(...)		return ((void)aResultToken.Win32Error(__VA_ARGS__))
+#define _f_throw_value(...)		return ((void)aResultToken.ValueError(__VA_ARGS__))
 #define _f_throw_type(...)		return ((void)aResultToken.TypeError(__VA_ARGS__))
+#define _f_throw_oom			return ((void)aResultToken.MemoryError())
 #define _o_throw(...)			_o__ret(aResultToken.Error(__VA_ARGS__))
+#define _o_throw_param(_prm_, ...)	return aResultToken.ParamError(_prm_, aParam[_prm_], __VA_ARGS__)
 #define _o_throw_win32(...)		return aResultToken.Win32Error(__VA_ARGS__)
+#define _o_throw_value(...)		return aResultToken.ValueError(__VA_ARGS__)
+#define _o_throw_type(...)		return aResultToken.TypeError(__VA_ARGS__)
+#define _o_throw_oom			return aResultToken.MemoryError()
 #define _f_return_FAIL			_f__ret(aResultToken.SetExitResult(FAIL))
 #define _o_return_FAIL			_o__ret(aResultToken.SetExitResult(FAIL))
 // The _f_set_retval macros should be used with care because the integer macros assume symbol
@@ -1357,7 +1365,7 @@ public:
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
-	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
+	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo, Object *aPrototype);
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 	
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType);
@@ -3095,7 +3103,7 @@ public:
 	ResultType CriticalError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 	// RuntimeError allows the user to choose to continue, in which case OK is returned instead of FAIL;
 	// therefore, caller must not rely on a FAIL result to abort the overall operation.
-	ResultType RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), ResultType aErrorType = FAIL_OR_OK, Line *aLine = nullptr);
+	ResultType RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), ResultType aErrorType = FAIL_OR_OK, Line *aLine = nullptr, Object *aPrototype = nullptr);
 
 	ResultType ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting);
 	enum VarRefUsageType { VARREF_READ = 0, VARREF_BYREF, VARREF_ISSET
@@ -3117,7 +3125,7 @@ public:
 
 	ResultType ThrowIfTrue(bool aError);
 	ResultType ThrowIntIfNonzero(int aErrorValue);
-	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine, ResultType aErrorType);
+	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine, ResultType aErrorType, Object *aPrototype = nullptr);
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 	ResultType Win32Error(DWORD aError = GetLastError());
 	
@@ -3441,6 +3449,9 @@ LPTSTR TokenTypeString(ExprTokenType &aToken);
 #define STRING_TYPE_STRING _T("String")
 #define INTEGER_TYPE_STRING _T("Integer")
 #define FLOAT_TYPE_STRING _T("Float")
+
+ResultType MemoryError();
+ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultType aErrorType);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
 ResultType SetWorkingDir(LPTSTR aNewDir);

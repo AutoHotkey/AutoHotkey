@@ -876,7 +876,7 @@ class FileObject : public Object
 				{
 				case SYM_STRING:
 					if (reading)
-						_o_throw(ERR_PARAM1_INVALID); // Can't read into a read-only string.
+						_o_throw(ERR_PARAM1_INVALID, ErrorPrototype::Type); // Can't read into a read-only string.
 					target = target_token.marker;
 					max_size = (DWORD)(target_token.marker_length + 1) * sizeof(TCHAR); // Allow +1 to write the null-terminator (but it won't be written by default if size is omitted).
 					break;
@@ -900,7 +900,7 @@ class FileObject : public Object
 					if ((size_t)target >= 65536) // Basic sanity check relying on the fact that Win32 platforms reserve the first 64KB of address space.
 						break;
 					// Otherwise, it's invalid:
-					_o_throw(ERR_PARAM1_INVALID);
+					_o_throw_param(0);
 				}
 
 				DWORD size;
@@ -917,7 +917,7 @@ class FileObject : public Object
 				{
 					size = (DWORD)ParamIndexToInt64(1);
 					if (size > max_size) // Implies max_size != ~0.
-						_o_throw(ERR_PARAM2_INVALID); // Invalid size (param #2).
+						_o_throw_param(1); // Invalid size (param #2).
 				}
 
 				DWORD result;
@@ -988,7 +988,7 @@ class FileObject : public Object
 			{
 				codepage = Line::ConvertFileEncoding(*aParam[0]);
 				if (codepage == -1)
-					_o_throw(ERR_INVALID_VALUE);
+					_o_throw_value(ERR_INVALID_VALUE);
 				mFile.SetCodePage(codepage & ~CP_AHKNOBOM); // Ignore "-RAW" by removing the CP_AHKNOBOM flag; see comments above.
 				return OK;
 			}
@@ -1182,7 +1182,7 @@ BIF_DECL(BIF_FileOpen)
 	return;
 
 invalid_param:
-	_f_throw(ERR_PARAM_INVALID);
+	_f_throw_value(ERR_PARAM_INVALID);
 }
 
 

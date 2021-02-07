@@ -94,7 +94,7 @@ BIF_DECL(BIF_SysGetIPAddresses)
 
 	auto addresses = Array::Create();
 	if (!addresses)
-		_f_throw(ERR_OUTOFMEM);
+		_f_throw_oom;
 
 	WSADATA wsadata;
 	if (WSAStartup(MAKEWORD(1, 1), &wsadata)) // Failed (it returns 0 on success).
@@ -118,7 +118,7 @@ BIF_DECL(BIF_SysGetIPAddresses)
 		{
 			addresses->Release();
 			WSACleanup();
-			_f_throw(ERR_OUTOFMEM);
+			_f_throw_oom;
 		}
 	}
 
@@ -212,7 +212,7 @@ BIF_DECL(BIF_MenuSelect)
 	else
 		hMenu = GetMenu(target_window);
 	if (!hMenu) // Window has no menu bar.
-		_f_throw(ERR_WINDOW_HAS_NO_MENU);
+		_f_throw(ERR_WINDOW_HAS_NO_MENU, ErrorPrototype::Target);
 
 	int menu_item_count = GetMenuItemCount(hMenu);
 	//if (menu_item_count < 1) // Menu bar has no menus.
@@ -299,7 +299,7 @@ else\
 	_f_return_empty;
 
 error:
-	_f_throw(ERR_PARAM_INVALID, this_menu_param);
+	_f_throw_value(ERR_PARAM_INVALID, this_menu_param);
 }
 
 
@@ -322,7 +322,7 @@ BIF_DECL(BIF_Control)
 	case FID_ControlSetEnabled:
 		aToggle = ParamIndexToToggleValue(0);
 		if (aToggle == TOGGLE_INVALID)
-			_f_throw(ERR_PARAM1_INVALID);
+			_f_throw_param(0);
 		++aParam;
 		--aParamCount;
 		break;
@@ -339,6 +339,7 @@ BIF_DECL(BIF_Control)
 	// Integer parameter:
 	case FID_ControlDeleteItem:
 	case FID_ControlChooseIndex:
+		Throw_if_Param_NaN(0);
 		aNumber = ParamIndexToInt(0);
 		++aParam;
 		--aParamCount;
@@ -371,7 +372,7 @@ BIF_DECL(BIF_Control)
 		{
 			new_button_state = aToggle == TOGGLED_ON ? BST_CHECKED : BST_UNCHECKED;
 			if (!SendMessageTimeout(control_window, BM_GETCHECK, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
-				goto error;
+				goto win32_error;
 			if (dwResult == new_button_state) // It's already in the right state, so don't press it.
 				break;
 		}
@@ -406,7 +407,7 @@ BIF_DECL(BIF_Control)
 	case FID_ControlSetExStyle:
 	{
 		if (!*aValue)
-			_f_throw(ERR_PARAM1_MUST_NOT_BE_BLANK); // Seems best not to treat an explicit blank as zero.
+			_f_throw_value(ERR_PARAM1_MUST_NOT_BE_BLANK); // Seems best not to treat an explicit blank as zero.
 		int style_index = (control_cmd == FID_ControlSetStyle) ? GWL_STYLE : GWL_EXSTYLE;
 		DWORD new_style, orig_style = GetWindowLong(control_window, style_index);
 		// +/-/^ are used instead of |&^ because the latter is confusing, namely that & really means &=~style, etc.
@@ -469,7 +470,7 @@ BIF_DECL(BIF_Control)
 	case FID_ControlDeleteItem:
 		control_index = aNumber - 1;
 		if (control_index < 0)
-			_f_throw(ERR_PARAM1_INVALID);
+			_f_throw_param(0);
 		GetClassName(control_window, classname, _countof(classname));
 		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 			msg = CB_DELETESTRING;
@@ -486,7 +487,7 @@ BIF_DECL(BIF_Control)
 	case FID_ControlChooseIndex:
 		control_index = aNumber - 1;
 		if (control_index < -1)
-			_f_throw(ERR_PARAM1_INVALID);
+			_f_throw_param(0);
 		GetClassName(control_window, classname, _countof(classname));
 		if (tcscasestr(classname, _T("Combo"))) // v1.0.42: Changed to strcasestr vs. strnicmp for TListBox/TComboBox.
 		{
@@ -506,7 +507,7 @@ BIF_DECL(BIF_Control)
 		else if (tcscasestr(classname, _T("Tab")))
 		{
 			if (control_index < 0)
-				_f_throw(ERR_PARAM1_INVALID);
+				_f_throw_param(0);
 			if (!ControlSetTab(aResultToken, control_window, (DWORD)control_index))
 				goto win32_error;
 			goto success;
@@ -829,7 +830,7 @@ BIF_DECL(BIF_ControlGet)
 	{
 		control_index = aNumber - 1;
 		if (control_index < 0)
-			_f_throw(ERR_PARAM1_INVALID);
+			_f_throw_param(0);
 		DWORD_PTR dwLineCount;
 		// Lexikos: Not sure if the following comment is relevant (does the OS multiply by sizeof(wchar_t)?).
 		// jackieku: 32768 * sizeof(wchar_t) = 65536, which can not be stored in a unsigned 16bit integer.
@@ -842,7 +843,7 @@ BIF_DECL(BIF_ControlGet)
 			if (!SendMessageTimeout(control_window, EM_GETLINECOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwLineCount))
 				goto win32_error;
 			if ((DWORD)aNumber > dwLineCount)
-				_f_throw(ERR_PARAM1_INVALID);
+				_f_throw_param(0);
 		}
 		line_buf[dwResult] = '\0'; // Ensure terminated since the API might not do it in some cases.
 		_f_return(line_buf);
@@ -1339,7 +1340,7 @@ BIF_DECL(BIF_FileGetVersion)
 	_f_param_string_opt_def(aFilespec, 0, (g->mLoopFile ? g->mLoopFile->cFileName : _T("")));
 
 	if (!*aFilespec)
-		_f_throw(ERR_PARAM1_MUST_NOT_BE_BLANK);  // Since this is probably not what the user intended.
+		_f_throw_value(ERR_PARAM1_MUST_NOT_BE_BLANK);  // Since this is probably not what the user intended.
 
 	DWORD dwUnused, dwSize;
 	if (   !(dwSize = GetFileVersionInfoSize(aFilespec, &dwUnused))   )  // No documented limit on how large it can be, so don't use _alloca().

@@ -793,5 +793,14 @@ public:
 
 
 
+namespace ErrorPrototype
+{
+	extern Object *Error, *Memory, *Type, *Value, *OS, *ZeroDivision;
+	extern Object *Target, *Member, *Property, *Method, *Index, *Key;
+	extern Object *Timeout;
+}
+
+
+
 ResultType GetEnumerator(IObject *&aEnumerator, ExprTokenType &aEnumerable, int aVarCount, bool aDisplayError);
 ResultType CallEnumerator(IObject *aEnumerator, ExprTokenType *aParam[], int aParamCount, bool aDisplayError);

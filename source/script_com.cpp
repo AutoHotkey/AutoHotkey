@@ -80,10 +80,7 @@ BIF_DECL(BIF_ComObjGet)
 BIF_DECL(BIF_ComObject)
 {
 	if (!TokenIsNumeric(*aParam[0]))
-	{
-		aResultToken.Error(ERR_PARAM1_INVALID);
-		return;
-	}
+		_f_throw_param(0, _T("Number"));
 		
 	VARTYPE vt;
 	__int64 llVal;
@@ -92,10 +89,7 @@ BIF_DECL(BIF_ComObject)
 	if (aParamCount > 1)
 	{
 		if (!TokenIsNumeric(*aParam[1]))
-		{
-			aResultToken.Error(ERR_PARAM2_INVALID);
-			return;
-		}
+			_f_throw_param(1, _T("Number"));
 		// ComObject(vt, value [, flags])
 		vt = (VARTYPE)TokenToInt64(*aParam[0]);
 		llVal = TokenToInt64(*aParam[1]);
@@ -138,7 +132,7 @@ BIF_DECL(BIF_ComObject)
 	ComObject *obj;
 	if (  !(obj = new ComObject(llVal, vt, flags))  )
 	{
-		aResultToken.Error(ERR_OUTOFMEM);
+		aResultToken.MemoryError();
 		// Do any cleanup that the object may have been expected to do:
 		if (vt == VT_DISPATCH || vt == VT_UNKNOWN)
 			((IUnknown *)llVal)->Release();
@@ -488,7 +482,9 @@ BIF_DECL(BIF_ComObjArray)
 		}
 		SafeArrayDestroy(psa);
 	}
-	_f_throw(!(vt > 1 && vt < 0x18 && vt != 0xF) ? ERR_PARAM1_INVALID : ERR_OUTOFMEM);
+	if (vt > 1 && vt < 0x18 && vt != 0xF)
+		_f_throw_oom;
+	_f_throw_param(0);
 }
 
 
@@ -520,7 +516,7 @@ BIF_DECL(BIF_ComObjQuery)
 			punk = (IUnknown *)TokenToInt64(*aParam[0]);
 	}
 	if (punk < (IUnknown *)65536) // Error-detection: the first 64KB of address space is always invalid.
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_param(0);
 
 	if (aParamCount > 2) // QueryService(obj, SID, IID)
 	{

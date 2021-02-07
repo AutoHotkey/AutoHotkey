@@ -423,6 +423,7 @@ private: // Force code to use one of the CopyFrom() methods, for clarity.
 #define STACK_PUSH(token_ptr) stack[stack_count++] = token_ptr
 #define STACK_POP stack[--stack_count]  // To be used as the r-value for an assignment.
 
+class Object;
 class BuiltInFunc;
 struct ResultToken : public ExprTokenType
 {
@@ -525,10 +526,17 @@ struct ResultToken : public ExprTokenType
 
 	ResultType Error(LPCTSTR aErrorText);
 	ResultType Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo);
+	ResultType Error(LPCTSTR aErrorText, Object *aPrototype);
+	ResultType Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aPrototype);
+	ResultType MemoryError();
 	ResultType UnknownMemberError(ExprTokenType &aObject, int aFlags, LPCTSTR aMember);
 	ResultType Win32Error(DWORD aError = GetLastError());
+	ResultType ValueError(LPCTSTR aErrorText);
+	ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo);
 	ResultType TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue);
 	ResultType TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LPTSTR aExtraInfo = _T(""));
+	ResultType ParamError(int aIndex, ExprTokenType *aParam);
+	ResultType ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType);
 	
 	void SetLastErrorMaybeThrow(bool aError, DWORD aLastError = GetLastError());
 	void SetLastErrorCloseAndMaybeThrow(HANDLE aHandle, bool aError, DWORD aLastError = GetLastError());

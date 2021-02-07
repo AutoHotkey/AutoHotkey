@@ -142,7 +142,7 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 	// including the adding separator lines.  So at the point, it is necessary to either find
 	// or create a menu item.  The latter only occurs for the ADD command.
 	if (!*param1)
-		_o_throw(ERR_PARAM1_MUST_NOT_BE_BLANK);
+		_o_throw_value(ERR_PARAM1_MUST_NOT_BE_BLANK);
 
 	TCHAR buf1[MAX_NUMBER_SIZE], buf2[MAX_NUMBER_SIZE];
 	LPTSTR param2 = ParamIndexToOptionalString(1, buf1);
@@ -165,7 +165,7 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 	if (member == M_Add && !update_existing_item_options) // Callbacks and submenus are only used in conjunction with the ADD command.
 	{
 		if (callback_was_omitted)
-			_o_throw(ERR_PARAM2_MUST_NOT_BE_BLANK);
+			_o_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
 		callback = ParamIndexToObject(1);
 		submenu = dynamic_cast<UserMenu *>(callback);
 		if (submenu) // Param #2 is a Menu object.
@@ -177,7 +177,7 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 			// things to the actual menu bar on any GUI it is assigned to.
 			if (submenu == this || submenu->ContainsMenu(this)
 				|| submenu->mMenuType != MENU_TYPE_POPUP)
-				_o_throw(ERR_PARAM2_INVALID);
+				_o_throw_param(1);
 			// Store only submenu, not callback.  Don't Release() this since AddRef() wasn't called
 			// (we're just borrowing the caller's reference until the menu item is constructed).
 			callback = NULL;
@@ -483,7 +483,7 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, Use
 	if (length)
 	{
 		if (   !(name_dynamic = tmalloc(length + 1))   )  // +1 for terminator.
-			return g_script.RuntimeError(ERR_OUTOFMEM);
+			return MemoryError();
 		_tcscpy(name_dynamic, aName);
 	}
 	else
@@ -493,7 +493,7 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, Use
 	{
 		if (name_dynamic != Var::sEmptyString)
 			free(name_dynamic);
-		return g_script.RuntimeError(ERR_OUTOFMEM);
+		return MemoryError();
 	}
 	if (*aOptions && !UpdateOptions(menu_item, aOptions))
 	{
@@ -737,7 +737,7 @@ ResultType UserMenu::UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions)
 		else
 		{
 			*option_end = orig_char;
-			if (!g_script.RuntimeError(ERR_INVALID_OPTION, next_option)) // invalid option
+			if (!ValueError(ERR_INVALID_OPTION, next_option, FAIL_OR_OK)) // invalid option
 				return FAIL;
 			// Otherwise, user wants to continue.
 		}

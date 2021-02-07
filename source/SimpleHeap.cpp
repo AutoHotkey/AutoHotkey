@@ -36,7 +36,7 @@ LPTSTR SimpleHeap::Malloc(LPCTSTR aBuf, size_t aLength)
 	LPTSTR new_buf;
 	if (   !(new_buf = (LPTSTR)SimpleHeap::Malloc((aLength + 1) * sizeof(TCHAR)))   ) // +1 for the zero terminator.
 	{
-		g_script.ScriptError(ERR_OUTOFMEM, aBuf);
+		MemoryError();
 		return NULL; // Callers may rely on NULL vs. "" being returned in the event of failure.
 	}
 	if (aLength)

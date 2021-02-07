@@ -4136,7 +4136,7 @@ ResultType Script::UpdateOrCreateTimer(IObject *aCallback
 	if (!timer_existed)  // Create it.
 	{
 		if (   !(timer = new ScriptTimer(aCallback))   )
-			return ScriptError(ERR_OUTOFMEM);
+			return MemoryError();
 		if (!mFirstTimer)
 			mFirstTimer = mLastTimer = timer;
 		else
@@ -5461,7 +5461,7 @@ ResultType DerefList::Push()
 		const int block_size = 128; // In most cases one allocation will be enough.
 		DerefType *p = (DerefType *)realloc(items, (size + block_size) * sizeof(DerefType));
 		if (!p)
-			return g_script.ScriptError(ERR_OUTOFMEM);
+			return MemoryError();
 		items = p;
 		size += block_size;
 	}
@@ -7001,7 +7001,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	auto *pfunc = new BuiltInFunc(*pbif, pbif->mOutputVars);
 	if (!pfunc || !mFuncs.Insert(pfunc, left)) // left contains the position within mFuncs to insert the function.  Cannot use *apInsertPos as caller may have omitted it.
 	{
-		ScriptError(ERR_OUTOFMEM);
+		MemoryError();
 		return nullptr;
 	}
 
@@ -7407,7 +7407,7 @@ Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int
 	Var *the_new_var = new Var(new_name, aScope);
 	if (!the_new_var || !aList->Insert(the_new_var, aInsertPos))
 	{
-		ScriptError(ERR_OUTOFMEM);
+		MemoryError();
 		return NULL;
 	}
 
@@ -7430,7 +7430,7 @@ Var *Script::FindOrAddBuiltInVar(LPCTSTR aVarName, VarEntry *aVarEntry)
 	Var *the_new_var = new Var(name, aVarEntry, VAR_DECLARE_SUPER_GLOBAL);
 	if (!the_new_var || !mVars.Insert(the_new_var, insert_pos))
 	{
-		ScriptError(ERR_OUTOFMEM);
+		MemoryError();
 		return nullptr;
 	}
 	return the_new_var;
@@ -7479,7 +7479,7 @@ WinGroup *Script::FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound)
 		if (aCreateIfNotFound)
 			// An error message must be shown in this case since our caller is about to
 			// exit the current script thread (and we don't want it to happen silently).
-			ScriptError(_T("Blank group name."));
+			ValueError(_T("Blank group name."), nullptr, FAIL);
 		return NULL;
 	}
 	for (WinGroup *group = mFirstGroup; group != NULL; group = group->mNextGroup)
@@ -7502,7 +7502,7 @@ ResultType Script::AddGroup(LPTSTR aGroupName)
 {
 	size_t aGroupName_length = _tcslen(aGroupName);
 	if (aGroupName_length > MAX_VAR_NAME_LENGTH)
-		return ScriptError(_T("Group name too long."), aGroupName);
+		return ValueError(_T("Group name too long."), aGroupName, FAIL);
 	if (!Var::ValidateName(aGroupName, DISPLAY_GROUP_ERROR)) // Seems best to use same validation as var names.
 		return FAIL;
 
@@ -7515,7 +7515,7 @@ ResultType Script::AddGroup(LPTSTR aGroupName)
 	// must be carefully reviewed:
 	WinGroup *the_new_group = new WinGroup(new_name);
 	if (the_new_group == NULL)
-		return ScriptError(ERR_OUTOFMEM);
+		return MemoryError();
 	if (mFirstGroup == NULL)
 		mFirstGroup = the_new_group;
 	else
@@ -10205,7 +10205,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 
 			ResultToken* token = new ResultToken;
 			if (!token) // Unlikely.
-				return line->LineError(ERR_OUTOFMEM);
+				return MemoryError();
 
 			token->symbol = SYM_STRING; // Set default. ExpandArgs() mightn't set it.
 			token->mem_to_free = NULL;
@@ -10833,7 +10833,7 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, bool &aContin
 	// long paths while keeping code size minimal.
 	LoopFilesStruct *plfs = new LoopFilesStruct;
 	if (!plfs)
-		return LineError(ERR_OUTOFMEM);
+		return MemoryError();
 	// Parse aFilePattern into its components and copy into *plfs.  Copies are taken because:
 	//  - As the lines of the loop are executed, the deref buffer (which is what aFilePattern might
 	//    point to if we were called from ExecUntil()) may be overwritten -- and we will need the path
@@ -10902,7 +10902,7 @@ bool Line::ParseLoopFilePattern(LPTSTR aFilePattern, LoopFilesStruct &lfs, Resul
 	{
 		if (  !(lfs.orig_dir = tmalloc(orig_dir_length + 1))  )
 		{
-			aResult = LineError(ERR_OUTOFMEM);
+			aResult = MemoryError();
 			return false;
 		}
 		tmemcpy(lfs.orig_dir, aFilePattern, orig_dir_length);
@@ -10958,7 +10958,7 @@ bool Line::ParseLoopFilePattern(LPTSTR aFilePattern, LoopFilesStruct &lfs, Resul
 	}
 	if (  !(lfs.long_dir = _tcsdup(long_dir))  ) // Conserve memory during loop execution by not using the full MAX_WIDE_PATH.
 	{
-		aResult = LineError(ERR_OUTOFMEM);
+		aResult = MemoryError();
 		return false;
 	}
 
@@ -11313,7 +11313,7 @@ ResultType Line::PerformLoopParse(ResultToken *aResultToken, bool &aContinueMain
 		if (   !(buf = tmalloc(space_needed))   )
 			// Probably best to consider this a critical error, since on the rare times it does happen, the user
 			// would probably want to know about it immediately.
-			return LineError(ERR_OUTOFMEM, FAIL, ARG2);
+			return MemoryError();
 		stack_buf = NULL; // For comparison purposes later below.
 	}
 	_tcscpy(buf, ARG1); // Make the copy.
@@ -11420,7 +11420,7 @@ ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, bool &aContinueM
 	else
 	{
 		if (   !(buf = tmalloc(space_needed))   )
-			return LineError(ERR_OUTOFMEM, FAIL, ARG1);
+			return MemoryError();
 		stack_buf = NULL; // For comparison purposes later below.
 	}
 	_tcscpy(buf, ARG1); // Make the copy.
@@ -11544,7 +11544,7 @@ ResultType Line::PerformLoopReadFile(ResultToken *aResultToken, bool &aContinueM
 {
 	// Make a persistent copy in case aWriteFileName's contents are in the deref buffer:
 	if (  !(aWriteFileName = _tcsdup(aWriteFileName))  )
-		return LineError(ERR_OUTOFMEM);
+		return MemoryError();
 
 	LoopReadFileStruct loop_info(aReadFile, aWriteFileName);
 	size_t line_length;
@@ -11836,7 +11836,7 @@ ResultType Line::Perform()
 
 	case ACT_SETWORKINGDIR:
 		if (!SetWorkingDir(ARG1))
-			return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK); // Hard to imagine any other cause.
+			return g_script.Win32Error();
 		return OK;
 
 	case ACT_FILECREATESHORTCUT:
@@ -12543,7 +12543,7 @@ LPCTSTR Debugger::WhatThrew()
 #endif
 
 
-IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo)
+IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo, Object *aPrototype)
 {
 	// Build the parameters for Object::Create()
 	ExprTokenType aParams[5*2]; int aParamCount = 4*2;
@@ -12573,7 +12573,13 @@ IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR
 		aParams[9].SetValue((LPTSTR)aExtraInfo);
 	}
 
-	return Object::Create(aParam, aParamCount);
+	auto obj = Object::Create(aParam, aParamCount);
+	if (!obj)
+		return nullptr;
+	if (!aPrototype)
+		aPrototype = ErrorPrototype::Error;
+	obj->SetBase(aPrototype);
+	return obj;
 }
 
 
@@ -12583,7 +12589,7 @@ ResultType Line::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 }
 
 ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo
-	, Line *aLine, ResultType aErrorType)
+	, Line *aLine, ResultType aErrorType, Object *aPrototype)
 {
 	// ThrownToken should only be non-NULL while control is being passed up the
 	// stack, which implies no script code can be executing.
@@ -12594,7 +12600,7 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo
 
 	ResultToken *token;
 	if (   !(token = new ResultToken)
-		|| !(token->object = aLine->CreateRuntimeException(aErrorText, nullptr, aExtraInfo))   )
+		|| !(token->object = aLine->CreateRuntimeException(aErrorText, nullptr, aExtraInfo, aPrototype))   )
 	{
 		// Out of memory. It's likely that we were called for this very reason.
 		// Since we don't even have enough memory to allocate an exception object,
@@ -12640,7 +12646,7 @@ ResultType Script::Win32Error(DWORD aError)
 		if (message[size - 1] == '\r')
 			message[--size] = '\0';
 	}
-	return RuntimeError(message, _T(""), FAIL_OR_OK);
+	return RuntimeError(message, _T(""), FAIL_OR_OK, nullptr, ErrorPrototype::OS);
 }
 
 
@@ -12763,7 +12769,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 	return g_script.ShowError(aErrorText, aErrorType, aExtraInfo, this);
 }
 
-ResultType Script::RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultType aErrorType, Line *aLine)
+ResultType Script::RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultType aErrorType, Line *aLine, Object *aPrototype)
 {
 	ASSERT(aErrorText);
 	if (!aExtraInfo)
@@ -12773,7 +12779,7 @@ ResultType Script::RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultTy
 		aLine = mCurrLine;
 	
 	if ((g->ExcptMode || mOnError.Count()) && aErrorType != WARN)
-		return ThrowRuntimeException(aErrorText, aExtraInfo, aLine, aErrorType);
+		return ThrowRuntimeException(aErrorText, aExtraInfo, aLine, aErrorType, aPrototype);
 
 	return ShowError(aErrorText, aErrorType, aExtraInfo, aLine);
 }
@@ -12984,16 +12990,57 @@ ResultType ResultToken::Error(LPCTSTR aErrorText)
 __declspec(noinline)
 ResultType ResultToken::Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 {
+	return Error(aErrorText, aExtraInfo, nullptr);
+}
+
+__declspec(noinline)
+ResultType ResultToken::Error(LPCTSTR aErrorText, Object *aPrototype)
+{
+	return Error(aErrorText, nullptr, aPrototype);
+}
+
+__declspec(noinline)
+ResultType ResultToken::Error(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aPrototype)
+{
 	// These two assertions should always pass, since anything else would imply returning a value,
 	// not throwing an error.  If they don't, the memory/object might not be freed since the caller
 	// isn't expecting a value, or they might be freed twice (if the callee already freed it).
 	//ASSERT(!mem_to_free); // At least one caller frees it after calling this function.
 	ASSERT(symbol != SYM_OBJECT);
-	if (g_script.RuntimeError(aErrorText, aExtraInfo) == FAIL)
+	if (g_script.RuntimeError(aErrorText, aExtraInfo, FAIL_OR_OK, nullptr, aPrototype) == FAIL)
 		return SetExitResult(FAIL);
 	SetValue(_T(""), 0);
 	// Caller may rely on FAIL to unwind stack, but this->result is still OK.
 	return FAIL;
+}
+
+__declspec(noinline)
+ResultType ResultToken::MemoryError()
+{
+	return Error(ERR_OUTOFMEM, nullptr, ErrorPrototype::Memory);
+}
+
+ResultType MemoryError()
+{
+	return g_script.RuntimeError(ERR_OUTOFMEM, nullptr, FAIL, nullptr, ErrorPrototype::Memory);
+}
+
+__declspec(noinline)
+ResultType ResultToken::ValueError(LPCTSTR aErrorText)
+{
+	return Error(aErrorText, nullptr, ErrorPrototype::Value);
+}
+
+__declspec(noinline)
+ResultType ResultToken::ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
+{
+	return Error(aErrorText, aExtraInfo, ErrorPrototype::Value);
+}
+
+__declspec(noinline)
+ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultType aErrorType)
+{
+	return g_script.RuntimeError(aErrorText, aExtraInfo, aErrorType, nullptr, ErrorPrototype::Value);
 }
 
 __declspec(noinline)
@@ -13004,7 +13051,7 @@ ResultType ResultToken::UnknownMemberError(ExprTokenType &aObject, int aFlags, L
 		aMember = (aFlags & IT_CALL) ? _T("Call") : _T("__Item");
 	sntprintf(msg, _countof(msg), _T("This value of type \"%s\" has no %s named \"%s\".")
 		, TokenTypeString(aObject), (aFlags & IT_CALL) ? _T("method") : _T("property"), aMember);
-	return Error(msg);
+	return Error(msg, nullptr, (aFlags & IT_CALL) ? ErrorPrototype::Method : ErrorPrototype::Property);
 }
 
 __declspec(noinline)
@@ -13016,15 +13063,22 @@ ResultType ResultToken::Win32Error(DWORD aError)
 	return FAIL;
 }
 
+void TokenTypeAndValue(ExprTokenType &aToken, LPTSTR &aType, LPTSTR &aValue, TCHAR *aNBuf)
+{
+	if (aToken.symbol == SYM_VAR && aToken.var->IsUninitializedNormalVar())
+		aType = _T("unset variable"), aValue = aToken.var->mName;
+	else if (TokenIsEmptyString(aToken))
+		aType = _T("empty string"), aValue = _T("");
+	else
+		aType = TokenTypeString(aToken), aValue = TokenToString(aToken, aNBuf);
+}
+
 __declspec(noinline)
 ResultType ResultToken::TypeError(LPCTSTR aExpectedType, ExprTokenType &aActualValue)
 {
 	TCHAR number_buf[MAX_NUMBER_SIZE];
 	LPTSTR actual_type, value_as_string;
-	if (aActualValue.symbol == SYM_VAR && aActualValue.var->IsUninitializedNormalVar())
-		actual_type = _T("unset variable"), value_as_string = aActualValue.var->mName;
-	else
-		actual_type = TokenTypeString(aActualValue), value_as_string = TokenToString(aActualValue, number_buf);
+	TokenTypeAndValue(aActualValue, actual_type, value_as_string, number_buf);
 	return TypeError(aExpectedType, actual_type, value_as_string);
 }
 
@@ -13036,7 +13090,41 @@ ResultType ResultToken::TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LP
 	TCHAR msg[512];
 	sntprintf(msg, _countof(msg), _T("Expected a%s %s but got a%s %s.")
 		, an(aExpectedType), aExpectedType, an(aActualType), aActualType);
-	return Error(msg, aExtraInfo);
+	return Error(msg, aExtraInfo, ErrorPrototype::Type);
+}
+
+__declspec(noinline)
+ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam)
+{
+	return ParamError(aIndex, aParam, nullptr);
+}
+
+__declspec(noinline)
+ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType)
+{
+	auto an = [](LPCTSTR thing) {
+		return _tcschr(_T("aeiou"), ctolower(*thing)) ? _T("n") : _T("");
+	};
+	TCHAR msg[512];
+	TCHAR number_buf[MAX_NUMBER_SIZE];
+	LPTSTR actual_type, value_as_string;
+	TokenTypeAndValue(*aParam, actual_type, value_as_string, number_buf);
+	if (!*value_as_string && !aExpectedType)
+		value_as_string = actual_type;
+#ifdef CONFIG_DEBUGGER
+	if (aExpectedType)
+		sntprintf(msg, _countof(msg), _T("Parameter #%i of %s requires a%s %s, but received a%s %s.")
+			, aIndex + 1, g_Debugger.WhatThrew(), an(aExpectedType), aExpectedType, an(actual_type), actual_type);
+	else
+		sntprintf(msg, _countof(msg), _T("Parameter #%i of %s is invalid."), aIndex + 1, g_Debugger.WhatThrew());
+#else
+	if (aExpectedType)
+		sntprintf(msg, _countof(msg), _T("Parameter #%i requires a%s, but a%s %s was passed.")
+			, aIndex + 1, an(aExpectedType), aExpectedType, an(actual_type), actual_type);
+	else
+		sntprintf(msg, _countof(msg), _T("Parameter #%i invalid."), aIndex + 1);
+#endif
+	return Error(msg, value_as_string, ErrorPrototype::Type);
 }
 
 

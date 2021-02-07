@@ -968,7 +968,7 @@ ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultT
 				if (!ValidateFunctor(aExprObj, 1, aResultToken, ERR_PARAM2_INVALID))
 					return FAIL;
 				if (  !(cp = AddHotkeyIfExpr())  )
-					return aResultToken.Error(ERR_OUTOFMEM);
+					return aResultToken.MemoryError();
 				aExprObj->AddRef();
 				cp->Type = HOT_IF_CALLBACK;
 				cp->Callback = aExprObj;
@@ -989,7 +989,7 @@ ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultT
 	{
 		HotkeyCriterion *cp = FindHotkeyIfExpr(aExpr);
 		if (!cp) // Expression not found.
-			return aResultToken.Error(ERR_HOTKEY_IF_EXPR);
+			return aResultToken.ValueError(ERR_HOTKEY_IF_EXPR);
 		g->HotCriterion = cp;
 	}
 	return OK;
@@ -1000,11 +1000,8 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 // Creates, updates, enables, or disables a hotkey dynamically (while the script is running).
 // Returns OK or FAIL.
 {
-	// This macro was used to support UseErrorLevel in previous versions.
-	#define RETURN_HOTKEY_ERROR(level, msg, info) return aResultToken.Error(msg, info)
-
 	if (!aJumpToLabel && !aHookAction && *aLabelName)
-		RETURN_HOTKEY_ERROR(HOTKEY_EL_BADLABEL, ERR_PARAM2_INVALID, aLabelName);
+		return aResultToken.ValueError(ERR_PARAM2_INVALID, aLabelName);
 	// Caller has ensured that aJumpToLabel and aHookAction can't both be non-zero.  Furthermore,
 	// both can be zero/NULL only when the caller is updating an existing hotkey to have new options
 	// (i.e. it's retaining its current label).
@@ -1026,12 +1023,12 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	case HOTKEY_ID_OFF:
 	case HOTKEY_ID_TOGGLE:
 		if (!hk)
-			RETURN_HOTKEY_ERROR(HOTKEY_EL_NOTEXIST, ERR_NONEXISTENT_HOTKEY, aHotkeyName);
+			return aResultToken.Error(ERR_NONEXISTENT_HOTKEY, aHotkeyName, ErrorPrototype::Target);
 		if (!(variant || hk->mHookAction)) // mHookAction (alt-tab) hotkeys don't need a variant that matches the current criteria.
 			// To avoid ambiguity and also allow the script to use error handling to detect whether a variant
 			// already exists, it seems best to strictly require a matching variant rather than falling back
 			// onto some "default variant" such as the global variant (if any).
-			RETURN_HOTKEY_ERROR(HOTKEY_EL_NOTEXISTVARIANT, ERR_NONEXISTENT_VARIANT, aHotkeyName);
+			return aResultToken.Error(ERR_NONEXISTENT_VARIANT, aHotkeyName, ErrorPrototype::Target);
 		if (aHookAction == HOTKEY_ID_TOGGLE)
 			aHookAction = hk->mHookAction
 				? (hk->mParentEnabled ? HOTKEY_ID_OFF : HOTKEY_ID_ON) // Enable/disable parent hotkey (due to alt-tab being a global hotkey).
@@ -1054,7 +1051,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 			else // COMMAND (create hotkey): Hotkey, Name, LabelName [, Options]
 			{
 				if (!aJumpToLabel) // Caller is trying to set new aOptions for a nonexistent hotkey.
-					RETURN_HOTKEY_ERROR(HOTKEY_EL_NOTEXIST, ERR_NONEXISTENT_HOTKEY, aHotkeyName);
+					return aResultToken.Error(ERR_NONEXISTENT_HOTKEY, aHotkeyName, ErrorPrototype::Target);
 				hk = AddHotkey(aJumpToLabel, 0, aHotkeyName, suffix_has_tilde);
 			}
 			if (!hk)
@@ -1117,7 +1114,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				else // No existing variant matching current criteria, so create a new variant.
 				{
 					if (   !(variant = hk->AddVariant(aJumpToLabel, suffix_has_tilde))   ) // Out of memory.
-						RETURN_HOTKEY_ERROR(HOTKEY_EL_MEM, ERR_OUTOFMEM, aHotkeyName);
+						return aResultToken.MemoryError();
 					variant_was_just_created = true;
 					update_all_hotkeys = true;
 					// It seems undesirable for #UseHook to be applied to a hotkey just because it's options
@@ -1159,7 +1156,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	// Hotkey, Name,, Options  ; Where name exists as a hotkey, but the right variant doesn't yet exist.
 	// If it catches anything else, that could be a bug, so this error message will help spot it.
 	if (!(variant || hk->mHookAction)) // mHookAction (alt-tab) hotkeys don't need a variant that matches the current criteria.
-		RETURN_HOTKEY_ERROR(HOTKEY_EL_NOTEXISTVARIANT, ERR_NONEXISTENT_VARIANT, aHotkeyName);
+		return aResultToken.Error(ERR_NONEXISTENT_VARIANT, aHotkeyName, ErrorPrototype::Target);
 	// Below relies on the fact that either variant or hk->mHookAction (or both) is now non-zero.
 	// Specifically, when an existing hotkey was changed to become an alt-tab hotkey, above, there will sometimes
 	// be a NULL variant (depending on whether there happens to be a variant in the hotkey that matches the current criteria).
@@ -1253,7 +1250,7 @@ Hotkey *Hotkey::AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPT
 	if (   (shkMax <= sNextID && !HookAdjustMaxHotkeys(shk, shkMax, shkMax ? shkMax * 2 : INITIAL_MAX_HOTKEYS)) // Allocate or expand shk if needed.
 		|| !(shk[sNextID] = new Hotkey(sNextID, aJumpToLabel, aHookAction, aName, aSuffixHasTilde))   )
 	{
-		g_script.ScriptError(ERR_OUTOFMEM);
+		MemoryError();
 		return NULL;
 	}
 	if (!shk[sNextID]->mConstructedOK)
@@ -1341,7 +1338,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 				// to try to guess which key, left or right, should be used based on the
 				// location of the suffix key on the keyboard.  Lexikos: Better not do that
 				// since a wrong guess will leave the user wondering why it doesn't work.
-				g_script.ScriptError(ERR_ALTTAB_MODLR, hotkey_name);
+				ValueError(ERR_ALTTAB_MODLR, hotkey_name, FAIL);
 				return;  // Key is invalid so don't give it an ID.
 			}
 			if (mModifiersLR)
@@ -1360,7 +1357,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 				case MOD_LWIN: mModifierVK = VK_LWIN; break;
 				case MOD_RWIN: mModifierVK = VK_RWIN; break;
 				default:
-					g_script.ScriptError(ERR_ALTTAB_ONEMOD, hotkey_name);
+					ValueError(ERR_ALTTAB_ONEMOD, hotkey_name, FAIL);
 					return;  // Key is invalid so don't give it an ID.
 				}
 				// Since above didn't return:
@@ -1479,7 +1476,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 	if (   !(mName = aName ? SimpleHeap::Malloc(aName) : hotkey_name)
 		|| !(AddVariant(aJumpToLabel, aSuffixHasTilde))   ) // Too rare to worry about freeing the other if only one fails.
 	{
-		g_script.ScriptError(ERR_OUTOFMEM);
+		MemoryError();
 		return;
 	}
 	// Above has ensured that both mFirstVariant and mLastVariant are non-NULL, so callers can rely on that.
@@ -1826,7 +1823,7 @@ ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier,
 		{
 			if (IS_WHEEL_VK(temp_vk))
 			{
-				g_script.ScriptError(ERR_UNSUPPORTED_PREFIX, aText);
+				ValueError(ERR_UNSUPPORTED_PREFIX, aText, FAIL);
 				// When aThisHotkey==NULL, return CONDITION_FALSE to indicate to our caller that it's
 				// an invalid hotkey and we've already shown the error message.  Unlike the old method,
 				// this method respects /ErrorStdOut and avoids the second, generic error message.
@@ -1870,7 +1867,7 @@ ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier,
 					// would make loadtime's second call to create the hotkey always succeed. Also, it's
 					// more appropriate to say "key name" than "hotkey" in this message because it's only
 					// showing the one bad key name when it's a composite hotkey such as "Capslock & y".
-					g_script.ScriptError(ERR_INVALID_KEYNAME, aText);
+					ValueError(ERR_INVALID_KEYNAME, aText, FAIL);
 				}
 				//else do not show an error in this case because the loader will attempt to interpret
 				// this line as a command.  If that too fails, it will show an "unrecognized action"
@@ -2394,12 +2391,12 @@ ResultType Hotstring::AddHotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR a
 	// The length is limited for performance reasons, notably so that the hook does not have to move
 	// memory around in the buffer it uses to watch for hotstrings:
 	if (_tcslen(aHotstring) > MAX_HOTSTRING_LENGTH)
-		return g_script.ScriptError(_T("Hotstring max abbreviation length is ") MAX_HOTSTRING_LENGTH_STR _T("."), aHotstring);
+		return ValueError(_T("Hotstring max abbreviation length is ") MAX_HOTSTRING_LENGTH_STR _T("."), aHotstring, FAIL);
 
 	if (!shs)
 	{
 		if (   !(shs = (Hotstring **)malloc(HOTSTRING_BLOCK_SIZE * sizeof(Hotstring *)))   )
-			return g_script.ScriptError(ERR_OUTOFMEM); // Short msg. since so rare.
+			return MemoryError(); // Short msg. since so rare.
 		sHotstringCountMax = HOTSTRING_BLOCK_SIZE;
 	}
 	else if (sHotstringCount >= sHotstringCountMax) // Realloc to preserve contents and keep contiguous array.
@@ -2408,13 +2405,13 @@ ResultType Hotstring::AddHotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR a
 		// but leaves original block allocated.
 		void *realloc_temp = realloc(shs, (sHotstringCountMax + HOTSTRING_BLOCK_SIZE) * sizeof(Hotstring *));
 		if (!realloc_temp)
-			return g_script.ScriptError(ERR_OUTOFMEM);  // Short msg. since so rare.
+			return MemoryError();  // Short msg. since so rare.
 		shs = (Hotstring **)realloc_temp;
 		sHotstringCountMax += HOTSTRING_BLOCK_SIZE;
 	}
 
 	if (   !(shs[sHotstringCount] = new Hotstring(aName, aJumpToLabel, aOptions, aHotstring, aReplacement, aHasContinuationSection, aSuspend))   )
-		return g_script.ScriptError(ERR_OUTOFMEM); // Short msg. since so rare.
+		return MemoryError(); // Short msg. since so rare.
 	if (!shs[sHotstringCount]->mConstructedOK)
 	{
 		delete shs[sHotstringCount];  // SimpleHeap allows deletion of most recently added item.
@@ -2464,7 +2461,7 @@ Hotstring::Hotstring(LPTSTR aName, LabelPtr aJumpToLabel, LPTSTR aOptions, LPTST
 		// SimpleHeap is not used for the replacement as it can be changed at runtime by Hotstring().
 		if (   !(mReplacement = _tcsdup(aReplacement))   )
 		{
-			g_script.ScriptError(ERR_OUTOFMEM); // Short msg since very rare.
+			MemoryError(); // Short msg since very rare.
 			return;
 		}
 	}
@@ -2655,7 +2652,7 @@ BIF_DECL(BIF_Hotstring)
 			//else it's just a naked "::", which is invalid.
 	}
 	if (!hotstring_start)
-		_f_throw(ERR_PARAM1_INVALID, action);
+		_f_throw_param(0);
 	
 	// Determine options which affect hotstring identity/uniqueness.
 	bool case_sensitive = g_HSCaseSensitive;
@@ -2673,7 +2670,7 @@ BIF_DECL(BIF_Hotstring)
 		else // Caller did not specify an object, so must specify a function name.
 			if (   execute_action // Caller specified 'X' option (which is ignored when passing an object).
 				&& !(action_obj = StringToFunctor(action))   ) // No valid function found.
-				_f_throw(ERR_PARAM2_INVALID, action);
+				_f_throw_param(1);
 	}
 
 	ToggleValueType toggle = NEUTRAL;
@@ -2681,7 +2678,7 @@ BIF_DECL(BIF_Hotstring)
 	{
 		if (action_obj)
 			action_obj->Release();
-		_f_throw(ERR_PARAM3_INVALID, onoff);
+		_f_throw_param(2);
 	}
 
 	bool was_already_enabled;
@@ -2703,7 +2700,7 @@ BIF_DECL(BIF_Hotstring)
 					new_replacement = existing->mReplacement; // Avoid reallocating it.
 				}
 				else if (   !(new_replacement = _tcsdup(action))   )
-					_f_throw(ERR_OUTOFMEM);
+					_f_throw_oom;
 			}
 			existing->mSuspended |= HS_TEMPORARILY_DISABLED;
 			WaitHookIdle();
@@ -2735,7 +2732,7 @@ BIF_DECL(BIF_Hotstring)
 	else // No matching hotstring yet.
 	{
 		if (!action_obj && !*action)
-			_f_throw(aParamCount > 1 ? ERR_PARAM2_MUST_NOT_BE_BLANK : _T("Hotstring not found."));
+			_f_throw(ERR_NONEXISTENT_HOTSTRING, ErrorPrototype::Target);
 
 		UCHAR initial_suspend_state = (toggle == TOGGLED_OFF) ? HS_TURNED_OFF : FALSE;
 		if (g_IsSuspended)

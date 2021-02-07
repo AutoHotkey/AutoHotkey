@@ -253,7 +253,7 @@ ResultType TrayTipParseOptions(LPTSTR aOptions, NOTIFYICONDATA &nic)
 		}
 	}
 invalid_option:
-	return g_script.RuntimeError(ERR_INVALID_OPTION, next_option);
+	return ValueError(ERR_INVALID_OPTION, next_option, FAIL_OR_OK);
 }
 
 
@@ -324,7 +324,7 @@ ResultType input_type::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList
 	
 	// For maintainability/simplicity/code size, it's allocated even if BufferLengthMax == 0.
 	if (  !(Buffer = tmalloc(BufferLengthMax + 1))  )
-		return g_script.ScriptError(ERR_OUTOFMEM);
+		return MemoryError();
 	*Buffer = '\0';
 
 	return OK;
@@ -546,7 +546,7 @@ ResultType input_type::SetKeyFlags(LPTSTR aKeys, bool aEndKeyMode, UCHAR aFlagsR
 			if (EndCharsMax) // If zero, EndChars may point to static memory.
 				free(EndChars);
 			if (  !(EndChars = tmalloc(single_char_count + 1))  )
-				return g_script.ScriptError(ERR_OUTOFMEM);
+				return MemoryError();
 			EndCharsMax = single_char_count;
 		}
 		TCHAR *dst, *src;
@@ -593,7 +593,7 @@ ResultType input_type::SetMatchList(LPTSTR aMatchList, size_t aMatchList_length)
 		if (!match)
 		{
 			if (   !(match = (LPTSTR *)malloc(INPUT_ARRAY_BLOCK_SIZE * sizeof(LPTSTR)))   )
-				return g_script.ScriptError(ERR_OUTOFMEM);  // Short msg. since so rare.
+				return MemoryError();  // Short msg. since so rare.
 			MatchCountMax = INPUT_ARRAY_BLOCK_SIZE;
 		}
 		// If needed, create or enlarge the buffer that contains all the match phrases:
@@ -606,7 +606,7 @@ ResultType input_type::SetMatchList(LPTSTR aMatchList, size_t aMatchList_length)
 			if (   !(MatchBuf = tmalloc(MatchBufSize))   )
 			{
 				MatchBufSize = 0;
-				return g_script.ScriptError(ERR_OUTOFMEM);  // Short msg. since so rare.
+				return MemoryError();  // Short msg. since so rare.
 			}
 		}
 		// Copy aMatchList into the match buffer:
@@ -646,7 +646,7 @@ ResultType input_type::SetMatchList(LPTSTR aMatchList, size_t aMatchList_length)
 					// Expand the array by one block:
 					if (   !(realloc_temp = (LPTSTR *)realloc(match  // Must use a temp variable.
 						, (MatchCountMax + INPUT_ARRAY_BLOCK_SIZE) * sizeof(LPTSTR)))   )
-						return g_script.ScriptError(ERR_OUTOFMEM);  // Short msg. since so rare.
+						return MemoryError();  // Short msg. since so rare.
 					match = realloc_temp;
 					MatchCountMax += INPUT_ARRAY_BLOCK_SIZE;
 				}
@@ -861,8 +861,8 @@ BIF_DECL(BIF_WinShow)
 		{
 		case FAIL: return;
 		case OK:
-			if (!target_window) // Specified a HWND of 0.
-				_f_throw(ERR_NO_WINDOW);
+			if (!target_window) // Specified a HWND of 0, or IsWindow() returned false.
+				_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
 		}
 	}
 
@@ -878,7 +878,7 @@ BIF_DECL(BIF_WinShow)
 		_f_param_string_opt(aExcludeText, 4);
 		if (!WinClose(*g, aTitle, aText, wait_time, aExcludeTitle, aExcludeText, action == FID_WinKill))
 			// Currently WinClose returns NULL only for this case; it doesn't confirm the window closed.
-			_f_throw(ERR_NO_WINDOW);
+			_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
 		DoWinDelay;
 		_f_return_retval;
 	}
@@ -897,7 +897,7 @@ BIF_DECL(BIF_WinShow)
 		if (need_restore)
 			g->DetectHiddenWindows = false;
 		if (!target_window)
-			_f_throw(ERR_NO_WINDOW);
+			_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
 	}
 
 	// WinGroup's EnumParentActUponAll() is quite similar to the following, so the two should be
@@ -1009,7 +1009,7 @@ BIF_DECL(BIF_GroupActivate)
 	if (!_tcsicmp(aMode, _T("R")))
 		reverse = true;
 	else if (*aMode)
-		_f_throw(ERR_PARAM1_INVALID, aMode);
+		_f_throw_param(1);
 
 	HWND activated;
 	if (!group->Activate(reverse, activated))
@@ -1098,7 +1098,7 @@ BIF_DECL(BIF_Wait)
 			joy = (JoyControls)ConvertJoy(arg1, &joystick_id);
 			if (!IS_JOYSTICK_BUTTON(joy)) // Currently, only buttons are supported.
 				// It's either an invalid key name or an unsupported Joy-something.
-				_f_throw(ERR_PARAM1_INVALID, arg1);
+				_f_throw_param(0);
 		}
 		// Set defaults:
 		wait_for_keydown = false;  // The default is to wait for the key to be released.
@@ -1340,7 +1340,7 @@ BIF_DECL(BIF_ControlClick)
 	_f_param_string_opt(aWhichButton, 3);
 	int aVK = Line::ConvertMouseButton(aWhichButton);
 	if (!aVK)
-		_f_throw(ERR_PARAM4_INVALID, aWhichButton);
+		_f_throw_param(3);
 	int aClickCount = ParamIndexToOptionalInt(4, 1);
 	_f_param_string_opt(aOptions, 5);
 
@@ -1596,7 +1596,7 @@ error:
 	_f_throw_win32();
 
 control_error:
-	_f_throw(ERR_NO_CONTROL, aControl);
+	_f_throw(ERR_NO_CONTROL, aControl, ErrorPrototype::Target);
 }
 
 
@@ -1859,7 +1859,7 @@ void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions)
 	LPTSTR col_option = tcscasestr(aOptions, _T("Col")); // Also used for mode "Count Col"
 	int requested_col = col_option ? ATOI(col_option + 3) - 1 : -1;
 	if (col_count > -1 && col_option && (requested_col < 0 || requested_col >= col_count)) // Specified column does not exist.
-		_f_throw(ERR_PARAM1_INVALID, col_option);
+		_f_throw_value(ERR_PARAM1_INVALID, col_option);
 
 	// IF THE "COUNT" OPTION IS PRESENT, FULLY HANDLE THAT AND RETURN
 	if (get_count)
@@ -2240,7 +2240,7 @@ BIF_DECL(BIF_PostSendMessage)
 			// Fall through:
 		default:
 			// SYM_FLOAT: Seems best to treat it as an error rather than truncating the value.
-			_f_throw(i == 1 ? ERR_PARAM2_INVALID : ERR_PARAM3_INVALID);
+			_f_throw(i == 1 ? ERR_PARAM2_INVALID : ERR_PARAM3_INVALID, ErrorPrototype::Type);
 		}
 	}
 
@@ -2254,7 +2254,7 @@ BIF_DECL(BIF_PostSendMessage)
 	{
 		auto last_error = GetLastError();
 		if (aUseSend && last_error == ERROR_TIMEOUT)
-			_f_throw(ERR_TIMEOUT);
+			_f_throw(ERR_TIMEOUT, ErrorPrototype::Timeout);
 		_f_throw_win32(last_error); // Passing last_error reduces code size due to the implied additional GetLastError() call when omitting this parameter.
 	}
 	if (aUseSend)
@@ -2303,7 +2303,7 @@ BIF_DECL(BIF_Process)
 		if (aParamCount > 1) // The param containing the timeout value was specified.
 		{
 			if (!ParamIndexIsNumeric(1))
-				_f_throw(ERR_PARAM2_INVALID);
+				_f_throw_param(1, _T("Number"));
 			wait_indefinitely = false;
 			sleep_duration = (int)(TokenToDouble(*aParam[1]) * 1000); // Can be zero.
 			start_time = GetTickCount();
@@ -2358,7 +2358,7 @@ BIF_DECL(BIF_ProcessSetPriority)
 	case 'R': priority = REALTIME_PRIORITY_CLASS; break;
 	default:
 		// Since above didn't break, aPriority was invalid.
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_param(0);
 	}
 
 	if (pid = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId())  // Assign
@@ -2528,7 +2528,7 @@ void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
 	_f_return_empty;
 
 arg_error:
-	_f_throw(ERR_PARAM1_INVALID);
+	_f_throw_value(ERR_PARAM1_INVALID);
 
 error:
 	_f_throw_win32();
@@ -2553,7 +2553,7 @@ BIF_DECL(BIF_WinSet)
 	{
 		toggle = ParamIndexToToggleValue(0);
 		if (toggle == TOGGLE_INVALID)
-			_f_throw(ERR_PARAM1_INVALID);
+			_f_throw_param(0);
 	}
 	else
 		aValue = ParamIndexToString(0, _f_number_buf);
@@ -2673,7 +2673,7 @@ BIF_DECL(BIF_WinSet)
 		if (!*aValue)
 		{
 			// Seems best not to treat an explicit blank as zero.
-			_f_throw(ERR_PARAM1_REQUIRED);
+			_f_throw_value(ERR_PARAM1_MUST_NOT_BE_BLANK);
 		}
 		int style_index = (cmd == FID_WinSetStyle) ? GWL_STYLE : GWL_EXSTYLE;
 		DWORD new_style, orig_style = GetWindowLong(target_window, style_index);
@@ -2813,7 +2813,7 @@ void WinGetList(ResultToken &aResultToken, BuiltInFunctionID aCmd, LPTSTR aTitle
 	ws.mFindLastMatch = true; // Must set mFindLastMatch to get all matches rather than just the first.
 	if (aCmd == FID_WinGetList)
 		if (  !(ws.mArray = Array::Create())  )
-			_f_throw(ERR_OUTOFMEM);
+			_f_throw_oom;
 	// Check if we were asked to "list" or count the active window:
 	if (USE_FOREGROUND_WINDOW(aTitle, aText, aExcludeTitle, aExcludeText))
 	{
@@ -2870,12 +2870,12 @@ BIF_DECL(BIF_WinGet)
 		case FAIL: return;
 		case OK:
 			if (!target_window)
-				_f_throw(ERR_NO_WINDOW);
+				_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
 		}
 	if (!target_window)
 		target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText, cmd == FID_WinGetIDLast);
 	if (!target_window)
-		_f_throw(ERR_NO_WINDOW);
+		_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
 
 	switch(cmd)
 	{
@@ -2954,7 +2954,7 @@ void WinGetControlList(ResultToken &aResultToken, HWND aTargetWindow, bool aFetc
 {
 	control_list_type cl; // A big struct containing room to store class names and counts for each.
 	if (  !(cl.target_array = Array::Create())  )
-		_f_throw(ERR_OUTOFMEM);
+		_f_throw_oom;
 	CL_INIT_CONTROL_LIST(cl)
 	cl.fetch_hwnds = aFetchHWNDs;
 	EnumChildWindows(aTargetWindow, EnumChildGetControlList, (LPARAM)&cl);
@@ -3255,7 +3255,7 @@ BIF_DECL(BIF_MonitorGet)
 	// Since above didn't return, an error was detected.
 	if (!mip.count) // Might be virtually impossible.
 		_f_throw_win32();
-	_f_throw(ERR_PARAM1_INVALID);
+	_f_throw_param(0);
 }
 
 
@@ -3641,10 +3641,12 @@ BIF_DECL(BIF_PixelSearch)
 {
 	Var *output_var_x = ParamIndexToOutputVar(0);
 	Var *output_var_y = ParamIndexToOutputVar(1);
-	if (!output_var_x)
-		_f_throw(ERR_PARAM1_INVALID);
-	if (!output_var_y)
-		_f_throw(ERR_PARAM2_INVALID);
+	// Redundant due to prior validation of OutputVars:
+	//if (!output_var_x)
+	//	_f_throw_param(0, _T("variable reference"));
+	//if (!output_var_y)
+	//	_f_throw_param(1, _T("variable reference"));
+	ASSERT(output_var_x && output_var_y);
 	PixelSearch(output_var_x, output_var_y
 		, ParamIndexToInt(2), ParamIndexToInt(3), ParamIndexToInt(4), ParamIndexToInt(5)
 		, ParamIndexToInt(6), ParamIndexToOptionalInt(7, 0), false, aResultToken);
@@ -3661,10 +3663,12 @@ BIF_DECL(BIF_ImageSearch)
 
 	Var *output_var_x = ParamIndexToOutputVar(0);
 	Var *output_var_y = ParamIndexToOutputVar(1);
-	if (!output_var_x)
-		_f_throw(ERR_PARAM1_INVALID);
-	if (!output_var_y)
-		_f_throw(ERR_PARAM2_INVALID);
+	// Redundant due to prior validation of OutputVars:
+	//if (!output_var_x)
+	//	_f_throw_param(0, _T("variable reference"));
+	//if (!output_var_y)
+	//	_f_throw_param(1, _T("variable reference"));
+	ASSERT(output_var_x && output_var_y);
 
 	int aLeft = ParamIndexToInt(2);
 	int aTop = ParamIndexToInt(3);
@@ -4046,7 +4050,7 @@ end:
 	_f_return_b(found);
 
 arg7_error:
-	_f_throw(ERR_PARAM7_INVALID, aImageFile);
+	_f_throw_param(6);
 
 error:
 	_f_throw_win32(first_error);
@@ -4771,7 +4775,7 @@ UserFunc* Script::CreateHotFunc()
 	
 	if (!func)
 	{
-		ScriptError(ERR_OUTOFMEM);
+		MemoryError();
 		return nullptr;
 	}
 	
@@ -4881,7 +4885,7 @@ ResultType MsgBoxParseOptions(LPTSTR aOptions, int &aType, double &aTimeout, HWN
 		}
 	}
 invalid_option:
-	return g_script.RuntimeError(ERR_INVALID_OPTION, next_option);
+	return ValueError(ERR_INVALID_OPTION, next_option, FAIL_OR_OK);
 }
 
 
@@ -4949,7 +4953,7 @@ BIF_DECL(BIF_MsgBox)
 	// v1.1.09.02: If the MsgBox failed due to invalid options, it seems better to display
 	// an error dialog than to silently exit the thread:
 	if (!result && GetLastError() == ERROR_INVALID_MSGBOX_STYLE)
-		_f_throw(ERR_PARAM3_INVALID, ParamIndexToString(2, _f_retval_buf));
+		_f_throw_param(2);
 	// Return a string such as "OK", "Yes" or "No" if possible, or fall back to the integer value.
 	if (LPTSTR result_string = MsgBoxResultString(result))
 		_f_return_p(result_string);
@@ -4990,7 +4994,7 @@ ResultType InputBoxParseOptions(LPTSTR aOptions, InputBoxType &aInputBox)
 					, FALSE, option_char == 'T')) // Only Timeout allows floating-point.
 			{
 				*option_end = orig_char; // Undo the temporary termination.
-				return g_script.RuntimeError(ERR_INVALID_OPTION, next_option);
+				return ValueError(ERR_INVALID_OPTION, next_option, FAIL_OR_OK);
 			}
 
 			switch (ctoupper(*next_option))
@@ -5375,7 +5379,7 @@ ResultType Script::SetCoordMode(LPTSTR aCommand, LPTSTR aMode)
 	CoordModeType mode = Line::ConvertCoordMode(aMode);
 	CoordModeType shift = Line::ConvertCoordModeCmd(aCommand);
 	if (shift == COORD_MODE_INVALID || mode == COORD_MODE_INVALID)
-		return g_script.RuntimeError(ERR_INVALID_VALUE, aMode);
+		return ValueError(ERR_INVALID_VALUE, aMode, FAIL_OR_OK);
 	g->CoordMode = (g->CoordMode & ~(COORD_MODE_MASK << shift)) | (mode << shift);
 	return OK;
 }
@@ -5390,7 +5394,7 @@ ResultType Script::SetSendLevel(int aValue, LPTSTR aValueStr)
 {
 	int sendLevel = aValue;
 	if (!SendLevelIsValid(sendLevel))
-		return g_script.RuntimeError(ERR_INVALID_VALUE, aValueStr);
+		return ValueError(ERR_INVALID_VALUE, aValueStr, FAIL_OR_OK);
 	g->SendLevel = sendLevel;
 	return OK;
 }
@@ -5565,7 +5569,7 @@ BIF_DECL(BIF_FormatTime)
 	// Input/format length is restricted since it must be translated and expanded into a new format
 	// string that uses single quotes around non-alphanumeric characters such as punctuation:
 	if (_tcslen(aFormat) > FT_MAX_INPUT_CHARS)
-		_f_throw(ERR_PARAM2_INVALID);
+		_f_throw_param(1);
 
 	// Worst case expansion: .d.d.d.d. (9 chars) --> '.'d'.'d'.'d'.'d'.' (19 chars)
 	// Buffer below is sized to a little more than twice as big as the largest allowed format,
@@ -5897,7 +5901,7 @@ BIF_DECL(BIF_StrReplace)
 	StringCaseSenseType string_case_sense = ParamIndexToCaseSense(3);
 	if (string_case_sense == SCS_INVALID 
 		|| string_case_sense == SCS_INSENSITIVE_LOGICAL) // Not supported, seems more useful to throw rather than using SCS_INSENSITIVE.
-		_f_throw(ERR_PARAM4_INVALID);
+		_f_throw_param(3);
 
 	Var *output_var_count = ParamIndexToOutputVar(4); 
 	UINT replacement_limit = (UINT)ParamIndexToOptionalInt64(5, UINT_MAX); 
@@ -5911,7 +5915,7 @@ BIF_DECL(BIF_StrReplace)
 	UINT found_count = StrReplace(source, oldstr, newstr, string_case_sense, replacement_limit, -1, &dest, &length); // Length of haystack is passed to improve performance because TokenToString() can often discover it instantaneously.
 
 	if (!dest) // Failure due to out of memory.
-		_f_throw(ERR_OUTOFMEM); 
+		_f_throw_oom; 
 
 	if (dest != source) // StrReplace() allocated new memory rather than returning "source" to us unaltered.
 	{
@@ -6053,9 +6057,9 @@ outofmem:
 	// rarely executed code at the end of the function might help performance due to cache utilization.
 throw_outofmem:
 	// Either goto was used or FELL THROUGH FROM ABOVE.
-	_f_throw(ERR_OUTOFMEM);
+	_f_throw_oom;
 throw_invalid_delimiter:
-	_f_throw(ERR_PARAM2_INVALID);
+	_f_throw_param(1);
 }
 
 
@@ -6227,7 +6231,7 @@ BIF_DECL(BIF_SplitPath)
 			{
 				aFileSpec = mem_to_free = _tcsdup(aFileSpec);
 				if (!mem_to_free)
-					_f_throw(ERR_OUTOFMEM);
+					_f_throw_oom;
 				break;
 			}
 		}
@@ -6426,7 +6430,7 @@ BIF_DECL(BIF_Sort)
 		g_SortFunc = TokenToFunctor(*aParam[2]);
 		if (!g_SortFunc)
 		{
-			aResultToken.Error(ERR_PARAM3_INVALID);
+			aResultToken.ParamError(2, aParam[2]);
 			goto end;
 		}
 	}
@@ -6499,7 +6503,7 @@ BIF_DECL(BIF_Sort)
 		// and that deref buffer is about to be overwritten by the execution of the script's UDF body.
 		if (   !(mem_to_free = tmalloc(aContents_length + 3))   ) // +1 for terminator and +2 in case of trailing_crlf_added_temporarily.
 		{
-			aResultToken.Error(ERR_OUTOFMEM);
+			aResultToken.MemoryError();
 			goto end;
 		}
 		tmemcpy(mem_to_free, aContents, aContents_length + 1); // memcpy() usually benches a little faster than _tcscpy().
@@ -6521,7 +6525,7 @@ BIF_DECL(BIF_Sort)
 	item = (LPTSTR *)malloc((item_count + 1) * item_size);
 	if (!item)
 	{
-		aResultToken.Error(ERR_OUTOFMEM);
+		aResultToken.MemoryError();
 		goto end;
 	}
 
@@ -6856,7 +6860,7 @@ BIF_DECL(BIF_DriveGet)
 	// A parameter is mandatory for some, but optional for others:
 	LPTSTR aValue = ParamIndexToOptionalString(0, _f_number_buf);
 	if (!*aValue && drive_get_cmd != FID_DriveGetList && drive_get_cmd != FID_DriveGetStatusCD)
-		_f_throw(ERR_PARAM1_MUST_NOT_BE_BLANK);
+		_f_throw_value(ERR_PARAM1_MUST_NOT_BE_BLANK);
 	
 	if (drive_get_cmd == FID_DriveGetCapacity || drive_get_cmd == FID_DriveGetSpaceFree)
 	{
@@ -7003,7 +7007,7 @@ error: // Win32 error
 	_f_throw_win32();
 
 invalid_parameter:
-	_f_throw(ERR_PARAM1_INVALID);
+	_f_throw_param(0);
 }
 
 
@@ -7294,7 +7298,7 @@ BIF_DECL(BIF_Sound)
 	case SoundControlType::IID:
 		LPTSTR iid; iid = ParamIndexToString(0);
 		if (*iid != '{' || FAILED(CLSIDFromString(iid, &search.target_iid)))
-			_f_throw(ERR_PARAM1_INVALID, iid);
+			_f_throw_param(0);
 		++aParam;
 		--aParamCount;
 		break;
@@ -7324,7 +7328,7 @@ BIF_DECL(BIF_Sound)
 
 	hr = SoundSetGet_GetDevice(aDevice, device);
 	if (FAILED(hr))
-		_f_throw(ERR_SOUND_DEVICE);
+		_f_throw(ERR_SOUND_DEVICE, ErrorPrototype::Target);
 
 	LPCTSTR errorlevel = NULL;
 	float result_float;
@@ -7499,7 +7503,7 @@ control_fail:
 	device->Release();
 	
 	if (errorlevel)
-		_f_throw(errorlevel);
+		_f_throw(errorlevel, ErrorPrototype::Target);
 	if (FAILED(hr)) // This would be rare and unexpected.
 		_f_throw_win32(hr);
 
@@ -7779,7 +7783,7 @@ BIF_DECL(BIF_FileSelect)
 		++aOptions;
 		flags |= FOS_PICKFOLDERS;
 		if (*aFilter)
-			_f_throw(ERR_PARAM4_MUST_BE_BLANK);
+			_f_throw_value(ERR_PARAM4_MUST_BE_BLANK);
 		filter_count = 0;
 		break;
 	case 'M':  // Multi-select.
@@ -8002,7 +8006,7 @@ ResultType ConvertFileOptions(ResultToken &aResultToken, LPTSTR aOptions, UINT &
 			{
 				codepage = Line::ConvertFileEncoding(cp);
 				if (codepage == -1 || cisdigit(*cp)) // Require "cp" prefix in FileRead/FileAppend options.
-					return aResultToken.Error(ERR_INVALID_OPTION, cp);
+					return aResultToken.ValueError(ERR_INVALID_OPTION, cp);
 			}
 			break;
 		} // switch()
@@ -8068,7 +8072,7 @@ BIF_DECL(BIF_FileRead)
 #endif
 	{
 		CloseHandle(hfile);
-		_f_throw(ERR_OUTOFMEM); // Using this instead of "File too large." to reduce code size, since this condition is very rare (and malloc succeeding would be even rarer).
+		_f_throw_oom; // Using this instead of "File too large." to reduce code size, since this condition is very rare (and malloc succeeding would be even rarer).
 	}
 
 	if (!bytes_to_read && codepage != -1) // In RAW mode, always return a zero-byte Buffer.
@@ -8081,7 +8085,7 @@ BIF_DECL(BIF_FileRead)
 	if (!output_buf)
 	{
 		CloseHandle(hfile);
-		_f_throw(ERR_OUTOFMEM);
+		_f_throw_oom;
 	}
 
 	DWORD bytes_actually_read;
@@ -8222,7 +8226,7 @@ BIF_DECL(BIF_FileAppend)
 	if (aCurrentReadFile)
 		aFilespec = aCurrentReadFile->mWriteFileName;
 	if (!*aFilespec) // Nothing to write to.
-		_f_throw(ERR_PARAM2_REQUIRED);
+		_f_throw_value(ERR_PARAM2_REQUIRED);
 
 	TextStream *ts = aCurrentReadFile ? aCurrentReadFile->mWriteFile : NULL;
 	bool file_was_already_open = ts;
@@ -8386,7 +8390,7 @@ BIF_DECL(BIF_FileGetAttrib)
 	_f_param_string_opt_def(aFilespec, 0, (g->mLoopFile ? g->mLoopFile->cFileName : _T("")));
 
 	if (!*aFilespec)
-		_f_throw(ERR_PARAM2_MUST_NOT_BE_BLANK);
+		_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
 
 	DWORD attr = GetFileAttributes(aFilespec);
 	if (attr == 0xFFFFFFFF)  // Failure, probably because file doesn't exist.
@@ -8631,7 +8635,7 @@ BIF_DECL(BIF_FileGetTime)
 	_f_param_string_opt(aWhichTime, 1);
 
 	if (!*aFilespec)
-		_f_throw(ERR_PARAM2_MUST_NOT_BE_BLANK);
+		_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
 
 	// Don't use CreateFile() & FileGetSize() size they will fail to work on a file that's in use.
 	// Research indicates that this method has no disadvantages compared to the other method.
@@ -8748,7 +8752,7 @@ BIF_DECL(BIF_FileGetSize)
 	_f_param_string_opt(aGranularity, 1);
 
 	if (!*aFilespec)
-		_f_throw(ERR_PARAM2_MUST_NOT_BE_BLANK); // Throw an error, since this is probably not what the user intended.
+		_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK); // Throw an error, since this is probably not what the user intended.
 	
 	BOOL got_file_size = false;
 	__int64 size;
@@ -8888,7 +8892,7 @@ ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aVa
 		if (result != INVOKE_NOT_HANDLED) // Property exists but is not an integer.
 		{
 			if (!TokenIsEmptyString(result_token))
-				return aResultToken.Error(ERR_TYPE_MISMATCH, aPropName);
+				return aResultToken.Error(ERR_TYPE_MISMATCH, aPropName, ErrorPrototype::Type);
 			result = INVOKE_NOT_HANDLED;
 		}
 		//aValue = 0; // Caller should set default value for these cases.
@@ -8953,7 +8957,7 @@ ResultType DetermineTargetWindow(HWND &aWindow, ResultToken &aResultToken, ExprT
 		if (result != CONDITION_FALSE)
 		{
 			if (result == OK && !aWindow)
-				return aResultToken.Error(ERR_NO_WINDOW);
+				return aResultToken.Error(ERR_NO_WINDOW, ErrorPrototype::Target);
 			return result;
 		}
 	}
@@ -8967,7 +8971,7 @@ ResultType DetermineTargetWindow(HWND &aWindow, ResultToken &aResultToken, ExprT
 	aWindow = Line::DetermineTargetWindow(param[0], param[1], param[2], param[3]);
 	if (aWindow)
 		return OK;
-	return aResultToken.Error(ERR_NO_WINDOW, param[0]);
+	return aResultToken.Error(ERR_NO_WINDOW, param[0], ErrorPrototype::Target);
 }
 
 
@@ -8987,7 +8991,7 @@ ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aR
 		case OK:
 			aControl = aWindow;
 			if (!aControl)
-				return aResultToken.Error(ERR_NO_CONTROL);
+				return aResultToken.Error(ERR_NO_CONTROL, ErrorPrototype::Target);
 			return OK;
 		case FAIL:
 			return FAIL;
@@ -8999,7 +9003,7 @@ ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aR
 		return FAIL;
 	aControl = control_spec ? ControlExist(aWindow, control_spec) : aWindow;
 	if (!aControl && aThrowIfNotFound)
-		return aResultToken.Error(ERR_NO_CONTROL);
+		return aResultToken.Error(ERR_NO_CONTROL, ErrorPrototype::Target);
 	return OK;
 }
 
@@ -9265,7 +9269,7 @@ BIV_DECL_W(BIV_TitleMatchMode_Set)
 	case FIND_FAST: g->TitleFindFast = true; break;
 	case FIND_SLOW: g->TitleFindFast = false; break;
 	default:
-		_f_throw(ERR_INVALID_VALUE, aBuf);
+		_f_throw_value(ERR_INVALID_VALUE, aBuf);
 	}
 }
 
@@ -9466,7 +9470,7 @@ BIV_DECL_W(BIV_FileEncoding_Set)
 	LPTSTR aBuf = BivRValueToString();
 	UINT new_encoding = Line::ConvertFileEncoding(aBuf);
 	if (new_encoding == -1)
-		_f_throw(ERR_INVALID_VALUE, aBuf);
+		_f_throw_value(ERR_INVALID_VALUE, aBuf);
 	g->Encoding = new_encoding;
 }
 
@@ -9490,7 +9494,7 @@ BIV_DECL_W(BIV_RegView_Set)
 	DWORD reg_view = Line::RegConvertView(aBuf);
 	// Validate the parameter even if it's not going to be used.
 	if (reg_view == -1)
-		_f_throw(ERR_INVALID_VALUE, aBuf);
+		_f_throw_value(ERR_INVALID_VALUE, aBuf);
 	// Since these flags cause the registry functions to fail on Win2k and have no effect on
 	// any later 32-bit OS, ignore this command when the OS is 32-bit.  Leave A_RegView = "Default".
 	if (IsOS64Bit())
@@ -9549,7 +9553,7 @@ BIV_DECL_W(BIV_AllowMainWindow_Set)
 	// which is only sometimes compiled may execute it unconditionally.
 	// For code size, false values are ignored instead of throwing an exception.
 	//if (!BivRValueToBOOL())
-	//	_f_throw(ERR_INVALID_VALUE, aBuf);
+	//	_f_throw_value(ERR_INVALID_VALUE, aBuf);
 #endif
 }
 
@@ -9769,7 +9773,7 @@ BIV_DECL_R(BIV_WorkingDir)
 BIV_DECL_W(BIV_WorkingDir_Set)
 {
 	if (!SetWorkingDir(BivRValueToString()))
-		_f_throw(ERR_INVALID_VALUE); // Hard to imagine any other cause.
+		_f_throw_win32();
 }
 
 BIV_DECL_R(BIV_InitialWorkingDir)
@@ -9957,7 +9961,7 @@ BIV_DECL_W(BIV_ScriptName_Set)
 	// For simplicity, a new buffer is allocated each time.  It is not expected to be set frequently.
 	LPTSTR script_name = _tcsdup(BivRValueToString());
 	if (!script_name)
-		_f_throw(ERR_OUTOFMEM);
+		_f_throw_oom;
 	free(g_script.mScriptName);
 	g_script.mScriptName = script_name;
 }
@@ -10811,9 +10815,11 @@ BIF_DECL(BIF_DllCall)
 	if (_f_callee_id == FID_ComCall)
 	{
 		function = NULL;
-		vf_index = ParamIndexIsNumeric(0) ? (int)ParamIndexToInt64(0) : -1;
+		if (!ParamIndexIsNumeric(0))
+			_f_throw_param(0, _T("Integer"));
+		vf_index = (int)ParamIndexToInt64(0);
 		if (vf_index < 0) // But positive values aren't checked since there's no known upper bound.
-			_f_throw(ERR_PARAM1_INVALID);
+			_f_throw_param(0);
 		// Cheat a bit to make the second arg both the source of the virtual function
 		// and the first parameter value (always an interface pointer):
 		static ExprTokenType t_this_arg_type = _T("Ptr");
@@ -10838,7 +10844,7 @@ BIF_DECL(BIF_DllCall)
 			// is zero or negative, the same result will occur as for any other invalid address:
 			// an exception code of 0xc0000005.
 			//if ((UINT64)temp64 < 0x10000 || (UINT64)temp64 > UINTPTR_MAX)
-			//	_f_throw(ERR_PARAM1_INVALID); // Stage 1 error: Invalid first param.
+			//	_f_throw_param(0); // Stage 1 error: Invalid first param.
 			//// Otherwise, assume it's a valid address:
 			//	function = (void *)temp64;
 			break;
@@ -10846,7 +10852,7 @@ BIF_DECL(BIF_DllCall)
 			function = (void *)aParam[0]->value_int64; // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
 			break;
 		default: // SYM_FLOAT, SYM_OBJECT, SYM_MISSING or (should be impossible) something else.
-			_f_throw(ERR_PARAM1_INVALID);
+			_f_throw(ERR_PARAM1_INVALID, ErrorPrototype::Type);
 		}
 		if (!function)
 			function_name = TokenToString(*aParam[0]);
@@ -10898,7 +10904,7 @@ BIF_DECL(BIF_DllCall)
 		{
 			if (token.symbol == SYM_VAR)
 				token.var->MaybeWarnUninitialized();
-			_f_throw(ERR_INVALID_RETURN_TYPE);
+			_f_throw_value(ERR_INVALID_RETURN_TYPE);
 		}
 has_valid_return_type:
 		--aParamCount;  // Remove the last parameter from further consideration.
@@ -10948,7 +10954,7 @@ has_valid_return_type:
 		ConvertDllArgType(arg_type_string, this_dyna_param);
 
 		if (this_dyna_param.type == DLL_ARG_INVALID)
-			_f_throw(ERR_INVALID_ARG_TYPE);
+			_f_throw_value(ERR_INVALID_ARG_TYPE);
 
 		IObject *this_param_obj = TokenToObject(this_param);
 		if (this_param_obj)
@@ -11048,7 +11054,7 @@ has_valid_return_type:
 	if (vf_index >= 0) // ComCall
 	{
 		if ((UINT_PTR)dyna_param[0].ptr < 65536) // Basic sanity check to catch null pointers and small numbers.  On Win32, the first 64KB of address space is always invalid.
-			_f_throw(ERR_PARAM2_INVALID);
+			_f_throw_param(1);
 		LPVOID *vftbl = *(LPVOID **)dyna_param[0].ptr;
 		function = vftbl[vf_index];
 	}
@@ -11366,7 +11372,7 @@ BIF_DECL(BIF_StrCompare)
 	case SCS_INSENSITIVE_LOCALE:	result = lstrcmpi(str1, str2); break;
 	case SCS_INSENSITIVE_LOGICAL:	result = StrCmpLogicalW(str1, str2); break;
 	case SCS_INVALID:
-		_f_throw(ERR_PARAM3_INVALID);
+		_f_throw_param(2);
 	}
 	_f_return_i(result);			// Return 
 }
@@ -11400,7 +11406,7 @@ BIF_DECL(BIF_String)
 		ObjectToString(aResultToken, *aParam[0], aParam[0]->object);
 		break;
 	case SYM_MISSING:
-		_f_throw(ERR_PARAM1_REQUIRED);
+		_f_throw_value(ERR_PARAM1_REQUIRED);
 		break;
 #ifdef _DEBUG
 	default:
@@ -11492,7 +11498,7 @@ BIF_DECL(BIF_InStr)
 	StringCaseSenseType string_case_sense = ParamIndexToCaseSense(2);
 	if (string_case_sense == SCS_INVALID 
 		|| string_case_sense == SCS_INSENSITIVE_LOGICAL) // Not supported, seems more useful to throw rather than using SCS_INSENSITIVE.
-		_f_throw(ERR_PARAM3_INVALID);
+		_f_throw_param(2);
 	// BIF_StrReplace sets string_case_sense similarly, maintain together.
 
 	LPTSTR found_pos;
@@ -11500,7 +11506,7 @@ BIF_DECL(BIF_InStr)
 	int occurrence_number = ParamIndexToOptionalInt(4, 1);
 
 	if (!needle_length) // Although arguably legitimate, this is more likely an error, so throw.
-		_f_throw(ERR_PARAM2_INVALID);
+		_f_throw_param(1);
 
 	if (!ParamIndexIsOmitted(3)) // There is a starting position present.
 	{
@@ -11716,7 +11722,7 @@ ResultType RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFla
 	if (p < 0 || p >= mPatternCount)
 	{
 		if (IS_INVOKE_CALL)
-			_o_throw(ERR_PARAM1_INVALID);
+			_o_throw_value(ERR_PARAM1_INVALID);
 		return INVOKE_NOT_HANDLED;
 	}
 
@@ -11837,7 +11843,7 @@ int RegExCallout(pcret_callout_block *cb)
 	if (!RegExCreateMatchArray(cb->subject, cd.re, cd.extra, cb->offset_vector, cd.pattern_count, cb->capture_top, match_object))
 	{
 		callout_func->Release();
-		cd.result_token->Error(ERR_OUTOFMEM);
+		cd.result_token->MemoryError();
 		return PCRE_ERROR_CALLOUT; // Abort.
 	}
 
@@ -12580,7 +12586,7 @@ void RegExReplace(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 	// All paths above should return (or goto some other label), so execution should never reach here except
 	// through goto:
 out_of_mem:
-	aResultToken.Error(ERR_OUTOFMEM);
+	aResultToken.MemoryError();
 abort:
 	if (result)
 	{
@@ -12711,7 +12717,7 @@ BIF_DECL(BIF_RegEx)
 
 	IObject *match_object;
 	if (!RegExCreateMatchArray(haystack, re, extra, offset, pattern_count, captured_pattern_count, match_object))
-		aResultToken.Error(ERR_OUTOFMEM);
+		aResultToken.MemoryError();
 	if (match_object)
 		output_var->AssignSkipAddRef(match_object);
 	else // Out-of-memory or there were no captured patterns.
@@ -12746,7 +12752,7 @@ BIF_DECL(BIF_Chr)
 	LPTSTR cp = _f_retval_buf; // If necessary, it will be moved to a persistent memory location by our caller.
 	int len;
 	if (param1 < 0 || param1 > UorA(0x10FFFF, UCHAR_MAX))
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_param(0);
 #ifdef UNICODE
 	else if (param1 >= 0x10000)
 	{
@@ -12880,7 +12886,7 @@ BIF_DECL(BIF_NumGet)
 		|| op.target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
 		|| op.target+op.num_size > op.right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
-		_f_throw(ERR_PARAM_INVALID);
+		_f_throw_value(ERR_PARAM_INVALID);
 	}
 
 	switch (op.num_size)
@@ -13107,7 +13113,7 @@ BIF_DECL(BIF_NumPut)
 			|| op.target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
 			|| num_end > op.right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 		{
-			_f_throw(ERR_PARAM_INVALID);
+			_f_throw_value(ERR_PARAM_INVALID);
 		}
 
 		union
@@ -13208,7 +13214,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 		{
 			// See the "Legend" above.  Either this is StrGet and Address was invalid (it can't be omitted due
 			// to prior min-param checks), or it is StrPut and there are too many parameters.
-			_f_throw(source_string ? ERR_TOO_MANY_PARAMS : ERR_PARAM1_INVALID);  // StrPut : StrGet
+			_f_throw_value(source_string ? ERR_PARAM_INVALID : ERR_PARAM1_INVALID);  // StrPut : StrGet
 		}
 		// else this is the special measuring mode of StrPut, where Address and Length are omitted.
 		// A length of 0 when passed to the Win API conversion functions (or the code below) means
@@ -13234,7 +13240,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 						length_is_max_size = true; // Limit to this, but stop at the first null char.
 				}
 				else if (length <= 0)
-					_f_throw(ERR_INVALID_LENGTH);
+					_f_throw_value(ERR_INVALID_LENGTH);
 				++aParam; // Let encoding be the next param, if present.
 			}
 			else if ((*aParam)->symbol == SYM_MISSING)
@@ -13249,7 +13255,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 		{
 			encoding = Line::ConvertFileEncoding(**aParam);
 			if (encoding == -1)
-				_f_throw(ERR_INVALID_ENCODING);
+				_f_throw_value(ERR_INVALID_ENCODING);
 		}
 	}
 	// Note: CP_AHKNOBOM is not supported; "-RAW" must be omitted.
@@ -13264,7 +13270,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 		// The following catches StrPut(X, &Y) where Y is uninitialized or has zero capacity.
 		|| (address == Var::sEmptyString && source_length) )
 	{
-		_f_throw(source_string ? ERR_PARAM2_INVALID : ERR_PARAM1_INVALID);
+		_f_throw_param(source_string ? 1 : 0);
 	}
 
 	if (max_bytes != SIZE_MAX)
@@ -13272,9 +13278,9 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 		// Target is a Buffer object with known size, so limit length accordingly.
 		int max_chars = int(max_bytes >> int(encoding == CP_UTF16));
 		if (length > max_chars)
-			_f_throw(ERR_INVALID_LENGTH);
+			_f_throw_value(ERR_INVALID_LENGTH);
 		if (source_length > max_chars)
-			_f_throw(ERR_PARAM2_INVALID);
+			_f_throw_param(1);
 		if (length == -1)
 		{
 			length = max_chars;
@@ -13319,7 +13325,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 				}
 				else
 					// For consistency with the sections below, don't truncate the string.
-					_f_throw(ERR_INVALID_LENGTH);
+					_f_throw_value(ERR_INVALID_LENGTH);
 			}
 			//else: Caller just wants the the required buffer size (char_count), which will be returned below.
 			//	Note that although this seems equivalent to StrLen(), the caller might have explicitly
@@ -13499,7 +13505,7 @@ BIF_DECL(BIF_IsFunc) // Lexikos: Added for use with dynamic function calls.
 // is a nested one with upvalues.
 {
 	if (ParamIndexToObject(0))
-		_f_throw(ERR_PARAM1_INVALID); // Seems worthwhile to avoid confusion.
+		_f_throw_param(0, _T("String")); // Seems worthwhile to avoid confusion.
 	Func *func = g_script.FindFunc(ParamIndexToString(0));
 	_f_return_i(func ? (__int64)func->mMinParams+1 : 0);
 }
@@ -13514,7 +13520,7 @@ BIF_DECL(BIF_Func)
 	if (_f_callee_id == FID_Func)
 	{
 		if (ParamIndexToObject(0))
-			_f_throw(ERR_PARAM1_INVALID); // For consistency with IsFunc().
+			_f_throw_param(0, _T("String")); // For consistency with IsFunc().
 		func = g_script.FindFunc(ParamIndexToString(0));
 	}
 	else // FID_FuncClose (internal).
@@ -13544,8 +13550,8 @@ BIF_DECL(BIF_IsByRef)
 {
 	if (aParam[0]->symbol != SYM_VAR)
 	{
-		// Incorrect usage.
-		_f_throw(ERR_PARAM1_INVALID);
+		// Redundant due to prior validation of OutputVars:
+		//_f_throw_param(0, _T("variable reference"));
 	}
 	else
 	{
@@ -13621,7 +13627,7 @@ BIF_DECL(BIF_IsTypeish)
 	case SCS_INSENSITIVE_LOCALE: // 'Locale'
 		break;
 	default:
-		_f_throw(ERR_PARAM2_INVALID);
+		_f_throw_param(1);
 	}
 
 	// The remainder of this function is based on the original code for ACT_IFIS, which was removed
@@ -13728,8 +13734,8 @@ type_mismatch:
 
 BIF_DECL(BIF_IsSet)
 {
-	if (aParam[0]->symbol != SYM_VAR)
-		_f_throw(ERR_PARAM1_INVALID);
+	if (aParam[0]->symbol != SYM_VAR) // Possible only for dynamic calls.
+		_f_throw_param(0, _T("variable reference"));
 
 	_f_return_b(!aParam[0]->var->IsUninitializedNormalVar());
 }
@@ -13750,7 +13756,7 @@ BIF_DECL(BIF_GetKeyState)
 		if (   !(joy = (JoyControls)ConvertJoy(key_name, &joystick_id))   )
 		{
 			// It is neither a key name nor a joystick button/axis.
-			_f_throw(ERR_PARAM1_INVALID);
+			_f_throw_param(0);
 		}
 		ScriptGetJoyState(joy, joystick_id, aResultToken, _f_retval_buf);
 		return;
@@ -13802,8 +13808,9 @@ BIF_DECL(BIF_VarSetStrCapacity)
 // 2: Requested capacity.
 {
 	Var *target_var = ParamIndexToOutputVar(0);
-	if (!target_var)
-		_f_throw(ERR_PARAM1_INVALID);
+	// Redundant due to prior validation of OutputVars:
+	//if (!target_var)
+	//	_f_throw_param(0, _T("variable reference"));
 	Var &var = *target_var;
 	ASSERT(var.Type() == VAR_NORMAL); // Should always be true.
 
@@ -13826,7 +13833,7 @@ BIF_DECL(BIF_VarSetStrCapacity)
 			}
 			// x64: it's negative but not -1.
 			// x86: it's either >2GB or negative and not -1.
-			_f_throw(ERR_PARAM2_INVALID, TokenToString(*aParam[1], _f_number_buf));
+			_f_throw_param(1);
 		}
 		// Since above didn't return:
 		size_t new_capacity = (size_t)param1 * sizeof(TCHAR); // Chars to bytes.
@@ -14058,7 +14065,7 @@ BIF_DECL(BIF_Mod)
 		if (param0.symbol == SYM_INTEGER && param1.symbol == SYM_INTEGER) // Both are integers.
 		{
 			if (param1.value_int64 == 0)
-				_f_throw(ERR_DIVIDEBYZERO);
+				_f_throw(ERR_DIVIDEBYZERO, ErrorPrototype::ZeroDivision);
 			// For performance, % is used vs. qmath for integers.
 			_f_return_i(param0.value_int64 % param1.value_int64);
 		}
@@ -14067,12 +14074,12 @@ BIF_DECL(BIF_Mod)
 			double dividend = TokenToDouble(param0);
 			double divisor = TokenToDouble(param1);
 			if (divisor == 0.0)
-				_f_throw(ERR_DIVIDEBYZERO);
+				_f_throw(ERR_DIVIDEBYZERO, ErrorPrototype::ZeroDivision);
 			_f_return(qmathFmod(dividend, divisor));
 		}
 	}
 	// Since above didn't return, one or both parameters were invalid.
-	_f_throw(ERR_PARAM_INVALID);
+	_f_throw(ERR_PARAM_INVALID, ErrorPrototype::Type);
 }
 
 
@@ -14110,7 +14117,7 @@ BIF_DECL(BIF_MinMax)
 				}
 				break;
 			default: // Non-operand or non-numeric string.
-				_f_throw(ERR_PARAM_INVALID);
+				_f_throw_param(i, _T("Number"));
 		}
 	}
 	// Compare found integer with found float:
@@ -14125,7 +14132,7 @@ BIF_DECL(BIF_MinMax)
 BIF_DECL(BIF_Abs)
 {
 	if (!TokenToDoubleOrInt64(*aParam[0], aResultToken)) // "Cast" token to Int64/Double depending on whether it has a decimal point.
-		_f_throw(ERR_PARAM1_INVALID); // Non-operand or non-numeric string.
+		_f_throw_param(0, _T("Number")); // Non-operand or non-numeric string.
 	if (aResultToken.symbol == SYM_INTEGER)
 	{
 		// The following method is used instead of __abs64() to allow linking against the multi-threaded
@@ -14176,7 +14183,7 @@ BIF_DECL(BIF_ASinACos)
 	double value = ParamIndexToDouble(0);
 	if (value > 1 || value < -1) // ASin and ACos aren't defined for such values.
 	{
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_param(0);
 	}
 	else
 	{
@@ -14212,7 +14219,7 @@ BIF_DECL(BIF_SqrtLogLn)
 	double value = ParamIndexToDouble(0);
 	if (value < 0) // Result is undefined in these cases.
 	{
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_param(0);
 	}
 	else
 	{
@@ -14281,7 +14288,7 @@ BIF_DECL(BIF_DateAdd)
 {
 	FILETIME ft;
 	if (!YYYYMMDDToFileTime(ParamIndexToString(0, _f_number_buf), ft))
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_value(ERR_PARAM1_INVALID);
 
 	// Use double to support a floating point value for days, hours, minutes, etc:
 	double nUnits;
@@ -14303,7 +14310,7 @@ BIF_DECL(BIF_DateAdd)
 		nUnits *= ((double)10000000 * 60 * 60 * 24);
 		break;
 	default: // Invalid
-		_f_throw(ERR_PARAM3_INVALID);
+		_f_throw_param(2);
 	}
 	// Convert ft struct to a 64-bit variable (maybe there's some way to avoid these conversions):
 	ULARGE_INTEGER ul;
@@ -14338,7 +14345,7 @@ BIF_DECL(BIF_DateDiff)
 	case 'H': time_until /= 60 * 60; break; // Hours
 	case 'D': time_until /= 60 * 60 * 24; break; // Days
 	default: // Invalid
-		_f_throw(ERR_PARAM3_INVALID);
+		_f_throw_param(2);
 	}
 	_f_return_i(time_until);
 }
@@ -14423,7 +14430,7 @@ BIF_DECL(BIF_SetTimer)
 			callback = NULL;
 		if (!callback)
 			// Either the thread was not launched by a timer or the timer has been deleted.
-			_f_throw(ERR_PARAM1_MUST_NOT_BE_BLANK);
+			_f_throw_value(ERR_PARAM1_MUST_NOT_BE_BLANK);
 		callback->AddRef();
 	}
 	else
@@ -14435,7 +14442,7 @@ BIF_DECL(BIF_SetTimer)
 		{
 			LPTSTR arg1 = ParamIndexToString(0, _f_number_buf);
 			if (  !(callback = StringToFunctor(arg1))  )
-				_f_throw(ERR_PARAM1_INVALID, arg1);
+				_f_throw_param(0);
 		}
 		if (!ValidateFunctor(callback, 0, aResultToken))
 			return;
@@ -14445,8 +14452,7 @@ BIF_DECL(BIF_SetTimer)
 	bool update_period = false, update_priority = false;
 	if (!ParamIndexIsOmitted(1))
 	{
-		if (!ParamIndexIsNumeric(1))
-			_f_throw(ERR_PARAM2_INVALID);
+		Throw_if_Param_NaN(1);
 		period = ParamIndexToInt64(1);
 		if (!period)
 		{
@@ -14515,7 +14521,7 @@ BIF_DECL(BIF_OnMessage)
 	// ByRef or optional parameters.
 	// If the parameter is not an object or a valid function...
 	if (!callback || func && func->mMinParams > 4)
-		_f_throw(ERR_PARAM2_INVALID);
+		_f_throw_param(1);
 
 	// Check if this message already exists in the array:
 	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(specified_msg, callback);
@@ -14531,7 +14537,7 @@ BIF_DECL(BIF_OnMessage)
 		if (func)
 			callback->Release();
 		if (!pmonitor)
-			_f_throw(ERR_OUTOFMEM);
+			_f_throw_oom;
 	}
 
 	MsgMonitorStruct &monitor = *pmonitor;
@@ -14777,7 +14783,7 @@ BIF_DECL(BIF_On)
 		if (!handlers.Add(0, callback, mode == 1))
 		{
 			callback->Release();
-			_f_throw(ERR_OUTOFMEM);
+			_f_throw_oom;
 		}
 		break;
 	case  0:
@@ -14786,7 +14792,7 @@ BIF_DECL(BIF_On)
 		break;
 	default:
 		callback->Release();
-		_f_throw(ERR_PARAM2_INVALID);
+		_f_throw_param(1);
 	}
 	// In case the above enabled the clipboard listener but failed to add the handler,
 	// do this even if mode != 0:
@@ -14953,7 +14959,7 @@ BIF_DECL(BIF_CallbackCreate)
 {
 	IObject *func = TokenToFunctor(*aParam[0]);
 	if (!func)
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_param(0);
 
 	LPTSTR options = ParamIndexToOptionalString(1);
 	bool pass_params_pointer = _tcschr(options, '&'); // Callback wants the address of the parameter list instead of their values.
@@ -14968,7 +14974,7 @@ BIF_DECL(BIF_CallbackCreate)
 	if (pass_params_pointer && require_param_count && !params_specified)
 	{
 		func->Release();
-		_f_throw(ERR_PARAM3_MUST_NOT_BE_BLANK);
+		_f_throw_value(ERR_PARAM3_MUST_NOT_BE_BLANK);
 	}
 
 	int actual_param_count = params_specified ? ParamIndexToInt(2) : 0;
@@ -14986,7 +14992,7 @@ BIF_DECL(BIF_CallbackCreate)
 	if (!use_cdecl && actual_param_count > 31) // The ASM instruction currently used limits parameters to 31 (which should be plenty for any realistic use).
 	{
 		func->Release();
-		_f_throw(ERR_PARAM3_INVALID);
+		_f_throw_param(2);
 	}
 #endif
 
@@ -15005,7 +15011,7 @@ BIF_DECL(BIF_CallbackCreate)
 	if (!callbackfunc)
 	{
 		func->Release();
-		_f_throw(ERR_OUTOFMEM);
+		_f_throw_oom;
 	}
 	RCCallbackFunc &cb = *callbackfunc; // For convenience and possible code-size reduction.
 
@@ -15068,7 +15074,7 @@ BIF_DECL(BIF_CallbackFree)
 {
 	INT_PTR address = ParamIndexToIntPtr(0);
 	if (address < 65536 && address >= 0) // Basic sanity check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_param(0);
 	RCCallbackFunc *callbackfunc = (RCCallbackFunc *)address;
 	callbackfunc->func->Release();
 	callbackfunc->func = NULL; // To help detect bugs.
@@ -15195,7 +15201,7 @@ ResultType GuiControlType::LV_GetNextOrCount(ResultToken &aResultToken, int aID,
 			else if (!_tcsnicmp(options, _T("Col"), 3)) // "Col" or "Column". Don't allow "C" by itself, so that "Checked" can be added in the future.
 				_o_return(union_lv_attrib->col_count);
 			else
-				_o_throw(ERR_PARAM1_INVALID);
+				_o_throw_param(0);
 		}
 		_o_return(SendMessage(control_hwnd, LVM_GETITEMCOUNT, 0, 0));
 	}
@@ -15234,7 +15240,7 @@ ResultType GuiControlType::LV_GetNextOrCount(ResultToken &aResultToken, int aID,
 		_o_return(0);
 	  }
 	default:
-		_o_throw(ERR_PARAM1_INVALID);
+		_o_throw_param(1);
 	}
 }
 
@@ -15254,11 +15260,11 @@ ResultType GuiControlType::LV_GetText(ResultToken & aResultToken, int aID, int a
 
 	int row_index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 	if (row_index < -1) // row_index==-1 is reserved to mean "get column heading's text".
-		_o_throw(ERR_PARAM1_INVALID);
+		_o_throw_param(0);
 	// If parameter 2 is omitted, default to the first column (index 0):
 	int col_index = ParamIndexIsOmitted(1) ? 0 : ParamIndexToInt(1) - 1; // -1 to convert to zero-based.
 	if (col_index < 0)
-		_o_throw(ERR_PARAM2_INVALID);
+		_o_throw_param(1);
 
 	TCHAR buf[LV_TEXT_BUF_SIZE];
 	bool result;
@@ -15320,7 +15326,7 @@ ResultType GuiControlType::LV_AddInsertModify(ResultToken &aResultToken, int aID
 	{
 		index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
 		if (index < -1 || (mode != FID_LV_Modify && index < 0)) // Allow -1 to mean "all rows" when in modify mode.
-			_o_throw(ERR_PARAM1_INVALID);
+			_o_throw_param(0);
 		++aParam;  // Remove the first parameter from further consideration to make Insert/Modify symmetric with Add.
 		--aParamCount;
 	}
@@ -15448,7 +15454,7 @@ ResultType GuiControlType::LV_AddInsertModify(ResultToken &aResultToken, int aID
 		}
 		else
 		{
-			aResultToken.Error(ERR_INVALID_OPTION, next_option);
+			aResultToken.ValueError(ERR_INVALID_OPTION, next_option);
 			*option_end = orig_char; // See comment below.
 			return FAIL;
 		}
@@ -15575,7 +15581,7 @@ ResultType GuiControlType::LV_Delete(ResultToken &aResultToken, int aID, int aFl
 		_o_return(SendMessage(hwnd, LVM_DELETEITEM, index, 0)); // Returns TRUE/FALSE.
 	else
 		// Even if index==0, for safety, it seems best not to do a delete-all.
-		_o_throw(ERR_PARAM1_INVALID);
+		_o_throw_param(0);
 }
 
 
@@ -15829,7 +15835,7 @@ ResultType GuiControlType::LV_InsertModifyDeleteCol(ResultToken &aResultToken, i
 			}
 			else
 			{
-				aResultToken.Error(ERR_INVALID_OPTION, next_option);
+				aResultToken.ValueError(ERR_INVALID_OPTION, next_option);
 				*option_end = orig_char; // See comment below.
 				return FAIL;
 			}
@@ -16159,7 +16165,7 @@ ResultType GuiControlType::TV_AddModifyDelete(ResultToken &aResultToken, int aID
 		else
 		{
 			control.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Re-enable events.
-			aResultToken.Error(ERR_INVALID_OPTION, next_option);
+			aResultToken.ValueError(ERR_INVALID_OPTION, next_option);
 			*option_end = orig_char; // See comment below.
 			return FAIL;
 		}
@@ -16287,7 +16293,7 @@ ResultType GuiControlType::TV_GetRelatedItem(ResultToken &aResultToken, int aID,
 	else if (first_char_upper == 'F')
 		search_checkmark = false;
 	else // Reserve other option letters/words for future use by being somewhat strict.
-		_o_throw(ERR_PARAM2_INVALID);
+		_o_throw_param(1);
 
 	// When an actual item was specified, search begins at the item *after* it.  Otherwise (when NULL):
 	// It's a special mode that always considers the root node first.  Otherwise, there would be no way
@@ -16447,7 +16453,7 @@ BIF_DECL(BIF_IL_Add)
 {
 	HIMAGELIST himl = (HIMAGELIST)ParamIndexToInt64(0); // Load-time validation has ensured there is a first parameter.
 	if (!himl)
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_param(0);
 
 	int param3 = ParamIndexToOptionalInt(2, 0);
 	int icon_number, width = 0, height = 0; // Zero width/height causes image to be loaded at its actual width/height.
@@ -16630,14 +16636,14 @@ BIF_DECL(BIF_Exception)
 
 	LPTSTR extra = ParamIndexToOptionalString(2, extra_buf);
 
-	if (aResultToken.object = line->CreateRuntimeException(message, what, extra))
+	if (aResultToken.object = line->CreateRuntimeException(message, what, extra, ErrorPrototype::Error))
 	{
 		aResultToken.symbol = SYM_OBJECT;
 	}
 	else
 	{
 		// Out of memory. Seems best to alert the user.
-		_f_throw(ERR_OUTOFMEM);
+		_f_throw_oom;
 	}
 }
 
@@ -17007,7 +17013,7 @@ IObject *StringToFunctor(LPTSTR aStr)
 ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, LPTSTR aNullErr, int *aUseMinParams)
 {
 	if (!aFunc)
-		return aResultToken.Error(aNullErr);
+		return aResultToken.Error(aNullErr, ErrorPrototype::Type);
 	__int64 min_params = 0, max_params = INT_MAX;
 	auto min_result = /*aParamCount < 0 ? INVOKE_NOT_HANDLED
 		:*/ GetObjectIntProperty(aFunc, _T("MinParams"), min_params, aResultToken, true);
@@ -17021,7 +17027,7 @@ ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResult
 		*aUseMinParams = aParamCount = (int)min_params;
 	}
 	else if (has_minparams && aParamCount < (int)min_params)
-		return aResultToken.Error(ERR_INVALID_FUNCTOR);
+		return aResultToken.ValueError(ERR_INVALID_FUNCTOR);
 	auto max_result = (aParamCount == 0 || has_minparams && min_params == aParamCount)
 		? INVOKE_NOT_HANDLED // No need to check MaxParams in the above cases.
 		: GetObjectIntProperty(aFunc, _T("MaxParams"), max_params, aResultToken, true);
@@ -17034,7 +17040,7 @@ ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResult
 		if (!result)
 			return FAIL;
 		if (!is_variadic) // or not defined.
-			return aResultToken.Error(ERR_INVALID_FUNCTOR);
+			return aResultToken.ValueError(ERR_INVALID_FUNCTOR);
 	}
 	// If either MinParams or MaxParams was confirmed to exist, this is likely a valid
 	// function object, so skip the following check for performance.  Otherwise, catch
@@ -17063,7 +17069,7 @@ ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLen
 		// Caller has provided a mem_to_free (initially NULL) as a means of passing back memory we allocate here.
 		// So if we change "result" to be non-NULL, the caller will take over responsibility for freeing that memory.
 		if (   !(aResultToken.mem_to_free = tmalloc(aLength + 1))   ) // Out of memory.
-			return aResultToken.Error(ERR_OUTOFMEM);
+			return aResultToken.MemoryError();
 		aResultToken.marker = aResultToken.mem_to_free; // Store the address of the result for the caller.
 	}
 	if (aValue) // Caller may pass NULL to retrieve a buffer of sufficient size.

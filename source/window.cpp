@@ -781,7 +781,7 @@ void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
 // aBarHwnd is allowed to be NULL because in that case, the caller wants us to set aresultToken appropriately.
 {
 	if (!aBarHwnd)
-		_f_throw(ERR_NO_STATUSBAR);
+		_f_throw(ERR_NO_STATUSBAR, ErrorPrototype::Target);
 
 	if (aCheckInterval < 1)
 		aCheckInterval = SB_DEFAULT_CHECK_INTERVAL; // Caller relies on us doing this.
@@ -807,7 +807,7 @@ void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
 	if (!SendMessageTimeout(aBarHwnd, SB_GETPARTS, 0, 0, SMTO_ABORTIFHUNG, SB_TIMEOUT, (PDWORD_PTR)&part_count)) // It failed or timed out.
 		goto error;
 	if (aPartNumber > part_count)
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_value(ERR_PARAM1_INVALID);
 	if (  !(remote_buf = AllocInterProcMem(handle, _TSIZE(WINDOW_TEXT_SIZE + 1), aBarHwnd))  )
 		goto error;
 
