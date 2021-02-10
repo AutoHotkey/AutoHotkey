@@ -435,7 +435,7 @@ public:
 
 	static ObjectMember sMembers[];
 	static ObjectMember sClassMembers[];
-	static Object *sPrototype, *sClass, *sClassPrototype, *sClassClass;
+	static Object *sPrototype, *sClass, *sClassPrototype;
 
 	static Object *CreateRootPrototypes();
 	static Object *CreateClass(Object *aPrototype);
@@ -547,7 +547,7 @@ public:
 		M___Enum
 	};
 	static ObjectMember sMembers[];
-	static Object *sPrototype, *sClass;
+	static Object *sPrototype;
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
@@ -691,7 +691,7 @@ public:
 	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	static ObjectMember sMembers[];
-	static Object *sPrototype, *sClass;
+	static Object *sPrototype;
 };
 
 
@@ -790,6 +790,10 @@ public:
 	ClipboardAll(void *aData, size_t aSize) : BufferObject(aData, aSize) {}
 	static Object *sPrototype;
 };
+
+
+
+void DefineFileClass();
 
 
 

@@ -35,14 +35,13 @@ ObjectMember InputObject::sMembers[] =
 	Object_Member(VisibleNonText, BoolOpt, P_VisibleNonText, IT_SET),
 	Object_Member(VisibleText, BoolOpt, P_VisibleText, IT_SET),
 };
+int InputObject::sMemberCount = _countof(sMembers);
 
-Object *InputObject::sPrototype = nullptr;
+Object *InputObject::sPrototype;
 
 InputObject::InputObject()
 {
 	input.ScriptObject = this;
-	if (!sPrototype)
-		sPrototype = CreatePrototype(_T("InputHook"), Object::sPrototype, sMembers, _countof(sMembers));
 	SetBase(sPrototype);
 }
 

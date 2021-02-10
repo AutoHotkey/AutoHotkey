@@ -29,7 +29,7 @@ GNU General Public License for more details.
 static ATOM sGuiWinClass;
 
 
-LPTSTR GuiControlType::sTypeNames[] = { GUI_CONTROL_TYPE_NAMES };
+LPTSTR GuiControlType::sTypeNames[GUI_CONTROL_TYPE_COUNT] = { GUI_CONTROL_TYPE_NAMES };
 
 GuiControls GuiControlType::ConvertTypeName(LPTSTR aTypeName)
 {
@@ -91,7 +91,7 @@ UCHAR **ConstructEventSupportArray()
 	// This is mostly static data, but I haven't figured out how to construct it with just
 	// an array initialiser (other than by using a fixed size for the sub-array, which
 	// wastes space due to ListView and TreeView having many more events than other types).
-	static UCHAR *raises[_countof(GuiControlType::sTypeNames)];
+	static UCHAR *raises[GUI_CONTROL_TYPE_COUNT];
 	// Not necessary since the array is static and therefore initialised to 0 (NULL):
 	//#define RAISES_NONE(ctrl) \
 	//	raises[ctrl] = NULL;
@@ -651,35 +651,57 @@ ObjectMember GuiControlType::sMembersSB[] =
 #undef FUN1
 #undef FUNn
 
-Object *GuiControlType::GetPrototype(GuiControls aType)
+Object *GuiControlType::sPrototype;
+Object *GuiControlType::sPrototypeList;
+Object *GuiControlType::sPrototypes[GUI_CONTROL_TYPE_COUNT];
+
+void GuiControlType::DefineControlClasses()
 {
-	static Object *sPrototype = CreatePrototype(_T("Gui.Control"), Object::sPrototype, sMembers, _countof(sMembers));
-	static Object *sPrototypeList = CreatePrototype(_T("Gui.List"), sPrototype, sMembersList, _countof(sMembersList));
-	static Object *sPrototypes[_countof(sTypeNames)] = {};
-	ASSERT(aType <= _countof(sPrototypes));
-	if (aType == GUI_CONTROL_TAB2 || aType == GUI_CONTROL_TAB3)
-		aType = GUI_CONTROL_TAB; // Just make them all Gui.Tab.
-	if (!sPrototypes[aType])
+	auto gui_class = (Object *)g_script.FindGlobalVar(_T("Gui"), 3)->Object();
+
+	sPrototype = CreatePrototype(_T("Gui.Control"), Object::sPrototype, sMembers, _countof(sMembers));
+	sPrototypeList = CreatePrototype(_T("Gui.List"), sPrototype, sMembersList, _countof(sMembersList));
+	auto ctrl_class = CreateClass(sPrototype);
+	auto list_class = CreateClass(sPrototypeList);
+	ctrl_class->SetBase(Object::sClass);
+	list_class->SetBase(ctrl_class);
+	gui_class->SetOwnProp(_T("Control"), ctrl_class);
+	gui_class->SetOwnProp(_T("List"), list_class);
+
+	for (int i = GUI_CONTROL_INVALID + 1; i < GUI_CONTROL_TYPE_COUNT; ++i)
 	{
+		if (i == GUI_CONTROL_TAB2 || i == GUI_CONTROL_TAB3)
+			continue;
+
 		// Determine base prototype and control-type-specific members.
-		Object *base = sPrototype;
+		Object *base_proto = sPrototype, *base_class = ctrl_class;
 		ObjectMember *more_items = nullptr;
 		int how_many = 0;
-		switch (aType)
+		switch (i)
 		{
 		case GUI_CONTROL_TAB: more_items = sMembersTab; how_many = _countof(sMembersTab); // Fall through:
 		case GUI_CONTROL_DROPDOWNLIST:
 		case GUI_CONTROL_COMBOBOX:
-		case GUI_CONTROL_LISTBOX: base = sPrototypeList; break;
+		case GUI_CONTROL_LISTBOX: base_proto = sPrototypeList; base_class = list_class; break;
 		case GUI_CONTROL_DATETIME: more_items = sMembersDate; how_many = _countof(sMembersDate); break;
 		case GUI_CONTROL_LISTVIEW: more_items = sMembersLV; how_many = _countof(sMembersLV); break;
 		case GUI_CONTROL_TREEVIEW: more_items = sMembersTV; how_many = _countof(sMembersTV); break;
 		case GUI_CONTROL_STATUSBAR: more_items = sMembersSB; how_many = _countof(sMembersSB); break;
 		}
 		TCHAR buf[32];
-		_sntprintf(buf, 32, _T("Gui.%s"), sTypeNames[aType]);
-		sPrototypes[aType] = CreatePrototype(buf, base, more_items, how_many);
+		_sntprintf(buf, 32, _T("Gui.%s"), sTypeNames[i]);
+		sPrototypes[i] = CreatePrototype(buf, base_proto, more_items, how_many);
+		auto cls = CreateClass(sPrototypes[i]);
+		cls->SetBase(base_class);
+		gui_class->SetOwnProp(sTypeNames[i], cls);
 	}
+}
+
+Object *GuiControlType::GetPrototype(GuiControls aType)
+{
+	ASSERT(aType <= _countof(sPrototypes));
+	if (aType == GUI_CONTROL_TAB2 || aType == GUI_CONTROL_TAB3)
+		aType = GUI_CONTROL_TAB; // Just make them all Gui.Tab.
 	return sPrototypes[aType];
 }
 

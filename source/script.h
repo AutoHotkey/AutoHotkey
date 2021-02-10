@@ -691,7 +691,8 @@ enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero du
 	, GUI_CONTROL_LISTBOX, GUI_CONTROL_LISTVIEW, GUI_CONTROL_TREEVIEW
 	, GUI_CONTROL_EDIT, GUI_CONTROL_DATETIME, GUI_CONTROL_MONTHCAL, GUI_CONTROL_HOTKEY
 	, GUI_CONTROL_UPDOWN, GUI_CONTROL_SLIDER, GUI_CONTROL_PROGRESS, GUI_CONTROL_TAB, GUI_CONTROL_TAB2, GUI_CONTROL_TAB3
-	, GUI_CONTROL_ACTIVEX, GUI_CONTROL_LINK, GUI_CONTROL_CUSTOM, GUI_CONTROL_STATUSBAR}; // Kept last to reflect it being bottommost in switch()s (for perf), since not too often used.
+	, GUI_CONTROL_ACTIVEX, GUI_CONTROL_LINK, GUI_CONTROL_CUSTOM, GUI_CONTROL_STATUSBAR // Kept last to reflect it being bottommost in switch()s (for perf), since not too often used.
+	, GUI_CONTROL_TYPE_COUNT};
 
 #define GUI_CONTROL_TYPE_NAMES  _T(""), \
 	_T("Text"), _T("Pic"), _T("GroupBox"), \
@@ -1790,9 +1791,9 @@ class Closure : public Func
 	UserFunc *mFunc;
 	FreeVars *mVars;
 
+public:
 	static Object *sPrototype;
 
-public:
 	Closure(UserFunc *aFunc, FreeVars *aVars)
 		: mFunc(aFunc), mVars(aVars), Func(aFunc->mName)
 	{
@@ -1824,9 +1825,9 @@ class BoundFunc : public Func
 		SetBase(sPrototype);
 	}
 
+public:
 	static Object *sPrototype;
 
-public:
 	static BoundFunc *Bind(IObject *aFunc, int aFlags, LPCTSTR aMember, ExprTokenType **aParam, int aParamCount);
 	~BoundFunc();
 	
@@ -2096,9 +2097,9 @@ struct MsgMonitorInstance
 class UserMenuItem;  // Forward declaration since classes use each other (i.e. a menu *item* can have a submenu).
 class UserMenu : public Object
 {
+public:
 	class Bar;
 
-public:
 	UserMenuItem *mFirstMenuItem = nullptr, *mLastMenuItem = nullptr, *mDefault = nullptr;
 	UserMenu *mNextMenu = nullptr;  // Next item in linked list
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
@@ -2112,7 +2113,7 @@ public:
 
 	static ObjectMember sMembers[];
 	static int sMemberCount;
-	static Object *sPrototype, *sBarPrototype, *sClass, *sBarClass;
+	static Object *sPrototype, *sBarPrototype;
 
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
@@ -2301,7 +2302,7 @@ struct GuiControlType : public Object
 	GuiControlType() = delete;
 	GuiControlType(GuiType* owner) : gui(owner) {}
 
-	static LPTSTR sTypeNames[];
+	static LPTSTR sTypeNames[GUI_CONTROL_TYPE_COUNT];
 	static GuiControls ConvertTypeName(LPTSTR aTypeName);
 	LPTSTR GetTypeName();
 
@@ -2435,6 +2436,9 @@ struct GuiControlType : public Object
 	static ObjectMember sMembersTV[];
 	static ObjectMember sMembersSB[];
 
+	static Object *sPrototype, *sPrototypeList;
+	static Object *sPrototypes[GUI_CONTROL_TYPE_COUNT];
+	static void DefineControlClasses();
 	static Object *GetPrototype(GuiControls aType);
 
 	ResultType StatusBar(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
@@ -2598,7 +2602,7 @@ public:
 
 	static ObjectMember sMembers[];
 	static int sMemberCount;
-	static Object *sPrototype, *sClass;
+	static Object *sPrototype;
 
 	GuiType() // Constructor
 		: mHwnd(NULL), mOwner(NULL), mName(NULL)

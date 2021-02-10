@@ -6,8 +6,10 @@
 
 #include "script_object.h"
 #include "script_func_impl.h"
+#include "input_object.h"
 
 #include <errno.h> // For ERANGE.
+#include <initializer_list>
 
 
 //
@@ -883,7 +885,7 @@ bool Object::IsDerivedFrom(IObject *aBase)
 	for (base = mBase; base; base = base->mBase)
 		if (base == aBase)
 			return true;
-	return aBase == Object::sPrototype; // Should only be true when this == aBase, since every other Object should derive from it.
+	return false;
 }
 
 
@@ -1037,18 +1039,21 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 
 	class_obj->SetBase(aBase);
 
-	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
-	_stprintf(full_name, _T("%s.New"), aClassName);
-	auto ctor = new BuiltInMethod(SimpleHeap::Malloc(full_name));
-	ctor->mBIM = aCtor;
-	ctor->mMID = 0;
-	ctor->mMIT = IT_CALL;
-	ctor->mMinParams = 0;
-	ctor->mParamCount = MAX_FUNCTION_PARAMS;
-	ctor->mIsVariadic = true;
-	ctor->mClass = nullptr; // Safe to call on any Object.
-	class_obj->DefineMethod(_T("New"), ctor);
-	ctor->Release();
+	if (aCtor)
+	{
+		TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
+		_stprintf(full_name, _T("%s.New"), aClassName);
+		auto ctor = new BuiltInMethod(SimpleHeap::Malloc(full_name));
+		ctor->mBIM = aCtor;
+		ctor->mMID = 0;
+		ctor->mMIT = IT_CALL;
+		ctor->mMinParams = 0;
+		ctor->mParamCount = MAX_FUNCTION_PARAMS;
+		ctor->mIsVariadic = true;
+		ctor->mClass = nullptr; // Safe to call on any Object.
+		class_obj->DefineMethod(_T("New"), ctor);
+		ctor->Release();
+	}
 
 	auto var = g_script.FindOrAddVar(aClassName, 0, VAR_DECLARE_SUPER_GLOBAL);
 	var->AssignSkipAddRef(class_obj);
@@ -2827,6 +2832,47 @@ ObjectMember Func::sMembers[] =
 };
 
 
+
+ObjectMember RegExMatchObject::sMembers[] =
+{
+	Object_Method(__Enum, 0, 1),
+	Object_Member(__Get, Invoke, M_Value, IT_CALL, 2, 2),
+	Object_Member(__Item, Invoke, M_Value, IT_GET, 0, 1),
+	Object_Method(Value, 0, 1),
+	Object_Method(Pos, 0, 1),
+	Object_Method(Len, 0, 1),
+	Object_Method(Name, 0, 1),
+	Object_Method(Count, 0, 0),
+	Object_Method(Mark, 0, 0),
+};
+
+
+
+struct ClassDef
+{
+	LPCTSTR name;
+	Object **proto_var;
+	ObjectMethod ctor;
+	ObjectMember *members;
+	int member_count;
+	std::initializer_list<ClassDef> subclasses;
+};
+
+void DefineClasses(Object *aBaseClass, Object *aBaseProto, std::initializer_list<ClassDef> aClasses)
+{
+	for (auto &c : aClasses)
+	{
+		auto proto = (c.proto_var && *c.proto_var) ? *c.proto_var
+			: Object::CreatePrototype(const_cast<LPTSTR>(c.name), aBaseProto, c.members, c.member_count);
+		if (c.proto_var)
+			*c.proto_var = proto;
+		auto cobj = Object::CreateClass(const_cast<LPTSTR>(c.name), aBaseClass, proto, c.ctor);
+		if (c.subclasses.size())
+			DefineClasses(cobj, proto, c.subclasses);
+	}
+}
+
+
 Object *Object::CreateRootPrototypes()
 {
 	// Create the root prototypes before defining any members, since
@@ -2849,6 +2895,71 @@ Object *Object::CreateRootPrototypes()
 	DefineMembers(sPrototype, _T("Object"), sMembers, _countof(sMembers));
 	DefineMembers(Func::sPrototype, _T("Func"), Func::sMembers, _countof(Func::sMembers));
 
+	// Create classes.
+	//
+
+	sClassPrototype = Object::CreatePrototype(_T("Class"), Object::sPrototype);
+	auto anyClass = CreateClass(_T("Any"), sClassPrototype, sAnyPrototype, nullptr);
+	Object::sClass = CreateClass(_T("Object"), anyClass, Object::sPrototype, static_cast<ObjectMethod>(&Object::New<Object>));
+
+	ObjectMethod no_ctor = nullptr;
+	ObjectMember *no_members = nullptr;
+
+	DefineClasses(Object::sClass, Object::sPrototype, {
+		{_T("Array"), &Array::sPrototype, static_cast<ObjectMethod>(&Object::New<Array>)
+			, Array::sMembers, _countof(Array::sMembers)},
+		{_T("Buffer"), &BufferObject::sPrototype, no_ctor, BufferObject::sMembers, _countof(BufferObject::sMembers), {
+			{_T("ClipboardAll")}
+		}},
+		{_T("Class"), &Object::sClassPrototype, static_cast<ObjectMethod>(&Object::New<Object>)},
+		{_T("Error"), &ErrorPrototype::Error, no_ctor, no_members, 0, {
+			{_T("IndexError"), &ErrorPrototype::Index, no_ctor, no_members, 0, {
+				{_T("KeyError"), &ErrorPrototype::Key}
+			}},
+			{_T("MemberError"), &ErrorPrototype::Member, no_ctor, no_members, 0, {
+				{_T("PropertyError"), &ErrorPrototype::Property},
+				{_T("MethodError"), &ErrorPrototype::Method}
+			}},
+			{_T("MemoryError"), &ErrorPrototype::Memory},
+			{_T("OSError"), &ErrorPrototype::OS},
+			{_T("TargetError"), &ErrorPrototype::Target},
+			{_T("TimeoutError"), &ErrorPrototype::Timeout},
+			{_T("TypeError"), &ErrorPrototype::Type},
+			{_T("ValueError"), &ErrorPrototype::Value},
+			{_T("ZeroDivisionError"), &ErrorPrototype::ZeroDivision}
+		}},
+		{_T("Func"), &Func::sPrototype, no_ctor, Func::sMembers, _countof(Func::sMembers), {
+			{_T("BoundFunc"), &BoundFunc::sPrototype},
+			{_T("Closure"), &Closure::sPrototype},
+			{_T("Enumerator"), &EnumBase::sPrototype}
+		}},
+		{_T("Gui"), &GuiType::sPrototype, static_cast<ObjectMethod>(&Object::New<GuiType>)
+			, GuiType::sMembers, GuiType::sMemberCount},
+		{_T("InputHook"), &InputObject::sPrototype, no_ctor
+			, InputObject::sMembers, InputObject::sMemberCount},
+		{_T("Map"), &Map::sPrototype, static_cast<ObjectMethod>(&Object::New<Map>)
+			, Map::sMembers, _countof(Map::sMembers)},
+		{_T("Menu"), &UserMenu::sPrototype, static_cast<ObjectMethod>(&Object::New<UserMenu>)
+			, UserMenu::sMembers, UserMenu::sMemberCount, {
+			{_T("MenuBar"), &UserMenu::sBarPrototype, static_cast<ObjectMethod>(&Object::New<UserMenu::Bar>)}
+		}},
+		{_T("RegExMatch"), &RegExMatchObject::sPrototype, no_ctor
+			, RegExMatchObject::sMembers, _countof(RegExMatchObject::sMembers)}
+	});
+
+	DefineClasses(anyClass, sAnyPrototype, {
+		{_T("Primitive"), &Object::sPrimitivePrototype, no_ctor, no_members, 0, {
+			{_T("Number"), &Object::sNumberPrototype, no_ctor, no_members, 0, {
+				{_T("Float"), &Object::sFloatPrototype},
+				{_T("Integer"), &Object::sIntegerPrototype}
+			}},
+			{_T("String"), &Object::sStringPrototype}
+		}}
+	});
+
+	GuiControlType::DefineControlClasses();
+	DefineFileClass();
+
 	return sAnyPrototype;
 }
 
@@ -2856,74 +2967,30 @@ Object *Object::sAnyPrototype = CreateRootPrototypes();
 Object *Func::sPrototype;
 Object *Object::sPrototype;
 
-//																		Direct base			Members
-Object *Object::sClassPrototype	= Object::CreatePrototype(_T("Class"),	Object::sPrototype);
-Object *Array::sPrototype		= Object::CreatePrototype(_T("Array"),	Object::sPrototype,	sMembers, _countof(sMembers));
-Object *Map::sPrototype			= Object::CreatePrototype(_T("Map"),	Object::sPrototype,	sMembers, _countof(sMembers));
+Object *Object::sClassPrototype;
+Object *Array::sPrototype;
+Object *Map::sPrototype;
 
-//																Direct base			Prototype			Constructor
-Object *Object::sClass		= Object::CreateClass(_T("Object"),	sClassPrototype,	sPrototype,			static_cast<ObjectMethod>(&New<Object>));
-Object *Object::sClassClass	= Object::CreateClass(_T("Class"),	Object::sClass,		sClassPrototype,	static_cast<ObjectMethod>(&New<Object>));
-Object *Array::sClass		= Object::CreateClass(_T("Array"),	Object::sClass,		sPrototype,			static_cast<ObjectMethod>(&New<Array>));
-Object *Map::sClass			= Object::CreateClass(_T("Map"),	Object::sClass,		sPrototype,			static_cast<ObjectMethod>(&New<Map>));
+Object *Object::sClass;
 
+Object *Closure::sPrototype;
+Object *BoundFunc::sPrototype;
+Object *EnumBase::sPrototype;
 
+Object *BufferObject::sPrototype;
+Object *ClipboardAll::sPrototype;
 
-Object *Closure::sPrototype = Object::CreatePrototype(_T("Closure"), Func::sPrototype);
-Object *BoundFunc::sPrototype = Object::CreatePrototype(_T("BoundFunc"), Func::sPrototype);
-Object *EnumBase::sPrototype = Object::CreatePrototype(_T("Enumerator"), Func::sPrototype);
+Object *RegExMatchObject::sPrototype;
 
-
-
-Object *BufferObject::sPrototype = Object::CreatePrototype(_T("Buffer"), Object::sPrototype, sMembers, _countof(sMembers));
-Object *ClipboardAll::sPrototype = Object::CreatePrototype(_T("ClipboardAll"), BufferObject::sPrototype);
-
-
-
-ObjectMember RegExMatchObject::sMembers[] =
-{
-	Object_Method(__Enum, 0, 1),
-	Object_Member(__Get, Invoke, M_Value, IT_CALL, 2, 2),
-	Object_Member(__Item, Invoke, M_Value, IT_GET, 0, 1),
-	Object_Method(Value, 0, 1),
-	Object_Method(Pos, 0, 1),
-	Object_Method(Len, 0, 1),
-	Object_Method(Name, 0, 1),
-	Object_Method(Count, 0, 0),
-	Object_Method(Mark, 0, 0),
-};
-
-Object *RegExMatchObject::sPrototype = CreatePrototype(_T("RegExMatch"), Object::sPrototype, sMembers, _countof(sMembers));
-
-
-
-Object *GuiType::sPrototype = CreatePrototype(_T("Gui"), Object::sPrototype, sMembers, sMemberCount);
-Object *GuiType::sClass = CreateClass(_T("Gui"), Object::sClass, sPrototype, static_cast<ObjectMethod>(&New<GuiType>));
-
-
-
-Object *UserMenu::sPrototype = CreatePrototype(_T("Menu"), Object::sPrototype, sMembers, sMemberCount);
-Object *UserMenu::sBarPrototype = CreatePrototype(_T("MenuBar"), sPrototype);
-Object *UserMenu::sClass = CreateClass(_T("Menu"), Object::sClass, sPrototype, static_cast<ObjectMethod>(&New<UserMenu>));
-Object *UserMenu::sBarClass = CreateClass(_T("MenuBar"), sClass, sBarPrototype, static_cast<ObjectMethod>(&New<UserMenu::Bar>));
-
-
+Object *GuiType::sPrototype;
+Object *UserMenu::sPrototype;
+Object *UserMenu::sBarPrototype;
 
 namespace ErrorPrototype
 {
-	Object *Error = Object::CreatePrototype(_T("Error"), Object::sPrototype);
-	Object *Memory = Object::CreatePrototype(_T("MemoryError"), Error);
-	Object *Type = Object::CreatePrototype(_T("TypeError"), Error);
-	Object *Value = Object::CreatePrototype(_T("ValueError"), Error);
-	Object *OS = Object::CreatePrototype(_T("OSError"), Error);
-	Object *ZeroDivision = Object::CreatePrototype(_T("ZeroDivisionError"), Error);
-	Object *Target = Object::CreatePrototype(_T("TargetError"), Error);
-	  Object *Member = Object::CreatePrototype(_T("MemberError"), Target);
-	    Object *Property = Object::CreatePrototype(_T("PropertyError"), Member);
-	    Object *Method = Object::CreatePrototype(_T("MethodError"), Member);
-	  Object *Index = Object::CreatePrototype(_T("IndexError"), Target);
-	    Object *Key = Object::CreatePrototype(_T("KeyError"), Index);
-	Object *Timeout = Object::CreatePrototype(_T("TimeoutError"), Error);
+	Object *Error, *Memory, *Type, *Value, *OS, *ZeroDivision;
+	Object *Target, *Member, *Property, *Method, *Index, *Key;
+	Object *Timeout;
 }
 
 
@@ -2932,11 +2999,11 @@ namespace ErrorPrototype
 // Primitive values as objects
 //
 
-Object *Object::sPrimitivePrototype = CreatePrototype(_T("Primitive"), Object::sAnyPrototype);
-Object *Object::sStringPrototype = CreatePrototype(_T("String"), Object::sPrimitivePrototype);
-Object *Object::sNumberPrototype = CreatePrototype(_T("Number"), Object::sPrimitivePrototype);
-Object *Object::sIntegerPrototype = CreatePrototype(_T("Integer"), Object::sNumberPrototype);
-Object *Object::sFloatPrototype = CreatePrototype(_T("Float"), Object::sNumberPrototype);
+Object *Object::sPrimitivePrototype;
+Object *Object::sStringPrototype;
+Object *Object::sNumberPrototype;
+Object *Object::sIntegerPrototype;
+Object *Object::sFloatPrototype;
 
 Object *Object::ValueBase(ExprTokenType &aValue)
 {

@@ -729,6 +729,8 @@ class FileObject : public Object
 	static ObjectMember sMembers[];
 	static Object *sPrototype;
 
+	friend void ::DefineFileClass();
+
 	enum NumReadWriteFlags
 	{
 		F_SIZE_MASK = 0xF,
@@ -1068,7 +1070,14 @@ ObjectMember FileObject::sMembers[] =
 	Object_Property_get_set(Pos)
 };
 
-Object *FileObject::sPrototype = Object::CreatePrototype(_T("File"), Object::sPrototype, sMembers, _countof(sMembers));
+Object *FileObject::sPrototype;
+
+void DefineFileClass()
+{
+	FileObject::sPrototype = Object::CreatePrototype(_T("File"), Object::sPrototype
+		, FileObject::sMembers, _countof(FileObject::sMembers));
+	Object::CreateClass(_T("File"), Object::sClass, FileObject::sPrototype, nullptr);
+}
 
 FileObject *FileObject::Open(LPCTSTR aFileSpec, DWORD aFlags, UINT aCodePage)
 {
