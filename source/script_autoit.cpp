@@ -1294,7 +1294,7 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 ResultType Line::FileRecycle(LPTSTR aFilePattern)
 {
 	if (!aFilePattern || !*aFilePattern)
-		return LineError(ERR_PARAM1_REQUIRED, FAIL_OR_OK);  // Since this is probably not what the user intended.
+		return LineError(ERR_PARAM1_MUST_NOT_BE_BLANK, FAIL_OR_OK);  // Since this is probably not what the user intended.
 
 	SHFILEOPSTRUCT FileOp;
 	TCHAR szFileTemp[_MAX_PATH+2];

@@ -357,7 +357,7 @@ void RegWrite(ResultToken &aResultToken, ExprTokenType &aValue, DWORD aValueType
 	LONG result;
 
 	if (aValueType == REG_NONE)
-		_f_throw_value(ERR_PARAM2_REQUIRED);
+		_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
 
 	if (aValueType != REG_DWORD)
 		value = TokenToString(aValue, nbuf, &length);

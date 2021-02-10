@@ -8226,7 +8226,7 @@ BIF_DECL(BIF_FileAppend)
 	if (aCurrentReadFile)
 		aFilespec = aCurrentReadFile->mWriteFileName;
 	if (!*aFilespec) // Nothing to write to.
-		_f_throw_value(ERR_PARAM2_REQUIRED);
+		_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
 
 	TextStream *ts = aCurrentReadFile ? aCurrentReadFile->mWriteFile : NULL;
 	bool file_was_already_open = ts;
@@ -11405,9 +11405,9 @@ BIF_DECL(BIF_String)
 	case SYM_OBJECT:
 		ObjectToString(aResultToken, *aParam[0], aParam[0]->object);
 		break;
-	case SYM_MISSING:
-		_f_throw_value(ERR_PARAM1_REQUIRED);
-		break;
+	// Impossible due to parameter count validation:
+	//case SYM_MISSING:
+	//	_f_throw_value(ERR_PARAM1_REQUIRED);
 #ifdef _DEBUG
 	default:
 		MsgBox(_T("DEBUG: type not handled"));
