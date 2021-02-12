@@ -968,7 +968,8 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 
 Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMember[], int aMemberCount)
 {
-	obj->mFlags |= NativeClassPrototype;
+	if (aMemberCount)
+		obj->mFlags |= NativeClassPrototype;
 
 	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
 	TCHAR *name = full_name + _stprintf(full_name, _T("%s.Prototype."), aClassName);
@@ -2911,7 +2912,7 @@ Object *Object::CreateRootPrototypes()
 		{_T("Buffer"), &BufferObject::sPrototype, no_ctor, BufferObject::sMembers, _countof(BufferObject::sMembers), {
 			{_T("ClipboardAll")}
 		}},
-		{_T("Class"), &Object::sClassPrototype, static_cast<ObjectMethod>(&Object::New<Object>)},
+		{_T("Class"), &Object::sClassPrototype},
 		{_T("Error"), &ErrorPrototype::Error, no_ctor, no_members, 0, {
 			{_T("IndexError"), &ErrorPrototype::Index, no_ctor, no_members, 0, {
 				{_T("KeyError"), &ErrorPrototype::Key}
