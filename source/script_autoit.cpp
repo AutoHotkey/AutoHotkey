@@ -601,7 +601,7 @@ error: // GetLastError() is no use in this case.
 	_f_throw(ERR_FAILED);
 
 control_type_error:
-	_f_throw(ERR_GUI_NOT_FOR_THIS_TYPE, classname);
+	_f_throw(ERR_GUI_NOT_FOR_THIS_TYPE, classname, ErrorPrototype::Target);
 }
 
 
@@ -904,7 +904,7 @@ win32_error:
 	_f_throw_win32();
 
 control_type_error:
-	_f_throw(ERR_GUI_NOT_FOR_THIS_TYPE, classname);
+	_f_throw(ERR_GUI_NOT_FOR_THIS_TYPE, classname, ErrorPrototype::Target);
 }
 
 
