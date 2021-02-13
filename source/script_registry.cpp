@@ -527,7 +527,7 @@ void RegDelete(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTS
 	// or an empty string. aValueName is also checked to preserve the ability to delete a value
 	// that exists directly under a root key.
 	if (  (!aRegSubkey || !*aRegSubkey) && !aValueName  )
-		_f_throw(_T("Cannot delete root key"));
+		_f_throw_value(_T("Cannot delete root key"));
 
 	// Open the key we want
 	HKEY hRegKey;

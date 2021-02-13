@@ -879,7 +879,7 @@ void StatusBarUtil(ResultToken &aResultToken, HWND aBarHwnd, int aPartNumber
 	return;
 
 error:
-	_f_throw(ERR_INTERNAL_CALL);
+	_f_throw_win32();
 }
 
 

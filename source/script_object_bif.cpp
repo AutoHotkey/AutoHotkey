@@ -161,6 +161,8 @@ BIF_DECL(BIF_Base)
 		if (!obj)
 			_f_throw_type(_T("Object"), *aParam[0]);
 		auto new_base = dynamic_cast<Object *>(TokenToObject(*aParam[1]));
+		if (!new_base)
+			_f_throw_type(_T("Object"), *aParam[1]);
 		if (!obj->SetBase(new_base, aResultToken))
 			return;
 	}
