@@ -14509,19 +14509,14 @@ BIF_DECL(BIF_OnMessage)
 	}
 
 	// Parameter #2: The callback to add or remove.  Must be an object or a function name.
-	Func *func; // Func for validation of parameters, where possible.
-	if (callback = TokenToObject(*aParam[1]))
-		func = dynamic_cast<Func *>(callback);
-	else
-		callback = func = g_script.FindFunc(TokenToString(*aParam[1]));
-	// Notes about func validation: ByRef and optional parameters are allowed for flexibility.
-	// For example, a function may be called directly by the script to set static vars which
-	// are used when a message arrives.  Raising an error might help catch bugs, but only in
-	// very rare cases where a valid but wrong function name is given *and* that function has
-	// ByRef or optional parameters.
-	// If the parameter is not an object or a valid function...
-	if (!callback || func && func->mMinParams > 4)
+	callback = TokenToFunctor(*aParam[1]);
+	if (!callback)
 		_f_throw_param(1);
+	if (!ValidateFunctor(callback, 4, aResultToken))
+	{
+		callback->Release();
+		return;
+	}
 
 	// Check if this message already exists in the array:
 	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(specified_msg, callback);
@@ -14531,14 +14526,11 @@ BIF_DECL(BIF_OnMessage)
 		if (mode_is_delete) // Delete a non-existent item.
 			_f_return_retval; // Yield the default return value set earlier (an empty string).
 		// From this point on, it is certain that an item will be added to the array.
-		if (func)
-			callback = func->CloseIfNeeded(); // Returns a new reference, if not a new object.
 		pmonitor = g_MsgMonitor.Add(specified_msg, callback, call_it_last);
-		if (func)
-			callback->Release();
-		if (!pmonitor)
-			_f_throw_oom;
 	}
+	callback->Release();
+	if (!pmonitor)
+		_f_throw_oom;
 
 	MsgMonitorStruct &monitor = *pmonitor;
 
