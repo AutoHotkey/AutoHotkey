@@ -33,7 +33,7 @@ BIF_DECL(Op_Array)
 {
 	if (auto arr = Array::Create(aParam, aParamCount))
 		_f_return(arr);
-	_f_throw(ERR_OUTOFMEM);
+	_f_throw_oom;
 }
 	
 
@@ -72,7 +72,7 @@ BIF_DECL(BIF_ObjAddRefRelease)
 {
 	IObject *obj = (IObject *)TokenToInt64(*aParam[0]);
 	if (obj < (IObject *)65536) // Rule out some obvious errors.
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_param(0);
 	if (_f_callee_id == FID_ObjAddRef)
 		_f_return_i(obj->AddRef());
 	else
@@ -88,7 +88,7 @@ BIF_DECL(BIF_ObjBindMethod)
 {
 	IObject *func, *bound_func;
 	if (  !(func = ParamIndexToObject(0))  )
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_param(0);
 	LPCTSTR name = nullptr;
 	if (aParamCount > 1)
 	{
@@ -101,7 +101,7 @@ BIF_DECL(BIF_ObjBindMethod)
 		aParamCount = 0;
 	bound_func = BoundFunc::Bind(func, IT_CALL, name, aParam, aParamCount);
 	if (!bound_func)
-		_f_throw(ERR_OUTOFMEM);
+		_f_throw_oom;
 	_f_return(bound_func);
 }
 
@@ -116,7 +116,7 @@ BIF_DECL(BIF_ObjPtr)
 	{
 		auto obj = (IObject *)ParamIndexToInt64(0);
 		if (obj < (IObject *)65536) // Prevent some obvious errors.
-			_f_throw(ERR_PARAM1_INVALID);
+			_f_throw_param(0);
 		if (_f_callee_id == FID_ObjFromPtrAddRef)
 			obj->AddRef();
 		_f_return(obj);
@@ -145,6 +145,8 @@ BIF_DECL(BIF_Base)
 		if (!obj)
 			_f_throw_type(_T("Object"), *aParam[0]);
 		auto new_base = dynamic_cast<Object *>(TokenToObject(*aParam[1]));
+		if (!new_base)
+			_f_throw_type(_T("Object"), *aParam[1]);
 		if (!obj->SetBase(new_base, aResultToken))
 			return;
 	}
@@ -200,7 +202,7 @@ Object *ParamToObjectOrBase(ExprTokenType &aToken, ResultToken &aResultToken)
 	if (  (obj = dynamic_cast<Object *>(TokenToObject(aToken)))
 		|| (obj = Object::ValueBase(aToken))  )
 		return obj;
-	aResultToken.Error(ERR_PARAM1_INVALID);
+	aResultToken.ParamError(0, &aToken, _T("Object"));
 	return nullptr;
 }
 

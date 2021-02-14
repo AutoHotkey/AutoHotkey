@@ -35,6 +35,7 @@ public:
 
 	static Object *sPrototype;
 	static ObjectMember sMembers[];
+	static int sMemberCount;
 
 	InputObject();
 	~InputObject()

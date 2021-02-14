@@ -358,7 +358,7 @@ ResultType Var::GetClipboardAll(void **aData, size_t *aDataSize)
 	if (!binary_contents)
 	{
 		g_clip.Close();
-		return g_script.RuntimeError(ERR_OUTOFMEM);
+		return MemoryError();
 	}
 
 	// Retrieve and store all the clipboard formats.  Because failures of GetClipboardData() are now
@@ -462,7 +462,7 @@ ResultType Var::SetClipboardAll(void *aData, size_t aDataSize)
 		if (   !(hglobal = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, size + (size == 0)))   )
 		{
 			g_clip.Close();
-			return g_script.RuntimeError(ERR_OUTOFMEM); // Short msg since so rare.
+			return MemoryError();
 		}
 		if (size) // i.e. Don't try to lock memory of size zero.  It's not needed.
 		{
@@ -597,7 +597,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 				// from SimpleHeap even though the var already had one. This is by design because it can
 				// happen only a limited number of times per variable. See comments further above for details.
 				if (   !(new_mem = (char *) SimpleHeap::Malloc(new_size))   )
-					return FAIL; // It already displayed the error. Leave all var members unchanged so that they're consistent with each other. Don't bother making the var blank and its length zero for reasons described higher above.
+					return MemoryError(); // Leave all var members unchanged so that they're consistent with each other. Don't bother making the var blank and its length zero for reasons described higher above.
 				mHowAllocated = ALLOC_SIMPLE;  // In case it was previously ALLOC_NONE. This step must be done only after the alloc succeeded.
 				break;
 			}
@@ -657,7 +657,7 @@ ResultType Var::AssignString(LPCTSTR aBuf, VarSizeType aLength, bool aExactSize)
 					*mCharContents = '\0'; // If it's sEmptyString, that's okay too because it's writable.
 				}
 				mByteLength = 0; // mAttrib was already updated higher above.
-				return g_script.ScriptError(ERR_OUTOFMEM); // since an error is most likely to occur at runtime.
+				return MemoryError(); // since an error is most likely to occur at runtime.
 			}
 
 			// Below is necessary because it might have fallen through from case ALLOC_SIMPLE.

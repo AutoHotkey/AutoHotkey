@@ -6,8 +6,10 @@
 
 #include "script_object.h"
 #include "script_func_impl.h"
+#include "input_object.h"
 
 #include <errno.h> // For ERANGE.
+#include <initializer_list>
 
 
 //
@@ -101,7 +103,7 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *ap
 			if (!obj->SetOwnProp(name, *aParam[i + 1]))
 			{
 				if (apResultToken)
-					apResultToken->Error(ERR_OUTOFMEM);
+					apResultToken->MemoryError();
 				obj->Release();
 				return NULL;
 			}
@@ -320,7 +322,7 @@ ResultType GetEnumerator(IObject *&aEnumerator, ExprTokenType &aEnumerable, int 
 		return OK;
 	result_token.Free();
 	if (aDisplayError)
-		g_script.ScriptError(ERR_TYPE_MISMATCH, _T("__Enum"));
+		g_script.RuntimeError(ERR_TYPE_MISMATCH, _T("__Enum"), FAIL, nullptr, ErrorPrototype::Type);
 	return FAIL;
 }
 
@@ -332,7 +334,7 @@ ResultType CallEnumerator(IObject *aEnumerator, ExprTokenType *aParam[], int aPa
 	if (result == FAIL || result == EARLY_EXIT || result == INVOKE_NOT_HANDLED)
 	{
 		if (result == INVOKE_NOT_HANDLED && aDisplayError)
-			return g_script.ScriptError(ERR_NOT_ENUMERABLE); // Object not callable -> wrong type of object.
+			return g_script.RuntimeError(ERR_NOT_ENUMERABLE, nullptr, FAIL, nullptr, ErrorPrototype::Type); // Object not callable -> wrong type of object.
 		return result;
 	}
 	result = TokenToBOOL(result_token) ? CONDITION_TRUE : CONDITION_FALSE;
@@ -707,7 +709,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 				|| (field = Insert(name, insert_pos))) // A new field is inserted.
 			&& field->Assign(**actual_param))
 			return OK;
-		_o_throw(ERR_OUTOFMEM);
+		_o_throw_oom;
 	}
 
 	// GET
@@ -773,12 +775,12 @@ ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 				aResultToken.object->AddRef();
 			return OK;
 		}
-		_o_throw(ERR_NO_KEY, ParamIndexToString(0, _f_number_buf));
+		_o_throw(ERR_NO_KEY, ParamIndexToString(0, _f_number_buf), ErrorPrototype::Key);
 	}
 	else
 	{
 		if (!SetItem(*aParam[1], *aParam[0]))
-			_o_throw(ERR_OUTOFMEM);
+			_o_throw_oom;
 	}
 	return OK;
 }
@@ -789,7 +791,7 @@ ResultType Map::Set(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTyp
 	if (aParamCount & 1)
 		_o_throw(ERR_PARAM_COUNT_INVALID);
 	if (!SetItems(aParam, aParamCount))
-		_o_throw(ERR_OUTOFMEM);
+		_o_throw_oom;
 	AddRef();
 	_o_return(this);
 }
@@ -807,7 +809,7 @@ ResultType Object::CallAsMethod(ExprTokenType &aFunc, ResultToken &aResultToken,
 		func = ValueBase(aFunc);
 	ExprTokenType **param = (ExprTokenType **)_malloca((aParamCount + 1) * sizeof(ExprTokenType *));
 	if (!param)
-		_o_throw(ERR_OUTOFMEM);
+		_o_throw_oom;
 	param[0] = &aThisToken;
 	memcpy(param + 1, aParam, aParamCount * sizeof(ExprTokenType *));
 	// return %func%(this, aParam*)
@@ -833,7 +835,7 @@ ResultType Object::CallMetaVarg(int aFlags, LPTSTR aName, ResultToken &aResultTo
 		return INVOKE_NOT_HANDLED;
 	auto vargs = Array::Create(aParam, aParamCount);
 	if (!vargs)
-		_o_throw(ERR_OUTOFMEM);
+		_o_throw_oom;
 	ExprTokenType name_token(aName), args_token(vargs), *param[4];
 	param[0] = &aThisToken; // this
 	param[1] = &name_token; // name
@@ -906,7 +908,7 @@ bool Object::IsDerivedFrom(IObject *aBase)
 	for (base = mBase; base; base = base->mBase)
 		if (base == aBase)
 			return true;
-	return aBase == Object::sPrototype; // Should only be true when this == aBase, since every other Object should derive from it.
+	return false;
 }
 
 
@@ -938,7 +940,7 @@ bool Object::CanSetBase(Object *aBase)
 ResultType Object::SetBase(Object *aNewBase, ResultToken &aResultToken)
 {
 	if (!CanSetBase(aNewBase))
-		return aResultToken.Error(ERR_INVALID_BASE);
+		return aResultToken.ValueError(ERR_INVALID_BASE);
 	SetBase(aNewBase);
 	return OK;
 }
@@ -989,7 +991,8 @@ Object *Object::CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember a
 
 Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMember[], int aMemberCount)
 {
-	obj->mFlags |= NativeClassPrototype;
+	if (aMemberCount)
+		obj->mFlags |= NativeClassPrototype;
 
 	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
 	TCHAR *name = full_name + _stprintf(full_name, _T("%s.Prototype."), aClassName);
@@ -1054,24 +1057,25 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 	return obj;
 }
 
-Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ObjectMethod aCtor)
+Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ObjectCtor aCtor)
 {
 	auto class_obj = CreateClass(aPrototype);
 
 	class_obj->SetBase(aBase);
 
-	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
-	_stprintf(full_name, _T("%s.Call"), aClassName);
-	auto ctor = new BuiltInMethod(SimpleHeap::Malloc(full_name));
-	ctor->mBIM = aCtor;
-	ctor->mMID = 0;
-	ctor->mMIT = IT_CALL;
-	ctor->mMinParams = 0;
-	ctor->mParamCount = MAX_FUNCTION_PARAMS;
-	ctor->mIsVariadic = true;
-	ctor->mClass = nullptr; // Safe to call on any Object.
-	class_obj->DefineMethod(_T("Call"), ctor);
-	ctor->Release();
+	if (aCtor)
+	{
+		TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
+		_stprintf(full_name, _T("%s.Call"), aClassName);
+		auto ctor = new BuiltInFunc(SimpleHeap::Malloc(full_name));
+		ctor->mBIF = aCtor;
+		ctor->mFID = FID_Object_New;
+		ctor->mMinParams = 1; // Class object.
+		ctor->mParamCount = 1;
+		ctor->mIsVariadic = true; // Always variadic since __new(...) may be redefined/overridden.
+		class_obj->DefineMethod(_T("Call"), ctor);
+		ctor->Release();
+	}
 
 	auto var = g_script.FindOrAddVar(aClassName, 0, VAR_DECLARE_GLOBAL);
 	var->AssignSkipAddRef(class_obj);
@@ -1109,7 +1113,7 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 	{
 		// Our return value when only one arg is given is supposed to be the value
 		// removed from this[arg].  Since this[arg] would throw an exception...
-		_o_throw(ERR_NO_KEY, ParamIndexToString(0, _f_number_buf));
+		_o_throw(ERR_NO_KEY, ParamIndexToString(0, _f_number_buf), ErrorPrototype::Key);
 	}
 	// Set return value to the removed item.
 	item->ReturnMove(aResultToken);
@@ -1184,7 +1188,7 @@ ResultType Map::CaseSense(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 		mFlags = (mFlags | MapCaseless) & ~MapUseLocale;
 		break;
 	default:
-		_o_throw(ERR_INVALID_VALUE, value);
+		_o_throw_value(ERR_INVALID_VALUE, value);
 	}
 	return OK;
 }
@@ -1197,7 +1201,7 @@ ResultType Object::GetCapacity(ResultToken &aResultToken, int aID, int aFlags, E
 ResultType Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (!ParamIndexIsNumeric(0))
-		_o_throw(ERR_PARAM1_INVALID);
+		return aResultToken.ParamError(1, aParam[0], _T("Number")); // Param index differs because this is actually the global function ObjSetCapacity().
 
 	index_t desired_count = (index_t)ParamIndexToInt64(0);
 	if (desired_count < mFields.Length())
@@ -1219,7 +1223,7 @@ ResultType Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, E
 	// At this point, failure isn't critical since nothing is being stored yet.  However, it might be easier to
 	// debug if an error is thrown here rather than possibly later, when the array attempts to resize itself to
 	// fit new items.  This also avoids the need for scripts to check if the return value is less than expected:
-	_o_throw(ERR_OUTOFMEM);
+	_o_throw_oom;
 }
 
 ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1230,7 +1234,7 @@ ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	}
 
 	if (!ParamIndexIsNumeric(0))
-		_o_throw(ERR_PARAM1_INVALID);
+		_o_throw_type(_T("Number"), *aParam[0]);
 
 	index_t desired_count = (index_t)ParamIndexToInt64(0);
 	if (desired_count < mCount)
@@ -1258,7 +1262,7 @@ ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	// At this point, failure isn't critical since nothing is being stored yet.  However, it might be easier to
 	// debug if an error is thrown here rather than possibly later, when the array attempts to resize itself to
 	// fit new items.  This also avoids the need for scripts to check if the return value is less than expected:
-	_o_throw(ERR_OUTOFMEM);
+	_o_throw_oom;
 }
 
 ResultType Object::OwnProps(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -1288,10 +1292,10 @@ ResultType Map::Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTyp
 ResultType Object::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (GetNativeBase() != Object::sPrototype)
-		_o_throw(ERR_TYPE_MISMATCH); // Cannot construct an instance of this class using Object::Clone().
+		_o_throw(ERR_TYPE_MISMATCH, ErrorPrototype::Type); // Cannot construct an instance of this class using Object::Clone().
 	auto clone = new Object();
 	if (!CloneTo(*clone))
-		_o_throw(ERR_OUTOFMEM);	
+		_o_throw_oom;	
 	_o_return(clone);
 }
 
@@ -1299,7 +1303,7 @@ ResultType Map::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenT
 {
 	auto clone = new Map();
 	if (!CloneTo(*clone))
-		_o_throw(ERR_OUTOFMEM);
+		_o_throw_oom;
 	_o_return(clone);
 }
 
@@ -1364,7 +1368,7 @@ ResultType Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, Ex
 {
 	auto name = ParamIndexToString(0, _f_number_buf);
 	if (!*name)
-		_o_throw(ERR_PARAM1_INVALID);
+		_o_throw_param(0);
 	ExprTokenType getter, setter, method, value;
 	getter.symbol = SYM_INVALID;
 	setter.symbol = SYM_INVALID;
@@ -1379,17 +1383,17 @@ ResultType Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, Ex
 		// To help prevent errors, throw if none of the above properties were present.  This also serves to
 		// reserve some cases for possible future use, such as passing a function object to imply {get:...}.
 		|| getter.symbol == SYM_INVALID && setter.symbol == SYM_INVALID && method.symbol == SYM_INVALID && value.symbol == SYM_INVALID)
-		_o_throw(ERR_PARAM2_INVALID);
+		_o_throw_param(1);
 	if (value.symbol != SYM_INVALID) // Above already verified that neither Get nor Set was present.
 	{
 		if (!SetOwnProp(name, value))
-			_o_throw(ERR_OUTOFMEM);
+			_o_throw_oom;
 		AddRef();
 		_o_return(this);
 	}
 	auto prop = DefineProperty(name);
 	if (!prop)
-		_o_throw(ERR_OUTOFMEM);
+		_o_throw_oom;
 	if (getter.symbol == SYM_OBJECT) prop->SetGetter(getter.object);
 	if (setter.symbol == SYM_OBJECT) prop->SetSetter(setter.object);
 	if (method.symbol == SYM_OBJECT) prop->SetMethod(method.object);
@@ -1427,7 +1431,7 @@ ResultType Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags
 {
 	auto name = ParamIndexToString(0, _f_number_buf);
 	if (!*name)
-		_o_throw(ERR_PARAM1_INVALID);
+		_o_throw_param(0);
 	auto field = FindField(name);
 	if (!field)
 		_o__ret(aResultToken.UnknownMemberError(ExprTokenType(this), IT_GET, name));
@@ -1453,15 +1457,21 @@ ResultType Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags
 // Class objects
 //
 
-template<class T>
-ResultType Object::New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::New(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	auto obj = T::Create();
-	if (!obj)
-		_o_throw(ERR_OUTOFMEM);
-	if (!obj->SetBase(dynamic_cast<Object *>(GetOwnPropObj(_T("Prototype"))), aResultToken))
+	Object *base = dynamic_cast<Object *>(ParamIndexToObject(0));
+	Object *proto = base ? dynamic_cast<Object *>(base->GetOwnPropObj(_T("Prototype"))) : nullptr;
+	if (!proto)
+	{
+		Release();
+		_o_throw_param(0);
+	}
+	if (!SetBase(proto, aResultToken))
+	{
+		Release();
 		return FAIL;
-	return obj->Construct(aResultToken, aParam, aParamCount);
+	}
+	return Construct(aResultToken, aParam + 1, aParamCount - 1);
 }
 
 ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
@@ -1882,13 +1892,13 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	{
 		auto index = ParamToZeroIndex(*aParam[aParamCount - 1]);
 		if (index >= mLength)
-			_o_throw(ERR_INVALID_INDEX, ParamIndexToString(aParamCount - 1, _f_number_buf));
+			_o_throw(ERR_INVALID_INDEX, ParamIndexToString(aParamCount - 1, _f_number_buf), ErrorPrototype::Index);
 		auto &item = mItem[index];
 		if (IS_INVOKE_GET)
 			item.ReturnRef(aResultToken);
 		else
 			if (!item.Assign(*aParam[0]))
-				_o_throw(ERR_OUTOFMEM);
+				_o_throw_oom;
 		return OK;
 	}
 
@@ -1896,11 +1906,13 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	case P_Capacity:
 		if (IS_INVOKE_SET)
 		{
+			if (!ParamIndexIsNumeric(0))
+				_o_throw_type(_T("Number"), *aParam[0]);
 			auto arg64 = (UINT64)ParamIndexToInt64(0);
-			if (arg64 < 0 || arg64 > MaxIndex || !ParamIndexIsNumeric(0))
-				_o_throw(ERR_INVALID_VALUE);
+			if (arg64 < 0 || arg64 > MaxIndex)
+				_o_throw_value(ERR_INVALID_VALUE);
 			if (!(aID == P_Capacity ? SetCapacity((index_t)arg64) : SetLength((index_t)arg64)))
-				_o_throw(ERR_OUTOFMEM);
+				_o_throw_oom;
 			return OK;
 		}
 		_o_return(aID == P_Capacity ? Capacity() : Length());
@@ -1913,14 +1925,14 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		{
 			index = ParamToZeroIndex(*aParam[0]);
 			if (index > mLength || index + (index_t)aParamCount > MaxIndex) // The second condition is very unlikely.
-				_o_throw(ERR_PARAM1_INVALID);
+				_o_throw_param(0);
 			aParam++;
 			aParamCount--;
 		}
 		else
 			index = mLength;
 		if (!InsertAt(index, aParam, aParamCount))
-			_o_throw(ERR_OUTOFMEM);
+			_o_throw_oom;
 		return OK;
 	}
 
@@ -1932,7 +1944,7 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		{
 			index = ParamToZeroIndex(*aParam[0]);
 			if (index >= mLength)
-				_o_throw(ERR_PARAM1_INVALID);
+				_o_throw_param(0);
 		}
 		else
 		{
@@ -1943,7 +1955,7 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		
 		index_t count = (index_t)ParamIndexToOptionalInt64(1, 1);
 		if (index + count > mLength)
-			_o_throw(ERR_PARAM2_INVALID);
+			_o_throw_param(1);
 
 		if (aParamCount < 2) // Remove-and-return mode.
 		{
@@ -1976,7 +1988,7 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	case M_Clone:
 		if (auto *arr = Clone())
 			_o_return(arr);
-		_o_throw(ERR_OUTOFMEM);
+		_o_throw_oom;
 
 	case M___Enum:
 		_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&Array::GetEnumItem)));
@@ -2454,7 +2466,7 @@ ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	case M_Bind:
 		if (BoundFunc *bf = BoundFunc::Bind(this, IT_CALL, nullptr, aParam, aParamCount))
 			_o_return(bf);
-		_o_throw(ERR_OUTOFMEM);
+		_o_throw_oom;
 
 	case M_IsOptional:
 		if (aParamCount)
@@ -2463,7 +2475,7 @@ ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 			if (param > 0 && (param <= mParamCount || mIsVariadic))
 				_o_return(param > mMinParams);
 			else
-				_o_throw(ERR_PARAM1_INVALID);
+				_o_throw_param(0);
 		}
 		else
 			_o_return(mMinParams != mParamCount || mIsVariadic); // True if any params are optional.
@@ -2473,7 +2485,7 @@ ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 		{
 			int param = ParamIndexToInt(0);
 			if (param <= 0 || param > mParamCount && !mIsVariadic)
-				_o_throw(ERR_PARAM1_INVALID);
+				_o_throw_param(0);
 			_o_return(ArgIsOutputVar(param-1));
 		}
 		else
@@ -2718,12 +2730,12 @@ ResultType BufferObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, 
 		if (IS_INVOKE_SET)
 		{
 			if (!ParamIndexIsNumeric(0))
-				_o_throw(ERR_INVALID_VALUE);
+				_o_throw_type(_T("Number"), *aParam[0]);
 			auto new_size = ParamIndexToInt64(0);
 			if (new_size < 0 || new_size > SIZE_MAX)
-				_o_throw(ERR_INVALID_VALUE);
+				_o_throw_value(ERR_INVALID_VALUE);
 			if (!Resize((size_t)new_size))
-				_o_throw(ERR_OUTOFMEM);
+				_o_throw_oom;
 			return OK;
 		}
 		_o_return(mSize);
@@ -2744,14 +2756,13 @@ ResultType BufferObject::Resize(size_t aNewSize)
 
 BIF_DECL(BIF_BufferAlloc)
 {
-	if (!ParamIndexIsNumeric(0))
-		_f_throw(ERR_PARAM1_INVALID);
+	Throw_if_Param_NaN(0);
 	auto size = ParamIndexToInt64(0);
 	if (size < 0 || size > SIZE_MAX)
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_param(0);
 	auto data = malloc((size_t)size);
 	if (!data)
-		_f_throw(ERR_OUTOFMEM);
+		_f_throw_oom;
 	if (!ParamIndexIsOmitted(1))
 		memset(data, (char)ParamIndexToInt64(1), (size_t)size);
 	auto bo = new BufferObject(data, (size_t)size);
@@ -2785,15 +2796,15 @@ BIF_DECL(BIF_ClipboardAll)
 			// Caller supplied an address.
 			caller_data = (size_t)ParamIndexToIntPtr(0);
 			if (caller_data < 65536) // Basic check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
-				_f_throw(ERR_PARAM1_INVALID);
+				_f_throw_param(0);
 			size = -1;
 		}
 		if (!ParamIndexIsOmitted(1))
 			size = (size_t)ParamIndexToIntPtr(1);
 		else if (size == -1) // i.e. it can be omitted when size != -1 (a string was passed).
-			_f_throw(ERR_PARAM2_MUST_NOT_BE_BLANK);
+			_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
 		if (  !(data = malloc(size))  ) // More likely to be due to invalid parameter than out of memory.
-			_f_throw(ERR_OUTOFMEM);
+			_f_throw_oom;
 		memcpy(data, (void *)caller_data, size);
 	}
 	auto obj = new ClipboardAll(data, size);
@@ -2818,6 +2829,54 @@ ObjectMember Func::sMembers[] =
 };
 
 
+
+ObjectMember RegExMatchObject::sMembers[] =
+{
+	Object_Method(__Enum, 0, 1),
+	Object_Member(__Get, Invoke, M_Value, IT_CALL, 2, 2),
+	Object_Member(__Item, Invoke, M_Value, IT_GET, 0, 1),
+	Object_Method(Value, 0, 1),
+	Object_Method(Pos, 0, 1),
+	Object_Method(Len, 0, 1),
+	Object_Method(Name, 0, 1),
+	Object_Method(Count, 0, 0),
+	Object_Method(Mark, 0, 0),
+};
+
+
+
+ObjectMember Object::sErrorMembers[]
+{
+	Object_Member(__New, Error__New, 0, IT_CALL, 0, 3)
+};
+
+
+
+struct ClassDef
+{
+	LPCTSTR name;
+	Object **proto_var;
+	BuiltInFunctionType ctor;
+	ObjectMember *members;
+	int member_count;
+	std::initializer_list<ClassDef> subclasses;
+};
+
+void DefineClasses(Object *aBaseClass, Object *aBaseProto, std::initializer_list<ClassDef> aClasses)
+{
+	for (auto &c : aClasses)
+	{
+		auto proto = (c.proto_var && *c.proto_var) ? *c.proto_var
+			: Object::CreatePrototype(const_cast<LPTSTR>(c.name), aBaseProto, c.members, c.member_count);
+		if (c.proto_var)
+			*c.proto_var = proto;
+		auto cobj = Object::CreateClass(const_cast<LPTSTR>(c.name), aBaseClass, proto, c.ctor);
+		if (c.subclasses.size())
+			DefineClasses(cobj, proto, c.subclasses);
+	}
+}
+
+
 Object *Object::CreateRootPrototypes()
 {
 	// Create the root prototypes before defining any members, since
@@ -2840,6 +2899,74 @@ Object *Object::CreateRootPrototypes()
 	DefineMembers(sPrototype, _T("Object"), sMembers, _countof(sMembers));
 	DefineMembers(Func::sPrototype, _T("Func"), Func::sMembers, _countof(Func::sMembers));
 
+	// Create classes.
+	//
+
+	sClassPrototype = Object::CreatePrototype(_T("Class"), Object::sPrototype);
+	auto anyClass = CreateClass(_T("Any"), sClassPrototype, sAnyPrototype, nullptr);
+	Object::sClass = CreateClass(_T("Object"), anyClass, Object::sPrototype, NewObject<Object>);
+
+	ObjectCtor no_ctor = nullptr;
+	ObjectMember *no_members = nullptr;
+
+	DefineClasses(Object::sClass, Object::sPrototype, {
+		{_T("Array"), &Array::sPrototype, NewObject<Array>
+			, Array::sMembers, _countof(Array::sMembers)},
+		{_T("Buffer"), &BufferObject::sPrototype, no_ctor, BufferObject::sMembers, _countof(BufferObject::sMembers), {
+			{_T("ClipboardAll")}
+		}},
+		{_T("Class"), &Object::sClassPrototype},
+		{_T("Error"), &ErrorPrototype::Error, no_ctor, sErrorMembers, _countof(sErrorMembers), {
+			{_T("IndexError"), &ErrorPrototype::Index, no_ctor, no_members, 0, {
+				{_T("KeyError"), &ErrorPrototype::Key}
+			}},
+			{_T("MemberError"), &ErrorPrototype::Member, no_ctor, no_members, 0, {
+				{_T("PropertyError"), &ErrorPrototype::Property},
+				{_T("MethodError"), &ErrorPrototype::Method}
+			}},
+			{_T("MemoryError"), &ErrorPrototype::Memory},
+			{_T("OSError"), &ErrorPrototype::OS},
+			{_T("TargetError"), &ErrorPrototype::Target},
+			{_T("TimeoutError"), &ErrorPrototype::Timeout},
+			{_T("TypeError"), &ErrorPrototype::Type},
+			{_T("ValueError"), &ErrorPrototype::Value},
+			{_T("ZeroDivisionError"), &ErrorPrototype::ZeroDivision}
+		}},
+		{_T("Func"), &Func::sPrototype, no_ctor, Func::sMembers, _countof(Func::sMembers), {
+			{_T("BoundFunc"), &BoundFunc::sPrototype},
+			{_T("Closure"), &Closure::sPrototype},
+			{_T("Enumerator"), &EnumBase::sPrototype}
+		}},
+		{_T("Gui"), &GuiType::sPrototype, NewObject<GuiType>
+			, GuiType::sMembers, GuiType::sMemberCount},
+		{_T("InputHook"), &InputObject::sPrototype, no_ctor
+			, InputObject::sMembers, InputObject::sMemberCount},
+		{_T("Map"), &Map::sPrototype, NewObject<Map>
+			, Map::sMembers, _countof(Map::sMembers)},
+		{_T("Menu"), &UserMenu::sPrototype, NewObject<UserMenu>
+			, UserMenu::sMembers, UserMenu::sMemberCount, {
+			{_T("MenuBar"), &UserMenu::sBarPrototype, NewObject<UserMenu::Bar>}
+		}},
+		{_T("RegExMatch"), &RegExMatchObject::sPrototype, no_ctor
+			, RegExMatchObject::sMembers, _countof(RegExMatchObject::sMembers)}
+	});
+
+	DefineClasses(anyClass, sAnyPrototype, {
+		{_T("Primitive"), &Object::sPrimitivePrototype, no_ctor, no_members, 0, {
+			{_T("Number"), &Object::sNumberPrototype, no_ctor, no_members, 0, {
+				{_T("Float"), &Object::sFloatPrototype},
+				{_T("Integer"), &Object::sIntegerPrototype}
+			}},
+			{_T("String"), &Object::sStringPrototype}
+		}}
+	});
+
+	GuiControlType::DefineControlClasses();
+	DefineFileClass();
+
+	// Permit Object.New to construct Error objects.
+	ErrorPrototype::Error->mFlags &= ~NativeClassPrototype;
+
 	return sAnyPrototype;
 }
 
@@ -2847,56 +2974,31 @@ Object *Object::sAnyPrototype = CreateRootPrototypes();
 Object *Func::sPrototype;
 Object *Object::sPrototype;
 
-//																		Direct base			Members
-Object *Object::sClassPrototype	= Object::CreatePrototype(_T("Class"),	Object::sPrototype);
-Object *Array::sPrototype		= Object::CreatePrototype(_T("Array"),	Object::sPrototype,	sMembers, _countof(sMembers));
-Object *Map::sPrototype			= Object::CreatePrototype(_T("Map"),	Object::sPrototype,	sMembers, _countof(sMembers));
+Object *Object::sClassPrototype;
+Object *Array::sPrototype;
+Object *Map::sPrototype;
 
-//																Direct base			Prototype			Constructor
-Object *Object::sClass		= Object::CreateClass(_T("Object"),	sClassPrototype,	sPrototype,			static_cast<ObjectMethod>(&New<Object>));
-Object *Object::sClassClass	= Object::CreateClass(_T("Class"),	Object::sClass,		sClassPrototype,	static_cast<ObjectMethod>(&New<Object>));
-Object *Array::sClass		= Object::CreateClass(_T("Array"),	Object::sClass,		sPrototype,			static_cast<ObjectMethod>(&New<Array>));
-Object *Map::sClass			= Object::CreateClass(_T("Map"),	Object::sClass,		sPrototype,			static_cast<ObjectMethod>(&New<Map>));
+Object *Object::sClass;
 
+Object *Closure::sPrototype;
+Object *BoundFunc::sPrototype;
+Object *EnumBase::sPrototype;
 
+Object *BufferObject::sPrototype;
+Object *ClipboardAll::sPrototype;
 
-Object *Closure::sPrototype = Object::CreatePrototype(_T("Closure"), Func::sPrototype);
-Object *BoundFunc::sPrototype = Object::CreatePrototype(_T("BoundFunc"), Func::sPrototype);
-Object *EnumBase::sPrototype = Object::CreatePrototype(_T("Enumerator"), Func::sPrototype);
+Object *RegExMatchObject::sPrototype;
 
+Object *GuiType::sPrototype;
+Object *UserMenu::sPrototype;
+Object *UserMenu::sBarPrototype;
 
-
-Object *BufferObject::sPrototype = Object::CreatePrototype(_T("Buffer"), Object::sPrototype, sMembers, _countof(sMembers));
-Object *ClipboardAll::sPrototype = Object::CreatePrototype(_T("ClipboardAll"), BufferObject::sPrototype);
-
-
-
-ObjectMember RegExMatchObject::sMembers[] =
+namespace ErrorPrototype
 {
-	Object_Method(__Enum, 0, 1),
-	Object_Member(__Get, Invoke, M_Value, IT_CALL, 2, 2),
-	Object_Member(__Item, Invoke, M_Value, IT_GET, 0, 1),
-	Object_Method(Value, 0, 1),
-	Object_Method(Pos, 0, 1),
-	Object_Method(Len, 0, 1),
-	Object_Method(Name, 0, 1),
-	Object_Method(Count, 0, 0),
-	Object_Method(Mark, 0, 0),
-};
-
-Object *RegExMatchObject::sPrototype = CreatePrototype(_T("RegExMatch"), Object::sPrototype, sMembers, _countof(sMembers));
-
-
-
-Object *GuiType::sPrototype = CreatePrototype(_T("Gui"), Object::sPrototype, sMembers, sMemberCount);
-Object *GuiType::sClass = CreateClass(_T("Gui"), Object::sClass, sPrototype, static_cast<ObjectMethod>(&New<GuiType>));
-
-
-
-Object *UserMenu::sPrototype = CreatePrototype(_T("Menu"), Object::sPrototype, sMembers, sMemberCount);
-Object *UserMenu::sBarPrototype = CreatePrototype(_T("MenuBar"), sPrototype);
-Object *UserMenu::sClass = CreateClass(_T("Menu"), Object::sClass, sPrototype, static_cast<ObjectMethod>(&New<UserMenu>));
-Object *UserMenu::sBarClass = CreateClass(_T("MenuBar"), sClass, sBarPrototype, static_cast<ObjectMethod>(&New<UserMenu::Bar>));
+	Object *Error, *Memory, *Type, *Value, *OS, *ZeroDivision;
+	Object *Target, *Member, *Property, *Method, *Index, *Key;
+	Object *Timeout;
+}
 
 
 
@@ -2904,11 +3006,11 @@ Object *UserMenu::sBarClass = CreateClass(_T("MenuBar"), sClass, sBarPrototype, 
 // Primitive values as objects
 //
 
-Object *Object::sPrimitivePrototype = CreatePrototype(_T("Primitive"), Object::sAnyPrototype);
-Object *Object::sStringPrototype = CreatePrototype(_T("String"), Object::sPrimitivePrototype);
-Object *Object::sNumberPrototype = CreatePrototype(_T("Number"), Object::sPrimitivePrototype);
-Object *Object::sIntegerPrototype = CreatePrototype(_T("Integer"), Object::sNumberPrototype);
-Object *Object::sFloatPrototype = CreatePrototype(_T("Float"), Object::sNumberPrototype);
+Object *Object::sPrimitivePrototype;
+Object *Object::sStringPrototype;
+Object *Object::sNumberPrototype;
+Object *Object::sIntegerPrototype;
+Object *Object::sFloatPrototype;
 
 Object *Object::ValueBase(ExprTokenType &aValue)
 {

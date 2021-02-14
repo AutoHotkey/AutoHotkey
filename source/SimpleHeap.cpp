@@ -36,7 +36,7 @@ LPTSTR SimpleHeap::Malloc(LPCTSTR aBuf, size_t aLength)
 	LPTSTR new_buf;
 	if (   !(new_buf = (LPTSTR)SimpleHeap::Malloc((aLength + 1) * sizeof(TCHAR)))   ) // +1 for the zero terminator.
 	{
-		g_script.ScriptError(ERR_OUTOFMEM, aBuf);
+		MemoryError();
 		return NULL; // Callers may rely on NULL vs. "" being returned in the event of failure.
 	}
 	if (aLength)
@@ -56,14 +56,18 @@ void* SimpleHeap::Malloc(size_t aSize)
 // potentially large linked list or maintaining and traversing an array of
 // "under-utilized" blocks.
 {
-	if (aSize < 1 || aSize > BLOCK_SIZE)
+	if (aSize < 1)
 		return NULL;
 	if (!sFirst) // We need at least one block to do anything, so create it.
 		if (   !(sFirst = CreateBlock())   )
 			return NULL;
 	if (aSize > sLast->mSpaceAvailable)
-		if (   !(sLast->mNextBlock = CreateBlock())   )
+	{
+		if (aSize > MAX_ALLOC_IN_NEW_BLOCK) // Also covers aSize > BLOCK_SIZE.
+			return malloc(aSize); // Avoid wasting the remainder of the block.
+		if (!(sLast->mNextBlock = CreateBlock()))
 			return NULL;
+	}
 	sMostRecentlyAllocated = sLast->mFreeMarker; // THIS IS NOW THE NEWLY ALLOCATED BLOCK FOR THE CALLER, which is 32-bit aligned because the previous call to this function (i.e. the logic below) set it up that way.
 	// v1.0.40.04: Set up the NEXT chunk to be aligned on a 32-bit boundary (the first chunk in each block
 	// should always be aligned since the block's address came from malloc()).  On average, this change

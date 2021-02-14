@@ -1496,11 +1496,11 @@ type_mismatch:
 		goto abort_if_result;
 	}
 divide_by_zero:
-	error_msg = ERR_DIVIDEBYZERO;
-	goto abort_with_exception;
+	aResult = g_script.RuntimeError(ERR_DIVIDEBYZERO, nullptr, FAIL_OR_OK, this, ErrorPrototype::ZeroDivision);
+	goto abort_if_result;
 outofmem:
-	error_msg = ERR_OUTOFMEM;
-	goto abort_with_exception;
+	aResult = MemoryError();
+	goto abort_if_result;
 unset_var:
 	aResult = g_script.VarUnsetError(error_value->var);
 	goto abort_if_result;
@@ -1558,7 +1558,7 @@ ResultType Line::ExpandSingleArg(int aArgIndex, ResultToken &aResultToken, LPTST
 		if ( !(aDerefBuf = tmalloc(space_needed)) )
 		{
 			aDerefBufSize = 0;
-			return LineError(ERR_OUTOFMEM);
+			return MemoryError();
 		}
 		aDerefBufSize = space_needed;
 		if (aDerefBufSize > LARGE_DEREF_BUF_SIZE)
@@ -1621,7 +1621,7 @@ ResultType VariadicCall(IObject *aObj, IObject_Invoke_PARAMS_DECL)
 		// Allocate new param list and tokens; tokens first for convenience.
 		token = (ExprTokenType *)_malloca(space_needed);
 		if (!token)
-			return aResultToken.Error(ERR_OUTOFMEM);
+			return aResultToken.MemoryError();
 		ExprTokenType **param_list = (ExprTokenType **)(token + extra_params);
 		// Since built-in functions don't have variables we can directly assign to,
 		// we need to expand the param object's contents into an array of tokens:
@@ -1736,7 +1736,9 @@ bool BuiltInMethod::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int
 	{
 		LPCTSTR expected_type;
 		ExprTokenType value;
-		if (mClass->GetOwnProp(value, _T("__Class")) && value.symbol == SYM_STRING)
+		if (!mClass)
+			expected_type = _T("Object");
+		else if (mClass->GetOwnProp(value, _T("__Class")) && value.symbol == SYM_STRING)
 			expected_type = value.marker;
 		else
 			expected_type = _T("?"); // Script may have tampered with the prototype.
@@ -1805,7 +1807,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			// underlying recursed/interrupted instance's memory, which it will need intact when it's resumed.
 			if (!Var::BackupFunctionVars(*this, recurse.backup, recurse.backup_count)) // Out of memory.
 			{
-				aResultToken.Error(ERR_OUTOFMEM, mName);
+				aResultToken.MemoryError();
 				return false;
 			}
 		} // if (func.mInstances > 0)
@@ -1974,7 +1976,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			auto vararg_obj = Array::Create();
 			if (!vararg_obj)
 			{
-				aResultToken.Error(ERR_OUTOFMEM, mName); // Abort thread.
+				aResultToken.MemoryError();
 				goto free_and_return;
 			}
 			if (j < aParamCount)
@@ -2081,7 +2083,7 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 		{
 			// Error msg was formerly: "Ran out of memory while attempting to dereference this line's parameters."
 			sDerefBufSize = 0;  // Reset so that it can make another attempt, possibly smaller, next time.
-			return LineError(ERR_OUTOFMEM); // Short msg since so rare.
+			return MemoryError();
 		}
 		sDerefBufSize = new_buf_size;
 		if (sDerefBufSize > LARGE_DEREF_BUF_SIZE)

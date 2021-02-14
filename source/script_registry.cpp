@@ -357,7 +357,7 @@ void RegWrite(ResultToken &aResultToken, ExprTokenType &aValue, DWORD aValueType
 	LONG result;
 
 	if (aValueType == REG_NONE)
-		_f_throw(ERR_PARAM2_REQUIRED);
+		_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
 
 	if (aValueType != REG_DWORD)
 		value = TokenToString(aValue, nbuf, &length);
@@ -521,13 +521,13 @@ void RegDelete(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTS
 	LONG result;
 
 	if (!aRootKey)
-		_f_throw(ERR_PARAM1_INVALID);
+		_f_throw_value(ERR_PARAM1_INVALID);
 	// Fix for v1.0.48: Don't remove the entire key if it's a root key!  According to MSDN,
 	// the root key would be opened by RegOpenKeyEx() further below whenever aRegSubkey is NULL
 	// or an empty string. aValueName is also checked to preserve the ability to delete a value
 	// that exists directly under a root key.
 	if (  (!aRegSubkey || !*aRegSubkey) && !aValueName  )
-		_f_throw(_T("Cannot delete root key"));
+		_f_throw_value(_T("Cannot delete root key"));
 
 	// Open the key we want
 	HKEY hRegKey;
@@ -620,7 +620,7 @@ BIF_DECL(BIF_Reg)
 			{
 				value_type = Line::RegConvertValueType(ParamIndexToString(1));
 				if (value_type == REG_NONE) // In this case REG_NONE means unknown/invalid vs. omitted.
-					_f_throw(ERR_PARAM2_INVALID);
+					_f_throw_param(1);
 			}
 			aParamCount -= 2;
 		}
@@ -660,7 +660,7 @@ BIF_DECL(BIF_Reg)
 		LPTSTR key_name = ParamIndexToOptionalString(0); // No buf needed since numbers aren't valid root keys.
 		root_key = Line::RegConvertKey(key_name, &sub_key, &close_root);
 		if (!root_key)
-			_f_throw(action == FID_RegWrite ? ERR_PARAM3_INVALID : ERR_PARAM1_INVALID, key_name);
+			_f_throw_value(action == FID_RegWrite ? ERR_PARAM3_INVALID : ERR_PARAM1_INVALID, key_name);
 	}
 	if (!ParamIndexIsOmitted(1)) // Implies this isn't RegDeleteKey.
 		value_name = ParamIndexToString(1, _f_number_buf);

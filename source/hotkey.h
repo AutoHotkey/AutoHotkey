@@ -203,15 +203,6 @@ public:
 
 	static void AllDestructAndExit(int exit_code);
 
-	// Currently unused (filtered out by a macro):
-	#define HOTKEY_EL_BADLABEL           1
-	#define HOTKEY_EL_INVALID_KEYNAME    2
-	#define HOTKEY_EL_UNSUPPORTED_PREFIX 3
-	#define HOTKEY_EL_ALTTAB             4
-	#define HOTKEY_EL_NOTEXIST           5
-	#define HOTKEY_EL_NOTEXISTVARIANT    6
-	#define HOTKEY_EL_MAXCOUNT           98 // 98 allows room for other ErrorLevels to be added in between.
-	#define HOTKEY_EL_MEM                99
 	static ResultType IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultToken);
 	static ResultType Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions
 		, IObject *aJumpToLabel, HookActionType aHookAction, ResultToken &aResultToken);

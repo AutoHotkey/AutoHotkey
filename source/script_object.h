@@ -72,6 +72,7 @@ public:
 // Helpers for IObject::Invoke implementations.
 //
 
+typedef BuiltInFunctionType ObjectCtor;
 typedef ResultType (IObject::*ObjectMethod)(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 struct ObjectMember
 {
@@ -336,6 +337,7 @@ public:
 	static Object *Create();
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
 
+	ResultType New(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	bool HasProp(name_t aName);
@@ -393,6 +395,7 @@ public:
 
 	bool SetOwnProp(name_t aName, __int64 aValue) { return SetOwnProp(aName, ExprTokenType(aValue)); }
 	bool SetOwnProp(name_t aName, IObject *aValue) { return SetOwnProp(aName, ExprTokenType(aValue)); }
+	bool SetOwnProp(name_t aName, LPCTSTR aValue) { return SetOwnProp(aName, ExprTokenType(const_cast<LPTSTR>(aValue))); }
 
 	void DeleteOwnProp(name_t aName)
 	{
@@ -435,14 +438,15 @@ public:
 
 	static ObjectMember sMembers[];
 	static ObjectMember sClassMembers[];
-	static Object *sPrototype, *sClass, *sClassPrototype, *sClassClass;
+	static ObjectMember sErrorMembers[];
+	static Object *sPrototype, *sClass, *sClassPrototype;
 
 	static Object *CreateRootPrototypes();
 	static Object *CreateClass(Object *aPrototype);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase = nullptr);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount);
 	static Object *DefineMembers(Object *aObject, LPTSTR aClassName, ObjectMember aMember[], int aMemberCount);
-	static Object *CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ObjectMethod aCtor);
+	static Object *CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ObjectCtor aCtor);
 
 	ResultType CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
@@ -460,9 +464,7 @@ public:
 	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType GetMethod(ResultToken &aResultToken, name_t aName);
 
-	// Class methods:
-	template<class T>
-	ResultType New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	// For pseudo-objects:
 	static ObjectMember sValueMembers[];
@@ -544,7 +546,7 @@ public:
 		M___Enum
 	};
 	static ObjectMember sMembers[];
-	static Object *sPrototype, *sClass;
+	static Object *sPrototype;
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
@@ -688,7 +690,7 @@ public:
 	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	static ObjectMember sMembers[];
-	static Object *sPrototype, *sClass;
+	static Object *sPrototype;
 };
 
 
@@ -787,6 +789,19 @@ public:
 	ClipboardAll(void *aData, size_t aSize) : BufferObject(aData, aSize) {}
 	static Object *sPrototype;
 };
+
+
+
+void DefineFileClass();
+
+
+
+namespace ErrorPrototype
+{
+	extern Object *Error, *Memory, *Type, *Value, *OS, *ZeroDivision;
+	extern Object *Target, *Member, *Property, *Method, *Index, *Key;
+	extern Object *Timeout;
+}
 
 
 

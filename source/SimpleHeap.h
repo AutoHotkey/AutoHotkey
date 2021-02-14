@@ -29,13 +29,13 @@ GNU General Public License for more details.
 
 // The size of each block in bytes.  Use a size that's a good compromise
 // of avg. wastage vs. reducing memory fragmentation and overhead.
-// But be careful never to reduce it to something less than LINE_SIZE
-// (the maximum line length that can be loaded -- currently 16K), otherwise,
-// memory for that line might be impossible to allocate.
 // Update: reduced it from 64K to 32K since many scripts tend to be small.
 // Update 2 (fincs): Use twice as big blocks when compiling for Unicode because
 // Unicode strings are twice as large.
 #define BLOCK_SIZE (32 * 1024 * sizeof(TCHAR)) // Relied upon by Malloc() to be a multiple of 4.
+// The maximum size for a new allocation when a new block must be created to fulfill it.
+// Allocations under this size might cause wasted space at the end of the previous block.
+#define MAX_ALLOC_IN_NEW_BLOCK (1024 * sizeof(TCHAR))
 
 class SimpleHeap
 {

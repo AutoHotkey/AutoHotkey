@@ -139,6 +139,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_UNRECOGNIZED_ACTION _T("This line does not contain a recognized action.")
 #define ERR_NONEXISTENT_HOTKEY _T("Nonexistent hotkey.")
 #define ERR_NONEXISTENT_VARIANT _T("Nonexistent hotkey variant (IfWin).")
+#define ERR_NONEXISTENT_HOTSTRING _T("Nonexistent hotstring.")
 #define ERR_INVALID_KEYNAME _T("Invalid key name.")
 #define ERR_UNSUPPORTED_PREFIX _T("Unsupported prefix key.")
 #define ERR_ALTTAB_MODLR _T("This AltTab hotkey must specify which key (L or R).")
@@ -429,11 +430,6 @@ struct ArgStruct
 
 __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 
-#define BIF_DECL_PARAMS ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount
-
-// The following macro is used for definitions and declarations of built-in functions:
-#define BIF_DECL(name) void name(BIF_DECL_PARAMS)
-
 #define _f__oneline(act)		do { act } while (0)		// Make the macro safe to use like a function, under if(), etc.
 #define _f__ret(act)			_f__oneline( act; return; )	// BIFs have no return value.
 #define _o__ret(act)			return (act)				// IObject::Invoke() returns ResultType.
@@ -444,10 +440,17 @@ __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 #define _f_return(...)			_f__ret(aResultToken.Return(__VA_ARGS__))
 #define _o_return(...)			_o__ret(aResultToken.Return(__VA_ARGS__))
 #define _f_throw(...)			_f__ret(aResultToken.Error(__VA_ARGS__))
+#define _f_throw_param(_prm_, ...)	return ((void)aResultToken.ParamError(_prm_, aParam[_prm_], __VA_ARGS__))
 #define _f_throw_win32(...)		return ((void)aResultToken.Win32Error(__VA_ARGS__))
+#define _f_throw_value(...)		return ((void)aResultToken.ValueError(__VA_ARGS__))
 #define _f_throw_type(...)		return ((void)aResultToken.TypeError(__VA_ARGS__))
+#define _f_throw_oom			return ((void)aResultToken.MemoryError())
 #define _o_throw(...)			_o__ret(aResultToken.Error(__VA_ARGS__))
+#define _o_throw_param(_prm_, ...)	return aResultToken.ParamError(_prm_, aParam[_prm_], __VA_ARGS__)
 #define _o_throw_win32(...)		return aResultToken.Win32Error(__VA_ARGS__)
+#define _o_throw_value(...)		return aResultToken.ValueError(__VA_ARGS__)
+#define _o_throw_type(...)		return aResultToken.TypeError(__VA_ARGS__)
+#define _o_throw_oom			return aResultToken.MemoryError()
 #define _f_return_FAIL			_f__ret(aResultToken.SetExitResult(FAIL))
 #define _o_return_FAIL			_o__ret(aResultToken.SetExitResult(FAIL))
 // The _f_set_retval macros should be used with care because the integer macros assume symbol
@@ -617,6 +620,7 @@ enum JoyControls {JOYCTRL_INVALID, JOYCTRL_XPOS, JOYCTRL_YPOS, JOYCTRL_ZPOS
 // C++ function to tell it which function is being called.  Each group starts at ID 0 in case
 // it helps the compiler to reduce code size.
 enum BuiltInFunctionID {
+	FID_Object_New = -1,
 	FID_DllCall = 0, FID_ComCall,
 	FID_LV_GetNext = 0, FID_LV_GetCount,
 	FID_LV_Add = 0, FID_LV_Insert, FID_LV_Modify,
@@ -678,7 +682,8 @@ enum GuiControlTypes {GUI_CONTROL_INVALID // GUI_CONTROL_INVALID must be zero du
 	, GUI_CONTROL_LISTBOX, GUI_CONTROL_LISTVIEW, GUI_CONTROL_TREEVIEW
 	, GUI_CONTROL_EDIT, GUI_CONTROL_DATETIME, GUI_CONTROL_MONTHCAL, GUI_CONTROL_HOTKEY
 	, GUI_CONTROL_UPDOWN, GUI_CONTROL_SLIDER, GUI_CONTROL_PROGRESS, GUI_CONTROL_TAB, GUI_CONTROL_TAB2, GUI_CONTROL_TAB3
-	, GUI_CONTROL_ACTIVEX, GUI_CONTROL_LINK, GUI_CONTROL_CUSTOM, GUI_CONTROL_STATUSBAR}; // Kept last to reflect it being bottommost in switch()s (for perf), since not too often used.
+	, GUI_CONTROL_ACTIVEX, GUI_CONTROL_LINK, GUI_CONTROL_CUSTOM, GUI_CONTROL_STATUSBAR // Kept last to reflect it being bottommost in switch()s (for perf), since not too often used.
+	, GUI_CONTROL_TYPE_COUNT};
 
 #define GUI_CONTROL_TYPE_NAMES  _T(""), \
 	_T("Text"), _T("Pic"), _T("GroupBox"), \
@@ -1353,8 +1358,8 @@ public:
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
-	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
-	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = NULL, LPCTSTR aExtraInfo = _T(""));
+	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo, Object *aPrototype);
+	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 	
 	ResultType ValidateVarUsage(Var *aVar, int aUsage);
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType);
@@ -1600,9 +1605,6 @@ struct UDFCallInfo
 };
 
 
-typedef BIF_DECL((* BuiltInFunctionType));
-
-
 class DECLSPEC_NOVTABLE Func : public Object
 {
 public:
@@ -1787,6 +1789,7 @@ class Closure : public Func
 	UserFunc *mFunc;
 	FreeVars *mVars;
 
+public:
 	static Object *sPrototype;
 
 	enum Flags : decltype(mFlags)
@@ -1794,7 +1797,6 @@ class Closure : public Func
 		ClosureGroupedFlag = LastObjectFlag << 1
 	};
 
-public:
 	Closure(UserFunc *aFunc, FreeVars *aVars, bool aIsGrouped)
 		: mFunc(aFunc), mVars(aVars), Func(aFunc->mName)
 	{
@@ -1834,9 +1836,9 @@ class BoundFunc : public Func
 		SetBase(sPrototype);
 	}
 
+public:
 	static Object *sPrototype;
 
-public:
 	static BoundFunc *Bind(IObject *aFunc, int aFlags, LPCTSTR aMember, ExprTokenType **aParam, int aParamCount);
 	~BoundFunc();
 	
@@ -1873,7 +1875,7 @@ public:
 	BuiltInFunctionID mFID; // For code sharing: this function's ID in the group of functions which share the same C++ function.
 	
 	BuiltInFunc(LPCTSTR aName) : NativeFunc(aName) {}
-	BuiltInFunc(FuncEntry &, UCHAR *aOutputVars);
+	BuiltInFunc(FuncEntry &);
 
 #define MAX_FUNC_OUTPUT_VAR 7
 	bool ArgIsOutputVar(int aIndex) override
@@ -2106,9 +2108,9 @@ struct MsgMonitorInstance
 class UserMenuItem;  // Forward declaration since classes use each other (i.e. a menu *item* can have a submenu).
 class UserMenu : public Object
 {
+public:
 	class Bar;
 
-public:
 	UserMenuItem *mFirstMenuItem = nullptr, *mLastMenuItem = nullptr, *mDefault = nullptr;
 	UserMenu *mNextMenu = nullptr;  // Next item in linked list
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
@@ -2122,7 +2124,7 @@ public:
 
 	static ObjectMember sMembers[];
 	static int sMemberCount;
-	static Object *sPrototype, *sBarPrototype, *sClass, *sBarClass;
+	static Object *sPrototype, *sBarPrototype;
 
 	// Don't overload new and delete operators in this case since we want to use real dynamic memory
 	// (since menus can be read in from a file, destroyed and recreated, over and over).
@@ -2311,7 +2313,7 @@ struct GuiControlType : public Object
 	GuiControlType() = delete;
 	GuiControlType(GuiType* owner) : gui(owner) {}
 
-	static LPTSTR sTypeNames[];
+	static LPTSTR sTypeNames[GUI_CONTROL_TYPE_COUNT];
 	static GuiControls ConvertTypeName(LPTSTR aTypeName);
 	LPTSTR GetTypeName();
 
@@ -2445,6 +2447,9 @@ struct GuiControlType : public Object
 	static ObjectMember sMembersTV[];
 	static ObjectMember sMembersSB[];
 
+	static Object *sPrototype, *sPrototypeList;
+	static Object *sPrototypes[GUI_CONTROL_TYPE_COUNT];
+	static void DefineControlClasses();
 	static Object *GetPrototype(GuiControls aType);
 
 	ResultType StatusBar(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
@@ -2608,7 +2613,7 @@ public:
 
 	static ObjectMember sMembers[];
 	static int sMemberCount;
-	static Object *sPrototype, *sClass;
+	static Object *sPrototype;
 
 	GuiType() // Constructor
 		: mHwnd(NULL), mOwner(NULL), mName(NULL)
@@ -2759,18 +2764,18 @@ public:
 	GuiControlType *ControlOverrideBkColor(GuiControlType &aControl);
 	void ControlGetBkColor(GuiControlType &aControl, bool aUseWindowColor, HBRUSH &aBrush, COLORREF &aColor);
 	
-	ResultType ControlSetContents(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText);
+	ResultType ControlSetContents(GuiControlType &aControl, ExprTokenType &aContents, ResultToken &aResultToken, bool aIsText);
 	ResultType ControlSetPic(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	ResultType ControlSetCheck(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken); // CheckBox, Radio
 	ResultType ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText); // DDL, ComboBox, ListBox, Tab
 	ResultType ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText);
 	ResultType ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
 	ResultType ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aFormat, ResultToken &aResultToken);
 	ResultType ControlSetMonthCal(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
 	ResultType ControlSetHotkey(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	ResultType ControlSetUpDown(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	ResultType ControlSetSlider(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	ResultType ControlSetProgress(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
+	ResultType ControlSetCheck(GuiControlType &aControl, int aValue, ResultToken &aResultToken); // CheckBox, Radio
+	ResultType ControlSetUpDown(GuiControlType &aControl, int aValue, ResultToken &aResultToken);
+	ResultType ControlSetSlider(GuiControlType &aControl, int aValue, ResultToken &aResultToken);
+	ResultType ControlSetProgress(GuiControlType &aControl, int aValue, ResultToken &aResultToken);
 
 	enum ValueModeType { Value_Mode, Text_Mode, Submit_Mode };
 
@@ -3114,7 +3119,7 @@ public:
 	ResultType CriticalError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 	// RuntimeError allows the user to choose to continue, in which case OK is returned instead of FAIL;
 	// therefore, caller must not rely on a FAIL result to abort the overall operation.
-	ResultType RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), ResultType aErrorType = FAIL_OR_OK, Line *aLine = nullptr);
+	ResultType RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), ResultType aErrorType = FAIL_OR_OK, Line *aLine = nullptr, Object *aPrototype = nullptr);
 
 	ResultType ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting);
 	enum VarRefUsageType { VARREF_READ = 0, VARREF_ISSET
@@ -3136,9 +3141,9 @@ public:
 	void CountNestedFuncRefs(UserFunc &aWithin, LPCTSTR aFuncName);
 
 	ResultType ThrowIfTrue(bool aError);
-	ResultType ThrowIntIfNonzero(int aErrorValue, LPCTSTR aWhat = NULL);
-	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo, Line *aLine, ResultType aErrorType);
-	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat = nullptr, LPCTSTR aExtraInfo = _T(""));
+	ResultType ThrowIntIfNonzero(int aErrorValue);
+	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine, ResultType aErrorType, Object *aPrototype = nullptr);
+	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 	ResultType Win32Error(DWORD aError = GetLastError());
 	
 	ResultType UnhandledException(Line* aLine, ResultType aErrorType = FAIL);
@@ -3450,13 +3455,16 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 StringCaseSenseType TokenToStringCase(ExprTokenType& aToken);
 Var *TokenToOutputVar(ExprTokenType &aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
-ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, LPTSTR aNullErr = ERR_TYPE_MISMATCH, int *aMinParams = nullptr);
+ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, int *aMinParams = nullptr);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
 BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right);
 LPTSTR TokenTypeString(ExprTokenType &aToken);
 #define STRING_TYPE_STRING _T("String")
 #define INTEGER_TYPE_STRING _T("Integer")
 #define FLOAT_TYPE_STRING _T("Float")
+
+ResultType MemoryError();
+ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultType aErrorType);
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
 ResultType SetWorkingDir(LPTSTR aNewDir);

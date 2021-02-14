@@ -65,7 +65,7 @@ ResultType WinGroup::AddWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle
 	// must be carefully reviewed:
 	WindowSpec *the_new_win = new WindowSpec(new_title, new_text, new_exclude_title, new_exclude_text);
 	if (the_new_win == NULL)
-		return g_script.ScriptError(ERR_OUTOFMEM);
+		return MemoryError();
 	if (mFirstWindow == NULL)
 		mFirstWindow = the_new_win;
 	else
