@@ -6998,7 +6998,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	if (!pbif)
 		return nullptr;
 
-	auto *pfunc = new BuiltInFunc(*pbif, pbif->mOutputVars);
+	auto *pfunc = new BuiltInFunc(*pbif);
 	if (!pfunc || !mFuncs.Insert(pfunc, left)) // left contains the position within mFuncs to insert the function.  Cannot use *apInsertPos as caller may have omitted it.
 	{
 		MemoryError();
@@ -7010,14 +7010,14 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 
 
 
-BuiltInFunc::BuiltInFunc(FuncEntry &bif, UCHAR *aOutputVars) : BuiltInFunc(bif.mName)
+BuiltInFunc::BuiltInFunc(FuncEntry &bif) : BuiltInFunc(bif.mName)
 {
 	mBIF = bif.mBIF;
 	mMinParams = bif.mMinParams;
 	mParamCount = bif.mMaxParams;
 	mIsVariadic = bif.mMaxParams == MAX_FUNCTION_PARAMS;
 	mFID = (BuiltInFunctionID)bif.mID;
-	mOutputVars = aOutputVars; // Not bif.mOutputVars, which may be temporary (and bif_output_vars may have been overridden above).
+	mOutputVars = bif.mOutputVars;
 }
 
 

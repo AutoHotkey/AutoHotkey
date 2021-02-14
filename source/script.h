@@ -1864,7 +1864,7 @@ public:
 	BuiltInFunctionID mFID; // For code sharing: this function's ID in the group of functions which share the same C++ function.
 	
 	BuiltInFunc(LPCTSTR aName) : NativeFunc(aName) {}
-	BuiltInFunc(FuncEntry &, UCHAR *aOutputVars);
+	BuiltInFunc(FuncEntry &);
 
 #define MAX_FUNC_OUTPUT_VAR 7
 	bool ArgIsOutputVar(int aIndex) override
