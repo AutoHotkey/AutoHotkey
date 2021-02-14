@@ -1689,7 +1689,9 @@ bool BuiltInMethod::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int
 	{
 		LPCTSTR expected_type;
 		ExprTokenType value;
-		if (mClass->GetOwnProp(value, _T("__Class")) && value.symbol == SYM_STRING)
+		if (!mClass)
+			expected_type = _T("Object");
+		else if (mClass->GetOwnProp(value, _T("__Class")) && value.symbol == SYM_STRING)
 			expected_type = value.marker;
 		else
 			expected_type = _T("?"); // Script may have tampered with the prototype.
