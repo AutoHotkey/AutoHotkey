@@ -552,6 +552,15 @@ private:
 	ResultType result;
 };
 
+
+#define BIF_DECL_PARAMS ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount
+
+// The following macro is used for definitions and declarations of built-in functions:
+#define BIF_DECL(name) void name(BIF_DECL_PARAMS)
+
+typedef BIF_DECL((* BuiltInFunctionType));
+
+
 // But the array that goes with these actions is in globaldata.cpp because
 // otherwise it would be a little cumbersome to declare the extern version
 // of the array in here (since it's only extern to modules other than

@@ -65,3 +65,13 @@ inline LPTSTR _OptionalStringDefaultHelper(LPTSTR aDef, LPTSTR aBuf = NULL, size
 #define BivRValueToInt64()  TokenToInt64(aValue)
 #define BivRValueToBOOL()  TokenToBOOL(aValue)
 #define BivRValueToObject()  TokenToObject(aValue)
+
+
+template<class T>
+BIF_DECL(NewObject)
+{
+	Object *obj = T::Create();
+	if (!obj)
+		_f_throw_oom;
+	obj->New(aResultToken, aParam, aParamCount);
+}

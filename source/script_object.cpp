@@ -1034,7 +1034,7 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 	return obj;
 }
 
-Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ObjectMethod aCtor)
+Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ObjectCtor aCtor)
 {
 	auto class_obj = CreateClass(aPrototype);
 
@@ -1044,14 +1044,12 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 	{
 		TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
 		_stprintf(full_name, _T("%s.New"), aClassName);
-		auto ctor = new BuiltInMethod(SimpleHeap::Malloc(full_name));
-		ctor->mBIM = aCtor;
-		ctor->mMID = 0;
-		ctor->mMIT = IT_CALL;
-		ctor->mMinParams = 0;
-		ctor->mParamCount = MAX_FUNCTION_PARAMS;
-		ctor->mIsVariadic = true;
-		ctor->mClass = nullptr; // Safe to call on any Object.
+		auto ctor = new BuiltInFunc(SimpleHeap::Malloc(full_name));
+		ctor->mBIF = aCtor;
+		ctor->mFID = FID_Object_New;
+		ctor->mMinParams = 1; // Class object.
+		ctor->mParamCount = 1;
+		ctor->mIsVariadic = true; // Always variadic since __new(...) may be redefined/overridden.
 		class_obj->DefineMethod(_T("New"), ctor);
 		ctor->Release();
 	}
@@ -1470,15 +1468,21 @@ ResultType Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags
 // Class objects
 //
 
-template<class T>
-ResultType Object::New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+ResultType Object::New(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	auto obj = T::Create();
-	if (!obj)
-		_o_throw_oom;
-	if (!obj->SetBase(dynamic_cast<Object *>(GetOwnPropObj(_T("Prototype"))), aResultToken))
+	Object *base = dynamic_cast<Object *>(ParamIndexToObject(0));
+	Object *proto = base ? dynamic_cast<Object *>(base->GetOwnPropObj(_T("Prototype"))) : nullptr;
+	if (!proto)
+	{
+		Release();
+		_o_throw_param(0);
+	}
+	if (!SetBase(proto, aResultToken))
+	{
+		Release();
 		return FAIL;
-	return obj->Construct(aResultToken, aParam, aParamCount);
+	}
+	return Construct(aResultToken, aParam + 1, aParamCount - 1);
 }
 
 ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
@@ -2853,7 +2857,7 @@ struct ClassDef
 {
 	LPCTSTR name;
 	Object **proto_var;
-	ObjectMethod ctor;
+	BuiltInFunctionType ctor;
 	ObjectMember *members;
 	int member_count;
 	std::initializer_list<ClassDef> subclasses;
@@ -2901,13 +2905,13 @@ Object *Object::CreateRootPrototypes()
 
 	sClassPrototype = Object::CreatePrototype(_T("Class"), Object::sPrototype);
 	auto anyClass = CreateClass(_T("Any"), sClassPrototype, sAnyPrototype, nullptr);
-	Object::sClass = CreateClass(_T("Object"), anyClass, Object::sPrototype, static_cast<ObjectMethod>(&Object::New<Object>));
+	Object::sClass = CreateClass(_T("Object"), anyClass, Object::sPrototype, NewObject<Object>);
 
-	ObjectMethod no_ctor = nullptr;
+	ObjectCtor no_ctor = nullptr;
 	ObjectMember *no_members = nullptr;
 
 	DefineClasses(Object::sClass, Object::sPrototype, {
-		{_T("Array"), &Array::sPrototype, static_cast<ObjectMethod>(&Object::New<Array>)
+		{_T("Array"), &Array::sPrototype, NewObject<Array>
 			, Array::sMembers, _countof(Array::sMembers)},
 		{_T("Buffer"), &BufferObject::sPrototype, no_ctor, BufferObject::sMembers, _countof(BufferObject::sMembers), {
 			{_T("ClipboardAll")}
@@ -2934,15 +2938,15 @@ Object *Object::CreateRootPrototypes()
 			{_T("Closure"), &Closure::sPrototype},
 			{_T("Enumerator"), &EnumBase::sPrototype}
 		}},
-		{_T("Gui"), &GuiType::sPrototype, static_cast<ObjectMethod>(&Object::New<GuiType>)
+		{_T("Gui"), &GuiType::sPrototype, NewObject<GuiType>
 			, GuiType::sMembers, GuiType::sMemberCount},
 		{_T("InputHook"), &InputObject::sPrototype, no_ctor
 			, InputObject::sMembers, InputObject::sMemberCount},
-		{_T("Map"), &Map::sPrototype, static_cast<ObjectMethod>(&Object::New<Map>)
+		{_T("Map"), &Map::sPrototype, NewObject<Map>
 			, Map::sMembers, _countof(Map::sMembers)},
-		{_T("Menu"), &UserMenu::sPrototype, static_cast<ObjectMethod>(&Object::New<UserMenu>)
+		{_T("Menu"), &UserMenu::sPrototype, NewObject<UserMenu>
 			, UserMenu::sMembers, UserMenu::sMemberCount, {
-			{_T("MenuBar"), &UserMenu::sBarPrototype, static_cast<ObjectMethod>(&Object::New<UserMenu::Bar>)}
+			{_T("MenuBar"), &UserMenu::sBarPrototype, NewObject<UserMenu::Bar>}
 		}},
 		{_T("RegExMatch"), &RegExMatchObject::sPrototype, no_ctor
 			, RegExMatchObject::sMembers, _countof(RegExMatchObject::sMembers)}

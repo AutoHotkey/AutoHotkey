@@ -65,6 +65,7 @@ public:
 // Helpers for IObject::Invoke implementations.
 //
 
+typedef BuiltInFunctionType ObjectCtor;
 typedef ResultType (IObject::*ObjectMethod)(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 struct ObjectMember
 {
@@ -333,6 +334,7 @@ public:
 	static Object *Create();
 	static Object *Create(ExprTokenType *aParam[], int aParamCount, ResultToken *apResultToken = nullptr);
 
+	ResultType New(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType Construct(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	bool HasProp(name_t aName);
@@ -442,7 +444,7 @@ public:
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase = nullptr);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount);
 	static Object *DefineMembers(Object *aObject, LPTSTR aClassName, ObjectMember aMember[], int aMemberCount);
-	static Object *CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ObjectMethod aCtor);
+	static Object *CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ObjectCtor aCtor);
 
 	ResultType CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
@@ -462,10 +464,6 @@ public:
 	ResultType DeleteMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType GetMethod(ResultToken &aResultToken, name_t aName);
 	ResultType HasOwnMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-
-	// Class methods:
-	template<class T>
-	ResultType New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	// For pseudo-objects:
 	static ObjectMember sValueMembers[];

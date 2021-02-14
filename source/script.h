@@ -434,11 +434,6 @@ struct ArgStruct
 
 __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 
-#define BIF_DECL_PARAMS ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount
-
-// The following macro is used for definitions and declarations of built-in functions:
-#define BIF_DECL(name) void name(BIF_DECL_PARAMS)
-
 #define _f__oneline(act)		do { act } while (0)		// Make the macro safe to use like a function, under if(), etc.
 #define _f__ret(act)			_f__oneline( act; return; )	// BIFs have no return value.
 #define _o__ret(act)			return (act)				// IObject::Invoke() returns ResultType.
@@ -629,6 +624,7 @@ enum JoyControls {JOYCTRL_INVALID, JOYCTRL_XPOS, JOYCTRL_YPOS, JOYCTRL_ZPOS
 // C++ function to tell it which function is being called.  Each group starts at ID 0 in case
 // it helps the compiler to reduce code size.
 enum BuiltInFunctionID {
+	FID_Object_New = -1,
 	FID_DllCall = 0, FID_ComCall,
 	FID_Func = 0, FID_FuncClose,
 	FID_LV_GetNext = 0, FID_LV_GetCount,
@@ -1603,9 +1599,6 @@ struct UDFCallInfo
 	int backup_count = 0; // Number of previous instance's local vars.  0 if no previous instance or no vars.
 	UDFCallInfo(UserFunc *f) : func(f) {}
 };
-
-
-typedef BIF_DECL((* BuiltInFunctionType));
 
 
 class DECLSPEC_NOVTABLE Func : public Object
