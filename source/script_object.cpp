@@ -2853,6 +2853,13 @@ ObjectMember RegExMatchObject::sMembers[] =
 
 
 
+ObjectMember Object::sErrorMembers[]
+{
+	Object_Member(__New, Error__New, 0, IT_CALL, 0, 3)
+};
+
+
+
 struct ClassDef
 {
 	LPCTSTR name;
@@ -2917,7 +2924,7 @@ Object *Object::CreateRootPrototypes()
 			{_T("ClipboardAll")}
 		}},
 		{_T("Class"), &Object::sClassPrototype},
-		{_T("Error"), &ErrorPrototype::Error, no_ctor, no_members, 0, {
+		{_T("Error"), &ErrorPrototype::Error, no_ctor, sErrorMembers, _countof(sErrorMembers), {
 			{_T("IndexError"), &ErrorPrototype::Index, no_ctor, no_members, 0, {
 				{_T("KeyError"), &ErrorPrototype::Key}
 			}},
@@ -2964,6 +2971,9 @@ Object *Object::CreateRootPrototypes()
 
 	GuiControlType::DefineControlClasses();
 	DefineFileClass();
+
+	// Permit Object.New to construct Error objects.
+	ErrorPrototype::Error->mFlags &= ~NativeClassPrototype;
 
 	return sAnyPrototype;
 }

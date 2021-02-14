@@ -16586,7 +16586,16 @@ LPTSTR TokenTypeString(ExprTokenType &aToken)
 
 BIF_DECL(BIF_Exception)
 {
-	LPTSTR message = ParamIndexToString(0, _f_number_buf);
+	Object *exc = Object::Create();
+	if (!exc)
+		_f_throw_oom;
+	exc->SetBase(ErrorPrototype::Error);
+	exc->Construct(aResultToken, aParam, aParamCount);
+}
+
+ResultType Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	LPTSTR message = ParamIndexIsOmitted(0) ? Type() : ParamIndexToString(0, _f_number_buf);
 	TCHAR what_buf[MAX_NUMBER_SIZE], extra_buf[MAX_NUMBER_SIZE];
 	LPCTSTR what = NULL;
 	Line *line = NULL;
@@ -16632,15 +16641,13 @@ BIF_DECL(BIF_Exception)
 
 	LPTSTR extra = ParamIndexToOptionalString(2, extra_buf);
 
-	if (aResultToken.object = line->CreateRuntimeException(message, what, extra, ErrorPrototype::Error))
-	{
-		aResultToken.symbol = SYM_OBJECT;
-	}
-	else
-	{
-		// Out of memory. Seems best to alert the user.
-		_f_throw_oom;
-	}
+	SetOwnProp(_T("Message"), message);
+	SetOwnProp(_T("What"), const_cast<LPTSTR>(what));
+	SetOwnProp(_T("File"), Line::sSourceFile[line->mFileIndex]);
+	SetOwnProp(_T("Line"), line->mLineNumber);
+	SetOwnProp(_T("Extra"), extra);
+
+	return OK;
 }
 
 

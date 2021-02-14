@@ -386,6 +386,7 @@ public:
 
 	bool SetOwnProp(name_t aName, __int64 aValue) { return SetOwnProp(aName, ExprTokenType(aValue)); }
 	bool SetOwnProp(name_t aName, IObject *aValue) { return SetOwnProp(aName, ExprTokenType(aValue)); }
+	bool SetOwnProp(name_t aName, LPCTSTR aValue) { return SetOwnProp(aName, ExprTokenType(const_cast<LPTSTR>(aValue))); }
 
 	void DeleteOwnProp(name_t aName)
 	{
@@ -437,6 +438,7 @@ public:
 
 	static ObjectMember sMembers[];
 	static ObjectMember sClassMembers[];
+	static ObjectMember sErrorMembers[];
 	static Object *sPrototype, *sClass, *sClassPrototype;
 
 	static Object *CreateRootPrototypes();
@@ -464,6 +466,8 @@ public:
 	ResultType DeleteMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType GetMethod(ResultToken &aResultToken, name_t aName);
 	ResultType HasOwnMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	ResultType Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	// For pseudo-objects:
 	static ObjectMember sValueMembers[];
