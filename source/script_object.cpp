@@ -2947,17 +2947,17 @@ Object *Object::CreateRootPrototypes()
 			, UserMenu::sMembers, UserMenu::sMemberCount, {
 			{_T("MenuBar"), &UserMenu::sBarPrototype, NewObject<UserMenu::Bar>}
 		}},
-		{_T("RegExMatch"), &RegExMatchObject::sPrototype, no_ctor
+		{_T("RegExMatchInfo"), &RegExMatchObject::sPrototype, no_ctor
 			, RegExMatchObject::sMembers, _countof(RegExMatchObject::sMembers)}
 	});
 
 	DefineClasses(anyClass, sAnyPrototype, {
 		{_T("Primitive"), &Object::sPrimitivePrototype, no_ctor, no_members, 0, {
 			{_T("Number"), &Object::sNumberPrototype, no_ctor, no_members, 0, {
-				{_T("Float"), &Object::sFloatPrototype},
-				{_T("Integer"), &Object::sIntegerPrototype}
+				{_T("Float"), &Object::sFloatPrototype, BIF_Float},
+				{_T("Integer"), &Object::sIntegerPrototype, BIF_Integer}
 			}},
-			{_T("String"), &Object::sStringPrototype}
+			{_T("String"), &Object::sStringPrototype, BIF_String}
 		}}
 	});
 
