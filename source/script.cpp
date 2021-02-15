@@ -9376,7 +9376,7 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 			}
 			if (this_postfix->callsite->flags & EIF_LEAVE_PARAMS)
 				stack_count = prev_stack_count;
-			if (func)
+			if (func && call_call)
 			{
 				if (this_postfix->callsite->is_variadic())
 					--param_count; // Exclude the array parameter, which resolves to 0 or more parameters.
