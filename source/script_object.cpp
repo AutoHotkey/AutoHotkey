@@ -2771,7 +2771,7 @@ BIF_DECL(BIF_BufferAlloc)
 }
 
 
-BIF_DECL(BIF_ClipboardAll)
+ResultType ClipboardAll::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	void *data;
 	size_t size;
@@ -2779,7 +2779,7 @@ BIF_DECL(BIF_ClipboardAll)
 	{
 		// Retrieve clipboard contents.
 		if (!Var::GetClipboardAll(&data, &size))
-			_f_return_FAIL;
+			_o_return_FAIL;
 	}
 	else
 	{
@@ -2789,28 +2789,44 @@ BIF_DECL(BIF_ClipboardAll)
 		{
 			GetBufferObjectPtr(aResultToken, obj, caller_data, size);
 			if (aResultToken.Exited())
-				return;
+				return aResultToken.Result();
 		}
 		else
 		{
 			// Caller supplied an address.
 			caller_data = (size_t)ParamIndexToIntPtr(0);
 			if (caller_data < 65536) // Basic check to catch incoming raw addresses that are zero or blank.  On Win32, the first 64KB of address space is always invalid.
-				_f_throw_param(0);
+				_o_throw_param(0);
 			size = -1;
 		}
 		if (!ParamIndexIsOmitted(1))
 			size = (size_t)ParamIndexToIntPtr(1);
 		else if (size == -1) // i.e. it can be omitted when size != -1 (a string was passed).
-			_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
+			_o_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
 		if (  !(data = malloc(size))  ) // More likely to be due to invalid parameter than out of memory.
-			_f_throw_oom;
+			_o_throw_oom;
 		memcpy(data, (void *)caller_data, size);
 	}
-	auto obj = new ClipboardAll(data, size);
-	obj->SetBase(ClipboardAll::sPrototype);
-	_f_return(obj);
+	if (mData != data)
+		free(mData); // In case of explicit call to __New.
+	mData = data;
+	mSize = size;
+	_o_return_empty;
 }
+
+
+Object *ClipboardAll::Create()
+{
+	auto obj = new ClipboardAll();
+	obj->SetBase(ClipboardAll::sPrototype);
+	return obj;
+}
+
+
+ObjectMember ClipboardAll::sMembers[]
+{
+	Object_Method1(__New, 0, 2)
+};
 
 
 
@@ -2913,7 +2929,8 @@ Object *Object::CreateRootPrototypes()
 		{_T("Array"), &Array::sPrototype, NewObject<Array>
 			, Array::sMembers, _countof(Array::sMembers)},
 		{_T("Buffer"), &BufferObject::sPrototype, no_ctor, BufferObject::sMembers, _countof(BufferObject::sMembers), {
-			{_T("ClipboardAll")}
+			{_T("ClipboardAll"), &ClipboardAll::sPrototype, NewObject<ClipboardAll>
+				, ClipboardAll::sMembers, _countof(ClipboardAll::sMembers)}
 		}},
 		{_T("Class"), &Object::sClassPrototype},
 		{_T("Error"), &ErrorPrototype::Error, no_ctor, sErrorMembers, _countof(sErrorMembers), {

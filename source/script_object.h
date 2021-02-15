@@ -786,8 +786,11 @@ public:
 class ClipboardAll : public BufferObject
 {
 public:
-	ClipboardAll(void *aData, size_t aSize) : BufferObject(aData, aSize) {}
+	ClipboardAll() : BufferObject(nullptr, 0) {}
+	static ObjectMember sMembers[];
 	static Object *sPrototype;
+	static Object *Create();
+	ResultType __New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
 
