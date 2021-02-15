@@ -2939,7 +2939,7 @@ Object *Object::CreateRootPrototypes()
 		}},
 		{_T("Gui"), &GuiType::sPrototype, NewObject<GuiType>
 			, GuiType::sMembers, GuiType::sMemberCount},
-		{_T("InputHook"), &InputObject::sPrototype, no_ctor
+		{_T("InputHook"), &InputObject::sPrototype, NewObject<InputObject>
 			, InputObject::sMembers, InputObject::sMemberCount},
 		{_T("Map"), &Map::sPrototype, NewObject<Map>
 			, Map::sMembers, _countof(Map::sMembers)},

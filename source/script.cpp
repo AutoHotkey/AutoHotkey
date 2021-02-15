@@ -192,7 +192,6 @@ FuncEntry g_BIF[] =
 	BIF1(IniRead, 1, 4),
 	BIFA(IniWrite, 3, 4, ACT_INIWRITE),
 	BIF1(InputBox, 0, 4),
-	BIF1(InputHook, 0, 3),
 	BIF1(InStr, 2, 5),
 	BIF1(Integer, 1, 1),
 	BIFi(IsAlnum, 1, 2, BIF_IsTypeish, VAR_TYPE_ALNUM),
