@@ -27,9 +27,8 @@ freely, without restriction.
 #define U4T(s) CStringUTF8FromTChar(s).GetString()
 
 #include <ws2tcpip.h>
-#include <wspiapi.h> // for getaddrinfo() on versions of Windows earlier than XP.
+#include <wspiapi.h> // for getaddrinfo()
 #include <stdarg.h>
-#include <typeinfo> // for typeid().
 
 Debugger g_Debugger;
 CStringA g_DebuggerHost;
