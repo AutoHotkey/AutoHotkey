@@ -14512,11 +14512,6 @@ BIF_DECL(BIF_OnMessage)
 	callback = TokenToFunctor(*aParam[1]);
 	if (!callback)
 		_f_throw_param(1);
-	if (!ValidateFunctor(callback, 4, aResultToken))
-	{
-		callback->Release();
-		return;
-	}
 
 	// Check if this message already exists in the array:
 	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(specified_msg, callback);
@@ -14525,6 +14520,11 @@ BIF_DECL(BIF_OnMessage)
 	{
 		if (mode_is_delete) // Delete a non-existent item.
 			_f_return_retval; // Yield the default return value set earlier (an empty string).
+		if (!ValidateFunctor(callback, 4, aResultToken))
+		{
+			callback->Release();
+			return;
+		}
 		// From this point on, it is certain that an item will be added to the array.
 		pmonitor = g_MsgMonitor.Add(specified_msg, callback, call_it_last);
 	}
