@@ -8890,11 +8890,7 @@ ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aVa
 			return FAIL;
 		}
 		if (result != INVOKE_NOT_HANDLED) // Property exists but is not an integer.
-		{
-			if (!TokenIsEmptyString(result_token))
-				return aResultToken.Error(ERR_TYPE_MISMATCH, aPropName, ErrorPrototype::Type);
-			result = INVOKE_NOT_HANDLED;
-		}
+			return aResultToken.Error(ERR_TYPE_MISMATCH, aPropName, ErrorPrototype::Type);
 		//aValue = 0; // Caller should set default value for these cases.
 		if (!aOptional)
 			return aResultToken.UnknownMemberError(ExprTokenType(aObject), IT_GET, aPropName);
