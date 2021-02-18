@@ -12543,42 +12543,34 @@ LPCTSTR Debugger::WhatThrew()
 #endif
 
 
-IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo, Object *aPrototype)
+IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aPrototype)
 {
 	// Build the parameters for Object::Create()
-	ExprTokenType aParams[5*2]; int aParamCount = 4*2;
-	ExprTokenType* aParam[5*2] = { aParams + 0, aParams + 1, aParams + 2, aParams + 3, aParams + 4
-		, aParams + 5, aParams + 6, aParams + 7, aParams + 8, aParams + 9 };
-	aParams[0].SetValue(_T("What"), 4);
-	aParams[1].SetValue(const_cast<LPTSTR>(aWhat ? aWhat : 
+	ExprTokenType aParams[3]; int aParamCount = 2;
+	ExprTokenType* aParam[3] { aParams + 0, aParams + 1, aParams + 2 };
+	aParams[0].SetValue(const_cast<LPTSTR>(aErrorText));
 #ifdef CONFIG_DEBUGGER
-		g_Debugger.WhatThrew()));
+	aParams[1].SetValue(const_cast<LPTSTR>(g_Debugger.WhatThrew()));
 #else
-		// Without the debugger stack, there's no good way to determine what's throwing. It could be:
-		//g_act[mActionType].Name; // A command implemented as an Action (g_act).
-		//g->CurrentFunc->mName; // A user-defined function (perhaps when mActionType == ACT_THROW).
-		//???; // A built-in function implemented as a Func (g_BIF).
-		_T("")));
+	// Without the debugger stack, there's no good way to determine what's throwing. It could be:
+	//g_act[mActionType].Name; // A command implemented as an Action (g_act).
+	//g->CurrentFunc->mName; // A user-defined function (perhaps when mActionType == ACT_THROW).
+	//???; // A built-in function implemented as a Func (g_BIF).
+	aParams[1].SetValue(_T(""), 0);
 #endif
-	aParams[2].SetValue(_T("File"), 4);
-	aParams[3].SetValue(Line::sSourceFile[mFileIndex]);
-	aParams[4].SetValue(_T("Line"), 4);
-	aParams[5].SetValue(mLineNumber);
-	aParams[6].SetValue(_T("Message"), 7);
-	aParams[7].SetValue((LPTSTR)aErrorText);
 	if (aExtraInfo && *aExtraInfo)
-	{
-		aParamCount += 2;
-		aParams[8].SetValue(_T("Extra"), 5);
-		aParams[9].SetValue((LPTSTR)aExtraInfo);
-	}
+		aParams[aParamCount++].SetValue(const_cast<LPTSTR>(aExtraInfo));
 
-	auto obj = Object::Create(aParam, aParamCount);
+	auto obj = Object::Create();
 	if (!obj)
 		return nullptr;
 	if (!aPrototype)
 		aPrototype = ErrorPrototype::Error;
 	obj->SetBase(aPrototype);
+	FuncResult rt;
+	g_script.mCurrLine = this;
+	if (!obj->Construct(rt, aParam, aParamCount))
+		return nullptr;
 	return obj;
 }
 
@@ -12600,7 +12592,7 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo
 
 	ResultToken *token;
 	if (   !(token = new ResultToken)
-		|| !(token->object = aLine->CreateRuntimeException(aErrorText, nullptr, aExtraInfo, aPrototype))   )
+		|| !(token->object = aLine->CreateRuntimeException(aErrorText, aExtraInfo, aPrototype))   )
 	{
 		// Out of memory. It's likely that we were called for this very reason.
 		// Since we don't even have enough memory to allocate an exception object,
@@ -12608,14 +12600,20 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo
 		// since that would recurse into this function.
 		if (token)
 			delete token;
-		MsgBox(ERR_OUTOFMEM ERR_ABORT);
-		return FAIL;
+		if (!g->ThrownToken)
+		{
+			MsgBox(ERR_OUTOFMEM ERR_ABORT);
+			return FAIL;
+		}
+		//else: Thrown by Error constructor?
 	}
+	else
+	{
+		token->symbol = SYM_OBJECT;
+		token->mem_to_free = NULL;
 
-	token->symbol = SYM_OBJECT;
-	token->mem_to_free = NULL;
-
-	g->ThrownToken = token;
+		g->ThrownToken = token;
+	}
 	if (!(g->ExcptMode & EXCPTMODE_CATCH))
 		return UnhandledException(aLine, aErrorType);
 
