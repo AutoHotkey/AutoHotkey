@@ -2894,6 +2894,33 @@ void Debugger::PropertyWriter::EndProperty(DebugCookie aCookie)
 }
 
 
+void GetScriptStack(LPTSTR aBuf, int aBufSize, DbgStack::Entry *aTop)
+{
+	aBufSize -= 12;
+	auto aBuf_orig = aBuf;
+	for (auto se = aTop ? aTop : g_Debugger.mStack.mTop - 1; se >= g_Debugger.mStack.mBottom; --se)
+	{
+		auto &line = *se->line;
+		auto line_start = aBuf;
+		if (se->type == DbgStack::SE_Thread)
+			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("> %s\r\n"), se->desc);
+		else
+		{
+			aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("%s (%i) : [%s] ")
+				, Line::sSourceFile[line.mFileIndex], (int)line.mLineNumber, se->Name());
+			aBuf = line.ToText(aBuf, BUF_SPACE_REMAINING, true, 0, false, false);
+		}
+		if (BUF_SPACE_REMAINING <= 1) // In case of truncation, there should be 1 char left, since the terminator is not counted.
+		{
+			aBuf = line_start;
+			aBufSize += 12;
+			sntprintf(aBuf, BUF_SPACE_REMAINING, _T("... %i more"), int(se - g_Debugger.mStack.mBottom) + 1);
+			break;
+		}
+	}
+}
+
+
 #endif
 
 

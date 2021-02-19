@@ -1351,7 +1351,7 @@ public:
 
 	static LPTSTR LogToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR VicinityToText(LPTSTR aBuf, int aBufSize);
-	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false);
+	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false, bool aLineNumber = true);
 
 	static void ToggleSuspendState();
 	static void PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause);

@@ -16593,29 +16593,28 @@ ResultType Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, Ex
 {
 	LPTSTR message = ParamIndexIsOmitted(0) ? Type() : ParamIndexToString(0, _f_number_buf);
 	TCHAR what_buf[MAX_NUMBER_SIZE], extra_buf[MAX_NUMBER_SIZE];
-	LPCTSTR what = NULL;
-	Line *line = NULL;
+	LPCTSTR what = ParamIndexToOptionalString(1, what_buf);
+	Line *line = g_script.mCurrLine;
+
+#ifndef CONFIG_DEBUGGER
+	if (ParamIndexIsOmitted(1) && g->CurrentFunc)
+		what = g->CurrentFunc->mName;
+#else
+	DbgStack::Entry *stack_top = g_Debugger.mStack.mTop - 1;
+	if (stack_top->type == DbgStack::SE_BIF && _tcsicmp(what, stack_top->func->mName))
+		--stack_top;
 
 	if (ParamIndexIsOmitted(1)) // "What"
 	{
-		line = g_script.mCurrLine;
 		if (g->CurrentFunc)
 			what = g->CurrentFunc->mName;
-		else
-			what = _T(""); // Probably the auto-execute section?
 	}
 	else
 	{
-#ifdef CONFIG_DEBUGGER
 		int offset = ParamIndexIsNumeric(1) ? ParamIndexToInt(1) : 0;
-		DbgStack::Entry *se = g_Debugger.mStack.mTop;
-		while (--se >= g_Debugger.mStack.mBottom)
+		for (auto se = stack_top; se >= g_Debugger.mStack.mBottom; --se)
 		{
-			if (se->type == DbgStack::SE_Thread)
-				break; // Never return stack locations in other threads.
-			if (se->type == DbgStack::SE_BIF)
-				continue; // Skip built-in functions.
-			if (++offset == 0)
+			if (++offset == 0 || !_tcsicmp(se->Name(), what))
 			{
 				line = se > g_Debugger.mStack.mBottom ? se[-1].line : se->line;
 				// se->line contains the line at the given offset from the top of the stack.
@@ -16623,17 +16622,19 @@ ResultType Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, Ex
 				// line, return the name of the function or sub which that line called.
 				// In other words, an offset of -1 gives the name of the current function and
 				// the file and number of the line which it was called from.
-				what = se->udf->func->mName;
+				what = se->Name();
+				stack_top = se;
 				break;
 			}
-		}
-#endif
-		if (!what)
-		{
-			line = g_script.mCurrLine;
-			what = ParamIndexToString(1, what_buf);
+			if (se->type == DbgStack::SE_Thread)
+				break; // Look only within the current thread.
 		}
 	}
+
+	TCHAR stack_buf[2048];
+	GetScriptStack(stack_buf, _countof(stack_buf), stack_top);
+	SetOwnProp(_T("Stack"), stack_buf);
+#endif
 
 	LPTSTR extra = ParamIndexToOptionalString(2, extra_buf);
 

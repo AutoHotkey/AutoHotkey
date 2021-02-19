@@ -12356,7 +12356,7 @@ LPTSTR Line::VicinityToText(LPTSTR aBuf, int aBufSize) // aBufSize should be an 
 
 
 
-LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool aLineWasResumed) // aBufSize should be an int to preserve negatives from caller (caller relies on this).
+LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool aLineWasResumed, bool aLineNumber) // aBufSize should be an int to preserve negatives from caller (caller relies on this).
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // Caller has ensured that aBuf isn't NULL.
 // Translates this line into its text equivalent, putting the result into aBuf and
@@ -12369,7 +12369,8 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 
 	LPTSTR aBuf_orig = aBuf;
 
-	aBuf += sntprintf(aBuf, aBufSize, _T("%03u: "), mLineNumber);
+	if (aLineNumber)
+		aBuf += sntprintf(aBuf, aBufSize, _T("%03u: "), mLineNumber);
 	if (aLineWasResumed)
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("STILL WAITING (%0.2f): "), (float)aElapsed / 1000.0);
 
