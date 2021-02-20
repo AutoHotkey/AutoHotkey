@@ -14368,7 +14368,7 @@ BIF_DECL(BIF_Hotkey)
 				functor->AddRef();
 			else if (  !(hook_action = Hotkey::ConvertAltTab(aParam1, true))  )
 				functor = StringToFunctor(aParam1);
-			if (!functor)
+			if (!functor && !hook_action && *aParam1)
 			{
 				// Search for a match in the hotkey variants' "original callbacks".
 				// I.e., find the function implicitly defined by "x::action".
@@ -14386,9 +14386,11 @@ BIF_DECL(BIF_Hotkey)
 						}
 				}
 			break_twice:;
+				if (!functor)
+					_f_throw_param(1);
 			}
 		}
-		result = Hotkey::Dynamic(aParam0, aParam1, aParam2, functor, hook_action, aResultToken);
+		result = Hotkey::Dynamic(aParam0, aParam2, functor, hook_action, aResultToken);
 		break;
 	}
 	case FID_HotIf:

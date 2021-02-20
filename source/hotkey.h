@@ -204,7 +204,7 @@ public:
 	static void AllDestructAndExit(int exit_code);
 
 	static ResultType IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultToken);
-	static ResultType Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions
+	static ResultType Dynamic(LPTSTR aHotkeyName, LPTSTR aOptions
 		, IObject *aCallback, HookActionType aHookAction, ResultToken &aResultToken);
 
 	static Hotkey *AddHotkey(IObject *aCallback, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde);

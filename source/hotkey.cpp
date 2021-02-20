@@ -992,13 +992,10 @@ ResultType Hotkey::IfExpr(LPTSTR aExpr, IObject *aExprObj, ResultToken &aResultT
 	return OK;
 }
 
-ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions
-	, IObject *aCallback, HookActionType aHookAction, ResultToken &aResultToken)
+ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aOptions, IObject *aCallback, HookActionType aHookAction, ResultToken &aResultToken)
 // Creates, updates, enables, or disables a hotkey dynamically (while the script is running).
 // Returns OK or FAIL.
 {
-	if (!aCallback && !aHookAction && *aLabelName)
-		return aResultToken.ValueError(ERR_PARAM2_INVALID, aLabelName);
 	// Caller has ensured that aCallback and aHookAction can't both be non-zero.  Furthermore,
 	// both can be zero/NULL only when the caller is updating an existing hotkey to have new options
 	// (i.e. it's retaining its current callback).
