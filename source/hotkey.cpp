@@ -1550,7 +1550,7 @@ ResultType Hotkey::TextInterpret(LPTSTR aName, Hotkey *aThisHotkey)
 	LPTSTR term1 = hotkey_name;
 	LPTSTR term2 = _tcsstr(term1, COMPOSITE_DELIMITER);
 	if (!term2)
-		return TextToKey(TextToModifiers(term1, aThisHotkey), aName, false, aThisHotkey);
+		return TextToKey(TextToModifiers(term1, aThisHotkey), false, aThisHotkey);
 	if (*term1 == '~')
 	{
 		if (aThisHotkey)
@@ -1564,7 +1564,7 @@ ResultType Hotkey::TextInterpret(LPTSTR aName, Hotkey *aThisHotkey)
 	// Temporarily terminate the string so that the 2nd term is hidden:
 	TCHAR ctemp = *end_of_term1;
 	*end_of_term1 = '\0';
-	ResultType result = TextToKey(term1, aName, true, aThisHotkey);
+	ResultType result = TextToKey(term1, true, aThisHotkey);
 	*end_of_term1 = ctemp;  // Undo the termination.
 	if (result != OK)
 		return result;
@@ -1578,7 +1578,7 @@ ResultType Hotkey::TextInterpret(LPTSTR aName, Hotkey *aThisHotkey)
 	//term2 = TextToModifiers(term2, aThisHotkey);
 	if (*term2 == '~')
 		++term2; // Some other stage handles this modifier, so just ignore it here.
-	return TextToKey(term2, aName, false, aThisHotkey);
+	return TextToKey(term2, false, aThisHotkey);
 }
 
 
@@ -1757,7 +1757,7 @@ break_loop:
 
 
 
-ResultType Hotkey::TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier, Hotkey *aThisHotkey)
+ResultType Hotkey::TextToKey(LPTSTR aText, bool aIsModifier, Hotkey *aThisHotkey)
 // This function and those it calls should avoid showing any error dialogs when caller passes NULL for
 // aThisHotkey (however, there is at least one exception explained in comments below where it occurs).
 // Caller must ensure that aText is a modifiable string.

@@ -235,7 +235,7 @@ public:
 		bool hook_is_mandatory;
 	};
 	static LPTSTR TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperties *aProperties = NULL);
-	static ResultType TextToKey(LPTSTR aText, LPTSTR aHotkeyName, bool aIsModifier, Hotkey *aThisHotkey);
+	static ResultType TextToKey(LPTSTR aText, bool aIsModifier, Hotkey *aThisHotkey);
 
 	static void InstallKeybdHook();
 	static void InstallMouseHook();
