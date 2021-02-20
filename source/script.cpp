@@ -5180,10 +5180,10 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// this action type does not accept an expression (e.g. "goto label").
 			this_new_arg.is_expression = *this_aArg && aAllArgsAreExpressions;
 
-			// So that it can be passed to Malloc(), first update the length to match what the text will be
-			// (if the alloc fails, an inaccurate length won't matter because it's an program-abort situation).
-			// The length must fit into a WORD, which it will since each arg is literal text from a script's line,
-			// which is limited to LINE_SIZE. The length member was added in v1.0.44.14 to boost runtime performance.
+			// So that it can be passed to Alloc(), first update the length to match what the text will be
+			// (if the alloc fails, an inaccurate length won't matter because it's a program-abort situation).
+			// The length member was added in v1.0.44.14 to boost runtime performance, but is currently only
+			// used to estimate how much deref buf space is needed; see EXPR_BUF_SIZE macro.
 			this_new_arg.length = (ArgLengthType)_tcslen(this_aArg);
 			
 			// Create a copy of arg text in persistent memory.
@@ -12031,8 +12031,7 @@ BIF_DECL(BIF_PerformAction)
 		arg[i].text = TokenToString(*aParam[i], number_buf + (i * MAX_NUMBER_SIZE));
 		arg[i].deref = NULL;
 		Line::sArgDeref[i] = arg[i].text;
-		// length won't actually be used.  In any case, this wouldn't always
-		// work, since ArgLengthType is currently limited to 65535:
+		// length won't actually be used.
 		//arg[i].length = (ArgLengthType)_tcslen(arg[i].text);
 	}
 
