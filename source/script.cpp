@@ -10502,7 +10502,7 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	// CALL THE CALLBACK
 	ExprTokenType param = aHotkeyName;
 	__int64 retval;
-	result = LabelPtr(Callback)->ExecuteInNewThread(_T("#HotIf"), &param, 1, &retval);
+	result = IObjectPtr(Callback)->ExecuteInNewThread(_T("#HotIf"), &param, 1, &retval);
 	if (result != FAIL)
 		result = retval ? CONDITION_TRUE : CONDITION_FALSE;
 	

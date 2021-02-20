@@ -2631,7 +2631,7 @@ Closure::~Closure()
 }
 
 
-ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aParamValue, int aParamCount, __int64 *aRetVal) const
+ResultType IObjectPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aParamValue, int aParamCount, __int64 *aRetVal) const
 {
 	DEBUGGER_STACK_PUSH(aNewThreadDesc)
 	ResultType result = CallMethod(mObject, mObject, nullptr, aParamValue, aParamCount, aRetVal);
@@ -2640,12 +2640,12 @@ ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aP
 }
 
 
-Func *LabelPtr::ToFunc() const
+Func *IObjectPtr::ToFunc() const
 {
 	return dynamic_cast<Func *>(mObject);
 }
 
-LPCTSTR LabelPtr::Name() const
+LPCTSTR IObjectPtr::Name() const
 {
 	if (auto func = ToFunc()) return func->mName;
 	return mObject->Type();
