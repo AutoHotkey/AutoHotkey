@@ -2071,7 +2071,7 @@ process_completed_line:
 				return ScriptError(_T("Hotkeys/hotstrings are not allowed inside functions or classes."), buf);
 			}
 
-			*hotkey_flag = '\0'; // Terminate so that buf is now the label itself.
+			*hotkey_flag = '\0'; // Terminate so that buf is now the hotkey's name.
 			hotkey_flag += HOTKEY_FLAG_LENGTH;  // Now hotkey_flag is the hotkey's action, if any.
 			
 			LPTSTR otb_brace = omit_leading_whitespace(hotkey_flag);
@@ -2430,10 +2430,7 @@ process_completed_line:
 						&& !set_last_hotfunc())
 						return FAIL;
 					
-					TCHAR hotkey_name[MAX_VAR_NAME_LENGTH];
-					tcslcpy(hotkey_name, buf, _tcslen(buf) + 1);
-					
-					hk = Hotkey::AddHotkey(mLastHotFunc, hook_action, hotkey_name, suffix_has_tilde);
+					hk = Hotkey::AddHotkey(mLastHotFunc, hook_action, buf, suffix_has_tilde);
 					if (!hk)
 					{
 						if (hotkey_validity != CONDITION_TRUE)
