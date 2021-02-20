@@ -1281,8 +1281,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction,
 		return;
 	}
 
-	LPTSTR hotkey_name = aName;
-	if (!TextInterpret(hotkey_name, this)) // The called function already displayed the error.
+	if (!TextInterpret(aName, this)) // The called function already displayed the error.
 		return;
 
 	if (mType != HK_JOYSTICK) // Perform modifier adjustment and other activities that don't apply to joysticks.
@@ -1315,7 +1314,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction,
 				// to try to guess which key, left or right, should be used based on the
 				// location of the suffix key on the keyboard.  Lexikos: Better not do that
 				// since a wrong guess will leave the user wondering why it doesn't work.
-				ValueError(ERR_ALTTAB_MODLR, hotkey_name, FAIL);
+				ValueError(ERR_ALTTAB_MODLR, aName, FAIL);
 				return;  // Key is invalid so don't give it an ID.
 			}
 			if (mModifiersLR)
@@ -1334,7 +1333,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction,
 				case MOD_LWIN: mModifierVK = VK_LWIN; break;
 				case MOD_RWIN: mModifierVK = VK_RWIN; break;
 				default:
-					ValueError(ERR_ALTTAB_ONEMOD, hotkey_name, FAIL);
+					ValueError(ERR_ALTTAB_ONEMOD, aName, FAIL);
 					return;  // Key is invalid so don't give it an ID.
 				}
 				// Since above didn't return:
@@ -1450,7 +1449,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction,
 	// If mKeybdHookMandatory==true, ManifestAllHotkeysHotstringsHooks() will set mType to HK_KEYBD_HOOK for us.
 
 	// To avoid memory leak, this is done only when it is certain the hotkey will be created:
-	if (   !(mName = aName ? SimpleHeap::Malloc(aName) : hotkey_name)
+	if (   !(mName = SimpleHeap::Malloc(aName))
 		|| !(AddVariant(aCallback, aSuffixHasTilde))   ) // Too rare to worry about freeing the other if only one fails.
 	{
 		MemoryError();
