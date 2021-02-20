@@ -5804,9 +5804,6 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 		return FAIL;
 	auto block_begin = mLastLine;
 
-	if (!g->CurrentFunc->mOuterFunc)
-		g->CurrentFunc->mDefaultVarType = VAR_DECLARE_GLOBAL;
-
 	for (; aExprEnd > aExpr && IS_SPACE_OR_TAB(aExprEnd[-1]); --aExprEnd);
 	orig_end = *aExprEnd;
 	*aExprEnd = '\0';
