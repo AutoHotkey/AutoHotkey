@@ -2028,6 +2028,10 @@ process_completed_line:
 			{
 				if (hotkey_flag == buf && hotkey_flag[2] == ':') // v1.0.46: Support ":::" to mean "colon is a hotkey".
 					++hotkey_flag;
+					// Above: Hotkeys like "^:::" and "l & :::" are not supported because: 1) some cases are
+					// ambiguous, such as "^:::" legitimately remapping caret to colon; 2) retaining support
+					// for colon as a remap target would require larger/more complicated code; 3) such hotkeys
+					// are hard for a human to read/interpret.
 				// v1.0.40: It appears to be a hotkey, but validate it as such before committing to processing
 				// it as a hotkey.  If it fails validation as a hotkey, treat it as a command that just happens
 				// to contain a double-colon somewhere.  This avoids the need to escape double colons in scripts.
