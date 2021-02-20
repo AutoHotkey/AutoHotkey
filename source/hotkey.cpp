@@ -2399,7 +2399,7 @@ ResultType Hotstring::AddHotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aO
 Hotstring::Hotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR aHotstring, LPTSTR aReplacement
 	, bool aHasContinuationSection, UCHAR aSuspend)
 	: mCallback(aCallback)  // Any NULL value will cause failure further below.
-	, mName(aName)
+	, mName(NULL)
 	, mString(NULL), mReplacement(NULL), mStringLength(0)
 	, mHotCriterion(g->HotCriterion)
 	, mSuspended(aSuspend)
@@ -2420,7 +2420,7 @@ Hotstring::Hotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR
 	// To avoid memory leak, this is done only when it is certain the hotstring will be created:
 	if (   !(mString = SimpleHeap::Malloc(aHotstring))   )
 		return; // ScriptError() was already called by Malloc().
-	if (   g_script.mIsReadyToExecute && !(mName = SimpleHeap::Malloc(aName))   ) // mName already contains persistent memory when we're called at load time.
+	if (   !(mName = SimpleHeap::Malloc(aName))   )
 	{
 		SimpleHeap::Delete(mString); // SimpleHeap allows deletion of most recently added item.
 		return;

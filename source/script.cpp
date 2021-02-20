@@ -2379,8 +2379,7 @@ process_completed_line:
 					return ScriptError(ERR_HOTKEY_MISSING_BRACE);
 				}
 				
-				LPTSTR hotstring_name = SimpleHeap::Alloc(buf);
-				if (!Hotstring::AddHotstring(hotstring_name, mLastHotFunc, hotstring_options
+				if (!Hotstring::AddHotstring(buf, mLastHotFunc, hotstring_options
 					, hotstring_start, hotstring_execute || hotkey_uses_otb ? _T("") : hotkey_flag, has_continuation_section))
 					return FAIL;
 				if (!mLastHotFunc)
