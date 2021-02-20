@@ -6136,9 +6136,9 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		for (int i = 0; i < Hotkey::sHotkeyCount; ++i)
 		{
 			for (HotkeyVariant* v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
-				if (v->mJumpToLabel == last_hotfunc)
+				if (v->mCallback == last_hotfunc)
 				{
-					v->mJumpToLabel = &func;
+					v->mCallback = &func;
 					v->mOriginalCallback = &func;	// To make scripts more maintainable and to
 													// make the hotkey() function more consistent.
 													// For example,
@@ -6157,12 +6157,12 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		// Check hotstrings as well (even if a hotkey was found):
 		for (int i = Hotstring::sHotstringCount - 1; i >= 0; --i) // Start with the last one defined, for performance.
 		{
-			if (Hotstring::shs[i]->mJumpToLabel != last_hotfunc)
+			if (Hotstring::shs[i]->mCallback != last_hotfunc)
 				// This hotstring has a function or is auto-replace.
 				// Since hotstrings are listed in order of definition and we're iterating in
 				// the reverse order, there's no need to continue.
 				break;
-			Hotstring::shs[i]->mJumpToLabel = &func;
+			Hotstring::shs[i]->mCallback = &func;
 		}
 
 		if (func.mMinParams > 1 || (func.mParamCount == 0 && !func.mIsVariadic))
