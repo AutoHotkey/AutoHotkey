@@ -2034,7 +2034,11 @@ ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved)
 			auto &item = mItem[aIndex];
 			switch (item.symbol)
 			{
-			default:	aVal->AssignString(item.string, item.string.Length());	break;
+			default:
+				aVal->AssignString(item.string, item.string.Length());
+				if (item.symbol == SYM_MISSING)
+					aVal->MarkUninitialized();
+				break;
 			case SYM_INTEGER:	aVal->Assign(item.n_int64);			break;
 			case SYM_FLOAT:		aVal->Assign(item.n_double);		break;
 			case SYM_OBJECT:	aVal->Assign(item.object);			break;
