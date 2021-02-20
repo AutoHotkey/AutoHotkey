@@ -47,7 +47,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	SetErrorMode(SEM_FAILCRITICALERRORS);
 
 	UpdateWorkingDir(); // Needed for the FileSelect() workaround.
-	g_WorkingDirOrig = SimpleHeap::Malloc(const_cast<LPTSTR>(g_WorkingDir.GetString())); // Needed by the Reload command.
+	g_WorkingDirOrig = SimpleHeap::Alloc(g_WorkingDir.GetString()); // Needed by the Reload command.
 
 	// Set defaults, to be overridden by command line args we receive:
 	bool restart_mode = false;

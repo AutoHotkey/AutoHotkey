@@ -100,8 +100,7 @@ HotkeyCriterion *FindHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, L
 HotkeyCriterion *AddHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText)
 {
 	HotkeyCriterion *cp;
-	if (   !(cp = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))   )
-		return NULL;
+	cp = SimpleHeap::Alloc<HotkeyCriterion>();
 	cp->Type = aType;
 	cp->OriginalExpr = nullptr;
 	if (*aWinTitle)
@@ -139,9 +138,7 @@ HotkeyCriterion *AddHotkeyCriterion(HotkeyCriterion *cp)
 
 HotkeyCriterion *AddHotkeyIfExpr()
 {
-	HotkeyCriterion *cp;
-	if (   !(cp = (HotkeyCriterion *)SimpleHeap::Malloc(sizeof(HotkeyCriterion)))   )
-		return NULL;
+	HotkeyCriterion *cp = SimpleHeap::Alloc<HotkeyCriterion>();
 	cp->NextExpr = NULL;
 	cp->OriginalExpr = nullptr;
 	if (g_LastHotExpr)
@@ -1509,9 +1506,7 @@ HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde)
 // NULL doesn't have to be constantly checked during script runtime.
 // The caller is responsible for calling ManifestAllHotkeysHotstringsHooks(), if appropriate.
 {
-	HotkeyVariant *vp;
-	if (   !(vp = (HotkeyVariant *)SimpleHeap::Malloc(sizeof(HotkeyVariant)))   )
-		return NULL;
+	HotkeyVariant *vp = SimpleHeap::Alloc<HotkeyVariant>();
 	ZeroMemory(vp, sizeof(HotkeyVariant));
 	// The following members are left at 0/NULL by the above:
 	// mNextVariant

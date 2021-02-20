@@ -4782,8 +4782,8 @@ UserFunc* Script::CreateHotFunc()
 	g->CurrentFunc = func; // Must do this before calling AddVar
 
 	// Add one parameter to hold the name of the hotkey/hotstring when triggered:
-	if (	!(func->mParam = (FuncParam*)SimpleHeap::Malloc(sizeof FuncParam))
-		||	!(func->mParam[0].var = AddVar(_T("ThisHotkey"), 10, &func->mVars, 0, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM)) )
+	func->mParam = SimpleHeap::Alloc<FuncParam>();
+	if ( !(func->mParam[0].var = AddVar(_T("ThisHotkey"), 10, &func->mVars, 0, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM)) )
 		return nullptr;
 
 	func->mParam[0].default_type = PARAM_DEFAULT_NONE;
@@ -9607,7 +9607,7 @@ void Script::SetTrayTip(LPTSTR aText)
 	// it will override the use of mFileName as the tray tip text.
 	// This allows the script to completely disable the tray tooltip.
 	if (!mTrayIconTip)
-		mTrayIconTip = (LPTSTR) SimpleHeap::Malloc(sizeof(mNIC.szTip)); // SimpleHeap improves avg. case mem load.
+		mTrayIconTip = SimpleHeap::Alloc<TCHAR>(_countof(mNIC.szTip)); // SimpleHeap improves avg. case mem load.
 	if (mTrayIconTip)
 		tcslcpy(mTrayIconTip, aText, _countof(mNIC.szTip));
 	if (mNIC.hWnd) // i.e. only update the tip if the tray icon exists (can't work otherwise).
