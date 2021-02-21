@@ -8504,7 +8504,7 @@ unquoted_literal:
 				// ExpandExpression(); it will be pushed onto the stack due to IS_OPERAND()
 				// and handled directly by SYM_FUNC.
 				LPTSTR next_op = omit_leading_whitespace(cp + this_deref_ref.length);
-				if (*next_op != '.' && *next_op != '[')
+				if (*next_op != '.' && *next_op != '[' && *next_op != '(')
 					return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
 				if (!g->CurrentFunc || !g->CurrentFunc->mClass)
 					return LineError(_T("\"") SUPER_KEYWORD _T("\" is valid only inside a class."), FAIL, cp);
