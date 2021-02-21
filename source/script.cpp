@@ -6568,7 +6568,6 @@ UserFunc *Script::DefineClassInit(bool aStatic)
 		mLastLine->mLineNumber = 0; // Signal the debugger to skip this line while stepping in/over/out.
 	}
 	auto init_func = g->CurrentFunc;
-	init_func->mDefaultVarType = VAR_DECLARE_GLOBAL; // Allow global variables/class names in initializer expressions.
 	if (!AddLine(ACT_BLOCK_END)) // This also resets g->CurrentFunc to NULL.
 		return nullptr;
 	mLastLine->mLineNumber = 0; // See above.
