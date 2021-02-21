@@ -13050,11 +13050,17 @@ ResultType ResultToken::TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LP
 __declspec(noinline)
 ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam)
 {
-	return ParamError(aIndex, aParam, nullptr);
+	return ParamError(aIndex, aParam, nullptr, nullptr);
 }
 
 __declspec(noinline)
 ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType)
+{
+	return ParamError(aIndex, aParam, aExpectedType, nullptr);
+}
+
+__declspec(noinline)
+ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType, LPCTSTR aFunction)
 {
 	auto an = [](LPCTSTR thing) {
 		return _tcschr(_T("aeiou"), ctolower(*thing)) ? _T("n") : _T("");
@@ -13066,9 +13072,11 @@ ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aE
 	if (!*value_as_string && !aExpectedType)
 		value_as_string = actual_type;
 #ifdef CONFIG_DEBUGGER
+	if (!aFunction)
+		aFunction = g_Debugger.WhatThrew();
 	if (aExpectedType)
 		sntprintf(msg, _countof(msg), _T("Parameter #%i of %s requires a%s %s, but received a%s %s.")
-			, aIndex + 1, g_Debugger.WhatThrew(), an(aExpectedType), aExpectedType, an(actual_type), actual_type);
+			, aIndex + 1, aFunction, an(aExpectedType), aExpectedType, an(actual_type), actual_type);
 	else
 		sntprintf(msg, _countof(msg), _T("Parameter #%i of %s is invalid."), aIndex + 1, g_Debugger.WhatThrew());
 #else

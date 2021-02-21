@@ -1684,9 +1684,7 @@ bool NativeFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aP
 					&& aParam[mOutputVars[i]-1]->symbol != SYM_MISSING
 					&& !TokenToOutputVar(*aParam[mOutputVars[i]-1]))
 				{
-					sntprintf(aResultToken.buf, _f_retval_buf_size, _T("Parameter #%i of %s must be a VarRef (&variable).")
-						, mOutputVars[i], mName);
-					aResultToken.Error(aResultToken.buf);
+					aResultToken.ParamError(mOutputVars[i]-1, aParam[mOutputVars[i]-1], _T("variable reference"), mName);
 					return false; // Abort expression.
 				}
 			}
@@ -1951,7 +1949,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 					this_formal_param.var->UpdateAlias(ref); // Set mAliasFor and mObject.
 					continue;
 				}
-				aResultToken.TypeError(_T("VarRef"), token);
+				aResultToken.ParamError(j, &token, _T("variable reference"), mName);
 				goto free_and_return;
 			}
 			//else // This parameter is passed "by value".
