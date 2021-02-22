@@ -1452,11 +1452,11 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, ExprTokenType &
 	// Otherwise, this is the Value property.
 	switch (aControl.type)
 	{
-	case GUI_CONTROL_RADIO: // Same as below.
 	case GUI_CONTROL_PIC: return ControlSetPic(aControl, aContents, aResultToken);
 	case GUI_CONTROL_MONTHCAL: return ControlSetMonthCal(aControl, aContents, aResultToken);
 	case GUI_CONTROL_HOTKEY: return ControlSetHotkey(aControl, aContents, aResultToken);
 
+	case GUI_CONTROL_RADIO: // Same as below.
 	case GUI_CONTROL_CHECKBOX:
 	case GUI_CONTROL_UPDOWN:
 	case GUI_CONTROL_SLIDER:
@@ -1470,6 +1470,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, ExprTokenType &
 		case GUI_CONTROL_UPDOWN: return ControlSetUpDown(aControl, value, aResultToken);
 		case GUI_CONTROL_SLIDER: return ControlSetSlider(aControl, value, aResultToken);
 		case GUI_CONTROL_PROGRESS: return ControlSetProgress(aControl, value, aResultToken);
+		case GUI_CONTROL_RADIO: // Same as below.
 		case GUI_CONTROL_CHECKBOX: return ControlSetCheck(aControl, value, aResultToken);
 		}
 	}
