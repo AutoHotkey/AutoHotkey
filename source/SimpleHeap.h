@@ -51,12 +51,32 @@ private:
 	static SimpleHeap *CreateBlock();
 	SimpleHeap();  // Private constructor, since we want only the static methods to be able to create new objects.
 	~SimpleHeap();
+
+	static LPTSTR strDup(LPCTSTR aBuf, size_t aLength = -1); // Return a block of memory to the caller and copy aBuf into it.
+
 public:
-//	static UINT GetBlockCount() {return sBlockCount;}
-	static LPTSTR Malloc(LPCTSTR aBuf, size_t aLength = -1); // Return a block of memory to the caller and copy aBuf into it.
-	static void* Malloc(size_t aSize); // Return a block of memory to the caller.
+	// Return a block of memory to the caller with aBuf copied into it.  Returns nullptr on failure.
+	static LPTSTR Malloc(LPCTSTR aBuf, size_t aLength = -1);
+	
+	// Return a block of memory to the caller with aBuf copied into it.  Terminates app on failure.
+	static LPTSTR Alloc(LPCTSTR aBuf, size_t aLength = -1);
+	
+	// Return a block of memory to the caller, or nullptr on failure.
+	static void* Malloc(size_t aSize);
+	
+	// Return a block of memory to the caller, or terminate app on failure.
+	static void* Alloc(size_t aSize);
+
 	static void Delete(void *aPtr);
 	//static void DeleteAll();
+
+	static void CriticalFail();
+
+	template<typename T>
+	static T* Alloc(size_t aCount = 1)
+	{
+		return (T *)Alloc(sizeof(T) * aCount);
+	}
 };
 
 #endif

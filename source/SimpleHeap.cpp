@@ -24,7 +24,7 @@ SimpleHeap *SimpleHeap::sLast  = NULL;
 char *SimpleHeap::sMostRecentlyAllocated = NULL;
 UINT SimpleHeap::sBlockCount = 0;
 
-LPTSTR SimpleHeap::Malloc(LPCTSTR aBuf, size_t aLength)
+LPTSTR SimpleHeap::strDup(LPCTSTR aBuf, size_t aLength)
 // v1.0.44.14: Added aLength to improve performance in cases where callers already know the length.
 // If aLength is at its default of -1, the length will be calculated here.
 // Caller must ensure that aBuf isn't NULL.
@@ -35,15 +35,28 @@ LPTSTR SimpleHeap::Malloc(LPCTSTR aBuf, size_t aLength)
 		aLength = _tcslen(aBuf);
 	LPTSTR new_buf;
 	if (   !(new_buf = (LPTSTR)SimpleHeap::Malloc((aLength + 1) * sizeof(TCHAR)))   ) // +1 for the zero terminator.
-	{
-		MemoryError();
 		return NULL; // Callers may rely on NULL vs. "" being returned in the event of failure.
-	}
 	if (aLength)
 		tmemcpy(new_buf, aBuf, aLength); // memcpy() typically benchmarks slightly faster than strcpy().
 	//else only a terminator is needed.
 	new_buf[aLength] = '\0'; // Terminate here for when aLength==0 and for the memcpy above so that caller's aBuf doesn't have to be terminated.
 	return new_buf;
+}
+
+LPTSTR SimpleHeap::Malloc(LPCTSTR aBuf, size_t aLength)
+{
+	auto new_buf = strDup(aBuf, aLength);
+	if (!new_buf)
+		MemoryError();
+	return new_buf; // May be null.
+}
+
+LPTSTR SimpleHeap::Alloc(LPCTSTR aBuf, size_t aLength)
+{
+	auto new_buf = strDup(aBuf, aLength);
+	if (!new_buf)
+		CriticalFail(); // This terminates the program.
+	return new_buf; // Always non-null.
 }
 
 void* SimpleHeap::Malloc(size_t aSize)
@@ -86,6 +99,14 @@ void* SimpleHeap::Malloc(size_t aSize)
 	sLast->mFreeMarker += size_consumed;
 	sLast->mSpaceAvailable -= size_consumed;
 	return (void *)sMostRecentlyAllocated;
+}
+
+void* SimpleHeap::Alloc(size_t aSize)
+{
+	auto p = Malloc(aSize);
+	if (!p)
+		CriticalFail();
+	return p;
 }
 
 

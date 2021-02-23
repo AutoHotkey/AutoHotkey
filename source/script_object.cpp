@@ -13,7 +13,7 @@
 
 
 //
-// CallAsMethod - Invoke a method with no parameters, discarding the result.
+// CallMethod - Invoke a method with no parameters, discarding the result.
 //
 
 ResultType CallMethod(IObject *aInvokee, IObject *aThis, LPTSTR aMethodName
@@ -1006,7 +1006,7 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 		_tcscpy(name, member.name);
 		if (member.invokeType == IT_CALL)
 		{
-			auto func = new BuiltInMethod(SimpleHeap::Malloc(full_name));
+			auto func = new BuiltInMethod(SimpleHeap::Alloc(full_name));
 			func->mBIM = member.method;
 			func->mMID = member.id;
 			func->mMIT = IT_CALL;
@@ -1026,7 +1026,7 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 			auto op_name = _tcschr(name, '\0');
 
 			_tcscpy(op_name, _T(".Get"));
-			auto func = new BuiltInMethod(SimpleHeap::Malloc(full_name));
+			auto func = new BuiltInMethod(SimpleHeap::Alloc(full_name));
 			func->mBIM = member.method;
 			func->mMID = member.id;
 			func->mMIT = IT_GET;
@@ -1040,7 +1040,7 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 			if (member.invokeType == IT_SET)
 			{
 				_tcscpy(op_name, _T(".Set"));
-				func = new BuiltInMethod(SimpleHeap::Malloc(full_name));
+				func = new BuiltInMethod(SimpleHeap::Alloc(full_name));
 				func->mBIM = member.method;
 				func->mMID = member.id;
 				func->mMIT = IT_SET;
@@ -1067,7 +1067,7 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 	{
 		TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
 		_stprintf(full_name, _T("%s.Call"), aClassName);
-		auto ctor = new BuiltInFunc(SimpleHeap::Malloc(full_name));
+		auto ctor = new BuiltInFunc(SimpleHeap::Alloc(full_name));
 		ctor->mBIF = aCtor;
 		ctor->mFID = FID_Object_New;
 		ctor->mMinParams = 1; // Class object.
@@ -2024,7 +2024,11 @@ ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved)
 			auto &item = mItem[aIndex];
 			switch (item.symbol)
 			{
-			default:	aVal->AssignString(item.string, item.string.Length());	break;
+			default:
+				aVal->AssignString(item.string, item.string.Length());
+				if (item.symbol == SYM_MISSING)
+					aVal->MarkUninitialized();
+				break;
 			case SYM_INTEGER:	aVal->Assign(item.n_int64);			break;
 			case SYM_FLOAT:		aVal->Assign(item.n_double);		break;
 			case SYM_OBJECT:	aVal->Assign(item.object);			break;
@@ -2623,7 +2627,7 @@ bool FreeVars::FullyReleased(ULONG aRefPendingRelease)
 }
 
 
-ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aParamValue, int aParamCount, __int64 *aRetVal) const
+ResultType IObjectPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aParamValue, int aParamCount, __int64 *aRetVal) const
 {
 	DEBUGGER_STACK_PUSH(aNewThreadDesc)
 	ResultType result = CallMethod(mObject, mObject, nullptr, aParamValue, aParamCount, aRetVal);
@@ -2632,12 +2636,12 @@ ResultType LabelPtr::ExecuteInNewThread(TCHAR *aNewThreadDesc, ExprTokenType *aP
 }
 
 
-Func *LabelPtr::ToFunc() const
+Func *IObjectPtr::ToFunc() const
 {
 	return dynamic_cast<Func *>(mObject);
 }
 
-LPCTSTR LabelPtr::Name() const
+LPCTSTR IObjectPtr::Name() const
 {
 	if (auto func = ToFunc()) return func->mName;
 	return mObject->Type();

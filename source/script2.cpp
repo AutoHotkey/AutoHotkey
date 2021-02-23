@@ -4782,8 +4782,8 @@ UserFunc* Script::CreateHotFunc()
 	g->CurrentFunc = func; // Must do this before calling AddVar
 
 	// Add one parameter to hold the name of the hotkey/hotstring when triggered:
-	if (	!(func->mParam = (FuncParam*)SimpleHeap::Malloc(sizeof FuncParam))
-		||	!(func->mParam[0].var = AddVar(_T("ThisHotkey"), 10, &func->mVars, 0, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM)) )
+	func->mParam = SimpleHeap::Alloc<FuncParam>();
+	if ( !(func->mParam[0].var = AddVar(_T("ThisHotkey"), 10, &func->mVars, 0, VAR_DECLARE_LOCAL | VAR_LOCAL_FUNCPARAM)) )
 		return nullptr;
 
 	func->mParam[0].default_type = PARAM_DEFAULT_NONE;
@@ -8890,11 +8890,7 @@ ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aVa
 			return FAIL;
 		}
 		if (result != INVOKE_NOT_HANDLED) // Property exists but is not an integer.
-		{
-			if (!TokenIsEmptyString(result_token))
-				return aResultToken.Error(ERR_TYPE_MISMATCH, aPropName, ErrorPrototype::Type);
-			result = INVOKE_NOT_HANDLED;
-		}
+			return aResultToken.Error(ERR_TYPE_MISMATCH, aPropName, ErrorPrototype::Type);
 		//aValue = 0; // Caller should set default value for these cases.
 		if (!aOptional)
 			return aResultToken.UnknownMemberError(ExprTokenType(aObject), IT_GET, aPropName);
@@ -9611,7 +9607,7 @@ void Script::SetTrayTip(LPTSTR aText)
 	// it will override the use of mFileName as the tray tip text.
 	// This allows the script to completely disable the tray tooltip.
 	if (!mTrayIconTip)
-		mTrayIconTip = (LPTSTR) SimpleHeap::Malloc(sizeof(mNIC.szTip)); // SimpleHeap improves avg. case mem load.
+		mTrayIconTip = SimpleHeap::Alloc<TCHAR>(_countof(mNIC.szTip)); // SimpleHeap improves avg. case mem load.
 	if (mTrayIconTip)
 		tcslcpy(mTrayIconTip, aText, _countof(mNIC.szTip));
 	if (mNIC.hWnd) // i.e. only update the tip if the tray icon exists (can't work otherwise).
@@ -14314,7 +14310,8 @@ BIF_DECL(BIF_Hotkey)
 		HookActionType hook_action = 0;
 		if (!ParamIndexIsOmitted(1))
 		{
-			if (  !(functor = ParamIndexToObject(1))  )
+			if (  !(functor = ParamIndexToObject(1)) && *aParam1
+				&& !(hook_action = Hotkey::ConvertAltTab(aParam1, true))  )
 			{
 				// Search for a match in the hotkey variants' "original callbacks".
 				// I.e., find the function implicitly defined by "x::action".
@@ -14331,11 +14328,13 @@ BIF_DECL(BIF_Hotkey)
 						}
 				}
 			break_twice:;
+				if (!functor)
+					_f_throw_param(1);
 			}
 			if (!functor)
 				hook_action = Hotkey::ConvertAltTab(aParam1, true);
 		}
-		result = Hotkey::Dynamic(aParam0, aParam1, aParam2, functor, hook_action, aResultToken);
+		result = Hotkey::Dynamic(aParam0, aParam2, functor, hook_action, aResultToken);
 		break;
 	}
 	case FID_HotIf:
@@ -16508,29 +16507,28 @@ ResultType Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, Ex
 {
 	LPTSTR message = ParamIndexIsOmitted(0) ? Type() : ParamIndexToString(0, _f_number_buf);
 	TCHAR what_buf[MAX_NUMBER_SIZE], extra_buf[MAX_NUMBER_SIZE];
-	LPCTSTR what = NULL;
-	Line *line = NULL;
+	LPCTSTR what = ParamIndexToOptionalString(1, what_buf);
+	Line *line = g_script.mCurrLine;
+
+#ifndef CONFIG_DEBUGGER
+	if (ParamIndexIsOmitted(1) && g->CurrentFunc)
+		what = g->CurrentFunc->mName;
+#else
+	DbgStack::Entry *stack_top = g_Debugger.mStack.mTop - 1;
+	if (stack_top->type == DbgStack::SE_BIF && _tcsicmp(what, stack_top->func->mName))
+		--stack_top;
 
 	if (ParamIndexIsOmitted(1)) // "What"
 	{
-		line = g_script.mCurrLine;
 		if (g->CurrentFunc)
 			what = g->CurrentFunc->mName;
-		else
-			what = _T(""); // Probably the auto-execute section?
 	}
 	else
 	{
-#ifdef CONFIG_DEBUGGER
 		int offset = ParamIndexIsNumeric(1) ? ParamIndexToInt(1) : 0;
-		DbgStack::Entry *se = g_Debugger.mStack.mTop;
-		while (--se >= g_Debugger.mStack.mBottom)
+		for (auto se = stack_top; se >= g_Debugger.mStack.mBottom; --se)
 		{
-			if (se->type == DbgStack::SE_Thread)
-				break; // Never return stack locations in other threads.
-			if (se->type == DbgStack::SE_BIF)
-				continue; // Skip built-in functions.
-			if (++offset == 0)
+			if (++offset == 0 || !_tcsicmp(se->Name(), what))
 			{
 				line = se > g_Debugger.mStack.mBottom ? se[-1].line : se->line;
 				// se->line contains the line at the given offset from the top of the stack.
@@ -16538,17 +16536,19 @@ ResultType Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, Ex
 				// line, return the name of the function or sub which that line called.
 				// In other words, an offset of -1 gives the name of the current function and
 				// the file and number of the line which it was called from.
-				what = se->udf->func->mName;
+				what = se->Name();
+				stack_top = se;
 				break;
 			}
-		}
-#endif
-		if (!what)
-		{
-			line = g_script.mCurrLine;
-			what = ParamIndexToString(1, what_buf);
+			if (se->type == DbgStack::SE_Thread)
+				break; // Look only within the current thread.
 		}
 	}
+
+	TCHAR stack_buf[2048];
+	GetScriptStack(stack_buf, _countof(stack_buf), stack_top);
+	SetOwnProp(_T("Stack"), stack_buf);
+#endif
 
 	LPTSTR extra = ParamIndexToOptionalString(2, extra_buf);
 

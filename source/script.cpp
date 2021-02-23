@@ -769,13 +769,11 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		// lowercase/uppercase letters:
 		ConvertFilespecToCorrectCase(buf, _countof(buf), buf_length); // This might change the length, e.g. due to expansion of 8.3 filename.
 	}
-	if (   !(mFileSpec = SimpleHeap::Malloc(buf))   )  // The full spec is stored for convenience, and it's relied upon by mIncludeLibraryFunctionsThenExit.
-		return FAIL;  // It already displayed the error for us.
+	mFileSpec = SimpleHeap::Alloc(buf);  // The full spec is stored for convenience, and it's relied upon by mIncludeLibraryFunctionsThenExit.
 	LPTSTR filename_marker;
 	if (filename_marker = _tcsrchr(buf, '\\'))
 	{
-		if (   !(mFileDir = SimpleHeap::Malloc(buf, filename_marker - buf))   )
-			return FAIL;  // It already displayed the error for us.
+		mFileDir = SimpleHeap::Alloc(buf, filename_marker - buf);
 		++filename_marker;
 	}
 	else
@@ -787,8 +785,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		mFileDir = g_WorkingDirOrig;
 		filename_marker = buf;
 	}
-	if (   !(mFileName = SimpleHeap::Malloc(filename_marker))   )
-		return FAIL;  // It already displayed the error for us.
+	mFileName = SimpleHeap::Alloc(filename_marker);
 #ifdef AUTOHOTKEYSC
 	// Omit AutoHotkey from the window title, like AutoIt3 does for its compiled scripts.
 	// One reason for this is to reduce backlash if evil-doers create viruses and such
@@ -796,8 +793,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 #else
 	sntprintfcat(buf, _countof(buf), _T(" - %s"), T_AHK_NAME_VERSION);
 #endif
-	if (   !(mMainWindowTitle = SimpleHeap::Malloc(buf))   )
-		return FAIL;  // It already displayed the error for us.
+	mMainWindowTitle = SimpleHeap::Alloc(buf);
 
 	// It may be better to get the module name this way rather than reading it from the registry
 	// (though it might be more proper to parse it out of the command line args or something),
@@ -810,17 +806,12 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		size_t buf_length = _tcslen(buf);
 		buf[buf_length++] = '"';
 		buf[buf_length] = '\0';
-		if (   !(mOurEXE = SimpleHeap::Malloc(buf))   )
-			return FAIL;  // It already displayed the error for us.
-		else
-		{
-			LPTSTR last_backslash = _tcsrchr(buf, '\\');
-			if (!last_backslash) // probably can't happen due to the nature of GetModuleFileName().
-				mOurEXEDir = _T("");
-			*last_backslash = '\0';
-			if (   !(mOurEXEDir = SimpleHeap::Malloc(buf + 1))   ) // +1 to omit the leading double-quote.
-				return FAIL;  // It already displayed the error for us.
-		}
+		mOurEXE = SimpleHeap::Alloc(buf);
+		LPTSTR last_backslash = _tcsrchr(buf, '\\');
+		if (!last_backslash) // probably can't happen due to the nature of GetModuleFileName().
+			mOurEXEDir = _T("");
+		*last_backslash = '\0';
+		mOurEXEDir = SimpleHeap::Alloc(buf + 1); // +1 to omit the leading double-quote.
 	}
 
 	return OK;
@@ -1773,8 +1764,7 @@ ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllo
 
 	// This is done only after the file has been successfully opened in case aIgnoreLoadFailure==true:
 	if (source_file_index > 0)
-		if (  !(Line::sSourceFile[source_file_index] = SimpleHeap::Malloc(full_path))  )
-			return ScriptError(ERR_OUTOFMEM);
+		Line::sSourceFile[source_file_index] = SimpleHeap::Alloc(full_path);
 	//else the first file was already taken care of by another means.
 
 #else // Stand-alone mode (there are no include files in this mode since all of them were merged into the main script at the time of compiling).
@@ -2012,6 +2002,10 @@ process_completed_line:
 			{
 				if (hotkey_flag == buf && hotkey_flag[2] == ':') // v1.0.46: Support ":::" to mean "colon is a hotkey".
 					++hotkey_flag;
+					// Above: Hotkeys like "^:::" and "l & :::" are not supported because: 1) some cases are
+					// ambiguous, such as "^:::" legitimately remapping caret to colon; 2) retaining support
+					// for colon as a remap target would require larger/more complicated code; 3) such hotkeys
+					// are hard for a human to read/interpret.
 				// v1.0.40: It appears to be a hotkey, but validate it as such before committing to processing
 				// it as a hotkey.  If it fails validation as a hotkey, treat it as a command that just happens
 				// to contain a double-colon somewhere.  This avoids the need to escape double colons in scripts.
@@ -2055,7 +2049,7 @@ process_completed_line:
 				return ScriptError(_T("Hotkeys/hotstrings are not allowed inside functions or classes."), buf);
 			}
 
-			*hotkey_flag = '\0'; // Terminate so that buf is now the label itself.
+			*hotkey_flag = '\0'; // Terminate so that buf is now the hotkey's name.
 			hotkey_flag += HOTKEY_FLAG_LENGTH;  // Now hotkey_flag is the hotkey's action, if any.
 			
 			LPTSTR otb_brace = omit_leading_whitespace(hotkey_flag);
@@ -2359,10 +2353,7 @@ process_completed_line:
 					return ScriptError(ERR_HOTKEY_MISSING_BRACE);
 				}
 				
-				LPTSTR hotstring_name = SimpleHeap::Malloc(buf);
-				if (!hotstring_name)
-					return FAIL;
-				if (!Hotstring::AddHotstring(hotstring_name, mLastHotFunc, hotstring_options
+				if (!Hotstring::AddHotstring(buf, mLastHotFunc, hotstring_options
 					, hotstring_start, hotstring_execute || hotkey_uses_otb ? _T("") : hotkey_flag, has_continuation_section))
 					return FAIL;
 				if (!mLastHotFunc)
@@ -2416,10 +2407,7 @@ process_completed_line:
 						&& !set_last_hotfunc())
 						return FAIL;
 					
-					TCHAR hotkey_name[MAX_VAR_NAME_LENGTH];
-					tcslcpy(hotkey_name, buf, _tcslen(buf) + 1);
-					
-					hk = Hotkey::AddHotkey(mLastHotFunc, hook_action, hotkey_name, suffix_has_tilde);
+					hk = Hotkey::AddHotkey(mLastHotFunc, hook_action, buf, suffix_has_tilde);
 					if (!hk)
 					{
 						if (hotkey_validity != CONDITION_TRUE)
@@ -3758,8 +3746,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		if (!Hotkey::IfExpr(NULL, mLastHotFunc, result_token))		// Set the new criterion.
 			return FAIL;
 
-		if (!(g->HotCriterion->OriginalExpr = SimpleHeap::Malloc(parameter))) 															
-			return ScriptError(ERR_OUTOFMEM); 
+		g->HotCriterion->OriginalExpr = SimpleHeap::Alloc(parameter);
 		
 		auto func = mLastHotFunc; // AddLine will set mLastHotFunc to nullptr below
 		
@@ -4235,12 +4222,8 @@ ResultType Script::AddLabel(LPTSTR aLabelName, bool aAllowDupe)
 		// return
 		return ScriptError(_T("Duplicate label."), aLabelName);
 	}
-	LPTSTR new_name = SimpleHeap::Malloc(aLabelName);
-	if (!new_name)
-		return FAIL;  // It already displayed the error for us.
+	LPTSTR new_name = SimpleHeap::Alloc(aLabelName);
 	Label *the_new_label = new Label(new_name); // Pass it the dynamic memory area we created.
-	if (the_new_label == NULL)
-		return ScriptError(ERR_OUTOFMEM);
 	the_new_label->mPrevLabel = last_label;  // Whether NULL or not.
 	if (first_label == NULL)
 		first_label = the_new_label;
@@ -5141,8 +5124,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		new_arg = NULL;  // Just need an empty array in this case.
 	else
 	{
-		if (   !(new_arg = (ArgStruct *)SimpleHeap::Malloc(aArgc * sizeof(ArgStruct)))   )
-			return ScriptError(ERR_OUTOFMEM);
+		new_arg = SimpleHeap::Alloc<ArgStruct>(aArgc);
 
 		int i;
 
@@ -5166,17 +5148,14 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			// this action type does not accept an expression (e.g. "goto label").
 			this_new_arg.is_expression = *this_aArg && aAllArgsAreExpressions;
 
-			// So that it can be passed to Malloc(), first update the length to match what the text will be
-			// (if the alloc fails, an inaccurate length won't matter because it's an program-abort situation).
-			// The length must fit into a WORD, which it will since each arg is literal text from a script's line,
-			// which is limited to LINE_SIZE. The length member was added in v1.0.44.14 to boost runtime performance.
+			// So that it can be passed to Alloc(), first update the length to match what the text will be
+			// (if the alloc fails, an inaccurate length won't matter because it's a program-abort situation).
+			// The length member was added in v1.0.44.14 to boost runtime performance, but is currently only
+			// used to estimate how much deref buf space is needed; see EXPR_BUF_SIZE macro.
 			this_new_arg.length = (ArgLengthType)_tcslen(this_aArg);
 			
-			// Allocate memory for arg text.
-			if (   !(this_new_arg.text = (LPTSTR)SimpleHeap::Malloc((this_new_arg.length + 1) * sizeof(TCHAR)))   )
-				return FAIL;  // It already displayed the error for us.
-			// Copy arg text to persistent memory.
-			tmemcpy(this_new_arg.text, this_aArg, this_new_arg.length + 1); // +1 for null terminator.
+			// Create a copy of arg text in persistent memory.
+			this_new_arg.text = SimpleHeap::Alloc(this_aArg, this_new_arg.length);
 
 			///////////////////////////////////////////
 			// Build the list of operands for this arg.
@@ -5204,8 +5183,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			//////////////////////////////////////////////////////////////
 			if (deref.count)
 			{
-				if (   !(this_new_arg.deref = (DerefType *)SimpleHeap::Malloc((deref.count + 1) * sizeof(DerefType)))   ) // +1 for the "NULL-item" terminator.
-					return ScriptError(ERR_OUTOFMEM);
+				this_new_arg.deref = SimpleHeap::Alloc<DerefType>(deref.count + 1); // +1 for the "NULL-item" terminator.
 				memcpy(this_new_arg.deref, deref.items, deref.count * sizeof(DerefType));
 				// Terminate the list of derefs with a deref that has a NULL marker:
 				this_new_arg.deref[deref.count].marker = NULL;
@@ -5220,8 +5198,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	// to Line's constructor so that they can be anchored to the new line.
 	//////////////////////////////////////////////////////////////////////////////////////
 	Line *the_new_line = new Line(mCurrFileIndex, mCombinedLineNumber, aActionType, new_arg, aArgc);
-	if (!the_new_line)
-		return ScriptError(ERR_OUTOFMEM);
 
 	Line &line = *the_new_line;  // For performance and convenience.
 
@@ -5994,7 +5970,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 				// The above has also set param_end for use near the bottom of the loop.
 				ConvertEscapeSequences(buf, NULL); // Raw escape sequences like `n haven't been converted yet, so do it now.
 				this_param.default_type = PARAM_DEFAULT_STR;
-				this_param.default_str = *buf ? SimpleHeap::Malloc(buf, target-buf) : _T("");
+				this_param.default_str = *buf ? SimpleHeap::Alloc(buf, target-buf) : _T("");
 			}
 			else // A default value other than a quoted/literal string.
 			{
@@ -6070,11 +6046,9 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 	if (param_count)
 	{
 		// Allocate memory only for the actual number of parameters actually present.
-		size_t size = param_count * sizeof(param[0]);
-		if (   !(func.mParam = (FuncParam *)SimpleHeap::Malloc(size))   )
-			return ScriptError(ERR_OUTOFMEM);
+		func.mParam = SimpleHeap::Alloc<FuncParam>(param_count);
 		func.mParamCount = param_count - func.mIsVariadic; // i.e. don't count the final "param*" of a variadic function.
-		memcpy(func.mParam, param, size);
+		memcpy(func.mParam, param, param_count * sizeof(FuncParam));
 	}
 	//else leave func.mParam/mParamCount set to their NULL/0 defaults.
 
@@ -6094,9 +6068,9 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		for (int i = 0; i < Hotkey::sHotkeyCount; ++i)
 		{
 			for (HotkeyVariant* v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
-				if (v->mJumpToLabel == last_hotfunc)
+				if (v->mCallback == last_hotfunc)
 				{
-					v->mJumpToLabel = &func;
+					v->mCallback = &func;
 					v->mOriginalCallback = &func;	// To make scripts more maintainable and to
 													// make the hotkey() function more consistent.
 													// For example,
@@ -6115,12 +6089,12 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		// Check hotstrings as well (even if a hotkey was found):
 		for (int i = Hotstring::sHotstringCount - 1; i >= 0; --i) // Start with the last one defined, for performance.
 		{
-			if (Hotstring::shs[i]->mJumpToLabel != last_hotfunc)
+			if (Hotstring::shs[i]->mCallback != last_hotfunc)
 				// This hotstring has a function or is auto-replace.
 				// Since hotstrings are listed in order of definition and we're iterating in
 				// the reverse order, there's no need to continue.
 				break;
-			Hotstring::shs[i]->mJumpToLabel = &func;
+			Hotstring::shs[i]->mCallback = &func;
 		}
 
 		if (func.mMinParams > 1 || (func.mParamCount == 0 && !func.mIsVariadic))
@@ -6710,11 +6684,7 @@ void Script::InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSu
 	// MAX_PATH on ANSI builds since no path longer than that would work, but doing it this
 	// way simplifies length checks later (and Unicode builds support much longer paths).
 	size_t buf_size = length + MAX_VAR_NAME_LENGTH + FUNC_LIB_EXT_LENGTH + 1;
-	if (  !(aLib.path = (LPTSTR)SimpleHeap::Malloc(buf_size * sizeof(TCHAR)))  )
-	{
-		aLib.path = _T("");
-		return;
-	}
+	aLib.path = SimpleHeap::Alloc<TCHAR>(buf_size);
 	tmemcpy(aLib.path, buf, length + 1);
 	aLib.length = length;
 }
@@ -6925,9 +6895,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 	// ValidateName requires that the name be null-terminated, but it isn't in this case.
 	// Doing this first saves doing tcslcpy() into a temporary buffer, and won't leak memory
 	// since the script currently always exits if an error occurs anywhere below:
-	LPTSTR new_name = SimpleHeap::Malloc((LPTSTR)aFuncName, aFuncNameLength);
-	if (!new_name)
-		return nullptr; // Above already displayed the error for us.
+	LPTSTR new_name = SimpleHeap::Alloc(aFuncName, aFuncNameLength);
 
 	if (!aClassObject && *new_name && !Var::ValidateName(new_name, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
 		return nullptr; // Above already displayed the error for us.
@@ -7463,8 +7431,6 @@ ResultType Script::AddGroup(LPTSTR aGroupName)
 	// some other thread calls FindGroup() in the middle of the operation.  But any changes
 	// must be carefully reviewed:
 	WinGroup *the_new_group = new WinGroup(new_name);
-	if (the_new_group == NULL)
-		return MemoryError();
 	if (mFirstGroup == NULL)
 		mFirstGroup = the_new_group;
 	else
@@ -8043,8 +8009,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					else
 					{
 						auto callsite = new CallSite();
-						if (!callsite)
-							return LineError(ERR_OUTOFMEM);
 						if (  !(infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))  )
 							callsite->func = ExprOp<Op_Array, 0>();
 						else
@@ -8061,8 +8025,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
 						return LineError(_T("Unexpected \"{\""));
 					this_infix_item.callsite = new CallSite();
-					if (!this_infix_item.callsite)
-						return LineError(ERR_OUTOFMEM);
 					this_infix_item.callsite->func = ExprOp<Op_Object, 0>();
 					this_infix_item.symbol = SYM_OBRACE;
 					break;
@@ -8176,8 +8138,6 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					{
 						++cp;
 						this_infix_item.callsite = new CallSite();
-						if (!this_infix_item.callsite)
-							return LineError(ERR_OUTOFMEM);
 						this_infix_item.callsite->func = ExprOp<BIF_RegEx, FID_RegExMatch>();
 						this_infix_item.callsite->param_count = 2;
 						this_infix_item.symbol = SYM_REGEXMATCH;
@@ -8268,10 +8228,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 								return LineError(ERR_EXPR_SYNTAX, FAIL, cp-1); // Intentionally vague since the user's intention isn't clear.
 
 							auto callsite = new CallSite();
-							if (!callsite)
-								return LineError(ERR_OUTOFMEM);
-							if (  !(callsite->member = SimpleHeap::Malloc(cp, op_end - cp))  )
-								return FAIL; // Malloc already displayed an error message.
+							callsite->member = SimpleHeap::Alloc(cp, op_end - cp);
 
 							SymbolType new_symbol; // Type of token: SYM_FUNC or SYM_DOT (which must be treated differently as it doesn't have parentheses).
 							if (*op_end == '(')
@@ -8342,9 +8299,7 @@ unquoted_literal:
 					}
 					op_end = find_identifier_end(cp);
 					// SYM_STRING: either the "key" in "{key: value}" or a syntax error (might be impossible).
-					LPTSTR str = SimpleHeap::Malloc(cp, op_end - cp);
-					if (!str)
-						return FAIL; // Malloc already displayed an error message.
+					LPTSTR str = SimpleHeap::Alloc(cp, op_end - cp);
 					this_literal.SetValue(str, op_end - cp);
 					cp = op_end; // Have the loop process whatever lies at op_end and beyond.
 					continue; // "Continue" to avoid the ++cp at the bottom.
@@ -8430,9 +8385,7 @@ unquoted_literal:
 
 			if (!can_be_optimized_out)
 			{
-				LPTSTR str = SimpleHeap::Malloc(this_deref_ref.marker, this_deref_ref.length);
-				if (!str)
-					return FAIL; // Malloc already displayed an error message.
+				LPTSTR str = SimpleHeap::Alloc(this_deref_ref.marker, this_deref_ref.length);
 				infix[infix_count].SetValue(str, this_deref_ref.length);
 				infix_count++;
 			}
@@ -8481,8 +8434,6 @@ unquoted_literal:
 		else if (this_deref_ref.type == DT_DOTPERCENT)
 		{
 			auto callsite = new CallSite();
-			if (!callsite)
-				return LineError(ERR_OUTOFMEM);
 			if (*this_deref_ref.marker == '(')
 			{
 				infix[infix_count].symbol = SYM_FUNC;
@@ -8526,8 +8477,6 @@ unquoted_literal:
 			// reference and returns the function itself or a closure.  Which that will be depends
 			// on var references which haven't been resolved yet (unless it's a global function).
 			auto callsite = new CallSite();
-			if (!callsite)
-				return LineError(ERR_OUTOFMEM);
 			callsite->func = ExprOp<Op_FuncClose, 0>();
 			infix[infix_count].symbol = SYM_FUNC;
 			infix[infix_count].callsite = callsite;
@@ -9058,8 +9007,6 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 						// Give it a new callsite since the original one will be reused below
 						// (so that there's no redundant allocation for the SYM_ASSIGN case).
 						this_postfix->callsite = new CallSite();
-						if (!this_postfix->callsite)
-							return LineError(ERR_OUTOFMEM);
 						this_postfix->callsite->flags		= callsite->flags | EIF_LEAVE_PARAMS;
 						this_postfix->callsite->member		= callsite->member;
 						this_postfix->callsite->param_count	= callsite->param_count;
@@ -9087,8 +9034,6 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 						auto get_callsite = get_token->callsite;
 
 						auto set_callsite = new CallSite();
-						if (!set_callsite)
-							return LineError(ERR_OUTOFMEM);
 						set_callsite->member      = get_callsite->member;
 						set_callsite->flags       = IT_SET | (get_callsite->flags & ~IT_GET);
 						set_callsite->param_count = get_callsite->param_count + 1;
@@ -9227,8 +9172,7 @@ end_of_infix_to_postfix:
 		case SYM_FLOAT:
 			// Convert this numeric literal back into a string to ensure the format is consistent.
 			// This also ensures parentheses are not present in the output, for cases like MsgBox (1.0).
-			if (  !(aArg.text = SimpleHeap::Malloc(TokenToString(only_token, number_buf)))  )
-				return FAIL; // Malloc already displayed an error message.
+			aArg.text = SimpleHeap::Alloc(TokenToString(only_token, number_buf));
 			aArg.is_expression = false;
 			break;
 		case SYM_STRING:
@@ -9248,8 +9192,7 @@ end_of_infix_to_postfix:
 	}
 
 	// Create a new postfix array and attach it to this arg of this line.
-	if (   !(aArg.postfix = (ExprTokenType *)SimpleHeap::Malloc((postfix_count+1)*sizeof(ExprTokenType)))   ) // +1 for the terminator item added below.
-		return LineError(ERR_OUTOFMEM);
+	aArg.postfix = SimpleHeap::Alloc<ExprTokenType>(postfix_count + 1); // +1 for the terminator item added below.
 
 	int i, j, max_stack = 0, max_alloc = 0;
 	for (i = 0; i < postfix_count; ++i) // Copy the postfix array in physically sorted order into the new postfix array.
@@ -10485,7 +10428,7 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	// CALL THE CALLBACK
 	ExprTokenType param = aHotkeyName;
 	__int64 retval;
-	result = LabelPtr(Callback)->ExecuteInNewThread(_T("#HotIf"), &param, 1, &retval);
+	result = IObjectPtr(Callback)->ExecuteInNewThread(_T("#HotIf"), &param, 1, &retval);
 	if (result != FAIL)
 		result = retval ? CONDITION_TRUE : CONDITION_FALSE;
 	
@@ -12030,8 +11973,7 @@ BIF_DECL(BIF_PerformAction)
 		arg[i].text = TokenToString(*aParam[i], number_buf + (i * MAX_NUMBER_SIZE));
 		arg[i].deref = NULL;
 		Line::sArgDeref[i] = arg[i].text;
-		// length won't actually be used.  In any case, this wouldn't always
-		// work, since ArgLengthType is currently limited to 65535:
+		// length won't actually be used.
 		//arg[i].length = (ArgLengthType)_tcslen(arg[i].text);
 	}
 
@@ -12296,7 +12238,7 @@ LPTSTR Line::VicinityToText(LPTSTR aBuf, int aBufSize) // aBufSize should be an 
 
 
 
-LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool aLineWasResumed) // aBufSize should be an int to preserve negatives from caller (caller relies on this).
+LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool aLineWasResumed, bool aLineNumber) // aBufSize should be an int to preserve negatives from caller (caller relies on this).
 // aBufSize is an int so that any negative values passed in from caller are not lost.
 // Caller has ensured that aBuf isn't NULL.
 // Translates this line into its text equivalent, putting the result into aBuf and
@@ -12309,7 +12251,8 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 
 	LPTSTR aBuf_orig = aBuf;
 
-	aBuf += sntprintf(aBuf, aBufSize, _T("%03u: "), mLineNumber);
+	if (aLineNumber)
+		aBuf += sntprintf(aBuf, aBufSize, _T("%03u: "), mLineNumber);
 	if (aLineWasResumed)
 		aBuf += sntprintf(aBuf, BUF_SPACE_REMAINING, _T("STILL WAITING (%0.2f): "), (float)aElapsed / 1000.0);
 
@@ -12483,42 +12426,34 @@ LPCTSTR Debugger::WhatThrew()
 #endif
 
 
-IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo, Object *aPrototype)
+IObject *Line::CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aPrototype)
 {
 	// Build the parameters for Object::Create()
-	ExprTokenType aParams[5*2]; int aParamCount = 4*2;
-	ExprTokenType* aParam[5*2] = { aParams + 0, aParams + 1, aParams + 2, aParams + 3, aParams + 4
-		, aParams + 5, aParams + 6, aParams + 7, aParams + 8, aParams + 9 };
-	aParams[0].SetValue(_T("What"), 4);
-	aParams[1].SetValue(const_cast<LPTSTR>(aWhat ? aWhat : 
+	ExprTokenType aParams[3]; int aParamCount = 2;
+	ExprTokenType* aParam[3] { aParams + 0, aParams + 1, aParams + 2 };
+	aParams[0].SetValue(const_cast<LPTSTR>(aErrorText));
 #ifdef CONFIG_DEBUGGER
-		g_Debugger.WhatThrew()));
+	aParams[1].SetValue(const_cast<LPTSTR>(g_Debugger.WhatThrew()));
 #else
-		// Without the debugger stack, there's no good way to determine what's throwing. It could be:
-		//g_act[mActionType].Name; // A command implemented as an Action (g_act).
-		//g->CurrentFunc->mName; // A user-defined function (perhaps when mActionType == ACT_THROW).
-		//???; // A built-in function implemented as a Func (g_BIF).
-		_T("")));
+	// Without the debugger stack, there's no good way to determine what's throwing. It could be:
+	//g_act[mActionType].Name; // A command implemented as an Action (g_act).
+	//g->CurrentFunc->mName; // A user-defined function (perhaps when mActionType == ACT_THROW).
+	//???; // A built-in function implemented as a Func (g_BIF).
+	aParams[1].SetValue(_T(""), 0);
 #endif
-	aParams[2].SetValue(_T("File"), 4);
-	aParams[3].SetValue(Line::sSourceFile[mFileIndex]);
-	aParams[4].SetValue(_T("Line"), 4);
-	aParams[5].SetValue(mLineNumber);
-	aParams[6].SetValue(_T("Message"), 7);
-	aParams[7].SetValue((LPTSTR)aErrorText);
 	if (aExtraInfo && *aExtraInfo)
-	{
-		aParamCount += 2;
-		aParams[8].SetValue(_T("Extra"), 5);
-		aParams[9].SetValue((LPTSTR)aExtraInfo);
-	}
+		aParams[aParamCount++].SetValue(const_cast<LPTSTR>(aExtraInfo));
 
-	auto obj = Object::Create(aParam, aParamCount);
+	auto obj = Object::Create();
 	if (!obj)
 		return nullptr;
 	if (!aPrototype)
 		aPrototype = ErrorPrototype::Error;
 	obj->SetBase(aPrototype);
+	FuncResult rt;
+	g_script.mCurrLine = this;
+	if (!obj->Construct(rt, aParam, aParamCount))
+		return nullptr;
 	return obj;
 }
 
@@ -12540,7 +12475,7 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo
 
 	ResultToken *token;
 	if (   !(token = new ResultToken)
-		|| !(token->object = aLine->CreateRuntimeException(aErrorText, nullptr, aExtraInfo, aPrototype))   )
+		|| !(token->object = aLine->CreateRuntimeException(aErrorText, aExtraInfo, aPrototype))   )
 	{
 		// Out of memory. It's likely that we were called for this very reason.
 		// Since we don't even have enough memory to allocate an exception object,
@@ -12548,14 +12483,20 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo
 		// since that would recurse into this function.
 		if (token)
 			delete token;
-		MsgBox(ERR_OUTOFMEM ERR_ABORT);
-		return FAIL;
+		if (!g->ThrownToken)
+		{
+			MsgBox(ERR_OUTOFMEM ERR_ABORT);
+			return FAIL;
+		}
+		//else: Thrown by Error constructor?
 	}
+	else
+	{
+		token->symbol = SYM_OBJECT;
+		token->mem_to_free = NULL;
 
-	token->symbol = SYM_OBJECT;
-	token->mem_to_free = NULL;
-
-	g->ThrownToken = token;
+		g->ThrownToken = token;
+	}
 	if (!(g->ExcptMode & EXCPTMODE_CATCH))
 		return UnhandledException(aLine, aErrorType);
 
@@ -12978,6 +12919,11 @@ ResultType MemoryError()
 	return g_script.RuntimeError(ERR_OUTOFMEM, nullptr, FAIL, nullptr, ErrorPrototype::Memory);
 }
 
+void SimpleHeap::CriticalFail()
+{
+	g_script.CriticalError(ERR_OUTOFMEM);
+}
+
 __declspec(noinline)
 ResultType ResultToken::ValueError(LPCTSTR aErrorText)
 {
@@ -13361,10 +13307,8 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 		// Upvars are vars local to an outer function which are referenced by aFunc.
 		// They might be local to aFunc.mOuterFunc or one further out.  In the latter
 		// case, aFunc.mOuterFunc contains a downvar which is also one of its upvars.
-		aFunc.mUpVar = (Var **)SimpleHeap::Malloc(aFunc.mUpVarCount * sizeof(Var *));
-		aFunc.mUpVarIndex = (int *)SimpleHeap::Malloc(aFunc.mUpVarCount * sizeof(int));
-		if (!aFunc.mUpVar || !aFunc.mUpVarIndex)
-			return ScriptError(ERR_OUTOFMEM);
+		aFunc.mUpVar = SimpleHeap::Alloc<Var*>(aFunc.mUpVarCount);
+		aFunc.mUpVarIndex = SimpleHeap::Alloc<int>(aFunc.mUpVarCount);
 
 		auto &outer = *aFunc.mOuterFunc; // Always non-null when aFunc.mUpVarCount > 0.
 		int upvar_count = 0;
@@ -13393,9 +13337,7 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 	if (aFunc.mDownVarCount)
 	{
 		// Downvars are vars local to aFunc which are referenced by a nested function.
-		aFunc.mDownVar = (Var **)SimpleHeap::Malloc(aFunc.mDownVarCount * sizeof(Var *));
-		if (!aFunc.mDownVar)
-			return ScriptError(ERR_OUTOFMEM);
+		aFunc.mDownVar = SimpleHeap::Alloc<Var*>(aFunc.mDownVarCount);
 		
 		int downvar_count = 0;
 		for (int v = 0; v < var_count; ++v)

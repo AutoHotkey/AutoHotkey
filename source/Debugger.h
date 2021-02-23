@@ -486,5 +486,9 @@ private:
 	static int FatalError(LPCTSTR aMessage = DEBUGGER_ERR_INTERNAL DEBUGGER_ERR_DISCONNECT_PROMPT);
 };
 
+
+void GetScriptStack(LPTSTR aBuf, int aBufSize, DbgStack::Entry *aTop = nullptr);
+
+
 #endif
 #endif

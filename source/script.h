@@ -401,8 +401,8 @@ struct CallSite
 	bool is_variadic() { return flags & EIF_VARIADIC; }
 	void is_variadic(bool b) { if (b) flags |= EIF_VARIADIC; else flags &= ~EIF_VARIADIC; }
 	
-	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void *operator new(size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
+	void *operator new[](size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
 	void operator delete(void *aPtr) {}  // Intentionally does nothing.
 	void operator delete[](void *aPtr) {}
 };
@@ -1347,7 +1347,7 @@ public:
 
 	static LPTSTR LogToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR VicinityToText(LPTSTR aBuf, int aBufSize);
-	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false);
+	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false, bool aLineNumber = true);
 
 	static void ToggleSuspendState();
 	static void PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause);
@@ -1358,7 +1358,7 @@ public:
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
 	ResultType LineError(LPCTSTR aErrorText, ResultType aErrorType = FAIL, LPCTSTR aExtraInfo = _T(""));
-	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aWhat, LPCTSTR aExtraInfo, Object *aPrototype);
+	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aPrototype);
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 	
 	ResultType ValidateVarUsage(Var *aVar, int aUsage);
@@ -1383,8 +1383,8 @@ public:
 		, mBreakpoint(NULL)
 #endif
 		{}
-	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void *operator new(size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
+	void *operator new[](size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
 	void operator delete(void *aPtr) {}  // Intentionally does nothing because we're using SimpleHeap for everything.
 	void operator delete[](void *aPtr) {}
 
@@ -1414,8 +1414,8 @@ public:
 		, mJumpToLine(NULL)
 		, mPrevLabel(NULL), mNextLabel(NULL)
 	{}
-	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void *operator new(size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
+	void *operator new[](size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
 };
@@ -1426,17 +1426,17 @@ public:
 // hotkey, etc.  It provides common functionality that wouldn't be suitable for the
 // base IObject interface, but is needed for detection of "Suspend" or "Critical"
 // prior to calling the sub or function.
-class LabelPtr
+class IObjectPtr
 {
 protected:
 	IObject *mObject;
 	
 public:
-	LabelPtr() : mObject(NULL) {}
-	LabelPtr(IObject *object) : mObject(object) {}
+	IObjectPtr() : mObject(NULL) {}
+	IObjectPtr(IObject *object) : mObject(object) {}
 	ResultType ExecuteInNewThread(TCHAR *aNewThreadDesc
 		, ExprTokenType *aParamValue = NULL, int aParamCount = 0, __int64 *aRetVal = NULL) const;
-	const LabelPtr* operator-> () { return this; } // Act like a pointer.
+	const IObjectPtr* operator-> () { return this; } // Act like a pointer.
 	operator void *() const { return mObject; } // For comparisons and boolean eval.
 
 	// Caller beware: does not check for NULL.
@@ -1447,28 +1447,28 @@ public:
 	LPCTSTR Name() const;
 };
 
-// LabelPtr with automatic reference-counting, for storing an object safely,
+// IObjectPtr with automatic reference-counting, for storing an object safely,
 // such as in a HotkeyVariant, UserMenuItem, etc.  Its specific purpose is to
 // work with old code that wasn't concerned with reference counting.
-class LabelRef : public LabelPtr
+class IObjectRef : public IObjectPtr
 {
 private:
-	LabelRef(const LabelRef &); // Disable default copy constructor.
-	LabelRef & operator = (const LabelRef &); // ...and copy assignment.
+	IObjectRef(const IObjectRef &); // Disable default copy constructor.
+	IObjectRef & operator = (const IObjectRef &); // ...and copy assignment.
 
 public:
-	LabelRef() : LabelPtr() {}
-	LabelRef(IObject *object) : LabelPtr(object)
+	IObjectRef() : IObjectPtr() {}
+	IObjectRef(IObject *object) : IObjectPtr(object)
 	{
 		if (object)
 			object->AddRef();
 	}
-	LabelRef(const LabelPtr &other) : LabelPtr(other)
+	IObjectRef(const IObjectPtr &other) : IObjectPtr(other)
 	{
 		if (mObject)
 			mObject->AddRef();
 	}
-	LabelRef & operator = (IObject *object)
+	IObjectRef & operator = (IObject *object)
 	{
 		if (object)
 			object->AddRef();
@@ -1477,11 +1477,11 @@ public:
 		mObject = object;
 		return *this;
 	}
-	LabelRef & operator = (const LabelPtr &other)
+	IObjectRef & operator = (const IObjectPtr &other)
 	{
 		return *this = other.ToObject();
 	}
-	~LabelRef()
+	~IObjectRef()
 	{
 		if (mObject)
 			mObject->Release();
@@ -1777,8 +1777,8 @@ public:
 		return result;
 	}
 
-	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void *operator new(size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
+	void *operator new[](size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
 };
@@ -1860,8 +1860,8 @@ public:
 
 	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
 
-	void *operator new(size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
-	void *operator new[](size_t aBytes) {return SimpleHeap::Malloc(aBytes);}
+	void *operator new(size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
+	void *operator new[](size_t aBytes) {return SimpleHeap::Alloc(aBytes);}
 	void operator delete(void *aPtr) {}
 	void operator delete[](void *aPtr) {}
 };
@@ -1997,7 +1997,7 @@ public:
 class ScriptTimer
 {
 public:
-	LabelRef mCallback;
+	IObjectRef mCallback;
 	DWORD mPeriod; // v1.0.36.33: Changed from int to DWORD to double its capacity.
 	DWORD mTimeLastRun;  // TickCount
 	int mPriority;  // Thread priority relative to other threads, default 0.
@@ -2215,7 +2215,7 @@ class UserMenuItem
 public:
 	LPTSTR mName;  // Dynamically allocated.
 	size_t mNameCapacity;
-	LabelRef mCallback;
+	IObjectRef mCallback;
 	UserMenu *mSubmenu;
 	UserMenu *mMenu;  // The menu to which this item belongs.  Needed to support script var A_ThisMenu.
 	UINT mMenuID;

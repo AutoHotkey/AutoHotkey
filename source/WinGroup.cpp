@@ -64,8 +64,6 @@ ResultType WinGroup::AddWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle
 	// some other thread calls IsMember() in the middle of the operation.  But any changes
 	// must be carefully reviewed:
 	WindowSpec *the_new_win = new WindowSpec(new_title, new_text, new_exclude_title, new_exclude_text);
-	if (the_new_win == NULL)
-		return MemoryError();
 	if (mFirstWindow == NULL)
 		mFirstWindow = the_new_win;
 	else
@@ -366,9 +364,8 @@ inline ResultType WinGroup::Update(bool aIsModeActivate)
 	if (!sAlreadyVisited) // Allocate the array on first use.
 		// Getting it from SimpleHeap reduces overhead for the avg. case (i.e. the first
 		// block of SimpleHeap is usually never fully used, and this array won't even
-		// be allocated for short scripts that don't even using window groups.
-		if (   !(sAlreadyVisited = (HWND *)SimpleHeap::Malloc(MAX_ALREADY_VISITED * sizeof(HWND)))   )
-			return FAIL;  // It already displayed the error for us.
+		// be allocated for short scripts that don't even use window groups.
+		sAlreadyVisited = SimpleHeap::Alloc<HWND>(MAX_ALREADY_VISITED);
 	return OK;
 }
 
