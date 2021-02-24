@@ -2605,7 +2605,7 @@ BIF_DECL(BIF_WinSet)
 		// GetClassLong) if aValue is entirely blank.
 
 		exstyle = GetWindowLong(target_window, GWL_EXSTYLE);
-		if (!_tcsicmp(aValue, _T("Off")))
+		if (!_tcsicmp(aValue, _T("Off")) || !*aValue)
 			// One user reported that turning off the attribute helps window's scrolling performance.
 			success = SetWindowLong(target_window, GWL_EXSTYLE, exstyle & ~WS_EX_LAYERED);
 		else
