@@ -2610,6 +2610,8 @@ BIF_DECL(BIF_WinSet)
 			success = SetWindowLong(target_window, GWL_EXSTYLE, exstyle & ~WS_EX_LAYERED);
 		else
 		{
+			if (!IsNumeric(aValue, FALSE, FALSE))
+				_f_throw_param(0);
 			if (cmd == FID_WinSetTransparent)
 			{
 				// Update to the below for v1.0.23: WS_EX_LAYERED can now be removed via the above:
