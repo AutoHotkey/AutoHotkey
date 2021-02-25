@@ -680,6 +680,8 @@ public:
 	void MarkAssignedSomewhere()
 	{
 		mAttrib |= VAR_ATTRIB_HAS_ASSIGNMENT;
+		if (mType == VAR_ALIAS)
+			mAliasFor->MarkAssignedSomewhere();
 	}
 
 	bool IsObject() // L31: Indicates this var contains an object reference which must be released if the var is emptied.
