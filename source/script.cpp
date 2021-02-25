@@ -278,7 +278,7 @@ FuncEntry g_BIF[] =
 	BIFn(RegDeleteKey, 0, 1, BIF_Reg),
 	BIFn(RegExMatch, 2, 4, BIF_RegEx, {3}),
 	BIFn(RegExReplace, 2, 6, BIF_RegEx, {4}),
-	BIFn(RegRead, 0, 2, BIF_Reg),
+	BIFn(RegRead, 0, 3, BIF_Reg),
 	BIFn(RegWrite, 0, 4, BIF_Reg),
 	BIFA(Reload, 0, 0, ACT_RELOAD),
 	BIF1(Round, 1, 2),

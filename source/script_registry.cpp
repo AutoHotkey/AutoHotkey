@@ -179,7 +179,7 @@ ResultType Line::IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 
 
 
-void RegRead(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
+void RegRead(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName, ExprTokenType *aDefault)
 {
 	HKEY	hRegKey;
 	DWORD	dwRes, dwBuf, dwType;
@@ -338,7 +338,13 @@ finish:
 	//if (hRegKey)
 	RegCloseKey(hRegKey);
 	g->LastError = result;
-	if (result != ERROR_SUCCESS)
+	if (result == ERROR_FILE_NOT_FOUND && aDefault)
+	{
+		aResultToken.CopyValueFrom(*aDefault);
+		if (aResultToken.symbol == SYM_OBJECT)
+			aResultToken.object->AddRef(); // Must be done for safety, and supporting objects (returned as is) might have some utility.
+	}
+	else if (result != ERROR_SUCCESS)
 		_f_throw_win32(g->LastError);
 } // RegRead()
 
@@ -667,7 +673,7 @@ BIF_DECL(BIF_Reg)
 
 	switch (action)
 	{
-	case FID_RegRead:  RegRead(aResultToken, root_key, sub_key, value_name); break;
+	case FID_RegRead:  RegRead(aResultToken, root_key, sub_key, value_name, ParamIndexIsOmitted(2) ? nullptr : aParam[2]); break;
 	case FID_RegWrite: RegWrite(aResultToken, *value, value_type, root_key, sub_key, value_name); break;
 	default:           RegDelete(aResultToken, root_key, sub_key, value_name); break;
 	}
