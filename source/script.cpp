@@ -6947,7 +6947,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 	else if (aFuncNameLength)
 	{
 		Var *var = FindOrAddVar(aFuncName, aFuncNameLength
-			, (g->CurrentFunc ? VAR_DECLARE_LOCAL : VAR_DECLARE_GLOBAL));
+			, FINDVAR_NO_BIF | (g->CurrentFunc ? VAR_DECLARE_LOCAL : VAR_DECLARE_GLOBAL));
 		if (!var)
 			return nullptr;
 		if (!var->IsUninitializedNormalVar())
@@ -7138,6 +7138,7 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 		if (apList) *apList = varlist;
 		if (apInsertPos) *apInsertPos = insert_pos;
 
+		if (!(aScope & FINDVAR_NO_BIF))
 		// Built-in functions can be shadowed, so are checked only in this section.
 		if (auto *bif = GetBuiltInFunc(var_name))
 		{
