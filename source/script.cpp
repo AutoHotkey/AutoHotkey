@@ -7211,6 +7211,23 @@ Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayE
 	if (  !(outer_var = outer.mVars.Find(aVarName))
 		&& !(outer.mOuterFunc && (outer_var = FindUpVar(aVarName, outer, aDisplayError)))  )
 		return nullptr;
+	// At this point, all var refs used in declarations, assignments or &var in the outer
+	// function should have already been parsed, while it's possible that some read-refs
+	// have not.  Ignore all variables that lack an assignment, &var or declaration.
+	//  - Avoids an issue where only read-refs ABOVE the nested function are accessible
+	//    (which could also be fixed by changing PreparseVarRefs to parse one function
+	//    at a time, parsing outer in its entirety before inner).
+	//  - Avoids inconsistency between read-refs and write-refs: when the outer var is created
+	//    by a read-ref, closures which only read would capture it, while closures which write
+	//    would create their own local.
+	//  - Avoids having behaviour depend on whether a global exists: when outer and inner both
+	//    only use read-refs (but maybe assign dynamically), whether the nested function becomes
+	//    a closure might depend on whether the var is global or local to outer.
+	//  - Having a non-dynamic assignment (and no global declaration) makes it easier to see
+	//    that the var is local by looking at just the outer function, and avoids warnings.
+	//  - A clear rule is easier to remember.
+	if (  !(outer_var->IsAssignedSomewhere() || outer_var->IsDeclared())  )
+		return nullptr;
 	// Since this local variable is not static, things need to be set up so that the inner
 	// function will capture it as an upvar at the appropriate time.
 	if (mIsReadyToExecute)
@@ -13189,7 +13206,14 @@ void Script::WarnUnassignedVar(Var *var)
 
 	// Show only one MsgBox per var, but list all references when using StdOut/OutputDebug.
 	if (warnMode == WARNMODE_MSGBOX)
-		var->MarkAssignedSomewhere();
+	{
+		// The following check uses a flag separate to IsAssignedSomewhere() because setting
+		// that one for the purpose of preventing multiple MsgBoxes would cause other callers
+		// of IsAssignedSomewhere() to get the wrong result if a MsgBox has been shown.
+		if (var->HasAlreadyWarned())
+			return;
+		var->MarkAlreadyWarned();
+	}
 
 	bool isUndeclaredLocal = (var->Scope() & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL;
 	LPCTSTR sameNameAsGlobal = isUndeclaredLocal && FindGlobalVar(var->mName) ? _T("  (same name as a global)") : _T("");

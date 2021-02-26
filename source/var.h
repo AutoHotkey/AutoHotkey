@@ -155,6 +155,7 @@ private:
 	VarSizeType mByteCapacity = 0; // In bytes.  Includes the space for the zero terminator.
 	AllocMethodType mHowAllocated = ALLOC_NONE; // Keep adjacent/contiguous with the below to save memory.
 	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE	0x01 // Combined with VAR_ATTRIB_IS_INT64/DOUBLE/OBJECT to indicate mContents is not current.
+	#define VAR_ATTRIB_ALREADY_WARNED		0x01 // Combined with VAR_ATTRIB_UNINITIALIZED to limit VarUnset warnings to 1 MsgBox per var.  See WarnUnassignedVar.
 	#define VAR_ATTRIB_UNINITIALIZED		0x02 // Var requires initialization before use.
 	#define VAR_ATTRIB_HAS_ASSIGNMENT		0x04 // Used during load time to detect vars that are not assigned anywhere.
 	#define VAR_ATTRIB_NOT_NUMERIC			0x08 // A prior call to IsNumeric() determined the var's value is PURE_NOT_NUMERIC.
@@ -671,7 +672,7 @@ public:
 	bool IsAssignedSomewhere()
 	{
 		//return mAttrib & VAR_ATTRIB_HAS_ASSIGNMENT;
-		return mAttrib != VAR_ATTRIB_UNINITIALIZED;
+		return (mAttrib & ~VAR_ATTRIB_ALREADY_WARNED) != VAR_ATTRIB_UNINITIALIZED;
 		// When this function is called (at load time), any of the other attributes
 		// would mean that this var has a value, which means that it doesn't require
 		// an assignment.  If it lacks all attributes, it's presumably a built-in var.
@@ -682,6 +683,16 @@ public:
 		mAttrib |= VAR_ATTRIB_HAS_ASSIGNMENT;
 		if (mType == VAR_ALIAS)
 			mAliasFor->MarkAssignedSomewhere();
+	}
+
+	bool HasAlreadyWarned()
+	{
+		return mAttrib & VAR_ATTRIB_ALREADY_WARNED;
+	}
+
+	void MarkAlreadyWarned()
+	{
+		mAttrib |= VAR_ATTRIB_ALREADY_WARNED;
 	}
 
 	bool IsObject() // L31: Indicates this var contains an object reference which must be released if the var is emptied.
