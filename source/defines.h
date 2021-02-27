@@ -230,6 +230,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 struct ExprTokenType; // Forward declarations for use below.
 struct ResultToken;
 struct IDebugProperties;
+class Object;
 
 
 // Must not be smaller than INT_PTR; see "(IntKeyType)(INT_PTR)".
@@ -247,6 +248,7 @@ struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 	virtual LPTSTR Type() = 0;
 	#define IObject_Type_Impl(name) \
 		LPTSTR Type() { return _T(name); }
+	virtual Object *Base() = 0;
 	
 #ifdef CONFIG_DEBUGGER
 	#define IObject_DebugWriteProperty_Def \

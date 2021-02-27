@@ -735,6 +735,17 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 }
 
 
+ResultType ObjectBase::Invoke(IObject_Invoke_PARAMS_DECL)
+{
+	if (auto base = Base())
+	{
+		aFlags |= IF_NO_SET_PROPVAL;
+		return base->Invoke(IObject_Invoke_PARAMS);
+	}
+	return INVOKE_NOT_HANDLED;
+}
+
+
 ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	switch (aID)
@@ -2979,7 +2990,8 @@ Object *Object::CreateRootPrototypes()
 				{_T("Integer"), &Object::sIntegerPrototype, BIF_Integer}
 			}},
 			{_T("String"), &Object::sStringPrototype, BIF_String}
-		}}
+		}},
+		{_T("VarRef"), &sVarRefPrototype}
 	});
 
 	GuiControlType::DefineControlClasses();
@@ -3032,6 +3044,7 @@ Object *Object::sStringPrototype;
 Object *Object::sNumberPrototype;
 Object *Object::sIntegerPrototype;
 Object *Object::sFloatPrototype;
+Object *Object::sVarRefPrototype;
 
 Object *Object::ValueBase(ExprTokenType &aValue)
 {

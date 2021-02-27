@@ -23,11 +23,9 @@ public:
 	// the script has a reference to the object, which means either that the script
 	// itself has implemented IConnectionPoint (and why would it?), or has used the
 	// IEnumConnections interface to retrieve its own object (unlikely).
-	ResultType Invoke(IObject_Invoke_PARAMS_DECL)
-	{
-		return INVOKE_NOT_HANDLED;
-	}
+	//ResultType Invoke(IObject_Invoke_PARAMS_DECL); // ObjectBase::Invoke is sufficient.
 	IObject_Type_Impl("ComEvent") // Unlikely to be called; see above.
+	Object *Base() { return nullptr; }
 
 	HRESULT Connect(LPTSTR pfx = NULL, IObject *ahkObject = NULL);
 
@@ -66,6 +64,7 @@ public:
 	ResultType SafeArrayInvoke(IObject_Invoke_PARAMS_DECL);
 	ResultType ByRefInvoke(IObject_Invoke_PARAMS_DECL);
 	LPTSTR Type();
+	Object *Base() { return nullptr; }
 	IObject_DebugWriteProperty_Def;
 
 	void ToVariant(VARIANT &aVar)

@@ -930,8 +930,8 @@ public:
 		Free(VAR_ALWAYS_FREE, true);
 	}
 
-	ResultType Invoke(IObject_Invoke_PARAMS_DECL) { return INVOKE_NOT_HANDLED; }
 	IObject_Type_Impl("VarRef");
+	::Object *Base() { return ::Object::sVarRefPrototype; }
 };
 
 

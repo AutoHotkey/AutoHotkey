@@ -139,9 +139,10 @@ BIF_DECL(BIF_ObjPtr)
 
 BIF_DECL(BIF_Base)
 {
-	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
+	IObject *iobj = ParamIndexToObject(0);
 	if (_f_callee_id == FID_ObjSetBase)
 	{
+		Object *obj = dynamic_cast<Object*>(iobj);
 		if (!obj)
 			_f_throw_type(_T("Object"), *aParam[0]);
 		auto new_base = dynamic_cast<Object *>(TokenToObject(*aParam[1]));
@@ -153,8 +154,8 @@ BIF_DECL(BIF_Base)
 	else // ObjGetBase
 	{
 		Object *obj_base;
-		if (obj)
-			obj_base = obj->Base();
+		if (iobj)
+			obj_base = iobj->Base();
 		else
 			obj_base = Object::ValueBase(*aParam[0]);
 		if (obj_base)
@@ -171,14 +172,13 @@ BIF_DECL(BIF_Base)
 
 bool Object::HasBase(ExprTokenType &aValue, IObject *aBase)
 {
-	if (auto obj = dynamic_cast<Object *>(TokenToObject(aValue)))
-	{
-		return obj->IsDerivedFrom(aBase);
-	}
-	if (auto value_base = Object::ValueBase(aValue))
-	{
+	Object *value_base;
+	if (auto obj = TokenToObject(aValue))
+		value_base = obj->Base();
+	else
+		value_base = Object::ValueBase(aValue);
+	if (value_base)
 		return value_base == aBase || value_base->IsDerivedFrom(aBase);
-	}
 	// Something that doesn't fit in our type hierarchy, like a ComObject.
 	// Returning false seems correct and more useful than throwing.
 	// HasBase(ComObj, "".base.base) ; False, it's not a primitive value.

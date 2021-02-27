@@ -65,6 +65,8 @@ public:
 	// and because it is likely to be more convenient and reliable than overriding
 	// Delete(), especially with a chain of derived types.
 	virtual ~ObjectBase() {}
+
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 };
 
 
@@ -470,6 +472,7 @@ public:
 	static ObjectMember sValueMembers[];
 	static Object *sAnyPrototype, *sPrimitivePrototype, *sStringPrototype
 		, *sNumberPrototype, *sIntegerPrototype, *sFloatPrototype;
+	static Object *sVarRefPrototype;
 	static Object *ValueBase(ExprTokenType &aValue);
 	static bool HasBase(ExprTokenType &aValue, IObject *aBase);
 
