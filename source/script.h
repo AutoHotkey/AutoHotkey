@@ -2969,7 +2969,7 @@ public:
 	void PrintErrorStdOut(LPCTSTR aErrorText, int aLength = 0, LPCTSTR aFile = _T("*"));
 	void PrintErrorStdOut(LPCTSTR aErrorText, LPCTSTR aExtraInfo, FileIndexType aFileIndex, LineNumberType aLineNumber);
 #ifndef AUTOHOTKEYSC
-	TextStream *mIncludeLibraryFunctionsThenExit;
+	bool mValidateThenExit;
 #endif
 	int mUninterruptedLineCountMax; // 32-bit for performance (since huge values seem unnecessary here).
 	int mUninterruptibleTime;
@@ -3034,7 +3034,7 @@ public:
 	};
 	void InitFuncLibraries(FuncLibrary aLibs[]);
 	void InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix);
-	void IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
+	void IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound);
 #endif
 	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0);
 	static FuncEntry *GetBuiltInFunc(LPTSTR aFuncName);

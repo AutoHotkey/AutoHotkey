@@ -558,7 +558,7 @@ Script::Script()
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
 	, mIsRestart(false), mErrorStdOut(false), mErrorStdOutCP(-1)
 #ifndef AUTOHOTKEYSC
-	, mIncludeLibraryFunctionsThenExit(NULL)
+	, mValidateThenExit(false)
 #endif
 	, mUninterruptedLineCountMax(1000), mUninterruptibleTime(17)
 	, mCustomIcon(NULL), mCustomIconSmall(NULL) // Normally NULL unless there's a custom tray icon loaded dynamically.
@@ -756,7 +756,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	else
 	{
 		// In case the script is a relative filespec (relative to current working dir):
-		buf_length = GetFullPathName(aScriptFilename, _countof(buf), buf, NULL); // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
+		buf_length = GetFullPathName(aScriptFilename, _countof(buf), buf, NULL); // Succeeds even on nonexistent files.
 		if (!buf_length)
 			return FAIL; // Due to rarity, no error msg, just abort.
 	}
@@ -769,7 +769,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		// lowercase/uppercase letters:
 		ConvertFilespecToCorrectCase(buf, _countof(buf), buf_length); // This might change the length, e.g. due to expansion of 8.3 filename.
 	}
-	mFileSpec = SimpleHeap::Alloc(buf);  // The full spec is stored for convenience, and it's relied upon by mIncludeLibraryFunctionsThenExit.
+	mFileSpec = SimpleHeap::Alloc(buf);  // The full spec is stored for convenience.
 	LPTSTR filename_marker;
 	if (filename_marker = _tcsrchr(buf, '\\'))
 	{
@@ -1546,11 +1546,8 @@ UINT Script::LoadFromFile()
 	}
 
 #ifndef AUTOHOTKEYSC
-	if (mIncludeLibraryFunctionsThenExit)
-	{
-		delete mIncludeLibraryFunctionsThenExit;
+	if (mValidateThenExit)
 		return 0; // Tell our caller to do a normal exit.
-	}
 #endif
 
 	// Set the working directory to the script's directory.  This must be done after the above
@@ -2416,7 +2413,7 @@ process_completed_line:
 						// keyboard layout.  Allow the script to start, but warn the user about the problem.
 						// Note that this hotkey's label is still valid even though the hotkey wasn't created.
 #ifndef AUTOHOTKEYSC
-						if (!mIncludeLibraryFunctionsThenExit) // Current keyboard layout is not relevant in /iLib mode.
+						if (!mValidateThenExit) // Current keyboard layout is not relevant in /validate mode.
 #endif
 						{
 							TCHAR msg_text[128];
@@ -3574,8 +3571,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				bool error_was_shown, file_was_found;
 				// Save the working directory; see the similar line below for details.
 				LPTSTR prev_dir = GetWorkingDir();
-				// Attempt to include a script file based on the same rules as func() auto-include:
-				IncludeLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found, false);
+				// Attempt to include a script file from a Lib folder:
+				IncludeLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found);
 				// Restore the working directory.
 				if (prev_dir)
 				{
@@ -6689,7 +6686,7 @@ void Script::InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSu
 	aLib.length = length;
 }
 
-void Script::IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude)
+void Script::IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound)
 // Caller must ensure that aFuncName doesn't already exist as a defined function.
 // If aFuncNameLength is 0, the entire length of aFuncName is used.
 {
@@ -6730,27 +6727,6 @@ void Script::IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErr
 			// Since above didn't "continue", a file exists whose name matches that of the requested function.
 			aFileWasFound = true; // Indicate success for #include <lib>, which doesn't necessarily expect a function to be found.
 
-			if (mIncludeLibraryFunctionsThenExit && aIsAutoInclude)
-			{
-				// For each auto-included library-file, write out two #Include lines:
-				// 1) Use #Include in its "change working directory" mode so that any explicit #include directives
-				//    or FileInstalls inside the library file itself will work consistently and properly.
-				// 2) Use #IncludeAgain (to improve performance since no dupe-checking is needed) to include
-				//    the library file itself.
-				// We don't directly append library files onto the main script here because:
-				// 1) ahk2exe needs to be able to see and act upon FileInstall and #Include lines (i.e. library files
-				//    might contain #Include even though it's rare).
-				// 2) #IncludeAgain and #Include directives that bring in fragments rather than entire functions or
-				//    subroutines wouldn't work properly if we resolved such includes in AutoHotkey.exe because they
-				//    wouldn't be properly interleaved/asynchronous, but instead brought out of their library file
-				//    and deposited separately/synchronously into the temp-include file by some new logic at the
-				//    AutoHotkey.exe's code for the #Include directive.
-				// 3) ahk2exe prefers to omit comments from included files to minimize size of compiled scripts.
-				mIncludeLibraryFunctionsThenExit->Format(_T("#Include %-0.*s\n#IncludeAgain %s\n")
-					, sLib[i].length, sLib[i].path, sLib[i].path);
-				// Now continue on normally so that our caller can continue looking for syntax errors.
-			}
-			
 			// g->CurrentFunc is non-NULL when the function-call being resolved is inside
 			// a function.  Save and reset it for correct behaviour in the include file:
 			auto current_func = g->CurrentFunc;
