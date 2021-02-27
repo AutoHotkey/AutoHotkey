@@ -268,7 +268,7 @@ Script::Script()
 	if (   !(mTrayMenu = AddMenu(_T("Tray")))   ) // realistically never happens
 	{
 		ScriptError(_T("No tray mem"));
-		ExitApp(EXIT_DESTROY);
+		ExitApp(EXIT_CRITICAL);
 	}
 	else
 		mTrayMenu->mIncludeStandardItems = true;
@@ -1114,7 +1114,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, int aExitCode)
 	DEBUGGER_STACK_POP()
 	sOnExitIsRunning = false;  // In case the user wanted the thread to end normally (see above).
 
-	if (terminate_afterward || aExitReason == EXIT_DESTROY)
+	if (terminate_afterward || EXITREASON_MUST_EXIT(aExitReason))
 		TerminateApp(aExitReason, aExitCode);
 
 	// Otherwise:
@@ -1131,7 +1131,7 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 // tray icons, menus, and unowned windows such as ToolTip.
 {
 	// L31: Release objects stored in variables, where possible.
-	if (aExitReason != CRITICAL_ERROR) // i.e. Avoid making matters worse if CRITICAL_ERROR.
+	if (aExitReason != EXIT_CRITICAL) // i.e. Avoid making matters worse if EXIT_CRITICAL.
 	{
 		// Ensure the current thread is not paused and can't be interrupted
 		// in case one or more objects need to call a __delete meta-function.
@@ -16615,7 +16615,7 @@ ResultType Line::LineError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aE
 
 	if (aErrorType == CRITICAL_ERROR && g_script.mIsReadyToExecute)
 		// Pass EXIT_DESTROY to ensure the program always exits, regardless of OnExit.
-		g_script.ExitApp(EXIT_DESTROY);
+		g_script.ExitApp(EXIT_CRITICAL);
 
 	return aErrorType; // The caller told us whether it should be a critical error or not.
 }
@@ -16725,7 +16725,7 @@ ResultType Script::CriticalError(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 	// mCurrLine should always be non-NULL during runtime, and CRITICAL_ERROR should
 	// cause LineError() to exit even if an OnExit routine is present, so this is here
 	// mainly for maintainability.
-	TerminateApp(EXIT_DESTROY, CRITICAL_ERROR);
+	TerminateApp(EXIT_CRITICAL, 0);
 	return FAIL; // Never executed.
 }
 
