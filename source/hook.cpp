@@ -2279,7 +2279,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 			}
 			else if (sDisguiseNextMenu)
 			{
-				// If LWin/RWin is still physically down (or down due to an explicit Send, such as a remapping),
+				// If a menu key is still physically down (or down due to an explicit Send, such as a remapping),
 				// keep watching until it is released so that if key-repeat puts it back into effect, it will be
 				// disguised again.  _non_ignored is used to ignore temporary modifier changes made during a
 				// Send which aren't explicit, such as `Send x` temporarily releasing LWin/RWin.  Without this,
@@ -2290,7 +2290,9 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 				// event; i.e. when an isolated Ctrl/Shift up event is received without a corresponding down event.
 				// "Physical" events of this kind can be sent by the system when switching from a window with UK
 				// layout to a window with US layout.  This is likely related to the UK layout having AltGr.
-				if (  !(g_modifiersLR_logical_non_ignored & (MOD_LWIN | MOD_RWIN))  )
+				// v1.1.33.03: This is now applied to LAlt/RAlt, to fix issues with hotkeys like !WheelUp:: in
+				// programs with non-standard handling of the Alt key, such as Firefox.
+				if (  !(g_modifiersLR_logical_non_ignored & (MOD_LWIN | MOD_RWIN | MOD_LALT | MOD_RALT))  )
 				{
 					if (modLR & (MOD_LCONTROL | MOD_RCONTROL | MOD_LSHIFT | MOD_RSHIFT))
 					{
