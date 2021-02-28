@@ -8022,7 +8022,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						// character be a digit (even a hex literal must start with 0).
 						if ((cp1 >= '0' && cp1 <= '9') || cp1 == '.') // v1.0.46.01: Recognize dot too, to support numbers like -.5.
 						{
-							for (op_end = cp + 2; !_tcschr(EXPR_OPERAND_TERMINATORS_EX_DOT, *op_end); ++op_end); // Find the end of this number (can be '\0').
+							_tcstod(cp, &op_end); // Find the end of this number, the easy way.
 							// 1.0.46.11: Due to obscurity, no changes have been made here to support scientific
 							// notation followed by the power operator; e.g. -1.0e+1**5.
 							if (!this_deref || op_end < this_deref->marker) // Detect numeric double derefs such as one created via "12%i% = value".
