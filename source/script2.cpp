@@ -15204,13 +15204,19 @@ ResultType GuiControlType::LV_GetNextOrCount(ResultToken &aResultToken, int aID,
 	}
 	// Since above didn't return, this is GetNext() mode.
 
-	int index = ParamIndexToOptionalInt(0, 0) - 1; // -1 to convert to zero-based.
-	// For flexibility, allow index to be less than -1 to avoid first-iteration complications in script loops
-	// (such as when deleting rows, which shifts the row index upward, require the search to resume at
-	// the previously found index rather than the row after it).  However, reset it to -1 to ensure
-	// proper return values from the API in the "find checked item" mode used below.
-	if (index < -1)
-		index = -1;  // Signal it to start at the top.
+	int index = -1;
+	if (!ParamIndexIsOmitted(0))
+	{
+		if (!ParamIndexIsNumeric(0))
+			_o_throw_param(0, _T("Number"));
+		index = ParamIndexToInt(0) - 1; // -1 to convert to zero-based.
+		// For flexibility, allow index to be less than -1 to avoid first-iteration complications in script loops
+		// (such as when deleting rows, which shifts the row index upward, require the search to resume at
+		// the previously found index rather than the row after it).  However, reset it to -1 to ensure
+		// proper return values from the API in the "find checked item" mode used below.
+		if (index < -1)
+			index = -1;  // Signal it to start at the top.
+	}
 
 	// For performance, decided to always find next selected item when the "C" option hasn't been specified,
 	// even when the checkboxes style is in effect.  Otherwise, would have to fetch and check checkbox style
