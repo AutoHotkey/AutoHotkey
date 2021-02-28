@@ -15278,12 +15278,16 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 			: SoundSetWaveVolume(ARG1, (HWAVEOUT)device_id);
 
 	case ACT_SOUNDBEEP:
-		// For simplicity and support for future/greater capabilities, no range checking is done.
-		// It simply calls the function with the two DWORD values provided. It avoids setting
-		// ErrorLevel because failure is rare and also because a script might want play a beep
-		// right before displaying an error dialog that uses the previous value of ErrorLevel.
-		Beep(*ARG1 ? ArgToUInt(1) : 523, *ARG2 ? ArgToUInt(2) : 150);
+	{
+		// Negative values are checked to avoid interpreting them as a very long duration.
+		// It avoids setting ErrorLevel because failure is rare and also because a script might want
+		// beep right before displaying an error dialog that uses the previous value of ErrorLevel.
+		DWORD duration = *ARG2 ? ArgToUInt(2) : 150;
+		if ((int)duration < 0)
+			duration = 150;
+		Beep(*ARG1 ? ArgToUInt(1) : 523, duration);
 		return OK;
+	}
 
 	case ACT_SOUNDPLAY:
 		return SoundPlay(ARG1, *ARG2 && !_tcsicmp(ARG2, _T("wait")) || !_tcsicmp(ARG2, _T("1")));
