@@ -643,7 +643,10 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 				// set a breakpoint on one of these should act like setting a breakpoint on a line
 				// which contains no code: put the breakpoint at the next line instead.
 				// Without this check, setting a breakpoint on a line like "else Exit" would not work.
-				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_BEGIN)
+				// ACT_CASE executes when the *previous* case reaches its end, so for that case
+				// we want to shift the breakpoint to the first Line after the ACT_CASE.
+				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_BEGIN
+					|| line->mActionType == ACT_CASE)
 					continue;
 				// Use the first line of code at or after lineno, like Visual Studio.
 				// To display the breakpoint correctly, an IDE should use breakpoint_get.

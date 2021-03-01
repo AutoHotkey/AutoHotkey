@@ -1366,7 +1366,7 @@ HRESULT ComArrayEnum::Begin(ComObject *aArrayObject, ComArrayEnum *&aEnum)
 	{
 		VARTYPE arrayType = aArrayObject->mVarType & VT_TYPEMASK;
 		UINT elemSize = SafeArrayGetElemsize(psa);
-		arrayEnd = arrayData + (ubound - lbound) * elemSize;
+		arrayEnd = arrayData + (ubound - lbound) * (long)elemSize; // Must cast to signed long for correct result when array is empty (ubound - lbound == -1).
 		if (aEnum = new ComArrayEnum(aArrayObject, arrayData, arrayEnd, elemSize, arrayType))
 		{
 			aArrayObject->AddRef(); // Keep obj alive until enumeration completes.

@@ -266,11 +266,23 @@ else\
 					, menu_text_length > this_menu_param_length ? this_menu_param_length : menu_text_length
 					, this_menu_param, this_menu_param_length);
 				//match_found = strcasestr(menu_text, this_menu_param);
-				if (!match_found)
+				TCHAR *cpamp;
+				if (!match_found && (cpamp = _tcschr(menu_text, '&')))
 				{
-					// Try again to find a match, this time without the ampersands used to indicate
-					// a menu item's shortcut key:
-					StrReplace(menu_text, _T("&"), _T(""), SCS_SENSITIVE);
+					// Try again to find a match, this time without the ampersands used to indicate a menu item's
+					// shortcut key.  One might assume that only the first & needs to be removed, but the actual
+					// behaviour confirmed on Windows 10.0.19041 was:
+					//  - Only every second & in a series of consecutive &&s was kept.
+					//  - Only the *first* &-letter was usable as a shortcut key.
+					//  - Only the *last* & caused an underline.
+					for (TCHAR *cplit = cpamp; ; ++cpamp, ++cplit)
+					{
+						if (*cpamp == '&')
+							++cpamp; // Skip this '&' but copy the next character unconditionally, even if it is '&'.
+						*cplit = *cpamp;
+						if (!*cpamp)
+							break; // Only after copying, so menu_text is null-terminated at the correct position (cpw).
+					}
 					menu_text_length = _tcslen(menu_text);
 					match_found = !lstrcmpni(menu_text  // This call is basically a strnicmp() that obeys locale.
 						, menu_text_length > this_menu_param_length ? this_menu_param_length : menu_text_length

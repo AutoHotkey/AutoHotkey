@@ -9667,7 +9667,7 @@ LPTSTR GetExitReasonString(ExitReasons aExitReason)
 	// Since the below are all relatively rare, except WM_CLOSE perhaps, they are all included
 	// as one word to cut down on the number of possible words (it's easier to write OnExit
 	// functions to cover all possibilities if there are fewer of them).
-	// Update: The redundant ExitReasons were merged to reduce code size.
+	case EXIT_CRITICAL:
 	case EXIT_DESTROY:
 	case EXIT_CLOSE: str = _T("Close"); break;
 	case EXIT_ERROR: str = _T("Error"); break;

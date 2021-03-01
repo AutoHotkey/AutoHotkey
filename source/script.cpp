@@ -1418,7 +1418,7 @@ ResultType Script::ExitApp(ExitReasons aExitReason, int aExitCode)
 	DEBUGGER_STACK_POP()
 
 	if (result != CONDITION_TRUE // OnExit function did not return true to prevent exit.
-		|| aExitReason == EXIT_DESTROY) // Caller requested we exit unconditionally.
+		|| EXITREASON_MUST_EXIT(aExitReason)) // Caller requested we exit unconditionally.
 		TerminateApp(aExitReason, aExitCode);
 
 	// Otherwise:
@@ -1469,7 +1469,7 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 // tray icons, menus, and unowned windows such as ToolTip.
 {
 	// L31: Release objects stored in variables, where possible.
-	if (aExitReason != CRITICAL_ERROR) // i.e. Avoid making matters worse if CRITICAL_ERROR.
+	if (aExitReason != EXIT_CRITICAL) // i.e. Avoid making matters worse if EXIT_CRITICAL.
 	{
 		// Ensure the current thread is not paused and can't be interrupted
 		// in case one or more objects need to call a __delete meta-function.
@@ -11715,12 +11715,14 @@ ResultType Line::Perform()
 		return OK;
 
 	case ACT_SOUNDBEEP:
-		// For simplicity and support for future/greater capabilities, no range checking is done.
-		// It simply calls the function with the two DWORD values provided.  Error checking is
-		// omitted because failure is rare and also because a script might want play a beep
-		// right before displaying an error dialog.
-		Beep(*ARG1 ? ArgToUInt(1) : 523, *ARG2 ? ArgToUInt(2) : 150);
+	{
+		// Negative values are checked to avoid interpreting them as a very long duration.
+		DWORD duration = *ARG2 ? ArgToUInt(2) : 150;
+		if ((int)duration < 0)
+			duration = 150;
+		Beep(*ARG1 ? ArgToUInt(1) : 523, duration);
 		return OK;
+	}
 
 	case ACT_SOUNDPLAY:
 		return SoundPlay(ARG1, *ARG2 && !_tcsicmp(ARG2, _T("wait")) || !_tcsicmp(ARG2, _T("1")));
@@ -12746,7 +12748,7 @@ ResultType Script::ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR 
 
 	if (aErrorType == CRITICAL_ERROR && mIsReadyToExecute)
 		// Pass EXIT_DESTROY to ensure the program always exits, regardless of OnExit.
-		ExitApp(EXIT_DESTROY);
+		ExitApp(EXIT_CRITICAL);
 
 	// Since above didn't exit, the caller isn't CriticalError(), which ignores
 	// the return value.  Other callers always want FAIL at this point.
@@ -12912,7 +12914,7 @@ ResultType Script::CriticalError(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 	// mCurrLine should always be non-NULL during runtime, and CRITICAL_ERROR should
 	// cause LineError() to exit even if an OnExit routine is present, so this is here
 	// mainly for maintainability.
-	TerminateApp(EXIT_DESTROY, CRITICAL_ERROR);
+	TerminateApp(EXIT_CRITICAL, 0);
 	return FAIL; // Never executed.
 }
 
