@@ -736,7 +736,7 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 				&& hk2.mID != hotkey_id // Don't consider the original hotkey because it was already found ineligible.
 				&& !(hk2.mModifiers & ~modifiers) // All neutral modifiers required by the candidate are pressed.
 				&& !(hk2.mModifiersLR & ~g_modifiersLR_logical_non_ignored) // All left-right specific modifiers required by the candidate are pressed.
-				//&& hk2.mType != HK_JOYSTICK // Seems unnecessary since joystick hotkeys don't call us and even if they did, probably should be included.
+				//&& hk2.mType != HK_JOYSTICK // Seems unnecessary since joystick hotkeys don't call us and even if they did, probably shouldn't be included.
 				//&& hk2.mParentEnabled   ) // CriterionAllowsFiring() will check this for us.
 				)
 			{
@@ -770,6 +770,29 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 	if (aSingleChar)
 		*aSingleChar = '#'; // '#' in KeyHistory to indicate this hotkey is disabled due to #IfWin criterion.
 	return NULL;
+}
+
+
+
+HotkeyIDType Hotkey::FindPairedHotkey(HotkeyIDType aFirstID, modLR_type aModsLR, bool aKeyUp)
+{
+	mod_type modifiers = ConvertModifiersLR(aModsLR); // Neutral modifiers.
+	for (HotkeyIDType candidate_id = aFirstID; candidate_id != HOTKEY_ID_INVALID; )
+	{
+		Hotkey &hk2 = *shk[candidate_id]; // For performance and convenience.
+		candidate_id = hk2.mNextHotkey;
+		if (  (hk2.mAllowExtraModifiers || !(~hk2.mModifiersConsolidatedLR & aModsLR))
+			&& hk2.mKeyUp == aKeyUp
+			&& !hk2.mModifierVK // Avoid accidental matching of normal hotkeys with custom-combo "&"
+			&& !hk2.mModifierSC // hotkeys that happen to have the same mVK/SC.
+			&& !hk2.mHookAction // Might be unnecessary to check this; but just in case.
+			&& !(hk2.mModifiers & ~modifiers) // All neutral modifiers required by the candidate are pressed.
+			&& !(hk2.mModifiersLR & ~aModsLR) // All left-right specific modifiers required by the candidate are pressed.
+			//&& hk2.mParentEnabled // CriterionAllowsFiring() will check this for us.
+			)
+			return aKeyUp ? (hk2.mID | HOTKEY_KEY_UP) : hk2.mID;
+	}
+	return HOTKEY_ID_INVALID;
 }
 
 

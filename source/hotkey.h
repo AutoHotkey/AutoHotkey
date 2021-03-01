@@ -314,6 +314,7 @@ public:
 	static Hotkey *FindHotkeyContainingModLR(modLR_type aModifiersLR);  //, HotkeyIDType hotkey_id_to_omit);
 	//static Hotkey *FindHotkeyWithThisModifier(vk_type aVK, sc_type aSC);
 	//static Hotkey *FindHotkeyBySC(sc2_type aSC2, mod_type aModifiers, modLR_type aModifiersLR);
+	static HotkeyIDType FindPairedHotkey(HotkeyIDType aFirstID, modLR_type aModsLR, bool aKeyUp);
 
 	static LPTSTR ListHotkeys(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline);
