@@ -2204,7 +2204,7 @@ void GuiType::Destroy()
 	// IT IS NOW UNSAFE TO REFER TO ANY NON-STATIC MEMBERS OF THIS OBJECT.
 
 	// If this Gui was the last thing keeping the script running, exit the script:
-	g_script.ExitIfNotPersistent(EXIT_DESTROY);
+	g_script.ExitIfNotPersistent(EXIT_CLOSE);
 }
 
 
