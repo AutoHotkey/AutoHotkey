@@ -20,7 +20,6 @@ GNU General Public License for more details.
 #include "util.h" // for snprintfcat()
 #include "window.h" // for MsgBox()
 #include "application.h" // For MsgSleep().
-#include <intrin.h>
 
 // Declare static variables (global to only this file/module, i.e. no external linkage):
 static HANDLE sKeybdMutex = NULL;
@@ -3373,10 +3372,10 @@ int sort_most_general_before_least(const void *a1, const void *a2)
 	// a1's modifiers are a subset of a2's or vice versa (since the subset would always have
 	// fewer bits).  This new method helps prioritize combinations which overlap but have a
 	// different number of modifiers, such as "*<^a" vs. "*<^>^a".
-	UINT nmodLR_a1 = __popcnt(b1.modifiersLR);
-	UINT nmodLR_a2 = __popcnt(b2.modifiersLR);
-	UINT nmod_a1 = __popcnt(b1.modifiers) + nmodLR_a1;
-	UINT nmod_a2 = __popcnt(b2.modifiers) + nmodLR_a2;
+	UINT nmodLR_a1 = popcount8(b1.modifiersLR);
+	UINT nmodLR_a2 = popcount8(b2.modifiersLR);
+	UINT nmod_a1 = popcount8(b1.modifiers) + nmodLR_a1;
+	UINT nmod_a2 = popcount8(b2.modifiers) + nmodLR_a2;
 	if (nmod_a1 != nmod_a2)
 		return nmod_a1 - nmod_a2;
 	if (nmodLR_a1 != nmodLR_a2)
