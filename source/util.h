@@ -733,6 +733,16 @@ PWSTR GetDocumentsFolder();
 
 int CompareVersion(LPCTSTR a, LPCTSTR b);
 
+// This is used due to the popcnt instruction not being supported on old CPUs.
+// Source: https://www.autohotkey.com/boards/viewtopic.php?f=14&p=384978
+inline int popcount8(unsigned char c)
+{
+	c = (c & 0x55u) + ((c >> 1) & 0x55u);
+	c = (c & 0x33u) + ((c >> 2) & 0x33u);
+	c = (c & 0x0fu) + ((c >> 4) & 0x0fu);
+	return c;
+}
+
 #if defined(_MSC_VER) && defined(_DEBUG)
 void OutputDebugStringFormat(LPCTSTR fmt, ...); // put debug message to the "Output" panel of Visual Studio.
 #endif

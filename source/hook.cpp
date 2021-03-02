@@ -20,7 +20,6 @@ GNU General Public License for more details.
 #include "util.h" // for snprintfcat()
 #include "window.h" // for MsgBox()
 #include "application.h" // For MsgSleep().
-#include <intrin.h>
 
 // Declare static variables (global to only this file/module, i.e. no external linkage):
 static HANDLE sKeybdMutex = NULL;
@@ -1948,7 +1947,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 
 
 LRESULT SuppressThisKeyFunc(const HHOOK aHook, LPARAM lParam, const vk_type aVK, const sc_type aSC, bool aKeyUp
-	, KeyHistoryItem *pKeyHistoryCurr, WPARAM aHotkeyIDToPost, WPARAM aHSwParamToPost, LPARAM aHSlParamToPost)
+	, ULONG_PTR aExtraInfo, KeyHistoryItem *pKeyHistoryCurr, WPARAM aHotkeyIDToPost, WPARAM aHSwParamToPost, LPARAM aHSlParamToPost)
 // Always use the parameter vk rather than event.vkCode because the caller or caller's caller
 // might have adjusted vk, namely to make it a left/right specific modifier key rather than a
 // neutral one.
@@ -2010,12 +2009,13 @@ LRESULT SuppressThisKeyFunc(const HHOOK aHook, LPARAM lParam, const vk_type aVK,
 	// system settings of the same ilk as "favor background processes").
 	if (aHotkeyIDToPost != HOTKEY_ID_INVALID)
 	{
-		PostMessage(g_hWnd, AHK_HOOK_HOTKEY, aHotkeyIDToPost, pKeyHistoryCurr->sc); // v1.0.43.03: sc is posted currently only to support the number of wheel turns (to store in A_EventInfo).
+		int input_level = InputLevelFromInfo(aExtraInfo);
+		PostMessage(g_hWnd, AHK_HOOK_HOTKEY, aHotkeyIDToPost, MAKELONG(pKeyHistoryCurr->sc, input_level)); // v1.0.43.03: sc is posted currently only to support the number of wheel turns (to store in A_EventInfo).
 		if (aKeyUp && hotkey_up[aHotkeyIDToPost & HOTKEY_ID_MASK] != HOTKEY_ID_INVALID)
 		{
 			// This is a key-down hotkey being triggered by releasing a prefix key.
 			// There's also a corresponding key-up hotkey, so fire it too:
-    		PostMessage(g_hWnd, AHK_HOOK_HOTKEY, hotkey_up[aHotkeyIDToPost & HOTKEY_ID_MASK], pKeyHistoryCurr->sc);
+			PostMessage(g_hWnd, AHK_HOOK_HOTKEY, hotkey_up[aHotkeyIDToPost & HOTKEY_ID_MASK], MAKELONG(pKeyHistoryCurr->sc, input_level));
 		}
 	}
 	if (aHSwParamToPost != HOTSTRING_INDEX_INVALID)
@@ -2026,7 +2026,7 @@ LRESULT SuppressThisKeyFunc(const HHOOK aHook, LPARAM lParam, const vk_type aVK,
 
 
 LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, const vk_type aVK, const sc_type aSC
-	, bool aKeyUp, KeyHistoryItem *pKeyHistoryCurr, WPARAM aHotkeyIDToPost)
+	, bool aKeyUp, ULONG_PTR aExtraInfo, KeyHistoryItem *pKeyHistoryCurr, WPARAM aHotkeyIDToPost)
 // Always use the parameter vk rather than event.vkCode because the caller or caller's caller
 // might have adjusted vk, namely to make it a left/right specific modifier key rather than a
 // neutral one.
@@ -2091,13 +2091,13 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 			{
 				// Dereference to get the global var's value:
 				if (*(kvk[aVK].pForceToggle) != NEUTRAL) // Prevent toggle.
-					return SuppressThisKeyFunc(aHook, lParam, aVK, aSC, aKeyUp, pKeyHistoryCurr, aHotkeyIDToPost);
+					return SuppressThisKeyFunc(aHook, lParam, aVK, aSC, aKeyUp, aExtraInfo, pKeyHistoryCurr, aHotkeyIDToPost);
 			}
 		}
 
 		if ((Hotstring::sEnabledCount && !is_ignored) || g_input)
 			if (!CollectInput(event, aVK, aSC, aKeyUp, is_ignored, pKeyHistoryCurr, hs_wparam_to_post, hs_lparam_to_post)) // Key should be invisible (suppressed).
-				return SuppressThisKeyFunc(aHook, lParam, aVK, aSC, aKeyUp, pKeyHistoryCurr, aHotkeyIDToPost, hs_wparam_to_post, hs_lparam_to_post);
+				return SuppressThisKeyFunc(aHook, lParam, aVK, aSC, aKeyUp, aExtraInfo, pKeyHistoryCurr, aHotkeyIDToPost, hs_wparam_to_post, hs_lparam_to_post);
 
 		// Do these here since the above "return SuppressThisKey" will have already done it in that case.
 #ifdef ENABLE_KEY_HISTORY_FILE
@@ -2273,12 +2273,13 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 	LRESULT result_to_return = CallNextHookEx(aHook, aCode, wParam, lParam);
 	if (aHotkeyIDToPost != HOTKEY_ID_INVALID)
 	{
-		PostMessage(g_hWnd, AHK_HOOK_HOTKEY, aHotkeyIDToPost, pKeyHistoryCurr->sc); // v1.0.43.03: sc is posted currently only to support the number of wheel turns (to store in A_EventInfo).
+		int input_level = InputLevelFromInfo(aExtraInfo);
+		PostMessage(g_hWnd, AHK_HOOK_HOTKEY, aHotkeyIDToPost, MAKELONG(pKeyHistoryCurr->sc, input_level)); // v1.0.43.03: sc is posted currently only to support the number of wheel turns (to store in A_EventInfo).
 		if (aKeyUp && hotkey_up[aHotkeyIDToPost & HOTKEY_ID_MASK] != HOTKEY_ID_INVALID)
 		{
 			// This is a key-down hotkey being triggered by releasing a prefix key.
 			// There's also a corresponding key-up hotkey, so fire it too:
-    		PostMessage(g_hWnd, AHK_HOOK_HOTKEY, hotkey_up[aHotkeyIDToPost & HOTKEY_ID_MASK], pKeyHistoryCurr->sc);
+    		PostMessage(g_hWnd, AHK_HOOK_HOTKEY, hotkey_up[aHotkeyIDToPost & HOTKEY_ID_MASK], MAKELONG(pKeyHistoryCurr->sc, input_level));
 		}
 	}
 	if (hs_wparam_to_post != HOTSTRING_INDEX_INVALID)
@@ -3304,10 +3305,10 @@ int sort_most_general_before_least(const void *a1, const void *a2)
 	// a1's modifiers are a subset of a2's or vice versa (since the subset would always have
 	// fewer bits).  This new method helps prioritize combinations which overlap but have a
 	// different number of modifiers, such as "*<^a" vs. "*<^>^a".
-	UINT nmodLR_a1 = __popcnt(b1.modifiersLR);
-	UINT nmodLR_a2 = __popcnt(b2.modifiersLR);
-	UINT nmod_a1 = __popcnt(b1.modifiers) + nmodLR_a1;
-	UINT nmod_a2 = __popcnt(b2.modifiers) + nmodLR_a2;
+	UINT nmodLR_a1 = popcount8(b1.modifiersLR);
+	UINT nmodLR_a2 = popcount8(b2.modifiersLR);
+	UINT nmod_a1 = popcount8(b1.modifiers) + nmodLR_a1;
+	UINT nmod_a2 = popcount8(b2.modifiers) + nmodLR_a2;
 	if (nmod_a1 != nmod_a2)
 		return nmod_a1 - nmod_a2;
 	if (nmodLR_a1 != nmodLR_a2)
