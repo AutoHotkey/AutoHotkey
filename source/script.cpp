@@ -4278,7 +4278,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			if (!_tcsnicmp(aLineText, _T("Global"), 6))
 			{
 				cp = aLineText + 6; // The character after the declaration word.
-				declare_type = g->CurrentFunc ? VAR_DECLARE_GLOBAL : VAR_DECLARE_SUPER_GLOBAL;
+				declare_type = VAR_DECLARE_GLOBAL;
 			}
 			else
 			{
@@ -4307,17 +4307,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			{
 				// Any combination of declarations is allowed here for simplicity, but only declarations can
 				// appear above this line:
-				if (mNextLineIsFunctionBody)
+				if (mNextLineIsFunctionBody && declare_type != VAR_DECLARE_LOCAL)
 				{
-					if (declare_type == VAR_DECLARE_LOCAL)
-						// v1.1.27: "local" by itself restricts globals to only those declared inside the function.
-						declare_type |= VAR_FORCE_LOCAL;
-					// v1.1.27: Allow "local" and "static" to be combined, leaving the restrictions on globals in place.
-					else if (g->CurrentFunc->mDefaultVarType == (VAR_DECLARE_LOCAL | VAR_FORCE_LOCAL) && declare_type == VAR_DECLARE_STATIC)
-					{
-						g->CurrentFunc->mDefaultVarType = (VAR_DECLARE_STATIC | VAR_FORCE_LOCAL);
-						return OK;
-					}
 					g->CurrentFunc->mDefaultVarType = declare_type;
 					// No further action is required.
 					return OK;
@@ -4367,8 +4358,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 							return result;
 						if (global_var) // Implies (declare_type & VAR_GLOBAL) != 0.
 						{
-							// Insert could be skipped if the function is assume-global or the variable is
-							// super-global (and the function not force-local), but isn't for these reasons:
+							// Insert could be skipped if the function is assume-global, but isn't because:
 							//  - When !mNextLineIsFunctionBody, mDefaultVarType might still be changed.
 							//  - It seems harmless to add any explicitly declared globals here.
 							//  - There might be some reason to refer to the declared globals in future.
@@ -4389,8 +4379,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					//  - Declaring local but found a parameter in varlist.
 					// But permit the following:
 					//  - Exact duplicate declarations, such as for two different code paths.
-					//  - Declaring a global which is already super-global, or a class.
-					if ((var->Scope() & ~VAR_SUPER_GLOBAL) != declare_type)
+					if (var->Scope() != declare_type)
 						return ConflictingDeclarationError(Var::DeclarationType(declare_type), var);
 				}
 				else
@@ -4399,20 +4388,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				switch (var->Type())
 				{
 				case VAR_CONSTANT:
-					if (declare_type == VAR_DECLARE_GLOBAL)
-						break; // Permit importing classes into force-local functions.
-				// Otherwise, don't permit it.
 				case VAR_VIRTUAL: // Shouldn't be declared either way (global or local).
 					return ConflictingDeclarationError(Var::DeclarationType(declare_type), var);
 				}
-
-				// If this is a super-global declaration, ensure the flag is added in case the var already
-				// existed due to a previous declaration inside a function.  VAR_DECLARED should already be
-				// present since no undeclared vars have been resolved at this stage (and checks above rely
-				// on this).  VAR_LOCAL_STATIC should always be present if this is "static", otherwise an
-				// error would have been raised.
-				if (declare_type & VAR_SUPER_GLOBAL)
-					var->Scope() |= VAR_SUPER_GLOBAL;
 
 				item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
 
@@ -7149,18 +7127,15 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 				return found;
 		// No local var was found, nor was a global declared in this function (otherwise it would
 		// have been found in g.CurrentFunc->mStaticVars), so caller wants to fall back to a global
-		// in this case only if the function is assume-global or the var is super-global.  However,
-		// they want the insertion (if our caller will be doing one) to insert according to the
-		// current assume-mode.  Therefore, if the mode is assume-global, pass apList/apInsertPos
+		// in this case only if the function is assume-global or FINDVAR_GLOBAL_FALLBACK was used.
+		// However, they want the insertion (if our caller will be doing one) to insert according to
+		// the current assume-mode.  Therefore, if the mode is assume-global, pass apList/apInsertPos
 		// to FindVar() so that it will update them to be global.
 		if (g.CurrentFunc->IsAssumeGlobal())
 			return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL, apList, apInsertPos);
-		if (g.CurrentFunc->AllowSuperGlobals())
-		{
-			Var *found = FindGlobalVar(aVarName, aVarNameLength);
-			if (found && (found->IsSuperGlobal() || (aScope & FINDVAR_GLOBAL_FALLBACK)))
+		if (aScope & FINDVAR_GLOBAL_FALLBACK)
+			if (Var *found = FindGlobalVar(aVarName, aVarNameLength))
 				return found;
-		}
 	}
 	// Otherwise, since above didn't return:
 	if (auto *builtin = GetBuiltInVar(var_name))
@@ -7177,9 +7152,9 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 
 Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError)
 {
-	// Do not search outer if inner is force-local or *explicitly* assume-global, since in those
-	// cases a local or global var should be returned in preference to anything defined by outer.
-	if ((aInner.mDefaultVarType & VAR_FORCE_LOCAL) || aInner.mDefaultVarType == VAR_DECLARE_GLOBAL)
+	// Do not search outer if inner is *explicitly* assume-global, since in that case a
+	// global var should be returned in preference to anything defined by outer.
+	if (aInner.mDefaultVarType == VAR_DECLARE_GLOBAL)
 		return nullptr;
 	auto &outer = *aInner.mOuterFunc;
 	Var *outer_var;
@@ -7297,7 +7272,6 @@ Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int
 
 	if ((aScope & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL // This is an implicit local.
 		&& g_Warn_LocalSameAsGlobal && !mIsReadyToExecute // Not enabled at runtime because of overlap with #Warn UseUnset, and dynamic assignments in assume-local mode are less likely to be intended global.
-		&& !(g->CurrentFunc->mDefaultVarType & VAR_FORCE_LOCAL)
 		&& FindGlobalVar(var_name, aVarNameLength))
 		WarnLocalSameAsGlobal(var_name);
 
@@ -7334,11 +7308,11 @@ Var *Script::FindOrAddBuiltInVar(LPCTSTR aVarName, VarEntry *aVarEntry)
 {
 	int insert_pos;
 	if (Var *found = mVars.Find(aVarName, &insert_pos))
-		return found; // Perhaps caller didn't search mVars due to force-local?
+		return found;
 	LPTSTR name = SimpleHeap::Malloc(aVarName);
 	if (!name)
 		return nullptr;
-	Var *the_new_var = new Var(name, aVarEntry, VAR_DECLARE_SUPER_GLOBAL);
+	Var *the_new_var = new Var(name, aVarEntry, VAR_DECLARE_GLOBAL);
 	if (!the_new_var || !mVars.Insert(the_new_var, insert_pos))
 	{
 		MemoryError();

@@ -1674,10 +1674,8 @@ public:
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
 	bool mIsFuncExpression; // Whether this function was defined *within* an expression and is therefore allowed under a control flow statement.
 #define VAR_DECLARE_GLOBAL (VAR_DECLARED | VAR_GLOBAL)
-#define VAR_DECLARE_SUPER_GLOBAL (VAR_DECLARE_GLOBAL | VAR_SUPER_GLOBAL)
 #define VAR_DECLARE_LOCAL  (VAR_DECLARED | VAR_LOCAL)
 #define VAR_DECLARE_STATIC (VAR_DECLARED | VAR_LOCAL | VAR_LOCAL_STATIC)
-	// The last two may be combined (bitwise-OR) with VAR_FORCE_LOCAL.
 	UCHAR mDefaultVarType = VAR_DECLARE_LOCAL;
 
 	UserFunc(LPCTSTR aName) : Func(aName) {}
@@ -1697,16 +1695,6 @@ public:
 		if (Var *var = mStaticVars.Find(aName, aNameLength))
 			return var;
 		return nullptr;
-	}
-
-	bool AllowSuperGlobals()
-	{
-		// A function allows super-globals unless it is force-local or contained by another
-		// function which is force-local (i.e. a nested function should inherit the rules and
-		// declarations of the scope which encloses it).
-		if (mDefaultVarType & VAR_FORCE_LOCAL)
-			return false;
-		return mOuterFunc ? mOuterFunc->AllowSuperGlobals() : true;
 	}
 
 	bool IsAssumeGlobal()
