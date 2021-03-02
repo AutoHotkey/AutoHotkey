@@ -72,6 +72,13 @@ HotkeyCriterion *AddHotkeyIfExpr();
 HotkeyCriterion *FindHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText);
 HotkeyCriterion *FindHotkeyIfExpr(LPTSTR aExpr);
 
+inline int InputLevelFromInfo(ULONG_PTR aExtraInfo)
+{
+	if (aExtraInfo >= KEY_IGNORE_MIN && aExtraInfo <= KEY_IGNORE_MAX)
+		return (int)(KEY_IGNORE_LEVEL(0) - aExtraInfo);
+	return SendLevelMax + 1;
+}
+
 
 
 struct HotkeyVariant
@@ -211,7 +218,7 @@ public:
 	HotkeyVariant *FindVariant();
 	HotkeyVariant *AddVariant(IObject *aCallback, bool aSuffixHasTilde);
 	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC);
-	HotkeyVariant *CriterionAllowsFiring(HWND *aFoundHWND = NULL);
+	HotkeyVariant *CriterionAllowsFiring(HWND *aFoundHWND = NULL, ULONG_PTR aExtraInfo = 0);
 	static HotkeyVariant *CriterionAllowsFiring(HotkeyIDType aHotkeyID, HWND &aFoundHWND);
 	static HotkeyVariant *CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, ULONG_PTR aExtraInfo
 		, UCHAR &aNoSuppress, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
@@ -311,6 +318,7 @@ public:
 	static Hotkey *FindHotkeyContainingModLR(modLR_type aModifiersLR);  //, HotkeyIDType hotkey_id_to_omit);
 	//static Hotkey *FindHotkeyWithThisModifier(vk_type aVK, sc_type aSC);
 	//static Hotkey *FindHotkeyBySC(sc2_type aSC2, mod_type aModifiers, modLR_type aModifiersLR);
+	static HotkeyIDType FindPairedHotkey(HotkeyIDType aFirstID, modLR_type aModsLR, bool aKeyUp);
 
 	static LPTSTR ListHotkeys(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aAppendNewline);

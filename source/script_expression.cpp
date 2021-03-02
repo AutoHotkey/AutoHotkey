@@ -311,7 +311,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				stack_count--;
 				func_token = stack[stack_count];
 				func = TokenToObject(*func_token);
-				if (!func)
+				if (!func && !member)
 					func = g_script.FindFunc(TokenToString(*func_token, left_buf));
 				if (!func)
 				{

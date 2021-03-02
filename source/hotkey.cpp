@@ -591,7 +591,7 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC)
 
 
 
-HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
+HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND, ULONG_PTR aExtraInfo)
 // Caller must not call this for AltTab hotkeys IDs because this will always return NULL in such cases.
 // Returns the address of the first matching non-global hotkey variant that is allowed to fire.
 // If there is no non-global one eligible, the global one is returned (or NULL if none).
@@ -624,6 +624,7 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
 		// impact performance since the vast majority of hotkeys have either one or just a few variants.
 		if (   vp->mEnabled // This particular variant within its parent hotkey is enabled.
 			&& (!g_IsSuspended || vp->mSuspendExempt) // This variant isn't suspended...
+			&& HotInputLevelAllowsFiring(vp->mInputLevel, aExtraInfo, NULL) // ... its #InputLevel allows it to fire...
 			&& (!vp->mHotCriterion || (found_hwnd = HotCriterionAllowsFiring(vp->mHotCriterion, mName)))   ) // ... and its criteria allow it to fire.
 		{
 			if (vp->mHotCriterion) // Since this is the first criteria hotkey, it takes precedence.
@@ -639,15 +640,11 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND)
 
 bool HotInputLevelAllowsFiring(SendLevelType inputLevel, ULONG_PTR aEventExtraInfo, LPTSTR aKeyHistoryChar)
 {
-	if (aEventExtraInfo >= KEY_IGNORE_MIN && aEventExtraInfo <= KEY_IGNORE_MAX)
+	if (InputLevelFromInfo(aEventExtraInfo) <= inputLevel)
 	{
-		// We can safely cast here since aExtraInfo is constrained above
-		int eventInputLevel = (int)(KEY_IGNORE_LEVEL(0) - aEventExtraInfo);
-		if (eventInputLevel <= inputLevel) {
-			if (aKeyHistoryChar)
-				*aKeyHistoryChar = 'i'; // Mark as ignored in KeyHistory
-			return false;
-		}
+		if (aKeyHistoryChar)
+			*aKeyHistoryChar = 'i'; // Mark as ignored in KeyHistory
+		return false;
 	}
 	return true;
 }
@@ -655,17 +652,6 @@ bool HotInputLevelAllowsFiring(SendLevelType inputLevel, ULONG_PTR aEventExtraIn
 
 HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, ULONG_PTR aExtraInfo
 	, UCHAR &aNoSuppress, bool &aFireWithNoSuppress, LPTSTR aSingleChar)
-{
-	HotkeyVariant *hkv = CriterionFiringIsCertainHelper(aHotkeyIDwithFlags, aKeyUp, aNoSuppress, aFireWithNoSuppress, aSingleChar);
-	if (!hkv)
-		return NULL;
-
-	return HotInputLevelAllowsFiring(hkv->mInputLevel, aExtraInfo, aSingleChar) ? hkv : NULL;
-}
-
-
-HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, UCHAR &aNoSuppress
-	, bool &aFireWithNoSuppress, LPTSTR aSingleChar)
 // v1.0.44: Caller has ensured that aFireWithNoSuppress is true if has already been decided and false if undecided.
 // Upon return, caller can assume that the value in it is now decided rather than undecided.
 // v1.0.42: Caller must not call this for AltTab hotkeys IDs, but this will always return NULL in such cases.
@@ -694,7 +680,8 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 		// (once in the hook to determine whether the hotkey keystroke should be passed through to the active window,
 		// and again upon receipt of the message for reasons explained there).
 		for (HotkeyVariant *vp = hk.mFirstVariant; vp; vp = vp->mNextVariant)
-			if (!vp->mHotCriterion && vp->mEnabled && (!g_IsSuspended || vp->mSuspendExempt))
+			if (!vp->mHotCriterion && vp->mEnabled && (!g_IsSuspended || vp->mSuspendExempt)
+				&& HotInputLevelAllowsFiring(vp->mInputLevel, aExtraInfo, aSingleChar))
 			{
 				// Fix for v1.0.47.02: The following section (above "return") was moved into this block
 				// from above the for() because only when this for() returns is it certain that this
@@ -710,7 +697,7 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 	// Since above didn't return, a slower method is needed to find out which variant of this hotkey (if any)
 	// should fire.
 	HotkeyVariant *vp;
-	if (vp = hk.CriterionAllowsFiring())
+	if (vp = hk.CriterionAllowsFiring(NULL, aExtraInfo))
 	{
 		if (!aFireWithNoSuppress) // Caller hasn't yet determined its value with certainty (currently, this statement might always be true).
 			aFireWithNoSuppress = vp->mNoSuppress;
@@ -759,12 +746,12 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 				&& hk2.mID != hotkey_id // Don't consider the original hotkey because it was already found ineligible.
 				&& !(hk2.mModifiers & ~modifiers) // All neutral modifiers required by the candidate are pressed.
 				&& !(hk2.mModifiersLR & ~g_modifiersLR_logical_non_ignored) // All left-right specific modifiers required by the candidate are pressed.
-				//&& hk2.mType != HK_JOYSTICK // Seems unnecessary since joystick hotkeys don't call us and even if they did, probably should be included.
+				//&& hk2.mType != HK_JOYSTICK // Seems unnecessary since joystick hotkeys don't call us and even if they did, probably shouldn't be included.
 				//&& hk2.mParentEnabled   ) // CriterionAllowsFiring() will check this for us.
 				)
 			{
 				// The following section is similar to one higher above, so maintain them together:
-				if (vp = hk2.CriterionAllowsFiring())
+				if (vp = hk2.CriterionAllowsFiring(NULL, aExtraInfo))
 				{
 					if (!aFireWithNoSuppress) // Caller hasn't yet determined its value with certainty (currently, this statement might always be true).
 						aFireWithNoSuppress = vp->mNoSuppress;
@@ -793,6 +780,29 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertainHelper(HotkeyIDType &aHotkeyIDwit
 	if (aSingleChar)
 		*aSingleChar = '#'; // '#' in KeyHistory to indicate this hotkey is disabled due to #HotIf WinActive/Exist() criterion.
 	return NULL;
+}
+
+
+
+HotkeyIDType Hotkey::FindPairedHotkey(HotkeyIDType aFirstID, modLR_type aModsLR, bool aKeyUp)
+{
+	mod_type modifiers = ConvertModifiersLR(aModsLR); // Neutral modifiers.
+	for (HotkeyIDType candidate_id = aFirstID; candidate_id != HOTKEY_ID_INVALID; )
+	{
+		Hotkey &hk2 = *shk[candidate_id]; // For performance and convenience.
+		candidate_id = hk2.mNextHotkey;
+		if (  (hk2.mAllowExtraModifiers || !(~hk2.mModifiersConsolidatedLR & aModsLR))
+			&& hk2.mKeyUp == aKeyUp
+			&& !hk2.mModifierVK // Avoid accidental matching of normal hotkeys with custom-combo "&"
+			&& !hk2.mModifierSC // hotkeys that happen to have the same mVK/SC.
+			&& !hk2.mHookAction // Might be unnecessary to check this; but just in case.
+			&& !(hk2.mModifiers & ~modifiers) // All neutral modifiers required by the candidate are pressed.
+			&& !(hk2.mModifiersLR & ~aModsLR) // All left-right specific modifiers required by the candidate are pressed.
+			//&& hk2.mParentEnabled // CriterionAllowsFiring() will check this for us.
+			)
+			return aKeyUp ? (hk2.mID | HOTKEY_KEY_UP) : hk2.mID;
+	}
+	return HOTKEY_ID_INVALID;
 }
 
 
@@ -1468,7 +1478,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction,
 
 
 HotkeyVariant *Hotkey::FindVariant()
-// Returns he address of the variant in this hotkey whose criterion matches the current #HotIf criterion.
+// Returns the address of the variant in this hotkey whose criterion matches the current #HotIf criterion.
 // If no match, it returns NULL.
 {
 	for (HotkeyVariant *vp = mFirstVariant; vp; vp = vp->mNextVariant)

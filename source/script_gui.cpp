@@ -2204,7 +2204,7 @@ void GuiType::Destroy()
 	// IT IS NOW UNSAFE TO REFER TO ANY NON-STATIC MEMBERS OF THIS OBJECT.
 
 	// If this Gui was the last thing keeping the script running, exit the script:
-	g_script.ExitIfNotPersistent(EXIT_DESTROY);
+	g_script.ExitIfNotPersistent(EXIT_CLOSE);
 }
 
 
@@ -3381,7 +3381,9 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 				extra_width = 2 * GetSystemMetrics(SM_CXBORDER);
 				extra_height = 2 * GetSystemMetrics(SM_CYBORDER);
 			}
-			if (opt.width != COORD_UNSPECIFIED) // Since a width was given, auto-expand the height via word-wrapping.
+			if (   opt.width != COORD_UNSPECIFIED // Since a width was given, auto-expand the height via word-wrapping,
+				&& ( !(aControlType == GUI_CONTROL_BUTTON || aControlType == GUI_CONTROL_CHECKBOX || aControlType == GUI_CONTROL_RADIO)
+					|| (style & BS_MULTILINE) )   ) // except when -Wrap is used on a Button, Checkbox or Radio.
 				draw_format |= DT_WORDBREAK;
 
 			RECT draw_rect;
