@@ -225,10 +225,10 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_GUI_NO_WINDOW _T("Gui has no window.")
 #define ERR_GUI_NOT_FOR_THIS_TYPE _T("Not supported for this control type.") // Used by GuiControl object and Control functions.
 #define ERR_MUST_DECLARE _T("This variable must be declared.")
-#define ERR_REMOVE_THE_PERCENT _T("If this variable was not intended to be dynamic, remove the % symbols from it.")
-#define ERR_DYNAMIC_TOO_LONG _T("This dynamically built variable name is too long.  ") ERR_REMOVE_THE_PERCENT
-#define ERR_DYNAMIC_BLANK _T("This dynamic variable is blank.  ") ERR_REMOVE_THE_PERCENT
+#define ERR_DYNAMIC_BLANK _T("This dynamic variable is blank.")
 #define ERR_DYNAMIC_UPVAR _T("This dynamic variable is not included in this closure.")
+#define ERR_DYNAMIC_NOT_FOUND _T("Variable not found.")
+#define ERR_DYNAMIC_BAD_GLOBAL _T("This dynamic assignment requires a \"global\" declaration.")
 #define ERR_HOTKEY_IF_EXPR _T("Parameter #1 must match an existing #HotIf expression.")
 #define ERR_EXCEPTION _T("An exception was thrown.")
 #define ERR_INVALID_ASSIGNMENT _T("Invalid assignment.")

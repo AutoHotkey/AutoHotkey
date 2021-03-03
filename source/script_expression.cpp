@@ -146,27 +146,23 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						error_info = mArg[aArgIndex].text;
 						goto abort_with_exception;
 					}
-					if (right_length > MAX_VAR_NAME_LENGTH)
-					{
-						error_msg = ERR_DYNAMIC_TOO_LONG;
-						error_info = right_string;
-						goto abort_with_exception;
-					}
-					// In v1.0.31, FindOrAddVar() vs. FindVar() is called below to support the passing of non-existent
-					// array elements ByRef, e.g. Var:=MyFunc(Array%i%) where the MyFunc function's parameter is
-					// defined as ByRef, would effectively create the new element Array%i% if it doesn't already exist.
-					// Since at this stage we don't know whether this particular double deref is to be sent as a param
-					// to a function, or whether it will be byref, this is done unconditionally for all double derefs
-					// since it seems relatively harmless to create a blank variable in something like var := Array%i%
-					// (though it will produce a runtime error if the double resolves to an illegal variable name such
-					// as one containing spaces).
-					if (   !(temp_var = g_script.FindOrAddVar(right_string, right_length
+					// v2.0: Use of FindVar() vs. FindOrAddVar() makes this check unnecessary.
+					//if (right_length > MAX_VAR_NAME_LENGTH)
+					//{
+					//	error_msg = ERR_DYNAMIC_TOO_LONG;
+					//	error_info = right_string;
+					//	goto abort_with_exception;
+					//}
+					// v2.0: Dynamic creation of variables is not permitted, so FindOrAddVar() is not used.
+					if (   !(temp_var = g_script.FindVar(right_string, right_length
 						, VARREF_IS_WRITE(this_token.var_usage) ? FINDVAR_FOR_WRITE : FINDVAR_FOR_READ))   )
 					{
-						// Above already displayed the error.  As of v1.0.31, this type of error is displayed and
-						// causes the current thread to terminate, which seems more useful than the old behavior
-						// that tolerated anything in expressions.
-						goto abort;
+						if (g->CurrentFunc && g_script.FindGlobalVar(right_string, right_length))
+							error_msg = ERR_DYNAMIC_BAD_GLOBAL;
+						else
+							error_msg = ERR_DYNAMIC_NOT_FOUND;
+						error_info = right_string;
+						goto abort_with_exception;
 					}
 					this_token.var = temp_var;
 				}
