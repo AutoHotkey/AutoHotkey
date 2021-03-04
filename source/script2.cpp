@@ -11253,14 +11253,19 @@ has_valid_return_type:
 			continue;
 		}
 
-		if (this_param.symbol != SYM_VAR || this_param.var_usage == Script::VARREF_READ)
-			continue; // Output parameters are copied back only if provided with a VarRef (&variable).
+		if (this_param.symbol != SYM_VAR)
+			continue;
 		Var &output_var = *this_param.var;
 
 		if (!this_dyna_param.passed_by_address)
 		{
 			if (this_dyna_param.type == DLL_ARG_STR) // Native string type for current build config.
 			{
+				// Update the variable's length and check for null termination.  This could be skipped
+				// when a naked variable (not VarRef) is passed since that's supposed to be input-only,
+				// but seems better to do this unconditionally since the function can in fact modify
+				// the variable's contents, and detecting buffer overrun errors seems more important
+				// than any performance gain from skipping this.
 				output_var.SetLengthFromContents();
 				output_var.Close(); // Clear the attributes of the variable to reflect the fact that the contents may have changed.
 			}
@@ -11270,6 +11275,8 @@ has_valid_return_type:
 			// No other types can be output parameters when !passed_by_address.
 			continue;
 		}
+		if (this_param.var_usage == Script::VARREF_READ)
+			continue; // Output parameters are copied back only if provided with a VarRef (&variable).
 
 		switch (this_dyna_param.type)
 		{
