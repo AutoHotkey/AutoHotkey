@@ -8421,9 +8421,13 @@ unquoted_literal:
 				// These checks ensure SYM_SUPER doesn't need to be specifically handled by
 				// ExpandExpression(); it will be pushed onto the stack due to IS_OPERAND()
 				// and handled directly by SYM_FUNC.
-				LPTSTR next_op = omit_leading_whitespace(cp + this_deref_ref.length);
-				if (*next_op != '.' && *next_op != '[' && *next_op != '(')
-					return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
+				LPTSTR next_op = cp + this_deref_ref.length;
+				if (*next_op != '(') // Permit super() to mean super.call(), but do not permit "super (1)".
+				{
+					next_op = omit_leading_whitespace(next_op); // The "." and "[]" operators permit leading spaces.
+					if (*next_op != '.' && *next_op != '[') // Permit super.x and super[i].
+						return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
+				}
 				if (!g->CurrentFunc || !g->CurrentFunc->mClass)
 					return LineError(_T("\"") SUPER_KEYWORD _T("\" is valid only inside a class."), FAIL, cp);
 				CHECK_AUTO_CONCAT;
