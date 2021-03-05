@@ -2325,34 +2325,32 @@ process_completed_line:
 				// hotstring duplicates (and performs a lot worse if a script has thousands of
 				// hotstrings) because of all the hotstring options.
 
-
-				if (hotstring_execute && !*hotkey_flag)
-					// Do not allow execute option with blank line.
+				if (hotstring_execute && (!*hotkey_flag || hotkey_uses_otb))
+					// Do not allow execute option with blank line or OTB.
 					// Without this check, this
 					// :X:x::
 					// {
 					// }
-					// would execute the block. But the X options
-					// is supposed to mean "execute this line".
+					// would execute the block. But X is supposed to mean "execute this line".
 					return ScriptError(ERR_EXPECTED_ACTION);
 
-				bool uses_text_or_raw_mode = false;
-				if (hotkey_uses_otb && hotstring_options)
+				if (hotkey_uses_otb)
 				{
 					// Never use otb if text or raw mode is in effect for this hotstring.
 					// Either explicitly or via #hotstring.
-					LPTSTR ho = hotstring_options;
-					uses_text_or_raw_mode =
-						(_tcsstr(ho, _T("T0")) || _tcsstr(ho, _T("t0")) || _tcsstr(ho, _T("R0")) || _tcsstr(ho, _T("r0")))
-						? false
-						: ( StrChrAny(ho, _T("T")) || StrChrAny(ho, _T("R")) )
-						? true
-						: g_HSSendRaw;
+					bool uses_text_or_raw_mode = g_HSSendRaw;
+					for (LPTSTR cp = hotstring_options; cp < hotstring_start; ++cp)
+						switch (ctoupper(*cp))
+						{
+						case 'T':
+						case 'R':
+							uses_text_or_raw_mode = cp[1] != '0';
+						}
+					if (uses_text_or_raw_mode)
+						hotkey_uses_otb = false;
 				}
 
-
 				// The hotstring never uses otb if it uses X or T options (either explicitly or via #hotstring).
-				hotkey_uses_otb = hotkey_uses_otb && !hotstring_execute && !uses_text_or_raw_mode;
 				if ( (!*hotkey_flag || hotkey_uses_otb) || hotstring_execute)
 				{
 					// It is not auto-replace
