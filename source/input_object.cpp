@@ -11,6 +11,7 @@
 
 ObjectMember InputObject::sMembers[] =
 {
+	Object_Method1(__New, 0, 3),
 	Object_Method1(KeyOpt, 2, 2),
 	Object_Method(Start, 0, 0),
 	Object_Method(Wait, 0, 1),
@@ -46,22 +47,22 @@ InputObject::InputObject()
 }
 
 
-BIF_DECL(BIF_InputHook)
+Object *InputObject::Create()
 {
-	auto *input_handle = new InputObject();
-	
+	return new InputObject();
+}
+
+
+ResultType InputObject::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
 	_f_param_string_opt(aOptions, 0);
 	_f_param_string_opt(aEndKeys, 1);
 	_f_param_string_opt(aMatchList, 2);
 	
-	if (!input_handle->Setup(aOptions, aEndKeys, aMatchList, _tcslen(aMatchList)))
-	{
-		input_handle->Release();
-		_f_return_FAIL;
-	}
+	if (!Setup(aOptions, aEndKeys, aMatchList, _tcslen(aMatchList)))
+		_o_return_FAIL;
 
-	aResultToken.symbol = SYM_OBJECT;
-	aResultToken.object = input_handle;
+	_o_return_empty;
 }
 
 

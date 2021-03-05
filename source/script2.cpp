@@ -6221,10 +6221,11 @@ BIF_DECL(BIF_SplitPath)
 	LPTSTR mem_to_free = nullptr;
 	_f_param_string(aFileSpec, 0);
 	Var *vars[6];
-	for (int i = 0; i < _countof(vars); ++i)
+	for (int i = 1; i < _countof(vars); ++i)
 		vars[i] = ParamIndexToOutputVar(i);
-	if (vars[0]) // Check for overlap of input/output vars.
+	if (aParam[0]->symbol == SYM_VAR) // Check for overlap of input/output vars.
 	{
+		vars[0] = aParam[0]->var;
 		// There are cases where this could be avoided, such as by careful ordering of the assignments
 		// in SplitPath(), or when there's only one output var.  Also, real paths are generally short
 		// enough that stack memory could be used.  However, perhaps simple is best in this case.
@@ -6430,8 +6431,7 @@ BIF_DECL(BIF_Sort)
 
 	if (!ParamIndexIsOmitted(2))
 	{
-		g_SortFunc = TokenToFunctor(*aParam[2]);
-		if (!g_SortFunc)
+		if (  !(g_SortFunc = ParamIndexToObject(2))  )
 		{
 			aResultToken.ParamError(2, aParam[2]);
 			goto end;
@@ -10900,11 +10900,7 @@ BIF_DECL(BIF_DllCall)
 		else
 			ConvertDllArgType(return_type_string, return_attrib);
 		if (return_attrib.type == DLL_ARG_INVALID)
-		{
-			if (token.symbol == SYM_VAR)
-				token.var->MaybeWarnUninitialized();
 			_f_throw_value(ERR_INVALID_RETURN_TYPE);
-		}
 has_valid_return_type:
 		--aParamCount;  // Remove the last parameter from further consideration.
 #ifdef WIN32_PLATFORM
@@ -10944,31 +10940,36 @@ has_valid_return_type:
 	// It has also verified that the dyna_param array is large enough to hold all of the args.
 	for (arg_count = 0, i = 0; i < aParamCount; ++arg_count, i += 2)  // Same loop as used later below, so maintain them together.
 	{
+		// Store each arg into a dyna_param struct, using its arg type to determine how.
+		DYNAPARM &this_dyna_param = dyna_param[arg_count];
+
 		arg_type_string = TokenToString(*aParam[i]); // aBuf not needed since numbers and "" are equally invalid.
-
-		ExprTokenType &this_param = *aParam[i + 1];         // Resolved for performance and convenience.
-		DYNAPARM &this_dyna_param = dyna_param[arg_count];  //
-
-		// Store the each arg into a dyna_param struct, using its arg type to determine how.
 		ConvertDllArgType(arg_type_string, this_dyna_param);
-
 		if (this_dyna_param.type == DLL_ARG_INVALID)
 			_f_throw_value(ERR_INVALID_ARG_TYPE);
 
-		IObject *this_param_obj = TokenToObject(this_param);
+		IObject *this_param_obj = TokenToObject(*aParam[i + 1]);
 		if (this_param_obj)
 		{
-			// Support Buffer.Ptr, but only for "Ptr" type.  All other types are reserved for possible
-			// future use, which might be general like obj.ToValue(), or might be specific to DllCall
-			// or the particular type of this arg (Int, Float, etc.).
-			if (ctoupper(*arg_type_string) == 'P')
+			if ((this_dyna_param.passed_by_address || this_dyna_param.type == DLL_ARG_STR)
+				&& dynamic_cast<VarRef*>(this_param_obj))
 			{
+				aParam[i + 1] = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+				aParam[i + 1]->SetVarRef(static_cast<VarRef*>(this_param_obj));
+				this_param_obj = nullptr;
+			}
+			else if (ctoupper(*arg_type_string) == 'P')
+			{
+				// Support Buffer.Ptr, but only for "Ptr" type.  All other types are reserved for possible
+				// future use, which might be general like obj.ToValue(), or might be specific to DllCall
+				// or the particular type of this arg (Int, Float, etc.).
 				GetBufferObjectPtr(aResultToken, this_param_obj, this_dyna_param.value_uintptr);
 				if (aResultToken.Exited())
 					return;
 				continue;
 			}
 		}
+		ExprTokenType &this_param = *aParam[i + 1];
 
 		switch (this_dyna_param.type)
 		{
@@ -11253,7 +11254,7 @@ has_valid_return_type:
 			continue;
 		}
 
-		if (this_param.symbol != SYM_VAR) // Output parameters are copied back only if its counterpart parameter is a naked variable.
+		if (this_param.symbol != SYM_VAR)
 			continue;
 		Var &output_var = *this_param.var;
 
@@ -11261,6 +11262,11 @@ has_valid_return_type:
 		{
 			if (this_dyna_param.type == DLL_ARG_STR) // Native string type for current build config.
 			{
+				// Update the variable's length and check for null termination.  This could be skipped
+				// when a naked variable (not VarRef) is passed since that's supposed to be input-only,
+				// but seems better to do this unconditionally since the function can in fact modify
+				// the variable's contents, and detecting buffer overrun errors seems more important
+				// than any performance gain from skipping this.
 				output_var.SetLengthFromContents();
 				output_var.Close(); // Clear the attributes of the variable to reflect the fact that the contents may have changed.
 			}
@@ -11270,6 +11276,8 @@ has_valid_return_type:
 			// No other types can be output parameters when !passed_by_address.
 			continue;
 		}
+		if (this_param.var_usage == Script::VARREF_READ)
+			continue; // Output parameters are copied back only if provided with a VarRef (&variable).
 
 		switch (this_dyna_param.type)
 		{
@@ -11306,12 +11314,12 @@ has_valid_return_type:
 			// passed_by_address for all other types.  However, it must be used carefully since
 			// there's no way for Str* to know how or whether the function requires the string
 			// to be freed (e.g. by calling CoTaskMemFree()).
-			if (this_dyna_param.ptr != output_var.Contents(FALSE, TRUE)
+			if (this_dyna_param.ptr != output_var.Contents(FALSE)
 				&& !output_var.AssignString((LPTSTR)this_dyna_param.ptr))
 				aResultToken.SetExitResult(FAIL);
 			break;
 		case DLL_ARG_xSTR: // AStr* on Unicode builds and WStr* on ANSI builds.
-			if (this_dyna_param.ptr != output_var.Contents(FALSE, TRUE)
+			if (this_dyna_param.ptr != output_var.Contents(FALSE)
 				&& !output_var.AssignStringFromCodePage(UorA(LPSTR,LPWSTR)this_dyna_param.ptr))
 				aResultToken.SetExitResult(FAIL);
 		}
@@ -11378,6 +11386,9 @@ BIF_DECL(BIF_StrCompare)
 
 BIF_DECL(BIF_String)
 {
+	if (aParamCount > 2)
+		_f_throw(ERR_TOO_MANY_PARAMS);
+	++aParam;
 	aResultToken.symbol = SYM_STRING;
 	switch (aParam[0]->symbol)
 	{
@@ -11742,10 +11753,8 @@ void *pcret_resolve_user_callout(LPCTSTR aCalloutParam, int aCalloutParamLength)
 	// If no Func is found, pcre will handle the case where aCalloutParam is a pure integer.
 	// In that case, the callout param becomes an integer between 0 and 255. No valid pointer
 	// could be in this range, but we must take care to check (ptr>255) rather than (ptr!=NULL).
-	Func *callout_func = g_script.FindFunc(aCalloutParam, aCalloutParamLength);
-	if (!callout_func)
-		return nullptr;
-	return (void *)callout_func;
+	auto callout_var = g_script.FindVar(aCalloutParam, aCalloutParamLength);
+	return callout_var ? callout_var->ToObject() : nullptr;
 }
 
 struct RegExCalloutData // L14: Used by BIF_RegEx to pass necessary info to RegExCallout.
@@ -11780,18 +11789,13 @@ int RegExCallout(pcret_callout_block *cb)
 		return 0;
 	RegExCalloutData &cd = *(RegExCalloutData *)cb->callout_data;
 
-	IObject *callout_func = (IObject *)cb->user_callout;
-	if (callout_func)
-		callout_func->AddRef();
-	else
+	auto callout_func = (IObject *)cb->user_callout;
+	if (!callout_func)
 	{
-		Var *pcre_callout_var = g_script.FindVar(_T("pcre_callout"), 12); // This may be a local of the UDF which called RegExMatch/Replace().
+		Var *pcre_callout_var = g_script.FindVar(_T("pcre_callout"), 12, FINDVAR_FOR_READ); // This may be a local of the UDF which called RegExMatch/Replace().
 		if (!pcre_callout_var)
 			return 0; // Seems best to ignore the callout rather than aborting the match.
-		ExprTokenType token;
-		token.symbol = SYM_VAR;
-		token.var = pcre_callout_var;
-		callout_func = TokenToFunctor(token); // Allow name or reference.
+		callout_func = pcre_callout_var->ToObject();
 		if (!callout_func)
 		{
 			if (!pcre_callout_var->HasContents()) // Var exists but is empty.
@@ -11841,7 +11845,6 @@ int RegExCallout(pcret_callout_block *cb)
 	IObject *match_object;
 	if (!RegExCreateMatchArray(cb->subject, cd.re, cd.extra, cb->offset_vector, cd.pattern_count, cb->capture_top, match_object))
 	{
-		callout_func->Release();
 		cd.result_token->MemoryError();
 		return PCRE_ERROR_CALLOUT; // Abort.
 	}
@@ -11873,7 +11876,6 @@ int RegExCallout(pcret_callout_block *cb)
 	
 	g->EventInfo = EventInfo_saved;
 
-	callout_func->Release();
 	// Behaviour of return values is defined by PCRE.
 	return (int)number_to_return;
 }
@@ -13496,74 +13498,23 @@ BIF_DECL(BIF_IsLabel)
 
 
 
-BIF_DECL(BIF_IsFunc) // Lexikos: Added for use with dynamic function calls.
-// Returns a non-zero value if the function exists in the current scope.  Since a dynamic function-call
-// fails when too few or (in v2) too many parameters are passed, the return value indicates to the caller
-// not only that the function exists, but also how many parameters are required.  Although this may seem
-// redundant due to Func().MinParams, it has the benefit of not creating a new closure if the function
-// is a nested one with upvalues.
+BIF_DECL(Op_FuncClose)
+// Returns the Func aParam[0] itself or a new closure if it has upvalues.
 {
-	if (ParamIndexToObject(0))
-		_f_throw_param(0, _T("String")); // Seems worthwhile to avoid confusion.
-	Func *func = g_script.FindFunc(ParamIndexToString(0));
-	_f_return_i(func ? (__int64)func->mMinParams+1 : 0);
-}
-
-
-
-BIF_DECL(BIF_Func)
-// Returns a reference to an existing user-defined or built-in function, as an object.
-// Returns a new closure if the function has upvalues.
-{
-	Func *func;
-	if (_f_callee_id == FID_Func)
-	{
-		if (ParamIndexToObject(0))
-			_f_throw_param(0, _T("String")); // For consistency with IsFunc().
-		func = g_script.FindFunc(ParamIndexToString(0));
-	}
-	else // FID_FuncClose (internal).
-		func = (Func *)aParam[0]->object; // No type-checking needed because this is a private/internal function.
-	if (func)
-		_f_return(func->CloseIfNeeded());
-	else
-		_f_return_empty;
+	Func *func = (Func *)aParam[0]->object; // No type-checking needed because this is a private/internal function.
+	_f_return(func->CloseIfNeeded());
 }
 
 
 IObject *UserFunc::CloseIfNeeded()
 {
-	FreeVars *fv = (mOuterFunc && sFreeVars) ? sFreeVars->ForFunc(mOuterFunc) : NULL;
+	FreeVars *fv = (mUpVarCount && mOuterFunc && sFreeVars) ? sFreeVars->ForFunc(mOuterFunc) : NULL;
 	if (!fv)
 	{
 		AddRef();
 		return this;
 	}
-	Closure *cl = new Closure(this, fv);
-	fv->AddRef();
-	return cl;
-}
-
-
-BIF_DECL(BIF_IsByRef)
-{
-	if (aParam[0]->symbol != SYM_VAR)
-	{
-		// Redundant due to prior validation of OutputVars:
-		//_f_throw_param(0, _T("variable reference"));
-	}
-	else
-	{
-		// Return true if the var is a function parameter which currently holds an alias for
-		// another var, unless it is a downvar (an alias for a free variable, rather than one
-		// passed by the caller).  The current implementation does not allow ByRef parameters
-		// to be downvars; if that is changed, this will need to differentiate between an alias
-		// to one of this function's own free variables and an alias to any other variable
-		// (including free variables from another function, or another instance of this function).
-		Var &var = *aParam[0]->var;
-		_f_return_b(var.ResolveAlias() != &var
-			&& (var.Scope() & (VAR_LOCAL_FUNCPARAM | VAR_DOWNVAR)) == VAR_LOCAL_FUNCPARAM);
-	}
+	return new Closure(this, fv, false);
 }
 
 
@@ -13733,10 +13684,10 @@ type_mismatch:
 
 BIF_DECL(BIF_IsSet)
 {
-	if (aParam[0]->symbol != SYM_VAR) // Possible only for dynamic calls.
+	Var *var = ParamIndexToOutputVar(0);
+	if (!var)
 		_f_throw_param(0, _T("variable reference"));
-
-	_f_return_b(!aParam[0]->var->IsUninitializedNormalVar());
+	_f_return_b(!var->IsUninitializedNormalVar());
 }
 
 
@@ -13855,10 +13806,6 @@ BIF_DECL(BIF_VarSetStrCapacity)
 		// RequestedCapacity was omitted, so the var is not altered; instead, the current capacity
 		// is reported, which seems more intuitive/useful than having it do a Free(). In this case
 		// it's an input var rather than an output var, so check if it contains a string.
-		// v1.1.11.01: Support VarSetCapacity(var) as a means for the script to check if it
-		// has initialized a var.  In other words, don't show a warning even in that case.
-		// v2: We now have IsSet(), but it still seems reasonable to allow this without a warning.
-		//var.MaybeWarnUninitialized();
 		if (var.IsPureNumericOrObject())
 			_f_throw_type(_T("String"), *aParam[0]);
 	}
@@ -14040,6 +13987,9 @@ BIF_DECL(BIF_FloorCeil)
 
 BIF_DECL(BIF_Integer)
 {
+	if (aParamCount > 2)
+		_f_throw(ERR_TOO_MANY_PARAMS);
+	++aParam;
 	Throw_if_Param_NaN(0);
 	_f_return_i(ParamIndexToInt64(0));
 }
@@ -14048,6 +13998,9 @@ BIF_DECL(BIF_Integer)
 
 BIF_DECL(BIF_Float)
 {
+	if (aParamCount > 2)
+		_f_throw(ERR_TOO_MANY_PARAMS);
+	++aParam;
 	Throw_if_Param_NaN(0);
 	_f_return(ParamIndexToDouble(0));
 }
@@ -14358,7 +14311,7 @@ BIF_DECL(BIF_Hotkey)
 	_f_param_string_opt(aParam2, 2);
 	
 	ResultType result = OK;
-	IObject *functor = NULL;
+	IObject *functor = nullptr;
 
 	switch (_f_callee_id) 
 	{
@@ -14367,11 +14320,8 @@ BIF_DECL(BIF_Hotkey)
 		HookActionType hook_action = 0;
 		if (!ParamIndexIsOmitted(1))
 		{
-			if (functor = TokenToObject(*aParam[1]))
-				functor->AddRef();
-			else if (  !(hook_action = Hotkey::ConvertAltTab(aParam1, true))  )
-				functor = StringToFunctor(aParam1);
-			if (!functor && !hook_action && *aParam1)
+			if (  !(functor = ParamIndexToObject(1)) && *aParam1
+				&& !(hook_action = Hotkey::ConvertAltTab(aParam1, true))  )
 			{
 				// Search for a match in the hotkey variants' "original callbacks".
 				// I.e., find the function implicitly defined by "x::action".
@@ -14383,8 +14333,7 @@ BIF_DECL(BIF_Hotkey)
 					for (HotkeyVariant* v = Hotkey::shk[i]->mFirstVariant; v; v = v->mNextVariant)
 						if (v->mHotCriterion == g->HotCriterion)
 						{
-							if (functor = v->mOriginalCallback.ToFunc())
-								functor->AddRef(); // To counter the below release.
+							functor = v->mOriginalCallback.ToFunc();
 							goto break_twice;
 						}
 				}
@@ -14392,13 +14341,14 @@ BIF_DECL(BIF_Hotkey)
 				if (!functor)
 					_f_throw_param(1);
 			}
+			if (!functor)
+				hook_action = Hotkey::ConvertAltTab(aParam1, true);
 		}
 		result = Hotkey::Dynamic(aParam0, aParam2, functor, hook_action, aResultToken);
 		break;
 	}
 	case FID_HotIf:
-		if (!ParamIndexIsOmitted(0))
-			functor = TokenToFunctor(*aParam[0]);
+		functor = ParamIndexToOptionalObject(0);
 		result = Hotkey::IfExpr(aParam0, functor, aResultToken);
 		break;
 	
@@ -14407,9 +14357,6 @@ BIF_DECL(BIF_Hotkey)
 	
 	}
 	
-	if (functor)
-		functor->Release();
-
 	if (!result)
 		_f_return_FAIL;
 	_f_return_empty;
@@ -14432,19 +14379,12 @@ BIF_DECL(BIF_SetTimer)
 		if (!callback)
 			// Either the thread was not launched by a timer or the timer has been deleted.
 			_f_throw_value(ERR_PARAM1_MUST_NOT_BE_BLANK);
-		callback->AddRef();
 	}
 	else
 	{
 		callback = ParamIndexToObject(0);
-		if (callback)
-			callback->AddRef();
-		else
-		{
-			LPTSTR arg1 = ParamIndexToString(0, _f_number_buf);
-			if (  !(callback = StringToFunctor(arg1))  )
-				_f_throw_param(0);
-		}
+		if (!callback)
+			_f_throw_param(0, _T("object"));
 		if (!ValidateFunctor(callback, 0, aResultToken))
 			return;
 	}
@@ -14458,7 +14398,6 @@ BIF_DECL(BIF_SetTimer)
 		if (!period)
 		{
 			g_script.DeleteTimer(callback);
-			callback->Release();
 			_f_return_empty;
 		}
 		update_period = true;
@@ -14469,7 +14408,6 @@ BIF_DECL(BIF_SetTimer)
 		update_priority = true;
 	}
 	g_script.UpdateOrCreateTimer(callback, update_period, period, update_priority, priority);
-	callback->Release();
 	_f_return_empty;
 }
 
@@ -14489,7 +14427,6 @@ BIF_DECL(BIF_OnMessage)
 	UINT specified_msg = (UINT)ParamIndexToInt64(0); // Parameter #1
 
 	// Set defaults:
-	IObject *callback = NULL;
 	bool mode_is_delete = false;
 	int max_instances = 1;
 	bool call_it_last = true;
@@ -14509,10 +14446,10 @@ BIF_DECL(BIF_OnMessage)
 			mode_is_delete = true;
 	}
 
-	// Parameter #2: The callback to add or remove.  Must be an object or a function name.
-	callback = TokenToFunctor(*aParam[1]);
+	// Parameter #2: The callback to add or remove.  Must be an object.
+	IObject *callback = TokenToObject(*aParam[1]);
 	if (!callback)
-		_f_throw_param(1);
+		_f_throw_param(1, _T("object"));
 
 	// Check if this message already exists in the array:
 	MsgMonitorStruct *pmonitor = g_MsgMonitor.Find(specified_msg, callback);
@@ -14522,16 +14459,12 @@ BIF_DECL(BIF_OnMessage)
 		if (mode_is_delete) // Delete a non-existent item.
 			_f_return_retval; // Yield the default return value set earlier (an empty string).
 		if (!ValidateFunctor(callback, 4, aResultToken))
-		{
-			callback->Release();
 			return;
-		}
 		// From this point on, it is certain that an item will be added to the array.
 		pmonitor = g_MsgMonitor.Add(specified_msg, callback, call_it_last);
+		if (!pmonitor)
+			_f_throw_oom;
 	}
-	callback->Release();
-	if (!pmonitor)
-		_f_throw_oom;
 
 	MsgMonitorStruct &monitor = *pmonitor;
 
@@ -14747,9 +14680,9 @@ BIF_DECL(BIF_On)
 	MsgMonitorList &handlers = *phandlers;
 
 
-	IObject *callback = TokenToFunctor(*aParam[0]);
+	IObject *callback = ParamIndexToObject(0);
 	if (!callback)
-		_f_throw_param(0);
+		_f_throw_param(0, _T("object"));
 	if (!ValidateFunctor(callback, event_type == FID_OnClipboardChange ? 1 : 2, aResultToken))
 	{
 		callback->Release();
@@ -14767,10 +14700,7 @@ BIF_DECL(BIF_On)
 	case  1:
 	case -1:
 		if (existing)
-		{
-			callback->Release();
 			return;
-		}
 		if (event_type == FID_OnClipboardChange)
 		{
 			// Do this before adding the handler so that it won't be called as a result of the
@@ -14779,24 +14709,19 @@ BIF_DECL(BIF_On)
 			g_script.EnableClipboardListener(true);
 		}
 		if (!handlers.Add(0, callback, mode == 1))
-		{
-			callback->Release();
 			_f_throw_oom;
-		}
 		break;
 	case  0:
 		if (existing)
 			handlers.Delete(existing);
 		break;
 	default:
-		callback->Release();
 		_f_throw_param(1);
 	}
 	// In case the above enabled the clipboard listener but failed to add the handler,
 	// do this even if mode != 0:
 	if (event_type == FID_OnClipboardChange && !handlers.Count())
 		g_script.EnableClipboardListener(false);
-	callback->Release();
 }
 
 
@@ -14955,9 +14880,9 @@ BIF_DECL(BIF_CallbackCreate)
 // Author: Original x86 RegisterCallback() was created by Jonathan Rennison (JGR).
 //   x64 support by fincs.  Various changes by Lexikos.
 {
-	IObject *func = TokenToFunctor(*aParam[0]);
+	IObject *func = ParamIndexToObject(0);
 	if (!func)
-		_f_throw_param(0);
+		_f_throw_param(0, _T("object"));
 
 	LPTSTR options = ParamIndexToOptionalString(1);
 	bool pass_params_pointer = _tcschr(options, '&'); // Callback wants the address of the parameter list instead of their values.
@@ -14970,10 +14895,7 @@ BIF_DECL(BIF_CallbackCreate)
 
 	bool params_specified = !ParamIndexIsOmittedOrEmpty(2);
 	if (pass_params_pointer && require_param_count && !params_specified)
-	{
-		func->Release();
 		_f_throw_value(ERR_PARAM3_MUST_NOT_BE_BLANK);
-	}
 
 	int actual_param_count = params_specified ? ParamIndexToInt(2) : 0;
 	if (!ValidateFunctor(func
@@ -14982,7 +14904,6 @@ BIF_DECL(BIF_CallbackCreate)
 		// Use MinParams as actual_param_count if unspecified and no & option.
 		, params_specified || pass_params_pointer ? nullptr : &actual_param_count))
 	{
-		func->Release();
 		return;
 	}
 	
@@ -15007,10 +14928,7 @@ BIF_DECL(BIF_CallbackCreate)
 	//						memory and the VirtualProtect function to grant PAGE_EXECUTE access."
 	RCCallbackFunc *callbackfunc=(RCCallbackFunc*) GlobalAlloc(GMEM_FIXED,sizeof(RCCallbackFunc));	//allocate structure off process heap, automatically RWE and fixed.
 	if (!callbackfunc)
-	{
-		func->Release();
 		_f_throw_oom;
-	}
 	RCCallbackFunc &cb = *callbackfunc; // For convenience and possible code-size reduction.
 
 #ifdef WIN32_PLATFORM
@@ -15052,6 +14970,7 @@ BIF_DECL(BIF_CallbackCreate)
 	cb.callfuncptr = RegisterCallbackCStub;
 #endif
 
+	func->AddRef();
 	cb.func = func;
 	cb.actual_param_count = actual_param_count;
 	cb.flags = 0;
@@ -16690,10 +16609,7 @@ BOOL ResultToBOOL(LPTSTR aResult)
 BOOL VarToBOOL(Var &aVar)
 {
 	if (!aVar.HasContents()) // Must be checked first because otherwise IsNumeric() would consider "" to be non-numeric and thus TRUE.  For performance, it also exploits the binary number cache.
-	{
-		aVar.MaybeWarnUninitialized();
 		return FALSE;
-	}
 	switch (aVar.IsNumeric())
 	{
 	case PURE_INTEGER:
@@ -16820,15 +16736,6 @@ BOOL TokenIsEmptyString(ExprTokenType &aToken)
 }
 
 
-BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar)
-{
-	if (aWarnUninitializedVar && aToken.symbol == SYM_VAR)
-		aToken.var->MaybeWarnUninitialized();
-
-	return TokenIsEmptyString(aToken);
-}
-
-
 __int64 TokenToInt64(ExprTokenType &aToken)
 // Caller has ensured that any SYM_VAR's Type() is VAR_NORMAL.
 // Converts the contents of aToken to a 64-bit int.
@@ -16948,6 +16855,8 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 	return OK; // Since above didn't return, indicate success.
 }
 
+
+
 StringCaseSenseType TokenToStringCase(ExprTokenType& aToken)
 {
 	// Pure integers 1 and 0 corresponds to SCS_SENSITIVE and SCS_INSENSITIVE, respectively.
@@ -16981,6 +16890,17 @@ StringCaseSenseType TokenToStringCase(ExprTokenType& aToken)
 										: SCS_INVALID);		// else - invalid.
 }
 
+
+
+Var *TokenToOutputVar(ExprTokenType &aToken)
+{
+	if (aToken.symbol == SYM_VAR && aToken.var_usage != Script::VARREF_READ)
+		return aToken.var;
+	return dynamic_cast<VarRef *>(TokenToObject(aToken));
+}
+
+
+
 IObject *TokenToObject(ExprTokenType &aToken)
 // L31: Returns IObject* from SYM_OBJECT or SYM_VAR (where var->HasObject()), NULL for other tokens.
 // Caller is responsible for calling AddRef() if that is appropriate.
@@ -16992,31 +16912,6 @@ IObject *TokenToObject(ExprTokenType &aToken)
 		return aToken.var->ToObject();
 
 	return NULL;
-}
-
-
-
-IObject *TokenToFunctor(ExprTokenType &aToken)
-// Returns an object if aToken contains an object or function name.
-// Reference is counted so CALLER MUST Release() WHEN APPROPRIATE.
-// For nested functions with upvalues, this returns a Closure, whereas TokenToFunc
-// returns the base Func (which can't be called after the outer function returns).
-{
-	if (IObject *obj = TokenToObject(aToken))
-	{
-		obj->AddRef();
-		return obj;
-	}
-	return StringToFunctor(TokenToString(aToken)); // No need for buf (see TokenToFunc).
-}
-
-
-
-IObject *StringToFunctor(LPTSTR aStr)
-// Reference is counted so CALLER MUST Release() WHEN APPROPRIATE.
-{
-	Func *func = g_script.FindFunc(aStr);
-	return func ? func->CloseIfNeeded() : NULL;
 }
 
 

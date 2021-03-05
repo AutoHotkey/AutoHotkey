@@ -99,6 +99,8 @@ struct VarEntry
 	VirtualVar type;
 };
 
+class VarRef;
+
 #pragma warning(push)
 #pragma warning(disable: 4995 4996)
 
@@ -153,6 +155,7 @@ private:
 	VarSizeType mByteCapacity = 0; // In bytes.  Includes the space for the zero terminator.
 	AllocMethodType mHowAllocated = ALLOC_NONE; // Keep adjacent/contiguous with the below to save memory.
 	#define VAR_ATTRIB_CONTENTS_OUT_OF_DATE	0x01 // Combined with VAR_ATTRIB_IS_INT64/DOUBLE/OBJECT to indicate mContents is not current.
+	#define VAR_ATTRIB_ALREADY_WARNED		0x01 // Combined with VAR_ATTRIB_UNINITIALIZED to limit VarUnset warnings to 1 MsgBox per var.  See WarnUnassignedVar.
 	#define VAR_ATTRIB_UNINITIALIZED		0x02 // Var requires initialization before use.
 	#define VAR_ATTRIB_HAS_ASSIGNMENT		0x04 // Used during load time to detect vars that are not assigned anywhere.
 	#define VAR_ATTRIB_NOT_NUMERIC			0x08 // A prior call to IsNumeric() determined the var's value is PURE_NOT_NUMERIC.
@@ -166,12 +169,10 @@ private:
 	VarAttribType mAttrib;  // Bitwise combination of the above flags (but many of them may be mutually exclusive).
 	#define VAR_GLOBAL			0x01
 	#define VAR_LOCAL			0x02
-	#define VAR_FORCE_LOCAL		0x04 // Flag reserved for force-local mode in functions (not used in Var::mScope).
 	#define VAR_DOWNVAR			0x08 // This var is captured by a nested function/closure (it's in Func::mDownVar).
 	#define VAR_LOCAL_FUNCPARAM	0x10 // Indicates this local var is a function's parameter.  VAR_LOCAL_DECLARED should also be set.
 	#define VAR_LOCAL_STATIC	0x20 // Indicates this local var retains its value between function calls.
 	#define VAR_DECLARED		0x40 // Indicates this var was declared somehow, not automatic.
-	#define VAR_SUPER_GLOBAL	0x80 // Indicates this global var should be visible in all functions.
 	UCHAR mScope;  // Bitwise combination of the above flags.
 	VarTypeType mType; // Keep adjacent/contiguous with the above due to struct alignment, to save memory.
 	// Performance: Rearranging mType and the other byte-sized members with respect to each other didn't seem
@@ -327,10 +328,7 @@ public:
 	IObject *ToObject()
 	{
 		Var &var = *ResolveAlias();
-		if (var.IsObject())
-			return var.mObject;
-		var.MaybeWarnUninitialized();
-		return NULL;
+		return var.IsObject() ? var.mObject : nullptr;
 	}
 
 	void ReleaseObject()
@@ -600,7 +598,7 @@ public:
 	// Convert VAR_NORMAL to VAR_CONSTANT.
 	void MakeReadOnly()
 	{
-		ASSERT(mType == VAR_NORMAL); // Should never be called on VAR_ALIAS or VAR_VIRTUAL.
+		ASSERT(mType == VAR_NORMAL || mType == VAR_CONSTANT); // Should never be called on VAR_ALIAS or VAR_VIRTUAL.
 		ASSERT(!(mAttrib & VAR_ATTRIB_UNINITIALIZED));
 		mType = VAR_CONSTANT;
 	}
@@ -646,11 +644,6 @@ public:
 		return (mScope & VAR_DECLARED);
 	}
 
-	bool IsSuperGlobal()
-	{
-		return (mScope & VAR_SUPER_GLOBAL);
-	}
-
 	UCHAR &Scope()
 	{
 		return mScope;
@@ -672,7 +665,7 @@ public:
 	bool IsAssignedSomewhere()
 	{
 		//return mAttrib & VAR_ATTRIB_HAS_ASSIGNMENT;
-		return mAttrib != VAR_ATTRIB_UNINITIALIZED;
+		return (mAttrib & ~VAR_ATTRIB_ALREADY_WARNED) != VAR_ATTRIB_UNINITIALIZED;
 		// When this function is called (at load time), any of the other attributes
 		// would mean that this var has a value, which means that it doesn't require
 		// an assignment.  If it lacks all attributes, it's presumably a built-in var.
@@ -681,6 +674,18 @@ public:
 	void MarkAssignedSomewhere()
 	{
 		mAttrib |= VAR_ATTRIB_HAS_ASSIGNMENT;
+		if (mType == VAR_ALIAS)
+			mAliasFor->MarkAssignedSomewhere();
+	}
+
+	bool HasAlreadyWarned()
+	{
+		return mAttrib & VAR_ATTRIB_ALREADY_WARNED;
+	}
+
+	void MarkAlreadyWarned()
+	{
+		mAttrib |= VAR_ATTRIB_ALREADY_WARNED;
 	}
 
 	bool IsObject() // L31: Indicates this var contains an object reference which must be released if the var is emptied.
@@ -766,23 +771,16 @@ public:
 	//	return (BYTE *) CharContents(aAllowUpdate);
 	//}
 
-	TCHAR *Contents(BOOL aAllowUpdate = TRUE, BOOL aNoWarnUninitializedVar = FALSE)
+	TCHAR *Contents(BOOL aAllowUpdate = TRUE)
 	// Callers should almost always pass TRUE for aAllowUpdate because any caller who wants to READ from
 	// mContents would almost always want it up-to-date.  Any caller who wants to WRITE to mContents would
 	// would almost always have called Assign(NULL, ...) prior to calling Contents(), which would have
 	// cleared the VAR_ATTRIB_CONTENTS_OUT_OF_DATE flag.
 	{
 		if (mType == VAR_ALIAS)
-			return mAliasFor->Contents(aAllowUpdate, aNoWarnUninitializedVar);
+			return mAliasFor->Contents(aAllowUpdate);
 		if ((mAttrib & VAR_ATTRIB_CONTENTS_OUT_OF_DATE) && aAllowUpdate) // VAR_ATTRIB_CONTENTS_OUT_OF_DATE is checked here and in the function below, for performance.
 			UpdateContents(); // This also clears the VAR_ATTRIB_CONTENTS_OUT_OF_DATE.
-		if (mType == VAR_NORMAL)
-		{
-			// If aAllowUpdate is FALSE, the caller just wants to compare mCharContents to another address.
-			// Otherwise, the caller is probably going to use mCharContents and might want a warning:
-			if (aAllowUpdate && !aNoWarnUninitializedVar)
-				MaybeWarnUninitialized();
-		}
 		if (mType == VAR_VIRTUAL && !(mAttrib & VAR_ATTRIB_VIRTUAL_OPEN) && aAllowUpdate)
 		{
 			// This var isn't open for writing, so populate mCharContents with its current value.
@@ -822,6 +820,7 @@ public:
 	// Makes this var an alias of aTargetVar, or aTargetVar's target if it's an alias.
 	// Copies any internal mObject ref used for managing the lifetime of the alias.
 	void UpdateAlias(Var *aTargetVar);
+	void UpdateAlias(VarRef *aTargetVar);
 
 	// Unconditionally makes this var an alias of aTargetVar, without resolving aliases.
 	// Caller must ensure aTargetVar != nullptr && aTargetVar != this.
@@ -909,8 +908,6 @@ public:
 		var.mAttrib |= VAR_ATTRIB_UNINITIALIZED;
 	}
 
-	void MaybeWarnUninitialized();
-
 }; // class Var
 #pragma pack(pop) // Calling pack with no arguments restores the default value (which is 8, but "the alignment of a member will be on a boundary that is either a multiple of n or a multiple of the size of the member, whichever is smaller.")
 #pragma warning(pop)
@@ -926,8 +923,8 @@ public:
 		Free(VAR_ALWAYS_FREE, true);
 	}
 
-	ResultType Invoke(IObject_Invoke_PARAMS_DECL) { return INVOKE_NOT_HANDLED; }
 	IObject_Type_Impl("VarRef");
+	::Object *Base() { return ::Object::sVarRefPrototype; }
 };
 
 

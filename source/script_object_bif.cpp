@@ -13,7 +13,7 @@ extern BuiltInFunc *OpFunc_GetProp, *OpFunc_GetItem, *OpFunc_SetProp, *OpFunc_Se
 // Object()
 //
 
-BIF_DECL(BIF_Object)
+BIF_DECL(Op_Object)
 {
 	IObject *obj = Object::Create(aParam, aParamCount, &aResultToken);
 	if (obj)
@@ -29,26 +29,11 @@ BIF_DECL(BIF_Object)
 // BIF_Array - Array(items*)
 //
 
-BIF_DECL(BIF_Array)
+BIF_DECL(Op_Array)
 {
 	if (auto arr = Array::Create(aParam, aParamCount))
 		_f_return(arr);
 	_f_throw_oom;
-}
-
-
-//
-// Map()
-//
-
-BIF_DECL(BIF_Map)
-{
-	if (aParamCount & 1)
-		_f_throw(ERR_PARAM_COUNT_INVALID);
-	auto obj = Map::Create(aParam, aParamCount);
-	if (!obj)
-		_f_throw_oom;
-	_f_return(obj);
 }
 	
 
@@ -102,7 +87,7 @@ BIF_DECL(BIF_ObjAddRefRelease)
 BIF_DECL(BIF_ObjBindMethod)
 {
 	IObject *func, *bound_func;
-	if (  !(func = TokenToFunctor(*aParam[0]))  )
+	if (  !(func = ParamIndexToObject(0))  )
 		_f_throw_param(0);
 	LPCTSTR name = nullptr;
 	if (aParamCount > 1)
@@ -115,7 +100,6 @@ BIF_DECL(BIF_ObjBindMethod)
 	else
 		aParamCount = 0;
 	bound_func = BoundFunc::Bind(func, IT_CALL, name, aParam, aParamCount);
-	func->Release();
 	if (!bound_func)
 		_f_throw_oom;
 	_f_return(bound_func);
@@ -155,9 +139,10 @@ BIF_DECL(BIF_ObjPtr)
 
 BIF_DECL(BIF_Base)
 {
-	Object *obj = dynamic_cast<Object*>(TokenToObject(*aParam[0]));
+	IObject *iobj = ParamIndexToObject(0);
 	if (_f_callee_id == FID_ObjSetBase)
 	{
+		Object *obj = dynamic_cast<Object*>(iobj);
 		if (!obj)
 			_f_throw_type(_T("Object"), *aParam[0]);
 		auto new_base = dynamic_cast<Object *>(TokenToObject(*aParam[1]));
@@ -169,8 +154,8 @@ BIF_DECL(BIF_Base)
 	else // ObjGetBase
 	{
 		Object *obj_base;
-		if (obj)
-			obj_base = obj->Base();
+		if (iobj)
+			obj_base = iobj->Base();
 		else
 			obj_base = Object::ValueBase(*aParam[0]);
 		if (obj_base)
@@ -187,14 +172,13 @@ BIF_DECL(BIF_Base)
 
 bool Object::HasBase(ExprTokenType &aValue, IObject *aBase)
 {
-	if (auto obj = dynamic_cast<Object *>(TokenToObject(aValue)))
-	{
-		return obj->IsDerivedFrom(aBase);
-	}
-	if (auto value_base = Object::ValueBase(aValue))
-	{
+	Object *value_base;
+	if (auto obj = TokenToObject(aValue))
+		value_base = obj->Base();
+	else
+		value_base = Object::ValueBase(aValue);
+	if (value_base)
 		return value_base == aBase || value_base->IsDerivedFrom(aBase);
-	}
 	// Something that doesn't fit in our type hierarchy, like a ComObject.
 	// Returning false seems correct and more useful than throwing.
 	// HasBase(ComObj, "".base.base) ; False, it's not a primitive value.

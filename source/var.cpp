@@ -51,7 +51,6 @@ ResultType Var::Assign(Var &aVar)
 		return target_var.Assign(source_var.mObject);
 	}
 	// Otherwise:
-	source_var.MaybeWarnUninitialized();
 	return target_var.Assign(source_var.mCharContents, source_var._CharLength()); // Pass length to improve performance. It isn't necessary to call Contents()/Length() because they must be already up-to-date because there is no binary number to update them from (if there were, the above would have returned).  Also, caller ensured Type()==VAR_NORMAL.
 }
 
@@ -152,6 +151,16 @@ void Var::UpdateAlias(Var *aTargetVar)
 
 
 
+void Var::UpdateAlias(VarRef *aTargetVar)
+{
+	ASSERT(!IsObject());
+	SetAliasDirect(aTargetVar);
+	_SetObject(aTargetVar);
+	aTargetVar->AddRef();
+}
+
+
+
 IObject *Var::GetRef()
 {
 	auto target_var = this;
@@ -171,14 +180,8 @@ IObject *Var::GetRef()
 		return nullptr;
 	}
 	if (mType == VAR_ALIAS)
-	{
-		ref->AddRef();
-		target_var->_SetObject(ref);
-		target_var->SetAliasDirect(ref);
-	}
-	ref->AddRef();
-	_SetObject(ref);
-	SetAliasDirect(ref);
+		target_var->UpdateAlias(ref);
+	UpdateAlias(ref);
 	return ref;
 }
 
@@ -1228,7 +1231,7 @@ ResultType Var::AssignStringFromCodePage(LPCSTR aBuf, int aLength, UINT aCodePag
 	if (iLen > 0) {
 		if (!AssignString(NULL, iLen, true))
 			return FAIL;
-		LPWSTR aContents = Contents(TRUE, TRUE);
+		LPWSTR aContents = Contents(TRUE);
 		iLen = MultiByteToWideChar(aCodePage, 0, aBuf, aLength, (LPWSTR) aContents, iLen);
 		aContents[iLen] = 0;
 		if (!iLen)
@@ -1256,7 +1259,7 @@ ResultType Var::AssignStringToCodePage(LPCWSTR aBuf, int aLength, UINT aCodePage
 	if (iLen > 0) {
 		if (!SetCapacity(iLen, true))
 			return FAIL;
-		LPSTR aContents = (LPSTR) Contents(TRUE, TRUE);
+		LPSTR aContents = (LPSTR) Contents(TRUE);
 		iLen = WideCharToMultiByte(aCodePage, aFlags, aBuf, aLength, aContents, iLen, pDefChar, NULL);
 		aContents[iLen] = 0;
 		if (!iLen)
@@ -1268,20 +1271,6 @@ ResultType Var::AssignStringToCodePage(LPCWSTR aBuf, int aLength, UINT aCodePage
 	else
 		Assign();
 	return OK;
-}
-
-
-
-__forceinline void Var::MaybeWarnUninitialized()
-{
-	if (IsUninitializedNormalVar())
-	{
-		// The following should not be possible; if it is, there's a bug and we want to know about it:
-		//if (mByteLength != 0)
-		//	MarkInitialized();	// "self-correct" if we catch a var that has normal content but wasn't marked initialized
-		//else
-			g_script.WarnUninitializedVar(this);
-	}
 }
 
 

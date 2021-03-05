@@ -225,10 +225,10 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_GUI_NO_WINDOW _T("Gui has no window.")
 #define ERR_GUI_NOT_FOR_THIS_TYPE _T("Not supported for this control type.") // Used by GuiControl object and Control functions.
 #define ERR_MUST_DECLARE _T("This variable must be declared.")
-#define ERR_REMOVE_THE_PERCENT _T("If this variable was not intended to be dynamic, remove the % symbols from it.")
-#define ERR_DYNAMIC_TOO_LONG _T("This dynamically built variable name is too long.  ") ERR_REMOVE_THE_PERCENT
-#define ERR_DYNAMIC_BLANK _T("This dynamic variable is blank.  ") ERR_REMOVE_THE_PERCENT
+#define ERR_DYNAMIC_BLANK _T("This dynamic variable is blank.")
 #define ERR_DYNAMIC_UPVAR _T("This dynamic variable is not included in this closure.")
+#define ERR_DYNAMIC_NOT_FOUND _T("Variable not found.")
+#define ERR_DYNAMIC_BAD_GLOBAL _T("This dynamic assignment requires a \"global\" declaration.")
 #define ERR_HOTKEY_IF_EXPR _T("Parameter #1 must match an existing #HotIf expression.")
 #define ERR_EXCEPTION _T("An exception was thrown.")
 #define ERR_INVALID_ASSIGNMENT _T("Invalid assignment.")
@@ -260,7 +260,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_SOUND_COMPONENT _T("Component not found")
 #define ERR_SOUND_CONTROLTYPE _T("Component doesn't support this control type")
 #define ERR_TIMEOUT _T("Timeout")
-#define WARNING_USE_UNSET_VARIABLE _T("This variable has not been assigned a value.")
+#define ERR_VAR_UNSET _T("This variable has not been assigned a value.")
 #define WARNING_ALWAYS_UNSET_VARIABLE _T("This variable appears to never be assigned a value.")
 #define WARNING_LOCAL_SAME_AS_GLOBAL _T("This local variable has the same name as a global variable.")
 #define WARNING_USE_ENV_VARIABLE _T("An environment variable is being accessed; see #NoEnv.")
@@ -369,10 +369,7 @@ enum DerefTypeType : BYTE
 	DT_WORDOP,		// Word operator: and, or, not, new.
 	DT_CONST_INT,	// Constant integer value (true, false).
 	DT_DOTPERCENT,	// Dynamic member: .%name%
-	DT_FUNCREF,		// Reference to function (for fat arrow functions).
-	// DerefType::is_function() requires that these are last:
-	DT_FUNC,		// Function call.
-	DT_VARIADIC		// Variadic function call.
+	DT_FUNCREF		// Reference to function (for fat arrow functions).
 };
 
 class Func; // Forward declaration for use below.
@@ -382,7 +379,7 @@ struct DerefType
 	union
 	{
 		Var *var; // DT_VAR
-		Func *func; // DT_FUNC
+		Func *func; // DT_FUNCREF
 		DerefType *next; // DT_STRING
 		SymbolType symbol; // DT_WORDOP
 		int int_value; // DT_CONST_INT
@@ -390,14 +387,13 @@ struct DerefType
 	// Keep any fields that aren't an even multiple of 4 adjacent to each other.  This conserves memory
 	// due to byte-alignment:
 	DerefTypeType type;
-	bool is_function() { return type == DT_FUNC; }
 	UCHAR substring_count;
 	DerefLengthType length; // Listed only after byte-sized fields, due to it being a WORD.
 };
 
 struct CallSite
 {
-	IObject *func = nullptr;
+	Func *func = nullptr;
 	LPTSTR member = nullptr;
 	int flags = IT_CALL;
 	int param_count = 0;
@@ -626,7 +622,6 @@ enum JoyControls {JOYCTRL_INVALID, JOYCTRL_XPOS, JOYCTRL_YPOS, JOYCTRL_ZPOS
 enum BuiltInFunctionID {
 	FID_Object_New = -1,
 	FID_DllCall = 0, FID_ComCall,
-	FID_Func = 0, FID_FuncClose,
 	FID_LV_GetNext = 0, FID_LV_GetCount,
 	FID_LV_Add = 0, FID_LV_Insert, FID_LV_Modify,
 	FID_LV_InsertCol = 0, FID_LV_ModifyCol, FID_LV_DeleteCol,
@@ -648,7 +643,7 @@ enum BuiltInFunctionID {
 	FID_Min = 0, FID_Max,
 	FID_Random = 0, FID_RandomSeed,
 	FID_ObjAddRef = 0, FID_ObjRelease,
-	FID_ObjHasOwnProp = 0, FID_ObjOwnPropCount, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjOwnProps, FID_ObjOwnMethods,
+	FID_ObjHasOwnProp = 0, FID_ObjOwnPropCount, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjOwnProps,
 	FID_ObjGetBase = 0, FID_ObjSetBase,
 	FID_ObjPtr = 0, FID_ObjPtrAddRef, FID_ObjFromPtr, FID_ObjFromPtrAddRef,
 	FID_WinGetID = 0, FID_WinGetIDLast, FID_WinGetPID, FID_WinGetProcessName, FID_WinGetProcessPath, FID_WinGetCount, FID_WinGetList, FID_WinGetMinMax, FID_WinGetControls, FID_WinGetControlsHwnd, FID_WinGetTransparent, FID_WinGetTransColor, FID_WinGetStyle, FID_WinGetExStyle,
@@ -951,6 +946,7 @@ public:
 	ResultType ExpandSingleArg(int aArgIndex, ResultToken &aResultToken, LPTSTR &aDerefBuf, size_t &aDerefBufSize);
 	ResultType ExpressionToPostfix(ArgStruct &aArg);
 	ResultType ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix);
+	ResultType FinalizeExpression(ArgStruct &aArg);
 
 	static bool FileIsFilteredOut(LoopFilesStruct &aCurrentFile, FileLoopModeType aFileLoopMode);
 
@@ -1365,6 +1361,7 @@ public:
 	IObject *CreateRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Object *aPrototype);
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
 	
+	ResultType ValidateVarUsage(Var *aVar, int aUsage);
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType);
 	ResultType LineUnexpectedError();
 
@@ -1545,11 +1542,11 @@ struct FreeVars
 
 	void Release()
 	{
-		if (mRefCount == 1)
-			delete this;
-		else
-			--mRefCount;
+		if (--mRefCount == 0)
+			FullyReleased();
 	}
+
+	bool FullyReleased(ULONG aRefPendingRelease = 0);
 
 	FreeVars *ForFunc(UserFunc *aFunc)
 	{
@@ -1586,6 +1583,13 @@ private:
 			mVar[i].Free(VAR_ALWAYS_FREE, true); // Pass "true" to exclude aliases, since their targets should not be freed (they don't belong to this function).
 		::delete[] mVar; // Must use :: to avoid SimpleHeap.
 	}
+};
+
+
+struct ClosureInfo
+{
+	Var *var;
+	UserFunc *func;
 };
 
 
@@ -1657,22 +1661,21 @@ public:
 	Object *mClass = nullptr; // The class or prototype object which this user-defined method was defined for, or nullptr.
 	Label *mFirstLabel = nullptr, *mLastLabel = nullptr; // Linked list of private labels.
 	UserFunc *mOuterFunc = nullptr; // Func which contains this func (usually nullptr).
-	FuncList mFuncs {}; // List of nested functions (usually empty).
 	VarList mVars {}; // Sorted list of non-static local variables.
 	VarList mStaticVars {}; // Sorted list of static variables.
 	Var **mDownVar = nullptr, **mUpVar = nullptr;
 	int *mUpVarIndex = nullptr;
+	ClosureInfo *mClosure = nullptr; // Array of nested functions containing upvars.
 	static FreeVars *sFreeVars;
 #define MAX_FUNC_UP_VARS 1000
 	int mDownVarCount = 0, mUpVarCount = 0;
+	int mClosureCount = 0;
 
 	// Keep small members adjacent to each other to save space and improve perf. due to byte alignment:
 	bool mIsFuncExpression; // Whether this function was defined *within* an expression and is therefore allowed under a control flow statement.
 #define VAR_DECLARE_GLOBAL (VAR_DECLARED | VAR_GLOBAL)
-#define VAR_DECLARE_SUPER_GLOBAL (VAR_DECLARE_GLOBAL | VAR_SUPER_GLOBAL)
 #define VAR_DECLARE_LOCAL  (VAR_DECLARED | VAR_LOCAL)
 #define VAR_DECLARE_STATIC (VAR_DECLARED | VAR_LOCAL | VAR_LOCAL_STATIC)
-	// The last two may be combined (bitwise-OR) with VAR_FORCE_LOCAL.
 	UCHAR mDefaultVarType = VAR_DECLARE_LOCAL;
 
 	UserFunc(LPCTSTR aName) : Func(aName) {}
@@ -1692,16 +1695,6 @@ public:
 		if (Var *var = mStaticVars.Find(aName, aNameLength))
 			return var;
 		return nullptr;
-	}
-
-	bool AllowSuperGlobals()
-	{
-		// A function allows super-globals unless it is force-local or contained by another
-		// function which is force-local (i.e. a nested function should inherit the rules and
-		// declarations of the scope which encloses it).
-		if (mDefaultVarType & VAR_FORCE_LOCAL)
-			return false;
-		return mOuterFunc ? mOuterFunc->AllowSuperGlobals() : true;
 	}
 
 	bool IsAssumeGlobal()
@@ -1787,15 +1780,28 @@ class Closure : public Func
 public:
 	static Object *sPrototype;
 
-	Closure(UserFunc *aFunc, FreeVars *aVars)
+	enum Flags : decltype(mFlags)
+	{
+		ClosureGroupedFlag = LastObjectFlag << 1
+	};
+
+	Closure(UserFunc *aFunc, FreeVars *aVars, bool aIsGrouped)
 		: mFunc(aFunc), mVars(aVars), Func(aFunc->mName)
 	{
+		if (aIsGrouped)
+		{
+			mFlags |= ClosureGroupedFlag;
+			mRefCount = 0;
+		}
+		else
+			aVars->AddRef();
 		mMinParams = aFunc->mMinParams;
 		mParamCount = aFunc->mParamCount;
 		mIsVariadic = aFunc->mIsVariadic;
 		SetBase(sPrototype);
 	}
 	~Closure();
+	bool Delete() override;
 
 	bool IsBuiltIn() override { return false; }
 	bool ArgIsOutputVar(int aArg) override { return mFunc->ArgIsOutputVar(aArg); }
@@ -2645,7 +2651,6 @@ public:
 	ResultType AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Create(LPTSTR aTitle);
 	ResultType SetName(LPTSTR aName);
-	ResultType NameToEventHandler(LPTSTR aName, IObject *&aObject);
 	ResultType OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken);
 	ResultType OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads, ResultToken &aResultToken);
 	void ApplyEventStyles(GuiControlType *aControl, UINT aEvent, bool aAdded);
@@ -2914,7 +2919,6 @@ private:
 	// if aStartingLine is allowed to be NULL (for recursive calls).  If they
 	// were member functions of class Line, a check for NULL would have to
 	// be done before dereferencing any line's mNextLine, for example:
-	ResultType PreparseFuncRefs(Line *aStartingLine);
 	ResultType PreparseExpressions(Line *aStartingLine);
 	ResultType PreparseExpressions(FuncList &aFuncs);
 	void PreparseHotkeyIfExpr(Line *aLine);
@@ -2953,7 +2957,7 @@ public:
 	void PrintErrorStdOut(LPCTSTR aErrorText, int aLength = 0, LPCTSTR aFile = _T("*"));
 	void PrintErrorStdOut(LPCTSTR aErrorText, LPCTSTR aExtraInfo, FileIndexType aFileIndex, LineNumberType aLineNumber);
 #ifndef AUTOHOTKEYSC
-	TextStream *mIncludeLibraryFunctionsThenExit;
+	bool mValidateThenExit;
 #endif
 	int mUninterruptedLineCountMax; // 32-bit for performance (since huge values seem unnecessary here).
 	int mUninterruptibleTime;
@@ -3018,11 +3022,11 @@ public:
 	};
 	void InitFuncLibraries(FuncLibrary aLibs[]);
 	void InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix);
-	Func *FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude);
+	void IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound);
 #endif
-	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = -1, int *apInsertPos = NULL);
-	FuncEntry *FindBuiltInFunc(LPTSTR aFuncName);
-	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsertPos, Object *aClassObject = NULL);
+	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0);
+	static FuncEntry *GetBuiltInFunc(LPTSTR aFuncName);
+	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aClassObject = NULL);
 
 	ResultType DefineClass(LPTSTR aBuf);
 	UserFunc *DefineClassInit(bool aStatic);
@@ -3036,11 +3040,15 @@ public:
 	static SymbolType ConvertWordOperator(LPCTSTR aWord, size_t aLength);
 	static bool EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker);
 
-	#define FINDVAR_DEFAULT  (VAR_LOCAL | VAR_GLOBAL)
-	#define FINDVAR_GLOBAL   VAR_GLOBAL
-	#define FINDVAR_LOCAL    VAR_LOCAL
-	Var *FindOrAddVar(LPCTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT);
-	Var *FindVar(LPCTSTR aVarName, size_t aVarNameLength = 0, int aScope = FINDVAR_DEFAULT
+	#define FINDVAR_DEFAULT			(VAR_LOCAL | VAR_GLOBAL)
+	#define FINDVAR_GLOBAL			VAR_GLOBAL
+	#define FINDVAR_LOCAL			VAR_LOCAL
+	#define FINDVAR_GLOBAL_FALLBACK	0x100
+	#define FINDVAR_NO_BIF			0x200
+	#define FINDVAR_FOR_WRITE		FINDVAR_DEFAULT
+	#define FINDVAR_FOR_READ		(FINDVAR_DEFAULT | FINDVAR_GLOBAL_FALLBACK)
+	Var *FindOrAddVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope);
+	Var *FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope = FINDVAR_FOR_READ
 		, VarList **apList = nullptr, int *apInsertPos = nullptr, ResultType *aDisplayError = nullptr);
 	Var *FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError);
 	Var *AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope);
@@ -3103,22 +3111,23 @@ public:
 	ResultType RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), ResultType aErrorType = FAIL_OR_OK, Line *aLine = nullptr, Object *aPrototype = nullptr);
 
 	ResultType ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting);
-	enum VarRefUsageType { VARREF_READ = 0, VARREF_BYREF, VARREF_ISSET
-		, VARREF_DYNAMIC_PARAM, VARREF_LVALUE, VARREF_OUTPUT_VAR };
-#define VARREF_IS_WRITE(is_lvalue) ((is_lvalue) >= Script::VARREF_LVALUE)
+	enum VarRefUsageType { VARREF_READ = 0, VARREF_ISSET
+		, VARREF_REF, VARREF_LVALUE, VARREF_OUTPUT_VAR };
+#define VARREF_IS_WRITE(var_usage) ((var_usage) >= Script::VARREF_REF)
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType = VARREF_LVALUE);
+	ResultType VarUnsetError(Var *aVar);
 
 	ResultType ShowError(LPCTSTR aErrorText, ResultType aErrorType, LPCTSTR aExtraInfo, Line *aLine);
 	int FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine);
 
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
 	void WarnUnassignedVar(Var *aVar);
-	void WarnUninitializedVar(Var *aVar);
 	void WarnLocalSameAsGlobal(LPCTSTR aVarName);
 
 	ResultType PreprocessLocalVars(FuncList &aFuncs);
 	ResultType PreprocessLocalVars(UserFunc &aFunc);
 	ResultType PreparseVarRefs();
+	void CountNestedFuncRefs(UserFunc &aWithin, LPCTSTR aFuncName);
 
 	ResultType ThrowIfTrue(bool aError);
 	ResultType ThrowIntIfNonzero(int aErrorValue);
@@ -3259,9 +3268,6 @@ BIF_DECL(BIF_NumPut);
 BIF_DECL(BIF_StrGetPut);
 BIF_DECL(BIF_StrPtr);
 BIF_DECL(BIF_IsLabel);
-BIF_DECL(BIF_IsFunc);
-BIF_DECL(BIF_Func);
-BIF_DECL(BIF_IsByRef);
 BIF_DECL(BIF_IsTypeish);
 BIF_DECL(BIF_IsSet);
 BIF_DECL(BIF_GetKeyState);
@@ -3294,7 +3300,6 @@ BIF_DECL(BIF_SetTimer);
 BIF_DECL(BIF_OnMessage);
 BIF_DECL(BIF_On);
 BIF_DECL(BIF_BufferAlloc);
-BIF_DECL(BIF_ClipboardAll);
 
 #ifdef ENABLE_REGISTERCALLBACK
 BIF_DECL(BIF_CallbackCreate);
@@ -3320,15 +3325,14 @@ BIF_DECL(BIF_LoadPicture);
 BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.
 
 BIF_DECL(BIF_Hotstring);
-BIF_DECL(BIF_InputHook);
 
 BIF_DECL(BIF_Type);
 BIF_DECL(BIF_IsObject);
 
 
-BIF_DECL(BIF_Object);
-BIF_DECL(BIF_Array);
-BIF_DECL(BIF_Map);
+BIF_DECL(Op_Object);
+BIF_DECL(Op_Array);
+
 BIF_DECL(BIF_ObjAddRefRelease);
 BIF_DECL(BIF_ObjBindMethod);
 BIF_DECL(BIF_ObjPtr);
@@ -3341,6 +3345,7 @@ BIF_DECL(BIF_HasProp);
 BIF_DECL(BIF_HasMethod);
 BIF_DECL(BIF_GetMethod);
 
+BIF_DECL(Op_FuncClose);
 
 // Advanced file IO interfaces
 BIF_DECL(BIF_FileOpen);
@@ -3428,7 +3433,6 @@ SymbolType TokenIsNumeric(ExprTokenType &aToken);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken);
 SymbolType TokenIsPureNumeric(ExprTokenType &aToken, SymbolType &aIsImpureNumeric);
 BOOL TokenIsEmptyString(ExprTokenType &aToken);
-BOOL TokenIsEmptyString(ExprTokenType &aToken, BOOL aWarnUninitializedVar); // Same as TokenIsEmptyString but optionally warns if the token is an uninitialized var.
 SymbolType TypeOfToken(ExprTokenType &aToken);
 SymbolType TypeOfToken(ExprTokenType &aToken, SymbolType &aIsNum);
 __int64 TokenToInt64(ExprTokenType &aToken);
@@ -3436,9 +3440,8 @@ double TokenToDouble(ExprTokenType &aToken, BOOL aCheckForHex = TRUE);
 LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf = NULL, size_t *aLength = NULL);
 ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOutput);
 StringCaseSenseType TokenToStringCase(ExprTokenType& aToken);
+Var *TokenToOutputVar(ExprTokenType &aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
-IObject *TokenToFunctor(ExprTokenType &aToken);
-IObject *StringToFunctor(LPTSTR aStr);
 ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, int *aMinParams = nullptr);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
 BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right);

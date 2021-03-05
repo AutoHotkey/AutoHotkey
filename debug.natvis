@@ -24,4 +24,17 @@
   <Type Name="Func">
     <DisplayString>{mName,sub}()</DisplayString>
   </Type>
+  <Type Name="Object">
+    <Expand>
+      <Synthetic Name="Properties">
+        <DisplayString>{mFields.data->size,d}</DisplayString>
+        <Expand>
+          <ArrayItems>
+            <Size>mFields.data->size</Size>
+            <ValuePointer>(FieldType *)(mFields.data + 1)</ValuePointer>
+          </ArrayItems>
+        </Expand>
+      </Synthetic>
+    </Expand>
+  </Type>
 </AutoVisualizer>

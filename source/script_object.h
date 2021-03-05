@@ -43,7 +43,12 @@ public:
 			// is copied to another variable (AddRef() is called).  To gracefully handle this, let
 			// implementors decide when to delete and just decrement mRefCount if it doesn't happen.
 			if (Delete())
-				return 0;
+				return 0; // Object was deleted, so cannot check or decrement --mRefCount.
+			// If the object is implemented correctly, false was returned because:
+			//  a) mRefCount > 1; e.g. __delete has "resurrected" the object by storing a reference.
+			//  b) There are no more counted references to this object, but its lifetime is tied to
+			//     another object, which can "resurrect" this one.  The other object must have some
+			//     way to delete this one when appropriate, such as by calling AddRef() & Release().
 			// Implementor has ensured Delete() returns false only if delete wasn't called (due to
 			// remaining references to this), so we must assume mRefCount > 1.  If Delete() really
 			// deletes the object and (erroneously) returns false, checking if mRefCount is still
@@ -52,12 +57,16 @@ public:
 		return --mRefCount;
 	}
 
+	ULONG RefCount() { return mRefCount; }
+
 	ObjectBase() : mRefCount(1) {}
 
 	// Declare a virtual destructor for correct 'delete this' behaviour in Delete(),
 	// and because it is likely to be more convenient and reliable than overriding
 	// Delete(), especially with a chain of derived types.
 	virtual ~ObjectBase() {}
+
+	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 };
 
 
@@ -170,7 +179,7 @@ typename FlatVector<T, index_t>::OneT FlatVector<T, index_t>::Empty;
 
 class Property
 {
-	IObject *mGet = nullptr, *mSet = nullptr;
+	IObject *mGet = nullptr, *mSet = nullptr, *mCall = nullptr;
 
 	void SetEtter(IObject *&aMemb, IObject *aFunc)
 	{
@@ -192,13 +201,17 @@ public:
 			mGet->Release();
 		if (mSet)
 			mSet->Release();
+		if (mCall)
+			mCall->Release();
 	}
 
 	IObject *Getter() { return mGet; }
 	IObject *Setter() { return mSet; }
+	IObject *Method() { return mCall; }
 
 	void SetGetter(IObject *aFunc) { SetEtter(mGet, aFunc); }
 	void SetSetter(IObject *aFunc) { SetEtter(mSet, aFunc); }
+	void SetMethod(IObject *aFunc) { SetEtter(mCall, aFunc); }
 };
 
 
@@ -297,7 +310,6 @@ protected:
 private:
 	Object *mBase = nullptr;
 	FlatVector<FieldType, index_t> mFields;
-	FlatVector<MethodType, index_t> mMethods;
 
 	FieldType *FindField(name_t name, index_t &insert_pos);
 	FieldType *FindField(name_t name)
@@ -307,7 +319,6 @@ private:
 	}
 	
 	FieldType *Insert(name_t name, index_t at);
-	MethodType *InsertMethod(name_t name, index_t pos);
 
 	bool SetInternalCapacity(index_t new_capacity);
 	bool Expand()
@@ -317,17 +328,11 @@ private:
 	}
 
 protected:
-	MethodType *GetMethod(name_t name); // Recursive.
-	MethodType *FindMethod(name_t name, index_t &insert_pos); // Own methods only.
-	MethodType *FindMethod(name_t name) // Own methods only.
-	{
-		index_t insert_pos;
-		return FindMethod(name, insert_pos);
-	}
+	IObject *GetMethod(name_t name);
 
-	ResultType CallMethod(LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType CallMethod(IObject *aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
-	ResultType CallMeta(IObject *aFunc, LPTSTR aName, int aFlags, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallAsMethod(ExprTokenType &aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallMeta(LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType CallMetaVarg(int aFlags, LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 
 public:
 
@@ -339,6 +344,12 @@ public:
 
 	bool HasProp(name_t aName);
 	bool HasMethod(name_t aName);
+
+	bool HasOwnProps() { return mFields.Length(); }
+	bool HasOwnProp(name_t aName)
+	{
+		return FindField(aName) != nullptr;
+	}
 
 	enum class PropType
 	{
@@ -395,18 +406,9 @@ public:
 			mFields.Remove((index_t)(field - mFields), 1);
 	}
 	
-	IObject *GetOwnMethodFunc(name_t name)
-	{
-		if (auto method = FindMethod(name))
-			return method->func;
-		return nullptr;
-	}
-
 	Property *DefineProperty(name_t aName);
 	bool DefineMethod(name_t aName, IObject *aFunc);
 	
-	bool HasOwnMethods() { return mMethods.Length(); }
-
 	bool CanSetBase(Object *aNewBase);
 	ResultType SetBase(Object *aNewBase, ResultToken &aResultToken);
 	void SetBase(Object *aNewBase)
@@ -460,12 +462,9 @@ public:
 	ResultType DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType __Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType OwnProps(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType DefineMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType DeleteMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType GetMethod(ResultToken &aResultToken, name_t aName);
-	ResultType HasOwnMethod(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	ResultType Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
@@ -473,6 +472,7 @@ public:
 	static ObjectMember sValueMembers[];
 	static Object *sAnyPrototype, *sPrimitivePrototype, *sStringPrototype
 		, *sNumberPrototype, *sIntegerPrototype, *sFloatPrototype;
+	static Object *sVarRefPrototype;
 	static Object *ValueBase(ExprTokenType &aValue);
 	static bool HasBase(ExprTokenType &aValue, IObject *aBase);
 
@@ -789,8 +789,11 @@ public:
 class ClipboardAll : public BufferObject
 {
 public:
-	ClipboardAll(void *aData, size_t aSize) : BufferObject(aData, aSize) {}
+	ClipboardAll() : BufferObject(nullptr, 0) {}
+	static ObjectMember sMembers[];
 	static Object *sPrototype;
+	static Object *Create();
+	ResultType __New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 };
 
 

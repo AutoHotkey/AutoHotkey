@@ -37,7 +37,6 @@ FuncEntry g_BIF[] =
 {
 	BIF1(Abs, 1, 1),
 	BIFn(ACos, 1, 1, BIF_ASinACos),
-	BIF1(Array, 0, NA),
 	BIFn(ASin, 1, 1, BIF_ASinACos),
 	BIF1(ATan, 1, 1),
 	BIFA(BlockInput, 1, 1, ACT_BLOCKINPUT),
@@ -50,7 +49,6 @@ FuncEntry g_BIF[] =
 	BIFn(Ceil, 1, 1, BIF_FloorCeil),
 	BIF1(Chr, 1, 1),
 	BIFA(Click, 0, 6, ACT_CLICK),
-	BIF1(ClipboardAll, 0, 2),
 	BIFn(ClipWait, 0, 2, BIF_Wait),
 #ifdef ENABLE_DLLCALL
 	BIFn(ComCall, 2, NA, BIF_DllCall),
@@ -160,11 +158,9 @@ FuncEntry g_BIF[] =
 	BIF1(FileSelect, 0, 4),
 	BIFA(FileSetAttrib, 1, 3, ACT_FILESETATTRIB),
 	BIFA(FileSetTime, 0, 4, ACT_FILESETTIME),
-	BIF1(Float, 1, 1),
 	BIFn(Floor, 1, 1, BIF_FloorCeil),
 	BIF1(Format, 1, NA),
 	BIF1(FormatTime, 0, 2),
-	BIF1(Func, 1, 1),
 	BIFn(GetKeyName, 1, 1, BIF_GetKeyName),
 	BIFn(GetKeySC, 1, 1, BIF_GetKeyName),
 	BIF1(GetKeyState, 1, 2),
@@ -194,21 +190,17 @@ FuncEntry g_BIF[] =
 	BIF1(IniRead, 1, 4),
 	BIFA(IniWrite, 3, 4, ACT_INIWRITE),
 	BIF1(InputBox, 0, 4),
-	BIF1(InputHook, 0, 3),
 	BIF1(InStr, 2, 5),
-	BIF1(Integer, 1, 1),
 	BIFi(IsAlnum, 1, 2, BIF_IsTypeish, VAR_TYPE_ALNUM),
 	BIFi(IsAlpha, 1, 2, BIF_IsTypeish, VAR_TYPE_ALPHA),
-	BIF1(IsByRef, 1, 1, {1}),
 	BIFi(IsDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_DIGIT),
 	BIFi(IsFloat, 1, 1, BIF_IsTypeish, VAR_TYPE_FLOAT),
-	BIF1(IsFunc, 1, 1),
 	BIFi(IsInteger, 1, 1, BIF_IsTypeish, VAR_TYPE_INTEGER),
 	BIF1(IsLabel, 1, 1),
 	BIFi(IsLower, 1, 2, BIF_IsTypeish, VAR_TYPE_LOWER),
 	BIFi(IsNumber, 1, 1, BIF_IsTypeish, VAR_TYPE_NUMBER),
 	BIF1(IsObject, 1, 1),
-	BIF1(IsSet, 1, 1),
+	BIF1(IsSet, 1, 1, {1}),
 	BIFi(IsSpace, 1, 1, BIF_IsTypeish, VAR_TYPE_SPACE),
 	BIFi(IsTime, 1, 1, BIF_IsTypeish, VAR_TYPE_TIME),
 	BIFi(IsUpper, 1, 2, BIF_IsTypeish, VAR_TYPE_UPPER),
@@ -223,7 +215,6 @@ FuncEntry g_BIF[] =
 	BIF1(LoadPicture, 1, 3, {3}),
 	BIFn(Log, 1, 1, BIF_SqrtLogLn),
 	BIFn(LTrim, 1, 2, BIF_Trim),
-	BIF1(Map, 0, NA),
 	BIFn(Max, 1, NA, BIF_MinMax),
 	BIF1(MenuFromHandle, 1, 1),
 	BIF1(MenuSelect, 0, 11),
@@ -243,13 +234,11 @@ FuncEntry g_BIF[] =
 	BIF1(NumPut, 3, NA),
 	BIFn(ObjAddRef, 1, 1, BIF_ObjAddRefRelease),
 	BIF1(ObjBindMethod, 1, NA),
-	BIF1(Object, 0, NA),
 	BIFn(ObjFromPtr, 1, 1, BIF_ObjPtr),
 	BIFn(ObjFromPtrAddRef, 1, 1, BIF_ObjPtr),
 	BIFn(ObjGetBase, 1, 1, BIF_Base),
 	BIFn(ObjGetCapacity, 1, 1, BIF_ObjXXX),
 	BIFn(ObjHasOwnProp, 2, 2, BIF_ObjXXX),
-	BIFn(ObjOwnMethods, 1, 1, BIF_ObjXXX),
 	BIFn(ObjOwnPropCount, 1, 1, BIF_ObjXXX),
 	BIFn(ObjOwnProps, 1, 1, BIF_ObjXXX),
 	BIFn(ObjPtr, 1, 1, BIF_ObjPtr),
@@ -325,7 +314,6 @@ FuncEntry g_BIF[] =
 	BIF1(StatusBarWait, 0, 8),
 	BIF1(StrCompare, 2, 3),
 	BIFn(StrGet, 1, 3, BIF_StrGetPut),
-	BIF1(String, 1, 1),
 	BIF1(StrLen, 1, 1),
 	BIFn(StrLower, 1, 2, BIF_StrCase),
 	BIF1(StrPtr, 1, 1),
@@ -570,7 +558,7 @@ Script::Script()
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
 	, mIsRestart(false), mErrorStdOut(false), mErrorStdOutCP(-1)
 #ifndef AUTOHOTKEYSC
-	, mIncludeLibraryFunctionsThenExit(NULL)
+	, mValidateThenExit(false)
 #endif
 	, mUninterruptedLineCountMax(1000), mUninterruptibleTime(17)
 	, mCustomIcon(NULL), mCustomIconSmall(NULL) // Normally NULL unless there's a custom tray icon loaded dynamically.
@@ -586,8 +574,6 @@ Script::Script()
 	// This is done here rather than in Init() because by then CreateRootPrototypes()
 	// definitely would have already caused functions to be added to the list.
 	mFuncs.Alloc(100); // Avoid multiple reallocations for simple scripts.
-	FindFunc(_T("Array"));  // This ensures they aren't inserted while PreparseExpressions
-	FindFunc(_T("Object")); // is iterating over mFuncs.
 
 #ifdef _DEBUG
 	if (ID_FILE_EXIT < ID_MAIN_FIRST) // Not a very thorough check.
@@ -770,7 +756,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	else
 	{
 		// In case the script is a relative filespec (relative to current working dir):
-		buf_length = GetFullPathName(aScriptFilename, _countof(buf), buf, NULL); // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
+		buf_length = GetFullPathName(aScriptFilename, _countof(buf), buf, NULL); // Succeeds even on nonexistent files.
 		if (!buf_length)
 			return FAIL; // Due to rarity, no error msg, just abort.
 	}
@@ -783,7 +769,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		// lowercase/uppercase letters:
 		ConvertFilespecToCorrectCase(buf, _countof(buf), buf_length); // This might change the length, e.g. due to expansion of 8.3 filename.
 	}
-	mFileSpec = SimpleHeap::Alloc(buf);  // The full spec is stored for convenience, and it's relied upon by mIncludeLibraryFunctionsThenExit.
+	mFileSpec = SimpleHeap::Alloc(buf);  // The full spec is stored for convenience.
 	LPTSTR filename_marker;
 	if (filename_marker = _tcsrchr(buf, '\\'))
 	{
@@ -1449,16 +1435,13 @@ void ReleaseStaticVarObjects(FuncList &aFuncs)
 {
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
-		if (aFuncs.mItem[i]->IsBuiltIn())
-			continue;
+		ASSERT(!aFuncs.mItem[i]->IsBuiltIn());
 		auto &f = *(UserFunc *)aFuncs.mItem[i];
 		// Since it doesn't seem feasible to release all var backups created by recursive function
 		// calls and all tokens in the 'stack' of each currently executing expression, currently
 		// only static and global variables are released.  It seems best for consistency to also
 		// avoid releasing top-level non-static local variables (i.e. which aren't in var backups).
 		ReleaseVarObjects(f.mStaticVars);
-		if (f.mFuncs.mCount)
-			ReleaseStaticVarObjects(f.mFuncs);
 	}
 }
 
@@ -1526,15 +1509,6 @@ UINT Script::LoadFromFile()
 	if (!LoadIncludedFile(g_RunStdIn ? _T("*") : mFileSpec, false, false))
 		return LOADING_FAILED;
 
-	// Resolve all non-dynamic function references at this exact point to ensure that
-	// all auto-includes are processed before any of the following checks or calls.
-	// This improves maintainability, since the following stages don't need to account
-	// for auto-includes adding more lines or changing global state, such as #DllLoad
-	// overriding the SetDllDirectory(NULL) call below.  It may also improve flexibility.
-	// If auto-includes are removed, this could be merged into ExpressionToPostfix.
-	if (!PreparseFuncRefs(mFirstLine))
-		return LOADING_FAILED;
-
 #ifdef ENABLE_DLLCALL
 	// So that (the last occuring) "#DllLoad directory" doesn't affect calls to GetDllProcAddress for run time calls to DllCall
 	// or DllCall optimizations in Line::ExpressionToPostfix.
@@ -1572,11 +1546,8 @@ UINT Script::LoadFromFile()
 	}
 
 #ifndef AUTOHOTKEYSC
-	if (mIncludeLibraryFunctionsThenExit)
-	{
-		delete mIncludeLibraryFunctionsThenExit;
+	if (mValidateThenExit)
 		return 0; // Tell our caller to do a normal exit.
-	}
 #endif
 
 	// Set the working directory to the script's directory.  This must be done after the above
@@ -2440,7 +2411,7 @@ process_completed_line:
 						// keyboard layout.  Allow the script to start, but warn the user about the problem.
 						// Note that this hotkey's label is still valid even though the hotkey wasn't created.
 #ifndef AUTOHOTKEYSC
-						if (!mIncludeLibraryFunctionsThenExit) // Current keyboard layout is not relevant in /iLib mode.
+						if (!mValidateThenExit) // Current keyboard layout is not relevant in /validate mode.
 #endif
 						{
 							TCHAR msg_text[128];
@@ -3598,8 +3569,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 				bool error_was_shown, file_was_found;
 				// Save the working directory; see the similar line below for details.
 				LPTSTR prev_dir = GetWorkingDir();
-				// Attempt to include a script file based on the same rules as func() auto-include:
-				FindFuncInLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found, false);
+				// Attempt to include a script file from a Lib folder:
+				IncludeLibrary(parameter, parameter_end - parameter, error_was_shown, file_was_found);
 				// Restore the working directory.
 				if (prev_dir)
 				{
@@ -4012,12 +3983,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		// The following series of "if" statements was confirmed to produce smaller code
 		// than a switch() with a final case WARN_ALL that duplicates all of the assignments:
 
-		if (warnType == WARN_USE_UNSET_LOCAL || warnType == WARN_ALL)
-			g_Warn_UseUnsetLocal = warnMode;
-
-		if (warnType == WARN_USE_UNSET_GLOBAL || warnType == WARN_ALL)
-			g_Warn_UseUnsetGlobal = warnMode;
-
 		if (warnType == WARN_LOCAL_SAME_AS_GLOBAL || warnType == WARN_ALL)
 			g_Warn_LocalSameAsGlobal = warnMode;
 
@@ -4311,7 +4276,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			if (!_tcsnicmp(aLineText, _T("Global"), 6))
 			{
 				cp = aLineText + 6; // The character after the declaration word.
-				declare_type = g->CurrentFunc ? VAR_DECLARE_GLOBAL : VAR_DECLARE_SUPER_GLOBAL;
+				declare_type = VAR_DECLARE_GLOBAL;
 			}
 			else
 			{
@@ -4340,17 +4305,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			{
 				// Any combination of declarations is allowed here for simplicity, but only declarations can
 				// appear above this line:
-				if (mNextLineIsFunctionBody)
+				if (mNextLineIsFunctionBody && declare_type != VAR_DECLARE_LOCAL)
 				{
-					if (declare_type == VAR_DECLARE_LOCAL)
-						// v1.1.27: "local" by itself restricts globals to only those declared inside the function.
-						declare_type |= VAR_FORCE_LOCAL;
-					// v1.1.27: Allow "local" and "static" to be combined, leaving the restrictions on globals in place.
-					else if (g->CurrentFunc->mDefaultVarType == (VAR_DECLARE_LOCAL | VAR_FORCE_LOCAL) && declare_type == VAR_DECLARE_STATIC)
-					{
-						g->CurrentFunc->mDefaultVarType = (VAR_DECLARE_STATIC | VAR_FORCE_LOCAL);
-						return OK;
-					}
 					g->CurrentFunc->mDefaultVarType = declare_type;
 					// No further action is required.
 					return OK;
@@ -4400,8 +4356,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 							return result;
 						if (global_var) // Implies (declare_type & VAR_GLOBAL) != 0.
 						{
-							// Insert could be skipped if the function is assume-global or the variable is
-							// super-global (and the function not force-local), but isn't for these reasons:
+							// Insert could be skipped if the function is assume-global, but isn't because:
 							//  - When !mNextLineIsFunctionBody, mDefaultVarType might still be changed.
 							//  - It seems harmless to add any explicitly declared globals here.
 							//  - There might be some reason to refer to the declared globals in future.
@@ -4422,8 +4377,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					//  - Declaring local but found a parameter in varlist.
 					// But permit the following:
 					//  - Exact duplicate declarations, such as for two different code paths.
-					//  - Declaring a global which is already super-global, or a class.
-					if ((var->Scope() & ~VAR_SUPER_GLOBAL) != declare_type)
+					if (var->Scope() != declare_type)
 						return ConflictingDeclarationError(Var::DeclarationType(declare_type), var);
 				}
 				else
@@ -4432,20 +4386,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				switch (var->Type())
 				{
 				case VAR_CONSTANT:
-					if (declare_type == VAR_DECLARE_GLOBAL)
-						break; // Permit importing classes into force-local functions.
-				// Otherwise, don't permit it.
 				case VAR_VIRTUAL: // Shouldn't be declared either way (global or local).
 					return ConflictingDeclarationError(Var::DeclarationType(declare_type), var);
 				}
-
-				// If this is a super-global declaration, ensure the flag is added in case the var already
-				// existed due to a previous declaration inside a function.  VAR_DECLARED should already be
-				// present since no undeclared vars have been resolved at this stage (and checks above rely
-				// on this).  VAR_LOCAL_STATIC should always be present if this is "static", otherwise an
-				// error would have been raised.
-				if (declare_type & VAR_SUPER_GLOBAL)
-					var->Scope() |= VAR_SUPER_GLOBAL;
 
 				item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
 
@@ -5533,11 +5476,8 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 						if (aDeref.count)
 						{
 							DerefType &d = *aDeref.Last();
-							if (d.type == DT_FUNC && d.marker + d.length == op_begin)
-							{
+							if (d.type == DT_VAR && d.marker + d.length == op_begin)
 								op_begin = d.marker;
-								--aDeref.count;
-							}
 						}
 						if (!ParseFatArrow(aArgText, aArgMap, aDeref, op_begin, close_paren, cp + 2, op_begin))
 							return FAIL;
@@ -5653,21 +5593,11 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 
 		if (is_double_deref)
 		{
-			// Mark the end of the sub-expression which computes the variable name or function
-			// in this double-deref or dynamic function call:
+			// Mark the end of this dynamic reference.
 			this_deref.marker = op_end;
 			this_deref.length = 0;
 			if (op_begin > aArgText && op_begin[-1] == '.')
-			{
 				this_deref.type = DT_DOTPERCENT;
-			}
-			else if (is_function)
-			{
-				// func is initialized to NULL and left that way to indicate the call is dynamic.
-				// PreparseBlocks() relies on length == 0 meaning a dynamic function reference.
-				this_deref.func = NULL;
-				this_deref.type = DT_FUNC;
-			}
 			else
 				this_deref.type = DT_DOUBLE;
 		}
@@ -5694,15 +5624,15 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 			this_deref.type = DT_CONST_INT;
 			this_deref.int_value = toupper(*op_begin) == 'T';
 		}
-		else // This operand is a variable name or function name (single deref).
+		else // This operand is a variable name or function name.
 		{
 			// Store the deref's starting location, even for functions (leave it set to the start
 			// of the function's name for use when doing error reporting at other stages -- i.e.
 			// don't set it to the address of the first param or closing-paren-if-no-params):
 			this_deref.marker = op_begin;
 			this_deref.length = (DerefLengthType)operand_length;
-			this_deref.type = is_function ? DT_FUNC : DT_VAR;
-			this_deref.var = nullptr; // To be resolved later.  Also sets func via union.
+			this_deref.type = DT_VAR;
+			this_deref.var = nullptr; // To be resolved later.
 		}
 	}
 	if (aPos)
@@ -5823,9 +5753,6 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 		return FAIL;
 	auto block_begin = mLastLine;
 
-	if (!g->CurrentFunc->mOuterFunc)
-		g->CurrentFunc->mDefaultVarType = VAR_DECLARE_GLOBAL;
-
 	for (; aExprEnd > aExpr && IS_SPACE_OR_TAB(aExprEnd[-1]); --aExprEnd);
 	orig_end = *aExprEnd;
 	*aExprEnd = '\0';
@@ -5889,28 +5816,18 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		_sntprintf(full_name, MAX_VAR_NAME_LENGTH + 1, aStatic ? _T("%s.%s") : _T("%s.Prototype.%s"), mClassName, aBuf);
 		full_name[MAX_VAR_NAME_LENGTH + 1] = '\0'; // Must terminate at this exact point if _sntprintf hit the limit.
 		
-		// Check for duplicates and determine insert_pos:
-		Func *found_func;
-		ExprTokenType found_item;
-		if (found_func = FindFunc(full_name, -1, &insert_pos)) // Must be done to determine insert_pos.
-			return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf); // The parameters are omitted due to temporary termination above.  This might make it more obvious why "X[]" and "X()" are considered duplicates.
-		
 		*param_start = '('; // Undo temporary termination.
 
 		// Below passes class_object for AddFunc() to store the func "by reference" in it:
-		if (  !(g->CurrentFunc = AddFunc(full_name, -1, insert_pos, class_object))  )
+		if (  !(g->CurrentFunc = AddFunc(full_name, -1, class_object))  )
 			return FAIL;
 	}
 	else
 	{
-		Func *found_func = FindFunc(aBuf, param_start - aBuf, &insert_pos);
-		if (found_func && !found_func->IsBuiltIn())
-			return ScriptError(_T("Duplicate function definition."), aBuf); // Seems more descriptive than "Function already defined."
-		else
-			// The value of g->CurrentFunc must be set here rather than by our caller since AddVar(), which we call,
-			// relies upon it having been done.
-			if (   !(g->CurrentFunc = AddFunc(aBuf, param_start - aBuf, insert_pos))   )
-				return FAIL; // It already displayed the error.
+		// The value of g->CurrentFunc must be set here rather than by our caller since AddVar(), which we call,
+		// relies upon it having been done.
+		if (   !(g->CurrentFunc = AddFunc(aBuf, param_start - aBuf))   )
+			return FAIL; // It already displayed the error.
 	}
 
 	auto &func = *g->CurrentFunc; // For performance and convenience.
@@ -5951,24 +5868,14 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		if (*param_start == ')') // No more params.
 			break;
 
-		// Must start the search at param_start, not param_start+1, so that something like fn(, x) will be properly handled:
-		if (   !*param_start || !(param_end = StrChrAny(param_start, _T(", \t:=*)")))   ) // Look for first comma, space, tab, =, or close-paren.
-			return ScriptError(ERR_MISSING_CLOSE_PAREN, aBuf);
-
 		if (param_count >= MAX_FUNCTION_PARAMS)
 			return ScriptError(_T("Too many params."), param_start); // Short msg since so rare.
 		FuncParam &this_param = param[param_count]; // For performance and convenience.
 
-		// To enhance syntax error catching, consider ByRef to be a keyword; i.e. that can never be the name
-		// of a formal parameter:
-		if (this_param.is_byref = !tcslicmp(param_start, _T("ByRef"), param_end - param_start)) // ByRef.
-		{
-			// Omit the ByRef keyword from further consideration:
-			param_start = omit_leading_whitespace(param_end);
-			if (   !*param_start || !(param_end = StrChrAny(param_start, _T(", \t:=*)")))   ) // Look for first comma, space, tab, =, or close-paren.
-				return ScriptError(ERR_MISSING_CLOSE_PAREN, aBuf);
-		}
-
+		if (this_param.is_byref = (*param_start == '&')) // ByRef.
+			param_start = omit_leading_whitespace(param_start + 1);
+		
+		param_end = find_identifier_end(param_start);
 		param_length = param_end - param_start;
 		if (param_length)
 		{
@@ -6283,11 +6190,8 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 			if (class_var->IsDeclared())
 				return ConflictingDeclarationError(_T("class"), class_var);
 		}
-		else if (  !(class_var = AddVar(class_name, class_name_length, varlist, insert_pos, VAR_DECLARE_SUPER_GLOBAL))  )
+		else if (  !(class_var = AddVar(class_name, class_name_length, varlist, insert_pos, VAR_DECLARE_GLOBAL))  )
 			return FAIL;
-		// Explicitly set the variable scope, since FindVar may have returned
-		// an existing ordinary global instead of creating a super-global.
-		class_var->Scope() = VAR_DECLARE_SUPER_GLOBAL;
 	}
 	
 	size_t length = _tcslen(mClassName), extra_length = class_name_length + 1; // +1 for '.'
@@ -6550,7 +6454,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		// or at the end of the __Init method belonging to this class.  Save the current values:
 		Line *script_first_line = mFirstLine, *script_last_line = mLastLine;
 		Line *block_end;
-		auto init_func = (UserFunc *)class_object->GetOwnMethodFunc(_T("__Init")); // Can only be a user-defined function or nullptr at this stage.
+		auto init_func = (UserFunc *)class_object->GetOwnPropObj(_T("__Init")); // Can only be a user-defined function or nullptr at this stage.
 
 		if (init_func)
 		{
@@ -6611,7 +6515,6 @@ UserFunc *Script::DefineClassInit(bool aStatic)
 		mLastLine->mLineNumber = 0; // Signal the debugger to skip this line while stepping in/over/out.
 	}
 	auto init_func = g->CurrentFunc;
-	init_func->mDefaultVarType = VAR_DECLARE_GLOBAL; // Allow global variables/class names in initializer expressions.
 	if (!AddLine(ACT_BLOCK_END)) // This also resets g->CurrentFunc to NULL.
 		return nullptr;
 	mLastLine->mLineNumber = 0; // See above.
@@ -6759,7 +6662,7 @@ void Script::InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSu
 	aLib.length = length;
 }
 
-Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound, bool aIsAutoInclude)
+void Script::IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound)
 // Caller must ensure that aFuncName doesn't already exist as a defined function.
 // If aFuncNameLength is 0, the entire length of aFuncName is used.
 {
@@ -6778,7 +6681,7 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 	if (!aFuncNameLength) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = _tcslen(aFuncName);
 	if (aFuncNameLength > MAX_VAR_NAME_LENGTH) // Too long to fit in the allowed space, and also too long to be a valid function name.
-		return NULL;
+		return;
 
 	TCHAR *dest, *first_underscore, class_name_buf[MAX_VAR_NAME_LENGTH + 1];
 	LPTSTR naked_filename = aFuncName;               // Set up for the first iteration.
@@ -6800,27 +6703,6 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			// Since above didn't "continue", a file exists whose name matches that of the requested function.
 			aFileWasFound = true; // Indicate success for #include <lib>, which doesn't necessarily expect a function to be found.
 
-			if (mIncludeLibraryFunctionsThenExit && aIsAutoInclude)
-			{
-				// For each auto-included library-file, write out two #Include lines:
-				// 1) Use #Include in its "change working directory" mode so that any explicit #include directives
-				//    or FileInstalls inside the library file itself will work consistently and properly.
-				// 2) Use #IncludeAgain (to improve performance since no dupe-checking is needed) to include
-				//    the library file itself.
-				// We don't directly append library files onto the main script here because:
-				// 1) ahk2exe needs to be able to see and act upon FileInstall and #Include lines (i.e. library files
-				//    might contain #Include even though it's rare).
-				// 2) #IncludeAgain and #Include directives that bring in fragments rather than entire functions or
-				//    subroutines wouldn't work properly if we resolved such includes in AutoHotkey.exe because they
-				//    wouldn't be properly interleaved/asynchronous, but instead brought out of their library file
-				//    and deposited separately/synchronously into the temp-include file by some new logic at the
-				//    AutoHotkey.exe's code for the #Include directive.
-				// 3) ahk2exe prefers to omit comments from included files to minimize size of compiled scripts.
-				mIncludeLibraryFunctionsThenExit->Format(_T("#Include %-0.*s\n#IncludeAgain %s\n")
-					, sLib[i].length, sLib[i].path, sLib[i].path);
-				// Now continue on normally so that our caller can continue looking for syntax errors.
-			}
-			
 			// g->CurrentFunc is non-NULL when the function-call being resolved is inside
 			// a function.  Save and reset it for correct behaviour in the include file:
 			auto current_func = g->CurrentFunc;
@@ -6829,16 +6711,10 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 			// Fix for v1.1.06.00: If the file contains any lib #includes, it must be loaded AFTER the
 			// above writes sLib[i].path to the iLib file, otherwise the wrong filename could be written.
 			if (!LoadIncludedFile(sLib[i].path, false, false)) // Fix for v1.0.47.05: Pass false for allow-dupe because otherwise, it's possible for a stdlib file to attempt to include itself (especially via the LibNamePrefix_ method) and thus give a misleading "duplicate function" vs. "func does not exist" error message.  Obsolete: For performance, pass true for allow-dupe so that it doesn't have to check for a duplicate file (seems too rare to worry about duplicates since by definition, the function doesn't yet exist so it's file shouldn't yet be included).
-			{
 				aErrorWasShown = true; // Above has just displayed its error (e.g. syntax error in a line, failed to open the include file, etc).  So override the default set earlier.
-				return NULL;
-			}
 			
 			g->CurrentFunc = current_func; // Restore.
-
-			// Now that a matching filename has been found, it seems best to stop searching here even if that
-			// file doesn't actually contain the requested function.  This helps library authors catch bugs/typos.
-			return FindFunc(aFuncName, aFuncNameLength);
+			return; // A file was found, so look no further.
 		} // for() each library directory.
 
 		// Now that the first iteration is done, set up for the second one that searches by class/prefix.
@@ -6859,7 +6735,6 @@ Func *Script::FindFuncInLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &
 	} // 2-iteration for().
 
 	// Since above didn't return, no match found in any library.
-	return NULL;
 }
 
 #endif
@@ -6915,65 +6790,12 @@ T *ScriptItemList<T, S>::Find(LPCTSTR aName, size_t aNameLength, int *apInsertPo
 
 
 
-Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertPos) // L27: Added apInsertPos for binary-search.
-// Returns the Function whose name matches aFuncName (which caller has ensured isn't NULL).
-// If it doesn't exist, NULL is returned.
-// If apInsertPos is non-NULL (i.e. caller is DefineFunc), only the current scope is searched
-// and built-in functions are returned only if g->CurrentFunc == NULL (so that nested functions
-// "shadow" built-in functions but do not actually replace them globally).
+Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength)
 {
-	if (aFuncNameLength == -1) // Caller didn't specify, so use the entire string.
-		aFuncNameLength = _tcslen(aFuncName);
-
-	// For the below, no error is reported because callers don't want that.  Instead, simply return
-	// NULL to indicate that names that are illegal or too long are not found.  If the caller later
-	// tries to add the function, it will get an error then:
-	if (aFuncNameLength > MAX_VAR_NAME_LENGTH || !aFuncNameLength)
-	{
-		if (apInsertPos)
-			*apInsertPos = 0; // Unnamed (fat arrow) functions rely on this.
-		return NULL;
-	}
-
-	// The following copy is made because it allows the name searching to use _tcsicmp() instead of
-	// strlicmp(), which close to doubles the performance.  The copy includes only the first aVarNameLength
-	// characters from aVarName:
-	TCHAR func_name[MAX_VAR_NAME_LENGTH + 1];
-	tcslcpy(func_name, aFuncName, aFuncNameLength + 1);  // +1 to convert length to size.
-
-	int left;
-	for (auto scopefunc = g->CurrentFunc; ; scopefunc = scopefunc->mOuterFunc)
-	{
-		FuncList &funcs = scopefunc ? scopefunc->mFuncs : mFuncs;
-		auto pfunc = funcs.Find(func_name, &left);
-		if (apInsertPos) // Caller is DefineFunc.
-		{
-			*apInsertPos = left;
-			if (scopefunc) // Nested functions may "shadow" built-in functions without replacing them globally.
-				return pfunc; // Search no further, even if nullptr.
-		}
-		if (pfunc)
-			return pfunc;
-		if (!scopefunc)
-			break;
-	}
-	// left now contains a position in the outer-most FuncList, as needed for built-in functions below.
-
-	// Since above didn't return, there is no match.  See if it's a built-in function that hasn't yet
-	// been added to the function list.
-
-	FuncEntry *pbif = FindBuiltInFunc(func_name);
-	if (!pbif)
-		return nullptr;
-
-	auto *pfunc = new BuiltInFunc(*pbif);
-	if (!pfunc || !mFuncs.Insert(pfunc, left)) // left contains the position within mFuncs to insert the function.  Cannot use *apInsertPos as caller may have omitted it.
-	{
-		MemoryError();
-		return nullptr;
-	}
-
-	return pfunc;
+	if (Var *var = FindVar(aFuncName, aFuncNameLength))
+		if (var->Type() == VAR_CONSTANT)
+			return dynamic_cast<Func *>(var->ToObject());
+	return nullptr;
 }
 
 
@@ -6990,7 +6812,7 @@ BuiltInFunc::BuiltInFunc(FuncEntry &bif) : BuiltInFunc(bif.mName)
 
 
 
-FuncEntry *Script::FindBuiltInFunc(LPTSTR aFuncName)
+FuncEntry *Script::GetBuiltInFunc(LPTSTR aFuncName)
 {
 	int left, right, mid, result;
 	for (left = 0, right = _countof(g_BIF) - 1; left <= right;)
@@ -7009,7 +6831,7 @@ FuncEntry *Script::FindBuiltInFunc(LPTSTR aFuncName)
 
 
 
-UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsertPos, Object *aClassObject)
+UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aClassObject)
 // Returns the address of the new function or NULL on failure.
 // The caller must already have verified that this isn't a duplicate function.
 {
@@ -7019,7 +6841,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 	if (aFuncNameLength > MAX_VAR_NAME_LENGTH) // FindFunc(), BIF_OnMessage() and perhaps others rely on this limit being enforced.
 	{
 		ScriptError(_T("Function name too long."), aFuncName);
-		return NULL;
+		return nullptr;
 	}
 
 	// ValidateName requires that the name be null-terminated, but it isn't in this case.
@@ -7028,13 +6850,13 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 	LPTSTR new_name = SimpleHeap::Alloc(aFuncName, aFuncNameLength);
 
 	if (!aClassObject && *new_name && !Var::ValidateName(new_name, DISPLAY_FUNC_ERROR))  // Variable and function names are both validated the same way.
-		return NULL; // Above already displayed the error for us.
+		return nullptr; // Above already displayed the error for us.
 
 	auto the_new_func = new UserFunc(new_name);
 	if (!the_new_func)
 	{
 		ScriptError(ERR_OUTOFMEM);
-		return NULL;
+		return nullptr;
 	}
 
 	if (aClassObject)
@@ -7042,24 +6864,51 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 		LPTSTR key = _tcsrchr(new_name, '.'); // DefineFunc() always passes "ClassName.MethodName".
 		++key;
 		if (!Var::ValidateName(key, DISPLAY_METHOD_ERROR))
-			return NULL;
+			return nullptr;
 		if (mClassProperty)
 		{
-			if (toupper(*key) == 'G')
+			bool is_getter = ctoupper(*key) == 'G';
+			if (is_getter ? mClassProperty->Getter() : mClassProperty->Setter())
+			{
+				ScriptError(ERR_DUPLICATE_DECLARATION, new_name);
+				return nullptr;
+			}
+			if (is_getter)
 				mClassProperty->SetGetter(the_new_func);
 			else
 				mClassProperty->SetSetter(the_new_func);
 		}
 		else
+		{
+			if (aClassObject->HasOwnProp(key))
+			{
+				ScriptError(ERR_DUPLICATE_DECLARATION, new_name);
+				return nullptr;
+			}
 			if (!aClassObject->DefineMethod(key, the_new_func))
 			{
 				ScriptError(ERR_OUTOFMEM);
-				return NULL;
+				return nullptr;
 			}
+		}
 		aClassObject->AddRef(); // In case the script clears the class var.
 		the_new_func->mClass = aClassObject;
 		// Also add it to the script's list of functions, to support #Warn LocalSameAsGlobal
 		// and automatic cleanup of objects in static vars on program exit.
+	}
+	else if (aFuncNameLength)
+	{
+		Var *var = FindOrAddVar(aFuncName, aFuncNameLength
+			, FINDVAR_NO_BIF | (g->CurrentFunc ? VAR_DECLARE_LOCAL : VAR_DECLARE_GLOBAL));
+		if (!var)
+			return nullptr;
+		if (!var->IsUninitializedNormalVar())
+		{
+			ConflictingDeclarationError(_T("function"), var);
+			return nullptr;
+		}
+		var->Assign(the_new_func);
+		var->MakeReadOnly();
 	}
 
 	the_new_func->mOuterFunc = g->CurrentFunc;
@@ -7070,16 +6919,11 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int aInsert
 	if (the_new_func->mOuterFunc && the_new_func->mOuterFunc->IsAssumeGlobal())
 		the_new_func->mDefaultVarType = VAR_GLOBAL; // Not VAR_DECLARE_GLOBAL, which would prevent referencing of outer vars.
 
-	FuncList &funcs = the_new_func->mOuterFunc ? the_new_func->mOuterFunc->mFuncs : mFuncs;
-	
-	if (aInsertPos < funcs.mCount && *new_name && !_tcsicmp(funcs.mItem[aInsertPos]->mName, new_name))
-		funcs.mItem[aInsertPos] = the_new_func;
-	else
-		if (!funcs.Insert(the_new_func, aInsertPos))
-		{
-			ScriptError(ERR_OUTOFMEM);
-			return NULL;
-		}
+	if (!mFuncs.Insert(the_new_func, mFuncs.mCount))
+	{
+		ScriptError(ERR_OUTOFMEM);
+		return nullptr;
+	}
 
 	return the_new_func;
 }
@@ -7234,20 +7078,46 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 		if (Var *found = func.mVars.Find(var_name, &nonstatic_pos)) return found;
 		if (Var *found = func.mStaticVars.Find(var_name, &static_pos)) return found;
 		bool add_static = (aScope & VAR_LOCAL_STATIC)
-			|| aScope == FINDVAR_DEFAULT && (func.mDefaultVarType & VAR_LOCAL_STATIC);
+			|| !(aScope & VAR_DECLARED) && (func.mDefaultVarType & VAR_LOCAL_STATIC);
 		if (apList) *apList = add_static ? &func.mStaticVars : &func.mVars;
 		if (apInsertPos) *apInsertPos = add_static ? static_pos : nonstatic_pos;
 	}
 	else
 	{
 		auto varlist = GlobalVars();
-		if (Var *found = varlist->Find(var_name, apInsertPos)) return found;
+		int insert_pos;
+		if (Var *found = varlist->Find(var_name, &insert_pos)) return found;
 		if (apList) *apList = varlist;
+		if (apInsertPos) *apInsertPos = insert_pos;
+
+		if (!(aScope & FINDVAR_NO_BIF))
+		// Built-in functions can be shadowed, so are checked only in this section.
+		if (auto *bif = GetBuiltInFunc(var_name))
+		{
+			auto *func = new BuiltInFunc(*bif);
+			if (!func)
+			{
+				if (aDisplayError)
+					*aDisplayError = ScriptError(ERR_OUTOFMEM);
+				return nullptr;
+			}
+			Var *var = AddVar(var_name, aVarNameLength, varlist, insert_pos, VAR_DECLARE_GLOBAL);
+			if (!var)
+			{
+				if (aDisplayError)
+					*aDisplayError = FAIL;
+				func->Release();
+				return nullptr;
+			}
+			var->AssignSkipAddRef(func);
+			var->MakeReadOnly();
+			return var;
+		}
 	}
 
 	// Since no match was found, if this is a local fall back to searching outer functions and the
 	// list of globals if the caller didn't insist on a particular type:
-	if (search_local && aScope == FINDVAR_DEFAULT)
+	if (search_local && (aScope & VAR_GLOBAL))
 	{
 		// Search outer functions, if applicable:
 		if (g.CurrentFunc->mOuterFunc)
@@ -7255,18 +7125,15 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 				return found;
 		// No local var was found, nor was a global declared in this function (otherwise it would
 		// have been found in g.CurrentFunc->mStaticVars), so caller wants to fall back to a global
-		// in this case only if the function is assume-global or the var is super-global.  However,
-		// they want the insertion (if our caller will be doing one) to insert according to the
-		// current assume-mode.  Therefore, if the mode is assume-global, pass apList/apInsertPos
+		// in this case only if the function is assume-global or FINDVAR_GLOBAL_FALLBACK was used.
+		// However, they want the insertion (if our caller will be doing one) to insert according to
+		// the current assume-mode.  Therefore, if the mode is assume-global, pass apList/apInsertPos
 		// to FindVar() so that it will update them to be global.
 		if (g.CurrentFunc->IsAssumeGlobal())
 			return FindVar(aVarName, aVarNameLength, FINDVAR_GLOBAL, apList, apInsertPos);
-		if (g.CurrentFunc->AllowSuperGlobals())
-		{
-			Var *found = FindGlobalVar(aVarName, aVarNameLength);
-			if (found && found->IsSuperGlobal())
+		if (aScope & FINDVAR_GLOBAL_FALLBACK)
+			if (Var *found = FindGlobalVar(aVarName, aVarNameLength))
 				return found;
-		}
 	}
 	// Otherwise, since above didn't return:
 	if (auto *builtin = GetBuiltInVar(var_name))
@@ -7283,9 +7150,9 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 
 Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError)
 {
-	// Do not search outer if inner is force-local or *explicitly* assume-global, since in those
-	// cases a local or global var should be returned in preference to anything defined by outer.
-	if ((aInner.mDefaultVarType & VAR_FORCE_LOCAL) || aInner.mDefaultVarType == VAR_DECLARE_GLOBAL)
+	// Do not search outer if inner is *explicitly* assume-global, since in that case a
+	// global var should be returned in preference to anything defined by outer.
+	if (aInner.mDefaultVarType == VAR_DECLARE_GLOBAL)
 		return nullptr;
 	auto &outer = *aInner.mOuterFunc;
 	Var *outer_var;
@@ -7293,6 +7160,23 @@ Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayE
 		return outer_var;
 	if (  !(outer_var = outer.mVars.Find(aVarName))
 		&& !(outer.mOuterFunc && (outer_var = FindUpVar(aVarName, outer, aDisplayError)))  )
+		return nullptr;
+	// At this point, all var refs used in declarations, assignments or &var in the outer
+	// function should have already been parsed, while it's possible that some read-refs
+	// have not.  Ignore all variables that lack an assignment, &var or declaration.
+	//  - Avoids an issue where only read-refs ABOVE the nested function are accessible
+	//    (which could also be fixed by changing PreparseVarRefs to parse one function
+	//    at a time, parsing outer in its entirety before inner).
+	//  - Avoids inconsistency between read-refs and write-refs: when the outer var is created
+	//    by a read-ref, closures which only read would capture it, while closures which write
+	//    would create their own local.
+	//  - Avoids having behaviour depend on whether a global exists: when outer and inner both
+	//    only use read-refs (but maybe assign dynamically), whether the nested function becomes
+	//    a closure might depend on whether the var is global or local to outer.
+	//  - Having a non-dynamic assignment (and no global declaration) makes it easier to see
+	//    that the var is local by looking at just the outer function, and avoids warnings.
+	//  - A clear rule is easier to remember.
+	if (  !(outer_var->IsAssignedSomewhere() || outer_var->IsDeclared())  )
 		return nullptr;
 	// Since this local variable is not static, things need to be set up so that the inner
 	// function will capture it as an upvar at the appropriate time.
@@ -7304,7 +7188,12 @@ Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayE
 			*aDisplayError = RuntimeError(ERR_DYNAMIC_UPVAR, aVarName);
 		return nullptr;
 	}
-	outer_var->Scope() |= VAR_DOWNVAR;
+	ASSERT(!outer.mDownVar && !aInner.mUpVar); // PreprocessLocalVars has not yet been called.
+	if (!(outer_var->Scope() & VAR_DOWNVAR))
+	{
+		outer.mDownVarCount++;
+		outer_var->Scope() |= VAR_DOWNVAR;
+	}
 	// At this point aInner doesn't have a variable by this name, so create one:
 	int insert_pos;
 	aInner.mVars.Find(aVarName, &insert_pos);
@@ -7315,8 +7204,37 @@ Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayE
 			*aDisplayError = FAIL; // Error already displayed.
 		return nullptr;
 	}
+	ASSERT(outer_var->Type() != VAR_CONSTANT || outer_var->HasObject() && dynamic_cast<UserFunc*>(outer_var->Object()));
+	bool indefinite = outer_var->Type() == VAR_CONSTANT && !((UserFunc *)outer_var->Object())->mUpVarCount;
+	if (!indefinite && ++aInner.mUpVarCount == 1) // This function's first definite upvar.
+	{
+		// Count all references to aInner as upvars (except the one in outer).
+		CountNestedFuncRefs(outer, aInner.mName);
+	}
 	inner_var->SetAliasDirect(outer_var); // Temporarily point the upvar to its downvar for later processing.
 	return inner_var;
+}
+
+
+
+void Script::CountNestedFuncRefs(UserFunc &aWithin, LPCTSTR aFuncName)
+{
+	for (int i = 0; i < aWithin.mVars.mCount; ++i)
+	{
+		Var &nfv = *aWithin.mVars.mItem[i];
+		if (nfv.Type() == VAR_CONSTANT)
+		{
+			ASSERT(nfv.HasObject() && dynamic_cast<UserFunc*>(nfv.Object()));
+			auto &nf = *(UserFunc *)nfv.Object();
+			Var *uv = nf.mVars.Find(aFuncName);
+			if (uv && uv->IsAlias())
+			{
+				nf.mUpVarCount++;
+				if (uv->Scope() & VAR_DOWNVAR)
+					CountNestedFuncRefs(nf, aFuncName);
+			}
+		}
+	}
 }
 
 
@@ -7352,7 +7270,6 @@ Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int
 
 	if ((aScope & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL // This is an implicit local.
 		&& g_Warn_LocalSameAsGlobal && !mIsReadyToExecute // Not enabled at runtime because of overlap with #Warn UseUnset, and dynamic assignments in assume-local mode are less likely to be intended global.
-		&& !(g->CurrentFunc->mDefaultVarType & VAR_FORCE_LOCAL)
 		&& FindGlobalVar(var_name, aVarNameLength))
 		WarnLocalSameAsGlobal(var_name);
 
@@ -7389,11 +7306,11 @@ Var *Script::FindOrAddBuiltInVar(LPCTSTR aVarName, VarEntry *aVarEntry)
 {
 	int insert_pos;
 	if (Var *found = mVars.Find(aVarName, &insert_pos))
-		return found; // Perhaps caller didn't search mVars due to force-local?
+		return found;
 	LPTSTR name = SimpleHeap::Malloc(aVarName);
 	if (!name)
 		return nullptr;
-	Var *the_new_var = new Var(name, aVarEntry, VAR_DECLARE_SUPER_GLOBAL);
+	Var *the_new_var = new Var(name, aVarEntry, VAR_DECLARE_GLOBAL);
 	if (!the_new_var || !mVars.Insert(the_new_var, insert_pos))
 	{
 		MemoryError();
@@ -7491,55 +7408,6 @@ ResultType Script::AddGroup(LPTSTR aGroupName)
 
 
 
-ResultType Script::PreparseFuncRefs(Line *aStartingLine)
-{
-	// See LoadFromFile() for comments about the use of this function.
-	for (Line *line = aStartingLine; line; line = line->mNextLine)
-	{
-		switch (line->mActionType)
-		{
-		// Set g->CurrentFunc for use resolving names of nested functions.
-		case ACT_BLOCK_BEGIN:
-			if (line->mAttribute)
-				g->CurrentFunc = (UserFunc *)line->mAttribute;
-			continue;
-		case ACT_BLOCK_END:
-			if (line->mAttribute)
-				g->CurrentFunc = g->CurrentFunc->mOuterFunc;
-			continue;
-		}
-		for (int i = 0; i < line->mArgc; ++i) // For each arg.
-		{
-			ArgStruct &this_arg = line->mArg[i]; // For performance and convenience.
-			if (!this_arg.is_expression // Plain text; i.e. goto/break/continue label.
-				|| !this_arg.deref) // The expression contains neither variables nor function calls.
-				continue;
-			for (auto deref = this_arg.deref; deref->marker; ++deref) // For each deref.
-			{
-				if (!deref->is_function() || !deref->length || deref->func) // Zero length means a dynamic function call.
-					continue;
-				if (   !(deref->func = FindFunc(deref->marker, deref->length))   )
-				{
-#ifndef AUTOHOTKEYSC
-					bool error_was_shown, file_was_found;
-					if (   !(deref->func = FindFuncInLibrary(deref->marker, deref->length, error_was_shown, file_was_found, true))   )
-					{
-						// When above already displayed the proximate cause of the error, it's usually
-						// undesirable to show the cascade effects of that error in a second dialog:
-						return error_was_shown ? FAIL : line->LineError(ERR_NONEXISTENT_FUNCTION, FAIL, deref->marker);
-					}
-#else
-					return line->LineError(ERR_NONEXISTENT_FUNCTION, FAIL, deref->marker);
-#endif
-				}
-			} // for each deref of this arg
-		} // for each arg of this line
-	} // for each line
-	return OK;
-}
-
-
-
 ResultType Script::PreparseExpressions(Line *aStartingLine)
 {
 	for (Line *line = aStartingLine; line; line = line->mNextLine) // For each line.
@@ -7573,13 +7441,13 @@ ResultType Script::PreparseExpressions(FuncList &aFuncs)
 {
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
-		if (aFuncs.mItem[i]->IsBuiltIn())
-			continue;
+		ASSERT(!aFuncs.mItem[i]->IsBuiltIn());
 		auto &func = *(UserFunc *)aFuncs.mItem[i];
 		g->CurrentFunc = &func;
-		if (!PreparseExpressions(func.mJumpToLine) // Preparse the entire body first.
-			|| !PreparseExpressions(func.mFuncs)) // Then preparse nested functions.
+		if (!PreparseExpressions(func.mJumpToLine)) // Preparse this function's body.
 			return FAIL;
+		// Nested functions will be preparsed next, due to the fact that they immediately
+		// follow the outer function in aFuncs.
 	}
 	g->CurrentFunc = nullptr;
 	return OK;
@@ -7730,35 +7598,13 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 				if (parent->mActionType == ACT_FINALLY)
 					return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			break;
-
-		case ACT_FOR:
-			// Construct these arrays so that PerformLoopFor doesn't need to.
-			// This relies on ARG_TYPE_OUTPUT_VAR always being resolved at load-time,
-			// prior to this function being called (which is currently always the case).
-			int var_count = line->mArgc - 1;
-			line->mAttribute = SimpleHeap::Alloc(
-				sizeof(ExprTokenType*) * var_count +
-				sizeof(ExprTokenType) * var_count
-			);
-			auto param = (ExprTokenType**)line->mAttribute;
-			auto token = (ExprTokenType*)(param + var_count);
-			for (int i = 0; i < var_count; ++i)
-			{
-				param[i] = token + i;
-				if (line->mArg[i].type == ARG_TYPE_OUTPUT_VAR)
-				{
-					token[i].symbol = SYM_VAR;
-					token[i].var = VAR(line->mArg[i]);
-				}
-				else // Omitted.
-				{
-					token[i].symbol = SYM_MISSING;
-					token[i].marker = _T("");
-					token[i].marker_length = 0;
-				}
-			}
-			break;
 		}
+
+		// Finalize and optimize postfix expressions.
+		for (int i = 0; i < line->mArgc; ++i)
+			if (line->mArg[i].is_expression && !line->FinalizeExpression(line->mArg[i]))
+				return nullptr;
+
 		// Check for unreachable code.
 		if (g_Warn_Unreachable)
 		switch (line->mActionType)
@@ -7854,7 +7700,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 		, 62, 62	     // SYM_MULTIPLY, SYM_DIVIDE
 		, 73             // SYM_POWER (see note below). Changed to right-associative for v2.
 		, 25             // SYM_LOWNOT (the word "NOT": the low precedence version of logical-not).  HAS AN ODD NUMBER to indicate right-to-left evaluation order so that things like "not not var" are supports (which can be used to convert a variable into a pure 1/0 boolean value).
-		, 67,67,67,67    // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT
+		, 67,67,67,67,67 // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_REF, SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT
 		// NOTE: THE ABOVE MUST BE AN ODD NUMBER to indicate right-to-left evaluation order, which was added in v1.0.46 to support consecutive unary operators such as !*var !!var (!!var can be used to convert a value into a pure 1/0 boolean).
 //		, 68             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 77, 77         // SYM_PRE_INCREMENT, SYM_PRE_DECREMENT (higher precedence than SYM_POWER because it doesn't make sense to evaluate power first because that would cause ++/-- to fail due to operating on a non-lvalue.
@@ -7911,6 +7757,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 
 				ExprTokenType &this_infix_item = infix[infix_count]; // Might help reduce code size since it's referenced many places below.
 				this_infix_item.callsite = nullptr; // Init needed for SYM_ASSIGN and related; a non-NULL value means it should be converted to an object-assignment.
+				// Above: SYM_REF and possibly others may rely on this zero-initializing the union.
 				this_infix_item.error_reporting_marker = cp; // Used for reporting syntax errors with unary and binary operators, and may be overwritten via union for other symbols.
 
 				// Auto-concat requires a space or tab for the following reasons:
@@ -8129,7 +7976,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					{
 						auto callsite = new CallSite();
 						if (  !(infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))  )
-							callsite->func = g_script.FindFunc(_T("Array"));
+							callsite->func = ExprOp<Op_Array, 0>();
 						else
 							callsite->flags = IT_GET; // This may be overridden by standard_pop_into_postfix.
 						this_infix_item.callsite = callsite;
@@ -8144,7 +7991,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
 						return LineError(_T("Unexpected \"{\""));
 					this_infix_item.callsite = new CallSite();
-					this_infix_item.callsite->func = g_script.FindFunc(_T("Object"));
+					this_infix_item.callsite->func = ExprOp<Op_Object, 0>();
 					this_infix_item.symbol = SYM_OBRACE;
 					break;
 				case '}':
@@ -8217,7 +8064,17 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						this_infix_item.symbol = SYM_ASSIGN_BITAND;
 					}
 					else
-						this_infix_item.symbol = SYM_BITAND;
+					{
+						// Differentiate between unary "take a reference to" and the "bitwise and" operator:
+						// See '-' above for more details:
+						if (infix_count && YIELDS_AN_OPERAND(infix[infix_count - 1].symbol))
+							this_infix_item.symbol = SYM_BITAND;
+						else
+						{
+							this_infix_item.symbol = SYM_REF;
+							this_infix_item.var_usage = Script::VARREF_READ; // Set default: assume a VarRef is needed.
+						}
+					}
 					break;
 				case '|':
 					if (cp1 == '|')
@@ -8247,7 +8104,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					{
 						++cp;
 						this_infix_item.callsite = new CallSite();
-						this_infix_item.callsite->func = g_script.FindFunc(_T("RegExMatch"));
+						this_infix_item.callsite->func = ExprOp<BIF_RegEx, FID_RegExMatch>();
 						this_infix_item.callsite->param_count = 2;
 						this_infix_item.symbol = SYM_REGEXMATCH;
 					}
@@ -8438,15 +8295,7 @@ unquoted_literal:
 		// THE ABOVE HAS NOW PROCESSED ANY/ALL RAW/LITERAL TEXT THAT LIES TO THE LEFT OF this_deref.
 		// SO NOW PROCESS THIS_DEREF ITSELF.
 		DerefType &this_deref_ref = *this_deref; // Boosts performance slightly.
-		if (this_deref_ref.is_function()) // Above has ensured that at this stage, this_deref!=NULL.
-		{
-			if (this_deref_ref.length) // Non-dynamic. For dynamic calls like %x%(), auto-concat has already been handled.
-				CHECK_AUTO_CONCAT;
-			infix[infix_count].callsite = new CallSite();
-			infix[infix_count].callsite->func = this_deref_ref.func;
-			infix[infix_count].symbol = SYM_FUNC;
-		}
-		else if (this_deref_ref.type == DT_STRING || this_deref_ref.type == DT_QSTRING)
+		if (this_deref_ref.type == DT_STRING || this_deref_ref.type == DT_QSTRING)
 		{
 			bool is_end_of_string = !this_deref_ref.next;
 			bool is_start_of_string = this_deref_ref.substring_count == 1;
@@ -8546,7 +8395,7 @@ unquoted_literal:
 		{
 			infix[infix_count].symbol = SYM_DYNAMIC;
 			infix[infix_count].var = nullptr; // Indicate this is a double-deref.
-			infix[infix_count].var_usage = FALSE; // Set default.
+			infix[infix_count].var_usage = Script::VARREF_READ; // Set default.
 		}
 		else if (this_deref_ref.type == DT_DOTPERCENT)
 		{
@@ -8570,9 +8419,13 @@ unquoted_literal:
 				// These checks ensure SYM_SUPER doesn't need to be specifically handled by
 				// ExpandExpression(); it will be pushed onto the stack due to IS_OPERAND()
 				// and handled directly by SYM_FUNC.
-				LPTSTR next_op = omit_leading_whitespace(cp + this_deref_ref.length);
-				if (*next_op != '.' && *next_op != '[')
-					return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
+				LPTSTR next_op = cp + this_deref_ref.length;
+				if (*next_op != '(') // Permit super() to mean super.call(), but do not permit "super (1)".
+				{
+					next_op = omit_leading_whitespace(next_op); // The "." and "[]" operators permit leading spaces.
+					if (*next_op != '.' && *next_op != '[') // Permit super.x and super[i].
+						return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
+				}
 				if (!g->CurrentFunc || !g->CurrentFunc->mClass)
 					return LineError(_T("\"") SUPER_KEYWORD _T("\" is valid only inside a class."), FAIL, cp);
 				CHECK_AUTO_CONCAT;
@@ -8582,11 +8435,19 @@ unquoted_literal:
 		}
 		else if (this_deref_ref.type == DT_FUNCREF)
 		{
+			if (*this_deref_ref.func->mName)
+			{
+				// This reference isn't needed, as it was preceded by a SYM_VAR.
+				ASSERT(this_deref > aArg.deref && this_deref[-1].type == DT_VAR && this_deref[-1].marker + this_deref[-1].length == cp);
+				cp = this_deref_ref.marker + this_deref_ref.length; // Not +=, since it overlaps with the previous deref.
+				--infix_count; // Counter the loop's increment.
+				continue;
+			}
 			// Make a function call to an internal version of Func() which accepts the function
 			// reference and returns the function itself or a closure.  Which that will be depends
 			// on var references which haven't been resolved yet (unless it's a global function).
 			auto callsite = new CallSite();
-			callsite->func = ExprOp<BIF_Func, FID_FuncClose>();
+			callsite->func = ExprOp<Op_FuncClose, 0>();
 			infix[infix_count].symbol = SYM_FUNC;
 			infix[infix_count].callsite = callsite;
 			infix[infix_count+1].symbol = SYM_OPAREN;
@@ -8609,7 +8470,7 @@ unquoted_literal:
 			// will validate and translate each SYM_VAR as needed.
 			infix[infix_count].symbol = SYM_VAR;
 			infix[infix_count].var_deref = &this_deref_ref;
-			infix[infix_count].var_usage = FALSE; // Set default, for detection of how this var ref is used.
+			infix[infix_count].var_usage = Script::VARREF_READ; // Set default, for detection of how this var ref is used.
 		} // Handling of the var or function in this_deref.
 
 		// Finally, jump over the dereference text. Note that in the case of an expression, there might not
@@ -8720,7 +8581,6 @@ unquoted_literal:
 			}
 			else if (IS_OPAREN_LIKE(stack_symbol))
 			{
-				Func *func = dynamic_cast<Func*>(in_param_list->func); // Can be NULL, e.g. for dynamic function calls.
 				if (infix_symbol == SYM_COMMA || this_infix[-1].symbol != stack_symbol) // i.e. not an empty parameter list.
 				{
 					// Accessing this_infix[-1] here is necessarily safe since in_param_list is
@@ -8728,9 +8588,6 @@ unquoted_literal:
 					SymbolType prev_sym = this_infix[-1].symbol;
 					if (prev_sym == SYM_COMMA || prev_sym == stack_symbol) // Empty parameter.
 					{
-						if (func && in_param_list->param_count < func->mMinParams) // Is this parameter mandatory?
-							return LineError(ERR_PARAM_REQUIRED);
-
 						int num_blank_params = 0;
 						while (this_infix->symbol == SYM_COMMA)
 						{
@@ -8763,124 +8620,10 @@ unquoted_literal:
 						// This is SYM_COMMA or SYM_CPAREN/BRACKET/BRACE at the end of a parameter.
 						++in_param_list->param_count;
 
-						auto *bif = func && func->IsBuiltIn() ? ((BuiltInFunc *)func)->mBIF : nullptr;
-
-						// This retrieves the last token in the parameter; if that's SYM_VAR or SYM_DYNAMIC,
-						// it will end up being passed to this parameter, so should be flagged as a potential
-						// l-value unless this parameter is known to be input-only.
-						// Known limitation: If the parameter's value is determined by a short-circuit op,
-						// the first branch won't be flagged; e.g. f(1 ? "" : a).
-						ExprTokenType &param_last = *postfix[postfix_count-1];
-						if (param_last.symbol == SYM_VAR || param_last.symbol == SYM_DYNAMIC)
-						{
-							if (!func || func->mName[0] == '<') // Relies on ExprOpFunc using "<object>" as the name.
-							{
-								// Mark this as a potential l-value.
-								param_last.var_usage = Script::VARREF_DYNAMIC_PARAM;
-							}
-							else if (func->ArgIsOutputVar(in_param_list->param_count - 1))
-							{
-								// Mark this as an l-value.  If it is a double-deref, it will either produce a writable
-								// var as SYM_VAR or will throw an error.  Other load-time checks will raise an error
-								// if this is SYM_VAR and it turns out to be a constant/read-only variable.
-								param_last.var_usage = bif ? Script::VARREF_OUTPUT_VAR : Script::VARREF_BYREF;
-							}
-							else if (bif == BIF_IsSet)
-							{
-								// Mark this so that IsSet(v) suppresses any warnings about v lacking an assignment.
-								param_last.var_usage = Script::VARREF_ISSET;
-							}
-						}
-
-						if (!func)
-						{
-							// Skip the checks below.
-						}
-						else if (in_param_list->param_count > func->mParamCount && !func->mIsVariadic)
-						{
-							return LineError(ERR_TOO_MANY_PARAMS, FAIL, func->mName);
-						}
-						else if (!bif)
-						{
-							// Skip the checks below.
-						}
-						// The rest of the checks are for calls to built-in functions only:
-						else if (func->ArgIsOutputVar(in_param_list->param_count - 1)
-							|| bif == BIF_IsSet)
-						{
-							if (param_last.symbol != SYM_VAR && param_last.symbol != SYM_DYNAMIC
-								&& !IS_OPERATOR_VALID_LVALUE(param_last.symbol))
-							{
-								sntprintf(number_buf, MAX_NUMBER_SIZE, _T("Parameter #%i of %s must be a variable.")
-									, in_param_list->param_count, func->mName);
-								return LineError(number_buf);
-							}
-						}
-						else if (postfix[postfix_count-1][-1].symbol != SYM_COMMA && postfix[postfix_count-1][-1].symbol != stack_symbol)
-						{
-							// This parameter is more than a single operand, so may be something which can't be
-							// handled by the checks and optimizations below, such as Func(true ? "abs" : "").
-						}
-						#ifdef ENABLE_DLLCALL
-						else if (bif == &BIF_DllCall // Implies mIsBuiltIn == true.
-							&& in_param_list->param_count == 1) // i.e. this is the end of the first param.
-						{
-							// Optimise DllCall by resolving function addresses at load-time where possible.
-							if (param_last.symbol == SYM_STRING)
-							{
-								void *function = GetDllProcAddress(param_last.marker);
-								if (function)
-									param_last.SetValue((__int64)function);
-								// Otherwise, one of the following is true:
-								//  a) A file was specified and is not already loaded.  GetDllProcAddress avoids
-								//     loading any dlls since doing so may have undesired side-effects.  The file
-								//     might not exist at this stage, but might when DllCall is actually called.
-								//	b) The function could not be found.  This is not considered an error since the
-								//     absence of certain functions (e.g. IsWow64Process) may have some meaning to
-								//     the script; or the function may be non-essential.
-							}
-						}
-						#endif
-						else if (bif == &BIF_Func)
-						{
-							if (param_last.symbol == SYM_STRING && infix_symbol == SYM_CPAREN) // Checking infix_symbol ensures errors such as Func(a,b) are handled correctly.
-							{
-								// Reduce the cost of repeated calls to Func() by resolving the function name now. 
-								Func *param_func = g_script.FindFunc(param_last.marker, param_last.marker_length);
-								if (param_func)
-								{
-									// Pass the Func to an internal version of Func() which will call CloseIfNeeded().
-									param_last.SetValue(param_func);
-									in_param_list->func = ExprOp<BIF_Func, FID_FuncClose>();
-								}
-								else
-								{
-									param_last.SetValue(_T(""), 0);
-								}
-								if (!param_func || param_func->IsBuiltIn() || !((UserFunc *)param_func)->mOuterFunc)
-								{
-									// The function either doesn't exist or is not nested.  In both cases, the value
-									// in param_last would always be the result of Func(), so skip the function call.
-									ASSERT(stack_symbol == SYM_OPAREN && stack[stack_count - 2]->symbol == SYM_FUNC);
-									in_param_list = stack[stack_count - 1]->outer_param_list;
-									stack_count -= 2;
-									++this_infix;
-									continue;
-								}
-								// There's not enough information at this stage to determine whether this nested
-								// function needs CloseIfNeeded() to be called, so we must assume that it does.
-							}
-						}
-
 						if (stack_symbol == SYM_OBRACE && (in_param_list->param_count & 1)) // i.e. an odd number of parameters, which means no "key:" was specified.
 							return LineError(_T("Missing \"propertyname:\" in object literal."));
 					}
 				}
-
-				// Enforce mMinParams:
-				if (func && infix_symbol == SYM_CPAREN && in_param_list->param_count < func->mMinParams
-					&& !in_param_list->is_variadic())
-					return LineError(ERR_TOO_FEW_PARAMS, FAIL, func->mName);
 			}
 				
 			switch (infix_symbol)
@@ -8945,7 +8688,16 @@ unquoted_literal:
 				in_param_list = this_infix[-1].callsite; // Store this SYM_FUNC's deref.
 			else if (this_infix > infix && YIELDS_AN_OPERAND(this_infix[-1].symbol)
 				&& *this_infix->marker == '(') // i.e. it's not an implicit SYM_OPAREN generated by DT_STRING.
-				return LineError(_T("Missing operator or space before \"(\"."), FAIL, this_infix->marker);
+			{
+				// This is a function call with something other than a known function name,
+				// so this_infix[-1] is the object to be called (or an error).
+				auto token = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
+				token->symbol = SYM_FUNC;
+				token->callsite = in_param_list = new CallSite();
+				if (!in_param_list)
+					return LineError(ERR_OUTOFMEM);
+				STACK_PUSH(token);
+			}
 			else
 				in_param_list = NULL; // Allow multi-statement commas, even in cases like Func((x,y)).
 			STACK_PUSH(this_infix++);
@@ -9307,6 +9059,14 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 		case SYM_IFF_THEN:
 			return LineError(_T("A \"?\" is missing its \":\""), FAIL, this_postfix->marker);
 
+		case SYM_REF:
+			postfix_symbol = postfix[postfix_count - 1]->symbol;
+			if (postfix_symbol == SYM_VAR || postfix_symbol == SYM_DYNAMIC)
+				postfix[postfix_count - 1]->var_usage = Script::VARREF_REF;
+			else if (!IS_OPERATOR_VALID_LVALUE(postfix_symbol))
+				return LineError(_T("\"&\" requires a variable."));
+			break;
+
 		case SYM_PRE_INCREMENT:
 		case SYM_PRE_DECREMENT:
 			if (postfix_count)
@@ -9409,6 +9169,7 @@ end_of_infix_to_postfix:
 	{
 		ExprTokenType &new_token = aArg.postfix[i];
 		new_token.CopyExprFrom(*postfix[i]);
+		ASSERT((UINT)new_token.symbol < SYM_COUNT);
 		if (SYM_USES_CIRCUIT_TOKEN(new_token.symbol)) // Adjust each circuit_token address to be relative to the new array rather than the temp/infix array.
 		{
 			// circuit_token should always be non-NULL at this point.
@@ -9423,21 +9184,12 @@ end_of_infix_to_postfix:
 		// for later to facilitate detecting variables which are not assigned anywhere.
 		if (new_token.symbol == SYM_VAR && new_token.var_usage != Script::VARREF_READ)
 		{
-			new_token.var = g_script.FindOrAddVar(new_token.var_deref->marker, new_token.var_deref->length);
+			new_token.var = g_script.FindOrAddVar(new_token.var_deref->marker, new_token.var_deref->length, FINDVAR_FOR_WRITE);
 			if (!new_token.var)
 				return FAIL;
-			if (VARREF_IS_WRITE(new_token.var_usage)) // Direct assignment or output var of built-in function.
-			{
-				if (new_token.var->IsReadOnly())
-					return VarIsReadOnlyError(new_token.var, new_token.var_usage);
-				// Leave this as SYM_VAR even if it's VAR_VIRTUAL, which is supported for this var_usage.
-			}
-			else if (new_token.var->Type() == VAR_VIRTUAL
-				&& new_token.var_usage != Script::VARREF_ISSET) // Let IsSet(A_Whatever) work.
-			{
-				// Convert it to SYM_DYNAMIC for evaluation by ExpandExpression.
-				new_token.symbol = SYM_DYNAMIC;
-			}
+			if (new_token.var_usage != Script::VARREF_REF // Validation of REF is left to FinalizeExpression().
+				&& !ValidateVarUsage(new_token.var, new_token.var_usage))
+				return FAIL;
 			new_token.var->MarkAssignedSomewhere();
 			if (aArg.type == ARG_TYPE_OUTPUT_VAR)
 			{
@@ -9446,7 +9198,8 @@ end_of_infix_to_postfix:
 			}
 		}
 		// Count the tokens which potentially use to_free[].
-		if (new_token.symbol == SYM_DYNAMIC || new_token.symbol == SYM_FUNC || new_token.symbol == SYM_CONCAT)
+		if (new_token.symbol == SYM_DYNAMIC || new_token.symbol == SYM_FUNC
+			|| new_token.symbol == SYM_CONCAT || new_token.symbol == SYM_REF)
 			++max_alloc;
 	}
 	aArg.postfix[postfix_count].symbol = SYM_INVALID;  // Special item to mark the end of the array.
@@ -9455,6 +9208,151 @@ end_of_infix_to_postfix:
 
 	return OK;
 }
+
+
+
+ResultType Line::FinalizeExpression(ArgStruct &aArg)
+{
+	auto postfix = aArg.postfix;
+	auto stack = (ExprTokenType **)_alloca(aArg.max_stack * sizeof(ExprTokenType **));
+	int stack_count = 0;
+
+	for (auto this_postfix = aArg.postfix; this_postfix->symbol != SYM_INVALID; ++this_postfix)
+	{
+		auto postfix_symbol = this_postfix->symbol;
+		ASSERT((UINT)postfix_symbol < SYM_COUNT);
+		if (IS_OPERAND(postfix_symbol))
+		{
+			if (postfix_symbol == SYM_DYNAMIC && !this_postfix->var)
+				--stack_count;
+			stack[stack_count++] = this_postfix;
+		}
+		else if (IS_POSTFIX_OPERATOR(postfix_symbol) || IS_PREFIX_OPERATOR(postfix_symbol))
+		{
+			if (stack_count < 1)
+				return LineError(ERR_EXPR_SYNTAX);
+			stack[stack_count - 1] = this_postfix;
+		}
+		else if (SYM_USES_CIRCUIT_TOKEN(postfix_symbol))
+		{
+			if (stack_count < 1)
+				return LineError(ERR_EXPR_SYNTAX);
+			if (this_postfix->symbol != SYM_IFF_THEN)
+			{
+				stack[stack_count - 1] = this_postfix;
+				this_postfix = this_postfix->circuit_token;
+			}
+			else
+				--stack_count;
+		}
+		else if (postfix_symbol == SYM_COMMA)
+		{
+			--stack_count;
+		}
+		else if (postfix_symbol != SYM_FUNC)
+		{
+			if (stack_count < 2)
+				return LineError(ERR_EXPR_SYNTAX);
+			stack[--stack_count] = this_postfix;
+		}
+		else // SYM_FUNC
+		{
+			int prev_stack_count = stack_count;
+			int param_count = this_postfix->callsite->param_count;
+			stack_count -= param_count;
+			auto param = stack + stack_count;
+			bool call_call = !this_postfix->callsite->member;
+			if (call_call && (this_postfix->callsite->flags & EIF_STACK_MEMBER))
+			{
+				--stack_count;
+				call_call = false;
+			}
+			if (stack_count < 0)
+				return LineError(ERR_EXPR_SYNTAX);
+			Func *func = nullptr;
+			ExprTokenType *func_op = nullptr;
+			if (this_postfix->callsite->func)
+				func = dynamic_cast<Func*>(this_postfix->callsite->func);
+			else
+			{
+				if (stack_count < 1)
+					return LineError(ERR_EXPR_SYNTAX);
+				func_op = stack[--stack_count];
+				if (func_op->symbol == SYM_VAR && func_op->var->HasObject())
+					func = dynamic_cast<Func*>(func_op->var->Object());
+				else if (func_op->symbol == SYM_OBJECT)
+					func = dynamic_cast<Func*>(func_op->object);
+			}
+			if (this_postfix->callsite->flags & EIF_LEAVE_PARAMS)
+				stack_count = prev_stack_count;
+			if (func && call_call)
+			{
+				if (this_postfix->callsite->is_variadic())
+					--param_count; // Exclude the array parameter, which resolves to 0 or more parameters.
+				if (param_count < func->mMinParams && !this_postfix->callsite->is_variadic())
+					return LineError(ERR_TOO_FEW_PARAMS, FAIL, func->mName);
+				if (param_count > func->mParamCount && !func->mIsVariadic)
+					return LineError(ERR_TOO_MANY_PARAMS, FAIL, func->mName);
+
+				auto *bif = func && func->IsBuiltIn() ? ((BuiltInFunc *)func)->mBIF : nullptr;
+
+				for (int i = 0; i < param_count; ++i)
+				{
+					switch (param[i]->symbol)
+					{
+					case SYM_MISSING:
+						if (i < func->mMinParams)
+							return LineError(ERR_PARAM_REQUIRED);
+						break;
+					case SYM_REF:
+						if (func->ArgIsOutputVar(i))
+						{
+							// Permit VAR_VIRTUAL for built-in functions and all var types for IsSet().
+							// Optimize SYM_REF by allowing it to pass SYM_VAR directly where possible.
+							param[i]->var_usage =
+								(!bif || bif == BIF_VarSetStrCapacity) ? Script::VARREF_REF
+								: bif == BIF_IsSet					   ? Script::VARREF_ISSET
+								:										 Script::VARREF_OUTPUT_VAR;
+							if (!bif)
+								param[i]->object = func; // Used during runtime to detect when a VarRef is needed due to recursion (func->mInstances).
+							if (param[i][-1].symbol == SYM_DYNAMIC)
+								param[i][-1].var_usage = param[i]->var_usage;
+						}
+						break;
+					}
+				}
+
+				if (bif == &BIF_DllCall && param_count)
+				{
+					if (param[0]->symbol == SYM_STRING)
+					{
+						if (void *function = GetDllProcAddress(param[0]->marker))
+							param[0]->SetValue((__int64)function);
+					}
+				}
+			}
+			stack[stack_count++] = this_postfix;
+		} // SYM_FUNC
+	} // postfix loop
+
+	if (stack_count != 1)
+		return LineError(ERR_EXPR_SYNTAX);
+
+	for (auto this_postfix = aArg.postfix; this_postfix->symbol != SYM_INVALID; ++this_postfix)
+	{
+		if (this_postfix->symbol == SYM_REF && this_postfix[-1].symbol == SYM_VAR)
+		{
+			// Now that var_usage has been set for any SYM_REF operators in postfix that are passed
+			// to functions, ensure the var being referenced is valid for the given var_usage.
+			int var_usage = this_postfix->var_usage == Script::VARREF_READ ? Script::VARREF_REF : this_postfix->var_usage;
+			if (!ValidateVarUsage(this_postfix[-1].var, var_usage))
+				return FAIL;
+		}
+	}
+
+	return OK;
+}
+
 
 //-------------------------------------------------------------------------------------
 
@@ -10695,7 +10593,6 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 		// A script-function-call inside the expression returned EARLY_EXIT or FAIL.
 		return result;
 	
-	auto var_param = (ExprTokenType **)mAttribute; // See PreparseCommands.
 	int var_count = mArgc - 1;
 	
 	IObject *enumerator;
@@ -10706,18 +10603,32 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 
 	// "Localize" the loop variables.
 	auto var_bkp = (VarBkp *)_alloca(sizeof(VarBkp) * var_count);
+	auto var_param = (ExprTokenType**)_alloca(sizeof(ExprTokenType*) * var_count);
 	for (int i = 0; i < var_count; ++i)
-		if (var_param[i]->symbol == SYM_VAR)
+	{
+		ExprTokenType &token = *(ExprTokenType*)_alloca(sizeof(ExprTokenType));
+		var_param[i] = &token;
+		if (mArg[i].type == ARG_TYPE_OUTPUT_VAR)
 		{
-			var_param[i]->var->Backup(var_bkp[i]);
-			// If var was a ByRef parameter or upvar, Backup() has backed up the alias and
-			// converted it to a normal local variable, so any assignment in the loop below
-			// will not affect the original target variable, only the local alias.
+			auto var = VAR(mArg[i]);
+			var->Backup(var_bkp[i]);
+			token.symbol = SYM_OBJECT;
+			token.object = var->GetRef();
+			if (token.object)
+				continue;
+			result = FAIL;
+			var_count = i + 1; // Restore var_bkp and free any previous refs.
 		}
+		// Omitted.
+		token.symbol = SYM_MISSING;
+		token.marker = _T("");
+		token.marker_length = 0;
+	}
 
 	// Now that the enumerator expression has been evaluated, init A_Index:
 	g.mLoopIteration = 1;
 
+	if (result != FAIL)
 	for (;; ++g.mLoopIteration)
 	{
 		result = CallEnumerator(enumerator, var_param, var_count, true);
@@ -10753,11 +10664,12 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 	} // for()
 	enumerator->Release();
 	for (int i = 0; i < var_count; ++i)
-		if (var_param[i]->symbol == SYM_VAR)
-		{
-			var_param[i]->var->Free();
-			var_param[i]->var->Restore(var_bkp[i]);
-		}
+	{
+		if (mArg[i].type == ARG_TYPE_OUTPUT_VAR)
+			VAR(mArg[i])->Restore(var_bkp[i]);
+		if (var_param[i]->symbol == SYM_OBJECT)
+			var_param[i]->object->Release();
+	}
 	return result; // The script's loop is now over.
 }
 
@@ -11548,6 +11460,8 @@ ResultType Line::PerformAssign()
 		//		x := 1.0
 		//		x := "quoted literal string"
 		//		x := normal_var  ; but not built-ins
+		if (mArg[1].postfix->symbol == SYM_VAR && mArg[1].postfix->var->IsUninitializedNormalVar())
+			return g_script.VarUnsetError(mArg[1].postfix->var);
 		Var *output_var = VAR(mArg[0]);
 		return output_var->Assign(*mArg[1].postfix);
 	}
@@ -12103,7 +12017,7 @@ ResultType Script::DerefInclude(LPTSTR &aOutput, LPTSTR aBuf)
 				var_name_length = cp1 - cp - 1;
 				if (*cp1 && var_name_length && var_name_length <= MAX_VAR_NAME_LENGTH)
 				{
-					Var *var = FindVar(cp + 1, var_name_length, FINDVAR_GLOBAL);
+					Var *var = FindGlobalVar(cp + 1, var_name_length);
 					if (var && var->Type() == VAR_VIRTUAL)
 					{
 						if (which_pass) // 2nd pass
@@ -12865,7 +12779,7 @@ LPCTSTR VarKindForErrorMessage(Var *aVar)
 	switch (aVar->Type())
 	{
 	case VAR_VIRTUAL: return _T("built-in variable");
-	case VAR_CONSTANT: return _T("class");
+	case VAR_CONSTANT: return aVar->Object()->Type();
 	default: return Var::DeclarationType(aVar->Scope());
 	}
 }
@@ -12879,12 +12793,25 @@ ResultType Script::ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting
 }
 
 
+ResultType Line::ValidateVarUsage(Var *aVar, int aUsage)
+{
+	if (   (aUsage != Script::VARREF_READ)
+		&& (aUsage != Script::VARREF_ISSET) // IsSet permits any var.
+		&& (aUsage == Script::VARREF_REF
+			? aVar->Type() != VAR_NORMAL // Aliasing VAR_VIRTUAL is currently unsupported.
+			: aVar->IsReadOnly())   )
+		return VarIsReadOnlyError(aVar, aUsage);
+	return OK;
+}
+
 ResultType Script::VarIsReadOnlyError(Var *aVar, int aErrorType)
 {
 	TCHAR buf[127];
-	sntprintf(buf, _countof(buf), _T("This %s %s.")
+	sntprintf(buf, _countof(buf), _T("This %s cannot %s.")
 		, VarKindForErrorMessage(aVar)
-		, aErrorType == VARREF_LVALUE ? _T("cannot be assigned a value") : _T("cannot be used as an output variable"));
+		, aErrorType == VARREF_LVALUE ? _T("be assigned a value")
+		: aErrorType == VARREF_REF ? _T("have its reference taken")
+		: _T("be used as an output variable"));
 	return ScriptError(buf, aVar->mName);
 }
 
@@ -13040,11 +12967,17 @@ ResultType ResultToken::TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LP
 __declspec(noinline)
 ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam)
 {
-	return ParamError(aIndex, aParam, nullptr);
+	return ParamError(aIndex, aParam, nullptr, nullptr);
 }
 
 __declspec(noinline)
 ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType)
+{
+	return ParamError(aIndex, aParam, aExpectedType, nullptr);
+}
+
+__declspec(noinline)
+ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType, LPCTSTR aFunction)
 {
 	auto an = [](LPCTSTR thing) {
 		return _tcschr(_T("aeiou"), ctolower(*thing)) ? _T("n") : _T("");
@@ -13056,9 +12989,11 @@ ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aE
 	if (!*value_as_string && !aExpectedType)
 		value_as_string = actual_type;
 #ifdef CONFIG_DEBUGGER
+	if (!aFunction)
+		aFunction = g_Debugger.WhatThrew();
 	if (aExpectedType)
 		sntprintf(msg, _countof(msg), _T("Parameter #%i of %s requires a%s %s, but received a%s %s.")
-			, aIndex + 1, g_Debugger.WhatThrew(), an(aExpectedType), aExpectedType, an(actual_type), actual_type);
+			, aIndex + 1, aFunction, an(aExpectedType), aExpectedType, an(actual_type), actual_type);
 	else
 		sntprintf(msg, _countof(msg), _T("Parameter #%i of %s is invalid."), aIndex + 1, g_Debugger.WhatThrew());
 #else
@@ -13219,7 +13154,6 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 
 
 void Script::WarnUnassignedVar(Var *var)
-// Separating this from WarnUninitializedVar() was observed to produce smaller code.
 {
 	auto warnMode = g_Warn_VarUnset;
 	if (!warnMode)
@@ -13227,7 +13161,14 @@ void Script::WarnUnassignedVar(Var *var)
 
 	// Show only one MsgBox per var, but list all references when using StdOut/OutputDebug.
 	if (warnMode == WARNMODE_MSGBOX)
-		var->MarkAssignedSomewhere();
+	{
+		// The following check uses a flag separate to IsAssignedSomewhere() because setting
+		// that one for the purpose of preventing multiple MsgBoxes would cause other callers
+		// of IsAssignedSomewhere() to get the wrong result if a MsgBox has been shown.
+		if (var->HasAlreadyWarned())
+			return;
+		var->MarkAlreadyWarned();
+	}
 
 	bool isUndeclaredLocal = (var->Scope() & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL;
 	LPCTSTR sameNameAsGlobal = isUndeclaredLocal && FindGlobalVar(var->mName) ? _T("  (same name as a global)") : _T("");
@@ -13238,24 +13179,13 @@ void Script::WarnUnassignedVar(Var *var)
 
 
 
-void Script::WarnUninitializedVar(Var *var)
+ResultType Script::VarUnsetError(Var *var)
 {
-	auto warnMode = var->IsLocal() ? g_Warn_UseUnsetLocal : g_Warn_UseUnsetGlobal;
-	if (!warnMode)
-		return;
-
-	// Note: If warning mode is MsgBox, this method has side effect of marking the var initialized, so that
-	// only a single message box gets raised per variable.  (In other modes, e.g. OutputDebug, the var remains
-	// uninitialized because it may be beneficial to see the quantity and various locations of uninitialized
-	// uses, and doesn't present the same user interface problem that multiple message boxes can.)
-	if (warnMode == WARNMODE_MSGBOX)
-		var->MarkInitialized();
-
 	bool isUndeclaredLocal = (var->Scope() & (VAR_LOCAL | VAR_DECLARED)) == VAR_LOCAL;
 	LPCTSTR sameNameAsGlobal = isUndeclaredLocal && FindGlobalVar(var->mName) ? _T("  (same name as a global)") : _T("");
 	TCHAR buf[DIALOG_TITLE_SIZE];
 	sntprintf(buf, _countof(buf), _T("%s %s%s"), Var::DeclarationType(var->Scope()), var->mName, sameNameAsGlobal);
-	ScriptWarning(warnMode, WARNING_USE_UNSET_VARIABLE, buf);
+	return RuntimeError(ERR_VAR_UNSET, buf);
 }
 
 
@@ -13279,12 +13209,12 @@ ResultType Script::PreprocessLocalVars(FuncList &aFuncs)
 {
 	for (int i = 0; i < aFuncs.mCount; ++i)
 	{
-		if (aFuncs.mItem[i]->IsBuiltIn())
-			continue;
+		ASSERT(!aFuncs.mItem[i]->IsBuiltIn());
 		auto &func = *(UserFunc *)aFuncs.mItem[i];
-		if (!PreprocessLocalVars(func) // Process func first so mDownVar is allocated if needed.
-			|| !PreprocessLocalVars(func.mFuncs)) // Process nested functions.
+		if (!PreprocessLocalVars(func))
 			return FAIL;
+		// Nested functions will be preparsed next, due to the fact that they immediately
+		// follow the outer function in aFuncs.
 	}
 	return OK;
 }
@@ -13295,56 +13225,109 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 {
 	Var **vars = aFunc.mVars.mItem;
 	int var_count = aFunc.mVars.mCount;
-	int upvar_count = 0;
-	int downvar_count = 0;
+	int closure_count = 0, non_closure_count = 0;
 	for (int v = 0; v < var_count; ++v)
 	{
 		Var &var = *vars[v];
-
-		if (var.IsAlias()) // At this stage only upvars are aliases.
-			++upvar_count;
-		if (var.Scope() & VAR_DOWNVAR)
-			++downvar_count;
+		if (var.Type() == VAR_CONSTANT)
+		{
+			// Currently only nested functions create local constants, but this could be
+			// a local constant or an upvar alias for a non-local constant.
+			ASSERT(var.HasObject() && dynamic_cast<UserFunc *>(var.Object()));
+			auto &func = *(UserFunc *)var.Object();
+			if (!func.mUpVarCount)
+			{
+				// This function doesn't need to be a closure, so convert it to static.
+				int insert_pos;
+				aFunc.mStaticVars.Find(var.mName, &insert_pos);
+				aFunc.mStaticVars.Insert(&var, insert_pos);
+				var.Scope() |= VAR_LOCAL_STATIC;
+				++non_closure_count;
+				if (var.Scope() & VAR_DOWNVAR)
+				{
+					var.Scope() &= ~VAR_DOWNVAR;
+					--aFunc.mDownVarCount;
+				}
+			}
+			else if (!var.IsAlias()) // At this stage only upvars are aliases.
+			{
+				// This is a closure of aFunc and not an alias for an outer function's
+				// nested function constant.
+				++closure_count;
+			}
+		}
 	}
-	if (upvar_count)
+	if (non_closure_count) // One or more static vars are to be removed from mVars.
+	{
+		int dst = 0;
+		for (int src = 0; src < var_count; ++src)
+			if (!vars[src]->IsStatic())
+				vars[dst++] = vars[src];
+		aFunc.mVars.mCount = var_count = dst;
+	}
+	if (closure_count)
+	{
+		aFunc.mClosure = (ClosureInfo *)SimpleHeap::Malloc(closure_count * sizeof(ClosureInfo));
+		for (int v = 0; v < var_count; ++v)
+		{
+			Var &var = *vars[v];
+			if (!var.IsAlias() && var.Type() == VAR_CONSTANT)
+			{
+				ASSERT(var.IsObject() && dynamic_cast<UserFunc *>(var.Object()));
+				auto &ci = aFunc.mClosure[aFunc.mClosureCount++];
+				ci.var = &var;
+				ci.func = (UserFunc *)var.Object();
+			}
+		}
+		ASSERT(aFunc.mClosureCount == closure_count);
+	}
+	if (aFunc.mUpVarCount)
 	{
 		// Upvars are vars local to an outer function which are referenced by aFunc.
 		// They might be local to aFunc.mOuterFunc or one further out.  In the latter
 		// case, aFunc.mOuterFunc contains a downvar which is also one of its upvars.
-		aFunc.mUpVar = SimpleHeap::Alloc<Var*>(upvar_count);
-		aFunc.mUpVarIndex = SimpleHeap::Alloc<int>(upvar_count);
-		ASSERT(aFunc.mUpVarCount == 0);
+		aFunc.mUpVar = SimpleHeap::Alloc<Var*>(aFunc.mUpVarCount);
+		aFunc.mUpVarIndex = SimpleHeap::Alloc<int>(aFunc.mUpVarCount);
 
-		auto &outer = *aFunc.mOuterFunc; // Always non-null when upvar_count > 0.
+		auto &outer = *aFunc.mOuterFunc; // Always non-null when aFunc.mUpVarCount > 0.
+		int upvar_count = 0;
 		for (int v = 0; v < var_count; ++v)
 		{
 			Var &var = *vars[v];
 			if (!var.IsAlias()) // At this stage only upvars are aliases.
 				continue;
 
-			// At this stage outer.mDownVar has been allocated but would not contain
-			// &var unless it was referenced by a previous nested function.
 			Var *downvar = var.GetAliasFor(); // FindUpVar() set var to be an alias of the corresponding downvar.
-			var.ConvertToNonAliasIfNecessary(); // From this point on, it's not permitted to be a multiple level alias.
 			int d;
-			for (d = 0; d < outer.mDownVarCount; ++d)
+			for (d = 0; ; ++d)
+			{
+				ASSERT(d < outer.mDownVarCount);
 				if (outer.mDownVar[d] == downvar)
 					break;
-			if (d == outer.mDownVarCount)
-				outer.mDownVar[outer.mDownVarCount++] = downvar;
+			}
 
-			aFunc.mUpVar[aFunc.mUpVarCount] = &var;
-			aFunc.mUpVarIndex[aFunc.mUpVarCount] = d;
-			++aFunc.mUpVarCount;
+			ASSERT(upvar_count < aFunc.mUpVarCount);
+			aFunc.mUpVar[upvar_count] = &var;
+			aFunc.mUpVarIndex[upvar_count] = d;
+			++upvar_count;
 		}
-		ASSERT(aFunc.mUpVarCount == upvar_count);
+		ASSERT(upvar_count == aFunc.mUpVarCount);
 	}
-	if (downvar_count)
+	if (aFunc.mDownVarCount)
 	{
 		// Downvars are vars local to aFunc which are referenced by a nested function.
-		aFunc.mDownVar = SimpleHeap::Alloc<Var*>(downvar_count);
-		// The list is populated when a nested function is processed by the section above.
-		ASSERT(aFunc.mDownVarCount == 0);
+		aFunc.mDownVar = SimpleHeap::Alloc<Var*>(aFunc.mDownVarCount);
+		
+		int downvar_count = 0;
+		for (int v = 0; v < var_count; ++v)
+		{
+			if (vars[v]->Scope() & VAR_DOWNVAR)
+			{
+				ASSERT(downvar_count < aFunc.mDownVarCount);
+				aFunc.mDownVar[downvar_count++] = vars[v];
+			}
+		}
+		ASSERT(downvar_count == aFunc.mDownVarCount);
 	}
 	return OK;
 }
@@ -13375,7 +13358,7 @@ ResultType Script::PreparseVarRefs()
 				if (token->symbol != SYM_VAR // Not a var.
 					|| token->var_usage != VARREF_READ) // Already resolved by ExpressionToPostfix.
 					continue;
-				if (  !(token->var = FindOrAddVar(token->var_deref->marker, token->var_deref->length))  )
+				if (  !(token->var = FindOrAddVar(token->var_deref->marker, token->var_deref->length, FINDVAR_FOR_READ))  )
 					return FAIL;
 				if (token->var->IsAlias()) // Upvar.
 					continue;
@@ -13385,7 +13368,8 @@ ResultType Script::PreparseVarRefs()
 					// This ensures classes introduced via stdlib are consistent with other classes;
 					// i.e. passing to a ByRef parameter gives a value instead of a read-only parameter.
 					// It might also help performance.
-					token->var->ToToken(*token);
+					if (!token->var->IsLocal())
+						token->var->ToToken(*token);
 					continue;
 				case VAR_VIRTUAL:
 					// Convert this virtual var to SYM_DYNAMIC for evaluation by ExpandExpression.

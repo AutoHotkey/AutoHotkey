@@ -733,8 +733,18 @@ void AssignVariant(Var &aArg, VARIANT &aVar, bool aRetainVar = true)
 }
 
 
-void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, BOOL aVarIsArg)
+enum TTVArgType
 {
+	VariantIsValue,
+	VariantIsAllocatedString,
+	VariantIsVarRef
+};
+
+void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, TTVArgType *aVarIsArg = FALSE)
+{
+	if (aVarIsArg)
+		*aVarIsArg = VariantIsValue;
+
 	if (aToken.symbol == SYM_VAR)
 		aToken.var->ToTokenSkipAddRef(aToken);
 
@@ -743,6 +753,8 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, BOOL aVarIsArg)
 	case SYM_STRING:
 		aVar.vt = VT_BSTR;
 		aVar.bstrVal = SysAllocString(CStringWCharFromTCharIfNeeded(aToken.marker));
+		if (aVarIsArg)
+			*aVarIsArg = VariantIsAllocatedString;
 		break;
 	case SYM_INTEGER:
 		{
@@ -781,14 +793,26 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, BOOL aVarIsArg)
 						aVar.vt = VT_EMPTY;
 				}
 			}
+			break;
 		}
-		else
+		if (aVarIsArg)
 		{
-			aVar.vt = VT_DISPATCH;
-			aVar.pdispVal = aToken.object;
-			if (!aVarIsArg)
-				aToken.object->AddRef();
+			// Caller is equipped to marshal VT_BYREF|VT_VARIANT back to VarRef, so check for that.
+			if (VarRef *ref = dynamic_cast<VarRef *>(aToken.object))
+			{
+				*aVarIsArg = VariantIsVarRef;
+				aVar.vt = VT_BYREF | VT_VARIANT;
+				aVar.pvarVal = (VARIANT *)malloc(sizeof(VARIANT));
+				ExprTokenType token;
+				ref->ToTokenSkipAddRef(token);
+				TokenToVariant(token, *aVar.pvarVal, nullptr);
+				break;
+			}
 		}
+		aVar.vt = VT_DISPATCH;
+		aVar.pdispVal = aToken.object;
+		if (!aVarIsArg)
+			aToken.object->AddRef();
 		break;
 	case SYM_MISSING:
 		aVar.vt = VT_ERROR;
@@ -1133,16 +1157,18 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 	static DISPID dispidParam = DISPID_PROPERTYPUT;
 	DISPPARAMS dispparams = {NULL, NULL, 0, 0};
 	VARIANTARG *rgvarg;
+	TTVArgType *argtype;
 	EXCEPINFO excepinfo = {0};
 	VARIANT varResult = {0};
 	
 	if (aParamCount)
 	{
 		rgvarg = (VARIANTARG *)_alloca(sizeof(VARIANTARG) * aParamCount);
+		argtype = (TTVArgType *)_alloca(sizeof(TTVArgType) * aParamCount);
 
 		for (int i = 1; i <= aParamCount; i++)
 		{
-			TokenToVariant(*aParam[aParamCount-i], rgvarg[i-1], TRUE);
+			TokenToVariant(*aParam[aParamCount-i], rgvarg[i-1], &argtype[i-1]);
 		}
 
 		dispparams.rgvarg = rgvarg;
@@ -1166,8 +1192,16 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 	{
 		// TokenToVariant() in "arg" mode never calls AddRef() or SafeArrayCopy(), so the arg needs to be freed
 		// only if it is a BSTR and not one which came from a ComObject wrapper (such as ComObject(9, pbstr)).
-		if (rgvarg[i].vt == VT_BSTR && aParam[aParamCount-(i+1)]->symbol != SYM_OBJECT)
+		switch (argtype[i])
+		{
+		case VariantIsAllocatedString:
 			SysFreeString(rgvarg[i].bstrVal);
+			break;
+		case VariantIsVarRef:
+			AssignVariant(*(VarRef *)aParam[aParamCount - (i + 1)]->object, *rgvarg[i].pvarVal, false);
+			free(rgvarg[i].pvarVal);
+			break;
+		}
 	}
 
 	if	(FAILED(hr))
@@ -1543,32 +1577,33 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	
 	for (UINT i = 1; i <= cArgs; ++i)
 	{
-		VARIANTARG *pvar = &pDispParams->rgvarg[cArgs-i];
-		if (pvar->vt & VT_BYREF)
+		VARIANTARG &varg = pDispParams->rgvarg[cArgs-i];
+		if (varg.vt & VT_BYREF)
 		{
 			// Allocate and pass a temporary Var to transparently support ByRef.
-			param_token[i].symbol = SYM_VAR;
-			param_token[i].var = new (_alloca(sizeof(Var))) Var();
-			if (pvar->vt == (VT_BYREF | VT_BSTR))
+			auto varref = new VarRef();
+			param_token[i].SetValue(varref);
+			param_token[i].mem_to_free = nullptr;
+			if (varg.vt == (VT_BYREF | VT_BSTR))
 			{
 				// Avoid an unnecessary string-copy that would be made by VariantCopyInd().
-				param_token[i].var->AssignStringW(*pvar->pbstrVal, SysStringLen(*pvar->pbstrVal));
+				varref->AssignStringW(*varg.pbstrVal, SysStringLen(*varg.pbstrVal));
 			}
-			else if (pvar->vt == (VT_BYREF | VT_VARIANT))
+			else if (varg.vt == (VT_BYREF | VT_VARIANT))
 			{
-				AssignVariant(*param_token[i].var, *pvar->pvarVal);
+				AssignVariant(*varref, *varg.pvarVal);
 			}
 			else
 			{
 				VARIANT value;
 				value.vt = VT_EMPTY;
-				VariantCopyInd(&value, pvar);
-				AssignVariant(*param_token[i].var, value, false); // false causes value's memory/ref to be transferred to var or freed.
+				VariantCopyInd(&value, &varg);
+				AssignVariant(*varref, value, false); // false causes value's memory/ref to be transferred to var or freed.
 			}
 		}
 		else
 		{
-			VariantToToken(*pvar, param_token[i]);
+			VariantToToken(varg, param_token[i]);
 		}
 		param[i] = &param_token[i];
 	}
@@ -1646,16 +1681,16 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	result_token.Free();
 	for (UINT i = 1; i <= cArgs; ++i)
 	{
-		if (param_token[i].symbol == SYM_VAR)
+		VARIANTARG &varg = pDispParams->rgvarg[cArgs-i];
+		if (varg.vt & VT_BYREF)
 		{
-			auto &varg = pDispParams->rgvarg[cArgs-i];
+			ASSERT(param_token[i].symbol == SYM_OBJECT && dynamic_cast<VarRef *>(param_token[i].object));
+			auto varref = (VarRef *)param_token[i].object;
 			ExprTokenType value;
-			param_token[i].var->ToTokenSkipAddRef(value);
+			varref->ToTokenSkipAddRef(value);
 			TokenToVarType(value, varg.vt & ~VT_BYREF, varg.pvRecord);
-			param_token[i].var->Free();
 		}
-		else
-			param_token[i].Free();
+		param_token[i].Free();
 	}
 
 	return result_to_return;

@@ -87,15 +87,17 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		else if (!_tcsnicmp(param, _T("/ErrorStdOut"), 12))
 			g_script.SetErrorStdOut(param[12] == '=' ? param + 13 : NULL);
 #ifndef AUTOHOTKEYSC // i.e. the following switch is recognized only by AutoHotkey.exe (especially since recognizing new switches in compiled scripts can break them, unlike AutoHotkey.exe).
+		else if (!_tcsicmp(param, _T("/validate")))
+			g_script.mValidateThenExit = true;
+		// DEPRECATED: /iLib
 		else if (!_tcsicmp(param, _T("/iLib"))) // v1.0.47: Build an include-file so that ahk2exe can include library functions called by the script.
 		{
 			++i; // Consume the next parameter too, because it's associated with this one.
 			if (i >= __argc) // Missing the expected filename parameter.
 				return CRITICAL_ERROR;
-			// For performance and simplicity, open/create the file unconditionally and keep it open until exit.
-			g_script.mIncludeLibraryFunctionsThenExit = new TextFile;
-			if (!g_script.mIncludeLibraryFunctionsThenExit->Open(__targv[i], TextStream::WRITE | TextStream::EOL_CRLF | TextStream::BOM_UTF8, CP_UTF8)) // Can't open the temp file.
-				return CRITICAL_ERROR;
+			// The original purpose of /iLib has gone away with the removal of auto-includes,
+			// but some scripts (like Ahk2Exe) use it to validate the syntax of script files.
+			g_script.mValidateThenExit = true;
 		}
 		else if (!_tcsnicmp(param, _T("/CP"), 3)) // /CPnnn
 		{
@@ -142,7 +144,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		}
 	}
 
-	if (Var *var = g_script.FindOrAddVar(_T("A_Args"), 6, VAR_DECLARE_SUPER_GLOBAL))
+	if (Var *var = g_script.FindOrAddVar(_T("A_Args"), 6, VAR_DECLARE_GLOBAL))
 	{
 		// Store the remaining args in an array and assign it to "Args".
 		// If there are no args, assign an empty array so that A_Args[1]
@@ -177,13 +179,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 	UINT load_result = g_script.LoadFromFile();
 	if (load_result == LOADING_FAILED) // Error during load (was already displayed by the function call).
-	{
-#ifndef AUTOHOTKEYSC
-		if (g_script.mIncludeLibraryFunctionsThenExit)
-			g_script.mIncludeLibraryFunctionsThenExit->Close(); // Flush its buffer to disk.
-#endif
 		return CRITICAL_ERROR;  // Should return this value because PostQuitMessage() also uses it.
-	}
 	if (!load_result) // LoadFromFile() relies upon us to do this check.  No script was loaded or we're in /iLib mode, so nothing more to do.
 		return 0;
 

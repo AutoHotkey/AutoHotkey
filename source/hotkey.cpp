@@ -164,18 +164,18 @@ void Script::PreparseHotkeyIfExpr(Line* aLine)
 // evaluated by the hook directly, without synchronizing with the main thread.
 {
 	ExprTokenType *postfix = aLine->mArg[0].postfix;
+	if (postfix[0].symbol != SYM_OBJECT)
+		return;
+	auto fn = dynamic_cast<BuiltInFunc*>(postfix[0].object);
+	if (!fn || fn->mBIF != &BIF_WinExistActive)
+		return; // Not WinExist() or WinActive().
+	++postfix;
 	int param_count = 0;
 	while (postfix[param_count].symbol == SYM_STRING)
 		++param_count;
 	if (postfix[param_count].symbol != SYM_FUNC // Not a function call, or it doesn't only accept strings.
-		|| param_count > 2 // Too many parameters.
-		|| !postfix[param_count].callsite->func) // Dynamic target.
+		|| param_count > 2) // Too many parameters.
 		return;
-	if (param_count > 2)
-		return; // Too many parameters.
-	auto fn = dynamic_cast<BuiltInFunc*>(postfix[param_count].callsite->func);
-	if (!fn || fn->mBIF != &BIF_WinExistActive)
-		return; // Not WinExist() or WinActive().
 	bool invert = postfix[param_count+1].symbol == SYM_LOWNOT || postfix[param_count+1].symbol == SYM_HIGHNOT;
 	if (postfix[param_count+1+invert].symbol != SYM_INVALID)
 		return; // There's more to the expression.
@@ -2637,20 +2637,16 @@ BIF_DECL(BIF_Hotstring)
 	// Determine options which affect hotstring identity/uniqueness.
 	bool case_sensitive = g_HSCaseSensitive;
 	bool detect_inside_word = g_HSDetectWhenInsideWord;
-	bool execute_action = false; // Unlike the others, 'X' must be specified each time.
 	bool un; int iun; SendModes sm; SendRawType sr; // Unused.
 	if (*hotstring_options)
-		Hotstring::ParseOptions(hotstring_options, iun, iun, sm, case_sensitive, un, un, un, sr, un, detect_inside_word, un, execute_action);
+		Hotstring::ParseOptions(hotstring_options, iun, iun, sm, case_sensitive, un, un, un, sr, un, detect_inside_word, un, un);
 	
 	IObject *action_obj = NULL;
 	if (!ParamIndexIsOmitted(1))
 	{
 		if (action_obj = ParamIndexToObject(1))
 			action_obj->AddRef();
-		else // Caller did not specify an object, so must specify a function name.
-			if (   execute_action // Caller specified 'X' option (which is ignored when passing an object).
-				&& !(action_obj = StringToFunctor(action))   ) // No valid function found.
-				_f_throw_param(1);
+		// Otherwise, it's always replacement text (the 'X' option is ignored at runtime).
 	}
 
 	ToggleValueType toggle = NEUTRAL;

@@ -132,6 +132,12 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (!stack_count) // Prevent stack underflow.
 						goto abort_with_exception;
 					ExprTokenType &right = *STACK_POP;
+					if (auto ref = dynamic_cast<VarRef *>(TokenToObject(right)))
+					{
+						this_token.symbol = SYM_VAR;
+						this_token.var = static_cast<Var *>(ref);
+						goto push_this_token;
+					}
 					right_string = TokenToString(right, right_buf, &right_length);
 					// Do some basic validation to ensure a helpful error message is displayed on failure.
 					if (right_length == 0)
@@ -140,48 +146,50 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						error_info = mArg[aArgIndex].text;
 						goto abort_with_exception;
 					}
-					if (right_length > MAX_VAR_NAME_LENGTH)
+					// v2.0: Use of FindVar() vs. FindOrAddVar() makes this check unnecessary.
+					//if (right_length > MAX_VAR_NAME_LENGTH)
+					//{
+					//	error_msg = ERR_DYNAMIC_TOO_LONG;
+					//	error_info = right_string;
+					//	goto abort_with_exception;
+					//}
+					// v2.0: Dynamic creation of variables is not permitted, so FindOrAddVar() is not used.
+					if (   !(temp_var = g_script.FindVar(right_string, right_length
+						, VARREF_IS_WRITE(this_token.var_usage) ? FINDVAR_FOR_WRITE : FINDVAR_FOR_READ))   )
 					{
-						error_msg = ERR_DYNAMIC_TOO_LONG;
+						if (g->CurrentFunc && g_script.FindGlobalVar(right_string, right_length))
+							error_msg = ERR_DYNAMIC_BAD_GLOBAL;
+						else
+							error_msg = ERR_DYNAMIC_NOT_FOUND;
 						error_info = right_string;
 						goto abort_with_exception;
-					}
-					// In v1.0.31, FindOrAddVar() vs. FindVar() is called below to support the passing of non-existent
-					// array elements ByRef, e.g. Var:=MyFunc(Array%i%) where the MyFunc function's parameter is
-					// defined as ByRef, would effectively create the new element Array%i% if it doesn't already exist.
-					// Since at this stage we don't know whether this particular double deref is to be sent as a param
-					// to a function, or whether it will be byref, this is done unconditionally for all double derefs
-					// since it seems relatively harmless to create a blank variable in something like var := Array%i%
-					// (though it will produce a runtime error if the double resolves to an illegal variable name such
-					// as one containing spaces).
-					if (   !(temp_var = g_script.FindOrAddVar(right_string, right_length))   )
-					{
-						// Above already displayed the error.  As of v1.0.31, this type of error is displayed and
-						// causes the current thread to terminate, which seems more useful than the old behavior
-						// that tolerated anything in expressions.
-						goto abort;
 					}
 					this_token.var = temp_var;
 				}
 				//else: It's a built-in variable.
 
-				if (VARREF_IS_WRITE(this_token.var_usage) && this_token.var->IsReadOnly())
+				if (!ValidateVarUsage(this_token.var, this_token.var_usage))
 				{
 					// Having this check here allows us to display the variable name rather than its contents
 					// in the error message.
-					VarIsReadOnlyError(this_token.var, this_token.var_usage);
 					goto abort;
 				}
 
 				if (this_token.var->Type() == VAR_CONSTANT)
 				{
-					// Currently constants can't be local, so there should be no need to AddRef() and add to to_free[].
+					// There should be no need to AddRef() and add to to_free[], since even if
+					// a constant is local, it could only be released when the function returns.
 					this_token.var->ToTokenSkipAddRef(this_token);
 					goto push_this_token;
 				}
 
 				if (this_token.var->Type() == VAR_NORMAL || VARREF_IS_WRITE(this_token.var_usage))
   				{
+					if (this_token.var->IsUninitializedNormalVar() && this_token.var_usage == Script::VARREF_READ)
+					{
+						error_value = &this_token;
+						goto unset_var;
+					}
 					this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with limited exceptions) is relied upon in several places such as built-in functions.
 					goto push_this_token;
   				}
@@ -241,12 +249,20 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				tmemcpy(result, result_token.marker, result_length + 1);
 				this_token.SetValue(result, result_length);
 			} // if (this_token.symbol == SYM_DYNAMIC)
+			if (this_token.symbol == SYM_VAR)
+			{
+				if (this_token.var->IsUninitializedNormalVar() && this_token.var_usage == Script::VARREF_READ)
+				{
+					error_value = &this_token;
+					goto unset_var;
+				}
+			}
 			goto push_this_token;
 		} // if (IS_OPERAND(this_token.symbol))
 
 		if (this_token.symbol == SYM_FUNC)
 		{
-			auto func = this_token.callsite->func; // For convenience and because any modifications should not be persistent.
+			IObject *func = this_token.callsite->func; // For convenience and because any modifications should not be persistent.
 			auto member = this_token.callsite->member;
 			auto flags = this_token.callsite->flags;
 			auto param_count = this_token.callsite->param_count;
@@ -630,6 +646,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		case SYM_OR:			//
 		case SYM_LOWNOT:		//
 		case SYM_HIGHNOT:		//
+		case SYM_REF:
 			break;
 			
 		case SYM_COMMA: // This can only be a statement-separator comma, not a function comma, since function commas weren't put into the postfix array.
@@ -637,8 +654,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			// result of the comma's left-hand sub-statement.  At this point the right-hand sub-statement
 			// has not yet been evaluated.  Like C++ and other languages, but unlike AutoHotkey v1, the
 			// rightmost operand is preserved, not the leftmost.
-			if (right.symbol == SYM_VAR) // Count this as "use" for the purpose of the warning, since it could be an error (maybe the author intended to call a function?).
-				right.var->MaybeWarnUninitialized();
 			continue;
 
 		default:
@@ -713,6 +728,35 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				error_value = &right;
 				goto type_mismatch; // For consistency with unary minus (see above).
 			}
+			break;
+
+		case SYM_REF:
+			if (right.symbol != SYM_VAR) // Syntax error?
+				goto abort_with_exception;
+			if (this_token.var_usage != Script::VARREF_READ)
+			{
+				if (this_token.var_usage != Script::VARREF_REF)
+				{
+					// VARREF_ISSET or VARREF_OUTPUT_VAR -> SYM_VAR.
+					this_token.SetVarRef(right.var);
+					goto push_this_token;
+				}
+				Var *target_var = right.var->ResolveAlias();
+				if (!target_var->IsNonStaticLocal()
+					|| !this_token.object
+					|| !((UserFunc *)this_token.object)->mInstances)
+				{
+					// target_var definitely isn't a local var of the function being called,
+					// so it's safe to pass as SYM_VAR.
+					this_token.SetVarRef(target_var);
+					goto push_this_token;
+				}
+			}
+			ASSERT(right.var->Type() == VAR_NORMAL);
+			this_token.SetValue(right.var->GetRef());
+			if (!this_token.object)
+				goto outofmem;
+			to_free[to_free_count++] = &this_token;
 			break;
 
 		case SYM_POST_INCREMENT: // These were added in v1.0.46.  It doesn't seem worth translating them into
@@ -1241,11 +1285,7 @@ push_this_token:
 	// It seems best to avoid any chance of looking at the result since it might be invalid due to the above
 	// having taken shortcuts (since it knew the result would be discarded).
 	if (mActionType == ACT_EXPRESSION)   // A stand-alone expression whose end result doesn't matter.
-	{
-		if (result_token.symbol == SYM_VAR) // Count this as "use" for the purpose of the warning, since it could be an error (maybe the author intended to call a function?).
-			result_token.var->MaybeWarnUninitialized();
 		goto normal_end_skip_output_var; // Can't be any output_var for this action type. Also, leave result_to_return at its default of "".
-	}
 
 	if (output_var)
 	{
@@ -1457,6 +1497,9 @@ divide_by_zero:
 outofmem:
 	aResult = MemoryError();
 	goto abort_if_result;
+unset_var:
+	aResult = g_script.VarUnsetError(error_value->var);
+	goto abort_if_result;
 
 //normal_end: // This isn't currently used, but is available for future-use and readability.
 	// v1.0.45: ACT_ASSIGNEXPR relies on us to set the output_var (i.e. whenever it's ARG1's is_expression==true).
@@ -1493,7 +1536,7 @@ ResultType Line::ExpandSingleArg(int aArgIndex, ResultToken &aResultToken, LPTST
 #ifdef _WIN64
 		aResultToken.marker_length = postfix->marker_length;
 #endif
-		if (aResultToken.symbol == SYM_OBJECT) // This can happen for VAR_CONSTANT or optimised Func("x").
+		if (aResultToken.symbol == SYM_OBJECT) // This can happen for VAR_CONSTANT.
 			aResultToken.object->AddRef();
 		return OK;
 	}
@@ -1634,12 +1677,10 @@ bool NativeFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aP
 			for (int i = 0; i < MAX_FUNC_OUTPUT_VAR && mOutputVars[i]; ++i)
 			{
 				if (mOutputVars[i] <= aParamCount
-					&& aParam[mOutputVars[i]-1]->symbol != SYM_VAR
-					&& aParam[mOutputVars[i]-1]->symbol != SYM_MISSING)
+					&& aParam[mOutputVars[i]-1]->symbol != SYM_MISSING
+					&& !TokenToOutputVar(*aParam[mOutputVars[i]-1]))
 				{
-					sntprintf(aResultToken.buf, _f_retval_buf_size, _T("Parameter #%i of %s must be a variable.")
-						, mOutputVars[i], mName);
-					aResultToken.Error(aResultToken.buf);
+					aResultToken.ParamError(mOutputVars[i]-1, aParam[mOutputVars[i]-1], _T("variable reference"), mName);
 					return false; // Abort expression.
 				}
 			}
@@ -1741,55 +1782,18 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			// Only when a backup is needed is it possible for this function to be calling itself recursively,
 			// either directly or indirectly by means of an intermediate function.  As a consequence, it's
 			// possible for this function to be passing one or more of its own params or locals to itself.
-			// The following section compensates for that to handle parameters passed by-value, but it
-			// doesn't correctly handle passing its own locals/params to itself ByRef, which is in the
-			// help file as a known limitation.  Also, the below doesn't indicate a failure when stack
-			// underflow would occur because the loop after this one needs to do that (since this
-			// one will never execute if a backup isn't needed).  Note that this loop that reviews all
-			// actual parameters is necessary as a separate loop from the one further below because this
-			// first one's conversion must occur prior to calling BackupFunctionVars().  In addition, there
-			// might be other interdependencies between formals and actuals if a function is calling itself
-			// recursively.
 			for (j = 0; j < aParamCount; ++j) // For each actual parameter.
 			{
-				ExprTokenType &this_param_token = *aParam[j]; // stack[stack_count] is the first actual parameter. A check higher above has already ensured that this line won't cause stack overflow.
-				if (this_param_token.symbol != SYM_VAR)
+				ExprTokenType &this_param_token = *aParam[j];
+				if (this_param_token.symbol != SYM_VAR
+					|| this_param_token.var_usage != Script::VARREF_READ) // Other values for var_usage indicate ExpandExpression has determined this var is static or global, and is being passed ByRef.
 					continue;
-				Var &param_var = *this_param_token.var;
-				Var &target_var = *param_var.ResolveAlias();
-				if (j < mParamCount && mParam[j].is_byref)
-				{
-					// If the target or actual var is local, it could be local to this function, in which
-					// case it's about to be reset.  Enable the function to receive its own local variable
-					// ByRef by moving its storage into a VarRef and aliasing that instead.
-					if (target_var.IsNonStaticLocal()) // Safest to assume it's a local of this function.
-					{
-						// target_var is necessarily not a freevar (due to either GetRef or a closure)
-						// because in that case IsNonStaticLocal would be false.
-						if (!param_var.GetRef()) // Convert it to a freevar ref.
-							return false;
-						this_param_token.var = param_var.GetAliasFor();
-					}
-					else //if (param_var.IsNonStaticLocal()) // No need to check this.
-					{
-						// Ensure the token points to the target of any alias, since the alias itself
-						// will be reset below.  This will have no effect if param_var isn't an alias.
-						this_param_token.var = &target_var;
-					}
-				}
-				else
-				{
-					// Since this formal parameter is passed by value, if it's SYM_VAR, convert it to
-					// a non-var to allow the variables to be backed up and reset further below without
-					// corrupting any SYM_VARs that happen to be locals or params of this very same
-					// function.
-					// DllCall() relies on the fact that this transformation is only done for user
-					// functions, not built-in ones such as DllCall().  This is because DllCall()
-					// sometimes needs the variable of a parameter for use as an output parameter.
-					// Skip AddRef() if this is an object because Release() won't be called, and
-					// AddRef() will be called when the object is assigned to a parameter.
-					target_var.ToTokenSkipAddRef(this_param_token);
-				}
+				// Since this SYM_VAR is being passed by value, convert it to a non-var to allow
+				// the variables to be backed up and reset further below without corrupting any
+				// SYM_VARs that happen to be locals or params of this very same function.
+				// Skip AddRef() if this is an object because Release() won't be called, and
+				// AddRef() will be called when the object is assigned to a parameter.
+				this_param_token.var->ToTokenSkipAddRef(this_param_token);
 			}
 			// BackupFunctionVars() will also clear each local variable and formal parameter so that
 			// if that parameter or local var is assigned a value by any other means during our call
@@ -1815,7 +1819,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 		if (sFreeVars && mOuterFunc && !aUpVars)
 			aUpVars = sFreeVars->ForFunc(mOuterFunc);
 
-		if (mDownVarCount || aUpVars)
+		if (mDownVarCount)
 		{
 			// These local vars need to persist after the function returns (and be independent of
 			// any other instances of this function).  Since we really only have one set of local
@@ -1849,6 +1853,19 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 					// in which case inner_free_var is now an alias for outer_free_var->mAliasFor.
 				}
 				mUpVar[i]->UpdateAlias(outer_free_var);
+			}
+		}
+
+		if (mClosureCount)
+		{
+			ASSERT(sFreeVars);
+			for (int i = 0; i < mClosureCount; ++i)
+			{
+				auto closure = new Closure(mClosure[i].func, sFreeVars
+					, mClosure[i].var->Scope() & VAR_DOWNVAR); // Closures in downvars have lifetime tied to sFreeVars.
+				Var *var = mClosure[i].var->ResolveAlias();
+				var->AssignSkipAddRef(closure);
+				var->MakeReadOnly();
 			}
 		}
 
@@ -1899,9 +1916,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			
 			if (this_formal_param.is_byref)
 			{
-				// Note that the previous loop might not have checked things like the following because that
-				// loop never ran unless a backup was needed:
-				if (token.symbol == SYM_VAR)
+				if (token.symbol == SYM_VAR && token.var_usage != Script::VARREF_READ) // An optimized &var ref.
 				{
 					if (this_formal_param.var->Scope() & VAR_DOWNVAR) // This parameter's var is referenced by one or more closures.
 					{
@@ -1909,14 +1924,29 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 						auto ref = token.var->GetRef();
 						if (!ref)
 							goto free_and_return;
+						ref->Release(); // token.var retains a reference; release ours.
 						ASSERT(this_formal_param.var->IsAlias());
 						// Point our freevar to the caller's freevar, for use by our closures.
 						this_formal_param.var->GetAliasFor()->UpdateAlias(token.var);
 						// Also update our local alias below.
 					}
-					this_formal_param.var->UpdateAlias(token.var); // Make the formal parameter point directly to the actual parameter's contents.
+					this_formal_param.var->UpdateAlias(token.var); // Set mAliasFor.
 					continue;
 				}
+				else if (auto ref = dynamic_cast<VarRef *>(TokenToObject(token)))
+				{
+					if (this_formal_param.var->Scope() & VAR_DOWNVAR) // This parameter's var is referenced by one or more closures.
+					{
+						ASSERT(this_formal_param.var->IsAlias());
+						// Point our freevar to the caller's freevar, for use by our closures.
+						this_formal_param.var->GetAliasFor()->UpdateAlias(ref);
+						// Also update our local alias below.
+					}
+					this_formal_param.var->UpdateAlias(ref); // Set mAliasFor and mObject.
+					continue;
+				}
+				aResultToken.ParamError(j, &token, _T("variable reference"), mName);
+				goto free_and_return;
 			}
 			//else // This parameter is passed "by value".
 			// Assign actual parameter's value to the formal parameter (which is itself a
@@ -2146,6 +2176,12 @@ ResultType Line::ExpandArgs(ResultToken *aResultTokens)
 			}
 			// Since above didn't continue, this arg is a plain variable reference.
 			// aResultTokens should currently always be NULL for ARG_TYPE_INPUT_VAR, so isn't filled.
+
+			if (VAR(mArg[i])->IsUninitializedNormalVar())
+			{
+				result_to_return = g_script.VarUnsetError(VAR(mArg[i]));
+				goto end;
+			}
 
 			// Some comments below might be obsolete.  There was previously some logic here deciding
 			// whether the variable needed to be dereferenced, but that's no longer ever necessary.

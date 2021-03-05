@@ -129,8 +129,8 @@ enum ExitReasons {EXIT_CRITICAL = -2, EXIT_DESTROY = -1, EXIT_NONE = 0, EXIT_ERR
 	, EXIT_CLOSE, EXIT_MENU, EXIT_EXIT, EXIT_RELOAD, EXIT_SINGLEINSTANCE};
 #define EXITREASON_MUST_EXIT(er) (static_cast<ExitReasons>(er) <= EXIT_DESTROY)
 
-enum WarnType {WARN_USE_UNSET_LOCAL, WARN_USE_UNSET_GLOBAL, WARN_LOCAL_SAME_AS_GLOBAL, WARN_UNREACHABLE, WARN_VAR_UNSET, WARN_ALL};
-#define WARN_TYPE_STRINGS _T("UseUnsetLocal"), _T("UseUnsetGlobal"), _T("LocalSameAsGlobal"), _T("Unreachable"), _T("VarUnset"), _T("All")
+enum WarnType {WARN_LOCAL_SAME_AS_GLOBAL, WARN_UNREACHABLE, WARN_VAR_UNSET, WARN_ALL};
+#define WARN_TYPE_STRINGS _T("LocalSameAsGlobal"), _T("Unreachable"), _T("VarUnset"), _T("All")
 
 enum WarnMode {WARNMODE_OFF, WARNMODE_OUTPUTDEBUG, WARNMODE_MSGBOX, WARNMODE_STDOUT};	// WARNMODE_OFF must be zero.
 #define WARN_MODE_STRINGS _T("Off"), _T("OutputDebug"), _T("MsgBox"), _T("StdOut")
@@ -210,7 +210,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_MULTIPLY, SYM_DIVIDE
 	, SYM_POWER
 	, SYM_LOWNOT  // LOWNOT is the word "not", the low precedence counterpart of !
-	, SYM_NEGATIVE, SYM_POSITIVE, SYM_HIGHNOT, SYM_BITNOT  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
+	, SYM_NEGATIVE, SYM_POSITIVE, SYM_REF, SYM_HIGHNOT, SYM_BITNOT  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
 #define SYM_OVERRIDES_POWER_ON_STACK(symbol) ((symbol) >= SYM_LOWNOT && (symbol) <= SYM_BITNOT) // Check lower bound first for short-circuit performance.
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
 #define SYM_INCREMENT_OR_DECREMENT_IS_PRE(symbol) ((symbol) >= SYM_PRE_INCREMENT) // Caller has verified symbol is an INCREMENT or DECREMENT operator.
@@ -231,6 +231,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 struct ExprTokenType; // Forward declarations for use below.
 struct ResultToken;
 struct IDebugProperties;
+class Object;
 
 
 // Must not be smaller than INT_PTR; see "(IntKeyType)(INT_PTR)".
@@ -248,6 +249,7 @@ struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 	virtual LPTSTR Type() = 0;
 	#define IObject_Type_Impl(name) \
 		LPTSTR Type() { return _T(name); }
+	virtual Object *Base() = 0;
 	
 #ifdef CONFIG_DEBUGGER
 	#define IObject_DebugWriteProperty_Def \
@@ -403,6 +405,13 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 		return CopyValueFrom(other); // Currently nothing needs to be done differently.
 	}
 
+	void SetVarRef(Var *aVar)
+	{
+		symbol = SYM_VAR;
+		var = aVar;
+		var_usage = 1; // FIXME: VARREF_REF
+	}
+
 	// Assignments yield a variable using this function so that it can be passed ByRef,
 	// and because in some cases it avoids an extra memory allocation or string copy
 	// (that would otherwise be necessary to ensure the string value is not freed or
@@ -413,6 +422,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	{
 		symbol = SYM_VAR;
 		var = aVar;
+		var_usage = 0;
 	}
 
 private: // Force code to use one of the CopyFrom() methods, for clarity.
@@ -538,6 +548,7 @@ struct ResultToken : public ExprTokenType
 	ResultType TypeError(LPCTSTR aExpectedType, LPCTSTR aActualType, LPTSTR aExtraInfo = _T(""));
 	ResultType ParamError(int aIndex, ExprTokenType *aParam);
 	ResultType ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType);
+	ResultType ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aExpectedType, LPCTSTR aFunction);
 	
 	void SetLastErrorMaybeThrow(bool aError, DWORD aLastError = GetLastError());
 	void SetLastErrorCloseAndMaybeThrow(HANDLE aHandle, bool aError, DWORD aLastError = GetLastError());
