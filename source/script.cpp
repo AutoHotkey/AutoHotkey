@@ -1523,15 +1523,15 @@ UINT Script::LoadFromFile()
 	// All of a function's non-dynamic local variables are created before variable names
 	// are resolved in nested functions.
 	if (!PreparseExpressions(mFirstLine)
+		|| !PreparseExpressions(mHotFuncs) // mHotFuncs first in case they have nested functions, which would be in mFuncs.
 		|| !PreparseExpressions(mFuncs)
-		|| !PreparseExpressions(mHotFuncs)
 		|| !PreparseVarRefs())
 		return LOADING_FAILED; // Error was already displayed by the above call.
 
 	// Do some processing of local variables to support closures.
 	// This must be done after PreparseExpressions() has resolved all variable references.
-	if (!PreprocessLocalVars(mFuncs)
-		|| !PreprocessLocalVars(mHotFuncs))
+	if (!PreprocessLocalVars(mHotFuncs) // mHotFuncs first in case they have nested functions, which would be in mFuncs.
+		|| !PreprocessLocalVars(mFuncs))
 		return LOADING_FAILED;
 
 	free(mHotFuncs.mItem); // Not needed beyond this point.
