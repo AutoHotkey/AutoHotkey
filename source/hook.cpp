@@ -3951,47 +3951,47 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 						// Either both are key-up hotkeys or both are key-down hotkeys.  this overrides prev.
 						its_table_entry = this_hk.id_with_flags;
 					}
-					
-					if (do_cascade)
+				}
+
+				if (do_cascade)
+				{
+					switch (this_hk.vk)
 					{
-						switch (this_hk.vk)
-						{
-						case VK_MENU:
-						case VK_LMENU: // In case the program is ever changed to support these VKs directly.
-							Kvkm(modifiersLR, VK_LMENU) = this_hk.id_with_flags;
-							Kscm(modifiersLR, SC_LALT) = this_hk.id_with_flags;
-							if (this_hk.vk == VK_LMENU)
-								break;
-							//else fall through so that VK_MENU also gets the right side set below:
-						case VK_RMENU:
-							Kvkm(modifiersLR, VK_RMENU) = this_hk.id_with_flags;
-							Kscm(modifiersLR, SC_RALT) = this_hk.id_with_flags;
+					case VK_MENU:
+					case VK_LMENU: // In case the program is ever changed to support these VKs directly.
+						Kvkm(modifiersLR, VK_LMENU) = this_hk.id_with_flags;
+						Kscm(modifiersLR, SC_LALT) = this_hk.id_with_flags;
+						if (this_hk.vk == VK_LMENU)
 							break;
-						case VK_SHIFT:
-						case VK_LSHIFT:
-							Kvkm(modifiersLR, VK_LSHIFT) = this_hk.id_with_flags;
-							Kscm(modifiersLR, SC_LSHIFT) = this_hk.id_with_flags;
-							if (this_hk.vk == VK_LSHIFT)
-								break;
-							//else fall through so that VK_SHIFT also gets the right side set below:
-						case VK_RSHIFT:
-							Kvkm(modifiersLR, VK_RSHIFT) = this_hk.id_with_flags;
-							Kscm(modifiersLR, SC_RSHIFT) = this_hk.id_with_flags;
+						//else fall through so that VK_MENU also gets the right side set below:
+					case VK_RMENU:
+						Kvkm(modifiersLR, VK_RMENU) = this_hk.id_with_flags;
+						Kscm(modifiersLR, SC_RALT) = this_hk.id_with_flags;
+						break;
+					case VK_SHIFT:
+					case VK_LSHIFT:
+						Kvkm(modifiersLR, VK_LSHIFT) = this_hk.id_with_flags;
+						Kscm(modifiersLR, SC_LSHIFT) = this_hk.id_with_flags;
+						if (this_hk.vk == VK_LSHIFT)
 							break;
-						case VK_CONTROL:
-						case VK_LCONTROL:
-							Kvkm(modifiersLR, VK_LCONTROL) = this_hk.id_with_flags;
-							Kscm(modifiersLR, SC_LCONTROL) = this_hk.id_with_flags;
-							if (this_hk.vk == VK_LCONTROL)
-								break;
-							//else fall through so that VK_CONTROL also gets the right side set below:
-						case VK_RCONTROL:
-							Kvkm(modifiersLR, VK_RCONTROL) = this_hk.id_with_flags;
-							Kscm(modifiersLR, SC_RCONTROL) = this_hk.id_with_flags;
+						//else fall through so that VK_SHIFT also gets the right side set below:
+					case VK_RSHIFT:
+						Kvkm(modifiersLR, VK_RSHIFT) = this_hk.id_with_flags;
+						Kscm(modifiersLR, SC_RSHIFT) = this_hk.id_with_flags;
+						break;
+					case VK_CONTROL:
+					case VK_LCONTROL:
+						Kvkm(modifiersLR, VK_LCONTROL) = this_hk.id_with_flags;
+						Kscm(modifiersLR, SC_LCONTROL) = this_hk.id_with_flags;
+						if (this_hk.vk == VK_LCONTROL)
 							break;
-						} // switch()
-					} // if (do_cascade)
-				} // this hotkey is a scan code hotkey.
+						//else fall through so that VK_CONTROL also gets the right side set below:
+					case VK_RCONTROL:
+						Kvkm(modifiersLR, VK_RCONTROL) = this_hk.id_with_flags;
+						Kscm(modifiersLR, SC_RCONTROL) = this_hk.id_with_flags;
+						break;
+					} // switch()
+				} // if (do_cascade)
 			}
 		}
 	}
