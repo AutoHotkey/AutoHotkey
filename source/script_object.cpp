@@ -2461,7 +2461,7 @@ Map::Pair *Map::Insert(SymbolType key_type, Key key, index_t at)
 
 ResultType Func::Invoke(IObject_Invoke_PARAMS_DECL)
 {
-	if (!aName && !HasOwnProps()) // Very rough check that covers the most common cases.
+	if (!aName && IS_INVOKE_CALL && !HasOwnProps()) // Very rough check that covers the most common cases.
 	{
 		// Take a shortcut for performance.
 		Call(aResultToken, aParam, aParamCount);
