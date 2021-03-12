@@ -1204,8 +1204,11 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 		}
 	}
 
-	if	(FAILED(hr))
+	if (FAILED(hr))
 	{
+		if (hr == DISP_E_UNKNOWNNAME)
+			return INVOKE_NOT_HANDLED;
+
 		ComError(hr, aResultToken, aName, &excepinfo);
 	}
 	else if	(IS_INVOKE_SET)
