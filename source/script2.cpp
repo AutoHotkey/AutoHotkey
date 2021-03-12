@@ -14684,10 +14684,7 @@ BIF_DECL(BIF_On)
 	if (!callback)
 		_f_throw_param(0, _T("object"));
 	if (!ValidateFunctor(callback, event_type == FID_OnClipboardChange ? 1 : 2, aResultToken))
-	{
-		callback->Release();
 		return;
-	}
 	
 	int mode = 1; // Default.
 	if (!ParamIndexIsOmitted(1))
