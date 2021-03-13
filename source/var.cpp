@@ -198,6 +198,19 @@ ResultType Var::MoveToNewFreeVar(Var &aFV)
 			| VAR_ATTRIB_CONTENTS_OUT_OF_DATE;
 		mAttrib &= ~VAR_ATTRIB_TYPES; // Mainly to remove VAR_ATTRIB_IS_OBJECT.
 	}
+#if 0
+	// The following is currently not used because:
+	//  - It causes the capacity of the variable to change (possibly reset to 0), which is bad if
+	//    VarSetStrCapacity(&v, n) was used.  GetRef() wouldn't have been called by it because of
+	//    optimization of OutputVar parameters.
+	//  - At worst, a small amount of memory per unique variable is reserved and won't be reused
+	//    from this point on, the same as if its capacity increased beyond MAX_ALLOC_SIMPLE.
+	//  - If the variable isn't empty, it's likely that this action will be repeateded each time
+	// 	  the function is called; i.e. malloc will be used by aFV.Assign() and the string will be
+	// 	  copied, when it would be more efficient to malloc at a earlier point and swap vs. copy.
+	//  - In the most common cases, GetRef() is used when capacity is 0.
+	// An alternative would be to change VarSetStrCapacity() to always GetRef(), but that would be
+	// detrimental for optimizing string concatenation, which is its recommended purpose.
 	else if (mHowAllocated == ALLOC_SIMPLE && !(mScope & (VAR_GLOBAL | VAR_LOCAL_STATIC)))
 	{
 		// Don't transfer a SimpleHeap buffer to freevars since that would cause the
@@ -210,6 +223,7 @@ ResultType Var::MoveToNewFreeVar(Var &aFV)
 		//mByteLength = 0;
 		return OK;
 	}
+#endif
 	else
 	{
 		if (!(mAttrib & VAR_ATTRIB_UNINITIALIZED))
