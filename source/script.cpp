@@ -9253,7 +9253,8 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 		{
 			if (stack_count < 2)
 				return LineError(ERR_EXPR_SYNTAX);
-			stack[--stack_count] = this_postfix;
+			--stack_count; // Pop RHS
+			stack[stack_count - 1] = this_postfix; // Replace LHS
 		}
 		else // SYM_FUNC
 		{
