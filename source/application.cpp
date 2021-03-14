@@ -939,7 +939,8 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					--variant_id; // i.e. index 1 should be mFirstVariant, not mFirstVariant->mNextVariant.
 					for (variant = hk->mFirstVariant; variant_id; variant = variant->mNextVariant, --variant_id);
 				}
-				if (   !(variant || (variant = hk->CriterionAllowsFiring(&criterion_found_hwnd, KEY_IGNORE_LEVEL(HIWORD(msg.lParam)))))   )
+				if (   !(variant || (variant = hk->CriterionAllowsFiring(&criterion_found_hwnd
+					, msg.message == AHK_HOOK_HOTKEY ? KEY_IGNORE_LEVEL(HIWORD(msg.lParam)) : 0)))   )
 					continue; // No criterion is eligible, so ignore this hotkey event (see other comments).
 					// If this is AHK_HOOK_HOTKEY, criterion was eligible at time message was posted,
 					// but not now.  Seems best to abort (see other comments).
