@@ -3133,7 +3133,7 @@ public:
 	ResultType ThrowIntIfNonzero(int aErrorValue);
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine, ResultType aErrorType, Object *aPrototype = nullptr);
 	ResultType ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
-	ResultType Win32Error(DWORD aError = GetLastError());
+	ResultType Win32Error(DWORD aError = GetLastError(), ResultType aErrorType = FAIL_OR_OK);
 	
 	ResultType UnhandledException(Line* aLine, ResultType aErrorType = FAIL);
 	static void FreeExceptionToken(ResultToken*& aToken);

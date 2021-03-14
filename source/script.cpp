@@ -12483,7 +12483,7 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 }
 
 
-ResultType Script::Win32Error(DWORD aError)
+ResultType Script::Win32Error(DWORD aError, ResultType aErrorType)
 {
 	TCHAR message[1024];
 	// Prefix the message with the error number to avoid something like
@@ -12499,7 +12499,7 @@ ResultType Script::Win32Error(DWORD aError)
 		if (message[size - 1] == '\r')
 			message[--size] = '\0';
 	}
-	return RuntimeError(message, _T(""), FAIL_OR_OK, nullptr, ErrorPrototype::OS);
+	return RuntimeError(message, _T(""), aErrorType, nullptr, ErrorPrototype::OS);
 }
 
 

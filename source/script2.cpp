@@ -11096,16 +11096,14 @@ has_valid_return_type:
 		// CriticalError always terminates the process.
 	}
 
-	if (return_attrib.is_hresult && FAILED((HRESULT)return_value.Int) && !g->ThrownToken)
+	if (g->ThrownToken || return_attrib.is_hresult && FAILED((HRESULT)return_value.Int))
 	{
-		g_script.Win32Error((DWORD)return_value.Int);
-	}
-
-	if (g->ThrownToken)
-	{
-		// A script exception was thrown by DynaCall(), either because the called function threw a
-		// SEH exception or because the stdcall parameter list was the wrong size.  Set FAIL result
-		// to indicate to our caller that a script exception was thrown:
+		if (!g->ThrownToken)
+			// "Error values (as defined by the FAILED macro) are never returned"; so FAIL, not FAIL_OR_OK.
+			g_script.Win32Error((DWORD)return_value.Int, FAIL);
+		// If a script exception was thrown by DynaCall(), it was either because the called function threw
+		// a SEH exception or because the stdcall parameter list was the wrong size.  In any of these cases,
+		// set FAIL result to ensure control is transferred as expected (exiting the thread or TRY block).
 		aResultToken.SetExitResult(FAIL);
 		// But continue on to write out any output parameters because the called function might have
 		// had a chance to update them before aborting.  They might be of some use in debugging the
