@@ -516,9 +516,9 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 	int actual_param_count = aParamCount; // Actual number of parameters between [] or ().
 
 	bool hasprop = false; // Whether any kind of property was found.
-	bool handle_params_recursively = false;
 	bool setting = IS_INVOKE_SET;
 	bool calling = IS_INVOKE_CALL;
+	bool handle_params_recursively = calling;
 	ResultToken token_for_recursion;
 	IObject *etter = nullptr;
 	Variant *field = nullptr;
