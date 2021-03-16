@@ -520,7 +520,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 	bool calling = IS_INVOKE_CALL;
 	bool handle_params_recursively = calling;
 	ResultToken token_for_recursion;
-	IObject *etter = nullptr;
+	IObject *etter = nullptr, *method = nullptr;
 	Variant *field = nullptr;
 	index_t insert_pos, other_pos;
 	Object *that;
@@ -538,60 +538,51 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		// Search each object from this to its most distance base, but set insert_pos only when
 		// searching this object, since it needs to be the position we can insert a new field at.
 		field = that->FindField(name, that == this ? insert_pos : other_pos);
-		if (field)
+		if (!field) // 'that' has no own property.
+			continue;
+		if (field->symbol != SYM_DYNAMIC) // 'that' has a value property.
 		{
-			if (calling)
-			{
-				hasprop = true;
-				if (field->symbol != SYM_DYNAMIC)
-					break; // Call a value, such as a Func (but etter takes precedence if non-null).
-				if (field->prop->Method())
-				{
-					etter = nullptr; // Method takes precedence.
-					break;
-				}
-				// Record the first (most derived) getter, if any, in case there is no method:
-				if (!etter)
-					etter = field->prop->Getter();
+			if (hasprop && setting)
+				// This value property has been overridden with a getter, but no setter.
+				// Treat it as read-only rather than allowing the getter to implicitly be overridden.
 				field = nullptr;
-				continue;
-			}
-			if (hasprop && field->symbol != SYM_DYNAMIC)
-			{
-				// This value property has been overridden with a half-defined dynamic property.
-				if (setting)
-				{
-					// A derived object has overridden GET but not SET.  The default behaviour
-					// for a value property would be to write a new value in `this`, but that
-					// would override GET.  It seems safer to treat this property as read-only.
-					// It is also simpler, since field points to a field of the base object at
-					// this point (we would need to keep the result of the first FindField()).
-					field = nullptr;
-				}
-				//else this is GET, meaning a derived object has overridden SET but not GET.
-				// In that case, inherit the value from field.
-				break;
-			}
 			hasprop = true;
-			if (field->symbol == SYM_DYNAMIC) // Property with getter/setter.
-			{
-				if (actual_param_count > 0 && field->prop->MaxParams == 0) // Prop cannot accept parameters.
-				{
-					setting = false; // GET this property's value.
-					handle_params_recursively = true; // Apply parameters by passing them to value->Invoke().
-				}
-				// Can this Property actually handle this operation?
-				etter = setting ? field->prop->Setter() : field->prop->Getter();
-				// Reset field to simplify detection of dynamic property vs. value.
-				// Note that field would be reset by the next iteration, if there is one.
-				field = nullptr;
-				if (!etter)
-					// This part of the property isn't implemented here, so keep searching.
-					continue;
-			}
+			// This value property takes precedence over any getter, setter or method defined in a base.
 			break;
 		}
-	}
+		hasprop = true;
+		// Since above did not break or continue, 'that' has a dynamic property.
+		if (calling)
+		{
+			if (method = field->prop->Method())
+			{
+				etter = nullptr; // Method takes precedence.
+				break;
+			}
+			// Record the first (most derived) getter, if any, in case there is no method:
+			if (!etter)
+				etter = field->prop->Getter();
+			field = nullptr;
+			continue;
+		}
+		if (actual_param_count > 0 && field->prop->MaxParams == 0) // Prop cannot accept parameters.
+		{
+			setting = false; // GET this property's value.
+			handle_params_recursively = true; // Apply parameters by passing them to value->Invoke().
+		}
+		// Can this Property actually handle this operation?
+		if (setting)
+			etter = field->prop->Setter();
+		else if (  !(etter = field->prop->Getter()) && !method  )
+			method = field->prop->Method(); // Fall back to returning this if no getter is found.
+		// Reset field to simplify detection of dynamic property vs. value.
+		// Note that field would be reset by the next iteration, if there is one.
+		field = nullptr;
+		if (etter)
+			break;
+		// This part of the property isn't implemented here, so keep searching.
+		continue;
+	} // for (that = each base)
 
 	if (!hasprop && aName)
 	{
@@ -639,6 +630,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 	if (calling)
 	{
 		ExprTokenType func_token;
+
 		if (etter)
 			func_token.CopyValueFrom(token_for_recursion);
 		else if (!field)
@@ -660,9 +652,12 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		// property is undefined or just a value).
 		if (!etter)
 		{
-			if (!field)
+			if (field)
+				field->ToToken(token_for_recursion);
+			else if (method)
+				token_for_recursion.SetValue(method);
+			else
 				return INVOKE_NOT_HANDLED;
-			field->ToToken(token_for_recursion);
 		}
 		
 		if (IS_INVOKE_SET)
@@ -727,6 +722,11 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 			// is handled by ExpandExpression() since commit 2a276145.
 			field->ReturnRef(aResultToken);
 			return OK;
+		}
+		else if (method)
+		{
+			method->AddRef();
+			_o_return(method);
 		}
 	}
 
