@@ -965,15 +965,17 @@ BIF_DECL(BIF_WinActivate)
 {
 	_f_set_retval_p(_T(""), 0);
 
-	HWND target_hwnd;
 	if (aParamCount > 0)
 	{
+		HWND target_hwnd;
 		switch (DetermineTargetHwnd(target_hwnd, aResultToken, *aParam[0]))
 		{
 		case FAIL: return;
 		case OK:
-			if (target_hwnd)
-				SetForegroundWindowEx(target_hwnd);
+			if (!target_hwnd)
+				_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
+			SetForegroundWindowEx(target_hwnd);
+			DoWinDelay;
 			_f_return_retval;
 		}
 	}
@@ -983,15 +985,16 @@ BIF_DECL(BIF_WinActivate)
 	_f_param_string_opt(aExcludeTitle, 2);
 	_f_param_string_opt(aExcludeText, 3);
 
-	if (WinActivate(*g, aTitle, aText, aExcludeTitle, aExcludeText, _f_callee_id == FID_WinActivateBottom))
-		// It seems best to do these sleeps here rather than in the windowing
-		// functions themselves because that way, the program can use the
-		// windowing functions without being subject to the script's delay
-		// setting (i.e. there are probably cases when we don't need to wait,
-		// such as bringing a message box to the foreground, since no other
-		// actions will be dependent on it actually having happened):
-		DoWinDelay;
+	if (!WinActivate(*g, aTitle, aText, aExcludeTitle, aExcludeText, _f_callee_id == FID_WinActivateBottom, true))
+		_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
 
+	// It seems best to do these sleeps here rather than in the windowing
+	// functions themselves because that way, the program can use the
+	// windowing functions without being subject to the script's delay
+	// setting (i.e. there are probably cases when we don't need to wait,
+	// such as bringing a message box to the foreground, since no other
+	// actions will be dependent on it actually having happened):
+	DoWinDelay;
 	_f_return_retval;
 }
 
