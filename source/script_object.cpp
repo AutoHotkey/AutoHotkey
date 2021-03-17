@@ -1329,7 +1329,12 @@ ResultType Object::GetMethod(ResultToken &aResultToken, name_t aName)
 
 bool Object::DefineMethod(name_t aName, IObject *aFunc)
 {
-	return SetOwnProp(aName, aFunc);
+	if (auto prop = DefineProperty(aName))
+	{
+		prop->SetMethod(aFunc);
+		return true;
+	}
+	return false;
 }
 
 Property *Object::DefineProperty(name_t aName)

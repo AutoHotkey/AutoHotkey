@@ -328,8 +328,6 @@ private:
 	}
 
 protected:
-	IObject *GetMethod(name_t name);
-
 	ResultType CallAsMethod(ExprTokenType &aFunc, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMeta(LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType CallMetaVarg(int aFlags, LPTSTR aName, ResultToken &aResultToken, ExprTokenType &aThisToken, ExprTokenType *aParam[], int aParamCount);
@@ -344,6 +342,7 @@ public:
 
 	bool HasProp(name_t aName);
 	bool HasMethod(name_t aName);
+	IObject *GetMethod(name_t name);
 
 	bool HasOwnProps() { return mFields.Length(); }
 	bool HasOwnProp(name_t aName)
@@ -356,7 +355,9 @@ public:
 		None = 0,
 		Value,
 		Object,
-		Dynamic
+		DynamicValue,
+		DynamicMethod,
+		DynamicMixed
 	};
 	PropType GetOwnPropType(name_t aName)
 	{
@@ -365,7 +366,10 @@ public:
 			return PropType::None;
 		switch (field->symbol)
 		{
-		case SYM_DYNAMIC: return PropType::Dynamic;
+		case SYM_DYNAMIC:
+			if (field->prop->Getter() || field->prop->Getter())
+				return field->prop->Method() ? PropType::DynamicMixed : PropType::DynamicValue;
+			return field->prop->Method() ? PropType::DynamicMethod : PropType::None;
 		case SYM_OBJECT: return PropType::Object;
 		default: return PropType::Value;
 		}

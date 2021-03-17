@@ -6296,8 +6296,13 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, bool aStatic, bool &aBufHasB
 	if (!aStatic)
 		class_object = (Object *)class_object->GetOwnPropObj(_T("Prototype"));
 	*name_end = 0; // Terminate for aBuf use below.
-	if (class_object->GetOwnPropType(aBuf) > Object::PropType::Value)
+	switch (class_object->GetOwnPropType(aBuf))
+	{
+	case Object::PropType::Object:
+	case Object::PropType::DynamicValue: // get/set
+	case Object::PropType::DynamicMixed: // get/set and call
 		return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
+	}
 	mClassProperty = class_object->DefineProperty(aBuf);
 	mClassPropertyStatic = aStatic;
 	if (!mClassProperty)
@@ -6454,7 +6459,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		// or at the end of the __Init method belonging to this class.  Save the current values:
 		Line *script_first_line = mFirstLine, *script_last_line = mLastLine;
 		Line *block_end;
-		auto init_func = (UserFunc *)class_object->GetOwnPropObj(_T("__Init")); // Can only be a user-defined function or nullptr at this stage.
+		auto init_func = (UserFunc *)class_object->GetMethod(_T("__Init")); // Can only be a user-defined function or nullptr at this stage.
 
 		if (init_func)
 		{
@@ -6880,8 +6885,11 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 		}
 		else
 		{
-			if (aClassObject->HasOwnProp(key))
+			switch (aClassObject->GetOwnPropType(key))
 			{
+			case Object::PropType::Object:
+			case Object::PropType::DynamicMethod: // call
+			case Object::PropType::DynamicMixed: // get/set and call
 				ScriptError(ERR_DUPLICATE_DECLARATION, new_name);
 				return nullptr;
 			}
