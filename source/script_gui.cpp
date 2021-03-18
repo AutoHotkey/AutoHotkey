@@ -165,7 +165,8 @@ ResultType GuiType::GetEnumItem(UINT &aIndex, Var *aOutputVar1, Var *aOutputVar2
 	if (aIndex >= mControlCount) // Use >= vs. == in case the Gui was destroyed.
 		return CONDITION_FALSE;
 	GuiControlType* ctrl = mControl[aIndex];
-	aOutputVar1->AssignHWND(ctrl->hwnd);
+	if (aOutputVar1)
+		aOutputVar1->AssignHWND(ctrl->hwnd);
 	if (aOutputVar2)
 		aOutputVar2->Assign(ctrl);
 	return CONDITION_TRUE;
