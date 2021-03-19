@@ -1993,11 +1993,10 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	case M_Delete:
 	{
 		auto index = ParamToZeroIndex(*aParam[0]);
-		if (index < mLength)
-		{
-			mItem[index].ReturnMove(aResultToken);
-			mItem[index].AssignMissing();
-		}
+		if (index >= mLength)
+			_o_throw_param(0);
+		mItem[index].ReturnMove(aResultToken);
+		mItem[index].AssignMissing();
 		return OK;
 	}
 
