@@ -925,6 +925,11 @@ public:
 
 	IObject_Type_Impl("VarRef");
 	::Object *Base() { return ::Object::sVarRefPrototype; }
+
+	void *operator new(size_t aBytes) { return malloc(aBytes); } // Must override Var::new, which uses SimpleHeap::Malloc.
+	void *operator new[](size_t aBytes) { return malloc(aBytes); }
+	void operator delete(void *aPtr) { free(aPtr); }
+	void operator delete[](void *aPtr) { free(aPtr); }
 };
 
 
