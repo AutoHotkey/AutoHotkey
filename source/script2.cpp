@@ -10837,17 +10837,12 @@ BIF_DECL(BIF_DllCall)
 	{
 		// Check that the mandatory first parameter (DLL+Function) is valid.
 		// (load-time validation has ensured at least one parameter is present).
-		switch (aParam[0]->symbol)
+		switch (TypeOfToken(*aParam[0]))
 		{
-		case SYM_STRING: // By far the most common, so it's listed first for performance. Also for performance, don't even consider the possibility that a quoted literal string like "33" is a function-address.
-			//function = NULL; // Already set: indicates that no function has been specified yet.
-			break;
-		case SYM_VAR:
+		case SYM_INTEGER: // Might be the most common case, due to FinalizeExpression resolving function names at load time.
 			// v1.0.46.08: Allow script to specify the address of a function, which might be useful for
 			// calling functions that the script discovers through unusual means such as C++ member functions.
-			function = (aParam[0]->var->IsNumeric() == PURE_INTEGER)
-				? (void *)aParam[0]->var->ToInt64() // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
-				: NULL; // Not a pure integer, so fall back to normal method of considering it to be path+name.
+			function = (void *)ParamIndexToInt64(0);
 			// A check like the following is not present due to rarity of need and because if the address
 			// is zero or negative, the same result will occur as for any other invalid address:
 			// an exception code of 0xc0000005.
@@ -10856,10 +10851,19 @@ BIF_DECL(BIF_DllCall)
 			//// Otherwise, assume it's a valid address:
 			//	function = (void *)temp64;
 			break;
-		case SYM_INTEGER:
-			function = (void *)aParam[0]->value_int64; // For simplicity and due to rarity, this doesn't check for zero or negative numbers.
+		case SYM_STRING: // For performance, don't even consider the possibility that a string like "33" is a function-address.
+			//function = NULL; // Already set: indicates that no function has been specified yet.
 			break;
-		default: // SYM_FLOAT, SYM_OBJECT, SYM_MISSING or (should be impossible) something else.
+		case SYM_OBJECT:
+			// Permit an object with Ptr property.  This enables DllCall or DllCall.Bind() to be used directly
+			// as a method of an object, such as one used for wrapping a dll function.  It could also have other
+			// uses, such as resolving and memoizing function addresses on first use.
+			__int64 n;
+			if (!GetObjectIntProperty(ParamIndexToObject(0), _T("Ptr"), n, aResultToken))
+				return;
+			function = (void *)n;
+			break;
+		default: // SYM_FLOAT, SYM_MISSING or (should be impossible) something else.
 			_f_throw(ERR_PARAM1_INVALID, ErrorPrototype::Type);
 		}
 		if (!function)
