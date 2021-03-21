@@ -11484,15 +11484,9 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 	// Above has set extract_length to the exact number of characters that will actually be extracted.
 	LPTSTR result = haystack + starting_offset; // This is the result except for the possible need to truncate it below.
 
-	if (extract_length == remaining_length_available) // All of haystack is desired (starting at starting_offset).
-	{
-		// No need for any copying or termination, just send back part of haystack.
-		// Caller and Var::Assign() know that overlap is possible, so this seems safe.
-		_f_return_p(result, extract_length);
-	}
-	
-	// Otherwise, at least one character is being omitted from the end of haystack.
-	_f_return(result, extract_length);
+	// No need for any copying or termination, just send back part of haystack.
+	// Caller and Var::Assign() know that overlap is possible, so this seems safe.
+	_f_return_p(result, extract_length);
 }
 
 
@@ -16460,7 +16454,7 @@ BIF_DECL(BIF_Trim) // L31
 {
 	BuiltInFunctionID trim_type = _f_callee_id;
 
-	TCHAR buf[MAX_NUMBER_SIZE]; // Not using _f_retval_buf because behaviour is undefined for wmemcpy with overlapping source and destination, and pure numbers are rare here.
+	LPTSTR buf = _f_retval_buf;
 	size_t extract_length;
 	LPTSTR str = ParamIndexToString(0, buf, &extract_length);
 
@@ -16477,7 +16471,7 @@ BIF_DECL(BIF_Trim) // L31
 	if (extract_length && trim_type != FID_LTrim) // i.e. it's Trim() or RTrim();  THE LINE BELOW REQUIRES extract_length >= 1.
 		extract_length = omit_trailing_any(result, omit_list, result + extract_length - 1);
 
-	_f_return(result, extract_length);
+	_f_return_p(result, extract_length);
 }
 
 

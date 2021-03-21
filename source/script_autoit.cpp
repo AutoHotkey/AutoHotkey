@@ -858,7 +858,7 @@ BIF_DECL(BIF_ControlGet)
 				_f_throw_param(0);
 		}
 		line_buf[dwResult] = '\0'; // Ensure terminated since the API might not do it in some cases.
-		_f_return(line_buf);
+		_f_return(line_buf, dwResult);
 	}
 
 	case FID_EditGetSelectedText: // Must be an Edit.

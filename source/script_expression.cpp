@@ -585,12 +585,12 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				if (result_size <= aDerefBufSize - (target - aDerefBuf)) // There is room at the end of our deref buf, so use it.
 				{
 					// Make the token's result the new, more persistent location:
-					this_token.marker = tmemcpy(target, result, result_size); // Benches slightly faster than strcpy().
+					this_token.marker = tmemcpy(target, result, result_length); // Benches slightly faster than strcpy().
 					target += result_size; // Point it to the location where the next string would be written.
 				}
 				else if (result_size < EXPR_SMALL_MEM_LIMIT && alloca_usage < EXPR_ALLOCA_LIMIT) // See comments at EXPR_SMALL_MEM_LIMIT.
 				{
-					this_token.marker = tmemcpy(talloca(result_size), result, result_size); // Benches slightly faster than strcpy().
+					this_token.marker = tmemcpy(talloca(result_size), result, result_length); // Benches slightly faster than strcpy().
 					alloca_usage += result_size; // This might put alloca_usage over the limit by as much as EXPR_SMALL_MEM_LIMIT, but that is fine because it's more of a guideline than a limit.
 				}
 				else // Need to create some new persistent memory for our temporary use.
@@ -605,9 +605,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					//   return values are usually small, such as numbers).
 					if (  !(this_token.marker = tmalloc(result_size))  )
 						goto outofmem;
-					tmemcpy(this_token.marker, result, result_size); // Benches slightly faster than strcpy().
+					tmemcpy(this_token.marker, result, result_length); // Benches slightly faster than strcpy().
 					to_free[to_free_count++] = &this_token; // A slot was reserved for this SYM_FUNC.
 				}
+				// Must be null-terminated because some built-in functions (such as MsgBox) still require it.
+				// Explicit null-termination here (vs. including it in tmemcpy above) allows SubStr and others
+				// to return a non-terminated substring.
+				this_token.marker[result_length] = '\0';
 			}
 			else // make_result_persistent==false
 				this_token.marker = result;
@@ -1373,13 +1377,14 @@ push_this_token:
 		if (result_token.symbol == SYM_VAR)
 		{
 			result = result_token.var->Contents();
-			result_size = result_token.var->Length() + 1;
+			result_length = result_token.var->Length();
 		}
 		else
 		{
 			result = result_token.marker;
-			result_size = result_token.marker_length + 1; // At this stage, marker_length should always be valid, not -1.
+			result_length = result_token.marker_length; // At this stage, marker_length should always be valid, not -1.
 		}
+		result_size = result_length + 1;
 
 		// Notes about the macro below:
 		// Space is needed for whichever of the following is greater (since only one of the following is in
@@ -1432,7 +1437,8 @@ push_this_token:
 			// larger than capacity_of_our_buf_portion because other arg(s) exist in this line after ours
 			// that will be using a larger total portion of the buffer than ours.  Thus, the following must be
 			// done prior to free(), but memcpy() vs. memmove() is safe in any case:
-			tmemcpy(aTarget, result, result_size); // Copy from old location to the newly allocated one.
+			tmemcpy(aTarget, result, result_length); // Copy from old location to the newly allocated one.
+			aTarget[result_length] = '\0'; // Guarantee null-termination so it doesn't have to be done at an earlier stage.
 
 			free(aDerefBuf); // Free our original buffer since it's contents are no longer needed.
 			if (aDerefBufSize > LARGE_DEREF_BUF_SIZE)
@@ -1450,12 +1456,14 @@ push_this_token:
 			aDerefBufSize = new_buf_size; // Set for our caller.
 		}
 		else // Deref buf is already large enough to fit the string.
-			if (aTarget != result) // Currently, might be always true.
-				tmemmove(aTarget, result, result_size); // memmove() vs. memcpy() in this case, since source and dest might overlap (i.e. "target" may have been used to put temporary things into aTarget, but those things are no longer needed and now safe to overwrite).
+		{
+			tmemmove(aTarget, result, result_length); // memmove() vs. memcpy() in this case, since source and dest might overlap (i.e. "target" may have been used to put temporary things into aTarget, but those things are no longer needed and now safe to overwrite).
+			aTarget[result_length] = '\0'; // Guarantee null-termination so it doesn't have to be done at an earlier stage.
+		}
 		if (aResultToken)
 		{
 			aResultToken->marker = aTarget;
-			aResultToken->marker_length = result_size - 1;
+			aResultToken->marker_length = result_length;
 		}
 		aTarget += result_size;
 		goto normal_end_skip_output_var; // output_var was already checked higher above, so no need to consider it again.
