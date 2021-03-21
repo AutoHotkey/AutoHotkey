@@ -6900,15 +6900,25 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 	}
 	else if (aFuncNameLength)
 	{
-		Var *var = FindOrAddVar(aFuncName, aFuncNameLength
-			, FINDVAR_NO_BIF | (g->CurrentFunc ? VAR_DECLARE_LOCAL : VAR_DECLARE_GLOBAL));
-		if (!var)
-			return nullptr;
-		if (!var->IsUninitializedNormalVar())
+		ResultType result = OK;
+		VarList *varlist;
+		int insert_pos;
+		int scope = (g->CurrentFunc ? VAR_DECLARE_LOCAL : VAR_DECLARE_GLOBAL);
+		Var *var = FindVar(aFuncName, aFuncNameLength, FINDVAR_NO_BIF | scope, &varlist, &insert_pos, &result);
+		if (var)
 		{
+			// Anything found at this early stage must have been created by a prior declaration
+			// or predefined.  Treat it as an error even if var is uninitialized, otherwise:
+			//  1) "static x" or "global x" prior to the function would affect its scope/duration
+			//     in a way that is problematic for closures and probably unintentional.
+			//  2) It would be possible to declare the function as local/global prior to defining
+			//     it, but not afterward (as the conflict would be detected by ParseAndAddLine).
 			ConflictingDeclarationError(_T("function"), var);
 			return nullptr;
 		}
+		var = AddVar(aFuncName, aFuncNameLength, varlist, insert_pos, scope);
+		if (!var)
+			return nullptr;
 		var->Assign(the_new_func);
 		var->MakeReadOnly();
 	}
