@@ -16460,15 +16460,9 @@ BIF_DECL(BIF_Trim) // L31
 {
 	BuiltInFunctionID trim_type = _f_callee_id;
 
-	LPTSTR buf = _f_retval_buf;
+	TCHAR buf[MAX_NUMBER_SIZE]; // Not using _f_retval_buf because behaviour is undefined for wmemcpy with overlapping source and destination, and pure numbers are rare here.
 	size_t extract_length;
 	LPTSTR str = ParamIndexToString(0, buf, &extract_length);
-
-	if (str == buf) // IS_NUMERIC(aParam[0]->symbol)
-	{
-		// Take a shortcut for SYM_INTEGER/SYM_FLOAT.
-		_f_return_p(str, extract_length);
-	}
 
 	LPTSTR result = str; // Prior validation has ensured at least 1 param.
 
