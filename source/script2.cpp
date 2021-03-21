@@ -4637,15 +4637,21 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 	// This is done so that scripts can be compiled more securely, making it difficult for anyone
 	// to use ListLines to see the author's source code.  Rather than make exceptions for things
 	// like KeyHistory, it seems best to forbid all information reporting except in cases where
-	// existing info in the main window -- which must have gotten their via an allowed command
+	// existing info in the main window -- which must have gotten there via an allowed function
 	// such as ListLines encountered in the script -- is being refreshed.  This is because in
 	// that case, the script author has given de facto permission for that loophole (and it's
 	// a pretty small one, not easy to exploit):
 	if (aRestricted && !g_AllowMainWindow && (current_mode == MAIN_MODE_NO_CHANGE || aMode != MAIN_MODE_REFRESH))
 	{
-		SendMessage(g_hWndEdit, WM_SETTEXT, 0, (LPARAM)
-			_T("Script info will not be shown because the \"Menu, Tray, MainWindow\"\r\n")
-			_T("command option was not enabled in the original script."));
+		// This used to set g_hWndEdit's text to an explanation for why the information will not
+		// be shown, but it would never be seen unless the window was shown by some other means.
+		// Since the menu items are disabled or removed, execution probably reached here as a
+		// result of direct PostMessage to the script, so whoever did it can probably deal with
+		// the lack of explanation (if the window was even visible).  The explanation contained
+		// obsolete syntax (Menu, Tray, MainWindow) and was removed rather than updated to reduce
+		// code size.  It seems unnecessary to even clear g_hWndEdit: either it's already empty,
+		// or content was placed there deliberately and was already accessible.
+		//SendMessage(g_hWndEdit, WM_SETTEXT, 0, (LPARAM)_T("Disabled"));
 		return OK;
 	}
 #endif
