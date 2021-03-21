@@ -4375,6 +4375,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					//  - Declaring local but found a static/global in conflicts, or vice versa.
 					//  - Declaring static but found a global in varlist, or vice versa.
 					//  - Declaring local but found a parameter in varlist.
+					//  - Declaring a built-in variable as local or static.
 					// But permit the following:
 					//  - Exact duplicate declarations, such as for two different code paths.
 					if (var->Scope() != declare_type)
@@ -4382,13 +4383,6 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				}
 				else
 					var = global_var;
-				
-				switch (var->Type())
-				{
-				case VAR_CONSTANT:
-				case VAR_VIRTUAL: // Shouldn't be declared either way (global or local).
-					return ConflictingDeclarationError(Var::DeclarationType(declare_type), var);
-				}
 
 				item_end = omit_leading_whitespace(item_end); // Move up to the next comma, assignment-op, or '\0'.
 
