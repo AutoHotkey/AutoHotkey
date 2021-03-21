@@ -11705,7 +11705,8 @@ ResultType RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFla
 	{
 	case M_Count: _o_return(mPatternCount - 1);
 	case M_Mark: _o_return(mMark ? mMark : _T(""));
-	case M___Enum: _o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&RegExMatchObject::GetEnumItem)));
+	case M___Enum: _o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 1)
+		, static_cast<IndexEnumerator::Callback>(&RegExMatchObject::GetEnumItem)));
 	}
 
 	int p;

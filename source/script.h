@@ -1961,16 +1961,16 @@ public:
 class IndexEnumerator : public EnumBase
 {
 public:
-	typedef ResultType (Object::* Callback)(UINT &aIndex, Var *aOutputVar1, Var *aOutputVar2);
+	typedef ResultType (Object::* Callback)(UINT &aIndex, Var *aOutputVar1, Var *aOutputVar2, int aVarCount);
 private:
 	Object *mObject;
 	UINT mIndex = UINT_MAX;
 	Callback mGetItem;
 public:
-	IndexEnumerator(Object *aObject, Callback aGetItem) : mObject(aObject), mGetItem(aGetItem)
+	IndexEnumerator(Object *aObject, int aVarCount, Callback aGetItem) : mObject(aObject), mGetItem(aGetItem)
 	{
 		mObject->AddRef();
-		mParamCount = 2;
+		mParamCount = aVarCount;
 		SetBase(EnumBase::sPrototype);
 	}
 	~IndexEnumerator()
@@ -2662,7 +2662,7 @@ public:
 	// unreliable (but maybe placing some limitations would solve that?).
 	BOOL IsMonitoring(GuiEventType aEvent) { return mEvents.IsMonitoring(aEvent); }
 
-	ResultType GetEnumItem(UINT &aIndex, Var *, Var *);
+	ResultType GetEnumItem(UINT &aIndex, Var *, Var *, int);
 
 	static IObject* CreateDropArray(HDROP hDrop);
 	ResultType SetMenu(ExprTokenType &aParam);

@@ -160,11 +160,16 @@ static Array* TokenToArray(ExprTokenType &token)
 
 
 // Enumerator for GuiType objects.
-ResultType GuiType::GetEnumItem(UINT &aIndex, Var *aOutputVar1, Var *aOutputVar2)
+ResultType GuiType::GetEnumItem(UINT &aIndex, Var *aOutputVar1, Var *aOutputVar2, int aVarCount)
 {
 	if (aIndex >= mControlCount) // Use >= vs. == in case the Gui was destroyed.
 		return CONDITION_FALSE;
 	GuiControlType* ctrl = mControl[aIndex];
+	if (aVarCount < 2) // `for x in myGui` or `[myGui*]`
+	{
+		aOutputVar2 = aOutputVar1; // Return the more useful value in single-var mode: the control object.
+		aOutputVar1 = nullptr;
+	}
 	if (aOutputVar1)
 		aOutputVar1->AssignHWND(ctrl->hwnd);
 	if (aOutputVar2)
@@ -323,7 +328,8 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 		}
 		case M___Enum:
 		{
-			_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&GuiType::GetEnumItem)));
+			_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 1)
+				, static_cast<IndexEnumerator::Callback>(&GuiType::GetEnumItem)));
 		}
 		case M_OnEvent:
 		{

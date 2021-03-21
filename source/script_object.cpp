@@ -1278,12 +1278,14 @@ ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 
 ResultType Object::OwnProps(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&Object::GetEnumProp)));
+	_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 1)
+		, static_cast<IndexEnumerator::Callback>(&Object::GetEnumProp)));
 }
 
 ResultType Map::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&Map::GetEnumItem)));
+	_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 1)
+		, static_cast<IndexEnumerator::Callback>(&Map::GetEnumItem)));
 }
 
 ResultType Object::HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -2006,7 +2008,8 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		_o_throw_oom;
 
 	case M___Enum:
-		_o_return(new IndexEnumerator(this, static_cast<IndexEnumerator::Callback>(&Array::GetEnumItem)));
+		_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 1)
+			, static_cast<IndexEnumerator::Callback>(&Array::GetEnumItem)));
 	}
 	return INVOKE_NOT_HANDLED;
 }
@@ -2023,11 +2026,11 @@ Array::index_t Array::ParamToZeroIndex(ExprTokenType &aParam)
 }
 
 
-ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved)
+ResultType Array::GetEnumItem(UINT &aIndex, Var *aVal, Var *aReserved, int aVarCount)
 {
 	if (aIndex < mLength)
 	{
-		if (aReserved)
+		if (aVarCount > 1)
 		{
 			// Put the index first, only when there are two parameters.
 			if (aVal)
@@ -2080,11 +2083,11 @@ bool EnumBase::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 
 ResultType IndexEnumerator::Next(Var *var0, Var *var1)
 {
-	return (mObject->*mGetItem)(++mIndex, var0, var1);
+	return (mObject->*mGetItem)(++mIndex, var0, var1, mParamCount);
 }
 
 
-ResultType Object::GetEnumProp(UINT &aIndex, Var *aName, Var *aVal)
+ResultType Object::GetEnumProp(UINT &aIndex, Var *aName, Var *aVal, int aVarCount)
 {
 	for  ( ; aIndex < mFields.Length(); ++aIndex)
 	{
@@ -2135,7 +2138,7 @@ ResultType Object::GetEnumProp(UINT &aIndex, Var *aName, Var *aVal)
 }
 
 
-ResultType Map::GetEnumItem(UINT &aIndex, Var *aKey, Var *aVal)
+ResultType Map::GetEnumItem(UINT &aIndex, Var *aKey, Var *aVal, int aVarCount)
 {
 	if (aIndex < mCount)
 	{
@@ -2161,13 +2164,13 @@ ResultType Map::GetEnumItem(UINT &aIndex, Var *aKey, Var *aVal)
 }
 
 
-ResultType RegExMatchObject::GetEnumItem(UINT &aIndex, Var *aKey, Var *aVal)
+ResultType RegExMatchObject::GetEnumItem(UINT &aIndex, Var *aKey, Var *aVal, int aVarCount)
 {
 	if (aIndex >= (UINT)mPatternCount)
 		return CONDITION_FALSE;
 	// In single-var mode, return the subpattern values.
 	// Otherwise, return the subpattern names first and values second.
-	if (!aVal)
+	if (aVarCount < 2)
 	{
 		aVal = aKey;
 		aKey = nullptr;
