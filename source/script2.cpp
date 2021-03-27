@@ -10983,6 +10983,8 @@ has_valid_return_type:
 			}
 		}
 		ExprTokenType &this_param = *aParam[i + 1];
+		if (this_param.symbol == SYM_MISSING)
+			_f_throw(ERR_PARAM_REQUIRED);
 
 		switch (this_dyna_param.type)
 		{
