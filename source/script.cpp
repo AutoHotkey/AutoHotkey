@@ -13011,7 +13011,7 @@ ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aE
 		sntprintf(msg, _countof(msg), _T("Parameter #%i of %s is invalid."), aIndex + 1, g_Debugger.WhatThrew());
 #else
 	if (aExpectedType)
-		sntprintf(msg, _countof(msg), _T("Parameter #%i requires a%s, but a%s %s was passed.")
+		sntprintf(msg, _countof(msg), _T("Parameter #%i requires a%s %s, but received a%s %s.")
 			, aIndex + 1, an(aExpectedType), aExpectedType, an(actual_type), actual_type);
 	else
 		sntprintf(msg, _countof(msg), _T("Parameter #%i invalid."), aIndex + 1);
