@@ -14015,6 +14015,17 @@ BIF_DECL(BIF_Float)
 
 
 
+BIF_DECL(BIF_Number)
+{
+	if (aParamCount > 2)
+		_f_throw(ERR_TOO_MANY_PARAMS);
+	++aParam;
+	if (!ParamIndexToNumber(0, aResultToken))
+		_f_throw_param(0, _T("Number"));
+}
+
+
+
 BIF_DECL(BIF_Mod)
 {
 	// Load-time validation has already ensured there are exactly two parameters.

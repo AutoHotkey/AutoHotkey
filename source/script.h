@@ -3279,6 +3279,7 @@ BIF_DECL(BIF_Round);
 BIF_DECL(BIF_FloorCeil);
 BIF_DECL(BIF_Integer);
 BIF_DECL(BIF_Float);
+BIF_DECL(BIF_Number);
 BIF_DECL(BIF_Mod);
 BIF_DECL(BIF_Abs);
 BIF_DECL(BIF_Sin);

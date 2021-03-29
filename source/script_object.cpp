@@ -2992,7 +2992,7 @@ Object *Object::CreateRootPrototypes()
 
 	DefineClasses(anyClass, sAnyPrototype, {
 		{_T("Primitive"), &Object::sPrimitivePrototype, no_ctor, no_members, 0, {
-			{_T("Number"), &Object::sNumberPrototype, no_ctor, no_members, 0, {
+			{_T("Number"), &Object::sNumberPrototype, BIF_Number, no_members, 0, {
 				{_T("Float"), &Object::sFloatPrototype, BIF_Float},
 				{_T("Integer"), &Object::sIntegerPrototype, BIF_Integer}
 			}},
