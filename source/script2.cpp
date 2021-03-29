@@ -4266,6 +4266,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			// now handled this way also so that owned windows won't be hidden when
 			// the main window is hidden.
 			ShowWindow(g_hWnd, SW_HIDE);
+			g_script.ExitIfNotPersistent(EXIT_CLOSE);
 			return 0;
 		}
 		break;

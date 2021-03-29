@@ -1253,7 +1253,8 @@ bool Script::IsPersistent()
 		|| g_MsgMonitor.Count() // At least one message monitor is active (installed by OnMessage).
 		|| mOnClipboardChange.Count() // The script is monitoring clipboard changes.
 		|| g_input // At least one active Input or InputHook (but Input would imply there is a script thread running).
-		|| (mNIC.hWnd && mTrayMenu->ContainsCustomItems())) // The tray icon is visible and its menu has custom items.
+		|| (mNIC.hWnd && mTrayMenu->ContainsCustomItems()) // The tray icon is visible and its menu has custom items.
+		|| IsWindowVisible(g_hWnd))
 		return true;
 	for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
 		if (IsWindowVisible(gui->mHwnd)) // A GUI is visible.
