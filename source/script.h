@@ -3038,6 +3038,7 @@ public:
 	void EnableClipboardListener(bool aEnable);
 	void EnableOrDisableViewMenuItems(HMENU aMenu, UINT aFlags);
 	void CreateTrayIcon();
+	void RestoreTrayIcon();
 	void UpdateTrayIcon(bool aForceUpdate = false);
 	ResultType AutoExecSection();
 	ResultType Edit();

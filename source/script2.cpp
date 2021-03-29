@@ -5780,8 +5780,7 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		// The following iMsg can't be in the switch() since it's not constant:
 		if (iMsg == WM_TASKBARCREATED && !g_NoTrayIcon) // !g_NoTrayIcon --> the tray icon should be always visible.
 		{
-			g_script.CreateTrayIcon();
-			g_script.UpdateTrayIcon(true);  // Force the icon into the correct pause, suspend, or mIconFrozen state.
+			g_script.RestoreTrayIcon();
 			// And now pass this iMsg on to DefWindowProc() in case it does anything with it.
 		}
 		
