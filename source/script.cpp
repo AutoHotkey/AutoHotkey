@@ -938,13 +938,6 @@ ResultType Script::CreateWindows()
 		ShowWindow(g_hWnd, SW_MINIMIZE);
 		SetWindowLong(g_hWnd, GWL_EXSTYLE, 0); // Give the main window back its taskbar button.
 	}
-	// Note: When the window is not minimized, task manager reports that a simple script (such as
-	// one consisting only of the single line "#Persistent") uses 2600 KB of memory vs. ~452 KB if
-	// it were immediately minimized.  That is probably just due to the vagaries of how the OS
-	// manages windows and memory and probably doesn't actually impact system performance to the
-	// degree indicated.  In other words, it's hard to imagine that the failure to do
-	// ShowWidnow(g_hWnd, SW_MINIMIZE) unconditionally upon startup (which causes the side effects
-	// discussed further above) significantly increases the actual memory load on the system.
 
 	g_hAccelTable = LoadAccelerators(g_hInstance, MAKEINTRESOURCE(IDR_ACCELERATOR1));
 
@@ -1249,7 +1242,7 @@ bool Script::IsPersistent()
 	if (Hotkey::sHotkeyCount || Hotstring::sHotstringCount // At least one hotkey or hotstring exists.
 		// No attempt is made to determine if the hotkeys/hotstrings are enabled, since even if they
 		// are, it's impossible to detect whether #HotIf will allow them to ever execute.
-		|| g_persistent // #Persistent has been used somewhere in the script.
+		|| g_persistent // Persistent() has been used somewhere in the script.
 		|| g_script.mTimerEnabledCount // At least one script timer is currently enabled.
 		|| g_MsgMonitor.Count() // At least one message monitor is active (installed by OnMessage).
 		|| mOnClipboardChange.Count() // The script is monitoring clipboard changes.
@@ -3675,11 +3668,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	if (IS_DIRECTIVE_MATCH(_T("#NoTrayIcon")))
 	{
 		g_NoTrayIcon = true;
-		return CONDITION_TRUE;
-	}
-	if (IS_DIRECTIVE_MATCH(_T("#Persistent")))
-	{
-		g_persistent = true;
 		return CONDITION_TRUE;
 	}
 	if (IS_DIRECTIVE_MATCH(_T("#SingleInstance")))
@@ -10017,7 +10005,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 						g_script.FreeExceptionToken(thrown_token);
 					if (res == FAIL || res == EARLY_EXIT)
 						// Above: It's borderline whether Exit should be valid here, but it's allowed for
-						// two reasons: 1) if the script was non-#Persistent it would have already terminated
+						// two reasons: 1) if the script was non-persistent it could have already terminated
 						// anyway, and 2) it's only a question of whether to show a message before exiting.
 						return res;
 					// The remaining cases are all invalid jumps/control flow statements.  All such cases
