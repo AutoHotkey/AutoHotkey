@@ -10363,6 +10363,19 @@ BIF_DECL(BIF_SetBIV)
 
 
 
+BIF_DECL(BIF_Persistent)
+{
+	// Need to set a return value explicitly, since the default is effectively StrPtr(""), not "".
+	// Returning the old value might have some use, but if the caller doesn't want its value to change,
+	// something awkward like "Persistent(isPersistent := Persistent())" is needed.  Rather than just
+	// returning the current status, Persistent() makes the script persistent because that's likely to
+	// be its most common use by far, and it's what users familiar with the old #Persistent may expect.
+	_f_set_retval_i(g_persistent);
+	g_persistent = ParamIndexToOptionalBOOL(0, true);
+}
+
+
+
 ////////////////////////
 // BUILT-IN FUNCTIONS //
 ////////////////////////
