@@ -1245,7 +1245,7 @@ bool Script::IsPersistent()
 		|| g_persistent // Persistent() has been used somewhere in the script.
 		|| g_script.mTimerEnabledCount // At least one script timer is currently enabled.
 		|| mOnClipboardChange.Count() // The script is monitoring clipboard changes.
-		|| g_input // At least one active Input or InputHook (but Input would imply there is a script thread running).
+		|| g_input // At least one active InputHook.
 		|| IsWindowVisible(g_hWnd))
 		return true;
 	// OnMessage does not make the script persistent because:
