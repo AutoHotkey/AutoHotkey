@@ -1244,11 +1244,23 @@ bool Script::IsPersistent()
 		// are, it's impossible to detect whether #HotIf will allow them to ever execute.
 		|| g_persistent // Persistent() has been used somewhere in the script.
 		|| g_script.mTimerEnabledCount // At least one script timer is currently enabled.
-		|| g_MsgMonitor.Count() // At least one message monitor is active (installed by OnMessage).
 		|| mOnClipboardChange.Count() // The script is monitoring clipboard changes.
 		|| g_input // At least one active Input or InputHook (but Input would imply there is a script thread running).
 		|| IsWindowVisible(g_hWnd))
 		return true;
+	// OnMessage does not make the script persistent because:
+	//  1) It has too many uses to assume that the author would want the script to be persistent
+	//     (which would probably only be in cases where OnMessage is the main purpose of the script,
+	//     such as if it just idles until a command is received via WM_COPYDATA or other message).
+	//  2) It's often used in conjunction with a GUI, and in such cases it's probably more convenient
+	//     to rely on other logic to keep the script running while the GUI is visible, and allow it to
+	//     exit when the GUI is closed.
+	//  3) Message monitors that are intended to keep the script running probably won't be removed,
+	//     so checking the number of active monitors here at runtime doesn't offer much benefit vs.
+	//     requiring the script to call Persistent() if needed.
+	//  4) The only alternatives to OnMessage are generally window subclassing and hooks, which come
+	//     with various problems, such as spamming ListLines, interacting badly with Pause/A_IsPaused
+	//     (due to thread-starting messages passing through the window proc), and others.
 	// Adding custom items to A_TrayMenu does not make the script persistent because:
 	//  1) It could be something like a slight modification to a standard item's behaviour,
 	//     or something else that isn't intended to keep the script running.
