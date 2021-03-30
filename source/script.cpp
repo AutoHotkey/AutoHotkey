@@ -1247,9 +1247,18 @@ bool Script::IsPersistent()
 		|| g_MsgMonitor.Count() // At least one message monitor is active (installed by OnMessage).
 		|| mOnClipboardChange.Count() // The script is monitoring clipboard changes.
 		|| g_input // At least one active Input or InputHook (but Input would imply there is a script thread running).
-		|| (mNIC.hWnd && mTrayMenu->ContainsCustomItems()) // The tray icon is visible and its menu has custom items.
 		|| IsWindowVisible(g_hWnd))
 		return true;
+	// Adding custom items to A_TrayMenu does not make the script persistent because:
+	//  1) It could be something like a slight modification to a standard item's behaviour,
+	//     or something else that isn't intended to keep the script running.
+	//  2) Custom items usually aren't removed, so having checks for them at runtime is not as helpful
+	//     as some of the conditions above, like timers and visible windows.  When they are removed, it
+	//     is always a direct action of the code, not some external event.
+	//  3) If adding custom items made the script persistent, it can be worked around by intercepting
+	//     right-clicks on the tray icon and showing some other menu, but replicating the Pause/Suspend
+	//     checkmarks and AddStandard() behaviour is surprisingly complicated.  By contrast, calling
+	//     Persistent() before/after adding the custom items is trivial.
 	for (GuiType* gui = g_firstGui; gui; gui = gui->mNextGui)
 		if (IsWindowVisible(gui->mHwnd)) // A GUI is visible.
 			return true;

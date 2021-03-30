@@ -2177,7 +2177,6 @@ public:
 	UserMenuItem *FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bool &aByPos);
 	UserMenuItem *FindItemByID(UINT aID);
 	bool ContainsMenu(UserMenu *aMenu);
-	bool ContainsCustomItems();
 	void UpdateAccelerators();
 	// L17: Functions for menu icons.
 	ResultType SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int aIconNumber, int aWidth);

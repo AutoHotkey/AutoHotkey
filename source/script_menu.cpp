@@ -1288,17 +1288,6 @@ bool UserMenu::ContainsMenu(UserMenu *aMenu)
 
 
 
-bool UserMenu::ContainsCustomItems()
-// Returns true if the menu contains items other than the standard items.
-{
-	for (UserMenuItem *mi = mFirstMenuItem; mi; mi = mi->mNextMenuItem)
-		if (mi->mMenuID <= ID_USER_LAST)
-			return true;
-	return false;
-}
-
-
-
 void UserMenu::UpdateAccelerators()
 {
 	if (!mMenu)
