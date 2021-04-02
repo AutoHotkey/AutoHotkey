@@ -190,6 +190,8 @@ FuncEntry g_BIF[] =
 	BIF1(IniRead, 1, 4),
 	BIFA(IniWrite, 3, 4, ACT_INIWRITE),
 	BIF1(InputBox, 0, 4),
+	BIFi(InstallKeybdHook, 0, 2, BIF_InstallHook, HOOK_KEYBD),
+	BIFi(InstallMouseHook, 0, 2, BIF_InstallHook, HOOK_MOUSE),
 	BIF1(InStr, 2, 5),
 	BIFi(IsAlnum, 1, 2, BIF_IsTypeish, VAR_TYPE_ALNUM),
 	BIFi(IsAlpha, 1, 2, BIF_IsTypeish, VAR_TYPE_ALPHA),

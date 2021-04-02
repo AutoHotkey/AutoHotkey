@@ -10376,6 +10376,23 @@ BIF_DECL(BIF_Persistent)
 
 
 
+BIF_DECL(BIF_InstallHook)
+{
+	bool installing = ParamIndexToOptionalBOOL(0, true);
+	bool use_force = ParamIndexToOptionalBOOL(1, false);
+	auto which_hook = (HookType)_f_callee_id;
+	// When the second parameter is true, unconditionally remove the hook.  If the first parameter is
+	// also true, the hook will be reinstalled fresh.  Otherwise the hook will be left uninstalled,
+	// until something happens to reinstall it, such as Hotkey::ManifestAllHotkeysHotstringsHooks().
+	if (use_force)
+		AddRemoveHooks(GetActiveHooks() & ~which_hook);
+	Hotkey::RequireHook(which_hook, installing);
+	if (!use_force || installing)
+		Hotkey::ManifestAllHotkeysHotstringsHooks();
+}
+
+
+
 ////////////////////////
 // BUILT-IN FUNCTIONS //
 ////////////////////////

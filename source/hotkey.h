@@ -225,7 +225,7 @@ public:
 	static void TriggerJoyHotkeys(int aJoystickID, DWORD aButtonsNewlyDown);
 	void PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant);
 	static void ManifestAllHotkeysHotstringsHooks();
-	static void RequireHook(HookType aWhichHook) {sWhichHookAlways |= aWhichHook;}
+	static void RequireHook(HookType aWhichHook, bool aRequire = true) { aRequire ? sWhichHookAlways |= aWhichHook : sWhichHookAlways &= ~aWhichHook; }
 	static void MaybeUninstallHook();
 	static ResultType TextInterpret(LPTSTR aName, Hotkey *aThisHotkey);
 
