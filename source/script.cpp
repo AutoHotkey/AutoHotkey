@@ -3710,16 +3710,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			return ScriptError(ERR_PARAM1_INVALID, aBuf);
 		return CONDITION_TRUE;
 	}
-	if (IS_DIRECTIVE_MATCH(_T("#InstallKeybdHook")))
-	{
-		Hotkey::RequireHook(HOOK_KEYBD);
-		return CONDITION_TRUE;
-	}
-	if (IS_DIRECTIVE_MATCH(_T("#InstallMouseHook")))
-	{
-		Hotkey::RequireHook(HOOK_MOUSE);
-		return CONDITION_TRUE;
-	}
 	if (IS_DIRECTIVE_MATCH(_T("#UseHook")))
 	{
 		if (!ConvertDirectiveBool(parameter, g_ForceKeybdHook, true))
