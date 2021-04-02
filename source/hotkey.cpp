@@ -364,11 +364,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// THIRD PASS THROUGH THE HOTKEYS:
 	// v1.0.42: Reset sWhichHookNeeded because it's now possible that the hook was on before but no longer
 	// needed due to changing of a hotkey from hook to registered (for various reasons described above):
-	// v1.0.91: Make sure to leave the keyboard hook active if the script needs it for collecting input.
-	if (g_input) // There's an Input in progress (or just ending).
-		sWhichHookNeeded = HOOK_KEYBD;
-	else
-		sWhichHookNeeded = 0;
+	sWhichHookNeeded = 0;
 	for (i = 0; i < sHotkeyCount; ++i)
 	{
 		if (hk_is_inactive[i])
@@ -467,6 +463,7 @@ void Hotkey::ManifestAllHotkeysHotstringsHooks()
 	// this function was first called.  By design, the Num/Scroll/CapsLock AlwaysOn/Off setting
 	// stays in effect even when Suspend in ON.
 	if (   Hotstring::sEnabledCount
+		|| g_input // v1.0.91: Hook is needed for collecting input.
 		|| !(g_ForceNumLock == NEUTRAL && g_ForceCapsLock == NEUTRAL && g_ForceScrollLock == NEUTRAL)   )
 		sWhichHookNeeded |= HOOK_KEYBD;
 	if (g_BlockMouseMove || (g_HSResetUponMouseClick && Hotstring::sEnabledCount))

@@ -4167,7 +4167,7 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 		if (GetTickCount() - start_time > 500) // DWORD subtraction yields correct result even when TickCount has wrapped.
 			break;
 		// v1.0.43: The following sleeps for 0 rather than some longer time because:
-		// 1) In nearly all cases, this loop should do only one iteration because a Sleep(0) should guaranty
+		// 1) In nearly all cases, this loop should do only one iteration because a Sleep(0) should guarantee
 		//    that the hook thread will get a timeslice before our thread gets another.  In fact, it might not
 		//    do any iterations if the system preempts the main thread immediately when a message is posted to
 		//    a higher priority thread (especially one in its own process).
