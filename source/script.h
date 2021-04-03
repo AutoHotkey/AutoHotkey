@@ -3233,7 +3233,6 @@ BIV_DECL_R (BIV_TimeSincePriorHotkey);
 BIV_DECL_R (BIV_EndChar);
 BIV_DECL_RW(BIV_EventInfo);
 BIV_DECL_R (BIV_TimeIdle);
-BIV_DECL_R (BIV_TimeIdlePhysical);
 BIV_DECL_R (BIV_IPAddress);
 BIV_DECL_R (BIV_IsAdmin);
 BIV_DECL_R (BIV_PtrSize);
