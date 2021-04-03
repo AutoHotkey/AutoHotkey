@@ -99,8 +99,8 @@ extern DWORD g_InputTimeoutAt;
 
 extern UCHAR g_MaxThreadsPerHotkey;
 extern int g_MaxThreadsTotal;
-extern int g_MaxHotkeysPerInterval;
-extern int g_HotkeyThrottleInterval;
+extern UINT g_MaxHotkeysPerInterval;
+extern UINT g_HotkeyThrottleInterval;
 extern bool g_MaxThreadsBuffer;
 extern bool g_SuspendExempt;
 extern SendLevelType g_InputLevel;

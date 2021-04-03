@@ -872,8 +872,8 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 	// unreliable is when the true difference between the past and future
 	// tickcounts itself is greater than about 49 days:
 	time_until_now = (sTimeNow - sTimePrev);
-	if (display_warning = (throttled_key_count > (DWORD)g_MaxHotkeysPerInterval
-		&& time_until_now < (DWORD)g_HotkeyThrottleInterval))
+	if (display_warning = (throttled_key_count > g_MaxHotkeysPerInterval
+		&& time_until_now < g_HotkeyThrottleInterval))
 	{
 		// The moment any dialog is displayed, hotkey processing is halted since this
 		// app currently has only one thread.
@@ -900,7 +900,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 		sDialogIsDisplayed = false;
 	}
 	// The display_warning var is needed due to the fact that there's an OR in this condition:
-	if (display_warning || time_until_now > (DWORD)g_HotkeyThrottleInterval)
+	if (display_warning || time_until_now > g_HotkeyThrottleInterval)
 	{
 		// Reset the sliding interval whenever it expires.  Doing it this way makes the
 		// sliding interval more sensitive than alternate methods might be.

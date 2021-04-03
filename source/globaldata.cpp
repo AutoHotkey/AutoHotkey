@@ -102,8 +102,8 @@ int g_MaxThreadsTotal = MAX_THREADS_DEFAULT;
 // key auto-repeat feature to work on most systems without triggering the warning dialog.
 // In any case, using auto-repeat with a hotkey is pretty rare for most people, so it's best
 // to keep these values conservative:
-int g_MaxHotkeysPerInterval = 70; // Increased to 70 because 60 was still causing the warning dialog for repeating keys sometimes.  Increased from 50 to 60 for v1.0.31.02 since 50 would be triggered by keyboard auto-repeat when it is set to its fastest.
-int g_HotkeyThrottleInterval = 2000; // Milliseconds.
+UINT g_MaxHotkeysPerInterval = 70; // Increased to 70 because 60 was still causing the warning dialog for repeating keys sometimes.  Increased from 50 to 60 for v1.0.31.02 since 50 would be triggered by keyboard auto-repeat when it is set to its fastest.
+UINT g_HotkeyThrottleInterval = 2000; // Milliseconds.
 bool g_MaxThreadsBuffer = false;  // This feature usually does more harm than good, so it defaults to OFF.
 bool g_SuspendExempt = false;
 SendLevelType g_InputLevel = 0;

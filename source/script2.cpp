@@ -9406,6 +9406,36 @@ BIV_DECL_W(BIV_StoreCapsLockMode_Set)
 	g->StoreCapslockMode = BivRValueToBOOL();
 }
 
+BIV_DECL_R(BIV_Hotkey)
+{
+	if (aVarName[2] == 'M') // A_MaxHotkeysPerInterval
+		_f_return_i(g_MaxHotkeysPerInterval);
+	if (aVarName[8] == 'I') // A_HotkeyInterval
+		_f_return_i(g_HotkeyThrottleInterval);
+	// A_HotkeyModifierTimeout
+	_f_return_i(g_HotkeyModifierTimeout);
+}
+
+BIV_DECL_W(BIV_Hotkey_Set)
+{
+	Throw_if_RValue_NaN();
+	int value = (int)BivRValueToInt64();
+	if (aVarName[2] == 'M') // A_MaxHotkeysPerInterval
+	{
+		if (value < 1)
+			_f_throw_value(ERR_INVALID_VALUE);
+		g_MaxHotkeysPerInterval = value;
+	}
+	else if (aVarName[8] == 'I') // A_HotkeyInterval
+	{
+		if (value < 0)
+			_f_throw_value(ERR_INVALID_VALUE);
+		g_HotkeyThrottleInterval = value;
+	}
+	else // A_HotkeyModifierTimeout
+		g_HotkeyModifierTimeout = value;
+}
+
 BIV_DECL_R(BIV_IsPaused) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
 {
 	// Although A_IsPaused could indicate how many threads are paused beneath the current thread,
