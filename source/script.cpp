@@ -3860,25 +3860,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			return ScriptError(ERR_PARAM1_INVALID, parameter);
 		return CONDITION_TRUE;
 	}
-	if (IS_DIRECTIVE_MATCH(_T("#KeyHistory")))
-	{
-		if (parameter)
-		{
-			g_MaxHistoryKeys = ATOI(parameter);  // parameter was set to the right position by the above macro
-			if (g_MaxHistoryKeys < 0)
-				g_MaxHistoryKeys = 0;
-			else if (g_MaxHistoryKeys > 500)
-				g_MaxHistoryKeys = 500;
-			// Above: There are two reasons for limiting the history file to 500 keystrokes:
-			// 1) GetHookStatus() only has a limited size buffer in which to transcribe the keystrokes.
-			//    500 events is about what you would expect to fit in a 32 KB buffer (it the unlikely event
-			//    that the transcribed events create too much text, the text will be truncated, so it's
-			//    not dangerous anyway).
-			// 2) To reduce the impression that AutoHotkey designed for key logging (the key history file
-			//    is in a very unfriendly format that type of key logging anyway).
-		}
-		return CONDITION_TRUE;
-	}
 	
 	if (IS_DIRECTIVE_MATCH(_T("#InputLevel")))
 	{
@@ -13470,7 +13451,7 @@ LPTSTR Script::ListKeyHistory(LPTSTR aBuf, int aBufSize) // aBufSize should be a
 	GetHookStatus(aBuf, BUF_SPACE_REMAINING);
 	aBuf += _tcslen(aBuf); // Adjust for what GetHookStatus() wrote to the buffer.
 	return aBuf + sntprintf(aBuf, BUF_SPACE_REMAINING, g_KeyHistory ? _T("\r\nPress [F5] to refresh.")
-		: _T("\r\nKey History has been disabled via #KeyHistory 0."));
+		: _T("\r\nKey History has been disabled via KeyHistory(0)."));
 }
 
 
