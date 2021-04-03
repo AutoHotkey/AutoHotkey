@@ -207,7 +207,7 @@ FuncEntry g_BIF[] =
 	BIFi(IsTime, 1, 1, BIF_IsTypeish, VAR_TYPE_TIME),
 	BIFi(IsUpper, 1, 2, BIF_IsTypeish, VAR_TYPE_UPPER),
 	BIFi(IsXDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_XDIGIT),
-	BIFA(KeyHistory, 0, 0, ACT_KEYHISTORY),
+	BIFA(KeyHistory, 0, 1, ACT_KEYHISTORY),
 	BIFn(KeyWait, 1, 2, BIF_Wait),
 	BIFA(ListHotkeys, 0, 0, ACT_LISTHOTKEYS),
 	BIFA(ListLines, 0, 1, ACT_LISTLINES),
@@ -11671,6 +11671,23 @@ ResultType Line::Perform()
 		return FileCreateShortcut(NINE_ARGS);
 
 	case ACT_KEYHISTORY:
+		if (*ARG1)
+		{
+			int value = ATOI(ARG1);
+			if (value < 0)
+				value = 0;
+			else if (value > 500)
+				value = 500;
+			// GetHookStatus() only has a limited size buffer in which to transcribe the keystrokes.
+			// 500 events is about what you would expect to fit in a 32 KB buffer (in the unlikely
+			// event that the transcribed events create too much text, the text will be truncated,
+			// so it's not dangerous anyway).
+			if (g_KeybdHook || g_MouseHook)
+				PostThreadMessage(g_HookThreadID, AHK_HOOK_SET_KEYHISTORY, value, 0);
+			else
+				SetKeyHistoryMax(value);
+			return OK;
+		}
 		return ShowMainWindow(MAIN_MODE_KEYHISTORY, false); // Pass "unrestricted" when the command is explicitly used in the script.
 	case ACT_LISTLINES:
 		if (!*ARG1)

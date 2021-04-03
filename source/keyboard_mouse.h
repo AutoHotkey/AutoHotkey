@@ -315,6 +315,7 @@ extern SendModes sSendMode;
 void DoKeyDelay(int aDelay = (sSendMode == SM_PLAY) ? g->KeyDelayPlay : g->KeyDelay);
 void DoMouseDelay();
 void UpdateKeyEventHistory(bool aKeyUp, vk_type aVK, sc_type aSC);
+void SetKeyHistoryMax(int aMax);
 #define KEYEVENT_PHYS(event_type, vk, sc) KeyEvent(event_type, vk, sc, NULL, false, KEY_PHYS_IGNORE)
 
 ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue);

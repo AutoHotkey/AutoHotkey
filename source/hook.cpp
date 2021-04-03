@@ -4321,6 +4321,10 @@ DWORD WINAPI HookThreadProc(LPVOID aUnused)
 			sHookSyncd = true;
 			break;
 
+		case AHK_HOOK_SET_KEYHISTORY:
+			SetKeyHistoryMax((int)msg.wParam);
+			break;
+
 		} // switch (msg.message)
 	} // for(;;)
 }

@@ -2968,6 +2968,26 @@ void UpdateKeyEventHistory(bool aKeyUp, vk_type aVK, sc_type aSC)
 
 
 
+// Allocates or resizes and resets g_KeyHistory.
+// Must be called from the hook thread if it's running, otherwise it can be called from the main thread.
+void SetKeyHistoryMax(int aMax)
+{
+	free(g_KeyHistory);
+	g_KeyHistory = aMax ? (KeyHistoryItem *)malloc(aMax * sizeof(KeyHistoryItem)) : nullptr;
+	if (g_KeyHistory)
+	{
+		ZeroMemory(g_KeyHistory, aMax * sizeof(KeyHistoryItem)); // Must be zeroed.
+		g_MaxHistoryKeys = aMax;
+		g_HistoryTickPrev = GetTickCount();
+		g_HistoryHwndPrev = NULL;
+	}
+	else
+		g_MaxHistoryKeys = 0;
+	g_KeyHistoryNext = 0;
+}
+
+
+
 ToggleValueType ToggleKeyState(vk_type aVK, ToggleValueType aToggleValue)
 // Toggle the given aVK into another state.  For performance, it is the caller's responsibility to
 // ensure that aVK is a toggleable key such as capslock, numlock, insert, or scrolllock.

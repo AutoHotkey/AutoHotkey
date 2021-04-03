@@ -40,6 +40,7 @@ enum UserMessages {AHK_HOOK_HOTKEY = WM_USER, AHK_HOTSTRING, AHK_USER_MENU, AHK_
 	, AHK_HOT_IF_EVAL	// HotCriterionAllowsFiring uses this to ensure expressions are evaluated only on the main thread.
 	, AHK_HOOK_SYNC // For WaitHookIdle().
 	, AHK_INPUT_END, AHK_INPUT_KEYDOWN, AHK_INPUT_CHAR, AHK_INPUT_KEYUP
+	, AHK_HOOK_SET_KEYHISTORY
 };
 // NOTE: TRY NEVER TO CHANGE the specific numbers of the above messages, since some users might be
 // using the Post/SendMessage commands to automate AutoHotkey itself.  Here is the original order
