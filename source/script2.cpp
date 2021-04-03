@@ -9436,6 +9436,37 @@ BIV_DECL_W(BIV_Hotkey_Set)
 		g_HotkeyModifierTimeout = value;
 }
 
+BIV_DECL_R(BIV_MenuMaskKey)
+{
+	if (!g_MenuMaskKeyVK && !g_MenuMaskKeySC)
+		_f_return_empty; // Return a "false" value to indicate there is no masking.
+	// For uniformity, simplicity and to avoid any loss of information, always return vkNNscNNN.
+	auto len = sntprintf(_f_retval_buf, _f_retval_buf_size, _T("vk%02Xsc%03X"), g_MenuMaskKeyVK, g_MenuMaskKeySC);
+	_f_return_p(_f_retval_buf, len);
+}
+
+BIV_DECL_W(BIV_MenuMaskKey_Set)
+{
+	auto keyname = BivRValueToString();
+	if (!*keyname) // Allow "" to mean "no masking".
+	{
+		g_MenuMaskKeyVK = 0;
+		g_MenuMaskKeySC = 0;
+		return;
+	}
+	vk_type vk;
+	sc_type sc;
+	// Testing shows that sending an event with zero VK but non-zero SC fails to suppress
+	// the Start menu (although it does suppress the window menu).  However, allowing all
+	// valid key strings seems more correct than requiring g_MenuMaskKeyVK != 0, and adds
+	// flexibility at very little cost.  Note that this use of TextToVKandSC()'s return
+	// value (vs. checking VK|SC) allows vk00sc000 to turn off masking altogether.
+	if (!TextToVKandSC(keyname, vk, sc))
+		_f_throw_value(ERR_INVALID_VALUE);
+	g_MenuMaskKeyVK = vk;
+	g_MenuMaskKeySC = sc;
+}
+
 BIV_DECL_R(BIV_IsPaused) // v1.0.48: Lexikos: Added BIV_IsPaused and BIV_IsCritical.
 {
 	// Although A_IsPaused could indicate how many threads are paused beneath the current thread,

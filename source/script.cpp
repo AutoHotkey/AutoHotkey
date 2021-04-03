@@ -472,6 +472,7 @@ VarEntry g_BIV_A[] =
 	A_(LoopRegType),
 	A_wx(MaxHotkeysPerInterval, BIV_Hotkey, BIV_Hotkey_Set),
 	A_x(MDay, BIV_DateTime),
+	A_w(MenuMaskKey),
 	A_x(Min, BIV_DateTime),
 	A_x(MM, BIV_DateTime),
 	A_x(MMM, BIV_MMM_DDD),
