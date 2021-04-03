@@ -1188,6 +1188,10 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aOptions, IObject *aCallba
 				if (variant)
 					variant->mPriority = _ttoi(cp + 1);
 				break;
+			case 'S':
+				if (variant)
+					variant->mSuspendExempt = (cp[1] != '0');
+				break;
 			case 'T':
 				if (variant)
 				{
