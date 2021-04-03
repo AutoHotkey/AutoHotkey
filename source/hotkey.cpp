@@ -883,7 +883,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 		// involved somewhere.  Avoiding floats altogether may reduce EXE size
 		// and maybe other benefits (due to it not being "loaded")?
 		sntprintf(error_text, _countof(error_text), _T("%u hotkeys have been received in the last %ums.\n\n")
-			_T("Do you want to continue?\n(see #MaxHotkeysPerInterval in the help file)")  // In case its stuck in a loop.
+			_T("Do you want to continue?\n(see A_MaxHotkeysPerInterval in the help file)")  // In case its stuck in a loop.
 			, throttled_key_count, time_until_now);
 
 		// Turn off any RunAgain flags that may be on, which in essence is the same as de-buffering
@@ -919,7 +919,7 @@ void Hotkey::PerformInNewThreadMadeByCaller(HotkeyVariant &aVariant)
 	// This is stored as an attribute of the script (semi-globally) rather than passed
 	// as a parameter to ExecUntil (and from their on to any calls to SendKeys() that it
 	// makes) because it's possible for SendKeys to be called asynchronously, namely
-	// by a timed subroutine, while #HotkeyModifierTimeout is still in effect,
+	// by a timed subroutine, while A_HotkeyModifierTimeout is still in effect,
 	// in which case we would want SendKeys() to take note of these modifiers even
 	// if it was called from an ExecUntil() other than ours here:
 	g_script.mThisHotkeyModifiersLR = mModifiersConsolidatedLR;

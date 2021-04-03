@@ -3800,32 +3800,6 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		return CONDITION_TRUE;
 	}
 
-	if (IS_DIRECTIVE_MATCH(_T("#HotkeyModifierTimeout")))
-	{
-		if (parameter)
-			g_HotkeyModifierTimeout = ATOI(parameter);  // parameter was set to the right position by the above macro
-		return CONDITION_TRUE;
-	}
-	if (IS_DIRECTIVE_MATCH(_T("#HotkeyInterval")))
-	{
-		if (parameter)
-		{
-			g_HotkeyThrottleInterval = ATOI(parameter);  // parameter was set to the right position by the above macro
-			if (g_HotkeyThrottleInterval < 10) // values under 10 wouldn't be useful due to timer granularity.
-				g_HotkeyThrottleInterval = 10;
-		}
-		return CONDITION_TRUE;
-	}
-	if (IS_DIRECTIVE_MATCH(_T("#MaxHotkeysPerInterval")))
-	{
-		if (parameter)
-		{
-			g_MaxHotkeysPerInterval = ATOI(parameter);  // parameter was set to the right position by the above macro
-			if (g_MaxHotkeysPerInterval < 1) // sanity check
-				g_MaxHotkeysPerInterval = 1;
-		}
-		return CONDITION_TRUE;
-	}
 	if (IS_DIRECTIVE_MATCH(_T("#MaxThreadsPerHotkey")))
 	{
 		if (parameter)

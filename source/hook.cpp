@@ -4209,7 +4209,7 @@ void AddRemoveHooks(HookType aHooksToBeActive, bool aChangeIsTemporary)
 		// Prevent hotkeys and other subroutines from running (which could happen via MsgBox's message pump)
 		// to avoid the possibility that the script will continue to call this function recursively, resulting
 		// in an infinite stack of MsgBoxes. This approach is similar to that used in Hotkey::Perform()
-		// for the #MaxHotkeysPerInterval warning dialog:
+		// for the A_MaxHotkeysPerInterval warning dialog:
 		g_AllowInterruption = FALSE; 
 		// Below is a generic message to reduce code size.  Failure is rare, but has been known to happen when
 		// certain types of games are running).
