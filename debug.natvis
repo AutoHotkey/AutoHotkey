@@ -8,7 +8,7 @@
     <DisplayString Condition="symbol == SYM_INTEGER">{value_int64}</DisplayString>
     <DisplayString Condition="symbol == SYM_FLOAT">{value_double}</DisplayString>
     <DisplayString Condition="symbol == SYM_OBJECT">{object}</DisplayString>
-    <DisplayString Condition="symbol == SYM_VAR">var</DisplayString>
+    <DisplayString Condition="symbol == SYM_VAR">{var}</DisplayString>
     <DisplayString>{symbol,en}</DisplayString>
     <Expand>
       <Item Name="value" Condition="symbol == SYM_STRING">marker</Item>
@@ -17,8 +17,18 @@
       <Item Name="value" Condition="symbol == SYM_FLOAT">value_double</Item>
       <Item Name="object" Condition="symbol == SYM_OBJECT">object</Item>
       <Item Name="var" Condition="symbol == SYM_VAR">var</Item>
-      
       <Item Name="callsite" Condition="symbol == SYM_FUNC">callsite</Item>
+    </Expand>
+  </Type>
+  <Type Name="Var">
+    <DisplayString Condition="mAttrib &amp; 0x10">{mName,sub} = {mContentsInt64}</DisplayString>
+    <DisplayString Condition="mAttrib &amp; 0x20">{mName,sub} = {mContentsDouble}</DisplayString>
+    <DisplayString Condition="mAttrib &amp; 0x40">{mName,sub} = {mObject}</DisplayString>
+    <DisplayString Condition="mType == VAR_ALIAS">{mName,sub} -> {mAliasFor}</DisplayString>
+    <DisplayString Condition="mAttrib &amp; 0x02">{mName,sub} is unset</DisplayString>
+    <DisplayString>{mName,sub} = {mCharContents,su}</DisplayString>
+    <Expand>
+      <Item Name="object" Condition="mAttrib &amp; 0x40">mObject</Item>
     </Expand>
   </Type>
   <Type Name="Func">
