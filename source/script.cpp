@@ -3792,7 +3792,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			// other caller, it will stop at end-of-string or ':', whichever comes first.
 			Hotstring::ParseOptions(parameter, g_HSPriority, g_HSKeyDelay, g_HSSendMode, g_HSCaseSensitive
 				, g_HSConformToCase, g_HSDoBackspace, g_HSOmitEndChar, g_HSSendRaw, g_HSEndCharRequired
-				, g_HSDetectWhenInsideWord, g_HSDoReset, g_HSSameLineAction);
+				, g_HSDetectWhenInsideWord, g_HSDoReset, g_HSSameLineAction, g_SuspendExemptHS);
 		}
 		return CONDITION_TRUE;
 	}

@@ -373,7 +373,7 @@ public:
 		, LPTSTR aReplacement, bool aHasContinuationSection, UCHAR aSuspend = FALSE);
 	static void ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
 		, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, SendRawType &aSendRaw
-		, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset, bool &aExecuteAction);
+		, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset, bool &aExecuteAction, bool &aSuspendExempt);
 	void ParseOptions(LPTSTR aOptions);
 
 	// Constructor & destructor:

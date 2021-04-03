@@ -2421,12 +2421,12 @@ Hotstring::Hotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR
 	, mOmitEndChar(g_HSOmitEndChar), mSendRaw(aHasContinuationSection ? SCM_RAW_TEXT : g_HSSendRaw)
 	, mEndCharRequired(g_HSEndCharRequired), mDetectWhenInsideWord(g_HSDetectWhenInsideWord), mDoReset(g_HSDoReset)
 	, mInputLevel(g_InputLevel)
-	, mSuspendExempt(g_SuspendExempt)
+	, mSuspendExempt(g_SuspendExempt || g_SuspendExemptHS)
 	, mConstructedOK(false)
 {
 	bool execute_action = false; // do not assign  mReplacement if execute_action is true.
 	ParseOptions(aOptions, mPriority, mKeyDelay, mSendMode, mCaseSensitive, mConformToCase, mDoBackspace
-		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, execute_action);
+		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, execute_action, mSuspendExempt);
 	
 	// To avoid memory leak, this is done only when it is certain the hotstring will be created:
 	if (   !(mString = SimpleHeap::Malloc(aHotstring))   )
@@ -2458,14 +2458,14 @@ void Hotstring::ParseOptions(LPTSTR aOptions)
 {
 	bool unused_X_option;
 	ParseOptions(aOptions, mPriority, mKeyDelay, mSendMode, mCaseSensitive, mConformToCase, mDoBackspace
-		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, unused_X_option);
+		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, unused_X_option, mSuspendExempt);
 }
 
 
 
 void Hotstring::ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, SendModes &aSendMode
 	, bool &aCaseSensitive, bool &aConformToCase, bool &aDoBackspace, bool &aOmitEndChar, SendRawType &aSendRaw
-	, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset, bool &aExecuteAction)
+	, bool &aEndCharRequired, bool &aDetectWhenInsideWord, bool &aDoReset, bool &aExecuteAction, bool &aSuspendExempt)
 {
 	// In this case, colon rather than zero marks the end of the string.  However, the string
 	// might be empty so check for that too.  In addition, this is now called from
@@ -2530,7 +2530,7 @@ void Hotstring::ParseOptions(LPTSTR aOptions, int &aPriority, int &aKeyDelay, Se
 			case 'I': aSendMode = SM_INPUT_FALLBACK_TO_PLAY; break;
 			case 'E': aSendMode = SM_EVENT; break;
 			case 'P': aSendMode = SM_PLAY; break;
-			//default: leave it unchanged.
+			default: aSuspendExempt = (*cp1 != '0'); break;
 			}
 			break;
 		case 'Z':
@@ -2609,7 +2609,7 @@ BIF_DECL(BIF_Hotstring)
 		bool unused_X_option; // 'X' option is required to be passed for each Hotstring() call, for clarity.
 		Hotstring::ParseOptions(name, g_HSPriority, g_HSKeyDelay, g_HSSendMode, g_HSCaseSensitive
 			, g_HSConformToCase, g_HSDoBackspace, g_HSOmitEndChar, g_HSSendRaw, g_HSEndCharRequired
-			, g_HSDetectWhenInsideWord, g_HSDoReset, unused_X_option);
+			, g_HSDetectWhenInsideWord, g_HSDoReset, unused_X_option, g_SuspendExemptHS);
 		return;
 	}
 
@@ -2640,7 +2640,7 @@ BIF_DECL(BIF_Hotstring)
 	bool detect_inside_word = g_HSDetectWhenInsideWord;
 	bool un; int iun; SendModes sm; SendRawType sr; // Unused.
 	if (*hotstring_options)
-		Hotstring::ParseOptions(hotstring_options, iun, iun, sm, case_sensitive, un, un, un, sr, un, detect_inside_word, un, un);
+		Hotstring::ParseOptions(hotstring_options, iun, iun, sm, case_sensitive, un, un, un, sr, un, detect_inside_word, un, un, un);
 	
 	IObject *action_obj = NULL;
 	if (!ParamIndexIsOmitted(1))

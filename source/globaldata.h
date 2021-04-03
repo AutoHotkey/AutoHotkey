@@ -103,6 +103,7 @@ extern UINT g_MaxHotkeysPerInterval;
 extern UINT g_HotkeyThrottleInterval;
 extern bool g_MaxThreadsBuffer;
 extern bool g_SuspendExempt;
+extern bool g_SuspendExemptHS;
 extern SendLevelType g_InputLevel;
 extern HotkeyCriterion *g_FirstHotCriterion, *g_LastHotCriterion;
 
