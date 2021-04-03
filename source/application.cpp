@@ -1701,23 +1701,9 @@ bool MsgMonitor(HWND aWnd, UINT aMsg, WPARAM awParam, LPARAM alParam, MSG *apMsg
 	// Consequently, the MSG_FILTER_MAX queuing effect will only occur for monitored messages that are
 	// numerically greater than WM_HOTKEY. Other messages will not be subject to the filter and thus
 	// will arrive here even when the script is currently uninterruptible, in which case it seems best
-	// to discard the message because the current design doesn't allow for interruptions. The design
-	// could be reviewed to find out what the consequences of interruption would be.  Also, the message
-	// could be suppressed (via return 1) and reposted, but if there are other messages already in
-	// the queue that qualify to fire a msg-filter (or even messages such as WM_LBUTTONDOWN that have
-	// a normal effect that relies on ordering), the messages would then be processed out of their
-	// original order, which would be very undesirable in many cases.
-	//
-	// Parts of the following are obsolete:
-	// In light of the above, INTERRUPTIBLE_IF_NECESSARY is used instead of INTERRUPTIBLE_IN_EMERGENCY
-	// to reduce on the unreliability of message filters that are numerically less than WM_HOTKEY.
-	// For example, if the user presses a hotkey and an instant later a qualified WM_LBUTTONDOWN arrives,
-	// the filter will still be able to run by interrupting the uninterruptible thread.  In this case,
-	// ResumeUnderlyingThread() sets g->AllowThreadToBeInterrupted to false for us in case the
-	// timer "TIMER_ID_UNINTERRUPTIBLE" fired for the new thread rather than for the old one (this
-	// prevents the interrupted thread from becoming permanently uninterruptible).
-	if (!INTERRUPTIBLE_IN_EMERGENCY)
-		return false;
+	// for flexibility to allow the interruption (the same is done for CreateCallback).
+	//if (!INTERRUPTIBLE_IN_EMERGENCY)
+	//	return false;
 
 	bool result = false; // Set default: Tell the caller to give this message any additional/default processing.
 	MsgMonitorInstance inst (g_MsgMonitor); // Register this instance so that index can be adjusted by BIF_OnMessage if an item is deleted.
