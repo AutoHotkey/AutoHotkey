@@ -197,10 +197,6 @@ extern DWORD g_TimeLastInputPhysical;
 extern DWORD g_TimeLastInputKeyboard;
 extern DWORD g_TimeLastInputMouse;
 
-#ifdef ENABLE_KEY_HISTORY_FILE
-extern bool g_KeyHistoryToFile;
-#endif
-
 
 // 9 might be better than 10 because if the granularity/timer is a little
 // off on certain systems, a Sleep(10) might really result in a Sleep(20),

@@ -452,10 +452,6 @@ int g_key_to_sc_count = _countof(g_key_to_sc);
 KeyHistoryItem *g_KeyHistory = NULL; // Array is allocated during startup.
 int g_KeyHistoryNext = 0;
 
-#ifdef ENABLE_KEY_HISTORY_FILE
-bool g_KeyHistoryToFile = false;
-#endif
-
 // These must be global also, since both the keyboard and mouse hook functions,
 // in addition to KeyEvent() when it's logging keys with only the mouse hook installed,
 // MUST refer to the same variables.  Otherwise, the elapsed time between keyboard and

@@ -1993,12 +1993,6 @@ LRESULT SuppressThisKeyFunc(const HHOOK aHook, LPARAM lParam, const vk_type aVK,
 		UpdateKeybdState(event, aVK, aSC, aKeyUp, true);
 	}
 
-#ifdef ENABLE_KEY_HISTORY_FILE
-	if (g_KeyHistoryToFile)
-		KeyHistoryToFile(NULL, pKeyHistoryCurr->event_type, pKeyHistoryCurr->key_up
-			, pKeyHistoryCurr->vk, pKeyHistoryCurr->sc);  // A fairly low overhead operation.
-#endif
-
 	// These should be posted only at the last possible moment before returning in order to
 	// minimize the chance that the main thread will receive and process the message before
 	// our thread can finish updating key states and other maintenance.  This has been proven
@@ -2074,11 +2068,6 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 				break;
 		}
 #endif
-#ifdef ENABLE_KEY_HISTORY_FILE
-		if (g_KeyHistoryToFile)
-			KeyHistoryToFile(NULL, pKeyHistoryCurr->event_type, pKeyHistoryCurr->key_up
-				, pKeyHistoryCurr->vk, pKeyHistoryCurr->sc);  // A fairly low overhead operation.
-#endif
 	}
 	else // Our caller is the keyboard hook.
 	{
@@ -2099,13 +2088,7 @@ LRESULT AllowIt(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lParam, cons
 			if (!CollectInput(event, aVK, aSC, aKeyUp, is_ignored, pKeyHistoryCurr, hs_wparam_to_post, hs_lparam_to_post)) // Key should be invisible (suppressed).
 				return SuppressThisKeyFunc(aHook, lParam, aVK, aSC, aKeyUp, aExtraInfo, pKeyHistoryCurr, aHotkeyIDToPost, hs_wparam_to_post, hs_lparam_to_post);
 
-		// Do these here since the above "return SuppressThisKey" will have already done it in that case.
-#ifdef ENABLE_KEY_HISTORY_FILE
-		if (g_KeyHistoryToFile)
-			KeyHistoryToFile(NULL, pKeyHistoryCurr->event_type, pKeyHistoryCurr->key_up
-				, pKeyHistoryCurr->vk, pKeyHistoryCurr->sc);  // A fairly low overhead operation.
-#endif
-
+		// Do this here since the above "return SuppressThisKey" will have already done it in that case.
 		UpdateKeybdState(event, aVK, aSC, aKeyUp, false);
 
 		// UPDATE: The Win-L and Ctrl-Alt-Del workarounds below are still kept in effect in spite of the

@@ -23,11 +23,6 @@ EXTERN_G;
 // The max number of keystrokes to Send prior to taking a break to pump messages:
 #define MAX_LUMP_KEYS 50
 
-// Logging keys to a file is disabled in the main version in an effort to prevent
-// AutoHotkey from being branded as a key logger or trojan by various security firms and
-// security software. Uncomment this line to re-enabled logging of keys to a file:
-// #define ENABLE_KEY_HISTORY_FILE
-
 // Maybe define more of these later, perhaps with ifndef (since they should be in the normal header, and probably
 // will be eventually):
 // ALREADY DEFINED: #define VK_HELP 0x2F
@@ -357,11 +352,6 @@ vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLa
 bool TextToVKandSC(LPTSTR aText, vk_type &aVK, sc_type &aSC, modLR_type *pModifiersLR = NULL, HKL aKeybdLayout = GetKeyboardLayout(0));
 vk_type TextToSpecial(LPTSTR aText, size_t aTextLength, KeyEventTypes &aEventTypem, modLR_type &aModifiersLR
 	, bool aUpdatePersistent);
-
-#ifdef ENABLE_KEY_HISTORY_FILE
-ResultType KeyHistoryToFile(LPTSTR aFilespec = NULL, TCHAR aType = '\0', bool aKeyUp = false
-	, vk_type aVK = 0, sc_type aSC = 0);
-#endif
 
 LPTSTR GetKeyName(vk_type aVK, sc_type aSC, LPTSTR aBuf, int aBufSize, LPTSTR aDefault = _T("not found"));
 sc_type vk_to_sc(vk_type aVK, bool aReturnSecondary = false);

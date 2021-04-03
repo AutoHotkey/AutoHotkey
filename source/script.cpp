@@ -207,7 +207,7 @@ FuncEntry g_BIF[] =
 	BIFi(IsTime, 1, 1, BIF_IsTypeish, VAR_TYPE_TIME),
 	BIFi(IsUpper, 1, 2, BIF_IsTypeish, VAR_TYPE_UPPER),
 	BIFi(IsXDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_XDIGIT),
-	BIFA(KeyHistory, 0, 2, ACT_KEYHISTORY),
+	BIFA(KeyHistory, 0, 0, ACT_KEYHISTORY),
 	BIFn(KeyWait, 1, 2, BIF_Wait),
 	BIFA(ListHotkeys, 0, 0, ACT_LISTHOTKEYS),
 	BIFA(ListLines, 0, 1, ACT_LISTLINES),
@@ -669,10 +669,6 @@ Script::~Script() // Destructor.
 		if (*buf) // "playing" or "stopped"
 			mciSendString(_T("close ") SOUNDPLAY_ALIAS, NULL, 0, NULL);
 	}
-
-#ifdef ENABLE_KEY_HISTORY_FILE
-	KeyHistoryToFile();  // Close the KeyHistory file if it's open.
-#endif
 
 	DeleteCriticalSection(&g_CriticalRegExCache); // g_CriticalRegExCache is used elsewhere for thread-safety.
 	OleUninitialize();
@@ -11675,34 +11671,6 @@ ResultType Line::Perform()
 		return FileCreateShortcut(NINE_ARGS);
 
 	case ACT_KEYHISTORY:
-#ifdef ENABLE_KEY_HISTORY_FILE
-		if (*ARG1 || *ARG2)
-		{
-			switch (ConvertOnOffToggle(ARG1))
-			{
-			case NEUTRAL:
-			case TOGGLE:
-				g_KeyHistoryToFile = !g_KeyHistoryToFile;
-				if (!g_KeyHistoryToFile)
-					KeyHistoryToFile();  // Signal it to close the file, if it's open.
-				break;
-			case TOGGLED_ON:
-				g_KeyHistoryToFile = true;
-				break;
-			case TOGGLED_OFF:
-				g_KeyHistoryToFile = false;
-				KeyHistoryToFile();  // Signal it to close the file, if it's open.
-				break;
-			// We know it's a variable because otherwise the loading validation would have caught it earlier:
-			case TOGGLE_INVALID:
-				return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, ARG1);
-			}
-			if (*ARG2) // The user also specified a filename, so update the target filename.
-				KeyHistoryToFile(ARG2);
-			return OK;
-		}
-#endif
-		// Otherwise:
 		return ShowMainWindow(MAIN_MODE_KEYHISTORY, false); // Pass "unrestricted" when the command is explicitly used in the script.
 	case ACT_LISTLINES:
 		if (!*ARG1)
