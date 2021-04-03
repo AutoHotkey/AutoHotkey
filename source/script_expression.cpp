@@ -175,15 +175,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					goto abort;
 				}
 
-				if (this_token.var->Type() == VAR_CONSTANT)
-				{
-					// There should be no need to AddRef() and add to to_free[], since even if
-					// a constant is local, it could only be released when the function returns.
-					this_token.var->ToTokenSkipAddRef(this_token);
-					goto push_this_token;
-				}
-
-				if (this_token.var->Type() == VAR_NORMAL || VARREF_IS_WRITE(this_token.var_usage))
+				if (this_token.var->Type() == VAR_NORMAL || this_token.var_usage != Script::VARREF_READ)
   				{
 					if (this_token.var->IsUninitializedNormalVar() && this_token.var_usage == Script::VARREF_READ)
 					{
@@ -193,7 +185,15 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with limited exceptions) is relied upon in several places such as built-in functions.
 					goto push_this_token;
   				}
-				
+
+				if (this_token.var->Type() == VAR_CONSTANT)
+				{
+					// There should be no need to AddRef() and add to to_free[], since even if
+					// a constant is local, it could only be released when the function returns.
+					this_token.var->ToTokenSkipAddRef(this_token);
+					goto push_this_token;
+				}
+
 				// FUTURE: This should be merged with the SYM_FUNC handling at some point to improve
 				// maintainability, reduce code size, and take advantage of SYM_FUNC's optimizations.
 				ResultToken result_token;
