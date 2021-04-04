@@ -3124,7 +3124,8 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 				{
 					if (!buf.EnsureCapacity(buf_length + next_buf_length + 1)) // -1 to account for the extra space added below.
 						return ScriptError(ERR_OUTOFMEM);
-					if (*next_buf != ',') // Insert space before expression operators so that built/combined expression works correctly (some operators like 'and', 'or' and concat currently require spaces on either side) and also for readability of ListLines.
+					if (*next_buf != ',' // Insert space before expression operators so that built/combined expression works correctly (some operators like 'and', 'or' and concat currently require spaces on either side) and also for readability of ListLines.
+						&& (*next_buf != '.' || IS_SPACE_OR_TAB(next_buf[1]))) // But don't insert a space for `.someproperty` or obscure cases like `.123` (`x .123` is never auto-concat; it's a literal number only in the presence of an operator like `x+.123`).
 						buf[buf_length++] = ' ';
 					tmemcpy(buf + buf_length, next_buf, next_buf_length + 1); // Append this line to prev. and include the zero terminator.
 					buf_length += next_buf_length;
