@@ -16622,6 +16622,7 @@ ResultType Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, Ex
 #ifndef CONFIG_DEBUGGER
 	if (ParamIndexIsOmitted(1) && g->CurrentFunc)
 		what = g->CurrentFunc->mName;
+	SetOwnProp(_T("Stack"), _T("")); // Avoid "unknown property" in compiled scripts.
 #else
 	DbgStack::Entry *stack_top = g_Debugger.mStack.mTop - 1;
 	if (stack_top->type == DbgStack::SE_BIF && _tcsicmp(what, stack_top->func->mName))
