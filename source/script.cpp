@@ -2971,12 +2971,10 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 			}
 
 			// v1.0.38.06: The following has been fixed to exclude "(:" and "(::".  These should be
-			// labels/hotkeys, not the start of a continuation section.  In addition, a line that starts
-			// with '(' but that ends with ':' should be treated as a label because labels such as
-			// "(label):" are far more common than something obscure like a continuation section whose
-			// join character is colon, namely "(Join:".
-			if (   !(in_continuation_section = (next_buf_length != -1 && *next_buf == '(' // Compare directly to -1 since length is unsigned.
-				&& next_buf[1] != ':' && next_buf[next_buf_length - 1] != ':'))   ) // Relies on short-circuit boolean order.
+			// labels/hotkeys, not the start of a continuation section.
+			// v2: Unlike v1, a line that starts with '(' but that ends with ':' is not a valid label,
+			// so should be treated as a continuation section, for cases like "(Join:".
+			if (   !(in_continuation_section = (next_buf_length != -1 && *next_buf == '(' && next_buf[1] != ':'))   ) // Compare directly to -1 since length is unsigned.
 			{
 				if (next_buf_length == -1)  // Compare directly to -1 since length is unsigned.
 					break;
