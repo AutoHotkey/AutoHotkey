@@ -16612,15 +16612,6 @@ LPTSTR TokenTypeString(ExprTokenType &aToken)
 
 
 
-BIF_DECL(BIF_Exception)
-{
-	Object *exc = Object::Create();
-	if (!exc)
-		_f_throw_oom;
-	exc->SetBase(ErrorPrototype::Error);
-	exc->Construct(aResultToken, aParam, aParamCount);
-}
-
 ResultType Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	LPTSTR message = ParamIndexIsOmitted(0) ? Type() : ParamIndexToString(0, _f_number_buf);

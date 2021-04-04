@@ -3364,9 +3364,6 @@ BIF_DECL(BIF_ComObjArray);
 BIF_DECL(BIF_ComObjQuery);
 
 
-BIF_DECL(BIF_Exception);
-
-
 BIF_DECL(BIF_Control);
 BIF_DECL(BIF_ControlClick);
 BIF_DECL(BIF_ControlFocus);

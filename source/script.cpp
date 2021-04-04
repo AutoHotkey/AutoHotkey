@@ -134,7 +134,6 @@ FuncEntry g_BIF[] =
 	BIFn(EditPaste, 2, 6, BIF_Control),
 	BIFn(EnvGet, 1, 1, BIF_Env),
 	BIFn(EnvSet, 1, 2, BIF_Env),
-	BIF1(Exception, 1, 3),
 	BIFA(Exit, 0, 1, ACT_EXIT),
 	BIFA(ExitApp, 0, 1, ACT_EXITAPP),
 	BIF1(Exp, 1, 1),
