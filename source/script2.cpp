@@ -4344,13 +4344,9 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		break; // Let DWP handle it.
 
 	case WM_SIZE:
-		if (hWnd == g_hWnd)
+		if (hWnd == g_hWnd && wParam != SIZE_MINIMIZED)
 		{
-			if (wParam == SIZE_MINIMIZED)
-				// Minimizing the main window hides it.
-				ShowWindow(g_hWnd, SW_HIDE);
-			else
-				MoveWindow(g_hWndEdit, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
+			MoveWindow(g_hWndEdit, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
 			return 0; // The correct return value for this msg.
 		}
 		break; // Let DWP handle it.
