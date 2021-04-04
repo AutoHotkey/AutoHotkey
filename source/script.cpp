@@ -6489,7 +6489,8 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
 		return NULL;
 
 	// Although at load time only the "Object" type can exist, dynamic_cast is used in case we're called at run-time:
-	if (  !(base_var->IsObject() && (base_object = dynamic_cast<Object *>(base_var->Object())))  )
+	if (  !(base_var->IsObject() && (base_object = dynamic_cast<Object *>(base_var->Object()))
+		&& base_object->IsDerivedFrom(Object::sClassPrototype))  ) // Rule out something silly like "class x extends MsgBox".
 		return NULL;
 
 	// Even if the loop below has no iterations, it initializes 'key' to the appropriate value:
