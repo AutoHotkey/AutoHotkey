@@ -4266,7 +4266,6 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 			// now handled this way also so that owned windows won't be hidden when
 			// the main window is hidden.
 			ShowWindow(g_hWnd, SW_HIDE);
-			g_script.ExitIfNotPersistent(EXIT_CLOSE);
 			return 0;
 		}
 		break;
@@ -4335,6 +4334,14 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		// creation of the window. If the application returns 1, the window is destroyed and
 		// the CreateWindowEx or CreateWindow function returns a NULL handle.
 		return 0;
+
+	case WM_WINDOWPOSCHANGED:
+		if (hWnd == g_hWnd && (LPWINDOWPOS(lParam)->flags & SWP_HIDEWINDOW))
+		{
+			g_script.ExitIfNotPersistent(EXIT_CLOSE);
+			return 0;
+		}
+		break; // Let DWP handle it.
 
 	case WM_SIZE:
 		if (hWnd == g_hWnd)
