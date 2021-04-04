@@ -4826,6 +4826,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		ConvertEscapeSequences(action_args, literal_map);
 	}
 
+	// v2: All statements accept expressions by default, except goto/break/continue.
+	if (aActionType > ACT_LAST_JUMP || aActionType < ACT_FIRST_JUMP)
+		all_args_are_expressions = true;
+
 	if (aActionType == ACT_FOR)
 	{
 		// Validate "For" syntax and translate to conventional command syntax.
@@ -4846,10 +4850,11 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		cp[0] = cp == action_args ? ' ' : g_delimiter;
 		cp[1] = ' ';
 	}
-
-	// v2: All statements accept expressions by default, except goto/break/continue.
-	if (aActionType > ACT_LAST_JUMP || aActionType < ACT_FIRST_JUMP)
-		all_args_are_expressions = true;
+	else if (aActionType == ACT_CATCH)
+	{
+		// Add as 1 arg and parse later.
+		all_args_are_expressions = false;
+	}
 
 	/////////////////////////////////////////////////////////////
 	// Parse the parameter string into a list of separate params.
@@ -4911,14 +4916,14 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			, this_action.MinParams > 1 ? _T("s") : _T(""));
 		return ScriptError(error_msg, aLineText);
 	}
-	if (action_args[mark] && aActionType != ACT_EXPRESSION)
+	if (action_args[mark] && !(aActionType == ACT_EXPRESSION || aActionType == ACT_CATCH))
 	{
 		sntprintf(error_msg, _countof(error_msg), _T("\"%s\" accepts at most %d parameter%s.")
 			, this_action.Name, max_params
 			, max_params > 1 ? _T("s") : _T(""));
 		return ScriptError(error_msg, aLineText);
 	}
-	for (int i = 0, non_blank_params = aActionType == ACT_CASE ? nArgs : this_action.MinParams
+	for (int i = 0, non_blank_params = aActionType == ACT_CASE ? nArgs : aActionType == ACT_CATCH ? nArgs - 1 : this_action.MinParams
 		; i < non_blank_params; ++i) // It's only safe to do this after the above.
 		if (!*arg[i])
 		{
@@ -5167,7 +5172,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			{
 			case ACT_ELSE: expected = parent_act == ACT_IF; break;
 			case ACT_UNTIL: expected = ACT_IS_LOOP_EXCLUDING_WHILE(parent_act); break;
-			case ACT_CATCH: expected = parent_act == ACT_TRY; break;
+			case ACT_CATCH: expected = parent_act == ACT_TRY || (parent_act == ACT_CATCH && parent->mArgc && *parent->mArg[0].text); break;
 			case ACT_FINALLY: expected = parent_act == ACT_TRY || parent_act == ACT_CATCH; break;
 			}
 			if (expected)
@@ -7372,6 +7377,16 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 		if (line->mActionType == ACT_BLOCK_END && line->mAttribute)
 			return OK; // End of this function.
 
+		mCurrLine = line; // For error reporting in FindVar() and perhaps other places.
+
+		if (line->mActionType == ACT_CATCH)
+		{
+			// Preparse Catch at this stage since its output var hasn't been parsed yet.
+			if (!PreparseCatch(line))
+				return FAIL;
+			continue;
+		}
+
 		for (int i = 0; i < line->mArgc; ++i) // For each arg.
 		{
 			ArgStruct &this_arg = line->mArg[i]; // For performance and convenience.
@@ -7380,7 +7395,6 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 			ASSERT(!this_arg.postfix);
 			// Otherwise, convert the expression text to postfix form and set is_expression
 			// based on whether the arg should be evaluated by ExpandExpression():
-			mCurrLine = line; // For error reporting in FindVar() and perhaps other places.
 			if (!line->ExpressionToPostfix(this_arg)) // Doing this here, after the script has been loaded, might improve the compactness/adjacent-ness of the compiled expressions in memory, which might improve performance due to CPU caching.
 				return FAIL; // The function above already displayed the error msg.
 		}
@@ -7594,6 +7608,59 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 	} // for()
 	// Return something non-NULL to indicate success:
 	return mLastLine;
+}
+
+
+
+ResultType Script::PreparseCatch(Line *aLine)
+{
+	if (!aLine->mArgc)
+		return OK;
+	IObject *prototype[MAX_ARGS - 1]; // Set an arbitrary limit to simplify the code; using MAX_ARGS to keep things consistent, -1 for the output var.
+	int prototype_count = 0;
+	Var *output_var = nullptr;
+	for (LPTSTR cp = aLine->mArg->text; *cp; )
+	{
+		if (ctolower(*cp) == 'a' && ctolower(cp[1]) == 's' && IS_SPACE_OR_TAB(cp[2]))
+		{
+			cp = omit_leading_whitespace(cp + 2);
+			LPTSTR end = find_identifier_end(cp);
+			if (end == cp || *end)
+				return aLine->LineError(ERR_EXPR_SYNTAX);
+			if (  !(output_var = FindOrAddVar(cp, end - cp, FINDVAR_FOR_WRITE))
+				|| !aLine->ValidateVarUsage(output_var, Script::VARREF_OUTPUT_VAR)  )
+				return FAIL;
+			break;
+		}
+		if (prototype_count)
+		{
+			if (prototype_count == _countof(prototype))
+				return aLine->LineError(_T("Too many classes."));
+			if (*cp != g_delimiter)
+				return aLine->LineError(ERR_EXPR_SYNTAX);
+			cp = omit_leading_whitespace(cp + 1);
+		}
+		LPTSTR end = cp;
+		while (IS_IDENTIFIER_CHAR(*end) || *end == '.') ++end;
+		LPTSTR next = omit_leading_whitespace(end);
+		if (end == cp)
+			return aLine->LineError(ERR_EXPR_SYNTAX);
+		auto cls = FindClass(cp, end - cp);
+		if (  !cls || !(prototype[prototype_count++] = cls->GetOwnPropObj(_T("Prototype")))  )
+			return aLine->LineError(_T("Unknown class."), FAIL, cp);
+		cp = next;
+	}
+	auto args = SimpleHeap::Alloc<CatchStatementArgs>();
+	args->output_var = output_var;
+	if (args->prototype_count = prototype_count)
+	{
+		args->prototype = SimpleHeap::Alloc<IObject *>(prototype_count);
+		memcpy(args->prototype, prototype, prototype_count * sizeof(IObject *));
+	}
+	else
+		args->prototype = nullptr;
+	aLine->mAttribute = args;
+	return OK;
 }
 
 
@@ -9876,7 +9943,10 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				g.ThrownToken = NULL; // Assign() may cause script to execute via __Delete, so this must be cleared first.
 
 				// Assign the thrown token to the variable if provided.
-				result = line->mArgc ? VAR(line->mArg[0])->Assign(*our_token) : OK;
+				result = OK;
+				if (auto args = (CatchStatementArgs *)line->mAttribute)
+					if (args->output_var)
+						result = args->output_var->Assign(*our_token);
 				g_script.FreeExceptionToken(our_token);
 				if (!result)
 					return FAIL;
@@ -9902,30 +9972,25 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			// Move to the next line after the 'try' or 'catch' block.
 			line = line->mRelatedLine;
 
+			bool bHasCatch = false;
 			if (this_act == ACT_TRY)
 			{
 				g.ExcptMode = outer_excptmode;
-				bool bHasCatch = false;
 
-				if (line->mActionType == ACT_CATCH)
+				while (line->mActionType == ACT_CATCH)
 				{
 					bHasCatch = true;
-					if (g.ThrownToken)
+					if (g.ThrownToken && line->CatchThis(*g.ThrownToken))
 					{
 						// An exception was thrown and we have a 'catch' block, so let the next
 						// iteration handle it.  Implies result == FAIL && jump_to_line == NULL,
 						// but result won't have any meaning for the next iteration.
-						continue;
+						goto continue_ExecUntil_loop;
 					}
-					// Otherwise: no exception was thrown, so skip the 'catch' block.
+					// Otherwise: an exception of appropriate type was not thrown, so skip this 'catch'.
 					line = line->mRelatedLine;
 				}
-				if (line->mActionType == ACT_FINALLY)
-				{
-					// Let the section below handle the FINALLY block.
-					this_act = ACT_CATCH;
-				}
-				else if (!bHasCatch && g.ThrownToken)
+				if (!bHasCatch && g.ThrownToken && line->mActionType != ACT_FINALLY)
 				{
 					// An exception was thrown, but no 'catch' nor 'finally' is present.
 					// In this case 'try' acts as a catch-all.
@@ -9933,7 +9998,13 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 					result = OK;
 				}
 			}
-			if (this_act == ACT_CATCH && line->mActionType == ACT_FINALLY)
+			else // this_act == ACT_CATCH
+			{
+				// Even if g.ThrownToken, no other 'catch' statements at this level should execute.
+				while (line->mActionType == ACT_CATCH)
+					line = line->mRelatedLine;
+			}
+			if (line->mActionType == ACT_FINALLY)
 			{
 				if (result == OK && !jump_to_line)
 					// Execution is being allowed to flow normally into the finally block and
@@ -9965,6 +10036,15 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				}
 				g.ThrownToken = thrown_token; // If non-NULL, this was thrown within the try block.
 			}
+			if (g.ThrownToken && bHasCatch && !(g.ExcptMode & EXCPTMODE_CATCH))
+			{
+				// Known limitation: UnhandledException wasn't called when the error was thrown since a CATCH
+				// was present, but it wasn't caught due to the type filter, so we have to do this here so the
+				// error will be reported.  The idea of calling UnhandledException early is that OnError can
+				// attach a debugger which can inspect the stack before it unwinds, but at this point it has
+				// already unwound.
+				return g_script.UnhandledException(line);
+			}
 			
 			if (aMode == ONLY_ONE_LINE || result != OK)
 			{
@@ -9981,7 +10061,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				}
 				line = jump_to_line;
 			}
-
+			continue_ExecUntil_loop:
 			continue;
 		}
 
@@ -13049,6 +13129,8 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 	return FAIL;
 }
 
+
+
 void Script::FreeExceptionToken(ResultToken*& aToken)
 {
 	// Release any potential content the token may hold
@@ -13058,6 +13140,20 @@ void Script::FreeExceptionToken(ResultToken*& aToken)
 	// Clear caller's variable.
 	aToken = NULL;
 }
+
+
+
+bool Line::CatchThis(ExprTokenType &aThrown) // ACT_CATCH
+{
+	auto args = (CatchStatementArgs *)mAttribute;
+	if (!args || !args->prototype_count)
+		return true;
+	for (int i = 0; i < args->prototype_count; ++i)
+		if (Object::HasBase(aThrown, args->prototype[i]))
+			return true;
+	return false;
+}
+
 
 
 void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo, Line *line)

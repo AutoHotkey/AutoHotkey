@@ -579,6 +579,14 @@ struct LoopReadFileStruct
 #define DEFAULT_READ_FLAGS (TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR | TextStream::SHARE_READ | TextStream::SHARE_WRITE)
 
 
+struct CatchStatementArgs
+{
+	Var *output_var;
+	IObject **prototype;
+	int prototype_count;
+};
+
+
 typedef UCHAR ArgCountType;
 #define MAX_ARGS 20   // Maximum number of args used by any command.
 
@@ -719,6 +727,7 @@ private:
 	ResultType PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil); // Lexikos: ACT_FOR.
 	ResultType PerformAssign();
 	ResultType Perform();
+	bool CatchThis(ExprTokenType &aThrown);
 	friend BIF_DECL(BIF_PerformAction);
 
 	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
@@ -957,24 +966,11 @@ public:
 	static HWND DetermineTargetWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
 
 	
-	// This is in the .h file so that it's more likely the compiler's cost/benefit estimate will
-	// make it inline (since it is called from only one place).  Inline would be good since it
-	// is called frequently during script loading and is difficult to macro-ize in a way that
-	// retains readability.
 	static ArgTypeType ArgIsVar(ActionTypeType aActionType, int aArgIndex, int aArgCount)
 	{
-		switch(aArgIndex)
-		{
-		case 0:  // Arg #1
-			switch(aActionType)
-			{
-			case ACT_ASSIGNEXPR:
-			case ACT_CATCH:
-				return ARG_TYPE_OUTPUT_VAR;
-			}
-		}
-		if (aActionType == ACT_FOR)
-			return aArgIndex == aArgCount - 1 ? ARG_TYPE_NORMAL : ARG_TYPE_OUTPUT_VAR;
+		if (aActionType == ACT_ASSIGNEXPR && aArgIndex == 0
+			|| aActionType == ACT_FOR && aArgIndex != aArgCount - 1)
+			return ARG_TYPE_OUTPUT_VAR;
 		return ARG_TYPE_NORMAL;
 	}
 
@@ -2922,6 +2918,7 @@ private:
 	ResultType PreparseExpressions(FuncList &aFuncs);
 	void PreparseHotkeyIfExpr(Line *aLine);
 	Line *PreparseCommands(Line *aStartingLine);
+	ResultType PreparseCatch(Line *aLine);
 	bool IsLabelTarget(Line *aLine);
 
 public:

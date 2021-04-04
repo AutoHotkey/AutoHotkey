@@ -2,7 +2,17 @@
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
 	<Type Name="Line">
 		<DisplayString>{(enum_act)mActionType} ln {mLineNumber}</DisplayString>
+    <Expand>
+      <Item Name="act">(enum_act)mActionType</Item>
+      <Item Name="file">sSourceFile[mFileIndex],sub</Item>
+      <Item Name="line">mLineNumber,d</Item>
+      <Item Name="args">mArg,[mArgc]</Item>
+    </Expand>
 	</Type>
+  <Type Name="ArgStruct">
+    <DisplayString Condition="is_expression || !postfix">{text,sub}</DisplayString>
+    <DisplayString Condition="!is_expression &amp;&amp; postfix">{text,su}</DisplayString>
+  </Type>
   <Type Name="ExprTokenType">
     <DisplayString Condition="symbol == SYM_STRING">{marker}</DisplayString>
     <DisplayString Condition="symbol == SYM_INTEGER">{value_int64}</DisplayString>
@@ -35,16 +45,47 @@
     <DisplayString>{mName,sub}()</DisplayString>
   </Type>
   <Type Name="Object">
+    <DisplayString Condition="mFields.data->length >= 4">{((FieldType *)(mFields.data + 1))[0]}, {((FieldType *)(mFields.data + 1))[1]}, {((FieldType *)(mFields.data + 1))[2]}, {((FieldType *)(mFields.data + 1))[3]}</DisplayString>
+    <DisplayString Condition="mFields.data->length == 3">{((FieldType *)(mFields.data + 1))[0]}, {((FieldType *)(mFields.data + 1))[1]}, {((FieldType *)(mFields.data + 1))[2]}</DisplayString>
+    <DisplayString Condition="mFields.data->length == 2">{((FieldType *)(mFields.data + 1))[0]}, {((FieldType *)(mFields.data + 1))[1]}</DisplayString>
+    <DisplayString Condition="mFields.data->length == 1">{((FieldType *)(mFields.data + 1))[0]}</DisplayString>
+    <DisplayString>(no properties)</DisplayString>
     <Expand>
       <Synthetic Name="Properties">
-        <DisplayString>{mFields.data->size,d}</DisplayString>
         <Expand>
           <ArrayItems>
-            <Size>mFields.data->size</Size>
+            <Size>mFields.data->length</Size>
             <ValuePointer>(FieldType *)(mFields.data + 1)</ValuePointer>
           </ArrayItems>
         </Expand>
       </Synthetic>
+    </Expand>
+  </Type>
+  <Type Name="Object::Variant">
+    <DisplayString Condition="symbol == SYM_STRING">{string}</DisplayString>
+    <DisplayString Condition="symbol == SYM_INTEGER">{n_int64}</DisplayString>
+    <DisplayString Condition="symbol == SYM_FLOAT">{n_double}</DisplayString>
+    <DisplayString Condition="symbol == SYM_OBJECT">{{{*object}}}</DisplayString>
+    <DisplayString Condition="symbol == SYM_DYNAMIC">{*prop}</DisplayString>
+    <DisplayString>(bad symbol: {symbol})</DisplayString>
+  </Type>
+  <Type Name="Object::FieldType">
+    <DisplayString>{name,sub} = {*(Variant *)this,nd}</DisplayString>
+    <Expand>
+      <Item Name="name">name,sub</Item>
+      <Item Name="value" Condition="symbol == SYM_STRING">string</Item>
+      <Item Name="value" Condition="symbol == SYM_INTEGER">n_int64</Item>
+      <Item Name="value" Condition="symbol == SYM_FLOAT">n_double</Item>
+      <Item Name="value" Condition="symbol == SYM_OBJECT">*object</Item>
+      <Item Name="value" Condition="symbol == SYM_DYNAMIC">*prop</Item>
+      <Item Name="raw">*(Variant *)this,nd</Item>
+    </Expand>
+  </Type>
+  <Type Name="Property">
+    <Expand>
+      <Item Name="get" Condition="mGet">*mGet</Item>
+      <Item Name="set" Condition="mSet">*mSet</Item>
+      <Item Name="call" Condition="mCall">*mCall</Item>
     </Expand>
   </Type>
 </AutoVisualizer>

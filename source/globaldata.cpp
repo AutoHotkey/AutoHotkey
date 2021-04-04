@@ -260,7 +260,7 @@ Action g_act[] =
 	, {_T("Goto"), 1, 1}
 	, {_T("Return"), 0, 1}
 	, {_T("Try"), 0, 0}
-	, {_T("Catch"), 0, 1} // fincs: seems best to allow catch without a parameter
+	, {_T("Catch"), 0, 1}
 	, {_T("Finally"), 0, 0}
 	, {_T("Throw"), 0, 1}
 	, {_T("Switch"), 0, 1}
