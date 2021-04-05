@@ -9972,7 +9972,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				{
 					g.ExcptMode |= EXCPTMODE_CATCH;
 					// Disable re-throw when catch is present, since the inner layer won't have the Error object to match
-					// against type filters such as `try..catch SpecificError`, and fixing that would increase complexity.
+					// against type filters such as `try..catch SpecificError`, and fixing that would increase complexity
+					// or the size of global_struct.
 					g.ExcptMode &= ~EXCPTMODE_CAUGHT;
 				}
 			}
@@ -9988,11 +9989,14 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			else
 				result = line->mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
 
-			bool token_is_unhandled_if_present = (g.ExcptMode & EXCPTMODE_CATCH) && !(outer_excptmode & EXCPTMODE_CATCH);
+			bool UnhandledException_was_not_called = (g.ExcptMode & EXCPTMODE_CATCH); // Because CATCH is present.
 			if (our_token) // Implies this is CATCH, or TRY but somehow g.ThrownToken was already non-null due to a prior exception.
 			{
 				if (!result && !g.ThrownToken) // Assume this is a re-throw, since any other failure should have generated a new exception.
-					g.ThrownToken = our_token, our_token = nullptr, token_is_unhandled_if_present = true;
+				{
+					g.ThrownToken = our_token, our_token = nullptr;
+					UnhandledException_was_not_called = true; // Because THROW didn't have our_token to pass to it.
+				}
 				else
 					g_script.FreeExceptionToken(our_token); // Get this out of the way now in case of early "goto" or "return".
 			}
@@ -10063,13 +10067,13 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				}
 				g.ThrownToken = thrown_token; // If non-NULL, this was thrown within the try block.
 			}
-			if (g.ThrownToken && token_is_unhandled_if_present)
+			if (g.ThrownToken && UnhandledException_was_not_called && !(g.ExcptMode & EXCPTMODE_CATCH))
 			{
 				// Known limitation: UnhandledException wasn't called when the error was thrown since a CATCH
 				// was present, but it wasn't caught due to the type filter, so we have to do this here so the
 				// error will be reported.  The idea of calling UnhandledException early is that OnError can
 				// attach a debugger which can inspect the stack before it unwinds, but at this point it has
-				// already unwound.
+				// already partially unwound.
 				return g_script.UnhandledException(line);
 			}
 			
