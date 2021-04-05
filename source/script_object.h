@@ -274,14 +274,6 @@ protected:
 		~FieldType() { free(name); }
 	};
 
-	struct MethodType
-	{
-		name_t name;
-		IObject *func;
-		MethodType() = delete;
-		~MethodType() { func->Release(); free(name); }
-	};
-
 	enum EnumeratorType
 	{
 		Enum_Properties,
