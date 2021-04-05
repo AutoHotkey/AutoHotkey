@@ -1068,22 +1068,22 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 	return obj;
 }
 
-Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ObjectCtor aCtor)
+Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ClassFactoryDef aFactory)
 {
 	auto class_obj = CreateClass(aPrototype);
 
 	class_obj->SetBase(aBase);
 
-	if (aCtor)
+	if (aFactory.call)
 	{
 		TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
 		_stprintf(full_name, _T("%s.Call"), aClassName);
 		auto ctor = new BuiltInFunc(SimpleHeap::Alloc(full_name));
-		ctor->mBIF = aCtor;
+		ctor->mBIF = aFactory.call;
 		ctor->mFID = FID_Object_New;
-		ctor->mMinParams = 1; // Class object.
-		ctor->mParamCount = 1;
-		ctor->mIsVariadic = true; // Always variadic since __new(...) may be redefined/overridden.
+		ctor->mMinParams = aFactory.min_params; // Usually 1, the class object.
+		ctor->mParamCount = aFactory.max_params;
+		ctor->mIsVariadic = aFactory.is_variadic; // Usually variadic since __new(...) may be redefined/overridden.
 		class_obj->DefineMethod(_T("Call"), ctor);
 		ctor->Release();
 	}
@@ -2894,7 +2894,7 @@ struct ClassDef
 {
 	LPCTSTR name;
 	Object **proto_var;
-	BuiltInFunctionType ctor;
+	ClassFactoryDef factory;
 	ObjectMember *members;
 	int member_count;
 	std::initializer_list<ClassDef> subclasses;
@@ -2908,7 +2908,7 @@ void DefineClasses(Object *aBaseClass, Object *aBaseProto, std::initializer_list
 			: Object::CreatePrototype(const_cast<LPTSTR>(c.name), aBaseProto, c.members, c.member_count);
 		if (c.proto_var)
 			*c.proto_var = proto;
-		auto cobj = Object::CreateClass(const_cast<LPTSTR>(c.name), aBaseClass, proto, c.ctor);
+		auto cobj = Object::CreateClass(const_cast<LPTSTR>(c.name), aBaseClass, proto, c.factory);
 		if (c.subclasses.size())
 			DefineClasses(cobj, proto, c.subclasses);
 	}
@@ -2990,18 +2990,24 @@ Object *Object::CreateRootPrototypes()
 			, RegExMatchObject::sMembers, _countof(RegExMatchObject::sMembers)}
 	});
 
+	// Parameter counts are specified for static Call in the following classes
+	// but not those using NewObject<> because the latter passes parameters on
+	// to __New, which can be redefined by a subclass.  Specifying counts here
+	// sets MinParams/MaxParams/IsVariadic appropriately and avoids the need to
+	// validate aParamCount in each function, which reduces code size.
+	// Note that the `this` parameter (the class itself) is counted.
 	DefineClasses(anyClass, sAnyPrototype, {
-		{_T("ComValue"), &sComValuePrototype, ComValue_Call, no_members, 0, {
-			{_T("ComObjArray"), &sComArrayPrototype, ComObjArray_Call},
-			{_T("ComObject"), &sComObjectPrototype, ComObject_Call},
+		{_T("ComValue"), &sComValuePrototype, {ComValue_Call, 3, 4}, no_members, 0, {
+			{_T("ComObjArray"), &sComArrayPrototype, {ComObjArray_Call, 3, 10}},
+			{_T("ComObject"), &sComObjectPrototype, {ComObject_Call, 2, 3}},
 			{_T("ComValueRef"), &sComRefPrototype}
 		}},
 		{_T("Primitive"), &Object::sPrimitivePrototype, no_ctor, no_members, 0, {
-			{_T("Number"), &Object::sNumberPrototype, BIF_Number, no_members, 0, {
-				{_T("Float"), &Object::sFloatPrototype, BIF_Float},
-				{_T("Integer"), &Object::sIntegerPrototype, BIF_Integer}
+			{_T("Number"), &Object::sNumberPrototype, {BIF_Number, 2, 2}, no_members, 0, {
+				{_T("Float"), &Object::sFloatPrototype, {BIF_Float, 2, 2}},
+				{_T("Integer"), &Object::sIntegerPrototype, {BIF_Integer, 2, 2}}
 			}},
-			{_T("String"), &Object::sStringPrototype, BIF_String}
+			{_T("String"), &Object::sStringPrototype, {BIF_String, 2, 2}}
 		}},
 		{_T("VarRef"), &sVarRefPrototype}
 	});

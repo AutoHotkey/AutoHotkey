@@ -93,6 +93,16 @@ struct ObjectMember
 #define MAXP_VARIADIC 255
 
 
+// Helper for predefined classes
+struct ClassFactoryDef
+{
+	BuiltInFunctionType call;
+	UCHAR min_params, max_params, is_variadic;
+	ClassFactoryDef(BuiltInFunctionType aCall, int aMin, int aMax, bool aVariadic = false) : call(aCall), min_params(aMin), max_params(aMax), is_variadic(aVariadic) {}
+	ClassFactoryDef(BuiltInFunctionType aCall = nullptr) : ClassFactoryDef(aCall, 1, 1, true) {}
+};
+
+
 //
 // FlatVector - utility class.
 //
@@ -443,7 +453,7 @@ public:
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase = nullptr);
 	static Object *CreatePrototype(LPTSTR aClassName, Object *aBase, ObjectMember aMember[], int aMemberCount);
 	static Object *DefineMembers(Object *aObject, LPTSTR aClassName, ObjectMember aMember[], int aMemberCount);
-	static Object *CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ObjectCtor aCtor);
+	static Object *CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype, ClassFactoryDef aFactory);
 
 	ResultType CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
 

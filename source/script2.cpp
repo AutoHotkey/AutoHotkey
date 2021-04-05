@@ -11494,9 +11494,7 @@ BIF_DECL(BIF_StrCompare)
 
 BIF_DECL(BIF_String)
 {
-	if (aParamCount > 2)
-		_f_throw(ERR_TOO_MANY_PARAMS);
-	++aParam;
+	++aParam; // Skip `this`
 	aResultToken.symbol = SYM_STRING;
 	switch (aParam[0]->symbol)
 	{
@@ -14090,9 +14088,7 @@ BIF_DECL(BIF_FloorCeil)
 
 BIF_DECL(BIF_Integer)
 {
-	if (aParamCount > 2)
-		_f_throw(ERR_TOO_MANY_PARAMS);
-	++aParam;
+	++aParam; // Skip `this`
 	Throw_if_Param_NaN(0);
 	_f_return_i(ParamIndexToInt64(0));
 }
@@ -14101,9 +14097,7 @@ BIF_DECL(BIF_Integer)
 
 BIF_DECL(BIF_Float)
 {
-	if (aParamCount > 2)
-		_f_throw(ERR_TOO_MANY_PARAMS);
-	++aParam;
+	++aParam; // Skip `this`
 	Throw_if_Param_NaN(0);
 	_f_return(ParamIndexToDouble(0));
 }
@@ -14112,9 +14106,7 @@ BIF_DECL(BIF_Float)
 
 BIF_DECL(BIF_Number)
 {
-	if (aParamCount > 2)
-		_f_throw(ERR_TOO_MANY_PARAMS);
-	++aParam;
+	++aParam; // Skip `this`
 	if (!ParamIndexToNumber(0, aResultToken))
 		_f_throw_param(0, _T("Number"));
 }

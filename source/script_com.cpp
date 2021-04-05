@@ -19,10 +19,6 @@ BIF_DECL(ComObject_Call) // Formerly BIF_ComObjCreate.
 {
 	++aParam; // Exclude `this`
 	--aParamCount;
-	if (aParamCount < 1)
-		_f_throw(ERR_TOO_FEW_PARAMS);
-	if (aParamCount > 2)
-		_f_throw(ERR_TOO_MANY_PARAMS);
 
 	HRESULT hr;
 	CLSID clsid, iid;
@@ -157,10 +153,6 @@ BIF_DECL(ComValue_Call)
 {
 	++aParam; // Exclude `this`
 	--aParamCount;
-	if (aParamCount < 2)
-		_f_throw(ERR_TOO_FEW_PARAMS);
-	if (aParamCount > 3)
-		_f_throw(ERR_TOO_MANY_PARAMS);
 	BIF_ComObj(aResultToken, aParam, aParamCount);
 }
 
@@ -486,14 +478,13 @@ BIF_DECL(ComObjArray_Call)
 {
 	++aParam; // Exclude `this`
 	--aParamCount;
-	if (aParamCount < 2)
-		_f_throw(ERR_TOO_FEW_PARAMS);
 
 	VARTYPE vt = (VARTYPE)TokenToInt64(*aParam[0]);
 	SAFEARRAYBOUND bound[8]; // Same limit as ComObject::SafeArrayInvoke().
 	int dims = aParamCount - 1;
-	if (dims > _countof(bound))
-		_f_throw(ERR_TOO_MANY_PARAMS);
+	ASSERT(dims <= _countof(bound)); // Enforced by MaxParams.
+	//if (dims > _countof(bound))
+	//	_f_throw(ERR_TOO_MANY_PARAMS);
 	for (int i = 0; i < dims; ++i)
 	{
 		bound[i].cElements = (ULONG)TokenToInt64(*aParam[i + 1]);
