@@ -105,9 +105,11 @@ BIF_DECL(BIF_ComObj) // Handles both ComObjFromPtr and ComValue.Call.
 	}
 	else
 	{
-		// ComObject(pdisp)
+		// ComObjFromPtr(pdisp)
 		vt = VT_DISPATCH;
 		llVal = TokenToInt64(*aParam[0]);
+		if (!(IUnknown *)llVal)
+			_f_throw_param(0); // Require ComValue(9,0) for null; assume ComObjFromPtr(0) is an error.
 	}
 
 	if (vt == VT_DISPATCH || vt == VT_UNKNOWN)
