@@ -1206,7 +1206,7 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 
 	if (FAILED(hr))
 	{
-		if (hr == DISP_E_UNKNOWNNAME)
+		if (hr == DISP_E_UNKNOWNNAME || hr == DISP_E_MEMBERNOTFOUND)
 			return INVOKE_NOT_HANDLED;
 
 		ComError(hr, aResultToken, aName, &excepinfo);
