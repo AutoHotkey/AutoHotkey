@@ -9989,7 +9989,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			else
 				result = line->mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
 
-			bool UnhandledException_was_not_called = (g.ExcptMode & EXCPTMODE_CATCH); // Because CATCH is present.
+			bool UnhandledException_was_not_called = (g.ExcptMode & EXCPTMODE_CATCH); // Because CATCH is present (or TRY without CATCH or FINALLY).
 			if (our_token) // Implies this is CATCH, or TRY but somehow g.ThrownToken was already non-null due to a prior exception.
 			{
 				if (!result && !g.ThrownToken) // Assume this is a re-throw, since any other failure should have generated a new exception.
@@ -10021,7 +10021,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 					// Otherwise: an exception of appropriate type was not thrown, so skip this 'catch'.
 					line = line->mRelatedLine;
 				}
-				if (!bHasCatch && g.ThrownToken && line->mActionType != ACT_FINALLY)
+				if (!bHasCatch && g.ThrownToken && line->mActionType != ACT_FINALLY
+					&& Object::HasBase(*g.ThrownToken, ErrorPrototype::Error)) // Make `try {}` equivalent to `try {} catch {}` without a class.
 				{
 					// An exception was thrown, but no 'catch' nor 'finally' is present.
 					// In this case 'try' acts as a catch-all.
