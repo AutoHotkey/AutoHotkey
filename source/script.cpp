@@ -9932,29 +9932,35 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			ActionTypeType this_act = line->mActionType;
 			int outer_excptmode = g.ExcptMode;
 
+			ResultToken *our_token = g.ThrownToken; // Should always be non-null for CATCH and null for TRY.
+			g.ThrownToken = nullptr; // Must be done before assigning the output var in case Assign() causes script to execute via __Delete.
+
 			if (this_act == ACT_CATCH)
 			{
-				// The following should never happen:
-				//if (!g.ThrownToken)
-				//	return line->LineError(_T("Attempt to catch nothing!"), CRITICAL_ERROR);
-
-				ResultToken *our_token = g.ThrownToken;
-				g.ThrownToken = NULL; // Assign() may cause script to execute via __Delete, so this must be cleared first.
+				ASSERT(our_token);
+				g.ExcptMode |= EXCPTMODE_CAUGHT;
 
 				// Assign the thrown token to the variable if provided.
 				result = OK;
 				if (auto args = (CatchStatementArgs *)line->mAttribute)
 					if (args->output_var)
 						result = args->output_var->Assign(*our_token);
-				g_script.FreeExceptionToken(our_token);
 				if (!result)
+				{
+					g_script.FreeExceptionToken(our_token);
 					return FAIL;
+				}
 			}
 			else // (this_act == ACT_TRY)
 			{
 				//g.ExcptMode |= EXCPTMODE_TRY; // Currently unused.  Must use |= rather than = to avoid removing EXCPTMODE_CATCH, if present.
 				if (line->mRelatedLine->mActionType != ACT_FINALLY) // Try without Catch/Finally acts like it has an empty Catch.
+				{
 					g.ExcptMode |= EXCPTMODE_CATCH;
+					// Disable re-throw when catch is present, since the inner layer won't have the Error object to match
+					// against type filters such as `try..catch SpecificError`, and fixing that would increase complexity.
+					g.ExcptMode &= ~EXCPTMODE_CAUGHT;
+				}
 			}
 
 			// The following section is similar to ACT_IF.
@@ -9968,14 +9974,22 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			else
 				result = line->mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
 
+			bool token_is_unhandled_if_present = (g.ExcptMode & EXCPTMODE_CATCH) && !(outer_excptmode & EXCPTMODE_CATCH);
+			if (our_token) // Implies this is CATCH, or TRY but somehow g.ThrownToken was already non-null due to a prior exception.
+			{
+				if (!result && !g.ThrownToken) // Assume this is a re-throw, since any other failure should have generated a new exception.
+					g.ThrownToken = our_token, our_token = nullptr, token_is_unhandled_if_present = true;
+				else
+					g_script.FreeExceptionToken(our_token); // Get this out of the way now in case of early "goto" or "return".
+			}
+			g.ExcptMode = outer_excptmode; // Reset it now in case of early "goto" or "return".
+
 			// Move to the next line after the 'try' or 'catch' block.
 			line = line->mRelatedLine;
 
 			bool bHasCatch = false;
 			if (this_act == ACT_TRY)
 			{
-				g.ExcptMode = outer_excptmode;
-
 				while (line->mActionType == ACT_CATCH)
 				{
 					bHasCatch = true;
@@ -10035,7 +10049,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				}
 				g.ThrownToken = thrown_token; // If non-NULL, this was thrown within the try block.
 			}
-			if (g.ThrownToken && bHasCatch && !(g.ExcptMode & EXCPTMODE_CATCH))
+			if (g.ThrownToken && token_is_unhandled_if_present)
 			{
 				// Known limitation: UnhandledException wasn't called when the error was thrown since a CATCH
 				// was present, but it wasn't caught due to the type filter, so we have to do this here so the
@@ -10067,7 +10081,11 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 		case ACT_THROW:
 		{
 			if (!line->mArgc)
-				return line->ThrowRuntimeException(ERR_EXCEPTION);
+			{
+				// If we're executing within a CATCH statement, signal it to re-throw its exception.
+				// Otherwise, throw a new generic Error.
+				return (g.ExcptMode & EXCPTMODE_CAUGHT) ? FAIL : line->ThrowRuntimeException(ERR_EXCEPTION);
+			}
 
 			// ThrownToken should only be non-NULL while control is being passed up the
 			// stack, which implies no script code can be executing.
