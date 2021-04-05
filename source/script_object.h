@@ -468,6 +468,10 @@ public:
 	static Object *sAnyPrototype, *sPrimitivePrototype, *sStringPrototype
 		, *sNumberPrototype, *sIntegerPrototype, *sFloatPrototype;
 	static Object *sVarRefPrototype;
+
+	// For COM object wrappers:
+	static Object *sComObjectPrototype, *sComValuePrototype, *sComArrayPrototype, *sComRefPrototype;
+
 	static Object *ValueBase(ExprTokenType &aValue);
 	static bool HasBase(ExprTokenType &aValue, IObject *aBase);
 

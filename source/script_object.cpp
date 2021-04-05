@@ -970,7 +970,7 @@ LPTSTR Object::Type()
 	for (base = mBase; base; base = base->mBase)
 		if (base->GetOwnProp(value, _T("__Class")))
 			return TokenToString(value); // This object is an instance of that class.
-	return _T("Object"); // This is an Object of undetermined type, like Object() or {}.
+	return _T("Object"); // Provide a default in case __Class has been removed from all of the base objects.
 }
 
 
@@ -2991,6 +2991,11 @@ Object *Object::CreateRootPrototypes()
 	});
 
 	DefineClasses(anyClass, sAnyPrototype, {
+		{_T("ComValue"), &sComValuePrototype, ComValue_Call, no_members, 0, {
+			{_T("ComObjArray"), &sComArrayPrototype, ComObjArray_Call},
+			{_T("ComObject"), &sComObjectPrototype, ComObject_Call},
+			{_T("ComValueRef"), &sComRefPrototype}
+		}},
 		{_T("Primitive"), &Object::sPrimitivePrototype, no_ctor, no_members, 0, {
 			{_T("Number"), &Object::sNumberPrototype, BIF_Number, no_members, 0, {
 				{_T("Float"), &Object::sFloatPrototype, BIF_Float},
@@ -3040,6 +3045,8 @@ namespace ErrorPrototype
 	Object *Timeout;
 }
 
+Object *Object::sVarRefPrototype;
+Object *Object::sComObjectPrototype, *Object::sComValuePrototype, *Object::sComArrayPrototype, *Object::sComRefPrototype;
 
 
 //
@@ -3051,7 +3058,6 @@ Object *Object::sStringPrototype;
 Object *Object::sNumberPrototype;
 Object *Object::sIntegerPrototype;
 Object *Object::sFloatPrototype;
-Object *Object::sVarRefPrototype;
 
 Object *Object::ValueBase(ExprTokenType &aValue)
 {

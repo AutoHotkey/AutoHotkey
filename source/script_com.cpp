@@ -15,8 +15,15 @@ const IID IID_IObjectComCompatible = { 0x619f7e25, 0x6d89, 0x4eb4, 0xb2, 0xfb, 0
 
 
 
-BIF_DECL(BIF_ComObjCreate)
+BIF_DECL(ComObject_Call) // Formerly BIF_ComObjCreate.
 {
+	++aParam; // Exclude `this`
+	--aParamCount;
+	if (aParamCount < 1)
+		_f_throw(ERR_TOO_FEW_PARAMS);
+	if (aParamCount > 2)
+		_f_throw(ERR_TOO_MANY_PARAMS);
+
 	HRESULT hr;
 	CLSID clsid, iid;
 	for (;;)
@@ -77,7 +84,7 @@ BIF_DECL(BIF_ComObjGet)
 }
 
 
-BIF_DECL(BIF_ComObject)
+BIF_DECL(BIF_ComObj) // Handles both ComObjFromPtr and ComValue.Call.
 {
 	if (!TokenIsNumeric(*aParam[0]))
 		_f_throw_param(0, _T("Number"));
@@ -90,7 +97,7 @@ BIF_DECL(BIF_ComObject)
 	{
 		if (!TokenIsNumeric(*aParam[1]))
 			_f_throw_param(1, _T("Number"));
-		// ComObject(vt, value [, flags])
+		// ComValue(vt, value [, flags])
 		vt = (VARTYPE)TokenToInt64(*aParam[0]);
 		llVal = TokenToInt64(*aParam[1]);
 		if (aParamCount > 2)
@@ -142,6 +149,17 @@ BIF_DECL(BIF_ComObject)
 	}
 	aResultToken.symbol = SYM_OBJECT;
 	aResultToken.object = obj;
+}
+
+BIF_DECL(ComValue_Call)
+{
+	++aParam; // Exclude `this`
+	--aParamCount;
+	if (aParamCount < 2)
+		_f_throw(ERR_TOO_FEW_PARAMS);
+	if (aParamCount > 3)
+		_f_throw(ERR_TOO_MANY_PARAMS);
+	BIF_ComObj(aResultToken, aParam, aParamCount);
 }
 
 
@@ -462,13 +480,18 @@ BIF_DECL(BIF_ComObjFlags)
 }
 
 
-BIF_DECL(BIF_ComObjArray)
+BIF_DECL(ComObjArray_Call)
 {
+	++aParam; // Exclude `this`
+	--aParamCount;
+	if (aParamCount < 2)
+		_f_throw(ERR_TOO_FEW_PARAMS);
+
 	VARTYPE vt = (VARTYPE)TokenToInt64(*aParam[0]);
 	SAFEARRAYBOUND bound[8]; // Same limit as ComObject::SafeArrayInvoke().
 	int dims = aParamCount - 1;
-	if (dims > _countof(bound)) // Possible only for dynamic function calls.
-		dims = _countof(bound);
+	if (dims > _countof(bound))
+		_f_throw(ERR_TOO_MANY_PARAMS);
 	for (int i = 0; i < dims; ++i)
 	{
 		bound[i].cElements = (ULONG)TokenToInt64(*aParam[i + 1]);
@@ -1348,10 +1371,6 @@ ResultType ComObject::ByRefInvoke(IObject_Invoke_PARAMS_DECL)
 
 LPTSTR ComObject::Type()
 {
-	if (mVarType & VT_ARRAY)
-		return _T("ComObjArray"); // Has SafeArray methods.
-	if (mVarType & VT_BYREF)
-		return _T("ComObjRef"); // Has this[].
 	if ((mVarType == VT_DISPATCH || mVarType == VT_UNKNOWN) && mUnknown)
 	{
 		BSTR name;
@@ -1365,10 +1384,23 @@ LPTSTR ComObject::Type()
 			SysFreeString(name);
 			return sBuf;
 		}
-		if (mVarType == VT_DISPATCH)
-			return _T("ComObject"); // Can be invoked.
 	}
-	return _T("ComObj"); // Can't be invoked; may represent a value or a non-dispatch object.
+	ExprTokenType value;
+	if (Base()->GetOwnProp(value, _T("__Class")))
+		return TokenToString(value);
+	return _T("ComValue"); // Provide a safe default in case __Class was removed.
+}
+
+
+Object *ComObject::Base()
+{
+	if (mVarType & VT_ARRAY)
+		return Object::sComArrayPrototype;
+	if (mVarType & VT_BYREF)
+		return Object::sComRefPrototype;
+	if (mVarType == VT_DISPATCH && mUnknown)
+		return Object::sComObjectPrototype;
+	return Object::sComValuePrototype;
 }
 
 

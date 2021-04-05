@@ -54,11 +54,9 @@ FuncEntry g_BIF[] =
 	BIFn(ComCall, 2, NA, BIF_DllCall),
 #endif
 	BIF1(ComObjActive, 1, 1),
-	BIF1(ComObjArray, 2, 9),
 	BIF1(ComObjConnect, 1, 2),
-	BIF1(ComObjCreate, 1, 2),
-	BIF1(ComObject, 1, 3),
 	BIF1(ComObjFlags, 1, 3),
+	BIFi(ComObjFromPtr, 1, 1, BIF_ComObj, 0),
 	BIF1(ComObjGet, 1, 1),
 	BIF1(ComObjQuery, 2, 3),
 	BIF1(ComObjType, 1, 2),

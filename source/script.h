@@ -3352,15 +3352,16 @@ BIF_DECL(BIF_FileOpen);
 
 
 // COM interop
-BIF_DECL(BIF_ComObject);
+BIF_DECL(ComValue_Call);
+BIF_DECL(ComObject_Call);
+BIF_DECL(ComObjArray_Call);
+BIF_DECL(BIF_ComObj);
 BIF_DECL(BIF_ComObjActive);
-BIF_DECL(BIF_ComObjCreate);
 BIF_DECL(BIF_ComObjGet);
 BIF_DECL(BIF_ComObjConnect);
 BIF_DECL(BIF_ComObjType);
 BIF_DECL(BIF_ComObjValue);
 BIF_DECL(BIF_ComObjFlags);
-BIF_DECL(BIF_ComObjArray);
 BIF_DECL(BIF_ComObjQuery);
 
 

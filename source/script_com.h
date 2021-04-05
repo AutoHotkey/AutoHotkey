@@ -64,7 +64,7 @@ public:
 	ResultType SafeArrayInvoke(IObject_Invoke_PARAMS_DECL);
 	ResultType ByRefInvoke(IObject_Invoke_PARAMS_DECL);
 	LPTSTR Type();
-	Object *Base() { return nullptr; }
+	Object *Base();
 	IObject_DebugWriteProperty_Def;
 
 	void ToVariant(VARIANT &aVar)
