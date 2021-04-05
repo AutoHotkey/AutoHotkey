@@ -7627,6 +7627,7 @@ ResultType Script::PreparseCatch(Line *aLine)
 			if (  !(output_var = FindOrAddVar(cp, end - cp, FINDVAR_FOR_WRITE))
 				|| !aLine->ValidateVarUsage(output_var, Script::VARREF_OUTPUT_VAR)  )
 				return FAIL;
+			output_var->MarkAssignedSomewhere();
 			break;
 		}
 		if (prototype_count)
