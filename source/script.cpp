@@ -12560,21 +12560,11 @@ ResultType Script::ThrowRuntimeException(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 
 ResultType Script::Win32Error(DWORD aError, ResultType aErrorType)
 {
-	TCHAR message[1024];
-	// Prefix the message with the error number to avoid something like
-	// "Error: The file does not exist. Specifically: 2".
-	DWORD size = (DWORD)_sntprintf(message, _countof(message)
-		, (int)aError < 0 ? _T("(0x%X) ") : _T("(%i) "), aError);
-	size += FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS
-		, NULL, aError, 0, message + size, _countof(message) - size, NULL);
-	if (size)
-	{
-		if (message[size - 1] == '\n')
-			message[--size] = '\0';
-		if (message[size - 1] == '\r')
-			message[--size] = '\0';
-	}
-	return RuntimeError(message, _T(""), aErrorType, nullptr, ErrorPrototype::OS);
+	TCHAR number_string[_MAX_ULTOSTR_BASE10_COUNT];
+	// Convert aError to string to pass it through RuntimeError, but it will ultimately
+	// be converted to the error number and proper message by OSError.Prototype.__New.
+	_ultot(aError, number_string, 10);
+	return RuntimeError(number_string, _T(""), aErrorType, nullptr, ErrorPrototype::OS);
 }
 
 
@@ -12706,7 +12696,7 @@ ResultType Script::RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultTy
 	if (g->ExcptMode == EXCPTMODE_LINE_WORKAROUND && mCurrLine)
 		aLine = mCurrLine;
 	
-	if ((g->ExcptMode || mOnError.Count()) && aErrorType != WARN)
+	if ((g->ExcptMode || mOnError.Count() || aPrototype && aPrototype->HasOwnProps()) && aErrorType != WARN)
 		return ThrowRuntimeException(aErrorText, aExtraInfo, aLine, aErrorType, aPrototype);
 
 	return ShowError(aErrorText, aErrorType, aExtraInfo, aLine);

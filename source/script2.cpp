@@ -16608,10 +16608,32 @@ LPTSTR TokenTypeString(ExprTokenType &aToken)
 
 ResultType Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	LPTSTR message = ParamIndexIsOmitted(0) ? Type() : ParamIndexToString(0, _f_number_buf);
+	LPTSTR message;
 	TCHAR what_buf[MAX_NUMBER_SIZE], extra_buf[MAX_NUMBER_SIZE];
 	LPCTSTR what = ParamIndexToOptionalString(1, what_buf);
 	Line *line = g_script.mCurrLine;
+
+	if (aID == M_OSError__New && (ParamIndexIsOmitted(0) || ParamIndexIsNumeric(0)))
+	{
+		DWORD error = ParamIndexIsOmitted(0) ? g->LastError : (DWORD)ParamIndexToInt64(0);
+		SetOwnProp(_T("Number"), error);
+		
+		// Determine message based on error number.
+		DWORD message_buf_size = _f_retval_buf_size;
+		message = _f_retval_buf;
+		DWORD size = (DWORD)_sntprintf(message, message_buf_size, (int)error < 0 ? _T("(0x%X) ") : _T("(%i) "), error);
+		if (error) // Never show "Error: (0) The operation completed successfully."
+			size += FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, error, 0, message + size, message_buf_size - size, NULL);
+		if (size)
+		{
+			if (message[size - 1] == '\n')
+				message[--size] = '\0';
+			if (message[size - 1] == '\r')
+				message[--size] = '\0';
+		}
+	}
+	else
+		message = ParamIndexIsOmitted(0) ? Type() : ParamIndexToString(0, _f_number_buf);
 
 #ifndef CONFIG_DEBUGGER
 	if (ParamIndexIsOmitted(1) && g->CurrentFunc)

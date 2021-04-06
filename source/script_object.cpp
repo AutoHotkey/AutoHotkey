@@ -2885,7 +2885,12 @@ ObjectMember RegExMatchObject::sMembers[] =
 
 ObjectMember Object::sErrorMembers[]
 {
-	Object_Member(__New, Error__New, 0, IT_CALL, 0, 3)
+	Object_Member(__New, Error__New, M_Error__New, IT_CALL, 0, 3)
+};
+
+ObjectMember Object::sOSErrorMembers[]
+{
+	Object_Member(__New, Error__New, M_OSError__New, IT_CALL, 0, 3)
 };
 
 
@@ -2964,7 +2969,7 @@ Object *Object::CreateRootPrototypes()
 				{_T("MethodError"), &ErrorPrototype::Method}
 			}},
 			{_T("MemoryError"), &ErrorPrototype::Memory},
-			{_T("OSError"), &ErrorPrototype::OS},
+			{_T("OSError"), &ErrorPrototype::OS, no_ctor, sOSErrorMembers, _countof(sOSErrorMembers)},
 			{_T("TargetError"), &ErrorPrototype::Target},
 			{_T("TimeoutError"), &ErrorPrototype::Timeout},
 			{_T("TypeError"), &ErrorPrototype::Type},
@@ -3015,8 +3020,9 @@ Object *Object::CreateRootPrototypes()
 	GuiControlType::DefineControlClasses();
 	DefineFileClass();
 
-	// Permit Object.New to construct Error objects.
+	// Permit Object.Call to construct Error objects.
 	ErrorPrototype::Error->mFlags &= ~NativeClassPrototype;
+	ErrorPrototype::OS->mFlags &= ~NativeClassPrototype;
 
 	return sAnyPrototype;
 }

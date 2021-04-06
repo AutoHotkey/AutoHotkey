@@ -451,7 +451,7 @@ public:
 
 	static ObjectMember sMembers[];
 	static ObjectMember sClassMembers[];
-	static ObjectMember sErrorMembers[];
+	static ObjectMember sErrorMembers[], sOSErrorMembers[];
 	static Object *sPrototype, *sClass, *sClassPrototype;
 
 	static Object *CreateRootPrototypes();
@@ -477,6 +477,7 @@ public:
 	ResultType Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType GetMethod(ResultToken &aResultToken, name_t aName);
 
+	enum { M_Error__New, M_OSError__New };
 	ResultType Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	// For pseudo-objects:
