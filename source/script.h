@@ -2978,6 +2978,7 @@ public:
 	void EnableOrDisableViewMenuItems(HMENU aMenu, UINT aFlags);
 #endif
 	void CreateTrayIcon();
+	void RestoreTrayIcon();
 	void UpdateTrayIcon(bool aForceUpdate = false);
 	void ShowTrayIcon(bool aShow);
 	ResultType SetTrayIcon(LPTSTR aIconFile, int aIconNumber, ToggleValueType aFreezeIcon);

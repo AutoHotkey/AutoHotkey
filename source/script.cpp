@@ -1009,10 +1009,23 @@ void Script::CreateTrayIcon()
 	mNIC.uCallbackMessage = AHK_NOTIFYICON;
 	mNIC.hIcon = mCustomIconSmall ? mCustomIconSmall : g_IconSmall;
 	UPDATE_TIP_FIELD
-	// If we were called due to an Explorer crash, I don't think it's necessary to call
-	// Shell_NotifyIcon() to remove the old tray icon because it was likely destroyed
-	// along with Explorer.  So just add it unconditionally:
 	if (!Shell_NotifyIcon(NIM_ADD, &mNIC))
+		mNIC.hWnd = NULL;  // Set this as an indicator that tray icon is not installed.
+}
+
+
+
+void Script::RestoreTrayIcon()
+{
+	// v1.1.33.07: This function is called when the TaskbarCreated message is received, instead of calling
+	// CreateTrayIcon() and UpdateTrayIcon(true).  mNIC already contains the values needed to recreate the
+	// icon as it was.  NIM_ADD fails if the icon already exists, such as if the message was received due
+	// to a screen DPI change or explicit SendMessage; for those cases, attempt NIM_MODIFY to be sure that
+	// the icon really doesn't exist.  This also fixes the icon becoming blurry when the DPI is changed
+	// repeatedly (presumably because the tray resizes its copy of the icon, but NIM_MODIFY refreshes it).
+	// This isn't done by UpdateTrayIcon() in case any scripts rely on the fact that the icon won't be
+	// recreated if it is killed by explicitly calling Shell_NotifyIcon().
+	if (  !(Shell_NotifyIcon(NIM_ADD, &mNIC) || Shell_NotifyIcon(NIM_MODIFY, &mNIC))  )
 		mNIC.hWnd = NULL;  // Set this as an indicator that tray icon is not installed.
 }
 
