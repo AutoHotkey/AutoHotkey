@@ -390,6 +390,12 @@ public:
 		auto field = FindField(aName);
 		return field && field->symbol == SYM_OBJECT ? field->object : nullptr;
 	}
+	
+	IObject *GetOwnPropMethod(name_t name)
+	{
+		auto field = FindField(name);
+		return field && field->symbol == SYM_DYNAMIC ? field->prop->Method() : nullptr;
+	}
 
 	bool SetOwnProp(name_t aName, ExprTokenType &aValue)
 	{

@@ -6408,7 +6408,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 		// or at the end of the __Init method belonging to this class.  Save the current values:
 		Line *script_first_line = mFirstLine, *script_last_line = mLastLine;
 		Line *block_end;
-		auto init_func = (UserFunc *)class_object->GetMethod(_T("__Init")); // Can only be a user-defined function or nullptr at this stage.
+		auto init_func = (UserFunc *)class_object->GetOwnPropMethod(_T("__Init")); // Can only be a user-defined function or nullptr at this stage.
 
 		if (init_func)
 		{
