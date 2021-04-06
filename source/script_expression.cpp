@@ -372,7 +372,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					this_token.SetValue(_T(""), 0);
 					goto push_this_token;
 				}
-				aResult = result_token.UnknownMemberError(*func_token, flags, member);
+				result_token.UnknownMemberError(*func_token, flags, member);
+				aResult = result_token.Result(); // FAIL to abort, OK if user or OnError requested continuation.
 				goto abort_if_result;
 			}
 
