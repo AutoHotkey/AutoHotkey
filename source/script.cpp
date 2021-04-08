@@ -5176,13 +5176,25 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		{
 			if (!parent)
 				return line.LineUnexpectedError();
-			enum_act parent_act = parent ? (enum_act)parent->mActionType : ACT_INVALID;
+			enum_act parent_act = (enum_act)parent->mActionType;
 			switch (aActionType)
 			{
-			case ACT_ELSE: expected = parent_act == ACT_IF; break;
+			case ACT_ELSE: expected = parent_act == ACT_IF || parent_act == ACT_CATCH; break;
 			case ACT_UNTIL: expected = ACT_IS_LOOP_EXCLUDING_WHILE(parent_act); break;
 			case ACT_CATCH: // Same as below.
-			case ACT_FINALLY: expected = parent_act == ACT_TRY || parent_act == ACT_CATCH; break;
+			case ACT_FINALLY:
+				if (parent_act == ACT_ELSE)
+				{
+					Line *else_line = parent; // But what kind of ELSE?
+					parent = parent->mPrevLine; // This is potentially the last line of a compound statement above the ELSE.
+					do // Find the IF/CATCH at the same level as the ELSE.
+						parent = parent->mParentLine;
+					while (parent->mParentLine != else_line->mParentLine);
+					expected = parent->mActionType == ACT_CATCH;
+					break;
+				}
+				expected = parent_act == ACT_TRY || parent_act == ACT_CATCH;
+				break;
 			}
 			if (expected)
 				break;
@@ -10042,6 +10054,12 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 					g_script.FreeExceptionToken(g.ThrownToken);
 					result = OK;
 				}
+				if (!g.ThrownToken && line->mActionType == ACT_ELSE && result == OK && !jump_to_line)
+				{
+					// Since no exception was thrown, execute the ELSE (by jumping to its first statement).
+					line = line->mNextLine;
+					continue;
+				}
 			}
 			else // this_act == ACT_CATCH
 			{
@@ -10049,6 +10067,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				while (line->mActionType == ACT_CATCH)
 					line = line->mRelatedLine;
 			}
+			if (line->mActionType == ACT_ELSE)
+				line = line->mRelatedLine;
 			if (line->mActionType == ACT_FINALLY)
 			{
 				if (result == OK && !jump_to_line)
