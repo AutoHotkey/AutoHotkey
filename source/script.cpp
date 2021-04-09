@@ -7593,6 +7593,8 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 			for (Line *parent = line->mParentLine; parent; parent = parent->mParentLine)
 				if (parent->mActionType == ACT_FINALLY)
 					return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
+				else if (parent->mActionType == ACT_BLOCK_BEGIN && parent->mAttribute)
+					break; // Allow "return" to be used inside a nested function or fat arrow function.
 			break;
 
 		case ACT_CATCH:
