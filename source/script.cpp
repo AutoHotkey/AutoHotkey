@@ -6053,8 +6053,6 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 	}
 	else if (*param_start == '=' && '>' == param_start[1]) // => expr
 	{
-		if (!func.mOuterFunc && !is_method)
-			func.mDefaultVarType = VAR_DECLARE_GLOBAL;
 		param_start = omit_leading_whitespace(param_start + 2);
 		if (!*param_start)
 			return ScriptError(ERR_INVALID_FUNCDECL, aBuf);
