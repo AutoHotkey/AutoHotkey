@@ -7675,27 +7675,16 @@ ResultType Script::PreparseCatch(Line *aLine)
 	}
 	auto args = SimpleHeap::Alloc<CatchStatementArgs>();
 	args->output_var = output_var;
-	if (prototype_count && prototype[0] == Object::sAnyPrototype)
-	{
-		// This isn't essential, but allows type checks to be skipped for `catch Any`, since they should
-		// always pass.  For simplicity, inane cases like `catch Error, Any` are handled the slower way.
-		args->prototype = nullptr;
-		args->prototype_count = 0;
-		// `catch` of any kind after `catch Any` will never execute, so flag it as an error if present.
-		if (aLine->mRelatedLine->mActionType == ACT_CATCH)
-			return aLine->mRelatedLine->LineUnexpectedError();
-	}
-	else if (prototype_count)
+	if (prototype_count)
 	{
 		args->prototype = SimpleHeap::Alloc<IObject *>(prototype_count);
 		args->prototype_count = prototype_count;
 		memcpy(args->prototype, prototype, prototype_count * sizeof(IObject *));
 	}
-	else
+	else // must be just `catch as output_var`.
 	{
-		static IObject *sErrorPrototype = ErrorPrototype::Error;
-		args->prototype = &sErrorPrototype;
-		args->prototype_count = 1;
+		args->prototype = nullptr;
+		args->prototype_count = 0; // This is treated the same as !mArgc: default to Error.
 	}
 	aLine->mAttribute = args;
 	return OK;
@@ -13206,7 +13195,7 @@ bool Line::CatchThis(ExprTokenType &aThrown) // ACT_CATCH
 {
 	auto args = (CatchStatementArgs *)mAttribute;
 	if (!args || !args->prototype_count)
-		return true;
+		return Object::HasBase(aThrown, ErrorPrototype::Error);
 	for (int i = 0; i < args->prototype_count; ++i)
 		if (Object::HasBase(aThrown, args->prototype[i]))
 			return true;
