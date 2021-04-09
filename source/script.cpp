@@ -6226,7 +6226,9 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, bool aStatic, bool &aBufHasB
 	LPTSTR param_end, next_token;
 	if (*param_start == '[')
 	{
-		++param_start;
+		param_start = omit_leading_whitespace(param_start + 1);
+		if (*param_start == ']')
+			return ScriptError(ERR_PROPERTY_EMPTY_BRACKETS, aBuf);
 		param_end = param_start + FindExprDelim(param_start, ']');
 		if (!*param_end)
 			return ScriptError(ERR_MISSING_CLOSE_BRACKET, aBuf);

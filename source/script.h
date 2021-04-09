@@ -182,6 +182,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_UNEXPECTED_CLOSE_BRACKET _T("Unexpected \"]\"")
 #define ERR_UNEXPECTED_CLOSE_BRACE _T("Unexpected \"}\"")
 #define ERR_UNEXPECTED_COMMA _T("Unexpected comma")
+#define ERR_PROPERTY_EMPTY_BRACKETS _T("Empty [] not permitted.")
 #define ERR_BAD_AUTO_CONCAT _T("Missing space or operator before this.")
 #define ERR_MISSING_CLOSE_QUOTE _T("Missing close-quote") // No period after short phrases.
 #define ERR_MISSING_COMMA _T("Missing comma")             //
