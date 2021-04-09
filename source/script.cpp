@@ -9824,8 +9824,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 
 			// ONLY AFTER THE ABOVE IS IT CERTAIN THE LOOP WILL LAUNCH (i.e. there was no error or early return).
 			// So only now is it safe to make changes to global things like g.mLoopIteration.
-			bool continue_main_loop = false; // Init these output parameters prior to starting each type of loop.
-			jump_to_line = NULL;             //
+			jump_to_line = NULL; // Init this output parameter prior to starting each type of loop.
 
 			Line *finished_line = line->mRelatedLine;
 			Line *until;
@@ -9870,30 +9869,28 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 					iteration_limit = 0; // Avoids debug-mode's "used without having been defined" (though it's merely passed as a parameter, not ever used in this case).
 					is_infinite = true;  // Override the default set earlier.
 				}
-				result = line->PerformLoop(aResultToken, continue_main_loop, jump_to_line, until
-					, iteration_limit, is_infinite);
+				result = line->PerformLoop(aResultToken, jump_to_line, until, iteration_limit, is_infinite);
 				break;
 			case ACT_WHILE:
-				result = line->PerformLoopWhile(aResultToken, continue_main_loop, jump_to_line);
+				result = line->PerformLoopWhile(aResultToken, jump_to_line);
 				break;
 			case ACT_FOR:
-				result = line->PerformLoopFor(aResultToken, continue_main_loop, jump_to_line, until);
+				result = line->PerformLoopFor(aResultToken, jump_to_line, until);
 				break;
 			case ACT_LOOP_PARSE:
 				// The phrase "csv" is unique enough since user can always rearrange the letters
 				// to do a literal parse using C, S, and V as delimiters:
 				if (_tcsicmp(ARG2, _T("CSV")))
-					result = line->PerformLoopParse(aResultToken, continue_main_loop, jump_to_line, until);
+					result = line->PerformLoopParse(aResultToken, jump_to_line, until);
 				else
-					result = line->PerformLoopParseCSV(aResultToken, continue_main_loop, jump_to_line, until);
+					result = line->PerformLoopParseCSV(aResultToken, jump_to_line, until);
 				break;
 			case ACT_LOOP_READ:
 				{
 					TextFile tfile;
 					if (tfile.Open(ARG1, DEFAULT_READ_FLAGS, g.Encoding & CP_AHKCP))
 					{
-						result = line->PerformLoopReadFile(aResultToken, continue_main_loop, jump_to_line, until
-							, &tfile, ARG2);
+						result = line->PerformLoopReadFile(aResultToken, jump_to_line, until, &tfile, ARG2);
 						tfile.Close();
 					}
 					else
@@ -9902,7 +9899,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				}
 				break;
 			case ACT_LOOP_FILE:
-				result = line->PerformLoopFilePattern(aResultToken, continue_main_loop, jump_to_line, until
+				result = line->PerformLoopFilePattern(aResultToken, jump_to_line, until
 					, (file_loop_mode & ~FILE_LOOP_RECURSE), (file_loop_mode & FILE_LOOP_RECURSE), ARG1);
 				break;
 			case ACT_LOOP_REG:
@@ -9915,7 +9912,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				if (root_key = RegConvertKey(ARG1, &subkey, &is_remote_registry)) // This will open the key if it's remote.
 				{
 					// root_key_type needs to be passed in order to support GetLoopRegKey():
-					result = line->PerformLoopReg(aResultToken, continue_main_loop, jump_to_line, until
+					result = line->PerformLoopReg(aResultToken, jump_to_line, until
 						, (file_loop_mode & ~FILE_LOOP_RECURSE), (file_loop_mode & FILE_LOOP_RECURSE), root_key_type, root_key, subkey);
 					if (is_remote_registry)
 						RegCloseKey(root_key);
@@ -9959,8 +9956,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			if (result == FAIL || result == EARLY_RETURN || result == EARLY_EXIT)
 				return result;
 			// else result can be LOOP_BREAK or OK or LOOP_CONTINUE (but only if a loop-label was given).
-			if (continue_main_loop) // It signaled us to do this:
-				continue;
 
 			if (jump_to_line)
 			{
@@ -10548,7 +10543,7 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 }
 
 
-ResultType Line::PerformLoop(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+ResultType Line::PerformLoop(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
 	, __int64 aIterationLimit, bool aIsInfinite) // bool performs better than BOOL in current benchmarks for this.
 // This performs much better (by at least 7%) as a function than as inline code, probably because
 // it's only called to set up the loop, not each time through the loop.
@@ -10589,24 +10584,12 @@ ResultType Line::PerformLoop(ResultToken *aResultToken, bool &aContinueMainLoop,
 			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
 		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // i.e. "goto somewhere" or "continue a_loop_which_encloses_this_one".
 		{
-			if (jump_to_line == this) 
-				// Since this LOOP's ExecUntil() encountered a Goto whose target is the LOOP
-				// itself, continue with the for-loop without moving to a different
-				// line.  Also: stay in this recursion layer even if aMode == ONLY_ONE_LINE
-				// because we don't want the caller handling it because then it's cleanup
-				// to jump to its end-point (beyond its own and any unowned elses) won't work.
-				// Example:
-				// if x  <-- If this layer were to do it, its own else would be unexpectedly encountered.
-				//    label1:
-				//    loop  <-- We want this statement's layer to handle the goto.
-				//       goto, label1
-				// else
-				//   ...
-				// Also, signal all our callers to return until they get back to the original
-				// ExecUntil() instance that started the loop:
-				aContinueMainLoop = true;
-			else // jump_to_line must be a line that's at the same level or higher as our Exec_Until's LOOP statement itself.
-				aJumpToLine = jump_to_line; // Signal the caller to handle this jump.
+			// This condition used to set a variable that told ExecUntil() to continue without changing line.
+			// However, it was completely redundant because jump_to_line has the same effect (only without an
+			// actual change in value for the line pointer).
+			//if (jump_to_line == this)
+			// jump_to_line must be a line that's at the same level or higher as our Exec_Until's LOOP statement itself.
+			aJumpToLine = jump_to_line; // Signal the caller to handle this jump.
 			return result;
 		}
 		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
@@ -10625,7 +10608,7 @@ ResultType Line::PerformLoop(ResultToken *aResultToken, bool &aContinueMainLoop,
 
 
 // Lexikos: ACT_WHILE
-ResultType Line::PerformLoopWhile(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine)
+ResultType Line::PerformLoopWhile(ResultToken *aResultToken, Line *&aJumpToLine)
 {
 	ResultType result;
 	Line *jump_to_line;
@@ -10663,10 +10646,7 @@ ResultType Line::PerformLoopWhile(ResultToken *aResultToken, bool &aContinueMain
 			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
 		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this))
 		{
-			if (jump_to_line == this)
-				aContinueMainLoop = true;
-			else
-				aJumpToLine = jump_to_line;
+			aJumpToLine = jump_to_line;
 			return result;
 		}
 		if (result != OK && result != LOOP_CONTINUE)
@@ -10702,7 +10682,7 @@ bool Line::EvaluateLoopUntil(ResultType &aResult)
 
 
 
-ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil)
+ResultType Line::PerformLoopFor(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil)
 {
 	ResultType result;
 	Line *jump_to_line;
@@ -10775,10 +10755,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
 		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this))
 		{
-			if (jump_to_line == this)
-				aContinueMainLoop = true;
-			else
-				aJumpToLine = jump_to_line;
+			aJumpToLine = jump_to_line;
 			break;
 		}
 		if (result != OK && result != LOOP_CONTINUE)
@@ -10799,7 +10776,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, bool &aContinueMainLo
 
 
 
-ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
 	, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LPTSTR aFilePattern)
 {
 	ResultType result = OK; // Set default.
@@ -10819,7 +10796,7 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, bool &aContin
 	//    This approach means a little up-front work that mightn't be needed, but greatly improves
 	//    performance in some common cases, such as if A_LoopFileLongPath is used on each iteration.
 	if (ParseLoopFilePattern(aFilePattern, *plfs, result))
-		result = PerformLoopFilePattern(aResultToken, aContinueMainLoop, aJumpToLine, aUntil, aFileLoopMode, aRecurseSubfolders, *plfs);
+		result = PerformLoopFilePattern(aResultToken, aJumpToLine, aUntil, aFileLoopMode, aRecurseSubfolders, *plfs);
 	//else: leave result == OK, since in effect, no files were found.
 	delete plfs;
 	return result;
@@ -10955,7 +10932,7 @@ bool Line::ParseLoopFilePattern(LPTSTR aFilePattern, LoopFilesStruct &lfs, Resul
 
 
 
-ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
 	, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LoopFilesStruct &lfs)
 // This is the recursive part, called for each sub-directory when aRecurseSubfolders is true.
 // Caller has allocated buffers (lfs) and filled in the initial paths and filename/pattern.
@@ -11012,10 +10989,7 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, bool &aContin
 
 		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // See comments in PerformLoop() about this section.
 		{
-			if (jump_to_line == this)
-				aContinueMainLoop = true;
-			else
-				aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
+			aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
 			FindClose(file_search);
 			return result;
 		}
@@ -11098,7 +11072,7 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, bool &aContin
 		short_path_end[short_name_length + 1] = '\0';
 		lfs.short_path_length = short_path_length + short_name_length + 1;
 
-		result = PerformLoopFilePattern(aResultToken, aContinueMainLoop, aJumpToLine, aUntil, aFileLoopMode, aRecurseSubfolders, lfs);
+		result = PerformLoopFilePattern(aResultToken, aJumpToLine, aUntil, aFileLoopMode, aRecurseSubfolders, lfs);
 		// Above returns LOOP_CONTINUE for cases like "continue 2" or "continue outer_loop", where the
 		// target is not this Loop but a Loop which encloses it. In those cases we want below to return:
 		if (result != OK) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
@@ -11106,12 +11080,8 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, bool &aContin
 			FindClose(file_search);
 			return result;  // Return even LOOP_BREAK, since our caller can be either ExecUntil() or ourself.
 		}
-		if (aContinueMainLoop // The call to PerformLoop() above signaled us to break & return.
-			|| aJumpToLine)
-			// Above: There's no need to check "aJumpToLine == this" because PerformLoop() would already have
-			// handled it.  But if it set aJumpToLine to be non-NULL, it means we have to return and let our caller
-			// handle the jump.
-			break;
+		if (aJumpToLine)
+			break; // Return and let our caller handle the jump.
 	} while (FindNextFile(file_search, &lfs));
 	FindClose(file_search);
 
@@ -11120,7 +11090,7 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, bool &aContin
 
 
 
-ResultType Line::PerformLoopReg(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+ResultType Line::PerformLoopReg(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
 	, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, HKEY aRootKeyType, HKEY aRootKey, LPTSTR aRegSubkey)
 // aRootKeyType is the type of root key, independent of whether it's local or remote.
 // This is used because there's no easy way to determine which root key a remote HKEY
@@ -11163,10 +11133,7 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, bool &aContinueMainLo
 			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);\
 		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this))\
 		{\
-			if (jump_to_line == this)\
-				aContinueMainLoop = true;\
-			else\
-				aJumpToLine = jump_to_line;\
+			aJumpToLine = jump_to_line;\
 			RegCloseKey(hRegKey);\
 			return result;\
 		}\
@@ -11233,14 +11200,14 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, bool &aContinueMainLo
 				sntprintf(subkey_full_path, _countof(subkey_full_path), _T("%s%s%s"), reg_item.subkey
 					, *reg_item.subkey ? _T("\\") : _T(""), reg_item.name);
 				// This section is very similar to the one in PerformLoopFilePattern(), so see it for comments:
-				result = PerformLoopReg(aResultToken, aContinueMainLoop, aJumpToLine, aUntil
+				result = PerformLoopReg(aResultToken, aJumpToLine, aUntil
 					, aFileLoopMode , aRecurseSubfolders, aRootKeyType, aRootKey, subkey_full_path);
 				if (result != OK)
 				{
 					RegCloseKey(hRegKey);
 					return result;
 				}
-				if (aContinueMainLoop || aJumpToLine)
+				if (aJumpToLine)
 					break;
 			}
 		}
@@ -11254,7 +11221,7 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, bool &aContinueMainLo
 
 
 
-ResultType Line::PerformLoopParse(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil)
+ResultType Line::PerformLoopParse(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil)
 {
 	if (!*ARG1) // Since the input variable's contents are blank, the loop will execute zero times.
 		return OK;
@@ -11350,10 +11317,7 @@ ResultType Line::PerformLoopParse(ResultToken *aResultToken, bool &aContinueMain
 
 		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // See comments in PerformLoop() about this section.
 		{
-			if (jump_to_line == this)
-				aContinueMainLoop = true;
-			else
-				aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
+			aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
 			FREE_PARSE_MEMORY;
 			return result;
 		}
@@ -11376,7 +11340,7 @@ ResultType Line::PerformLoopParse(ResultToken *aResultToken, bool &aContinueMain
 
 
 
-ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil)
+ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil)
 // This function is similar to PerformLoopParse() so the two should be maintained together.
 // See PerformLoopParse() for comments about the below (comments have been mostly stripped
 // from this function).
@@ -11476,10 +11440,7 @@ ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, bool &aContinueM
 
 		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // See comments in PerformLoop() about this section.
 		{
-			if (jump_to_line == this)
-				aContinueMainLoop = true;
-			else
-				aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
+			aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
 			FREE_PARSE_MEMORY;
 			return result;
 		}
@@ -11514,7 +11475,7 @@ ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, bool &aContinueM
 
 
 
-ResultType Line::PerformLoopReadFile(ResultToken *aResultToken, bool &aContinueMainLoop, Line *&aJumpToLine, Line *aUntil
+ResultType Line::PerformLoopReadFile(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
 	, TextStream *aReadFile, LPTSTR aWriteFileName)
 {
 	// Make a persistent copy in case aWriteFileName's contents are in the deref buffer:
@@ -11547,10 +11508,7 @@ ResultType Line::PerformLoopReadFile(ResultToken *aResultToken, bool &aContinueM
 			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
 		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // See comments in PerformLoop() about this section.
 		{
-			if (jump_to_line == this)
-				aContinueMainLoop = true;
-			else
-				aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
+			aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
 			break;
 		}
 		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
