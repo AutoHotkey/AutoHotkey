@@ -2918,7 +2918,8 @@ private:
 	ResultType PreparseExpressions(FuncList &aFuncs);
 	void PreparseHotkeyIfExpr(Line *aLine);
 	Line *PreparseCommands(Line *aStartingLine);
-	ResultType PreparseCatch(Line *aLine);
+	ResultType PreparseCatchVar(Line *aLine);
+	ResultType PreparseCatchClass(Line *aLine);
 	bool IsLabelTarget(Line *aLine);
 
 public:

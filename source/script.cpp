@@ -6507,7 +6507,10 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
 
 	// Get base variable; e.g. "MyClass" in "MyClass.MySubClass".
 	cp = _tcschr(class_name + 1, '.');
-	Var *base_var = FindGlobalVar(class_name, cp - class_name);
+	// To reserve for possible future use with local classes, resolve the class variable according
+	// to the current scope (which is always global for class..extends, but often local for Catch).
+	// This also avoids confusion due to inconsistency between `catch x` and other references to x.
+	Var *base_var = FindVar(class_name, cp - class_name);
 	if (!base_var)
 		return NULL;
 
@@ -7403,8 +7406,12 @@ ResultType Script::PreparseExpressions(Line *aStartingLine)
 
 		if (line->mActionType == ACT_CATCH)
 		{
-			// Preparse Catch at this stage since its output var hasn't been parsed yet.
-			if (!PreparseCatch(line))
+			// Preparse Catch's output var at this stage so it has the proper assign-local effect.
+			// Don't parse the class names yet since that might parse a given name as global when it
+			// should be local due to a subsequent assignment.  Delaying it ensures CATCH's classes
+			// are always consistent with other references in the function, and ensures that adding
+			// local classes in future won't necessitate a change in behaviour.
+			if (!PreparseCatchVar(line))
 				return FAIL;
 			continue;
 		}
@@ -7587,6 +7594,11 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 				if (parent->mActionType == ACT_FINALLY)
 					return line->PreparseError(ERR_BAD_JUMP_INSIDE_FINALLY);
 			break;
+
+		case ACT_CATCH:
+			if (!PreparseCatchClass(line))
+				return nullptr;
+			break;
 		}
 
 		// Finalize and optimize postfix expressions.
@@ -7634,33 +7646,58 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 
 
 
-ResultType Script::PreparseCatch(Line *aLine)
+ResultType Script::PreparseCatchVar(Line *aLine)
 {
 	if (!aLine->mArgc)
 		return OK;
+	auto args = SimpleHeap::Alloc<CatchStatementArgs>();
+	args->output_var = nullptr;
+	args->prototype = nullptr;
+	args->prototype_count = 0;
+	aLine->mAttribute = args;
+	LPTSTR cp = aLine->mArg->text + aLine->mArg->length;
+	for (LPTSTR min_space_position = aLine->mArg->text + 2;;)
+	{
+		--cp;
+		if (cp < min_space_position)
+			return OK;
+		if (IS_SPACE_OR_TAB(*cp))
+			break;
+		if (!IS_IDENTIFIER_CHAR(*cp))
+			//return *cp == '.' ? OK : aLine->LineError(ERR_EXPR_SYNTAX);
+			return OK; // Leave error reporting to PreparseCatchClass().
+	}
+	LPTSTR var_name = cp + 1;
+	cp = omit_trailing_whitespace(aLine->mArg->text + 1, cp);
+	if (ctolower(*cp) == 's' && ctolower(cp[-1]) == 'a' && (cp - 1 == aLine->mArg->text || IS_SPACE_OR_TAB(cp[-2])))
+	{
+		Var *var;
+		if (  !(var = FindOrAddVar(var_name, 0, FINDVAR_FOR_WRITE))
+			|| !aLine->ValidateVarUsage(var, Script::VARREF_OUTPUT_VAR)  )
+			return FAIL;
+		var->MarkAssignedSomewhere();
+		args->output_var = var;
+		aLine->mArg->length = ArgLengthType((cp - 1) - aLine->mArg->text);
+	}
+	return OK;
+}
+
+
+
+ResultType Script::PreparseCatchClass(Line *aLine)
+{
+	if (!aLine->mArgc || !aLine->mArg->length) // PreparseCatchVar() may have already set length to exclude " as output_var".
+		return OK;
 	IObject *prototype[MAX_ARGS - 1]; // Set an arbitrary limit to simplify the code; using MAX_ARGS to keep things consistent, -1 for the output var.
 	int prototype_count = 0;
-	Var *output_var = nullptr;
-	for (LPTSTR cp = aLine->mArg->text; *cp; )
+	for (LPTSTR cp = aLine->mArg->text, cp_end = cp + aLine->mArg->length; cp < cp_end; )
 	{
-		if (ctolower(*cp) == 'a' && ctolower(cp[1]) == 's' && IS_SPACE_OR_TAB(cp[2]))
-		{
-			cp = omit_leading_whitespace(cp + 2);
-			LPTSTR end = find_identifier_end(cp);
-			if (end == cp || *end)
-				return aLine->LineError(ERR_EXPR_SYNTAX);
-			if (  !(output_var = FindOrAddVar(cp, end - cp, FINDVAR_FOR_WRITE))
-				|| !aLine->ValidateVarUsage(output_var, Script::VARREF_OUTPUT_VAR)  )
-				return FAIL;
-			output_var->MarkAssignedSomewhere();
-			break;
-		}
 		if (prototype_count)
 		{
-			if (prototype_count == _countof(prototype))
-				return aLine->LineError(_T("Too many classes."));
 			if (*cp != g_delimiter)
 				return aLine->LineError(ERR_EXPR_SYNTAX);
+			if (prototype_count == _countof(prototype))
+				return aLine->LineError(_T("Too many classes."));
 			cp = omit_leading_whitespace(cp + 1);
 		}
 		LPTSTR end = cp;
@@ -7670,23 +7707,16 @@ ResultType Script::PreparseCatch(Line *aLine)
 			return aLine->LineError(ERR_EXPR_SYNTAX);
 		auto cls = FindClass(cp, end - cp);
 		if (  !cls || !(prototype[prototype_count++] = cls->GetOwnPropObj(_T("Prototype")))  )
-			return aLine->LineError(_T("Unknown class."), FAIL, cp);
+			return aLine->LineError(_T("Invalid class."), FAIL, cp);
 		cp = next;
 	}
-	auto args = SimpleHeap::Alloc<CatchStatementArgs>();
-	args->output_var = output_var;
-	if (prototype_count)
+	if (prototype_count) // Currently should always be non-zero due to the length check.
 	{
+		auto args = (CatchStatementArgs *)aLine->mAttribute;
 		args->prototype = SimpleHeap::Alloc<IObject *>(prototype_count);
 		args->prototype_count = prototype_count;
 		memcpy(args->prototype, prototype, prototype_count * sizeof(IObject *));
 	}
-	else // must be just `catch as output_var`.
-	{
-		args->prototype = nullptr;
-		args->prototype_count = 0; // This is treated the same as !mArgc: default to Error.
-	}
-	aLine->mAttribute = args;
 	return OK;
 }
 
