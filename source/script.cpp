@@ -10543,66 +10543,71 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 }
 
 
+
+// The following macro is used to reduce repetition, in lieu of an inline function,
+// which wouldn't be fully inlined.  Benchmarks showed this affected performance of
+// very simple loops by a few percent.  Making it a macro also allows repetition of
+// the result checks to be avoided.
+//
+// Simple loops are about 6% faster by omitting the open-brace from ListLines, so
+// it seems worth it:
+//if (g.ListLinesIsEnabled)
+//	LOG_LINE(mNextLine)
+//
+// If this loop has a block under it rather than just a single line, take a shortcut
+// and directly execute the block.  This avoids one recursive call to ExecUntil()
+// for each iteration, which can speed up short/fast loops by as much as 30%.
+// Another benefit is conservation of stack space, especially during "else if" ladders.
+//
+// At this point, mNextLine is already verified non-NULL by the pre-parser because it
+// checks that every LOOP has a line under it (ACT_BLOCK_BEGIN in this case) and that
+// every ACT_BLOCK_BEGIN has at least one line under it.
+#define PERFORMLOOP_EXECUTE_BODY \
+	if (mNextLine->mActionType == ACT_BLOCK_BEGIN) \
+	{ \
+		do \
+			result = mNextLine->mNextLine->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line); \
+		while (jump_to_line == mNextLine); \
+	} \
+	else \
+		result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line); /* i.e. "goto somewhere" or "continue a_loop_which_encloses_this_one". */ \
+	if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) \
+	{ /* jump_to_line must be a line that's at the same level or higher as our Exec_Until's LOOP statement itself. */ \
+		aJumpToLine = jump_to_line; /* Signal the caller to handle this jump. */ \
+		break; \
+	} \
+	if (result == LOOP_CONTINUE) /* Continue this loop (outer loops were handled via jump_to_line above). */ \
+		result = OK; /* Don't propagate the LOOP_CONTINUE result since it has already achieved its purpose. */ \
+	else if (result != OK) /* i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL) */ \
+		break;
+#define PERFORMLOOP_EVALUATE_UNTIL \
+	if (aUntil && aUntil->EvaluateLoopUntil(result)) \
+		break;
+
+
+
 ResultType Line::PerformLoop(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
 	, __int64 aIterationLimit, bool aIsInfinite) // bool performs better than BOOL in current benchmarks for this.
 // This performs much better (by at least 7%) as a function than as inline code, probably because
 // it's only called to set up the loop, not each time through the loop.
 {
-	ResultType result;
-	Line *jump_to_line;
+	ResultType result = OK;
+	Line *jump_to_line = nullptr;
 	global_struct &g = *::g; // Primarily for performance in this case.
 
 	for (; aIsInfinite || g.mLoopIteration <= aIterationLimit; ++g.mLoopIteration)
 	{
-		// Execute once the body of the loop (either just one statement or a block of statements).
+		// Execute the body of the loop (either just one statement or a block of statements).
 		// Preparser has ensured that every LOOP has a non-NULL next line.
-		if (mNextLine->mActionType == ACT_BLOCK_BEGIN)
-		{
-			// Simple loops are about 6% faster by omitting the open-brace from ListLines, so
-			// it seems worth it:
-			//if (g.ListLinesIsEnabled)
-			//{
-			//	sLog[sLogNext] = mNextLine; // See comments in ExecUntil() about this section.
-			//	sLogTick[sLogNext++] = GetTickCount();
-			//	if (sLogNext >= LINE_LOG_SIZE)
-			//		sLogNext = 0;
-			//}
-
-			// If this loop has a block under it rather than just a single line, take a shortcut
-			// and directly execute the block.  This avoids one recursive call to ExecUntil()
-			// for each iteration, which can speed up short/fast loops by as much as 30%.
-			// Another benefit is conservation of stack space, especially during "else if" ladders.
-			//
-			// At this point, mNextLine->mNextLine is already verified non-NULL by the pre-parser
-			// because it checks that every LOOP has a line under it (ACT_BLOCK_BEGIN in this case)
-			// and that every ACT_BLOCK_BEGIN has at least one line under it.
-			do
-				result = mNextLine->mNextLine->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
-			while (jump_to_line == mNextLine); // The above call encountered a Goto that jumps to the "{". See ACT_BLOCK_BEGIN in ExecUntil() for details.
-		}
-		else
-			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
-		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // i.e. "goto somewhere" or "continue a_loop_which_encloses_this_one".
-		{
-			// This condition used to set a variable that told ExecUntil() to continue without changing line.
-			// However, it was completely redundant because jump_to_line has the same effect (only without an
-			// actual change in value for the line pointer).
-			//if (jump_to_line == this)
-			// jump_to_line must be a line that's at the same level or higher as our Exec_Until's LOOP statement itself.
-			aJumpToLine = jump_to_line; // Signal the caller to handle this jump.
-			return result;
-		}
-		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-			return result;
-		if (aUntil && aUntil->EvaluateLoopUntil(result))
-			return result;
-		// Otherwise, the result of executing the body of the loop, above, was either OK
-		// (the current iteration completed normally) or LOOP_CONTINUE (the current loop
-		// iteration was cut short).  In both cases, just continue on through the loop.
+		PERFORMLOOP_EXECUTE_BODY
+		PERFORMLOOP_EVALUATE_UNTIL
+		// Since the macro didn't "break", the result of executing the body of the loop was either OK
+		// (the current iteration completed normally) or LOOP_CONTINUE (the current loop iteration
+		// was cut short).  In both cases, just continue on through the loop.
 	} // for()
 
 	// The script's loop is now over.
-	return OK;
+	return result;
 }
 
 
@@ -10610,8 +10615,8 @@ ResultType Line::PerformLoop(ResultToken *aResultToken, Line *&aJumpToLine, Line
 // Lexikos: ACT_WHILE
 ResultType Line::PerformLoopWhile(ResultToken *aResultToken, Line *&aJumpToLine)
 {
-	ResultType result;
-	Line *jump_to_line;
+	ResultType result = OK;
+	Line *jump_to_line = nullptr;
 	global_struct &g = *::g; // Might slightly speed up the loop below.
 
 	for (;; ++g.mLoopIteration)
@@ -10637,20 +10642,7 @@ ResultType Line::PerformLoopWhile(ResultToken *aResultToken, Line *&aJumpToLine)
 		if (!ResultToBOOL(ARG1))
 			break;
 
-		// CONCERNING ALL THE REST OF THIS FUNCTION: See comments in PerformLoop() for details.
-		if (mNextLine->mActionType == ACT_BLOCK_BEGIN)
-			do
-				result = mNextLine->mNextLine->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
-			while (jump_to_line == mNextLine);
-		else
-			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
-		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this))
-		{
-			aJumpToLine = jump_to_line;
-			return result;
-		}
-		if (result != OK && result != LOOP_CONTINUE)
-			return result;
+		PERFORMLOOP_EXECUTE_BODY
 
 		// Before re-evaluating the condition, add it to the ListLines log again.  This is done
 		// at the end of the loop rather than the beginning because ExecUntil already added the
@@ -10658,7 +10650,7 @@ ResultType Line::PerformLoopWhile(ResultToken *aResultToken, Line *&aJumpToLine)
 		if (g.ListLinesIsEnabled)
 			LOG_LINE(this)
 	} // for()
-	return OK; // The script's loop is now over.
+	return result; // The script's loop is now over.
 }
 
 
@@ -10746,22 +10738,8 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, Line *&aJumpToLine, L
 		}
 		// Otherwise the enumerator already stored the next value(s) in the variable(s) we passed it via params.
 
-		// CONCERNING ALL THE REST OF THIS FUNCTION: See comments in PerformLoop() for details.
-		if (mNextLine->mActionType == ACT_BLOCK_BEGIN)
-			do
-				result = mNextLine->mNextLine->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
-			while (jump_to_line == mNextLine);
-		else
-			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
-		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this))
-		{
-			aJumpToLine = jump_to_line;
-			break;
-		}
-		if (result != OK && result != LOOP_CONTINUE)
-			break;
-		if (aUntil && aUntil->EvaluateLoopUntil(result))
-			break;
+		PERFORMLOOP_EXECUTE_BODY
+		PERFORMLOOP_EVALUATE_UNTIL
 	} // for()
 	enumerator->Release();
 	for (int i = 0; i < var_count; ++i)
@@ -10968,8 +10946,8 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpT
 	// file_found and lfs have now been set for use below.
 	// Above is responsible for having properly set file_found and file_search.
 
-	ResultType result;
-	Line *jump_to_line;
+	ResultType result = OK;
+	Line *jump_to_line = nullptr;
 	global_struct &g = *::g; // Primarily for performance in this case.
 
 	g.mLoopFile = &lfs; // inner file-loop's file takes precedence over any outer file-loop's.
@@ -10978,30 +10956,10 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpT
 
 	for (; file_found; ++g.mLoopIteration)
 	{
-		// Execute once the body of the loop (either just one statement or a block of statements).
-		// Preparser has ensured that every LOOP has a non-NULL next line.
-		if (mNextLine->mActionType == ACT_BLOCK_BEGIN) // See PerformLoop() for comments about this section.
-			do
-				result = mNextLine->mNextLine->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
-			while (jump_to_line == mNextLine);
-		else
-			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
-
-		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // See comments in PerformLoop() about this section.
-		{
-			aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
-			FindClose(file_search);
-			return result;
-		}
-		if ( result != OK && result != LOOP_CONTINUE // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-			|| (aUntil && aUntil->EvaluateLoopUntil(result)) )
-		{
-			FindClose(file_search);
-			// Although ExecUntil() will treat the LOOP_BREAK result identically to OK, we
-			// need to return LOOP_BREAK in case our caller is another instance of this
-			// same function (i.e. due to recursing into subfolders):
-			return result;
-		}
+		PERFORMLOOP_EXECUTE_BODY
+		PERFORMLOOP_EVALUATE_UNTIL
+		
+		// The macro above will "break", depending on result and jump_to_line.
 		// Otherwise, the result of executing the body of the loop, above, was either OK
 		// (the current iteration completed normally) or LOOP_CONTINUE (the current loop
 		// iteration was cut short).  In both cases, just continue on through the loop.
@@ -11015,6 +10973,9 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpT
 	// The script's loop is now over.
 	if (file_search != INVALID_HANDLE_VALUE)
 		FindClose(file_search);
+
+	if (result != OK || aJumpToLine)
+		return result;
 
 	// If aRecurseSubfolders is true, we now need to perform the loop's body for every subfolder to
 	// search for more files and folders inside that match aFilePattern.  We can't do this in the
@@ -11076,16 +11037,13 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpT
 		// Above returns LOOP_CONTINUE for cases like "continue 2" or "continue outer_loop", where the
 		// target is not this Loop but a Loop which encloses it. In those cases we want below to return:
 		if (result != OK) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-		{
-			FindClose(file_search);
-			return result;  // Return even LOOP_BREAK, since our caller can be either ExecUntil() or ourself.
-		}
+			break;
 		if (aJumpToLine)
 			break; // Return and let our caller handle the jump.
 	} while (FindNextFile(file_search, &lfs));
 	FindClose(file_search);
 
-	return OK;
+	return result;  // Return even LOOP_BREAK, since our caller can be either ExecUntil() or ourself.
 }
 
 
@@ -11115,34 +11073,17 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, Line *&aJumpToLine, L
 		return OK;
 	}
 
-	ResultType result;
-	Line *jump_to_line;
+	ResultType result = OK;
+	Line *jump_to_line = nullptr;
 	DWORD i;
 	global_struct &g = *::g; // Primarily for performance in this case.
 
 	// See comments in PerformLoop() for details about this section.
-	// Note that &reg_item is passed to ExecUntil() rather than... (comment was never finished).
 	#define MAKE_SCRIPT_LOOP_PROCESS_THIS_ITEM \
 	{\
 		g.mLoopRegItem = &reg_item;\
-		if (mNextLine->mActionType == ACT_BLOCK_BEGIN)\
-			do\
-				result = mNextLine->mNextLine->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);\
-			while (jump_to_line == mNextLine);\
-		else\
-			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);\
-		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this))\
-		{\
-			aJumpToLine = jump_to_line;\
-			RegCloseKey(hRegKey);\
-			return result;\
-		}\
-		if ( result != OK && result != LOOP_CONTINUE \
-			|| (aUntil && aUntil->EvaluateLoopUntil(result)) ) \
-		{\
-			RegCloseKey(hRegKey);\
-			return result;\
-		}\
+		PERFORMLOOP_EXECUTE_BODY \
+		PERFORMLOOP_EVALUATE_UNTIL \
 		++g.mLoopIteration;\
 	}
 
@@ -11166,6 +11107,11 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, Line *&aJumpToLine, L
 			// else continue the loop in case some of the lower indexes can still be retrieved successfully.
 			if (i == 0)  // Check this here due to it being an unsigned value that we don't want to go negative.
 				break;
+		}
+		if (result != OK || aJumpToLine)
+		{
+			RegCloseKey(hRegKey);
+			return result;
 		}
 	}
 
@@ -11202,12 +11148,7 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, Line *&aJumpToLine, L
 				// This section is very similar to the one in PerformLoopFilePattern(), so see it for comments:
 				result = PerformLoopReg(aResultToken, aJumpToLine, aUntil
 					, aFileLoopMode , aRecurseSubfolders, aRootKeyType, aRootKey, subkey_full_path);
-				if (result != OK)
-				{
-					RegCloseKey(hRegKey);
-					return result;
-				}
-				if (aJumpToLine)
+				if (result != OK || aJumpToLine)
 					break;
 			}
 		}
@@ -11216,7 +11157,7 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, Line *&aJumpToLine, L
 			break;
 	}
 	RegCloseKey(hRegKey);
-	return OK;
+	return result;
 }
 
 
@@ -11266,8 +11207,8 @@ ResultType Line::PerformLoopParse(ResultToken *aResultToken, Line *&aJumpToLine,
 	tcslcpy(delimiters, ARG2, _countof(delimiters));
 	tcslcpy(omit_list, ARG3, _countof(omit_list));
 
-	ResultType result;
-	Line *jump_to_line;
+	ResultType result = OK;
+	Line *jump_to_line = nullptr;
 	TCHAR *field, *field_end, saved_char;
 	size_t field_length;
 	global_struct &g = *::g; // Primarily for performance in this case.
@@ -11308,25 +11249,8 @@ ResultType Line::PerformLoopParse(ResultToken *aResultToken, Line *&aJumpToLine,
 
 		g.mLoopField = field;
 
-		if (mNextLine->mActionType == ACT_BLOCK_BEGIN) // See PerformLoop() for comments about this section.
-			do
-				result = mNextLine->mNextLine->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
-			while (jump_to_line == mNextLine);
-		else
-			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
-
-		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // See comments in PerformLoop() about this section.
-		{
-			aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
-			FREE_PARSE_MEMORY;
-			return result;
-		}
-		if ( result != OK && result != LOOP_CONTINUE // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-			|| (aUntil && aUntil->EvaluateLoopUntil(result)) )
-		{
-			FREE_PARSE_MEMORY;
-			return result;
-		}
+		PERFORMLOOP_EXECUTE_BODY
+		PERFORMLOOP_EVALUATE_UNTIL
 
 		if (!saved_char) // The last item in the list has just been processed, so the loop is done.
 			break;
@@ -11335,7 +11259,7 @@ ResultType Line::PerformLoopParse(ResultToken *aResultToken, Line *&aJumpToLine,
 		++g.mLoopIteration;
 	}
 	FREE_PARSE_MEMORY;
-	return OK;
+	return result;
 }
 
 
@@ -11367,8 +11291,8 @@ ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, Line *&aJumpToLi
 	TCHAR omit_list[512];
 	tcslcpy(omit_list, ARG3, _countof(omit_list));
 
-	ResultType result;
-	Line *jump_to_line;
+	ResultType result = OK;
+	Line *jump_to_line = nullptr;
 	TCHAR *field, *field_end, saved_char;
 	size_t field_length;
 	bool field_is_enclosed_in_quotes;
@@ -11431,25 +11355,8 @@ ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, Line *&aJumpToLi
 
 		g.mLoopField = field;
 
-		if (mNextLine->mActionType == ACT_BLOCK_BEGIN) // See PerformLoop() for comments about this section.
-			do
-				result = mNextLine->mNextLine->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
-			while (jump_to_line == mNextLine);
-		else
-			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
-
-		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // See comments in PerformLoop() about this section.
-		{
-			aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
-			FREE_PARSE_MEMORY;
-			return result;
-		}
-		if ( result != OK && result != LOOP_CONTINUE // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-			|| (aUntil && aUntil->EvaluateLoopUntil(result)) )
-		{
-			FREE_PARSE_MEMORY;
-			return result;
-		}
+		PERFORMLOOP_EXECUTE_BODY
+		PERFORMLOOP_EVALUATE_UNTIL
 
 		if (!saved_char) // The last item in the list has just been processed, so the loop is done.
 			break;
@@ -11470,7 +11377,7 @@ ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, Line *&aJumpToLi
 		++g.mLoopIteration;
 	}
 	FREE_PARSE_MEMORY;
-	return OK;
+	return result;
 }
 
 
@@ -11500,21 +11407,9 @@ ResultType Line::PerformLoopReadFile(ResultToken *aResultToken, Line *&aJumpToLi
 			--line_length;
 		loop_info.mCurrentLine[line_length] = '\0';
 		g.mLoopReadFile = &loop_info;
-		if (mNextLine->mActionType == ACT_BLOCK_BEGIN) // See PerformLoop() for comments about this section.
-			do
-				result = mNextLine->mNextLine->ExecUntil(UNTIL_BLOCK_END, aResultToken, &jump_to_line);
-			while (jump_to_line == mNextLine);
-		else
-			result = mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &jump_to_line);
-		if (jump_to_line && !(result == LOOP_CONTINUE && jump_to_line == this)) // See comments in PerformLoop() about this section.
-		{
-			aJumpToLine = jump_to_line; // Signal our caller to handle this jump.
-			break;
-		}
-		if (result != OK && result != LOOP_CONTINUE) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-			break;
-		if (aUntil && aUntil->EvaluateLoopUntil(result))
-			break;
+
+		PERFORMLOOP_EXECUTE_BODY
+		PERFORMLOOP_EVALUATE_UNTIL
 	}
 
 	if (loop_info.mWriteFile)

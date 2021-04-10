@@ -712,9 +712,9 @@ class Line
 private:
 	ResultType EvaluateCondition();
 	bool EvaluateLoopUntil(ResultType &aResult);
-	ResultType Line::PerformLoop(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
+	ResultType PerformLoop(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
 		, __int64 aIterationLimit, bool aIsInfinite);
-	ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
+	ResultType PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LPTSTR aFilePattern);
 	bool ParseLoopFilePattern(LPTSTR aFilePattern, LoopFilesStruct &lfs, ResultType &aResult);
 	ResultType PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
@@ -722,7 +722,7 @@ private:
 	ResultType PerformLoopReg(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, HKEY aRootKeyType, HKEY aRootKey, LPTSTR aRegSubkey);
 	ResultType PerformLoopParse(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil);
-	ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil);
+	ResultType PerformLoopParseCSV(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil);
 	ResultType PerformLoopReadFile(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil, TextStream *aReadFile, LPTSTR aWriteFileName);
 	ResultType PerformLoopWhile(ResultToken *aResultToken, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
 	ResultType PerformLoopFor(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil); // Lexikos: ACT_FOR.
