@@ -2871,14 +2871,16 @@ ObjectMember Func::sMembers[] =
 ObjectMember RegExMatchObject::sMembers[] =
 {
 	Object_Method(__Enum, 0, 1),
-	Object_Member(__Get, Invoke, M_Value, IT_CALL, 2, 2),
+	Object_Method(__Get, 2, 2),
 	Object_Member(__Item, Invoke, M_Value, IT_GET, 0, 1),
-	Object_Method(Value, 0, 1),
-	Object_Method(Pos, 0, 1),
+	Object_Member(Count, Invoke, M_Count, IT_GET, 0, 0),
 	Object_Method(Len, 0, 1),
-	Object_Method(Name, 0, 1),
-	Object_Method(Count, 0, 0),
-	Object_Method(Mark, 0, 0),
+	Object_Member(Len, Invoke, M_Len, IT_GET, 0, 1),
+	Object_Member(Mark, Invoke, M_Mark, IT_GET, 0, 0),
+	Object_Method(Name, 1, 1),
+	Object_Member(Name, Invoke, M_Name, IT_GET, 1, 1),
+	Object_Method(Pos, 0, 1),
+	Object_Member(Pos, Invoke, M_Pos, IT_GET, 0, 1),
 };
 
 

@@ -11830,14 +11830,15 @@ ResultType RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFla
 			}
 	}
 	if (p < 0 || p >= mPatternCount)
-	{
-		if (IS_INVOKE_CALL)
-			_o_throw_value(ERR_PARAM1_INVALID);
-		return INVOKE_NOT_HANDLED;
-	}
+		_o_throw_param(0); // p != 0 implies the parameter was not omitted.
 
 	switch (aID)
 	{
+	case M___Get:
+		if (auto arr = dynamic_cast<Array*>(ParamIndexToObject(1)))
+			if (arr->Length())
+				_o_throw(ERR_INVALID_USAGE);
+			// Otherwise, fall through:
 	// Gives the correct result even if there was no match (because length is 0):
 	case M_Value: _o_return(mHaystack - mHaystackStart + mOffset[p*2], mOffset[p*2+1]);
 	case M_Pos: _o_return(mOffset[2*p] + 1);

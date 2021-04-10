@@ -754,6 +754,7 @@ public:
 	
 	enum MemberID
 	{
+		M___Get,
 		M_Value,
 		M_Pos,
 		M_Len,
