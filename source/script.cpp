@@ -11195,7 +11195,7 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, Line *&aJumpToLine, L
 ResultType Line::PerformLoopParse(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil)
 {
 	if (!*ARG1) // Since the input variable's contents are blank, the loop will execute zero times.
-		return CONDITION_FALSE; // This is the only case where an ELSE can execute, since in every other case there is at least one iteration.
+		return CONDITION_FALSE;
 
 	// The following will be used to hold the parsed items.  It needs to have its own storage because
 	// even though ARG1 might always be a writable memory area, we can't rely upon it being
@@ -11237,7 +11237,7 @@ ResultType Line::PerformLoopParse(ResultToken *aResultToken, Line *&aJumpToLine,
 	tcslcpy(delimiters, ARG2, _countof(delimiters));
 	tcslcpy(omit_list, ARG3, _countof(omit_list));
 
-	ResultType result = OK; // Value doesn't matter since there's always at least one iteration, and result is overwritten.
+	ResultType result = CONDITION_FALSE;
 	Line *jump_to_line = nullptr;
 	TCHAR *field, *field_end, saved_char;
 	size_t field_length;
