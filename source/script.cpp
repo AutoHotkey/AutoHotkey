@@ -5179,7 +5179,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			enum_act parent_act = (enum_act)parent->mActionType;
 			switch (aActionType)
 			{
-			case ACT_ELSE: expected = parent_act == ACT_IF || parent_act == ACT_CATCH; break;
+			case ACT_ELSE: expected = parent_act == ACT_IF || parent_act == ACT_CATCH || ACT_IS_LOOP(parent_act); break;
 			case ACT_UNTIL: expected = ACT_IS_LOOP_EXCLUDING_WHILE(parent_act); break;
 			case ACT_CATCH: // Same as below.
 			case ACT_FINALLY:
@@ -9894,8 +9894,16 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 						tfile.Close();
 					}
 					else
-						// The open of a the input file failed.
-						result = g_script.Win32Error();
+					{
+						// Failed to open the input file.  If an ELSE is present, executing it if the file wasn't found
+						// seems much more useful than executing ELSE only for empty files; but if there's no ELSE, it's
+						// probably best to throw an error.
+						DWORD error = GetLastError();
+						if (finished_line->mActionType == ACT_ELSE && (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND))
+							result = CONDITION_FALSE;
+						else
+							result = g_script.Win32Error(error);
+					}
 				}
 				break;
 			case ACT_LOOP_FILE:
@@ -9971,6 +9979,15 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				// continue execution from there:
 				line = jump_to_line;
 				continue; // end this case of the switch().
+			}
+			if (finished_line->mActionType == ACT_ELSE)
+			{
+				if (result == CONDITION_FALSE)
+				{
+					line = finished_line->mNextLine;
+					continue;
+				}
+				finished_line = finished_line->mRelatedLine;
 			}
 			if (aMode == ONLY_ONE_LINE)
 				return OK;
@@ -10591,7 +10608,7 @@ ResultType Line::PerformLoop(ResultToken *aResultToken, Line *&aJumpToLine, Line
 // This performs much better (by at least 7%) as a function than as inline code, probably because
 // it's only called to set up the loop, not each time through the loop.
 {
-	ResultType result = OK;
+	ResultType result = CONDITION_FALSE;
 	Line *jump_to_line = nullptr;
 	global_struct &g = *::g; // Primarily for performance in this case.
 
@@ -10615,7 +10632,7 @@ ResultType Line::PerformLoop(ResultToken *aResultToken, Line *&aJumpToLine, Line
 // Lexikos: ACT_WHILE
 ResultType Line::PerformLoopWhile(ResultToken *aResultToken, Line *&aJumpToLine)
 {
-	ResultType result = OK;
+	ResultType result = CONDITION_FALSE;
 	Line *jump_to_line = nullptr;
 	global_struct &g = *::g; // Might slightly speed up the loop below.
 
@@ -10631,9 +10648,9 @@ ResultType Line::PerformLoopWhile(ResultToken *aResultToken, Line *&aJumpToLine)
 			g_Debugger.PreExecLine(this);
 #endif
 		// Evaluate the expression only now that A_Index has been set.
-		result = ExpandArgs();
-		if (result != OK)
-			return result;
+		auto args_result = ExpandArgs();
+		if (args_result != OK)
+			return args_result;
 
 		// Unlike if(expression), performance isn't significantly improved to make cases like
 		// "while x" and "while %x%" into non-expressions (the latter actually performs much
@@ -10725,17 +10742,16 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, Line *&aJumpToLine, L
 	g.mLoopIteration = 1;
 
 	if (result != FAIL)
-	for (;; ++g.mLoopIteration)
+	for (result = CONDITION_FALSE;; ++g.mLoopIteration)
 	{
-		result = CallEnumerator(enumerator, var_param, var_count, true);
-		if (result == FAIL || result == EARLY_EXIT)
-			break;
-
-		if (result != CONDITION_TRUE)
-		{	// The enumerator returned false, which means there are no more items.
-			result = OK;
+		auto enum_result = CallEnumerator(enumerator, var_param, var_count, true);
+		if (enum_result == FAIL || enum_result == EARLY_EXIT)
+		{
+			result = enum_result;
 			break;
 		}
+		if (enum_result != CONDITION_TRUE) // The enumerator returned false, which means there are no more items.
+			break;
 		// Otherwise the enumerator already stored the next value(s) in the variable(s) we passed it via params.
 
 		PERFORMLOOP_EXECUTE_BODY
@@ -10757,7 +10773,7 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, Line *&aJumpToLine, L
 ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
 	, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, LPTSTR aFilePattern)
 {
-	ResultType result = OK; // Set default.
+	ResultType result = CONDITION_FALSE;
 	// LoopFilesStruct is currently about 128KB, so it's probably best not to put it on the stack.
 	// 128KB temporary usage per Loop (for all iterations) seems a reasonable trade-off for supporting
 	// long paths while keeping code size minimal.
@@ -10775,7 +10791,7 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpT
 	//    performance in some common cases, such as if A_LoopFileLongPath is used on each iteration.
 	if (ParseLoopFilePattern(aFilePattern, *plfs, result))
 		result = PerformLoopFilePattern(aResultToken, aJumpToLine, aUntil, aFileLoopMode, aRecurseSubfolders, *plfs);
-	//else: leave result == OK, since in effect, no files were found.
+	//else: leave result == CONDITION_FALSE, since in effect, no files were found.
 	delete plfs;
 	return result;
 }
@@ -10935,7 +10951,7 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpT
 	LPTSTR file_path_end = lfs.file_path + file_path_length;
 	size_t file_space_remaining = _countof(lfs.file_path) - file_path_length;
 	if (lfs.pattern_length >= file_space_remaining)
-		return OK;
+		return CONDITION_FALSE;
 	tmemcpy(file_path_end, lfs.pattern, lfs.pattern_length + 1); // file_path already includes the slash.
 
 	BOOL file_found;
@@ -10946,7 +10962,7 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpT
 	// file_found and lfs have now been set for use below.
 	// Above is responsible for having properly set file_found and file_search.
 
-	ResultType result = OK;
+	ResultType result = CONDITION_FALSE; // Default to "no iterations executed".
 	Line *jump_to_line = nullptr;
 	global_struct &g = *::g; // Primarily for performance in this case.
 
@@ -10974,7 +10990,7 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpT
 	if (file_search != INVALID_HANDLE_VALUE)
 		FindClose(file_search);
 
-	if (result != OK || aJumpToLine)
+	if (result != OK && result != CONDITION_FALSE || aJumpToLine)
 		return result;
 
 	// If aRecurseSubfolders is true, we now need to perform the loop's body for every subfolder to
@@ -10982,7 +10998,7 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpT
 	// first loop, above, because it may have a restricted file-pattern such as *.txt and we want to
 	// find and recurse into ALL folders:
 	if (!aRecurseSubfolders) // No need to continue into the "recurse" section.
-		return OK;
+		return result;
 
 	// Since above didn't return, this is a file-loop and recursion into sub-folders has been requested.
 	// Append * to file_path so that we can retrieve all files and folders in the aFilePattern main dir.
@@ -10991,7 +11007,7 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpT
 	file_path_end[1] = '\0';
 	file_search = FindFirstFile(lfs.file_path, &lfs);
 	if (file_search == INVALID_HANDLE_VALUE)
-		return OK; // Nothing more to do.
+		return result; // Nothing more to do.
 	// Otherwise, recurse into any subdirectories found inside this parent directory.
 
 	LPTSTR short_path_end = lfs.short_path + short_path_length;
@@ -11033,16 +11049,22 @@ ResultType Line::PerformLoopFilePattern(ResultToken *aResultToken, Line *&aJumpT
 		short_path_end[short_name_length + 1] = '\0';
 		lfs.short_path_length = short_path_length + short_name_length + 1;
 
-		result = PerformLoopFilePattern(aResultToken, aJumpToLine, aUntil, aFileLoopMode, aRecurseSubfolders, lfs);
+		auto sub_result = PerformLoopFilePattern(aResultToken, aJumpToLine, aUntil, aFileLoopMode, aRecurseSubfolders, lfs);
 		// Above returns LOOP_CONTINUE for cases like "continue 2" or "continue outer_loop", where the
 		// target is not this Loop but a Loop which encloses it. In those cases we want below to return:
-		if (result != OK) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL)
-			break;
-		if (aJumpToLine)
-			break; // Return and let our caller handle the jump.
+		if (sub_result != CONDITION_FALSE)
+		{
+			result = sub_result;
+			if (result != OK) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL
+				break;
+			if (aJumpToLine)
+				break; // Return and let our caller handle the jump.
+		}
+		// Otherwise, the recursive call performed no iterations, but result could already be
+		// OK or CONDITION_FALSE depending on whether iterations were performed by this layer.
 	} while (FindNextFile(file_search, &lfs));
+	
 	FindClose(file_search);
-
 	return result;  // Return even LOOP_BREAK, since our caller can be either ExecUntil() or ourself.
 }
 
@@ -11061,7 +11083,7 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, Line *&aJumpToLine, L
 	// the keys & values can be deleted or written to (though I'm not sure this would be an issue
 	// in most cases):
 	if (RegOpenKeyEx(reg_item.root_key, reg_item.subkey, 0, KEY_QUERY_VALUE | KEY_ENUMERATE_SUB_KEYS | g->RegView, &hRegKey) != ERROR_SUCCESS)
-		return OK;
+		return CONDITION_FALSE;
 
 	// Get the count of how many values and subkeys are contained in this parent key:
 	DWORD count_subkeys;
@@ -11070,10 +11092,10 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, Line *&aJumpToLine, L
 		, &count_values, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
 	{
 		RegCloseKey(hRegKey);
-		return OK;
+		return CONDITION_FALSE;
 	}
 
-	ResultType result = OK;
+	ResultType result = CONDITION_FALSE;
 	Line *jump_to_line = nullptr;
 	DWORD i;
 	global_struct &g = *::g; // Primarily for performance in this case.
@@ -11108,7 +11130,7 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, Line *&aJumpToLine, L
 			if (i == 0)  // Check this here due to it being an unsigned value that we don't want to go negative.
 				break;
 		}
-		if (result != OK || aJumpToLine)
+		if (result != OK && result != CONDITION_FALSE || aJumpToLine)
 		{
 			RegCloseKey(hRegKey);
 			return result;
@@ -11120,7 +11142,7 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, Line *&aJumpToLine, L
 	if (!count_subkeys || (aFileLoopMode == FILE_LOOP_FILES_ONLY && !aRecurseSubfolders))
 	{
 		RegCloseKey(hRegKey);
-		return OK;
+		return result;
 	}
 
 	// Enumerate the subkeys, which are analogous to subfolders in the files system:
@@ -11146,10 +11168,18 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, Line *&aJumpToLine, L
 				sntprintf(subkey_full_path, _countof(subkey_full_path), _T("%s%s%s"), reg_item.subkey
 					, *reg_item.subkey ? _T("\\") : _T(""), reg_item.name);
 				// This section is very similar to the one in PerformLoopFilePattern(), so see it for comments:
-				result = PerformLoopReg(aResultToken, aJumpToLine, aUntil
+				auto sub_result = PerformLoopReg(aResultToken, aJumpToLine, aUntil
 					, aFileLoopMode , aRecurseSubfolders, aRootKeyType, aRootKey, subkey_full_path);
-				if (result != OK || aJumpToLine)
-					break;
+				if (sub_result != CONDITION_FALSE)
+				{
+					result = sub_result;
+					if (result != OK) // i.e. result == LOOP_BREAK || result == EARLY_RETURN || result == EARLY_EXIT || result == FAIL
+						break;
+					if (aJumpToLine)
+						break; // Return and let our caller handle the jump.
+				}
+				// Otherwise, the recursive call performed no iterations, but result could already be
+				// OK or CONDITION_FALSE depending on whether iterations were performed by this layer.
 			}
 		}
 		// else continue the loop in case some of the lower indexes can still be retrieved successfully.
@@ -11165,7 +11195,7 @@ ResultType Line::PerformLoopReg(ResultToken *aResultToken, Line *&aJumpToLine, L
 ResultType Line::PerformLoopParse(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil)
 {
 	if (!*ARG1) // Since the input variable's contents are blank, the loop will execute zero times.
-		return OK;
+		return CONDITION_FALSE; // This is the only case where an ELSE can execute, since in every other case there is at least one iteration.
 
 	// The following will be used to hold the parsed items.  It needs to have its own storage because
 	// even though ARG1 might always be a writable memory area, we can't rely upon it being
@@ -11207,7 +11237,7 @@ ResultType Line::PerformLoopParse(ResultToken *aResultToken, Line *&aJumpToLine,
 	tcslcpy(delimiters, ARG2, _countof(delimiters));
 	tcslcpy(omit_list, ARG3, _countof(omit_list));
 
-	ResultType result = OK;
+	ResultType result = OK; // Value doesn't matter since there's always at least one iteration, and result is overwritten.
 	Line *jump_to_line = nullptr;
 	TCHAR *field, *field_end, saved_char;
 	size_t field_length;
@@ -11270,7 +11300,7 @@ ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, Line *&aJumpToLi
 // from this function).
 {
 	if (!*ARG1) // Since the input variable's contents are blank, the loop will execute zero times.
-		return OK;
+		return CONDITION_FALSE;
 
 	// See comments in PerformLoopParse() for details.
 	size_t space_needed = ArgLength(1) + 1;  // +1 for the zero terminator.
@@ -11291,7 +11321,7 @@ ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, Line *&aJumpToLi
 	TCHAR omit_list[512];
 	tcslcpy(omit_list, ARG3, _countof(omit_list));
 
-	ResultType result = OK;
+	ResultType result = CONDITION_FALSE;
 	Line *jump_to_line = nullptr;
 	TCHAR *field, *field_end, saved_char;
 	size_t field_length;
@@ -11391,18 +11421,14 @@ ResultType Line::PerformLoopReadFile(ResultToken *aResultToken, Line *&aJumpToLi
 
 	LoopReadFileStruct loop_info(aReadFile, aWriteFileName);
 	size_t line_length;
-	ResultType result;
-	Line *jump_to_line;
+	ResultType result = CONDITION_FALSE;
+	Line *jump_to_line = nullptr;
 	global_struct &g = *::g; // Primarily for performance in this case.
 
 	for (;; ++g.mLoopIteration)
 	{ 
 		if (  !(line_length = loop_info.mReadFile->ReadLine(loop_info.mCurrentLine, _countof(loop_info.mCurrentLine) - 1))  ) // -1 to ensure there's room for a null-terminator.
-		{
-			// We want to return OK except in some specific cases handled below (see "break").
-			result = OK;
 			break;
-		}
 		if (loop_info.mCurrentLine[line_length - 1] == '\n') // Remove end-of-line character.
 			--line_length;
 		loop_info.mCurrentLine[line_length] = '\0';
