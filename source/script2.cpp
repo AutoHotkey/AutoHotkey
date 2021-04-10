@@ -11568,7 +11568,7 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 
 	INT_PTR remaining_length_available = haystack_length - starting_offset;
 	INT_PTR extract_length;
-	if (aParamCount < 3) // No length specified, so extract all the remaining length.
+	if (ParamIndexIsOmitted(2)) // No length specified, so extract all the remaining length.
 		extract_length = remaining_length_available;
 	else
 	{
