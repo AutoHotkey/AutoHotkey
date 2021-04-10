@@ -559,12 +559,12 @@ struct RegItemStruct
 class TextStream; // TextIO
 struct LoopReadFileStruct
 {
-	TextStream *mReadFile, *mWriteFile;
+	TextStream *mWriteFile; // Currently no need for mReadFile, so it's left as a local variable of PerformLoopRead().
 	LPTSTR mWriteFileName;
 	#define READ_FILE_LINE_SIZE (64 * 1024)
 	TCHAR mCurrentLine[READ_FILE_LINE_SIZE];
-	LoopReadFileStruct(TextStream *aReadFile, LPTSTR aWriteFileName)
-		: mReadFile(aReadFile), mWriteFile(NULL) // mWriteFile is opened by FileAppend() only upon first use.
+	LoopReadFileStruct(LPTSTR aWriteFileName)
+		: mWriteFile(nullptr) // mWriteFile is opened by FileAppend() only upon first use.
 		, mWriteFileName(aWriteFileName) // Caller has passed the result of _tcsdup() for us to take over.
 	{
 		*mCurrentLine = '\0';
@@ -723,7 +723,7 @@ private:
 		, FileLoopModeType aFileLoopMode, bool aRecurseSubfolders, HKEY aRootKeyType, HKEY aRootKey, LPTSTR aRegSubkey);
 	ResultType PerformLoopParse(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil);
 	ResultType PerformLoopParseCSV(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil);
-	ResultType PerformLoopReadFile(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil, TextStream *aReadFile, LPTSTR aWriteFileName);
+	ResultType PerformLoopReadFile(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil, LPTSTR aReadFileName, LPTSTR aWriteFileName);
 	ResultType PerformLoopWhile(ResultToken *aResultToken, Line *&aJumpToLine); // Lexikos: ACT_WHILE.
 	ResultType PerformLoopFor(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil); // Lexikos: ACT_FOR.
 	ResultType PerformAssign();

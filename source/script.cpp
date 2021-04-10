@@ -9886,25 +9886,7 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 					result = line->PerformLoopParseCSV(aResultToken, jump_to_line, until);
 				break;
 			case ACT_LOOP_READ:
-				{
-					TextFile tfile;
-					if (tfile.Open(ARG1, DEFAULT_READ_FLAGS, g.Encoding & CP_AHKCP))
-					{
-						result = line->PerformLoopReadFile(aResultToken, jump_to_line, until, &tfile, ARG2);
-						tfile.Close();
-					}
-					else
-					{
-						// Failed to open the input file.  If an ELSE is present, executing it if the file wasn't found
-						// seems much more useful than executing ELSE only for empty files; but if there's no ELSE, it's
-						// probably best to throw an error.
-						DWORD error = GetLastError();
-						if (finished_line->mActionType == ACT_ELSE && (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND))
-							result = CONDITION_FALSE;
-						else
-							result = g_script.Win32Error(error);
-					}
-				}
+				result = line->PerformLoopReadFile(aResultToken, jump_to_line, until, ARG1, ARG2);
 				break;
 			case ACT_LOOP_FILE:
 				result = line->PerformLoopFilePattern(aResultToken, jump_to_line, until
@@ -11413,29 +11395,53 @@ ResultType Line::PerformLoopParseCSV(ResultToken *aResultToken, Line *&aJumpToLi
 
 
 ResultType Line::PerformLoopReadFile(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
-	, TextStream *aReadFile, LPTSTR aWriteFileName)
+	, LPTSTR aReadFileName, LPTSTR aWriteFileName)
 {
+	TextFile tfile;
+	bool file_is_open = tfile.Open(aReadFileName, DEFAULT_READ_FLAGS, g->Encoding & CP_AHKCP);
+	if (!file_is_open)
+	{
+		// Failed to open the input file.  If an ELSE is present, executing it if the file wasn't found
+		// seems much more useful than executing ELSE only for empty files; but if there's no ELSE, it's
+		// probably best to throw an error.
+		DWORD error = GetLastError();
+		if (  !(mRelatedLine->mActionType == ACT_ELSE && (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND))  )
+			return g_script.Win32Error(error);
+		// Otherwise, execute the ELSE below.
+	}
+
 	// Make a persistent copy in case aWriteFileName's contents are in the deref buffer:
 	if (  !(aWriteFileName = _tcsdup(aWriteFileName))  )
 		return MemoryError();
 
-	LoopReadFileStruct loop_info(aReadFile, aWriteFileName);
+	LoopReadFileStruct loop_info { aWriteFileName };
 	size_t line_length;
 	ResultType result = CONDITION_FALSE;
 	Line *jump_to_line = nullptr;
 	global_struct &g = *::g; // Primarily for performance in this case.
+	g.mLoopReadFile = &loop_info;
 
+	if (file_is_open)
 	for (;; ++g.mLoopIteration)
 	{ 
-		if (  !(line_length = loop_info.mReadFile->ReadLine(loop_info.mCurrentLine, _countof(loop_info.mCurrentLine) - 1))  ) // -1 to ensure there's room for a null-terminator.
+		if (  !(line_length = tfile.ReadLine(loop_info.mCurrentLine, _countof(loop_info.mCurrentLine) - 1))  ) // -1 to ensure there's room for a null-terminator.
 			break;
 		if (loop_info.mCurrentLine[line_length - 1] == '\n') // Remove end-of-line character.
 			--line_length;
 		loop_info.mCurrentLine[line_length] = '\0';
-		g.mLoopReadFile = &loop_info;
 
 		PERFORMLOOP_EXECUTE_BODY
 		PERFORMLOOP_EVALUATE_UNTIL
+	}
+
+	if (result == CONDITION_FALSE)
+	{
+		// No lines were read, so execute this loop's ELSE if present.  It's done here rather than
+		// in ExecUntil so that FileAppend can be used within the ELSE to write to mWriteFile.
+		if (mRelatedLine->mActionType == ACT_ELSE)
+			result = mRelatedLine->mNextLine->ExecUntil(ONLY_ONE_LINE, aResultToken, &aJumpToLine);
+		else
+			result = OK; // Never return CONDITION_FALSE, otherwise ExecUntil() will execute the ELSE a second time.
 	}
 
 	if (loop_info.mWriteFile)
