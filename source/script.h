@@ -630,6 +630,7 @@ enum JoyControls {JOYCTRL_INVALID, JOYCTRL_XPOS, JOYCTRL_YPOS, JOYCTRL_ZPOS
 // it helps the compiler to reduce code size.
 enum BuiltInFunctionID {
 	FID_Object_New = -1,
+	FID_GetMethod = 0, FID_HasMethod,
 	FID_DllCall = 0, FID_ComCall,
 	FID_LV_GetNext = 0, FID_LV_GetCount,
 	FID_LV_Add = 0, FID_LV_Insert, FID_LV_Modify,
@@ -3345,7 +3346,6 @@ BIF_DECL(BIF_ObjXXX);
 BIF_DECL(BIF_Base);
 BIF_DECL(BIF_HasBase);
 BIF_DECL(BIF_HasProp);
-BIF_DECL(BIF_HasMethod);
 BIF_DECL(BIF_GetMethod);
 
 BIF_DECL(Op_FuncClose);
@@ -3443,7 +3443,7 @@ ResultType TokenToDoubleOrInt64(const ExprTokenType &aInput, ExprTokenType &aOut
 StringCaseSenseType TokenToStringCase(ExprTokenType& aToken);
 Var *TokenToOutputVar(ExprTokenType &aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
-ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, int *aMinParams = nullptr);
+ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, int *aMinParams = nullptr, bool aShowError = true);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
 BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right);
 LPTSTR TokenTypeString(ExprTokenType &aToken);

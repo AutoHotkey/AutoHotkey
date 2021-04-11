@@ -1320,15 +1320,6 @@ ResultType Map::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenT
 	_o_return(clone);
 }
 
-ResultType Object::GetMethod(ResultToken &aResultToken, name_t aName)
-{
-	auto method = GetMethod(aName);
-	if (!method)
-		_o__ret(aResultToken.UnknownMemberError(ExprTokenType(this), IT_CALL, aName));
-	method->AddRef();
-	_o_return(method);
-}
-
 bool Object::DefineMethod(name_t aName, IObject *aFunc)
 {
 	if (auto prop = DefineProperty(aName))

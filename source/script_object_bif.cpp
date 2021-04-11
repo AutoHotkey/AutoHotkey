@@ -216,19 +216,28 @@ BIF_DECL(BIF_HasProp)
 }
 
 
-BIF_DECL(BIF_HasMethod)
-{
-	auto obj = ParamToObjectOrBase(*aParam[0], aResultToken);
-	if (!obj)
-		return;
-	_f_return_b(obj->HasMethod(ParamIndexToString(1, _f_number_buf)));
-}
-
-
 BIF_DECL(BIF_GetMethod)
 {
 	auto obj = ParamToObjectOrBase(*aParam[0], aResultToken);
 	if (!obj)
 		return;
-	obj->GetMethod(aResultToken, ParamIndexToString(1, _f_number_buf));
+	auto method_name = ParamIndexToOptionalStringDef(1, nullptr, _f_number_buf);
+	auto method = method_name ? obj->GetMethod(method_name) : obj; // Validate obj itself as a function if method name is omitted.
+	if (method)
+	{
+		int param_count = ParamIndexToOptionalInt(2, -1); // Default to no parameter count validation.
+		if (param_count != -1 && method_name)
+			++param_count; // So caller does not need to include the implicit `this` parameter.
+		switch (ValidateFunctor(method, param_count, aResultToken, nullptr, _f_callee_id == FID_GetMethod))
+		{
+		case FAIL: return; // A property call threw an exception, or validation failed for GetMethod.
+		case CONDITION_FALSE: method = nullptr; // Validation failed for HasMethod.
+		}
+	}
+	if (_f_callee_id == FID_HasMethod)
+		_f_return_b(method != nullptr);
+	if (!method) // No method for GetMethod to return: throw MethodError().
+		_f__ret(aResultToken.UnknownMemberError(*aParam[0], IT_CALL, method_name));
+	method->AddRef();
+	_f_return(method);
 }

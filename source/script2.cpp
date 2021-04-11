@@ -17027,24 +17027,24 @@ IObject *TokenToObject(ExprTokenType &aToken)
 
 
 
-ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, int *aUseMinParams)
+ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, int *aUseMinParams, bool aShowError)
 {
 	ASSERT(aFunc);
 	__int64 min_params = 0, max_params = INT_MAX;
-	auto min_result = /*aParamCount < 0 ? INVOKE_NOT_HANDLED
-		:*/ GetObjectIntProperty(aFunc, _T("MinParams"), min_params, aResultToken, true);
+	auto min_result = aParamCount == -1 ? INVOKE_NOT_HANDLED
+		: GetObjectIntProperty(aFunc, _T("MinParams"), min_params, aResultToken, true);
 	if (!min_result)
 		return FAIL;
 	bool has_minparams = min_result != INVOKE_NOT_HANDLED; // For readability.
 	if (aUseMinParams) // CallbackCreate's signal to default to MinParams.
 	{
 		if (!has_minparams)
-			return aResultToken.UnknownMemberError(ExprTokenType(aFunc), IT_GET, _T("MinParams"));
+			return aShowError ? aResultToken.UnknownMemberError(ExprTokenType(aFunc), IT_GET, _T("MinParams")) : CONDITION_FALSE;
 		*aUseMinParams = aParamCount = (int)min_params;
 	}
 	else if (has_minparams && aParamCount < (int)min_params)
-		return aResultToken.ValueError(ERR_INVALID_FUNCTOR);
-	auto max_result = (aParamCount == 0 || has_minparams && min_params == aParamCount)
+		return aShowError ? aResultToken.ValueError(ERR_INVALID_FUNCTOR) : CONDITION_FALSE;
+	auto max_result = (aParamCount <= 0 || has_minparams && min_params == aParamCount)
 		? INVOKE_NOT_HANDLED // No need to check MaxParams in the above cases.
 		: GetObjectIntProperty(aFunc, _T("MaxParams"), max_params, aResultToken, true);
 	if (!max_result)
@@ -17056,7 +17056,7 @@ ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResult
 		if (!result)
 			return FAIL;
 		if (!is_variadic) // or not defined.
-			return aResultToken.ValueError(ERR_INVALID_FUNCTOR);
+			return aShowError ? aResultToken.ValueError(ERR_INVALID_FUNCTOR) : CONDITION_FALSE;
 	}
 	// If either MinParams or MaxParams was confirmed to exist, this is likely a valid
 	// function object, so skip the following check for performance.  Otherwise, catch
@@ -17064,7 +17064,7 @@ ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResult
 	if (min_result == INVOKE_NOT_HANDLED && max_result == INVOKE_NOT_HANDLED)
 		if (Object *obj = dynamic_cast<Object *>(aFunc))
 			if (!obj->HasMethod(_T("Call")))
-				return aResultToken.UnknownMemberError(ExprTokenType(aFunc), IT_CALL, _T("Call"));
+				return aShowError ? aResultToken.UnknownMemberError(ExprTokenType(aFunc), IT_CALL, _T("Call")) : CONDITION_FALSE;
 		// Otherwise: COM objects can be callable via DISPID_VALUE.  There's probably
 		// no way to determine whether the object supports that without invoking it.
 	return OK;
