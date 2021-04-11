@@ -784,7 +784,12 @@ ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 		if (!GetItem(aResultToken, *aParam[0]))
 		{
 			if (ParamIndexIsOmitted(1))
-				_o_throw(ERR_NO_KEY, ParamIndexToString(0, _f_number_buf), ErrorPrototype::Key);
+			{
+				auto result = Invoke(aResultToken, IT_GET, _T("Default"), ExprTokenType { this }, nullptr, 0);
+				if (result == INVOKE_NOT_HANDLED)
+					_o_throw(ERR_NO_KEY, ParamIndexToString(0, _f_number_buf), ErrorPrototype::Key);
+				return result;
+			}
 			// Otherwise, caller provided a default value.
 			aResultToken.CopyValueFrom(*aParam[1]);
 		}
