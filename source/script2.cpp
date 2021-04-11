@@ -17109,10 +17109,8 @@ SymbolType TypeOfToken(ExprTokenType &aToken)
 		case VAR_ATTRIB_IS_DOUBLE: return SYM_FLOAT;
 		case VAR_ATTRIB_IS_OBJECT: return SYM_OBJECT;
 		}
-		// Fall through for the default case:
-	case SYM_MISSING:
 		return SYM_STRING;
-	default:
+	default: // Providing a default case produces smaller code on release builds as the compiler can omit the other symbol checks.
 #ifdef _DEBUG
 		MsgBox(_T("DEBUG: Unhandled symbol type."));
 #endif
@@ -17120,6 +17118,7 @@ SymbolType TypeOfToken(ExprTokenType &aToken)
 	case SYM_INTEGER:
 	case SYM_FLOAT:
 	case SYM_OBJECT:
+	case SYM_MISSING:
 		return aToken.symbol;
 	}
 }

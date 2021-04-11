@@ -163,8 +163,7 @@ BIF_DECL(BIF_Base)
 			obj_base->AddRef();
 			_f_return(obj_base);
 		}
-		// Otherwise, it's something with no base, so return "".
-		// Could be Object::sAnyPrototype, a ComObject or perhaps SYM_MISSING.
+		// Otherwise, could be Object::sAnyPrototype or SYM_MISSING (via a variadic call).
 	}
 	_f_return_empty;
 }
@@ -179,10 +178,7 @@ bool Object::HasBase(ExprTokenType &aValue, IObject *aBase)
 		value_base = Object::ValueBase(aValue);
 	if (value_base)
 		return value_base == aBase || value_base->IsDerivedFrom(aBase);
-	// Something that doesn't fit in our type hierarchy, like a ComObject.
-	// Returning false seems correct and more useful than throwing.
-	// HasBase(ComObj, "".base.base) ; False, it's not a primitive value.
-	// HasBase(ComObj, Object.Prototype) ; False, it's not one of our Objects.
+	// Otherwise, could be Object::sAnyPrototype or SYM_MISSING (via a variadic call).
 	return false;
 }
 
