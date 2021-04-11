@@ -191,6 +191,8 @@ ResultType Var::MoveToNewFreeVar(Var &aFV)
 {
 	ASSERT(aFV.mType == VAR_NORMAL && mType == VAR_NORMAL);
 	ASSERT(aFV.mHowAllocated == ALLOC_MALLOC);
+	aFV.mName = mName;   // For error reporting.
+	aFV.mScope = mScope; //
 	if (mAttrib & VAR_ATTRIB_TYPES)
 	{
 		aFV.mContentsInt64 = mContentsInt64;

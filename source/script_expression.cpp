@@ -134,35 +134,36 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					ExprTokenType &right = *STACK_POP;
 					if (auto ref = dynamic_cast<VarRef *>(TokenToObject(right)))
 					{
-						this_token.symbol = SYM_VAR;
-						this_token.var = static_cast<Var *>(ref);
-						goto push_this_token;
+						temp_var = static_cast<Var *>(ref);
 					}
-					right_string = TokenToString(right, right_buf, &right_length);
-					// Do some basic validation to ensure a helpful error message is displayed on failure.
-					if (right_length == 0)
+					else
 					{
-						error_msg = ERR_DYNAMIC_BLANK;
-						error_info = mArg[aArgIndex].text;
-						goto abort_with_exception;
-					}
-					// v2.0: Use of FindVar() vs. FindOrAddVar() makes this check unnecessary.
-					//if (right_length > MAX_VAR_NAME_LENGTH)
-					//{
-					//	error_msg = ERR_DYNAMIC_TOO_LONG;
-					//	error_info = right_string;
-					//	goto abort_with_exception;
-					//}
-					// v2.0: Dynamic creation of variables is not permitted, so FindOrAddVar() is not used.
-					if (   !(temp_var = g_script.FindVar(right_string, right_length
-						, VARREF_IS_WRITE(this_token.var_usage) ? FINDVAR_FOR_WRITE : FINDVAR_FOR_READ))   )
-					{
-						if (g->CurrentFunc && g_script.FindGlobalVar(right_string, right_length))
-							error_msg = ERR_DYNAMIC_BAD_GLOBAL;
-						else
-							error_msg = ERR_DYNAMIC_NOT_FOUND;
-						error_info = right_string;
-						goto abort_with_exception;
+						right_string = TokenToString(right, right_buf, &right_length);
+						// Do some basic validation to ensure a helpful error message is displayed on failure.
+						if (right_length == 0)
+						{
+							error_msg = ERR_DYNAMIC_BLANK;
+							error_info = mArg[aArgIndex].text;
+							goto abort_with_exception;
+						}
+						// v2.0: Use of FindVar() vs. FindOrAddVar() makes this check unnecessary.
+						//if (right_length > MAX_VAR_NAME_LENGTH)
+						//{
+						//	error_msg = ERR_DYNAMIC_TOO_LONG;
+						//	error_info = right_string;
+						//	goto abort_with_exception;
+						//}
+						// v2.0: Dynamic creation of variables is not permitted, so FindOrAddVar() is not used.
+						if (!(temp_var = g_script.FindVar(right_string, right_length
+							, VARREF_IS_WRITE(this_token.var_usage) ? FINDVAR_FOR_WRITE : FINDVAR_FOR_READ)))
+						{
+							if (g->CurrentFunc && g_script.FindGlobalVar(right_string, right_length))
+								error_msg = ERR_DYNAMIC_BAD_GLOBAL;
+							else
+								error_msg = ERR_DYNAMIC_NOT_FOUND;
+							error_info = right_string;
+							goto abort_with_exception;
+						}
 					}
 					this_token.var = temp_var;
 				}
