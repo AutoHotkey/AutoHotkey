@@ -9292,9 +9292,12 @@ end_of_infix_to_postfix:
 
 ResultType Line::FinalizeExpression(ArgStruct &aArg)
 {
-	auto postfix = aArg.postfix;
 	auto stack = (ExprTokenType **)_alloca(aArg.max_stack * sizeof(ExprTokenType **));
 	int stack_count = 0;
+	// stack_count checks: Since missing operands are caught at an earlier stage, it doesn't
+	// seem possible to produce any situation where the stack is unbalanced, but due to the
+	// overall complexity it seems best to assume that it could happen.  Having these checks
+	// here might help catch future (or present) bugs.
 
 	for (auto this_postfix = aArg.postfix; this_postfix->symbol != SYM_INVALID; ++this_postfix)
 	{
@@ -9303,7 +9306,11 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 		if (IS_OPERAND(postfix_symbol))
 		{
 			if (postfix_symbol == SYM_DYNAMIC && !this_postfix->var)
+			{
+				if (stack_count < 1)
+					return LineError(ERR_EXPR_SYNTAX);
 				--stack_count;
+			}
 			stack[stack_count++] = this_postfix;
 		}
 		else if (IS_POSTFIX_OPERATOR(postfix_symbol) || IS_PREFIX_OPERATOR(postfix_symbol))
@@ -9316,16 +9323,21 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 		{
 			if (stack_count < 1)
 				return LineError(ERR_EXPR_SYNTAX);
-			if (this_postfix->symbol != SYM_IFF_THEN)
-			{
-				stack[stack_count - 1] = this_postfix;
-				this_postfix = this_postfix->circuit_token;
-			}
-			else
-				--stack_count;
+			// Pop the result of the left branch of this short-circuit operator, then just allow the right branch
+			// to be evaluated and its value/token used as the result.  A consequence of this simple approach is
+			// that when a short-circuit expression is passed as a parameter, only the right branch...
+			//  1) is permitted to be something like &A_Index, being passed to a built-in output var param.
+			//  2) is resolved to a function address in something like DllCall(a || "B") or DllCall(a?"B":"C").
+			// If this is changed, be sure that both branches are "finalized"; i.e. don't just skip over the right
+			// branch, since it might contain invalid function calls.  This seems difficult to do in one pass since
+			// the end of the right branch isn't marked in any way, but it can be done by having a recursive call
+			// finalize from [this_postfix] to [this_postfix->circuit_token], then having this layer skip it.
+			--stack_count;
 		}
 		else if (postfix_symbol == SYM_COMMA)
 		{
+			if (stack_count < 1)
+				return LineError(ERR_EXPR_SYNTAX);
 			--stack_count;
 		}
 		else if (postfix_symbol != SYM_FUNC)
