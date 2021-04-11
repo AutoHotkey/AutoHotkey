@@ -771,6 +771,7 @@ ObjectMember Map::sMembers[] =
 	Object_Method1(Clear, 0, 0),
 	Object_Method1(Clone, 0, 0),
 	Object_Method1(Delete, 1, 1),
+	Object_Member(Get, __Item, 0, IT_CALL, 1, 2),
 	Object_Method1(Has, 1, 1),
 	Object_Method1(Set, 0, MAXP_VARIADIC)  // Allow 0 for flexibility with variadic calls.
 };
@@ -778,15 +779,18 @@ ObjectMember Map::sMembers[] =
 
 ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
-	if (IS_INVOKE_GET)
+	if (!IS_INVOKE_SET) // Get or call.
 	{
-		if (GetItem(aResultToken, *aParam[0]))
+		if (!GetItem(aResultToken, *aParam[0]))
 		{
-			if (aResultToken.symbol == SYM_OBJECT)
-				aResultToken.object->AddRef();
-			return OK;
+			if (ParamIndexIsOmitted(1))
+				_o_throw(ERR_NO_KEY, ParamIndexToString(0, _f_number_buf), ErrorPrototype::Key);
+			// Otherwise, caller provided a default value.
+			aResultToken.CopyValueFrom(*aParam[1]);
 		}
-		_o_throw(ERR_NO_KEY, ParamIndexToString(0, _f_number_buf), ErrorPrototype::Key);
+		if (aResultToken.symbol == SYM_OBJECT)
+			aResultToken.object->AddRef();
+		return OK;
 	}
 	else
 	{
