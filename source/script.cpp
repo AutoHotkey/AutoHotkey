@@ -3012,7 +3012,7 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 				is_continuation_line = false; // Set default.
 				switch(ctoupper(*next_buf)) // Above has ensured *next_buf != '\0' (toupper might have problems with '\0').
 				{
-				case 'A': // AND
+				case 'A': // AND, AS (future use)
 				case 'O': // OR
 				case 'I': // IS, IN, (unwanted) ISSET
 				case 'C': // CONTAINS (future use)
@@ -5566,9 +5566,9 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 		else if (  operand_length < 9 && (wordop = ConvertWordOperator(op_begin, operand_length))  )
 		{
 			// It's a word operator like AND/OR/NOT.
-			if (wordop == SYM_IN || wordop == SYM_CONTAINS)
+			if (wordop == SYM_RESERVED_WORD)
 			{
-				return ScriptError(_T("Word reserved for future use."), op_begin);
+				return ScriptError(_T("Unexpected reserved word."), op_begin);
 			}
 			// Mark this word as an operator.  Unlike the old method of replacing "OR" with "||",
 			// this leaves ListLines more accurate.  More importantly, it allows "Hotkey, If" to
@@ -5657,8 +5657,10 @@ SymbolType Script::ConvertWordOperator(LPCTSTR aWord, size_t aLength)
 		{ _T("is"), SYM_IS },
 		{ _T("IsSet"), SYM_ISSET },
 		{ SUPER_KEYWORD, SYM_SUPER },
-		{ _T("in"), SYM_IN },
-		{ _T("contains"), SYM_CONTAINS }
+		{ _T("as"), SYM_RESERVED_WORD },
+		{ _T("contains"), SYM_RESERVED_WORD },
+		{ _T("in"), SYM_RESERVED_WORD },
+		{ _T("unset"), SYM_RESERVED_WORD },
 	};
 	for (int i = 0; i < _countof(sWordOp); ++i)
 	{
@@ -7766,7 +7768,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 		, 20             // SYM_AND
 //		, 25             // Reserved for SYM_LOWNOT.
 //		, 26             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
-		, 28, 28, 28	 // SYM_IS, SYM_IN, SYM_CONTAINS
+		, 28             // SYM_IS
 		, 30, 30, 30, 30 // SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL, SYM_NOTEQUALCASE (lower prec. than the below so that "x < 5 = var" means "result of comparison is the boolean value in var".
 		, 34, 34, 34, 34 // SYM_GT, SYM_LT, SYM_GTOE, SYM_LTOE
 		, 36             // SYM_REGEXMATCH
@@ -7789,6 +7791,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 //		, 78             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 //		, 82, 82         // RESERVED FOR SYM_POST_INCREMENT, SYM_POST_DECREMENT (which are listed higher above for the performance of YIELDS_AN_OPERAND().
 		, 86             // SYM_FUNC -- Has special handling which ensures it stays tightly bound with its parameters as though it's a single operand for use by other operators; the actual value here is irrelevant.
+		, 0              // SYM_RESERVED_WORD
 	};
 	// Most programming languages give exponentiation a higher precedence than unary minus and logical-not.
 	// For example, -2**2 is evaluated as -(2**2), not (-2)**2 (the latter is unsupported by qmathPow anyway).
