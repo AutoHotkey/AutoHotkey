@@ -214,6 +214,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_LOWNOT  // LOWNOT is the word "not", the low precedence counterpart of !
 	, SYM_NEGATIVE, SYM_POSITIVE, SYM_REF, SYM_HIGHNOT, SYM_BITNOT  // Don't change position or order of these because Infix-to-postfix converter's special handling for SYM_POWER relies on them being adjacent to each other.
 #define SYM_OVERRIDES_POWER_ON_STACK(symbol) ((symbol) >= SYM_LOWNOT && (symbol) <= SYM_BITNOT) // Check lower bound first for short-circuit performance.
+	, SYM_ISSET
 	, SYM_PRE_INCREMENT, SYM_PRE_DECREMENT // Must be kept after the post-ops and in this order relative to each other due to a range check in the code.
 #define SYM_INCREMENT_OR_DECREMENT_IS_PRE(symbol) ((symbol) >= SYM_PRE_INCREMENT) // Caller has verified symbol is an INCREMENT or DECREMENT operator.
 #define IS_PREFIX_OPERATOR(symbol) ((symbol) >= SYM_LOWNOT && (symbol) <= SYM_PRE_DECREMENT)

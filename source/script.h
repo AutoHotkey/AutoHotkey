@@ -1862,6 +1862,13 @@ public:
 	
 	BuiltInFunc(LPCTSTR aName) : NativeFunc(aName) {}
 	BuiltInFunc(FuncEntry &);
+	BuiltInFunc(LPCTSTR aName, BuiltInFunctionType aBIF, int aMinParams, int aMaxParams) : BuiltInFunc(aName)
+	{
+		mBIF = aBIF;
+		mMinParams = aMinParams;
+		mParamCount = aMaxParams;
+		mFID = (BuiltInFunctionID)0;
+	}
 
 #define MAX_FUNC_OUTPUT_VAR 7
 	bool ArgIsOutputVar(int aIndex) override
@@ -3121,7 +3128,7 @@ public:
 	int FormatError(LPTSTR aBuf, int aBufSize, ResultType aErrorType, LPCTSTR aErrorText, LPCTSTR aExtraInfo, Line *aLine);
 
 	void ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExtraInfo = _T(""), Line *line = NULL);
-	void WarnUnassignedVar(Var *aVar);
+	void WarnUnassignedVar(Var *aVar, Line *aLine);
 	void WarnLocalSameAsGlobal(LPCTSTR aVarName);
 
 	ResultType PreprocessLocalVars(FuncList &aFuncs);

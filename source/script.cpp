@@ -199,7 +199,7 @@ FuncEntry g_BIF[] =
 	BIFi(IsLower, 1, 2, BIF_IsTypeish, VAR_TYPE_LOWER),
 	BIFi(IsNumber, 1, 1, BIF_IsTypeish, VAR_TYPE_NUMBER),
 	BIF1(IsObject, 1, 1),
-	BIF1(IsSet, 1, 1, {1}),
+	BIFi(IsSetRef, 1, 1, BIF_IsSet, 0, {1}),
 	BIFi(IsSpace, 1, 1, BIF_IsTypeish, VAR_TYPE_SPACE),
 	BIFi(IsTime, 1, 1, BIF_IsTypeish, VAR_TYPE_TIME),
 	BIFi(IsUpper, 1, 2, BIF_IsTypeish, VAR_TYPE_UPPER),
@@ -3014,7 +3014,7 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 				{
 				case 'A': // AND
 				case 'O': // OR
-				case 'I': // IS, IN
+				case 'I': // IS, IN, (unwanted) ISSET
 				case 'C': // CONTAINS (future use)
 					// See comments in the default section further below.
 					cp = find_identifier_end<LPTSTR>(next_buf);
@@ -3025,6 +3025,7 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 					// This also rules out valid double-derefs such as and%suffix% := 1.
 					if (IS_SPACE_OR_TAB(*cp) && ConvertWordOperator(next_buf, cp - next_buf))
 					{
+						// ISSET doesn't need to be excluded here because it can't be legally followed by a space or tab.
 						// Unlike in v1, there's no check for an operator after AND/OR (such as AND := 1) because they
 						// should never be used as variable names.
 						is_continuation_line = true; // Override the default set earlier.
@@ -5654,6 +5655,7 @@ SymbolType Script::ConvertWordOperator(LPCTSTR aWord, size_t aLength)
 		{ _T("and"), SYM_AND },
 		{ _T("not"), SYM_LOWNOT },
 		{ _T("is"), SYM_IS },
+		{ _T("IsSet"), SYM_ISSET },
 		{ SUPER_KEYWORD, SYM_SUPER },
 		{ _T("in"), SYM_IN },
 		{ _T("contains"), SYM_CONTAINS }
@@ -7605,7 +7607,7 @@ Line *Script::PreparseCommands(Line *aStartingLine)
 
 		// Finalize and optimize postfix expressions.
 		for (int i = 0; i < line->mArgc; ++i)
-			if (line->mArg[i].is_expression && !line->FinalizeExpression(line->mArg[i]))
+			if (line->mArg[i].postfix && !line->FinalizeExpression(line->mArg[i]))
 				return nullptr;
 
 		// Check for unreachable code.
@@ -7782,6 +7784,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 		, 67,67,67,67,67 // SYM_NEGATIVE (unary minus), SYM_POSITIVE (unary plus), SYM_REF, SYM_HIGHNOT (the high precedence "!" operator), SYM_BITNOT
 		// NOTE: THE ABOVE MUST BE AN ODD NUMBER to indicate right-to-left evaluation order, which was added in v1.0.46 to support consecutive unary operators such as !*var !!var (!!var can be used to convert a value into a pure 1/0 boolean).
 //		, 68             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
+		, 86             // SYM_ISSET
 		, 77, 77         // SYM_PRE_INCREMENT, SYM_PRE_DECREMENT (higher precedence than SYM_POWER because it doesn't make sense to evaluate power first because that would cause ++/-- to fail due to operating on a non-lvalue.
 //		, 78             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 //		, 82, 82         // RESERVED FOR SYM_POST_INCREMENT, SYM_POST_DECREMENT (which are listed higher above for the performance of YIELDS_AN_OPERAND().
@@ -7792,6 +7795,11 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 	// However, this rule requires a small workaround in the postfix-builder to allow 2**-2 to be
 	// evaluated as 2**(-2) rather than being seen as an error.  v1.0.45: A similar thing is required
 	// to allow the following to work: 2**!1, 2**not 0, 2**~0xFFFFFFFE, 2**&x.
+
+	// IsSet is constructed here because it's a sort of intrinsic function with its own
+	// special rules.  ExprOp<> isn't used because it doesn't have parameter count limits
+	// or a name (which is displayed when the parameter count is invalid, for instance).
+	static BuiltInFunc *sIsSetFunc = new BuiltInFunc { _T("IsSet"), BIF_IsSet, 1, 1 };
 
 	ExprTokenType *infix = NULL;
 	int infix_size = 0, infix_count = 0, allow_for_extra_postfix = 0;
@@ -8509,6 +8517,14 @@ unquoted_literal:
 					return LineError(_T("\"") SUPER_KEYWORD _T("\" is valid only inside a class."), FAIL, cp);
 				CHECK_AUTO_CONCAT;
 			}
+			else if (this_deref_ref.symbol == SYM_ISSET)
+			{
+				if (cp[this_deref_ref.length] != '(')
+					return LineError(ERR_MISSING_OPEN_PAREN, FAIL, cp);
+				infix[infix_count].callsite = new CallSite();
+				infix[infix_count].callsite->func = sIsSetFunc;
+				this_deref_ref.symbol = SYM_FUNC;
+			}
 			infix[infix_count].symbol = this_deref_ref.symbol;
 			infix[infix_count].error_reporting_marker = this_deref_ref.marker;
 		}
@@ -9117,6 +9133,17 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				// if this_infix[1] is SYM_DOT.  In that case, a later iteration should apply
 				// the transformations above to that operator.
 			}
+			else if ((this_postfix->callsite->flags & IT_BITMASK) == IT_CALL)
+			{
+				if (this_postfix->callsite->param_count == 1 && this_postfix->callsite->func == sIsSetFunc)
+				{
+					if (postfix[postfix_count - 1]->symbol != SYM_VAR && postfix[postfix_count - 1]->symbol != SYM_DYNAMIC)
+					{
+						return LineError(_T("IsSet requires a variable."), FAIL, this_postfix->error_reporting_marker);
+					}
+					postfix[postfix_count - 1]->var_usage = Script::VARREF_ISSET;
+				}
+			}
 			break;
 
 		case SYM_REGEXMATCH: // a ~= b  ->  RegExMatch(a, b)
@@ -9261,14 +9288,15 @@ end_of_infix_to_postfix:
 			++max_stack;
 		// Resolve variable references for assignments and output vars.  Leave all others
 		// for later to facilitate detecting variables which are not assigned anywhere.
-		if (new_token.symbol == SYM_VAR && new_token.var_usage != Script::VARREF_READ)
+		if (new_token.symbol == SYM_VAR && VARREF_IS_WRITE(new_token.var_usage))
 		{
 			new_token.var = g_script.FindOrAddVar(new_token.var_deref->marker, new_token.var_deref->length, FINDVAR_FOR_WRITE);
 			if (!new_token.var)
 				return FAIL;
-			if (new_token.var_usage != Script::VARREF_REF // Validation of REF is left to FinalizeExpression().
-				&& !ValidateVarUsage(new_token.var, new_token.var_usage))
-				return FAIL;
+			// This is currently left to FinalizeExpression() to reduce code size:
+			//if (new_token.var_usage != Script::VARREF_REF // Validation of REF is left to FinalizeExpression().
+			//	&& !ValidateVarUsage(new_token.var, new_token.var_usage))
+			//	return FAIL;
 			new_token.var->MarkAssignedSomewhere();
 			if (aArg.type == ARG_TYPE_OUTPUT_VAR)
 			{
@@ -9399,15 +9427,15 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 					case SYM_REF:
 						if (func->ArgIsOutputVar(i))
 						{
-							// Permit VAR_VIRTUAL for built-in functions and all var types for IsSet().
-							// Optimize SYM_REF by allowing it to pass SYM_VAR directly where possible.
+							// Override the SYM_REF's default var_usage of VARREF_READ to indicate 1) that SYM_VAR can be
+							// passed directly without the need to allocate a VarRef, and 2) which var types are allowed.
+							// Permit VAR_VIRTUAL for all built-in functions except VarSetStrCapacity.
 							param[i]->var_usage =
 								(!bif || bif == BIF_VarSetStrCapacity) ? Script::VARREF_REF
-								: bif == BIF_IsSet					   ? Script::VARREF_ISSET
 								:										 Script::VARREF_OUTPUT_VAR;
 							if (!bif)
 								param[i]->object = func; // Used during runtime to detect when a VarRef is needed due to recursion (func->mInstances).
-							if (param[i][-1].symbol == SYM_DYNAMIC)
+							if (param[i][-1].symbol == SYM_DYNAMIC || param[i][-1].symbol == SYM_VAR)
 								param[i][-1].var_usage = param[i]->var_usage;
 						}
 						break;
@@ -9432,14 +9460,14 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 
 	for (auto this_postfix = aArg.postfix; this_postfix->symbol != SYM_INVALID; ++this_postfix)
 	{
-		if (this_postfix->symbol == SYM_REF && this_postfix[-1].symbol == SYM_VAR)
-		{
-			// Now that var_usage has been set for any SYM_REF operators in postfix that are passed
-			// to functions, ensure the var being referenced is valid for the given var_usage.
-			int var_usage = this_postfix->var_usage == Script::VARREF_READ ? Script::VARREF_REF : this_postfix->var_usage;
-			if (!ValidateVarUsage(this_postfix[-1].var, var_usage))
-				return FAIL;
-		}
+		if (this_postfix->symbol != SYM_VAR)
+			continue;
+		// Now that var_usage has been set for any SYM_REF operators in postfix that are passed
+		// to functions, ensure the var being referenced is valid for the given var_usage.
+		if (!ValidateVarUsage(this_postfix->var, this_postfix->var_usage))
+			return FAIL;
+		if (!this_postfix->var->IsAssignedSomewhere())
+			g_script.WarnUnassignedVar(this_postfix->var, this);
 	}
 
 	return OK;
@@ -13176,14 +13204,16 @@ void Script::ScriptWarning(WarnMode warnMode, LPCTSTR aWarningText, LPCTSTR aExt
 
 
 
-void Script::WarnUnassignedVar(Var *var)
+void Script::WarnUnassignedVar(Var *var, Line *aLine)
 {
 	auto warnMode = g_Warn_VarUnset;
 	if (!warnMode)
 		return;
 
-	// Show only one MsgBox per var, but list all references when using StdOut/OutputDebug.
-	if (warnMode == WARNMODE_MSGBOX)
+	// Currently only the first reference to each var generates a warning even when using
+	// StdOut/OutputDebug, since MarkAlreadyWarned() is used to suppress warnings for any
+	// var which is checked with IsSet().
+	//if (warnMode == WARNMODE_MSGBOX)
 	{
 		// The following check uses a flag separate to IsAssignedSomewhere() because setting
 		// that one for the purpose of preventing multiple MsgBoxes would cause other callers
@@ -13197,7 +13227,7 @@ void Script::WarnUnassignedVar(Var *var)
 	LPCTSTR sameNameAsGlobal = isUndeclaredLocal && FindGlobalVar(var->mName) ? _T("  (same name as a global)") : _T("");
 	TCHAR buf[DIALOG_TITLE_SIZE];
 	sntprintf(buf, _countof(buf), _T("%s %s%s"), Var::DeclarationType(var->Scope()), var->mName, sameNameAsGlobal);
-	ScriptWarning(warnMode, WARNING_ALWAYS_UNSET_VARIABLE, buf);
+	ScriptWarning(warnMode, WARNING_ALWAYS_UNSET_VARIABLE, buf, aLine);
 }
 
 
@@ -13378,12 +13408,10 @@ ResultType Script::PreparseVarRefs()
 			ArgStruct &arg = line->mArg[a];
 			if (!arg.is_expression)
 				continue;
-			
-			ExprTokenType *token;
-			for (token = arg.postfix; token->symbol != SYM_INVALID; ++token)
+			for (ExprTokenType *token = arg.postfix; token->symbol != SYM_INVALID; ++token)
 			{
 				if (token->symbol != SYM_VAR // Not a var.
-					|| token->var_usage != VARREF_READ) // Already resolved by ExpressionToPostfix.
+					|| VARREF_IS_WRITE(token->var_usage)) // Already resolved by ExpressionToPostfix.
 					continue;
 				if (  !(token->var = FindOrAddVar(token->var_deref->marker, token->var_deref->length, FINDVAR_FOR_READ))  )
 					return FAIL;
@@ -13392,10 +13420,9 @@ ResultType Script::PreparseVarRefs()
 				switch (token->var->Type())
 				{
 				case VAR_CONSTANT:
-					// This ensures classes introduced via stdlib are consistent with other classes;
-					// i.e. passing to a ByRef parameter gives a value instead of a read-only parameter.
-					// It might also help performance.
-					if (!token->var->IsLocal())
+					// Resolve constants to their values, except in cases like IsSet(SomeClass), or when
+					// the constant is a closure (which may change each time the outer function is called).
+					if (!token->var->IsLocal() && token->var_usage == VARREF_READ)
 						token->var->ToToken(*token);
 					continue;
 				case VAR_VIRTUAL:
@@ -13404,11 +13431,15 @@ ResultType Script::PreparseVarRefs()
 					++arg.max_alloc;
 					break;
 				default:
-					if (!token->var->IsAssignedSomewhere())
-					{
-						mCurrLine = line;
-						WarnUnassignedVar(token->var);
-					}
+					// Suppress any VarUnset warnings for IsSet(var) so that it can be used to determine if an
+					// optionally-set global variable has been set, such as a class in an optional #Include.
+					// MarkAssignedSomewhere() isn't used for this because PreprocessLocalVars() hasn't been
+					// called yet, and it relies on the attribute being accurate.
+					if (token->var_usage == VARREF_ISSET)
+						token->var->MarkAlreadyWarned();
+					// It's too early to show VarUnset warnings, since not all VARREF_ISSET references have been marked.
+					// The effect of IsSet(v) for suppressing the warning shouldn't be positional since it's feasible for
+					// a check in one function to guard evaluation of a VARREF_READ in some other function.
 				}
 			}
 			if (arg.type == ARG_TYPE_INPUT_VAR)
