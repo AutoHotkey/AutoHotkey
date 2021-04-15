@@ -4344,9 +4344,16 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		break; // Let DWP handle it.
 
 	case WM_SIZE:
-		if (hWnd == g_hWnd && wParam != SIZE_MINIMIZED)
+		if (hWnd == g_hWnd)
 		{
-			MoveWindow(g_hWndEdit, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
+			if (wParam == SIZE_MINIMIZED)
+				// Minimizing the main window hides it.  This message generally doesn't arrive as a
+				// result of user interaction, since WM_SYSCOMMAND, SC_MINIMIZE is handled as well.
+				// However, this is necessary to keep the main window hidden when CreateWindows()
+				// minimizes it during startup.
+				ShowWindow(g_hWnd, SW_HIDE);
+			else
+				MoveWindow(g_hWndEdit, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
 			return 0; // The correct return value for this msg.
 		}
 		break; // Let DWP handle it.
