@@ -6418,57 +6418,57 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 	{
 		// Above wrote at least one initializer expression into buf.
 		buf[buf_used -= 2] = '\0'; // Remove the final ", "
-
-		// The following section temporarily replaces mLastLine in order to insert script lines
-		// either at the end of the list of static initializers (separate from the main script)
-		// or at the end of the __Init method belonging to this class.  Save the current values:
-		Line *script_first_line = mFirstLine, *script_last_line = mLastLine;
-		Line *block_end;
-		auto init_func = (UserFunc *)class_object->GetOwnPropMethod(_T("__Init")); // Can only be a user-defined function or nullptr at this stage.
-
-		if (init_func)
-		{
-			// __Init method already exists, so find the end of its body.
-			for (block_end = init_func->mJumpToLine;
-				block_end->mActionType != ACT_BLOCK_END || block_end->mAttribute != init_func;
-				block_end = block_end->mNextLine);
-		}
-		else
-		{
-			// Create an __Init method for this class/prototype.
-			init_func = DefineClassInit(aStatic);
-			if (!init_func)
-				return FAIL;
-			block_end = mLastLine;
-
-			// These must be updated as one or both have changed:
-			script_first_line = mFirstLine;
-			script_last_line = mLastLine;
-		}
-		g->CurrentFunc = init_func; // g->CurrentFunc should be NULL prior to this.
-		mLastLine = block_end->mPrevLine; // i.e. insert before block_end.
-		mLastLine->mNextLine = nullptr; // For maintainability; AddLine() should overwrite it regardless.
-		mCurrLine = nullptr; // Fix for v1.1.09.02: Leaving this non-NULL at best causes error messages to show irrelevant vicinity lines, and at worst causes a crash because the linked list is in an inconsistent state.
-
-		Line *prl = mPendingRelatedLine; // This was set by AddLine(ACT_BLOCK_END) if DefineClassInit() was just called.
-		mPendingRelatedLine = nullptr;
-		mNoUpdateLabels = true;
-		if (!ParseAndAddLine(buf))
-			return FAIL; // Above already displayed the error.
-		mNoUpdateLabels = false;
-		mPendingRelatedLine = prl;
-		
-		if (init_func->mJumpToLine == block_end) // This can be true only for the first static initializer.
-			init_func->mJumpToLine = mLastLine;
-		// Rejoin the function's block-end (and any lines following it) to the main script.
-		mLastLine->mNextLine = block_end;
-		block_end->mPrevLine = mLastLine;
-		// mFirstLine should be left as it is: if it was NULL, it now contains a pointer to our
-		// __init function's block-begin, which is now the very first executable line in the script.
-		g->CurrentFunc = nullptr;
-		// Restore mLastLine so that any subsequent script lines are added at the correct point.
-		mLastLine = script_last_line;
+		return DefineClassVarInit(buf, aStatic, class_object);
 	}
+	return OK;
+}
+
+
+ResultType Script::DefineClassVarInit(LPTSTR aBuf, bool aStatic, Object *aObject)
+{
+	Line *script_last_line = mLastLine;
+	Line *block_end;
+	auto init_func = (UserFunc *)aObject->GetOwnPropMethod(_T("__Init")); // Can only be a user-defined function or nullptr at this stage.
+	if (init_func)
+	{
+		// __Init method already exists, so find the end of its body.
+		for (block_end = init_func->mJumpToLine;
+			block_end->mActionType != ACT_BLOCK_END || block_end->mAttribute != init_func;
+			block_end = block_end->mNextLine);
+	}
+	else
+	{
+		// Create an __Init method for this class/prototype.
+		init_func = DefineClassInit(aStatic);
+		if (!init_func)
+			return FAIL;
+		script_last_line = block_end = mLastLine;
+	}
+	
+	// Temporarily replace mLastLine to insert script lines at the end of __Init.
+	g->CurrentFunc = init_func; // g->CurrentFunc should be NULL prior to this.
+	mLastLine = block_end->mPrevLine; // i.e. insert before block_end.
+	mLastLine->mNextLine = nullptr; // For maintainability; AddLine() should overwrite it regardless.
+	mCurrLine = nullptr; // Fix for v1.1.09.02: Leaving this non-NULL at best causes error messages to show irrelevant vicinity lines, and at worst causes a crash because the linked list is in an inconsistent state.
+
+	Line *prl = mPendingRelatedLine; // This was set by AddLine(ACT_BLOCK_END) if DefineClassInit() was just called.
+	mPendingRelatedLine = nullptr;
+	mNoUpdateLabels = true;
+	if (!ParseAndAddLine(aBuf))
+		return FAIL; // Above already displayed the error.
+	mNoUpdateLabels = false;
+	mPendingRelatedLine = prl;
+
+	if (init_func->mJumpToLine == block_end) // This can be true only for the first static initializer.
+		init_func->mJumpToLine = mLastLine;
+	// Rejoin the function's block-end (and any lines following it) to the main script.
+	mLastLine->mNextLine = block_end;
+	block_end->mPrevLine = mLastLine;
+	// mFirstLine should be left as it is: if it was NULL, it now contains a pointer to our
+	// __init function's block-begin, which is now the very first executable line in the script.
+	g->CurrentFunc = nullptr;
+	// Restore mLastLine so that any subsequent script lines are added at the correct point.
+	mLastLine = script_last_line;
 	return OK;
 }
 
