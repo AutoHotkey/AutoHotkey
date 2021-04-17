@@ -1301,3 +1301,20 @@ LPTSTR ResultToken::Malloc(LPTSTR aValue, size_t aLength)
 	marker_length = aLength;
 	return tmemcpy(marker = mem_to_free, aValue, aLength + 1); // +1 to include the null-terminator.
 }
+
+
+
+ResultType Var::InitializeConstant()
+{
+	// Caller has verified !IsInitialized() && Type() == VAR_CONSTANT.
+	Var &var = *ResolveAlias();
+	ASSERT(var.mType == VAR_CONSTANT && var.IsObject() && dynamic_cast<::Object*>(var.mObject));
+	var.mAttrib &= ~VAR_ATTRIB_UNINITIALIZED; // Only make one attempt; prevents infinite recursion.
+	FuncResult result_token;
+	auto cls = (::Object*)var.mObject;
+	cls->AddRef(); // Necessary because Construct() calls Release() on failure.
+	auto result = cls->Construct(result_token, nullptr, 0);
+	if (result == OK)
+		cls->Release();
+	return result;
+}

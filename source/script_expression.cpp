@@ -178,7 +178,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 				if (this_token.var->Type() == VAR_NORMAL || this_token.var_usage != Script::VARREF_READ)
   				{
-					if (this_token.var->IsUninitializedNormalVar() && this_token.var_usage == Script::VARREF_READ)
+					if (this_token.var->IsUninitialized() && this_token.var_usage == Script::VARREF_READ)
 					{
 						error_value = &this_token;
 						goto unset_var;
@@ -189,6 +189,16 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 				if (this_token.var->Type() == VAR_CONSTANT)
 				{
+					if (this_token.var->IsUninitialized())
+					{
+						auto result = this_token.var->InitializeConstant();
+						if (result != OK)
+						{
+							aResult = result;
+							result_to_return = NULL;
+							goto normal_end_skip_output_var;
+						}
+					}
 					// There should be no need to AddRef() and add to to_free[], since even if
 					// a constant is local, it could only be released when the function returns.
 					this_token.var->ToTokenSkipAddRef(this_token);
@@ -252,10 +262,25 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			} // if (this_token.symbol == SYM_DYNAMIC)
 			if (this_token.symbol == SYM_VAR)
 			{
-				if (this_token.var->IsUninitializedNormalVar() && this_token.var_usage == Script::VARREF_READ)
+				if (this_token.var->IsUninitialized())
 				{
-					error_value = &this_token;
-					goto unset_var;
+					if (this_token.var->Type() == VAR_CONSTANT)
+					{
+						auto result = this_token.var->InitializeConstant();
+						if (result != OK)
+						{
+							aResult = result;
+							result_to_return = NULL;
+							goto normal_end_skip_output_var;
+						}
+					}
+					else if (this_token.var_usage == Script::VARREF_READ)
+					{
+						// The expression is always aborted in this case, even if the user chooses to continue the thread.
+						// If this is changed, check all other callers of unset_var and VarUnsetError() for consistency.
+						error_value = &this_token;
+						goto unset_var;
+					}
 				}
 			}
 			goto push_this_token;

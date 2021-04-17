@@ -6201,6 +6201,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	{
 		class_var->Assign(class_object); // Assign to global variable named %class_name%.
 		class_var->MakeReadOnly();
+		class_var->MarkUninitialized(); // This enables the constructor to be called on first use.
 	}
 
 	prototype->SetBase(base_prototype);
@@ -6209,7 +6210,8 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 
 	if (!DefineClassInit(true))
 		return FAIL;
-	mClasses->Append(ExprTokenType(class_object));
+	if (mClassObjectCount > 1) // Nested classes still require this for initialization.
+		mClasses->Append(ExprTokenType(class_object));
 	
 	// This line enables a class without any static methods to be freed at program exit,
 	// or sooner if it's a nested class and the script removes it from the outer class.
@@ -11515,9 +11517,9 @@ ResultType Line::PerformAssign()
 		//		x := 123
 		//		x := 1.0
 		//		x := "quoted literal string"
-		//		x := normal_var  ; but not built-ins
-		if (mArg[1].postfix->symbol == SYM_VAR && mArg[1].postfix->var->IsUninitializedNormalVar())
-			return g_script.VarUnsetError(mArg[1].postfix->var);
+		//		x := normal_var  ; but not VAR_VIRTUAL or VAR_CONSTANT
+		if (mArg[1].postfix->symbol == SYM_VAR && mArg[1].postfix->var->IsUninitialized())
+			return g_script.VarUnsetError(mArg[1].postfix->var); // !is_expression implies VAR_NORMAL, so InitializeConstant() isn't needed here.
 		Var *output_var = VAR(mArg[0]);
 		return output_var->Assign(*mArg[1].postfix);
 	}
@@ -13425,7 +13427,7 @@ ResultType Script::PreparseVarRefs()
 				case VAR_CONSTANT:
 					// Resolve constants to their values, except in cases like IsSet(SomeClass), or when
 					// the constant is a closure (which may change each time the outer function is called).
-					if (!token->var->IsLocal() && token->var_usage == VARREF_READ)
+					if (!token->var->IsLocal() && token->var_usage == VARREF_READ && !token->var->IsUninitialized())
 						token->var->ToToken(*token);
 					continue;
 				case VAR_VIRTUAL:
@@ -13447,10 +13449,10 @@ ResultType Script::PreparseVarRefs()
 			}
 			if (arg.type == ARG_TYPE_INPUT_VAR)
 			{
-				if (arg.postfix->symbol != SYM_VAR || arg.postfix->var->Type() == VAR_VIRTUAL)
+				if (arg.postfix->symbol != SYM_VAR || arg.postfix->var->Type() != VAR_NORMAL)
 				{
-					// Can't be ARG_TYPE_INPUT_VAR after all, as VAR_VIRTUAL requires ExpandExpression
-					// and VAR_CONSTANT is converted to SYM_OBJECT above.
+					// Can't be ARG_TYPE_INPUT_VAR after all, as VAR_VIRTUAL and VAR_CONSTANT require ExpandExpression
+					// (unless it's a constant which was converted to SYM_OBJECT above).
 					arg.type = ARG_TYPE_NORMAL;
 				}
 				else

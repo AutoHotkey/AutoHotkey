@@ -889,8 +889,15 @@ public:
 	void operator delete(void *aPtr, void *) {}
 	void operator delete[](void *aPtr) {}
 
+	ResultType InitializeConstant();
 
 	bool IsUninitializedNormalVar()
+	{
+		Var &var = *ResolveAlias();
+		return var.mType == VAR_NORMAL && (var.mAttrib & VAR_ATTRIB_UNINITIALIZED);
+	}
+
+	bool IsUninitialized()
 	{
 		Var &var = *ResolveAlias();
 		return var.mAttrib & VAR_ATTRIB_UNINITIALIZED;
