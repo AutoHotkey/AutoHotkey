@@ -829,3 +829,11 @@ namespace ErrorPrototype
 
 ResultType GetEnumerator(IObject *&aEnumerator, ExprTokenType &aEnumerable, int aVarCount, bool aDisplayError);
 ResultType CallEnumerator(IObject *aEnumerator, ExprTokenType *aParam[], int aParamCount, bool aDisplayError);
+
+
+struct NestedClassInfo
+{
+	Object *class_object;
+	bool constructed;
+};
+BIF_DECL(Class_GetNestedClass);

@@ -6171,10 +6171,9 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	if (conflict_found)
 		return ScriptError(ERR_DUPLICATE_DECLARATION, aBuf);
 
-	token.SetValue(mClassName, length);
-	
 	if (mUnresolvedClasses)
 	{
+		token.SetValue(mClassName, length);
 		ExprTokenType *param = &token;
 		ResultToken result_token;
 		result_token.symbol = SYM_STRING; // Init for detecting SYM_OBJECT below.
@@ -6196,7 +6195,22 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		class_object = Object::CreateClass(prototype = Object::CreatePrototype(mClassName));
 
 	if (mClassObjectCount)
-		outer_class->SetOwnProp(class_name, class_object); // Assign to outer_class[class_name].
+	{
+		// Define property outer_class.%class_name%.
+		auto prop = outer_class->DefineProperty(class_name);
+		
+		ExprTokenType values[] { class_object, class_name }, *param[] { values, values + 1 };
+
+		auto info = SimpleHeap::Alloc<NestedClassInfo>();
+		info->class_object = class_object;
+		info->constructed = false;
+		class_object->AddRef();
+
+		auto get = new BuiltInFunc { _T(""), Class_GetNestedClass, 1, 1, false, info };
+		prop->MinParams = 0;
+		prop->MaxParams = 0;
+		prop->SetGetter(get);
+	}
 	else
 	{
 		class_var->Assign(class_object); // Assign to global variable named %class_name%.
@@ -6210,8 +6224,6 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 
 	if (!DefineClassInit(true))
 		return FAIL;
-	if (mClassObjectCount > 1) // Nested classes still require this for initialization.
-		mClasses->Append(ExprTokenType(class_object));
 	
 	// This line enables a class without any static methods to be freed at program exit,
 	// or sooner if it's a nested class and the script removes it from the outer class.

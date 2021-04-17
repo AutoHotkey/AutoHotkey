@@ -3086,6 +3086,19 @@ Object *Object::ValueBase(ExprTokenType &aValue)
 
 
 
+BIF_DECL(Class_GetNestedClass)
+{
+	auto info = (NestedClassInfo *)aResultToken.func->mData;
+	auto cls = info->class_object;
+	cls->AddRef();
+	if (info->constructed)
+		_f_return(cls);
+	info->constructed = true;
+	cls->Construct(aResultToken, nullptr, 0);
+}
+
+
+
 #ifdef CONFIG_DEBUGGER
 
 void IObject::DebugWriteProperty(IDebugProperties *aDebugger, int aPage, int aPageSize, int aMaxDepth)
