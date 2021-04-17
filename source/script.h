@@ -1858,16 +1858,21 @@ class BuiltInFunc : public NativeFunc
 {
 public:
 	BuiltInFunctionType mBIF;
-	BuiltInFunctionID mFID; // For code sharing: this function's ID in the group of functions which share the same C++ function.
+	union {
+		BuiltInFunctionID mFID; // For code sharing: this function's ID in the group of functions which share the same C++ function.
+		void *mData;
+	};
 	
 	BuiltInFunc(LPCTSTR aName) : NativeFunc(aName) {}
 	BuiltInFunc(FuncEntry &);
-	BuiltInFunc(LPCTSTR aName, BuiltInFunctionType aBIF, int aMinParams, int aMaxParams) : BuiltInFunc(aName)
+	BuiltInFunc(LPCTSTR aName, BuiltInFunctionType aBIF, int aMinParams, int aMaxParams, bool aIsVariadic = false, void *aData = nullptr) : BuiltInFunc(aName)
 	{
 		mBIF = aBIF;
 		mMinParams = aMinParams;
 		mParamCount = aMaxParams;
-		mFID = (BuiltInFunctionID)0;
+		mIsVariadic = aIsVariadic;
+		//mFID = (BuiltInFunctionID)0;
+		mData = aData;
 	}
 
 #define MAX_FUNC_OUTPUT_VAR 7
