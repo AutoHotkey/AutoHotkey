@@ -837,3 +837,4 @@ struct NestedClassInfo
 	bool constructed;
 };
 BIF_DECL(Class_GetNestedClass);
+BIF_DECL(Class_CallNestedClass);

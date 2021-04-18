@@ -3098,6 +3098,25 @@ BIF_DECL(Class_GetNestedClass)
 }
 
 
+BIF_DECL(Class_CallNestedClass)
+{
+	auto info = (NestedClassInfo *)aResultToken.func->mData;
+	auto cls = info->class_object;
+	if (!info->constructed)
+	{
+		info->constructed = true;
+		cls->AddRef(); // Necessary because Construct() calls Release() on failure/exit.
+		if (cls->Construct(aResultToken, nullptr, 0) != OK) // FAIL or EXIT
+			return;
+		cls->Release();
+		aResultToken.InitResult(aResultToken.buf);
+	}
+	else
+		aResultToken.symbol = SYM_STRING; // Set the default expected by Invoke.
+	cls->Invoke(aResultToken, IT_CALL, nullptr, ExprTokenType { cls }, aParam + 1, aParamCount - 1);
+}
+
+
 
 #ifdef CONFIG_DEBUGGER
 

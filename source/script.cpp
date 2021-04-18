@@ -6210,6 +6210,9 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		prop->MinParams = 0;
 		prop->MaxParams = 0;
 		prop->SetGetter(get);
+
+		auto call = new BuiltInFunc { _T(""), Class_CallNestedClass, 1, 1, true, info };
+		prop->SetMethod(call);
 	}
 	else
 	{
