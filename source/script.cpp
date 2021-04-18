@@ -6217,8 +6217,14 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 
 	prototype->SetBase(base_prototype);
 	class_object->SetBase(base_class);
-	++mClassObjectCount;
 
+	length += 3; // ()\0
+	LPTSTR buf = talloca(length);
+	sntprintf(buf, (int)length, _T("(%s)"), mClassName);
+	if (mClassObjectCount ? !DefineClassVarInit(buf, true, outer_class) : !ParseAndAddLine(buf, ACT_EXPRESSION))
+		return FAIL;
+	++mClassObjectCount;
+	// Define __Init unconditionally so that classes without static vars do not inherit __Init.
 	if (!DefineClassInit(true))
 		return FAIL;
 	
