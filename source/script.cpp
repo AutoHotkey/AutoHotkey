@@ -7195,6 +7195,7 @@ Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayE
 		CountNestedFuncRefs(outer, aInner.mName);
 	}
 	inner_var->SetAliasDirect(outer_var); // Temporarily point the upvar to its downvar for later processing.
+	inner_var->MarkAssignedSomewhere(); // Upvars are not candidates for #Warn VarUnset.
 	return inner_var;
 }
 
