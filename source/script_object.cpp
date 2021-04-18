@@ -909,14 +909,21 @@ bool Array::Append(ExprTokenType &aValue)
 void Object::EndClassDefinition()
 {
 	auto &obj = *(Object *)GetOwnPropObj(_T("Prototype"));
-	// Instance variables were previously created as keys in the class object to prevent duplicate or
-	// conflicting declarations.  Since these variables will be added at run-time to the derived objects,
-	// we don't want them in the class object.  So delete any key-value pairs with "".
-	for (index_t i = obj.mFields.Length(); i > 0; )
+	// Each variable declaration created a 'missing' property in the class or prototype object to prevent
+	// duplicate or conflicting declarations.  Remove them now so that the declaration acts like a normal
+	// assignment (i.e. invokes property setters and __Set), for flexibility and consistency; and so that
+	// SYM_MISSING doesn't need special handling at runtime.
+	RemoveMissingProperties();
+	obj.RemoveMissingProperties();
+}
+
+void Object::RemoveMissingProperties()
+{
+	for (index_t i = mFields.Length(); i > 0; )
 	{
 		i--;
-		if (obj.mFields[i].symbol == SYM_STRING && obj.mFields[i].string.Length() == 0)
-			obj.mFields.Remove(i, 1);
+		if (mFields[i].symbol == SYM_MISSING)
+			mFields.Remove(i, 1);
 	}
 }
 

@@ -6345,6 +6345,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 	TCHAR orig_char, buf[LINE_SIZE];
 	size_t buf_used = 0;
 	ExprTokenType empty_token(_T(""), 0);
+	empty_token.symbol = SYM_MISSING;
 
 	for (item = omit_leading_whitespace(aBuf); *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
 	{

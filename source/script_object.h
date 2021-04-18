@@ -445,6 +445,7 @@ public:
 	bool IsInstanceOf(Object *aClass);
 
 	void EndClassDefinition();
+	void RemoveMissingProperties();
 	Object *GetUnresolvedClass(LPTSTR &aName);
 	
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
