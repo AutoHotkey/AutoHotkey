@@ -6077,7 +6077,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	if (mClassObjectCount == MAX_NESTED_CLASSES)
 		return ScriptError(_T("This class definition is nested too deep."), aBuf);
 
-	LPTSTR cp, class_name = aBuf;
+	LPTSTR cp, class_name = aBuf, base_class_name = nullptr;
 	Object *outer_class, *base_class = Object::sClass, *base_prototype = Object::sPrototype;
 	Var *class_var;
 	ExprTokenType token;
@@ -6090,7 +6090,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 		cp = omit_leading_whitespace(cp + 1);
 		if (_tcsnicmp(cp, _T("extends"), 7) || !IS_SPACE_OR_TAB(cp[7]))
 			return ScriptError(_T("Syntax error in class definition."), cp);
-		LPTSTR base_class_name = omit_leading_whitespace(cp + 8);
+		base_class_name = omit_leading_whitespace(cp + 8);
 		if (!*base_class_name)
 			return ScriptError(_T("Missing class name."), cp);
 		base_class = FindClass(base_class_name);
@@ -6218,15 +6218,19 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	prototype->SetBase(base_prototype);
 	class_object->SetBase(base_class);
 
-	length += 3; // ()\0
-	LPTSTR buf = talloca(length);
-	sntprintf(buf, (int)length, _T("(%s)"), mClassName);
-	if (mClassObjectCount ? !DefineClassVarInit(buf, true, outer_class) : !ParseAndAddLine(buf, ACT_EXPRESSION))
+	if (mClassObjectCount ? !DefineClassVarInit(mClassName, true, outer_class, ACT_EXPRESSION) : !ParseAndAddLine(mClassName, ACT_EXPRESSION))
 		return FAIL;
 	++mClassObjectCount;
 	// Define __Init unconditionally so that classes without static vars do not inherit __Init.
 	if (!DefineClassInit(true))
 		return FAIL;
+	if (base_class_name)
+	{
+		// Ensure the base class is initialized by inserting a reference to it into static __Init.
+		// Otherwise, the base class could be accessed via .base without triggering initialization.
+		if (!DefineClassVarInit(base_class_name, true, class_object, ACT_EXPRESSION))
+			return FAIL;
+	}
 	
 	// This line enables a class without any static methods to be freed at program exit,
 	// or sooner if it's a nested class and the script removes it from the outer class.
@@ -6441,7 +6445,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 }
 
 
-ResultType Script::DefineClassVarInit(LPTSTR aBuf, bool aStatic, Object *aObject)
+ResultType Script::DefineClassVarInit(LPTSTR aBuf, bool aStatic, Object *aObject, ActionTypeType aActionType)
 {
 	Line *script_last_line = mLastLine;
 	Line *block_end;
@@ -6471,7 +6475,7 @@ ResultType Script::DefineClassVarInit(LPTSTR aBuf, bool aStatic, Object *aObject
 	Line *prl = mPendingRelatedLine; // This was set by AddLine(ACT_BLOCK_END) if DefineClassInit() was just called.
 	mPendingRelatedLine = nullptr;
 	mNoUpdateLabels = true;
-	if (!ParseAndAddLine(aBuf))
+	if (!ParseAndAddLine(aBuf, aActionType))
 		return FAIL; // Above already displayed the error.
 	mNoUpdateLabels = false;
 	mPendingRelatedLine = prl;
