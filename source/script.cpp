@@ -9332,7 +9332,7 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 		ASSERT((UINT)postfix_symbol < SYM_COUNT);
 		if (IS_OPERAND(postfix_symbol))
 		{
-			if (postfix_symbol == SYM_DYNAMIC && !this_postfix->var)
+			if (postfix_symbol == SYM_DYNAMIC)
 			{
 				if (stack_count < 1)
 					return LineError(ERR_EXPR_SYNTAX);
@@ -12829,8 +12829,7 @@ ResultType Script::ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting
 
 ResultType Line::ValidateVarUsage(Var *aVar, int aUsage)
 {
-	if (   (aUsage != Script::VARREF_READ)
-		&& (aUsage != Script::VARREF_ISSET) // IsSet permits any var.
+	if (   VARREF_IS_WRITE(aUsage)
 		&& (aUsage == Script::VARREF_REF
 			? aVar->Type() != VAR_NORMAL // Aliasing VAR_VIRTUAL is currently unsupported.
 			: aVar->IsReadOnly())   )
@@ -13425,9 +13424,8 @@ ResultType Script::PreparseVarRefs()
 						token->var->ToToken(*token);
 					continue;
 				case VAR_VIRTUAL:
-					// Convert this virtual var to SYM_DYNAMIC for evaluation by ExpandExpression.
-					token->symbol = SYM_DYNAMIC;
-					++arg.max_alloc;
+					if (token->var_usage == VARREF_READ)
+						++arg.max_alloc; // Reserve a to_free[] slot for it in ExpandExpression().
 					break;
 				default:
 					// Suppress any VarUnset warnings for IsSet(var) so that it can be used to determine if an

@@ -125,143 +125,111 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 		if (IS_OPERAND(this_token.symbol)) // If it's an operand, just push it onto stack for use by an operator in a future iteration.
 		{
-			if (this_token.symbol == SYM_DYNAMIC) // CONVERTED HERE/EARLY TO SOMETHING *OTHER* THAN SYM_DYNAMIC so that no later stages need any handling for them as operands. SYM_DYNAMIC is quite similar to SYM_FUNC/BIF in this respect.
+			if (this_token.symbol == SYM_DYNAMIC) // Dynamic variable reference.
 			{
-				if (SYM_DYNAMIC_IS_DOUBLE_DEREF(this_token)) // Double-deref such as Array%i%.
+				if (!stack_count) // Prevent stack underflow.
+					goto abort_with_exception;
+				ExprTokenType &right = *STACK_POP;
+				if (auto ref = dynamic_cast<VarRef *>(TokenToObject(right)))
 				{
-					if (!stack_count) // Prevent stack underflow.
+					temp_var = static_cast<Var *>(ref);
+				}
+				else
+				{
+					right_string = TokenToString(right, right_buf, &right_length);
+					// Do some basic validation to ensure a helpful error message is displayed on failure.
+					if (right_length == 0)
+					{
+						error_msg = ERR_DYNAMIC_BLANK;
+						error_info = mArg[aArgIndex].text;
 						goto abort_with_exception;
-					ExprTokenType &right = *STACK_POP;
-					if (auto ref = dynamic_cast<VarRef *>(TokenToObject(right)))
-					{
-						temp_var = static_cast<Var *>(ref);
 					}
-					else
+					// v2.0: Use of FindVar() vs. FindOrAddVar() makes this check unnecessary.
+					//if (right_length > MAX_VAR_NAME_LENGTH)
+					//{
+					//	error_msg = ERR_DYNAMIC_TOO_LONG;
+					//	error_info = right_string;
+					//	goto abort_with_exception;
+					//}
+					// v2.0: Dynamic creation of variables is not permitted, so FindOrAddVar() is not used.
+					if (!(temp_var = g_script.FindVar(right_string, right_length
+						, VARREF_IS_WRITE(this_token.var_usage) ? FINDVAR_FOR_WRITE : FINDVAR_FOR_READ)))
 					{
-						right_string = TokenToString(right, right_buf, &right_length);
-						// Do some basic validation to ensure a helpful error message is displayed on failure.
-						if (right_length == 0)
-						{
-							error_msg = ERR_DYNAMIC_BLANK;
-							error_info = mArg[aArgIndex].text;
-							goto abort_with_exception;
-						}
-						// v2.0: Use of FindVar() vs. FindOrAddVar() makes this check unnecessary.
-						//if (right_length > MAX_VAR_NAME_LENGTH)
-						//{
-						//	error_msg = ERR_DYNAMIC_TOO_LONG;
-						//	error_info = right_string;
-						//	goto abort_with_exception;
-						//}
-						// v2.0: Dynamic creation of variables is not permitted, so FindOrAddVar() is not used.
-						if (!(temp_var = g_script.FindVar(right_string, right_length
-							, VARREF_IS_WRITE(this_token.var_usage) ? FINDVAR_FOR_WRITE : FINDVAR_FOR_READ)))
-						{
-							if (g->CurrentFunc && g_script.FindGlobalVar(right_string, right_length))
-								error_msg = ERR_DYNAMIC_BAD_GLOBAL;
-							else
-								error_msg = ERR_DYNAMIC_NOT_FOUND;
-							error_info = right_string;
-							goto abort_with_exception;
-						}
+						if (g->CurrentFunc && g_script.FindGlobalVar(right_string, right_length))
+							error_msg = ERR_DYNAMIC_BAD_GLOBAL;
+						else
+							error_msg = ERR_DYNAMIC_NOT_FOUND;
+						error_info = right_string;
+						goto abort_with_exception;
 					}
-					this_token.var = temp_var;
 				}
-				//else: It's a built-in variable.
-
-				if (!ValidateVarUsage(this_token.var, this_token.var_usage))
-				{
-					// Having this check here allows us to display the variable name rather than its contents
-					// in the error message.
+				// var_usage was already validated for non-dynamic variables.  SYM_REF relies on this check.
+				// It also flags invalid assignments, but those can be handled by Var::Assign() anyway.
+				if (!ValidateVarUsage(temp_var, this_token.var_usage))
 					goto abort;
-				}
-
-				if (this_token.var->Type() == VAR_NORMAL || this_token.var_usage != Script::VARREF_READ)
-  				{
-					if (this_token.var->IsUninitialized() && this_token.var_usage == Script::VARREF_READ)
-					{
-						error_value = &this_token;
-						goto unset_var;
-					}
-					this_token.symbol = SYM_VAR; // The fact that a SYM_VAR operand is always VAR_NORMAL (with limited exceptions) is relied upon in several places such as built-in functions.
-					goto push_this_token;
-  				}
-
-				if (this_token.var->Type() == VAR_CONSTANT)
-				{
-					if (this_token.var->IsUninitialized())
-					{
-						auto result = this_token.var->InitializeConstant();
-						if (result != OK)
-						{
-							aResult = result;
-							result_to_return = NULL;
-							goto normal_end_skip_output_var;
-						}
-					}
-					// There should be no need to AddRef() and add to to_free[], since even if
-					// a constant is local, it could only be released when the function returns.
-					this_token.var->ToTokenSkipAddRef(this_token);
-					goto push_this_token;
-				}
-
-				// FUTURE: This should be merged with the SYM_FUNC handling at some point to improve
-				// maintainability, reduce code size, and take advantage of SYM_FUNC's optimizations.
-				ResultToken result_token;
-				result_token.InitResult(left_buf);
-				result_token.symbol = SYM_INTEGER; // For _f_return_i() and consistency with BIFs.
-
-				// Call this virtual variable's getter.
-				this_token.var->Get(result_token);
-
-				if (result_token.Exited())
-				{
-					aResult = result_token.Result(); // See similar section under SYM_FUNC for comments.
-					result_to_return = NULL;
-					goto normal_end_skip_output_var;
-				}
-
-				if (result_token.symbol != SYM_STRING || result_token.marker_length == 0)
-				{
-					// Currently SYM_OBJECT is not added to to_free[] as there aren't any built-in
-					// vars that create an object or call AddRef().  If that's changed, must update
-					// BIV_TrayMenu and Debugger::GetPropertyValue.
-					this_token.CopyValueFrom(result_token);
-					goto push_this_token;
-				}
-
-				result_length = result_token.marker_length;
-				if (result_length == -1)
-					result_length = _tcslen(result_token.marker);
-				
-				if (result_token.marker != left_buf)
-				{
-					if (result_token.mem_to_free) // Persistent memory was already allocated for the result.
-						to_free[to_free_count++] = &this_token; // A slot was reserved for this SYM_DYNAMIC.
-						// Also push the value, below.
-					//else: Currently marker is assumed to point to persistent memory, such as a literal
-					// string, which should be safe to use at least until expression evaluation completes.
-					this_token.SetValue(result_token.marker, result_length);
-					goto push_this_token;
-				}
-				
-				result_size = 1 + result_length;
-				if (result_size <= (int)(aDerefBufSize - (target - aDerefBuf))) // There is room at the end of our deref buf, so use it.
-				{
-					result = target; // Point result to its new, more persistent location.
-					target += result_size; // Point it to the location where the next string would be written.
-				}
-				else // if (result_size < EXPR_SMALL_MEM_LIMIT && alloca_usage < EXPR_ALLOCA_LIMIT) // See comments at EXPR_SMALL_MEM_LIMIT.
-				{	// Above: Anything longer than MAX_NUMBER_SIZE can't be in left_buf and therefore
-					// was already handled above.  alloca_usage is a safeguard but not an absolute limit.
-					result = (LPTSTR)talloca(result_size);
-					alloca_usage += result_size; // This might put alloca_usage over the limit by as much as EXPR_SMALL_MEM_LIMIT, but that is fine because it's more of a guideline than a limit.
-				}
-				tmemcpy(result, result_token.marker, result_length + 1);
-				this_token.SetValue(result, result_length);
-			} // if (this_token.symbol == SYM_DYNAMIC)
-			if (this_token.symbol == SYM_VAR)
+				this_token.var = temp_var;
+				this_token.symbol = SYM_VAR;
+			}
+			if (this_token.symbol == SYM_VAR && !VARREF_IS_WRITE(this_token.var_usage))
 			{
+				if (this_token.var->Type() == VAR_VIRTUAL && this_token.var_usage == Script::VARREF_READ)
+				{
+					// FUTURE: This should be merged with the SYM_FUNC handling at some point to improve
+					// maintainability, reduce code size, and take advantage of SYM_FUNC's optimizations.
+					ResultToken result_token;
+					result_token.InitResult(left_buf);
+					result_token.symbol = SYM_INTEGER; // For _f_return_i() and consistency with BIFs.
+
+					// Call this virtual variable's getter.
+					this_token.var->Get(result_token);
+
+					if (result_token.Exited())
+					{
+						aResult = result_token.Result(); // See similar section under SYM_FUNC for comments.
+						result_to_return = NULL;
+						goto normal_end_skip_output_var;
+					}
+
+					if (result_token.symbol != SYM_STRING || result_token.marker_length == 0)
+					{
+						// Currently SYM_OBJECT is not added to to_free[] as there aren't any built-in
+						// vars that create an object or call AddRef().  If that's changed, must update
+						// BIV_TrayMenu and Debugger::GetPropertyValue.
+						this_token.CopyValueFrom(result_token);
+						goto push_this_token;
+					}
+
+					result_length = result_token.marker_length;
+					if (result_length == -1)
+						result_length = _tcslen(result_token.marker);
+
+					if (result_token.marker != left_buf)
+					{
+						if (result_token.mem_to_free) // Persistent memory was already allocated for the result.
+							to_free[to_free_count++] = &this_token; // A slot was reserved for this SYM_DYNAMIC.
+							// Also push the value, below.
+						//else: Currently marker is assumed to point to persistent memory, such as a literal
+						// string, which should be safe to use at least until expression evaluation completes.
+						this_token.SetValue(result_token.marker, result_length);
+						goto push_this_token;
+					}
+
+					result_size = 1 + result_length;
+					if (result_size <= (int)(aDerefBufSize - (target - aDerefBuf))) // There is room at the end of our deref buf, so use it.
+					{
+						result = target; // Point result to its new, more persistent location.
+						target += result_size; // Point it to the location where the next string would be written.
+					}
+					else // if (result_size < EXPR_SMALL_MEM_LIMIT && alloca_usage < EXPR_ALLOCA_LIMIT) // See comments at EXPR_SMALL_MEM_LIMIT.
+					{	// Above: Anything longer than MAX_NUMBER_SIZE can't be in left_buf and therefore
+						// was already handled above.  alloca_usage is a safeguard but not an absolute limit.
+						result = (LPTSTR)talloca(result_size);
+						alloca_usage += result_size; // This might put alloca_usage over the limit by as much as EXPR_SMALL_MEM_LIMIT, but that is fine because it's more of a guideline than a limit.
+					}
+					tmemcpy(result, result_token.marker, result_length + 1);
+					this_token.SetValue(result, result_length);
+					goto push_this_token;
+				} // end if (reading a var of type VAR_VIRTUAL)
 				if (this_token.var->IsUninitialized())
 				{
 					if (this_token.var->Type() == VAR_CONSTANT)
@@ -328,7 +296,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			else
 			{
 				// This is a dynamic function call.
-				if (!stack_count) // SYM_DYNAMIC should have pushed a function name or reference onto the stack, but a syntax error may still cause this condition.
+				if (!stack_count)
 					goto abort_with_exception;
 				stack_count--;
 				func_token = stack[stack_count];

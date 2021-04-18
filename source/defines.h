@@ -164,7 +164,7 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_MISSING // Only used in parameter lists.
 	, SYM_VAR // An operand that is a variable's contents.
 	, SYM_OBJECT // L31: Represents an IObject interface pointer.
-	, SYM_DYNAMIC // An operand that needs further processing during the evaluation phase.
+	, SYM_DYNAMIC // A dynamic variable reference/double-deref.  Also used in Object::Variant to identify dynamic properties.
 	, SYM_SUPER // Special operand just for the "super" keyword.  Should only ever appear as the target of SYM_FUNC with callsite->func == nullptr.
 #define SUPER_KEYWORD _T("Super")
 	, SYM_OPERAND_END // Marks the symbol after the last operand.  This value is used below.
@@ -223,8 +223,6 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 	, SYM_COUNT    // Must be last because it's the total symbol count for everything above.
 	, SYM_INVALID = SYM_COUNT // Some callers may rely on YIELDS_AN_OPERAND(SYM_INVALID)==false.
 };
-// These two are macros for maintainability (i.e. seeing them together here helps maintain them together).
-#define SYM_DYNAMIC_IS_DOUBLE_DEREF(token) (!(token).var) // SYM_DYNAMICs are either double-derefs or built-in vars.
 
 // This should include all operators which can produce SYM_VAR for a subsequent assignment:
 #define IS_OPERATOR_VALID_LVALUE(sym) \
