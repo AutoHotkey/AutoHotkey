@@ -1514,9 +1514,8 @@ ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[],
 			Release();
 			return result;
 		}
+		g_script.mCurrLine = curr_line; // Prevent misleading error reports in __New or for our caller.
 	}
-
-	g_script.mCurrLine = curr_line; // Prevent misleading error reports/Exception() stack trace.
 
 	// __New may be defined by the script for custom initialization code.
 	result = CallMeta(_T("__New"), aResultToken, this_token, aParam, aParamCount);
@@ -1533,6 +1532,7 @@ ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[],
 		Release();
 		return result;
 	}
+	g_script.mCurrLine = curr_line; // Prevent misleading error reports for our caller.
 
 	aResultToken.SetValue(this); // No AddRef() since Object::New() would need to Release().
 	return aResultToken.SetResult(OK);
