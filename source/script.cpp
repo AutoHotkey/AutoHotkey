@@ -1181,9 +1181,6 @@ ResultType Script::AutoExecSection()
 	// would terminate the script:
 	++g_nThreads;
 
-	if (!InitClasses())
-		return FAIL; // Treat it like a load-time error.
-
 	// v1.0.48: Due to switching from SET_UNINTERRUPTIBLE_TIMER to IsInterruptible():
 	// In spite of the comments in IsInterruptible(), periodically have a timer call IsInterruptible() due to
 	// the following scenario:
@@ -6080,9 +6077,6 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	if (mClassObjectCount == MAX_NESTED_CLASSES)
 		return ScriptError(_T("This class definition is nested too deep."), aBuf);
 
-	if (!mClasses)
-		mClasses = Array::Create();
-
 	LPTSTR cp, class_name = aBuf;
 	Object *outer_class, *base_class = Object::sClass, *base_prototype = Object::sPrototype;
 	Var *class_var;
@@ -6581,27 +6575,6 @@ ResultType Script::ResolveClasses()
 	}
 	mCurrLine = NULL;
 	return ScriptError(_T("Unknown class."), name);
-}
-
-
-ResultType Script::InitClasses()
-{
-	if (!mClasses) // No classes.
-		return OK;
-	TCHAR buf[_f_retval_buf_size];
-	ResultToken result_token;
-	ExprTokenType cls;
-	for (Array::index_t i = 0; i < mClasses->Length(); ++i)
-	{
-		mClasses->ItemToToken(i, cls);
-		result_token.InitResult(buf);
-		if (!((Object *)cls.object)->Construct(result_token, nullptr, 0))
-			return FAIL;
-		//result_token.Free(); // Construct() returned cls.object without AddRef(), so don't Free().
-	}
-	mClasses->Release();
-	mClasses = nullptr;
-	return OK;
 }
 
 
