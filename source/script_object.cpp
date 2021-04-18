@@ -1512,7 +1512,7 @@ ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[],
 		if (result == FAIL || result == EARLY_EXIT) // Checked only after Free() and InitResult() as caller might expect mem_to_free == NULL.
 		{
 			Release();
-			return result;
+			return aResultToken.SetExitResult(result); // SetExitResult is necessary because result was reset by InitResult.
 		}
 		g_script.mCurrLine = curr_line; // Prevent misleading error reports in __New or for our caller.
 	}
