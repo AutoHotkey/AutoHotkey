@@ -88,4 +88,15 @@
       <Item Name="call" Condition="mCall">*mCall</Item>
     </Expand>
   </Type>
+  <Type Name="Array">
+    <Expand>
+      <ArrayItems>
+        <Size>mLength</Size>
+        <ValuePointer>mItem</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="FlatVector&lt;wchar_t,unsigned __int64&gt;">
+    <DisplayString>{(wchar_t*)(data + 1),su}</DisplayString>
+  </Type>
 </AutoVisualizer>
