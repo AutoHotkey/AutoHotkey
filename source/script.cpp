@@ -9387,7 +9387,7 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 			stack_count -= param_count;
 			auto param = stack + stack_count;
 			bool call_call = !this_postfix->callsite->member && IT_CALL == (this_postfix->callsite->flags & IT_BITMASK);
-			if (call_call && (this_postfix->callsite->flags & EIF_STACK_MEMBER))
+			if (this_postfix->callsite->flags & EIF_STACK_MEMBER)
 			{
 				--stack_count;
 				call_call = false;
