@@ -1099,7 +1099,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 						EVT_ARG_ADD(pcontrol);
 					else
 						EVT_ARG_ADD(_T(""));
-					EVT_ARG_ADD(GuiType::CreateDropArray(hdrop_to_free));
+					EVT_ARG_ADD(GuiType::CreateDropArray(hdrop_to_free)); // Currently must be the third-last arg; see "Free the drop array."
 					EVT_ARG_ADD(pgui->Unscale(gui_point.x));
 					EVT_ARG_ADD(pgui->Unscale(gui_point.y));
 
@@ -1198,7 +1198,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 					}
 				}
 				if (gui_action == GUI_EVENT_DROPFILES) // Must be done regardless of pgui->mHwnd.
-					gui_event_args[2].object->Release(); // Free the drop array.
+					gui_event_args[gui_event_arg_count - 3].object->Release(); // Free the drop array.
 				// Counteract the earlier AddRef(). If the Gui was destroyed (and none of this
 				// Gui's other labels are still running), this will free the Gui structure.
 				pgui->Release();
