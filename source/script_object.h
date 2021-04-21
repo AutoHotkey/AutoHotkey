@@ -397,6 +397,12 @@ public:
 		return field && field->symbol == SYM_DYNAMIC ? field->prop->Method() : nullptr;
 	}
 
+	IObject *GetOwnPropGetter(name_t name)
+	{
+		auto field = FindField(name);
+		return field && field->symbol == SYM_DYNAMIC ? field->prop->Getter() : nullptr;
+	}
+
 	bool SetOwnProp(name_t aName, ExprTokenType &aValue)
 	{
 		index_t insert_pos;

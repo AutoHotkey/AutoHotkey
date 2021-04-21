@@ -6551,9 +6551,13 @@ Object *Script::FindClass(LPCTSTR aClassName, size_t aClassNameLength)
 		if (cp == key)
 			return NULL; // ScriptError(_T("Missing name."), cp);
 		*cp = '\0'; // Terminate at the delimiting dot.
-		if (!base_object->GetOwnProp(token, key) || token.symbol != SYM_OBJECT)
+		// Invoking at this stage isn't safe since aClassName could include the name of a
+		// user-defined property getter, or the class might implement __Get, and the script
+		// isn't necessarily ready to execute.  Get it this way instead:
+		auto getter = dynamic_cast<BuiltInFunc*>(base_object->GetOwnPropGetter(key));
+		if (!getter || getter->mBIF != Class_GetNestedClass)
 			return NULL;
-		base_object = (Object *)token.object; // See comment about Object() above.
+		base_object = ((NestedClassInfo*)getter->mData)->class_object;
 	}
 
 	return base_object;
