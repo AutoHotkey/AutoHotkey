@@ -5919,7 +5919,7 @@ BIF_DECL(BIF_StrReplace)
 	_f_param_string(oldstr, 1);
 	_f_param_string_opt(newstr, 2);
 
-	// Maintain this together with the equivalent section of BIF_InStr:
+	// Maintain this together with the equivalent sections of BIF_InStr/BIF_StrCount:
 	StringCaseSenseType string_case_sense = ParamIndexToCaseSense(3);
 	if (string_case_sense == SCS_INVALID 
 		|| string_case_sense == SCS_INSENSITIVE_LOGICAL) // Not supported, seems more useful to throw rather than using SCS_INSENSITIVE.
@@ -11615,7 +11615,7 @@ BIF_DECL(BIF_InStr)
 	if (string_case_sense == SCS_INVALID 
 		|| string_case_sense == SCS_INSENSITIVE_LOGICAL) // Not supported, seems more useful to throw rather than using SCS_INSENSITIVE.
 		_f_throw_param(2);
-	// BIF_StrReplace sets string_case_sense similarly, maintain together.
+	// BIF_StrReplace/BIF_StrCount set string_case_sense similarly, maintain together.
 
 	LPTSTR found_pos;
 	INT_PTR offset = 0; // Set default.
@@ -11645,6 +11645,59 @@ BIF_DECL(BIF_InStr)
 		if (!(found_pos = tcsstr2(found_pos, needle, string_case_sense)) || i == occurrence_number)
 			break;
 	_f_return_i(found_pos ? (found_pos - haystack + 1) : 0);
+}
+
+
+
+BIF_DECL(BIF_StrCount)
+{
+	// These should be equivalent:
+	// Count := StrCount(Haystack, Needle, CaseSense)
+	// StrReplace(Haystack, Needle,, CaseSense, &Count)
+
+	// Caller has already ensured that at least two actual parameters are present.
+	TCHAR needle_buf[MAX_NUMBER_SIZE];
+	INT_PTR haystack_length;
+	LPTSTR haystack = ParamIndexToString(0, _f_number_buf, (size_t *)&haystack_length);
+	size_t needle_length;
+	LPTSTR needle = ParamIndexToString(1, needle_buf, &needle_length);
+
+	// Maintain this together with the equivalent sections of BIF_InStr/BIF_StrReplace:
+	StringCaseSenseType string_case_sense = ParamIndexToCaseSense(2);
+	if (string_case_sense == SCS_INVALID 
+		|| string_case_sense == SCS_INSENSITIVE_LOGICAL) // Not supported, seems more useful to throw rather than using SCS_INSENSITIVE.
+		_f_throw_param(2);
+
+	LPTSTR found_pos;
+	__int64 count = 0;
+	INT_PTR offset = 0; // Set default.
+
+	if (!needle_length) // Counting occurrences of an empty string is undefined, so throw.
+		_f_throw_param(1);
+
+	if (!ParamIndexIsOmitted(3)) // There is a starting position present.
+	{
+		offset = ParamIndexToIntPtr(3);
+		if (offset > haystack_length || offset == 0)
+			_f_return_i(0); // Match never found when offset is beyond length of string.
+		if (offset < 0) // Same convention as RegExMatch/Replace(): Treat negative StartingPos as a position relative to the end of the string.
+		{
+			offset += haystack_length;
+			if (offset < 0)
+				offset = 0;
+		}
+		else
+			--offset; // Convert to zero-based.
+	}
+
+	int i;
+	for (i = 1, found_pos = haystack + offset; ; ++i, found_pos += needle_length)
+	{
+		if (!(found_pos = tcsstr2(found_pos, needle, string_case_sense)))
+			break;
+		++count;
+	}
+	_f_return_i(count);
 }
 
 

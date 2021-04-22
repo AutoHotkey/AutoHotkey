@@ -3266,6 +3266,7 @@ BIF_DECL(BIF_String);
 BIF_DECL(BIF_StrLen);
 BIF_DECL(BIF_SubStr);
 BIF_DECL(BIF_InStr);
+BIF_DECL(BIF_StrCount);
 BIF_DECL(BIF_StrCase);
 BIF_DECL(BIF_StrSplit);
 BIF_DECL(BIF_StrReplace);

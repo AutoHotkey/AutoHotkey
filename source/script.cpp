@@ -313,6 +313,7 @@ FuncEntry g_BIF[] =
 	BIF1(StatusBarGetText, 0, 5),
 	BIF1(StatusBarWait, 0, 8),
 	BIF1(StrCompare, 2, 3),
+	BIF1(StrCount, 2, 4),
 	BIFn(StrGet, 1, 3, BIF_StrGetPut),
 	BIF1(StrLen, 1, 1),
 	BIFn(StrLower, 1, 2, BIF_StrCase),
