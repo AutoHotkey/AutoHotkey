@@ -18791,6 +18791,14 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_Noop)
+{
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
