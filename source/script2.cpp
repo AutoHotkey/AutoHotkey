@@ -18791,6 +18791,40 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_StrSplitLen)
+{
+	LPTSTR aInputString = TokenToString(*aParam[0], aResultToken.buf);
+	int slice_len = (int)TokenToInt64(*aParam[1]);
+	if (slice_len < 1)
+		_f_throw(ERR_PARAM2_INVALID);
+
+	int count = _tcslen(aInputString) / slice_len;
+	Object *output_array = Object::Create();
+
+	for (int i = 0; i < count; ++i)
+	{
+		if (!output_array->Append(aInputString, slice_len))
+			goto outofmem;
+		aInputString += slice_len;
+	}
+	if (*aInputString) // If not null, one item remains.
+	{
+		if (!output_array->Append(aInputString, _tcslen(aInputString)))
+			goto outofmem;
+	}
+	
+	aResultToken.symbol = SYM_OBJECT;
+	aResultToken.object = output_array;
+	return;
+
+outofmem:
+	output_array->Release(); // Since we're not returning it.
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
