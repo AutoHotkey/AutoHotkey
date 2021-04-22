@@ -621,6 +621,8 @@ inline LPTSTR HwndToString(HWND aHwnd, LPTSTR aBuf)
 // returns 0 on failure, but failure occurs only when parameter/flag is invalid, which should never happen in
 // this case.
 #define lstrcmpni(str1, len1, str2, len2) (CompareString(LOCALE_USER_DEFAULT, NORM_IGNORECASE, str1, (int)(len1), str2, (int)(len2)) - 2) // -2 for maintainability
+#define tcscmpn2(str1, str2, string_case_sense, len) ((string_case_sense) == SCS_INSENSITIVE ? _tcsnicmp(str1, str2, len) \
+	: ((string_case_sense) == SCS_INSENSITIVE_LOCALE ? lstrcmpni(str1, len, str2, len) : _tcsncmp(str1, str2, len)))
 
 
 // The following macros simplify and make consistent the calls to MultiByteToWideChar().
