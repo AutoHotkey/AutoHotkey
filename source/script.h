@@ -3356,6 +3356,7 @@ BIF_DECL(BIF_Trim); // L31: Also handles LTrim and RTrim.
 
 BIF_DECL(BIF_Hotstring);
 BIF_DECL(BIF_InputHook);
+BIF_DECL(BIF_Clamp);
 
 
 BIF_DECL(BIF_IsObject);
