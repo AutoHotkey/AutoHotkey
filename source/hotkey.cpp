@@ -568,7 +568,7 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC)
 
 
 
-HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND, ULONG_PTR aExtraInfo)
+HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND, ULONG_PTR aExtraInfo, LPTSTR aSingleChar)
 // Caller must not call this for AltTab hotkeys IDs because this will always return NULL in such cases.
 // Returns the address of the first matching non-global hotkey variant that is allowed to fire.
 // If there is no non-global one eligible, the global one is returned (or NULL if none).
@@ -601,7 +601,7 @@ HotkeyVariant *Hotkey::CriterionAllowsFiring(HWND *aFoundHWND, ULONG_PTR aExtraI
 		// impact performance since the vast majority of hotkeys have either one or just a few variants.
 		if (   vp->mEnabled // This particular variant within its parent hotkey is enabled.
 			&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
-			&& HotInputLevelAllowsFiring(vp->mInputLevel, aExtraInfo, NULL) // ... its #InputLevel allows it to fire...
+			&& HotInputLevelAllowsFiring(vp->mInputLevel, aExtraInfo, aSingleChar) // ... its #InputLevel allows it to fire...
 			&& (!vp->mHotCriterion || (found_hwnd = HotCriterionAllowsFiring(vp->mHotCriterion, mName)))   ) // ... and its criteria allow it to fire.
 		{
 			if (vp->mHotCriterion) // Since this is the first criteria hotkey, it takes precedence.
@@ -674,7 +674,7 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags
 	// Since above didn't return, a slower method is needed to find out which variant of this hotkey (if any)
 	// should fire.
 	HotkeyVariant *vp;
-	if (vp = hk.CriterionAllowsFiring(NULL, aExtraInfo))
+	if (vp = hk.CriterionAllowsFiring(NULL, aExtraInfo, aSingleChar))
 	{
 		if (!aFireWithNoSuppress) // Caller hasn't yet determined its value with certainty (currently, this statement might always be true).
 			aFireWithNoSuppress = vp->mNoSuppress;
@@ -728,7 +728,7 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags
 				)
 			{
 				// The following section is similar to one higher above, so maintain them together:
-				if (vp = hk2.CriterionAllowsFiring(NULL, aExtraInfo))
+				if (vp = hk2.CriterionAllowsFiring(NULL, aExtraInfo, aSingleChar))
 				{
 					if (!aFireWithNoSuppress) // Caller hasn't yet determined its value with certainty (currently, this statement might always be true).
 						aFireWithNoSuppress = vp->mNoSuppress;
