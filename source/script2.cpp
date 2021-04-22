@@ -11610,36 +11610,46 @@ BIF_DECL(BIF_InStr)
 	LPTSTR haystack = ParamIndexToString(0, _f_number_buf, (size_t *)&haystack_length);
 	size_t needle_length;
 	LPTSTR needle = ParamIndexToString(1, needle_buf, &needle_length);
-	
+
 	StringCaseSenseType string_case_sense = ParamIndexToCaseSense(2);
-	if (string_case_sense == SCS_INVALID 
+	if (string_case_sense == SCS_INVALID
 		|| string_case_sense == SCS_INSENSITIVE_LOGICAL) // Not supported, seems more useful to throw rather than using SCS_INSENSITIVE.
 		_f_throw_param(2);
 	// BIF_StrReplace sets string_case_sense similarly, maintain together.
 
 	LPTSTR found_pos;
-	INT_PTR offset = 0; // Set default.
-	int occurrence_number = ParamIndexToOptionalInt(4, 1);
+	INT_PTR offset = ParamIndexIsOmitted(3) ? 1 : ParamIndexToIntPtr(3);
+	int occurrence_number = ParamIndexIsOmitted(4) ? (offset > 0 ? 1 : -1) : ParamIndexToInt(4);
+	if (!ParamIndexIsOmitted(4) && ParamIndexIsOmitted(3))
+		offset = (occurrence_number > 0) ? 1 : haystack_length;
 
 	if (!needle_length) // Although arguably legitimate, this is more likely an error, so throw.
 		_f_throw_param(1);
+	if (!offset)
+		_f_throw_param(3);
+	if (!occurrence_number)
+		_f_throw_param(4);
 
-	if (!ParamIndexIsOmitted(3)) // There is a starting position present.
+	// For offset validation and reverse search we need to know the length of haystack:
+	if (occurrence_number < 0) // Special mode to search from the right side.
 	{
-		offset = ParamIndexToIntPtr(3); // i.e. the fourth arg.
-		// For offset validation and reverse search we need to know the length of haystack:
-		if (offset < 0) // Special mode to search from the right side.
-		{
-			++offset; // Convert from negative-one-based to zero-based.
-			haystack_length += offset; // i.e. reduce haystack_length by the absolute value of offset.
-			found_pos = (haystack_length >= 0) ? tcsrstr(haystack, haystack_length, needle, string_case_sense, occurrence_number) : NULL;
-			_f_return_i(found_pos ? (found_pos - haystack + 1) : 0);  // +1 to convert to 1-based, since 0 indicates "not found".
-		}
-		--offset; // Convert from one-based to zero-based.
-		if (offset > haystack_length || occurrence_number < 1 || offset < 0)
-			_f_return_i(0); // Match never found when offset is beyond length of string.
+		if (offset > -1)
+			offset -= haystack_length + 1;
+		if (offset > -1)
+			offset = -1;
+		++offset; // Convert from negative-one-based to zero-based.
+		haystack_length += offset; // i.e. reduce haystack_length by the absolute value of offset.
+		found_pos = (haystack_length >= 0) ? tcsrstr(haystack, haystack_length, needle, string_case_sense, -occurrence_number) : NULL;
+		_f_return_i(found_pos ? (found_pos - haystack + 1) : 0);  // +1 to convert to 1-based, since 0 indicates "not found".
 	}
-	// Since above didn't return:
+
+	if (offset < 0)
+	{
+		offset += haystack_length + 1;
+		if (offset < 0)
+			offset = 1;
+	}
+	--offset; // Convert from one-based to zero-based.
 	int i;
 	for (i = 1, found_pos = haystack + offset; ; ++i, found_pos += needle_length)
 		if (!(found_pos = tcsstr2(found_pos, needle, string_case_sense)) || i == occurrence_number)
