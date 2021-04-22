@@ -13777,6 +13777,15 @@ BIF_DECL(BIF_IsTypeish)
 				break;
 			}
 		break;
+	case VAR_TYPE_ASCII:
+		if_condition = true;
+		for (cp = aValueStr; *cp; ++cp)
+			if (*cp > 127)
+			{
+				if_condition = false;
+				break;
+			}
+		break;
 #ifdef DEBUG
 	default:
 		MsgBox(_T("DEBUG: Unhandled IsXStr mode."));
