@@ -5894,20 +5894,19 @@ BIF_DECL(BIF_StrCase)
 {
 	size_t length;
 	LPTSTR contents = ParamIndexToString(0, _f_number_buf, &length);
-	LPTSTR option = ParamIndexToOptionalString(1);
-	
+
 	// Make a modifiable copy of the string to return:
 	if (!TokenSetResult(aResultToken, contents, length))
 		return;
 	aResultToken.symbol = SYM_STRING;
 	contents = aResultToken.marker;
-	
-	if (*option && ctoupper(*option) == 'T' && !*(option + 1)) // Convert to title case.
-		StrToTitleCase(contents);
-	else if (_f_callee_id == FID_StrLower)
+
+	if (_f_callee_id == FID_StrLower)
 		CharLower(contents);
-	else
+	else if (_f_callee_id == FID_StrUpper)
 		CharUpper(contents);
+	else // Convert to title case.
+		StrToTitleCase(contents);
 }
 
 

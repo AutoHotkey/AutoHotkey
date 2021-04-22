@@ -643,7 +643,7 @@ enum BuiltInFunctionID {
 	FID_RegExMatch = 0, FID_RegExReplace,
 	FID_Input = 0, FID_InputEnd,
 	FID_GetKeyName = 0, FID_GetKeyVK = 1, FID_GetKeySC,
-	FID_StrLower = 0, FID_StrUpper,
+	FID_StrLower = 0, FID_StrUpper, FID_StrTitle,
 	FID_StrGet = 0, FID_StrPut,
 	FID_FileExist = 0, FID_DirExist,
 	FID_WinExist = 0, FID_WinActive,
