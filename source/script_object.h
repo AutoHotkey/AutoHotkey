@@ -823,6 +823,7 @@ public:
 
 
 
+void DefineComPrototypeMembers();
 void DefineFileClass();
 
 

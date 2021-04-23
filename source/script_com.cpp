@@ -1100,31 +1100,14 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	if (mVarType != VT_DISPATCH || !mDispatch)
 	{
-		if (!IS_INVOKE_CALL && aName && !_tcsicmp(aName, _T("Ptr")))
-		{
-			if (IS_INVOKE_SET && (mVarType == VT_UNKNOWN || mVarType == VT_DISPATCH) && !mUnknown)
-			{
-				// Allow this assignment only in the specific cases indicated above, to avoid ambiguity
-				// about what to do with the old value.  This operation is specifically intended for use
-				// with DllCall; i.e. DllCall(..., "ptr*", o := ComObject(13,0)) to wrap a returned ptr.
-				// Assigning zero is permitted and there is no AddRef because the caller wants us to
-				// Release the interface pointer automatically.
-				mUnknown = (IUnknown *)ParamIndexToInt64(0);
-				return OK;
-			}
-			if (aParamCount)
-				_o_throw(ERR_INVALID_USAGE);
-			// Support passing VT_ARRAY, VT_BYREF or IUnknown to DllCall.
-			if ((mVarType & (VT_ARRAY | VT_BYREF)) || mVarType == VT_UNKNOWN || mVarType == VT_DISPATCH)
-				_o_return(mVal64);
-		}
+		IObject *proto;
 		if (mVarType & VT_ARRAY)
-			return SafeArrayInvoke(IObject_Invoke_PARAMS);
-		if (mVarType & VT_BYREF)
-			return ByRefInvoke(IObject_Invoke_PARAMS);
-		// Otherwise: this object can't be invoked.
-		ComError(-1, aResultToken);
-		return aResultToken.Result();
+			proto = Object::sComArrayPrototype;
+		else if (mVarType & VT_BYREF)
+			proto = Object::sComRefPrototype;
+		else
+			proto = Object::sComValuePrototype;
+		return proto->Invoke(aResultToken, aFlags | IF_NO_SET_PROPVAL, aName, aThisToken, aParam, aParamCount);
 	}
 
 	DISPID dispid;
@@ -1241,71 +1224,134 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 }
 
 
-ResultType ComObject::SafeArrayInvoke(IObject_Invoke_PARAMS_DECL)
+
+ObjectMember ComObject::sArrayMembers[]
 {
-	HRESULT hr = S_OK;
-	SAFEARRAY *psa = (SAFEARRAY*)mVal64;
-	VARTYPE item_type = (mVarType & VT_TYPEMASK);
+	Object_Member(__Item, SafeArrayItem, 0, IT_SET, 1, 8),
+	Object_Method_(__Enum, 0, 1, SafeArrayInvoke, M___Enum),
+	Object_Method_(Clone, 0, 0, SafeArrayInvoke, M_Clone),
+	Object_Method_(MaxIndex, 0, 1, SafeArrayInvoke, M_MaxIndex),
+	Object_Method_(MinIndex, 0, 1, SafeArrayInvoke, M_MinIndex),
+};
 
-	if (IS_INVOKE_CALL)
+ObjectMember ComObject::sRefMembers[]
+{
+	Object_Property_get_set(__Item),
+};
+
+ObjectMember ComObject::sValueMembers[]
+{
+	Object_Property_get_set(Ptr),
+};
+
+
+void DefineComPrototypeMembers()
+{
+	Object::DefineMembers(Object::sComValuePrototype, _T("ComValue"), ComObject::sValueMembers, _countof(ComObject::sValueMembers));
+	Object::DefineMembers(Object::sComRefPrototype, _T("ComValueRef"), ComObject::sRefMembers, _countof(ComObject::sRefMembers));
+	Object::DefineMembers(Object::sComArrayPrototype, _T("ComObjArray"), ComObject::sArrayMembers, _countof(ComObject::sArrayMembers));
+}
+
+
+ResultType ComObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (aID == P___Item) // ComValueRef
 	{
-		if (!aName)
-			return INVOKE_NOT_HANDLED;
-
-		LONG retval;
-		if (!_tcsicmp(aName, _T("__Enum")))
+		VARTYPE item_type = mVarType & VT_TYPEMASK;
+		if (IS_INVOKE_SET)
 		{
-			ComArrayEnum *enm;
-			if (SUCCEEDED(hr = ComArrayEnum::Begin(this, enm)))
+			auto hr = TokenToVarType(*aParam[0], item_type, mValPtr);
+			if (FAILED(hr))
 			{
-				aResultToken.symbol = SYM_OBJECT;
-				aResultToken.object = enm;
+				ComError(hr, aResultToken);
+				return aResultToken.Result();
 			}
-		}
-		else if (!_tcsicmp(aName, _T("Clone")))
-		{
-			SAFEARRAY *clone;
-			if (SUCCEEDED(hr = SafeArrayCopy(psa, &clone)))
-				if (!SafeSetTokenObject(aResultToken, new ComObject((__int64)clone, mVarType, F_OWNVALUE)))
-					SafeArrayDestroy(clone);
 		}
 		else
 		{
-			if (!_tcsicmp(aName, _T("MaxIndex")))
-				hr = SafeArrayGetUBound(psa, aParamCount ? (UINT)TokenToInt64(*aParam[0]) : 1, &retval);
-			else if (!_tcsicmp(aName, _T("MinIndex")))
-				hr = SafeArrayGetLBound(psa, aParamCount ? (UINT)TokenToInt64(*aParam[0]) : 1, &retval);
-			else
-				hr = DISP_E_UNKNOWNNAME; // Seems slightly better than ignoring the call.
-			if (SUCCEEDED(hr))
+			VarTypeToToken(item_type, mValPtr, aResultToken);
+		}
+	}
+	else // P_Ptr
+	{
+		if (IS_INVOKE_SET)
+		{
+			if ((mVarType == VT_UNKNOWN || mVarType == VT_DISPATCH) && !mUnknown)
 			{
-				aResultToken.symbol = SYM_INTEGER;
-				aResultToken.value_int64 = retval;
+				// Allow this assignment only in the specific cases indicated above, to avoid ambiguity
+				// about what to do with the old value.  This operation is specifically intended for use
+				// with DllCall; i.e. DllCall(..., "ptr*", o := ComValue(13,0)) to wrap a returned ptr.
+				// Assigning zero is permitted and there is no AddRef because the caller wants us to
+				// Release the interface pointer automatically.
+				mUnknown = (IUnknown *)ParamIndexToInt64(0);
+				return OK;
 			}
 		}
-		if (FAILED(hr))
-			ComError(hr, aResultToken);
-		return aResultToken.Result();
+		else // GET
+		{
+			// Support passing VT_ARRAY, VT_BYREF or IUnknown to DllCall.
+			if ((mVarType & (VT_ARRAY | VT_BYREF)) || mVarType == VT_UNKNOWN || mVarType == VT_DISPATCH)
+				_o_return(mVal64);
+		}
+		_o_throw(ERR_INVALID_USAGE);
 	}
-	if (aName && _tcsicmp(aName, _T("__Item")))
-		return INVOKE_NOT_HANDLED;
+	return OK;
+}
+
+
+ResultType ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	HRESULT hr = E_UNEXPECTED;
+	SAFEARRAY *psa = (SAFEARRAY*)mVal64;
+
+	LONG retval;
+	switch (aID)
+	{
+	case M___Enum:
+		ComArrayEnum *enm;
+		if (SUCCEEDED(hr = ComArrayEnum::Begin(this, enm)))
+			aResultToken.SetValue(enm);
+		break;
+	case M_Clone:
+		SAFEARRAY *clone;
+		if (SUCCEEDED(hr = SafeArrayCopy(psa, &clone)))
+			if (!SafeSetTokenObject(aResultToken, new ComObject((__int64)clone, mVarType, F_OWNVALUE)))
+				SafeArrayDestroy(clone);
+		break;
+	case M_MaxIndex:
+		hr = SafeArrayGetUBound(psa, (UINT)ParamIndexToOptionalInt64(0, 1), &retval);
+		if (SUCCEEDED(hr))
+			aResultToken.SetValue(retval);
+		break;
+	case M_MinIndex:
+		hr = SafeArrayGetLBound(psa, (UINT)ParamIndexToOptionalInt64(0, 1), &retval);
+		if (SUCCEEDED(hr))
+			aResultToken.SetValue(retval);
+		break;
+	}
+	if (FAILED(hr))
+		ComError(hr, aResultToken);
+	return aResultToken.Result();
+}
+
+
+ResultType ComObject::SafeArrayItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	SAFEARRAY *psa = (SAFEARRAY*)mVal64;
+	VARTYPE item_type = (mVarType & VT_TYPEMASK);
 
 	UINT dims = SafeArrayGetDim(psa);
 	LONG index[8];
 	// Verify correct number of parameters/dimensions (maximum 8).
 	if (dims > _countof(index) || dims != (IS_INVOKE_SET ? aParamCount - 1 : aParamCount))
-	{
-		ComError(DISP_E_BADPARAMCOUNT, aResultToken);
-		return OK;
-	}
+		_o_throw(ERR_PARAM_COUNT_INVALID);
+	// Adjust aParam for assignment rvalue.
+	ExprTokenType *rvalue = IS_INVOKE_SET ? *aParam++ : nullptr;
 	// Build array of indices from parameters.
 	for (UINT i = 0; i < dims; ++i)
 	{
 		if (!TokenIsNumeric(*aParam[i]))
-		{
-			ComError(DISP_E_BADINDEX, aResultToken);
-			return OK;
-		}
+			_o_throw_param(i, _T("Number"));
 		index[i] = (LONG)TokenToInt64(*aParam[i]);
 	}
 
@@ -1313,18 +1359,13 @@ ResultType ComObject::SafeArrayInvoke(IObject_Invoke_PARAMS_DECL)
 
 	SafeArrayLock(psa);
 
-	hr = SafeArrayPtrOfIndex(psa, index, &item);
+	auto hr = SafeArrayPtrOfIndex(psa, index, &item);
 	if (SUCCEEDED(hr))
 	{
-		if (IS_INVOKE_GET)
-		{
+		if (rvalue)
+			hr = TokenToVarType(*rvalue, item_type, item);
+		else
 			VarTypeToToken(item_type, item, aResultToken);
-		}
-		else // SET
-		{
-			ExprTokenType &rvalue = *aParam[dims];
-			hr = TokenToVarType(rvalue, item_type, item);
-		}
 	}
 
 	SafeArrayUnlock(psa);
@@ -1332,33 +1373,6 @@ ResultType ComObject::SafeArrayInvoke(IObject_Invoke_PARAMS_DECL)
 	if (FAILED(hr))
 		ComError(hr, aResultToken);
 	return aResultToken.Result();
-}
-
-
-ResultType ComObject::ByRefInvoke(IObject_Invoke_PARAMS_DECL)
-{
-	if (IS_INVOKE_CALL || aName && _tcsicmp(aName, _T("__Item"))) // It's not [] or .__Item.
-		return INVOKE_NOT_HANDLED;
-
-	if (aParamCount > (IS_INVOKE_SET ? 1 : 0))
-		_o_throw(ERR_INVALID_USAGE);
-	//else: Something like x[] or x[]:=y.
-	
-	VARTYPE item_type = mVarType & VT_TYPEMASK;
-	if (IS_INVOKE_SET)
-	{
-		auto hr = TokenToVarType(*aParam[0], item_type, mValPtr);
-		if (FAILED(hr))
-		{
-			ComError(hr, aResultToken);
-			return aResultToken.Result();
-		}
-	}
-	else
-	{
-		VarTypeToToken(item_type, mValPtr, aResultToken);
-	}
-	return OK;
 }
 
 

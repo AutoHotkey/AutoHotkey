@@ -60,9 +60,23 @@ public:
 	enum { F_OWNVALUE = 1 };
 	USHORT mFlags;
 
+	enum
+	{
+		P_Ptr,
+		// ComValueRef
+		P___Item,
+		// ComObjArray
+		M___Enum,
+		M_Clone,
+		M_MaxIndex,
+		M_MinIndex,
+	};
+	static ObjectMember sArrayMembers[], sRefMembers[], sValueMembers[];
+
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
-	ResultType SafeArrayInvoke(IObject_Invoke_PARAMS_DECL);
-	ResultType ByRefInvoke(IObject_Invoke_PARAMS_DECL);
+	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType SafeArrayInvoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	ResultType SafeArrayItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	LPTSTR Type();
 	Object *Base();
 	IObject_DebugWriteProperty_Def;

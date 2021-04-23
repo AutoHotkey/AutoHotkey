@@ -3030,6 +3030,7 @@ Object *Object::CreateRootPrototypes()
 	});
 
 	GuiControlType::DefineControlClasses();
+	DefineComPrototypeMembers();
 	DefineFileClass();
 
 	// Permit Object.Call to construct Error objects.
