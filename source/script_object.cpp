@@ -929,6 +929,18 @@ void Object::RemoveMissingProperties()
 
 
 
+bool ObjectBase::IsOfType(Object *aPrototype)
+{
+	auto base = Base();
+	return base == aPrototype || base->IsDerivedFrom(aPrototype);
+}
+
+bool Object::IsOfType(Object *aPrototype)
+{
+	return aPrototype == Object::sPrototype || (!IsClassPrototype() && IsDerivedFrom(aPrototype));
+}
+
+
 bool Object::IsDerivedFrom(IObject *aBase)
 {
 	Object *base;
@@ -1018,9 +1030,6 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 	TCHAR full_name[MAX_VAR_NAME_LENGTH + 1];
 	TCHAR *name = full_name + _stprintf(full_name, _T("%s.Prototype."), aClassName);
 
-	// Skip base checks for Object members, since dynamic_cast<Object*> takes care of it.
-	auto type_checked = (aMember == Object::sMembers) ? nullptr : obj;
-
 	for (int i = 0; i < aMemberCount; ++i)
 	{
 		const auto &member = aMember[i];
@@ -1034,7 +1043,7 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 			func->mMinParams = member.minParams + 1; // Includes `this`.
 			func->mParamCount = member.maxParams + 1;
 			func->mIsVariadic = member.maxParams == MAXP_VARIADIC;
-			func->mClass = type_checked; // AddRef not needed since neither mClass nor our caller's reference to obj is ever Released.
+			func->mClass = obj; // AddRef not needed since neither mClass nor our caller's reference to obj is ever Released.
 			obj->DefineMethod(member.name, func);
 			func->Release();
 		}
@@ -1054,7 +1063,7 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 			func->mMinParams = member.minParams + 1; // Includes `this`.
 			func->mParamCount = member.maxParams + 1;
 			func->mIsVariadic = member.maxParams == MAXP_VARIADIC;
-			func->mClass = type_checked;
+			func->mClass = obj;
 			prop->SetGetter(func);
 			func->Release();
 			

@@ -1721,17 +1721,15 @@ bool BuiltInMethod::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int
 
 	DEBUGGER_STACK_PUSH(this) // See comments in BuiltInFunc::Call.
 
-	auto obj = dynamic_cast<Object *>(TokenToObject(*aParam[0]));
-	// If this method is for a built-in class derived from Object, mClass != nullptr.
-	// In that case, the method can't be called if obj is a Prototype object, since
-	// that's natively just an Object, or if obj is not derived from mClass.
-	if (!obj || mClass && (obj->IsClassPrototype() || !obj->IsDerivedFrom(mClass)))
+	auto obj = TokenToObject(*aParam[0]);
+	// mClass is the prototype object of the class which this method is for, such as
+	// Object.Prototype or Map.Prototype.  IsOfType() takes care of ruling out derived
+	// prototype objects, which are always really just Object.
+	if (!obj || !obj->IsOfType(mClass))
 	{
 		LPCTSTR expected_type;
 		ExprTokenType value;
-		if (!mClass)
-			expected_type = _T("Object");
-		else if (mClass->GetOwnProp(value, _T("__Class")) && value.symbol == SYM_STRING)
+		if (mClass->GetOwnProp(value, _T("__Class")) && value.symbol == SYM_STRING)
 			expected_type = value.marker;
 		else
 			expected_type = _T("?"); // Script may have tampered with the prototype.

@@ -66,6 +66,8 @@ public:
 	// Delete(), especially with a chain of derived types.
 	virtual ~ObjectBase() {}
 
+	bool IsOfType(Object *aPrototype) override;
+
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 };
 
@@ -446,7 +448,8 @@ public:
 		return mBase; // Callers only want to call Invoke(), so no AddRef is done.
 	}
 
-	LPTSTR Type();
+	LPTSTR Type() override;
+	bool IsOfType(Object *aPrototype) override;
 	bool IsDerivedFrom(IObject *aBase); // Always false for non-Object objects, but IObject* allows dynamic_cast to be avoided.
 
 	void EndClassDefinition();

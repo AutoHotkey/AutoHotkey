@@ -252,6 +252,7 @@ struct DECLSPEC_NOVTABLE IObject // L31: Abstract interface for "objects".
 	#define IObject_Type_Impl(name) \
 		LPTSTR Type() { return _T(name); }
 	virtual Object *Base() = 0;
+	virtual bool IsOfType(Object *aPrototype) = 0;
 	
 #ifdef CONFIG_DEBUGGER
 	#define IObject_DebugWriteProperty_Def \
