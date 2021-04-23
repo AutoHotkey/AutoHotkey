@@ -939,12 +939,6 @@ bool Object::IsDerivedFrom(IObject *aBase)
 }
 
 
-bool Object::IsInstanceOf(Object *aClass)
-{
-	return IsDerivedFrom(GetOwnPropObj(_T("Prototype")));
-}
-
-
 Object *Object::GetNativeBase()
 {
 	Object *base;

@@ -448,7 +448,6 @@ public:
 
 	LPTSTR Type();
 	bool IsDerivedFrom(IObject *aBase); // Always false for non-Object objects, but IObject* allows dynamic_cast to be avoided.
-	bool IsInstanceOf(Object *aClass);
 
 	void EndClassDefinition();
 	void RemoveMissingProperties();
