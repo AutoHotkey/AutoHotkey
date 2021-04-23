@@ -135,18 +135,21 @@ public:
 class ComArrayEnum : public EnumBase
 {
 	ComObject *mArrayObject;
-	char *mPointer, *mEnd;
+	void *mData;
+	long mLBound, mUBound;
 	UINT mElemSize;
 	VARTYPE mType;
+	bool mIndexMode;
+	long mOffset = -1;
 
-	ComArrayEnum(ComObject *aObj, char *aData, char *aDataEnd, UINT aElemSize, VARTYPE aType)
-		: mArrayObject(aObj), mPointer(aData - aElemSize), mEnd(aDataEnd), mElemSize(aElemSize), mType(aType)
+	ComArrayEnum(ComObject *aObj, void *aData, long aLBound, long aUBound, UINT aElemSize, VARTYPE aType, bool aIndexMode)
+		: mArrayObject(aObj), mData(aData), mLBound(aLBound), mUBound(aUBound), mElemSize(aElemSize), mType(aType), mIndexMode(aIndexMode)
 	{
 	}
 
 public:
-	static HRESULT Begin(ComObject *aArrayObject, ComArrayEnum *&aOutput);
-	ResultType Next(Var *aOutput, Var *aOutputType);
+	static HRESULT Begin(ComObject *aArrayObject, ComArrayEnum *&aOutput, int aMode);
+	ResultType Next(Var *aVar1, Var *aVar2);
 	~ComArrayEnum();
 };
 

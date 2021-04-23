@@ -1309,7 +1309,7 @@ ResultType ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aID, int aF
 	{
 	case M___Enum:
 		ComArrayEnum *enm;
-		if (SUCCEEDED(hr = ComArrayEnum::Begin(this, enm)))
+		if (SUCCEEDED(hr = ComArrayEnum::Begin(this, enm, ParamIndexToOptionalInt(0, 2))))
 			aResultToken.SetValue(enm);
 		break;
 	case M_Clone:
@@ -1426,11 +1426,11 @@ ResultType ComEnum::Next(Var *aOutput, Var *aOutputType)
 }
 
 
-HRESULT ComArrayEnum::Begin(ComObject *aArrayObject, ComArrayEnum *&aEnum)
+HRESULT ComArrayEnum::Begin(ComObject *aArrayObject, ComArrayEnum *&aEnum, int aMode)
 {
 	HRESULT hr;
 	SAFEARRAY *psa = aArrayObject->mArray;
-	char *arrayData, *arrayEnd;
+	void *arrayData;
 	long lbound, ubound;
 
 	if (SafeArrayGetDim(psa) != 1)
@@ -1438,12 +1438,11 @@ HRESULT ComArrayEnum::Begin(ComObject *aArrayObject, ComArrayEnum *&aEnum)
 	
 	if (   SUCCEEDED(hr = SafeArrayGetLBound(psa, 1, &lbound))
 		&& SUCCEEDED(hr = SafeArrayGetUBound(psa, 1, &ubound))
-		&& SUCCEEDED(hr = SafeArrayAccessData(psa, (void **)&arrayData))   )
+		&& SUCCEEDED(hr = SafeArrayAccessData(psa, &arrayData))   )
 	{
 		VARTYPE arrayType = aArrayObject->mVarType & VT_TYPEMASK;
 		UINT elemSize = SafeArrayGetElemsize(psa);
-		arrayEnd = arrayData + (ubound - lbound) * (long)elemSize; // Must cast to signed long for correct result when array is empty (ubound - lbound == -1).
-		if (aEnum = new ComArrayEnum(aArrayObject, arrayData, arrayEnd, elemSize, arrayType))
+		if (aEnum = new ComArrayEnum(aArrayObject, arrayData, lbound, ubound, elemSize, arrayType, aMode >= 2))
 		{
 			aArrayObject->AddRef(); // Keep obj alive until enumeration completes.
 		}
@@ -1462,26 +1461,32 @@ ComArrayEnum::~ComArrayEnum()
 	mArrayObject->Release();
 }
 
-ResultType ComArrayEnum::Next(Var *aOutput, Var *aOutputType)
+ResultType ComArrayEnum::Next(Var *aVar1, Var *aVar2)
 {
-	if ((mPointer += mElemSize) <= mEnd)
+	++mOffset;
+	if (mLBound + mOffset <= mUBound)
 	{
+		void *p = ((char *)mData) + mOffset * mElemSize;
 		VARIANT var = {0};
 		if (mType == VT_VARIANT)
 		{
 			// Make shallow copy of the VARIANT item.
-			memcpy(&var, mPointer, sizeof(VARIANT));
+			memcpy(&var, p, sizeof(VARIANT));
 		}
 		else
 		{
 			// Build VARIANT with shallow copy of the item.
 			var.vt = mType;
-			memcpy(&var.lVal, mPointer, mElemSize);
+			memcpy(&var.lVal, p, mElemSize);
 		}
-		if (aOutput)
-			AssignVariant(*aOutput, var);
-		if (aOutputType)
-			aOutputType->Assign(var.vt);
+		if (mIndexMode)
+		{
+			if (aVar1)
+				aVar1->Assign(mLBound + mOffset);
+			aVar1 = aVar2;
+		}
+		if (aVar1)
+			AssignVariant(*aVar1, var);
 		return CONDITION_TRUE;
 	}
 	return CONDITION_FALSE;
