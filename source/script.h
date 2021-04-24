@@ -3314,7 +3314,6 @@ BIF_DECL(BIF_OnMessage);
 BIF_DECL(BIF_On);
 BIF_DECL(BIF_Persistent);
 BIF_DECL(BIF_InstallHook);
-BIF_DECL(BIF_BufferAlloc);
 
 #ifdef ENABLE_REGISTERCALLBACK
 BIF_DECL(BIF_CallbackCreate);

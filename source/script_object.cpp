@@ -2746,8 +2746,16 @@ ResultType MsgMonitorList::Call(ExprTokenType *aParamValue, int aParamCount, UIN
 // Buffer
 //
 
+BufferObject *BufferObject::Create(void *aData, size_t aSize)
+{
+	auto obj = new BufferObject(aData, aSize);
+	obj->SetBase(BufferObject::sPrototype);
+	return obj;
+}
+
 ObjectMember BufferObject::sMembers[] =
 {
+	Object_Method(__New, 0, 2),
 	Object_Property_get(Ptr),
 	Object_Property_get_set(Size)
 };
@@ -2758,16 +2766,28 @@ ResultType BufferObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, 
 	{
 	case P_Ptr:
 		_o_return((size_t)mData);
-	case P_Size:
-		if (IS_INVOKE_SET)
+	case P_Size: // Size or __New
+		if (!IS_INVOKE_GET)
 		{
-			if (!ParamIndexIsNumeric(0))
-				_o_throw_type(_T("Number"), *aParam[0]);
-			auto new_size = ParamIndexToInt64(0);
-			if (new_size < 0 || new_size > SIZE_MAX)
-				_o_throw_value(ERR_INVALID_VALUE);
-			if (!Resize((size_t)new_size))
-				_o_throw_oom;
+			if (!ParamIndexIsOmitted(0))
+			{
+				if (!ParamIndexIsNumeric(0))
+					if (IS_INVOKE_SET)
+						_o_throw_type(_T("Number"), *aParam[0]);
+					else
+						_o_throw_param(0, _T("Number"));
+				auto new_size = ParamIndexToInt64(0);
+				if (new_size < 0 || new_size > SIZE_MAX)
+					_o_throw_value(ERR_INVALID_VALUE);
+				if (!Resize((size_t)new_size))
+					_o_throw_oom;
+			}
+			if (!ParamIndexIsOmitted(1))
+			{
+				if (!ParamIndexIsNumeric(1))
+					_o_throw_param(1, _T("Number"));
+				memset(mData, (char)ParamIndexToInt64(1), mSize);
+			}
 			return OK;
 		}
 		_o_return(mSize);
@@ -2783,23 +2803,6 @@ ResultType BufferObject::Resize(size_t aNewSize)
 	mData = new_data;
 	mSize = aNewSize;
 	return OK;
-}
-
-
-BIF_DECL(BIF_BufferAlloc)
-{
-	Throw_if_Param_NaN(0);
-	auto size = ParamIndexToInt64(0);
-	if (size < 0 || size > SIZE_MAX)
-		_f_throw_param(0);
-	auto data = malloc((size_t)size);
-	if (!data)
-		_f_throw_oom;
-	if (!ParamIndexIsOmitted(1))
-		memset(data, (char)ParamIndexToInt64(1), (size_t)size);
-	auto bo = new BufferObject(data, (size_t)size);
-	bo->SetBase(BufferObject::sPrototype);
-	_f_return(bo);
 }
 
 
@@ -2967,7 +2970,7 @@ Object *Object::CreateRootPrototypes()
 	DefineClasses(Object::sClass, Object::sPrototype, {
 		{_T("Array"), &Array::sPrototype, NewObject<Array>
 			, Array::sMembers, _countof(Array::sMembers)},
-		{_T("Buffer"), &BufferObject::sPrototype, no_ctor, BufferObject::sMembers, _countof(BufferObject::sMembers), {
+		{_T("Buffer"), &BufferObject::sPrototype, NewObject<BufferObject>, BufferObject::sMembers, _countof(BufferObject::sMembers), {
 			{_T("ClipboardAll"), &ClipboardAll::sPrototype, NewObject<ClipboardAll>
 				, ClipboardAll::sMembers, _countof(ClipboardAll::sMembers)}
 		}},

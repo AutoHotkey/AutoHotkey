@@ -8198,9 +8198,7 @@ BIF_DECL(BIF_FileRead)
 		else // codepage == -1 ("RAW" mode)
 		{
 			// Return the buffer to our caller.
-			auto bo = new BufferObject(output_buf, bytes_actually_read);
-			bo->SetBase(BufferObject::sPrototype);
-			aResultToken.Return(bo);
+			aResultToken.Return(BufferObject::Create(output_buf, bytes_actually_read));
 		}
 	}
 	else
@@ -12924,10 +12922,11 @@ void ConvertNumGetType(ExprTokenType &aToken, NumGetParams &op)
 	}
 }
 
+void *BufferObject::sVTable = getVTable(); // Placing this here vs. in script_object.cpp improves some simple benchmarks by as much as 7%.
+
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, size_t &aSize)
 {
-	static BufferObject sBuffer(0, 0);
-	if (*(void **)obj == *(void **)&sBuffer) // See ""type check"" comments in Object::Invoke for comments.
+	if (BufferObject::IsInstanceExact(obj))
 	{
 		// Some primitive benchmarks showed that this was about as fast as passing
 		// a pointer directly, whereas invoking the properties (below) doubled the
@@ -12945,8 +12944,7 @@ void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, s
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr)
 // See above for comments.
 {
-	static BufferObject sBuffer(0, 0);
-	if (*(void **)obj == *(void **)&sBuffer)
+	if (BufferObject::IsInstanceExact(obj))
 		aPtr = (size_t)((BufferObject *)obj)->Data();
 	else
 		GetObjectPtrProperty(obj, _T("Ptr"), aPtr, aResultToken);

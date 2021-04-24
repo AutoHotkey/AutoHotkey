@@ -783,27 +783,38 @@ public:
 
 class BufferObject : public Object
 {
+private:
+	static void *getVTable()
+	{
+		BufferObject sBuffer(0, 0);
+		return *(void **)&sBuffer;
+	}
+
 protected:
 	void *mData;
 	size_t mSize;
+	BufferObject(void *aData = nullptr, size_t aSize = 0) : mData(aData), mSize(aSize) {}
 
 public:
 	void *Data() { return mData; }
 	size_t Size() { return mSize; }
 	ResultType Resize(size_t aNewSize);
 
-	BufferObject() = delete;
-	BufferObject(void *aData, size_t aSize) : mData(aData), mSize(aSize) {}
 	~BufferObject() { free(mData); }
 
 	enum MemberID
 	{
 		P_Ptr,
-		P_Size
+		P_Size,
+		M___New = P_Size,
 	};
 	static ObjectMember sMembers[];
 	static Object *sPrototype;
+	static BufferObject *Create(void *aData = nullptr, size_t aSize = 0);
 	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+
+	static void *sVTable;
+	static bool IsInstanceExact(IObject *aObj) { return *(void **)aObj == sVTable; } // Benchmarked a little faster than aObj->IsOfType(BufferObject::sPrototype);
 };
 
 
@@ -813,8 +824,10 @@ public:
 
 class ClipboardAll : public BufferObject
 {
+private:
+	ClipboardAll() : BufferObject() {}
+
 public:
-	ClipboardAll() : BufferObject(nullptr, 0) {}
 	static ObjectMember sMembers[];
 	static Object *sPrototype;
 	static Object *Create();
