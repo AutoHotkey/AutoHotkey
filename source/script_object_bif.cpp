@@ -192,31 +192,32 @@ BIF_DECL(BIF_HasBase)
 }
 
 
-Object *ParamToObjectOrBase(ExprTokenType &aToken, ResultToken &aResultToken)
+Object *ParamToObjectOrBase(ExprTokenType &aToken)
 {
-	Object *obj;
-	if (  (obj = dynamic_cast<Object *>(TokenToObject(aToken)))
-		|| (obj = Object::ValueBase(aToken))  )
-		return obj;
-	aResultToken.ParamError(0, &aToken, _T("Object"));
-	return nullptr;
+	if (IObject *iobj = TokenToObject(aToken))
+	{
+		if (iobj->IsOfType(Object::sPrototype))
+			return (Object *)iobj;
+		return iobj->Base();
+	}
+	return Object::ValueBase(aToken);
 }
 
 
 BIF_DECL(BIF_HasProp)
 {
-	auto obj = ParamToObjectOrBase(*aParam[0], aResultToken);
-	if (!obj)
-		return;
+	auto obj = ParamToObjectOrBase(*aParam[0]);
+	if (obj == Object::sComObjectPrototype)
+		_f_throw_param(0);
 	_f_return_b(obj->HasProp(ParamIndexToString(1, _f_number_buf)));
 }
 
 
 BIF_DECL(BIF_GetMethod)
 {
-	auto obj = ParamToObjectOrBase(*aParam[0], aResultToken);
-	if (!obj)
-		return;
+	auto obj = ParamToObjectOrBase(*aParam[0]);
+	if (obj == Object::sComObjectPrototype)
+		_f_throw_param(0);
 	auto method_name = ParamIndexToOptionalStringDef(1, nullptr, _f_number_buf);
 	auto method = method_name ? obj->GetMethod(method_name) : obj; // Validate obj itself as a function if method name is omitted.
 	if (method)
