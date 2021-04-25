@@ -13093,7 +13093,7 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 		case VAR_TYPE_DIGIT:
 			if_condition = true;
 			for (cp = ARG1; *cp; ++cp)
-				if (!_istdigit((UCHAR)*cp))
+				if (!_istdigit((USHORT)*cp))
 				{
 					if_condition = false;
 					break;
@@ -13105,7 +13105,7 @@ ResultType Line::EvaluateCondition() // __forceinline on this reduces benchmarks
 				cp += 2;
 			if_condition = true;
 			for (; *cp; ++cp)
-				if (!_istxdigit((UCHAR)*cp))
+				if (!_istxdigit((USHORT)*cp))
 				{
 					if_condition = false;
 					break;
