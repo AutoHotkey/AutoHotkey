@@ -130,9 +130,16 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				if (!stack_count) // Prevent stack underflow.
 					goto abort_with_exception;
 				ExprTokenType &right = *STACK_POP;
-				if (auto ref = dynamic_cast<VarRef *>(TokenToObject(right)))
+				if (auto right_obj = TokenToObject(right))
 				{
-					temp_var = static_cast<Var *>(ref);
+					if (right_obj->Base() == Object::sVarRefPrototype)
+						temp_var = static_cast<VarRef *>(right_obj);
+					else
+					{
+						error_info = _T("String or VarRef");
+						error_value = &right;
+						goto type_mismatch;
+					}
 				}
 				else
 				{
