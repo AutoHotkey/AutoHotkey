@@ -8392,11 +8392,20 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	// v1.0.35.11: Must search in A_ScriptDir by default because that's where ahk2exe will search by default.
 	// The old behavior was to search in A_WorkingDir, which seems pointless because ahk2exe would never
 	// be able to use that value if the script changes it while running.
-	TCHAR aDestPath[T_MAX_PATH];
-	GetFullPathName(aDest, _countof(aDestPath), aDestPath, NULL);
+	TCHAR source_path[T_MAX_PATH], dest_path[T_MAX_PATH];
+	GetFullPathName(aDest, _countof(dest_path), dest_path, NULL);
+	// Avoid attempting the copy if both paths are the same (since it would fail with ERROR_SHARING_VIOLATION),
+	// but resolve both to full paths in case mFileDir != g_WorkingDir.  There is a more thorough way to detect
+	// when two *different* paths refer to the same file, but it doesn't work with different network shares, and
+	// the additional complexity wouldn't be warranted.  Also, the limitations of this method are clearer.
 	SetCurrentDirectory(g_script.mFileDir);
-	success = CopyFile(aSource, aDestPath, !allow_overwrite);
+	GetFullPathName(aSource, _countof(source_path), source_path, NULL);
 	SetCurrentDirectory(g_WorkingDir); // Restore to proper value.
+	if (!lstrcmpi(source_path, dest_path) // Full paths are equal.
+		&& !(GetFileAttributes(source_path) & FILE_ATTRIBUTE_DIRECTORY)) // Source file exists and is not a directory (otherwise, an error should be thrown).
+		return OK;
+
+	success = CopyFile(source_path, dest_path, !allow_overwrite);
 
 #endif
 
