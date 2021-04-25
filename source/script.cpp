@@ -357,6 +357,8 @@ FuncEntry g_BIF[] =
 	BIFn(WinGetTransColor, 0, 4, BIF_WinGet),
 	BIFn(WinGetTransparent, 0, 4, BIF_WinGet),
 	BIFn(WinHide, 0, 4, BIF_WinShow),
+	BIFn(WinIsEnabled, 0, 4, BIF_WinGet),
+	BIFn(WinIsVisible, 0, 4, BIF_WinShow),
 	BIFn(WinKill, 0, 5, BIF_WinShow),
 	BIFn(WinMaximize, 0, 4, BIF_WinShow),
 	BIFn(WinMinimize, 0, 4, BIF_WinShow),

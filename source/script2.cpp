@@ -890,7 +890,7 @@ BIF_DECL(BIF_WinShow)
 		// By design, the WinShow command must always unhide a hidden window, even if the user has
 		// specified that hidden windows should not be detected.  So set this now so that
 		// DetermineTargetWindow() will make its calls in the right mode:
-		bool need_restore = (_f_callee_id == FID_WinShow && !g->DetectHiddenWindows);
+		bool need_restore = ((_f_callee_id == FID_WinShow || _f_callee_id == FID_WinIsVisible) && !g->DetectHiddenWindows);
 		if (need_restore)
 			g->DetectHiddenWindows = true;
 		target_window = Line::DetermineTargetWindow(aTitle, aText, aExcludeTitle, aExcludeText);
@@ -936,6 +936,9 @@ BIF_DECL(BIF_WinShow)
 	case FID_WinHide: nCmdShow = SW_HIDE; break;
 	case FID_WinShow: nCmdShow = SW_SHOW; break;
 	}
+
+	if (_f_callee_id == FID_WinIsVisible)
+		_f_return(IsWindowVisible(target_window) ? 1 : 0); // Force pure boolean 0/1.
 
 	// UPDATE:  Trying ShowWindowAsync()
 	// now, which should avoid the problems with hanging.  UPDATE #2: Went back to
@@ -2946,6 +2949,9 @@ BIF_DECL(BIF_WinGet)
 			// Otherwise, this window does not have a transparent color (or it's not accessible to us,
 			// perhaps for reasons described at MSDN GetLayeredWindowAttributes()).
 		}
+
+	case FID_WinIsEnabled:
+		_f_return(IsWindowEnabled(target_window) ? 1 : 0); // Force pure boolean 0/1.
 	}
 	_f_return_empty;
 }
