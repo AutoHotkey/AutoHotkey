@@ -2878,8 +2878,20 @@ BIF_DECL(BIF_WinGet)
 			if (!target_window)
 				_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
 		}
+	bool need_restore = false; // For WinIsVisible.
+	if (cmd == FID_WinIsVisible)
+	{
+		// By design, WinIsVisible must always check for a hidden window, even if the user has
+		// specified that hidden windows should not be detected.  So set this now so that
+		// WinExist() will make its calls in the right mode:
+		need_restore = !g->DetectHiddenWindows;
+		if (need_restore)
+			g->DetectHiddenWindows = true;
+	}
 	if (!target_window)
 		target_window = WinExist(*g, aTitle, aText, aExcludeTitle, aExcludeText, cmd == FID_WinGetIDLast);
+	if (need_restore) // For WinIsVisible.
+		g->DetectHiddenWindows = false;
 	if (!target_window)
 		_f_throw(ERR_NO_WINDOW, ErrorPrototype::Target);
 
@@ -2946,6 +2958,17 @@ BIF_DECL(BIF_WinGet)
 			// Otherwise, this window does not have a transparent color (or it's not accessible to us,
 			// perhaps for reasons described at MSDN GetLayeredWindowAttributes()).
 		}
+
+	case FID_WinIsAlwaysOnTop:
+		DWORD exstyle;
+		exstyle = GetWindowLong(target_window, GWL_EXSTYLE);
+		_f_return((exstyle & WS_EX_TOPMOST) ? 1 : 0); // Force pure boolean 0/1.
+
+	case FID_WinIsEnabled:
+		_f_return(IsWindowEnabled(target_window) ? 1 : 0); // Force pure boolean 0/1.
+
+	case FID_WinIsVisible:
+		_f_return(IsWindowVisible(target_window) && !IsWindowCloaked(target_window) ? 1 : 0); // Force pure boolean 0/1.
 	}
 	_f_return_empty;
 }
