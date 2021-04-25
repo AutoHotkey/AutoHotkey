@@ -3865,6 +3865,8 @@ void ChangeHookState(Hotkey *aHK[], int aHK_count, HookType aWhichHook, HookType
 				else
 				{
 					prev_hk_id = its_table_entry & HOTKEY_ID_MASK;
+					if (this_hk_id >= Hotkey::sHotkeyCount || prev_hk_id >= Hotkey::sHotkeyCount) // AltTab hotkey.
+						continue; // Exclude AltTab hotkeys since hotkey_up[] and shk[] can't be used.
 					prev_hk_is_key_up = its_table_entry & HOTKEY_KEY_UP;
 					if (this_hk_is_key_up && !prev_hk_is_key_up) // Override any existing key-up hotkey for this down hotkey ID, e.g. "LButton Up" takes precedence over "*LButton Up".
 					{
