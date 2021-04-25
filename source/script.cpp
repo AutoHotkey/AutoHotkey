@@ -8529,6 +8529,7 @@ unquoted_literal:
 			{
 				if (cp[this_deref_ref.length] != '(')
 					return LineError(ERR_MISSING_OPEN_PAREN, FAIL, cp);
+				CHECK_AUTO_CONCAT;
 				infix[infix_count].callsite = new CallSite();
 				infix[infix_count].callsite->func = sIsSetFunc;
 				this_deref_ref.symbol = SYM_FUNC;
