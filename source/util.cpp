@@ -211,7 +211,8 @@ ResultType YYYYMMDDToSystemTime(LPTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool 
 		// explicit zero for the day of the month.  It also reports failure if st.wYear is
 		// less than 1601, which for simplicity is enforced globally throughout the program
 		// since none of the Windows API calls seem to support earlier years.
-		return SystemTimeToFileTime(&aSystemTime, &ft) ? OK : FAIL;
+		// Length checks, and 1601 being the minimum year value, ensure a digit count of 4/6/8/10/12/14.
+		return (SystemTimeToFileTime(&aSystemTime, &ft) && !(length % 2) && (length <= 14)) ? OK : FAIL;
 		// Above: The st.wDayOfWeek member is ignored by the above (but might be used by our caller), but
 		// that's okay because it shouldn't need validation.
 	}
