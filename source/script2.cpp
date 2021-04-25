@@ -11586,8 +11586,14 @@ BIF_DECL(BIF_SubStr) // Added in v1.0.46.
 		extract_length = remaining_length_available;
 	else
 	{
-		if (   !(extract_length = (INT_PTR)ParamIndexToInt64(2))   )  // It has asked to extract zero characters.
-			_f_return_retval; // Yield the empty string (a default set higher above).
+		if (   !(extract_length = (INT_PTR)ParamIndexToInt64(2))   )  // It has asked to extract zero characters. Or is an empty string: treat param as omitted.
+		{
+			TCHAR len_buf[MAX_NUMBER_SIZE];
+			LPTSTR len = ParamIndexToString(2, len_buf);
+			if (_tcslen(len))
+				_f_return_retval; // Yield the empty string (a default set higher above).
+			extract_length = remaining_length_available;
+		}
 		if (extract_length < 0)
 		{
 			extract_length += remaining_length_available; // Result is the number of characters to be extracted (i.e. after omitting the number of chars specified in extract_length).
