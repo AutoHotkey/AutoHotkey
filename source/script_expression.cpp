@@ -870,6 +870,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				case SYM_ASSIGN_SUBTRACT:      this_token.symbol = SYM_SUBTRACT; break;
 				case SYM_ASSIGN_MULTIPLY:      this_token.symbol = SYM_MULTIPLY; break;
 				case SYM_ASSIGN_DIVIDE:        this_token.symbol = SYM_DIVIDE; break;
+				case SYM_ASSIGN_FLOORDIVIDE:   this_token.symbol = SYM_FLOORDIVIDE; break;
 				case SYM_ASSIGN_INTEGERDIVIDE: this_token.symbol = SYM_INTEGERDIVIDE; break;
 				case SYM_ASSIGN_BITOR:         this_token.symbol = SYM_BITOR; break;
 				case SYM_ASSIGN_BITXOR:        this_token.symbol = SYM_BITXOR; break;
@@ -1149,6 +1150,16 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					this_token.value_int64 = this_token.symbol == SYM_BITSHIFTLEFT
 						? left_int64 << right_int64
 						: left_int64 >> right_int64;
+					break;
+				case SYM_FLOORDIVIDE:
+					if (right_int64 == 0)
+						goto divide_by_zero;
+					this_token.value_int64 = left_int64 / right_int64;
+					if ((left_int64 >= 0 && right_int64 > 0)
+						|| (left_int64 <= 0 && right_int64 < 0))
+						break;
+					else if (left_int64 % right_int64)
+						--this_token.value_int64;
 					break;
 				case SYM_INTEGERDIVIDE:
 					if (right_int64 == 0)

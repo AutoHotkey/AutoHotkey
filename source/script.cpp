@@ -4554,6 +4554,10 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 				}
 			}
 			break;
+		case '~':
+			if (action_args_2nd_char == '/' && action_args[2] == '=') // i.e. ~/=
+				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
+			break;
 		//default: Leave aActionType set to ACT_INVALID. This also covers case '\0' in case that's possible.
 		} // switch()
 
@@ -7765,7 +7769,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 		, 86             // SYM_DOT
 		, 2,2,2,2,2,2    // SYM_CPAREN, SYM_CBRACKET, SYM_CBRACE, SYM_OPAREN, SYM_OBRACKET, SYM_OBRACE (to simplify the code, parentheses/brackets/braces must be lower than all operators in precedence).
 		, 6              // SYM_COMMA -- Must be just above SYM_OPAREN so it doesn't pop OPARENs off the stack.
-		, 7,7,7,7,7,7,7,7,7,7,7,7  // SYM_ASSIGN_*. THESE HAVE AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for cascading assignments such as x:=y:=1 to work.
+		, 7,7,7,7,7,7,7,7,7,7,7,7,7  // SYM_ASSIGN_*. THESE HAVE AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for cascading assignments such as x:=y:=1 to work.
 //		, 8              // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 11, 11         // SYM_IFF_ELSE, SYM_IFF_THEN (ternary conditional).  HAS AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for ternaries to perform traditionally when nested in each other without parentheses.
 //		, 12             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
@@ -7783,7 +7787,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 		, 46             // SYM_BITXOR
 		, 50             // SYM_BITAND
 		, 54, 54         // SYM_BITSHIFTLEFT, SYM_BITSHIFTRIGHT
-		, 62			 // SYM_INTEGERDIVIDE
+		, 62, 62		 // SYM_FLOORDIVIDE, SYM_INTEGERDIVIDE
 		, 58, 58         // SYM_ADD, SYM_SUBTRACT
 		, 62, 62	     // SYM_MULTIPLY, SYM_DIVIDE
 		, 73             // SYM_POWER (see note below). Changed to right-associative for v2.
@@ -8000,12 +8004,12 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						if (cp[2] == '=')
 						{
 							cp += 2; // An additional increment to have loop skip over the operator's 2nd & 3rd symbols.
-							this_infix_item.symbol = SYM_ASSIGN_INTEGERDIVIDE;
+							this_infix_item.symbol = SYM_ASSIGN_FLOORDIVIDE;
 						}
 						else
 						{
 							++cp; // An additional increment to have loop skip over the second '/' too.
-							this_infix_item.symbol = SYM_INTEGERDIVIDE;
+							this_infix_item.symbol = SYM_FLOORDIVIDE;
 						}
 					}
 					else
@@ -8202,6 +8206,19 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						this_infix_item.callsite->func = ExprOp<BIF_RegEx, FID_RegExMatch>();
 						this_infix_item.callsite->param_count = 2;
 						this_infix_item.symbol = SYM_REGEXMATCH;
+					}
+					else if (cp1 == '/')
+					{
+						if (cp[2] == '=')
+						{
+							cp += 2; // An additional increment to have loop skip over the operator's 2nd & 3rd symbols.
+							this_infix_item.symbol = SYM_ASSIGN_INTEGERDIVIDE;
+						}
+						else
+						{
+							++cp; // An additional increment to have loop skip over the operator's second symbol.
+							this_infix_item.symbol = SYM_INTEGERDIVIDE;
+						}
 					}
 					else
 					// If what lies to its left is a CPARAN or OPERAND, SYM_CONCAT is not auto-inserted because:
@@ -9210,6 +9227,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					case SYM_ASSIGN_SUBTRACT:      postfix_symbol = SYM_SUBTRACT; break;
 					case SYM_ASSIGN_MULTIPLY:      postfix_symbol = SYM_MULTIPLY; break;
 					case SYM_ASSIGN_DIVIDE:        postfix_symbol = SYM_DIVIDE; break;
+					case SYM_ASSIGN_FLOORDIVIDE:   postfix_symbol = SYM_FLOORDIVIDE; break;
 					case SYM_ASSIGN_INTEGERDIVIDE: postfix_symbol = SYM_INTEGERDIVIDE; break;
 					case SYM_ASSIGN_BITOR:         postfix_symbol = SYM_BITOR; break;
 					case SYM_ASSIGN_BITXOR:        postfix_symbol = SYM_BITXOR; break;
