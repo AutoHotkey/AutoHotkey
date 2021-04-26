@@ -6190,22 +6190,7 @@ ResultType Script::DefineClass(LPTSTR aBuf)
 	if (mClassObjectCount)
 	{
 		// Define property outer_class.%class_name%.
-		auto prop = outer_class->DefineProperty(class_name);
-		
-		ExprTokenType values[] { class_object, class_name }, *param[] { values, values + 1 };
-
-		auto info = SimpleHeap::Alloc<NestedClassInfo>();
-		info->class_object = class_object;
-		info->constructed = false;
-		class_object->AddRef();
-
-		auto get = new BuiltInFunc { _T(""), Class_GetNestedClass, 1, 1, false, info };
-		prop->MinParams = 0;
-		prop->MaxParams = 0;
-		prop->SetGetter(get);
-
-		auto call = new BuiltInFunc { _T(""), Class_CallNestedClass, 1, 1, true, info };
-		prop->SetMethod(call);
+		outer_class->DefineClass(class_name, class_object);
 	}
 	else
 	{

@@ -427,6 +427,7 @@ public:
 	
 	Property *DefineProperty(name_t aName);
 	bool DefineMethod(name_t aName, IObject *aFunc);
+	void DefineClass(name_t aName, Object *aClass);
 	
 	bool CanSetBase(Object *aNewBase);
 	ResultType SetBase(Object *aNewBase, ResultToken &aResultToken);

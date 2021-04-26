@@ -700,7 +700,7 @@ void GuiControlType::DefineControlClasses()
 		sPrototypes[i] = CreatePrototype(buf, base_proto, more_items, how_many);
 		auto cls = CreateClass(sPrototypes[i]);
 		cls->SetBase(base_class);
-		gui_class->SetOwnProp(sTypeNames[i], cls);
+		gui_class->DefineClass(sTypeNames[i], cls);
 	}
 }
 

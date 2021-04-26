@@ -3100,6 +3100,27 @@ Object *Object::ValueBase(ExprTokenType &aValue)
 
 
 
+void Object::DefineClass(name_t aName, Object *aClass)
+{
+	auto prop = DefineProperty(aName);
+
+	ExprTokenType values[] { aClass, aName }, *param[] { values, values + 1 };
+
+	auto info = SimpleHeap::Alloc<NestedClassInfo>();
+	info->class_object = aClass;
+	info->constructed = false;
+	aClass->AddRef();
+
+	auto get = new BuiltInFunc { _T(""), Class_GetNestedClass, 1, 1, false, info };
+	prop->MinParams = 0;
+	prop->MaxParams = 0;
+	prop->SetGetter(get);
+
+	auto call = new BuiltInFunc { _T(""), Class_CallNestedClass, 1, 1, true, info };
+	prop->SetMethod(call);
+}
+
+
 BIF_DECL(Class_GetNestedClass)
 {
 	auto info = (NestedClassInfo *)aResultToken.func->mData;
