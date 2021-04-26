@@ -130,7 +130,7 @@ struct key_type
 	UCHAR used_as_prefix; // Whether a given virtual key or scan code is even used by a hotkey.
 	bool used_as_suffix;  //
 	bool used_as_key_up;  // Whether this suffix also has an enabled key-up hotkey.
-	UCHAR no_suppress; // Contains bitwise flags such as NO_SUPPRESS_PREFIX.
+	UCHAR no_suppress; // Contains bitwise flags such as NO_SUPPRESS_NEXT_UP_EVENT.
 	bool is_down; // this key is currently down.
 	bool it_put_alt_down;  // this key resulted in ALT being pushed down (due to alt-tab).
 	bool it_put_shift_down;  // this key resulted in SHIFT being pushed down (due to shift-alt-tab).

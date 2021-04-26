@@ -522,12 +522,13 @@ void Hotkey::AllDestructAndExit(int aExitCode)
 
 
 
-bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC)
+bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC, bool &aSuppress)
 // aVKorSC contains the virtual key or scan code of the specified prefix key (it's a scan code if aIsSC is true).
-// Returns true if this prefix key has no suffixes that can possibly.  Each such suffix is prevented from
+// Returns true if this prefix key has no suffixes that can possibly fire.  Each such suffix is prevented from
 // firing by one or more of the following:
 // 1) Hotkey is completely disabled via IsCompletelyDisabled().
 // 2) Hotkey has criterion and those criterion do not allow the hotkey to fire.
+// Caller is expected to set aSuppress to a default of false.
 {
 	// v1.0.44: Added aAsModifier so that a pair of hotkeys such as:
 	//   LControl::tooltip LControl
@@ -535,6 +536,8 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC)
 	// ...works as it did in versions prior to 1.0.41, namely that LControl fires on key-up rather than
 	// down because it is considered a prefix key for the <^c hotkey .
 	modLR_type aAsModifier = KeyToModifiersLR(aIsSC ? 0 : aVKorSC, aIsSC ? aVKorSC : 0, NULL);
+
+	bool has_enabled_suffix = false;
 
 	for (int i = 0; i < sHotkeyCount; ++i)
 	{
@@ -549,9 +552,14 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC)
 				// alt-tab hotkeys have no subroutine capable of making them exempt.  So g_IsSuspended is checked
 				// for alt-tab hotkeys here; and for other types of hotkeys, it's checked further below.
 				continue;
-			else // This alt-tab hotkey is currently active.
+			//else // This alt-tab hotkey is currently active.
+			if ((hk.mNoSuppress & NO_SUPPRESS_PREFIX) || aSuppress)
 				return false; // Since any stored mHotCriterion are ignored for alt-tab hotkeys, no further checking is needed.
+			has_enabled_suffix = true;
+			continue; // Still need to check other hotkeys for NO_SUPPRESS_PREFIX.
 		}
+		if (has_enabled_suffix && !(hk.mNoSuppress & NO_SUPPRESS_PREFIX))
+			continue; // No need to evaluate this hotkey's variants.
 		// Otherwise, find out if any of its variants is eligible to fire.  If so, immediately return
 		// false because even one eligible hotkey means this prefix is enabled.
 		for (HotkeyVariant *vp = hk.mFirstVariant; vp; vp = vp->mNextVariant)
@@ -560,10 +568,19 @@ bool Hotkey::PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC)
 			if (   vp->mEnabled // This particular variant within its parent hotkey is enabled.
 				&& (!g_IsSuspended || vp->mJumpToLabel->IsExemptFromSuspend()) // This variant isn't suspended...
 				&& (!vp->mHotCriterion || HotCriterionAllowsFiring(vp->mHotCriterion, hk.mName))   ) // ... and its criteria allow it to fire.
-				return false; // At least one of this prefix's suffixes is eligible for firing.
+			{
+				if ((vp->mNoSuppress & NO_SUPPRESS_PREFIX) || aSuppress)
+					return false; // At least one of this prefix's suffixes is eligible for firing.
+				has_enabled_suffix = true;
+				if (!(hk.mNoSuppress & NO_SUPPRESS_PREFIX))
+					break; // None of this hotkey's variants have NO_SUPPRESS_PREFIX.
+				// Keep checking to ensure no other enabled variants have NO_SUPPRESS_PREFIX.
+			}
 	}
-	// Since above didn't return, no hotkeys were found for this prefix that are capable of firing.
-	return true;
+	// Since above didn't return, either no hotkeys were found for this prefix that are capable of firing,
+	// or no variants were found with the NO_SUPPRESS_PREFIX flag.
+	aSuppress = has_enabled_suffix;
+	return !has_enabled_suffix;
 }
 
 
@@ -1019,8 +1036,9 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 	// both can be zero/NULL only when the caller is updating an existing hotkey to have new options
 	// (i.e. it's retaining its current label).
 
-	bool suffix_has_tilde, hook_is_mandatory;
-	Hotkey *hk = FindHotkeyByTrueNature(aHotkeyName, suffix_has_tilde, hook_is_mandatory); // NULL if not found.
+	UCHAR no_suppress;
+	bool hook_is_mandatory;
+	Hotkey *hk = FindHotkeyByTrueNature(aHotkeyName, no_suppress, hook_is_mandatory); // NULL if not found.
 	HotkeyVariant *variant = hk ? hk->FindVariant() : NULL;
 	bool update_all_hotkeys = false;  // This method avoids multiple calls to ManifestAllHotkeysHotstringsHooks() (which is high-overhead).
 	bool variant_was_just_created = false;
@@ -1055,12 +1073,12 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 		if (!hk) // No existing hotkey of this name, so create a new hotkey.
 		{
 			if (hook_action) // COMMAND (create hotkey): Hotkey, Name, AltTabAction
-				hk = AddHotkey(NULL, hook_action, aHotkeyName, suffix_has_tilde, use_errorlevel);
+				hk = AddHotkey(NULL, hook_action, aHotkeyName, no_suppress, use_errorlevel);
 			else // COMMAND (create hotkey): Hotkey, Name, LabelName [, Options]
 			{
 				if (!aJumpToLabel) // Caller is trying to set new aOptions for a nonexistent hotkey.
 					RETURN_HOTKEY_ERROR(HOTKEY_EL_NOTEXIST, ERR_NONEXISTENT_HOTKEY, aHotkeyName);
-				hk = AddHotkey(aJumpToLabel, 0, aHotkeyName, suffix_has_tilde, use_errorlevel);
+				hk = AddHotkey(aJumpToLabel, 0, aHotkeyName, no_suppress, use_errorlevel);
 			}
 			if (!hk)
 				return use_errorlevel ? OK : FAIL; // AddHotkey() already displayed the error (or set ErrorLevel).
@@ -1128,7 +1146,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 				}
 				else // No existing variant matching current #IfWin criteria, so create a new variant.
 				{
-					if (   !(variant = hk->AddVariant(aJumpToLabel, suffix_has_tilde))   ) // Out of memory.
+					if (   !(variant = hk->AddVariant(aJumpToLabel, no_suppress))   ) // Out of memory.
 						RETURN_HOTKEY_ERROR(HOTKEY_EL_MEM, ERR_OUTOFMEM, aHotkeyName);
 					variant_was_just_created = true;
 					update_all_hotkeys = true;
@@ -1147,13 +1165,15 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 			// v1.1.15: Allow the ~tilde prefix to be added/removed from an existing hotkey variant.
 			// v1.1.19: Apply this change even if aJumpToLabel is omitted.  This is redundant if
 			// variant_was_just_created, but checking that condition seems counter-productive.
-			if (variant->mNoSuppress = suffix_has_tilde)
-				hk->mNoSuppress |= AT_LEAST_ONE_VARIANT_HAS_TILDE;
-			else
+			variant->mNoSuppress = no_suppress;
+			// hk->mNoSuppress might be inaccurate if a no-suppress flag was just removed from this variant,
+			// but that just means a slight reduction in efficiency if tilde is removed from all variants.
+			hk->mNoSuppress |= no_suppress; // Apply both AT_LEAST_ONE_VARIANT_HAS_TILDE and NO_SUPPRESS_PREFIX, if present.
+			if (!(no_suppress & AT_LEAST_ONE_VARIANT_HAS_TILDE))
 				hk->mNoSuppress |= AT_LEAST_ONE_VARIANT_LACKS_TILDE;
 				
 			// v1.1.19: Allow the $UseHook prefix to be added to an existing hotkey.
-			if (!hk->mKeybdHookMandatory && (hook_is_mandatory || suffix_has_tilde))
+			if (!hk->mKeybdHookMandatory && (hook_is_mandatory || no_suppress))
 			{
 				// Require the hook for all variants of this hotkey if any variant requires it.
 				// This seems more intuitive than the old behaviour, which required $ or #UseHook
@@ -1267,7 +1287,7 @@ ResultType Hotkey::Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOption
 
 
 
-Hotkey *Hotkey::AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel)
+Hotkey *Hotkey::AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, UCHAR aNoSuppress, bool aUseErrorLevel)
 // Caller provides aJumpToLabel rather than a Line* because at the time a hotkey or hotstring
 // is created, the label's destination line is not yet known.  So the label is used a placeholder.
 // Caller must ensure that either aJumpToLabel or aName is not NULL.
@@ -1278,7 +1298,7 @@ Hotkey *Hotkey::AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPT
 // The caller is responsible for calling ManifestAllHotkeysHotstringsHooks(), if appropriate.
 {
 	if (   (shkMax <= sNextID && !HookAdjustMaxHotkeys(shk, shkMax, shkMax ? shkMax * 2 : INITIAL_MAX_HOTKEYS)) // Allocate or expand shk if needed.
-		|| !(shk[sNextID] = new Hotkey(sNextID, aJumpToLabel, aHookAction, aName, aSuffixHasTilde, aUseErrorLevel))   )
+		|| !(shk[sNextID] = new Hotkey(sNextID, aJumpToLabel, aHookAction, aName, aNoSuppress, aUseErrorLevel))   )
 	{
 		if (aUseErrorLevel)
 			g_ErrorLevel->Assign(HOTKEY_EL_MEM);
@@ -1297,7 +1317,7 @@ Hotkey *Hotkey::AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPT
 
 
 Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName
-	, bool aSuffixHasTilde, bool aUseErrorLevel)
+	, UCHAR aNoSuppress, bool aUseErrorLevel)
 // Constructor.
 // Caller provides aJumpToLabel rather than a Line* because at the time a hotkey or hotstring
 // is created, the label's destination line is not yet known.  So the label is used a placeholder.
@@ -1500,7 +1520,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 
 		if (HK_TYPE_CAN_BECOME_KEYBD_HOOK(mType))
 			if (   (mModifiersLR || aHookAction || mKeyUp || mModifierVK || mModifierSC) // mSC is handled higher above.
-				|| (g_ForceKeybdHook || mAllowExtraModifiers // mNoSuppress&NO_SUPPRESS_PREFIX has already been handled elsewhere. Other bits in mNoSuppress must be checked later because they can change by any variants added after *this* one.
+				|| (g_ForceKeybdHook || mAllowExtraModifiers // mNoSuppress must be checked later because it can be changed by any variants added after *this* one.
 					|| (mVK && !mVK_WasSpecifiedByNumber && vk_to_sc(mVK, true)))   ) // Its mVK corresponds to two scan codes (such as "ENTER").
 				mKeybdHookMandatory = true;
 			// v1.0.38.02: The check of mVK_WasSpecifiedByNumber above was added so that an explicit VK hotkey such
@@ -1528,7 +1548,7 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookActi
 
 	// To avoid memory leak, this is done only when it is certain the hotkey will be created:
 	if (   !(mName = aName ? SimpleHeap::Malloc(aName) : hotkey_name)
-		|| !(AddVariant(aJumpToLabel, aSuffixHasTilde))   ) // Too rare to worry about freeing the other if only one fails.
+		|| !(AddVariant(aJumpToLabel, aNoSuppress))   ) // Too rare to worry about freeing the other if only one fails.
 	{
 		if (aUseErrorLevel)
 			g_ErrorLevel->Assign(HOTKEY_EL_MEM);
@@ -1560,7 +1580,7 @@ HotkeyVariant *Hotkey::FindVariant()
 
 
 
-HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde)
+HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, UCHAR aNoSuppress)
 // Returns NULL upon out-of-memory; otherwise, the address of the new variant.
 // Even if aJumpToLabel is NULL, a non-NULL mJumpToLabel will be stored in each variant so that
 // NULL doesn't have to be constantly checked during script runtime.
@@ -1590,10 +1610,10 @@ HotkeyVariant *Hotkey::AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde)
 		// A non-zero InputLevel only works when using the hook
 		mKeybdHookMandatory = true;
 	}
-	if (aSuffixHasTilde)
+	v.mNoSuppress = aNoSuppress;
+	mNoSuppress |= aNoSuppress; // Apply both AT_LEAST_ONE_VARIANT_HAS_TILDE and NO_SUPPRESS_PREFIX, if present.
+	if (aNoSuppress & AT_LEAST_ONE_VARIANT_HAS_TILDE)
 	{
-		v.mNoSuppress = true; // Override the false value set by ZeroMemory above.
-		mNoSuppress |= AT_LEAST_ONE_VARIANT_HAS_TILDE;
 		// For simplicity, make the hook mandatory for any hotkey that has at least one non-suppressed variant.
 		// Otherwise, ManifestAllHotkeysHotstringsHooks() would have to do a loop to check if any
 		// non-suppressed variants are actually enabled & non-suspended to decide if the hook is actually needed
@@ -1637,14 +1657,7 @@ ResultType Hotkey::TextInterpret(LPTSTR aName, Hotkey *aThisHotkey, bool aUseErr
 	if (!term2)
 		return TextToKey(TextToModifiers(term1, aThisHotkey), aName, false, aThisHotkey, aUseErrorLevel);
 	if (*term1 == '~')
-	{
-		if (aThisHotkey)
-		{
-			aThisHotkey->mNoSuppress |= NO_SUPPRESS_PREFIX;
-			aThisHotkey->mKeybdHookMandatory = true;
-		}
-		term1 = omit_leading_whitespace(term1 + 1);
-	}
+		++term1; // Some other stage handles this modifier, so just ignore it here.
     LPTSTR end_of_term1 = omit_trailing_whitespace(term1, term2) + 1;
 	// Temporarily terminate the string so that the 2nd term is hidden:
 	TCHAR ctemp = *end_of_term1;
@@ -1825,11 +1838,12 @@ break_loop:
 			if (temp = _tcsstr(aProperties->prefix_text, COMPOSITE_DELIMITER)) // Check again in case it tried to overflow.
 				omit_trailing_whitespace(aProperties->prefix_text, temp)[1] = '\0'; // Truncate prefix_text so that the suffix text is omitted.
 			composite = omit_leading_whitespace(composite + COMPOSITE_DELIMITER_LENGTH);
-			if (aProperties->suffix_has_tilde = (*composite == '~')) // Override any value of suffix_has_tilde set higher above.
+			aProperties->prefix_has_tilde = aProperties->suffix_has_tilde;
+			if (aProperties->suffix_has_tilde = (*composite == '~')) // Override any value of no_suppress set higher above.
 				++composite; // For simplicity, no skipping of leading whitespace between tilde and the suffix key name.
 			tcslcpy(aProperties->suffix_text, composite, _countof(aProperties->suffix_text)); // Protect against overflow case script ultra-long (and thus invalid) key name.
 		}
-		else // A normal (non-composite) hotkey, so suffix_has_tilde was already set properly (higher above).
+		else // A normal (non-composite) hotkey, so no_suppress was already set properly (higher above).
 			tcslcpy(aProperties->suffix_text, omit_leading_whitespace(marker), _countof(aProperties->suffix_text)); // Protect against overflow case script ultra-long (and thus invalid) key name.
 		if (temp = tcscasestr(aProperties->suffix_text, _T(" Up"))) // Should be reliable detection method because leading spaces have been omitted and it's unlikely a legitimate key name will ever contain a space followed by "Up".
 		{
@@ -2078,7 +2092,7 @@ void Hotkey::InstallMouseHook()
 
 
 
-Hotkey *Hotkey::FindHotkeyByTrueNature(LPTSTR aName, bool &aSuffixHasTilde, bool &aHookIsMandatory)
+Hotkey *Hotkey::FindHotkeyByTrueNature(LPTSTR aName, UCHAR &aNoSuppress, bool &aHookIsMandatory)
 // Returns the address of the hotkey if found, NULL otherwise.
 // In v1.0.42, it tries harder to find a match so that the order of modifier symbols doesn't affect the true nature of a hotkey.
 // For example, ^!c should be the same as !^c, primarily because RegisterHotkey() and the hook would consider them the same.
@@ -2094,9 +2108,10 @@ Hotkey *Hotkey::FindHotkeyByTrueNature(LPTSTR aName, bool &aSuffixHasTilde, bool
 {
 	HotkeyProperties prop_candidate, prop_existing;
 	TextToModifiers(aName, NULL, &prop_candidate);
-	aSuffixHasTilde = prop_candidate.suffix_has_tilde; // Set for caller.
+	aNoSuppress = (prop_candidate.prefix_has_tilde ? NO_SUPPRESS_PREFIX : 0) // Set for caller.
+				| (prop_candidate.suffix_has_tilde ? AT_LEAST_ONE_VARIANT_HAS_TILDE : 0);
 	aHookIsMandatory = prop_candidate.hook_is_mandatory; // Set for caller.
-	// Both suffix_has_tilde and a hypothetical prefix_has_tilde are ignored during dupe-checking below.
+	// Both suffix_has_tilde and prefix_has_tilde are ignored during dupe-checking below.
 	// See comments inside the loop for details.
 
 	for (int i = 0; i < sHotkeyCount; ++i)
@@ -2118,9 +2133,9 @@ Hotkey *Hotkey::FindHotkeyByTrueNature(LPTSTR aName, bool &aSuffixHasTilde, bool
 			// ID slot within the VK/SC hook arrays).  The advantages of allowing tilde to be a per-variant attribute
 			// seem substantial, namely to have some variant/siblings pass-through while others do not.
 			&& prop_existing.has_asterisk == prop_candidate.has_asterisk
-			// v1.0.43.05: Use stricmp not lstrcmpi so that the higher ANSI letters because an uppercase
-			// high ANSI letter isn't necessarily produced by holding down the shift key and pressing the
-			// lowercase letter.  In addition, it preserves backward compatibility and may improve flexibility.
+			// v1.0.43.05: Use stricmp not lstrcmpi because an uppercase high ANSI letter isn't necessarily
+			// produced by holding down the shift key and pressing the lowercase letter.  In addition, it
+			// preserves backward compatibility and may improve flexibility.
 			&& !_tcsicmp(prop_existing.prefix_text, prop_candidate.prefix_text)
 			&& !_tcsicmp(prop_existing.suffix_text, prop_candidate.suffix_text)   )
 			return shk[i]; // Match found.
