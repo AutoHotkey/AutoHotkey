@@ -1634,7 +1634,9 @@ ResultType VariadicCall(IObject *aObj, IObject_Invoke_PARAMS_DECL)
 	if (rvalue)
 		aParam[aParamCount++] = rvalue; // In place of the variadic param.
 
+#ifdef ENABLE_HALF_BAKED_NAMED_PARAMS
 	aResultToken.named_params = param_obj;
+#endif
 
 	auto result = aObj->Invoke(aResultToken, aFlags, aName, aThisToken, aParam, aParamCount);
 
@@ -1884,6 +1886,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 
 			if (j >= aParamCount || aParam[j]->symbol == SYM_MISSING)
 			{
+#ifdef ENABLE_HALF_BAKED_NAMED_PARAMS
 				if (aResultToken.named_params)
 				{
 					FuncResult rt_item;
@@ -1901,6 +1904,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 						continue;
 					}
 				}
+#endif
 			
 				switch(this_formal_param.default_type)
 				{

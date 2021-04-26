@@ -443,7 +443,9 @@ struct ResultToken : public ExprTokenType
 {
 	LPTSTR buf; // Points to a buffer of _f_retval_buf_size characters for returning short strings and misc purposes.
 	LPTSTR mem_to_free; // Callee stores memory allocated for the result here.  Must be NULL or equal to marker.
+#ifdef ENABLE_HALF_BAKED_NAMED_PARAMS
 	IObject *named_params; // Variadic callers may pass named parameters via properties of this.
+#endif
 
 	// Utility function for initializing result tokens.
 	void InitResult(LPTSTR aResultBuf)
@@ -453,7 +455,9 @@ struct ResultToken : public ExprTokenType
 		marker_length = -1; // Helps code size to do this here instead of in ReturnPtr(), which should be inlined.
 		buf = aResultBuf;
 		mem_to_free = nullptr;
+#ifdef ENABLE_HALF_BAKED_NAMED_PARAMS
 		named_params = nullptr;
+#endif
 		result = OK;
 	}
 
