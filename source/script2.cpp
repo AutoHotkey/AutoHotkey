@@ -16704,6 +16704,38 @@ ResultType Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, Ex
 
 
 
+BIF_DECL(BIF_VerCompare)
+{
+	size_t len1;
+	size_t len2;
+	_f_param_string(ver1, 0, &len1);
+	_f_param_string(ver2, 1, &len2);
+	int num1;
+	int num2;
+	if ((_tcsspn(ver1, _T("0123456789.")) != len1) || _tcsstr(ver1, _T(".."))
+		|| *ver1 == '\0' || *ver1 == '.' || *(ver1+len1-1) == '.')
+			_f_throw_param(0);
+	if ((_tcsspn(ver2, _T("0123456789.")) != len2) || _tcsstr(ver2, _T(".."))
+		|| *ver2 == '\0' || *ver2 == '.' || *(ver2+len2-1) == '.')
+			_f_throw_param(1);
+	--ver1;
+	--ver2;
+	while (ver1 || ver2)
+	{
+		num1 = ver1 ? _ttoi(ver1+1) : 0;
+		num2 = ver2 ? _ttoi(ver2+1) : 0;
+		if (num1 > num2)
+			_f_return_i(1);
+		else if (num1 < num2)
+			_f_return_i(-1);
+		ver1 = ver1 ? _tcsstr(ver1+1, _T(".")) : 0;
+		ver2 = ver2 ? _tcsstr(ver2+1, _T(".")) : 0;
+	}
+	_f_return_i(0);
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
