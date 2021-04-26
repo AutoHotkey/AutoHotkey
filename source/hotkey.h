@@ -218,7 +218,7 @@ public:
 	HotkeyVariant *FindVariant();
 	HotkeyVariant *AddVariant(IObject *aCallback, bool aSuffixHasTilde);
 	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC);
-	HotkeyVariant *CriterionAllowsFiring(HWND *aFoundHWND = NULL, ULONG_PTR aExtraInfo = 0);
+	HotkeyVariant *CriterionAllowsFiring(HWND *aFoundHWND = NULL, ULONG_PTR aExtraInfo = 0, LPTSTR aSingleChar = NULL);
 	static HotkeyVariant *CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, ULONG_PTR aExtraInfo
 		, UCHAR &aNoSuppress, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
 	static modLR_type HotkeyRequiresModLR(HotkeyIDType aHotkeyIDwithoutflags, modLR_type aModLR);
