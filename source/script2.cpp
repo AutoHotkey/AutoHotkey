@@ -4479,12 +4479,12 @@ bool FindAutoHotkeyUtil(LPTSTR aBuf, int aBufSize, LPTSTR aFile, LPTSTR aInstall
 	return true;
 }
 
-bool LaunchAutoHotkeyUtil(LPTSTR aFile, bool aIsScript)
+void LaunchAutoHotkeyUtil(LPTSTR aFile, bool aIsScript)
 {
 	TCHAR buf_file[2048], buf_exe[2048], installdir[MAX_PATH];
 	LPTSTR utildir, file = buf_file, args = _T(""); // Use "" vs. NULL to specify that there are no params at all.
 	if (!FindAutoHotkeyUtil(buf_file, _countof(buf_file), aFile, installdir, utildir))
-		return false;
+		return;
 	if (aIsScript)
 	{
 		// Always try AutoHotkey.exe in the same directory as the util first, if present,
@@ -4501,20 +4501,21 @@ bool LaunchAutoHotkeyUtil(LPTSTR aFile, bool aIsScript)
 		// with some other EXE name.
 	}
 	// Attempt to run the file:
-	return g_script.ActionExec(file, args, NULL, false) != FAIL;
+	if (!g_script.ActionExec(file, args, NULL, false))
+	{
+		sntprintf(buf_file, _countof(buf_file), _T("Could not launch %s"), aFile);
+		MsgBox(buf_file, MB_ICONERROR);
+	}
 }
 
 void LaunchWindowSpy()
 {
-	if (   !LaunchAutoHotkeyUtil(_T("WindowSpy.ahk"), true)
-		&& !LaunchAutoHotkeyUtil(_T("AU3_Spy.exe"), false)   )
-		MsgBox(_T("Could not launch WindowSpy.ahk or AU3_Spy.exe"), MB_ICONERROR);
+	LaunchAutoHotkeyUtil(_T("WindowSpy.ahk"), true);
 }
 
 void LaunchAutoHotkeyHelp()
 {
-	if (   !LaunchAutoHotkeyUtil(AHK_HELP_FILE, false)   )
-		MsgBox(_T("Could not launch ") AHK_HELP_FILE, MB_ICONERROR);
+	LaunchAutoHotkeyUtil(AHK_HELP_FILE, false);
 }
 
 bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
