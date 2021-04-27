@@ -13272,7 +13272,7 @@ BIF_DECL(BIF_NumPut)
 BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 {
 	// To simplify flexible handling of parameters:
-	ExprTokenType **aParam_end = aParam + aParamCount;
+	ExprTokenType **aParam_end = aParam + aParamCount, **next_param = aParam;
 
 	LPCVOID source_string; // This may hold an intermediate UTF-16 string in ANSI builds.
 	int source_length;
@@ -13282,7 +13282,7 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 		ExprTokenType &source_token = *aParam[0];
 		source_string = (LPCVOID)TokenToString(source_token, _f_number_buf); // Safe to use _f_number_buf since StrPut won't use it for the result.
 		source_length = (int)((source_token.symbol == SYM_VAR) ? source_token.var->CharLength() : _tcslen((LPCTSTR)source_string));
-		++aParam; // Remove the String param from further consideration.
+		++next_param; // Remove the String param from further consideration.
 	}
 	else
 	{
@@ -13311,19 +13311,19 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 
 	const LPVOID FIRST_VALID_ADDRESS = (LPVOID)65536;
 
-	if (aParam < aParam_end && TokenIsNumeric(**aParam))
+	if (next_param < aParam_end && TokenIsNumeric(**next_param))
 	{
-		address = (LPVOID)TokenToInt64(**aParam);
-		++aParam;
+		address = (LPVOID)TokenToInt64(**next_param);
+		++next_param;
 	}
-	else if (aParam < aParam_end && (buffer_obj = TokenToObject(**aParam)))
+	else if (next_param < aParam_end && (buffer_obj = TokenToObject(**next_param)))
 	{
 		size_t ptr;
 		GetBufferObjectPtr(aResultToken, buffer_obj, ptr, max_bytes);
 		if (aResultToken.Exited())
 			return;
 		address = (LPVOID)ptr;
-		++aParam;
+		++next_param;
 	}
 	else
 	{
@@ -13340,13 +13340,13 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 		address = FIRST_VALID_ADDRESS; // Skip validation below; address should never be used when length == 0.
 	}
 
-	if (aParam < aParam_end)
+	if (next_param < aParam_end)
 	{
 		if (length == -1) // i.e. not StrPut(String, Encoding)
 		{
-			if (TokenIsNumeric(**aParam)) // Length parameter
+			if (TokenIsNumeric(**next_param)) // Length parameter
 			{
-				length = (int)TokenToInt64(**aParam);
+				length = (int)TokenToInt64(**next_param);
 				if (!source_string) // StrGet
 				{
 					if (length == 0)
@@ -13358,19 +13358,19 @@ BIF_DECL(BIF_StrGetPut) // BIF_DECL(BIF_StrGet), BIF_DECL(BIF_StrPut)
 				}
 				else if (length <= 0)
 					_f_throw_value(ERR_INVALID_LENGTH);
-				++aParam; // Let encoding be the next param, if present.
+				++next_param; // Let encoding be the next param, if present.
 			}
-			else if ((*aParam)->symbol == SYM_MISSING)
+			else if ((*next_param)->symbol == SYM_MISSING)
 			{
 				// Length was "explicitly omitted", as in StrGet(Address,, Encoding),
 				// which allows Encoding to be an integer without specifying Length.
-				++aParam;
+				++next_param;
 			}
 			// aParam now points to aParam_end or the Encoding param.
 		}
-		if (aParam < aParam_end)
+		if (next_param < aParam_end)
 		{
-			encoding = Line::ConvertFileEncoding(**aParam);
+			encoding = Line::ConvertFileEncoding(**next_param);
 			if (encoding == -1)
 				_f_throw_value(ERR_INVALID_ENCODING);
 		}
