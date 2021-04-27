@@ -8464,7 +8464,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	}
 	else if (!_tcsicmp(func_name, _T("Floor")) || !_tcsicmp(func_name, _T("Ceil")))
 		bif = BIF_FloorCeil;
-	else if (!_tcsicmp(func_name, _T("Mod")))
+	else if (!_tcsicmp(func_name, _T("Mod")) || !_tcsicmp(func_name, _T("FloorMod")))
 	{
 		bif = BIF_Mod;
 		min_params = 2;

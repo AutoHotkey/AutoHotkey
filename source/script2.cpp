@@ -16322,6 +16322,7 @@ BIF_DECL(BIF_FloorCeil)
 
 BIF_DECL(BIF_Mod)
 {
+	bool is_floormod = (ctoupper(aResultToken.marker[0]) == 'F');
 	// Load-time validation has already ensured there are exactly two parameters.
 	// "Cast" each operand to Int64/Double depending on whether it has a decimal point.
 	ExprTokenType param0, param1;
@@ -16337,20 +16338,31 @@ BIF_DECL(BIF_Mod)
 		{
 			aResultToken.symbol = SYM_STRING;
 			aResultToken.marker = _T("");
+			if (is_floormod)
+				_f_throw(_T("Divide by zero."));
 		}
 		else
+		{
 			// For performance, % is used vs. qmath for integers.
 			// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
 			aResultToken.value_int64 = param0.value_int64 % param1.value_int64;
+			if (is_floormod) // Adjust result.
+				if ((param1.value_int64 > 0 && aResultToken.value_int64 < 0)
+					|| (param1.value_int64 < 0 && aResultToken.value_int64 > 0))
+					aResultToken.value_int64 += param1.value_int64;
+		}
 	}
 	else // At least one is a floating point number.
 	{
 		double dividend = TokenToDouble(param0);
 		double divisor = TokenToDouble(param1);
-		if (divisor == 0.0) // Divide by zero.
+		if ((divisor == 0.0) // Divide by zero.
+			|| is_floormod) // Fail for floats.
 		{
 			aResultToken.symbol = SYM_STRING;
 			aResultToken.marker = _T("");
+			if (is_floormod)
+				_f_throw(param0.symbol != SYM_INTEGER ? ERR_PARAM1_INVALID : ERR_PARAM2_INVALID);
 		}
 		else
 		{
