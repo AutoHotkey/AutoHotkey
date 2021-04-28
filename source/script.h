@@ -3404,6 +3404,7 @@ BIF_DECL(BIF_ComObjQuery);
 
 
 BIF_DECL(BIF_Exception);
+BIF_DECL(BIF_Print);
 
 
 BOOL LegacyResultToBOOL(LPTSTR aResult);

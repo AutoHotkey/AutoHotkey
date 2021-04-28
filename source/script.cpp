@@ -4522,6 +4522,11 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					}
 				}
 				break;
+			case 'p':
+			case 'P':
+				if (!_tcsnicmp(action_args+1, _T("ush"), 3) && IS_SPACE_OR_TAB(action_args[4])) // i.e. "push"
+					aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
+				break;
 			//default: Leave aActionType set to ACT_INVALID. This also covers case '\0' in case that's possible.
 			} // switch()
 
@@ -4699,7 +4704,8 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		{
 			if (*action_args == '(' || *action_args == '[' // v1.0.46.11: Recognize as multi-statements that start with a function, like "fn(), x:=4".  v1.0.47.03: Removed the following check to allow a close-brace to be followed by a comma-less function-call: strchr(action_args, g_delimiter).
 				|| *aLineText == '(' // Probably an expression with parentheses to control order of evaluation.
-				|| !_tcsnicmp(aLineText, _T("new"), 3) && IS_SPACE_OR_TAB(aLineText[3]))
+				|| !_tcsnicmp(aLineText, _T("new"), 3) && IS_SPACE_OR_TAB(aLineText[3])
+				|| !_tcsnicmp(aLineText, _T("print"), 5) && IS_SPACE_OR_TAB(aLineText[5]))
 			{
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 				action_args = aLineText; // Since this is a function-call followed by a comma and some other expression, use the line's full text for later parsing.
@@ -5650,8 +5656,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 
 					operand_length = op_end - op_begin;
 
-					// Check if it's AND/OR/NOT:
-					if (operand_length < 4 && operand_length > 1) // Ordered for short-circuit performance.
+					// Check if it's AND/OR/NOT/PUSH/PRINT:
+					if (operand_length < 6 && operand_length > 1) // Ordered for short-circuit performance.
 					{
 						if (operand_length == 2)
 						{
@@ -5662,7 +5668,7 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 								continue;
 							}
 						}
-						else // operand_length must be 3
+						else if (operand_length == 3)
 						{
 							switch (*op_begin)
 							{
@@ -5710,7 +5716,30 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 								break;
 							}
 						}
-					} // End of check for AND/OR/NOT.
+						else if (operand_length == 4)
+						{
+							if (   (*op_begin   == 'p' || *op_begin   == 'P')
+								&& (op_begin[1] == 'u' || op_begin[1] == 'U')
+								&& (op_begin[2] == 's' || op_begin[2] == 'S')
+								&& (op_begin[3] == 'h' || op_begin[3] == 'H')
+								&& IS_SPACE_OR_TAB(op_begin[4])   )
+							{	// "PUSH" was found.
+								continue;
+							}
+						}
+						else if (operand_length == 5)
+						{
+							if (   (*op_begin   == 'p' || *op_begin   == 'P')
+								&& (op_begin[1] == 'r' || op_begin[1] == 'R')
+								&& (op_begin[2] == 'i' || op_begin[2] == 'I')
+								&& (op_begin[3] == 'n' || op_begin[3] == 'N')
+								&& (op_begin[4] == 't' || op_begin[4] == 'T')
+								&& IS_SPACE_OR_TAB(op_begin[5])   )
+							{	// "PRINT" was found.
+								continue;
+							}
+						}
+					} // End of check for AND/OR/NOT/PUSH/PRINT.
 
 					// Temporarily terminate, which avoids at least the below issue:
 					// Two or more extremely long var names together could exceed MAX_VAR_NAME_LENGTH
@@ -8674,6 +8703,8 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		min_params = 0;
 		max_params = 3;
 	}
+	else if (!_tcsicmp(func_name, _T("Print")))
+		bif = BIF_Print;
 	else
 		return NULL; // Maint: There may be other lines above that also return NULL.
 
@@ -10167,6 +10198,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 86             // SYM_FUNC -- Has special handling which ensures it stays tightly bound with its parameters as though it's a single operand for use by other operators; the actual value here is irrelevant.
 		, 86             // SYM_NEW -- should be popped off the stack immediately after the pseudo function-call which follows it.
 		, 36             // SYM_REGEXMATCH
+		, 7              // SYM_PUSH
+		, 10             // SYM_PRINT
 	};
 	// Most programming languages give exponentiation a higher precedence than unary minus and logical-not.
 	// For example, -2**2 is evaluated as -(2**2), not (-2)**2 (the latter is unsupported by qmathPow anyway).
@@ -10820,6 +10853,43 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 							infix[infix_count].deref = deref_new;
 							cp = op_end; // See comments above.
 							continue;    //
+						}
+					}
+					else if (op_end-cp == 4
+						&& (cp[0] == 'p' || cp[0] == 'P')
+						&& *omit_leading_whitespace(op_end) != ':') // Exclude "push:", which is either the key in a key-value pair or a syntax error.
+					{
+						if (   (cp1   == 'u' || cp1   == 'U')
+							&& (cp[2] == 's' || cp[2] == 'S')
+							&& (cp[3] == 'h' || cp[3] == 'H')   ) // "PUSH" was found.
+						{
+							if (   !(this_infix_item.deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))   )
+								return LineError(ERR_OUTOFMEM);
+							this_infix_item.deref->func = g_script.FindFunc(_T("ObjPush"));
+							this_infix_item.deref->is_function = true;
+							this_infix_item.deref->param_count = 2;
+							this_infix_item.symbol = SYM_PUSH;
+							cp = op_end; // Have the loop process whatever lies at op_end and beyond.
+							continue; // Continue vs. break to avoid the ++cp at the bottom (though it might not matter in this case).
+						}
+					}
+					else if (op_end-cp == 5
+						&& (cp[0] == 'p' || cp[0] == 'P')
+						&& *omit_leading_whitespace(op_end) != ':') // Exclude "print:", which is either the key in a key-value pair or a syntax error.
+					{
+						if (   (cp1   == 'r' || cp1   == 'R')
+							&& (cp[2] == 'i' || cp[2] == 'I')
+							&& (cp[3] == 'n' || cp[3] == 'N')
+							&& (cp[4] == 't' || cp[4] == 'T')   ) // "PRINT" was found.
+						{
+							if (   !(this_infix_item.deref = (DerefType *)SimpleHeap::Malloc(sizeof(DerefType)))   )
+								return LineError(ERR_OUTOFMEM);
+							this_infix_item.deref->func = g_script.FindFunc(_T("Print"));
+							this_infix_item.deref->is_function = true;
+							this_infix_item.deref->param_count = 1;
+							this_infix_item.symbol = SYM_PRINT;
+							cp = op_end; // Have the loop process whatever lies at op_end and beyond.
+							continue; // Continue vs. break to avoid the ++cp at the bottom (though it might not matter in this case).
 						}
 					}
 numeric_literal:
@@ -11558,6 +11628,8 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 
 		case SYM_NEW: // This is probably something like "new Class", without "()", otherwise an earlier stage would've handled it.
 		case SYM_REGEXMATCH: // a ~= b  ->  RegExMatch(a, b)
+		case SYM_PUSH:
+		case SYM_PRINT:
 			this_postfix->symbol = SYM_FUNC;
 			break;
 

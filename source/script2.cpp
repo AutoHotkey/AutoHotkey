@@ -18790,6 +18790,16 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_Print)
+{
+	LPTSTR aText = ParamIndexToString(0, aResultToken.buf);
+	MsgBox(aText, NULL, NULL, NULL, NULL);
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
