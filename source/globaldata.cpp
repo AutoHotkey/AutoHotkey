@@ -730,6 +730,27 @@ modifier is specified along with it:
 , {_T("Launch_App1"), VK_LAUNCH_APP1}
 , {_T("Launch_App2"), VK_LAUNCH_APP2}
 
+// Japanese Virtual Key Support
+, { _T("Kana"), VK_KANA}
+, { _T("Ime_On"), VK_IME_ON}
+, { _T("Kanji"), VK_KANJI}
+, { _T("Henkan"), VK_CONVERT}
+, { _T("Ime_Off"), VK_IME_OFF}
+, { _T("Muhenkan"), VK_NONCONVERT}
+
+// These keys behave like 3-state radio keys.
+, { _T("Eisu"), VK_OEM_ATTN} // VK_DBE_ALPHANUMERIC
+, { _T("Katakana"), VK_OEM_FINISH} // VK_DBE_KATAKANA
+, { _T("Hiragana"), VK_OEM_COPY} // VK_DBE_HIRAGANA
+
+// These keys behave like toggle radio keys.
+, { _T("Hankaku"), VK_OEM_AUTO} // VK_DBE_SBCSCHAR
+, { _T("Zenkaku"), VK_OEM_ENLW} // VK_DBE_DBCSCHAR
+
+// These keys behave like toggle radio keys.
+, { _T("Romaji"), VK_OEM_BACKTAB} // VK_DBE_ROMAN
+, { _T("NoRomaji"), VK_ATTN} // VK_DBE_NOROMAN
+
 // Probably safest to terminate it this way, with a flag value.  (plus this makes it a little easier
 // to code some loops, maybe).  Can also calculate how many elements are in the array using sizeof(array)
 // divided by sizeof(element).  UPDATE: Decided not to do this in case ever decide to sort this array; don't
