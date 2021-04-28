@@ -86,16 +86,21 @@ BIF_DECL(BIF_ComObj) // Handles both ComObjFromPtr and ComValue.Call.
 		_f_throw_param(0, _T("Number"));
 		
 	VARTYPE vt;
-	__int64 llVal;
+	union
+	{
+		__int64 llVal = 0; // Must be zero-initialized for TokenToVarType().
+		double dblVal;
+		float fltVal;
+	};
+	HRESULT hr;
 	USHORT flags = 0;
 
 	if (aParamCount > 1)
 	{
-		if (!TokenIsNumeric(*aParam[1]))
-			_f_throw_param(1, _T("Number"));
 		// ComValue(vt, value [, flags])
 		vt = (VARTYPE)TokenToInt64(*aParam[0]);
-		llVal = TokenToInt64(*aParam[1]);
+		if (FAILED(hr = TokenToVarType(*aParam[1], vt, &llVal, true)))
+			return ComError(hr, aResultToken);
 		if (aParamCount > 2)
 			flags = (USHORT)TokenToInt64(*aParam[2]);
 	}
@@ -583,7 +588,7 @@ bool SafeSetTokenObject(ExprTokenType &aToken, IObject *aObject)
 
 void VariantToToken(VARIANT &aVar, ResultToken &aToken, bool aRetainVar = true)
 {
-	aToken.mem_to_free = NULL; // Set default.
+	aToken.mem_to_free = NULL; // Set default.	
 	switch (aVar.vt)
 	{
 	case VT_BSTR:
@@ -619,14 +624,8 @@ void VariantToToken(VARIANT &aVar, ResultToken &aToken, bool aRetainVar = true)
 			VariantClear(&aVar);
 		break;
 	case VT_I4:
-	case VT_ERROR:
 		aToken.symbol = SYM_INTEGER;
 		aToken.value_int64 = aVar.lVal;
-		break;
-	case VT_I2:
-	case VT_BOOL:
-		aToken.symbol = SYM_INTEGER;
-		aToken.value_int64 = aVar.iVal;
 		break;
 	case VT_R8:
 		aToken.symbol = SYM_FLOAT;
@@ -635,6 +634,10 @@ void VariantToToken(VARIANT &aVar, ResultToken &aToken, bool aRetainVar = true)
 	case VT_R4:
 		aToken.symbol = SYM_FLOAT;
 		aToken.value_double = (double)aVar.fltVal;
+		break;
+	case VT_BOOL:
+		aToken.symbol = SYM_INTEGER;
+		aToken.value_int64 = aVar.iVal != VARIANT_FALSE;
 		break;
 	case VT_UNKNOWN:
 		if (aVar.punkVal)
@@ -695,6 +698,20 @@ void VariantToToken(VARIANT &aVar, ResultToken &aToken, bool aRetainVar = true)
 		aToken.marker = _T("");
 		aToken.marker_length = 0;
 		break;
+	case VT_I1:
+	case VT_I2:
+	case VT_I8:
+	case VT_UI1:
+	case VT_UI2:
+	case VT_UI4:
+	case VT_UI8:
+	{
+		VARIANT var {};
+		VariantChangeType(&var, &aVar, 0, VT_I8);
+		aToken.symbol = SYM_INTEGER;
+		aToken.value_int64 = var.llVal;
+		break;
+	}
 	default:
 		{
 			VARIANT var = {0};
@@ -749,14 +766,7 @@ void AssignVariant(Var &aArg, VARIANT &aVar, bool aRetainVar = true)
 }
 
 
-enum TTVArgType
-{
-	VariantIsValue,
-	VariantIsAllocatedString,
-	VariantIsVarRef
-};
-
-void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, TTVArgType *aVarIsArg = FALSE)
+void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, TTVArgType *aVarIsArg)
 {
 	if (aVarIsArg)
 		*aVarIsArg = VariantIsValue;
@@ -838,7 +848,7 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, TTVArgType *aVarIsArg 
 }
 
 
-HRESULT TokenToVarType(ExprTokenType &aToken, VARTYPE aVarType, void *apValue)
+HRESULT TokenToVarType(ExprTokenType &aToken, VARTYPE aVarType, void *apValue, bool aCallerIsComValue)
 // Copy the value of a given token into a variable of the given VARTYPE.
 {
 	if (aVarType == VT_VARIANT)
@@ -848,22 +858,67 @@ HRESULT TokenToVarType(ExprTokenType &aToken, VARTYPE aVarType, void *apValue)
 		return S_OK;
 	}
 
-#define U 0 // Unsupported in SAFEARRAY/VARIANT.
+#define U 0 // Unsupported in SAFEARRAY/VARIANT (but vt 15 has no assigned meaning).
 #define P sizeof(void *)
 	// Unfortunately there appears to be no function to get the size of a given VARTYPE,
 	// and VariantCopyInd() copies in the wrong direction.  An alternative approach to
 	// the following would be to switch(aVarType) and copy using the appropriate pointer
 	// type, but disassembly shows that approach produces larger code and internally uses
 	// an array of sizes like this anyway:
-	static char vt_size[] = {U,U,2,4,4,8,8,8,P,P,4,2,0,P,0,U,1,1,2,4,8,8,4,4,U,U,U,U,U,U,U,U,U,U,U,U,U,P,P};
-	size_t vsize = (aVarType < _countof(vt_size)) ? vt_size[aVarType] : 0;
+	static char vt_size[] = {U,U,2,4,4,8,8,8,P,P,4,2,U,P,U,U,1,1,2,4,8,8,4,4,U,U,U,U,U,U,U,U,U,U,U,U,U,P,P};
+	// Checking aCallerIsComValue has these purposes:
+	//  - Let ComValue() accept a raw pointer/integer value for VT_BYREF, VT_ARRAY and
+	//    any types not explicitly supported.
+	//  - When an integer value is passed by ComValue(), copy all 64 bits.
+	size_t vsize = aCallerIsComValue ? 8 : (aVarType < _countof(vt_size)) ? vt_size[aVarType] : 0;
 	if (!vsize)
 		return DISP_E_BADVARTYPE;
 #undef P
 #undef U
 
 	VARIANT src;
-	TokenToVariant(aToken, src, FALSE);
+
+	if (aVarType == VT_BOOL)
+	{
+		// Use AutoHotkey's boolean evaluation rules, but VARIANT_TRUE == -1.
+		*((VARIANT_BOOL*)apValue) = -TokenToBOOL(aToken);
+		return S_OK;
+	}
+
+	if (TypeOfToken(aToken) == SYM_INTEGER)
+	{
+		// This has a few uses:
+		//  - Allows pointer types to be initialized by pointer value for ComValue().
+		//  - Avoids truncation or loss of precision for large integer values,
+		//    since TokenToVariant() only uses the common VT_I4 or VT_R8 types.
+		//  - Probably faster.
+		src.vt = VT_I8;
+		src.llVal = TokenToInt64(aToken);
+		switch (aVarType)
+		{
+		case VT_R4:
+		case VT_R8:
+		case VT_DATE: // Date is "double" based.
+			// Doesn't make sense to reinterpret the bits of an integer value as float.
+			break;
+		case VT_CY:
+			// This ensures 42 and 42.0 produce the same value.
+			src.llVal *= 10000;
+			*((CY*)apValue) = src.cyVal;
+			return S_OK;
+		case VT_BSTR:
+		case VT_DISPATCH:
+		case VT_UNKNOWN:
+			if (!aCallerIsComValue)
+				break;
+			// Otherwise, fall through:
+		default:
+			memcpy(apValue, &src.llVal, vsize);
+			return S_OK;
+		}
+	}
+	else
+		TokenToVariant(aToken, src, FALSE);
 	// Above may have set var.vt to VT_BSTR (a newly allocated string or one passed via ComObject),
 	// VT_DISPATCH or VT_UNKNOWN (in which case it called AddRef()).  The value is either freed by
 	// VariantChangeType() or moved into *apValue, so we don't free it except on failure.

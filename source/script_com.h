@@ -154,6 +154,15 @@ public:
 };
 
 
+enum TTVArgType
+{
+	VariantIsValue,
+	VariantIsAllocatedString,
+	VariantIsVarRef
+};
+void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, TTVArgType *aVarIsArg = FALSE);
+HRESULT TokenToVarType(ExprTokenType &aToken, VARTYPE aVarType, void *apValue, bool aCallerIsComValue = false);
+
 void ComError(HRESULT, ResultToken &, LPTSTR = _T(""), EXCEPINFO* = NULL);
 
 bool SafeSetTokenObject(ExprTokenType &aToken, IObject *aObject);
