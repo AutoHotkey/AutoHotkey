@@ -1118,7 +1118,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				default:
 					// All other operators do not support non-numeric operands.
 					error_info = _T("Number");
-					error_value = left_is_number ? &right : &left;
+					error_value = right_is_number ? &left : &right; // Must use right_is_number since if it's false, left_is_number wasn't set.
 					goto type_mismatch;
 				}
 				this_token.symbol = result_symbol; // Must be done only after the switch() above.
