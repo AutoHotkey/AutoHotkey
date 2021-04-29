@@ -579,6 +579,8 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 	if (mMenu) // Delete the item from the menu.
 		RemoveMenu(mMenu, aMenuItem_ID, aMenuItem_MF_BY); // v1.0.48: Lexikos: DeleteMenu() destroys any sub-menu handle associated with the item, so use RemoveMenu. Otherwise the submenu handle stored somewhere else in memory would suddenly become invalid.
 	RemoveItemIcon(aMenuItem); // L17: Free icon or bitmap.
+	if (mDefault == aMenuItem)
+		mDefault = NULL; // No need to SetDefaultMenuItem since the previous default item was removed.
 	delete aMenuItem; // Do this last when its contents are no longer needed.
 	--mMenuItemCount;
 	if (aUpdateGuiMenuBars)
