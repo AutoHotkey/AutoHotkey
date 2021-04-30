@@ -16194,13 +16194,11 @@ LPTSTR Line::VicinityToText(LPTSTR aBuf, int aBufSize) // aBufSize should be an 
 		; i < LINES_ABOVE_AND_BELOW && line_end->mNextLine != NULL
 		; ++i, line_end = line_end->mNextLine);
 
-#ifdef AUTOHOTKEYSC
 	if (!g_AllowMainWindow) // Override the above to show only a single line, to conceal the script's source code.
 	{
 		line_start = this;
 		line_end = this;
 	}
-#endif
 
 	// Now line_start and line_end are the first and last lines of the range
 	// we want to convert to text, and they're non-NULL.

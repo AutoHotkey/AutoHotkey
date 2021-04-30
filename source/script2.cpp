@@ -6006,7 +6006,6 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 	bool jump_to_bottom = false;  // Set default behavior for edit control.
 	static MainWindowModes current_mode = MAIN_MODE_NO_CHANGE;
 
-#ifdef AUTOHOTKEYSC
 	// If we were called from a restricted place, such as via the Tray Menu or the Main Menu,
 	// don't allow potentially sensitive info such as script lines and variables to be shown.
 	// This is done so that scripts can be compiled more securely, making it difficult for anyone
@@ -6023,7 +6022,6 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 			_T("command option was not enabled in the original script."));
 		return OK;
 	}
-#endif
 
 	// If the window is empty, caller wants us to default it to showing the most recently
 	// executed script lines:

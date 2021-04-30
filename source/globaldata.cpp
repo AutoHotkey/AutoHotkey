@@ -88,6 +88,8 @@ bool g_persistent = false;  // Whether the script should stay running even after
 bool g_NoTrayIcon = false;
 #ifdef AUTOHOTKEYSC
 	bool g_AllowMainWindow = false;
+#else
+	bool g_AllowMainWindow = true;
 #endif
 bool g_MainTimerExists = false;
 bool g_AutoExecTimerExists = false;

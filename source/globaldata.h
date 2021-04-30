@@ -84,9 +84,7 @@ extern WarnMode g_Warn_Unreachable;
 extern SingleInstanceType g_AllowOnlyOneInstance;
 extern bool g_persistent;
 extern bool g_NoTrayIcon;
-#ifdef AUTOHOTKEYSC
-	extern bool g_AllowMainWindow;
-#endif
+extern bool g_AllowMainWindow;
 extern bool g_DeferMessagesForUnderlyingPump;
 extern bool g_MainTimerExists;
 extern bool g_AutoExecTimerExists;
