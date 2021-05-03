@@ -1478,7 +1478,7 @@ ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllo
 			return OK;
 		TCHAR msg_text[T_MAX_PATH + 64]; // T_MAX_PATH vs. MAX_PATH because the full length could be utilized with ErrorStdOut.
 		sntprintf(msg_text, _countof(msg_text), _T("%s file \"%s\" cannot be opened.")
-			, Line::sSourceFileCount > 0 ? _T("#Include") : _T("Script"), full_path);
+			, source_file_index ? _T("#Include") : _T("Script"), aFileSpec);
 		return ScriptError(msg_text);
 	}
 
