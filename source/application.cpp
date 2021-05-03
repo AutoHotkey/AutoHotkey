@@ -1759,10 +1759,10 @@ bool MsgMonitor(MsgMonitorInstance &aInstance, HWND aWnd, UINT aMsg, WPARAM awPa
 	// Set up the array of parameters for func->Invoke().
 	ExprTokenType param[] =
 	{
-		(__int64)awParam,
-		(__int64)(DWORD_PTR)alParam, // Additional type-cast prevents sign-extension on 32-bit, since LPARAM is signed.
+		(__int64)(size_t)aWnd,
 		(__int64)aMsg,
-		(__int64)(size_t)aWnd
+		(__int64)awParam,
+		(__int64)(DWORD_PTR)alParam // Additional type-cast prevents sign-extension on 32-bit, since LPARAM is signed.
 	};
 
 	ResultType result;
