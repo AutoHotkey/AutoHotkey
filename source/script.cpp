@@ -11930,10 +11930,11 @@ ResultType Line::Perform()
 		// be allowed to complete normally.  This is especially important in v2 because a persistent
 		// script can become non-persistent by disabling a timer, closing a GUI, etc.  So if there
 		// are any threads below this one, only exit this thread:
-		if (g_nThreads > 1 || g_script.IsPersistent())
-			return EARLY_EXIT; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
-		// Otherwise, this is the last thread in a non-persistent script.
-		// FALL THROUGH TO BELOW (this is the only time Exit's ExitCode is used):
+		//if (g_nThreads > 1 || g_script.IsPersistent())
+		// UPDATE: Handle it this way unconditionally so that the thread is properly exited prior to
+		// the script terminating; i.e. any FINALLY statements are executed and __delete is called for
+		// any objects in local variables or on the expression evaluation stack.
+		return EARLY_EXIT; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
 	case ACT_EXITAPP: // Unconditional exit.
 		// This has been tested and it does yield to the OS the error code indicated in ARG1,
 		// if present (otherwise it returns 0, naturally) as expected:
