@@ -4769,9 +4769,9 @@ DWORD GetAHKInstallDir(LPTSTR aBuf)
 
 LPTSTR Script::DefaultDialogTitle()
 {
-	// If the script has set A_ScriptName, use that:
-	if (mScriptName)
-		return mScriptName;
+	// If the script has set A_ScriptTitle, use that:
+	if (mScriptTitle)
+		return mScriptTitle;
 	// If available, the script's filename seems a much better title than the program name
 	// in case the user has more than one script running:
 	return (mFileName && *mFileName) ? mFileName : T_AHK_NAME_VERSION;
@@ -10039,17 +10039,22 @@ BIV_DECL_R(BIV_ScreenWidth_Height)
 
 BIV_DECL_R(BIV_ScriptName)
 {
-	_f_return_p(g_script.mScriptName ? g_script.mScriptName : g_script.mFileName);
+	_f_return_p(g_script.mFileName);
 }
 
-BIV_DECL_W(BIV_ScriptName_Set)
+BIV_DECL_R(BIV_ScriptTitle)
+{
+	_f_return_p(g_script.mScriptTitle ? g_script.mScriptTitle : g_script.mFileName);
+}
+
+BIV_DECL_W(BIV_ScriptTitle_Set)
 {
 	// For simplicity, a new buffer is allocated each time.  It is not expected to be set frequently.
-	LPTSTR script_name = _tcsdup(BivRValueToString());
-	if (!script_name)
+	LPTSTR script_title = _tcsdup(BivRValueToString());
+	if (!script_title)
 		_f_throw_oom;
-	free(g_script.mScriptName);
-	g_script.mScriptName = script_name;
+	free(g_script.mScriptTitle);
+	g_script.mScriptTitle = script_title;
 }
 
 BIV_DECL_R(BIV_ScriptDir)
