@@ -5925,6 +5925,20 @@ BIF_DECL(BIF_StrReplace)
 		|| string_case_sense == SCS_INSENSITIVE_LOGICAL) // Not supported, seems more useful to throw rather than using SCS_INSENSITIVE.
 		_f_throw_param(3);
 
+	INT_PTR starting_offset = (INT_PTR)ParamIndexToOptionalInt(6, 1); // The one-based starting position in haystack (if any).
+	if (starting_offset > (INT_PTR)length)
+		starting_offset = length;
+	else if (starting_offset < 0) // Same convention as RegExMatch/Replace(): Treat negative StartingPos as a position relative to the end of the string.
+	{
+		starting_offset += length;
+		if (starting_offset < 0)
+			starting_offset = 0;
+	}
+	else if (!starting_offset)
+		_f_throw_param(6);
+	else
+		--starting_offset; // Convert to zero-based.
+
 	Var *output_var_count = ParamIndexToOutputVar(4); 
 	UINT replacement_limit = (UINT)ParamIndexToOptionalInt64(5, UINT_MAX); 
 	
@@ -5934,7 +5948,7 @@ BIF_DECL(BIF_StrReplace)
 	// search string inside of newly-inserted replace strings (e.g. replacing all occurrences
 	// of b with bcd would not keep finding b in the newly inserted bcd, infinitely).
 	LPTSTR dest;
-	UINT found_count = StrReplace(source, oldstr, newstr, string_case_sense, replacement_limit, -1, &dest, &length); // Length of haystack is passed to improve performance because TokenToString() can often discover it instantaneously.
+	UINT found_count = StrReplace(source, oldstr, newstr, string_case_sense, replacement_limit, -1, &dest, &length, starting_offset); // Length of haystack is passed to improve performance because TokenToString() can often discover it instantaneously.
 
 	if (!dest) // Failure due to out of memory.
 		_f_throw_oom; 

@@ -682,7 +682,7 @@ LPTSTR ltcschr(LPCTSTR haystack, TCHAR ch);
 LPTSTR lstrcasestr(LPCTSTR phaystack, LPCTSTR pneedle);
 LPTSTR tcscasestr (LPCTSTR phaystack, LPCTSTR pneedle);
 UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType aStringCaseSense
-	, UINT aLimit = UINT_MAX, size_t aSizeLimit = -1, LPTSTR *aDest = NULL, size_t *aHaystackLength = NULL);
+	, UINT aLimit = UINT_MAX, size_t aSizeLimit = -1, LPTSTR *aDest = NULL, size_t *aHaystackLength = NULL, INT_PTR aStartingOffset = 0);
 size_t PredictReplacementSize(ptrdiff_t aLengthDelta, int aReplacementCount, int aLimit, size_t aHaystackLength
 	, size_t aCurrentLength, size_t aEndOffsetOfCurrMatch);
 LPTSTR TranslateLFtoCRLF(LPTSTR aString);

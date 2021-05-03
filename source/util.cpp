@@ -1055,7 +1055,7 @@ __int64 nstrtoi64(LPCTSTR buf)
 
 
 UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType aStringCaseSense
-	, UINT aLimit, size_t aSizeLimit, LPTSTR *aDest, size_t *aHaystackLength)
+	, UINT aLimit, size_t aSizeLimit, LPTSTR *aDest, size_t *aHaystackLength, INT_PTR aStartingOffset)
 // Replaces all (or aLimit) occurrences of aOld with aNew in aHaystack.
 // On success, it returns the number of replacements done (0 if none).  On failure (out of memory), it returns 0
 // (and if aDest isn't NULL, it also sets *aDest to NULL on failure).
@@ -1067,6 +1067,7 @@ UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType 
 // - aDest: If NULL, the function will operate in mode #1.  Otherwise, it uses mode #2 (see further below).
 // - aHaystackLength: If it isn't NULL, *aHaystackLength must be the length of aHaystack.  HOWEVER, *aHaystackLength
 //   is then changed here to be the length of the result string so that caller can use it to improve performance.
+// - aStartingOffset: Must be non-negative. Defaults to 0.
 //
 // MODE 1 (when aDest==NULL): aHaystack is used as both the source and the destination (sometimes temporary memory
 // is used for performance, but it's freed afterward and so transparent to the caller).
@@ -1172,8 +1173,9 @@ UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType 
 
 	// Perform the replacement:
 	for (replacement_count = 0, src = aHaystack
-		; aLimit && (match_pos = tcsstr2(src, aOld, aStringCaseSense));) // Relies on short-circuit boolean order.
+		; aLimit && (match_pos = tcsstr2(src+aStartingOffset, aOld, aStringCaseSense));) // Relies on short-circuit boolean order.
 	{
+		aStartingOffset = 0;
 		++replacement_count;
 		--aLimit;
 		haystack_portion_length = match_pos - src; // The length of the haystack section between the end of the previous match and the start of the current one.
@@ -1260,9 +1262,10 @@ in_place_method:
 	//for ( ; ptr = StrReplace(aHaystack, aOld, aNew, aStringCaseSense); ); // Note that this very different from the below.
 
 	for (replacement_count = 0, src = aHaystack
-		; aLimit && (match_pos = tcsstr2(src, aOld, aStringCaseSense)) // Relies on short-circuit boolean order.
+		; aLimit && (match_pos = tcsstr2(src+aStartingOffset, aOld, aStringCaseSense)) // Relies on short-circuit boolean order.
 		; --aLimit, ++replacement_count)
 	{
+		aStartingOffset = 0;
 		src = match_pos + aNew_length;  // The next search should start at this position when all is adjusted below.
 		if (length_delta) // This check can greatly improve performance if old and new strings happen to be same length.
 		{
