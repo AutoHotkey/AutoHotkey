@@ -1327,18 +1327,11 @@ ResultType Script::Edit()
 		sntprintf(buf, _countof(buf), _T("\"%s\""), mFileSpec);
 		if (!ActionExec(_T("edit"), buf, mFileDir, false))  // Since this didn't work, try notepad.
 		{
-			// v1.0.40.06: Try to open .ini files first with their associated editor rather than trying the
-			// "edit" verb on them:
-			LPTSTR file_ext;
-			if (   !(file_ext = _tcsrchr(mFileName, '.')) || _tcsicmp(file_ext, _T(".ini"))
-				|| !ActionExec(_T("open"), buf, mFileDir, false)   ) // Relies on short-circuit boolean order.
-			{
-				// Even though notepad properly handles filenames with spaces in them under WinXP,
-				// even without double quotes around them, it seems safer and more correct to always
-				// enclose the filename in double quotes for maximum compatibility with all OSes:
-				if (!ActionExec(_T("notepad.exe"), buf, mFileDir, false))
-					MsgBox(_T("Could not open script.")); // Short message since so rare.
-			}
+			// Even though notepad properly handles filenames with spaces in them under WinXP,
+			// even without double quotes around them, it seems safer and more correct to always
+			// enclose the filename in double quotes for maximum compatibility with all OSes:
+			if (!ActionExec(_T("notepad.exe"), buf, mFileDir, false))
+				MsgBox(_T("Could not open script.")); // Short message since so rare.
 		}
 	}
 	return OK;
