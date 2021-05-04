@@ -6291,14 +6291,18 @@ int SortWithOptions(const void *a1, const void *a2)
 		// Resolve only once since parts of the ATOF() macro are inline:
 		double item1_minus_2 = ATOF(sort_item1) - ATOF(sort_item2);
 		if (!item1_minus_2) // Exactly equal.
-			return 0;
+			return (sort_item1 > sort_item2) ? 1 : -1; // Stable sort.
 		// Otherwise, it's either greater or less than zero:
 		int result = (item1_minus_2 > 0.0) ? 1 : -1;
 		return g_SortReverse ? -result : result;
 	}
 	// Otherwise, it's a non-numeric sort.
 	// v1.0.43.03: Added support the new locale-insensitive mode.
-	int result = tcscmp2(sort_item1, sort_item2, g_SortCaseSensitive); // Resolve large macro only once for code size reduction.
+	int result = (g_SortCaseSensitive != SCS_INSENSITIVE_LOGICAL)
+		? tcscmp2(sort_item1, sort_item2, g_SortCaseSensitive) // Resolve large macro only once for code size reduction.
+		: StrCmpLogicalW(sort_item1, sort_item2);
+	if (!result)
+		result = (sort_item1 > sort_item2) ? 1 : -1; // Stable sort.
 	return g_SortReverse ? -result : result;
 }
 
@@ -6315,7 +6319,11 @@ int SortByNakedFilename(const void *a1, const void *a2)
 	if (cp = _tcsrchr(sort_item2, '\\'))  // Assign
 		sort_item2 = cp + 1;
 	// v1.0.43.03: Added support the new locale-insensitive mode.
-	int result = tcscmp2(sort_item1, sort_item2, g_SortCaseSensitive); // Resolve large macro only once for code size reduction.
+	int result = (g_SortCaseSensitive != SCS_INSENSITIVE_LOGICAL)
+		? tcscmp2(sort_item1, sort_item2, g_SortCaseSensitive) // Resolve large macro only once for code size reduction.
+		: StrCmpLogicalW(sort_item1, sort_item2);
+	if (!result)
+		result = (sort_item1 > sort_item2) ? 1 : -1; // Stable sort.
 	return g_SortReverse ? -result : result;
 }
 
@@ -6402,10 +6410,46 @@ BIF_DECL(BIF_Sort)
 		case 'C':
 			if (ctoupper(cp[1]) == 'L') // v1.0.43.03: Locale-insensitive mode, which probably performs considerably worse.
 			{
-				++cp;
-				g_SortCaseSensitive = SCS_INSENSITIVE_LOCALE;
+				if (!_tcsnicmp(cp+2, _T("ogical"), 6)) // CLogical.
+				{
+					cp += 7;
+					g_SortCaseSensitive = SCS_INSENSITIVE_LOGICAL;
+				}
+				else if (!_tcsnicmp(cp+2, _T("ocale"), 5)) // CLocale.
+				{
+					cp += 6;
+					g_SortCaseSensitive = SCS_INSENSITIVE_LOCALE;
+				}
+				else // CL.
+				{
+					++cp;
+					g_SortCaseSensitive = SCS_INSENSITIVE_LOCALE;
+				}
 			}
-			else
+			else if (ctoupper(cp[1]) == 'O')
+			{
+				if (ctoupper(cp[2]) == 'N') // COn.
+				{
+					cp += 2;
+					g_SortCaseSensitive = SCS_SENSITIVE;
+				}
+				else if ((ctoupper(cp[2]) == 'F') && (ctoupper(cp[3]) == 'F')) // COff.
+				{
+					cp += 3;
+					g_SortCaseSensitive = SCS_INSENSITIVE;
+				}
+			}
+			else if ((cp[1]) == '1') // C1.
+			{
+				++cp;
+				g_SortCaseSensitive = SCS_SENSITIVE;
+			}
+			else if ((cp[1]) == '0') // C0.
+			{
+				++cp;
+				g_SortCaseSensitive = SCS_INSENSITIVE;
+			}
+			else // C.
 				g_SortCaseSensitive = SCS_SENSITIVE;
 			break;
 		case 'D':
@@ -6661,6 +6705,8 @@ BIF_DECL(BIF_Sort)
 				// ever useful to anyone.  This is done because numbers in an offset column are not supported
 				// since the extra code size doensn't seem justified given the rarity of the need.
 				keep_this_item = (ATOF(*item_curr) != ATOF(item_prev)); // ATOF() ignores any trailing \r in CRLF mode, so no extra logic is needed for that.
+			else if (g_SortCaseSensitive == SCS_INSENSITIVE_LOGICAL)
+				keep_this_item = StrCmpLogicalW(*item_curr, item_prev);
 			else
 				keep_this_item = tcscmp2(*item_curr, item_prev, g_SortCaseSensitive); // v1.0.43.03: Added support for locale-insensitive mode.
 				// Permutations of sorting case sensitive vs. eliminating duplicates based on case sensitivity:
