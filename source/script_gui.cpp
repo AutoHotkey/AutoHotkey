@@ -7948,6 +7948,7 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 	case WM_SIZE: // Listed first for performance.
 		if (   !(pgui = GuiType::FindGui(hWnd))   )
 			break; // Let default proc handle it.
+		pgui->mIsMinimized = wParam == SIZE_MINIMIZED; // See "case WM_SETFOCUS" for comments.
 		if (pgui->mStatusBarHwnd)
 			// Send the msg even if the bar is hidden because the OS typically knows not to do extra drawing work for
 			// hidden controls.  In addition, when the bar is shown again, it might be the wrong size if this isn't done.
@@ -8818,6 +8819,73 @@ LRESULT CALLBACK GuiWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPara
 			SetTextColor(lpdis->hDC, prev_color);
 		break;
 	}
+
+	case WM_SETFOCUS:
+		// DefDlgProc "Sets the input focus to the control identified by a previously saved control window
+		// handle. If no such handle exists, the procedure sets the input focus to the first control ..."
+	case WM_ACTIVATE:
+		// DefDlgProc "Restores the input focus to the control identified by the previously saved handle
+		// if the dialog box is activated."
+		// "If the window is being activated and is not minimized, the DefWindowProc function sets the
+		// keyboard focus to the window."
+		if (   (pgui = GuiType::FindGui(hWnd)) && pgui->mIsMinimized   )
+			return 0;
+		// The simple check above solves a problem caused by bad OS behaviour that I couldn't find any
+		// mention of in all my searching, and that took hours to debug; so I'll be verbose:
+		//
+		// Without the suppression check, restoring a minimized GUI window (without activating it first)
+		// causes focus to reset to the first control in the GUI, instead of the control that had focus
+		// previously.  The sequence of events is as follows:
+		//  - WM_ACTIVATE, WA_ACTIVE (window is active and already NOT MINIMIZED according to wParam)
+		//    DefDlgProc restores focus to the correct control.
+		//  - WM_SIZE, SIZE_RESTORED (now we're told the window has been restored)
+		//  - WM_SETFOCUS (the control has lost focus and the window itself has gained it)
+		//    DefDlgProc resets focus to the window's FIRST control.
+		//  - WM_ACTIVATE, WA_ACTIVE (again)
+		//
+		// My conclusion after debugging with Spy++, logging breakpoints and OnMessage, was that these
+		// WM_ACTIVATE and WM_SETFOCUS messages are directly caused by whatever system function restores
+		// the window.  If only the first WM_ACTIVATE message is suppressed, the following occurs:
+		//  - WM_ACTIVATE, WA_ACTIVE (we don't call DefDlgProc)
+		//  - WM_SETFOCUS (this is sent after WM_ACTIVATE returns)
+		//    DefDlgProc restores focus to the correct control.
+		//  - WM_SIZE, SIZE_RESTORED
+		//  - WM_SETFOCUS
+		//    DefDlgProc resets focus to the window's FIRST control (as before).
+		//  - WM_ACTIVATE, WA_ACTIVE (again)
+		//
+		// So apparently if the window doesn't set focus in response to WM_ACTIVATE, the system calls
+		// SetFocus(hWnd).  But even though it does that, it calls SetFocus(hWnd) again afterward!
+		//
+		// Another attempted workaround was to have WM_SETFOCUS do SetFocus(wParam) if wParam was this
+		// window's own control.  This worked, but the focus changed several times each time the window
+		// was restored, and for some controls this generates redundant focus and lost-focus events.
+		//
+		// To solve this we suppress both WM_ACTIVATE and WM_SETFOCUS in between WM_SIZE, SIZE_MINIMIZED
+		// and the next WM_SIZE with any other parameter value.  The end result is that when the window
+		// is activated, the window itself is focused (which normally happens, temporarily) and then
+		// focus changes only once, when WM_ACTIVATE is received after WM_SIZE.  There is no second
+		// WM_SETFOCUS, because hWnd already has the focus.
+		//
+		// WM_SIZE is tracked with mIsMinimized rather than using IsIconic(hWnd) because the iconic state
+		// of the window changes before the transition is completed (which is probably why WM_ACTIVATE's
+		// wParam doesn't indicate that the window is minimized).
+		//
+		// Note that this issue didn't occur in at least the following cases:
+		//  1) If the window is activated before restoring it, WM_ACTIVATE is received while the window
+		//     is definitely in the minimized state (and not in transition), therefore DefDlgProc does
+		//     not handle it by changing the focus.
+		//  2) If the window is restored via the taskbar button, it loses focus when the user clicks the
+		//     taskbar, so see above.
+		//  3) If the window is minimized via the taskbar button, it can be restored even without first
+		//     activating it.  This seems to be a consequence of some shonky handling by the system, as
+		//     it sends WM_ACTIVATE, 0x00200001 (WA_ACTIVE with upper word non-zero, meaning minimized),
+		//     even though the window IS NOT ACTIVE, and then when the window is activated, WM_ACTIVATE
+		//     is not sent (and without that message, there is no premature focus restoration).
+		//     I came across several mentions of this issue with WM_ACTIVATE and the taskbar in my searches.
+		//     Note that sending the bogus message manually produces a different result; i.e. WM_ACTIVATE
+		//     is still sent by the system when the window is restored.
+		break;
 
 	case WM_CONTEXTMENU:
 		if ((pgui = GuiType::FindGui(hWnd)) && pgui->mLabelForContextMenu)
