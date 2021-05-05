@@ -1755,7 +1755,7 @@ ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllo
 			return OK;
 		TCHAR msg_text[T_MAX_PATH + 64]; // T_MAX_PATH vs. MAX_PATH because the full length could be utilized with ErrorStdOut.
 		sntprintf(msg_text, _countof(msg_text), _T("%s file \"%s\" cannot be opened.")
-			, Line::sSourceFileCount > 0 ? _T("#Include") : _T("Script"), full_path);
+			, source_file_index ? _T("#Include") : _T("Script"), aFileSpec);
 		return ScriptError(msg_text);
 	}
 	
@@ -12764,8 +12764,11 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 		TCHAR buf[MSGBOX_TEXT_SIZE], *cp = buf;
 		int buf_space_remaining = (int)_countof(buf);
 
-		cp += sntprintf(cp, buf_space_remaining, _T("Error at line %u"), mCombinedLineNumber); // Don't call it "critical" because it's usually a syntax error.
-		buf_space_remaining = (int)(_countof(buf) - (cp - buf));
+		if (mCombinedLineNumber || mCurrFileIndex)
+		{
+			cp += sntprintf(cp, buf_space_remaining, _T("Error at line %u"), mCombinedLineNumber); // Don't call it "critical" because it's usually a syntax error.
+			buf_space_remaining = (int)(_countof(buf) - (cp - buf));
+		}
 
 		if (mCurrFileIndex)
 		{
@@ -12774,8 +12777,11 @@ ResultType Script::ScriptError(LPCTSTR aErrorText, LPCTSTR aExtraInfo) //, Resul
 		}
 		//else don't bother cluttering the display if it's the main script file.
 
-		cp += sntprintf(cp, buf_space_remaining, _T(".\n\n"));
-		buf_space_remaining = (int)(_countof(buf) - (cp - buf));
+		if (mCombinedLineNumber || mCurrFileIndex)
+		{
+			cp += sntprintf(cp, buf_space_remaining, _T(".\n\n"));
+			buf_space_remaining = (int)(_countof(buf) - (cp - buf));
+		}
 
 		if (*aExtraInfo)
 		{
