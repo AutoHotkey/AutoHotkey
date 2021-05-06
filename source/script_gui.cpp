@@ -6944,10 +6944,22 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		} // if (mGuiShowHasNeverBeenDone)
 	} // if (allow_move_window)
 
-	// Note that for SW_MINIMIZE and SW_MAXIMZE, the MoveWindow() above should be done prior to ShowWindow()
+	// Note that for SW_MINIMIZE and SW_MAXIMIZE, the MoveWindow() above should be done prior to ShowWindow()
 	// so that the window will "remember" its new size upon being restored later.
 	if (!show_was_done)
+	{
+		if (show_mode == SW_MINIMIZE && GetForegroundWindow() == mHwnd)
+		{
+			// Before minimizing the window, call DefDlgProc to save the handle of the focused control.
+			// This is only necessary when minimizing an active GUI by calling ShowWindow(), as it is
+			// normally done by DefDlgProc when WM_SYSCOMMAND, SC_MINIMIZE is received.  Without this,
+			// focus is reset to the first control with WS_TABSTOP when the window is restored.
+			// We don't use WM_SYSCOMMAND to minimize the window because it would cause the "minimize"
+			// system sound to be played, and that should probably only happen as a result of user action.
+			DefDlgProc(mHwnd, WM_ACTIVATE, WA_INACTIVE, 0);
+		}
 		ShowWindow(mHwnd, show_mode);
+	}
 
 	bool we_did_the_first_activation = false; // Set default.
 
