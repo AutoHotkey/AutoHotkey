@@ -694,7 +694,7 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags
 	if (vp = hk.CriterionAllowsFiring(NULL, aExtraInfo, aSingleChar))
 	{
 		if (!aFireWithNoSuppress) // Caller hasn't yet determined its value with certainty (currently, this statement might always be true).
-			aFireWithNoSuppress = vp->mNoSuppress;
+			aFireWithNoSuppress = (vp->mNoSuppress & AT_LEAST_ONE_VARIANT_HAS_TILDE);
 		return vp; // It found an eligible variant to fire.
 	}
 
@@ -748,7 +748,7 @@ HotkeyVariant *Hotkey::CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags
 				if (vp = hk2.CriterionAllowsFiring(NULL, aExtraInfo, aSingleChar))
 				{
 					if (!aFireWithNoSuppress) // Caller hasn't yet determined its value with certainty (currently, this statement might always be true).
-						aFireWithNoSuppress = vp->mNoSuppress;
+						aFireWithNoSuppress = (vp->mNoSuppress & AT_LEAST_ONE_VARIANT_HAS_TILDE);
 					aHotkeyIDwithFlags = hk2.mID; // Caller currently doesn't need the flags put onto it, so they're omitted.
 					return vp; // It found an eligible variant to fire.
 				}
