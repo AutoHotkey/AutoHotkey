@@ -7532,14 +7532,13 @@ ResultType GuiType::Show(LPTSTR aOptions)
 		HWND focused_hwnd = GetFocus(); // Window probably must be visible and active for GetFocus() to work.
 		if (focused_hwnd)
 		{
-			if (mTabControlCount)
+			if (GuiControlType *focused_control = FindControl(focused_hwnd))
 			{
 				// Since this is the first activation, if the focus wound up on a tab control itself as a result
 				// of the above, focus the first control of that tab since that is traditional.  HOWEVER, do not
 				// instead default tab controls to lacking WS_TABSTOP since it is traditional for them to have
 				// that property, probably to aid accessibility.
-				GuiControlType *focused_control = FindControl(focused_hwnd);
-				if (focused_control && focused_control->type == GUI_CONTROL_TAB)
+				if (focused_control->type == GUI_CONTROL_TAB)
 				{
 					// v1.0.27: The following must be done, at least in some cases, because otherwise
 					// controls outside of the tab control will not get drawn correctly.  I suspect this
@@ -7550,8 +7549,33 @@ ResultType GuiType::Show(LPTSTR aOptions)
 					UpdateWindow(mHwnd);
 					ControlUpdateCurrentTab(*focused_control, true);
 				}
+				else if (focused_control->type == GUI_CONTROL_BUTTON)
+				{
+					if (mDefaultButtonIndex < mControlCount && mControl[mDefaultButtonIndex] != focused_control)
+					{
+						// There is a Default button, but some other button was focused instead (because it was
+						// the first input-capable control).  There are a few reasons to override this:
+						//  1) It is counter-intuitive to have two different kinds of "default button".
+						//  2) MsgBox (and maybe other system dialogs that have only buttons) focus the Default
+						//     button by default, even if it is not the first button.
+						//  3) In most other cases, when a button is focused it also temporarily becomes Default,
+						//     so pressing Enter or Space will activate it; but due to the way the default message
+						//     processing focuses the initial control, it ends up being focused but not Default,
+						//     so Space and Enter click two different buttons.  This lasts until the user changes
+						//     focus, even by switching to another window and back.
+						//     This inconsistency can be avoided by using WM_NEXTDLGCTL to "refocus" the button,
+						//     but then the button with "Default" option would only become the default once some
+						//     non-button control is focused, which seems unlikely to be what the author intended.
+						SetFocus(mControl[mDefaultButtonIndex]->hwnd);
+						// This is only done if a button was focused by default, as if some other type of control
+						// is focused, the Default button can often still be activated with Enter.  Most of the
+						// time if there is an input field and a confirmation button, the input field should have
+						// the initial focus.  There are numerous examples of system and third-party dialogs that
+						// behave this way.
+					}
+				}
+				//else focus has already been set appropriately, and nothing needs to be done.
 			}
-			//else no tab controls, but focus has already been set.  Nothing needs to be done.
 		}
 		else // No window/control has keyboard focus (see comment below).
 			SetFocus(mHwnd);
@@ -7562,8 +7586,8 @@ ResultType GuiType::Show(LPTSTR aOptions)
 			// 2) The GUI window is shown via its custom tray menu item.
 			// 3) The window becomes active and foreground, but doesn't have keyboard focus (not even its
 			//    GuiEscape label will work until you switch away from that window then back to it).
-			// Note: SetFocus() apparently works even on parent windows, which is good because otherwise,
-			// might have to do a loop to find the first input-capable control that's enabled+visible.
+			// Note: Default handling of WM_SETFOCUS moves the focus to the first input-capable control.
+			// This case should be unusual since default handling of WM_ACTIVATE is also to SetFocus().
 	}
 
 	mGuiShowHasNeverBeenDone = false;
