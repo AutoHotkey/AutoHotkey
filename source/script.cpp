@@ -3140,7 +3140,7 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 			// OTHERWISE in_continuation_section != 0, so the above has found the first line of a new
 			// continuation section.
 			continuation_line_count = 0; // Reset for this new section.
-			// Otherwise, parse options.  First set the defaults, which can be individually overridden
+			// Parse options.  First set the defaults, which can be individually overridden
 			// by any options actually present.  RTrim defaults to ON for two reasons:
 			// 1) Whitespace often winds up at the end of a lines in a text editor by accident.  In addition,
 			//    whitespace at the end of any consolidated/merged line will be rtrim'd anyway, since that's
@@ -3162,6 +3162,7 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 			suffix[0] = '\n';
 			suffix[1] = '\0';
 			suffix_length = 1;
+			LPTSTR invalid_option = nullptr;
 			for (next_option = omit_leading_whitespace(next_buf + 1); *next_option; next_option = omit_leading_whitespace(option_end))
 			{
 				// Find the end of this option item:
@@ -3187,40 +3188,40 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 					do_ltrim = (next_option[5] == '0') ? TOGGLED_OFF : TOGGLED_ON;  // i.e. Only an explicit zero will turn it off.
 				else if (!_tcsnicmp(next_option, _T("RTrim"), 5))
 					do_rtrim = (next_option[5] != '0');
+				else if (!_tcsnicmp(next_option, _T("Comments"), option_end - next_option)) // Any prefix is supported, but the documented options are: C, Com, Comment, Comments
+					in_continuation_section = CONTINUATION_SECTION_WITH_COMMENTS; // Override the default, which is boolean true (i.e. 1).
+				else if (*next_option == g_EscapeChar && !next_option[1])
+					literal_escapes = true;
 				else
 				{
-					// Fix for v1.0.36.01: Missing "else" above, because otherwise, the option Join`r`n
-					// would be processed above but also be processed again below, this time seeing the
-					// accent and thinking it's the signal to treat accents literally for the entire
-					// continuation section rather than as escape characters.
-					// Within this terminated option substring, allow the characters to be adjacent to
-					// improve usability:
-					for (; *next_option; ++next_option)
-					{
-						switch (*next_option)
+					// If ')' is present in any as yet unrecognized option, treat this line as an expression and not
+					// the start of a continuation section.  This allows expressions to start the line with '(' to
+					// control order of precedence, like (x.y)() or (x=y) && z().  Do the same for '(', for symmetry
+					// and to allow multi-line expressions starting with (( and (MyFunc(.
+					for (cp = next_option; *cp; ++cp)
+						if (*cp == '(' || *cp == ')')
 						{
-						case '`': // OBSOLETE because g_EscapeChar is now constant: Although not using g_EscapeChar (reduces code size/complexity), #EscapeChar is still supported by continuation sections; it's just that enabling the option uses '`' rather than the custom escape-char (one reason is that that custom escape-char might be ambiguous with future/past options if it's something weird like an alphabetic character).
-							literal_escapes = true;
-							break;
-						case 'C': // v1.0.45.03: For simplicity, anything that begins with "C" is enough to
-						case 'c': // identify it as the option to allow comments in the section.
-							in_continuation_section = CONTINUATION_SECTION_WITH_COMMENTS; // Override the default, which is boolean true (i.e. 1).
-							break;
-						case ')':
-							// Probably something like (x.y)[z](), which is not intended as the beginning of
-							// a continuation section.  Doing this only when ")" is found should remove the
-							// need to escape "(" in most real-world expressions while still allowing new
-							// options to be added later with minimal risk of breaking scripts.
 							in_continuation_section = 0;
 							*option_end = orig_char; // Undo the temporary termination.
 							return OK;
 						}
-					}
+					// All other characters are reserved for possible future options or to detect errors.  One reason
+					// not to assume any invalid continuation section was intended to be an expression is that something
+					// like the following would result in a 'Missing "' error instead of reporting the invalid option:
+					//  sometext := "
+					//  (Jion`r`n
+					//  ...
+					// Mark the first invalid option, but don't report it until any other options are checked for ().
+					if (!invalid_option)
+						invalid_option = next_option;
 				}
 
 				// If the item was not handled by the above, ignore it because it is unknown.
 				*option_end = orig_char; // Undo the temporary termination.
 			} // for() each item in option list
+
+			if (invalid_option)
+				return ScriptError(ERR_INVALID_OPTION, invalid_option);
 
 			// This section determines the default value for literal_quotes based on whether this
 			// continuation section appears to start inside a quoted string.  This is done because
