@@ -10532,6 +10532,9 @@ ResultType HotkeyCriterion::Eval(LPTSTR aHotkeyName)
 	InitNewThread(0, false, true, true);
 	ResultType result;
 
+	// Let HotIf default to the criterion currently being evaluated, in case Hotkey() is called.
+	g->HotCriterion = this;
+
 	// Update A_ThisHotkey, useful if #HotIf calls a function to do its dirty work.
 	LPTSTR prior_hotkey_name[] = { g_script.mThisHotkeyName, g_script.mPriorHotkeyName };
 	DWORD prior_hotkey_time[] = { g_script.mThisHotkeyStartTime, g_script.mPriorHotkeyStartTime };
