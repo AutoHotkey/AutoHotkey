@@ -672,8 +672,8 @@ void GuiControlType::DefineControlClasses()
 	auto list_class = CreateClass(sPrototypeList);
 	ctrl_class->SetBase(Object::sClass);
 	list_class->SetBase(ctrl_class);
-	gui_class->SetOwnProp(_T("Control"), ctrl_class);
-	gui_class->SetOwnProp(_T("List"), list_class);
+	gui_class->DefineClass(_T("Control"), ctrl_class);
+	gui_class->DefineClass(_T("List"), list_class);
 
 	for (int i = GUI_CONTROL_INVALID + 1; i < GUI_CONTROL_TYPE_COUNT; ++i)
 	{
