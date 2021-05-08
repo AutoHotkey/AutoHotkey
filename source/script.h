@@ -3007,6 +3007,11 @@ public:
 	LPTSTR mOurEXE; // Will hold this app's module name (e.g. C:\Program Files\AutoHotkey\AutoHotkey.exe).
 	LPTSTR mOurEXEDir;  // Same as above but just the containing directory (for convenience).
 	LPTSTR mMainWindowTitle; // Will hold our main window's title, for consistency & convenience.
+	enum Kind {
+		ScriptKindFile,
+		ScriptKindResource,
+		ScriptKindStdIn
+	} mKind;
 	bool mIsReadyToExecute;
 	bool mAutoExecSectionIsRunning;
 	bool mIsRestart; // The app is restarting rather than starting from scratch.

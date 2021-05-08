@@ -426,6 +426,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	TCHAR buf[UorA(T_MAX_PATH, 2048)]; // Just to make sure we have plenty of room to do things with.
 	size_t buf_length;
 #ifdef AUTOHOTKEYSC
+	mKind = ScriptKindResource;
 	// Fix for v1.0.29: Override the caller's use of __argv[0] by using GetModuleFileName(),
 	// so that when the script is started from the command line but the user didn't type the
 	// extension, the extension will be included.  This necessary because otherwise
@@ -481,18 +482,23 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		}
 		//else since the file exists, everything is now set up right. (The file might be a directory, but that isn't checked due to rarity.)
 	}
+	if (*aScriptFilename == '*' && !aScriptFilename[1]) // Read script from stdin.
+	{
+		mKind = ScriptKindStdIn;
+		buf[0] = '*';
+		buf[1] = '\0';
+		// Seems best to disable #SingleInstance and enable #NoEnv for stdin scripts.
+		g_AllowOnlyOneInstance = SINGLE_INSTANCE_OFF;
+		g_NoEnv = true;
+	}
+	else
+		mKind = ScriptKindFile;
 	// In case the script is a relative filespec (relative to current working dir):
 	buf_length = GetFullPathName(aScriptFilename, _countof(buf), buf, NULL); // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
 	if (!buf_length)
 		return FAIL; // Due to rarity, no error msg, just abort.
 #endif
-	if (g_RunStdIn = (*aScriptFilename == '*' && !aScriptFilename[1])) // v1.1.17: Read script from stdin.
-	{
-		// Seems best to disable #SingleInstance and enable #NoEnv for stdin scripts.
-		g_AllowOnlyOneInstance = SINGLE_INSTANCE_OFF;
-		g_NoEnv = true;
-	}
-	else // i.e. don't call the following function for stdin.
+	if (mKind != ScriptKindStdIn)
 	{
 		// Using the correct case not only makes it look better in title bar & tray tool tip,
 		// it also helps with the detection of "this script already running" since otherwise
@@ -505,8 +511,7 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	LPTSTR filename_marker;
 	if (filename_marker = _tcsrchr(buf, '\\'))
 	{
-		*filename_marker = '\0'; // Terminate buf in this position to divide the string.
-		if (   !(mFileDir = SimpleHeap::Malloc(buf))   )
+		if (   !(mFileDir = SimpleHeap::Malloc(buf, filename_marker - buf))   )
 			return FAIL;  // It already displayed the error for us.
 		++filename_marker;
 	}
@@ -523,10 +528,9 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 #ifdef AUTOHOTKEYSC
 	// Omit AutoHotkey from the window title, like AutoIt3 does for its compiled scripts.
 	// One reason for this is to reduce backlash if evil-doers create viruses and such
-	// with the program:
-	sntprintf(buf, _countof(buf), _T("%s\\%s"), mFileDir, mFileName);
+	// with the program.  buf already contains the full path, so no change is needed.
 #else
-	sntprintf(buf, _countof(buf), _T("%s\\%s - %s"), mFileDir, mFileName, T_AHK_NAME_VERSION);
+	sntprintfcat(buf, _countof(buf), _T(" - %s"), T_AHK_NAME_VERSION);
 #endif
 	if (   !(mMainWindowTitle = SimpleHeap::Malloc(buf))   )
 		return FAIL;  // It already displayed the error for us.
@@ -1201,7 +1205,7 @@ UINT Script::LoadFromFile()
 	if (!mFileSpec || !*mFileSpec) return LOADING_FAILED;
 
 #ifndef AUTOHOTKEYSC  // When not in stand-alone mode, read an external script file.
-	DWORD attr = g_RunStdIn ? 0 : GetFileAttributes(mFileSpec); // v1.1.17: Don't check if reading script from stdin.
+	DWORD attr = mKind == ScriptKindFile ? GetFileAttributes(mFileSpec) : 0; // v1.1.17: Don't check if reading script from stdin.
 	if (attr == MAXDWORD) // File does not exist or lacking the authorization to get its attributes.
 	{
 		TCHAR buf[T_MAX_PATH + 24];
@@ -1223,7 +1227,7 @@ UINT Script::LoadFromFile()
 	// function library auto-inclusions to be processed correctly.
 
 	// Load the main script file.  This will also load any files it includes with #Include.
-	if (   LoadIncludedFile(g_RunStdIn ? _T("*") : mFileSpec, false, false) != OK
+	if (   LoadIncludedFile(mKind == ScriptKindStdIn ? _T("*") : mFileSpec, false, false) != OK
 		|| !AddLine(ACT_EXIT)) // Add an Exit to ensure lib auto-includes aren't auto-executed, for backward compatibility.
 		return LOADING_FAILED;
 	mLastLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
