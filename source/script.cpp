@@ -454,6 +454,10 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	aScriptFilename = buf;
 #else
 	TCHAR def_buf[513]; // Enough for max Documents path (256 chars, according to testing on 20H2), slash and max NTFS filename (255 chars).
+#ifdef _DEBUG
+	if (!aScriptFilename)
+		aScriptFilename = _T("Test\\Test.ahk");
+#endif
 	if (!aScriptFilename) // v1.0.46.08: Change in policy: store the default script in the My Documents directory rather than in Program Files.  It's more correct and solves issues that occur due to Vista's file-protection scheme.
 	{
 		// Since no script-file was specified on the command line, use the default name.
@@ -490,18 +494,26 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		}
 		//else since the file exists, everything is now set up right. (The file might be a directory, but that isn't checked due to rarity.)
 	}
-	if (*aScriptFilename == '*' && !aScriptFilename[1]) // Read script from stdin.
+	if (*aScriptFilename == '*')
 	{
-		mKind = ScriptKindStdIn;
-		buf[0] = '*';
-		buf[1] = '\0';
-		// Seems best to disable #SingleInstance and enable #NoEnv for stdin scripts.
-		g_AllowOnlyOneInstance = SINGLE_INSTANCE_OFF;
-		g_NoEnv = true;
+		if (!aScriptFilename[1]) // Read script from stdin.
+		{
+			mKind = ScriptKindStdIn;
+			buf[0] = '*';
+			buf[1] = '\0';
+			// Seems best to disable #SingleInstance and enable #NoEnv for stdin scripts.
+			g_AllowOnlyOneInstance = SINGLE_INSTANCE_OFF;
+			g_NoEnv = true;
+		}
+		else
+		{
+			mKind = ScriptKindResource;
+			g_AllowMainWindow = false;
+		}
 	}
 	else
 		mKind = ScriptKindFile;
-	if (aScriptFilename != buf)
+	if (aScriptFilename != buf && mKind != ScriptKindResource) // For backward-compatibility, stdin is not excluded from this.
 	{
 		// In case the script is a relative filespec (relative to current working dir):
 		buf_length = GetFullPathName(aScriptFilename, _countof(buf), buf, NULL); // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
@@ -541,7 +553,8 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	// One reason for this is to reduce backlash if evil-doers create viruses and such
 	// with the program.  buf already contains the full path, so no change is needed.
 #else
-	sntprintfcat(buf, _countof(buf), _T(" - %s"), T_AHK_NAME_VERSION);
+	if (_tcscmp(aScriptFilename, SCRIPT_RESOURCE_SPEC))
+		sntprintfcat(buf, _countof(buf), _T(" - %s"), mKind != ScriptKindResource ? T_AHK_NAME_VERSION : aScriptFilename);
 #endif
 	if (   !(mMainWindowTitle = SimpleHeap::Malloc(buf))   )
 		return FAIL;  // It already displayed the error for us.
@@ -621,14 +634,15 @@ ResultType Script::CreateWindows()
 		MsgBox(_T("CreateWindow")); // Short msg since so rare.
 		return FAIL;
 	}
-#ifdef AUTOHOTKEYSC
-	HMENU menu = GetMenu(g_hWnd);
-	// Disable the Edit menu item, since it does nothing for a compiled script:
-	EnableMenuItem(menu, ID_FILE_EDITSCRIPT, MF_DISABLED | MF_GRAYED);
-	EnableOrDisableViewMenuItems(menu, MF_DISABLED | MF_GRAYED); // Fix for v1.0.47.06: No point in checking g_AllowMainWindow because the script hasn't starting running yet, so it will always be false.
-	// But leave the ID_VIEW_REFRESH menu item enabled because if the script contains a
-	// command such as ListLines in it, Refresh can be validly used.
-#endif
+
+	if (mKind == ScriptKindResource)
+	{
+		HMENU menu = GetMenu(g_hWnd);
+		// Disable the Edit menu item, since it's not useful without a source file:
+		EnableMenuItem(menu, ID_FILE_EDITSCRIPT, MF_DISABLED | MF_GRAYED);
+		if (!g_AllowMainWindow)
+			EnableOrDisableViewMenuItems(menu, MF_DISABLED | MF_GRAYED);
+	}
 
 	if (    !(g_hWndEdit = CreateWindow(_T("edit"), NULL, WS_CHILD | WS_VISIBLE | WS_BORDER
 		| ES_LEFT | ES_MULTILINE | ES_READONLY | WS_VSCROLL // | WS_HSCROLL (saves space)
@@ -962,6 +976,8 @@ ResultType Script::Edit()
 #ifdef AUTOHOTKEYSC
 	return OK; // Do nothing.
 #else
+	if (mKind != ScriptKindFile)
+		return OK;
 	// This is here in case a compiled script ever uses the Edit command.  Since the "Edit This
 	// Script" menu item is not available for compiled scripts, it can't be called from there.
 	TitleMatchModes old_mode = g->TitleMatchMode;
@@ -1016,7 +1032,7 @@ ResultType Script::Reload(bool aDisplayErrors)
 	return g_script.ActionExec(mOurEXE, _T("/restart"), g_WorkingDirOrig, aDisplayErrors);
 #else
 	TCHAR arg_string[T_MAX_PATH + 16];
-	sntprintf(arg_string, _countof(arg_string), _T("/restart \"%s\""), mFileSpec);
+	sntprintf(arg_string, _countof(arg_string), _T("/restart /execute \"%s\""), Line::sSourceFile[0]);
 	return g_script.ActionExec(mOurEXE, arg_string, g_WorkingDirOrig, aDisplayErrors);
 #endif
 }
@@ -1185,19 +1201,20 @@ void Script::TerminateApp(ExitReasons aExitReason, int aExitCode)
 
 
 
-UINT Script::LoadFromFile()
+UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 // Returns the number of non-comment lines that were loaded, or LOADING_FAILED on error.
 {
 	mNoHotkeyLabels = true;  // Indicate that there are no hotkey labels, since we're (re)loading the entire file.
 	mIsReadyToExecute = mAutoExecSectionIsRunning = false;
-	if (!mFileSpec || !*mFileSpec) return LOADING_FAILED;
+	if (!aFileSpec)
+		aFileSpec = mFileSpec;
 
 #ifndef AUTOHOTKEYSC  // When not in stand-alone mode, read an external script file.
-	DWORD attr = mKind == ScriptKindFile ? GetFileAttributes(mFileSpec) : 0; // v1.1.17: Don't check if reading script from stdin.
+	DWORD attr = mKind == ScriptKindFile ? GetFileAttributes(aFileSpec) : 0; // v1.1.17: Don't check if reading script from stdin.
 	if (attr == MAXDWORD) // File does not exist or lacking the authorization to get its attributes.
 	{
 		TCHAR buf[T_MAX_PATH + 24];
-		sntprintf(buf, _countof(buf), _T("Script file not found:\n%s"), mFileSpec);
+		sntprintf(buf, _countof(buf), _T("Script file not found:\n%s"), aFileSpec);
 		MsgBox(buf, MB_ICONHAND);
 		return 0;
 	}
@@ -1215,7 +1232,7 @@ UINT Script::LoadFromFile()
 	// function library auto-inclusions to be processed correctly.
 
 	// Load the main script file.  This will also load any files it includes with #Include.
-	if (   LoadIncludedFile(mKind == ScriptKindStdIn ? _T("*") : mFileSpec, false, false) != OK
+	if (   LoadIncludedFile(mKind == ScriptKindStdIn ? _T("*") : aFileSpec, false, false) != OK
 		|| !AddLine(ACT_EXIT)) // Add an Exit to ensure lib auto-includes aren't auto-executed, for backward compatibility.
 		return LOADING_FAILED;
 	mLastLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
@@ -1404,7 +1421,7 @@ inline LPTSTR IsClassDefinition(LPTSTR aBuf, bool &aHasOTB)
 
 
 
-ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure)
+ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure)
 // Open the included file.  Returns CONDITION_TRUE if the file is to
 // be loaded, otherwise OK (duplicate/already loaded) or FAIL (error).
 // See "full_path" below for why this is separate to LoadIncludedFile().  
@@ -1444,7 +1461,7 @@ ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllo
 	TCHAR full_path[T_MAX_PATH];
 
 	int source_file_index = Line::sSourceFileCount;
-	if (!source_file_index)
+	if (!source_file_index && *aFileSpec != '*')
 		// Since this is the first source file, it must be the main script file.  Just point it to the
 		// location of the filespec already dynamically allocated:
 		Line::sSourceFile[source_file_index] = mFileSpec;
@@ -1453,18 +1470,44 @@ ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllo
 		// Get the full path in case aFileSpec has a relative path.  This is done so that duplicates
 		// can be reliably detected (we only want to avoid including a given file more than once):
 		LPTSTR filename_marker;
-		GetFullPathName(aFileSpec, _countof(full_path), full_path, &filename_marker);
+		if (*aFileSpec == '*')
+		{
+			tcslcpy(full_path, aFileSpec, _countof(full_path));
+			CharUpper(full_path); // Resource names must be upper-case.
+		}
+		else
+			GetFullPathName(aFileSpec, _countof(full_path), full_path, &filename_marker);
 		// Check if this file was already included.  If so, it's not an error because we want
 		// to support automatic "include once" behavior.  So just ignore repeats:
 		if (!aAllowDuplicateInclude)
 			for (int f = 0; f < source_file_index; ++f) // Here, source_file_index==Line::sSourceFileCount
 				if (!lstrcmpi(Line::sSourceFile[f], full_path)) // Case insensitive like the file system (testing shows that "Ä" == "ä" in the NTFS, which is hopefully how lstrcmpi works regardless of locale).
 					return OK;
-		// The file is added to the list further below, after the file has been opened, in case the
-		// opening fails and aIgnoreLoadFailure==true.
+		// The path is copied into persistent memory further below, after the file has been opened,
+		// in case the opening fails and aIgnoreLoadFailure==true.  Initialize for the check below.
+		Line::sSourceFile[source_file_index] = NULL;
 	}
 
-	if (!ts.Open(aFileSpec, DEFAULT_READ_FLAGS, g_DefaultScriptCodepage))
+	LPCTSTR filespec_to_open = aFileSpec;
+	UINT codepage = g_DefaultScriptCodepage;
+
+	TextMem::Buffer textbuf(nullptr, 0, false);
+	HRSRC hRes;
+	if (*aFileSpec == '*' && aFileSpec[1] && (hRes = FindResource(NULL, aFileSpec + 1, RT_RCDATA)))
+	{
+		HGLOBAL hResData = LoadResource(NULL, hRes);
+		if (hResData && (textbuf.mBuffer = LockResource(hResData)))
+		{
+			textbuf.mLength = SizeofResource(NULL, hRes);
+			filespec_to_open = textbuf;
+			codepage = CP_UTF8;
+			ts = new TextMem();
+		}
+	}
+	else
+		ts = new TextFile();
+
+	if (!ts || !ts->Open(filespec_to_open, DEFAULT_READ_FLAGS, codepage))
 	{
 		if (aIgnoreLoadFailure)
 			return OK;
@@ -1475,7 +1518,7 @@ ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllo
 	}
 
 	// This is done only after the file has been successfully opened in case aIgnoreLoadFailure==true:
-	if (source_file_index > 0)
+	if (!Line::sSourceFile[source_file_index])
 		if (  !(Line::sSourceFile[source_file_index] = SimpleHeap::Malloc(full_path))  )
 			return ScriptError(ERR_OUTOFMEM);
 	//else the first file was already taken care of by another means.
@@ -1487,26 +1530,18 @@ ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllo
 	HRSRC hRes;
 	HGLOBAL hResData;
 
-#ifdef _DEBUG
-	if (hRes = FindResource(NULL, _T("AHK"), RT_RCDATA))
-#else
-	if (hRes = FindResource(NULL, _T(">AUTOHOTKEY SCRIPT<"), RT_RCDATA))
-#endif
-	{}
-	else if (hRes = FindResource(NULL, _T(">AHK WITH ICON<"), RT_RCDATA))
-	{}
-	
+	hRes = FindResource(NULL, SCRIPT_RESOURCE_NAME, RT_RCDATA);
 	if ( !( hRes 
 			&& (textbuf.mLength = SizeofResource(NULL, hRes))
 			&& (hResData = LoadResource(NULL, hRes))
 			&& (textbuf.mBuffer = LockResource(hResData)) ) )
 	{
-		MsgBox(_T("Could not extract script from EXE."), 0, aFileSpec);
-		return FAIL;
+		return ScriptError(_T("Could not extract script from EXE."), aFileSpec);
 	}
 
+	ts = new TextMem();
 	// NOTE: Ahk2Exe strips off the UTF-8 BOM.
-	ts.Open(textbuf, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR, CP_UTF8);
+	ts->Open(textbuf, TextStream::READ | TextStream::EOL_CRLF | TextStream::EOL_ORPHAN_CR, CP_UTF8);
 
 	// Since this is a compiled script, there is only one script file.
 	// Just point it to the location of the filespec already dynamically allocated:
@@ -1521,22 +1556,16 @@ ResultType Script::OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllo
 
 
 
-ResultType Script::LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure)
+ResultType Script::LoadIncludedFile(LPCTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure)
 // Returns OK or FAIL.
 {
-#ifndef AUTOHOTKEYSC
-	TextFile ts;
-#else
-	TextMem ts;
-#endif
-
+	TextStream *ts = nullptr;
 	ResultType result = OpenIncludedFile(ts, aFileSpec, aAllowDuplicateInclude, aIgnoreLoadFailure);
-	if (result != CONDITION_TRUE)
-		return result; // OK or FAIL.
-
-	// Off-loading to another function significantly reduces code size, perhaps because
-	// the TextFile/TextMem destructor is called from fewer places (each "return"):
-	return LoadIncludedFile(&ts);
+	if (result == CONDITION_TRUE)
+		result = LoadIncludedFile(ts);
+	if (ts)
+		delete ts;
+	return result;
 }
 
 
@@ -3060,13 +3089,9 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		if (!parameter)
 			return ScriptError(ERR_PARAM1_REQUIRED, aBuf);
 		// v1.0.32:
-		bool ignore_load_failure = (parameter[0] == '*' && ctoupper(parameter[1]) == 'I'); // Relies on short-circuit boolean order.
+		bool ignore_load_failure = (parameter[0] == '*' && ctoupper(parameter[1]) == 'I' && IS_SPACE_OR_TAB(parameter[2])); // Relies on short-circuit boolean order.
 		if (ignore_load_failure)
-		{
-			parameter += 2;
-			if (IS_SPACE_OR_TAB(*parameter)) // Skip over at most one space or tab, since others might be a literal part of the filename.
-				++parameter;
-		}
+			parameter += 3; // Skip over at most one space or tab, since others might be a literal part of the filename.
 
 		if (*parameter == '<') // Support explicitly-specified <standard_lib_name>.
 		{

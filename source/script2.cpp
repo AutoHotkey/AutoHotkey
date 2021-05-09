@@ -10327,14 +10327,21 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 {
 	bool success;
 	bool allow_overwrite = (ATOI(aFlag) == 1);
-#ifdef AUTOHOTKEYSC
-	if (!allow_overwrite && Util_DoesFileExist(aDest))
-		return SetErrorLevelOrThrow();
+#ifndef AUTOHOTKEYSC
+	if (g_script.mKind != Script::ScriptKindResource)
+		success = FileInstallCopy(aSource, aDest, allow_overwrite);
+	else
+#endif
+		success = FileInstallExtract(aSource, aDest, allow_overwrite);
+	return SetErrorLevelOrThrowBool(!success);
+}
 
+bool Line::FileInstallExtract(LPTSTR aSource, LPTSTR aDest, bool aOverwrite)
+{
 	// Open the file first since it's the most likely to fail:
-	HANDLE hfile = CreateFile(aDest, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+	HANDLE hfile = CreateFile(aDest, GENERIC_WRITE, 0, NULL, aOverwrite ? CREATE_ALWAYS : CREATE_NEW, 0, NULL);
 	if (hfile == INVALID_HANDLE_VALUE)
-		return SetErrorLevelOrThrow();
+		return false;
 
 	// Create a temporary copy of aSource to ensure it is the correct case (upper-case).
 	// Ahk2Exe converts it to upper-case before adding the resource. My testing showed that
@@ -10352,6 +10359,7 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	HRSRC res;
 	HGLOBAL res_load;
 	LPVOID res_lock;
+	bool success = false;
 	if ( (res = FindResource(NULL, source, RT_RCDATA))
 	  && (res_load = LoadResource(NULL, res))
 	  && (res_lock = LockResource(res_load))  )
@@ -10360,25 +10368,24 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 		// Write the resource data to file.
 		success = WriteFile(hfile, res_lock, SizeofResource(NULL, res), &num_bytes_written, NULL);
 	}
-	else
-		success = false;
 	CloseHandle(hfile);
+	return success;
+}
 
-#else // AUTOHOTKEYSC not defined:
-
+#ifndef AUTOHOTKEYSC
+bool Line::FileInstallCopy(LPTSTR aSource, LPTSTR aDest, bool aOverwrite)
+{
 	// v1.0.35.11: Must search in A_ScriptDir by default because that's where ahk2exe will search by default.
 	// The old behavior was to search in A_WorkingDir, which seems pointless because ahk2exe would never
 	// be able to use that value if the script changes it while running.
 	TCHAR aDestPath[T_MAX_PATH];
 	GetFullPathName(aDest, _countof(aDestPath), aDestPath, NULL);
 	SetCurrentDirectory(g_script.mFileDir);
-	success = CopyFile(aSource, aDestPath, !allow_overwrite);
+	bool success = CopyFile(aSource, aDestPath, !aOverwrite);
 	SetCurrentDirectory(g_WorkingDir); // Restore to proper value.
-
-#endif
-
-	return SetErrorLevelOrThrowBool(!success);
+	return success;
 }
+#endif
 
 
 
@@ -11272,14 +11279,7 @@ VarSizeType BIV_IsSuspended(LPTSTR aBuf, LPTSTR aVarName)
 
 VarSizeType BIV_IsCompiled(LPTSTR aBuf, LPTSTR aVarName)
 {
-#ifdef AUTOHOTKEYSC
-	if (aBuf)
-	{
-		*aBuf++ = '1';
-		*aBuf = '\0';
-	}
-	return 1;
-#else
+#ifndef AUTOHOTKEYSC
 	// v1.1.06: A_IsCompiled is defined so that it does not cause warnings with #Warn enabled,
 	// but left empty for backward-compatibility.  Defining the variable (even though it is
 	// left empty) has some side-effects:
@@ -11293,11 +11293,20 @@ VarSizeType BIV_IsCompiled(LPTSTR aBuf, LPTSTR aVarName)
 	//     (or the address of Var::sEmptyString if the variable hasn't been given a value).
 	//
 	//  3) A_IsCompiled will never show up in ListVars, even if the script is uncompiled.
-	//     
-	if (aBuf)
-		*aBuf = '\0';
-	return 0;
+	//
+	if (g_script.mKind != Script::ScriptKindResource)
+	{
+		if (aBuf)
+			*aBuf = '\0';
+		return 0;
+	}
 #endif
+	if (aBuf)
+	{
+		*aBuf++ = '1';
+		*aBuf = '\0';
+	}
+	return 1;
 }
 
 

@@ -226,6 +226,7 @@ END
 #endif    // not APSTUDIO_INVOKED
 
 
+
 #ifdef _DEBUG
-AHK RCDATA "Test\\Test.ahk"
+//1 RCDATA "Test\\Test.ahk"
 #endif

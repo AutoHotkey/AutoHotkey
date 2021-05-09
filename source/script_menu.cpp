@@ -1288,12 +1288,15 @@ ResultType UserMenu::AppendStandardItems()
 			SetMenuDefaultItem(mMenu, ID_TRAY_OPEN, FALSE); // Seems to have no function other than appearance.
 	}
 #ifndef AUTOHOTKEYSC
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_HELP, _T("&Help"));
-	AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP1, NULL); // The separators are given IDs to simplify removal.
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_WINDOWSPY, _T("&Window Spy"));
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_RELOADSCRIPT, _T("&Reload This Script"));
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_EDITSCRIPT, _T("&Edit This Script"));
-	AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP2, NULL);
+	if (g_script.mKind != Script::ScriptKindResource)
+	{
+		AppendMenu(mMenu, MF_STRING, ID_TRAY_HELP, _T("&Help"));
+		AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP1, NULL); // The separators are given IDs to simplify removal.
+		AppendMenu(mMenu, MF_STRING, ID_TRAY_WINDOWSPY, _T("&Window Spy"));
+		AppendMenu(mMenu, MF_STRING, ID_TRAY_RELOADSCRIPT, _T("&Reload This Script"));
+		AppendMenu(mMenu, MF_STRING, ID_TRAY_EDITSCRIPT, _T("&Edit This Script"));
+		AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP2, NULL);
+	}
 #endif
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_SUSPEND, _T("&Suspend Hotkeys"));
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_PAUSE, _T("&Pause Script"));
