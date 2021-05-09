@@ -425,6 +425,25 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	mIsRestart = aIsRestart;
 	TCHAR buf[UorA(T_MAX_PATH, 2048)]; // Just to make sure we have plenty of room to do things with.
 	size_t buf_length;
+
+	// It may be better to get the module name this way rather than reading it from the registry
+	// in case the user has moved it to a folder other than the install folder, hasn't installed it,
+	// or has renamed the EXE file itself.
+	if (buf_length = GetModuleFileName(NULL, buf, _countof(buf)))
+	{
+		// Any path longer than MAX_PATH is probably impossible as of 2018 since testing indicates
+		// the program can't start if its path is longer than MAX_PATH-1 even with Windows 10 long
+		// path awareness enabled.
+		if (buf_length == _countof(buf)) // It was truncated.
+			return FAIL; // Seems the safest option for this unlikely case.
+		if (   !(mOurEXE = SimpleHeap::Malloc(buf, buf_length))   )
+			return FAIL;  // It already displayed the error for us.
+		LPTSTR last_backslash = _tcsrchr(buf, '\\');
+		if (last_backslash) // Probably always true due to the nature of GetModuleFileName().
+			if (   !(mOurEXEDir = SimpleHeap::Malloc(buf, last_backslash - buf))   )
+				return FAIL;  // It already displayed the error for us.
+	}
+
 #ifdef AUTOHOTKEYSC
 	mKind = ScriptKindResource;
 	// Fix for v1.0.29: Override the caller's use of __argv[0] by using GetModuleFileName(),
@@ -432,34 +451,24 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	// extension, the extension will be included.  This necessary because otherwise
 	// #SingleInstance wouldn't be able to detect duplicate versions in every case.
 	// It also provides more consistency.
-	buf_length = GetModuleFileName(NULL, buf, _countof(buf));
+	aScriptFilename = buf;
 #else
-	TCHAR def_buf[MAX_PATH + 1], exe_buf[MAX_PATH + 20]; // For simplicity, allow at least space for +2 (see below) and "AutoHotkey.chm".
+	TCHAR def_buf[513]; // Enough for max Documents path (256 chars, according to testing on 20H2), slash and max NTFS filename (255 chars).
 	if (!aScriptFilename) // v1.0.46.08: Change in policy: store the default script in the My Documents directory rather than in Program Files.  It's more correct and solves issues that occur due to Vista's file-protection scheme.
 	{
 		// Since no script-file was specified on the command line, use the default name.
 		// For portability, first check if there's an <EXENAME>.ahk file in the current directory.
 		LPTSTR suffix, dot;
-		DWORD exe_len = GetModuleFileName(NULL, exe_buf, MAX_PATH + 2);
-		// MAX_PATH+1 could mean it was truncated.  Any path longer than MAX_PATH is probably
-		// impossible as of 2018 since testing indicates the program can't start if its path
-		// is longer than MAX_PATH-1 even with Windows 10 long path awareness enabled.
-		// On Windows XP, exe_len of exactly the buffer size specified would indicate the path
-		// was truncated and not null-terminated, but is probably impossible in this case.
-		if (exe_len > MAX_PATH)
-			return FAIL; // Seems the safest option for this unlikely case.
-		if (  (suffix = _tcsrchr(exe_buf, '\\')) // Find name part of path.
-			&& (dot = _tcsrchr(suffix, '.'))  ) // Find extension part of name.
-			// Even if the extension is somehow zero characters, more than enough space was
-			// reserved in exe_buf to add "ahk":
-			//&& dot - exe_buf + 5 < _countof(exe_buf)  ) // Enough space in buffer?
+		if (  (suffix = _tcsrchr(buf, '\\')) // Find name part of path.
+			&& (dot = _tcsrchr(suffix, '.')) // Find extension part of name.
+			&& dot - buf + 5 < _countof(buf)  ) // Enough space in buffer?
 		{
 			_tcscpy(dot, EXT_AUTOHOTKEY);
 		}
 		else // Very unlikely.
 			return FAIL;
 
-		aScriptFilename = exe_buf; // Use the entire path, including the exe's directory.
+		aScriptFilename = buf; // Use the entire path, including the exe's directory.
 		if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF) // File doesn't exist, so fall back to new method.
 		{
 			aScriptFilename = def_buf;
@@ -469,12 +478,11 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 			_tcscpy(aScriptFilename + filespec_length, suffix); // Append the filename: .ahk vs. .ini seems slightly better in terms of clarity and usefulness (e.g. the ability to double click the default script to launch it).
 			if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF)
 			{
-				_tcscpy(suffix, _T("\\") AHK_HELP_FILE); // Replace the executable name.
-				if (GetFileAttributes(exe_buf) != 0xFFFFFFFF) // Avoids hh.exe showing an error message if the file doesn't exist.
+				SetCurrentDirectory(mOurEXEDir);
+				if (GetFileAttributes(AHK_HELP_FILE) != 0xFFFFFFFF) // Avoids hh.exe showing an error message if the file doesn't exist.
 				{
-					_sntprintf(buf, _countof(buf), _T("\"ms-its:%s::/docs/Welcome.htm\""), exe_buf);
-					if (ActionExec(_T("hh.exe"), buf, exe_buf, false, _T("Max")))
-						return FAIL;
+					if (ActionExec(_T("hh.exe"), _T("\"ms-its:") AHK_HELP_FILE _T("::/docs/Welcome.htm\""), nullptr, false, _T("Max")))
+						return FAIL; // Help file launched, so exit the program.
 				}
 				// Since above didn't return, the help file is missing or failed to launch,
 				// so continue on and let the missing script file be reported as an error.
@@ -493,10 +501,13 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	}
 	else
 		mKind = ScriptKindFile;
-	// In case the script is a relative filespec (relative to current working dir):
-	buf_length = GetFullPathName(aScriptFilename, _countof(buf), buf, NULL); // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
-	if (!buf_length)
-		return FAIL; // Due to rarity, no error msg, just abort.
+	if (aScriptFilename != buf)
+	{
+		// In case the script is a relative filespec (relative to current working dir):
+		buf_length = GetFullPathName(aScriptFilename, _countof(buf), buf, NULL); // This is also relied upon by mIncludeLibraryFunctionsThenExit.  Succeeds even on nonexistent files.
+		if (!buf_length || buf_length >= _countof(buf))
+			return FAIL; // Due to rarity, no error msg, just abort.
+	}
 #endif
 	if (mKind != ScriptKindStdIn)
 	{
@@ -535,29 +546,6 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 	if (   !(mMainWindowTitle = SimpleHeap::Malloc(buf))   )
 		return FAIL;  // It already displayed the error for us.
 
-	// It may be better to get the module name this way rather than reading it from the registry
-	// (though it might be more proper to parse it out of the command line args or something),
-	// in case the user has moved it to a folder other than the install folder, hasn't installed it,
-	// or has renamed the EXE file itself.  Also, enclose the full filespec of the module in double
-	// quotes since that's how callers usually want it because ActionExec() currently needs it that way:
-	*buf = '"';
-	if (GetModuleFileName(NULL, buf + 1, _countof(buf) - 2)) // -2 to leave room for the enclosing double quotes.
-	{
-		size_t buf_length = _tcslen(buf);
-		buf[buf_length++] = '"';
-		buf[buf_length] = '\0';
-		if (   !(mOurEXE = SimpleHeap::Malloc(buf))   )
-			return FAIL;  // It already displayed the error for us.
-		else
-		{
-			LPTSTR last_backslash = _tcsrchr(buf, '\\');
-			if (!last_backslash) // probably can't happen due to the nature of GetModuleFileName().
-				mOurEXEDir = _T("");
-			*last_backslash = '\0';
-			if (   !(mOurEXEDir = SimpleHeap::Malloc(buf + 1))   ) // +1 to omit the leading double-quote.
-				return FAIL;  // It already displayed the error for us.
-		}
-	}
 	return OK;
 }
 
@@ -17236,8 +17224,8 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		LPTSTR command_line;
 		if (aParams && *aParams)
 		{
-			command_line = talloca(action_length + _tcslen(aParams) + 10); // +10 to allow room for space, terminator, and any extra chars that might get added in the future.
-			_stprintf(command_line, _T("%s %s"), aAction, aParams);
+			command_line = talloca(action_length + _tcslen(aParams) + 10); // +10 to allow room for quotes, space, terminator, and any extra chars that might get added in the future.
+			_stprintf(command_line, _T("\"%s\" %s"), aAction, aParams);
 		}
 		else // We're running the original action from caller.
 		{
