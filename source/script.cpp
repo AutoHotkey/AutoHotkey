@@ -1032,7 +1032,7 @@ ResultType Script::Reload(bool aDisplayErrors)
 	return g_script.ActionExec(mOurEXE, _T("/restart"), g_WorkingDirOrig, aDisplayErrors);
 #else
 	TCHAR arg_string[T_MAX_PATH + 16];
-	sntprintf(arg_string, _countof(arg_string), _T("/restart /execute \"%s\""), Line::sSourceFile[0]);
+	sntprintf(arg_string, _countof(arg_string), _T("/restart /script \"%s\""), Line::sSourceFile[0]);
 	return g_script.ActionExec(mOurEXE, arg_string, g_WorkingDirOrig, aDisplayErrors);
 #endif
 }

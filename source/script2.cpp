@@ -5844,10 +5844,10 @@ bool LaunchAutoHotkeyUtil(LPTSTR aFile, bool aIsScript)
 		return false;
 #ifndef AUTOHOTKEYSC
 	// If it's a script in our directory, use our EXE to run it.
-	TCHAR buf[64]; // More than enough for "/execute WindowSpy.ahk".
+	TCHAR buf[64]; // More than enough for "/script WindowSpy.ahk".
 	if (aIsScript && our_file)
 	{
-		sntprintf(buf, _countof(buf), _T("/execute %s"), aFile);
+		sntprintf(buf, _countof(buf), _T("/script %s"), aFile);
 		file = g_script.mOurEXE;
 		args = buf;
 	}

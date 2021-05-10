@@ -98,7 +98,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		else if (!_tcsnicmp(param, _T("/ErrorStdOut"), 12))
 			g_script.SetErrorStdOut(param[12] == '=' ? param + 13 : NULL);
 #ifndef AUTOHOTKEYSC // i.e. the following switch is recognized only by AutoHotkey.exe (especially since recognizing new switches in compiled scripts can break them, unlike AutoHotkey.exe).
-		else if (!_tcsicmp(param, _T("/execute")))
+		else if (!_tcsicmp(param, _T("/script")))
 			script_filespec = NULL; // Override compiled script mode, otherwise no effect.
 		else if (script_filespec) // Compiled script mode.
 			break;
