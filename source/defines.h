@@ -44,6 +44,8 @@ GNU General Public License for more details.
 #else
 #define SCRIPT_RESOURCE_SPEC _T("*#1")
 #define SCRIPT_RESOURCE_NAME MAKEINTRESOURCE(1)
+#define SCRIPT_PRESOURCE_SPEC _T("*#2")
+#define SCRIPT_PRESOURCE_NAME MAKEINTRESOURCE(2)
 #endif
 
 // Window class names: Changing these may result in new versions not being able to detect any old instances

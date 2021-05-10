@@ -1522,6 +1522,14 @@ ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAl
 		if (  !(Line::sSourceFile[source_file_index] = SimpleHeap::Malloc(full_path))  )
 			return ScriptError(ERR_OUTOFMEM);
 	//else the first file was already taken care of by another means.
+	++Line::sSourceFileCount;
+
+	if (!source_file_index)
+	{
+		if (FindResource(NULL, SCRIPT_PRESOURCE_NAME, RT_RCDATA)
+			&& !LoadIncludedFile(SCRIPT_PRESOURCE_SPEC, false, false))
+			return FAIL;
+	}
 
 #else // Stand-alone mode (there are no include files in this mode since all of them were merged into the main script at the time of compiling).
 
@@ -1546,11 +1554,11 @@ ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAl
 	// Since this is a compiled script, there is only one script file.
 	// Just point it to the location of the filespec already dynamically allocated:
 	Line::sSourceFile[0] = mFileSpec;
+	++Line::sSourceFileCount;
 
 #endif
 	
 	// Since above did not continue, proceed with loading the file.
-	++Line::sSourceFileCount;
 	return CONDITION_TRUE;
 }
 
@@ -1559,10 +1567,11 @@ ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAl
 ResultType Script::LoadIncludedFile(LPCTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure)
 // Returns OK or FAIL.
 {
+	int source_file_index = Line::sSourceFileCount; // Set early in case of >PRESCRIPT<.
 	TextStream *ts = nullptr;
 	ResultType result = OpenIncludedFile(ts, aFileSpec, aAllowDuplicateInclude, aIgnoreLoadFailure);
 	if (result == CONDITION_TRUE)
-		result = LoadIncludedFile(ts);
+		result = LoadIncludedFile(ts, source_file_index);
 	if (ts)
 		delete ts;
 	return result;
@@ -1570,12 +1579,12 @@ ResultType Script::LoadIncludedFile(LPCTSTR aFileSpec, bool aAllowDuplicateInclu
 
 
 
-ResultType Script::LoadIncludedFile(TextStream *fp)
+ResultType Script::LoadIncludedFile(TextStream *fp, int aFileIndex)
 // Returns OK or FAIL.
 {
 	// Keep this var on the stack due to recursion, which allows newly created lines to be given the
 	// correct file number even when some #include's have been encountered in the middle of the script:
-	int source_file_index = Line::sSourceFileCount - 1;
+	int source_file_index = aFileIndex;
 
 	// <buf> should be no larger than LINE_SIZE because some later functions rely upon that:
 	TCHAR buf1[LINE_SIZE], buf2[LINE_SIZE], suffix[16], pending_buf[LINE_SIZE];
