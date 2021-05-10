@@ -632,6 +632,7 @@ enum BuiltInFunctionID {
 	FID_Object_New = -1,
 	FID_GetMethod = 0, FID_HasMethod,
 	FID_DllCall = 0, FID_ComCall,
+	FID_NumPut = 0, FID_NumPutPairs,
 	FID_LV_GetNext = 0, FID_LV_GetCount,
 	FID_LV_Add = 0, FID_LV_Insert, FID_LV_Modify,
 	FID_LV_InsertCol = 0, FID_LV_ModifyCol, FID_LV_DeleteCol,

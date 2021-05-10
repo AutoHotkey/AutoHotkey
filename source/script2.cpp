@@ -13197,30 +13197,37 @@ BIF_DECL(BIF_Format)
 
 BIF_DECL(BIF_NumPut)
 {
+	// NumPut:
+	//   NumPut(n, p, o, t)
+	//   NumPut(n, p, t)
+
+	// NumPutPairs:
 	// Params can be any non-zero number of type-number pairs, followed by target[, offset].
 	// Prior validation has ensured that there are at least three parameters.
-	//   NumPut(t1, n1, t2, n2, p, o)
-	//   NumPut(t1, n1, t2, n2, p)
-	//   NumPut(t1, n1, p, o)
-	//   NumPut(t1, n1, p)
+	//   NumPutPairs(t1, n1, t2, n2, p, o)
+	//   NumPutPairs(t1, n1, t2, n2, p)
+	//   NumPutPairs(t1, n1, p, o)
+	//   NumPutPairs(t1, n1, p)
 	
 	// Split target[,offset] from aParam.
 	bool offset_was_specified = !(aParamCount & 1);
 	aParamCount -= 1 + int(offset_was_specified);
-	ExprTokenType &target_token = *aParam[aParamCount];
+	int adjust_npo = (_f_callee_id == FID_NumPutPairs) ? 0 : -1; // Adjust for NumPut: value/target/offset.
+	int adjust_t = (_f_callee_id == FID_NumPutPairs) ? 0 : offset_was_specified ? 3 : 2; // Adjust for NumPut: type.
+	ExprTokenType &target_token = *aParam[aParamCount + adjust_npo];
 	
 	NumGetParams op;
 	ConvertNumGetTarget(aResultToken, target_token, op);
 	if (aResultToken.Exited())
 		return;
 	if (offset_was_specified)
-		op.target += (ptrdiff_t)TokenToInt64(*aParam[aParamCount + 1]);
+		op.target += (ptrdiff_t)TokenToInt64(*aParam[aParamCount + 1 + adjust_npo]);
 
 	size_t num_end;
 	for (int n_param = 1; n_param < aParamCount; n_param += 2, op.target = num_end)
 	{
-		ConvertNumGetType(*aParam[n_param - 1], op); // Type name.
-		ExprTokenType &token_to_write = *aParam[n_param]; // Numeric value.
+		ConvertNumGetType(*aParam[n_param - 1 + adjust_t], op); // Type name.
+		ExprTokenType &token_to_write = *aParam[n_param + adjust_npo]; // Numeric value.
 
 		num_end = op.target + op.num_size; // This is used below and also as NumPut's return value. It's the address to the right of the item to be written.
 
