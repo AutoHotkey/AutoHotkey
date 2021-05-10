@@ -3026,7 +3026,9 @@ public:
 	void PrintErrorStdOut(LPCTSTR aErrorText, LPCTSTR aExtraInfo, FileIndexType aFileIndex, LineNumberType aLineNumber);
 #ifndef AUTOHOTKEYSC
 	TextStream *mIncludeLibraryFunctionsThenExit;
+	LPTSTR mCmdLineInclude;
 #endif
+
 	__int64 mLinesExecutedThisCycle; // Use 64-bit to match the type of g->LinesPerCycle
 	int mUninterruptedLineCountMax; // 32-bit for performance (since huge values seem unnecessary here).
 	int mUninterruptibleTime;

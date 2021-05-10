@@ -251,6 +251,7 @@ Script::Script()
 	, mIsRestart(false), mErrorStdOut(false), mErrorStdOutCP(-1)
 #ifndef AUTOHOTKEYSC
 	, mIncludeLibraryFunctionsThenExit(NULL)
+	, mCmdLineInclude(NULL)
 #endif
 	, mLinesExecutedThisCycle(0), mUninterruptedLineCountMax(1000), mUninterruptibleTime(15)
 	, mCustomIcon(NULL), mCustomIconSmall(NULL) // Normally NULL unless there's a custom tray icon loaded dynamically.
@@ -1526,8 +1527,14 @@ ResultType Script::OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAl
 
 	if (!source_file_index)
 	{
+		// Load any pre-script resource.
 		if (FindResource(NULL, SCRIPT_PRESOURCE_NAME, RT_RCDATA)
 			&& !LoadIncludedFile(SCRIPT_PRESOURCE_SPEC, false, false))
+			return FAIL;
+
+		// Load any file specified with the /include switch.
+		if (mCmdLineInclude
+			&& !LoadIncludedFile(mCmdLineInclude, false, false))
 			return FAIL;
 	}
 

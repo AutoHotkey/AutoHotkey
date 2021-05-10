@@ -102,6 +102,14 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			script_filespec = NULL; // Override compiled script mode, otherwise no effect.
 		else if (script_filespec) // Compiled script mode.
 			break;
+		else if (!_tcsicmp(param, _T("/include")))
+		{
+			++i; // Consume the next parameter too, because it's associated with this one.
+			if (i >= __argc // Missing the expected filename parameter.
+				|| g_script.mCmdLineInclude) // Only one is supported, so abort if there's more.
+				return CRITICAL_ERROR;
+			g_script.mCmdLineInclude = __targv[i];
+		}
 		else if (!_tcsicmp(param, _T("/iLib"))) // v1.0.47: Build an include-file so that ahk2exe can include library functions called by the script.
 		{
 			++i; // Consume the next parameter too, because it's associated with this one.
