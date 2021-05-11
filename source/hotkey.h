@@ -90,7 +90,7 @@ struct HotkeyVariant
 	USHORT mIndex;
 	UCHAR mExistingThreads, mMaxThreads;
 	SendLevelType mInputLevel;
-	bool mNoSuppress; // v1.0.44: This became a per-variant attribute because it's more useful/flexible that way.
+	UCHAR mNoSuppress; // v1.0.44: This became a per-variant attribute because it's more useful/flexible that way.
 	bool mMaxThreadsBuffer;
 	bool mRunAgainAfterFinished;
 	bool mEnabled; // Whether this variant has been disabled via the Hotkey command.
@@ -154,7 +154,7 @@ private:
 
 	// For now, constructor & destructor are private so that only static methods can create new
 	// objects.  This allow proper tracking of which OS hotkey IDs have been used.
-	Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel);
+	Hotkey(HotkeyIDType aID, IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, UCHAR aNoSuppress, bool aUseErrorLevel);
 	~Hotkey() {if (mIsRegistered) Unregister();}
 
 public:
@@ -215,12 +215,11 @@ public:
 	#define HOTKEY_EL_MEM                _T("99")
 	static ResultType Dynamic(LPTSTR aHotkeyName, LPTSTR aLabelName, LPTSTR aOptions, IObject *aJumpToLabel, Var *aJumpToLabelVar);
 
-	static Hotkey *AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde, bool aUseErrorLevel);
+	static Hotkey *AddHotkey(IObject *aJumpToLabel, HookActionType aHookAction, LPTSTR aName, UCHAR aNoSuppress, bool aUseErrorLevel);
 	HotkeyVariant *FindVariant();
-	HotkeyVariant *AddVariant(IObject *aJumpToLabel, bool aSuffixHasTilde);
-	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC);
+	HotkeyVariant *AddVariant(IObject *aJumpToLabel, UCHAR aNoSuppress);
+	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC, bool &aSuppress);
 	HotkeyVariant *CriterionAllowsFiring(HWND *aFoundHWND = NULL, ULONG_PTR aExtraInfo = 0, LPTSTR aSingleChar = NULL);
-	static HotkeyVariant *CriterionAllowsFiring(HotkeyIDType aHotkeyID, HWND &aFoundHWND);
 	static HotkeyVariant *CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, ULONG_PTR aExtraInfo
 		, UCHAR &aNoSuppress, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
 	static modLR_type HotkeyRequiresModLR(HotkeyIDType aHotkeyIDwithoutflags, modLR_type aModLR);
@@ -237,6 +236,7 @@ public:
 		modLR_type modifiersLR;
 		TCHAR prefix_text[32];  // Has to be large enough to hold the largest key name in g_key_to_vk,
 		TCHAR suffix_text[32];  // which is probably "Browser_Favorites" (17).
+		bool prefix_has_tilde;
 		bool suffix_has_tilde; // As opposed to "prefix has tilde".
 		bool has_asterisk;
 		bool is_key_up;
@@ -317,7 +317,7 @@ public:
 		return 0;
 	}
 
-	static Hotkey *FindHotkeyByTrueNature(LPTSTR aName, bool &aSuffixHasTilde, bool &aHookIsMandatory);
+	static Hotkey *FindHotkeyByTrueNature(LPTSTR aName, UCHAR &aNoSuppress, bool &aHookIsMandatory);
 	static Hotkey *FindHotkeyContainingModLR(modLR_type aModifiersLR);  //, HotkeyIDType hotkey_id_to_omit);
 	//static Hotkey *FindHotkeyWithThisModifier(vk_type aVK, sc_type aSC);
 	//static Hotkey *FindHotkeyBySC(sc2_type aSC2, mod_type aModifiers, modLR_type aModifiersLR);

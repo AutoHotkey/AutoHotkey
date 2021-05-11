@@ -1615,7 +1615,8 @@ ResultType Script::LoadIncludedFile(TextStream *fp, int aFileIndex)
 	Hotkey *hk;
 	LineNumberType pending_buf_line_number, saved_line_number;
 	HookActionType hook_action;
-	bool is_label, suffix_has_tilde, hook_is_mandatory, in_comment_section, hotstring_options_all_valid, hotstring_execute;
+	bool is_label, hook_is_mandatory, in_comment_section, hotstring_options_all_valid, hotstring_execute;
+	UCHAR no_suppress;
 	ResultType hotkey_validity;
 
 	// For the remap mechanism, e.g. a::b
@@ -2658,9 +2659,9 @@ examine_line:
 						return FAIL;
 					mLastLine->mAttribute = ATTR_LINE_CAN_BE_UNREACHABLE;
 				}
-				if (hk = Hotkey::FindHotkeyByTrueNature(buf, suffix_has_tilde, hook_is_mandatory)) // Parent hotkey found.  Add a child/variant hotkey for it.
+				if (hk = Hotkey::FindHotkeyByTrueNature(buf, no_suppress, hook_is_mandatory)) // Parent hotkey found.  Add a child/variant hotkey for it.
 				{
-					if (hook_action) // suffix_has_tilde has always been ignored for these types (alt-tab hotkeys).
+					if (hook_action) // no_suppress has always been ignored for these types (alt-tab hotkeys).
 					{
 						// Hotkey::Dynamic() contains logic and comments similar to this, so maintain them together.
 						// An attempt to add an alt-tab variant to an existing hotkey.  This might have
@@ -2672,12 +2673,12 @@ examine_line:
 					else
 					{
 						// Detect duplicate hotkey variants to help spot bugs in scripts.
-						if (hk->FindVariant()) // See if there's already a variant matching the current criteria (suffix_has_tilde does not make variants distinct form each other because it would require firing two hotkey IDs in response to pressing one hotkey, which currently isn't in the design).
+						if (hk->FindVariant()) // See if there's already a variant matching the current criteria (no_suppress does not make variants distinct form each other because it would require firing two hotkey IDs in response to pressing one hotkey, which currently isn't in the design).
 						{
 							mCurrLine = NULL;  // Prevents showing unhelpful vicinity lines.
 							return ScriptError(_T("Duplicate hotkey."), buf);
 						}
-						if (!hk->AddVariant(mLastLabel, suffix_has_tilde))
+						if (!hk->AddVariant(mLastLabel, no_suppress))
 							return ScriptError(ERR_OUTOFMEM, buf);
 						if (hook_is_mandatory || g_ForceKeybdHook)
 						{
@@ -2689,7 +2690,7 @@ examine_line:
 					}
 				}
 				else // No parent hotkey yet, so create it.
-					if (   !(hk = Hotkey::AddHotkey(mLastLabel, hook_action, mLastLabel->mName, suffix_has_tilde, false))   )
+					if (   !(hk = Hotkey::AddHotkey(mLastLabel, hook_action, mLastLabel->mName, no_suppress, false))   )
 					{
 						if (hotkey_validity != CONDITION_TRUE)
 							return FAIL; // It already displayed the error.
