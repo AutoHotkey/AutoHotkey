@@ -1032,8 +1032,12 @@ ResultType Script::Reload(bool aDisplayErrors)
 	// Script" menu item is not available for compiled scripts, it can't be called from there.
 	return g_script.ActionExec(mOurEXE, _T("/restart"), g_WorkingDirOrig, aDisplayErrors);
 #else
-	TCHAR arg_string[T_MAX_PATH + 16];
-	sntprintf(arg_string, _countof(arg_string), _T("/restart /script \"%s\""), Line::sSourceFile[0]);
+	TCHAR arg_string[UorA(MAX_WIDE_PATH, MAX_PATH * 2 + 16)]; // MAX_WIDEPATH coincides with the CreateProcess command line length limit (+1).
+	if (mCmdLineInclude)
+		sntprintf(arg_string, _countof(arg_string), _T("/include \"%s\" "), mCmdLineInclude);
+	else
+		*arg_string = '\0';
+	sntprintfcat(arg_string, _countof(arg_string), _T("/restart /script \"%s\""), Line::sSourceFile[0]);
 	return g_script.ActionExec(mOurEXE, arg_string, g_WorkingDirOrig, aDisplayErrors);
 #endif
 }
