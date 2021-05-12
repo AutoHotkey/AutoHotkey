@@ -2150,7 +2150,7 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 		else // Using old picture loading method.
 		{
 			// Based on code sample at http://www.codeguru.com/Cpp/G-M/bitmap/article.php/c4935/
-			HANDLE hfile = CreateFile(aFilespec, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+			HANDLE hfile = CreateFile(aFilespec, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
 			if (hfile == INVALID_HANDLE_VALUE)
 				return NULL;
 			DWORD size = GetFileSize(hfile, NULL);
