@@ -3758,7 +3758,13 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 			, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			if (!ControlLoadPicture(control, aText, opt.width, opt.height, opt.icon_number))
+			{
+				// GetLastError() isn't used because a variety of methods are used, and it is likely that
+				// some failure cases haven't SetLastError().
+				DestroyWindow(control.hwnd);
+				control.hwnd = NULL;
 				break;
+			}
 			// UPDATE ABOUT THE BELOW: Rajat says he can't get the Smart GUI working without
 			// the controls retaining their original numbering/z-order.  This has to do with the fact
 			// that TEXT controls and PIC controls are both static.  If only PIC controls were reordered,
