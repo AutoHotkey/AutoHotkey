@@ -729,14 +729,18 @@ ResultType Script::Init(global_struct &g, LPTSTR aScriptFilename, bool aIsRestar
 		aScriptFilename = buf; // Use the entire path, including the exe's directory.
 		if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF) // File doesn't exist, so fall back to new method.
 		{
-			if (PWSTR docs_path = GetDocumentsFolder())
-			{
-				auto len = _sntprintf(def_buf, _countof(def_buf), _T("%ws%s"), docs_path, suffix);
-				CoTaskMemFree(docs_path);
-				if (len > 0 && len < _countof(def_buf))
-					aScriptFilename = def_buf;
-				//else: Due to extreme rarity of failure, just check the same path again.
-			}
+			// The only known cause of failure for SHGetKnownFolderPath is having a path longer than
+			// 256 characters; i.e. by sabotaging the "...\User Shell Folders\Personal" registry value.
+			// It's very unlikely to happen naturally, so just permit _sntprintf to print "(null)".
+			PWSTR docs_path = GetDocumentsFolder();
+			auto len = _sntprintf(def_buf, _countof(def_buf), _T("%ws%s"), docs_path, suffix);
+			CoTaskMemFree(docs_path); // NULL is OK here too (but abnormal).
+			// def_buf allows for the maximum length docs_path (according to testing) and maximum length suffix
+			// (based on file system limitation of <= 255 characters per name, not path), but check overflow in
+			// case any of these limits ever change:
+			if (len < 0 || len >= _countof(def_buf))
+				return FAIL; // Probably impossible, and definitely abnormal, so for code size just silently exit.
+			aScriptFilename = def_buf;
 			if (GetFileAttributes(aScriptFilename) == 0xFFFFFFFF)
 			{
 				SetCurrentDirectory(mOurEXEDir);
