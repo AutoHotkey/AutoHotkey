@@ -1035,6 +1035,10 @@ ResultType UserMenu::AppendStandardItems()
 	int i = g_AllowMainWindow ? 0 : 1;
 	for (; i < _countof(sItems); ++i)
 	{
+#ifndef AUTOHOTKEYSC
+		if (i == 1 && g_script.mKind == Script::ScriptKindResource)
+			i += 6;
+#endif
 		if (!FindItemByID(sItems[i].id)) // Avoid duplicating items, but add any missing ones.
 			if (!AddItem(sItems[i].name, sItems[i].id, NULL, NULL, _T(""), NULL))
 				return FAIL;
@@ -1050,8 +1054,6 @@ ResultType UserMenu::AppendStandardItems()
 }
 
 
-
-#ifdef AUTOHOTKEYSC
 
 ResultType UserMenu::EnableStandardOpenItem(bool aEnable)
 {
@@ -1078,8 +1080,6 @@ ResultType UserMenu::EnableStandardOpenItem(bool aEnable)
 	}
 	return OK;
 }
-
-#endif
 
 
 

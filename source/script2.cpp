@@ -4450,62 +4450,51 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 
 
 
-bool FindAutoHotkeyUtilSub(LPTSTR aBuf, int aBufSize, LPTSTR aFile, LPTSTR aDir)
+bool FindAutoHotkeyUtilSub(LPTSTR aFile, LPTSTR aDir)
 {
-	int len = sntprintf(aBuf, aBufSize, _T("\"%s\\%s"), aDir, aFile);
-	if (len + 1 > aBufSize // Too long. Should realistically never happen.
-		|| GetFileAttributes(aBuf + 1) == INVALID_FILE_ATTRIBUTES) // File not found.
-		return false;
-	aBuf[len++] = '"';
-	aBuf[len] = '\0';
-	return true;
+	SetCurrentDirectory(aDir);
+	return GetFileAttributes(aFile) != INVALID_FILE_ATTRIBUTES;
 }
 
-bool FindAutoHotkeyUtil(LPTSTR aBuf, int aBufSize, LPTSTR aFile, LPTSTR aInstallDirBuf, LPTSTR &aUtilDir)
+bool FindAutoHotkeyUtil(LPTSTR aFile, bool &aFoundOurs)
 {
 	// Always try our directory first, in case it has different utils to the installed version.
-	// ActionExec()'s CreateProcess() is currently done in a way that prefers enclosing double quotes:
-	if (!FindAutoHotkeyUtilSub(aBuf, aBufSize, aFile, g_script.mOurEXEDir))
+	if (  !(aFoundOurs = FindAutoHotkeyUtilSub(aFile, g_script.mOurEXEDir))  )
 	{
 		// Try GetAHKInstallDir() so that compiled scripts running on machines that happen
 		// to have AHK installed will still be able to fetch the help file and Window Spy:
-		if (   !GetAHKInstallDir(aInstallDirBuf)
-			|| !FindAutoHotkeyUtilSub(aBuf, aBufSize, aFile, aInstallDirBuf)   )
+		TCHAR installdir[MAX_PATH];
+		if (   !GetAHKInstallDir(installdir)
+			|| !FindAutoHotkeyUtilSub(aFile, installdir)   )
 			return false;
-		aUtilDir = aInstallDirBuf;
 	}
-	else
-		aUtilDir = g_script.mOurEXEDir;
 	return true;
 }
 
 void LaunchAutoHotkeyUtil(LPTSTR aFile, bool aIsScript)
 {
-	TCHAR buf_file[2048], buf_exe[2048], installdir[MAX_PATH];
-	LPTSTR utildir, file = buf_file, args = _T(""); // Use "" vs. NULL to specify that there are no params at all.
-	if (!FindAutoHotkeyUtil(buf_file, _countof(buf_file), aFile, installdir, utildir))
+	LPTSTR file = aFile, args = _T("");
+	bool our_file, result = false;
+	if (!FindAutoHotkeyUtil(aFile, our_file))
 		return;
-	if (aIsScript)
-	{
-		// Always try AutoHotkey.exe in the same directory as the util first, if present,
-		// since mOurEXE could be a different version of AutoHotkey (or a compiled script).
-		if (FindAutoHotkeyUtilSub(buf_exe, _countof(buf_exe), _T("AutoHotkey.exe"), utildir))
-			file = buf_exe, args = buf_file;
 #ifndef AUTOHOTKEYSC
-		else if (utildir == g_script.mOurEXEDir)
-			// Use our EXE only if the util was found in our directory.
-			file = g_script.mOurEXE, args = buf_file;
-#endif
-		//else: AutoHotkey appears to be installed but missing AutoHotkey.exe.
-		// Try running the .ahk file directly in the off chance that it is registered
-		// with some other EXE name.
+	// If it's a script in our directory, use our EXE to run it.
+	TCHAR buf[64]; // More than enough for "/script WindowSpy.ahk".
+	if (aIsScript && our_file)
+	{
+		sntprintf(buf, _countof(buf), _T("/script %s"), aFile);
+		file = g_script.mOurEXE;
+		args = buf;
 	}
-	// Attempt to run the file:
+	//else it's not a script or it's the installed copy of WindowSpy.ahk, so just run it.
+#endif
 	if (!g_script.ActionExec(file, args, NULL, false))
 	{
+		TCHAR buf_file[64];
 		sntprintf(buf_file, _countof(buf_file), _T("Could not launch %s"), aFile);
 		MsgBox(buf_file, MB_ICONERROR);
 	}
+	SetCurrentDirectory(g_WorkingDir); // Restore the proper working directory.
 }
 
 void LaunchWindowSpy()
@@ -4642,7 +4631,6 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 	bool jump_to_bottom = false;  // Set default behavior for edit control.
 	static MainWindowModes current_mode = MAIN_MODE_NO_CHANGE;
 
-#ifdef AUTOHOTKEYSC
 	// If we were called from a restricted place, such as via the Tray Menu or the Main Menu,
 	// don't allow potentially sensitive info such as script lines and variables to be shown.
 	// This is done so that scripts can be compiled more securely, making it difficult for anyone
@@ -4665,7 +4653,6 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 		//SendMessage(g_hWndEdit, WM_SETTEXT, 0, (LPARAM)_T("Disabled"));
 		return OK;
 	}
-#endif
 
 	// If the window is empty, caller wants us to default it to showing the most recently
 	// executed script lines:
@@ -8351,14 +8338,21 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 {
 	bool success;
 	bool allow_overwrite = (ATOI(aFlag) == 1);
-#ifdef AUTOHOTKEYSC
-	if (!allow_overwrite && Util_DoesFileExist(aDest))
-		return Throw();
+#ifndef AUTOHOTKEYSC
+	if (g_script.mKind != Script::ScriptKindResource)
+		success = FileInstallCopy(aSource, aDest, allow_overwrite);
+	else
+#endif
+		success = FileInstallExtract(aSource, aDest, allow_overwrite);
+	return ThrowIfTrue(!success);
+}
 
+bool Line::FileInstallExtract(LPTSTR aSource, LPTSTR aDest, bool aOverwrite)
+{
 	// Open the file first since it's the most likely to fail:
-	HANDLE hfile = CreateFile(aDest, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+	HANDLE hfile = CreateFile(aDest, GENERIC_WRITE, 0, NULL, aOverwrite ? CREATE_ALWAYS : CREATE_NEW, 0, NULL);
 	if (hfile == INVALID_HANDLE_VALUE)
-		return Throw();
+		return false;
 
 	// Create a temporary copy of aSource to ensure it is the correct case (upper-case).
 	// Ahk2Exe converts it to upper-case before adding the resource. My testing showed that
@@ -8376,6 +8370,7 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	HRSRC res;
 	HGLOBAL res_load;
 	LPVOID res_lock;
+	bool success = false;
 	if ( (res = FindResource(NULL, source, RT_RCDATA))
 	  && (res_load = LoadResource(NULL, res))
 	  && (res_lock = LockResource(res_load))  )
@@ -8384,12 +8379,13 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 		// Write the resource data to file.
 		success = WriteFile(hfile, res_lock, SizeofResource(NULL, res), &num_bytes_written, NULL);
 	}
-	else
-		success = false;
 	CloseHandle(hfile);
+	return success;
+}
 
-#else // AUTOHOTKEYSC not defined:
-
+#ifndef AUTOHOTKEYSC
+bool Line::FileInstallCopy(LPTSTR aSource, LPTSTR aDest, bool aOverwrite)
+{
 	// v1.0.35.11: Must search in A_ScriptDir by default because that's where ahk2exe will search by default.
 	// The old behavior was to search in A_WorkingDir, which seems pointless because ahk2exe would never
 	// be able to use that value if the script changes it while running.
@@ -8404,14 +8400,11 @@ ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
 	SetCurrentDirectory(g_WorkingDir); // Restore to proper value.
 	if (!lstrcmpi(source_path, dest_path) // Full paths are equal.
 		&& !(GetFileAttributes(source_path) & FILE_ATTRIBUTE_DIRECTORY)) // Source file exists and is not a directory (otherwise, an error should be thrown).
-		return OK;
+		return true;
 
-	success = CopyFile(source_path, dest_path, !allow_overwrite);
-
-#endif
-
-	return ThrowIfTrue(!success);
+	return CopyFile(source_path, dest_path, !aOverwrite);
 }
+#endif
 
 
 
@@ -9521,10 +9514,10 @@ BIV_DECL_R(BIV_IsSuspended)
 
 BIV_DECL_R(BIV_IsCompiled)
 {
-#ifdef AUTOHOTKEYSC
+#ifndef AUTOHOTKEYSC
 	_f_return_b(true);
 #else
-	_f_return_b(false);
+	_f_return_b(g_script.mKind == Script::ScriptKindResource);
 #endif
 }
 
@@ -9633,15 +9626,7 @@ BIV_DECL_R(BIV_AllowMainWindow)
 
 BIV_DECL_W(BIV_AllowMainWindow_Set)
 {
-#ifdef AUTOHOTKEYSC
 	g_script.AllowMainWindow(BivRValueToBOOL());
-#else
-	// It seems best to allow `A_AllowMainWindow := true`, since a script
-	// which is only sometimes compiled may execute it unconditionally.
-	// For code size, false values are ignored instead of throwing an exception.
-	//if (!BivRValueToBOOL())
-	//	_f_throw_value(ERR_INVALID_VALUE, aBuf);
-#endif
 }
 
 

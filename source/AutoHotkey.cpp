@@ -52,12 +52,11 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// Set defaults, to be overridden by command line args we receive:
 	bool restart_mode = false;
 
+	TCHAR *script_filespec = NULL; // Set default as "unspecified/omitted".
 #ifndef AUTOHOTKEYSC
-	#ifdef _DEBUG
-		TCHAR *script_filespec = _T("Test\\Test.ahk");
-	#else
-		TCHAR *script_filespec = NULL; // Set default as "unspecified/omitted".
-	#endif
+	// Is this a compiled script?
+	if (FindResource(NULL, SCRIPT_RESOURCE_NAME, RT_RCDATA))
+		script_filespec = SCRIPT_RESOURCE_SPEC;
 #endif
 
 	// The problem of some command line parameters such as /r being "reserved" is a design flaw (one that
@@ -87,6 +86,18 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		else if (!_tcsnicmp(param, _T("/ErrorStdOut"), 12))
 			g_script.SetErrorStdOut(param[12] == '=' ? param + 13 : NULL);
 #ifndef AUTOHOTKEYSC // i.e. the following switch is recognized only by AutoHotkey.exe (especially since recognizing new switches in compiled scripts can break them, unlike AutoHotkey.exe).
+		else if (!_tcsicmp(param, _T("/script")))
+			script_filespec = NULL; // Override compiled script mode, otherwise no effect.
+		else if (script_filespec) // Compiled script mode.
+			break;
+		else if (!_tcsicmp(param, _T("/include")))
+		{
+			++i; // Consume the next parameter too, because it's associated with this one.
+			if (i >= __argc // Missing the expected filename parameter.
+				|| g_script.mCmdLineInclude) // Only one is supported, so abort if there's more.
+				return CRITICAL_ERROR;
+			g_script.mCmdLineInclude = __targv[i];
+		}
 		else if (!_tcsicmp(param, _T("/validate")))
 			g_script.mValidateThenExit = true;
 		// DEPRECATED: /iLib
@@ -159,12 +170,8 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 	global_init(*g);  // Set defaults.
 
-// Set up the basics of the script:
-#ifdef AUTOHOTKEYSC
-	if (g_script.Init(*g, _T(""), restart_mode) != OK) 
-#else
-	if (g_script.Init(*g, script_filespec, restart_mode) != OK)  // Set up the basics of the script, using the above.
-#endif
+	// Set up the basics of the script:
+	if (g_script.Init(*g, script_filespec, restart_mode) != OK)
 		return CRITICAL_ERROR;
 
 	// Could use CreateMutex() but that seems pointless because we have to discover the
@@ -177,7 +184,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	//CreateMutex(NULL, FALSE, script_filespec); // script_filespec seems a good choice for uniqueness.
 	//if (!g_ForceLaunch && !restart_mode && GetLastError() == ERROR_ALREADY_EXISTS)
 
-	UINT load_result = g_script.LoadFromFile();
+	UINT load_result = g_script.LoadFromFile(script_filespec);
 	if (load_result == LOADING_FAILED) // Error during load (was already displayed by the function call).
 		return CRITICAL_ERROR;  // Should return this value because PostQuitMessage() also uses it.
 	if (!load_result) // LoadFromFile() relies upon us to do this check.  No script was loaded or we're in /iLib mode, so nothing more to do.
