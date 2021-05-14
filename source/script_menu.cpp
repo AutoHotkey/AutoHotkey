@@ -1038,6 +1038,10 @@ ResultType UserMenu::AppendStandardItems()
 #ifndef AUTOHOTKEYSC
 		if (i == 1 && g_script.mKind == Script::ScriptKindResource)
 			i += 6;
+		// To minimize code size, and to make it easier for a stdin script to imitate a standard script,
+		// the Reload and Edit options are not disabled or removed here for stdin scripts.
+		//else if (i == 4 && g_script.mKind == Script::ScriptKindStdIn)
+		//	i += 3;
 #endif
 		if (!FindItemByID(sItems[i].id)) // Avoid duplicating items, but add any missing ones.
 			if (!AddItem(sItems[i].name, sItems[i].id, NULL, NULL, _T(""), NULL))

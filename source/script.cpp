@@ -886,12 +886,14 @@ ResultType Script::CreateWindows()
 	mTrayMenu = new UserMenu(MENU_TYPE_POPUP);
 	mTrayMenu->AppendStandardItems();
 
+	// Stdin scripts leave the menu items enabled, to make it easier to imitate a standard script
+	// (such as by handling the appropriate WM_COMMAND messages and overriding Reload/Edit).
 	if (mKind == ScriptKindResource)
 	{
 		HMENU menu = GetMenu(g_hWnd);
 		// Disable the Edit menu item, since it's not useful without a source file:
 		EnableMenuItem(menu, ID_FILE_EDITSCRIPT, MF_DISABLED | MF_GRAYED);
-		if (!g_AllowMainWindow)
+		if (!g_AllowMainWindow) // Apply the compiled-script default value.
 			EnableOrDisableViewMenuItems(menu, MF_DISABLED | MF_GRAYED);
 	}
 
@@ -1355,6 +1357,8 @@ ResultType Script::Reload(bool aDisplayErrors)
 	// Script" menu item is not available for compiled scripts, it can't be called from there.
 	return g_script.ActionExec(mOurEXE, _T("/restart"), g_WorkingDirOrig, aDisplayErrors);
 #else
+	if (mKind == ScriptKindStdIn)
+		return OK;
 	TCHAR arg_string[UorA(MAX_WIDE_PATH, MAX_PATH * 2 + 16)]; // MAX_WIDEPATH coincides with the CreateProcess command line length limit (+1).
 	if (mCmdLineInclude)
 		sntprintf(arg_string, _countof(arg_string), _T("/include \"%s\" "), mCmdLineInclude);
