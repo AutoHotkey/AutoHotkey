@@ -59,19 +59,16 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		script_filespec = SCRIPT_RESOURCE_SPEC;
 #endif
 
-	// The problem of some command line parameters such as /r being "reserved" is a design flaw (one that
-	// can't be fixed without breaking existing scripts).  Fortunately, I think it affects only compiled
-	// scripts because running a script via AutoHotkey.exe should avoid treating anything after the
-	// filename as switches. This flaw probably occurred because when this part of the program was designed,
-	// there was no plan to have compiled scripts.
+	// The number of switches recognized by compiled scripts (without /script) is kept to a minimum
+	// since all such switches must be effectively reserved, as there's nothing to separate them from
+	// the switches defined by the script itself.  The abbreviated /R and /F switches present in v1
+	// were also removed for this reason.
 	// 
 	// Examine command line args.  Rules:
 	// Any special flags (e.g. /force and /restart) must appear prior to the script filespec.
 	// The script filespec (if present) must be the first non-backslash arg.
 	// All args that appear after the filespec are considered to be parameters for the script
-	// and will be added as variables %1% %2% etc.
-	// The above rules effectively make it impossible to autostart AutoHotkey.ini with parameters
-	// unless the filename is explicitly given (shouldn't be an issue for 99.9% of people).
+	// and will be stored in A_Args.
 	int i;
 	for (i = 1; i < __argc; ++i) // Start at 1 because 0 contains the program name.
 	{
@@ -79,9 +76,9 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 		// Insist that switches be an exact match for the allowed values to cut down on ambiguity.
 		// For example, if the user runs "CompiledScript.exe /find", we want /find to be considered
 		// an input parameter for the script rather than a switch:
-		if (!_tcsicmp(param, _T("/R")) || !_tcsicmp(param, _T("/restart")))
+		if (!_tcsicmp(param, _T("/restart")))
 			restart_mode = true;
-		else if (!_tcsicmp(param, _T("/F")) || !_tcsicmp(param, _T("/force")))
+		else if (!_tcsicmp(param, _T("/force")))
 			g_ForceLaunch = true;
 #ifndef AUTOHOTKEYSC // i.e. the following switch is recognized only by AutoHotkey.exe (especially since recognizing new switches in compiled scripts can break them, unlike AutoHotkey.exe).
 		else if (!_tcsicmp(param, _T("/script")))
