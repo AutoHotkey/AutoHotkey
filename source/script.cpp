@@ -1357,8 +1357,8 @@ ResultType Script::Reload(bool aDisplayErrors)
 	// The new instance we're about to start will tell our process to stop, or it will display
 	// a syntax error or some other error, in which case our process will still be running:
 #ifdef AUTOHOTKEYSC
-	// This is here in case a compiled script ever uses the Reload command.  Since the "Reload This
-	// Script" menu item is not available for compiled scripts, it can't be called from there.
+	// This is here in case a compiled script ever uses the Reload function.  Since the "Reload Script"
+	// tray menu item is not available for compiled scripts, it can't be called from there.
 	return g_script.ActionExec(mOurEXE, _T("/restart"), g_WorkingDirOrig, aDisplayErrors);
 #else
 	if (mKind == ScriptKindStdIn)

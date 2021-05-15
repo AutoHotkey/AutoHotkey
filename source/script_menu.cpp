@@ -1023,8 +1023,8 @@ ResultType UserMenu::AppendStandardItems()
 		_T("&Help"), ID_TRAY_HELP,
 		_T(""), ID_TRAY_SEP1,
 		_T("&Window Spy"), ID_TRAY_WINDOWSPY,
-		_T("&Reload This Script"), ID_TRAY_RELOADSCRIPT,
-		_T("&Edit This Script"), ID_TRAY_EDITSCRIPT,
+		_T("&Reload Script"), ID_TRAY_RELOADSCRIPT,
+		_T("&Edit Script"), ID_TRAY_EDITSCRIPT,
 		_T(""), ID_TRAY_SEP2,
 #endif
 		_T("&Suspend Hotkeys"), ID_TRAY_SUSPEND,
