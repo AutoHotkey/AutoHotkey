@@ -85,7 +85,7 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			script_filespec = NULL; // Override compiled script mode, otherwise no effect.
 		else if (script_filespec) // Compiled script mode.
 			break;
-		else if (!_tcsnicmp(param, _T("/ErrorStdOut"), 12))
+		else if (!_tcsnicmp(param, _T("/ErrorStdOut"), 12) && (param[12] == '\0' || param[12] == '='))
 			g_script.SetErrorStdOut(param[12] == '=' ? param + 13 : NULL);
 		else if (!_tcsicmp(param, _T("/include")))
 		{
