@@ -83,13 +83,13 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 			restart_mode = true;
 		else if (!_tcsicmp(param, _T("/F")) || !_tcsicmp(param, _T("/force")))
 			g_ForceLaunch = true;
-		else if (!_tcsnicmp(param, _T("/ErrorStdOut"), 12))
-			g_script.SetErrorStdOut(param[12] == '=' ? param + 13 : NULL);
 #ifndef AUTOHOTKEYSC // i.e. the following switch is recognized only by AutoHotkey.exe (especially since recognizing new switches in compiled scripts can break them, unlike AutoHotkey.exe).
 		else if (!_tcsicmp(param, _T("/script")))
 			script_filespec = NULL; // Override compiled script mode, otherwise no effect.
 		else if (script_filespec) // Compiled script mode.
 			break;
+		else if (!_tcsnicmp(param, _T("/ErrorStdOut"), 12))
+			g_script.SetErrorStdOut(param[12] == '=' ? param + 13 : NULL);
 		else if (!_tcsicmp(param, _T("/include")))
 		{
 			++i; // Consume the next parameter too, because it's associated with this one.
