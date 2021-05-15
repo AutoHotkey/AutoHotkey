@@ -8504,7 +8504,8 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	}
 	else if (!_tcsicmp(func_name, _T("OnExit"))
 		|| !_tcsicmp(func_name, _T("OnClipboardChange"))
-		|| !_tcsicmp(func_name, _T("OnError")))
+		|| !_tcsicmp(func_name, _T("OnError"))
+		|| !_tcsicmp(func_name, _T("OnHotkey")))
 	{
 		bif = BIF_On;
 		max_params = 2;

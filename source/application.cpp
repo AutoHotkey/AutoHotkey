@@ -836,7 +836,14 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// even if it can't launch due to MaxThreads, MaxThreadsPerHotkey, or some other reason:
 				hs->DoReplace(msg.lParam);  // Does only the backspacing if it's not an auto-replace hotstring.
 				if (hs->mReplacement) // Fully handled by the above; i.e. it's an auto-replace hotstring.
+				{
+					if (g_script.mOnHotkey.Count())
+					{
+						ExprTokenType param[] = { hs->mName, (__int64)fore_window, (__int64)criterion_found_hwnd, (__int64)2 };
+						g_script.mOnHotkey.Call(param, 4, 1);
+					}
 					continue;
+				}
 				// Otherwise, continue on and let a new thread be created to handle this hotstring.
 				// Since this isn't an auto-replace hotstring, set this value to support
 				// the built-in variable A_EndChar:
@@ -1068,6 +1075,11 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 				// the options that distinguish between (for example) :c:ahk:: and ::ahk::
 				g_script.mThisHotkeyName = (msg.message == AHK_HOTSTRING) ? hs->mName : hk->mName;
 				g_script.mThisHotkeyStartTime = GetTickCount(); // Fixed for v1.0.35.10 to not happen for GUI threads.
+				if (g_script.mOnHotkey.Count())
+				{
+					ExprTokenType param[] = { g_script.mThisHotkeyName, (__int64)fore_window, (__int64)criterion_found_hwnd, (__int64)(msg.message == AHK_HOTSTRING ? 1 : 0) };
+					g_script.mOnHotkey.Call(param, 4, 1);
+				}
 			}
 
 			// Also save the ErrorLevel of the subroutine that's about to be suspended.

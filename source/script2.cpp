@@ -16750,7 +16750,8 @@ BIF_DECL(BIF_On)
 	enum OnEventType {
 		OnExit,
 		OnError,
-		OnClipboardChange
+		OnClipboardChange,
+		OnHotkey
 	} event_type;
 	MsgMonitorList *phandlers;
 	switch (tolower(aResultToken.marker[3]))
@@ -16762,6 +16763,10 @@ BIF_DECL(BIF_On)
 	case 'l':
 		event_type = OnClipboardChange;
 		phandlers = &g_script.mOnClipboardChange;
+		break;
+	case 'o':
+		event_type = OnHotkey;
+		phandlers = &g_script.mOnHotkey;
 		break;
 	default:
 		event_type = OnExit;
