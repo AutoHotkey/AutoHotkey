@@ -190,10 +190,7 @@ void RegRead(ResultToken &aResultToken, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR
 	// Open the registry key
 	result = RegOpenKeyEx(aRootKey, aRegSubkey, 0, KEY_READ | g->RegView, &hRegKey);
 	if (result != ERROR_SUCCESS)
-	{
-		g->LastError = result;
-		_f_throw_win32(result);
-	}
+		goto finish_skip_close;
 
 	// Read the value and determine the type.  If aValueName is the empty string, the key's default value is used.
 	result = RegQueryValueEx(hRegKey, aValueName, NULL, &dwType, NULL, NULL);
@@ -337,6 +334,7 @@ finish:
 	// not clear whether NULL is actually an invalid registry handle value:
 	//if (hRegKey)
 	RegCloseKey(hRegKey);
+finish_skip_close:
 	g->LastError = result;
 	if (result == ERROR_FILE_NOT_FOUND && aDefault)
 	{
