@@ -183,17 +183,11 @@ BEGIN
 #ifdef AUTOHOTKEYSC
             VALUE "FileDescription", ""
             VALUE "FileVersion", AHK_VERSION
-            VALUE "InternalName", ""
-            VALUE "LegalCopyright", ""
-            VALUE "OriginalFilename", ""
             VALUE "ProductName", ""
             VALUE "ProductVersion", AHK_VERSION
 #else
             VALUE "FileDescription", "AutoHotkey " AHK_BIT
             VALUE "FileVersion", AHK_VERSION
-            VALUE "InternalName", "AutoHotkey"
-            VALUE "LegalCopyright", "Copyright (C) 2003-2013"
-            VALUE "OriginalFilename", "AutoHotkey.exe"
             VALUE "ProductName", "AutoHotkey"
             VALUE "ProductVersion", AHK_VERSION
 #endif
