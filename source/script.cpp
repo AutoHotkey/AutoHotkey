@@ -2913,7 +2913,7 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 			balance = -1;
 		}
 	} // do
-	while (balance > 0 && next_buf_length != -1);
+	while (balance >= 0 && next_buf_length != -1);
 	if (balance != 0)
 	{
 		// buf might include some lines that the author did not intend to be merged, so report
