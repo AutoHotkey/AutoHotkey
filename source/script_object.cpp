@@ -503,6 +503,10 @@ LPTSTR Object::sMetaFuncName[] = { _T("__Get"), _T("__Set"), _T("__Call") };
 
 ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 {
+	// In debug mode, verify aResultToken has been initialized correctly.
+	ASSERT(aResultToken.symbol == SYM_STRING && aResultToken.marker && !*aResultToken.marker);
+	ASSERT(aResultToken.Result() == OK);
+
 	name_t name;
 	if (!aName)
 	{

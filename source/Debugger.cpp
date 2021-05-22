@@ -1445,17 +1445,24 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 		if (error)
 			return error;
 		if (aResult.value.symbol == SYM_OBJECT)
-			iobj = aResult.value.object;
+			iobj = aResult.value.object; // Take ownership of this reference, which is overwitten below.
+		else
+			aResult.value.Free(); // Free mem_to_free if non-null.
+		// aResult.value must be reinitialized because Invoke expects it to have a default of "".
+		// For x.<base> and x.<enum>, it's expected to have a value that doesn't need Free() called.
+		aResult.value.InitResult(aResult.value.buf);
 	}
 	else
 	{
 		if (varbkp->mAttrib & VAR_ATTRIB_IS_OBJECT) 
+		{
 			iobj = varbkp->mObject;
+			iobj->AddRef();
+		}
 	}
 
 	if (!iobj)
 		return DEBUGGER_E_UNKNOWN_PROPERTY;
-	iobj->AddRef();
 
 	int return_value = DEBUGGER_E_UNKNOWN_PROPERTY;
 	Object *obj, *this_override = nullptr;

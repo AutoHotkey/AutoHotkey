@@ -505,8 +505,10 @@ public:
 			// because this isn't a number and therefore never needs UpdateContents().
 			// Although Contents() should be harmless, we want to be absolutely sure
 			// length isn't increased since that could cause buffer overflow.
-			memcpy(aResultToken.marker = aResultToken.buf, mCharContents, mByteLength + sizeof(TCHAR));
-			aResultToken.marker_length = mByteLength / sizeof(TCHAR);
+			memcpy(aResultToken.buf, mCharContents, mByteLength + sizeof(TCHAR));
+			// symbol should default to SYM_STRING, but it's more robust to use SetValue()
+			// than set marker and marker_length directly.
+			aResultToken.SetValue(aResultToken.buf, mByteLength / sizeof(TCHAR));
 		}
 		return true;
 	}
