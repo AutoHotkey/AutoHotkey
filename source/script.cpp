@@ -2814,7 +2814,8 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 
 	TCHAR expect[MAX_BALANCEEXPR_DEPTH], open_quote = 0;
 	int balance = BalanceExpr(buf, 0, expect);
-	if (balance <= 0 // Balanced or invalid.
+	if (balance < 0 // Invalid.
+		|| !buf_length // Blank (shouldn't happen as buf must already qualify as expression-like).
 		|| next_buf_length == -1) // End of file.
 		return balance == 0 ? OK : BalanceExprError(balance, expect, buf);
 	
@@ -2854,6 +2855,11 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 
 	do
 	{
+		if (balance == 0 && !EndsWithOperator(buf, buf + (buf_length - 1)) && !IsSOLContExpr(next_buf))
+		{
+			// There's no continuation by enclosure and no continuation operator, so we're done.
+			return OK;
+		}
 		// Before appending each line, check whether the last line ended with OTB '{'.
 		// It can't be OTB if balance > 1 since that would mean another unclosed (/[/{.
 		// balance == 1 implies buf_length >= 1, but below requires buf_length >= 2.
@@ -2893,10 +2899,9 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 			buf[buf_length] = '\0';
 		}
 		auto prev_length = buf_length; // Store length vs. pointer since buf may be reallocated below.
-		// This serves to get the next line into next_buf but also handles any comment sections,
-		// continuation lines (when balance <= 0) or sections which follow the line just appended:
-		if (!GetLineContinuation(fp, buf, next_buf
-			, phys_line_number, has_continuation_section, open_quote ? 0 : balance))
+		// This serves to get the next non-blank, non-comment line into next_buf but also handles any
+		// continuation sections which follow the line just appended:
+		if (!GetLineContinuation(fp, buf, next_buf, phys_line_number, has_continuation_section))
 			return FAIL;
 		if (buf_length > prev_length && balance >= 0)
 			balance = BalanceExpr(buf + prev_length, balance, expect, &open_quote); // Adjust balance based on what was appended.
@@ -2917,6 +2922,130 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 		return BalanceExprError(balance, expect, buf);
 	}
 	return OK;
+}
+
+
+
+bool Script::IsSOLContExpr(LineBuffer &next_buf)
+{
+	LPTSTR cp, hotkey_flag;
+
+	switch(ctoupper(*next_buf)) // Above has ensured *next_buf != '\0' (toupper might have problems with '\0').
+	{
+	case 'A': // AND, AS (future use)
+	case 'O': // OR
+	case 'I': // IS, IN, (unwanted) ISSET
+	case 'C': // CONTAINS (future use)
+		// See comments in the default section further below.
+		cp = find_identifier_end<LPTSTR>(next_buf);
+		// Although (x)and(y) is technically valid, it's quite unusual.  The space or tab requirement is kept
+		// as the simplest way to allow method definitions to use these as names (when called, the leading dot
+		// ensures there is no ambiguity).  Note that checking if we're inside a class definition is not
+		// sufficient because multi-line expressions are valid there too (i.e. for var initializers).
+		// This also rules out valid double-derefs such as and%suffix% := 1.
+		if (IS_SPACE_OR_TAB(*cp) && ConvertWordOperator(next_buf, cp - next_buf))
+		{
+			// ISSET doesn't need to be excluded here because it can't be legally followed by a space or tab.
+			// Unlike in v1, there's no check for an operator after AND/OR (such as AND := 1) because they
+			// should never be used as variable names.
+			return true;
+		}
+		break;
+	default:
+		// Desired line continuation operators:
+		// Pretty much everything, namely:
+		// +, -, *, /, //, **, <<, >>, &, |, ^, <, >, <=, >=, =, ==, <>, !=, :=, +=, -=, /=, *=, ?, :
+		// And also the following remaining unaries (i.e. those that aren't also binaries): !, ~
+		// The first line below checks for ::, ++, and --.  Those can't be continuation lines because:
+		// "::" isn't a valid operator (this also helps performance if there are many hotstrings).
+		// ++ and -- are ambiguous with an isolated line containing ++Var or --Var (and besides,
+		// wanting to use ++ to continue an expression seems extremely rare, though if there's ever
+		// demand for it, might be able to look at what lies to the right of the operator's operand
+		// -- though that would produce inconsistent continuation behavior since ++Var itself still
+		// could never be a continuation line due to ambiguity).
+		//
+		// The logic here isn't smart enough to differentiate between a leading - that's meant as a
+		// continuation character and one that isn't. Even if it were, it would still be ambiguous in
+		// some cases because the author's intent isn't known; for example, the leading minus sign on
+		// the second line below is ambiguous:
+		//    x := y 
+		//    -z ? a:=1 : func() 
+		if ((*next_buf == ':' || *next_buf == '+' || *next_buf == '-') && next_buf[1] == *next_buf // See above.
+			|| !_tcschr(CONTINUATION_LINE_SYMBOLS, *next_buf)) // Line doesn't start with a continuation char.
+			break;
+		// Some of the above checks must be done before the next ones.
+		if (   !(hotkey_flag = _tcsstr(next_buf, HOTKEY_FLAG))   ) // Without any "::", it can't be a hotkey or hotstring.
+			return true;
+		if (*next_buf == ':') // First char is ':', so it's more likely a hotstring than a hotkey.
+		{
+			// Remember that hotstrings can contain what *appear* to be quoted literal strings,
+			// so detecting whether a "::" is in a quoted/literal string in this case would
+			// be more complicated.  That's one reason this other method is used.
+			bool hotstring_options_all_valid = true;
+			for (cp = next_buf + 1; *cp && *cp != ':'; ++cp)
+				if (!IS_HOTSTRING_OPTION(*cp)) // Not a perfect test, but eliminates most of what little remaining ambiguity exists between ':' as a continuation character vs. ':' as the start of a hotstring.  It especially eliminates the ":=" operator.
+				{
+					hotstring_options_all_valid = false;
+					break;
+				}
+			if (hotstring_options_all_valid && *cp == ':') // It's almost certainly a hotstring.
+				break; // So don't treat it as a continuation line.
+			//else it's not a hotstring but it might still be a hotkey such as ": & x::".
+			// So continue checking below.
+		}
+		// Since above didn't "break", this line isn't a hotstring but it is probably a hotkey
+		// because above already discovered that it contains "::" somewhere. So try to find out
+		// if there's anything that disqualifies this from being a hotkey, such as some
+		// expression line that contains a quoted/literal "::" (or a line starting with
+		// a comma that contains an unquoted-but-literal "::" such as for FileAppend).
+		if (*next_buf == ',')
+		{
+			cp = omit_leading_whitespace(next_buf + 1);
+			// The above has set cp to the position of the non-whitespace item to the right of
+			// this comma.  Normal (single-colon) labels can't contain commas, so only hotkey
+			// labels are sources of ambiguity.  In addition, normal labels and hotstrings have
+			// already been checked for, higher above.
+			if (   _tcsncmp(cp, HOTKEY_FLAG, HOTKEY_FLAG_LENGTH) // It's not a hotkey such as ",::action".
+				&& _tcsncmp(cp - 1, COMPOSITE_DELIMITER, COMPOSITE_DELIMITER_LENGTH)   ) // ...and it's not a hotkey such as ", & y::action".
+				return true;
+		}
+		else // First symbol in line isn't a comma but some other operator symbol.
+		{
+			// Check if the "::" found earlier appears to be inside a quoted/literal string.
+			// This check is NOT done for a line beginning with a comma since such lines
+			// can contain an unquoted-but-literal "::".  In addition, this check is done this
+			// way to detect hotkeys such as the following:
+			//   +keyname:: (and other hotkey modifier symbols such as ! and ^)
+			//   +keyname1 & keyname2::
+			//   +^:: (i.e. a modifier symbol followed by something that is a hotkey modifier and/or a hotkey suffix and/or an expression operator).
+			//   <:: and &:: (i.e. hotkeys that are also expression-continuation symbols)
+			// By contrast, expressions that qualify as continuation lines can look like:
+			//   . "xxx::yyy"
+			//   + x . "xxx::yyy"
+			// In addition, hotkeys like the following should continue to be supported regardless
+			// of how things are done here:
+			//   ^"::
+			//   . & "::
+			// Finally, keep in mind that an expression-continuation line can start with two
+			// consecutive unary operators like !! or !*. It can also start with a double-symbol
+			// operator such as <=, <>, !=, &&, ||, //, **.
+			for (cp = next_buf; cp < hotkey_flag && *cp != '"' && *cp != '\''; ++cp);
+			if (cp == hotkey_flag) // No '"' found to left of "::", so this "::" appears to be a real hotkey flag rather than part of a literal string.
+				break; // Treat this line as a normal line vs. continuation line.
+			TCHAR in_quote = *cp;
+			for (cp = hotkey_flag + HOTKEY_FLAG_LENGTH; *cp && *cp != in_quote; ++cp);
+			if (*cp)
+			{
+				// Closing quote was found so "::" is probably inside a literal string of an
+				// expression (further checking seems unnecessary given the fairly extreme
+				// rarity of using '"' as a key in a hotkey definition).
+				return true;
+			}
+			//else no closing '"' found, so this "::" probably belongs to something like +":: or
+			// . & "::.  Treat this line as a normal line vs. continuation line.
+		}
+	} // switch(toupper(*next_buf))
+	return false;
 }
 
 
@@ -2951,7 +3080,7 @@ ResultType Script::BalanceExprError(int aBalance, TCHAR aExpect[], LPTSTR aLineT
 
 
 ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuffer &next_buf
-	, LineNumberType &phys_line_number, bool &has_continuation_section, int expr_balance)
+	, LineNumberType &phys_line_number, bool &has_continuation_section)
 {
 	bool do_rtrim, literal_escapes, literal_quotes;
 	#define CONTINUATION_SECTION_WITHOUT_COMMENTS 1 // MUST BE 1 because it's the default set by anything that's boolean-true.
@@ -2961,9 +3090,9 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 	TCHAR indent_char, suffix[16];
 	size_t suffix_length;
 
-	LPTSTR next_option, option_end, cp, hotkey_flag;
+	LPTSTR next_option, option_end, cp;
 	TCHAR orig_char, quote_char;
-	bool in_comment_section, is_continuation_line, hotstring_options_all_valid;
+	bool in_comment_section;
 	int quote_pos;
 	int continuation_line_count;
 
@@ -3022,164 +3151,13 @@ ResultType Script::GetLineContinuation(TextStream *fp, LineBuffer &buf, LineBuff
 			// so should be treated as a continuation section, for cases like "(Join:".
 			if (   !(in_continuation_section = (next_buf_length != -1 && *next_buf == '(' && next_buf[1] != ':'))   ) // Compare directly to -1 since length is unsigned.
 			{
-				if (next_buf_length == -1)  // Compare directly to -1 since length is unsigned.
-					break;
 				if (!next_buf_length)
 					// It is permitted to have blank lines and comment lines in between the line above
 					// and any continuation section/line that might come after the end of the
 					// comment/blank lines:
 					continue;
-				if (expr_balance > 0) // Inside a continuation expression.
-					// Caller will combine lines, so no need to check for continuation operators.
-					break;
-				// SINCE ABOVE DIDN'T BREAK/CONTINUE, NEXT_BUF IS NON-BLANK.
-				if (next_buf[next_buf_length - 1] == ':' && *next_buf != ',')
-					// With the exception of lines starting with a comma, the last character of any
-					// legitimate continuation line can't be a colon because expressions can't end
-					// in a colon. The only exception is the ternary operator's colon, but that is
-					// very rare because it requires the line after it also be a continuation line
-					// or section, which is unusual to say the least -- so much so that it might be
-					// too obscure to even document as a known limitation.  Anyway, by excluding lines
-					// that end with a colon from consideration ambiguity with normal labels
-					// and non-single-line hotkeys and hotstrings is eliminated.
-					break;
-
-				is_continuation_line = false; // Set default.
-				switch(ctoupper(*next_buf)) // Above has ensured *next_buf != '\0' (toupper might have problems with '\0').
-				{
-				case 'A': // AND, AS (future use)
-				case 'O': // OR
-				case 'I': // IS, IN, (unwanted) ISSET
-				case 'C': // CONTAINS (future use)
-					// See comments in the default section further below.
-					cp = find_identifier_end<LPTSTR>(next_buf);
-					// Although (x)and(y) is technically valid, it's quite unusual.  The space or tab requirement is kept
-					// as the simplest way to allow method definitions to use these as names (when called, the leading dot
-					// ensures there is no ambiguity).  Note that checking if we're inside a class definition is not
-					// sufficient because multi-line expressions are valid there too (i.e. for var initializers).
-					// This also rules out valid double-derefs such as and%suffix% := 1.
-					if (IS_SPACE_OR_TAB(*cp) && ConvertWordOperator(next_buf, cp - next_buf))
-					{
-						// ISSET doesn't need to be excluded here because it can't be legally followed by a space or tab.
-						// Unlike in v1, there's no check for an operator after AND/OR (such as AND := 1) because they
-						// should never be used as variable names.
-						is_continuation_line = true; // Override the default set earlier.
-					}
-					break;
-				default:
-					// Desired line continuation operators:
-					// Pretty much everything, namely:
-					// +, -, *, /, //, **, <<, >>, &, |, ^, <, >, <=, >=, =, ==, <>, !=, :=, +=, -=, /=, *=, ?, :
-					// And also the following remaining unaries (i.e. those that aren't also binaries): !, ~
-					// The first line below checks for ::, ++, and --.  Those can't be continuation lines because:
-					// "::" isn't a valid operator (this also helps performance if there are many hotstrings).
-					// ++ and -- are ambiguous with an isolated line containing ++Var or --Var (and besides,
-					// wanting to use ++ to continue an expression seems extremely rare, though if there's ever
-					// demand for it, might be able to look at what lies to the right of the operator's operand
-					// -- though that would produce inconsistent continuation behavior since ++Var itself still
-					// could never be a continuation line due to ambiguity).
-					//
-					// The logic here isn't smart enough to differentiate between a leading ! or - that's
-					// meant as a continuation character and one that isn't. Even if it were, it would
-					// still be ambiguous in some cases because the author's intent isn't known; for example,
-					// the leading minus sign on the second line below is ambiguous, so will probably remain
-					// a continuation character in both v1 and v2:
-					//    x := y 
-					//    -z ? a:=1 : func() 
-					if ((*next_buf == ':' || *next_buf == '+' || *next_buf == '-') && next_buf[1] == *next_buf // See above.
-						// L31: '.' and '?' no longer require spaces; '.' without space is member-access (object) operator.
-						//|| (*next_buf == '.' || *next_buf == '?') && !IS_SPACE_OR_TAB_OR_NBSP(next_buf[1]) // The "." and "?" operators require a space or tab after them to be legitimate.  For ".", this is done in case period is ever a legal character in var names, such as struct support.  For "?", it's done for backward compatibility since variable names can contain question marks (though "?" by itself is not considered a variable in v1.0.46).
-							//&& next_buf[1] != '=' // But allow ".=" (and "?=" too for code simplicity), since ".=" is the concat-assign operator.
-						|| !_tcschr(CONTINUATION_LINE_SYMBOLS, *next_buf)) // Line doesn't start with a continuation char.
-						break; // Leave is_continuation_line set to its default of false.
-					// Some of the above checks must be done before the next ones.
-					if (   !(hotkey_flag = _tcsstr(next_buf, HOTKEY_FLAG))   ) // Without any "::", it can't be a hotkey or hotstring.
-					{
-						is_continuation_line = true; // Override the default set earlier.
-						break;
-					}
-					if (*next_buf == ':') // First char is ':', so it's more likely a hotstring than a hotkey.
-					{
-						// Remember that hotstrings can contain what *appear* to be quoted literal strings,
-						// so detecting whether a "::" is in a quoted/literal string in this case would
-						// be more complicated.  That's one reason this other method is used.
-						for (hotstring_options_all_valid = true, cp = next_buf + 1; *cp && *cp != ':'; ++cp)
-							if (!IS_HOTSTRING_OPTION(*cp)) // Not a perfect test, but eliminates most of what little remaining ambiguity exists between ':' as a continuation character vs. ':' as the start of a hotstring.  It especially eliminates the ":=" operator.
-							{
-								hotstring_options_all_valid = false;
-								break;
-							}
-						if (hotstring_options_all_valid && *cp == ':') // It's almost certainly a hotstring.
-							break; // So don't treat it as a continuation line.
-						//else it's not a hotstring but it might still be a hotkey such as ": & x::".
-						// So continue checking below.
-					}
-					// Since above didn't "break", this line isn't a hotstring but it is probably a hotkey
-					// because above already discovered that it contains "::" somewhere. So try to find out
-					// if there's anything that disqualifies this from being a hotkey, such as some
-					// expression line that contains a quoted/literal "::" (or a line starting with
-					// a comma that contains an unquoted-but-literal "::" such as for FileAppend).
-					if (*next_buf == ',')
-					{
-						cp = omit_leading_whitespace(next_buf + 1);
-						// The above has set cp to the position of the non-whitespace item to the right of
-						// this comma.  Normal (single-colon) labels can't contain commas, so only hotkey
-						// labels are sources of ambiguity.  In addition, normal labels and hotstrings have
-						// already been checked for, higher above.
-						if (   _tcsncmp(cp, HOTKEY_FLAG, HOTKEY_FLAG_LENGTH) // It's not a hotkey such as ",::action".
-							&& _tcsncmp(cp - 1, COMPOSITE_DELIMITER, COMPOSITE_DELIMITER_LENGTH)   ) // ...and it's not a hotkey such as ", & y::action".
-							is_continuation_line = true; // Override the default set earlier.
-					}
-					else // First symbol in line isn't a comma but some other operator symbol.
-					{
-						// Check if the "::" found earlier appears to be inside a quoted/literal string.
-						// This check is NOT done for a line beginning with a comma since such lines
-						// can contain an unquoted-but-literal "::".  In addition, this check is done this
-						// way to detect hotkeys such as the following:
-						//   +keyname:: (and other hotkey modifier symbols such as ! and ^)
-						//   +keyname1 & keyname2::
-						//   +^:: (i.e. a modifier symbol followed by something that is a hotkey modifier and/or a hotkey suffix and/or an expression operator).
-						//   <:: and &:: (i.e. hotkeys that are also expression-continuation symbols)
-						// By contrast, expressions that qualify as continuation lines can look like:
-						//   . "xxx::yyy"
-						//   + x . "xxx::yyy"
-						// In addition, hotkeys like the following should continue to be supported regardless
-						// of how things are done here:
-						//   ^"::
-						//   . & "::
-						// Finally, keep in mind that an expression-continuation line can start with two
-						// consecutive unary operators like !! or !*. It can also start with a double-symbol
-						// operator such as <=, <>, !=, &&, ||, //, **.
-						for (cp = next_buf; cp < hotkey_flag && *cp != '"' && *cp != '\''; ++cp);
-						if (cp == hotkey_flag) // No '"' found to left of "::", so this "::" appears to be a real hotkey flag rather than part of a literal string.
-							break; // Treat this line as a normal line vs. continuation line.
-						TCHAR in_quote = *cp;
-						for (cp = hotkey_flag + HOTKEY_FLAG_LENGTH; *cp && *cp != in_quote; ++cp);
-						if (*cp)
-						{
-							// Closing quote was found so "::" is probably inside a literal string of an
-							// expression (further checking seems unnecessary given the fairly extreme
-							// rarity of using '"' as a key in a hotkey definition).
-							is_continuation_line = true; // Override the default set earlier.
-						}
-						//else no closing '"' found, so this "::" probably belongs to something like +":: or
-						// . & "::.  Treat this line as a normal line vs. continuation line.
-					}
-				} // switch(toupper(*next_buf))
-
-				if (is_continuation_line)
-				{
-					if (!buf.EnsureCapacity(buf_length + next_buf_length + 1)) // -1 to account for the extra space added below.
-						return ScriptError(ERR_OUTOFMEM);
-					if (*next_buf != ',' // Insert space before expression operators so that built/combined expression works correctly (some operators like 'and', 'or' and concat currently require spaces on either side) and also for readability of ListLines.
-						&& (*next_buf != '.' || IS_SPACE_OR_TAB(next_buf[1]))) // But don't insert a space for `.someproperty` or obscure cases like `.123` (`x .123` is never auto-concat; it's a literal number only in the presence of an operator like `x+.123`).
-						buf[buf_length++] = ' ';
-					tmemcpy(buf + buf_length, next_buf, next_buf_length + 1); // Append this line to prev. and include the zero terminator.
-					buf_length += next_buf_length;
-					continue; // Check for yet more continuation lines after this one.
-				}
-				// Since above didn't continue, there is no continuation line or section.  In addition,
-				// since this line isn't blank, no further searching is needed.
+				// Since there is no continuation section and this line isn't blank, no further searching
+				// is needed.  This also covers the case of EOF (next_buf_length == -1).
 				break;
 			} // if (!in_continuation_section)
 

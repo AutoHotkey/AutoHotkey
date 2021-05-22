@@ -2909,9 +2909,10 @@ private:
 	};
 	size_t GetLine(LineBuffer &aBuf, int aInContinuationSection, bool aInBlockComment, TextStream *ts);
 	ResultType GetLineContinuation(TextStream *ts, LineBuffer &aBuf, LineBuffer &aNextBuf
-		, LineNumberType &aPhysLineNumber, bool &aHasContinuationSection, int aExprBalance = 0);
+		, LineNumberType &aPhysLineNumber, bool &aHasContinuationSection);
 	ResultType GetLineContExpr(TextStream *ts, LineBuffer &aBuf, LineBuffer &aNextBuf
 		, LineNumberType &aPhysLineNumber, bool &aHasContinuationSection);
+	bool IsSOLContExpr(LineBuffer &aBuf);
 	ResultType BalanceExprError(int aBalance, TCHAR aExpect[], LPTSTR aLineText);
 	static bool IsFunctionDefinition(LPTSTR aBuf, LPTSTR aNextBuf);
 	ResultType IsDirective(LPTSTR aBuf);
