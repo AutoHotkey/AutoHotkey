@@ -13969,6 +13969,8 @@ BIF_DECL(BIF_WinExistActive)
 			// g->DetectHiddenWindows is intentionally ignored for these cases.
 			if (_f_callee_id == FID_WinActive && GetForegroundWindow() != hwnd)
 				hwnd = 0;
+			if (hwnd)
+				g->hWndLastUsed = hwnd;
 			break;
 		}
 	}
