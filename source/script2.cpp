@@ -2792,7 +2792,7 @@ BIF_DECL(BIF_WinGetTitle)
 	// Update length using the actual length, rather than the estimate provided by GetWindowTextLength():
 	aResultToken.marker_length = GetWindowText(target_window, aResultToken.marker, space_needed);
 	if (!aResultToken.marker_length)
-		// There was no text to get or GetWindowTextTimeout() failed.
+		// There was no text to get or GetWindowText() failed.
 		*aResultToken.marker = '\0';
 }
 
