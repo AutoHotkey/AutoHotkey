@@ -2116,7 +2116,8 @@ process_completed_line:
 			hotkey_uses_otb = *otb_brace == '{' && !*omit_leading_whitespace(otb_brace + 1);
 			if (!hotstring_start)
 			{
-				ltrim(hotkey_flag); // Has already been rtrimmed by GetLine().
+				// Mustn't use ltrim(hotkey_flag) because that would cause buf.length to become incorrect:
+				hotkey_flag = omit_leading_whitespace(hotkey_flag); // Has already been rtrimmed by GetLine().
 				// Not done because Hotkey::TextInterpret() does not allow trailing whitespace: 
 				//rtrim(buf); // Trim the new substring inside of buf (due to temp termination). It has already been ltrimmed.
 				
