@@ -2148,10 +2148,9 @@ BIF_DECL(BIF_StatusBarGetText)//(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 	//, LPTSTR aExcludeTitle, LPTSTR aExcludeText)
 {
 	int part = ParamIndexToOptionalInt(0, 1);
-	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1))
+	HWND target_window, control_window;
+	if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam + 1, aParamCount - 1))
 		return;
-	HWND control_window = ControlExist(target_window, _T("msctls_statusbar321"));
 	// StatusBarUtil will handle any NULL control_window or zero part# for us.
 	StatusBarUtil(aResultToken, control_window, part);
 }
@@ -2160,21 +2159,20 @@ BIF_DECL(BIF_StatusBarGetText)//(LPTSTR aPart, LPTSTR aTitle, LPTSTR aText
 
 BIF_DECL(BIF_StatusBarWait)
 {
-	HWND target_window;
-	if (!DetermineTargetWindow(target_window, aResultToken, aParam + 3, aParamCount - 3, 1))
+	HWND target_window, control_window;
+	if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam + 3, aParamCount - 3, 1))
 		return;
 
 	LPTSTR aTextToWaitFor = ParamIndexToOptionalString(0, _f_number_buf);
 	int aSeconds = ParamIndexIsOmittedOrEmpty(1) ? -1 : int(ParamIndexToDouble(1) * 1000);
 	int aPart = ParamIndexToOptionalInt(2, 0);
-	int aInterval = ParamIndexToOptionalInt(5, 50);
+	int aInterval = ParamIndexToOptionalInt(6, 50);
 
 	// Make a copy of any memory areas that are volatile (due to caller passing a variable,
 	// which could be reassigned by a new hotkey subroutine launched while we are waiting)
 	// but whose contents we need to refer to while we are waiting:
 	TCHAR text_to_wait_for[4096];
 	tcslcpy(text_to_wait_for, aTextToWaitFor, _countof(text_to_wait_for));
-	HWND control_window = ControlExist(target_window, _T("msctls_statusbar321"));
 	// StatusBarUtil will handle any NULL control_window or zero part# for us.
 	StatusBarUtil(aResultToken, control_window, aPart, text_to_wait_for, aSeconds, aInterval);
 }
