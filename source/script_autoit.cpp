@@ -650,6 +650,13 @@ BIF_DECL(BIF_ControlGet)
 	// aControl might not be a ClassNN, so don't rely on it for class checks.
 	//LPTSTR aControl = ParamIndexToString(0, control_buf);
 
+	if (control_cmd == FID_ControlExist)
+	{
+		HWND target_window, control_window;
+		DetermineTargetControl(control_window, target_window, aResultToken, aParam, aParamCount, 0, false);
+		_f_return((size_t)control_window);
+	}
+
 	DETERMINE_TARGET_CONTROL(0);
 
 	DWORD_PTR dwResult, index, length, item_length, u, item_count;
