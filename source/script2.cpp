@@ -15140,8 +15140,35 @@ BIF_DECL(BIF_RegEx)
 
 	// Since compiling succeeded, get info about other parameters.
 	TCHAR haystack_buf[MAX_NUMBER_SIZE];
-	LPTSTR haystack = ParamIndexToString(0, haystack_buf); // Load-time validation has already ensured that at least two actual parameters are present.
-	int haystack_length = (int)ParamIndexLength(0, haystack);
+	LPTSTR haystack;
+	int haystack_length;
+	if (Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[0])))
+	{
+		ExprTokenType t1;
+		ExprTokenType t2;
+		DWORD capacity;
+		if ((obj->GetItem(t1, _T("Ptr")))
+		&& (obj->GetItem(t2, _T("Size"))))
+		{
+			haystack = (LPTSTR)TokenToInt64(t1);
+#ifdef UNICODE
+			haystack_length = (int)TokenToInt64(t2) / 2;
+#else
+			haystack_length = (int)TokenToInt64(t2);
+#endif
+		}
+		else
+		{
+			aResultToken.symbol = SYM_STRING;
+			aResultToken.marker = _T("");
+			return;
+		}
+	}
+	else
+	{
+		haystack = ParamIndexToString(0, haystack_buf); // Load-time validation has already ensured that at least two actual parameters are present.
+		haystack_length = (int)ParamIndexLength(0, haystack);
+	}
 
 	int param_index = mode_is_replace ? 5 : 3;
 	int starting_offset;
