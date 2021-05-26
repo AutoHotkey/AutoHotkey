@@ -18790,6 +18790,28 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_VarGetName)
+{
+	if (aParam[0]->symbol != SYM_VAR)
+	{
+		// Incorrect usage: return empty string to indicate the error.
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+	}
+	else
+	{
+		int len = _tcslen(aParam[0]->var->ResolveAlias()->mName);
+		TCHAR *output = new TCHAR[len+1];
+		tmemcpy(output, aParam[0]->var->ResolveAlias()->mName, len+1);
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = output;
+		aResultToken.mem_to_free = output;
+		aResultToken.marker_length = len;
+	}
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
