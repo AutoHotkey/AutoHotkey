@@ -2770,7 +2770,16 @@ bool Script::EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker)
 	for (word = cp; word > aBuf && IS_IDENTIFIER_CHAR(word[-1]); --word);
 	if (word > aBuf && word[-1] == '.')
 		return false; // Reserved words are permitted as property names, so `a.as` isn't an operator.
-	return ConvertWordOperator(word, cp - word + 1);
+	switch (ConvertWordOperator(word, cp - word + 1))
+	{
+	case SYM_OR:
+	case SYM_AND:
+	case SYM_IS:
+	case SYM_LOWNOT:
+	case SYM_RESERVED_OPERATOR:
+		return true;
+	}
+	return false;
 }
 
 
@@ -5588,7 +5597,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 		else if (  operand_length < 9 && (wordop = ConvertWordOperator(op_begin, operand_length))  )
 		{
 			// It's a word operator like AND/OR/NOT.
-			if (wordop == SYM_RESERVED_WORD)
+			if (SYM_IS_RESERVED(wordop))
 			{
 				return ScriptError(_T("Unexpected reserved word."), op_begin);
 			}
@@ -5679,9 +5688,9 @@ SymbolType Script::ConvertWordOperator(LPCTSTR aWord, size_t aLength)
 		{ _T("is"), SYM_IS },
 		{ _T("IsSet"), SYM_ISSET },
 		{ SUPER_KEYWORD, SYM_SUPER },
-		{ _T("as"), SYM_RESERVED_WORD },
-		{ _T("contains"), SYM_RESERVED_WORD },
-		{ _T("in"), SYM_RESERVED_WORD },
+		{ _T("as"), SYM_RESERVED_OPERATOR },
+		{ _T("contains"), SYM_RESERVED_OPERATOR },
+		{ _T("in"), SYM_RESERVED_OPERATOR },
 		{ _T("unset"), SYM_RESERVED_WORD },
 	};
 	for (int i = 0; i < _countof(sWordOp); ++i)
@@ -7807,7 +7816,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 //		, 78             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 //		, 82, 82         // RESERVED FOR SYM_POST_INCREMENT, SYM_POST_DECREMENT (which are listed higher above for the performance of YIELDS_AN_OPERAND().
 		, 86             // SYM_FUNC -- Has special handling which ensures it stays tightly bound with its parameters as though it's a single operand for use by other operators; the actual value here is irrelevant.
-		, 0              // SYM_RESERVED_WORD
+		, 0, 0           // SYM_RESERVED_*
 	};
 	// Most programming languages give exponentiation a higher precedence than unary minus and logical-not.
 	// For example, -2**2 is evaluated as -(2**2), not (-2)**2 (the latter is unsupported by qmathPow anyway).
