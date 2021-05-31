@@ -2768,6 +2768,8 @@ bool Script::EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker)
 		return true;
 	LPTSTR word;
 	for (word = cp; word > aBuf && IS_IDENTIFIER_CHAR(word[-1]); --word);
+	if (word > aBuf && word[-1] == '.')
+		return false; // Reserved words are permitted as property names, so `a.as` isn't an operator.
 	return ConvertWordOperator(word, cp - word + 1);
 }
 
