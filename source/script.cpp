@@ -2856,7 +2856,16 @@ ResultType Script::GetLineContExpr(TextStream *fp, LineBuffer &buf, LineBuffer &
 
 	do
 	{
-		if (balance == 0 && !EndsWithOperator(buf, buf + (buf_length - 1)) && !IsSOLContExpr(next_buf))
+		if (balance == 0 && buf[buf_length - 1] == ':')
+		{
+			if (action_type == ACT_CASE && FindExprDelim(buf, ':') == buf_length - 1)
+			{
+				// This is the colon terminating a case statement.
+				return OK;
+			}
+			//else this colon qualifies for line continuation.
+		}
+		else if (balance == 0 && !EndsWithOperator(buf, buf + (buf_length - 1)) && !IsSOLContExpr(next_buf))
 		{
 			// There's no continuation by enclosure and no continuation operator, so we're done.
 			return OK;
