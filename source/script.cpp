@@ -8857,7 +8857,7 @@ unquoted_literal:
 				continue;
 			}
 			if (stack_symbol == SYM_OPAREN)
-				return LineError(_T("Missing \")\" before \":\""));
+				return LineError(_T("Unexpected \":\"")); // No reference to ")" since it might be a function call statement.
 			if (stack_symbol == SYM_OBRACKET)
 				return LineError(_T("Missing \"]\" before \":\""));
 			if (stack_symbol == SYM_OBRACE)
