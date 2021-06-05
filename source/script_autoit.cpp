@@ -663,13 +663,13 @@ BIF_DECL(BIF_ControlGet)
 	case FID_ControlGetChecked: //Must be a Button
 		if (!SendMessageTimeout(control_window, BM_GETCHECK, 0, 0, SMTO_ABORTIFHUNG, 2000, &dwResult))
 			goto win32_error;
-		_f_return(dwResult == BST_CHECKED);
+		_f_return_b(dwResult == BST_CHECKED);
 
 	case FID_ControlGetEnabled:
-		_f_return(IsWindowEnabled(control_window) ? 1 : 0); // Force pure boolean 0/1.
+		_f_return_b(IsWindowEnabled(control_window));
 
 	case FID_ControlGetVisible:
-		_f_return(IsWindowVisible(control_window) ? 1 : 0); // Force pure boolean 0/1.
+		_f_return_b(IsWindowVisible(control_window));
 
 	case FID_ControlFindItem:
 		GetClassName(control_window, classname, _countof(classname));
