@@ -294,7 +294,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				}
 			}
 
-			bool permit_unhandled_result = false;
 			if (func)
 			{
 				func_token = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
@@ -317,7 +316,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						func = g->CurrentFunc->mClass->Base();
 						ASSERT(func);
 						func_token->SetVar(g->CurrentFunc->mParam[0].var);
-						permit_unhandled_result = true;
 					}
 					else
 					{
@@ -366,11 +364,6 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 				// reason for early exit) should be considered valid/meaningful only if result_to_return is NULL.
 				goto normal_end_skip_output_var; // output_var is left unchanged in these cases.
 			case INVOKE_NOT_HANDLED:
-				if (permit_unhandled_result)
-				{
-					this_token.SetValue(_T(""), 0);
-					goto push_this_token;
-				}
 				result_token.UnknownMemberError(*func_token, flags, member);
 				aResult = result_token.Result(); // FAIL to abort, OK if user or OnError requested continuation.
 				goto abort_if_result;

@@ -862,3 +862,5 @@ struct NestedClassInfo
 };
 BIF_DECL(Class_GetNestedClass);
 BIF_DECL(Class_CallNestedClass);
+
+BIF_DECL(Any___Init);

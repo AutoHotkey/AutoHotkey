@@ -1552,6 +1552,11 @@ ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[],
 	return aResultToken.SetResult(OK);
 }
 
+BIF_DECL(Any___Init)
+{
+	_f_return_empty;
+}
+
 
 //
 // Object::Variant
@@ -2957,6 +2962,10 @@ Object *Object::CreateRootPrototypes()
 	prop->MaxParams = 0;
 	prop->SetGetter(g_script.FindFunc(_T("ObjGetBase")));
 	prop->SetSetter(g_script.FindFunc(_T("ObjSetBase")));
+	
+	// Define __Init so that Script::DefineClassInit can add an unconditional super.__Init().
+	static auto __Init = new BuiltInFunc { _T(""), Any___Init, 1, 1 };
+	sAnyPrototype->DefineMethod(_T("__Init"), __Init);
 
 	DefineMembers(sPrototype, _T("Object"), sMembers, _countof(sMembers));
 	DefineMembers(Func::sPrototype, _T("Func"), Func::sMembers, _countof(Func::sMembers));
