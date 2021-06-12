@@ -9514,7 +9514,7 @@ BIV_DECL_R(BIV_IsSuspended)
 
 BIV_DECL_R(BIV_IsCompiled)
 {
-#ifndef AUTOHOTKEYSC
+#ifdef AUTOHOTKEYSC
 	_f_return_b(true);
 #else
 	_f_return_b(g_script.mKind == Script::ScriptKindResource);
