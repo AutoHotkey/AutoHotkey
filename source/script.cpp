@@ -5610,7 +5610,8 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 			this_deref.type = DT_WORDOP;
 			this_deref.symbol = wordop;
 		}
-		else if (!_tcsnicmp(op_begin, _T("true"), 4) || !_tcsnicmp(op_begin, _T("false"), 5))
+		else if (operand_length == 4 && !_tcsnicmp(op_begin, _T("true"), 4)
+			|| operand_length == 5 && !_tcsnicmp(op_begin, _T("false"), 5))
 		{
 			this_deref.marker = op_begin;
 			this_deref.length = (DerefLengthType)operand_length;
