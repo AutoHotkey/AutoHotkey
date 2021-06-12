@@ -13143,12 +13143,16 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 				for (file_index = 0; file_index < Line::sSourceFileCount; ++file_index)
 					if (!_tcsicmp(file, Line::sSourceFile[file_index]))
 						break;
-				Line *line;
-				for (line = mFirstLine;
-					line && (line->mLineNumber != line_no || line->mFileIndex != file_index);
-					line = line->mNextLine);
-				if (line)
-					aLine = line;
+				if (!aLine || aLine->mFileIndex != file_index || aLine->mLineNumber != line_no) // Keep aLine if it matches, in case of multiple Lines with the same number.
+				{
+					Line *line;
+					for (line = mFirstLine;
+						line && (line->mLineNumber != line_no || line->mFileIndex != file_index
+							|| !line->mArgc && line->mNextLine && line->mNextLine->mLineNumber == line_no); // Skip any same-line block-begin/end, try, else or finally.
+						line = line->mNextLine);
+					if (line)
+						aLine = line;
+				}
 			}
 		}
 	}
