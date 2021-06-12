@@ -8584,6 +8584,7 @@ unquoted_literal:
 		}
 		else if (this_deref_ref.type == DT_CONST_INT)
 		{
+			CHECK_AUTO_CONCAT;
 			infix[infix_count].SetValue(this_deref_ref.int_value);
 		}
 		else // this_deref is a variable.
