@@ -43,9 +43,6 @@
     <ClCompile Include="source\keyboard_mouse.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="source\mt19937ar-cok.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="source\os_version.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -142,9 +139,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="source\lib_pcre\pcre\pcre.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\mt19937ar-cok.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="source\os_version.h">

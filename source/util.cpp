@@ -3184,6 +3184,16 @@ int CompareVersion(LPCTSTR a, LPCTSTR b)
 
 
 
+// Fills a buffer with pseudo-random numbers.
+BOOLEAN __stdcall GenRandom(PVOID RandomBuffer, ULONG RandomBufferLength)
+// Don't change the function signature without also changing the type-cast below.
+{
+	static auto *RtlGenRandom = (decltype(&GenRandom)) GetProcAddress(GetModuleHandle(_T("Advapi32")), "SystemFunction036");
+	return RtlGenRandom && RtlGenRandom(RandomBuffer, RandomBufferLength);
+}
+
+
+
 #if defined(_MSC_VER) && defined(_DEBUG)
 void OutputDebugStringFormat(LPCTSTR fmt, ...)
 {

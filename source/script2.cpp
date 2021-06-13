@@ -18,7 +18,6 @@ GNU General Public License for more details.
 #include <olectl.h> // for OleLoadPicture()
 #include <winioctl.h> // For PREVENT_MEDIA_REMOVAL and CD lock/unlock.
 #include "qmath.h" // Used by Transform() [math.h incurs 2k larger code size just for ceil() & floor()]
-#include "mt19937ar-cok.h" // for sorting in random order
 #include "script.h"
 #include "window.h" // for IF_USE_FOREGROUND_WINDOW
 #include "application.h" // for MsgSleep()
@@ -6559,26 +6558,25 @@ BIF_DECL(BIF_Sort)
 			*cp = '\0';  // Terminate the item that appears before this delimiter.
 			++item_count;
 			if (sort_random)
-				*(item_curr + 1) = (LPTSTR)(size_t)genrand_int31(); // i.e. the randoms are in the odd fields, the pointers in the even.
+			{
+				auto &n = *(unsigned int *)(item_curr + 1); // i.e. the randoms are in the odd fields, the pointers in the even.
+				GenRandom(&n, sizeof(n));
+				n >>= 1;
 				// For the above:
-				// I don't know the exact reasons, but using genrand_int31() is much more random than
-				// using genrand_int32() in this case.  Perhaps it is some kind of statistical/cyclical
-				// anomaly in the random number generator.  Or perhaps it's something to do with integer
-				// underflow/overflow in SortRandom().  In any case, the problem can be proven via the
-				// following script, which shows a sharply non-random distribution when genrand_int32()
-				// is used:
-				//count = 0
-				//Loop 10000
+				// The random numbers given to SortRandom() must be within INT_MAX of each other, otherwise
+				// integer overflow would cause the difference between two items to flip signs depending
+				// on how far apart the numbers are, which would mean for some cases where A < B and B < C,
+				// it's possible that C > A.  Without n >>= 1, the problem can be proven via the following
+				// script, which shows a sharply biased distribution:
+				//count := 0
+				//Loop total := 10000
 				//{
-				//	var = 1`n2`n3`n4`n5`n
-				//	Sort, Var, Random
-				//	StringLeft, Var1, Var, 1
-				//	if Var1 = 5  ; Change this value to 1 to see the opposite problem.
+				//	var := Sort("1`n2`n3`n4`n5`n", "Random")
+				//	if SubStr(var, 1, 1) = 5
 				//		count += 1
 				//}
-				//Msgbox %count%
-				//
-				// I e-mailed the author about this sometime around/prior to 12/1/04 but never got a response.
+				//MsgBox Round(count / total * 100, 2) "%"
+			}
 			item_curr += unit_size; // i.e. Don't use [] indexing for the reason described above.
 			*item_curr = cp + 1; // Make a pointer to the next item's place in aContents.
 		}
@@ -6589,7 +6587,11 @@ BIF_DECL(BIF_Sort)
 	{
 		++item_count;
 		if (sort_random) // Provide a random number for the last item.
-			*(item_curr + 1) = (LPTSTR)(size_t)genrand_int31(); // i.e. the randoms are in the odd fields, the pointers in the even.
+		{
+			auto &n = *(unsigned int *)(item_curr + 1); // i.e. the randoms are in the odd fields, the pointers in the even.
+			GenRandom(&n, sizeof(n));
+			n >>= 1;
+		}
 	}
 	else // Since the final item is not included in the count, point item_curr to the one before the last, for use below.
 		item_curr -= unit_size;
@@ -14299,46 +14301,68 @@ BIF_DECL(BIF_SqrtLogLn)
 
 BIF_DECL(BIF_Random)
 {
-	if (_f_callee_id == FID_RandomSeed) // Special mode to change the seed.
-	{
-		init_genrand((UINT)ParamIndexToInt64(0)); // It's documented that an unsigned 32-bit number is required.
-		_f_return_empty;
-	}
-	SymbolType arg1type = aParamCount > 0 ? ParamIndexIsNumeric(0) : SYM_MISSING;
-	SymbolType arg2type = aParamCount > 1 ? ParamIndexIsNumeric(1) : SYM_MISSING;
-	bool use_float = arg1type == PURE_FLOAT || arg2type == PURE_FLOAT;
+	UINT64 rand = 0;
+	if (!GenRandom(&rand, sizeof(rand)))
+		_f_throw(ERR_INTERNAL_CALL);
+
+	SymbolType arg1type = ParamIndexIsOmitted(0) ? SYM_MISSING : ParamIndexIsNumeric(0);
+	SymbolType arg2type = ParamIndexIsOmitted(1) ? SYM_MISSING : ParamIndexIsNumeric(1);
+	if (arg1type == PURE_NOT_NUMERIC)
+		_f_throw_param(0, _T("Number"));
+	if (arg2type == PURE_NOT_NUMERIC)
+		_f_throw_param(1, _T("Number"));
+
+	bool use_float = arg1type == PURE_FLOAT || arg2type == PURE_FLOAT || !aParamCount; // Let Random() be Random(0.0, 1.0).
 	if (use_float)
 	{
-		double rand_min = arg1type != SYM_MISSING ? ParamIndexToDouble(0) : 0;
-		double rand_max = arg2type != SYM_MISSING ? ParamIndexToDouble(1) : INT_MAX;
-		// Seems best not to raise an error for this function at all, since silly cases
-		// such as Max > Min are too rare.  Swap the two values instead.
-		if (rand_min > rand_max)
-		{
-			double rand_swap = rand_min;
-			rand_min = rand_max;
-			rand_max = rand_swap;
-		}
-		_f_return((genrand_real1() * (rand_max - rand_min)) + rand_min);
+		double target_min = arg1type != SYM_MISSING ? ParamIndexToDouble(0) : 0.0;
+		double target_max = arg2type != SYM_MISSING ? ParamIndexToDouble(1) : arg1type == SYM_MISSING ? 1.0 : 0.0;
+		// Be permissive about the order of parameters, and convert Random(n) to Random(0, n).
+		if (target_min > target_max)
+			swap(target_min, target_max);
+		// The first part below produces a 53-bit integer, and from that a value between
+		// 0.0 (inclusive) and 1.0 (exclusive) with the maximum precision for a double.
+		_f_return((((rand >> 11) / 9007199254740992.0) * (target_max - target_min)) + target_min);
 	}
-	else // Avoid using floating point, where possible, which may improve speed a lot more than expected.
+	else
 	{
-		int rand_min = arg1type != SYM_MISSING ? ParamIndexToInt(0) : 0;
-		int rand_max = arg2type != SYM_MISSING ? ParamIndexToInt(1) : INT_MAX;
-		// Seems best not to raise an error for this function at all, since silly cases
-		// such as Max > Min are too rare.  Swap the two values instead.
-		if (rand_min > rand_max)
-		{
-			int rand_swap = rand_min;
-			rand_min = rand_max;
-			rand_max = rand_swap;
-		}
-		// Do NOT use genrand_real1() to generate random integers because of cases like
+		INT64 target_min = arg1type != SYM_MISSING ? ParamIndexToInt64(0) : 0;
+		INT64 target_max = arg2type != SYM_MISSING ? ParamIndexToInt64(1) : 0;
+		// Be permissive about the order of parameters, and convert Random(n) to Random(0, n).
+		if (target_min > target_max)
+			swap(target_min, target_max);
+		// Do NOT use floating-point to generate random integers because of cases like
 		// min=0 and max=1: we want an even distribution of 1's and 0's in that case, not
 		// something skewed that might result due to rounding/truncation issues caused by
-		// the float method used above:
-		// AutoIt3: __int64 is needed here to do the proper conversion from unsigned long to signed long:
-		_f_return(__int64(genrand_int32() % ((__int64)rand_max - rand_min + 1)) + rand_min);
+		// the float method used above.
+		// Furthermore, the simple modulo approach is biased when the target range does not
+		// divide cleanly into rand.  Suppose that rand ranges from 0..7, and the target range
+		// is 0..2.  By using modulo, rand is effectively divided into sets {0..2, 3..5, 6..7}
+		// and each value in the set is mapped to the target range 0..2.  Because the last set
+		// maps to 0..1, 0 and 1 have greater chance of appearing than 2.  However, since rand
+		// is 64-bit, this isn't actually a problem for small ranges such as 1..100 due to the
+		// vanishingly small chance of rand falling within the defective set.
+		UINT64 u_max = (UINT64)(target_max - target_min);
+		if (u_max < UINT64_MAX)
+		{
+			// What we actually want is (UINT64_MAX + 1) % (u_max + 1), but without overflow.
+			UINT64 error_margin = UINT64_MAX % (u_max + 1);
+			if (error_margin != u_max) // i.e. ((error_margin + 1) % (u_max + 1)) != 0.
+			{
+				++error_margin;
+				// error_margin is now the remainder after dividing (UINT64_MAX+1) by (u_max+1).
+				// This is also the size of the incomplete number set which must be excluded to
+				// ensure even distribution of random numbers.  For simplicity we just take the
+				// number set starting at 0, since use of modulo below will auto-correct.
+				// For example, with a target range of 1..100, the error_margin should be 16,
+				// which gives a mere 16 in 2**64 chance that a second iteration will be needed.
+				while (rand < error_margin)
+					// To ensure even distribution, keep trying until outside the error margin.
+					GenRandom(&rand, sizeof(rand));
+			}
+			rand %= (u_max + 1);
+		}
+		_f_return((INT64)(rand + (UINT64)target_min));
 	}
 }
 

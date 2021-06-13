@@ -18,7 +18,6 @@ GNU General Public License for more details.
 #include "script.h"
 #include "globaldata.h" // for a lot of things
 #include "util.h" // for strlcpy() etc.
-#include "mt19937ar-cok.h" // for random number generator
 #include "window.h" // for a lot of things
 #include "application.h" // for MsgSleep()
 #include "TextIO.h"
@@ -260,8 +259,7 @@ FuncEntry g_BIF[] =
 	BIF1(ProcessSetPriority, 1, 2),
 	BIFn(ProcessWait, 1, 2, BIF_Process),
 	BIFn(ProcessWaitClose, 1, 2, BIF_Process),
-	BIFn(Random, 0, 2, BIF_Random),
-	BIFn(RandomSeed, 1, 1, BIF_Random),
+	BIF1(Random, 0, 2),
 	BIFn(RegDelete, 0, 2, BIF_Reg),
 	BIFn(RegDeleteKey, 0, 1, BIF_Reg),
 	BIFn(RegExMatch, 2, 4, BIF_RegEx, {3}),
@@ -1605,21 +1603,7 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 	if (!PreparseCommands(mFirstLine))
 		return LOADING_FAILED; // Error was already displayed by the above calls.
 
-	// Initialize the random number generator:
-	// Note: On 32-bit hardware, the generator module uses only 2506 bytes of static
-	// data, so it doesn't seem worthwhile to put it in a class (so that the mem is
-	// only allocated on first use of the generator).  For v1.0.24, _ftime() is not
-	// used since it could be as large as 0.5 KB of non-compressed code.  A simple call to
-	// GetSystemTimeAsFileTime() seems just as good or better, since it produces
-	// a FILETIME, which is "the number of 100-nanosecond intervals since January 1, 1601."
-	// Use the low-order DWORD since the high-order one rarely changes.  If my calculations are correct,
-	// the low-order 32-bits traverses its full 32-bit range every 7.2 minutes, which seems to make
-	// using it as a seed superior to GetTickCount for most purposes.
-	RESEED_RANDOM_GENERATOR;
-
 	return TRUE; // Must be non-zero.
-	// OBSOLETE: mLineCount was always non-zero at this point since above did AddLine().
-	//return mLineCount; // The count of runnable lines that were loaded, which might be zero.
 }
 
 

@@ -88,13 +88,6 @@ enum VariableTypeType {VAR_TYPE_INVALID, VAR_TYPE_NUMBER, VAR_TYPE_INTEGER, VAR_
 	if (threads_are_attached)\
 		AttachThreadInput(g_MainThreadID, target_thread, FALSE);
 
-#define RESEED_RANDOM_GENERATOR \
-{\
-	FILETIME ft;\
-	GetSystemTimeAsFileTime(&ft);\
-	init_genrand(ft.dwLowDateTime);\
-}
-
 // Since WM_COMMAND IDs must be shared among all menus and controls, they are carefully conserved,
 // especially since there are only 65,535 possible IDs.  In addition, they are assigned to ranges
 // to minimize the need that they will need to be changed in the future (changing the ID of a main
@@ -651,7 +644,6 @@ enum BuiltInFunctionID {
 	FID_ASin = 0, FID_ACos,
 	FID_Sqrt = 0, FID_Log, FID_Ln,
 	FID_Min = 0, FID_Max,
-	FID_Random = 0, FID_RandomSeed,
 	FID_ObjAddRef = 0, FID_ObjRelease,
 	FID_ObjHasOwnProp = 0, FID_ObjOwnPropCount, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjOwnProps,
 	FID_ObjGetBase = 0, FID_ObjSetBase,

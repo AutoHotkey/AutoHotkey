@@ -213,7 +213,6 @@
     <ClCompile Include="source\hotkey.cpp" />
     <ClCompile Include="source\input_object.cpp" />
     <ClCompile Include="source\keyboard_mouse.cpp" />
-    <ClCompile Include="source\mt19937ar-cok.cpp" />
     <ClCompile Include="source\os_version.cpp" />
     <ClCompile Include="source\script.cpp" />
     <ClCompile Include="source\script2.cpp" />
@@ -251,7 +250,6 @@
     <ClInclude Include="source\keyboard_mouse.h" />
     <ClInclude Include="source\KuString.h" />
     <ClInclude Include="source\lib_pcre\pcre\pcret.h" />
-    <ClInclude Include="source\mt19937ar-cok.h" />
     <ClInclude Include="source\os_version.h" />
     <ClInclude Include="source\lib_pcre\pcre\pcre.h" />
     <ClInclude Include="source\qmath.h" />

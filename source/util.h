@@ -733,6 +733,8 @@ PWSTR GetDocumentsFolder();
 
 int CompareVersion(LPCTSTR a, LPCTSTR b);
 
+BOOLEAN __stdcall GenRandom(PVOID RandomBuffer, ULONG RandomBufferLength);
+
 // This is used due to the popcnt instruction not being supported on old CPUs.
 // Source: https://www.autohotkey.com/boards/viewtopic.php?f=14&p=384978
 inline int popcount8(unsigned char c)
