@@ -13708,7 +13708,7 @@ BIF_DECL(BIF_IsTypeish)
 	case VAR_TYPE_DIGIT:
 		if_condition = true;
 		for (cp = aValueStr; *cp; ++cp)
-			if (!_istdigit((UCHAR)*cp))
+			if (*cp < '0' || *cp > '9') // Avoid iswdigit; as documented, only ASCII digits 0 .. 9 are permitted.
 			{
 				if_condition = false;
 				break;
@@ -13720,7 +13720,7 @@ BIF_DECL(BIF_IsTypeish)
 			cp += 2;
 		if_condition = true;
 		for (; *cp; ++cp)
-			if (!_istxdigit((UCHAR)*cp))
+			if (!cisxdigit(*cp)) // Avoid iswxdigit; as documented, only ASCII xdigits are permitted.
 			{
 				if_condition = false;
 				break;
