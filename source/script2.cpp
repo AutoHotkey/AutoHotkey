@@ -16613,6 +16613,15 @@ BIF_DECL(BIF_Trim) // L31
 
 
 
+BIF_DECL(BIF_VerCompare)
+{
+	_f_param_string(a, 0);
+	_f_param_string(b, 1);
+	_f_return(CompareVersion(a, b));
+}
+
+
+
 BIF_DECL(BIF_Type)
 {
 	_f_return_p(TokenTypeString(*aParam[0]));
