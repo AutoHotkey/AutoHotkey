@@ -6782,6 +6782,7 @@ BIF_DECL(BIF_Drive)
 		break;
 
 	case FID_DriveEject:
+	case FID_DriveRetract:
 	{
 		// Don't do DRIVE_SET_PATH in this case since trailing backslash might prevent it from
 		// working on some OSes.
@@ -6804,7 +6805,7 @@ BIF_DECL(BIF_Drive)
 		// all OSes (on the off-chance that the absence of "wait" really avoids waiting on Win9x or future
 		// OSes, or perhaps under certain conditions or for certain types of drives).  See above comment
 		// for details.
-		BOOL retract = ParamIndexToOptionalBOOL(1, 0);
+		BOOL retract = (drive_cmd == FID_DriveRetract);
 		if (!*aValue) // When drive is omitted, operate upon default CD/DVD drive.
 		{
 			sntprintf(mci_string, _countof(mci_string), _T("set cdaudio door %s wait"), retract ? _T("closed") : _T("open"));
