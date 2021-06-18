@@ -6784,44 +6784,51 @@ BIF_DECL(BIF_Drive)
 	case FID_DriveEject:
 	case FID_DriveRetract:
 	{
-		// Don't do DRIVE_SET_PATH in this case since trailing backslash might prevent it from
-		// working on some OSes.
+		// Don't do DRIVE_SET_PATH in this case since trailing backslash is not wanted.
 		// It seems best not to do the below check since:
-		// 1) aValue usually lacks a trailing backslash so that it will work correctly with "open c: type cdaudio".
-		//    That lack might prevent DriveGetType() from working on some OSes.
-		// 2) It's conceivable that tray eject/retract might work on certain types of drives even though
-		//    they aren't of type DRIVE_CDROM.
-		// 3) One or both of the calls to mciSendString() will simply fail if the drive isn't of the right type.
-		//if (GetDriveType(aValue) != DRIVE_CDROM) // Testing reveals that the below method does not work on Network CD/DVD drives.
+		// 1) aValue usually lacks a trailing backslash, which might prevent DriveGetType() from working on some OSes.
+		// 2) Eject (and more rarely, retract) works on some other drive types.
+		// 3) CreateFile or DeviceIoControl will simply fail or have no effect if the drive isn't of the right type.
+		//if (GetDriveType(aValue) != DRIVE_CDROM)
 		//	_f_throw(ERR_FAILED);
-		TCHAR mci_string[256];
-		MCIERROR error;
-		successful = true; // GetLastError() is not relevant for this function.
-		// Note: The following comment is obsolete because research of MSDN indicates that there is no way
-		// not to wait when the tray must be physically opened or closed, at least on Windows XP.  Omitting
-		// the word "wait" from both "close cd wait" and "set cd door open/closed wait" does not help, nor
-		// does replacing wait with the word notify in "set cdaudio door open/closed wait".
-		// The word "wait" is always specified with these operations to ensure consistent behavior across
-		// all OSes (on the off-chance that the absence of "wait" really avoids waiting on Win9x or future
-		// OSes, or perhaps under certain conditions or for certain types of drives).  See above comment
-		// for details.
 		BOOL retract = (drive_cmd == FID_DriveRetract);
-		if (!*aValue) // When drive is omitted, operate upon default CD/DVD drive.
+		TCHAR path[] { '\\', '\\', '.', '\\', 0, ':', '\0', '\0' };
+		if (*aValue)
 		{
-			sntprintf(mci_string, _countof(mci_string), _T("set cdaudio door %s wait"), retract ? _T("closed") : _T("open"));
-			error = mciSendString(mci_string, NULL, 0, NULL); // Open or close the tray.
-			if (error)
-				_f_throw(ERR_FAILED); // GetLastError() not relevant.
-			break;
+			// Testing showed that a Volume GUID of the form \\?\Volume{...} will work even when
+			// the drive isn't mapped to a drive letter.
+			if (cisalpha(aValue[0]) && (!aValue[1] || aValue[1] == ':' && (!aValue[2] || aValue[2] == '\\' && !aValue[3])))
+			{
+				path[4] = aValue[0];
+				aValue = path;
+			}
 		}
-		sntprintf(mci_string, _countof(mci_string), _T("open %s type cdaudio alias cd wait shareable"), aValue);
-		if (mciSendString(mci_string, NULL, 0, NULL)) // Error.
+		else // When drive is omitted, operate upon the first CD/DVD drive.
+		{
+			path[6] = '\\'; // GetDriveType technically requires a slash, although it may work without.
+			// Testing with mciSendString() while changing or removing drive letters showed that
+			// its "default" drive is really just the first drive found in alphabetical order,
+			// which is also the most obvious/intuitive choice.
+			for (TCHAR c = 'A'; ; ++c)
+			{
+				path[4] = c;
+				if (GetDriveType(path) == DRIVE_CDROM)
+					break;
+				if (c == 'Z')
+					_f_throw(ERR_FAILED); // No CD/DVD drive found with a drive letter.  
+			}
+			path[6] = '\0'; // Remove the trailing slash for CreateFile to open the volume.
+			aValue = path;
+		}
+		// Testing indicates neither this method nor the MCI method work with mapped drives or UNC paths.
+		// That makes sense when one considers that the following opens the *volume*, whereas a network
+		// share would correspond to a directory; i.e. this needs "\\.\D:" and not "\\.\D:\".
+		HANDLE hVol = CreateFile(aValue, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+		if (hVol == INVALID_HANDLE_VALUE)
 			break;
-		sntprintf(mci_string, _countof(mci_string), _T("set cd door %s wait"), retract ? _T("closed") : _T("open"));
-		error = mciSendString(mci_string, NULL, 0, NULL); // Open or close the tray.
-		mciSendString(_T("close cd wait"), NULL, 0, NULL);
-		if (error)
-			_f_throw(ERR_FAILED); // GetLastError() not relevant.
+		DWORD unused;
+		successful = DeviceIoControl(hVol, retract ? IOCTL_STORAGE_LOAD_MEDIA : IOCTL_STORAGE_EJECT_MEDIA, NULL, 0, NULL, 0, &unused, NULL);
+		CloseHandle(hVol);
 		break;
 	}
 
