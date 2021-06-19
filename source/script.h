@@ -3459,7 +3459,7 @@ Var *TokenToOutputVar(ExprTokenType &aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
 ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, int *aMinParams = nullptr, bool aShowError = true);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
-BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right);
+BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right, StringCaseSenseType aStringCaseSense);
 LPTSTR TokenTypeString(ExprTokenType &aToken);
 #define STRING_TYPE_STRING _T("String")
 #define INTEGER_TYPE_STRING _T("Integer")

@@ -17209,7 +17209,7 @@ SymbolType TypeOfToken(ExprTokenType &aToken, SymbolType &aIsNum)
 
 
 
-BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right)
+BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right, StringCaseSenseType aStringCaseSense)
 // Compares two tokens using similar rules to SYM_EQUAL, but case sensitive if appropriate.
 {
 	SymbolType left_is_numeric, left_type = TypeOfToken(left, left_is_numeric)
@@ -17221,7 +17221,12 @@ BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right)
 	{
 		TCHAR left_buf[MAX_NUMBER_SIZE], *left_string = TokenToString(left, left_buf);
 		TCHAR right_buf[MAX_NUMBER_SIZE], *right_string = TokenToString(right, right_buf);
-		return !_tcscmp(left_string, right_string);
+		switch (aStringCaseSense)
+		{
+		case SCS_INSENSITIVE:	return !_tcsicmp(left_string, right_string);
+		case SCS_SENSITIVE:		return !_tcscmp(left_string, right_string);
+		default:				return !lstrcmpi(left_string, right_string);
+		}
 	}
 	if (left_type == PURE_INTEGER && right_type == PURE_INTEGER)
 		return TokenToInt64(left) == TokenToInt64(right);
