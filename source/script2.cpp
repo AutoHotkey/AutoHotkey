@@ -17209,33 +17209,6 @@ SymbolType TypeOfToken(ExprTokenType &aToken, SymbolType &aIsNum)
 
 
 
-BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right, StringCaseSenseType aStringCaseSense)
-// Compares two tokens using similar rules to SYM_EQUAL, but case sensitive if appropriate.
-{
-	SymbolType left_is_numeric, left_type = TypeOfToken(left, left_is_numeric)
-			, right_is_numeric, right_type = TypeOfToken(right, right_is_numeric);
-
-	if (left_type == SYM_OBJECT || right_type == SYM_OBJECT)
-		return TokenToObject(left) == TokenToObject(right);
-	if (!left_is_numeric || !right_is_numeric || (left_type == SYM_STRING && right_type == SYM_STRING))
-	{
-		TCHAR left_buf[MAX_NUMBER_SIZE], *left_string = TokenToString(left, left_buf);
-		TCHAR right_buf[MAX_NUMBER_SIZE], *right_string = TokenToString(right, right_buf);
-		switch (aStringCaseSense)
-		{
-		case SCS_INSENSITIVE:	return !_tcsicmp(left_string, right_string);
-		case SCS_SENSITIVE:		return !_tcscmp(left_string, right_string);
-		default:				return !lstrcmpi(left_string, right_string);
-		}
-	}
-	if (left_type == PURE_INTEGER && right_type == PURE_INTEGER)
-		return TokenToInt64(left) == TokenToInt64(right);
-	else
-		return TokenToDouble(left) == TokenToDouble(right);
-}
-
-
-
 ResultType ResultToken::Return(LPTSTR aValue, size_t aLength)
 // Copy and return a string.
 {

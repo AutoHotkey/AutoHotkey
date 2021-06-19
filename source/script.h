@@ -704,6 +704,7 @@ class Line
 {
 private:
 	ResultType EvaluateCondition();
+	ResultType EvaluateSwitchCase(ExprTokenType &aSwitch, SymbolType aSwitchIsNumeric, ExprTokenType &aCase, StringCaseSenseType aStringCaseSense);
 	bool EvaluateLoopUntil(ResultType &aResult);
 	ResultType PerformLoop(ResultToken *aResultToken, Line *&aJumpToLine, Line *aUntil
 		, __int64 aIterationLimit, bool aIsInfinite);
@@ -3459,7 +3460,6 @@ Var *TokenToOutputVar(ExprTokenType &aToken);
 IObject *TokenToObject(ExprTokenType &aToken); // L31
 ResultType ValidateFunctor(IObject *aFunc, int aParamCount, ResultToken &aResultToken, int *aMinParams = nullptr, bool aShowError = true);
 ResultType TokenSetResult(ResultToken &aResultToken, LPCTSTR aValue, size_t aLength = -1);
-BOOL TokensAreEqual(ExprTokenType &left, ExprTokenType &right, StringCaseSenseType aStringCaseSense);
 LPTSTR TokenTypeString(ExprTokenType &aToken);
 #define STRING_TYPE_STRING _T("String")
 #define INTEGER_TYPE_STRING _T("Integer")

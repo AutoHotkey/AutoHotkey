@@ -10287,7 +10287,8 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			size_t switch_value_mem_size = 0;
 			ResultToken switch_value;
 			switch_value.mem_to_free = NULL;
-			StringCaseSenseType string_case_sense = SCS_SENSITIVE;
+			SymbolType switch_is_numeric = PURE_NOT_NUMERIC;
+			StringCaseSenseType string_case_sense = SCS_INVALID; // In this case, the default value indicates numeric comparison should be used when appropriate.
 			if (!line->mArgc) // Switch with no value: find the first 'true' case.
 			{
 				switch_value.symbol = SYM_INVALID;
@@ -10312,6 +10313,32 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 						result = string_case_sense >= SCS_INSENSITIVE_LOGICAL ? line->LineError(ERR_PARAM2_INVALID) : OK;
 					}
 					case_sense_value.Free();
+				}
+				if (result == OK)
+				{
+					if (string_case_sense == SCS_INVALID)
+					{
+						// In this mode, numeric comparison is performed if both switch_value and case_value are
+						// numeric.  For performance, call IsNumeric() for switch_value only once.  If non-numeric,
+						// IsNumeric() calls can be avoided for each case_value.  If it's an object, the comparison
+						// result will be false (not an error) if case_value is not an object, as for a == b.
+						// If string comparison ends up being performed, 
+						switch (switch_value.symbol)
+						{
+						case SYM_STRING: switch_is_numeric = IsNumeric(switch_value.marker, TRUE, FALSE, TRUE); break;
+						case SYM_OBJECT: break; // Leave switch_is_numeric at its default value, PURE_NOT_NUMERIC.
+						default: switch_is_numeric = switch_value.symbol; break;
+						}
+					}
+					else
+					{
+						// Since the CaseSense parameter was specified, perform string comparison for every case.
+						// Avoid calling IsNumeric(), for performance and because its result is not relevant.
+						// It doesn't make sense to specify case sensitivity for objects, so treat that as an error
+						// (otherwise EvaluateSwitchCase would ignore string_case_sense). 
+						if (switch_value.symbol == SYM_OBJECT)
+							result = ResultToken().TypeError(_T("String"), switch_value);
+					}
 				}
 			}
 			if (result == OK)
@@ -10344,8 +10371,20 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 							line_to_execute = NULL; // Do not execute default case.
 							break;
 						}
-						bool found = switch_value.symbol == SYM_INVALID ? TokenToBOOL(case_value)
-							: TokensAreEqual(switch_value, case_value, string_case_sense);
+						bool found;
+						if (switch_value.symbol != SYM_INVALID)
+						{
+							result = EvaluateSwitchCase(switch_value, switch_is_numeric, case_value, string_case_sense);
+							if (result != CONDITION_TRUE && result != CONDITION_FALSE)
+							{
+								line_to_execute = NULL; // Do not execute default case.
+								break;
+							}
+							found = result == CONDITION_TRUE;
+							result = OK;
+						}
+						else
+							found = TokenToBOOL(case_value);
 						if (case_value.symbol == SYM_OBJECT)
 							case_value.object->Release();
 						if (found)
@@ -10567,6 +10606,49 @@ ResultType Line::EvaluateCondition()
 		: ResultToBOOL(ARG1); // CAN'T simply check *ARG1=='1' because the loadtime routine has various ways of setting if_expresion to false for things that are normally expressions.
 
 	return if_condition ? CONDITION_TRUE : CONDITION_FALSE;
+}
+
+
+
+ResultType Line::EvaluateSwitchCase(ExprTokenType &aSwitch, SymbolType aSwitchIsNumeric, ExprTokenType &aCase, StringCaseSenseType aStringCaseSense)
+// Performs comparison of two tokens for Switch().
+{
+	SymbolType case_is_numeric = PURE_NOT_NUMERIC;
+	if (aStringCaseSense == SCS_INVALID)
+	{
+		// Perform numeric comparison if both aSwitch and aCase are numeric and at least one
+		// is pure numeric, not a string.  This should match the behaviour of SYM_EQUALCASE.
+		if (aSwitchIsNumeric && !(aSwitch.symbol == SYM_STRING && aCase.symbol == SYM_STRING))
+			case_is_numeric = TokenIsNumeric(aCase);
+		//else no need to call TokenIsNumeric(); just leave case_is_numeric set to its default
+		// value so that string comparison will be used.
+	}
+	else // Since CaseSense was specified, unconditionally use string comparison.
+	{
+		if (aCase.symbol == SYM_OBJECT)
+			return ResultToken().TypeError(_T("String"), aCase);
+		// Caller has unconditionally set aSwitchIsNumeric to PURE_NOT_NUMERIC in this case,
+		// and has already verified aSwitch.symbol != SYM_OBJECT.
+	}
+	bool equal;
+	if (aSwitch.symbol == SYM_OBJECT || aCase.symbol == SYM_OBJECT)
+		equal = aSwitch.symbol == aCase.symbol && aSwitch.object == aCase.object;
+	else if (!case_is_numeric)
+	{
+		TCHAR left_buf[MAX_NUMBER_SIZE], *left_string = TokenToString(aSwitch, left_buf);
+		TCHAR right_buf[MAX_NUMBER_SIZE], *right_string = TokenToString(aCase, right_buf);
+		switch (aStringCaseSense)
+		{
+		case SCS_INSENSITIVE:			equal = !_tcsicmp(left_string, right_string); break;
+		case SCS_INSENSITIVE_LOCALE:	equal = !lstrcmpi(left_string, right_string); break;
+		default:						equal = !_tcscmp(left_string, right_string); break;
+		}
+	}
+	else if (aSwitchIsNumeric == PURE_INTEGER && case_is_numeric == PURE_INTEGER)
+		equal = TokenToInt64(aSwitch) == TokenToInt64(aCase);
+	else
+		equal = TokenToDouble(aSwitch) == TokenToDouble(aCase);
+	return equal ? CONDITION_TRUE : CONDITION_FALSE;
 }
 
 
