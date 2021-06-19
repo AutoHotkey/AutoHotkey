@@ -4378,9 +4378,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 					// += -= *= /= .= |= &= ^=
 					if (_tcschr(_T("+-*/.|&^"), *item_end) && item_end[1] == '=')
 						break;
-					// //= <<= >>=
-					if (_tcschr(_T("/<>"), *item_end) && item_end[1] == *item_end && (item_end[2] == '=' 
-						|| (*item_end != '/' && item_end[2] == *item_end && item_end[3] == '='))) // allowed: <<<= >>>=, but not ///=
+					// //= <<= >>= >>>=
+					if (_tcschr(_T("/<>"), *item_end) && item_end[1] == *item_end && (item_end[2] == '=' // //= <<= >>=
+						|| (*item_end == '>' && item_end[2] == *item_end && item_end[3] == '='))) // >>>=
 						break;
 					return ScriptError(ERR_INVALID_VARDECL, item);
 				}
@@ -4525,7 +4525,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		case '>':
 		case '<':
 			if (action_args_2nd_char == *action_args && ( action_args[2] == '='	// i.e. >>= and <<=
-				|| (action_args[2] == *action_args && action_args[3] == '=') ))	// or >>>= and <<<=	
+				|| (action_args_2nd_char == '>' && action_args[2] == '>' && action_args[3] == '=') )) // >>>=
 				aActionType = ACT_EXPRESSION; // Mark this line as a stand-alone expression.
 			break;
 		case '.': // L34: Handle dot differently now that dot is considered an action end flag. Detects some more errors and allows some valid expressions which weren't previously allowed.
@@ -4560,7 +4560,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 						&& ( ( _tcschr(_T("/<>"), cp[0]) && cp[2] == '=' // //=, <<= or >>=
 									|| *cp == '+' || *cp == '-' ) // x.y++ or x.y--
 							// or three repeated characters:
-							|| (cp[2] == cp[0] && _tcschr(_T("<>"), cp[0]) && cp[3] == '=') )	) // <<<= or >>>=	
+							|| (cp[0] == '>' && cp[2] == '>' && cp[3] == '=') )	) // >>>=
 					{	// Allow Set and bracketed Get as standalone expression.
 						aActionType = ACT_EXPRESSION;
 						break;
@@ -8159,14 +8159,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						else
 						{
 							++cp; // An additional increment to have loop skip over the second '<' too.
-							if (cp[1] == '<') // look for a third '<'
-							{
-								++cp; // to have the loop skip the third '<'
-								// it is <<< or <<<=, which is taken as SYM_BITSHIFTLEFT and SYM_ASSIGN_BITSHIFTLEFT. 
-								this_infix_item.symbol = cp[1] == '=' ? (cp++, SYM_ASSIGN_BITSHIFTLEFT) : SYM_BITSHIFTLEFT;
-							}
-							else
-								this_infix_item.symbol = SYM_BITSHIFTLEFT;
+							this_infix_item.symbol = SYM_BITSHIFTLEFT;
 						}
 						break;
 					default:
