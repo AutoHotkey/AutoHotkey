@@ -6797,8 +6797,8 @@ BuiltInFunc::BuiltInFunc(FuncEntry &bif) : BuiltInFunc(bif.mName)
 {
 	mBIF = bif.mBIF;
 	mMinParams = bif.mMinParams;
-	mParamCount = bif.mMaxParams;
 	mIsVariadic = bif.mMaxParams == MAX_FUNCTION_PARAMS;
+	mParamCount = mIsVariadic ? bif.mMinParams : bif.mMaxParams;
 	mFID = (BuiltInFunctionID)bif.mID;
 	mOutputVars = bif.mOutputVars;
 }

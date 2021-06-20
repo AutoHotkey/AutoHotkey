@@ -1045,8 +1045,8 @@ Object *Object::DefineMembers(Object *obj, LPTSTR aClassName, ObjectMember aMemb
 			func->mMID = member.id;
 			func->mMIT = IT_CALL;
 			func->mMinParams = member.minParams + 1; // Includes `this`.
-			func->mParamCount = member.maxParams + 1;
 			func->mIsVariadic = member.maxParams == MAXP_VARIADIC;
+			func->mParamCount = func->mIsVariadic ? func->mMinParams : member.maxParams + 1;
 			func->mClass = obj; // AddRef not needed since neither mClass nor our caller's reference to obj is ever Released.
 			obj->DefineMethod(member.name, func);
 			func->Release();
