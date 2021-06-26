@@ -1872,7 +1872,8 @@ ResultType GuiType::ControlSetDateTime(GuiControlType &aControl, LPTSTR aContent
 	{
 		if (YYYYMMDDToSystemTime(aContents, st, true))
 			DateTime_SetSystemtime(aControl.hwnd, GDT_VALID, &st);
-		//else invalid, so leave current sel. unchanged.
+		else
+			_o_throw_value(ERR_INVALID_VALUE, aContents);
 	}
 	else // User wants there to be no date selection.
 	{
@@ -1932,13 +1933,13 @@ ResultType GuiType::ControlSetMonthCal(GuiControlType &aControl, LPTSTR aContent
 {
 	SYSTEMTIME st[2];
 	DWORD gdtr = YYYYMMDDToSystemTime2(aContents, st);
-	if (!gdtr) // Neither min nor max is present (or both are invalid).
-		_o_throw_value(ERR_INVALID_VALUE);
+	if (!gdtr) // aContents is empty or invalid (it's not meaningful to set an empty value).
+		_o_throw_value(ERR_INVALID_VALUE, aContents);
 	if (GetWindowLong(aControl.hwnd, GWL_STYLE) & MCS_MULTISELECT) // Must use range-selection even if selection is only one date.
 	{
 		if (gdtr == GDTR_MIN) // No maximum is present, so set maximum to minimum.
 			st[1] = st[0];
-		//else just max, or both are present.  Assume both for code simplicity.
+		//else both are present.
 		MonthCal_SetSelRange(aControl.hwnd, st);
 	}
 	else
@@ -4234,9 +4235,14 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	}
 
 	case GUI_CONTROL_MONTHCAL:
-		if (!opt.gdtr && *aText) // The option "ChooseYYYYMMDD" was not present, so fall back to Text (allow Text to be ignored in case it's incorrectly a date-time format, etc.)
+		if (*aText)
 		{
 			opt.gdtr = YYYYMMDDToSystemTime2(aText, opt.sys_time);
+			if (!opt.gdtr)
+			{
+				delete pcontrol;
+				return g_script.RuntimeError(ERR_INVALID_VALUE, aText);
+			}
 			if (opt.gdtr == (GDTR_MIN | GDTR_MAX)) // When range is present, multi-select is automatically put into effect.
 				style |= MCS_MULTISELECT;  // Must be applied during control creation since it can't be changed afterward.
 		}
@@ -5330,7 +5336,11 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					else // See if it's a valid date-time.
 						if (YYYYMMDDToSystemTime(next_option, aOpt.sys_time[0], true)) // Date string is valid.
 							aOpt.choice = 1; // Overwrite 0 to flag sys_time as both present and valid.
-						//else leave choice at its 0 default to indicate no valid Choose option was present.
+						else
+						{
+							error_message = ERR_INVALID_OPTION;
+							goto return_error;
+						}
 					break;
 				default:
 					aOpt.choice = ATOI(next_option);
@@ -5851,7 +5861,12 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 					{
 						// Note: aOpt.range_changed is not set for these control types. aOpt.gdtr_range is used instead.
 						aOpt.gdtr_range = YYYYMMDDToSystemTime2(next_option, aOpt.sys_time_range);
-						if (aOpt.gdtr_range && aControl.hwnd) // Caller relies on us doing it now.
+						if (!aOpt.gdtr_range) // Must be invalid, since next_option was verified to be non-empty.
+						{
+							error_message = ERR_INVALID_OPTION;
+							goto return_error;
+						}
+						if (aControl.hwnd) // Caller relies on us doing it now.
 						{
 							SendMessage(aControl.hwnd // MCM_SETRANGE != DTM_SETRANGE
 								, aControl.type == GUI_CONTROL_DATETIME ? DTM_SETRANGE : MCM_SETRANGE

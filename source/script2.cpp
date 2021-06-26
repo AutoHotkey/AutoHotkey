@@ -5618,7 +5618,8 @@ BIF_DECL(BIF_FormatTime)
 			// Pass "false" for validation so that times can still be reported even if the year
 			// is prior to 1601.  If the time and/or date is invalid, GetTimeFormat() and GetDateFormat()
 			// will refuse to produce anything, which is documented behavior:
-			YYYYMMDDToSystemTime(yyyymmdd, st, false);
+			if (!YYYYMMDDToSystemTime(yyyymmdd, st, false))
+				_f_throw_param(0);
 		}
 	}
 	
@@ -13718,7 +13719,7 @@ BIF_DECL(BIF_IsTypeish)
 		// Also insist on numeric, because even though YYYYMMDDToFileTime() will properly convert a
 		// non-conformant string such as "2004.4", for future compatibility, we don't want to
 		// report that such strings are valid times:
-		if_condition = IsNumeric(aValueStr, false, false, false) && YYYYMMDDToSystemTime(aValueStr, st, true); // Can't call Var::IsNumeric() here because it doesn't support aAllowNegative.
+		if_condition = IsNumeric(aValueStr, false, false, false) && YYYYMMDDToSystemTime(aValueStr, st, true);
 		break;
 	}
 	case VAR_TYPE_DIGIT:

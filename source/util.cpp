@@ -81,7 +81,8 @@ int GetISOWeekNumber(LPTSTR aBuf, int aYear, int aYDay, int aWDay)
 ResultType YYYYMMDDToFileTime(LPTSTR aYYYYMMDD, FILETIME &aFileTime)
 {
 	SYSTEMTIME st;
-	YYYYMMDDToSystemTime(aYYYYMMDD, st, false);  // "false" because it's validated below.
+	if (!YYYYMMDDToSystemTime(aYYYYMMDD, st, false))  // "false" because it's validated below.
+		return FAIL;
 	// This will return failure if aYYYYMMDD contained any invalid elements, such as an
 	// explicit zero for the day of the month.  It also reports failure if st.wYear is
 	// less than 1601, which for simplicity is enforced globally throughout the program
@@ -93,7 +94,8 @@ ResultType YYYYMMDDToFileTime(LPTSTR aYYYYMMDD, FILETIME &aFileTime)
 
 DWORD YYYYMMDDToSystemTime2(LPTSTR aYYYYMMDD, SYSTEMTIME *aSystemTime)
 // Calls YYYYMMDDToSystemTime() to fill up to two elements of the aSystemTime array.
-// Returns a GDTR bitwise combination to indicate which of the two elements, or both, are valid.
+// Returns 0 if the parameter is empty or invalid, otherwise a GDTR bitwise combination
+// to indicate which of the two elements, or both, are present.
 // Caller must ensure that aYYYYMMDD is a modifiable string since it's temporarily altered and restored here.
 {
 	DWORD gdtr = 0;
@@ -120,20 +122,22 @@ DWORD YYYYMMDDToSystemTime2(LPTSTR aYYYYMMDD, SYSTEMTIME *aSystemTime)
 	{
 		if (YYYYMMDDToSystemTime(aYYYYMMDD, aSystemTime[1], true)) // Date string is valid.
 			gdtr |= GDTR_MAX; // Indicate that maximum is present.
+		else
+			gdtr = 0; // Indicate that the value is invalid.
 	}
 	return gdtr;
 }
 
 
 
-ResultType YYYYMMDDToSystemTime(LPTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool aDoValidate)
+ResultType YYYYMMDDToSystemTime(LPTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool aValidateTimeValues)
 // Although aYYYYMMDD need not be terminated at the end of the YYYYMMDDHH24MISS string (as long as
 // the string's capacity is at least 14), it should be terminated if only the leading part
 // of the YYYYMMDDHH24MISS format is present.
-// Caller must ensure that aYYYYMMDD is non-NULL.  If aDoValidate is false, OK is always
-// returned and aSystemTime might contain invalid elements.  Otherwise, FAIL will be returned
-// if the date and time contains any invalid elements, or if the year is less than 1601
-// (Windows generally does not support earlier years).
+// Caller must ensure that aYYYYMMDD is non-NULL.  If the string's length is not an even number
+// between 4 and 14 (inclusive), FAIL is returned.  FAIL is also returned if aValidateTimeValues
+// is true and some elements of aYYYYMMDD were invalid, or if the year is less than 1601
+// (Windows generally does not support earlier years).  Otherwise OK is returned.
 {
 	// sscanf() is avoided because it adds 2 KB to the compressed EXE size.
 	TCHAR temp[16];
@@ -204,7 +208,11 @@ ResultType YYYYMMDDToSystemTime(LPTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool 
 		aSystemTime.wDayOfWeek = (y + y/4 - y/100 + y/400 + t[aSystemTime.wMonth-1] + aSystemTime.wDay) % 7;
 	}
 
-	if (aDoValidate)
+	// Callers who check the return value expect this to be done even when !aValidateTimeValues:
+	if (length < 4 || (length & 1) || length > 14)
+		return FAIL;
+
+	if (aValidateTimeValues)
 	{
 		FILETIME ft;
 		// This will return failure if aYYYYMMDD contained any invalid elements, such as an
