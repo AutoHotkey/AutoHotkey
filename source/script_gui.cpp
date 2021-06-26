@@ -270,6 +270,8 @@ ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, E
 		pcontrol->AddRef();
 		_o_return(pcontrol);
 	} // else: above already displayed an error message.
+	if (!result)
+		aResultToken.SetExitResult(result);
 	return result;
 }
 
