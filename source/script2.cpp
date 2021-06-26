@@ -6395,49 +6395,35 @@ BIF_DECL(BIF_Sort)
 		switch(_totupper(*cp))
 		{
 		case 'C':
-			if (ctoupper(cp[1]) == 'L') // v1.0.43.03: Locale-insensitive mode, which probably performs considerably worse.
+			if (ctoupper(cp[1]) == 'L')
 			{
-				if (!_tcsnicmp(cp+2, _T("ogical"), 6)) // CLogical.
+				if (!_tcsnicmp(cp+2, _T("Logical") + 1, 6)) // CLogical.  Using "Logical" + 1 instead of "ogical" was confirmed to eliminate one string from the binary (due to string pooling).
 				{
 					cp += 7;
 					g_SortCaseSensitive = SCS_INSENSITIVE_LOGICAL;
 				}
-				else if (!_tcsnicmp(cp+2, _T("ocale"), 5)) // CLocale.
+				else
 				{
-					cp += 6;
+					if (!_tcsnicmp(cp+2, _T("Locale") + 1, 5)) // CLocale
+						cp += 6;
+					else // CL
+						++cp;
 					g_SortCaseSensitive = SCS_INSENSITIVE_LOCALE;
 				}
-				else // CL.
-				{
-					++cp;
-					g_SortCaseSensitive = SCS_INSENSITIVE_LOCALE;
-				}
 			}
-			else if (ctoupper(cp[1]) == 'O')
+			else if (!_tcsnicmp(cp+1, _T("Off"), 3)) // COff.  Using ctoupper() here significantly increased code size.
 			{
-				if (ctoupper(cp[2]) == 'N') // COn.
-				{
-					cp += 2;
-					g_SortCaseSensitive = SCS_SENSITIVE;
-				}
-				else if ((ctoupper(cp[2]) == 'F') && (ctoupper(cp[3]) == 'F')) // COff.
-				{
-					cp += 3;
-					g_SortCaseSensitive = SCS_INSENSITIVE;
-				}
-			}
-			else if ((cp[1]) == '1') // C1.
-			{
-				++cp;
-				g_SortCaseSensitive = SCS_SENSITIVE;
-			}
-			else if ((cp[1]) == '0') // C0.
-			{
-				++cp;
+				cp += 3;
 				g_SortCaseSensitive = SCS_INSENSITIVE;
 			}
-			else // C.
+			else if (cp[1] == '0') // C0
+				g_SortCaseSensitive = SCS_INSENSITIVE;
+			else // C  C1  COn
+			{
+				if (!_tcsnicmp(cp+1, _T("On"), 2)) // COn.  Using ctoupper() here significantly increased code size.
+					cp += 2;
 				g_SortCaseSensitive = SCS_SENSITIVE;
+			}
 			break;
 		case 'D':
 			if (!cp[1]) // Avoids out-of-bounds when the loop's own ++cp is done.
