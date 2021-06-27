@@ -3834,16 +3834,16 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// wrap the text, at least on XP.  Since it's strange-looking to have multiple lines, newlines
 		// should be rarely present anyway.  Also, BS_NOTIFY seems to have no effect on GroupBoxes (it
 		// never sends any BN_CLICKED/BN_DBLCLK messages).  This has been verified twice.
-		control.hwnd = CreateWindowEx(exstyle, _T("button"), aText, style
+		control.hwnd = CreateWindowEx(exstyle, _T("Button"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL);
 		break;
 
 	case GUI_CONTROL_BUTTON:
-		// For all "button" type controls, BS_MULTILINE is included by default so that any literal
+		// For all "Button" type controls, BS_MULTILINE is included by default so that any literal
 		// newlines in the button's name will start a new line of text as the user intended.
 		// In addition, this causes automatic wrapping to occur if the user specified a width
 		// too small to fit the entire line.
-		if (control.hwnd = CreateWindowEx(exstyle, _T("button"), aText, style
+		if (control.hwnd = CreateWindowEx(exstyle, _T("Button"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			if (style & BS_DEFPUSHBUTTON)
@@ -3892,7 +3892,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// The BS_NOTIFY style is not a good idea for checkboxes because although it causes the control
 		// to send BN_DBLCLK messages, any rapid clicks by the user on (for example) a tri-state checkbox
 		// are seen only as one click for the purpose of changing the box's state.
-		if (control.hwnd = CreateWindowEx(exstyle, _T("button"), aText, style
+		if (control.hwnd = CreateWindowEx(exstyle, _T("Button"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			if (opt.checked != BST_UNCHECKED) // Set the specified state.
@@ -3901,7 +3901,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		break;
 
 	case GUI_CONTROL_RADIO:
-		control.hwnd = CreateWindowEx(exstyle, _T("button"), aText, style
+		control.hwnd = CreateWindowEx(exstyle, _T("Button"), aText, style
 			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL);
 		// opt.checked is handled later below.
 		break;
@@ -3918,7 +3918,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// as the control's caption, rather than the name of the variable.  The name of the variable
 		// isn't that useful anymore anyway since GuiControl(Get) can access controls directly by
 		// their current output-var names:
-		if (control.hwnd = CreateWindowEx(exstyle, _T("Combobox"), _T(""), style
+		if (control.hwnd = CreateWindowEx(exstyle, _T("ComboBox"), _T(""), style
 			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			// Set font unconditionally to simplify calculations, which help ensure that at least one item
@@ -3953,7 +3953,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 
 	case GUI_CONTROL_LISTBOX:
 		// See GUI_CONTROL_COMBOBOX above for why empty string is passed in as the caption:
-		if (control.hwnd = CreateWindowEx(exstyle, _T("Listbox"), _T(""), style
+		if (control.hwnd = CreateWindowEx(exstyle, _T("ListBox"), _T(""), style
 			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			if (opt.tabstop_count)
@@ -4167,7 +4167,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 		// is needed.  Otherwise, it will return a new buffer which we are responsible for freeing
 		// when done (or NULL if it failed to allocate the memory).
 		malloc_buf = (*aText && (style & ES_MULTILINE)) ? TranslateLFtoCRLF(aText) : aText;
-		if (control.hwnd = CreateWindowEx(exstyle, _T("edit"), malloc_buf ? malloc_buf : aText, style  // malloc_buf is checked again in case mem alloc failed.
+		if (control.hwnd = CreateWindowEx(exstyle, _T("Edit"), malloc_buf ? malloc_buf : aText, style  // malloc_buf is checked again in case mem alloc failed.
 			, opt.x, opt.y, opt.width, opt.height, parent_hwnd, control_id, g_hInstance, NULL))
 		{
 			// As documented in MSDN, setting a password char will have no effect for multi-line edits
@@ -5377,7 +5377,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 			if (adding) aOpt.style_add |= WS_TABSTOP; else aOpt.style_remove |= WS_TABSTOP;
 		else if (!_tcsicmp(next_option, _T("NoTab"))) // Supported for backward compatibility and it might be more ergonomic for "Gui Add".
 			if (adding) aOpt.style_remove |= WS_TABSTOP; else aOpt.style_add |= WS_TABSTOP;
-		else if (!_tcsicmp(next_option, _T("Group")))
+		else if (!_tcsicmp(next_option, _T("group")))
 			if (adding) aOpt.style_add |= WS_GROUP; else aOpt.style_remove |= WS_GROUP;
 		else if (!_tcsicmp(next_option, _T("Redraw")))  // Seems a little more intuitive/memorable than "Draw".
 			aOpt.redraw = adding ? CONDITION_TRUE : CONDITION_FALSE; // Otherwise leave it at its default of 0.
@@ -5527,7 +5527,7 @@ ResultType GuiType::ControlParseOptions(LPTSTR aOptions, GuiControlOptionsType &
 				aOpt.color_bk = CLR_DEFAULT;
 			}
 		} // Option "Background".
-		else if (!_tcsicmp(next_option, _T("Group"))) // This overlaps with g-label, but seems well worth it in this case.
+		else if (!_tcsicmp(next_option, _T("group"))) // This overlaps with g-label, but seems well worth it in this case.
 			if (adding) aOpt.style_add |= WS_GROUP; else aOpt.style_remove |= WS_GROUP;
 		else if (!_tcsicmp(next_option, _T("Theme")))
 			aOpt.use_theme = adding;
@@ -8046,7 +8046,7 @@ int GuiType::FindOrCreateFont(LPTSTR aOptions, LPTSTR aFontName, FontType *aFoun
 		TCHAR orig_char = *option_end;
 		*option_end = '\0';
 
-		if (!_tcsicmp(next_option, _T("bold")))
+		if (!_tcsicmp(next_option, _T("Bold")))
 			font.lfWeight = FW_BOLD;
 		else if (!_tcsicmp(next_option, _T("italic")))
 			font.lfItalic = true;

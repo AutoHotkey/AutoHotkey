@@ -1125,8 +1125,8 @@ public:
 		if (*aBuf == '3' && !*(aBuf + 1)) return FIND_EXACT;
 		if (!_tcsicmp(aBuf, _T("RegEx"))) return FIND_REGEX; // Goes with the above, not fast/slow below.
 
-		if (!_tcsicmp(aBuf, _T("FAST"))) return FIND_FAST;
-		if (!_tcsicmp(aBuf, _T("SLOW"))) return FIND_SLOW;
+		if (!_tcsicmp(aBuf, _T("Fast"))) return FIND_FAST;
+		if (!_tcsicmp(aBuf, _T("Slow"))) return FIND_SLOW;
 		return MATCHMODE_INVALID;
 	}
 
@@ -1254,19 +1254,19 @@ public:
 	// These are also the modes that AutoIt3 uses.
 	{
 		if (!aBuf || !*aBuf) return SW_SHOWNORMAL;
-		if (!_tcsicmp(aBuf, _T("MIN"))) return SW_MINIMIZE;
-		if (!_tcsicmp(aBuf, _T("MAX"))) return SW_MAXIMIZE;
-		if (!_tcsicmp(aBuf, _T("HIDE"))) return SW_HIDE;
+		if (!_tcsicmp(aBuf, _T("Min"))) return SW_MINIMIZE;
+		if (!_tcsicmp(aBuf, _T("Max"))) return SW_MAXIMIZE;
+		if (!_tcsicmp(aBuf, _T("Hide"))) return SW_HIDE;
 		return SW_SHOWNORMAL;
 	}
 
 	static int ConvertMouseButton(LPTSTR aBuf, bool aAllowWheel = true)
 	// Returns the matching VK, or zero if none.
 	{
-		if (!*aBuf || !_tcsicmp(aBuf, _T("LEFT")) || !_tcsicmp(aBuf, _T("L")))
+		if (!*aBuf || !_tcsicmp(aBuf, _T("Left")) || !_tcsicmp(aBuf, _T("L")))
 			return VK_LBUTTON; // Some callers rely on this default when !*aBuf.
-		if (!_tcsicmp(aBuf, _T("RIGHT")) || !_tcsicmp(aBuf, _T("R"))) return VK_RBUTTON;
-		if (!_tcsicmp(aBuf, _T("MIDDLE")) || !_tcsicmp(aBuf, _T("M"))) return VK_MBUTTON;
+		if (!_tcsicmp(aBuf, _T("Right")) || !_tcsicmp(aBuf, _T("R"))) return VK_RBUTTON;
+		if (!_tcsicmp(aBuf, _T("Middle")) || !_tcsicmp(aBuf, _T("M"))) return VK_MBUTTON;
 		if (!_tcsicmp(aBuf, _T("X1"))) return VK_XBUTTON1;
 		if (!_tcsicmp(aBuf, _T("X2"))) return VK_XBUTTON2;
 		if (aAllowWheel)

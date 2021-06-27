@@ -89,7 +89,7 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *ap
 
 			auto name = TokenToString(*aParam[i], buf);
 
-			if (!_tcsicmp(name, _T("base")) && apResultToken)
+			if (!_tcsicmp(name, _T("Base")) && apResultToken)
 			{
 				auto base = dynamic_cast<Object *>(TokenToObject(*aParam[i + 1]));
 				if (!obj->SetBase(base, *apResultToken))

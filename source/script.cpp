@@ -901,7 +901,7 @@ ResultType Script::CreateWindows()
 			EnableOrDisableViewMenuItems(menu, MF_DISABLED | MF_GRAYED);
 	}
 
-	if (    !(g_hWndEdit = CreateWindow(_T("edit"), NULL, WS_CHILD | WS_VISIBLE | WS_BORDER
+	if (    !(g_hWndEdit = CreateWindow(_T("Edit"), NULL, WS_CHILD | WS_VISIBLE | WS_BORDER
 		| ES_LEFT | ES_MULTILINE | ES_READONLY | WS_VSCROLL // | WS_HSCROLL (saves space)
 		, 0, 0, 0, 0, g_hWnd, (HMENU)1, g_hInstance, NULL))   )
 	{
@@ -1337,7 +1337,7 @@ ResultType Script::Edit()
 		// method, which is attempted first, is more likely to succeed.  This is because it uses
 		// the command line method of creating the process, with everything all lumped together:
 		sntprintf(buf, _countof(buf), _T("\"%s\""), mFileSpec);
-		if (!ActionExec(_T("edit"), buf, mFileDir, false))  // Since this didn't work, try notepad.
+		if (!ActionExec(_T("Edit"), buf, mFileDir, false))  // Since this didn't work, try notepad.
 		{
 			// Even though notepad properly handles filenames with spaces in them under WinXP,
 			// even without double quotes around them, it seems safer and more correct to always
@@ -2222,8 +2222,8 @@ process_completed_line:
 						TCHAR remap_buf[LINE_SIZE];
 						cp = remap_buf;
 						cp += _stprintf(cp
-							, _T("Set%sDelay(-1),") // Does NOT need to be "-1, -1" for SetKeyDelay (see below).
-							, remap_dest_is_mouse ? _T("Mouse") : _T("Key")
+							, _T("%s(-1),") // Does NOT need to be "-1, -1" for SetKeyDelay (see below).
+							, remap_dest_is_mouse ? _T("SetMouseDelay") : _T("SetKeyDelay") // Using the full function names vs. Set%sDelay might help size due to string pooling.
 						);
 						// It seems unnecessary to set press-duration to -1 even though the auto-exec section might
 						// have set it to something higher than -1 because:
@@ -2306,9 +2306,9 @@ process_completed_line:
 						if (!make_remap_hotkey(remap_buf)) 
 							return FAIL;
 						_stprintf(remap_buf
-							, _T("Set%sDelay(-1),")
+							, _T("%s(-1),")
 							_T("Send(\"{Blind}{%s Up}\")\n") // Unlike the down-event above, remap_dest_modifiers is not included for the up-event; e.g. ^{b up} is inappropriate.
-							, remap_dest_is_mouse ? _T("Mouse") : _T("Key")
+							, remap_dest_is_mouse ? _T("SetMouseDelay") : _T("SetKeyDelay") // Using the full function names vs. Set%sDelay might help size due to string pooling.
 							, remap_dest
 						);
 						if (!define_remap_func()) // define the "up" function.
@@ -4005,9 +4005,9 @@ ResultType Script::ConvertDirectiveBool(LPTSTR aBuf, bool &aResult, bool aDefaul
 {
 	if (!aBuf || !*aBuf)
 		aResult = aDefault;
-	else if (!_tcsicmp(aBuf, _T("true")) || *aBuf == '1' && !aBuf[1])
+	else if (!_tcsicmp(aBuf, _T("True")) || *aBuf == '1' && !aBuf[1])
 		aResult = true;
-	else if (!_tcsicmp(aBuf, _T("false")) || *aBuf == '0' && !aBuf[1])
+	else if (!_tcsicmp(aBuf, _T("False")) || *aBuf == '0' && !aBuf[1])
 		aResult = false;
 	else
 		return FAIL;
@@ -4240,19 +4240,19 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 		{
 			int declare_type;
 			LPTSTR cp;
-			if (!_tcsnicmp(aLineText, _T("Global"), 6))
+			if (!_tcsnicmp(aLineText, _T("global"), 6))
 			{
 				cp = aLineText + 6; // The character after the declaration word.
 				declare_type = VAR_DECLARE_GLOBAL;
 			}
 			else
 			{
-				if (!_tcsnicmp(aLineText, _T("Local"), 5))
+				if (!_tcsnicmp(aLineText, _T("local"), 5))
 				{
 					cp = aLineText + 5; // The character after the declaration word.
 					declare_type = VAR_DECLARE_LOCAL;
 				}
-				else if (!_tcsnicmp(aLineText, _T("Static"), 6)) // Static also implies local (for functions that default to global).
+				else if (!_tcsnicmp(aLineText, _T("static"), 6)) // Static also implies local (for functions that default to global).
 				{
 					cp = aLineText + 6; // The character after the declaration word.
 					declare_type = VAR_DECLARE_STATIC;
@@ -5603,8 +5603,8 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 			this_deref.type = DT_WORDOP;
 			this_deref.symbol = wordop;
 		}
-		else if (operand_length == 4 && !_tcsnicmp(op_begin, _T("true"), 4)
-			|| operand_length == 5 && !_tcsnicmp(op_begin, _T("false"), 5))
+		else if (operand_length == 4 && !_tcsnicmp(op_begin, _T("True"), 4)
+			|| operand_length == 5 && !_tcsnicmp(op_begin, _T("False"), 5))
 		{
 			this_deref.marker = op_begin;
 			this_deref.length = (DerefLengthType)operand_length;
@@ -5943,12 +5943,12 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 				if (value_length > MAX_NUMBER_LENGTH) // Too rare to justify elaborate handling or error reporting.
 					value_length = MAX_NUMBER_LENGTH;
 				tcslcpy(buf, param_start, value_length + 1);  // Make a temp copy to simplify the below (especially IsNumeric).
-				if (!_tcsicmp(buf, _T("false")))
+				if (!_tcsicmp(buf, _T("False")))
 				{
 					this_param.default_type = PARAM_DEFAULT_INT;
 					this_param.default_int64 = 0;
 				}
-				else if (!_tcsicmp(buf, _T("true")))
+				else if (!_tcsicmp(buf, _T("True")))
 				{
 					this_param.default_type = PARAM_DEFAULT_INT;
 					this_param.default_int64 = 1;
@@ -11813,7 +11813,7 @@ ResultType Line::Perform()
 	}
 
 	case ACT_SOUNDPLAY:
-		return SoundPlay(ARG1, *ARG2 && !_tcsicmp(ARG2, _T("wait")) || !_tcsicmp(ARG2, _T("1")));
+		return SoundPlay(ARG1, *ARG2 && !_tcsicmp(ARG2, _T("Wait")) || !_tcsicmp(ARG2, _T("1")));
 
 	case ACT_FILEDELETE:
 		return FileDelete(ARG1);
@@ -13724,7 +13724,7 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 		aWorkingDir = NULL;
 
 	#define IS_VERB(str) (   !_tcsicmp(str, _T("find")) || !_tcsicmp(str, _T("explore")) || !_tcsicmp(str, _T("open"))\
-		|| !_tcsicmp(str, _T("edit")) || !_tcsicmp(str, _T("print")) || !_tcsicmp(str, _T("properties"))   )
+		|| !_tcsicmp(str, _T("Edit")) || !_tcsicmp(str, _T("print")) || !_tcsicmp(str, _T("properties"))   )
 
 	// Set default items to be run by ShellExecute().  These are also used by the error
 	// reporting at the end, which is why they're initialized even if CreateProcess() works

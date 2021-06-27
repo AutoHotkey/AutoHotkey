@@ -6923,11 +6923,11 @@ BIF_DECL(BIF_DriveGet)
 		UINT drive_type;
 		#define ALL_DRIVE_TYPES 256
 		if (!*aValue) drive_type = ALL_DRIVE_TYPES;
-		else if (!_tcsicmp(aValue, _T("CDRom"))) drive_type = DRIVE_CDROM;
+		else if (!_tcsicmp(aValue, _T("CDROM"))) drive_type = DRIVE_CDROM;
 		else if (!_tcsicmp(aValue, _T("Removable"))) drive_type = DRIVE_REMOVABLE;
 		else if (!_tcsicmp(aValue, _T("Fixed"))) drive_type = DRIVE_FIXED;
 		else if (!_tcsicmp(aValue, _T("Network"))) drive_type = DRIVE_REMOTE;
-		else if (!_tcsicmp(aValue, _T("Ramdisk"))) drive_type = DRIVE_RAMDISK;
+		else if (!_tcsicmp(aValue, _T("RAMDisk"))) drive_type = DRIVE_RAMDISK;
 		else if (!_tcsicmp(aValue, _T("Unknown"))) drive_type = DRIVE_UNKNOWN;
 		else
 			goto invalid_parameter;
@@ -8042,7 +8042,7 @@ ResultType ConvertFileOptions(ResultToken &aResultToken, LPTSTR aOptions, UINT &
 				name[next - cp] = '\0';
 				cp = name;
 			}
-			if (!_tcsicmp(cp, _T("RAW")))
+			if (!_tcsicmp(cp, _T("Raw")))
 			{
 				codepage = -1;
 			}

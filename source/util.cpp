@@ -2058,8 +2058,8 @@ HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, 
 	//	aIconNumber = 0; // Use the default behavior, which is "load icon or bitmap, whichever is most appropriate".
 
 	bool script_passed_handle = false, script_owns_handle = false;
-	if (   !_tcsnicmp(aFilespec, _T("hicon:"), 6)
-		|| !_tcsnicmp(aFilespec, _T("hbitmap:"), 8)   )
+	if (   !_tcsnicmp(aFilespec, _T("HICON:"), 6)
+		|| !_tcsnicmp(aFilespec, _T("HBITMAP:"), 8)   )
 	{
 		if (aFilespec[5] == ':') // hicon:
 		{
