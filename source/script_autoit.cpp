@@ -1940,14 +1940,45 @@ void DoIncrementalMouseMove(int aX1, int aY1, int aX2, int aY2, int aSpeed)
 
 DWORD ProcessExist(LPTSTR aProcess)
 {
+	// Determine the PID if aProcess is a pure, non-negative integer (any negative number
+	// is more likely to be the name of a process [with a leading dash], rather than the PID).
+	DWORD specified_pid = IsNumeric(aProcess) ? ATOU(aProcess) : 0;
+	if (specified_pid)
+	{
+		// Most of the time while a PID is being used, the process still exists.  So try opening
+		// the process directly, since doing so is much faster than enumerating all processes:
+		if (HANDLE hproc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, specified_pid))
+		{
+			DWORD wait_result = WAIT_FAILED;
+			// OpenProcess can succeed for erroneous PID values; e.g. values of 1501 to 1503 can
+			// open the process with ID 1500.  This is likely due to the undocumented fact that
+			// PIDs are a multiple of four: https://devblogs.microsoft.com/oldnewthing/20080228-00/?p=23283
+			DWORD actual_pid = GetProcessId(hproc); // Requires PROCESS_QUERY_LIMITED_INFORMATION access.
+			if (actual_pid == specified_pid)
+			{
+				// OpenProcess can succeed for a process which has already exited if another process
+				// still has an open handle to it.  So check whether it's still running:
+				wait_result = WaitForSingleObject(hproc, 0); // Requires SYNCHRONIZE access.
+			}
+			CloseHandle(hproc);
+			if (wait_result == WAIT_OBJECT_0)
+				return 0; // Process has exited.
+			if (wait_result == WAIT_TIMEOUT)
+				return specified_pid; // Process still running.
+			// Otherwise, fall back to the slow but more reliable method to get a more conclusive result.
+		}
+		// If OpenProcess failed, some likely causes are ERROR_ACCESS_DENIED and ERROR_INVALID_PARAMETER.
+		// The latter probably indicates the PID is invalid, but we continue anyway, for the unlikely
+		// case of a process with a name composed of digits and no extension (verified possible).
+		// If ERROR_ACCESS_DENIED was returned, we can't rule out the false-positive cases described
+		// above without doing a thorough enumeration of processes, so continue in that case as well.
+	}
+
 	PROCESSENTRY32 proc;
     proc.dwSize = sizeof(proc);
 	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 	Process32First(snapshot, &proc);
 
-	// Determine the PID if aProcess is a pure, non-negative integer (any negative number
-	// is more likely to be the name of a process [with a leading dash], rather than the PID).
-	DWORD specified_pid = IsNumeric(aProcess) ? ATOU(aProcess) : 0;
 	TCHAR szDrive[_MAX_PATH+1], szDir[_MAX_PATH+1], szFile[_MAX_PATH+1], szExt[_MAX_PATH+1];
 
 	while (Process32Next(snapshot, &proc))
