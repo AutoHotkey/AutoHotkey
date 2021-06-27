@@ -472,12 +472,6 @@ ResultType UserMenu::AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, Use
 	else
 		name_dynamic = Var::sEmptyString; // So that it can be detected as a non-allocated empty string.
 	UserMenuItem *menu_item = new UserMenuItem(name_dynamic, length + 1, aMenuID, aCallback, aSubmenu, this);
-	if (!menu_item) // Should also be very rare.
-	{
-		if (name_dynamic != Var::sEmptyString)
-			free(name_dynamic);
-		return MemoryError();
-	}
 	if (*aOptions && !UpdateOptions(menu_item, aOptions))
 	{
 		// Invalid options; an error message was displayed.

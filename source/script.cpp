@@ -4053,8 +4053,7 @@ ResultType Script::UpdateOrCreateTimer(IObject *aCallback
 	bool timer_existed = (timer != NULL);
 	if (!timer_existed)  // Create it.
 	{
-		if (   !(timer = new ScriptTimer(aCallback))   )
-			return MemoryError();
+		timer = new ScriptTimer(aCallback);
 		if (!mFirstTimer)
 			mFirstTimer = mLastTimer = timer;
 		else
@@ -6846,11 +6845,6 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 		return nullptr; // Above already displayed the error for us.
 
 	auto the_new_func = new UserFunc(new_name);
-	if (!the_new_func)
-	{
-		ScriptError(ERR_OUTOFMEM);
-		return nullptr;
-	}
 
 	if (aClassObject)
 	{
@@ -7101,12 +7095,6 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 		if (auto *bif = GetBuiltInFunc(var_name))
 		{
 			auto *func = new BuiltInFunc(*bif);
-			if (!func)
-			{
-				if (aDisplayError)
-					*aDisplayError = ScriptError(ERR_OUTOFMEM);
-				return nullptr;
-			}
 			Var *var = AddVar(var_name, aVarNameLength, varlist, insert_pos, VAR_DECLARE_GLOBAL);
 			if (!var)
 			{
@@ -10232,9 +10220,6 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 			ASSERT(!g.ThrownToken);
 
 			ResultToken* token = new ResultToken;
-			if (!token) // Unlikely.
-				return MemoryError();
-
 			token->symbol = SYM_STRING; // Set default. ExpandArgs() mightn't set it.
 			token->mem_to_free = NULL;
 			token->marker_length = -1;

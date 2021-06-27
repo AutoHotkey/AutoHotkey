@@ -67,13 +67,7 @@ BIF_DECL(BIF_ComObjGet)
 	hr = CoGetObject(CStringWCharFromTCharIfNeeded(TokenToString(*aParam[0])), NULL, IID_IDispatch, (void **)&pdisp);
 	if (SUCCEEDED(hr))
 	{
-		if (aResultToken.object = new ComObject(pdisp))
-		{
-			aResultToken.symbol = SYM_OBJECT;
-			return;
-		}
-		hr = E_OUTOFMEMORY;
-		pdisp->Release();
+		_f_return(new ComObject(pdisp));
 	}
 	_f_set_retval_p(_T(""), 0);
 	ComError(hr, aResultToken);
@@ -139,19 +133,7 @@ BIF_DECL(BIF_ComObj) // Handles both ComObjFromPtr and ComValue.Call.
 		// script tries to invoke the object, it'll get a warning then.
 	}
 
-	ComObject *obj;
-	if (  !(obj = new ComObject(llVal, vt, flags))  )
-	{
-		aResultToken.MemoryError();
-		// Do any cleanup that the object may have been expected to do:
-		if (vt == VT_DISPATCH || vt == VT_UNKNOWN)
-			((IUnknown *)llVal)->Release();
-		else if ((vt & (VT_BYREF | VT_ARRAY)) == VT_ARRAY && (flags & ComObject::F_OWNVALUE))
-			SafeArrayDestroy((SAFEARRAY *)llVal);
-		return;
-	}
-	aResultToken.symbol = SYM_OBJECT;
-	aResultToken.object = obj;
+	_f_return(new ComObject(llVal, vt, flags));
 }
 
 BIF_DECL(ComValue_Call)
@@ -180,14 +162,7 @@ BIF_DECL(BIF_ComObjActive)
 			punk->Release();
 			if (SUCCEEDED(hr))
 			{
-				if (ComObject *obj = new ComObject(pdisp))
-				{
-					aResultToken.symbol = SYM_OBJECT;
-					aResultToken.object = obj;
-					return;
-				}
-				hr = E_OUTOFMEMORY;
-				pdisp->Release();
+				_f_return(new ComObject(pdisp));
 			}
 		}
 	}
@@ -497,11 +472,7 @@ BIF_DECL(ComObjArray_Call)
 	}
 	if (SAFEARRAY *psa = SafeArrayCreate(vt, dims, bound))
 	{
-		if (ComObject *obj = new ComObject((__int64)psa, VT_ARRAY | vt, ComObject::F_OWNVALUE))
-		{
-			_f_return(obj);
-		}
-		SafeArrayDestroy(psa);
+		_f_return(new ComObject((__int64)psa, VT_ARRAY | vt, ComObject::F_OWNVALUE));
 	}
 	if (vt > 1 && vt < 0x18 && vt != 0xF)
 		_f_throw_oom;
@@ -679,17 +650,12 @@ void VariantToToken(VARIANT &aVar, ResultToken &aToken, bool aRetainVar = true)
 					aVar.punkVal->Release();
 				break;
 			}
-			if (aToken.object = new ComObject((__int64)aVar.punkVal, aVar.vt))
-			{
-				aToken.symbol = SYM_OBJECT;
-				if (aRetainVar)
-					// Caller is keeping their ref, so we AddRef.
-					aVar.punkVal->AddRef();
-				break;
-			}
-			if (!aRetainVar)
-				// Above failed, but caller doesn't want their ref, so release it.
-				aVar.punkVal->Release();
+			if (aRetainVar)
+				// Caller is keeping their ref, so we AddRef.
+				aVar.punkVal->AddRef();
+			aToken.object = new ComObject((__int64)aVar.punkVal, aVar.vt);
+			aToken.symbol = SYM_OBJECT;
+			break;
 		}
 		// FALL THROUGH to the next case:
 	case VT_EMPTY:
@@ -1497,15 +1463,8 @@ HRESULT ComArrayEnum::Begin(ComObject *aArrayObject, ComArrayEnum *&aEnum, int a
 	{
 		VARTYPE arrayType = aArrayObject->mVarType & VT_TYPEMASK;
 		UINT elemSize = SafeArrayGetElemsize(psa);
-		if (aEnum = new ComArrayEnum(aArrayObject, arrayData, lbound, ubound, elemSize, arrayType, aMode >= 2))
-		{
-			aArrayObject->AddRef(); // Keep obj alive until enumeration completes.
-		}
-		else
-		{
-			SafeArrayUnaccessData(psa);
-			hr = E_OUTOFMEMORY;
-		}
+		aEnum = new ComArrayEnum(aArrayObject, arrayData, lbound, ubound, elemSize, arrayType, aMode >= 2);
+		aArrayObject->AddRef(); // Keep obj alive until enumeration completes.
 	}
 	return hr;
 }
@@ -1565,13 +1524,11 @@ IObject *GuiType::ControlGetActiveX(HWND aWnd)
 			if (SUCCEEDED(punk->QueryInterface(IID_IDispatch, (void **)&pdisp)))
 			{
 				punk->Release();
-				if (  !(pobj = new ComObject(pdisp))  )
-					pdisp->Release();
+				pobj = new ComObject(pdisp);
 			}
 			else
 			{
-				if (  !(pobj = new ComObject((__int64)punk, VT_UNKNOWN))  )
-					punk->Release();
+				pobj = new ComObject((__int64)punk, VT_UNKNOWN);
 			}
 			return pobj;
 		}

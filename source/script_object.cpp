@@ -2589,14 +2589,9 @@ BoundFunc *BoundFunc::Bind(IObject *aFunc, int aFlags, LPCTSTR aMember, ExprToke
 		return nullptr;
 	if (auto params = Array::Create(aParam, aParamCount))
 	{
-		if (BoundFunc *bf = new BoundFunc(aFunc, member, params, aFlags))
-		{
-			aFunc->AddRef();
-			// bf has taken over our reference to params.
-			return bf;
-		}
-		// malloc failure; release params and return.
-		params->Release();
+		aFunc->AddRef();
+		// BoundFunc takes our reference to params.
+		return new BoundFunc(aFunc, member, params, aFlags);
 	}
 	free(member);
 	return nullptr;

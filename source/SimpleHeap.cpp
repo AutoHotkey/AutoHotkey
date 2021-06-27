@@ -148,9 +148,7 @@ SimpleHeap *SimpleHeap::CreateBlock()
 // (compared to using "new" on a class that contains a large buffer such as "char mBlock[BLOCK_SIZE]").
 // In a 200 KB script, it saves 8 KB of VM Size as shown by Task Manager.
 {
-	SimpleHeap *block;
-	if (   !(block = new SimpleHeap)   )
-		return NULL;
+	SimpleHeap *block = new SimpleHeap;
 	// The new block's mFreeMarker starts off pointing to the first byte in the new block:
 	if (   !(block->mBlock = block->mFreeMarker = (char *)malloc(BLOCK_SIZE))   )
 	{

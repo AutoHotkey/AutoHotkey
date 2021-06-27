@@ -4782,12 +4782,6 @@ UserFunc* Script::CreateHotFunc()
 	static LPCTSTR sName = _T("<Hotkey>");
 	auto func = new UserFunc(sName);
 	
-	if (!func)
-	{
-		MemoryError();
-		return nullptr;
-	}
-	
 	g->CurrentFunc = func; // Must do this before calling AddVar
 
 	// Add one parameter to hold the name of the hotkey/hotstring when triggered:
