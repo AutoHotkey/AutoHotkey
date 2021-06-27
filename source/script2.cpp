@@ -6354,12 +6354,10 @@ int SortUDF(const void *a1, const void *a2)
 	// catch() block never executed.
 
 	int returned_int;
-	if (i64 > 0)  // Maybe there's a faster/better way to do these checks. Can't simply typecast to an int because some large positives wrap into negative, maybe vice versa.
-		returned_int = 1;
-	else if (i64 < 0)
-		returned_int = -1;
-	else
-		returned_int = 0;
+	if (i64)  // Maybe there's a faster/better way to do these checks. Can't simply typecast to an int because some large positives wrap into negative, maybe vice versa.
+		returned_int = i64 < 0 ? -1 : 1;
+	else  // The result was 0 or "".  Since returning 0 would make the results less predictable and doesn't seem to have any benefit,
+		returned_int = aStr1 < aStr2 ? -1 : 1; // use the relative positions of the items as a tie-breaker.
 
 	return returned_int;
 }
