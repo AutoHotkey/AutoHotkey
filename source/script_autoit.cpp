@@ -1979,8 +1979,6 @@ DWORD ProcessExist(LPTSTR aProcess)
 	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 	Process32First(snapshot, &proc);
 
-	TCHAR szDrive[_MAX_PATH+1], szDir[_MAX_PATH+1], szFile[_MAX_PATH+1], szExt[_MAX_PATH+1];
-
 	while (Process32Next(snapshot, &proc))
 	{
 		if (specified_pid && specified_pid == proc.th32ProcessID)
@@ -1992,9 +1990,9 @@ DWORD ProcessExist(LPTSTR aProcess)
 		// also be a valid name?):
 		// It seems that proc.szExeFile never contains a path, just the executable name.
 		// But in case it ever does, ensure consistency by removing the path:
-		_tsplitpath(proc.szExeFile, szDrive, szDir, szFile, szExt);
-		_tcscat(szFile, szExt);
-		if (!_tcsicmp(szFile, aProcess)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
+		LPCTSTR proc_name = _tcsrchr(proc.szExeFile, '\\');
+		proc_name = proc_name ? proc_name + 1 : proc.szExeFile;
+		if (!_tcsicmp(proc_name, aProcess)) // lstrcmpi() is not used: 1) avoids breaking existing scripts; 2) provides consistent behavior across multiple locales; 3) performance.
 		{
 			CloseHandle(snapshot);
 			return proc.th32ProcessID;
