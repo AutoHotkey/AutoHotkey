@@ -5206,7 +5206,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			{
 			case ACT_ELSE: expected = parent_act == ACT_IF || parent_act == ACT_CATCH || ACT_IS_LOOP(parent_act); break;
 			case ACT_UNTIL: expected = ACT_IS_LOOP_EXCLUDING_WHILE(parent_act); break;
-			case ACT_CATCH: // Same as below.
 			case ACT_FINALLY:
 				if (parent_act == ACT_ELSE)
 				{
@@ -5218,6 +5217,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 					expected = parent->mActionType == ACT_CATCH;
 					break;
 				}
+				// Fall through:
+			case ACT_CATCH:
 				expected = parent_act == ACT_TRY || parent_act == ACT_CATCH;
 				break;
 			}
