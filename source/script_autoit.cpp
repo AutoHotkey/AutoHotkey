@@ -870,11 +870,12 @@ BIF_DECL(BIF_ControlGet)
 		// The above sets start to be the zero-based position of the start of the selection (similar for end).
 		// If there is no selection, start and end will be equal, at least in the edit controls I tried it with.
 		// The dwResult from the above is not useful and is not checked.
-		if (start == end) // Unlike Au3, it seems best to consider a blank selection to be a non-error.
+		if (start > end) // Later sections rely on this for safety with unsupported controls.
+			goto error; // The most likely cause is that this isn't an Edit control, but that isn't certain.
+		if (start == end)
 			_f_return_empty;
-		// Dynamic memory is used because must get all the control's text so that just the selected region
-		// can be cropped out and assigned to the output variable.  Otherwise, output_var might
-		// have to be sized much larger than it would need to be:
+		// Dynamic memory is used because we must get all the control's text so that just the selected region
+		// can be cropped out and returned:
 		if (   !SendMessageTimeout(control_window, WM_GETTEXTLENGTH, 0, 0, SMTO_ABORTIFHUNG, 2000, &length)
 			|| !length  // Since the above didn't return for start == end, this is an error because we have a selection of non-zero length, but no text to go with it!
 			|| !(dyn_buf = tmalloc(length + 1))   ) // Relies on short-circuit boolean order.
