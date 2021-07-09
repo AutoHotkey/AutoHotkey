@@ -937,7 +937,9 @@ ResultType Line::ControlGet(LPTSTR aCmd, LPTSTR aValue, LPTSTR aControl, LPTSTR 
 		// The above sets start to be the zero-based position of the start of the selection (similar for end).
 		// If there is no selection, start and end will be equal, at least in the edit controls I tried it with.
 		// The dwResult from the above is not useful and is not checked.
-		if (start == end) // Unlike Au3, it seems best to consider a blank selection to be a non-error.
+		if (start > end) // Later sections rely on this for safety with unsupported controls.
+			goto error; // The most likely cause is that this isn't an Edit control, but that isn't certain.
+		if (start == end)
 		{
 			output_var.Assign();
 			break; // Fall out of the switch so that ErrorLevel will be set to 0 (no error).
