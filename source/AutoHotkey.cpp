@@ -29,6 +29,7 @@ GNU General Public License for more details.
 
 
 int MainExecuteScript();
+ResultType SetLegacyArgVars(LPTSTR *aArg, int aArgCount);
 
 
 int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
@@ -72,26 +73,14 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// and will be added as variables %1% %2% etc.
 	// The above rules effectively make it impossible to autostart AutoHotkey.ini with parameters
 	// unless the filename is explicitly given (shouldn't be an issue for 99.9% of people).
-	TCHAR var_name[32], *param; // Small size since only numbers will be used (e.g. %1%, %2%).
-	Var *var;
-	bool switch_processing_is_complete = false;
-	int script_param_num = 1;
-	int first_script_param = __argc;
-
-	for (int i = 1; i < __argc; ++i) // Start at 1 because 0 contains the program name.
+	int i;
+	for (i = 1; i < __argc; ++i) // Start at 1 because 0 contains the program name.
 	{
-		param = __targv[i]; // For performance and convenience.
-		if (switch_processing_is_complete) // All args are now considered to be input parameters for the script.
-		{
-			if (   !(var = g_script.FindOrAddVar(var_name, _stprintf(var_name, _T("%d"), script_param_num)))   )
-				return CRITICAL_ERROR;  // Realistically should never happen.
-			var->Assign(param);
-			++script_param_num;
-		}
+		LPTSTR param = __targv[i]; // For performance and convenience.
 		// Insist that switches be an exact match for the allowed values to cut down on ambiguity.
 		// For example, if the user runs "CompiledScript.exe /find", we want /find to be considered
 		// an input parameter for the script rather than a switch:
-		else if (!_tcsicmp(param, _T("/R")) || !_tcsicmp(param, _T("/restart")))
+		if (!_tcsicmp(param, _T("/R")) || !_tcsicmp(param, _T("/restart")))
 			restart_mode = true;
 		else if (!_tcsicmp(param, _T("/F")) || !_tcsicmp(param, _T("/force")))
 			g_ForceLaunch = true;
@@ -157,26 +146,23 @@ int WINAPI _tWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 #endif
 		else // since this is not a recognized switch, the end of the [Switches] section has been reached (by design).
 		{
-			switch_processing_is_complete = true;  // No more switches allowed after this point.
-#ifdef AUTOHOTKEYSC
-			--i; // Make the loop process this item again so that it will be treated as a script param.
-#else
+#ifndef AUTOHOTKEYSC
 			script_filespec = param;  // The first unrecognized switch must be the script filespec, by design.
+			++i; // Omit this from the "args" array.
 #endif
-			first_script_param = i + 1;
+			break; // No more switches allowed after this point.
 		}
 	}
-
-	// Like AutoIt2, store the number of script parameters in the script variable %0%, even if it's zero:
-	if (   !(var = g_script.FindOrAddVar(_T("0")))   )
-		return CRITICAL_ERROR;  // Realistically should never happen.
-	var->Assign(script_param_num - 1);
+	
+	// All remaining args are considered to be input parameters for the script.
+	if (!SetLegacyArgVars(__targv + i, __argc - i))
+		return CRITICAL_ERROR;
 
 	if (Var *var = g_script.FindOrAddVar(_T("A_Args"), 6, VAR_DECLARE_SUPER_GLOBAL))
 	{
 		// Store the remaining args in an array and assign it to "Args".
 		// If there are no args, assign an empty array.
-		Object *args = Object::CreateFromArgV(__targv + first_script_param, __argc - first_script_param);
+		Object *args = Object::CreateFromArgV(__targv + i, __argc - i);
 		if (!args)
 			return CRITICAL_ERROR;  // Realistically should never happen.
 		var->AssignSkipAddRef(args);
@@ -378,4 +364,24 @@ int MainExecuteScript()
 	}
 #endif 
 	return 0; // Never executed; avoids compiler warning.
+}
+
+
+ResultType SetLegacyArgVars(LPTSTR *aArg, int aArgCount)
+{
+	TCHAR var_name[32]; // Small size since only numbers will be used (e.g. %1%, %2%).
+	Var *var;
+
+	// All remaining args are considered to be input parameters for the script.
+	for (int i = 0; i < aArgCount; ++i)
+	{
+		if (   !(var = g_script.FindOrAddVar(var_name, _stprintf(var_name, _T("%d"), i + 1)))   )
+			return FAIL;  // Realistically should never happen.
+		var->Assign(aArg[i]);
+	}
+
+	// Like AutoIt2, store the number of script parameters in the script variable %0%, even if it's zero:
+	if (   !(var = g_script.FindOrAddVar(_T("0")))   )
+		return FAIL;  // Realistically should never happen.
+	return var->Assign(aArgCount);
 }
