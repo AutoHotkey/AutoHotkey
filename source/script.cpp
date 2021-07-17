@@ -5499,7 +5499,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 			if (!*op_end)
 				return ScriptError(ERR_MISSING_CLOSE_QUOTE, op_begin);
 			if (!aDeref.Push())
-				return ScriptError(ERR_OUTOFMEM);
+				return FAIL;
 			DerefType &this_deref = *aDeref.Last();
 			this_deref.type = DT_QSTRING;
 			this_deref.next = NULL;
@@ -5583,7 +5583,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 		}
 
 		if (!aDeref.Push())
-			return ScriptError(ERR_OUTOFMEM);
+			return FAIL;
 		auto &this_deref = *aDeref.Last();
 
 		if (is_double_deref)
@@ -5650,7 +5650,7 @@ ResultType Script::ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefList &
 		// String "derefs" are needed to pair up to the '%' markers, allowing both
 		// to be optimized out if the string is empty (as on either side of %a%).
 		if (!aDeref.Push())
-			return ScriptError(ERR_OUTOFMEM);
+			return FAIL;
 		DerefType &this_deref = *aDeref.Last();
 		this_deref.type = DT_STRING;
 		this_deref.next = NULL;
@@ -5711,7 +5711,7 @@ ResultType Script::ParseFatArrow(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 	, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR &aExprEnd)
 {
 	if (!aDeref.Push())
-		return ScriptError(ERR_OUTOFMEM);
+		return FAIL;
 	int expr_start_pos = int(aExpr - aArgText);
 	int expr_end_pos = FindExprDelim(aArgText, 0, expr_start_pos, aArgMap);
 	if (!ParseFatArrow(*aDeref.Last(), aPrmStart, aPrmEnd, aExpr, aArgText + expr_end_pos, aArgMap + expr_start_pos))
