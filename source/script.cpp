@@ -5710,21 +5710,19 @@ SymbolType Script::ConvertWordOperator(LPCTSTR aWord, size_t aLength)
 ResultType Script::ParseFatArrow(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDeref
 	, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR &aExprEnd)
 {
-	if (!aDeref.Push())
-		return FAIL;
 	int expr_start_pos = int(aExpr - aArgText);
 	int expr_end_pos = FindExprDelim(aArgText, 0, expr_start_pos, aArgMap);
-	if (!ParseFatArrow(*aDeref.Last(), aPrmStart, aPrmEnd, aExpr, aArgText + expr_end_pos, aArgMap + expr_start_pos))
+	if (!ParseFatArrow(aDeref, aPrmStart, aPrmEnd, aExpr, aArgText + expr_end_pos, aArgMap + expr_start_pos))
 		return FAIL;
 	aExprEnd = aArgText + expr_end_pos;
 	return OK;
 }
 
 
-ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd, LPTSTR aExprMap)
+ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd, LPTSTR aExprMap)
 {
 	TCHAR orig_end;
-	
+
 	// Avoid pointing any pending labels at the fat arrow function's body (let the caller
 	// finish adding the line which contains this expression and make it the label's target).
 	bool nolabels = mNoUpdateLabels; // Could be true if this line is a static declaration.
@@ -5759,13 +5757,28 @@ ResultType Script::ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 		return FAIL;
 	*aExprEnd = orig_end;
 
-	aDeref.type = DT_FUNCREF;
-	aDeref.marker = aPrmStart; // Mark the entire fat arrow expression as a function deref.
-	aDeref.length = DerefLengthType(aExprEnd - aPrmStart); // Relies on the fact that an arg can't be longer than the max deref length (because ArgLengthType == DerefLengthType).
-	aDeref.func = g->CurrentFunc;
+	auto name = g->CurrentFunc->mName; // Must be done before AddLine(ACT_BLOCK_END).
 
 	if (!AddLine(ACT_BLOCK_END))
 		return FAIL;
+
+	if (!*name) // Anonymous function is not yet preceded by a DT_VAR.
+	{
+		if (!aDeref.Push())
+			return FAIL;
+	}
+	else // Replace the DT_VAR preceding this fat arrow function with DT_FUNCREF.
+	{
+		ASSERT(aDeref.count && aDeref.Last()->type == DT_VAR && aDeref.Last()->marker == aPrmStart);
+	}
+	auto &fr = *aDeref.Last();
+	fr.type = DT_FUNCREF;
+	fr.marker = aPrmStart; // Mark the entire fat arrow expression as a function deref.
+	fr.length = DerefLengthType(aExprEnd - aPrmStart); // Relies on the fact that an arg can't be longer than the max deref length (because ArgLengthType == DerefLengthType).
+	if (*name)
+		fr.var = FindVar(name, 0); // Find the Var already added by AddFunc().
+	else // No name, so AddFunc() inserted it at position 0.
+		fr.var = g->CurrentFunc ? g->CurrentFunc->mVars.mItem[0] : GlobalVars()->mItem[0];
 
 	mNoUpdateLabels = nolabels;
 	if (parent_line)
@@ -8558,36 +8571,12 @@ unquoted_literal:
 			infix[infix_count].symbol = this_deref_ref.symbol;
 			infix[infix_count].error_reporting_marker = this_deref_ref.marker;
 		}
-		else if (this_deref_ref.type == DT_FUNCREF)
-		{
-			if (*this_deref_ref.func->mName)
-			{
-				// This reference isn't needed, as it was preceded by a SYM_VAR.
-				ASSERT(this_deref > aArg.deref && this_deref[-1].type == DT_VAR && this_deref[-1].marker + this_deref[-1].length == cp);
-				cp = this_deref_ref.marker + this_deref_ref.length; // Not +=, since it overlaps with the previous deref.
-				--infix_count; // Counter the loop's increment.
-				continue;
-			}
-			// Make a function call to an internal version of Func() which accepts the function
-			// reference and returns the function itself or a closure.  Which that will be depends
-			// on var references which haven't been resolved yet (unless it's a global function).
-			auto callsite = new CallSite();
-			callsite->func = ExprOp<Op_FuncClose, 0>();
-			infix[infix_count].symbol = SYM_FUNC;
-			infix[infix_count].callsite = callsite;
-			infix[infix_count+1].symbol = SYM_OPAREN;
-			infix[infix_count+1].marker = cp;
-			infix[infix_count+2].symbol = SYM_OBJECT;
-			infix[infix_count+2].object = this_deref_ref.func;
-			infix[infix_count+3].symbol = SYM_CPAREN;
-			infix_count += 3; // Loop will increment once more.
-		}
 		else if (this_deref_ref.type == DT_CONST_INT)
 		{
 			CHECK_AUTO_CONCAT;
 			infix[infix_count].SetValue(this_deref_ref.int_value);
 		}
-		else // this_deref is a variable.
+		else // this_deref is a variable (DT_VAR) or fat arrow function (DT_FUNCREF).
 		{
 			CHECK_AUTO_CONCAT;
 			// Use SYM_VAR for both built-in and normal vars at this stage, since some normal vars
@@ -13466,7 +13455,7 @@ ResultType Script::PreprocessLocalVars(UserFunc &aFunc)
 	}
 	if (closure_count)
 	{
-		aFunc.mClosure = (ClosureInfo *)SimpleHeap::Malloc(closure_count * sizeof(ClosureInfo));
+		aFunc.mClosure = SimpleHeap::Alloc<ClosureInfo>(closure_count);
 		for (int v = 0; v < var_count; ++v)
 		{
 			Var &var = *vars[v];
@@ -13555,6 +13544,11 @@ ResultType Script::PreparseVarRefs()
 				if (token->symbol != SYM_VAR // Not a var.
 					|| VARREF_IS_WRITE(token->var_usage)) // Already resolved by ExpressionToPostfix.
 					continue;
+				if (token->var_deref->type == DT_FUNCREF)
+				{
+					token->var = token->var_deref->var;
+					continue;
+				}
 				if (  !(token->var = FindOrAddVar(token->var_deref->marker, token->var_deref->length, FINDVAR_FOR_READ))  )
 					return FAIL;
 				if (token->var->IsAlias()) // Upvar.

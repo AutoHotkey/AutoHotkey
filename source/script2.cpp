@@ -13641,15 +13641,6 @@ BIF_DECL(BIF_IsLabel)
 }
 
 
-
-BIF_DECL(Op_FuncClose)
-// Returns the Func aParam[0] itself or a new closure if it has upvalues.
-{
-	Func *func = (Func *)aParam[0]->object; // No type-checking needed because this is a private/internal function.
-	_f_return(func->CloseIfNeeded());
-}
-
-
 IObject *UserFunc::CloseIfNeeded()
 {
 	FreeVars *fv = (mUpVarCount && mOuterFunc && sFreeVars) ? sFreeVars->ForFunc(mOuterFunc) : NULL;

@@ -2916,7 +2916,7 @@ private:
 	ResultType ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDeref, int *aPos);
 	ResultType ParseFatArrow(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDeref
 		, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR &aExprEnd);
-	ResultType ParseFatArrow(DerefType &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd, LPTSTR aExprMap);
+	ResultType ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPrmEnd, LPTSTR aExpr, LPTSTR aExprEnd, LPTSTR aExprMap);
 	LPTSTR ParseActionType(LPTSTR aBufTarget, LPTSTR aBufSource, bool aDisplayErrors);
 	ResultType AddLabel(LPTSTR aLabelName, bool aAllowDupe);
 	void RemoveLabel(Label *aLabel);
@@ -3362,8 +3362,6 @@ BIF_DECL(BIF_Base);
 BIF_DECL(BIF_HasBase);
 BIF_DECL(BIF_HasProp);
 BIF_DECL(BIF_GetMethod);
-
-BIF_DECL(Op_FuncClose);
 
 // Advanced file IO interfaces
 BIF_DECL(BIF_FileOpen);
