@@ -6895,13 +6895,13 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 		// Also add it to the script's list of functions, to support #Warn LocalSameAsGlobal
 		// and automatic cleanup of objects in static vars on program exit.
 	}
-	else if (aFuncNameLength)
+	else
 	{
 		ResultType result = OK;
 		VarList *varlist;
 		int insert_pos;
 		int scope = (g->CurrentFunc ? VAR_DECLARE_LOCAL : VAR_DECLARE_GLOBAL);
-		Var *var = FindVar(aFuncName, aFuncNameLength, FINDVAR_NO_BIF | scope, &varlist, &insert_pos, &result);
+		Var *var = aFuncNameLength ? FindVar(aFuncName, aFuncNameLength, FINDVAR_NO_BIF | scope, &varlist, &insert_pos, &result) : NULL;
 		if (var)
 		{
 			// Anything found at this early stage must have been created by a prior declaration
@@ -6912,6 +6912,11 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 			//     it, but not afterward (as the conflict would be detected by ParseAndAddLine).
 			ConflictingDeclarationError(_T("function"), var);
 			return nullptr;
+		}
+		if (!aFuncNameLength)
+		{
+			insert_pos = 0;
+			varlist = g->CurrentFunc ? &g->CurrentFunc->mVars : GlobalVars();
 		}
 		var = AddVar(aFuncName, aFuncNameLength, varlist, insert_pos, scope);
 		if (!var)
@@ -7033,6 +7038,8 @@ Var *Script::FindOrAddVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope)
 {
 	if (!*aVarName)
 		return NULL;
+	if (!aVarNameLength) // Caller didn't specify, so use the entire string.
+		aVarNameLength = _tcslen(aVarName);
 	ResultType result = OK; // Must set default.
 	VarList *varlist;
 	int insert_pos;
@@ -7124,7 +7131,7 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 	{
 		// Search outer functions, if applicable:
 		if (g.CurrentFunc->mOuterFunc)
-			if (Var *found = FindUpVar(var_name, *g.CurrentFunc, aDisplayError))
+			if (Var *found = FindUpVar(var_name, aVarNameLength, *g.CurrentFunc, aDisplayError))
 				return found;
 		// No local var was found, nor was a global declared in this function (otherwise it would
 		// have been found in g.CurrentFunc->mStaticVars), so caller wants to fall back to a global
@@ -7151,7 +7158,7 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 
 
 
-Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError)
+Var *Script::FindUpVar(LPCTSTR aVarName, size_t aVarNameLength, UserFunc &aInner, ResultType *aDisplayError)
 {
 	// Do not search outer if inner is *explicitly* assume-global, since in that case a
 	// global var should be returned in preference to anything defined by outer.
@@ -7162,7 +7169,7 @@ Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayE
 	if (  (outer_var = outer.mStaticVars.Find(aVarName))  )
 		return outer_var;
 	if (  !(outer_var = outer.mVars.Find(aVarName))
-		&& !(outer.mOuterFunc && (outer_var = FindUpVar(aVarName, outer, aDisplayError)))  )
+		&& !(outer.mOuterFunc && (outer_var = FindUpVar(aVarName, aVarNameLength, outer, aDisplayError)))  )
 		return nullptr;
 	// At this point, all var refs used in declarations, assignments or &var in the outer
 	// function should have already been parsed, while it's possible that some read-refs
@@ -7200,7 +7207,7 @@ Var *Script::FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayE
 	// At this point aInner doesn't have a variable by this name, so create one:
 	int insert_pos;
 	aInner.mVars.Find(aVarName, &insert_pos);
-	Var *inner_var = AddVar(aVarName, 0, &aInner.mVars, insert_pos, VAR_LOCAL | VAR_DECLARED); // VAR_DECLARED suppresses checking for a global for #Warn LocalSameAsGlobal or when #Warn UseUnset is triggered.
+	Var *inner_var = AddVar(aVarName, aVarNameLength, &aInner.mVars, insert_pos, VAR_LOCAL | VAR_DECLARED); // VAR_DECLARED suppresses checking for a global for #Warn LocalSameAsGlobal or when #Warn UseUnset is triggered.
 	if (!inner_var)
 	{
 		if (aDisplayError)
@@ -7251,11 +7258,6 @@ Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int
 // Finally, aIsLocal has been provided to indicate which list, global or local, should receive this
 // new variable, as well as the type of local variable.  (See the declaration of VAR_LOCAL etc.)
 {
-	if (!*aVarName) // Should never happen, so just silently indicate failure.
-		return NULL;
-	if (!aVarNameLength) // Caller didn't specify, so use the entire string.
-		aVarNameLength = _tcslen(aVarName);
-
 	if (aVarNameLength > MAX_VAR_NAME_LENGTH)
 	{
 		ScriptError(_T("Variable name too long."), aVarName);
@@ -7266,7 +7268,7 @@ Var *Script::AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int
 	TCHAR var_name[MAX_VAR_NAME_LENGTH + 1];
 	tcslcpy(var_name, aVarName, aVarNameLength + 1);  // See explanation above.  +1 to convert length to size.
 
-	if (!Var::ValidateName(var_name))
+	if (*var_name && !Var::ValidateName(var_name))
 		// Above already displayed error for us.  This can happen at loadtime or runtime (e.g. StringSplit).
 		return NULL;
 

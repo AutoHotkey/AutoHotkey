@@ -3065,7 +3065,7 @@ public:
 	Var *FindOrAddVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope);
 	Var *FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope = FINDVAR_FOR_READ
 		, VarList **apList = nullptr, int *apInsertPos = nullptr, ResultType *aDisplayError = nullptr);
-	Var *FindUpVar(LPCTSTR aVarName, UserFunc &aInner, ResultType *aDisplayError);
+	Var *FindUpVar(LPCTSTR aVarName, size_t aVarNameLength, UserFunc &aInner, ResultType *aDisplayError);
 	Var *AddVar(LPCTSTR aVarName, size_t aVarNameLength, VarList *aList, int aInsertPos, int aScope);
 	Var *FindOrAddBuiltInVar(LPCTSTR aVarName, VarEntry *aVarEntry);
 	static VarEntry *GetBuiltInVar(LPCTSTR aVarName);
