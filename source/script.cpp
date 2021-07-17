@@ -5461,7 +5461,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 			j = (int)(op_begin - aArgText + 1);
 			if (close_char == ')')
 			{
-				// Before pasing derefs, check if this is the parameter list of an inline function.
+				// Before parsing derefs, check if this is the parameter list of an inline function.
 				LPTSTR close_paren = aArgText + FindExprDelim(aArgText, close_char, j, aArgMap);
 				if (*close_paren)
 				{
@@ -5573,7 +5573,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 					continue; // Leave it unmarked so ExpressionToPostfix() handles it as a literal.
 				}
 			}
-			else if (*cp == '=' && cp[1] == '>') // () => Fat arrow function.
+			else if (*cp == '=' && cp[1] == '>') // one_param => Fat arrow function.
 			{
 				if (!ParseFatArrow(aArgText, aArgMap, aDeref, op_begin, op_end, cp + 2, op_end))
 					return FAIL;
@@ -7055,7 +7055,7 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 // Caller has ensured that aVarName isn't NULL.  It must also ignore the contents of apInsertPos when
 // a match (non-NULL value) is returned.
 // Returns the Var whose name matches aVarName.  If it doesn't exist, NULL is returned.
-// If caller provided a non-NULL apInsertPos, it will be given a the array index that a newly
+// If caller provided a non-NULL apInsertPos, it will be given the array index that a newly
 // inserted item should have to keep the list in sorted order (which also allows the ListVars command
 // to display the variables in alphabetical order).
 {
