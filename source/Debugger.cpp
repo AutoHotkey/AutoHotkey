@@ -964,9 +964,10 @@ DEBUGGER_COMMAND(Debugger::context_get)
 	prop.pagesize = mMaxChildren;
 	prop.max_depth = mMaxDepth;
 	for ( ; bkp < bkp_end; ++bkp)
-		if (  (err = GetPropertyInfo(*bkp, prop))
-			|| (err = WritePropertyXml(prop, bkp->mVar->mName))  )
-			break;
+		if (bkp->mType != VAR_CONSTANT) // Exclude closures.
+			if (  (err = GetPropertyInfo(*bkp, prop))
+				|| (err = WritePropertyXml(prop, bkp->mVar->mName))  )
+				break;
 	for (int j = 0; j < _countof(var_lists); ++j)
 	{
 		if (!var_lists[j])
@@ -974,9 +975,10 @@ DEBUGGER_COMMAND(Debugger::context_get)
 		Var **vars = var_lists[j]->mItem;
 		int var_count = var_lists[j]->mCount;
 		for (int i = 0; i < var_count; ++i)
-			if (  (err = GetPropertyInfo(*vars[i], prop))
-				|| (err = WritePropertyXml(prop, vars[i]->mName))  )
-				break;
+			if (vars[i]->mType != VAR_CONSTANT || context_id != PC_Local) // Exclude closures.
+				if (  (err = GetPropertyInfo(*vars[i], prop))
+					|| (err = WritePropertyXml(prop, vars[i]->mName))  )
+					break;
 	}
 	if (err)
 		return err;
