@@ -74,9 +74,9 @@ public:
 	static ObjectMember sArrayMembers[], sRefMembers[], sValueMembers[];
 
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
-	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType SafeArrayInvoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType SafeArrayItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void SafeArrayInvoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void SafeArrayItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	LPTSTR Type();
 	Object *Base();
 	IObject_DebugWriteProperty_Def;

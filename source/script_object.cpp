@@ -602,7 +602,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		ExprTokenType this_etter(etter);
 		ExprTokenType **prop_param = (ExprTokenType **)_malloca((actual_param_count + 2) * sizeof(ExprTokenType *));
 		if (!prop_param)
-			_o_throw(ERR_OUTOFMEM);
+			return aResultToken.MemoryError();
 		prop_param[0] = &aThisToken; // For the hidden "this" parameter in the getter/setter.
 		int prop_param_count = 1;
 		if (setting)
@@ -700,7 +700,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 	else if (setting)
 	{
 		if (!field && hasprop) // Property with getter but no setter.
-			_o_throw(ERR_PROPERTY_READONLY, name);
+			return aResultToken.Error(ERR_PROPERTY_READONLY, name);
 		if (aFlags & IF_NO_SET_PROPVAL) // Changing value properties not permitted ("".foo := bar).
 			return INVOKE_NOT_HANDLED;
 		
@@ -708,7 +708,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 				|| (field = Insert(name, insert_pos))) // A new field is inserted.
 			&& field->Assign(**actual_param))
 			return OK;
-		_o_throw_oom;
+		return aResultToken.MemoryError();
 	}
 
 	// GET
@@ -730,7 +730,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		else if (method)
 		{
 			method->AddRef();
-			_o_return(method);
+			return aResultToken.Return(method);
 		}
 	}
 
@@ -750,7 +750,7 @@ ResultType ObjectBase::Invoke(IObject_Invoke_PARAMS_DECL)
 }
 
 
-ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
+void Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
 	switch (aID)
 	{
@@ -760,7 +760,6 @@ ResultType Object::CallBuiltin(int aID, ResultToken &aResultToken, ExprTokenType
 	case FID_ObjSetCapacity:	return SetCapacity(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	case FID_ObjOwnProps:		return OwnProps(aResultToken, 0, IT_CALL, aParam, aParamCount);
 	}
-	return INVOKE_NOT_HANDLED;
 }
 
 
@@ -781,7 +780,7 @@ ObjectMember Map::sMembers[] =
 };
 
 
-ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (!IS_INVOKE_SET) // Get or call.
 	{
@@ -792,25 +791,24 @@ ResultType Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 				auto result = Invoke(aResultToken, IT_GET, _T("Default"), ExprTokenType { this }, nullptr, 0);
 				if (result == INVOKE_NOT_HANDLED)
 					_o_throw(ERR_NO_KEY, ParamIndexToString(0, _f_number_buf), ErrorPrototype::Key);
-				return result;
+				return;
 			}
 			// Otherwise, caller provided a default value.
 			aResultToken.CopyValueFrom(*aParam[1]);
 		}
 		if (aResultToken.symbol == SYM_OBJECT)
 			aResultToken.object->AddRef();
-		return OK;
+		return;
 	}
 	else
 	{
 		if (!SetItem(*aParam[1], *aParam[0]))
 			_o_throw_oom;
 	}
-	return OK;
 }
 
 
-ResultType Map::Set(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Map::Set(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (aParamCount & 1)
 		_o_throw(ERR_PARAM_COUNT_INVALID);
@@ -833,7 +831,7 @@ ResultType Object::CallAsMethod(ExprTokenType &aFunc, ResultToken &aResultToken,
 		func = ValueBase(aFunc);
 	ExprTokenType **param = (ExprTokenType **)_malloca((aParamCount + 1) * sizeof(ExprTokenType *));
 	if (!param)
-		_o_throw_oom;
+		return aResultToken.MemoryError();
 	param[0] = &aThisToken;
 	memcpy(param + 1, aParam, aParamCount * sizeof(ExprTokenType *));
 	// return %func%(this, aParam*)
@@ -859,7 +857,7 @@ ResultType Object::CallMetaVarg(int aFlags, LPTSTR aName, ResultToken &aResultTo
 		return INVOKE_NOT_HANDLED;
 	auto vargs = Array::Create(aParam, aParamCount);
 	if (!vargs)
-		_o_throw_oom;
+		return aResultToken.MemoryError();
 	ExprTokenType name_token(aName), args_token(vargs), *param[4];
 	param[0] = &aThisToken; // this
 	param[1] = &name_token; // name
@@ -1123,17 +1121,17 @@ Object *Object::CreateClass(LPTSTR aClassName, Object *aBase, Object *aPrototype
 // Object:: and Map:: Built-ins
 //
 
-ResultType Object::DeleteProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Object::DeleteProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	auto field = FindField(ParamIndexToString(0, _f_number_buf));
 	if (!field)
 		_o_return_empty;
 	field->ReturnMove(aResultToken); // Return the removed value.
 	mFields.Remove((index_t)(field - mFields), 1);
-	return OK;
+	_o_return_empty;
 }
 
-ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	Pair *item;
 	index_t pos;
@@ -1171,28 +1169,28 @@ ResultType Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprToken
 		else
 			copy->key.p->Release();
 	}
-	return OK;
+	_o_return_retval;
 }
 
 
-ResultType Map::Clear(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Map::Clear(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	Clear();
 	_o_return_empty;
 }
 
 
-ResultType Object::PropCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Object::PropCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_o_return((__int64)mFields.Length());
 }
 
-ResultType Map::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Map::Count(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_o_return((__int64)mCount);
 }
 
-ResultType Map::CaseSense(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Map::CaseSense(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (IS_INVOKE_GET)
 	{
@@ -1224,18 +1222,20 @@ ResultType Map::CaseSense(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 	default:
 		_o_throw_value(ERR_INVALID_VALUE, value);
 	}
-	return OK;
 }
 
-ResultType Object::GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Object::GetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_o_return(mFields.Capacity());
 }
 
-ResultType Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (!ParamIndexIsNumeric(0))
-		return aResultToken.ParamError(1, aParam[0], _T("Number")); // Param index differs because this is actually the global function ObjSetCapacity().
+	{
+		aResultToken.ParamError(1, aParam[0], _T("Number")); // Param index differs because this is actually the global function ObjSetCapacity().
+		return;
+	}
 
 	index_t desired_count = (index_t)ParamIndexToInt64(0);
 	if (desired_count < mFields.Length())
@@ -1260,7 +1260,7 @@ ResultType Object::SetCapacity(ResultToken &aResultToken, int aID, int aFlags, E
 	_o_throw_oom;
 }
 
-ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (IS_INVOKE_GET)
 	{
@@ -1299,24 +1299,24 @@ ResultType Map::Capacity(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	_o_throw_oom;
 }
 
-ResultType Object::OwnProps(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Object::OwnProps(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 1)
 		, static_cast<IndexEnumerator::Callback>(&Object::GetEnumProp)));
 }
 
-ResultType Map::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Map::__Enum(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 1)
 		, static_cast<IndexEnumerator::Callback>(&Map::GetEnumItem)));
 }
 
-ResultType Object::HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Object::HasOwnProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_o_return(FindField(ParamIndexToString(0, _f_number_buf)) != nullptr);
 }
 
-ResultType Map::Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Map::Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	SymbolType key_type;
 	Key key;
@@ -1325,7 +1325,7 @@ ResultType Map::Has(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTyp
 	_o_return(item != nullptr);
 }
 
-ResultType Object::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Object::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (GetNativeBase() != Object::sPrototype)
 		_o_throw(ERR_TYPE_MISMATCH, ErrorPrototype::Type); // Cannot construct an instance of this class using Object::Clone().
@@ -1335,7 +1335,7 @@ ResultType Object::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 	_o_return(clone);
 }
 
-ResultType Map::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Map::Clone(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	auto clone = new Map();
 	if (!CloneTo(*clone))
@@ -1396,7 +1396,7 @@ ResultType GetObjMaxParams(IObject *aObj, int &aMaxParams, ResultToken &aResultT
 	return result;
 }
 
-ResultType Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	auto name = ParamIndexToString(0, _f_number_buf);
 	if (!*name)
@@ -1437,7 +1437,7 @@ ResultType Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, Ex
 		{
 		case FAIL:
 		case EARLY_EXIT:
-			return aResultToken.Result();
+			return;
 		case OK:
 			prop->MaxParams = max_params - 1;
 		}
@@ -1449,7 +1449,7 @@ ResultType Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, Ex
 		{
 		case FAIL:
 		case EARLY_EXIT:
-			return aResultToken.Result();
+			return;
 		case OK:
 			if (prop->MaxParams < max_params - 2)
 				prop->MaxParams = max_params - 2;
@@ -1459,7 +1459,7 @@ ResultType Object::DefineProp(ResultToken &aResultToken, int aID, int aFlags, Ex
 	_o_return(this);
 }
 
-ResultType Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Object::GetOwnPropDesc(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	auto name = ParamIndexToString(0, _f_number_buf);
 	if (!*name)
@@ -1496,7 +1496,7 @@ ResultType Object::New(ResultToken &aResultToken, ExprTokenType *aParam[], int a
 	if (!proto)
 	{
 		Release();
-		_o_throw_param(0);
+		return aResultToken.ParamError(0, aParam[0]);
 	}
 	if (!SetBase(proto, aResultToken))
 	{
@@ -1921,7 +1921,7 @@ ObjectMember Array::sMembers[] =
 	Object_Method(RemoveAt, 1, 2)
 };
 
-ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	switch (aID)
 	{
@@ -1936,7 +1936,7 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		else
 			if (!item.Assign(*aParam[0]))
 				_o_throw_oom;
-		return OK;
+		_o_return_retval;
 	}
 
 	case P_Length:
@@ -1950,7 +1950,7 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 				_o_throw_value(ERR_INVALID_VALUE);
 			if (!(aID == P_Capacity ? SetCapacity((index_t)arg64) : SetLength((index_t)arg64)))
 				_o_throw_oom;
-			return OK;
+			return;
 		}
 		_o_return(aID == P_Capacity ? Capacity() : Length());
 
@@ -1970,7 +1970,7 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 			index = mLength;
 		if (!InsertAt(index, aParam, aParamCount))
 			_o_throw_oom;
-		return OK;
+		_o_return_empty;
 	}
 
 	case M_RemoveAt:
@@ -1998,11 +1998,11 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		{
 			mItem[index].ReturnMove(aResultToken);
 			if (aResultToken.Exited())
-				return aResultToken.Result();
+				return;
 		}
 		
 		RemoveAt(index, count);
-		return OK;
+		return;
 	}
 	
 	case M_Has:
@@ -2018,7 +2018,7 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 			_o_throw_param(0);
 		mItem[index].ReturnMove(aResultToken);
 		mItem[index].AssignMissing();
-		return OK;
+		_o_return_retval;
 	}
 
 	case M_Clone:
@@ -2030,7 +2030,6 @@ ResultType Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTok
 		_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 1)
 			, static_cast<IndexEnumerator::Callback>(&Array::GetEnumItem)));
 	}
-	return INVOKE_NOT_HANDLED;
 }
 
 Array::index_t Array::ParamToZeroIndex(ExprTokenType &aParam)
@@ -2496,13 +2495,13 @@ ResultType Func::Invoke(IObject_Invoke_PARAMS_DECL)
 	return Object::Invoke(IObject_Invoke_PARAMS);
 }
 
-ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	switch (MemberID(aID))
 	{
 	case M_Call:
 		Call(aResultToken, aParam, aParamCount);
-		return aResultToken.Result();
+		return;
 
 	case M_Bind:
 		if (BoundFunc *bf = BoundFunc::Bind(this, IT_CALL, nullptr, aParam, aParamCount))
@@ -2543,7 +2542,6 @@ ResultType Func::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 	case P_IsBuiltIn: _o_return(IsBuiltIn());
 	case P_IsVariadic: _o_return(mIsVariadic);
 	}
-	return INVOKE_NOT_HANDLED;
 }
 
 
@@ -2764,7 +2762,7 @@ ObjectMember BufferObject::sMembers[] =
 	Object_Property_get_set(Size)
 };
 
-ResultType BufferObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void BufferObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	switch (aID)
 	{
@@ -2792,11 +2790,10 @@ ResultType BufferObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, 
 					_o_throw_param(1, _T("Number"));
 				memset(mData, (char)ParamIndexToInt64(1), mSize);
 			}
-			return OK;
+			return;
 		}
 		_o_return(mSize);
 	}
-	return INVOKE_NOT_HANDLED;
 }
 
 ResultType BufferObject::Resize(size_t aNewSize)
@@ -2810,7 +2807,7 @@ ResultType BufferObject::Resize(size_t aNewSize)
 }
 
 
-ResultType ClipboardAll::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void ClipboardAll::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	void *data;
 	size_t size;
@@ -2828,7 +2825,7 @@ ResultType ClipboardAll::__New(ResultToken &aResultToken, int aID, int aFlags, E
 		{
 			GetBufferObjectPtr(aResultToken, obj, caller_data, size);
 			if (aResultToken.Exited())
-				return aResultToken.Result();
+				return;
 		}
 		else
 		{
@@ -2850,7 +2847,6 @@ ResultType ClipboardAll::__New(ResultToken &aResultToken, int aID, int aFlags, E
 		free(mData); // In case of explicit call to __New.
 	mData = data;
 	mSize = size;
-	_o_return_empty;
 }
 
 

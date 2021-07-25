@@ -240,7 +240,7 @@ ObjectMember GuiType::sMembers[] =
 
 int GuiType::sMemberCount = _countof(sMembers);
 
-ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	auto ctrl_type = GuiControls(aID);
 	if (ctrl_type == GUI_CONTROL_INVALID) // Gui.Add(CtrlType)
@@ -259,7 +259,8 @@ ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, E
 		&& GuiControlType::TypeHasAttrib(ctrl_type, GuiControlType::TYPE_HAS_ITEMS)
 		&& !(text_obj = TokenToArray(*aParam[1]))   )
 	{
-		return aResultToken.ParamError(aID ? 1 : 2, aParam[1], _T("Array"));
+		aResultToken.ParamError(aID ? 1 : 2, aParam[1], _T("Array"));
+		return;
 	}
 	if (!mHwnd)
 		_o_throw(ERR_GUI_NO_WINDOW);
@@ -272,10 +273,9 @@ ResultType GuiType::AddControl(ResultToken &aResultToken, int aID, int aFlags, E
 	} // else: above already displayed an error message.
 	if (!result)
 		aResultToken.SetExitResult(result);
-	return result;
 }
 
-ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (!mHwnd)
 		_o_throw(ERR_GUI_NO_WINDOW);
@@ -289,7 +289,9 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 			Destroy();
 			_o_return_empty;
 		case M_Show:
-			return Show(ParamIndexToOptionalString(0, nbuf1));
+			if (!Show(ParamIndexToOptionalString(0, nbuf1)))
+				_o_return_FAIL;
+			_o_return_empty;
 		case M_Hide:
 			Cancel();
 			_o_return_empty;
@@ -310,7 +312,9 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 		{
 			LPTSTR options = ParamIndexToOptionalString(0, nbuf1);   // A number currently isn't valid here, so nbuf is passed just for maintainability.
 			LPTSTR font_name = ParamIndexToOptionalString(1, nbuf2); //
-			return SetCurrentFont(options, font_name);
+			if (!SetCurrentFont(options, font_name))
+				_o_return_FAIL;
+			_o_return_empty;
 		}
 		case M_Opt:
 		{
@@ -350,23 +354,22 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 			if (IS_INVOKE_SET)
 			{
 				SetWindowText(mHwnd, ParamIndexToString(0, _f_number_buf));
-				return OK;
+				return;
 			}
 			else
 			{
 				int length = GetWindowTextLength(mHwnd);
-				ResultType result = TokenSetResult(aResultToken, NULL, length);
-				if (result != OK)
-					return result; // Already displayed error.
+				if (!TokenSetResult(aResultToken, NULL, length))
+					return; // Already displayed error.
 				GetWindowText(mHwnd, aResultToken.marker, length+1);
-				return OK;
+				_o_return_retval;
 			}
 		}
 		case P_MenuBar:
 		{
 			if (IS_INVOKE_SET)
 			{
-				return SetMenu(*aParam[0]);
+				return SetMenu(aResultToken, *aParam[0]);
 			}
 			if (mMenu)
 			{
@@ -414,7 +417,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 			if (IS_INVOKE_SET)
 			{
 				margin = Scale(ParamIndexToInt(0)); // Seems okay to allow negative margins.
-				return OK;
+				return;
 			}
 			_o_return(Unscale(margin));
 		}
@@ -436,7 +439,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 					// UpdateWindow() isn't enough sometimes/always, so do something more aggressive:
 					InvalidateRect(mHwnd, NULL, TRUE);
 				
-				return OK;
+				return;
 			}
 			
 			// Return the property's proper value, which may differ from the value assigned by the script.
@@ -464,7 +467,7 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 		{
 			int coord[4];
 			if (!ParseMoveParams(coord, aResultToken, aParam, aParamCount))
-				return FAIL;
+				return;
 			// Like WinMove, this doesn't check if the window is minimized or do any autosizing.
 			// Unlike WinMove, this does DPI scaling.
 			RECT rect;
@@ -482,17 +485,18 @@ ResultType GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprT
 			// Name is used to help identify the Gui in event handlers, and has no use outside
 			// of the script being able to assign or retrieve it using this property.
 			if (IS_INVOKE_SET)
-				return SetName(ParamIndexToString(0, _f_number_buf));
+			{
+				if (!SetName(ParamIndexToString(0, _f_number_buf)))
+					_o_return_FAIL;
+				return;
+			}
 			_o_return_p(mName ? mName : _T(""));
 		}
 	}
-
-	// Since above did not return, we assume failure.
-	return FAIL;
 }
 
 
-ResultType GuiType::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiType::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (mHwnd || mDisposed)
 		_o_throw(ERR_INVALID_USAGE);
@@ -530,7 +534,7 @@ ResultType GuiType::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 
 	// Create the Gui, now that we're past all other failure points.
 	if (!Create(title))
-		return FAIL; // Error already displayed.
+		_o_return_FAIL; // Error already displayed.
 
 	if (set_last_found_window)
 		g->hWndLastUsed = mHwnd;
@@ -538,7 +542,7 @@ ResultType GuiType::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 
 	// Successful creation - add the Gui to the global list of Guis and return it
 	AddGuiToList(this);
-	return OK;
+	_o_return_empty;
 }
 
 
@@ -717,13 +721,13 @@ Object *GuiControlType::GetPrototype(GuiControls aType)
 ResultType GuiControlType::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	if (!hwnd)
-		_o_throw(_T("The control is destroyed."));
+		return aResultToken.Error(_T("The control is destroyed."));
 
 	return Object::Invoke(IObject_Invoke_PARAMS);
 }
 
 
-ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	auto member = MemberID(aID);
 	switch (member)
@@ -732,7 +736,9 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 		{
 			GuiControlOptionsType go; // Its contents are not currently used here, but they might be in the future.
 			gui->ControlInitOptions(go, *this);
-			return gui->ControlParseOptions(ParamIndexToOptionalString(0, _f_number_buf), go, *this, GUI_HWND_TO_INDEX(hwnd));
+			if (!gui->ControlParseOptions(ParamIndexToOptionalString(0, _f_number_buf), go, *this, GUI_HWND_TO_INDEX(hwnd)))
+				_o_return_FAIL;
+			_o_return_empty;
 		}
 
 		case M_Focus:
@@ -749,13 +755,17 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 			_o_return(GetFocus() == hwnd);
 
 		case M_SetFont:
-			return gui->ControlSetFont(*this, ParamIndexToOptionalString(0), ParamIndexToOptionalString(1));
+			if (!gui->ControlSetFont(*this, ParamIndexToOptionalString(0), ParamIndexToOptionalString(1)))
+				_o_return_FAIL;
+			_o_return_empty;
 
 		case M_Move:
 			int coord[4];
 			if (!gui->ParseMoveParams(coord, aResultToken, aParam, aParamCount))
-				return FAIL;
-			return gui->ControlMove(*this, coord[0], coord[1], coord[2], coord[3]);
+				return;
+			if (!gui->ControlMove(*this, coord[0], coord[1], coord[2], coord[3]))
+				_o_return_FAIL;
+			_o_return_empty;
 
 		case M_Redraw:
 		{
@@ -767,7 +777,9 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 		}
 			
 		case M_Choose:
-			return gui->ControlChoose(*this, *aParam[0]);
+			if (!gui->ControlChoose(*this, *aParam[0]))
+				_o_return_FAIL;
+			_o_return_empty;
 
 		case M_OnEvent:
 		case M_OnNotify:
@@ -795,7 +807,11 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 
 		case P_Name:
 			if (IS_INVOKE_SET)
-				return gui->ControlSetName(*this, ParamIndexToString(0, _f_number_buf));
+			{
+				if (!gui->ControlSetName(*this, ParamIndexToString(0, _f_number_buf)))
+					_o_return_FAIL;
+				return;
+			}
 			_o_return_p(name ? name : _T(""));
 
 		case P_Type:
@@ -846,7 +862,7 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 			if (IS_INVOKE_SET)
 			{
 				gui->ControlSetEnabled(*this, (bool)ParamIndexToBOOL(0));
-				return OK;
+				return;
 			}
 			_o_return(IsWindowEnabled(hwnd) ? 1 : 0);
 		}
@@ -856,7 +872,7 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 			if (IS_INVOKE_SET)
 			{
 				gui->ControlSetVisible(*this, (bool)ParamIndexToBOOL(0));
-				return OK;
+				return;
 			}
 			_o_return(IsWindowVisible(hwnd) ? 1 : 0);
 		}
@@ -963,9 +979,6 @@ ResultType GuiControlType::Invoke(ResultToken &aResultToken, int aID, int aFlags
 		case M_DateTime_SetFormat:
 			return gui->ControlSetDateTimeFormat(*this, ParamIndexToOptionalString(0, _f_number_buf), aResultToken);
 	}
-
-	// Since above did not return, we assume failure.
-	return FAIL;
 }
 
 
@@ -994,14 +1007,14 @@ GuiType *GuiType::FindGuiParent(HWND aHwnd)
 	return NULL;
 }
 
-ResultType GuiType::SetMenu(ExprTokenType &aParam)
+void GuiType::SetMenu(ResultToken &aResultToken, ExprTokenType &aParam)
 {
 	UserMenu *menu = NULL;
 	if (!TokenIsEmptyString(aParam))
 	{
 		menu = dynamic_cast<UserMenu *>(TokenToObject(aParam));
 		if (!menu || menu->mMenuType != MENU_TYPE_BAR)
-			return ResultToken().TypeError(_T("MenuBar"), aParam);
+			_o_throw_type(_T("MenuBar"), aParam);
 		menu->CreateHandle(); // Ensure the menu bar physically exists.
 		menu->AddRef();
 	}
@@ -1013,7 +1026,6 @@ ResultType GuiType::SetMenu(ExprTokenType &aParam)
 		UpdateAccelerators(*menu);
 	else
 		RemoveAccelerators();
-	return OK;
 }
 
 
@@ -1045,7 +1057,7 @@ ResultType GuiType::ControlSetName(GuiControlType &aControl, LPTSTR aName)
 }
 
 
-ResultType GuiType::MethodGetPos(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, RECT &aPos)
+void GuiType::MethodGetPos(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, RECT &aPos)
 {
 	aPos.right -= aPos.left; // Convert to width.
 	aPos.bottom -= aPos.top; // Convert to height.
@@ -1179,7 +1191,7 @@ ResultType GuiType::ControlMove(GuiControlType &aControl, int xpos, int ypos, in
 		, width == COORD_UNSPECIFIED ? rect.right - rect.left : Scale(width)
 		, height == COORD_UNSPECIFIED ? rect.bottom - rect.top : Scale(height)
 		, TRUE))  // Do repaint.
-		return g_script.RuntimeError(_T("Can't move control.")); // Short msg since so rare.
+		return g_script.Win32Error();
 
 	// Note that GUI_CONTROL_UPDOWN has no special handling here.  This is because unlike slider buddies,
 	// whose only purpose is to label the control, an up-down's is also content-linked to it, so the
@@ -1418,7 +1430,7 @@ error:
 }
 
 
-ResultType GuiType::ControlSetContents(GuiControlType &aControl, ExprTokenType &aValue, ResultToken &aResultToken, bool aIsText)
+void GuiType::ControlSetContents(GuiControlType &aControl, ExprTokenType &aValue, ResultToken &aResultToken, bool aIsText)
 // aContents: The content as a string.
 // aResultToken: Used only to set an exit result in the event of an error.
 {
@@ -1456,7 +1468,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, ExprTokenType &
 		SetWindowText(aControl.hwnd, aContents);
 		if (aControl.background_color == CLR_TRANSPARENT) // +BackgroundTrans
 			ControlRedraw(aControl);
-		return OK;
+		return;
 	}
 	// Otherwise, this is the Value property.
 	switch (aControl.type)
@@ -1507,7 +1519,7 @@ ResultType GuiType::ControlSetContents(GuiControlType &aControl, ExprTokenType &
 }
 
 
-ResultType GuiType::ControlSetPic(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+void GuiType::ControlSetPic(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
 {
 	// Update: The below doesn't work, so it will be documented that a picture control
 	// should be always be referred to by its original filename even if the picture changes.
@@ -1582,11 +1594,10 @@ ResultType GuiType::ControlSetPic(GuiControlType &aControl, LPTSTR aContents, Re
 	// Redraw is usually only needed for pictures in a tab control, but is sometimes
 	// needed outside of that, for .gif and perhaps others.  So redraw unconditionally:
 	ControlRedraw(aControl);
-	return OK;
 }
 
 
-ResultType GuiType::ControlSetCheck(GuiControlType &aControl, int checked, ResultToken &aResultToken)
+void GuiType::ControlSetCheck(GuiControlType &aControl, int checked, ResultToken &aResultToken)
 {
 	if (  !(checked == 0 || checked == 1 || (aControl.type == GUI_CONTROL_CHECKBOX && checked == -1))  )
 		_o_throw_value(ERR_INVALID_VALUE);
@@ -1596,15 +1607,14 @@ ResultType GuiType::ControlSetCheck(GuiControlType &aControl, int checked, Resul
 	if (aControl.type == GUI_CONTROL_RADIO)
 	{
 		ControlCheckRadioButton(aControl, GUI_HWND_TO_INDEX(aControl.hwnd), checked);
-		return OK;
+		return;
 	}
 	// Otherwise, we're operating upon a checkbox.
 	SendMessage(aControl.hwnd, BM_SETCHECK, checked, 0);
-	return OK;
 }
 
 
-ResultType GuiType::ControlGetCheck(ResultToken &aResultToken, GuiControlType &aControl)
+void GuiType::ControlGetCheck(ResultToken &aResultToken, GuiControlType &aControl)
 {
 	switch (SendMessage(aControl.hwnd, BM_GETCHECK, 0, 0))
 	{
@@ -1619,11 +1629,11 @@ ResultType GuiType::ControlGetCheck(ResultToken &aResultToken, GuiControlType &a
 		// retrieving the state of the control:
 		_o_return(-1);
 	}
-	return FAIL; // Shouldn't be reached since ZERO(BST_UNCHECKED) is returned on failure.
+	// Shouldn't be reached since ZERO(BST_UNCHECKED) is returned on failure.
 }
 
 
-ResultType GuiType::ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText)
+void GuiType::ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText)
 {
 	ExprTokenType choice;
 	if (aIsText)
@@ -1637,7 +1647,7 @@ ResultType GuiType::ControlSetChoice(GuiControlType &aControl, LPTSTR aContents,
 			// previous selection.  By contrast, a user typing in the box always sets it to -1.
 			SendMessage(aControl.hwnd, CB_SETCURSEL, -1, 0);
 			SetWindowText(aControl.hwnd, aContents);
-			return OK;
+			return;
 		}
 		choice.symbol = SYM_STRING;
 		choice.marker = aContents;
@@ -1645,15 +1655,16 @@ ResultType GuiType::ControlSetChoice(GuiControlType &aControl, LPTSTR aContents,
 	else // (!aIsText)
 	{
 		if (!IsNumeric(aContents, FALSE, FALSE))
-			return aResultToken.Error(ERR_INVALID_VALUE, ErrorPrototype::Type);
+			_o_throw(ERR_INVALID_VALUE, ErrorPrototype::Type);
 		choice.symbol = SYM_INTEGER;
 		choice.value_int64 = ATOI(aContents);
 	}
-	return ControlChoose(aControl, choice, TRUE); // Pass TRUE to find an exact (not partial) match.
+	if (!ControlChoose(aControl, choice, TRUE)) // Pass TRUE to find an exact (not partial) match.
+		_o_return_FAIL;
 }
 
 
-ResultType GuiType::ControlGetDDL(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
+void GuiType::ControlGetDDL(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
 {
 	LRESULT index;
 	if (aMode == Value_Mode || (aMode == Submit_Mode && (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT))) // Caller wants the position, not the text.
@@ -1664,11 +1675,11 @@ ResultType GuiType::ControlGetDDL(ResultToken &aResultToken, GuiControlType &aCo
 		// is not, return 0 in that case.  MSDN: "If no item is selected, it is CB_ERR."
 		_o_return((int)index + 1);
 	}
-	return ControlGetWindowText(aResultToken, aControl);
+	ControlGetWindowText(aResultToken, aControl);
 }
 
 
-ResultType GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
+void GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
 {
 	LRESULT index = SendMessage(aControl.hwnd, CB_GETCURSEL, 0, 0); // Get index of currently selected item.
 
@@ -1724,7 +1735,7 @@ ResultType GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType
 		{
 			// edit_text does not match any of the list items, so just return the text.
 			aResultToken.AcceptMem(edit_text, edit_length);
-			return OK;
+			_o_return_retval;
 		}
 	}
 	free(edit_text);
@@ -1734,20 +1745,20 @@ ResultType GuiType::ControlGetComboBox(ResultToken &aResultToken, GuiControlType
 
 	LRESULT length = SendMessage(aControl.hwnd, CB_GETLBTEXTLEN, (WPARAM)index, 0);
 	if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-		return OK; // Return empty string (default).
+		_o_return_empty; // Return empty string (default).
 	// In unusual cases, MSDN says the indicated length might be longer than it actually winds up
 	// being when the item's text is retrieved.  This should be harmless, since there are many
 	// other precedents where a variable is sized to something larger than it winds up carrying.
 	if (!TokenSetResult(aResultToken, NULL, length))
-		return FAIL; // It already displayed the error.
+		return; // It already displayed the error.
 	length = SendMessage(aControl.hwnd, CB_GETLBTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
 	if (length == CB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
 		_o_return_p(_T(""), 0); // Must use this vs _o_return_empty to override TokenSetResult.
-	return OK;
+	_o_return_retval;
 }
 
 
-ResultType GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
+void GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
 {
 	bool position_mode = (aMode == Value_Mode || (aMode == Submit_Mode && (aControl.attrib & GUI_CONTROL_ATTRIB_ALTSUBMIT)));
 	if (GetWindowLong(aControl.hwnd, GWL_STYLE) & (LBS_EXTENDEDSEL|LBS_MULTIPLESEL))
@@ -1811,19 +1822,23 @@ ResultType GuiType::ControlGetListBox(ResultToken &aResultToken, GuiControlType 
 		if (index == LB_ERR) // There is no selection (or very rarely, some other type of problem).
 			_o_return_empty;
 		LRESULT length = SendMessage(aControl.hwnd, LB_GETTEXTLEN, (WPARAM)index, 0);
-		if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
+		if (length == LB_ERR // Given the way it was called, this should be impossible based on MSDN docs.
+			|| length == 0)
 			_o_return_empty;
 		if (!TokenSetResult(aResultToken, NULL, length))
-			return FAIL;  // It already displayed the error.
+			return;  // It already displayed the error.
 		length = SendMessage(aControl.hwnd, LB_GETTEXT, (WPARAM)index, (LPARAM)aResultToken.marker);
 		if (length == LB_ERR) // Given the way it was called, this should be impossible based on MSDN docs.
-			_o_return_empty;
+		{
+			*aResultToken.marker = 0; // Clear the buffer returned by TokenSetResult.
+			aResultToken.marker_length = 0;
+		}
 	}
-	return OK;
+	_o_return_retval;
 }
 
 
-ResultType GuiType::ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText)
+void GuiType::ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText)
 {
 	// Auto-translate LF to CRLF if this is the "Value" property of a multi-line Edit control.
 	// Note that TranslateLFtoCRLF() will return the original buffer we gave it if no translation
@@ -1843,15 +1858,14 @@ ResultType GuiType::ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, R
 	aControl.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Enable events.
 	if (malloc_buf != aContents)
 		free(malloc_buf);
-	return OK;
 }
 
 
-ResultType GuiType::ControlGetEdit(ResultToken &aResultToken, GuiControlType &aControl)
+void GuiType::ControlGetEdit(ResultToken &aResultToken, GuiControlType &aControl)
 // Only called by Edit.Value, so aTranslateEOL == true is implied.
 {
 	if (!ControlGetWindowText(aResultToken, aControl))
-		return FAIL;
+		return;
 	if (GetWindowLong(aControl.hwnd, GWL_STYLE) & ES_MULTILINE) // For consistency with ControlSetEdit().
 	{
 		// Auto-translate CRLF to LF for better compatibility with other script commands.
@@ -1861,11 +1875,10 @@ ResultType GuiType::ControlGetEdit(ResultToken &aResultToken, GuiControlType &aC
 		StrReplace(aResultToken.marker, _T("\r\n"), _T("\n"), SCS_SENSITIVE
 			, -1, -1, NULL, &aResultToken.marker_length); // Pass &marker_length to improve performance and (more importantly) update it.
 	}
-	return OK;
 }
 
 
-ResultType GuiType::ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+void GuiType::ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
 {
 	SYSTEMTIME st;
 	if (*aContents)
@@ -1883,11 +1896,10 @@ ResultType GuiType::ControlSetDateTime(GuiControlType &aControl, LPTSTR aContent
 		//SetWindowLong(aControl.hwnd, GWL_STYLE, GetWindowLong(aControl.hwnd, GWL_STYLE) | DTS_SHOWNONE);
 		DateTime_SetSystemtime(aControl.hwnd, GDT_NONE, &st);  // Contents of st are ignored in this mode.
 	}
-	return OK;
 }
 
 
-ResultType GuiType::ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aFormat, ResultToken &aResultToken)
+void GuiType::ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aFormat, ResultToken &aResultToken)
 {
 	bool use_custom_format = false; // Set default.
 	// Reset style to "pure" so that new style (or custom format) can take effect.
@@ -1916,11 +1928,10 @@ ResultType GuiType::ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aF
 	//else leave style unchanged so that if format is later removed, the underlying named style will
 	// not have been altered.
 	DateTime_SetFormat(aControl.hwnd, use_custom_format ? aFormat : NULL); // NULL removes any custom format so that the underlying style format is revealed.
-	return OK;
 }
 
 
-ResultType GuiType::ControlGetDateTime(ResultToken &aResultToken, GuiControlType &aControl)
+void GuiType::ControlGetDateTime(ResultToken &aResultToken, GuiControlType &aControl)
 {
 	LPTSTR buf = aResultToken.buf;
 	SYSTEMTIME st;
@@ -1929,7 +1940,7 @@ ResultType GuiType::ControlGetDateTime(ResultToken &aResultToken, GuiControlType
 }
 
 
-ResultType GuiType::ControlSetMonthCal(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+void GuiType::ControlSetMonthCal(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
 {
 	SYSTEMTIME st[2];
 	DWORD gdtr = YYYYMMDDToSystemTime2(aContents, st);
@@ -1945,11 +1956,10 @@ ResultType GuiType::ControlSetMonthCal(GuiControlType &aControl, LPTSTR aContent
 	else
 		MonthCal_SetCurSel(aControl.hwnd, st);
 	ControlRedraw(aControl, true); // Confirmed necessary.
-	return OK;
 }
 
 
-ResultType GuiType::ControlGetMonthCal(ResultToken &aResultToken, GuiControlType &aControl)
+void GuiType::ControlGetMonthCal(ResultToken &aResultToken, GuiControlType &aControl)
 {
 	LPTSTR buf = aResultToken.buf;
 	SYSTEMTIME st[2];
@@ -1976,14 +1986,13 @@ ResultType GuiType::ControlGetMonthCal(ResultToken &aResultToken, GuiControlType
 }
 
 
-ResultType GuiType::ControlSetHotkey(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
+void GuiType::ControlSetHotkey(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken)
 {
 	SendMessage(aControl.hwnd, HKM_SETHOTKEY, TextToHotkey(aContents), 0); // This will set it to "None" if aContents is blank.
-	return OK;
 }
 
 
-ResultType GuiType::ControlGetHotkey(ResultToken &aResultToken, GuiControlType &aControl)
+void GuiType::ControlGetHotkey(ResultToken &aResultToken, GuiControlType &aControl)
 {
 	LPTSTR buf = aResultToken.buf;
 	// Testing shows that neither GetWindowText() nor WM_GETTEXT can pull anything out of a hotkey
@@ -1993,16 +2002,15 @@ ResultType GuiType::ControlGetHotkey(ResultToken &aResultToken, GuiControlType &
 }
 
 
-ResultType GuiType::ControlSetUpDown(GuiControlType &aControl, int new_pos, ResultToken &aResultToken)
+void GuiType::ControlSetUpDown(GuiControlType &aControl, int new_pos, ResultToken &aResultToken)
 {
 	// MSDN: "If the parameter is outside the control's specified range, nPos will be set to the nearest
 	// valid value."
 	SendMessage(aControl.hwnd, UDM_SETPOS32, 0, new_pos);
-	return OK; // Don't break since don't want the other actions below to be taken.
 }
 
 
-ResultType GuiType::ControlGetUpDown(ResultToken &aResultToken, GuiControlType &aControl)
+void GuiType::ControlGetUpDown(ResultToken &aResultToken, GuiControlType &aControl)
 {
 	// Any out of range or non-numeric value in the buddy is ignored since error reporting is
 	// left up to the script, which can compare contents of buddy to those of UpDown to check
@@ -2012,17 +2020,16 @@ ResultType GuiType::ControlGetUpDown(ResultToken &aResultToken, GuiControlType &
 }
 
 
-ResultType GuiType::ControlSetSlider(GuiControlType &aControl, int aValue, ResultToken &aResultToken)
+void GuiType::ControlSetSlider(GuiControlType &aControl, int aValue, ResultToken &aResultToken)
 {
 	// Confirmed this fact from MSDN: That the control automatically deals with out-of-range values
 	// by setting slider to min or max:
 	SendMessage(aControl.hwnd, TBM_SETPOS, TRUE, ControlInvertSliderIfNeeded(aControl, aValue));
 	// Above msg has no return value.
-	return OK; // Don't break since don't want the other actions below to be taken.
 }
 
 
-ResultType GuiType::ControlGetSlider(ResultToken &aResultToken, GuiControlType &aControl)
+void GuiType::ControlGetSlider(ResultToken &aResultToken, GuiControlType &aControl)
 {
 	_o_return(ControlInvertSliderIfNeeded(aControl, (int)SendMessage(aControl.hwnd, TBM_GETPOS, 0, 0)));
 	// Above assigns it as a signed value because testing shows a slider can have part or all of its
@@ -2031,22 +2038,21 @@ ResultType GuiType::ControlGetSlider(ResultToken &aResultToken, GuiControlType &
 }
 
 
-ResultType GuiType::ControlSetProgress(GuiControlType &aControl, int aValue, ResultToken &aResultToken)
+void GuiType::ControlSetProgress(GuiControlType &aControl, int aValue, ResultToken &aResultToken)
 {
 	// Confirmed through testing (PBM_DELTAPOS was also tested): The control automatically deals
 	// with out-of-range values by setting bar to min or max.  
 	SendMessage(aControl.hwnd, PBM_SETPOS, aValue, 0);
-	return OK;
 }
 
 
-ResultType GuiType::ControlGetProgress(ResultToken &aResultToken, GuiControlType &aControl)
+void GuiType::ControlGetProgress(ResultToken &aResultToken, GuiControlType &aControl)
 {
 	_o_return((int)SendMessage(aControl.hwnd, PBM_GETPOS, 0, 0));
 }
 
 
-ResultType GuiType::ControlGetTab(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
+void GuiType::ControlGetTab(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
 {
 	LPTSTR buf = aResultToken.buf;
 	LRESULT index = TabCtrl_GetCurSel(aControl.hwnd); // Get index of currently selected item.
@@ -2384,7 +2390,7 @@ ResultType GuiType::Create(LPTSTR aTitle)
 }
 
 
-ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
+void GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 	, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken)
 {
 	// Caller has already converted aParam[0] to aEvent and validated it,
@@ -2405,7 +2411,7 @@ ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventK
 }
 
 
-ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
+void GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind
 	, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads, ResultToken &aResultToken)
 {
 	MsgMonitorList &handlers = aControl ? aControl->events : mEvents;
@@ -2419,7 +2425,7 @@ ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventK
 		if (mon)
 			handlers.Delete(mon);
 		ApplyEventStyles(aControl, aEvent, false);
-		return OK;
+		_o_return_empty;
 	}
 	bool append = aMaxThreads >= 0;
 	if (!append) // Negative values mean "call it last".
@@ -2454,20 +2460,20 @@ ResultType GuiType::OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventK
 				}
 			}
 			if (!ValidateFunctor(aFunc, param_count, aResultToken))
-				return FAIL;
+				return;
 			// Add the callback.
 			mon = handlers.Add(aEvent, aFunc, append);
 		}
 		else
 			mon = handlers.Add(aEvent, aMethodName, append);
 		if (!mon)
-			return aResultToken.MemoryError();
+			_o_throw_oom;
 	}
 	mon->instance_count = 0;
 	mon->max_instances = aMaxThreads;
 	mon->msg_type = aEventKind;
 	ApplyEventStyles(aControl, aEvent, true);
-	return OK;
+	_o_return_empty;
 }
 
 
@@ -7709,11 +7715,11 @@ void GuiType::VisibilityChanged()
 
 
 
-ResultType GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
+void GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 // Caller has ensured that all controls have valid, non-NULL hwnds:
 {
 	if (!mHwnd)
-		return FAIL; // Shouldn't be possible.
+		_o_return_FAIL; // Shouldn't be possible.
 
 	Object* ret = Object::Create();
 	if (!ret)
@@ -7733,9 +7739,18 @@ ResultType GuiType::Submit(ResultToken &aResultToken, bool aHideIt)
 			ResultToken value;
 			value.InitResult(temp_buf);
 
-			if (  !ControlGetContents(value, control, Submit_Mode)
-				|| !ret->SetOwnProp(control.name, value)  )
+			ControlGetContents(value, control, Submit_Mode);
+			if (value.Exited())
+			{
+				ret->Release();
+				return;
+			}
+			if (!ret->SetOwnProp(control.name, value))
+			{
+				value.Free();
 				goto outofmem;
+			}
+			value.Free();
 		}
 	}
 
@@ -7815,7 +7830,7 @@ outofmem:
 
 
 
-ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
+void GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode)
 {
 	// Control types for which Text and Value both have special handling:
 	switch (aControl.type)
@@ -7835,7 +7850,8 @@ ResultType GuiType::ControlGetContents(ResultToken &aResultToken, GuiControlType
 	// of the value, or no "value" at all.
 	if (aMode == Text_Mode)
 	{
-		return ControlGetWindowText(aResultToken, aControl);
+		ControlGetWindowText(aResultToken, aControl);
+		_o_return_retval;
 	}
 	// Otherwise, it's the Value property or Submit method.
 	switch (aControl.type)

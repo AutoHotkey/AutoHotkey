@@ -741,7 +741,7 @@ class FileObject : public Object
 		F_FLOAT = 0x40
 	};
 
-	ResultType NumReadWrite(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+	void NumReadWrite(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 	{
 		const bool reading = aID & F_READ;
 		const BOOL is_signed = aID & F_SIGNED, is_float = aID & F_FLOAT;
@@ -807,7 +807,7 @@ class FileObject : public Object
 		}
 	}
 
-	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 	{
 		aResultToken.symbol = SYM_INTEGER; // Set default return type -- the most common cases return integer.
 
@@ -824,26 +824,26 @@ class FileObject : public Object
 				if (length == -1)
 					break; // Fail.
 				if (!TokenSetResult(aResultToken, NULL, length)) // Only after checking length above: TokenSetResult requires non-NULL aResult if aResultLength == -1.
-					return FAIL;
+					return;
 				length = mFile.Read(aResultToken.marker, length);
 				aResultToken.symbol = SYM_STRING;
 				aResultToken.marker[length] = '\0';
 				aResultToken.marker_length = length; // Update marker_length to the actual number of characters read.
-				return OK;
+				_o_return_retval;
 			}
 			break;
 		
 		case M_ReadLine:
 			{	// See above for comments.
 				if (!TokenSetResult(aResultToken, NULL, READ_FILE_LINE_SIZE))
-					return FAIL;
+					return;
 				DWORD length = mFile.ReadLine(aResultToken.marker, READ_FILE_LINE_SIZE - 1);
 				aResultToken.symbol = SYM_STRING;
 				if (length && aResultToken.marker[length - 1] == '\n')
 					--length;
 				aResultToken.marker[length] = '\0';
 				aResultToken.marker_length = length;
-				return OK;
+				_o_return_retval;
 			}
 			break;
 
@@ -862,7 +862,7 @@ class FileObject : public Object
 					bytes_written += mFile.Write(_T("\n"), 1);
 				}
 				aResultToken.value_int64 = bytes_written;
-				return OK;
+				_o_return_retval;
 			}
 			break;
 
@@ -888,7 +888,7 @@ class FileObject : public Object
 						size_t ptr, size;
 						GetBufferObjectPtr(aResultToken, obj, ptr, size);
 						if (aResultToken.Exited())
-							return aResultToken.Result();
+							return;
 						target = (LPVOID)ptr;
 						max_size = (DWORD)size;
 					}
@@ -928,7 +928,7 @@ class FileObject : public Object
 				else
 					result = mFile.Write(target, size);
 				aResultToken.value_int64 = result;
-				return OK;
+				_o_return_retval;
 			}
 			break;
 
@@ -936,7 +936,7 @@ class FileObject : public Object
 			if (IS_INVOKE_GET)
 			{
 				aResultToken.value_int64 = mFile.Tell();
-				return OK;
+				_o_return_retval;
 			}
 			else
 			{
@@ -949,7 +949,7 @@ class FileObject : public Object
 					origin = (distance < 0) ? SEEK_END : SEEK_SET;
 
 				aResultToken.value_int64 = mFile.Seek(distance, origin);
-				return OK;
+				_o_return_retval;
 			}
 			break;
 
@@ -958,23 +958,22 @@ class FileObject : public Object
 			if (IS_INVOKE_GET) 
 			{
 				aResultToken.value_int64 = mFile.Length();
-				return OK;
+				_o_return_retval;
 			}
-			else
+			else // SET
 			{
-				if (-1 != (aResultToken.value_int64 = mFile.Length(ParamIndexToInt64(0))))
-					return OK;
-				// Otherwise, fall through:
+				mFile.Length(ParamIndexToInt64(0));
+				return;
 			}
 			break;
 
 		case P_AtEOF:
 			aResultToken.value_int64 = mFile.AtEOF();
-			return OK;
-		
+			_o_return_retval;
+
 		case P_Handle:
 			aResultToken.value_int64 = (UINT_PTR) mFile.Handle();
-			return OK;
+			_o_return_retval;
 
 		case P_Encoding:
 		{
@@ -992,7 +991,7 @@ class FileObject : public Object
 				if (codepage == -1)
 					_o_throw_value(ERR_INVALID_VALUE);
 				mFile.SetCodePage(codepage & ~CP_AHKNOBOM); // Ignore "-RAW" by removing the CP_AHKNOBOM flag; see comments above.
-				return OK;
+				return;
 			}
 			LPTSTR name;
 			codepage = mFile.GetCodePage();
@@ -1014,18 +1013,18 @@ class FileObject : public Object
 			}
 			aResultToken.symbol = SYM_STRING;
 			aResultToken.marker = name;
-			return OK;
+			_o_return_retval;
 		}
 
 		case M_Close:
 			mFile.Close();
-			return OK;
+			break;
 		}
 		
-		// Since above didn't return, an error must've occurred.
+		// Since above didn't return, something went wrong or an empty return value is desired.
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T(""); // Already set in most cases, but done here for maintainability.
-		return OK;
+		_o_return_retval;
 	}
 
 	TextFile mFile;

@@ -330,7 +330,7 @@ ResultType input_type::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList
 }
 
 
-ResultType InputStart(input_type &input)
+void InputStart(input_type &input)
 {
 	ASSERT(!input.InProgress());
 
@@ -349,8 +349,6 @@ ResultType InputStart(input_type &input)
 	g_input = &input; // Signal the hook to start the input.
 
 	Hotkey::InstallKeybdHook(); // Install the hook (if needed).
-
-	return OK;
 }
 
 
@@ -11836,7 +11834,7 @@ ResultType RegExMatchObject::Create(LPCTSTR aHaystack, int *aOffset, LPCTSTR *aP
 }
 
 
-ResultType RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	switch (aID)
 	{
@@ -11888,7 +11886,6 @@ ResultType RegExMatchObject::Invoke(ResultToken &aResultToken, int aID, int aFla
 	case M_Len: _o_return(mOffset[2*p + 1]);
 	case M_Name: _o_return((mPatternName && mPatternName[p]) ? mPatternName[p] : _T(""));
 	}
-	return INVOKE_NOT_HANDLED;
 }
 
 
@@ -15177,7 +15174,7 @@ BIF_DECL(BIF_MenuFromHandle)
 
 
 
-ResultType GuiControlType::StatusBar(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiControlType::StatusBar(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	GuiType& gui = *this->gui;
 	HWND control_hwnd = this->hwnd;
@@ -15258,7 +15255,7 @@ ResultType GuiControlType::StatusBar(ResultToken &aResultToken, int aID, int aFl
 }
 
 
-ResultType GuiControlType::LV_GetNextOrCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiControlType::LV_GetNextOrCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // LV.GetNext:
 // Returns: The index of the found item, or 0 on failure.
 // Parameters:
@@ -15330,7 +15327,7 @@ ResultType GuiControlType::LV_GetNextOrCount(ResultToken &aResultToken, int aID,
 
 
 
-ResultType GuiControlType::LV_GetText(ResultToken & aResultToken, int aID, int aFlags, ExprTokenType * aParam[], int aParamCount)
+void GuiControlType::LV_GetText(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Returns: Text on success.
 // Throws on failure.
 // Parameters:
@@ -15387,7 +15384,7 @@ ResultType GuiControlType::LV_GetText(ResultToken & aResultToken, int aID, int a
 
 
 
-ResultType GuiControlType::LV_AddInsertModify(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiControlType::LV_AddInsertModify(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: For Add(), this is the options.  For Insert/Modify, it's the row index (one-based when it comes in).
@@ -15539,7 +15536,7 @@ ResultType GuiControlType::LV_AddInsertModify(ResultToken &aResultToken, int aID
 		{
 			aResultToken.ValueError(ERR_INVALID_OPTION, next_option);
 			*option_end = orig_char; // See comment below.
-			return FAIL;
+			return;
 		}
 
 		*option_end = orig_char; // Undo the temporary termination because the caller needs aOptions to be unaltered.
@@ -15650,7 +15647,7 @@ ResultType GuiControlType::LV_AddInsertModify(ResultToken &aResultToken, int aID
 
 
 
-ResultType GuiControlType::LV_Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiControlType::LV_Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: Row index (one-based when it comes in).
@@ -15669,7 +15666,7 @@ ResultType GuiControlType::LV_Delete(ResultToken &aResultToken, int aID, int aFl
 
 
 
-ResultType GuiControlType::LV_InsertModifyDeleteCol(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiControlType::LV_InsertModifyDeleteCol(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Returns: 1 on success and 0 on failure.
 // Parameters:
 // 1: Column index (one-based when it comes in).
@@ -15920,7 +15917,7 @@ ResultType GuiControlType::LV_InsertModifyDeleteCol(ResultToken &aResultToken, i
 			{
 				aResultToken.ValueError(ERR_INVALID_OPTION, next_option);
 				*option_end = orig_char; // See comment below.
-				return FAIL;
+				return;
 			}
 		}
 
@@ -15993,7 +15990,7 @@ ResultType GuiControlType::LV_InsertModifyDeleteCol(ResultToken &aResultToken, i
 
 
 
-ResultType GuiControlType::LV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiControlType::LV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Returns (MSDN): "handle to the image list previously associated with the control if successful; NULL otherwise."
 // Parameters:
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
@@ -16015,7 +16012,7 @@ ResultType GuiControlType::LV_SetImageList(ResultToken &aResultToken, int aID, i
 
 
 
-ResultType GuiControlType::TV_AddModifyDelete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiControlType::TV_AddModifyDelete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // TV.Add():
 // Returns the HTREEITEM of the item on success, zero on failure.
 // Parameters:
@@ -16250,7 +16247,7 @@ ResultType GuiControlType::TV_AddModifyDelete(ResultToken &aResultToken, int aID
 			control.attrib &= ~GUI_CONTROL_ATTRIB_SUPPRESS_EVENTS; // Re-enable events.
 			aResultToken.ValueError(ERR_INVALID_OPTION, next_option);
 			*option_end = orig_char; // See comment below.
-			return FAIL;
+			return;
 		}
 
 		// If the item was not handled by the above, ignore it because it is unknown.
@@ -16323,7 +16320,7 @@ HTREEITEM GetNextTreeItem(HWND aTreeHwnd, HTREEITEM aItem)
 
 
 
-ResultType GuiControlType::TV_GetRelatedItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiControlType::TV_GetRelatedItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // TV.GetParent/Child/Selection/Next/Prev(hitem):
 // The above all return the HTREEITEM (or 0 on failure).
 // When TV.GetNext's second parameter is present, the search scope expands to include not just siblings,
@@ -16398,7 +16395,7 @@ ResultType GuiControlType::TV_GetRelatedItem(ResultToken &aResultToken, int aID,
 
 
 
-ResultType GuiControlType::TV_Get(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiControlType::TV_Get(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // TV.Get()
 // Returns: Varies depending on param #2.
 // Parameters:
@@ -16465,7 +16462,7 @@ ResultType GuiControlType::TV_Get(ResultToken &aResultToken, int aID, int aFlags
 
 
 
-ResultType GuiControlType::TV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void GuiControlType::TV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 // Returns (MSDN): "handle to the image list previously associated with the control if successful; NULL otherwise."
 // Parameters:
 // 1: HIMAGELIST obtained from somewhere such as IL_Create().
@@ -16674,7 +16671,7 @@ LPTSTR TokenTypeString(ExprTokenType &aToken)
 
 
 
-ResultType Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	LPTSTR message;
 	TCHAR what_buf[MAX_NUMBER_SIZE], extra_buf[MAX_NUMBER_SIZE];
@@ -16751,8 +16748,6 @@ ResultType Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, Ex
 	SetOwnProp(_T("File"), Line::sSourceFile[line->mFileIndex]);
 	SetOwnProp(_T("Line"), line->mLineNumber);
 	SetOwnProp(_T("Extra"), extra);
-
-	return OK;
 }
 
 

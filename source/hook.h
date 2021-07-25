@@ -261,7 +261,7 @@ private:
 
 #include "input_object.h"
 
-ResultType InputStart(input_type &input);
+void InputStart(input_type &input);
 input_type *InputRelease(input_type *aInput);
 input_type *InputFind(InputObject *object);
 

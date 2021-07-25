@@ -48,7 +48,7 @@ int UserMenu::sMemberCount = _countof(sMembers);
 
 
 
-ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	LPTSTR param1 = (aParamCount || IS_INVOKE_SET) ? ParamIndexToString(0, _f_number_buf) : _T("");
 
@@ -59,7 +59,8 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 	switch (member)
 	{
 	case M_Show:
-		return Display(true, ParamIndexToOptionalInt(0, COORD_UNSPECIFIED), ParamIndexToOptionalInt(1, COORD_UNSPECIFIED));
+		Display(true, ParamIndexToOptionalInt(0, COORD_UNSPECIFIED), ParamIndexToOptionalInt(1, COORD_UNSPECIFIED));
+		_o_return_empty;
 
 	case M_Insert:
 		if (*param1) // i.e. caller specified where to insert.
@@ -86,15 +87,16 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 	case M_Add:
 		if (*param1) // Since a menu item name was given, it's not a separator line.
 			break; // Let a later switch() handle it.
-		return AddItem(_T(""), g_script.GetFreeMenuItemID(), NULL, NULL, _T(""), insert_at); // Even separators get an ID, so that they can be modified later using the position& notation.
+		if (!AddItem(_T(""), g_script.GetFreeMenuItemID(), NULL, NULL, _T(""), insert_at)) // Even separators get an ID, so that they can be modified later using the position& notation.
+			_o_return_FAIL;
+		_o_return_empty;
 
 	case M_Delete:
 		if (aParamCount) // Since a menu item name was given, an item is being deleted, not the whole menu.
 			// aParamCount vs *param1: seems best to differentiate between Menu.Delete() and Menu.Delete("").
 			break; // Let a later switch() handle it.
-		if (!DeleteAllItems())
-			_o_throw(_T("Can't delete items (in use?)."));
-		return OK;
+		DeleteAllItems();
+		_o_return_empty;
 
 	case P_Default:
 		if (IS_INVOKE_SET)
@@ -106,7 +108,9 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 		_o_return(mDefault ? mDefault->mName : _T(""));
 
 	case M_AddStandard:
-		return AppendStandardItems();
+		if (!AppendStandardItems())
+			_o_return_FAIL;
+		_o_return_empty;
 
 	case M_SetColor:
 	{
@@ -115,7 +119,7 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 			SetColor(*aParam[0], submenus);
 		else
 			SetColor(ExprTokenType(_T("")), submenus);
-		return OK;
+		_o_return_empty;
 	}
 
 	case P_Handle:
@@ -131,7 +135,7 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 				mClickCount = 1;  // Single-click to activate menu's default item.
 			else if (mClickCount > 2)
 				mClickCount = 2;  // Double-click.
-			return OK;
+			return;
 		}
 		_o_return(mClickCount);
 	}
@@ -185,7 +189,7 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 			if (!callback)
 				_o_throw_param(1, _T("object"));
 			if (!ValidateFunctor(callback, 3, aResultToken))
-				return FAIL;
+				return;
 		}
 	}
 
@@ -203,7 +207,9 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 		UINT item_id = g_script.GetFreeMenuItemID();
 		if (!item_id) // All ~64000 IDs are in use!
 			_o_throw(_T("Too many menu items."), param1); // Short msg since so rare.
-		return AddItem(param1, item_id, callback, submenu, aOptions, insert_at);
+		if (!AddItem(param1, item_id, callback, submenu, aOptions, insert_at))
+			_o_return_FAIL;
+		_o_return_empty;
 	} // if (!menu_item)
 
 	// Above has found the correct menu_item to operate upon (it already returned if
@@ -217,11 +223,13 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 		// This is only reached if the ADD command is being used to update the callback, submenu, or
 		// options of an existing menu item (since it would have returned above if the item was
 		// just newly created).
-		return ModifyItem(menu_item, callback, submenu, aOptions);
+		if (!ModifyItem(menu_item, callback, submenu, aOptions))
+			_o_return_FAIL;
+		_o_return_empty;
 	case M_Rename:
 		if (!RenameItem(menu_item, param2))
 			_o_throw(_T("Rename failed (name too long?)."), param2);
-		return OK;
+		_o_return_empty;
 	case M_Check:
 		return CheckItem(menu_item);
 	case M_Uncheck:
@@ -242,9 +250,8 @@ ResultType UserMenu::Invoke(ResultToken &aResultToken, int aID, int aFlags, Expr
 		// Icon width defaults to system small icon size.  Original icon size will be used if "0" is specified.
 		if (!SetItemIcon(menu_item, param2, ATOI(aOptions), ParamIndexToOptionalInt(3, GetSystemMetrics(SM_CXSMICON))))
 			_o_throw(_T("Can't load icon."), param2);
-		return OK;
+		_o_return_empty;
 	} // switch()
-	return FAIL; // Should be impossible if all members were handled.
 }
 
 
@@ -561,7 +568,7 @@ UserMenuItem::UserMenuItem(LPTSTR aName, size_t aNameCapacity, UINT aMenuID, IOb
 
 
 
-ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev, bool aUpdateGuiMenuBars)
+void UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev, bool aUpdateGuiMenuBars)
 {
 	// Remove this menu item from the linked list:
 	if (aMenuItem == mLastMenuItem)
@@ -579,12 +586,11 @@ ResultType UserMenu::DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItem
 	--mMenuItemCount;
 	if (aUpdateGuiMenuBars)
 		UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
-	return OK;
 }
 
 
 
-ResultType UserMenu::DeleteAllItems()
+void UserMenu::DeleteAllItems()
 // Remove all menu items from the linked list and from the menu.
 {
 	// Fixed for v1.1.27.03: Don't attempt to take a shortcut by calling DestroyHandle(), as it
@@ -593,7 +599,7 @@ ResultType UserMenu::DeleteAllItems()
 	// DestroyHandle() was used; that reason is now obsolete since submenus are given IDs:
 	// "In addition, this avoids the need to find any submenus by position:"
 	if (!mFirstMenuItem)
-		return OK;  // If there are no user-defined menu items, it's already in the correct state.
+		return;  // If there are no user-defined menu items, it's already in the correct state.
 	UserMenuItem *menu_item_to_delete;
 	for (UserMenuItem *mi = mFirstMenuItem; mi;)
 	{
@@ -608,7 +614,6 @@ ResultType UserMenu::DeleteAllItems()
 	mMenuItemCount = 0;
 	mDefault = NULL;  // i.e. there can't be a *user-defined* default item anymore, even if this is the tray.
 	UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
-	return OK;
 }
 
 
@@ -839,7 +844,7 @@ ResultType UserMenu::UpdateName(UserMenuItem *aMenuItem, LPTSTR aNewName)
 
 
 
-ResultType UserMenu::SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aStateMask)
+void UserMenu::SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aStateMask)
 {
 	if (mMenu)
 	{
@@ -857,59 +862,57 @@ ResultType UserMenu::SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aSt
 			SetMenuItemInfo(mMenu, aMenuItem->mMenuID, FALSE, &mii);
 			if (aStateMask & MFS_DISABLED) // i.e. enabling or disabling, which would affect a menu bar.
 				UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Verified as being necessary.
-			return OK;
+			return;
 		}
 	}
 	aMenuItem->mMenuState = (WORD)((aMenuItem->mMenuState & ~aStateMask) | aState);
-	return OK;
 }
 
-ResultType UserMenu::CheckItem(UserMenuItem *aMenuItem)
+void UserMenu::CheckItem(UserMenuItem *aMenuItem)
 {
 	return SetItemState(aMenuItem, MFS_CHECKED, MFS_CHECKED);
 }
 
-ResultType UserMenu::UncheckItem(UserMenuItem *aMenuItem)
+void UserMenu::UncheckItem(UserMenuItem *aMenuItem)
 {
 	return SetItemState(aMenuItem, MFS_UNCHECKED, MFS_CHECKED);
 }
 
-ResultType UserMenu::ToggleCheckItem(UserMenuItem *aMenuItem)
+void UserMenu::ToggleCheckItem(UserMenuItem *aMenuItem)
 {
 	return SetItemState(aMenuItem, (aMenuItem->mMenuState & MFS_CHECKED) ^ MFS_CHECKED, MFS_CHECKED);
 }
 
-ResultType UserMenu::EnableItem(UserMenuItem *aMenuItem)
+void UserMenu::EnableItem(UserMenuItem *aMenuItem)
 {
 	return SetItemState(aMenuItem, MFS_ENABLED, MFS_DISABLED);
 }
 
-ResultType UserMenu::DisableItem(UserMenuItem *aMenuItem)
+void UserMenu::DisableItem(UserMenuItem *aMenuItem)
 {
 	return SetItemState(aMenuItem, MFS_DISABLED, MFS_DISABLED);
 }
 
-ResultType UserMenu::ToggleEnableItem(UserMenuItem *aMenuItem)
+void UserMenu::ToggleEnableItem(UserMenuItem *aMenuItem)
 {
 	return SetItemState(aMenuItem, (aMenuItem->mMenuState & MFS_DISABLED) ^ MFS_DISABLED, MFS_DISABLED);
 }
 
 
 
-ResultType UserMenu::SetDefault(UserMenuItem *aMenuItem, bool aUpdateGuiMenuBars)
+void UserMenu::SetDefault(UserMenuItem *aMenuItem, bool aUpdateGuiMenuBars)
 {
 	if (mDefault == aMenuItem)
-		return OK;
+		return;
 	mDefault = aMenuItem;
 	if (!mMenu) // No further action required: the new setting will be in effect when the menu is created.
-		return OK;
+		return;
 	if (aMenuItem) // A user-defined menu item is being made the default.
 		SetMenuDefaultItem(mMenu, aMenuItem->mMenuID, FALSE); // This also ensures that only one is default at a time.
 	else
 		SetMenuDefaultItem(mMenu, -1, FALSE);
 	if (aUpdateGuiMenuBars)
 		UPDATE_GUI_MENU_BARS(mMenuType, mMenu)  // Testing shows that menu bars themselves can have default items, and that this is necessary.
-	return OK;
 }
 
 
@@ -1071,7 +1074,8 @@ ResultType UserMenu::EnableStandardOpenItem(bool aEnable)
 						SetDefault(*p);
 					return OK;
 				}
-				return DeleteItem(mi, mi_prev);
+				DeleteItem(mi, mi_prev);
+				return OK;
 			}
 			break;
 		}
@@ -1328,7 +1332,10 @@ void UserMenu::UpdateAccelerators()
 ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int aIconNumber, int aWidth)
 {
 	if (!*aFilename || (*aFilename == '*' && !aFilename[1]))
-		return RemoveItemIcon(aMenuItem);
+	{
+		RemoveItemIcon(aMenuItem);
+		return OK;
+	}
 
 	int image_type;
 	HBITMAP new_icon, new_copy;
@@ -1359,7 +1366,7 @@ ResultType UserMenu::SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int 
 
 
 // Caller has ensured mMenu is non-NULL.
-ResultType UserMenu::ApplyItemIcon(UserMenuItem *aMenuItem)
+void UserMenu::ApplyItemIcon(UserMenuItem *aMenuItem)
 {
 	if (aMenuItem->mBitmap)
 	{
@@ -1370,11 +1377,10 @@ ResultType UserMenu::ApplyItemIcon(UserMenuItem *aMenuItem)
 		item_info.hbmpItem = aMenuItem->mBitmap;
 		SetMenuItemInfo(mMenu, aMenuItem_ID, aMenuItem_MF_BY, &item_info);
 	}
-	return OK;
 }
 
 
-ResultType UserMenu::RemoveItemIcon(UserMenuItem *aMenuItem)
+void UserMenu::RemoveItemIcon(UserMenuItem *aMenuItem)
 {
 	if (aMenuItem->mBitmap)
 	{
@@ -1389,6 +1395,5 @@ ResultType UserMenu::RemoveItemIcon(UserMenuItem *aMenuItem)
 		DeleteObject(aMenuItem->mBitmap);
 		aMenuItem->mBitmap = NULL;
 	}
-	return OK;
 }
 

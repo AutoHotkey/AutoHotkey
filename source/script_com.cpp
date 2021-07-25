@@ -1261,7 +1261,7 @@ void DefineComPrototypeMembers()
 }
 
 
-ResultType ComObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void ComObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	if (aID == P___Item) // ComValueRef
 	{
@@ -1272,7 +1272,7 @@ ResultType ComObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, Exp
 			if (FAILED(hr))
 			{
 				ComError(hr, aResultToken);
-				return aResultToken.Result();
+				return;
 			}
 		}
 		else
@@ -1292,7 +1292,7 @@ ResultType ComObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, Exp
 				// Assigning zero is permitted and there is no AddRef because the caller wants us to
 				// Release the interface pointer automatically.
 				mUnknown = (IUnknown *)ParamIndexToInt64(0);
-				return OK;
+				return;
 			}
 		}
 		else // GET
@@ -1303,11 +1303,10 @@ ResultType ComObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, Exp
 		}
 		_o_throw(ERR_INVALID_USAGE);
 	}
-	return OK;
 }
 
 
-ResultType ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	HRESULT hr = E_UNEXPECTED;
 	SAFEARRAY *psa = (SAFEARRAY*)mVal64;
@@ -1339,11 +1338,10 @@ ResultType ComObject::SafeArrayInvoke(ResultToken &aResultToken, int aID, int aF
 	}
 	if (FAILED(hr))
 		ComError(hr, aResultToken);
-	return aResultToken.Result();
 }
 
 
-ResultType ComObject::SafeArrayItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void ComObject::SafeArrayItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	SAFEARRAY *psa = (SAFEARRAY*)mVal64;
 	VARTYPE item_type = (mVarType & VT_TYPEMASK);
@@ -1380,7 +1378,6 @@ ResultType ComObject::SafeArrayItem(ResultToken &aResultToken, int aID, int aFla
 
 	if (FAILED(hr))
 		ComError(hr, aResultToken);
-	return aResultToken.Result();
 }
 
 

@@ -53,16 +53,16 @@ Object *InputObject::Create()
 }
 
 
-ResultType InputObject::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void InputObject::__New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_f_param_string_opt(aOptions, 0);
 	_f_param_string_opt(aEndKeys, 1);
 	_f_param_string_opt(aMatchList, 2);
 	
 	if (!Setup(aOptions, aEndKeys, aMatchList, _tcslen(aMatchList)))
-		_o_return_FAIL;
+		_f_return_FAIL;
 
-	_o_return_empty;
+	_f_return_empty;
 }
 
 
@@ -72,15 +72,17 @@ ResultType InputObject::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchLis
 }
 
 
-ResultType InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	switch (aID)
 	{
 	case M_Start:
-		if (input.InProgress())
-			return OK;
-		input.Buffer[input.BufferLength = 0] = '\0';
-		return InputStart(input);
+		if (!input.InProgress())
+		{
+			input.Buffer[input.BufferLength = 0] = '\0';
+			InputStart(input);
+		}
+		_o_return_empty;
 
 	case M_Wait:
 		DWORD wait_ms, tick_start;
@@ -95,7 +97,7 @@ ResultType InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, E
 	case M_Stop:
 		if (input.InProgress())
 			input.Stop();
-		return OK;
+		_o_return_empty;
 
 	case P_Input:
 		_o_return(input.Buffer, input.BufferLength);
@@ -109,7 +111,7 @@ ResultType InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, E
 			input.GetEndReason(aResultToken.marker = _f_retval_buf, _f_retval_buf_size);
 		else
 			aResultToken.marker = _T("");
-		return OK;
+		_o_return_retval;
 
 	case P_EndMods:
 	{
@@ -123,7 +125,7 @@ ResultType InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, E
 				*cp++ = mod_string[i * 2 + 1];
 			}
 		*cp = '\0';
-		return OK;
+		_o_return_retval;
 	}
 
 	case P_Match:
@@ -132,13 +134,13 @@ ResultType InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, E
 			aResultToken.marker = input.match[input.EndingMatchIndex];
 		else
 			aResultToken.marker = _T("");
-		return OK;
+		_o_return_retval;
 
 	case P_MinSendLevel:
 		if (IS_INVOKE_SET)
 		{
 			input.MinSendLevel = (SendLevelType)ParamIndexToInt64(0);
-			return OK;
+			return;
 		}
 		_o_return(input.MinSendLevel);
 
@@ -148,15 +150,14 @@ ResultType InputObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, E
 			input.Timeout = (int)(ParamIndexToDouble(0) * 1000);
 			if (input.InProgress() && input.Timeout > 0)
 				input.SetTimeoutTimer();
-			return OK;
+			return;
 		}
 		_o_return(input.Timeout / 1000.0);
 	}
-	return INVOKE_NOT_HANDLED;
 }
 
 
-ResultType InputObject::BoolOpt(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void InputObject::BoolOpt(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	bool *bool_option = nullptr;
 	switch (aID)
@@ -174,7 +175,7 @@ ResultType InputObject::BoolOpt(ResultToken &aResultToken, int aID, int aFlags, 
 }
 
 
-ResultType InputObject::OnX(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void InputObject::OnX(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	IObject **pon;
 	switch (aID)
@@ -200,11 +201,10 @@ ResultType InputObject::OnX(ResultToken &aResultToken, int aID, int aFlags, Expr
 		(*pon)->AddRef();
 		aResultToken.SetValue(*pon);
 	}
-	return OK;
 }
 
 
-ResultType InputObject::KeyOpt(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
+void InputObject::KeyOpt(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
 {
 	_f_param_string(keys, 0);
 	_f_param_string(options, 1);
@@ -254,8 +254,9 @@ ResultType InputObject::KeyOpt(ResultToken &aResultToken, int aID, int aFlags, E
 			input.KeyVK[i] = (input.KeyVK[i] & ~remove_flags) | add_flags;
 		for (int i = 0; i < _countof(input.KeySC); ++i)
 			input.KeySC[i] = (input.KeySC[i] & ~remove_flags) | add_flags;
-		return OK;
+		_o_return_empty;
 	}
 
-	return input.SetKeyFlags(keys, false, remove_flags, add_flags);
+	if (!input.SetKeyFlags(keys, false, remove_flags, add_flags))
+		_o_return_FAIL;
 }

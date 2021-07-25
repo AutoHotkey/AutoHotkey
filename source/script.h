@@ -426,27 +426,18 @@ __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 
 #define _f__oneline(act)		do { act } while (0)		// Make the macro safe to use like a function, under if(), etc.
 #define _f__ret(act)			_f__oneline( act; return; )	// BIFs have no return value.
-#define _o__ret(act)			return (act)				// IObject::Invoke() returns ResultType.
 // The following macros are used in built-in functions and objects to reduce code repetition
 // and facilitate changes to the script "ABI" (i.e. the way in which parameters and return
 // values are passed around).  For instance, the built-in functions might someday be exposed
 // via COM IDispatch or coupled with different scripting languages.
 #define _f_return(...)			_f__ret(aResultToken.Return(__VA_ARGS__))
-#define _o_return(...)			_o__ret(aResultToken.Return(__VA_ARGS__))
 #define _f_throw(...)			_f__ret(aResultToken.Error(__VA_ARGS__))
 #define _f_throw_param(_prm_, ...)	return ((void)aResultToken.ParamError(_prm_, aParam[_prm_], __VA_ARGS__))
 #define _f_throw_win32(...)		return ((void)aResultToken.Win32Error(__VA_ARGS__))
 #define _f_throw_value(...)		return ((void)aResultToken.ValueError(__VA_ARGS__))
 #define _f_throw_type(...)		return ((void)aResultToken.TypeError(__VA_ARGS__))
 #define _f_throw_oom			return ((void)aResultToken.MemoryError())
-#define _o_throw(...)			_o__ret(aResultToken.Error(__VA_ARGS__))
-#define _o_throw_param(_prm_, ...)	return aResultToken.ParamError(_prm_, aParam[_prm_], __VA_ARGS__)
-#define _o_throw_win32(...)		return aResultToken.Win32Error(__VA_ARGS__)
-#define _o_throw_value(...)		return aResultToken.ValueError(__VA_ARGS__)
-#define _o_throw_type(...)		return aResultToken.TypeError(__VA_ARGS__)
-#define _o_throw_oom			return aResultToken.MemoryError()
 #define _f_return_FAIL			_f__ret(aResultToken.SetExitResult(FAIL))
-#define _o_return_FAIL			_o__ret(aResultToken.SetExitResult(FAIL))
 // The _f_set_retval macros should be used with care because the integer macros assume symbol
 // is set to its default value; i.e. don't set a string and then attempt to return an integer.
 // It is also best for maintainability to avoid setting mem_to_free or an object without
@@ -458,16 +449,27 @@ __int64 pow_ll(__int64 base, __int64 exp); // integer power function
 #define _f_return_i(n)			_f__ret(_f_set_retval_i(n)) // Return an integer.  Reduces code size vs _f_return() by assuming symbol == SYM_INTEGER, the default for BIFs.
 #define _f_return_b(b)			_f_return_i((bool)(b)) // Boolean.  Currently just returns an int because we have no boolean type.
 #define _f_return_p(...)		_f__ret(_f_set_retval_p(__VA_ARGS__)) // Return a string which is already in persistent memory.
-#define _o_return_p(...)		_o__ret(_f_set_retval_p(__VA_ARGS__)) // Return a string which is already in persistent memory.
 #define _f_return_retval		return  // Return the value set by _f_set_retval().
-#define _o_return_retval		return OK
 #define _f_return_empty			_f_return_p(_T(""), 0)
-#define _o_return_empty			return OK  // Default return value for Invoke is "".
-#define _o_return_or_throw(p)	if (p) _o_return(p); else _o_throw(ERR_OUTOFMEM);
 #define _f_retval_buf			(aResultToken.buf)
 #define _f_retval_buf_size		MAX_NUMBER_SIZE
 #define _f_number_buf			_f_retval_buf  // An alias to show intended usage, and in case the buffer size is changed.
 #define _f_callee_id			(aResultToken.func->mFID)
+// The _o_ macros originally needed different implementations due to differences between the
+// function signature for methods and that for built-in functions.  Currently they're similar
+// enough that most of these macros can just be aliases (kept for maintainability).
+#define _o__ret					_f__ret
+#define _o_throw				_f_throw
+#define _o_throw_param			_f_throw_param
+#define _o_throw_win32			_f_throw_win32
+#define _o_throw_value			_f_throw_value
+#define _o_throw_type			_f_throw_type
+#define _o_throw_oom			_f_throw_oom
+#define _o_return				_f_return
+#define _o_return_p				_f_return_p
+#define _o_return_FAIL			_f_return_FAIL
+#define _o_return_retval		_f_return_retval
+#define _o_return_empty			_o_return_retval  // Default return value for Invoke is "".
 
 
 struct LoopFilesStruct : WIN32_FIND_DATA
@@ -1634,7 +1636,7 @@ public:
 		P_IsVariadic
 	};
 	static ObjectMember sMembers[];
-	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	static Object *sPrototype;
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
@@ -2156,24 +2158,24 @@ public:
 		P_ClickCount,
 	};
 	
-	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
 	ResultType AddItem(LPTSTR aName, UINT aMenuID, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions, UserMenuItem **aInsertAt);
 	ResultType InternalAppendMenu(UserMenuItem *aMenuItem, UserMenuItem *aInsertBefore = NULL);
-	ResultType DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev, bool aUpdateGuiMenuBars = true);
-	ResultType DeleteAllItems();
+	void DeleteItem(UserMenuItem *aMenuItem, UserMenuItem *aMenuItemPrev, bool aUpdateGuiMenuBars = true);
+	void DeleteAllItems();
 	ResultType ModifyItem(UserMenuItem *aMenuItem, IObject *aCallback, UserMenu *aSubmenu, LPTSTR aOptions);
 	ResultType UpdateOptions(UserMenuItem *aMenuItem, LPTSTR aOptions);
 	ResultType RenameItem(UserMenuItem *aMenuItem, LPTSTR aNewName);
 	ResultType UpdateName(UserMenuItem *aMenuItem, LPTSTR aNewName);
-	ResultType SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aStateMask);
-	ResultType CheckItem(UserMenuItem *aMenuItem);
-	ResultType UncheckItem(UserMenuItem *aMenuItem);
-	ResultType ToggleCheckItem(UserMenuItem *aMenuItem);
-	ResultType EnableItem(UserMenuItem *aMenuItem);
-	ResultType DisableItem(UserMenuItem *aMenuItem);
-	ResultType ToggleEnableItem(UserMenuItem *aMenuItem);
-	ResultType SetDefault(UserMenuItem *aMenuItem = NULL, bool aUpdateGuiMenuBars = true);
+	void SetItemState(UserMenuItem *aMenuItem, UINT aState, UINT aStateMask);
+	void CheckItem(UserMenuItem *aMenuItem);
+	void UncheckItem(UserMenuItem *aMenuItem);
+	void ToggleCheckItem(UserMenuItem *aMenuItem);
+	void EnableItem(UserMenuItem *aMenuItem);
+	void DisableItem(UserMenuItem *aMenuItem);
+	void ToggleEnableItem(UserMenuItem *aMenuItem);
+	void SetDefault(UserMenuItem *aMenuItem = NULL, bool aUpdateGuiMenuBars = true);
 	ResultType CreateHandle();
 	void DestroyHandle();
 	void SetColor(ExprTokenType &aColor, bool aApplyToSubmenus);
@@ -2187,8 +2189,8 @@ public:
 	void UpdateAccelerators();
 	// L17: Functions for menu icons.
 	ResultType SetItemIcon(UserMenuItem *aMenuItem, LPTSTR aFilename, int aIconNumber, int aWidth);
-	ResultType ApplyItemIcon(UserMenuItem *aMenuItem);
-	ResultType RemoveItemIcon(UserMenuItem *aMenuItem);
+	void ApplyItemIcon(UserMenuItem *aMenuItem);
+	void RemoveItemIcon(UserMenuItem *aMenuItem);
 };
 
 class UserMenu::Bar : public UserMenu
@@ -2446,19 +2448,19 @@ struct GuiControlType : public Object
 	static void DefineControlClasses();
 	static Object *GetPrototype(GuiControls aType);
 
-	ResultType StatusBar(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType LV_GetNextOrCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType LV_GetText(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType LV_AddInsertModify(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType LV_Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType LV_InsertModifyDeleteCol(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType LV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType TV_AddModifyDelete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType TV_GetRelatedItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType TV_Get(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType TV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void StatusBar(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void LV_GetNextOrCount(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void LV_GetText(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void LV_AddInsertModify(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void LV_Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void LV_InsertModifyDeleteCol(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void LV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void TV_AddModifyDelete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void TV_GetRelatedItem(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void TV_Get(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void TV_SetImageList(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 
-	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Invoke(IObject_Invoke_PARAMS_DECL);
 
 	void Dispose(); // Called by GuiType::Dispose().
@@ -2653,13 +2655,13 @@ public:
 	void Dispose();
 	static void DestroyIconsIfUnused(HICON ahIcon, HICON ahIconSmall); // L17: Renamed function and added parameter to also handle the window's small icon.
 	static GuiType *Create() { return new GuiType(); } // For Object::New<GuiType>().
-	ResultType __New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
-	ResultType AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void __New(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	void AddControl(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount);
 	ResultType Create(LPTSTR aTitle);
 	ResultType SetName(LPTSTR aName);
-	ResultType OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken);
-	ResultType OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads, ResultToken &aResultToken);
+	void OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, ExprTokenType *aParam[], int aParamCount, ResultToken &aResultToken);
+	void OnEvent(GuiControlType *aControl, UINT aEvent, UCHAR aEventKind, IObject *aFunc, LPTSTR aMethodName, int aMaxThreads, ResultToken &aResultToken);
 	void ApplyEventStyles(GuiControlType *aControl, UINT aEvent, bool aAdded);
 	static LPTSTR sEventNames[];
 	static LPTSTR ConvertEvent(GuiEventType evt);
@@ -2672,10 +2674,10 @@ public:
 	ResultType GetEnumItem(UINT &aIndex, Var *, Var *, int);
 
 	static IObject* CreateDropArray(HDROP hDrop);
-	ResultType SetMenu(ExprTokenType &aParam);
+	void SetMenu(ResultToken &aResultToken, ExprTokenType &aParam);
 	static void UpdateMenuBars(HMENU aMenu);
 	ResultType AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR aText, GuiControlType*& apControl, Array *aObj = NULL);
-	ResultType MethodGetPos(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, RECT &aPos);
+	void MethodGetPos(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, RECT &aPos);
 
 	ResultType ParseOptions(LPTSTR aOptions, bool &aSetLastFoundWindow, ToggleValueType &aOwnDialogs);
 	void SetOwnDialogs(ToggleValueType state)
@@ -2698,7 +2700,7 @@ public:
 	void Close(); // Due to SC_CLOSE, etc.
 	void Escape(); // Similar to close, except typically called when the user presses ESCAPE.
 	void VisibilityChanged();
-	ResultType Submit(ResultToken &aResultToken, bool aHideIt);
+	void Submit(ResultToken &aResultToken, bool aHideIt);
 
 	static GuiType *FindGui(HWND aHwnd);
 	static GuiType *FindGuiParent(HWND aHwnd);
@@ -2759,34 +2761,34 @@ public:
 	GuiControlType *ControlOverrideBkColor(GuiControlType &aControl);
 	void ControlGetBkColor(GuiControlType &aControl, bool aUseWindowColor, HBRUSH &aBrush, COLORREF &aColor);
 	
-	ResultType ControlSetContents(GuiControlType &aControl, ExprTokenType &aContents, ResultToken &aResultToken, bool aIsText);
-	ResultType ControlSetPic(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	ResultType ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText); // DDL, ComboBox, ListBox, Tab
-	ResultType ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText);
-	ResultType ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	ResultType ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aFormat, ResultToken &aResultToken);
-	ResultType ControlSetMonthCal(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	ResultType ControlSetHotkey(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
-	ResultType ControlSetCheck(GuiControlType &aControl, int aValue, ResultToken &aResultToken); // CheckBox, Radio
-	ResultType ControlSetUpDown(GuiControlType &aControl, int aValue, ResultToken &aResultToken);
-	ResultType ControlSetSlider(GuiControlType &aControl, int aValue, ResultToken &aResultToken);
-	ResultType ControlSetProgress(GuiControlType &aControl, int aValue, ResultToken &aResultToken);
+	void ControlSetContents(GuiControlType &aControl, ExprTokenType &aContents, ResultToken &aResultToken, bool aIsText);
+	void ControlSetPic(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
+	void ControlSetChoice(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText); // DDL, ComboBox, ListBox, Tab
+	void ControlSetEdit(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken, bool aIsText);
+	void ControlSetDateTime(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
+	void ControlSetDateTimeFormat(GuiControlType &aControl, LPTSTR aFormat, ResultToken &aResultToken);
+	void ControlSetMonthCal(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
+	void ControlSetHotkey(GuiControlType &aControl, LPTSTR aContents, ResultToken &aResultToken);
+	void ControlSetCheck(GuiControlType &aControl, int aValue, ResultToken &aResultToken); // CheckBox, Radio
+	void ControlSetUpDown(GuiControlType &aControl, int aValue, ResultToken &aResultToken);
+	void ControlSetSlider(GuiControlType &aControl, int aValue, ResultToken &aResultToken);
+	void ControlSetProgress(GuiControlType &aControl, int aValue, ResultToken &aResultToken);
 
 	enum ValueModeType { Value_Mode, Text_Mode, Submit_Mode };
 
-	ResultType ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode = Value_Mode);
-	ResultType ControlGetCheck(ResultToken &aResultToken, GuiControlType &aControl); // CheckBox, Radio
-	ResultType ControlGetDDL(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
-	ResultType ControlGetComboBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
-	ResultType ControlGetListBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
-	ResultType ControlGetEdit(ResultToken &aResultToken, GuiControlType &aControl);
-	ResultType ControlGetDateTime(ResultToken &aResultToken, GuiControlType &aControl);
-	ResultType ControlGetMonthCal(ResultToken &aResultToken, GuiControlType &aControl);
-	ResultType ControlGetHotkey(ResultToken &aResultToken, GuiControlType &aControl);
-	ResultType ControlGetUpDown(ResultToken &aResultToken, GuiControlType &aControl);
-	ResultType ControlGetSlider(ResultToken &aResultToken, GuiControlType &aControl);
-	ResultType ControlGetProgress(ResultToken &aResultToken, GuiControlType &aControl);
-	ResultType ControlGetTab(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
+	void ControlGetContents(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode = Value_Mode);
+	void ControlGetCheck(ResultToken &aResultToken, GuiControlType &aControl); // CheckBox, Radio
+	void ControlGetDDL(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
+	void ControlGetComboBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
+	void ControlGetListBox(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
+	void ControlGetEdit(ResultToken &aResultToken, GuiControlType &aControl);
+	void ControlGetDateTime(ResultToken &aResultToken, GuiControlType &aControl);
+	void ControlGetMonthCal(ResultToken &aResultToken, GuiControlType &aControl);
+	void ControlGetHotkey(ResultToken &aResultToken, GuiControlType &aControl);
+	void ControlGetUpDown(ResultToken &aResultToken, GuiControlType &aControl);
+	void ControlGetSlider(ResultToken &aResultToken, GuiControlType &aControl);
+	void ControlGetProgress(ResultToken &aResultToken, GuiControlType &aControl);
+	void ControlGetTab(ResultToken &aResultToken, GuiControlType &aControl, ValueModeType aMode);
 	
 	ResultType ControlGetWindowText(ResultToken &aResultToken, GuiControlType &aControl);
 	void ControlRedraw(GuiControlType &aControl, bool aOnlyWithinTab = false);
