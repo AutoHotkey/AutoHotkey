@@ -5988,10 +5988,6 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 					switch(IsNumeric(buf, true, false, true))
 					{
 					case PURE_INTEGER:
-						// It's always been somewhat inconsistent that for parameter default values,
-						// numbers like 0xFF and 0123 do not preserve their formatting (unlike func(0123)
-						// and y:=0xFF, which do preserve it). But for backward compatibility and
-						// performance, it seems best to keep it this way.
 						this_param.default_type = PARAM_DEFAULT_INT;
 						this_param.default_int64 = ATOI64(buf);
 						break;
