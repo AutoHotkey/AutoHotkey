@@ -898,7 +898,7 @@ struct ScriptThreadState
 	EventInfoType EventInfo;
 	HWND DialogHWND; // MsgBox being shown by this thread.
 	HWND DialogOwner; // This thread's dialog owner, if any.
-#define THREAD_DIALOG_OWNER (IsWindow(::g->DialogOwner) ? ::g->DialogOwner : NULL)
+#define THREAD_DIALOG_OWNER (IsWindow(::g->DialogOwner) ? ::g->DialogOwner : (::g->DialogOwner = NULL)) // Reset to NULL if invalid to mitigate the risk of errors due to HWND reuse by the OS.
 	ResultToken* ThrownToken;
 
 	int ExcptMode;
