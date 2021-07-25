@@ -271,10 +271,9 @@ BIF_DECL(BIF_ComObjConnect)
 	{
 		if ((obj->mVarType != VT_DISPATCH && obj->mVarType != VT_UNKNOWN) || !obj->mUnknown)
 		{
-			ComError(-1, aResultToken); // Previously E_NOINTERFACE.
-			return;
+			_f_throw_param(0);
 		}
-		
+
 		ITypeInfo *ptinfo;
 		if (  !obj->mEventSink && (ptinfo = GetClassTypeInfo(obj->mUnknown))  )
 		{
@@ -286,7 +285,7 @@ BIF_DECL(BIF_ComObjConnect)
 				ptinfo->ReleaseTypeAttr(typeattr);
 			}
 
-			for(UINT j = 0; j < cImplTypes; j++)
+			for (UINT j = 0; j < cImplTypes; j++)
 			{
 				INT flags;
 				HREFTYPE reftype;
@@ -326,7 +325,7 @@ BIF_DECL(BIF_ComObjConnect)
 		ComError(E_NOINTERFACE, aResultToken);
 	}
 	else
-		ComError(-1, aResultToken); // "No COM object"
+		_f_throw_param(0, _T("ComValue"));
 }
 
 
@@ -334,10 +333,7 @@ BIF_DECL(BIF_ComObjValue)
 {
 	ComObject *obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0]));
 	if (!obj)
-	{
-		ComError(-1, aResultToken); // No COM object
-		_f_return_empty;
-	}
+		_f_throw_param(0, _T("ComValue"));
 	aResultToken.value_int64 = obj->mVal64;
 }
 
@@ -420,10 +416,7 @@ BIF_DECL(BIF_ComObjFlags)
 {
 	ComObject *obj = dynamic_cast<ComObject *>(TokenToObject(*aParam[0]));
 	if (!obj)
-	{
-		ComError(-1, aResultToken); // No COM object
-		_f_return_empty;
-	}
+		_f_throw_param(0, _T("ComValue"));
 	if (aParamCount > 1)
 	{
 		USHORT flags, mask;
@@ -948,30 +941,24 @@ void ComError(HRESULT hr, ResultToken &aResultToken, LPTSTR name, EXCEPINFO* pei
 		hr = pei->wCode ? 0x80040200 + pei->wCode : pei->scode;
 	}
 
-	TCHAR buf[4096], *error_text;
-	if (hr == -1)
-		error_text = _T("No valid COM object!");
-	else
+	TCHAR buf[4096];
+	int size = _stprintf(buf, _T("(0x%X) "), hr);
+	auto msg_buf = buf + size;
+	int msg_size = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, hr, 0, msg_buf, _countof(buf) - size - 1, NULL);
+	if (msg_size)
 	{
-		int size = _stprintf(buf, _T("(0x%X) "), hr);
-		auto msg_buf = buf + size;
-		int msg_size = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, hr, 0, msg_buf, _countof(buf) - size - 1, NULL);
-		if (msg_size)
-		{
-			// Remove any possible trailing \r\n.
-			if (msg_buf[msg_size-1] == '\n')
-				msg_buf[--msg_size] = '\0';
-			if (msg_buf[msg_size-1] == '\r')
-				msg_buf[--msg_size] = '\0';
-			// Add a trailing \n if we'll be adding more lines below.
-			if (pei)
-				msg_buf[msg_size++] = '\n';
-		}
-		size += msg_size;
+		// Remove any possible trailing \r\n.
+		if (msg_buf[msg_size-1] == '\n')
+			msg_buf[--msg_size] = '\0';
+		if (msg_buf[msg_size-1] == '\r')
+			msg_buf[--msg_size] = '\0';
+		// Add a trailing \n if we'll be adding more lines below.
 		if (pei)
-			_sntprintf(buf + size, _countof(buf) - size, _T("%ws\nSource:\t%ws"), pei->bstrDescription, pei->bstrSource);
-		error_text = buf;
+			msg_buf[msg_size++] = '\n';
 	}
+	size += msg_size;
+	if (pei)
+		_sntprintf(buf + size, _countof(buf) - size, _T("%ws\nSource:\t%ws"), pei->bstrDescription, pei->bstrSource);
 
 	if (pei)
 	{
@@ -980,7 +967,7 @@ void ComError(HRESULT hr, ResultToken &aResultToken, LPTSTR name, EXCEPINFO* pei
 		SysFreeString(pei->bstrHelpFile);
 	}
 
-	aResultToken.Error(error_text, name);
+	aResultToken.Error(buf, name);
 }
 
 
