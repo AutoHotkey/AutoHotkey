@@ -9803,17 +9803,17 @@ BIV_DECL_R(BIV_AhkVersion)
 
 BIV_DECL_R(BIV_AhkPath)
 {
-	TCHAR buf[MAX_PATH];
 #ifdef AUTOHOTKEYSC
+	TCHAR buf[MAX_PATH];
 	size_t length;
 	if (length = GetAHKInstallDir(buf))
 		// Name "AutoHotkey.exe" is assumed for code size reduction and because it's not stored in the registry:
 		tcslcpy(buf + length, _T("\\AutoHotkey.exe"), MAX_PATH - length); // tcslcpy() in case registry has a path that is too close to MAX_PATH to fit AutoHotkey.exe
 	//else leave it blank as documented.
-#else
-	auto length = GetModuleFileName(NULL, buf, MAX_PATH);
-#endif
 	_f_return(buf, length);
+#else
+	_f_return_p(g_script.mOurEXE);
+#endif
 }
 
 
