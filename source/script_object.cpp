@@ -590,6 +590,21 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 					return OK;
 				}
 			}
+			//
+			// BUILT-IN "LENGTH" AND "COUNT" PROPERTIES
+			//
+			else if (param_count_excluding_rvalue == 1 && IS_INVOKE_GET && !_tcsicmp(key.s, _T("length")))
+			{
+				IntKeyType max_index = mKeyOffsetObject ? mFields[mKeyOffsetObject - 1].key.i : 0;
+				aResultToken.symbol = SYM_INTEGER;
+				aResultToken.value_int64 = (__int64)(max_index > 0 ? max_index : 0);
+				return OK;
+			}
+			else if (param_count_excluding_rvalue == 1 && IS_INVOKE_GET && !_tcsicmp(key.s, _T("count")))
+			{
+				aResultToken.SetValue((__int64)mFieldCount);
+				return OK;
+			}
 		} // if (!IS_INVOKE_META && key_type == SYM_STRING)
 	} // if (!field)
 
