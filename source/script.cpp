@@ -260,6 +260,7 @@ FuncEntry g_BIF[] =
 	BIFn(ProcessWait, 1, 2, BIF_Process),
 	BIFn(ProcessWaitClose, 1, 2, BIF_Process),
 	BIF1(Random, 0, 2),
+	BIFn(RegCreateKey, 1, 1, BIF_Reg),
 	BIFn(RegDelete, 0, 2, BIF_Reg),
 	BIFn(RegDeleteKey, 0, 1, BIF_Reg),
 	BIFn(RegExMatch, 2, 4, BIF_RegEx, {3}),

@@ -673,6 +673,16 @@ BIF_DECL(BIF_Reg)
 	{
 	case FID_RegRead:  RegRead(aResultToken, root_key, sub_key, value_name, ParamIndexIsOmitted(2) ? nullptr : aParam[2]); break;
 	case FID_RegWrite: RegWrite(aResultToken, *value, value_type, root_key, sub_key, value_name); break;
+	case FID_RegCreateKey:
+	{
+		HKEY hRegKey;
+		DWORD dwRes;
+		LONG result = RegCreateKeyEx(root_key, sub_key, 0, _T(""), REG_OPTION_NON_VOLATILE, KEY_WRITE | g->RegView, NULL, &hRegKey, &dwRes);
+		g->LastError = result;
+		if (result != ERROR_SUCCESS)
+			_f_throw_win32(result);
+		break;
+	}
 	default:           RegDelete(aResultToken, root_key, sub_key, value_name); break;
 	}
 
