@@ -2008,7 +2008,10 @@ input_type *InputRelease(input_type *aInput)
 		if (aInput->ScriptObject->onEnd)
 			return aInput; // Return for caller to call OnEnd and Release.
 		aInput->ScriptObject->Release();
-		aInput->ScriptObject = NULL;
+		// The following is not done because this Release() is only to counteract an AddRef() in
+		// InputStart().  ScriptObject != NULL indicates this input_type is actually embedded in
+		// the InputObject and as such the link should never be broken until both are deleted.
+		//aInput->ScriptObject = NULL;
 	}
 	return NULL;
 }
