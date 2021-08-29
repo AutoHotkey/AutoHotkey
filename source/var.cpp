@@ -1014,15 +1014,14 @@ void Var::_AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 	// VarShrink().
 	if (mByteCapacity - mByteLength > 64)
 	{
-		mByteCapacity = mByteLength + sizeof(TCHAR); // This will become the new capacity.
 		// _expand() is only about 75 bytes of uncompressed code size and probably performs very quickly
-		// when shrinking.  Also, MSDN implies that when shrinking, failure won't happen unless something
-		// is terribly wrong (e.g. corrupted heap).  But for robustness it is checked anyway:
-		if (   !(mByteContents = (char *)_expand(mByteContents, mByteCapacity))   )
-		{
-			mByteLength = 0;
-			mByteCapacity = 0;
-		}
+		// when shrinking.  MSDN implies that when shrinking, failure won't happen unless something is
+		// terribly wrong (e.g. corrupted heap), but it's known to fail in other cases, such as when
+		// called by AutoHotkey running as a Windows store app.
+		if (_expand(mByteContents, mByteLength + sizeof(TCHAR)))
+			// Update capacity only after successfully shrinking:
+			mByteCapacity = mByteLength + sizeof(TCHAR);
+		// The block is left unchanged on failure, so in that case leave everything as is.
 	}
 }
 
