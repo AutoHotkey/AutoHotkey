@@ -6216,9 +6216,34 @@ ResultType SplitPath(LPCTSTR aFileSpec, Var *output_var_name, Var *output_var_di
 
 BIF_DECL(BIF_SplitPath)
 {
-	LPTSTR mem_to_free = nullptr;
 	_f_param_string(aFileSpec, 0);
 	Var *vars[6];
+
+	if (aParamCount == 1) // No output vars, so return object.
+	{
+		for (int i = 1; i < _countof(vars); ++i)
+			vars[i] = new Var();
+		aResultToken.SetValue(_T(""), 0);
+		if (SplitPath(aFileSpec, vars[1], vars[2], vars[3], vars[4], vars[5]))
+		{
+			LPTSTR parts[6];
+			ExprTokenType token;
+			for (int i = 1; i < _countof(parts); ++i)
+			{
+				vars[i]->ToTokenSkipAddRef(token);
+				parts[i] = TokenToString(token);
+			}
+
+			ExprTokenType argt[] = { _T("Path"), aFileSpec, _T("Name"), parts[1], _T("Dir"), parts[2], _T("Ext"), parts[3], _T("NameNoExt"), parts[4], _T("Drive"), parts[5] };
+			ExprTokenType *args[_countof(argt)] = { argt, argt+1, argt+2, argt+3, argt+4, argt+5, argt+6, argt+7, argt+8, argt+9, argt+10, argt+11 };
+			if (Object *obj = Object::Create(args, _countof(args)))
+				_f_return(obj);
+		}
+		aResultToken.SetExitResult(FAIL);
+		return;
+	}
+
+	LPTSTR mem_to_free = nullptr;
 	for (int i = 1; i < _countof(vars); ++i)
 		vars[i] = ParamIndexToOutputVar(i);
 	if (aParam[0]->symbol == SYM_VAR) // Check for overlap of input/output vars.
