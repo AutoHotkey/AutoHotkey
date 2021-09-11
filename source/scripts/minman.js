@@ -14,7 +14,7 @@ try
 	var xml = fs.OpenTextFile(source).ReadAll();
 
 	xml = xml
-	.replace(/<!--[\s\S]*?-->/g, "")	// Remove comments
+	.replace(/<!--(?:(?!<!--[\s\S])*?)-->/g, "")	// Remove comments
 	.replace(/>\s*</g, "><")			// Remove space between elements
 	.replace(/\r?\n\s*/g, " ")			// Replace line breaks+indent with one space
 	.replace(/<\?xml.*?\?>/, "")		// The VS manifest tool seems to strip this out, so we will too
