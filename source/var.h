@@ -169,6 +169,7 @@ private:
 	VarAttribType mAttrib;  // Bitwise combination of the above flags (but many of them may be mutually exclusive).
 	#define VAR_GLOBAL			0x01
 	#define VAR_LOCAL			0x02
+	#define VAR_VARREF			0x04 // This is a VarRef (used to determine whether the ToReturnValue optimization is safe).
 	#define VAR_DOWNVAR			0x08 // This var is captured by a nested function/closure (it's in Func::mDownVar).
 	#define VAR_LOCAL_FUNCPARAM	0x10 // Indicates this local var is a function's parameter.  VAR_LOCAL_DECLARED should also be set.
 	#define VAR_LOCAL_STATIC	0x20 // Indicates this local var retains its value between function calls.
@@ -487,9 +488,15 @@ public:
 			return true;
 		}
 		// var is either local or a free var (this is an upvar/downvar).
-		if (mType == VAR_ALIAS)
-			// This var is an alias for another var.  Even if the target is local,
-			// it's most likely not a local of the same function, so not about to be freed.
+		if (mType == VAR_ALIAS || (mScope & VAR_VARREF))
+			// a) This var is an alias for another var.  Even if the target is local, it's
+			//    most likely not a local of the same function, so not about to be freed.
+			//    On the other hand, it could be an alias due to GetRef(), in which case
+			//    it might be freed, so we can't return Contents().
+			// b) This is a VarRef, which could probably only happen directly as a result
+			//    of a double-deref.  It may not be freed when the function returns, so we
+			//    can't steal its mem.  It may be freed (if it's actually a reference to a
+			//    local variable of this function), so we can't return Contents() either.
 			return false;
 		// Var is local.  Since the function is returning, the var is about to be freed.
 		// Instead of copying and then freeing its contents, let the caller take ownership:
@@ -876,7 +883,7 @@ public:
 	{
 	}
 
-	Var() : Var(_T(""), 0)
+	Var() : Var(_T(""), VAR_VARREF)
 	{
 		// Vars constructed this way are for temporary use, and therefore must have mHowAllocated set
 		// as below to prevent the use of SimpleHeap::Malloc().  Otherwise, each Var could allocate
