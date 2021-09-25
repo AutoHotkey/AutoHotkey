@@ -12510,9 +12510,17 @@ ResultType Line::PauseCurrentThread()
 	// in case we are in a hotkey subroutine and in case this hotkey has a buffered repeat-again
 	// action pending, which the user probably wouldn't want to happen after the script is unpaused:
 	Hotkey::ResetRunAgainAfterFinished();
-	g->IsPaused = true;
+	auto &g = *::g;
+	g.IsPaused = true;
 	++g_nPausedThreads; // For this purpose the idle thread is counted as a paused thread.
 	g_script.UpdateTrayIcon();
+	// Don't return until the script is unpaused.  This is done for two reasons:
+	// 1) Pause() can be called as part of an expression, in which case it seems more intuitive for
+	//    the script to pause immediately rather than after evaluating more of the expression.
+	// 2) If `return Pause()` is used, the thread might end before checking g.IsPaused, in which
+	//    case g_nPausedThreads would not be adjusted and timers would forever be disabled.
+	while (g.IsPaused)
+		MsgSleep(INTERVAL_UNSPECIFIED);
 	return OK;
 }
 
