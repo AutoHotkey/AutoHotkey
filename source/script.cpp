@@ -13537,6 +13537,8 @@ ResultType Script::PreparseVarRefs()
 		case ACT_BLOCK_BEGIN: if (line->mAttribute) g->CurrentFunc = (UserFunc *)line->mAttribute; break;
 		case ACT_BLOCK_END: if (line->mAttribute) g->CurrentFunc = g->CurrentFunc->mOuterFunc; break;
 		}
+		
+		mCurrLine = line; // For error-reporting.
 
 		for (int a = 0; a < line->mArgc; ++a)
 		{
