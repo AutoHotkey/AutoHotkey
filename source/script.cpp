@@ -5244,6 +5244,8 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		mPendingRelatedLine = mPendingRelatedLine->mParentLine;
 		if (mPendingRelatedLine && mPendingRelatedLine->mActionType == ACT_BLOCK_BEGIN)
 			mPendingRelatedLine = nullptr;
+		if (aActionType == ACT_UNTIL) // Until must "relate to" only a single statement.
+			break;
 	}
 	if (mPendingParentLine) // A line waiting for block or single-line action.
 	{
