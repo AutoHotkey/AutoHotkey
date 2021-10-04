@@ -16722,7 +16722,7 @@ void Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 		int offset = ParamIndexIsNumeric(1) ? ParamIndexToInt(1) : 0;
 		for (auto se = stack_top; se >= g_Debugger.mStack.mBottom; --se)
 		{
-			if (++offset == 0 || !_tcsicmp(se->Name(), what))
+			if (++offset == 0 || *what && !_tcsicmp(se->Name(), what))
 			{
 				line = se > g_Debugger.mStack.mBottom ? se[-1].line : se->line;
 				// se->line contains the line at the given offset from the top of the stack.
