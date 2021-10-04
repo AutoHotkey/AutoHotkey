@@ -870,7 +870,10 @@ DEBUGGER_COMMAND(Debugger::stack_get)
 			else if (se->type == DbgStack::SE_Thread)
 			{
 				// !se->line implies se->type == SE_Thread.
-				if (se[1].type == DbgStack::SE_UDF)
+				if (_tcscmp(se->desc, _T("Auto-execute")) && se[1].type == DbgStack::SE_UDF)
+					// Show the function's jump-to line since se->line is most likely whatever line
+					// this thread interrupted.  Don't do it for the auto-execute thread since in
+					// that case the function doesn't represent the thread's overall execution.
 					line = se[1].udf->func->mJumpToLine;
 				else
 					// The auto-execute thread is probably the only one that can exist without
