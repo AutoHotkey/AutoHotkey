@@ -170,7 +170,7 @@ public:
 	{
 		auto v = Value();
 		ASSERT(i >= 0 && i + count <= data->length);
-		FreeRange(i, count);
+		FreeRange(i, i + count);
 		memmove(v + i, v + i + count, (data->length - i - count) * sizeof(T));
 		data->length -= count;
 	}
