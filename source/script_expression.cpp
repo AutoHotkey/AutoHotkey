@@ -1879,7 +1879,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 
 			// Assignments below rely on ByRef parameters having already been reset to VAR_NORMAL
 			// by Free() or Backup(), except when it's a downvar, which should be VAR_ALIAS.
-			ASSERT((this_formal_param.var->Scope() & VAR_DOWNVAR) ? this_formal_param.var->ResolveAlias()->Scope() == 0
+			ASSERT((this_formal_param.var->Scope() & VAR_DOWNVAR) ? (this_formal_param.var->ResolveAlias()->Scope() & ~VAR_VARREF) == 0
 				: !this_formal_param.var->IsAlias());
 
 			if (j >= aParamCount || aParam[j]->symbol == SYM_MISSING)
