@@ -13121,7 +13121,7 @@ BIF_DECL(BIF_Format)
 				param = ATOI(cp), cp = cp_end;
 			else
 				param = last_param + 1;
-			if (param >= aParamCount) // Invalid parameter index.
+			if (param >= aParamCount || param < 1) // Invalid parameter index.
 				continue;
 
 			custom_format = 0; // Set default.
