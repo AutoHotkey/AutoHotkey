@@ -6314,6 +6314,7 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, bool aStatic, bool &aBufHasB
 	Object *class_object = mClassObject[mClassObjectCount - 1];
 	if (!aStatic)
 		class_object = (Object *)class_object->GetOwnPropObj(_T("Prototype"));
+	TCHAR end_char = *name_end; // In case there's no space before =>.
 	*name_end = 0; // Terminate for aBuf use below.
 	switch (class_object->GetOwnPropType(aBuf))
 	{
@@ -6327,6 +6328,7 @@ ResultType Script::DefineClassProperty(LPTSTR aBuf, bool aStatic, bool &aBufHasB
 	if (!mClassProperty)
 		return ScriptError(ERR_OUTOFMEM);
 
+	*name_end = end_char;
 	if (*next_token == '=') // => expr
 	{
 		// mClassPropertyDef is already set up for "Get".
