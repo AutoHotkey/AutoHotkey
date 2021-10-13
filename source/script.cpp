@@ -2611,6 +2611,24 @@ process_completed_line:
 			goto continue_main_loop; // It's just a naked "{" or "}", so no more processing needed for this line.
 		}
 
+		// Handle this first so that GetLineContExpr() doesn't need to detect it for OTB exclusion:
+		if (LPTSTR class_name = IsClassDefinition(buf))
+		{
+			if (g->CurrentFunc)
+				return ScriptError(_T("Functions cannot contain classes."), buf);
+			if (!ClassHasOpenBrace(buf, buf_length, next_buf, next_buf_length))
+				return ScriptError(ERR_MISSING_OPEN_BRACE, buf);
+			if (!DefineClass(class_name))
+				return FAIL;
+			goto continue_main_loop;
+		}
+
+		// Aside from goto/break/continue, anything not already handled above is either an expression
+		// or something with similar lexical requirements (i.e. balanced parentheses/brackets/braces).
+		// The following call allows any expression enclosed in ()/[]/{} to span multiple lines:
+		if (!GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section))
+			return FAIL;
+
 		if (mClassProperty && !g->CurrentFunc) // This is checked before IsFunction() to prevent method definitions inside a property.
 		{
 			if (!_tcsnicmp(buf, _T("Get"), 3) || !_tcsnicmp(buf, _T("Set"), 3))
@@ -2629,24 +2647,6 @@ process_completed_line:
 			}
 			return ScriptError(ERR_INVALID_LINE_IN_PROPERTY_DEF, buf);
 		}
-
-		// Handle this first so that GetLineContExpr() doesn't need to detect it for OTB exclusion:
-		if (LPTSTR class_name = IsClassDefinition(buf))
-		{
-			if (g->CurrentFunc)
-				return ScriptError(_T("Functions cannot contain classes."), buf);
-			if (!ClassHasOpenBrace(buf, buf_length, next_buf, next_buf_length))
-				return ScriptError(ERR_MISSING_OPEN_BRACE, buf);
-			if (!DefineClass(class_name))
-				return FAIL;
-			goto continue_main_loop;
-		}
-
-		// Aside from goto/break/continue, anything not already handled above is either an expression
-		// or something with similar lexical requirements (i.e. balanced parentheses/brackets/braces).
-		// The following call allows any expression enclosed in ()/[]/{} to span multiple lines:
-		if (!GetLineContExpr(fp, buf, next_buf, phys_line_number, has_continuation_section))
-			return FAIL;
 
 		if (mClassObjectCount && !g->CurrentFunc) // Inside a class definition (and not inside a method).
 		{
