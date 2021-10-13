@@ -7181,9 +7181,15 @@ Var *Script::FindUpVar(LPCTSTR aVarName, size_t aVarNameLength, UserFunc &aInner
 	Var *outer_var;
 	if (  (outer_var = outer.mStaticVars.Find(aVarName))  )
 		return outer_var;
-	if (  !(outer_var = outer.mVars.Find(aVarName))
-		&& !(outer.mOuterFunc && (outer_var = FindUpVar(aVarName, aVarNameLength, outer, aDisplayError)))  )
-		return nullptr;
+	if (  !(outer_var = outer.mVars.Find(aVarName))  )
+	{
+		if (  !(outer.mOuterFunc && (outer_var = FindUpVar(aVarName, aVarNameLength, outer, aDisplayError)))  )
+			return nullptr;
+		// Static or declared-global variables of outer would return above by virtue of being
+		// in mStaticVars, but variables pulled in from further out must still be checked:
+		if (!outer_var->IsNonStaticLocal())
+			return outer_var;
+	}
 	// At this point, all var refs used in declarations, assignments or &var in the outer
 	// function should have already been parsed, while it's possible that some read-refs
 	// have not.  Ignore all variables that lack an assignment, &var or declaration.
