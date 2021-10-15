@@ -125,7 +125,7 @@ class FlatVector
 	void FreeRange(index_t i, index_t count)
 	{
 		auto v = Value();
-		for (; i < count; ++i)
+		for (auto j = i + count; i < j; ++i)
 			v[i].~T();
 	}
 
