@@ -15437,6 +15437,11 @@ BIF_DECL(BIF_NumGet)
 
 BIF_DECL(BIF_Format)
 {
+	if (TokenIsPureNumeric(*aParam[0]))
+	{
+		aResultToken.SetValue(ParamIndexToString(0, _f_retval_buf));
+		return;
+	}
 	LPCTSTR fmt = ParamIndexToString(0), lit, cp, cp_end, cp_spec;
 	LPTSTR target = NULL;
 	int size = 0, spec_len;
