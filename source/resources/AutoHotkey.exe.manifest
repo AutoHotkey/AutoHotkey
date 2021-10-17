@@ -43,6 +43,8 @@
     <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/>
     <!-- Windows 8 -->
     <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}"/>
+    <!-- maxversiontested is required for XAML islands -->
+    <maxversiontested Id="10.0.18362.0"/>
   </application>
 </compatibility>
 <v3:application>
