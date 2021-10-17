@@ -2893,7 +2893,7 @@ private:
 		TCHAR *p = nullptr;
 		size_t length = 0;
 		size_t size = 0;
-		const size_t EXPANSION_INTERVAL = 0x1000;
+		const size_t INITIAL_SIZE = 0x1000; // # characters for first allocation. Subsequent Reallocs will grow exponentially.
 		const size_t RESERVED_SPACE = 3; // Allow for a null-terminator and appending "()" for call statements.
 		size_t Capacity() { ASSERT(size); return size - RESERVED_SPACE; }
 		ResultType Expand();

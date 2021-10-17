@@ -2773,24 +2773,32 @@ bool Script::EndsWithOperator(LPTSTR aBuf, LPTSTR aBuf_marker)
 ResultType Script::LineBuffer::EnsureCapacity(size_t aLength)
 {
 	aLength += RESERVED_SPACE;
-	return size < aLength ? Realloc(aLength) : OK;
+	if (size >= aLength)
+		return OK;
+	// See comments in Expand() regarding buffer growth.
+	size_t newsize = size ? size : INITIAL_SIZE;
+	while (newsize < aLength)
+		newsize *= 2;
+	return Realloc(aLength);
 }
 
 ResultType Script::LineBuffer::Expand()
 {
-	return Realloc(size + EXPANSION_INTERVAL);
+	// The buffer typically needs to grow incrementally while joining lines in a continuation section.
+	// Expanding in large increments avoids multiple reallocs in most files.  Expanding exponentially
+	// scales better in theory, though some testing showed it to have virtually no impact on load time
+	// even with very long lines.  Memory usage isn't a concern since the buffer will be freed after
+	// the script file is read.
+	return Realloc(size ? size * 2 : INITIAL_SIZE);
 }
 
 ResultType Script::LineBuffer::Realloc(size_t aNewSize)
 {
-	// The buffer typically needs to grow incrementally while joining lines in a continuation section.
-	// Expanding in large increments avoids multiple reallocs in most files.
-	size_t newsize = (aNewSize + EXPANSION_INTERVAL - 1) / EXPANSION_INTERVAL * EXPANSION_INTERVAL;
-	LPTSTR newp = (LPTSTR)realloc(p, sizeof(TCHAR) * newsize);
+	LPTSTR newp = (LPTSTR)realloc(p, sizeof(TCHAR) * aNewSize);
 	if (!newp)
 		return FAIL;
 	p = newp;
-	size = newsize;
+	size = aNewSize;
 	return OK;
 }
 
