@@ -5246,13 +5246,14 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	}
 	while (mPendingRelatedLine) // A completed block or a parent line with a single-line action, waiting for its mRelatedLine.
 	{
+		bool break_time = aActionType == ACT_UNTIL && ACT_IS_LOOP_EXCLUDING_WHILE(mPendingRelatedLine->mActionType); // Until must "relate to" only a single statement.
 		mPendingRelatedLine->mRelatedLine = &line;
 		// Regardless of whether mPendingRelatedLine is a block-begin or parent line,
 		// its own parent also needs its mRelatedLine set, unless that's an open block.
 		mPendingRelatedLine = mPendingRelatedLine->mParentLine;
 		if (mPendingRelatedLine && mPendingRelatedLine->mActionType == ACT_BLOCK_BEGIN)
 			mPendingRelatedLine = nullptr;
-		if (aActionType == ACT_UNTIL) // Until must "relate to" only a single statement.
+		if (break_time)
 			break;
 	}
 	if (mPendingParentLine) // A line waiting for block or single-line action.
