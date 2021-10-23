@@ -2779,7 +2779,7 @@ ResultType Script::LineBuffer::EnsureCapacity(size_t aLength)
 	size_t newsize = size ? size : INITIAL_SIZE;
 	while (newsize < aLength)
 		newsize *= 2;
-	return Realloc(aLength);
+	return Realloc(newsize);
 }
 
 ResultType Script::LineBuffer::Expand()
