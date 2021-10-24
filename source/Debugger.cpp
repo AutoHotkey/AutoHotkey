@@ -404,11 +404,7 @@ DEBUGGER_COMMAND(Debugger::feature_get)
 		else if (!strcmp(feature_name + 9, "name"))
 			setting = DEBUGGER_LANG_NAME;
 		else if (!strcmp(feature_name + 9, "version"))
-#ifdef UNICODE
-			setting = AHK_VERSION " (Unicode)";
-#else
 			setting = AHK_VERSION;
-#endif
 	} else if (!strcmp(feature_name, "encoding"))
 		setting = "UTF-8";
 	else if (!strcmp(feature_name, "protocol_version")
