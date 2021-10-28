@@ -70,8 +70,9 @@ ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR a
 // Returns FAIL if memory couldn't be allocated, or OK otherwise.
 // This is a global function because it's used by both hotkeys and hotstrings.
 {
-	HotkeyCriterion *cp;
-	if (  !(cp = FindHotkeyCriterion(aType, aWinTitle, aWinText))
+	HotkeyCriterion *cp = nullptr;
+	if (  (*aWinTitle || *aWinText)
+		&& !(cp = FindHotkeyCriterion(aType, aWinTitle, aWinText))
 		&& !(cp = AddHotkeyCriterion(aType, aWinTitle, aWinText))  )
 		return FAIL;
 	g->HotCriterion = cp;
@@ -81,10 +82,6 @@ ResultType SetHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR a
 
 HotkeyCriterion *FindHotkeyCriterion(HotCriterionType aType, LPTSTR aWinTitle, LPTSTR aWinText)
 {
-	// Caller may rely on this check:
-	if (!(*aWinTitle || *aWinText))
-		return NULL;
-
 	// Storing combinations of WinTitle+WinText doesn't have as good a best-case memory savings as
 	// have a separate linked list for Title vs. Text.  But it does save code size, and in the vast
 	// majority of scripts, the memory savings would be insignificant.
