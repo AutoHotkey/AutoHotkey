@@ -3997,8 +3997,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			}
 		}
 		TCHAR buf[100];
-		sntprintf(buf, _countof(buf), _T("This script requires %s%s.")
-			, parameter, show_autohotkey_version ? _T(", but you have v") T_AHK_VERSION : _T(""));
+		sntprintf(buf, _countof(buf), _T("This script requires %s%s%s.")
+			, parameter, show_autohotkey_version ? _T(", but you have v") : _T(""), show_autohotkey_version ? T_AHK_VERSION : _T(""));
 		return ScriptError(buf);
 #endif
 	}

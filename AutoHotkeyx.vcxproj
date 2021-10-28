@@ -118,8 +118,8 @@
   </ItemDefinitionGroup>
   <!-- paths and basic settings -->
   <PropertyGroup>
-    <IntDir>temp\$(Platform)\$(Configuration)\</IntDir>
-    <BinDir>bin\$(Platform)</BinDir>
+    <IntDir>$(ProjectDir)temp\$(Platform)\$(Configuration)\</IntDir>
+    <BinDir>$(ProjectDir)bin\$(Platform)</BinDir>
     <BinDir Condition="'$(CharacterSet)'=='Unicode'">$(BinDir)w</BinDir>
     <BinDir Condition="'$(CharacterSet)'=='MultiByte'">$(BinDir)a</BinDir>
     <OutDir>$(BinDir)\</OutDir>
@@ -201,6 +201,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Self-contained(minimal)|x64'" />
   <!-- FILES -->
   <ItemGroup>
+    <ClCompile Include="source\ahkversion.cpp" />
     <ClCompile Include="source\application.cpp" />
     <ClCompile Include="source\AutoHotkey.cpp" />
     <ClCompile Include="source\clipboard.cpp" />
@@ -321,4 +322,33 @@
     <Natvis Include="debug.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <!-- add version info from git -->
+  <ItemGroup>
+    <AhkVersionInput Include="$(ProjectDir).git\logs\HEAD" />
+    <AhkVersionOutput Include="$(IntDir)ahkversion.obj" />
+    <AhkVersionOutput Include="$(IntDir)AutoHotkey.res" />
+  </ItemGroup>
+  <Target Name="SetAhkVersion" Condition="Exists('@(AhkVersionInput)')" BeforeTargets="PrepareForBuild">
+    <Exec Condition="'$(RawAhkVersion)'==''" Command="git describe --dirty --match v*" ConsoleToMSBuild="true" IgnoreExitCode="true" EchoOff="true">
+      <Output PropertyName="GitDescription" TaskParameter="ConsoleOutput" />
+    </Exec>
+    <PropertyGroup Condition="'$(GitDescription)'!='' and '$(GitDescription.Substring(0,1))'=='v'">
+      <RawAhkVersion>$(GitDescription.Substring(1).Replace("-g", "+"))</RawAhkVersion>
+    </PropertyGroup>
+    <Message Text="RAW_AHK_VERSION sourced from git: '$(RawAhkVersion)'" Importance="high" />
+    <ItemGroup Condition="'$(RawAhkVersion)'!=''">
+      <ResourceCompile>
+        <PreprocessorDefinitions>RAW_AHK_VERSION=\"$(RawAhkVersion)\";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      </ResourceCompile>
+      <ClCompile>
+        <PreprocessorDefinitions>RAW_AHK_VERSION="$(RawAhkVersion)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      </ClCompile>
+    </ItemGroup>
+  </Target>
+  <Target Name="ForceBuildForSetAhkVersion" Condition="Exists('@(AhkVersionInput)')" BeforeTargets="PrepareForBuild" Inputs="@(AhkVersionInput)" Outputs="@(AhkVersionOutput)">
+    <!-- This is a separate target because SetAhkVersion must execute unconditionally. -->
+    <!-- Write tlog for VS "fast up-to-date check" to recognize when HEAD changes. -->
+    <PropertyGroup><AhkTlogHeader>^@(AhkVersionOutput,'|')</AhkTlogHeader></PropertyGroup>
+    <WriteLinesToFile File="$(TLogLocation)ahkversion.read.1.tlog" Lines="$(AhkTlogHeader);@(AhkVersionInput)" Overwrite="true" />
+  </Target>
 </Project>

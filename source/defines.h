@@ -31,13 +31,8 @@ GNU General Public License for more details.
 #pragma warning(disable:4800)
 #endif
 
-#define AHK_NAME "AutoHotkey"
 #include "ahkversion.h"
 #define AHK_WEBSITE "https://autohotkey.com"
-
-#define T_AHK_NAME			_T(AHK_NAME)
-#define T_AHK_VERSION		_T(AHK_VERSION)
-#define T_AHK_NAME_VERSION	T_AHK_NAME _T(" v") T_AHK_VERSION
 
 #ifdef AUTOHOTKEYSC
 #define SCRIPT_RESOURCE_NAME _T(">AUTOHOTKEY SCRIPT<")
