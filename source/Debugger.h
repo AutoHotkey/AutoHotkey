@@ -220,7 +220,7 @@ public:
 	int PreExecLine(Line *aLine); // Called before executing each line.
 	
 	// Receive and process commands. Returns when a continuation command is received.
-	int ProcessCommands();
+	int ProcessCommands(bool aBreakFirst = false);
 	int Break();
 	
 	bool HasPendingCommand();

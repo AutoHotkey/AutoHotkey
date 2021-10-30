@@ -165,29 +165,32 @@ void Debugger::ExitBreakState()
 
 int Debugger::Break()
 {
-	if (mInternalState == DIS_Break)
-		// Already in a break state, so it's likely that we are currently evaluating a
-		// DBGp command, such as when property_set releases an object which implements
-		// __delete and this causes a breakpoint to be hit.  In that case we must not
-		// re-enter the command loop until the current command has completed.
-		return DEBUGGER_E_OK;
-	int err = EnterBreakState();
-	if (!err)
-		err = ProcessCommands();
-	return err;
+	return ProcessCommands(true);
 }
 
 
 const int MAX_DBGP_ARGS = 16; // More than currently necessary.
 
-int Debugger::ProcessCommands()
+int Debugger::ProcessCommands(bool aBreakFirst)
 {
+	int err;
+
+	// The command loop isn't designed to support re-entry, so that is prevented by
+	// the following check.  Re-entry could otherwise occur if a command causes script
+	// to execute and then a command is received asynchonously or a breakpoint is hit.
+	// Such commands include:
+	//  - property_get when evaluation of an object property is required.
+	//  - property_set when an object with __delete is released.
+	if (mInternalState == DIS_Break)
+		return DEBUGGER_E_OK;
+	if (aBreakFirst)
+		if (err = EnterBreakState())
+			return err;
+
 	// Disable notification of READ readiness and reset socket to synchronous mode.
 	u_long zero = 0;
 	WSAAsyncSelect(mSocket, g_hWnd, 0, 0);
 	ioctlsocket(mSocket, FIONBIO, &zero);
-
-	int err;
 
 	for (;;)
 	{
