@@ -1248,12 +1248,12 @@ ResultType Var::AssignStringFromCodePage(LPCSTR aBuf, int aLength, UINT aCodePag
 			return FAIL;
 		LPWSTR aContents = Contents(TRUE);
 		iLen = MultiByteToWideChar(aCodePage, 0, aBuf, aLength, (LPWSTR) aContents, iLen);
-		if (aLength == -1)
+		// A return value of 0 is not ambiguous here, but any failure is more likely to occur
+		// in the first call.  For consistency (see below), let the var be blank on error.
+		if (aLength == -1 && iLen)
 			--iLen; // Exclude the null-terminator.
 		else
 			aContents[iLen] = 0;
-		if (!iLen)
-			return FAIL;
 		SetCharLength(iLen);
 	}
 	else
