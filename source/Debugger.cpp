@@ -1425,8 +1425,9 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 	// aFullName contains a '.' or '['.  Although it looks like an expression, the IDE should
 	// only pass a property name which we gave it in response to a previous command, so we
 	// only need to support the subset of expression syntax used by WriteObjectPropertyXml().
-	for (*name_end = c; ; )
+	for (;;)
 	{
+		*name_end = c; // Undo termination (if it was terminated at this position).
 		name = name_end + 1;
 		if (c == '[')
 		{
