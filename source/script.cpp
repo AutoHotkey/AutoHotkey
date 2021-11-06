@@ -5181,9 +5181,9 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			add_openbrace_afterward = true;
 			*arg1_last_char = '\0';  // Since it will be fully handled here, remove the brace from further consideration.
 			if (!rtrim(arg1)) // Trimmed down to nothing, so only a brace was present: remove the arg completely.
-				if (aActionType == ACT_LOOP || aActionType == ACT_CATCH)
+				if (aActionType == ACT_LOOP || aActionType == ACT_CATCH || aActionType == ACT_SWITCH)
 					nArgs = 0;    // This makes later stages recognize it as an infinite loop rather than a zero-iteration loop.
-				else // ACT_WHILE, ACT_FOR or ACT_SWITCH
+				else // ACT_WHILE or ACT_FOR
 					return ScriptError(ERR_PARAM1_REQUIRED, aLineText);
 		}
 	}
