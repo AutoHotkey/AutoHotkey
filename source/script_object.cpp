@@ -411,8 +411,6 @@ bool Object::Delete()
 		// less often in most cases.
 		PRIVATIZE_S_DEREF_BUF;
 
-		Line *curr_line = g_script.mCurrLine;
-
 		// If an exception has been thrown, temporarily clear it for execution of __Delete.
 		ResultToken *exc = g->ThrownToken;
 		g->ThrownToken = NULL;
@@ -440,8 +438,6 @@ bool Object::Delete()
 		// reliably by our caller, so restore it.
 		if (exc)
 			g->ThrownToken = exc;
-
-		g_script.mCurrLine = curr_line; // Prevent misleading error reports/Exception() stack trace.
 
 		DEPRIVATIZE_S_DEREF_BUF; // L33: See above.
 
@@ -615,7 +611,6 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 			memcpy(prop_param + prop_param_count, actual_param, actual_param_count * sizeof(ExprTokenType *));
 			prop_param_count += actual_param_count;
 		}
-		auto caller_line = g_script.mCurrLine;
 		// Call getter/setter.
 		auto result = etter->Invoke(aResultToken, IT_CALL, nullptr, this_etter, prop_param, prop_param_count);
 		_freea(prop_param);
@@ -624,7 +619,6 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		if ((!handle_params_recursively && !calling) || result == FAIL || result == EARLY_EXIT)
 			return result;
 		// Otherwise, handle_params_recursively || calling.
-		g_script.mCurrLine = caller_line; // For error-reporting.
 		token_for_recursion.CopyValueFrom(aResultToken);
 		token_for_recursion.mem_to_free = aResultToken.mem_to_free;
 		aResultToken.mem_to_free = nullptr;
@@ -1510,7 +1504,6 @@ ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[],
 {
 	ExprTokenType this_token(this);
 	ResultType result;
-	Line *curr_line = g_script.mCurrLine;
 
 	// __Init was added so that instance variables can be initialized in the correct order
 	// (beginning at the root class and ending at class_object) before __New is called.
@@ -1528,7 +1521,6 @@ ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[],
 			Release();
 			return aResultToken.SetExitResult(result); // SetExitResult is necessary because result was reset by InitResult.
 		}
-		g_script.mCurrLine = curr_line; // Prevent misleading error reports in __New or for our caller.
 	}
 
 	// __New may be defined by the script for custom initialization code.
@@ -1546,7 +1538,6 @@ ResultType Object::Construct(ResultToken &aResultToken, ExprTokenType *aParam[],
 		Release();
 		return result;
 	}
-	g_script.mCurrLine = curr_line; // Prevent misleading error reports for our caller.
 
 	aResultToken.SetValue(this); // No AddRef() since Object::New() would need to Release().
 	return aResultToken.SetResult(OK);

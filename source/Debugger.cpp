@@ -77,6 +77,32 @@ Debugger::CommandDef Debugger::sCommands[] =
 };
 
 
+inline bool PreExecLineIsSlippery(Line *aLine)
+{
+	ActionTypeType act = aLine->mActionType;
+	// BLOCK_BEGIN: yes
+	// BLOCK_END: yes if !mAttribute (not a function-body)
+	// TRY, CATCH, FINALLY: yes
+	// THROW, SWITCH: no
+	// CASE: yes
+	return act >= ACT_TRY ? (act <= ACT_FINALLY || act == ACT_CASE)
+		: act == ACT_BLOCK_BEGIN || act == ACT_BLOCK_END && !aLine->mAttribute;
+}
+
+inline bool BreakpointLineIsSlippery(Line *aLine)
+{
+	ActionTypeType act = aLine->mActionType;
+	// BLOCK_BEGIN: yes
+	// BLOCK_END: no (can be used for "break-on-return"; also, doesn't make sense to slip to the next line?)
+	// ELSE: yes
+	// TRY, CATCH, FINALLY: yes
+	// THROW, SWITCH: no
+	// CASE: yes
+	return act >= ACT_TRY ? (act <= ACT_FINALLY || act == ACT_CASE)
+		: act == ACT_ELSE || act == ACT_BLOCK_BEGIN;
+}
+
+
 // PreExecLine: aLine is about to execute; handle current line marker, breakpoints and step into/over/out.
 int Debugger::PreExecLine(Line *aLine)
 {
@@ -100,8 +126,9 @@ int Debugger::PreExecLine(Line *aLine)
 	if ((mInternalState == DIS_StepInto
 		|| mInternalState == DIS_StepOver && mStack.Depth() <= mContinuationDepth
 		|| mInternalState == DIS_StepOut && mStack.Depth() < mContinuationDepth) // Due to short-circuit boolean evaluation, mStack.Depth() is only evaluated once and only if mInternalState is StepOver or StepOut.
-		// Although IF/ELSE/LOOP skips its block-begin, standalone/function-body block-begin still gets here; we want to skip it:
-		&& aLine->mActionType != ACT_BLOCK_BEGIN && (aLine->mActionType != ACT_BLOCK_END || aLine->mAttribute) // Ignore { and }; except for function-end, since we want to break there after a "return" to inspect variables while they're still in scope.
+		// Although IF/ELSE/LOOP skips its block-begin, standalone/function-body block-begin still gets here; we want to skip it,
+		// unless it's the block-end of a function, to allow breaking there after a "return" to inspect variables while still in scope.
+		&& !PreExecLineIsSlippery(aLine)
 		&& aLine->mLineNumber) // Some scripts (i.e. LowLevel/code.ahk) use mLineNumber==0 to indicate the Line has been generated and injected by the script.
 	{
 		return Break();
@@ -644,8 +671,7 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 				// Without this check, setting a breakpoint on a line like "else Exit" would not work.
 				// ACT_CASE executes when the *previous* case reaches its end, so for that case
 				// we want to shift the breakpoint to the first Line after the ACT_CASE.
-				if (line->mActionType == ACT_ELSE || line->mActionType == ACT_BLOCK_BEGIN
-					|| line->mActionType == ACT_CASE)
+				if (BreakpointLineIsSlippery(line))
 					continue;
 				// Use the first line of code at or after lineno, like Visual Studio.
 				// To display the breakpoint correctly, an IDE should use breakpoint_get.
@@ -1476,7 +1502,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, Exp
 	// only need to support the subset of expression syntax used by WriteObjectPropertyXml().
 	for (;;)
 	{
-		*name_end = c;
+		*name_end = c; // Undo termination (if it was terminated at this position).
 		name = name_end + 1;
 		const bool brackets = c == '[';
 		if (brackets)
@@ -2698,6 +2724,14 @@ DbgStack::Entry *DbgStack::Push()
 		mTop->line = g_script.mCurrLine;
 	}
 	return ++mTop;
+}
+
+void DbgStack::Pop()
+{
+	ASSERT(mTop >= mBottom);
+	--mTop;
+	if (mTop >= mBottom)
+		g_script.mCurrLine = g_Debugger.mCurrLine = mTop->line;
 }
 
 void DbgStack::Push(TCHAR *aDesc)
