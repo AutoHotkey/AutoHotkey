@@ -2628,6 +2628,14 @@ DbgStack::Entry *DbgStack::Push()
 	return ++mTop;
 }
 
+void DbgStack::Pop()
+{
+	ASSERT(mTop >= mBottom);
+	--mTop;
+	if (mTop >= mBottom)
+		g_script.mCurrLine = g_Debugger.mCurrLine = mTop->line;
+}
+
 void DbgStack::Push(TCHAR *aDesc)
 {
 	Entry &s = *Push();

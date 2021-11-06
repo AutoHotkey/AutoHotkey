@@ -194,8 +194,6 @@ BIF_DECL(BIF_ObjNew)
 	ResultType result;
 	LPTSTR buf = aResultToken.buf; // In case Invoke overwrites it via the union.
 
-	Line *curr_line = g_script.mCurrLine;
-
 	// __Init was added so that instance variables can be initialized in the correct order
 	// (beginning at the root class and ending at class_object) before __New is called.
 	// It shouldn't be explicitly defined by the user, but auto-generated in DefineClassVars().
@@ -225,8 +223,6 @@ BIF_DECL(BIF_ObjNew)
 		}
 	}
 
-	g_script.mCurrLine = curr_line; // Prevent misleading error reports/Exception() stack trace.
-	
 	// __New may be defined by the script for custom initialization code.
 	name_token.marker = Object::sMetaFuncName[4]; // __New
 	result = class_object->Invoke(aResultToken, this_token, IT_CALL | IF_METAOBJ, aParam, aParamCount);

@@ -328,8 +328,6 @@ bool Object::Delete()
 		// executed much less often in most cases.
 		PRIVATIZE_S_DEREF_BUF;
 
-		Line *curr_line = g_script.mCurrLine;
-
 		// If an exception has been thrown, temporarily clear it for execution of __Delete.
 		ExprTokenType *exc = g->ThrownToken;
 		g->ThrownToken = NULL;
@@ -353,8 +351,6 @@ bool Object::Delete()
 		// reliably by our caller, so restore it.
 		if (exc)
 			g->ThrownToken = exc;
-
-		g_script.mCurrLine = curr_line; // Prevent misleading error reports/Exception() stack trace.
 
 		DEPRIVATIZE_S_DEREF_BUF; // L33: See above.
 
@@ -428,9 +424,7 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			// identified the field (or in this case an empty space) to replace with aThisToken when appropriate.
 			memcpy(meta_params + 1, aParam, aParamCount * sizeof(ExprTokenType*));
 
-			Line *curr_line = g_script.mCurrLine;
 			ResultType r = CallField(field, aResultToken, aThisToken, aFlags, meta_params, aParamCount + 1);
-			g_script.mCurrLine = curr_line; // Allows exceptions thrown by later meta-functions to report a more appropriate line.
 			//if (r == EARLY_RETURN)
 				// Propagate EARLY_RETURN in case this was the __Call meta-function of a
 				// "function object" which is used as a meta-function of some other object.

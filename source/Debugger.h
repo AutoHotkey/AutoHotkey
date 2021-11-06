@@ -159,11 +159,7 @@ struct DbgStack
 
 	Entry *Push();
 
-	void Pop()
-	{
-		ASSERT(mTop >= mBottom);
-		--mTop;
-	}
+	void Pop();
 
 	void Push(TCHAR *aDesc);
 	void Push(Label *aSub);
@@ -274,6 +270,7 @@ public:
 	
 	// Stack - keeps track of threads, function calls and gosubs.
 	DbgStack mStack;
+	friend struct DbgStack;
 
 private:
 	SOCKET mSocket;
