@@ -436,7 +436,7 @@ public:
 	// See ToDoubleOrInt64 for comments.
 	{
 		Var &var = *ResolveAlias();
-		switch (var.mAttrib & VAR_ATTRIB_TYPES)
+		switch (var.mAttrib & (VAR_ATTRIB_TYPES | VAR_ATTRIB_UNINITIALIZED))
 		{
 		case VAR_ATTRIB_IS_INT64:
 			aToken.SetValue(var.mContentsInt64);
@@ -447,6 +447,15 @@ public:
 		case VAR_ATTRIB_IS_OBJECT:
 			aToken.SetValue(var.mObject);
 			return;
+		case VAR_ATTRIB_UNINITIALIZED:
+			// This is relied upon by callers of CallEnumerator to permit an unset output arg
+			// to indicate a missing array item.  It should not be translated to a parameter's
+			// default value, because an unset var in that context would have raised an error.
+			// Some other callers may use this in place of IsUninitialized().
+			aToken.symbol = SYM_MISSING;
+			aToken.marker = _T("");
+			aToken.marker_length = 0;
+			break;
 		default:
 			// VAR_ATTRIB_BINARY_CLIP or 0.
 			aToken.SetValue(var.Contents(), var.Length());

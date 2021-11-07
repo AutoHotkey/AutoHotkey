@@ -330,6 +330,12 @@ ResultType CallEnumerator(IObject *aEnumerator, ExprTokenType *aParam[], int aPa
 {
 	FuncResult result_token;
 	ExprTokenType t_this(aEnumerator);
+	for (int i = 0; i < aParamCount; ++i)
+		if (aParam[i]->symbol == SYM_OBJECT)
+		{
+			ASSERT(dynamic_cast<VarRef *>(aParam[i]->object));
+			((VarRef *)aParam[i]->object)->MarkUninitialized();
+		}
 	auto result = aEnumerator->Invoke(result_token, IT_CALL, nullptr, t_this, aParam, aParamCount);
 	if (result == FAIL || result == EARLY_EXIT || result == INVOKE_NOT_HANDLED)
 	{

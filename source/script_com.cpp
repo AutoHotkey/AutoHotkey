@@ -790,7 +790,10 @@ void TokenToVariant(ExprTokenType &aToken, VARIANT &aVar, TTVArgType *aVarIsArg)
 				aVar.pvarVal = (VARIANT *)malloc(sizeof(VARIANT));
 				ExprTokenType token;
 				ref->ToTokenSkipAddRef(token);
-				TokenToVariant(token, *aVar.pvarVal, nullptr);
+				if (token.symbol == SYM_MISSING)
+					aVar.pvarVal->vt = VT_EMPTY; // Seems better than BSTR("") or ERROR(DISP_E_PARAMNOTFOUND).
+				else
+					TokenToVariant(token, *aVar.pvarVal, nullptr);
 				break;
 			}
 		}
