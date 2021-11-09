@@ -198,7 +198,7 @@ ResultType YYYYMMDDToSystemTime(LPTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool 
 	else // Month is in-range, which is necessary for the method below to work safely.
 	{
 		// Day-of-week code by Tomohiko Sakamoto:
-		static int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+		static const int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
 		int y = aSystemTime.wYear;
 		y -= aSystemTime.wMonth < 3;
 		aSystemTime.wDayOfWeek = (y + y/4 - y/100 + y/400 + t[aSystemTime.wMonth-1] + aSystemTime.wDay) % 7;

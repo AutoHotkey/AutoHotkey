@@ -860,7 +860,7 @@ HRESULT TokenToVarType(ExprTokenType &aToken, VARTYPE aVarType, void *apValue)
 	// the following would be to switch(aVarType) and copy using the appropriate pointer
 	// type, but disassembly shows that approach produces larger code and internally uses
 	// an array of sizes like this anyway:
-	static char vt_size[] = {U,U,2,4,4,8,8,8,P,P,4,2,0,P,0,U,1,1,2,4,8,8,4,4,U,U,U,U,U,U,U,U,U,U,U,U,U,P,P};
+	static const char vt_size[] = {U,U,2,4,4,8,8,8,P,P,4,2,0,P,0,U,1,1,2,4,8,8,4,4,U,U,U,U,U,U,U,U,U,U,U,U,U,P,P};
 	size_t vsize = (aVarType < _countof(vt_size)) ? vt_size[aVarType] : 0;
 	if (!vsize)
 		return DISP_E_BADVARTYPE;
