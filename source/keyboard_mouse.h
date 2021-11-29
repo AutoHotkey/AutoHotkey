@@ -314,8 +314,6 @@ void InitEventArray(void *aMem, UINT aMaxEvents, modLR_type aModifiersLR);
 void SendEventArray(int &aFinalKeyDelay, modLR_type aModsDuringSend);
 void CleanupEventArray(int aFinalKeyDelay);
 
-extern SendModes sSendMode;
-void DoKeyDelay(int aDelay = (sSendMode == SM_PLAY) ? g->KeyDelayPlay : g->KeyDelay);
 void DoMouseDelay();
 void UpdateKeyEventHistory(bool aKeyUp, vk_type aVK, sc_type aSC);
 #define KEYEVENT_PHYS(event_type, vk, sc) KeyEvent(event_type, vk, sc, NULL, false, KEY_PHYS_IGNORE)

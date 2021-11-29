@@ -22,6 +22,7 @@ GNU General Public License for more details.
 #include "window.h" // for IsWindowHung()
 
 
+
 // Added for v1.0.25.  Search on sPrevEventType for more comments:
 static KeyEventTypes sPrevEventType;
 static vk_type sPrevVK = 0;
@@ -54,6 +55,9 @@ static bool sAbortArraySend;         // No init needed.
 static bool sFirstCallForThisEvent;  //
 static bool sInBlindMode;            //
 static DWORD sThisEventTime;         //
+
+static void DoKeyDelay(int aDelay);
+static void DoDefaultKeyDelay();
 
 
 void DisguiseWinAltIfNeeded(vk_type aVK)
@@ -679,7 +683,7 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 					// Also, sending the ASC sequence to window doesn't work, so don't even try:
 					SendASC(omit_leading_whitespace(aKeys + 3));
 					// Do this only once at the end of the sequence:
-					DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
+					DoDefaultKeyDelay(); // It knows not to do the delay for SM_INPUT.
 				}
 
 				else if (key_text_length > 2 && !_tcsnicmp(aKeys, _T("U+"), 2))
@@ -726,7 +730,7 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 							SendASC(asc);
 						}
 					}
-					DoKeyDelay();
+					DoDefaultKeyDelay();
 				}
 
 				//else do nothing since it isn't recognized as any of the above "else if" cases (see below).
@@ -1231,7 +1235,7 @@ void SendKeySpecial(TCHAR aChar, int aRepeatCount, modLR_type aModifiersLR)
 			SendASC(asc_string);
 		else
 			SendUnicodeChar(wc, aModifiersLR);
-		DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
+		DoDefaultKeyDelay(); // It knows not to do the delay for SM_INPUT.
 	}
 
 	// It is not necessary to do SetModifierLRState() to put a caller-specified set of persistent modifier
@@ -1889,7 +1893,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 	}
 
 	if (aDoKeyDelay) // SM_PLAY also uses DoKeyDelay(): it stores the delay item in the event array.
-		DoKeyDelay(); // Thread-safe because only called by main thread in this mode.  See notes above.
+		DoDefaultKeyDelay(); // Thread-safe because only called by main thread in this mode.  See notes above.
 }
 
 
@@ -2953,7 +2957,8 @@ void CleanupEventArray(int aFinalKeyDelay)
 /////////////////////////////////
 
 
-void DoKeyDelay(int aDelay)
+
+static void DoKeyDelay(int aDelay)
 // Doesn't need to be thread safe because it should only ever be called from main thread.
 {
 	if (aDelay < 0) // To support user-specified KeyDelay of -1 (fastest send rate).
@@ -2968,6 +2973,12 @@ void DoKeyDelay(int aDelay)
 	SLEEP_WITHOUT_INTERRUPTION(aDelay);
 }
 
+
+static void DoDefaultKeyDelay()
+{
+	int aDelay = (sSendMode == SM_PLAY) ? g->KeyDelayPlay : g->KeyDelay;
+	DoKeyDelay(aDelay);
+}
 
 
 void DoMouseDelay() // Helper function for the mouse functions below.
