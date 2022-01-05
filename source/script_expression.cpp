@@ -1004,17 +1004,18 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 						this_token.symbol = SYM_VAR; // address can be taken, and it can be passed ByRef. e.g. &(x:=1)
 					}
 					goto push_this_token;
-				case SYM_ASSIGN_ADD:           this_token.symbol = SYM_ADD; break;
-				case SYM_ASSIGN_SUBTRACT:      this_token.symbol = SYM_SUBTRACT; break;
-				case SYM_ASSIGN_MULTIPLY:      this_token.symbol = SYM_MULTIPLY; break;
-				case SYM_ASSIGN_DIVIDE:        this_token.symbol = SYM_DIVIDE; break;
-				case SYM_ASSIGN_FLOORDIVIDE:   this_token.symbol = SYM_FLOORDIVIDE; break;
-				case SYM_ASSIGN_BITOR:         this_token.symbol = SYM_BITOR; break;
-				case SYM_ASSIGN_BITXOR:        this_token.symbol = SYM_BITXOR; break;
-				case SYM_ASSIGN_BITAND:        this_token.symbol = SYM_BITAND; break;
-				case SYM_ASSIGN_BITSHIFTLEFT:  this_token.symbol = SYM_BITSHIFTLEFT; break;
-				case SYM_ASSIGN_BITSHIFTRIGHT: this_token.symbol = SYM_BITSHIFTRIGHT; break;
-				case SYM_ASSIGN_CONCAT:        this_token.symbol = SYM_CONCAT; break;
+				case SYM_ASSIGN_ADD:					this_token.symbol = SYM_ADD; break;
+				case SYM_ASSIGN_SUBTRACT:				this_token.symbol = SYM_SUBTRACT; break;
+				case SYM_ASSIGN_MULTIPLY:				this_token.symbol = SYM_MULTIPLY; break;
+				case SYM_ASSIGN_DIVIDE:					this_token.symbol = SYM_DIVIDE; break;
+				case SYM_ASSIGN_FLOORDIVIDE:			this_token.symbol = SYM_FLOORDIVIDE; break;
+				case SYM_ASSIGN_BITOR:					this_token.symbol = SYM_BITOR; break;
+				case SYM_ASSIGN_BITXOR:					this_token.symbol = SYM_BITXOR; break;
+				case SYM_ASSIGN_BITAND:					this_token.symbol = SYM_BITAND; break;
+				case SYM_ASSIGN_BITSHIFTLEFT:			this_token.symbol = SYM_BITSHIFTLEFT; break;
+				case SYM_ASSIGN_BITSHIFTRIGHT:			this_token.symbol = SYM_BITSHIFTRIGHT; break;
+				case SYM_ASSIGN_BITSHIFTRIGHT_LOGICAL:	this_token.symbol = SYM_BITSHIFTRIGHT_LOGICAL; break;
+				case SYM_ASSIGN_CONCAT:					this_token.symbol = SYM_CONCAT; break;
 				}
 				// Since above didn't goto or break out of the outer loop, this is an assignment other than
 				// SYM_ASSIGN, so it needs further evaluation later below before the assignment will actually be made.
@@ -1239,7 +1240,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 			}
 
 			else if (right_is_number == PURE_INTEGER && left_is_number == PURE_INTEGER && this_token.symbol != SYM_DIVIDE
-				|| this_token.symbol <= SYM_BITSHIFTRIGHT && this_token.symbol >= SYM_BITOR) // Check upper bound first for short-circuit performance (because operators like +-*/ are much more frequently used).
+				|| this_token.symbol <= SYM_BITSHIFTRIGHT_LOGICAL && this_token.symbol >= SYM_BITOR) // Check upper bound first for short-circuit performance (because operators like +-*/ are much more frequently used).
 			{
 				// Because both are integers and the operation isn't division, the result is integer.
 				// The result is also an integer for the bitwise operations listed in the if-statement
@@ -1269,6 +1270,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ExprTokenType 
 				case SYM_BITXOR:   this_token.value_int64 = left_int64 ^ right_int64; break;
 				case SYM_BITSHIFTLEFT:  this_token.value_int64 = left_int64 << right_int64; break;
 				case SYM_BITSHIFTRIGHT: this_token.value_int64 = left_int64 >> right_int64; break;
+				case SYM_BITSHIFTRIGHT_LOGICAL: this_token.value_int64 = (unsigned __int64)left_int64 >> right_int64; break;
 				case SYM_FLOORDIVIDE:
 					// Since it's integer division, no need for explicit floor() of the result.
 					// Also, performance is much higher for integer vs. float division, which is part
