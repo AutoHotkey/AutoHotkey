@@ -16758,6 +16758,70 @@ void Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 
 
 
+BIF_DECL(BIF_Pow)
+{
+	// Based on the code for SYM_POWER.
+	// Load-time validation has already ensured there are exactly two parameters.
+	// "Cast" each operand to Int64/Double depending on whether it has a decimal point.
+	ExprTokenType param0, param1;
+	if (ParamIndexToNumber(0, param0) && ParamIndexToNumber(1, param1)) // Both are numeric.
+	{
+		if (param0.symbol == SYM_INTEGER && param1.symbol == SYM_INTEGER) // Both are integers.
+		{
+			if (param0.value_int64 == 0 && param1.value_int64 < 0)
+				_f_throw(ERR_DIVIDEBYZERO, ErrorPrototype::ZeroDivision);
+			else if (param0.value_int64 == 0 && param1.value_int64 == 0)
+				_f_throw(ERR_EXPR_EVAL);
+			else if (param1.value_int64 >= 0)
+				_f_return_i(pow_ll(param0.value_int64, param1.value_int64));
+
+			// else negative exponent, treat as floats:
+			// Note: if we fell through out of this if-block, to handle floats below, sometimes Pow(a,b) would return -0.0, whereas a**b would return 0.0.
+			__int64 left_int64 = param0.value_int64;
+			__int64 right_int64 = param1.value_int64;
+			double result;
+#ifdef USE_INLINE_ASM	// see qmath.h
+			// Note: The function pow() in math.h adds about 28 KB of code size (uncompressed)! That is why it's not used here.
+			// v1.0.44.11: With Laszlo's help, negative integer bases are now supported.
+			BOOL left_was_negative = (left_int64 < 0);
+			if (left_was_negative)
+				left_int64 = -left_int64; // Force a positive due to the limitations of qmathPow().
+			result = qmathPow((double)left_int64, (double)right_int64);
+			if (left_was_negative && right_int64 % 2) // Negative base and odd exponent (not zero or even).
+				result = -result;
+#else
+			result = pow((double)left_int64, (double)right_int64);
+#endif
+			_f_return(result);
+		}
+
+		double left_double = TokenToDouble(param0);
+		double right_double = TokenToDouble(param1);
+		double result;
+		if (left_double == 0.0 && right_double < 0)  // In essence, this is divide-by-zero.
+			_f_throw(ERR_DIVIDEBYZERO, ErrorPrototype::ZeroDivision);
+		BOOL left_was_negative = (left_double < 0);
+		if ((left_was_negative && qmathFmod(right_double, 1.0) != 0.0)	// Negative base, but exponent isn't close enough to being an integer: unsupported (to simplify code).
+			|| (left_double == 0.0 && right_double == 0.0))				// 0.0**0.0, not defined.
+			_f_throw(ERR_EXPR_EVAL);
+#ifdef USE_INLINE_ASM	// see qmath.h
+		// v1.0.44.11: With Laszlo's help, negative bases are now supported as long as the exponent is not fractional.
+		if (left_was_negative)
+			left_double = -left_double; // Force a positive due to the limitations of qmathPow().
+		result = qmathPow(left_double, right_double);
+		if (left_was_negative && qmathFabs(qmathFmod(right_double, 2.0)) == 1.0) // Negative base and exactly-odd exponent (otherwise, it can only be zero or even because if not it would have returned higher above).
+			result = -result;
+#else
+		result = pow(left_double, right_double);
+#endif
+		_f_return(result);
+	}
+	// Since above didn't return, one or both parameters were invalid.
+	_f_throw(ERR_PARAM_INVALID, ErrorPrototype::Type);
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
