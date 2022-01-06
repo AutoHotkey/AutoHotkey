@@ -140,7 +140,7 @@ FuncEntry g_BIF[] =
 	BIFn(FileEncoding, 1, 1, BIF_SetBIV),
 	BIFn(FileExist, 1, 1, BIF_FileExist),
 	BIF1(FileGetAttrib, 0, 1),
-	BIF1(FileGetShortcut, 1, 8, {2, 3, 4, 5, 6, 7, 8}),
+	BIF1(FileGetShortcut, 1, 9, {2, 3, 4, 5, 6, 7, 8, 9}),
 	BIF1(FileGetSize, 0, 2),
 	BIF1(FileGetTime, 0, 2),
 	BIF1(FileGetVersion, 0, 1),

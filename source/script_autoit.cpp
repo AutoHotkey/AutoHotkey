@@ -1154,10 +1154,10 @@ BIF_DECL(BIF_DirSelect)
 
 
 
-BIF_DECL(BIF_FileGetShortcut) // Credited to Holger <Holger.Kotsch at GMX de>.
+BIF_DECL(BIF_FileGetShortcut) // Credited to Holger <Holger.Kotsch at GMX de>. Modified to support IShellLink::GetHotkey.
 {
 	_f_param_string(aShortcutFile, 0);
-	Var *output_var[7];
+	Var *output_var[8];
 	for (int i = 0; i < _countof(output_var); ++i)
 		if (output_var[i] = ParamIndexToOutputVar(i+1))
 			output_var[i]->Assign(); // Init to blank.  OutIconNum relies on this.
@@ -1207,20 +1207,37 @@ BIF_DECL(BIF_FileGetShortcut) // Credited to Holger <Holger.Kotsch at GMX de>.
 					psl->GetDescription(buf, MAX_PATH); // Testing shows that the OS limits it to 260 characters.
 					output_var[3]->Assign(buf);
 				}
-				if (output_var[4] || output_var[5])
+				if (output_var[4] || output_var[6])
 				{
 					psl->GetIconLocation(buf, MAX_PATH, &icon_index);
 					if (output_var[4])
 						output_var[4]->Assign(buf);
-					if (output_var[5])
+					if (output_var[6])
 						if (*buf)
-							output_var[5]->Assign(icon_index + (icon_index >= 0 ? 1 : 0));  // Convert from 0-based to 1-based for consistency with the Menu command, etc. but leave negative resource IDs as-is.
+							output_var[6]->Assign(icon_index + (icon_index >= 0 ? 1 : 0));  // Convert from 0-based to 1-based for consistency with the Menu command, etc. but leave negative resource IDs as-is.
 						//else: Leave it blank to indicate that there is none.
 				}
-				if (output_var[6])
+				if (output_var[5])
+				{
+					CHAR bufwd[2];
+					psl->GetHotkey((WORD*)bufwd);
+					// buf has sufficient capacity, MAX_PATH+1 > 133, 4 modifier chars + 128 key name chars + 1 null:
+					TCHAR *cp = buf;
+					if (bufwd[1] & HOTKEYF_CONTROL)
+						*cp++ = '^';
+					if (bufwd[1] & HOTKEYF_EXT) // Windows key?
+						*cp++ = '#';
+					if (bufwd[1] & HOTKEYF_ALT)
+						*cp++ = '!';
+					if (bufwd[1] & HOTKEYF_SHIFT)
+						*cp++ = '+';
+					VKtoKeyName((vk_type)bufwd[0], cp, 128, false);
+					output_var[5]->Assign(buf);
+				}
+				if (output_var[7])
 				{
 					psl->GetShowCmd(&show_cmd);
-					output_var[6]->Assign(show_cmd);
+					output_var[7]->Assign(show_cmd);
 					// For the above, decided not to translate them to Max/Min/Normal since other
 					// show-state numbers might be supported in the future (or are already).  In other
 					// words, this allows the flexibility to specify some number other than 1/3/7 when

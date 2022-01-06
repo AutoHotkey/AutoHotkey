@@ -1874,7 +1874,7 @@ public:
 		mData = aData;
 	}
 
-#define MAX_FUNC_OUTPUT_VAR 7
+#define MAX_FUNC_OUTPUT_VAR 8
 	bool ArgIsOutputVar(int aIndex) override
 	{
 		if (!mOutputVars)
