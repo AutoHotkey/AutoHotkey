@@ -16758,6 +16758,136 @@ void Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 
 
 
+BIF_DECL(BIF_DTPGetTime)
+{
+	DETERMINE_TARGET_CONTROL(0);
+	SYSTEMTIME st;
+	bool is_error = false;
+	HANDLE handle;
+	LPVOID remote_buf;
+	DWORD_PTR result;
+	if (remote_buf = AllocInterProcMem(handle, sizeof(st), control_window))
+	{
+		if (!SendMessageTimeout(control_window, DTM_GETSYSTEMTIME, GDT_VALID, (LPARAM)remote_buf, SMTO_ABORTIFHUNG, 2000, &result)
+		|| !ReadProcessMemory(handle, remote_buf, &st, sizeof(st), NULL))
+			is_error = true;
+		FreeInterProcMem(handle, remote_buf);
+	}
+	else
+		is_error = true;
+	if (is_error)
+		_f_throw(ERR_FAILED);
+	_f_return_p(SystemTimeToYYYYMMDD(_f_retval_buf, st));
+}
+
+
+
+BIF_DECL(BIF_DTPSetTime)
+{
+	LPTSTR aYYYYMMDD = ParamIndexToString(0, _f_number_buf);
+	SYSTEMTIME st;
+	if (!*aYYYYMMDD) // Use current local time by default.
+		GetLocalTime(&st);
+	else
+	{
+		if (!(YYYYMMDDToSystemTime(aYYYYMMDD, st, true)))
+			_f_throw_value(ERR_INVALID_VALUE, aYYYYMMDD);
+	}
+
+	DETERMINE_TARGET_CONTROL(1);
+	bool is_error = false;
+	HANDLE handle;
+	LPVOID remote_buf;
+	DWORD_PTR result;
+	if (remote_buf = AllocInterProcMem(handle, sizeof(st), control_window))
+	{
+		if (!WriteProcessMemory(handle, remote_buf, &st, sizeof(st), NULL)
+		|| !SendMessageTimeout(control_window, DTM_SETSYSTEMTIME, GDT_VALID, (LPARAM)remote_buf, SMTO_ABORTIFHUNG, 2000, &result))
+			is_error = true;
+		FreeInterProcMem(handle, remote_buf);
+	}
+	else
+		is_error = true;
+	if (is_error)
+		_f_throw(ERR_FAILED);
+}
+
+
+
+BIF_DECL(BIF_MonthCalGetTime)
+{
+	DETERMINE_TARGET_CONTROL(0);
+	LPTSTR buf = aResultToken.buf;
+	SYSTEMTIME st[2];
+	bool is_error = false;
+	HANDLE handle;
+	LPVOID remote_buf;
+	DWORD_PTR result;
+	bool is_multi = GetWindowLong(control_window, GWL_STYLE) & MCS_MULTISELECT;
+	if (remote_buf = AllocInterProcMem(handle, sizeof(st), control_window))
+	{
+		if (!SendMessageTimeout(control_window, is_multi ? MCM_GETSELRANGE : MCM_GETCURSEL, 0, (LPARAM)remote_buf, SMTO_ABORTIFHUNG, 2000, &result)
+		|| !ReadProcessMemory(handle, remote_buf, &st, sizeof(st), NULL))
+			is_error = true;
+		FreeInterProcMem(handle, remote_buf);
+	}
+	else
+		is_error = true;
+	if (is_error)
+		_f_throw(ERR_FAILED);
+	if (is_multi)
+	{
+		SystemTimeToYYYYMMDD(buf, st[0]);
+		buf[8] = '-'; // Retain only the first 8 chars to omit the time portion, which is unreliable (not relevant anyway).
+		SystemTimeToYYYYMMDD(buf + 9, st[1]);
+		buf[17] = 0; // Limit to 17 chars to omit the time portion of the second timestamp.
+	}
+	else
+	{
+		SystemTimeToYYYYMMDD(buf, st[0]);
+		buf[8] = 0; // Limit to 8 chars to omit the time portion, which is unreliable (not relevant anyway).
+	}
+	_f_return_p(buf);
+}
+
+
+
+BIF_DECL(BIF_MonthCalSetTime)
+{
+	LPTSTR date_range = ParamIndexToString(0, _f_number_buf);
+	SYSTEMTIME st[2];
+	DWORD gdtr = YYYYMMDDToSystemTime2(date_range, st);
+	if (!*date_range) // Use current local time by default.
+	{
+		GetLocalTime((SYSTEMTIME*)&st);
+		st[1] = st[0];
+	}
+	else if (!gdtr)
+		_f_throw_value(ERR_INVALID_VALUE, date_range);
+
+	DETERMINE_TARGET_CONTROL(1);
+	bool is_error = false;
+	HANDLE handle;
+	LPVOID remote_buf;
+	DWORD_PTR result;
+	bool is_multi = GetWindowLong(control_window, GWL_STYLE) & MCS_MULTISELECT;
+	if (is_multi && (gdtr == GDTR_MIN)) // No maximum is present, so set maximum to minimum.
+		st[1] = st[0];
+	if (remote_buf = AllocInterProcMem(handle, sizeof(st), control_window))
+	{
+		if (!WriteProcessMemory(handle, remote_buf, &st, sizeof(st), NULL)
+		|| !SendMessageTimeout(control_window, is_multi ? MCM_SETSELRANGE : MCM_SETCURSEL, GDT_VALID, (LPARAM)remote_buf, SMTO_ABORTIFHUNG, 2000, &result))
+			is_error = true;
+		FreeInterProcMem(handle, remote_buf);
+	}
+	else
+		is_error = true;
+	if (is_error)
+		_f_throw(ERR_FAILED);
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
