@@ -629,6 +629,7 @@ BIF_DECL(BIF_ControlGet)
 	{
 	case FID_ControlFindItem: // String (required).
 	case FID_ListViewGetContent: // Options (optional).
+	case FID_ListViewHeaderGetContent: // Options (optional).
 		if (aParamCount)
 		{
 			aString = ParamIndexToString(0, _f_number_buf);
@@ -808,6 +809,9 @@ BIF_DECL(BIF_ControlGet)
 
 	case FID_ListViewGetContent:
 		return ControlGetListView(aResultToken, control_window, aString);
+
+	case FID_ListViewHeaderGetContent:
+		return ControlGetListViewHeader(aResultToken, control_window, aString);
 
 	case FID_EditGetLineCount:  // Must be an Edit
 		// MSDN: "If the control has no text, the return value is 1. The return value will never be less than 1."

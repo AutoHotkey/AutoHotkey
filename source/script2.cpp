@@ -2096,6 +2096,156 @@ error:
 
 
 
+void ControlGetListViewHeader(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions)
+// Called by ControlGet() below.  It has ensured that aHwnd is a valid handle to a control.
+{
+	TCHAR classname[256 + 1];
+	GetClassName(aHwnd, classname, _countof(classname));
+	HWND header_control;
+	LRESULT col_count = -1;  // Use -1 to indicate "undetermined col count".
+	// If contains 'Header', assume a header control, else a listview.
+	if (tcscasestr(classname, _T("Header")))
+		header_control = aHwnd;
+	else
+		SendMessageTimeout(aHwnd, LVM_GETHEADER, 0, 0, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&header_control);
+	if (header_control)
+		SendMessageTimeout(header_control, HDM_GETITEMCOUNT, 0, 0, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&col_count);
+		// Return value is not checked because if it fails, col_count is left at its default of -1 set above.
+	if (col_count == -1)
+		goto error;
+
+	// PARSE OPTIONS (a simple vs. strict method is used to reduce code size)
+	LPTSTR col_option = tcscasestr(aOptions, _T("Col"));
+	int requested_col = col_option ? ATOI(col_option + 3) - 1 : -1;
+	if (col_count > -1 && col_option && (requested_col < 0 || requested_col >= col_count)) // Specified column does not exist.
+		_f_throw_value(ERR_PARAM1_INVALID, col_option);
+
+	// FINAL CHECKS
+	if (!col_count) // But don't return when col_count == -1 (i.e. always make the attempt when col count is undetermined).
+		_f_return_empty;  // No text in the control, so indicate success.
+
+	// The layout of HDITEM needs to match what the TARGET process expects.
+	struct HDITEM32
+	{
+		UINT    mask;
+		int     cxy;
+		UINT    pszText;
+		UINT    hbm;
+		int     cchTextMax;
+		int     fmt;
+		UINT    lParam;
+		int     iImage;
+		int     iOrder;
+		UINT    type;
+		UINT    pvFilter;
+		UINT    state;
+	};
+	struct HDITEM64
+	{
+		UINT    mask;
+		int     cxy;
+		UINT64  pszText;
+		UINT64  hbm;
+		int     cchTextMax;
+		int     fmt;
+		UINT64  lParam;
+		int     iImage;
+		int     iOrder;
+		UINT    type;
+		UINT64  pvFilter;
+		UINT    state;
+	};
+	union
+	{
+		HDITEM32 i32;
+		HDITEM64 i64;
+	} local_hdi;
+
+	// ALLOCATE INTERPROCESS MEMORY FOR TEXT RETRIEVAL
+	HANDLE handle;
+	LPVOID p_remote_hdi; // Not of type LPHDITEM to help catch bugs where p_remote_hdi->member is wrongly accessed here in our process.
+	if (   !(p_remote_hdi = AllocInterProcMem(handle, sizeof(local_hdi) + _TSIZE(LV_REMOTE_BUF_SIZE), header_control, PROCESS_QUERY_INFORMATION))   ) // Allocate both the HDITEM struct and its internal string buffer in one go because VirtualAllocEx() is probably a high overhead call.
+		goto error;
+	LPVOID p_remote_text = (LPVOID)((UINT_PTR)p_remote_hdi + sizeof(local_hdi)); // The next buffer is the memory area adjacent to, but after the struct.
+	
+	// PREPARE HDI STRUCT MEMBERS FOR TEXT RETRIEVAL
+	if (IsProcess64Bit(handle))
+	{
+		// See the section below for comments.
+		local_hdi.i64.mask = HDI_TEXT;
+		local_hdi.i64.cchTextMax = LV_REMOTE_BUF_SIZE - 1;
+		local_hdi.i64.pszText = (UINT64)p_remote_text;
+	}
+	else
+	{
+		// Subtract 1 because of that nagging doubt about size vs. length. Some MSDN examples subtract one,
+		// such as TabCtrl_GetItem()'s cchTextMax:
+		local_hdi.i32.mask = HDI_TEXT;
+		local_hdi.i32.cchTextMax = LV_REMOTE_BUF_SIZE - 1; // Note that LVM_GETITEM doesn't update this member to reflect the new length.
+		local_hdi.i32.pszText = (UINT)(UINT_PTR)p_remote_text; // Extra cast avoids a truncation warning (C4311).
+	}
+
+	LRESULT i = 0;
+	LRESULT length;
+	LRESULT total_length;
+	bool single_col_mode = (requested_col > -1); // Get only one column in these cases.
+
+	// ESTIMATE THE AMOUNT OF MEMORY NEEDED TO STORE ALL THE TEXT
+	if (single_col_mode)
+	{
+		total_length = LV_REMOTE_BUF_SIZE + 1;
+		i = requested_col;
+		col_count = requested_col + 1;
+	}
+	else if (col_count >= 0)
+		total_length = (LV_REMOTE_BUF_SIZE + 1) * col_count + 1; // Note: 1 tab for each item.
+
+	if (!WriteProcessMemory(handle, p_remote_hdi, &local_hdi, sizeof(local_hdi), NULL))
+	{
+		aResultToken.MemoryError();
+		goto cleanup_and_return;
+	}
+
+	// SET UP THE OUTPUT BUFFER
+	if (!TokenSetResult(aResultToken, NULL, (size_t)total_length))
+		goto cleanup_and_return; // Error() was already called.
+	aResultToken.symbol = SYM_STRING;
+
+	LPTSTR contents = aResultToken.marker;
+	DWORD_PTR result;
+	for (i, total_length = 0; i < col_count; ++i)
+	{
+		if (SendMessageTimeout(header_control, HDM_GETITEMW, i, (LPARAM)p_remote_hdi, SMTO_ABORTIFHUNG, 2000, &result)
+		&& ReadProcessMemory(handle, p_remote_text, contents, _TSIZE(LV_REMOTE_BUF_SIZE), NULL))
+		{
+			length = _tcslen(contents);
+			contents += length;
+			*contents++ = '\t';
+			total_length += length + 1;
+		}
+		else
+		{
+			aResultToken.MemoryError();
+			goto cleanup_and_return;
+		}
+	}
+	--contents;
+	--total_length;
+
+	*contents = '\0'; // Final termination.  Above has reserved room for this one byte.
+	aResultToken.marker_length = (size_t)total_length; // Update to actual vs. estimated length.
+
+	// CLEAN UP
+cleanup_and_return: // This is "called" if a memory allocation failed above
+	FreeInterProcMem(handle, p_remote_hdi);
+	return;
+
+error:
+	_f_throw_win32();
+}
+
+
+
 bool ControlSetTab(ResultToken &aResultToken, HWND aHwnd, DWORD aTabIndex)
 {
 	DWORD_PTR dwResult;

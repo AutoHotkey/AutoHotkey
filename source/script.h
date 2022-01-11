@@ -659,7 +659,7 @@ enum BuiltInFunctionID {
 	FID_ProcessExist = 0, FID_ProcessClose, FID_ProcessWait, FID_ProcessWaitClose, 
 	FID_MonitorGet = 0, FID_MonitorGetWorkArea, FID_MonitorGetCount, FID_MonitorGetPrimary, FID_MonitorGetName, 
 	FID_OnExit = 0, FID_OnClipboardChange, FID_OnError,
-	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlFindItem, FID_ControlGetIndex, FID_ControlGetChoice, FID_ControlGetItems, FID_ListViewGetContent, FID_EditGetLineCount, FID_EditGetCurrentLine, FID_EditGetCurrentCol, FID_EditGetLine, FID_EditGetSelectedText, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
+	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlFindItem, FID_ControlGetIndex, FID_ControlGetChoice, FID_ControlGetItems, FID_ListViewGetContent, FID_ListViewHeaderGetContent, FID_EditGetLineCount, FID_EditGetCurrentLine, FID_EditGetCurrentCol, FID_EditGetLine, FID_EditGetSelectedText, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,
 	FID_ControlSetChecked = 0, FID_ControlSetEnabled, FID_ControlShow, FID_ControlHide, FID_ControlSetStyle, FID_ControlSetExStyle, FID_ControlShowDropDown, FID_ControlHideDropDown, FID_ControlAddItem, FID_ControlDeleteItem, FID_ControlChooseIndex, FID_ControlChooseString, FID_EditPaste,
 	FID_ControlSend = SCM_NOT_RAW, FID_ControlSendText = SCM_RAW_TEXT,
 	FID_DriveEject = 0, FID_DriveLock, FID_DriveUnlock, FID_DriveSetLabel, FID_DriveRetract,
@@ -3487,6 +3487,7 @@ ResultType DetermineTargetControl(HWND &aControl, HWND &aWindow, ResultToken &aR
 LPTSTR GetExitReasonString(ExitReasons aExitReason);
 
 void ControlGetListView(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions);
+void ControlGetListViewHeader(ResultToken &aResultToken, HWND aHwnd, LPTSTR aOptions);
 bool ControlSetTab(ResultToken &aResultToken, HWND aHwnd, DWORD aTabIndex);
 
 void PixelSearch(Var *aOutputVarX, Var *aOutputVarY

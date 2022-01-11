@@ -208,6 +208,7 @@ FuncEntry g_BIF[] =
 	BIFA(ListLines, 0, 1, ACT_LISTLINES),
 	BIFA(ListVars, 0, 0, ACT_LISTVARS),
 	BIFn(ListViewGetContent, 0, 6, BIF_ControlGet),
+	BIFn(ListViewHeaderGetContent, 0, 6, BIF_ControlGet),
 	BIFn(Ln, 1, 1, BIF_SqrtLogLn),
 	BIF1(LoadPicture, 1, 3, {3}),
 	BIFn(Log, 1, 1, BIF_SqrtLogLn),
