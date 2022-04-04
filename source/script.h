@@ -2943,7 +2943,8 @@ public:
 	bool mOnClipboardChangeIsRunning;
 	ExitReasons mExitReason;
 
-	ScriptTimer *mFirstTimer, *mLastTimer;  // The first and last script timers in the linked list.
+	ScriptTimer *mFirstTimer, *mLastTimer;  // The first and last script timers in the linked list. 
+											// At least DeleteTimer relies on timers never being inserted anywhere else than after the last timer in the linked list.
 	UINT mTimerCount, mTimerEnabledCount;
 
 	UserMenu *mFirstMenu, *mLastMenu;
@@ -3027,7 +3028,7 @@ public:
 	};
 	ResultType UpdateOrCreateTimer(IObject *aCallback
 		, bool aUpdatePeriod, __int64 aPeriod, bool aUpdatePriority, int aPriority);
-	void DeleteTimer(IObject *aCallback);
+	void DeleteTimer(IObject *aCallback, ScriptTimer **aNextTimer = nullptr);
 	LPTSTR DefaultDialogTitle();
 	UserFunc* CreateHotFunc();
 	ResultType DefineFunc(LPTSTR aBuf, bool aStatic = false, bool aIsInExpression = false);

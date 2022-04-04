@@ -4124,9 +4124,11 @@ ResultType Script::UpdateOrCreateTimer(IObject *aCallback
 
 
 
-void Script::DeleteTimer(IObject *aLabel)
+void Script::DeleteTimer(IObject *aLabel, ScriptTimer** aNextTimer)
 {
 	ScriptTimer *timer, *previous = NULL;
+	if (aNextTimer)
+		*aNextTimer = nullptr;
 	for (timer = mFirstTimer; timer != NULL; previous = timer, timer = timer->mNextTimer)
 		if (timer->mCallback == aLabel) // Match found.
 		{
@@ -4147,8 +4149,34 @@ void Script::DeleteTimer(IObject *aLabel)
 			if (mLastTimer == timer)
 				mLastTimer = previous;
 			mTimerCount--;
-			// Delete the timer, automatically releasing its reference to the object.
-			delete timer;
+			
+			auto timer_count = mTimerCount;
+			auto last_timer = mLastTimer;
+			auto next_timer = timer->mNextTimer;
+			
+			delete timer; // Delete the timer, automatically releasing its reference to the object.
+
+			if (aNextTimer && next_timer)
+			{
+				if (timer_count > mTimerCount //  Timers has been deleted
+					|| last_timer != mLastTimer) // Timers has been added, and consequently, might also have been deleted
+				{
+					// next_timer might have been deleted from the __delete routine of timer->mCallback
+					// either explicitly via BIF_SetTimer or by the timer interrupting the __delete routine (and running only once)
+					// Check if next_timer is still in the linked list
+					for (timer = mFirstTimer; timer != NULL; timer = timer->mNextTimer)
+					{
+						if (timer == next_timer)
+						{
+							*aNextTimer = next_timer;
+							break;
+						}
+					}
+
+				}
+				else // no timers added or deleted
+					*aNextTimer = next_timer;
+			}
 			break;
 		}
 }

@@ -1625,12 +1625,23 @@ bool CheckScriptTimers()
 
 		// Resolve the next timer only now, in case other timers were created or deleted while
 		// this timer was executing.  Must be done before the timer is potentially deleted below.
-		next_timer = timer.mNextTimer;
+
+		// Cannot unconditionally resolve the next timer as:
+		// next_timer = timer.mNextTimer;
+		// Because a call to DeleteTimer below could end up deleting next_timer if timer.mCallback
+		// has a __delete routine which is interupted by next_timer or if it explicitly
+		// deletes it via BIF_SetTimer. If DeleteTimer is called it will set
+		// next_timer timer.mNextTimer if it wasn't deleted.
+
+		
 		// Currently timers are disabled only when they can't be deleted (because they're
 		// running).  So now that this one has finished, check if it needs to be deleted.
 		// mExistingThreads==0 is implied at this point since timers are only allowed one thread.
 		if (!timer.mEnabled)
-			g_script.DeleteTimer(timer.mCallback->ToObject());
+			g_script.DeleteTimer(timer.mCallback->ToObject(), &next_timer);
+		else
+			next_timer = timer.mNextTimer;
+
 	} // for() each timer.
 
 	if (at_least_one_timer_launched) // Since at least one subroutine was run above, restore various values for our caller.
