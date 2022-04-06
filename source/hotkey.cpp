@@ -2636,17 +2636,20 @@ BIF_DECL(BIF_Hotstring)
 	bool case_sensitive = g_HSCaseSensitive;
 	bool detect_inside_word = g_HSDetectWhenInsideWord;
 	bool un; int iun; SendModes sm; SendRawType sr; // Unused.
+	bool execute_action = false;
 	if (*hotstring_options)
-		Hotstring::ParseOptions(hotstring_options, iun, iun, sm, case_sensitive, un, un, un, sr, un, detect_inside_word, un, un, un);
-	
+		Hotstring::ParseOptions(hotstring_options, iun, iun, sm, case_sensitive, un, un, un, sr, un, detect_inside_word, un, execute_action, un);
+
 	IObject *action_obj = NULL;
 	if (!ParamIndexIsOmitted(1))
 	{
 		if (action_obj = ParamIndexToObject(1))
 			action_obj->AddRef();
-		// Otherwise, it's always replacement text (the 'X' option is ignored at runtime).
+		else if (execute_action)
+			_f_throw_param(1); // the 'X' option must be used together with a function object.
+		// Otherwise, it's always replacement text
 	}
-
+	
 	ToggleValueType toggle = NEUTRAL;
 	if (  *onoff && !(toggle = Line::ConvertOnOffToggle(onoff))   )
 	{
