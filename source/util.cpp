@@ -1661,7 +1661,7 @@ void GetVirtualDesktopRect(RECT &aRect)
 
 
 DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf)
-// Returns the length of what has been copied into aBuf.
+// Returns the length of what has been copied into aBuf, not including the null terminator.
 // Caller has ensured that aBuf is large enough (though anything >=32767 is always large enough).
 // This function was added in v1.0.46.08 to fix a long-standing bug that was more fully revealed
 // by 1.0.46.07's reduction of DEREF_BUF_EXPAND_INCREMENT from 32 to 16K (which allowed the Win9x
@@ -1689,8 +1689,8 @@ DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf)
 	// GetEnvironmentVariable() could be called twice, the first time to get the actual size.  But that would
 	// probably perform worse since GetEnvironmentVariable() is a very slow function.  In addition, it would
 	// add code complexity, so it seems best to fetch it into a large buffer then just copy it to dest-var.
-	if (length) // Probably always true under the conditions in effect for our callers.
-		tmemcpy(aBuf, buf, length + 1); // memcpy() usually benches a little faster than strcpy().
+	if (length && (size_t) length + 1 <= _countof(buf)) // Probably always true under the conditions in effect for our callers.
+		tmemcpy(aBuf, buf, (size_t) length + 1); // memcpy() usually benches a little faster than strcpy().
 	else // Failure. The buffer's contents might be undefined in this case.
 		*aBuf = '\0'; // Caller's buf should always have room for an empty string. So make it empty for maintainability, even if not strictly required by caller.
 	return length;
