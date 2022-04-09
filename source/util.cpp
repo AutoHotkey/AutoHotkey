@@ -1684,12 +1684,15 @@ DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf)
 	//
 	// Don't use a size greater than 32767 because that will cause it to fail on Win95 (tested by Robert Yalkin).
 	// According to MSDN, 32767 is exactly large enough to handle the largest variable plus its zero terminator.
+	// Update in 2022: Testing on Windows 11 showed the actual limit to be much higher, perhaps only bounded by
+	// available memory.  Since this function is only used by A_ComSpec and the deprecated auto-env retrieval
+	// mechanism (and due to rarity of need), no attempt is made to support larger variables.
 	TCHAR buf[32767];
 	DWORD length = GetEnvironmentVariable(aEnvVarName, buf, _countof(buf));
 	// GetEnvironmentVariable() could be called twice, the first time to get the actual size.  But that would
 	// probably perform worse since GetEnvironmentVariable() is a very slow function.  In addition, it would
 	// add code complexity, so it seems best to fetch it into a large buffer then just copy it to dest-var.
-	if (length && (size_t) length + 1 <= _countof(buf)) // Probably always true under the conditions in effect for our callers.
+	if (length && (size_t) length + 1 <= _countof(buf))
 		tmemcpy(aBuf, buf, (size_t) length + 1); // memcpy() usually benches a little faster than strcpy().
 	else // Failure. The buffer's contents might be undefined in this case.
 		*aBuf = '\0'; // Caller's buf should always have room for an empty string. So make it empty for maintainability, even if not strictly required by caller.
