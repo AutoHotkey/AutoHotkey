@@ -46,7 +46,7 @@ AutoHotkeyx.vcxproj includes the following Platforms:
 
 Visual C++ 2010 officially supports XP SP2 and later.  AutoHotkey supports Windows XP pre-SP2 and Windows 2000 via an asm patch (win2kcompat.asm).  Older versions are not supported.
 
-## AutoHotkey v2 Alpha  ##
+## AutoHotkey v2 Beta ##
 
 https://autohotkey.com/v2/
 
