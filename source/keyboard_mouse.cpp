@@ -4105,7 +4105,7 @@ sc_type TextToSC(LPTSTR aText, bool *aSpecifiedByNumber)
 
 vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandledByScanCode, bool aAllowExplicitVK
 	, HKL aKeybdLayout)
-// If modifiers_p is non-NULL, place the modifiers that are needed to realize the key in there.
+// If pModifiersLR is non-NULL, place the modifiers that are needed to realize the key in there.
 // e.g. M is really +m (shift-m), # is really shift-3.
 // HOWEVER, this function does not completely overwrite the contents of pModifiersLR; instead, it just
 // adds the required modifiers into whatever is already there.
