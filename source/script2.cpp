@@ -2514,7 +2514,6 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 		if (click.y == COORD_UNSPECIFIED)
 			click.y = (rect.bottom - rect.top) / 2;
 	}
-	LPARAM lparam = MAKELPARAM(click.x, click.y);
 
 	UINT msg_down, msg_up;
 	WPARAM wparam, wparam_up = 0;
@@ -2523,6 +2522,7 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 
 	if (vk_is_wheel)
 	{
+		ClientToScreen(control_window, &click); // Wheel messages use screen coordinates.
 		wparam = (aClickCount * ((aVK == VK_WHEEL_UP) ? WHEEL_DELTA : -WHEEL_DELTA)) << 16;  // High order word contains the delta.
 		msg_down = WM_MOUSEWHEEL;
 		// Make the event more accurate by having the state of the keys reflected in the event.
@@ -2565,6 +2565,8 @@ ResultType Line::ControlClick(vk_type aVK, int aClickCount, LPTSTR aOptions, LPT
 			default: goto error; // Just do nothing since this should realistically never happen.
 		}
 	}
+
+	LPARAM lparam = MAKELPARAM(click.x, click.y);
 
 	// SetActiveWindow() requires ATTACH_THREAD_INPUT to succeed.  Even though the MSDN docs state
 	// that SetActiveWindow() has no effect unless the parent window is foreground, Jon insists
