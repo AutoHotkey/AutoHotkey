@@ -8460,7 +8460,10 @@ unquoted_literal:
 			{
 				// This substring is empty; can we optimize it out along with one concat op?
 				if (*cp == g_DerefChar)
-					cp++; // Skip the deref char, which otherwise produces SYM_LOW_CONCAT.
+					// Skip the deref char, which otherwise produces SYM_LOW_CONCAT.  Can't use cp++ because we need
+					// to ensure the value stored infix[].marker below doesn't end up pointing to an open parenthesis,
+					// such as for obj.%(methodexpr)%().  length can be repurposed because this deref will be discarded.
+					this_deref_ref.length = 1; 
 				else if (infix_count && infix[infix_count - 1].symbol == SYM_LOW_CONCAT)
 					infix_count--; // Undo the concat op.
 				else
