@@ -374,7 +374,7 @@ struct DerefType
 	{
 		Var *var; // DT_VAR
 		Func *func; // DT_FUNCREF
-		DerefType *next; // DT_STRING
+		bool terminal; // DT_STRING
 		SymbolType symbol; // DT_WORDOP
 		int int_value; // DT_CONST_INT
 	};

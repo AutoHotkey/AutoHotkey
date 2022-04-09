@@ -5513,7 +5513,7 @@ ResultType Script::ParseOperands(LPTSTR aArgText, LPTSTR aArgMap, DerefList &aDe
 				return FAIL;
 			DerefType &this_deref = *aDeref.Last();
 			this_deref.type = DT_QSTRING;
-			this_deref.next = NULL;
+			this_deref.terminal = true;
 			this_deref.marker = op_begin + 1;
 			this_deref.length = DerefLengthType(op_end - (op_begin + 1));
 			this_deref.substring_count = 1;
@@ -5652,7 +5652,6 @@ ResultType Script::ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefList &
 {
 	LPTSTR op_begin, dd_begin;
 	LPTSTR op_end;
-	DerefType *last = NULL;
 	int count = 0;
 	for (op_begin = dd_begin = aArgText + *aPos; ; op_begin = op_end + 1)
 	{
@@ -5664,17 +5663,13 @@ ResultType Script::ParseDoubleDeref(LPTSTR aArgText, LPTSTR aArgMap, DerefList &
 			return FAIL;
 		DerefType &this_deref = *aDeref.Last();
 		this_deref.type = DT_STRING;
-		this_deref.next = NULL;
+		this_deref.terminal = *op_end != g_DerefChar;
 		this_deref.marker = op_begin;
 		this_deref.length = DerefLengthType(op_end - op_begin);
 		this_deref.substring_count = ++count;
 
-		if (last)
-			last->next = &this_deref;
-		last = &this_deref;
-
 		*aPos = int(op_end - aArgText);
-		if (*op_end != g_DerefChar)
+		if (this_deref.terminal)
 			break;
 		(*aPos)++;
 		if (!ParseOperands(aArgText, aArgMap, aDeref, aPos, g_DerefChar))
@@ -8441,9 +8436,9 @@ unquoted_literal:
 		DerefType &this_deref_ref = *this_deref; // Boosts performance slightly.
 		if (this_deref_ref.type == DT_STRING || this_deref_ref.type == DT_QSTRING)
 		{
-			bool is_end_of_string = !this_deref_ref.next;
+			bool is_end_of_string = this_deref_ref.terminal;
 			bool is_start_of_string = this_deref_ref.substring_count == 1;
-			bool require_paren = this_deref_ref.substring_count > 1 || this_deref_ref.next;
+			bool require_paren = this_deref_ref.substring_count > 1 || !this_deref_ref.terminal;
 
 			cp = this_deref_ref.marker; // This is done in case omit_leading_whitespace() skipped over leading whitespace of a string.
 
@@ -8460,30 +8455,16 @@ unquoted_literal:
 				}
 			}
 
-			bool can_be_optimized_out = this_deref_ref.length == 0;
+			bool can_be_optimized_out = this_deref_ref.length == 0 && this_deref_ref.type != DT_QSTRING;
 			if (can_be_optimized_out)
 			{
-				// This substring is empty; can we optimize it out along with one concat op?  If this is a quoted
-				// string, at least one concat op must remain to ensure a SYM_STRING value is produced.
-				if (is_start_of_string && this_deref_ref.type == DT_QSTRING)
-				{
-					if (is_end_of_string // No second substring (this is just "").
-						|| !this_deref_ref.next->length && !this_deref_ref.next->next) // Only two substrings, and the second is also empty.
-						can_be_optimized_out = false;
-					// Otherwise: the second substring won't be optimized out, or there are more than
-					// two substrings; in either case there will be at least one concat op remaining.
-				}
-				// Otherwise: this isn't the first substring (so isn't required), or it's the first in a text arg,
-				// which will ultimately produce a string even if we optimize out all of the concat operations.
-				if (can_be_optimized_out)
-				{
-					if (*cp == g_DerefChar)
-						cp++; // Skip the deref char, which otherwise produces SYM_LOW_CONCAT.
-					else if (infix_count && infix[infix_count - 1].symbol == SYM_LOW_CONCAT)
-						infix_count--; // Undo the concat op.
-					else
-						can_be_optimized_out = false;
-				}
+				// This substring is empty; can we optimize it out along with one concat op?
+				if (*cp == g_DerefChar)
+					cp++; // Skip the deref char, which otherwise produces SYM_LOW_CONCAT.
+				else if (infix_count && infix[infix_count - 1].symbol == SYM_LOW_CONCAT)
+					infix_count--; // Undo the concat op.
+				else
+					can_be_optimized_out = false;
 			}
 
 			if (require_paren && is_start_of_string)
