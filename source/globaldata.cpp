@@ -228,7 +228,7 @@ ToggleValueType g_BlockInputMode = TOGGLE_DEFAULT;
 bool g_BlockInput = false;
 bool g_BlockMouseMove = false;
 
-// The order of initialization here must match the order in the enum contained in script.h
+// The order of initialization here must match the order in the enum contained in defines.h
 // It's in there rather than in globaldata.h so that the action-type constants can be referred
 // to without having access to the global array itself (i.e. it avoids having to include
 // globaldata.h in modules that only need access to the enum's constants, which in turn prevents
@@ -241,19 +241,31 @@ bool g_BlockMouseMove = false;
 // safest to always terminate these subarrays with an explicit zero, below.
 
 // STEPS TO ADD A NEW COMMAND:
-// 1) Add an entry to the command enum in script.h.
-// 2) Add an entry to the below array (it's position here MUST exactly match that in the enum).
-//    The first item is the command name, the second is the minimum number of parameters (e.g.
-//    if you enter 3, the first 3 args are mandatory) and the third is the maximum number of
-//    parameters (the user need not escape commas within the last parameter).
-//    The subarray should indicate the param numbers that must be numeric (first param is numbered 1,
-//    not zero).  That subarray should be terminated with an explicit zero to be safe and
+// 1) Add an entry to the command enum in defines.h.
+// 2) Add an entry to the below array (its position here MUST exactly match that in the enum).
+//    The first item is the command name.
+//
+//    The second is the minimum number of parameters (e.g. if you enter 3, the first 3 args are
+//    mandatory).
+//
+//    The third is the maximum number of parameters (the user need not escape commas within the
+//    last parameter).
+//
+//    The fourth is MaxParamsAu2WithHighBit, who's value is ignored other than to test for the high-bit
+//    set with the H macro, below. Commands with the high-bit set dynamically evaluate the length of
+//	  their parameters, which can be slower; see Line::ArgIndexLength().
+//
+//    The fifth element is a subarray which should indicate the param numbers that must be
+//    numeric (first param is numbered 1, not zero).
+//
+//    That subarray should be terminated with an explicit zero to be safe and
 //    so that the compiler will complain if the sub-array size needs to be increased to
 //    accommodate all the elements in the new sub-array, including room for its 0 terminator.
 //    Note: If you use a value for MinParams than is greater than zero, remember than any params
 //    beneath that threshold will also be required to be non-blank (i.e. user can't omit them even
 //    if later, non-blank params are provided).  UPDATE: For a parameter to recognize an expression
 //    such as x+100, it must be listed in the sub-array as a pure numeric parameter.
+//
 // 3) If the new command has any params that are output or input vars, change Line::ArgIsVar().
 // 4) Add any desired load-time validation in Script::AddLine() in an syntax-checking section.
 // 5) Implement the command in Line::Perform() or Line::EvaluateCondition (if it's an IF).
