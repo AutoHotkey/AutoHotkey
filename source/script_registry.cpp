@@ -325,7 +325,7 @@ ResultType Line::RegRead(HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 
 			int j = 0;
 			DWORD i, n; // i and n must be unsigned to work
-			TCHAR szHexData[] = _T("0123456789ABCDEF");  // Access to local vars might be faster than static ones.
+			static const TCHAR szHexData[] = _T("0123456789ABCDEF");
 			for (i = 0; i < dwRes; ++i)
 			{
 				n = pRegBuffer[i];				// Get the value and convert to 2 digit hex
