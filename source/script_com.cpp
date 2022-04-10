@@ -827,7 +827,7 @@ HRESULT TokenToVarType(ExprTokenType &aToken, VARTYPE aVarType, void *apValue, b
 	// the following would be to switch(aVarType) and copy using the appropriate pointer
 	// type, but disassembly shows that approach produces larger code and internally uses
 	// an array of sizes like this anyway:
-	static char vt_size[] = {U,U,2,4,4,8,8,8,P,P,4,2,U,P,U,U,1,1,2,4,8,8,4,4,U,U,U,U,U,U,U,U,U,U,U,U,U,P,P};
+	static const char vt_size[] = {U,U,2,4,4,8,8,8,P,P,4,2,U,P,U,U,1,1,2,4,8,8,4,4,U,U,U,U,U,U,U,U,U,U,U,U,U,P,P};
 	// Checking aCallerIsComValue has these purposes:
 	//  - Let ComValue() accept a raw pointer/integer value for VT_BYREF, VT_ARRAY and
 	//    any types not explicitly supported.
@@ -1552,36 +1552,70 @@ STDMETHODIMP IObjectComCompatible::GetTypeInfo(UINT itinfo, LCID lcid, ITypeInfo
 	return E_NOTIMPL;
 }
 
-static Array *g_IdToName;
-static Object *g_NameToId;
+static LPTSTR *sDispNameByIdMinus1;
+static DISPID *sDispIdSortByName;
+static DISPID sDispNameCount, sDispNameMax;
 
 STDMETHODIMP IObjectComCompatible::GetIDsOfNames(REFIID riid, LPOLESTR *rgszNames, UINT cNames, LCID lcid, DISPID *rgDispId)
 {
+	HRESULT result_on_success = cNames == 1 ? S_OK : DISP_E_UNKNOWNNAME;
+	for (UINT i = 0; i < cNames; ++i)
+		rgDispId[i] = DISPID_UNKNOWN;
+
 #ifdef UNICODE
 	LPTSTR name = *rgszNames;
 #else
 	CStringCharFromWChar name_buf(*rgszNames);
 	LPTSTR name = const_cast<LPTSTR>(name_buf.GetString());
 #endif
-	if ( !(g_IdToName || (g_IdToName = Array::Create())) ||
-		 !(g_NameToId || (g_NameToId = Object::Create())) )
-		return E_OUTOFMEMORY;
-	ExprTokenType id;
-	if (!g_NameToId->GetOwnProp(id, name))
+
+	int left, right, mid, result;
+	for (left = 0, right = sDispNameCount - 1; left <= right;)
 	{
-		if (!g_IdToName->Append(name))
-			return E_OUTOFMEMORY;
-		id.symbol = SYM_INTEGER;
-		id.value_int64 = g_IdToName->Length();
-		if (!g_NameToId->SetOwnProp(name, id))
-			return E_OUTOFMEMORY;
+		mid = (left + right) / 2;
+		// Comparison is case-sensitive so that the proper case of the name comes through for
+		// meta-functions or new assignments.  Using different case will produce a different ID,
+		// but the ID is ultimately mapped back to the name when the member is invoked anyway.
+		result = _tcscmp(name, sDispNameByIdMinus1[sDispIdSortByName[mid] - 1]);
+		if (result > 0)
+			left = mid + 1;
+		else if (result < 0)
+			right = mid - 1;
+		else // Match found.
+		{
+			*rgDispId = sDispIdSortByName[mid];
+			return result_on_success;
+		}
 	}
-	*rgDispId = (DISPID)id.value_int64;
-	if (cNames == 1)
-		return S_OK;
-	for (UINT i = 1; i < cNames; ++i)
-		rgDispId[i] = DISPID_UNKNOWN;
-	return DISP_E_UNKNOWNNAME;
+
+	if (sDispNameMax == sDispNameCount)
+	{
+		int new_max = sDispNameMax ? sDispNameMax * 2 : 16;
+		LPTSTR *new_names = (LPTSTR *)realloc(sDispNameByIdMinus1, new_max * sizeof(LPTSTR *));
+		if (!new_names)
+			return E_OUTOFMEMORY;
+		DISPID *new_ids = (DISPID *)realloc(sDispIdSortByName, new_max * sizeof(DISPID));
+		if (!new_ids)
+		{
+			free(new_names);
+			return E_OUTOFMEMORY;
+		}
+		sDispNameByIdMinus1 = new_names;
+		sDispIdSortByName = new_ids;
+		sDispNameMax = new_max;
+	}
+
+	LPTSTR name_copy = _tcsdup(name);
+	if (!name_copy)
+		return E_OUTOFMEMORY;
+
+	sDispNameByIdMinus1[sDispNameCount] = name_copy; // Put names in ID order; index = ID - 1.
+	if (left < sDispNameCount)
+		memmove(sDispIdSortByName + left + 1, sDispIdSortByName + left, (sDispNameCount - left) * sizeof(DISPID));
+	sDispIdSortByName[left] = ++sDispNameCount; // Insert ID in order sorted by name, for binary search.  ID = index + 1, to avoid DISPID_VALUE.
+
+	*rgDispId = sDispNameCount;
+	return result_on_success;
 }
 
 STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
@@ -1608,18 +1642,12 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	int param_count = cArgs;
 	LPTSTR name;
 	
-	if (dispIdMember > 0)
-	{
-		if (!g_IdToName->ItemToToken(dispIdMember - 1, param_token[0]))
-			return DISP_E_MEMBERNOTFOUND;
-		name = param_token[0].marker;
-	}
-	else
-	{
-		if (dispIdMember != DISPID_VALUE)
-			return DISP_E_MEMBERNOTFOUND;
+	if (dispIdMember > 0 && dispIdMember <= sDispNameCount)
+		name = sDispNameByIdMinus1[dispIdMember - 1];
+	else if (dispIdMember == DISPID_VALUE)
 		name = nullptr;
-	}
+	else
+		return DISP_E_MEMBERNOTFOUND;
 	
 	for (UINT i = 1; i <= cArgs; ++i)
 	{

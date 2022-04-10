@@ -15,7 +15,6 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#include <olectl.h> // for OleLoadPicture()
 #include <winioctl.h> // For PREVENT_MEDIA_REMOVAL and CD lock/unlock.
 #include "qmath.h" // Used by Transform() [math.h incurs 2k larger code size just for ceil() & floor()]
 #include "script.h"
@@ -1484,7 +1483,6 @@ BIF_DECL(BIF_ControlClick)
 		if (click.y == COORD_UNSPECIFIED)
 			click.y = (rect.bottom - rect.top) / 2;
 	}
-	LPARAM lparam = MAKELPARAM(click.x, click.y);
 
 	UINT msg_down, msg_up;
 	WPARAM wparam, wparam_up = 0;
@@ -1493,6 +1491,7 @@ BIF_DECL(BIF_ControlClick)
 
 	if (vk_is_wheel)
 	{
+		ClientToScreen(control_window, &click); // Wheel messages use screen coordinates.
 		wparam = (aClickCount * ((aVK == VK_WHEEL_UP) ? WHEEL_DELTA : -WHEEL_DELTA)) << 16;  // High order word contains the delta.
 		msg_down = WM_MOUSEWHEEL;
 		// Make the event more accurate by having the state of the keys reflected in the event.
@@ -1536,6 +1535,8 @@ BIF_DECL(BIF_ControlClick)
 				ASSERT(!"aVK value not handled");
 		}
 	}
+
+	LPARAM lparam = MAKELPARAM(click.x, click.y);
 
 	// SetActiveWindow() requires ATTACH_THREAD_INPUT to succeed.  Even though the MSDN docs state
 	// that SetActiveWindow() has no effect unless the parent window is foreground, Jon insists

@@ -1291,7 +1291,7 @@ bool MsgSleep(int aSleepDuration, MessageMode aMode)
 
 			default: // hotkey
 				if (IS_WHEEL_VK(hk->mVK)) // If this is true then also: msg.message==AHK_HOOK_HOTKEY
-					g.EventInfo = (DWORD)msg.lParam; // v1.0.43.03: Override the thread default of 0 with the number of notches by which the wheel was turned.
+					g.EventInfo = LOWORD(msg.lParam); // v1.0.43.03: Override the thread default of 0 with the number of notches by which the wheel was turned.
 					// Above also works for RunAgainAfterFinished since that feature reuses the same thread attributes set above.
 				g.hWndLastUsed = criterion_found_hwnd; // v1.0.42. Even if the window is invalid for some reason, IsWindow() and such are called whenever the script accesses it (GetValidLastUsedWindow()).
 				g.SendLevel = variant->mInputLevel;

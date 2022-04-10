@@ -44,7 +44,7 @@ AutoHotkeyx.vcxproj includes the following Platforms:
 
 AutoHotkey supports Windows XP with or without service packs and Windows 2000 via an asm patch (win2kcompat.asm).  Support may be removed if maintaining it becomes non-trivial.  Older versions are not supported.
 
-## AutoHotkey v2 Alpha  ##
+## AutoHotkey v2 Beta ##
 
 https://autohotkey.com/v2/
 

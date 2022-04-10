@@ -559,7 +559,7 @@ Script::Script()
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
 	, mScriptName(NULL)
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
-	, mIsRestart(false), mErrorStdOut(false), mErrorStdOutCP(-1)
+	, mIsRestart(false), mErrorStdOut(false), mErrorStdOutCP(0)
 #ifndef AUTOHOTKEYSC
 	, mValidateThenExit(false)
 	, mCmdLineInclude(NULL)
@@ -3928,7 +3928,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 
 		int i;
 
-		static LPTSTR sWarnTypes[] = { WARN_TYPE_STRINGS };
+		static const LPCTSTR sWarnTypes[] = { WARN_TYPE_STRINGS };
 		WarnType warnType = WARN_ALL; // Set default.
 		if (*parameter)
 		{
@@ -3942,7 +3942,7 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			warnType = (WarnType)i;
 		}
 
-		static LPTSTR sWarnModes[] = { WARN_MODE_STRINGS };
+		static const LPCTSTR sWarnModes[] = { WARN_MODE_STRINGS };
 		WarnMode warnMode = WARNMODE_MSGBOX; // Set default.
 		if (*param2)
 		{

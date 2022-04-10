@@ -202,7 +202,7 @@ ToggleValueType g_BlockInputMode = TOGGLE_DEFAULT;
 bool g_BlockInput = false;
 bool g_BlockMouseMove = false;
 
-// The order of initialization here must match the order in the enum contained in script.h
+// The order of initialization here must match the order in the enum contained in defines.h
 // It's in there rather than in globaldata.h so that the action-type constants can be referred
 // to without having access to the global array itself (i.e. it avoids having to include
 // globaldata.h in modules that only need access to the enum's constants, which in turn prevents
@@ -211,7 +211,7 @@ bool g_BlockMouseMove = false;
 // to separate the action-type-name from the first parameter.
 
 // STEPS TO ADD A NEW COMMAND:
-// 1) Add an entry to the command enum in script.h.
+// 1) Add an entry to the command enum in defines.h.
 // 2) Add an entry to the below array (it's position here MUST exactly match that in the enum).
 //    The first item is the command name, the second is the minimum number of parameters (e.g.
 //    if you enter 3, the first 3 args are mandatory) and the third is the maximum number of
