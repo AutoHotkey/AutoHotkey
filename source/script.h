@@ -1999,6 +1999,7 @@ public:
 	DWORD mTimeLastRun;  // TickCount
 	int mPriority;  // Thread priority relative to other threads, default 0.
 	UCHAR mExistingThreads;  // Whether this timer is already running its subroutine.
+	UCHAR mDeleteLocked;     // Lock count to prevent full deletion.  Separate to mExistingThreads so it doesn't prevent timer execution.
 	bool mEnabled;
 	bool mRunOnlyOnce;
 	ScriptTimer *mNextTimer;  // Next items in linked list
@@ -2008,6 +2009,7 @@ public:
 		: mCallback(aLabel), mPeriod(DEFAULT_TIMER_PERIOD), mPriority(0) // Default is always 0.
 		, mExistingThreads(0), mTimeLastRun(0)
 		, mEnabled(false), mRunOnlyOnce(false), mNextTimer(NULL)  // Note that mEnabled must default to false for the counts to be right.
+		, mDeleteLocked(0)
 	{}
 };
 

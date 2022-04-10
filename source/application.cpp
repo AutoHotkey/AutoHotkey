@@ -1623,14 +1623,25 @@ bool CheckScriptTimers()
 		timer.mCallback->ExecuteInNewThread(_T("Timer"));
 		--timer.mExistingThreads;
 
-		// Resolve the next timer only now, in case other timers were created or deleted while
-		// this timer was executing.  Must be done before the timer is potentially deleted below.
-		next_timer = timer.mNextTimer;
-		// Currently timers are disabled only when they can't be deleted (because they're
-		// running).  So now that this one has finished, check if it needs to be deleted.
-		// mExistingThreads==0 is implied at this point since timers are only allowed one thread.
-		if (!timer.mEnabled)
-			g_script.DeleteTimer(timer.mCallback->ToObject());
+		for (auto *this_timer = &timer; this_timer; this_timer = next_timer)
+		{
+			// Resolve the next timer only now, in case other timers were created or deleted while
+			// this timer was executing.  Must be done before the timer is potentially deleted below.
+			next_timer = this_timer->mNextTimer;
+			// Currently timers are disabled only when they can't be deleted (because they're
+			// running).  So now that this one has finished, check if it needs to be deleted.
+			if (this_timer->mEnabled || this_timer->mExistingThreads || this_timer->mDeleteLocked)
+				break;
+			if (next_timer)
+				next_timer->mDeleteLocked++; // Prevent next_timer from being deleted.
+			// The following call can trigger __delete, which can cause further changes to timers,
+			// either directly via SetTimer or via thread interruption.
+			g_script.DeleteTimer(this_timer->mCallback->ToObject());
+			if (next_timer)
+				next_timer->mDeleteLocked--; // Might still be non-zero due to thread interruption.
+			// Now also check next_timer, in case it was disabled while __delete was executing.
+		} // for() series of timers being deleted.
+		
 	} // for() each timer.
 
 	if (at_least_one_timer_launched) // Since at least one subroutine was run above, restore various values for our caller.
