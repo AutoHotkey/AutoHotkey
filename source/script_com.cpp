@@ -1548,36 +1548,70 @@ STDMETHODIMP IObjectComCompatible::GetTypeInfo(UINT itinfo, LCID lcid, ITypeInfo
 	return E_NOTIMPL;
 }
 
-static Object *g_IdToName;
-static Object *g_NameToId;
+static LPTSTR *sDispNameByIdMinus1;
+static DISPID *sDispIdSortByName;
+static DISPID sDispNameCount, sDispNameMax;
 
 STDMETHODIMP IObjectComCompatible::GetIDsOfNames(REFIID riid, LPOLESTR *rgszNames, UINT cNames, LCID lcid, DISPID *rgDispId)
 {
+	HRESULT result_on_success = cNames == 1 ? S_OK : DISP_E_UNKNOWNNAME;
+	for (UINT i = 0; i < cNames; ++i)
+		rgDispId[i] = DISPID_UNKNOWN;
+
 #ifdef UNICODE
 	LPTSTR name = *rgszNames;
 #else
 	CStringCharFromWChar name_buf(*rgszNames);
 	LPTSTR name = const_cast<LPTSTR>(name_buf.GetString());
 #endif
-	if ( !(g_IdToName || (g_IdToName = Object::Create())) ||
-		 !(g_NameToId || (g_NameToId = Object::Create())) )
-		return E_OUTOFMEMORY;
-	ExprTokenType id;
-	if (!g_NameToId->GetItem(id, name))
+
+	int left, right, mid, result;
+	for (left = 0, right = sDispNameCount - 1; left <= right;)
 	{
-		if (!g_IdToName->Append(name))
-			return E_OUTOFMEMORY;
-		id.symbol = SYM_INTEGER;
-		id.value_int64 = g_IdToName->GetNumericItemCount();
-		if (!g_NameToId->SetItem(name, id))
-			return E_OUTOFMEMORY;
+		mid = (left + right) / 2;
+		// Comparison is case-sensitive so that the proper case of the name comes through for
+		// meta-functions or new assignments.  Using different case will produce a different ID,
+		// but the ID is ultimately mapped back to the name when the member is invoked anyway.
+		result = _tcscmp(name, sDispNameByIdMinus1[sDispIdSortByName[mid] - 1]);
+		if (result > 0)
+			left = mid + 1;
+		else if (result < 0)
+			right = mid - 1;
+		else // Match found.
+		{
+			*rgDispId = sDispIdSortByName[mid];
+			return result_on_success;
+		}
 	}
-	*rgDispId = (DISPID)id.value_int64;
-	if (cNames == 1)
-		return S_OK;
-	for (UINT i = 1; i < cNames; ++i)
-		rgDispId[i] = DISPID_UNKNOWN;
-	return DISP_E_UNKNOWNNAME;
+
+	if (sDispNameMax == sDispNameCount)
+	{
+		int new_max = sDispNameMax ? sDispNameMax * 2 : 16;
+		LPTSTR *new_names = (LPTSTR *)realloc(sDispNameByIdMinus1, new_max * sizeof(LPTSTR *));
+		if (!new_names)
+			return E_OUTOFMEMORY;
+		DISPID *new_ids = (DISPID *)realloc(sDispIdSortByName, new_max * sizeof(DISPID));
+		if (!new_ids)
+		{
+			free(new_names);
+			return E_OUTOFMEMORY;
+		}
+		sDispNameByIdMinus1 = new_names;
+		sDispIdSortByName = new_ids;
+		sDispNameMax = new_max;
+	}
+
+	LPTSTR name_copy = _tcsdup(name);
+	if (!name_copy)
+		return E_OUTOFMEMORY;
+
+	sDispNameByIdMinus1[sDispNameCount] = name_copy; // Put names in ID order; index = ID - 1.
+	if (left < sDispNameCount)
+		memmove(sDispIdSortByName + left + 1, sDispIdSortByName + left, (sDispNameCount - left) * sizeof(DISPID));
+	sDispIdSortByName[left] = ++sDispNameCount; // Insert ID in order sorted by name, for binary search.  ID = index + 1, to avoid DISPID_VALUE.
+
+	*rgDispId = sDispNameCount;
+	return result_on_success;
 }
 
 STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID lcid, WORD wFlags, DISPPARAMS *pDispParams, VARIANT *pVarResult, EXCEPINFO *pExcepInfo, UINT *puArgErr)
@@ -1605,15 +1639,16 @@ STDMETHODIMP IObjectComCompatible::Invoke(DISPID dispIdMember, REFIID riid, LCID
 	ExprTokenType **first_param = param;
 	int param_count = cArgs;
 	
-	if (dispIdMember > 0)
+	if (dispIdMember > 0 && dispIdMember <= sDispNameCount)
 	{
-		if (!g_IdToName->GetItemOffset(param_token[0], dispIdMember - 1))
-			return DISP_E_MEMBERNOTFOUND;
+		param_token[0].marker = sDispNameByIdMinus1[dispIdMember - 1];
 		if (IsPureNumeric(param_token[0].marker, FALSE, FALSE)) // o[1] in JScript produces a numeric name.
 		{
 			param_token[0].symbol = SYM_INTEGER;
 			param_token[0].value_int64 = ATOI(param_token[0].marker);
 		}
+		else
+			param_token[0].symbol = SYM_STRING;
 		param[0] = &param_token[0];
 		++param_count;
 		if (flags == IT_CALL && (wFlags & DISPATCH_PROPERTYGET))
