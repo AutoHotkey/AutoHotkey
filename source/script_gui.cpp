@@ -2607,6 +2607,8 @@ ResultType GuiType::SetName(LPTSTR aName)
 		if (!aName)
 			return MemoryError();
 	}
+	else
+		aName = nullptr;
 	free(mName);
 	mName = aName;
 	return OK;
