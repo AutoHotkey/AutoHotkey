@@ -3748,7 +3748,8 @@ void Script::DeleteTimer(IObject *aLabel)
 			// Disable it, even if it's not technically being deleted yet.
 			if (timer->mEnabled)
 				timer->Disable(); // Keeps track of mTimerEnabledCount and whether the main timer is needed.
-			if (timer->mExistingThreads) // This condition differs from g->CurrentTimer == timer, which only detects the "top-most" timer.
+			if (timer->mExistingThreads // This condition differs from g->CurrentTimer == timer, which only detects the "top-most" timer.
+				|| timer->mDeleteLocked)
 			{
 				if (!aLabel) // Caller requested we delete a previously marked timer which
 					continue; // has now finished, but this one hasn't, so keep looking.

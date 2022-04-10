@@ -1824,25 +1824,40 @@ bool CheckScriptTimers()
 		timer.mLabel->ExecuteInNewThread(_T("Timer"));
 		--timer.mExistingThreads;
 
-		// Resolve the next timer only now, in case other timers were created or deleted while
-		// this timer was executing.  Must be done before the timer is potentially deleted below.
-		next_timer = timer.mNextTimer;
-		// If this is a run-once timer for a live reference-counted object (i.e. not a Label or
-		// Func, which can never be deleted), delete the timer.  Otherwise, there's a high risk
-		// that the script will leak objects, because if the object is only referenced by the
-		// timer list, there's no way to re-enable it.  By contrast, a Label or Func can be
-		// referenced by name, and a repeating timer can self-reference during execution.
-		// It is tempting to do this only when mRefCount == 1 (for backward-compatibility),
-		// but that would only work if the script releases its last reference to the object
-		// *before* the timer expires.
-		// mEnabled is checked in case the timer re-enabled itself.
-		if (timer.mRunOnlyOnce && !timer.mEnabled && timer.mLabel.IsLiveObject())
-			timer.mLabel = NULL;
-		// If the script attempted to delete this timer while it was executing, mLabel was set
-		// to NULL and it is now time to delete the timer.  mExistingThreads == 0 is implied
-		// at this point since timers are only allowed one thread.
-		if (timer.mLabel == NULL)
-			g_script.DeleteTimer(NULL);
+		for (auto *this_timer = &timer; this_timer; this_timer = next_timer)
+		{
+			// Resolve the next timer only now, in case other timers were created or deleted while
+			// this timer was executing.  Must be done before the timer is potentially deleted below.
+			next_timer = this_timer->mNextTimer;
+
+			// Check initial eligibility of this timer to be deleted.
+			if (this_timer->mEnabled || this_timer->mExistingThreads || this_timer->mDeleteLocked)
+				break;
+			if (next_timer)
+				next_timer->mDeleteLocked++; // Prevent next_timer from being deleted.
+
+			// If this is a run-once timer for a live reference-counted object (i.e. not a Label or
+			// Func, which can never be deleted), delete the timer.  Otherwise, there's a high risk
+			// that the script will leak objects, because if the object is only referenced by the
+			// timer list, there's no way to re-enable it.  By contrast, a Label or Func can be
+			// referenced by name, and a repeating timer can self-reference during execution.
+			// It is tempting to do this only when mRefCount == 1 (for backward-compatibility),
+			// but that would only work if the script releases its last reference to the object
+			// *before* the timer expires.
+			if (this_timer == &timer && timer.mRunOnlyOnce && timer.mLabel.IsLiveObject())
+				timer.mLabel = NULL; // This might cause __delete to execute.
+
+			// If the script attempted to delete this timer while it was executing, mLabel was set
+			// to NULL and it is now time to delete the timer.  mExistingThreads == 0 is implied
+			// at this point since timers are only allowed one thread.
+			if (this_timer->mLabel == NULL)
+				g_script.DeleteTimer(NULL);
+
+			if (next_timer)
+				next_timer->mDeleteLocked--; // Might still be non-zero due to thread interruption.
+			// Now also check next_timer, in case it was disabled while __delete was executing.
+		} // for() series of timers being deleted.
+
 	} // for() each timer.
 
 	if (at_least_one_timer_launched) // Since at least one subroutine was run above, restore various values for our caller.
