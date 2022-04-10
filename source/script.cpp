@@ -248,7 +248,7 @@ Script::Script()
 	, mCurrFileIndex(0), mCombinedLineNumber(0), mNoHotkeyLabels(true), mMenuUseErrorLevel(false)
 	, mFileSpec(_T("")), mFileDir(_T("")), mFileName(_T("")), mOurEXE(_T("")), mOurEXEDir(_T("")), mMainWindowTitle(_T(""))
 	, mIsReadyToExecute(false), mAutoExecSectionIsRunning(false)
-	, mIsRestart(false), mErrorStdOut(false), mErrorStdOutCP(-1)
+	, mIsRestart(false), mErrorStdOut(false), mErrorStdOutCP(0)
 #ifndef AUTOHOTKEYSC
 	, mIncludeLibraryFunctionsThenExit(NULL)
 #endif
