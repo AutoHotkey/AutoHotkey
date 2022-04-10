@@ -10183,7 +10183,10 @@ ResultType Line::ExecUntil(ExecUntilMode aMode, ResultToken *aResultToken, Line 
 				// error will be reported.  The idea of calling UnhandledException early is that OnError can
 				// attach a debugger which can inspect the stack before it unwinds, but at this point it has
 				// already partially unwound.
-				return g_script.UnhandledException(line);
+				// mCurrLine is more likely to be relevant than `line`, which at this point is probably the
+				// line after the TRY/ELSE.  This is only used if ThrownToken doesn't have valid File/Line
+				// properties; i.e. it's not a proper Error, so it's something not intended for error-reporting.
+				return g_script.UnhandledException(g_script.mCurrLine);
 			}
 			
 			if (aMode == ONLY_ONE_LINE || result != OK)
@@ -13255,15 +13258,12 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 	else
 	{
 		// Assume it's a string or number.
-		message = TokenToString(*g.ThrownToken, message_buf);
+		extra = TokenToString(*g.ThrownToken, message_buf);
 	}
 
-	// If message is empty or numeric, display a default message for clarity.
-	if (!*extra && IsNumeric(message, TRUE, TRUE, TRUE))
-	{
-		extra = message;
+	// If message is empty (or a string or number was thrown), display a default message for clarity.
+	if (!*message)
 		message = _T("Unhandled exception.");
-	}	
 
 	TCHAR buf[MSGBOX_TEXT_SIZE];
 	FormatError(buf, _countof(buf), aErrorType, message, extra, aLine);
