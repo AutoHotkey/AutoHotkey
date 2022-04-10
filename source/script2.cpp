@@ -6465,6 +6465,7 @@ BIF_DECL(BIF_Sort)
 			aResultToken.ParamError(2, aParam[2]);
 			goto end;
 		}
+		g_SortFunc->AddRef(); // Must be done in case the parameter was SYM_VAR and that var gets reassigned.
 	}
 	
 	if (!*aContents) // Input is empty, nothing to sort, return empty string.
