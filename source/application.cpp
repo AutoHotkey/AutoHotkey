@@ -1828,11 +1828,16 @@ bool CheckScriptTimers()
 		{
 			// Resolve the next timer only now, in case other timers were created or deleted while
 			// this timer was executing.  Must be done before the timer is potentially deleted below.
-			next_timer = this_timer->mNextTimer;
 
 			// Check initial eligibility of this timer to be deleted.
 			if (this_timer->mEnabled || this_timer->mExistingThreads || this_timer->mDeleteLocked)
+			{
+				if (this_timer == &timer) // If this_timer itself has just executed.
+					next_timer = this_timer->mNextTimer;
+				//else leave next_timer == this_timer, in case it is ready to execute.
 				break;
+			}
+			next_timer = this_timer->mNextTimer;
 			if (next_timer)
 				next_timer->mDeleteLocked++; // Prevent next_timer from being deleted.
 
