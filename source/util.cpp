@@ -1644,22 +1644,6 @@ void CoordToScreen(POINT &aPoint, int aWhichMode)
 
 
 
-void GetVirtualDesktopRect(RECT &aRect)
-{
-	aRect.right = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-	if (aRect.right) // A non-zero value indicates the OS supports multiple monitors or at least SM_CXVIRTUALSCREEN.
-	{
-		aRect.left = GetSystemMetrics(SM_XVIRTUALSCREEN);  // Might be negative or greater than zero.
-		aRect.right += aRect.left;
-		aRect.top = GetSystemMetrics(SM_YVIRTUALSCREEN);   // Might be negative or greater than zero.
-		aRect.bottom = aRect.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
-	}
-	else // Win95/NT do not support SM_CXVIRTUALSCREEN and such, so zero was returned.
-		GetWindowRect(GetDesktopWindow(), &aRect);
-}
-
-
-
 DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf)
 // Returns the length of what has been copied into aBuf, not including the null terminator.
 // Caller has ensured that aBuf is large enough (though anything >=32767 is always large enough).

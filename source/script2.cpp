@@ -738,10 +738,6 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 		return OK;
 	}
 
-	// Use virtual desktop so that tooltip can move onto non-primary monitor in a multi-monitor system:
-	RECT dtw;
-	GetVirtualDesktopRect(dtw);
-
 	bool one_or_both_coords_unspecified = !*aX || !*aY;
 	POINT pt, pt_cursor;
 	if (one_or_both_coords_unspecified)
@@ -770,6 +766,15 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 	if (*aY)
 		pt.y = ATOI(aY) + origin.y;
 
+	HMONITOR hmon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+	MONITORINFO mi;
+	mi.cbSize = sizeof(mi);
+	GetMonitorInfo(hmon, &mi);
+	// v1.1.34: Use work area to avoid trying to overlap the taskbar on newer OSes, which otherwise
+	// would cause the tooltip to appear at the top of the screen instead of the position we specify.
+	// This was observed on Windows 10 and 11, and confirmed to not apply to Windows 7 or XP.
+	RECT dtw = g_os.IsWin8orLater() ? mi.rcWork : mi.rcMonitor;
+
 	TOOLINFO ti = {0};
 	ti.cbSize = sizeof(ti) - sizeof(void *); // Fixed for v1.0.36.05: Tooltips fail to work on Windows 2000 unless the size for the *lpReserved member in _WIN32_WINNT 0x0501 is omitted.
 	ti.uFlags = TTF_TRACK;
@@ -792,16 +797,27 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 
 	// v1.0.40.12: Added the IsWindow() check below to recreate the tooltip in cases where it was destroyed
 	// by external means such as Alt-F4 or WinClose.
-	if (!tip_hwnd || !IsWindow(tip_hwnd))
+	bool newly_created = !tip_hwnd || !IsWindow(tip_hwnd);
+	if (newly_created)
 	{
 		// This this window has no owner, it won't be automatically destroyed when its owner is.
 		// Thus, it will be explicitly by the program's exit function.
 		tip_hwnd = g_hWndToolTip[window_index] = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL, TTS_NOPREFIX | TTS_ALWAYSTIP
 			, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, NULL, NULL);
 		SendMessage(tip_hwnd, TTM_ADDTOOL, 0, (LPARAM)(LPTOOLINFO)&ti);
-		// v1.0.21: GetSystemMetrics(SM_CXSCREEN) is used for the maximum width because even on a
-		// multi-monitor system, most users would not want a tip window to stretch across multiple monitors:
-		SendMessage(tip_hwnd, TTM_SETMAXTIPWIDTH, 0, (LPARAM)GetSystemMetrics(SM_CXSCREEN));
+	}
+
+	// v1.1.34: Fixed to use the appropriate monitor, in case it's sized differently to the primary.
+	// Also fixed to account for incorrect DPI scaling done by the tooltip control; i.e. a value of
+	// n ends up allowing tooltips n*g_ScreenDPI/96 pixels wide.  TTM_SETMAXTIPWIDTH seems to want
+	// the max text width, not the max window width, so adjust for that.  Do this every time since
+	// the tooltip might be moving between screens of different sizes.
+	RECT text_rect = dtw;
+	SendMessage(tip_hwnd, TTM_ADJUSTRECT, FALSE, (LPARAM)&text_rect);
+	SendMessage(tip_hwnd, TTM_SETMAXTIPWIDTH, 0, (LPARAM)((text_rect.right - text_rect.left) * 96 / g_ScreenDPI));
+
+	if (newly_created)
+	{
 		// Must do these next two when the window is first created, otherwise GetWindowRect() below will retrieve
 		// a tooltip window size that is quite a bit taller than it winds up being:
 		SendMessage(tip_hwnd, TTM_TRACKPOSITION, 0, (LPARAM)MAKELONG(pt.x, pt.y));
