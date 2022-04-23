@@ -453,14 +453,10 @@ void GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTy
 		{
 			RECT rect;
 			if (member == M_GetPos)
-			{
 				GetWindowRect(mHwnd, &rect);
-			}
 			else
-			{
 				GetClientRect(mHwnd, &rect);
-				MapWindowPoints(mHwnd, NULL, (LPPOINT)&rect, 2);
-			}
+			MapWindowPoints(member == M_GetPos ? NULL : mHwnd, mOwner, (LPPOINT)&rect, 2);
 			return MethodGetPos(aResultToken, aParam, aParamCount, rect);
 		}
 		case M_Move:
