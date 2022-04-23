@@ -474,6 +474,8 @@ void GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTy
 			GetWindowRect(mHwnd, &rect);
 			rect.right -= rect.left; // Convert to width.
 			rect.bottom -= rect.top; // Convert to height.
+			if (HWND parent = GetParent(mHwnd)) // Allow for +Parent.
+				ScreenToClient(parent, (LPPOINT)&rect); // Must do this before the loop, as coord[] already contains client coords.
 			for (int i = 0; i < aParamCount; ++i)
 				if (coord[i] != COORD_UNSPECIFIED)
 					((int *)&rect)[i] = Scale(coord[i]);
@@ -7465,6 +7467,8 @@ ResultType GuiType::Show(LPTSTR aOptions)
 			// it might not be valid to reposition a maximized window without unmaximizing it?)
 			if (IsZoomed(mHwnd)) // Call IsZoomed() again in case above changed the state. No need to check IsIconic() because above already set default show-mode to SW_RESTORE for such windows.
 				ShowWindow(mHwnd, SW_RESTORE); // But restore isn't done for something like "Gui, Show, Center" because it's too obscure and might reduce flexibility (debatable).
+			if (is_child_window)
+				ScreenToClient(mOwner, (LPPOINT)&old_rect); // Make the old coords relative to parent.
 			MoveWindow(mHwnd, x == COORD_UNSPECIFIED ? old_rect.left : x, y == COORD_UNSPECIFIED ? old_rect.top : y
 				, width, height, is_visible);  // Do repaint if window is visible.
 		}
