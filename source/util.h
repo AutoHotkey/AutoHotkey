@@ -772,6 +772,8 @@ BOOL IsOS64Bit();
 LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd, DWORD aExtraAccess = 0);
 void FreeInterProcMem(HANDLE aHandle, LPVOID aMem);
 
+bool ToolTipTextEquals(HWND aToolTipHwnd, LPCTSTR aText);
+
 DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf);
 DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, DWORD aBufSize, DWORD aFlag = 0);
 

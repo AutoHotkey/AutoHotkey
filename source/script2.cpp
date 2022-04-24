@@ -829,7 +829,10 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 	// 1) Windows XP;
 	// 2) Common controls v6 (via manifest);
 	// 3) "Control Panel >> Display >> Effects >> Use transition >> Fade effect" setting is in effect.
-	SendMessage(tip_hwnd, TTM_UPDATETIPTEXT, 0, (LPARAM)&ti);
+	// v1.1.34: Avoid TTM_UPDATETIPTEXT if the text hasn't changed, to reduce flicker.  The behaviour described
+	// above could not be replicated, EVEN ON WINDOWS XP.  Whether it was ever observed on other OSes is unknown.
+	if (!newly_created && !ToolTipTextEquals(tip_hwnd, aText))
+		SendMessage(tip_hwnd, TTM_UPDATETIPTEXT, 0, (LPARAM)&ti);
 
 	RECT ttw = {0};
 	GetWindowRect(tip_hwnd, &ttw); // Must be called this late to ensure the tooltip has been created by above.
@@ -883,6 +886,10 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 		}
 	}
 
+	// These messages seem to cause a complete update of the tooltip, which is slow and causes flickering.
+	// It is tempting to use SetWindowPos() instead to speed things up, but if TTM_TRACKPOSITION isn't
+	// sent each time, the next TTM_UPDATETIPTEXT message will move it back to whatever position was set
+	// with TTM_TRACKPOSITION last.
 	SendMessage(tip_hwnd, TTM_TRACKPOSITION, 0, (LPARAM)MAKELONG(pt.x, pt.y));
 	// And do a TTM_TRACKACTIVATE even if the tooltip window already existed upon entry to this function,
 	// so that in case it was hidden or dismissed while its HWND still exists, it will be shown again:

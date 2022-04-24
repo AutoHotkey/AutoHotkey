@@ -1824,6 +1824,24 @@ void FreeInterProcMem(HANDLE aHandle, LPVOID aMem)
 
 
 
+// Returns true if a tooltip created by ToolTip already has the given text.
+// MUST NOT call on Windows XP or earlier, due to limitations of TTM_GETTEXT there.
+bool ToolTipTextEquals(HWND aToolTipHwnd, LPCTSTR aText)
+{
+	TOOLINFO ti;
+	ti.cbSize = sizeof(ti);
+	ti.hwnd = NULL;
+	ti.uId = 0;
+	size_t len = _tcslen(aText);
+	LPTSTR buf = ti.lpszText = (LPTSTR)_malloca((len + 2) * sizeof(TCHAR));
+	SendMessage(aToolTipHwnd, TTM_GETTEXT, len + 2, (LPARAM)&ti);
+	bool is_equal = !_tcscmp(aText, buf);
+	_freea(buf);
+	return is_equal;
+}
+
+
+
 HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
 	, bool aUseGDIPlusIfAvailable, bool *apNoDelete, HMODULE *apModule)
 // Returns NULL on failure.
