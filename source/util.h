@@ -708,11 +708,12 @@ bool FontExist(HDC aHdc, LPCTSTR aTypeface);
 void ScreenToWindow(POINT &aPoint, HWND aHwnd);
 void CoordToScreen(int &aX, int &aY, int aWhichMode);
 void CoordToScreen(POINT &aPoint, int aWhichMode);
-void GetVirtualDesktopRect(RECT &aRect);
 BOOL IsProcess64Bit(HANDLE aHandle);
 BOOL IsOS64Bit();
 LPVOID AllocInterProcMem(HANDLE &aHandle, DWORD aSize, HWND aHwnd, DWORD aExtraAccess = 0);
 void FreeInterProcMem(HANDLE aHandle, LPVOID aMem);
+
+bool ToolTipTextEquals(HWND aToolTipHwnd, LPCTSTR aText);
 
 DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf);
 DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, DWORD aBufSize, DWORD aFlag = 0);

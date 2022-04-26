@@ -66,10 +66,6 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 		return OK;
 	}
 
-	// Use virtual desktop so that tooltip can move onto non-primary monitor in a multi-monitor system:
-	RECT dtw;
-	GetVirtualDesktopRect(dtw);
-
 	bool one_or_both_coords_unspecified = !*aX || !*aY;
 	POINT pt, pt_cursor;
 	if (one_or_both_coords_unspecified)
@@ -98,6 +94,15 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 	if (*aY)
 		pt.y = ATOI(aY) + origin.y;
 
+	HMONITOR hmon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+	MONITORINFO mi;
+	mi.cbSize = sizeof(mi);
+	GetMonitorInfo(hmon, &mi);
+	// v1.1.34: Use work area to avoid trying to overlap the taskbar on newer OSes, which otherwise
+	// would cause the tooltip to appear at the top of the screen instead of the position we specify.
+	// This was observed on Windows 10 and 11, and confirmed to not apply to Windows 7 or XP.
+	RECT dtw = g_os.IsWin8orLater() ? mi.rcWork : mi.rcMonitor;
+
 	TOOLINFO ti = {0};
 	ti.cbSize = sizeof(ti);
 	ti.uFlags = TTF_TRACK;
@@ -120,16 +125,27 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 
 	// v1.0.40.12: Added the IsWindow() check below to recreate the tooltip in cases where it was destroyed
 	// by external means such as Alt-F4 or WinClose.
-	if (!tip_hwnd || !IsWindow(tip_hwnd))
+	bool newly_created = !tip_hwnd || !IsWindow(tip_hwnd);
+	if (newly_created)
 	{
 		// This this window has no owner, it won't be automatically destroyed when its owner is.
 		// Thus, it will be explicitly by the program's exit function.
 		tip_hwnd = g_hWndToolTip[window_index] = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL, TTS_NOPREFIX | TTS_ALWAYSTIP
 			, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, NULL, NULL);
 		SendMessage(tip_hwnd, TTM_ADDTOOL, 0, (LPARAM)(LPTOOLINFO)&ti);
-		// v1.0.21: GetSystemMetrics(SM_CXSCREEN) is used for the maximum width because even on a
-		// multi-monitor system, most users would not want a tip window to stretch across multiple monitors:
-		SendMessage(tip_hwnd, TTM_SETMAXTIPWIDTH, 0, (LPARAM)GetSystemMetrics(SM_CXSCREEN));
+	}
+
+	// v1.1.34: Fixed to use the appropriate monitor, in case it's sized differently to the primary.
+	// Also fixed to account for incorrect DPI scaling done by the tooltip control; i.e. a value of
+	// n ends up allowing tooltips n*g_ScreenDPI/96 pixels wide.  TTM_SETMAXTIPWIDTH seems to want
+	// the max text width, not the max window width, so adjust for that.  Do this every time since
+	// the tooltip might be moving between screens of different sizes.
+	RECT text_rect = dtw;
+	SendMessage(tip_hwnd, TTM_ADJUSTRECT, FALSE, (LPARAM)&text_rect);
+	SendMessage(tip_hwnd, TTM_SETMAXTIPWIDTH, 0, (LPARAM)((text_rect.right - text_rect.left) * 96 / g_ScreenDPI));
+
+	if (newly_created)
+	{
 		// Must do these next two when the window is first created, otherwise GetWindowRect() below will retrieve
 		// a tooltip window size that is quite a bit taller than it winds up being:
 		SendMessage(tip_hwnd, TTM_TRACKPOSITION, 0, (LPARAM)MAKELONG(pt.x, pt.y));
@@ -141,7 +157,10 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 	// 1) Windows XP;
 	// 2) Common controls v6 (via manifest);
 	// 3) "Control Panel >> Display >> Effects >> Use transition >> Fade effect" setting is in effect.
-	SendMessage(tip_hwnd, TTM_UPDATETIPTEXT, 0, (LPARAM)&ti);
+	// v1.1.34: Avoid TTM_UPDATETIPTEXT if the text hasn't changed, to reduce flicker.  The behaviour described
+	// above could not be replicated, EVEN ON WINDOWS XP.  Whether it was ever observed on other OSes is unknown.
+	if (!newly_created && !ToolTipTextEquals(tip_hwnd, aText))
+		SendMessage(tip_hwnd, TTM_UPDATETIPTEXT, 0, (LPARAM)&ti);
 
 	RECT ttw = {0};
 	GetWindowRect(tip_hwnd, &ttw); // Must be called this late to ensure the tooltip has been created by above.
@@ -195,6 +214,10 @@ ResultType Line::ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID)
 		}
 	}
 
+	// These messages seem to cause a complete update of the tooltip, which is slow and causes flickering.
+	// It is tempting to use SetWindowPos() instead to speed things up, but if TTM_TRACKPOSITION isn't
+	// sent each time, the next TTM_UPDATETIPTEXT message will move it back to whatever position was set
+	// with TTM_TRACKPOSITION last.
 	SendMessage(tip_hwnd, TTM_TRACKPOSITION, 0, (LPARAM)MAKELONG(pt.x, pt.y));
 	// And do a TTM_TRACKACTIVATE even if the tooltip window already existed upon entry to this function,
 	// so that in case it was hidden or dismissed while its HWND still exists, it will be shown again:

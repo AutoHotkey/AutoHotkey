@@ -36,6 +36,7 @@ public:
 	bool	IsWinVista(void) {return m_bWinVista;}				// Returns true if WinVista (v1.0.44.13)
 	bool	IsWin7(void) {return m_bWin7; }						// Returns true if Win7
 	bool	IsWin8(void) {return m_bWin8; }						// Returns true if Win8
+	bool	IsWin8orLater() {return m_dwMajorVersion > 6 || m_dwMinorVersion > 1;}
 	bool	IsWin8_1(void) {return m_bWin8_1; }					// Returns true if Win8.1
 	bool	IsWin7OrLater(void) {return m_bWin7OrLater; }		// Returns true if Win7+
 	bool	IsWin10OrLater(void) {return m_dwMajorVersion >= 10;} // Excludes early pre-release builds.
