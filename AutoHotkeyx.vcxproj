@@ -333,7 +333,7 @@
       <Output PropertyName="GitDescription" TaskParameter="ConsoleOutput" />
     </Exec>
     <PropertyGroup Condition="'$(GitDescription)'!='' and '$(GitDescription.Substring(0,1))'=='v'">
-      <RawAhkVersion>$(GitDescription.Substring(1).Replace("-g", "+"))</RawAhkVersion>
+      <RawAhkVersion>$([System.Text.RegularExpressions.Regex]::Replace($(GitDescription.Substring(1)), "-(?=\d+-)|-g|-dirty$", "+"))</RawAhkVersion>
     </PropertyGroup>
     <Message Text="RAW_AHK_VERSION sourced from git: '$(RawAhkVersion)'" Importance="high" />
     <ItemGroup Condition="'$(RawAhkVersion)'!=''">
