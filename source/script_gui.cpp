@@ -419,6 +419,13 @@ void GuiType::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenTy
 				margin = Scale(ParamIndexToInt(0)); // Seems okay to allow negative margins.
 				return;
 			}
+			if (margin == COORD_UNSPECIFIED)
+			{
+				// Avoid returning an arbitrary value such as COORD_UNSPECIFIED or -1 (Unscale(COORD_UNSPECIFIED)).
+				// Instead, set the default margins if MarginX or MarginY is queried without having first been set,
+				// prior to adding any controls.
+				SetDefaultMargins();
+			}
 			_o_return(Unscale(margin));
 		}
 		case P_BackColor:
@@ -2734,16 +2741,7 @@ ResultType GuiType::AddControl(GuiControls aControlType, LPTSTR aOptions, LPTSTR
 	// of the current font, but only if the margins haven't already been set:
 	if (!mControlCount)
 	{
-		// The original default mMarginX was documented as "1.25 times font-height", which is
-		// confusing because font-height is in points while mMarginX is in pixels.  It's kept
-		// at this value anyway since it seems to work well.  The calculation below uses a
-		// factor relative to 72 vs. denominator of 96 to emulate pixel-to-point conversion.
-		// 96 is used even when DPI != 100% so that the scaling performed by point-to-pixel
-		// conversion is kept (lfHeight is already proportionate to screen DPI).
-		if (mMarginX == COORD_UNSPECIFIED)
-			mMarginX = MulDiv(sFont[mCurrentFontIndex].lfHeight, -90, 96); // Seems to be a good rule of thumb.  Originally 1.25 * point_size.
-		if (mMarginY == COORD_UNSPECIFIED)
-			mMarginY = MulDiv(sFont[mCurrentFontIndex].lfHeight, -54, 96); // Also seems good.  Originally 0.75 * point_size.
+		SetDefaultMargins();
 		mPrevX = mMarginX;  // This makes first control be positioned correctly if it lacks both X & Y coords.
 	}
 
@@ -10974,4 +10972,20 @@ bool GuiType::ConvertAccelerator(LPTSTR aString, ACCEL &aAccel)
 		aAccel.fVirt |= FSHIFT;
 
 	return aAccel.key; // i.e. false if not a valid key name.
+}
+
+
+
+void GuiType::SetDefaultMargins()
+{
+	// The original default mMarginX was documented as "1.25 times font-height", which is
+	// confusing because font-height is in points while mMarginX is in pixels.  It's kept
+	// at this value anyway since it seems to work well.  The calculation below uses a
+	// factor relative to 72 vs. denominator of 96 to emulate pixel-to-point conversion.
+	// 96 is used even when DPI != 100% so that the scaling performed by point-to-pixel
+	// conversion is kept (lfHeight is already proportionate to screen DPI).
+	if (mMarginX == COORD_UNSPECIFIED)
+		mMarginX = MulDiv(sFont[mCurrentFontIndex].lfHeight, -90, 96); // Seems to be a good rule of thumb.  Originally 1.25 * point_size.
+	if (mMarginY == COORD_UNSPECIFIED)
+		mMarginY = MulDiv(sFont[mCurrentFontIndex].lfHeight, -54, 96); // Also seems good.  Originally 0.75 * point_size.
 }

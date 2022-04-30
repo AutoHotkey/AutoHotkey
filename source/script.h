@@ -2815,6 +2815,8 @@ public:
 	void RemoveAccelerators();
 	static bool ConvertAccelerator(LPTSTR aString, ACCEL &aAccel);
 
+	void SetDefaultMargins();
+
 	// See DPIScale() and DPIUnscale() for more details.
 	int Scale(int x) { return mUsesDPIScaling ? DPIScale(x) : x; }
 	int Unscale(int x) { return mUsesDPIScaling ? DPIUnscale(x) : x; }
