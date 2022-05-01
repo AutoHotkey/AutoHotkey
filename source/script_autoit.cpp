@@ -1481,8 +1481,10 @@ bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int Overwrit
 	Util_GetFullPathName(szInputSource, szSource);
 	Util_GetFullPathName(szInputDest, szDest);
 
-	// Ensure source is a directory
-	if (Util_IsDir(szSource) == false)
+	// Permit !IsDir when copying to support extracting zip files.  Other checks prevent
+	// going in the other direction, which isn't supported by SHFileOperation anyway.
+	// The "\*.*" suffix added below prevents any single file from being copied.
+	if (bMove && Util_IsDir(szSource) == false)
 		return false;							// Nope
 
 	// Jon on the AutoIt forums says "Well SHFileOp is way too unpredictable under 9x. Grrr."
@@ -1528,9 +1530,8 @@ bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int Overwrit
 	// issues alluded to below are probably only on 9x, which is no longer supported.  Adding the
 	// wildcard appears to permit copying a directory into itself (perhaps because the directory
 	// itself isn't being copied), although we still document the result as "undefined".
-	// Really old comment:
-	// To work under old versions AND new version of shell32.dll the source must be specified
-	// as "dir\*.*" and the destination directory must already exist... Goddamn Microsoft and their APIs...
+	// This suffix also allows SHFileOperation to extract the contents of a zip file, and prevents
+	// it from copying the source itself into the destination.
 	if (!bMove)
 		_tcscat(szSource, _T("\\*.*"));
 
