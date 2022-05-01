@@ -615,7 +615,7 @@ enum enum_act {
 // All others are not included in g_act, and are only used with BIF_PerformAction:
 // ================================================================================
 , ACT_EXITAPP
-, ACT_TOOLTIP, ACT_TRAYTIP
+, ACT_TRAYTIP
 , ACT_RUNAS, ACT_DOWNLOAD
 , ACT_SEND, ACT_SENDTEXT, ACT_SENDINPUT, ACT_SENDPLAY, ACT_SENDEVENT
 , ACT_SENDMODE, ACT_SENDLEVEL, ACT_COORDMODE, ACT_SETDEFAULTMOUSESPEED
