@@ -1064,12 +1064,13 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// the state of the Capslock key should not be changed when the hotkey is pressed.
 			// Do this check prior to the below check (give it precedence).
 			if (this_key.was_just_used  // AS_PREFIX or AS_PREFIX_FOR_HOTKEY.
-				&& hotkey_id_with_flags == HOTKEY_ID_INVALID) // v1.0.44.04: Must check this because this prefix might be being used in its role as a suffix instead.
+				&& !(this_key.no_suppress & NO_SUPPRESS_PREFIX) // v1.0.34: This fixes '~a & b' preventing 'a up' from firing if 'a up' was enabled only after 'a' was pressed down.
+				&& hotkey_id_with_flags == HOTKEY_ID_INVALID) // v1.0.44.04: Must check this because this prefix might be being used in its role as a suffix instead.  At this point id is only set if modifiers are held down.
 			{
 				if (this_key.as_modifiersLR) // Always false if our caller is the mouse hook.
 					return AllowKeyToGoToSystem; // Win/Alt will be disguised if needed.
 				// Otherwise:
-				return (this_key.no_suppress & NO_SUPPRESS_PREFIX) ? AllowKeyToGoToSystem : SuppressThisKey;
+				return SuppressThisKey;
 			}
 
 		// v1.0.41: This spot cannot be reached when a disabled prefix key's up-action fires on
