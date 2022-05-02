@@ -2536,6 +2536,9 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	{
 		switch (aVK)
 		{
+		case VK_ESCAPE:		// Reset hotstring detection if user presses esc, 
+							// as this commonly indicates a wish to "abort" rather than producing a character.
+			char_count = 0; // To avoid storing VK_ESCAPE in g_HSBuf below.
 		case VK_LEFT:
 		case VK_RIGHT:
 		case VK_DOWN:
