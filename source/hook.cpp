@@ -1883,15 +1883,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 
 		if (fire_with_no_suppress) // Plus we know it's not a modifier since otherwise it would've returned above.
 		{
-			// Currently not supporting the mouse buttons for the above method, because KeyEvent()
-			// doesn't support the translation of a mouse-VK into a mouse_event() call.
-			// Such a thing might not work anyway because the hook probably received extra
-			// info such as the location where the mouse click should occur and other things.
-			// That info plus anything else relevant in MSLLHOOKSTRUCT would have to be
-			// translated into the correct info for a call to mouse_event().
-			if (aHook == g_MouseHook)
-				return AllowKeyToGoToSystem;
-			// Otherwise, our caller is the keyboard hook.
 			// Although it seems more sensible to suppress the key-up if the key-down was suppressed,
 			// it probably does no harm to let the key-up pass through, and in this case, it's exactly
 			// what the script is asking to happen (by prefixing the key-up hotkey with '~').
