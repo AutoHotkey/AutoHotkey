@@ -4419,8 +4419,15 @@ DWORD WINAPI HookThreadProc(LPVOID aUnused)
 void ResetHook(bool aAllModifiersUp, HookType aWhichHook, bool aResetKVKandKSC)
 // Caller should ensure that aWhichHook indicates at least one of the hooks (not none).
 {
-	// Reset items common to both hooks:
-	pPrefixKey = NULL;
+	if (pPrefixKey)
+	{
+		// Reset pPrefixKey only if the corresponding hook is being reset.  This fixes
+		// custom combo mouse hotkeys breaking when the prefix key does something which
+		// causes the keyboard hook to be reset, or vice versa.
+		bool is_mouse_key = pPrefixKey >= kvk && pPrefixKey <= kvk + VK_ARRAY_COUNT && IsMouseVK((vk_type)(pPrefixKey - kvk));
+		if (aWhichHook & (is_mouse_key ? HOOK_MOUSE : HOOK_KEYBD))
+			pPrefixKey = NULL;
+	}
 
 	if (aWhichHook & HOOK_MOUSE)
 	{
