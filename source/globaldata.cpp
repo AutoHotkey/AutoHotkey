@@ -77,7 +77,6 @@ HHOOK g_MouseHook = NULL;
 HHOOK g_PlaybackHook = NULL;
 bool g_ForceLaunch = false;
 bool g_WinActivateForce = false;
-bool g_RunStdIn = false;
 WarnMode g_Warn_UseUnsetLocal = WARNMODE_OFF;		// Used by #Warn directive.
 WarnMode g_Warn_UseUnsetGlobal = WARNMODE_OFF;		//
 WarnMode g_Warn_UseEnv = WARNMODE_OFF;				//
@@ -89,6 +88,8 @@ bool g_persistent = false;  // Whether the script should stay running even after
 bool g_NoTrayIcon = false;
 #ifdef AUTOHOTKEYSC
 	bool g_AllowMainWindow = false;
+#else
+	bool g_AllowMainWindow = true;
 #endif
 bool g_MainTimerExists = false;
 bool g_AutoExecTimerExists = false;

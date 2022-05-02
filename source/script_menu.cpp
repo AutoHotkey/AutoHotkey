@@ -225,7 +225,6 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 
 	case MENU_CMD_MAINWINDOW:
 		RETURN_IF_NOT_TRAY;
-#ifdef AUTOHOTKEYSC
 		if (!g_AllowMainWindow)
 		{
 			g_AllowMainWindow = true;
@@ -240,12 +239,10 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 				mTrayMenu->Destroy(); // It will be recreated automatically the next time the user displays it.
 			// else there's no need.
 		}
-#endif
         return OK;
 
 	case MENU_CMD_NOMAINWINDOW:
 		RETURN_IF_NOT_TRAY;
-#ifdef AUTOHOTKEYSC
 		if (g_AllowMainWindow)
 		{
 			g_AllowMainWindow = false;
@@ -255,7 +252,6 @@ ResultType Script::PerformMenu(LPTSTR aMenu, LPTSTR aCommand, LPTSTR aParam3, LP
 				mTrayMenu->Destroy(); // It will be recreated automatically the next time the user displays it.
 			// else there's no need.
 		}
-#endif
 		return OK;
 	} // switch()
 
@@ -653,7 +649,6 @@ UserMenuItem *UserMenu::FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bo
 		GuiType::UpdateMenuBars(hmenu); // Above: If it's not a popup, it's probably a menu bar.
 
 
-#ifdef AUTOHOTKEYSC
 #define CHANGE_DEFAULT_IF_NEEDED \
 	if (mDefault == aMenuItem)\
 	{\
@@ -666,20 +661,6 @@ UserMenuItem *UserMenu::FindItem(LPTSTR aNameOrPos, UserMenuItem *&aPrevItem, bo
 		}\
 		mDefault = NULL;\
 	}
-#else
-#define CHANGE_DEFAULT_IF_NEEDED \
-	if (mDefault == aMenuItem)\
-	{\
-		if (mMenu)\
-		{\
-			if (this == g_script.mTrayMenu)\
-				SetMenuDefaultItem(mMenu, mIncludeStandardItems ? ID_TRAY_OPEN : -1, FALSE);\
-			else\
-				SetMenuDefaultItem(mMenu, -1, FALSE);\
-		}\
-		mDefault = NULL;\
-	}
-#endif
 
 
 
@@ -1146,11 +1127,7 @@ ResultType UserMenu::SetDefault(UserMenuItem *aMenuItem)
 		// Provide a new default if this is the tray menu, the standard items are present, and a default
 		// action is called for:
 		if (this == g_script.mTrayMenu) // Necessary for proper operation of the self-contained version:
-#ifdef AUTOHOTKEYSC
 			SetMenuDefaultItem(mMenu, g_AllowMainWindow && mIncludeStandardItems ? ID_TRAY_OPEN : -1, FALSE);
-#else
-			SetMenuDefaultItem(mMenu, mIncludeStandardItems ? ID_TRAY_OPEN : -1, FALSE);
-#endif
 		else
 			SetMenuDefaultItem(mMenu, -1, FALSE);
 	}
@@ -1304,23 +1281,22 @@ ResultType UserMenu::AppendStandardItems()
 	mIncludeStandardItems = true; // even if the menu doesn't exist.
 	if (!mMenu)
 		return OK;
-#ifdef AUTOHOTKEYSC
 	if (g_AllowMainWindow)
 	{
 		AppendMenu(mMenu, MF_STRING, ID_TRAY_OPEN, _T("&Open"));
 		if (this == g_script.mTrayMenu && !mDefault) // No user-defined default menu item, so use the standard one.
 			SetMenuDefaultItem(mMenu, ID_TRAY_OPEN, FALSE); // Seems to have no function other than appearance.
 	}
-#else
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_OPEN, _T("&Open"));
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_HELP, _T("&Help"));
-	AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP1, NULL); // The separators are given IDs to simplify removal.
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_WINDOWSPY, _T("&Window Spy"));
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_RELOADSCRIPT, _T("&Reload This Script"));
-	AppendMenu(mMenu, MF_STRING, ID_TRAY_EDITSCRIPT, _T("&Edit This Script"));
-	AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP2, NULL);
-	if (this == g_script.mTrayMenu && !mDefault) // No user-defined default menu item, so use the standard one.
-		SetMenuDefaultItem(mMenu, ID_TRAY_OPEN, FALSE); // Seems to have no function other than appearance.
+#ifndef AUTOHOTKEYSC
+	if (g_script.mKind != Script::ScriptKindResource)
+	{
+		AppendMenu(mMenu, MF_STRING, ID_TRAY_HELP, _T("&Help"));
+		AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP1, NULL); // The separators are given IDs to simplify removal.
+		AppendMenu(mMenu, MF_STRING, ID_TRAY_WINDOWSPY, _T("&Window Spy"));
+		AppendMenu(mMenu, MF_STRING, ID_TRAY_RELOADSCRIPT, _T("&Reload This Script"));
+		AppendMenu(mMenu, MF_STRING, ID_TRAY_EDITSCRIPT, _T("&Edit This Script"));
+		AppendMenu(mMenu, MF_SEPARATOR, ID_TRAY_SEP2, NULL);
+	}
 #endif
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_SUSPEND, _T("&Suspend Hotkeys"));
 	AppendMenu(mMenu, MF_STRING, ID_TRAY_PAUSE, _T("&Pause Script"));

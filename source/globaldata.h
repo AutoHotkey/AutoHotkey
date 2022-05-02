@@ -75,7 +75,6 @@ extern HHOOK g_MouseHook;
 extern HHOOK g_PlaybackHook;
 extern bool g_ForceLaunch;
 extern bool g_WinActivateForce;
-extern bool g_RunStdIn;
 extern WarnMode g_Warn_UseUnsetLocal;
 extern WarnMode g_Warn_UseUnsetGlobal;
 extern WarnMode g_Warn_UseEnv;
@@ -85,9 +84,7 @@ extern WarnMode g_Warn_Unreachable;
 extern SingleInstanceType g_AllowOnlyOneInstance;
 extern bool g_persistent;
 extern bool g_NoTrayIcon;
-#ifdef AUTOHOTKEYSC
-	extern bool g_AllowMainWindow;
-#endif
+extern bool g_AllowMainWindow;
 extern bool g_DeferMessagesForUnderlyingPump;
 extern bool g_MainTimerExists;
 extern bool g_AutoExecTimerExists;

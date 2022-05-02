@@ -713,6 +713,10 @@ private:
 	ResultType FileRecycle(LPTSTR aFilePattern);
 	ResultType FileRecycleEmpty(LPTSTR aDriveLetter);
 	ResultType FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag);
+	bool FileInstallExtract(LPTSTR aSource, LPTSTR aDest, bool aOverwrite);
+#ifndef AUTOHOTKEYSC
+	bool FileInstallCopy(LPTSTR aSource, LPTSTR aDest, bool aOverwrite);
+#endif
 
 	typedef BOOL (* FilePatternCallback)(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
 	struct FilePatternStruct
@@ -3009,6 +3013,11 @@ public:
 	LPTSTR mOurEXE; // Will hold this app's module name (e.g. C:\Program Files\AutoHotkey\AutoHotkey.exe).
 	LPTSTR mOurEXEDir;  // Same as above but just the containing directory (for convenience).
 	LPTSTR mMainWindowTitle; // Will hold our main window's title, for consistency & convenience.
+	enum Kind {
+		ScriptKindFile,
+		ScriptKindResource,
+		ScriptKindStdIn
+	} mKind;
 	bool mIsReadyToExecute;
 	bool mAutoExecSectionIsRunning;
 	bool mIsRestart; // The app is restarting rather than starting from scratch.
@@ -3019,7 +3028,9 @@ public:
 	void PrintErrorStdOut(LPCTSTR aErrorText, LPCTSTR aExtraInfo, FileIndexType aFileIndex, LineNumberType aLineNumber);
 #ifndef AUTOHOTKEYSC
 	TextStream *mIncludeLibraryFunctionsThenExit;
+	LPTSTR mCmdLineInclude;
 #endif
+
 	__int64 mLinesExecutedThisCycle; // Use 64-bit to match the type of g->LinesPerCycle
 	int mUninterruptedLineCountMax; // 32-bit for performance (since huge values seem unnecessary here).
 	int mUninterruptibleTime;
@@ -3048,10 +3059,10 @@ public:
 	ResultType Reload(bool aDisplayErrors);
 	ResultType ExitApp(ExitReasons aExitReason, int aExitCode = 0);
 	void TerminateApp(ExitReasons aExitReason, int aExitCode); // L31: Added aExitReason. See script.cpp.
-	LineNumberType LoadFromFile();
-	ResultType LoadIncludedFile(LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
-	ResultType LoadIncludedFile(TextStream *fp);
-	ResultType OpenIncludedFile(TextStream &ts, LPTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
+	LineNumberType LoadFromFile(LPCTSTR aFileSpec);
+	ResultType LoadIncludedFile(LPCTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
+	ResultType LoadIncludedFile(TextStream *fp, int aFileIndex);
+	ResultType OpenIncludedFile(TextStream *&ts, LPCTSTR aFileSpec, bool aAllowDuplicateInclude, bool aIgnoreLoadFailure);
 	LineNumberType CurrentLine();
 	LPTSTR CurrentFile();
 

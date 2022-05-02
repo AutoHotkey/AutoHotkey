@@ -39,6 +39,15 @@ GNU General Public License for more details.
 #define T_AHK_VERSION		_T(AHK_VERSION)
 #define T_AHK_NAME_VERSION	T_AHK_NAME _T(" v") T_AHK_VERSION
 
+#ifdef AUTOHOTKEYSC
+#define SCRIPT_RESOURCE_NAME _T(">AUTOHOTKEY SCRIPT<")
+#else
+#define SCRIPT_RESOURCE_SPEC _T("*#1")
+#define SCRIPT_RESOURCE_NAME MAKEINTRESOURCE(1)
+#define SCRIPT_PRESOURCE_SPEC _T("*#2")
+#define SCRIPT_PRESOURCE_NAME MAKEINTRESOURCE(2)
+#endif
+
 // Window class names: Changing these may result in new versions not being able to detect any old instances
 // that may be running (such as the use of FindWindow() in WinMain()).  It may also have other unwanted
 // effects, such as anything in the OS that relies on the class name that the user may have changed the
