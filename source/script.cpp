@@ -10149,7 +10149,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 		, 20             // SYM_AND
 		, 25             // SYM_LOWNOT (the word "NOT": the low precedence version of logical-not).  HAS AN ODD NUMBER to indicate right-to-left evaluation order so that things like "not not var" are supports (which can be used to convert a variable into a pure 1/0 boolean value).
 //		, 26             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
-		, 30, 30, 30     // SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL (lower prec. than the below so that "x < 5 = var" means "result of comparison is the boolean value in var".
+		, 30, 30, 30, 30 // SYM_EQUAL, SYM_EQUALCASE, SYM_NOTEQUAL, SYM_NOTEQUALCASE (lower prec. than the below so that "x < 5 = var" means "result of comparison is the boolean value in var".
 		, 34, 34, 34, 34 // SYM_GT, SYM_LT, SYM_GTOE, SYM_LTOE
 		, 38             // SYM_CONCAT
 		, 42             // SYM_BITOR -- Seems more intuitive to have these three higher in prec. than the above, unlike C and Perl, but like Python.
@@ -10395,10 +10395,12 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg)
 					}
 					break;
 				case '!':
-					if (cp1 == '=') // i.e. != is synonymous with <>, which is also already supported by legacy.
+					if (cp1 == '=') // i.e. != is synonymous with <>, which is also already supported by legacy, or !==.
 					{
-						++cp; // An additional increment to have loop skip over the '=' too.
-						this_infix_item.symbol = SYM_NOTEQUAL;
+						// An additional increment for each '=' to have loop skip over the '=' too.
+						++cp, this_infix_item.symbol	= cp[1] == '=' // note, cp[1] is not equal to cp1 here due to ++cp
+														? (++cp, SYM_NOTEQUALCASE)	// !==
+														: SYM_NOTEQUAL;				// != 
 					}
 					else
 						// If what lies to its left is a CPARAN or OPERAND, SYM_CONCAT is not auto-inserted because:
