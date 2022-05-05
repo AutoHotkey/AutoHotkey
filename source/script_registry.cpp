@@ -81,7 +81,11 @@ BIF_DECL(BIF_IniRead)
 	if (g->LastError)
 	{
 		if (!aDefault)
+		{
+			if (g->LastError == 2)
+				_f_throw_value(_T("The requested key, section or file was not found."));
 			_f_throw_win32(g->LastError);
+		}
 		if (!*aKey)
 			_f_return(aDefault);
 	}
