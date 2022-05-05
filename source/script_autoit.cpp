@@ -1265,13 +1265,36 @@ ResultType Line::FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LP
 			psl->SetIconLocation(aIconFile,  icon_index - (icon_index > 0 ? 1 : 0)); // Convert 1-based index to 0-based, but leave negative resource IDs as-is.
 		if (*aHotkey)
 		{
-			// If badly formatted, it's not a critical error, just continue.
-			// Currently, only shortcuts with a CTRL+ALT are supported.
-			// AutoIt3 note: Make sure that CTRL+ALT is selected (otherwise invalid)
-			vk_type vk = TextToVK(aHotkey);
-			if (vk)
+			WORD mods = 0;
+			LPTSTR cp = aHotkey;
+			for (;; ++cp)
+			{
+				// Note: the last char is always literal, not a modifier, even if it's one of '^#!+'.
+				if (!cp[1])
+					break;
+				else if (*cp == '^')
+					mods |= HOTKEYF_CONTROL;
+				else if (*cp == '#')
+					mods |= HOTKEYF_EXT; // Windows key?
+				else if (*cp == '!')
+					mods |= HOTKEYF_ALT;
+				else if (*cp == '+')
+					mods |= HOTKEYF_SHIFT;
+				else
+					break;
+			}
+
+			vk_type vk = TextToVK(cp);
+			// We disallow shortcut keys that lack modifiers even though they are valid:
+			if (vk && mods)
 				// Vk in low 8 bits, mods in high 8:
-				psl->SetHotkey(   (WORD)vk | ((WORD)(HOTKEYF_CONTROL | HOTKEYF_ALT) << 8)   );
+				psl->SetHotkey(   (WORD)vk | (mods << 8)   );
+			else
+			{
+				psl->Release();
+				CoUninitialize();
+				return ThrowRuntimeException(_T("Invalid hotkey."));
+			}
 		}
 		if (*aRunState)
 			psl->SetShowCmd(ATOI(aRunState)); // No validation is done since there's a chance other numbers might be valid now or in the future.
