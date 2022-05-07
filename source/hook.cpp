@@ -1054,8 +1054,8 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		{
 			// It's done this way because CapsLock, for example, is a key users often
 			// press quickly while typing.  I suspect many users are like me in that
-			// they're in the habit of not having releasing the CapsLock key quite yet
-			// before they resume typing, expecting it's new mode to be in effect.
+			// they're in the habit of not having released the CapsLock key quite yet
+			// before they resume typing, expecting its new mode to be in effect.
 			// This resolves that problem by always toggling the state of a toggleable
 			// key upon key-down.  If this key has just acted in its role of a prefix
 			// to trigger a suffix action, toggle its state back to what it was before
@@ -1279,7 +1279,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 					KeyEvent(KEYDOWN, VK_SHIFT);  // Same notes apply to this key.
 				pPrefixKey->it_put_shift_down = true;
 			}
-			// And this may do weird things if VK_TAB itself is already assigned a as a naked hotkey, since
+			// And this may do weird things if VK_TAB itself is already assigned as a naked hotkey, since
 			// it will recursively call the hook, resulting in the launch of some other action.  But it's hard
 			// to imagine someone ever reassigning the naked VK_TAB key (i.e. with no modifiers).
 			// UPDATE: The new "ignore" method should prevent that.  Or in the case of low-level hook:
