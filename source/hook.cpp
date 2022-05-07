@@ -1075,7 +1075,8 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 				&& !(this_key.no_suppress & NO_SUPPRESS_PREFIX) // v1.0.34: This fixes '~a & b' preventing 'a up' from firing if 'a up' was enabled only after 'a' was pressed down.
 				&& hotkey_id_with_flags == HOTKEY_ID_INVALID) // v1.0.44.04: Must check this because this prefix might be being used in its role as a suffix instead.  At this point id is only set if modifiers are held down.
 			{
-				if (this_key.as_modifiersLR) // Always false if our caller is the mouse hook.
+				if (this_key.as_modifiersLR // Always false if our caller is the mouse hook.
+					|| fire_with_no_suppress) // Shouldn't be true unless it's a modifier, but seems safest to check anyway.
 					return AllowKeyToGoToSystem; // Win/Alt will be disguised if needed.
 				// Otherwise:
 				return SuppressThisKey;
@@ -1451,6 +1452,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 					// the release of which should never be suppressed if it didn't actually fire the
 					// up-hotkey (due to the wrong modifiers being down):
 					|| !this_key.used_as_prefix
+					|| fire_with_no_suppress
 					// The order on this line important; it relies on short-circuit boolean:
 					|| this_toggle_key_can_be_toggled) ? AllowKeyToGoToSystem : SuppressThisKey;
 				// v1.0.37.02: Added !this_key.used_as_prefix for mouse hook too (see comment above).
