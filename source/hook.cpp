@@ -699,6 +699,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 	HotkeyVariant *firing_is_certain = NULL;               //
 	HotkeyIDType hotkey_id_temp; // For informal/temp storage of the ID-without-flags.
 
+	bool fire_with_no_suppress = false; // Set default.
 	bool down_performed_action, was_down_before_up;
 	if (aKeyUp)
 	{
@@ -714,6 +715,14 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// The line below is done even though the down-event also resets it in case it is ever
 			// possible for keys to generate multiple consecutive key-up events (faulty or unusual keyboards?)
 			this_key.hotkey_to_fire_upon_release = HOTKEY_ID_INVALID;
+		}
+		// v1.1.34.01: Use up the no-suppress ticket early for simplicity and maintainability.  Its value
+		// might not be used further below, but in any case the ticket shouldn't be applied to any event
+		// after this one.
+		if (this_key.no_suppress & NO_SUPPRESS_NEXT_UP_EVENT)
+		{
+			fire_with_no_suppress = true;
+			this_key.no_suppress &= ~NO_SUPPRESS_NEXT_UP_EVENT; // This ticket has been used up, so remove it.
 		}
 	}
 	this_key.is_down = !aKeyUp;
@@ -762,7 +771,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		GetModifierLRState(true);
 	}
 
-	bool fire_with_no_suppress = false; // Set default.
 
 	///////////////////////////////////////////////////////////////////////////////////////
 	// CASE #1 of 4: PREFIX key has been pressed down.  But use it in this capacity only if
@@ -991,17 +999,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// generate up events without first having generated any down-event for the key.  UPDATE: I think
 		// this check is now also needed to allow fall-through in cases like "b" and "b up" both existing.
 		if (!this_key.used_as_key_up)
-		{
-			bool suppress_up_event;
-			if (this_key.no_suppress & NO_SUPPRESS_NEXT_UP_EVENT)
-			{
-				suppress_up_event = false;
-				this_key.no_suppress &= ~NO_SUPPRESS_NEXT_UP_EVENT;  // This ticket has been used up.
-			}
-			else // the default is to suppress the up-event.
-				suppress_up_event = true;
-			return (down_performed_action && suppress_up_event) ? SuppressThisKey : AllowKeyToGoToSystem;
-		}
+			return (down_performed_action && !fire_with_no_suppress) ? SuppressThisKey : AllowKeyToGoToSystem;
 		//else continue checking to see if the right modifiers are down to trigger one of this
 		// suffix key's key-up hotkeys.
 		fell_through_from_case2 = true;
@@ -1032,22 +1030,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		{
 			this_key.it_put_shift_down = false;
 			KeyEvent(KEYUP, VK_SHIFT);
-		}
-
-		// Section added in v1.0.41:
-		// Fix for v1.0.44.04: Defer use of the ticket and avoid returning here if hotkey_id_with_flags is valid,
-		// which only happens by means of this_key.hotkey_to_fire_upon_release.  This fixes custom combination
-		// hotkeys whose composite hotkey is also present such as:
-		//LShift & ~LAlt::
-		//LAlt & ~LShift::
-		//LShift & ~LAlt up::
-		//LAlt & ~LShift up::
-		//ToolTip %A_ThisHotkey%
-		//return
-		if (hotkey_id_with_flags == HOTKEY_ID_INVALID && this_key.no_suppress & NO_SUPPRESS_NEXT_UP_EVENT)
-		{
-			this_key.no_suppress &= ~NO_SUPPRESS_NEXT_UP_EVENT;  // This ticket has been used up.
-			return AllowKeyToGoToSystem; // This should handle pForceToggle for us, suppressing if necessary.
 		}
 
 		if (this_toggle_key_can_be_toggled) // Always false if our caller is the mouse hook.
@@ -1516,18 +1498,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 
 	// Since above didn't return, hotkey_id_with_flags is now a valid hotkey.  The only thing that can
 	// stop it from firing now is CriterionFiringIsCertain().
-
-	// v1.0.41: Below should be done prior to the next section's "return AllowKeyToGoToSystem" so that the
-	// NO_SUPPRESS_NEXT_UP_EVENT ticket is used up rather than staying around to possibly take effect for
-	// a future key-up for which it wasn't intended.
-	// Handling for NO_SUPPRESS_NEXT_UP_EVENT was added because it seems more correct that key-up
-	// hotkeys should obey NO_SUPPRESS_NEXT_UP_EVENT too.  The absence of this might have been inconsequential
-	// due to other safety/redundancies; but it seems more maintainable this way.
-	if ((this_key.no_suppress & NO_SUPPRESS_NEXT_UP_EVENT) && aKeyUp)
-	{
-		fire_with_no_suppress = true; // In spite of this being a key-up, there may be circumstances in which this was already true due to action above.
-		this_key.no_suppress &= ~NO_SUPPRESS_NEXT_UP_EVENT; // This ticket has been used up, so remove it.
-	}
 
 	// v1.0.41: This must be done prior to the setting of sDisguiseNextMenu below.
 	hotkey_id_temp = hotkey_id_with_flags & HOTKEY_ID_MASK;
