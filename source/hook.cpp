@@ -1098,6 +1098,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// this_key.as_modifiersLR
 			// this_toggle_key_can_be_toggled
 			return (this_key.as_modifiersLR
+				|| fire_with_no_suppress
 				|| this_toggle_key_can_be_toggled) ? AllowKeyToGoToSystem : SuppressThisKey;
 
 		// Since the above didn't return, this key is both a prefix and a suffix, but
