@@ -889,7 +889,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 							hotkey_id_with_flags = HOTKEY_ID_INVALID; // See comments above about resetting the ID.
 					}
 				}
-				if (hotkey_id_with_flags & HOTKEY_ID_INVALID) // A key-up hotkey or HOTKEY_ID_INVALID.
+				if (hotkey_id_with_flags & HOTKEY_KEY_UP)
 				{
 					// Queue it for later, which is done here rather than upon release of the key so that
 					// the user can release the key's modifiers before releasing the key itself, which
@@ -899,7 +899,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 					this_key.hotkey_to_fire_upon_release = hotkey_id_with_flags;
 					hotkey_id_with_flags = HOTKEY_ID_INVALID;
 				}
-				else // hotkey_id_with_flags is a valid key-down hotkey.
+				else if (hotkey_id_with_flags != HOTKEY_ID_INVALID) // Valid key-down hotkey.
 				{
 					if (hotkey_id_temp < Hotkey::sHotkeyCount)
 						this_key.hotkey_to_fire_upon_release = hotkey_up[hotkey_id_temp]; // Might assign HOTKEY_ID_INVALID.
