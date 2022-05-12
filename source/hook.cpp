@@ -790,7 +790,7 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 		// introduce a new hotkey modifier such as an "up2" keyword that makes any key into a prefix
 		// key even if it never acts as a prefix for other keys, which in turn has the benefit of firing
 		// on key-up, but only if the no other key was pressed while the user was holding it down.
-		bool suppress_this_prefix = false;// !(this_key.no_suppress & NO_SUPPRESS_PREFIX); // Set default.
+		bool suppress_this_prefix = !(this_key.no_suppress & NO_SUPPRESS_PREFIX); // Set default.
 		bool has_no_enabled_suffixes;
 		if (   !(has_no_enabled_suffixes = (this_key.used_as_prefix == PREFIX_ACTUAL)
 			&& Hotkey::PrefixHasNoEnabledSuffixes(sc_takes_precedence ? aSC : aVK, sc_takes_precedence, suppress_this_prefix))   )
@@ -932,11 +932,10 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 			// If our caller is the mouse hook, both of the following will always be false:
 			// this_key.as_modifiersLR
 			// this_toggle_key_can_be_toggled
-			if (this_key.as_modifiersLR || !suppress_this_prefix || this_toggle_key_can_be_toggled)
-			{
+			if (!suppress_this_prefix) // Only for this condition. Not needed for toggle keys and not wanted for modifiers as it would prevent menu suppression.
 				this_key.no_suppress |= NO_SUPPRESS_NEXT_UP_EVENT;
+			if (this_key.as_modifiersLR || !suppress_this_prefix || this_toggle_key_can_be_toggled)
 				return AllowKeyToGoToSystem;
-			}
 			// Mark this key as having been suppressed.  This currently doesn't have any known effect
 			// since the change to tilde (~) handling in v1.0.95 (commit 161162b8), but may in future.
 			this_key.hotkey_down_was_suppressed = true;
