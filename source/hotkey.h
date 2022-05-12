@@ -181,6 +181,7 @@ public:
 	#define AT_LEAST_ONE_VARIANT_HAS_TILDE 0x02   // Bitwise: Bit #2
 	#define AT_LEAST_ONE_VARIANT_LACKS_TILDE 0x04 // Bitwise: Bit #3
 	#define NO_SUPPRESS_NEXT_UP_EVENT 0x08        // Bitwise: Bit #4
+	#define AT_LEAST_ONE_COMBO_HAS_TILDE 0x10
 	#define NO_SUPPRESS_SUFFIX_VARIES (AT_LEAST_ONE_VARIANT_HAS_TILDE | AT_LEAST_ONE_VARIANT_LACKS_TILDE) // i.e. a hotkey that has variants of both types.
 	#define NO_SUPPRESS_STATES NO_SUPPRESS_NEXT_UP_EVENT  // This is a bitwise union (currently only one item) of those of the above that represent a the key's dynamically changing state as the user types.
 	UCHAR mNoSuppress;  // Uses the flags above.  Normally 0, but can be overridden by using the hotkey tilde (~) prefix).

@@ -141,6 +141,7 @@ struct key_type
 	// And these are the values for the above (besides 0):
 	#define AS_PREFIX 1
 	#define AS_PREFIX_FOR_HOTKEY 2
+	#define AS_PASSTHROUGH_PREFIX -1 // v1.1.34.02: Indicates the suffix key-up hotkey of this prefix key should fire even if a combo was activated.
 	bool sc_takes_precedence; // used only by the scan code array: this scan code should take precedence over vk.
 }; // Keep the macro below in sync with the above.
 
