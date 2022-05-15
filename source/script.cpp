@@ -1896,7 +1896,8 @@ ResultType Script::LoadIncludedFile(TextStream *fp, int aFileIndex)
 	Hotkey *hk;
 	LineNumberType saved_line_number;
 	HookActionType hook_action;
-	bool suffix_has_tilde, hook_is_mandatory, hotstring_execute;
+	bool hook_is_mandatory, hotstring_execute;
+	UCHAR no_suppress;
 	ResultType hotkey_validity;
 
 	// Init both for main file and any included files loaded by this function:
@@ -2205,13 +2206,13 @@ process_completed_line:
 						{
 							if (!CreateHotFunc())
 									return FAIL;
-							hk = Hotkey::FindHotkeyByTrueNature(aKey, suffix_has_tilde, hook_is_mandatory);
+							hk = Hotkey::FindHotkeyByTrueNature(aKey, no_suppress, hook_is_mandatory);
 							if (hk)
 							{
-								if (!hk->AddVariant(mLastHotFunc, suffix_has_tilde))
+								if (!hk->AddVariant(mLastHotFunc, no_suppress))
 									return FAIL;
 							}
-							else if (!Hotkey::AddHotkey(mLastHotFunc, HK_NORMAL, aKey, suffix_has_tilde))
+							else if (!Hotkey::AddHotkey(mLastHotFunc, HK_NORMAL, aKey, no_suppress))
 								return FAIL;
 							return OK;
 						};
@@ -2407,9 +2408,9 @@ process_completed_line:
 			else // It's a hotkey vs. hotstring.
 			{
 				hook_action = Hotkey::ConvertAltTab(hotkey_flag, false);
-				if (hk = Hotkey::FindHotkeyByTrueNature(buf, suffix_has_tilde, hook_is_mandatory)) // Parent hotkey found.  Add a child/variant hotkey for it.
+				if (hk = Hotkey::FindHotkeyByTrueNature(buf, no_suppress, hook_is_mandatory)) // Parent hotkey found.  Add a child/variant hotkey for it.
 				{
-					if (hook_action) // suffix_has_tilde has always been ignored for these types (alt-tab hotkeys).
+					if (hook_action) // no_suppress has always been ignored for these types (alt-tab hotkeys).
 					{
 						// Hotkey::Dynamic() contains logic and comments similar to this, so maintain them together.
 						// An attempt to add an alt-tab variant to an existing hotkey.  This might have
@@ -2421,14 +2422,14 @@ process_completed_line:
 					else
 					{
 						// Detect duplicate hotkey variants to help spot bugs in scripts.
-						if (hk->FindVariant()) // See if there's already a variant matching the current criteria (suffix_has_tilde does not make variants distinct form each other because it would require firing two hotkey IDs in response to pressing one hotkey, which currently isn't in the design).
+						if (hk->FindVariant()) // See if there's already a variant matching the current criteria (no_suppress does not make variants distinct form each other because it would require firing two hotkey IDs in response to pressing one hotkey, which currently isn't in the design).
 						{
 							mCurrLine = NULL;  // Prevents showing unhelpful vicinity lines.
 							return ScriptError(_T("Duplicate hotkey."), buf);
 						}
 						if (!set_last_hotfunc())
 							return FAIL;
-						if (!hk->AddVariant(mLastHotFunc, suffix_has_tilde))
+						if (!hk->AddVariant(mLastHotFunc, no_suppress))
 							return ScriptError(ERR_OUTOFMEM, buf);
 						if (hook_is_mandatory || g_ForceKeybdHook)
 						{
@@ -2452,7 +2453,7 @@ process_completed_line:
 						&& !set_last_hotfunc())
 						return FAIL;
 					
-					hk = Hotkey::AddHotkey(mLastHotFunc, hook_action, buf, suffix_has_tilde);
+					hk = Hotkey::AddHotkey(mLastHotFunc, hook_action, buf, no_suppress);
 					if (!hk)
 					{
 						if (hotkey_validity != CONDITION_TRUE)

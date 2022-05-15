@@ -131,7 +131,7 @@ struct key_type
 	UCHAR used_as_prefix; // Whether a given virtual key or scan code is even used by a hotkey.
 	bool used_as_suffix;  //
 	bool used_as_key_up;  // Whether this suffix also has an enabled key-up hotkey.
-	UCHAR no_suppress; // Contains bitwise flags such as NO_SUPPRESS_PREFIX.
+	UCHAR no_suppress; // Contains bitwise flags such as NO_SUPPRESS_NEXT_UP_EVENT.
 	bool is_down; // this key is currently down.
 	bool it_put_alt_down;  // this key resulted in ALT being pushed down (due to alt-tab).
 	bool it_put_shift_down;  // this key resulted in SHIFT being pushed down (due to shift-alt-tab).
@@ -142,6 +142,7 @@ struct key_type
 	// And these are the values for the above (besides 0):
 	#define AS_PREFIX 1
 	#define AS_PREFIX_FOR_HOTKEY 2
+	#define AS_PASSTHROUGH_PREFIX -1 // v1.1.34.02: Indicates the suffix key-up hotkey of this prefix key should fire even if a combo was activated.
 	bool sc_takes_precedence; // used only by the scan code array: this scan code should take precedence over vk.
 }; // Keep the macro below in sync with the above.
 

@@ -96,7 +96,7 @@ struct HotkeyVariant
 	USHORT mIndex;
 	UCHAR mExistingThreads, mMaxThreads;
 	SendLevelType mInputLevel;
-	bool mNoSuppress; // v1.0.44: This became a per-variant attribute because it's more useful/flexible that way.
+	UCHAR mNoSuppress; // v1.0.44: This became a per-variant attribute because it's more useful/flexible that way.
 	bool mMaxThreadsBuffer;
 	bool mRunAgainAfterFinished;
 	bool mEnabled; // Whether this variant has been disabled via the Hotkey command.
@@ -161,7 +161,7 @@ private:
 
 	// For now, constructor & destructor are private so that only static methods can create new
 	// objects.  This allow proper tracking of which OS hotkey IDs have been used.
-	Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde);
+	Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction, LPTSTR aName, UCHAR aNoSuppress);
 	~Hotkey() {if (mIsRegistered) Unregister();}
 
 public:
@@ -188,6 +188,7 @@ public:
 	#define AT_LEAST_ONE_VARIANT_HAS_TILDE 0x02   // Bitwise: Bit #2
 	#define AT_LEAST_ONE_VARIANT_LACKS_TILDE 0x04 // Bitwise: Bit #3
 	#define NO_SUPPRESS_NEXT_UP_EVENT 0x08        // Bitwise: Bit #4
+	#define AT_LEAST_ONE_COMBO_HAS_TILDE 0x10
 	#define NO_SUPPRESS_SUFFIX_VARIES (AT_LEAST_ONE_VARIANT_HAS_TILDE | AT_LEAST_ONE_VARIANT_LACKS_TILDE) // i.e. a hotkey that has variants of both types.
 	#define NO_SUPPRESS_STATES NO_SUPPRESS_NEXT_UP_EVENT  // This is a bitwise union (currently only one item) of those of the above that represent a the key's dynamically changing state as the user types.
 	UCHAR mNoSuppress;  // Uses the flags above.  Normally 0, but can be overridden by using the hotkey tilde (~) prefix).
@@ -214,10 +215,10 @@ public:
 	static ResultType Dynamic(LPTSTR aHotkeyName, LPTSTR aOptions
 		, IObject *aCallback, HookActionType aHookAction, ResultToken &aResultToken);
 
-	static Hotkey *AddHotkey(IObject *aCallback, HookActionType aHookAction, LPTSTR aName, bool aSuffixHasTilde);
+	static Hotkey *AddHotkey(IObject *aCallback, HookActionType aHookAction, LPTSTR aName, UCHAR aNoSuppress);
 	HotkeyVariant *FindVariant();
-	HotkeyVariant *AddVariant(IObject *aCallback, bool aSuffixHasTilde);
-	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC);
+	HotkeyVariant *AddVariant(IObject *aCallback, UCHAR aNoSuppress);
+	static bool PrefixHasNoEnabledSuffixes(int aVKorSC, bool aIsSC, bool &aSuppress);
 	HotkeyVariant *CriterionAllowsFiring(HWND *aFoundHWND = NULL, ULONG_PTR aExtraInfo = 0, LPTSTR aSingleChar = NULL);
 	static HotkeyVariant *CriterionFiringIsCertain(HotkeyIDType &aHotkeyIDwithFlags, bool aKeyUp, ULONG_PTR aExtraInfo
 		, UCHAR &aNoSuppress, bool &aFireWithNoSuppress, LPTSTR aSingleChar);
@@ -235,6 +236,7 @@ public:
 		modLR_type modifiersLR;
 		TCHAR prefix_text[32];  // Has to be large enough to hold the largest key name in g_key_to_vk,
 		TCHAR suffix_text[32];  // which is probably "Browser_Favorites" (17).
+		bool prefix_has_tilde;
 		bool suffix_has_tilde; // As opposed to "prefix has tilde".
 		bool has_asterisk;
 		bool is_key_up;
@@ -313,7 +315,7 @@ public:
 		return 0;
 	}
 
-	static Hotkey *FindHotkeyByTrueNature(LPTSTR aName, bool &aSuffixHasTilde, bool &aHookIsMandatory);
+	static Hotkey *FindHotkeyByTrueNature(LPTSTR aName, UCHAR &aNoSuppress, bool &aHookIsMandatory);
 	static Hotkey *FindHotkeyContainingModLR(modLR_type aModifiersLR);  //, HotkeyIDType hotkey_id_to_omit);
 	//static Hotkey *FindHotkeyWithThisModifier(vk_type aVK, sc_type aSC);
 	//static Hotkey *FindHotkeyBySC(sc2_type aSC2, mod_type aModifiers, modLR_type aModifiersLR);
