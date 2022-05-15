@@ -669,6 +669,7 @@ enum BuiltInFunctionID {
 	FID_RegRead = 0, FID_RegWrite, FID_RegDelete, FID_RegDeleteKey,
 	FID_SoundGetVolume = 0, FID_SoundGetMute, FID_SoundGetName, FID_SoundGetInterface, FID_SoundSetVolume, FID_SoundSetMute,
 	FID_RunWait = 0, FID_ClipWait, FID_KeyWait, FID_WinWait, FID_WinWaitClose, FID_WinWaitActive, FID_WinWaitNotActive,
+	FID_BinCopy = 0, FID_BinCompare, FID_BinDiff, FID_InBin,
 	// For BIF_SetBIV (functions corresponding to built-in vars): keep the order of these in sync with the array in BIF_SetBIV.
 	FID_DetectHiddenText = 0, FID_DetectHiddenWindows, FID_FileEncoding, FID_SetRegView, FID_SetStoreCapsLockMode, FID_SetTitleMatchMode,
 	// Hotkey/HotIf/...
@@ -3436,6 +3437,8 @@ BIF_DECL(BIF_Process);
 BIF_DECL(BIF_ProcessSetPriority);
 BIF_DECL(BIF_MonitorGet);
 BIF_DECL(BIF_Wait);
+BIF_DECL(BIF_Bin);
+BIF_DECL(BIF_StrDiff);
 
 BIF_DECL(BIF_PerformAction);
 BIF_DECL(BIF_SetBIV);

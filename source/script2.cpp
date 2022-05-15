@@ -16752,6 +16752,391 @@ void Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 
 
 
+BIF_DECL(BIF_Bin)
+{
+	ExprTokenType **next_param = aParam;
+	IObject *buffer_obj;
+	BYTE* address;
+	BYTE* address1;
+	BYTE* address2;
+	size_t size;
+	size_t size1;
+	size_t size2;
+	bool is_num1 = false;
+	bool is_num2 = false;
+	INT_PTR offset1;
+	INT_PTR offset2;
+
+	for (int i = 0; i < 2; ++i, ++next_param)
+	{
+		if (TokenIsNumeric(**next_param))
+		{
+			address = (BYTE*)TokenToInt64(**next_param);
+			size = 0;
+			(i) ? (is_num2 = true) : (is_num1 = true);
+		}
+		else if (buffer_obj = TokenToObject(**next_param))
+		{
+			size_t ptr;
+			GetBufferObjectPtr(aResultToken, buffer_obj, ptr, size);
+			address = aResultToken.Exited() ? 0 : (BYTE*)ptr;
+		}
+		else
+			address = 0;
+
+		if (address < (BYTE*)65536)
+			_f_throw_param(i);
+		else if (i)
+		{
+			address2 = address;
+			size2 = size;
+		}
+		else
+		{
+			address1 = address;
+			size1 = size;
+		}
+	}
+
+	// Start of checks:
+
+	// BinCopy/BinCompare (allow integer addresses as well as buffers):
+	if ((_f_callee_id == FID_BinCopy) || (_f_callee_id == FID_BinCompare))
+	{
+		offset1 = ParamIndexToOptionalIntPtr(3, 0);
+		offset2 = ParamIndexToOptionalIntPtr(4, 0);
+		if (offset1 < 0)
+		{
+			if (is_num1)
+				_f_throw_value(_T("If param 1 is not a buffer, offset cannot be negative."));
+			offset1 += size1;
+			if (offset1 < 0)
+				offset1 = 0;
+		}
+		if (offset2 < 0)
+		{
+			if (is_num2)
+				_f_throw_value(_T("If param 2 is not a buffer, offset cannot be negative."));
+			offset2 += size2;
+			if (offset2 < 0)
+				offset2 = 0;
+		}
+		if (ParamIndexIsOmitted(2)) // Size.
+		{
+			if (is_num1)
+				_f_throw_value(_T("To omit Size, param 1 must be a buffer."));
+			else if (size1 < offset1)
+				_f_throw_param(3);
+			else
+				size = size1 - offset1;
+			if (_f_callee_id == FID_BinCompare)
+			{
+				if (is_num2)
+					_f_throw_value(_T("To omit Size, param 2 must be a buffer."));
+				else if (size2 < offset2)
+					_f_throw_param(4);
+				if (size != size2 - offset2)
+					_f_throw_value(_T("To omit Size, buffer sizes minus respective offsets must be equal."));
+			}
+		}
+		else if (ParamIndexToInt64(2) < 0)
+			_f_throw_param(2);
+		else
+			size = (size_t)ParamIndexToInt64(2);
+		if (is_num1)
+			size1 = (size_t)offset1 + size;
+		if (is_num2)
+			size2 = (size_t)offset2 + size;
+	}
+	else
+	{
+		if (is_num1)
+			_f_throw_param(0);
+		else if (is_num2)
+			_f_throw_param(1);
+	}
+
+	if (_f_callee_id == FID_BinDiff)
+	{
+		offset1 = ParamIndexToOptionalIntPtr(4, 0);
+		offset2 = ParamIndexToOptionalIntPtr(5, 0);
+		if (offset1 < 0)
+		{
+			offset1 += size1;
+			if (offset1 < 0)
+				offset1 = 0;
+		}
+		if (offset2 < 0)
+		{
+			offset2 += size2;
+			if (offset2 < 0)
+				offset2 = 0;
+		}
+		if (ParamIndexIsOmitted(3)) // Size.
+		{
+			if (size1 < offset1)
+				_f_throw_param(3);
+			else
+				size = size1 - offset1;
+			if (size2 < offset2)
+				_f_throw_param(4);
+			if (size != size2 - offset2)
+				_f_throw_value(_T("To omit Size, buffer sizes minus respective offsets must be equal."));
+		}
+		else if (ParamIndexToInt64(3) < 0)
+			_f_throw_param(3);
+		else
+			size = (size_t)ParamIndexToInt64(3);
+	}
+
+	if (_f_callee_id != FID_InBin)
+	{
+		if ((size1 < offset1) || (size1 - offset1 < size))
+			_f_throw_value(_T("Buffer 1 too small."));
+		if ((size2 < offset2) || (size2 - offset2 < size))
+			_f_throw_value(_T("Buffer 2 too small."));
+	}
+
+	// End of checks.
+
+	if (_f_callee_id == FID_BinCopy)
+	{
+		memmove(address2+offset2, address1+offset1, size);
+		_f_return_empty;
+	}
+	else if (_f_callee_id == FID_BinCompare)
+	{
+		__int64 result = memcmp(address1+offset1, address2+offset2, size);
+		_f_return_i(result == 0 ? 0 : result > 0 ? 1 : -1);
+	}
+	else if (_f_callee_id == FID_InBin)
+	{
+		if (!size2) // Disallow an empty needle buffer.
+			_f_throw_param(1);
+
+		int step_size = ParamIndexToOptionalInt(2, 1);
+		if (step_size < 1)
+			_f_throw_param(2);
+
+		// Part of BIF_Instr code, adapted for 0-based buffers:
+		INT_PTR offset = ParamIndexToOptionalIntPtr(3, 0);
+		int occurrence_number = ParamIndexToOptionalInt(4, 1);
+		if (!occurrence_number)
+			_f_throw_param(4);
+		if (offset < 0)
+		{
+			if (ParamIndexIsOmitted(4))
+				occurrence_number = -1; // Default to RTL.
+			offset += size1; // Convert end-relative position to start-relative.
+		}
+		if (offset < 0) // To the left of the first byte.
+			offset = 0; // LTR: start at offset 0.  RTL: search 0 bytes.
+		else if ((size_t)offset >= size1) // To the right of the last byte.
+			offset = size1; // LTR: start at buffer end (omit all).  RTL: search whole buffer.
+
+		BYTE* cp1 = address1 + offset;
+		BYTE* cp2 = address2;
+		__int64 result = -1; // -1 indicates no match.
+		int steps;
+		int step;
+
+		if (occurrence_number < 0)
+		{
+			occurrence_number *= -1;
+			steps = (int)(offset - size2 + step_size) / step_size;
+			step = -step_size;
+			cp1 -= size2;
+		}
+		else
+		{
+			steps = (int)(size1 - offset - size2 + step_size) / step_size;
+			step = step_size;
+		}
+
+		if (steps < 1)
+			_f_return_i(result);
+		else if (steps > (int)size1) // Sanity check.
+			_f_throw_value(_T("Calculation error."));
+
+		for (int i = 0; i < steps; ++i, cp1 += step)
+		{
+			if (!memcmp(cp1, cp2, size2))
+			{
+				--occurrence_number;
+				if (!occurrence_number)
+				{
+					result = cp1 - address1;
+					break;
+				}
+			}
+		}
+		_f_return_i(result);
+	}
+	else if (_f_callee_id == FID_BinDiff)
+	{
+		int step_size = ParamIndexToOptionalInt(2, 1);
+		int occurrence_number = ParamIndexToOptionalInt(6, 1);
+
+		__int64 result = -1; // -1 indicates no match.
+		if (step_size < 1)
+			_f_throw_param(2);
+		int steps = size / step_size;
+		if (steps < 1)
+			_f_return_i(result);
+		int step = step_size;
+
+		BYTE* cp1 = address1 + offset1;
+		BYTE* cp2 = address2 + offset2;
+		if (occurrence_number < 0)
+		{
+			occurrence_number *= -1; // Make it positive.
+			step *= -1;
+			cp1 += size - step_size;
+			cp2 += size - step_size;
+		}
+
+		for (int i = 0; i < steps; ++i, cp1 += step, cp2 += step)
+		{
+			if (memcmp(cp1, cp2, step_size))
+			{
+				--occurrence_number;
+				if (!occurrence_number)
+				{
+					result = cp1 - address1 - offset1;
+					break;
+				}
+			}
+		}
+		_f_return_i(result);
+	}
+}
+
+
+
+BIF_DECL(BIF_StrDiff)
+{
+	size_t len;
+	size_t len1;
+	size_t len2;
+	_f_param_string(str1, 0, &len1);
+	_f_param_string(str2, 1, &len2);
+	INT_PTR offset1 = ParamIndexToOptionalIntPtr(4, 1);
+	INT_PTR offset2 = ParamIndexToOptionalIntPtr(5, 1);
+	int occurrence_number = ParamIndexToOptionalInt(6, 1);
+
+	if (!offset1)
+		_f_throw_param(4);
+	else if (offset1 < 0) // Same convention as RegExMatch/Replace(): Treat negative StartingPos as a position relative to the end of the string.
+	{
+		offset1 += len1;
+		if (offset1 < 0)
+			offset1 = 0;
+	}
+	else
+		--offset1; // Convert to zero-based.
+	if (!offset2)
+		_f_throw_param(5);
+	else if (offset2 < 0)
+	{
+		offset2 += len2;
+		if (offset2 < 0)
+			offset2 = 0;
+	}
+	else
+		--offset2;
+
+	if (ParamIndexIsOmitted(3)) // Size.
+	{
+		if (len1 < offset1)
+			_f_throw_param(4);
+		else
+			len = len1 - offset1;
+		if (len2 < offset2)
+			_f_throw_param(5);
+		if (len != len2 - offset2)
+			_f_throw_value(_T("To omit Length, string lengths minus respective offsets must be equal."));
+	}
+	else if (ParamIndexToInt64(3) < 0)
+		_f_throw_param(3);
+	else
+		len = (size_t)ParamIndexToInt64(3);
+
+	if ((len1 < offset1) || (len1 - offset1 < len))
+		_f_throw_value(_T("String 1 too small."));
+	if ((len2 < offset2) || (len2 - offset2 < len))
+		_f_throw_value(_T("String 2 too small."));
+
+	__int64 result = 0; // 0 indicates no match.
+	int step = 1;
+	TCHAR* cp1 = str1 + offset1;
+	TCHAR* cp2 = str2 + offset2;
+	if (occurrence_number < 0)
+	{
+		occurrence_number *= -1;  // Make it positive.
+		step *= -1;
+		cp1 += len - 1;
+		cp2 += len - 1;
+	}
+
+	StringCaseSenseType string_case_sense = ParamIndexToCaseSense(2);
+	if (string_case_sense == SCS_INVALID
+		|| string_case_sense == SCS_INSENSITIVE_LOGICAL)
+		_f_throw_param(2);
+	// BIF_StrReplace sets string_case_sense similarly, maintain together.
+
+	if (string_case_sense == SCS_SENSITIVE)
+	{
+		for (int i = 0; i < (int)len; ++i, cp1 += step, cp2 += step)
+		{
+			if (*cp1 != *cp2)
+			{
+				--occurrence_number;
+				if (!occurrence_number)
+				{
+					result = cp1 - str1 - offset1 + 1;
+					break;
+				}
+			}
+		}
+	}
+	else if (string_case_sense == SCS_INSENSITIVE)
+	{
+		for (int i = 0; i < (int)len; ++i, cp1 += step, cp2 += step)
+		{
+			if (ctoupper(*cp1) != ctoupper(*cp2))
+			{
+				--occurrence_number;
+				if (!occurrence_number)
+				{
+					result = cp1 - str1 - offset1 + 1;
+					break;
+				}
+			}
+		}
+	}
+	else if (string_case_sense == SCS_INSENSITIVE_LOCALE)
+	{
+		for (int i = 0; i < (int)len; ++i, cp1 += step, cp2 += step)
+		{
+			if (lstrcmpni(cp1, 1, cp2, 1))
+			{
+				--occurrence_number;
+				if (!occurrence_number)
+				{
+					result = cp1 - str1 - offset1 + 1;
+					break;
+				}
+			}
+		}
+	}
+	else
+		_f_throw_param(2);
+
+	_f_return_i(result);
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
