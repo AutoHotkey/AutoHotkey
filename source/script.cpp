@@ -13187,14 +13187,18 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 	TCHAR extra_buf[MAX_NUMBER_SIZE], message_buf[MAX_NUMBER_SIZE];
 
 	global_struct &g = *::g;
+	
+	ResultToken *token = g.ThrownToken;
+	// Clear ThrownToken to allow any applicable callbacks to execute correctly.
+	// This includes OnError callbacks explicitly called below, but also COM events
+	// and CallbackCreate callbacks that execute while MsgBox() is waiting.
+	g.ThrownToken = NULL;
 
 	// OnError: Allow the script to handle it via a global callback.
 	static bool sOnErrorRunning = false;
 	if (mOnError.Count() && !sOnErrorRunning)
 	{
 		__int64 retval;
-		ResultToken *token = g.ThrownToken;
-		g.ThrownToken = NULL; // Allow the callback to execute correctly.
 		sOnErrorRunning = true;
 		ExprTokenType param[2];
 		param[0].CopyValueFrom(*token);
@@ -13218,12 +13222,14 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 		// Some callers rely on g.ThrownToken!=NULL to unwind the stack, so it is restored
 		// rather than freeing it immediately.  If the exception object has __Delete, it
 		// will be called after the stack unwinds.
-		g.ThrownToken = token;
 		if (retval)
+		{
+			g.ThrownToken = token;
 			return FAIL; // Exit thread.
+		}
 	}
 
-	if (Object *ex = dynamic_cast<Object *>(TokenToObject(*g.ThrownToken)))
+	if (Object *ex = dynamic_cast<Object *>(TokenToObject(*token)))
 	{
 		// For simplicity and safety, we call into the Object directly rather than via Invoke().
 		ExprTokenType t;
@@ -13259,7 +13265,7 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 	else
 	{
 		// Assume it's a string or number.
-		extra = TokenToString(*g.ThrownToken, message_buf);
+		extra = TokenToString(*token, message_buf);
 	}
 
 	// If message is empty (or a string or number was thrown), display a default message for clarity.
@@ -13271,9 +13277,10 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 
 	if (MsgBox(buf, aErrorType == FAIL_OR_OK ? MB_YESNO|MB_DEFBUTTON2 : 0) == IDYES)
 	{
-		FreeExceptionToken(g.ThrownToken);
+		FreeExceptionToken(token);
 		return OK;
 	}
+	g.ThrownToken = token;
 	return FAIL;
 }
 
