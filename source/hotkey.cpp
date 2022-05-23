@@ -2436,9 +2436,9 @@ Hotstring::Hotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR
 	, mSuspendExempt(g_SuspendExempt || g_SuspendExemptHS)
 	, mConstructedOK(false)
 {
-	bool execute_action = false; // do not assign  mReplacement if execute_action is true.
+	bool unused_x = false;
 	ParseOptions(aOptions, mPriority, mKeyDelay, mSendMode, mCaseSensitive, mConformToCase, mDoBackspace
-		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, execute_action, mSuspendExempt);
+		, mOmitEndChar, mSendRaw, mEndCharRequired, mDetectWhenInsideWord, mDoReset, unused_x, mSuspendExempt);
 	
 	// To avoid memory leak, this is done only when it is certain the hotstring will be created:
 	if (   !(mString = SimpleHeap::Malloc(aHotstring))   )
@@ -2449,7 +2449,7 @@ Hotstring::Hotstring(LPTSTR aName, IObjectPtr aCallback, LPTSTR aOptions, LPTSTR
 		return;
 	}
 	mStringLength = (UCHAR)_tcslen(mString);
-	if (!execute_action && *aReplacement)
+	if (*aReplacement)
 	{
 		// SimpleHeap is not used for the replacement as it can be changed at runtime by Hotstring().
 		if (   !(mReplacement = _tcsdup(aReplacement))   )
