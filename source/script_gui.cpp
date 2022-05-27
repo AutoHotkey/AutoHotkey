@@ -6845,6 +6845,10 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 			SendMessage(mHwnd, WM_NCCALCSIZE, FALSE, (LPARAM)&rcTemp);
 			rect.bottom += rcTemp.top;
 		}
+
+		int nc_width = rect.right - rect.left - width;
+		int nc_height = rect.bottom - rect.top - height;
+
 		width = rect.right - rect.left;  // rect.left might be slightly less than zero.
 		height = rect.bottom - rect.top; // rect.top might be slightly less than zero. A status bar is properly handled since it's inside the window's client area.
 
@@ -6883,6 +6887,43 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 		int old_width = old_rect.right - old_rect.left;
 		int old_height = old_rect.bottom - old_rect.top;
 
+		// Added for v1.0.44.13:
+		// Below is done inside this block (allow_move_window) because it that way, it should always
+		// execute whenever mGuiShowHasNeverBeenDone (since the window shouldn't be iconic prior to
+		// its first showing).  In addition, below must be down prior to any ShowWindow() that does
+		// a minimize or maximize because that would prevent GetWindowRect/GetClientRect calculations
+		// below from working properly.
+		// v1.1.34.03: It's now done before the MoveWindow call below, so that the initial size is
+		// limited by the correct values.  nc_width and nc_height are expected to be accurate, and
+		// must be used rather than calling GetClientRect and calculating the difference, as that's
+		// likely to be 0x0 prior to calling MoveWindow.
+		if (mGuiShowHasNeverBeenDone) // This is the first showing of this window.
+		{
+			// Now that the window's style, edge type, title bar, menu bar, and other non-client attributes have
+			// likely (but not certainly) been determined, adjust MinMaxSize values from client size to
+			// entire-window size for use with WM_GETMINMAXINFO.
+
+			if (mMinWidth == COORD_CENTERED) // COORD_CENTERED is the flag that means, "use window's current, total width."
+				mMinWidth = width;
+			else if (mMinWidth != COORD_UNSPECIFIED)
+				mMinWidth += nc_width;
+
+			if (mMinHeight == COORD_CENTERED)
+				mMinHeight = height;
+			else if (mMinHeight != COORD_UNSPECIFIED)
+				mMinHeight += nc_height;
+
+			if (mMaxWidth == COORD_CENTERED)
+				mMaxWidth = width;
+			else if (mMaxWidth != COORD_UNSPECIFIED)
+				mMaxWidth += nc_width;
+
+			if (mMaxHeight == COORD_CENTERED)
+				mMaxHeight = height;
+			else if (mMaxHeight != COORD_UNSPECIFIED)
+				mMaxHeight += nc_height;
+		} // if (mGuiShowHasNeverBeenDone)
+
 		// Avoid calling MoveWindow() if nothing changed because it might repaint/redraw even if window size/pos
 		// didn't change:
 		if (width != old_width || height != old_height || (x != COORD_UNSPECIFIED && x != old_rect.left)
@@ -6897,51 +6938,6 @@ ResultType GuiType::Show(LPTSTR aOptions, LPTSTR aText)
 			MoveWindow(mHwnd, x == COORD_UNSPECIFIED ? old_rect.left : x, y == COORD_UNSPECIFIED ? old_rect.top : y
 				, width, height, is_visible);  // Do repaint if window is visible.
 		}
-
-		// Added for v1.0.44.13:
-		// Below is done inside this block (allow_move_window) because it that way, it should always
-		// execute whenever mGuiShowHasNeverBeenDone (since the window shouldn't be iconic prior to
-		// its first showing).  In addition, below must be down prior to any ShowWindow() that does
-		// a minimize or maximize because that would prevent GetWindowRect/GetClientRect calculations
-		// below from working properly.
-		if (mGuiShowHasNeverBeenDone) // This is the first showing of this window.
-		{
-			// Now that the window's style, edge type, title bar, menu bar, and other non-client attributes have
-			// likely (but not certainly) been determined, adjust MinMaxSize values from client size to
-			// entire-window size for use with WM_GETMINMAXINFO.
-			// To help reduce code size, the following isn't done (the calls later below are probably very fast):
-			//if (   mMinWidth != COORD_UNSPECIFIED || mMinHeight != COORD_UNSPECIFIED
-			//	|| mMaxWidth != COORD_UNSPECIFIED || mMaxHeight != COORD_UNSPECIFIED   )
-			//{
-			// ...
-			RECT rect, client_rect;
-			GetWindowRect(mHwnd, &rect);        // Get both rects again in case MoveWindow wasn't
-			GetClientRect(mHwnd, &client_rect); // above to grant the requested size.
-			int total_width = rect.right - rect.left;
-			int total_height = rect.bottom - rect.top;
-			int extra_width = total_width - client_rect.right;
-			int extra_height = total_height - client_rect.bottom;
-
-			if (mMinWidth == COORD_CENTERED) // COORD_CENTERED is the flag that means, "use window's current, total width."
-				mMinWidth = total_width;
-			else if (mMinWidth != COORD_UNSPECIFIED)
-				mMinWidth += extra_width;
-
-			if (mMinHeight == COORD_CENTERED)
-				mMinHeight = total_height;
-			else if (mMinHeight != COORD_UNSPECIFIED)
-				mMinHeight += extra_height;
-
-			if (mMaxWidth == COORD_CENTERED)
-				mMaxWidth = total_width;
-			else if (mMaxWidth != COORD_UNSPECIFIED)
-				mMaxWidth += extra_width;
-
-			if (mMaxHeight == COORD_CENTERED)
-				mMaxHeight = total_height;
-			else if (mMaxHeight != COORD_UNSPECIFIED)
-				mMaxHeight += extra_height;
-		} // if (mGuiShowHasNeverBeenDone)
 	} // if (allow_move_window)
 
 	// Note that for SW_MINIMIZE and SW_MAXIMIZE, the MoveWindow() above should be done prior to ShowWindow()
