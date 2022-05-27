@@ -908,10 +908,9 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 					this_key.hotkey_to_fire_upon_release = hotkey_id_with_flags;
 					hotkey_id_with_flags = HOTKEY_ID_INVALID;
 				}
-				else // Valid key-down hotkey.
+				else if (hotkey_id_with_flags < Hotkey::sHotkeyCount) // Valid key-down hotkey.
 				{
-					if (hotkey_id_temp < Hotkey::sHotkeyCount)
-						this_key.hotkey_to_fire_upon_release = hotkey_up[hotkey_id_temp]; // Might assign HOTKEY_ID_INVALID.
+					this_key.hotkey_to_fire_upon_release = hotkey_up[hotkey_id_with_flags]; // Might assign HOTKEY_ID_INVALID.
 					// Since this prefix key is being used in its capacity as a suffix instead,
 					// hotkey_id_with_flags now contains a hotkey ready for firing later below.
 					// v1.0.41: Above is done even if the hotkey is subject to #IfWin because:
