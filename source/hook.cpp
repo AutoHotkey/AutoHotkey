@@ -920,9 +920,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 					// released rather than now (and also probably reduces code size).
 				}
 			}
-			// Alt-tab need not be checked here (like it is in the similar section below) because all
-			// such hotkeys use (or were converted at load-time to use) a modifier_vk, not a set of
-			// modifiers or modifierlr's.
 		} // if (this_key.used_as_suffix)
 
 		if (hotkey_id_with_flags == HOTKEY_ID_INVALID)
