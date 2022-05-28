@@ -1526,6 +1526,11 @@ ResultType InputStart(input_type &input, Var *output_var)
 	if (input.Timeout > 0)
 		input.SetTimeoutTimer();
 
+	// It is possible for &input to already be in the list if AHK_INPUT_END is still
+	// in the message queue, in which case it must be removed from its current position
+	// to prevent the list from looping back on itself.
+	InputUnlinkIfStopped(&input);
+
 	input.Prev = g_input;
 	input.Start();
 	g_input = &input; // Signal the hook to start the input.
@@ -2000,30 +2005,43 @@ void input_type::EndByReason(InputStatusType aReason)
 }
 
 
-input_type *InputRelease(input_type *aInput)
+input_type **InputFindLink(input_type *aInput)
+{
+	if (g_input == aInput)
+		return &g_input;
+	else
+		for (auto *input = g_input; input; input = input->Prev)
+			if (input->Prev == aInput)
+				return &input->Prev;
+	return NULL; // aInput is not valid (faked AHK_INPUT_END message?) or not active.
+}
+
+
+input_type *InputUnlinkIfStopped(input_type *aInput)
 {
 	if (!aInput)
 		return NULL;
-	// Input should already have ended prior to this function being called.
-	// Otherwise, removal of aInput from the chain will end input collection.
-	if (g_input == aInput)
-		g_input = aInput->Prev;
-	else
-		for (auto *input = g_input; ; input = input->Prev)
-		{
-			if (!input)
-				return NULL; // aInput is not valid (faked AHK_INPUT_END message?) or not active.
-			if (input->Prev == aInput)
-			{
-				input->Prev = aInput->Prev;
-				break;
-			}
-		}
+	input_type **found = InputFindLink(aInput);
+	if (!found)
+		return NULL;
+	// InProgress can be true if Start() is called while AHK_INPUT_END is in the queue.
+	// In such cases, aInput was already moved to a new position in the list and must
+	// not be removed yet.
+	if (!aInput->InProgress())
+	{
+		*found = aInput->Prev;
+		WaitHookIdle(); // Ensure any pending use of aInput by the hook is finished.
+		aInput->Prev = NULL;
+	}
+	return aInput; // Return non-null to indicate aInput was found in the list and is therefore valid.
+}
 
-	// Ensure any pending use of aInput by the hook is finished.
-	WaitHookIdle();
-	
-	aInput->Prev = NULL;
+
+input_type *InputRelease(input_type *aInput)
+{
+	if (!InputUnlinkIfStopped(aInput))
+		return NULL;
+
 	if (aInput->ScriptObject)
 	{
 		Hotkey::MaybeUninstallHook();

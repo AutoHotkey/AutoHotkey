@@ -264,6 +264,8 @@ private:
 
 ResultType InputStart(input_type &input, Var *output_var = NULL);
 ResultType InputWait(Var *output_var, input_type &input);
+input_type **InputFindLink(input_type *aInput);
+input_type *InputUnlinkIfStopped(input_type *aInput);
 input_type *InputRelease(input_type *aInput);
 input_type *InputFind(InputObject *object);
 
