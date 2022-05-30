@@ -14431,7 +14431,9 @@ BIF_DECL(BIF_Random)
 BIF_DECL(BIF_DateAdd)
 {
 	FILETIME ft;
-	if (!YYYYMMDDToFileTime(ParamIndexToString(0, _f_number_buf), ft))
+	SYSTEMTIME st;
+	if ((!YYYYMMDDToSystemTime(ParamIndexToString(0, _f_number_buf), st, false))  // "false" because it's validated below.
+	|| (!SystemTimeToFileTime(&st, &ft)))
 		_f_throw_value(ERR_PARAM1_INVALID);
 
 	// Use double to support a floating point value for days, hours, minutes, etc:
@@ -14439,13 +14441,17 @@ BIF_DECL(BIF_DateAdd)
 	nUnits = TokenToDouble(*aParam[1]);
 
 	// Convert to 10ths of a microsecond (the units of the FILETIME struct):
+	bool is_months = false;
 	switch (ctoupper(*TokenToString(*aParam[2])))
 	{
 	case 'S': // Seconds
 		nUnits *= (double)10000000;
 		break;
-	case 'M': // Minutes
-		nUnits *= ((double)10000000 * 60);
+	case 'M': // Minutes or Months
+		if (ctoupper(TokenToString(*aParam[2])[1]) != 'O')
+			nUnits *= ((double)10000000 * 60);
+		else
+			is_months = true;
 		break;
 	case 'H': // Hours
 		nUnits *= ((double)10000000 * 60 * 60);
@@ -14453,9 +14459,33 @@ BIF_DECL(BIF_DateAdd)
 	case 'D': // Days
 		nUnits *= ((double)10000000 * 60 * 60 * 24);
 		break;
+	case 'Y': // Years
+		nUnits *= 12;
+		is_months = true;
+		break;
 	default: // Invalid
 		_f_throw_param(2);
 	}
+
+	if (is_months)
+	{
+		nUnits += st.wYear*12 + st.wMonth;
+		st.wYear = (int)nUnits / 12;
+		st.wMonth = (int)nUnits % 12;
+		if (!st.wMonth)
+		{
+			--st.wYear;
+			st.wMonth = 12;
+		}
+		if (st.wYear < 1601 || st.wYear > 9999)
+			_f_throw_param(1);
+		if ((st.wMonth == 2) && (st.wDay > 28))
+			st.wDay = (!(st.wYear % 4) && ((st.wYear % 100) || !(st.wYear % 400))) ? 29 : 28;
+		else if ((st.wDay == 31) && (st.wMonth == 4 || st.wMonth == 6 || st.wMonth == 9 || st.wMonth == 11))
+			st.wDay = 30;
+		_f_return_p(SystemTimeToYYYYMMDD(_f_retval_buf, st));
+	}
+
 	// Convert ft struct to a 64-bit variable (maybe there's some way to avoid these conversions):
 	ULARGE_INTEGER ul;
 	ul.LowPart = ft.dwLowDateTime;
@@ -14472,9 +14502,43 @@ BIF_DECL(BIF_DateAdd)
 
 BIF_DECL(BIF_DateDiff)
 {
+	__int64 time_until; // Declaring separate from initializing avoids compiler warning when not inside a block.
+	LPTSTR unit = ParamIndexToString(2);
+	int offset = 0;
+	if (ctoupper(*unit) == 'Y')
+		offset = 2;
+	else if ((ctoupper(*unit) == 'M') && (ctoupper(unit[1]) == 'O'))
+		offset = 6;
+	if (offset)
+	{
+		FILETIME ft;
+		SYSTEMTIME st1, st2;
+		if ((!YYYYMMDDToSystemTime(ParamIndexToString(0, _f_number_buf), st1, false))  // "false" because it's validated below.
+		|| (!SystemTimeToFileTime(&st1, &ft)))
+			_f_throw_value(ERR_PARAM1_INVALID);
+		if ((!YYYYMMDDToSystemTime(ParamIndexToString(1, _f_number_buf), st2, false))  // "false" because it's validated below.
+		|| (!SystemTimeToFileTime(&st2, &ft)))
+			_f_throw_value(ERR_PARAM2_INVALID);
+		if (offset == 2)
+		{
+			time_until = st1.wYear - st2.wYear;
+			st1.wDayOfWeek = 0;
+			st2.wDayOfWeek = 0;
+		}
+		else if (offset == 6)
+			time_until = st1.wYear*12 + st1.wMonth - st2.wYear*12 - st2.wMonth;
+		if (sizeof(SYSTEMTIME) != 16)
+			_f_throw_value(_T("Unexpected SYSTEMTIME structure size."));
+		__int64 result = memcmp((BYTE*)&st1+offset, (BYTE*)&st2+offset, 14-offset);
+		if (time_until > 0 && result < 0)
+			--time_until;
+		if (time_until < 0 && result > 0)
+			++time_until;
+		_f_return_i(time_until);
+	}
+
 	LPTSTR error_message;
 	// If either parameter is blank, it will default to the current time:
-	__int64 time_until; // Declaring separate from initializing avoids compiler warning when not inside a block.
 	TCHAR number_buf[MAX_NUMBER_SIZE]; // Additional buf used in case both parameters are pure numbers.
 	time_until = YYYYMMDDSecondsUntil(
 		ParamIndexToString(1, _f_number_buf),
@@ -14482,7 +14546,7 @@ BIF_DECL(BIF_DateDiff)
 		error_message);
 	if (error_message) // Usually caused by an invalid component in the date-time string.
 		_f_throw(error_message);
-	switch (ctoupper(*ParamIndexToString(2)))
+	switch (ctoupper(*unit))
 	{
 	case 'S': break;
 	case 'M': time_until /= 60; break; // Minutes
