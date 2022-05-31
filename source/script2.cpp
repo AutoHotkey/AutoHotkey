@@ -15320,6 +15320,46 @@ BIF_DECL(BIF_Ord)
 
 
 
+BIF_DECL(BIF_OrdMinMax)
+{
+	// Supports one or more parameters.
+	// Load-time validation has already ensured there is at least one parameter.
+
+	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
+
+	ExprTokenType param;
+	bool is_min = (ctoupper(aResultToken.marker[4]) == 'I');
+	int result = is_min ? 0x7FFFFFFF : -1;
+
+	for (int i = 0; i < aParamCount; ++i)
+	{
+		TBYTE *cp = (TBYTE*)ParamIndexToString(i, aResultToken.buf);
+		for (; *cp; ++cp)
+		{
+			if (is_min ? *cp < result : *cp > result)
+			{
+				if (*cp < 0xd800 || *cp > 0xdfff)
+					result = *cp;
+#ifdef UNICODE
+				else if (IS_SURROGATE_PAIR(cp[0], cp[1]))
+				{
+					result = ((cp[0] - 0xd800) << 10) + (cp[1] - 0xdc00) + 0x10000;
+					++cp;
+				}
+				else
+					_f_throw(_T("Invalid surrogate pair."));
+#endif
+			}
+		}
+	}
+
+	if (result == 0x7FFFFFFF || result == -1)
+		_f_throw(_T("At least one parameter must be non-blank."));
+	aResultToken.value_int64 = result;
+}
+
+
+
 BIF_DECL(BIF_Chr)
 {
 	int param1 = ParamIndexToInt(0); // Convert to INT vs. UINT so that negatives can be detected.
