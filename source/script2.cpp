@@ -15358,16 +15358,38 @@ BIF_DECL(BIF_NumGet)
 	else
 		target = (size_t)TokenToInt64(target_token);
 
-	if (aParamCount > 1) // Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
+	// params:
+	// 1: Target                      [invalid in AHK v2]
+	// 2: Target, Offset              [invalid in AHK v2]
+	// 2: Target,         Type
+	// 2: Target,               Count [invalid in AHK v2] [Count interpreted as Offset]
+	// 3: Target, Offset, Type
+	// 3: Target,         Type, Count
+	// 3: Target, Offset,       Count [invalid in AHK v2] [Count interpreted as Type]
+	// 4: Target, Offset, Type, Count
+
+	int count = 1;
+	bool is_array = false;
+	if (aParamCount > 1)
 	{
-		if (aParamCount > 2 || TokenIsPureNumeric(*aParam[1])) // Checking aParamCount first avoids some unnecessary work in common cases where all parameters were specified.
+		// Parameter "offset" is present, so increment the address by that amount.  For flexibility, this is done even when the target isn't a variable.
+		if (aParamCount > 3 || TokenIsPureNumeric(*aParam[1])) // Checking aParamCount first avoids some unnecessary work in common cases where all parameters were specified.
 			target += (ptrdiff_t)TokenToInt64(*aParam[1]); // Cast to ptrdiff_t vs. size_t to support negative offsets.
 		else
 			// Final param was omitted but this param is non-numeric, so use it as Type instead of Offset:
 			++aParamCount, --aParam; // aParam[0] is no longer valid, but that's OK.
+		if (aParamCount == 4)
+		{
+			count = (int)TokenToInt64(*aParam[3]);
+			is_array = true;
+			--aParamCount;
+		}
 	}
+	if (count < 0)
+		_f_throw(_T("Invalid item count."));
 
 	BOOL is_signed;
+	BOOL is_integer = TRUE;
 	size_t size = sizeof(DWORD_PTR); // Set default.
 
 	if (aParamCount < 3) // The "type" parameter is absent (which is most often the case), so use defaults.
@@ -15400,8 +15422,8 @@ BIF_DECL(BIF_NumGet)
 		case 'S': size = 2; break; // Short.
 		case 'C': size = 1; break; // Char.
 
-		case 'D': size = 8; aResultToken.symbol = SYM_FLOAT; break; // Double.
-		case 'F': size = 4; aResultToken.symbol = SYM_FLOAT; break; // Float.
+		case 'D': size = 8; is_integer = FALSE; break; // Double.
+		case 'F': size = 4; is_integer = FALSE; break; // Float.
 
 		// default: For any unrecognized values, keep "size" and aResultToken.symbol at their defaults set earlier
 		// (for simplicity).
@@ -15417,39 +15439,87 @@ BIF_DECL(BIF_NumGet)
 	// - Due to rarity of negative offsets, only the right-side boundary is checked, not the left.
 	// - Due to rarity and to simplify things, Float/Double (which "return" higher above) aren't checked.
 	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.
-		|| target_token.symbol == SYM_VAR && target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+		|| target_token.symbol == SYM_VAR && target+size*count > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
 		return;
 	}
 
-	switch(size)
+	Object *output_array;
+	ExprTokenType *output1;
+	ExprTokenType **output2;
+	if (is_array)
 	{
-	case 4: // Listed first for performance.
-		if (aResultToken.symbol == SYM_FLOAT)
-			aResultToken.value_double = *(float *)target;
-		else if (is_signed)
-			aResultToken.value_int64 = *(int *)target; // aResultToken.symbol was set to SYM_FLOAT or SYM_INTEGER higher above.
+		output_array = Object::Create();
+		aResultToken.symbol = SYM_OBJECT;
+		aResultToken.object = output_array;
+		output1 = (ExprTokenType*)_alloca(count * sizeof(ExprTokenType));
+		output2 = (ExprTokenType**)_alloca(count * sizeof(ExprTokenType*));
+	}
+
+	__int64 value_int64;
+	double value_double;
+	for (int i = 0; i < count; ++i, target+=size)
+	{
+		switch(size)
+		{
+		case 4: // Listed first for performance.
+			if (!is_integer)
+				value_double = *(float *)target;
+			else if (is_signed)
+				value_int64 = *(int *)target; // aResultToken.symbol was set to SYM_FLOAT or SYM_INTEGER higher above.
+			else
+				value_int64 = *(unsigned int *)target;
+			break;
+		case 8:
+			// Unsigned 64-bit integers aren't supported because variables/expressions can't support them.
+			if (!is_integer)
+				value_double = *(double *)target;
+			else
+				value_int64 = *(__int64 *)target;
+			break;
+		case 2:
+			if (is_signed) // Don't use ternary because that messes up type-casting.
+				value_int64 = *(short *)target;
+			else
+				value_int64 = *(unsigned short *)target;
+			break;
+		default: // size 1
+			if (is_signed) // Don't use ternary because that messes up type-casting.
+				value_int64 = *(char *)target;
+			else
+				value_int64 = *(unsigned char *)target;
+		}
+		if (!is_array)
+			break;
+		if (is_integer)
+		{
+			output1[i].symbol = SYM_INTEGER;
+			output1[i].value_int64 = value_int64;
+		}
 		else
-			aResultToken.value_int64 = *(unsigned int *)target;
-		break;
-	case 8:
-		// The below correctly copies both DOUBLE and INT64 into the union.
-		// Unsigned 64-bit integers aren't supported because variables/expressions can't support them.
-		aResultToken.value_int64 = *(__int64 *)target;
-		break;
-	case 2:
-		if (is_signed) // Don't use ternary because that messes up type-casting.
-			aResultToken.value_int64 = *(short *)target;
+		{
+			output1[i].symbol = SYM_FLOAT;
+			output1[i].value_double = value_double;
+		}
+		output2[i] = &output1[i];
+	}
+
+	if (!is_array)
+	{
+		if (is_integer)
+			aResultToken.value_int64 = value_int64;
 		else
-			aResultToken.value_int64 = *(unsigned short *)target;
-		break;
-	default: // size 1
-		if (is_signed) // Don't use ternary because that messes up type-casting.
-			aResultToken.value_int64 = *(char *)target;
-		else
-			aResultToken.value_int64 = *(unsigned char *)target;
+		{
+			aResultToken.symbol = SYM_FLOAT;
+			aResultToken.value_double = value_double;
+		}
+	}
+	else
+	{
+		ExprTokenType result_token;
+		output_array->_Push(result_token, output2, count);
 	}
 }
 
@@ -15674,7 +15744,16 @@ BIF_DECL(BIF_NumPut)
 		}
 	}
 
-	aResultToken.value_int64 = target + size; // This is used below and also as NumPut's return value. It's the address to the right of the item to be written.  aResultToken.symbol was set to SYM_INTEGER by our caller.
+	int count = 1;
+	bool is_array = false;
+	Object *obj;
+	if (obj = dynamic_cast<Object *>(TokenToObject(*aParam[0])))
+	{
+		count = obj->GetNumericItemCount();
+		is_array = true;
+	}
+
+	aResultToken.value_int64 = target + size*count; // This is used below and also as NumPut's return value. It's the address to the right of the item to be written.  aResultToken.symbol was set to SYM_INTEGER by our caller.
 
 	// See comments in NumGet about the following section:
 	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.
@@ -15696,28 +15775,38 @@ BIF_DECL(BIF_NumPut)
 		return;
 	}
 
-	switch(size)
+	for (int i = 0; i < count; ++i, target += size)
 	{
-	case 4: // Listed first for performance.
-		if (is_integer)
-			*(unsigned int *)target = (unsigned int)TokenToInt64(token_to_write);
-		else // Float (32-bit).
-			*(float *)target = (float)TokenToDouble(token_to_write);
-		break;
-	case 8:
-		if (is_integer)
-			// v1.0.48: Support unsigned 64-bit integers like DllCall does:
-			*(__int64 *)target = (is_unsigned && !IS_NUMERIC(token_to_write.symbol)) // Must not be numeric because those are already signed values, so should be written out as signed so that whoever uses them can interpret negatives as large unsigned values.
-				? (__int64)ATOU64(TokenToString(token_to_write)) // For comments, search for ATOU64 in BIF_DllCall().
-				: TokenToInt64(token_to_write);
-		else // Double (64-bit).
-			*(double *)target = TokenToDouble(token_to_write);
-		break;
-	case 2:
-		*(unsigned short *)target = (unsigned short)TokenToInt64(token_to_write);
-		break;
-	default: // size 1
-		*(unsigned char *)target = (unsigned char)TokenToInt64(token_to_write);
+		if (is_array)
+		{
+			ExprTokenType params[2], temp;
+			ExprTokenType* (param[])[1] = { params + 0 };
+			params[0].symbol = SYM_INTEGER; params[0].value_int64 = i+1;
+			obj->Invoke(token_to_write, temp, IT_GET, param[0], 1);
+		}
+		switch(size)
+		{
+		case 4: // Listed first for performance.
+			if (is_integer)
+				*(unsigned int *)target = (unsigned int)TokenToInt64(token_to_write);
+			else // Float (32-bit).
+				*(float *)target = (float)TokenToDouble(token_to_write);
+			break;
+		case 8:
+			if (is_integer)
+				// v1.0.48: Support unsigned 64-bit integers like DllCall does:
+				*(__int64 *)target = (is_unsigned && !IS_NUMERIC(token_to_write.symbol)) // Must not be numeric because those are already signed values, so should be written out as signed so that whoever uses them can interpret negatives as large unsigned values.
+					? (__int64)ATOU64(TokenToString(token_to_write)) // For comments, search for ATOU64 in BIF_DllCall().
+					: TokenToInt64(token_to_write);
+			else // Double (64-bit).
+				*(double *)target = TokenToDouble(token_to_write);
+			break;
+		case 2:
+			*(unsigned short *)target = (unsigned short)TokenToInt64(token_to_write);
+			break;
+		default: // size 1
+			*(unsigned char *)target = (unsigned char)TokenToInt64(token_to_write);
+		}
 	}
 	if (target_token.symbol == SYM_VAR)
 		target_token.var->Close(); // This updates various attributes of the variable.

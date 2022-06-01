@@ -8460,7 +8460,7 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	else if (!_tcsicmp(func_name, _T("NumGet")))
 	{
 		bif = BIF_NumGet;
-		max_params = 3;
+		max_params = 4;
 	}
 	else if (!_tcsicmp(func_name, _T("NumPut")))
 	{
