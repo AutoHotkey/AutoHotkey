@@ -1487,13 +1487,13 @@ public:
 
 
 
-enum FuncParamDefaults {PARAM_DEFAULT_NONE, PARAM_DEFAULT_STR, PARAM_DEFAULT_INT, PARAM_DEFAULT_FLOAT, PARAM_DEFAULT_UNSET};
+enum FuncParamDefaults {PARAM_DEFAULT_NONE, PARAM_DEFAULT_STR, PARAM_DEFAULT_INT, PARAM_DEFAULT_FLOAT, PARAM_DEFAULT_EXPR, PARAM_DEFAULT_UNSET};
 struct FuncParam
 {
 	Var *var;
 	WORD is_byref; // Boolean, but defined as WORD in case it helps data alignment and/or performance (BOOL vs. WORD didn't help benchmarks).
 	WORD default_type;
-	union {LPTSTR default_str; __int64 default_int64; double default_double;};
+	union { LPTSTR default_str; __int64 default_int64; double default_double; UserFunc *default_expr; };
 };
 
 struct FuncResult : public ResultToken
@@ -1674,6 +1674,7 @@ public:
 #define VAR_DECLARE_STATIC (VAR_DECLARED | VAR_LOCAL | VAR_LOCAL_STATIC)
 	UCHAR mDefaultVarType = VAR_DECLARE_LOCAL;
 
+	bool mHasParamExpr = false; // Indicates that this function has at least one parameter with a default expr, eg, f(param := expr)
 	UserFunc(LPCTSTR aName) : Func(aName) {}
 
 	bool IsBuiltIn() override { return false; }
@@ -3020,6 +3021,8 @@ public:
 	LineNumberType CurrentLine();
 	LPTSTR CurrentFile();
 	static ActionTypeType ConvertActionType(LPCTSTR aActionTypeString);
+
+	ResultType DefineParamExpr(UserFunc* aFunc);
 
 	enum SetTimerFlags
 	{

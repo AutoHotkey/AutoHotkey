@@ -5042,7 +5042,49 @@ inline ActionTypeType Script::ConvertActionType(LPCTSTR aActionTypeString)
 	return ACT_INVALID;  // On failure to find a match.
 }
 
-
+ResultType Script::DefineParamExpr(UserFunc* aFunc)
+{
+	// Called for each function which defines at least one "param := expr".
+	// For a script function 
+	// f(x:=expr) {
+	// }
+	// this function adds,
+	// f(x:=expr) {
+	//	<unnamed>() {
+	//		return expr
+	//	}
+	// }
+	auto count = aFunc->mParamCount;
+	auto current_func = g->CurrentFunc;
+	auto cls = g->CurrentFunc->mClass;
+	
+	for (int i = 0; i < count; ++i)
+	{
+		auto &param = aFunc->mParam[i];
+		if (param.default_type == FuncParamDefaults::PARAM_DEFAULT_EXPR)
+		{
+			auto param_func = g->CurrentFunc = AddFunc(_T(""), 0, nullptr); // No name to avoid creating a variable.
+			if (cls)
+			{	// To allow using "super" in a method/property parameter expression.
+				// Also see SYM_SUPER in ExpandExpression()
+				cls->AddRef();
+				param_func->mClass = cls;
+			}
+			auto expr_str = param.default_str;
+			
+			mNextLineIsFunctionBody = false;
+			if (!AddLine(ACT_BLOCK_BEGIN)
+				|| !ParseAndAddLine(expr_str, ACT_RETURN)
+				|| !AddLine(ACT_BLOCK_END))
+				return ScriptError(ERR_OUTOFMEM);
+			g->CurrentFunc = current_func;
+			param.default_expr = param_func;
+			free(expr_str); // allocated in DefineFunc with _tcsdup
+		}
+	}
+	mNextLineIsFunctionBody = true;
+	return OK;
+}
 
 ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc, LPTSTR aArgMap[], bool aAllArgsAreExpressions)
 // aArg must be a collection of pointers to memory areas that are modifiable, and there
@@ -5068,6 +5110,15 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 		mLastHotFunc = nullptr;
 	}
 
+	// Check if this is a function which needs to define any parameter default expresssions,
+	// eg f(param := expr)
+	if (mNextLineIsFunctionBody)
+	{
+		ASSERT(g->CurrentFunc);
+		if (g->CurrentFunc->mHasParamExpr
+			&& !DefineParamExpr(g->CurrentFunc))
+			return FAIL;
+	}
 	DerefList deref;  // Will be used to temporarily store the var-deref locations in each arg.
 	ArgStruct *new_arg;  // We will allocate some dynamic memory for this, then hang it onto the new line.
 	LPTSTR this_aArgMap, this_aArg;
@@ -5966,8 +6017,21 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 			}
 			else // A default value other than a quoted/literal string.
 			{
-				if (!(param_end = StrChrAny(param_start, _T(", \t=)")))) // Somewhat debatable but stricter seems better.
-					return ScriptError(ERR_MISSING_COMMA, aBuf); // Reporting aBuf vs. param_start seems more informative since Vicinity isn't shown.
+				
+				auto len_expr = FindExprDelim(param_start, ',');
+				if (param_start[len_expr] == '\0')
+				{
+					len_expr = FindExprDelim(param_start, ')');
+					if (param_start[len_expr] == '\0')
+					{
+						if (!(param_end = StrChrAny(param_start, _T(", \t=)")))) // Somewhat debatable but stricter seems better.
+							return ScriptError(ERR_MISSING_COMMA, aBuf); // Reporting aBuf vs. param_start seems more informative since vicinity isn't shown.
+					}
+					else
+						param_end = param_start + len_expr;
+				}
+				else
+					param_end = param_start + len_expr;
 				value_length = param_end - param_start;
 				if (value_length > MAX_NUMBER_LENGTH) // Too rare to justify elaborate handling or error reporting.
 					value_length = MAX_NUMBER_LENGTH;
@@ -5986,7 +6050,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 				{
 					this_param.default_type = PARAM_DEFAULT_UNSET;
 				}
-				else // The only things supported other than the above are integers and floats.
+				else // Check for pure numbers before handling "param := expr"
 				{
 					// Vars could be supported here via FindVar(), but only globals ABOVE this point in
 					// the script would be supported (since other globals don't exist yet). So it seems
@@ -6003,7 +6067,13 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 						this_param.default_double = ATOF(buf);
 						break;
 					default: // Not numeric (and also not a quoted string because that was handled earlier).
-						return ScriptError(_T("Unsupported parameter default."), aBuf);
+						// Aribtrary expression supported via nested functions
+						if (!*buf)
+							return ScriptError(ERR_INVALID_FUNCDECL, aBuf); // eg f( param := )
+						this_param.default_type = PARAM_DEFAULT_EXPR;
+						this_param.default_str = _tcsdup(buf);	// Used to define the expression in a nested function after
+																// g->CurrentFunc's opening brace line has been added.
+						g->CurrentFunc->mHasParamExpr = true;
 					}
 				}
 			}

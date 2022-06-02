@@ -315,7 +315,10 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						ASSERT(g->CurrentFunc && g->CurrentFunc->mClass);
 						func = g->CurrentFunc->mClass->Base();
 						ASSERT(func);
-						func_token->SetVar(g->CurrentFunc->mParam[0].var);
+						auto var = g->CurrentFunc->mParamCount
+							? g->CurrentFunc->mParam[0].var					// This is a method using "super"
+							: g->CurrentFunc->mOuterFunc->mParam[0].var;	// This is a nested function for a parameter expr containing "super". See DefineParamExpr 
+						func_token->SetVar(var);
 					}
 					else
 					{
@@ -1909,7 +1912,37 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 				case PARAM_DEFAULT_STR:   this_formal_param.var->Assign(this_formal_param.default_str);    break;
 				case PARAM_DEFAULT_INT:   this_formal_param.var->Assign(this_formal_param.default_int64);  break;
 				case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
+				case PARAM_DEFAULT_EXPR:
+				{
+					// evaluate "expr" in, eg, "f(param := expr)"
+					// and assign the result
+					auto expr_func = this_formal_param.default_expr;
+					
+					ResultToken result;
+					TCHAR buf[MAX_NUMBER_LENGTH];
+					result.InitResult(buf);
+					bool error = false;
+					if (!expr_func->Call(result, nullptr, 0))
+					{
+						aResultToken.SetExitResult(result.Result());	
+						error = true;
+					}
+					
+					if (!error
+						&& !this_formal_param.var->Assign(result))
+					{
+						aResultToken.SetExitResult(FAIL); // Abort thread.
+						error = true;
+					}
+					result.Free();
+					if (error)
+						goto free_and_return;
+					
+					break;
+					
+				}
 				case PARAM_DEFAULT_UNSET: this_formal_param.var->MarkUninitialized(); break;
+
 				default: //case PARAM_DEFAULT_NONE:
 					// No value has been supplied for this REQUIRED parameter.
 					aResultToken.Error(ERR_PARAM_REQUIRED, this_formal_param.var->mName); // Abort thread.
