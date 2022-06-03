@@ -5988,7 +5988,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		{
 			if (param_start[1] != '=')
 				return ScriptError(ERR_BAD_OPTIONAL_PARAM, param_start);
-
+			bool is_default_str = false;
 			param_start = omit_leading_whitespace(param_start + 2); // Start of the default value.
 			if (*param_start == '"' || *param_start == '\'') // Quoted literal string, or the empty string.
 			{
@@ -6004,20 +6004,29 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 					if (*param_end == in_quote && param_end[-1] != '`')
 					{
 						++param_end;
+						// Check if this string is the first value in a concatenation
+						// eg, f(x: = 'y' z), handle as PARAM_DEFAULT_EXPR below.
+						auto next_non_white = *omit_leading_whitespace(param_end);
+						if (next_non_white == ','
+							|| next_non_white == ')')
+							is_default_str = true;
+						// else it is concatenation,
 						break;  // The previous char is the ending quote.
 					}
 					//else an escaped '"' or some character other than '\0' or '"'.
 					*target++ = *param_end++;
 				}
-				*target = '\0'; // Terminate it in the buffer.
-				// The above has also set param_end for use near the bottom of the loop.
-				ConvertEscapeSequences(buf, NULL); // Raw escape sequences like `n haven't been converted yet, so do it now.
-				this_param.default_type = PARAM_DEFAULT_STR;
-				this_param.default_str = *buf ? SimpleHeap::Alloc(buf, target-buf) : _T("");
+				if (is_default_str)
+				{ 
+					*target = '\0'; // Terminate it in the buffer.
+					// The above has also set param_end for use near the bottom of the loop.
+					ConvertEscapeSequences(buf, NULL); // Raw escape sequences like `n haven't been converted yet, so do it now.
+					this_param.default_type = PARAM_DEFAULT_STR;
+					this_param.default_str = *buf ? SimpleHeap::Alloc(buf, target-buf) : _T("");
+				}
 			}
-			else // A default value other than a quoted/literal string.
-			{
-				
+			if (!is_default_str) // A default value or expression other than a quoted/literal string.
+			{	
 				auto len_expr = FindExprDelim(param_start, ',');
 				if (param_start[len_expr] == '\0')
 				{
