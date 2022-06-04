@@ -15368,14 +15368,8 @@ __forceinline ResultType Line::Perform() // As of 2/9/2009, __forceinline() redu
 		return FileInstall(THREE_ARGS);
 
 	case ACT_FILECOPY:
-	{
-		int error_count = Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1, false, g.LastError);
-		if (!error_count)
-			return g_ErrorLevel->Assign(ERRORLEVEL_NONE);
-		return SetErrorLevelOrThrowInt(error_count);
-	}
 	case ACT_FILEMOVE:
-		return SetErrorLevelOrThrowInt(Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1, true, g.LastError));
+		return FileCopyOrMove(ARG1, ARG2, ArgToInt(3) == 1);
 	case ACT_FILECOPYDIR:
 		return SetErrorLevelOrThrowBool(!Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1, false));
 	case ACT_FILEMOVEDIR:

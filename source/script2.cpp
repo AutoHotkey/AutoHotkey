@@ -10423,6 +10423,18 @@ bool Line::FileInstallCopy(LPTSTR aSource, LPTSTR aDest, bool aOverwrite)
 
 
 
+ResultType Line::FileCopyOrMove(LPTSTR aSource, LPTSTR aDest, bool aOverwrite)
+{
+	if (!*aDest) // Fix for v1.1.34.03: Previous behaviour was a Critical Error.
+		return LineError(ERR_PARAM2_MUST_NOT_BE_BLANK);
+	int error_count = 0;
+	if (*aSource) // For backward-compatibility, empty Source is treated as "no files found".
+		error_count = Util_CopyFile(aSource, aDest, aOverwrite, mActionType == ACT_FILEMOVE, g->LastError);
+	return SetErrorLevelOrThrowInt(error_count);
+}
+
+
+
 ResultType Line::FileGetAttrib(LPTSTR aFilespec)
 {
 	OUTPUT_VAR->Assign(); // Init to be blank, in case of failure.

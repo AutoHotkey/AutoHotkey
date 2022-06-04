@@ -717,6 +717,7 @@ private:
 #ifndef AUTOHOTKEYSC
 	bool FileInstallCopy(LPTSTR aSource, LPTSTR aDest, bool aOverwrite);
 #endif
+	ResultType FileCopyOrMove(LPTSTR aSource, LPTSTR aDest, bool aOverwrite);
 
 	typedef BOOL (* FilePatternCallback)(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
 	struct FilePatternStruct
