@@ -1473,6 +1473,9 @@ ResultType Line::FileGetVersion(LPTSTR aFilespec)
 
 bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int OverwriteMode, bool bMove)
 {
+	if (!*szInputSource || !*szInputDest)
+		return false;
+
 	bool bOverwrite = OverwriteMode == 1 || OverwriteMode == 2; // Strict validation for safety.
 
 	// Get the fullpathnames and strip trailing \s
@@ -1570,6 +1573,9 @@ bool Line::Util_CopyDir(LPCTSTR szInputSource, LPCTSTR szInputDest, int Overwrit
 
 bool Line::Util_RemoveDir(LPCTSTR szInputSource, bool bRecurse)
 {
+	if (!*szInputSource)
+		return false;
+
 	SHFILEOPSTRUCT	FileOp;
 	TCHAR			szSource[_MAX_PATH+2];
 	
@@ -1862,6 +1868,7 @@ bool Line::Util_IsDir(LPCTSTR szPath) // Returns true if the path is a directory
 void Line::Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut)
 // Returns the full pathname and strips any trailing \s.  Assumes output is _MAX_PATH in size.
 {
+	ASSERT(*szIn && *szOut);
 	LPTSTR szFilePart;
 	GetFullPathName(szIn, _MAX_PATH, szOut, &szFilePart);
 	strip_trailing_backslash(szOut);
@@ -1871,6 +1878,7 @@ void Line::Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut)
 
 void Line::Util_GetFullPathName(LPCTSTR szIn, LPTSTR szOut, DWORD aBufSize)
 {
+	ASSERT(*szIn && *szOut);
 	GetFullPathName(szIn, aBufSize, szOut, NULL);
 	strip_trailing_backslash(szOut);
 }
