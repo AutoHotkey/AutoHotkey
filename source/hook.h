@@ -263,6 +263,8 @@ private:
 #include "input_object.h"
 
 void InputStart(input_type &input);
+input_type **InputFindLink(input_type *aInput);
+input_type *InputUnlinkIfStopped(input_type *aInput);
 input_type *InputRelease(input_type *aInput);
 input_type *InputFind(InputObject *object);
 

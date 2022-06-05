@@ -2288,14 +2288,19 @@ void Hotstring::DoReplace(LPARAM alParam)
 
 	if (mDoBackspace)
 	{
+		int backspace_count = mStringLength;
+#ifdef UNICODE
+		for (LPCTSTR cp = mString; *cp; ++cp)
+			if (IS_SURROGATE_PAIR(cp[0], cp[1]))
+				++cp, --backspace_count; // Treat this surrogate pair as a single character (which it is).
+#endif
 		// Subtract 1 from backspaces because the final key pressed by the user to make a
 		// match was already suppressed by the hook (it wasn't sent through to the active
 		// window).  So what we do is backspace over all the other keys prior to that one,
 		// put in the replacement text (if applicable), then send the EndChar through
 		// (if applicable) to complete the sequence.
-		int backspace_count = mStringLength - 1;
-		if (mEndCharRequired)
-			++backspace_count;
+		if (!mEndCharRequired)
+			--backspace_count;
 		for (int i = 0; i < backspace_count; ++i)
 			*start_of_replacement++ = '\b';  // Use raw backspaces, not {BS n}, in case the send will be raw.
 		*start_of_replacement = '\0'; // Terminate the string created above.

@@ -840,10 +840,9 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 					this_key.hotkey_to_fire_upon_release = hotkey_id_with_flags;
 					hotkey_id_with_flags = HOTKEY_ID_INVALID;
 				}
-				else // Valid key-down hotkey.
+				else if (hotkey_id_with_flags < Hotkey::sHotkeyCount) // Valid key-down hotkey.
 				{
-					if (hotkey_id_temp < Hotkey::sHotkeyCount)
-						this_key.hotkey_to_fire_upon_release = hotkey_up[hotkey_id_temp]; // Might assign HOTKEY_ID_INVALID.
+					this_key.hotkey_to_fire_upon_release = hotkey_up[hotkey_id_with_flags]; // Might assign HOTKEY_ID_INVALID.
 					// Since this prefix key is being used in its capacity as a suffix instead,
 					// hotkey_id_with_flags now contains a hotkey ready for firing later below.
 					// v1.0.41: Above is done even if the hotkey is subject to #HotIf because:
@@ -852,9 +851,6 @@ LRESULT LowLevelCommon(const HHOOK aHook, int aCode, WPARAM wParam, LPARAM lPara
 					// released rather than now (and also probably reduces code size).
 				}
 			}
-			// Alt-tab need not be checked here (like it is in the similar section below) because all
-			// such hotkeys use (or were converted at load-time to use) a modifier_vk, not a set of
-			// modifiers or modifierlr's.
 		} // if (this_key.used_as_suffix)
 
 		if (hotkey_id_with_flags == HOTKEY_ID_INVALID)
@@ -2506,7 +2502,10 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 		}
 		if (char_count > 0
 			&& !CollectHotstring(aEvent, ch, char_count, active_window, pKeyHistoryCurr, aHotstringWparamToPost, aHotstringLparamToPost))
+		{
+			sPendingDeadKeyVK = 0; // Avoid reinserting it later (see "dead_key_sequence_complete" below).
 			return false; // Suppress.
+		}
 	}
 
 	// Fix for v1.0.37.06: The following section was moved beneath the hotstring section so that
@@ -2520,18 +2519,31 @@ bool CollectInput(KBDLLHOOKSTRUCT &aEvent, const vk_type aVK, const sc_type aSC,
 	// the letter "a" to produce á.
 	if (dead_key_sequence_complete)
 	{
-		// Since our call to ToUnicodeOrAsciiEx above has removed the pending dead key from the
-		// buffer, we need to put it back for the active window or the next hook in the chain.
-		// This is not needed when ch (the character or characters produced by combining the dead
-		// key with the last keystroke) is being suppressed, since in that case we don't want the
-		// dead key back in the buffer.
-		ZeroMemory(key_state, 256);
-		AdjustKeyState(key_state
-			, (sPendingDeadKeyUsedAltGr ? MOD_LCONTROL|MOD_RALT : 0)
-			| (sPendingDeadKeyUsedShift ? MOD_RSHIFT : 0)); // Left vs Right Shift probably doesn't matter in this context.
-		TCHAR temp_ch[2];
-		ToUnicodeOrAsciiEx(sPendingDeadKeyVK, sPendingDeadKeySC, key_state, temp_ch, 0, active_window_keybd_layout);
-		sPendingDeadKeyVK = 0;
+		// Fix for v1.1.34.03: Avoid reinserting the dead char if it wasn't actually in the buffer
+		// (which can happen if there's another keyboard hook that removed it due to a suppressed
+		// hotstring end-char).
+		TCHAR new_ch[2];
+		int new_char_count = ToUnicodeOrAsciiEx(aVK, aEvent.scanCode, key_state, new_ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
+		if (new_char_count < 0)
+			// aVK is also a dead key and wasn't in the buffer, so take it back out.  This also implies
+			// that sPendingDeadKeyVK needs to be reinserted, since the buffer state apparently differed
+			// between our two ToUnicode() calls, and sPendingDeadKeyVK is probably the reason.
+			ToUnicodeOrAsciiEx(aVK, aEvent.scanCode, key_state, new_ch, g_MenuIsVisible ? 1 : 0, active_window_keybd_layout);
+		if (new_char_count != char_count || ch[0] != new_ch[0]) // Translation differs, likely due to pending dead key having been removed.
+		{
+			// Since our earlier call to ToUnicodeOrAsciiEx has removed the pending dead key from the
+			// buffer, we need to put it back for the active window or the next hook in the chain.
+			// This is not needed when ch (the character or characters produced by combining the dead
+			// key with the last keystroke) is being suppressed, since in that case we don't want the
+			// dead key back in the buffer.
+			ZeroMemory(key_state, 256);
+			AdjustKeyState(key_state
+				, (sPendingDeadKeyUsedAltGr ? MOD_LCONTROL | MOD_RALT : 0)
+				| (sPendingDeadKeyUsedShift ? MOD_RSHIFT : 0)); // Left vs Right Shift probably doesn't matter in this context.
+			TCHAR temp_ch[2];
+			ToUnicodeOrAsciiEx(sPendingDeadKeyVK, sPendingDeadKeySC, key_state, temp_ch, 0, active_window_keybd_layout);
+			sPendingDeadKeyVK = 0;
+		}
 	}
 
 	return true; // Visible.

@@ -11833,8 +11833,7 @@ ResultType Line::Perform()
 
 	case ACT_FILECOPY:
 	case ACT_FILEMOVE:
-		return ThrowIntIfNonzero(Util_CopyFile(ARG1, ARG2, ArgToInt(3) == 1
-			, mActionType == ACT_FILEMOVE, g.LastError));
+		return FileCopyOrMove(ARG1, ARG2, ArgToInt(3) == 1);
 	case ACT_DIRCOPY:
 		return ThrowIfTrue(!Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1, false));
 	case ACT_DIRMOVE:
