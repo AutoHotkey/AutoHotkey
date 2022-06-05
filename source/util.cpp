@@ -1639,6 +1639,8 @@ LPTSTR FileAttribToStr(LPTSTR aBuf, DWORD aAttr)
 		aBuf[length++] = 'C';
 	if (aAttr & FILE_ATTRIBUTE_TEMPORARY)
 		aBuf[length++] = 'T';
+	if (aAttr & FILE_ATTRIBUTE_REPARSE_POINT)
+		aBuf[length++] = 'L';
 	aBuf[length] = '\0';  // Perform the final termination.
 	return aBuf;
 }
