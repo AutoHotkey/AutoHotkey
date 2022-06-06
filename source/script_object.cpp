@@ -2602,7 +2602,10 @@ BoundFunc::~BoundFunc()
 
 bool Closure::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount)
 {
-	return mFunc->Call(aResultToken, aParam, aParamCount, mVars);
+	AddRef();	// Avoid it being deleted during the call.
+	auto result = mFunc->Call(aResultToken, aParam, aParamCount, mVars);
+	Release();
+	return result;
 }
 
 Closure::~Closure()
