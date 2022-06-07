@@ -7255,19 +7255,21 @@ Var *Script::FindUpVar(LPCTSTR aVarName, size_t aVarNameLength, UserFunc &aInner
 
 void Script::CountNestedFuncRefs(UserFunc &aWithin, LPCTSTR aFuncName)
 {
-	for (int i = 0; i < aWithin.mVars.mCount; ++i)
+	for (int i = 0; i < aWithin.mVars.mCount; ++i) // There's no list of nested functions, so we look for them within mVars.
 	{
 		Var &nfv = *aWithin.mVars.mItem[i];
-		if (nfv.Type() == VAR_CONSTANT)
+		if (nfv.Type() == VAR_CONSTANT && !nfv.IsAlias()) // nfv is a reference to a function defined within aWithin (an alias would be a reference to something from outside).
 		{
 			ASSERT(nfv.HasObject() && dynamic_cast<UserFunc*>(nfv.Object()));
 			auto &nf = *(UserFunc *)nfv.Object();
 			Var *uv = nf.mVars.Find(aFuncName);
-			if (uv && uv->IsAlias())
+			if (uv && uv->IsAlias()) // nf refers to the outer aFuncName (if not an alias, it would be a nested function with the same name).
 			{
-				nf.mUpVarCount++;
-				if (uv->Scope() & VAR_DOWNVAR)
-					CountNestedFuncRefs(nf, aFuncName);
+				nf.mUpVarCount++; // Count uv as an upvar, as caller has determined aFuncName is now a closure.
+				if (nf.mUpVarCount == 1) // nf's first definite upvar, so nf is also now known to be a closure.
+					CountNestedFuncRefs(*nf.mOuterFunc, nf.mName); // Count all references to nf as upvars (except the one in nf.mOuterFunc).
+				if (uv->Scope() & VAR_DOWNVAR) // uv is also referenced by functions nested within nf,
+					CountNestedFuncRefs(nf, aFuncName); // so recurse.
 			}
 		}
 	}
