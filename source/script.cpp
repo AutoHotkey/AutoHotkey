@@ -5829,9 +5829,9 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		*param_start = '\0'; // Temporarily terminate, for simplicity.
 
 		// Build the fully-qualified method name for A_ThisFunc and ListVars:
-		// AddFunc() enforces a limit of MAX_VAR_NAME_LENGTH characters for function names, which is relied
-		// on by FindFunc(), BIF_OnMessage() and perhaps others.  For simplicity, allow one extra char to be
-		// printed and rely on AddFunc() detecting that the name is too long.
+		// AddFunc() enforces a limit of MAX_VAR_NAME_LENGTH characters for function names.
+		// For simplicity, allow one extra char to be printed and rely on AddFunc() detecting
+		// that the name is too long.
 		TCHAR full_name[MAX_VAR_NAME_LENGTH + 1 + 1]; // Extra +1 for null terminator.
 		_sntprintf(full_name, MAX_VAR_NAME_LENGTH + 1, aStatic ? _T("%s.%s") : _T("%s.Prototype.%s"), mClassName, aBuf);
 		full_name[MAX_VAR_NAME_LENGTH + 1] = '\0'; // Must terminate at this exact point if _sntprintf hit the limit.
@@ -6810,9 +6810,9 @@ T *ScriptItemList<T, S>::Find(LPCTSTR aName, size_t aNameLength, int *apInsertPo
 
 
 
-Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength)
+Func *Script::FindGlobalFunc(LPCTSTR aFuncName, size_t aFuncNameLength)
 {
-	if (Var *var = FindVar(aFuncName, aFuncNameLength))
+	if (Var *var = FindVar(aFuncName, aFuncNameLength, VAR_GLOBAL))
 		if (var->Type() == VAR_CONSTANT)
 			return dynamic_cast<Func *>(var->ToObject());
 	return nullptr;
@@ -6858,7 +6858,7 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 	if (aFuncNameLength == -1) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = _tcslen(aFuncName);
 
-	if (aFuncNameLength > MAX_VAR_NAME_LENGTH) // FindFunc(), BIF_OnMessage() and perhaps others rely on this limit being enforced.
+	if (aFuncNameLength > MAX_VAR_NAME_LENGTH) // Various parts of the code rely on this limit being enforced.
 	{
 		ScriptError(_T("Function name too long."), aFuncName);
 		return nullptr;

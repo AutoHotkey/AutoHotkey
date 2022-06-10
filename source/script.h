@@ -3046,7 +3046,7 @@ public:
 	void InitFuncLibrary(FuncLibrary &aLib, LPTSTR aPathBase, LPTSTR aPathSuffix);
 	void IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound);
 #endif
-	Func *FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0);
+	Func *FindGlobalFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0);
 	static FuncEntry *GetBuiltInFunc(LPTSTR aFuncName);
 	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aClassObject = NULL);
 
