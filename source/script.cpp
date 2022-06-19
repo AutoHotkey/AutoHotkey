@@ -857,6 +857,17 @@ ResultType Script::CreateWindows()
 	bool do_minimize = !fore_win || (GetClassName(fore_win, class_name, _countof(class_name))
 		&& !_tcsicmp(class_name, _T("Shell_TrayWnd"))); // Shell_TrayWnd is the taskbar's class on Win98/XP and probably the others too.
 
+	// v2: Set the default size to 75% of the primary work area (which seems to be what
+	// CW_USEDEFAULT does, at least on Windows 11); but limit the default width to the
+	// total height, so the window won't be ridiculously wide on ultra-wide screens.
+	RECT work;
+	SystemParametersInfo(SPI_GETWORKAREA, 0, &work, 0);
+	int default_width = (work.right - work.left) * 3 / 4;
+	int default_height = work.bottom - work.top;
+	if (default_width > default_height)
+		default_width = default_height;
+	default_height = default_height * 3 / 4;
+
 	// Note: the title below must be constructed the same was as is done by our
 	// WinMain() (so that we can detect whether this script is already running)
 	// which is why it's standardized in g_script.mMainWindowTitle.
@@ -874,8 +885,8 @@ ResultType Script::CreateWindows()
 		, WS_OVERLAPPEDWINDOW // Style.  Alt: WS_POPUP or maybe 0.
 		, CW_USEDEFAULT // xpos
 		, CW_USEDEFAULT // ypos
-		, CW_USEDEFAULT // width
-		, CW_USEDEFAULT // height
+		, default_width // width
+		, default_height // height
 		, NULL // parent window
 		, NULL // Identifies a menu, or specifies a child-window identifier depending on the window style
 		, g_hInstance // passed into WinMain
