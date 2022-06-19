@@ -767,7 +767,6 @@ private:
 	ResultType IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
 	ResultType IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
 
-	ResultType ToolTip(LPTSTR aText, LPTSTR aX, LPTSTR aY, LPTSTR aID);
 	ResultType TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions);
 
 	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);
@@ -3336,6 +3335,7 @@ BIF_DECL(BIF_TraySetIcon);
 
 BIF_DECL(BIF_MsgBox);
 BIF_DECL(BIF_InputBox);
+BIF_DECL(BIF_ToolTip);
 
 // Gui
 BIF_DECL(BIF_GuiFromHwnd);

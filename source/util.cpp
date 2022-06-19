@@ -2028,6 +2028,8 @@ bool ToolTipTextEquals(HWND aToolTipHwnd, LPCTSTR aText)
 	ti.uId = 0;
 	size_t len = _tcslen(aText);
 	LPTSTR buf = ti.lpszText = (LPTSTR)_malloca((len + 2) * sizeof(TCHAR));
+	if (!buf)
+		return false;
 	SendMessage(aToolTipHwnd, TTM_GETTEXT, len + 2, (LPARAM)&ti);
 	bool is_equal = !_tcscmp(aText, buf);
 	_freea(buf);

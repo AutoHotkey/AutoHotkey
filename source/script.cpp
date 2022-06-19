@@ -325,7 +325,7 @@ FuncEntry g_BIF[] =
 	BIF1(SysGetIPAddresses, 0, 0),
 	BIF1(Tan, 1, 1),
 	BIFA(Thread, 1, 3, ACT_THREAD),
-	BIFA(ToolTip, 0, 4, ACT_TOOLTIP),
+	BIF1(ToolTip, 0, 4),
 	BIF1(TraySetIcon, 0, 3),
 	BIFA(TrayTip, 0, 3, ACT_TRAYTIP),
 	BIFn(Trim, 1, 2, BIF_Trim),
@@ -11920,10 +11920,6 @@ ResultType Line::Perform()
 		return ShowMainWindow(MAIN_MODE_VARS, false); // Pass "unrestricted" when the command is explicitly used in the script.
 	case ACT_LISTHOTKEYS:
 		return ShowMainWindow(MAIN_MODE_HOTKEYS, false); // Pass "unrestricted" when the command is explicitly used in the script.
-
-	case ACT_TOOLTIP:
-		return ToolTip(FOUR_ARGS);
-
 	case ACT_TRAYTIP:
 		return TrayTip(THREE_ARGS);
 
