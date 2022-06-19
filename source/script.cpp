@@ -5071,12 +5071,6 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 	{
 		if (aActionType != ACT_BLOCK_BEGIN)
 			return ScriptError(ERR_HOTKEY_MISSING_BRACE);
-		// This is copied from DefineFunc:
-		else if (mLastLabel && !mLastLabel->mJumpToLine && !mNoUpdateLabels)
-		{
-			// There are one or more labels pointing at this function.
-			return ScriptError(_T("A label must not point to a function."), mLastLabel->mName);
-		}
 		mLastHotFunc = nullptr;
 	}
 
@@ -6051,12 +6045,6 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		memcpy(func.mParam, param, param_count * sizeof(FuncParam));
 	}
 	//else leave func.mParam/mParamCount set to their NULL/0 defaults.
-
-	if (mLastLabel && !mLastLabel->mJumpToLine && !mNoUpdateLabels) // AddLine does a similar check, maintain together.
-	{
-		// There are one or more labels pointing at this function.
-		return ScriptError(_T("A label must not point to a function."), mLastLabel->mName);
-	}
 	
 	if (last_hotfunc)
 	{
