@@ -1674,9 +1674,16 @@ bool NativeFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aP
 			aResultToken.Error(ERR_TOO_FEW_PARAMS, mName);
 			return false; // Abort expression.
 		}
-		// Otherwise, even if some params are SYM_MISSING, it is relatively safe to call the function.
-		// The TokenTo' set of functions will produce 0 or "" for missing params.  Although that isn't
-		// technically correct, it is simple and fairly logical.
+		
+		for (int i = 0; i < mMinParams; ++i)
+		{
+			if (aParam[i]->symbol == SYM_MISSING)
+			{
+				aResultToken.Error(ERR_PARAM_REQUIRED);
+				return false; // Abort expression.
+			}
+		}
+
 		if (mOutputVars)
 		{
 			// Verify that each output parameter is either a valid var or completely omitted.
