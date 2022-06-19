@@ -503,9 +503,10 @@ BIF_DECL(BIF_ComObjQuery)
 	if (punk < (IUnknown *)65536) // Error-detection: the first 64KB of address space is always invalid.
 		_f_throw_param(0);
 
+	GUID iid;
 	if (aParamCount > 2) // QueryService(obj, SID, IID)
 	{
-		GUID sid, iid;
+		GUID sid;
 		if (   SUCCEEDED(hr = CLSIDFromString(CStringWCharFromTCharIfNeeded(TokenToString(*aParam[1])), &sid))
 			&& SUCCEEDED(hr = CLSIDFromString(CStringWCharFromTCharIfNeeded(TokenToString(*aParam[2])), &iid))   )
 		{
@@ -518,7 +519,6 @@ BIF_DECL(BIF_ComObjQuery)
 	}
 	else // QueryInterface(obj, IID)
 	{
-		GUID iid;
 		if (SUCCEEDED(hr = CLSIDFromString(CStringWCharFromTCharIfNeeded(TokenToString(*aParam[1])), &iid)))
 		{
 			hr = punk->QueryInterface(iid, (void **)&pint);
@@ -526,7 +526,7 @@ BIF_DECL(BIF_ComObjQuery)
 	}
 
 	if (pint)
-		_f_return(new ComObject(pint, VT_UNKNOWN));
+		_f_return(new ComObject(pint, iid == IID_IDispatch ? VT_DISPATCH : VT_UNKNOWN));
 	ComError(hr, aResultToken);
 }
 
