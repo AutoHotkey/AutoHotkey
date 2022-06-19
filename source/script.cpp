@@ -3767,8 +3767,11 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 	// L4: Handle #HotIf (expression) directive.
 	if (IS_DIRECTIVE_MATCH(_T("#HotIf")))
 	{
-		if (g->CurrentFunc || mClassObjectCount || mLastHotFunc)
+		// Disallow #HotIf inside a function or class, but allow it interspersed with hotkey labels;
+		// i.e. g->CurrentFunc and mLastHotFunc must both be null or the same non-null value.
+		if (mClassObjectCount || g->CurrentFunc != mLastHotFunc) 
 			return ScriptError(ERR_INVALID_USAGE);
+
 		if (!parameter) // The omission of the parameter indicates that any existing criteria should be turned off.
 		{
 			g->HotCriterion = NULL; // Indicate that no criteria are in effect for subsequent hotkeys.
@@ -3781,6 +3784,8 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 		//  - Conserves memory.
 		if (g->HotCriterion = FindHotkeyIfExpr(parameter))
 			return CONDITION_TRUE;
+
+		auto pending_hotfunc = mLastHotFunc;
 		
 		// Create a function to return the result of the expression
 		// specified by "parameter":
@@ -3801,6 +3806,9 @@ inline ResultType Script::IsDirective(LPTSTR aBuf)
 			return ScriptError(ERR_OUTOFMEM);
 
 		func->mJumpToLine->mAttribute = g->HotCriterion;	// Must be set for PreparseHotkeyIfExpr
+
+		ASSERT(!g->CurrentFunc && !mLastHotFunc); // Should be null due to ACT_BLOCK_END and prior checks.
+		g->CurrentFunc = mLastHotFunc = pending_hotfunc; // Restore any pending hotkey function.
 		
 		return CONDITION_TRUE;
 	}
