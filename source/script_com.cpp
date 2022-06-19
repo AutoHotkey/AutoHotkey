@@ -525,7 +525,6 @@ BIF_DECL(BIF_ComObjQuery)
 		}
 	}
 
-	g->LastError = hr;
 	if (pint)
 		_f_return(new ComObject(pint, VT_UNKNOWN));
 	ComError(hr, aResultToken);
