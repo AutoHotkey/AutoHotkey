@@ -2710,19 +2710,19 @@ public:
 	GuiIndexType FindControl(LPTSTR aControlID);
 	GuiIndexType FindControlIndex(HWND aHwnd)
 	{
-		GuiIndexType index = GUI_HWND_TO_INDEX(aHwnd); // Retrieves a small negative on failure, which will be out of bounds when converted to unsigned.
-		if (index >= mControlCount) // Not found yet; try again with parent.
+		for (;;)
 		{
-			// Since ComboBoxes (and possibly other future control types) have children, try looking
-			// up aHwnd's parent to see if its a known control of this dialog.  Some callers rely on us making
-			// this extra effort:
-			if (aHwnd = GetParent(aHwnd)) // Note that a ComboBox's drop-list (class ComboLBox) is apparently a direct child of the desktop, so this won't help us in that case.
-				index = GUI_HWND_TO_INDEX(aHwnd); // Retrieves a small negative on failure, which will be out of bounds when converted to unsigned.
+			GuiIndexType index = GUI_HWND_TO_INDEX(aHwnd); // Retrieves a small negative on failure, which will be out of bounds when converted to unsigned.
+			if (index < mControlCount && mControl[index]->hwnd == aHwnd) // A match was found.  Fix for v1.1.09.03: Confirm it is actually one of our controls.
+				return index;
+			// Not found yet; try again with parent.  ComboBox and ListView only need one iteration,
+			// but multiple iterations may be needed by ActiveX/Custom or other future control types.
+			// Note that a ComboBox's drop-list (class ComboLBox) is apparently a direct child of the
+			// desktop, so this won't help us in that case.
+			aHwnd = GetParent(aHwnd);
+			if (!aHwnd || aHwnd == mHwnd) // No match, so indicate failure.
+				return NO_CONTROL_INDEX;
 		}
-		if (index < mControlCount && mControl[index]->hwnd == aHwnd) // A match was found.  Fix for v1.1.09.03: Confirm it is actually one of our controls.
-			return index;
-		else // No match, so indicate failure.
-			return NO_CONTROL_INDEX;
 	}
 	GuiControlType *FindControl(HWND aHwnd)
 	{
