@@ -27,6 +27,7 @@
       <Item Name="value" Condition="symbol == SYM_FLOAT">value_double</Item>
       <Item Name="object" Condition="symbol == SYM_OBJECT">object</Item>
       <Item Name="var" Condition="symbol == SYM_VAR">var</Item>
+      <Item Name="var_deref" Condition="symbol == SYM_VAR">var_deref</Item>
       <Item Name="callsite" Condition="symbol == SYM_FUNC">callsite</Item>
       <Item Name="marker" Condition="symbol == SYM_OPAREN">marker</Item>
       <Item Name="outer" Condition="symbol == SYM_OPAREN">outer_param_list</Item>
