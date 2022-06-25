@@ -845,7 +845,7 @@ void DefineFileClass();
 namespace ErrorPrototype
 {
 	extern Object *Error, *Memory, *Type, *Value, *OS, *ZeroDivision;
-	extern Object *Target, *Unset, *Member, *Property, *Method, *Index, *Key;
+	extern Object *Target, *Unset, *Member, *Property, *Method, *Index, *UnsetItem;
 	extern Object *Timeout;
 }
 

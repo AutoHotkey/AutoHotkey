@@ -790,7 +790,7 @@ void Map::__Item(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *
 			{
 				auto result = Invoke(aResultToken, IT_GET, _T("Default"), ExprTokenType { this }, nullptr, 0);
 				if (result == INVOKE_NOT_HANDLED)
-					_o_throw(ERR_NO_KEY, ParamIndexToString(0, _f_number_buf), ErrorPrototype::Key);
+					_o_throw(ERR_ITEM_UNSET, ParamIndexToString(0, _f_number_buf), ErrorPrototype::UnsetItem);
 				return;
 			}
 			// Otherwise, caller provided a default value.
@@ -1144,7 +1144,7 @@ void Map::Delete(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *
 	{
 		// Our return value when only one arg is given is supposed to be the value
 		// removed from this[arg].  Since this[arg] would throw an exception...
-		_o_throw(ERR_NO_KEY, ParamIndexToString(0, _f_number_buf), ErrorPrototype::Key);
+		_o_throw(ERR_ITEM_UNSET, ParamIndexToString(0, _f_number_buf), ErrorPrototype::UnsetItem);
 	}
 	// Set return value to the removed item.
 	item->ReturnMove(aResultToken);
@@ -2988,7 +2988,7 @@ Object *Object::CreateRootPrototypes()
 					{_T("PropertyError"), &ErrorPrototype::Property},
 					{_T("MethodError"), &ErrorPrototype::Method}
 				}},
-				{_T("KeyError"), &ErrorPrototype::Key}
+				{_T("UnsetItemError"), &ErrorPrototype::UnsetItem}
 			}},
 			{_T("ValueError"), &ErrorPrototype::Value, no_ctor, no_members, 0, {
 				{_T("IndexError"), &ErrorPrototype::Index}
@@ -3073,7 +3073,7 @@ Object *UserMenu::sBarPrototype;
 namespace ErrorPrototype
 {
 	Object *Error, *Memory, *Type, *Value, *OS, *ZeroDivision;
-	Object *Target, *Unset, *Member, *Property, *Method, *Index, *Key;
+	Object *Target, *Unset, *Member, *Property, *Method, *Index, *UnsetItem;
 	Object *Timeout;
 }
 

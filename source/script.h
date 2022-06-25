@@ -232,7 +232,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_TYPE_MISMATCH _T("Type mismatch.")
 #define ERR_NOT_ENUMERABLE _T("Value not enumerable.")
 #define ERR_PROPERTY_READONLY _T("Property is read-only.")
-#define ERR_NO_KEY _T("Key not found.")
+#define ERR_ITEM_UNSET _T("Item has no value.")
 #define ERR_NO_WINDOW _T("Target window not found.")
 #define ERR_NO_CONTROL _T("Target control not found.")
 #define ERR_NO_GUI _T("No default GUI.")
