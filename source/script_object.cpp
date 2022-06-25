@@ -2978,19 +2978,21 @@ Object *Object::CreateRootPrototypes()
 		}},
 		{_T("Class"), &Object::sClassPrototype},
 		{_T("Error"), &ErrorPrototype::Error, no_ctor, sErrorMembers, _countof(sErrorMembers), {
-			{_T("IndexError"), &ErrorPrototype::Index, no_ctor, no_members, 0, {
-				{_T("KeyError"), &ErrorPrototype::Key}
-			}},
-			{_T("MemberError"), &ErrorPrototype::Member, no_ctor, no_members, 0, {
-				{_T("PropertyError"), &ErrorPrototype::Property},
-				{_T("MethodError"), &ErrorPrototype::Method}
-			}},
 			{_T("MemoryError"), &ErrorPrototype::Memory},
 			{_T("OSError"), &ErrorPrototype::OS, no_ctor, sOSErrorMembers, _countof(sOSErrorMembers)},
 			{_T("TargetError"), &ErrorPrototype::Target},
 			{_T("TimeoutError"), &ErrorPrototype::Timeout},
 			{_T("TypeError"), &ErrorPrototype::Type},
-			{_T("ValueError"), &ErrorPrototype::Value},
+			{_T("UnsetError"), &ErrorPrototype::Unset, no_ctor, no_members, 0, {
+				{_T("MemberError"), &ErrorPrototype::Member, no_ctor, no_members, 0, {
+					{_T("PropertyError"), &ErrorPrototype::Property},
+					{_T("MethodError"), &ErrorPrototype::Method}
+				}},
+				{_T("KeyError"), &ErrorPrototype::Key}
+			}},
+			{_T("ValueError"), &ErrorPrototype::Value, no_ctor, no_members, 0, {
+				{_T("IndexError"), &ErrorPrototype::Index}
+			}},
 			{_T("ZeroDivisionError"), &ErrorPrototype::ZeroDivision}
 		}},
 		{_T("Func"), &Func::sPrototype, no_ctor, Func::sMembers, _countof(Func::sMembers), {
@@ -3071,7 +3073,7 @@ Object *UserMenu::sBarPrototype;
 namespace ErrorPrototype
 {
 	Object *Error, *Memory, *Type, *Value, *OS, *ZeroDivision;
-	Object *Target, *Member, *Property, *Method, *Index, *Key;
+	Object *Target, *Unset, *Member, *Property, *Method, *Index, *Key;
 	Object *Timeout;
 }
 

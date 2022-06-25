@@ -13390,7 +13390,7 @@ ResultType Script::VarUnsetError(Var *var)
 		sntprintf(buf, _countof(buf), _T("%s %s%s"), Var::DeclarationType(var->Scope()), var->mName, sameNameAsGlobal);
 	}
 	else *buf = '\0';
-	return RuntimeError(ERR_VAR_UNSET, buf);
+	return RuntimeError(ERR_VAR_UNSET, buf, FAIL_OR_OK, nullptr, ErrorPrototype::Unset);
 }
 
 
