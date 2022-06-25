@@ -562,6 +562,7 @@ public:
 	enum MemberID
 	{
 		P___Item,
+		M_Get,
 		P_Length,
 		P_Capacity,
 		M_InsertAt,

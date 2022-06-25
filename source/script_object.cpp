@@ -1909,6 +1909,7 @@ ObjectMember Array::sMembers[] =
 	Object_Method(__Enum, 0, 1),
 	Object_Method(Clone, 0, 0),
 	Object_Method(Delete, 1, 1),
+	Object_Method(Get, 1, 2),
 	Object_Method(Has, 1, 1),
 	Object_Method(InsertAt, 2, MAXP_VARIADIC),
 	Object_Method(Pop, 0, 0),
@@ -1921,10 +1922,11 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 	switch (aID)
 	{
 	case P___Item:
+	case M_Get:
 	{
-		auto index = ParamToZeroIndex(*aParam[aParamCount - 1]);
+		auto index = ParamToZeroIndex(*aParam[IS_INVOKE_SET ? 1 : 0]);
 		if (index >= mLength)
-			_o_throw(ERR_INVALID_INDEX, ParamIndexToString(aParamCount - 1, _f_number_buf), ErrorPrototype::Index);
+			_o_throw(ERR_INVALID_INDEX, ParamIndexToString(IS_INVOKE_SET ? 1 : 0, _f_number_buf), ErrorPrototype::Index);
 		auto &item = mItem[index];
 		if (IS_INVOKE_SET)
 		{
@@ -1933,7 +1935,17 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 			return;
 		}
 		if (item.symbol == SYM_MISSING)
+		{
+			if (!ParamIndexIsOmitted(1)) // Get(index, default)
+			{
+				aResultToken.CopyValueFrom(*aParam[1]);
+				return;
+			}
+			auto result = Object::Invoke(aResultToken, IT_GET, _T("Default"), ExprTokenType{this}, nullptr, 0);
+			if (result != INVOKE_NOT_HANDLED)
+				_o_return_retval;
 			_o_throw(ERR_ITEM_UNSET, ParamIndexToString(0, _f_number_buf), ErrorPrototype::UnsetItem);
+		}
 		item.ReturnRef(aResultToken);
 		_o_return_retval;
 	}
