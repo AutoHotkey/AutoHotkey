@@ -17260,47 +17260,6 @@ SymbolType TypeOfToken(ExprTokenType &aToken)
 
 
 
-// TypeOfToken: Similar result to TokenIsPureNumeric, but may return SYM_OBJECT.
-SymbolType TypeOfToken(ExprTokenType &aToken, SymbolType &aIsNum)
-{
-	switch (aToken.symbol)
-	{
-	case SYM_VAR:
-		switch (aToken.var->IsPureNumericOrObject())
-		{
-		case VAR_ATTRIB_IS_INT64:
-			aIsNum = PURE_INTEGER;
-			return SYM_INTEGER;
-		case VAR_ATTRIB_IS_DOUBLE:
-			aIsNum = PURE_FLOAT;
-			return SYM_FLOAT;
-		case VAR_ATTRIB_IS_OBJECT:
-			aIsNum = PURE_NOT_NUMERIC;
-			return SYM_OBJECT;
-		default:
-			aIsNum = aToken.var->IsNumeric();
-			return SYM_STRING;
-		}
-	case SYM_STRING:
-	case SYM_MISSING:
-		aIsNum = IsNumeric(aToken.marker, true, false, true);
-		return SYM_STRING;
-	case SYM_INTEGER:
-	case SYM_FLOAT:
-		aIsNum = aToken.symbol;
-		return aToken.symbol;
-	default:
-#ifdef _DEBUG
-		MsgBox(_T("DEBUG: Unhandled symbol type."));
-#endif
-	case SYM_OBJECT:
-		aIsNum = PURE_NOT_NUMERIC;
-		return aToken.symbol;
-	}
-}
-
-
-
 ResultType ResultToken::Return(LPTSTR aValue, size_t aLength)
 // Copy and return a string.
 {
