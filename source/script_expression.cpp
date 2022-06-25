@@ -1770,7 +1770,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 		count_of_actuals_that_have_formals = (aParamCount > mParamCount)
 			? mParamCount  // Omit any actuals that lack formals (this can happen when a dynamic call passes too many parameters).
 			: aParamCount;
-		
+
 		// If there are other instances of this function already running, either via recursion or
 		// an interrupted quasi-thread, back up the local variables of the instance that lies immediately
 		// beneath ours (in turn, that instance is responsible for backing up any instance that lies
@@ -1818,6 +1818,13 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 		// due to a function exiting.  In other words, it seems impossible for a there to be no other
 		// instances of this function on the call-stack and yet SYM_VAR to be one of this function's own
 		// locals or formal params because it would have no legitimate origin.
+
+		// Do not use "goto free_and_return" above this line
+		DEBUGGER_STACK_PUSH(&recurse) 
+		auto prev_func = g->CurrentFunc; // This will be non-NULL when a function is called from inside another function.
+		g->CurrentFunc = this;
+		// Do not use "return" below this line without popping the stack or before restoring g->CurrentFunc.
+
 
 		// From this point on, mInstances must be decremented before returning, even on error:
 		++mInstances;
@@ -1875,8 +1882,12 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 				var->MakeReadOnly();
 			}
 		}
-
-		for (j = 0; j < mParamCount; ++j) // For each formal parameter.
+		
+		UINT number_of_missing_params = 0;	// Tally of missing parameters, these will be assigned their default
+											// values/expressions only after the values passed by the caller
+											// has been assigned.
+		
+		for (j = 0; j < mParamCount; ++j)	// For each formal parameter assign values supplied by the caller.
 		{
 			FuncParam &this_formal_param = mParam[j]; // For performance and convenience.
 
@@ -1906,51 +1917,10 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 					}
 				}
 #endif
-			
-				switch(this_formal_param.default_type)
-				{
-				case PARAM_DEFAULT_STR:   this_formal_param.var->Assign(this_formal_param.default_str);    break;
-				case PARAM_DEFAULT_INT:   this_formal_param.var->Assign(this_formal_param.default_int64);  break;
-				case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
-				case PARAM_DEFAULT_EXPR:
-				{
-					// evaluate "expr" in, eg, "f(param := expr)"
-					// and assign the result
-					auto expr_func = this_formal_param.default_expr;
-					
-					ResultToken result;
-					TCHAR buf[MAX_NUMBER_LENGTH];
-					result.InitResult(buf);
-					bool error = false;
-					if (!expr_func->Call(result, nullptr, 0))
-					{
-						aResultToken.SetExitResult(result.Result());	
-						error = true;
-					}
-					
-					if (!error
-						&& !this_formal_param.var->Assign(result))
-					{
-						aResultToken.SetExitResult(FAIL); // Abort thread.
-						error = true;
-					}
-					result.Free();
-					if (error)
-						goto free_and_return;
-					
-					break;
-					
-				}
-				case PARAM_DEFAULT_UNSET: this_formal_param.var->MarkUninitialized(); break;
-
-				default: //case PARAM_DEFAULT_NONE:
-					// No value has been supplied for this REQUIRED parameter.
-					aResultToken.Error(ERR_PARAM_REQUIRED, this_formal_param.var->mName); // Abort thread.
-					goto free_and_return;
-				}
+				number_of_missing_params++; 
 				continue;
 			}
-
+		
 			ExprTokenType &token = *aParam[j];
 			
 			if (this_formal_param.is_byref)
@@ -2001,6 +1971,58 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			}
 		} // for each formal parameter.
 		
+		if (number_of_missing_params)
+		{
+			// Assign default values/expressions to missing parameters.
+			int k = 0; // loop index
+			do
+			{
+				ASSERT(k < mParamCount);
+				FuncParam& this_formal_param = mParam[k]; // For performance and convenience.
+				if (k >= aParamCount || aParam[k]->symbol == SYM_MISSING)
+				{
+					number_of_missing_params--;
+					switch (this_formal_param.default_type)
+					{
+					case PARAM_DEFAULT_STR:   this_formal_param.var->Assign(this_formal_param.default_str);    break;
+					case PARAM_DEFAULT_INT:   this_formal_param.var->Assign(this_formal_param.default_int64);  break;
+					case PARAM_DEFAULT_FLOAT: this_formal_param.var->Assign(this_formal_param.default_double); break;
+					case PARAM_DEFAULT_EXPR:
+					{
+						// evaluate "expr" in, eg, "f(param := expr)"
+						auto expr_func = this_formal_param.default_expr;
+						ResultToken result;
+						TCHAR buf[MAX_NUMBER_LENGTH];
+						result.InitResult(buf);
+						bool error = false;
+						if (!expr_func->Call(result, nullptr, 0))
+						{
+							aResultToken.SetExitResult(result.Result());
+							error = true;
+						}
+
+						if (!error
+							&& !this_formal_param.var->Assign(result))
+						{
+							aResultToken.SetExitResult(FAIL); // Abort thread.
+							error = true;
+						}
+						result.Free();
+						if (error)
+							goto free_and_return;
+						break;
+					}
+					case PARAM_DEFAULT_UNSET: this_formal_param.var->MarkUninitialized(); break;
+					default:
+						// No value has been supplied for this REQUIRED parameter.
+						aResultToken.Error(ERR_PARAM_REQUIRED, this_formal_param.var->mName); // Abort thread.
+						goto free_and_return;
+					}
+				}
+				k++;
+			} while (number_of_missing_params);
+		} // if (number_of_missing_params)
+
 		if (mIsVariadic && mParam[mParamCount].var) // i.e. this function is capable of accepting excess params via an object/array.
 		{
 			// Unused named parameters in param_obj are currently discarded, pending completion of the
@@ -2019,12 +2041,9 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			mParam[mParamCount].var->AssignSkipAddRef(vararg_obj);
 		}
 
-		DEBUGGER_STACK_PUSH(&recurse)
 
 		result = Execute(&aResultToken); // Execute the body of the function.
 
-		DEBUGGER_STACK_POP()
-		
 		// Setting this unconditionally isn't likely to perform any worse than checking for EXIT/FAIL,
 		// and likely produces smaller code.  Currently EARLY_RETURN results are possible and must be
 		// passed back in case this is a meta-function, but this should be revised at some point since
@@ -2032,6 +2051,12 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 		aResultToken.SetResult(result);
 
 free_and_return:
+		// Restore the original value in case this function is called from inside another function.
+		// Due to the synchronous nature of recursion and recursion-collapse, this should keep
+		// g->CurrentFunc accurate, even amidst the asynchronous saving and restoring of "g" itself:
+		g->CurrentFunc = prev_func;
+		DEBUGGER_STACK_POP()
+
 		// Free the memory of all the just-completed function's local variables.  This is done in
 		// both of the following cases:
 		// 1) There are other instances of this function beneath us on the call-stack: Must free
