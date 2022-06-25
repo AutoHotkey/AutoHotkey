@@ -453,8 +453,6 @@ public:
 			// default value, because an unset var in that context would have raised an error.
 			// Some other callers may use this in place of IsUninitialized().
 			aToken.symbol = SYM_MISSING;
-			aToken.marker = _T("");
-			aToken.marker_length = 0;
 			break;
 		default:
 			// VAR_ATTRIB_BINARY_CLIP or 0.

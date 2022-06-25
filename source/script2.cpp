@@ -17054,6 +17054,7 @@ LPTSTR TokenToString(ExprTokenType &aToken, LPTSTR aBuf, size_t *aLength)
 		}
 		//else continue on to return the default at the bottom.
 	//case SYM_OBJECT: // Treat objects as empty strings (or TRUE where appropriate).
+	//case SYM_MISSING:
 	default:
 		result = _T("");
 	}

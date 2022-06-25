@@ -913,8 +913,7 @@ void Object::EndClassDefinition()
 	auto &obj = *(Object *)GetOwnPropObj(_T("Prototype"));
 	// Each variable declaration created a 'missing' property in the class or prototype object to prevent
 	// duplicate or conflicting declarations.  Remove them now so that the declaration acts like a normal
-	// assignment (i.e. invokes property setters and __Set), for flexibility and consistency; and so that
-	// SYM_MISSING doesn't need special handling at runtime.
+	// assignment (i.e. invokes property setters and __Set), for flexibility and consistency.
 	RemoveMissingProperties();
 	obj.RemoveMissingProperties();
 }
@@ -1739,7 +1738,6 @@ void Object::Variant::ToToken(ExprTokenType &aToken)
 	switch (aToken.symbol = symbol) // Assign.
 	{
 	case SYM_STRING:
-	case SYM_MISSING:
 		aToken.marker = string;
 		aToken.marker_length = string.Length();
 		break;

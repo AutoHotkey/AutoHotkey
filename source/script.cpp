@@ -6392,7 +6392,7 @@ ResultType Script::DefineClassVars(LPTSTR aBuf, bool aStatic)
 	LPTSTR item, item_end;
 	TCHAR orig_char, buf[LINE_SIZE];
 	size_t buf_used = 0;
-	ExprTokenType empty_token(_T(""), 0);
+	ExprTokenType empty_token;
 	empty_token.symbol = SYM_MISSING;
 
 	for (item = omit_leading_whitespace(aBuf); *item;) // FOR EACH COMMA-SEPARATED ITEM IN THE DECLARATION LIST.
@@ -8729,7 +8729,6 @@ unquoted_literal:
 								// code than setting it up like token_begin, at least at the time of this comment.
 								ExprTokenType *missing = (ExprTokenType *)_alloca(sizeof(ExprTokenType));
 								missing->symbol = SYM_MISSING;
-								missing->marker = _T(""); // Simplify some cases by letting it be treated as SYM_STRING.
 								postfix[postfix_count++] = missing;
 							}
 							in_param_list->param_count += num_blank_params;
@@ -10892,8 +10891,6 @@ ResultType Line::PerformLoopFor(ResultToken *aResultToken, Line *&aJumpToLine, L
 		}
 		// Omitted.
 		token.symbol = SYM_MISSING;
-		token.marker = _T("");
-		token.marker_length = 0;
 	}
 
 	// Now that the enumerator expression has been evaluated, init A_Index:

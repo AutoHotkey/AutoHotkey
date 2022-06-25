@@ -42,7 +42,7 @@ inline LPTSTR _OptionalStringDefaultHelper(LPTSTR aDef, LPTSTR aBuf = NULL, size
 	(ParamIndexIsOmitted(index) ? _OptionalStringDefaultHelper(def, __VA_ARGS__) \
 								: ParamIndexToString(index, __VA_ARGS__))
 // The macro below defaults to "", since that is by far the most common default.
-// This allows it to skip the check for SYM_MISSING, which always has marker == _T("").
+// No check for SYM_MISSING is needed since TokenToString() returns "" for that.
 #define ParamIndexToOptionalString(index, ...) \
 	(((index) < aParamCount) ? ParamIndexToString(index, __VA_ARGS__) \
 							: _OptionalStringDefaultHelper(_T(""), __VA_ARGS__))

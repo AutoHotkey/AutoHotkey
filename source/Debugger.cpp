@@ -1079,11 +1079,7 @@ int Debugger::GetPropertyValue(Var &aVar, PropertySource &aProp)
 		aProp.value.Free();
 		aProp.value.mem_to_free = nullptr; // Any value would be overwritten but this must be cleared manually.
 		if (aVar.IsUninitializedNormalVar())
-		{
 			aProp.value.symbol = SYM_MISSING;
-			aProp.value.marker = _T("");
-			aProp.value.marker_length = 0;
-		}
 		else
 			aVar.ToToken(aProp.value);
 	}
