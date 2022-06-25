@@ -1926,11 +1926,15 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 		if (index >= mLength)
 			_o_throw(ERR_INVALID_INDEX, ParamIndexToString(aParamCount - 1, _f_number_buf), ErrorPrototype::Index);
 		auto &item = mItem[index];
-		if (IS_INVOKE_GET)
-			item.ReturnRef(aResultToken);
-		else
+		if (IS_INVOKE_SET)
+		{
 			if (!item.Assign(*aParam[0]))
 				_o_throw_oom;
+			return;
+		}
+		if (item.symbol == SYM_MISSING)
+			_o_throw(ERR_ITEM_UNSET, ParamIndexToString(0, _f_number_buf), ErrorPrototype::UnsetItem);
+		item.ReturnRef(aResultToken);
 		_o_return_retval;
 	}
 
