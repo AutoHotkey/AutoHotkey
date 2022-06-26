@@ -5715,7 +5715,7 @@ SymbolType Script::ConvertWordOperator(LPCTSTR aWord, size_t aLength)
 		{ _T("as"), SYM_RESERVED_OPERATOR },
 		{ _T("contains"), SYM_RESERVED_OPERATOR },
 		{ _T("in"), SYM_RESERVED_OPERATOR },
-		{ _T("unset"), SYM_RESERVED_WORD },
+		{ _T("unset"), SYM_MISSING },
 	};
 	for (int i = 0; i < _countof(sWordOp); ++i)
 	{
@@ -6024,6 +6024,13 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 			param_must_have_default = true;  // For now, all other params after this one must also have default values.
 			// Set up for the next iteration:
 			param_start = omit_leading_whitespace(param_end);
+		}
+		else if (*param_start == '?')
+		{
+			this_param.default_type = PARAM_DEFAULT_UNSET;
+			param_must_have_default = true;  // For now, all other params after this one must also have default values.
+			// Set up for the next iteration:
+			param_start = omit_leading_whitespace(param_start + 1);
 		}
 		else // This parameter does not have a default value specified.
 		{
@@ -8267,6 +8274,20 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					this_infix_item.symbol = SYM_BITNOT;
 					break;
 				case '?':
+					if (IS_SPACE_OR_TAB(cp1))
+						cp1 = *omit_leading_whitespace(cp + 1);
+					if (cp1 == ')' || cp1 == ',' || cp1 == ']' || cp1 == '}' || cp1 == ':')
+					{
+						// Under the conditions checked above, this '?' can't be a valid ternary operator.
+						// If there's a variable to the left, this is probably a valid "maybe" reference.
+						// Future use: other operations such as x[y]?.
+						if ( !(infix_count && (infix[infix_count - 1].symbol == SYM_VAR || infix[infix_count - 1].symbol == SYM_DYNAMIC)) )
+							return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
+						infix[infix_count - 1].var_usage = Script::VARREF_READ_MAYBE;
+						++cp; // Discard this '?'.
+						--infix_count; // Counter the loop's increment.
+						continue;
+					}
 					this_infix_item.symbol = SYM_IFF_THEN;
 					this_infix_item.marker = cp; // For error-reporting.
 					break;
@@ -9251,8 +9272,9 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 	} // End of loop that builds postfix array from the infix array.
 end_of_infix_to_postfix:
 
-	if (!postfix_count) // The code below relies on this check.  This can't be an empty (omitted) expression because an earlier check would've turned it into a non-expression.
-		return LineError(ERR_EXPR_SYNTAX, FAIL, aArg.text);
+	if (!postfix_count // The code below relies on this check.  This can't be an empty (omitted) expression because an earlier check would've turned it into a non-expression.
+		|| postfix[postfix_count - 1]->symbol == SYM_MISSING) // Some other things might rely on SYM_MISSING not being returned as the overall result.
+		return LineError(ERR_EXPR_SYNTAX, FAIL, mArgc > 1 ? aArg.text : _T(""));
 
 	// The following enables ExpandExpression() to be skipped in common cases for ACT_ASSIGNEXPR
 	// and ACT_RETURN.  A similar optimization used to be done for simple literal integers by
@@ -9357,6 +9379,8 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 	// overall complexity it seems best to assume that it could happen.  Having these checks
 	// here might help catch future (or present) bugs.
 
+#define TOKEN_MAY_MISS(token) ((token)->symbol == SYM_MISSING || (token)->symbol == SYM_VAR && (token)->var_usage == Script::VARREF_READ_MAYBE)
+
 	for (auto this_postfix = aArg.postfix; this_postfix->symbol != SYM_INVALID; ++this_postfix)
 	{
 		auto postfix_symbol = this_postfix->symbol;
@@ -9365,7 +9389,7 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 		{
 			if (postfix_symbol == SYM_DYNAMIC)
 			{
-				if (stack_count < 1)
+				if (stack_count < 1 || TOKEN_MAY_MISS(stack[stack_count - 1]))
 					return LineError(ERR_EXPR_SYNTAX);
 				--stack_count;
 			}
@@ -9373,13 +9397,13 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 		}
 		else if (IS_POSTFIX_OPERATOR(postfix_symbol) || IS_PREFIX_OPERATOR(postfix_symbol))
 		{
-			if (stack_count < 1)
+			if (stack_count < 1 || TOKEN_MAY_MISS(stack[stack_count - 1]))
 				return LineError(ERR_EXPR_SYNTAX);
 			stack[stack_count - 1] = this_postfix;
 		}
 		else if (SYM_USES_CIRCUIT_TOKEN(postfix_symbol))
 		{
-			if (stack_count < 1)
+			if (stack_count < 1 || postfix_symbol != SYM_IFF_ELSE && TOKEN_MAY_MISS(stack[stack_count - 1]))
 				return LineError(ERR_EXPR_SYNTAX);
 			// Pop the result of the left branch of this short-circuit operator, then just allow the right branch
 			// to be evaluated and its value/token used as the result.  A consequence of this simple approach is
@@ -9394,13 +9418,15 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 		}
 		else if (postfix_symbol == SYM_COMMA)
 		{
-			if (stack_count < 1)
+			if (stack_count < 1 || TOKEN_MAY_MISS(stack[stack_count - 1]))
 				return LineError(ERR_EXPR_SYNTAX);
 			--stack_count;
 		}
 		else if (postfix_symbol != SYM_FUNC)
 		{
-			if (stack_count < 2)
+			if (stack_count < 2
+				|| TOKEN_MAY_MISS(stack[stack_count - 1])
+				|| TOKEN_MAY_MISS(stack[stack_count - 2]))
 				return LineError(ERR_EXPR_SYNTAX);
 			--stack_count; // Pop RHS
 			stack[stack_count - 1] = this_postfix; // Replace LHS
@@ -9484,6 +9510,8 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 			stack[stack_count++] = this_postfix;
 		} // SYM_FUNC
 	} // postfix loop
+
+#undef TOKEN_MAY_MISS
 
 	if (stack_count != 1)
 		return LineError(ERR_EXPR_SYNTAX);

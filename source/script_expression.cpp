@@ -162,6 +162,13 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (!(temp_var = g_script.FindVar(right_string, right_length
 						, VARREF_IS_WRITE(this_token.var_usage) ? FINDVAR_FOR_WRITE : FINDVAR_FOR_READ)))
 					{
+						if (this_token.var_usage == Script::VARREF_ISSET) // this_token is to be passed to IsSet().
+						{
+							ASSERT(this_postfix[1].symbol == SYM_FUNC);
+							++this_postfix; // Skip the actual IsSet call since we're pushing its result directly.
+							this_token.SetValue(FALSE);
+							goto push_this_token;
+						}
 						if (g->CurrentFunc && g_script.FindGlobalVar(right_string, right_length))
 							error_msg = ERR_DYNAMIC_BAD_GLOBAL;
 						else
@@ -256,6 +263,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						error_value = &this_token;
 						goto unset_var;
 					}
+					else if (this_token.var_usage == Script::VARREF_READ_MAYBE)
+					{
+						this_token.symbol = SYM_MISSING;
+						goto push_this_token;
+					}
 				}
 			}
 			goto push_this_token;
@@ -324,7 +336,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					}
 					flags |= IF_NO_SET_PROPVAL;
 				}
-				ASSERT(func);
+				if (!func) // Possible for SYM_MISSING in cases that currently can't be detected at load-time, like (a ? unset : b).
+					goto abort_with_exception;
 			}
 
 			if (flags & EIF_LEAVE_PARAMS)
@@ -627,7 +640,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		if (!stack_count) // Prevent stack underflow.  An expression such as -*3 causes this.
 			goto abort_with_exception;
 		ExprTokenType &right = *STACK_POP;
-		if (!IS_OPERAND(right.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
+		if (right.symbol == SYM_MISSING)
 			goto abort_with_exception;
 
 		switch (this_token.symbol)
@@ -848,7 +861,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			if (!stack_count) // Prevent stack underflow.
 				goto abort_with_exception;
 			ExprTokenType &left = *STACK_POP; // i.e. the right operand always comes off the stack before the left.
-			if (!IS_OPERAND(left.symbol)) // Haven't found a way to produce this situation yet, but safe to assume it's possible.
+			if (left.symbol == SYM_MISSING)
 				goto abort_with_exception;
 			
 			if (IS_ASSIGNMENT_EXCEPT_POST_AND_PRE(this_token.symbol)) // v1.0.46: Added support for various assignment operators.
@@ -1272,7 +1285,8 @@ push_this_token:
 		STACK_PUSH(&this_token);   // Push the result onto the stack for use as an operand by a future operator.
 	} // For each item in the postfix array.
 
-	if (stack_count != 1)  // Even for multi-statement expressions, the stack should have only one item left on it:
+	if (stack_count != 1  // Even for multi-statement expressions, the stack should have only one item left on it:
+		|| stack[0]->symbol == SYM_MISSING) // Some other things might rely on SYM_MISSING not being returned as the overall result.
 		goto abort_with_exception; // the overall result.  Any conditions that cause this *should* be detected at load time.
 
 	ExprTokenType &result_token = *stack[0];  // For performance and convenience.  Even for multi-statement, the bottommost item on the stack is the final result so that things like var1:=1,var2:=2 work.

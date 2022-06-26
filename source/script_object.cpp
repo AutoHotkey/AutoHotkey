@@ -85,7 +85,7 @@ Object *Object::Create(ExprTokenType *aParam[], int aParamCount, ResultToken *ap
 		for (int i = 0; i + 1 < aParamCount; i += 2)
 		{
 			if (aParam[i]->symbol == SYM_MISSING || aParam[i+1]->symbol == SYM_MISSING)
-				continue; // For simplicity.
+				continue; // For simplicity and flexibility.
 
 			auto name = TokenToString(*aParam[i], buf);
 
@@ -148,7 +148,7 @@ ResultType Map::SetItems(ExprTokenType *aParam[], int aParamCount)
 	for (int i = 0; i + 1 < aParamCount; i += 2)
 	{
 		if (aParam[i]->symbol == SYM_MISSING || aParam[i+1]->symbol == SYM_MISSING)
-			continue; // For simplicity.
+			continue; // For simplicity and flexibility.
 
 		// See comments above.  HasItem() is checked so that the capacity won't be expanded
 		// unnecessarily if all of the remaining items already exist.  This produces smaller
@@ -305,21 +305,24 @@ ResultType GetEnumerator(IObject *&aEnumerator, ExprTokenType &aEnumerable, int 
 	IObject *invokee = TokenToObject(aEnumerable);
 	if (!invokee)
 		invokee = Object::ValueBase(aEnumerable);
-	// enum := object.__Enum(number of vars)
-	// IF_NEWENUM causes ComObjects to invoke a _NewEnum method or property.
-	// IF_BYPASS_METAFUNC causes Objects to skip the __Call meta-function if __Enum is not found.
-	auto result = invokee->Invoke(result_token, IT_CALL | IF_NEWENUM | IF_BYPASS_METAFUNC, _T("__Enum"), aEnumerable, param, 1);
-	if (result == FAIL || result == EARLY_EXIT)
-		return result;
-	if (result == INVOKE_NOT_HANDLED)
+	if (invokee)
 	{
-		aEnumerator = invokee;
-		aEnumerator->AddRef();
-		return OK;
+		// enum := object.__Enum(number of vars)
+		// IF_NEWENUM causes ComObjects to invoke a _NewEnum method or property.
+		// IF_BYPASS_METAFUNC causes Objects to skip the __Call meta-function if __Enum is not found.
+		auto result = invokee->Invoke(result_token, IT_CALL | IF_NEWENUM | IF_BYPASS_METAFUNC, _T("__Enum"), aEnumerable, param, 1);
+		if (result == FAIL || result == EARLY_EXIT)
+			return result;
+		if (result == INVOKE_NOT_HANDLED)
+		{
+			aEnumerator = invokee;
+			aEnumerator->AddRef();
+			return OK;
+		}
+		aEnumerator = TokenToObject(result_token);
+		if (aEnumerator)
+			return OK;
 	}
-	aEnumerator = TokenToObject(result_token);
-	if (aEnumerator)
-		return OK;
 	result_token.Free();
 	if (aDisplayError)
 		g_script.RuntimeError(ERR_TYPE_MISMATCH, _T("__Enum"), FAIL, nullptr, ErrorPrototype::Type);
