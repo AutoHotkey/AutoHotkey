@@ -7824,6 +7824,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 //		, 8              // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 11, 11         // SYM_IFF_ELSE, SYM_IFF_THEN (ternary conditional).  HAS AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for ternaries to perform traditionally when nested in each other without parentheses.
 //		, 12             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
+		, 15             // SYM_OR_MAYBE -- Right-associative as below.
 		, 17             // SYM_OR -- Right-associative so that short-circuit skips the entire right branch, instead of evaluating each one in sequence with the same result.
 		, 21             // SYM_AND -- As above.
 //		, 25             // Reserved for SYM_LOWNOT.
@@ -8274,6 +8275,15 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 					this_infix_item.symbol = SYM_BITNOT;
 					break;
 				case '?':
+					if (cp1 == '?')
+					{
+						if ( !(infix_count && (infix[infix_count - 1].symbol == SYM_VAR || infix[infix_count - 1].symbol == SYM_DYNAMIC)) )
+							return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
+						infix[infix_count - 1].var_usage = VARREF_READ_MAYBE; // `var ??` implies that no error should be raised if var is unset.
+						++cp; // An additional increment to have loop skip over the operator's second symbol.
+						this_infix_item.symbol = SYM_OR_MAYBE;
+						break;
+					}
 					if (IS_SPACE_OR_TAB(cp1))
 						cp1 = *omit_leading_whitespace(cp + 1);
 					if (cp1 == ')' || cp1 == ',' || cp1 == ']' || cp1 == '}' || cp1 == ':')
@@ -9202,6 +9212,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 
 		case SYM_AND:
 		case SYM_OR:
+		case SYM_OR_MAYBE:
 		case SYM_IFF_ELSE:
 		{
 			// Point this short-circuit operator to the end of its right operand.
@@ -9403,7 +9414,7 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 		}
 		else if (SYM_USES_CIRCUIT_TOKEN(postfix_symbol))
 		{
-			if (stack_count < 1 || postfix_symbol != SYM_IFF_ELSE && TOKEN_MAY_MISS(stack[stack_count - 1]))
+			if (stack_count < 1 || TOKEN_MAY_MISS(stack[stack_count - 1]) && postfix_symbol != SYM_IFF_ELSE && postfix_symbol != SYM_OR_MAYBE)
 				return LineError(ERR_EXPR_SYNTAX);
 			// Pop the result of the left branch of this short-circuit operator, then just allow the right branch
 			// to be evaluated and its value/token used as the result.  A consequence of this simple approach is
@@ -9524,7 +9535,8 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 		// to functions, ensure the var being referenced is valid for the given var_usage.
 		if (!ValidateVarUsage(this_postfix->var, this_postfix->var_usage))
 			return FAIL;
-		if (!this_postfix->var->IsAssignedSomewhere())
+		if (!this_postfix->var->IsAssignedSomewhere()
+			&& this_postfix->var_usage == VARREF_READ) // i.e. VARREF_READ_MAYBE (var?, var ?? value) generates no warning but doesn't mark var as assigned.
 			g_script.WarnUnassignedVar(this_postfix->var, this);
 	}
 

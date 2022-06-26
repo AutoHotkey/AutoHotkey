@@ -641,7 +641,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			goto abort_with_exception;
 		ExprTokenType &right = *STACK_POP;
 		if (right.symbol == SYM_MISSING)
+		{
+			if (this_token.symbol == SYM_OR_MAYBE) // ?? is the only operator that permits SYM_MISSING.
+				continue; // Continue on to evaluate the right branch.
 			goto abort_with_exception;
+		}
 
 		switch (this_token.symbol)
 		{
@@ -651,7 +655,8 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		case SYM_IS:
 			right_is_pure_number = right_is_number = PURE_NOT_NUMERIC; // Init for convenience/maintainability.
 		case SYM_AND:			// v2: These don't need it either since even numeric strings are considered "true".
-		case SYM_OR:			//
+		case SYM_OR:			// right_is_number isn't used at all in these cases since they are handled early.
+		case SYM_OR_MAYBE:		//
 		case SYM_LOWNOT:		//
 		case SYM_HIGHNOT:		//
 		case SYM_REF:
@@ -683,6 +688,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 
 			if (left_branch_is_true == (this_token.symbol == SYM_OR))
 			{
+		case SYM_OR_MAYBE: // This case skips the "if" above, since the false (SYM_MISSING) branch was already handled.
 				// The ternary's condition is false or this AND/OR causes a short-circuit.
 				// Discard the entire right branch of this AND/OR or "then" branch of this IFF:
 				this_postfix = this_token.circuit_token; // The address in any circuit_token always points into the arg's postfix array (never any temporary array or token created here) due to the nature/definition of circuit_token.
