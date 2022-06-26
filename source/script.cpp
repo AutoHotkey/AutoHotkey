@@ -7739,7 +7739,7 @@ ResultType Script::PreparseCatchVar(Line *aLine)
 	{
 		Var *var;
 		if (  !(var = FindOrAddVar(var_name, 0, FINDVAR_FOR_WRITE))
-			|| !aLine->ValidateVarUsage(var, Script::VARREF_OUTPUT_VAR)  )
+			|| !aLine->ValidateVarUsage(var, VARREF_OUTPUT_VAR)  )
 			return FAIL;
 		var->MarkAssignedSomewhere();
 		args->output_var = var;
@@ -8229,7 +8229,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						else
 						{
 							this_infix_item.symbol = SYM_REF;
-							this_infix_item.var_usage = Script::VARREF_READ; // Set default: assume a VarRef is needed.
+							this_infix_item.var_usage = VARREF_READ; // Set default: assume a VarRef is needed.
 						}
 					}
 					break;
@@ -8283,7 +8283,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 						// Future use: other operations such as x[y]?.
 						if ( !(infix_count && (infix[infix_count - 1].symbol == SYM_VAR || infix[infix_count - 1].symbol == SYM_DYNAMIC)) )
 							return LineError(ERR_EXPR_SYNTAX, FAIL, cp);
-						infix[infix_count - 1].var_usage = Script::VARREF_READ_MAYBE;
+						infix[infix_count - 1].var_usage = VARREF_READ_MAYBE;
 						++cp; // Discard this '?'.
 						--infix_count; // Counter the loop's increment.
 						continue;
@@ -8555,7 +8555,7 @@ unquoted_literal:
 		{
 			infix[infix_count].symbol = SYM_DYNAMIC;
 			infix[infix_count].var = nullptr; // Indicate this is a double-deref.
-			infix[infix_count].var_usage = Script::VARREF_READ; // Set default.
+			infix[infix_count].var_usage = VARREF_READ; // Set default.
 		}
 		else if (this_deref_ref.type == DT_DOTPERCENT)
 		{
@@ -8616,7 +8616,7 @@ unquoted_literal:
 			// will validate and translate each SYM_VAR as needed.
 			infix[infix_count].symbol = SYM_VAR;
 			infix[infix_count].var_deref = &this_deref_ref;
-			infix[infix_count].var_usage = Script::VARREF_READ; // Set default, for detection of how this var ref is used.
+			infix[infix_count].var_usage = VARREF_READ; // Set default, for detection of how this var ref is used.
 		} // Handling of the var or function in this_deref.
 
 		// Finally, jump over the dereference text. Note that in the case of an expression, there might not
@@ -8636,7 +8636,7 @@ unquoted_literal:
 	{
 		if (infix_count != 1 || infix->symbol != SYM_VAR)
 			return LineError(ERR_EXPR_SYNTAX, FAIL, aArg.text);
-		infix->var_usage = Script::VARREF_OUTPUT_VAR;
+		infix->var_usage = VARREF_OUTPUT_VAR;
 	}
 
 	// Terminate the array with a special item.  This allows infix-to-postfix conversion to do a faster
@@ -9011,7 +9011,7 @@ unquoted_literal:
 					else if (sym_postfix == SYM_VAR || sym_postfix == SYM_DYNAMIC)
 					{
 						ExprTokenType &target = *postfix[postfix_count - 1];
-						target.var_usage = Script::VARREF_LVALUE; // Mark this as the target of an assignment.
+						target.var_usage = VARREF_LVALUE; // Mark this as the target of an assignment.
 					}
 					else if (!IS_OPERATOR_VALID_LVALUE(sym_postfix))
 						return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_infix->error_reporting_marker);
@@ -9191,7 +9191,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 					{
 						return LineError(_T("IsSet requires a variable."), FAIL, this_postfix->error_reporting_marker);
 					}
-					postfix[postfix_count - 1]->var_usage = Script::VARREF_ISSET;
+					postfix[postfix_count - 1]->var_usage = VARREF_ISSET;
 				}
 			}
 			break;
@@ -9218,7 +9218,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 		case SYM_REF:
 			postfix_symbol = postfix[postfix_count - 1]->symbol;
 			if (postfix_symbol == SYM_VAR || postfix_symbol == SYM_DYNAMIC)
-				postfix[postfix_count - 1]->var_usage = Script::VARREF_REF;
+				postfix[postfix_count - 1]->var_usage = VARREF_REF;
 			else if (!IS_OPERATOR_VALID_LVALUE(postfix_symbol))
 				return LineError(_T("\"&\" requires a variable."));
 			break;
@@ -9230,7 +9230,7 @@ standard_pop_into_postfix: // Use of a goto slightly reduces code size.
 				ExprTokenType &target = *postfix[postfix_count - 1];
 				// This is nearly identical to the section for assignments under "if (IS_ASSIGNMENT_OR_POST_OP(infix_symbol))":
 				if (target.symbol == SYM_VAR || target.symbol == SYM_DYNAMIC)
-					target.var_usage = Script::VARREF_LVALUE; // Mark this as the target of an assignment.
+					target.var_usage = VARREF_LVALUE; // Mark this as the target of an assignment.
 				else if (!IS_OPERATOR_VALID_LVALUE(target.symbol))
 					return LineError(ERR_INVALID_ASSIGNMENT, FAIL, this_postfix->error_reporting_marker);
 			}
@@ -9346,7 +9346,7 @@ end_of_infix_to_postfix:
 			if (!new_token.var)
 				return FAIL;
 			// This is currently left to FinalizeExpression() to reduce code size:
-			//if (new_token.var_usage != Script::VARREF_REF // Validation of REF is left to FinalizeExpression().
+			//if (new_token.var_usage != VARREF_REF // Validation of REF is left to FinalizeExpression().
 			//	&& !ValidateVarUsage(new_token.var, new_token.var_usage))
 			//	return FAIL;
 			new_token.var->MarkAssignedSomewhere();
@@ -9379,7 +9379,7 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 	// overall complexity it seems best to assume that it could happen.  Having these checks
 	// here might help catch future (or present) bugs.
 
-#define TOKEN_MAY_MISS(token) ((token)->symbol == SYM_MISSING || (token)->symbol == SYM_VAR && (token)->var_usage == Script::VARREF_READ_MAYBE)
+#define TOKEN_MAY_MISS(token) ((token)->symbol == SYM_MISSING || (token)->symbol == SYM_VAR && (token)->var_usage == VARREF_READ_MAYBE)
 
 	for (auto this_postfix = aArg.postfix; this_postfix->symbol != SYM_INVALID; ++this_postfix)
 	{
@@ -9487,8 +9487,8 @@ ResultType Line::FinalizeExpression(ArgStruct &aArg)
 							// passed directly without the need to allocate a VarRef, and 2) which var types are allowed.
 							// Permit VAR_VIRTUAL for all built-in functions except VarSetStrCapacity.
 							param[i]->var_usage =
-								(!bif || bif == BIF_VarSetStrCapacity) ? Script::VARREF_REF
-								:										 Script::VARREF_OUTPUT_VAR;
+								(!bif || bif == BIF_VarSetStrCapacity) ? VARREF_REF
+								:										 VARREF_OUTPUT_VAR;
 							if (!bif)
 								param[i]->object = func; // Used during runtime to detect when a VarRef is needed due to recursion (func->mInstances).
 							if (param[i][-1].symbol == SYM_DYNAMIC || param[i][-1].symbol == SYM_VAR)
@@ -13000,7 +13000,7 @@ ResultType Script::ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting
 ResultType Line::ValidateVarUsage(Var *aVar, int aUsage)
 {
 	if (   VARREF_IS_WRITE(aUsage)
-		&& (aUsage == Script::VARREF_REF
+		&& (aUsage == VARREF_REF
 			? aVar->Type() != VAR_NORMAL // Aliasing VAR_VIRTUAL is currently unsupported.
 			: aVar->IsReadOnly())   )
 		return VarIsReadOnlyError(aVar, aUsage);

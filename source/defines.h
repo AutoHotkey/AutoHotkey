@@ -235,6 +235,12 @@ enum SymbolType // For use with ExpandExpression() and IsNumeric().
 		|| sym == SYM_PRE_INCREMENT || sym == SYM_PRE_DECREMENT)
 
 
+enum VarRefUsageType { VARREF_READ = 0, VARREF_ISSET, VARREF_READ_MAYBE
+	, VARREF_REF, VARREF_LVALUE, VARREF_OUTPUT_VAR };
+#define VARREF_IS_WRITE(var_usage) ((var_usage) >= VARREF_REF)
+#define VARREF_IS_READ(var_usage) ((var_usage) == VARREF_READ || (var_usage) == VARREF_READ_MAYBE) // But not VARREF_ISSET.
+
+
 struct ExprTokenType; // Forward declarations for use below.
 struct ResultToken;
 struct IDebugProperties;
@@ -354,7 +360,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 				CallSite *outer_param_list; // Used by ExpressionToPostfix().
 				LPTSTR error_reporting_marker; // Used by ExpressionToPostfix() for binary and unary operators.
 				size_t marker_length;
-				int var_usage;		// for SYM_DYNAMIC and SYM_VAR (at load time)
+				VarRefUsageType var_usage; // for SYM_DYNAMIC and SYM_VAR (at load time)
 			};
 		};  
 	};
@@ -417,7 +423,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	{
 		symbol = SYM_VAR;
 		var = aVar;
-		var_usage = 1; // FIXME: VARREF_REF
+		var_usage = VARREF_REF;
 	}
 
 	// Assignments yield a variable using this function so that it can be passed ByRef,
@@ -430,7 +436,7 @@ struct ExprTokenType  // Something in the compiler hates the name TokenType, so 
 	{
 		symbol = SYM_VAR;
 		var = aVar;
-		var_usage = 0;
+		var_usage = VARREF_READ;
 	}
 
 private: // Force code to use one of the CopyFrom() methods, for clarity.

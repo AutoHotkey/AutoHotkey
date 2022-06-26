@@ -3132,9 +3132,7 @@ public:
 	ResultType RuntimeError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), ResultType aErrorType = FAIL_OR_OK, Line *aLine = nullptr, Object *aPrototype = nullptr);
 
 	ResultType ConflictingDeclarationError(LPCTSTR aDeclType, Var *aExisting);
-	enum VarRefUsageType { VARREF_READ = 0, VARREF_ISSET, VARREF_READ_MAYBE
-		, VARREF_REF, VARREF_LVALUE, VARREF_OUTPUT_VAR };
-#define VARREF_IS_WRITE(var_usage) ((var_usage) >= Script::VARREF_REF)
+	
 	ResultType VarIsReadOnlyError(Var *aVar, int aErrorType = VARREF_LVALUE);
 	ResultType VarUnsetError(Var *aVar);
 

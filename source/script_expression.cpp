@@ -162,7 +162,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 					if (!(temp_var = g_script.FindVar(right_string, right_length
 						, VARREF_IS_WRITE(this_token.var_usage) ? FINDVAR_FOR_WRITE : FINDVAR_FOR_READ)))
 					{
-						if (this_token.var_usage == Script::VARREF_ISSET) // this_token is to be passed to IsSet().
+						if (this_token.var_usage == VARREF_ISSET) // this_token is to be passed to IsSet().
 						{
 							ASSERT(this_postfix[1].symbol == SYM_FUNC);
 							++this_postfix; // Skip the actual IsSet call since we're pushing its result directly.
@@ -186,7 +186,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			}
 			if (this_token.symbol == SYM_VAR && !VARREF_IS_WRITE(this_token.var_usage))
 			{
-				if (this_token.var->Type() == VAR_VIRTUAL && this_token.var_usage == Script::VARREF_READ)
+				if (this_token.var->Type() == VAR_VIRTUAL && this_token.var_usage == VARREF_READ)
 				{
 					// FUTURE: This should be merged with the SYM_FUNC handling at some point to improve
 					// maintainability, reduce code size, and take advantage of SYM_FUNC's optimizations.
@@ -256,14 +256,14 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 							goto normal_end_skip_output_var;
 						}
 					}
-					else if (this_token.var_usage == Script::VARREF_READ)
+					else if (this_token.var_usage == VARREF_READ)
 					{
 						// The expression is always aborted in this case, even if the user chooses to continue the thread.
 						// If this is changed, check all other callers of unset_var and VarUnsetError() for consistency.
 						error_value = &this_token;
 						goto unset_var;
 					}
-					else if (this_token.var_usage == Script::VARREF_READ_MAYBE)
+					else if (this_token.var_usage == VARREF_READ_MAYBE)
 					{
 						this_token.symbol = SYM_MISSING;
 						goto push_this_token;
@@ -741,9 +741,9 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 		case SYM_REF:
 			if (right.symbol != SYM_VAR) // Syntax error?
 				goto abort_with_exception;
-			if (this_token.var_usage != Script::VARREF_READ)
+			if (this_token.var_usage != VARREF_READ)
 			{
-				if (this_token.var_usage != Script::VARREF_REF)
+				if (this_token.var_usage != VARREF_REF)
 				{
 					// VARREF_ISSET or VARREF_OUTPUT_VAR -> SYM_VAR.
 					this_token.SetVarRef(right.var);
@@ -1811,7 +1811,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			{
 				ExprTokenType &this_param_token = *aParam[j];
 				if (this_param_token.symbol != SYM_VAR
-					|| this_param_token.var_usage != Script::VARREF_READ) // Other values for var_usage indicate ExpandExpression has determined this var is static or global, and is being passed ByRef.
+					|| this_param_token.var_usage != VARREF_READ) // Other values for var_usage indicate ExpandExpression has determined this var is static or global, and is being passed ByRef.
 					continue;
 				// Since this SYM_VAR is being passed by value, convert it to a non-var to allow
 				// the variables to be backed up and reset further below without corrupting any
@@ -1943,7 +1943,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			
 			if (this_formal_param.is_byref)
 			{
-				if (token.symbol == SYM_VAR && token.var_usage != Script::VARREF_READ) // An optimized &var ref.
+				if (token.symbol == SYM_VAR && token.var_usage != VARREF_READ) // An optimized &var ref.
 				{
 					if (this_formal_param.var->Scope() & VAR_DOWNVAR) // This parameter's var is referenced by one or more closures.
 					{
