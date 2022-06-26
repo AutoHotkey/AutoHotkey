@@ -8294,7 +8294,7 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 				case ':':
 					if (cp1 == '=')
 					{
-						++cp; // An additional increment to have loop skip over the second '|' too.
+						++cp; // An additional increment to have loop skip over '=' too.
 						this_infix_item.symbol = SYM_ASSIGN;
 					}
 					else
