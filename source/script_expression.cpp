@@ -169,6 +169,11 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 							this_token.SetValue(FALSE);
 							goto push_this_token;
 						}
+						if (this_token.var_usage == VARREF_READ_MAYBE)
+						{
+							this_token.symbol = SYM_MISSING;
+							goto push_this_token;
+						}
 						if (g->CurrentFunc && g_script.FindGlobalVar(right_string, right_length))
 							error_msg = ERR_DYNAMIC_BAD_GLOBAL;
 						else
