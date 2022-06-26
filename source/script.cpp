@@ -7824,8 +7824,8 @@ ResultType Line::ExpressionToPostfix(ArgStruct &aArg, ExprTokenType *&aInfix)
 //		, 8              // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 11, 11         // SYM_IFF_ELSE, SYM_IFF_THEN (ternary conditional).  HAS AN ODD NUMBER to indicate right-to-left evaluation order, which is necessary for ternaries to perform traditionally when nested in each other without parentheses.
 //		, 12             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
-		, 16             // SYM_OR
-		, 20             // SYM_AND
+		, 17             // SYM_OR -- Right-associative so that short-circuit skips the entire right branch, instead of evaluating each one in sequence with the same result.
+		, 21             // SYM_AND -- As above.
 //		, 25             // Reserved for SYM_LOWNOT.
 //		, 26             // THIS VALUE MUST BE LEFT UNUSED so that the one above can be promoted to it by the infix-to-postfix routine.
 		, 28             // SYM_IS
