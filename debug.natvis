@@ -70,6 +70,7 @@
     <DisplayString Condition="symbol == SYM_FLOAT">{n_double}</DisplayString>
     <DisplayString Condition="symbol == SYM_OBJECT">{{{*object}}}</DisplayString>
     <DisplayString Condition="symbol == SYM_DYNAMIC">{*prop}</DisplayString>
+    <DisplayString Condition="symbol == SYM_MISSING">unset</DisplayString>
     <DisplayString>(bad symbol: {symbol})</DisplayString>
   </Type>
   <Type Name="Object::FieldType">
