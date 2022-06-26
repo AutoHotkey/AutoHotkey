@@ -186,7 +186,7 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 			}
 			if (this_token.symbol == SYM_VAR && !VARREF_IS_WRITE(this_token.var_usage))
 			{
-				if (this_token.var->Type() == VAR_VIRTUAL && this_token.var_usage == VARREF_READ)
+				if (this_token.var->Type() == VAR_VIRTUAL && VARREF_IS_READ(this_token.var_usage))
 				{
 					// FUTURE: This should be merged with the SYM_FUNC handling at some point to improve
 					// maintainability, reduce code size, and take advantage of SYM_FUNC's optimizations.
@@ -1811,7 +1811,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			{
 				ExprTokenType &this_param_token = *aParam[j];
 				if (this_param_token.symbol != SYM_VAR
-					|| this_param_token.var_usage != VARREF_READ) // Other values for var_usage indicate ExpandExpression has determined this var is static or global, and is being passed ByRef.
+					|| VARREF_IS_WRITE(this_param_token.var_usage)) // VARREF_REF indicates SYM_VAR is being passed ByRef.
 					continue;
 				// Since this SYM_VAR is being passed by value, convert it to a non-var to allow
 				// the variables to be backed up and reset further below without corrupting any
@@ -1943,7 +1943,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 			
 			if (this_formal_param.is_byref)
 			{
-				if (token.symbol == SYM_VAR && token.var_usage != VARREF_READ) // An optimized &var ref.
+				if (token.symbol == SYM_VAR && VARREF_IS_WRITE(token.var_usage)) // An optimized &var ref.
 				{
 					if (this_formal_param.var->Scope() & VAR_DOWNVAR) // This parameter's var is referenced by one or more closures.
 					{

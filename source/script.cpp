@@ -13605,11 +13605,11 @@ ResultType Script::PreparseVarRefs()
 				case VAR_CONSTANT:
 					// Resolve constants to their values, except in cases like IsSet(SomeClass), or when
 					// the constant is a closure (which may change each time the outer function is called).
-					if (!token->var->IsLocal() && token->var_usage == VARREF_READ && !token->var->IsUninitialized())
+					if (!token->var->IsLocal() && VARREF_IS_READ(token->var_usage) && !token->var->IsUninitialized())
 						token->var->ToToken(*token);
 					continue;
 				case VAR_VIRTUAL:
-					if (token->var_usage == VARREF_READ)
+					if (VARREF_IS_READ(token->var_usage))
 						++arg.max_alloc; // Reserve a to_free[] slot for it in ExpandExpression().
 					break;
 				default:

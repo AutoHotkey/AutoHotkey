@@ -11485,7 +11485,7 @@ has_valid_return_type:
 			// No other types can be output parameters when !passed_by_address.
 			continue;
 		}
-		if (this_param.var_usage == VARREF_READ)
+		if (VARREF_IS_READ(this_param.var_usage))
 			continue; // Output parameters are copied back only if provided with a VarRef (&variable).
 
 		switch (this_dyna_param.type)
@@ -17141,7 +17141,7 @@ StringCaseSenseType TokenToStringCase(ExprTokenType& aToken)
 
 Var *TokenToOutputVar(ExprTokenType &aToken)
 {
-	if (aToken.symbol == SYM_VAR && aToken.var_usage != VARREF_READ)
+	if (aToken.symbol == SYM_VAR && !VARREF_IS_READ(aToken.var_usage)) // VARREF_ISSET is tolerated for use by IsSet().
 		return aToken.var;
 	return dynamic_cast<VarRef *>(TokenToObject(aToken));
 }
