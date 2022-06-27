@@ -7,6 +7,7 @@
       <Item Name="file">sSourceFile[mFileIndex],sub</Item>
       <Item Name="line">mLineNumber,d</Item>
       <Item Name="args">mArg,[mArgc]</Item>
+      <Item Name="func" Condition="mActionType == ACT_BLOCK_BEGIN">(UserFunc*)mAttribute</Item>
     </Expand>
 	</Type>
   <Type Name="ArgStruct">
