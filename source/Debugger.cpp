@@ -659,27 +659,27 @@ DEBUGGER_COMMAND(Debugger::breakpoint_set)
 	}
 
 	Line *line = NULL, *found_line = NULL;
-	if (!found_line)
-		// If line is non-NULL, above has left it set to mLastStaticLine, which we want to exclude:
-		for (line = line ? line->mNextLine : g_script.mFirstLine; line; line = line->mNextLine)
-			if (line->mFileIndex == file_index && line->mLineNumber >= lineno)
-			{
-				// ACT_ELSE and ACT_BLOCK_BEGIN generally don't cause PreExecLine() to be called,
-				// so any breakpoint set on one of those lines would never be hit.  Attempting to
-				// set a breakpoint on one of these should act like setting a breakpoint on a line
-				// which contains no code: put the breakpoint at the next line instead.
-				// Without this check, setting a breakpoint on a line like "else Exit" would not work.
-				// ACT_CASE executes when the *previous* case reaches its end, so for that case
-				// we want to shift the breakpoint to the first Line after the ACT_CASE.
-				if (BreakpointLineIsSlippery(line))
-					continue;
-				// Use the first line of code at or after lineno, like Visual Studio.
-				// To display the breakpoint correctly, an IDE should use breakpoint_get.
-				if (!found_line || found_line->mLineNumber > line->mLineNumber)
-					found_line = line;
-				// Must keep searching, since class var initializers can cause lines to be listed out of order.
-				//break;
-			}
+	for (line = line ? line->mNextLine : g_script.mFirstLine; line; line = line->mNextLine)
+	{
+		if (line->mFileIndex == file_index && line->mLineNumber >= lineno)
+		{
+			// ACT_ELSE and ACT_BLOCK_BEGIN generally don't cause PreExecLine() to be called,
+			// so any breakpoint set on one of those lines would never be hit.  Attempting to
+			// set a breakpoint on one of these should act like setting a breakpoint on a line
+			// which contains no code: put the breakpoint at the next line instead.
+			// Without this check, setting a breakpoint on a line like "else Exit" would not work.
+			// ACT_CASE executes when the *previous* case reaches its end, so for that case
+			// we want to shift the breakpoint to the first Line after the ACT_CASE.
+			if (BreakpointLineIsSlippery(line))
+				continue;
+			// Use the first line of code at or after lineno, like Visual Studio.
+			// To display the breakpoint correctly, an IDE should use breakpoint_get.
+			if (!found_line || found_line->mLineNumber > line->mLineNumber)
+				found_line = line;
+			// Must keep searching, since class var initializers can cause lines to be listed out of order.
+			//break;
+		}
+	}
 	if (found_line)
 	{
 		if (!found_line->mBreakpoint)
