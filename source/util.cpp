@@ -2914,6 +2914,13 @@ int FindExprDelim(LPCTSTR aBuf, TCHAR aDelimiter, int aStartIndex, LPCTSTR aLite
 			// terminate the sub-expression (likely a fat arrow function).
 			return mark;
 		case '?':
+			if (aBuf[mark + 1] == '?') // ??
+			{
+				mark++; // Skip the second '?'.
+				continue;
+			}
+			// Otherwise, it could still be [var?], but that shouldn't need special treatment
+			// since aDelimiter should be ]/)/}, not :.
 			if (aDelimiter && aDelimiter != ':')
 				continue; // The following isn't needed in this case.
 			// Scan for the corresponding ':' (or some other closing symbol if that's missing)
