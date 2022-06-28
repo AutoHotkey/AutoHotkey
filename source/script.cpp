@@ -5879,7 +5879,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 	size_t param_length, value_length;
 	FuncParam param[MAX_FUNCTION_PARAMS];
 	int param_count = 0;
-	TCHAR buf[LINE_SIZE], *target;
+	TCHAR buf[LINE_SIZE];
 	bool param_must_have_default = false;
 	bool at_least_one_default_expr = false;
 
@@ -5967,30 +5967,20 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 			param_start = omit_leading_whitespace(param_start + 2); // Start of the default value.
 			if (*param_start == '"' || *param_start == '\'') // Quoted literal string, or the empty string.
 			{
-				TCHAR in_quote = *param_start;
-				// v1.0.46.13: Added support for quoted/literal strings beyond simply "".
-				// The following section is nearly identical to one in ExpandExpression().
-				// Find the end of this string literal, noting that a pair of double quotes is
-				// a literal double quote inside the string.
-				for (target = buf, param_end = param_start + 1;;) // Omit the starting-quote from consideration, and from the resulting/built string.
+				// Find the end of this string literal, taking into account quote type and escape chars.
+				param_end = param_start + FindTextDelim(param_start, *param_start, 1);
+				if (*param_end) // Close-quote was found.
 				{
-					if (!*param_end) // No matching end-quote. Probably impossible due to load-time validation.
-						return ScriptError(ERR_MISSING_CLOSE_QUOTE, param_start); // Reporting param_start vs. aBuf seems more informative in the case of quoted/literal strings.
-					if (*param_end == in_quote && param_end[-1] != '`')
+					auto next_non_white = *omit_leading_whitespace(param_end + 1);
+					if ((next_non_white == ',' || next_non_white == ')') // Just a literal string.
+						&& param_end - param_start < _countof(buf)) // If it's too long for the buffer, let it raise an error in the next section.
 					{
-						++param_end;
-						break;  // The previous char is the ending quote.
+						tcslcpy(buf, param_start + 1, param_end - param_start); // +1 skips the opening quote and also accounts for the terminator for tcslcpy.
+						ConvertEscapeSequences(buf, NULL); // Raw escape sequences like `n haven't been converted yet, so do it now.
+						this_param.default_type = PARAM_DEFAULT_STR;
+						this_param.default_str = SimpleHeap::Alloc(buf);
+						++param_end; // Move beyond the close-quote, for below.
 					}
-					//else an escaped '"' or some character other than '\0' or '"'.
-					*target++ = *param_end++;
-				}
-				if (omit_leading_whitespace(param_end) - param_end == FindExprDelim(param_end, 0)) // Nothing but whitespace between the quote and delimiter.
-				{
-					*target = '\0'; // Terminate it in the buffer.
-					// The above has also set param_end for use near the bottom of the loop.
-					ConvertEscapeSequences(buf, NULL); // Raw escape sequences like `n haven't been converted yet, so do it now.
-					this_param.default_type = PARAM_DEFAULT_STR;
-					this_param.default_str = *buf ? SimpleHeap::Alloc(buf, target - buf) : _T("");
 				}
 			}
 			if (this_param.default_type != PARAM_DEFAULT_STR)
