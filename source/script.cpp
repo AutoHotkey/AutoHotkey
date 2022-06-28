@@ -5081,6 +5081,11 @@ ResultType Script::AddLine(ActionTypeType aActionType, LPTSTR aArg[], int aArgc,
 			return ScriptError(ERR_HOTKEY_MISSING_BRACE);
 		mLastHotFunc = nullptr;
 	}
+	if (aActionType == ACT_BLOCK_BEGIN && mIgnoreNextBlockBegin)
+	{
+		mIgnoreNextBlockBegin = false;
+		return OK;
+	}
 
 	DerefList deref;  // Will be used to temporarily store the var-deref locations in each arg.
 	ArgStruct *new_arg;  // We will allocate some dynamic memory for this, then hang it onto the new line.
@@ -5811,6 +5816,7 @@ ResultType Script::ParseFatArrow(DerefList &aDeref, LPTSTR aPrmStart, LPTSTR aPr
 	return OK;
 }
 
+
 ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 // Returns OK or FAIL.
 // Caller has already called ValidateName() on the function, and it is known that this valid name
@@ -5863,6 +5869,11 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 			return FAIL; // It already displayed the error.
 	}
 
+	// mNextLineIsFunctionBody can be true in cases where a function begins with a nested function.
+	// Reset it to false for this new function prior to any AddLine() calls; it will be set back to
+	// true if appropriate when the block-end of this function is found.
+	mNextLineIsFunctionBody = false;
+
 	auto &func = *g->CurrentFunc; // For performance and convenience.
 
 	size_t param_length, value_length;
@@ -5870,6 +5881,7 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 	int param_count = 0;
 	TCHAR buf[LINE_SIZE], *target;
 	bool param_must_have_default = false;
+	bool at_least_one_default_expr = false;
 
 	func.mIsFuncExpression = aIsInExpression;
 
@@ -5972,20 +5984,24 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 					//else an escaped '"' or some character other than '\0' or '"'.
 					*target++ = *param_end++;
 				}
-				*target = '\0'; // Terminate it in the buffer.
-				// The above has also set param_end for use near the bottom of the loop.
-				ConvertEscapeSequences(buf, NULL); // Raw escape sequences like `n haven't been converted yet, so do it now.
-				this_param.default_type = PARAM_DEFAULT_STR;
-				this_param.default_str = *buf ? SimpleHeap::Alloc(buf, target-buf) : _T("");
+				if (omit_leading_whitespace(param_end) - param_end == FindExprDelim(param_end, 0)) // Nothing but whitespace between the quote and delimiter.
+				{
+					*target = '\0'; // Terminate it in the buffer.
+					// The above has also set param_end for use near the bottom of the loop.
+					ConvertEscapeSequences(buf, NULL); // Raw escape sequences like `n haven't been converted yet, so do it now.
+					this_param.default_type = PARAM_DEFAULT_STR;
+					this_param.default_str = *buf ? SimpleHeap::Alloc(buf, target - buf) : _T("");
+				}
 			}
-			else // A default value other than a quoted/literal string.
+			if (this_param.default_type != PARAM_DEFAULT_STR)
 			{
-				if (!(param_end = StrChrAny(param_start, _T(", \t=)")))) // Somewhat debatable but stricter seems better.
-					return ScriptError(ERR_MISSING_COMMA, aBuf); // Reporting aBuf vs. param_start seems more informative since Vicinity isn't shown.
-				value_length = param_end - param_start;
-				if (value_length > MAX_NUMBER_LENGTH) // Too rare to justify elaborate handling or error reporting.
-					value_length = MAX_NUMBER_LENGTH;
-				tcslcpy(buf, param_start, value_length + 1);  // Make a temp copy to simplify the below (especially IsNumeric).
+				value_length = FindExprDelim(param_start, 0);
+				if (value_length >= _countof(buf)) // Default expressions shouldn't realistically be longer than LINE_SIZE.
+					return ScriptError(ERR_INVALID_FUNCDECL, aBuf);
+				if (value_length <= MAX_NUMBER_SIZE)
+					tcslcpy(buf, param_start, value_length + 1); // Make a temp copy to simplify the below (especially IsNumeric).
+				else
+					*buf = '\0'; // It can't be any of the optimized defaults, so skip the copy.
 				if (!_tcsicmp(buf, _T("False")))
 				{
 					this_param.default_type = PARAM_DEFAULT_INT;
@@ -6002,10 +6018,6 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 				}
 				else // The only things supported other than the above are integers and floats.
 				{
-					// Vars could be supported here via FindVar(), but only globals ABOVE this point in
-					// the script would be supported (since other globals don't exist yet). So it seems
-					// best to wait until full/comprehensive support for expressions is studied/designed
-					// for both static initializers and parameter-default-values.
 					switch(IsNumeric(buf, true, false, true))
 					{
 					case PURE_INTEGER:
@@ -6017,9 +6029,19 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 						this_param.default_double = ATOF(buf);
 						break;
 					default: // Not numeric (and also not a quoted string because that was handled earlier).
-						return ScriptError(_T("Unsupported parameter default."), aBuf);
+						sntprintf(buf, _countof(buf), _T("%s ?? %s := %.*s"), this_param.var->mName, this_param.var->mName, value_length, param_start);
+						if (!at_least_one_default_expr)
+						{
+							at_least_one_default_expr = true;
+							if (!AddLine(ACT_BLOCK_BEGIN))
+								return FAIL;
+						}
+						if (!ParseAndAddLine(buf, ACT_EXPRESSION))
+							return FAIL;
+						this_param.default_type = PARAM_DEFAULT_UNSET;
 					}
 				}
+				param_end = param_start + value_length;
 			}
 			param_must_have_default = true;  // For now, all other params after this one must also have default values.
 			// Set up for the next iteration:
@@ -6051,7 +6073,10 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 		//else it's ')', in which case the next iteration will handle it.
 		// Above has ensured that param_start now points to the next parameter, or ')' if none.
 	} // for() each formal parameter.
-	
+
+	if (at_least_one_default_expr)
+		mIgnoreNextBlockBegin = true; // This is only set after all parameters are parsed, in case they contain fat arrow functions.
+
 	if (param_count)
 	{
 		// Allocate memory only for the actual number of parameters actually present.
@@ -6108,8 +6133,6 @@ ResultType Script::DefineFunc(LPTSTR aBuf, bool aStatic, bool aIsInExpression)
 										// next hotkey which needs a function.
 		mHotFuncs.mCount--;				// Consider it gone from the list.
 	}
-
-	mNextLineIsFunctionBody = false; // This is part of a workaround for functions which start with a nested function.
 
 	// At this point, param_start points to ')'.
 	ASSERT(*param_start == ')');

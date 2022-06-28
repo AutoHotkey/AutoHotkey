@@ -2869,6 +2869,7 @@ private:
 	Line *mPendingParentLine, *mPendingRelatedLine;
 	bool mNextLineIsFunctionBody; // Whether the very next line to be added will be the first one of the body.
 	bool mNoUpdateLabels;
+	bool mIgnoreNextBlockBegin;
 
 #define MAX_NESTED_CLASSES 5
 #define MAX_CLASS_NAME_LENGTH UCHAR_MAX
