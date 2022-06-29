@@ -1916,7 +1916,7 @@ ObjectMember Array::sMembers[] =
 	Object_Method(Has, 1, 1),
 	Object_Method(InsertAt, 2, MAXP_VARIADIC),
 	Object_Method(Pop, 0, 0),
-	Object_Method(Push, 1, MAXP_VARIADIC),
+	Object_Method(Push, 0, MAXP_VARIADIC),
 	Object_Method(RemoveAt, 1, 2)
 };
 
