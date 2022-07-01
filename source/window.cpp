@@ -1030,7 +1030,7 @@ int MsgBox(LPCTSTR aText, UINT uType, LPTSTR aTitle, double aTimeout, HWND aOwne
 	}
 
 	if (!aText) // In case the caller explicitly called it with a NULL, overriding the default.
-		aText = _T("");
+		aText = (uType & 0xF) ? _T("") : _T("Press OK to continue."); // Use default text only if OK is the only button.
 	if (!aTitle) // Caller omitted it or explicitly requested the default.
 		aTitle = g_script.DefaultDialogTitle();
 

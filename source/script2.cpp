@@ -4773,24 +4773,17 @@ BIF_DECL(BIF_MsgBox)
 	HWND dialog_owner = THREAD_DIALOG_OWNER; // Resolve macro only once to reduce code size.
 	// dialog_owner is passed via parameter to avoid internally-displayed MsgBoxes from being
 	// affected by script-thread's owner setting.
-	if (!aParamCount) // When called explicitly with zero params, it displays this default msg.
+	_f_param_string_opt_def(aText, 0, nullptr);
+	_f_param_string_opt_def(aTitle, 1, nullptr);
+	_f_param_string_opt(aOptions, 2);
+	int type;
+	double timeout;
+	if (!MsgBoxParseOptions(aOptions, type, timeout, dialog_owner))
 	{
-		result = MsgBox(_T("Press OK to continue."), MSGBOX_NORMAL, NULL, 0, dialog_owner);
+		aResultToken.SetExitResult(FAIL);
+		return;
 	}
-	else
-	{
-		_f_param_string_opt(aText, 0);
-		_f_param_string_opt_def(aTitle, 1, NULL);
-		_f_param_string_opt(aOptions, 2);
-		int type;
-		double timeout;
-		if (!MsgBoxParseOptions(aOptions, type, timeout, dialog_owner))
-		{
-			aResultToken.SetExitResult(FAIL);
-			return;
-		}
-		result = MsgBox(aText, type, aTitle, timeout, dialog_owner);
-	}
+	result = MsgBox(aText, type, aTitle, timeout, dialog_owner);
 	// If the MsgBox window can't be displayed for any reason, always return FAIL to
 	// the caller because it would be unsafe to proceed with the execution of the
 	// current script subroutine.  For example, if the script contains an IfMsgBox after,
