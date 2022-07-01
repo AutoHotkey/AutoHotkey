@@ -1630,7 +1630,11 @@ bool Script::IsFunctionDefinition(LPTSTR aBuf, LPTSTR aNextBuf)
 // *aPendingFunctionHasBrace is set to true if a brace is present at the end, or false otherwise.
 // In addition, any open-brace is removed from aBuf in this mode.
 {
+	LPTSTR action_start = aBuf;
 	LPTSTR action_end = find_identifier_end(aBuf);
+	// Allow the "static" keyword for preventing a nested function from becoming a closure.
+	if (IS_SPACE_OR_TAB(*action_end) && !_tcsnicmp(aBuf, _T("Static"), 6))
+		action_end = find_identifier_end(action_start = omit_leading_whitespace(action_end));
 	// Can't be a function definition or call without an open-parenthesis as first char found by the above.
 	// action_end points at the first character which is not usable in an identifier, such as a space, tab
 	// colon or other operator symbol.  As a result, it can't be:
@@ -1638,10 +1642,9 @@ bool Script::IsFunctionDefinition(LPTSTR aBuf, LPTSTR aNextBuf)
 	//    first-expr-char-is-not-open-parenthesis by the above.
 	// 2) Any kind of math or assignment, such as var:=(x+y) or var+=(x+y).
 	// The only things it could be other than a function call or function definition are:
-	// Normal label that ends in single colon but contains an open-parenthesis prior to the colon, e.g. Label(x):
 	// Single-line hotkey such as KeyName::MsgBox.  But (:: is the only valid hotkey where *action_end == '(',
 	// and that's handled by excluding action_end == aBuf.
-	if (*action_end != '(' || action_end == aBuf)
+	if (*action_end != '(' || action_end == action_start)
 		return false;
 	// Is it a control flow statement, such as "if(condition)"?
 	*action_end = '\0';
@@ -6882,6 +6885,24 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 // Returns the address of the new function or NULL on failure.
 // The caller must already have verified that this isn't a duplicate function.
 {
+	bool is_static = !_tcsnicmp(aFuncName, _T("Static"), 6) && IS_SPACE_OR_TAB(aFuncName[6]);
+	if (is_static)
+	{
+		if (aClassObject || !g->CurrentFunc)
+		{
+			ScriptError(ERR_INVALID_FUNCDECL, aFuncName); // Uses a generic message to minimize code size.
+			return nullptr;
+		}
+		size_t n;
+		for (n = 7; IS_SPACE_OR_TAB(aFuncName[n]); ++n);
+		if (aFuncNameLength > n) // Checked for maintainability; should always be true.
+		{
+			aFuncNameLength -= n;
+			aFuncName += n;
+		}
+		//else (shouldn't happen): it will fail to validate below.
+	}
+
 	if (aFuncNameLength == -1) // Caller didn't specify, so use the entire string.
 		aFuncNameLength = _tcslen(aFuncName);
 
@@ -6947,6 +6968,11 @@ UserFunc *Script::AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aCl
 		VarList *varlist;
 		int insert_pos;
 		int scope = (g->CurrentFunc ? VAR_DECLARE_LOCAL : VAR_DECLARE_GLOBAL);
+		if (is_static)
+		{
+			the_new_func->mIsStatic = true;
+			scope |= VAR_LOCAL_STATIC;
+		}
 		Var *var = aFuncNameLength ? FindVar(aFuncName, aFuncNameLength, FINDVAR_NO_BIF | scope, &varlist, &insert_pos, &result) : NULL;
 		if (var)
 		{
@@ -7212,8 +7238,8 @@ Var *Script::FindUpVar(LPCTSTR aVarName, size_t aVarNameLength, UserFunc &aInner
 		return nullptr;
 	auto &outer = *aInner.mOuterFunc;
 	Var *outer_var;
-	if (  (outer_var = outer.mStaticVars.Find(aVarName))  )
-		return outer_var;
+	if (  (outer_var = outer.mStaticVars.Find(aVarName)) || aInner.mIsStatic  )
+		return outer_var; // Can be nullptr if aInner.mIsStatic.
 	if (  !(outer_var = outer.mVars.Find(aVarName))  )
 	{
 		if (  !(outer.mOuterFunc && (outer_var = FindUpVar(aVarName, aVarNameLength, outer, aDisplayError)))  )
