@@ -1737,10 +1737,10 @@ public:
 
 		ResultType result;
 		result = mJumpToLine->ExecUntil(UNTIL_BLOCK_END, aResultToken);
-#ifdef CONFIG_DEBUGGER
-		if (g_Debugger.IsConnected())
+		if (result == EARLY_RETURN)
 		{
-			if (result == EARLY_RETURN)
+#ifdef CONFIG_DEBUGGER
+			if (g_Debugger.IsConnected())
 			{
 				// Find the end of this function.
 				//Line *line;
@@ -1753,8 +1753,9 @@ public:
 				if (line)
 					g_Debugger.PreExecLine(line);
 			}
-		}
 #endif
+			result = OK; // Function results should be OK, FAIL or EARLY_EXIT.
+		}
 
 		// Restore the original value in case this function is called from inside another function.
 		// Due to the synchronous nature of recursion and recursion-collapse, this should keep

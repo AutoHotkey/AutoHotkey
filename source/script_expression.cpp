@@ -2026,9 +2026,7 @@ bool UserFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aPar
 		DEBUGGER_STACK_POP()
 		
 		// Setting this unconditionally isn't likely to perform any worse than checking for EXIT/FAIL,
-		// and likely produces smaller code.  Currently EARLY_RETURN results are possible and must be
-		// passed back in case this is a meta-function, but this should be revised at some point since
-		// most of our callers only expect OK, FAIL or EARLY_EXIT.
+		// and likely produces smaller code.  Execute() takes care of translating EARLY_RETURN to OK.
 		aResultToken.SetResult(result);
 
 free_and_return:
