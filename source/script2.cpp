@@ -5008,7 +5008,8 @@ BIF_DECL(BIF_ToolTip)
 	ti.cbSize = sizeof(ti);
 	ti.uFlags = TTF_TRACK;
 	ti.lpszText = tip_text;
-	// Note that the ToolTip won't work if ti.hwnd is assigned the HWND from GetDesktopWindow().
+	// ti.hwnd is the window to which notification messages are sent.  Set this to allow customization.
+	ti.hwnd = g_hWnd;
 	// All of ti's other members are left at NULL/0, including the following:
 	//ti.hinst = NULL;
 	//ti.uId = 0;
