@@ -314,16 +314,15 @@ struct DECLSPEC_NOVTABLE IDebugProperties
 #define IT_CALL				2
 #define IT_BITMASK			3 // bit-mask for the above.
 
-#define IF_BYPASS_METAFUNC	0x10000 // Skip invocation of meta-functions, such as when calling __Init or __Delete.
-#define IF_NO_SET_PROPVAL	0x20000 // Fail IT_SET for value properties (allow only setters/__set).
-#define IF_DEFAULT			0x40000 // Invoke the default member (call a function object, array indexing, etc.).
-#define IF_NEWENUM			0x80000 // Workaround for COM objects which don't resolve "_NewEnum" to DISPID_NEWENUM.
-#define IF_BITMASK			0xF0000
+#define IF_BYPASS_METAFUNC	0x000010 // Skip invocation of meta-functions, such as when calling __Init or __Delete.
+#define IF_SUBSTITUTE_THIS	0x000020 // "this" is a substitute object (i.e. ValueBase()), so prohibit new value properties.
+#define IF_SUPER			0x000040 // super.something invocation.
+#define IF_DEFAULT			0x000100 // Invoke the default member (call a function object, array indexing, etc.).
+#define IF_NEWENUM			0x000200 // Workaround for COM objects which don't resolve "_NewEnum" to DISPID_NEWENUM.
 
-#define EIF_VARIADIC		0x01000
-#define EIF_STACK_MEMBER	0x02000
-#define EIF_LEAVE_PARAMS	0x04000
-#define EIF_BITMASK			0x07000
+#define EIF_VARIADIC		0x010000
+#define EIF_STACK_MEMBER	0x020000
+#define EIF_LEAVE_PARAMS	0x040000
 
 
 // Helper function for event handlers and __Delete:

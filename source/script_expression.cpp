@@ -333,13 +333,14 @@ LPTSTR Line::ExpandExpression(int aArgIndex, ResultType &aResult, ResultToken *a
 						func = g->CurrentFunc->mClass->Base();
 						ASSERT(func);
 						func_token->SetVar(g->CurrentFunc->mParam[0].var);
+						flags |= IF_SUPER;
 					}
 					else
 					{
 						// Invoke a substitute object but pass func_token as "this".
 						func = Object::ValueBase(*func_token);
+						flags |= IF_SUBSTITUTE_THIS;
 					}
-					flags |= IF_NO_SET_PROPVAL;
 				}
 				if (!func) // Possible for SYM_MISSING in cases that currently can't be detected at load-time, like (a ? unset : b).
 					goto abort_with_exception;

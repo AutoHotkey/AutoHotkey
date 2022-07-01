@@ -674,7 +674,7 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 		if (!obj_for_recursion)
 		{
 			obj_for_recursion = ValueBase(token_for_recursion);
-			aFlags |= IF_NO_SET_PROPVAL;
+			aFlags |= IF_SUBSTITUTE_THIS;
 		}
 		
 		// Recursively invoke obj_for_recursion, passing remaining parameters:
@@ -702,10 +702,24 @@ ResultType Object::Invoke(IObject_Invoke_PARAMS_DECL)
 	// SET
 	else if (setting)
 	{
-		if (!field && hasprop) // Property with getter but no setter.
-			return aResultToken.Error(ERR_PROPERTY_READONLY, name);
-		if (aFlags & IF_NO_SET_PROPVAL) // Changing value properties not permitted ("".foo := bar).
-			return INVOKE_NOT_HANDLED;
+		if (!field && hasprop || (aFlags & (IF_SUBSTITUTE_THIS | IF_SUPER)))
+		{
+			if ((aFlags & IF_SUPER) && (field || !hasprop))
+			{
+				// This is `super.x := y` where x is either a value property or undefined.
+				// If aThisToken is an Object, use the base Object implementation of set: create a value property.
+				if (auto real_this = dynamic_cast<Object *>(TokenToObject(aThisToken)))
+				{
+					if (!real_this->SetOwnProp(aName, **actual_param))
+						return aResultToken.MemoryError();
+					return OK;
+				}
+			}
+			// This property has a getter but no setter; or either IF_SUBSTITUTE_THIS or IF_SUPER was set and above
+			// did not return, in which case the property should be considered read-only, since it can't be stored
+			// in the actual target object (which is aThisToken, not C++ `this`).
+			return hasprop ? aResultToken.Error(ERR_PROPERTY_READONLY, name) : INVOKE_NOT_HANDLED;
+		}
 		
 		if (((field && this == that) // A field already exists in this object.
 				|| (field = Insert(name, insert_pos))) // A new field is inserted.
@@ -746,7 +760,7 @@ ResultType ObjectBase::Invoke(IObject_Invoke_PARAMS_DECL)
 {
 	if (auto base = Base())
 	{
-		aFlags |= IF_NO_SET_PROPVAL;
+		aFlags |= IF_SUBSTITUTE_THIS;
 		return base->Invoke(IObject_Invoke_PARAMS);
 	}
 	return INVOKE_NOT_HANDLED;

@@ -1117,7 +1117,7 @@ ResultType ComObject::Invoke(IObject_Invoke_PARAMS_DECL)
 			proto = Object::sComRefPrototype;
 		else
 			proto = Object::sComValuePrototype;
-		return proto->Invoke(aResultToken, aFlags | IF_NO_SET_PROPVAL, aName, aThisToken, aParam, aParamCount);
+		return proto->Invoke(aResultToken, aFlags | IF_SUBSTITUTE_THIS, aName, aThisToken, aParam, aParamCount);
 	}
 
 	DISPID dispid;
