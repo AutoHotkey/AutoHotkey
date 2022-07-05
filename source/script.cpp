@@ -1603,6 +1603,7 @@ UINT Script::LoadFromFile(LPCTSTR aFileSpec)
 	// restored by "#Include" after LoadIncludedFile() returned.  Note that A_InitialWorkingDir
 	// contains the startup-determined working directory, so no flexibility is lost.
 	SetCurrentDirectory(mFileDir);
+	g_WorkingDir.SetString(mFileDir);
 
 	// Even if the last line of the script is already "exit", always add another
 	// one in case the script ends in a label.  That way, every label will have
