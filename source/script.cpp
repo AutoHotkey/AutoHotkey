@@ -13823,9 +13823,23 @@ ResultType Script::ActionExec(LPTSTR aAction, LPTSTR aParams, LPTSTR aWorkingDir
 	// Launching nothing is always a success:
 	if (!aAction || !*aAction) return OK;
 
-	// Make sure this is set to NULL because CreateProcess() won't work if it's the empty string:
-	if (aWorkingDir && !*aWorkingDir)
-		aWorkingDir = NULL;
+	if (aWorkingDir)
+	{
+		if (*aWorkingDir)
+		{
+			// aWorkingDir is validated for two main reasons:
+			//  1) To make the cause of failure much clearer when both CreateProcess and ShellExecuteEx fail.
+			//  2) To prevent ShellExecuteEx from wrongly executing a file:
+			//     a) with aAction relative to the wrong working directory; and/or
+			//     b) with the child process having the wrong working directory.
+			auto attrib = GetFileAttributes(aWorkingDir);
+			if (attrib == INVALID_FILE_ATTRIBUTES || !(attrib & FILE_ATTRIBUTE_DIRECTORY))
+				return aDisplayErrors ? RuntimeError(ERR_PARAM2_INVALID, aWorkingDir) : FAIL;
+		}
+		else
+			// Set it to NULL because CreateProcess() won't work if it's the empty string.
+			aWorkingDir = NULL;
+	}
 
 	#define IS_VERB(str) (   !_tcsicmp(str, _T("find")) || !_tcsicmp(str, _T("explore")) || !_tcsicmp(str, _T("open"))\
 		|| !_tcsicmp(str, _T("Edit")) || !_tcsicmp(str, _T("print")) || !_tcsicmp(str, _T("properties"))   )
