@@ -231,7 +231,7 @@ Map *Map::CloneTo(Map &obj)
 	int failure_count = 0; // See Object::CloneT() for comments.
 	index_t i;
 
-	obj.mFlags = obj.mFlags;
+	obj.mFlags = mFlags;
 	obj.mCount = mCount;
 	obj.mKeyOffsetObject = mKeyOffsetObject;
 	obj.mKeyOffsetString = mKeyOffsetString;
