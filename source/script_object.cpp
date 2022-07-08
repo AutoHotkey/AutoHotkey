@@ -2829,6 +2829,11 @@ void BufferObject::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTo
 
 ResultType BufferObject::Resize(size_t aNewSize)
 {
+	// It seems worthwhile to guarantee that no reallocation is performed if size is the same.
+	// Testing (in 2022) showed realloc() to return new blocks even if the same size is passed
+	// in multiple times.
+	if (aNewSize == mSize)
+		return OK;
 	auto new_data = realloc(mData, aNewSize);
 	if (!new_data)
 		return FAIL;
