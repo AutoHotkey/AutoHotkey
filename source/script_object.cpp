@@ -2835,7 +2835,7 @@ ResultType BufferObject::Resize(size_t aNewSize)
 	if (aNewSize == mSize)
 		return OK;
 	auto new_data = realloc(mData, aNewSize);
-	if (!new_data)
+	if (!new_data && aNewSize)
 		return FAIL;
 	mData = new_data;
 	mSize = aNewSize;
