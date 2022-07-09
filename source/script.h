@@ -656,7 +656,7 @@ enum BuiltInFunctionID {
 	FID_WinMoveBottom = 0, FID_WinMoveTop,
 	FID_WinShow = 0, FID_WinHide, FID_WinMinimize, FID_WinMaximize, FID_WinRestore, FID_WinClose, FID_WinKill,
 	FID_WinActivate = 0, FID_WinActivateBottom,
-	FID_ProcessExist = 0, FID_ProcessClose, FID_ProcessWait, FID_ProcessWaitClose, 
+	FID_ProcessExist = 0, FID_ProcessClose, FID_ProcessWait, FID_ProcessWaitClose, FID_ProcessGetName, FID_ProcessGetPath,
 	FID_MonitorGet = 0, FID_MonitorGetWorkArea, FID_MonitorGetCount, FID_MonitorGetPrimary, FID_MonitorGetName, 
 	FID_OnExit = 0, FID_OnClipboardChange, FID_OnError,
 	FID_ControlGetChecked = 0, FID_ControlGetEnabled, FID_ControlGetVisible, FID_ControlFindItem, FID_ControlGetIndex, FID_ControlGetChoice, FID_ControlGetItems, FID_ListViewGetContent, FID_EditGetLineCount, FID_EditGetCurrentLine, FID_EditGetCurrentCol, FID_EditGetLine, FID_EditGetSelectedText, FID_ControlGetStyle, FID_ControlGetExStyle, FID_ControlGetHwnd,

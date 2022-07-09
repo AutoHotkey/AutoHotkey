@@ -2192,6 +2192,13 @@ BIF_DECL(BIF_Process)
 				_f_return_i(pid);
 			}
 		} // for()
+
+	case FID_ProcessGetName:
+	case FID_ProcessGetPath:
+		pid = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId();
+		TCHAR process_name[MAX_PATH];
+		GetProcessName(pid, process_name, _countof(process_name), process_cmd == FID_ProcessGetName);
+		_f_return(process_name);
 	} // case
 	} // switch()
 }

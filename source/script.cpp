@@ -256,6 +256,8 @@ FuncEntry g_BIF[] =
 	BIFn(PostMessage, 1, 8, BIF_PostSendMessage),
 	BIFn(ProcessClose, 1, 1, BIF_Process),
 	BIFn(ProcessExist, 0, 1, BIF_Process),
+	BIFn(ProcessGetName, 0, 1, BIF_Process),
+	BIFn(ProcessGetPath, 0, 1, BIF_Process),
 	BIF1(ProcessSetPriority, 1, 2),
 	BIFn(ProcessWait, 1, 2, BIF_Process),
 	BIFn(ProcessWaitClose, 1, 2, BIF_Process),
