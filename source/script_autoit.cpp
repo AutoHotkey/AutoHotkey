@@ -650,7 +650,9 @@ BIF_DECL(BIF_ControlGet)
 	// aControl might not be a ClassNN, so don't rely on it for class checks.
 	//LPTSTR aControl = ParamIndexToString(0, control_buf);
 
-	DETERMINE_TARGET_CONTROL(0);
+	HWND target_window, control_window;
+	if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam, aParamCount, 0, control_cmd != FID_ControlExist))
+		return;
 
 	DWORD_PTR dwResult, index, length, item_length, u, item_count;
 	DWORD start, end;
@@ -902,6 +904,7 @@ BIF_DECL(BIF_ControlGet)
 	case FID_ControlGetExStyle:
 		_f_return(GetWindowLong(control_window, GWL_EXSTYLE));
 
+	case FID_ControlExist:
 	case FID_ControlGetHwnd:
 		// The terminology "HWND" was chosen rather than "ID" to avoid confusion with a control's
 		// dialog ID (as retrieved by GetDlgCtrlID).  This also reserves the word ID for possible
