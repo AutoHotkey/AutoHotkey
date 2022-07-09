@@ -352,11 +352,12 @@ finish_skip_close:
 
 
 
-void RegWrite(ResultToken &aResultToken, ExprTokenType &aValue, DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
+void RegWrite(ResultToken &aResultToken, ExprTokenType *aValue, DWORD aValueType, HKEY aRootKey, LPTSTR aRegSubkey, LPTSTR aValueName)
 // If aValueName is the empty string, the key's default value is used.
+// if aValue is NULL, aValueType must be REG_NONE; a key will be created but no value will be set.
 {
 	HKEY	hRegKey;
-	DWORD	dwRes, dwBuf;
+	DWORD	dwBuf;
 
 	TCHAR nbuf[MAX_NUMBER_SIZE];
 	LPTSTR value;
@@ -364,18 +365,23 @@ void RegWrite(ResultToken &aResultToken, ExprTokenType &aValue, DWORD aValueType
 	
 	LONG result;
 
-	if (aValueType == REG_NONE)
-		_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
+	if (aValue) // RegWrite, not RegCreateKey
+	{
+		if (aValueType == REG_NONE) // Omitted
+			_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
 
-	if (aValueType != REG_DWORD)
-		value = TokenToString(aValue, nbuf, &length);
+		if (aValueType != REG_DWORD)
+			value = TokenToString(*aValue, nbuf, &length);
+		else
+			dwBuf = (DWORD)TokenToInt64(*aValue);
+	}
 
 	// Open/Create the registry key
 	// The following works even on root keys (i.e. blank subkey), although values can't be created/written to
 	// HKCU's root level, perhaps because it's an alias for a subkey inside HKEY_USERS.  Even when RegOpenKeyEx()
 	// is used on HKCU (which is probably redundant since it's a pre-opened key?), the API can't create values
 	// there even though RegEdit can.
-	result = RegCreateKeyEx(aRootKey, aRegSubkey, 0, _T(""), REG_OPTION_NON_VOLATILE, KEY_WRITE | g->RegView, NULL, &hRegKey, &dwRes);
+	result = RegCreateKeyEx(aRootKey, aRegSubkey, 0, _T(""), REG_OPTION_NON_VOLATILE, KEY_WRITE | g->RegView, NULL, &hRegKey, NULL);
 	if (result != ERROR_SUCCESS)
 		goto finish;
 
@@ -424,7 +430,6 @@ void RegWrite(ResultToken &aResultToken, ExprTokenType &aValue, DWORD aValueType
 	}
 
 	case REG_DWORD:
-		dwBuf = (DWORD)TokenToInt64(aValue);
 		result = RegSetValueEx(hRegKey, aValueName, 0, REG_DWORD, (CONST BYTE *)&dwBuf, sizeof(dwBuf));
 		break;
 
@@ -477,7 +482,10 @@ void RegWrite(ResultToken &aResultToken, ExprTokenType &aValue, DWORD aValueType
 		break;
 	}
 
-	default:
+	case REG_NONE: // RegCreateKey
+		break;
+
+	default: // Could be any unsupported value stored in reg_item.type by RegEnumValue().
 		result = ERROR_INVALID_PARAMETER; // Anything other than ERROR_SUCCESS.
 		break;
 	} // switch()
@@ -617,7 +625,7 @@ BIF_DECL(BIF_Reg)
 	LPTSTR sub_key;
 	LPTSTR value_name = action == FID_RegDeleteKey ? NULL : _T(""); // Set default.
 	DWORD value_type = REG_NONE; // RegWrite
-	ExprTokenType *value; // RegWrite
+	ExprTokenType *value = nullptr; // RegWrite
 	bool close_root;
 	if (action == FID_RegWrite)
 	{
@@ -676,7 +684,8 @@ BIF_DECL(BIF_Reg)
 	switch (action)
 	{
 	case FID_RegRead:  RegRead(aResultToken, root_key, sub_key, value_name, ParamIndexIsOmitted(2) ? nullptr : aParam[2]); break;
-	case FID_RegWrite: RegWrite(aResultToken, *value, value_type, root_key, sub_key, value_name); break;
+	case FID_RegCreateKey:
+	case FID_RegWrite: RegWrite(aResultToken, value, value_type, root_key, sub_key, value_name); break;
 	default:           RegDelete(aResultToken, root_key, sub_key, value_name); break;
 	}
 

@@ -667,7 +667,7 @@ enum BuiltInFunctionID {
 	FID_DriveGetList = 0, FID_DriveGetFilesystem, FID_DriveGetLabel, FID_DriveGetSerial, FID_DriveGetType, FID_DriveGetStatus, FID_DriveGetStatusCD, FID_DriveGetCapacity, FID_DriveGetSpaceFree,
 	FID_EnvGet = 0, FID_EnvSet,
 	FID_PostMessage = 0, FID_SendMessage,
-	FID_RegRead = 0, FID_RegWrite, FID_RegDelete, FID_RegDeleteKey,
+	FID_RegRead = 0, FID_RegWrite, FID_RegCreateKey, FID_RegDelete, FID_RegDeleteKey,
 	FID_SoundGetVolume = 0, FID_SoundGetMute, FID_SoundGetName, FID_SoundGetInterface, FID_SoundSetVolume, FID_SoundSetMute,
 	FID_RunWait = 0, FID_ClipWait, FID_KeyWait, FID_WinWait, FID_WinWaitClose, FID_WinWaitActive, FID_WinWaitNotActive,
 	// For BIF_SetBIV (functions corresponding to built-in vars): keep the order of these in sync with the array in BIF_SetBIV.
