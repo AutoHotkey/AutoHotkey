@@ -2196,8 +2196,11 @@ BIF_DECL(BIF_Process)
 	case FID_ProcessGetName:
 	case FID_ProcessGetPath:
 		pid = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId();
+		if (!pid)
+			_f_throw(ERR_NO_PROCESS, ErrorPrototype::Target);
 		TCHAR process_name[MAX_PATH];
-		GetProcessName(pid, process_name, _countof(process_name), process_cmd == FID_ProcessGetName);
+		if (!GetProcessName(pid, process_name, _countof(process_name), process_cmd == FID_ProcessGetName))
+			_f_throw_win32();
 		_f_return(process_name);
 	} // case
 	} // switch()
@@ -2210,9 +2213,7 @@ BIF_DECL(BIF_ProcessSetPriority)
 	_f_param_string_opt(aPriority, 0);
 	_f_param_string_opt(aProcess, 1);
 
-	DWORD pid, priority;
-	HANDLE hProcess;
-
+	DWORD priority;
 	switch (_totupper(*aPriority))
 	{
 	case 'L': priority = IDLE_PRIORITY_CLASS; break;
@@ -2226,16 +2227,18 @@ BIF_DECL(BIF_ProcessSetPriority)
 		_f_throw_param(0);
 	}
 
-	if (pid = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId())  // Assign
-	{
-		if (hProcess = OpenProcess(PROCESS_SET_INFORMATION, FALSE, pid)) // Assign
-		{
-			if (!SetPriorityClass(hProcess, priority))
-				pid = 0; // Indicate failure.
-			CloseHandle(hProcess);
-		}
-	}
-	// Otherwise, return a PID of 0 to indicate failure.
+	DWORD pid = *aProcess ? ProcessExist(aProcess) : GetCurrentProcessId();
+	if (!pid)
+		_f_throw(ERR_NO_PROCESS, ErrorPrototype::Target);
+
+	HANDLE hProcess = OpenProcess(PROCESS_SET_INFORMATION, FALSE, pid);
+	if (!hProcess)
+		_f_throw_win32();
+
+	DWORD error = SetPriorityClass(hProcess, priority) ? NOERROR : GetLastError();
+	CloseHandle(hProcess);
+	if (error)
+		_f_throw_win32(error);
 	_f_return_i(pid);
 }
 
