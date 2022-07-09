@@ -6065,7 +6065,7 @@ throw_invalid_delimiter:
 
 
 
-ResultType SplitPath(LPCTSTR aFileSpec, Var *output_var_name, Var *output_var_dir, Var *output_var_ext, Var *output_var_name_no_ext, Var *output_var_drive)
+ResultType SplitPath(LPCTSTR aFileSpec, Var *output_var_name, Var *output_var_dir, Var *output_var_ext, Var *output_var_name_no_ext, Var *output_var_drive, LPTSTR parts[5])
 {
 	// For URLs, "drive" is defined as the server name, e.g. http://somedomain.com
 	LPCTSTR name = _T(""), name_delimiter = NULL, drive_end = NULL; // Set defaults to improve maintainability.
@@ -6211,6 +6211,50 @@ ResultType SplitPath(LPCTSTR aFileSpec, Var *output_var_name, Var *output_var_di
 	if (output_var_drive && !output_var_drive->Assign(drive, (VarSizeType)(drive_end - drive)))
 		return FAIL;
 
+	if (parts)
+	{
+		int size;
+
+		// name:
+		parts[0] = new TCHAR[_tcslen(name)+1];
+		_tcscpy(parts[0], name);
+
+		// dir:
+		if (!name_delimiter)
+			size = 0;
+		else if (*name_delimiter == '\\' || *name_delimiter == '/')
+			size = name_delimiter - aFileSpec;
+		else
+			size = name_delimiter - aFileSpec + 1;
+		parts[1] = new TCHAR[size+1];
+		*parts[1] = '\0';
+		if (size)
+			_tcsncat(parts[1], aFileSpec, size);
+
+		// ext:
+		if (!ext_dot)
+			size = 0;
+		else
+			size = _tcslen(ext_dot + 1);
+		parts[2] = new TCHAR[size+1];
+		if (size)
+			_tcscpy(parts[2], ext_dot + 1);
+		else
+			*parts[2] = '\0';
+
+		// name_no_ext:
+		size = ext_dot ? ext_dot - name : _tcslen(name);
+		parts[3] = new TCHAR[size+1];
+		*parts[3] = '\0';
+		_tcsncat(parts[3], name, size);
+
+		// drive:
+		size = drive_end - drive;
+		parts[4] = new TCHAR[size+1];
+		*parts[4] = '\0';
+		_tcsncat(parts[4], aFileSpec, size);
+	}
+
 	return OK;
 }
 
@@ -6221,6 +6265,22 @@ BIF_DECL(BIF_SplitPath)
 	Var *vars[6];
 	for (int i = 1; i < _countof(vars); ++i)
 		vars[i] = ParamIndexToOutputVar(i);
+
+	if (aParamCount == 1) // No output vars, so return object.
+	{
+		LPTSTR parts[5];
+		aResultToken.SetValue(_T(""), 0);
+		if (SplitPath(aFileSpec, vars[1], vars[2], vars[3], vars[4], vars[5], parts))
+		{
+			ExprTokenType argt[] = { _T("Path"), aFileSpec, _T("Name"), parts[0], _T("Dir"), parts[1], _T("Ext"), parts[2], _T("NameNoExt"), parts[3], _T("Drive"), parts[4] };
+			ExprTokenType *args[_countof(argt)] = { argt, argt+1, argt+2, argt+3, argt+4, argt+5, argt+6, argt+7, argt+8, argt+9, argt+10, argt+11 };
+			if (Object *obj = Object::Create(args, _countof(args)))
+				_f_return(obj);
+		}
+		aResultToken.SetExitResult(FAIL);
+		return;
+	}
+
 	if (aParam[0]->symbol == SYM_VAR) // Check for overlap of input/output vars.
 	{
 		vars[0] = aParam[0]->var;
@@ -6239,7 +6299,7 @@ BIF_DECL(BIF_SplitPath)
 		}
 	}
 	aResultToken.SetValue(_T(""), 0);
-	if (!SplitPath(aFileSpec, vars[1], vars[2], vars[3], vars[4], vars[5]))
+	if (!SplitPath(aFileSpec, vars[1], vars[2], vars[3], vars[4], vars[5], NULL))
 		aResultToken.SetExitResult(FAIL);
 	free(mem_to_free);
 }
