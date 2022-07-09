@@ -1910,6 +1910,7 @@ ObjectMember Array::sMembers[] =
 	Object_Property_get_set(__Item, 1, 1),
 	Object_Property_get_set(Capacity),
 	Object_Property_get_set(Length),
+	Object_Property_get(Count),
 	Object_Member(__New, Invoke, M_Push, IT_CALL, 0, MAXP_VARIADIC),
 	Object_Method(__Enum, 0, 1),
 	Object_Method(Clone, 0, 0),
@@ -1953,6 +1954,14 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 			return;
 		}
 		_o_return(aID == P_Capacity ? Capacity() : Length());
+
+	case P_Count:
+	{
+		__int64 count = 0;
+		for (__int64 i = 0; i < mLength; ++i)
+			count += (mItem[i].symbol != SYM_MISSING) ? 1 : 0;
+		_o_return(count);
+	}
 
 	case M_InsertAt:
 	case M_Push:

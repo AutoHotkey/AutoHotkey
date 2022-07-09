@@ -564,6 +564,7 @@ public:
 		P___Item,
 		P_Length,
 		P_Capacity,
+		P_Count,
 		M_InsertAt,
 		M_Push,
 		M_RemoveAt,
