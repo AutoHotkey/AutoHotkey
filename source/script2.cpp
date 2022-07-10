@@ -16568,7 +16568,7 @@ BIF_DECL(BIF_IL_Create)
 	// So that param3 can be reserved as a future "specified width" param, to go along with "specified height"
 	// after it, only when the parameter is both present and numerically zero are large icons used.  Otherwise,
 	// small icons are used.
-	int param3 = ParamIndexToOptionalInt(2, 0);
+	int param3 = ParamIndexToOptionalBOOL(2, FALSE);
 	_f_return_i((size_t)ImageList_Create(GetSystemMetrics(param3 ? SM_CXICON : SM_CXSMICON)
 		, GetSystemMetrics(param3 ? SM_CYICON : SM_CYSMICON)
 		, ILC_MASK | ILC_COLOR32  // ILC_COLOR32 or at least something higher than ILC_COLOR is necessary to support true-color icons.
@@ -16617,7 +16617,7 @@ BIF_DECL(BIF_IL_Add)
 	if (!ParamIndexIsOmitted(3)) // Presence of fourth parameter switches mode to be "load a non-icon image".
 	{
 		icon_number = 0; // Zero means "load icon or bitmap (doesn't matter)".
-		if (ParamIndexToInt64(3)) // A value of True indicates that the image should be scaled to fit the imagelist's image size.
+		if (ParamIndexToBOOL(3)) // A value of True indicates that the image should be scaled to fit the imagelist's image size.
 			ImageList_GetIconSize(himl, &width, &height); // Determine the width/height to which it should be scaled.
 		//else retain defaults of zero for width/height, which loads the image at actual size, which in turn
 		// lets ImageList_AddMasked() divide it up into separate images based on its width.

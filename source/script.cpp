@@ -11941,7 +11941,7 @@ ResultType Line::Perform()
 		return SetLastErrorMaybeThrow(!FileCreateDir(ARG1));
 	case ACT_DIRDELETE:
 		return ThrowIfTrue(!*ARG1 // Consider an attempt to create or remove a blank dir to be an error.
-			|| !Util_RemoveDir(ARG1, ArgToInt(2) == 1)); // Relies on short-circuit evaluation.
+			|| !Util_RemoveDir(ARG1, ResultToBOOL(ARG2))); // Relies on short-circuit evaluation.
 
 	case ACT_FILESETATTRIB:
 	{
