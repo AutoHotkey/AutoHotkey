@@ -1038,22 +1038,6 @@ void Script::CreateTrayIcon()
 
 
 
-void Script::RestoreTrayIcon()
-{
-	// v1.1.33.07: This function is called when the TaskbarCreated message is received, instead of calling
-	// CreateTrayIcon() and UpdateTrayIcon(true).  mNIC already contains the values needed to recreate the
-	// icon as it was.  NIM_ADD fails if the icon already exists, such as if the message was received due
-	// to a screen DPI change or explicit SendMessage; for those cases, attempt NIM_MODIFY to be sure that
-	// the icon really doesn't exist.  This also fixes the icon becoming blurry when the DPI is changed
-	// repeatedly (presumably because the tray resizes its copy of the icon, but NIM_MODIFY refreshes it).
-	// This isn't done by UpdateTrayIcon() in case any scripts rely on the fact that the icon won't be
-	// recreated if it is killed by explicitly calling Shell_NotifyIcon().
-	if (  !(Shell_NotifyIcon(NIM_ADD, &mNIC) || Shell_NotifyIcon(NIM_MODIFY, &mNIC))  )
-		mNIC.hWnd = NULL;  // Set this as an indicator that tray icon is not installed.
-}
-
-
-
 void Script::UpdateTrayIcon(bool aForceUpdate)
 {
 	if (!mNIC.hWnd) // tray icon is not installed
@@ -1073,9 +1057,22 @@ void Script::UpdateTrayIcon(bool aForceUpdate)
 		icon = IDI_MAIN;
 	// Use the custom tray icon if the icon is normal (non-paused & non-suspended):
 	mNIC.hIcon = (mCustomIconSmall && (mIconFrozen || (!g->IsPaused && !g_IsSuspended))) ? mCustomIconSmall // L17: Always use small icon for tray.
-		: (icon == IDI_MAIN) ? g_IconSmall // Use the pre-loaded small icon for best quality.
-		: (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(icon), IMAGE_ICON, 0, 0, LR_SHARED); // Use LR_SHARED for simplicity and performance more than to conserve memory in this case.
-	if (Shell_NotifyIcon(NIM_MODIFY, &mNIC))
+		// For simplicity, g_IconSmall isn't used since it might not match the current tray icon size.
+		//: (icon == IDI_MAIN) ? g_IconSmall // Use the pre-loaded small icon for best quality.
+		: NULL;
+	if (!mNIC.hIcon)
+	{
+		// Retrieve the tray icon size each time in case the primary screen's DPI has changed.
+		int cx = GetSystemTrayIconSize();
+		// Use LR_SHARED for simplicity and performance more than to conserve memory in this case.
+		// The documentation says "This function finds the first image in the cache with the requested
+		// resource name, regardless of the size requested." -- but testing (on Windows 11) showed that
+		// in reality, it caches one icon handle per size.
+		mNIC.hIcon = (HICON)LoadImage(g_hInstance, MAKEINTRESOURCE(icon), IMAGE_ICON, cx, cx, LR_SHARED); 
+	}
+	// NIM_ADD is attempted as a fallback, since NIM_MODIFY can fail if the taskbar was
+	// recreated or the icon has been deleted by a script calling Shell_NotifyIcon().
+	if (Shell_NotifyIcon(NIM_MODIFY, &mNIC) || Shell_NotifyIcon(NIM_ADD, &mNIC))
 	{
 		icon_shows_paused = g->IsPaused;
 		icon_shows_suspended = g_IsSuspended;

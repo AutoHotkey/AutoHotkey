@@ -2038,6 +2038,24 @@ bool ToolTipTextEquals(HWND aToolTipHwnd, LPCTSTR aText)
 
 
 
+int GetSystemTrayIconSize()
+{
+	// This requires Windows 10, version 1607 or later.
+	static auto GetDpiForWindow = (UINT (WINAPI *)(_In_ HWND hwnd))GetProcAddress(GetModuleHandle(_T("user32.dll")), "GetDpiForWindow");
+	// GetSystemMetrics returns values scaled to our base DPI (g_ScreenDPI).
+	int cx = GetSystemMetrics(SM_CXSMICON);
+	if (!GetDpiForWindow)
+		return cx;
+	// This should be accurate because the icons are to be displayed in Shell_TrayWnd (which is always
+	// the taskbar of the primary screen), and GetDpiForWindow uses the DPI awareness of the window.
+	// This differs from GetDpiForSystem, as it appears the "system DPI" is fixed at initial login
+	// and doesn't change after that.  Same for GetDpiForWindow(GetDesktopWindow()).
+	int dpi = GetDpiForWindow(FindWindow(_T("Shell_TrayWnd"), NULL));
+	return MulDiv(cx, dpi, g_ScreenDPI);
+}
+
+
+
 HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
 	, bool aUseGDIPlusIfAvailable, bool *apNoDelete, HMODULE *apModule)
 // Returns NULL on failure.

@@ -718,6 +718,8 @@ bool ToolTipTextEquals(HWND aToolTipHwnd, LPCTSTR aText);
 DWORD GetEnvVarReliable(LPCTSTR aEnvVarName, LPTSTR aBuf);
 DWORD ReadRegString(HKEY aRootKey, LPTSTR aSubkey, LPTSTR aValueName, LPTSTR aBuf, DWORD aBufSize, DWORD aFlag = 0);
 
+int GetSystemTrayIconSize();
+
 HBITMAP LoadPicture(LPTSTR aFilespec, int aWidth, int aHeight, int &aImageType, int aIconNumber
 	, bool aUseGDIPlusIfAvailable, bool *apNoDelete = NULL, HMODULE *apModule = NULL);
 HBITMAP IconToBitmap(HICON ahIcon, bool aDestroyIcon);

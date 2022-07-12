@@ -4280,7 +4280,12 @@ LRESULT CALLBACK MainWindowProc(HWND hWnd, UINT iMsg, WPARAM wParam, LPARAM lPar
 		// The following iMsg can't be in the switch() since it's not constant:
 		if (iMsg == WM_TASKBARCREATED && !g_NoTrayIcon) // !g_NoTrayIcon --> the tray icon should be always visible.
 		{
-			g_script.RestoreTrayIcon();
+			// This message is sent by the system in two known cases:
+			//  1) Explorer.exe has just started and the taskbar has been newly created.
+			//     In this case, the taskbar icon doesn't exist yet, so NIM_MODIFY would fail.
+			//  2) The screen DPI has just changed.  Our icon already exists, but has probably
+			//     been resized by the system.  If we don't refresh it, it becomes blurry.
+			g_script.UpdateTrayIcon(true);
 			// And now pass this iMsg on to DefWindowProc() in case it does anything with it.
 		}
 		
