@@ -8558,6 +8558,8 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		BIF_OBJ_CASE(NewEnum,		0, 0)
 		BIF_OBJ_CASE(Clone,			0, 0)
 		BIF_OBJ_CASE(BindMethod,	1, 10000) // obj, method [, param...]
+		BIF_OBJ_CASE(Reverse,		0, 0)
+		BIF_OBJ_CASE(Swap,			2, 2) // key1, key2
 #undef BIF_OBJ_CASE
 		else if (!_tcsicmp(suffix, _T("AddRef")) || !_tcsicmp(suffix, _T("Release")))
 			bif = BIF_ObjAddRefRelease;

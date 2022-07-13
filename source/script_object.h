@@ -13,7 +13,7 @@ enum ObjectMethodID { // Partially ported from v2 BuiltInFunctionID.  Used for c
 	FID_ObjInsertAt, FID_ObjDelete, FID_ObjRemoveAt, FID_ObjPush, FID_ObjPop, FID_ObjLength
 	, FID_ObjHasKey, FID_ObjGetCapacity, FID_ObjSetCapacity, FID_ObjGetAddress, FID_ObjClone
 	, FID_ObjNewEnum, FID_ObjMaxIndex, FID_ObjMinIndex, FID_ObjRemove, FID_ObjInsert
-	, FID_ObjCount
+	, FID_ObjCount, FID_ObjReverse, FID_ObjSwap
 };
 
 
@@ -351,6 +351,8 @@ public:
 	ResultType _NewEnum(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _HasKey(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 	ResultType _Clone(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Reverse(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
+	ResultType _Swap(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount);
 
 	static LPTSTR sMetaFuncName[];
 

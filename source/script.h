@@ -3388,6 +3388,8 @@ BIF_DECL(BIF_ObjMinIndex);
 BIF_DECL(BIF_ObjNewEnum);
 BIF_DECL(BIF_ObjHasKey);
 BIF_DECL(BIF_ObjClone);
+BIF_DECL(BIF_ObjReverse);
+BIF_DECL(BIF_ObjSwap);
 
 
 // Advanced file IO interfaces

@@ -390,6 +390,8 @@ BIF_METHOD(MinIndex)
 BIF_METHOD(NewEnum)
 BIF_METHOD(HasKey)
 BIF_METHOD(Clone)
+BIF_METHOD(Reverse)
+BIF_METHOD(Swap)
 
 
 //

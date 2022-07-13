@@ -750,6 +750,8 @@ int Object::GetBuiltinID(LPCTSTR aName)
 	case 'R':
 		if (!_tcsicmp(aName, _T("RemoveAt")))
 			return FID_ObjRemoveAt;
+		if (!_tcsicmp(aName, _T("Reverse")))
+			return FID_ObjReverse;
 		break;
 	case 'D':
 		if (!_tcsicmp(aName, _T("Delete")))
@@ -757,6 +759,10 @@ int Object::GetBuiltinID(LPCTSTR aName)
 	case 'C':
 		if (!_tcsicmp(aName, _T("Count")))
 			return FID_ObjCount;
+		break;
+	case 'S':
+		if (!_tcsicmp(aName, _T("Swap")))
+			return FID_ObjSwap;
 		break;
 	}
 	// Older methods which support the _ prefix:
@@ -829,6 +835,8 @@ ResultType Object::CallBuiltin(int aID, ExprTokenType &aResultToken, ExprTokenTy
 	case_method(SetCapacity);
 	case_method(GetCapacity);
 	case_method(Clone);
+	case_method(Reverse);
+	case_method(Swap);
 	// Deprecated methods:
 	case_method(Insert);
 	case_method(Remove);
@@ -1495,6 +1503,88 @@ ResultType Object::_Clone(ExprTokenType &aResultToken, ExprTokenType *aParam[], 
 			aResultToken.symbol = SYM_OBJECT;
 		}
 	}
+	return OK;
+}
+
+ResultType Object::_Reverse(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	if (aParamCount > 0)
+		return g_script.ScriptError(ERR_TOO_MANY_PARAMS);
+
+	SymbolType key_type;
+	KeyType key;
+	INT_PTR insert_pos;
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+
+	IntKeyType max_index = mKeyOffsetObject ? mFields[mKeyOffsetObject - 1].key.i : 0;
+	if (max_index <= 0)
+		return OK; // Nothing to reverse.
+
+	ExprTokenType *token = (ExprTokenType *)_alloca(2 * sizeof(ExprTokenType));
+	token[0].SetValue(1);
+	token[1].SetValue(max_index);
+	
+	FieldType *field1 = FindField(*token, aResultToken.buf, key_type, key, insert_pos);
+	FieldType *field2 = FindField(*(token+1), aResultToken.buf, key_type, key, insert_pos);
+	if ((field1 == NULL) || (field2 == NULL) || (field1 >= field2))
+		_o_throw(ERR_EXCEPTION); // An unexpected error.
+	if (field2 - field1 + 1 != max_index)
+		_o_throw(_T("Item(s) with no value.")); // Some keys below max_index missing.
+
+	// Swap keys: move data union and symbol, but not key:
+	char *pos1 = (char *)&(*field1);
+	char *pos2 = (char *)&(*field2);
+	char buf[sizeof(FieldType)];
+	int size_data = 2 * sizeof(void *); // Size of data union.
+	int size_type = sizeof(SymbolType);
+	int offset = offsetof(FieldType, symbol);
+	int size = sizeof(FieldType);
+	for (int i = 1; i <= max_index/2; ++i, pos1 += size, pos2 -= size)
+	{
+		memcpy(buf, pos1, size_data);
+		memcpy(pos1, pos2, size_data);
+		memcpy(pos2, buf, size_data);
+		memcpy(buf+offset, pos1+offset, size_type);
+		memcpy(pos1+offset, pos2+offset, size_type);
+		memcpy(pos2+offset, buf+offset, size_type);
+	}
+	return OK;
+}
+
+ResultType Object::_Swap(ExprTokenType &aResultToken, ExprTokenType *aParam[], int aParamCount)
+{
+	if (aParamCount < 2)
+		return g_script.ScriptError(ERR_TOO_FEW_PARAMS);
+	if (aParamCount > 2)
+		return g_script.ScriptError(ERR_TOO_MANY_PARAMS);
+
+	SymbolType key_type;
+	KeyType key;
+	INT_PTR insert_pos;
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+
+	FieldType *field1 = FindField(**aParam, aResultToken.buf, key_type, key, insert_pos);
+	FieldType *field2 = FindField(**(aParam+1), aResultToken.buf, key_type, key, insert_pos);
+	if ((field1 == NULL) || (field2 == NULL))
+		_o_throw(ERR_INVALID_VALUE); // A key missing.
+	if (field1 == field2)
+		return OK; // Asked to swap a key with itself.
+
+	// Swap keys: move data union and symbol, but not key:
+	char *pos1 = (char *)&(*field1);
+	char *pos2 = (char *)&(*field2);
+	char buf[sizeof(FieldType)];
+	int size_data = 2 * sizeof(void *); // Size of data union.
+	int size_type = sizeof(SymbolType);
+	int offset = offsetof(FieldType, symbol);
+	memcpy(buf, pos1, size_data);
+	memcpy(pos1, pos2, size_data);
+	memcpy(pos2, buf, size_data);
+	memcpy(buf+offset, pos1+offset, size_type);
+	memcpy(pos1+offset, pos2+offset, size_type);
+	memcpy(pos2+offset, buf+offset, size_type);
 	return OK;
 }
 
