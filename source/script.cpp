@@ -2080,14 +2080,14 @@ process_completed_line:
 				switch (hotkey_validity)
 				{
 				case FAIL:
-					hotkey_flag = NULL; // It's not a valid hotkey, so indicate that it's a command (i.e. one that contains a literal double-colon, which avoids the need to escape the double-colon).
-					break;
-				case CONDITION_FALSE:
 					return FAIL; // It's an invalid hotkey and above already displayed the error message.
+				case CONDITION_FALSE:
+					hotkey_flag = NULL; // It doesn't look like valid hotkey syntax, so parse it as something else (so the error message won't be ERR_INVALID_KEYNAME).
+					break;
 				//case CONDITION_TRUE:
 					// It's a key that doesn't exist on the current keyboard layout.  Leave hotkey_flag set
-					// so that the section below handles it as a hotkey.  This allows it to end the auto-exec
-					// section and register the appropriate label even though it won't be an active hotkey.
+					// so that the section below handles it as a hotkey.  This ensures any same-line action
+					// or trailing block is interpreted correctly.  A warning will be displayed below.
 				}
 				*cp = orig_char; // Undo the temp. termination above.
 			}
@@ -4755,7 +4755,7 @@ ResultType Script::ParseAndAddLine(LPTSTR aLineText, ActionTypeType aActionType,
 			else
 				// v1.0.40: Give a more specific error message now that hotkeys can make it here due to
 				// the change that avoids the need to escape double-colons:
-				return ScriptError(_tcsstr(aLineText, HOTKEY_FLAG) ? _T("Invalid hotkey.") : ERR_UNRECOGNIZED_ACTION, aLineText);
+				return ScriptError(_tcsstr(aLineText, HOTKEY_FLAG) ? ERR_INVALID_HOTKEY : ERR_UNRECOGNIZED_ACTION, aLineText);
 		}
 	} // if (!aActionType)
 	else if (aActionType == ACT_LOOP)

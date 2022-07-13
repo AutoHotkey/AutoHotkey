@@ -1312,7 +1312,15 @@ Hotkey::Hotkey(HotkeyIDType aID, IObject *aCallback, HookActionType aHookAction,
 	if (!TextInterpret(aName, this)) // The called function already displayed the error.
 		return;
 
-	if (mType != HK_JOYSTICK) // Perform modifier adjustment and other activities that don't apply to joysticks.
+	if (mType == HK_JOYSTICK)
+	{
+		if (mModifiers || mModifierVK || mModifierSC)
+		{
+			ValueError(ERR_INVALID_HOTKEY, aName, FAIL);
+			return;
+		}
+	}
+	else // Perform modifier adjustment and other activities that don't apply to joysticks.
 	{
 		// Remove any modifiers that are obviously redundant from keys (even NORMAL/registered ones
 		// due to cases where RegisterHotkey() fails and the key is then auto-enabled via the hook).
@@ -1565,7 +1573,7 @@ HotkeyVariant *Hotkey::AddVariant(IObject *aCallback, UCHAR aNoSuppress)
 
 
 
-ResultType Hotkey::TextInterpret(LPTSTR aName, Hotkey *aThisHotkey)
+ResultType Hotkey::TextInterpret(LPTSTR aName, Hotkey *aThisHotkey, bool aSyntaxCheckOnly)
 // Returns OK or FAIL.  This function is static and aThisHotkey is passed in as a parameter
 // so that aThisHotkey can be NULL. NULL signals that aName should be checked as a valid
 // hotkey only rather than populating the members of the new hotkey aThisHotkey. This function
@@ -1578,16 +1586,16 @@ ResultType Hotkey::TextInterpret(LPTSTR aName, Hotkey *aThisHotkey)
 	LPTSTR term1 = hotkey_name;
 	LPTSTR term2 = _tcsstr(term1, COMPOSITE_DELIMITER);
 	if (!term2)
-		return TextToKey(TextToModifiers(term1, aThisHotkey), false, aThisHotkey);
+		return TextToKey(TextToModifiers(term1, aThisHotkey), false, aThisHotkey, aSyntaxCheckOnly);
 	if (*term1 == '~')
 		++term1; // Some other stage handles this modifier, so just ignore it here.
     LPTSTR end_of_term1 = omit_trailing_whitespace(term1, term2) + 1;
 	// Temporarily terminate the string so that the 2nd term is hidden:
 	TCHAR ctemp = *end_of_term1;
 	*end_of_term1 = '\0';
-	ResultType result = TextToKey(term1, true, aThisHotkey);
+	ResultType result = TextToKey(term1, true, aThisHotkey, aSyntaxCheckOnly);
 	*end_of_term1 = ctemp;  // Undo the termination.
-	if (result != OK)
+	if (result == FAIL || result == CONDITION_FALSE)
 		return result;
 	term2 += COMPOSITE_DELIMITER_LENGTH;
 	term2 = omit_leading_whitespace(term2);
@@ -1599,7 +1607,8 @@ ResultType Hotkey::TextInterpret(LPTSTR aName, Hotkey *aThisHotkey)
 	//term2 = TextToModifiers(term2, aThisHotkey);
 	if (*term2 == '~')
 		++term2; // Some other stage handles this modifier, so just ignore it here.
-	return TextToKey(term2, false, aThisHotkey);
+	ResultType result2 = TextToKey(term2, false, aThisHotkey, aSyntaxCheckOnly);
+	return result2 != OK ? result2 : result;
 }
 
 
@@ -1779,7 +1788,7 @@ break_loop:
 
 
 
-ResultType Hotkey::TextToKey(LPTSTR aText, bool aIsModifier, Hotkey *aThisHotkey)
+ResultType Hotkey::TextToKey(LPTSTR aText, bool aIsModifier, Hotkey *aThisHotkey, bool aSyntaxCheckOnly)
 // This function and those it calls should avoid showing any error dialogs when caller passes NULL for
 // aThisHotkey (however, there is at least one exception explained in comments below where it occurs).
 // Caller must ensure that aText is a modifiable string.
@@ -1795,36 +1804,38 @@ ResultType Hotkey::TextToKey(LPTSTR aText, bool aIsModifier, Hotkey *aThisHotkey
 	bool is_mouse = false;
 	int joystick_id;
 
+	// Previous steps should make it unnecessary to call omit_leading_whitespace(aText).
+	LPTSTR keyname_end = find_identifier_end(aText);
+	if (keyname_end == aText && *aText) // Any single character except '\0' can be a key name.
+		++keyname_end;
+
+	if (!aIsModifier && IS_SPACE_OR_TAB(*keyname_end) && !_tcsicmp(omit_leading_whitespace(keyname_end), _T("Up")))
+	{
+		if (aSyntaxCheckOnly)
+			return OK; // It's a word or single character followed by " up" -- looks valid.
+		// This is a key-up hotkey, such as "Ctrl Up::".
+		if (aThisHotkey)
+			aThisHotkey->mKeyUp = true;
+		*keyname_end = '\0'; // Terminate at the first space so that the word "up" is removed from further consideration.
+	}
+	else
+	{
+		// If there's something after the first word/character, it's not a hotkey.
+		if (aSyntaxCheckOnly)
+			return *keyname_end ? FAIL : OK;
+		if (*keyname_end)
+			return CONDITION_FALSE;
+	}
+
 	HotkeyTypeType hotkey_type_temp;
 	HotkeyTypeType &hotkey_type = aThisHotkey ? aThisHotkey->mType : hotkey_type_temp; // Simplifies and reduces code size below.
-
-	if (!aIsModifier)
-	{
-		// Previous steps should make it unnecessary to call omit_leading_whitespace(aText).
-		LPTSTR cp = StrChrAny(aText, _T(" \t")); // Find first space or tab.
-		if (cp && !_tcsicmp(omit_leading_whitespace(cp), _T("Up")))
-		{
-			// This is a key-up hotkey, such as "Ctrl Up::".
-			if (aThisHotkey)
-				aThisHotkey->mKeyUp = true;
-			*cp = '\0'; // Terminate at the first space so that the word "up" is removed from further consideration by us and callers.
-		}
-	}
 
 	if (temp_vk = TextToVK(aText, &modifiersLR, true)) // Assign.
 	{
 		if (aIsModifier)
 		{
 			if (IS_WHEEL_VK(temp_vk))
-			{
-				ValueError(ERR_UNSUPPORTED_PREFIX, aText, FAIL);
-				// When aThisHotkey==NULL, return CONDITION_FALSE to indicate to our caller that it's
-				// an invalid hotkey and we've already shown the error message.  Unlike the old method,
-				// this method respects /ErrorStdOut and avoids the second, generic error message.
-				if (!aThisHotkey)
-					return CONDITION_FALSE;
-				return FAIL;
-			}
+				return ValueError(ERR_UNSUPPORTED_PREFIX, aText, FAIL);
 		}
 		else
 			// This is done here rather than at some later stage because we have access to the raw
@@ -1849,27 +1860,20 @@ ResultType Hotkey::TextToKey(LPTSTR aText, bool aIsModifier, Hotkey *aThisHotkey
 					// At load time, single-character key names are always considered valid but show a
 					// warning if they can't be registered as hotkeys on the current keyboard layout.
 					if (!aThisHotkey) // First stage: caller wants to differentiate this case from others.
-						return CONDITION_TRUE;
+						return CONDITION_TRUE; // It's valid, but won't be active.
 					return FAIL; // Second stage: return FAIL to avoid creating an invalid hotkey.
 				}
-				if (aThisHotkey)
-				{
-					// If it fails while aThisHotkey!=NULL, that should mean that this was called as
-					// a result of the Hotkey command rather than at loadtime.  This is because at 
-					// loadtime, the first call here (for validation, i.e. aThisHotkey==NULL) should have
-					// caught the error and converted the line into a non-hotkey (command), which in turn
-					// would make loadtime's second call to create the hotkey always succeed. Also, it's
-					// more appropriate to say "key name" than "hotkey" in this message because it's only
-					// showing the one bad key name when it's a composite hotkey such as "Capslock & y".
-					ValueError(ERR_INVALID_KEYNAME, aText, FAIL);
-				}
-				//else do not show an error in this case because the loader will attempt to interpret
-				// this line as a command.  If that too fails, it will show an "unrecognized action"
-				// dialog.
-				return FAIL;
+				// It's more appropriate to say "key name" than "hotkey" in this message because it's only
+				// showing the one bad key name when it's a composite hotkey such as "Capslock & y".
+				return ValueError(ERR_INVALID_KEYNAME, aText, FAIL);
 			}
 			else
 			{
+				// Block joystick buttons as prefix keys at this stage in case hotkey_type would be overridden
+				// by the suffix key.  For example, the hotkey `Joy1 & LButton::` would reinterpret Joy1 as sc0C.
+				if (aIsModifier)
+					return ValueError(ERR_UNSUPPORTED_PREFIX, aText, FAIL);
+
 				++sJoyHotkeyCount;
 				hotkey_type = HK_JOYSTICK;
 				temp_vk = (vk_type)joystick_id;  // 0 is the 1st joystick, 1 the 2nd, etc.

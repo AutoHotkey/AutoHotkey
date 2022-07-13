@@ -228,14 +228,16 @@ public:
 	static void ManifestAllHotkeysHotstringsHooks();
 	static void RequireHook(HookType aWhichHook, bool aRequire = true) { aRequire ? sWhichHookAlways |= aWhichHook : sWhichHookAlways &= ~aWhichHook; }
 	static void MaybeUninstallHook();
-	static ResultType TextInterpret(LPTSTR aName, Hotkey *aThisHotkey);
+	static ResultType TextInterpret(LPTSTR aName, Hotkey *aThisHotkey, bool aSyntaxCheckOnly = false);
+
+	static constexpr int KEY_NAME_BUF_SIZE = 24; // Large enough to hold the largest key name in g_key_to_vk, which is probably "Browser_Favorites" (17).
 
 	struct HotkeyProperties // Struct used by TextToModifiers() and its callers.
 	{
 		mod_type modifiers;
 		modLR_type modifiersLR;
-		TCHAR prefix_text[32];  // Has to be large enough to hold the largest key name in g_key_to_vk,
-		TCHAR suffix_text[32];  // which is probably "Browser_Favorites" (17).
+		TCHAR prefix_text[KEY_NAME_BUF_SIZE];
+		TCHAR suffix_text[KEY_NAME_BUF_SIZE];
 		bool prefix_has_tilde;
 		bool suffix_has_tilde; // As opposed to "prefix has tilde".
 		bool has_asterisk;
@@ -243,7 +245,7 @@ public:
 		bool hook_is_mandatory;
 	};
 	static LPTSTR TextToModifiers(LPTSTR aText, Hotkey *aThisHotkey, HotkeyProperties *aProperties = NULL);
-	static ResultType TextToKey(LPTSTR aText, bool aIsModifier, Hotkey *aThisHotkey);
+	static ResultType TextToKey(LPTSTR aText, bool aIsModifier, Hotkey *aThisHotkey, bool aSyntaxCheckOnly);
 
 	static void InstallKeybdHook();
 	static void InstallMouseHook();

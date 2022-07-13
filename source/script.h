@@ -133,6 +133,7 @@ enum CommandIDs {CONTROL_ID_FIRST = IDCANCEL + 1
 #define ERR_NONEXISTENT_HOTKEY _T("Nonexistent hotkey.")
 #define ERR_NONEXISTENT_VARIANT _T("Nonexistent hotkey variant (IfWin).")
 #define ERR_NONEXISTENT_HOTSTRING _T("Nonexistent hotstring.")
+#define ERR_INVALID_HOTKEY _T("Invalid hotkey.")
 #define ERR_INVALID_KEYNAME _T("Invalid key name.")
 #define ERR_UNSUPPORTED_PREFIX _T("Unsupported prefix key.")
 #define ERR_ALTTAB_MODLR _T("This AltTab hotkey must specify which key (L or R).")
