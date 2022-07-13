@@ -13166,6 +13166,8 @@ ResultType ResultToken::ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo)
 __declspec(noinline)
 ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultType aErrorType)
 {
+	if (!g_script.mIsReadyToExecute)
+		return g_script.ScriptError(aErrorText, aExtraInfo);
 	return g_script.RuntimeError(aErrorText, aExtraInfo, aErrorType, nullptr, ErrorPrototype::Value);
 }
 
