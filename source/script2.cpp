@@ -16834,6 +16834,26 @@ void Object::Error__New(ResultToken &aResultToken, int aID, int aFlags, ExprToke
 
 
 
+BIF_DECL(BIF_Swap)
+{
+	Var *var1 = ParamIndexToOutputVar(0);
+	Var *var2 = ParamIndexToOutputVar(1);
+	if (!var1)
+		_f_throw_param(0, _T("variable reference"));
+	if (!var2)
+		_f_throw_param(1, _T("variable reference"));
+
+	VarBkp varbkp1;
+	VarBkp varbkp2;
+	var1->Backup(varbkp1);
+	var2->Backup(varbkp2);
+	var1->Restore(varbkp2);
+	var2->Restore(varbkp1);
+	aResultToken.SetValue(_T(""), 0);
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////

@@ -3443,6 +3443,7 @@ BIF_DECL(BIF_Process);
 BIF_DECL(BIF_ProcessSetPriority);
 BIF_DECL(BIF_MonitorGet);
 BIF_DECL(BIF_Wait);
+BIF_DECL(BIF_Swap);
 
 BIF_DECL(BIF_PerformAction);
 BIF_DECL(BIF_SetBIV);

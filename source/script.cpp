@@ -324,6 +324,7 @@ FuncEntry g_BIF[] =
 	BIFn(StrUpper, 1, 1, BIF_StrCase),
 	BIF1(SubStr, 2, 3),
 	BIFA(Suspend, 0, 1, ACT_SUSPEND),
+	BIF1(Swap, 2, 2),
 	BIF1(SysGet, 1, 1),
 	BIF1(SysGetIPAddresses, 0, 0),
 	BIF1(Tan, 1, 1),
