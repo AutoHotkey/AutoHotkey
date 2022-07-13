@@ -8464,6 +8464,8 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 	}
 	else if (!_tcsicmp(func_name, _T("Abs")))
 		bif = BIF_Abs;
+	else if (!_tcsicmp(func_name, _T("Sign")))
+		bif = BIF_Sign;
 	else if (!_tcsicmp(func_name, _T("Sin")))
 		bif = BIF_Sin;
 	else if (!_tcsicmp(func_name, _T("Cos")))

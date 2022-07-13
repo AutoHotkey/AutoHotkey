@@ -16437,6 +16437,23 @@ BIF_DECL(BIF_Abs)
 
 
 
+BIF_DECL(BIF_Sign)
+{
+	if (!TokenToDoubleOrInt64(*aParam[0], aResultToken)) // "Cast" token to Int64/Double depending on whether it has a decimal point.
+		// Non-operand or non-numeric string. TokenToDoubleOrInt64() has already set the token to be an
+		// empty string for us.
+		_f_throw(ERR_PARAM1_INVALID);
+	else if (aResultToken.symbol == SYM_INTEGER)
+		aResultToken.value_int64 = aResultToken.value_int64 > 0 ? 1 : aResultToken.value_int64 < 0 ? -1 : 0;
+	else if (aResultToken.value_double == aResultToken.value_double) // Must be SYM_FLOAT due to the conversion above.
+		// Value equals itself, therefore not a NaN:
+		aResultToken.value_double = aResultToken.value_double > 0.0 ? 1.0 : aResultToken.value_double < 0.0 ? -1.0 : 0.0;
+	else // Value doesn't equal itself, therefore a NaN:
+		_f_throw(ERR_PARAM1_INVALID);
+}
+
+
+
 BIF_DECL(BIF_Sin)
 // For simplicity and backward compatibility, a numeric result is always returned (even if the input
 // is non-numeric or an empty string).
