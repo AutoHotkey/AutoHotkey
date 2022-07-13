@@ -3025,56 +3025,18 @@ bool Script::IsSOLContExpr(LineBuffer &next_buf)
 			// So continue checking below.
 		}
 		// Since above didn't "break", this line isn't a hotstring but it is probably a hotkey
-		// because above already discovered that it contains "::" somewhere. So try to find out
-		// if there's anything that disqualifies this from being a hotkey, such as some
-		// expression line that contains a quoted/literal "::" (or a line starting with
-		// a comma that contains an unquoted-but-literal "::" such as for FileAppend).
-		if (*next_buf == ',')
-		{
-			cp = omit_leading_whitespace(next_buf + 1);
-			// The above has set cp to the position of the non-whitespace item to the right of
-			// this comma.  Normal (single-colon) labels can't contain commas, so only hotkey
-			// labels are sources of ambiguity.  In addition, normal labels and hotstrings have
-			// already been checked for, higher above.
-			if (   _tcsncmp(cp, HOTKEY_FLAG, HOTKEY_FLAG_LENGTH) // It's not a hotkey such as ",::action".
-				&& _tcsncmp(cp - 1, COMPOSITE_DELIMITER, COMPOSITE_DELIMITER_LENGTH)   ) // ...and it's not a hotkey such as ", & y::action".
-				return true;
-		}
-		else // First symbol in line isn't a comma but some other operator symbol.
-		{
-			// Check if the "::" found earlier appears to be inside a quoted/literal string.
-			// This check is NOT done for a line beginning with a comma since such lines
-			// can contain an unquoted-but-literal "::".  In addition, this check is done this
-			// way to detect hotkeys such as the following:
-			//   +keyname:: (and other hotkey modifier symbols such as ! and ^)
-			//   +keyname1 & keyname2::
-			//   +^:: (i.e. a modifier symbol followed by something that is a hotkey modifier and/or a hotkey suffix and/or an expression operator).
-			//   <:: and &:: (i.e. hotkeys that are also expression-continuation symbols)
-			// By contrast, expressions that qualify as continuation lines can look like:
-			//   . "xxx::yyy"
-			//   + x . "xxx::yyy"
-			// In addition, hotkeys like the following should continue to be supported regardless
-			// of how things are done here:
-			//   ^"::
-			//   . & "::
-			// Finally, keep in mind that an expression-continuation line can start with two
-			// consecutive unary operators like !! or !*. It can also start with a double-symbol
-			// operator such as <=, <>, !=, &&, ||, //, **.
-			for (cp = next_buf; cp < hotkey_flag && *cp != '"' && *cp != '\''; ++cp);
-			if (cp == hotkey_flag) // No '"' found to left of "::", so this "::" appears to be a real hotkey flag rather than part of a literal string.
-				break; // Treat this line as a normal line vs. continuation line.
-			TCHAR in_quote = *cp;
-			for (cp = hotkey_flag + HOTKEY_FLAG_LENGTH; *cp && *cp != in_quote; ++cp);
-			if (*cp)
-			{
-				// Closing quote was found so "::" is probably inside a literal string of an
-				// expression (further checking seems unnecessary given the fairly extreme
-				// rarity of using '"' as a key in a hotkey definition).
-				return true;
-			}
-			//else no closing '"' found, so this "::" probably belongs to something like +":: or
-			// . & "::.  Treat this line as a normal line vs. continuation line.
-		}
+		// because above already discovered that it contains "::" somewhere.  The v1 policy was
+		// to do some rough checks for comma hotkeys and quote marks.  For v2, we use a much
+		// clearer rule: if it's valid hotkey syntax (even with invalid key names), it's not
+		// continuation.  There is at least one pathological case that could be an expression,
+		// but it's much more likely to be intended as a hotkey:
+		//  MsgBox
+		//  +!'::'  ; 0
+		*hotkey_flag = '\0';
+		bool valid_hotkey = Hotkey::TextInterpret(next_buf, NULL, true);
+		*hotkey_flag = *HOTKEY_FLAG;
+		if (!valid_hotkey)
+			return true; // It's not valid hotkey syntax, so treat it as continuation even if it's ultimately a syntax error.
 	} // switch(toupper(*next_buf))
 	return false;
 }
