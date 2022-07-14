@@ -216,6 +216,7 @@
     <ClCompile Include="source\input_object.cpp" />
     <ClCompile Include="source\keyboard_mouse.cpp" />
     <ClCompile Include="source\lib\input.cpp" />
+    <ClCompile Include="source\lib\wait.cpp" />
     <ClCompile Include="source\os_version.cpp" />
     <ClCompile Include="source\script.cpp" />
     <ClCompile Include="source\script2.cpp" />
