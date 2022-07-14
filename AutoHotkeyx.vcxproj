@@ -215,6 +215,7 @@
     <ClCompile Include="source\hotkey.cpp" />
     <ClCompile Include="source\input_object.cpp" />
     <ClCompile Include="source\keyboard_mouse.cpp" />
+    <ClCompile Include="source\lib\input.cpp" />
     <ClCompile Include="source\os_version.cpp" />
     <ClCompile Include="source\script.cpp" />
     <ClCompile Include="source\script2.cpp" />
@@ -349,7 +350,9 @@
   <Target Name="ForceBuildForSetAhkVersion" Condition="Exists('@(AhkVersionInput)')" BeforeTargets="PrepareForBuild" Inputs="@(AhkVersionInput)" Outputs="@(AhkVersionOutput)">
     <!-- This is a separate target because SetAhkVersion must execute unconditionally. -->
     <!-- Write tlog for VS "fast up-to-date check" to recognize when HEAD changes. -->
-    <PropertyGroup><AhkTlogHeader>^@(AhkVersionOutput,'|')</AhkTlogHeader></PropertyGroup>
+    <PropertyGroup>
+      <AhkTlogHeader>^@(AhkVersionOutput,'|')</AhkTlogHeader>
+    </PropertyGroup>
     <WriteLinesToFile File="$(TLogLocation)ahkversion.read.1.tlog" Lines="$(AhkTlogHeader);@(AhkVersionInput)" Overwrite="true" />
   </Target>
 </Project>
