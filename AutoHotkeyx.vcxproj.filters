@@ -124,6 +124,9 @@
     <ClCompile Include="source\lib\process.cpp">
       <Filter>Lib</Filter>
     </ClCompile>
+    <ClCompile Include="source\lib\pixel.cpp">
+      <Filter>Lib</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="source\application.h">

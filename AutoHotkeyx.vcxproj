@@ -217,6 +217,7 @@
     <ClCompile Include="source\keyboard_mouse.cpp" />
     <ClCompile Include="source\lib\env.cpp" />
     <ClCompile Include="source\lib\input.cpp" />
+    <ClCompile Include="source\lib\pixel.cpp" />
     <ClCompile Include="source\lib\process.cpp" />
     <ClCompile Include="source\lib\wait.cpp" />
     <ClCompile Include="source\os_version.cpp" />
