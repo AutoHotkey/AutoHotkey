@@ -129,6 +129,7 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <PrecompiledHeader Condition="!$(ConfigDebug)">Use</PrecompiledHeader>
+      <AdditionalIncludeDirectories>$(ProjectDir)source;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>

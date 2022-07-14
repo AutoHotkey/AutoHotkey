@@ -17,6 +17,12 @@
       <UniqueIdentifier>{ecb1e7be-5c45-4dfc-9f18-09b5a4ea18e1}</UniqueIdentifier>
       <Extensions>asm;asmx</Extensions>
     </Filter>
+    <Filter Include="Core">
+      <UniqueIdentifier>{be4f060f-b16c-43ac-a1e2-2d865f148fc1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Lib">
+      <UniqueIdentifier>{41214896-089d-4744-8504-46c4db4998c4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="source\application.cpp">
