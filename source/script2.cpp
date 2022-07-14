@@ -148,6 +148,11 @@ BIF_DECL(BIF_TraySetIcon)
 
 
 
+///////////
+// Input //
+///////////
+
+
 ResultType input_type::Setup(LPTSTR aOptions, LPTSTR aEndKeys, LPTSTR aMatchList, size_t aMatchList_length)
 {
 	ParseOptions(aOptions);
@@ -666,6 +671,11 @@ input_type *InputFind(InputObject *object)
 
 
 
+//////////////////////
+// Window Functions //
+//////////////////////
+
+
 BIF_DECL(BIF_WinShow)
 {
 	auto action = _f_callee_id;
@@ -874,6 +884,10 @@ BIF_DECL(BIF_GroupActivate)
 }
 
 
+
+/////////////
+// ...Wait //
+/////////////
 
 BIF_DECL(BIF_Wait)
 // Since other script threads can interrupt these commands while they're running, it's important that
@@ -1156,6 +1170,11 @@ BIF_DECL(BIF_Wait)
 	} // for()
 }
 
+
+
+//////////////////////
+// Window Functions //
+//////////////////////
 
 
 BIF_DECL(BIF_WinMove)
@@ -2123,6 +2142,11 @@ BIF_DECL(BIF_PostSendMessage)
 
 
 
+///////////////////////
+// Process Functions //
+///////////////////////
+
+
 BIF_DECL(BIF_Process)
 {
 	_f_param_string_opt(aProcess, 0);
@@ -2242,6 +2266,11 @@ BIF_DECL(BIF_ProcessSetPriority)
 	_f_return_i(pid);
 }
 
+
+
+//////////////////////
+// Window Functions //
+//////////////////////
 
 
 void WinSetRegion(HWND aWnd, LPTSTR aPoints, ResultToken &aResultToken)
@@ -3000,6 +3029,11 @@ BIF_DECL(BIF_WinGetPos)
 
 
 
+///////////////////////
+// Process Functions //
+///////////////////////
+
+
 BIF_DECL(BIF_Run)
 {
 	_f_param_string(target, 0);
@@ -3011,6 +3045,11 @@ BIF_DECL(BIF_Run)
 	_f_return_empty;
 }
 
+
+
+///////////////////////////
+// Environment Functions //
+///////////////////////////
 
 
 BIF_DECL(BIF_Env)
@@ -3161,6 +3200,11 @@ BOOL CALLBACK EnumMonitorProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMoni
 	return TRUE;
 }
 
+
+
+//////////////////////
+// Screen Searching //
+//////////////////////
 
 
 LPCOLORREF getbits(HBITMAP ahImage, HDC hdc, LONG &aWidth, LONG &aHeight, bool &aIs16Bit, int aMinColorDepth = 8)
@@ -4671,6 +4715,13 @@ UserFunc* Script::CreateHotFunc()
 	return func;
 }
 
+
+
+////////////
+// MsgBox //
+////////////
+
+
 ResultType MsgBoxParseOptions(LPTSTR aOptions, int &aType, double &aTimeout, HWND &aOwner)
 {
 	aType = 0;
@@ -5434,12 +5485,20 @@ ResultType InputBoxType::UpdateResult(HWND hControl)
 
 
 
+///////////////////
+// Misc internal //
+///////////////////
+
 VOID CALLBACK DerefTimeout(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
 {
 	Line::FreeDerefBufIfLarge(); // It will also kill the timer, if appropriate.
 }
 
 
+
+////////////////////////
+// Misc built-in vars //
+////////////////////////
 
 ResultType Script::SetCoordMode(LPTSTR aCommand, LPTSTR aMode)
 {
@@ -5467,6 +5526,10 @@ ResultType Script::SetSendLevel(int aValue, LPTSTR aValueStr)
 }
 
 
+
+/////////////////
+// MouseGetPos //
+/////////////////
 
 BIF_DECL(BIF_MouseGetPos)
 // Returns OK or FAIL.
@@ -5619,9 +5682,9 @@ BOOL CALLBACK EnumChildFindPoint(HWND aWnd, LPARAM lParam)
 
 
 
-///////////////////////////////
-// Related to other commands //
-///////////////////////////////
+////////////////
+// FormatTime //
+////////////////
 
 BIF_DECL(BIF_FormatTime)
 // The compressed code size of this function is about 1 KB (2 KB uncompressed), which compares
@@ -5934,6 +5997,11 @@ BIF_DECL(BIF_FormatTime)
 	_f_return(output_buf);
 }
 
+
+
+//////////////////////
+// String Functions //
+//////////////////////
 
 
 BIF_DECL(BIF_StrCase)
@@ -6807,6 +6875,11 @@ end:
 
 
 
+/////////////////////
+// Drive Functions //
+/////////////////////
+
+
 void DriveSpace(ResultToken &aResultToken, LPTSTR aPath, bool aGetFreeSpace)
 // Because of NTFS's ability to mount volumes into a directory, a path might not necessarily
 // have the same amount of free space as its root drive.  However, I'm not sure if this
@@ -7119,6 +7192,11 @@ invalid_parameter:
 	_f_throw_param(0);
 }
 
+
+
+/////////////////////
+// Sound Functions //
+/////////////////////
 
 
 #pragma region Sound support functions - Vista and later
@@ -7684,6 +7762,11 @@ error:
 
 
 
+///////////////////////
+// Working Directory //
+///////////////////////
+
+
 ResultType SetWorkingDir(LPTSTR aNewDir)
 // Throws a script runtime exception on failure, but only if the script has begun runtime execution.
 // This function was added in v1.0.45.01 for the reason described below.
@@ -7751,6 +7834,11 @@ LPTSTR GetWorkingDir()
 	return NULL;
 }
 
+
+
+////////////////////
+// File Functions //
+////////////////////
 
 
 BIF_DECL(BIF_FileSelect)
@@ -8950,6 +9038,10 @@ BIF_DECL(BIF_FileGetSize)
 }
 
 
+
+/////////////////////
+// SetXXXLockState //
+/////////////////////
 
 ResultType Line::SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText)
 // Caller must have already validated that the args are correct.
@@ -10567,9 +10659,9 @@ BIF_DECL(BIF_InstallHook)
 
 
 
-////////////////////////
-// BUILT-IN FUNCTIONS //
-////////////////////////
+///////////////////////
+// Interop Functions //
+///////////////////////
 
 #ifdef ENABLE_DLLCALL
 
@@ -11554,6 +11646,11 @@ end:
 #endif
 
 
+//////////////////////
+// String Functions //
+//////////////////////
+
+
 void ObjectToString(ResultToken &aResultToken, ExprTokenType &aThisToken, IObject *aObject)
 {
 	// Something like this should be done for every TokenToString() call or
@@ -11759,6 +11856,11 @@ BIF_DECL(BIF_InStr)
 			break;
 	_f_return_i(found_pos ? (found_pos - haystack + 1) : 0);
 }
+
+
+/////////////////////
+// RegEx Functions //
+/////////////////////
 
 
 ResultType RegExCreateMatchArray(LPCTSTR haystack, pcret *re, pcret_extra *extra, int *offset, int pattern_count, int captured_pattern_count, IObject *&match_object)
@@ -12947,6 +13049,11 @@ BIF_DECL(BIF_RegEx)
 
 
 
+//////////////////////
+// String Functions //
+//////////////////////
+
+
 BIF_DECL(BIF_Ord)
 {
 	// Result will always be an integer (this simplifies scripts that work with binary zeros since an
@@ -12995,6 +13102,11 @@ BIF_DECL(BIF_Chr)
 	_f_return_p(cp, len);
 }
 
+
+
+///////////////////////
+// Interop Functions //
+///////////////////////
 
 
 struct NumGetParams
@@ -13145,6 +13257,10 @@ BIF_DECL(BIF_NumGet)
 }
 
 
+
+//////////////////////
+// String Functions //
+//////////////////////
 
 BIF_DECL(BIF_Format)
 {
@@ -13301,6 +13417,10 @@ BIF_DECL(BIF_Format)
 }
 
 
+
+///////////////////////
+// Interop Functions //
+///////////////////////
 
 BIF_DECL(BIF_NumPut)
 {
@@ -13714,6 +13834,11 @@ BIF_DECL(BIF_StrPtr)
 
 
 
+////////////////////
+// Misc Functions //
+////////////////////
+
+
 BIF_DECL(BIF_IsLabel)
 {
 	_f_return_b(g_script.FindLabel(ParamIndexToString(0, _f_number_buf)) ? 1 : 0);
@@ -13906,6 +14031,11 @@ BIF_DECL(BIF_IsSet)
 
 
 
+////////////////////////
+// Keyboard Functions //
+////////////////////////
+
+
 BIF_DECL(BIF_GetKeyState)
 {
 	TCHAR key_name_buf[MAX_NUMBER_SIZE]; // Because _f_retval_buf is used for something else below.
@@ -13964,6 +14094,10 @@ BIF_DECL(BIF_GetKeyName)
 }
 
 
+
+////////////////////
+// Misc Functions //
+////////////////////
 
 BIF_DECL(BIF_VarSetStrCapacity)
 // Returns: The variable's new capacity.
@@ -14031,6 +14165,10 @@ BIF_DECL(BIF_VarSetStrCapacity)
 
 
 
+////////////////////
+// File Functions //
+////////////////////
+
 BIF_DECL(BIF_FileExist)
 {
 	TCHAR filename_buf[MAX_NUMBER_SIZE]; // Because _f_number_buf is used for something else below.
@@ -14065,6 +14203,10 @@ BIF_DECL(BIF_FileExist)
 }
 
 
+
+//////////////////////
+// Window Functions //
+//////////////////////
 
 BIF_DECL(BIF_WinExistActive)
 {
@@ -14102,6 +14244,11 @@ BIF_DECL(BIF_WinExistActive)
 	_f_return_i((size_t)hwnd);
 }
 
+
+
+////////////////////
+// Math Functions //
+////////////////////
 
 
 BIF_DECL(BIF_Round)
@@ -14199,6 +14346,11 @@ BIF_DECL(BIF_FloorCeil)
 	_f_return_i((__int64)(x + (x > 0 ? 0.2 : -0.2)));
 }
 
+
+
+////////////////////
+// Misc Functions //
+////////////////////
 
 
 BIF_DECL(BIF_Integer)
@@ -14655,6 +14807,9 @@ BIF_DECL(BIF_SetTimer)
 }
 
 
+//////////////////////////////
+// Event Handling Functions //
+//////////////////////////////
 
 BIF_DECL(BIF_OnMessage)
 // Returns: An empty string.
@@ -14965,6 +15120,11 @@ BIF_DECL(BIF_On)
 }
 
 
+///////////////////////
+// Interop Functions //
+///////////////////////
+
+
 #ifdef ENABLE_REGISTERCALLBACK
 struct RCCallbackFunc // Used by BIF_CallbackCreate() and related.
 {
@@ -15254,6 +15414,11 @@ BIF_DECL(BIF_MenuFromHandle)
 	_f_return_empty;
 }
 
+
+
+//////////////////////
+// Gui & GuiControl //
+//////////////////////
 
 
 void GuiControlType::StatusBar(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -16657,6 +16822,10 @@ BIF_DECL(BIF_IL_Add)
 
 
 
+////////////////////
+// Misc Functions //
+////////////////////
+
 BIF_DECL(BIF_LoadPicture)
 {
 	// h := LoadPicture(filename [, options, ByRef image_type])
@@ -16698,6 +16867,10 @@ BIF_DECL(BIF_LoadPicture)
 
 
 
+//////////////////////
+// String Functions //
+//////////////////////
+
 BIF_DECL(BIF_Trim) // L31
 {
 	BuiltInFunctionID trim_type = _f_callee_id;
@@ -16731,6 +16904,11 @@ BIF_DECL(BIF_VerCompare)
 	_f_return(CompareVersion(a, b));
 }
 
+
+
+////////////////////
+// Misc Functions //
+////////////////////
 
 
 BIF_DECL(BIF_Type)
