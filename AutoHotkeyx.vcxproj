@@ -222,6 +222,7 @@
     <ClCompile Include="source\lib\file.cpp" />
     <ClCompile Include="source\lib\input.cpp" />
     <ClCompile Include="source\lib\InputBox.cpp" />
+    <ClCompile Include="source\lib\interop.cpp" />
     <ClCompile Include="source\lib\math.cpp" />
     <ClCompile Include="source\lib\pixel.cpp" />
     <ClCompile Include="source\lib\process.cpp" />
