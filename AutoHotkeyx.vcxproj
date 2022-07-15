@@ -229,6 +229,7 @@
     <ClCompile Include="source\lib\regex.cpp" />
     <ClCompile Include="source\lib\sound.cpp" />
     <ClCompile Include="source\lib\string.cpp" />
+    <ClCompile Include="source\lib\vars.cpp" />
     <ClCompile Include="source\lib\wait.cpp" />
     <ClCompile Include="source\lib\win.cpp" />
     <ClCompile Include="source\os_version.cpp" />
