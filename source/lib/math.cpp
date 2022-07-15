@@ -17,7 +17,7 @@ GNU General Public License for more details.
 #include "stdafx.h"
 #include "qmath.h"
 #include "script.h"
-#include "TextIO.h"
+#include <stdint.h>
 
 #include "script_func_impl.h"
 
