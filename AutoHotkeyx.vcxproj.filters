@@ -281,12 +281,6 @@
     <None Include="source\resources\icon_suspend.ico">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="source\resources\icon_tray_win9x.ico">
-      <Filter>Resource Files</Filter>
-    </None>
-    <None Include="source\resources\icon_tray_win9x_suspend.ico">
-      <Filter>Resource Files</Filter>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="source\resources\AutoHotkey.rc">

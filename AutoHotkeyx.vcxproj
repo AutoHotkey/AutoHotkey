@@ -322,8 +322,6 @@
     <None Include="source\resources\icon_pause.ico" />
     <None Include="source\resources\icon_pause_suspend.ico" />
     <None Include="source\resources\icon_suspend.ico" />
-    <None Include="source\resources\icon_tray_win9x.ico" />
-    <None Include="source\resources\icon_tray_win9x_suspend.ico" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="source\resources\AutoHotkey.rc" />
