@@ -28,9 +28,9 @@ GNU General Public License for more details.
 
 
 
-////////////////////
-// Window related //
-////////////////////
+///////////////////////
+// GUI-related: Tray //
+///////////////////////
 
 ResultType TrayTipParseOptions(LPTSTR aOptions, NOTIFYICONDATA &nic)
 {
@@ -884,9 +884,9 @@ UserFunc* Script::CreateHotFunc()
 
 
 
-////////////
-// MsgBox //
-////////////
+/////////////////////////
+// GUI-related: MsgBox //
+/////////////////////////
 
 
 ResultType MsgBoxParseOptions(LPTSTR aOptions, int &aType, double &aTimeout, HWND &aOwner)
@@ -1048,9 +1048,9 @@ BIF_DECL(BIF_MsgBox)
 
 
 
-/////////////
-// ToolTip //
-/////////////
+//////////////////////////
+// GUI-related: ToolTip //
+//////////////////////////
 
 BIF_DECL(BIF_ToolTip)
 {
@@ -1527,9 +1527,9 @@ LPTSTR GetWorkingDir()
 
 
 
-////////////////
-// FileSelect //
-////////////////
+/////////////////////////////
+// GUI-related: FileSelect //
+/////////////////////////////
 
 BIF_DECL(BIF_FileSelect)
 // Since other script threads can interrupt this command while it's running, it's important that
@@ -1793,9 +1793,9 @@ BIF_DECL(BIF_FileSelect)
 
 
 
-/////////////////////
-// SetXXXLockState //
-/////////////////////
+////////////////////////
+// Keyboard Functions //
+////////////////////////
 
 ResultType Line::SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText)
 // Caller must have already validated that the args are correct.
@@ -3321,7 +3321,7 @@ BIF_DECL(BIF_InstallHook)
 
 
 ////////////////////
-// Misc Functions //
+// Core Functions //
 ////////////////////
 
 
@@ -3384,7 +3384,7 @@ BIF_DECL(BIF_String)
 
 
 ////////////////////
-// Misc Functions //
+// Core Functions //
 ////////////////////
 
 
@@ -3633,8 +3633,9 @@ BIF_DECL(BIF_GetKeyName)
 
 
 ////////////////////
-// Misc Functions //
+// Core Functions //
 ////////////////////
+
 
 BIF_DECL(BIF_VarSetStrCapacity)
 // Returns: The variable's new capacity.
@@ -3702,11 +3703,6 @@ BIF_DECL(BIF_VarSetStrCapacity)
 
 
 
-////////////////////
-// Misc Functions //
-////////////////////
-
-
 BIF_DECL(BIF_Integer)
 {
 	++aParam; // Skip `this`
@@ -3732,6 +3728,11 @@ BIF_DECL(BIF_Number)
 		_f_throw_param(0, _T("Number"));
 }
 
+
+
+////////////////////
+// Misc Functions //
+////////////////////
 
 
 BIF_DECL(BIF_Hotkey)
@@ -3840,6 +3841,7 @@ BIF_DECL(BIF_SetTimer)
 	g_script.UpdateOrCreateTimer(callback, update_period, period, update_priority, priority);
 	_f_return_empty;
 }
+
 
 
 //////////////////////////////
@@ -4153,6 +4155,7 @@ BIF_DECL(BIF_On)
 	if (event_type == FID_OnClipboardChange && !handlers.Count())
 		g_script.EnableClipboardListener(false);
 }
+
 
 
 ///////////////////////
@@ -5625,7 +5628,7 @@ BIF_DECL(BIF_LoadPicture)
 
 
 ////////////////////
-// Misc Functions //
+// Core Functions //
 ////////////////////
 
 
