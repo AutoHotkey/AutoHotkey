@@ -85,9 +85,6 @@
     <ClCompile Include="source\SimpleHeap.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="source\stdafx.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="source\StringConv.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

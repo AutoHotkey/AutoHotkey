@@ -207,8 +207,7 @@
     <ClCompile Include="source\AutoHotkey.cpp" />
     <ClCompile Include="source\clipboard.cpp" />
     <ClCompile Include="source\Debugger.cpp">
-      <FavorSizeOrSpeed Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Size</FavorSizeOrSpeed>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+      <Optimization>MinSpace</Optimization>
     </ClCompile>
     <ClCompile Include="source\globaldata.cpp" />
     <ClCompile Include="source\hook.cpp" />
@@ -235,6 +234,13 @@
     <ClCompile Include="source\lib\wait.cpp" />
     <ClCompile Include="source\lib\win.cpp" />
     <ClCompile Include="source\os_version.cpp" />
+    <ClCompile Include="source\pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="source\pch_min.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+      <Optimization>MinSpace</Optimization>
+    </ClCompile>
     <ClCompile Include="source\script.cpp" />
     <ClCompile Include="source\script2.cpp" />
     <ClCompile Include="source\script_autoit.cpp" />
@@ -246,9 +252,6 @@
     <ClCompile Include="source\script_object_bif.cpp" />
     <ClCompile Include="source\script_registry.cpp" />
     <ClCompile Include="source\SimpleHeap.cpp" />
-    <ClCompile Include="source\stdafx.cpp">
-      <PrecompiledHeader>Create</PrecompiledHeader>
-    </ClCompile>
     <ClCompile Include="source\StringConv.cpp" />
     <ClCompile Include="source\TextIO.cpp" />
     <ClCompile Include="source\util.cpp" />
@@ -346,6 +349,16 @@
     <AhkVersionOutput Include="$(IntDir)ahkversion.obj" />
     <AhkVersionOutput Include="$(IntDir)AutoHotkey.res" />
   </ItemGroup>
+  <Target Name="ApplyMinSizePCH" BeforeTargets="ClCompile" Condition="!$(ConfigMinSize)">
+    <!-- This target configures the PCH path for files with Optimization == MinSpace,
+    which would otherwise need PCH turned off, causing slower build times.  MinSpace.pch
+    is created when pch_min.cpp is compiled. -->
+    <ItemGroup>
+      <ClCompile Condition="'%(ClCompile.Optimization)' == 'MinSpace'">
+        <PrecompiledHeaderOutputFile>$(IntDir)MinSize.pch</PrecompiledHeaderOutputFile>
+      </ClCompile>
+    </ItemGroup>
+  </Target>
   <Target Name="SetAhkVersion" Condition="Exists('@(AhkVersionInput)')" BeforeTargets="PrepareForBuild">
     <Exec Condition="'$(RawAhkVersion)'==''" Command="git describe --dirty --match v*" ConsoleToMSBuild="true" IgnoreExitCode="true" EchoOff="true">
       <Output PropertyName="GitDescription" TaskParameter="ConsoleOutput" />
