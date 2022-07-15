@@ -23,6 +23,9 @@
     <Filter Include="Lib">
       <UniqueIdentifier>{41214896-089d-4744-8504-46c4db4998c4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Lib\Gui">
+      <UniqueIdentifier>{d89b1451-308b-4d71-b654-bd52e7e74493}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="source\application.cpp">
@@ -162,6 +165,9 @@
     </ClCompile>
     <ClCompile Include="source\lib\vars.cpp">
       <Filter>Lib</Filter>
+    </ClCompile>
+    <ClCompile Include="source\lib\Gui.ListView.cpp">
+      <Filter>Lib\Gui</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
