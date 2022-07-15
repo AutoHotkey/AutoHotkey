@@ -216,8 +216,12 @@
     <ClCompile Include="source\keyboard_mouse.cpp" />
     <ClCompile Include="source\lib\CCallback.cpp" />
     <ClCompile Include="source\lib\DllCall.cpp" />
-    <ClCompile Include="source\lib\drive.cpp" />
-    <ClCompile Include="source\lib\env.cpp" />
+    <ClCompile Include="source\lib\drive.cpp">
+      <Optimization>MinSpace</Optimization>
+    </ClCompile>
+    <ClCompile Include="source\lib\env.cpp">
+      <Optimization>MinSpace</Optimization>
+    </ClCompile>
     <ClCompile Include="source\lib\file.cpp" />
     <ClCompile Include="source\lib\Gui.ListView.cpp" />
     <ClCompile Include="source\lib\Gui.TreeView.cpp" />
@@ -226,12 +230,18 @@
     <ClCompile Include="source\lib\interop.cpp" />
     <ClCompile Include="source\lib\math.cpp" />
     <ClCompile Include="source\lib\pixel.cpp" />
-    <ClCompile Include="source\lib\process.cpp" />
+    <ClCompile Include="source\lib\process.cpp">
+      <Optimization>MinSpace</Optimization>
+    </ClCompile>
     <ClCompile Include="source\lib\regex.cpp" />
-    <ClCompile Include="source\lib\sound.cpp" />
+    <ClCompile Include="source\lib\sound.cpp">
+      <Optimization>MinSpace</Optimization>
+    </ClCompile>
     <ClCompile Include="source\lib\string.cpp" />
     <ClCompile Include="source\lib\vars.cpp" />
-    <ClCompile Include="source\lib\wait.cpp" />
+    <ClCompile Include="source\lib\wait.cpp">
+      <Optimization>MinSpace</Optimization>
+    </ClCompile>
     <ClCompile Include="source\lib\win.cpp" />
     <ClCompile Include="source\os_version.cpp" />
     <ClCompile Include="source\pch.cpp">
