@@ -221,6 +221,7 @@
     <ClCompile Include="source\lib\env.cpp" />
     <ClCompile Include="source\lib\file.cpp" />
     <ClCompile Include="source\lib\Gui.ListView.cpp" />
+    <ClCompile Include="source\lib\Gui.TreeView.cpp" />
     <ClCompile Include="source\lib\input.cpp" />
     <ClCompile Include="source\lib\InputBox.cpp" />
     <ClCompile Include="source\lib\interop.cpp" />
