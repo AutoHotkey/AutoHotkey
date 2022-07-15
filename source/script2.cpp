@@ -15,14 +15,10 @@ GNU General Public License for more details.
 */
 
 #include "stdafx.h" // pre-compiled headers
-#include <winioctl.h> // For PREVENT_MEDIA_REMOVAL and CD lock/unlock.
 #include "qmath.h" // Used by Transform() [math.h incurs 2k larger code size just for ceil() & floor()]
 #include "script.h"
 #include "window.h" // for IF_USE_FOREGROUND_WINDOW
 #include "application.h" // for MsgSleep()
-#include "resources/resource.h"  // For InputBox.
-#include <Psapi.h> // for GetModuleBaseName.
-
 #include "script_func_impl.h"
 
 
