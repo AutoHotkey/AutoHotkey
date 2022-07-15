@@ -220,6 +220,7 @@
     <ClCompile Include="source\lib\pixel.cpp" />
     <ClCompile Include="source\lib\process.cpp" />
     <ClCompile Include="source\lib\wait.cpp" />
+    <ClCompile Include="source\lib\win.cpp" />
     <ClCompile Include="source\os_version.cpp" />
     <ClCompile Include="source\script.cpp" />
     <ClCompile Include="source\script2.cpp" />
