@@ -130,6 +130,9 @@
     <ClCompile Include="source\lib\win.cpp">
       <Filter>Lib</Filter>
     </ClCompile>
+    <ClCompile Include="source\lib\math.cpp">
+      <Filter>Lib</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="source\application.h">
