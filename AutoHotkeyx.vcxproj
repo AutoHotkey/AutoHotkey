@@ -221,6 +221,7 @@
     <ClCompile Include="source\lib\math.cpp" />
     <ClCompile Include="source\lib\pixel.cpp" />
     <ClCompile Include="source\lib\process.cpp" />
+    <ClCompile Include="source\lib\sound.cpp" />
     <ClCompile Include="source\lib\wait.cpp" />
     <ClCompile Include="source\lib\win.cpp" />
     <ClCompile Include="source\os_version.cpp" />
