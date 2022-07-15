@@ -151,6 +151,9 @@
     <ClCompile Include="source\lib\CCallback.cpp">
       <Filter>Lib</Filter>
     </ClCompile>
+    <ClCompile Include="source\lib\file.cpp">
+      <Filter>Lib</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="source\application.h">

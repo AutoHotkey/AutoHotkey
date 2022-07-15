@@ -219,6 +219,7 @@
     <ClCompile Include="source\lib\DllCall.cpp" />
     <ClCompile Include="source\lib\drive.cpp" />
     <ClCompile Include="source\lib\env.cpp" />
+    <ClCompile Include="source\lib\file.cpp" />
     <ClCompile Include="source\lib\input.cpp" />
     <ClCompile Include="source\lib\math.cpp" />
     <ClCompile Include="source\lib\pixel.cpp" />
