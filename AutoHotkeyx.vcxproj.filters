@@ -1,10 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
-    </Filter>
     <Filter Include="Resource Files">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx</Extensions>
@@ -13,253 +9,264 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cxx;def;odl;idl;hpj;bat</Extensions>
     </Filter>
-    <Filter Include="Assembly Files">
-      <UniqueIdentifier>{ecb1e7be-5c45-4dfc-9f18-09b5a4ea18e1}</UniqueIdentifier>
-      <Extensions>asm;asmx</Extensions>
-    </Filter>
     <Filter Include="Core">
       <UniqueIdentifier>{be4f060f-b16c-43ac-a1e2-2d865f148fc1}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Lib">
+    <Filter Include="Utility">
+      <UniqueIdentifier>{d9ae6b1b-0049-48c3-adb9-9956b6d59210}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Keyboard &amp; mouse">
+      <UniqueIdentifier>{2f7b5800-cfee-4837-bd4d-e04071a188ef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Build &amp; debug">
+      <UniqueIdentifier>{3e216b98-1f13-49ff-a21d-106a6a9abfe4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Built-in library">
       <UniqueIdentifier>{41214896-089d-4744-8504-46c4db4998c4}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Lib\Gui">
+    <Filter Include="Built-in library\Gui">
       <UniqueIdentifier>{d89b1451-308b-4d71-b654-bd52e7e74493}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="source\application.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\AutoHotkey.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\clipboard.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\Debugger.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\globaldata.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\hook.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\hotkey.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\keyboard_mouse.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\os_version.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\script.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="source\script2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="source\script_autoit.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\script_expression.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\script_gui.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\script_menu.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\script_object.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\script_object_bif.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\script_registry.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\SimpleHeap.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\StringConv.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\TextIO.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\util.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\var.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\window.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\WinGroup.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\script_com.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\input_object.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\ahkversion.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="source\lib\input.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\wait.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\env.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\process.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\pixel.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\win.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\math.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\drive.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\sound.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\regex.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\string.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\DllCall.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\CCallback.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\file.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\InputBox.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\interop.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\vars.cpp">
-      <Filter>Lib</Filter>
+      <Filter>Built-in library</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\Gui.ListView.cpp">
-      <Filter>Lib\Gui</Filter>
+      <Filter>Built-in library\Gui</Filter>
     </ClCompile>
     <ClCompile Include="source\lib\Gui.TreeView.cpp">
-      <Filter>Lib\Gui</Filter>
+      <Filter>Built-in library\Gui</Filter>
+    </ClCompile>
+    <ClCompile Include="source\pch.cpp">
+      <Filter>Build &amp; debug</Filter>
+    </ClCompile>
+    <ClCompile Include="source\pch_min.cpp">
+      <Filter>Build &amp; debug</Filter>
+    </ClCompile>
+    <ClCompile Include="source\ahkversion.cpp">
+      <Filter>Resource Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\os_version.cpp">
+      <Filter>Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="source\SimpleHeap.cpp">
+      <Filter>Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="source\StringConv.cpp">
+      <Filter>Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="source\TextIO.cpp">
+      <Filter>Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="source\util.cpp">
+      <Filter>Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="source\script_registry.cpp">
+      <Filter>Built-in library</Filter>
+    </ClCompile>
+    <ClCompile Include="source\input_object.cpp">
+      <Filter>Built-in library</Filter>
+    </ClCompile>
+    <ClCompile Include="source\script_autoit.cpp">
+      <Filter>Built-in library</Filter>
+    </ClCompile>
+    <ClCompile Include="source\script_gui.cpp">
+      <Filter>Built-in library</Filter>
+    </ClCompile>
+    <ClCompile Include="source\script_menu.cpp">
+      <Filter>Built-in library</Filter>
+    </ClCompile>
+    <ClCompile Include="source\clipboard.cpp">
+      <Filter>Built-in library</Filter>
+    </ClCompile>
+    <ClCompile Include="source\WinGroup.cpp">
+      <Filter>Built-in library</Filter>
+    </ClCompile>
+    <ClCompile Include="source\window.cpp">
+      <Filter>Built-in library</Filter>
+    </ClCompile>
+    <ClCompile Include="source\application.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="source\AutoHotkey.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Debugger.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="source\globaldata.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="source\var.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="source\script_object.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="source\script_object_bif.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="source\script_expression.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="source\script_com.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="source\script.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="source\hook.cpp">
+      <Filter>Keyboard &amp; mouse</Filter>
+    </ClCompile>
+    <ClCompile Include="source\hotkey.cpp">
+      <Filter>Keyboard &amp; mouse</Filter>
+    </ClCompile>
+    <ClCompile Include="source\keyboard_mouse.cpp">
+      <Filter>Keyboard &amp; mouse</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="source\application.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\clipboard.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\config.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\debug.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\Debugger.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\defines.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\globaldata.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\hook.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\hotkey.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\keyboard_mouse.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\KuString.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\lib_pcre\pcre\pcre.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\os_version.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\qmath.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="source\ahkversion.h">
+      <Filter>Resource Files</Filter>
     </ClInclude>
     <ClInclude Include="source\resources\resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\script.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\script_object.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\SimpleHeap.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\stdafx.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\StringConv.h">
-      <Filter>Header Files</Filter>
+      <Filter>Resource Files</Filter>
     </ClInclude>
     <ClInclude Include="source\TextIO.h">
-      <Filter>Header Files</Filter>
+      <Filter>Utility</Filter>
     </ClInclude>
-    <ClInclude Include="source\util.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="source\StringConv.h">
+      <Filter>Utility</Filter>
     </ClInclude>
-    <ClInclude Include="source\var.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="source\SimpleHeap.h">
+      <Filter>Utility</Filter>
     </ClInclude>
-    <ClInclude Include="source\window.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\WinGroup.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\script_com.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="source\ahkversion.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="source\qmath.h">
+      <Filter>Utility</Filter>
     </ClInclude>
     <ClInclude Include="source\lib_pcre\pcre\pcret.h">
-      <Filter>Header Files</Filter>
+      <Filter>Utility</Filter>
     </ClInclude>
-    <ClInclude Include="source\script_func_impl.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="source\lib_pcre\pcre\pcre.h">
+      <Filter>Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="source\os_version.h">
+      <Filter>Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="source\util.h">
+      <Filter>Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="source\KuString.h">
+      <Filter>Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="source\debug.h">
+      <Filter>Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="source\config.h">
+      <Filter>Build &amp; debug</Filter>
     </ClInclude>
     <ClInclude Include="source\input_object.h">
-      <Filter>Header Files</Filter>
+      <Filter>Built-in library</Filter>
+    </ClInclude>
+    <ClInclude Include="source\clipboard.h">
+      <Filter>Built-in library</Filter>
+    </ClInclude>
+    <ClInclude Include="source\WinGroup.h">
+      <Filter>Built-in library</Filter>
+    </ClInclude>
+    <ClInclude Include="source\window.h">
+      <Filter>Built-in library</Filter>
+    </ClInclude>
+    <ClInclude Include="source\application.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\Debugger.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\globaldata.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\defines.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\script.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\script_com.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\script_func_impl.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\script_object.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\stdafx.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\var.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\hook.h">
+      <Filter>Keyboard &amp; mouse</Filter>
+    </ClInclude>
+    <ClInclude Include="source\hotkey.h">
+      <Filter>Keyboard &amp; mouse</Filter>
+    </ClInclude>
+    <ClInclude Include="source\keyboard_mouse.h">
+      <Filter>Keyboard &amp; mouse</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -285,17 +292,19 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="source\libx64call\x64call.asm">
-      <Filter>Assembly Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="source\libx64call\x64stub.asm">
-      <Filter>Assembly Files</Filter>
-    </CustomBuild>
     <CustomBuild Include="source\resources\AutoHotkey.exe.manifest">
       <Filter>Resource Files</Filter>
     </CustomBuild>
+    <CustomBuild Include="source\libx64call\x64call.asm">
+      <Filter>Utility</Filter>
+    </CustomBuild>
+    <CustomBuild Include="source\libx64call\x64stub.asm">
+      <Filter>Utility</Filter>
+    </CustomBuild>
   </ItemGroup>
   <ItemGroup>
-    <Natvis Include="debug.natvis" />
+    <Natvis Include="debug.natvis">
+      <Filter>Build &amp; debug</Filter>
+    </Natvis>
   </ItemGroup>
 </Project>
