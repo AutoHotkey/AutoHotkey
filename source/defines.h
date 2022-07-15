@@ -1053,6 +1053,10 @@ inline void global_init(global_struct &g)
 #define CP_AHKNOBOM 0x80000000
 #define CP_AHKCP    (~CP_AHKNOBOM)
 
+#ifndef CP_UTF16
+#define CP_UTF16 1200
+#endif
+
 // Use #pragma message(MY_WARN(nnnn) "warning messages") to generate a warning like a compiler's warning
 #define __S(x) #x
 #define _S(x) __S(x)

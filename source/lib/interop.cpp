@@ -17,7 +17,6 @@ GNU General Public License for more details.
 #include "stdafx.h"
 #include "script.h"
 #include "script_func_impl.h"
-#include "TextIO.h"
 
 
 

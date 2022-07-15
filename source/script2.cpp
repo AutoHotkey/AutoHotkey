@@ -21,7 +21,6 @@ GNU General Public License for more details.
 #include "window.h" // for IF_USE_FOREGROUND_WINDOW
 #include "application.h" // for MsgSleep()
 #include "resources/resource.h"  // For InputBox.
-#include "TextIO.h"
 #include <Psapi.h> // for GetModuleBaseName.
 
 #include "script_func_impl.h"
