@@ -145,6 +145,9 @@
     <ClCompile Include="source\lib\string.cpp">
       <Filter>Lib</Filter>
     </ClCompile>
+    <ClCompile Include="source\lib\DllCall.cpp">
+      <Filter>Lib</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="source\application.h">

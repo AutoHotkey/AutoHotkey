@@ -3502,6 +3502,7 @@ void PixelSearch(Var *aOutputVarX, Var *aOutputVarY
 
 ResultType GetObjectPtrProperty(IObject *aObject, LPTSTR aPropName, UINT_PTR &aPtr, ResultToken &aResultToken, bool aOptional = false);
 ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aValue, ResultToken &aResultToken, bool aOptional = false);
+ResultType SetObjectIntProperty(IObject * aObject, LPTSTR aPropName, __int64 aValue, ResultToken & aResultToken);
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, size_t &aSize);
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr);
 
