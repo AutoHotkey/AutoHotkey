@@ -3394,18 +3394,6 @@ BIF_DECL(BIF_IsLabel)
 }
 
 
-IObject *UserFunc::CloseIfNeeded()
-{
-	FreeVars *fv = (mUpVarCount && mOuterFunc && sFreeVars) ? sFreeVars->ForFunc(mOuterFunc) : NULL;
-	if (!fv)
-	{
-		AddRef();
-		return this;
-	}
-	return new Closure(this, fv, false);
-}
-
-
 
 BIF_DECL(BIF_IsTypeish)
 {

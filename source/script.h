@@ -1617,12 +1617,6 @@ public:
 
 	// bool result indicates whether aResultToken contains a value (i.e. false for FAIL/EARLY_EXIT).
 	virtual bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount);
-	
-	virtual IObject *CloseIfNeeded()
-	{
-		AddRef();
-		return this;
-	}
 
 	enum MemberID
 	{
@@ -1701,8 +1695,6 @@ public:
 	{
 		return mDefaultVarType & VAR_GLOBAL;
 	}
-
-	IObject *CloseIfNeeded() override; // Returns this UserFunc or (if mUpVarCount != 0) a Closure.
 
 	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount) override;
 	bool Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, FreeVars *aUpVars);
