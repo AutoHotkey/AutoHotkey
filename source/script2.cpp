@@ -18791,6 +18791,64 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_BetweenClamp)
+{
+	ExprTokenType param;
+	TCHAR mode = ctoupper(aResultToken.marker[0]); // Get 1st char of function name.
+	bool has_floats = false;
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+	for (int i = 0; i < 3; ++i)
+	{
+		ParamIndexToNumber(i, param);
+		switch (param.symbol)
+		{
+			case SYM_INTEGER:
+				break;
+			case SYM_FLOAT:
+				has_floats = true;
+				break;
+			default:
+				_f_throw(i == 0 ? ERR_PARAM1_INVALID : i == 1 ? ERR_PARAM2_INVALID : ERR_PARAM3_INVALID);
+		}
+	}
+
+	if (has_floats)
+	{
+		double fNum = ParamIndexToDouble(0);
+		double fLow = ParamIndexToDouble(1);
+		double fHigh = ParamIndexToDouble(2);
+		if (fHigh < fLow)
+			_f_throw(_T("Invalid bounds."));
+		if (mode == 'B') // Between.
+		{
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = (fLow <= fNum) && (fNum <= fHigh); // Integer.
+		}
+		else // Clamp.
+		{
+			aResultToken.symbol = SYM_FLOAT;
+			double fTemp = fNum < fHigh ? fNum : fHigh;
+			aResultToken.value_double = fLow > fTemp ? fLow : fTemp;
+		}
+	}
+	else
+	{
+		__int64 iNum = ParamIndexToInt64(0);
+		__int64 iLow = ParamIndexToInt64(1);
+		__int64 iHigh = ParamIndexToInt64(2);
+		if (iHigh < iLow)
+			_f_throw(_T("Invalid bounds."));
+		aResultToken.symbol = SYM_INTEGER;
+		if (mode == 'B') // Between.
+			aResultToken.value_int64 = (iLow <= iNum) && (iNum <= iHigh);
+		else // Clamp.
+			aResultToken.value_int64 = max(iLow, min(iNum, iHigh));
+	}
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
