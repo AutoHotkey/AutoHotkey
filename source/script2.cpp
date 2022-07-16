@@ -18791,6 +18791,46 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_StrRept)
+{
+	aResultToken.symbol = SYM_STRING;
+	LPTSTR item = ParamIndexToString(0, aResultToken.buf);
+	int len_item = _tcslen(item);
+	int count = (int)ParamIndexToInt64(1);
+	int len_out = len_item * count;
+	if (len_item == 0 || count < 1)
+	{
+		aResultToken.marker = _T("");
+		return;
+	}
+	if (len_out < 0)
+	{
+		aResultToken.marker = _T("");
+		_f_throw(_T("Requested buffer size not handled."));
+	}
+
+	LPTSTR output = tmalloc(len_out+1);
+	tmemcpy(output, item, len_item);
+
+	int len_temp = len_item;
+	LPTSTR pos = output + len_item;
+	LPTSTR end = output + len_out;
+	while (pos + len_temp <= end)
+	{
+		tmemcpy(pos, output, len_temp);
+		pos += len_temp;
+		len_temp <<= 1;
+	}
+
+	tmemcpy(pos, output, end-pos);
+	*end = '\0';
+	aResultToken.marker = output;
+	aResultToken.mem_to_free = output;
+	aResultToken.marker_length = len_out;
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
