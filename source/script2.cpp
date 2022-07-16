@@ -18791,6 +18791,241 @@ BIF_DECL(BIF_Exception)
 
 
 
+RangeObject *RangeObject::Create(__int64 aStart, __int64 aEnd, __int64 aStep)
+{
+	RangeObject *m = new RangeObject();
+	m->mHasFloats = false;
+	m->miStart = aStart;
+	m->miEnd = aEnd;
+	m->miStep = aStep;
+	m->mCount = (__int64)(_abs64((m->miEnd - m->miStart) / m->miStep)) + 1;
+	return m;
+}
+
+RangeObject *RangeObject::Create(double aStart, double aEnd, double aStep)
+{
+	RangeObject *m = new RangeObject();
+	m->mHasFloats = true;
+	m->mfStart = aStart;
+	m->mfEnd = aEnd;
+	m->mfStep = aStep;
+	m->mCount = (__int64)(qmathFabs((m->mfEnd - m->mfStart) / m->mfStep)) + 1;
+	return m;
+}
+
+ResultType STDMETHODCALLTYPE RangeObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (IS_INVOKE_SET)
+		return INVOKE_NOT_HANDLED;
+
+	LPTSTR name = ParamIndexToString(0);
+
+	if (IS_INVOKE_CALL && !_tcsicmp(name, _T("Next")))
+	{
+		aResultToken.symbol = SYM_INTEGER;
+		if (mIndex > mCount)
+		{
+			aResultToken.value_int64 = FAIL;
+			return OK;
+		}
+
+		aParam[1]->var->Assign(mIndex);
+		if (!ParamIndexIsOmitted(2))
+		{
+			if (mHasFloats)
+				aParam[2]->var->Assign(mfStart + (mIndex-1) * mfStep);
+			else
+				aParam[2]->var->Assign(miStart + (mIndex-1) * miStep);
+		}
+
+		mIndex++;
+		aResultToken.value_int64 = OK;
+		return OK;
+	}
+
+	// Next (handled above) expects param count 2 or 3.
+	// The methods/properties below expect param count 1.
+	if (aParamCount != 1)
+		_o_throw(ERR_INVALID_USAGE);
+
+	if (IS_INVOKE_CALL)
+	{
+		if (!_tcsicmp(name, _T("_NewEnum")))
+		{
+			mIndex = 1; // 1-based index.
+			this->AddRef();
+			aResultToken.symbol = SYM_OBJECT;
+			aResultToken.object = this;
+			return OK;
+		}
+		else if (!_tcsicmp(name, _T("ToArray")))
+		{
+			Object *output_array = Object::Create();
+			aResultToken.symbol = SYM_OBJECT;
+			aResultToken.object = output_array;
+
+			ExprTokenType *output1 = (ExprTokenType*)_alloca((int)mCount * sizeof(ExprTokenType));
+			ExprTokenType **output2 = (ExprTokenType**)_alloca((int)mCount * sizeof(ExprTokenType*));
+			for (int i = 0; i < mCount; i++)
+			{
+				output1[i].symbol = mHasFloats ? SYM_FLOAT : SYM_INTEGER;
+				if (mHasFloats)
+					output1[i].value_double = mfStart + i * mfStep;
+				else
+					output1[i].value_int64 = miStart + i * miStep;
+				output2[i] = &output1[i];
+			}
+
+			ExprTokenType result_token;
+			output_array->_Push(result_token, output2, (int)mCount);
+			return OK;
+		}
+	}
+
+	if (IS_INVOKE_GET)
+	{
+		__int64 index = (__int64)ATOI64(name);
+		if (TokenIsPureNumeric(*aParam[0])) // Handle numeric properties.
+		{
+			if (index > mCount || index < -mCount || index == 0)
+				_o_throw(_T("Invalid index."), name);
+
+			if (index < 0)
+				index += mCount + 1; // Convert negative index to positive.
+			aResultToken.symbol = mHasFloats ? SYM_FLOAT : SYM_INTEGER;
+			if (mHasFloats)
+				aResultToken.value_double = mfStart + (index-1) * mfStep;
+			else
+				aResultToken.value_int64 = miStart + (index-1) * miStep;
+			return OK;
+		}
+	 	else if (!_tcsicmp(name, _T("Start")))
+		{
+			aResultToken.symbol = mHasFloats ? SYM_FLOAT : SYM_INTEGER;
+			if (mHasFloats)
+				aResultToken.value_double = mfStart;
+			else
+				aResultToken.value_int64 = miStart;
+			return OK;
+		}
+		else if (!_tcsicmp(name, _T("End")))
+		{
+			aResultToken.symbol = mHasFloats ? SYM_FLOAT : SYM_INTEGER;
+			if (mHasFloats)
+				aResultToken.value_double = mfEnd;
+			else
+				aResultToken.value_int64 = miEnd;
+			return OK;
+		}
+		else if (!_tcsicmp(name, _T("Step")))
+		{
+			aResultToken.symbol = mHasFloats ? SYM_FLOAT : SYM_INTEGER;
+			if (mHasFloats)
+				aResultToken.value_double = mfStep;
+			else
+				aResultToken.value_int64 = miStep;
+			return OK;
+		}
+	}
+
+	// Count / Length:
+	// For AHK v2: allow IS_INVOKE_GET only.
+	// For AHK v1: also allow IS_INVOKE_CALL.
+	if (!_tcsicmp(name, _T("Count")) || !_tcsicmp(name, _T("Length")))
+	{
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = mCount;
+		return OK;
+	}
+
+	return INVOKE_NOT_HANDLED;
+}
+
+
+
+BIF_DECL(BIF_Range)
+{
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+	bool has_floats = false;
+	ExprTokenType param;
+
+	for (int i = 0; i < aParamCount; ++i)
+	{
+		ParamIndexToNumber(i, param);
+		switch (param.symbol)
+		{
+			case SYM_INTEGER:
+				break;
+			case SYM_FLOAT:
+				has_floats = true;
+				break;
+			default:
+				_f_throw(i == 0 ? ERR_PARAM1_INVALID : i == 1 ? ERR_PARAM2_INVALID : ERR_PARAM3_INVALID);
+		}
+	}
+
+	__int64 iStart, iEnd, iStep;
+	double fStart, fEnd, fStep;
+	IObject *obj;
+	if (has_floats)
+	{
+		fStart = ParamIndexToDouble(0);
+		fStep = ParamIndexToOptionalDouble(2, 1.0);
+
+		if (ParamIndexIsOmitted(1)) // Range(n) becomes Range(1.0, n).
+		{
+			fEnd = fStart;
+			if (fEnd < 1.0)
+				_f_throw(ERR_PARAM1_INVALID);
+			fStart = 1.0;
+		}
+		else
+			fEnd = ParamIndexToDouble(1);
+
+		if (fStep == 0.0)
+			_f_throw(_T("Step cannot be zero."));
+		else if (((fStep > 0.0) && (fStart > fEnd))
+		|| ((fStep < 0.0) && (fStart < fEnd)))
+			_f_throw(_T("Step must be consistent with Start and End."));
+
+		obj = RangeObject::Create(fStart, fEnd, fStep);
+	}
+	else
+	{
+		iStart = ParamIndexToInt64(0);
+		iStep = ParamIndexToOptionalInt64(2, 1);
+
+		if (ParamIndexIsOmitted(1)) // Range(n) becomes Range(1, n).
+		{
+			iEnd = iStart;
+			if (iEnd < 1)
+				_f_throw(ERR_PARAM1_INVALID);
+			iStart = 1;
+		}
+		else
+			iEnd = ParamIndexToInt64(1);
+
+		if (iStep == 0)
+			_f_throw(_T("Step cannot be zero."));
+		else if (((iStep > 0) && (iStart > iEnd))
+		|| ((iStep < 0) && (iStart < iEnd)))
+			_f_throw(_T("Step must be consistent with Start and End."));
+
+		obj = RangeObject::Create(iStart, iEnd, iStep);
+	}
+
+	if (obj)
+	{
+		aResultToken.object = obj;
+		aResultToken.symbol = SYM_OBJECT;
+		return;
+	}
+	_f_throw(ERR_EXCEPTION);
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
