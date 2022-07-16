@@ -18791,6 +18791,92 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_StrJoin)
+{
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+
+	if (aParamCount < 2)
+		return;
+
+	int count = aParamCount - 1; // Count of strings to join.
+	int len_out = 0;
+	TCHAR item_buf[MAX_NUMBER_SIZE];
+
+	// Calculate the length of params 2 to aParamCount. The pad string lengths are added later.
+	for (int i = 1; i < aParamCount; ++i)
+		len_out += (int)_tcslen(ParamIndexToString(i, item_buf));
+
+	TCHAR *output;
+	TCHAR *pos;
+	LPTSTR item;
+	int len_item;
+
+	// Handle pad string array. (Based on BIF_StrSplit.)
+	if (Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[0])))
+	{
+		int aPadCount = obj->GetNumericItemCount();
+		LPTSTR *aPadList = (LPTSTR *)_alloca(aPadCount * sizeof(LPTSTR *));
+		if (!obj->ArrayToStrings(aPadList, aPadCount, aPadCount))
+			// Array contains something other than a string.
+			_f_throw(ERR_PARAM1_INVALID);
+
+		int count_pad_trail = (count-1) % aPadCount; // Count of final incomplete cycle of pad strings.
+		int len_pad_cycle = 0; // Length of one cycle of pad strings.
+		int len_pad_trail = 0; // Length of final incomplete cycle of pad strings.
+		int *aPadListLen = (int *)_alloca(aPadCount * 4);
+		for (int i = 0; i < aPadCount; ++i)
+		{
+			aPadListLen[i] = (int)(_tcslen(aPadList[i]));
+			len_pad_cycle += aPadListLen[i];
+			if (i < count_pad_trail)
+				len_pad_trail += aPadListLen[i];
+		}
+
+		len_out += ((count-1) / aPadCount) * len_pad_cycle + len_pad_trail;
+		output = tmalloc(len_out+1);
+		pos = output;
+		int j = 0;
+		for (int i = 1; i < aParamCount-1; ++i)
+		{
+			item = ParamIndexToString(i, item_buf);
+			len_item = (int)_tcslen(item);
+			tmemcpy(pos, item, len_item);
+			pos += len_item;
+			tmemcpy(pos, aPadList[j], aPadListLen[j]);
+			pos += aPadListLen[j];
+			j = (j + 1) % aPadCount;
+		}
+	}
+	else
+	{
+		LPTSTR pad = ParamIndexToString(0, item_buf);
+		int len_pad = (int)_tcslen(pad);
+		len_out += (count-1) * len_pad;
+		output = tmalloc(len_out+1);
+		pos = output;
+		for (int i = 1; i < aParamCount-1; ++i)
+		{
+			item = ParamIndexToString(i, item_buf);
+			len_item = (int)_tcslen(item);
+			tmemcpy(pos, item, len_item);
+			pos += len_item;
+			tmemcpy(pos, pad, len_pad);
+			pos += len_pad;
+		}
+	}
+
+	item = ParamIndexToString(aParamCount-1, item_buf);
+	len_item = (int)_tcslen(item);
+	tmemcpy(pos, item, len_item);
+	*(pos+len_item) = '\0';
+	aResultToken.marker = output;
+	aResultToken.mem_to_free = output;
+	aResultToken.marker_length = len_out;
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
