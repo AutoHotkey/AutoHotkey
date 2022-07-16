@@ -822,7 +822,7 @@ BIV_DECL_R(BIV_SpecialFolderPath)
 		break;
 #ifdef _DEBUG
 	default:
-		MsgBox(_T("DEBUG: Unhandled SpecialFolderPath variable."));
+		ASSERT(!_T("DEBUG: Unhandled SpecialFolderPath variable."));
 #endif
 	}
 	if (SHGetFolderPath(NULL, aFolder, NULL, SHGFP_TYPE_CURRENT, buf) != S_OK)

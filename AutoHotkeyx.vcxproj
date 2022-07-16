@@ -250,6 +250,7 @@
     <ClCompile Include="source\pch_min.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
       <Optimization>MinSpace</Optimization>
+      <MultiProcessorCompilation>false</MultiProcessorCompilation>
     </ClCompile>
     <ClCompile Include="source\script.cpp" />
     <ClCompile Include="source\script2.cpp" />
@@ -365,7 +366,8 @@
     is created when pch_min.cpp is compiled. -->
     <ItemGroup>
       <ClCompile Condition="'%(ClCompile.Optimization)' == 'MinSpace'">
-        <PrecompiledHeaderOutputFile>$(IntDir)MinSize.pch</PrecompiledHeaderOutputFile>
+        <PrecompiledHeaderOutputFile Condition="!$(ConfigDebug)">$(IntDir)MinSize.pch</PrecompiledHeaderOutputFile>
+        <Optimization Condition="$(ConfigDebug)">Disabled</Optimization>
       </ClCompile>
     </ItemGroup>
   </Target>
