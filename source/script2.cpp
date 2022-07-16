@@ -18791,6 +18791,77 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_StrMatch)
+{
+		TCHAR mode = ctoupper(aResultToken.marker[4]); // Get 5th char of function name.
+		aResultToken.symbol = SYM_STRING;
+		aResultToken.marker = _T("");
+
+		StringCaseSenseType string_case_sense = SCS_INSENSITIVE;
+		if (!ParamIndexIsOmitted(2))
+		{
+			TCHAR scs_buf[MAX_NUMBER_SIZE];
+			LPTSTR scs = ParamIndexToString(2, scs_buf);
+			string_case_sense = Line::ConvertStringCaseSense(scs);
+			if (string_case_sense == SCS_INVALID)
+				_f_throw(ERR_PARAM3_INVALID);
+		}
+
+		int aNeedleCount = 0;
+		LPTSTR *aNeedleList = NULL;
+		if (Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[1]))) // Needle object.
+		{
+			aNeedleCount = obj->GetNumericItemCount();
+			aNeedleList = (LPTSTR *)_alloca(aNeedleCount * sizeof(LPTSTR *));
+			if (!obj->ArrayToStrings(aNeedleList, aNeedleCount, aNeedleCount))
+				// Array contains something other than a string.
+				_f_throw(ERR_PARAM2_INVALID);
+		}
+		else
+		{
+			aNeedleList = (LPTSTR *)_alloca(sizeof(LPTSTR *));
+			*aNeedleList = TokenToString(*aParam[1]);
+			aNeedleCount = 1;
+		}
+
+		LPTSTR haystack = ParamIndexToString(0, aResultToken.buf);
+		int len_haystack = _tcslen(haystack);
+		int result = 0;
+		if (mode != 'Q') // If not StrEquals, disallow blank needles.
+		{
+			for (int i = 0; i < aNeedleCount; ++i)
+			{
+				if (!*aNeedleList[i])
+					_f_throw(ERR_PARAM2_INVALID);
+			}
+		}
+		for (int i = 0; i < aNeedleCount; ++i)
+		{
+			LPTSTR needle = aNeedleList[i];
+			int len_needle = _tcslen(needle);
+			if (len_haystack < len_needle)
+				continue;
+			else if (mode == 'Q') // StrEquals.
+				result = !tcscmp2(haystack, needle, string_case_sense);
+			else if (mode == 'O') // StrContains.
+				result = !!tcsstr2(haystack, needle, string_case_sense);
+			else if (mode == 'T') // StrStarts.
+				result = !tcscmpn2(haystack, needle, string_case_sense, len_needle);
+			else if (mode == 'N') // StrEnds.
+				result = !tcscmp2(haystack+len_haystack-len_needle, needle, string_case_sense);
+
+			if (result)
+			{
+				result = i + 1;
+				break;
+			}
+		}
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = result;
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
