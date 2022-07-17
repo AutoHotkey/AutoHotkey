@@ -15539,19 +15539,41 @@ BIF_DECL(BIF_Format)
 					spec[spec_len++] = '6';
 					spec[spec_len++] = '4';
 					// Integer value; apply I64 prefix to avoid truncation.
-					value.value_int64 = ParamIndexToInt64(param);
+					if ((*aParam[param]).symbol == SYM_STRING
+					&& (*aParam[param]).marker[1] == 'b' && (*aParam[param]).marker[0] == '0')
+						value.value_int64 = _tcstoui64((*aParam[param]).marker+2, NULL, 2);
+					else
+						value.value_int64 = ParamIndexToInt64(param);
 					spec[spec_len++] = *cp++;
 				}
 				else if (_tcschr(_T("eEfgGaA"), *cp))
 				{
-					value.value_double = ParamIndexToDouble(param);
+					if ((*aParam[param]).symbol == SYM_STRING
+					&& (*aParam[param]).marker[1] == 'b' && (*aParam[param]).marker[0] == '0')
+						value.value_double = (double)_tcstoui64((*aParam[param]).marker+2, NULL, 2);
+					else
+						value.value_double = ParamIndexToDouble(param);
 					spec[spec_len++] = *cp++;
 				}
 				else if (_tcschr(_T("cCp"), *cp))
 				{
 					// Input is an integer or pointer, but I64 prefix should not be applied.
-					value.value_int64 = ParamIndexToInt64(param);
+					if ((*aParam[param]).symbol == SYM_STRING
+					&& (*aParam[param]).marker[1] == 'b' && (*aParam[param]).marker[0] == '0')
+						value.value_int64 = _tcstoui64((*aParam[param]).marker+2, NULL, 2);
+					else
+						value.value_int64 = ParamIndexToInt64(param);
 					spec[spec_len++] = *cp++;
+				}
+				else if (*cp == 'b')
+				{
+					if ((*aParam[param]).symbol == SYM_STRING
+					&& (*aParam[param]).marker[1] == 'b' && (*aParam[param]).marker[0] == '0')
+						value.value_int64 = _tcstoui64((*aParam[param]).marker+2, NULL, 2);
+					else
+						value.value_int64 = ParamIndexToInt64(param);
+					custom_format = 'B';
+					++cp;
 				}
 				else
 				{
@@ -15584,15 +15606,28 @@ BIF_DECL(BIF_Format)
 			
 			if (target)
 			{
-				int len = _stprintf(target, spec, value.value_int64);
-				switch (custom_format)
+				if (custom_format == 'B')
 				{
-				case 0: break; // Might help performance to list this first.
-				case 'U': CharUpper(target); break;
-				case 'L': CharLower(target); break;
-				case 'T': StrToTitleCase(target); break;
+					_ui64tot(value.value_int64, target, 2);
+					target += _tcslen(target);
 				}
-				target += len;
+				else
+				{
+					int len = _stprintf(target, spec, value.value_int64);
+					switch (custom_format)
+					{
+					case 0: break; // Might help performance to list this first.
+					case 'U': CharUpper(target); break;
+					case 'L': CharLower(target); break;
+					case 'T': StrToTitleCase(target); break;
+					}
+					target += len;
+				}
+			}
+			else if (custom_format == 'B')
+			{
+				_ui64tot(value.value_int64, number_buf, 2);
+				size += _tcslen(number_buf);
 			}
 			else
 				size += _sctprintf(spec, value.value_int64);
