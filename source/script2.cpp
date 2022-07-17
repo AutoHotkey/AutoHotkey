@@ -15539,19 +15539,42 @@ BIF_DECL(BIF_Format)
 					spec[spec_len++] = '6';
 					spec[spec_len++] = '4';
 					// Integer value; apply I64 prefix to avoid truncation.
-					value.value_int64 = ParamIndexToInt64(param);
+					if ((*aParam[param]).symbol == SYM_STRING
+					&& (*aParam[param]).marker[1] == 'b' && (*aParam[param]).marker[0] == '0')
+						value.value_int64 = _tcstoui64((*aParam[param]).marker+2, NULL, 2);
+					else
+						value.value_int64 = ParamIndexToInt64(param);
 					spec[spec_len++] = *cp++;
 				}
 				else if (_tcschr(_T("eEfgGaA"), *cp))
 				{
-					value.value_double = ParamIndexToDouble(param);
+					if ((*aParam[param]).symbol == SYM_STRING
+					&& (*aParam[param]).marker[1] == 'b' && (*aParam[param]).marker[0] == '0')
+						value.value_double = (double)_tcstoui64((*aParam[param]).marker+2, NULL, 2);
+					else
+						value.value_double = ParamIndexToDouble(param);
 					spec[spec_len++] = *cp++;
 				}
 				else if (_tcschr(_T("cCp"), *cp))
 				{
 					// Input is an integer or pointer, but I64 prefix should not be applied.
-					value.value_int64 = ParamIndexToInt64(param);
+					if ((*aParam[param]).symbol == SYM_STRING
+					&& (*aParam[param]).marker[1] == 'b' && (*aParam[param]).marker[0] == '0')
+						value.value_int64 = _tcstoui64((*aParam[param]).marker+2, NULL, 2);
+					else
+						value.value_int64 = ParamIndexToInt64(param);
 					spec[spec_len++] = *cp++;
+				}
+				else if (*cp == 'b')
+				{
+					if ((*aParam[param]).symbol == SYM_STRING
+					&& (*aParam[param]).marker[1] == 'b' && (*aParam[param]).marker[0] == '0')
+						value.value_int64 = _tcstoui64((*aParam[param]).marker+2, NULL, 2);
+					else
+						value.value_int64 = ParamIndexToInt64(param);
+					spec[spec_len++] = 's';
+					custom_format = 'B';
+					++cp;
 				}
 				else
 				{
@@ -15570,7 +15593,8 @@ BIF_DECL(BIF_Format)
 			}
 			if (spec[spec_len - 1] == 's')
 			{
-				value.marker = ParamIndexToString(param, number_buf);
+				if (custom_format != 'B')
+					value.marker = ParamIndexToString(param, number_buf);
 			}
 			spec[spec_len] = '\0';
 			
@@ -15584,10 +15608,18 @@ BIF_DECL(BIF_Format)
 			
 			if (target)
 			{
-				int len = _stprintf(target, spec, value.value_int64);
+				int len;
+				if (custom_format == 'B')
+				{
+					_ui64tot(value.value_int64, number_buf, 2);
+					len = _stprintf(target, spec, number_buf);
+				}
+				else
+					len = _stprintf(target, spec, value.value_int64);
 				switch (custom_format)
 				{
-				case 0: break; // Might help performance to list this first.
+				case 0: // Might help performance to list this first.
+				case 'B': break;
 				case 'U': CharUpper(target); break;
 				case 'L': CharLower(target); break;
 				case 'T': StrToTitleCase(target); break;
@@ -15595,7 +15627,15 @@ BIF_DECL(BIF_Format)
 				target += len;
 			}
 			else
-				size += _sctprintf(spec, value.value_int64);
+			{
+				if (custom_format == 'B')
+				{
+					_ui64tot(value.value_int64, number_buf, 2);
+					size += _sctprintf(spec, number_buf);
+				}
+				else
+					size += _sctprintf(spec, value.value_int64);
+			}
 		}
 		if (target)
 		{
