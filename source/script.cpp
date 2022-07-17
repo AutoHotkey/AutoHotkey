@@ -8661,6 +8661,18 @@ Func *Script::FindFunc(LPCTSTR aFuncName, size_t aFuncNameLength, int *apInsertP
 		min_params = 0;
 		max_params = 3;
 	}
+	else if (!_tcsicmp(func_name, _T("Base64Get")) || !_tcsicmp(func_name, _T("HexGet")))
+	{
+		bif = BIF_HexBase64Get;
+		min_params = 1;
+		max_params = 2;
+	}
+	else if (!_tcsicmp(func_name, _T("Base64Put")) || !_tcsicmp(func_name, _T("HexPut")))
+	{
+		bif = BIF_HexBase64Put;
+		min_params = 1;
+		max_params = 3;
+	}
 	else
 		return NULL; // Maint: There may be other lines above that also return NULL.
 

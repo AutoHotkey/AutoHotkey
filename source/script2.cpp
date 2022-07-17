@@ -18791,6 +18791,206 @@ BIF_DECL(BIF_Exception)
 
 
 
+BIF_DECL(BIF_HexBase64Get)
+{
+	bool is_hex = (ctoupper(aResultToken.marker[0]) == 'H');
+	BYTE *address = 0;
+	__int64 size = ParamIndexToOptionalInt64(1, -1);
+	size_t char_count;
+	const LPTSTR hex_chars = _T("0123456789ABCDEF");
+	const LPTSTR b64_chars = _T("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/");
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+
+	if (Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[0])))
+	{
+		ExprTokenType t1;
+		ExprTokenType t2;
+		if ((obj->GetItem(t1, _T("Ptr")))
+		&& (obj->GetItem(t2, _T("Size"))))
+		{
+			address = (BYTE *)TokenToInt64(t1);
+			int size_buf = (int)TokenToInt64(t2);
+			if (ParamIndexIsOmitted(1))
+				size = size_buf;
+			else if (size > size_buf)
+				_f_throw(ERR_PARAM2_INVALID);
+		}
+		else
+			_f_throw(ERR_PARAM2_INVALID);
+	}
+	else
+	{
+		address = (BYTE *)ParamIndexToInt64(0);
+		if (ParamIndexIsOmitted(1))
+			_f_throw(ERR_PARAM2_INVALID);
+	}
+	if ((size_t)address < 65535)
+		_f_throw(ERR_PARAM1_INVALID);
+	if (size < 0)
+		_f_throw(ERR_PARAM2_INVALID);
+	if (!size)
+		return;
+
+	TCHAR *text;
+	TCHAR *cp;
+	if (is_hex)
+	{
+		char_count = (size_t)size * 2;
+		text = tmalloc(char_count+1);
+		cp = text;
+		for (int i = 0; i < size; ++i, ++address)
+		{
+			*cp++ = hex_chars[(*address & 0xF0) >> 4];
+			*cp++ = hex_chars[*address & 0x0F];
+		}
+		*cp = '\0';
+	}
+	else
+	{
+		char_count = ((size_t)size+2) / 3 * 4; // Including 0 to 2 equals signs.
+		text = tmalloc(char_count+1);
+		cp = text;
+		for (int i = 0; i < size/3; ++i, address += 3)
+		{
+			*cp++ = b64_chars[(address[0] & 0xFC) >> 2];
+			*cp++ = b64_chars[(address[0] & 0x03) << 4 | (address[1] & 0xF0) >> 4];
+			*cp++ = b64_chars[(address[1] & 0x0F) << 2 | (address[2] & 0xC0) >> 6];
+			*cp++ = b64_chars[address[2] & 0x3F];
+		}
+		if (int rem = size % 3) // 2 or 1.
+		{
+			*cp++ = b64_chars[(address[0] & 0xFC) >> 2];
+			*cp++ = b64_chars[(address[0] & 0x03) << 4 | (rem == 2 ? ((address[1] & 0xF0) >> 4) : 0)];
+			*cp++ = (rem == 2) ? b64_chars[(address[1] & 0x0F) << 2] : '=';
+			*cp++ = '=';
+		}
+		*cp = '\0';
+	}
+	aResultToken.marker = text;
+	aResultToken.mem_to_free = text;
+	aResultToken.marker_length = char_count;
+}
+
+
+
+BIF_DECL(BIF_HexBase64Put)
+{
+	bool is_hex = (ctoupper(aResultToken.marker[0]) == 'H');
+	TCHAR *text = (TCHAR *)ParamIndexToString(0);
+	__int64 len = _tcslen(text);
+	__int64 char_count = ParamIndexToOptionalInt64(2, len);
+	BYTE *address = 0;
+	__int64 size = -1;
+	// Codepoints to hex/base64 values:
+	const int hex_table[128] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 11, 12, 13, 14, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	const int b64_table[128] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 62, 0, 0, 0, 63, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 0, 0, 0, 0, 0, 0, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 0, 0, 0, 0, 0 };
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+
+	if (is_hex)
+	{
+		if (len & 1)
+			_f_throw(ERR_PARAM1_INVALID);
+		if (char_count & 1 || char_count < 0 || char_count > len)
+			_f_throw(ERR_PARAM3_INVALID);
+		for (LPTSTR cp = text; *cp; ++cp)
+		{
+			if (*cp > 127 || (!hex_table[*cp] && *cp != '0')) // Literal '0'.
+				_f_throw(ERR_PARAM1_INVALID);
+		}
+		size = char_count / 2;
+	}
+	else
+	{
+		while (len > 0 && text[len-1] == '=')
+			--len;
+		if (len % 4 == 1)
+			_f_throw(ERR_PARAM1_INVALID);
+		if (ParamIndexIsOmitted(2))
+			char_count = len;
+		if (char_count % 4 == 1 || char_count < 0 || char_count > len)
+			_f_throw(ERR_PARAM3_INVALID);
+		for (LPTSTR cp = text; *cp; ++cp)
+		{
+			if (*cp > 127 || (!b64_table[*cp] && *cp != 'A'))
+				_f_throw(ERR_PARAM1_INVALID);
+		}
+		size = char_count * 3 / 4;
+	}
+
+	if (ParamIndexIsOmitted(1))
+	{
+		if (ParamIndexIsOmitted(2))
+		{
+			aResultToken.symbol = SYM_INTEGER;
+			aResultToken.value_int64 = (__int64)size;
+			return;
+		}
+		else
+			_f_throw(ERR_PARAM2_INVALID);
+	}
+
+	if (Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[1])))
+	{
+		ExprTokenType t1;
+		ExprTokenType t2;
+		if ((obj->GetItem(t1, _T("Ptr")))
+		&& (obj->GetItem(t2, _T("Size"))))
+		{
+			address = (BYTE *)TokenToInt64(t1);
+			int size_buf = (int)TokenToInt64(t2);
+			if (size > size_buf)
+				_f_throw(_T("Buffer too small."));
+		}
+		else
+			_f_throw(ERR_PARAM2_INVALID);
+	}
+	else
+		address = (BYTE *)ParamIndexToInt64(1);
+	if ((size_t)address < 65535)
+		_f_throw(ERR_PARAM2_INVALID);
+
+	aResultToken.symbol = SYM_INTEGER;
+	if (!size)
+	{
+		aResultToken.value_int64 = 0;
+		return;
+	}
+	if (is_hex)
+	{
+		for (LPTSTR cp = text; *cp; cp += 2)
+			*address++ = (hex_table[cp[0]] << 4) | hex_table[cp[1]];
+	}
+	else
+	{
+		LPTSTR cp = text;
+		UINT_PTR buffer;
+		for (int i = 0; i < char_count/4; ++i, cp += 4)
+		{
+			buffer	= b64_table[cp[0]] << 18
+					| b64_table[cp[1]] << 12
+					| b64_table[cp[2]] << 6
+					| b64_table[cp[3]];
+			*address++ = (buffer >> 16) & 255;
+			*address++ = (buffer >> 8) & 255;
+			*address++ = buffer & 255;
+		}
+		if (char_count % 4) // 3 or 2.
+		{
+			buffer	= b64_table[cp[0]] << 18
+					| b64_table[cp[1]] << 12
+					| (char_count & 1 ? b64_table[cp[2]] << 6 : 0);
+			*address++ = (buffer >> 16) & 255;
+			if (char_count & 1)
+				*address++ = (buffer >> 8) & 255;
+		}
+	}
+	aResultToken.value_int64 = size;
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////
