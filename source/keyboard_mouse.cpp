@@ -1876,6 +1876,8 @@ void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEvent
 	// Set defaults for all output parameters for caller.
 	aX = COORD_UNSPECIFIED;
 	aY = COORD_UNSPECIFIED;
+	int x_alt = COORD_UNSPECIFIED;
+	int y_alt = COORD_UNSPECIFIED;
 	aVK = VK_LBUTTON;
 	aEventType = KEYDOWNANDUP;
 	aRepeatCount = 1;
@@ -1924,6 +1926,14 @@ void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEvent
 				case 'D': aEventType = KEYDOWN; break;
 				case 'U': aEventType = KEYUP; break;
 				case 'R': aMoveOffset = true; break; // Since it wasn't recognized as the right mouse button, it must have other letters after it, e.g. Rel/Relative.
+				case 'C': aRepeatCount = ATOI(next_option+1); break;
+
+				// For the below:
+				// Use atoi() vs. ATOI() to avoid interpreting something like 0x01D as hex
+				// when in fact the D was meant to be an option letter:
+				case 'X': x_alt = _ttoi(next_option+1); break;
+				case 'Y': y_alt = _ttoi(next_option+1); break;
+
 				// default: Ignore anything else to reserve them for future use.
 				}
 			}
@@ -1940,6 +1950,11 @@ break_both:
 		aRepeatCount = aX;
 		aX = COORD_UNSPECIFIED;
 	}
+
+	if (x_alt != COORD_UNSPECIFIED)
+		aX = x_alt;
+	if (y_alt != COORD_UNSPECIFIED)
+		aY = y_alt;
 }
 
 

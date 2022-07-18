@@ -1269,8 +1269,8 @@ public:
 			return VK_LBUTTON; // Some callers rely on this default when !*aBuf.
 		if (!_tcsicmp(aBuf, _T("Right")) || !_tcsicmp(aBuf, _T("R"))) return VK_RBUTTON;
 		if (!_tcsicmp(aBuf, _T("Middle")) || !_tcsicmp(aBuf, _T("M"))) return VK_MBUTTON;
-		if (!_tcsicmp(aBuf, _T("X1"))) return VK_XBUTTON1;
-		if (!_tcsicmp(aBuf, _T("X2"))) return VK_XBUTTON2;
+		if (!_tcsicmp(aBuf, _T("XB1"))) return VK_XBUTTON1;
+		if (!_tcsicmp(aBuf, _T("XB2"))) return VK_XBUTTON2;
 		if (aAllowWheel)
 		{
 			if (!_tcsicmp(aBuf, _T("WheelUp")) || !_tcsicmp(aBuf, _T("WU"))) return VK_WHEEL_UP;

@@ -61,7 +61,7 @@ FuncEntry g_BIF[] =
 	BIFn(ControlAddItem, 2, 6, BIF_Control),
 	BIFn(ControlChooseIndex, 2, 6, BIF_Control),
 	BIFn(ControlChooseString, 2, 6, BIF_Control),
-	BIF1(ControlClick, 0, 8),
+	BIF1(ControlClick, 0, 6),
 	BIFn(ControlDeleteItem, 2, 6, BIF_Control),
 	BIFn(ControlFindItem, 2, 6, BIF_ControlGet),
 	BIF1(ControlFocus, 1, 5),

@@ -1361,32 +1361,21 @@ BIF_DECL(BIF_ControlSend) // ControlSend and ControlSendText.
 
 BIF_DECL(BIF_ControlClick)
 {
-	_f_param_string_opt(aControl, 0);
-	_f_param_string_opt(aWhichButton, 3);
-	int aVK = Line::ConvertMouseButton(aWhichButton);
-	if (!aVK)
-		_f_throw_param(3);
-	int aClickCount = ParamIndexToOptionalInt(4, 1);
-	_f_param_string_opt(aOptions, 5);
+	int x, y;
+	vk_type vk;
+	KeyEventTypes event_type;
+	int repeat_count;
+	bool move_offset;
 
-	// Set the defaults that will be in effect unless overridden by options:
-	KeyEventTypes event_type = KEYDOWNANDUP;
-	bool position_mode = false;
+	_f_param_string_opt(aOptions, 0);
+	ParseClickOptions(aOptions, x, y, vk, event_type, repeat_count, move_offset);
+
 	bool do_activate = true;
-	// These default coords can be overridden either by aOptions or aControl's X/Y mode:
-	POINT click = {COORD_UNSPECIFIED, COORD_UNSPECIFIED};
-
+	POINT click = {x, y};
 	for (LPTSTR cp = aOptions; *cp; ++cp)
 	{
-		switch(ctoupper(*cp))
+		if (ctoupper(*cp) == 'N' && ctoupper(cp[1]) == 'A')
 		{
-		case 'D':
-			event_type = KEYDOWN;
-			break;
-		case 'U':
-			event_type = KEYUP;
-			break;
-		case 'N':
 			// v1.0.45:
 			// It was reported (and confirmed through testing) that this new NA mode (which avoids
 			// AttachThreadInput() and SetActiveWindow()) improves the reliability of ControlClick when
@@ -1398,93 +1387,17 @@ BIF_DECL(BIF_ControlClick)
 			// ALSO, SetControlDelay -1 seems to fix the unreliability issue as well (independently of NA),
 			// though it might not work with some types of windows/controls (thus, for backward
 			// compatibility, ControlClick still obeys SetControlDelay).
-			if (ctoupper(cp[1]) == 'A')
-			{
-				cp += 1;  // Add 1 vs. 2 to skip over the rest of the letters in this option word.
-				do_activate = false;
-			}
-			break;
-		case 'P':
-			if (!_tcsnicmp(cp, _T("Pos"), 3))
-			{
-				cp += 2;  // Add 2 vs. 3 to skip over the rest of the letters in this option word.
-				position_mode = true;
-			}
-			break;
-		// For the below:
-		// Use atoi() vs. ATOI() to avoid interpreting something like 0x01D as hex
-		// when in fact the D was meant to be an option letter:
-		case 'X':
-			click.x = _ttoi(cp + 1); // Will be overridden later below if it turns out that position_mode is in effect.
-			break;
-		case 'Y':
-			click.y = _ttoi(cp + 1); // Will be overridden later below if it turns out that position_mode is in effect.
-			break;
+			++cp;  // Add 1 vs. 2 to skip over the rest of the letters in this option word.
+			do_activate = false;
 		}
 	}
-	
-	HWND target_window, control_window;
-	if (position_mode)
-	{
-		// Determine target window only.  Control will be found by position below.
-		if (!DetermineTargetWindow(target_window, aResultToken, aParam + 1, aParamCount - 1, 3))
-			return; // aResultToken.SetExitResult() or Error() was already called.
-		control_window = NULL;
-	}
-	else
-	{
-		// Determine target window and control.
-		if (!DetermineTargetControl(control_window, target_window, aResultToken, aParam, aParamCount, 3, false))
-			return; // aResultToken.SetExitResult() or Error() was already called.
-	}
-	ASSERT(target_window != NULL);
 
-	// It's debatable, but might be best for flexibility (and backward compatibility) to allow target_window to itself
-	// be a control (at least for the position_mode handler below).  For example, the script may have called SetParent
-	// to make a top-level window the child of some other window, in which case this policy allows it to be seen like
-	// a non-child.
-	if (!control_window) // Even if position_mode is false, the below is still attempted, as documented.
-	{
-		// New section for v1.0.24.  But only after the above fails to find a control do we consider
-		// whether aControl contains X and Y coordinates.  That way, if a control class happens to be
-		// named something like "X1 Y1", it will still be found by giving precedence to class names.
-		point_and_hwnd_type pah = {0};
-		pah.ignore_disabled_controls = true; // v1.1.20: Ignore disabled controls.
-		// Parse the X an Y coordinates in a strict way to reduce ambiguity with control names and also
-		// to keep the code simple.
-		LPTSTR cp = omit_leading_whitespace(aControl);
-		if (ctoupper(*cp) != 'X')
-			goto control_error;
-		++cp;
-		if (!*cp)
-			goto control_error;
-		pah.pt.x = ATOI(cp);
-		if (   !(cp = StrChrAny(cp, _T(" \t")))   ) // Find next space or tab (there must be one for it to be considered valid).
-			goto control_error;
-		cp = omit_leading_whitespace(cp + 1);
-		if (!*cp || _totupper(*cp) != 'Y')
-			goto control_error;
-		++cp;
-		if (!*cp)
-			goto control_error;
-		pah.pt.y = ATOI(cp);
-		// The passed-in coordinates are always relative to target_window's client area because offering
-		// an option for absolute/screen coordinates doesn't seem useful.
-		ClientToScreen(target_window, &pah.pt); // Convert to screen coordinates.
-		EnumChildWindows(target_window, EnumChildFindPoint, (LPARAM)&pah); // Find topmost control containing point.
-		// If no control is at this point, try posting the mouse event message(s) directly to the
-		// parent window to increase the flexibility of this feature:
-		control_window = pah.hwnd_found ? pah.hwnd_found : target_window;
-		// Convert click's target coordinates to be relative to the client area of the control or
-		// parent window because that is the format required by messages such as WM_LBUTTONDOWN
-		// used later below:
-		click = pah.pt;
-		ScreenToClient(control_window, &click);
-	}
+	DETERMINE_TARGET_CONTROL(1);
+	ASSERT(target_window != NULL);
 
 	// This is done this late because it seems better to throw an exception whenever the
 	// target window or control isn't found, or any other error condition occurs above:
-	if (aClickCount < 1)
+	if (repeat_count < 1)
 	{
 		// Allow this to simply "do nothing", because it increases flexibility
 		// in the case where the number of clicks is a dereferenced script variable
@@ -1509,13 +1422,13 @@ BIF_DECL(BIF_ControlClick)
 
 	UINT msg_down, msg_up;
 	WPARAM wparam, wparam_up = 0;
-	bool vk_is_wheel = aVK == VK_WHEEL_UP || aVK == VK_WHEEL_DOWN;
-	bool vk_is_hwheel = aVK == VK_WHEEL_LEFT || aVK == VK_WHEEL_RIGHT; // v1.0.48: Lexikos: Support horizontal scrolling in Windows Vista and later.
+	bool vk_is_wheel = vk == VK_WHEEL_UP || vk == VK_WHEEL_DOWN;
+	bool vk_is_hwheel = vk == VK_WHEEL_LEFT || vk == VK_WHEEL_RIGHT; // v1.0.48: Lexikos: Support horizontal scrolling in Windows Vista and later.
 
 	if (vk_is_wheel)
 	{
 		ClientToScreen(control_window, &click); // Wheel messages use screen coordinates.
-		wparam = (aClickCount * ((aVK == VK_WHEEL_UP) ? WHEEL_DELTA : -WHEEL_DELTA)) << 16;  // High order word contains the delta.
+		wparam = (repeat_count * ((vk == VK_WHEEL_UP) ? WHEEL_DELTA : -WHEEL_DELTA)) << 16;  // High order word contains the delta.
 		msg_down = WM_MOUSEWHEEL;
 		// Make the event more accurate by having the state of the keys reflected in the event.
 		// The logical state (not physical state) of the modifier keys is used so that something
@@ -1542,12 +1455,12 @@ BIF_DECL(BIF_ControlClick)
 	}
 	else if (vk_is_hwheel)	// Lexikos: Support horizontal scrolling in Windows Vista and later.
 	{
-		wparam = (aClickCount * ((aVK == VK_WHEEL_LEFT) ? -WHEEL_DELTA : WHEEL_DELTA)) << 16;
+		wparam = (repeat_count * ((vk == VK_WHEEL_LEFT) ? -WHEEL_DELTA : WHEEL_DELTA)) << 16;
 		msg_down = WM_MOUSEHWHEEL;
 	}
 	else
 	{
-		switch (aVK)
+		switch (vk)
 		{
 			case VK_LBUTTON:  msg_down = WM_LBUTTONDOWN; msg_up = WM_LBUTTONUP; wparam = MK_LBUTTON; break;
 			case VK_RBUTTON:  msg_down = WM_RBUTTONDOWN; msg_up = WM_RBUTTONUP; wparam = MK_RBUTTON; break;
@@ -1555,7 +1468,7 @@ BIF_DECL(BIF_ControlClick)
 			case VK_XBUTTON1: msg_down = WM_XBUTTONDOWN; msg_up = WM_XBUTTONUP; wparam_up = XBUTTON1<<16; wparam = MK_XBUTTON1|wparam_up; break;
 			case VK_XBUTTON2: msg_down = WM_XBUTTONDOWN; msg_up = WM_XBUTTONUP; wparam_up = XBUTTON2<<16; wparam = MK_XBUTTON2|wparam_up; break;
 			default: // Just do nothing since this should realistically never happen.
-				ASSERT(!"aVK value not handled");
+				ASSERT(!"vk value not handled");
 		}
 	}
 
@@ -1590,7 +1503,7 @@ BIF_DECL(BIF_ControlClick)
 	}
 	else
 	{
-		for (int i = 0; i < aClickCount; ++i)
+		for (int i = 0; i < repeat_count; ++i)
 		{
 			if (event_type != KEYUP) // It's either down-only or up-and-down so always to the down-event.
 			{
@@ -1621,9 +1534,6 @@ BIF_DECL(BIF_ControlClick)
 
 error:
 	_f_throw_win32();
-
-control_error:
-	_f_throw(ERR_NO_CONTROL, aControl, ErrorPrototype::Target);
 }
 
 
