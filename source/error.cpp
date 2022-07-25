@@ -750,10 +750,7 @@ ResultType Script::UnhandledException(Line* aLine, ResultType aErrorType)
 	if (!*message)
 		message = _T("Unhandled exception.");
 
-	TCHAR buf[MSGBOX_TEXT_SIZE];
-	FormatError(buf, _countof(buf), aErrorType, message, extra, aLine);
-
-	if (MsgBox(buf, aErrorType == FAIL_OR_OK ? MB_YESNO|MB_DEFBUTTON2 : 0) == IDYES)
+	if (ShowError(message, aErrorType, extra, aLine) == OK)
 	{
 		FreeExceptionToken(token);
 		return OK;
