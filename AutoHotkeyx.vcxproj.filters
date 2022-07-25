@@ -176,6 +176,9 @@
     <ClCompile Include="source\keyboard_mouse.cpp">
       <Filter>Keyboard &amp; mouse</Filter>
     </ClCompile>
+    <ClCompile Include="source\error.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="source\ahkversion.h">

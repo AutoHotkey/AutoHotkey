@@ -209,6 +209,7 @@
     <ClCompile Include="source\Debugger.cpp">
       <Optimization>MinSpace</Optimization>
     </ClCompile>
+    <ClCompile Include="source\error.cpp" />
     <ClCompile Include="source\globaldata.cpp" />
     <ClCompile Include="source\hook.cpp" />
     <ClCompile Include="source\hotkey.cpp" />
