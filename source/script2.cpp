@@ -10640,9 +10640,9 @@ static inline UINT_PTR DynaParamToElement(DYNAPARM& parm)
 
 #ifdef WIN32_PLATFORM
 DYNARESULT DynaCall(int aFlags, void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aException
-	, void *aRet, int aRetSize, DWORD aExtraStackSize = 0)
+	, void*& aRet, int aRetSize, DWORD aExtraStackSize = 0)
 #elif defined(_WIN64)
-DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aException, void* aRet = nullptr)
+DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &aException, void*& aRet, int aRetSize)
 #else
 #error DllCall not supported on this platform
 #endif
@@ -10661,7 +10661,7 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	DWORD *our_stack;
 	// Used to read the structure
 	DWORD *pdword;
-	DWORD esp_start, esp_end, dwEAX, dwEDX;
+	DWORD esp_start, esp_end; // , dwEAX, dwEDX;
 	int i, esp_delta; // Declare this here rather than later to prevent C code from interfering with esp.
 
 	// Reserve enough space on the stack to handle the worst case of our args (which is currently a
@@ -10701,11 +10701,16 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		}
 	}
 
-	if ((aRet != NULL) && ((aFlags & DC_BORLAND) || (aRetSize > 8)))
+	if (aRet)
 	{
-		// Return value isn't passed through registers, memory copy
-		// is performed instead. Pass the pointer as hidden arg.
-		*--our_stack = (DWORD)aRet;	// ESP = ESP - 4, SS:[ESP] = pMem
+		if (aRetSize == 1 || aRetSize == 2 || aRetSize == 4 || aRetSize == 8)
+			aRet = NULL;
+		else
+		{
+			// Return value isn't passed through registers, memory copy
+			// is performed instead. Pass the pointer as hidden arg.
+			*--our_stack = (DWORD)aRet;	// ESP = ESP - 4, SS:[ESP] = pMem
+		}
 	}
 
 	// Call the function.
@@ -10737,8 +10742,8 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 		// and even for CDECL, the following line restores esp to what it was before we pushed the
 		// function's args onto the stack, which in the case of DC_CALL_STD helps prevent crashes
 		// due to too many or to few args having been passed.
-		mov dwEAX, eax          // Save eax/edx registers
-		mov dwEDX, edx
+		//mov dwEAX, eax          // Save eax/edx registers
+		//mov dwEDX, edx
 	}
 
 	// Possibly adjust stack and read return values.
@@ -10753,22 +10758,10 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	{
 		_asm
 		{
-			mov  eax, [dwEAX]
+			//mov  eax, [dwEAX]
 			mov  DWORD PTR [Res], eax
-			mov  edx, [dwEDX]
+			//mov  edx, [dwEDX]
 			mov  DWORD PTR [Res + 4], edx
-		}
-	}
-	else if (((aFlags & DC_BORLAND) == 0) && (aRetSize <= 8))
-	{
-		// Microsoft optimized less than 8-bytes structure passing
-		_asm
-		{
-			mov ecx, DWORD PTR [aRet]
-			mov eax, [dwEAX]
-			mov DWORD PTR [ecx], eax
-			mov edx, [dwEDX]
-			mov DWORD PTR [ecx + 4], edx
 		}
 	}
 
@@ -10780,9 +10773,18 @@ DYNARESULT DynaCall(void *aFunction, DYNAPARM aParam[], int aParamCount, DWORD &
 	DWORD_PTR* stackArgs = NULL;
 	size_t stackArgsSize = 0;
 
-	// The first four parameters are passed in x64 through registers... like ARM :D
 	if (aRet)
-		regArgs[i++] = (DWORD_PTR)aRet;
+	{
+		if (aRetSize == 1 || aRetSize == 2 || aRetSize == 4 || aRetSize == 8)
+			aRet = NULL;
+		else
+		{
+			// Return value isn't passed through registers, memory copy
+			// is performed instead. Pass the pointer as hidden arg.
+			regArgs[i++] = (DWORD_PTR)aRet;
+		}
+	}
+	// The first four parameters are passed in x64 through registers... like ARM :D
 	for(; (i < 4) && params_left; i++, params_left--)
 		regArgs[i] = DynaParamToElement(aParam[i]);
 
@@ -11170,17 +11172,10 @@ has_valid_return_type:
 	}
 
 	if (return_struct_size) {
-		if (auto p = malloc(return_struct_size))
-			free_after_exit.return_struct_obj = BufferObject::Create(p, return_struct_size);
+		if (return_struct_ptr = malloc(return_struct_size))
+			free_after_exit.return_struct_obj = BufferObject::Create(return_struct_ptr, return_struct_size);
 		else
 			_f_throw_oom;
-
-		if (!(return_struct_size == 1 || return_struct_size == 2 || return_struct_size == 4 || return_struct_size == 8)) {
-			return_struct_ptr = free_after_exit.return_struct_obj->Data();
-#ifdef WIN32_PLATFORM
-			dll_call_mode |= DC_BORLAND;
-#endif
-		}
 	}
 
 	// Using stack memory, create an array of dll args large enough to hold the actual number of args present.
@@ -11389,7 +11384,7 @@ has_valid_return_type:
 		, return_struct_ptr, return_struct_size, struct_extra_size + (return_struct_ptr ? 4 : 0));
 #endif
 #ifdef _WIN64
-	return_value = DynaCall(function, dyna_param, arg_count, exception_occurred, return_struct_ptr);
+	return_value = DynaCall(function, dyna_param, arg_count, exception_occurred, return_struct_ptr, return_struct_size);
 #endif
 
 	if (*Var::sEmptyString)
