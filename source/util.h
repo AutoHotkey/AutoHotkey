@@ -687,9 +687,6 @@ size_t PredictReplacementSize(ptrdiff_t aLengthDelta, int aReplacementCount, int
 	, size_t aCurrentLength, size_t aEndOffsetOfCurrMatch);
 LPTSTR TranslateLFtoCRLF(LPTSTR aString);
 bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr = NULL, DWORD aRequiredAttr = 0);
-#ifdef _DEBUG
-	ResultType FileAppend(LPTSTR aFilespec, LPTSTR aLine, bool aAppendNewline = true);
-#endif
 LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFilespec, LPTSTR aBuf, size_t aBufSize, size_t &aBufLength);
 void ConvertFilespecToCorrectCase(LPTSTR aBuf, size_t aBufSize, size_t &aBufLength);
 LPTSTR FileAttribToStr(LPTSTR aBuf, DWORD aAttr);

@@ -1497,24 +1497,6 @@ bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr, DWORD aRequired
 
 
 
-#ifdef _DEBUG
-ResultType FileAppend(LPTSTR aFilespec, LPTSTR aLine, bool aAppendNewline)
-{
-	if (!aFilespec || !aLine) return FAIL;
-	if (!*aFilespec) return FAIL;
-	FILE *fp = _tfopen(aFilespec, _T("a"));
-	if (fp == NULL)
-		return FAIL;
-	_fputts(aLine, fp);
-	if (aAppendNewline)
-		_puttc('\n', fp);
-	fclose(fp);
-	return OK;
-}
-#endif
-
-
-
 LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFilespec, LPTSTR aBuf, size_t aBufSize, size_t &aBufLength)
 // Convert aFilespec to proper case and put the result into aBuf.
 // aFilespec and aBuf must not overlap.
