@@ -16983,6 +16983,8 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 	}
 
 	g->EventInfo = cb.event_info; // This is the means to identify which caller called the callback (if the script assigned more than one caller to this callback).
+	
+	UINT_PTR number_to_return;
 
 	// For performance and to preserve stack space, the indirect method of calling a function via the new
 	// Func::Call overload is not used here.  Using it would only be necessary to support variadic functions,
@@ -16995,10 +16997,11 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 	// 3) Script explicitly calls the UDF in addition to using it as a callback.
 	//
 	// See ExpandExpression() for detailed comments about the following section.
-	VarBkp *var_backup = NULL;  // If needed, it will hold an array of VarBkp objects.
-	int var_backup_count; // The number of items in the above array.
+	{// begin scope for call_info.
+	UDFCallInfo call_info;
+	call_info.func = &func;
 	if (func.mInstances > 0) // Backup is needed (see above for explanation).
-		if (!Var::BackupFunctionVars(func, var_backup, var_backup_count)) // Out of memory.
+		if (!Var::BackupFunctionVars(func, call_info.backup, call_info.backup_count)) // Out of memory.
 			return DEFAULT_CB_RETURN_VALUE; // Since out-of-memory is so rare, it seems justifiable not to have any error reporting and instead just avoid calling the function.
 
 	// The following section is similar to the one in ExpandExpression().  See it for detailed comments.
@@ -17028,13 +17031,15 @@ UINT_PTR CALLBACK RegisterCallbackCStub(UINT_PTR *params, char *address) // Used
 	g_script.mLastScriptRest = g_script.mLastPeekTime = GetTickCount(); // Somewhat debatable, but might help minimize interruptions when the callback is called via message (e.g. subclassing a control; overriding a WindowProc).
 
 	ExprTokenType result_token; // L31
+	DEBUGGER_STACK_PUSH(&call_info)
 	func.Call(&result_token); // Call the UDF.  Call()'s own return value (e.g. EARLY_EXIT or FAIL) is ignored because it wouldn't affect the handling below.
+	DEBUGGER_STACK_POP()
 
-	UINT_PTR number_to_return = (UINT_PTR)TokenToInt64(result_token); // L31: For simplicity, DEFAULT_CB_RETURN_VALUE is not used - DEFAULT_CB_RETURN_VALUE is 0, which TokenToInt64 will return if the token is empty.
+	number_to_return = (UINT_PTR)TokenToInt64(result_token); // L31: For simplicity, DEFAULT_CB_RETURN_VALUE is not used - DEFAULT_CB_RETURN_VALUE is 0, which TokenToInt64 will return if the token is empty.
 	if (result_token.symbol == SYM_OBJECT) // L31
 		result_token.object->Release();
 
-	Var::FreeAndRestoreFunctionVars(func, var_backup, var_backup_count); // ABOVE must be done BEFORE this because return_value might be the contents of one of the function's local variables (which are about to be free'd).
+	}// end scope for call_info; this is where Var::FreeAndRestoreFunctionVars() is called via ~UDFCallInfo().
 
 	if (cb.create_new_thread)
 	{
