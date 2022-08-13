@@ -85,10 +85,14 @@ MdFunc::MdFunc(LPCTSTR aName, void *aMcFunc, MdType aRetType, MdType *aArg, UINT
 	for (UINT i = 0; i < aArgSize; ++i)
 	{
 		bool opt = false, retval = false;
+		MdType out = MdType::Void;
 		for (; MdType_IsMod(aArg[i]); ++i)
 		{
+			ASSERT(i < aArgSize);
 			if (aArg[i] == MdType::Optional)
 				opt = true;
+			else if (MdType_IsOut(aArg[i]))
+				out = aArg[i];
 			else if (aArg[i] == MdType::RetVal)
 				retval = true;
 		}
@@ -102,7 +106,7 @@ MdFunc::MdFunc(LPCTSTR aName, void *aMcFunc, MdType aRetType, MdType *aArg, UINT
 			++pc;
 			if (!opt)
 				mMinParams = pc;
-			if (aArg[i] == MdType::String)
+			if (aArg[i] == MdType::String || aArg[i] == MdType::Variant && out != MdType::Void)
 				++mMaxResultTokens;
 		}
 	}
@@ -150,10 +154,11 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 			else if (*atp == MdType::RetVal)
 				retval_index = ai;
 		}
+		ASSERT(retval_index != ai || out != MdType::Void && !opt);
 		auto arg_type = *atp;
 		auto &arg_value = args[ai];
 		
-		if (out != MdType::Void)
+		if (out != MdType::Void && !(opt && ParamIndexIsOmitted(pi)))
 		{
 			void *av_buf;
 			// Different 'out' modifiers could be supported here to control allocation behaviour,
@@ -171,8 +176,14 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 			else if (arg_type == MdType::Variant)
 			{
 				// Rarely used, so no specialized abstraction yet.
-				ASSERT(retval_index == ai);
-				av_buf = &aResultToken;
+				if (retval_index == ai)
+					av_buf = &aResultToken;
+				else
+				{
+					ResultToken &rt = rtp[rt_count++];
+					rt.InitResult(talloca(_f_retval_buf_size));
+					av_buf = &rt;
+				}
 			}
 			else
 			{
@@ -350,7 +361,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				aResultToken.SetValue(strret->Value(), strret->Length());
 			//else leave aResultToken set to its default value, "".
 		}
-		else
+		else if (retval_arg_type != MdType::Variant) // Variant type passes aResultToken directly.
 			TypedPtrToToken(retval_arg_type, (void*)args[retval_index], aResultToken);
 	}
 
@@ -380,6 +391,20 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				var->AcceptNewMem(strret->Value(), strret->Length());
 			else
 				var->AssignString(strret->Value(), strret->Length());
+		}
+		else if (*atp == MdType::Variant)
+		{
+			ResultToken &value = *(ResultToken*)arg_value;
+			if (value.mem_to_free)
+			{
+				ASSERT(value.symbol == SYM_STRING && value.marker == value.mem_to_free);
+				var->AcceptNewMem(value.marker, value.marker_length);
+				value.mem_to_free = nullptr;
+			}
+			else
+				var->Assign(value);
+			// ResultTokens are allocated from rtp[], and are freed below.
+			//value.Free();
 		}
 		else
 		{

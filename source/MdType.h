@@ -55,6 +55,10 @@ template<MdType T = MdType::Int32> struct md_outtype { typedef typename md_argty
 template<> struct md_outtype<MdType::String> { typedef StrRet &t; };
 template<> struct md_outtype<MdType::Variant> { typedef ResultToken &t; };
 
+template<MdType T> struct md_optout { typedef typename md_outtype<T>::t t; };
+template<> struct md_optout<MdType::String> { typedef StrRet *t; };
+template<> struct md_optout<MdType::Variant> { typedef ResultToken *t; };
+
 template<MdType T> struct md_optional { typedef typename md_argtype<T>::t* t; };
 template<> struct md_optional<MdType::String> { typedef LPCTSTR t; };
 
@@ -70,7 +74,7 @@ template<> struct md_retval<MdType::NzIntWin32> { typedef BOOL t; };
 #define md_arg_decl_type_In(type) md_argtype<MdType::type>::t
 #define md_arg_decl_type_In_Opt(type) md_optional<MdType::type>::t
 #define md_arg_decl_type_Out(type) md_outtype<MdType::type>::t
-#define md_arg_decl_type_Out_Opt(type) md_arg_decl_type_Out(type)
+#define md_arg_decl_type_Out_Opt(type) md_optout<MdType::type>::t
 #define md_arg_decl_type_Ret(type) md_arg_decl_type_Out(type)
 
 #define md_arg_decl_(mod, type, name) md_arg_decl_type_##mod(type) name
