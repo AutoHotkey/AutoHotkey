@@ -14,7 +14,7 @@ public:
 	// and sets it as the return value.  Must be called only once.
 	LPTSTR Alloc(size_t n)
 	{
-		ASSERT(!mAllocated && n);
+		ASSERT(!mAllocated && !mValue && n);
 		LPTSTR buf;
 		if (n < CallerBufSize)
 			buf = mCallerBuf;
@@ -22,6 +22,27 @@ public:
 			buf = mAllocated = tmalloc(n + 1);
 		mValue = buf;
 		return buf;
+	}
+
+	// Set value to a copy of the string in memory that can be returned to the caller.
+	LPTSTR Copy(LPCTSTR s, size_t n)
+	{
+		ASSERT(!mAllocated && !mValue);
+		if (!n)
+			return nullptr;
+		LPTSTR buf = Alloc(n);
+		if (buf)
+		{
+			tmemcpy(buf, s, n);
+			buf[n] = '\0';
+		}
+		return buf;
+	}
+	
+	// Set value to a copy of the string in memory that can be returned to the caller.
+	LPTSTR Copy(LPCTSTR s)
+	{
+		return Copy(s, _tcslen(s));
 	}
 
 	// Returns a buffer of size StrRet::CallerBufSize allocated by the caller for use by the callee.
@@ -54,16 +75,16 @@ public:
 	}
 
 	// Set the return value.
-	// s must be the return value of Alloc() if it was called, otherwise it must be in persistent memory.
-	void Set(LPTSTR s)
+	// s must be in static memory or CallerBuf().
+	void SetStatic(LPTSTR s)
 	{
 		ASSERT(!mValue);
 		mValue = s;
 	}
 
 	// Set the return value and length.
-	// s must be the return value of Alloc() if it was called, otherwise it must be in persistent memory.
-	void Set(LPTSTR s, size_t n)
+	// s must be in static memory or CallerBuf().
+	void SetStatic(LPTSTR s, size_t n)
 	{
 		ASSERT(!mValue);
 		mValue = s;

@@ -251,7 +251,7 @@ bif_impl FResult DriveGetFilesystem(LPCTSTR aDrive, StrRet &aRetVal)
 	LPTSTR file_system = aRetVal.CallerBuf();
 	if (!GetVolumeInformation(aDrive, NULL, 0, NULL, NULL, NULL, file_system, StrRet::CallerBufSize))
 		return FR_E_WIN32;
-	aRetVal.Set(file_system);
+	aRetVal.SetStatic(file_system);
 	return OK;
 }
 
@@ -264,7 +264,7 @@ bif_impl FResult DriveGetLabel(LPCTSTR aDrive, StrRet &aRetVal)
 	LPTSTR volume_name = aRetVal.CallerBuf();
 	if (!GetVolumeInformation(aDrive, volume_name, StrRet::CallerBufSize, NULL, NULL, NULL, NULL, 0))
 		return FR_E_WIN32;
-	aRetVal.Set(volume_name);
+	aRetVal.SetStatic(volume_name);
 	return OK;
 }
 
@@ -289,12 +289,12 @@ bif_impl FResult DriveGetType(LPCTSTR aDrive, StrRet &aRetVal)
 	DriveFixPath(aDrive, buf);
 	switch (GetDriveType(aDrive))
 	{
-	case DRIVE_UNKNOWN:   aRetVal.Set(_T("Unknown")); break;
-	case DRIVE_REMOVABLE: aRetVal.Set(_T("Removable")); break;
-	case DRIVE_FIXED:     aRetVal.Set(_T("Fixed")); break;
-	case DRIVE_REMOTE:    aRetVal.Set(_T("Network")); break;
-	case DRIVE_CDROM:     aRetVal.Set(_T("CDROM")); break;
-	case DRIVE_RAMDISK:   aRetVal.Set(_T("RAMDisk")); break;
+	case DRIVE_UNKNOWN:   aRetVal.SetStatic(_T("Unknown")); break;
+	case DRIVE_REMOVABLE: aRetVal.SetStatic(_T("Removable")); break;
+	case DRIVE_FIXED:     aRetVal.SetStatic(_T("Fixed")); break;
+	case DRIVE_REMOTE:    aRetVal.SetStatic(_T("Network")); break;
+	case DRIVE_CDROM:     aRetVal.SetStatic(_T("CDROM")); break;
+	case DRIVE_RAMDISK:   aRetVal.SetStatic(_T("RAMDisk")); break;
 	default: // DRIVE_NO_ROOT_DIR
 		aRetVal.SetEmpty();
 	}
@@ -311,11 +311,11 @@ bif_impl FResult DriveGetStatus(LPCTSTR aDrive, StrRet &aRetVal)
 	switch (GetDiskFreeSpace(aDrive, &sectors_per_cluster, &bytes_per_sector, &free_clusters, &total_clusters)
 		? ERROR_SUCCESS : GetLastError())
 	{
-	case ERROR_SUCCESS:			aRetVal.Set(_T("Ready")); break;
-	case ERROR_PATH_NOT_FOUND:	aRetVal.Set(_T("Invalid")); break;
-	case ERROR_NOT_READY:		aRetVal.Set(_T("NotReady")); break;
-	case ERROR_WRITE_PROTECT:	aRetVal.Set(_T("ReadOnly")); break;
-	default:					aRetVal.Set(_T("Unknown")); break;
+	case ERROR_SUCCESS:			aRetVal.SetStatic(_T("Ready")); break;
+	case ERROR_PATH_NOT_FOUND:	aRetVal.SetStatic(_T("Invalid")); break;
+	case ERROR_NOT_READY:		aRetVal.SetStatic(_T("NotReady")); break;
+	case ERROR_WRITE_PROTECT:	aRetVal.SetStatic(_T("ReadOnly")); break;
+	default:					aRetVal.SetStatic(_T("Unknown")); break;
 	}
 	return OK;
 }
