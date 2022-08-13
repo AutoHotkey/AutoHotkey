@@ -179,6 +179,9 @@
     <ClCompile Include="source\error.cpp">
       <Filter>Core</Filter>
     </ClCompile>
+    <ClCompile Include="source\MdFunc.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="source\ahkversion.h">
@@ -271,6 +274,21 @@
     <ClInclude Include="source\keyboard_mouse.h">
       <Filter>Keyboard &amp; mouse</Filter>
     </ClInclude>
+    <ClInclude Include="source\MdFunc.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\MdType.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\lib\functions.h">
+      <Filter>Built-in library</Filter>
+    </ClInclude>
+    <ClInclude Include="source\StrRet.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="source\abi.h">
+      <Filter>Core</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="source\resources\icon_filetype.ico">
@@ -302,6 +320,9 @@
       <Filter>Utility</Filter>
     </CustomBuild>
     <CustomBuild Include="source\libx64call\x64stub.asm">
+      <Filter>Utility</Filter>
+    </CustomBuild>
+    <CustomBuild Include="source\x86call.asm">
       <Filter>Utility</Filter>
     </CustomBuild>
   </ItemGroup>

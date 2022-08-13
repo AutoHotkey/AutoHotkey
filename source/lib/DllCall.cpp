@@ -76,8 +76,8 @@ extern "C" UINT_PTR PerformDynaCall(size_t stackArgsSize, DWORD_PTR* stackArgs, 
 // Retrieve a float or double return value.  These don't actually do anything, since the value we
 // want is already in the xmm0 register which is used to return float or double values.
 // Many thanks to http://locklessinc.com/articles/c_abi_hacks/ for the original idea.
-extern "C" float read_xmm0_float();
-extern "C" double read_xmm0_double();
+extern "C" float GetFloatRetval();
+extern "C" double GetDoubleRetval();
 
 static inline UINT_PTR DynaParamToElement(DYNAPARM& parm)
 {
@@ -815,10 +815,10 @@ has_valid_return_type:
 			{
 			// Floating-point values are returned via the xmm0 register. Copy it for use in the next section:
 			case DLL_ARG_FLOAT:
-				return_value.Float = read_xmm0_float();
+				return_value.Float = GetFloatRetval();
 				break;
 			case DLL_ARG_DOUBLE:
-				return_value.Double = read_xmm0_double();
+				return_value.Double = GetDoubleRetval();
 				break;
 			}
 		}

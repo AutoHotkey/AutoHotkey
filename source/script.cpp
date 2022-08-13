@@ -6825,7 +6825,7 @@ BuiltInFunc::BuiltInFunc(FuncEntry &bif) : BuiltInFunc(bif.mName)
 
 
 
-FuncEntry *Script::GetBuiltInFunc(LPTSTR aFuncName)
+Func *Script::GetBuiltInFunc(LPTSTR aFuncName)
 {
 	int left, right, mid, result;
 	for (left = 0, right = _countof(g_BIF) - 1; left <= right;)
@@ -6837,9 +6837,9 @@ FuncEntry *Script::GetBuiltInFunc(LPTSTR aFuncName)
 		else if (result < 0)
 			right = mid - 1;
 		else // Match found.
-			return &g_BIF[mid];
+			return new BuiltInFunc(g_BIF[mid]);
 	}
-	return NULL;
+	return GetBuiltInMdFunc(aFuncName);
 }
 
 
@@ -7143,9 +7143,8 @@ Var *Script::FindVar(LPCTSTR aVarName, size_t aVarNameLength, int aScope
 
 		if (!(aScope & FINDVAR_NO_BIF))
 		// Built-in functions can be shadowed, so are checked only in this section.
-		if (auto *bif = GetBuiltInFunc(var_name))
+		if (auto *func = GetBuiltInFunc(var_name))
 		{
-			auto *func = new BuiltInFunc(*bif);
 			Var *var = AddVar(var_name, aVarNameLength, varlist, insert_pos, VAR_DECLARE_GLOBAL);
 			if (!var)
 			{

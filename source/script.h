@@ -27,6 +27,7 @@ GNU General Public License for more details.
 #include "Util.h" // for FileTimeToYYYYMMDD(), strlcpy()
 #include "resources/resource.h"  // For tray icon.
 #include "Debugger.h"
+#include "abi.h"
 
 #include "os_version.h" // For the global OS_Version object
 EXTERN_OSVER; // For the access to the g_os version object without having to include globaldata.h
@@ -3042,7 +3043,8 @@ public:
 	void IncludeLibrary(LPTSTR aFuncName, size_t aFuncNameLength, bool &aErrorWasShown, bool &aFileWasFound);
 #endif
 	Func *FindGlobalFunc(LPCTSTR aFuncName, size_t aFuncNameLength = 0);
-	static FuncEntry *GetBuiltInFunc(LPTSTR aFuncName);
+	static Func *GetBuiltInFunc(LPTSTR aFuncName);
+	static Func *GetBuiltInMdFunc(LPTSTR aFuncName);
 	UserFunc *AddFunc(LPCTSTR aFuncName, size_t aFuncNameLength, Object *aClassObject = NULL);
 
 	ResultType DefineClass(LPTSTR aBuf);
@@ -3467,6 +3469,9 @@ LPTSTR TokenTypeString(ExprTokenType &aToken);
 ResultType MemoryError();
 ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultType aErrorType);
 
+FResult FError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), Object *aPrototype = nullptr);
+FResult FValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
+
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
 ResultType SetWorkingDir(LPTSTR aNewDir);
 void UpdateWorkingDir(LPTSTR aNewDir = NULL);
@@ -3497,6 +3502,7 @@ ResultType GetObjectIntProperty(IObject *aObject, LPTSTR aPropName, __int64 &aVa
 ResultType SetObjectIntProperty(IObject * aObject, LPTSTR aPropName, __int64 aValue, ResultToken & aResultToken);
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr, size_t &aSize);
 void GetBufferObjectPtr(ResultToken &aResultToken, IObject *obj, size_t &aPtr);
+void ObjectToString(ResultToken & aResultToken, ExprTokenType & aThisToken, IObject * aObject);
 
 
 #endif

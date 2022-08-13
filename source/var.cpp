@@ -998,6 +998,8 @@ void Var::_AcceptNewMem(LPTSTR aNewMem, VarSizeType aLength)
 	Free(VAR_ALWAYS_FREE); // Release the variable's old memory. This also removes flags VAR_ATTRIB_OFTEN_REMOVED.
 	mHowAllocated = ALLOC_MALLOC; // Must always be this type to avoid complications and possible memory leaks.
 	mByteContents = (char *) aNewMem;
+	if (aLength == VARSIZE_MAX)
+		aLength = _tcslen(aNewMem);
 	mByteLength = aLength * sizeof(TCHAR);
 	ASSERT( mByteLength + sizeof(TCHAR) <= _msize(aNewMem) );
 	mByteCapacity = (VarSizeType)_msize(aNewMem); // Get actual capacity in case it's a lot bigger than aLength+1. _msize() is only about 36 bytes of code and probably a very fast call.
