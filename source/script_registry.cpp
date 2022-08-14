@@ -28,15 +28,11 @@
 #include "util.h" // for strlcpy()
 #include "globaldata.h"
 #include "script_func_impl.h"
+#include "abi.h"
 
 
-BIF_DECL(BIF_IniRead)
+bif_impl FResult IniRead(LPCTSTR aFilespec, LPCTSTR aSection, LPCTSTR aKey, LPCTSTR aDefault, StrRet &aRetVal)
 {
-	_f_param_string_opt(aFilespec, 0);
-	_f_param_string_opt(aSection, 1);
-	_f_param_string_opt(aKey, 2);
-	_f_param_string_opt_def(aDefault, 3, nullptr);
-
 	TCHAR	szFileTemp[T_MAX_PATH];
 	TCHAR	*szFilePart, *cp;
 	TCHAR	szBuffer[65535];					// Max ini file size is 65535 under 95
@@ -45,7 +41,7 @@ BIF_DECL(BIF_IniRead)
 
 	// Get the fullpathname (ini functions need a full path):
 	GetFullPathName(aFilespec, _countof(szFileTemp), szFileTemp, &szFilePart);
-	if (*aKey)
+	if (aKey) // But let it be "", which would correspond to an entry such as "=value".
 	{
 		// An access violation can occur if the following conditions are met:
 		//	1) aFilespec specifies a Unicode file.
@@ -60,11 +56,11 @@ BIF_DECL(BIF_IniRead)
 		// required parameter prior to revision 57, empty or blank section names
 		// are actually valid.  Simply passing an empty writable buffer appears
 		// to work around the problem effectively:
-		if (!*aSection)
+		if (!aSection || !*aSection)
 			aSection = szEmpty;
 		GetPrivateProfileString(aSection, aKey, aDefault, szBuffer, _countof(szBuffer), szFileTemp);
 	}
-	else if (*aSection
+	else if (aSection
 		? GetPrivateProfileSection(aSection, szBuffer, _countof(szBuffer), szFileTemp)
 		: GetPrivateProfileSectionNames(szBuffer, _countof(szBuffer), szFileTemp))
 	{
@@ -83,19 +79,24 @@ BIF_DECL(BIF_IniRead)
 		if (!aDefault)
 		{
 			if (g->LastError == 2)
-				_f_throw_value(_T("The requested key, section or file was not found."));
-			_f_throw_win32(g->LastError);
+				return FError(_T("The requested key, section or file was not found."));
+			return FR_E_WIN32(g->LastError);
 		}
-		if (!*aKey)
-			_f_return(aDefault);
+		if (!aKey)
+		{
+			aRetVal.SetStatic(aDefault);
+			return OK;
+		}
 	}
 	// The above function is supposed to set szBuffer to be aDefault if it can't find the
 	// file, section, or key.  In other words, it always changes the contents of szBuffer.
-	_f_return(szBuffer); // Avoid using the length the API reported because it might be inaccurate if the data contains any binary zeroes, or if the data is double-terminated, etc.
+	if (!aRetVal.Copy(szBuffer)) // Avoid using the length the API reported because it might be inaccurate if the data contains any binary zeroes, or if the data is double-terminated, etc.
+		return FR_E_OUTOFMEM;
+	return OK;
 }
 
 #ifdef UNICODE
-static BOOL IniEncodingFix(LPWSTR aFilespec, LPWSTR aSection)
+static BOOL IniEncodingFix(LPCWSTR aFilespec, LPCWSTR aSection)
 {
 	BOOL result = TRUE;
 	if (!DoesFilePatternExist(aFilespec))
@@ -108,27 +109,24 @@ static BOOL IniEncodingFix(LPWSTR aFilespec, LPWSTR aSection)
 		if (hFile != INVALID_HANDLE_VALUE)
 		{
 			DWORD cc = (DWORD)wcslen(aSection);
-			DWORD cb = (cc + 1) * sizeof(WCHAR);
+			LPTSTR section = talloca(cc + 4);
+			sntprintf(section, cc + 4, L"\xFEFF[%s]", aSection);
+			DWORD cb = _TSIZE(cc + 3);
 			
-			aSection[cc] = ']'; // Temporarily replace the null-terminator.
-
 			// Write a UTF-16LE BOM to identify this as a Unicode file.
 			// Write [%aSection%] to prevent WritePrivateProfileString from inserting an empty line (for consistency and style).
-			if (   !WriteFile(hFile, L"\xFEFF[", 4, &dwWritten, NULL) || dwWritten != 4
-				|| !WriteFile(hFile, aSection, cb, &dwWritten, NULL) || dwWritten != cb   )
+			if (!WriteFile(hFile, section, cb, &dwWritten, NULL) || dwWritten != cb)
 				result = FALSE;
 
 			if (!CloseHandle(hFile))
 				result = FALSE;
-
-			aSection[cc] = '\0'; // Re-terminate.
 		}
 	}
 	return result;
 }
 #endif
 
-ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
+bif_impl FResult IniWrite(LPCTSTR aValue, LPCTSTR aFilespec, LPCTSTR aSection, LPCTSTR aKey)
 {
 	TCHAR	szFileTemp[T_MAX_PATH];
 	TCHAR	*szFilePart;
@@ -142,13 +140,13 @@ ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTS
 	result = IniEncodingFix(szFileTemp, aSection);
 	if(result){
 #endif
-		if (*aKey)
+		if (aKey) // But let it be "", which would create an entry such as "=value".
 		{
 			result = WritePrivateProfileString(aSection, aKey, aValue, szFileTemp);  // Returns zero on failure.
 		}
 		else
 		{
-			size_t value_len = ArgLength(1);
+			size_t value_len = _tcslen(aValue);
 			TCHAR c, *cp, *szBuffer = talloca(value_len + 2); // +2 for double null-terminator.
 			// Convert newline-delimited list to null-terminated array of null-terminated strings.
 			for (cp = szBuffer; *aValue; ++cp, ++aValue)
@@ -159,16 +157,17 @@ ResultType Line::IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTS
 			*cp = '\0', cp[1] = '\0'; // Double null-terminator.
 			result = WritePrivateProfileSection(aSection, szBuffer, szFileTemp);
 		}
-		WritePrivateProfileString(NULL, NULL, NULL, szFileTemp);	// Flush
+		if (result)
+			WritePrivateProfileString(NULL, NULL, NULL, szFileTemp);	// Flush
 #ifdef UNICODE
 	}
 #endif
-	return SetLastErrorMaybeThrow(!result);
+	return result ? OK : FR_E_WIN32;
 }
 
 
 
-ResultType Line::IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
+bif_impl FResult IniDelete(LPCTSTR aFilespec, LPCTSTR aSection, LPCTSTR aKey)
 // Note that aKey can be NULL, in which case the entire section will be deleted.
 {
 	TCHAR	szFileTemp[T_MAX_PATH];
@@ -178,7 +177,7 @@ ResultType Line::IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey)
 	BOOL result = WritePrivateProfileString(aSection, aKey, NULL, szFileTemp);  // Returns zero on failure.
 	g->LastError = GetLastError();
 	WritePrivateProfileString(NULL, NULL, NULL, szFileTemp);	// Flush
-	return SetLastErrorMaybeThrow(!result);
+	return result ? OK : FR_E_WIN32(g->LastError);
 }
 
 

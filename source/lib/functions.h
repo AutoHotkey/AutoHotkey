@@ -63,6 +63,11 @@ md_func(DirSelect, (In_Opt, String, StartingFolder), (In_Opt, Int32, Options), (
 md_func(Download, (In, String, URL), (In, String, Path))
 
 
+md_func(IniDelete, (In, String, Path), (In, String, Section), (In_Opt, String, Key))
+md_func(IniRead, (In, String, Path), (In_Opt, String, Section), (In_Opt, String, Key), (In_Opt, String, Default), (Ret, String, RetVal))
+md_func(IniWrite, (In, String, Value), (In, String, Path), (In, String, Section), (In_Opt, String, Key))
+
+
 md_func_x(InstallKeybdHook, InstallKeybdHook, Void, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
 md_func_x(InstallMouseHook, InstallMouseHook, Void, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
 

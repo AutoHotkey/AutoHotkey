@@ -136,9 +136,6 @@ FuncEntry g_BIF[] =
 	BIF1(IL_Create, 0, 3),
 	BIF1(IL_Destroy, 1, 1),
 	BIF1(ImageSearch, 7, 7, {1, 2}),
-	BIFA(IniDelete, 2, 3, ACT_INIDELETE),
-	BIF1(IniRead, 1, 4),
-	BIFA(IniWrite, 3, 4, ACT_INIWRITE),
 	BIF1(InputBox, 0, 4),
 	BIF1(InStr, 2, 5),
 	BIFi(IsAlnum, 1, 2, BIF_IsTypeish, VAR_TYPE_ALNUM),
@@ -11970,15 +11967,6 @@ ResultType Line::Perform()
 		MsgSleep(sleep_time);
 		return OK;
 	}
-
-	case ACT_INIWRITE:
-		return IniWrite(FOUR_ARGS);
-	case ACT_INIDELETE:
-		// To preserve maximum compatibility with existing scripts, only send NULL if ARG3
-		// was explicitly omitted.  This is because some older scripts might rely on the
-		// fact that a blank ARG3 does not delete the entire section, but rather does
-		// nothing (that fact is untested):
-		return IniDelete(ARG1, ARG2, mArgc < 3 ? NULL : ARG3);
 
 	case ACT_OUTPUTDEBUG:
 #ifdef CONFIG_DEBUGGER
