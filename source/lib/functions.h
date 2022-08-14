@@ -54,6 +54,13 @@ md_func(DirMove, (In, String, Source), (In, String, Dest), (In_Opt, String, Flag
 md_func(DirSelect, (In_Opt, String, StartingFolder), (In_Opt, Int32, Options), (In_Opt, String, Prompt), (Ret, String, RetVal))
 
 
+md_func(Download, (In, String, URL), (In, String, Path))
+
+
+md_func_x(InstallKeybdHook, InstallKeybdHook, Void, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
+md_func_x(InstallMouseHook, InstallMouseHook, Void, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
+
+
 md_func(MonitorGet,
 	(In_Opt, Int32, N),
 	(Out_Opt, Int32, Left),
@@ -76,4 +83,11 @@ md_func_x(MonitorGetPrimary, MonitorGetPrimary, Int32, md_arg_none)
 md_func(MonitorGetName, (In_Opt, Int32, N), (Ret, String, RetVal))
 
 
+md_func_x(Persistent, Persistent, Void, (In_Opt, Bool32, NewValue), (Ret, Bool32, OldValue))
+
+
+md_func_x(RunAs, RunAs, Void, (In_Opt, String, User), (In_Opt, String, Password), (In_Opt, String, Domain))
+
+
 md_func_x(SysGet, SysGet, Int32, (In, Int32, Index))
+md_func(SysGetIPAddresses, (Ret, Object, RetVal))

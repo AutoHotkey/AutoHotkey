@@ -725,7 +725,6 @@ private:
 	friend BIF_DECL(BIF_PerformAction);
 
 	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
-	ResultType Download(LPTSTR aURL, LPTSTR aFilespec);
 
 	ResultType IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
 	ResultType IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
@@ -3269,14 +3268,11 @@ BIF_DECL(BIF_SqrtLogLn);
 BIF_DECL(BIF_MinMax);
 BIF_DECL(BIF_DateAdd);
 BIF_DECL(BIF_DateDiff);
-BIF_DECL(BIF_SysGetIPAddresses);
 BIF_DECL(BIF_PostSendMessage);
 BIF_DECL(BIF_Hotkey);
 BIF_DECL(BIF_SetTimer);
 BIF_DECL(BIF_OnMessage);
 BIF_DECL(BIF_On);
-BIF_DECL(BIF_Persistent);
-BIF_DECL(BIF_InstallHook);
 
 #ifdef ENABLE_REGISTERCALLBACK
 BIF_DECL(BIF_CallbackCreate);

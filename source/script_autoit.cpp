@@ -88,18 +88,33 @@ ResultType Script::DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDispla
 
 
 
-BIF_DECL(BIF_SysGetIPAddresses)
+bif_impl void RunAs(LPCTSTR aUser, LPCTSTR aPass, LPCTSTR aDomain)
+{
+	if (!aUser) aUser = _T("");
+	if (!aPass) aPass = _T("");
+	if (!aDomain) aDomain = _T("");
+	StringTCharToWChar(aUser, g_script.mRunAsUser);
+	StringTCharToWChar(aPass, g_script.mRunAsPass);
+	StringTCharToWChar(aDomain, g_script.mRunAsDomain);
+}
+
+
+
+bif_impl FResult SysGetIPAddresses(IObject **aRetVal)
 {
 	// aaa.bbb.ccc.ddd = 15, but allow room for larger IP's in the future.
 	#define IP_ADDRESS_SIZE 32 // The maximum size of any of the strings we return, including terminator.
 
 	auto addresses = Array::Create();
 	if (!addresses)
-		_f_throw_oom;
+		return FR_E_OUTOFMEM;
 
 	WSADATA wsadata;
 	if (WSAStartup(MAKEWORD(1, 1), &wsadata)) // Failed (it returns 0 on success).
-		_f_return(addresses);
+	{
+		*aRetVal = addresses;
+		return OK;
+	}
 
 	char host_name[256];
 	gethostname(host_name, _countof(host_name));
@@ -119,12 +134,13 @@ BIF_DECL(BIF_SysGetIPAddresses)
 		{
 			addresses->Release();
 			WSACleanup();
-			_f_throw_oom;
+			return FR_E_OUTOFMEM;
 		}
 	}
 
 	WSACleanup();
-	_f_return(addresses);
+	*aRetVal = addresses;
+	return OK;
 }
 
 
@@ -923,7 +939,7 @@ control_type_error:
 
 
 
-ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
+bif_impl FResult Download(LPCTSTR aURL, LPCTSTR aFilespec)
 {
 	// v1.0.44.07: Set default to INTERNET_FLAG_RELOAD vs. 0 because the vast majority of usages would want
 	// the file to be retrieved directly rather than from the cache.
@@ -939,8 +955,7 @@ ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 	if (*aURL == '*') // v1.0.44.07: Provide an option to override flags_for_open_url.
 	{
 		flags_for_open_url = ATOU(++aURL);
-		LPTSTR cp;
-		if (cp = StrChrAny(aURL, _T(" \t"))) // Find first space or tab.
+		if (auto cp = StrChrAny(aURL, _T(" \t"))) // Find first space or tab.
 			aURL = omit_leading_whitespace(cp);
 	}
 
@@ -950,14 +965,14 @@ ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 	// as the user agent (even if documented) seems like a bad idea because it might contain personal/sensitive info.
 	HINTERNET hInet = InternetOpen(_T("AutoHotkey"), INTERNET_OPEN_TYPE_PRECONFIG_WITH_NO_AUTOPROXY, NULL, NULL, 0);
 	if (!hInet)
-		return Throw();
+		return FR_E_WIN32;
 
 	// Open the required URL
 	HINTERNET hFile = InternetOpenUrl(hInet, aURL, NULL, 0, flags_for_open_url, 0);
 	if (!hFile)
 	{
 		InternetCloseHandle(hInet);
-		return Throw();
+		return FR_E_WIN32;
 	}
 
 	// Open our output file
@@ -966,7 +981,7 @@ ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 	{
 		InternetCloseHandle(hFile);
 		InternetCloseHandle(hInet);
-		return Throw();
+		return FR_E_FAILED;
 	}
 
 	BYTE bufData[1024 * 1]; // v1.0.44.11: Reduced from 8 KB to alleviate GUI window lag during Download.  Testing shows this reduction doesn't affect performance on high-speed downloads (in fact, downloads are slightly faster; I tested two sites, one at 184 KB/s and the other at 380 KB/s).  It might affect slow downloads, but that seems less likely so wasn't tested.
@@ -1005,6 +1020,7 @@ ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 			fwrite(bufData, number_of_bytes_read, 1, fptr);
 		}
 	}
+	DWORD last_error = GetLastError();
 	// Close internet session:
 	InternetCloseHandle(hFile);
 	InternetCloseHandle(hInet);
@@ -1012,8 +1028,11 @@ ResultType Line::Download(LPTSTR aURL, LPTSTR aFilespec)
 	fclose(fptr);
 
 	if (!result) // An error occurred during the transfer.
+	{
 		DeleteFile(aFilespec);  // Delete damaged/incomplete file.
-	return ThrowIfTrue(!result);
+		return FR_E_WIN32(last_error);
+	}
+	return OK;
 }
 
 

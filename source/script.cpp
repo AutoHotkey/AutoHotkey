@@ -100,7 +100,6 @@ FuncEntry g_BIF[] =
 #ifdef ENABLE_DLLCALL
 	BIFn(DllCall, 1, NA, BIF_DllCall),
 #endif
-	BIFA(Download, 2, 2, ACT_DOWNLOAD),
 	BIFA(Edit, 0, 0, ACT_EDIT),
 	BIFn(EditGetCurrentCol, 1, 5, BIF_ControlGet),
 	BIFn(EditGetCurrentLine, 1, 5, BIF_ControlGet),
@@ -145,8 +144,6 @@ FuncEntry g_BIF[] =
 	BIF1(IniRead, 1, 4),
 	BIFA(IniWrite, 3, 4, ACT_INIWRITE),
 	BIF1(InputBox, 0, 4),
-	BIFi(InstallKeybdHook, 0, 2, BIF_InstallHook, HOOK_KEYBD),
-	BIFi(InstallMouseHook, 0, 2, BIF_InstallHook, HOOK_MOUSE),
 	BIF1(InStr, 2, 5),
 	BIFi(IsAlnum, 1, 2, BIF_IsTypeish, VAR_TYPE_ALNUM),
 	BIFi(IsAlpha, 1, 2, BIF_IsTypeish, VAR_TYPE_ALPHA),
@@ -205,7 +202,6 @@ FuncEntry g_BIF[] =
 	BIF1(Ord, 1, 1),
 	BIFA(OutputDebug, 1, 1, ACT_OUTPUTDEBUG),
 	BIFA(Pause, 0, 1, ACT_PAUSE),
-	BIF1(Persistent, 0, 1),
 	BIF1(PixelGetColor, 2, 3),
 	BIF1(PixelSearch, 7, 8, {1, 2}),
 	BIFn(PostMessage, 1, 8, BIF_PostSendMessage),
@@ -228,7 +224,6 @@ FuncEntry g_BIF[] =
 	BIF1(Round, 1, 2),
 	BIFn(RTrim, 1, 2, BIF_Trim),
 	BIF1(Run, 1, 4, {4}),
-	BIFA(RunAs, 0, 3, ACT_RUNAS),
 	BIFn(RunWait, 1, 4, BIF_Wait, {4}),
 	BIFA(Send, 1, 1, ACT_SEND),
 	BIFA(SendEvent, 1, 1, ACT_SENDEVENT),
@@ -279,7 +274,6 @@ FuncEntry g_BIF[] =
 	BIFn(StrUpper, 1, 1, BIF_StrCase),
 	BIF1(SubStr, 2, 3),
 	BIFA(Suspend, 0, 1, ACT_SUSPEND),
-	BIF1(SysGetIPAddresses, 0, 0),
 	BIF1(Tan, 1, 1),
 	BIFA(Thread, 1, 3, ACT_THREAD),
 	BIF1(ToolTip, 0, 4),
@@ -11702,15 +11696,6 @@ ResultType Line::Perform()
 		return PerformMouse(mActionType, THREE_ARGS, _T(""), _T(""), ARG5, ARG7, ARG4, ARG6);
 	case ACT_MOUSEMOVE:
 		return PerformMouse(mActionType, _T(""), ARG1, ARG2, _T(""), _T(""), ARG3, ARG4);
-
-	case ACT_DOWNLOAD:
-		return Download(TWO_ARGS);
-
-	case ACT_RUNAS:
-		StringTCharToWChar(ARG1, g_script.mRunAsUser);
-		StringTCharToWChar(ARG2, g_script.mRunAsPass);
-		StringTCharToWChar(ARG3, g_script.mRunAsDomain);
-		return OK;
 
 	case ACT_WINMINIMIZEALL:
 		PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 419, 0);
