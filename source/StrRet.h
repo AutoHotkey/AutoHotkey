@@ -2,7 +2,8 @@
 
 class StrRet
 {
-	LPTSTR mValue = nullptr, mCallerBuf = nullptr, mAllocated = nullptr;
+	LPCTSTR mValue = nullptr;
+	LPTSTR mCallerBuf = nullptr, mAllocated = nullptr;
 	size_t mLength = -1;
 
 public:
@@ -57,7 +58,7 @@ public:
 		return mAllocated != nullptr;
 	}
 
-	LPTSTR Value()
+	LPCTSTR Value()
 	{
 		ASSERT(!mAllocated || mAllocated == mValue);
 		return mValue;
@@ -76,7 +77,7 @@ public:
 
 	// Set the return value.
 	// s must be in static memory or CallerBuf().
-	void SetStatic(LPTSTR s)
+	void SetStatic(LPCTSTR s)
 	{
 		ASSERT(!mValue);
 		mValue = s;
@@ -84,7 +85,7 @@ public:
 
 	// Set the return value and length.
 	// s must be in static memory or CallerBuf().
-	void SetStatic(LPTSTR s, size_t n)
+	void SetStatic(LPCTSTR s, size_t n)
 	{
 		ASSERT(!mValue);
 		mValue = s;

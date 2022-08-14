@@ -363,9 +363,9 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		{
 			auto strret = (StrRet*)args[retval_index];
 			if (strret->UsedMalloc())
-				aResultToken.AcceptMem(strret->Value(), strret->Length());
+				aResultToken.AcceptMem(const_cast<LPTSTR>(strret->Value()), strret->Length());
 			else if (strret->Value())
-				aResultToken.SetValue(strret->Value(), strret->Length());
+				aResultToken.SetValue(const_cast<LPTSTR>(strret->Value()), strret->Length());
 			//else leave aResultToken set to its default value, "".
 		}
 		else if (retval_arg_type != MdType::Variant) // Variant type passes aResultToken directly.
@@ -395,7 +395,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 			if (!strret->Value())
 				var->Assign();
 			else if (strret->UsedMalloc())
-				var->AcceptNewMem(strret->Value(), strret->Length());
+				var->AcceptNewMem(const_cast<LPTSTR>(strret->Value()), strret->Length());
 			else
 				var->AssignString(strret->Value(), strret->Length());
 		}
