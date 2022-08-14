@@ -78,7 +78,7 @@ int GetISOWeekNumber(LPTSTR aBuf, int aYear, int aYDay, int aWDay)
 
 
 
-ResultType YYYYMMDDToFileTime(LPTSTR aYYYYMMDD, FILETIME &aFileTime)
+ResultType YYYYMMDDToFileTime(LPCTSTR aYYYYMMDD, FILETIME &aFileTime)
 {
 	SYSTEMTIME st;
 	if (!YYYYMMDDToSystemTime(aYYYYMMDD, st, false))  // "false" because it's validated below.
@@ -92,7 +92,7 @@ ResultType YYYYMMDDToFileTime(LPTSTR aYYYYMMDD, FILETIME &aFileTime)
 
 
 
-DWORD YYYYMMDDToSystemTime2(LPTSTR aYYYYMMDD, SYSTEMTIME *aSystemTime)
+DWORD YYYYMMDDToSystemTime2(LPCTSTR aYYYYMMDD, SYSTEMTIME *aSystemTime)
 // Calls YYYYMMDDToSystemTime() to fill up to two elements of the aSystemTime array.
 // Returns 0 if the parameter is empty or invalid, otherwise a GDTR bitwise combination
 // to indicate which of the two elements, or both, are present.
@@ -103,16 +103,20 @@ DWORD YYYYMMDDToSystemTime2(LPTSTR aYYYYMMDD, SYSTEMTIME *aSystemTime)
 		return gdtr;
 	if (*aYYYYMMDD != '-') // Since first char isn't a dash, there is a minimum present.
 	{
-		LPTSTR cp;
+		TCHAR temp[16];
+		tcslcpy(temp, aYYYYMMDD, _countof(temp));
+		LPCTSTR cp, first = aYYYYMMDD;
 		if (cp = _tcschr(aYYYYMMDD + 1, '-'))
-			*cp = '\0'; // Temporarily terminate in case only the leading part of the YYYYMMDD format is present.  Otherwise, the dash and other chars would be considered invalid fields.
-		if (YYYYMMDDToSystemTime(aYYYYMMDD, aSystemTime[0], true)) // Date string is valid.
+		{
+			// Temporarily terminate; otherwise, the dash and other chars would be considered invalid fields.
+			tmemcpy(temp, aYYYYMMDD, min(cp - aYYYYMMDD, _countof(temp) - 1));
+			temp[_countof(temp) - 1] = '\0';
+			first = temp;
+		}
+		if (YYYYMMDDToSystemTime(first, aSystemTime[0], true)) // Date string is valid.
 			gdtr |= GDTR_MIN; // Indicate that minimum is present.
 		if (cp)
-		{
-			*cp = '-'; // Undo the temp. termination.
 			aYYYYMMDD = cp + 1; // Set it to the maximum's position for use below.
-		}
 		else // No dash, so there is no maximum.  Indicate this by making aYYYYMMDD empty.
 			aYYYYMMDD = _T("");
 	}
@@ -130,7 +134,7 @@ DWORD YYYYMMDDToSystemTime2(LPTSTR aYYYYMMDD, SYSTEMTIME *aSystemTime)
 
 
 
-ResultType YYYYMMDDToSystemTime(LPTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool aValidateTimeValues)
+ResultType YYYYMMDDToSystemTime(LPCTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool aValidateTimeValues)
 // Although aYYYYMMDD need not be terminated at the end of the YYYYMMDDHH24MISS string (as long as
 // the string's capacity is at least 14), it should be terminated if only the leading part
 // of the YYYYMMDDHH24MISS format is present.
@@ -255,7 +259,7 @@ LPTSTR SystemTimeToYYYYMMDD(LPTSTR aBuf, SYSTEMTIME &aTime)
 
 
 
-__int64 YYYYMMDDSecondsUntil(LPTSTR aYYYYMMDDStart, LPTSTR aYYYYMMDDEnd, LPTSTR &aFailed)
+__int64 YYYYMMDDSecondsUntil(LPCTSTR aYYYYMMDDStart, LPCTSTR aYYYYMMDDEnd, LPTSTR &aFailed)
 // Returns the number of seconds from aYYYYMMDDStart until aYYYYMMDDEnd.
 // If aYYYYMMDDStart is blank, the current time will be used in its place.
 {
@@ -1451,7 +1455,7 @@ LPTSTR TranslateLFtoCRLF(LPTSTR aString)
 
 
 
-bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr, DWORD aRequiredAttr)
+bool DoesFilePatternExist(LPCTSTR aFilePattern, DWORD *aFileAttr, DWORD aRequiredAttr)
 // Returns true if the file/folder exists or false otherwise.
 // If non-NULL, aFileAttr's DWORD is set to the attributes of the file/folder if a match is found.
 // If there is no match, its contents are undefined.
@@ -1461,7 +1465,7 @@ bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr, DWORD aRequired
 	// Such volume names are obtained from GetVolumeNameForVolumeMountPoint() and perhaps other functions.
 	// However, testing shows that wildcards beyond that first one should be seen as real wildcards
 	// because the wildcard match-method below does work for such volume names.
-	LPTSTR cp = _tcsncmp(aFilePattern, _T("\\\\?\\"), 4) ? aFilePattern : aFilePattern + 4;
+	auto cp = _tcsncmp(aFilePattern, _T("\\\\?\\"), 4) ? aFilePattern : aFilePattern + 4;
 	if (StrChrAny(cp, _T("?*")))
 	{
 		WIN32_FIND_DATA wfd;

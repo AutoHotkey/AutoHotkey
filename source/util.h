@@ -123,7 +123,8 @@ inline LPTSTR StrToTitleCase(LPTSTR aStr)
 
 
 
-inline LPTSTR StrChrAny(LPTSTR aStr, LPTSTR aCharList)
+template<typename T = LPTSTR>
+inline T StrChrAny(T aStr, LPCTSTR aCharList)
 // Returns the position of the first char in aStr that is of any one of the characters listed in aCharList.
 // Returns NULL if not found.
 // Update: Yes, this seems identical to strpbrk().  However, since the corresponding code would
@@ -136,7 +137,7 @@ inline LPTSTR StrChrAny(LPTSTR aStr, LPTSTR aCharList)
 	// Don't use strchr() because that would just find the first occurrence
 	// of the first search-char, which is not necessarily the first occurrence
 	// of *any* search-char:
-	LPTSTR look_for_this_char;
+	LPCTSTR look_for_this_char;
 	TCHAR char_being_analyzed;
 	for (; *aStr; ++aStr)
 		// If *aStr is any of the search char's, we're done:
@@ -654,12 +655,12 @@ inline LPTSTR UTF8ToWide(LPCSTR str){
 
 int GetYDay(int aMon, int aDay, bool aIsLeapYear);
 int GetISOWeekNumber(LPTSTR aBuf, int aYear, int aYDay, int aWDay);
-ResultType YYYYMMDDToFileTime(LPTSTR aYYYYMMDD, FILETIME &aFileTime);
-DWORD YYYYMMDDToSystemTime2(LPTSTR aYYYYMMDD, SYSTEMTIME *aSystemTime);
-ResultType YYYYMMDDToSystemTime(LPTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool aValidateTimeValues);
+ResultType YYYYMMDDToFileTime(LPCTSTR aYYYYMMDD, FILETIME &aFileTime);
+DWORD YYYYMMDDToSystemTime2(LPCTSTR aYYYYMMDD, SYSTEMTIME *aSystemTime);
+ResultType YYYYMMDDToSystemTime(LPCTSTR aYYYYMMDD, SYSTEMTIME &aSystemTime, bool aValidateTimeValues);
 LPTSTR FileTimeToYYYYMMDD(LPTSTR aBuf, FILETIME &aTime, bool aConvertToLocalTime = false);
 LPTSTR SystemTimeToYYYYMMDD(LPTSTR aBuf, SYSTEMTIME &aTime);
-__int64 YYYYMMDDSecondsUntil(LPTSTR aYYYYMMDDStart, LPTSTR aYYYYMMDDEnd, LPTSTR &aFailed);
+__int64 YYYYMMDDSecondsUntil(LPCTSTR aYYYYMMDDStart, LPCTSTR aYYYYMMDDEnd, LPTSTR &aFailed);
 __int64 FileTimeSecondsUntil(FILETIME *pftStart, FILETIME *pftEnd);
 
 SymbolType IsNumeric(LPCTSTR aBuf, BOOL aAllowNegative = false // BOOL vs. bool might squeeze a little more performance out of this frequently-called function.
@@ -686,7 +687,7 @@ UINT StrReplace(LPTSTR aHaystack, LPTSTR aOld, LPTSTR aNew, StringCaseSenseType 
 size_t PredictReplacementSize(ptrdiff_t aLengthDelta, int aReplacementCount, int aLimit, size_t aHaystackLength
 	, size_t aCurrentLength, size_t aEndOffsetOfCurrMatch);
 LPTSTR TranslateLFtoCRLF(LPTSTR aString);
-bool DoesFilePatternExist(LPTSTR aFilePattern, DWORD *aFileAttr = NULL, DWORD aRequiredAttr = 0);
+bool DoesFilePatternExist(LPCTSTR aFilePattern, DWORD *aFileAttr = NULL, DWORD aRequiredAttr = 0);
 LPTSTR ConvertFilespecToCorrectCase(LPTSTR aFilespec, LPTSTR aBuf, size_t aBufSize, size_t &aBufLength);
 void ConvertFilespecToCorrectCase(LPTSTR aBuf, size_t aBufSize, size_t &aBufLength);
 LPTSTR FileAttribToStr(LPTSTR aBuf, DWORD aAttr);

@@ -97,12 +97,6 @@ FuncEntry g_BIF[] =
 	BIF1(DateDiff, 3, 3),
 	BIFn(DetectHiddenText, 1, 1, BIF_SetBIV),
 	BIFn(DetectHiddenWindows, 1, 1, BIF_SetBIV),
-	BIFA(DirCopy, 2, 3, ACT_DIRCOPY),
-	BIFA(DirCreate, 1, 1, ACT_DIRCREATE),
-	BIFA(DirDelete, 1, 2, ACT_DIRDELETE),
-	BIFn(DirExist, 1, 1, BIF_FileExist),
-	BIFA(DirMove, 2, 3, ACT_DIRMOVE),
-	BIF1(DirSelect, 0, 3),
 #ifdef ENABLE_DLLCALL
 	BIFn(DllCall, 1, NA, BIF_DllCall),
 #endif
@@ -117,26 +111,8 @@ FuncEntry g_BIF[] =
 	BIFA(Exit, 0, 1, ACT_EXIT),
 	BIFA(ExitApp, 0, 1, ACT_EXITAPP),
 	BIF1(Exp, 1, 1),
-	BIF1(FileAppend, 1, 3),
-	BIFA(FileCopy, 2, 3, ACT_FILECOPY),
-	BIFA(FileCreateShortcut, 2, 9, ACT_FILECREATESHORTCUT),
-	BIFA(FileDelete, 1, 1, ACT_FILEDELETE),
 	BIFn(FileEncoding, 1, 1, BIF_SetBIV),
-	BIFn(FileExist, 1, 1, BIF_FileExist),
-	BIF1(FileGetAttrib, 0, 1),
-	BIF1(FileGetShortcut, 1, 8, {2, 3, 4, 5, 6, 7, 8}),
-	BIF1(FileGetSize, 0, 2),
-	BIF1(FileGetTime, 0, 2),
-	BIF1(FileGetVersion, 0, 1),
-	BIFA(FileInstall, 2, 3, ACT_FILEINSTALL),
-	BIFA(FileMove, 2, 3, ACT_FILEMOVE),
 	BIF1(FileOpen, 2, 3),
-	BIF1(FileRead, 1, 2),
-	BIFA(FileRecycle, 1, 1, ACT_FILERECYCLE),
-	BIFA(FileRecycleEmpty, 0, 1, ACT_FILERECYCLEEMPTY),
-	BIF1(FileSelect, 0, 4),
-	BIFA(FileSetAttrib, 1, 3, ACT_FILESETATTRIB),
-	BIFA(FileSetTime, 0, 4, ACT_FILESETTIME),
 	BIFn(Floor, 1, 1, BIF_FloorCeil),
 	BIF1(Format, 1, NA),
 	BIF1(FormatTime, 0, 2),
@@ -11844,62 +11820,10 @@ ResultType Line::Perform()
 	case ACT_SOUNDPLAY:
 		return SoundPlay(ARG1, *ARG2 && !_tcsicmp(ARG2, _T("Wait")) || !_tcsicmp(ARG2, _T("1")));
 
-	case ACT_FILEDELETE:
-		return FileDelete(ARG1);
-
-	case ACT_FILERECYCLE:
-		return FileRecycle(ARG1);
-
-	case ACT_FILERECYCLEEMPTY:
-		return FileRecycleEmpty(ARG1);
-
-	case ACT_FILEINSTALL:
-		return FileInstall(THREE_ARGS);
-
-	case ACT_FILECOPY:
-	case ACT_FILEMOVE:
-		return FileCopyOrMove(ARG1, ARG2, ArgToInt(3) == 1);
-	case ACT_DIRCOPY:
-		return ThrowIfTrue(!Util_CopyDir(ARG1, ARG2, ArgToInt(3) == 1, false));
-	case ACT_DIRMOVE:
-		if (ctoupper(*ARG3) == 'R')
-		{
-			// Perform a simple rename instead, which prevents the operation from being only partially
-			// complete if the source directory is in use (due to being a working dir for a currently
-			// running process, or containing a file that is being written to).  In other words,
-			// the operation will be "all or none":
-			return ThrowIfTrue(!MoveFile(ARG1, ARG2));
-		}
-		// Otherwise:
-		return ThrowIfTrue(!Util_CopyDir(ARG1, ARG2, ArgToInt(3), true));
-
-	case ACT_DIRCREATE:
-		return SetLastErrorMaybeThrow(!FileCreateDir(ARG1));
-	case ACT_DIRDELETE:
-		return ThrowIfTrue(!*ARG1 // Consider an attempt to create or remove a blank dir to be an error.
-			|| !Util_RemoveDir(ARG1, ResultToBOOL(ARG2))); // Relies on short-circuit evaluation.
-
-	case ACT_FILESETATTRIB:
-	{
-		FileLoopModeType mode = ConvertLoopMode(ARG3);
-		// The specified ARG, if non-blank, takes precedence over the file-loop's file (if any):
-		#define USE_FILE_LOOP_FILE_IF_ARG_BLANK(arg) \
-			(*arg ? arg : (g.mLoopFile ? g.mLoopFile->file_path : _T("")))
-		return FileSetAttrib(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), (mode & ~FILE_LOOP_RECURSE), (mode & FILE_LOOP_RECURSE));
-	}
-	case ACT_FILESETTIME:
-	{
-		FileLoopModeType mode = ConvertLoopMode(ARG4);
-		return FileSetTime(ARG1, USE_FILE_LOOP_FILE_IF_ARG_BLANK(ARG2), *ARG3, (mode & ~FILE_LOOP_RECURSE), (mode & FILE_LOOP_RECURSE));
-	}
-
 	case ACT_SETWORKINGDIR:
 		if (!SetWorkingDir(ARG1))
 			return g_script.Win32Error();
 		return OK;
-
-	case ACT_FILECREATESHORTCUT:
-		return FileCreateShortcut(NINE_ARGS);
 
 	case ACT_KEYHISTORY:
 		if (*ARG1)

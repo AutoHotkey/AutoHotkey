@@ -20,6 +20,7 @@ GNU General Public License for more details.
 #include "window.h" // for IF_USE_FOREGROUND_WINDOW
 #include "application.h" // for MsgSleep()
 #include "script_func_impl.h"
+#include "abi.h"
 
 
 
@@ -1495,7 +1496,8 @@ LPTSTR GetWorkingDir()
 // GUI-related: FileSelect //
 /////////////////////////////
 
-BIF_DECL(BIF_FileSelect)
+bif_impl FResult FileSelect(LPCTSTR aOptions, LPCTSTR aWorkingDir, LPCTSTR aGreeting, LPCTSTR aFilter
+	, ResultToken &aResultToken)
 // Since other script threads can interrupt this command while it's running, it's important that
 // this command not refer to sArgDeref[] and sArgVar[] anytime after an interruption becomes possible.
 // This is because an interrupting thread usually changes the values to something inappropriate for this thread.
@@ -1503,12 +1505,8 @@ BIF_DECL(BIF_FileSelect)
 	if (g_nFileDialogs >= MAX_FILEDIALOGS)
 	{
 		// Have a maximum to help prevent runaway hotkeys due to key-repeat feature, etc.
-		_f_throw(_T("The maximum number of File Dialogs has been reached."));
+		return FError(_T("The maximum number of File Dialogs has been reached."));
 	}
-	_f_param_string_opt(aOptions, 0);
-	_f_param_string_opt(aWorkingDir, 1);
-	_f_param_string_opt(aGreeting, 2);
-	_f_param_string_opt(aFilter, 3);
 	
 	LPCTSTR default_file_name = _T("");
 
@@ -1570,7 +1568,7 @@ BIF_DECL(BIF_FileSelect)
 	*pattern = '\0'; // Set default.
 	if (*aFilter)
 	{
-		LPTSTR pattern_start = _tcschr(aFilter, '(');
+		auto pattern_start = _tcschr(aFilter, '(');
 		if (pattern_start)
 		{
 			// Make pattern a separate string because we want to remove any spaces from it.
@@ -1634,7 +1632,7 @@ BIF_DECL(BIF_FileSelect)
 		++aOptions;
 		flags |= FOS_PICKFOLDERS;
 		if (*aFilter)
-			_f_throw_value(ERR_PARAM4_MUST_BE_BLANK);
+			return FValueError(ERR_PARAM4_MUST_BE_BLANK);
 		filter_count = 0;
 		break;
 	case 'M':  // Multi-select.
@@ -1679,7 +1677,7 @@ BIF_DECL(BIF_FileSelect)
 	HRESULT hr = CoCreateInstance(always_use_save_dialog ? CLSID_FileSaveDialog : CLSID_FileOpenDialog,
 		NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd));
 	if (FAILED(hr))
-		_f_throw_win32(hr);
+		return hr;
 
 	pfd->SetOptions(flags);
 	pfd->SetTitle(greeting);
@@ -1735,8 +1733,10 @@ BIF_DECL(BIF_FileSelect)
 			pfod->Release();
 		}
 		pfd->Release();
-		_f_return(files);
+		aResultToken.Return(files);
+		return OK;
 	}
+	
 	aResultToken.SetValue(_T(""), 0); // Set default.
 	IShellItem *psi;
 	if (SUCCEEDED(result) && SUCCEEDED(pfd->GetResult(&psi)))
@@ -1750,9 +1750,8 @@ BIF_DECL(BIF_FileSelect)
 		psi->Release();
 	}
 	//else: User pressed CANCEL vs. OK to dismiss the dialog or there was a problem displaying it.
-		// Currently assuming the user canceled, otherwise this would tell us whether an error
-		// occurred vs. the user canceling: if (result != HRESULT_FROM_WIN32(ERROR_CANCELLED))
 	pfd->Release();
+	return result == HRESULT_FROM_WIN32(ERROR_CANCELLED) ? OK : result;
 }
 
 

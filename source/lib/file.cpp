@@ -20,13 +20,37 @@ GNU General Public License for more details.
 #include "application.h"
 #include "TextIO.h"
 #include "script_func_impl.h"
+#include "abi.h"
 
 
+
+typedef BOOL (* FilePatternCallback)(LPCTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
+
+struct FilePatternStruct
+{
+	TCHAR path[T_MAX_PATH]; // Directory and naked filename or pattern.
+	TCHAR pattern[MAX_PATH]; // Naked filename or pattern.
+	size_t dir_length, pattern_length;
+	FilePatternCallback aCallback;
+	void *aCallbackData;
+	FileLoopModeType aOperateOnFolders;
+	bool aDoRecurse;
+	int failure_count;
+};
+
+static void FilePatternApply(FilePatternStruct &fps);
+
+static FResult FilePatternApply(LPCTSTR aFilePattern, FileLoopModeType aOperateOnFolders
+	, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData);
+
+
+
+static bool FileCreateDirRecursive(LPTSTR aDirSpec);
 
 // As of 2019-09-29, noinline reduces code size by over 20KB on VC++ 2019.
 // Prior to merging Util_CreateDir with this, it wasn't inlined.
 DECLSPEC_NOINLINE
-bool Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
+bool FileCreateDir(LPCTSTR aDirSpec)
 {
 	if (!aDirSpec || !*aDirSpec)
 	{
@@ -34,6 +58,22 @@ bool Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 		return false;
 	}
 
+	// Allocate a modifiable buffer to be used by recursive calls (supports long paths).
+	//auto buf = (LPTSTR)_alloca((last_backslash - aDirSpec + 1) * sizeof(TCHAR));
+	TCHAR buf[T_MAX_PATH];
+	auto len = _tcslen(aDirSpec);
+	if (len >= T_MAX_PATH)
+	{
+		SetLastError(ERROR_BUFFER_OVERFLOW);
+		return false;
+	}
+	tmemcpy(buf, aDirSpec, len + 1);
+
+	return FileCreateDirRecursive(buf);
+}
+
+static bool FileCreateDirRecursive(LPTSTR aDirSpec)
+{
 	DWORD attr = GetFileAttributes(aDirSpec);
 	if (attr != 0xFFFFFFFF)  // aDirSpec already exists.
 	{
@@ -45,31 +85,13 @@ bool Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 	// to create this directory:
 	LPTSTR last_backslash = _tcsrchr(aDirSpec, '\\');
 	if (last_backslash > aDirSpec // v1.0.48.04: Changed "last_backslash" to "last_backslash > aDirSpec" so that an aDirSpec with a leading \ (but no other backslashes), such as \dir, is supported.
-		&& last_backslash[-1] != ':') // v1.1.31.00: Don't attempt FileCreateDir("C:") since that's equivalent to either "C:\" or the working directory (which already exists), or FileCreateDir("\\?\C:") since it always fails.
+		&& last_backslash[-1] != ':' // v1.1.31.00: Don't attempt FileCreateDir("C:") since that's equivalent to either "C:\" or the working directory (which already exists), or FileCreateDir("\\?\C:") since it always fails.
+		&& last_backslash[1]) // Skip the recursive call if it's just a trailing backslash.
 	{
-		LPTSTR parent_dir;
-		if (aCanModifyDirSpec)
-		{
-			parent_dir = aDirSpec; // Caller provided a modifiable aDirSpec.
-			*last_backslash = '\0'; // Temporarily terminate for parent directory.
-		}
-		else
-		{
-			// v1.1.31.00: Allocate a modifiable buffer to be used by all calls (supports long paths).
-			parent_dir = (LPTSTR)_alloca((last_backslash - aDirSpec + 1) * sizeof(TCHAR));
-			tcslcpy(parent_dir, aDirSpec, last_backslash - aDirSpec + 1); // Omits the last backslash.
-		}
-		bool exists = FileCreateDir(parent_dir, parent_dir); // Recursively create all needed ancestor directories.
-		if (aCanModifyDirSpec)
-			*last_backslash = '\\'; // Undo temporary termination.
-
-		// v1.0.44: Fixed ErrorLevel being set to 1 when the specified directory ends in a backslash.  In such cases,
-		// two calls were made to CreateDirectory for the same folder: the first without the backslash and then with
-		// it.  Since the directory already existed on the second call, ErrorLevel was wrongly set to 1 even though
-		// everything succeeded.  So now, when recursion finishes creating all the ancestors of this directory
-		// our own layer here does not call CreateDirectory() when there's a trailing backslash because a previous
-		// layer already did:
-		if (!last_backslash[1] || !exists)
+		*last_backslash = '\0'; // Temporarily terminate for parent directory.
+		auto exists = FileCreateDirRecursive(aDirSpec); // Recursively create all needed ancestor directories.
+		*last_backslash = '\\'; // Undo temporary termination.
+		if (!exists)
 			return exists;
 	}
 
@@ -80,9 +102,10 @@ bool Line::FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec)
 
 
 
-ResultType ConvertFileOptions(ResultToken &aResultToken, LPTSTR aOptions, UINT &codepage, bool &translate_crlf_to_lf, unsigned __int64 *pmax_bytes_to_load)
+static FResult ConvertFileOptions(LPCTSTR aOptions, UINT &codepage, bool &translate_crlf_to_lf, unsigned __int64 *pmax_bytes_to_load)
 {
-	for (LPTSTR next, cp = aOptions; cp && *(cp = omit_leading_whitespace(cp)); cp = next)
+	if (aOptions)
+	for (LPCTSTR next, cp = aOptions; cp && *(cp = omit_leading_whitespace(cp)); cp = next)
 	{
 		if (*cp == '\n')
 		{
@@ -123,7 +146,7 @@ ResultType ConvertFileOptions(ResultToken &aResultToken, LPTSTR aOptions, UINT &
 			{
 				codepage = Line::ConvertFileEncoding(cp);
 				if (codepage == -1 || cisdigit(*cp)) // Require "cp" prefix in FileRead/FileAppend options.
-					return aResultToken.ValueError(ERR_INVALID_OPTION, cp);
+					return FValueError(ERR_INVALID_OPTION, cp);
 			}
 			break;
 		} // switch()
@@ -131,10 +154,13 @@ ResultType ConvertFileOptions(ResultToken &aResultToken, LPTSTR aOptions, UINT &
 	return OK;
 }
 
-BIF_DECL(BIF_FileRead)
+
+
+bif_impl FResult FileRead(LPCTSTR aFilespec, LPCTSTR aOptions, ResultToken &aResultToken)
 {
-	_f_param_string(aFilespec, 0);
-	_f_param_string_opt(aOptions, 1);
+	g->LastError = 0; // Set default for successful early return or non-Win32 errors.
+	if (!*aFilespec)
+		return FR_E_ARG(0); // Seems more helpful than throwing OSError(3).
 
 	const DWORD DWORD_MAX = ~0;
 
@@ -143,10 +169,9 @@ BIF_DECL(BIF_FileRead)
 	unsigned __int64 max_bytes_to_load = ULLONG_MAX; // By default, fail if the file is too large.  See comments near bytes_to_read below.
 	UINT codepage = g->Encoding;
 
-	if (!ConvertFileOptions(aResultToken, aOptions, codepage, translate_crlf_to_lf, &max_bytes_to_load))
-		return; // It already displayed the error.
-
-	_f_set_retval_p(_T(""), 0); // Set default.
+	auto fr = ConvertFileOptions(aOptions, codepage, translate_crlf_to_lf, &max_bytes_to_load);
+	if (fr != OK)
+		return fr; // It already displayed the error.
 
 	// It seems more flexible to allow other processes to read and write the file while we're reading it.
 	// For example, this allows the file to be appended to during the read operation, which could be
@@ -157,15 +182,16 @@ BIF_DECL(BIF_FileRead)
 		, FILE_FLAG_SEQUENTIAL_SCAN, NULL); // MSDN says that FILE_FLAG_SEQUENTIAL_SCAN will often improve performance
 	if (hfile == INVALID_HANDLE_VALUE)      // in cases like these (and it seems best even if max_bytes_to_load was specified).
 	{
-		aResultToken.SetLastErrorMaybeThrow(true);
-		return;
+		g->LastError = GetLastError();
+		return FR_E_WIN32(g->LastError);
 	}
 
 	unsigned __int64 bytes_to_read = GetFileSize64(hfile);
 	if (bytes_to_read == ULLONG_MAX) // GetFileSize64() failed.
 	{
-		aResultToken.SetLastErrorCloseAndMaybeThrow(hfile, true);
-		return;
+		g->LastError = GetLastError();
+		CloseHandle(hfile);
+		return FR_E_WIN32(g->LastError);
 	}
 	// In addition to imposing the limit set by the *M option, the following check prevents an error
 	// caused by 64 to 32-bit truncation -- that is, a file size of 0x100000001 would be truncated to
@@ -189,25 +215,25 @@ BIF_DECL(BIF_FileRead)
 #endif
 	{
 		CloseHandle(hfile);
-		_f_throw_oom; // Using this instead of "File too large." to reduce code size, since this condition is very rare (and malloc succeeding would be even rarer).
+		return FR_E_OUTOFMEM; // Using this instead of "File too large." to reduce code size, since this condition is very rare (and malloc succeeding would be even rarer).
 	}
 
-	if (!bytes_to_read && codepage != -1) // In RAW mode, always return a zero-byte Buffer.
+	if (!bytes_to_read && codepage != -1) // In RAW mode, return a Buffer even if the file has zero bytes.
 	{
-		aResultToken.SetLastErrorCloseAndMaybeThrow(hfile, false, 0); // Indicate success (a zero-length file results in an empty string).
-		return;
+		g->LastError = GetLastError();
+		CloseHandle(hfile);
+		return OK; // Indicate success (a zero-length file results in an empty string).
 	}
 
 	LPBYTE output_buf = (LPBYTE)malloc(size_t(bytes_to_read + (bytes_to_read & 1) + sizeof(wchar_t)));
 	if (!output_buf)
 	{
 		CloseHandle(hfile);
-		_f_throw_oom;
+		return FR_E_OUTOFMEM;
 	}
 
 	DWORD bytes_actually_read;
 	BOOL result = ReadFile(hfile, output_buf, (DWORD)bytes_to_read, &bytes_actually_read, NULL);
-	g->LastError = GetLastError();
 	CloseHandle(hfile);
 
 	// Upon result==success, bytes_actually_read is not checked against bytes_to_read because it
@@ -269,7 +295,7 @@ BIF_DECL(BIF_FileRead)
 						if (!TokenSetResult(aResultToken, NULL, wlen))
 						{
 							free(output_buf);
-							return;
+							return aResultToken.Exited() ? FR_FAIL : FR_ABORTED;
 						}
 						wlen = MultiByteToWideChar(codepage, 0, text, length, aResultToken.marker, wlen);
 						aResultToken.symbol = SYM_STRING;
@@ -304,44 +330,50 @@ BIF_DECL(BIF_FileRead)
 		free(output_buf);
 	}
 
-	aResultToken.SetLastErrorMaybeThrow(!result);
+	if (!result)
+	{
+		g->LastError = GetLastError();
+		return FR_E_WIN32(g->LastError);
+	}
+	return OK;
 }
 
 
 
-BIF_DECL(BIF_FileAppend)
+bif_impl FResult FileAppend(ExprTokenType &aValue, LPCTSTR aFilespec, LPCTSTR aOptions)
 {
-	size_t aBuf_length;
-	_f_param_string(aBuf, 0, &aBuf_length);
-	_f_param_string_opt(aFilespec, 1);
-	_f_param_string_opt(aOptions, 2);
+	g->LastError = 0; // Set default for successful early return or non-Win32 errors.
 
-	IObject *aBuf_obj = ParamIndexToObject(0); // Allow a Buffer-like object.
+	size_t aBuf_length;
+	TCHAR aBuf_buf[MAX_NUMBER_SIZE];
+	LPCTSTR aBuf = TokenToString(aValue, aBuf_buf, &aBuf_length);
+	
+	IObject *aBuf_obj = TokenToObject(aValue); // Allow a Buffer-like object.
 	if (aBuf_obj)
 	{
 		size_t ptr;
-		GetBufferObjectPtr(aResultToken, aBuf_obj, ptr, aBuf_length);
-		if (aResultToken.Exited())
-			return;
+		FuncResult rt;
+		GetBufferObjectPtr(rt, aBuf_obj, ptr, aBuf_length);
+		ASSERT(rt.symbol == SYM_INTEGER && !rt.mem_to_free);
+		if (rt.Exited())
+			return FR_FAIL;
 		aBuf = (LPTSTR)ptr;
 	}
 	else
 		aBuf_length *= sizeof(TCHAR); // Convert to byte count.
 
-	_f_set_retval_p(_T(""), 0); // For all non-throw cases.
-
 	// The below is avoided because want to allow "nothing" to be written to a file in case the
 	// user is doing this to reset it's timestamp (or create an empty file).
 	//if (!aBuf || !*aBuf)
-	//	_f_return_retval;
+	//	return OK;
 
 	// Use the read-file loop's current item if filename was explicitly left blank (i.e. not just
 	// a reference to a variable that's blank):
-	LoopReadFileStruct *aCurrentReadFile = (aParamCount < 2) ? g->mLoopReadFile : NULL;
+	LoopReadFileStruct *aCurrentReadFile = aFilespec ? NULL : g->mLoopReadFile;
 	if (aCurrentReadFile)
 		aFilespec = aCurrentReadFile->mWriteFileName;
-	if (!*aFilespec) // Nothing to write to.
-		_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
+	if (!aFilespec || !*aFilespec) // Nothing to write to.
+		return FR_E_ARG(1);
 
 	TextStream *ts = aCurrentReadFile ? aCurrentReadFile->mWriteFile : NULL;
 	bool file_was_already_open = ts;
@@ -351,8 +383,7 @@ BIF_DECL(BIF_FileAppend)
 	{
 		// StdOut has been redirected to the debugger, and this "FileAppend" call has been
 		// fully handled by the call above, so just return.
-		g->LastError = 0;
-		_f_return_retval;
+		return OK;
 	}
 #endif
 
@@ -368,8 +399,9 @@ BIF_DECL(BIF_FileAppend)
 	{
 		codepage = aBuf_obj ? -1 : g->Encoding; // Never default to BOM if a Buffer object was passed.
 		bool translate_crlf_to_lf = false;
-		if (!ConvertFileOptions(aResultToken, aOptions, codepage, translate_crlf_to_lf, NULL))
-			return;
+		auto fr = ConvertFileOptions(aOptions, codepage, translate_crlf_to_lf, nullptr);
+		if (fr != OK)
+			return fr;
 
 		DWORD flags = TextStream::APPEND | (translate_crlf_to_lf ? TextStream::EOL_CRLF : 0);
 		
@@ -388,9 +420,9 @@ BIF_DECL(BIF_FileAppend)
 		ts = new TextFile; // ts was already verified NULL via !file_was_already_open.
 		if ( !ts->Open(aFilespec, flags, codepage) )
 		{
-			aResultToken.SetLastErrorMaybeThrow(true);
+			g->LastError = GetLastError();
 			delete ts; // Must be deleted explicitly!
-			return;
+			return FR_E_WIN32(g->LastError);
 		}
 		if (aCurrentReadFile)
 			aCurrentReadFile->mWriteFile = ts;
@@ -406,33 +438,38 @@ BIF_DECL(BIF_FileAppend)
 			result = ts->Write((LPCVOID)aBuf, (DWORD)aBuf_length);
 		else
 			result = ts->Write(aBuf, DWORD(aBuf_length / sizeof(TCHAR)));
+		g->LastError = GetLastError();
 	}
 	//else: aBuf is empty; we've already succeeded in creating the file and have nothing further to do.
-	aResultToken.SetLastErrorMaybeThrow(result == 0);
 
 	if (!aCurrentReadFile)
 		delete ts;
 	// else it's the caller's responsibility, or it's caller's, to close it.
+	
+	return result == 0 ? FR_E_WIN32(g->LastError) : OK;
 }
 
 
 
-BOOL FileDeleteCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData)
+BOOL FileDeleteCallback(LPCTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData)
 {
 	return DeleteFile(aFilename);
 }
 
-ResultType Line::FileDelete(LPTSTR aFilePattern)
+bif_impl FResult FileDelete(LPCTSTR aFilePattern)
 {
 	if (!*aFilePattern)
-		return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK);
+		return FR_E_ARG(0);
 
 	// The no-wildcard case could be handled via FilePatternApply(), but handling it this
 	// way ensures deleting a non-existent path without wildcards is considered a failure:
 	if (!StrChrAny(aFilePattern, _T("?*"))) // No wildcards; just a plain path/filename.
 	{
-		SetLastError(0); // For sanity: DeleteFile appears to set it only on failure.
-		return SetLastErrorMaybeThrow(!DeleteFile(aFilePattern));
+		if (!DeleteFile(aFilePattern))
+		{
+			g->LastError = GetLastError();
+			return FR_E_WIN32(g->LastError);
+		}
 	}
 
 	// Otherwise aFilePattern contains wildcards, so we'll search for all matches and delete them.
@@ -441,20 +478,7 @@ ResultType Line::FileDelete(LPTSTR aFilePattern)
 
 
 
-ResultType Line::FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag)
-{
-	bool success;
-	bool allow_overwrite = (ATOI(aFlag) == 1);
-#ifndef AUTOHOTKEYSC
-	if (g_script.mKind != Script::ScriptKindResource)
-		success = FileInstallCopy(aSource, aDest, allow_overwrite);
-	else
-#endif
-		success = FileInstallExtract(aSource, aDest, allow_overwrite);
-	return ThrowIfTrue(!success);
-}
-
-bool Line::FileInstallExtract(LPTSTR aSource, LPTSTR aDest, bool aOverwrite)
+static bool FileInstallExtract(LPCTSTR aSource, LPCTSTR aDest, bool aOverwrite)
 {
 	// Open the file first since it's the most likely to fail:
 	HANDLE hfile = CreateFile(aDest, GENERIC_WRITE, 0, NULL, aOverwrite ? CREATE_ALWAYS : CREATE_NEW, 0, NULL);
@@ -491,7 +515,7 @@ bool Line::FileInstallExtract(LPTSTR aSource, LPTSTR aDest, bool aOverwrite)
 }
 
 #ifndef AUTOHOTKEYSC
-bool Line::FileInstallCopy(LPTSTR aSource, LPTSTR aDest, bool aOverwrite)
+static bool FileInstallCopy(LPCTSTR aSource, LPCTSTR aDest, bool aOverwrite)
 {
 	// v1.0.35.11: Must search in A_ScriptDir by default because that's where ahk2exe will search by default.
 	// The old behavior was to search in A_WorkingDir, which seems pointless because ahk2exe would never
@@ -513,52 +537,83 @@ bool Line::FileInstallCopy(LPTSTR aSource, LPTSTR aDest, bool aOverwrite)
 }
 #endif
 
-
-
-ResultType Line::FileCopyOrMove(LPTSTR aSource, LPTSTR aDest, bool aOverwrite)
+bif_impl FResult FileInstall(LPCTSTR aSource, LPCTSTR aDest, int *aFlag)
 {
-	if (!*aDest) // Fix for v1.1.34.03: Previous behaviour was a Critical Error.
-		return LineError(ERR_PARAM2_MUST_NOT_BE_BLANK);
-	int error_count = 0;
-	if (*aSource) // For backward-compatibility, empty Source is treated as "no files found".
-		error_count = Util_CopyFile(aSource, aDest, aOverwrite, mActionType == ACT_FILEMOVE, g->LastError);
-	return ThrowIntIfNonzero(error_count);
+	bool success;
+	bool allow_overwrite = (aFlag && *aFlag == 1);
+#ifndef AUTOHOTKEYSC
+	if (g_script.mKind != Script::ScriptKindResource)
+		success = FileInstallCopy(aSource, aDest, allow_overwrite);
+	else
+#endif
+		success = FileInstallExtract(aSource, aDest, allow_overwrite);
+	return success ? OK : FR_E_FAILED;
 }
 
 
 
-BIF_DECL(BIF_FileGetAttrib)
+static FResult FileCopyOrMove(LPCTSTR aSource, LPCTSTR aDest, int *aFlag, bool aMove)
 {
-	_f_param_string_opt_def(aFilespec, 0, (g->mLoopFile ? g->mLoopFile->cFileName : _T("")));
+	if (!*aSource) // v2: Empty Source is likely to be a mistake.
+		return FR_E_ARG(0);
+	if (!*aDest) // Fix for v1.1.34.03: Previous behaviour was a Critical Error.
+		return FR_E_ARG(1);
+	int error_count = Line::Util_CopyFile(aSource, aDest, aFlag && *aFlag == 1, aMove
+		, g->LastError);
+	return error_count ? FR_THROW_INT(error_count) : OK;
+}
 
-	if (!*aFilespec)
-		_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
+bif_impl FResult FileCopy(LPCTSTR aSource, LPCTSTR aDest, int *aFlag)
+{
+	return FileCopyOrMove(aSource, aDest, aFlag, false);
+}
 
-	DWORD attr = GetFileAttributes(aFilespec);
+bif_impl FResult FileMove(LPCTSTR aSource, LPCTSTR aDest, int *aFlag)
+{
+	return FileCopyOrMove(aSource, aDest, aFlag, true);
+}
+
+
+
+bif_impl FResult FileGetAttrib(LPCTSTR aPath, StrRet &aRetVal)
+{
+	g->LastError = 0; // Set default for successful return or non-Win32 errors.
+
+	if (!aPath && g->mLoopFile)
+		aPath = g->mLoopFile->cFileName;
+	if (!aPath || !*aPath)
+		return FR_E_ARG(0);
+
+	DWORD attr = GetFileAttributes(aPath);
 	if (attr == 0xFFFFFFFF)  // Failure, probably because file doesn't exist.
 	{
-		aResultToken.SetLastErrorMaybeThrow(true);
-		return;
+		g->LastError = GetLastError();
+		return FR_E_WIN32(g->LastError);
 	}
 
-	g->LastError = 0;
-	_f_return_p(FileAttribToStr(_f_retval_buf, attr));
+	aRetVal.SetStatic(FileAttribToStr(aRetVal.CallerBuf(), attr));
+	return OK;
 }
 
 
 
-BOOL FileSetAttribCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
+BOOL FileSetAttribCallback(LPCTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
 struct FileSetAttribData
 {
 	DWORD and_mask, xor_mask;
 };
 
-ResultType Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern
-	, FileLoopModeType aOperateOnFolders, bool aDoRecurse)
-// Returns the number of files and folders that could not be changed due to an error.
+bif_impl FResult FileSetAttrib(LPCTSTR aAttributes, LPCTSTR aFilePattern, LPCTSTR aMode)
 {
-	if (!*aFilePattern)
-		return LineError(ERR_PARAM2_INVALID, FAIL_OR_OK);
+	if (!aFilePattern && g->mLoopFile)
+		aFilePattern = g->mLoopFile->file_path; // Default to the current file-loop's file.
+	if (!aFilePattern || !*aFilePattern)
+		return FR_E_ARG(1);
+	FileLoopModeType mode = Line::ConvertLoopMode(aMode);
+	if (mode == FILE_LOOP_INVALID)
+		return FR_E_ARG(2);
+	FileLoopModeType aOperateOnFolders = mode & ~FILE_LOOP_RECURSE;
+	bool aDoRecurse = mode & FILE_LOOP_RECURSE;
 
 	// Convert the attribute string to three bit-masks: add, remove and toggle.
 	FileSetAttribData attrib;
@@ -566,7 +621,7 @@ ResultType Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern
 	int op = 0;
 	attrib.and_mask = 0xFFFFFFFF; // Set default: keep all bits.
 	attrib.xor_mask = 0; // Set default: affect none.
-	for (LPTSTR cp = aAttributes; *cp; ++cp)
+	for (auto cp = aAttributes; *cp; ++cp)
 	{
 		switch (ctoupper(*cp))
 		{
@@ -578,7 +633,7 @@ ResultType Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern
 		case '\t':
 			continue;
 		default:
-			return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, cp);
+			return FR_E_ARG(0);
 		// Note that D (directory) and C (compressed) are currently not supported:
 		case 'R': mask = FILE_ATTRIBUTE_READONLY; break;
 		case 'A': mask = FILE_ATTRIBUTE_ARCHIVE; break;
@@ -609,11 +664,10 @@ ResultType Line::FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern
 			break;
 		}
 	}
-	FilePatternApply(aFilePattern, aOperateOnFolders, aDoRecurse, FileSetAttribCallback, &attrib);
-	return OK;
+	return FilePatternApply(aFilePattern, aOperateOnFolders, aDoRecurse, FileSetAttribCallback, &attrib);
 }
 
-BOOL FileSetAttribCallback(LPTSTR file_path, WIN32_FIND_DATA &current_file, void *aCallbackData)
+BOOL FileSetAttribCallback(LPCTSTR file_path, WIN32_FIND_DATA &current_file, void *aCallbackData)
 {
 	FileSetAttribData &attrib = *(FileSetAttribData *)aCallbackData;
 	DWORD file_attrib = ((current_file.dwFileAttributes & attrib.and_mask) ^ attrib.xor_mask);
@@ -627,12 +681,14 @@ BOOL FileSetAttribCallback(LPTSTR file_path, WIN32_FIND_DATA &current_file, void
 
 
 
-ResultType Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
+static FResult FilePatternApply(LPCTSTR aFilePattern, FileLoopModeType aOperateOnFolders
 	, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData)
 {
 	if (!*aFilePattern)
-		// Caller should handle this case before calling us if an exception is to be thrown.
-		return SetLastErrorMaybeThrow(true, ERROR_INVALID_PARAMETER);
+	{
+		g->LastError = ERROR_INVALID_PARAMETER;
+		return FR_E_WIN32(g->LastError);
+	}
 
 	if (aOperateOnFolders == FILE_LOOP_INVALID) // In case runtime dereference of a var was an invalid value.
 		aOperateOnFolders = FILE_LOOP_FILES_ONLY;  // Set default.
@@ -640,7 +696,7 @@ ResultType Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperate
 
 	FilePatternStruct fps;
 
-	LPTSTR last_backslash = _tcsrchr(aFilePattern, '\\');
+	auto last_backslash = _tcsrchr(aFilePattern, '\\');
 	if (last_backslash)
 		fps.dir_length = last_backslash - aFilePattern + 1; // Include the slash.
 	else // Use current working directory, e.g. if user specified only *.*
@@ -651,7 +707,10 @@ ResultType Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperate
 	// than 259, even if the pattern would match files whose names are short enough to be legal.
 	if (fps.dir_length + fps.pattern_length >= _countof(fps.path)
 		|| fps.pattern_length >= _countof(fps.pattern))
-		return SetLastErrorMaybeThrow(true, ERROR_BUFFER_OVERFLOW);
+	{
+		g->LastError = ERROR_BUFFER_OVERFLOW;
+		return FR_E_WIN32(g->LastError);
+	}
 
 	// Make copies in case of overwrite of deref buf during LONG_OPERATION/MsgSleep,
 	// and to allow modification:
@@ -671,12 +730,13 @@ ResultType Line::FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperate
 	fps.failure_count = 0;
 
 	FilePatternApply(fps);
-	return ThrowIntIfNonzero(fps.failure_count); // i.e. indicate success if there were no failures.
+
+	return fps.failure_count ? FR_THROW_INT(fps.failure_count) : OK;
 }
 
 
 
-void Line::FilePatternApply(FilePatternStruct &fps)
+static void FilePatternApply(FilePatternStruct &fps)
 {
 	size_t dir_length = fps.dir_length; // Length of this directory (saved before recursion).
 	LPTSTR append_pos = fps.path + dir_length; // This is where the changing part gets appended.
@@ -771,85 +831,86 @@ void Line::FilePatternApply(FilePatternStruct &fps)
 
 
 
-BIF_DECL(BIF_FileGetTime)
+bif_impl FResult FileGetTime(LPCTSTR aPath, LPCTSTR aWhichTime, StrRet &aRetVal)
 {
-	_f_param_string_opt_def(aFilespec, 0, (g->mLoopFile ? g->mLoopFile->cFileName : _T("")));
-	_f_param_string_opt(aWhichTime, 1);
+	g->LastError = 0; // Set default for successful return or non-Win32 errors.
 
-	if (!*aFilespec)
-		_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK);
+	if (!aPath && g->mLoopFile)
+		aPath = g->mLoopFile->cFileName;
+	if (!aPath || !*aPath)
+		return FR_E_ARG(0);
 
-	// Don't use CreateFile() & FileGetSize() size they will fail to work on a file that's in use.
-	// Research indicates that this method has no disadvantages compared to the other method.
+	FILETIME *which_time;
 	WIN32_FIND_DATA found_file;
-	HANDLE file_search = FindFirstFile(aFilespec, &found_file);
+	switch (aWhichTime && *aWhichTime ? ctoupper(*aWhichTime) : 'M')
+	{
+	case 'C': which_time = &found_file.ftCreationTime; break;
+	case 'A': which_time = &found_file.ftLastAccessTime; break;
+	case 'M': which_time = &found_file.ftLastWriteTime; break;
+	default: return FR_E_ARG(1);
+	}
+
+	// Don't use CreateFile() & GetFileTime() since they will fail to work on a file that's in use.
+	// Research indicates that this method has no disadvantages compared to the other method.
+	HANDLE file_search = FindFirstFile(aPath, &found_file);
 	if (file_search == INVALID_HANDLE_VALUE)
 	{
-		aResultToken.SetLastErrorMaybeThrow(true);
-		return;
+		g->LastError = GetLastError();
+		return FR_E_WIN32(g->LastError);
 	}
 	FindClose(file_search);
 
 	FILETIME local_file_time;
-	switch (ctoupper(*aWhichTime))
-	{
-	case 'C': // File's creation time.
-		FileTimeToLocalFileTime(&found_file.ftCreationTime, &local_file_time);
-		break;
-	case 'A': // File's last access time.
-		FileTimeToLocalFileTime(&found_file.ftLastAccessTime, &local_file_time);
-		break;
-	default:  // 'M', unspecified, or some other value.  Use the file's modification time.
-		FileTimeToLocalFileTime(&found_file.ftLastWriteTime, &local_file_time);
-	}
-
-	g->LastError = 0;
-	_f_return_p(FileTimeToYYYYMMDD(_f_retval_buf, local_file_time));
+	FileTimeToLocalFileTime(which_time, &local_file_time);
+	aRetVal.SetStatic(FileTimeToYYYYMMDD(aRetVal.CallerBuf(), local_file_time));
+	return OK;
 }
 
 
 
-BOOL FileSetTimeCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
+BOOL FileSetTimeCallback(LPCTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
 struct FileSetTimeData
 {
 	FILETIME Time;
 	TCHAR WhichTime;
 };
 
-ResultType Line::FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
-	, FileLoopModeType aOperateOnFolders, bool aDoRecurse)
-// Returns the number of files and folders that could not be changed due to an error.
+bif_impl FResult FileSetTime(LPCTSTR aYYYYMMDD, LPCTSTR aFilePattern, LPCTSTR aWhichTime, LPCTSTR aMode)
 {
-	// Related to the comment at the top: Since the script subroutine that resulted in the call to
-	// this function can be interrupted during our MsgSleep(), make a copy of any params that might
-	// currently point directly to the deref buffer.  This is done because their contents might
-	// be overwritten by the interrupting subroutine:
-	TCHAR yyyymmdd[64]; // Even do this one since its value is passed recursively in calls to self.
-	tcslcpy(yyyymmdd, aYYYYMMDD, _countof(yyyymmdd));
+	if (!aFilePattern && g->mLoopFile)
+		aFilePattern = g->mLoopFile->file_path; // Default to the current file-loop's file.
+	if (!aFilePattern || !*aFilePattern)
+		return FR_E_ARG(1);
+	FileLoopModeType mode = Line::ConvertLoopMode(aMode);
+	if (mode == FILE_LOOP_INVALID)
+		return FR_E_ARG(3);
+	FileLoopModeType aOperateOnFolders = mode & ~FILE_LOOP_RECURSE;
+	bool aDoRecurse = mode & FILE_LOOP_RECURSE;
+	switch (ctoupper(*aWhichTime))
+	{
+	case 'M': case 'C': case 'A': case '\0': break;
+	default: return FR_E_ARG(2);
+	}
 
 	FileSetTimeData callbackData;
-	callbackData.WhichTime = aWhichTime;
+	callbackData.WhichTime = *aWhichTime;
 	FILETIME ft;
-	if (*yyyymmdd)
+	if (*aYYYYMMDD)
 	{
-		if (   !YYYYMMDDToFileTime(yyyymmdd, ft)  // Convert the arg into the time struct as local (non-UTC) time.
+		if (   !YYYYMMDDToFileTime(aYYYYMMDD, ft)  // Convert the arg into the time struct as local (non-UTC) time.
 			|| !LocalFileTimeToFileTime(&ft, &callbackData.Time)   )  // Convert from local to UTC.
 		{
 			// Invalid parameters are the only likely cause of this condition.
-			return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, aYYYYMMDD);
+			return FR_E_ARG(0);
 		}
 	}
 	else // User wants to use the current time (i.e. now) as the new timestamp.
 		GetSystemTimeAsFileTime(&callbackData.Time);
 
-	if (!*aFilePattern)
-		return LineError(ERR_PARAM2_INVALID, FAIL_OR_OK);
-
-	FilePatternApply(aFilePattern, aOperateOnFolders, aDoRecurse, FileSetTimeCallback, &callbackData);
-	return OK;
+	return FilePatternApply(aFilePattern, aOperateOnFolders, aDoRecurse, FileSetTimeCallback, &callbackData);
 }
 
-BOOL FileSetTimeCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData)
+BOOL FileSetTimeCallback(LPCTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData)
 {
 	HANDLE hFile;
 	// Open existing file.
@@ -888,21 +949,22 @@ BOOL FileSetTimeCallback(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallba
 
 
 
-BIF_DECL(BIF_FileGetSize)
+bif_impl FResult FileGetSize(LPCTSTR aPath, LPCTSTR aUnits, __int64 *aRetVal)
 {
-	_f_param_string_opt_def(aFilespec, 0, (g->mLoopFile ? g->mLoopFile->cFileName : _T("")));
-	_f_param_string_opt(aGranularity, 1);
+	g->LastError = 0; // Set default for successful return or non-Win32 errors.
 
-	if (!*aFilespec)
-		_f_throw_value(ERR_PARAM2_MUST_NOT_BE_BLANK); // Throw an error, since this is probably not what the user intended.
-	
+	if (!aPath && g->mLoopFile)
+		aPath = g->mLoopFile->cFileName;
+	if (!aPath || !*aPath)
+		return FR_E_ARG(0);
+
 	BOOL got_file_size = false;
 	__int64 size;
 
 	// Try CreateFile() and GetFileSizeEx() first, since they can be more accurate. 
 	// See "Why is the file size reported incorrectly for files that are still being written to?"
 	// http://blogs.msdn.com/b/oldnewthing/archive/2011/12/26/10251026.aspx
-	HANDLE hfile = CreateFile(aFilespec, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
+	HANDLE hfile = CreateFile(aPath, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
 		, NULL, OPEN_EXISTING, 0, NULL);
 	if (hfile != INVALID_HANDLE_VALUE)
 	{
@@ -913,59 +975,37 @@ BIF_DECL(BIF_FileGetSize)
 	if (!got_file_size)
 	{
 		WIN32_FIND_DATA found_file;
-		HANDLE file_search = FindFirstFile(aFilespec, &found_file);
+		HANDLE file_search = FindFirstFile(aPath, &found_file);
 		if (file_search == INVALID_HANDLE_VALUE)
 		{
-			aResultToken.SetLastErrorMaybeThrow(true);
-			_f_return_empty;
+			g->LastError = GetLastError();
+			return FR_E_WIN32(g->LastError);
 		}
 		FindClose(file_search);
 		size = ((__int64)found_file.nFileSizeHigh << 32) | found_file.nFileSizeLow;
 	}
 
-	switch(ctoupper(*aGranularity))
+	switch (aUnits && *aUnits ? ctoupper(*aUnits) : 'B')
 	{
-	case 'K': // KB
-		size /= 1024;
-		break;
-	case 'M': // MB
-		size /= (1024 * 1024);
-		break;
-	// default: // i.e. either 'B' for bytes, or blank, or some other unknown value, so default to bytes.
-		// do nothing
+	case 'K': size /= 1024; break; // KB
+	case 'M': size /= (1024 * 1024); break; // MB
+	case 'B': break; // Bytes
+	default: return FR_E_ARG(1);
 	}
 
 	g->LastError = 0;
-	_f_return(size);
-	// The below comment is obsolete in light of the switch to 64-bit integers.  But it might
-	// be good to keep for background:
-	// Currently, the above is basically subject to a 2 gig limit, I believe, after which the
-	// size will appear to be negative.  Beyond a 4 gig limit, the value will probably wrap around
-	// to zero and start counting from there as file sizes grow beyond 4 gig (UPDATE: The size
-	// is now set to -1 [the maximum DWORD when expressed as a signed int] whenever >4 gig).
-	// There's not much sense in putting values larger than 2 gig into the var as a text string
-	// containing a positive number because such a var could never be properly handled by anything
-	// that compares to it (e.g. IfGreater) or does math on it (e.g. EnvAdd), since those operations
-	// use ATOI() to convert the string.  So as a future enhancement (unless the whole program is
-	// revamped to use 64bit ints or something) might add an optional param to the end to indicate
-	// size should be returned in K(ilobyte) or M(egabyte).  However, this is sorta bad too since
-	// adding a param can break existing scripts which use filenames containing commas (delimiters)
-	// with this command.  Therefore, I think I'll just add the K/M param now.
-	// Also, the above assigns an int because unsigned ints should never be stored in script
-	// variables.  This is because an unsigned variable larger than INT_MAX would not be properly
-	// converted by ATOI(), which is current standard method for variables to be auto-converted
-	// from text back to a number whenever that is needed.
+	*aRetVal = size;
+	return OK;
 }
 
 
 
-BIF_DECL(BIF_FileExist)
+static void FileOrDirExist(LPCTSTR aFilePattern, StrRet &aRetVal, DWORD aRequiredAttr)
 {
-	TCHAR filename_buf[MAX_NUMBER_SIZE]; // Because _f_number_buf is used for something else below.
-	LPTSTR filename = ParamIndexToString(0, filename_buf);
-	LPTSTR buf = _f_retval_buf; // If necessary, it will be moved to a persistent memory location by our caller.
+	LPTSTR buf = aRetVal.CallerBuf();
+	aRetVal.SetStatic(buf);
 	DWORD attr;
-	if (DoesFilePatternExist(filename, &attr, _f_callee_id == FID_DirExist ? FILE_ATTRIBUTE_DIRECTORY : 0))
+	if (DoesFilePatternExist(aFilePattern, &attr, aRequiredAttr))
 	{
 		// Yield the attributes of the first matching file.  If not match, yield an empty string.
 		// This relies upon the fact that a file's attributes are never legitimately zero, which
@@ -987,7 +1027,58 @@ BIF_DECL(BIF_FileExist)
 			buf[1] = '\0';
 		}
 	}
-	else // Empty string is the indicator of "not found" (seems more consistent than using an integer 0, since caller might rely on it being SYM_STRING).
+	else // Empty string is the indicator of "not found".
 		*buf = '\0';
-	_f_return_p(buf);
 }
+
+bif_impl void FileExist(LPCTSTR aFilePattern, StrRet &aRetVal)
+{
+	return FileOrDirExist(aFilePattern, aRetVal, 0);
+}
+
+bif_impl void DirExist(LPCTSTR aFilePattern, StrRet &aRetVal)
+{
+	return FileOrDirExist(aFilePattern, aRetVal, FILE_ATTRIBUTE_DIRECTORY);
+}
+
+
+bif_impl FResult DirCopy(LPCTSTR aSource, LPCTSTR aDest, int *aOverwrite)
+{
+	return Line::Util_CopyDir(aSource, aDest, aOverwrite ? *aOverwrite : FALSE, false) ? OK : FR_E_FAILED;
+}
+
+
+bif_impl FResult DirMove(LPCTSTR aSource, LPCTSTR aDest, LPCTSTR aFlag)
+{
+	if (aFlag && ctoupper(*aFlag) == 'R')
+	{
+		// Perform a simple rename instead, which prevents the operation from being only partially
+		// complete if the source directory is in use (due to being a working dir for a currently
+		// running process, or containing a file that is being written to).  In other words,
+		// the operation will be "all or none":
+		if (!MoveFile(aSource, aDest))
+			return FR_E_WIN32;
+	}
+	if (aFlag && !IsNumeric(aFlag))
+		return FR_E_ARG(2);
+	if (!Line::Util_CopyDir(aSource, aDest, aFlag ? ATOI(aFlag) : 0, true))
+		return FR_E_FAILED;
+	return OK;
+}
+
+
+bif_impl FResult DirCreate(LPCTSTR aPath)
+{
+	SetLastError(0);
+	auto result = FileCreateDir(aPath);
+	g->LastError = GetLastError();
+	return result;
+}
+
+
+bif_impl FResult DirDelete(LPCTSTR aPath, BOOL *aRecurse)
+{
+	return Line::Util_RemoveDir(aPath, aRecurse && *aRecurse) ? OK : FR_E_FAILED;
+}
+
+

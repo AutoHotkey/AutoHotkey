@@ -4009,7 +4009,7 @@ TCHAR VKtoChar(vk_type aVK, HKL aKeybdLayout)
 
 
 
-sc_type TextToSC(LPTSTR aText, bool *aSpecifiedByNumber)
+sc_type TextToSC(LPCTSTR aText, bool *aSpecifiedByNumber)
 {
 	if (!*aText) return 0;
 	for (int i = 0; i < g_key_to_sc_count; ++i)
@@ -4031,7 +4031,7 @@ sc_type TextToSC(LPTSTR aText, bool *aSpecifiedByNumber)
 
 
 
-vk_type TextToVK(LPTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandledByScanCode, bool aAllowExplicitVK
+vk_type TextToVK(LPCTSTR aText, modLR_type *pModifiersLR, bool aExcludeThoseHandledByScanCode, bool aAllowExplicitVK
 	, HKL aKeybdLayout)
 // If pModifiersLR is non-NULL, place the modifiers that are needed to realize the key in there.
 // e.g. M is really +m (shift-m), # is really shift-3.

@@ -642,7 +642,6 @@ enum BuiltInFunctionID {
 	FID_GetKeyName = 0, FID_GetKeyVK = 1, FID_GetKeySC,
 	FID_StrLower = 0, FID_StrUpper, FID_StrTitle,
 	FID_StrGet = 0, FID_StrPut,
-	FID_FileExist = 0, FID_DirExist,
 	FID_WinExist = 0, FID_WinActive,
 	FID_Floor = 0, FID_Ceil,
 	FID_ASin = 0, FID_ACos,
@@ -727,40 +726,6 @@ private:
 
 	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
 	ResultType Download(LPTSTR aURL, LPTSTR aFilespec);
-
-	ResultType FileCreateShortcut(LPTSTR aTargetFile, LPTSTR aShortcutFile, LPTSTR aWorkingDir, LPTSTR aArgs
-		, LPTSTR aDescription, LPTSTR aIconFile, LPTSTR aHotkey, LPTSTR aIconNumber, LPTSTR aRunState);
-	static bool FileCreateDir(LPTSTR aDirSpec, LPTSTR aCanModifyDirSpec = NULL);
-	ResultType FileDelete(LPTSTR aFilePattern);
-	ResultType FileRecycle(LPTSTR aFilePattern);
-	ResultType FileRecycleEmpty(LPTSTR aDriveLetter);
-	ResultType FileInstall(LPTSTR aSource, LPTSTR aDest, LPTSTR aFlag);
-	bool FileInstallExtract(LPTSTR aSource, LPTSTR aDest, bool aOverwrite);
-#ifndef AUTOHOTKEYSC
-	bool FileInstallCopy(LPTSTR aSource, LPTSTR aDest, bool aOverwrite);
-#endif
-	ResultType FileCopyOrMove(LPTSTR aSource, LPTSTR aDest, bool aOverwrite);
-
-	typedef BOOL (* FilePatternCallback)(LPTSTR aFilename, WIN32_FIND_DATA &aFile, void *aCallbackData);
-	struct FilePatternStruct
-	{
-		TCHAR path[T_MAX_PATH]; // Directory and naked filename or pattern.
-		TCHAR pattern[MAX_PATH]; // Naked filename or pattern.
-		size_t dir_length, pattern_length;
-		FilePatternCallback aCallback;
-		void *aCallbackData;
-		FileLoopModeType aOperateOnFolders;
-		bool aDoRecurse;
-		int failure_count;
-	};
-	ResultType FilePatternApply(LPTSTR aFilePattern, FileLoopModeType aOperateOnFolders
-		, bool aDoRecurse, FilePatternCallback aCallback, void *aCallbackData);
-	void FilePatternApply(FilePatternStruct &);
-
-	ResultType FileSetAttrib(LPTSTR aAttributes, LPTSTR aFilePattern
-		, FileLoopModeType aOperateOnFolders, bool aDoRecurse);
-	ResultType FileSetTime(LPTSTR aYYYYMMDD, LPTSTR aFilePattern, TCHAR aWhichTime
-		, FileLoopModeType aOperateOnFolders, bool aDoRecurse);
 
 	ResultType IniWrite(LPTSTR aValue, LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
 	ResultType IniDelete(LPTSTR aFilespec, LPTSTR aSection, LPTSTR aKey);
@@ -1217,7 +1182,7 @@ public:
 		return aValueToReturnIfInvalid;
 	}
 
-	static FileLoopModeType ConvertLoopMode(LPTSTR aBuf)
+	static FileLoopModeType ConvertLoopMode(LPCTSTR aBuf)
 	// Returns the file loop mode, or FILE_LOOP_INVALID if aBuf contains an invalid mode.
 	{
 		for (FileLoopModeType mode = FILE_LOOP_INVALID;;)
@@ -1306,7 +1271,7 @@ public:
 		return aCP == 0 || aCP == 1200 || IsValidCodePage(aCP);
 	}
 
-	static UINT ConvertFileEncoding(LPTSTR aBuf)
+	static UINT ConvertFileEncoding(LPCTSTR aBuf)
 	// Returns the encoding with possible CP_AHKNOBOM flag, or (UINT)-1 if invalid.
 	{
 		if (!aBuf || !*aBuf)
@@ -3286,7 +3251,6 @@ BIF_DECL(BIF_IsSet);
 BIF_DECL(BIF_GetKeyState);
 BIF_DECL(BIF_GetKeyName);
 BIF_DECL(BIF_VarSetStrCapacity);
-BIF_DECL(BIF_FileExist);
 BIF_DECL(BIF_WinExistActive);
 BIF_DECL(BIF_Round);
 BIF_DECL(BIF_FloorCeil);
@@ -3388,15 +3352,6 @@ BIF_DECL(BIF_ControlGetText);
 BIF_DECL(BIF_ControlMove);
 BIF_DECL(BIF_ControlSend);
 BIF_DECL(BIF_ControlSetText);
-BIF_DECL(BIF_DirSelect);
-BIF_DECL(BIF_FileAppend);
-BIF_DECL(BIF_FileGetAttrib);
-BIF_DECL(BIF_FileGetShortcut);
-BIF_DECL(BIF_FileGetSize);
-BIF_DECL(BIF_FileGetTime);
-BIF_DECL(BIF_FileGetVersion);
-BIF_DECL(BIF_FileRead);
-BIF_DECL(BIF_FileSelect);
 BIF_DECL(BIF_GroupActivate);
 BIF_DECL(BIF_ImageSearch);
 BIF_DECL(BIF_IniRead);
@@ -3469,6 +3424,7 @@ LPTSTR GetWorkingDir();
 int ConvertJoy(LPTSTR aBuf, int *aJoystickID = NULL, bool aAllowOnlyButtons = false);
 bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType);
 bool ScriptGetJoyState(JoyControls aJoy, int aJoystickID, ExprTokenType &aToken, LPTSTR aBuf);
+bool FileCreateDir(LPCTSTR aDirSpec);
 
 ResultType DetermineTargetHwnd(HWND &aWindow, ResultToken &aResultToken, ExprTokenType &aToken);
 ResultType DetermineTargetWindow(HWND &aWindow, ResultToken &aResultToken, ExprTokenType *aParam[], int aParamCount, int aNonWinParamCount = 0);
