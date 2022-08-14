@@ -287,12 +287,19 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 		}
 		else
 		{
-			ASSERT(MdType_IsNum(arg_type));
 			ExprTokenType nt;
-			if (!TokenToDoubleOrInt64(param, nt))
+			if (arg_type == MdType::Bool32)
 			{
-				result = aResultToken.ParamError(pi, &param, _T("Number"));
-				goto end;
+				nt.SetValue(TokenToBOOL(param));
+			}
+			else
+			{
+				ASSERT(MdType_IsNum(arg_type));
+				if (!TokenToDoubleOrInt64(param, nt))
+				{
+					result = aResultToken.ParamError(pi, &param, _T("Number"));
+					goto end;
+				}
 			}
 			// If necessary, convert integer <-> float within the value union.
 			if (arg_type == MdType::Float64)
@@ -431,6 +438,7 @@ void TypedPtrToToken(MdType aType, void *aPtr, ExprTokenType &aToken)
 {
 	switch (aType)
 	{
+	case MdType::Bool32:
 	case MdType::Int32: aToken.SetValue(*(int*)aPtr); break;
 	case MdType::Int64: aToken.SetValue(*(__int64*)aPtr); break;
 	case MdType::Float64: aToken.SetValue(*(double*)aPtr); break;

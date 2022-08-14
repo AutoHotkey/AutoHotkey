@@ -15,6 +15,7 @@ enum class MdType : UINT8
 	String		= 3,
 	Object,
 	Variant, // Currently only for input (ExprTokenType) or retval (ResultToken).
+	Bool32,
 	ResultType,
 	FResult,
 	NzIntWin32, // BOOL result where FALSE means failure and GetLastError() is applicable.
@@ -50,6 +51,7 @@ template<> struct md_argtype<MdType::Int64> { typedef __int64 t; };
 template<> struct md_argtype<MdType::String> { typedef LPCTSTR t; };
 template<> struct md_argtype<MdType::Void> { typedef void t; };
 template<> struct md_argtype<MdType::Variant> { typedef ExprTokenType &t; };
+template<> struct md_argtype<MdType::Bool32> { typedef BOOL t; };
 
 template<MdType T = MdType::Int32> struct md_outtype { typedef typename md_argtype<T>::t* t; };
 template<> struct md_outtype<MdType::String> { typedef StrRet &t; };
