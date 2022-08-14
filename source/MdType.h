@@ -103,9 +103,17 @@ template<> struct md_retval<MdType::NzIntWin32> { typedef BOOL t; };
 	md_retval<MdType::retcode>::t native_name( \
 		MAP_LIST(md_arg_decl, __VA_ARGS__) );
 
+// md_func_cast(...)(functionName) is used for overload resolution.
+#define md_func_cast(retcode, ...) \
+	static_cast<md_retval<MdType::retcode>::t (*)( MAP_LIST(md_arg_decl, __VA_ARGS__) )>
+
 #define md_func_data(script_name, native_name, retcode, ...) \
-	{_T(#script_name), native_name, MdType::retcode, \
-		{ MAP_LIST(md_arg_data, __VA_ARGS__) }},
+	{ \
+		_T(#script_name), \
+		md_func_cast(retcode, __VA_ARGS__)(native_name), \
+		MdType::retcode, \
+		{ MAP_LIST(md_arg_data, __VA_ARGS__) } \
+	},
 
 #define md_func_x(script_name, native_name, retcode, ...) \
 	md_cat(md_func_,md_mode)(script_name, native_name, retcode, __VA_ARGS__)
