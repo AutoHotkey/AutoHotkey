@@ -350,7 +350,7 @@ sc_type TextToSC(LPCTSTR aText, bool *aSpecifiedByNumber = NULL);
 vk_type TextToVK(LPCTSTR aText, modLR_type *pModifiersLR = NULL, bool aExcludeThoseHandledByScanCode = false
 	, bool aAllowExplicitVK = true, HKL aKeybdLayout = GetKeyboardLayout(0));
 vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLayout, bool aEnableAZFallback = true);
-bool TextToVKandSC(LPTSTR aText, vk_type &aVK, sc_type &aSC, modLR_type *pModifiersLR = NULL, HKL aKeybdLayout = GetKeyboardLayout(0));
+bool TextToVKandSC(LPCTSTR aText, vk_type &aVK, sc_type &aSC, modLR_type *pModifiersLR = NULL, HKL aKeybdLayout = GetKeyboardLayout(0));
 vk_type TextToSpecial(LPTSTR aText, size_t aTextLength, KeyEventTypes &aEventTypem, modLR_type &aModifiersLR
 	, bool aUpdatePersistent);
 

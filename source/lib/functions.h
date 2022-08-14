@@ -46,6 +46,12 @@ md_func(FileSetAttrib, (In, String, Attributes), (In_Opt, String, Pattern), (In_
 md_func(FileSetTime, (In_Opt, String, YYYYMMDD), (In_Opt, String, Pattern), (In_Opt, String, WhichTime), (In_Opt, String, Mode))
 
 
+md_func_x(GetKeyName, GetKeyName, Void, (In, String, KeyName), (Ret, String, RetVal))
+md_func_x(GetKeySC, GetKeySC, Int32, (In, String, KeyName))
+md_func(GetKeyState, (In, String, KeyName), (In_Opt, String, Mode), (Ret, Variant, RetVal))
+md_func_x(GetKeyVK, GetKeyVK, Int32, (In, String, KeyName))
+
+
 md_func(DirCopy, (In, String, Source), (In, String, Dest), (In_Opt, Int32, Overwrite))
 md_func(DirCreate, (In, String, Path))
 md_func(DirDelete, (In, String, Path), (In_Opt, Bool32, Recurse))

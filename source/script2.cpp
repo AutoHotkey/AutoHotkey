@@ -2254,12 +2254,8 @@ BIF_DECL(BIF_IsSet)
 ////////////////////////
 
 
-BIF_DECL(BIF_GetKeyState)
+bif_impl FResult GetKeyState(LPCTSTR key_name, LPCTSTR mode, ResultToken &aResultToken)
 {
-	TCHAR key_name_buf[MAX_NUMBER_SIZE]; // Because _f_retval_buf is used for something else below.
-	LPTSTR key_name = ParamIndexToString(0, key_name_buf);
-	// Keep this in sync with GetKeyJoyState().
-	// See GetKeyJoyState() for more comments about the following lines.
 	JoyControls joy;
 	int joystick_id;
 	vk_type vk = TextToVK(key_name);
@@ -2268,47 +2264,50 @@ BIF_DECL(BIF_GetKeyState)
 		if (   !(joy = (JoyControls)ConvertJoy(key_name, &joystick_id))   )
 		{
 			// It is neither a key name nor a joystick button/axis.
-			_f_throw_param(0);
+			return FR_E_ARG(0);
 		}
 		ScriptGetJoyState(joy, joystick_id, aResultToken, _f_retval_buf);
-		return;
+		return OK;
 	}
 	// Since above didn't return: There is a virtual key (not a joystick control).
-	TCHAR mode_buf[MAX_NUMBER_SIZE];
-	LPTSTR mode = ParamIndexToOptionalString(1, mode_buf);
 	KeyStateTypes key_state_type;
-	switch (ctoupper(*mode)) // Second parameter.
+	switch (mode ? ctoupper(*mode) : 'L') // Second parameter.
 	{
 	case 'T': key_state_type = KEYSTATE_TOGGLE; break; // Whether a toggleable key such as CapsLock is currently turned on.
 	case 'P': key_state_type = KEYSTATE_PHYSICAL; break; // Physical state of key.
-	default: key_state_type = KEYSTATE_LOGICAL;
+	case 'L': key_state_type = KEYSTATE_LOGICAL; break;
+	default: return FR_E_ARG(1);
 	}
-	// Caller has set aResultToken.symbol to a default of SYM_INTEGER, so no need to set it here.
-	aResultToken.value_int64 = ScriptGetKeyState(vk, key_state_type); // 1 for down and 0 for up.
+	aResultToken.SetValue(ScriptGetKeyState(vk, key_state_type)); // 1 for down and 0 for up.
+	return OK;
 }
 
 
 
-BIF_DECL(BIF_GetKeyName)
+bif_impl int GetKeyVK(LPCTSTR aKeyName)
 {
-	// Get VK and/or SC from the first parameter, which may be a key name, scXXX or vkXX.
-	// Key names are allowed even for GetKeyName() for simplicity and so that it can be
-	// used to normalise a key name; e.g. GetKeyName("Esc") returns "Escape".
-	LPTSTR key = ParamIndexToString(0, _f_number_buf);
 	vk_type vk;
 	sc_type sc;
-	TextToVKandSC(key, vk, sc);
+	TextToVKandSC(aKeyName, vk, sc);
+	return vk;
+}
 
-	switch (_f_callee_id)
-	{
-	case FID_GetKeyVK:
-		_f_return_i(vk ? vk : sc_to_vk(sc));
-	case FID_GetKeySC:
-		_f_return_i(sc ? sc : vk_to_sc(vk));
-	//case FID_GetKeyName:
-	default:
-		_f_return_p(GetKeyName(vk, sc, _f_retval_buf, _f_retval_buf_size, _T("")));
-	}
+
+bif_impl int GetKeySC(LPCTSTR aKeyName)
+{
+	vk_type vk;
+	sc_type sc;
+	TextToVKandSC(aKeyName, vk, sc);
+	return sc;
+}
+
+
+bif_impl void GetKeyName(LPCTSTR aKeyName, StrRet &aRetVal)
+{
+	vk_type vk;
+	sc_type sc;
+	TextToVKandSC(aKeyName, vk, sc);
+	aRetVal.SetStatic(GetKeyName(vk, sc, aRetVal.CallerBuf(), aRetVal.CallerBufSize, _T("")));
 }
 
 
@@ -3639,7 +3638,7 @@ ResultType ResultToken::Return(LPTSTR aValue, size_t aLength)
 
 
 
-int ConvertJoy(LPTSTR aBuf, int *aJoystickID, bool aAllowOnlyButtons)
+int ConvertJoy(LPCTSTR aBuf, int *aJoystickID, bool aAllowOnlyButtons)
 // The caller TextToKey() currently relies on the fact that when aAllowOnlyButtons==true, a value
 // that can fit in a sc_type (USHORT) is returned, which is true since the joystick buttons
 // are very small numbers (JOYCTRL_1==12).
@@ -3647,7 +3646,7 @@ int ConvertJoy(LPTSTR aBuf, int *aJoystickID, bool aAllowOnlyButtons)
 	if (aJoystickID)
 		*aJoystickID = 0;  // Set default output value for the caller.
 	if (!aBuf || !*aBuf) return JOYCTRL_INVALID;
-	LPTSTR aBuf_orig = aBuf;
+	auto aBuf_orig = aBuf;
 	for (; *aBuf >= '0' && *aBuf <= '9'; ++aBuf); // self-contained loop to find the first non-digit.
 	if (aBuf > aBuf_orig) // The string starts with a number.
 	{

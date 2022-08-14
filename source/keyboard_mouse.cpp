@@ -4139,7 +4139,7 @@ vk_type CharToVKAndModifiers(TCHAR aChar, modLR_type *pModifiersLR, HKL aKeybdLa
 
 
 
-bool TextToVKandSC(LPTSTR aText, vk_type &aVK, sc_type &aSC, modLR_type *pModifiersLR, HKL aKeybdLayout)
+bool TextToVKandSC(LPCTSTR aText, vk_type &aVK, sc_type &aSC, modLR_type *pModifiersLR, HKL aKeybdLayout)
 {
 	if (aVK = TextToVK(aText, pModifiersLR, true, true, aKeybdLayout))
 	{
