@@ -243,12 +243,10 @@ FuncEntry g_BIF[] =
 	BIF1(Sin, 1, 1),
 	BIFA(Sleep, 1, 1, ACT_SLEEP),
 	BIF1(Sort, 1, 3),
-	BIFA(SoundBeep, 0, 2, ACT_SOUNDBEEP),
 	BIFn(SoundGetInterface, 1, 3, BIF_Sound),
 	BIFn(SoundGetMute, 0, 2, BIF_Sound),
 	BIFn(SoundGetName, 0, 2, BIF_Sound),
 	BIFn(SoundGetVolume, 0, 2, BIF_Sound),
-	BIFA(SoundPlay, 1, 2, ACT_SOUNDPLAY),
 	BIFn(SoundSetMute, 1, 3, BIF_Sound),
 	BIFn(SoundSetVolume, 1, 3, BIF_Sound),
 	BIF1(SplitPath, 1, 6, {2, 3, 4, 5, 6}),
@@ -11784,19 +11782,6 @@ ResultType Line::Perform()
 		else
 			group->CloseAndGoToNext(*ARG2 && !_tcsicmp(ARG2, _T("R")));  // Note: It will take care of DoWinDelay if needed.
 		return OK;
-
-	case ACT_SOUNDBEEP:
-	{
-		// Negative values are checked to avoid interpreting them as a very long duration.
-		DWORD duration = *ARG2 ? ArgToUInt(2) : 150;
-		if ((int)duration < 0)
-			duration = 150;
-		Beep(*ARG1 ? ArgToUInt(1) : 523, duration);
-		return OK;
-	}
-
-	case ACT_SOUNDPLAY:
-		return SoundPlay(ARG1, *ARG2 && !_tcsicmp(ARG2, _T("Wait")) || !_tcsicmp(ARG2, _T("1")));
 
 	case ACT_SETWORKINGDIR:
 		if (!SetWorkingDir(ARG1))

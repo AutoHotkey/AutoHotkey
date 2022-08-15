@@ -536,9 +536,9 @@ control_fail:
 
 
 
-ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
+bif_impl FResult SoundPlay(LPCTSTR aFilespec, LPCTSTR aWait)
 {
-	LPTSTR cp = omit_leading_whitespace(aFilespec);
+	auto cp = omit_leading_whitespace(aFilespec);
 	if (*cp == '*')
 	{
 		// ATOU() returns 0xFFFFFFFF for -1, which is relied upon to support the -1 sound.
@@ -560,12 +560,12 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 		mciSendString(_T("close ") SOUNDPLAY_ALIAS, NULL, 0, NULL);
 	sntprintf(buf, _countof(buf), _T("open \"%s\" alias ") SOUNDPLAY_ALIAS, aFilespec);
 	if (mciSendString(buf, NULL, 0, NULL)) // Failure.
-		goto error;
+		return FR_E_FAILED;
 	g_SoundWasPlayed = true;  // For use by Script's destructor.
 	if (mciSendString(_T("play ") SOUNDPLAY_ALIAS, NULL, 0, NULL)) // Failure.
-		goto error;
+		return FR_E_FAILED;
 	// Otherwise, the sound is now playing.
-	if (!aSleepUntilDone)
+	if (  !(aWait && (aWait[0] == '1' && !aWait[1] || !_tcsicmp(aWait, _T("Wait"))))  )
 		return OK;
 	// Otherwise, caller wants us to wait until the file is done playing.  To allow our app to remain
 	// responsive during this time, use a loop that checks our message queue:
@@ -585,7 +585,11 @@ ResultType Line::SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone)
 		MsgSleep(20);
 	}
 	return OK;
+}
 
-error:
-	return LineError(ERR_FAILED, FAIL_OR_OK);
+
+
+bif_impl void SoundBeep(int *aFrequency, int *aDuration)
+{
+	Beep(aFrequency ? *aFrequency : 523, aDuration && *aDuration >= 0 ? *aDuration : 150);
 }

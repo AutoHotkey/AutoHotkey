@@ -724,8 +724,6 @@ private:
 	bool CatchThis(ExprTokenType &aThrown);
 	friend BIF_DECL(BIF_PerformAction);
 
-	ResultType SoundPlay(LPTSTR aFilespec, bool aSleepUntilDone);
-
 	ResultType TrayTip(LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions);
 
 	static ResultType SetToggleState(vk_type aVK, ToggleValueType &ForceLock, LPTSTR aToggleText);

@@ -100,5 +100,9 @@ md_func_x(Persistent, Persistent, Void, (In_Opt, Bool32, NewValue), (Ret, Bool32
 md_func_x(RunAs, RunAs, Void, (In_Opt, String, User), (In_Opt, String, Password), (In_Opt, String, Domain))
 
 
+md_func_x(SoundBeep, SoundBeep, Void, (In_Opt, Int32, Duration), (In_Opt, Int32, Frequency))
+md_func(SoundPlay, (In, String, Path), (In_Opt, String, Wait))
+
+
 md_func_x(SysGet, SysGet, Int32, (In, Int32, Index))
 md_func(SysGetIPAddresses, (Ret, Object, RetVal))
