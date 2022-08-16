@@ -297,7 +297,7 @@ bool MdFunc::Call(ResultToken &aResultToken, ExprTokenType *aParam[], int aParam
 				ASSERT(MdType_IsNum(arg_type));
 				if (!TokenToDoubleOrInt64(param, nt))
 				{
-					result = aResultToken.ParamError(pi, &param, _T("Number"));
+					result = aResultToken.ParamError(pi - 1, &param, _T("Number"));
 					goto end;
 				}
 			}
