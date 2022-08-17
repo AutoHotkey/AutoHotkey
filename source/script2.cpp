@@ -11586,10 +11586,21 @@ VarSizeType BIV_Space_Tab(LPTSTR aBuf, LPTSTR aVarName)
 	// prior to when it can be used):
 	if (aBuf)
 	{
-		*aBuf++ = aVarName[5] ? ' ' : '\t'; // A_Tab[]
+		switch (ctoupper(aVarName[3]))
+		{
+		case 'P': *aBuf++ = ' '; break; // A_Space
+		case 'A': *aBuf++ = '\t'; break; // A_Tab
+		case 'Q': *aBuf++ = (aVarName[2] == 'D' || aVarName[2] == 'd') ? '"' : '\''; break; // A_DQ, A_SQ
+		case 'F': *aBuf++ = '\n'; break; // A_LF
+		case 'R': *aBuf++ = '\r'; // A_CR, A_CRLF
+			if (aVarName[4])
+				*aBuf++ = '\n';
+			break;
+		case 'O': *aBuf++ = ','; break; // A_Comma
+		}
 		*aBuf = '\0';
 	}
-	return 1;
+	return (ctoupper(aVarName[3]) != 'R' || !aVarName[4]) ? 1 : 2; // if A_CRLF: 2, else: 1
 }
 
 VarSizeType BIV_AhkVersion(LPTSTR aBuf, LPTSTR aVarName)
