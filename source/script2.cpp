@@ -18798,6 +18798,291 @@ BIF_DECL(BIF_Exception)
 
 
 
+BufferObject *BufferObject::Create(size_t aSize)
+{
+	BufferObject *m = new BufferObject();
+	m->mSize = aSize;
+	m->mData = malloc(aSize);
+	return m;
+}
+
+
+
+ResultType STDMETHODCALLTYPE BufferObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (IS_INVOKE_CALL)
+		return INVOKE_NOT_HANDLED;
+
+	LPTSTR name = ParamIndexToString(0);
+
+	if (IS_INVOKE_SET)
+	{
+		if (!_tcsicmp(name, _T("Size"))
+		&& (!ParamIndexIsOmitted(1)))
+		{
+			size_t aSize = (size_t)ParamIndexToInt64(1);
+			if ((__int64)aSize < 0 || aSize > SIZE_MAX)
+				return INVOKE_NOT_HANDLED;
+			void *new_data = malloc(aSize);
+			memcpy(new_data, mData, aSize < mSize ? aSize : mSize);
+			free(mData);
+			mSize = aSize;
+			mData = new_data;
+			return OK;
+		}
+		return INVOKE_NOT_HANDLED;
+	}
+
+	aResultToken.symbol = SYM_INTEGER;
+	if (!_tcsicmp(name, _T("Ptr")))
+	{
+		aResultToken.value_int64 = (__int64)mData;
+		return OK;
+	}
+	else if (!_tcsicmp(name, _T("Size")))
+	{
+		aResultToken.value_int64 = mSize;
+		return OK;
+	}
+
+	aResultToken.symbol = SYM_STRING;
+	return INVOKE_NOT_HANDLED;
+}
+
+
+
+BIF_DECL(BIF_Buffer)
+{
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+
+	size_t aSize = (size_t)ParamIndexToOptionalInt64(0, 0);
+
+	IObject *obj = BufferObject::Create(aSize);
+	if (obj)
+	{
+		if (!ParamIndexIsOmitted(1))
+		{
+			if (!TokenIsPureNumeric(*aParam[1]))
+				_f_throw(ERR_PARAM2_INVALID);
+			char aFillByte = (char)ParamIndexToInt64(1);
+			ExprTokenType aParams[1];
+			ExprTokenType* (aParam[1])[1] = { aParams };
+			aParams[0].symbol = SYM_STRING; aParams[0].marker = _T("Ptr");
+			ExprTokenType r, t;
+			obj->Invoke(r, t, IT_GET, aParam[0], 1);
+			memset((LPVOID)TokenToInt64(r), aFillByte, aSize);
+		}
+
+		aResultToken.object = obj;
+		aResultToken.symbol = SYM_OBJECT;
+		return;
+	}
+	_f_throw(ERR_EXCEPTION);
+}
+
+
+
+RemoteBufferObject *RemoteBufferObject::Create(DWORD aPID, SIZE_T aSize, DWORD aAccessRights, DWORD aAllocType, DWORD aProtect, DWORD aFreeType)
+{
+	RemoteBufferObject *m = new RemoteBufferObject();
+	m->mSize = aSize;
+	m->mPID = aPID;
+	m->mIsLocal = (aPID == GetCurrentProcessId());
+	m->mFreeType = aFreeType;
+
+	if (m->mIsLocal)
+	{
+		m->mhProc = 0;
+		m->mPtr = malloc(aSize);
+	}
+	else
+	{
+		HANDLE aHandle;
+		LPVOID mem;
+		if (   !(aHandle = OpenProcess(aAccessRights, FALSE, aPID))   )
+			return NULL;
+		mem = VirtualAllocEx(aHandle, NULL, aSize, aAllocType, aProtect);
+		if (!mem)
+		{
+			CloseHandle(aHandle); // Caller should ignore the value of aHandle when return value is NULL.
+			return NULL;
+		}
+		m->mhProc = aHandle;
+		m->mPtr = mem;
+	}
+	return m;
+}
+
+
+
+ResultType STDMETHODCALLTYPE RemoteBufferObject::Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount)
+{
+	if (IS_INVOKE_SET)
+		return INVOKE_NOT_HANDLED;
+
+	LPTSTR name = ParamIndexToString(0);
+
+	if (IS_INVOKE_CALL)
+	{
+		if (!_tcsicmp(name, _T("Read"))
+		&& !_tcsicmp(name, _T("Write")))
+			return INVOKE_NOT_HANDLED;
+
+		// Read(Dest [, Size, LocalOffset:=0, RemoteOffset:=0])
+		// Write(Source [, Size, LocalOffset:=0, RemoteOffset:=0])
+
+		bool is_read = (ctoupper(*name) == 'R');
+		LPVOID mem_local;
+		SIZE_T size_local;
+		bool size_readwrite_is_omitted = ParamIndexIsOmitted(2);
+		SIZE_T size_readwrite = (SIZE_T)ParamIndexToOptionalInt64(2, 0);
+		__int64 offset_local = ParamIndexToOptionalInt64(3, 0);
+		__int64 offset_remote = ParamIndexToOptionalInt64(4, 0);
+
+		if ((__int64)size_readwrite < 0)
+			_o_throw(_T("Invalid size value."));
+		if (offset_local < 0)
+			_o_throw(_T("Invalid local offset."));
+		if (offset_remote < 0)
+			_o_throw(_T("Invalid remote offset."));
+
+		if (BufferObject *obj = dynamic_cast<BufferObject *>(ParamIndexToObject(1)))
+		{
+			ExprTokenType aParams[2];
+			ExprTokenType* (aParam[2])[1] = { aParams + 0, aParams + 1 };
+			aParams[0].symbol = SYM_STRING; aParams[0].marker = _T("Ptr");
+			aParams[1].symbol = SYM_STRING; aParams[1].marker = _T("Size");
+			ExprTokenType r1, r2, t1, t2;
+			obj->Invoke(r1, t1, IT_GET, aParam[0], 1);
+			obj->Invoke(r2, t2, IT_GET, aParam[1], 1);
+			mem_local = (LPVOID)TokenToInt64(r1);
+			size_local = (SIZE_T)TokenToInt64(r2);
+		}
+		else if (Object *obj = dynamic_cast<Object *>(ParamIndexToObject(1)))
+		{
+			ExprTokenType aParams[2];
+			ExprTokenType* (aParam[2])[1] = { aParams + 0, aParams + 1 };
+			aParams[0].symbol = SYM_STRING; aParams[0].marker = _T("Ptr");
+			aParams[1].symbol = SYM_STRING; aParams[1].marker = _T("Size");
+			ExprTokenType r1, r2, t1, t2;
+			t1.symbol = SYM_OBJECT; t1.object = obj;
+			t2.symbol = SYM_OBJECT; t2.object = obj;
+
+			// check for Ptr/Size keys, else properties:
+			if ((obj->GetItem(r1, _T("Ptr")))
+			|| (obj->Invoke(r1, t1, IT_GET, aParam[0], 1) == OK))
+				mem_local = (LPVOID)TokenToInt64(r1);
+			else
+				_o_throw(_T("Invalid buffer."));
+			if ((obj->GetItem(r2, _T("Size")))
+			|| (obj->Invoke(r2, t2, IT_GET, aParam[1], 1) == OK))
+				size_local = (SIZE_T)TokenToInt64(r2);
+			else
+				_o_throw(_T("Invalid buffer."));
+		}
+		else if (TokenIsPureNumeric(*aParam[1]))
+		{
+			mem_local = (LPVOID)ParamIndexToInt64(1);
+			// Size of local buffer unknown, assume it is sufficient:
+			size_local = size_readwrite;
+		}
+		else
+			_o_throw(_T("Invalid address or local buffer."));
+
+		if (size_readwrite_is_omitted)
+		{
+			if (size_local != mSize)
+				_o_throw(_T("Size can only be omitted if local/remote buffers have equal size."));
+			size_readwrite = size_local;
+		}
+		if (offset_local + size_readwrite > size_local)
+			_o_throw(_T("Memory to read/write would go beyond local buffer."));
+		if (offset_remote + size_readwrite > mSize)
+			_o_throw(_T("Memory to read/write would go beyond remote buffer."));
+
+		SIZE_T bytes_readwrite;
+		if (mIsLocal)
+		{
+			if (is_read)
+				memmove((BYTE*)mem_local+offset_local, (BYTE*)mPtr+offset_remote, size_readwrite);
+			else
+				memmove((BYTE*)mPtr+offset_remote, (BYTE*)mem_local+offset_local, size_readwrite);
+			bytes_readwrite = size_readwrite;
+		}
+		else
+		{
+			bool success;
+			if (is_read)
+				success = ReadProcessMemory(mhProc, (BYTE*)mPtr+offset_remote, (BYTE*)mem_local+offset_local, size_readwrite, &bytes_readwrite);
+			else
+				success = WriteProcessMemory(mhProc, (BYTE*)mPtr+offset_remote, (BYTE*)mem_local+offset_local, size_readwrite, &bytes_readwrite);
+			if (!success)
+				_o_throw(_T("Read/write error."));
+		}
+		aResultToken.symbol = SYM_INTEGER;
+		aResultToken.value_int64 = (__int64)bytes_readwrite;
+		return OK;
+	}
+
+	// else a property:
+	aResultToken.symbol = SYM_INTEGER;
+	if (!_tcsicmp(name, _T("Ptr")))
+	{
+		aResultToken.value_int64 = (__int64)mPtr;
+		return OK;
+	}
+	else if (!_tcsicmp(name, _T("Size")))
+	{
+		aResultToken.value_int64 = mSize;
+		return OK;
+	}
+	else if (!_tcsicmp(name, _T("HProc")))
+	{
+		aResultToken.value_int64 = (__int64)mhProc;
+		return OK;
+	}
+	else if (!_tcsicmp(name, _T("PID")))
+	{
+		aResultToken.value_int64 = mPID;
+		return OK;
+	}
+	else if (!_tcsicmp(name, _T("IsLocal")))
+	{
+		aResultToken.value_int64 = mIsLocal;
+		return OK;
+	}
+
+	aResultToken.symbol = SYM_STRING;
+	return INVOKE_NOT_HANDLED;
+}
+
+
+
+BIF_DECL(BIF_RemoteBuffer)
+{
+	aResultToken.symbol = SYM_STRING;
+	aResultToken.marker = _T("");
+
+	DWORD aPID = (DWORD)ParamIndexToInt64(0);
+	SIZE_T aSize = (SIZE_T)ParamIndexToInt64(1);
+	DWORD aAccessRights = (DWORD)ParamIndexToOptionalInt64(2, PROCESS_QUERY_INFORMATION|PROCESS_VM_WRITE|PROCESS_VM_READ|PROCESS_VM_OPERATION);
+	DWORD aAllocType = (DWORD)ParamIndexToOptionalInt64(3, MEM_RESERVE|MEM_COMMIT);
+	DWORD aProtect = (DWORD)ParamIndexToOptionalInt64(4, PAGE_READWRITE);
+	DWORD aFreeType = (DWORD)ParamIndexToOptionalInt64(5, MEM_RELEASE);
+
+	IObject *obj = RemoteBufferObject::Create(aPID, aSize, aAccessRights, aAllocType, aProtect, aFreeType);
+	if (obj)
+	{
+		aResultToken.object = obj;
+		aResultToken.symbol = SYM_OBJECT;
+		return;
+	}
+	_f_throw(ERR_EXCEPTION);
+}
+
+
+
 ////////////////////////////////////////////////////////
 // HELPER FUNCTIONS FOR TOKENS AND BUILT-IN FUNCTIONS //
 ////////////////////////////////////////////////////////

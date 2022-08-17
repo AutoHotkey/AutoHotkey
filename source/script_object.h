@@ -445,3 +445,55 @@ public:
 	void DebugWriteProperty(IDebugProperties *, int aPage, int aPageSize, int aDepth);
 #endif
 };
+
+
+//
+// Buffer
+//
+class BufferObject : public ObjectBase
+{
+	void *mData;
+	size_t mSize;
+	BufferObject() : mData(nullptr), mSize(0) {}
+
+	~BufferObject() { free(mData); }
+
+public:
+	static BufferObject *Create(size_t aSize);
+
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	IObject_Type_Impl("Buffer")
+};
+
+
+//
+// RemoteBuffer
+//
+class RemoteBufferObject : public ObjectBase
+{
+	LPVOID mPtr;
+	SIZE_T mSize;
+	HANDLE mhProc;
+	DWORD mPID;
+	bool mIsLocal;
+	DWORD mFreeType;
+
+	RemoteBufferObject() : mPtr(0), mSize(0), mhProc(0), mPID(0), mIsLocal(false), mFreeType(0) {}
+
+	~RemoteBufferObject()
+	{
+		if (mIsLocal)
+			free(mPtr);
+		else
+		{
+			VirtualFreeEx(mhProc, mPtr, 0, mFreeType);
+			CloseHandle(mhProc);
+		}
+	}
+
+public:
+	static RemoteBufferObject *Create(DWORD aPID, SIZE_T aSize, DWORD aAccessRights, DWORD aAllocType, DWORD aProtect, DWORD aFreeType);
+
+	ResultType STDMETHODCALLTYPE Invoke(ExprTokenType &aResultToken, ExprTokenType &aThisToken, int aFlags, ExprTokenType *aParam[], int aParamCount);
+	IObject_Type_Impl("RemoteBuffer")
+};
