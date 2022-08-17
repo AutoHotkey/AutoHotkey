@@ -15327,7 +15327,20 @@ BIF_DECL(BIF_NumGet)
 {
 	size_t right_side_bound, target; // Don't make target a pointer-type because the integer offset might not be a multiple of 4 (i.e. the below increments "target" directly by "offset" and we don't want that to use pointer math).
 	ExprTokenType &target_token = *aParam[0];
-	if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+	if (Object *obj = dynamic_cast<Object *>(TokenToObject(target_token)))
+	{
+		ExprTokenType t1;
+		ExprTokenType t2;
+		if ((obj->GetItem(t1, _T("Ptr")))
+		&& (obj->GetItem(t2, _T("Size"))))
+		{
+			target = (size_t)TokenToInt64(t1);
+			right_side_bound = target + (size_t)TokenToInt64(t2);
+		}
+		else
+			target = 0;
+	}
+	else if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 	{
 		target = (size_t)target_token.var->Contents(); // Although Contents(TRUE) will force an update of mContents if necessary, it very unlikely to be necessary here because we're about to fetch a binary number from inside mContents, not a normal/text number.
 		right_side_bound = target + target_token.var->ByteCapacity(); // This is first illegal address to the right of target.
@@ -15394,7 +15407,8 @@ BIF_DECL(BIF_NumGet)
 	// - Due to rarity of negative offsets, only the right-side boundary is checked, not the left.
 	// - Due to rarity and to simplify things, Float/Double (which "return" higher above) aren't checked.
 	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.
-		|| target_token.symbol == SYM_VAR && target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+		|| (target_token.symbol == SYM_VAR || target_token.symbol == SYM_OBJECT)
+		&& target+size > right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
 		aResultToken.symbol = SYM_STRING;
 		aResultToken.marker = _T("");
@@ -15595,7 +15609,20 @@ BIF_DECL(BIF_NumPut)
 
 	size_t right_side_bound, target; // Don't make target a pointer-type because the integer offset might not be a multiple of 4 (i.e. the below increments "target" directly by "offset" and we don't want that to use pointer math).
 	ExprTokenType &target_token = *aParam[1];
-	if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+	if (Object *obj = dynamic_cast<Object *>(TokenToObject(target_token)))
+	{
+		ExprTokenType t1;
+		ExprTokenType t2;
+		if ((obj->GetItem(t1, _T("Ptr")))
+		&& (obj->GetItem(t2, _T("Size"))))
+		{
+			target = (size_t)TokenToInt64(t1);
+			right_side_bound = target + (size_t)TokenToInt64(t2);
+		}
+		else
+			target = 0;
+	}
+	else if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 	{
 		target = (size_t)target_token.var->Contents(FALSE); // Pass FALSE for performance because contents is about to be overwritten, followed by a call to Close(). If something goes wrong and we return early, Contents() won't have been changed, so nothing about it needs updating.
 		right_side_bound = target + target_token.var->ByteCapacity(); // This is the first illegal address to the right of target.
@@ -15650,7 +15677,8 @@ BIF_DECL(BIF_NumPut)
 
 	// See comments in NumGet about the following section:
 	if (target < 65536 // Basic sanity check to catch incoming raw addresses that are zero or blank.
-		|| target_token.symbol == SYM_VAR && aResultToken.value_int64 > (INT_PTR)right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
+		|| (target_token.symbol == SYM_VAR || target_token.symbol == SYM_OBJECT)
+		&& aResultToken.value_int64 > (INT_PTR)right_side_bound) // i.e. it's ok if target+size==right_side_bound because the last byte to be read is actually at target+size-1. In other words, the position of the last possible terminator within the variable's capacity is considered an allowable address.
 	{
 		if (target_token.symbol == SYM_VAR)
 		{
@@ -15726,6 +15754,7 @@ BIF_DECL(BIF_StrGetPut)
 
 	LPVOID 	address;
 	int 	length = -1; // actual length
+	int 	buf_length = -1; // buffer capacity in TChars (for chars and null)
 	UINT 	encoding = UorA(CP_UTF16, CP_ACP); // native encoding
 
 	// Parameters are interpreted according to the following rules (highest to lowest precedence):
@@ -15741,6 +15770,22 @@ BIF_DECL(BIF_StrGetPut)
 	if (aParam < aParam_end && TokenIsPureNumeric(**aParam))
 	{
 		address = (LPVOID)TokenToInt64(**aParam);
+		++aParam;
+	}
+	else if (Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[0])))
+	{
+		ExprTokenType t1;
+		ExprTokenType t2;
+		if ((obj->GetItem(t1, _T("Ptr")))
+		&& (obj->GetItem(t2, _T("Size"))))
+		{
+			address = (LPVOID)TokenToInt64(t1);
+			buf_length = (int)TokenToInt64(t2); // byte count, will become short count if encoding is UTF-16
+			if (buf_length < 0)
+				return;
+		}
+		else
+			return;
 		++aParam;
 	}
 	else
@@ -15785,6 +15830,8 @@ BIF_DECL(BIF_StrGetPut)
 			else encoding = (UINT)TokenToInt64(**aParam);
 		}
 	}
+	if ((buf_length != -1) && (encoding == CP_UTF16))
+		buf_length >>= 1;
 	// Note: CP_AHKNOBOM is not supported; "-RAW" must be omitted.
 
 	// Check for obvious errors to prevent an Access Violation.
@@ -15803,8 +15850,11 @@ BIF_DECL(BIF_StrGetPut)
 
 		if (!source_length)
 		{	// Take a shortcut when source_string is empty, since some paths below might not handle it correctly.
-			if (length) {
-				if (encoding == CP_UTF16)
+			if (length)
+			{
+			 	if (!buf_length)
+			 		return;
+				else if (encoding == CP_UTF16)
 					*(LPWSTR)address = '\0';
 				else
 					*(LPSTR)address = '\0';
@@ -15827,6 +15877,8 @@ BIF_DECL(BIF_StrGetPut)
 						// Exceptional case: caller doesn't want a null-terminator (or passed this length in error).
 						--char_count;
 					// Copy the string, including null-terminator if requested.
+					if ((UINT)char_count > (UINT)buf_length)
+						return;
 					tmemcpy((LPTSTR)address, (LPCTSTR)source_string, char_count);
 				}
 				else
@@ -15855,6 +15907,8 @@ BIF_DECL(BIF_StrGetPut)
 					}
 					length = char_count;
 				}
+				if ((UINT)length > (UINT)buf_length)
+					return;
 				char_count = MultiByteToWideChar(CP_ACP, 0, (LPCSTR)source_string, source_length, (LPWSTR)address, length);
 				if (char_count && char_count < length)
 					((LPWSTR)address)[char_count++] = '\0';
@@ -15897,6 +15951,8 @@ BIF_DECL(BIF_StrGetPut)
 					// Assume there is sufficient buffer space and hope for the best:
 					length = char_count;
 				}
+				if ((UINT)length > (UINT)buf_length)
+					return;
 				// Convert to target encoding.
 				char_count = WideCharToMultiByte(encoding, flags, (LPCWSTR)source_string, source_length, (LPSTR)address, length, NULL, NULL);
 				// Since above did not null-terminate, check for buffer space and null-terminate if there's room.
@@ -15921,6 +15977,8 @@ BIF_DECL(BIF_StrGetPut)
 #ifdef UNICODE
 			// Convert multi-byte encoded string to UTF-16.
 			conv_length = MultiByteToWideChar(encoding, 0, (LPCSTR)address, length, NULL, 0);
+			if ((UINT)conv_length > (UINT)buf_length)
+				return;
 			if (!TokenSetResult(aResultToken, NULL, conv_length)) // DO NOT SUBTRACT 1, conv_length might not include a null-terminator.
 				return; // Out of memory.
 			conv_length = MultiByteToWideChar(encoding, 0, (LPCSTR)address, length, aResultToken.marker, conv_length);
@@ -15936,6 +15994,8 @@ BIF_DECL(BIF_StrGetPut)
 
 			// Now convert UTF-16 to ACP.
 			conv_length = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (LPCWSTR)address, length, NULL, 0, NULL, NULL);
+			if ((UINT)conv_length > (UINT)buf_length)
+				return;
 			if (!TokenSetResult(aResultToken, NULL, conv_length)) // DO NOT SUBTRACT 1, conv_length might not include a null-terminator.
 				return; // Out of memory.
 			conv_length = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, (LPCWSTR)address, length, aResultToken.marker, conv_length, NULL, NULL);
@@ -15950,7 +16010,8 @@ BIF_DECL(BIF_StrGetPut)
 		else if (length > -1)
 		{
 			// No conversion necessary, but we might not want the whole string.
-			if (length == 0)
+			if ((length == 0)
+			|| ((UINT)length + 1 > (UINT)buf_length))
 				return;	// Already set marker = "" above.
 			// Copy and null-terminate at the specified length.
 			TokenSetResult(aResultToken, (LPCTSTR)address, length);
@@ -15958,7 +16019,9 @@ BIF_DECL(BIF_StrGetPut)
 		}
 
 		// Return this null-terminated string, no conversion necessary.
-		aResultToken.marker = (LPTSTR) address;
+		length = _tcslen((TCHAR *)address);
+		if ((UINT)length + 1 <= (UINT)buf_length)
+			aResultToken.marker = (LPTSTR)address;
 	}
 }
 

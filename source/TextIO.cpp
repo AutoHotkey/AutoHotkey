@@ -965,7 +965,28 @@ class FileObject : public ObjectBase // fincs: No longer allowing the script to 
 				ExprTokenType &target_token = *aParam[1];
 				DWORD size = (DWORD)TokenToInt64(*aParam[2]);
 
-				if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
+				if (Object *obj = dynamic_cast<Object *>(TokenToObject(target_token)))
+				{
+					ExprTokenType t1;
+					ExprTokenType t2;
+					DWORD capacity;
+					if ((obj->GetItem(t1, _T("Ptr")))
+					&& (obj->GetItem(t2, _T("Size"))))
+					{
+						target = (LPVOID)TokenToInt64(t1);
+						capacity = (DWORD)TokenToInt64(t2);
+					}
+					else
+						target = 0;
+					if (!target || size > capacity)
+					{
+						if (g->InTryBlock())
+							break; // Throw an exception.
+						aResultToken.value_int64 = 0;
+						return OK;
+					}
+				}
+				else if (target_token.symbol == SYM_VAR) // SYM_VAR's Type() is always VAR_NORMAL (except lvalues in expressions).
 				{
 					// Check if the user requested a size larger than the variable.
 					if ( size > target_token.var->ByteCapacity()
