@@ -3220,6 +3220,7 @@ BIV_DECL_R (BIV_Is64bitOS);
 BIV_DECL_R (BIV_Language);
 BIV_DECL_R (BIV_UserName_ComputerName);
 BIV_DECL_R (BIV_WorkingDir);
+BIV_DECL_R (BIV_InitialWorkingDir);
 BIV_DECL_R (BIV_WinDir);
 BIV_DECL_R (BIV_Temp);
 BIV_DECL_R (BIV_ComSpec);

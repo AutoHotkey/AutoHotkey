@@ -11677,6 +11677,13 @@ VarSizeType BIV_WorkingDir(LPTSTR aBuf, LPTSTR aVarName)
 		// Above avoids subtracting 1 to be conservative and to reduce code size (due to the need to otherwise check for zero and avoid subtracting 1 in that case).
 }
 
+VarSizeType BIV_InitialWorkingDir(LPTSTR aBuf, LPTSTR aVarName)
+{
+	if (aBuf)
+		_tcscpy(aBuf, g_WorkingDirOrig);
+	return (VarSizeType)_tcslen(g_WorkingDirOrig);
+}
+
 VarSizeType BIV_WinDir(LPTSTR aBuf, LPTSTR aVarName)
 {
 	TCHAR buf[MAX_PATH]; // MSDN (2018): The uSize parameter "should be set to MAX_PATH."
