@@ -64,6 +64,7 @@ VarEntry g_BIV_A[] =
 	A_x(BatchLines, BIV_BatchLines),
 	A_x(CaretX, BIV_Caret),
 	A_x(CaretY, BIV_Caret),
+	A_x(Clipboard, (BuiltInVarType)VAR_CLIPBOARD),
 	A_x(ComputerName, BIV_UserName_ComputerName),
 	A_(ComSpec),
 	A_x(ControlDelay, BIV_xDelay),
