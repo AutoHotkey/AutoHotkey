@@ -16214,10 +16214,35 @@ BIF_DECL(BIF_WinExistActive)
 	for (int j = 0; j < 4; ++j) // For each formal parameter, including optional ones.
 		param[j] = ParamIndexToOptionalString(j, param_buf[j]);
 
+	bool need_restore = false;
+	if (!ParamIndexIsOmitted(0)) 
+	{
+		if (Object *obj = dynamic_cast<Object *>(TokenToObject(*aParam[0])))
+		{
+			ExprTokenType t;
+			TCHAR wintitle[30] = _T("ahk_id ");
+			if (obj->GetItem(t, _T("HWND")))
+			{
+				param[0] = TokenToString(t, param_buf[0]);
+				if (_tcslen(param[0]) <= 22)
+					_tcscat(wintitle+7, param[0]);
+				param[0] = wintitle;
+				if (!g->DetectHiddenWindows)
+				{
+					need_restore = true;
+					g->DetectHiddenWindows = true;
+				}
+			}
+		}
+	}
+
 	// Should be called the same was as ACT_IFWINEXIST and ACT_IFWINACTIVE:
 	HWND found_hwnd = (ctoupper(bif_name[3]) == 'E') // Win[E]xist.
 		? WinExist(*g, param[0], param[1], param[2], param[3], false, true)
 		: WinActive(*g, param[0], param[1], param[2], param[3], true);
+
+	if (need_restore)
+		g->DetectHiddenWindows = false;
 
 	aResultToken.marker = HwndToString(found_hwnd, aResultToken.buf);
 }
