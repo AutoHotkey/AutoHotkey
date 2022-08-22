@@ -1389,11 +1389,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 			for ( ; ; ++bkps)
 			{
 				if (bkps == bkps_end)
-				{
-					// No local var at that depth, so make sure to not return the wrong local.
-					aVarScope = FINDVAR_GLOBAL;
 					break;
-				}
 				if (!_tcsicmp(bkps->mVar->mName, name))
 				{
 					varbkp = bkps;
@@ -1406,11 +1402,7 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 			for ( ; ; ++vars)
 			{
 				if (vars == vars_end)
-				{
-					// No local var at that depth, so make sure to not return the wrong local.
-					aVarScope = FINDVAR_GLOBAL;
 					break;
-				}
 				if (!_tcsicmp((*vars)->mName, name))
 				{
 					var = *vars;
@@ -1418,6 +1410,9 @@ int Debugger::ParsePropertyName(LPCSTR aFullName, int aDepth, int aVarScope, boo
 				}
 			}
 		}
+		// If a var wasn't found above, make sure not to return a local var of the wrong function or depth.
+		if (!var)
+			aVarScope = FINDVAR_GLOBAL;
 	}
 
 	// If we're allowed to create variables
