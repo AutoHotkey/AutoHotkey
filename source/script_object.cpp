@@ -537,6 +537,9 @@ ResultType STDMETHODCALLTYPE Object::Invoke(
 			}
 		}
 
+		if (!field && key_type == SYM_INVALID)
+			return INVOKE_NOT_HANDLED; // Nothing more we can do without a key; avoid any Insert() calls below.
+
 		// Since the base object didn't handle this op, check for built-in properties/methods.
 		// This must apply only to the original target object (aThisToken), not one of its bases.
 		if (!IS_INVOKE_META && key_type == SYM_STRING && !field) // v1.1.16: Check field again so if __Call sets a field, it gets called.
