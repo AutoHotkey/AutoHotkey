@@ -848,6 +848,7 @@ inline void global_clear_state(global_struct &g)
 	g.hWndLastUsed = NULL;
 	//g.hWndToRestore = NULL;
 	g.MsgBoxResult = 0;
+	g.DialogHWND = NULL;
 	g.IsPaused = false;
 	g.UninterruptedLineCount = 0;
 	g.DialogOwner = NULL;
