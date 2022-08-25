@@ -6131,7 +6131,7 @@ throw_invalid_delimiter:
 
 
 
-ResultType SplitPath(LPCTSTR aFileSpec, Var *output_var_name, Var *output_var_dir, Var *output_var_ext, Var *output_var_name_no_ext, Var *output_var_drive)
+ResultType SplitPath(LPCTSTR aFileSpec, LPTSTR out_name, LPTSTR out_dir, LPTSTR out_ext, LPTSTR out_name_no_ext, LPTSTR out_drive)
 {
 	// For URLs, "drive" is defined as the server name, e.g. http://somedomain.com
 	LPCTSTR name = _T(""), name_delimiter = NULL, drive_end = NULL; // Set defaults to improve maintainability.
@@ -6174,22 +6174,22 @@ ResultType SplitPath(LPCTSTR aFileSpec, Var *output_var_name, Var *output_var_di
 	else // It's not a URL, just a file specification such as c:\my folder\my file.txt, or \\server01\folder\file.txt
 	{
 		// Differences between _splitpath() and the method used here:
-		// _splitpath() doesn't include drive in output_var_dir, it includes a trailing
+		// _splitpath() doesn't include drive in out_dir, it includes a trailing
 		// backslash, it includes the . in the extension, it considers ":" to be a filename.
 		// _splitpath(pathname, drive, dir, file, ext);
 		//char sdrive[16], sdir[MAX_PATH], sname[MAX_PATH], sext[MAX_PATH];
 		//_splitpath(aFileSpec, sdrive, sdir, sname, sext);
-		//if (output_var_name_no_ext)
-		//	output_var_name_no_ext->Assign(sname);
+		//if (out_name_no_ext)
+		//	out_name_no_ext->Assign(sname);
 		//strcat(sname, sext);
-		//if (output_var_name)
-		//	output_var_name->Assign(sname);
-		//if (output_var_dir)
-		//	output_var_dir->Assign(sdir);
-		//if (output_var_ext)
-		//	output_var_ext->Assign(sext);
-		//if (output_var_drive)
-		//	output_var_drive->Assign(sdrive);
+		//if (out_name)
+		//	out_name->Assign(sname);
+		//if (out_dir)
+		//	out_dir->Assign(sdir);
+		//if (out_ext)
+		//	out_ext->Assign(sext);
+		//if (out_drive)
+		//	out_drive->Assign(sdrive);
 		//return OK;
 
 		// Don't use _splitpath() since it supposedly doesn't handle UNC paths correctly,
@@ -6242,40 +6242,51 @@ ResultType SplitPath(LPCTSTR aFileSpec, Var *output_var_name, Var *output_var_di
 	// drive: As the start of the drive/server name, e.g. C:, \\Workstation01, http://domain.com, etc.
 	// drive_end: As the position after the drive's last character, either a zero terminator, slash, or backslash.
 
-	if (output_var_name && !output_var_name->Assign(name))
-		return FAIL;
+	if (out_name)
+		_tcscpy(out_name, name);
 
-	if (output_var_dir)
+	if (out_dir)
 	{
 		if (!name_delimiter)
-			output_var_dir->Assign(); // Shouldn't fail.
+			*out_dir = '\0';
 		else if (*name_delimiter == '\\' || *name_delimiter == '/')
 		{
-			if (!output_var_dir->Assign(aFileSpec, (VarSizeType)(name_delimiter - aFileSpec)))
-				return FAIL;
+			_tcsncpy(out_dir, aFileSpec, name_delimiter - aFileSpec);
+			out_dir[name_delimiter - aFileSpec] = '\0';
 		}
 		else // *name_delimiter == ':', e.g. "C:Some File.txt".  If aFileSpec starts with just ":",
-			 // the dir returned here will also start with just ":" since that's rare & illegal anyway.
-			if (!output_var_dir->Assign(aFileSpec, (VarSizeType)(name_delimiter - aFileSpec + 1)))
-				return FAIL;
+		{    // the dir returned here will also start with just ":" since that's rare & illegal anyway.
+			_tcsncpy(out_dir, aFileSpec, name_delimiter - aFileSpec + 1);
+			out_dir[name_delimiter - aFileSpec + 1] = '\0';
+		}
 	}
 
 	LPCTSTR ext_dot = _tcsrchr(name, '.');
-	if (output_var_ext)
+	if (out_ext)
 	{
 		// Note that the OS doesn't allow filenames to end in a period.
 		if (!ext_dot)
-			output_var_ext->Assign();
+			*out_ext = '\0';
 		else
-			if (!output_var_ext->Assign(ext_dot + 1)) // Can be empty string if filename ends in just a dot.
-				return FAIL;
+			_tcscpy(out_ext, ext_dot + 1);
 	}
 
-	if (output_var_name_no_ext && !output_var_name_no_ext->Assign(name, (VarSizeType)(ext_dot ? ext_dot - name : _tcslen(name))))
-		return FAIL;
+	if (out_name_no_ext)
+	{
+		if (ext_dot)
+		{
+			_tcsncpy(out_name_no_ext, name, ext_dot - name);
+			out_name_no_ext[ext_dot - name] = '\0';
+		}
+		else
+			_tcscpy(out_name_no_ext, name);
+	}
 
-	if (output_var_drive && !output_var_drive->Assign(drive, (VarSizeType)(drive_end - drive)))
-		return FAIL;
+	if (out_drive)
+	{
+		_tcsncpy(out_drive, drive, drive_end - drive);
+		out_drive[drive_end - drive] = '\0';
+	}
 
 	return OK;
 }
@@ -6284,6 +6295,33 @@ BIF_DECL(BIF_SplitPath)
 {
 	LPTSTR mem_to_free = nullptr;
 	_f_param_string(aFileSpec, 0);
+	int len = _tcslen(aFileSpec);
+	LPTSTR out_name = (!ParamIndexIsOmitted(1) || aParamCount == 1) ? tmalloc(len+1) : NULL;
+	LPTSTR out_dir = (!ParamIndexIsOmitted(2) || aParamCount == 1) ? tmalloc(len+1) : NULL;
+	LPTSTR out_ext = (!ParamIndexIsOmitted(3) || aParamCount == 1) ? tmalloc(len+1) : NULL;
+	LPTSTR out_name_no_ext = (!ParamIndexIsOmitted(4) || aParamCount == 1) ? tmalloc(len+1) : NULL;
+	LPTSTR out_drive = (!ParamIndexIsOmitted(5) || aParamCount == 1) ? tmalloc(len+1) : NULL;
+
+	if (aParamCount == 1) // No output vars, so return object.
+	{
+		aResultToken.SetValue(_T(""), 0);
+		if (SplitPath(aFileSpec, out_name, out_dir, out_ext, out_name_no_ext, out_drive))
+		{
+			ExprTokenType argt[] = { _T("Dir"), out_dir, _T("Drive"), out_drive, _T("Ext"), out_ext, _T("Name"), out_name, _T("NameNoExt"), out_name_no_ext, _T("Path"), aFileSpec };
+			ExprTokenType *args[_countof(argt)] = { argt, argt+1, argt+2, argt+3, argt+4, argt+5, argt+6, argt+7, argt+8, argt+9, argt+10, argt+11 };
+			Object *obj = Object::Create(args, _countof(args));
+			free(out_name);
+			free(out_ext);
+			free(out_dir);
+			free(out_name_no_ext);
+			free(out_drive);
+			if (obj)
+				_f_return(obj);
+		}
+		aResultToken.SetExitResult(FAIL);
+		return;
+	}
+
 	Var *vars[6];
 	for (int i = 1; i < _countof(vars); ++i)
 		vars[i] = ParamIndexToOutputVar(i);
@@ -6305,8 +6343,18 @@ BIF_DECL(BIF_SplitPath)
 		}
 	}
 	aResultToken.SetValue(_T(""), 0);
-	if (!SplitPath(aFileSpec, vars[1], vars[2], vars[3], vars[4], vars[5]))
+	if (!SplitPath(aFileSpec, out_name, out_dir, out_ext, out_name_no_ext, out_drive))
 		aResultToken.SetExitResult(FAIL);
+	if (out_name)
+		{ vars[1]->Assign(out_name); free(out_name); }
+	if (out_dir)
+		{ vars[2]->Assign(out_dir); free(out_dir); }
+	if (out_ext)
+		{ vars[3]->Assign(out_ext); free(out_ext); }
+	if (out_name_no_ext)
+		{ vars[4]->Assign(out_name_no_ext); free(out_name_no_ext); }
+	if (out_drive)
+		{ vars[5]->Assign(out_drive); free(out_drive); }
 	free(mem_to_free);
 }
 
