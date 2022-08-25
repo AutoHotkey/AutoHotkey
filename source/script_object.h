@@ -247,6 +247,7 @@ protected:
 	typedef LPTSTR name_t;
 	typedef FlatVector<TCHAR> String;
 
+public: // Public for use with Array.Sort().
 	struct Variant
 	{
 		union { // Which of its members is used depends on the value of symbol, below.
@@ -278,6 +279,7 @@ protected:
 		inline void ToToken(ExprTokenType &aToken); // Used when we want the value as is, in a token.  Does not AddRef() or copy strings.
 	};
 
+protected:
 	struct FieldType : Variant
 	{
 		name_t name;
@@ -559,6 +561,8 @@ public:
 	ResultType ToStrings(LPTSTR *aStrings, int &aStringCount, int aStringsMax);
 	void ToParams(ExprTokenType *token, ExprTokenType **param_list, ExprTokenType **aParam, int aParamCount);
 
+	ResultType Sort(TCHAR* aOptions, IObject* aFunction);
+
 	enum MemberID
 	{
 		P___Item,
@@ -572,7 +576,8 @@ public:
 		M_Has,
 		M_Delete,
 		M_Clone,
-		M___Enum
+		M___Enum,
+		M_Sort
 	};
 	static ObjectMember sMembers[];
 	static Object *sPrototype;

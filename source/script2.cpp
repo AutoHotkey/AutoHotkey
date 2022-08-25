@@ -6422,30 +6422,111 @@ int SortUDF(const void *a1, const void *a2)
 
 
 
-BIF_DECL(BIF_Sort)
+int ArraySortWithOptions(const void *a1, const void *a2)
 {
-	// Set defaults in case of early goto:
-	LPTSTR mem_to_free = NULL;
-	LPTSTR *item = NULL; // The index/pointer list used for the sort.
-	IObject *sort_func_orig = g_SortFunc; // Because UDFs can be interrupted by other threads -- and because UDFs can themselves call Sort with some other UDF (unlikely to be sure) -- backup & restore original g_SortFunc so that the "collapsing in reverse order" behavior will automatically ensure proper operation.
-	ResultType sort_func_result_orig = g_SortFuncResult;
-	g_SortFunc = NULL; // Now that original has been saved above, reset to detect whether THIS sort uses a UDF.
-	g_SortFuncResult = OK;
+	ExprTokenType token1, token2;
+	TCHAR buf1[MAX_NUMBER_SIZE], buf2[MAX_NUMBER_SIZE];
+	INT_PTR addr1 = *(INT_PTR *)a1;
+	INT_PTR addr2 = *(INT_PTR *)a2;
+	(*(Array::Variant *)addr1).ToToken(token1);
+	(*(Array::Variant *)addr2).ToToken(token2);
+	LPTSTR sort_item1 = TokenToString(token1, buf1);
+	LPTSTR sort_item2 = TokenToString(token2, buf2);
 
-	_f_param_string(aContents, 0);
-	_f_param_string_opt(aOptions, 1);
+	// Based on SortWithOptions:
+	if (g_SortColumnOffset > 0)
+	{
+		// Adjust each string (even for numerical sort) to be the right column position,
+		// or the position of its zero terminator if the column offset goes beyond its length:
+		size_t length = _tcslen(sort_item1);
+		sort_item1 += (size_t)g_SortColumnOffset > length ? length : g_SortColumnOffset;
+		length = _tcslen(sort_item2);
+		sort_item2 += (size_t)g_SortColumnOffset > length ? length : g_SortColumnOffset;
+	}
+	if (g_SortNumeric) // Takes precedence over g_SortCaseSensitive
+	{
+		// For now, assume both are numbers.  If one of them isn't, it will be sorted as a zero.
+		// Thus, all non-numeric items should wind up in a sequential, unsorted group.
+		// Resolve only once since parts of the ATOF() macro are inline:
+		double item1_minus_2 = ATOF(sort_item1) - ATOF(sort_item2);
+		if (!item1_minus_2) // Exactly equal.
+			return (addr1 > addr2) ? 1 : -1; // Stable sort.
+		// Otherwise, it's either greater or less than zero:
+		int result = (item1_minus_2 > 0.0) ? 1 : -1;
+		return g_SortReverse ? -result : result;
+	}
+	// Otherwise, it's a non-numeric sort.
+	// v1.0.43.03: Added support the new locale-insensitive mode.
+	int result = (g_SortCaseSensitive != SCS_INSENSITIVE_LOGICAL)
+		? tcscmp2(sort_item1, sort_item2, g_SortCaseSensitive) // Resolve large macro only once for code size reduction.
+		: StrCmpLogicalW(sort_item1, sort_item2);
+	if (!result)
+		result = (addr1 > addr2) ? 1 : -1; // Stable sort.
+	return g_SortReverse ? -result : result;
+}
 
-	// Resolve options.  First set defaults for options:
-	TCHAR delimiter = '\n';
-	g_SortCaseSensitive = SCS_INSENSITIVE;
-	g_SortNumeric = false;
-	g_SortReverse = false;
-	g_SortColumnOffset = 0;
-	bool trailing_delimiter_indicates_trailing_blank_item = false, terminate_last_item_with_delimiter = false
-		, trailing_crlf_added_temporarily = false, sort_by_naked_filename = false, sort_random = false
-		, omit_dupes = false;
+int ArraySortRandom(const void *a1, const void *a2)
+{
+	UINT64 rand = 0;
+	GenRandom(&rand, sizeof(rand));
+	return (rand & 1) ? 1 : -1;
+}
+
+int ArraySortByNakedFilename(const void *a1, const void *a2)
+{
+	ExprTokenType token1, token2;
+	TCHAR buf1[MAX_NUMBER_SIZE], buf2[MAX_NUMBER_SIZE];
+	INT_PTR addr1 = *(INT_PTR *)a1;
+	INT_PTR addr2 = *(INT_PTR *)a2;
+	(*(Array::Variant *)addr1).ToToken(token1);
+	(*(Array::Variant *)addr2).ToToken(token2);
+	LPTSTR sort_item1 = TokenToString(token1, buf1);
+	LPTSTR sort_item2 = TokenToString(token2, buf2);
+
+	// Based on SortByNakedFilename:
 	LPTSTR cp;
+	if (cp = _tcsrchr(sort_item1, '\\'))  // Assign
+		sort_item1 = cp + 1;
+	if (cp = _tcsrchr(sort_item2, '\\'))  // Assign
+		sort_item2 = cp + 1;
+	// v1.0.43.03: Added support the new locale-insensitive mode.
+	int result = (g_SortCaseSensitive != SCS_INSENSITIVE_LOGICAL)
+		? tcscmp2(sort_item1, sort_item2, g_SortCaseSensitive) // Resolve large macro only once for code size reduction.
+		: StrCmpLogicalW(sort_item1, sort_item2);
+	if (!result)
+		result = (addr1 > addr2) ? 1 : -1; // Stable sort.
+	return g_SortReverse ? -result : result;
+}
 
+int ArraySortUDF(const void *a1, const void *a2)
+{
+	if (!g_SortFuncResult || g_SortFuncResult == EARLY_EXIT)
+		return 0;
+
+	ExprTokenType token1, token2;
+	INT_PTR addr1 = *(INT_PTR *)a1;
+	INT_PTR addr2 = *(INT_PTR *)a2;
+	(*(Array::Variant *)addr1).ToToken(token1);
+	(*(Array::Variant *)addr2).ToToken(token2);
+	ExprTokenType param[] = { token1, token2, __int64(addr2 - addr1) };
+	__int64 i64;
+	g_SortFuncResult = CallMethod(g_SortFunc, g_SortFunc, nullptr, param, _countof(param), &i64);
+
+	int returned_int;
+	if (i64 > 0)  // Maybe there's a faster/better way to do these checks. Can't simply typecast to an int because some large positives wrap into negative, maybe vice versa.
+		returned_int = 1;
+	else if (i64 < 0)
+		returned_int = -1;
+	else
+		returned_int = addr1 > addr2 ? 1 : -1; // Stable sort.
+	return returned_int;
+}
+
+
+
+void SortParseOptions(LPTSTR aOptions, TCHAR &delimiter, bool &trailing_delimiter_indicates_trailing_blank_item, bool &sort_by_naked_filename, bool &sort_random, bool &omit_dupes)
+{
+	LPTSTR cp;
 	for (cp = aOptions; *cp; ++cp)
 	{
 		switch(_totupper(*cp))
@@ -6520,6 +6601,32 @@ BIF_DECL(BIF_Sort)
 			sort_by_naked_filename = true;
 		}
 	}
+}
+
+BIF_DECL(BIF_Sort)
+{
+	// Set defaults in case of early goto:
+	LPTSTR mem_to_free = NULL;
+	LPTSTR *item = NULL; // The index/pointer list used for the sort.
+	IObject *sort_func_orig = g_SortFunc; // Because UDFs can be interrupted by other threads -- and because UDFs can themselves call Sort with some other UDF (unlikely to be sure) -- backup & restore original g_SortFunc so that the "collapsing in reverse order" behavior will automatically ensure proper operation.
+	ResultType sort_func_result_orig = g_SortFuncResult;
+	g_SortFunc = NULL; // Now that original has been saved above, reset to detect whether THIS sort uses a UDF.
+	g_SortFuncResult = OK;
+
+	_f_param_string(aContents, 0);
+	_f_param_string_opt(aOptions, 1);
+
+	// Resolve options.  First set defaults for options:
+	TCHAR delimiter = '\n';
+	g_SortCaseSensitive = SCS_INSENSITIVE;
+	g_SortNumeric = false;
+	g_SortReverse = false;
+	g_SortColumnOffset = 0;
+	bool trailing_delimiter_indicates_trailing_blank_item = false, terminate_last_item_with_delimiter = false
+		, trailing_crlf_added_temporarily = false, sort_by_naked_filename = false, sort_random = false
+		, omit_dupes = false;
+	LPTSTR cp;
+	SortParseOptions(aOptions, delimiter, trailing_delimiter_indicates_trailing_blank_item, sort_by_naked_filename, sort_random, omit_dupes);
 
 	if (!ParamIndexIsOmitted(2))
 	{

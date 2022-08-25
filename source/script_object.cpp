@@ -1871,6 +1871,80 @@ ResultType Array::SetLength(index_t aNewLength)
 	return OK;
 }
 
+ResultType Array::Sort(TCHAR* aOptions, IObject* aFunction)
+{
+	if (mLength < 2)
+		return OK;
+	if (mItem+mLength-mItem != mLength) // Pointer arithmetic.
+		return FAIL;
+
+	IObject *sort_func_orig = g_SortFunc; // Because UDFs can be interrupted by other threads -- and because UDFs can themselves call Sort with some other UDF (unlikely to be sure) -- backup & restore original g_SortFunc so that the "collapsing in reverse order" behavior will automatically ensure proper operation.
+	ResultType sort_func_result_orig = g_SortFuncResult;
+	g_SortFunc = NULL; // Now that original has been saved above, reset to detect whether THIS sort uses a UDF.
+	g_SortFuncResult = OK;
+	bool is_error = false;
+
+	// Resolve options.  First set defaults for options:
+	TCHAR delimiter = '\0'; // Not used by Array.Sort().
+	g_SortCaseSensitive = SCS_INSENSITIVE;
+	g_SortNumeric = false;
+	g_SortReverse = false;
+	g_SortColumnOffset = 0;
+	bool trailing_delimiter_indicates_trailing_blank_item = false // Not used by Array.Sort().
+		, sort_by_naked_filename = false, sort_random = false
+		, omit_dupes = false; // Not used by Array.Sort().
+	SortParseOptions(aOptions, delimiter, trailing_delimiter_indicates_trailing_blank_item, sort_by_naked_filename, sort_random, omit_dupes);
+
+	Variant **ptr_array = (Variant **)malloc(mLength * sizeof(Variant *));
+	if (!ptr_array)
+	{
+		is_error = true;
+		goto end;
+	}
+	UINT i;
+	Variant *ptr = mItem;
+	for (i = 0; i < mLength; ++i, ++ptr)
+		ptr_array[i] = ptr;
+
+	if (aFunction) // Takes precedence other sorting methods.
+	{
+		g_SortFunc = aFunction;
+		qsort(ptr_array, mLength, sizeof(void *), ArraySortUDF);
+		if (!g_SortFuncResult || g_SortFuncResult == EARLY_EXIT)
+		{
+			free(ptr_array);
+			is_error = true;
+			goto end;
+		}
+	}
+	else if (sort_random) // Takes precedence over all remaining options.
+		qsort(ptr_array, mLength, sizeof(void *), ArraySortRandom);
+	else
+		qsort(ptr_array, mLength, sizeof(void *), sort_by_naked_filename ? ArraySortByNakedFilename : ArraySortWithOptions);
+
+	int size = sizeof(Variant);
+	char *buf = (char *)malloc(mLength * size);
+	if (!buf)
+	{
+		free(ptr_array);
+		is_error = true;
+		goto end;
+	}
+	char *pos = buf;
+	for (i = 0; i < mLength; ++i, pos += size)
+		memcpy(pos, (char *)ptr_array[i], size);
+	memcpy(mItem, buf, mLength*size);
+	free(ptr_array);
+	free(buf);
+
+end:
+	if (g_SortFunc)
+		g_SortFunc->Release();
+	g_SortFunc = sort_func_orig;
+	g_SortFuncResult = sort_func_result_orig;
+	return is_error ? FAIL : OK;
+}
+
 Array::~Array()
 {
 	RemoveAt(0, mLength);
@@ -1931,7 +2005,8 @@ ObjectMember Array::sMembers[] =
 	Object_Method(InsertAt, 2, MAXP_VARIADIC),
 	Object_Method(Pop, 0, 0),
 	Object_Method(Push, 0, MAXP_VARIADIC),
-	Object_Method(RemoveAt, 1, 2)
+	Object_Method(RemoveAt, 1, 2),
+	Object_Method(Sort, 0, 2)
 };
 
 void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType *aParam[], int aParamCount)
@@ -2057,6 +2132,30 @@ void Array::Invoke(ResultToken &aResultToken, int aID, int aFlags, ExprTokenType
 	case M___Enum:
 		_o_return(new IndexEnumerator(this, ParamIndexToOptionalInt(0, 1)
 			, static_cast<IndexEnumerator::Callback>(&Array::GetEnumItem)));
+
+	case M_Sort:
+	{
+		LPTSTR aOptions = _T("");
+		IObject *aFunction = NULL;
+		if (ParamIndexIsOmitted(1)) // Sort() or Sort(Options) or Sort(Function).
+		{
+			if (!ParamIndexIsOmitted(0))
+			{
+				if (TypeOfToken(*aParam[0]) != SYM_OBJECT)
+					aOptions = ParamIndexToString(0, _f_number_buf);
+				else if (  !(aFunction = ParamIndexToObject(0))  )
+					_o_throw_param(0);
+			}
+		}
+		else // Sort(, Function) or Sort(Options, Function).
+		{
+			if (  !(aFunction = ParamIndexToObject(1))  )
+				_o_throw_param(1);
+			aOptions = ParamIndexToOptionalString(0, _f_number_buf);
+		}
+		Sort(aOptions, aFunction);
+	}
+
 	}
 }
 
