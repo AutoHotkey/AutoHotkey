@@ -322,6 +322,12 @@ static inline int DPIUnscale(int x)
 	return MulDiv(x, 96, g_ScreenDPI);
 }
 
+void SortParseOptions(LPTSTR aOptions, TCHAR &delimiter, bool &trailing_delimiter_indicates_trailing_blank_item, bool &sort_by_naked_filename, bool &sort_random, bool &omit_dupes);
+int ArraySortWithOptions(const void *a1, const void *a2);
+int ArraySortRandom(const void *a1, const void *a2);
+int ArraySortByNakedFilename(const void *a1, const void *a2);
+int ArraySortUDF(const void *a1, const void *a2);
+
 #define INPUTBOX_DEFAULT INT_MIN
 ResultType InputBoxParseOptions(LPTSTR aOptions, InputBoxType &aInputBox);
 ResultType InputBox(Var *aOutputVar, LPTSTR aText, LPTSTR aTitle, LPTSTR aOptions, LPTSTR aDefault);
