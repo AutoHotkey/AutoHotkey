@@ -20,6 +20,7 @@ GNU General Public License for more details.
 #include "application.h" // for MsgSleep()
 #include "util.h"  // for strlicmp()
 #include "window.h" // for IsWindowHung()
+#include "abi.h"
 
 
 // Added for v1.0.25.  Search on sPrevEventType for more comments:
@@ -1942,27 +1943,24 @@ break_both:
 
 
 
-ResultType PerformMouse(ActionTypeType aActionType, LPTSTR aButton, LPTSTR aX1, LPTSTR aY1, LPTSTR aX2, LPTSTR aY2
-	, LPTSTR aSpeed, LPTSTR aOffsetMode, LPTSTR aRepeatCount, LPTSTR aDownUp)
+FResult PerformMouse(ActionTypeType aActionType, LPCTSTR aButton, int *aX1, int *aY1, int *aX2, int *aY2
+	, int *aSpeed, LPCTSTR aOffsetMode, int *aRepeatCount, LPCTSTR aDownUp)
 {
 	vk_type vk;
 	if (aActionType == ACT_MOUSEMOVE)
 		vk = 0;
 	else
-		// ConvertMouseButton() treats blank as "Left":
+		// ConvertMouseButton() treats omitted/blank as "Left":
 		if (   !(vk = Line::ConvertMouseButton(aButton, aActionType == ACT_MOUSECLICK))   )
-			vk = VK_LBUTTON; // See below.
-			// v1.0.43: Seems harmless (due to rarity) to treat invalid button names as "Left" (keeping in
-			// mind that due to loadtime validation, invalid buttons are possible only when the button name is
-			// contained in a variable, e.g. MouseClick %ButtonName%.
+			return FR_E_ARG(0); // of MouseClick/MouseClickDrag
 
 	KeyEventTypes event_type = KEYDOWNANDUP;  // Set defaults.
-	int repeat_count = 1;                     //
+	int repeat_count = aRepeatCount ? *aRepeatCount : 1;
+	if (repeat_count < 0)
+		return FR_E_ARG(2); // of MouseClick
 
-	if (aActionType == ACT_MOUSECLICK)
+	if (aDownUp)
 	{
-		if (*aRepeatCount)
-			repeat_count = ATOI(aRepeatCount);
 		switch(*aDownUp)
 		{
 		case 'u':
@@ -1973,20 +1971,32 @@ ResultType PerformMouse(ActionTypeType aActionType, LPTSTR aButton, LPTSTR aX1, 
 		case 'D':
 			event_type = KEYDOWN;
 			break;
-		// Otherwise, leave it set to the default.
+		case '\0':
+			break;
+		default:
+			return FR_E_ARG(5); // of MouseClick
 		}
 	}
 
-	PerformMouseCommon(aActionType, vk
-		, *aX1 ? ATOI(aX1) : COORD_UNSPECIFIED  // If no starting coords are specified, mark it as "use the
-		, *aY1 ? ATOI(aY1) : COORD_UNSPECIFIED  // current mouse position":
-		, *aX2 ? ATOI(aX2) : COORD_UNSPECIFIED  // These two are blank except for dragging.
-		, *aY2 ? ATOI(aY2) : COORD_UNSPECIFIED  //
-		, repeat_count, event_type
-		, *aSpeed ? ATOI(aSpeed) : g->DefaultMouseSpeed
-		, ctoupper(*aOffsetMode) == 'R'); // aMoveOffset.
+	bool move_offset = false;
+	if (aOffsetMode && *aOffsetMode)
+	{
+		if (ctoupper(*aOffsetMode) == 'R')
+			move_offset = true;
+		else
+			return FR_E_ARG(aActionType == ACT_MOUSEMOVE ? 3 : 6);
+	}
 
-	return OK; // For caller convenience.
+	PerformMouseCommon(aActionType, vk
+		, aX1 ? *aX1 : COORD_UNSPECIFIED  // If no starting coords are specified, mark it as "use the
+		, aY1 ? *aY1 : COORD_UNSPECIFIED  // current mouse position":
+		, aX2 ? *aX2 : COORD_UNSPECIFIED  // These two are non-null only for MouseClickDrag.
+		, aY2 ? *aY2 : COORD_UNSPECIFIED  //
+		, repeat_count, event_type
+		, aSpeed ? *aSpeed : g->DefaultMouseSpeed
+		, move_offset);
+
+	return OK;
 }
 
 
@@ -2847,7 +2857,7 @@ void SendEventArray(int &aFinalKeyDelay, modLR_type aModsDuringSend)
 	// state, and message pumping is far more efficient with GetMessage than PeekMessage.
 	// Also note that both registered and hook hotkeys are noticed/caught during journal playback
 	// (confirmed through testing).  However, they are kept buffered until the Send finishes
-	// because ACT_SEND and such are designed to be uninterruptible by other script threads;
+	// because SendKeys() is designed to be uninterruptible by other script threads;
 	// also, it would be undesirable in almost any conceivable case.
 	//
 	// Use a loop rather than a single call to MsgSleep(WAIT_FOR_MESSAGES) because
@@ -4436,3 +4446,49 @@ vk_type sc_to_vk(sc_type aSC)
 	}
 	return MapVirtualKey(aSC, MAPVK_VSC_TO_VK_EX);
 }
+
+
+
+#pragma region Top-level Functions
+
+bif_impl void Send(LPCTSTR aKeys)
+{
+	SendKeys(aKeys, SCM_NOT_RAW, g->SendMode);
+}
+
+bif_impl void SendText(LPCTSTR aText)
+{
+	SendKeys(aText, SCM_RAW_TEXT, g->SendMode);
+}
+
+bif_impl void SendInput(LPCTSTR aKeys)
+{
+	SendKeys(aKeys, SCM_NOT_RAW, g->SendMode == SM_INPUT_FALLBACK_TO_PLAY ? SM_INPUT_FALLBACK_TO_PLAY : SM_INPUT);
+}
+
+bif_impl void SendPlay(LPCTSTR aKeys)
+{
+	SendKeys(aKeys, SCM_NOT_RAW, SM_PLAY);
+}
+
+bif_impl void SendEvent(LPCTSTR aKeys)
+{
+	SendKeys(aKeys, SCM_NOT_RAW, SM_EVENT);
+}
+
+bif_impl FResult MouseClick(LPCTSTR aButton, int *aX, int *aY, int *aClickCount, int *aSpeed, LPCTSTR aDownOrUp, LPCTSTR aRelative)
+{
+	return PerformMouse(ACT_MOUSECLICK, aButton, aX, aY, nullptr, nullptr, aSpeed, aRelative, aClickCount, aDownOrUp);
+}
+
+bif_impl FResult MouseClickDrag(LPCTSTR aButton, int aX1, int aY1, int aX2, int aY2, int *aSpeed, LPCTSTR aRelative)
+{
+	return PerformMouse(ACT_MOUSECLICKDRAG, aButton, &aX1, &aY1, &aX2, &aY2, aSpeed, aRelative, nullptr, nullptr);
+}
+
+bif_impl FResult MouseMove(int aX, int aY, int *aSpeed, LPCTSTR aRelative)
+{
+	return PerformMouse(ACT_MOUSEMOVE, nullptr, &aX, &aY, nullptr, nullptr, aSpeed, aRelative, nullptr, nullptr);
+}
+
+#pragma endregion

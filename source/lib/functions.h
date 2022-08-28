@@ -96,14 +96,40 @@ md_func_x(MonitorGetPrimary, MonitorGetPrimary, Int32, md_arg_none)
 md_func(MonitorGetName, (In_Opt, Int32, N), (Ret, String, RetVal))
 
 
+md_func(MouseClick,
+	(In_Opt, String, Button),
+	(In_Opt, Int32, X), (In_Opt, Int32, Y),
+	(In_Opt, Int32, ClickCount),
+	(In_Opt, Int32, Speed),
+	(In_Opt, String, DownOrUp),
+	(In_Opt, String, Relative))
+md_func(MouseClickDrag,
+	(In_Opt, String, Button),
+	(In, Int32, X1), (In, Int32, Y1),
+	(In, Int32, X2), (In, Int32, Y2),
+	(In_Opt, Int32, Speed),
+	(In_Opt, String, Relative))
+md_func(MouseMove,
+	(In, Int32, X), (In, Int32, Y),
+	(In_Opt, Int32, Speed),
+	(In_Opt, String, Relative))
+
+
 md_func_x(Persistent, Persistent, Void, (In_Opt, Bool32, NewValue), (Ret, Bool32, OldValue))
 
 
 md_func_x(RunAs, RunAs, Void, (In_Opt, String, User), (In_Opt, String, Password), (In_Opt, String, Domain))
 
 
+md_func_x(Send, Send, Void, (In, String, Keys))
+md_func_x(SendEvent, SendEvent, Void, (In, String, Keys))
+md_func_x(SendInput, SendInput, Void, (In, String, Keys))
 md_func(SendLevel, (In, Int32, Level))
 md_func(SendMode, (In, String, Mode))
+md_func_x(SendPlay, SendPlay, Void, (In, String, Keys))
+md_func_x(SendText, SendText, Void, (In, String, Text))
+
+
 md_func(SetDefaultMouseSpeed, (In, Int32, Speed))
 md_func(SetControlDelay, (In, Int32, Delay))
 md_func(SetKeyDelay, (In_Opt, Int32, Delay), (In_Opt, Int32, Duration), (In_Opt, String, Mode))

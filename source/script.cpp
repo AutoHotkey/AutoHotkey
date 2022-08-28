@@ -166,10 +166,7 @@ FuncEntry g_BIF[] =
 	BIF1(MenuSelect, 0, 11),
 	BIFn(Min, 1, NA, BIF_MinMax),
 	BIF1(Mod, 2, 2),
-	BIFA(MouseClick, 0, 7, ACT_MOUSECLICK),
-	BIFA(MouseClickDrag, 1, 7, ACT_MOUSECLICKDRAG),
 	BIF1(MouseGetPos, 0, 5, {1, 2, 3, 4}),
-	BIFA(MouseMove, 2, 4, ACT_MOUSEMOVE),
 	BIF1(MsgBox, 0, 3),
 	BIF1(NumGet, 2, 3),
 	BIF1(NumPut, 3, NA),
@@ -217,12 +214,7 @@ FuncEntry g_BIF[] =
 	BIFn(RTrim, 1, 2, BIF_Trim),
 	BIF1(Run, 1, 4, {4}),
 	BIFn(RunWait, 1, 4, BIF_Wait, {4}),
-	BIFA(Send, 1, 1, ACT_SEND),
-	BIFA(SendEvent, 1, 1, ACT_SENDEVENT),
-	BIFA(SendInput, 1, 1, ACT_SENDINPUT),
 	BIFn(SendMessage, 1, 9, BIF_PostSendMessage),
-	BIFA(SendPlay, 1, 1, ACT_SENDPLAY),
-	BIFA(SendText, 1, 1, ACT_SENDTEXT),
 	BIFA(SetCapslockState, 0, 1, ACT_SETCAPSLOCKSTATE),
 	BIFA(SetNumlockState, 0, 1, ACT_SETNUMLOCKSTATE),
 	BIFn(SetRegView, 1, 1, BIF_SetBIV),
@@ -11648,20 +11640,6 @@ ResultType Line::Perform()
 
 	switch (mActionType)
 	{
-	case ACT_SEND:
-	case ACT_SENDTEXT:
-		SendKeys(ARG1, mActionType == ACT_SENDTEXT ? SCM_RAW_TEXT : SCM_NOT_RAW, g.SendMode);
-		return OK;
-	case ACT_SENDINPUT: // Raw mode is supported via {Raw} in ARG1.
-		SendKeys(ARG1, SCM_NOT_RAW, g.SendMode == SM_INPUT_FALLBACK_TO_PLAY ? SM_INPUT_FALLBACK_TO_PLAY : SM_INPUT);
-		return OK;
-	case ACT_SENDPLAY: // Raw mode is supported via {Raw} in ARG1.
-		SendKeys(ARG1, SCM_NOT_RAW, SM_PLAY);
-		return OK;
-	case ACT_SENDEVENT:
-		SendKeys(ARG1, SCM_NOT_RAW, SM_EVENT);
-		return OK;
-
 	case ACT_CLICK:
 		if (mArgc > 1)
 		{
@@ -11673,12 +11651,6 @@ ResultType Line::Perform()
 			return PerformClick(buf_temp);
 		}
 		return PerformClick(ARG1);
-	case ACT_MOUSECLICKDRAG:
-		return PerformMouse(mActionType, SEVEN_ARGS);
-	case ACT_MOUSECLICK:
-		return PerformMouse(mActionType, THREE_ARGS, _T(""), _T(""), ARG5, ARG7, ARG4, ARG6);
-	case ACT_MOUSEMOVE:
-		return PerformMouse(mActionType, _T(""), ARG1, ARG2, _T(""), _T(""), ARG3, ARG4);
 
 	case ACT_WINMINIMIZEALL:
 		PostMessage(FindWindow(_T("Shell_TrayWnd"), NULL), WM_COMMAND, 419, 0);

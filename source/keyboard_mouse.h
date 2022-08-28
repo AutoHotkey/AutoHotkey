@@ -18,6 +18,7 @@ GNU General Public License for more details.
 #define keyboard_h
 
 #include "defines.h"
+#include "abi.h"
 EXTERN_G;
 
 // The max number of keystrokes to Send prior to taking a break to pump messages:
@@ -291,8 +292,8 @@ void KeyEventMenuMask(KeyEventTypes aEventType, DWORD aExtraInfo = KEY_IGNORE_AL
 ResultType PerformClick(LPTSTR aOptions);
 void ParseClickOptions(LPTSTR aOptions, int &aX, int &aY, vk_type &aVK, KeyEventTypes &aEventType
 	, int &aRepeatCount, bool &aMoveOffset);
-ResultType PerformMouse(ActionTypeType aActionType, LPTSTR aButton, LPTSTR aX1, LPTSTR aY1, LPTSTR aX2, LPTSTR aY2
-	, LPTSTR aSpeed, LPTSTR aOffsetMode, LPTSTR aRepeatCount = _T(""), LPTSTR aDownUp = _T(""));
+FResult PerformMouse(ActionTypeType aActionType, LPCTSTR aButton, int *aX1, int *aY1, int *aX2, int *aY2
+	, int *aSpeed, LPCTSTR aOffsetMode, int *aRepeatCount, LPCTSTR aDownUp);
 void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY1, int aX2, int aY2
 	, int aRepeatCount, KeyEventTypes aEventType, int aSpeed, bool aMoveOffset);
 

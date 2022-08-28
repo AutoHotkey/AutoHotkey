@@ -621,7 +621,6 @@ enum enum_act {
 // ================================================================================
 , ACT_EXITAPP
 , ACT_TRAYTIP
-, ACT_SEND, ACT_SENDTEXT, ACT_SENDINPUT, ACT_SENDPLAY, ACT_SENDEVENT
 , ACT_CLICK, ACT_MOUSEMOVE, ACT_MOUSECLICK, ACT_MOUSECLICKDRAG
 , ACT_SLEEP
 , ACT_CRITICAL, ACT_THREAD
