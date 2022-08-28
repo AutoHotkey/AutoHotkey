@@ -106,8 +106,6 @@ FuncEntry g_BIF[] =
 	BIFn(EditGetLineCount, 1, 5, BIF_ControlGet),
 	BIFn(EditGetSelectedText, 1, 5, BIF_ControlGet),
 	BIFn(EditPaste, 2, 6, BIF_Control),
-	BIFA(Exit, 0, 1, ACT_EXIT),
-	BIFA(ExitApp, 0, 1, ACT_EXITAPP),
 	BIF1(Exp, 1, 1),
 	BIFn(FileEncoding, 1, 1, BIF_SetBIV),
 	BIF1(FileOpen, 2, 3),
@@ -468,7 +466,7 @@ Script::Script()
 	: mFirstLine(NULL), mLastLine(NULL), mCurrLine(NULL)
 	, mThisHotkeyName(_T("")), mPriorHotkeyName(_T("")), mThisHotkeyStartTime(0), mPriorHotkeyStartTime(0)
 	, mEndChar(0), mThisHotkeyModifiersLR(0)
-	, mOnClipboardChangeIsRunning(false), mExitReason(EXIT_NONE)
+	, mOnClipboardChangeIsRunning(false)
 	, mFirstLabel(NULL), mLastLabel(NULL)
 	, mLastHotFunc(nullptr), mUnusedHotFunc(nullptr)
 	, mFirstTimer(NULL), mLastTimer(NULL), mTimerEnabledCount(0), mTimerCount(0)
@@ -1303,12 +1301,31 @@ ResultType Script::Reload(bool aDisplayErrors)
 
 
 
+bif_impl ResultType Exit(int *aExitCode)
+{
+	// Even if the script isn't persistent, this thread might've interrupted another which should
+	// be allowed to complete normally.  This is especially important in v2 because a persistent
+	// script can become non-persistent by disabling a timer, closing a GUI, etc.  So if there
+	// are any threads below this one, only exit this thread:
+	//if (g_nThreads > 1 || g_script.IsPersistent())
+	// UPDATE: Handle it this way unconditionally so that the thread is properly exited prior to
+	// the script terminating; i.e. any FINALLY statements are executed and __delete is called for
+	// any objects in local variables or on the expression evaluation stack.
+	return EARLY_EXIT;
+}
+
+bif_impl ResultType ExitApp(int *aExitCode)
+{
+	return g_script.ExitApp(EXIT_EXIT, aExitCode ? *aExitCode : 0);
+}
+
+
+
 ResultType Script::ExitApp(ExitReasons aExitReason, int aExitCode)
 // Normal exit (if aBuf is NULL), or a way to exit immediately on error (which is mostly
 // for times when it would be unsafe to call MsgBox() due to the possibility that it would
 // make the situation even worse).
 {
-	mExitReason = aExitReason;
 	// Note that currently, mOnExit.Count() can only be non-zero if the script is in a runnable
 	// state (since registering an OnExit function requires that the script calls OnExit()).
 	// If this ever changes, the !mIsReadyToExecute condition should be added below:
@@ -11843,22 +11860,6 @@ ResultType Line::Perform()
 
 	case ACT_SHUTDOWN:
 		return Util_Shutdown(ArgToInt(1)) ? OK : FAIL; // Range of ARG1 is not validated in case other values are supported in the future.
-
-	case ACT_EXIT:
-		// Even if the script isn't persistent, this thread might've interrupted another which should
-		// be allowed to complete normally.  This is especially important in v2 because a persistent
-		// script can become non-persistent by disabling a timer, closing a GUI, etc.  So if there
-		// are any threads below this one, only exit this thread:
-		//if (g_nThreads > 1 || g_script.IsPersistent())
-		// UPDATE: Handle it this way unconditionally so that the thread is properly exited prior to
-		// the script terminating; i.e. any FINALLY statements are executed and __delete is called for
-		// any objects in local variables or on the expression evaluation stack.
-		return EARLY_EXIT; // EARLY_EXIT needs to be distinct from FAIL for ExitApp() and AutoExecSection().
-	case ACT_EXITAPP: // Unconditional exit.
-		// This has been tested and it does yield to the OS the error code indicated in ARG1,
-		// if present (otherwise it returns 0, naturally) as expected:
-		return g_script.ExitApp(EXIT_EXIT, (int)ArgIndexToInt64(0));
-
 	} // switch()
 
 	// Since above didn't return, this line's mActionType isn't handled here,

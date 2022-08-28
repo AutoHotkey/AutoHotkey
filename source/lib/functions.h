@@ -24,6 +24,10 @@ md_func(EnvGet, (In, String, VarName), (Ret, String, RetVal))
 md_func_x(EnvSet, EnvSet, NzIntWin32, (In, String, VarName), (In_Opt, String, Value))
 
 
+md_func_x(Exit, Exit, ResultType, (In_Opt, Int32, ExitCode))
+md_func_x(ExitApp, ExitApp, ResultType, (In_Opt, Int32, ExitCode))
+
+
 md_func(FileAppend, (In, Variant, Value), (In_Opt, String, Path), (In_Opt, String, Options))
 md_func(FileCopy, (In, String, Source), (In, String, Dest), (In_Opt, Int32, Overwrite))
 md_func(FileCreateShortcut, (In, String, Target), (In, String, LinkFile), (In_Opt, String, WorkingDir),

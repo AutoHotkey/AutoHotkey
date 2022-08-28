@@ -619,7 +619,6 @@ enum enum_act {
 // ================================================================================
 // All others are not included in g_act, and are only used with BIF_PerformAction:
 // ================================================================================
-, ACT_EXITAPP
 , ACT_TRAYTIP
 , ACT_CLICK, ACT_MOUSEMOVE, ACT_MOUSECLICK, ACT_MOUSECLICKDRAG
 , ACT_SLEEP
