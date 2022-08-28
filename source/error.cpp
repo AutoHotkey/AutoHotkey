@@ -667,7 +667,7 @@ ResultType ResultToken::ParamError(int aIndex, ExprTokenType *aParam, LPCTSTR aE
 	else
 		sntprintf(msg, _countof(msg), _T("Parameter #%i invalid."), aIndex + 1);
 #endif
-	return Error(msg, value_as_string, ErrorPrototype::Type);
+	return Error(msg, value_as_string, aExpectedType ? ErrorPrototype::Type : ErrorPrototype::Value);
 }
 
 
