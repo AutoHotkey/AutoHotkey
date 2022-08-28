@@ -115,10 +115,6 @@ FuncEntry g_BIF[] =
 	BIF1(Format, 1, NA),
 	BIF1(FormatTime, 0, 2),
 	BIFn(GetMethod, 1, 3, BIF_GetMethod),
-	BIF1(GroupActivate, 1, 2),
-	BIFA(GroupAdd, 1, 5, ACT_GROUPADD),
-	BIFA(GroupClose, 1, 2, ACT_GROUPCLOSE),
-	BIFA(GroupDeactivate, 1, 2, ACT_GROUPDEACTIVATE),
 	BIF1(GuiCtrlFromHwnd, 1, 1),
 	BIF1(GuiFromHwnd, 1, 2),
 	BIF1(HasBase, 2, 2),
@@ -7321,7 +7317,7 @@ VarEntry *Script::GetBuiltInVar(LPCTSTR aVarName)
 
 
 
-WinGroup *Script::FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound)
+WinGroup *Script::FindGroup(LPCTSTR aGroupName, bool aCreateIfNotFound)
 // Caller must ensure that aGroupName isn't NULL.  But if it's the empty string, NULL is returned.
 // Returns the Group whose name matches aGroupName.  If it doesn't exist, it is created if aCreateIfNotFound==true.
 // Thread-safety: This function is thread-safe (except when called with aCreateIfNotFound==true) even when
@@ -7347,7 +7343,7 @@ WinGroup *Script::FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound)
 
 
 
-ResultType Script::AddGroup(LPTSTR aGroupName)
+ResultType Script::AddGroup(LPCTSTR aGroupName)
 // Returns OK or FAIL.
 // The caller must already have verified that this isn't a duplicate group.
 // This function is not thread-safe because it adds an entry to the quasi-global list of window groups.
@@ -11628,7 +11624,6 @@ ResultType Line::Perform()
 // Goto, Return, Block-Begin, Block-End, If, Else, etc.
 {
 	TCHAR buf_temp[MAX_REG_ITEM_SIZE]; // For registry and other things.
-	WinGroup *group; // For the group commands.
 	global_struct &g = *::g; // Reduces code size due to replacing so many g-> with g. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
 	ToggleValueType toggle;  // For commands that use on/off/neutral.
 
@@ -11726,25 +11721,6 @@ ResultType Line::Perform()
 		// If invalid command, do nothing since that is always caught at load-time unless the command
 		// is in a variable reference (very rare in this case).
 		}
-		return OK;
-
-	case ACT_GROUPADD: // Adding a WindowSpec *to* a group, not adding a group.
-		if (   !(group = g_script.FindGroup(ARG1, true))   )  // Last parameter -> create-if-not-found.
-			return FAIL;  // It already displayed the error for us.
-		return group->AddWindow(ARG2, ARG3, ARG4, ARG5);
-	
-	case ACT_GROUPDEACTIVATE:
-		if (   !(group = g_script.FindGroup(ARG1))   )
-			return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, ARG1);
-		return group->Deactivate(*ARG2 && !_tcsicmp(ARG2, _T("R")));  // Note: It will take care of DoWinDelay if needed.
-
-	case ACT_GROUPCLOSE:
-		if (   !(group = g_script.FindGroup(ARG1))   )
-			return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, ARG1);
-		if (*ARG2 && !_tcsicmp(ARG2, _T("A")))
-			group->ActUponAll(FID_WinClose, 0);  // Note: It will take care of DoWinDelay if needed.
-		else
-			group->CloseAndGoToNext(*ARG2 && !_tcsicmp(ARG2, _T("R")));  // Note: It will take care of DoWinDelay if needed.
 		return OK;
 
 	case ACT_SETWORKINGDIR:

@@ -3035,8 +3035,8 @@ public:
 
 	ResultType DerefInclude(LPTSTR &aOutput, LPTSTR aBuf);
 
-	WinGroup *FindGroup(LPTSTR aGroupName, bool aCreateIfNotFound = false);
-	ResultType AddGroup(LPTSTR aGroupName);
+	WinGroup *FindGroup(LPCTSTR aGroupName, bool aCreateIfNotFound = false);
+	ResultType AddGroup(LPCTSTR aGroupName);
 	Label *FindLabel(LPTSTR aLabelName);
 
 	ResultType DoRunAs(LPTSTR aCommandLine, LPTSTR aWorkingDir, bool aDisplayErrors, WORD aShowWindow

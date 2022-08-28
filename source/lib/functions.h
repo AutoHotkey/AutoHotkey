@@ -54,6 +54,12 @@ md_func(GetKeyState, (In, String, KeyName), (In_Opt, String, Mode), (Ret, Varian
 md_func_x(GetKeyVK, GetKeyVK, Int32, (In, String, KeyName))
 
 
+md_func(GroupActivate, (In, String, GroupName), (In_Opt, String, Mode), (Ret, Int64, RetVal))
+md_func(GroupAdd, (In, String, GroupName), (In_Opt, String, WinTitle), (In_Opt, String, WinText), (In_Opt, String, ExcludeTitle), (In_Opt, String, ExcludeText))
+md_func(GroupClose, (In, String, GroupName), (In_Opt, String, Mode))
+md_func(GroupDeactivate, (In, String, GroupName), (In_Opt, String, Mode))
+
+
 md_func(DirCopy, (In, String, Source), (In, String, Dest), (In_Opt, Int32, Overwrite))
 md_func(DirCreate, (In, String, Path))
 md_func(DirDelete, (In, String, Path), (In_Opt, Bool32, Recurse))

@@ -73,7 +73,7 @@ private:
 		sAlreadyVisited[sAlreadyVisitedCount++] = aWnd;
 	}
 
-	ResultType Update(bool aIsModeActivate);
+	void Update(bool aIsModeActivate);
 
 public:
 	LPTSTR mName;    // The name of the group.
@@ -81,11 +81,11 @@ public:
 	WinGroup *mNextGroup;  // Next item in linked list.
 	UINT mWindowCount;
 
-	ResultType AddWindow(LPTSTR aTitle, LPTSTR aText, LPTSTR aExcludeTitle, LPTSTR aExcludeText);
+	ResultType AddWindow(LPCTSTR aTitle, LPCTSTR aText, LPCTSTR aExcludeTitle, LPCTSTR aExcludeText);
 	void ActUponAll(BuiltInFunctionID aActionType, int aTimeToWaitForClose);
-	ResultType CloseAndGoToNext(bool aStartWithMostRecent);
-	ResultType Activate(bool aStartWithMostRecent, HWND &aHwnd, WindowSpec *aWinSpec = nullptr);
-	ResultType Deactivate(bool aStartWithMostRecent);
+	void CloseAndGoToNext(bool aStartWithMostRecent);
+	void Activate(bool aStartWithMostRecent, HWND &aHwnd, WindowSpec *aWinSpec = nullptr);
+	void Deactivate(bool aStartWithMostRecent);
 	bool IsEmpty() {return mFirstWindow == NULL;}
 	WindowSpec *IsMember(HWND aWnd, ScriptThreadSettings &aSettings);
 	WinGroup(LPTSTR aGroupName)
