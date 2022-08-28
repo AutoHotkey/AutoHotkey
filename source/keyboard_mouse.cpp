@@ -132,7 +132,7 @@ void SendUnicodeChar(wchar_t aChar, modLR_type aModifiers)
 
 
 
-void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow)
+void SendKeys(LPCTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND aTargetWindow)
 // The aKeys string must be modifiable (not constant), since for performance reasons,
 // it's allowed to be temporarily altered by this function.  mThisHotkeyModifiersLR, if non-zero,
 // should be the set of modifiers used to trigger the hotkey that called the subroutine
@@ -265,7 +265,7 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 				// below isn't comprehensive (e.g. it fails to consider things like {L} and #L).
 				// Although RegExMatch() could be used instead of the below, that would use up one of
 				// the RegEx cache entries, plus it would probably perform worse.  So scan manually.
-				LPTSTR L_pos, brace_pos;
+				LPCTSTR L_pos, brace_pos;
 				for (wait_for_win_key_release = false, brace_pos = aKeys; L_pos = StrChrAny(brace_pos, _T("Ll"));)
 				{
 					// Encountering a #L seems too rare, and the consequences too mild (or nonexistent), to
@@ -437,7 +437,8 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 	// which ALT key is held down to produce the character.
 	vk_type this_event_modifier_down;
 	size_t key_text_length, key_name_length;
-	TCHAR *end_pos, *space_pos, *next_word, old_char;
+	LPCTSTR end_pos, next_word;
+	TCHAR key_text[1024]; // Make it reasonably large to support any conceivable {Click ...} usage.
 	KeyEventTypes event_type;
 	int repeat_count, click_x, click_y;
 	bool move_offset;
@@ -507,12 +508,16 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 						goto brace_case_end;  // The loop's ++aKeys will now skip over the '}', ignoring it.
 				}
 
-				if (!_tcsnicmp(aKeys, _T("Click"), 5))
+				// Make a modifiable null-terminated copy to simplify comparisons etc.
+				if (key_text_length >= _countof(key_text))
+					goto brace_case_end; // Skip this unreasonably long (probably invalid) item.
+				tmemcpy(key_text, aKeys, key_text_length);
+				key_text[key_text_length] = '\0';
+
+				if (!_tcsnicmp(key_text, _T("Click"), 5))
 				{
-					*end_pos = '\0';  // Temporarily terminate the string here to omit the closing brace from consideration below.
-					ParseClickOptions(omit_leading_whitespace(aKeys + 5), click_x, click_y, vk
+					ParseClickOptions(omit_leading_whitespace(key_text + 5), click_x, click_y, vk
 						, event_type, repeat_count, move_offset);
-					*end_pos = '}';  // Undo temp termination.
 					if (repeat_count < 1) // Allow {Click 100, 100, 0} to do a mouse-move vs. click (but modifiers like ^{Click..} aren't supported in this case.
 						MouseMove(click_x, click_y, placeholder, g.DefaultMouseSpeed, move_offset);
 					else // Use SendKey because it supports modifiers (e.g. ^{Click}) SendKey requires repeat_count>=1.
@@ -520,18 +525,16 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 							, repeat_count, event_type, 0, aTargetWindow, click_x, click_y, move_offset);
 					goto brace_case_end; // This {} item completely handled, so move on to next.
 				}
-				else if (!_tcsnicmp(aKeys, _T("Raw"), 3)) // This is used by auto-replace hotstrings too.
+				else if (!_tcsicmp(key_text, _T("Raw"))) // This is used by auto-replace hotstrings too.
 				{
 					// As documented, there's no way to switch back to non-raw mode afterward since there's no
 					// correct way to support special (non-literal) strings such as {Raw Off} while in raw mode.
 					aSendRaw = SCM_RAW;
 					goto brace_case_end; // This {} item completely handled, so move on to next.
 				}
-				else if (!_tcsnicmp(aKeys, _T("Text"), 4)) // Added in v1.1.27
+				else if (!_tcsicmp(key_text, _T("Text"))) // Added in v1.1.27
 				{
-					if (omit_leading_whitespace(aKeys + 4) == end_pos)
-						aSendRaw = SCM_RAW_TEXT;
-					//else: ignore this {Text something} to reserve for future use.
+					aSendRaw = SCM_RAW_TEXT;
 					goto brace_case_end; // This {} item completely handled, so move on to next.
 				}
 
@@ -539,13 +542,11 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 				event_type = KEYDOWNANDUP;         // Set defaults.
 				repeat_count = 1;                  //
 				key_name_length = key_text_length; //
-				*end_pos = '\0';  // Temporarily terminate the string here to omit the closing brace from consideration below.
 
-				if (space_pos = StrChrAny(aKeys, _T(" \t"))) // Assign. Also, it relies on the fact that {} key names contain no spaces.
+				if (auto space_pos = StrChrAny(key_text, _T(" \t"))) // Assign. Also, it relies on the fact that {} key names contain no spaces.
 				{
-					old_char = *space_pos;
-					*space_pos = '\0';  // Temporarily terminate here so that TextToVK() can properly resolve a single char.
-					key_name_length = space_pos - aKeys; // Override the default value set above.
+					*space_pos = '\0';  // Terminate here so that TextToVK() can properly resolve a single char.
+					key_name_length = space_pos - key_text; // Override the default value set above.
 					next_word = omit_leading_whitespace(space_pos + 1);
 					UINT next_word_length = (UINT)(end_pos - next_word);
 					if (next_word_length > 0)
@@ -578,11 +579,8 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 					}
 				}
 
-				TextToVKandSC(aKeys, vk, sc, &mods_for_next_key, sTargetKeybdLayout);
+				TextToVKandSC(key_text, vk, sc, &mods_for_next_key, sTargetKeybdLayout);
 
-				if (space_pos)  // undo the temporary termination
-					*space_pos = old_char;
-				*end_pos = '}';  // undo the temporary termination
 				if (repeat_count < 1)
 					goto brace_case_end; // Gets rid of one level of indentation. Well worth it.
 
@@ -646,16 +644,16 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 							// Although MSDN says WM_CHAR uses UTF-16, it seems to really do automatic
 							// translation between ANSI and UTF-16; we rely on this for correct results:
 							for (int i = 0; i < repeat_count; ++i)
-								PostMessage(aTargetWindow, WM_CHAR, aKeys[0], 0);
+								PostMessage(aTargetWindow, WM_CHAR, key_text[0], 0);
 						}
 						else
-							SendKeySpecial(aKeys[0], repeat_count, mods_for_next_key | persistent_modifiers_for_this_SendKeys);
+							SendKeySpecial(key_text[0], repeat_count, mods_for_next_key | persistent_modifiers_for_this_SendKeys);
 					}
 				}
 
 				// See comment "else must never change sModifiersLR_persistent" above about why
 				// !aTargetWindow is used below:
-				else if (vk = TextToSpecial(aKeys, key_text_length, event_type
+				else if (vk = TextToSpecial(key_text, key_text_length, event_type
 					, persistent_modifiers_for_this_SendKeys, !aTargetWindow)) // Assign.
 				{
 					if (!aTargetWindow)
@@ -683,19 +681,19 @@ void SendKeys(LPTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWND
 					}
 				}
 
-				else if (key_text_length > 4 && !_tcsnicmp(aKeys, _T("ASC "), 4) && !aTargetWindow) // {ASC nnnnn}
+				else if (key_text_length > 4 && !_tcsnicmp(key_text, _T("ASC "), 4) && !aTargetWindow) // {ASC nnnnn}
 				{
 					// Include the trailing space in "ASC " to increase uniqueness (selectivity).
 					// Also, sending the ASC sequence to window doesn't work, so don't even try:
-					SendASC(omit_leading_whitespace(aKeys + 3));
+					SendASC(omit_leading_whitespace(key_text + 3));
 					// Do this only once at the end of the sequence:
 					DoKeyDelay(); // It knows not to do the delay for SM_INPUT.
 				}
 
-				else if (key_text_length > 2 && !_tcsnicmp(aKeys, _T("U+"), 2))
+				else if (key_text_length > 2 && !_tcsnicmp(key_text, _T("U+"), 2))
 				{
 					// L24: Send a unicode value as shown by Character Map.
-					UINT u_code = (UINT) _tcstol(aKeys + 2, NULL, 16);
+					UINT u_code = (UINT) _tcstol(key_text + 2, NULL, 16);
 					wchar_t wc1, wc2;
 					if (u_code >= 0x10000)
 					{
