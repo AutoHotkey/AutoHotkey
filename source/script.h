@@ -1160,7 +1160,7 @@ public:
 		return TOGGLE_INVALID;
 	}
 
-	static SendModes ConvertSendMode(LPTSTR aBuf, SendModes aValueToReturnIfInvalid)
+	static SendModes ConvertSendMode(LPCTSTR aBuf, SendModes aValueToReturnIfInvalid)
 	{
 		if (!_tcsicmp(aBuf, _T("Play"))) return SM_PLAY;
 		if (!_tcsicmp(aBuf, _T("Event"))) return SM_EVENT;
@@ -1239,7 +1239,7 @@ public:
 		return 0;
 	}
 
-	static CoordModeType ConvertCoordMode(LPTSTR aBuf)
+	static CoordModeType ConvertCoordMode(LPCTSTR aBuf)
 	{
 		if (!_tcsicmp(aBuf, _T("Screen")))
 			return COORD_MODE_SCREEN;
@@ -1250,7 +1250,7 @@ public:
 		return COORD_MODE_INVALID;
 	}
 
-	static CoordModeType ConvertCoordModeCmd(LPTSTR aBuf)
+	static CoordModeType ConvertCoordModeCmd(LPCTSTR aBuf)
 	{
 		if (!_tcsicmp(aBuf, _T("Pixel"))) return COORD_MODE_PIXEL;
 		if (!_tcsicmp(aBuf, _T("Mouse"))) return COORD_MODE_MOUSE;
@@ -3068,10 +3068,6 @@ public:
 					return mi;
 		return NULL;
 	}
-
-	static ResultType SetCoordMode(LPTSTR aCommand, LPTSTR aMode);
-	static ResultType SetSendMode(LPTSTR aValue);
-	static ResultType SetSendLevel(int aValue, LPTSTR aValueStr);
 
 	// Call this ScriptError to avoid confusion with Line's error-displaying functions.
 	// Use it for load time errors and non-continuable runtime errors:

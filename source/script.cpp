@@ -90,7 +90,6 @@ FuncEntry g_BIF[] =
 	BIF1(ControlSetText, 2, 6),
 	BIFn(ControlShow, 1, 5, BIF_Control),
 	BIFn(ControlShowDropDown, 1, 5, BIF_Control),
-	BIFA(CoordMode, 1, 2, ACT_COORDMODE),
 	BIF1(Cos, 1, 1),
 	BIFA(Critical, 0, 1, ACT_CRITICAL),
 	BIF1(DateAdd, 3, 3),
@@ -221,23 +220,16 @@ FuncEntry g_BIF[] =
 	BIFA(Send, 1, 1, ACT_SEND),
 	BIFA(SendEvent, 1, 1, ACT_SENDEVENT),
 	BIFA(SendInput, 1, 1, ACT_SENDINPUT),
-	BIFA(SendLevel, 1, 1, ACT_SENDLEVEL),
 	BIFn(SendMessage, 1, 9, BIF_PostSendMessage),
-	BIFA(SendMode, 1, 1, ACT_SENDMODE),
 	BIFA(SendPlay, 1, 1, ACT_SENDPLAY),
 	BIFA(SendText, 1, 1, ACT_SENDTEXT),
 	BIFA(SetCapslockState, 0, 1, ACT_SETCAPSLOCKSTATE),
-	BIFA(SetControlDelay, 1, 1, ACT_SETCONTROLDELAY),
-	BIFA(SetDefaultMouseSpeed, 1, 1, ACT_SETDEFAULTMOUSESPEED),
-	BIFA(SetKeyDelay, 0, 3, ACT_SETKEYDELAY),
-	BIFA(SetMouseDelay, 1, 2, ACT_SETMOUSEDELAY),
 	BIFA(SetNumlockState, 0, 1, ACT_SETNUMLOCKSTATE),
 	BIFn(SetRegView, 1, 1, BIF_SetBIV),
 	BIFA(SetScrollLockState, 0, 1, ACT_SETSCROLLLOCKSTATE),
 	BIFn(SetStoreCapsLockMode, 1, 1, BIF_SetBIV),
 	BIF1(SetTimer, 0, 3),
 	BIFn(SetTitleMatchMode, 1, 1, BIF_SetBIV),
-	BIFA(SetWinDelay, 1, 1, ACT_SETWINDELAY),
 	BIFA(SetWorkingDir, 1, 1, ACT_SETWORKINGDIR),
 	BIFA(Shutdown, 1, 1, ACT_SHUTDOWN),
 	BIF1(Sin, 1, 1),
@@ -11835,51 +11827,6 @@ ResultType Line::Perform()
 
 
 //////////////////////////////////////////////////////////////////////////
-
-	case ACT_COORDMODE:
-		return Script::SetCoordMode(ARG1, *ARG2 ? ARG2 : _T("Screen"));
-
-	case ACT_SETDEFAULTMOUSESPEED:
-		g.DefaultMouseSpeed = (UCHAR)ArgToInt(1);
-		// In case it was a deref, force it to be some default value if it's out of range:
-		if (g.DefaultMouseSpeed < 0 || g.DefaultMouseSpeed > MAX_MOUSE_SPEED)
-			g.DefaultMouseSpeed = DEFAULT_MOUSE_SPEED;
-		return OK;
-
-	case ACT_SENDMODE:
-		return Script::SetSendMode(ARG1);
-
-	case ACT_SENDLEVEL:
-		return Script::SetSendLevel(ArgToInt(1), ARG1);
-
-	case ACT_SETKEYDELAY:
-		if (!_tcsicmp(ARG3, _T("Play")))
-		{
-			if (*ARG1)
-				g.KeyDelayPlay = ArgToInt(1);
-			if (*ARG2)
-				g.PressDurationPlay = ArgToInt(2);
-		}
-		else
-		{
-			if (*ARG1)
-				g.KeyDelay = ArgToInt(1);
-			if (*ARG2)
-				g.PressDuration = ArgToInt(2);
-		}
-		return OK;
-	case ACT_SETMOUSEDELAY:
-		if (!_tcsicmp(ARG2, _T("Play")))
-			g.MouseDelayPlay = ArgToInt(1);
-		else
-			g.MouseDelay = ArgToInt(1);
-		return OK;
-	case ACT_SETWINDELAY:
-		g.WinDelay = ArgToInt(1);
-		return OK;
-	case ACT_SETCONTROLDELAY:
-		g.ControlDelay = ArgToInt(1);
-		return OK;
 
 	case ACT_SUSPEND:
 		toggle = Convert10Toggle(ARG1);

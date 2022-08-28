@@ -21,28 +21,101 @@ GNU General Public License for more details.
 
 
 
-ResultType Script::SetCoordMode(LPTSTR aCommand, LPTSTR aMode)
+bif_impl FResult CoordMode(LPCTSTR aCommand, LPCTSTR aMode)
 {
-	CoordModeType mode = Line::ConvertCoordMode(aMode);
+	CoordModeType mode = aMode ? Line::ConvertCoordMode(aMode) : COORD_MODE_SCREEN;
 	CoordModeType shift = Line::ConvertCoordModeCmd(aCommand);
-	if (shift == COORD_MODE_INVALID || mode == COORD_MODE_INVALID)
-		return ValueError(ERR_INVALID_VALUE, aMode, FAIL_OR_OK);
+	if (shift == COORD_MODE_INVALID)
+		return FR_E_ARG(0);
+	if (mode == COORD_MODE_INVALID)
+		return FR_E_ARG(1);
 	g->CoordMode = (g->CoordMode & ~(COORD_MODE_MASK << shift)) | (mode << shift);
 	return OK;
 }
 
-ResultType Script::SetSendMode(LPTSTR aValue)
+
+bif_impl FResult SendMode(LPCTSTR aMode)
 {
-	g->SendMode = Line::ConvertSendMode(aValue, g->SendMode); // Leave value unchanged if ARG1 is invalid.
+	auto new_mode = Line::ConvertSendMode(aMode, SM_INVALID);
+	if (new_mode == SM_INVALID)
+		return FR_E_ARG(0);
+	g->SendMode = new_mode;
 	return OK;
 }
 
-ResultType Script::SetSendLevel(int aValue, LPTSTR aValueStr)
+
+bif_impl FResult SendLevel(int aLevel)
 {
-	int sendLevel = aValue;
-	if (!SendLevelIsValid(sendLevel))
-		return ValueError(ERR_INVALID_VALUE, aValueStr, FAIL_OR_OK);
-	g->SendLevel = sendLevel;
+	if (!SendLevelIsValid(aLevel))
+		return FR_E_ARG(0);
+	g->SendLevel = aLevel;
+	return OK;
+}
+
+
+bif_impl FResult SetDefaultMouseSpeed(int aSpeed)
+{
+	if (aSpeed < 0 || aSpeed > MAX_MOUSE_SPEED)
+		return FR_E_ARG(0);
+	g->DefaultMouseSpeed = (UCHAR)aSpeed;
+	return OK;
+}
+
+
+bif_impl FResult SetKeyDelay(int *aDelay, int *aDuration, LPCTSTR aMode)
+{
+	if (aDelay && *aDelay < -1)
+		return FR_E_ARG(0);
+	if (aDuration && *aDuration < -1)
+		return FR_E_ARG(1);
+	if (aMode && !_tcsicmp(aMode, _T("Play")))
+	{
+		if (aDelay)
+			g->KeyDelayPlay = *aDelay;
+		if (aDuration)
+			g->PressDurationPlay = *aDuration;
+	}
+	else
+	{
+		if (aMode && *aMode)
+			return FR_E_ARG(2);
+		if (aDelay)
+			g->KeyDelay = *aDelay;
+		if (aDuration)
+			g->PressDuration = *aDuration;
+	}
+	return OK;
+}
+
+
+bif_impl FResult SetMouseDelay(int aDelay, LPCTSTR aMode)
+{
+	if (aDelay < -1)
+		return FR_E_ARG(0);
+	if (aMode && !_tcsicmp(aMode, _T("Play")))
+		g->MouseDelayPlay = aDelay;
+	else if (aMode && *aMode)
+		return FR_E_ARG(1);
+	else
+		g->MouseDelay = aDelay;
+	return OK;
+}
+
+
+bif_impl FResult SetWinDelay(int aDelay)
+{
+	if (aDelay < -1)
+		return FR_E_ARG(0);
+	g->WinDelay = aDelay;
+	return OK;
+}
+
+
+bif_impl FResult SetControlDelay(int aDelay)
+{
+	if (aDelay < -1)
+		return FR_E_ARG(0);
+	g->ControlDelay = aDelay;
 	return OK;
 }
 
@@ -291,8 +364,9 @@ BIV_DECL_R(BIV_CoordMode)
 
 BIV_DECL_W(BIV_CoordMode_Set)
 {
-	if (!Script::SetCoordMode(aVarName + 11, BivRValueToString())) // A_CoordMode is 11 chars.
-		_f_return_FAIL;
+	auto value = BivRValueToString();
+	if (FAILED(CoordMode(aVarName + 11, value))) // A_CoordMode is 11 chars.
+		_f_throw_value(ERR_INVALID_VALUE, value);
 }
 
 BIV_DECL_R(BIV_SendMode)
@@ -303,8 +377,9 @@ BIV_DECL_R(BIV_SendMode)
 
 BIV_DECL_W(BIV_SendMode_Set)
 {
-	if (!Script::SetSendMode(BivRValueToString()))
-		_f_return_FAIL;
+	auto value = BivRValueToString();
+	if (FAILED(SendMode(value)))
+		_f_throw_value(ERR_INVALID_VALUE, value);
 }
 
 BIV_DECL_R(BIV_SendLevel)
@@ -314,8 +389,9 @@ BIV_DECL_R(BIV_SendLevel)
 
 BIV_DECL_W(BIV_SendLevel_Set)
 {
-	if (!Script::SetSendLevel((int)BivRValueToInt64(), BivRValueToString()))
-		_f_return_FAIL;
+	Throw_if_RValue_NaN();
+	if (FAILED(SendLevel((int)BivRValueToInt64())))
+		_f_throw_value(ERR_INVALID_VALUE, BivRValueToString());
 }
 
 BIV_DECL_R(BIV_StoreCapsLockMode)

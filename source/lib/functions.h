@@ -1,4 +1,6 @@
 
+md_func(CoordMode, (In, String, TargetType), (In_Opt, String, RelativeTo))
+
 md_func(DriveGetCapacity, (In, String, Path), (Ret, Int64, RetVal))
 md_func(DriveGetFilesystem, (In, String, Drive), (Ret, String, RetVal))
 md_func(DriveGetLabel, (In, String, Drive), (Ret, String, RetVal))
@@ -98,6 +100,15 @@ md_func_x(Persistent, Persistent, Void, (In_Opt, Bool32, NewValue), (Ret, Bool32
 
 
 md_func_x(RunAs, RunAs, Void, (In_Opt, String, User), (In_Opt, String, Password), (In_Opt, String, Domain))
+
+
+md_func(SendLevel, (In, Int32, Level))
+md_func(SendMode, (In, String, Mode))
+md_func(SetDefaultMouseSpeed, (In, Int32, Speed))
+md_func(SetControlDelay, (In, Int32, Delay))
+md_func(SetKeyDelay, (In_Opt, Int32, Delay), (In_Opt, Int32, Duration), (In_Opt, String, Mode))
+md_func(SetMouseDelay, (In, Int32, Delay), (In_Opt, String, Mode))
+md_func(SetWinDelay, (In, Int32, Delay))
 
 
 md_func_x(SoundBeep, SoundBeep, Void, (In_Opt, Int32, Duration), (In_Opt, Int32, Frequency))
