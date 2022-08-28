@@ -3130,7 +3130,7 @@ ResultType Line::ControlGetListView(Var &aOutputVar, HWND aHwnd, LPTSTR aOptions
 			//    mouse/key lag would occur).
 			if (!SendMessageTimeout(aHwnd, LVM_GETNEXTITEM, next, include_focused_only ? LVNI_FOCUSED : LVNI_SELECTED
 				, SMTO_ABORTIFHUNG, 2000, (PDWORD_PTR)&next) // Timed out or failed.
-				|| next == -1) // No next item.  Relies on short-circuit boolean order.
+				|| next == -1 || (int)next == -1) // No next item.  Relies on short-circuit boolean order.
 				break; // End of estimation phase (if estimate is too small, the text retrieval below will truncate it).
 		}
 		else
