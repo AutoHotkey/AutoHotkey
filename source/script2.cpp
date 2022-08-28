@@ -614,7 +614,7 @@ bool HandleMenuItem(HWND aHwnd, WORD aMenuItemID, HWND aGuiHwnd)
 		return true;
 	case ID_TRAY_SUSPEND:
 	case ID_FILE_SUSPEND:
-		Line::ToggleSuspendState();
+		ToggleSuspendState();
 		return true;
 	case ID_TRAY_PAUSE:
 	case ID_FILE_PAUSE:

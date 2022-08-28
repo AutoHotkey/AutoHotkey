@@ -121,6 +121,9 @@ md_func(MouseMove,
 	(In_Opt, String, Relative))
 
 
+md_func(Pause, (In_Opt, Int32, NewState))
+
+
 md_func_x(Persistent, Persistent, Void, (In_Opt, Bool32, NewValue), (Ret, Bool32, OldValue))
 
 
@@ -145,6 +148,9 @@ md_func(SetWinDelay, (In, Int32, Delay))
 
 md_func_x(SoundBeep, SoundBeep, Void, (In_Opt, Int32, Duration), (In_Opt, Int32, Frequency))
 md_func(SoundPlay, (In, String, Path), (In_Opt, String, Wait))
+
+
+md_func(Suspend, (In_Opt, Int32, Mode))
 
 
 md_func_x(SysGet, SysGet, Int32, (In, Int32, Index))

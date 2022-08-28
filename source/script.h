@@ -1117,16 +1117,15 @@ public:
 		return aDefault;
 	}
 
-	static ToggleValueType Convert10Toggle(LPTSTR aBuf)
+	static ToggleValueType Convert10Toggle(int *aValue)
 	{
-		if (!aBuf || !*aBuf) return NEUTRAL;
-		if (IsNumeric(aBuf, true))
-			switch (ATOI(aBuf))
-			{
-			case 1: return TOGGLED_ON;
-			case 0: return TOGGLED_OFF;
-			case -1: return TOGGLE;
-			}
+		if (!aValue) return NEUTRAL;
+		switch (*aValue)
+		{
+		case 1: return TOGGLED_ON;
+		case 0: return TOGGLED_OFF;
+		case -1: return TOGGLE;
+		}
 		return TOGGLE_INVALID;
 	}
 
@@ -1303,10 +1302,6 @@ public:
 	LPTSTR VicinityToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false, bool aLineNumber = true);
 
-	static void ToggleSuspendState();
-	static void PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause);
-	ResultType ChangePauseState(LPTSTR aChangeTo);
-	ResultType PauseCurrentThread();
 	static ResultType ScriptBlockInput(bool aEnable);
 
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
@@ -3400,6 +3395,9 @@ ResultType ValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo, ResultType aErrorT
 
 FResult FError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""), Object *aPrototype = nullptr);
 FResult FValueError(LPCTSTR aErrorText, LPCTSTR aExtraInfo = _T(""));
+
+void PauseCurrentThread();
+void ToggleSuspendState();
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
 ResultType SetWorkingDir(LPTSTR aNewDir);

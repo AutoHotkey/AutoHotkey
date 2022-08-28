@@ -186,7 +186,6 @@ FuncEntry g_BIF[] =
 	BIF1(OnMessage, 2, 3),
 	BIF1(Ord, 1, 1),
 	BIFA(OutputDebug, 1, 1, ACT_OUTPUTDEBUG),
-	BIFA(Pause, 0, 1, ACT_PAUSE),
 	BIF1(PixelGetColor, 2, 3),
 	BIF1(PixelSearch, 7, 8, {1, 2}),
 	BIFn(PostMessage, 1, 8, BIF_PostSendMessage),
@@ -244,7 +243,6 @@ FuncEntry g_BIF[] =
 	BIFn(StrTitle, 1, 1, BIF_StrCase),
 	BIFn(StrUpper, 1, 1, BIF_StrCase),
 	BIF1(SubStr, 2, 3),
-	BIFA(Suspend, 0, 1, ACT_SUSPEND),
 	BIF1(Tan, 1, 1),
 	BIFA(Thread, 1, 3, ACT_THREAD),
 	BIF1(ToolTip, 0, 4),
@@ -11776,18 +11774,6 @@ ResultType Line::Perform()
 
 //////////////////////////////////////////////////////////////////////////
 
-	case ACT_SUSPEND:
-		toggle = Convert10Toggle(ARG1);
-		if (toggle == TOGGLE_INVALID)
-			return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, ARG1);
-		if (toggle >= TOGGLE // i.e. TOGGLE or NEUTRAL (omitted)
-			|| ((toggle == TOGGLED_ON) != g_IsSuspended))
-			ToggleSuspendState();
-		return OK;
-
-	case ACT_PAUSE:
-		return ChangePauseState(ARG1);
-
 	case ACT_BLOCKINPUT:
 		switch (toggle = ConvertBlockInput(ARG1))
 		{
@@ -12230,7 +12216,7 @@ LPTSTR Line::ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed, bool 
 
 
 
-void Line::ToggleSuspendState()
+void ToggleSuspendState()
 {
 	// If suspension is being turned on:
 	// It seems unnecessary, and possibly undesirable, to purge any pending hotkey msgs from the msg queue.
@@ -12245,7 +12231,20 @@ void Line::ToggleSuspendState()
 
 
 
-void Line::PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause)
+bif_impl FResult Suspend(int *aMode)
+{
+	auto toggle = Line::Convert10Toggle(aMode);
+	if (toggle == TOGGLE_INVALID)
+		return FR_E_ARG(0);
+	if (toggle >= TOGGLE // i.e. TOGGLE or NEUTRAL (omitted)
+		|| ((toggle == TOGGLED_ON) != g_IsSuspended))
+		ToggleSuspendState();
+	return OK;
+}
+
+
+
+void PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause)
 {
 	if (g <= g_array) // Guard against underflow. This condition can occur when the script thread that called us is the AutoExec section or a callback running in the idle/0 thread.
 		return;
@@ -12259,16 +12258,14 @@ void Line::PauseUnderlyingThread(bool aTrueForPauseFalseForUnpause)
 }
 
 
-
-ResultType Line::ChangePauseState(LPTSTR aChangeTo)
-// Currently designed to be called only by the Pause command (ACT_PAUSE).
-// Returns OK or FAIL.
+bif_impl FResult Pause(int *aNewState)
 {
-	auto toggle = Convert10Toggle(ARG1);
+	auto toggle = Line::Convert10Toggle(aNewState);
 	switch (toggle)
 	{
 	case NEUTRAL:
-		return PauseCurrentThread();
+		PauseCurrentThread();
+		return OK;
 	case TOGGLE:
 		// Update for v2: "Pause -1" is more useful if it always applies to the thread immediately beneath
 		// the current thread, since pausing the current thread would prevent a hotkey from unpausing itself
@@ -12290,13 +12287,12 @@ ResultType Line::ChangePauseState(LPTSTR aChangeTo)
 		PauseUnderlyingThread(toggle != TOGGLED_OFF); // i.e. pause if ON or fell through from TOGGLE.
 		return OK;
 	default: // TOGGLE_INVALID or some other disallowed value.
-		return LineError(ERR_PARAM1_INVALID, FAIL_OR_OK, aChangeTo);
+		return FR_E_ARG(0);
 	}
 }
 
 
-
-ResultType Line::PauseCurrentThread()
+void PauseCurrentThread()
 {
 	// Pause the current subroutine (which by definition isn't paused since it had to be  active
 	// to call us).  It seems best not to attempt to change the Hotkey mRunAgainAfterFinished
@@ -12322,7 +12318,6 @@ ResultType Line::PauseCurrentThread()
 	//    case g_nPausedThreads would not be adjusted and timers would forever be disabled.
 	while (g.IsPaused)
 		MsgSleep(INTERVAL_UNSPECIFIED);
-	return OK;
 }
 
 
