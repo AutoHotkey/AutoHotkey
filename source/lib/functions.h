@@ -84,6 +84,12 @@ md_func_x(InstallKeybdHook, InstallKeybdHook, Void, (In_Opt, Bool32, Install), (
 md_func_x(InstallMouseHook, InstallMouseHook, Void, (In_Opt, Bool32, Install), (In_Opt, Bool32, Force))
 
 
+md_func(KeyHistory, (In_Opt, Int32, MaxEvents))
+md_func_x(ListHotkeys, ListHotkeys, Void, md_arg_none)
+md_func_x(ListLines, ListLines, Void, (In_Opt, Bool32, Mode))
+md_func_x(ListVars, ListVars, Void, md_arg_none)
+
+
 md_func(MonitorGet,
 	(In_Opt, Int32, N),
 	(Out_Opt, Int32, Left),

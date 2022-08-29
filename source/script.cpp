@@ -145,11 +145,7 @@ FuncEntry g_BIF[] =
 	BIFi(IsTime, 1, 1, BIF_IsTypeish, VAR_TYPE_TIME),
 	BIFi(IsUpper, 1, 2, BIF_IsTypeish, VAR_TYPE_UPPER),
 	BIFi(IsXDigit, 1, 1, BIF_IsTypeish, VAR_TYPE_XDIGIT),
-	BIFA(KeyHistory, 0, 1, ACT_KEYHISTORY),
 	BIFn(KeyWait, 1, 2, BIF_Wait),
-	BIFA(ListHotkeys, 0, 0, ACT_LISTHOTKEYS),
-	BIFA(ListLines, 0, 1, ACT_LISTLINES),
-	BIFA(ListVars, 0, 0, ACT_LISTVARS),
 	BIFn(ListViewGetContent, 0, 6, BIF_ControlGet),
 	BIFn(Ln, 1, 1, BIF_SqrtLogLn),
 	BIF1(LoadPicture, 1, 3, {3}),
@@ -11743,48 +11739,6 @@ ResultType Line::Perform()
 			return g_script.Win32Error();
 		return OK;
 
-	case ACT_KEYHISTORY:
-		if (*ARG1)
-		{
-			int value = ATOI(ARG1);
-			if (value < 0)
-				value = 0;
-			else if (value > 500)
-				value = 500;
-			// GetHookStatus() only has a limited size buffer in which to transcribe the keystrokes.
-			// 500 events is about what you would expect to fit in a 32 KB buffer (in the unlikely
-			// event that the transcribed events create too much text, the text will be truncated,
-			// so it's not dangerous anyway).
-			if (g_KeybdHook || g_MouseHook)
-				PostThreadMessage(g_HookThreadID, AHK_HOOK_SET_KEYHISTORY, value, 0);
-			else
-				SetKeyHistoryMax(value);
-			return OK;
-		}
-		return ShowMainWindow(MAIN_MODE_KEYHISTORY, false); // Pass "unrestricted" when the command is explicitly used in the script.
-	case ACT_LISTLINES:
-		if (!*ARG1)
-			return ShowMainWindow(MAIN_MODE_LINES, false); // Pass "unrestricted" when the command is explicitly used in the script.
-		// Otherwise:
-		if (g.ListLinesIsEnabled)
-		{
-			// Since ExecUntil() just logged this ListLines On/Off in the line history, remove it to avoid
-			// cluttering the line history with distracting lines that the user probably wouldn't want to see.
-			// Might be especially useful in cases where a timer fires frequently (even if such a timer
-			// used "ListLines Off" as its top line, that line itself would appear very frequently in the line
-			// history).  v1.0.48.03: Fixed so that the below executes only when ListLines was previously "On".
-			if (sLogNext > 0)
-				--sLogNext;
-			else
-				sLogNext = LINE_LOG_SIZE - 1;
-			sLog[sLogNext] = NULL; // Without this, one of the lines in the history would be invalid due to the circular nature of the line history array, which would also cause the line history to show the wrong chronological order in some cases.
-		}
-		g.ListLinesIsEnabled = ResultToBOOL(ARG1);
-		return OK;
-	case ACT_LISTVARS:
-		return ShowMainWindow(MAIN_MODE_VARS, false); // Pass "unrestricted" when the command is explicitly used in the script.
-	case ACT_LISTHOTKEYS:
-		return ShowMainWindow(MAIN_MODE_HOTKEYS, false); // Pass "unrestricted" when the command is explicitly used in the script.
 	case ACT_TRAYTIP:
 		return TrayTip(THREE_ARGS);
 

@@ -806,6 +806,67 @@ ResultType ShowMainWindow(MainWindowModes aMode, bool aRestricted)
 
 
 
+bif_impl void ListLines(BOOL *aMode)
+{
+	if (!aMode)
+	{
+		ShowMainWindow(MAIN_MODE_LINES, false); // Pass "unrestricted" when the command is explicitly used in the script.
+		return;
+	}
+	if (g->ListLinesIsEnabled)
+	{
+		// Since ExecUntil() just logged this ListLines On/Off in the line history, remove it to avoid
+		// cluttering the line history with distracting lines that the user probably wouldn't want to see.
+		// Might be especially useful in cases where a timer fires frequently (even if such a timer used
+		// "ListLines 0" as its top line, that line itself would appear very frequently in the line history).
+		if (Line::sLogNext > 0)
+			--Line::sLogNext;
+		else
+			Line::sLogNext = LINE_LOG_SIZE - 1;
+		Line::sLog[Line::sLogNext] = NULL; // Without this, one of the lines in the history would be invalid due to the circular nature of the line history array, which would also cause the line history to show the wrong chronological order in some cases.
+	}
+	g->ListLinesIsEnabled = *aMode;
+}
+
+
+
+bif_impl void ListVars()
+{
+	ShowMainWindow(MAIN_MODE_VARS, false); // Pass "unrestricted" when the command is explicitly used in the script.
+}
+
+
+
+bif_impl void ListHotkeys()
+{
+	ShowMainWindow(MAIN_MODE_HOTKEYS, false); // Pass "unrestricted" when the command is explicitly used in the script.
+}
+
+
+
+bif_impl FResult KeyHistory(int *aMaxEvents)
+{
+	if (!aMaxEvents)
+	{
+		ShowMainWindow(MAIN_MODE_KEYHISTORY, false); // Pass "unrestricted" when the command is explicitly used in the script.
+		return OK;
+	}
+	int value = *aMaxEvents;
+	if (value < 0 || value > 500)
+		return FR_E_ARG(0);
+	// GetHookStatus() only has a limited size buffer in which to transcribe the keystrokes.
+	// 500 events is about what you would expect to fit in a 32 KB buffer (in the unlikely
+	// event that the transcribed events create too much text, the text will be truncated,
+	// so it's not dangerous anyway).
+	if (g_KeybdHook || g_MouseHook)
+		PostThreadMessage(g_HookThreadID, AHK_HOOK_SET_KEYHISTORY, value, 0);
+	else
+		SetKeyHistoryMax(value);
+	return OK;
+}
+
+
+
 DWORD GetAHKInstallDir(LPTSTR aBuf)
 // Caller must ensure that aBuf is large enough (either by having called this function a previous time
 // to get the length, or by making it MAX_PATH in capacity).
