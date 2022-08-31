@@ -99,7 +99,6 @@ FuncEntry g_BIF[] =
 #ifdef ENABLE_DLLCALL
 	BIFn(DllCall, 1, NA, BIF_DllCall),
 #endif
-	BIFA(Edit, 0, 0, ACT_EDIT),
 	BIFn(EditGetCurrentCol, 1, 5, BIF_ControlGet),
 	BIFn(EditGetCurrentLine, 1, 5, BIF_ControlGet),
 	BIFn(EditGetLine, 2, 6, BIF_ControlGet),
@@ -198,7 +197,6 @@ FuncEntry g_BIF[] =
 	BIFn(RegExReplace, 2, 6, BIF_RegEx, {4}),
 	BIFn(RegRead, 0, 3, BIF_Reg),
 	BIFn(RegWrite, 0, 4, BIF_Reg),
-	BIFA(Reload, 0, 0, ACT_RELOAD),
 	BIF1(Round, 1, 2),
 	BIFn(RTrim, 1, 2, BIF_Trim),
 	BIF1(Run, 1, 4, {4}),
@@ -211,7 +209,6 @@ FuncEntry g_BIF[] =
 	BIFn(SetStoreCapsLockMode, 1, 1, BIF_SetBIV),
 	BIF1(SetTimer, 0, 3),
 	BIFn(SetTitleMatchMode, 1, 1, BIF_SetBIV),
-	BIFA(SetWorkingDir, 1, 1, ACT_SETWORKINGDIR),
 	BIFA(Shutdown, 1, 1, ACT_SHUTDOWN),
 	BIF1(Sin, 1, 1),
 	BIFA(Sleep, 1, 1, ACT_SLEEP),
@@ -1230,6 +1227,11 @@ void Script::ExitIfNotPersistent(ExitReasons aExitReason)
 
 
 
+bif_impl void Edit()
+{
+	g_script.Edit();
+}
+
 ResultType Script::Edit()
 {
 #ifdef AUTOHOTKEYSC
@@ -1273,6 +1275,15 @@ ResultType Script::Edit()
 }
 
 
+
+bif_impl FResult Reload()
+{
+	// If Reload() returns failure, that means a failure to launch the new process at all,
+	// and an error message was displayed or an exception was thrown, so we must return FR_FAIL.
+	// If Reload() returns success but the script doesn't terminate even after some delay,
+	// it can be assumed that the reload didn't work, and the script can take follow-on action.
+	return g_script.Reload(true) ? OK : FR_FAIL;
+}
 
 ResultType Script::Reload(bool aDisplayErrors)
 {
@@ -11734,11 +11745,6 @@ ResultType Line::Perform()
 		}
 		return OK;
 
-	case ACT_SETWORKINGDIR:
-		if (!SetWorkingDir(ARG1))
-			return g_script.Win32Error();
-		return OK;
-
 	case ACT_TRAYTIP:
 		return TrayTip(THREE_ARGS);
 
@@ -11782,18 +11788,6 @@ ResultType Line::Perform()
 		return SetToggleState(VK_CAPITAL, g_ForceCapsLock, ARG1);
 	case ACT_SETSCROLLLOCKSTATE:
 		return SetToggleState(VK_SCROLL, g_ForceScrollLock, ARG1);
-
-	case ACT_EDIT:
-		g_script.Edit();
-		return OK;
-	case ACT_RELOAD:
-		g_script.Reload(true);
-		// Even if the reload failed, it seems best to return OK anyway.  That way,
-		// the script can take some follow-on action, e.g. it can sleep for 1000
-		// after issuing the reload command and then take action under the assumption
-		// that the reload didn't work (since obviously if the process and thread
-		// in which the Sleep is running still exist, it didn't work):
-		return OK;
 
 	case ACT_SLEEP:
 	{

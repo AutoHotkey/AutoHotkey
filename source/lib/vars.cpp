@@ -832,7 +832,7 @@ BIV_DECL_R(BIV_WorkingDir)
 
 BIV_DECL_W(BIV_WorkingDir_Set)
 {
-	if (!SetWorkingDir(BivRValueToString()))
+	if (SetWorkingDir(BivRValueToString()) != OK)
 		_f_throw_win32();
 }
 

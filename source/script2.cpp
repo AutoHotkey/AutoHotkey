@@ -1484,8 +1484,7 @@ BOOL CALLBACK EnumChildFindPoint(HWND aWnd, LPARAM lParam)
 ///////////////////////
 
 
-ResultType SetWorkingDir(LPTSTR aNewDir)
-// Throws a script runtime exception on failure, but only if the script has begun runtime execution.
+FResult SetWorkingDir(LPCTSTR aNewDir)
 // This function was added in v1.0.45.01 for the reason described below.
 {
 	// v1.0.45.01: Since A_ScriptDir omits the trailing backslash for roots of drives (such as C:),
@@ -1513,7 +1512,7 @@ ResultType SetWorkingDir(LPTSTR aNewDir)
 	}
 
 	if (!SetCurrentDirectory(aNewDir)) // Caused by nonexistent directory, permission denied, etc.
-		return FAIL;
+		return FR_E_WIN32;
 	// Otherwise, the change to the working directory succeeded.
 
 	// Other than during program startup, this should be the only place where the official
@@ -1527,7 +1526,7 @@ ResultType SetWorkingDir(LPTSTR aNewDir)
 
 
 
-void UpdateWorkingDir(LPTSTR aNewDir)
+void UpdateWorkingDir(LPCTSTR aNewDir)
 // aNewDir is NULL or a path which was just passed to SetCurrentDirectory().
 {
 	TCHAR buf[T_MAX_PATH]; // Windows 10 long path awareness enables working dir to exceed MAX_PATH.

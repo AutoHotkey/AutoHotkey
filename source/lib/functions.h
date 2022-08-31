@@ -24,6 +24,8 @@ md_func(EnvGet, (In, String, VarName), (Ret, String, RetVal))
 md_func_x(EnvSet, EnvSet, NzIntWin32, (In, String, VarName), (In_Opt, String, Value))
 
 
+md_func_x(Edit, Edit, Void, md_arg_none)
+
 md_func_x(Exit, Exit, ResultType, (In_Opt, Int32, ExitCode))
 md_func_x(ExitApp, ExitApp, ResultType, (In_Opt, Int32, ExitCode))
 
@@ -137,6 +139,9 @@ md_func(Pause, (In_Opt, Int32, NewState))
 md_func_x(Persistent, Persistent, Void, (In_Opt, Bool32, NewValue), (Ret, Bool32, OldValue))
 
 
+md_func(Reload, md_arg_none)
+
+
 md_func_x(RunAs, RunAs, Void, (In_Opt, String, User), (In_Opt, String, Password), (In_Opt, String, Domain))
 
 
@@ -154,6 +159,7 @@ md_func(SetControlDelay, (In, Int32, Delay))
 md_func(SetKeyDelay, (In_Opt, Int32, Delay), (In_Opt, Int32, Duration), (In_Opt, String, Mode))
 md_func(SetMouseDelay, (In, Int32, Delay), (In_Opt, String, Mode))
 md_func(SetWinDelay, (In, Int32, Delay))
+md_func(SetWorkingDir, (In, String, Path))
 
 
 md_func_x(SoundBeep, SoundBeep, Void, (In_Opt, Int32, Duration), (In_Opt, Int32, Frequency))

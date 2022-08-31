@@ -3399,8 +3399,8 @@ void PauseCurrentThread();
 void ToggleSuspendState();
 
 LPTSTR RegExMatch(LPTSTR aHaystack, LPTSTR aNeedleRegEx);
-ResultType SetWorkingDir(LPTSTR aNewDir);
-void UpdateWorkingDir(LPTSTR aNewDir = NULL);
+FResult SetWorkingDir(LPCTSTR aNewDir);
+void UpdateWorkingDir(LPCTSTR aNewDir = NULL);
 LPTSTR GetWorkingDir();
 int ConvertJoy(LPCTSTR aBuf, int *aJoystickID = NULL, bool aAllowOnlyButtons = false);
 bool ScriptGetKeyState(vk_type aVK, KeyStateTypes aKeyStateType);
