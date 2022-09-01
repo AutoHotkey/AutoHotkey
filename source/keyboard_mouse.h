@@ -365,4 +365,6 @@ inline bool IsMouseVK(vk_type aVK)
 		|| aVK >= VK_NEW_MOUSE_FIRST && aVK <= VK_NEW_MOUSE_LAST;
 }
 
+void OurBlockInput(bool aEnable);
+
 #endif

@@ -37,7 +37,6 @@ FuncEntry g_BIF[] =
 	BIFn(ACos, 1, 1, BIF_ASinACos),
 	BIFn(ASin, 1, 1, BIF_ASinACos),
 	BIF1(ATan, 1, 1),
-	BIFA(BlockInput, 1, 1, ACT_BLOCKINPUT),
 #ifdef ENABLE_REGISTERCALLBACK
 	BIF1(CallbackCreate, 1, 3),
 	BIF1(CallbackFree, 1, 1),
@@ -11644,7 +11643,6 @@ ResultType Line::Perform()
 {
 	TCHAR buf_temp[MAX_REG_ITEM_SIZE]; // For registry and other things.
 	global_struct &g = *::g; // Reduces code size due to replacing so many g-> with g. Eclipsing ::g with local g makes compiler remind/enforce the use of the right one.
-	ToggleValueType toggle;  // For commands that use on/off/neutral.
 
 	// Even though the loading-parser already checked, check again, for now,
 	// at least until testing raises confidence.  UPDATE: Don't do this because
@@ -11735,32 +11733,6 @@ ResultType Line::Perform()
 
 
 //////////////////////////////////////////////////////////////////////////
-
-	case ACT_BLOCKINPUT:
-		switch (toggle = ConvertBlockInput(ARG1))
-		{
-		case TOGGLED_ON:
-			ScriptBlockInput(true);
-			break;
-		case TOGGLED_OFF:
-			ScriptBlockInput(false);
-			break;
-		case TOGGLE_SEND:
-		case TOGGLE_MOUSE:
-		case TOGGLE_SENDANDMOUSE:
-		case TOGGLE_DEFAULT:
-			g_BlockInputMode = toggle;
-			break;
-		case TOGGLE_MOUSEMOVE:
-			g_BlockMouseMove = true;
-			Hotkey::InstallMouseHook();
-			break;
-		case TOGGLE_MOUSEMOVEOFF:
-			g_BlockMouseMove = false; // But the mouse hook is left installed because it might be needed by other things. This approach is similar to that used by the Input command.
-			break;
-		// default (NEUTRAL or TOGGLE_INVALID): do nothing.
-		}
-		return OK;
 
 	////////////////////////////////////////////////////////////////////////////////////////
 	// For these, it seems best not to report an error during runtime if there's
@@ -12252,18 +12224,6 @@ void PauseCurrentThread()
 	//    case g_nPausedThreads would not be adjusted and timers would forever be disabled.
 	while (g.IsPaused)
 		MsgSleep(INTERVAL_UNSPECIFIED);
-}
-
-
-
-ResultType Line::ScriptBlockInput(bool aEnable)
-// Always returns OK for caller convenience.
-{
-	// Always turn input ON/OFF even if g_BlockInput says its already in the right state.  This is because
-	// BlockInput can be externally and undetectably disabled, e.g. if the user presses Ctrl-Alt-Del:
-	BlockInput(aEnable ? TRUE : FALSE);
-	g_BlockInput = aEnable;
-	return OK;  // By design, it never returns FAIL.
 }
 
 

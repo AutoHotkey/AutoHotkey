@@ -427,7 +427,7 @@ void SendKeys(LPCTSTR aKeys, SendRawModes aSendRaw, SendModes aSendModeOrig, HWN
 	bool do_selective_blockinput = (g_BlockInputMode == TOGGLE_SEND || g_BlockInputMode == TOGGLE_SENDANDMOUSE)
 		&& !sSendMode && !aTargetWindow;
 	if (do_selective_blockinput)
-		Line::ScriptBlockInput(true); // Turn it on unconditionally even if it was on, since Ctrl-Alt-Del might have disabled it.
+		OurBlockInput(true); // Turn it on unconditionally even if it was on, since Ctrl-Alt-Del might have disabled it.
 
 	vk_type vk;
 	sc_type sc;
@@ -970,7 +970,7 @@ brace_case_end: // This label is used to simplify the code without sacrificing p
 		AttachThreadInput(g_MainThreadID, target_thread, FALSE);
 
 	if (do_selective_blockinput && !blockinput_prev) // Turn it back off only if it was off before we started.
-		Line::ScriptBlockInput(false);
+		OurBlockInput(false);
 
 	// The following MsgSleep(-1) solves unwanted buffering of hotkey activations while SendKeys is in progress
 	// in a non-Critical thread.  Because SLEEP_WITHOUT_INTERRUPTION is used to perform key delays, any incoming
@@ -1765,7 +1765,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 		bool we_turned_blockinput_off = g_BlockInput && (aVK == VK_MENU || aVK == VK_LMENU || aVK == VK_RMENU)
 			&& !caller_is_keybd_hook; // Ordered for short-circuit performance.
 		if (we_turned_blockinput_off)
-			Line::ScriptBlockInput(false);
+			OurBlockInput(false);
 
 		ResultType target_layout_has_altgr = caller_is_keybd_hook ? LayoutHasAltGr(GetFocusedKeybdLayout())
 			: sTargetLayoutHasAltGr;
@@ -1829,7 +1829,7 @@ void KeyEvent(KeyEventTypes aEventType, vk_type aVK, sc_type aSC, HWND aTargetWi
 		}
 
 		if (we_turned_blockinput_off)  // Already made thread-safe by action higher above.
-			Line::ScriptBlockInput(true);  // Turn BlockInput back on.
+			OurBlockInput(true);  // Turn BlockInput back on.
 	}
 
 	if (aDoKeyDelay) // SM_PLAY also uses DoKeyDelay(): it stores the delay item in the event array.
@@ -2029,7 +2029,7 @@ void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY
 	bool do_selective_blockinput = (g_BlockInputMode == TOGGLE_MOUSE || g_BlockInputMode == TOGGLE_SENDANDMOUSE)
 		&& !sSendMode;
 	if (do_selective_blockinput) // It seems best NOT to use g_BlockMouseMove for this, since often times the user would want keyboard input to be disabled too, until after the mouse event is done.
-		Line::ScriptBlockInput(true); // Turn it on unconditionally even if it was on, since Ctrl-Alt-Del might have disabled it.
+		OurBlockInput(true); // Turn it on unconditionally even if it was on, since Ctrl-Alt-Del might have disabled it.
 
 	switch (aActionType)
 	{
@@ -2054,7 +2054,7 @@ void PerformMouseCommon(ActionTypeType aActionType, vk_type aVK, int aX1, int aY
 	}
 
 	if (do_selective_blockinput && !blockinput_prev)  // Turn it back off only if it was off before we started.
-		Line::ScriptBlockInput(false);
+		OurBlockInput(false);
 }
 
 
@@ -4489,6 +4489,47 @@ bif_impl FResult MouseClickDrag(LPCTSTR aButton, int aX1, int aY1, int aX2, int 
 bif_impl FResult MouseMove(int aX, int aY, int *aSpeed, LPCTSTR aRelative)
 {
 	return PerformMouse(ACT_MOUSEMOVE, nullptr, &aX, &aY, nullptr, nullptr, aSpeed, aRelative, nullptr, nullptr);
+}
+
+#pragma endregion
+
+
+
+#pragma region BlockInput
+
+void OurBlockInput(bool aEnable)
+{
+	// Always turn input ON/OFF even if g_BlockInput says its already in the right state.  This is because
+	// BlockInput can be externally and undetectably disabled, e.g. if the user presses Ctrl-Alt-Del:
+	BlockInput(aEnable ? TRUE : FALSE);
+	g_BlockInput = aEnable;
+}
+
+bif_impl void ScriptBlockInput(LPCTSTR aMode)
+{
+	switch (auto toggle = Line::ConvertBlockInput(aMode))
+	{
+	case TOGGLED_ON:
+		OurBlockInput(true);
+		break;
+	case TOGGLED_OFF:
+		OurBlockInput(false);
+		break;
+	case TOGGLE_SEND:
+	case TOGGLE_MOUSE:
+	case TOGGLE_SENDANDMOUSE:
+	case TOGGLE_DEFAULT:
+		g_BlockInputMode = toggle;
+		break;
+	case TOGGLE_MOUSEMOVE:
+		g_BlockMouseMove = true;
+		Hotkey::InstallMouseHook();
+		break;
+	case TOGGLE_MOUSEMOVEOFF:
+		g_BlockMouseMove = false; // But the mouse hook is left installed because it might be needed by other things. This approach is similar to that used by the Input command.
+		break;
+	// default (NEUTRAL or TOGGLE_INVALID): do nothing.
+	}
 }
 
 #pragma endregion

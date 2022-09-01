@@ -1096,7 +1096,7 @@ public:
 		return THREAD_CMD_INVALID;
 	}
 
-	static ToggleValueType ConvertOnOff(LPTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
+	static ToggleValueType ConvertOnOff(LPCTSTR aBuf, ToggleValueType aDefault = TOGGLE_INVALID)
 	// Returns aDefault if aBuf isn't either ON, OFF, or blank.
 	{
 		if (!aBuf || !*aBuf) return NEUTRAL;
@@ -1144,7 +1144,7 @@ public:
 		return SCS_INVALID;
 	}
 
-	static ToggleValueType ConvertBlockInput(LPTSTR aBuf)
+	static ToggleValueType ConvertBlockInput(LPCTSTR aBuf)
 	{
 		if (ToggleValueType toggle = ConvertOnOff(aBuf))
 			return toggle;
@@ -1299,8 +1299,6 @@ public:
 	static LPTSTR LogToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR VicinityToText(LPTSTR aBuf, int aBufSize);
 	LPTSTR ToText(LPTSTR aBuf, int aBufSize, bool aCRLF, DWORD aElapsed = 0, bool aLineWasResumed = false, bool aLineNumber = true);
-
-	static ResultType ScriptBlockInput(bool aEnable);
 
 	Line *PreparseError(LPTSTR aErrorText, LPTSTR aExtraInfo = _T(""));
 	// Call this LineError to avoid confusion with Script's error-displaying functions:
